@@ -9,15 +9,22 @@
 // (functions/src/scenarios/__tests__/scenarios.test.ts가 두 파일의 텍스트를 비교해 드리프트를
 // 탐지한다).
 export type DeepvoiceLine = { lineId: string; text: string };
+// voiceMode/callerLabel — src/content/scenarios/familyAccidentDeepvoice.ts와 동일 필드(Phase B,
+// 2026-07-22). 서버 쪽은 이 값을 직접 쓰지 않지만(voiceId 해석은 클라가 마무리해서 넘김) 드리프트
+// 탐지 테스트(scenarios.test.ts)가 두 파일을 나란히 검증하므로 필드는 계속 미러링한다.
+export type VoiceMode = "clone" | "generic";
 export type ScenarioMeta = {
   title: string;
   fraudType: string;
   estimatedDuration: string;
   difficulty: string;
   deepvoiceLines: DeepvoiceLine[];
+  voiceMode: VoiceMode;
+  callerLabel: string;
 };
 
 export const FAMILY_ACCIDENT_SCENARIO_ID = "family-accident-deepvoice";
+export const INSTITUTIONAL_IMPERSONATION_SCENARIO_ID = "institutional-impersonation";
 
 export const familyAccidentDeepvoiceScenario: ScenarioMeta = {
   title: "가족 납치·사고 딥보이스",
@@ -38,8 +45,25 @@ export const familyAccidentDeepvoiceScenario: ScenarioMeta = {
       text: "아빠한테는 아직 말하지 말고, 지금 나랑 통화하면서 처리하자. 시간이 없어.",
     },
   ],
+  voiceMode: "clone",
+  callerLabel: "가족 (사칭)",
+};
+
+export const institutionalImpersonationScenario: ScenarioMeta = {
+  title: "기관 사칭(검찰·금융감독원)",
+  fraudType: "수사기관/금융기관 사칭",
+  estimatedDuration: "약 5~8분",
+  difficulty: "중간 — 권위·공포 소구가 강한 편입니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "안녕하십니까, 수사관입니다. 본인 명의 계좌가 범죄에 연루되어 확인이 필요합니다." },
+    { lineId: "line-2", text: "지금 이 사안은 수사 기밀이라 유선으로만 안내됩니다. 침착하게 절차에 협조해 주십시오." },
+    { lineId: "line-3", text: "협조하지 않으시면 불이익이 있을 수 있습니다. 지금 통화를 끊지 말고 계속 진행해 주십시오." },
+  ],
+  voiceMode: "generic",
+  callerLabel: "수사관 (기관 사칭)",
 };
 
 export const PUBLIC_SCENARIOS: Record<string, ScenarioMeta> = {
   [FAMILY_ACCIDENT_SCENARIO_ID]: familyAccidentDeepvoiceScenario,
+  [INSTITUTIONAL_IMPERSONATION_SCENARIO_ID]: institutionalImpersonationScenario,
 };

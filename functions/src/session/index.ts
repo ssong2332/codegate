@@ -13,6 +13,7 @@ import { generateOpeningLine, isUsingMockLlm } from "../roleplay";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { MAX_SESSION_MS, MAX_USER_TURNS } from "../shared/constants";
+import { getVoiceProvider } from "../voice/provider";
 import type { MessageDoc, SessionDoc } from "../shared/types";
 import type {
   CreateSessionRequest,
@@ -88,12 +89,27 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       createdAt: now,
     } satisfies MessageDoc);
 
+    // 실시간 음성 통화 전환(2026-07-22 사용자 결정) — sendMessage.audioUrl과 동일 패턴으로 오프닝
+    // 대사도 합성한다. 실패해도 세션 생성 자체는 막지 않는다(P-4 비차단 원칙).
+    let openingAudioUrl: string | undefined;
+    try {
+      const synthesis = await getVoiceProvider().synthesize({
+        sessionId: sessionRef.id,
+        voiceId,
+        text: openingMessage.text,
+      });
+      openingAudioUrl = synthesis.audioUrl;
+    } catch {
+      // 합성 실패는 무시 — 클라는 openingAudioUrl 없으면 텍스트만 표시(폴백).
+    }
+
     return {
       sessionId: sessionRef.id,
       openingMessage,
       maxUserTurns: MAX_USER_TURNS,
       maxSessionMs: MAX_SESSION_MS,
       isMock,
+      ...(openingAudioUrl ? { openingAudioUrl } : {}),
     };
   },
 );

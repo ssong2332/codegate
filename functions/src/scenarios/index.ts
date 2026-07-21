@@ -6,9 +6,15 @@ import {
   FAMILY_ACCIDENT_SCENARIO_ID,
   familyAccidentDeepvoicePrompt,
 } from "./familyAccidentDeepvoice.prompt";
+import {
+  INSTITUTIONAL_IMPERSONATION_SCENARIO_ID,
+  institutionalImpersonationPrompt,
+} from "./institutionalImpersonation.prompt";
 
 export { FAMILY_ACCIDENT_SCENARIO_ID, familyAccidentDeepvoicePrompt };
+export { INSTITUTIONAL_IMPERSONATION_SCENARIO_ID, institutionalImpersonationPrompt };
 
 export const SCENARIO_PROMPTS: Record<string, ScenarioPromptDoc> = {
   [FAMILY_ACCIDENT_SCENARIO_ID]: familyAccidentDeepvoicePrompt,
+  [INSTITUTIONAL_IMPERSONATION_SCENARIO_ID]: institutionalImpersonationPrompt,
 };

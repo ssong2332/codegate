@@ -3,12 +3,11 @@
 // UX-011 연령 확인(age-gate) (P1, Track C, T14, AC-014).
 //
 // 배치 판단(구현 보고서 참조): UX.md UX-011 Entry "UX-001 이전 또는 직후" 중 "직후"를 택했다 —
-// 같은 문서의 Exit이 "통과 → UX-002"로 명시돼 있어, UX-001(동의) 다음·UX-002(녹음) 이전에
-// 끼워 넣어야 그 Exit 타깃과 그대로 정합한다(만약 UX-001 이전에 두면 Exit이 자연히 UX-001이
-// 돼야 해 문서 기술과 어긋난다). 기존 온보딩 플로우(로그인→동의→녹음)를 깨지 않기 위해
-// consent/page.tsx의 다음 이동만 이 화면으로 바꾸고(1줄), record/page.tsx 진입 가드에도 동일한
-// "미충족 시 리다이렉트" 패턴으로 연령 확인 여부를 추가해 URL 직접 접근으로 이 화면을 건너뛸 수
-// 없게 했다(AC-014 "접근을 제한"의 실효성 확보 — 최소 연결).
+// UX-001(동의) 다음에 끼워 넣는다. **Phase B(2026-07-22) 갱신**: 원래 Exit은 "통과 → UX-002(녹음)"
+// 였으나, 시나리오 선택(UX-004)이 이제 녹음보다 먼저 온다(voiceMode:"generic" 시나리오는 녹음
+// 자체를 생략하므로 먼저 골라야 분기가 가능하다) — Exit을 `/scenarios`로 변경. `/onboarding/record`
+// 진입 가드는 여전히 age-gate 통과 여부를 확인하므로 URL 직접 접근 우회는 그대로 막혀 있다
+// (AC-014 "접근을 제한"의 실효성 유지).
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/auth";
@@ -41,7 +40,7 @@ export default function AgeGatePage() {
         if (cancelled) return;
         if (alreadyVerified) {
           setGateState("redirecting");
-          router.replace("/onboarding/record");
+          router.replace("/scenarios");
           return;
         }
         setGateState("ready");
@@ -65,7 +64,7 @@ export default function AgeGatePage() {
         </p>
       )}
       {gateState === "ready" && user && (
-        <AgeGate uid={user.uid} onPass={() => router.push("/onboarding/record")} />
+        <AgeGate uid={user.uid} onPass={() => router.push("/scenarios")} />
       )}
     </main>
   );

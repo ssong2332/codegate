@@ -14,6 +14,7 @@ import { maskPII } from "../guardrails";
 import { getLlmClient } from "../llm";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
+import { getVoiceProvider } from "../voice/provider";
 import type { MessageDoc, SessionDoc } from "../shared/types";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
 import { isSessionLimitReached } from "./sessionLimits";
@@ -128,6 +129,22 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       await triggerReportGeneration(sessionId);
     }
 
+    // ⑤ 실시간 음성 통화 전환(2026-07-22 사용자 결정) — 사기범 응답을 VoiceProvider로 합성해
+    // audioUrl을 함께 반환한다(session.voiceId는 createSession에서 이미 검증된 값). 합성 실패는
+    // 텍스트 응답 자체를 막지 않는다(P-4 "핵심 루프 비차단" — 이미 T5 synthesizeDeepvoice와 동일한
+    // "실패해도 조용히 생략" 원칙을 여기서도 따른다).
+    let audioUrl: string | undefined;
+    try {
+      const synthesis = await getVoiceProvider().synthesize({
+        sessionId,
+        voiceId: session.voiceId ?? "",
+        text: maskedReplyText,
+      });
+      audioUrl = synthesis.audioUrl;
+    } catch {
+      // 합성 실패는 무시 — 클라는 audioUrl 없으면 텍스트만 표시(폴백).
+    }
+
     const reply: ScammerMessage = { role: "scammer", text: maskedReplyText };
     return {
       reply,
@@ -135,6 +152,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       ended: limitReached,
       ...(limitReached ? { endReason: "limit_reached" as const } : {}),
       isMock: completion.isMock,
+      ...(audioUrl ? { audioUrl } : {}),
     };
   },
 );

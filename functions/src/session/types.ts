@@ -18,6 +18,11 @@ export type CreateSessionResponse = {
    * 태스크 범위 밖이라 별도 후속 필요(구현 보고서 참고).
    */
   isMock?: boolean;
+  /**
+   * 실시간 음성 통화 전환(2026-07-22 사용자 결정) — 오프닝 사기범 대사를 VoiceProvider로 합성한
+   * 재생 URL(sendMessage.audioUrl과 동일 패턴). 합성 실패해도 세션 생성 자체는 막지 않는다.
+   */
+  openingAudioUrl?: string;
 };
 
 export type EndSessionReason =

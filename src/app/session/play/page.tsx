@@ -1,47 +1,71 @@
 "use client";
 
-// UX-005 딥보이스 가족사칭 오디오 인앱 재생 (Track A, T5, AC-019/AC-022/AC-006).
-// Entry: /scenarios(UX-004)에서 createSession 호출 성공 직후 이 화면으로 이동한다. createSession이
-// pendingSessionId를 그대로 sessionId로 채택하므로(T4가 마련한 채택 로직), 이 화면도 동일하게
-// getPendingSessionId()로 세션을 식별하고 sessions/{sid} 문서에서 scenarioId를 읽어 재생할 대사
-// 목록(src/content/scenarios, T6)을 찾는다 — 별도 네비게이션 state/query param 불필요.
+// UX-014 통화 세션 — 딥보이스 오프닝 → 실시간 역할극 (단일 연속 통화) (Track A·B, T5/T7/T8 통합,
+// AC-003~007/AC-012/013/017/018/019/022/023/024).
 //
-// AC-019: 실제 전화망/통화 연동 없이 synthesizeDeepvoice 콜러블의 audioUrl을 <audio>로 인앱
-// 재생한다. AC-022: SyntheticLabel(화면 상시 라벨) + 재생 전 텍스트 프리롤 안내(오디오 프리롤은
-// Mock 단계라 텍스트 안내로 대체, UX.md Interaction Pattern P-3)로 합성 표식을 이중 노출한다.
-// AC-006: EndTrainingButton을 모든 상태에서 항상 노출한다.
+// **v2(2026-07-22, D-11/D-12) — 화면 통합**: 이전에는 이 화면(구 UX-005, 딥보이스 재생)이 끝나면
+// "계속(역할극 시작)" 버튼으로 /session/chat(구 UX-006)으로 페이지 전환했다. 사용자 피드백
+// ("전화받기→대화가 하나의 통화처럼 안 느껴짐, 채팅창으로 넘어가는 느낌")에 따라 두 화면을 하나의
+// 고정 통화 셸 안에서 phase 전이로만 처리하도록 재작성했다(docs/UX.md UX-014, P-10/P-11). 구
+// /session/chat 라우트는 이 화면으로의 리다이렉트만 남긴다.
+//
+// 오프닝 재생은 더 이상 scenario.deepvoiceLines(별도 스크립트, synthesizeDeepvoice)를 순회하지
+// 않는다 — createSession이 이미 생성해 Firestore messages(turnIndex 0)에 저장하고 1회성 힌트로
+// 넘겨준 openingAudioUrl을 그대로 재생한다(P-10 "오프닝과 실시간 응답은 같은 대화 로그·같은 자막
+// 영역에 누적"). scenario.deepvoiceLines/synthesizeDeepvoice 자체는 삭제하지 않았다(요청받지 않은
+// 삭제 금지) — 이 화면에서만 더 이상 쓰지 않는다.
+//
+// Phase 전이: incoming(수신) → connecting(짧은 로딩) → opening(오프닝 자동재생) → live(실시간
+// 역할극, 자동 청취) → ended(한도 도달/종료). AC-006 "훈련 종료"는 모든 phase에서 상시 노출.
+// 통화 경과 타이머는 "받기" 시점(call_answered)을 0으로 삼는다(OQ-U8 architect 기본값).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { doc, getDoc } from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { getPendingSessionId } from "@/lib/recording";
-import { synthesizeDeepvoice } from "@/lib/api";
+import { consumeOpeningAudioUrl, getPendingSessionId, useSpeechRecognition } from "@/lib/recording";
+import { sendMessage } from "@/lib/api";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import SyntheticLabel from "@/components/SyntheticLabel";
 import EndTrainingButton from "@/components/EndTrainingButton";
 
-type PageState =
-  | "checking"
-  | "no-session"
-  | "scenario-not-found"
-  | "load-error"
-  | "idle"
-  | "loading-line"
-  | "playing"
-  | "play-error"
-  | "completed";
+type PageState = "checking" | "ready" | "no-session" | "scenario-not-found" | "load-error";
+type Phase = "incoming" | "connecting" | "opening" | "live" | "ended";
+
+type ChatMessage = {
+  id: string;
+  role: "scammer" | "user";
+  text: string;
+  turnIndex: number;
+};
 
 const PREROLL_NOTICE =
   "지금부터 재생되는 음성은 실제 전화가 아니라 AI로 합성된 훈련용 음성입니다.";
 
-export default function SessionPlayPage() {
+function formatElapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+export default function SessionCallPage() {
   const router = useRouter();
   const [sessionId] = useState<string | null>(() => getPendingSessionId());
-  const [state, setState] = useState<PageState>(sessionId ? "checking" : "no-session");
+  const [pageState, setPageState] = useState<PageState>(sessionId ? "checking" : "no-session");
+  const [phase, setPhase] = useState<Phase>("incoming");
   const [scenario, setScenario] = useState<ScenarioDoc | null>(null);
-  const [lineIndex, setLineIndex] = useState(0);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [turnCount, setTurnCount] = useState(0);
+  const [maxUserTurns, setMaxUserTurns] = useState<number | null>(null);
+  const [isMock, setIsMock] = useState(false);
+  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [showTextInput, setShowTextInput] = useState(false);
+  const listEndRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speech = useSpeechRecognition();
 
   useEffect(() => {
     if (!sessionId) return;
@@ -50,16 +74,27 @@ export default function SessionPlayPage() {
       try {
         const snapshot = await getDoc(doc(db, "sessions", sessionId));
         if (cancelled) return;
-        const scenarioId = snapshot.data()?.scenarioId as string | undefined;
+        const data = snapshot.data();
+        if (!data) {
+          setPageState("load-error");
+          return;
+        }
+        const scenarioId = data.scenarioId as string | undefined;
         const found = scenarioId ? scenarios[scenarioId] : undefined;
         if (!found) {
-          setState("scenario-not-found");
+          setPageState("scenario-not-found");
           return;
         }
         setScenario(found);
-        setState("idle");
+        setTurnCount((data.turnCount as number) ?? 0);
+        setMaxUserTurns((data.maxUserTurns as number) ?? null);
+        setIsMock(data.llmProvider === "mock");
+        if (data.status === "ended") {
+          setPhase("ended");
+        }
+        setPageState("ready");
       } catch {
-        if (!cancelled) setState("load-error");
+        if (!cancelled) setPageState("load-error");
       }
     })();
     return () => {
@@ -67,94 +102,138 @@ export default function SessionPlayPage() {
     };
   }, [sessionId]);
 
-  const playLine = useCallback(
-    async (index: number, currentScenario: ScenarioDoc) => {
-      if (!sessionId) return;
-      const line = currentScenario.deepvoiceLines[index];
-      if (!line) {
-        setState("completed");
-        return;
-      }
-      setState("loading-line");
-      setLineIndex(index);
-      try {
-        const result = await synthesizeDeepvoice({ sessionId, lineId: line.lineId });
-        setAudioUrl(result.audioUrl);
-        setState("playing");
-      } catch {
-        setState("play-error");
-      }
-    },
-    [sessionId],
-  );
-
-  // 오디오 자동재생 정책상 브라우저가 프로그램적 재생을 막을 수 있으므로 <audio controls>로
-  // 수동 재생 대안을 항상 남겨둔다(UX.md UX-005 Permissions 주석). 실패해도 상태를 에러로 바꾸지
-  // 않는다 — 사용자가 native 컨트롤로 직접 누를 수 있다.
+  // 오프닝 이후(phase !== "incoming")부터 대화 로그를 구독한다(P-10 "같은 대화 로그·같은 자막
+  // 영역"). "받기" 전에는 구독하지 않아 아직 공개되지 않은 오프닝 텍스트가 미리 새지 않는다.
   useEffect(() => {
-    if (state === "playing" && audioUrl) {
+    if (!sessionId || phase === "incoming" || phase === "connecting") return;
+    const messagesQuery = query(
+      collection(db, "sessions", sessionId, "messages"),
+      orderBy("turnIndex", "asc"),
+    );
+    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+      setMessages(
+        snapshot.docs.map((docSnap) => {
+          const data = docSnap.data();
+          return {
+            id: docSnap.id,
+            role: data.role as "scammer" | "user",
+            text: data.textMasked as string,
+            turnIndex: data.turnIndex as number,
+          };
+        }),
+      );
+    });
+    return unsubscribe;
+  }, [sessionId, phase]);
+
+  useEffect(() => {
+    listEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // 통화 경과 타이머 — "받기"(call_answered) 시점부터 1초 간격 증가, ended면 정지(OQ-U8).
+  useEffect(() => {
+    if (phase === "incoming" || phase === "ended") return;
+    const interval = setInterval(() => setElapsedSec((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [phase]);
+
+  // 오디오 자동재생 정책상 브라우저가 막을 수 있으므로 실패해도 상태를 바꾸지 않는다 —
+  // <audio controls>가 수동 재생 대안으로 항상 남아 있다(P-4 비차단 원칙).
+  useEffect(() => {
+    if (playbackUrl) {
       audioRef.current?.play().catch(() => {});
     }
-  }, [state, audioUrl]);
+  }, [playbackUrl]);
 
-  const handleStartPlayback = () => {
-    if (!scenario) return;
-    void playLine(0, scenario);
+  const maybeStartListening = useCallback(() => {
+    if (speech.status === "unsupported" || speech.status === "listening") return;
+    speech.start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speech.status]);
+
+  // P-11 이음새 없는 전환 — 오프닝 재생이 끝나면(또는 재생할 오디오가 없으면) 화면 전환·확인 버튼
+  // 없이 곧바로 실시간 청취로 넘어간다.
+  const handlePlaybackEnded = () => {
+    setPhase((p) => (p === "opening" ? "live" : p));
+    maybeStartListening();
   };
 
-  const handleAudioEnded = () => {
-    if (!scenario) return;
-    void playLine(lineIndex + 1, scenario);
+  const handleAnswer = () => {
+    setPhase("connecting");
+    const audio = consumeOpeningAudioUrl();
+    if (audio) {
+      setPlaybackUrl(audio);
+      setPhase("opening");
+    } else {
+      // 합성 실패 등으로 재생할 오프닝 오디오가 없다 — 침묵 실패 금지, 바로 실시간 청취로 진입.
+      setPhase("live");
+      maybeStartListening();
+    }
   };
 
-  const handleRetryLine = () => {
-    if (!scenario) return;
-    void playLine(lineIndex, scenario);
-  };
-
-  const handleReplayAll = () => {
-    if (!scenario) return;
-    void playLine(0, scenario);
+  const handleDecline = () => {
+    router.push("/session/end");
   };
 
   const handleEndTraining = () => {
     audioRef.current?.pause();
-    // TODO(T8): endSession 콜러블 실호출은 T8 소관(세션 라이프사이클) — 지금은 UX-007로 이동만
-    // 시킨다(태스크 지시에 따른 최소 처리, 구현 보고서에 명시).
     router.push("/session/end");
   };
 
-  if (state === "checking") {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center">
-        <p className="flex items-center gap-2 text-lg" role="status">
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-gray-400 border-t-transparent"
-          />
-          재생 정보를 불러오는 중입니다...
-        </p>
-      </main>
-    );
-  }
+  const handleSend = async (textOverride?: string) => {
+    const text = (textOverride ?? input).trim();
+    if (!sessionId || !text || sending || phase !== "live") return;
+    setSending(true);
+    setSendError(null);
+    try {
+      const result = await sendMessage({ sessionId, userText: text });
+      setInput("");
+      speech.reset();
+      setTurnCount(result.turnCount);
+      setIsMock(result.isMock);
+      if (result.audioUrl) {
+        setPlaybackUrl(result.audioUrl);
+      } else if (!result.ended) {
+        maybeStartListening();
+      }
+      if (result.ended) {
+        setPhase("ended");
+      }
+    } catch {
+      setSendError("메시지를 보내지 못했습니다. 다시 시도해 주세요.");
+    } finally {
+      setSending(false);
+    }
+  };
 
-  if (state === "no-session" || state === "scenario-not-found" || state === "load-error") {
+  // STT가 발화를 인식하면(status === "processing") 곧바로 전송한다 — 인라인 async IIFE로 감싼다
+  // (session/end/page.tsx·report/page.tsx와 동일한 회피 패턴).
+  useEffect(() => {
+    if (speech.status === "processing" && speech.transcript) {
+      (async () => {
+        await handleSend(speech.transcript);
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speech.status, speech.transcript]);
+
+  if (pageState === "no-session" || pageState === "scenario-not-found" || pageState === "load-error") {
     const message =
-      state === "no-session"
+      pageState === "no-session"
         ? "진행 중인 세션 정보를 찾을 수 없습니다. 시나리오 선택부터 다시 진행해 주세요."
-        : state === "scenario-not-found"
+        : pageState === "scenario-not-found"
           ? "선택된 시나리오 정보를 찾을 수 없습니다. 시나리오를 다시 선택해 주세요."
-          : "재생 정보를 불러오지 못했습니다. 다시 시도해 주세요.";
+          : "통화 정보를 불러오지 못했습니다. 다시 시도해 주세요.";
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-red-700">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
           <span aria-hidden="true">⚠</span>
           <span>{message}</span>
         </p>
         <button
           type="button"
           onClick={() => router.push("/scenarios")}
-          className="min-h-[48px] rounded border border-gray-400 px-6 py-3 text-lg font-bold hover:bg-gray-100"
+          className="min-h-[48px] rounded-xl border border-[#C9C2B6] px-6 py-3 text-lg font-bold text-[#22303A] hover:bg-white"
         >
           시나리오 선택으로
         </button>
@@ -162,109 +241,328 @@ export default function SessionPlayPage() {
     );
   }
 
-  const currentLineText = scenario?.deepvoiceLines[lineIndex]?.text ?? null;
+  if (pageState !== "ready" || !scenario) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
+        <p className="flex items-center gap-2 text-lg text-[#22303A]" role="status">
+          <span
+            aria-hidden="true"
+            className="h-5 w-5 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-transparent"
+          />
+          통화 정보를 불러오는 중입니다...
+        </p>
+      </main>
+    );
+  }
+
+  const callerLabel = scenario.callerLabel ?? "발신자 (사칭)";
+  const latestMessage = messages[messages.length - 1] ?? null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-8">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-bold">딥보이스 재생</h1>
-        {/* AC-006 상시 종료 컨트롤 — 모든 상태에서 항상 노출. */}
-        <EndTrainingButton onClick={handleEndTraining} />
+    <main className="flex min-h-screen flex-col bg-[#22303A]">
+      <div className="flex items-center justify-center gap-3 pt-4">
+        <SyntheticLabel />
+        {phase !== "incoming" && phase !== "connecting" && (
+          <span className="rounded-full bg-white/10 px-3 py-1.5 text-sm font-semibold text-[#9FB0BA]" role="status">
+            {formatElapsed(elapsedSec)}
+          </span>
+        )}
       </div>
 
-      {/* AC-022 합성 표식 이중 노출 ① 화면 상시 라벨. */}
-      <SyntheticLabel />
+      <div className="flex flex-1 flex-col items-center gap-3 overflow-y-auto px-8 pt-4 text-white">
+        <div className="flex h-26 w-26 items-center justify-center rounded-full bg-[#41525E] text-4xl font-bold text-[#C9D4DB]">
+          {callerLabel.slice(0, 1)}
+        </div>
+        <p className="text-3xl font-bold">{callerLabel}</p>
 
-      {/* AC-022 합성 표식 이중 노출 ② 프리롤 안내 문구(Mock 단계는 텍스트 안내로 충분, 태스크
-          지시 — 실 ElevenLabs 전환 시 오디오 프리롤 추가 검토). */}
-      <p role="status" className="rounded bg-yellow-50 p-4 text-base text-yellow-900">
-        {PREROLL_NOTICE}
-      </p>
-
-      {scenario && (
-        <p className="text-base text-gray-600">
-          시나리오: <span className="font-semibold">{scenario.title}</span>
-        </p>
-      )}
-
-      <section className="flex flex-col items-center gap-4 rounded border border-gray-300 p-6">
-        {state === "idle" && (
-          <button
-            type="button"
-            onClick={handleStartPlayback}
-            className="min-h-[56px] w-full max-w-xs rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800"
-          >
-            ▶ 재생 시작
-          </button>
+        {phase === "incoming" && (
+          <>
+            <p className="text-lg text-[#9FB0BA]">휴대전화 수신 중…</p>
+            <p role="status" className="text-center text-sm text-[#9FB0BA]">
+              {PREROLL_NOTICE}
+            </p>
+          </>
         )}
 
-        {state === "loading-line" && (
-          <p className="flex items-center gap-2 text-lg" role="status">
+        {phase === "connecting" && (
+          <p className="flex items-center gap-2 text-lg text-[#9FB0BA]" role="status">
             <span
               aria-hidden="true"
-              className="h-5 w-5 animate-spin rounded-full border-2 border-gray-400 border-t-transparent"
+              className="h-4 w-4 animate-spin rounded-full border-2 border-[#9FB0BA] border-t-transparent"
             />
-            음성을 합성하는 중입니다...
+            연결하는 중…
           </p>
         )}
 
-        {(state === "playing" || state === "loading-line") && currentLineText && (
-          <p className="text-lg leading-relaxed" aria-live="polite">
-            {currentLineText}
+        {(phase === "opening" || phase === "live") && (
+          <p className="text-lg text-[#9FB0BA]" role="status">
+            통화 중
           </p>
         )}
 
-        {state === "playing" && audioUrl && (
+        {phase === "ended" && <p className="text-lg text-[#9FB0BA]">통화 종료</p>}
+
+        {/* voiceMode 라벨(D-13) — 오프닝 재생 중에만 노출. generic은 "당신의 목소리" 같은 근거
+            없는 표기를 하지 않는다. */}
+        {phase === "opening" && (
+          <p className="mt-1 rounded-xl border border-[#9484D6]/50 bg-[#5B4B9E]/25 px-4 py-2.5 text-center text-[15px] leading-relaxed text-[#CFC6EE]">
+            {scenario.voiceMode === "generic" ? (
+              "기본 합성 음성으로 재생됩니다"
+            ) : (
+              <>
+                이 목소리는 방금 녹음한
+                <br />
+                <b>당신의 목소리</b>로 합성되었습니다
+              </>
+            )}
+          </p>
+        )}
+
+        {isMock && (phase === "opening" || phase === "live") && (
+          <p role="status" className="text-center text-xs font-semibold text-[#CFC6EE]">
+            ⚠ 현재 상대방 응답은 실 LLM이 아닌 개발용 Mock 응답입니다.
+          </p>
+        )}
+
+        {maxUserTurns !== null && phase === "live" && (
+          <p className="rounded-full bg-white/10 px-3 py-1 text-sm text-[#9FB0BA]">
+            대화 {turnCount} / {maxUserTurns}턴
+          </p>
+        )}
+
+        {playbackUrl && (phase === "opening" || phase === "live") && (
           <audio
             ref={audioRef}
-            src={audioUrl}
+            src={playbackUrl}
             controls
-            onEnded={handleAudioEnded}
-            aria-label="딥보이스 합성 음성 재생"
-            className="w-full max-w-xs"
+            onEnded={handlePlaybackEnded}
+            aria-label="상대방 음성 재생"
+            className="mt-1 w-full max-w-xs"
           />
         )}
 
-        {state === "play-error" && (
-          <>
-            <p role="alert" className="flex items-center gap-2 text-base text-red-700">
-              <span aria-hidden="true">⚠</span>
-              <span>음성 재생에 실패했습니다. 다시 시도해 주세요.</span>
-            </p>
-            <button
-              type="button"
-              onClick={handleRetryLine}
-              className="min-h-[48px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800"
-            >
-              다시 시도
-            </button>
-          </>
+        {/* 같은 대화 로그·같은 자막 영역(P-10) — 오프닝도 사기범 첫 턴으로 여기 함께 쌓인다. */}
+        {latestMessage && (phase === "opening" || phase === "live" || phase === "ended") && (
+          <p
+            className="mt-2 w-full max-w-xs rounded-xl bg-white/10 p-4 text-center text-base leading-relaxed text-[#DCE4E9]"
+            aria-live="polite"
+          >
+            {latestMessage.role === "user" ? "나: " : `${callerLabel}: `}
+            &ldquo;{latestMessage.text}&rdquo;
+          </p>
         )}
 
-        {state === "completed" && (
-          <>
-            <p className="text-lg font-semibold text-green-700" role="status">
-              재생이 끝났습니다.
+        {messages.length > 1 && phase !== "incoming" && phase !== "connecting" && (
+          <div className="mt-1 flex w-full max-w-xs flex-col gap-1.5 pb-2">
+            {messages.slice(0, -1).map((message) => (
+              <p
+                key={message.id}
+                className={`truncate text-xs ${
+                  message.role === "user" ? "text-right text-[#9FB0BA]" : "text-left text-[#7C8991]"
+                }`}
+              >
+                {message.role === "user" ? "나: " : ""}
+                {message.text}
+              </p>
+            ))}
+          </div>
+        )}
+        <div ref={listEndRef} />
+      </div>
+
+      {sendError && (
+        <p role="alert" className="flex items-center gap-2 px-4 pb-2 text-base text-[#F0A79E]">
+          <span aria-hidden="true">⚠</span>
+          <span>{sendError}</span>
+        </p>
+      )}
+
+      {phase === "incoming" && (
+        <div className="flex justify-around px-9 pb-7 text-white">
+          <div className="flex flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDecline}
+              aria-label="전화 거절 — 훈련 종료"
+              className="h-19 w-19 rounded-full bg-[#C6392F] text-base font-bold text-white"
+            >
+              거절
+            </button>
+            <span className="text-sm text-[#9FB0BA]">받지 않기</span>
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAnswer}
+              aria-label="전화 받기"
+              className="h-19 w-19 rounded-full bg-[#1E9E6A] text-base font-bold text-white"
+            >
+              받기
+            </button>
+            <span className="text-sm text-[#9FB0BA]">받기</span>
+          </div>
+        </div>
+      )}
+
+      {phase === "ended" && (
+        <div className="flex flex-col gap-3 p-5 text-center">
+          <p className="text-lg font-semibold text-white" role="status">
+            대화 한도에 도달해 훈련이 종료되었습니다.
+          </p>
+          <button
+            type="button"
+            onClick={() => router.push("/session/end")}
+            className="min-h-[52px] rounded-xl bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white"
+          >
+            결과 확인하러 가기
+          </button>
+        </div>
+      )}
+
+      {phase === "live" &&
+        (speech.status === "unsupported" ? (
+          <div className="px-5 pb-5">
+            <p className="pb-2 text-center text-sm text-[#9FB0BA]">
+              이 브라우저는 음성 인식을 지원하지 않아 텍스트로 진행합니다.
             </p>
-            <div className="flex w-full max-w-xs flex-col gap-3">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleSend();
+              }}
+              className="flex items-center gap-2.5"
+            >
+              <label htmlFor="chat-input" className="sr-only">
+                메시지 입력
+              </label>
+              <input
+                id="chat-input"
+                type="text"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                disabled={sending}
+                placeholder="메시지를 입력하세요..."
+                className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-white/30 bg-white/10 px-[18px] py-3 text-lg text-white placeholder:text-[#9FB0BA]"
+              />
               <button
-                type="button"
-                onClick={handleReplayAll}
-                className="min-h-[48px] rounded border border-gray-400 px-6 py-3 text-lg font-bold hover:bg-gray-100"
+                type="submit"
+                disabled={sending || !input.trim()}
+                aria-label="전송"
+                className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-lg font-bold text-white disabled:opacity-50"
               >
-                다시 듣기
+                {sending ? (
+                  <span
+                    aria-hidden="true"
+                    className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                  />
+                ) : (
+                  "↑"
+                )}
               </button>
+            </form>
+            <div className="mt-3">
+              <EndTrainingButton onClick={handleEndTraining} variant="dark" />
+            </div>
+          </div>
+        ) : (
+          <div className="px-5 pb-5">
+            <div className="flex flex-col items-center gap-3">
+              {speech.status === "listening" && (
+                <p role="status" className="flex items-center gap-2 text-base font-semibold text-[#7CD9C2]">
+                  <span aria-hidden="true" className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#7CD9C2]" />
+                  듣고 있어요...
+                </p>
+              )}
+              {sending && (
+                <p role="status" className="text-base text-[#9FB0BA]">
+                  메시지를 보내는 중...
+                </p>
+              )}
+              {speech.status === "idle" && !sending && (
+                <p className="text-base text-[#9FB0BA]">말씀하시면 자동으로 인식됩니다.</p>
+              )}
+              {(speech.status === "permission-denied" || speech.status === "error") && speech.errorMessage && (
+                <p role="alert" className="flex items-center gap-2 text-sm text-[#F0A79E]">
+                  <span aria-hidden="true">⚠</span>
+                  <span>{speech.errorMessage}</span>
+                </p>
+              )}
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => (speech.status === "listening" ? speech.stop() : speech.start())}
+                  disabled={sending}
+                  aria-label={speech.status === "listening" ? "음성 인식 중지" : "다시 말하기"}
+                  className={`flex h-16 w-16 items-center justify-center rounded-full text-2xl disabled:opacity-50 ${
+                    speech.status === "listening"
+                      ? "bg-[#C6392F] text-white"
+                      : "border-2 border-white text-white"
+                  }`}
+                >
+                  🎙
+                </button>
+              </div>
+
               <button
                 type="button"
-                onClick={() => router.push("/session/chat")}
-                className="min-h-[48px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800"
+                onClick={() => setShowTextInput((v) => !v)}
+                className="text-sm font-semibold text-[#9FB0BA] underline"
               >
-                계속 (역할극 시작)
+                {showTextInput ? "텍스트 입력 숨기기" : "텍스트로 입력할게요"}
               </button>
             </div>
-          </>
-        )}
-      </section>
+
+            {showTextInput && (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleSend();
+                }}
+                className="mt-3 flex items-center gap-2.5"
+              >
+                <label htmlFor="chat-input" className="sr-only">
+                  메시지 입력
+                </label>
+                <input
+                  id="chat-input"
+                  type="text"
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  disabled={sending}
+                  placeholder="메시지를 입력하세요..."
+                  className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-white/30 bg-white/10 px-[18px] py-3 text-lg text-white placeholder:text-[#9FB0BA]"
+                />
+                <button
+                  type="submit"
+                  disabled={sending || !input.trim()}
+                  aria-label="전송"
+                  className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-lg font-bold text-white disabled:opacity-50"
+                >
+                  {sending ? (
+                    <span
+                      aria-hidden="true"
+                      className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                    />
+                  ) : (
+                    "↑"
+                  )}
+                </button>
+              </form>
+            )}
+
+            <div className="mt-3">
+              <EndTrainingButton onClick={handleEndTraining} variant="dark" />
+            </div>
+          </div>
+        ))}
+
+      {/* AC-006 상시 종료 — incoming(거절이 겸함)/ended(별도 버튼) 이외의 모든 phase에서 노출. */}
+      {(phase === "connecting" || phase === "opening") && (
+        <div className="px-5 pb-5">
+          <EndTrainingButton onClick={handleEndTraining} variant="dark" />
+        </div>
+      )}
     </main>
   );
 }

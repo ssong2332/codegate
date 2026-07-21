@@ -14,4 +14,10 @@ export type SendMessageResponse = {
    * 미러링은 이번 태스크 범위 밖이라 별도 후속 필요(구현 보고서 참고).
    */
   isMock?: boolean;
+  /**
+   * 실시간 음성 통화 전환(2026-07-22 사용자 결정) — 사기범 응답을 VoiceProvider(voice/provider.ts)로
+   * 합성한 재생 URL. 합성이 실패해도 텍스트 응답 자체는 막지 않으므로 옵셔널이다(P-4 "핵심 루프
+   * 비차단" 원칙). Mock 단계에서는 항상 고정 beep data URI가 온다(isMock으로 구분).
+   */
+  audioUrl?: string;
 };

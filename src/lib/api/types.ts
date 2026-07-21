@@ -39,6 +39,9 @@ export type CreateSessionResponse = {
   maxUserTurns: number; // 기본값 10 (DECISIONS #10)
   maxSessionMs: number; // 기본값 360000 (6분, DECISIONS #10)
   isMock: boolean;
+  // 실시간 음성 통화 전환(2026-07-22 사용자 결정) — 오프닝 대사 합성 오디오(서버가 이미 반환 중,
+  // functions/src/session/types.ts와 1:1).
+  openingAudioUrl?: string;
 };
 
 // --- sendMessage (Track A · T7 · UX-006 · AC-003~005/AC-013/AC-024/AC-007) ---
@@ -51,6 +54,9 @@ export type SendMessageResponse = {
   ended: boolean;
   endReason?: "limit_reached";
   isMock: boolean;
+  // 실시간 음성 통화 전환(2026-07-22 사용자 결정) — 사기범 응답 합성 오디오(서버가 이미 반환 중,
+  // functions/src/roleplay/types.ts와 1:1).
+  audioUrl?: string;
 };
 
 // --- endSession (Track B · T8 · UX-007 · AC-006/AC-007/AC-021) ---

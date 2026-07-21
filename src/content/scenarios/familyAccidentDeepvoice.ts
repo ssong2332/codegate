@@ -6,12 +6,19 @@
 // (Architecture.md §2 "계약 원천 2곳"은 유지하되, 워크스페이스/경로 별칭 도입은 T6 범위 밖 — 필드가
 // 바뀌면 두 파일을 함께 갱신해야 한다).
 export type DeepvoiceLine = { lineId: string; text: string };
+// voiceMode(Phase B, 2026-07-22 사용자 결정): "clone" = 본인 목소리 클론 필요(기존 온보딩 녹음
+// 플로우), "generic" = 클론 불필요 — 온보딩 녹음 자체를 생략하고 기본(비복제) TTS로 진행한다.
+// callerLabel: play/chat 화면에 표시할 발신자 라벨(시나리오마다 다른 캐릭터를 지어내지 않고
+// 여기 한 곳에서만 정의 — 화면 쪽은 이 값을 그대로 쓴다).
+export type VoiceMode = "clone" | "generic";
 export type ScenarioDoc = {
   title: string;
   fraudType: string;
   estimatedDuration: string;
   difficulty: string;
   deepvoiceLines: DeepvoiceLine[];
+  voiceMode: VoiceMode;
+  callerLabel: string;
 };
 
 export const FAMILY_ACCIDENT_SCENARIO_ID = "family-accident-deepvoice";
@@ -37,4 +44,6 @@ export const familyAccidentDeepvoiceScenario: ScenarioDoc = {
       text: "아빠한테는 아직 말하지 말고, 지금 나랑 통화하면서 처리하자. 시간이 없어.",
     },
   ],
+  voiceMode: "clone",
+  callerLabel: "가족 (사칭)",
 };

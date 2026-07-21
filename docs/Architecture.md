@@ -31,7 +31,7 @@ Based on PRD Version: v0.5 · Based on UX Version: 1.2 · Last Updated: 2026-07-
 | LLM | **Claude 또는 Gemini (택1, 어댑터로 교체 가능)** | 사기범 역할극·리포트 생성. Cloud Functions에서만 호출. |
 | Hosting | Firebase Hosting 또는 Vercel | T2 스캐폴딩에서 팀 편의로 택1. 설계 종속성 없음. |
 
-**금지:** 별도 백엔드 서버, 다른 DB, 다른 인증 프로바이더, 영상 딥페이크, 실시간 통화/STT(전부 PRD Out of Scope).
+**금지:** 별도 백엔드 서버, 다른 DB, 다른 인증 프로바이더, 영상 딥페이크, **실제 전화망(PSTN) 연동**(Twilio 등, 전부 PRD Out of Scope 무변경). ~~실시간 통화/STT~~ **PRD v0.8 갱신(2026-07-22)**: 브라우저 STT(Web Speech API)·사기범 응답 TTS 자동재생은 이제 In Scope다 — 단 이는 여전히 앱 내부(브라우저) 동작이며 실제 전화망과는 무관하다.
 
 ---
 

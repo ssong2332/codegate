@@ -22,6 +22,10 @@
 
 const SESSION_ID_KEY = "onboarding.pendingSessionId";
 const IDENTITY_CONFIRMED_KEY = "onboarding.identityConfirmed";
+// 실시간 음성 통화 전환(2026-07-22 사용자 결정, Phase A) — createSession이 반환하는 오프닝 대사
+// 합성 오디오는 응답 1회성이라(Firestore messages 문서엔 텍스트만 저장) 채팅 화면(/session/chat)이
+// 마운트 시점에 재생하려면 이 값을 넘겨줘야 한다. pendingSessionId와 동일하게 탭 범위 sessionStorage
+// 사용(Firestore에는 쓰지 않음 — 오디오 URL 자체가 세션 상태의 일부가 아니라 1회성 재생 힌트일 뿐).
 
 function hasSessionStorage(): boolean {
   return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
@@ -49,4 +53,35 @@ export function setIdentityConfirmed(confirmed: boolean): void {
 export function getIdentityConfirmed(): boolean {
   if (!hasSessionStorage()) return false;
   return window.sessionStorage.getItem(IDENTITY_CONFIRMED_KEY) === "true";
+}
+
+const OPENING_AUDIO_URL_KEY = "session.openingAudioUrl";
+
+export function setOpeningAudioUrl(url: string): void {
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.setItem(OPENING_AUDIO_URL_KEY, url);
+}
+
+/** 1회성 힌트라 읽은 뒤 곧바로 지운다(재마운트/새로고침 시 중복 재생 방지). */
+export function consumeOpeningAudioUrl(): string | null {
+  if (!hasSessionStorage()) return null;
+  const url = window.sessionStorage.getItem(OPENING_AUDIO_URL_KEY);
+  if (url) window.sessionStorage.removeItem(OPENING_AUDIO_URL_KEY);
+  return url;
+}
+
+// Phase B(2026-07-22 사용자 결정) — 시나리오 선택(UX-004)이 이제 녹음(UX-002)보다 먼저 온다
+// (voiceMode:"generic" 시나리오는 녹음 자체를 생략하므로 먼저 골라야 분기가 가능하다). 녹음이
+// 끝난 뒤(clone/wait 화면)에도 어떤 시나리오였는지 알아야 createSession을 호출할 수 있어, 선택한
+// scenarioId를 pendingSessionId와 동일하게 탭 범위 sessionStorage에 넘긴다.
+const SELECTED_SCENARIO_ID_KEY = "onboarding.selectedScenarioId";
+
+export function setSelectedScenarioId(scenarioId: string): void {
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.setItem(SELECTED_SCENARIO_ID_KEY, scenarioId);
+}
+
+export function getSelectedScenarioId(): string | null {
+  if (!hasSessionStorage()) return null;
+  return window.sessionStorage.getItem(SELECTED_SCENARIO_ID_KEY);
 }

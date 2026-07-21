@@ -1,8 +1,22 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css");
 @import "tailwindcss";
 
+/* 디자인 파운데이션 — "경고하되 돕는다" (claude.ai/design 옵션 탐색, 1x 파운데이션 확정).
+   라이트 테마 고정(어르신 접근성 우선, OS 다크모드 자동전환 없음). Pretendard 단일 서체. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #faf8f5; /* 웜 화이트 — 차갑지 않게 */
+  --foreground: #22303a; /* 잉크 — 본문 텍스트 */
+  --color-teal: #0e6b62; /* 주조 청록 — 신뢰/진행/CTA */
+  --color-teal-tint: #e4f0ec; /* 주조 틴트 — 안심 배경 */
+  --color-ink: #22303a;
+  --color-ai-purple: #5b4b9e; /* AI 합성 표식 전용 */
+  --color-ai-purple-tint: #efebf7;
+  --color-ai-purple-text: #463880;
+  --color-warn-red: #c6392f; /* 훈련 종료·에러 한정 */
+  --color-caution: #b96a1b; /* 주의 필요(시간압박 등 개선영역) */
+  --color-caution-tint: #fbf3e8;
+  --color-muted: #6b655c;
+  --color-border: #e2ddd3;
 }
 
 @theme inline {
@@ -10,15 +24,8 @@
   --color-foreground: var(--foreground);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Pretendard Variable", Pretendard, system-ui, sans-serif;
 }
