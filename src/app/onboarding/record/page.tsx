@@ -9,6 +9,7 @@ import { ref as storageRef, uploadBytes } from "firebase/storage";
 import { storage } from "@/lib/firebase";
 import { useCurrentUser } from "@/lib/auth";
 import { hasGrantedConsent } from "@/lib/consent";
+import { hasVerifiedAge } from "@/lib/age";
 import { createVoiceClone } from "@/lib/api";
 import {
   MAX_RECORDING_SECONDS,
@@ -50,19 +51,30 @@ export default function RecordPage() {
   useEffect(() => {
     if (userLoading || !user) return;
     let cancelled = false;
-    hasGrantedConsent(user.uid)
-      .then((granted) => {
+    (async () => {
+      try {
+        const granted = await hasGrantedConsent(user.uid);
         if (cancelled) return;
-        if (granted) {
-          setGateState("ok");
-        } else {
+        if (!granted) {
           setGateState("redirecting");
           router.replace("/onboarding/consent");
+          return;
         }
-      })
-      .catch(() => {
+        // T14: 연령 확인(UX-011, AC-014)이 동의 다음·녹음 이전에 끼워 들어간다 — URL 직접 접근으로
+        // age-gate를 건너뛰는 것을 막기 위해 기존 동의 확인 가드와 동일한 패턴으로 추가했다
+        // (그 외 이 useEffect의 동의 확인 로직·상태 전이는 무변경).
+        const ageVerified = await hasVerifiedAge(user.uid);
+        if (cancelled) return;
+        if (!ageVerified) {
+          setGateState("redirecting");
+          router.replace("/onboarding/age-gate");
+          return;
+        }
+        setGateState("ok");
+      } catch {
         if (!cancelled) setGateState("check-error");
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };

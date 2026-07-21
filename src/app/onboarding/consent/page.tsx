@@ -33,7 +33,10 @@ export default function ConsentPage() {
     setError(null);
     try {
       await grantConsent(user.uid);
-      router.push("/onboarding/record");
+      // T14: 연령 확인(UX-011)이 동의 직후·녹음 이전에 끼워 들어간다(AC-014) — 근거는
+      // src/app/onboarding/age-gate/page.tsx 상단 주석 참조. record로의 직행이었던 이전 경로를
+      // age-gate 경유로 1줄만 변경했다(그 외 동의 로직은 무변경).
+      router.push("/onboarding/age-gate");
     } catch {
       setError("동의 저장에 실패했습니다. 연결 상태를 확인하고 다시 시도해 주세요.");
       setSubmitting(false);

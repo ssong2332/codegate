@@ -31,20 +31,26 @@ export type SynthesizeDeepvoiceResponse = {
 // createSession이 채택한다(sessionId 불일치 갭 해소, functions/src/session/index.ts 참고).
 // API.md에는 아직 반영 안 됨 — architect 확인/문서 갱신 권장.
 export type CreateSessionRequest = { scenarioId: string; voiceId: string; sessionId?: string };
+// isMock(채팅 화면 구현 시 반영, 서버는 이미 반환 중 — functions/src/session/index.ts:96): 서버가
+// LLM 어댑터로 MockLlmClient를 썼다는 뜻(계약 드리프트 해소, API.md 갱신 권장).
 export type CreateSessionResponse = {
   sessionId: string;
   openingMessage: ScammerMessage;
   maxUserTurns: number; // 기본값 10 (DECISIONS #10)
   maxSessionMs: number; // 기본값 360000 (6분, DECISIONS #10)
+  isMock: boolean;
 };
 
 // --- sendMessage (Track A · T7 · UX-006 · AC-003~005/AC-013/AC-024/AC-007) ---
 export type SendMessageRequest = { sessionId: string; userText: string };
+// isMock: 서버가 이미 반환 중이었으나(functions/src/roleplay/index.ts:137) 클라 타입에 누락돼
+// 있던 계약 드리프트를 채팅 화면 구현 시 해소.
 export type SendMessageResponse = {
   reply: ScammerMessage;
   turnCount: number;
   ended: boolean;
   endReason?: "limit_reached";
+  isMock: boolean;
 };
 
 // --- endSession (Track B · T8 · UX-007 · AC-006/AC-007/AC-021) ---
