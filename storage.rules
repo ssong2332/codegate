@@ -1,0 +1,23 @@
+rules_version = '2';
+
+// ADR-0002 · AC-020 — 본인 목소리만 등록의 서버측 원천 차단(Database.md §Storage Layout /
+// §Security Rules 예시를 그대로 구현). 합성 산출물(synth/images)은 Functions(admin SDK)가
+// 이 규칙을 우회해 write한다 — 클라 write 경로는 마이크 녹음(audio/*)뿐이다(파일 업로드 UI
+// 부재와 합쳐 이중 차단, Architecture.md §6.1).
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /users/{uid}/sessions/{sid}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null
+                && request.auth.uid == uid
+                && request.resource.size < 3 * 1024 * 1024      // ≈30초 상한
+                && request.resource.contentType.matches('audio/.*'); // 파일 업로드/타인음성 차단
+    }
+
+    // 그 외 모든 경로는 기본 거부(폴백 오디오·표식 프리롤 등 비민감 정적 에셋은
+    // Storage가 아닌 Next.js /public 또는 별도 비-사용자 버킷에 둔다, Database.md §Storage Layout).
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

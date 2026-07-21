@@ -1,20 +1,110 @@
-# API — {{project-name}}
+# API — 안 당해본 사기는 못 막는다 (AI 금융사기 백신)
 
 Owner: architect (see AGENTS.md). Others read-only.
-Created only when the project exposes an API (architect: "if required").
-Based on PRD Version: {{x.x}} · Based on UX Version: {{y.y or N/A}}
+Based on PRD Version: v0.5 · Based on UX Version: 1.2
+
+> 이 프로젝트는 REST 엔드포인트가 아니라 **Firebase Cloud Functions(2nd gen)** 를 노출한다. 대부분 **Callable**(클라 SDK `httpsCallable`)이고, 폐기는 **Firestore 트리거**다. 외부 API 키(ElevenLabs/LLM)는 Functions 런타임에만 존재하며 클라이언트에 절대 노출하지 않는다(Architecture.md §8). 함수 시그니처는 `src/lib/api/*`·`functions/src/shared`에서 단일 정의(계약, ADR-0001).
 
 ## Conventions
-- Base URL: {{/api/v1}}
-- Auth: {{Bearer token / session / none}}
-- Error format: {{shared error response shape}}
+- 호출 방식: Firebase **Callable Functions**(`httpsCallable(functions, name)`). 트리거 함수는 클라가 직접 호출하지 않음.
+- Auth: 모든 callable은 `context.auth` 필수. 없으면 `unauthenticated`로 거부(AC-027 게이팅). 모든 데이터는 `context.auth.uid` 귀속.
+- 인가: 함수는 대상 리소스의 소유 uid == `context.auth.uid`를 검증. 불일치 시 `permission-denied`.
+- 에러 포맷: Firebase `HttpsError` 표준 — `{ code, message, details? }`. `code`는 아래 표의 값 사용.
+- 표준 에러 코드: `unauthenticated`(미로그인), `permission-denied`(타인 리소스), `invalid-argument`(입력 오류), `failed-precondition`(선행 상태 미충족, 예: 동의 없음/클론 없음), `deadline-exceeded`(외부 API 타임아웃), `resource-exhausted`(rate/credit 초과), `internal`(외부 API·기타 실패).
+- PII: 대화·리포트 관련 함수는 Firestore 쓰기 **전** `guardrails/maskPII()` 통과(ADR-0004).
+- 시크릿(런타임 config, `.env`→Functions): `ELEVENLABS_API_KEY`, `LLM_API_KEY`, `LLM_PROVIDER`(claude|gemini), `FALLBACK_VOICE_ID`. `.env.example`에 placeholder만.
 
-## Endpoints
-### {{METHOD}} {{/path}}
+---
+
+## Callable Functions
+
+### `createVoiceClone` — (Track A · T4 · UX-003)
 | Item | Value |
 |---|---|
-| Purpose | {{...}} |
-| Auth | {{required / none}} |
-| Request | {{body/query schema}} |
-| Response | {{200 schema}} |
-| Errors | {{400/401/404 conditions}} |
+| Purpose | 업로드된 30초 녹음으로 ElevenLabs Instant Voice Clone 생성 → `voiceId` 반환. AC-018. |
+| Auth | required. `sid` 소유 uid == caller. |
+| Request | `{ sessionId: string }` — 녹음은 이미 `users/{uid}/sessions/{sid}/voice_input.*`에 업로드됨(클라 Storage SDK). |
+| Response | `{ voiceId: string, cloneStatus: "ready" }` (성공). 진행 상태는 `sessions/{sid}.cloneStatus` 구독으로도 반영. |
+| 처리 | ① Storage에서 녹음 read → ② ElevenLabs IVC 호출(soft 15s/hard 45s, DECISIONS #9) → ③ `sessions/{sid}` 에 `voiceId`·`cloneStatus` write. |
+| Errors | `failed-precondition`(녹음 없음/동의 없음), `deadline-exceeded`(hard 45s 초과 → 클라가 폴백 경로 안내), `resource-exhausted`(크레딧/rate), `internal`(ElevenLabs 실패). |
+
+### `synthesizeDeepvoice` — (Track A · T5 · UX-005)
+| Item | Value |
+|---|---|
+| Purpose | 클론 voice로 시나리오 사칭 대사를 TTS 합성 → 임시 오디오 URL 반환 + 합성 표식 메타. AC-019, AC-022. |
+| Auth | required. `sid` 소유 검증. |
+| Request | `{ sessionId: string, lineId: string }` — `lineId`는 시나리오 `deepvoiceLines`의 대사 식별자(대사 원문은 서버가 조회, 클라가 임의 문장 합성 불가). |
+| Response | `{ audioUrl: string, artifactId: string, synthetic: true, syntheticLabel: "AI 훈련용 합성" }` |
+| 처리 | ElevenLabs TTS(hard 20s) → Storage `.../synth/{artifactId}.mp3`(admin write) → `sessions/{sid}/artifacts/{artifactId}` 메타 write(폐기 매니페스트). |
+| Errors | `failed-precondition`(voiceId 없음), `deadline-exceeded`(→ 사전녹화 폴백), `resource-exhausted`, `internal`. |
+
+### `createSession` — (Track B · T8 · UX-006 진입)
+| Item | Value |
+|---|---|
+| Purpose | 세션 문서 생성 + 사기범 오프닝 라인 반환. 턴/시간 한도 초기화. AC-003, AC-007. |
+| Auth | required. |
+| Request | `{ scenarioId: string, voiceId: string }` |
+| Response | `{ sessionId: string, openingMessage: { role: "scammer", text: string }, maxUserTurns: 10, maxSessionMs: 360000 }` |
+| 처리 | `sessions/{sid}` 생성(status=active, turnCount=0, 한도값 DECISIONS #10) → roleplay 모듈 `generateOpeningLine(scenarioId)`(서버 조립 프롬프트, ADR-0004) 호출 → 오프닝 메시지를 `messages`에 마스킹 저장. |
+| Errors | `failed-precondition`(동의/클론 미완), `invalid-argument`(없는 scenarioId), `internal`(LLM 실패). |
+
+### `sendMessage` — (Track A · T7 · UX-006)
+| Item | Value |
+|---|---|
+| Purpose | 사용자 턴 처리 → 사기범 응답 생성. 인젝션 방어·PII 마스킹·한도 체크. AC-003~005, AC-013, AC-024, AC-007. |
+| Auth | required. `sid` 소유 검증. |
+| Request | `{ sessionId: string, userText: string }` — **시스템 프롬프트/페르소나는 클라가 보내지 않음**(서버 조립, ADR-0004). |
+| Response | `{ reply: { role: "scammer", text: string }, turnCount: number, ended: boolean, endReason?: "limit_reached" }` |
+| 처리 | ① `maskPII(userText)` → `messages` write ② 서버에서 `scenarioPrompts/{id}`(클라 read 거부) + 히스토리로 프롬프트 조립 → LLM(어댑터, DECISIONS #11) ③ 응답 마스킹 저장 ④ turnCount++·경과시간 체크 → 한도 도달 시 `ended:true`+자동 종료 트리거. |
+| Errors | `failed-precondition`(세션 미활성/종료됨), `deadline-exceeded`(LLM 지연, AC-004 목표 p95≤10s), `resource-exhausted`, `internal`. |
+
+### `endSession` — (Track B · T8 · UX-007)
+| Item | Value |
+|---|---|
+| Purpose | 세션을 정확히 마감(status=ended, endReason). 폐기 트리거·리포트 생성 개시. AC-006, AC-007, AC-021. |
+| Auth | required. `sid` 소유 검증. |
+| Request | `{ sessionId: string, endReason: "user_ended" \| "completed" \| "deceived" \| "limit_reached" }` |
+| Response | `{ status: "ended", reportPending: true }` |
+| 처리 | `sessions/{sid}.status=ended`·`endReason`·`endedAt` write. 이 write가 ① `onSessionEnded`(폐기 트리거) ② `generateReport` 개시를 유발. 클라는 `reports/{sid}`·`deletionLogs` 구독으로 완료 반영. |
+| Errors | `permission-denied`, `failed-precondition`(이미 ended면 멱등 처리). |
+
+### `generateReport` — (Track A · T9 · UX-008)
+| Item | Value |
+|---|---|
+| Purpose | 마스킹 대화 로그로 취약점 리포트 생성. 속은 시점 타임라인·수법·대처법. AC-008, AC-009, AC-026. |
+| Auth | required(또는 `endSession` 후 서버 내부 호출). `sid` 소유 검증. |
+| Request | `{ sessionId: string }` |
+| Response | `{ reportId: string }` — 내용은 `reports/{id}` 구독으로 표시. |
+| 처리 | **마스킹된 `messages`만 입력**(원문·실제 운영정보 배제, AC-005/013). LLM으로 `deceivedMoments[]`·`tacticsUsed[]`·`preventionAdvice[]`·`wasDeceived` 산출 → `reports/{id}` write. |
+| Errors | `failed-precondition`(세션 미종료), `internal`(LLM 실패 → 재시도). |
+
+---
+
+## Trigger Functions (클라 직접 호출 아님)
+
+### `onSessionEnded` — Firestore trigger (Track C · T10 · AC-021)
+| Item | Value |
+|---|---|
+| Trigger | `sessions/{sid}` document update where `status` → `ended`. |
+| Purpose | 생성물 즉시 폐기 + 삭제 로그. ADR-0003. |
+| 처리 | ① `sessions/{sid}/artifacts` 매니페스트 순회 → Storage `users/{uid}/sessions/{sid}/**` 삭제 ② **ElevenLabs DELETE voice**(`session.voiceId`) ③ `session.voiceId` 클리어 ④ `deletionLogs/{id}` write(targets[]·target별 success/partial/failed). |
+| Errors(내부) | 외부 삭제 실패는 `deletionLogs`에 `partial`/`failed`로 기록 후 재시도 가능. 리포트 생성과 독립. |
+
+---
+
+## 외부 API 연동 지점 (Functions 내부에서만)
+| 외부 | 사용 함수 | 용도 | 비고 |
+|---|---|---|---|
+| ElevenLabs IVC | `createVoiceClone` | 30초 샘플 → 클론 voice 생성 | 키 `ELEVENLABS_API_KEY`(서버). 타임아웃 DECISIONS #9. |
+| ElevenLabs TTS | `synthesizeDeepvoice` | 클론 voice로 대사 합성 | 합성 표식 메타 부착(AC-022). |
+| ElevenLabs DELETE voice | `onSessionEnded` | 클론 voice 외부 삭제(AC-021) | 미삭제 시 외부 잔존 → 반드시 호출. |
+| LLM(Claude/Gemini) | `createSession`, `sendMessage`, `generateReport` | 역할극·리포트 | 어댑터 `functions/src/llm`(DECISIONS #11). 프롬프트 서버 조립(ADR-0004). |
+
+## 직접 SDK 사용(함수 불필요) — 참고
+| 동작 | 방식 | 규칙 |
+|---|---|---|
+| 로그인(UX-013) | Firebase Auth Google SDK | `signInWithPopup`/`signInWithRedirect` |
+| 동의 기록(UX-001) | Firestore write | `users/{uid}/consents` — rules로 본인만 |
+| 녹음 업로드(UX-002) | Storage put | storage.rules 강제(ADR-0002) |
+| 시나리오 목록(UX-004) | Firestore read | `scenarios`(공개 메타만). `scenarioPrompts`는 read 거부 |
+| 히스토리(UX-012, P1) | Firestore read | 본인 `sessions`/`reports`만 |

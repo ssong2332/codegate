@@ -1,2 +1,28 @@
 # Environment variables — never commit real secrets
 .env
+.env.local
+functions/.env
+functions/.env.local
+
+# Dependencies
+node_modules/
+functions/node_modules/
+
+# Next.js build output (static export → out/, deployed to Firebase Hosting)
+.next/
+out/
+next-env.d.ts
+
+# Firebase Functions build output
+functions/lib/
+
+# Firebase local emulator / CLI
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+
+# Misc
+.DS_Store
+*.log
