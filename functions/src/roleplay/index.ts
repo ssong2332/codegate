@@ -96,9 +96,14 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     } satisfies MessageDoc);
 
     // ④ turnCount++·경과시간 체크 → 한도 도달 시 ended:true + status=ended(→onSessionEnded 트리거,
-    // AC-007). 세션 시작 시점(createdAt) 기준 경과시간으로 MAX_SESSION_MS를 판단한다.
+    // AC-007). 경과시간 기점(#6 수정, 2026-07-22): 예전엔 session.createdAt(세션 생성 시각) 기준이라
+    // 수신 화면에서 오래 머물면 실제 대화 가능 시간이 줄어들었다. 이제 통화가 실제로 시작된 시점
+    // (answeredAt = 첫 사용자 발화 시각)을 기점으로 삼는다. 첫 턴에는 answeredAt이 아직 없어
+    // userWriteTime을 기점으로 쓰므로 경과가 ~0이 되고, 그 값을 answeredAt으로 저장한다 — UI 통화
+    // 타이머("받기" 기준)와도 정합.
     const turnCount = session.turnCount + 1;
-    const elapsedMs = userWriteTime.toMillis() - session.createdAt.toMillis();
+    const elapsedBase = session.answeredAt ?? userWriteTime;
+    const elapsedMs = userWriteTime.toMillis() - elapsedBase.toMillis();
     const limitReached = isSessionLimitReached({
       turnCount,
       maxUserTurns: session.maxUserTurns,
@@ -108,6 +113,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
 
     const sessionUpdate: Partial<SessionDoc> = {
       turnCount,
+      // 첫 사용자 발화 시각을 통화 시작 기점으로 1회 기록(위 elapsedBase 참고).
+      ...(session.answeredAt ? {} : { answeredAt: userWriteTime }),
       // Firestore admin SDK는 필드값 undefined를 기본적으로 거부하므로, Mock일 때만 갱신한다
       // (실 LLM으로 세션이 시작됐다면 굳이 llmProvider를 덮어쓸 필요가 없다).
       ...(completion.isMock ? { llmProvider: "mock" as const } : {}),

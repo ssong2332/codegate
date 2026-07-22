@@ -85,3 +85,15 @@ export function getSelectedScenarioId(): string | null {
   if (!hasSessionStorage()) return null;
   return window.sessionStorage.getItem(SELECTED_SCENARIO_ID_KEY);
 }
+
+// 세션이 끝나면 사전 세션 id와 부수 힌트를 전부 지운다(2026-07-22 버그픽스). 이걸 안 하면 같은
+// 탭에서 두 번째 훈련을 시작할 때 getOrCreatePendingSessionId가 종료된 세션 id를 그대로 반환해,
+// createSession이 이미 ended된 문서를 되살려 쓰고(이전 대화·turnIndex 잔존) 리포트도 첫 훈련 것이
+// 멱등 반환되던 치명 결함의 원인이었다. 종료 성공 시점(session/end)에서 호출한다.
+export function clearPendingSession(): void {
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.removeItem(SESSION_ID_KEY);
+  window.sessionStorage.removeItem(IDENTITY_CONFIRMED_KEY);
+  window.sessionStorage.removeItem(OPENING_AUDIO_URL_KEY);
+  window.sessionStorage.removeItem(SELECTED_SCENARIO_ID_KEY);
+}

@@ -85,6 +85,17 @@ export default function SessionCallPage() {
         setScenario(found);
         if (data.status === "ended") {
           setPhase("ended");
+        } else if (data.status === "active" && (data.turnCount as number) >= 1) {
+          // #5 새로고침 복원(2026-07-22): 이미 대화가 시작된(turnCount≥1) 세션을 다시 열면 "수신 중"
+          // 으로 되돌아가지 않고 곧바로 실시간(live)으로 복원한다. 오프닝 오디오는 1회성이라 다시
+          // 재생하지 않고, 대화 로그는 messages 구독이 그대로 복원한다. 통화 타이머는 answeredAt
+          // 기점으로 경과분을 이어서 센다(#6, 서버 한도 기점과 정합).
+          const answeredAtMs =
+            (data.answeredAt as { toMillis?: () => number } | undefined)?.toMillis?.() ?? null;
+          if (answeredAtMs) {
+            setElapsedSec(Math.max(0, Math.floor((Date.now() - answeredAtMs) / 1000)));
+          }
+          setPhase("live");
         }
         setPageState("ready");
       } catch {
@@ -159,6 +170,21 @@ export default function SessionCallPage() {
     speech.start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [speech.status]);
+
+  // #7 연속 자동 청취(2026-07-22): 브라우저 SpeechRecognition은 침묵이 이어지면 스스로 종료해
+  // status가 idle로 떨어진다. 예전엔 여기서 아무것도 다시 열지 않아, 사용자가 한 번 뜸을 들이면
+  // 그 뒤로는 수동으로 🎙을 눌러야 했다("자동 청취" 의도와 어긋남). live 구간에서 오디오 재생 중이
+  // 아니고 전송 중이 아니면 idle이 될 때마다 마이크를 다시 연다. start()가 status를 listening으로
+  // 바꿔 이 effect가 곧바로 멈추므로 타이트 루프가 아니다. 이 effect는 새로고침 복원(#5)으로
+  // live에 진입한 경우의 첫 청취 시작도 함께 담당한다.
+  useEffect(() => {
+    if (phase !== "live") return;
+    if (speech.status !== "idle") return;
+    if (sending || playbackUrl) return;
+    const timer = setTimeout(() => speech.start(), 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, speech.status, sending, playbackUrl]);
 
   // P-11 이음새 없는 전환 — 오프닝 재생이 끝나면(또는 재생할 오디오가 없으면) 화면 전환·확인 버튼
   // 없이 곧바로 실시간 청취로 넘어간다.

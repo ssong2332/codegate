@@ -37,12 +37,28 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
     }
 
+    const db = getFirestore();
+
+    // AC-017 서버측 동의 게이팅(#4 보안 하드닝, 2026-07-22) — 그동안 동의 확인은 클라 라우팅
+    // (RouteGuard·consent 페이지)에만 의존했다. 콜러블을 직접 호출하면 동의 없이 세션이 생성될 수
+    // 있어, 서버에서도 users/{uid}/consents(granted:true)를 1건 이상 확인한다(클라 hasGrantedConsent와
+    // 동일 기준). 동의 없으면 세션 생성을 거부한다.
+    const consentSnap = await db
+      .collection("users")
+      .doc(request.auth.uid)
+      .collection("consents")
+      .where("granted", "==", true)
+      .limit(1)
+      .get();
+    if (consentSnap.empty) {
+      throw new HttpsError("failed-precondition", "훈련 참여 동의가 필요합니다.");
+    }
+
     // roleplay 모듈(트랙 A 내부 계약, Architecture.md §4)에 오프닝 사기범 대사 생성을 위임한다.
     // LLM 호출 지점은 functions/src/llm 어댑터를 거친다(sendMessage와 동일 구조, T7 태스크 지시).
     const openingMessage = await generateOpeningLine(scenarioId);
     const isMock = isUsingMockLlm();
 
-    const db = getFirestore();
     // T4: sessionId(온보딩 "사전 세션 id")가 넘어오면 createVoiceClone이 만들어 둔 pending
     // sessions/{sid} 문서를 새로 만들지 않고 채택한다 — sessionId 불일치 갭 해소. 넘어오지 않으면
     // 기존과 동일하게 새 id를 발급한다(하위호환). ID 생성/채택 로직만 바꿨고, 그 외 인격유지·
@@ -51,8 +67,21 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     if (sessionId) {
       const candidateRef = db.collection("sessions").doc(sessionId);
       const candidateSnap = await candidateRef.get();
-      if (candidateSnap.exists && candidateSnap.data()?.uid !== request.auth.uid) {
-        throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
+      if (candidateSnap.exists) {
+        const candidate = candidateSnap.data();
+        if (candidate?.uid !== request.auth.uid) {
+          throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
+        }
+        // #1 치명 버그 차단(2026-07-22): 같은 사전 id로 이미 시작(active)되었거나 종료(ended)된
+        // 세션을 되살려 쓰지 못하게 막는다. 정상 클론 경로의 pending 문서는 status:"created"라
+        // 통과한다. 클라(session/end)가 종료 시 사전 id를 비우므로 정상 흐름에선 이 경로에 안 걸리며,
+        // 이 가드는 클라 클리어가 누락된 경우의 서버측 이중 방어다.
+        if (candidate?.status === "active" || candidate?.status === "ended") {
+          throw new HttpsError(
+            "failed-precondition",
+            "이미 사용된 세션입니다. 시나리오 선택부터 다시 시작해 주세요.",
+          );
+        }
       }
       sessionRef = candidateRef;
     }

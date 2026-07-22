@@ -17,11 +17,14 @@ service cloud.firestore {
       }
     }
 
-    // sessions/{sessionId} — 소유 uid == 호출자만(Database.md §Security Rules)
+    // sessions/{sessionId} — 소유 uid만 read. write는 전부 Functions(admin SDK, 규칙 우회)만.
+    // #3 보안 하드닝(2026-07-22): 예전엔 소유자면 create/update/delete를 허용했으나, 클라가
+    // sessions 문서를 직접 쓰는 경로가 실제로는 없고(세션 생성·수정은 전부 콜러블 경유), 열려
+    // 있으면 클라가 maxUserTurns(한도 우회)·voiceId(실 ElevenLabs 전환 시 타인 voice 주입·도용)·
+    // status 등을 임의 조작해 서버 불변식을 우회할 수 있었다. 클라 write를 원천 차단한다.
     match /sessions/{sessionId} {
       allow read: if request.auth != null && resource.data.uid == request.auth.uid;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow write: if false;
 
       // messages/artifacts는 서버(Functions admin SDK)만 write — PII 마스킹(ADR-0004)/
       // 폐기 매니페스트(ADR-0003) 보장을 클라가 우회할 수 없도록 원천 차단.

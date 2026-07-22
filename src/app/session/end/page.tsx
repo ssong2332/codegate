@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { endSession } from "@/lib/api";
-import { getPendingSessionId } from "@/lib/recording";
+import { clearPendingSession, getPendingSessionId } from "@/lib/recording";
 
 type PageState = "no-session" | "ending" | "ended" | "error";
 
@@ -40,7 +40,12 @@ export default function SessionEndPage() {
     (async () => {
       try {
         await requestEndSession(sessionId);
-        if (!cancelled) setState("ended");
+        if (cancelled) return;
+        // 종료 성공 시 사전 세션 id·힌트를 비운다 — 같은 탭에서 다음 훈련이 종료된 세션을
+        // 되살려 쓰던 치명 버그 차단(pendingSession.clearPendingSession 주석 참고). 이 화면의
+        // 로컬 sessionId 변수는 이미 캡처돼 있어 "리포트 보기"(쿼리 파라미터로 전달)는 영향 없다.
+        clearPendingSession();
+        setState("ended");
       } catch {
         if (!cancelled) setState("error");
       }

@@ -56,6 +56,9 @@ export type SessionDoc = {
   maxSessionMs: number;
   llmProvider?: LlmProviderName; // T7 추가 — 이 세션의 sendMessage가 쓴 LLM 어댑터 식별(옵셔널)
   createdAt: FirebaseFirestore.Timestamp;
+  // 통화가 실제로 시작된 시각(첫 사용자 발화) — 세션 시간 한도(maxSessionMs)의 기점(#6, 2026-07-22).
+  // sendMessage가 첫 턴에 1회 기록한다. 없으면(아직 대화 전) createdAt로 근사.
+  answeredAt?: FirebaseFirestore.Timestamp;
   endedAt?: FirebaseFirestore.Timestamp;
 };
 
