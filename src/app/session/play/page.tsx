@@ -24,7 +24,6 @@ import { consumeOpeningAudioUrl, getPendingSessionId, useSpeechRecognition } fro
 import { useRealtimeCall } from "@/lib/realtime";
 import { sendMessage } from "@/lib/api";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
-import EndTrainingButton from "@/components/EndTrainingButton";
 import CallWaveform from "@/components/CallWaveform";
 
 // ⚠️ 지연 로딩 필수 — @elevenlabs/react가 끌어오는 livekit-client(WebRTC)를 이 화면 로드 시점에
@@ -415,27 +414,11 @@ export default function SessionCallPage() {
           />
         )}
 
-        {/* 통화 중 발화 인디케이터 — 실시간 경로는 자막이 없을 수 있어 이게 주 피드백이다. */}
+        {/* 통화 중 발화 인디케이터 — 실제 통화 화면에 있는 유일한 "상태" 표시다.
+            자막·안내문·오류는 여기 두지 않는다(2026-07-22 사용자 피드백: 화면이 통화처럼 안 보임)
+            — 필요한 것은 키패드 패널 안으로 옮겨, 기본 화면은 발신자와 컨트롤만 남긴다. */}
         {(phase === "live" || phase === "opening") && (
           <CallWaveform active={agentSpeaking} label={waveLabel} />
-        )}
-
-        {/* 폴백 경로 안내 — 실시간 통화가 아님을 숨기지 않는다(조용한 실패 금지). */}
-        {callMode === "fallback" && (phase === "live" || phase === "opening") && (
-          <p className="max-w-xs text-center text-xs leading-relaxed text-[#8B9BA5]">
-            실시간 음성 통화를 사용할 수 없어 텍스트로 진행합니다.
-            {realtime.errorMessage ? ` ${realtime.errorMessage}` : ""}
-          </p>
-        )}
-
-        {/* 폴백 경로 자막 — 실시간 경로에서는 음성이 주채널이라 굳이 띄우지 않는다. */}
-        {callMode === "fallback" && latestScammerLine && phase !== "incoming" && (
-          <p
-            className="max-w-xs text-center text-lg leading-relaxed text-white/90"
-            aria-live="polite"
-          >
-            &ldquo;{latestScammerLine}&rdquo;
-          </p>
         )}
 
         {playbackUrl && (
@@ -447,6 +430,7 @@ export default function SessionCallPage() {
             className="hidden"
           />
         )}
+        {/* 자동재생이 막힌 경우에만 노출 — 이건 누르지 않으면 통화가 진행되지 않아 화면에 남긴다. */}
         {playbackBlocked && (
           <button
             type="button"
@@ -456,21 +440,6 @@ export default function SessionCallPage() {
             🔊 탭하여 듣기
           </button>
         )}
-
-        {sendError && (
-          <p role="alert" className="flex items-center gap-2 text-base text-[#F0A79E]">
-            <span aria-hidden="true">⚠</span>
-            <span>{sendError}</span>
-          </p>
-        )}
-
-        {(speech.status === "permission-denied" || speech.status === "error") &&
-          callMode === "fallback" &&
-          speech.errorMessage && (
-            <p role="alert" className="max-w-xs text-center text-sm text-[#F0A79E]">
-              {speech.errorMessage}
-            </p>
-          )}
       </div>
 
       {/* 하단 컨트롤 — 실제 폰 통화 UI 관례(수신 화면은 거절/받기, 통화 중은 음소거·키패드·종료). */}
@@ -514,7 +483,75 @@ export default function SessionCallPage() {
         </div>
       ) : (
         <div className="px-6 pb-10">
-          <div className="mb-6 flex items-center justify-center gap-10">
+          {/* 키패드 패널 — 기본 화면을 통화답게 유지하려고, 자막·안내·오류·텍스트 입력을 전부
+              여기로 모았다. 닫혀 있으면 통화 화면에는 발신자와 컨트롤만 남는다. */}
+          {showTextInput && (
+            <div className="mb-5 rounded-2xl bg-black/25 p-4">
+              {latestScammerLine && (
+                <p className="mb-3 text-center text-base leading-relaxed text-white/85" aria-live="polite">
+                  &ldquo;{latestScammerLine}&rdquo;
+                </p>
+              )}
+
+              {(callMode === "fallback" || sendError || speech.errorMessage) && (
+                <p
+                  role={sendError ? "alert" : undefined}
+                  className={`mb-3 text-center text-xs leading-relaxed ${
+                    sendError ? "text-[#F0A79E]" : "text-[#8B9BA5]"
+                  }`}
+                >
+                  {sendError ??
+                    (callMode === "fallback"
+                      ? `실시간 음성 통화를 사용할 수 없어 텍스트로 진행합니다.${
+                          realtime.errorMessage ? ` ${realtime.errorMessage}` : ""
+                        }`
+                      : speech.errorMessage)}
+                </p>
+              )}
+
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleSend();
+                }}
+                className="flex items-center gap-2.5"
+              >
+                <label htmlFor="chat-input" className="sr-only">
+                  메시지 입력
+                </label>
+                <input
+                  id="chat-input"
+                  type="text"
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  disabled={sending}
+                  placeholder="하고 싶은 말을 입력하세요..."
+                  className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-white/30 bg-white/10 px-[18px] py-3 text-lg text-white placeholder:text-[#8B9BA5]"
+                />
+                <button
+                  type="submit"
+                  disabled={sending || !input.trim()}
+                  aria-label="전송"
+                  className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-lg font-bold text-white disabled:opacity-50"
+                >
+                  {sending ? (
+                    <span
+                      aria-hidden="true"
+                      className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                    />
+                  ) : (
+                    "↑"
+                  )}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* 실제 폰 통화의 컨트롤 행: 음소거 · 통화 종료(빨강, 가운데) · 키패드.
+              가운데 빨강 버튼이 AC-006의 "상시 즉시 종료" 컨트롤을 겸한다 — 별도 "훈련 종료"
+              버튼을 두면 통화 화면처럼 보이지 않는다는 피드백을 반영하되, 종료 수단은 모든
+              상태에서 한 번의 탭으로 도달 가능하다는 요건은 그대로 지킨다. */}
+          <div className="flex items-end justify-center gap-9">
             <div className="flex flex-col items-center gap-2">
               <button
                 type="button"
@@ -533,6 +570,18 @@ export default function SessionCallPage() {
             <div className="flex flex-col items-center gap-2">
               <button
                 type="button"
+                onClick={handleEndTraining}
+                aria-label="통화 종료 — 훈련 종료"
+                className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[#C6392F] text-3xl shadow-lg transition active:scale-95"
+              >
+                <span aria-hidden="true">✆</span>
+              </button>
+              <span className="text-xs text-[#8B9BA5]">종료</span>
+            </div>
+
+            <div className="flex flex-col items-center gap-2">
+              <button
+                type="button"
                 onClick={() => setShowTextInput((v) => !v)}
                 aria-pressed={showTextInput}
                 aria-label="키패드 — 텍스트로 입력"
@@ -545,47 +594,6 @@ export default function SessionCallPage() {
               <span className="text-xs text-[#8B9BA5]">키패드</span>
             </div>
           </div>
-
-          {showTextInput && (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleSend();
-              }}
-              className="mb-4 flex items-center gap-2.5"
-            >
-              <label htmlFor="chat-input" className="sr-only">
-                메시지 입력
-              </label>
-              <input
-                id="chat-input"
-                type="text"
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                disabled={sending}
-                placeholder="하고 싶은 말을 입력하세요..."
-                className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-white/30 bg-white/10 px-[18px] py-3 text-lg text-white placeholder:text-[#8B9BA5]"
-              />
-              <button
-                type="submit"
-                disabled={sending || !input.trim()}
-                aria-label="전송"
-                className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-lg font-bold text-white disabled:opacity-50"
-              >
-                {sending ? (
-                  <span
-                    aria-hidden="true"
-                    className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-                  />
-                ) : (
-                  "↑"
-                )}
-              </button>
-            </form>
-          )}
-
-          {/* AC-006 상시 종료 — 통화 중 모든 상태에서 노출. */}
-          <EndTrainingButton onClick={handleEndTraining} variant="dark" />
         </div>
       )}
     </main>
