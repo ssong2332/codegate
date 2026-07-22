@@ -85,6 +85,15 @@ Based on PRD Version: v0.5 · Based on UX Version: 1.2
 
 > **Firestore 규칙으로 클라 read 전면 거부** — Functions/admin만 읽는다. `scenarios`와 같은 id로 1:1 매핑하되 분리 저장(필드 단위 읽기 제한이 어려운 Firestore 특성 대응).
 
+> ⚠️ **구현 현황(2026-07-22 실측)**: 런타임은 이 컬렉션을 **읽지 않는다**. `sendMessage`·
+> `generateOpeningLine`은 Functions 번들에 함께 배포되는 인메모리 상수
+> `functions/src/scenarios/index.ts`의 `SCENARIO_PROMPTS`를 직접 참조한다(문서-코드 드리프트를
+> 명시). 이 스키마와 `seed.ts`는 프롬프트를 코드 배포와 분리해 갱신하고 싶어질 때를 위해
+> 유지한다. 보안 결론은 동일하다 — 프롬프트는 어느 경로로도 클라이언트에 노출되지 않는다
+> (인메모리 상수는 `functions/` 번들 안에만 존재하고 클라 번들에 포함되지 않는다, ADR-0004).
+> 실시간 음성 통화 경로에서는 프롬프트가 ElevenLabs 에이전트 쪽에 저장된다
+> (`functions/src/realtime/agentMap.ts` 주석 참고).
+
 ### `reports/{reportId}`  — 취약점 리포트 (UX-008, AC-008/009/026)
 | Field | Type | Constraints | Description |
 |---|---|---|---|

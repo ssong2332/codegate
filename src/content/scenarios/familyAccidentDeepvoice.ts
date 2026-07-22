@@ -16,6 +16,12 @@ export type ScenarioDoc = {
   fraudType: string;
   estimatedDuration: string;
   difficulty: string;
+  /**
+   * @deprecated 2026-07-22 — 현재 어떤 화면도 이 값을 재생하지 않는다. UX-014 통합 이후 오프닝
+   * 음성은 createSession이 LLM으로 생성한 대사를, 통화 중 음성은 실시간 speech-to-speech를
+   * 쓴다. 스키마와 데이터는 "고정 대본 오프닝"을 되살릴 여지를 남겨 두려고 보존하지만, 새 코드가
+   * 이 필드에 의존하면 안 된다.
+   */
   deepvoiceLines: DeepvoiceLine[];
   voiceMode: VoiceMode;
   callerLabel: string;

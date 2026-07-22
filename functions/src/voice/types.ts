@@ -8,11 +8,6 @@ export type CreateVoiceCloneResponse = {
   isMock: boolean;
 };
 
-export type SynthesizeDeepvoiceRequest = { sessionId: string; lineId: string };
-export type SynthesizeDeepvoiceResponse = {
-  audioUrl: string;
-  artifactId: string;
-  synthetic: true;
-  syntheticLabel: "AI 훈련용 합성";
-  isMock: boolean;
-};
+// synthesizeDeepvoice 요청/응답 타입은 2026-07-22에 콜러블과 함께 제거했다
+// (functions/src/voice/index.ts 상단 제거 이력 참고). VoiceProvider.synthesize 자체는 남아 있고
+// createSession/sendMessage의 오디오 합성 경로에서 계속 쓰인다.

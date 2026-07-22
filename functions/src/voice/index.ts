@@ -1,29 +1,27 @@
-// ElevenLabs 클론 + TTS (Track A, T4/T5). API.md `createVoiceClone`/`synthesizeDeepvoice` 1:1.
-// T19: 두 콜러블을 `VoiceProvider` 인터페이스(provider.ts) 뒤의 `getVoiceProvider()`로 배선했다
+// ElevenLabs 클론 (Track A, T4). API.md `createVoiceClone` 1:1.
+// T19: 콜러블을 `VoiceProvider` 인터페이스(provider.ts) 뒤의 `getVoiceProvider()`로 배선했다
 // — 지금은 항상 MockVoiceProvider가 선택된다(ElevenLabs 키 미준비, OQ-14). 이렇게 하면
-// Storage/Firestore 연동(T4/T5) 없이도 콜러블 자체는 "unimplemented"가 아니라 실제로 동작하는
-// 목업 응답을 반환해 트랙 A 후속(T4/T5)과 프론트를 언블록한다.
+// Storage/Firestore 연동 없이도 콜러블 자체는 "unimplemented"가 아니라 실제로 동작하는
+// 목업 응답을 반환해 프론트를 언블록한다.
 //
 // T4: createVoiceClone에 ① Storage `voice_input.webm` 존재 확인(제출된 sessionId가 온보딩
 // "사전 세션 id"일 수 있어 sessions/{sid} 문서가 아직 없을 수 있다 — src/lib/recording/
 // pendingSession.ts 참고) ② provider.createClone() 호출 ③ `sessions/{sid}`에 voiceId/cloneStatus
 // 반영(문서가 없으면 최소 필드로 생성 — scenarioId는 아직 모르므로 생략, createSession이 시나리오
 // 선택 후 같은 문서를 채택해 보강한다)을 채웠다.
-// TODO(T5): ① 시나리오 `deepvoiceLines`에서 `lineId`로 실제 대사 원문 조회(클라가 임의 문장
-// 합성 불가) ② provider.synthesize() 결과를 Storage `.../synth/{artifactId}.mp3`에 admin write
-// ③ `sessions/{sid}/artifacts/{artifactId}` 메타 write(AC-022, 폐기 매니페스트).
 // TODO(T1/T4): ElevenLabs 키 준비되면 provider.ts의 getVoiceProvider()만 교체 — 이 파일은 불변.
+//
+// **제거 이력(2026-07-22)**: `synthesizeDeepvoice` 콜러블을 삭제했다. UX-014 통합 이후 오프닝
+// 음성은 createSession이 반환하는 openingAudioUrl로, 통화 중 음성은 실시간 speech-to-speech
+// (functions/src/realtime)로 처리하게 되면서 호출하는 화면이 하나도 남지 않았다. 게다가 본문이
+// 끝내 placeholder(`voiceId: "mock-voice-input-not-yet-wired"`, 대사 원문 대신 TODO 문자열)를
+// 반환하는 상태였어서, 배포된 채로 두면 언젠가 그 가짜 응답이 화면에 실릴 위험이 있었다.
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { getVoiceProvider } from "./provider";
-import type {
-  CreateVoiceCloneRequest,
-  CreateVoiceCloneResponse,
-  SynthesizeDeepvoiceRequest,
-  SynthesizeDeepvoiceResponse,
-} from "./types";
+import type { CreateVoiceCloneRequest, CreateVoiceCloneResponse } from "./types";
 
 ensureFirebaseAdminApp();
 
@@ -102,45 +100,3 @@ export const createVoiceClone = onCall<CreateVoiceCloneRequest, Promise<CreateVo
   },
 );
 
-export const synthesizeDeepvoice = onCall<
-  SynthesizeDeepvoiceRequest,
-  Promise<SynthesizeDeepvoiceResponse>
->(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
-  }
-  const { sessionId, lineId } = request.data ?? {};
-  if (!sessionId || !lineId) {
-    throw new HttpsError("invalid-argument", "sessionId와 lineId가 필요합니다.");
-  }
-  const uid = request.auth.uid;
-
-  const db = getFirestore();
-  const sessionRef = db.collection("sessions").doc(sessionId);
-  const existingSnap = await sessionRef.get();
-  // API.md Auth: "sid 소유 uid == caller" — createVoiceClone/createSession/endSession과 동일한
-  // 소유권 검증 패턴(보안 하드닝, T5 자가점검에서 발견된 갭 해소). 이 read는 TODO(T5)의
-  // sessions/{sid}.voiceId 조회가 구현되면 재사용해 중복 read를 피할 수 있다.
-  if (existingSnap.exists && existingSnap.data()?.uid !== uid) {
-    throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
-  }
-
-  const provider = getVoiceProvider();
-  // TODO(T5): voiceId는 sessions/{sid}.voiceId를 조회해서 넘겨야 한다(지금은 T4 미구현이라
-  // Mock 전용 placeholder를 쓴다 — Mock은 voiceId 내용을 실제로 사용하지 않는다).
-  const synthesis = await provider.synthesize({
-    sessionId,
-    voiceId: "mock-voice-input-not-yet-wired",
-    text: `(TODO T5: lineId=${lineId} 대사 원문을 시나리오에서 조회해 전달)`,
-  });
-
-  const artifactId = `mock-artifact-${sessionId}-${lineId}-${Date.now()}`;
-
-  return {
-    audioUrl: synthesis.audioUrl,
-    artifactId,
-    synthetic: true,
-    syntheticLabel: synthesis.syntheticLabel,
-    isMock: synthesis.isMock,
-  };
-});

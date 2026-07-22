@@ -71,43 +71,87 @@ export default function ScenariosPage() {
     }
   };
 
+  // 카드 디자인(2026-07-22 개편): 시나리오가 2종에서 5종으로 늘어 기존 평문 목록으로는 훑어보기가
+  // 어려워졌다. 어르신 대상이라 (a) 큰 글씨·넉넉한 터치 영역, (b) 색만이 아니라 체크 아이콘·굵은
+  // 테두리로 선택 상태를 이중 표기, (c) "발신자가 누구로 걸려오는지"(callerLabel)를 먼저 보여줘
+  // 통화 화면과 인식이 이어지게 했다.
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-8 p-8">
-      <h1 className="text-2xl font-bold">시나리오 선택</h1>
-      <p className="text-base text-gray-600">
-        체험할 사기 시나리오를 골라 주세요. 실제 사기가 아니라 훈련용 시뮬레이션입니다.
-      </p>
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-6 pb-10">
+      <header className="flex flex-col gap-2 pt-2">
+        <h1 className="text-2xl font-bold text-[#22303A]">어떤 전화를 받아볼까요?</h1>
+        <p className="text-base leading-relaxed text-[#6B655C]">
+          실제 사기가 아니라 훈련용 시뮬레이션입니다. 하나를 고르면 그 사기범이 전화를 겁니다.
+        </p>
+      </header>
 
-      <ul className="flex flex-col gap-4">
+      <ul className="flex flex-col gap-3">
         {scenarioEntries.map(([scenarioId, scenario]) => {
           const selected = selectedScenarioId === scenarioId;
+          const needsRecording = scenario.voiceMode === "clone";
           return (
             <li key={scenarioId}>
               <label
-                className={`flex min-h-[48px] cursor-pointer flex-col gap-2 rounded border p-4 text-lg ${
-                  selected ? "border-black bg-gray-50" : "border-gray-300"
+                className={`flex cursor-pointer gap-4 rounded-2xl border-2 p-4 transition ${
+                  selected
+                    ? "border-[#0E6B62] bg-[#E4F0EC]"
+                    : "border-[#E2DDD3] bg-white hover:border-[#C9C2B6]"
                 }`}
               >
-                <span className="flex items-start gap-3">
-                  <input
-                    type="radio"
-                    name="scenario"
-                    value={scenarioId}
-                    checked={selected}
-                    onChange={() => setSelectedScenarioId(scenarioId)}
-                    className="mt-1 h-5 w-5 shrink-0"
-                    aria-describedby={`scenario-${scenarioId}-meta`}
-                  />
-                  <span className="font-bold">{scenario.title}</span>
+                <input
+                  type="radio"
+                  name="scenario"
+                  value={scenarioId}
+                  checked={selected}
+                  onChange={() => setSelectedScenarioId(scenarioId)}
+                  className="sr-only"
+                  aria-describedby={`scenario-${scenarioId}-meta`}
+                />
+
+                {/* 발신자 아바타 — 통화 화면의 아바타와 같은 형태라 "이 사람이 전화한다"가 바로 읽힌다. */}
+                <span
+                  aria-hidden="true"
+                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xl font-bold ${
+                    selected ? "bg-[#0E6B62] text-white" : "bg-[#41525E] text-[#C9D4DB]"
+                  }`}
+                >
+                  {scenario.callerLabel.slice(0, 1)}
                 </span>
-                <span id={`scenario-${scenarioId}-meta`} className="flex flex-col gap-1 pl-8 text-sm text-gray-700">
-                  <span>사기 유형: {scenario.fraudType}</span>
-                  <span>예상 소요: {scenario.estimatedDuration}</span>
-                  <span>난이도: {scenario.difficulty}</span>
-                  <span>
-                    {scenario.voiceMode === "clone"
-                      ? "본인 목소리 등록(30초 녹음)이 필요합니다."
-                      : "본인 목소리 등록 없이 바로 진행됩니다(기본 합성 음성)."}
+
+                <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <span className="flex items-start justify-between gap-2">
+                    <span className="text-lg font-bold text-[#22303A]">{scenario.title}</span>
+                    {/* 선택 표시는 색 단독이 아니라 아이콘 병행(접근성). */}
+                    {selected && (
+                      <span
+                        aria-hidden="true"
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-sm font-bold text-white"
+                      >
+                        ✓
+                      </span>
+                    )}
+                  </span>
+
+                  <span className="text-sm text-[#6B655C]">{scenario.callerLabel}(으)로 전화가 옵니다</span>
+
+                  <span
+                    id={`scenario-${scenarioId}-meta`}
+                    className="flex flex-col gap-1 text-sm text-[#6B655C]"
+                  >
+                    <span>
+                      {scenario.fraudType} · {scenario.estimatedDuration}
+                    </span>
+                    <span>난이도: {scenario.difficulty}</span>
+                    <span
+                      className={`mt-1 inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        needsRecording
+                          ? "bg-[#FBF3E8] text-[#B96A1B]"
+                          : "bg-[#F2EFE9] text-[#6B655C]"
+                      }`}
+                    >
+                      {needsRecording
+                        ? "내 목소리 녹음 30초 필요"
+                        : "녹음 없이 바로 시작"}
+                    </span>
                   </span>
                 </span>
               </label>
@@ -117,7 +161,7 @@ export default function ScenariosPage() {
       </ul>
 
       {startError && (
-        <p role="alert" className="flex items-center gap-2 text-base text-red-700">
+        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
           <span aria-hidden="true">⚠</span>
           <span>{startError}</span>
         </p>
@@ -127,9 +171,9 @@ export default function ScenariosPage() {
         type="button"
         onClick={() => void handleStart()}
         disabled={!selectedScenarioId || state === "starting"}
-        className="min-h-[48px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800 disabled:opacity-50"
+        className="min-h-[56px] rounded-xl bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white transition hover:bg-[#0B564F] disabled:opacity-50"
       >
-        {state === "starting" ? "시작하는 중..." : "시작"}
+        {state === "starting" ? "연결하는 중..." : "이 전화 받아보기"}
       </button>
     </main>
   );

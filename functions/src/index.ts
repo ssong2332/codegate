@@ -3,7 +3,9 @@
 // 재export만 한다(T2 스캐폴딩 원칙 유지).
 
 // Callable functions
-export { createVoiceClone, synthesizeDeepvoice } from "./voice";
+// synthesizeDeepvoice는 2026-07-22에 제거됐다 — UX-014 통합 이후 호출하는 화면이 없고 본문이
+// placeholder를 반환하는 상태였다(functions/src/voice/index.ts 상단 제거 이력 참고).
+export { createVoiceClone } from "./voice";
 export { createSession, endSession } from "./session";
 export { sendMessage } from "./roleplay";
 // 실시간 음성 통화 자격증명 발급(2026-07-22) — 브라우저가 ElevenLabs Agents와 직접 speech-to-speech

@@ -61,17 +61,53 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const maskedUserText = maskPII(userText);
 
     const messagesRef = sessionRef.collection("messages");
-    const historySnap = await messagesRef.orderBy("turnIndex", "asc").get();
-    const storedHistory = historySnap.docs.map((doc) => doc.data() as MessageDoc);
-
-    const nextIndex = storedHistory.length;
     const userWriteTime = Timestamp.now();
-    await messagesRef.add({
-      role: "user",
-      textMasked: maskedUserText,
-      turnIndex: nextIndex,
-      createdAt: userWriteTime,
-    } satisfies MessageDoc);
+
+    // #8 원자적 턴 확보(2026-07-22): 예전엔 "대화 이력 read → 길이로 turnIndex 결정 → write"가
+    // 트랜잭션 밖이라, 같은 세션에서 요청이 겹치면(더블 탭·자동 청취 중복 인식) 두 요청이 같은
+    // turnIndex를 쓰고 turnCount 증가가 하나 유실될 수 있었다. 이력 read + 사용자 메시지 write +
+    // turnCount 증가를 한 트랜잭션으로 묶어 인덱스 충돌을 원천 차단한다.
+    //
+    // LLM 호출은 느리고 외부 의존이라 트랜잭션 안에 둘 수 없다(재시도 시 중복 호출·잠금 장기화).
+    // 그래서 트랜잭션은 "턴 확보"까지만 하고, 사기범 응답 write는 확보한 인덱스로 트랜잭션 밖에서
+    // 이어서 한다.
+    const claim = await db.runTransaction(async (tx) => {
+      const freshSnap = await tx.get(sessionRef);
+      const fresh = freshSnap.data() as SessionDoc | undefined;
+      if (!fresh) {
+        throw new HttpsError("failed-precondition", "존재하지 않는 세션입니다.");
+      }
+      if (fresh.status !== "active") {
+        throw new HttpsError("failed-precondition", "이미 종료되었거나 활성 상태가 아닌 세션입니다.");
+      }
+      const historySnap = await tx.get(messagesRef.orderBy("turnIndex", "asc"));
+      const history = historySnap.docs.map((doc) => doc.data() as MessageDoc);
+      const userIndex = history.length;
+
+      tx.create(messagesRef.doc(), {
+        role: "user",
+        textMasked: maskedUserText,
+        turnIndex: userIndex,
+        createdAt: userWriteTime,
+      } satisfies MessageDoc);
+      // answeredAt(통화 시작 기점, #6)은 첫 턴에만 설정한다 — 이후 턴은 기존 값을 유지한다.
+      tx.update(sessionRef, {
+        turnCount: fresh.turnCount + 1,
+        ...(fresh.answeredAt ? {} : { answeredAt: userWriteTime }),
+      });
+
+      return {
+        history,
+        userIndex,
+        turnCount: fresh.turnCount + 1,
+        answeredAt: fresh.answeredAt ?? userWriteTime,
+        maxUserTurns: fresh.maxUserTurns,
+        maxSessionMs: fresh.maxSessionMs,
+      };
+    });
+
+    const storedHistory = claim.history;
+    const nextIndex = claim.userIndex;
 
     // ② 서버에서 scenarioPrompts 기반으로 조립한 프롬프트 + 사용자 입력 구분자 감싸기(ADR-0004) →
     // LLM 어댑터(functions/src/llm) 호출.
@@ -95,26 +131,20 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       createdAt: Timestamp.now(),
     } satisfies MessageDoc);
 
-    // ④ turnCount++·경과시간 체크 → 한도 도달 시 ended:true + status=ended(→onSessionEnded 트리거,
-    // AC-007). 경과시간 기점(#6 수정, 2026-07-22): 예전엔 session.createdAt(세션 생성 시각) 기준이라
-    // 수신 화면에서 오래 머물면 실제 대화 가능 시간이 줄어들었다. 이제 통화가 실제로 시작된 시점
-    // (answeredAt = 첫 사용자 발화 시각)을 기점으로 삼는다. 첫 턴에는 answeredAt이 아직 없어
-    // userWriteTime을 기점으로 쓰므로 경과가 ~0이 되고, 그 값을 answeredAt으로 저장한다 — UI 통화
-    // 타이머("받기" 기준)와도 정합.
-    const turnCount = session.turnCount + 1;
-    const elapsedBase = session.answeredAt ?? userWriteTime;
-    const elapsedMs = userWriteTime.toMillis() - elapsedBase.toMillis();
+    // ④ 한도 체크 → 도달 시 ended:true + status=ended(→onSessionEnded 트리거, AC-007).
+    // turnCount 증가와 answeredAt 기록은 위 트랜잭션(#8)에서 이미 원자적으로 끝났으므로, 여기서는
+    // 트랜잭션이 확정한 값을 그대로 쓴다. 경과시간 기점은 answeredAt(통화 시작 = 첫 사용자 발화)
+    // 이다(#6) — 수신 화면에 머문 시간이 대화 예산을 깎지 않으며, UI 통화 타이머와도 정합.
+    const turnCount = claim.turnCount;
+    const elapsedMs = userWriteTime.toMillis() - claim.answeredAt.toMillis();
     const limitReached = isSessionLimitReached({
       turnCount,
-      maxUserTurns: session.maxUserTurns,
+      maxUserTurns: claim.maxUserTurns,
       elapsedMs,
-      maxSessionMs: session.maxSessionMs,
+      maxSessionMs: claim.maxSessionMs,
     });
 
     const sessionUpdate: Partial<SessionDoc> = {
-      turnCount,
-      // 첫 사용자 발화 시각을 통화 시작 기점으로 1회 기록(위 elapsedBase 참고).
-      ...(session.answeredAt ? {} : { answeredAt: userWriteTime }),
       // Firestore admin SDK는 필드값 undefined를 기본적으로 거부하므로, Mock일 때만 갱신한다
       // (실 LLM으로 세션이 시작됐다면 굳이 llmProvider를 덮어쓸 필요가 없다).
       ...(completion.isMock ? { llmProvider: "mock" as const } : {}),

@@ -28,15 +28,22 @@ Based on PRD Version: v0.5 · Based on UX Version: 1.2
 | 처리 | ① Storage에서 녹음 read → ② ElevenLabs IVC 호출(soft 15s/hard 45s, DECISIONS #9) → ③ `sessions/{sid}` 에 `voiceId`·`cloneStatus` write. |
 | Errors | `failed-precondition`(녹음 없음/동의 없음), `deadline-exceeded`(hard 45s 초과 → 클라가 폴백 경로 안내), `resource-exhausted`(크레딧/rate), `internal`(ElevenLabs 실패). |
 
-### `synthesizeDeepvoice` — (Track A · T5 · UX-005)
+### ~~`synthesizeDeepvoice`~~ — **제거됨 (2026-07-22)**
+
+UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음성은 `createSession`이 반환하는
+`openingAudioUrl`로, 통화 중 음성은 실시간 speech-to-speech(`createRealtimeCall`)로 처리한다.
+삭제 시점까지 본문이 placeholder를 반환하는 상태였다(제거 이력은 `functions/src/voice/index.ts`
+상단 주석 참고). `VoiceProvider.synthesize` 자체는 남아 있고 위 두 경로에서 계속 쓰인다.
+
+### `createRealtimeCall` — (UX-014 live phase · 2026-07-22)
 | Item | Value |
 |---|---|
-| Purpose | 클론 voice로 시나리오 사칭 대사를 TTS 합성 → 임시 오디오 URL 반환 + 합성 표식 메타. AC-019, AC-022. |
-| Auth | required. `sid` 소유 검증. |
-| Request | `{ sessionId: string, lineId: string }` — `lineId`는 시나리오 `deepvoiceLines`의 대사 식별자(대사 원문은 서버가 조회, 클라가 임의 문장 합성 불가). |
-| Response | `{ audioUrl: string, artifactId: string, synthetic: true, syntheticLabel: "AI 훈련용 합성" }` |
-| 처리 | ElevenLabs TTS(hard 20s) → Storage `.../synth/{artifactId}.mp3`(admin write) → `sessions/{sid}/artifacts/{artifactId}` 메타 write(폐기 매니페스트). |
-| Errors | `failed-precondition`(voiceId 없음), `deadline-exceeded`(→ 사전녹화 폴백), `resource-exhausted`, `internal`. |
+| Purpose | 실시간 speech-to-speech 통화용 ElevenLabs 서명 URL 발급. 브라우저가 에이전트와 직접 대화하되 API 키는 서버에만 남는다. |
+| Auth | required. `sid` 소유 + `status:"active"` 검증. |
+| Request | `{ sessionId: string }` |
+| Response | `{ signedUrl: string, voiceId: string, language: "ko", isMock: boolean }` |
+| 처리 | `scenarioId → agentId` 매핑(`ELEVENLABS_AGENT_IDS`) 조회 → ElevenLabs `GET /v1/convai/conversation/get-signed-url` 호출. 페르소나 프롬프트는 에이전트 쪽에 저장돼 클라로 내려가지 않는다(ADR-0004) — 클라가 보내는 오버라이드는 `voice_id`/`language`뿐. |
+| Errors | 발급 실패·키/에이전트 미설정은 **에러가 아니라** `isMock:true`로 응답해 클라가 텍스트 폴백으로 강등한다(P-4 핵심 루프 비차단). `unauthenticated`/`permission-denied`/`failed-precondition`(세션 없음·비활성)만 throw. |
 
 ### `createSession` — (Track B · T8 · UX-006 진입)
 | Item | Value |
@@ -96,7 +103,8 @@ Based on PRD Version: v0.5 · Based on UX Version: 1.2
 | 외부 | 사용 함수 | 용도 | 비고 |
 |---|---|---|---|
 | ElevenLabs IVC | `createVoiceClone` | 30초 샘플 → 클론 voice 생성 | 키 `ELEVENLABS_API_KEY`(서버). 타임아웃 DECISIONS #9. |
-| ElevenLabs TTS | `synthesizeDeepvoice` | 클론 voice로 대사 합성 | 합성 표식 메타 부착(AC-022). |
+| ElevenLabs TTS | `createSession`, `sendMessage` | 오프닝·응답 대사 합성(폴백 경로) | `VoiceProvider.synthesize`. 실패해도 텍스트 응답을 막지 않는다(P-4). |
+| ElevenLabs Agents | `createRealtimeCall` | 실시간 speech-to-speech 통화 서명 URL 발급 | 프롬프트는 에이전트 쪽 보관(ADR-0004). 미설정 시 `isMock:true`로 텍스트 폴백. |
 | ElevenLabs DELETE voice | `onSessionEnded` | 클론 voice 외부 삭제(AC-021) | 미삭제 시 외부 잔존 → 반드시 호출. |
 | LLM(Claude/Gemini) | `createSession`, `sendMessage`, `generateReport` | 역할극·리포트 | 어댑터 `functions/src/llm`(DECISIONS #11). 프롬프트 서버 조립(ADR-0004). |
 

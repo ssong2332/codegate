@@ -15,15 +15,9 @@ export type CreateVoiceCloneResponse = {
   isMock: boolean;
 };
 
-// --- synthesizeDeepvoice (Track A · T5 · UX-005 · AC-019/AC-022) ---
-export type SynthesizeDeepvoiceRequest = { sessionId: string; lineId: string };
-export type SynthesizeDeepvoiceResponse = {
-  audioUrl: string;
-  artifactId: string;
-  synthetic: true;
-  syntheticLabel: "AI 훈련용 합성";
-  isMock: boolean;
-};
+// synthesizeDeepvoice 계약은 2026-07-22에 제거됐다 — UX-014 통합 이후 오프닝 음성은
+// createSession.openingAudioUrl로, 통화 중 음성은 실시간 speech-to-speech(createRealtimeCall)로
+// 처리하면서 호출부가 사라졌다(functions/src/voice/index.ts 상단 제거 이력 참고).
 
 // --- createSession (Track B · T8 · UX-006 진입 · AC-003/AC-007) ---
 // sessionId(T4 추가, 옵셔널·하위호환): 온보딩 단계의 "사전 세션 id"(src/lib/recording/

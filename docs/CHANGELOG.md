@@ -4,6 +4,19 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 ### Added
+- **실시간 음성 통화(speech-to-speech, 2026-07-22)**: 훈련 통화가 이제 ElevenLabs Agents와의 실시간 음성 대화로 동작한다. 예전에는 턴마다 "브라우저 STT → 텍스트 LLM → TTS 합성 → 오디오 재생"을 왕복해 지연이 누적됐고 말을 끊거나 겹쳐 말할 수 없었다. **ElevenLabs를 고른 이유**: OpenAI Realtime·Gemini Live도 저지연 speech-to-speech를 제공하지만 둘 다 고정 프리셋 음성만 쓸 수 있다. 이 앱의 전제인 "참가자 본인 목소리 클론으로 걸려오는 전화"(AC-018/019)를 지키려면 런타임에 임의 클론 voice를 지정할 수 있어야 하고, 셋 중 `tts.voice_id` 오버라이드를 지원하는 건 ElevenLabs뿐이다. 한국어는 `agent.language="ko"`, 저지연 모델은 에이전트 설정에서 지정한다. **프롬프트 보안(ADR-0004)**: 오버라이드는 클라이언트가 보내는 값이라 페르소나 프롬프트를 그 경로로 넘기면 브라우저에 노출된다 — 그래서 시나리오별 에이전트에 프롬프트를 저장하고 서버는 `scenarioId→agentId` 매핑과 짧은 수명의 서명 URL만 발급한다(API 키는 서버에만 남는다). **폴백**: 키·에이전트 매핑·마이크 권한 중 하나라도 없으면 기존 텍스트 대화로 자동 강등하고 그 사실을 화면에 표시한다(조용한 실패 금지). 설정: `ELEVENLABS_AGENT_IDS`(README 참조).
+- **신규 시나리오 3종(2026-07-22)**: 저금리 대환대출 빙자, 국세청 환급금 빙자(둘 다 기본 합성 음성), 손주 사칭 급전 요청(본인 목소리 클론 — 이 앱의 주 대상인 어르신을 노리는 수법). 총 5종. 공개 메타(`src/content/scenarios`)와 민감 프롬프트(`functions/src/scenarios`) 분리 저장 관례를 그대로 따르며, 수법은 전부 "약화된" 형태라 실제 계좌번호·송금 절차·기관 연락처를 포함하지 않는다(AC-005).
+
+### Changed
+- **통화 화면을 실제 전화처럼 재구성(2026-07-22)**: 수신 파동 애니메이션, 상대 발화 파형 인디케이터, 경과 시간, 음소거/키패드/종료 컨트롤 행. 시나리오 선택 화면도 카드형으로 개편해 "누가 전화를 거는지"(발신자)와 "녹음이 필요한지"를 먼저 읽히게 했다. 모션은 `prefers-reduced-motion`을 존중한다.
+- **목업 대사 품질(2026-07-22)**: 규칙 기반 목업이 시나리오 수법 설명문(3인칭 지침)을 그대로 대사로 읽던 문제와, 가족 사칭 전용 표현("나야...", "지금 좀 도와줄 수 있어?")을 기관 사칭 시나리오에도 붙이던 문제를 고쳤다. 근본 해결은 실 LLM/실시간 에이전트 연동이다.
+
+### Fixed
+- **sendMessage 턴 경합(2026-07-22)**: 대화 이력 읽기 → 인덱스 결정 → 쓰기가 트랜잭션 밖이라, 같은 세션에서 요청이 겹치면 두 메시지가 같은 `turnIndex`를 쓰고 `turnCount` 증가가 유실될 수 있었다. 이력 읽기 + 사용자 메시지 쓰기 + turnCount 증가를 한 트랜잭션으로 묶었다(느린 LLM 호출은 트랜잭션 밖 유지).
+
+### Removed
+- **`synthesizeDeepvoice` 콜러블(2026-07-22)**: UX-014 화면 통합 이후 호출하는 화면이 없어졌고, 본문이 끝내 placeholder(가짜 voiceId·TODO 문자열)를 반환하는 상태였다 — 배포된 채로 두면 그 가짜 응답이 언젠가 화면에 실릴 위험이 있어 서버 콜러블·클라 래퍼·계약 타입을 함께 제거했다. `VoiceProvider.synthesize`는 남아 `createSession`/`sendMessage`의 폴백 오디오 합성에 계속 쓰인다. 시나리오의 `deepvoiceLines`는 "고정 대본 오프닝"을 되살릴 여지를 남겨 `@deprecated` 표기만 하고 보존했다.
+
 - **프로젝트 스캐폴딩(T2)**: Next.js(App Router, TypeScript, Tailwind, 정적 export) + Firebase(Auth/Functions/Firestore/Storage) 초기화, 배포 파이프라인(`firebase deploy`), API/DB 계약 스텁, `firestore.rules`/`storage.rules`, `.env.example`(클라)·`functions/.env.example`(서버) 2분리.
 - **Google 로그인 + 전역 라우트 가드(T18)**: Firebase Auth Google Provider로 로그인/가입. 인증되지 않은 사용자는 로그인 화면 외 모든 라우트에서 리다이렉트되며, 모든 데이터는 로그인한 사용자의 uid에 귀속된다. 로컬 Firebase 에뮬레이터 기준으로 빌드/lint/Firestore write까지 검증됨 — 실제 브라우저에서 Google OAuth 팝업을 끝까지 클릭해보는 것은 아직 미검증(에뮬레이터 한계).
 - **한국어 "가족 납치/사고" 딥보이스 시나리오 콘텐츠(T6)**: 공개 메타데이터(제목·사기 유형·난이도 등)와 민감한 역할극 프롬프트(페르소나·약화 수법)를 분리 저장.
