@@ -25,9 +25,16 @@ const DEFLECTION_LINES = [
 const OPENING_FILLERS = ["여보세요...?", "...", "엄마..."];
 const ESCALATION_FILLERS = ["...", "흑흑...", "빨리...", "제발..."];
 
-/** weakenedTactics 항목은 "라벨 — 설명" 형식(예: "다급함 조성 — ...")이라 대사처럼 보이도록 라벨
- * 이후 설명부만 취한다(라벨 원문을 그대로 대사에 노출하면 부자연스럽다). */
+/** weakenedTactics 항목은 "라벨 — 3인칭 설명(예: '...식으로 위협하되, 실제 법적 조치는 제시하지
+ * 않는다')" 형식이다 — 실 LLM에게 줄 지침 문장이라 그대로 대사로 읽으면 캐릭터가 자기 수법을
+ * 해설하는 것처럼 들린다(사용자 실측 피드백, 2026-07-22). 각 설명 안에는 캐릭터가 실제로 말했을
+ * 법한 '따옴표' 인용구가 최소 1개 포함되어 있으므로, 그 인용구만 뽑아 대사로 쓴다. 인용구가 없는
+ * 경우에만(향후 콘텐츠 대비 안전망) 기존 방식(라벨 이후 설명부 전체)으로 폴백한다. */
 function extractTacticFlavor(tacticText: string): string {
+  const quoted = [...tacticText.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  if (quoted.length > 0) {
+    return quoted.join(", ");
+  }
   const dashIndex = tacticText.indexOf("—");
   const flavor = dashIndex === -1 ? tacticText : tacticText.slice(dashIndex + 1).trim();
   return flavor.replace(/\.$/, "");
@@ -51,12 +58,16 @@ export class MockLlmClient implements LlmClient {
     return { text: this.craftEscalationLine(input.messages.length, input.mockTacticHints), isMock: true };
   }
 
+  // "나야..."(가족을 사칭할 때만 성립하는 표현)를 모든 시나리오에 하드코딩했던 것을 제거했다
+  // (사용자 실측 피드백, 2026-07-22) — 기관 사칭처럼 가족 관계가 아닌 시나리오에도 항상 붙어
+  // 있어 내용상 맞지 않았다. 발신자 정체는 화면(callerLabel)이 이미 보여주므로, 대사 자체는
+  // 시나리오를 가리지 않는 수법 문구만 전달한다.
   private craftOpeningLine(tacticHints?: string[]): string {
     const filler = OPENING_FILLERS[0];
     const flavor = tacticHints && tacticHints.length > 0
       ? extractTacticFlavor(tacticHints[0])
       : "지금 급한 일이 생겼어";
-    return `${filler} 나야... ${flavor}.`;
+    return `${filler} ${flavor}.`;
   }
 
   private craftEscalationLine(turn: number, tacticHints?: string[]): string {

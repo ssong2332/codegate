@@ -719,6 +719,17 @@ Append-only — 과거 항목을 고쳐쓰거나 삭제하지 않는다.
 | Impact | Screen Catalog UX-001/002/003/004/011 Entry·Exit·Nav·소속. UF-001/UF-002 Steps·Related AC. |
 | Status | Active |
 
+### D-15 UX-014 통화 중 "AI 훈련용 합성" 상시 배지 제거(AC-022 편차)
+
+| Item | Value |
+|---|---|
+| Decision | UX-014(통화) 화면에서 통화 중 상시 노출되던 "AI 훈련용 합성" 배지(SyntheticLabel)를 제거한다. 사전 동의(UX-001)·시나리오 선택 화면의 "실제 사기가 아니라 훈련용 시뮬레이션입니다" 안내·전화받기 전 프리롤 고지(PREROLL_NOTICE)·"훈련 종료" 버튼(AC-006/012/017/023)은 이번 변경 범위가 아니며 그대로 유지된다. |
+| Reason | 사용자(제품 소유자)가 명시적으로, 반복적으로 지시. AI 담당자는 통화 중 고압박 구간에서 순간적 판단력 저하 시 기댈 안전장치로서 배지 유지를 권고했고 이 우려를 사용자에게 전달했으나(2026-07-22, 세션 내 3회), 사용자가 이해한 상태에서 최종적으로 제거를 재확인·지시함 — 제품 자체의 UX/안전 톤에 대한 최종 결정권은 제품 소유자에게 있다고 판단해 반영. |
+| Alternatives Considered | (1) 배지 유지(AI 권고안). (2) 배지 크기/불투명도만 축소. |
+| Rejected Because | 사용자가 (1)·(2) 모두를 거부하고 완전 제거를 재확인. |
+| Impact | Implementation(`src/app/session/play/page.tsx`의 `<SyntheticLabel />` 제거, import 정리). AC-022 매핑 표(§Non-Functional/Cross-Cutting)는 "UX-014(오프닝·이미지 시)" 문구가 더 이상 통화 중 상시 노출과는 무관함을 유의 — 사전 고지·프리롤 문구 쪽으로 커버리지가 좁아졌다는 것을 architect/QA가 인지해야 함. |
+| Status | Active |
+
 ## Open Questions
 UX 설계 과정에서 **새로 발견된** 미해결 사항만 기재한다(PRD의 기존 OQ-3/5/8/9/14/15 등은 PRD에 있으므로 중복 기재하지 않음).
 

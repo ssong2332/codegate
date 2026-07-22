@@ -25,7 +25,6 @@ import { db } from "@/lib/firebase";
 import { consumeOpeningAudioUrl, getPendingSessionId, useSpeechRecognition } from "@/lib/recording";
 import { sendMessage } from "@/lib/api";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
-import SyntheticLabel from "@/components/SyntheticLabel";
 import EndTrainingButton from "@/components/EndTrainingButton";
 
 type PageState = "checking" | "ready" | "no-session" | "scenario-not-found" | "load-error";
@@ -54,10 +53,8 @@ export default function SessionCallPage() {
   const [phase, setPhase] = useState<Phase>("incoming");
   const [scenario, setScenario] = useState<ScenarioDoc | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [turnCount, setTurnCount] = useState(0);
-  const [maxUserTurns, setMaxUserTurns] = useState<number | null>(null);
-  const [isMock, setIsMock] = useState(false);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -86,9 +83,6 @@ export default function SessionCallPage() {
           return;
         }
         setScenario(found);
-        setTurnCount((data.turnCount as number) ?? 0);
-        setMaxUserTurns((data.maxUserTurns as number) ?? null);
-        setIsMock(data.llmProvider === "mock");
         if (data.status === "ended") {
           setPhase("ended");
         }
@@ -137,13 +131,28 @@ export default function SessionCallPage() {
     return () => clearInterval(interval);
   }, [phase]);
 
-  // 오디오 자동재생 정책상 브라우저가 막을 수 있으므로 실패해도 상태를 바꾸지 않는다 —
-  // <audio controls>가 수동 재생 대안으로 항상 남아 있다(P-4 비차단 원칙).
+  // 오디오 자동재생 정책상 브라우저가 막을 수 있다 — 재생바 대신 최소한의 "탭하여 듣기" 버튼으로만
+  // 수동 재생 대안을 남긴다(P-4 비차단 원칙, 2026-07-22 재생 컨트롤 숨김 요청 반영).
+  // 인라인 async IIFE로 감싼다(react-hooks/set-state-in-effect 회피 — effect 본문에서 직접
+  // setState를 호출하면 "동기 setState"로 오탐한다, clone/wait·session/end 등과 동일 패턴).
   useEffect(() => {
-    if (playbackUrl) {
-      audioRef.current?.play().catch(() => {});
-    }
+    if (!playbackUrl) return;
+    (async () => {
+      setPlaybackBlocked(false);
+      try {
+        await audioRef.current?.play();
+      } catch {
+        setPlaybackBlocked(true);
+      }
+    })();
   }, [playbackUrl]);
+
+  const handleManualPlay = () => {
+    audioRef.current
+      ?.play()
+      .then(() => setPlaybackBlocked(false))
+      .catch(() => {});
+  };
 
   const maybeStartListening = useCallback(() => {
     if (speech.status === "unsupported" || speech.status === "listening") return;
@@ -189,8 +198,6 @@ export default function SessionCallPage() {
       const result = await sendMessage({ sessionId, userText: text });
       setInput("");
       speech.reset();
-      setTurnCount(result.turnCount);
-      setIsMock(result.isMock);
       if (result.audioUrl) {
         setPlaybackUrl(result.audioUrl);
       } else if (!result.ended) {
@@ -260,8 +267,11 @@ export default function SessionCallPage() {
 
   return (
     <main className="flex min-h-screen flex-col bg-[#22303A]">
+      {/* 2026-07-22: 사용자가 반복 요청·명시적으로 지시해 이 화면의 "AI 훈련용 합성" 상시 배지를
+          제거했다(AC-022 편차, docs/UX.md에 결정 기록). 사전 동의·시나리오 선택 안내·전화받기 전
+          프리롤 고지(PREROLL_NOTICE)·"훈련 종료" 버튼(AC-006/012/017/023)은 그대로 유지된다 —
+          이번 변경은 통화 중 상시 배지 1개로 범위가 한정된다. */}
       <div className="flex items-center justify-center gap-3 pt-4">
-        <SyntheticLabel />
         {phase !== "incoming" && phase !== "connecting" && (
           <span className="rounded-full bg-white/10 px-3 py-1.5 text-sm font-semibold text-[#9FB0BA]" role="status">
             {formatElapsed(elapsedSec)}
@@ -318,55 +328,39 @@ export default function SessionCallPage() {
           </p>
         )}
 
-        {isMock && (phase === "opening" || phase === "live") && (
-          <p role="status" className="text-center text-xs font-semibold text-[#CFC6EE]">
-            ⚠ 현재 상대방 응답은 실 LLM이 아닌 개발용 Mock 응답입니다.
-          </p>
-        )}
-
-        {maxUserTurns !== null && phase === "live" && (
-          <p className="rounded-full bg-white/10 px-3 py-1 text-sm text-[#9FB0BA]">
-            대화 {turnCount} / {maxUserTurns}턴
-          </p>
-        )}
-
+        {/* 오디오는 화면에 재생바(스크러버)를 노출하지 않는다 — 실제 통화엔 없는 "재생 컨트롤" UI가
+            훈련 앱 티를 낸다는 사용자 피드백(2026-07-22)에 따라 숨김. 자동재생이 브라우저 정책으로
+            막히면(P-4 비차단 원칙) 아래 작은 "탭하여 듣기" 버튼만 최소로 노출한다. */}
         {playbackUrl && (phase === "opening" || phase === "live") && (
           <audio
             ref={audioRef}
             src={playbackUrl}
-            controls
             onEnded={handlePlaybackEnded}
             aria-label="상대방 음성 재생"
-            className="mt-1 w-full max-w-xs"
+            className="hidden"
           />
         )}
+        {playbackBlocked && (phase === "opening" || phase === "live") && (
+          <button
+            type="button"
+            onClick={handleManualPlay}
+            className="rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white"
+          >
+            🔊 탭하여 듣기
+          </button>
+        )}
 
-        {/* 같은 대화 로그·같은 자막 영역(P-10) — 오프닝도 사기범 첫 턴으로 여기 함께 쌓인다. */}
+        {/* 같은 대화 로그·같은 자막 영역(P-10) — 오프닝도 사기범 첫 턴으로 여기 함께 쌓인다. 실제
+            통화 자막처럼 보이도록 카드형 배경/테두리 없이 순수 텍스트로 표시(2026-07-22). */}
         {latestMessage && (phase === "opening" || phase === "live" || phase === "ended") && (
           <p
-            className="mt-2 w-full max-w-xs rounded-xl bg-white/10 p-4 text-center text-base leading-relaxed text-[#DCE4E9]"
+            className="mt-2 max-w-xs text-center text-lg leading-relaxed text-white/90"
             aria-live="polite"
           >
-            {latestMessage.role === "user" ? "나: " : `${callerLabel}: `}
             &ldquo;{latestMessage.text}&rdquo;
           </p>
         )}
 
-        {messages.length > 1 && phase !== "incoming" && phase !== "connecting" && (
-          <div className="mt-1 flex w-full max-w-xs flex-col gap-1.5 pb-2">
-            {messages.slice(0, -1).map((message) => (
-              <p
-                key={message.id}
-                className={`truncate text-xs ${
-                  message.role === "user" ? "text-right text-[#9FB0BA]" : "text-left text-[#7C8991]"
-                }`}
-              >
-                {message.role === "user" ? "나: " : ""}
-                {message.text}
-              </p>
-            ))}
-          </div>
-        )}
         <div ref={listEndRef} />
       </div>
 
@@ -477,9 +471,6 @@ export default function SessionCallPage() {
                 <p role="status" className="text-base text-[#9FB0BA]">
                   메시지를 보내는 중...
                 </p>
-              )}
-              {speech.status === "idle" && !sending && (
-                <p className="text-base text-[#9FB0BA]">말씀하시면 자동으로 인식됩니다.</p>
               )}
               {(speech.status === "permission-denied" || speech.status === "error") && speech.errorMessage && (
                 <p role="alert" className="flex items-center gap-2 text-sm text-[#F0A79E]">
