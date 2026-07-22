@@ -13,6 +13,9 @@ functions/node_modules/
 out/
 next-env.d.ts
 
+# TypeScript incremental build cache (빌드 산출물 — 커밋 대상 아님)
+*.tsbuildinfo
+
 # Firebase Functions build output
 functions/lib/
 

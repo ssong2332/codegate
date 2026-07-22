@@ -10,11 +10,23 @@ import {
   INSTITUTIONAL_IMPERSONATION_SCENARIO_ID,
   institutionalImpersonationPrompt,
 } from "./institutionalImpersonation.prompt";
+import { LOAN_SCAM_SCENARIO_ID, loanScamPrompt } from "./loanScam.prompt";
+import { TAX_REFUND_SCAM_SCENARIO_ID, taxRefundScamPrompt } from "./taxRefundScam.prompt";
+import {
+  GRANDCHILD_IMPERSONATION_SCENARIO_ID,
+  grandchildImpersonationPrompt,
+} from "./grandchildImpersonation.prompt";
 
 export { FAMILY_ACCIDENT_SCENARIO_ID, familyAccidentDeepvoicePrompt };
 export { INSTITUTIONAL_IMPERSONATION_SCENARIO_ID, institutionalImpersonationPrompt };
+export { LOAN_SCAM_SCENARIO_ID, loanScamPrompt };
+export { TAX_REFUND_SCAM_SCENARIO_ID, taxRefundScamPrompt };
+export { GRANDCHILD_IMPERSONATION_SCENARIO_ID, grandchildImpersonationPrompt };
 
 export const SCENARIO_PROMPTS: Record<string, ScenarioPromptDoc> = {
   [FAMILY_ACCIDENT_SCENARIO_ID]: familyAccidentDeepvoicePrompt,
   [INSTITUTIONAL_IMPERSONATION_SCENARIO_ID]: institutionalImpersonationPrompt,
+  [LOAN_SCAM_SCENARIO_ID]: loanScamPrompt,
+  [TAX_REFUND_SCAM_SCENARIO_ID]: taxRefundScamPrompt,
+  [GRANDCHILD_IMPERSONATION_SCENARIO_ID]: grandchildImpersonationPrompt,
 };

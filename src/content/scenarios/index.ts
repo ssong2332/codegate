@@ -2,16 +2,28 @@
 // 소스다(functions/src/scenarios/seed.ts가 firebase-admin으로 주입, Database.md §Migration Policy).
 export * from "./familyAccidentDeepvoice";
 export * from "./institutionalImpersonation";
+export * from "./loanScam";
+export * from "./taxRefundScam";
+export * from "./grandchildImpersonation";
 
 import { FAMILY_ACCIDENT_SCENARIO_ID, familyAccidentDeepvoiceScenario, type ScenarioDoc } from "./familyAccidentDeepvoice";
 import {
   INSTITUTIONAL_IMPERSONATION_SCENARIO_ID,
   institutionalImpersonationScenario,
 } from "./institutionalImpersonation";
+import { LOAN_SCAM_SCENARIO_ID, loanScamScenario } from "./loanScam";
+import { TAX_REFUND_SCAM_SCENARIO_ID, taxRefundScamScenario } from "./taxRefundScam";
+import {
+  GRANDCHILD_IMPERSONATION_SCENARIO_ID,
+  grandchildImpersonationScenario,
+} from "./grandchildImpersonation";
 
 export const scenarios: Record<string, ScenarioDoc> = {
   [FAMILY_ACCIDENT_SCENARIO_ID]: familyAccidentDeepvoiceScenario,
   [INSTITUTIONAL_IMPERSONATION_SCENARIO_ID]: institutionalImpersonationScenario,
+  [LOAN_SCAM_SCENARIO_ID]: loanScamScenario,
+  [TAX_REFUND_SCAM_SCENARIO_ID]: taxRefundScamScenario,
+  [GRANDCHILD_IMPERSONATION_SCENARIO_ID]: grandchildImpersonationScenario,
 };
 
 // Phase B(2026-07-22 사용자 결정) — voiceMode:"generic" 시나리오는 온보딩 녹음/클론을 생략하고

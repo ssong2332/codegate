@@ -25,6 +25,9 @@ export type ScenarioMeta = {
 
 export const FAMILY_ACCIDENT_SCENARIO_ID = "family-accident-deepvoice";
 export const INSTITUTIONAL_IMPERSONATION_SCENARIO_ID = "institutional-impersonation";
+export const LOAN_SCAM_SCENARIO_ID = "loan-refinance-scam";
+export const TAX_REFUND_SCAM_SCENARIO_ID = "tax-refund-scam";
+export const GRANDCHILD_IMPERSONATION_SCENARIO_ID = "grandchild-impersonation";
 
 export const familyAccidentDeepvoiceScenario: ScenarioMeta = {
   title: "가족 납치·사고 딥보이스",
@@ -63,7 +66,53 @@ export const institutionalImpersonationScenario: ScenarioMeta = {
   callerLabel: "수사관 (기관 사칭)",
 };
 
+// Phase 5(2026-07-22) 신규 시나리오 미러 — 클라 src/content/scenarios/*.ts와 필드 동일.
+export const loanScamScenario: ScenarioMeta = {
+  title: "저금리 대환대출 빙자",
+  fraudType: "대출 빙자(저금리 대환대출)",
+  estimatedDuration: "약 5~8분",
+  difficulty: "쉬움~중간 — 이익 유혹이 강한 편입니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "안녕하세요, 고객님. 정부 지원 저금리 대환대출 대상자로 확인되어 안내차 연락드렸습니다." },
+    { lineId: "line-2", text: "오늘까지만 신청 가능하신데, 기존 대출을 먼저 정리하셔야 저금리 전환이 됩니다." },
+    { lineId: "line-3", text: "지금 상담 끊으시면 대상에서 제외될 수 있어요. 바로 진행 도와드릴게요." },
+  ],
+  voiceMode: "generic",
+  callerLabel: "○○캐피탈 상담원 (사칭)",
+};
+
+export const taxRefundScamScenario: ScenarioMeta = {
+  title: "국세청 환급금 빙자",
+  fraudType: "환급금 사칭(국세청/공단)",
+  estimatedDuration: "약 5~8분",
+  difficulty: "중간 — 이익 유혹과 권위 소구가 결합됩니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "국세청 환급 담당입니다. 고객님 앞으로 미수령 환급금이 확인되어 안내드립니다." },
+    { lineId: "line-2", text: "본인 확인만 되면 오늘 바로 환급이 가능하신데, 절차상 몇 가지 확인이 필요합니다." },
+    { lineId: "line-3", text: "지금 안내해 드리는 대로만 따라 하시면 됩니다. 다른 곳에 문의하시면 처리가 지연돼요." },
+  ],
+  voiceMode: "generic",
+  callerLabel: "국세청 환급팀 (사칭)",
+};
+
+export const grandchildImpersonationScenario: ScenarioMeta = {
+  title: "손주 사칭 급전 요청",
+  fraudType: "가족 사칭(손주 딥보이스)",
+  estimatedDuration: "약 5~8분",
+  difficulty: "중간~높음 — 정서적 압박과 디지털 취약 악용이 결합됩니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "할머니, 나예요... 나 폰이 고장 나서 다른 번호로 전화했어요. 목소리 이상하죠?" },
+    { lineId: "line-2", text: "급하게 낼 돈이 있는데 지금 앱이 안 돼서요. 할머니가 잠깐만 도와주시면 안 돼요?" },
+    { lineId: "line-3", text: "엄마 아빠한테는 아직 말하지 마세요. 제가 나중에 다 갚을게요, 지금만 좀요." },
+  ],
+  voiceMode: "clone",
+  callerLabel: "손주 (사칭)",
+};
+
 export const PUBLIC_SCENARIOS: Record<string, ScenarioMeta> = {
   [FAMILY_ACCIDENT_SCENARIO_ID]: familyAccidentDeepvoiceScenario,
   [INSTITUTIONAL_IMPERSONATION_SCENARIO_ID]: institutionalImpersonationScenario,
+  [LOAN_SCAM_SCENARIO_ID]: loanScamScenario,
+  [TAX_REFUND_SCAM_SCENARIO_ID]: taxRefundScamScenario,
+  [GRANDCHILD_IMPERSONATION_SCENARIO_ID]: grandchildImpersonationScenario,
 };

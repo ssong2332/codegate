@@ -13,6 +13,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  clearPendingSession,
   getOrCreatePendingSessionId,
   setOpeningAudioUrl,
   setSelectedScenarioId as persistSelectedScenarioId,
@@ -24,9 +25,6 @@ type PageState = "ready" | "starting" | "start-error";
 
 export default function ScenariosPage() {
   const router = useRouter();
-  // sessionStorage 조회·생성은 클라이언트 전용이라 lazy 초기값으로 한 번만 읽는다
-  // (react-hooks/set-state-in-effect 회피, 다른 온보딩 화면과 동일 패턴).
-  const [sessionId] = useState<string>(() => getOrCreatePendingSessionId());
   const [state, setState] = useState<PageState>("ready");
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
@@ -34,9 +32,19 @@ export default function ScenariosPage() {
   const scenarioEntries = Object.entries(scenarios);
 
   const handleStart = async () => {
-    if (!sessionId || !selectedScenarioId) return;
+    if (!selectedScenarioId || state === "starting") return;
     const scenario = scenarios[selectedScenarioId];
     if (!scenario) return;
+
+    // "시작" = 새 훈련의 시작점. 직전 훈련을 "훈련 종료" 없이 빠져나온 경우 이전 사전 세션 id가
+    // 남아 있을 수 있는데(그 세션은 서버에서 active라 createSession이 재사용을 거부한다, #1 가드),
+    // 여기서 비우고 새 id를 발급해 매 훈련 시도가 독립 세션이 되게 한다. ⚠️ 이 clear+create는
+    // 비멱등이라 렌더 경로(useState lazy init 등)에 두면 안 된다 — React StrictMode가 initializer를
+    // 이중 호출해 컴포넌트 state와 sessionStorage의 id가 갈라지는 실버그가 있었다(브라우저 실측으로
+    // 확인). 반드시 이벤트 핸들러(여기)에서만 실행한다.
+    clearPendingSession();
+    const sessionId = getOrCreatePendingSessionId();
+    if (!sessionId) return;
 
     if (scenario.voiceMode === "clone") {
       // 본인 목소리 클론이 필요한 시나리오 — 선택을 저장해두고 녹음 화면으로 보낸다.
