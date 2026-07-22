@@ -29,3 +29,48 @@ body {
   color: var(--foreground);
   font-family: "Pretendard Variable", Pretendard, system-ui, sans-serif;
 }
+
+/* --- 통화 화면(UX-014) 전용 모션 (2026-07-22) ---
+   실제 전화 UI의 "수신 중 파동"과 "상대가 말하는 중 파형"을 표현한다. 어르신 대상이라 번쩍이는
+   고대비 점멸은 피하고, 느리고 부드러운 파동만 쓴다(불안 유발 방지 — D-3 톤 규칙과 정합).
+   prefers-reduced-motion을 켠 사용자에게는 모든 모션을 정지시킨다(접근성). */
+@keyframes call-ring-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70% {
+    transform: scale(1.55);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.55);
+    opacity: 0;
+  }
+}
+
+.call-ring-pulse {
+  animation: call-ring-pulse 2s cubic-bezier(0.25, 0.6, 0.35, 1) infinite;
+}
+
+@keyframes call-wave-bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.call-wave-bar {
+  animation: call-wave-bar 0.9s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-ring-pulse,
+  .call-wave-bar {
+    animation: none;
+  }
+}

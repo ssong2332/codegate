@@ -59,6 +59,20 @@ export type SendMessageResponse = {
   audioUrl?: string;
 };
 
+// --- createRealtimeCall (UX-014 live phase · 2026-07-22 실시간 음성 대화 전환) ---
+// 서버가 ElevenLabs 서명 URL을 발급해 브라우저가 speech-to-speech로 직접 대화한다. API 키는
+// 서버에만 남는다(functions/src/realtime/index.ts와 1:1).
+export type CreateRealtimeCallRequest = { sessionId: string };
+export type CreateRealtimeCallResponse = {
+  /** ElevenLabs 서명 WebSocket URL. isMock:true면 빈 문자열. */
+  signedUrl: string;
+  /** 이 통화에 쓸 목소리(clone 시나리오는 본인 클론 id, generic은 공용 기본 음성). */
+  voiceId: string;
+  language: "ko";
+  /** true = 실시간 대화 불가(키/에이전트 미설정 또는 발급 실패) → 텍스트 폴백으로 진행. */
+  isMock: boolean;
+};
+
 // --- endSession (Track B · T8 · UX-007 · AC-006/AC-007/AC-021) ---
 export type EndSessionReason =
   | "user_ended"

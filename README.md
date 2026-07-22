@@ -115,7 +115,8 @@ cp functions/.env.example functions/.env
 ```
 | Variable | Purpose |
 |---|---|
-| `ELEVENLABS_API_KEY` | ElevenLabs Instant Voice Cloning + TTS API 키(docs/API.md Conventions) |
+| `ELEVENLABS_API_KEY` | ElevenLabs Instant Voice Cloning + TTS + Agents(실시간 통화) API 키 |
+| `ELEVENLABS_AGENT_IDS` | 실시간 음성 통화용 `scenarioId:agentId` 매핑(쉼표 구분) — 아래 설명 참조 |
 | `LLM_API_KEY` | 사기범 역할극/리포트 생성용 LLM API 키 |
 | `LLM_PROVIDER` | `claude` 또는 `gemini` (DECISIONS #11 어댑터 선택) |
 | `FALLBACK_VOICE_ID` | 클론/합성 타임아웃 시 폴백용 사전 준비 voiceId(OQ-U3, DECISIONS #9) |
@@ -123,9 +124,28 @@ cp functions/.env.example functions/.env
 프로덕션 배포 시에는 `functions/.env` 파일 대신 `firebase functions:secrets:set <NAME>`로
 시크릿을 설정하는 것을 권장한다(파일을 배포 서버에 올리지 않음).
 
-이 값들이 없으면(특히 `ELEVENLABS_API_KEY`) 음성 클론(T1)은 착수할 수 없다 — 그동안은
-T19 목업(Mock TTS)으로 개발을 진행한다(docs/PRD.md v0.6 변경 요약 참조). 새 환경변수를
-도입할 때는 해당 `.env.example`과 이 표를 함께 갱신한다(CLAUDE.md 규칙).
+#### 실시간 음성 통화 설정 (`ELEVENLABS_AGENT_IDS`)
+
+훈련 통화는 ElevenLabs Agents와의 **speech-to-speech 실시간 대화**로 동작한다. 저지연 한국어
+대화를 위해 에이전트 설정에서 `language=ko`와 저지연 모델(Flash 계열)을 선택한다.
+
+시나리오별로 에이전트를 하나씩 만들고 매핑을 넣는다:
+
+```
+ELEVENLABS_AGENT_IDS=family-accident-deepvoice:agent_xxx,tax-refund-scam:agent_yyy
+```
+
+**페르소나 프롬프트는 에이전트 쪽에 저장한다**(ADR-0004). ElevenLabs 오버라이드는 클라이언트가
+보내는 값이라, 프롬프트를 오버라이드로 넘기면 브라우저에 민감 프롬프트가 노출되기 때문이다.
+서버는 서명 URL만 발급하고, 클라가 보내는 오버라이드는 민감하지 않은 `voice_id`/`language`뿐이다.
+각 에이전트에 넣을 프롬프트 원문은 `functions/src/scenarios/*.prompt.ts`를
+`roleplay/promptAssembly.buildSystemPrompt()`로 조립해 그대로 붙여넣는다(손으로 다시 쓰면
+드리프트가 난다).
+
+`ELEVENLABS_API_KEY` 또는 해당 시나리오의 에이전트 매핑이 없으면 실시간 통화 대신 **텍스트 폴백
+대화**로 자동 강등되며, 그 사실이 화면에도 표시된다(조용한 실패 금지). 즉 키 없이도 전체 흐름을
+개발·시연할 수 있다. 새 환경변수를 도입할 때는 해당 `.env.example`과 이 표를 함께 갱신한다
+(CLAUDE.md 규칙).
 
 ## Documentation
 | Document | Purpose |

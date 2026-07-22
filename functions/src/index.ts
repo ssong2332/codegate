@@ -6,6 +6,9 @@
 export { createVoiceClone, synthesizeDeepvoice } from "./voice";
 export { createSession, endSession } from "./session";
 export { sendMessage } from "./roleplay";
+// 실시간 음성 통화 자격증명 발급(2026-07-22) — 브라우저가 ElevenLabs Agents와 직접 speech-to-speech
+// 대화를 하되 API 키는 서버에만 두기 위한 서명 URL 발급 지점.
+export { createRealtimeCall } from "./realtime";
 export { generateReport } from "./report";
 
 // Trigger functions (클라 직접 호출 아님) — API.md `onSessionEnded` (Track C, T10, AC-021).

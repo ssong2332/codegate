@@ -22,8 +22,12 @@ const DEFLECTION_LINES = [
   "...왜 자꾸 이상한 걸 물어봐... 그냥 좀 믿고 도와주면 안 돼?",
 ];
 
-const OPENING_FILLERS = ["여보세요...?", "...", "엄마..."];
-const ESCALATION_FILLERS = ["...", "흑흑...", "빨리...", "제발..."];
+// 시나리오를 가리지 않는 중립적 필러만 쓴다(2026-07-22). 예전엔 "엄마...", "흑흑...", "빨리..."
+// 처럼 가족 사칭 전용 표현이 섞여 있어, 국세청·캐피탈 상담원 같은 기관 사칭 시나리오에서도 그대로
+// 튀어나와 대사가 어긋났다(실측 확인). 발신자 정체는 화면(callerLabel)과 대사 내용이 이미
+// 전달하므로 필러는 통화 도입/뜸 들이기 역할만 한다.
+const OPENING_FILLERS = ["여보세요...?", "여보세요, 들리세요?", "..."];
+const ESCALATION_FILLERS = ["...", "저기요...", "잠시만요..."];
 
 /** weakenedTactics 항목은 "라벨 — 3인칭 설명(예: '...식으로 위협하되, 실제 법적 조치는 제시하지
  * 않는다')" 형식이다 — 실 LLM에게 줄 지침 문장이라 그대로 대사로 읽으면 캐릭터가 자기 수법을
@@ -66,17 +70,20 @@ export class MockLlmClient implements LlmClient {
     const filler = OPENING_FILLERS[0];
     const flavor = tacticHints && tacticHints.length > 0
       ? extractTacticFlavor(tacticHints[0])
-      : "지금 급한 일이 생겼어";
+      : "확인하실 게 있어서 연락드렸습니다";
     return `${filler} ${flavor}.`;
   }
 
+  // 예전엔 모든 응답 끝에 "지금 좀 도와줄 수 있어?"를 붙였다 — 가족 사칭에서만 성립하는 반말
+  // 부탁이라 국세청·캐피탈 상담원 시나리오에서 어긋났다(실측 확인, 2026-07-22). 시나리오별 어투는
+  // 수법 문구(weakenedTactics 인용구)가 이미 담고 있으므로 공통 꼬리말을 붙이지 않는다.
   private craftEscalationLine(turn: number, tacticHints?: string[]): string {
     const filler = ESCALATION_FILLERS[turn % ESCALATION_FILLERS.length];
     const hasHints = tacticHints && tacticHints.length > 0;
     const flavor = hasHints
       ? extractTacticFlavor(tacticHints![turn % tacticHints!.length])
-      : "지금 상황이 너무 급해서 그래";
-    return `${filler} ${flavor}. 지금 좀 도와줄 수 있어?`;
+      : "지금 처리하지 않으면 곤란해집니다";
+    return `${filler} ${flavor}.`;
   }
 }
 
