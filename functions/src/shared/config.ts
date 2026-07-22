@@ -6,6 +6,13 @@ import { defineSecret, defineString } from "firebase-functions/params";
 export const ELEVENLABS_API_KEY = defineSecret("ELEVENLABS_API_KEY");
 
 /**
+ * Gemini Live API 키(2026-07-22) — 무료 티어로 쓸 수 있는 실시간 음성 대화 경로.
+ * ElevenLabs와 달리 고정 프리셋 음성만 지원하므로 generic 시나리오에만 붙인다
+ * (functions/src/realtime/provider.ts 선택 순서 주석 참고).
+ */
+export const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
+
+/**
  * 실시간 음성 대화용 시나리오별 에이전트 매핑(2026-07-22) — `scenarioId:agentId` 쉼표 구분.
  * 페르소나 프롬프트는 이 에이전트들에 저장하고 클라로 내려보내지 않는다(ADR-0004,
  * functions/src/realtime/agentMap.ts 주석 참고).

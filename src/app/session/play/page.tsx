@@ -33,6 +33,11 @@ import CallWaveform from "@/components/CallWaveform";
 const RealtimeVoiceSession = dynamic(() => import("@/lib/realtime/RealtimeVoiceSession"), {
   ssr: false,
 });
+// Gemini Live(무료 경로) 세션도 같은 이유로 지연 로딩한다 — 오디오 컨텍스트/SDK를 실제로 쓸
+// 때만 불러온다.
+const GeminiVoiceSession = dynamic(() => import("@/lib/realtime/GeminiVoiceSession"), {
+  ssr: false,
+});
 
 type PageState = "checking" | "ready" | "no-session" | "scenario-not-found" | "load-error";
 type Phase = "incoming" | "connecting" | "opening" | "live" | "ended";
@@ -345,8 +350,19 @@ export default function SessionCallPage() {
     <main className="flex min-h-screen flex-col bg-gradient-to-b from-[#26363F] via-[#22303A] to-[#18232B] text-white">
       {/* 실시간 speech-to-speech 세션 — 서버가 자격증명을 준 경우에만 마운트된다(지연 로딩).
           화면 요소는 없고 SDK 세션 생명주기만 관리한다. */}
-      {realtime.credentials && (
+      {realtime.credentials?.provider === "elevenlabs" && (
         <RealtimeVoiceSession
+          credentials={realtime.credentials}
+          stopSignal={realtime.stopSignal}
+          muted={muted}
+          onActive={realtime.handleActive}
+          onEnded={realtime.handleEnded}
+          onError={realtime.handleError}
+          onSpeakingChange={realtime.handleSpeakingChange}
+        />
+      )}
+      {realtime.credentials?.provider === "gemini" && (
+        <GeminiVoiceSession
           credentials={realtime.credentials}
           stopSignal={realtime.stopSignal}
           muted={muted}

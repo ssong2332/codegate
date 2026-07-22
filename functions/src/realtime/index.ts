@@ -7,7 +7,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
-import { ELEVENLABS_API_KEY } from "../shared/config";
+import { ELEVENLABS_API_KEY, GEMINI_API_KEY } from "../shared/config";
 import type { SessionDoc } from "../shared/types";
 import { getRealtimeProvider } from "./provider";
 import type { CreateRealtimeCallRequest, CreateRealtimeCallResponse } from "./callTypes";
@@ -17,7 +17,7 @@ ensureFirebaseAdminApp();
 export const createRealtimeCall = onCall<
   CreateRealtimeCallRequest,
   Promise<CreateRealtimeCallResponse>
->({ secrets: [ELEVENLABS_API_KEY] }, async (request) => {
+>({ secrets: [ELEVENLABS_API_KEY, GEMINI_API_KEY] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
@@ -48,8 +48,16 @@ export const createRealtimeCall = onCall<
     });
     return credentials;
   } catch {
-    // 서명 URL 발급 실패가 통화 자체를 막지 않도록, 목업(텍스트 폴백) 자격증명으로 강등해 돌려준다
+    // 자격증명 발급 실패가 통화 자체를 막지 않도록, 목업(텍스트 폴백)으로 강등해 돌려준다
     // (P-4 핵심 루프 비차단). 클라는 isMock을 보고 폴백 UI를 띄운다 — 조용히 실패하지 않는다.
-    return { signedUrl: "", voiceId: session.voiceId ?? "", language: "ko", isMock: true };
+    return {
+      provider: "none",
+      signedUrl: "",
+      geminiToken: "",
+      geminiModel: "",
+      voiceId: session.voiceId ?? "",
+      language: "ko",
+      isMock: true,
+    };
   }
 });

@@ -10,7 +10,10 @@ export class MockRealtimeProvider implements RealtimeVoiceProvider {
 
   async createCallCredentials(input: RealtimeCallInput): Promise<RealtimeCallCredentials> {
     return {
+      provider: "none",
       signedUrl: "",
+      geminiToken: "",
+      geminiModel: "",
       voiceId: input.voiceId,
       language: "ko",
       isMock: true,

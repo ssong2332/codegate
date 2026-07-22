@@ -106,8 +106,11 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     }
     if (!mountedRef.current) return;
 
-    // ③ 실시간 대화 불가(키·에이전트 미설정) → 텍스트 폴백. 조용히 넘어가지 않고 상태로 알린다.
-    if (issued.isMock || !issued.signedUrl) {
+    // ③ 실시간 대화 불가(키·설정 미비) → 텍스트 폴백. 조용히 넘어가지 않고 상태로 알린다.
+    const hasUsableCredentials =
+      (issued.provider === "elevenlabs" && Boolean(issued.signedUrl)) ||
+      (issued.provider === "gemini" && Boolean(issued.geminiToken));
+    if (issued.isMock || !hasUsableCredentials) {
       setStatus("fallback");
       return;
     }

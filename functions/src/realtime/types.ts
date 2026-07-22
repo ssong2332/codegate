@@ -28,13 +28,32 @@ export type RealtimeCallInput = {
   voiceId: string;
 };
 
+/**
+ * 어느 실시간 프로바이더로 붙을지 클라가 알아야 세션 구현을 고른다.
+ * - `elevenlabs`: 서명 URL로 접속. **본인 목소리 클론(voiceId) 사용 가능** — 유료.
+ * - `gemini`: 단기 토큰으로 접속. 무료 티어 가능하지만 **고정 프리셋 음성만** 쓸 수 있어
+ *   clone 시나리오의 "본인 목소리" 요건은 만족하지 못한다(generic 시나리오 전용).
+ * - `none`: 실시간 불가 → 클라는 기존 텍스트 폴백으로 진행한다.
+ */
+export type RealtimeProviderName = "elevenlabs" | "gemini" | "none";
+
 export type RealtimeCallCredentials = {
+  /** 어떤 프로바이더로 접속할지. `none`이면 실시간 통화 불가(텍스트 폴백). */
+  provider: RealtimeProviderName;
   /**
    * ElevenLabs 서명 URL(WebSocket). 짧은 유효기간을 가지며 API 키를 클라에 노출하지 않는다.
-   * Mock 구현체는 빈 문자열을 반환하고 `isMock: true`로 표시한다.
+   * gemini/none일 때는 빈 문자열.
    */
   signedUrl: string;
-  /** 클라가 세션 시작 시 그대로 전달할 오버라이드(민감 정보 없음 — voice_id/language만). */
+  /**
+   * Gemini 단기 토큰(ephemeral token) 이름. 클라가 API 키 자리에 그대로 넣어 접속한다.
+   * 모델·시스템 프롬프트는 발급 시점에 서버가 토큰에 고정해 두므로(liveConnectConstraints)
+   * 이 토큰만으로는 프롬프트를 바꾸거나 읽을 수 없다. elevenlabs/none일 때는 빈 문자열.
+   */
+  geminiToken: string;
+  /** Gemini 접속 시 사용할 모델명(토큰에 고정된 값과 동일해야 한다). */
+  geminiModel: string;
+  /** 이 통화에 쓸 목소리(ElevenLabs 전용 — 본인 클론 id 또는 공용 기본 음성). */
   voiceId: string;
   language: "ko";
   /** true = 실제 실시간 대화가 아니라 목업(키 미설정). 클라는 기존 텍스트 폴백으로 진행한다. */
@@ -42,7 +61,7 @@ export type RealtimeCallCredentials = {
 };
 
 export interface RealtimeVoiceProvider {
-  readonly providerName: "mock" | "elevenlabs";
+  readonly providerName: "mock" | "elevenlabs" | "gemini";
   /** 통화 1건에 필요한 접속 자격증명을 발급한다. */
   createCallCredentials(input: RealtimeCallInput): Promise<RealtimeCallCredentials>;
 }

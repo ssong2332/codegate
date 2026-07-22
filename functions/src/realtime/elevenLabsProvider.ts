@@ -46,7 +46,10 @@ export class ElevenLabsRealtimeProvider implements RealtimeVoiceProvider {
         throw new Error("ElevenLabs 응답에 signed_url이 없습니다.");
       }
       return {
+        provider: "elevenlabs",
         signedUrl: body.signed_url,
+        geminiToken: "",
+        geminiModel: "",
         voiceId: input.voiceId,
         language: "ko",
         isMock: false,

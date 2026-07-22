@@ -115,6 +115,7 @@ cp functions/.env.example functions/.env
 ```
 | Variable | Purpose |
 |---|---|
+| `GEMINI_API_KEY` | **무료** 실시간 음성 통화(Gemini Live) — 아래 설명 참조 |
 | `ELEVENLABS_API_KEY` | ElevenLabs Instant Voice Cloning + TTS + Agents(실시간 통화) API 키 |
 | `ELEVENLABS_AGENT_IDS` | 실시간 음성 통화용 `scenarioId:agentId` 매핑(쉼표 구분) — 아래 설명 참조 |
 | `LLM_API_KEY` | 사기범 역할극/리포트 생성용 LLM API 키 |
@@ -124,10 +125,37 @@ cp functions/.env.example functions/.env
 프로덕션 배포 시에는 `functions/.env` 파일 대신 `firebase functions:secrets:set <NAME>`로
 시크릿을 설정하는 것을 권장한다(파일을 배포 서버에 올리지 않음).
 
-#### 실시간 음성 통화 설정 (`ELEVENLABS_AGENT_IDS`)
+#### 실시간 음성 통화 설정
 
-훈련 통화는 ElevenLabs Agents와의 **speech-to-speech 실시간 대화**로 동작한다. 저지연 한국어
-대화를 위해 에이전트 설정에서 `language=ko`와 저지연 모델(Flash 계열)을 선택한다.
+훈련 통화는 **speech-to-speech 실시간 대화**로 동작한다. 두 경로가 있고, 서버가 시나리오에 따라
+자동으로 고른다(`functions/src/realtime/provider.ts`):
+
+| 경로 | 비용 | 본인 목소리 클론 | 적용 시나리오 |
+|---|---|---|---|
+| **Gemini Live** | 무료 티어 가능 | ❌ 고정 프리셋 음성만 | generic 3종(기관사칭·대출·환급금) |
+| **ElevenLabs Agents** | 유료 | ✅ 가능 | 전체(clone 2종은 이 경로에서만 성립) |
+
+둘 다 없으면 텍스트 폴백으로 자동 강등되고 그 사실이 화면에 표시된다. 즉 키 없이도 전체 흐름을
+개발·시연할 수 있다.
+
+##### 무료로 시작하기 (`GEMINI_API_KEY`)
+
+1. [aistudio.google.com](https://aistudio.google.com)에서 API 키 발급(카드 등록 불필요)
+2. `functions/.env`에 `GEMINI_API_KEY=발급받은_키` 추가 후 에뮬레이터 재시작
+
+이것만으로 generic 시나리오 3종이 실제 음성 대화로 동작한다. 시나리오별 설정은 필요 없다 —
+시스템 프롬프트는 서버가 단기 토큰에 고정해서 발급하므로(`liveConnectConstraints`) 브라우저로
+내려가지 않고, 클라이언트가 모델·프롬프트·도구를 바꿔치기할 수도 없다(ADR-0004).
+
+> ⚠️ 무료 티어는 대화 내용이 구글 모델 학습에 사용된다. 실제 사용자를 대상으로 배포할 때는
+> 유료 티어(학습 미사용)로 올릴 것.
+
+##### 본인 목소리 클론까지 (`ELEVENLABS_AGENT_IDS`)
+
+clone 시나리오(가족 납치·손주 사칭)는 참가자 본인 목소리로 걸려오는 것이 핵심이라 ElevenLabs가
+필요하다. 저지연 한국어 대화를 위해 에이전트 설정에서 `language=ko`와 저지연 모델(Flash 계열)을
+선택하고, Security 탭에서 `voice_id`·`language` 오버라이드를 허용한다(허용하지 않으면 클론
+목소리가 반영되지 않는다).
 
 시나리오별로 에이전트를 하나씩 만들고 매핑을 넣는다:
 
@@ -142,10 +170,7 @@ ELEVENLABS_AGENT_IDS=family-accident-deepvoice:agent_xxx,tax-refund-scam:agent_y
 `roleplay/promptAssembly.buildSystemPrompt()`로 조립해 그대로 붙여넣는다(손으로 다시 쓰면
 드리프트가 난다).
 
-`ELEVENLABS_API_KEY` 또는 해당 시나리오의 에이전트 매핑이 없으면 실시간 통화 대신 **텍스트 폴백
-대화**로 자동 강등되며, 그 사실이 화면에도 표시된다(조용한 실패 금지). 즉 키 없이도 전체 흐름을
-개발·시연할 수 있다. 새 환경변수를 도입할 때는 해당 `.env.example`과 이 표를 함께 갱신한다
-(CLAUDE.md 규칙).
+새 환경변수를 도입할 때는 해당 `.env.example`과 이 표를 함께 갱신한다(CLAUDE.md 규칙).
 
 ## Documentation
 | Document | Purpose |

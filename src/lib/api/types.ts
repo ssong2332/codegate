@@ -58,12 +58,23 @@ export type SendMessageResponse = {
 // 서버에만 남는다(functions/src/realtime/index.ts와 1:1).
 export type CreateRealtimeCallRequest = { sessionId: string };
 export type CreateRealtimeCallResponse = {
-  /** ElevenLabs 서명 WebSocket URL. isMock:true면 빈 문자열. */
+  /**
+   * 접속할 실시간 프로바이더.
+   * - `elevenlabs`: 서명 URL 접속. 본인 목소리 클론 사용 가능(유료).
+   * - `gemini`: 단기 토큰 접속. 무료 티어 가능하지만 고정 프리셋 음성만(generic 시나리오 전용).
+   * - `none`: 실시간 불가 → 텍스트 폴백.
+   */
+  provider: "elevenlabs" | "gemini" | "none";
+  /** ElevenLabs 서명 WebSocket URL. 그 외 프로바이더면 빈 문자열. */
   signedUrl: string;
-  /** 이 통화에 쓸 목소리(clone 시나리오는 본인 클론 id, generic은 공용 기본 음성). */
+  /** Gemini 단기 토큰 — 모델·시스템 프롬프트가 서버에서 고정돼 있다(클라가 바꿀 수 없음). */
+  geminiToken: string;
+  /** Gemini 접속 모델명. 그 외면 빈 문자열. */
+  geminiModel: string;
+  /** ElevenLabs에서 쓸 목소리(clone 시나리오는 본인 클론 id). Gemini는 고정 음성이라 빈 문자열. */
   voiceId: string;
   language: "ko";
-  /** true = 실시간 대화 불가(키/에이전트 미설정 또는 발급 실패) → 텍스트 폴백으로 진행. */
+  /** true = 실시간 대화 불가(키/설정 미비 또는 발급 실패) → 텍스트 폴백으로 진행. */
   isMock: boolean;
 };
 
