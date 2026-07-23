@@ -8,9 +8,23 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { ELEVENLABS_API_KEY, GEMINI_API_KEY } from "../shared/config";
-import type { SessionDoc } from "../shared/types";
+import type { VoiceMode } from "../scenarios/publicMeta";
+import type { SessionDoc, VoiceSelectionSource } from "../shared/types";
 import { getRealtimeProvider } from "./provider";
 import type { CreateRealtimeCallRequest, CreateRealtimeCallResponse } from "./callTypes";
+
+/**
+ * 에스컬레이션된 세션(§13.6 통합 버그 수정)의 "유효 voiceMode" 유추 — session.voiceSelectionSource가
+ * 있으면(메신저→보이스 전이 세션) 그 값으로부터 유추하고, 없으면(기존 순수 보이스 세션) undefined를
+ * 반환해 getRealtimeProvider가 PUBLIC_SCENARIOS[scenarioId]?.voiceMode를 그대로 쓰게 한다.
+ */
+export function resolveEffectiveVoiceMode(
+  voiceSelectionSource: VoiceSelectionSource | undefined,
+): VoiceMode | undefined {
+  if (!voiceSelectionSource) return undefined;
+  if (voiceSelectionSource === "recorded" || voiceSelectionSource === "reused") return "clone";
+  return "generic"; // fallback_male | fallback_female
+}
 
 ensureFirebaseAdminApp();
 
@@ -39,7 +53,8 @@ export const createRealtimeCall = onCall<
     throw new HttpsError("failed-precondition", "이미 종료되었거나 활성 상태가 아닌 세션입니다.");
   }
 
-  const provider = getRealtimeProvider(session.scenarioId);
+  const effectiveVoiceMode = resolveEffectiveVoiceMode(session.voiceSelectionSource);
+  const provider = getRealtimeProvider(session.scenarioId, effectiveVoiceMode);
   try {
     const credentials = await provider.createCallCredentials({
       sessionId,

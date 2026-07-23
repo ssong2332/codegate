@@ -12,32 +12,79 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { generateOpeningLine, isUsingMockLlm } from "../roleplay";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
-import { MAX_SESSION_MS, MAX_USER_TURNS } from "../shared/constants";
+import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import {
+  MAX_SESSION_MS,
+  MAX_USER_TURNS,
+  MESSENGER_ESCALATION_MAX_USER_TURNS,
+} from "../shared/constants";
+import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID } from "../shared/config";
 import { getVoiceProvider } from "../voice/provider";
+import { transitionChannel } from "./channelTransition";
 import type { MessageDoc, SessionDoc } from "../shared/types";
 import type {
   CreateSessionRequest,
   CreateSessionResponse,
   EndSessionRequest,
   EndSessionResponse,
+  RequestEscalationRequest,
+  RequestEscalationResponse,
   UpdateMessengerSkinRequest,
   UpdateMessengerSkinResponse,
 } from "./types";
 
 ensureFirebaseAdminApp();
 
+/** defineString은 바인딩되지 않은 컨텍스트(단위 테스트 등)에서 throw할 수 있으므로 안전하게
+ * 감싼다(functions/src/realtime/provider.ts의 readSecret과 동일한 패턴). placeholder(.env.example의
+ * "YOUR_" 접두) 값도 "미설정"으로 본다. */
+function readOptionalConfigString(param: { value: () => string }): string {
+  try {
+    const value = param.value();
+    return !value || value.startsWith("YOUR_") ? "" : value;
+  } catch {
+    return "";
+  }
+}
+
 export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionResponse>>(
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     }
-    const { scenarioId, voiceId, sessionId, channel, surface, messengerSkin, skinSource } =
-      request.data ?? {};
+    const {
+      scenarioId,
+      voiceId,
+      sessionId,
+      channel,
+      surface,
+      messengerSkin,
+      skinSource,
+      voiceSelectionSource,
+    } = request.data ?? {};
     if (!scenarioId || !voiceId) {
       throw new HttpsError("invalid-argument", "scenarioId와 voiceId가 필요합니다.");
     }
     if (!SCENARIO_PROMPTS[scenarioId]) {
       throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
+    }
+
+    // 교차채널 세션 총 한도(T30, Architecture.md §13.3, PoC 전 가정치) — 에스컬레이션 가능
+    // 시나리오(scenario.escalation 존재)는 두 채널을 합쳐도 기존 10턴 안에 다 담기 어려워
+    // maxUserTurns를 상향 발급한다.
+    const isEscalationCapable = Boolean(PUBLIC_SCENARIOS[scenarioId]?.escalation);
+
+    // UX-025(§13.6) "남/여 기본 보이스" 폴백 — 클라는 실제 ElevenLabs voiceId를 모르므로(서버
+    // 전용 설정), voiceSelectionSource로 요청하면 서버가 FALLBACK_VOICE_MALE_ID/FEMALE_ID로
+    // 재해석한다. 미설정(placeholder)이면 클라가 보낸 값을 그대로 쓴다(조용한 실패 없음 — 다만
+    // 실 ElevenLabs 통화에서는 유효하지 않은 voiceId라 Mock/일반 강등으로 이어질 수 있다).
+    let resolvedVoiceId = voiceId;
+    if (voiceSelectionSource === "fallback_male") {
+      const configured = readOptionalConfigString(FALLBACK_VOICE_MALE_ID);
+      if (configured) resolvedVoiceId = configured;
+    } else if (voiceSelectionSource === "fallback_female") {
+      const configured = readOptionalConfigString(FALLBACK_VOICE_FEMALE_ID);
+      if (configured) resolvedVoiceId = configured;
     }
 
     const db = getFirestore();
@@ -99,13 +146,15 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       uid: request.auth.uid,
       scenarioId,
       status: "active",
-      voiceId,
+      voiceId: resolvedVoiceId,
       cloneStatus: "ready",
       identitySelfConfirmed: true,
       turnCount: 0,
-      maxUserTurns: MAX_USER_TURNS,
+      maxUserTurns: isEscalationCapable ? MESSENGER_ESCALATION_MAX_USER_TURNS : MAX_USER_TURNS,
       maxSessionMs: MAX_SESSION_MS,
       createdAt: now,
+      // T30 추가(§13.1) — 세션이 처음 시작된 채널. 생성 시 1회만 기록(이후 전이와 무관하게 불변).
+      entryChannel: channel ?? "voice",
       // Firestore admin SDK는 필드값 undefined를 기본적으로 거부하므로(ignoreUndefinedProperties
       // 미설정), Mock이 아닐 때는 llmProvider 필드 자체를 생략한다.
       ...(isMock ? { llmProvider: "mock" as const } : {}),
@@ -115,6 +164,8 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       ...(surface ? { surface } : {}),
       ...(messengerSkin ? { messengerSkin } : {}),
       ...(skinSource ? { skinSource } : {}),
+      // UX-025(§13.6) — 에스컬레이션 가능 메신저 시나리오에서만 채워진다.
+      ...(voiceSelectionSource ? { voiceSelectionSource } : {}),
     };
     // merge:true — sessionId를 채택한 경우 pending 문서(createVoiceClone이 만든 voiceProvider 등
     // 부가 필드)를 지우지 않고 scenarioId/status 등을 덧씌운다. 새 문서인 경우는 기존과 동일.
@@ -125,6 +176,9 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       textMasked: openingMessage.text,
       turnIndex: 0,
       createdAt: now,
+      // T30 추가(§13.1) — 교차채널 타임라인(AC-037)용 채널 표기. 보이스 전용 세션은 기존과 동일하게
+      // 필드 부재.
+      ...(channel ? { channel } : {}),
     } satisfies MessageDoc);
 
     // 실시간 음성 통화 전환(2026-07-22 사용자 결정) — sendMessage.audioUrl과 동일 패턴으로 오프닝
@@ -150,7 +204,9 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     return {
       sessionId: sessionRef.id,
       openingMessage,
-      maxUserTurns: MAX_USER_TURNS,
+      // T30 버그 수정(에뮬레이터 검증 중 발견): sessionDoc.maxUserTurns는 이미 에스컬레이션 여부에
+      // 따라 분기했는데 이 응답 값은 MAX_USER_TURNS를 그대로 하드코딩해 응답과 저장값이 어긋나 있었다.
+      maxUserTurns: sessionDoc.maxUserTurns,
       maxSessionMs: MAX_SESSION_MS,
       isMock,
       ...(openingAudioUrl ? { openingAudioUrl } : {}),
@@ -234,4 +290,44 @@ export const updateMessengerSkin = onCall<
 
   await sessionRef.update({ messengerSkin, skinSource } satisfies Partial<SessionDoc>);
   return { messengerSkin, skinSource };
+});
+
+// 명시 전환 버튼("전화로 확인", T30, UX-022·§13.3/AC-034) — 사용자가 1턴부터 언제든 수동으로
+// 메신저→보이스 전이를 요청한다. endSession/updateMessengerSkin과 동일한 인증·존재확인·소유uid·
+// 상태 검증 패턴을 쓴다. 에스컬레이션이 불가능한 시나리오·이미 voice로 전이된 세션에 대한 요청은
+// 조용히 무시하지 않고 명시적으로 거부한다(AC-039 "조용한 실패 금지").
+export const requestEscalation = onCall<
+  RequestEscalationRequest,
+  Promise<RequestEscalationResponse>
+>(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+  }
+  const { sessionId } = request.data ?? {};
+  if (!sessionId) {
+    throw new HttpsError("invalid-argument", "sessionId가 필요합니다.");
+  }
+
+  const db = getFirestore();
+  const sessionRef = db.collection("sessions").doc(sessionId);
+  const sessionSnap = await sessionRef.get();
+  if (!sessionSnap.exists) {
+    throw new HttpsError("failed-precondition", "존재하지 않는 세션입니다.");
+  }
+  const session = sessionSnap.data() as SessionDoc;
+  if (session.uid !== request.auth.uid) {
+    throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
+  }
+  if (session.status !== "active") {
+    throw new HttpsError("failed-precondition", "이미 종료되었거나 활성 상태가 아닌 세션입니다.");
+  }
+  if (session.channel !== "messenger") {
+    throw new HttpsError("failed-precondition", "메신저 채널 세션에서만 요청할 수 있습니다.");
+  }
+  if (!PUBLIC_SCENARIOS[session.scenarioId]?.escalation) {
+    throw new HttpsError("failed-precondition", "이 시나리오는 통화 전이를 지원하지 않습니다.");
+  }
+
+  await transitionChannel(sessionId, "messenger", "voice", "manual_button");
+  return { escalation: { toChannel: "voice" } };
 });

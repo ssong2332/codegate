@@ -76,6 +76,9 @@ export const submitRealtimeTranscript = onCall<
         textMasked: masked,
         turnIndex: nextIndex,
         createdAt: Timestamp.fromMillis(baseTime + i * 1000),
+        // T30 추가(§13.1) — 교차채널 타임라인(AC-037)용 채널 표기. 실시간 통화 전사는 항상
+        // channel="voice" 단계에서 발생한다(에스컬레이션 세션이든 순수 보이스 세션이든 동일).
+        channel: "voice",
       } satisfies MessageDoc);
       nextIndex += 1;
       count += 1;

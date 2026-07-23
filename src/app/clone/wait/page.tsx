@@ -15,7 +15,12 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { getPendingSessionId, getSelectedScenarioId, setOpeningAudioUrl } from "@/lib/recording";
+import {
+  getPendingSessionId,
+  getSelectedScenarioId,
+  setOpeningAudioUrl,
+  hasMessengerVoiceSelectReturn,
+} from "@/lib/recording";
 import { createSession } from "@/lib/api";
 
 type CloneState = "checking" | "pending" | "ready" | "failed" | "no-session" | "read-error";
@@ -60,6 +65,14 @@ export default function CloneWaitPage() {
   // 호출하면 react-hooks/set-state-in-effect가 "동기 setState"로 오탐한다).
   useEffect(() => {
     if (cloneState !== "ready" || !sessionId || !voiceId) return;
+    // T30(UX-025) — "즉시 녹음" 경로로 메신저 에스컬레이션 목소리 선택 화면에서 온 경우, 이 화면이
+    // createSession을 대신 호출하지 않고 voice-select로 복귀시킨다(D-25, 그 화면이 channel=
+    // "messenger"/voiceSelectionSource="recorded"로 createSession을 마무리한다). 일반 보이스
+    // 온보딩 흐름은 이 분기와 무관하게 무변경.
+    if (hasMessengerVoiceSelectReturn()) {
+      router.push("/scenarios/messenger/voice-select");
+      return;
+    }
     let cancelled = false;
     (async () => {
       const scenarioId = getSelectedScenarioId();

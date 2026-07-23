@@ -15,6 +15,14 @@ service cloud.firestore {
       match /consents/{consentId} {
         allow read, write: if request.auth != null && request.auth.uid == uid;
       }
+
+      // users/{uid}/voices/{voiceId} — 유지형 복제 음성 보관함(T30, ADR-0005, Database.md 1:1).
+      // UX-025 "기존 목소리 재사용" 조회 대상. write는 아직 이 컬렉션을 채우는 콜러블/UI가 없어
+      // (P-8, 범위 밖) false로 막는다 — 채우는 기능이 생기면 그때 Functions 전용 write로 연다.
+      match /voices/{voiceId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
     }
 
     // sessions/{sessionId} — 소유 uid만 read. write는 전부 Functions(admin SDK, 규칙 우회)만.

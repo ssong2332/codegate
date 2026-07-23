@@ -28,4 +28,11 @@ export type SendMessageResponse = {
    * 비차단" 원칙). Mock 단계에서는 항상 고정 beep data URI가 온다(isMock으로 구분).
    */
   audioUrl?: string;
+  /**
+   * T30 추가(옵셔널, 하위호환) — sendMessage가 이번 응답에서 구조화 신호([[SIGNAL:ESCALATE_VOICE]])
+   * 를 감지했거나 메신저 단계 max-turn 폴백에 도달해 서버가 이미 transitionChannel을 호출했다는
+   * 뜻(Architecture.md §13.2). 클라는 이 플래그만 보고 통화 전환 연출(P-18)로 넘어간다 — 자유텍스트를
+   * 직접 분류하지 않는다(AC-024 불변).
+   */
+  escalation?: { toChannel: "voice" };
 };

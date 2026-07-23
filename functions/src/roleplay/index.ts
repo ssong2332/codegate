@@ -14,8 +14,12 @@ import { maskPII } from "../guardrails";
 import { getLlmClient } from "../llm";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
+import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import { MESSENGER_ESCALATION_FALLBACK_TURNS } from "../shared/constants";
 import { getVoiceProvider } from "../voice/provider";
-import type { MessageDoc, SessionDoc } from "../shared/types";
+import { transitionChannel } from "../session/channelTransition";
+import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
+import { extractEscalationSignal } from "./escalationSignal";
 import { extractLinkMarker } from "./linkMarker";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
 import { isSessionLimitReached } from "./sessionLimits";
@@ -90,6 +94,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         textMasked: maskedUserText,
         turnIndex: userIndex,
         createdAt: userWriteTime,
+        // T30 추가(§13.1) — 교차채널 타임라인(AC-037)용 채널 표기.
+        ...(fresh.channel ? { channel: fresh.channel } : {}),
       } satisfies MessageDoc);
       // answeredAt(통화 시작 기점, #6)은 첫 턴에만 설정한다 — 이후 턴은 기존 값을 유지한다.
       tx.update(sessionRef, {
@@ -130,13 +136,22 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const { text: linkFreeReplyText, attachments: replyAttachments } = extractLinkMarker(
       completion.text,
     );
-    const maskedReplyText = maskPII(linkFreeReplyText);
+
+    // ③-b 에스컬레이션 확장(T30, Architecture.md §13.2, AC-034/024) — 구조화 신호
+    // ([[SIGNAL:ESCALATE_VOICE]])를 링크 마커와 같은 sentinel 패턴으로 스캔·제거한다. 사용자는
+    // 마커 원문을 절대 보지 않는다. 이 스캔은 **LLM 완성 텍스트에만** 적용된다(사용자 입력에는
+    // 절대 적용하지 않음 — AC-024, escapeSentinelLookalikes가 사용자 입력의 흉내를 이미 무력화).
+    const { text: signalFreeReplyText, escalate: signalEscalate } = extractEscalationSignal(
+      linkFreeReplyText,
+    );
+    const maskedReplyText = maskPII(signalFreeReplyText);
     await messagesRef.add({
       role: "scammer",
       textMasked: maskedReplyText,
       turnIndex: nextIndex + 1,
       createdAt: Timestamp.now(),
       ...(replyAttachments ? { attachments: replyAttachments } : {}),
+      ...(session.channel ? { channel: session.channel } : {}),
     } satisfies MessageDoc);
 
     // ④ 한도 체크 → 도달 시 ended:true + status=ended(→onSessionEnded 트리거, AC-007).
@@ -152,26 +167,62 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       maxSessionMs: claim.maxSessionMs,
     });
 
-    const sessionUpdate: Partial<SessionDoc> = {
-      // Firestore admin SDK는 필드값 undefined를 기본적으로 거부하므로, Mock일 때만 갱신한다
-      // (실 LLM으로 세션이 시작됐다면 굳이 llmProvider를 덮어쓸 필요가 없다).
-      ...(completion.isMock ? { llmProvider: "mock" as const } : {}),
-    };
-    if (limitReached) {
-      sessionUpdate.status = "ended";
-      sessionUpdate.endReason = "limit_reached";
-      sessionUpdate.endedAt = Timestamp.now();
-    }
-    await sessionRef.update(sessionUpdate);
+    // #9 종료 레이스 방지(T31 reviewer Major #1, 2026-07-24): 사용자 메시지 확보(#8) 이후 LLM 호출은
+    // 트랜잭션 밖에서 시간이 걸리므로, 그 사이 endSession(예: 사용자의 "훈련 종료" 중복 탭)이 먼저
+    // 끝나 세션을 이미 종료시켰을 수 있다. 이 경우 여기서 그걸 모른 채 status/endReason을 덮어쓰거나
+    // 이미 종료된 세션을 채널 전이시키면, 리포트가 생성된 시점 이후의 상태를 리포트 없이 세션 문서에
+    // 반영하는 모순이 생긴다(AC-007 "정확히 1개 리포트" 자체는 여전히 지켜지지만 세션 문서가
+    // 리포트와 어긋난다). 최종 반영 직전에 트랜잭션으로 상태를 다시 확인해, 이미 종료됐다면
+    // limitReached로 인한 종료 필드 갱신·전이 판단 자체를 건너뛴다(대신 무해한 llmProvider 태그만
+    // 반영). isMock 플래그로 llmProvider 태그를 반영하는 것 자체는 status와 무관하므로 항상 적용한다.
+    const finalize = await db.runTransaction(async (tx) => {
+      const freshSnap = await tx.get(sessionRef);
+      const fresh = freshSnap.data() as SessionDoc | undefined;
+      const stillActive = fresh?.status === "active";
+
+      const update: Partial<SessionDoc> = {
+        ...(completion.isMock ? { llmProvider: "mock" as const } : {}),
+      };
+      if (limitReached && stillActive) {
+        update.status = "ended";
+        update.endReason = "limit_reached";
+        update.endedAt = Timestamp.now();
+      }
+      tx.update(sessionRef, update);
+      return { stillActive };
+    });
 
     // T8 배선: 한도 도달로 이 턴이 세션을 자동 종료시켰다면(status=ended, endReason=limit_reached),
     // endSession 콜러블 경로와 동일한 리포트 생성 트리거 지점을 거치도록 한다(AC-007 "종료된 모든
     // 세션은 정확히 1개의 리포트를 생성" — endSession을 거치지 않는 이 자동종료 경로가 리포트
     // 트리거를 빠뜨리던 기존 갭, T7 구현 보고서에 명시된 known gap). 실제 생성 로직은 T9 소관이라
     // 여전히 트리거 지점만이며, 실패해도 sendMessage 응답 자체는 막지 않는다(triggerReportGeneration
-    // 내부에서 에러를 흡수, functions/src/report/index.ts 참고).
-    if (limitReached) {
+    // 내부에서 에러를 흡수, functions/src/report/index.ts 참고). stillActive가 false면 위에서 이미
+    // 종료 필드를 반영하지 않았으므로(=이 턴이 종료를 일으키지 않았으므로) 트리거하지 않는다 —
+    // 그 세션은 이미 다른 경로(endSession)로 리포트가 트리거됐다.
+    if (limitReached && finalize.stillActive) {
       await triggerReportGeneration(sessionId);
+    }
+
+    // ④-b 채널 전이(T30, Architecture.md §13.2/13.3, AC-034/039) — 이 시나리오가 에스컬레이션
+    // 가능(scenario.escalation 존재)하고 아직 메신저 단계일 때만 판단한다. 우선순위: 구조화 신호
+    // > max-turn 폴백(MESSENGER_ESCALATION_FALLBACK_TURNS, §13.3 PoC 전 가정치). 이번 턴에 전체
+    // 세션 한도(limitReached)로 이미 종료됐다면 전이보다 종료를 우선한다(모순된 상태 방지). 위
+    // 트랜잭션에서 이미 종료된 것으로 확인됐다면(stillActive=false) 이 턴이 전이를 일으키지 않는다.
+    const canEscalate =
+      finalize.stillActive &&
+      session.channel === "messenger" &&
+      Boolean(PUBLIC_SCENARIOS[session.scenarioId]?.escalation);
+    let escalationTrigger: ChannelTransitionTrigger | undefined;
+    if (canEscalate && !limitReached) {
+      if (signalEscalate) {
+        escalationTrigger = "structured_signal";
+      } else if (turnCount >= MESSENGER_ESCALATION_FALLBACK_TURNS) {
+        escalationTrigger = "maxturn_fallback";
+      }
+    }
+    if (escalationTrigger) {
+      await transitionChannel(sessionId, "messenger", "voice", escalationTrigger);
     }
 
     // ⑤ 실시간 음성 통화 전환(2026-07-22 사용자 결정) — 사기범 응답을 VoiceProvider로 합성해
@@ -206,6 +257,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       ...(limitReached ? { endReason: "limit_reached" as const } : {}),
       isMock: completion.isMock,
       ...(audioUrl ? { audioUrl } : {}),
+      ...(escalationTrigger ? { escalation: { toChannel: "voice" as const } } : {}),
     };
   },
 );

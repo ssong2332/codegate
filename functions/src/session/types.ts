@@ -5,6 +5,7 @@ import type {
   MessengerSkin,
   MessengerSkinSource,
   MessengerSurface,
+  VoiceSelectionSource,
 } from "../shared/types";
 
 // sessionId(T4 추가, 옵셔널·하위호환): 온보딩 단계에서 클라가 만든 "사전 세션 id"
@@ -14,6 +15,10 @@ import type {
 // 새 id를 발급한다. API.md에는 아직 반영 안 됨 — architect 확인/문서 갱신 권장.
 // channel/surface/messengerSkin/skinSource(T29 추가, 옵셔널·하위호환, Architecture.md §13.1/13.4):
 // 메신저 훈련(UX-024)에서만 채워진다. 부재 시 기존과 동일하게 voice 세션으로 생성된다.
+// voiceSelectionSource(T30 추가, 옵셔널·하위호환, Architecture.md §13.6/UX-025) — 에스컬레이션
+// 가능한 메신저 시나리오에서만 채워진다. "fallback_male"|"fallback_female"이면 createSession이
+// 클라가 보낸 voiceId를 FALLBACK_VOICE_MALE_ID/FEMALE_ID(shared/config.ts)로 서버측 재해석한다
+// (미설정 시 클라 값 그대로, 조용한 실패 없음 — functions/src/session/index.ts 참고).
 export type CreateSessionRequest = {
   scenarioId: string;
   voiceId: string;
@@ -22,6 +27,7 @@ export type CreateSessionRequest = {
   surface?: MessengerSurface;
   messengerSkin?: MessengerSkin;
   skinSource?: MessengerSkinSource;
+  voiceSelectionSource?: VoiceSelectionSource;
 };
 export type CreateSessionResponse = {
   sessionId: string;
@@ -64,3 +70,9 @@ export type UpdateMessengerSkinResponse = {
   messengerSkin: MessengerSkin;
   skinSource: MessengerSkinSource;
 };
+
+// --- requestEscalation (T30 · UX-022 명시 "전화로 확인" 버튼 · §13.3/AC-034) ---
+// 사용자가 언제든(1턴부터) 수동으로 메신저→보이스 전이를 요청한다. endSession/updateMessengerSkin과
+// 동일한 인증·존재확인·소유uid·상태 검증 패턴을 따른다(functions/src/session/index.ts 참고).
+export type RequestEscalationRequest = { sessionId: string };
+export type RequestEscalationResponse = { escalation: { toChannel: "voice" } };
