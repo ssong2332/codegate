@@ -147,6 +147,24 @@ export type UpdateMessengerSkinResponse = {
 export type RequestEscalationRequest = { sessionId: string };
 export type RequestEscalationResponse = { escalation: { toChannel: "voice" } };
 
+// --- requestReverseEscalation (T40 fast-follow · UX-014 명시 "메시지로 전환" 버튼 · §13.1/AC-039) ---
+// functions/src/session/types.ts와 1:1. requestEscalation과 반대 방향(보이스→메신저), 명시 버튼만
+// 지원(구조화 신호·max-turn 폴백 없음 — T40 판단, docs/Tasks.md T40 행 참고).
+export type RequestReverseEscalationRequest = { sessionId: string };
+export type RequestReverseEscalationResponse = { escalation: { toChannel: "messenger" } };
+
 // --- generateReport (Track A · T9 · UX-008 · AC-008/AC-009/AC-026) ---
 export type GenerateReportRequest = { sessionId: string };
 export type GenerateReportResponse = { reportId: string };
+
+// --- createChallenge / deleteChallenge (Track A/C · T36 · UX-019/020 · AC-041/044/048/049) ---
+// functions/src/challenge/types.ts와 1:1. shareToken은 createChallenge 응답에서만 평문 반환되고
+// 서버 어디에도 저장되지 않는다(§14.4) — 클라도 sessionStorage 등에 지속시키지 않는다.
+export type CreateChallengeRequest = { scenarioId: string; displayName: string };
+export type CreateChallengeResponse = {
+  challengeId: string;
+  shareToken: string;
+  linkExpiresAt: string;
+};
+export type DeleteChallengeRequest = { challengeId: string };
+export type DeleteChallengeResponse = { status: "deleted" };

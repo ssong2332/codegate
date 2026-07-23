@@ -76,3 +76,11 @@ export type UpdateMessengerSkinResponse = {
 // 동일한 인증·존재확인·소유uid·상태 검증 패턴을 따른다(functions/src/session/index.ts 참고).
 export type RequestEscalationRequest = { sessionId: string };
 export type RequestEscalationResponse = { escalation: { toChannel: "voice" } };
+
+// --- requestReverseEscalation (T40 fast-follow · UX-014 명시 "메시지로 전환" 버튼 · §13.1/AC-039) ---
+// 통화 중 사용자가 언제든 수동으로 보이스→메신저 전이를 요청한다. requestEscalation과 동일한
+// 인증·존재확인·소유uid·상태 검증 패턴을 따르되, 방향이 반대다(functions/src/session/index.ts 참고).
+// **스코프(T40 판단, docs/Tasks.md T40 행 참고)**: 정방향(T30/T25/T26)과 달리 구조화 신호·max-turn
+// 폴백에 대응하는 UX/Architecture 설계 문서가 없어 명시 버튼만 지원한다.
+export type RequestReverseEscalationRequest = { sessionId: string };
+export type RequestReverseEscalationResponse = { escalation: { toChannel: "messenger" } };

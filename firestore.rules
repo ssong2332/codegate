@@ -72,6 +72,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // challenges/{} — 2인 소셜 챌린지(T36, Database.md §Security Rules 요지 그대로 구현, AC-041/043).
+    // 사용자1(creatorUid) 본인만 read(UX-020 대시보드). 사용자2는 무로그인이라 직접 read 불가 —
+    // 전부 Functions(토큰 매개, T37 소관)로만 접근한다. write는 클라 직접 전면 금지 — 생성·토큰
+    // 검증·개수 상한·삭제 모두 Functions(admin)만 강제한다(AC-041/044/048/049).
+    match /challenges/{challengeId} {
+      allow read: if request.auth != null && resource.data.creatorUid == request.auth.uid;
+      allow write: if false;
+    }
+
     // 그 외 모든 경로는 기본 거부.
     match /{document=**} {
       allow read, write: if false;

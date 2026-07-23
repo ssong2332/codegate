@@ -1,18 +1,34 @@
 // 채널 전이 엔진 (T30, Architecture.md §13.0/§13.1, AC-034/035/037/039).
 //
-// 방향 무관(direction-agnostic) 시그니처로 정의하되, 이 구현체는 MVP 계약대로
-// `from==="messenger" && to==="voice"` 한 방향만 실제로 허용한다. 그 외 조합(예: voice→messenger,
-// T40 fast-follow)은 조용히 무시하지 않고 `unimplemented`로 명시 거부한다(AC-039 "조용한 실패 금지").
+// 방향 무관(direction-agnostic) 시그니처로 정의한다. T30(MVP)은 `messenger→voice`만 허용했고,
+// T40(fast-follow)에서 `voice→messenger`(역방향)도 허용하도록 확장했다(AC-039 "설계는 양방향,
+// 구현은 순차" — Architecture.md §13.0 확정1). 그 외 조합(동일 채널 등)은 여전히 조용히 무시하지
+// 않고 `unimplemented`로 명시 거부한다(AC-039 "조용한 실패 금지") — SUPPORTED_TRANSITIONS 화이트
+// 리스트 밖은 전부 방어적으로 거부되므로, MessengerChannel에 세 번째 값이 추가돼도 안전하다.
 // 세션 문서(sessions/{sessionId})의 `channel`을 갱신하고 `channelHistory`에 이력을 append하는 것만
-// 책임진다 — "통화 진입 준비"(§13.1 ③)는 별도 새 로직이 필요 없다: `channel`이 "voice"로 바뀐 뒤
-// createRealtimeCall(functions/src/realtime/index.ts)이 세션을 다시 읽어 그 시점의 voiceId/
-// voiceSelectionSource로 자격증명을 발급하므로(§13.6), 이 함수는 필드만 정확히 갱신하면 된다.
+// 책임진다 — "통화 진입 준비"(§13.1 ③)는 `to==="voice"`일 때만 필요한데 별도 새 로직이 필요 없다:
+// `channel`이 "voice"로 바뀐 뒤 createRealtimeCall(functions/src/realtime/index.ts)이 세션을 다시
+// 읽어 그 시점의 voiceId/voiceSelectionSource로 자격증명을 발급하므로(§13.6), 이 함수는 필드만
+// 정확히 갱신하면 된다. `to==="messenger"`(T40 역방향)는 §13.1이 이 단계에 별도 준비를 요구하지
+// 않는다 — session/messenger/page.tsx는 이미 세션의 `channel` 필드만 보고 렌더링한다.
 //
-// 호출부: functions/src/roleplay/index.ts(sendMessage — structured_signal/maxturn_fallback),
-// functions/src/session/index.ts(requestEscalation — manual_button).
+// 호출부: functions/src/roleplay/index.ts(sendMessage — structured_signal/maxturn_fallback,
+// messenger→voice 정방향 전용), functions/src/session/index.ts(requestEscalation — manual_button,
+// messenger→voice / requestReverseEscalation — manual_button, voice→messenger, T40).
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import type { ChannelTransitionTrigger, MessengerChannel } from "../shared/types";
+
+// 허용 방향 화이트리스트 — analyzeConversation.ts/purge.ts류와 동일한 관례로 순수 판정 함수를
+// 분리해 firebase-admin 초기화 없이 단위 테스트할 수 있게 한다(channelTransition.test.ts 참고).
+const SUPPORTED_TRANSITIONS: ReadonlyArray<readonly [MessengerChannel, MessengerChannel]> = [
+  ["messenger", "voice"], // T30 MVP
+  ["voice", "messenger"], // T40 fast-follow
+];
+
+export function isSupportedChannelTransition(from: MessengerChannel, to: MessengerChannel): boolean {
+  return SUPPORTED_TRANSITIONS.some(([f, t]) => f === from && t === to);
+}
 
 export async function transitionChannel(
   sessionId: string,
@@ -20,12 +36,8 @@ export async function transitionChannel(
   to: MessengerChannel,
   trigger: ChannelTransitionTrigger,
 ): Promise<void> {
-  if (!(from === "messenger" && to === "voice")) {
-    // voice→messenger 등 역방향은 T40 fast-follow 소관(AC-039) — 지금은 명시적으로 거부한다.
-    throw new HttpsError(
-      "unimplemented",
-      `지원하지 않는 채널 전이입니다: ${from} → ${to} (voice→messenger는 T40 fast-follow 예정)`,
-    );
+  if (!isSupportedChannelTransition(from, to)) {
+    throw new HttpsError("unimplemented", `지원하지 않는 채널 전이입니다: ${from} → ${to}`);
   }
 
   const db = getFirestore();

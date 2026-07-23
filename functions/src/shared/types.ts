@@ -196,9 +196,60 @@ export type DeletionTarget = {
   result: DeletionResult;
 };
 export type DeletionLogDoc = {
-  sessionId: string;
+  // T36 추가(옵셔널, 하위호환) — 챌린지 폐기 로그(challengeId 있음)는 세션에서 나온 게 아니라
+  // sessionId가 없다. sessionId/challengeId는 상호 배타적이다(둘 중 정확히 하나만 채워진다).
+  // ADR-0005 follow-up("deletionLogs에 옵셔널 challengeId")이 sessionId를 명시적으로 옵셔널화하라고
+  // 적진 않았지만, 폐기 출처가 둘로 늘어난 이상 "항상 sessionId가 있다"는 기존 타입 불변식은 더
+  // 이상 참이 아니므로 함께 옵셔널로 바꿨다(architect 확인/문서 갱신 권장 — 구현 보고서 참고).
+  sessionId?: string;
+  challengeId?: string; // T36 추가(옵셔널) — ADR-0005 follow-up, Database.md §deletionLogs 주석.
   uid: string;
   deletedAt: FirebaseFirestore.Timestamp;
   targets: DeletionTarget[];
   overallResult: DeletionResult;
+};
+
+// --- challenges/{challengeId} (T36, ADR-0005, Architecture.md §14.1, Database.md §challenges) ---
+// 2인 소셜 챌린지 — 사용자1(creatorUid)이 자기 클론 목소리로 만들어 지인(사용자2)에게 보내는 비동기
+// 딥보이스 체험. 사용자2는 무계정·토큰 진입이라 이 스키마에 사용자2 uid가 없다(§14.0). T36은 이
+// 타입과 creatorUid 쪽(생성·스코프·토큰·폐기)만 채운다 — resultSharingConsented/resultSummary/
+// reportedAt/reportReason/reportNote는 전부 T37(사용자2 동의·체험·신고)이 채우는 필드라 T36은 쓰지
+// 않는다(옵셔널이라 T36 생성 시점엔 키 자체가 없다).
+export type ChallengeStatus =
+  | "pending"
+  | "consented"
+  | "in_progress"
+  | "completed"
+  | "expired"
+  | "reported"
+  | "deleted";
+export type ChallengeReportReason =
+  | "unwanted"
+  | "harassment"
+  | "impersonation_concern"
+  | "other";
+export type ChallengeResultSummary = {
+  completed: boolean;
+  suspicionTimeLabel?: string;
+  suspicionTurnIndex?: number;
+};
+export type ChallengeTier = "free" | "paid"; // 부재=free(§14.6, AC-050 — tier는 용량 축에만 영향)
+export type ChallengeDoc = {
+  challengeId: string;
+  creatorUid: string; // 사용자1(발신)·활성개수 판정 키
+  scenarioId: string; // 딥보이스(clone) 시나리오만
+  voiceId: string; // 이 챌린지에 스코프 고정된 클론 voice(ADR-0005) — 챌린지 밖 재사용 불가
+  displayName: string; // 사용자2에게 보일 "○○님이 준비" 표시이름
+  status: ChallengeStatus;
+  linkTokenHash: string; // 공유 토큰의 SHA-256 해시만(평문 미저장, §14.4)
+  linkExpiresAt: FirebaseFirestore.Timestamp; // 무료 생성+3일(AC-048)
+  linkConsumedAt?: FirebaseFirestore.Timestamp; // 1회성 소모 시각(동의 통과 시, T37이 세팅)
+  retentionDeleteAt: FirebaseFirestore.Timestamp; // 복제 음성·챌린지 자동 삭제 예정(기본 생성+30일)
+  resultSharingConsented?: boolean; // T37 소관 — 부재=미동의
+  resultSummary?: ChallengeResultSummary; // T37 소관 — 동의 시에만 채워짐, 대화 전문 없음(AC-043)
+  reportedAt?: FirebaseFirestore.Timestamp; // T37 소관
+  reportReason?: ChallengeReportReason; // T37 소관
+  reportNote?: string; // T37 소관, PII 마스킹
+  tier?: ChallengeTier;
+  createdAt: FirebaseFirestore.Timestamp;
 };
