@@ -49,7 +49,6 @@ function SessionRunner({
     onDisconnect: () => handlersRef.current.onEnded(),
     onError: () => handlersRef.current.onError(),
   });
-  const startedRef = useRef(false);
   // 콜백을 ref로 잡아 두면 부모 리렌더마다 세션이 재시작되는 사고를 막을 수 있다.
   // 렌더 중 ref를 쓰기지 않도록 effect에서만 갱신한다(react-hooks/refs).
   const handlersRef = useRef({ onActive, onEnded, onError, onSpeakingChange });
@@ -58,11 +57,11 @@ function SessionRunner({
     handlersRef.current = { onActive, onEnded, onError, onSpeakingChange };
   }, [onActive, onEnded, onError, onSpeakingChange]);
 
-  // 세션 시작 — 마운트 시 1회만. 페르소나 프롬프트는 에이전트 쪽에 저장돼 있어(ADR-0004)
-  // 여기서 넘기는 오버라이드는 민감하지 않은 voice_id/language뿐이다.
+  // 세션 시작. startedRef로 재실행을 막지 않는다(2026-07-23) — React Strict Mode(dev)의
+  // mount→cleanup→mount에서 재mount 연결을 건너뛰어 통화가 시작되지 않는 것을 막는다. 언마운트
+  // cleanup이 throwaway 세션을 끊고, 진짜 mount가 새로 시작한다. 페르소나 프롬프트는 에이전트
+  // 쪽에 저장돼 있어(ADR-0004) 여기서 넘기는 오버라이드는 민감하지 않은 voice_id/language뿐이다.
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
     try {
       conversation.startSession({
         signedUrl: credentials.signedUrl,

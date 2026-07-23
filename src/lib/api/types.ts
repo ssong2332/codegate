@@ -78,6 +78,12 @@ export type CreateRealtimeCallResponse = {
   isMock: boolean;
 };
 
+// --- submitRealtimeTranscript (finding #1 · 2026-07-23) ---
+// 실시간 음성 통화 대화를 리포트가 분석할 수 있도록 종료 직전에 전사를 제출한다.
+export type TranscriptTurn = { role: "user" | "scammer"; text: string };
+export type SubmitRealtimeTranscriptRequest = { sessionId: string; turns: TranscriptTurn[] };
+export type SubmitRealtimeTranscriptResponse = { written: number };
+
 // --- endSession (Track B · T8 · UX-007 · AC-006/AC-007/AC-021) ---
 export type EndSessionReason =
   | "user_ended"

@@ -20,9 +20,16 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { collection, doc, getDoc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { consumeOpeningAudioUrl, getPendingSessionId, useSpeechRecognition } from "@/lib/recording";
+import {
+  consumeOpeningAudioUrl,
+  getPendingSessionId,
+  isSessionAnswered,
+  markSessionAnswered,
+  useSpeechRecognition,
+} from "@/lib/recording";
 import { useRealtimeCall } from "@/lib/realtime";
-import { sendMessage } from "@/lib/api";
+import { sendMessage, submitRealtimeTranscript } from "@/lib/api";
+import type { TranscriptTurn } from "@/lib/api";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import CallWaveform from "@/components/CallWaveform";
 
@@ -76,9 +83,30 @@ export default function SessionCallPage() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [showTextInput, setShowTextInput] = useState(false);
+  const [maxSessionMs, setMaxSessionMs] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speech = useSpeechRecognition();
   const realtime = useRealtimeCall();
+  // 실시간 음성 통화의 전사 턴을 모아 종료 직전에 제출한다(finding #1). 리렌더와 무관하게 누적
+  // 되어야 하므로 ref에 쌓는다.
+  const transcriptRef = useRef<TranscriptTurn[]>([]);
+
+  const handleTranscriptTurn = useCallback((role: "user" | "scammer", text: string) => {
+    transcriptRef.current.push({ role, text });
+  }, []);
+
+  // 실시간 음성 통화 전사를 서버에 제출한다(finding #1). 종료 직전에 1회 호출. 실패해도 통화
+  // 종료를 막지 않는다(리포트가 비는 건 통화를 못 끝내는 것보다 나은 실패) — 조용히 흡수.
+  const flushTranscript = useCallback(async () => {
+    const turns = transcriptRef.current;
+    if (!sessionId || turns.length === 0) return;
+    transcriptRef.current = [];
+    try {
+      await submitRealtimeTranscript({ sessionId, turns });
+    } catch {
+      // 무시 — 다음 단계(endSession→리포트)는 그대로 진행한다.
+    }
+  }, [sessionId]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -99,12 +127,16 @@ export default function SessionCallPage() {
           return;
         }
         setScenario(found);
+        setMaxSessionMs((data.maxSessionMs as number) ?? null);
+        // #4/#5 새로고침 복원: 이미 "받기"를 누른 세션(answered 플래그)이나 대화가 시작된 세션
+        // (turnCount≥1)을 다시 열면 "수신 중"으로 되돌아가지 않고 곧바로 대화 상태로 복원한다.
+        // 실시간 경로는 sendMessage를 안 타 turnCount가 0에 머무므로, turnCount만으로는 실시간
+        // 통화 중 새로고침을 감지할 수 없다 — answered 플래그로 보완한다(finding #4). 실시간
+        // 소켓은 새로고침으로 끊기므로 복원은 텍스트 폴백으로 이어진다.
+        const answered = isSessionAnswered(sessionId) || (data.turnCount as number) >= 1;
         if (data.status === "ended") {
           setPhase("ended");
-        } else if (data.status === "active" && (data.turnCount as number) >= 1) {
-          // #5 새로고침 복원: 이미 대화가 시작된 세션을 다시 열면 "수신 중"으로 되돌아가지 않고
-          // 곧바로 대화 상태로 복원한다. 통화 타이머는 answeredAt 기점으로 이어서 센다(#6, 서버
-          // 한도 기점과 정합). 실시간 세션 자체는 새로고침으로 끊기므로 폴백 경로로 복원한다.
+        } else if (data.status === "active" && answered) {
           const answeredAtMs =
             (data.answeredAt as { toMillis?: () => number } | undefined)?.toMillis?.() ?? null;
           if (answeredAtMs) {
@@ -153,6 +185,24 @@ export default function SessionCallPage() {
     const interval = setInterval(() => setElapsedSec((s) => s + 1), 1000);
     return () => clearInterval(interval);
   }, [phase]);
+
+  // finding #2: 실시간 음성 통화의 시간 한도 자동 종료. 폴백 경로는 sendMessage가 서버에서
+  // 한도를 판정해 자동 종료하지만(AC-007), 실시간 경로는 sendMessage를 안 타 한도가 강제되지
+  // 않았다. 클라 타이머(answeredAt 기점, elapsedSec)가 서버 maxSessionMs를 넘으면 통화를 끝낸다.
+  const autoEndedRef = useRef(false);
+  useEffect(() => {
+    if (callMode !== "realtime" || phase !== "live" || maxSessionMs === null) return;
+    if (autoEndedRef.current) return;
+    if (elapsedSec * 1000 < maxSessionMs) return;
+    autoEndedRef.current = true;
+    audioRef.current?.pause();
+    realtime.stop();
+    (async () => {
+      await flushTranscript();
+      router.push("/session/end");
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callMode, phase, elapsedSec, maxSessionMs]);
 
   // 실시간 통화가 연결/폴백 판정을 끝내면 화면 phase를 맞춘다. 인라인 async IIFE로 감싼다
   // (react-hooks/set-state-in-effect 회피 — effect 본문에서 직접 setState를 호출하면 "동기
@@ -230,6 +280,8 @@ export default function SessionCallPage() {
 
   const handleAnswer = () => {
     if (!sessionId) return;
+    // finding #4: "받기"를 누른 세션을 기록해, 통화 중 새로고침 시 벨 화면이 아니라 통화로 복원.
+    markSessionAnswered(sessionId);
     setPhase("connecting");
     setCallMode("realtime");
     // 실시간 연결을 먼저 시도한다. 불가하면 위 effect가 폴백으로 강등한다.
@@ -240,9 +292,12 @@ export default function SessionCallPage() {
     router.push("/session/end");
   };
 
-  const handleEndTraining = () => {
+  const handleEndTraining = async () => {
     audioRef.current?.pause();
     realtime.stop();
+    // 실시간 전사를 먼저 제출해 리포트가 실제 대화를 분석할 수 있게 한 뒤 종료 화면으로 이동한다
+    // (/session/end가 endSession→리포트 생성을 트리거하므로 그 전에 messages가 채워져야 한다).
+    await flushTranscript();
     router.push("/session/end");
   };
 
@@ -257,6 +312,10 @@ export default function SessionCallPage() {
 
   const handleSend = async (textOverride?: string) => {
     const text = (textOverride ?? input).trim();
+    // finding #3: 실시간 음성 통화 중에는 sendMessage(별도 텍스트 LLM+TTS)를 호출하지 않는다.
+    // 그러면 Gemini/ElevenLabs 음성 위에 다른 AI 목소리가 겹쳐 흐른다. 텍스트 입력은 폴백 경로
+    // 전용이다(실시간 모드에서는 아래 렌더에서 텍스트 입력 자체를 노출하지 않는다).
+    if (callMode === "realtime") return;
     if (!sessionId || !text || sending || phase !== "live") return;
     setSending(true);
     setSendError(null);
@@ -370,6 +429,7 @@ export default function SessionCallPage() {
           onEnded={realtime.handleEnded}
           onError={realtime.handleError}
           onSpeakingChange={realtime.handleSpeakingChange}
+          onTranscriptTurn={handleTranscriptTurn}
         />
       )}
 
@@ -491,7 +551,7 @@ export default function SessionCallPage() {
           </p>
           <button
             type="button"
-            onClick={() => router.push("/session/end")}
+            onClick={() => void handleEndTraining()}
             className="min-h-[56px] rounded-xl bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white"
           >
             결과 확인하러 가기
@@ -503,63 +563,74 @@ export default function SessionCallPage() {
               여기로 모았다. 닫혀 있으면 통화 화면에는 발신자와 컨트롤만 남는다. */}
           {showTextInput && (
             <div className="mb-5 rounded-2xl bg-black/25 p-4">
-              {latestScammerLine && (
-                <p className="mb-3 text-center text-base leading-relaxed text-white/85" aria-live="polite">
-                  &ldquo;{latestScammerLine}&rdquo;
+              {/* finding #3: 실시간 음성 통화 중에는 텍스트 입력을 노출하지 않는다 — 텍스트를 보내면
+                  sendMessage(별도 텍스트 LLM+TTS)가 실시간 음성 위에 다른 목소리를 겹쳐 재생한다.
+                  실시간 모드에서는 안내만, 폴백 모드에서는 자막+텍스트 입력을 보여준다. */}
+              {callMode === "realtime" ? (
+                <p className="text-center text-sm leading-relaxed text-[#8B9BA5]">
+                  지금은 음성으로 대화하는 중입니다. 마이크에 대고 말씀하세요.
                 </p>
-              )}
-
-              {(callMode === "fallback" || sendError || speech.errorMessage) && (
-                <p
-                  role={sendError ? "alert" : undefined}
-                  className={`mb-3 text-center text-xs leading-relaxed ${
-                    sendError ? "text-[#F0A79E]" : "text-[#8B9BA5]"
-                  }`}
-                >
-                  {sendError ??
-                    (callMode === "fallback"
-                      ? `실시간 음성 통화를 사용할 수 없어 텍스트로 진행합니다.${
-                          realtime.errorMessage ? ` ${realtime.errorMessage}` : ""
-                        }`
-                      : speech.errorMessage)}
-                </p>
-              )}
-
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void handleSend();
-                }}
-                className="flex items-center gap-2.5"
-              >
-                <label htmlFor="chat-input" className="sr-only">
-                  메시지 입력
-                </label>
-                <input
-                  id="chat-input"
-                  type="text"
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  disabled={sending}
-                  placeholder="하고 싶은 말을 입력하세요..."
-                  className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-white/30 bg-white/10 px-[18px] py-3 text-lg text-white placeholder:text-[#8B9BA5]"
-                />
-                <button
-                  type="submit"
-                  disabled={sending || !input.trim()}
-                  aria-label="전송"
-                  className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-lg font-bold text-white disabled:opacity-50"
-                >
-                  {sending ? (
-                    <span
-                      aria-hidden="true"
-                      className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-                    />
-                  ) : (
-                    "↑"
+              ) : (
+                <>
+                  {latestScammerLine && (
+                    <p className="mb-3 text-center text-base leading-relaxed text-white/85" aria-live="polite">
+                      &ldquo;{latestScammerLine}&rdquo;
+                    </p>
                   )}
-                </button>
-              </form>
+
+                  {(callMode === "fallback" || sendError || speech.errorMessage) && (
+                    <p
+                      role={sendError ? "alert" : undefined}
+                      className={`mb-3 text-center text-xs leading-relaxed ${
+                        sendError ? "text-[#F0A79E]" : "text-[#8B9BA5]"
+                      }`}
+                    >
+                      {sendError ??
+                        (callMode === "fallback"
+                          ? `실시간 음성 통화를 사용할 수 없어 텍스트로 진행합니다.${
+                              realtime.errorMessage ? ` ${realtime.errorMessage}` : ""
+                            }`
+                          : speech.errorMessage)}
+                    </p>
+                  )}
+
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void handleSend();
+                    }}
+                    className="flex items-center gap-2.5"
+                  >
+                    <label htmlFor="chat-input" className="sr-only">
+                      메시지 입력
+                    </label>
+                    <input
+                      id="chat-input"
+                      type="text"
+                      value={input}
+                      onChange={(event) => setInput(event.target.value)}
+                      disabled={sending}
+                      placeholder="하고 싶은 말을 입력하세요..."
+                      className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-white/30 bg-white/10 px-[18px] py-3 text-lg text-white placeholder:text-[#8B9BA5]"
+                    />
+                    <button
+                      type="submit"
+                      disabled={sending || !input.trim()}
+                      aria-label="전송"
+                      className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-lg font-bold text-white disabled:opacity-50"
+                    >
+                      {sending ? (
+                        <span
+                          aria-hidden="true"
+                          className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                        />
+                      ) : (
+                        "↑"
+                      )}
+                    </button>
+                  </form>
+                </>
+              )}
             </div>
           )}
 
@@ -586,7 +657,7 @@ export default function SessionCallPage() {
             <div className="flex flex-col items-center gap-2">
               <button
                 type="button"
-                onClick={handleEndTraining}
+                onClick={() => void handleEndTraining()}
                 aria-label="통화 종료 — 훈련 종료"
                 className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[#C6392F] text-3xl shadow-lg transition active:scale-95"
               >

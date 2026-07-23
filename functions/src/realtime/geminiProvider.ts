@@ -44,7 +44,10 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     const now = Date.now();
     const token = await client.authTokens.create({
       config: {
-        uses: 1,
+        // uses는 "세션 시작 가능 횟수"다. 이상적으론 1이지만, dev(React Strict Mode)의 이중 mount나
+        // 사용자의 재시도로 두어 번 연결을 시작할 수 있어 소폭 여유(2)를 둔다. 토큰은 여전히 단명
+        // (30분)이고 이 세션에만 묶여 있어 보안 노출은 최소다.
+        uses: 2,
         expireTime: new Date(now + TOKEN_EXPIRE_MINUTES * 60_000).toISOString(),
         newSessionExpireTime: new Date(now + NEW_SESSION_EXPIRE_MINUTES * 60_000).toISOString(),
         liveConnectConstraints: {
@@ -56,6 +59,10 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
               languageCode: "ko-KR",
               voiceConfig: { prebuiltVoiceConfig: { voiceName: GEMINI_VOICE_NAME } },
             },
+            // 양쪽 발화의 텍스트 전사를 켠다(finding #1) — 실시간 음성 대화도 리포트가 분석할 수
+            // 있도록 클라가 이 전사를 모아 종료 시 서버에 제출한다(submitRealtimeTranscript).
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
             // 도구를 명시적으로 비운다 — 이걸 잠그지 않으면 클라가 임의 도구를 주입할 수 있다.
             tools: [],
           },

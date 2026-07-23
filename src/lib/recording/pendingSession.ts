@@ -96,4 +96,21 @@ export function clearPendingSession(): void {
   window.sessionStorage.removeItem(IDENTITY_CONFIRMED_KEY);
   window.sessionStorage.removeItem(OPENING_AUDIO_URL_KEY);
   window.sessionStorage.removeItem(SELECTED_SCENARIO_ID_KEY);
+  window.sessionStorage.removeItem(ANSWERED_SESSION_KEY);
+}
+
+// 통화를 "받은" 세션 id를 기록한다(finding #4, 2026-07-23). 실시간 경로는 sendMessage를 안 타
+// turnCount가 0에 머물러, 통화 중 새로고침하면 "이미 대화가 시작됐는지"를 turnCount로 판별할 수
+// 없다. 이 플래그로 "받기를 누른 세션"을 구분해, 새로고침 시 벨 울리는 수신 화면이 아니라 통화
+// 진행 상태로 복원한다. (실시간 소켓은 새로고침으로 끊기므로 복원은 텍스트 폴백으로 이어진다.)
+const ANSWERED_SESSION_KEY = "session.answeredSessionId";
+
+export function markSessionAnswered(sessionId: string): void {
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.setItem(ANSWERED_SESSION_KEY, sessionId);
+}
+
+export function isSessionAnswered(sessionId: string): boolean {
+  if (!hasSessionStorage()) return false;
+  return window.sessionStorage.getItem(ANSWERED_SESSION_KEY) === sessionId;
 }

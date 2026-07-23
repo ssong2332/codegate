@@ -62,6 +62,13 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // 언마운트 후 늦게 도착한 비동기 결과가 setState를 호출하지 않도록 가드한다.
   const mountedRef = useRef(true);
+  // 안정적인 콜백(useCallback [])에서 현재 status를 읽기 위한 미러 — setState 업데이터 안에서
+  // 다른 setState를 호출하는(순수하지 않은) 패턴을 피하려고 둔다. 렌더 중이 아니라 effect에서
+  // 갱신한다(react-hooks/refs).
+  const statusRef = useRef<RealtimeCallStatus>("idle");
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -69,6 +76,21 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
       mountedRef.current = false;
     };
   }, []);
+
+  // 연결 타임아웃(2026-07-23 고착 버그 수정) — 자격증명을 세팅했는데 세션 컴포넌트가 일정 시간
+  // 안에 active를 알려주지 않으면(연결이 매달리거나 조용히 닫힘), 무한 "연결하는 중"에 갇히지 않도록
+  // 강제로 error로 떨어뜨려 텍스트 폴백으로 강등한다. Node 실측상 정상 연결은 ~2초면 setupComplete가
+  // 오므로 12초는 충분히 여유 있는 상한이다.
+  useEffect(() => {
+    if (!credentials || status !== "connecting") return;
+    const timer = setTimeout(() => {
+      if (mountedRef.current) {
+        setStatus("error");
+        setErrorMessage("통화 연결이 지연되어 텍스트로 진행합니다.");
+      }
+    }, 12000);
+    return () => clearTimeout(timer);
+  }, [credentials, status]);
 
   const start = useCallback(async (sessionId: string) => {
     if (!hasMicrophoneSupport()) {
@@ -130,7 +152,17 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
   }, []);
 
   const handleEnded = useCallback(() => {
-    if (mountedRef.current) setStatus((prev) => (prev === "active" ? "ended" : prev));
+    if (!mountedRef.current) return;
+    // 세션이 닫혔을 때: 이미 통화 중(active)이었으면 정상 종료(ended). 하지만 아직 connecting
+    // 단계에서 닫혔다면(연결 실패로 서버가 곧장 close) "정상 종료"가 아니라 **연결 실패**다 —
+    // 예전엔 이 경우 아무 전이도 안 해서 무한 "연결하는 중"에 갇혔다(2026-07-23 고착 버그의 핵심).
+    // 이제 error로 떨어뜨려 텍스트 폴백으로 강등한다.
+    if (statusRef.current === "active") {
+      setStatus("ended");
+    } else if (statusRef.current === "connecting") {
+      setStatus("error");
+      setErrorMessage("통화가 연결되지 못해 텍스트로 진행합니다.");
+    }
   }, []);
 
   const handleError = useCallback(() => {

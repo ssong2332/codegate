@@ -11,6 +11,8 @@ export { sendMessage } from "./roleplay";
 // 실시간 음성 통화 자격증명 발급(2026-07-22) — 브라우저가 ElevenLabs Agents와 직접 speech-to-speech
 // 대화를 하되 API 키는 서버에만 두기 위한 서명 URL 발급 지점.
 export { createRealtimeCall } from "./realtime";
+// 실시간 통화 전사 제출(finding #1) — 음성 대화도 리포트가 분석하도록 종료 직전 클라가 제출한다.
+export { submitRealtimeTranscript } from "./realtime/submitTranscript";
 export { generateReport } from "./report";
 
 // Trigger functions (클라 직접 호출 아님) — API.md `onSessionEnded` (Track C, T10, AC-021).
