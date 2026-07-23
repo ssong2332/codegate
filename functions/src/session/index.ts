@@ -20,6 +20,8 @@ import type {
   CreateSessionResponse,
   EndSessionRequest,
   EndSessionResponse,
+  UpdateMessengerSkinRequest,
+  UpdateMessengerSkinResponse,
 } from "./types";
 
 ensureFirebaseAdminApp();
@@ -29,7 +31,8 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     }
-    const { scenarioId, voiceId, sessionId } = request.data ?? {};
+    const { scenarioId, voiceId, sessionId, channel, surface, messengerSkin, skinSource } =
+      request.data ?? {};
     if (!scenarioId || !voiceId) {
       throw new HttpsError("invalid-argument", "scenarioId와 voiceId가 필요합니다.");
     }
@@ -106,6 +109,12 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       // Firestore admin SDK는 필드값 undefined를 기본적으로 거부하므로(ignoreUndefinedProperties
       // 미설정), Mock이 아닐 때는 llmProvider 필드 자체를 생략한다.
       ...(isMock ? { llmProvider: "mock" as const } : {}),
+      // 메신저피싱 확장(T29) — UX-024가 넘긴 경우에만 채운다. 부재 시 기존과 동일하게 voice
+      // 세션으로 생성된다(Migration Policy, Architecture.md §13.1/13.4).
+      ...(channel ? { channel } : {}),
+      ...(surface ? { surface } : {}),
+      ...(messengerSkin ? { messengerSkin } : {}),
+      ...(skinSource ? { skinSource } : {}),
     };
     // merge:true — sessionId를 채택한 경우 pending 문서(createVoiceClone이 만든 voiceProvider 등
     // 부가 필드)를 지우지 않고 scenarioId/status 등을 덧씌운다. 새 문서인 경우는 기존과 동일.
@@ -120,16 +129,22 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
 
     // 실시간 음성 통화 전환(2026-07-22 사용자 결정) — sendMessage.audioUrl과 동일 패턴으로 오프닝
     // 대사도 합성한다. 실패해도 세션 생성 자체는 막지 않는다(P-4 비차단 원칙).
+    // T29 reviewer Major #2: channel="messenger"는 UI가 audioUrl을 아예 재생하지 않으므로(채팅은
+    // 텍스트 전용, 에스컬레이션 전까지 TTS 불필요) 합성 자체를 건너뛴다 — Mock에서는 무해하지만
+    // 실 ElevenLabs 연동 후 턴마다 불필요한 비용·지연·Storage 산출물(AC-021 폐기 대상)이 쌓이는
+    // 것을 막는다.
     let openingAudioUrl: string | undefined;
-    try {
-      const synthesis = await getVoiceProvider().synthesize({
-        sessionId: sessionRef.id,
-        voiceId,
-        text: openingMessage.text,
-      });
-      openingAudioUrl = synthesis.audioUrl;
-    } catch {
-      // 합성 실패는 무시 — 클라는 openingAudioUrl 없으면 텍스트만 표시(폴백).
+    if (channel !== "messenger") {
+      try {
+        const synthesis = await getVoiceProvider().synthesize({
+          sessionId: sessionRef.id,
+          voiceId,
+          text: openingMessage.text,
+        });
+        openingAudioUrl = synthesis.audioUrl;
+      } catch {
+        // 합성 실패는 무시 — 클라는 openingAudioUrl 없으면 텍스트만 표시(폴백).
+      }
     }
 
     return {
@@ -190,3 +205,33 @@ export const endSession = onCall<EndSessionRequest, Promise<EndSessionResponse>>
     return { status: "ended", reportPending: true };
   },
 );
+
+// 메신저 채팅(UX-022) 스킨 감지/수동 전환 결과 지속(T29, P-16, AC-031). endSession과 동일한
+// 패턴(인증·존재확인·소유 uid 검증)을 쓴다 — firestore.rules가 sessions/{sessionId} 클라 write를
+// 전부 거부하므로(#3 보안 하드닝) 콜러블 없이는 클라가 스킨 선택을 지속시킬 방법이 없다.
+export const updateMessengerSkin = onCall<
+  UpdateMessengerSkinRequest,
+  Promise<UpdateMessengerSkinResponse>
+>(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+  }
+  const { sessionId, messengerSkin, skinSource } = request.data ?? {};
+  if (!sessionId || !messengerSkin || !skinSource) {
+    throw new HttpsError("invalid-argument", "sessionId·messengerSkin·skinSource가 필요합니다.");
+  }
+
+  const db = getFirestore();
+  const sessionRef = db.collection("sessions").doc(sessionId);
+  const sessionSnap = await sessionRef.get();
+  if (!sessionSnap.exists) {
+    throw new HttpsError("failed-precondition", "존재하지 않는 세션입니다.");
+  }
+  const session = sessionSnap.data() as SessionDoc;
+  if (session.uid !== request.auth.uid) {
+    throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
+  }
+
+  await sessionRef.update({ messengerSkin, skinSource } satisfies Partial<SessionDoc>);
+  return { messengerSkin, skinSource };
+});

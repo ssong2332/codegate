@@ -1,5 +1,13 @@
 // roleplay 모듈 요청/응답 타입 — src/lib/api/types.ts(클라 계약)와 1:1 대응(API.md).
-export type ScammerMessage = { role: "scammer"; text: string };
+import type { MessengerAttachment } from "../shared/types";
+
+// attachments(T29 추가, 옵셔널·하위호환) — 메신저 채팅(UX-022)의 스미싱 링크(§13.2/13.4).
+// extractLinkMarker(../roleplay/linkMarker.ts)가 채워 넣는다. 보이스 세션은 항상 부재.
+export type ScammerMessage = {
+  role: "scammer";
+  text: string;
+  attachments?: MessengerAttachment[];
+};
 export type UserMessage = { role: "user"; text: string };
 
 export type SendMessageRequest = { sessionId: string; userText: string };

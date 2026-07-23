@@ -1,12 +1,28 @@
 // session 모듈 요청/응답 타입 — src/lib/api/types.ts(클라 계약)와 1:1 대응(API.md).
 import type { ScammerMessage } from "../roleplay/types";
+import type {
+  MessengerChannel,
+  MessengerSkin,
+  MessengerSkinSource,
+  MessengerSurface,
+} from "../shared/types";
 
 // sessionId(T4 추가, 옵셔널·하위호환): 온보딩 단계에서 클라가 만든 "사전 세션 id"
 // (src/lib/recording/pendingSession.ts, createVoiceClone이 최소 필드로 미리 만들어 둔
 // sessions/{sid} 문서)를 넘기면 createSession이 새 문서를 또 만들지 않고 그 문서를 채택한다
 // (sessionId 불일치 갭 해소 — functions/src/session/index.ts 주석 참고). 생략 시 기존과 동일하게
 // 새 id를 발급한다. API.md에는 아직 반영 안 됨 — architect 확인/문서 갱신 권장.
-export type CreateSessionRequest = { scenarioId: string; voiceId: string; sessionId?: string };
+// channel/surface/messengerSkin/skinSource(T29 추가, 옵셔널·하위호환, Architecture.md §13.1/13.4):
+// 메신저 훈련(UX-024)에서만 채워진다. 부재 시 기존과 동일하게 voice 세션으로 생성된다.
+export type CreateSessionRequest = {
+  scenarioId: string;
+  voiceId: string;
+  sessionId?: string;
+  channel?: MessengerChannel;
+  surface?: MessengerSurface;
+  messengerSkin?: MessengerSkin;
+  skinSource?: MessengerSkinSource;
+};
 export type CreateSessionResponse = {
   sessionId: string;
   openingMessage: ScammerMessage;
@@ -35,3 +51,16 @@ export type EndSessionRequest = {
   endReason: EndSessionReason;
 };
 export type EndSessionResponse = { status: "ended"; reportPending: true };
+
+// --- updateMessengerSkin (T29 · UX-022 · AC-031/P-16) ---
+// 클라 UA 감지·수동 전환 결과를 세션 문서에 지속한다(리포트·새로고침·수동 전환 유지 목적).
+// firestore.rules가 sessions/{sessionId}에 클라 write를 전부 거부해 콜러블이 필요하다.
+export type UpdateMessengerSkinRequest = {
+  sessionId: string;
+  messengerSkin: MessengerSkin;
+  skinSource: MessengerSkinSource;
+};
+export type UpdateMessengerSkinResponse = {
+  messengerSkin: MessengerSkin;
+  skinSource: MessengerSkinSource;
+};

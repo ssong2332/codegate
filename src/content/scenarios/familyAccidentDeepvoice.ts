@@ -11,6 +11,16 @@ export type DeepvoiceLine = { lineId: string; text: string };
 // callerLabel: play/chat 화면에 표시할 발신자 라벨(시나리오마다 다른 캐릭터를 지어내지 않고
 // 여기 한 곳에서만 정의 — 화면 쪽은 이 값을 그대로 쓴다).
 export type VoiceMode = "clone" | "generic";
+// 메신저피싱 확장(2026-07-23, T27, Architecture.md §13.4와 1:1) — channel/surface/escalation은
+// 전부 옵셔널 증분 필드다(Migration Policy 준수, 기존 9종 보이스 시나리오는 필드 부재만으로
+// channel="voice"로 간주). channel="messenger" 시나리오는 voiceMode가 의미 없어(AC-028이
+// "보이스피싱 분류 하위"로 voiceMode를 한정) voiceMode를 아예 비워 둔다 — 대신 에스컬레이션이
+// 가능한 메신저 시나리오는 escalation.voiceMode로 "통화로 넘어갈 때 쓸 목소리"를 별도로 갖는다
+// (같은 캐릭터가 채널만 바꿔 이어가는 것이지, 다른 보이스 시나리오로 갈아타는 게 아니므로
+// escalation에 voiceScenarioId 같은 별도 시나리오 참조는 두지 않는다 — 명시적 판단).
+export type Channel = "voice" | "messenger";
+export type MessengerSurface = "kakao" | "sms";
+export type EscalationConfig = { toChannel: "voice"; voiceMode: VoiceMode };
 export type ScenarioDoc = {
   title: string;
   fraudType: string;
@@ -23,8 +33,11 @@ export type ScenarioDoc = {
    * 이 필드에 의존하면 안 된다.
    */
   deepvoiceLines: DeepvoiceLine[];
-  voiceMode: VoiceMode;
+  voiceMode?: VoiceMode; // 보이스피싱 하위 전용(AC-028) — channel="messenger"면 부재
   callerLabel: string;
+  channel?: Channel; // 부재="voice"(하위호환)
+  surface?: MessengerSurface; // channel="messenger"일 때만
+  escalation?: EscalationConfig; // 메신저→보이스 전이 가능한 시나리오만(AC-046)
 };
 
 export const FAMILY_ACCIDENT_SCENARIO_ID = "family-accident-deepvoice";

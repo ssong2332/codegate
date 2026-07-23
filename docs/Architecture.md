@@ -2,9 +2,9 @@
 
 Owner: architect (see AGENTS.md). Others read-only.
 Major decisions are logged in DECISIONS.md; details in adr/.
-Based on PRD Version: v0.5 · Based on UX Version: 1.2 · Last Updated: 2026-07-21
+Based on PRD Version: v1.1 · Based on UX Version: 1.6 · Last Updated: 2026-07-23
 
-> **버전 갭 고지:** docs/UX.md(v1.2)의 헤더는 "Based on PRD v0.4"이지만, UX v1.1/v1.2가 이미 로그인 P0 상향(UX-013)·Google 프로바이더 확정을 반영했으므로 PRD v0.5의 로그인 변경과 내용상 정합한다. 실질 드리프트 없음. 본 문서는 PRD v0.5 + UX v1.2 기준으로 설계했다.
+> **버전 갭 고지(2026-07-23 갱신):** 본 문서는 이전에 PRD v0.5 + UX v1.2 기준이었다. T26·T35(메신저 확장 세션 전이 + 2인 소셜 데이터 구조)를 위해 **PRD v1.1 + UX v1.6** 기준으로 갱신한다. 갱신 범위는 신규 §13(메신저→보이스 전이)·§14(2인 소셜)와 관련 스키마·DECISIONS·ADR-0005에 한정하며, 기존 §0~§12(P0 예방접종 루프)는 여전히 유효하다(PRD 코어 루프 무변경). 이전 헤더의 "UX v1.2 / PRD v0.4~v0.5" 정합 고지는 그 구간 설계에 대해 계속 유효하다.
 
 ---
 
@@ -268,3 +268,166 @@ UX-008  reports 읽기 ──▶ 타임라인·수법·대처법 표시(AC-008/0
 | UX-010 방어등급(P1) | `/grade` | (직접 read/write) | `users/{uid}.defenseGrade` | AC-010, AC-011 |
 | UX-011 age-gate(P1) | `AgeGate` 컴포넌트 | (클라 확인) | (선택) `users/{uid}.ageVerified` | AC-014 |
 | UX-012 히스토리(P1) | `/history` | (직접 read) | `sessions`,`reports`(본인) | AC-011, AC-016 |
+
+---
+
+## 13. 채널 전이 아키텍처 — 메신저 ↔ 보이스 (T26, PRD v1.1 메신저 확장)
+> **소관 UX/AC 매핑:** UF-003·UX-015(메신저 분기)·T24 메신저 표면·T25 전이 연출 / AC-030·031·032·033·034·035·036·037·039·045·046·047. 기존 §5(P0 루프)·§6(가드레일)를 **재사용**하고 전이 계약만 증분한다.
+
+### 13.0 설계 요지(다른 판단보다 우선)
+1. **하나의 세션, 여러 채널.** 메신저 단계와 보이스 단계는 별개 세션이 아니라 **같은 `sessions/{sessionId}` 문서의 채널 전이**다. sessionId·대화 로그(messages)·턴 인덱스가 채널을 넘어 연속되고, 종료 시 **정확히 1개 리포트**가 두 채널을 함께 다룬다(AC-035/AC-007/AC-037).
+2. **방향 무관(direction-agnostic) 엔진, 순차 배선.** 전이 함수는 `(fromChannel, toChannel)`을 받는 대칭 구조로 정의하되, **MVP는 `messenger→voice` 한 방향만 배선·검증**한다. `voice→messenger`는 같은 계약을 재사용하는 fast-follow(T40, AC-039).
+3. **앱은 자유텍스트를 분류하지 않는다.** 전이 트리거는 **역할극 LLM이 캐릭터로서** 발신하는 **구조화 신호(sentinel 토큰)**만 신뢰한다. 사용자 입력=데이터 원칙(AC-024) 불변 — §13.2.
+4. **보이스 단계는 기존 파이프라인 재사용.** 통화 셸(UX-014)·`RealtimeVoiceProvider`(`functions/src/realtime/*`)·LLM 어댑터(`functions/src/llm`)·가드레일(§6)을 그대로 재사용한다. 전이는 "새 통신 스택"이 아니라 **채널 필드를 바꾸고 통화 자격증명을 발급**하는 것이다(§13.5).
+
+### 13.1 세션 채널 전이 모델 (스키마는 Database.md와 1:1)
+`sessions/{sessionId}`에 **하위호환 옵셔널 필드**를 증분한다(기존 세션은 필드 부재 → `voice` 단일 채널로 간주, Migration Policy 준수).
+
+| 필드 | 값 | 의미 |
+|---|---|---|
+| `channel` | `"messenger"`\|`"voice"` | **현재 활성 채널**(방향 무관 상태값). 부재 시 `"voice"`. ※ UX-014 내부의 receiving→opening→live는 통화 셸 내부 phase이며 이 `channel`과 다른 층위다(명명 충돌 회피 위해 필드명을 `phase`가 아닌 `channel`로 둔다 — DECISIONS #14). |
+| `entryChannel` | `"messenger"`\|`"voice"` | 세션이 처음 시작된 채널. 리포트가 교차채널 여부를 판정(AC-037). |
+| `channelHistory` | `array<{from,to,at,trigger}>` | 전이 이력. `trigger`=`"structured_signal"`\|`"maxturn_fallback"`\|`"manual_button"`. 단일 리포트가 두 단계 취약 시점을 시간축에 병합할 근거(AC-035/037). |
+
+- `messages` 서브컬렉션에 옵셔널 `channel` 필드를 더해 각 턴이 어느 채널에서 발생했는지 표기(AC-037 교차채널 타임라인). `turnIndex`는 채널을 넘어 **단조 증가**를 유지(연속성).
+- 전이 함수 계약(방향 무관): `transitionChannel(sessionId, from, to, trigger)` — ① `channel`을 `to`로 갱신 ② `channelHistory`에 항목 append ③ `to==="voice"`면 통화 진입 준비(§13.5). MVP는 `from==="messenger" && to==="voice"`만 허용하고 그 외 조합은 `unimplemented`로 거부(조용한 실패 금지, AC-039).
+
+### 13.2 구조화 트리거 신호 — sentinel 토큰 (DECISIONS #15, AC-034/AC-024)
+**결정: function-calling이 아니라 서버 파싱 sentinel 토큰**을 채택한다. 근거·대안은 DECISIONS #15.
+
+- **형식:** 역할극 LLM(메신저 단계 `sendMessage`)의 **어시스턴트 출력** 안에, 시스템 프롬프트가 지시한 고정 제어 마커 `[[SIGNAL:ESCALATE_VOICE]]`가 포함되면 전이 의도로 해석한다. 신호 문법은 `\[\[SIGNAL:([A-Z_]+)\]\]`(서버 정의 네임스페이스).
+- **처리 순서(서버, `sendMessage` 내부):**
+  1. LLM 어시스턴트 응답에서 `[[SIGNAL:*]]`를 스캔 → `ESCALATE_VOICE` 발견 시 전이 의도 세팅.
+  2. **어시스턴트 텍스트에서 모든 `[[SIGNAL:*]]`를 제거**한 뒤에야 마스킹·저장·클라 반환(사용자는 토큰을 보지 못한다).
+  3. 전이 의도가 있으면 응답에 `escalation: { toChannel: "voice" }` 플래그를 실어 클라가 통화 전환 연출(T25)로 넘어가게 한다. 실제 채널 전이는 `transitionChannel`가 수행.
+- **인젝션 방어(AC-024) 검증 — 위배 없음:**
+  - 앱은 **사용자 입력을 절대 신호로 해석하지 않는다.** 신호는 오직 **어시스턴트 role 출력**에서만 인정한다.
+  - **사용자 입력 수신 시점에 sentinel 형태 문자열을 선(先)제거**한다(방어적 정화) — 사용자가 `[[SIGNAL:...]]`를 타이핑해도 저장·LLM 전달 전에 지워져 신호 네임스페이스를 탐침·위조할 수 없다.
+  - 최악의 경우(사용자가 LLM을 꾀어 조기 신호 발신 유도) = **조기 전이**뿐이다. 보이스 단계도 사전 동의(이미 완료)·합성 표식·상시 종료·PII/인젝션 방어가 그대로 걸려 있어(§13.5·AC-036) **가드레일 우회가 발생하지 않는다.** 페르소나/시스템 프롬프트는 여전히 서버 조립·클라 미보유(ADR-0004 불변).
+- **어댑터 정합성:** sentinel은 텍스트 출력만 있으면 되므로 `functions/src/llm`의 Claude·Gemini·**mock** 어댑터에서 균일하게 동작한다(얇은 어댑터 철학 DECISIONS #11 계승). 보이스 단계의 Gemini Live는 `tools:[]`로 도구를 잠그는데(geminiProvider.ts), 트리거 감지는 **메신저(텍스트) 단계**에서 일어나므로 그 잠금과 무관하다.
+
+### 13.3 폴백 규칙 — 수치 확정(잠정, PoC 후 확정) (DECISIONS #16, AC-034)
+사용자가 끝까지 신호를 유발하지 않아도 전이가 막히지 않도록 **결정적 폴백**을 둔다. OQ-U3/U4와 같은 "PoC 전 가정 / PoC 후 확정" 패턴.
+
+| 폴백 | 잠정값 | 근거·확정 절차 |
+|---|---|---|
+| 메신저 단계 max-turn 자동 전이 | `MESSENGER_ESCALATION_FALLBACK_TURNS = 6` (사용자 턴) | 6턴까지 신호 없으면 자동으로 보이스 전이(사기범이 전화를 건다). T29/T30 메신저 PoC 후 실측 대화 길이로 확정. |
+| 명시 전환 버튼 | 1턴부터 상시 노출("전화로 확인" 류, UX는 T25) | 사용자가 언제든 수동 전이 가능(AC-034 "명시 전환 버튼"). 신호·폴백과 독립. |
+| 교차채널 세션 총 한도 | `maxUserTurns` 상향(에스컬레이션 세션 생성 시 예 **14**), `maxSessionMs`는 기존 6분 유지 | 두 채널을 합쳐도 기존 10턴(DECISIONS #10) 안에 다 담기 어려움 → 에스컬레이션 세션만 세션 문서의 `maxUserTurns`를 높여 발급. 정확값은 T30 검증 후 확정(잠정). |
+
+> 위 값은 **PoC 전 가정치**다. 근거 없는 확정 금지 원칙에 따라 잠정임을 명시하고, T30(에스컬레이션 구현) 검증 후 본 표·DECISIONS #16을 갱신한다.
+
+### 13.4 메신저 콘텐츠 스키마 (DECISIONS #17, AC-030/031/032/033/045)
+새 컬렉션을 만들지 않고 **기존 `scenarios`/`scenarioPrompts`에 옵셔널 필드를 증분**한다(3트랙 계약·Migration Policy 준수). 표면은 **콘텐츠와 분리된 프레젠테이션 레이어**로 두어 대화 콘텐츠를 표면·기기와 무관하게 재사용한다(PRD Risk 완화 "표면=스킨 레이어").
+
+- **`scenarios/{id}`(공개 메타) 증분:** `channel?: "voice"|"messenger"`(부재→voice), `surface?: "kakao"|"sms"`(메신저 전용), `escalation?: { toChannel:"voice", voiceScenarioId?:string, voiceMode:"clone"|"generic" }`(이 메신저 시나리오가 보이스로 이어질 수 있음 + 어떤 음성 모드로 — AC-046 조건부 clone 판정 입력).
+- **메시지 표면 요소:** `messages/{id}`에 옵셔널 `attachments?: MessengerAttachment[]`. `MessengerAttachment = { kind:"link", displayText, fakeLandingId, harmless:true }`. **실 URL 필드는 존재하지 않는다**(AC-023의 송금 금지와 동형의 구조적 금지) — 링크는 `displayText`(모의 표기)와 `fakeLandingId`(인앱 가짜 랜딩 참조, AC-045)로만 표현되고 외부 네비게이션 경로가 스키마에 없다.
+- **기기 스킨 저장 위치:** UA 자동 감지 결과를 **세션 문서**에 남긴다(클라 로컬만 두지 않는 이유: 리포트·새로고침·수동 전환 지속을 위해). `sessions.messengerSkin?: "ios"|"samsung"|"default"`, `sessions.skinSource?: "auto"|"manual"|"fallback"`. 스킨은 **프레젠테이션 전용**이라 어떤 안전 판정도 게이팅하지 않는다.
+- **가짜 랜딩(AC-045):** `fakeLandingId`는 인앱 정적 목업 화면 식별자(콘텐츠 T24/T29 소유). 입력값은 서버 미전송(콜러블 없음)·UI상 가짜 피드백만. 실 브랜드/URL 없음.
+- **면책 고지(AC-047):** 카카오 표면에 "카카오톡 실제 서비스와 무관한 훈련용 재현" **상시 노출**은 UI 요건(T24)이며 데이터 필드가 아니다. 스키마엔 두지 않고, §13.7 판단대로 별도 ADR 없이 UI 상시 요건으로 강제.
+
+### 13.5 UA 자동 감지 판정·신뢰도·폴백 (DECISIONS #17, AC-031/OQ-17)
+UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **best-effort 프레젠테이션**으로만 쓰고 어떤 안전 경로도 게이팅하지 않는다. 클라에서 판정 → 결과를 세션 문서에 기록. 판정은 규칙표로 고정(임의 판단 금지):
+
+| # | UA 조건(순서대로 첫 매치) | 스킨 | source |
+|---|---|---|---|
+| 1 | `iPhone`\|`iPad`\|`iPod`\|iOS 표식 | `ios` | auto |
+| 2 | Android + (`SM-`\|`SamsungBrowser`\|`Samsung`) | `samsung` | auto |
+| 3 | Android(삼성 외) | `default` | auto |
+| 4 | 데스크톱·미상·판정 실패 | `default` | fallback |
+| — | 사용자가 수동 토글 | 선택값 | manual |
+
+- **신뢰도 한계:** 규칙표는 대표 케이스만 커버한다. 인앱 브라우저(카톡 내장 등)·커스텀 UA·에뮬레이터는 오판정 가능 → 그래서 **항상 수동 전환 토글**을 제공하고(AC-031), 기본 폴백은 `default` 스킨이다. 오판정의 영향은 "채팅 외형이 기기와 다르게 보임"뿐 — 콘텐츠·안전·리포트에 영향 없음.
+
+### 13.6 조건부 clone/목소리 선택 데이터 흐름 (DECISIONS #18, AC-046/OQ-23)
+메신저→보이스 전이가 가능한 시나리오 진입 시(UX는 T23계열/T25), 통화에 쓸 목소리를 세 경로로 결정하고 **세션 문서**에 남긴다.
+
+- **결정 경로:** ① 즉시 녹음(기존 UX-002/003 클론 온보딩 재사용 → 세션 클론 voiceId) / ② 기존 목소리 재사용(보관해 둔 목소리에서 선택) / ③ 최종 폴백 남·여 기본 보이스.
+- **세션 필드:** `voiceId`(기존 재사용 — 결정된 클론/프리셋 id), `voiceSelectionSource?: "recorded"|"reused"|"fallback_male"|"fallback_female"`.
+- **남·여 기본 보이스:** `FALLBACK_VOICE_MALE_ID`/`FALLBACK_VOICE_FEMALE_ID` 설정 상수(기존 `FALLBACK_VOICE_ID` 패턴 계승). 단일 generic 무선택보다 한 단계 나은 폴백(AC-046).
+- **재사용 소스 = 유지형 목소리 보관함:** ②는 `users/{uid}/voices/{voiceId}`(유지형 복제 음성, opt-in·기간제)에서 읽는다 — ADR-0005·§14.2. **이 보관함은 ADR-0003(세션 종료 즉시 폐기)의 예외가 아니라, 사용자가 명시적으로 "보관"을 택한 별도 저장소**다. MVP 최소 구현은 ①+③만으로 성립하며, ②(재사용)는 보관함에 항목이 있을 때만 활성(전체 보관함 UI는 P-8, 이번 범위 밖). 스키마는 T30이 막히지 않게 정의만 해 둔다.
+- **전이 시 통화 자격증명:** `channel`이 `voice`로 바뀌면 기존 `createRealtimeCall`(functions/src/realtime/index.ts)이 `session.voiceId`로 자격증명을 발급한다 — **엔드포인트 신설 없이 재사용**. clone voiceId면 ElevenLabs(§provider ①), gendered 프리셋이면 그 id로 발급(clone 아님 표기 정합).
+
+### 13.7 카카오 면책 고지 — 별도 ADR 불요 판단 (DECISIONS #19, OQ-24/AC-047)
+**판단: 별도 ADR을 신설하지 않는다.** 근거(DECISIONS #19에 기록):
+- architect는 법률 자문을 제공하지 않는다. 사용자는 이미 완화책을 **"상시 면책 고지"로 한정 확정**했고(마케팅/스토어 제한 미채택), 이는 **소프트웨어 구조 결정(스키마·모듈·경계)이 아니라 UI 상시 노출 콘텐츠 요건**이다 → ADR(구조 결정 기록) 대상이 아니다.
+- 이미 **AC-047(PRD)·T24(UX)**로 포착되어 있어 중복 ADR은 문서만 늘린다.
+- architect가 보장하는 것은 **"상시 노출 UI 요건이 충족되게 설계"**뿐: 면책 고지는 카카오 표면에서 **영구 비활성화 불가(항상 노출·재진입 시에도 유지)**한 UI 요소로 강제하고, 데이터 필드가 아니라 표면 컴포넌트 요건으로 T24/T29에 넘긴다. 법적 충분성 자체는 architect 판단 범위 밖(사용자/법무 확인 필요 — Open Question으로 잔존).
+
+---
+
+## 14. 2인 소셜 훈련 — 데이터·안전 구조 (T35, PRD v1.1)
+> **소관 UX/AC 매핑:** UF-004/UF-005·UX-019/020/021·UX-018(강제 해설) / AC-040·041·042·043·044·048·049·050. **⚠️ 이 절의 스키마·수치 확정이 T36/T37(implementer) 착수 게이트.** 4대 안전제약은 옵션이 아니라 출시 전제조건(PRD Constraints).
+
+### 14.0 설계 요지
+1. **비동기·서버 매개.** 실시간 조종 없음(AC-044). 사용자2는 **무로그인**으로 링크 토큰만으로 진입하며(AC-048), 사용자2의 모든 접근은 **Functions가 토큰·동의로 매개**한다(직접 Firestore 접근 없음) — 이것이 결과 열람 제한(AC-043)·유출 차단(AC-041)을 스키마·규칙 레벨에서 강제하는 축이다.
+2. **안전장치는 등급 무관 동일 코드경로.** 유료/무료 차이는 오직 **용량·기간 축**(활성 개수·링크 만료·보존기간)뿐 — §14.6에서 AC-050 명시 검증.
+
+### 14.1 `challenges/{challengeId}` 스키마 (DECISIONS #21, Database.md와 1:1)
+| 필드 | 타입 | 의미·제약 |
+|---|---|---|
+| `challengeId` | string | PK(=doc id) |
+| `creatorUid` | string, indexed | 사용자1(발신). 소유·활성개수 판정 키 |
+| `scenarioId` | string | 딥보이스(clone) 시나리오 |
+| `voiceId` | string | 이 챌린지에 **스코프 고정**된 클론 voice(ADR-0005). 챌린지 밖 재사용·추출 불가(AC-041) |
+| `displayName` | string | 사용자2에게 보일 "○○님이 준비" 문구용(표시이름) |
+| `status` | string | `pending`\|`consented`\|`in_progress`\|`completed`\|`expired`\|`reported`\|`deleted` |
+| `linkTokenHash` | string, indexed | 공유 토큰의 **SHA-256 해시만 저장**(평문 미저장, §14.4) |
+| `linkExpiresAt` | timestamp | 링크 만료(무료 생성+3일). AC-048 |
+| `linkConsumedAt` | timestamp? | 1회성 소모 시각(동의 통과 시 세팅, §14.4) |
+| `retentionDeleteAt` | timestamp | 복제 음성·챌린지 자동 삭제 예정(생성+보존기간, 기본 30일). **링크 만료와 별개**(AC-041 vs AC-048) |
+| `resultSharingConsented` | bool? | 사용자2의 결과 공유 동의(AC-043 열람 게이트). 기본 부재=미동의 |
+| `resultSummary` | {completed:bool, suspicionTimeLabel?:string, suspicionTurnIndex?:number}? | **동의 시에만** Functions가 기록. **대화 전문 없음**(AC-043) |
+| `reportedAt` | timestamp? | 사용자2 신고 시각(AC-049) |
+| `reportReason` | string? | `unwanted`\|`harassment`\|`impersonation_concern`\|`other` |
+| `tier` | string? | `free`\|`paid`(부재=free). **용량 축에만 영향**(§14.6, AC-050) |
+| `createdAt` | timestamp | |
+
+- **사용자2 체험 세션:** 사용자2의 통화 체험은 별도 `sessions/{sessionId}` 문서(`challengeId` 필드로 연결, `uid`는 사용자2 무계정이므로 **소유자 없음/토큰 바운드**)로 생성한다. 사용자1은 이 세션·messages에 **접근 권한이 없다**(규칙으로 거부) — AC-043 열람 제한을 스키마 분리로 강제. 사용자1이 보는 것은 오직 `challenges/{id}.resultSummary`뿐.
+
+### 14.2 복제 음성 스코프 고정·추출 차단 (ADR-0005, AC-041)
+기존 ADR-0002(본인 목소리만)·ADR-0003(세션 종료 즉시 폐기) 패턴과 **정합**시킨 신규 구조. 상세는 **ADR-0005**.
+
+- **스코프 고정:** 챌린지 voiceId는 **그 챌린지 문서 컨텍스트 + Functions 자격증명 발급**을 통해서만 해석된다. 사용자2 체험 통화는 기존 `createRealtimeCall` 패턴을 재사용하되, **발급 조건 = 유효 토큰 + 동의 완료(`status==="consented"|"in_progress"`) + 미만료**. 이 조건 밖에서는 어떤 클라도 voiceId로 자격증명을 못 받는다. voiceId는 다른 챌린지에서 재사용되지 않는다(챌린지 1:1).
+- **추출 차단:** raw 오디오 바이트·ElevenLabs voiceId를 반환하는 콜러블·다운로드 경로가 **어디에도 없다**(사용자1·사용자2 공통). UX-019는 토큰만 발급, UX-020은 오디오 미노출(§UX Handoff). 사용자1의 30초 원본 녹음은 `creatorUid`만 read 가능한 Storage 경로(storage.rules)이며 합성 산출물은 Functions만 write(ADR-0002 규칙 계승).
+- **ADR-0003과의 관계(중요):** 챌린지 음성은 **즉시 폐기의 예외**다 — 사용자2가 3일 내 비동기로 체험해야 하므로 세션 종료 즉시 지울 수 없다. 대신 **기간제 보존(retentionDeleteAt) + 수동 삭제 + 추출 차단**으로 대체 보증한다(AC-041). ADR-0005가 이 예외와 보증을 명문화해 ADR-0003 불변식을 **약화가 아니라 범위 한정**임을 남긴다. 보존기간 도달·수동 삭제 시 폐기는 **ADR-0003의 기존 기계(ElevenLabs voice DELETE + Storage 삭제 + `deletionLogs` 기록)를 재사용**한다.
+
+### 14.3 보존기간 기본값 (DECISIONS #22, AC-041/OQ-25)
+| 항목 | 값 |
+|---|---|
+| 기본 보존기간 | **30일**(생성 시각 기준) |
+| 사용자 조정 범위 | **7~90일** |
+| 수동 삭제 | 언제든 가능(UX-020, 즉시 폐기 트리거) |
+| 자동 삭제 | `retentionDeleteAt` 도달 시 스케줄 함수가 폐기(ADR-0003 기계 재사용) |
+
+> 근거: 딥보이스 신뢰 리스크상 무기한 보관 금지, 그러나 비동기 챌린지(무료 링크 3일 + 사용자2 여유)와 "내 목소리 금고"(P-8) 재열람을 감안해 즉시삭제보다 길게. 30일은 링크 만료(3일)보다 충분히 길어 "링크는 만료됐지만 음성은 아직 보존"(AC-048 주석의 별개 개념)을 자연히 표현한다.
+
+### 14.4 링크 토큰 스키마 (DECISIONS #21, AC-048/OQ-26)
+| 항목 | 결정 |
+|---|---|
+| 생성 | 서버에서 `crypto.randomBytes(32)`(256-bit) → base64url(≈43자). 충돌 확률 무시 가능 |
+| 저장 | **평문 미저장** — `linkTokenHash = SHA-256(token)`만 challenge 문서에 저장·인덱싱. 평문은 발급 응답으로 사용자1에게 1회 반환(공유용) |
+| 조회 | 사용자2가 토큰으로 진입 → 서버가 해시 → `linkTokenHash`로 챌린지 검색 |
+| 만료 | `linkExpiresAt` = 생성+**3일(무료)** / 7일+(유료). `now>만료` 시 진입 차단(UX-021 만료 상태) |
+| 1회성 소모 | **동의 통과 시점에 소모**(`linkConsumedAt` 세팅). ▶ 근거: (a) **열기(open) 시 소모 금지** — 카톡/문자 링크 미리보기 크롤러가 URL을 선(先)fetch해 토큰을 조기 소진시킬 수 있다. (b) **완료 시 소모 금지** — 완료 전 무제한 재진입·재공유 여지. (c) **동의 시 소모**가 크롤러 안전 + 단일 taker 고정을 동시에 만족. 랜딩 열람·신고는 소모 없이 가능, 동의로 한 명에게 고정. 소모 후 재진입은 `status==="in_progress"` + 보존기간 내에서만 재개 허용(중도 이탈 복귀) |
+| 인증 | 사용자2 **로그인 불필요**(AC-048). 토큰 자체가 진입 자격 |
+
+### 14.5 오용 방지 — 상한·신고 모델 (DECISIONS #23, AC-049/OQ-27)
+- **사용자1당 활성 챌린지 개수 상한:** 무료 **3개**(사용자 확정), 유료 **10개**(수익화 표 "예 10개+"). "활성" = `status∈{pending,consented,in_progress}` 且 미만료. 챌린지 생성 콜러블이 생성 전 `creatorUid` 카운트 쿼리로 강제 — 초과 시 생성 거부(UX-019 개수초과 상태). 만료·완료·삭제·신고된 챌린지는 활성에서 빠져 슬롯 회수.
+- **신고 데이터 모델:** 사용자2는 무계정이므로 **콜러블 `reportChallenge(token, reason)`**로만 신고(직접 write 없음). 신고는 **챌린지 문서 내 필드**로 임베드(`reportedAt`·`reportReason`·`reportNote?`(마스킹)) — 토큰 1회성이라 taker가 1명뿐이므로 별도 신고 컬렉션 불요. 신고 사유 enum: `unwanted`\|`harassment`\|`impersonation_concern`\|`other`.
+- **신고 후 처리(MVP):** 신고 시 `status="reported"`로 전이해 **해당 챌린지 재생·재진입 즉시 차단**(더 이상 복제 음성 미재생). **데이터 축적 + 즉시 비활성화까지만** — **관리자 수동 검토·계정 조치·자동 확산 탐지는 미채택**(AC-049, 운영 부담). 향후 B2B/운영 도입 시 확장 지점.
+
+### 14.6 AC-050 검증 — 안전장치 게이팅 없음 (DECISIONS #24)
+이 스키마·정책이 "유료가 안전장치를 약화"하지 않음을 **명시 검증**한다.
+
+| 축 | 무료 | 유료 | 유형 | AC-050 판정 |
+|---|---|---|---|---|
+| 활성 챌린지 개수 | 3 | 10 | 용량 | ✅ 허용(용량 축) |
+| 링크 만료 | 3일 | 7일+ | 편의/기간 | ✅ 허용(기간 축) |
+| 복제 음성 보존기간 | 30일(기본) | 연장 가능 | 편의/기간 | ✅ 허용(기간 축) |
+| **AC-040 사전 동의 게이팅** | 강제 | 강제 | 안전 | ✅ **등급 무관 동일 코드경로**(tier 플래그가 게이트를 우회하지 않음) |
+| **AC-041 추출 차단·스코프 고정** | 강제 | 강제 | 안전 | ✅ 등급 무관 동일 |
+| **AC-042 강제 정체 공개** | 강제 | 강제 | 안전 | ✅ 등급 무관 동일 |
+| **AC-043 결과 열람 제한** | 강제 | 강제 | 안전 | ✅ 등급 무관 동일(스키마 분리로 강제) |
+
+- **결론:** 유료가 다르게 적용되는 항목은 **오직 개수 상한·만료기간·보존기간(용량/편의/기간 축)**뿐이며, 4대 안전제약(AC-040/041/042/043)과 기타 가드레일은 tier 필드를 조건으로 삼는 코드경로가 **존재하지 않는다**. 결제·구독 게이팅 로직을 실제 구현할 때(장기 로드맵)도 이 표를 게이트 조건으로 재검증해야 한다(PRD 수익화 로드맵 메모). **AC-050 위반 없음.**

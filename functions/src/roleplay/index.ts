@@ -16,6 +16,7 @@ import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { getVoiceProvider } from "../voice/provider";
 import type { MessageDoc, SessionDoc } from "../shared/types";
+import { extractLinkMarker } from "./linkMarker";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
@@ -121,14 +122,21 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       mockTacticHints: scenarioPrompt.weakenedTactics,
     });
 
-    // ③ 응답도 저장 전 마스킹(원칙상 사기범 발화엔 사용자 PII가 섞일 일이 적지만, 저장 전 마스킹
-    // 원칙을 대화 로그 전체에 일관 적용— ADR-0004).
-    const maskedReplyText = maskPII(completion.text);
+    // ③ 메신저 확장(T29) — 스미싱 링크 마커([[LINK:id]])를 저장 전 텍스트에서 제거하고
+    // attachments로 변환한다(§13.2 sentinel 패턴 재사용, linkMarker.ts 근거 참고). 보이스 세션의
+    // 응답에는 애초에 마커가 없으므로 attachments가 항상 undefined로 빠져 기존 동작에 영향 없다.
+    // 응답도 저장 전 마스킹(원칙상 사기범 발화엔 사용자 PII가 섞일 일이 적지만, 저장 전 마스킹
+    // 원칙을 대화 로그 전체에 일관 적용 — ADR-0004).
+    const { text: linkFreeReplyText, attachments: replyAttachments } = extractLinkMarker(
+      completion.text,
+    );
+    const maskedReplyText = maskPII(linkFreeReplyText);
     await messagesRef.add({
       role: "scammer",
       textMasked: maskedReplyText,
       turnIndex: nextIndex + 1,
       createdAt: Timestamp.now(),
+      ...(replyAttachments ? { attachments: replyAttachments } : {}),
     } satisfies MessageDoc);
 
     // ④ 한도 체크 → 도달 시 ended:true + status=ended(→onSessionEnded 트리거, AC-007).
@@ -170,19 +178,27 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // audioUrl을 함께 반환한다(session.voiceId는 createSession에서 이미 검증된 값). 합성 실패는
     // 텍스트 응답 자체를 막지 않는다(P-4 "핵심 루프 비차단" — 이미 T5 synthesizeDeepvoice와 동일한
     // "실패해도 조용히 생략" 원칙을 여기서도 따른다).
+    // T29 reviewer Major #2: channel="messenger"는 채팅 UI가 audioUrl을 재생하지 않으므로 합성
+    // 자체를 건너뛴다(createSession과 동일한 게이팅, 불필요한 비용·지연·Storage 산출물 방지).
     let audioUrl: string | undefined;
-    try {
-      const synthesis = await getVoiceProvider().synthesize({
-        sessionId,
-        voiceId: session.voiceId ?? "",
-        text: maskedReplyText,
-      });
-      audioUrl = synthesis.audioUrl;
-    } catch {
-      // 합성 실패는 무시 — 클라는 audioUrl 없으면 텍스트만 표시(폴백).
+    if (session.channel !== "messenger") {
+      try {
+        const synthesis = await getVoiceProvider().synthesize({
+          sessionId,
+          voiceId: session.voiceId ?? "",
+          text: maskedReplyText,
+        });
+        audioUrl = synthesis.audioUrl;
+      } catch {
+        // 합성 실패는 무시 — 클라는 audioUrl 없으면 텍스트만 표시(폴백).
+      }
     }
 
-    const reply: ScammerMessage = { role: "scammer", text: maskedReplyText };
+    const reply: ScammerMessage = {
+      role: "scammer",
+      text: maskedReplyText,
+      ...(replyAttachments ? { attachments: replyAttachments } : {}),
+    };
     return {
       reply,
       turnCount,

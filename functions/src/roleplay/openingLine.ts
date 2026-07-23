@@ -7,6 +7,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { maskPII } from "../guardrails";
 import { getLlmClient } from "../llm";
 import { SCENARIO_PROMPTS } from "../scenarios";
+import { extractLinkMarker } from "./linkMarker";
 import { buildSystemPrompt } from "./promptAssembly";
 import type { ScammerMessage } from "./types";
 
@@ -26,7 +27,15 @@ export async function generateOpeningLine(scenarioId: string): Promise<ScammerMe
     mockTacticHints: scenarioPrompt.weakenedTactics,
   });
 
-  return { role: "scammer", text: maskPII(completion.text) };
+  // 메신저 확장(T29) — 스미싱 링크 마커([[LINK:id]])를 텍스트에서 제거하고 attachments로 변환한다
+  // (§13.2 sentinel 패턴 재사용, linkMarker.ts 근거 참고). 마스킹 전/후 순서는 무관(마커는 PII가
+  // 아니다) — 여기서는 마커 제거를 먼저 해 마스킹이 이미 정돈된 텍스트만 보게 한다.
+  const { text: linkFreeText, attachments } = extractLinkMarker(completion.text);
+  return {
+    role: "scammer",
+    text: maskPII(linkFreeText),
+    ...(attachments ? { attachments } : {}),
+  };
 }
 
 /** generateOpeningLine이 Mock LLM으로 생성됐는지 createSession이 알 수 있도록 하는 보조 함수.

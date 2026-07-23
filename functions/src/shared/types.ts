@@ -41,6 +41,14 @@ export type VoiceProviderName = "mock" | "elevenlabs";
 // 확인/문서 갱신 권장.
 export type LlmProviderName = "mock" | "claude" | "gemini";
 
+// 메신저피싱 확장(T29, Architecture.md §13.1/13.4/13.5와 1:1) — 전부 옵셔널 증분 필드다
+// (Migration Policy 준수, 기존 세션은 필드 부재만으로 channel="voice"로 간주). 스킨은
+// 프레젠테이션 전용이라 어떤 안전 판정도 게이팅하지 않는다(§13.5).
+export type MessengerChannel = "voice" | "messenger";
+export type MessengerSurface = "kakao" | "sms";
+export type MessengerSkin = "ios" | "samsung" | "default";
+export type MessengerSkinSource = "auto" | "manual" | "fallback";
+
 export type SessionDoc = {
   sessionId: string;
   uid: string;
@@ -60,6 +68,20 @@ export type SessionDoc = {
   // sendMessage가 첫 턴에 1회 기록한다. 없으면(아직 대화 전) createdAt로 근사.
   answeredAt?: FirebaseFirestore.Timestamp;
   endedAt?: FirebaseFirestore.Timestamp;
+  channel?: MessengerChannel; // T29 추가 — 부재="voice"(하위호환)
+  surface?: MessengerSurface; // channel==="messenger"일 때만
+  messengerSkin?: MessengerSkin; // 문자 표면(surface="sms") 스킨 판정 결과(§13.5)
+  skinSource?: MessengerSkinSource; // 스킨 결정 출처(auto|manual|fallback)
+};
+
+// --- 메신저 표면 요소(T29, Architecture.md §13.4, AC-032/045) ---
+// 실 URL 필드가 존재하지 않는다 — 링크는 displayText(모의 표기)·fakeLandingId(인앱 가짜 랜딩
+// 참조)로만 표현되고 외부 네비게이션 경로가 스키마에 없다(AC-023 송금 금지와 동형의 구조적 금지).
+export type MessengerAttachment = {
+  kind: "link";
+  displayText: string;
+  fakeLandingId: string;
+  harmless: true;
 };
 
 // --- sessions/{sessionId}/messages/{messageId} (AC-024) ---
@@ -69,6 +91,7 @@ export type MessageDoc = {
   textMasked: string; // PII 마스킹된 텍스트만 저장(원문 미저장, ADR-0004)
   turnIndex: number;
   createdAt: FirebaseFirestore.Timestamp;
+  attachments?: MessengerAttachment[]; // T29 추가 — 스미싱 링크(§13.4/AC-045)
 };
 
 // --- sessions/{sessionId}/artifacts/{artifactId} (AC-022, ADR-0003) ---
@@ -95,10 +118,17 @@ export type ScenarioDoc = {
 };
 
 // --- scenarioPrompts/{scenarioId} (ADR-0004, 클라 read 거부) ---
+// suspicionKeywords(T27, 메신저피싱 확장, Architecture.md §13.2 AC-034 정합) — 앱이 사용자
+// 입력을 직접 분류하는 화이트리스트가 아니다("앱은 자유텍스트를 분류하지 않는다" 원칙 불변).
+// 역할극 LLM이 "이 캐릭터라면 상대가 이런 의심 반응을 보였을 때 통화로 넘어가려 한다"고 판단할
+// 때 참고하도록 personaPrompt에 함께 주입하는 고정 예시 목록일 뿐이며, 최종 전이 여부·시점은
+// 여전히 LLM이 구조화 신호([[SIGNAL:ESCALATE_VOICE]])를 실제로 내보내는지로만 결정된다.
+// 에스컬레이션이 불가능한(escalation 필드가 없는) 시나리오는 이 필드를 두지 않는다.
 export type ScenarioPromptDoc = {
   personaPrompt: string;
   weakenedTactics: string[];
   guardrailPreamble: string;
+  suspicionKeywords?: string[];
 };
 
 // --- reports/{reportId} (AC-008/009/026) ---
