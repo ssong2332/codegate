@@ -87,6 +87,10 @@ export default function GeminiVoiceSession({
     // 받은 오디오를 이어붙일 다음 재생 시작 시각(출력 컨텍스트 시간축 기준).
     let nextPlayTime = 0;
     let speakingTimer: ReturnType<typeof setTimeout> | null = null;
+    // 반이중(half-duplex): AI가 말하는 동안엔 마이크 프레임을 보내지 않는다. 스피커→마이크 에코가
+    // 민감한 VAD에 사용자 발화로 오인돼 AI가 자기 말을 끊는 것을 막는 핵심 장치(에코 제거만으론
+    // 노트북 스피커에서 부족). AI 발화가 끝나면(turnComplete/침묵) 다시 열린다.
+    let agentSpeaking = false;
     // 전사(transcript)는 조각으로 스트리밍되므로 턴이 끝날 때(turnComplete)까지 모았다가 flush한다.
     let userBuffer = "";
     let scammerBuffer = "";
@@ -101,11 +105,21 @@ export default function GeminiVoiceSession({
     };
 
     const markSpeaking = () => {
+      agentSpeaking = true;
       handlersRef.current.onSpeakingChange(true);
       if (speakingTimer) clearTimeout(speakingTimer);
       // 오디오 청크가 끊기면 곧 "말이 끝났다"고 본다 — 서버가 turnComplete를 늦게 줄 수도 있어
-      // 파형 인디케이터가 계속 켜져 있는 것을 막는 안전장치다.
-      speakingTimer = setTimeout(() => handlersRef.current.onSpeakingChange(false), 600);
+      // 파형 인디케이터가 계속 켜져 있는 것을 막는 안전장치다. 이 시점에 마이크도 다시 연다.
+      speakingTimer = setTimeout(() => {
+        agentSpeaking = false;
+        handlersRef.current.onSpeakingChange(false);
+      }, 600);
+    };
+
+    const stopSpeaking = () => {
+      agentSpeaking = false;
+      if (speakingTimer) clearTimeout(speakingTimer);
+      handlersRef.current.onSpeakingChange(false);
     };
 
     const cleanup = () => {
@@ -126,7 +140,17 @@ export default function GeminiVoiceSession({
     (async () => {
       try {
         log("getUserMedia…");
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // 에코 제거/잡음 억제/자동 게인을 명시적으로 켠다(2026-07-23). 노트북 스피커로 나온 AI
+        // 목소리가 마이크로 되돌아가면 Gemini가 그것을 사용자 발화로 오인해 자기 말에 끼어들거나
+        // 반응해 "화자가 여러 명"처럼 들린다. 브라우저 기본값이 켜져 있어도 명시해 확실히 한다
+        // (근본 해결은 헤드셋 사용).
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -172,11 +196,11 @@ export default function GeminiVoiceSession({
               // 사용자가 말을 끊으면 큐에 남은 재생을 버리고 시간축을 리셋한다.
               if (sc?.interrupted) {
                 nextPlayTime = 0;
-                handlersRef.current.onSpeakingChange(false);
+                stopSpeaking();
                 return;
               }
               if (sc?.turnComplete) {
-                handlersRef.current.onSpeakingChange(false);
+                stopSpeaking();
                 flushTranscript();
               }
               if (!message.data) return;
@@ -221,6 +245,8 @@ export default function GeminiVoiceSession({
         const inputRate = inputContext.sampleRate;
         processor.onaudioprocess = (event) => {
           if (cancelled || !session || mutedRef.current) return;
+          // 반이중: AI가 말하는 동안엔 마이크를 보내지 않아 에코가 AI를 끊지 못하게 한다.
+          if (agentSpeaking) return;
           const pcm = floatToPcm16(
             event.inputBuffer.getChannelData(0),
             inputRate,
