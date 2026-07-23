@@ -86,6 +86,20 @@ export default function GeminiVoiceSession({
     let session: { sendRealtimeInput: (i: unknown) => void; close: () => void } | null = null;
     // 받은 오디오를 이어붙일 다음 재생 시작 시각(출력 컨텍스트 시간축 기준).
     let nextPlayTime = 0;
+    // 현재 예약/재생 중인 오디오 소스들 — interrupted 시 이걸 전부 멈추지 않으면 이전 응답의
+    // 남은 소리 위에 새 응답이 겹쳐 나와 "다른 AI가 말하는" 것처럼 들린다(2026-07-23 겹침 버그).
+    const scheduledSources = new Set<AudioBufferSourceNode>();
+    const stopAllPlayback = () => {
+      scheduledSources.forEach((s) => {
+        try {
+          s.stop();
+        } catch {
+          // 이미 끝난 소스는 무시.
+        }
+      });
+      scheduledSources.clear();
+      nextPlayTime = 0;
+    };
     let speakingTimer: ReturnType<typeof setTimeout> | null = null;
     // 반이중(half-duplex): AI가 말하는 동안엔 마이크 프레임을 보내지 않는다. 스피커→마이크 에코가
     // 민감한 VAD에 사용자 발화로 오인돼 AI가 자기 말을 끊는 것을 막는 핵심 장치(에코 제거만으론
@@ -193,9 +207,9 @@ export default function GeminiVoiceSession({
               if (sc?.inputTranscription?.text) userBuffer += sc.inputTranscription.text;
               if (sc?.outputTranscription?.text) scammerBuffer += sc.outputTranscription.text;
 
-              // 사용자가 말을 끊으면 큐에 남은 재생을 버리고 시간축을 리셋한다.
+              // 사용자가 말을 끊으면 예약된 재생을 전부 멈춰 새 응답과 겹치지 않게 한다.
               if (sc?.interrupted) {
-                nextPlayTime = 0;
+                stopAllPlayback();
                 stopSpeaking();
                 return;
               }
@@ -216,6 +230,8 @@ export default function GeminiVoiceSession({
               const startAt = Math.max(outputContext.currentTime, nextPlayTime);
               source.start(startAt);
               nextPlayTime = startAt + buffer.duration;
+              scheduledSources.add(source);
+              source.onended = () => scheduledSources.delete(source);
               markSpeaking();
             },
             onerror: (e: unknown) => {
