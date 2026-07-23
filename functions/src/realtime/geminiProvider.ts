@@ -11,7 +11,7 @@
 //      클라는 그 값을 읽을 수도 바꿀 수도 없다).
 //   2. 제약 없이 발급한 토큰은 클라이언트가 setup 프레임을 임의로 주입해 모델·프롬프트·도구를
 //      바꿔치기할 수 있다고 보고된 바 있다. 도구는 빈 배열로 명시적으로 잠근다.
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenAI, Modality, EndSensitivity } from "@google/genai";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider } from "./types";
@@ -63,6 +63,17 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
             // 있도록 클라가 이 전사를 모아 종료 시 서버에 제출한다(submitRealtimeTranscript).
             inputAudioTranscription: {},
             outputAudioTranscription: {},
+            // 응답 지연 튜닝(2026-07-23) — 기본 침묵 대기가 길어 "말하고 한참 뒤에야 응답"해서
+            // 실시간 느낌이 안 났다. 발화 종료를 더 민감하게 감지하고(END_SENSITIVITY_HIGH),
+            // 침묵 대기를 500ms로 줄여 사용자가 말을 멈추면 곧 응답하게 한다. 다만 어르신은 말
+            // 중간에 뜸을 들일 수 있어 너무 짧게(예: 200ms) 잡으면 문장을 끊어버리므로 500ms로
+            // 절충했다(silenceDurationMs가 작을수록 지연↓·중간에 끊길 위험↑, SDK 주석 기준).
+            realtimeInputConfig: {
+              automaticActivityDetection: {
+                endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
+                silenceDurationMs: 500,
+              },
+            },
             // 도구를 명시적으로 비운다 — 이걸 잠그지 않으면 클라가 임의 도구를 주입할 수 있다.
             tools: [],
           },
