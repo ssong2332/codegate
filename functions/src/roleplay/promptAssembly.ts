@@ -32,8 +32,18 @@ const USER_INPUT_CLOSE = "[훈련참가자입력:데이터끝]";
 // 재계산해야 하고 toLlmHistory로 과거 턴을 재구성할 때도 같은 nonce를 알아야 해 호출부(index.ts/
 // toLlmHistory) 시그니처까지 건드려야 했다 — 이 이스케이프 방식은 이 함수 내부만 바꿔서 끝나
 // 과설계를 피한다(구조적 방어인 role 분리가 이미 1차 방어라 이 정도로 충분, ADR-0004).
+// T29 reviewer Major #4 — 사용자 입력 안에 `[[LINK:...]]`(스미싱 링크 마커, linkMarker.ts) 형태의
+// 문자열이 그대로 들어와도, 실 LLM이 사용자 텍스트를 대사에 그대로 인용/반복하는 경우
+// extractLinkMarker(어시스턴트 출력만 스캔하는 함수 자체는 안전하지만, LLM이 사용자 문구를
+// 반향하면 그 반향된 텍스트가 어시스턴트 출력에 섞여 들어온다)가 이를 진짜 마커로 오인할 여지를
+// 원천 차단한다. `[[SIGNAL:...]]`도 같은 원리로 보호가 필요하지만 그 감지 로직 자체는 T30(에스컬
+// 레이션 구현) 소관이라 아직 코드에 없다 — T30 구현 시 이 함수에 같은 패턴을 추가할 것.
+function escapeSentinelLookalikes(text: string): string {
+  return text.replace(/\[\[(LINK|SIGNAL):/g, "［［$1：");
+}
+
 function escapeDelimiterLookalikes(text: string): string {
-  return text.replace(/\[(훈련참가자입력:[^\]]*)\]/g, "［$1］");
+  return escapeSentinelLookalikes(text).replace(/\[(훈련참가자입력:[^\]]*)\]/g, "［$1］");
 }
 
 /**

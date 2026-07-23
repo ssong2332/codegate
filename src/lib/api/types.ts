@@ -2,7 +2,18 @@
 // 클라이언트(src/)와 Functions(functions/)가 이 시그니처에 맞춰 병렬 개발한다.
 // 계약 변경은 트랙 간 합의 후(Architecture.md §8).
 
-export type ScammerMessage = { role: "scammer"; text: string };
+// 메신저 표면 요소(T29, Architecture.md §13.4, AC-032/045) — 실 URL 필드가 존재하지 않는다.
+// 링크는 displayText(모의 표기)·fakeLandingId(인앱 가짜 랜딩 참조)로만 표현된다.
+export type MessengerAttachment = {
+  kind: "link";
+  displayText: string;
+  fakeLandingId: string;
+  harmless: true;
+};
+
+// attachments(T29 추가, 옵셔널·하위호환) — 메신저 채팅(UX-022)의 스미싱 링크. 보이스 세션은
+// 항상 부재(functions/src/roleplay/types.ts와 1:1).
+export type ScammerMessage = { role: "scammer"; text: string; attachments?: MessengerAttachment[] };
 export type UserMessage = { role: "user"; text: string };
 
 // --- createVoiceClone (Track A · T4 · UX-003 · AC-018) ---
@@ -24,7 +35,17 @@ export type CreateVoiceCloneResponse = {
 // pendingSession.ts)를 넘기면 createVoiceClone이 만들어 둔 pending sessions/{sid} 문서를
 // createSession이 채택한다(sessionId 불일치 갭 해소, functions/src/session/index.ts 참고).
 // API.md에는 아직 반영 안 됨 — architect 확인/문서 갱신 권장.
-export type CreateSessionRequest = { scenarioId: string; voiceId: string; sessionId?: string };
+// channel/surface/messengerSkin/skinSource(T29 추가, 옵셔널·하위호환) — 메신저 훈련(UX-024)에서만
+// 채워진다. 부재 시 기존과 동일하게 voice 세션으로 생성된다(functions/src/session/types.ts와 1:1).
+export type CreateSessionRequest = {
+  scenarioId: string;
+  voiceId: string;
+  sessionId?: string;
+  channel?: "voice" | "messenger";
+  surface?: "kakao" | "sms";
+  messengerSkin?: "ios" | "samsung" | "default";
+  skinSource?: "auto" | "manual" | "fallback";
+};
 // isMock(채팅 화면 구현 시 반영, 서버는 이미 반환 중 — functions/src/session/index.ts:96): 서버가
 // LLM 어댑터로 MockLlmClient를 썼다는 뜻(계약 드리프트 해소, API.md 갱신 권장).
 export type CreateSessionResponse = {
@@ -95,6 +116,20 @@ export type EndSessionRequest = {
   endReason: EndSessionReason;
 };
 export type EndSessionResponse = { status: "ended"; reportPending: true };
+
+// --- updateMessengerSkin (T29 · UX-022 · AC-031/P-16) ---
+// 메신저 채팅(UX-022)의 UA 자동 감지·수동 전환 결과를 세션 문서에 지속한다(리포트·새로고침·
+// 수동 전환 유지 목적). sessions/{sessionId}는 firestore.rules가 클라 write를 전부 거부하므로
+// 콜러블이 필요하다(functions/src/session/types.ts와 1:1).
+export type UpdateMessengerSkinRequest = {
+  sessionId: string;
+  messengerSkin: "ios" | "samsung" | "default";
+  skinSource: "auto" | "manual" | "fallback";
+};
+export type UpdateMessengerSkinResponse = {
+  messengerSkin: "ios" | "samsung" | "default";
+  skinSource: "auto" | "manual" | "fallback";
+};
 
 // --- generateReport (Track A · T9 · UX-008 · AC-008/AC-009/AC-026) ---
 export type GenerateReportRequest = { sessionId: string };
