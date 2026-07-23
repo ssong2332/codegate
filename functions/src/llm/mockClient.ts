@@ -34,10 +34,26 @@ const ESCALATION_FILLERS = ["...", "저기요...", "잠시만요..."];
  * 해설하는 것처럼 들린다(사용자 실측 피드백, 2026-07-22). 각 설명 안에는 캐릭터가 실제로 말했을
  * 법한 '따옴표' 인용구가 최소 1개 포함되어 있으므로, 그 인용구만 뽑아 대사로 쓴다. 인용구가 없는
  * 경우에만(향후 콘텐츠 대비 안전망) 기존 방식(라벨 이후 설명부 전체)으로 폴백한다. */
+// T29 QA 재검증(2026-07-23) 회귀 수정: 인용구만 뽑아 반환하면 `[[LINK:id]]`/`[[SIGNAL:...]]`
+// 처럼 인용구 밖에 있는 구조화 마커가 통째로 버려져, 메신저 시나리오의 스미싱 링크 칩이 Mock
+// LLM 경로에서 영영 만들어지지 않는 회귀가 생겼다(QA 재검증에서 발견). 인용구는 여전히
+// "대사 본문"으로 쓰되, 원문에 구조화 마커가 있으면 그 마커만 뽑아 인용구 뒤에 그대로
+// 덧붙여 살려 보낸다(뒤이어 extractLinkMarker/향후 sentinel 파서가 이 텍스트를 정상 처리할 수
+// 있게). 마커는 사용자에게 그대로 노출되면 안 되는 제어 토큰이므로 인용구 앞이 아니라 뒤에 붙여
+// "자연스러운 문장 + 마커"라는 실제 LLM이 낼 법한 순서를 흉내낸다.
+const STRUCTURED_MARKER_PATTERN = /\[\[(?:LINK|SIGNAL):[a-zA-Z0-9_-]+\]\]/g;
+
+function extractStructuredMarkers(tacticText: string): string[] {
+  return [...tacticText.matchAll(STRUCTURED_MARKER_PATTERN)].map((m) => m[0]);
+}
+
 function extractTacticFlavor(tacticText: string): string {
   const quoted = [...tacticText.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  const markers = extractStructuredMarkers(tacticText);
+  const markerSuffix = markers.length > 0 ? ` ${markers.join(" ")}` : "";
+
   if (quoted.length > 0) {
-    return quoted.join(", ");
+    return quoted.join(", ") + markerSuffix;
   }
   const dashIndex = tacticText.indexOf("—");
   const flavor = dashIndex === -1 ? tacticText : tacticText.slice(dashIndex + 1).trim();

@@ -13,14 +13,22 @@ export type DeepvoiceLine = { lineId: string; text: string };
 // 2026-07-22). 서버 쪽은 이 값을 직접 쓰지 않지만(voiceId 해석은 클라가 마무리해서 넘김) 드리프트
 // 탐지 테스트(scenarios.test.ts)가 두 파일을 나란히 검증하므로 필드는 계속 미러링한다.
 export type VoiceMode = "clone" | "generic";
+// 메신저피싱 확장(2026-07-23, T27) — src/content/scenarios/familyAccidentDeepvoice.ts의
+// Channel/MessengerSurface/EscalationConfig와 1:1 미러(옵셔널 증분, Migration Policy).
+export type Channel = "voice" | "messenger";
+export type MessengerSurface = "kakao" | "sms";
+export type EscalationConfig = { toChannel: "voice"; voiceMode: VoiceMode };
 export type ScenarioMeta = {
   title: string;
   fraudType: string;
   estimatedDuration: string;
   difficulty: string;
   deepvoiceLines: DeepvoiceLine[];
-  voiceMode: VoiceMode;
+  voiceMode?: VoiceMode;
   callerLabel: string;
+  channel?: Channel;
+  surface?: MessengerSurface;
+  escalation?: EscalationConfig;
 };
 
 export const FAMILY_ACCIDENT_SCENARIO_ID = "family-accident-deepvoice";
@@ -28,6 +36,14 @@ export const INSTITUTIONAL_IMPERSONATION_SCENARIO_ID = "institutional-impersonat
 export const LOAN_SCAM_SCENARIO_ID = "loan-refinance-scam";
 export const TAX_REFUND_SCAM_SCENARIO_ID = "tax-refund-scam";
 export const GRANDCHILD_IMPERSONATION_SCENARIO_ID = "grandchild-impersonation";
+export const CARD_COMPANY_IMPERSONATION_SCENARIO_ID = "card-company-impersonation";
+export const COURIER_CUSTOMS_SCAM_SCENARIO_ID = "courier-customs-scam";
+export const KIDNAPPING_THREAT_SCENARIO_ID = "kidnapping-threat";
+export const REPUTATION_BLACKMAIL_SCAM_SCENARIO_ID = "reputation-blackmail-scam";
+export const MESSENGER_CHILD_IMPERSONATION_KAKAO_SCENARIO_ID = "messenger-child-impersonation-kakao";
+export const MESSENGER_FRIEND_LOAN_KAKAO_SCENARIO_ID = "messenger-friend-loan-kakao";
+export const MESSENGER_PARCEL_SMISHING_SMS_SCENARIO_ID = "messenger-parcel-smishing-sms";
+export const MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID = "messenger-subsidy-smishing-sms";
 
 export const familyAccidentDeepvoiceScenario: ScenarioMeta = {
   title: "가족 납치·사고 딥보이스",
@@ -109,10 +125,131 @@ export const grandchildImpersonationScenario: ScenarioMeta = {
   callerLabel: "손주 (사칭)",
 };
 
+// Phase 6(2026-07-23, 사용자 요청) 신규 시나리오 미러 — 클라 src/content/scenarios/*.ts와 필드 동일.
+export const cardCompanyImpersonationScenario: ScenarioMeta = {
+  title: "카드사 부정결제 사칭",
+  fraudType: "카드사 부정결제 확인 사칭",
+  estimatedDuration: "약 5~8분",
+  difficulty: "쉬움~중간 — 놀람과 확인 압박을 이용합니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "안녕하세요, 고객님. 카드사 보안팀입니다. 방금 해외 가맹점에서 고액 결제 시도가 확인되었습니다." },
+    { lineId: "line-2", text: "본인이 하신 결제가 아니시면 지금 바로 확인해 드려야 추가 승인을 막을 수 있어요." },
+    { lineId: "line-3", text: "시간이 지체되면 결제가 그대로 승인될 수 있습니다. 지금 안내해 드리는 대로만 확인해 주세요." },
+  ],
+  voiceMode: "generic",
+  callerLabel: "카드사 보안팀 (사칭)",
+};
+
+export const courierCustomsScamScenario: ScenarioMeta = {
+  title: "택배 통관 지연 사칭",
+  fraudType: "택배/통관 지연 빙자",
+  estimatedDuration: "약 5~8분",
+  difficulty: "쉬움 — 생활 밀착형 소재라 경계심이 낮은 편입니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "안녕하세요, 고객님. 택배 고객센터입니다. 고객님 명의 국제 택배가 통관에서 보류되어 연락드렸습니다." },
+    { lineId: "line-2", text: "관세 미납 건으로 확인되는데, 본인 확인만 되면 바로 통관 처리해 드릴 수 있어요." },
+    { lineId: "line-3", text: "오늘 처리하지 않으시면 반송될 수 있어서요. 지금 안내해 드리는 절차만 따라와 주시면 됩니다." },
+  ],
+  voiceMode: "generic",
+  callerLabel: "택배 고객센터 (사칭)",
+};
+
+export const kidnappingThreatScenario: ScenarioMeta = {
+  title: "자녀 납치 협박",
+  fraudType: "납치·감금 협박(공포 소구)",
+  estimatedDuration: "약 5~8분",
+  difficulty: "높음 — 공포·협박이 강한 편이라 심리적 부담이 클 수 있습니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "묻지 말고 들어요. 자녀분, 지금 우리 쪽에 있습니다." },
+    { lineId: "line-2", text: "울거나 소리 지르지 마세요. 그런다고 달라지는 거 없습니다. 신고할 생각도 하지 마세요." },
+    { lineId: "line-3", text: "한 번만 말합니다. 묻지 말고, 시키는 대로만 하세요. 시간 없습니다." },
+  ],
+  voiceMode: "generic",
+  callerLabel: "신원 불상 (협박범)",
+};
+
+export const reputationBlackmailScamScenario: ScenarioMeta = {
+  title: "불법업소 방문 사실 유포 협박",
+  fraudType: "사생활 유포 협박(신용·평판 훼손 위협)",
+  estimatedDuration: "약 5~8분",
+  difficulty: "높음 — 수치심과 공포를 이용한 협박이라 심리적 부담이 클 수 있습니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "고객님 명의로 불법 업소 출입 기록이 확인됐습니다. 설명은 됐고, 예 아니오로만 답하세요." },
+    { lineId: "line-2", text: "믿고 안 믿고는 그쪽 사정이고요. 가족분들이나 회사에 알려지길 원치 않으시면 지금 확인 절차에 협조하세요." },
+    { lineId: "line-3", text: "지금 결정 안 하시면 저도 더 못 도와드립니다. 시간 끌지 마세요." },
+  ],
+  voiceMode: "generic",
+  callerLabel: "신원 불상 (협박범)",
+};
+
+// 메신저피싱 확장(2026-07-23, T27) — src/content/scenarios/*.ts와 필드 동일(channel/surface/
+// escalation은 옵셔널 증분, Architecture.md §13.4).
+export const messengerChildImpersonationKakaoScenario: ScenarioMeta = {
+  title: "자녀 사칭 급전 요청(카카오톡)",
+  fraudType: "가족 사칭(메신저)",
+  estimatedDuration: "약 5~8분",
+  difficulty: "중간 — 정서적 압박과 채널 전환이 결합됩니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "엄마, 나야. 폰 액정 깨져서 친구 폰으로 톡 보내." },
+  ],
+  callerLabel: "자녀 (사칭)",
+  channel: "messenger",
+  surface: "kakao",
+  escalation: { toChannel: "voice", voiceMode: "clone" },
+};
+
+export const messengerFriendLoanKakaoScenario: ScenarioMeta = {
+  title: "지인 사칭 급전 요청(카카오톡)",
+  fraudType: "지인 사칭(메신저 급전)",
+  estimatedDuration: "약 5~8분",
+  difficulty: "쉬움~중간 — 친분을 이용한 부탁 형태라 경계심이 낮은 편입니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "야 오랜만이다ㅋㅋ 잘 지내지? 근데 미안한데 부탁이 있어서 톡 했어." },
+  ],
+  callerLabel: "지인 (사칭)",
+  channel: "messenger",
+  surface: "kakao",
+};
+
+export const messengerParcelSmishingSmsScenario: ScenarioMeta = {
+  title: "택배 배송 실패 스미싱(문자)",
+  fraudType: "택배 사칭 스미싱(링크형)",
+  estimatedDuration: "약 3~5분",
+  difficulty: "쉬움 — 생활 밀착형 소재라 경계심이 낮은 편입니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "[국제택배] 고객님 물품이 주소지 오류로 배송이 보류되었습니다. 아래에서 주소를 확인해 주세요." },
+  ],
+  callerLabel: "택배 배송 안내",
+  channel: "messenger",
+  surface: "sms",
+};
+
+export const messengerSubsidySmishingSmsScenario: ScenarioMeta = {
+  title: "정부지원금 안내 스미싱(문자)",
+  fraudType: "지원금 사칭 스미싱(링크형)",
+  estimatedDuration: "약 5~8분",
+  difficulty: "중간 — 이익 유혹과 채널 전환이 결합됩니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "[지원금 안내] 고객님은 정부 지원금 대상자로 확인되었습니다. 아래에서 신청 여부를 확인해 주세요." },
+  ],
+  callerLabel: "지원금 안내센터 (사칭)",
+  channel: "messenger",
+  surface: "sms",
+  escalation: { toChannel: "voice", voiceMode: "generic" },
+};
+
 export const PUBLIC_SCENARIOS: Record<string, ScenarioMeta> = {
   [FAMILY_ACCIDENT_SCENARIO_ID]: familyAccidentDeepvoiceScenario,
   [INSTITUTIONAL_IMPERSONATION_SCENARIO_ID]: institutionalImpersonationScenario,
   [LOAN_SCAM_SCENARIO_ID]: loanScamScenario,
   [TAX_REFUND_SCAM_SCENARIO_ID]: taxRefundScamScenario,
   [GRANDCHILD_IMPERSONATION_SCENARIO_ID]: grandchildImpersonationScenario,
+  [CARD_COMPANY_IMPERSONATION_SCENARIO_ID]: cardCompanyImpersonationScenario,
+  [COURIER_CUSTOMS_SCAM_SCENARIO_ID]: courierCustomsScamScenario,
+  [KIDNAPPING_THREAT_SCENARIO_ID]: kidnappingThreatScenario,
+  [REPUTATION_BLACKMAIL_SCAM_SCENARIO_ID]: reputationBlackmailScamScenario,
+  [MESSENGER_CHILD_IMPERSONATION_KAKAO_SCENARIO_ID]: messengerChildImpersonationKakaoScenario,
+  [MESSENGER_FRIEND_LOAN_KAKAO_SCENARIO_ID]: messengerFriendLoanKakaoScenario,
+  [MESSENGER_PARCEL_SMISHING_SMS_SCENARIO_ID]: messengerParcelSmishingSmsScenario,
+  [MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID]: messengerSubsidySmishingSmsScenario,
 };
