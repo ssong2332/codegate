@@ -7,6 +7,9 @@
 // placeholder를 반환하는 상태였다(functions/src/voice/index.ts 상단 제거 이력 참고).
 export { createVoiceClone } from "./voice";
 export { createSession, endSession, updateMessengerSkin, requestEscalation } from "./session";
+// 보이스→메신저 역방향 전이(T40 fast-follow, AC-039) — session 모듈에 함수 자체는 이미 있으므로
+// export만 추가한다(기존 줄은 건드리지 않음, 다른 태스크와의 diff 충돌 회피).
+export { requestReverseEscalation } from "./session";
 export { sendMessage } from "./roleplay";
 // 실시간 음성 통화 자격증명 발급(2026-07-22) — 브라우저가 ElevenLabs Agents와 직접 speech-to-speech
 // 대화를 하되 API 키는 서버에만 두기 위한 서명 URL 발급 지점.

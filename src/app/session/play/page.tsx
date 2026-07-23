@@ -28,7 +28,7 @@ import {
   useSpeechRecognition,
 } from "@/lib/recording";
 import { useRealtimeCall } from "@/lib/realtime";
-import { sendMessage, submitRealtimeTranscript } from "@/lib/api";
+import { requestReverseEscalation, sendMessage, submitRealtimeTranscript } from "@/lib/api";
 import type { TranscriptTurn } from "@/lib/api";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import CallWaveform from "@/components/CallWaveform";
@@ -84,6 +84,10 @@ export default function SessionCallPage() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [showTextInput, setShowTextInput] = useState(false);
   const [maxSessionMs, setMaxSessionMs] = useState<number | null>(null);
+  // T40 fast-follow — 역방향 명시 전환 버튼("메시지로 전환") 상태. messenger/page.tsx의
+  // escalating/escalationError와 동일한 패턴, 방향만 반대.
+  const [switchingToMessenger, setSwitchingToMessenger] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speech = useSpeechRecognition();
   const realtime = useRealtimeCall();
@@ -307,6 +311,30 @@ export default function SessionCallPage() {
     // (/session/end가 endSession→리포트 생성을 트리거하므로 그 전에 messages가 채워져야 한다).
     await flushTranscript();
     router.push("/session/end");
+  };
+
+  // T40 fast-follow — 역방향 명시 전환 버튼("메시지로 전환", §13.1/AC-039). 명시 버튼만 지원(구조화
+  // 신호·max-turn 폴백은 이 태스크 범위 밖 — docs/Tasks.md T40 행 참고). 서버가 시나리오 자격을
+  // 다시 검증하므로(requestReverseEscalation) 실패 시 화면에 그대로 안내만 남긴다.
+  const handleRequestReverseEscalation = async () => {
+    if (!sessionId || switchingToMessenger) return;
+    setSwitchError(null);
+    setSwitchingToMessenger(true);
+    try {
+      const result = await requestReverseEscalation({ sessionId });
+      if (result.escalation?.toChannel === "messenger") {
+        audioRef.current?.pause();
+        realtime.stop();
+        // 전사를 먼저 제출해 메신저 단계로 돌아간 뒤에도 리포트가 지금까지의 통화 내용을 분석할
+        // 수 있게 한다(handleEndTraining과 동일한 이유).
+        await flushTranscript();
+        router.push("/session/messenger");
+      }
+    } catch {
+      setSwitchError("메시지 화면으로 전환하지 못했습니다. 다시 시도해 주세요.");
+    } finally {
+      setSwitchingToMessenger(false);
+    }
   };
 
   const handleToggleMute = () => {
@@ -647,8 +675,18 @@ export default function SessionCallPage() {
             </div>
           )}
 
-          {/* 실제 폰 통화의 컨트롤 행: 음소거 · 통화 종료(빨강, 가운데) · 키패드.
-              가운데 빨강 버튼이 AC-006의 "상시 즉시 종료" 컨트롤을 겸한다 — 별도 "훈련 종료"
+          {/* T40 fast-follow — 역방향 전환("메시지로 전환") 오류만 컨트롤 행 위에 상시 노출.
+              메신저 채팅으로 이어질 수 있는 시나리오(scenario.channel==="messenger", 즉 메신저→
+              보이스로 정방향 에스컬레이션된 세션)에서만 아래 버튼 자체가 보이므로, 이 오류 문구도
+              같은 조건에서만 의미가 있다. */}
+          {scenario.channel === "messenger" && switchError && (
+            <p role="alert" className="mb-3 text-center text-xs leading-relaxed text-[#F0A79E]">
+              {switchError}
+            </p>
+          )}
+
+          {/* 실제 폰 통화의 컨트롤 행: 음소거 · 통화 종료(빨강, 가운데) · 키패드 · (해당 시) 메시지로
+              전환. 가운데 빨강 버튼이 AC-006의 "상시 즉시 종료" 컨트롤을 겸한다 — 별도 "훈련 종료"
               버튼을 두면 통화 화면처럼 보이지 않는다는 피드백을 반영하되, 종료 수단은 모든
               상태에서 한 번의 탭으로 도달 가능하다는 요건은 그대로 지킨다. */}
           <div className="flex items-end justify-center gap-9">
@@ -693,6 +731,34 @@ export default function SessionCallPage() {
               </button>
               <span className="text-xs text-[#8B9BA5]">키패드</span>
             </div>
+
+            {/* T40 fast-follow — 역방향 명시 전환 버튼("메시지로 전환", §13.1/AC-039). 정방향
+                "전화로 확인"(session/messenger/page.tsx)과 대칭이지만, 이쪽은 UX 설계 문서가 없어
+                버튼만(구조화 신호·max-turn 폴백 없음) 최소 배선한다. scenario.channel==="messenger"
+                (메신저 콘텐츠가 실제로 존재하는 시나리오 — 현재는 메신저→보이스로 정방향
+                에스컬레이션된 세션만 해당)일 때만 노출한다 — 서버(requestReverseEscalation)도
+                동일 조건을 재검증하므로 이중 방어다. */}
+            {scenario.channel === "messenger" && (
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleRequestReverseEscalation()}
+                  disabled={switchingToMessenger}
+                  aria-label="메시지 화면으로 전환"
+                  className="flex h-14 w-14 items-center justify-center rounded-full bg-white/15 text-xl text-white transition active:scale-95 disabled:opacity-50"
+                >
+                  {switchingToMessenger ? (
+                    <span
+                      aria-hidden="true"
+                      className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                    />
+                  ) : (
+                    <span aria-hidden="true">💬</span>
+                  )}
+                </button>
+                <span className="text-xs text-[#8B9BA5]">메시지로</span>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -29,6 +29,8 @@ import type {
   EndSessionResponse,
   RequestEscalationRequest,
   RequestEscalationResponse,
+  RequestReverseEscalationRequest,
+  RequestReverseEscalationResponse,
   UpdateMessengerSkinRequest,
   UpdateMessengerSkinResponse,
 } from "./types";
@@ -330,4 +332,57 @@ export const requestEscalation = onCall<
 
   await transitionChannel(sessionId, "messenger", "voice", "manual_button");
   return { escalation: { toChannel: "voice" } };
+});
+
+// 역방향 명시 전환 버튼("메시지로 전환", T40 fast-follow, UX-014 통화 화면·§13.1/13.0/AC-039) —
+// 통화 중인 사용자가 언제든 수동으로 보이스→메신저 전이를 요청한다. requestEscalation과 동일한
+// 인증·존재확인·소유uid·상태 검증 패턴을 쓰되 방향과 채널 사전조건이 반대다.
+//
+// **스코프 축소(T40 판단, docs/Tasks.md T40 행에 상세 근거)**: 정방향(structured_signal/
+// maxturn_fallback, T25/T26/T30)과 달리 역방향에는 그 트리거에 대응하는 UX/Architecture 설계
+// 문서가 없다(무엇을 신호로 볼지 정의된 바 없음) — 이 태스크는 명시 버튼(manual_button)만 배선한다.
+//
+// **시나리오 게이팅(판단 근거)**: transitionChannel 자체는 channel 필드만 뒤집을 뿐 시나리오별
+// 메신저 콘텐츠 존재를 요구하지 않는다. 하지만 클라 `/session/messenger`
+// (src/app/session/messenger/page.tsx)는 `scenarios[scenarioId].channel !== "messenger"`면
+// "시나리오 정보를 찾을 수 없습니다"로 막아 렌더링하지 않는다(순수 보이스 시나리오는 애초에
+// `channel:"messenger"` 메타가 없다 — functions/src/scenarios/publicMeta.ts 확인). 서버가 채널
+// 플래그만 뒤집고 실제로는 아무 데도 못 가는 상태를 만드는 대신, 메신저 콘텐츠가 존재하는
+// 시나리오(현재는 메신저→보이스로 정방향 에스컬레이션된 세션뿐)에서만 명시적으로 허용한다
+// (AC-039 "조용한 실패 금지" — 여기서는 "성공한 척하고 화면만 막힘"을 피하는 형태로 적용).
+export const requestReverseEscalation = onCall<
+  RequestReverseEscalationRequest,
+  Promise<RequestReverseEscalationResponse>
+>(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+  }
+  const { sessionId } = request.data ?? {};
+  if (!sessionId) {
+    throw new HttpsError("invalid-argument", "sessionId가 필요합니다.");
+  }
+
+  const db = getFirestore();
+  const sessionRef = db.collection("sessions").doc(sessionId);
+  const sessionSnap = await sessionRef.get();
+  if (!sessionSnap.exists) {
+    throw new HttpsError("failed-precondition", "존재하지 않는 세션입니다.");
+  }
+  const session = sessionSnap.data() as SessionDoc;
+  if (session.uid !== request.auth.uid) {
+    throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
+  }
+  if (session.status !== "active") {
+    throw new HttpsError("failed-precondition", "이미 종료되었거나 활성 상태가 아닌 세션입니다.");
+  }
+  // 부재 시 "voice"로 간주(Migration Policy, shared/types.ts SessionDoc.channel 주석과 동일 기준).
+  if ((session.channel ?? "voice") !== "voice") {
+    throw new HttpsError("failed-precondition", "보이스 채널 세션에서만 요청할 수 있습니다.");
+  }
+  if (PUBLIC_SCENARIOS[session.scenarioId]?.channel !== "messenger") {
+    throw new HttpsError("failed-precondition", "이 시나리오는 메시지 전환을 지원하지 않습니다.");
+  }
+
+  await transitionChannel(sessionId, "voice", "messenger", "manual_button");
+  return { escalation: { toChannel: "messenger" } };
 });
