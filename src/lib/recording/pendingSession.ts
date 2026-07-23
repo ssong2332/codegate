@@ -97,6 +97,42 @@ export function clearPendingSession(): void {
   window.sessionStorage.removeItem(OPENING_AUDIO_URL_KEY);
   window.sessionStorage.removeItem(SELECTED_SCENARIO_ID_KEY);
   window.sessionStorage.removeItem(ANSWERED_SESSION_KEY);
+  window.sessionStorage.removeItem(SELECTED_TRAINING_TYPE_KEY);
+  window.sessionStorage.removeItem(SELECTED_VOICE_MODE_CHOICE_KEY);
+}
+
+// 드릴다운(UX-015 유형 → UX-016 방식 → UX-017 시나리오, T28/AC-028/AC-029) 단계 간 "뒤로가기 시
+// 이전 선택 유지"(docs/UX.md P-12)용 힌트. 각 단계는 탭 즉시 다음 화면으로 이동하는 방식(별도
+// "다음" 확인 버튼 없음)이라 선택 자체가 곧 네비게이션이지만, 뒤로가기(버튼·브라우저 둘 다)로
+// 그 단계에 복귀했을 때 방금 전 선택했던 카드가 강조 표시된 채로 보여야 재입력을 강요하지 않는다
+// (뒤로 온 사용자가 "내가 뭘 골랐었는지" 다시 읽지 않아도 되게). Firestore에는 쓰지 않는 순수
+// 화면 힌트라 pendingSessionId와 동일하게 탭 범위 sessionStorage를 쓴다.
+const SELECTED_TRAINING_TYPE_KEY = "onboarding.selectedTrainingType";
+
+export type TrainingType = "voice" | "messenger";
+
+export function setSelectedTrainingType(type: TrainingType): void {
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.setItem(SELECTED_TRAINING_TYPE_KEY, type);
+}
+
+export function getSelectedTrainingType(): TrainingType | null {
+  if (!hasSessionStorage()) return null;
+  const value = window.sessionStorage.getItem(SELECTED_TRAINING_TYPE_KEY);
+  return value === "voice" || value === "messenger" ? value : null;
+}
+
+const SELECTED_VOICE_MODE_CHOICE_KEY = "onboarding.selectedVoiceModeChoice";
+
+export function setSelectedVoiceModeChoice(mode: "clone" | "generic"): void {
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.setItem(SELECTED_VOICE_MODE_CHOICE_KEY, mode);
+}
+
+export function getSelectedVoiceModeChoice(): "clone" | "generic" | null {
+  if (!hasSessionStorage()) return null;
+  const value = window.sessionStorage.getItem(SELECTED_VOICE_MODE_CHOICE_KEY);
+  return value === "clone" || value === "generic" ? value : null;
 }
 
 // 통화를 "받은" 세션 id를 기록한다(finding #4, 2026-07-23). 실시간 경로는 sendMessage를 안 타

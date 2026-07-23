@@ -74,3 +74,29 @@ body {
     animation: none;
   }
 }
+
+/* --- 드릴다운 단계 전환(UX-015→016→017, T28, docs/UX.md P-12 #3) ---
+   "다음 단계=앞으로(우→좌 슬라이드), 뒤로가기는 역방향"을 별도 라우팅 라이브러리 없이 순수 CSS로
+   표현한다. 각 단계 화면이 마운트될 때 오른쪽에서 슬라이드+페이드인 한다(전/후 무관 동일 연출 —
+   실제 "이전/다음" 방향 구분은 프로토타입 스코프 밖, 애니메이션 자체는 필수 기능이 아니므로 단순화).
+   prefers-reduced-motion이면 즉시 교체(애니메이션 없음, 기능은 동일). */
+@keyframes drilldown-step-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.drilldown-step {
+  animation: drilldown-step-in 0.2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drilldown-step {
+    animation: none;
+  }
+}
