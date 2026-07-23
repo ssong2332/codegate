@@ -15,6 +15,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   clearPendingSession,
+  consumeChallengeMode,
   getOrCreatePendingSessionId,
   setOpeningAudioUrl,
   setSelectedScenarioId as persistSelectedScenarioId,
@@ -44,6 +45,19 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
     if (!selectedScenarioId || state === "starting") return;
     const scenario = scenarios[selectedScenarioId];
     if (!scenario) return;
+
+    // T36(UX-019) 진입점 판단 — "지인에게 딥보이스 체험 보내기" 카드(/scenarios/voice)가 세운
+    // sessionStorage 플래그를 여기서 소비한다(항상 소비 — 아래 주석의 "자가 치유" 근거,
+    // pendingSession.ts의 setChallengeMode/consumeChallengeMode 주석 참고). 챌린지는 항상 clone
+    // 시나리오만 대상이라(createChallenge 서버 검증과 동일 제약) generic 시나리오 클릭은 플래그를
+    // 소비해서 지우기만 하고 아래 일반 흐름을 그대로 탄다 — 챌린지 흐름을 중간에 이탈한 뒤 무관한
+    // 훈련을 시작해도 플래그가 다음 클릭에서 자연히 정리된다.
+    if (consumeChallengeMode() && scenario.voiceMode === "clone") {
+      // 챌린지는 훈련 세션이 아니므로 createSession을 호출하지 않는다(record/clone/wait도 거치지
+      // 않는다 — createChallenge가 "완료된 클론 보유" 여부를 서버에서 직접 재확인한다).
+      router.push(`/challenge/create?scenarioId=${encodeURIComponent(selectedScenarioId)}`);
+      return;
+    }
 
     // "시작" = 새 훈련의 시작점. 직전 훈련을 "훈련 종료" 없이 빠져나온 경우 이전 사전 세션 id가
     // 남아 있을 수 있는데(그 세션은 서버에서 active라 createSession이 재사용을 거부한다, #1 가드),

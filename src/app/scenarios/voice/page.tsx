@@ -8,7 +8,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { DrilldownOptionCard } from "@/components/DrilldownOptionCard";
-import { getSelectedVoiceModeChoice, setSelectedVoiceModeChoice } from "@/lib/recording";
+import {
+  getSelectedVoiceModeChoice,
+  setChallengeMode,
+  setSelectedVoiceModeChoice,
+} from "@/lib/recording";
 import type { VoiceMode } from "@/content/scenarios";
 
 export default function ScenarioVoiceModeSelectPage() {
@@ -21,6 +25,15 @@ export default function ScenarioVoiceModeSelectPage() {
     setSelected(mode);
     setSelectedVoiceModeChoice(mode);
     router.push(`/scenarios/voice/${mode}`);
+  };
+
+  // T36(UX-019) 진입점 — 2인 소셜 챌린지는 항상 clone(내 목소리 복제) 시나리오만 대상이라, "내
+  // 목소리 복제" 카드를 다시 고르게 하지 않고 clone 드릴다운(voice/clone)으로 바로 들어간다.
+  // 플래그만 세우고 실제 분기는 그 드릴다운의 최종 시나리오 카드 액션에서 일어난다
+  // (ScenarioListView.handleStart, pendingSession.ts의 setChallengeMode 주석 참고).
+  const handleStartChallenge = () => {
+    setChallengeMode();
+    router.push("/scenarios/voice/clone");
   };
 
   return (
@@ -58,6 +71,30 @@ export default function ScenarioVoiceModeSelectPage() {
           selected={selected === "generic"}
           onClick={() => handleSelect("generic")}
         />
+      </div>
+
+      {/* T36(UX-019) 진입점 — 위 두 카드와 같은 "선택지" 그룹이 아니라 별도 기능으로 보이도록
+          시각적으로 구분한다(점선 테두리 + 구분선). */}
+      <div className="mt-2 flex flex-col gap-3 border-t border-[#E2DDD3] pt-5">
+        <p className="text-sm font-semibold text-[#6B655C]">또는</p>
+        <button
+          type="button"
+          onClick={handleStartChallenge}
+          className="flex min-h-[56px] w-full items-start gap-4 rounded-2xl border-2 border-dashed border-[#0E6B62] bg-white p-4 text-left transition hover:bg-[#E4F0EC]"
+        >
+          <span
+            aria-hidden="true"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#0E6B62]/10 text-xl"
+          >
+            🎁
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="text-lg font-bold text-[#22303A]">지인에게 딥보이스 체험 보내기</span>
+            <span className="text-sm text-[#6B655C]">
+              내 목소리로 챌린지를 만들어 링크로 보내보세요(2인 챌린지)
+            </span>
+          </span>
+        </button>
       </div>
     </main>
   );

@@ -150,3 +150,15 @@ export type RequestEscalationResponse = { escalation: { toChannel: "voice" } };
 // --- generateReport (Track A · T9 · UX-008 · AC-008/AC-009/AC-026) ---
 export type GenerateReportRequest = { sessionId: string };
 export type GenerateReportResponse = { reportId: string };
+
+// --- createChallenge / deleteChallenge (Track A/C · T36 · UX-019/020 · AC-041/044/048/049) ---
+// functions/src/challenge/types.ts와 1:1. shareToken은 createChallenge 응답에서만 평문 반환되고
+// 서버 어디에도 저장되지 않는다(§14.4) — 클라도 sessionStorage 등에 지속시키지 않는다.
+export type CreateChallengeRequest = { scenarioId: string; displayName: string };
+export type CreateChallengeResponse = {
+  challengeId: string;
+  shareToken: string;
+  linkExpiresAt: string;
+};
+export type DeleteChallengeRequest = { challengeId: string };
+export type DeleteChallengeResponse = { status: "deleted" };

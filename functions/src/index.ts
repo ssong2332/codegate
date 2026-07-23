@@ -14,7 +14,12 @@ export { createRealtimeCall } from "./realtime";
 // 실시간 통화 전사 제출(finding #1) — 음성 대화도 리포트가 분석하도록 종료 직전 클라가 제출한다.
 export { submitRealtimeTranscript } from "./realtime/submitTranscript";
 export { generateReport } from "./report";
+// 2인 소셜 챌린지 — 사용자1 생성·클론 스코프·공유 링크(T36, Architecture.md §14, ADR-0005).
+export { createChallenge, deleteChallenge } from "./challenge";
 
 // Trigger functions (클라 직접 호출 아님) — API.md `onSessionEnded` (Track C, T10, AC-021).
 // 실제 정의는 functions/src/guardrails/index.ts(트리거 소유 모듈, Architecture.md §2)에 있다.
 export { onSessionEnded } from "./guardrails";
+// Scheduled function(클라 직접 호출 아님, 이 코드베이스 첫 onSchedule) — 챌린지 복제 음성 기간제
+// 자동 삭제(T36, Architecture.md §14.3, ADR-0005 "폐기 기계 재사용").
+export { purgeExpiredChallenges } from "./challenge";
