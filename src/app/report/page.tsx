@@ -377,6 +377,17 @@ export default function ReportPage() {
       </div>
 
       <div className="mx-5 mt-4 flex flex-col gap-2.5">
+        {/* UX-018(리플레이 해설) 진입점 — UX.md UX-008 Primary Actions "대화 되짚어보기(리플레이
+            해설)" → UX-018(T33, AC-038). 요약(무엇을·언제)과 별도 화면(D-18)이라 링크만 연결한다. */}
+        {sessionId && (
+          <button
+            type="button"
+            onClick={() => router.push(`/report/replay?sessionId=${encodeURIComponent(sessionId)}`)}
+            className="min-h-[56px] rounded-2xl border-2 border-[#0E6B62] px-6 py-3 text-lg font-bold text-[#0E6B62] hover:bg-[#E4F0EC]"
+          >
+            대화 되짚어보기(리플레이 해설)
+          </button>
+        )}
         <button
           type="button"
           onClick={() => router.push("/scenarios")}
