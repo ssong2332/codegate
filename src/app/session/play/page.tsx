@@ -609,6 +609,11 @@ export default function SessionCallPage() {
                       type="text"
                       value={input}
                       onChange={(event) => setInput(event.target.value)}
+                      // 모바일 UX 개선(2026-07-23) — 입력창이 화면 하단 쪽이라 폰 키보드가 뜨면
+                      // 가려질 수 있다. 포커스 시 화면 안으로 스크롤해 가려짐을 막는다.
+                      onFocus={(event) =>
+                        event.currentTarget.scrollIntoView({ behavior: "smooth", block: "center" })
+                      }
                       disabled={sending}
                       placeholder="하고 싶은 말을 입력하세요..."
                       className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-white/30 bg-white/10 px-[18px] py-3 text-lg text-white placeholder:text-[#8B9BA5]"

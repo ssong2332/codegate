@@ -61,11 +61,14 @@ export default function ConsentPage() {
       </ul>
 
       <label className="flex min-h-[48px] items-start gap-3 rounded border border-gray-300 p-4 text-lg">
+        {/* 체크박스 크기 확대(2026-07-23 모바일 UX 개선) — 24px는 라벨 전체가 탭 영역이라
+            동작에는 문제없지만, 어르신 대상 화면에서 시각적으로 작아 보인다는 지적에 따라
+            32px로 키웠다(동의라는 핵심 동작이라 존재감을 분명히 하는 쪽을 택함). */}
         <input
           type="checkbox"
           checked={checked}
           onChange={(event) => setChecked(event.target.checked)}
-          className="mt-1 h-6 w-6 shrink-0"
+          className="mt-0.5 h-8 w-8 shrink-0 accent-[#0E6B62]"
           aria-describedby="consent-checkbox-label"
         />
         <span id="consent-checkbox-label">

@@ -76,7 +76,7 @@ export default function ScenariosPage() {
   // 테두리로 선택 상태를 이중 표기, (c) "발신자가 누구로 걸려오는지"(callerLabel)를 먼저 보여줘
   // 통화 화면과 인식이 이어지게 했다.
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-6 pb-10">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-6 pb-28">
       <header className="flex flex-col gap-2 pt-2">
         <h1 className="text-2xl font-bold text-[#22303A]">어떤 전화를 받아볼까요?</h1>
         <p className="text-base leading-relaxed text-[#6B655C]">
@@ -160,21 +160,29 @@ export default function ScenariosPage() {
         })}
       </ul>
 
-      {startError && (
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
-          <span aria-hidden="true">⚠</span>
-          <span>{startError}</span>
-        </p>
-      )}
-
-      <button
-        type="button"
-        onClick={() => void handleStart()}
-        disabled={!selectedScenarioId || state === "starting"}
-        className="min-h-[56px] rounded-xl bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white transition hover:bg-[#0B564F] disabled:opacity-50"
+      {/* 하단 고정 CTA(2026-07-23 모바일 UX 개선) — 시나리오가 5종으로 늘어 목록이 뷰포트보다
+          길어졌다. 카드 아래에만 두면 스크롤해야 도달해 "다음 뭘 눌러야 하는지"가 흐려지므로,
+          시작 버튼을 화면 하단에 항상 떠 있게 한다(sticky). 목록 위로 배경을 깔아 텍스트가
+          버튼 뒤로 비치지 않게 하고, 노치 기기 대비 하단 안전 영역을 더한다. */}
+      <div
+        className="sticky bottom-0 -mx-6 -mb-28 border-t border-[#E2DDD3] bg-[#FAF8F5]/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur"
       >
-        {state === "starting" ? "연결하는 중..." : "이 전화 받아보기"}
-      </button>
+        {startError && (
+          <p role="alert" className="mb-3 flex items-center gap-2 text-base text-[#C6392F]">
+            <span aria-hidden="true">⚠</span>
+            <span>{startError}</span>
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => void handleStart()}
+          disabled={!selectedScenarioId || state === "starting"}
+          className="min-h-[56px] w-full rounded-xl bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white transition hover:bg-[#0B564F] disabled:opacity-50"
+        >
+          {state === "starting" ? "연결하는 중..." : "이 전화 받아보기"}
+        </button>
+      </div>
     </main>
   );
 }
