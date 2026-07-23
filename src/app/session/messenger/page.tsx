@@ -10,14 +10,22 @@
 // **기존 역할극 엔진 재사용(T29 지시)**: 메시지 전송·수신은 sendMessage(functions/src/roleplay,
 // T7)를 표면만 바꿔 그대로 쓴다 — 음성 재생(audioUrl)은 무시한다(메신저는 TTS를 재생하지 않는다).
 //
-// **에스컬레이션 UI는 만들지 않는다(T29 범위 밖, T30 소관)** — 이 화면으로 진입 가능한 시나리오는
-// UX-024가 이미 에스컬레이션 없는 2종만 통과시킨 뒤이므로 "전화로 확인" 버튼은 두지 않는다.
+// **T30 후속 수정 — 에스컬레이션 연출 배선**: T29는 이 화면에 에스컬레이션 UI를 만들지 않았다
+// (UX-024가 그때는 에스컬레이션 2종을 "준비 중"으로 막아 두어서다). 이제 UX-025(voice-select)가
+// 생겨 그 2종도 이 화면까지 들어올 수 있으므로, ①명시 "전화로 확인" 버튼(scenario.escalation
+// 있을 때만, 1턴부터 상시)과 ②sendMessage 응답의 escalation 플래그 처리(전이 연출 후 /session/play
+// 이동)를 배선한다(§13.2/13.3, P-18, AC-034/036/039).
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { collection, doc, getDoc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { getPendingSessionId } from "@/lib/recording";
-import { sendMessage, updateMessengerSkin, type MessengerAttachment } from "@/lib/api";
+import {
+  requestEscalation,
+  sendMessage,
+  updateMessengerSkin,
+  type MessengerAttachment,
+} from "@/lib/api";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import { detectMessengerSkin, type MessengerSkin } from "@/lib/messenger/detectSkin";
 import EndTrainingButton from "@/components/EndTrainingButton";
@@ -76,6 +84,9 @@ export default function MessengerSessionPage() {
   const [fakeLanding, setFakeLanding] = useState<{ fakeLandingId: string; displayText: string } | null>(
     null,
   );
+  // T30 — 에스컬레이션 전이 연출(P-18) 표시 중. true가 되면 잠시 후 /session/play로 이동한다.
+  const [escalating, setEscalating] = useState(false);
+  const [escalationError, setEscalationError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // 세션·시나리오 로드 + (문자형이면) 스킨 결정. session/play/page.tsx와 동일하게 인라인 async
@@ -161,12 +172,18 @@ export default function MessengerSessionPage() {
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!sessionId || !text || sending || ended) return;
+    if (!sessionId || !text || sending || ended || escalating) return;
     setSending(true);
     setSendError(null);
     try {
       const result = await sendMessage({ sessionId, userText: text });
       setInput("");
+      // T30(§13.2) — 자동 신호든 max-turn 폴백이든, 서버가 이미 transitionChannel을 마쳤다는
+      // 뜻이다. 클라는 이 플래그만 보고 전이 연출로 넘어간다(자유텍스트 직접 분류 안 함).
+      if (result.escalation?.toChannel === "voice") {
+        setEscalating(true);
+        return;
+      }
       if (result.ended) {
         setEnded(true);
       }
@@ -177,6 +194,29 @@ export default function MessengerSessionPage() {
       inputRef.current?.focus();
     }
   };
+
+  // 명시 전환 버튼("전화로 확인", §13.3 — 1턴부터 상시). 서버가 즉시 transitionChannel(manual_button)
+  // 을 수행하고 확인 플래그를 돌려주면 handleSend와 동일한 전이 연출로 넘어간다.
+  const handleRequestEscalation = async () => {
+    if (!sessionId || escalating || ended) return;
+    setEscalationError(null);
+    try {
+      const result = await requestEscalation({ sessionId });
+      if (result.escalation?.toChannel === "voice") {
+        setEscalating(true);
+      }
+    } catch {
+      setEscalationError("통화 연결을 요청하지 못했습니다. 다시 시도해 주세요.");
+    }
+  };
+
+  // 전이 연출(P-18) — "사기범이 전화를 거는" 화면을 잠시 보여준 뒤 UX-014 수신 phase로 이음새
+  // 없이 인계한다(/session/play는 이미 phase 기본값이 incoming이라 그대로 진입한다).
+  useEffect(() => {
+    if (!escalating) return;
+    const timer = setTimeout(() => router.push("/session/play"), 1500);
+    return () => clearTimeout(timer);
+  }, [escalating, router]);
 
   const handleToggleSkin = () => {
     const next = SKIN_CYCLE[(SKIN_CYCLE.indexOf(messengerSkin) + 1) % SKIN_CYCLE.length];
@@ -258,11 +298,29 @@ export default function MessengerSessionPage() {
               </button>
             )}
           </div>
-          <EndTrainingButton onClick={handleEndTraining} />
+          <div className="flex items-center gap-2">
+            {/* 명시 전환 버튼(§13.3 — 1턴부터 상시, AC-034) — 에스컬레이션 가능 시나리오에서만. */}
+            {scenario.escalation && !ended && (
+              <button
+                type="button"
+                onClick={() => void handleRequestEscalation()}
+                disabled={escalating}
+                className="min-h-[40px] rounded-full border border-[#0E6B62] px-3 text-sm font-semibold text-[#0E6B62] hover:bg-[#E4F0EC] disabled:opacity-50"
+              >
+                📞 전화로 확인
+              </button>
+            )}
+            <EndTrainingButton onClick={handleEndTraining} />
+          </div>
         </div>
         {surface === "sms" && skinSource === "fallback" && (
           <p role="status" className="px-4 pb-2 text-xs leading-relaxed text-[#6B655C]">
             기기를 자동 인식하지 못해 기본 화면으로 표시합니다. 직접 바꿀 수 있어요.
+          </p>
+        )}
+        {escalationError && (
+          <p role="alert" className="px-4 pb-2 text-xs leading-relaxed text-[#C6392F]">
+            {escalationError}
           </p>
         )}
       </div>
@@ -390,6 +448,32 @@ export default function MessengerSessionPage() {
           onClose={() => setFakeLanding(null)}
           onEndTraining={handleEndTraining}
         />
+      )}
+
+      {/* 전이 연출(P-18, T30) — "사기범이 전화를 거는" 화면으로 잠시 전환한 뒤 통화 셸(UX-014)
+          수신 phase로 이음새 없이 인계한다(위 effect가 1.5초 후 라우팅). 새 의존성 없이 기존
+          call-ring-pulse(globals.css, UX-014와 동일 모션 톤)만 재사용한다. */}
+      {escalating && (
+        <div
+          role="status"
+          className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-[#18232B] text-white"
+        >
+          <div className="relative flex items-center justify-center">
+            <span
+              aria-hidden="true"
+              className="call-ring-pulse absolute h-24 w-24 rounded-full bg-[#7CD9C2]/30"
+            />
+            <span
+              aria-hidden="true"
+              className="call-ring-pulse absolute h-24 w-24 rounded-full bg-[#7CD9C2]/20"
+              style={{ animationDelay: "0.7s" }}
+            />
+            <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-[#41525E] text-4xl">
+              📞
+            </div>
+          </div>
+          <p className="text-xl font-bold">{scenario.callerLabel}(으)로부터 전화가 옵니다</p>
+        </div>
       )}
     </main>
   );

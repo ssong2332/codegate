@@ -99,6 +99,7 @@ export function clearPendingSession(): void {
   window.sessionStorage.removeItem(ANSWERED_SESSION_KEY);
   window.sessionStorage.removeItem(SELECTED_TRAINING_TYPE_KEY);
   window.sessionStorage.removeItem(SELECTED_VOICE_MODE_CHOICE_KEY);
+  window.sessionStorage.removeItem(MESSENGER_VOICE_SELECT_RETURN_KEY);
 }
 
 // 드릴다운(UX-015 유형 → UX-016 방식 → UX-017 시나리오, T28/AC-028/AC-029) 단계 간 "뒤로가기 시
@@ -149,4 +150,30 @@ export function markSessionAnswered(sessionId: string): void {
 export function isSessionAnswered(sessionId: string): boolean {
   if (!hasSessionStorage()) return false;
   return window.sessionStorage.getItem(ANSWERED_SESSION_KEY) === sessionId;
+}
+
+// UX-025 조건부 목소리 선택(T30, Architecture.md §13.6) — "즉시 녹음" 경로는 기존 UX-002/003
+// 온보딩(record→clone/wait)을 그대로 재사용한 뒤 voice-select 화면으로 복귀해야 한다. clone/wait는
+// 원래 클론이 끝나면 곧장 createSession→/session/play로 진행하는 화면(일반 보이스 온보딩)이라,
+// 이 플래그가 설 때만 그 진행을 건너뛰고 voice-select로 돌려보낸다(비파괴적 분기 — 일반 흐름은
+// 무변경). clone/wait는 이 플래그를 "peek"만 하고(재시도 시에도 계속 유효해야 하므로) 소비하지
+// 않는다 — voice-select 쪽에서 실제로 다 쓴 뒤 clearPendingSession()을 통해 정리된다.
+const MESSENGER_VOICE_SELECT_RETURN_KEY = "onboarding.messengerVoiceSelectReturn";
+
+export function setMessengerVoiceSelectReturn(): void {
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.setItem(MESSENGER_VOICE_SELECT_RETURN_KEY, "true");
+}
+
+export function hasMessengerVoiceSelectReturn(): boolean {
+  if (!hasSessionStorage()) return false;
+  return window.sessionStorage.getItem(MESSENGER_VOICE_SELECT_RETURN_KEY) === "true";
+}
+
+/** voice-select 화면이 복귀 트립을 실제로 처리할 때 호출한다(읽은 뒤 곧바로 지워 중복 처리 방지). */
+export function consumeMessengerVoiceSelectReturn(): boolean {
+  if (!hasSessionStorage()) return false;
+  const had = window.sessionStorage.getItem(MESSENGER_VOICE_SELECT_RETURN_KEY) === "true";
+  if (had) window.sessionStorage.removeItem(MESSENGER_VOICE_SELECT_RETURN_KEY);
+  return had;
 }

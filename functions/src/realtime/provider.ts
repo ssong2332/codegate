@@ -13,7 +13,7 @@
 // "키는 있는데 이 시나리오만 설정이 없는" 경우도 강등 대상이라, 시나리오를 새로 추가하고 설정을
 // 빠뜨렸을 때 조용히 엉뚱한 에이전트로 연결되는 사고가 나지 않는다.
 import { ELEVENLABS_API_KEY, GEMINI_API_KEY, getElevenLabsAgentIds } from "../shared/config";
-import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import { PUBLIC_SCENARIOS, type VoiceMode } from "../scenarios/publicMeta";
 import { parseAgentMap } from "./agentMap";
 import { ElevenLabsRealtimeProvider } from "./elevenLabsProvider";
 import { GeminiRealtimeProvider } from "./geminiProvider";
@@ -31,7 +31,21 @@ function readSecret(param: { value: () => string }): string {
   }
 }
 
-export function getRealtimeProvider(scenarioId: string): RealtimeVoiceProvider {
+/**
+ * effectiveVoiceMode(T30 추가, 옵셔널, Architecture.md §13.6 통합 버그 수정) — 에스컬레이션된 세션
+ * (메신저→보이스 전이)의 scenarioId는 **메신저 시나리오 ID**(예: messenger-subsidy-smishing-sms)라
+ * `PUBLIC_SCENARIOS[scenarioId].voiceMode`가 의도적으로 undefined다(T27, 메신저 시나리오엔
+ * voiceMode 개념이 없음). 그대로 두면 에스컬레이션 세션은 이 조건을 절대 만족하지 못해 Gemini
+ * 경로를 못 타고 Mock으로 강등된다. 호출부(functions/src/realtime/index.ts)가
+ * session.voiceSelectionSource로부터 유추한 값을 넘기면 그 값을 우선 쓰고, 넘기지 않으면(기존
+ * 순수 보이스 세션) 기존과 동일하게 PUBLIC_SCENARIOS를 그대로 참조한다(하위호환).
+ */
+export function getRealtimeProvider(
+  scenarioId: string,
+  effectiveVoiceMode?: VoiceMode,
+): RealtimeVoiceProvider {
+  const voiceMode = effectiveVoiceMode ?? PUBLIC_SCENARIOS[scenarioId]?.voiceMode;
+
   // ① ElevenLabs — 클론 가능 경로 우선.
   const elevenLabsKey = readSecret(ELEVENLABS_API_KEY);
   if (elevenLabsKey) {
@@ -43,7 +57,7 @@ export function getRealtimeProvider(scenarioId: string): RealtimeVoiceProvider {
 
   // ② Gemini Live — 무료 경로. 고정 음성만 되므로 generic 시나리오에만 붙인다.
   const geminiKey = readSecret(GEMINI_API_KEY);
-  if (geminiKey && PUBLIC_SCENARIOS[scenarioId]?.voiceMode === "generic") {
+  if (geminiKey && voiceMode === "generic") {
     return new GeminiRealtimeProvider(geminiKey);
   }
 

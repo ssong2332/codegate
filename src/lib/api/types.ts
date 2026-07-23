@@ -37,6 +37,10 @@ export type CreateVoiceCloneResponse = {
 // API.md에는 아직 반영 안 됨 — architect 확인/문서 갱신 권장.
 // channel/surface/messengerSkin/skinSource(T29 추가, 옵셔널·하위호환) — 메신저 훈련(UX-024)에서만
 // 채워진다. 부재 시 기존과 동일하게 voice 세션으로 생성된다(functions/src/session/types.ts와 1:1).
+// voiceSelectionSource(T30 추가, 옵셔널·하위호환, Architecture.md §13.6/UX-025) — 에스컬레이션
+// 가능한 메신저 시나리오의 조건부 목소리 선택 결과(functions/src/session/types.ts와 1:1).
+export type VoiceSelectionSource = "recorded" | "reused" | "fallback_male" | "fallback_female";
+
 export type CreateSessionRequest = {
   scenarioId: string;
   voiceId: string;
@@ -45,6 +49,7 @@ export type CreateSessionRequest = {
   surface?: "kakao" | "sms";
   messengerSkin?: "ios" | "samsung" | "default";
   skinSource?: "auto" | "manual" | "fallback";
+  voiceSelectionSource?: VoiceSelectionSource;
 };
 // isMock(채팅 화면 구현 시 반영, 서버는 이미 반환 중 — functions/src/session/index.ts:96): 서버가
 // LLM 어댑터로 MockLlmClient를 썼다는 뜻(계약 드리프트 해소, API.md 갱신 권장).
@@ -72,6 +77,12 @@ export type SendMessageResponse = {
   // 실시간 음성 통화 전환(2026-07-22 사용자 결정) — 사기범 응답 합성 오디오(서버가 이미 반환 중,
   // functions/src/roleplay/types.ts와 1:1).
   audioUrl?: string;
+  /**
+   * T30 추가(옵셔널, 하위호환) — 서버가 구조화 신호 또는 max-turn 폴백으로 이미 채널을 voice로
+   * 전이시켰다는 뜻(functions/src/roleplay/types.ts와 1:1). 클라는 이 플래그만 보고 통화 전환
+   * 연출(P-18)로 넘어간다 — 자유텍스트를 직접 분류하지 않는다(AC-024).
+   */
+  escalation?: { toChannel: "voice" };
 };
 
 // --- createRealtimeCall (UX-014 live phase · 2026-07-22 실시간 음성 대화 전환) ---
@@ -130,6 +141,11 @@ export type UpdateMessengerSkinResponse = {
   messengerSkin: "ios" | "samsung" | "default";
   skinSource: "auto" | "manual" | "fallback";
 };
+
+// --- requestEscalation (T30 · UX-022 명시 "전화로 확인" 버튼 · §13.3/AC-034) ---
+// functions/src/session/types.ts와 1:1.
+export type RequestEscalationRequest = { sessionId: string };
+export type RequestEscalationResponse = { escalation: { toChannel: "voice" } };
 
 // --- generateReport (Track A · T9 · UX-008 · AC-008/AC-009/AC-026) ---
 export type GenerateReportRequest = { sessionId: string };

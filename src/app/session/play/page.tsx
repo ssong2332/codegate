@@ -133,7 +133,15 @@ export default function SessionCallPage() {
         // 실시간 경로는 sendMessage를 안 타 turnCount가 0에 머무므로, turnCount만으로는 실시간
         // 통화 중 새로고침을 감지할 수 없다 — answered 플래그로 보완한다(finding #4). 실시간
         // 소켓은 새로고침으로 끊기므로 복원은 텍스트 폴백으로 이어진다.
-        const answered = isSessionAnswered(sessionId) || (data.turnCount as number) >= 1;
+        //
+        // T30 수정(검증 중 발견): entryChannel==="messenger"(에스컬레이션 세션)는 메신저 단계에서
+        // 이미 turnCount≥1이 쌓인 채로 이 화면에 처음 진입한다 — turnCount만으로 판단하면 P-18
+        // "수신(벨) 화면 인계"를 건너뛰고 곧장 통화 중으로 복원돼 사전 고지(PREROLL_NOTICE)·수신
+        // 연출이 통째로 스킵되는 회귀가 있었다(AC-036 "사전 고지 유지" 위반). 에스컬레이션 세션은
+        // isSessionAnswered 플래그(이 화면에서 실제로 "받기"를 눌렀는지)만으로 판단한다.
+        const isEscalated = data.entryChannel === "messenger";
+        const answered =
+          isSessionAnswered(sessionId) || (!isEscalated && (data.turnCount as number) >= 1);
         if (data.status === "ended") {
           setPhase("ended");
         } else if (data.status === "active" && answered) {

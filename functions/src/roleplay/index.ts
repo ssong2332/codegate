@@ -14,8 +14,12 @@ import { maskPII } from "../guardrails";
 import { getLlmClient } from "../llm";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
+import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import { MESSENGER_ESCALATION_FALLBACK_TURNS } from "../shared/constants";
 import { getVoiceProvider } from "../voice/provider";
-import type { MessageDoc, SessionDoc } from "../shared/types";
+import { transitionChannel } from "../session/channelTransition";
+import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
+import { extractEscalationSignal } from "./escalationSignal";
 import { extractLinkMarker } from "./linkMarker";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
 import { isSessionLimitReached } from "./sessionLimits";
@@ -90,6 +94,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         textMasked: maskedUserText,
         turnIndex: userIndex,
         createdAt: userWriteTime,
+        // T30 추가(§13.1) — 교차채널 타임라인(AC-037)용 채널 표기.
+        ...(fresh.channel ? { channel: fresh.channel } : {}),
       } satisfies MessageDoc);
       // answeredAt(통화 시작 기점, #6)은 첫 턴에만 설정한다 — 이후 턴은 기존 값을 유지한다.
       tx.update(sessionRef, {
@@ -130,13 +136,22 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const { text: linkFreeReplyText, attachments: replyAttachments } = extractLinkMarker(
       completion.text,
     );
-    const maskedReplyText = maskPII(linkFreeReplyText);
+
+    // ③-b 에스컬레이션 확장(T30, Architecture.md §13.2, AC-034/024) — 구조화 신호
+    // ([[SIGNAL:ESCALATE_VOICE]])를 링크 마커와 같은 sentinel 패턴으로 스캔·제거한다. 사용자는
+    // 마커 원문을 절대 보지 않는다. 이 스캔은 **LLM 완성 텍스트에만** 적용된다(사용자 입력에는
+    // 절대 적용하지 않음 — AC-024, escapeSentinelLookalikes가 사용자 입력의 흉내를 이미 무력화).
+    const { text: signalFreeReplyText, escalate: signalEscalate } = extractEscalationSignal(
+      linkFreeReplyText,
+    );
+    const maskedReplyText = maskPII(signalFreeReplyText);
     await messagesRef.add({
       role: "scammer",
       textMasked: maskedReplyText,
       turnIndex: nextIndex + 1,
       createdAt: Timestamp.now(),
       ...(replyAttachments ? { attachments: replyAttachments } : {}),
+      ...(session.channel ? { channel: session.channel } : {}),
     } satisfies MessageDoc);
 
     // ④ 한도 체크 → 도달 시 ended:true + status=ended(→onSessionEnded 트리거, AC-007).
@@ -174,6 +189,24 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       await triggerReportGeneration(sessionId);
     }
 
+    // ④-b 채널 전이(T30, Architecture.md §13.2/13.3, AC-034/039) — 이 시나리오가 에스컬레이션
+    // 가능(scenario.escalation 존재)하고 아직 메신저 단계일 때만 판단한다. 우선순위: 구조화 신호
+    // > max-turn 폴백(MESSENGER_ESCALATION_FALLBACK_TURNS, §13.3 PoC 전 가정치). 이번 턴에 전체
+    // 세션 한도(limitReached)로 이미 종료됐다면 전이보다 종료를 우선한다(모순된 상태 방지).
+    const canEscalate =
+      session.channel === "messenger" && Boolean(PUBLIC_SCENARIOS[session.scenarioId]?.escalation);
+    let escalationTrigger: ChannelTransitionTrigger | undefined;
+    if (canEscalate && !limitReached) {
+      if (signalEscalate) {
+        escalationTrigger = "structured_signal";
+      } else if (turnCount >= MESSENGER_ESCALATION_FALLBACK_TURNS) {
+        escalationTrigger = "maxturn_fallback";
+      }
+    }
+    if (escalationTrigger) {
+      await transitionChannel(sessionId, "messenger", "voice", escalationTrigger);
+    }
+
     // ⑤ 실시간 음성 통화 전환(2026-07-22 사용자 결정) — 사기범 응답을 VoiceProvider로 합성해
     // audioUrl을 함께 반환한다(session.voiceId는 createSession에서 이미 검증된 값). 합성 실패는
     // 텍스트 응답 자체를 막지 않는다(P-4 "핵심 루프 비차단" — 이미 T5 synthesizeDeepvoice와 동일한
@@ -206,6 +239,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       ...(limitReached ? { endReason: "limit_reached" as const } : {}),
       isMock: completion.isMock,
       ...(audioUrl ? { audioUrl } : {}),
+      ...(escalationTrigger ? { escalation: { toChannel: "voice" as const } } : {}),
     };
   },
 );

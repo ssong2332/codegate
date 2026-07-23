@@ -25,6 +25,9 @@ export {
   getSelectedTrainingType,
   setSelectedVoiceModeChoice,
   getSelectedVoiceModeChoice,
+  setMessengerVoiceSelectReturn,
+  hasMessengerVoiceSelectReturn,
+  consumeMessengerVoiceSelectReturn,
 } from "./pendingSession";
 export type { TrainingType } from "./pendingSession";
 // 실시간 음성 통화 전환(2026-07-22 사용자 결정, Phase A) — 브라우저 STT 래퍼.

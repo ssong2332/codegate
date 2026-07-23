@@ -36,8 +36,9 @@ const USER_INPUT_CLOSE = "[훈련참가자입력:데이터끝]";
 // 문자열이 그대로 들어와도, 실 LLM이 사용자 텍스트를 대사에 그대로 인용/반복하는 경우
 // extractLinkMarker(어시스턴트 출력만 스캔하는 함수 자체는 안전하지만, LLM이 사용자 문구를
 // 반향하면 그 반향된 텍스트가 어시스턴트 출력에 섞여 들어온다)가 이를 진짜 마커로 오인할 여지를
-// 원천 차단한다. `[[SIGNAL:...]]`도 같은 원리로 보호가 필요하지만 그 감지 로직 자체는 T30(에스컬
-// 레이션 구현) 소관이라 아직 코드에 없다 — T30 구현 시 이 함수에 같은 패턴을 추가할 것.
+// 원천 차단한다. `[[SIGNAL:...]]`도 정규식에 이미 함께 포함돼(T29가 선제적으로 넣어 둠) 같은 보호를
+// 받는다 — T30(에스컬레이션 구현)이 실제로 escalationSignal.ts의 감지 로직을 추가한 뒤 이 정규식이
+// `[[SIGNAL:ESCALATE_VOICE]]` 흉내도 무력화함을 확인했다(별도 수정 불필요, 코드가 이미 앞서 있었음).
 function escapeSentinelLookalikes(text: string): string {
   return text.replace(/\[\[(LINK|SIGNAL):/g, "［［$1：");
 }

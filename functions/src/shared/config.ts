@@ -27,3 +27,13 @@ export function getElevenLabsAgentIds(): string {
 export const LLM_API_KEY = defineSecret("LLM_API_KEY");
 export const LLM_PROVIDER = defineString("LLM_PROVIDER", { default: "claude" });
 export const FALLBACK_VOICE_ID = defineString("FALLBACK_VOICE_ID");
+
+/**
+ * UX-025 조건부 목소리 선택(T30, Architecture.md §13.6) — "남/여 기본 보이스" 최종 폴백 경로가
+ * 쓸 ElevenLabs 스톡 voiceId. 기존 FALLBACK_VOICE_ID와 동일한 defineString 패턴을 따른다.
+ * ⚠️ FALLBACK_VOICE_ID는 그동안 어디서도 실제로 소비되지 않던 죽은 설정이었다(T30 발견) — 이 두
+ * 값은 functions/src/session/index.ts(createSession)가 voiceSelectionSource==="fallback_male"|
+ * "fallback_female"일 때 실제로 읽어 session.voiceId를 해석한다(같은 실수 반복 방지).
+ */
+export const FALLBACK_VOICE_MALE_ID = defineString("FALLBACK_VOICE_MALE_ID");
+export const FALLBACK_VOICE_FEMALE_ID = defineString("FALLBACK_VOICE_FEMALE_ID");

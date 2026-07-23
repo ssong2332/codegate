@@ -6,15 +6,19 @@
 // 유형→시나리오 2단계로 끝난다(UX-015=①, 이 화면=②). 카드 패턴·색 토큰·sticky CTA는
 // src/app/scenarios/voice/ScenarioListView.tsx(T28)를 그대로 재사용해 일관성을 유지한다.
 //
-// **범위 축소(T29 지시, T28 "미구현 분기 처리" 선례와 동일한 패턴)**: 에스컬레이션 가능
+// **T30 후속 수정**: T29 시점에는 UX-025(조건부 목소리 선택)가 아직 없어 에스컬레이션 가능
 // 시나리오(scenario.escalation 존재 — messenger-child-impersonation-kakao,
-// messenger-subsidy-smishing-sms)는 UX-025(조건부 목소리 선택)가 아직 없다(T30 소관). 선택은
-// 가능하게 두되 "시작" 시 조용히 막지 않고 "준비 중" 안내만 표시한다(P-12 정합). 에스컬레이션이
-// 없는 2종(messenger-friend-loan-kakao, messenger-parcel-smishing-sms)만 실제로
-// createSession(channel="messenger") 후 UX-022(/session/messenger)로 진입한다.
+// messenger-subsidy-smishing-sms)를 고르면 "시작" 시 "준비 중" 안내만 띄우도록 명시적으로
+// 축소해 두었다. UX-025(/scenarios/messenger/voice-select)가 이제 생겨 그 스텁을 실제 라우팅으로
+// 교체한다 — 에스컬레이션 시나리오는 D-25대로 채팅 진입 전에 먼저 목소리를 확보해야 하므로
+// createSession을 이 화면에서 바로 호출하지 않고 voice-select로 넘긴다(그 화면이 호출한다).
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { clearPendingSession, getOrCreatePendingSessionId } from "@/lib/recording";
+import {
+  clearPendingSession,
+  getOrCreatePendingSessionId,
+  setSelectedScenarioId as setPendingSelectedScenarioId,
+} from "@/lib/recording";
 import { createSession } from "@/lib/api";
 import { scenarios, GENERIC_VOICE_ID, type ScenarioDoc, type MessengerSurface } from "@/content/scenarios";
 
@@ -30,7 +34,6 @@ export default function MessengerScenarioSelectPage() {
   const [state, setState] = useState<PageState>("ready");
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
-  const [showEscalationNotice, setShowEscalationNotice] = useState(false);
 
   // AC-029/AC-030 핵심 — 메신저 채널로 필터된 시나리오만 노출(전체 평면 나열 아님).
   const filteredEntries = Object.entries(scenarios).filter(
@@ -43,12 +46,12 @@ export default function MessengerScenarioSelectPage() {
     if (!scenario) return;
 
     if (scenario.escalation) {
-      // 목적지(UX-025, T30 소관)가 아직 없어 라우팅하지 않는다 — 조용히 무시하지 않고 안내를
-      // 명시한다(T28의 "미구현 분기 처리" 패턴과 동일).
-      setShowEscalationNotice(true);
+      // D-25(UX-025) — 조건부 목소리 선택은 전이 발생 시점이 아니라 시나리오 선택 직후에 미리
+      // 온다. createSession은 이 화면이 아니라 voice-select 화면이 호출한다(voiceId 확정 후).
+      setPendingSelectedScenarioId(selectedScenarioId);
+      router.push("/scenarios/messenger/voice-select");
       return;
     }
-    setShowEscalationNotice(false);
 
     // "시작" = 새 훈련의 시작점(voice/ScenarioListView.tsx와 동일 판단·동일 가드 — clear+create는
     // 비멱등이라 이벤트 핸들러에서만 실행한다).
@@ -172,19 +175,6 @@ export default function MessengerScenarioSelectPage() {
         <ul className="flex flex-col gap-3">
           {filteredEntries.map(([scenarioId, scenario]) => renderScenarioCard(scenarioId, scenario))}
         </ul>
-      )}
-
-      {showEscalationNotice && (
-        <p
-          role="status"
-          className="flex items-start gap-2 rounded-xl border border-[#E2DDD3] bg-[#F2EFE9] p-4 text-base text-[#6B655C]"
-        >
-          <span aria-hidden="true">🛠</span>
-          <span>
-            이 시나리오는 통화 전이 기능이 아직 준비 중입니다. 먼저 다른 메신저 시나리오를 체험해
-            보세요.
-          </span>
-        </p>
       )}
 
       <div className="sticky bottom-0 -mx-6 -mb-28 border-t border-[#E2DDD3] bg-[#FAF8F5]/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur">
