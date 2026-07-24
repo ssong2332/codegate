@@ -11,10 +11,19 @@
 // Firebase Anonymous Auth는 로컬(브라우저) persistence라 같은 사람이 같은 브라우저로 돌아오면
 // 같은 uid를 다시 얻는다(§14.7 A1) — 그래서 "재개"와 "타인의 소진된 링크 재사용 시도"를 기존 체험
 // 세션의 uid와 호출자 uid 일치 여부로 구분할 수 있다.
+//
+// T38 통합 리뷰 Major 수정(2026-07-24): 최초 진입(status="pending")과 재개(resume)는 서로 다른
+// 시간 창을 따른다 — §14.4는 "재개는 **보존기간(retentionDeleteAt, 30일)** 내에서만 허용"이라고
+// 명시하는데, 이전 구현은 두 경우 모두 `linkExpiresAt`(3일, 최초 1회성 진입 창)로 단일 검사해
+// 정당하게 동의를 마친 사용자2가 3일 뒤 돌아오면(보존기간 30일 이내인데도) 자기 세션조차 이어갈
+// 수 없었다(라이브 에뮬레이터로 재현). 최초 진입은 linkExpired, 재개는 retentionExpired로 분리.
 import type { ChallengeStatus } from "../shared/types";
 
 export type ConsentGateInput = {
-  expired: boolean;
+  /** linkExpiresAt(3일, 최초 1회성 진입 창) 경과 여부 — status="pending" 최초 진입에만 적용. */
+  linkExpired: boolean;
+  /** retentionDeleteAt(30일, 보존기간) 경과 여부 — 이미 동의를 마친 본인의 재개(resume)에만 적용. */
+  retentionExpired: boolean;
   status: ChallengeStatus;
   /** challengeId로 조회한 기존 체험 세션의 소유 uid. 세션이 아직 없으면 null. */
   existingSessionUid: string | null;
@@ -30,14 +39,17 @@ export type ConsentGateResult =
   | { action: "reject"; message: string };
 
 export function decideConsentGate(input: ConsentGateInput): ConsentGateResult {
-  if (input.expired) {
-    return { action: "reject", message: "이 링크는 만료되었습니다." };
-  }
   if (input.status === "pending") {
+    if (input.linkExpired) {
+      return { action: "reject", message: "이 링크는 만료되었습니다." };
+    }
     return { action: "create" };
   }
   if (input.status === "consented" || input.status === "in_progress") {
     if (input.existingSessionUid && input.existingSessionUid === input.callerUid) {
+      if (input.retentionExpired) {
+        return { action: "reject", message: "보존 기간이 지나 더 이상 이어갈 수 없습니다." };
+      }
       return { action: "resume" };
     }
     return { action: "reject", message: "이미 다른 사람이 동의한 챌린지입니다." };

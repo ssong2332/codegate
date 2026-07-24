@@ -60,13 +60,19 @@ export const createRealtimeCall = onCall<
   // 시간이 지났으므로(신고·만료 등) 다시 확인해야 안전하다. 이 재검증 실패는 API.md Errors 표가
   // 명시한 throw 대상("challenge 만료/미동의")이라 provider 발급 실패의 isMock 폴백과 달리 그대로
   // 던진다 — 조용히 빈 voiceId로 넘어가지 않는다.
+  //
+  // T38 통합 리뷰 Major 수정(2026-07-24) — 여기 도달했다는 것 자체가 이미 동의를 마친 세션의
+  // "재개/이어가기"라는 뜻이다(§14.4). §14.4는 재개를 **보존기간(retentionDeleteAt, 30일)** 내에서만
+  // 허용한다고 명시하는데, `linkExpiresAt`(3일, 최초 1회성 진입 창)로 검사하던 이전 구현은 3일이
+  // 지나면 보존기간이 한참 남아 있어도 정당하게 동의한 사용자2의 통화 자격증명 발급을 막았다
+  // (consentGate.ts의 동일 버그와 짝 — decideConsentGate가 이미 이 구분을 쓰므로 여기서도 통일).
   let effectiveVoiceId = session.voiceId ?? "";
   if (session.challengeId) {
     const challengeSnap = await db.collection("challenges").doc(session.challengeId).get();
     const challenge = challengeSnap.data() as ChallengeDoc | undefined;
     const statusOk = challenge?.status === "consented" || challenge?.status === "in_progress";
-    const notExpired = challenge ? challenge.linkExpiresAt.toMillis() > Date.now() : false;
-    if (!challenge || !statusOk || !notExpired) {
+    const withinRetention = challenge ? challenge.retentionDeleteAt.toMillis() > Date.now() : false;
+    if (!challenge || !statusOk || !withinRetention) {
       throw new HttpsError(
         "failed-precondition",
         "챌린지가 만료되었거나 더 이상 진행할 수 없습니다.",
@@ -83,16 +89,28 @@ export const createRealtimeCall = onCall<
       scenarioId: session.scenarioId,
       voiceId: effectiveVoiceId,
     });
+    // T38 QA NO-GO 수정, architect 판정(ADR-0006 Addendum A2, 2026-07-24) — §14.2 "추출 차단"은
+    // raw voiceId를 응답에 실어 보내는 모든 경로를 무조건 막지 않는다(ElevenLabs 프로토콜상
+    // 클라 개시 override로만 통화 중 voice를 지정할 수 있어, 동의를 마친 유일한 참가자에게
+    // 라이브 elevenlabs 경로에서 통화 동안만 보내는 건 계정 스코프 불투명 참조라 안전하다고
+    // 판단). 그러나 mock/none 경로는 이 값을 아예 쓰지 않으므로(RealtimeVoiceSession은
+    // provider==="elevenlabs"일 때만 마운트, src/app/session/play/page.tsx:448) 굳이 실어 보낼
+    // 이유가 없다 — challenge 세션이면 그 불필요한 노출을 비운다.
+    if (session.challengeId && credentials.provider !== "elevenlabs") {
+      return { ...credentials, voiceId: "" };
+    }
     return credentials;
   } catch {
     // 자격증명 발급 실패가 통화 자체를 막지 않도록, 목업(텍스트 폴백)으로 강등해 돌려준다
     // (P-4 핵심 루프 비차단). 클라는 isMock을 보고 폴백 UI를 띄운다 — 조용히 실패하지 않는다.
+    // challenge 세션이면 위와 동일한 이유로 voiceId를 비운다(이 폴백은 provider:"none"이라
+    // 어차피 클라가 쓰지 않는다).
     return {
       provider: "none",
       signedUrl: "",
       geminiToken: "",
       geminiModel: "",
-      voiceId: effectiveVoiceId,
+      voiceId: session.challengeId ? "" : effectiveVoiceId,
       language: "ko",
       isMock: true,
     };

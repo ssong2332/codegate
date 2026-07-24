@@ -4,6 +4,8 @@ Owner: architect (see AGENTS.md). Others read-only.
 Major decisions are logged in DECISIONS.md; details in adr/.
 Based on PRD Version: v1.1 · Based on UX Version: 1.7 · Last Updated: 2026-07-24
 
+> **갱신 고지(2026-07-24, T38 통합 게이트):** PRD v1.1·UX 1.7 기준 무변경(버전 갭 없음). T38 QA가 실측한 ADR-0005 §14.2 불변식 ↔ ADR-0006 A1 사이의 모순(challenge 세션에서 `createRealtimeCall`이 사용자1 raw voiceId를 사용자2에게 반환)을 **ADR-0006 Addendum A2**로 해소했다 — §14.2 "추출 차단" 문구를 무조건형에서 스코프 한정 예외형으로 정밀화(오디오 바이트는 무조건 불변, voiceId는 라이브 elevenlabs 통화 경로의 동의 taker에게만)하고, 비-elevenlabs 경로 voiceId 블랭킹을 신규 요건으로 추가(DECISIONS #28). 기존 §14 스키마·안전제약·A1은 유효.
+>
 > **갱신 고지(2026-07-24, T37 착수 게이트):** PRD v1.1·UX 1.7 기준 무변경(버전 갭 없음). 신규 §14.7(2인 소셜 사용자2 접근 메커니즘 = 익명 인증 재사용)·ADR-0006·DECISIONS #27을 추가하고, 그에 맞춰 §14.0/§14.1의 "소유자 없음/직접 접근 없음" 문구와 §7 인증 표를 정정했다. §14.7이 §14.0~§14.6의 데이터 계약(T35) 위에 **실행 메커니즘**만 확정하므로 기존 §14 스키마·안전제약은 유효하다.
 >
 > **버전 갭 고지(2026-07-24 갱신):** 본 문서는 직전에 PRD v1.1 + UX v1.6 기준이었다. 이번 소급 설계 리뷰(T40 역방향 전이 + T33 리플레이 해설 스키마 갭)를 계기로 UX 기준을 **1.6 → 1.7**로 맞춘다 — UX 1.6→1.7 델타(T24 메신저 표면·T25 에스컬레이션 전이 = UX-022/024/025)는 이미 §13.1~13.7이 선(先)확정한 구조에 UX가 정합시킨 것이라 §13 설계는 1.7과 어긋나지 않음을 재검증했다(messenger/page.tsx·escalation 흐름 실측 확인). PRD 기준은 v1.1 유지. 이번 갱신 범위는 신규 §13.8(보이스→메신저 역방향 전이 소급 비준)·§13.1 증분(`turnCountAtTransition`)과 관련 DECISIONS(#25/#26)에 한정하며, 기존 §0~§14는 유효하다.
@@ -433,7 +435,7 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 기존 ADR-0002(본인 목소리만)·ADR-0003(세션 종료 즉시 폐기) 패턴과 **정합**시킨 신규 구조. 상세는 **ADR-0005**.
 
 - **스코프 고정:** 챌린지 voiceId는 **그 챌린지 문서 컨텍스트 + Functions 자격증명 발급**을 통해서만 해석된다. 사용자2 체험 통화는 기존 `createRealtimeCall` 패턴을 재사용하되, **발급 조건 = 유효 토큰 + 동의 완료(`status==="consented"|"in_progress"`) + 미만료**. 이 조건 밖에서는 어떤 클라도 voiceId로 자격증명을 못 받는다. voiceId는 다른 챌린지에서 재사용되지 않는다(챌린지 1:1).
-- **추출 차단:** raw 오디오 바이트·ElevenLabs voiceId를 반환하는 콜러블·다운로드 경로가 **어디에도 없다**(사용자1·사용자2 공통). UX-019는 토큰만 발급, UX-020은 오디오 미노출(§UX Handoff). 사용자1의 30초 원본 녹음은 `creatorUid`만 read 가능한 Storage 경로(storage.rules)이며 합성 산출물은 Functions만 write(ADR-0002 규칙 계승).
+- **추출 차단 (ADR-0006 A2로 정밀화, 2026-07-24):** raw **오디오 바이트**를 반환·다운로드하는 경로는 **어디에도 없다**(무조건형·불변 — 오디오는 ephemeral WebSocket 재생뿐). raw **ElevenLabs voiceId**는 **단 하나의 스코프 한정 예외**를 제외하고 어떤 콜러블·다운로드 경로로도 반환되지 않는다. **예외 = 챌린지 라이브 통화 voice 참조:** 동의를 마친 단일 토큰 바운드 taker(사용자2)에게, §14.2 발급 게이트(`status∈{consented,in_progress}`+미만료+보존기간 내)를 통과한 뒤, **라이브 ElevenLabs speech 세션을 실제로 여는 경로에서만**(`createRealtimeCall` 응답에서 `provider==="elevenlabs"`일 때만) 그 통화 duration 동안 도달한다. ElevenLabs Agents는 런타임 TTS voice를 **클라 개시 override로만** 받고 서버측 voice-핀 경로가 없어(get-signed-url이 override 파라미터 미수신 — 실측) 이 라이브 경로엔 참조가 불가피하다. 안전성 근거: voiceId는 앱 ElevenLabs 계정 전용·불투명·계정 스코프 참조(IVC는 타 계정 재사용 불가)이며, 발급 게이트·단일 taker·15분 서명URL 만료·서버 잠금 에이전트 프롬프트(ADR-0004)가 노출을 최소화한다 — 동의한 통화가 이미 재생하는 그 목소리 외의 추출 능력을 주지 않는다. **강제:** challenge 세션의 `createRealtimeCall` 응답은 `provider!=="elevenlabs"`인 모든 경로(mock/none 텍스트 폴백)에서 `voiceId=""`(텍스트 폴백은 voiceId 미소비 — `play/page.tsx:448` RealtimeVoiceSession이 elevenlabs에서만 마운트). 상세·구현 지침·QA 재검증 기준은 **ADR-0006 A2**. UX-019는 토큰만 발급, UX-020은 오디오 미노출(§UX Handoff). 사용자1의 30초 원본 녹음은 `creatorUid`만 read 가능한 Storage 경로(storage.rules)이며 합성 산출물은 Functions만 write(ADR-0002 규칙 계승).
 - **ADR-0003과의 관계(중요):** 챌린지 음성은 **즉시 폐기의 예외**다 — 사용자2가 3일 내 비동기로 체험해야 하므로 세션 종료 즉시 지울 수 없다. 대신 **기간제 보존(retentionDeleteAt) + 수동 삭제 + 추출 차단**으로 대체 보증한다(AC-041). ADR-0005가 이 예외와 보증을 명문화해 ADR-0003 불변식을 **약화가 아니라 범위 한정**임을 남긴다. 보존기간 도달·수동 삭제 시 폐기는 **ADR-0003의 기존 기계(ElevenLabs voice DELETE + Storage 삭제 + `deletionLogs` 기록)를 재사용**한다.
 
 ### 14.3 보존기간 기본값 (DECISIONS #22, AC-041/OQ-25)
