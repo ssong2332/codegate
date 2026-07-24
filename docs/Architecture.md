@@ -2,8 +2,10 @@
 
 Owner: architect (see AGENTS.md). Others read-only.
 Major decisions are logged in DECISIONS.md; details in adr/.
-Based on PRD Version: v1.3 · Based on UX Version: 1.8 · Last Updated: 2026-07-24
+Based on PRD Version: v1.4 · Based on UX Version: 1.10 · Last Updated: 2026-07-24
 
+> **갱신 고지(2026-07-24, T55 아키텍트 게이트 — generic 보이스 2인 챌린지 + 체험/발송 모드 배선):** 기준을 **PRD v1.3→v1.4 · UX 1.8→1.10**으로 맞춘다(직전까지 v1.3/1.8이라 버전 갭 존재 — 리포트에 명시). v1.3→v1.4 델타는 신규 AC-056/057/058(체험/발송 선택 상향 + 보이스 clone 자기체험 배제 + generic 보이스 2인 챌린지)·OQ-32(resolved: generic 챌린지 발신자 결과 열람=메신저식 "완료 여부만")이고, UX 1.8→1.10 델타는 T54의 D-31/32/33/34·UX-026 상향·UX-016 조건부 스킵·UX-019 3종 카피다. 이번 갱신은 신규 **§14.9**(generic 보이스 챌린지 — voiceMode 판별자 확장 + 모드 클라 배선)·DECISIONS #31에 한정하며, 기존 §0~§14.8·ADR-0005/0006은 유효하다(재검증: §14.8의 "voiceId-부재를 판별자로 오버로드하지 않는다" 원칙을 이번 clone/generic 판별에도 동형 적용). **새 ADR 없음**: 이 확장도 ADR-0005(챌린지 스코프 클론)·ADR-0006(익명 uid 접근)의 하위호환 옵셔널 증분이지 새 구조 결정이 아니다(§14.8과 동일 논리 — DECISIONS #19/#30 원칙 계승).
+>
 > **갱신 고지(2026-07-24, T47 아키텍트 게이트 — 메신저 2인 챌린지 #20):** 기준을 **PRD v1.1→v1.3 · UX 1.7→1.8**로 맞춘다(직전까지 v1.1/1.7이라 버전 갭 존재). v1.1→v1.3 델타는 순수 결정 확정(OQ-29/30/31 resolved)+신규 AC-051~055(메신저 2인 챌린지 확장)이고, UX 1.7→1.8 델타는 T46의 UF-004/005 메신저 변형·D-27/28/29다. 이번 갱신은 신규 **§14.8**(음성 없는 메신저 2인 챌린지 — 채널 인지 확장)·DECISIONS #30에 한정하며, 기존 §0~§14.7·ADR-0005/0006은 유효하다(재검증: §14.7 익명-uid 접근 모델이 채널 무관임을 코드로 확인 — §14.8.2). **새 ADR 없음**: 이 확장은 ADR-0005(챌린지 스코프 클론)·ADR-0006(익명 uid 접근)의 하위호환 옵셔널 증분이지 새 구조 결정이 아니다(중복 ADR 지양 — DECISIONS #19 원칙 계승).
 >
 > **갱신 고지(2026-07-24, T38 통합 게이트):** PRD v1.1·UX 1.7 기준 무변경(버전 갭 없음). T38 QA가 실측한 ADR-0005 §14.2 불변식 ↔ ADR-0006 A1 사이의 모순(challenge 세션에서 `createRealtimeCall`이 사용자1 raw voiceId를 사용자2에게 반환)을 **ADR-0006 Addendum A2**로 해소했다 — §14.2 "추출 차단" 문구를 무조건형에서 스코프 한정 예외형으로 정밀화(오디오 바이트는 무조건 불변, voiceId는 라이브 elevenlabs 통화 경로의 동의 taker에게만)하고, 비-elevenlabs 경로 voiceId 블랭킹을 신규 요건으로 추가(DECISIONS #28). 기존 §14 스키마·안전제약·A1은 유효.
@@ -615,3 +617,86 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 | UX-022 메신저 채팅 체험 | `sendMessage`(무개정) | `sessions/{}/messages`(마스킹·`channel`) | AC-053/054 | §14.8.2 |
 | UX-007→UX-018 강제 정체공개·리플레이 | `endSession`·`generateReport`(무개정) | `reports/{}`(익명 uid) | AC-042 | §14.8.2 |
 | UX-020 발신자 결과(완료 여부만) | `listMyChallenges`·`setChallengeResultSharing` | `challenges.resultSummary`(completed만) | AC-055/043 | §14.8.3 |
+
+## 14.9 generic 보이스 2인 챌린지 + 체험/발송 모드 배선 — voiceMode 판별자 확장 (T55, PRD v1.4 MVP #22/#23, AC-056/057/058)
+> **소관 UX/AC 매핑:** UF-003 재배치·UX-015→UX-026→UX-016/017/024·UF-004(발신)·UF-005(수신) / AC-056(체험/발송 상향)·057(보이스 clone 자기체험 배제)·058(generic 보이스 챌린지 신설)·OQ-32(발신자 결과 열람=완료 여부만). **⚠️ 이 절이 T56(implementer) 착수 게이트.** #21(에스컬레이션 가능 메신저 챌린지·OQ-28)은 **범위 밖** — 설계하지 않는다. AC-057(clone 자기체험 배제)은 순수 클라 라우팅 재배치라 스키마·콜러블 변경이 없다(§14.9.5에서 UX-016 스킵으로만 다룬다).
+
+### 14.9.0 설계 요지(다른 판단보다 우선)
+1. **generic 보이스 챌린지 = §14.8 메신저 챌린지와 동형의 "깨끗한 부분집합".** 클론·`voiceId`·`onSessionEnded` voice 삭제 경로를 **아예 타지 않고**, ElevenLabs clone 합성 대신 **기존 self-training generic 경로가 이미 쓰는 `GENERIC_VOICE_ID` 폴백 합성 + Gemini Live generic 라우팅**을 그대로 재사용한다(신규 합성 스택 없음). ADR-0006 A2(라이브 elevenlabs voiceId 노출 예외)가 다루는 유출 표면이 **존재하지 않는다**(generic은 `provider!=="elevenlabs"`라 A2 예외 경로를 애초에 안 탄다 — §14.9.2). §14.7 익명-uid 소유권 격리(AC-040/042/043)는 채널·음성모드 무관이라 그대로 성립한다.
+2. **하위호환 옵셔널 증분만.** `challenges`에 명시 `voiceMode?`를 **추가**하되 기존 필드를 제거·백필하지 않는다. 기존 프로덕션 보이스 챌린지 문서(전부 clone·`voiceMode` 부재)는 **무마이그레이션**으로 유효하다 — "`voiceMode` 부재 + `channel`=voice → clone" 계산 기본값(§14.8.1의 "`channel` 부재→voice"와 동형)을 읽기 시점에 적용한다.
+3. **판별자는 명시 필드로, voiceId-부재로 오버로드하지 않는다.** §14.8.1이 "voiceId-부재를 `channel` 신호로 재활용하지 않는다"고 확정한 원칙을 이번 clone/generic 판별에도 **동형 적용**한다(§14.9.1). 결과 요약(AC-055/OQ-32)의 store-nothing-sensitive 게이트는 부재(negative)가 아닌 **양(positive) 판별자**가 필요하다.
+4. **수신자(사용자2) 체험 세션 shape는 clone·generic이 동일.** 두 경우 모두 세션은 `entryChannel:"voice"`·`channel` 부재·`voiceId` 부재(A1)·`voiceSelectionSource` 부재로 생성된다 — 오직 `scenarioId`(generic vs clone 시나리오)와 챌린지 문서의 `voiceMode`/`voiceId`만 다르다. 그래서 통화 라우팅은 **세션이 아니라 시나리오의 `voiceMode`가 구동**한다(§14.9.2). 세션 스키마는 무증분이다.
+
+### 14.9.1 (질문1) 스키마 — `challenges.voiceMode` 명시 판별자 추가 (voiceId-부재 단독은 불충분)
+**결정: `challenges`에 명시적 `voiceMode?: "clone"|"generic"`(옵셔널, 부재→`clone`)를 추가한다. `channel`이 voice(또는 부재)인 챌린지의 clone/generic을 이 필드로 판별하고, `voiceId` 유무를 판별자로 오버로드하지 않는다.** 생성 시 `PUBLIC_SCENARIOS[scenarioId].voiceMode`로 역정규화한다(§14.8.1의 `channel` 역정규화와 동형).
+
+| 필드 | 변경 | 값·제약 |
+|---|---|---|
+| `voiceMode` | **신규 옵셔널** | `"clone"`\|`"generic"`. **부재→`clone`**(계산 기본값, 무백필 — 기존 보이스 챌린지 문서는 전부 clone이라 하위호환). `channel==="messenger"`인 챌린지에는 두지 않는다(메신저는 음성모드 개념 없음, `scenarios`의 순수 메신저 시나리오가 `voiceMode` 부재인 것과 동형). 생성 시 `PUBLIC_SCENARIOS[scenarioId].voiceMode`로 확정·역정규화. |
+
+- **왜 `voiceId` 부재를 clone/generic 판별자로 재활용하지 않는가(핵심 근거, §14.8.1 원칙 동형 적용):** 오늘은 "voice 채널에서 voiceId 있음⟺clone, 없음⟺generic"이 참이다(clone만 발급, generic은 미발급 — createChallenge 실측). 그러나 (a) 이는 **부재(negative)를 의미 신호로 오버로드**하는 것이라 §14.8.1이 `channel`에 대해 이미 기각한 안티패턴과 같은 종류다. (b) 더 결정적으로, **결과 요약 게이트(§14.9.3)는 "generic이면 의심 시점을 절대 저장 안 함"을 쓰기 시점에 강제해야 하는데, 이는 `voiceMode==="generic"`이라는 양(positive) 판정을 요구**한다 — "voiceId가 없으니까 generic이겠지"라는 부재 추론에 안전 판정을 매다는 것은 A1/AC-041이 확립한 store-nothing-sensitive 문화(선례: 세션에 voiceId를 안 담아 직접 read를 무해화)와 어긋난다. (c) #21(에스컬레이션 메신저 챌린지, AC-052)이 착수되면 `channel==="messenger"`+`voiceId` 병존이 생겨 "voiceId 유무=음성모드"가 완전히 깨진다 — §14.8.1이 `channel`을 명시 필드로 둔 바로 그 이유. 명시 `voiceMode`는 지금·미래 모두에서 단일·안정 판별자다.
+- **왜 scenarioId 룩업이 아니라 역정규화 필드인가:** §14.8.1과 동일 — OQ-29(생성 시점 시나리오 확정)로 `challenges.voiceMode === PUBLIC_SCENARIOS[scenarioId].voiceMode`가 생성 시 못박히고 드리프트하지 않는다. 수신자 핫패스(getChallengeLanding→consentChallenge)·발신자 결과 파생(setChallengeResultSharing)이 `PUBLIC_SCENARIOS`를 재조회하지 않도록 **토큰 해석 primitive(`resolveChallengeByTokenHash`)의 얇은 projection에 `voiceMode` 한 필드만 더한다**(`channel`을 더한 §14.8.1과 동일 — voiceId/linkTokenHash 같은 민감 필드가 아니라 반환 안전).
+
+**createChallenge 음성모드 분기(§14.9.1, 현 코드 L64–90 대비):**
+- `scenarioChannel = scenario.channel ?? "voice"`. `scenarioVoiceMode = scenario.voiceMode`(voice 시나리오에만 존재).
+- **현행 게이트(challenge/index.ts L72–78)는 `scenarioChannel==="voice"`일 때 `scenario.voiceMode !== "clone"`를 전부 거부**한다 — 이것이 generic 보이스 챌린지 생성을 막는 지점이다(AC-058 신규 능력). 이 게이트를 **완화**한다: voice 채널에서 `voiceMode==="clone"`이면 기존 클론 경로(L118–169: 최근 ready 세션 재사용→챌린지 전용 클론 발급→`voiceId` 기록), `voiceMode==="generic"`이면 **클론 블록 전부 스킵**(§14.8의 메신저 스킵과 동형), `voiceId` 미기록, `voiceMode:"generic"` 기록. 그 외(voiceMode 부재인 voice 시나리오가 있다면) 기존대로 거부.
+- **문서 write(L184–196):** `voiceMode`도 조건부 spread로 기록한다 — clone은 생략(부재→clone, 기존 문서 형태 유지) 또는 명시 `"clone"` 중 택1, **generic만 `voiceMode:"generic"`을 반드시 기록**(Firestore admin SDK undefined 거부 관례·기존 `channel:"messenger"` 조건부 spread와 동일 패턴).
+- **적격 generic 시나리오:** `PUBLIC_SCENARIOS`의 `voiceMode:"generic"` 보이스 시나리오(현행 콘텐츠상 다수 — publicMeta.ts 실측). clone 2종은 기존 AC-044 경로 무변경.
+- **활성 상한:** 음성모드 분기 이전에 동일 적용(§14.9.4 — 이미 채널·음성모드 무관 전역).
+
+### 14.9.2 (질문2·3) `consentChallenge` 오프닝 합성 3분기 + `createRealtimeCall` 무개정
+**결정: `consentChallenge`의 오프닝 오디오 합성만 3분기(messenger:스킵 / clone:challenge.voiceId / generic:`GENERIC_VOICE_ID`)로 확장하고, `createRealtimeCall`은 무개정한다 — generic 수신자 통화는 기존 generic 시나리오 라우팅(getRealtimeProvider의 voiceMode="generic"→Gemini Live)이 이미 정확히 처리한다.**
+
+- **`consentChallenge` 오프닝 합성 3분기(challenge/userAccess.ts L206–222 실측 대비):** 현행은 `scenarioChannel!=="messenger"`일 때 `if (challenge.voiceId) synthesize({voiceId: challenge.voiceId})`다. generic 챌린지는 `voiceId`가 없어 이 `if`가 거짓이 되어 **오프닝 오디오가 생성되지 않는다**(현재는 텍스트만) — 하지만 self-training generic(createSession L198–209)은 `GENERIC_VOICE_ID`로 오프닝을 합성한다. 파리티를 위해 다음으로 확장한다:
+  - `channel==="messenger"` → 합성 스킵(§14.8.2 무변경).
+  - `channel`=voice + `voiceMode`(부재→clone)==="clone" → `synthesize({voiceId: challenge.voiceId})`(기존).
+  - `channel`=voice + `voiceMode`==="generic" → `synthesize({voiceId: GENERIC_VOICE_ID})` — self-training generic과 **동일 값·동일 provider**(현재 MockVoiceProvider는 voiceId를 무시하고, 실 TTS 전환 시 self-training과 같은 TODO로 실제 stock voice로 교체됨). **판별은 `challenge.voiceMode`로**(voiceId-부재 추론 금지, §14.9.1). `openingMessageText`(텍스트)는 세 경우 모두 그대로 반환.
+- **`createRealtimeCall` 무개정(§14.9.0.4의 귀결 — 실측 근거):** generic 챌린지 수신자가 이 콜러블을 호출하면:
+  1. `session.challengeId`가 있어 challenge-voiceId 재해석·게이트 재검증 블록(realtime/index.ts L70–87)에 들어간다 — status∈{consented,in_progress}+보존기간 재검증은 **음성모드 무관**이라 그대로 성립(AC-040 재검증 유지). `effectiveVoiceId = challenge.voiceId ?? ""` = **""**(generic은 voiceId 부재 — 기존 방어적 폴백이 그대로 커버, 신규 분기 불요).
+  2. `effectiveVoiceMode = resolveEffectiveVoiceMode(session.voiceSelectionSource)` = **undefined**(챌린지 세션은 voiceSelectionSource 미설정) → `getRealtimeProvider(scenarioId, undefined)`가 `PUBLIC_SCENARIOS[scenarioId].voiceMode`(=generic 시나리오이므로 **"generic"**)를 그대로 써 **Gemini Live generic 경로**로 라우팅한다(realtime/provider.ts L47/L60 실측). clone voiceId 없이 고정 프리셋 음성으로 통화 — self-training generic과 완전 동일.
+  3. `credentials.provider`가 `"gemini"`(또는 키 미설정 시 `"none"`)이고 `session.challengeId`가 있으므로 **A2 블랭킹 분기(L104–106)가 `voiceId:""`를 반환** — generic은 애초에 보호할 clone voiceId가 없어 A2의 elevenlabs-전용 노출 예외를 **한 줄도 타지 않는다**(§14.9.0.1). 이것이 generic을 clone보다 단순·저위험으로 만드는 핵심이다.
+- **결론:** 이 절의 유일한 코드 변경은 `consentChallenge`의 합성 3분기 1곳이다. `createRealtimeCall`·A2·provider·callTypes·클라 통화 셸은 무개정(generic 라우팅이 기존 self-training generic 기계에 이미 존재). **갭(implementer 주의):** `GENERIC_VOICE_ID`는 현재 클라(`src/content/scenarios/index.ts`)에만 있고 Functions에서 import 불가 — consentChallenge가 쓰려면 서버측 상수가 필요하다(§14.9.6).
+
+### 14.9.3 (질문3) `deriveChallengeResultSummary` — voiceMode 게이트 추가(OQ-32, 쓰기 시점 강제)
+**결정: `deriveChallengeResultSummary`에 `voiceMode`를 추가로 넘겨, `channel==="messenger"` 또는 `voiceMode==="generic"`이면 `{completed:true}`만 파생한다. clone 보이스 챌린지만 장래 의심-타이밍 확장 여지를 유지한다.**
+
+- **근거(OQ-32 resolved = planner default "완료 여부만", AC-055 동형):** OQ-32는 generic 보이스 챌린지 발신자 결과 열람을 **메신저 챌린지(AC-055)와 같은 계층("완료 여부만")**으로 확정했다(사용자 명시 재검토 없이 default 적용, UX D-34/OQ-U13). 현행 `deriveChallengeResultSummary(report, channel="voice")`(userAccess.ts L279–292)는 `channel==="messenger"`만 완료-전용으로 게이트하고, `channel==="voice"`는 장래 의심-타이밍(DECISIONS #26 resistedMoments)을 채울 clone 경로로 남겨둔다. generic도 `channel==="voice"`라 이 함수만으로는 clone과 구분되지 않는다 — 그래서 **`voiceMode`를 함께 넘겨** `voiceMode==="generic"`을 완료-전용으로 게이트한다.
+- **왜 쓰기 시점(파생)에서 게이트하는가(§14.8.3 원칙 계승):** 읽기 필터만 두면 장래 clone용 의심-타이밍이 구현돼 저장되기 시작할 때 generic 문서에도 같은 write 경로가 실수로 값을 채우면 읽기 필터 누락 즉시 유출로 이어진다. **generic은 애초에 suspicion 필드를 계산·저장하지 않으면**(store-nothing-sensitive) 읽기 버그가 나도 셀 값이 없다(A1·§14.8.3와 동형 방어).
+- **구체(현 코드 대비):**
+  - 시그니처를 `deriveChallengeResultSummary(report, channel="voice", voiceMode="clone")`로 확장. 분기: `channel==="messenger"` → `{completed:true}`(기존); `voiceMode==="generic"` → `{completed:true}`(신규, OQ-32); else(voice clone) → 장래 의심-타이밍 확장 지점(현재는 `{completed:true}`).
+  - 호출부 `setChallengeResultSharing`(userAccess.ts L340)은 `deriveChallengeResultSummary(report, resolved.channel, resolved.voiceMode)`로 `voiceMode`를 함께 넘긴다 — `resolveChallengeByTokenHash` projection에 `voiceMode`를 추가(§14.9.1)했으므로 별도 문서 재조회 불요.
+- **2차 하드닝(권장, load-bearing은 1차):** `listMyChallenges`(challenge/index.ts)도 generic 행에서 `suspicionTimeLabel`을 표면화하지 않도록 음성모드 분기(§14.8.3의 메신저 2차 하드닝과 동일 벨트+멜빵). 1차(쓰기 미저장)가 주 강제.
+
+### 14.9.4 (질문4) 활성 챌린지 상한 — 이미 채널·음성모드 무관 전역 합산(무변경, 재확인)
+**결정: 변경 불요.** §14.8.4에서 이미 실측한 대로 상한 쿼리(challenge/index.ts L99–107)는 `creatorUid`+`status`+`linkExpiresAt` 필터뿐이라 `channel`/`voiceId`/`voiceMode` 어느 것으로도 필터하지 않는다 — clone·generic·메신저 챌린지가 **한 카운트에 합산**되어 `CHALLENGE_FREE_ACTIVE_CAP(3)`로 강제된다(AC-058 "AC-049 전역 카운트에 그대로 합산", OQ-30 무코드변경 성립). `challenges` 인덱스(`creatorUid+status`)도 음성모드 컬럼이 없어 그대로 재사용. implementer는 generic 생성 경로가 음성모드 분기 이전에 동일 상한 체크를 거치게만 유지하면 된다(§14.9.1 분기 순서 — 기존 createChallenge가 이미 그 순서).
+
+### 14.9.5 (질문5) 체험/발송 모드(self|send) 클라이언트 sessionStorage 힌트 배선
+**결정: UX-026에서 정하는 모드를 `sessionStorage` 힌트 `onboarding.experienceMode: "self"|"send"`로 두고, 드릴다운 형제 힌트(`getSelectedTrainingType`/`getSelectedVoiceModeChoice`)와 **동일한 peek 방식**으로 여러 하류 화면이 읽게 한다. T49가 은퇴시킨 단발 소비형 `setChallengeMode` 안티패턴을 재생성하지 않는다.**
+
+- **왜 sessionStorage 힌트인가(코드베이스 기존 관례):** 이 프로젝트는 "이른 화면에서 세운 선택을 몇 화면 뒤에서 소비"하는 순수 화면 상태를 전부 탭 범위 `sessionStorage`로 처리한다(`pendingSession.ts` — `setSelectedTrainingType`(UX-015)·`setSelectedVoiceModeChoice`(UX-016)·`setSelectedScenarioId`, Firestore 미기록). 모드도 정확히 이 부류(신규 데이터·신규 필드 없음 — UX-026 Data Operations "선택 상태는 클라 로컬" 실측)라 동일 관례를 따른다.
+- **신규 힌트 계약(pendingSession.ts에 추가):**
+  - `export type ExperienceMode = "self" | "send";`
+  - `setExperienceMode(mode)` / `getExperienceMode(): ExperienceMode | null` — **peek 전용**(읽어도 소비하지 않음). `getSelectedTrainingType`/`getSelectedVoiceModeChoice`와 동일 형태(값 검증 후 반환, 없으면 null).
+  - `clearPendingSession()`의 제거 목록에 `EXPERIENCE_MODE_KEY`를 추가한다(다른 드릴다운 힌트와 함께 세션 종료 시 정리 — 현행 목록에 `SELECTED_TRAINING_TYPE_KEY`·`SELECTED_VOICE_MODE_CHOICE_KEY`가 이미 있는 것과 동형, L130–132).
+- **스레딩(UX-026에서 set → 하류에서 peek):**
+  1. **UX-026(experience-select)**: 유형(voice|messenger)은 이미 `getSelectedTrainingType()`로 알고, 사용자가 "본인이 체험/지인에게 보내기" 탭 시 `setExperienceMode("self"|"send")` 후 다음 화면으로 네비게이트.
+  2. **UX-016 노출 여부(AC-057)**: voice + `self` → **UX-016을 건너뛰고** generic 강제로 UX-017(generic 필터)로 직행(clone 자기체험 배제 — 순수 클라 라우팅, 스키마·콜러블 무관). voice + `send` → UX-016(clone/generic 방식 선택) 정상 노출.
+  3. **UX-017/UX-024 필터·Exit(AC-057/058)**: `self` → 시나리오 필터 generic 강제(voice)·에스컬레이션 포함(messenger 전체), Exit=`createSession`→UX-014(voice)/UX-022(messenger). `send` → 필터=선택 `voiceMode`(voice: clone|generic)·비에스컬레이션만(messenger, AC-051), Exit=UX-019(챌린지 만들기).
+  4. **최종 목적지**: `self`=세션 생성(`createSession`) 후 체험(UX-014/UX-022). `send`=`createChallenge`(UX-019). 두 콜러블 모두 서버측 인증·게이팅이 별도로 있어(§14.9.1·createSession L57/L108), 이 클라 힌트는 **라우팅·필터 편의일 뿐 안전 판정을 게이팅하지 않는다**(위조돼도 서버가 재검증 — sessionStorage 힌트의 기존 관례).
+- **왜 T49가 은퇴시킨 `setChallengeMode`를 재생성하지 않는가(핵심 — 안티패턴 회피):** T49(UX.md D-30)가 제거한 `setChallengeMode()`/`consumeChallengeMode()`는 (a) **단발 소비형**(consume-on-read)이고 (b) **단일 진입점(드릴다운 진입 카드)에서 단일 분기(/challenge/create)만 게이팅**하는 과협(over-narrow) 플래그였다. 은퇴 사유는 D-30이 "체험/발송" 결정을 **시나리오 확정 직후**(소비 지점 바로 옆)로 옮겨 화면 간 상태를 들고 다닐 필요 자체가 사라졌기 때문이다(pendingSession.ts L211–219 실측). 그런데 v1.10 D-31은 그 결정을 다시 **유형 선택 직후(UX-026)**로 상향해 **여러 화면(UX-016 노출·UX-017/UX-024 필터·최종 라우팅) 뒤에서 소비**하게 만들었다 — 즉 크로스-화면 캐리가 다시 정당하게 필요해졌다. 다만 이번엔 그 캐리를 **① peek 방식(단발 소비 아님 — 뒤로가기/여러 소비자가 반복 읽어도 유효)·② 형제 드릴다운 힌트와 동일한 enum·③ `clearPendingSession` 공용 정리 목록 편입**으로 **올바른 크기**로 만든다(T49가 지적한 "단일 목적·소비형" 과협을 피함). 즉 "플래그 자체를 되살리는" 게 아니라 "형제 힌트(`selectedTrainingType`/`selectedVoiceModeChoice`)와 동급의 정식 드릴다운 상태"로 편입한다.
+
+### 14.9.6 폐기·서버상수 갭 (implementer 주의)
+- **`GENERIC_VOICE_ID` 서버측 부재**: 현재 `GENERIC_VOICE_ID`("generic-default-voice")는 클라 전용 상수(`src/content/scenarios/index.ts`)라 `consentChallenge`(functions)가 import할 수 없다. §14.9.2의 generic 오프닝 합성을 위해 **서버측 상수**가 필요하다 — `functions/src/shared/constants.ts` 또는 `functions/src/scenarios/publicMeta.ts`에 동일 값 상수를 두고(클라와 값 동기화, 실 TTS 전환 시 양쪽 동일 TODO), 또는 기존 `FALLBACK_VOICE_MALE_ID`/`_FEMALE_ID` 서버 config 패턴을 참고한다. 값 자체는 현재 Mock/Gemini-generic이 무시하므로 placeholder지만, "self-training generic과 같은 값"을 유지해 실 TTS 전환 시 한 곳만 교체하면 되게 한다.
+- **폐기 경로**: generic 보이스 챌린지도 §14.8.5와 동일하게 `voiceId` 부재라 `purgeChallenge`/`deleteChallenge`의 `voiceId: string` 시그니처가 `undefined`를 허용해야 한다(ElevenLabs DELETE 스킵 no-op). §14.8.5가 이미 이 갭을 메신저 챌린지용으로 명시했으므로 generic도 그 수정에 자동 포함된다(둘 다 voiceId 부재) — 추가 작업 없음, 확인만.
+- **`retentionDeleteAt`은 여전히 세팅**(챌린지 문서 자동 만료 — §14.8.5와 동일). 폐기 대상은 클론 음성이 아니라 챌린지 문서·`deletionLogs`뿐(음성·Storage 없음). AC-041 음성 조항은 대상 부재로 무효(AC-058 명시).
+
+### 14.9.7 UX Traceability 증분 (화면 → 콜러블/컬렉션)
+| Screen/Flow | 콜러블 | Firestore | 핵심 AC | §14.9 매핑 |
+|---|---|---|---|---|
+| UX-026 체험/발송 선택 | (없음 — 클라 로컬 `experienceMode` 힌트) | (없음) | AC-056 | §14.9.5 |
+| UX-016 목소리 방식(send 전용) | (없음 — 클라 로컬 `selectedVoiceModeChoice`) | (없음) | AC-057/058 | §14.9.5 |
+| UX-017 시나리오(self=generic 강제 / send=선택) | self: `createSession` / send: 없음 | `sessions`(self) | AC-057/058 | §14.9.5 |
+| UX-019 챌린지 생성(generic 보이스) | `createChallenge`(음성모드 분기) | `challenges`(`voiceMode:"generic"`·`voiceId` 부재·`channel` 부재→voice) | AC-058 | §14.9.1 |
+| UX-021 동의 랜딩(generic 보이스 수신) | `getChallengeLanding`·`consentChallenge`(오프닝 합성 generic 분기) | `challenges`·`sessions`(익명 uid·`voiceId` 부재) | AC-040/058 | §14.9.2 |
+| UX-014 통화 체험(generic 수신자) | `createRealtimeCall`(무개정 — 시나리오 voiceMode="generic"→Gemini) | `sessions`(voiceId 부재) | AC-058 | §14.9.2 |
+| UX-020 발신자 결과(완료 여부만) | `listMyChallenges`·`setChallengeResultSharing`(voiceMode 게이트) | `challenges.resultSummary`(completed만) | AC-055/OQ-32 | §14.9.3 |
