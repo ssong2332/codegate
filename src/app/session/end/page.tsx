@@ -17,6 +17,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { endSession } from "@/lib/api";
 import { clearPendingSession, getPendingSessionId } from "@/lib/recording";
+import { Button } from "@/components/ui";
 
 type PageState = "no-session" | "ending" | "ended" | "error";
 
@@ -126,28 +127,24 @@ export default function SessionEndPage() {
   if (state === "no-session") {
     body = (
       <>
-        <p role="alert" className="flex items-center gap-2 text-base text-red-700">
+        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
           <span aria-hidden="true">⚠</span>
           <span>
             진행 중인 훈련 세션 정보를 찾을 수 없습니다. 처음 화면으로 돌아가 다시 시작해
             주세요.
           </span>
         </p>
-        <button
-          type="button"
-          onClick={handleGoHome}
-          className="min-h-[48px] rounded border border-gray-400 px-6 py-3 text-lg font-bold hover:bg-gray-100"
-        >
+        <Button type="button" variant="secondary" onClick={handleGoHome}>
           처음으로
-        </button>
+        </Button>
       </>
     );
   } else if (state === "ending") {
     body = (
-      <p className="flex items-center gap-2 text-lg" role="status">
+      <p className="flex items-center gap-2 text-lg text-[#22303A]" role="status">
         <span
           aria-hidden="true"
-          className="h-5 w-5 animate-spin rounded-full border-2 border-gray-400 border-t-transparent"
+          className="h-5 w-5 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-transparent"
         />
         훈련 자료를 정리하고 리포트를 준비하는 중입니다...
       </p>
@@ -155,73 +152,70 @@ export default function SessionEndPage() {
   } else if (state === "error") {
     body = (
       <>
-        <p role="alert" className="flex items-center gap-2 text-base text-red-700">
+        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
           <span aria-hidden="true">⚠</span>
           <span>훈련 종료 처리 중 문제가 발생했습니다. 다시 시도해 주세요.</span>
         </p>
-        <button
-          type="button"
-          onClick={handleRetry}
-          className="min-h-[48px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800"
-        >
+        <Button type="button" variant="primary" onClick={handleRetry}>
           다시 시도
-        </button>
+        </Button>
       </>
     );
   } else {
     body = (
       <>
-        <p className="text-base text-gray-700" role="status">
+        <p className="text-sm text-[#6B655C]" role="status">
           훈련 중 사용된 음성·합성 파일은 폐기 절차가 시작되었습니다.
         </p>
         <div className="flex flex-col gap-3">
           {challenge ? (
             // T37(UF-005 step4, AC-042 "강제") — 2인 사용자2는 리포트(UX-008)가 아니라 리플레이
             // 해설(UX-018)로 곧장 인계된다. 이 화면에는 "리포트 보기" 버튼을 아예 두지 않는다.
-            <button
-              type="button"
-              onClick={handleViewReplay}
-              className="min-h-[56px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800"
-            >
+            <Button type="button" variant="primary" onClick={handleViewReplay}>
               대화 되짚어보기
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
-              onClick={handleViewReport}
-              className="min-h-[56px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800"
-            >
+            <Button type="button" variant="primary" onClick={handleViewReport}>
               리포트 보기
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            onClick={handleGoHome}
-            className="min-h-[48px] rounded border border-gray-400 px-6 py-3 text-lg font-bold hover:bg-gray-100"
-          >
+          <Button type="button" variant="secondary" onClick={handleGoHome}>
             처음으로
-          </button>
+          </Button>
         </div>
       </>
     );
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-8 p-8">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center gap-6 bg-[#FAF8F5] px-6 py-10 text-center">
       {/* AC-023: "이것은 훈련이었습니다" 명시 고지. 색이 아닌 아이콘+텍스트로 강조, 항상 노출. */}
+      <div
+        aria-hidden="true"
+        className="flex h-[88px] w-[88px] items-center justify-center rounded-full bg-[#E4F0EC]"
+      >
+        <svg width="40" height="40" viewBox="0 0 13 13" fill="none">
+          <path
+            d="M2.5 7L5.2 9.7L10.5 3.5"
+            stroke="#0E6B62"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </div>
       <h1
         ref={headingRef}
         tabIndex={-1}
-        className="flex items-center gap-3 text-2xl font-bold leading-relaxed outline-none"
+        className="text-[26px] font-bold leading-[1.35] text-[#22303A] outline-none"
       >
-        <span aria-hidden="true">✅</span>
-        <span>이것은 훈련이었습니다</span>
+        이것은 훈련이었습니다
       </h1>
 
       {/* AC-015 디스컬레이션(안심) 메시지 — 완화 톤·큰 글씨. 2인(UF-005) 재사용 시 강제 정체
           공개 문구로 교체한다(Architecture.md §14 Business Rules "○○님이 준비한 훈련이었습니다.
           실제 상황이 아니었습니다" 문구를 그대로 쓴다, AC-042). */}
-      <p className="text-lg leading-relaxed text-gray-800">
+      <p className="text-base leading-[1.7] text-[#6B655C]">
         {challenge ? (
           <>
             {challenge.displayName}님이 준비한 훈련이었습니다. 실제 상황이 아니었습니다. 지금까지
@@ -237,7 +231,7 @@ export default function SessionEndPage() {
         )}
       </p>
 
-      {body}
+      <div className="flex w-full flex-col items-stretch gap-3">{body}</div>
     </main>
   );
 }

@@ -12,8 +12,24 @@ import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/auth";
 import { deleteChallenge } from "@/lib/api";
 import { fetchMyChallenges, mapChallengesToListItems, type ChallengeListItem } from "@/lib/challenge";
+import { Badge, Button } from "@/components/ui";
 
 type PageState = "loading" | "error" | "empty" | "success";
+
+// mapChallengeItems.ts의 resolveStatusLabel이 만드는 문장 중 "아직 안 해봄"에 해당하는 정확한
+// 문자열 하나만 대기(caution) 배지로 취급하고, 그 외(전부 완료 계열 라벨)는 완료(success) 배지로
+// 다룬다 — statusLabel 문자열에 결합된 판정이라 다소 취약하지만, 이 화면 파일만 손대라는 태스크
+// 범위상 mapChallengeItems.ts에 원본 status를 노출하도록 바꿀 수 없어 택한 절충이다(구현 보고서
+// 참고). "만료" 배지는 라벨이 대기와 구분되지 않아(원본 데이터에 없음) 만들지 않는다 — 없는
+// 데이터를 지어내지 않는다는 원칙.
+const PENDING_LABEL = "상대가 아직 해보지 않았습니다";
+
+function resolveStatusBadge(statusLabel: string): { variant: "caution" | "success"; text: string } {
+  if (statusLabel === PENDING_LABEL) {
+    return { variant: "caution", text: "대기" };
+  }
+  return { variant: "success", text: "완료" };
+}
 
 export default function ChallengeResultsPage() {
   const router = useRouter();
@@ -89,11 +105,11 @@ export default function ChallengeResultsPage() {
 
   if (state === "loading") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 p-8 text-center">
-        <p className="flex items-center gap-2 text-lg" role="status">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
+        <p className="flex items-center gap-2 text-lg text-[#22303A]" role="status">
           <span
             aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-gray-400 border-t-transparent"
+            className="h-5 w-5 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-transparent"
           />
           내 챌린지를 불러오는 중입니다...
         </p>
@@ -103,78 +119,104 @@ export default function ChallengeResultsPage() {
 
   if (state === "error") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-red-700">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
           <span aria-hidden="true">⚠</span>
           <span>내 챌린지를 불러오지 못했습니다. 다시 시도해 주세요.</span>
         </p>
-        <button
-          type="button"
-          onClick={handleRetry}
-          className="min-h-[48px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800"
-        >
-          다시 시도
-        </button>
+        <div className="w-full max-w-xs">
+          <Button type="button" onClick={handleRetry}>
+            다시 시도
+          </Button>
+        </div>
       </main>
     );
   }
 
   if (state === "empty") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 p-8 text-center">
-        <h1 className="text-xl font-bold">내 챌린지</h1>
-        <p className="text-base text-gray-600">아직 만든 챌린지가 없습니다.</p>
-        <button
-          type="button"
-          onClick={() => router.push("/scenarios/voice")}
-          className="min-h-[48px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800"
-        >
-          새 챌린지 만들기
-        </button>
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
+        <h1 className="text-2xl font-bold text-[#22303A]">내 챌린지</h1>
+        <p className="text-base text-[#6B655C]">아직 만든 챌린지가 없습니다.</p>
+        <div className="w-full max-w-xs">
+          <Button type="button" onClick={() => router.push("/scenarios/voice")}>
+            새 챌린지 만들기
+          </Button>
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-8 p-8">
-      <h1 className="text-2xl font-bold">내 챌린지</h1>
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-[#FAF8F5] p-6">
+      <header className="flex flex-col gap-2 pt-2">
+        <h1 className="text-2xl font-bold text-[#22303A]">내 챌린지</h1>
+        <p className="text-sm leading-relaxed text-[#6B655C]">
+          결과는 요약만 보여요. 대화 내용 전문은 본인만 볼 수 있어요.
+        </p>
+      </header>
 
       {deleteError && (
-        <p role="alert" className="flex items-center gap-2 text-base text-red-700">
+        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
           <span aria-hidden="true">⚠</span>
           <span>{deleteError}</span>
         </p>
       )}
 
-      <ul className="flex flex-col gap-4">
-        {items.map((item) => (
-          <li
-            key={item.challengeId}
-            className="flex flex-col gap-2 rounded border border-gray-300 p-4"
-          >
-            <p className="text-lg font-bold">{item.displayName}</p>
-            <p className="text-sm text-gray-600">{item.dateLabel}</p>
-            {/* 상태는 색이 아니라 텍스트 라벨로만 구분한다(UX-020 Accessibility). */}
-            <p className="text-base text-gray-700">{item.statusLabel}</p>
-            <button
-              type="button"
-              onClick={() => void handleDelete(item.challengeId)}
-              disabled={deletingId === item.challengeId}
-              className="min-h-[48px] w-fit self-start rounded border border-red-400 px-4 py-2 text-base font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+      <ul className="flex flex-col gap-3">
+        {items.map((item) => {
+          const badge = resolveStatusBadge(item.statusLabel);
+          // 배지 텍스트("완료"/"대기")와 statusLabel이 다를 때만 상세 줄을 보여준다 — 정보 손실
+          // 없이 배지와의 중복만 없앤다(예: "완료" 단독이면 배지로 충분, "완료 · 의심 시점: ..."
+          // 이나 "결과 공유에 동의하지 않았습니다"처럼 배지보다 많은 정보를 담고 있을 때만 노출).
+          const showDetail = item.statusLabel !== PENDING_LABEL && item.statusLabel !== badge.text;
+          return (
+            <li
+              key={item.challengeId}
+              className="flex flex-col gap-2 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4"
             >
-              {deletingId === item.challengeId ? "삭제하는 중..." : "삭제"}
-            </button>
-          </li>
-        ))}
+              <div className="flex items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#41525E]"
+                >
+                  <span className="h-[18px] w-[18px] rounded-full bg-[#C9D4DB]" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-base font-bold text-[#22303A]">{item.displayName}</p>
+                  <p className="text-xs text-[#6B655C]">{item.dateLabel}</p>
+                </div>
+                {/* 상태는 색만이 아니라 배지 텍스트로도 구분한다(UX-020 Accessibility, Badge
+                    컴포넌트가 아이콘도 병행). */}
+                <Badge variant={badge.variant}>{badge.text}</Badge>
+              </div>
+              {showDetail && (
+                <p className="border-t border-[#F2EFE9] pt-3 text-sm leading-relaxed text-[#22303A]">
+                  {item.statusLabel}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => void handleDelete(item.challengeId)}
+                disabled={deletingId === item.challengeId}
+                className="min-h-[48px] w-fit self-start rounded-[10px] border-[1.5px] border-[#C6392F] px-4 py-2 text-sm font-semibold text-[#C6392F] transition-colors hover:bg-[#C6392F]/10 disabled:opacity-50"
+              >
+                {deletingId === item.challengeId ? "삭제하는 중..." : "삭제"}
+              </button>
+            </li>
+          );
+        })}
       </ul>
 
-      <button
-        type="button"
-        onClick={() => router.push("/scenarios/voice")}
-        className="min-h-[48px] rounded border border-gray-400 px-6 py-3 text-lg font-bold hover:bg-gray-100"
-      >
+      <div className="rounded-[12px] bg-[#F2EFE9] px-4 py-3">
+        <p className="text-xs leading-relaxed text-[#6B655C]">
+          만료된 챌린지는 링크가 비활성화되고 기록이 30일 후 삭제됩니다.
+        </p>
+      </div>
+
+      <Button type="button" variant="secondary" onClick={() => router.push("/scenarios/voice")}>
         새 챌린지 만들기
-      </button>
+      </Button>
     </main>
   );
 }

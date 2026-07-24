@@ -19,6 +19,7 @@ import { db } from "@/lib/firebase";
 import { scenarios } from "@/content/scenarios";
 import { setChallengeResultSharing } from "@/lib/api";
 import { getChallengeToken } from "@/lib/recording";
+import { Badge, Button } from "@/components/ui";
 import {
   buildReplayTimeline,
   getAnnotatedTurnIndexes,
@@ -256,11 +257,11 @@ export default function ReplayPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] pb-8">
       <div className="px-5 pt-[22px]">
-        <p className="text-sm font-semibold text-[#6B655C]">
+        <p className="text-[13px] font-semibold text-[#6B655C]">
           {[dateLabel, scenarioTitle].filter(Boolean).join(" · ")}
         </p>
-        <p className="mt-1.5 text-[26px] font-bold leading-[1.35] text-[#22303A]">대화 되짚어보기</p>
-        <p className="mt-1 text-base leading-relaxed text-[#4A5560]">
+        <p className="mt-1.5 text-[24px] font-bold leading-[1.35] text-[#22303A]">대화 되짚어보기</p>
+        <p className="mt-1 text-base leading-relaxed text-[#6B655C]">
           대화를 처음부터 순서대로 다시 보며, 사기 신호가 있었던 지점을 확인해 보세요.
         </p>
       </div>
@@ -272,7 +273,7 @@ export default function ReplayPage() {
           <p role="status" className="text-base font-semibold text-[#0E6B62]">
             이번 대화에서는 한 번도 속지 않았습니다.
           </p>
-          <p className="mt-1.5 text-base leading-relaxed text-[#4A5560]">
+          <p className="mt-1.5 text-base leading-relaxed text-[#6B655C]">
             사기 수법은 계속 진화하므로, 오늘 시도된 수법을 다시 확인하고 대화 흐름 속에서 어떻게
             대응했는지 아래에서 되짚어 보세요. 이건 한 번에 끝나는 게 아니라 계속 유지해야 할 개선
             영역입니다.
@@ -280,11 +281,13 @@ export default function ReplayPage() {
           {report.tacticsUsed.length > 0 && (
             <>
               <p className="mt-3 text-sm font-semibold text-[#22303A]">시도된 수법</p>
-              <ul className="mt-1 list-disc pl-6 text-base text-[#22303A]">
+              <div className="mt-1.5 flex flex-wrap gap-2">
                 {report.tacticsUsed.map((tactic) => (
-                  <li key={tactic}>{tactic}</li>
+                  <Badge key={tactic} variant="neutral">
+                    {tactic}
+                  </Badge>
                 ))}
-              </ul>
+              </div>
             </>
           )}
         </div>
@@ -298,25 +301,25 @@ export default function ReplayPage() {
               type="button"
               onClick={() => goToStep(stepPos - 1)}
               disabled={stepPos <= 0}
-              className="min-h-[48px] min-w-[96px] rounded-xl border border-[#C9C2B6] px-4 text-base font-bold text-[#22303A] disabled:opacity-40"
+              className="min-h-[48px] min-w-[96px] rounded-[14px] border border-[#C9C2B6] px-4 text-base font-bold text-[#22303A] disabled:opacity-40"
             >
               ◂ 이전 신호
             </button>
-            <p className="text-sm font-semibold text-[#4A5560]" aria-hidden="true">
+            <p className="text-sm font-semibold text-[#6B655C]" aria-hidden="true">
               신호 {stepPos + 1 > 0 ? stepPos + 1 : "-"} / {annotatedTurnIndexes.length}
             </p>
             <button
               type="button"
               onClick={() => goToStep(stepPos + 1)}
               disabled={stepPos >= annotatedTurnIndexes.length - 1}
-              className="min-h-[48px] min-w-[96px] rounded-xl border border-[#C9C2B6] px-4 text-base font-bold text-[#22303A] disabled:opacity-40"
+              className="min-h-[48px] min-w-[96px] rounded-[14px] border border-[#C9C2B6] px-4 text-base font-bold text-[#22303A] disabled:opacity-40"
             >
               다음 신호 ▸
             </button>
           </>
         ) : (
           // Failure(UX-018): 신호가 하나도 없으면 침묵하지 않고 명시한다.
-          <p className="text-base text-[#4A5560]" role="status">
+          <p className="text-base text-[#6B655C]" role="status">
             이번 대화에서는 뚜렷한 위험 신호가 없었습니다.
           </p>
         )}
@@ -326,49 +329,90 @@ export default function ReplayPage() {
         {stepAnnounce}
       </p>
 
-      {/* 대화 타임라인 — 스크린리더가 항상 대화 순서(DOM 순서)대로 읽는다. */}
+      {/* 대화 타임라인 — 디자인 시스템 "8 · 채팅 말풍선"(상대=좌측+아바타+흰 버블, 나=우측+teal
+          버블) 그대로. 스크린리더가 항상 대화 순서(DOM 순서)대로 읽는다. */}
       <ol className="mx-5 mt-4 flex flex-col gap-3">
-        {timeline.map((item) => (
-          <li
-            key={item.id}
-            ref={(el) => {
-              if (el) itemRefs.current.set(item.turnIndex, el);
-              else itemRefs.current.delete(item.turnIndex);
-            }}
-            tabIndex={-1}
-            className={`flex flex-col gap-1 rounded-2xl border p-4 outline-none ${
-              item.annotation ? "border-[#EFC7C3] bg-[#FDF1F0]" : "border-[#E2DDD3] bg-white"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-[#6B655C]">
-                {item.role === "user" ? "나" : callerLabel}
-              </span>
-              {hasMultipleChannels && (
-                <span className="rounded-full bg-[#EFEBE3] px-2 py-0.5 text-xs font-semibold text-[#6B655C]">
-                  {(item.channel ?? "voice") === "messenger" ? "메신저" : "통화"}
-                </span>
+        {timeline.map((item) => {
+          const channelBadgeLabel = (item.channel ?? "voice") === "messenger" ? "메신저" : "통화";
+          return (
+            <li
+              key={item.id}
+              ref={(el) => {
+                if (el) itemRefs.current.set(item.turnIndex, el);
+                else itemRefs.current.delete(item.turnIndex);
+              }}
+              tabIndex={-1}
+              className="outline-none"
+            >
+              {item.role === "user" ? (
+                <div className="flex justify-end">
+                  <div className="max-w-[85%]">
+                    <div className="rounded-[16px] rounded-br-[4px] bg-[#0E6B62] px-4 py-3">
+                      <p className="text-[15px] leading-[1.55] text-white">{item.textMasked}</p>
+                    </div>
+                    <p className="mr-1 mt-1 flex items-center justify-end gap-1.5 text-[11px] text-[#6B655C]">
+                      나
+                      {hasMultipleChannels && <Badge variant="neutral">{channelBadgeLabel}</Badge>}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex max-w-[85%] items-end gap-2">
+                  <div
+                    aria-hidden="true"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#41525E]"
+                  >
+                    <div className="h-[14px] w-[14px] rounded-full bg-[#C9D4DB]" />
+                  </div>
+                  <div>
+                    <p className="mb-1 ml-1 flex items-center gap-1.5 text-[11px] text-[#6B655C]">
+                      {callerLabel} <span className="font-semibold text-[#B96A1B]">(사칭)</span>
+                      {hasMultipleChannels && <Badge variant="neutral">{channelBadgeLabel}</Badge>}
+                    </p>
+                    <div
+                      className={`rounded-[16px] rounded-bl-[4px] px-4 py-3 ${
+                        item.annotation
+                          ? "border-[1.5px] border-[#B96A1B]/50 bg-[#FBF3E8]"
+                          : "border border-[#E2DDD3] bg-white"
+                      }`}
+                    >
+                      <p className="text-[15px] leading-[1.55] text-[#22303A]">{item.textMasked}</p>
+                    </div>
+                  </div>
+                </div>
               )}
-            </div>
-            <p className="text-base leading-relaxed text-[#22303A]">{item.textMasked}</p>
 
-            {/* 신호 주석 — 색만이 아니라 아이콘+텍스트로 이중 표기(P-13, Accessibility). */}
-            {item.annotation && (
-              <div role="note" className="mt-1.5 flex items-start gap-2 border-t border-[#EFC7C3] pt-2">
-                <svg width="18" height="18" viewBox="0 0 16 16" className="mt-0.5 shrink-0" aria-hidden="true">
-                  <path d="M8 1 L15 14 H1 Z" fill="#B96A1B" />
-                </svg>
-                <p className="text-sm leading-relaxed text-[#22303A]">
-                  <span className="font-semibold text-[#C6392F]">
+              {/* 신호 주석 — mockup의 "⚠️ 여기가 신호였어요" / "이렇게 대응했어야" 2단 카드
+                  그대로(색만이 아니라 라벨 텍스트로도 이중 표기, P-13 Accessibility). */}
+              {item.annotation && (
+                <div
+                  role="note"
+                  className={`mt-2 rounded-[12px] border border-[#B96A1B]/30 bg-[#FBF3E8] p-3.5 ${
+                    item.role === "user" ? "" : "ml-10"
+                  }`}
+                >
+                  <p className="mb-1.5 text-[13px] font-bold text-[#B96A1B]">⚠️ 여기가 신호였어요</p>
+                  <p className="text-[13px] leading-[1.6] text-[#22303A]">
                     {item.annotation.timeLabel}: 이 말이 &apos;{item.annotation.tactic}&apos; 신호였습니다.
-                  </span>{" "}
-                  {item.annotation.correctAction}
-                </p>
-              </div>
-            )}
-          </li>
-        ))}
+                  </p>
+                  <div className="my-2.5 h-px bg-[#B96A1B]/20" />
+                  <p className="mb-1.5 text-[13px] font-bold text-[#0E6B62]">이렇게 대응했어야</p>
+                  <p className="text-[13px] leading-[1.6] text-[#22303A]">{item.annotation.correctAction}</p>
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ol>
+
+      {/* 하단 고정 안내 — mockup(리포트 화면.dc.html) 고정 문구. "면역됐다" 류 과신 표현 대신
+          "이번에 놓쳤을 수 있는 부분"으로 프레이밍한다(README "3. 리포트 화면" 명시 요구사항). */}
+      <div className="mx-5 mt-4 rounded-[12px] bg-[#F2EFE9] px-4 py-3">
+        <p className="text-[13px] leading-[1.6] text-[#6B655C]">
+          한 번의 훈련으로 끝이 아니에요. 이번에 놓쳤을 수 있는 부분은 다음 훈련에서 다시 연습할 수
+          있어요.
+        </p>
+      </div>
 
       {/* T37(UF-005 step5, UX-018 "결과 공유 동의", AC-043) — 챌린지 체험 세션에서만 노출된다.
           challenges/{}는 클라 직접 read가 전면 거부라(firestore.rules) 사용자2는 자기 이전 선택을
@@ -398,22 +442,24 @@ export default function ReplayPage() {
             </p>
           ) : (
             <div className="flex gap-3">
-              <button
+              <Button
                 type="button"
+                variant="primary"
                 onClick={() => void handleShareResult(true)}
                 disabled={shareState === "saving"}
-                className="min-h-[48px] flex-1 rounded-xl bg-[#0E6B62] px-4 py-2 text-base font-bold text-white disabled:opacity-50"
+                className="flex-1"
               >
                 공유합니다
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="secondary"
                 onClick={() => void handleShareResult(false)}
                 disabled={shareState === "saving"}
-                className="min-h-[48px] flex-1 rounded-xl border border-[#C9C2B6] px-4 py-2 text-base font-semibold text-[#22303A] disabled:opacity-50"
+                className="flex-1"
               >
                 공유하지 않습니다
-              </button>
+              </Button>
             </div>
           )}
           {shareState === "error" && (
@@ -429,13 +475,9 @@ export default function ReplayPage() {
         {/* UX-007/UX-018 Exit(2인 변형) — 챌린지 세션은 UX-008(리포트, UF-002 전용)로 돌아가는
             경로를 제공하지 않는다. "(선택)결과 공유 동의 → 종료"만 남긴다. */}
         {!challenge && (
-          <button
-            type="button"
-            onClick={handleGoToReport}
-            className="min-h-[52px] rounded-2xl border border-[#C9C2B6] px-6 py-3 text-lg font-semibold text-[#22303A] hover:bg-white"
-          >
+          <Button type="button" variant="secondary" onClick={handleGoToReport}>
             요약 리포트로 돌아가기
-          </button>
+          </Button>
         )}
         <button
           type="button"

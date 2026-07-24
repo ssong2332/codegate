@@ -22,9 +22,17 @@ import {
   hasMessengerVoiceSelectReturn,
 } from "@/lib/recording";
 import { createSession } from "@/lib/api";
+import { Button, ProgressSteps, type ProgressStep } from "@/components/ui";
 
 type CloneState = "checking" | "pending" | "ready" | "failed" | "no-session" | "read-error";
 type StartState = "idle" | "starting" | "start-error" | "no-scenario";
+
+// record/page.tsx와 동일한 온보딩 진행 표시(3단계 중 마지막).
+const ONBOARDING_STEPS: ProgressStep[] = [
+  { label: "1/3 동의" },
+  { label: "2/3 목소리 등록" },
+  { label: "3/3 준비 완료" },
+];
 
 export default function CloneWaitPage() {
   const router = useRouter();
@@ -99,65 +107,130 @@ export default function CloneWaitPage() {
   const handleRetryScenarios = () => router.push("/scenarios");
   const handleRetryRecord = () => router.push("/onboarding/record");
 
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center">
-      <h1 className="text-xl font-bold">목소리 클론 생성 중</h1>
+  const isPending = cloneState === "checking" || cloneState === "pending";
+  const isReady = cloneState === "ready";
+  const showProgressCard = isPending || isReady;
+  // 실제 서버 신호는 pending/ready 이진값뿐이라(Mock VoiceProvider, T19), 목업의 3단계
+  // "분석 중 → 생성 중 → 준비 완료" 타이머는 재현하지 않는다(가짜 진행률 조작 금지). 대신 이 화면에
+  // 도달했다는 사실 자체가 이미 참인 "목소리 확인 완료" 단계 + 실제 cloneStatus를 반영하는
+  // "가상 음성 생성" 단계, 2단계로 정직하게 축약했다(아래 report 참조).
+  const steps = [
+    {
+      label: "목소리 확인 완료",
+      sub: "녹음한 목소리를 서버로 안전하게 전달했어요",
+      done: true,
+    },
+    {
+      label: isReady ? "가상 음성 생성 완료" : "가상 음성 생성 중",
+      sub: isReady ? "안전하게 사용할 준비가 끝났어요" : "음색과 억양을 반영해 만들고 있어요",
+      done: isReady,
+    },
+  ];
 
-      {(cloneState === "checking" || cloneState === "pending") && (
-        <p className="flex items-center gap-2 text-lg" role="status">
+  return (
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-7 bg-[#FAF8F5] px-6 pb-10 pt-10">
+      <ProgressSteps steps={ONBOARDING_STEPS} currentIndex={2} />
+
+      <div className="flex flex-col gap-3">
+        <h1 className="text-[24px] font-bold leading-[1.35] text-[#22303A]">
+          {isReady ? "가상 음성이 준비됐어요" : "가상 음성을 만들고 있어요"}
+        </h1>
+        <p className="text-[15px] leading-[1.6] text-[#6B655C]">
+          잠시만 기다려 주세요. 훈련용 가상 음성을 준비하고 있어요.
+        </p>
+      </div>
+
+      {showProgressCard && (
+        <div className="flex flex-1 flex-col justify-center">
+          <div className="flex flex-col gap-6 rounded-[20px] border-[1.5px] border-[#E2DDD3] bg-white p-6">
+            {steps.map((step) => (
+              <div key={step.label} className="flex items-center gap-4">
+                <div
+                  aria-hidden="true"
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                    step.done ? "bg-[#0E6B62]" : "bg-[#E4F0EC]"
+                  }`}
+                >
+                  {step.done ? (
+                    <svg width="16" height="16" viewBox="0 0 13 13" fill="none">
+                      <path
+                        d="M2.5 7L5.2 9.7L10.5 3.5"
+                        stroke="white"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : (
+                    <span className="h-5 w-5 animate-spin rounded-full border-[2.5px] border-[#E4F0EC] border-t-[#0E6B62]" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className="text-[16px] font-semibold text-[#22303A]">{step.label}</p>
+                  <p className="mt-0.5 text-[13px] text-[#6B655C]">{step.sub}</p>
+                </div>
+              </div>
+            ))}
+            <div className="h-[6px] overflow-hidden rounded-full bg-[#F2EFE9]">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ${!isReady ? "animate-pulse" : ""}`}
+                style={{
+                  width: isReady ? "100%" : "55%",
+                  background: "linear-gradient(90deg, #0E6B62, #4FA398, #0E6B62)",
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isPending && (
+        <p className="flex items-center justify-center gap-2 text-[15px] text-[#6B655C]" role="status">
           <span
             aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-gray-400 border-t-transparent"
+            className="h-4 w-4 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-[#0E6B62]"
           />
           잠시만 기다려 주세요. 내 목소리로 클론을 만들고 있습니다...
         </p>
       )}
 
-      {cloneState === "ready" && startState === "starting" && (
-        <p className="flex items-center gap-2 text-lg" role="status">
+      {isReady && startState === "starting" && (
+        <p className="flex items-center justify-center gap-2 text-[15px] text-[#6B655C]" role="status">
           <span
             aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-gray-400 border-t-transparent"
+            className="h-4 w-4 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-[#0E6B62]"
           />
           목소리 클론이 준비됐습니다. 훈련을 시작하는 중입니다...
         </p>
       )}
 
-      {cloneState === "ready" && startState === "start-error" && (
-        <>
-          <p role="alert" className="flex items-center gap-2 text-base text-red-700">
+      {isReady && startState === "start-error" && (
+        <div className="flex flex-col items-center gap-3 text-center">
+          <p role="alert" className="flex items-center gap-2 text-[15px] text-[#C6392F]">
             <span aria-hidden="true">⚠</span>
             <span>훈련을 시작하지 못했습니다. 다시 시도해 주세요.</span>
           </p>
-          <button
-            type="button"
-            onClick={handleRetryStart}
-            className="min-h-[48px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800"
-          >
+          <Button type="button" onClick={handleRetryStart}>
             다시 시도
-          </button>
-        </>
+          </Button>
+        </div>
       )}
 
-      {cloneState === "ready" && startState === "no-scenario" && (
-        <>
-          <p role="alert" className="flex items-center gap-2 text-base text-red-700">
+      {isReady && startState === "no-scenario" && (
+        <div className="flex flex-col items-center gap-3 text-center">
+          <p role="alert" className="flex items-center gap-2 text-[15px] text-[#C6392F]">
             <span aria-hidden="true">⚠</span>
             <span>선택한 시나리오 정보를 찾을 수 없습니다. 시나리오를 다시 선택해 주세요.</span>
           </p>
-          <button
-            type="button"
-            onClick={handleRetryScenarios}
-            className="min-h-[48px] rounded border border-gray-400 px-6 py-3 text-lg font-bold hover:bg-gray-100"
-          >
+          <Button type="button" variant="secondary" onClick={handleRetryScenarios}>
             시나리오 선택으로
-          </button>
-        </>
+          </Button>
+        </div>
       )}
 
       {(cloneState === "failed" || cloneState === "read-error" || cloneState === "no-session") && (
-        <>
-          <p role="alert" className="flex items-center gap-2 text-base text-red-700">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <p role="alert" className="flex items-center gap-2 text-[15px] text-[#C6392F]">
             <span aria-hidden="true">⚠</span>
             <span>
               {cloneState === "no-session"
@@ -165,14 +238,10 @@ export default function CloneWaitPage() {
                 : "목소리 클론 생성에 실패했습니다. 다시 시도해 주세요."}
             </span>
           </p>
-          <button
-            type="button"
-            onClick={handleRetryRecord}
-            className="min-h-[48px] rounded border border-gray-400 px-6 py-3 text-lg font-bold hover:bg-gray-100"
-          >
+          <Button type="button" variant="secondary" onClick={handleRetryRecord}>
             재녹음으로 돌아가기
-          </button>
-        </>
+          </Button>
+        </div>
       )}
     </main>
   );

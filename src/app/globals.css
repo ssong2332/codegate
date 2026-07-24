@@ -7,6 +7,7 @@
   --background: #faf8f5; /* 웜 화이트 — 차갑지 않게 */
   --foreground: #22303a; /* 잉크 — 본문 텍스트 */
   --color-teal: #0e6b62; /* 주조 청록 — 신뢰/진행/CTA */
+  --color-teal-hover: #0b564f; /* 주버튼/링크 hover */
   --color-teal-tint: #e4f0ec; /* 주조 틴트 — 안심 배경 */
   --color-ink: #22303a;
   --color-ai-purple: #5b4b9e; /* AI 합성 표식 전용 */
@@ -17,6 +18,12 @@
   --color-caution-tint: #fbf3e8;
   --color-muted: #6b655c;
   --color-border: #e2ddd3;
+  --color-border-hover: #c9c2b6; /* 카드/보조버튼 hover 테두리 */
+  --color-neutral-tint: #f2efe9; /* 비활성 버튼·중립 배지 배경 */
+  --color-disabled-text: #c9c2b6;
+  --color-avatar-bg: #41525e; /* 미선택 발신자 아바타 배경(통화 셸과 동일) */
+  --color-avatar-fg: #c9d4db; /* 아바타 내부 아이콘/도형 */
+  --color-canvas: #efebe4; /* 데모 프레임 바깥 캔버스(웹 데스크톱 wrapper에서만 사용) */
 }
 
 @theme inline {

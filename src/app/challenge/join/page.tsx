@@ -20,6 +20,7 @@ import { auth } from "@/lib/firebase";
 import { getChallengeLanding, consentChallenge, reportChallenge } from "@/lib/api";
 import type { ChallengeReportReason } from "@/lib/api";
 import { setPendingSessionId, setOpeningAudioUrl, setChallengeToken } from "@/lib/recording";
+import { Banner, Button } from "@/components/ui";
 
 type PageState = "no-token" | "loading" | "blocked" | "load-error" | "ready";
 
@@ -175,16 +176,53 @@ export default function ChallengeJoinPage() {
   }
 
   // state === "ready"
+  // 안내 요점 3개(챌린지 플로우.dc.html "화면 2" 안내 포인트 카드 재현) — 기존 한 문단이 담고
+  // 있던 문장을 그대로 셋으로 나눈 것뿐, 새 정보를 추가하지 않았다(제목에 이미 있는 표시 이름
+  // 소개 문장만 중복이라 제외).
+  const consentPoints = [
+    "지금부터 받는 전화·문자는 실제가 아닌 훈련입니다.",
+    "실제로 돈이나 개인정보가 오가지 않습니다.",
+    "통화 중 언제든 끊을 수 있습니다.",
+  ];
+
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-[#FAF8F5] p-6">
-      <header className="flex flex-col gap-3 pt-4">
+      {/* 상시 노출 훈련 초대 배너 — 닫기 불가(Banner 컴포넌트 계약, README "Interactions &
+          Behavior"). 동의 전 무동의 재생 없음(AC-040)을 화면 진입 즉시 재확인시킨다. */}
+      <Banner variant="caution">
+        <span className="font-semibold text-[#B96A1B]">훈련 초대입니다.</span> 동의 전에는 아무것도
+        시작되지 않아요.
+      </Banner>
+
+      <header className="flex flex-col gap-3">
         <h1 className="text-2xl font-bold leading-relaxed text-[#22303A]">
-          {displayName}님이 보이스피싱 인식 테스트를 준비했어요
+          <span className="text-[#0E6B62]">{displayName}</span>님이 보이스피싱 인식 테스트를
+          준비했어요
         </h1>
-        <p className="text-lg leading-relaxed text-[#4A5560]">
-          {displayName}님이 보이스피싱 인식 테스트를 준비했고, 지금부터 받는 전화·문자는 실제가
-          아닌 훈련입니다. 실제로 돈이나 개인정보가 오가지 않으며, 통화 중 언제든 끊을 수 있습니다.
-        </p>
+
+        <div className="flex flex-col gap-3 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4">
+          {consentPoints.map((point) => (
+            <div key={point} className="flex items-start gap-2.5">
+              <svg
+                className="mt-[3px] shrink-0"
+                width="14"
+                height="14"
+                viewBox="0 0 13 13"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M2.5 7L5.2 9.7L10.5 3.5"
+                  stroke="#0E6B62"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <p className="text-[14px] leading-[1.55] text-[#22303A]">{point}</p>
+            </div>
+          ))}
+        </div>
       </header>
 
       {consentError && (
@@ -195,12 +233,7 @@ export default function ChallengeJoinPage() {
       )}
 
       {/* AC-040 — 무동의로 체험(통화)에 진입하는 버튼/경로는 이 화면에 존재하지 않는다. */}
-      <button
-        type="button"
-        onClick={() => void handleConsent()}
-        disabled={consenting}
-        className="min-h-[56px] w-full rounded-xl bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white transition hover:bg-[#0B564F] disabled:opacity-50"
-      >
+      <Button type="button" onClick={() => void handleConsent()} disabled={consenting}>
         {consenting ? (
           <span className="flex items-center justify-center gap-2" role="status">
             <span
@@ -212,23 +245,25 @@ export default function ChallengeJoinPage() {
         ) : (
           "동의하고 시작"
         )}
-      </button>
+      </Button>
 
-      {/* AC-049 — 신고 버튼 위치(이 랜딩). 정책·데이터 모델은 architect(§14.5), 이 화면은 UI만. */}
+      {/* AC-049 — 신고 버튼 위치(이 랜딩). 정책·데이터 모델은 architect(§14.5), 이 화면은 UI만.
+          경고색(#C6392F)으로 스타일해 신고 경로를 기존보다 더 눈에 띄게 한다(제약 #2 — 덜 눈에
+          띄게 만들지 않는다는 요건과 상충하지 않음, 오히려 강화). */}
       {!showReportForm ? (
         <button
           type="button"
           onClick={() => setShowReportForm(true)}
-          className="min-h-[48px] w-fit rounded-lg px-2 text-base font-medium text-[#6B655C] underline hover:bg-[#F2EFE9]"
+          className="min-h-[48px] w-fit rounded-lg px-2 text-center text-[13px] font-semibold text-[#C6392F] underline hover:bg-[#F2EFE9]"
         >
-          원치 않는 챌린지 신고
+          원치 않는 챌린지인가요? 신고하기
         </button>
       ) : reportState === "submitted" ? (
         <p role="status" className="text-base text-[#0E6B62]">
           신고가 접수되었습니다. 이 챌린지는 더 이상 재생되지 않습니다.
         </p>
       ) : (
-        <div className="flex flex-col gap-3 rounded-xl border border-[#E2DDD3] bg-white p-4">
+        <div className="flex flex-col gap-3 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4">
           <p className="text-base font-semibold text-[#22303A]">신고 사유를 선택해 주세요</p>
           <div className="flex flex-col gap-2">
             {REPORT_REASON_LABELS.map((option) => (
@@ -252,7 +287,7 @@ export default function ChallengeJoinPage() {
               onChange={(event) => setReportNote(event.target.value)}
               disabled={reportState === "submitting"}
               rows={3}
-              className="rounded-lg border border-[#C9C2B6] bg-white p-3 text-base text-[#22303A]"
+              className="rounded-[10px] border-[1.5px] border-[#E2DDD3] bg-white p-3 text-base text-[#22303A] outline-none focus:border-[#0E6B62]"
             />
           </label>
           {reportState === "error" && (
@@ -266,7 +301,7 @@ export default function ChallengeJoinPage() {
               type="button"
               onClick={() => void handleSubmitReport()}
               disabled={reportState === "submitting"}
-              className="min-h-[48px] flex-1 rounded-xl bg-[#C6392F] px-4 py-2 text-base font-bold text-white disabled:opacity-50"
+              className="min-h-[48px] flex-1 rounded-[12px] bg-[#C6392F] px-4 py-2 text-base font-bold text-white transition-colors hover:bg-[#A82F27] disabled:opacity-50"
             >
               {reportState === "submitting" ? "접수하는 중..." : "신고하기"}
             </button>
@@ -274,7 +309,7 @@ export default function ChallengeJoinPage() {
               type="button"
               onClick={() => setShowReportForm(false)}
               disabled={reportState === "submitting"}
-              className="min-h-[48px] flex-1 rounded-xl border border-[#C9C2B6] px-4 py-2 text-base font-semibold text-[#22303A]"
+              className="min-h-[48px] flex-1 rounded-[12px] border-[1.5px] border-[#E2DDD3] px-4 py-2 text-base font-semibold text-[#22303A] transition-colors hover:border-[#C9C2B6] disabled:opacity-50"
             >
               취소
             </button>
