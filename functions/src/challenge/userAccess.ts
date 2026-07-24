@@ -113,8 +113,12 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
         throw new HttpsError("not-found", "챌린지를 찾을 수 없습니다.");
       }
       const existingSession = sessionsSnap.empty ? null : (sessionsSnap.docs[0].data() as SessionDoc);
+      const nowMs = Date.now();
       const decision = decideConsentGate({
-        expired: challenge.linkExpiresAt.toMillis() <= Date.now(),
+        // T38 Major 수정 — 최초 진입(linkExpiresAt, 3일)과 재개(retentionDeleteAt, 30일)를
+        // 분리(consentGate.ts 헤더 주석 참고). 둘 다 여기서 미리 계산해 순수 함수에 넘긴다.
+        linkExpired: challenge.linkExpiresAt.toMillis() <= nowMs,
+        retentionExpired: challenge.retentionDeleteAt.toMillis() <= nowMs,
         status: challenge.status,
         existingSessionUid: existingSession?.uid ?? null,
         callerUid,
