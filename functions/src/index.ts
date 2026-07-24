@@ -19,6 +19,14 @@ export { submitRealtimeTranscript } from "./realtime/submitTranscript";
 export { generateReport } from "./report";
 // 2인 소셜 챌린지 — 사용자1 생성·클론 스코프·공유 링크(T36, Architecture.md §14, ADR-0005).
 export { createChallenge, deleteChallenge, listMyChallenges } from "./challenge";
+// 2인 소셜 챌린지 — 사용자2 동의·체험·신고·결과공유(T37, §14.7/ADR-0006). challenge/index.ts와
+// 순환 참조를 피하려고 별도 모듈(userAccess.ts)에서 직접 export한다.
+export {
+  getChallengeLanding,
+  consentChallenge,
+  reportChallenge,
+  setChallengeResultSharing,
+} from "./challenge/userAccess";
 
 // Trigger functions (클라 직접 호출 아님) — API.md `onSessionEnded` (Track C, T10, AC-021).
 // 실제 정의는 functions/src/guardrails/index.ts(트리거 소유 모듈, Architecture.md §2)에 있다.

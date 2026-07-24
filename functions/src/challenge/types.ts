@@ -1,6 +1,7 @@
 // challenge 모듈 요청/응답 타입 — src/lib/api/types.ts(클라 계약)와 1:1 대응
 // (Architecture.md §14, ADR-0005, T36). API.md에는 아직 반영 안 됨 — architect 확인/문서 갱신 권장
 // (createSession의 sessionId 필드 등 기존 선례와 동일한 "서버 코드가 문서보다 먼저 나간" 패턴).
+import type { ChallengeReportReason, ChallengeStatus } from "../shared/types";
 
 // --- createChallenge (UX-019 · AC-041/044/048/049) ---
 export type CreateChallengeRequest = {
@@ -43,3 +44,34 @@ export type ListMyChallengesItem = {
 export type ListMyChallengesResponse = {
   challenges: ListMyChallengesItem[];
 };
+
+// --- getChallengeLanding (T37 · UX-021 · AC-040/048, §14.7.5) ---
+// 사용자2 진입(무로그인·토큰). 소모하지 않는다(크롤러 선fetch 방지, §14.4). 음성·voiceId·scenario
+// 상세는 절대 반환하지 않는다(서프라이즈 유지 + AC-041 추출 차단).
+export type GetChallengeLandingRequest = { token: string };
+export type GetChallengeLandingResponse = {
+  displayName: string;
+  status: ChallengeStatus;
+  expired: boolean;
+};
+
+// --- consentChallenge (T37 · UX-021 · AC-040/048, §14.7.5) ---
+// 익명 사인인 후 호출(§14.7/ADR-0006 A1). openingAudioUrl은 API.md 명시 계약엔 아직 없지만
+// createSession.openingAudioUrl과 동일한 선례(비차단 합성, 실패 시 필드 자체 생략)를 따른다.
+export type ConsentChallengeRequest = { token: string };
+export type ConsentChallengeResponse = {
+  sessionId: string;
+  openingAudioUrl?: string;
+};
+
+// --- reportChallenge (T37 · UX-021 · AC-049) ---
+export type ReportChallengeRequest = {
+  token: string;
+  reason: ChallengeReportReason;
+  note?: string;
+};
+export type ReportChallengeResponse = { status: "reported" };
+
+// --- setChallengeResultSharing (T37 · UX-018 · AC-043) ---
+export type SetChallengeResultSharingRequest = { token: string; share: boolean };
+export type SetChallengeResultSharingResponse = { shared: boolean };
