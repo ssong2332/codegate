@@ -30,6 +30,10 @@ export type RealtimeCallState = {
   credentials: CreateRealtimeCallResponse | null;
   /** 상대(사기범)가 지금 말하고 있는가 — 통화 화면 파형 인디케이터용. */
   isAgentSpeaking: boolean;
+  /** 사용자 신고(2026-07-24, "내 말을 잘 듣고 있는지 보고 싶다") — 로컬 마이크(Gemini) 또는
+   * SDK VAD 점수(ElevenLabs)로 판단한 "지금 사용자가 말하는 중"인가 — 사용자 측 파형 인디케이터용.
+   * agentSpeaking과 동일한 boolean 계약이라 CallWaveform을 그대로 재사용할 수 있다. */
+  isUserSpeaking: boolean;
   /** RealtimeVoiceSession에 넘길 종료 신호(증가시키면 세션이 끊긴다). */
   stopSignal: number;
   errorMessage: string | null;
@@ -45,6 +49,8 @@ export type RealtimeCallControls = {
   handleEnded: () => void;
   handleError: () => void;
   handleSpeakingChange: (speaking: boolean) => void;
+  /** RealtimeVoiceSession/GeminiVoiceSession이 사용자 발화 파형 신호를 올려주는 콜백. */
+  handleUserSpeakingChange: (speaking: boolean) => void;
 };
 
 function hasMicrophoneSupport(): boolean {
@@ -58,6 +64,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
   const [status, setStatus] = useState<RealtimeCallStatus>("idle");
   const [credentials, setCredentials] = useState<CreateRealtimeCallResponse | null>(null);
   const [isAgentSpeaking, setIsAgentSpeaking] = useState(false);
+  const [isUserSpeaking, setIsUserSpeaking] = useState(false);
   const [stopSignal, setStopSignal] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // 언마운트 후 늦게 도착한 비동기 결과가 setState를 호출하지 않도록 가드한다.
@@ -175,10 +182,15 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     if (mountedRef.current) setIsAgentSpeaking(speaking);
   }, []);
 
+  const handleUserSpeakingChange = useCallback((speaking: boolean) => {
+    if (mountedRef.current) setIsUserSpeaking(speaking);
+  }, []);
+
   return {
     status,
     credentials,
     isAgentSpeaking,
+    isUserSpeaking,
     stopSignal,
     errorMessage,
     start,
@@ -187,5 +199,6 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     handleEnded,
     handleError,
     handleSpeakingChange,
+    handleUserSpeakingChange,
   };
 }
