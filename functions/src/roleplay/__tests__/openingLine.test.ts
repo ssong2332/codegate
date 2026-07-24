@@ -21,6 +21,11 @@ test("generateOpeningLine(): 존재하지 않는 scenarioId면 invalid-argument 
   );
 });
 
-test("isUsingMockLlm(): LLM_API_KEY 미확보 상태에서는 true를 반환한다(현재 저장소 상태 기준)", () => {
+// 2026-07-24 갱신 — getLlmClient()가 GEMINI_API_KEY 존재 시 실 Gemini로 격상되도록 바뀌었지만
+// (llm/index.ts), defineSecret은 Functions 런타임 바인딩 밖(이 node:test 프로세스처럼)에서는
+// .value() 호출 시 throw하므로 readSecret이 "미설정"으로 처리해 여기서는 항상 Mock으로 남는다 —
+// GEMINI_API_KEY가 .env에 실제로 들어있어도 이 단위 테스트의 결과는 바뀌지 않는다(의도된 안전망,
+// realtime/provider.ts의 동일 readSecret 패턴과 동일한 이유).
+test("isUsingMockLlm(): Functions 런타임 secret 바인딩이 없는 단위 테스트 컨텍스트에서는 항상 true를 반환한다", () => {
   assert.equal(isUsingMockLlm(), true);
 });

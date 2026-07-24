@@ -1,20 +1,19 @@
 // LLM 역할극 엔진 (Track A, T7). API.md `sendMessage` 1:1. AC-003~005/AC-013/AC-024/AC-007.
 //
-// ⚠️ LLM 실호출 여부(투명 고지, 근거 없는 성공 보고 금지 원칙 준수): functions/.env가 아직 없고
-// functions/.env.example의 LLM_API_KEY도 placeholder뿐이라(T7 시점에 직접 확인) 실제 Claude/Gemini
-// API는 아직 호출하지 않는다. `functions/src/llm`의 `getLlmClient()`가 항상 MockLlmClient(규칙
-// 기반 텍스트 생성기)를 반환한다 — VoiceProvider(T19)와 동일한 "어댑터 뒤 목업" 패턴. Mock 응답은
-// `isMock: true`로 표시된다(SendMessageResponse.isMock). **실 LLM 없이는 "인격 유지·실시간 적응"이
-// 진짜로 검증되지 않는다** — 이 파일이 실제로 보장하는 것은 (1) 프롬프트 서버 조립 구조,
-// (2) 사용자입력/시스템프롬프트 role+구분자 분리 구조, (3) 턴/시간 한도 계산·자동 종료 로직이다.
+// LLM 실호출 여부(투명 고지): `functions/src/llm`의 `getLlmClient()`가 GEMINI_API_KEY 존재 여부로
+// 실 Gemini(GeminiLlmClient)/MockLlmClient를 고른다(2026-07-24, 사용자 실측 신고로 발견·수정 —
+// 이전엔 키가 있어도 항상 Mock을 반환하던 팩토리 버그). 응답의 `isMock` 플래그로 어느 쪽이었는지
+// 항상 구분된다(SendMessageResponse.isMock). 이 파일이 보장하는 구조는 그대로다: (1) 프롬프트
+// 서버 조립, (2) 사용자입력/시스템프롬프트 role+구분자 분리, (3) 턴/시간 한도 계산·자동 종료 로직.
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { maskPII } from "../guardrails";
-import { getLlmClient } from "../llm";
+import { completeWithFallback, getLlmClient } from "../llm";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import { GEMINI_API_KEY } from "../shared/config";
 import { MESSENGER_ESCALATION_FALLBACK_TURNS } from "../shared/constants";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "../session/channelTransition";
@@ -30,7 +29,11 @@ export { generateOpeningLine, isUsingMockLlm } from "./openingLine";
 
 ensureFirebaseAdminApp();
 
+// GEMINI_API_KEY 선언(2026-07-24) — getLlmClient()가 실 Gemini로 격상될 수 있어, Functions v2가
+// 배포 환경에서 이 secret을 런타임에 주입하도록 명시해야 한다(realtime/index.ts의
+// createRealtimeCall과 동일 이유).
 export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageResponse>>(
+  { secrets: [GEMINI_API_KEY] },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
@@ -122,8 +125,11 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const llmHistory = toLlmHistory(storedHistory);
     llmHistory.push({ role: "user", content: wrapUserInputAsData(maskedUserText) });
 
-    const llm = getLlmClient();
-    const completion = await llm.complete({
+    // reviewer 리뷰 Major #1 수정(2026-07-24, 실 Gemini 활성화로 처음 실측 가능해진 결함) — 사용자
+    // 턴은 이미 위 트랜잭션(#8, 동시 탭 방지용 원자적 클레임)에서 커밋됐고 turnCount도 이미
+    // 소진됐다. LLM 호출 실패 시 던지면 "답 없는 사용자 턴"이 남는다 — completeWithFallback이
+    // Mock으로 강등해 절대 답 없이 남기지 않는다(llm/index.ts 주석·유닛테스트 참고).
+    const completion = await completeWithFallback(getLlmClient(), {
       systemPrompt: buildSystemPrompt(scenarioPrompt),
       messages: llmHistory,
       mockTacticHints: scenarioPrompt.weakenedTactics,
@@ -189,7 +195,15 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         update.endReason = "limit_reached";
         update.endedAt = Timestamp.now();
       }
-      tx.update(sessionRef, update);
+      // 2026-07-24 수정(실 Gemini 연동으로 처음 드러난 잠재 버그) — update가 llmProvider 태그도
+      // 종료 필드도 없이 완전히 빈 객체({})가 되는 경우(=isMock:false·limitReached 아님·이미
+      // 종료된 세션 아님, 즉 실 LLM으로 정상 진행 중인 통상적인 턴)가 그동안은 존재하지 않았다
+      // (isMock이 언제나 true였던 Mock 전용 시절엔 update에 최소 llmProvider 필드가 항상 있었음).
+      // Firestore Transaction.update()는 빈 객체를 거부한다("At least one field must be updated")
+      // — 반영할 게 없으면 write 자체를 건너뛴다(멱등, 트랜잭션 실패로 사용자 응답을 막지 않음).
+      if (Object.keys(update).length > 0) {
+        tx.update(sessionRef, update);
+      }
       return { stillActive };
     });
 

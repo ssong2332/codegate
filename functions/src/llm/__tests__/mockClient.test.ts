@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import { getLlmClient } from "../index";
 import { MockLlmClient } from "../mockClient";
 
-test("getLlmClient() currently selects MockLlmClient (LLM_API_KEY not yet wired)", () => {
+// 2026-07-24 갱신 — getLlmClient()가 GEMINI_API_KEY 존재 시 실 Gemini로 격상되도록 바뀌었지만
+// (llm/index.ts, DECISIONS #29), defineSecret은 Functions 런타임 바인딩 밖(이 node:test 프로세스
+// 처럼)에서는 .value() 호출 시 throw하므로 readSecret이 "미설정"으로 처리해 이 단위 테스트
+// 컨텍스트에서는 항상 Mock으로 남는다(roleplay/__tests__/openingLine.test.ts의 동일 갱신 참고).
+test("getLlmClient(): Functions 런타임 secret 바인딩이 없는 단위 테스트 컨텍스트에서는 MockLlmClient를 선택한다", () => {
   const client = getLlmClient();
   assert.equal(client.providerName, "mock");
 });
