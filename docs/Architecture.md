@@ -2,9 +2,11 @@
 
 Owner: architect (see AGENTS.md). Others read-only.
 Major decisions are logged in DECISIONS.md; details in adr/.
-Based on PRD Version: v1.1 · Based on UX Version: 1.6 · Last Updated: 2026-07-23
+Based on PRD Version: v1.1 · Based on UX Version: 1.7 · Last Updated: 2026-07-24
 
-> **버전 갭 고지(2026-07-23 갱신):** 본 문서는 이전에 PRD v0.5 + UX v1.2 기준이었다. T26·T35(메신저 확장 세션 전이 + 2인 소셜 데이터 구조)를 위해 **PRD v1.1 + UX v1.6** 기준으로 갱신한다. 갱신 범위는 신규 §13(메신저→보이스 전이)·§14(2인 소셜)와 관련 스키마·DECISIONS·ADR-0005에 한정하며, 기존 §0~§12(P0 예방접종 루프)는 여전히 유효하다(PRD 코어 루프 무변경). 이전 헤더의 "UX v1.2 / PRD v0.4~v0.5" 정합 고지는 그 구간 설계에 대해 계속 유효하다.
+> **버전 갭 고지(2026-07-24 갱신):** 본 문서는 직전에 PRD v1.1 + UX v1.6 기준이었다. 이번 소급 설계 리뷰(T40 역방향 전이 + T33 리플레이 해설 스키마 갭)를 계기로 UX 기준을 **1.6 → 1.7**로 맞춘다 — UX 1.6→1.7 델타(T24 메신저 표면·T25 에스컬레이션 전이 = UX-022/024/025)는 이미 §13.1~13.7이 선(先)확정한 구조에 UX가 정합시킨 것이라 §13 설계는 1.7과 어긋나지 않음을 재검증했다(messenger/page.tsx·escalation 흐름 실측 확인). PRD 기준은 v1.1 유지. 이번 갱신 범위는 신규 §13.8(보이스→메신저 역방향 전이 소급 비준)·§13.1 증분(`turnCountAtTransition`)과 관련 DECISIONS(#25/#26)에 한정하며, 기존 §0~§14는 유효하다.
+>
+> **이전 갱신 고지(2026-07-23):** 본 문서는 그 이전에 PRD v0.5 + UX v1.2 기준이었다. T26·T35(메신저 확장 세션 전이 + 2인 소셜 데이터 구조)를 위해 PRD v1.1 + UX v1.6 기준으로 갱신했다. 기존 §0~§12(P0 예방접종 루프)는 여전히 유효하다(PRD 코어 루프 무변경). 이전 헤더의 "UX v1.2 / PRD v0.4~v0.5" 정합 고지는 그 구간 설계에 대해 계속 유효하다.
 
 ---
 
@@ -287,7 +289,7 @@ UX-008  reports 읽기 ──▶ 타임라인·수법·대처법 표시(AC-008/0
 |---|---|---|
 | `channel` | `"messenger"`\|`"voice"` | **현재 활성 채널**(방향 무관 상태값). 부재 시 `"voice"`. ※ UX-014 내부의 receiving→opening→live는 통화 셸 내부 phase이며 이 `channel`과 다른 층위다(명명 충돌 회피 위해 필드명을 `phase`가 아닌 `channel`로 둔다 — DECISIONS #14). |
 | `entryChannel` | `"messenger"`\|`"voice"` | 세션이 처음 시작된 채널. 리포트가 교차채널 여부를 판정(AC-037). |
-| `channelHistory` | `array<{from,to,at,trigger}>` | 전이 이력. `trigger`=`"structured_signal"`\|`"maxturn_fallback"`\|`"manual_button"`. 단일 리포트가 두 단계 취약 시점을 시간축에 병합할 근거(AC-035/037). |
+| `channelHistory` | `array<{from,to,at,trigger,turnCountAtTransition?}>` | 전이 이력. `trigger`=`"structured_signal"`\|`"maxturn_fallback"`\|`"manual_button"`. 단일 리포트가 두 단계 취약 시점을 시간축에 병합할 근거(AC-035/037). `turnCountAtTransition?`는 **`to==="messenger"` 전이에만** 기록하는 전이 시점 누적 `turnCount` 기준점 — 메신저 max-turn 폴백이 "세션 누적 턴"이 아니라 "이번 메신저 재진입 이후 턴 수"를 보게 해 역방향 복귀 직후 즉시 재-에스컬레이션되는 핑퐁을 막는다(§13.8, DECISIONS #25). |
 
 - `messages` 서브컬렉션에 옵셔널 `channel` 필드를 더해 각 턴이 어느 채널에서 발생했는지 표기(AC-037 교차채널 타임라인). `turnIndex`는 채널을 넘어 **단조 증가**를 유지(연속성).
 - 전이 함수 계약(방향 무관): `transitionChannel(sessionId, from, to, trigger)` — ① `channel`을 `to`로 갱신 ② `channelHistory`에 항목 append ③ `to==="voice"`면 통화 진입 준비(§13.5). MVP는 `from==="messenger" && to==="voice"`만 허용하고 그 외 조합은 `unimplemented`로 거부(조용한 실패 금지, AC-039).
@@ -353,6 +355,46 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 - architect는 법률 자문을 제공하지 않는다. 사용자는 이미 완화책을 **"상시 면책 고지"로 한정 확정**했고(마케팅/스토어 제한 미채택), 이는 **소프트웨어 구조 결정(스키마·모듈·경계)이 아니라 UI 상시 노출 콘텐츠 요건**이다 → ADR(구조 결정 기록) 대상이 아니다.
 - 이미 **AC-047(PRD)·T24(UX)**로 포착되어 있어 중복 ADR은 문서만 늘린다.
 - architect가 보장하는 것은 **"상시 노출 UI 요건이 충족되게 설계"**뿐: 면책 고지는 카카오 표면에서 **영구 비활성화 불가(항상 노출·재진입 시에도 유지)**한 UI 요소로 강제하고, 데이터 필드가 아니라 표면 컴포넌트 요건으로 T24/T29에 넘긴다. 법적 충분성 자체는 architect 판단 범위 밖(사용자/법무 확인 필요 — Open Question으로 잔존).
+
+### 13.8 역방향 전이 — 보이스→메신저 (T40 fast-follow, 소급 비준 2026-07-24) (DECISIONS #25, AC-039)
+> **소급 비준 고지:** T40(보이스→메신저 역방향)은 architect 선(先)설계 없이 오케스트레이션 세션이 설계 판단을 직접 내려 구현·머지·리뷰/QA 통과했다(AGENTS.md "Design-level defects go back to architect first" 절차 밖). 본 절은 그 판단들을 **사후에 그 자체의 타당성으로** 심사해 정식 비준한다. §13.2/13.3이 정방향을 설계한 것과 같은 층위로 역방향을 명문화한다. 결론: **세 판단 모두 비준(as-is)** — 근거는 아래. 구현 변경이 필요한 항목은 없고, 장래 확장 지점만 설계 노트로 남긴다.
+
+**전제(§13.0 확정2 재확인):** 전이 엔진(`transitionChannel`, `functions/src/session/channelTransition.ts`)은 이미 방향 무관이다 — `SUPPORTED_TRANSITIONS` 화이트리스트에 `["voice","messenger"]`를 더해 T40이 역방향을 **배선**했고, 그 외 조합은 여전히 `unimplemented`로 명시 거부(AC-039 "조용한 실패 금지"). 따라서 AC-039의 요구("방향 무관 설계 + 순차 구현")는 엔진 레벨에서 이미 충족돼 있고, 아래 세 판단은 그 위에 얹힌 **역방향 배선의 트리거·게이팅·연속성** 결정이다.
+
+#### 13.8.1 트리거 범위 — 명시 버튼 전용 (비준)
+| 트리거 | 정방향(§13.2/13.3) | 역방향(T40) | 판정 |
+|---|---|---|---|
+| 구조화 신호(sentinel) | 있음 — `[[SIGNAL:ESCALATE_VOICE]]` (`sendMessage`가 LLM 텍스트 완성 스캔) | **없음** | 비준(MVP 범위 밖) |
+| max-turn/시간 폴백 | 있음 — `MESSENGER_ESCALATION_FALLBACK_TURNS` | **없음** | 비준(MVP 범위 밖) |
+| 명시 전환 버튼 | 있음 — "전화로 확인"(`requestEscalation`) | **있음** — "메시지로 전환"(`requestReverseEscalation`) | 비준(유일 트리거) |
+
+**비준 근거(정방향 위상 대비):**
+1. **AC 요구 비대칭이 실재한다.** 세 트리거를 모두 요구하는 것은 **AC-034(정방향 전용)**이다 — "메신저 세션 진행 중 사용자의 의심/거부/확인 시도를 LLM이 감지→구조화 신호→폴백(max-turn/버튼)". 역방향에는 이에 대응하는 AC가 없다. **AC-039**는 오직 "엔진 방향 무관 + 역방향 fast-follow 배선"만 요구하고 트리거 파리티(parity)를 요구하지 않는다. 즉 정방향이 day-one에 세 트리거를 다 가진 것은 하루 스코프 자율이 아니라 AC-034가 명시적으로 요구했기 때문이고, 역방향에는 그 요구가 없다 → 명시 버튼 전용은 **스코프 축소가 아니라 AC 정합**이다.
+2. **구조화 신호에는 구조적 비대칭이 있다.** 정방향 sentinel(§13.2)은 `sendMessage`가 **어시스턴트 텍스트 완성을 서버에서 매 턴 스캔**할 수 있어 성립한다. 보이스 단계에는 그 훅이 없다 — 실시간 음성 제공자(`functions/src/realtime/*`)는 스트리밍이고 Gemini Live는 `tools:[]`로 도구를 잠근다(§13.2 말미). 역방향 구조화 신호를 만들려면 정방향이 DECISIONS #15에서 **명시적으로 기각한** function-calling 배선(어댑터·mock 복잡도)을 다시 들여오거나 별도 STT-후처리 스캐너를 신설해야 한다. 이는 §0.1(단순 우선)에 반한다.
+3. **역방향 폴백에는 서사가 없다.** 정방향 max-turn 폴백은 "사기범이 (끝내) 전화를 건다"는 결정적 서사가 있다(§13.3). 역방향 "통화 중 자동으로 문자로 강등"은 대응하는 사기 서사도, 이를 요구하는 AC도 없다. 무근거 자동 전이는 오히려 몰입을 해친다.
+
+→ **결론: 명시 버튼 전용을 비준한다.** 단, AC-039의 "방향 무관 설계" 주장이 계속 정직하려면 **장래 역방향 구조화 트리거가 어떤 모습일지**를 남겨 둔다(설계 노트, 구현 불요·Open Question 아님): ① 보이스 단계 트리거가 필요해지면 우선순위는 function-calling이 아니라 **정방향과 동형의 서버측 후처리 sentinel** — 단 이는 실시간 음성 경로에 "턴 종료 시 어시스턴트 텍스트를 서버가 확보하는 지점"이 생긴 뒤에야 가능(현재 realtime 스택엔 없음). ② 폴백을 도입한다면 max-turn이 아니라 "통화 무응답/특정 사기 국면 도달" 같은 **역방향 고유 서사**에 묶어야 하며, 그때 새 `ChannelTransitionTrigger` 값과 대응 AC를 함께 정의한다.
+
+#### 13.8.2 시나리오 게이팅 — 메신저 콘텐츠 보유 시나리오 한정 (비준, load-bearing 확인)
+`requestReverseEscalation`은 `PUBLIC_SCENARIOS[session.scenarioId]?.channel === "messenger"`가 아니면 명시 거부한다. **이 게이트가 실제로 load-bearing인지 클라 코드로 독립 검증했다:**
+- `src/app/session/messenger/page.tsx`(L106–111)는 세션의 `scenarioId`로 시나리오를 찾은 뒤 `!found || found.channel !== "messenger"`이면 `scenario-not-found` 상태로 전환하고 "선택된 메신저 시나리오 정보를 찾을 수 없습니다"만 렌더한다(채팅 렌더 없음). 순수 보이스 시나리오는 `channel` 메타 자체가 부재(→voice)라 이 화면에서 **렌더할 콘텐츠가 없다**.
+- 따라서 게이트를 없애면 `channel`만 `messenger`로 뒤집힌 채 클라가 `/session/messenger`로 이동해 **막다른 오류 화면**에 도달한다 — 이는 AC-039가 금지한 "조용한 실패"의 변종("성공한 척 응답하고 화면만 막힘")이다. 구현자의 판단은 타당하다.
+- 게이트가 검사하는 것은 **시나리오 메타의 `channel`(=저작/진입 채널)**이지 세션의 현재 `channel`이 아니다. 이는 정확한 불변식이다 — "이 세션이 되돌아갈 메신저 콘텐츠를 가진 시나리오인가"를 판정하기 때문. 역방향이 실제로 도달 가능한 경우 = **메신저로 진입→정방향 에스컬레이션으로 보이스에 와 있는 왕복(round-trip) 세션**뿐이며(현 콘텐츠상 `messenger-child-impersonation-kakao`·`messenger-subsidy-smishing-sms` 두 시나리오가 forward `escalation`을 가짐), 이들은 모두 `channel==="messenger"`라 게이트를 통과한다. 게이트는 의미 있는 유일 케이스를 정확히 허용한다.
+
+→ **결론: 게이팅을 비준한다(과잉 보수 아님).** "순수 보이스 시나리오에 최소 메신저 폴백 정체를 부여해 역방향을 열자"는 **장래 확장 후보이나 지금은 불요**(설계 노트): (a) 순수 보이스 시나리오의 역방향 지원을 요구하는 AC가 없다; (b) 그것은 모든 보이스 시나리오에 메신저 표면(surface/skin/오프닝)을 **저작**하는 콘텐츠 작업이지 아키텍처 갭이 아니다; (c) 도입한다면 게이트를 `escalation`/`entryChannel` 기반으로 재정식화하기보다 시나리오 메타에 실제 메신저 콘텐츠가 생긴 시점에 자연히 통과되게 두는 편이 낫다.
+
+#### 13.8.3 핑퐁 방지 — `turnCountAtTransition` 기준점 (비준, 접근 방식 확정)
+역방향 복귀 후 발견된 실버그: 메신저 max-turn 폴백이 세션 누적 `turnCount`(단조 증가·감소 없음)를 그대로 `MESSENGER_ESCALATION_FALLBACK_TURNS(6)`와 비교하고 있어, 한 번이라도 6턴을 넘긴 세션은 보이스→메신저 복귀 첫 메시지에서 **즉시(그리고 이후 영원히) 재-에스컬레이션**되는 핑퐁이 발생. 수정: `ChannelTransitionEntry.turnCountAtTransition?`(옵셔널 증분, `to==="messenger"` 전이에만 기록) + 순수 함수 `turnsSinceMessengerEntry(turnCount, channelHistory)`(`functions/src/roleplay/messengerReentry.ts`)가 "가장 최근 메신저 재진입 이후 턴 수"를 계산해 폴백이 그 값을 보게 한다.
+
+**"channelHistory 룩백" vs "전용 카운터 필드" — channelHistory 룩백을 확정한다:**
+| 축 | (A) channelHistory 룩백 [채택] | (B) 전용 카운터 필드(예: `messengerTurnsSinceEntry`) |
+|---|---|---|
+| 진실 원천 | 단일 — `channelHistory`는 이미 append-only 전이 로그(§13.1). 기준점은 전이 이벤트의 자연 속성("이 전이 시점 누적 턴=N") | 이중 — 별도 가변 필드가 `turnCount`와 별개로 동기화돼야 함(드리프트 위험) |
+| 쓰기 지점 | 전이 시 1회(`transitionChannel`) | 전이 시 리셋 + 매 `sendMessage` 증분(2곳) — 하나라도 누락 시 폴백 조용히 오작동(=이 버그와 동류) |
+| 읽기 비용 | 극소 배열 순수 함수(전이 이력은 최대 몇 항목)·쿼리/인덱스 없음 | 필드 1개 읽기(더 쌈) |
+| 코드베이스 관례 | `channelTransition.ts`·`sessionLimits.ts`·`analyzeConversation.ts`와 동일한 "Firestore 없는 순수 판정 함수" | 관례 밖 가변 상태 추가 |
+
+→ **결론: (A) 비준.** 정규화(단일 진실 원천)·최소 쓰기·기존 순수 함수 관례 정합에서 우월하다. (B)의 유일 이점(읽기 1회 절약)은 이 규모에서 무의미하고, 이중 쓰기 동기화가 바로 이 버그가 닫은 실패 부류를 다시 연다. `turnCountAtTransition`을 **§13.1 스키마 표에 정식 편입**한다(위 표 갱신 완료). `to==="messenger"`에만 기록하는 비대칭은 의도된 최소성이다 — 이 기준점을 소비하는 유일한 곳이 메신저 단계 폴백이고, 보이스 단계에는 폴백이 없기(§13.8.1) 때문. 세 케이스 모두 의미가 성립함을 확인: 메신저 진입 후 무전이(기준점 0=원시 turnCount) / 역방향 복귀 후(turnCount−baseline) / 순수 보이스(폴백 코드에 도달 안 함).
 
 ---
 
