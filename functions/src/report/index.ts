@@ -1,12 +1,14 @@
 // 리포트 생성 (Track A, T9). API.md `generateReport` 1:1. AC-008/AC-009/AC-026.
 //
 // ⚠️ 분석 로직 실호출 여부(투명 고지): 실제 LLM이 아니라 대화 로그를 정규식 기반으로 분석하는
-// 규칙 기반 로직이다(analyzeConversation.ts) — getLlmClient()가 여전히 MockLlmClient를 반환하므로
-// (functions/src/llm/index.ts) LLM에 리포트 판정을 위임하지 않는다. API.md는 "LLM으로 산출"이라고
-// 적었지만, LLM_API_KEY가 없는 이 하카톤 Mock 단계에서 LLM을 호출하는 척하는 것은 근거 없는 성공
+// 규칙 기반 로직이다(analyzeConversation.ts) — 이 분석 함수가 애초에 getLlmClient()를 호출하지
+// 않도록 설계됐다(대화 생성 경로와는 별개, functions/src/llm/index.ts가 이제 GEMINI_API_KEY 존재
+// 시 실 Gemini를 반환하는 것과 무관 — DECISIONS #29 참고). API.md는 "LLM으로 산출"이라고 적었지만,
+// 실 LLM 분석 판정 로직을 아직 만들지 않은 상태에서 LLM을 호출하는 척하는 것은 근거 없는 성공
 // 보고에 해당하므로, 대신 대화 로그(사용자 응답의 저항/순응 키워드, 사기범 발화의 weakenedTactics
-// 부분 일치)에서 직접 규칙 기반으로 추출한다 — 실제 LLM 없이도 리포트 구조(AC-008/009/026)를
-// 정직하게 채운다. LLM_API_KEY 확보 후 실 LLM 분석으로 교체 가능(T7/T19와 동일한 어댑터 교체 원칙).
+// 부분 일치)에서 직접 규칙 기반으로 추출한다 — 실제 LLM 판정 없이도 리포트 구조(AC-008/009/026)를
+// 정직하게 채운다. 실 LLM 판정으로 교체하려면 analyzeConversation.ts를 별도로 확장해야 한다
+// (T7/T19와 동일한 어댑터 교체 원칙, 이번 T43 범위 밖).
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore } from "firebase-admin/firestore";
