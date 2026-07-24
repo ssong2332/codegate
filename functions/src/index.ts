@@ -18,7 +18,7 @@ export { createRealtimeCall } from "./realtime";
 export { submitRealtimeTranscript } from "./realtime/submitTranscript";
 export { generateReport } from "./report";
 // 2인 소셜 챌린지 — 사용자1 생성·클론 스코프·공유 링크(T36, Architecture.md §14, ADR-0005).
-export { createChallenge, deleteChallenge } from "./challenge";
+export { createChallenge, deleteChallenge, listMyChallenges } from "./challenge";
 
 // Trigger functions (클라 직접 호출 아님) — API.md `onSessionEnded` (Track C, T10, AC-021).
 // 실제 정의는 functions/src/guardrails/index.ts(트리거 소유 모듈, Architecture.md §2)에 있다.

@@ -11,3 +11,4 @@ export { requestReverseEscalation } from "./requestReverseEscalation";
 export { generateReport } from "./generateReport";
 export { createChallenge } from "./createChallenge";
 export { deleteChallenge } from "./deleteChallenge";
+export { listMyChallenges } from "./listMyChallenges";

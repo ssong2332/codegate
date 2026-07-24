@@ -21,6 +21,7 @@ import { transitionChannel } from "../session/channelTransition";
 import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
 import { extractEscalationSignal } from "./escalationSignal";
 import { extractLinkMarker } from "./linkMarker";
+import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
@@ -217,7 +218,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     if (canEscalate && !limitReached) {
       if (signalEscalate) {
         escalationTrigger = "structured_signal";
-      } else if (turnCount >= MESSENGER_ESCALATION_FALLBACK_TURNS) {
+      } else if (
+        // reviewer 리뷰 Major #2 수정 — 세션 누적 turnCount가 아니라 "가장 최근 메신저 재진입
+        // 이후" 턴 수를 본다(messengerReentry.ts). T40으로 보이스→메신저 복귀 후 첫 메시지에서
+        // 곧바로 다시 max-turn 폴백이 발화하는 핑퐁을 막는다 — session은 이 턴이 시작되기 전에
+        // 읽은 스냅샷이라 직전 전이(있었다면)의 channelHistory가 이미 반영돼 있다.
+        turnsSinceMessengerEntry(turnCount, session.channelHistory) >= MESSENGER_ESCALATION_FALLBACK_TURNS
+      ) {
         escalationTrigger = "maxturn_fallback";
       }
     }

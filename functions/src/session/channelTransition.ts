@@ -15,6 +15,11 @@
 // 호출부: functions/src/roleplay/index.ts(sendMessage — structured_signal/maxturn_fallback,
 // messenger→voice 정방향 전용), functions/src/session/index.ts(requestEscalation — manual_button,
 // messenger→voice / requestReverseEscalation — manual_button, voice→messenger, T40).
+//
+// reviewer 리뷰 Major #2 수정(2026-07-24) — `to==="messenger"`로 전이할 때는 그 시점의 turnCount를
+// `turnCountAtTransition`으로 함께 기록한다. sendMessage의 max-turn 폴백이 세션 누적 turnCount가
+// 아니라 "이번 메신저 재진입 이후 턴 수"를 봐야, T40 역방향 복귀 직후 다음 메시지 한 번에 즉시
+// 재-에스컬레이션되는 핑퐁을 피할 수 있다(functions/src/roleplay/index.ts 참고).
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import type { ChannelTransitionTrigger, MessengerChannel } from "../shared/types";
@@ -35,6 +40,8 @@ export async function transitionChannel(
   from: MessengerChannel,
   to: MessengerChannel,
   trigger: ChannelTransitionTrigger,
+  /** `to==="messenger"`일 때만 의미 있음 — 전이 시점의 세션 turnCount(위 헤더 주석 참고). */
+  turnCountAtTransition?: number,
 ): Promise<void> {
   if (!isSupportedChannelTransition(from, to)) {
     throw new HttpsError("unimplemented", `지원하지 않는 채널 전이입니다: ${from} → ${to}`);
@@ -42,7 +49,15 @@ export async function transitionChannel(
 
   const db = getFirestore();
   const sessionRef = db.collection("sessions").doc(sessionId);
-  const entry = { from, to, at: Timestamp.now(), trigger };
+  const entry = {
+    from,
+    to,
+    at: Timestamp.now(),
+    trigger,
+    // Firestore admin SDK가 undefined 필드를 기본 거부하므로, 값이 있을 때만 키를 만든다(기존
+    // 관례, functions/src/session/index.ts의 옵셔널 스프레드 패턴과 동일).
+    ...(turnCountAtTransition !== undefined ? { turnCountAtTransition } : {}),
+  };
 
   // T31 QA 잔여 관찰 반영(2026-07-24): sendMessage는 이 함수를 부르기 직전에 이미 트랜잭션으로
   // status==="active"를 재확인하지만(finalize.stillActive), 그 확인과 이 update 사이에도 여전히

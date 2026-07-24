@@ -168,3 +168,17 @@ export type CreateChallengeResponse = {
 };
 export type DeleteChallengeRequest = { challengeId: string };
 export type DeleteChallengeResponse = { status: "deleted" };
+
+// --- listMyChallenges (Track A/C · T36 · UX-020 · reviewer 리뷰 Critical #1 수정) ---
+// functions/src/challenge/types.ts와 1:1. voiceId/linkTokenHash 등 민감 필드는 응답에 절대 싣지
+// 않는다 — firestore.rules의 challenges read는 전면 거부로 좁혀졌고 이 콜러블이 유일한 조회 경로다.
+export type ListMyChallengesRequest = Record<string, never>;
+export type ListMyChallengesItem = {
+  challengeId: string;
+  displayName: string;
+  status: string;
+  resultSharingConsented: boolean;
+  suspicionTimeLabel: string | null;
+  createdAt: string | null;
+};
+export type ListMyChallengesResponse = { challenges: ListMyChallengesItem[] };

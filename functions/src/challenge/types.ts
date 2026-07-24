@@ -22,3 +22,24 @@ export type DeleteChallengeRequest = {
 export type DeleteChallengeResponse = {
   status: "deleted";
 };
+
+// --- listMyChallenges (UX-020 목록 · AC-041/043, T31급 리뷰 Critical #1 수정) ---
+// reviewer 발견: 이전엔 클라가 challenges 컬렉션을 직접 read해(firestore.rules creatorUid 소유자
+// read 허용) voiceId·linkTokenHash까지 그대로 브라우저로 전송되고 있었다 — ADR-0005 §14.2
+// "raw voiceId를 반환하는 경로가 어디에도 없다(사용자1·사용자2 공통)"를 정면 위반. 이 콜러블이
+// resolveChallengeByTokenHash와 동일한 원칙(민감 필드는 서버가 절대 응답에 싣지 않는다)으로
+// 목록을 안전하게 가공해 반환하고, firestore.rules는 challenges read를 전면 거부로 좁혔다(index.ts
+// 참고) — 이제 이 콜러블이 유일한 조회 경로다.
+export type ListMyChallengesRequest = Record<string, never>;
+export type ListMyChallengesItem = {
+  challengeId: string;
+  displayName: string;
+  status: string;
+  resultSharingConsented: boolean;
+  suspicionTimeLabel: string | null;
+  /** ISO 문자열 — Firestore Timestamp를 그대로 onCall 응답에 실을 수 없어 변환한다. */
+  createdAt: string | null;
+};
+export type ListMyChallengesResponse = {
+  challenges: ListMyChallengesItem[];
+};

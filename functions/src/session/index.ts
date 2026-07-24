@@ -383,6 +383,8 @@ export const requestReverseEscalation = onCall<
     throw new HttpsError("failed-precondition", "이 시나리오는 메시지 전환을 지원하지 않습니다.");
   }
 
-  await transitionChannel(sessionId, "voice", "messenger", "manual_button");
+  // reviewer 리뷰 Major #2 수정 — 이 시점의 누적 turnCount를 기준점으로 함께 기록해, sendMessage의
+  // max-turn 폴백이 "메신저 재진입 이후 턴 수"만 보게 한다(channelTransition.ts 헤더 주석 참고).
+  await transitionChannel(sessionId, "voice", "messenger", "manual_button", session.turnCount);
   return { escalation: { toChannel: "messenger" } };
 });
