@@ -18,6 +18,7 @@ import {
   consumeChallengeMode,
   getOrCreatePendingSessionId,
   setOpeningAudioUrl,
+  setOpeningMessageText,
   setSelectedScenarioId as persistSelectedScenarioId,
 } from "@/lib/recording";
 import { createSession } from "@/lib/api";
@@ -87,6 +88,9 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
         voiceId: GENERIC_VOICE_ID,
       });
       if (result.openingAudioUrl) setOpeningAudioUrl(result.openingAudioUrl);
+      // 사용자 신고(2026-07-24) — 실시간 통화에서 사용자가 먼저 말해야 하던 문제. 오프닝 대사
+      // 텍스트를 함께 넘겨 ElevenLabs 세션의 firstMessage로 쓴다(pendingSession.ts 참고).
+      if (result.openingMessage.text) setOpeningMessageText(result.openingMessage.text);
       router.push("/session/play");
     } catch {
       setStartError("시나리오를 시작하지 못했습니다. 다시 시도해 주세요.");

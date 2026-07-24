@@ -46,6 +46,27 @@ export type GeminiVoiceSessionProps = {
 /** 마이크 캡처 버퍼 크기 — 작을수록 지연이 낮지만 콜백이 잦다. 4096은 통화용으로 무난한 절충. */
 const CAPTURE_BUFFER_SIZE = 4096;
 
+// 사용자 신고(2026-07-24) — 연결 직후 사용자가 먼저 말해야 대화가 시작되던 문제. Gemini Live는
+// ElevenLabs의 firstMessage 같은 "이 문장을 그대로 말하라" 오버라이드가 없다(sendClientContent로
+// 보낸 turns는 모델이 응답을 생성할 입력일 뿐, 그대로 낭독하지 않는다) — 대신 llm/geminiClient.ts의
+// OPENING_TRIGGER_TURN과 동일한 발상으로, "지금 막 연결됐으니 캐릭터로서 먼저 말을 걸라"는
+// 오케스트레이션 신호만 보낸다. 시스템 프롬프트(페르소나·수법·가드레일)는 이미 토큰 발급 시점에
+// liveConnectConstraints로 고정돼 있어(ADR-0004) 이 트리거가 캐릭터를 바꾸거나 새 지시를 주입하지
+// 않는다 — 단지 "지금 발화를 시작하라"는 신호일 뿐이다. 텍스트가 아니라 오디오 모달리티로만
+// 응답하도록 config에 이미 고정돼 있어(responseModalities:[AUDIO], geminiProvider.ts) 이 트리거
+// 자체가 사용자에게 텍스트로 노출될 일도 없다.
+const OPENING_TRIGGER_TURN = "(전화가 방금 연결됐다. 지금 막 전화를 받은 상대에게 캐릭터로서 자연스럽게 첫 마디를 건네라.)";
+
+// 이름 있는 타입으로 분리한 이유 — `let session: T | null` 선언부에서 `T`를 인라인으로 쓰면
+// `session = (...) as unknown as typeof session`처럼 자기참조 캐스트를 할 때, 같은 표현식 안의
+// 콜백 클로저(onclose 등)가 session을 참조하는 것과 얽혀 TS가 타입을 `never`로 좁혀버리는 문제가
+// 있었다(실측). 이름 있는 타입으로 자기참조를 없애 해결한다.
+type GeminiLiveSession = {
+  sendRealtimeInput: (i: unknown) => void;
+  sendClientContent: (i: { turns?: unknown; turnComplete?: boolean }) => void;
+  close: () => void;
+};
+
 const log = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") console.info("[gemini]", ...args);
 };
@@ -83,7 +104,7 @@ export default function GeminiVoiceSession({
     let inputContext: AudioContext | null = null;
     let outputContext: AudioContext | null = null;
     let processor: ScriptProcessorNode | null = null;
-    let session: { sendRealtimeInput: (i: unknown) => void; close: () => void } | null = null;
+    let session: GeminiLiveSession | null = null;
     // 받은 오디오를 이어붙일 다음 재생 시작 시각(출력 컨텍스트 시간축 기준).
     let nextPlayTime = 0;
     // 현재 예약/재생 중인 오디오 소스들 — interrupted 시 이걸 전부 멈추지 않으면 이전 응답의
@@ -246,13 +267,27 @@ export default function GeminiVoiceSession({
               }
             },
           },
-        })) as unknown as typeof session;
+        })) as unknown as GeminiLiveSession;
 
         if (cancelled) {
           cleanup();
           return;
         }
         log("connect() resolved");
+
+        // 사용자 신고(2026-07-24) — 연결 직후 캐릭터가 먼저 말을 걸도록 트리거를 보낸다. onopen
+        // 콜백(위)이 아니라 connect()가 실제로 resolve된 직후에 보내는 이유: onopen은 소켓 이벤트라
+        // connect()의 반환 Promise가 아직 resolve되기 전에 먼저 발화할 수 있어(session 변수가 아직
+        // 할당되기 전), 여기서 보내는 것이 session이 확실히 non-null임을 보장하는 가장 이른 지점이다.
+        const activeSession = session;
+        if (activeSession) {
+          try {
+            activeSession.sendClientContent({ turns: OPENING_TRIGGER_TURN, turnComplete: true });
+          } catch {
+            // 트리거 전송 실패는 무시 — 사용자가 먼저 말을 걸면 대화는 정상적으로 이어진다(핵심
+            // 루프 비차단, P-4). AI가 먼저 말하지 않는 것으로 조용히 강등될 뿐 통화 자체는 안 막힌다.
+          }
+        }
 
         // 마이크 → PCM16 16kHz → 전송. ScriptProcessor는 구식이지만 AudioWorklet과 달리 별도
         // 워커 파일 없이 동작해, 정적 export 구성(next.config.ts)에서 추가 배포 산출물이 없다.

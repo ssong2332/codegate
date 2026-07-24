@@ -25,7 +25,8 @@ import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAs
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
 
-export { generateOpeningLine, isUsingMockLlm } from "./openingLine";
+export { generateOpeningLine } from "./openingLine";
+export type { OpeningLineResult } from "./openingLine";
 
 ensureFirebaseAdminApp();
 

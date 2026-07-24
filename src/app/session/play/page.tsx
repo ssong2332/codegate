@@ -22,6 +22,7 @@ import { collection, doc, getDoc, onSnapshot, orderBy, query } from "firebase/fi
 import { db } from "@/lib/firebase";
 import {
   consumeOpeningAudioUrl,
+  consumeOpeningMessageText,
   getPendingSessionId,
   isSessionAnswered,
   markSessionAnswered,
@@ -70,6 +71,10 @@ function formatElapsed(seconds: number): string {
 export default function SessionCallPage() {
   const router = useRouter();
   const [sessionId] = useState<string | null>(() => getPendingSessionId());
+  // 사용자 신고(2026-07-24) — 실시간 통화에서 사용자가 먼저 말해야 대화가 시작되던 문제.
+  // consumeOpeningMessageText()는 1회성(읽으면 삭제)이라 sessionId와 동일하게 지연 초기값으로
+  // 마운트 시 한 번만 읽는다(재렌더마다 다시 읽어 소진되는 것을 방지).
+  const [openingMessageText] = useState<string | null>(() => consumeOpeningMessageText());
   const [pageState, setPageState] = useState<PageState>(sessionId ? "checking" : "no-session");
   const [phase, setPhase] = useState<Phase>("incoming");
   const [callMode, setCallMode] = useState<CallMode>("undecided");
@@ -448,6 +453,7 @@ export default function SessionCallPage() {
       {realtime.credentials?.provider === "elevenlabs" && (
         <RealtimeVoiceSession
           credentials={realtime.credentials}
+          firstMessage={openingMessageText ?? undefined}
           stopSignal={realtime.stopSignal}
           muted={muted}
           onActive={realtime.handleActive}

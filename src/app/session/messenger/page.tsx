@@ -89,6 +89,9 @@ export default function MessengerSessionPage() {
   const [escalating, setEscalating] = useState(false);
   const [escalationError, setEscalationError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // 사용자 신고(2026-07-24) — 대화가 길어지면 자동으로 맨 아래로 스크롤되지 않던 문제. 목록 끝에
+  // 빈 sentinel을 두고 메시지 도착·전송 중(타이핑 인디케이터 노출) 시마다 그 지점으로 스크롤한다.
+  const scrollAnchorRef = useRef<HTMLLIElement | null>(null);
 
   // 세션·시나리오 로드 + (문자형이면) 스킨 결정. session/play/page.tsx와 동일하게 인라인 async
   // IIFE로 감싼다(react-hooks/set-state-in-effect 회피 관례).
@@ -170,6 +173,13 @@ export default function MessengerSessionPage() {
     });
     return unsubscribe;
   }, [sessionId, pageState]);
+
+  // 사용자 신고(2026-07-24) — 새 메시지가 오거나(상대 응답) 내가 보내서 "입력 중" 표시가 뜰 때마다
+  // 맨 아래로 스크롤한다. scrollIntoView는 조상 스크롤 컨테이너가 없어도 안전(main 자체가 뷰포트
+  // 스크롤을 담당 — 이 화면은 별도 overflow 컨테이너를 쓰지 않는다).
+  useEffect(() => {
+    scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, sending]);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -377,7 +387,37 @@ export default function MessengerSessionPage() {
             )}
           </li>
         ))}
+        {/* 사용자 신고(2026-07-24) 반영 — 전송 후 응답을 기다리는 동안(실 LLM 연동 후 체감 지연이
+            늘었다) 그냥 버튼 스피너만으로는 "보냈는데도 멈춘 것 같다"는 인상을 줬다. docs/UX.md
+            P-4("AI 응답 대기 중... 타이핑 인디케이터 표시")가 이미 요구하던 패턴을 실제로
+            구현한다 — 상대가 실제로 답장을 쓰고 있는 것처럼 보이는 점 3개 애니메이션. */}
+        {sending && (
+          <li className="flex flex-col items-start gap-1" aria-hidden="true">
+            <span className="text-xs font-semibold text-[#6B655C]">{scenario.callerLabel}</span>
+            <span
+              className={`flex items-center gap-1 rounded-2xl px-4 py-3 ${bubbleClass(
+                "scammer",
+                surface,
+                messengerSkin,
+              )}`}
+            >
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="h-1.5 w-1.5 animate-bounce rounded-full bg-current opacity-60"
+                  style={{ animationDelay: `${i * 0.15}s` }}
+                />
+              ))}
+            </span>
+          </li>
+        )}
+        <li ref={scrollAnchorRef} aria-hidden="true" className="h-px w-full shrink-0" />
       </ul>
+      {sending && (
+        <p role="status" className="sr-only">
+          {scenario.callerLabel}이(가) 입력 중입니다.
+        </p>
+      )}
 
       {/* 입력·전송 또는 종료 상태 — 빈 메시지 전송 방지, 전송 중 중복 전송 방지. */}
       <div className="sticky bottom-0 border-t border-[#E2DDD3] bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">

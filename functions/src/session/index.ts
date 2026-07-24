@@ -9,7 +9,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
-import { generateOpeningLine, isUsingMockLlm } from "../roleplay";
+import { generateOpeningLine } from "../roleplay";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
@@ -111,8 +111,10 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
 
     // roleplay 모듈(트랙 A 내부 계약, Architecture.md §4)에 오프닝 사기범 대사 생성을 위임한다.
     // LLM 호출 지점은 functions/src/llm 어댑터를 거친다(sendMessage와 동일 구조, T7 태스크 지시).
-    const openingMessage = await generateOpeningLine(scenarioId);
-    const isMock = isUsingMockLlm();
+    // isMock은 generateOpeningLine이 실제로 관측한 값을 그대로 쓴다(별도 isUsingMockLlm() 사전
+    // 확인과 분리 — completeWithFallback 도입 후 그 둘이 다른 사실이 될 수 있음, openingLine.ts
+    // 주석 참고. 사용자 실측 신고로 발견된 정합성 버그 수정, 2026-07-24).
+    const { message: openingMessage, isMock } = await generateOpeningLine(scenarioId);
 
     // T4: sessionId(온보딩 "사전 세션 id")가 넘어오면 createVoiceClone이 만들어 둔 pending
     // sessions/{sid} 문서를 새로 만들지 않고 채택한다 — sessionId 불일치 갭 해소. 넘어오지 않으면
