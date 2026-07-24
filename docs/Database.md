@@ -1,9 +1,10 @@
 # Database — 안 당해본 사기는 못 막는다 (AI 금융사기 백신)
 
 Owner: architect (see AGENTS.md). Others read-only.
-Based on PRD Version: v1.1 · Based on UX Version: 1.6
+Based on PRD Version: v1.1 · Based on UX Version: 1.7
 
 > **v1.1 증분(2026-07-23, T26·T35):** 메신저→보이스 채널 전이(§sessions 증분·§messages 증분·§scenarios 증분)와 2인 소셜(§challenges·§users/voices) 스키마를 더한다. **모든 신규 필드는 옵셔널(하위호환, Migration Policy)** — 기존 P0 루프 문서·필드는 무변경. 설계 근거는 Architecture.md §13·§14, DECISIONS #14~#24, ADR-0005.
+> **소급 리뷰 증분(2026-07-24, T40·T33):** ① `channelHistory` 항목에 `turnCountAtTransition?`(역방향 핑퐁 방지, Architecture.md §13.8) 정식 편입 ② `reports`에 `resistedMoments?`(UX-018 "잘 대응한 지점", 후속 implementer 태스크로 구현) 추가. 근거 DECISIONS #25/#26. 둘 다 옵셔널 증분.
 
 ## Engine
 **Cloud Firestore**(NoSQL 문서 DB) + **Firebase Storage**(오브젝트). 이유는 DECISIONS #1(스택 확정)·#12(실시간 onSnapshot). 관계형 마이그레이션 없음 — 컬렉션/문서는 코드가 생성.
@@ -56,7 +57,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.6
 |---|---|---|---|
 | channel | string? | `messenger`\|`voice` | **현재 활성 채널**(방향 무관 상태값). 부재→`voice`. UX-014 내부 phase와 다른 층위(명명 충돌 회피로 `phase` 아닌 `channel`, DECISIONS #14) |
 | entryChannel | string? | `messenger`\|`voice` | 세션 시작 채널. 리포트 교차채널 판정(AC-037) |
-| channelHistory | array<{from,to,at,trigger}>? | | 전이 이력. trigger=`structured_signal`\|`maxturn_fallback`\|`manual_button`(AC-035/037) |
+| channelHistory | array<{from,to,at,trigger,turnCountAtTransition?}>? | | 전이 이력. trigger=`structured_signal`\|`maxturn_fallback`\|`manual_button`(AC-035/037). `turnCountAtTransition?`는 **`to==="messenger"` 전이에만** 기록하는 전이 시점 누적 `turnCount` 기준점 — 메신저 max-turn 폴백의 핑퐁 방지(Architecture.md §13.8, DECISIONS #25) |
 | messengerSkin | string? | `ios`\|`samsung`\|`default` | UA 자동 감지 결과(프레젠테이션 전용, 안전 미게이팅, §13.5) |
 | skinSource | string? | `auto`\|`manual`\|`fallback` | 스킨 결정 출처 |
 | voiceSelectionSource | string? | `recorded`\|`reused`\|`fallback_male`\|`fallback_female` | 조건부 clone/목소리 선택 결과(AC-046, §13.6). 결정된 voiceId는 기존 `voiceId` 필드 재사용 |
@@ -129,11 +130,13 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.6
 | uid | string | required, indexed | 소유자 |
 | wasDeceived | bool | required | 속았는지(AC-009) |
 | deceivedMoments | array<{turnIndex,timeLabel,tactic,correctAction}> | | 속은 시점 타임라인(AC-026) |
+| resistedMoments | array<{turnIndex,timeLabel,tactic,goodResponse}>? | | **T33 소급 결정(DECISIONS #26)** — 사용자가 잘 대응한(저항) 턴 타임라인. UX-018 리플레이 해설의 "잘 대응한 지점"(never-deceived Empty 상태)이 요구하는 per-turn 마커. `deceivedMoments`의 대칭 필드로, 동일 규칙 기반 분석(analyzeConversation.ts의 `RESISTANCE_PATTERN`)이 **이미 매 턴 계산하지만 현재 버리는** 저항 판정을 기록한다. `goodResponse`=그 순간 사용자가 잘한 대응의 긍정 문구(정확 카피는 구현/ux-design 상세). 옵셔널 증분(하위호환, Migration Policy) — 기존 리포트는 부재→빈 배열 취급. **⚠️ 아직 미구현(후속 implementer 태스크): shared/types.ts `ReportDoc`에 필드 추가 + analyzeConversation.ts/generateReportCore.ts가 저항 분기를 기록하도록 확장** |
 | tacticsUsed | array<string> | required | 사용된 조작 수법(AC-008) |
 | preventionAdvice | array<string> | min 1 | 예방 조언(AC-008) |
 | createdAt | timestamp | indexed | 히스토리 정렬(AC-016) |
 
 > **생성물 음성은 폐기되므로 리포트·메타만 계정에 잔존**(AC-021). 실제 운영정보(실계좌·실링크) 배제(AC-005/013).
+> **`resistedMoments`(T33/DECISIONS #26):** UX-018 Empty 상태("한 번도 속지 않은 경우 → 시도된 수법과 '잘 대응한 지점' 주석")를 스키마상 충족 가능하게 만드는 추가. AC-038의 "신규 데이터 모델·분석 파이프라인 도입 금지"와 상충하지 않는다 — 새 컬렉션·새 분석 패스가 아니라 **기존 리포트 문서에 옵셔널 필드 1개** + 이미 도는 규칙 기반 분석이 계산해 둔 저항 판정을 **저장만** 하는 대칭 증분이다. PRD AC-009/037(never-deceived=사실 명시+수법 나열)은 이 필드 없이도 충족되므로 PRD 변경 불요이며, UX-018 spec은 이 필드로 spec 그대로 충족 가능해진다(UX.md 변경 불요).
 
 ### `deletionLogs/{logId}`  — 폐기 감사 로그 (AC-021, ADR-0003)
 | Field | Type | Constraints | Description |
