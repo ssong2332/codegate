@@ -402,7 +402,7 @@ export default function SessionCallPage() {
         <button
           type="button"
           onClick={() => router.push("/scenarios")}
-          className="min-h-[48px] rounded-xl border border-[#C9C2B6] px-6 py-3 text-lg font-bold text-[#22303A] hover:bg-white"
+          className="min-h-[48px] rounded-[14px] border border-[#C9C2B6] px-6 py-3 text-lg font-bold text-[#22303A] hover:bg-white"
         >
           시나리오 선택으로
         </button>
@@ -442,7 +442,7 @@ export default function SessionCallPage() {
           : "말씀하세요";
 
   return (
-    <main className="flex min-h-screen flex-col bg-gradient-to-b from-[#26363F] via-[#22303A] to-[#18232B] text-white">
+    <main className="flex min-h-screen flex-col bg-[#22303A] text-white">
       {/* 실시간 speech-to-speech 세션 — 서버가 자격증명을 준 경우에만 마운트된다(지연 로딩).
           화면 요소는 없고 SDK 세션 생명주기만 관리한다. */}
       {realtime.credentials?.provider === "elevenlabs" && (
@@ -470,10 +470,13 @@ export default function SessionCallPage() {
       )}
 
       {/* 상단 상태 바 — 통신사/신호 자리에 통화 상태와 경과 시간(실제 통화 화면 관례). */}
-      <div className="flex items-center justify-between px-6 pt-5 text-sm text-[#8B9BA5]">
+      <div className="flex items-center justify-between px-6 pt-5 text-sm text-[#C9D4DB]">
         <span>휴대전화</span>
         {phase !== "incoming" && phase !== "connecting" && (
-          <span role="status" className="tabular-nums font-semibold text-[#B9C6CE]">
+          <span
+            role="status"
+            className="font-mono tabular-nums font-semibold tracking-wider text-[#C9D4DB]"
+          >
             {formatElapsed(elapsedSec)}
           </span>
         )}
@@ -502,7 +505,7 @@ export default function SessionCallPage() {
 
         <div className="flex flex-col items-center gap-1">
           <p className="text-3xl font-bold">{callerLabel}</p>
-          <p className="text-base text-[#8B9BA5]">
+          <p className="text-base text-[#C9D4DB]">
             {phase === "incoming"
               ? "휴대전화 수신 중…"
               : phase === "connecting"
@@ -514,7 +517,7 @@ export default function SessionCallPage() {
         </div>
 
         {phase === "incoming" && (
-          <p role="status" className="max-w-xs text-center text-sm leading-relaxed text-[#8B9BA5]">
+          <p role="status" className="max-w-xs text-center text-sm leading-relaxed text-[#C9D4DB]">
             {PREROLL_NOTICE}
           </p>
         )}
@@ -522,7 +525,7 @@ export default function SessionCallPage() {
         {phase === "connecting" && (
           <span
             aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-[#8B9BA5] border-t-transparent"
+            className="h-5 w-5 animate-spin rounded-full border-2 border-[#C9D4DB] border-t-transparent"
           />
         )}
 
@@ -566,18 +569,18 @@ export default function SessionCallPage() {
             >
               <span aria-hidden="true">✕</span>
             </button>
-            <span className="text-sm text-[#8B9BA5]">거절</span>
+            <span className="text-sm text-[#C9D4DB]">거절</span>
           </div>
           <div className="flex flex-col items-center gap-2">
             <button
               type="button"
               onClick={handleAnswer}
               aria-label="전화 받기"
-              className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[#1E9E6A] text-3xl shadow-lg transition active:scale-95"
+              className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[#0E6B62] text-3xl shadow-lg transition active:scale-95"
             >
               <span aria-hidden="true">✆</span>
             </button>
-            <span className="text-sm text-[#8B9BA5]">받기</span>
+            <span className="text-sm text-[#C9D4DB]">받기</span>
           </div>
         </div>
       ) : phase === "ended" ? (
@@ -588,7 +591,7 @@ export default function SessionCallPage() {
           <button
             type="button"
             onClick={() => void handleEndTraining()}
-            className="min-h-[56px] rounded-xl bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white"
+            className="min-h-[56px] rounded-[14px] bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white"
           >
             결과 확인하러 가기
           </button>
@@ -603,7 +606,7 @@ export default function SessionCallPage() {
                   sendMessage(별도 텍스트 LLM+TTS)가 실시간 음성 위에 다른 목소리를 겹쳐 재생한다.
                   실시간 모드에서는 안내만, 폴백 모드에서는 자막+텍스트 입력을 보여준다. */}
               {callMode === "realtime" ? (
-                <p className="text-center text-sm leading-relaxed text-[#8B9BA5]">
+                <p className="text-center text-sm leading-relaxed text-[#C9D4DB]">
                   지금은 음성으로 대화하는 중입니다. 마이크에 대고 말씀하세요.
                 </p>
               ) : (
@@ -618,7 +621,7 @@ export default function SessionCallPage() {
                     <p
                       role={sendError ? "alert" : undefined}
                       className={`mb-3 text-center text-xs leading-relaxed ${
-                        sendError ? "text-[#F0A79E]" : "text-[#8B9BA5]"
+                        sendError ? "text-[#F0A79E]" : "text-[#C9D4DB]"
                       }`}
                     >
                       {sendError ??
@@ -652,7 +655,7 @@ export default function SessionCallPage() {
                       }
                       disabled={sending}
                       placeholder="하고 싶은 말을 입력하세요..."
-                      className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-white/30 bg-white/10 px-[18px] py-3 text-lg text-white placeholder:text-[#8B9BA5]"
+                      className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-white/30 bg-white/10 px-[18px] py-3 text-lg text-white placeholder:text-[#C9D4DB]"
                     />
                     <button
                       type="submit"
@@ -697,12 +700,12 @@ export default function SessionCallPage() {
                 aria-pressed={muted}
                 aria-label={muted ? "음소거 해제" : "음소거"}
                 className={`flex h-14 w-14 items-center justify-center rounded-full text-xl transition active:scale-95 ${
-                  muted ? "bg-white text-[#22303A]" : "bg-white/15 text-white"
+                  muted ? "bg-white text-[#22303A]" : "bg-[#41525E] text-[#C9D4DB]"
                 }`}
               >
                 <span aria-hidden="true">{muted ? "🔇" : "🎙"}</span>
               </button>
-              <span className="text-xs text-[#8B9BA5]">{muted ? "음소거 중" : "음소거"}</span>
+              <span className="text-xs text-[#C9D4DB]">{muted ? "음소거 중" : "음소거"}</span>
             </div>
 
             <div className="flex flex-col items-center gap-2">
@@ -714,7 +717,7 @@ export default function SessionCallPage() {
               >
                 <span aria-hidden="true">✆</span>
               </button>
-              <span className="text-xs text-[#8B9BA5]">종료</span>
+              <span className="text-xs text-[#C9D4DB]">종료</span>
             </div>
 
             <div className="flex flex-col items-center gap-2">
@@ -724,12 +727,12 @@ export default function SessionCallPage() {
                 aria-pressed={showTextInput}
                 aria-label="키패드 — 텍스트로 입력"
                 className={`flex h-14 w-14 items-center justify-center rounded-full text-xl transition active:scale-95 ${
-                  showTextInput ? "bg-white text-[#22303A]" : "bg-white/15 text-white"
+                  showTextInput ? "bg-white text-[#22303A]" : "bg-[#41525E] text-[#C9D4DB]"
                 }`}
               >
                 <span aria-hidden="true">⌨</span>
               </button>
-              <span className="text-xs text-[#8B9BA5]">키패드</span>
+              <span className="text-xs text-[#C9D4DB]">키패드</span>
             </div>
 
             {/* T40 fast-follow — 역방향 명시 전환 버튼("메시지로 전환", §13.1/AC-039). 정방향
@@ -745,7 +748,7 @@ export default function SessionCallPage() {
                   onClick={() => void handleRequestReverseEscalation()}
                   disabled={switchingToMessenger}
                   aria-label="메시지 화면으로 전환"
-                  className="flex h-14 w-14 items-center justify-center rounded-full bg-white/15 text-xl text-white transition active:scale-95 disabled:opacity-50"
+                  className="flex h-14 w-14 items-center justify-center rounded-full bg-[#41525E] text-xl text-[#C9D4DB] transition active:scale-95 disabled:opacity-50"
                 >
                   {switchingToMessenger ? (
                     <span
@@ -756,7 +759,7 @@ export default function SessionCallPage() {
                     <span aria-hidden="true">💬</span>
                   )}
                 </button>
-                <span className="text-xs text-[#8B9BA5]">메시지로</span>
+                <span className="text-xs text-[#C9D4DB]">메시지로</span>
               </div>
             )}
           </div>

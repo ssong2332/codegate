@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/auth";
 import { grantConsent } from "@/lib/consent";
+import { Banner, Button } from "@/components/ui";
 
 // AC-012 필수 3요소: (1) 시뮬레이션임 (2) 실제 금전·자격증명 미관여 (3) 언제든 종료 가능.
 const NOTICE_POINTS = [
@@ -46,56 +47,74 @@ export default function ConsentPage() {
   if (userLoading) return null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-8 p-8">
-      <h1 className="text-2xl font-bold">시작하기 전에 꼭 알아두세요</h1>
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] px-6 pt-6">
+      {/* AC-012 사전 고지 배너 — 상시 노출(닫기 불가), 아래 3개 포인트 카드를 보강하는 상단 요약. */}
+      <Banner variant="caution" sticky>
+        <span className="font-semibold text-[#B96A1B]">모의 훈련입니다.</span>{" "}
+        지금 보시는 내용은 실제 상황이 아닙니다.
+      </Banner>
 
-      <ul className="flex flex-col gap-4 text-lg leading-relaxed">
-        {NOTICE_POINTS.map((point) => (
-          <li key={point} className="flex items-start gap-3">
-            <span aria-hidden="true" className="mt-0.5 shrink-0 text-2xl text-green-700">
-              ✔
-            </span>
-            <span>{point}</span>
-          </li>
-        ))}
-      </ul>
+      <div className="flex flex-1 flex-col gap-8 pb-10 pt-8">
+        <h1 className="text-[24px] font-bold leading-[1.35] text-[#22303A]">
+          시작하기 전에
+          <br />
+          꼭 알아두세요
+        </h1>
 
-      <label className="flex min-h-[48px] items-start gap-3 rounded border border-gray-300 p-4 text-lg">
-        {/* 체크박스 크기 확대(2026-07-23 모바일 UX 개선) — 24px는 라벨 전체가 탭 영역이라
-            동작에는 문제없지만, 어르신 대상 화면에서 시각적으로 작아 보인다는 지적에 따라
-            32px로 키웠다(동의라는 핵심 동작이라 존재감을 분명히 하는 쪽을 택함). */}
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={(event) => setChecked(event.target.checked)}
-          className="mt-0.5 h-8 w-8 shrink-0 accent-[#0E6B62]"
-          aria-describedby="consent-checkbox-label"
-        />
-        <span id="consent-checkbox-label">
-          위 내용을 모두 확인했으며, 이 훈련 시뮬레이션에 참여하는 것에 동의합니다.
-        </span>
-      </label>
+        <div className="flex flex-col gap-3">
+          {NOTICE_POINTS.map((point, index) => (
+            <div
+              key={point}
+              className="flex items-start gap-3 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4"
+            >
+              <div
+                aria-hidden="true"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#E4F0EC] text-[15px] font-bold text-[#0E6B62]"
+              >
+                {index + 1}
+              </div>
+              <p className="text-[16px] leading-[1.55] text-[#22303A]">{point}</p>
+            </div>
+          ))}
+        </div>
 
-      {error && (
-        <p
-          ref={errorRef}
-          role="alert"
-          tabIndex={-1}
-          className="flex items-center gap-2 text-base text-red-700 outline-none"
-        >
-          <span aria-hidden="true">⚠</span>
-          <span>{error}</span>
-        </p>
-      )}
+        <div className="flex-1" />
 
-      <button
-        type="button"
-        onClick={handleSubmit}
-        disabled={!checked || submitting || !user}
-        className="min-h-[48px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800 disabled:opacity-50"
-      >
-        {submitting ? "저장 중..." : "동의하고 시작"}
-      </button>
+        <label className="flex cursor-pointer select-none items-start gap-3 py-3">
+          {/* 체크박스 크기 확대(2026-07-23 모바일 UX 개선) — 32px, 디자인 시스템 토큰과 일치.
+              접근성 보존을 위해 커스텀 div 대신 네이티브 checkbox를 그대로 유지(키보드/스크린리더
+              시맨틱스). accent-color + rounded로 디자인 토큰에 최대한 근접시켰다. */}
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={(event) => setChecked(event.target.checked)}
+            className="mt-0.5 h-8 w-8 shrink-0 rounded-[10px] accent-[#0E6B62]"
+            aria-describedby="consent-checkbox-label"
+          />
+          <span
+            id="consent-checkbox-label"
+            className="text-[16px] font-semibold leading-[1.5] text-[#22303A]"
+          >
+            위 내용을 모두 확인했으며, 이 훈련 시뮬레이션에 참여하는 것에 동의합니다.
+          </span>
+        </label>
+
+        {error && (
+          <p
+            ref={errorRef}
+            role="alert"
+            tabIndex={-1}
+            className="flex items-center gap-2 text-[15px] text-[#C6392F] outline-none"
+          >
+            <span aria-hidden="true">⚠</span>
+            <span>{error}</span>
+          </p>
+        )}
+
+        <Button type="button" onClick={handleSubmit} disabled={!checked || submitting || !user}>
+          {submitting ? "저장 중..." : "동의하고 시작"}
+        </Button>
+      </div>
     </main>
   );
 }

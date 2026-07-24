@@ -31,6 +31,7 @@ import { detectMessengerSkin, type MessengerSkin } from "@/lib/messenger/detectS
 import EndTrainingButton from "@/components/EndTrainingButton";
 import SyntheticLabel from "@/components/SyntheticLabel";
 import MessengerFakeLanding from "@/components/MessengerFakeLanding";
+import { Banner, Button } from "@/components/ui";
 
 type PageState = "checking" | "ready" | "no-session" | "scenario-not-found" | "load-error";
 // detectSkin.ts의 MessengerSkinSource는 auto|fallback만 다룬다(자동 감지 결과 타입) — 이 화면은
@@ -244,13 +245,11 @@ export default function MessengerSessionPage() {
           <span aria-hidden="true">⚠</span>
           <span>{message}</span>
         </p>
-        <button
-          type="button"
-          onClick={() => router.push("/scenarios/messenger")}
-          className="min-h-[48px] rounded-xl border border-[#C9C2B6] px-6 py-3 text-lg font-bold text-[#22303A] hover:bg-white"
-        >
-          시나리오 선택으로
-        </button>
+        <div className="w-full max-w-xs">
+          <Button variant="secondary" type="button" onClick={() => router.push("/scenarios/messenger")}>
+            시나리오 선택으로
+          </Button>
+        </div>
       </main>
     );
   }
@@ -278,12 +277,13 @@ export default function MessengerSessionPage() {
       <div className="sticky top-0 z-20 flex flex-col border-b border-[#E2DDD3] bg-white">
         {surface === "kakao" && (
           // AC-047 핵심 — 닫기 버튼 없음. 어떤 state도 이 배너를 숨기지 않는다(영구 비활성 불가).
-          <p
-            role="status"
-            className="bg-[#FEF6D8] px-4 py-2 text-center text-sm font-semibold text-[#6B5A1E]"
-          >
-            ⚠ 카카오톡 실제 서비스와 무관한 훈련용 재현입니다
-          </p>
+          // Banner 공용 컴포넌트(caution, sticky) 재사용 — 메신저 플로우.dc.html의 상시 고지
+          // 배너와 동일 톤(ⓘ 아이콘 + 주의 배경). 텍스트 내용은 기존 AC-047/045 문구를 그대로 유지.
+          // (Banner의 기본 rounded-[12px]는 그대로 둔다 — 모서리를 각지게 강제로 덮어쓰려면
+          // Banner.tsx 자체를 수정해야 하는데 공용 컴포넌트는 이 작업 범위 밖이다.)
+          <Banner variant="caution" sticky>
+            카카오톡 실제 서비스와 무관한 훈련용 재현입니다
+          </Banner>
         )}
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
           <div className="flex items-center gap-2">
@@ -299,13 +299,16 @@ export default function MessengerSessionPage() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            {/* 명시 전환 버튼(§13.3 — 1턴부터 상시, AC-034) — 에스컬레이션 가능 시나리오에서만. */}
+            {/* 명시 전환 버튼(§13.3 — 1턴부터 상시, AC-034) — 에스컬레이션 가능 시나리오에서만.
+                전이 플로우.dc.html의 "📞 전화로 확인" 채움 스타일(브랜드 청록 CTA)을 그대로 채용
+                — 위치는 상단 sticky 툴바에 그대로 두었다(항상 노출 요건은 이미 충족, §13.3 판단
+                근거는 보고 참고). */}
             {scenario.escalation && !ended && (
               <button
                 type="button"
                 onClick={() => void handleRequestEscalation()}
                 disabled={escalating}
-                className="min-h-[40px] rounded-full border border-[#0E6B62] px-3 text-sm font-semibold text-[#0E6B62] hover:bg-[#E4F0EC] disabled:opacity-50"
+                className="min-h-[40px] rounded-full bg-[#0E6B62] px-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#0B564F] disabled:cursor-not-allowed disabled:bg-[#F2EFE9] disabled:text-[#C9C2B6]"
               >
                 📞 전화로 확인
               </button>
@@ -383,13 +386,9 @@ export default function MessengerSessionPage() {
             <p className="text-base font-semibold text-[#22303A]" role="status">
               대화가 종료되었습니다.
             </p>
-            <button
-              type="button"
-              onClick={() => router.push("/session/end")}
-              className="min-h-[52px] rounded-xl bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white hover:bg-[#0B564F]"
-            >
+            <Button type="button" onClick={() => router.push("/session/end")}>
               결과 확인하러 가기
-            </button>
+            </Button>
           </div>
         ) : (
           <>
@@ -451,13 +450,19 @@ export default function MessengerSessionPage() {
       )}
 
       {/* 전이 연출(P-18, T30) — "사기범이 전화를 거는" 화면으로 잠시 전환한 뒤 통화 셸(UX-014)
-          수신 phase로 이음새 없이 인계한다(위 effect가 1.5초 후 라우팅). 새 의존성 없이 기존
-          call-ring-pulse(globals.css, UX-014와 동일 모션 톤)만 재사용한다. */}
+          수신 phase로 이음새 없이 인계한다(위 effect가 1.5초 후 라우팅, 타이밍 로직은 무변경).
+          새 의존성 없이 기존 call-ring-pulse(globals.css, UX-014와 동일 모션 톤)만 재사용한다.
+          배경색은 디자인 시스템의 공식 "통화 셸 배경" 토큰(#22303A, 반투명)으로 맞춰 UX-014
+          수신 화면과 이음새 없이 이어지게 했다(전이 플로우.dc.html의 반투명 오버레이와 동일 취지 —
+          아래 채팅 화면이 은은히 비쳐 보인다). */}
       {escalating && (
         <div
           role="status"
-          className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-[#18232B] text-white"
+          className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-[#22303A]/95 text-white"
         >
+          <span className="rounded-full border border-[#B96A1B]/50 bg-[#B96A1B]/25 px-3 py-1.5 text-xs font-semibold text-[#FBF3E8]">
+            🔊 훈련용 가상 통화
+          </span>
           <div className="relative flex items-center justify-center">
             <span
               aria-hidden="true"
@@ -469,7 +474,7 @@ export default function MessengerSessionPage() {
               style={{ animationDelay: "0.7s" }}
             />
             <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-[#41525E] text-4xl">
-              📞
+              🔔
             </div>
           </div>
           <p className="text-xl font-bold">{scenario.callerLabel}(으)로부터 전화가 옵니다</p>

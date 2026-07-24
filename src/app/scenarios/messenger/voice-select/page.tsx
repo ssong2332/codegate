@@ -31,6 +31,7 @@ import {
 } from "@/lib/recording";
 import { fetchStoredVoices, type StoredVoiceSummary } from "@/lib/voices/fetchStoredVoices";
 import { scenarios, GENERIC_VOICE_ID } from "@/content/scenarios";
+import { Badge, Banner, Button } from "@/components/ui";
 
 type PageState = "no-scenario" | "returning-error" | "ready";
 
@@ -157,13 +158,11 @@ export default function MessengerVoiceSelectPage() {
           <span aria-hidden="true">⚠</span>
           <span>선택한 시나리오 정보를 찾을 수 없습니다. 시나리오를 다시 선택해 주세요.</span>
         </p>
-        <button
-          type="button"
-          onClick={() => router.push("/scenarios/messenger")}
-          className="min-h-[48px] rounded-xl border border-[#C9C2B6] px-6 py-3 text-lg font-bold text-[#22303A] hover:bg-white"
-        >
-          시나리오 선택으로
-        </button>
+        <div className="w-full max-w-xs">
+          <Button variant="secondary" type="button" onClick={() => router.push("/scenarios/messenger")}>
+            시나리오 선택으로
+          </Button>
+        </div>
       </main>
     );
   }
@@ -189,13 +188,11 @@ export default function MessengerVoiceSelectPage() {
           <span aria-hidden="true">⚠</span>
           <span>목소리 클론을 확인하지 못했습니다. 다시 시도해 주세요.</span>
         </p>
-        <button
-          type="button"
-          onClick={() => router.push("/onboarding/record")}
-          className="min-h-[48px] rounded-xl border border-[#C9C2B6] px-6 py-3 text-lg font-bold text-[#22303A] hover:bg-white"
-        >
-          재녹음으로 돌아가기
-        </button>
+        <div className="w-full max-w-xs">
+          <Button variant="secondary" type="button" onClick={() => router.push("/onboarding/record")}>
+            재녹음으로 돌아가기
+          </Button>
+        </div>
       </main>
     );
   }
@@ -210,6 +207,12 @@ export default function MessengerVoiceSelectPage() {
         >
           <span aria-hidden="true">←</span> 뒤로
         </button>
+        {/* 전이 플로우.dc.html "이 대화는 통화로 이어질 수 있어요" 배너 재사용(Banner 공용
+            컴포넌트, sticky·닫기 불가 — AC-047과 동일한 상시 고지 원칙). */}
+        <Banner variant="caution" sticky>
+          <span className="font-semibold text-[#B96A1B]">이 대화는 통화로 이어질 수 있어요.</span>{" "}
+          상대가 메시지 도중 전화를 걸어올 수 있는 시나리오예요.
+        </Banner>
         <h1 className="text-2xl font-bold text-[#22303A]">통화용 목소리를 정해 주세요</h1>
         <p className="text-base leading-relaxed text-[#6B655C]">
           이 시나리오는 통화로 이어질 수 있어 목소리가 필요할 수 있습니다. 지금 미리 정해 두면
@@ -218,69 +221,97 @@ export default function MessengerVoiceSelectPage() {
       </header>
 
       <div className="flex flex-col gap-3">
+        {/* "지금 30초 녹음"은 선택 후 별도 확정이 아니라 클릭 즉시 녹음 화면으로 이동하는
+            단일 액션이라(D-25 기존 로직 무변경) SelectableCard(선택→별도 확정 버튼)의 상시
+            "미선택" 원 어포던스를 그대로 쓰지 않고, 디자인 시스템의 카드 톤(테두리/라운드/배지)만
+            재사용한 커스텀 카드로 둔다 — 판단 근거는 팀 보고 참고. */}
         <button
           type="button"
           onClick={handleStartRecording}
           disabled={starting}
-          className="flex min-h-[64px] flex-col items-start gap-1 rounded-2xl border-2 border-[#E2DDD3] bg-white p-4 text-left transition hover:border-[#0E6B62] disabled:opacity-50"
+          className="flex min-h-[64px] flex-col items-start gap-2 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-5 text-left transition-colors hover:border-[#0E6B62] disabled:opacity-50"
         >
-          <span className="text-lg font-bold text-[#22303A]">지금 30초 녹음</span>
-          <span className="text-sm text-[#6B655C]">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-[17px] font-bold text-[#22303A]">지금 30초 녹음</span>
+            <Badge variant="caution">30초 소요</Badge>
+          </span>
+          <span className="text-sm leading-relaxed text-[#6B655C]">
             본인 목소리를 녹음해 통화에서 그대로 씁니다.
           </span>
         </button>
 
         {storedVoices.length > 0 && (
-          <div className="flex flex-col gap-2 rounded-2xl border-2 border-[#E2DDD3] bg-white p-4">
-            <span className="text-lg font-bold text-[#22303A]">저장된 내 목소리 사용</span>
-            <ul className="flex flex-col gap-2">
-              {storedVoices.map((voice) => (
-                <li key={voice.voiceId}>
-                  <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border border-[#E2DDD3] px-3 py-2 has-[:checked]:border-[#0E6B62] has-[:checked]:bg-[#E4F0EC]">
-                    <input
-                      type="radio"
-                      name="stored-voice"
-                      value={voice.voiceId}
-                      checked={selectedVoiceId === voice.voiceId}
-                      onChange={() => setSelectedVoiceId(voice.voiceId)}
-                      className="h-5 w-5"
-                    />
-                    <span className="text-base text-[#22303A]">{voice.label}</span>
-                  </label>
-                </li>
-              ))}
+          <div className="flex flex-col gap-3 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-5">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="text-[17px] font-bold text-[#22303A]">저장된 내 목소리 사용</span>
+              <Badge variant="success">보관된 목소리</Badge>
+            </span>
+            {/* reviewer 리뷰(디자인 시스템 롤아웃) — SelectableCard(button+aria-pressed)로 바꿨더니
+                네이티브 라디오그룹 시맨틱스(스크린리더 "N개 중 1개 선택됨" 안내)가 사라지는 접근성
+                회귀였다. 시각 스타일은 SelectableCard와 동일하게 유지하되 &lt;label&gt;+&lt;input
+                type="radio"&gt;로 되돌린다(1회성 선택 항목이라 진짜 라디오그룹 의미가 맞음 — 형제
+                화면들의 동일 패턴과도 일관). */}
+            <ul className="flex flex-col gap-2" role="radiogroup" aria-label="저장된 내 목소리">
+              {storedVoices.map((voice) => {
+                const selected = selectedVoiceId === voice.voiceId;
+                return (
+                  <li key={voice.voiceId}>
+                    <label
+                      className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-[16px] border-[1.5px] p-3 transition-colors ${
+                        selected
+                          ? "border-[#0E6B62] bg-[#E4F0EC]"
+                          : "border-[#E2DDD3] bg-white hover:border-[#C9C2B6]"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="stored-voice"
+                        value={voice.voiceId}
+                        checked={selected}
+                        onChange={() => setSelectedVoiceId(voice.voiceId)}
+                        className="h-5 w-5 accent-[#0E6B62]"
+                      />
+                      <span className="text-[16px] font-semibold text-[#22303A]">{voice.label}</span>
+                    </label>
+                  </li>
+                );
+              })}
             </ul>
-            <button
+            <Button
               type="button"
               onClick={() => selectedVoiceId && void startWithVoice(selectedVoiceId, "reused")}
               disabled={!selectedVoiceId || starting}
-              className="min-h-[48px] rounded-xl bg-[#0E6B62] px-6 py-2 text-base font-bold text-white disabled:opacity-50"
             >
               이 목소리로 시작
-            </button>
+            </Button>
           </div>
         )}
 
-        <div className="flex flex-col gap-2 rounded-2xl border-2 border-[#E2DDD3] bg-white p-4">
-          <span className="text-lg font-bold text-[#22303A]">기본 남성·여성 목소리</span>
-          <span className="text-sm text-[#6B655C]">본인 목소리가 아닌 기본 합성 음성입니다.</span>
+        <div className="flex flex-col gap-3 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-5">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-[17px] font-bold text-[#22303A]">기본 남성·여성 목소리</span>
+            <Badge variant="neutral">녹음 없이 시작</Badge>
+          </span>
+          <span className="text-sm leading-relaxed text-[#6B655C]">
+            본인 목소리가 아닌 기본 합성 음성입니다.
+          </span>
           <div className="flex gap-3">
-            <button
+            <Button
+              variant="secondary"
               type="button"
               onClick={() => void startWithVoice(GENERIC_VOICE_ID, "fallback_male")}
               disabled={starting}
-              className="min-h-[48px] flex-1 rounded-xl border-2 border-[#C9C2B6] px-4 py-2 text-base font-bold text-[#22303A] hover:bg-[#F2EFE9] disabled:opacity-50"
             >
-              기본 남성 목소리
-            </button>
-            <button
+              남성 음성
+            </Button>
+            <Button
+              variant="secondary"
               type="button"
               onClick={() => void startWithVoice(GENERIC_VOICE_ID, "fallback_female")}
               disabled={starting}
-              className="min-h-[48px] flex-1 rounded-xl border-2 border-[#C9C2B6] px-4 py-2 text-base font-bold text-[#22303A] hover:bg-[#F2EFE9] disabled:opacity-50"
             >
-              기본 여성 목소리
-            </button>
+              여성 음성
+            </Button>
           </div>
         </div>
       </div>

@@ -21,6 +21,7 @@ import {
 } from "@/lib/recording";
 import { createSession } from "@/lib/api";
 import { scenarios, GENERIC_VOICE_ID, type ScenarioDoc, type MessengerSurface } from "@/content/scenarios";
+import { Badge, Button } from "@/components/ui";
 
 type PageState = "ready" | "starting" | "start-error";
 
@@ -112,10 +113,9 @@ export default function MessengerScenarioSelectPage() {
           <span className="flex min-w-0 flex-1 flex-col gap-1.5">
             <span className="flex items-start justify-between gap-2">
               <span className="flex flex-wrap items-center gap-2">
-                {/* 표면 배지(AC-002/030) — 색 단독 표기 금지, 텍스트 라벨을 항상 함께 표기. */}
-                <span className="rounded-full border border-[#0E6B62] px-2.5 py-0.5 text-xs font-bold text-[#0E6B62]">
-                  {surfaceLabel}
-                </span>
+                {/* 표면 배지(AC-002/030) — 색 단독 표기 금지, 텍스트 라벨을 항상 함께 표기.
+                    디자인 시스템 배지(중립) 재사용 — 메신저 플로우.dc.html의 채널 배지와 동일 톤. */}
+                <Badge variant="neutral">{surfaceLabel}</Badge>
                 <span className="text-lg font-bold text-[#22303A]">{scenario.title}</span>
               </span>
               {selected && (
@@ -134,12 +134,17 @@ export default function MessengerScenarioSelectPage() {
 
             <span
               id={`scenario-${scenarioId}-meta`}
-              className="flex flex-col gap-1 text-sm text-[#6B655C]"
+              className="flex flex-col gap-1.5 text-sm text-[#6B655C]"
             >
-              <span>
-                {scenario.fraudType} · {scenario.estimatedDuration}
+              {/* 소요시간 배지(중립) — 메신저 플로우.dc.html의 "약 {time}" 배지와 동일 톤.
+                  난이도는 자유서술문이라(예: "중간 — 정서적 압박과 채널 전환이 결합됩니다") 색상
+                  등급 배지로 단정 짓지 않고 서술 텍스트로 유지한다(임의 매핑 금지). */}
+              <span className="flex flex-wrap items-center gap-2">
+                <Badge variant="neutral">{scenario.estimatedDuration}</Badge>
               </span>
-              <span>난이도: {scenario.difficulty}</span>
+              <span>
+                {scenario.fraudType} · 난이도: {scenario.difficulty}
+              </span>
             </span>
           </span>
         </label>
@@ -185,14 +190,13 @@ export default function MessengerScenarioSelectPage() {
           </p>
         )}
 
-        <button
+        <Button
           type="button"
           onClick={() => void handleStart()}
           disabled={!selectedScenarioId || state === "starting"}
-          className="min-h-[56px] w-full rounded-xl bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white transition hover:bg-[#0B564F] disabled:opacity-50"
         >
           {state === "starting" ? "연결하는 중..." : "이 메시지 받아보기"}
-        </button>
+        </Button>
       </div>
     </main>
   );

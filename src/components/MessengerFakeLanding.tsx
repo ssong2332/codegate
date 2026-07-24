@@ -7,6 +7,7 @@
 // 명·로고·실 URL은 쓰지 않는다(AC-032 무해화).
 import { useState } from "react";
 import EndTrainingButton from "./EndTrainingButton";
+import { Banner, Button } from "./ui";
 
 type MessengerFakeLandingProps = {
   /** 링크의 displayText(모의 표기) — 이 목업의 제목으로도 그대로 쓴다. */
@@ -39,70 +40,95 @@ export default function MessengerFakeLanding({
       aria-label={`${title} — 훈련용 모의 화면`}
       className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-[#FAF8F5]"
     >
-      <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-[#E2DDD3] bg-white px-4 py-3">
-        {/* AC-022/045 상시 표식 — 색이 아닌 텍스트로 항상 노출. */}
-        <p role="status" className="text-sm font-bold text-[#C6392F]">
-          AI 훈련용 모의 화면 · 실제 로그인/전송이 아닙니다
-        </p>
+      {/* AC-022/045 상시 표식 — 브랜드 스킨과 무관한 모듈이라 새 디자인 시스템(Banner)을 자유롭게
+          적용한다. 텍스트는 기존 문구 그대로(내용 변경 없음, 컨테이너만 Banner로 교체). */}
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-[#E2DDD3] bg-white px-4 py-3">
+        <Banner variant="caution" sticky className="flex-1">
+          <span className="font-semibold text-[#B96A1B]">AI 훈련용 모의 화면</span> · 실제 로그인/전송이
+          아닙니다
+        </Banner>
         <EndTrainingButton onClick={onEndTraining} />
       </div>
 
-      <div className="mx-auto flex w-full max-w-sm flex-1 flex-col gap-6 p-6">
-        <h1 className="text-xl font-bold text-[#22303A]">{title}</h1>
+      {/* 메신저 플로우.dc.html "가짜 브라우저 주소창" 재현 — 링크의 displayText(=이미 채팅에
+          표시된 모의 URL)를 그대로 다시 보여줄 뿐, 새 state·네트워크 호출은 없다(AC-045 무변경). */}
+      <div className="flex items-center gap-2 border-b border-[#E2DDD3] bg-[#F2EFE9] px-4 py-2.5">
+        <div className="flex h-9 flex-1 items-center gap-2 rounded-full border border-[#E2DDD3] bg-white px-3.5">
+          <span aria-hidden="true" className="text-xs text-[#C6392F]">
+            ⚠
+          </span>
+          <p className="truncate font-mono text-xs text-[#6B655C]">{title}</p>
+        </div>
+      </div>
 
+      <div className="mx-auto flex w-full max-w-sm flex-1 flex-col gap-6 p-6">
         {submitted ? (
-          <div className="flex flex-col gap-4 rounded-2xl border border-[#E2DDD3] bg-white p-5">
+          <div className="flex flex-col gap-4 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-5">
             <p role="status" className="text-lg font-semibold text-[#0E6B62]">
               입력되었습니다.
             </p>
             <p className="text-sm leading-relaxed text-[#6B655C]">
               (실제로는 어디에도 전송되지 않았습니다 — 훈련용 모의 화면입니다.)
             </p>
-            <button
-              type="button"
-              onClick={onClose}
-              className="min-h-[48px] rounded-xl bg-[#0E6B62] px-6 py-3 text-base font-bold text-white hover:bg-[#0B564F]"
-            >
+            <Button type="button" onClick={onClose}>
               채팅으로 돌아가기
-            </button>
+            </Button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#22303A]">
-              이름
-              <input
-                type="text"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="이름을 입력하세요"
-                className="min-h-[48px] rounded-xl border border-[#C9C2B6] px-4 text-base"
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#22303A]">
-              연락처
-              <input
-                type="text"
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                placeholder="연락처를 입력하세요"
-                className="min-h-[48px] rounded-xl border border-[#C9C2B6] px-4 text-base"
-              />
-            </label>
+          <>
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#F2EFE9]">
+              <span aria-hidden="true" className="text-2xl">
+                🔒
+              </span>
+            </div>
+            <div className="-mt-4 flex flex-col gap-2">
+              <h1 className="text-xl font-bold leading-snug text-[#22303A]">본인확인이 필요합니다</h1>
+              <p className="text-sm leading-relaxed text-[#6B655C]">
+                안전한 서비스 이용을 위해 아래 정보를 입력해 주세요.
+              </p>
+            </div>
 
-            <button
-              type="submit"
-              className="min-h-[52px] rounded-xl bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white hover:bg-[#0B564F]"
-            >
-              확인
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="min-h-[44px] rounded-xl border border-[#C9C2B6] px-6 py-2.5 text-base font-semibold text-[#22303A] hover:bg-white"
-            >
-              닫기
-            </button>
-          </form>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#22303A]">
+                이름
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="이름을 입력하세요"
+                  className="min-h-[48px] rounded-[10px] border border-[#E2DDD3] px-3.5 text-base text-[#22303A] outline-none focus:border-[#6B655C]"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#22303A]">
+                연락처
+                <input
+                  type="text"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  placeholder="연락처를 입력하세요"
+                  className="min-h-[48px] rounded-[10px] border border-[#E2DDD3] px-3.5 text-base text-[#22303A] outline-none focus:border-[#6B655C]"
+                />
+              </label>
+
+              {/* "확인" 버튼은 일부러 앱 브랜드 청록(#0E6B62)이 아닌 중립 회색(#41525E)을 쓴다 —
+                  이 화면이 우리 앱의 정식 CTA가 아니라 "낯선 가짜 사이트"라는 느낌을 유지해 훈련
+                  효과(진짜 앱 버튼과 구분)를 살린다(메신저 플로우.dc.html의 동일 의도적 선택). */}
+              <button
+                type="submit"
+                className="min-h-[52px] rounded-[10px] bg-[#41525E] text-base font-semibold text-white transition-colors hover:bg-[#374049]"
+              >
+                확인
+              </button>
+              <p className="text-center text-xs text-[#C9C2B6]">ⓒ 본인확인센터</p>
+              <button
+                type="button"
+                onClick={onClose}
+                className="min-h-[44px] rounded-[10px] border border-[#C9C2B6] px-6 py-2.5 text-base font-semibold text-[#22303A] hover:bg-white"
+              >
+                닫기
+              </button>
+            </form>
+          </>
         )}
       </div>
     </div>

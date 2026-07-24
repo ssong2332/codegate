@@ -15,6 +15,7 @@ import { doc, getDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { generateReport } from "@/lib/api";
 import { scenarios } from "@/content/scenarios";
+import { Badge, Button } from "@/components/ui";
 
 type DeceivedMoment = {
   turnIndex: number;
@@ -194,10 +195,10 @@ export default function ReportPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] pb-8">
       <div className="px-5 pt-[22px]">
-        <p className="text-sm font-semibold text-[#6B655C]">
+        <p className="text-[13px] font-semibold text-[#6B655C]">
           {[dateLabel, scenarioTitle].filter(Boolean).join(" · ")}
         </p>
-        <p className="mt-1.5 text-[26px] font-bold leading-[1.35] text-[#22303A]">
+        <p className="mt-1.5 text-[24px] font-bold leading-[1.35] text-[#22303A]">
           이번 훈련에서
           <br />
           확인된 것
@@ -228,7 +229,7 @@ export default function ReportPage() {
                 <p className="text-lg font-bold text-[#22303A]">
                   개선 영역 · {firstDeceivedMoment.tactic}
                 </p>
-                <p className="mt-0.5 text-base leading-relaxed text-[#4A5560]">
+                <p className="mt-0.5 text-base leading-relaxed text-[#6B655C]">
                   {firstDeceivedMoment.timeLabel}에 속았습니다. {firstDeceivedMoment.correctAction}
                 </p>
               </div>
@@ -251,7 +252,7 @@ export default function ReportPage() {
             <p className="text-lg font-bold text-[#22303A]">
               {report.wasDeceived ? "개선 영역 · 요구에 응함" : "잘 대처함 · 요구에 응하지 않음"}
             </p>
-            <p className="mt-0.5 text-base leading-relaxed text-[#4A5560]">
+            <p className="mt-0.5 text-base leading-relaxed text-[#6B655C]">
               {report.wasDeceived
                 ? "훈련 중 상대의 요구에 응한 순간이 있었습니다. 아래 타임라인에서 자세히 볼 수 있습니다."
                 : "이번 훈련에서는 상대의 요구에 응하지 않았습니다."}
@@ -269,7 +270,7 @@ export default function ReportPage() {
           </span>
           <div>
             <p className="text-lg font-bold text-[#22303A]">다음에 해볼 것</p>
-            <p className="mt-0.5 text-base leading-relaxed text-[#4A5560]">
+            <p className="mt-0.5 text-base leading-relaxed text-[#6B655C]">
               {report.preventionAdvice[0] ?? "다음에는 상대의 신원을 먼저 확인해 보세요."}
             </p>
           </div>
@@ -285,7 +286,7 @@ export default function ReportPage() {
           className="flex min-h-[56px] items-center justify-between rounded-2xl border border-[#E2DDD3] bg-white px-[18px] text-lg font-semibold text-[#22303A]"
         >
           속은 시점 타임라인 보기
-          <span aria-hidden="true" className="text-[#8A8378]">
+          <span aria-hidden="true" className="text-[#6B655C]">
             {expandedSection === "timeline" ? "▴" : "▾"}
           </span>
         </button>
@@ -296,16 +297,15 @@ export default function ReportPage() {
                 {report.deceivedMoments.map((moment) => (
                   <li
                     key={`${moment.turnIndex}-${moment.timeLabel}`}
-                    className="rounded-2xl border border-[#EFC7C3] bg-[#FDF1F0] p-4"
+                    className="rounded-2xl border border-[#B96A1B]/30 bg-[#FBF3E8] p-4"
                   >
-                    <p className="text-lg font-semibold text-[#C6392F]">
-                      <span aria-hidden="true">⚠ </span>
-                      {moment.timeLabel}에 속았습니다
-                    </p>
-                    <p className="mt-2 text-base text-[#22303A]">
-                      <span className="font-semibold">놓친 위험 신호: </span>
-                      {moment.tactic}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-lg font-semibold text-[#B96A1B]">
+                        <span aria-hidden="true">⚠ </span>
+                        {moment.timeLabel}에 속았습니다
+                      </p>
+                      <Badge variant="caution">{moment.tactic}</Badge>
+                    </div>
                     <p className="mt-2 text-base text-[#22303A]">
                       <span className="font-semibold">이렇게 했어야 해요: </span>
                       {moment.correctAction}
@@ -314,7 +314,7 @@ export default function ReportPage() {
                 ))}
               </ol>
             ) : (
-              <p className="rounded-2xl border border-[#E2DDD3] bg-white p-4 text-base text-[#4A5560]">
+              <p className="rounded-2xl border border-[#E2DDD3] bg-white p-4 text-base text-[#6B655C]">
                 속은 시점이 없습니다 — 이번 훈련에서는 한 번도 속지 않았습니다.
               </p>
             )}
@@ -328,18 +328,20 @@ export default function ReportPage() {
           className="flex min-h-[56px] items-center justify-between rounded-2xl border border-[#E2DDD3] bg-white px-[18px] text-lg font-semibold text-[#22303A]"
         >
           시도된 수법 {report.tacticsUsed.length}가지
-          <span aria-hidden="true" className="text-[#8A8378]">
+          <span aria-hidden="true" className="text-[#6B655C]">
             {expandedSection === "tactics" ? "▴" : "▾"}
           </span>
         </button>
         {expandedSection === "tactics" && (
           <section aria-label="시도된 수법" className="px-1">
             {report.tacticsUsed.length > 0 ? (
-              <ul className="list-disc rounded-2xl border border-[#E2DDD3] bg-white p-4 pl-8 text-base text-[#22303A]">
+              <div className="flex flex-wrap gap-2 rounded-2xl border border-[#E2DDD3] bg-white p-4">
                 {report.tacticsUsed.map((tactic) => (
-                  <li key={tactic}>{tactic}</li>
+                  <Badge key={tactic} variant="neutral">
+                    {tactic}
+                  </Badge>
                 ))}
-              </ul>
+              </div>
             ) : (
               <p className="rounded-2xl border border-[#E2DDD3] bg-white p-4 text-base text-[#6B655C]">
                 식별된 수법이 없습니다.
@@ -355,7 +357,7 @@ export default function ReportPage() {
           className="flex min-h-[56px] items-center justify-between rounded-2xl border border-[#E2DDD3] bg-white px-[18px] text-lg font-semibold text-[#22303A]"
         >
           상황별 대처법
-          <span aria-hidden="true" className="text-[#8A8378]">
+          <span aria-hidden="true" className="text-[#6B655C]">
             {expandedSection === "advice" ? "▴" : "▾"}
           </span>
         </button>
@@ -369,7 +371,7 @@ export default function ReportPage() {
                 <svg width="18" height="18" viewBox="0 0 16 16" className="mt-0.5 shrink-0" aria-hidden="true">
                   <path d="M8 1 L15 14 H1 Z" fill="#B96A1B" />
                 </svg>
-                <p className="text-base leading-relaxed text-[#4A5560]">{advice}</p>
+                <p className="text-base leading-relaxed text-[#6B655C]">{advice}</p>
               </div>
             ))}
           </section>
@@ -380,31 +382,23 @@ export default function ReportPage() {
         {/* UX-018(리플레이 해설) 진입점 — UX.md UX-008 Primary Actions "대화 되짚어보기(리플레이
             해설)" → UX-018(T33, AC-038). 요약(무엇을·언제)과 별도 화면(D-18)이라 링크만 연결한다. */}
         {sessionId && (
-          <button
+          <Button
             type="button"
+            variant="secondary"
             onClick={() => router.push(`/report/replay?sessionId=${encodeURIComponent(sessionId)}`)}
-            className="min-h-[56px] rounded-2xl border-2 border-[#0E6B62] px-6 py-3 text-lg font-bold text-[#0E6B62] hover:bg-[#E4F0EC]"
           >
             대화 되짚어보기(리플레이 해설)
-          </button>
+          </Button>
         )}
-        <button
-          type="button"
-          onClick={() => router.push("/scenarios")}
-          className="min-h-[56px] rounded-2xl bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white"
-        >
+        <Button type="button" variant="primary" onClick={() => router.push("/scenarios")}>
           다른 시나리오 훈련하기
-        </button>
+        </Button>
         {/* mockup의 "가족에게 리포트 공유"는 이 빌드 스코프에 없는 기능(OQ-15 미확정 — 자녀의 부모
             리포트 열람은 open, PRD "발표 내러티브 강조는 확정했으나 빌드 스코프는 별개") — 실제로
             동작하지 않는 버튼을 두는 대신, 이미 구현·검증된 히스토리 화면(T15)으로 대체했다. */}
-        <button
-          type="button"
-          onClick={() => router.push("/history")}
-          className="min-h-[52px] rounded-2xl border border-[#C9C2B6] px-6 py-3 text-lg font-semibold text-[#4A5560]"
-        >
+        <Button type="button" variant="secondary" onClick={() => router.push("/history")}>
           히스토리 보기
-        </button>
+        </Button>
         <button
           type="button"
           onClick={handleGoHome}

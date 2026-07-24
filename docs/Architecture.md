@@ -67,7 +67,13 @@ Next.js 앱 + Firebase Functions 단일 리포. 폴더 = 트랙 경계(아래 §
 │   │   ├── SyntheticLabel.tsx      # "AI 훈련용 합성" 표식(AC-022, D-3)  (공용)
 │   │   ├── EndTrainingButton.tsx   # 상시 종료 컨트롤(AC-006, P-2)       (공용)
 │   │   ├── AgeGate.tsx             # UX-011 (P1)                        (C)
-│   │   └── SpoofImage.tsx          # UX-009 사칭 이미지 (P1)             (B)
+│   │   ├── SpoofImage.tsx          # UX-009 사칭 이미지 (P1)             (B)
+│   │   └── ui/                     # 디자인 시스템 공용 프리미티브(T41)   (공용)
+│   │       ├── Button.tsx          # 주/보조/경고 버튼(56px/52px)
+│   │       ├── Badge.tsx           # 주의/완료/중립/경고 배지
+│   │       ├── SelectableCard.tsx  # 선택 카드(단일 액션이 아닌 진짜 select 흐름 전용 — 라디오그룹 의미가 필요한 목록엔 네이티브 input[type=radio] 유지, reviewer 리뷰 반영)
+│   │       ├── ProgressSteps.tsx   # 3단계 상단 진행 표시
+│   │       └── Banner.tsx          # 상시 노출 배너(닫기 불가 — dismiss 어포던스 없음, 구조적 강제)
 │   ├── lib/
 │   │   ├── firebase/               # 클라 SDK 초기화(auth/firestore/storage/functions)  (B, T2)
 │   │   ├── auth/                   # 라우트 가드·세션 훅                 (C, T18)
