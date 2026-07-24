@@ -119,7 +119,7 @@ cp functions/.env.example functions/.env
 ```
 | Variable | Purpose |
 |---|---|
-| `GEMINI_API_KEY` | **무료** 실시간 음성 통화(Gemini Live) — 아래 설명 참조 |
+| `GEMINI_API_KEY` | **무료** 실시간 음성 통화(Gemini Live, generic 3종) + **텍스트 대화(사기범 역할극) LLM**(DECISIONS #29) — 아래 설명 참조 |
 | `ELEVENLABS_API_KEY` | ElevenLabs Instant Voice Cloning + TTS + Agents(실시간 통화) API 키 |
 | `ELEVENLABS_AGENT_IDS` | 실시간 음성 통화용 `scenarioId:agentId` 매핑(쉼표 구분) — 아래 설명 참조 |
 | `LLM_API_KEY` | 사기범 역할극/리포트 생성용 LLM API 키 |
@@ -147,9 +147,16 @@ cp functions/.env.example functions/.env
 1. [aistudio.google.com](https://aistudio.google.com)에서 API 키 발급(카드 등록 불필요)
 2. `functions/.env`에 `GEMINI_API_KEY=발급받은_키` 추가 후 에뮬레이터 재시작
 
-이것만으로 generic 시나리오 3종이 실제 음성 대화로 동작한다. 시나리오별 설정은 필요 없다 —
-시스템 프롬프트는 서버가 단기 토큰에 고정해서 발급하므로(`liveConnectConstraints`) 브라우저로
-내려가지 않고, 클라이언트가 모델·프롬프트·도구를 바꿔치기할 수도 없다(ADR-0004).
+**이 키 하나가 두 가지 경로를 동시에 활성화한다(DECISIONS #29):**
+- generic 시나리오 3종(기관사칭·대출·환급금)의 실시간 음성 통화(Gemini Live, 고정 프리셋 음성만).
+- **모든 시나리오**(보이스·메신저 공통)의 텍스트 대화(`sendMessage`/`createSession`) — `functions/src/llm/index.ts`의 `getLlmClient()`가 이 키가 있으면 규칙 기반 목업 대신 실제 Gemini로 사기범 캐릭터를 생성한다. 텍스트 생성은 음성과 별도 모델(`gemini-flash-latest`)을 쓰고 고정 프리셋 음성 제약이 없다 — 클론 시나리오의 채팅/에스컬레이션 전 텍스트 구간도 이 경로를 탄다.
+
+키가 없으면 음성은 텍스트 폴백으로, 텍스트 대화는 규칙 기반 목업(`MockLlmClient`)으로 강등된다 —
+즉 키 없이도 전체 흐름을 개발·시연할 수 있다. 시스템 프롬프트는 서버가 조립·고정해서 전달하므로
+(음성: `liveConnectConstraints`로 단기 토큰에 고정, 텍스트: 서버 조립 후 클라로 전송한 적 없음)
+브라우저로 내려가지 않고, 클라이언트가 모델·프롬프트·도구를 바꿔치기할 수도 없다(ADR-0004).
+실 Gemini가 실패(안전필터 차단·타임아웃 등)해도 그 턴만 조용히 목업으로 강등되고 대화는 끊기지
+않는다(`completeWithFallback`, `functions/src/llm/index.ts`).
 
 > ⚠️ 무료 티어는 대화 내용이 구글 모델 학습에 사용된다. 실제 사용자를 대상으로 배포할 때는
 > 유료 티어(학습 미사용)로 올릴 것.

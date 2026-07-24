@@ -1,13 +1,15 @@
 // 대화 로그 규칙 기반 분석 (Track A, T9, AC-008/AC-009/AC-026). 순수 함수 — Firestore 없이
 // 단위 테스트 가능(roleplay/sessionLimits.ts와 동일 패턴).
 //
-// ⚠️ Mock 단계 투명 고지: "속았는지"를 실제 LLM이 판단하는 게 아니라, 사용자 응답 텍스트의
-// 저항/순응 키워드를 정규식으로 매칭하는 규칙 기반 판정이다 — getLlmClient()가 여전히
-// MockLlmClient를 반환하므로(functions/src/llm/index.ts) 판정을 LLM에 위임할 수 없다. 사기범
-// 발화가 어떤 weakenedTactics를 썼는지도 같은 이유로 텍스트 부분 일치로 추정한다(Mock이 flavor
-// 문구를 대사에 그대로 섞어 넣기 때문에 이 방식이 성립 — MockLlmClient.craftEscalationLine 참고).
-// LLM_API_KEY 확보 후 실 LLM 분석으로 교체하면 더 정교한 판정이 가능하다(T7/T19와 동일한 "Mock
-// 잔존 위험" 원칙).
+// ⚠️ 투명 고지: "속았는지"를 실제 LLM이 판단하는 게 아니라, 사용자 응답 텍스트의 저항/순응
+// 키워드를 정규식으로 매칭하는 규칙 기반 판정이다 — 이 분석 함수 자체가 getLlmClient()를 전혀
+// 호출하지 않는 순수 로직으로 설계됐기 때문이다(functions/src/llm/index.ts가 이제 GEMINI_API_KEY
+// 존재 시 실 Gemini를 반환하지만, 그건 대화 생성 경로 얘기고 이 리포트 분석은 애초에 그 경로를
+// 타지 않는다 — DECISIONS #29 참고). 사기범 발화가 어떤 weakenedTactics를 썼는지도 같은 이유로
+// 텍스트 부분 일치로 추정한다(Mock 대사에서는 flavor 문구가 그대로 섞여 들어가 이 방식이
+// 성립하지만 — MockLlmClient.craftEscalationLine 참고 — 실 LLM 대사는 표현이 자유로워 이 부분
+// 일치 추정이 덜 정확할 수 있다). 실 LLM 응답까지 반영한 분석(예: LLM 자체에 판정을 위임)으로
+// 교체하려면 이 함수를 별도로 확장해야 한다(T9/T19와 동일한 "규칙 기반 잔존 위험" 원칙).
 export type AnalysisMessage = {
   role: "scammer" | "user";
   textMasked: string;
