@@ -6,6 +6,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 > **v1.1 증분(2026-07-23, T26·T35):** 메신저→보이스 채널 전이(§sessions 증분·§messages 증분·§scenarios 증분)와 2인 소셜(§challenges·§users/voices) 스키마를 더한다. **모든 신규 필드는 옵셔널(하위호환, Migration Policy)** — 기존 P0 루프 문서·필드는 무변경. 설계 근거는 Architecture.md §13·§14, DECISIONS #14~#24, ADR-0005.
 > **소급 리뷰 증분(2026-07-24, T40·T33):** ① `channelHistory` 항목에 `turnCountAtTransition?`(역방향 핑퐁 방지, Architecture.md §13.8) 정식 편입 ② `reports`에 `resistedMoments?`(UX-018 "잘 대응한 지점", 후속 implementer 태스크로 구현) 추가. 근거 DECISIONS #25/#26. 둘 다 옵셔널 증분.
 > **v1.3 증분(2026-07-24, T47 — 메신저 2인 챌린지 #20):** `challenges`에 `channel?`(부재→voice) 추가 + `voiceId`를 required→optional 완화(메신저 챌린지는 클론 없음, AC-051). 사용자2 체험 세션은 `channel:"messenger"`·voiceId 부재로 생성 가능. **모두 옵셔널·하위호환**(기존 보이스 챌린지 문서 무마이그레이션). 설계 근거 Architecture.md §14.8, DECISIONS #30.
+> **v1.4 증분(2026-07-24, T55 — generic 보이스 2인 챌린지 #23):** `challenges`에 `voiceMode?`(부재→clone) 추가 — `channel`=voice 챌린지의 clone/generic 판별자(voiceId-부재로 오버로드하지 않음, Architecture.md §14.9.1). generic 보이스 챌린지는 `voiceMode:"generic"`·`voiceId` 부재·`channel` 부재(→voice)로 생성. `deriveChallengeResultSummary`가 이 필드로 결과 요약을 완료-전용 게이트(AC-055/OQ-32). **옵셔널·하위호환**(기존 clone 챌린지 문서 무마이그레이션). 설계 근거 Architecture.md §14.9, DECISIONS #31.
 
 ## Engine
 **Cloud Firestore**(NoSQL 문서 DB) + **Firebase Storage**(오브젝트). 이유는 DECISIONS #1(스택 확정)·#12(실시간 onSnapshot). 관계형 마이그레이션 없음 — 컬렉션/문서는 코드가 생성.
@@ -157,7 +158,8 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | creatorUid | string | required, indexed | 사용자1(발신)·활성개수 판정 키 |
 | scenarioId | string | required | 챌린지 시나리오(생성 시 확정, OQ-29). 보이스=딥보이스(clone), 메신저=`channel:"messenger"` 시나리오 |
 | channel | string? | `voice`\|`messenger`, **부재→`voice`**(계산 기본값·무백필) | **T47 증분(#20)** — 채널 판별자. 생성 시 `PUBLIC_SCENARIOS[scenarioId].channel ?? "voice"`로 역정규화. 수신자 라우팅(UX-014 vs UX-022)·발신자 결과 분기의 단일 판별자(scenarioId 룩업 불요). voiceId-부재를 채널 신호로 오버로드하지 않는 이유는 Architecture.md §14.8.1(#21은 messenger+voiceId 병존) |
-| voiceId | string? | **T47: required→optional**, 존재 시 **챌린지 스코프 고정** | 클론 voice. 챌린지 밖 재사용·추출 불가(AC-041, ADR-0005). **메신저 챌린지(#20)엔 부재** — 클론·통화 경로 미사용(AC-051). 기존 보이스 문서는 전부 세팅돼 하위호환 |
+| voiceId | string? | **T47: required→optional**, 존재 시 **챌린지 스코프 고정** | 클론 voice. 챌린지 밖 재사용·추출 불가(AC-041, ADR-0005). **메신저 챌린지(#20)엔 부재** — 클론·통화 경로 미사용(AC-051). generic 보이스 챌린지(#23)에도 부재(AC-058). 기존 보이스 문서는 전부 세팅돼 하위호환 |
+| voiceMode | string? | `clone`\|`generic`, **부재→`clone`**(계산 기본값·무백필) | **T55 증분(#23)** — `channel`=voice 챌린지의 clone/generic 판별자. 생성 시 `PUBLIC_SCENARIOS[scenarioId].voiceMode`로 역정규화. `voiceMode:"generic"`이면 클론·voiceId·통화 자격증명 미탑재, `GENERIC_VOICE_ID` 폴백 합성(AC-058). **voiceId-부재를 판별자로 오버로드하지 않는 이유**는 Architecture.md §14.9.1(결과 요약 게이트가 양 판별자 필요·#21 messenger+voiceId 병존). `channel:"messenger"` 챌린지엔 두지 않음(음성모드 개념 없음). resolveChallengeByTokenHash projection에 포함(비민감, `channel`과 동형) |
 | displayName | string | required | "○○님이 준비" 표시이름(사용자2 노출용) |
 | status | string | `pending`\|`consented`\|`in_progress`\|`completed`\|`expired`\|`reported`\|`deleted` | 상태 머신 |
 | linkTokenHash | string | required, indexed | 공유 토큰 **SHA-256 해시만**(평문 미저장, §14.4) |
@@ -165,7 +167,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | linkConsumedAt | timestamp? | | 1회성 소모(동의 통과 시). §14.4 |
 | retentionDeleteAt | timestamp | required | 복제 음성·챌린지 자동 삭제 예정(생성+보존기간 기본 30일). **링크 만료와 별개**(AC-041) |
 | resultSharingConsented | bool? | | 사용자2 결과 공유 동의(AC-043 열람 게이트). 부재=미동의 |
-| resultSummary | {completed:bool,suspicionTimeLabel?,suspicionTurnIndex?}? | | **동의 시에만** Functions 기록. **대화 전문 없음**(AC-043). **T47(#20)**: 메신저 챌린지는 `deriveChallengeResultSummary`가 채널 게이트로 `{completed}`만 파생 — suspicion 필드는 애초에 계산·저장 안 함(AC-055/OQ-31 "의심 시점 어떤 형태로도 미노출", 쓰기 시점 강제. Architecture.md §14.8.3) |
+| resultSummary | {completed:bool,suspicionTimeLabel?,suspicionTurnIndex?}? | | **동의 시에만** Functions 기록. **대화 전문 없음**(AC-043). **T47(#20)**: 메신저 챌린지는 `deriveChallengeResultSummary`가 채널 게이트로 `{completed}`만 파생 — suspicion 필드는 애초에 계산·저장 안 함(AC-055/OQ-31 "의심 시점 어떤 형태로도 미노출", 쓰기 시점 강제. Architecture.md §14.8.3). **T55(#23)**: generic 보이스 챌린지도 `voiceMode` 게이트로 `{completed}`만 파생(OQ-32 default "완료 여부만"=AC-055 동형). clone 보이스 챌린지만 장래 의심-타이밍 확장 여지 유지. Architecture.md §14.9.3 |
 | reportedAt | timestamp? | | 사용자2 신고 시각(AC-049) |
 | reportReason | string? | `unwanted`\|`harassment`\|`impersonation_concern`\|`other` | 신고 사유 enum |
 | reportNote | string? | 마스킹 | 선택 신고 메모(PII 마스킹) |
