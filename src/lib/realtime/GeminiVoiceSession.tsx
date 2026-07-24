@@ -30,6 +30,11 @@ import {
   floatToPcm16,
   pcm16ToBase64,
 } from "./pcm";
+import {
+  INITIAL_USER_SPEECH_DEBOUNCE_STATE,
+  computeRmsFromByteTimeDomain,
+  nextUserSpeechDebounceState,
+} from "./userSpeechLevel";
 
 export type GeminiVoiceSessionProps = {
   credentials: CreateRealtimeCallResponse;
@@ -147,10 +152,11 @@ export default function GeminiVoiceSession({
     // 노트북 스피커에서 부족). AI 발화가 끝나면(turnComplete/침묵) 다시 열린다.
     let agentSpeaking = false;
     // 사용자 발화 파형 인디케이터(2026-07-24, 사용자 신고 — "일단 잘 파악하는지 보고 싶다") 상태.
-    // cleanup()이 async IIFE 밖에서 정의되므로, raf/타이머 핸들을 여기 바깥 스코프에 미리 선언해
-    // 둔다(session/processor와 동일한 패턴 — 안에서 값만 대입).
-    let userSpeakingNow = false;
-    let userSpeakingOffTimer: ReturnType<typeof setTimeout> | null = null;
+    // cleanup()이 async IIFE 밖에서 정의되므로, raf 핸들을 여기 바깥 스코프에 미리 선언해 둔다
+    // (session/processor와 동일한 패턴 — 안에서 값만 대입). RMS 계산·문턱값·off-디바운스 자체는
+    // 순수 함수(userSpeechLevel.ts, Major #6 — 브라우저 전용 API가 아니라 별도로 단위 테스트됨)로
+    // 분리했고, 여기서는 매 프레임 그 함수에 넘길 상태만 들고 있는다.
+    let userSpeechDebounceState = INITIAL_USER_SPEECH_DEBOUNCE_STATE;
     let userLevelRafId: number | null = null;
     // 전사(transcript)는 조각으로 스트리밍되므로 턴이 끝날 때(turnComplete)까지 모았다가 flush한다.
     let userBuffer = "";
@@ -185,7 +191,6 @@ export default function GeminiVoiceSession({
 
     const cleanup = () => {
       if (speakingTimer) clearTimeout(speakingTimer);
-      if (userSpeakingOffTimer) clearTimeout(userSpeakingOffTimer);
       if (userLevelRafId !== null) cancelAnimationFrame(userLevelRafId);
       processor?.disconnect();
       stream?.getTracks().forEach((track) => track.stop());
@@ -340,26 +345,22 @@ export default function GeminiVoiceSession({
         const sampleUserLevel = () => {
           if (cancelled) return;
           userLevelAnalyser.getByteTimeDomainData(userLevelData);
-          let sumSquares = 0;
-          for (let i = 0; i < userLevelData.length; i++) {
-            const centered = userLevelData[i] - 128;
-            sumSquares += centered * centered;
-          }
-          const rms = Math.sqrt(sumSquares / userLevelData.length);
+          const rms = computeRmsFromByteTimeDomain(userLevelData);
           // AI가 말하는 동안엔(agentSpeaking) 스피커 반향이 마이크로 섞여 들어올 수 있어(에코
           // 캔슬이 100%는 아님, 위 반이중 주석 참고) 사용자 파형을 억제한다 — onaudioprocess의
           // 반이중 판단과 동일한 근거. 음소거 중에도 억제한다.
-          if (rms > USER_SPEECH_AMPLITUDE_THRESHOLD && !agentSpeaking && !mutedRef.current) {
-            if (!userSpeakingNow) {
-              userSpeakingNow = true;
-              handlersRef.current.onUserSpeakingChange(true);
-            }
-            if (userSpeakingOffTimer) clearTimeout(userSpeakingOffTimer);
-            userSpeakingOffTimer = setTimeout(() => {
-              userSpeakingNow = false;
-              handlersRef.current.onUserSpeakingChange(false);
-            }, USER_SPEECH_OFF_DELAY_MS);
+          const suppressed = agentSpeaking || mutedRef.current;
+          const nextState = nextUserSpeechDebounceState(userSpeechDebounceState, {
+            rms,
+            threshold: USER_SPEECH_AMPLITUDE_THRESHOLD,
+            suppressed,
+            nowMs: performance.now(),
+            offDelayMs: USER_SPEECH_OFF_DELAY_MS,
+          });
+          if (nextState.speaking !== userSpeechDebounceState.speaking) {
+            handlersRef.current.onUserSpeakingChange(nextState.speaking);
           }
+          userSpeechDebounceState = nextState;
           userLevelRafId = requestAnimationFrame(sampleUserLevel);
         };
         userLevelRafId = requestAnimationFrame(sampleUserLevel);

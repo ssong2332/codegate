@@ -37,8 +37,17 @@ export type RealtimeVoiceSessionProps = {
    * 인디케이터용. SDK가 이미 제공하는 `onVadScore`(0.0=무음~1.0=큰 목소리, ElevenLabs 문서
    * 관례)를 그대로 쓴다 — 이 컴포넌트는 마이크 캡처를 직접 하지 않고 SDK(useConversation)가
    * 내부에서 다루므로(GeminiVoiceSession과 달리 원본 MediaStream에 접근할 수 없다), 별도
-   * AnalyserNode를 새로 만들 수 없고 만들 필요도 없다 — SDK 자체 VAD 점수가 정확히 이 진단
-   * 목적(서버 쪽이 실제로 사용자 발화를 얼마나 감지하는지)에 더 부합한다. */
+   * AnalyserNode를 새로 만들 수 없고 만들 필요도 없다.
+   *
+   * **대안 검토(reviewer 지적, 2026-07-24 재검토)**: `useConversation`의 반환값에는 `onVadScore`
+   * 외에도 `getInputVolume(): number`·`getInputByteFrequencyData(): Uint8Array`가 있다(타입 정의
+   * 직접 확인, node_modules/@elevenlabs/react/dist/conversation/useConversation.d.ts) — 이쪽은
+   * 원본 MediaStream 없이도 쓸 수 있는 진폭 기반 신호라 Gemini 경로의 RMS 계산과 더 직접적으로
+   * 대응된다. 그럼에도 `onVadScore`를 그대로 쓴 이유: 이 인디케이터의 진단 목적은 "서버가 지금
+   * 이걸 발화로 인식하는가"이고, `onVadScore`는 서버가 실제로 내려주는 VAD 판정 값이라 그 질문에
+   * 직접 답한다 — `getInputVolume`류는 로컬 마이크 진폭만 알려줄 뿐 서버 인식 여부와는 별개라
+   * (Gemini 경로처럼 "마이크가 소리를 잡고 있다"만 보여주는 진단이라면 오히려 적합했겠지만) 이
+   * 컴포넌트의 진단 목적에는 `onVadScore`가 더 부합한다고 판단했다. */
   onUserSpeakingChange: (speaking: boolean) => void;
   /** 부모가 종료를 요청하면 값이 증가한다(훈련 종료 버튼). */
   stopSignal: number;
@@ -77,6 +86,13 @@ function SessionRunner({
     // 사용자 측 VAD 점수를 그대로 쓴다(직접 마이크를 캡처하지 않으므로 이게 유일하게 가능한
     // 신호 소스, 위 props 주석 참고).
     onVadScore: ({ vadScore }) => {
+      // 음소거 게이트(reviewer 지적, 2026-07-24 재검토) — Gemini 경로(GeminiVoiceSession.tsx의
+      // `!mutedRef.current` 검사)는 음소거 중엔 사용자 파형을 억제하는데, 이 경로엔 그 대칭
+      // 검사가 전혀 없었다. SDK 타입 정의만으로는 마이크가 음소거된 뒤에도 서버가 버퍼링/캐시된
+      // 오디오 기준으로 vadScore를 계속 내려보내는지 확인할 수 없지만(라이브 검증 불가 환경),
+      // 이 게이트는 비용이 거의 없고 그 불확실성을 원천 차단하므로 확인 여부와 무관하게 추가한다
+      // — 두 프로바이더의 같은 UI 요소(사용자 파형)가 음소거 중 동일하게 동작하도록 맞춘다.
+      if (muted) return;
       if (vadScore <= USER_SPEECH_VAD_THRESHOLD) return;
       if (!userSpeakingRef.current) {
         userSpeakingRef.current = true;
