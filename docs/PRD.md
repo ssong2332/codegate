@@ -1,7 +1,11 @@
 # PRD — 안 당해본 사기는 못 막는다 (AI 금융사기 백신)
 
 Owner: planner (see AGENTS.md). Others read-only.
-Document Version: v1.3 · Last Updated: 2026-07-24
+Document Version: v1.3.1 · Last Updated: 2026-07-24
+
+### 변경 요약 (v1.3 → v1.3.1, 정정)
+문서 정합성 재검토(2026-07-24, 사용자 요청) 결과 발견한 stale 서술 정정 — 새 결정 아님, v0.9.1 선례와 동일한 소규모 정정 릴리스:
+- **Assumptions·Risks의 챌린지 voiceId 스키마 항목이 "architect 확인 필요"로 남아있었으나, T47(Architecture.md §14.8.1, 이미 병합)이 이미 확정.** `challenges.channel?`(부재→voice)·`voiceId` optional로 확정 완료를 반영해 두 항목을 resolved로 정정(취소선으로 이전 서술 보존).
 
 ### 변경 요약 (v1.2 → v1.3)
 사용자 결정(2026-07-24) — v1.2가 planner 산출물로 낸 OQ-28~31 중 **P0(#20) 착수를 막던 3건을 확정**:
@@ -330,7 +334,7 @@ ux-design 정합화(2026-07-21): 사용자 결정으로 **로그인(계정 생�
 - **(사후 리플레이 해설·추정) 리플레이 해설은 기존 리포트 분석(analyzeConversation)·transcript·타임라인(AC-008/AC-026·T9) 인프라를 재사용해 구현 가능하다**(추정 — 리포트를 "정적 요약"에서 "대화 되짚기 뷰"로 확장하는 수준. UI/데이터 상세는 ux-design·architect 확인).
 - **(2인 소셜·전제) 이 기능의 4대 안전제약(AC-040 사전 동의·AC-041 유출 차단·AC-042 정체 공개·AC-043 결과 열람 제한)은 옵션이 아니라 구현 전제조건이다.** 하나라도 미충족이면 2인 모델은 출시하지 않는다. 무동의 상태로 실존 인물을 복제 음성으로 기만하는 버전은 명시적으로 금지한다.
 - **(2인 소셜·추정) 비동기 챌린지 링크 방식은 실시간 서버 세션 없이 챌린지 레코드(Firestore) + 토큰 링크로 구현 가능하다**(추정 — 데이터 구조·토큰·오용 방지 상세는 architect OQ-25/26/27). 동기(실시간 조종)는 MVP 제외.
-- **(메신저 2인·확인 필요) 현재 `challenges/{challengeId}` 스키마(Architecture.md §14.1)는 `voiceId`(필수 string)와 `scenarioId`("딥보이스 clone 시나리오" 전제)를 요구한다 — 이는 음성 없는 메신저 챌린지(AC-051)에서 깨진다.** planner는 "voiceId 옵셔널화 + scenarioId 채널 무관화"가 필요하다고 flag만 하며, **스키마 설계·마이그레이션은 architect 소관**(planner는 스키마를 설계하지 않음). 음성 없는 메신저 챌린지는 클론·통화 자격증명(createRealtimeCall)·ADR-0006 A2 voiceId 예외 경로를 **아예 타지 않는** 깨끗한 부분집합이라 ADR-0005/0006과 모순 없음(추정 — architect 확인).
+- **(메신저 2인·resolved, 2026-07-24 T47)** ~~현재 `challenges/{challengeId}` 스키마(Architecture.md §14.1)는 `voiceId`(필수 string)와 `scenarioId`("딥보이스 clone 시나리오" 전제)를 요구한다 — 이는 음성 없는 메신저 챌린지(AC-051)에서 깨진다.~~ **architect가 확정(Architecture.md §14.8.1)**: `challenges.channel?`(부재→voice, 무백필) 신설 + `voiceId` required→optional(하위호환). 채널은 생성 시 `scenario.channel`로 역정규화 — voiceId 부재를 채널 신호로 오버로드하지 않는다(#21은 messenger+voiceId 병존이라 판별자가 깨짐). 음성 없는 메신저 챌린지는 클론·통화 자격증명(createRealtimeCall)·ADR-0006 A2 voiceId 예외 경로를 **아예 타지 않는** 깨끗한 부분집합이라 ADR-0005/0006과 모순 없음(확인 완료, 더 이상 추정 아님).
 - **(메신저 2인·확인 필요) 에스컬레이션 가능 메신저 챌린지(#21)에서 채널 전이(§13)가 사용자2의 익명 인증 세션 안에서 일어난다.** 현행 에스컬레이션 설계(§13)와 §14.7.5 createRealtimeCall 챌린지 분기는 각각 "로그인 사용자1의 단독 세션"과 "챌린지 통화 발급"을 전제로 만들어졌고, **이 둘을 합친 '익명 사용자2 챌린지 세션 안에서의 메신저→보이스 전이'는 신영역**이다(추정 — architect가 세션·전이·voice 발급 접합을 확인해야 함). 이 불확실성이 #21을 P1 fast-follow로 미루는 근거 중 하나다.
 
 ## Constraints
@@ -369,7 +373,7 @@ ux-design 정합화(2026-07-21): 사용자 결정으로 **로그인(계정 생�
 | **(2인 소셜) 복제 음성 유출·오남용** — 사용자1 클론이 챌린지 밖으로 추출·재사용될 위험. | High | AC-041(추출·다운로드 불가·챌린지 스코프 고정·보존기한 삭제). 내 목소리 금고(P-8)로 사용처 가시화·삭제. 스코프·삭제 구조는 architect(OQ-25). |
 | **(2인 소셜) 챌린지 링크 무단 확산·토큰 악용** — 링크가 제3자에게 전달·재사용될 위험. | Medium~High | 링크 토큰 인증·만료·1회성 등 정책을 architect(OQ-26)가 확정. 사용자2 동의 게이팅(AC-040)이 최종 방어선. |
 | **(메신저 확장) 표면 2종 × 기기 스킨(iOS/삼성)으로 QA 매트릭스 증가** — 표면 넓게 결정(OQ-19)·자동 스킨(OQ-17)으로 조합이 늘어 검증 비용↑. | Medium~High | **표면을 스킨 레이어로 분리**해 콘텐츠(대화·수법)를 표면·기기와 무관하게 재사용하고, 스킨은 프레젠테이션만 교체(T24/T29 설계 원칙). UA 자동 감지는 폴백(기본 스킨)·수동 전환으로 실패를 흡수(AC-031). QA는 "각 표면 1개 시나리오 × 각 스킨 + 폴백 경로"를 대표 매트릭스로 우선 검증. |
-| **(메신저 2인) 챌린지 스키마의 voiceId 필수 전제가 음성 없는 메신저 챌린지에서 깨짐** — `challenges.voiceId`(필수)·`scenarioId`(clone 시나리오 전제)가 AC-051과 충돌. 미조정 시 음성 없는 챌린지 생성이 불가하거나 잘못된 클론 경로를 강제할 위험. | Medium | voiceId 옵셔널화·scenarioId 채널 무관화를 **architect가 스키마 확정**(planner는 flag만). 음성 없는 메신저 챌린지는 클론·createRealtimeCall·voiceId 예외 경로를 타지 않는 부분집합으로 설계해 ADR-0005/0006 불변식을 건드리지 않음. MVP는 이 단순 경로(#20)를 먼저 검증. |
+| **(메신저 2인·resolved 2026-07-24 T47)** ~~챌린지 스키마의 voiceId 필수 전제가 음성 없는 메신저 챌린지에서 깨짐~~ — `challenges.channel?`(부재→voice)·`voiceId` optional로 architect가 확정(Architecture.md §14.8.1, Database.md v1.3). 하위호환(무백필), MVP #20 착수 게이트 해소. | ~~Medium~~ Resolved | voiceId 옵셔널화·channel 판별자를 architect가 스키마 확정 완료. 음성 없는 메신저 챌린지는 클론·createRealtimeCall·voiceId 예외 경로를 타지 않는 부분집합으로 설계돼 ADR-0005/0006 불변식을 건드리지 않음(확인 완료). |
 | **(메신저 2인) 익명 사용자2 세션 안에서의 에스컬레이션 전이 미검증 신영역(#21)** — §13 전이 설계는 로그인 사용자1 단독 세션 전제, §14.7 챌린지 통화 발급은 익명 세션 전제 — 둘의 결합이 미설계. 성급히 P0로 넣으면 세션·voice·동의 게이트 접합에서 안전 결함 위험. | Medium~High | **#21을 P1 fast-follow로 분리**하고 OQ-28(음성 소스) 확정 + architect의 익명세션-전이 접합 확인을 착수 게이트로 둔다. P0(#20)는 전이 없는 순수 텍스트 경로만 다뤄 이 리스크를 회피. |
 
 ## Open Questions
