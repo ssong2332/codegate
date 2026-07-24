@@ -5,6 +5,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 
 > **v1.1 증분(2026-07-23, T26·T35):** 메신저→보이스 채널 전이(§sessions 증분·§messages 증분·§scenarios 증분)와 2인 소셜(§challenges·§users/voices) 스키마를 더한다. **모든 신규 필드는 옵셔널(하위호환, Migration Policy)** — 기존 P0 루프 문서·필드는 무변경. 설계 근거는 Architecture.md §13·§14, DECISIONS #14~#24, ADR-0005.
 > **소급 리뷰 증분(2026-07-24, T40·T33):** ① `channelHistory` 항목에 `turnCountAtTransition?`(역방향 핑퐁 방지, Architecture.md §13.8) 정식 편입 ② `reports`에 `resistedMoments?`(UX-018 "잘 대응한 지점", 후속 implementer 태스크로 구현) 추가. 근거 DECISIONS #25/#26. 둘 다 옵셔널 증분.
+> **v1.3 증분(2026-07-24, T47 — 메신저 2인 챌린지 #20):** `challenges`에 `channel?`(부재→voice) 추가 + `voiceId`를 required→optional 완화(메신저 챌린지는 클론 없음, AC-051). 사용자2 체험 세션은 `channel:"messenger"`·voiceId 부재로 생성 가능. **모두 옵셔널·하위호환**(기존 보이스 챌린지 문서 무마이그레이션). 설계 근거 Architecture.md §14.8, DECISIONS #30.
 
 ## Engine
 **Cloud Firestore**(NoSQL 문서 DB) + **Firebase Storage**(오브젝트). 이유는 DECISIONS #1(스택 확정)·#12(실시간 onSnapshot). 관계형 마이그레이션 없음 — 컬렉션/문서는 코드가 생성.
@@ -61,7 +62,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | messengerSkin | string? | `ios`\|`samsung`\|`default` | UA 자동 감지 결과(프레젠테이션 전용, 안전 미게이팅, §13.5) |
 | skinSource | string? | `auto`\|`manual`\|`fallback` | 스킨 결정 출처 |
 | voiceSelectionSource | string? | `recorded`\|`reused`\|`fallback_male`\|`fallback_female` | 조건부 clone/목소리 선택 결과(AC-046, §13.6). 결정된 voiceId는 기존 `voiceId` 필드 재사용 |
-| challengeId | string? | indexed | 2인 소셜 사용자2 체험 세션이면 소속 챌린지(§14.1). 이 세션의 `uid`는 **동의 시 발급된 임시 익명 uid**(§14.7/ADR-0006) — 사용자1(실 uid) 접근 규칙·콜러블 거부. 챌린지 clone `voiceId`는 이 세션에 **미저장**(A1) — `createRealtimeCall`이 challenge 문서에서 발급 시 해석(AC-041·폐기 격리) |
+| challengeId | string? | indexed | 2인 소셜 사용자2 체험 세션이면 소속 챌린지(§14.1). 이 세션의 `uid`는 **동의 시 발급된 임시 익명 uid**(§14.7/ADR-0006) — 사용자1(실 uid) 접근 규칙·콜러블 거부. 챌린지 clone `voiceId`는 이 세션에 **미저장**(A1) — `createRealtimeCall`이 challenge 문서에서 발급 시 해석(AC-041·폐기 격리). **T47(#20)**: 메신저 챌린지 체험 세션은 `channel:"messenger"`·`surface`·`entryChannel:"messenger"`로 생성되고 voiceId가 애초에 부재(통화·`createRealtimeCall` 미사용) — `onSessionEnded`의 voiceId 삭제는 안전 no-op(Architecture.md §14.8.2) |
 | maxUserTurns | number | (에스컬레이션 세션은 상향, 예 14) | 교차채널 총 한도(§13.3, 잠정) |
 
 > 교차채널 세션에서 `maxUserTurns`는 생성 시 상향 발급될 수 있다(§13.3). `maxSessionMs`는 6분 유지.
@@ -154,8 +155,9 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 |---|---|---|---|
 | challengeId | string | PK(=doc id) | |
 | creatorUid | string | required, indexed | 사용자1(발신)·활성개수 판정 키 |
-| scenarioId | string | required | 딥보이스(clone) 시나리오 |
-| voiceId | string | required, **챌린지 스코프 고정** | 클론 voice. 챌린지 밖 재사용·추출 불가(AC-041, ADR-0005) |
+| scenarioId | string | required | 챌린지 시나리오(생성 시 확정, OQ-29). 보이스=딥보이스(clone), 메신저=`channel:"messenger"` 시나리오 |
+| channel | string? | `voice`\|`messenger`, **부재→`voice`**(계산 기본값·무백필) | **T47 증분(#20)** — 채널 판별자. 생성 시 `PUBLIC_SCENARIOS[scenarioId].channel ?? "voice"`로 역정규화. 수신자 라우팅(UX-014 vs UX-022)·발신자 결과 분기의 단일 판별자(scenarioId 룩업 불요). voiceId-부재를 채널 신호로 오버로드하지 않는 이유는 Architecture.md §14.8.1(#21은 messenger+voiceId 병존) |
+| voiceId | string? | **T47: required→optional**, 존재 시 **챌린지 스코프 고정** | 클론 voice. 챌린지 밖 재사용·추출 불가(AC-041, ADR-0005). **메신저 챌린지(#20)엔 부재** — 클론·통화 경로 미사용(AC-051). 기존 보이스 문서는 전부 세팅돼 하위호환 |
 | displayName | string | required | "○○님이 준비" 표시이름(사용자2 노출용) |
 | status | string | `pending`\|`consented`\|`in_progress`\|`completed`\|`expired`\|`reported`\|`deleted` | 상태 머신 |
 | linkTokenHash | string | required, indexed | 공유 토큰 **SHA-256 해시만**(평문 미저장, §14.4) |
@@ -163,7 +165,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | linkConsumedAt | timestamp? | | 1회성 소모(동의 통과 시). §14.4 |
 | retentionDeleteAt | timestamp | required | 복제 음성·챌린지 자동 삭제 예정(생성+보존기간 기본 30일). **링크 만료와 별개**(AC-041) |
 | resultSharingConsented | bool? | | 사용자2 결과 공유 동의(AC-043 열람 게이트). 부재=미동의 |
-| resultSummary | {completed:bool,suspicionTimeLabel?,suspicionTurnIndex?}? | | **동의 시에만** Functions 기록. **대화 전문 없음**(AC-043) |
+| resultSummary | {completed:bool,suspicionTimeLabel?,suspicionTurnIndex?}? | | **동의 시에만** Functions 기록. **대화 전문 없음**(AC-043). **T47(#20)**: 메신저 챌린지는 `deriveChallengeResultSummary`가 채널 게이트로 `{completed}`만 파생 — suspicion 필드는 애초에 계산·저장 안 함(AC-055/OQ-31 "의심 시점 어떤 형태로도 미노출", 쓰기 시점 강제. Architecture.md §14.8.3) |
 | reportedAt | timestamp? | | 사용자2 신고 시각(AC-049) |
 | reportReason | string? | `unwanted`\|`harassment`\|`impersonation_concern`\|`other` | 신고 사유 enum |
 | reportNote | string? | 마스킹 | 선택 신고 메모(PII 마스킹) |
