@@ -18,6 +18,7 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { maskPII } from "../guardrails";
 import { generateOpeningLine } from "../roleplay";
 import { SCENARIO_PROMPTS } from "../scenarios";
+import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { GEMINI_API_KEY } from "../shared/config";
 import { MAX_SESSION_MS, MAX_USER_TURNS } from "../shared/constants";
 import { getVoiceProvider } from "../voice/provider";
@@ -65,7 +66,13 @@ export const getChallengeLanding = onCall<
     throw new HttpsError("not-found", "유효하지 않은 링크입니다.");
   }
   // 소모하지 않는다 — 랜딩 열람은 §14.4 "크롤러 선fetch 방지" 원칙상 비파괴적이어야 한다.
-  return { displayName: resolved.displayName, status: resolved.status, expired: resolved.expired };
+  // T47(#20, §14.8.2) — channel을 함께 반환해 클라가 동의 후 UX-014 vs UX-022 라우팅을 미리 안다.
+  return {
+    displayName: resolved.displayName,
+    status: resolved.status,
+    expired: resolved.expired,
+    channel: resolved.channel,
+  };
 });
 
 // consentChallenge — 사용자2 동의(무동의 차단 게이트) (T37 · UX-021 · AC-040/048)
@@ -94,6 +101,12 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
     if (!SCENARIO_PROMPTS[scenarioId]) {
       throw new HttpsError("failed-precondition", "존재하지 않는 시나리오입니다.");
     }
+    // T47(#20, §14.8.2) — 채널은 챌린지 문서에 이미 역정규화돼 있다(생성 시점 확정, OQ-29라
+    // scenarioId 재조회 불요). surface만 스킨 렌더용으로 PUBLIC_SCENARIOS에서 가볍게 조회한다
+    // (정적 맵, Firestore 쿼리 아님 — 메신저 챌린지에서만 쓰인다).
+    const scenarioChannel = resolved.channel;
+    const scenarioSurface =
+      scenarioChannel === "messenger" ? PUBLIC_SCENARIOS[scenarioId]?.surface : undefined;
 
     const callerUid = request.auth.uid;
     // reviewer 리뷰 Major(2026-07-24): 동시에 같은 아직-pending 링크를 두 명의 익명 uid가 호출하면
@@ -148,13 +161,18 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
         scenarioId,
         status: "active",
         // voiceId 의도적 미설정(A1) — challenges/{challengeId}.voiceId만이 유일한 진실 원천이다.
+        // 메신저 챌린지는 애초에 voiceId 자체가 없다(AC-051).
         cloneStatus: "ready",
         identitySelfConfirmed: true,
         turnCount: 0,
         maxUserTurns: MAX_USER_TURNS,
         maxSessionMs: MAX_SESSION_MS,
         createdAt: now,
-        entryChannel: "voice",
+        // T47(#20, §14.8.2) — 메신저 챌린지 세션은 entryChannel/channel/surface를 채운다(스킨
+        // 렌더·UX-022 라우팅용). 보이스 챌린지는 기존과 동일하게 entryChannel:"voice"만.
+        entryChannel: scenarioChannel === "messenger" ? "messenger" : "voice",
+        ...(scenarioChannel === "messenger" ? { channel: "messenger" as const } : {}),
+        ...(scenarioSurface ? { surface: scenarioSurface } : {}),
         challengeId: resolved.challengeId,
         challengeCreatorDisplayName: resolved.displayName,
         ...(isMock ? { llmProvider: "mock" as const } : {}),
@@ -170,6 +188,7 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
         textMasked: openingMessage.text,
         turnIndex: 0,
         createdAt: now,
+        ...(scenarioChannel === "messenger" ? { channel: "messenger" as const } : {}),
       } satisfies MessageDoc);
       return { action: "create" as const, sessionId: sessionRef.id };
     });
@@ -181,18 +200,25 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
     // 오프닝 합성 — createSession과 동일한 비차단 패턴(functions/src/session/index.ts 참고).
     // voiceId는 트랜잭션 커밋 후(=이 호출자가 유일한 승자로 확정된 뒤) challenge 문서에서 다시
     // in-memory로만 읽는다 — 세션 문서 어디에도 assign하지 않는다(A1, 파일 상단 불변식).
+    // T47(#20, §14.8.2) — 메신저 챌린지는 재생할 복제 음성이 없고(voiceId 부재, AC-051) 채팅
+    // UI가 애초에 오디오를 재생하지 않는다(createSession의 channel!=="messenger" 게이팅과 동형) —
+    // 합성 자체를 건너뛴다.
     let openingAudioUrl: string | undefined;
-    try {
-      const challengeSnap = await challengeRef.get();
-      const challenge = challengeSnap.data() as ChallengeDoc;
-      const synthesis = await getVoiceProvider().synthesize({
-        sessionId: claim.sessionId,
-        voiceId: challenge.voiceId,
-        text: openingMessage.text,
-      });
-      openingAudioUrl = synthesis.audioUrl;
-    } catch {
-      // 합성 실패는 무시(P-4 비차단) — 클라는 openingAudioUrl 없으면 텍스트만 표시.
+    if (scenarioChannel !== "messenger") {
+      try {
+        const challengeSnap = await challengeRef.get();
+        const challenge = challengeSnap.data() as ChallengeDoc;
+        if (challenge.voiceId) {
+          const synthesis = await getVoiceProvider().synthesize({
+            sessionId: claim.sessionId,
+            voiceId: challenge.voiceId,
+            text: openingMessage.text,
+          });
+          openingAudioUrl = synthesis.audioUrl;
+        }
+      } catch {
+        // 합성 실패는 무시(P-4 비차단) — 클라는 openingAudioUrl 없으면 텍스트만 표시.
+      }
     }
 
     await challengeRef.update({ status: "in_progress" });
@@ -244,9 +270,24 @@ export const reportChallenge = onCall<ReportChallengeRequest, Promise<ReportChal
 /** T9 리포트에서 챌린지 결과 요약을 파생한다(순수 함수 — Firestore 없이 테스트 가능).
  * suspicionTimeLabel/suspicionTurnIndex는 의도적으로 채우지 않는다 — "의심(저항) 시점" 판정은
  * DECISIONS #26의 별도 후속(resistedMoments, 아직 미구현)이 필요하고 이 태스크 범위 밖이다
- * (T9의 deceivedMoments는 "속은 시점"이지 "의심한 시점"이 아니라 대체 근거로 쓸 수 없다). */
-export function deriveChallengeResultSummary(report: Pick<ReportDoc, "sessionId">): ChallengeResultSummary {
+ * (T9의 deceivedMoments는 "속은 시점"이지 "의심한 시점"이 아니라 대체 근거로 쓸 수 없다).
+ *
+ * T47 증분(#20, §14.8.3, AC-055/OQ-31) — channel 파라미터로 "메신저 챌린지는 의심 시점을 절대
+ * 계산·저장하지 않는다"를 **구조적으로 고정**한다. 오늘은 보이스도 아직 suspicion 필드를 채우지
+ * 않지만(위 known gap), 장래 보이스 쪽에 resistedMoments가 추가되어도 이 분기(messenger)는
+ * 절대 값을 채우지 않는다 — 쓰기 시점 강제가 읽기 필터보다 안전하다(store-nothing-sensitive). */
+export function deriveChallengeResultSummary(
+  report: Pick<ReportDoc, "sessionId">,
+  channel: ChallengeDoc["channel"] = "voice",
+): ChallengeResultSummary {
   void report; // 현재는 존재 자체(=완료)만 반영한다. 추후 resistedMoments 도입 시 이 함수를 확장.
+  if (channel === "messenger") {
+    // AC-055/OQ-31 — 스미싱 링크 탭·가짜 랜딩 입력·에스컬레이션 도달 등 "의심 시점"은 어떤
+    // 형태로도 계산·포함하지 않는다. 이 분기는 앞으로도 절대 확장하지 않는다(구조적 고정).
+    return { completed: true };
+  }
+  // 보이스 챌린지 — DECISIONS #26 resistedMoments 도입 시 이 분기에서만 suspicionTimeLabel 등을
+  // 채우도록 확장한다(메신저 분기는 위에서 이미 구조적으로 차단됨).
   return { completed: true };
 }
 
@@ -296,7 +337,7 @@ export const setChallengeResultSharing = onCall<
     throw new HttpsError("failed-precondition", "아직 결과가 준비되지 않았습니다.");
   }
   const report = reportSnap.data() as ReportDoc;
-  const resultSummary = deriveChallengeResultSummary(report);
+  const resultSummary = deriveChallengeResultSummary(report, resolved.channel);
 
   await challengeRef.update({
     resultSharingConsented: true,

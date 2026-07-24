@@ -12,18 +12,18 @@
 // 축소해 두었다. UX-025(/scenarios/messenger/voice-select)가 이제 생겨 그 스텁을 실제 라우팅으로
 // 교체한다 — 에스컬레이션 시나리오는 D-25대로 채팅 진입 전에 먼저 목소리를 확보해야 하므로
 // createSession을 이 화면에서 바로 호출하지 않고 voice-select로 넘긴다(그 화면이 호출한다).
+//
+// **T49 후속 수정(v1.9, D-30)**: 비에스컬레이션 시나리오의 Exit가 `createSession` 직행에서
+// UX-026(체험 선택, src/app/scenarios/experience-select/page.tsx)으로 바뀐다 — 비에스컬레이션
+// 메신저 시나리오는 "지인에게 보내기"(챌린지, AC-051)가 가능하므로 "본인이 체험/지인에게
+// 보내기"를 먼저 물어야 한다. 세션 생성(clearPendingSession+createSession)은 이제 그 화면의
+// 자기훈련 분기가 담당한다 — 이 화면은 시나리오만 확정한다. 에스컬레이션 가능 시나리오는
+// 챌린지 대상이 아니므로(#21/OQ-28 보류) voice-select 경로는 무변경.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  clearPendingSession,
-  getOrCreatePendingSessionId,
-  setSelectedScenarioId as setPendingSelectedScenarioId,
-} from "@/lib/recording";
-import { createSession } from "@/lib/api";
-import { scenarios, GENERIC_VOICE_ID, type ScenarioDoc, type MessengerSurface } from "@/content/scenarios";
+import { setSelectedScenarioId as setPendingSelectedScenarioId } from "@/lib/recording";
+import { scenarios, type ScenarioDoc, type MessengerSurface } from "@/content/scenarios";
 import { Badge, Button } from "@/components/ui";
-
-type PageState = "ready" | "starting" | "start-error";
 
 const SURFACE_LABEL: Record<MessengerSurface, string> = {
   kakao: "카카오톡",
@@ -32,17 +32,15 @@ const SURFACE_LABEL: Record<MessengerSurface, string> = {
 
 export default function MessengerScenarioSelectPage() {
   const router = useRouter();
-  const [state, setState] = useState<PageState>("ready");
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
-  const [startError, setStartError] = useState<string | null>(null);
 
   // AC-029/AC-030 핵심 — 메신저 채널로 필터된 시나리오만 노출(전체 평면 나열 아님).
   const filteredEntries = Object.entries(scenarios).filter(
     ([, scenario]) => scenario.channel === "messenger",
   );
 
-  const handleStart = async () => {
-    if (!selectedScenarioId || state === "starting") return;
+  const handleStart = () => {
+    if (!selectedScenarioId) return;
     const scenario = scenarios[selectedScenarioId];
     if (!scenario) return;
 
@@ -54,29 +52,9 @@ export default function MessengerScenarioSelectPage() {
       return;
     }
 
-    // "시작" = 새 훈련의 시작점(voice/ScenarioListView.tsx와 동일 판단·동일 가드 — clear+create는
-    // 비멱등이라 이벤트 핸들러에서만 실행한다).
-    clearPendingSession();
-    const sessionId = getOrCreatePendingSessionId();
-    if (!sessionId) return;
-
-    setState("starting");
-    setStartError(null);
-    try {
-      // 메신저는 TTS를 재생하지 않으므로 GENERIC_VOICE_ID를 placeholder로 그대로 재사용한다
-      // (voiceId 필수 계약은 유지하되 값 자체는 쓰이지 않음, T29 지시대로).
-      await createSession({
-        sessionId,
-        scenarioId: selectedScenarioId,
-        voiceId: GENERIC_VOICE_ID,
-        channel: "messenger",
-        surface: scenario.surface,
-      });
-      router.push("/session/messenger");
-    } catch {
-      setStartError("시나리오를 시작하지 못했습니다. 다시 시도해 주세요.");
-      setState("ready");
-    }
+    // (T49, v1.9 D-30) — 비에스컬레이션 시나리오는 UX-026(체험 선택)에서 "본인이 체험/지인에게
+    // 보내기"를 가른다(AC-051). 세션 생성은 그 화면의 자기훈련 분기가 담당한다.
+    router.push(`/scenarios/experience-select?scenarioId=${encodeURIComponent(selectedScenarioId)}`);
   };
 
   const renderScenarioCard = (scenarioId: string, scenario: ScenarioDoc) => {
@@ -183,19 +161,8 @@ export default function MessengerScenarioSelectPage() {
       )}
 
       <div className="sticky bottom-0 -mx-6 -mb-28 border-t border-[#E2DDD3] bg-[#FAF8F5]/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur">
-        {startError && (
-          <p role="alert" className="mb-3 flex items-center gap-2 text-base text-[#C6392F]">
-            <span aria-hidden="true">⚠</span>
-            <span>{startError}</span>
-          </p>
-        )}
-
-        <Button
-          type="button"
-          onClick={() => void handleStart()}
-          disabled={!selectedScenarioId || state === "starting"}
-        >
-          {state === "starting" ? "연결하는 중..." : "이 메시지 받아보기"}
+        <Button type="button" onClick={handleStart} disabled={!selectedScenarioId}>
+          이 메시지 받아보기
         </Button>
       </div>
     </main>

@@ -33,6 +33,15 @@ test("purgeChallengeArtifacts(): voice 삭제 실패 → target failed, overallR
   assert.equal(deps.deletedVoiceIds.length, 0);
 });
 
+test("purgeChallengeArtifacts(): voiceId 없음(메신저 챌린지, T47 #20/AC-051/054) → ElevenLabs 삭제 스킵, target 없이 overallResult success", async () => {
+  const deps = fakeDeps();
+  const result = await purgeChallengeArtifacts(undefined, deps);
+
+  assert.equal(result.overallResult, "success");
+  assert.deepEqual(result.targets, []);
+  assert.deepEqual(deps.deletedVoiceIds, []);
+});
+
 test("selectChallengesToPurge(): retentionDeleteAt 도달 + 아직 안 지워진 챌린지만 선택한다", () => {
   const now = new Date("2026-08-20T00:00:00Z").getTime();
   const candidates = [

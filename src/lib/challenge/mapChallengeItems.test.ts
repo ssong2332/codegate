@@ -79,3 +79,33 @@ test("AC-041: status가 deleted인 챌린지는 목록에서 제외한다(삭제
 test("빈 배열이면 빈 목록(Empty 상태 판단은 화면이 함)", () => {
   assert.deepEqual(mapChallengesToListItems([]), []);
 });
+
+test("AC-055/OQ-31: 메신저 챌린지는 완료+동의라도 의심 시점을 절대 노출하지 않고 '완료 · 상대가 체험을 마침'만 표시한다", () => {
+  const items = mapChallengesToListItems([
+    {
+      challengeId: "c6",
+      displayName: "동료",
+      status: "completed",
+      resultSharingConsented: true,
+      // 서버가 원래 채우지 않는 값이지만, 화면 쪽 방어(2차 하드닝)도 채널로 무시함을 검증한다.
+      suspicionTimeLabel: "12초",
+      createdAt: new Date("2026-07-24T10:00:00+09:00"),
+      channel: "messenger",
+    },
+  ]);
+  assert.equal(items[0].statusLabel, "완료 · 상대가 체험을 마침");
+});
+
+test("channel 생략(부재) → 보이스 챌린지와 동일하게 기존 라벨을 그대로 유지한다(하위호환)", () => {
+  const items = mapChallengesToListItems([
+    {
+      challengeId: "c7",
+      displayName: "이모",
+      status: "completed",
+      resultSharingConsented: true,
+      suspicionTimeLabel: null,
+      createdAt: new Date("2026-07-24T10:00:00+09:00"),
+    },
+  ]);
+  assert.equal(items[0].statusLabel, "완료");
+});

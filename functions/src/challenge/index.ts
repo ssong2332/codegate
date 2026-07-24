@@ -6,6 +6,12 @@
 // markChallengeConsumed는 T37이 재사용할 primitive를 미리 만들어 둔 것일 뿐, 아직 어떤 콜러블에서도
 // 호출되지 않는다(functions/src/index.ts가 export하지 않는다 — 배포 대상 아님).
 //
+// T49(#20, MVP Scope #20, Architecture.md §14.8) — createChallenge에 채널 분기를 추가했다: 메신저
+// (비에스컬레이션) 시나리오는 클론/Storage/voiceId 발급을 전부 스킵하고 challenges.channel:"messenger"
+// 로 표시된 문서만 생성한다(AC-051). 에스컬레이션 가능 메신저 시나리오(#21/OQ-28 대기)는 여기서
+// failed-precondition(reason: "escalation_not_supported")으로 명시 거부한다. 보이스 챌린지 경로
+// (아래 (a)(c) 클론 검증)는 무변경.
+//
 // ⚠️ Database.md §Storage Layout 편차(구현 보고서에 명시, architect 확인 권장): Database.md는
 // `users/{uid}/challenges/{cid}/voice_input.webm`라는 챌린지 전용 녹음 업로드 경로를 정의하지만,
 // 이 태스크 지시는 "이미 완료된 온보딩 녹음을 재사용"하라고 명시했다. 새 녹음 화면을 만들지 않고
@@ -30,7 +36,7 @@ import {
 } from "../shared/constants";
 import { generateShareToken } from "./token";
 import { purgeChallengeArtifacts, selectChallengesToPurge } from "./purge";
-import type { ChallengeDoc, DeletionLogDoc, SessionDoc } from "../shared/types";
+import type { ChallengeDoc, DeletionLogDoc, MessengerChannel, SessionDoc } from "../shared/types";
 import type {
   CreateChallengeRequest,
   CreateChallengeResponse,
@@ -59,54 +65,36 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
     if (!scenario) {
       throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
     }
-    if (scenario.voiceMode !== "clone") {
-      throw new HttpsError(
-        "invalid-argument",
-        "딥보이스(내 목소리 복제) 시나리오만 챌린지로 만들 수 있습니다.",
-      );
+
+    // T47(#20, §14.8.1) — 명시 channel 판별자. 부재→"voice"(하위호환, 무백필).
+    const scenarioChannel: MessengerChannel = scenario.channel ?? "voice";
+
+    if (scenarioChannel === "voice") {
+      if (scenario.voiceMode !== "clone") {
+        throw new HttpsError(
+          "invalid-argument",
+          "딥보이스(내 목소리 복제) 시나리오만 챌린지로 만들 수 있습니다.",
+        );
+      }
+    } else {
+      // 메신저 — #20 게이트(§14.8.1): 에스컬레이션 가능 시나리오(scenario.escalation 존재)는
+      // #21(P1)/OQ-28 확정 대기라 명시적으로 거부한다(조용한 실패 금지). client가 "클론 미완료"
+      // failed-precondition과 구분할 수 있도록 details.reason을 함께 싣는다.
+      if (scenario.escalation) {
+        throw new HttpsError(
+          "failed-precondition",
+          "이 시나리오는 아직 지인에게 보내는 챌린지를 지원하지 않습니다.",
+          { reason: "escalation_not_supported" },
+        );
+      }
     }
 
     const uid = request.auth.uid;
     const db = getFirestore();
 
-    // (a) 완료된 클론 보유 확인 — createSession/createVoiceClone과 달리 클라가 voiceId를 직접
-    // 넘기지 않는다(챌린지 voiceId는 항상 서버가 새로 발급하므로, §스코프 고정). 대신 caller의 가장
-    // 최근 cloneStatus:"ready" 세션을 찾아 그 세션의 소스 녹음을 재사용한다(UF-004 Step1 "이미
-    // 클론 보유 시 재사용"). 신규 복합 인덱스를 추가하지 않기 위해 기존 sessions uid+createdAt desc
-    // 인덱스(firestore.indexes.json, T7/T8이 이미 사용 중)만으로 커버되는 최근 20건을 훑어 JS에서
-    // cloneStatus를 판정한다 — 이 규모(개인당 최근 훈련 이력)에서는 충분하다.
-    const recentSessionsSnap = await db
-      .collection("sessions")
-      .where("uid", "==", uid)
-      .orderBy("createdAt", "desc")
-      .limit(20)
-      .get();
-    let sourceSessionId: string | null = null;
-    for (const doc of recentSessionsSnap.docs) {
-      const data = doc.data() as SessionDoc;
-      if (data.cloneStatus === "ready" && data.voiceId) {
-        sourceSessionId = doc.id;
-        break;
-      }
-    }
-    if (!sourceSessionId) {
-      throw new HttpsError(
-        "failed-precondition",
-        "먼저 본인 목소리 클론을 완료해 주세요.",
-      );
-    }
-    const storagePath = voiceInputStoragePath(uid, sourceSessionId);
-    const [recordingExists] = await getStorage().bucket().file(storagePath).exists();
-    if (!recordingExists) {
-      // 원본 세션이 이미 종료·즉시폐기(T10 onSessionEnded)되어 녹음이 Storage에서 사라진 경우 —
-      // 알려진 한계(이 파일 상단 주석 참고). 사용자에게는 "클론 미완료"와 동일하게 안내한다.
-      throw new HttpsError(
-        "failed-precondition",
-        "먼저 본인 목소리 클론을 완료해 주세요.",
-      );
-    }
-
-    // (b) 활성 챌린지 개수 상한(무료 3개, §14.5/AC-049) — 생성 전에 미리 막는다(생성 후 롤백 없음).
+    // (b) 활성 챌린지 개수 상한(무료 3개, §14.5/AC-049·OQ-30 채널 무관 전역 합산) — 채널 분기
+    // 이전에 동일하게 적용한다(§14.8.4). 값비싼 클론 검증(아래 (a)(c))보다 먼저 막아 실패를
+    // 빠르게 반환한다(생성 후 롤백 없음).
     const now = Timestamp.now();
     const activeSnap = await db
       .collection("challenges")
@@ -124,19 +112,63 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
       );
     }
 
-    // (c) 챌린지 전용 신규 클론(ADR-0005 스코프 고정) — 원본 세션의 voiceId를 재사용하지 않고
-    // 항상 새로 발급한다. MockVoiceProvider는 매 호출 randomUUID 기반 voiceId를 반환하므로 소스
-    // 세션의 voiceId와 절대 같을 수 없다(에뮬레이터 검증 대상).
     const challengeRef = db.collection("challenges").doc();
-    const provider = getVoiceProvider();
-    const cloneResult = await provider.createClone({
-      sessionId: challengeRef.id,
-      uid,
-      voiceInputStoragePath: storagePath,
-    });
-    if (cloneResult.cloneStatus !== "ready") {
-      throw new HttpsError("internal", "음성 클론 생성에 실패했습니다.");
+    let voiceId: string | undefined;
+
+    if (scenarioChannel === "voice") {
+      // (a) 완료된 클론 보유 확인 — createSession/createVoiceClone과 달리 클라가 voiceId를 직접
+      // 넘기지 않는다(챌린지 voiceId는 항상 서버가 새로 발급하므로, §스코프 고정). 대신 caller의 가장
+      // 최근 cloneStatus:"ready" 세션을 찾아 그 세션의 소스 녹음을 재사용한다(UF-004 Step1 "이미
+      // 클론 보유 시 재사용"). 신규 복합 인덱스를 추가하지 않기 위해 기존 sessions uid+createdAt desc
+      // 인덱스(firestore.indexes.json, T7/T8이 이미 사용 중)만으로 커버되는 최근 20건을 훑어 JS에서
+      // cloneStatus를 판정한다 — 이 규모(개인당 최근 훈련 이력)에서는 충분하다.
+      const recentSessionsSnap = await db
+        .collection("sessions")
+        .where("uid", "==", uid)
+        .orderBy("createdAt", "desc")
+        .limit(20)
+        .get();
+      let sourceSessionId: string | null = null;
+      for (const doc of recentSessionsSnap.docs) {
+        const data = doc.data() as SessionDoc;
+        if (data.cloneStatus === "ready" && data.voiceId) {
+          sourceSessionId = doc.id;
+          break;
+        }
+      }
+      if (!sourceSessionId) {
+        throw new HttpsError(
+          "failed-precondition",
+          "먼저 본인 목소리 클론을 완료해 주세요.",
+        );
+      }
+      const storagePath = voiceInputStoragePath(uid, sourceSessionId);
+      const [recordingExists] = await getStorage().bucket().file(storagePath).exists();
+      if (!recordingExists) {
+        // 원본 세션이 이미 종료·즉시폐기(T10 onSessionEnded)되어 녹음이 Storage에서 사라진 경우 —
+        // 알려진 한계(이 파일 상단 주석 참고). 사용자에게는 "클론 미완료"와 동일하게 안내한다.
+        throw new HttpsError(
+          "failed-precondition",
+          "먼저 본인 목소리 클론을 완료해 주세요.",
+        );
+      }
+
+      // (c) 챌린지 전용 신규 클론(ADR-0005 스코프 고정) — 원본 세션의 voiceId를 재사용하지 않고
+      // 항상 새로 발급한다. MockVoiceProvider는 매 호출 randomUUID 기반 voiceId를 반환하므로 소스
+      // 세션의 voiceId와 절대 같을 수 없다(에뮬레이터 검증 대상).
+      const provider = getVoiceProvider();
+      const cloneResult = await provider.createClone({
+        sessionId: challengeRef.id,
+        uid,
+        voiceInputStoragePath: storagePath,
+      });
+      if (cloneResult.cloneStatus !== "ready") {
+        throw new HttpsError("internal", "음성 클론 생성에 실패했습니다.");
+      }
+      voiceId = cloneResult.voiceId;
     }
+    // 메신저(#20, §14.8.0) — 클론·Storage 검증·voiceId 발급을 아예 타지 않는다(AC-051, 유출
+    // 리스크 표면 자체가 없다).
 
     // (d) 토큰 — 평문은 이 응답에서만 반환, 해시만 저장(§14.4).
     const { token, tokenHash } = generateShareToken();
@@ -144,20 +176,23 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
     const linkExpiresAt = Timestamp.fromMillis(now.toMillis() + CHALLENGE_FREE_LINK_EXPIRY_MS);
     const retentionDeleteAt = Timestamp.fromMillis(now.toMillis() + CHALLENGE_DEFAULT_RETENTION_MS);
 
-    // (e)(f) challenges/{challengeId} 문서 작성 — Architecture.md §14.1 스키마 그대로. T37 소관
-    // 필드(resultSharingConsented 등)는 옵셔널이라 여기서는 키 자체를 만들지 않는다(Firestore admin
-    // SDK가 undefined 값을 기본 거부하는 기존 관례, session/index.ts와 동일 패턴).
+    // (e)(f) challenges/{challengeId} 문서 작성 — Architecture.md §14.1/§14.8.1 스키마 그대로.
+    // T37 소관 필드(resultSharingConsented 등)와 T47 신규 필드(voiceId/channel)는 옵셔널이라
+    // 값이 없으면 키 자체를 만들지 않는다(Firestore admin SDK가 undefined 값을 기본 거부하는
+    // 기존 관례, session/index.ts와 동일 패턴). 보이스 챌린지는 channel을 생략(부재→voice,
+    // 기존 문서와 동일 형태 유지) — 메신저 챌린지만 명시적으로 channel:"messenger"를 기록한다.
     const challengeDoc: ChallengeDoc = {
       challengeId: challengeRef.id,
       creatorUid: uid,
       scenarioId,
-      voiceId: cloneResult.voiceId,
       displayName: displayName.trim(),
       status: "pending",
       linkTokenHash: tokenHash,
       linkExpiresAt,
       retentionDeleteAt,
       createdAt: now,
+      ...(voiceId ? { voiceId } : {}),
+      ...(scenarioChannel === "messenger" ? { channel: "messenger" as const } : {}),
     };
     await challengeRef.set(challengeDoc);
 
@@ -219,13 +254,18 @@ export const listMyChallenges = onCall<
 
   const challenges: ListMyChallengesItem[] = snap.docs.map((doc) => {
     const data = doc.data() as ChallengeDoc;
+    const channel: MessengerChannel = data.channel ?? "voice";
     return {
       challengeId: data.challengeId,
       displayName: data.displayName,
       status: data.status,
       resultSharingConsented: Boolean(data.resultSharingConsented),
-      suspicionTimeLabel: data.resultSummary?.suspicionTimeLabel ?? null,
+      // T47(#20, §14.8.3 2차 하드닝) — 메신저 챌린지는 suspicionTimeLabel을 절대 표면화하지
+      // 않는다(AC-055/OQ-31, 벨트+멜빵 — 1차 강제는 deriveChallengeResultSummary가 애초에
+      // 계산·저장하지 않는 것).
+      suspicionTimeLabel: channel === "messenger" ? null : (data.resultSummary?.suspicionTimeLabel ?? null),
       createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : null,
+      channel,
     };
   });
 
@@ -238,7 +278,11 @@ export const listMyChallenges = onCall<
  * VoiceProvider 구현을 주입하고, deletionLogs 기록(challengeId 세팅) + challenges.status="deleted"
  * 갱신까지 완료한다.
  */
-async function purgeChallenge(challengeId: string, creatorUid: string, voiceId: string): Promise<void> {
+async function purgeChallenge(
+  challengeId: string,
+  creatorUid: string,
+  voiceId: string | undefined,
+): Promise<void> {
   const provider = getVoiceProvider();
   const { targets, overallResult } = await purgeChallengeArtifacts(voiceId, {
     deleteVoice: (id) => provider.deleteVoice(id),
@@ -311,6 +355,10 @@ export type ResolvedChallenge = {
   // in_progress}+미만료" 재검증에 필요) 자체는 민감 필드가 아니라(voiceId/linkTokenHash와 달리)
   // 반환해도 AC-041 위반이 아니다.
   status: ChallengeDoc["status"];
+  // T47 추가(#20, §14.8.1) — 채널 판별자(부재→voice). 수신 랜딩(UX-021)이 UX-014(voice) vs
+  // UX-022(messenger) 라우팅을 이 값만으로 결정한다(scenario 별도 룩업 불요). 민감 필드가
+  // 아니라 반환해도 무방하다.
+  channel: MessengerChannel;
 };
 
 /** linkTokenHash로 챌린지를 조회한다. raw voiceId 등 민감 필드는 반환하지 않는다(AC-041 추출 차단). */
@@ -326,6 +374,7 @@ export async function resolveChallengeByTokenHash(tokenHash: string): Promise<Re
     scenarioId: data.scenarioId,
     expired: data.linkExpiresAt.toMillis() <= Date.now(),
     status: data.status,
+    channel: data.channel ?? "voice",
   };
 }
 

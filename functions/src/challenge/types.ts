@@ -1,7 +1,7 @@
 // challenge 모듈 요청/응답 타입 — src/lib/api/types.ts(클라 계약)와 1:1 대응
 // (Architecture.md §14, ADR-0005, T36). API.md에는 아직 반영 안 됨 — architect 확인/문서 갱신 권장
 // (createSession의 sessionId 필드 등 기존 선례와 동일한 "서버 코드가 문서보다 먼저 나간" 패턴).
-import type { ChallengeReportReason, ChallengeStatus } from "../shared/types";
+import type { ChallengeReportReason, ChallengeStatus, MessengerChannel } from "../shared/types";
 
 // --- createChallenge (UX-019 · AC-041/044/048/049) ---
 export type CreateChallengeRequest = {
@@ -40,6 +40,9 @@ export type ListMyChallengesItem = {
   suspicionTimeLabel: string | null;
   /** ISO 문자열 — Firestore Timestamp를 그대로 onCall 응답에 실을 수 없어 변환한다. */
   createdAt: string | null;
+  /** T47 추가(#20, §14.8.3) — 부재→"voice". 메신저 챌린지는 suspicionTimeLabel이 항상 null임을
+   * 클라 표시 로직(UX-020 D-29)이 채널로 재확인할 수 있게 한다. */
+  channel: MessengerChannel;
 };
 export type ListMyChallengesResponse = {
   challenges: ListMyChallengesItem[];
@@ -53,6 +56,9 @@ export type GetChallengeLandingResponse = {
   displayName: string;
   status: ChallengeStatus;
   expired: boolean;
+  /** T47 추가(#20, §14.8.2) — 부재 없이 항상 확정값("voice"|"messenger")을 반환한다. 클라(UX-021)
+   * 가 동의 후 UX-014(voice) vs UX-022(messenger)로 분기하는 데 쓴다(D-28). */
+  channel: MessengerChannel;
 };
 
 // --- consentChallenge (T37 · UX-021 · AC-040/048, §14.7.5) ---

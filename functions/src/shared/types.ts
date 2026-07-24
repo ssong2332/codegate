@@ -254,8 +254,14 @@ export type ChallengeTier = "free" | "paid"; // 부재=free(§14.6, AC-050 — t
 export type ChallengeDoc = {
   challengeId: string;
   creatorUid: string; // 사용자1(발신)·활성개수 판정 키
-  scenarioId: string; // 딥보이스(clone) 시나리오만
-  voiceId: string; // 이 챌린지에 스코프 고정된 클론 voice(ADR-0005) — 챌린지 밖 재사용 불가
+  scenarioId: string; // 딥보이스(clone) 또는 메신저(비에스컬레이션) 시나리오(T47, §14.8.1)
+  // T47 증분(#20, §14.8.1) — required→optional. 메신저 챌린지(AC-051)는 클론·통화 자격증명
+  // 경로를 아예 타지 않아 값이 없다. 기존 보이스 챌린지 문서는 전부 세팅돼 있어 하위호환.
+  voiceId?: string; // 이 챌린지에 스코프 고정된 클론 voice(ADR-0005) — 챌린지 밖 재사용 불가
+  // T47 증분(#20, §14.8.1) — 채널 판별자. 부재→"voice"(계산 기본값, 무백필). 생성 시
+  // `PUBLIC_SCENARIOS[scenarioId].channel ?? "voice"`로 역정규화. voiceId 부재를 채널 신호로
+  // 오버로드하지 않는다(#21에서 messenger+voiceId가 병존할 수 있어 명시 판별자가 필요, §14.8.1).
+  channel?: MessengerChannel;
   displayName: string; // 사용자2에게 보일 "○○님이 준비" 표시이름
   status: ChallengeStatus;
   linkTokenHash: string; // 공유 토큰의 SHA-256 해시만(평문 미저장, §14.4)

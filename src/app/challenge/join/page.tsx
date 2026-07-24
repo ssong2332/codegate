@@ -13,6 +13,12 @@
 //
 // **무동의 경로 없음(AC-040)**: 이 화면에는 "동의하고 시작" 외에 체험(통화)로 진입하는 버튼/링크가
 // 존재하지 않는다 — 동의 전에는 어떤 복제 음성도 재생되지 않는다.
+//
+// **T49(#20 · MVP #20 · Architecture.md §14.8.2) — 채널 인지 랜딩(D-28)**: `getChallengeLanding`이
+// 이제 `channel`을 함께 반환한다. 메신저 챌린지(AC-051)는 (1) 고지 문구에서 음성/전화 프레이밍·
+// "복제 음성" 표현을 빼고 "메시지(카톡/문자)"로 바꾸고(음성 없는 챌린지엔 재생할 복제 음성이
+// 없음), (2) 동의 성공 후 `/session/play`(UX-014) 대신 `/session/messenger`(UX-022)로 이동한다.
+// 동의 게이트(AC-040)·무동의 차단·신고(AC-049)·만료 처리는 채널 무관으로 완전히 동일하다.
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signInAnonymously } from "firebase/auth";
@@ -44,6 +50,8 @@ export default function ChallengeJoinPage() {
   const [state, setState] = useState<PageState>(token ? "loading" : "no-token");
   const [blockedMessage, setBlockedMessage] = useState<string>("이 링크는 더 이상 이용할 수 없습니다.");
   const [displayName, setDisplayName] = useState<string>("");
+  // T49(#20, D-28) — 부재 없이 항상 확정값이나, 로드 전 기본값은 "voice"(기존 문구 유지).
+  const [channel, setChannel] = useState<"voice" | "messenger">("voice");
   const [consenting, setConsenting] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
 
@@ -68,6 +76,7 @@ export default function ChallengeJoinPage() {
       return;
     }
     setDisplayName(result.displayName);
+    setChannel(result.channel);
     setState("ready");
   };
 
@@ -107,7 +116,8 @@ export default function ChallengeJoinPage() {
       // 사용자 신고(2026-07-24) — 실시간 통화 "AI가 먼저 말해야" 수정, ScenarioListView.tsx와
       // 동일 근거.
       if (result.openingMessageText) setOpeningMessageText(result.openingMessageText);
-      router.push("/session/play");
+      // T49(#20, D-28) — 메신저 챌린지는 UX-022(채팅 셸)로, 보이스 챌린지는 기존대로 UX-014로.
+      router.push(channel === "messenger" ? "/session/messenger" : "/session/play");
     } catch {
       setConsentError("동의 처리에 실패했습니다. 다시 시도해 주세요.");
       setConsenting(false);
@@ -187,11 +197,21 @@ export default function ChallengeJoinPage() {
   // 안내 요점 3개(챌린지 플로우.dc.html "화면 2" 안내 포인트 카드 재현) — 기존 한 문단이 담고
   // 있던 문장을 그대로 셋으로 나눈 것뿐, 새 정보를 추가하지 않았다(제목에 이미 있는 표시 이름
   // 소개 문장만 중복이라 제외).
-  const consentPoints = [
-    "지금부터 받는 전화·문자는 실제가 아닌 훈련입니다.",
-    "실제로 돈이나 개인정보가 오가지 않습니다.",
-    "통화 중 언제든 끊을 수 있습니다.",
-  ];
+  // T49(#20, D-28 채널 인지 문구) — 메신저 챌린지는 음성/전화 프레이밍·"복제 음성" 표현을 빼고
+  // "메시지(카톡/문자)"로 바꾼다(재생할 복제 음성 자체가 없음, AC-051/054). 게이트 로직(AC-040)은
+  // 채널 무관으로 완전히 동일 — 문구만 다르다.
+  const consentPoints =
+    channel === "messenger"
+      ? [
+          "지금부터 받는 메시지(카톡·문자)는 실제가 아닌 훈련입니다.",
+          "실제로 돈이나 개인정보가 오가지 않습니다.",
+          "대화 중 언제든 끊을 수 있습니다.",
+        ]
+      : [
+          "지금부터 받는 전화·문자는 실제가 아닌 훈련입니다.",
+          "실제로 돈이나 개인정보가 오가지 않습니다.",
+          "통화 중 언제든 끊을 수 있습니다.",
+        ];
 
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-[#FAF8F5] p-6">

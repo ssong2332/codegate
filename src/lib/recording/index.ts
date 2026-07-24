@@ -31,8 +31,6 @@ export {
   setMessengerVoiceSelectReturn,
   hasMessengerVoiceSelectReturn,
   consumeMessengerVoiceSelectReturn,
-  setChallengeMode,
-  consumeChallengeMode,
   setChallengeToken,
   getChallengeToken,
 } from "./pendingSession";

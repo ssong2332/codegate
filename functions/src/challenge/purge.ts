@@ -23,17 +23,22 @@ export type ChallengePurgeResult = {
   overallResult: DeletionResult;
 };
 
-/** 챌린지 voiceId 하나를 폐기한다. 실패해도 throw하지 않고 target을 failed로 기록한다(재시도 근거). */
+/** 챌린지 voiceId 하나를 폐기한다. 실패해도 throw하지 않고 target을 failed로 기록한다(재시도 근거).
+ * T47 증분(#20, §14.8.5) — voiceId가 없으면(메신저 챌린지, AC-051) ElevenLabs DELETE 자체를
+ * 스킵한다(대상 부재) — target 배열이 비어 overallResult는 "success"(guardrails/purge.ts의
+ * purgeSessionArtifacts가 이미 세션 voiceId 부재를 동일하게 처리하는 것과 동형 패턴). */
 export async function purgeChallengeArtifacts(
-  voiceId: string,
+  voiceId: string | undefined,
   deps: ChallengePurgeDeps,
 ): Promise<ChallengePurgeResult> {
   const targets: DeletionTarget[] = [];
-  try {
-    await deps.deleteVoice(voiceId);
-    targets.push({ kind: "elevenlabs_voice", ref: voiceId, result: "success" });
-  } catch {
-    targets.push({ kind: "elevenlabs_voice", ref: voiceId, result: "failed" });
+  if (voiceId) {
+    try {
+      await deps.deleteVoice(voiceId);
+      targets.push({ kind: "elevenlabs_voice", ref: voiceId, result: "success" });
+    } catch {
+      targets.push({ kind: "elevenlabs_voice", ref: voiceId, result: "failed" });
+    }
   }
   return { targets, overallResult: computeOverallResult(targets) };
 }
