@@ -130,6 +130,7 @@ export function clearPendingSession(): void {
   window.sessionStorage.removeItem(SELECTED_TRAINING_TYPE_KEY);
   window.sessionStorage.removeItem(SELECTED_VOICE_MODE_CHOICE_KEY);
   window.sessionStorage.removeItem(MESSENGER_VOICE_SELECT_RETURN_KEY);
+  window.sessionStorage.removeItem(EXPERIENCE_MODE_KEY);
 }
 
 // 드릴다운(UX-015 유형 → UX-016 방식 → UX-017 시나리오, T28/AC-028/AC-029) 단계 간 "뒤로가기 시
@@ -164,6 +165,28 @@ export function getSelectedVoiceModeChoice(): "clone" | "generic" | null {
   if (!hasSessionStorage()) return null;
   const value = window.sessionStorage.getItem(SELECTED_VOICE_MODE_CHOICE_KEY);
   return value === "clone" || value === "generic" ? value : null;
+}
+
+// 체험/발송 모드 힌트(T56, v1.10 D-31, Architecture.md §14.9.5, AC-056) — UX-026(체험 선택)이
+// 유형 선택(UX-015) 직후로 상향되면서 "본인이 체험/지인에게 보내기" 결정이 UX-016 노출 여부·
+// UX-017/UX-024 필터·최종 라우팅까지 **여러 화면 뒤**에서 소비돼야 한다. 형제 드릴다운 힌트
+// (selectedTrainingType/selectedVoiceModeChoice)와 동일한 peek 방식(consume-on-read 아님 — 뒤로가기
+// ·여러 소비자가 반복 읽어도 유효)을 그대로 따른다. T49가 은퇴시킨 단발 소비형 setChallengeMode
+// 안티패턴(단일 진입점→단일 분기만 게이팅)을 재생성하지 않는다 — 이번엔 여러 소비자가 정상적으로
+// 반복 peek하는 정식 드릴다운 상태로 편입한다(§14.9.5 "왜 재생성하지 않는가" 참고).
+const EXPERIENCE_MODE_KEY = "onboarding.experienceMode";
+
+export type ExperienceMode = "self" | "send";
+
+export function setExperienceMode(mode: ExperienceMode): void {
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.setItem(EXPERIENCE_MODE_KEY, mode);
+}
+
+export function getExperienceMode(): ExperienceMode | null {
+  if (!hasSessionStorage()) return null;
+  const value = window.sessionStorage.getItem(EXPERIENCE_MODE_KEY);
+  return value === "self" || value === "send" ? value : null;
 }
 
 // 통화를 "받은" 세션 id를 기록한다(finding #4, 2026-07-23). 실시간 경로는 sendMessage를 안 타

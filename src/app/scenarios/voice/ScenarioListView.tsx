@@ -11,10 +11,20 @@
 // (`[mode]`)를 쓰려면 generateStaticParams가 필요해 오히려 더 복잡해지고, 값이 clone|generic
 // 2개뿐이라 정적 라우트 2개로 단순화하는 쪽이 이 코드베이스의 "화면=라우트 폴더" 관례와도 더
 // 잘 맞는다(명시적 판단, 추측 아님).
+//
+// **T56 갱신(v1.10, D-31/D-32/D-33, Architecture.md §14.9.5, AC-057/058)**: 이 화면의 Exit는 이제
+// UX-026에서 이미 정해진 모드(self|send, getExperienceMode() peek)로 갈린다 — 예전엔 "clone
+// 시나리오면 무조건 체험 선택(UX-026)으로" 였으나, UX-026이 시나리오 선택보다 앞으로 상향돼 이
+// 화면에 도달한 시점엔 모드가 이미 확정돼 있다. **send 모드**는 clone·generic 둘 다 UX-019(챌린지
+// 만들기)로 직행한다(generic 보이스 챌린지 신설, AC-058 — 기존 clone 전용 라우팅을 확장). **self
+// 모드**(또는 힌트 부재로 인한 방어적 기본값)는 generic만 도달 가능하므로(AC-057, UX-026이 클론을
+// 건너뛰게 한다) 기존 createSession 직행 로직을 그대로 쓴다. `scenario.voiceMode==="clone"`인
+// 시나리오는 self 경로로 정상 도달할 수 없으므로(방어적으로도) 항상 send로 취급한다.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   clearPendingSession,
+  getExperienceMode,
   getOrCreatePendingSessionId,
   setOpeningAudioUrl,
   setOpeningMessageText,
@@ -35,6 +45,10 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
   const [state, setState] = useState<PageState>("ready");
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
+  // 단계 표시(breadcrumb) 전용 — self는 UX-016을 건너뛰어 유형→체험선택→시나리오(③)이고, send는
+  // UX-016을 거쳐 유형→체험선택→방식→시나리오(④)다(v1.10 D-31 순서 반영). lazy initializer로 마운트
+  // 시 1회만 읽는다(다른 드릴다운 화면과 동일 패턴).
+  const [experienceModeHint] = useState<ReturnType<typeof getExperienceMode>>(() => getExperienceMode());
 
   // AC-029 핵심 — 전체 시나리오가 아니라 선택된 방식(mode)에 해당하는 부분집합만 노출.
   const filteredEntries = Object.entries(scenarios).filter(
@@ -46,13 +60,14 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
     const scenario = scenarios[selectedScenarioId];
     if (!scenario) return;
 
-    // (T49, v1.9 D-30) — clone 시나리오는 "본인이 체험/지인에게 보내기" 갈림을 UX-026(체험 선택,
-    // src/app/scenarios/experience-select/page.tsx)이 담당한다(별도 "챌린지 만들기" 진입점은
-    // 은퇴, pendingSession.ts의 challengeMode 관련 주석 참고). 이 화면은 시나리오만 확정하고 그
-    // 화면으로 넘긴다 — generic 시나리오는 "지인에게 보내기"가 불가해(AC-044) 아래 기존 흐름을
-    // 그대로 탄다.
-    if (scenario.voiceMode === "clone") {
-      router.push(`/scenarios/experience-select?scenarioId=${encodeURIComponent(selectedScenarioId)}`);
+    // (T56, v1.10 D-31/D-33) — 모드(self|send)는 이미 UX-026에서 확정돼 있다(이 화면 도달 시점엔
+    // 시나리오 선택이 나중이므로). send 모드는 clone·generic 둘 다 챌린지 생성(UX-019)으로 직행한다
+    // (AC-058 — generic 보이스 챌린지 신설). clone 시나리오는 self 경로로 정상 도달할 수 없으므로
+    // (AC-057, UX-026이 self일 때 이 화면 자체를 스킵) 힌트가 없거나 어긋나도 항상 send로 취급한다
+    // (방어적 판단 — clone은 "지인에게 보내기" 전용).
+    const isSendMode = getExperienceMode() === "send" || scenario.voiceMode === "clone";
+    if (isSendMode) {
+      router.push(`/challenge/create?scenarioId=${encodeURIComponent(selectedScenarioId)}`);
       return;
     }
 
@@ -165,7 +180,7 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
         </button>
         {/* 단계 표시(P-12 #2) — 지금까지의 선택 경로를 맥락으로 표시(스크린리더가 현재 위치로 읽음). */}
         <p className="text-sm font-semibold text-[#0E6B62]" aria-current="step">
-          보이스피싱 › {MODE_LABEL[mode]} › ③ 시나리오
+          보이스피싱 › {MODE_LABEL[mode]} › {experienceModeHint === "send" ? "④" : "③"} 시나리오
         </p>
         <h1 className="text-2xl font-bold text-[#22303A]">어떤 전화를 받아볼까요?</h1>
         <p className="text-base leading-relaxed text-[#6B655C]">

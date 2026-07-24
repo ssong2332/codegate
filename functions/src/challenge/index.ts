@@ -12,6 +12,11 @@
 // failed-precondition(reason: "escalation_not_supported")으로 명시 거부한다. 보이스 챌린지 경로
 // (아래 (a)(c) 클론 검증)는 무변경.
 //
+// T56(#23, MVP Scope #23, Architecture.md §14.9.1) — 보이스 채널 게이트를 완화했다: 기존엔
+// `scenario.voiceMode !== "clone"`이면 전부 거부해 generic 보이스 챌린지가 성립할 수 없었다. 이제
+// voice 채널은 clone·generic 둘 다 허용하고(AC-058), generic이면 클론 블록(아래 (a)(c))을 메신저와
+// 동형으로 전부 스킵한다 — voiceId 미발급·미기록, `voiceMode:"generic"`만 기록한다.
+//
 // ⚠️ Database.md §Storage Layout 편차(구현 보고서에 명시, architect 확인 권장): Database.md는
 // `users/{uid}/challenges/{cid}/voice_input.webm`라는 챌린지 전용 녹음 업로드 경로를 정의하지만,
 // 이 태스크 지시는 "이미 완료된 온보딩 녹음을 재사용"하라고 명시했다. 새 녹음 화면을 만들지 않고
@@ -29,6 +34,7 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { voiceInputStoragePath } from "../voice";
 import { getVoiceProvider } from "../voice/provider";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import type { VoiceMode } from "../scenarios/publicMeta";
 import {
   CHALLENGE_DEFAULT_RETENTION_MS,
   CHALLENGE_FREE_ACTIVE_CAP,
@@ -68,14 +74,14 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
 
     // T47(#20, §14.8.1) — 명시 channel 판별자. 부재→"voice"(하위호환, 무백필).
     const scenarioChannel: MessengerChannel = scenario.channel ?? "voice";
+    // T56(#23, §14.9.1) — 명시 voiceMode 판별자. voice 시나리오는 publicMeta.ts상 항상 세팅돼
+    // 있다(부재는 방어적으로 clone 취급 — 계산 기본값, §14.9.1과 동형).
+    const scenarioVoiceMode: VoiceMode = scenario.voiceMode ?? "clone";
 
     if (scenarioChannel === "voice") {
-      if (scenario.voiceMode !== "clone") {
-        throw new HttpsError(
-          "invalid-argument",
-          "딥보이스(내 목소리 복제) 시나리오만 챌린지로 만들 수 있습니다.",
-        );
-      }
+      // T56(#23, AC-058) — clone·generic 둘 다 유효한 챌린지 종류다(기존엔 clone만 허용하던
+      // 게이트를 완화). VoiceMode 타입 자체가 "clone"|"generic" 둘뿐이라 별도 화이트리스트
+      // 검증은 불필요 — 두 값 모두 아래 분기가 처리한다.
     } else {
       // 메신저 — #20 게이트(§14.8.1): 에스컬레이션 가능 시나리오(scenario.escalation 존재)는
       // #21(P1)/OQ-28 확정 대기라 명시적으로 거부한다(조용한 실패 금지). client가 "클론 미완료"
@@ -115,7 +121,7 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
     const challengeRef = db.collection("challenges").doc();
     let voiceId: string | undefined;
 
-    if (scenarioChannel === "voice") {
+    if (scenarioChannel === "voice" && scenarioVoiceMode === "clone") {
       // (a) 완료된 클론 보유 확인 — createSession/createVoiceClone과 달리 클라가 voiceId를 직접
       // 넘기지 않는다(챌린지 voiceId는 항상 서버가 새로 발급하므로, §스코프 고정). 대신 caller의 가장
       // 최근 cloneStatus:"ready" 세션을 찾아 그 세션의 소스 녹음을 재사용한다(UF-004 Step1 "이미
@@ -167,8 +173,9 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
       }
       voiceId = cloneResult.voiceId;
     }
-    // 메신저(#20, §14.8.0) — 클론·Storage 검증·voiceId 발급을 아예 타지 않는다(AC-051, 유출
-    // 리스크 표면 자체가 없다).
+    // 메신저(#20, §14.8.0)·generic 보이스(#23, §14.9.1) — 클론·Storage 검증·voiceId 발급을 아예
+    // 타지 않는다(AC-051/058, 유출 리스크 표면 자체가 없다). generic 보이스는 기존
+    // GENERIC_VOICE_ID 폴백 합성으로 성립(consentChallenge §14.9.2가 처리).
 
     // (d) 토큰 — 평문은 이 응답에서만 반환, 해시만 저장(§14.4).
     const { token, tokenHash } = generateShareToken();
@@ -176,11 +183,12 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
     const linkExpiresAt = Timestamp.fromMillis(now.toMillis() + CHALLENGE_FREE_LINK_EXPIRY_MS);
     const retentionDeleteAt = Timestamp.fromMillis(now.toMillis() + CHALLENGE_DEFAULT_RETENTION_MS);
 
-    // (e)(f) challenges/{challengeId} 문서 작성 — Architecture.md §14.1/§14.8.1 스키마 그대로.
-    // T37 소관 필드(resultSharingConsented 등)와 T47 신규 필드(voiceId/channel)는 옵셔널이라
-    // 값이 없으면 키 자체를 만들지 않는다(Firestore admin SDK가 undefined 값을 기본 거부하는
-    // 기존 관례, session/index.ts와 동일 패턴). 보이스 챌린지는 channel을 생략(부재→voice,
-    // 기존 문서와 동일 형태 유지) — 메신저 챌린지만 명시적으로 channel:"messenger"를 기록한다.
+    // (e)(f) challenges/{challengeId} 문서 작성 — Architecture.md §14.1/§14.8.1/§14.9.1 스키마
+    // 그대로. T37 소관 필드(resultSharingConsented 등)와 T47/T56 신규 필드(voiceId/channel/
+    // voiceMode)는 옵셔널이라 값이 없으면 키 자체를 만들지 않는다(Firestore admin SDK가 undefined
+    // 값을 기본 거부하는 기존 관례, session/index.ts와 동일 패턴). 보이스 clone 챌린지는
+    // channel·voiceMode를 둘 다 생략(부재→voice/clone, 기존 문서와 동일 형태 유지) — 메신저
+    // 챌린지는 channel:"messenger", generic 보이스 챌린지는 voiceMode:"generic"만 명시 기록한다.
     const challengeDoc: ChallengeDoc = {
       challengeId: challengeRef.id,
       creatorUid: uid,
@@ -193,6 +201,9 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
       createdAt: now,
       ...(voiceId ? { voiceId } : {}),
       ...(scenarioChannel === "messenger" ? { channel: "messenger" as const } : {}),
+      ...(scenarioChannel === "voice" && scenarioVoiceMode === "generic"
+        ? { voiceMode: "generic" as const }
+        : {}),
     };
     await challengeRef.set(challengeDoc);
 
@@ -255,17 +266,20 @@ export const listMyChallenges = onCall<
   const challenges: ListMyChallengesItem[] = snap.docs.map((doc) => {
     const data = doc.data() as ChallengeDoc;
     const channel: MessengerChannel = data.channel ?? "voice";
+    const voiceMode: VoiceMode = data.voiceMode ?? "clone";
+    // T56(#23, §14.9.3 2차 하드닝) — generic 보이스 챌린지도 메신저와 동일하게 suspicionTimeLabel을
+    // 절대 표면화하지 않는다(OQ-32/AC-058, 벨트+멜빵 — 1차 강제는 deriveChallengeResultSummary가
+    // 애초에 계산·저장하지 않는 것).
+    const suppressSuspicion = channel === "messenger" || voiceMode === "generic";
     return {
       challengeId: data.challengeId,
       displayName: data.displayName,
       status: data.status,
       resultSharingConsented: Boolean(data.resultSharingConsented),
-      // T47(#20, §14.8.3 2차 하드닝) — 메신저 챌린지는 suspicionTimeLabel을 절대 표면화하지
-      // 않는다(AC-055/OQ-31, 벨트+멜빵 — 1차 강제는 deriveChallengeResultSummary가 애초에
-      // 계산·저장하지 않는 것).
-      suspicionTimeLabel: channel === "messenger" ? null : (data.resultSummary?.suspicionTimeLabel ?? null),
+      suspicionTimeLabel: suppressSuspicion ? null : (data.resultSummary?.suspicionTimeLabel ?? null),
       createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : null,
       channel,
+      voiceMode,
     };
   });
 
@@ -359,6 +373,11 @@ export type ResolvedChallenge = {
   // UX-022(messenger) 라우팅을 이 값만으로 결정한다(scenario 별도 룩업 불요). 민감 필드가
   // 아니라 반환해도 무방하다.
   channel: MessengerChannel;
+  // T56 추가(#23, §14.9.1) — clone/generic 판별자(부재→clone). consentChallenge의 오프닝 합성
+  // 3분기(§14.9.2)·발신자 결과 파생(§14.9.3)이 scenario 재조회 없이 이 값만으로 판정한다. channel
+  // 과 동형으로 비민감 필드라 반환해도 무방하다(channel==="messenger"면 의미 없음 — 음성모드
+  // 개념 없음, 값은 계산 기본값 "clone"이지만 무시된다).
+  voiceMode: VoiceMode;
 };
 
 /** linkTokenHash로 챌린지를 조회한다. raw voiceId 등 민감 필드는 반환하지 않는다(AC-041 추출 차단). */
@@ -375,6 +394,7 @@ export async function resolveChallengeByTokenHash(tokenHash: string): Promise<Re
     expired: data.linkExpiresAt.toMillis() <= Date.now(),
     status: data.status,
     channel: data.channel ?? "voice",
+    voiceMode: data.voiceMode ?? "clone",
   };
 }
 

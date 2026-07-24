@@ -183,6 +183,9 @@ export type ListMyChallengesItem = {
   // T49(#20 · MVP #20 · Architecture.md §14.8.3) — 부재 없이 항상 확정값. 메신저 챌린지는
   // suspicionTimeLabel이 항상 null임을 화면(UX-020)이 재확인할 수 있게 한다(AC-055/OQ-31).
   channel: "voice" | "messenger";
+  // T56(#23 · MVP #23 · Architecture.md §14.9.3) — 부재→"clone". generic 보이스 챌린지도
+  // suspicionTimeLabel이 항상 null임을 화면(UX-020)이 재확인할 수 있게 한다(AC-058/OQ-32).
+  voiceMode: "clone" | "generic";
 };
 export type ListMyChallengesResponse = { challenges: ListMyChallengesItem[] };
 

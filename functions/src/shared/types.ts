@@ -1,6 +1,7 @@
 // Firestore 문서 계약 — Database.md와 1:1(Architecture.md §4 "계약 원천 2곳" 중 하나, ADR-0001).
 // 각 트랙은 실제 데이터가 없어도 이 타입에 맞춰 개발한다. 필드/제약 변경은 Database.md와
 // 함께(트랙 간 합의 후) 갱신한다.
+import type { VoiceMode } from "../scenarios/publicMeta";
 
 // --- users/{uid} (UX-013, AC-027) ---
 export type UserDoc = {
@@ -262,6 +263,12 @@ export type ChallengeDoc = {
   // `PUBLIC_SCENARIOS[scenarioId].channel ?? "voice"`로 역정규화. voiceId 부재를 채널 신호로
   // 오버로드하지 않는다(#21에서 messenger+voiceId가 병존할 수 있어 명시 판별자가 필요, §14.8.1).
   channel?: MessengerChannel;
+  // T55/56 증분(#23, §14.9.1) — channel=voice(또는 부재) 챌린지의 clone/generic 판별자.
+  // 부재→"clone"(계산 기본값·무백필, 기존 보이스 챌린지 문서는 전부 clone). 생성 시
+  // `PUBLIC_SCENARIOS[scenarioId].voiceMode`로 역정규화. voiceId 부재를 이 판별자로 오버로드하지
+  // 않는다(#21 messenger+voiceId 병존 대비 + 결과 요약 게이트가 양[positive] 판별자를 요구,
+  // §14.9.1). channel==="messenger" 챌린지에는 두지 않는다(음성모드 개념 없음).
+  voiceMode?: VoiceMode;
   displayName: string; // 사용자2에게 보일 "○○님이 준비" 표시이름
   status: ChallengeStatus;
   linkTokenHash: string; // 공유 토큰의 SHA-256 해시만(평문 미저장, §14.4)

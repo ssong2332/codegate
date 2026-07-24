@@ -19,6 +19,12 @@
 // 메신저피싱 선택 시 "준비 중" 안내만 표시했다(T28 구현 보고서가 예고한 후속 수정). T29가
 // UX-024/UX-022를 구현했으므로 이제 실제로 `/scenarios/messenger`로 라우팅한다(docs/UX.md
 // v1.7 UX-015 Exit 규칙과 정합).
+//
+// **T56 갱신(v1.10, D-31, AC-056)**: 유형 선택 직후의 목적지가 `/scenarios/voice`·
+// `/scenarios/messenger`(방식/시나리오 선택)에서 **`/scenarios/experience-select`(UX-026, 체험/발송
+// 선택)**로 바뀐다 — "본인이 체험/지인에게 보내기"를 방식·시나리오 선택보다 먼저 묻는다(Architecture.md
+// §14.9.5). 이 화면은 유형만 정하고(setSelectedTrainingType, 변경 없음) 그 다음은 유형 무관하게
+// UX-026으로 간다 — 방식·시나리오·최종 목적지는 전부 UX-026 하류에서 갈린다.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { DrilldownOptionCard } from "@/components/DrilldownOptionCard";
@@ -38,13 +44,13 @@ export default function ScenarioTypeSelectPage() {
   const handleSelectVoice = () => {
     setSelected("voice");
     setSelectedTrainingType("voice");
-    router.push("/scenarios/voice");
+    router.push("/scenarios/experience-select");
   };
 
   const handleSelectMessenger = () => {
     setSelected("messenger");
     setSelectedTrainingType("messenger");
-    router.push("/scenarios/messenger");
+    router.push("/scenarios/experience-select");
   };
 
   return (

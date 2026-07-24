@@ -2,6 +2,7 @@
 // (Architecture.md §14, ADR-0005, T36). API.md에는 아직 반영 안 됨 — architect 확인/문서 갱신 권장
 // (createSession의 sessionId 필드 등 기존 선례와 동일한 "서버 코드가 문서보다 먼저 나간" 패턴).
 import type { ChallengeReportReason, ChallengeStatus, MessengerChannel } from "../shared/types";
+import type { VoiceMode } from "../scenarios/publicMeta";
 
 // --- createChallenge (UX-019 · AC-041/044/048/049) ---
 export type CreateChallengeRequest = {
@@ -43,6 +44,9 @@ export type ListMyChallengesItem = {
   /** T47 추가(#20, §14.8.3) — 부재→"voice". 메신저 챌린지는 suspicionTimeLabel이 항상 null임을
    * 클라 표시 로직(UX-020 D-29)이 채널로 재확인할 수 있게 한다. */
   channel: MessengerChannel;
+  /** T56 추가(#23, §14.9.3) — 부재→"clone". generic 보이스 챌린지도 suspicionTimeLabel이 항상
+   * null임을 클라 표시 로직(UX-020 D-34)이 재확인할 수 있게 한다. */
+  voiceMode: VoiceMode;
 };
 export type ListMyChallengesResponse = {
   challenges: ListMyChallengesItem[];

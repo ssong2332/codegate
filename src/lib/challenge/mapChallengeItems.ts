@@ -21,6 +21,8 @@ export type ChallengeSource = {
   createdAt: Date | null;
   // T49(#20 · MVP #20 · AC-055/OQ-31) — 옵셔널(부재→voice, 기존 호출부·테스트 무회귀).
   channel?: "voice" | "messenger";
+  // T56(#23 · MVP #23 · AC-058/OQ-32) — 옵셔널(부재→clone, 기존 호출부·테스트 무회귀).
+  voiceMode?: "clone" | "generic";
 };
 
 export type ChallengeListItem = {
@@ -60,7 +62,11 @@ function resolveStatusLabel(challenge: ChallengeSource): string {
   // T49(#20 · AC-055/OQ-31 · D-29) — 메신저 챌린지는 의심 시점을 절대 노출하지 않는다(완료
   // 여부만). 서버(deriveChallengeResultSummary)가 애초에 suspicionTimeLabel을 채우지 않지만,
   // 이 화면 텍스트 자체도 채널로 재확인해 "완료" 단독이 아닌 명시적 문구를 보여준다.
-  if ((challenge.channel ?? "voice") === "messenger") {
+  // T56(#23 · AC-058/OQ-32 · D-34) — generic 보이스 챌린지도 메신저와 동일하게 완료 여부만
+  // 표시한다(의심 시점 절대 노출 금지). clone 보이스 챌린지만 의심 시점 문구가 유효하다.
+  const channel = challenge.channel ?? "voice";
+  const voiceMode = challenge.voiceMode ?? "clone";
+  if (channel === "messenger" || (channel === "voice" && voiceMode === "generic")) {
     return "완료 · 상대가 체험을 마침";
   }
   return challenge.suspicionTimeLabel

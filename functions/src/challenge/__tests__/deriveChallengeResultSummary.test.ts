@@ -23,3 +23,20 @@ test("deriveChallengeResultSummary(): channel='messenger' → suspicionTimeLabel
   assert.equal("suspicionTimeLabel" in result, false);
   assert.equal("suspicionTurnIndex" in result, false);
 });
+
+test("deriveChallengeResultSummary(): voiceMode 생략(부재→clone) → {completed:true}만 반환한다(기존 동작 무회귀)", () => {
+  const result = deriveChallengeResultSummary(FAKE_REPORT, "voice");
+  assert.deepEqual(result, { completed: true });
+});
+
+test("deriveChallengeResultSummary(): channel='voice'+voiceMode='clone' → {completed:true}만 반환한다(현재 resistedMoments 미구현)", () => {
+  const result = deriveChallengeResultSummary(FAKE_REPORT, "voice", "clone");
+  assert.deepEqual(result, { completed: true });
+});
+
+test("deriveChallengeResultSummary(): channel='voice'+voiceMode='generic' → suspicionTimeLabel/suspicionTurnIndex를 절대 포함하지 않는다(AC-058/OQ-32 구조적 고정, D-34)", () => {
+  const result = deriveChallengeResultSummary(FAKE_REPORT, "voice", "generic");
+  assert.deepEqual(result, { completed: true });
+  assert.equal("suspicionTimeLabel" in result, false);
+  assert.equal("suspicionTurnIndex" in result, false);
+});

@@ -18,5 +18,6 @@ export async function fetchMyChallenges(): Promise<ChallengeSource[]> {
     suspicionTimeLabel: item.suspicionTimeLabel,
     createdAt: item.createdAt ? new Date(item.createdAt) : null,
     channel: item.channel,
+    voiceMode: item.voiceMode,
   }));
 }

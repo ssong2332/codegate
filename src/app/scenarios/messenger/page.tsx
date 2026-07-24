@@ -19,10 +19,26 @@
 // 보내기"를 먼저 물어야 한다. 세션 생성(clearPendingSession+createSession)은 이제 그 화면의
 // 자기훈련 분기가 담당한다 — 이 화면은 시나리오만 확정한다. 에스컬레이션 가능 시나리오는
 // 챌린지 대상이 아니므로(#21/OQ-28 보류) voice-select 경로는 무변경.
+//
+// **T56 갱신(v1.10, D-31, Architecture.md §14.9.5, AC-056/051)**: UX-026이 유형 선택 직후로
+// 상향되면서 모드(self|send)가 **이 화면 도달 전에 이미 확정**된다(getExperienceMode() peek).
+// (1) **노출 필터**: self는 에스컬레이션 가능 시나리오를 포함한 전체를 노출(무변경, 자기훈련은
+// 에스컬레이션 제약 없음), send는 비에스컬레이션만 노출(AC-051, #21/OQ-28 보류 — send에는
+// 에스컬레이션 시나리오가 애초에 안 보인다). (2) **Exit**: send + 비에스컬레이션 → `/challenge/
+// create`로 직행(구 UX-026 handleSendToFriend 로직을 이 화면으로 이관). self + 비에스컬레이션 →
+// 이 화면이 직접 createSession을 호출한다(구 UX-026 handleSelfExperience의 isMessenger 분기를
+// 이 화면으로 이관 — UX-026이 시나리오 선택보다 앞서게 되며 그 책임을 넘겨받음). self + 에스컬레이션
+// → voice-select(무변경).
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { setSelectedScenarioId as setPendingSelectedScenarioId } from "@/lib/recording";
-import { scenarios, type ScenarioDoc, type MessengerSurface } from "@/content/scenarios";
+import {
+  clearPendingSession,
+  getExperienceMode,
+  getOrCreatePendingSessionId,
+  setSelectedScenarioId as setPendingSelectedScenarioId,
+} from "@/lib/recording";
+import { createSession } from "@/lib/api";
+import { scenarios, GENERIC_VOICE_ID, type ScenarioDoc, type MessengerSurface } from "@/content/scenarios";
 import { Badge, Button } from "@/components/ui";
 
 const SURFACE_LABEL: Record<MessengerSurface, string> = {
@@ -30,31 +46,66 @@ const SURFACE_LABEL: Record<MessengerSurface, string> = {
   sms: "문자",
 };
 
+type PageState = "ready" | "starting";
+
 export default function MessengerScenarioSelectPage() {
   const router = useRouter();
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
+  const [state, setState] = useState<PageState>("ready");
+  const [startError, setStartError] = useState<string | null>(null);
+  // lazy initializer로 마운트 시 1회만 읽는다(다른 드릴다운 화면과 동일 패턴). 힌트 부재(직접 URL
+  // 접근 등 방어적 상황)는 self로 취급 — 기존(UX-026 상향 전) "유형→시나리오 직행" 기본 동작과
+  // 동일한 최대 노출·자기훈련 우선 기본값이다.
+  const [isSendMode] = useState<boolean>(() => getExperienceMode() === "send");
 
   // AC-029/AC-030 핵심 — 메신저 채널로 필터된 시나리오만 노출(전체 평면 나열 아님).
+  // (T56, D-31/AC-051) — send 모드는 비에스컬레이션 시나리오만(#21/OQ-28 보류로 에스컬레이션은
+  // 챌린지 대상이 아님). self 모드는 무변경(에스컬레이션 포함 전체).
   const filteredEntries = Object.entries(scenarios).filter(
-    ([, scenario]) => scenario.channel === "messenger",
+    ([, scenario]) => scenario.channel === "messenger" && (!isSendMode || !scenario.escalation),
   );
 
-  const handleStart = () => {
-    if (!selectedScenarioId) return;
+  const handleStart = async () => {
+    if (!selectedScenarioId || state === "starting") return;
     const scenario = scenarios[selectedScenarioId];
     if (!scenario) return;
 
     if (scenario.escalation) {
       // D-25(UX-025) — 조건부 목소리 선택은 전이 발생 시점이 아니라 시나리오 선택 직후에 미리
       // 온다. createSession은 이 화면이 아니라 voice-select 화면이 호출한다(voiceId 확정 후).
+      // send 모드에는 에스컬레이션 시나리오가 필터에서 애초에 제외되므로 이 분기는 self 전용이다.
       setPendingSelectedScenarioId(selectedScenarioId);
       router.push("/scenarios/messenger/voice-select");
       return;
     }
 
-    // (T49, v1.9 D-30) — 비에스컬레이션 시나리오는 UX-026(체험 선택)에서 "본인이 체험/지인에게
-    // 보내기"를 가른다(AC-051). 세션 생성은 그 화면의 자기훈련 분기가 담당한다.
-    router.push(`/scenarios/experience-select?scenarioId=${encodeURIComponent(selectedScenarioId)}`);
+    if (isSendMode) {
+      // (T56, v1.10 D-31/AC-051) — 비에스컬레이션 + 지인에게 보내기 → UX-019(챌린지 만들기)로
+      // 직행한다(구 UX-026 handleSendToFriend와 동일 판단 — 메신저는 클론을 요구하지 않는다).
+      router.push(`/challenge/create?scenarioId=${encodeURIComponent(selectedScenarioId)}`);
+      return;
+    }
+
+    // (T56, v1.10 D-31) — 비에스컬레이션 + 본인이 체험 → 이 화면이 직접 세션을 시작한다(구
+    // UX-026 handleSelfExperience의 isMessenger 분기를 이관, 세션 생성 로직·게이팅은 무변경).
+    clearPendingSession();
+    const sessionId = getOrCreatePendingSessionId();
+    if (!sessionId) return;
+    setState("starting");
+    setStartError(null);
+    try {
+      await createSession({
+        sessionId,
+        scenarioId: selectedScenarioId,
+        voiceId: GENERIC_VOICE_ID,
+        channel: "messenger",
+        surface: scenario.surface,
+      });
+      router.push("/session/messenger");
+    } catch {
+      setStartError("시나리오를 시작하지 못했습니다. 다시 시도해 주세요.");
+      setState("ready");
+    }
   };
 
   const renderScenarioCard = (scenarioId: string, scenario: ScenarioDoc) => {
@@ -140,9 +191,10 @@ export default function MessengerScenarioSelectPage() {
         >
           <span aria-hidden="true">←</span> 뒤로
         </button>
-        {/* 단계 표시(P-12 #2, T28 패턴 재사용) — 메신저는 방식 단계가 없어 유형→시나리오 2단계. */}
+        {/* 단계 표시(P-12 #2, T28 패턴 재사용) — 메신저는 방식 단계가 없어 유형→체험선택→시나리오
+            3단계(v1.10 D-31로 체험 선택이 앞에 추가되며 ②→③으로 밀림). */}
         <p className="text-sm font-semibold text-[#0E6B62]" aria-current="step">
-          메신저피싱 › ② 시나리오
+          메신저피싱 › ③ 시나리오
         </p>
         <h1 className="text-2xl font-bold text-[#22303A]">어떤 메시지를 받아볼까요?</h1>
         <p className="text-base leading-relaxed text-[#6B655C]">
@@ -161,8 +213,19 @@ export default function MessengerScenarioSelectPage() {
       )}
 
       <div className="sticky bottom-0 -mx-6 -mb-28 border-t border-[#E2DDD3] bg-[#FAF8F5]/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur">
-        <Button type="button" onClick={handleStart} disabled={!selectedScenarioId}>
-          이 메시지 받아보기
+        {startError && (
+          <p role="alert" className="mb-3 flex items-center gap-2 text-base text-[#C6392F]">
+            <span aria-hidden="true">⚠</span>
+            <span>{startError}</span>
+          </p>
+        )}
+
+        <Button
+          type="button"
+          onClick={() => void handleStart()}
+          disabled={!selectedScenarioId || state === "starting"}
+        >
+          {state === "starting" ? "연결하는 중..." : "이 메시지 받아보기"}
         </Button>
       </div>
     </main>

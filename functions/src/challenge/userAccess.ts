@@ -20,7 +20,7 @@ import { generateOpeningLine } from "../roleplay";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { GEMINI_API_KEY } from "../shared/config";
-import { MAX_SESSION_MS, MAX_USER_TURNS } from "../shared/constants";
+import { GENERIC_VOICE_ID, MAX_SESSION_MS, MAX_USER_TURNS } from "../shared/constants";
 import { getVoiceProvider } from "../voice/provider";
 import { hashToken } from "./token";
 import { markChallengeConsumed, resolveChallengeByTokenHash } from "./index";
@@ -203,18 +203,31 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
     // T47(#20, §14.8.2) — 메신저 챌린지는 재생할 복제 음성이 없고(voiceId 부재, AC-051) 채팅
     // UI가 애초에 오디오를 재생하지 않는다(createSession의 channel!=="messenger" 게이팅과 동형) —
     // 합성 자체를 건너뛴다.
+    // T56(#23, §14.9.2) — 3분기: messenger(스킵, 무변경) / clone(challenge.voiceId, 무변경) /
+    // generic(GENERIC_VOICE_ID — self-training generic과 동일 값·동일 provider). 판별은
+    // `resolved.voiceMode`로 한다(voiceId-부재 추론 금지, §14.9.1) — resolveChallengeByTokenHash가
+    // 이미 이 값을 비민감 필드로 반환해 별도 문서 재조회 없이 판정할 수 있다.
     let openingAudioUrl: string | undefined;
     if (scenarioChannel !== "messenger") {
       try {
-        const challengeSnap = await challengeRef.get();
-        const challenge = challengeSnap.data() as ChallengeDoc;
-        if (challenge.voiceId) {
+        if (resolved.voiceMode === "generic") {
           const synthesis = await getVoiceProvider().synthesize({
             sessionId: claim.sessionId,
-            voiceId: challenge.voiceId,
+            voiceId: GENERIC_VOICE_ID,
             text: openingMessage.text,
           });
           openingAudioUrl = synthesis.audioUrl;
+        } else {
+          const challengeSnap = await challengeRef.get();
+          const challenge = challengeSnap.data() as ChallengeDoc;
+          if (challenge.voiceId) {
+            const synthesis = await getVoiceProvider().synthesize({
+              sessionId: claim.sessionId,
+              voiceId: challenge.voiceId,
+              text: openingMessage.text,
+            });
+            openingAudioUrl = synthesis.audioUrl;
+          }
         }
       } catch {
         // 합성 실패는 무시(P-4 비차단) — 클라는 openingAudioUrl 없으면 텍스트만 표시.
@@ -275,19 +288,25 @@ export const reportChallenge = onCall<ReportChallengeRequest, Promise<ReportChal
  * T47 증분(#20, §14.8.3, AC-055/OQ-31) — channel 파라미터로 "메신저 챌린지는 의심 시점을 절대
  * 계산·저장하지 않는다"를 **구조적으로 고정**한다. 오늘은 보이스도 아직 suspicion 필드를 채우지
  * 않지만(위 known gap), 장래 보이스 쪽에 resistedMoments가 추가되어도 이 분기(messenger)는
- * 절대 값을 채우지 않는다 — 쓰기 시점 강제가 읽기 필터보다 안전하다(store-nothing-sensitive). */
+ * 절대 값을 채우지 않는다 — 쓰기 시점 강제가 읽기 필터보다 안전하다(store-nothing-sensitive).
+ *
+ * T56 증분(#23, §14.9.3, AC-058/OQ-32) — voiceMode 파라미터를 추가해 "channel==='messenger' 또는
+ * voiceMode==='generic'이면 {completed:true}만 파생"한다(OQ-32 planner default="완료 여부만",
+ * D-34 — 메신저 챌린지와 동일 계층). clone 보이스 챌린지만 장래 의심-타이밍 확장 여지를 유지한다. */
 export function deriveChallengeResultSummary(
   report: Pick<ReportDoc, "sessionId">,
   channel: ChallengeDoc["channel"] = "voice",
+  voiceMode: ChallengeDoc["voiceMode"] = "clone",
 ): ChallengeResultSummary {
   void report; // 현재는 존재 자체(=완료)만 반영한다. 추후 resistedMoments 도입 시 이 함수를 확장.
-  if (channel === "messenger") {
-    // AC-055/OQ-31 — 스미싱 링크 탭·가짜 랜딩 입력·에스컬레이션 도달 등 "의심 시점"은 어떤
-    // 형태로도 계산·포함하지 않는다. 이 분기는 앞으로도 절대 확장하지 않는다(구조적 고정).
+  if (channel === "messenger" || voiceMode === "generic") {
+    // AC-055/OQ-31/OQ-32 — 스미싱 링크 탭·가짜 랜딩 입력·에스컬레이션 도달·통화 의심 시점 등
+    // "의심 시점"은 어떤 형태로도 계산·포함하지 않는다. 이 분기는 앞으로도 절대 확장하지 않는다
+    // (구조적 고정).
     return { completed: true };
   }
-  // 보이스 챌린지 — DECISIONS #26 resistedMoments 도입 시 이 분기에서만 suspicionTimeLabel 등을
-  // 채우도록 확장한다(메신저 분기는 위에서 이미 구조적으로 차단됨).
+  // clone 보이스 챌린지 — DECISIONS #26 resistedMoments 도입 시 이 분기에서만 suspicionTimeLabel
+  // 등을 채우도록 확장한다(messenger/generic 분기는 위에서 이미 구조적으로 차단됨).
   return { completed: true };
 }
 
@@ -337,7 +356,7 @@ export const setChallengeResultSharing = onCall<
     throw new HttpsError("failed-precondition", "아직 결과가 준비되지 않았습니다.");
   }
   const report = reportSnap.data() as ReportDoc;
-  const resultSummary = deriveChallengeResultSummary(report, resolved.channel);
+  const resultSummary = deriveChallengeResultSummary(report, resolved.channel, resolved.voiceMode);
 
   await challengeRef.update({
     resultSharingConsented: true,
