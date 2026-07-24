@@ -2,8 +2,10 @@
 
 Owner: architect (see AGENTS.md). Others read-only.
 Major decisions are logged in DECISIONS.md; details in adr/.
-Based on PRD Version: v1.1 · Based on UX Version: 1.7 · Last Updated: 2026-07-24
+Based on PRD Version: v1.3 · Based on UX Version: 1.8 · Last Updated: 2026-07-24
 
+> **갱신 고지(2026-07-24, T47 아키텍트 게이트 — 메신저 2인 챌린지 #20):** 기준을 **PRD v1.1→v1.3 · UX 1.7→1.8**로 맞춘다(직전까지 v1.1/1.7이라 버전 갭 존재). v1.1→v1.3 델타는 순수 결정 확정(OQ-29/30/31 resolved)+신규 AC-051~055(메신저 2인 챌린지 확장)이고, UX 1.7→1.8 델타는 T46의 UF-004/005 메신저 변형·D-27/28/29다. 이번 갱신은 신규 **§14.8**(음성 없는 메신저 2인 챌린지 — 채널 인지 확장)·DECISIONS #30에 한정하며, 기존 §0~§14.7·ADR-0005/0006은 유효하다(재검증: §14.7 익명-uid 접근 모델이 채널 무관임을 코드로 확인 — §14.8.2). **새 ADR 없음**: 이 확장은 ADR-0005(챌린지 스코프 클론)·ADR-0006(익명 uid 접근)의 하위호환 옵셔널 증분이지 새 구조 결정이 아니다(중복 ADR 지양 — DECISIONS #19 원칙 계승).
+>
 > **갱신 고지(2026-07-24, T38 통합 게이트):** PRD v1.1·UX 1.7 기준 무변경(버전 갭 없음). T38 QA가 실측한 ADR-0005 §14.2 불변식 ↔ ADR-0006 A1 사이의 모순(challenge 세션에서 `createRealtimeCall`이 사용자1 raw voiceId를 사용자2에게 반환)을 **ADR-0006 Addendum A2**로 해소했다 — §14.2 "추출 차단" 문구를 무조건형에서 스코프 한정 예외형으로 정밀화(오디오 바이트는 무조건 불변, voiceId는 라이브 elevenlabs 통화 경로의 동의 taker에게만)하고, 비-elevenlabs 경로 voiceId 블랭킹을 신규 요건으로 추가(DECISIONS #28). 기존 §14 스키마·안전제약·A1은 유효.
 >
 > **갱신 고지(2026-07-24, T37 착수 게이트):** PRD v1.1·UX 1.7 기준 무변경(버전 갭 없음). 신규 §14.7(2인 소셜 사용자2 접근 메커니즘 = 익명 인증 재사용)·ADR-0006·DECISIONS #27을 추가하고, 그에 맞춰 §14.0/§14.1의 "소유자 없음/직접 접근 없음" 문구와 §7 인증 표를 정정했다. §14.7이 §14.0~§14.6의 데이터 계약(T35) 위에 **실행 메커니즘**만 확정하므로 기존 §14 스키마·안전제약은 유효하다.
@@ -543,3 +545,73 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 §14.7 결정에 따라 아래를 정정한다(Architecture는 architect 소유·비-append 문서라 직접 갱신, 근거는 본 절·ADR-0006):
 - §14.0 point 1 "직접 Firestore 접근 없음" → "**챌린지 문서 접근은 Functions 매개**(challenges=`if false`); 사용자2 체험 세션·리포트·메시지는 **익명 uid 소유로 직접 read**(정상 세션과 동일 소유권 격리)". 보증 목표(AC-041/043)는 불변 — 수단만 "전면 Functions 매개"에서 "익명 uid 소유"로 명시화.
 - §14.1 "uid는 사용자2 무계정이므로 소유자 없음/토큰 바운드" → "uid는 **동의 시 발급된 임시 익명 uid**(토큰 매개로 생성). 사용자1(실 uid)은 소유권 불일치로 규칙·콜러블에서 거부(§14.7.2)". `voiceId`는 이 세션 문서에 저장하지 않고 `challengeId`만 둔다(A1).
+
+---
+
+## 14.8 음성 없는 메신저 2인 챌린지 — 채널 인지 확장 (T47, PRD v1.3 MVP #20, AC-051/053/054/055)
+> **소관 UX/AC 매핑:** UF-004/UF-005 메신저 변형·UX-019/020/021/022/023/024(채널 인지 재사용)·D-27/28/29 / AC-051·053·054·055·040·042·043·048·049. **⚠️ 이 절이 T48(implementer) 착수 게이트.** #21(에스컬레이션 가능 메신저 챌린지)은 **범위 밖**(OQ-28 보류) — 여기서는 아무 것도 설계하지 않는다.
+
+### 14.8.0 설계 요지(다른 판단보다 우선)
+1. **음성 없는 메신저 챌린지 = 기존 2인 모델의 "깨끗한 부분집합".** 클론·`voiceId`·통화 자격증명(`createRealtimeCall`)·`onSessionEnded` voice 삭제 경로를 **아예 타지 않는다**. 따라서 ADR-0005 §14.2(추출 차단)·ADR-0006 A1/A2(voiceId 미저장·라이브 통화 예외)가 다루는 유출 리스크 표면이 **존재하지 않는다**(대상 부재). §14.7의 익명-uid 소유권 격리(AC-040/042/043)는 **채널 무관**이라 그대로 성립한다(§14.8.2 코드 재검증).
+2. **하위호환 옵셔널 증분만.** `challenges` 스키마에 신규 필드를 **추가**하되 기존 필수 필드를 제거하지 않는다. 기존 프로덕션 보이스 챌린지 문서(전부 `voiceId` 세팅·`channel` 부재)는 **무마이그레이션**으로 유효하다 — "`channel` 부재→`voice`" 계산 기본값(sessions/scenarios가 이미 쓰는 Migration Policy와 동일)을 읽기 시점에 적용한다. 백필 없음.
+3. **안전장치는 등급·채널 무관 동일 코드경로.** 4대 안전제약(AC-040/042/043)은 채널을 조건으로 우회하지 않는다. 음성 없는 챌린지에서 AC-041(추출 차단·보존기간)은 **대상 부재로 무효**이나 AC-040/042/043은 무변경 적용(AC-054).
+
+### 14.8.1 (질문1) 스키마 — `challenges.voiceId` 옵셔널화 + 명시 `channel` 판별자
+**결정: `challenges`에 명시적 `channel?: "voice"|"messenger"`(옵셔널, 부재→`voice`)를 추가하고 `voiceId`를 옵셔널로 완화한다.** scenarioId 룩업으로 채널을 유도하지 않는다.
+
+| 필드 | 변경 | 값·제약 |
+|---|---|---|
+| `voiceId` | **`string` → `string?`** | 보이스 챌린지에만 존재(스코프 고정 클론, ADR-0005). **메신저 챌린지엔 부재** — 클론·통화 경로를 안 타므로 발급·저장할 값이 없다(AC-051). 기존 문서는 전부 세팅돼 있어 하위호환. |
+| `channel` | **신규 옵셔널** | `"voice"`\|`"messenger"`. **부재→`voice`**(계산 기본값, 무백필). 생성 시 `PUBLIC_SCENARIOS[scenarioId].channel ?? "voice"`로 확정·역정규화(denormalize). |
+
+- **왜 `voiceId` 부재를 채널 판별자로 재활용하지 않는가(핵심 근거):** "voiceId 있음⟺voice"는 지금은 참이지만 **#21(에스컬레이션 가능 메신저 챌린지)에서 깨진다** — 그 챌린지는 `channel==="messenger"`이면서 통화 전이용 `voiceId`를 **가질 수 있다**(AC-052 조건부 음성 첨부). voiceId-부재를 채널 신호로 오버로드하면 #21 착수 시 판별자를 다시 갈아엎어야 한다. 명시 `channel`은 지금·미래 모두에서 단일·안정 판별자다.
+- **왜 scenarioId 룩업이 아니라 역정규화 필드인가:** OQ-29(생성 시점 시나리오 확정)로 챌린지의 시나리오는 생성 후 불변이라 `challenges.channel === PUBLIC_SCENARIOS[scenarioId].channel`이 **생성 시 못박히고 이후 드리프트하지 않는다**(안전한 역정규화 전제). 이로써 **수신자 핫패스(getChallengeLanding→consentChallenge)와 발신자 목록(listMyChallenges→UX-020)이 라우팅·결과분기를 위해 `PUBLIC_SCENARIOS`를 조회할 필요가 없다** — 토큰 해석 primitive(`resolveChallengeByTokenHash`)가 반환하는 얇은 projection에 `channel` 한 필드만 더하면 된다(voiceId/linkTokenHash 같은 민감 필드가 아니라 반환 안전, AC-041 무관).
+- **불변식(implementer 강제):** `createChallenge`는 `challenges.channel = scenarioChannel`을 세팅한다. 보이스 챌린지는 기존대로 `channel` 생략(부재→voice, 기존 문서와 동일 형태 유지) 또는 명시 `"voice"` 중 택1 — **메신저 챌린지만 `channel:"messenger"`를 반드시 기록**한다(Firestore admin SDK의 undefined 거부 관례상 조건부 spread, 기존 session/index.ts L170 패턴 계승).
+
+**createChallenge 채널 분기(§14.8):**
+- `scenario = PUBLIC_SCENARIOS[scenarioId]`; `scenarioChannel = scenario.channel ?? "voice"`.
+- `scenarioChannel==="voice"`: 기존 경로 그대로 — `voiceMode==="clone"` 요구 → 클론 온보딩 소스 확인(challenge/index.ts L72–107) → 챌린지 전용 클론 발급 → `voiceId` 기록.
+- `scenarioChannel==="messenger"`: **#20 게이트 = `!scenario.escalation`을 요구**(에스컬레이션 보유 메신저 시나리오는 #21/OQ-28 대기 → `failed-precondition`으로 명시 거부, 조용한 실패 금지). 클론 블록(L72–139) **전부 스킵**, `voiceId` 미기록, `channel:"messenger"` 기록. 나머지(토큰·만료·retentionDeleteAt·문서 set)는 공유.
+  - **현재 콘텐츠상 적격 시나리오 2종**: `messenger-friend-loan-kakao`·`messenger-parcel-smishing-sms`(둘 다 `escalation` 부재). `messenger-child-impersonation-kakao`·`messenger-subsidy-smishing-sms`는 `escalation` 보유 → #20에서 차단.
+- **활성 개수 상한(§14.5/OQ-30)**: 채널 분기 이전에 동일하게 적용(§14.8.4 — 이미 전역).
+
+### 14.8.2 (질문2) `consentChallenge` 메신저 변형 — 구조적 분기 최소, 익명-uid 모델 무개정
+**결정: `consentChallenge`는 세션 문서 shape + 오프닝 합성 스킵 2곳만 채널 분기하고, 트랜잭션 로직(토큰 소모+세션 생성)은 재사용한다.** §14.7 익명-uid 소유권 모델은 메신저 세션(voiceId 없음)에 **개정 없이** 확장됨을 코드로 확인했다.
+
+- **분기 지점 (challenge/userAccess.ts 실측 대비):**
+  1. **세션 문서 shape** — 현재 보이스 경로는 `entryChannel:"voice"`만 세팅하고 `channel`은 생략한다(L157). 메신저 변형은 `entryChannel:"messenger"` + `channel:"messenger"` + `surface: PUBLIC_SCENARIOS[scenarioId].surface`를 세팅한다(스킨 렌더용). `voiceId`는 보이스 경로와 **동일하게 미설정**(A1 이미 준수) — 다만 보이스는 "challenge 문서에 있으나 세션엔 안 담음", 메신저는 "애초에 아무 데도 없음"이라는 차이뿐. `cloneStatus:"ready"`는 무해하게 유지(voice 개념이나 다른 필드 정합 위해 기존 형태 계승).
+  2. **오프닝 오디오 합성 스킵** — 트랜잭션 커밋 후 `challenge.voiceId`로 `synthesize`하는 블록(L184–196)을 메신저 채널에선 **건너뛴다**(voiceId 부재 + 채팅 UI는 오디오 미재생 — createSession L198·sendMessage L257의 `channel!=="messenger"` 게이팅과 동형). `openingMessageText`(텍스트)는 그대로 반환.
+  3. **응답에 `channel` 실어 라우팅** — 클라가 동의 후 UX-014(voice) vs UX-022(messenger)로 분기하도록 `channel`을 응답(또는 getChallengeLanding 응답)에 포함. §14.8.1의 역정규화 필드에서 파생.
+- **재사용(무개정) — 익명-uid 모델이 채널 무관임을 코드로 재검증:**
+  - `decideConsentGate`·`markChallengeConsumed`·소모+세션 생성 트랜잭션(L115–175): uid·status만 판정, 채널 무관 → **그대로 재사용**.
+  - **`sendMessage` 소유권 검사(roleplay/index.ts L54 `session.uid !== request.auth.uid`)는 uid 비교뿐 — voice-only 가정 없음.** sendMessage는 이미 메신저 채널(T29)을 처리한다: 링크 마커 추출(L144)·`channel!=="messenger"`일 때만 TTS 합성(L257)·에스컬레이션은 `scenario.escalation` 있을 때만(L228, #20 시나리오엔 부재라 미발동). 즉 "익명-uid 세션" + "메신저 채널"은 **각각 이미 동작하는 두 축의 교집합**일 뿐 신영역이 아니다.
+  - **`onSessionEnded`(guardrails/index.ts L131)는 `after.voiceId` 부재를 안전 no-op으로 처리**(L112 주석·`purgeSession`의 `voiceId: string|undefined` 시그니처 실측). 메신저 챌린지 세션은 voiceId가 없어 ElevenLabs DELETE가 스킵된다 — 오히려 보이스 챌린지보다 안전(A1이 방어하던 "첫 체험 종료 시 사용자1 클론 삭제" 위험 자체가 부재). 폐기할 클론이 없으므로 기간제 보존(retentionDeleteAt) 대상도 챌린지 문서뿐.
+  - `endSession`·`generateReport`·리플레이(`report/replay`)·`setChallengeResultSharing`: 전부 채널 무관(§14.7.3/14.7.4) → 무개정.
+- **갭(implementer 주의):** `createRealtimeCall`은 #20에서 **호출되지 않는다**(통화 없음) — A1의 challenge-voiceId 해석 분기(§14.7.5)는 메신저 챌린지와 무관하다. 이것이 #20을 #19(보이스 챌린지)보다 단순·저위험으로 만드는 핵심이다.
+
+### 14.8.3 (질문3) 결과 요약 파생 — 쓰기 시점 강제(채널 게이트), 읽기 필터에만 의존하지 않음
+**결정: 메신저-vs-보이스 분기를 파생(쓰기) 시점에 두어, 메신저 챌린지 `resultSummary`에는 의심-타이밍 필드를 애초에 계산·저장하지 않는다.** 읽기 시점 필터만으로 막지 않는다.
+
+- **근거(안전 우선, "무단 노출 금지" 문화 계승 — AC-041 voiceId 미반환·A1 voiceId 미저장 선례):** AC-055/OQ-31은 메신저 발신자에게 의심 시점(스미싱 링크 탭·가짜 랜딩 입력·에스컬레이션 도달)을 **"어떤 형태로도 노출하지 않는다"**. 읽기 시점 필터(listMyChallenges가 응답에서 제외)만 두면 **장래에 보이스용 의심-타이밍이 구현돼 저장되기 시작할 때, 메신저 문서에도 같은 write 경로가 실수로 값을 채우면** 이후 어떤 읽기 필터 누락이든 즉시 유출로 이어진다. **저장 자체를 안 하면**(store-nothing-sensitive) 읽기 버그가 나도 셀 값이 없다 — A1이 세션에 voiceId를 안 담아 직접 read를 무해화한 것과 동형의 방어.
+- **구체(현 코드 대비):** `deriveChallengeResultSummary`(challenge/userAccess.ts L248)는 이미 `{completed:true}`만 반환하고 suspicion 필드를 의도적으로 비운다(DECISIONS #26 resistedMoments 미구현). 이 함수에 **채널을 넘겨, `channel==="messenger"`면 suspicion 필드를 영구히 계산·포함하지 않도록 구조적으로 고정**한다(현재 동작을 채널 불변식으로 승격 — 장래 보이스 의심-타이밍이 추가돼도 메신저는 절대 안 담김). 보이스 챌린지는 AC-043대로 "완료/의심 시점" 노출 여지를 유지(장래).
+- **2차 하드닝(권장, load-bearing은 1차):** `listMyChallenges`(challenge/index.ts L227)도 메신저 행에선 `suspicionTimeLabel`을 아예 표면화하지 않도록 채널 분기(벨트+멜빵). 1차(쓰기 미저장)가 주 강제, 2차는 심층 방어.
+
+### 14.8.4 (질문4) 활성 챌린지 상한 — 이미 전역 합산(무변경, 실측 확인)
+**결정: 변경 불요.** 현 상한 쿼리는 이미 채널 무관 전역 합산이다(OQ-30 이미 충족).
+
+- **실측(challenge/index.ts L109–125):** 상한 쿼리는 `challenges.where("creatorUid","==",uid).where("status","in",ACTIVE_STATUSES)` + `linkExpiresAt>now` 필터뿐 — **`channel`/`voiceId`로 필터하지 않는다.** 따라서 보이스+메신저 챌린지가 **한 카운트에 합산**되어 `CHALLENGE_FREE_ACTIVE_CAP(3)`로 강제된다. OQ-30("전역 3개")이 코드 변경 없이 성립한다. `challenges` 인덱스(`creatorUid+status`)도 채널 컬럼이 없어 그대로 재사용.
+- implementer는 메신저 생성 경로가 **동일한** 상한 체크를 (채널 분기 이전에) 거치게만 유지하면 된다(§14.8.1 분기 순서).
+
+### 14.8.5 폐기·Storage 갭 (implementer 주의)
+- **`purgeChallenge`/`purgeChallengeArtifacts`/`deleteChallenge`의 `voiceId: string` 시그니처는 `undefined`를 허용해야 한다** — 메신저 챌린지는 voiceId가 없어 ElevenLabs DELETE를 스킵(no-op)해야 한다(`onSessionEnded`의 `voiceId: string|undefined` 안전 처리와 동형). 이걸 안 고치면 메신저 챌린지의 수동/기간제 삭제가 런타임 에러를 낸다.
+- **Storage 경로 부재**: 메신저 챌린지는 `users/{uid}/challenges/{cid}/voice_input.webm`(사용자1 녹음)을 만들지 않는다 — 폐기 시 삭제 대상도 챌린지 문서 + deletionLogs 기록뿐(voice·Storage 없음). `deletionLogs.challengeId`는 그대로 기록 가능.
+- **retentionDeleteAt은 여전히 세팅**한다(메신저도 챌린지 문서 자동 만료 대상) — 다만 폐기 대상이 "클론 음성"이 아니라 "챌린지 문서"뿐이다. AC-041의 음성 보존기간 조항은 대상 부재로 무효(AC-054), 문서 수명 관리 용도로만 유지.
+
+### 14.8.6 UX Traceability 증분 (화면 → 콜러블/컬렉션)
+| Screen/Flow | 콜러블 | Firestore | 핵심 AC | §14.8 매핑 |
+|---|---|---|---|---|
+| UX-019 챌린지 생성(메신저) | `createChallenge`(채널 분기) | `challenges`(`channel:"messenger"`, `voiceId` 부재) | AC-051 | §14.8.1 |
+| UX-021 동의 랜딩(채널 인지) | `getChallengeLanding`(`channel` 반환)·`consentChallenge`(메신저 변형) | `challenges`·`sessions`(익명 uid·`channel:"messenger"`) | AC-040/053 | §14.8.2 |
+| UX-022 메신저 채팅 체험 | `sendMessage`(무개정) | `sessions/{}/messages`(마스킹·`channel`) | AC-053/054 | §14.8.2 |
+| UX-007→UX-018 강제 정체공개·리플레이 | `endSession`·`generateReport`(무개정) | `reports/{}`(익명 uid) | AC-042 | §14.8.2 |
+| UX-020 발신자 결과(완료 여부만) | `listMyChallenges`·`setChallengeResultSharing` | `challenges.resultSummary`(completed만) | AC-055/043 | §14.8.3 |
