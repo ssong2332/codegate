@@ -12,6 +12,7 @@ export { MockLlmClient } from "./mockClient";
 export { GeminiLlmClient } from "./geminiClient";
 
 import { HttpsError } from "firebase-functions/v2/https";
+import { logger } from "firebase-functions";
 import { GEMINI_API_KEY } from "../shared/config";
 import { GeminiLlmClient } from "./geminiClient";
 import { MockLlmClient } from "./mockClient";
@@ -99,6 +100,12 @@ export function getLlmClient(): LlmClient {
  * 철학. `withTimeout`처럼 별도 함수로 분리한 이유도 같다 — 호출부가 이 폴백 로직을 직접 신경 쓸
  * 필요 없이 `completeWithFallback(getLlmClient(), input)`만 부르면 되고, fake client로 실패를
  * 흉내내 유닛 테스트할 수 있다(`llm/__tests__/completeWithFallback.test.ts`).
+ *
+ * reviewer/QA 리뷰 Minor(2026-07-24, 두 차례 지적) — 폴백 발동 자체를 아무 데도 남기지 않으면
+ * Gemini가 지속 장애(쿼터 소진·전역 안전필터 오류 등)를 겪어도 대화가 계속 자연스럽게 이어져 아무도
+ * 눈치채지 못한 채 사용자가 신고했던 원래 버그(문맥 미반영 Mock)로 조용히 되돌아갈 수 있다.
+ * `logger.warn`으로 최소한의 운영 신호만 남긴다 — 사용자에게 노출되는 대사 자체는 여전히 정상
+ * Mock 응답이라 대화 흐름은 안 끊긴다(P-4 비차단 원칙 유지), 관측 가능성만 보강.
  */
 export async function completeWithFallback(
   primary: LlmClient,
@@ -106,7 +113,11 @@ export async function completeWithFallback(
 ): Promise<LlmCompletionResult> {
   try {
     return await primary.complete(input);
-  } catch {
+  } catch (error) {
+    logger.warn("LLM 1차 클라이언트 실패 — Mock으로 강등", {
+      providerName: primary.providerName,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return await new MockLlmClient().complete(input);
   }
 }
