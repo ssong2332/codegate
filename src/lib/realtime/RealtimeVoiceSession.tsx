@@ -33,11 +33,25 @@ export type RealtimeVoiceSessionProps = {
   onError: () => void;
   /** 상대(사기범)가 말하는 중인지 — 통화 화면 파형 인디케이터용. */
   onSpeakingChange: (speaking: boolean) => void;
+  /** 사용자 신고(2026-07-24, "내 말을 잘 듣고 있는지 보고 싶다") — 사용자 본인 발화 파형
+   * 인디케이터용. SDK가 이미 제공하는 `onVadScore`(0.0=무음~1.0=큰 목소리, ElevenLabs 문서
+   * 관례)를 그대로 쓴다 — 이 컴포넌트는 마이크 캡처를 직접 하지 않고 SDK(useConversation)가
+   * 내부에서 다루므로(GeminiVoiceSession과 달리 원본 MediaStream에 접근할 수 없다), 별도
+   * AnalyserNode를 새로 만들 수 없고 만들 필요도 없다 — SDK 자체 VAD 점수가 정확히 이 진단
+   * 목적(서버 쪽이 실제로 사용자 발화를 얼마나 감지하는지)에 더 부합한다. */
+  onUserSpeakingChange: (speaking: boolean) => void;
   /** 부모가 종료를 요청하면 값이 증가한다(훈련 종료 버튼). */
   stopSignal: number;
   /** 통화 중 음소거 — 실제 마이크 입력을 끊는다. */
   muted: boolean;
 };
+
+// 사용자 파형 문턱값(2026-07-24) — ElevenLabs 문서 관례상 vadScore는 0.0(무음)~1.0(큰 목소리)
+// 스케일이다(Swift SDK 문서 기준, JS SDK도 동일 스케일로 추정 — 이 값 자체의 실제 체감은 사용자
+// 실브라우저 테스트 필요). 짧은 침묵에 파형이 깜빡이지 않도록 Gemini 쪽과 동일한 off-디바운스를
+// 쓴다.
+const USER_SPEECH_VAD_THRESHOLD = 0.5;
+const USER_SPEECH_OFF_DELAY_MS = 400;
 
 function SessionRunner({
   credentials,
@@ -46,22 +60,49 @@ function SessionRunner({
   onEnded,
   onError,
   onSpeakingChange,
+  onUserSpeakingChange,
   stopSignal,
   muted,
 }: RealtimeVoiceSessionProps) {
+  // 사용자 발화 파형 인디케이터 상태 — 리렌더로 초기화되면 안 되므로 ref에 둔다(state가 아님).
+  const userSpeakingRef = useRef(false);
+  const userSpeakingOffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const conversation = useConversation({
     micMuted: muted,
     onConnect: () => handlersRef.current.onActive(),
     onDisconnect: () => handlersRef.current.onEnded(),
     onError: () => handlersRef.current.onError(),
+    // 사용자 신고(2026-07-24, "내 말을 잘 듣고 있는지 보고 싶다") — SDK가 이미 계산해 주는
+    // 사용자 측 VAD 점수를 그대로 쓴다(직접 마이크를 캡처하지 않으므로 이게 유일하게 가능한
+    // 신호 소스, 위 props 주석 참고).
+    onVadScore: ({ vadScore }) => {
+      if (vadScore <= USER_SPEECH_VAD_THRESHOLD) return;
+      if (!userSpeakingRef.current) {
+        userSpeakingRef.current = true;
+        handlersRef.current.onUserSpeakingChange(true);
+      }
+      if (userSpeakingOffTimerRef.current) clearTimeout(userSpeakingOffTimerRef.current);
+      userSpeakingOffTimerRef.current = setTimeout(() => {
+        userSpeakingRef.current = false;
+        handlersRef.current.onUserSpeakingChange(false);
+      }, USER_SPEECH_OFF_DELAY_MS);
+    },
   });
   // 콜백을 ref로 잡아 두면 부모 리렌더마다 세션이 재시작되는 사고를 막을 수 있다.
   // 렌더 중 ref를 쓰기지 않도록 effect에서만 갱신한다(react-hooks/refs).
-  const handlersRef = useRef({ onActive, onEnded, onError, onSpeakingChange });
+  const handlersRef = useRef({ onActive, onEnded, onError, onSpeakingChange, onUserSpeakingChange });
 
   useEffect(() => {
-    handlersRef.current = { onActive, onEnded, onError, onSpeakingChange };
-  }, [onActive, onEnded, onError, onSpeakingChange]);
+    handlersRef.current = { onActive, onEnded, onError, onSpeakingChange, onUserSpeakingChange };
+  }, [onActive, onEnded, onError, onSpeakingChange, onUserSpeakingChange]);
+
+  // 언마운트 시 디바운스 타이머 정리 — 늦게 발화하는 타이머가 언마운트 후 콜백을 부르지 않게 한다.
+  useEffect(() => {
+    return () => {
+      if (userSpeakingOffTimerRef.current) clearTimeout(userSpeakingOffTimerRef.current);
+    };
+  }, []);
 
   // 세션 시작. startedRef로 재실행을 막지 않는다(2026-07-23) — React Strict Mode(dev)의
   // mount→cleanup→mount에서 재mount 연결을 건너뛰어 통화가 시작되지 않는 것을 막는다. 언마운트

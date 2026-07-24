@@ -63,15 +63,31 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
             // 있도록 클라가 이 전사를 모아 종료 시 서버에 제출한다(submitRealtimeTranscript).
             inputAudioTranscription: {},
             outputAudioTranscription: {},
-            // 응답 지연 튜닝(2026-07-23) — 기본 침묵 대기가 길어 "말하고 한참 뒤에야 응답"해서
-            // 실시간 느낌이 안 났다. 발화 종료를 더 민감하게 감지하고(END_SENSITIVITY_HIGH),
-            // 침묵 대기를 500ms로 줄여 사용자가 말을 멈추면 곧 응답하게 한다. 다만 어르신은 말
-            // 중간에 뜸을 들일 수 있어 너무 짧게(예: 200ms) 잡으면 문장을 끊어버리므로 500ms로
-            // 절충했다(silenceDurationMs가 작을수록 지연↓·중간에 끊길 위험↑, SDK 주석 기준).
+            // 응답 지연 튜닝(2026-07-23, 재검토 2026-07-24 — 사용자 신고 "지연이 길다") — 기본
+            // 침묵 대기가 길어 "말하고 한참 뒤에야 응답"해서 실시간 느낌이 안 났다. 발화 종료를
+            // 더 민감하게 감지하고(END_SENSITIVITY_HIGH), 침묵 대기를 줄여 사용자가 말을 멈추면
+            // 곧 응답하게 한다.
+            //
+            // 2026-07-24 재조정 근거(Google 공식 문서 실측 확인, ai.google.dev/gemini-api/docs/
+            // live-api/capabilities): 서버 내부 기본값은 **약 800ms**이고, 문서가 명시하는 위험
+            // 구간은 "100~200ms 이하 = 자연스러운 말 사이 정지에도 발화가 끊김", "2000ms 이상 =
+            // 사용자가 말을 멈춘 뒤에도 응답이 한참 늦어짐"이다. 즉 200~2000ms 사이는 문서상
+            // 안전 구간으로 다뤄진다. 기존 500ms는 이미 기본값(800ms)보다 빠르지만, 이 문서 기준
+            // 위험 구간(100~200ms)과는 아직 2배 이상 여유가 있어 어르신의 말 중간 뜸(자연스러운
+            // 정지)을 끊을 위험을 늘리지 않고 400ms까지 더 낮출 여지가 있다고 판단했다.
+            //
+            // ⚠️ 받아들이는 트레이드오프: 400ms는 500ms보다 "말 사이 짧은 정지"를 발화 종료로
+            // 오판할 위험이 (이론상) 소폭 더 크다 — 다만 문서가 실제로 문제 삼는 100~200ms 구간과는
+            // 여전히 2배 차이가 있어 그 위험은 작다고 보되, 실제 한국어(특히 어르신) 발화 패턴에서
+            // 체감 끊김이 늘었는지는 이 환경(마이크 하드웨어 없음)에서 라이브로 검증할 수 없다 —
+            // 사용자의 실제 브라우저+마이크 테스트로 확인 필요(끊김이 늘면 500ms로 되돌릴 것).
+            // endOfSpeechSensitivity=HIGH는 Live API 기본값과 동일(SDK 타입 주석 "The default is
+            // ... END_SENSITIVITY_HIGH for Gemini Live")이라 이 설정만으로는 추가 지연 단축 효과가
+            // 없다 — 명시적으로 남겨 향후 기본값이 바뀌어도 이 앱의 의도(민감 감지)가 고정되게 한다.
             realtimeInputConfig: {
               automaticActivityDetection: {
                 endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
-                silenceDurationMs: 500,
+                silenceDurationMs: 400,
               },
             },
             // 도구를 명시적으로 비운다 — 이걸 잠그지 않으면 클라가 임의 도구를 주입할 수 있다.

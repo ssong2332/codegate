@@ -37,6 +37,11 @@ export type GeminiVoiceSessionProps = {
   onEnded: () => void;
   onError: () => void;
   onSpeakingChange: (speaking: boolean) => void;
+  /** 사용자 신고(2026-07-24, "내 말을 잘 듣고 있는지 보고 싶다") — 로컬 마이크 입력이 실제로
+   * 잡히고 있는지를 사용자 파형 인디케이터로 보여주기 위한 신호. 서버 VAD 판정을 기다리지 않고
+   * 로컬에서 즉시 계산하므로, "서버가 내 말을 인식했다"가 아니라 "마이크가 지금 소리를 잡고
+   * 있다"는 진단/피드백 신호다(active/agentSpeaking과 동일한 boolean 계약, CallWaveform 재사용). */
+  onUserSpeakingChange: (speaking: boolean) => void;
   /** 완성된 발화 1턴을 부모로 올린다(리포트 기록용, finding #1). role은 user/scammer. */
   onTranscriptTurn: (role: "user" | "scammer", text: string) => void;
   stopSignal: number;
@@ -77,18 +82,33 @@ export default function GeminiVoiceSession({
   onEnded,
   onError,
   onSpeakingChange,
+  onUserSpeakingChange,
   onTranscriptTurn,
   stopSignal,
   muted,
 }: GeminiVoiceSessionProps) {
-  const handlersRef = useRef({ onActive, onEnded, onError, onSpeakingChange, onTranscriptTurn });
+  const handlersRef = useRef({
+    onActive,
+    onEnded,
+    onError,
+    onSpeakingChange,
+    onUserSpeakingChange,
+    onTranscriptTurn,
+  });
   const mutedRef = useRef(muted);
   // 정리 대상들 — 언마운트 시 전부 닫지 않으면 마이크가 계속 열려 있다.
   const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    handlersRef.current = { onActive, onEnded, onError, onSpeakingChange, onTranscriptTurn };
-  }, [onActive, onEnded, onError, onSpeakingChange, onTranscriptTurn]);
+    handlersRef.current = {
+      onActive,
+      onEnded,
+      onError,
+      onSpeakingChange,
+      onUserSpeakingChange,
+      onTranscriptTurn,
+    };
+  }, [onActive, onEnded, onError, onSpeakingChange, onUserSpeakingChange, onTranscriptTurn]);
 
   useEffect(() => {
     mutedRef.current = muted;
@@ -126,6 +146,12 @@ export default function GeminiVoiceSession({
     // 민감한 VAD에 사용자 발화로 오인돼 AI가 자기 말을 끊는 것을 막는 핵심 장치(에코 제거만으론
     // 노트북 스피커에서 부족). AI 발화가 끝나면(turnComplete/침묵) 다시 열린다.
     let agentSpeaking = false;
+    // 사용자 발화 파형 인디케이터(2026-07-24, 사용자 신고 — "일단 잘 파악하는지 보고 싶다") 상태.
+    // cleanup()이 async IIFE 밖에서 정의되므로, raf/타이머 핸들을 여기 바깥 스코프에 미리 선언해
+    // 둔다(session/processor와 동일한 패턴 — 안에서 값만 대입).
+    let userSpeakingNow = false;
+    let userSpeakingOffTimer: ReturnType<typeof setTimeout> | null = null;
+    let userLevelRafId: number | null = null;
     // 전사(transcript)는 조각으로 스트리밍되므로 턴이 끝날 때(turnComplete)까지 모았다가 flush한다.
     let userBuffer = "";
     let scammerBuffer = "";
@@ -159,6 +185,8 @@ export default function GeminiVoiceSession({
 
     const cleanup = () => {
       if (speakingTimer) clearTimeout(speakingTimer);
+      if (userSpeakingOffTimer) clearTimeout(userSpeakingOffTimer);
+      if (userLevelRafId !== null) cancelAnimationFrame(userLevelRafId);
       processor?.disconnect();
       stream?.getTracks().forEach((track) => track.stop());
       void inputContext?.close().catch(() => {});
@@ -292,6 +320,50 @@ export default function GeminiVoiceSession({
         // 마이크 → PCM16 16kHz → 전송. ScriptProcessor는 구식이지만 AudioWorklet과 달리 별도
         // 워커 파일 없이 동작해, 정적 export 구성(next.config.ts)에서 추가 배포 산출물이 없다.
         const micSource = inputContext.createMediaStreamSource(stream);
+
+        // 사용자 발화 파형 인디케이터용 병렬 탭(2026-07-24, 사용자 신고 — "일단 잘 파악하는지
+        // 보고 싶다"는 진단 목적 + 실제 UX). micSource를 기존 processor 체인과 완전히 별개로
+        // AnalyserNode에도 연결한다 — 아래 무음 게인 노드(스피커 반향 차단용 병렬 연결)와 정확히
+        // 동일한 "같은 소스를 추가 노드에 병렬로 붙인다" 기법이라, 서버로 보내는 기존 캡처·전송
+        // 경로(PCM16 변환·sendRealtimeInput)는 전혀 건드리지 않는다.
+        const userLevelAnalyser = inputContext.createAnalyser();
+        userLevelAnalyser.fftSize = 256;
+        micSource.connect(userLevelAnalyser);
+        const userLevelData = new Uint8Array(userLevelAnalyser.frequencyBinCount);
+        // 무음 대비 RMS 편차 문턱값(128 기준) — 조용한 방 배경잡음보다는 크고 정상 발화보다는
+        // 작게 잡은 경험적 초기값이다. 실측 튜닝값이 아니다 — 마이크 하드웨어가 없는 환경이라
+        // 이 값 자체는 실제 브라우저 사용자 테스트로 재검증이 필요하다(사용자 안내 사항).
+        const USER_SPEECH_AMPLITUDE_THRESHOLD = 10;
+        // 단어 사이 짧은 순간적 침묵에 파형이 깜빡이지 않도록 AI 발화 인디케이터(markSpeaking)와
+        // 동일한 off-디바운스 방식을 쓴다.
+        const USER_SPEECH_OFF_DELAY_MS = 400;
+        const sampleUserLevel = () => {
+          if (cancelled) return;
+          userLevelAnalyser.getByteTimeDomainData(userLevelData);
+          let sumSquares = 0;
+          for (let i = 0; i < userLevelData.length; i++) {
+            const centered = userLevelData[i] - 128;
+            sumSquares += centered * centered;
+          }
+          const rms = Math.sqrt(sumSquares / userLevelData.length);
+          // AI가 말하는 동안엔(agentSpeaking) 스피커 반향이 마이크로 섞여 들어올 수 있어(에코
+          // 캔슬이 100%는 아님, 위 반이중 주석 참고) 사용자 파형을 억제한다 — onaudioprocess의
+          // 반이중 판단과 동일한 근거. 음소거 중에도 억제한다.
+          if (rms > USER_SPEECH_AMPLITUDE_THRESHOLD && !agentSpeaking && !mutedRef.current) {
+            if (!userSpeakingNow) {
+              userSpeakingNow = true;
+              handlersRef.current.onUserSpeakingChange(true);
+            }
+            if (userSpeakingOffTimer) clearTimeout(userSpeakingOffTimer);
+            userSpeakingOffTimer = setTimeout(() => {
+              userSpeakingNow = false;
+              handlersRef.current.onUserSpeakingChange(false);
+            }, USER_SPEECH_OFF_DELAY_MS);
+          }
+          userLevelRafId = requestAnimationFrame(sampleUserLevel);
+        };
+        userLevelRafId = requestAnimationFrame(sampleUserLevel);
+
         processor = inputContext.createScriptProcessor(CAPTURE_BUFFER_SIZE, 1, 1);
         const inputRate = inputContext.sampleRate;
         processor.onaudioprocess = (event) => {

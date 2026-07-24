@@ -460,6 +460,7 @@ export default function SessionCallPage() {
           onEnded={realtime.handleEnded}
           onError={realtime.handleError}
           onSpeakingChange={realtime.handleSpeakingChange}
+          onUserSpeakingChange={realtime.handleUserSpeakingChange}
         />
       )}
       {realtime.credentials?.provider === "gemini" && (
@@ -471,6 +472,7 @@ export default function SessionCallPage() {
           onEnded={realtime.handleEnded}
           onError={realtime.handleError}
           onSpeakingChange={realtime.handleSpeakingChange}
+          onUserSpeakingChange={realtime.handleUserSpeakingChange}
           onTranscriptTurn={handleTranscriptTurn}
         />
       )}
@@ -540,6 +542,18 @@ export default function SessionCallPage() {
             — 필요한 것은 키패드 패널 안으로 옮겨, 기본 화면은 발신자와 컨트롤만 남긴다. */}
         {(phase === "live" || phase === "opening") && (
           <CallWaveform active={agentSpeaking} label={waveLabel} />
+        )}
+
+        {/* 사용자 발화 파형 인디케이터(2026-07-24, 사용자 신고 — "일단 잘 파악하는지 보고
+            싶다") — 실시간 통화(callMode==="realtime")에서만 신호가 존재한다(폴백 경로는
+            브라우저 STT 기반이라 "말하고 있다"는 연속 신호가 없음, 이번 범위 밖). AI 파형과
+            동일한 CallWaveform 컴포넌트를 재사용해 "말하는 쪽이 누구든 같은 방식으로 보인다"는
+            일관성을 유지한다. */}
+        {(phase === "live" || phase === "opening") && callMode === "realtime" && (
+          <CallWaveform
+            active={realtime.isUserSpeaking}
+            label={realtime.isUserSpeaking ? "내 목소리가 들리고 있어요" : "제 차례에 말씀하세요"}
+          />
         )}
 
         {playbackUrl && (

@@ -111,6 +111,36 @@ test("GeminiRealtimeProvider: 고정 프리셋 음성이라 클론 voiceId를 �
   }
 });
 
+test("GeminiRealtimeProvider: 응답 지연 튜닝 — 발화 종료 침묵 대기(silenceDurationMs)를 400ms로 토큰에 고정한다(2026-07-24 재조정)", async () => {
+  const capture = captureTokenRequest();
+  try {
+    const provider = new GeminiRealtimeProvider("test-key");
+    await provider.createCallCredentials({
+      sessionId: "sess",
+      scenarioId: "tax-refund-scam",
+      voiceId: "",
+    });
+    const setup = (capture.bodies()[0] as {
+      bidiGenerateContentSetup?: {
+        realtimeInputConfig?: {
+          automaticActivityDetection?: {
+            silenceDurationMs?: number;
+            endOfSpeechSensitivity?: string;
+          };
+        };
+      };
+    }).bidiGenerateContentSetup;
+    const aad = setup?.realtimeInputConfig?.automaticActivityDetection;
+    // 사용자 신고(지연이 길다) 대응 재조정값 — Google 공식 문서 실측(서버 내부 기본값 약 800ms,
+    // 100~200ms 이하는 문서가 명시하는 위험 구간)을 근거로 500ms→400ms로 낮췄다. 이 값이 실제로
+    // 토큰 발급 요청에 실려 서버에 고정되는지를 검증해, 향후 되돌아가는 회귀를 잡는다.
+    assert.equal(aad?.silenceDurationMs, 400);
+    assert.equal(aad?.endOfSpeechSensitivity, "END_SENSITIVITY_HIGH");
+  } finally {
+    capture.restore();
+  }
+});
+
 test("GeminiRealtimeProvider: 존재하지 않는 시나리오는 명시적으로 실패한다", async () => {
   const provider = new GeminiRealtimeProvider("test-key");
   await assert.rejects(
