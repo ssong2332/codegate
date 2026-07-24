@@ -15,11 +15,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   clearPendingSession,
-  consumeChallengeMode,
   getOrCreatePendingSessionId,
   setOpeningAudioUrl,
   setOpeningMessageText,
-  setSelectedScenarioId as persistSelectedScenarioId,
 } from "@/lib/recording";
 import { createSession } from "@/lib/api";
 import { scenarios, GENERIC_VOICE_ID, type ScenarioDoc, type VoiceMode } from "@/content/scenarios";
@@ -48,16 +46,13 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
     const scenario = scenarios[selectedScenarioId];
     if (!scenario) return;
 
-    // T36(UX-019) 진입점 판단 — "지인에게 딥보이스 체험 보내기" 카드(/scenarios/voice)가 세운
-    // sessionStorage 플래그를 여기서 소비한다(항상 소비 — 아래 주석의 "자가 치유" 근거,
-    // pendingSession.ts의 setChallengeMode/consumeChallengeMode 주석 참고). 챌린지는 항상 clone
-    // 시나리오만 대상이라(createChallenge 서버 검증과 동일 제약) generic 시나리오 클릭은 플래그를
-    // 소비해서 지우기만 하고 아래 일반 흐름을 그대로 탄다 — 챌린지 흐름을 중간에 이탈한 뒤 무관한
-    // 훈련을 시작해도 플래그가 다음 클릭에서 자연히 정리된다.
-    if (consumeChallengeMode() && scenario.voiceMode === "clone") {
-      // 챌린지는 훈련 세션이 아니므로 createSession을 호출하지 않는다(record/clone/wait도 거치지
-      // 않는다 — createChallenge가 "완료된 클론 보유" 여부를 서버에서 직접 재확인한다).
-      router.push(`/challenge/create?scenarioId=${encodeURIComponent(selectedScenarioId)}`);
+    // (T49, v1.9 D-30) — clone 시나리오는 "본인이 체험/지인에게 보내기" 갈림을 UX-026(체험 선택,
+    // src/app/scenarios/experience-select/page.tsx)이 담당한다(별도 "챌린지 만들기" 진입점은
+    // 은퇴, pendingSession.ts의 challengeMode 관련 주석 참고). 이 화면은 시나리오만 확정하고 그
+    // 화면으로 넘긴다 — generic 시나리오는 "지인에게 보내기"가 불가해(AC-044) 아래 기존 흐름을
+    // 그대로 탄다.
+    if (scenario.voiceMode === "clone") {
+      router.push(`/scenarios/experience-select?scenarioId=${encodeURIComponent(selectedScenarioId)}`);
       return;
     }
 
@@ -69,14 +64,6 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
     clearPendingSession();
     const sessionId = getOrCreatePendingSessionId();
     if (!sessionId) return;
-
-    if (scenario.voiceMode === "clone") {
-      // 본인 목소리 클론이 필요한 시나리오 — 선택을 저장해두고 녹음 화면으로 보낸다.
-      // clone/wait 화면이 클론 완료 후 이 값을 읽어 createSession을 대신 호출한다.
-      persistSelectedScenarioId(selectedScenarioId);
-      router.push("/onboarding/record");
-      return;
-    }
 
     // voiceMode === "generic" — 녹음/클론 없이 바로 세션을 시작한다(기본 TTS, GENERIC_VOICE_ID).
     setState("starting");

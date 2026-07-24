@@ -78,7 +78,12 @@ export const createRealtimeCall = onCall<
         "챌린지가 만료되었거나 더 이상 진행할 수 없습니다.",
       );
     }
-    effectiveVoiceId = challenge.voiceId;
+    // T47(#20, §14.8.1) — ChallengeDoc.voiceId가 optional로 완화됨(메신저 챌린지는 부재). 이
+    // 콜러블은 실제로는 보이스 챌린지(voiceId 존재)에서만 도달한다 — #20 메신저 챌린지는
+    // session.challengeId는 있어도 애초에 /session/messenger로만 진입해 createRealtimeCall을
+    // 호출하지 않는다(§14.8.2 "갭" 각주). 그래도 타입상 optional이라 방어적으로 폴백한다
+    // (line 69 session.voiceId ?? "" 와 동일 관례).
+    effectiveVoiceId = challenge.voiceId ?? "";
   }
 
   const effectiveVoiceMode = resolveEffectiveVoiceMode(session.voiceSelectionSource);

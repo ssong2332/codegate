@@ -130,7 +130,6 @@ export function clearPendingSession(): void {
   window.sessionStorage.removeItem(SELECTED_TRAINING_TYPE_KEY);
   window.sessionStorage.removeItem(SELECTED_VOICE_MODE_CHOICE_KEY);
   window.sessionStorage.removeItem(MESSENGER_VOICE_SELECT_RETURN_KEY);
-  window.sessionStorage.removeItem(CHALLENGE_MODE_KEY);
 }
 
 // 드릴다운(UX-015 유형 → UX-016 방식 → UX-017 시나리오, T28/AC-028/AC-029) 단계 간 "뒤로가기 시
@@ -209,33 +208,15 @@ export function consumeMessengerVoiceSelectReturn(): boolean {
   return had;
 }
 
-// UX-019 진입점(T36, "지인에게 딥보이스 체험 보내기") — 이 플래그를 세운 뒤 기존 clone 드릴다운
-// (/scenarios/voice/clone)에 그대로 진입시킨다. 드릴다운의 최종 시나리오 카드 액션
-// (ScenarioListView.handleStart)이 이 플래그를 소비해 분기한다: 평소엔 record/clone/wait를 거쳐
-// createSession을 호출하지만, 챌린지 모드면 그 파이프라인을 건너뛰고 곧장
-// `/challenge/create?scenarioId=...`로 이동한다(createChallenge가 서버에서 "완료된 클론 보유"
-// 여부를 직접 재확인하므로 재녹음을 강요하지 않는다 — UF-004 Step1 "이미 클론 보유 시 재사용").
-//
-// messengerVoiceSelectReturn과 달리 peek 전용 API를 따로 두지 않고 consume 하나만 둔다 — 소비 지점이
-// 정확히 한 곳(ScenarioListView.handleStart)뿐이고, 재시도 도중에도 값을 유지해야 할 이유가 없다.
-// **알려진 한계(구현 보고서 참고)**: handleStart는 clone 방식 시나리오에서만 이 플래그를 유효하게
-// 취급하고, 소비(clear) 자체는 방식과 무관하게 항상 실행한다 — 그래서 챌린지 흐름을 중간에 이탈한
-// 뒤 무관한 훈련을 다시 시작해도 플래그가 최대 1회의 다음 클릭에서 자동으로 정리된다(자가 치유).
-// 다만 그 "다음 클릭"이 하필 clone 시나리오라면 의도치 않게 챌린지 생성 화면으로 넘어갈 수 있는
-// 좁은 엣지 케이스가 남는다.
-const CHALLENGE_MODE_KEY = "onboarding.challengeMode";
-
-export function setChallengeMode(): void {
-  if (!hasSessionStorage()) return;
-  window.sessionStorage.setItem(CHALLENGE_MODE_KEY, "true");
-}
-
-export function consumeChallengeMode(): boolean {
-  if (!hasSessionStorage()) return false;
-  const had = window.sessionStorage.getItem(CHALLENGE_MODE_KEY) === "true";
-  if (had) window.sessionStorage.removeItem(CHALLENGE_MODE_KEY);
-  return had;
-}
+// (T49, v1.9 D-30) — 예전엔 여기에 UX-019 진입점용 setChallengeMode()/consumeChallengeMode()
+// sessionStorage 플래그(T36)가 있었다. "지인에게 딥보이스 체험 보내기" 카드가 드릴다운 진입 전에
+// 플래그를 세우고, ScenarioListView.handleStart가 시나리오 확정 후 그 플래그를 소비해
+// `/challenge/create`로 분기하는 구조였다. D-30(UX.md v1.9)이 그 별도 진입점 자체를 은퇴시키고
+// "본인이 체험/지인에게 보내기" 결정을 시나리오 확정 **직후** 화면(UX-026,
+// src/app/scenarios/experience-select/page.tsx)으로 옮기면서, 화면 전환 없이 그 자리에서 바로
+// `/challenge/create?scenarioId=...`로 이동할 수 있게 돼 화면 간 상태를 들고 다닐 플래그 자체가
+// 불필요해졌다 — 그래서 이 메커니즘을 제거했다(챌린지 생성 동작 자체는 100% 동일, 진입 경로만
+// 이동).
 
 // T37(UF-005 사용자2 · UX-018 결과 공유 동의) — setChallengeResultSharing({token, share})는 API.md
 // 계약상 평문 토큰이 필요하다(§14.4 "평문 미저장"은 *서버* 저장 금지 원칙이라 클라가 탭 범위로

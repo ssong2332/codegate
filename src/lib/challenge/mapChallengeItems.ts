@@ -19,6 +19,8 @@ export type ChallengeSource = {
   resultSharingConsented: boolean;
   suspicionTimeLabel: string | null;
   createdAt: Date | null;
+  // T49(#20 · MVP #20 · AC-055/OQ-31) — 옵셔널(부재→voice, 기존 호출부·테스트 무회귀).
+  channel?: "voice" | "messenger";
 };
 
 export type ChallengeListItem = {
@@ -54,6 +56,12 @@ function resolveStatusLabel(challenge: ChallengeSource): string {
   // 스키마에 애초에 없다(ChallengeDoc.resultSummary는 completed/suspicionTimeLabel 요약뿐).
   if (!challenge.resultSharingConsented) {
     return "상대가 완료했지만 결과 공유에 동의하지 않았습니다";
+  }
+  // T49(#20 · AC-055/OQ-31 · D-29) — 메신저 챌린지는 의심 시점을 절대 노출하지 않는다(완료
+  // 여부만). 서버(deriveChallengeResultSummary)가 애초에 suspicionTimeLabel을 채우지 않지만,
+  // 이 화면 텍스트 자체도 채널로 재확인해 "완료" 단독이 아닌 명시적 문구를 보여준다.
+  if ((challenge.channel ?? "voice") === "messenger") {
+    return "완료 · 상대가 체험을 마침";
   }
   return challenge.suspicionTimeLabel
     ? `완료 · 의심 시점: 약 ${challenge.suspicionTimeLabel}`

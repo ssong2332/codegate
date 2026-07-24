@@ -17,5 +17,6 @@ export async function fetchMyChallenges(): Promise<ChallengeSource[]> {
     resultSharingConsented: item.resultSharingConsented,
     suspicionTimeLabel: item.suspicionTimeLabel,
     createdAt: item.createdAt ? new Date(item.createdAt) : null,
+    channel: item.channel,
   }));
 }

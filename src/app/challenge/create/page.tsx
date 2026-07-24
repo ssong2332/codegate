@@ -10,9 +10,18 @@
 //
 // D-20(docs/UX.md) — 앱이 카톡/문자를 대신 전송하지 않는다. navigator.share(OS 공유 시트)가 있으면
 // 그걸 쓰고, 없으면 링크 텍스트 노출 + Clipboard API 복사로 폴백한다(P-14, 침묵 실패 금지).
+//
+// **T49(#20 · MVP #20 · AC-051) — 메신저 챌린지 지원**: 이 화면은 이제 보이스 clone·메신저
+// 비에스컬레이션 시나리오 양쪽에서 재사용된다(UX-026 "지인에게 보내기"가 두 채널 공통으로 이
+// 화면에 도착, D-30). `createChallenge` 요청 자체는 무변경(scenarioId+displayName) — 서버가
+// scenario.channel로 채널을 정하므로 이 화면은 표시 문구만 채널 인지로 분기한다. 신규 에러 상태
+// "error-escalation"은 서버가 에스컬레이션 가능 메신저 시나리오를 failed-precondition(reason:
+// "escalation_not_supported")으로 거부할 때만 나타난다 — 기존 "error-clone"(보이스 클론 미완료)과
+// 같은 HttpsError code(failed-precondition)라 `details.reason`으로 구분한다.
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createChallenge } from "@/lib/api";
+import { scenarios } from "@/content/scenarios";
 import { Button } from "@/components/ui";
 
 type PageState =
@@ -22,20 +31,33 @@ type PageState =
   | "success"
   | "error-cap"
   | "error-clone"
+  | "error-escalation"
   | "error-issue";
 
-function getFunctionsErrorCode(err: unknown): string | null {
-  if (err && typeof err === "object" && "code" in err) {
-    const code = (err as { code?: unknown }).code;
-    return typeof code === "string" ? code : null;
-  }
-  return null;
+function getFunctionsErrorInfo(err: unknown): { code: string | null; reason: string | null } {
+  if (!err || typeof err !== "object") return { code: null, reason: null };
+  const code =
+    "code" in err && typeof (err as { code?: unknown }).code === "string"
+      ? (err as { code: string }).code
+      : null;
+  const details = "details" in err ? (err as { details?: unknown }).details : undefined;
+  const reason =
+    details &&
+    typeof details === "object" &&
+    details !== null &&
+    "reason" in details &&
+    typeof (details as { reason?: unknown }).reason === "string"
+      ? (details as { reason: string }).reason
+      : null;
+  return { code, reason };
 }
 
 export default function ChallengeCreatePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const scenarioId = searchParams.get("scenarioId");
+  const scenario = scenarioId ? scenarios[scenarioId] : undefined;
+  const isMessenger = scenario?.channel === "messenger";
 
   const [displayName, setDisplayName] = useState("");
   const [state, setState] = useState<PageState>(scenarioId ? "form" : "no-scenario");
@@ -56,9 +78,11 @@ export default function ChallengeCreatePage() {
       setCopyLabel("복사");
       setState("success");
     } catch (err) {
-      const code = getFunctionsErrorCode(err);
+      const { code, reason } = getFunctionsErrorInfo(err);
       if (code === "functions/resource-exhausted") {
         setState("error-cap");
+      } else if (code === "functions/failed-precondition" && reason === "escalation_not_supported") {
+        setState("error-escalation");
       } else if (code === "functions/failed-precondition") {
         setState("error-clone");
       } else {
@@ -81,7 +105,10 @@ export default function ChallengeCreatePage() {
     if (!shareUrl) return;
     if (typeof navigator !== "undefined" && "share" in navigator) {
       try {
-        await navigator.share({ title: "딥보이스 체험 챌린지", url: shareUrl });
+        await navigator.share({
+          title: isMessenger ? "메신저피싱 체험 챌린지" : "딥보이스 체험 챌린지",
+          url: shareUrl,
+        });
         return;
       } catch {
         // 사용자가 공유 시트를 취소한 경우 등 — 복사 버튼이 여전히 유효한 대안이라 조용히 무시한다.
@@ -140,6 +167,22 @@ export default function ChallengeCreatePage() {
         <div className="w-full max-w-xs">
           <Button type="button" onClick={() => router.push("/onboarding/record")}>
             목소리 클론하러 가기
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
+  if (state === "error-escalation") {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+          <span aria-hidden="true">⚠</span>
+          <span>이 시나리오는 아직 지인에게 보내는 챌린지를 지원하지 않습니다. 다른 시나리오를 선택해 주세요.</span>
+        </p>
+        <div className="w-full max-w-xs">
+          <Button type="button" onClick={() => router.push("/scenarios/messenger")}>
+            다른 시나리오 선택하기
           </Button>
         </div>
       </main>
@@ -242,8 +285,8 @@ export default function ChallengeCreatePage() {
         </button>
         <h1 className="text-2xl font-bold text-[#22303A]">챌린지 만들기</h1>
         <p className="text-base leading-relaxed text-[#6B655C]">
-          지인에게 보일 표시 이름을 입력해 주세요. 「OOO님이 준비한 딥보이스 체험」 형태로
-          보이게 됩니다.
+          지인에게 보일 표시 이름을 입력해 주세요. 「OOO님이 준비한{" "}
+          {isMessenger ? "메신저피싱 체험" : "딥보이스 체험"}」 형태로 보이게 됩니다.
         </p>
       </header>
 

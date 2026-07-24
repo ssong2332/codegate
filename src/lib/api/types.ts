@@ -180,6 +180,9 @@ export type ListMyChallengesItem = {
   resultSharingConsented: boolean;
   suspicionTimeLabel: string | null;
   createdAt: string | null;
+  // T49(#20 · MVP #20 · Architecture.md §14.8.3) — 부재 없이 항상 확정값. 메신저 챌린지는
+  // suspicionTimeLabel이 항상 null임을 화면(UX-020)이 재확인할 수 있게 한다(AC-055/OQ-31).
+  channel: "voice" | "messenger";
 };
 export type ListMyChallengesResponse = { challenges: ListMyChallengesItem[] };
 
@@ -193,6 +196,9 @@ export type GetChallengeLandingResponse = {
   displayName: string;
   status: string;
   expired: boolean;
+  // T49(#20 · MVP #20 · Architecture.md §14.8.2) — 부재 없이 항상 확정값. 동의 후 UX-014(voice)
+  // vs UX-022(messenger) 라우팅을 이 값으로 분기한다(D-28).
+  channel: "voice" | "messenger";
 };
 
 // consentChallenge는 익명 사인인 후(§14.7/ADR-0006 A1) 호출한다 — 클라가 동의 탭 시점에
