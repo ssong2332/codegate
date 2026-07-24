@@ -61,7 +61,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | messengerSkin | string? | `ios`\|`samsung`\|`default` | UA 자동 감지 결과(프레젠테이션 전용, 안전 미게이팅, §13.5) |
 | skinSource | string? | `auto`\|`manual`\|`fallback` | 스킨 결정 출처 |
 | voiceSelectionSource | string? | `recorded`\|`reused`\|`fallback_male`\|`fallback_female` | 조건부 clone/목소리 선택 결과(AC-046, §13.6). 결정된 voiceId는 기존 `voiceId` 필드 재사용 |
-| challengeId | string? | indexed | 2인 소셜 사용자2 체험 세션이면 소속 챌린지(§14.1). 이 세션의 `uid`는 무계정(토큰 바운드) — 사용자1 접근 규칙 거부 |
+| challengeId | string? | indexed | 2인 소셜 사용자2 체험 세션이면 소속 챌린지(§14.1). 이 세션의 `uid`는 **동의 시 발급된 임시 익명 uid**(§14.7/ADR-0006) — 사용자1(실 uid) 접근 규칙·콜러블 거부. 챌린지 clone `voiceId`는 이 세션에 **미저장**(A1) — `createRealtimeCall`이 challenge 문서에서 발급 시 해석(AC-041·폐기 격리) |
 | maxUserTurns | number | (에스컬레이션 세션은 상향, 예 14) | 교차채널 총 한도(§13.3, 잠정) |
 
 > 교차채널 세션에서 `maxUserTurns`는 생성 시 상향 발급될 수 있다(§13.3). `maxSessionMs`는 6분 유지.
@@ -219,11 +219,11 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 - `scenarios/{}`: 인증 사용자 read 허용(공개 메타). write 금지(seed/admin).
 - `scenarioPrompts/{}`: **클라 read/write 전면 거부**(Functions/admin only, ADR-0004).
 - `messages`: `textMasked`만 존재(원문 필드 자체가 없음, ADR-0004).
-- **`challenges/{}` (T35, AC-043 스키마 강제):**
-  - read: `request.auth.uid == resource.data.creatorUid`만(사용자1 본인 대시보드 UX-020). **사용자2(무로그인)는 직접 read 불가 — 전부 Functions(토큰) 매개.**
+- **`challenges/{}` (T35, AC-041/043 스키마 강제, reviewer Critical #1 반영 실측):**
+  - read: **`if false` — 클라 직접 read 전면 금지**(사용자1·사용자2 공통). 문서에 raw `voiceId`·`linkTokenHash`가 담겨 소유자 read조차 브라우저 유출이라 잠갔다(ADR-0005 §14.2). 사용자1 목록은 `listMyChallenges` 콜러블이 민감 필드 제외 후 반환(유일 조회 경로). 사용자2(무로그인)는 토큰-매개 콜러블(getChallengeLanding 등).
   - write: **클라 직접 write 전면 금지** — 생성·동의·결과요약·신고·삭제 모두 Functions(admin)만. 개수 상한·토큰 검증·동의 게이트를 서버에서만 강제(AC-040/041/043/048/049).
-  - `resultSummary`는 사용자2 동의 시에만 Functions가 채운다. 대화 전문은 이 문서에 존재하지 않는다(AC-043).
-- **`sessions/{}` (challengeId 바운드, AC-043):** 사용자2 체험 세션은 `uid`가 사용자1이 아니므로, `resource.data.uid == request.auth.uid` 규칙에 의해 **사용자1의 직접 read가 거부**된다. 사용자1은 오직 `challenges/{}.resultSummary`만 본다 → 결과 열람 제한을 규칙으로 강제.
+  - `resultSummary`는 사용자2 동의 시에만 Functions가 세션 리포트에서 파생해 채운다(§14.7.3). 대화 전문은 이 문서에 존재하지 않는다(AC-043).
+- **`sessions/{}` (challengeId 바운드, AC-043, §14.7/ADR-0006):** 사용자2 체험 세션은 `uid`가 **임시 익명 uid**(사용자1의 실 uid 아님)이므로 `resource.data.uid == request.auth.uid` 규칙에 의해 **사용자1의 직접 read·콜러블이 거부**된다(§14.7.2 실측). 사용자2 본인(익명 uid)만 자기 세션·리포트·리플레이를 read → UX-014/UX-018 무개정 재사용. 사용자1은 오직 `challenges/{}.resultSummary`만 본다 → 결과 열람 제한을 규칙으로 강제.
 - **`users/{uid}/voices/{}` (ADR-0005):** `request.auth.uid == uid`만 read/write. **오디오 바이트·다운로드 경로 없음**(메타만). 실제 클론 삭제는 Functions.
 
 **Storage (ADR-0002 · AC-020) — 본인 목소리만 등록의 서버측 원천 차단:**

@@ -4,6 +4,8 @@ Owner: architect (see AGENTS.md). Others read-only.
 Major decisions are logged in DECISIONS.md; details in adr/.
 Based on PRD Version: v1.1 · Based on UX Version: 1.7 · Last Updated: 2026-07-24
 
+> **갱신 고지(2026-07-24, T37 착수 게이트):** PRD v1.1·UX 1.7 기준 무변경(버전 갭 없음). 신규 §14.7(2인 소셜 사용자2 접근 메커니즘 = 익명 인증 재사용)·ADR-0006·DECISIONS #27을 추가하고, 그에 맞춰 §14.0/§14.1의 "소유자 없음/직접 접근 없음" 문구와 §7 인증 표를 정정했다. §14.7이 §14.0~§14.6의 데이터 계약(T35) 위에 **실행 메커니즘**만 확정하므로 기존 §14 스키마·안전제약은 유효하다.
+>
 > **버전 갭 고지(2026-07-24 갱신):** 본 문서는 직전에 PRD v1.1 + UX v1.6 기준이었다. 이번 소급 설계 리뷰(T40 역방향 전이 + T33 리플레이 해설 스키마 갭)를 계기로 UX 기준을 **1.6 → 1.7**로 맞춘다 — UX 1.6→1.7 델타(T24 메신저 표면·T25 에스컬레이션 전이 = UX-022/024/025)는 이미 §13.1~13.7이 선(先)확정한 구조에 UX가 정합시킨 것이라 §13 설계는 1.7과 어긋나지 않음을 재검증했다(messenger/page.tsx·escalation 흐름 실측 확인). PRD 기준은 v1.1 유지. 이번 갱신 범위는 신규 §13.8(보이스→메신저 역방향 전이 소급 비준)·§13.1 증분(`turnCountAtTransition`)과 관련 DECISIONS(#25/#26)에 한정하며, 기존 §0~§14는 유효하다.
 >
 > **이전 갱신 고지(2026-07-23):** 본 문서는 그 이전에 PRD v0.5 + UX v1.2 기준이었다. T26·T35(메신저 확장 세션 전이 + 2인 소셜 데이터 구조)를 위해 PRD v1.1 + UX v1.6 기준으로 갱신했다. 기존 §0~§12(P0 예방접종 루프)는 여전히 유효하다(PRD 코어 루프 무변경). 이전 헤더의 "UX v1.2 / PRD v0.4~v0.5" 정합 고지는 그 구간 설계에 대해 계속 유효하다.
@@ -198,7 +200,7 @@ UX-008  reports 읽기 ──▶ 타임라인·수법·대처법 표시(AC-008/0
 ## 7. Authentication / Authorization
 | Item | Strategy |
 |---|---|
-| Provider | Firebase Auth **Google Provider only**(OQ-U5 확정). 최초 인증=계정 자동 생성=로그인 단일 동작(가입 폼 없음). |
+| Provider | Firebase Auth **Google Provider**(계정형 사용자=사용자1, OQ-U5 확정). 최초 인증=계정 자동 생성=로그인 단일 동작(가입 폼 없음). **+ Anonymous Auth(사용자2 전용, §14.7/ADR-0006)**: 2인 챌린지 수신자는 로그인 UI 없이 익명 사인인으로 임시 uid를 얻어 체험 세션을 소유한다(무로그인·AC-048 정합). 익명 프로바이더는 Firebase 콘솔에서 활성화 필요(코드 아닌 설정). |
 | 게이팅(AC-027) | 클라: 인증 안 된 사용자는 `/login` 외 모든 라우트 접근 시 리다이렉트(`lib/auth` 가드). 서버: 모든 callable이 `context.auth` 없으면 거부. |
 | 데이터 귀속 | 모든 문서는 `uid` 키. 최초 로그인 시 `users/{uid}` 자동 생성. |
 | 인가(rules) | Firestore/Storage 규칙: `request.auth.uid == 리소스 소유 uid`만 read/write. `scenarioPrompts`는 클라 read 전면 거부(Functions만). |
@@ -402,7 +404,7 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 > **소관 UX/AC 매핑:** UF-004/UF-005·UX-019/020/021·UX-018(강제 해설) / AC-040·041·042·043·044·048·049·050. **⚠️ 이 절의 스키마·수치 확정이 T36/T37(implementer) 착수 게이트.** 4대 안전제약은 옵션이 아니라 출시 전제조건(PRD Constraints).
 
 ### 14.0 설계 요지
-1. **비동기·서버 매개.** 실시간 조종 없음(AC-044). 사용자2는 **무로그인**으로 링크 토큰만으로 진입하며(AC-048), 사용자2의 모든 접근은 **Functions가 토큰·동의로 매개**한다(직접 Firestore 접근 없음) — 이것이 결과 열람 제한(AC-043)·유출 차단(AC-041)을 스키마·규칙 레벨에서 강제하는 축이다.
+1. **비동기·서버 매개.** 실시간 조종 없음(AC-044). 사용자2는 **무로그인**으로 링크 토큰만으로 진입하며(AC-048), **챌린지 문서 접근은 Functions가 토큰·동의로 매개**한다(challenges=`if false`). 체험 세션·리포트·메시지는 **동의 시 발급된 임시 익명 uid 소유로 직접 read**한다(정상 세션과 동일한 소유권 격리 — §14.7 확정, ADR-0006). 결과 열람 제한(AC-043)·유출 차단(AC-041)은 이 소유권 격리 + 챌린지 잠금 + raw-voiceId 미반환으로 강제한다.
 2. **안전장치는 등급 무관 동일 코드경로.** 유료/무료 차이는 오직 **용량·기간 축**(활성 개수·링크 만료·보존기간)뿐 — §14.6에서 AC-050 명시 검증.
 
 ### 14.1 `challenges/{challengeId}` 스키마 (DECISIONS #21, Database.md와 1:1)
@@ -425,7 +427,7 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 | `tier` | string? | `free`\|`paid`(부재=free). **용량 축에만 영향**(§14.6, AC-050) |
 | `createdAt` | timestamp | |
 
-- **사용자2 체험 세션:** 사용자2의 통화 체험은 별도 `sessions/{sessionId}` 문서(`challengeId` 필드로 연결, `uid`는 사용자2 무계정이므로 **소유자 없음/토큰 바운드**)로 생성한다. 사용자1은 이 세션·messages에 **접근 권한이 없다**(규칙으로 거부) — AC-043 열람 제한을 스키마 분리로 강제. 사용자1이 보는 것은 오직 `challenges/{id}.resultSummary`뿐.
+- **사용자2 체험 세션:** 사용자2의 통화 체험은 별도 `sessions/{sessionId}` 문서(`challengeId` 필드로 연결)로 생성한다. `uid`는 **동의 시 발급된 임시 익명 uid**(토큰 매개 생성, §14.7/ADR-0006)이며, 챌린지 clone `voiceId`는 이 세션 문서에 **저장하지 않는다**(A1 — `createRealtimeCall`이 발급 시 challenge 문서에서 해석, AC-041·onSessionEnded 폐기 격리). 사용자1(실 uid)은 소유권 불일치로 이 세션·messages·리포트에 **접근 권한이 없다**(규칙·콜러블 거부, §14.7.2) — AC-043 열람 제한 강제. 사용자1이 보는 것은 오직 `challenges/{id}.resultSummary`뿐.
 
 ### 14.2 복제 음성 스코프 고정·추출 차단 (ADR-0005, AC-041)
 기존 ADR-0002(본인 목소리만)·ADR-0003(세션 종료 즉시 폐기) 패턴과 **정합**시킨 신규 구조. 상세는 **ADR-0005**.
@@ -473,3 +475,63 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 | **AC-043 결과 열람 제한** | 강제 | 강제 | 안전 | ✅ 등급 무관 동일(스키마 분리로 강제) |
 
 - **결론:** 유료가 다르게 적용되는 항목은 **오직 개수 상한·만료기간·보존기간(용량/편의/기간 축)**뿐이며, 4대 안전제약(AC-040/041/042/043)과 기타 가드레일은 tier 필드를 조건으로 삼는 코드경로가 **존재하지 않는다**. 결제·구독 게이팅 로직을 실제 구현할 때(장기 로드맵)도 이 표를 게이트 조건으로 재검증해야 한다(PRD 수익화 로드맵 메모). **AC-050 위반 없음.**
+
+### 14.7 사용자2 접근 메커니즘 — 익명 인증 재사용(채택) vs 완전 자체 토큰(기각) (T37 착수 게이트, ADR-0006)
+> **소관 UX/AC:** UF-005·UX-021/014/007/018 / AC-040·042·043·044·048. §14.0/§14.1은 "사용자2 무로그인·토큰 매개·소유자 없음"을 **정책**으로 확정했으나 **실제 메커니즘은 미정**이었다(T35는 데이터 계약만 고정). T37(사용자2 측: 동의 랜딩→체험→강제 정체 공개→리플레이→결과 공유 동의→신고)이 이 위에서 구현되므로, **구현 착수 전에 메커니즘을 확정**한다. 결정이 후속 구현의 형태(스크린 재사용 vs 재작성, 콜러블 신설 규모)를 크게 좌우하므로 **ADR-0006**으로 승격한다.
+>
+> **왜 미정이었나(잠재 모순 실측):** API.md `consentChallenge`는 체험 세션을 "uid=무계정/소유자 없음"으로 만들라 하면서, 같은 문서에서 "통화 자격증명은 `createRealtimeCall`을 재사용"하라고 적는다. 그러나 `createRealtimeCall`(functions/src/realtime/index.ts L48–51)은 `session.uid === request.auth.uid`를 강제한다 — **소유자 없는 세션에서는 이 검증이 성립할 수 없다.** 즉 §14의 "재사용" 주장과 "소유자 없음" 정책이 코드 레벨에서 상충한다. §14.7이 이를 해소한다.
+
+**결정: (A) Firebase 익명 인증(Anonymous Auth)을 내부적으로 재사용한다 — 정제형 A1.**
+사용자2 브라우저는 **동의 시점**에 로그인 UI·비밀번호·계정 생성 없이 익명으로 사인인해 **임시(에페메랄) `request.auth.uid`**를 얻고, 그 uid가 체험 `sessions/{sid}`를 소유한다. 이후 통화 자격증명(`createRealtimeCall`)·전사 제출(`submitRealtimeTranscript`)·종료(`endSession`)·리포트(`generateReport`)·리플레이 화면(`report/replay`)·`firestore.rules`의 소유자 read가 **전부 무개정 재사용**된다. 새로 필요한 것은 **챌린지 문서만 만지는 토큰-매개 콜러블**(landing/consent/report/result-sharing — 어느 옵션이든 필요)뿐이다.
+
+**정제(A1) — 왜 "그냥 재사용"이 아니라 두 지점을 손대야 하는가:** 사용자2 세션 문서에 챌린지 clone `voiceId`를 **저장하지 않는다.** ① `voiceId`를 세션 문서에 담으면 사용자2가 자기 세션 문서를 소유자 자격으로 직접 read할 때 **사용자1의 raw clone id가 브라우저로 그대로 나간다**(reviewer가 `challenges`를 `if false`로 잠근 Critical #1과 동형의 유출, AC-041·ADR-0005 §14.2 위반). ② `onSessionEnded`(guardrails/index.ts L131)는 `after.voiceId`를 **ElevenLabs DELETE voice**로 폐기한다 — 세션 문서에 챌린지 voiceId가 있으면 **사용자2의 첫 체험이 끝나는 순간 사용자1의 챌린지 clone이 삭제**돼 기간제 보존(30일, §14.3)·2차 taker가 깨진다. 따라서 A1은 **선택이 아니라 정합성 요건**이다: 체험 세션은 `challengeId`만 갖고 `voiceId`는 갖지 않으며, `createRealtimeCall`이 발급 시점에 `challenges/{challengeId}`에서 서버측(admin)으로 voiceId를 해석하고 **동시에 §14.2의 발급 게이트(status∈{consented,in_progress} + 미만료)를 재검증**한다. 이로써 §14.2 "voiceId는 챌린지 문서 컨텍스트를 통해서만 해석된다"가 코드로 실현되고, clone 수명은 챌린지 문서(`retentionDeleteAt`)에만 묶여 체험 세션의 `onSessionEnded`와 완전 분리된다.
+
+#### 14.7.1 A vs B 트레이드오프 (실측 기반)
+| 축 | (A/A1) 익명 인증 재사용 [채택] | (B) 완전 자체 토큰(무인증 파라미터) |
+|---|---|---|
+| `request.auth` | 임시 익명 uid 존재 → 기존 `resource.data.uid == request.auth.uid` 규칙·콜러블 소유권 검증이 **그대로 성립** | 없음. `firestore.rules`는 request-body 토큰을 볼 수 없어 사용자2 경로 문서를 전부 `if false`로 잠그고 **100% Functions 매개**해야 함 |
+| UX-014 통화 화면 재사용 | **무개정.** `session/play/page.tsx`가 세션 문서 `getDoc`(L120)·messages `onSnapshot`(L178)을 소유자 규칙으로 그대로 read | **재작성.** 두 직접 read를 콜러블로 대체(라이브 `onSnapshot` 상실) 또는 화면 포크(767줄) |
+| UX-018 리플레이 재사용(AC-042 필수) | **무개정.** `report/replay/page.tsx`가 `sessions`·`reports`·`messages` 3곳을 직접 read(L51/55/59) — 전부 익명 uid 소유라 통과 | **재작성.** 3 read를 토큰-게이트 콜러블로 대체 또는 포크 |
+| 신규 콜러블 | 3개(landing·consent·report·result-sharing 중 챌린지 문서만 만지는 것 — 양쪽 공통) | 위 + `createRealtimeCall`/`endSession`/`submitRealtimeTranscript`/`generateReport`의 토큰-검증 병렬 경로 또는 challenge 전용 중복 콜러블 ~8–10개 |
+| AC-041 voiceId 유출 | A1로 세션 문서에서 voiceId 제거 → 직접 read해도 셀 것이 없음 | 전 문서 `if false`라 read 자체 불가(다만 그 대가가 위 재작성) |
+| §0.1(단순·재사용)·§14.2("createRealtimeCall 재사용") | **정합** | **정면 위반**(새 통신 스택·병렬 경로) |
+| "무로그인"(AC-048) 문자 해석 | "보이는 로그인 없음"(계정·비번·로그인 UI 없음) — 익명 토큰은 사용자에게 불가시 | "Firebase Auth 토큰 자체가 0" — 가장 문자적 |
+
+**AC-048 "무로그인" 판독:** AC-048의 요구는 "**사용자2에게 로그인을 요구하지 않는다**"(랜덤 토큰·만료·1회 소모, 로그인 불필요)이다. 익명 인증은 계정 생성·자격증명 입력·로그인 화면이 **전무**하고 사용자에게 완전히 불가시하다 — 사용자2 관점에서 "로그인 없음"은 문자 그대로 성립한다. 토큰이 여전히 진입 자격의 원천이고(landing/consent가 토큰으로 게이트), 익명 uid는 그 이후의 **에페메랄 세션 핸들**일 뿐이다. DECISIONS #2의 "Google Provider only"는 **사용자1의 계정·로그인 UX를 최소화**하려는 결정이었지(로그인 폼·다중 프로바이더 버튼 회피) 보안상 익명 인증 금지가 아니다 — 익명 인증은 바로 그 회피 대상(로그인 UI)을 도입하지 않으므로 #2의 취지와 충돌하지 않는다. (B)의 "토큰 0" 판독이 더 문자적이나, 그 대가가 UX-014/018 재작성 + 병렬 콜러블 스택이며 §0.1·§14.2와 정면 충돌한다 — 얻는 것(문자적 순수성)보다 잃는 것(재사용·단순성, 그리고 손으로 재구현한 토큰 스레딩이 이미 검증된 Auth 토큰보다 취약)이 크다.
+
+#### 14.7.2 (질문1) 사용자1이 사용자2 세션·메시지를 절대 read 못 함 (AC-043 핵심)
+사용자1은 **정상 Google 계정**(실 `request.auth.uid = user1Uid`)이다. 사용자2 체험 세션은 `uid = <익명 uid>`로 소유된다(user1Uid ≠ 익명 uid). 실측 확인:
+- **세션 문서:** `firestore.rules` L34 `allow read: if resource.data.uid == request.auth.uid` → user1Uid는 익명 uid 소유 문서에 **거부**.
+- **messages/artifacts:** L40–48 `get(sessions/{sid}).data.uid == request.auth.uid` → 동일 거부.
+- **reports/{sid}:** `generateReportForSession`(generateReportCore.ts L61)이 `uid: session.uid`(=익명 uid)로 리포트를 쓴다 → `firestore.rules` L65 소유자 read가 user1을 **거부**. (실측: 리포트 uid는 세션 uid를 그대로 상속.)
+- **콜러블:** `sendMessage`·`endSession`·`generateReport`·`createRealtimeCall` 전부 `session.uid !== request.auth.uid → permission-denied`(각 파일 실측). user1이 사용자2 세션 id를 알아도 어떤 콜러블도 통과 못 함.
+- **사용자1이 보는 유일 창:** `challenges/{id}.resultSummary`뿐 — `listMyChallenges` 콜러블이 민감 필드를 제외하고 반환(challenges 컬렉션 자체는 `if false`, 리포트 문서는 user1에게 절대 노출 안 됨). §14.1과 정합.
+
+**핵심:** 이 격리는 새 보증이 아니라 **앱 전체가 이미 신뢰하는 "내 세션은 남이 못 본다" 소유권 격리와 동일한 메커니즘**이다. (B)가 전 문서 `if false`로 얻는 격리와 강도가 같되, 검증된 경로를 재사용한다.
+
+#### 14.7.3 (질문2) 정체 공개·리포트 파이프라인 — 정상 세션과 동일 + resultSummary는 서버 파생
+사용자2 세션은 정상 세션과 **동일한** `endSession`→`onSessionEnded`(폐기)→`generateReport`(T9) 파이프라인을 타 `reports/{sid}`(익명 uid 소유)를 만든다. 강제 정체 공개(AC-042)·리플레이(AC-038)는 **백엔드 메커니즘 변경이 아니라 클라 라우팅 강제**다(T34가 이미 UX-007→UX-018 강제 인계를 설계; 백엔드는 리포트만 있으면 됨).
+- **리포트 문서를 누가 read하나:** 사용자2 본인(익명 uid 소유)만 — 자기 체험의 리플레이(UF-005 step 4). 사용자1은 **영구 불가**(§14.7.2). AC-043 준수.
+- **resultSummary는 독립 계산이 아니라 T9 산출 리포트에서 서버 파생:** `setChallengeResultSharing(share=true)`가 그 챌린지의 체험 세션 리포트를 **서버측(admin) read**해 `{completed, suspicionTimeLabel?, suspicionTurnIndex?}`만 뽑아 `challenges/{id}.resultSummary`에 쓴다(대화 전문·상대 발화 원문 없음, AC-043). 별도 분석 파이프라인 신설 금지 — T9 재사용. 미동의면 이 write가 일어나지 않아 사용자1은 완료 여부조차 상세로 못 봄(§14.1).
+- **부수효과 메모(비차단):** T9의 defense-grade 갱신이 `users/<익명 uid>`를 만든다 — 무해한 에페메랄 문서(익명 사용자는 프로필을 안 봄). 원하면 challengeId 바운드 세션에서 grade 갱신을 건너뛰는 최적화가 가능하나 **정합성엔 무관**(리포트 생성은 grade 실패를 이미 흡수, generateReportCore.ts L75). implementer 판단에 위임.
+
+#### 14.7.4 (질문3) T33 리플레이 화면 — 무개정 재사용
+`report/replay/page.tsx`는 `sessions/{sid}`·`reports/{sid}`·`sessions/{sid}/messages`를 **직접 클라 SDK로 read**(L51/55/59)하고 전부 기존 소유자 read 규칙에 걸려 있다. 익명 uid가 세 문서를 소유하므로 **토큰-게이트 변형 없이 그대로 동작**한다(sessionId는 consent 응답으로 클라가 알고 `?sessionId=`로 진입). A1로 세션 문서에서 voiceId를 뺐지만 리플레이는 voiceId를 읽지 않으므로 영향 없음. → **질문3 답: 무개정.**
+
+#### 14.7.5 (질문4) 신고·결과 공유 콜러블 형태(확정) — 챌린지 문서 전용, 토큰-매개
+아래 넷은 **챌린지 문서만** 만지고(sessions/messages/reports 무접촉) `challenges`가 `if false`라 어느 옵션이든 콜러블 필수다. T36의 `resolveChallengeByTokenHash`/`markChallengeConsumed` primitive와 `hashToken`을 **반드시 재사용**(새 해시 로직 금지, challenge/index.ts L296–334).
+
+| 콜러블 | Auth | Request | Response | 처리 요지 |
+|---|---|---|---|---|
+| `getChallengeLanding` | 없음(토큰) | `{ token }` | `{ displayName, status, expired }` | 해시 조회·만료/소진 검증. **소모 안 함**(크롤러 선fetch 방지, §14.4). 음성·voiceId·scenario 상세 미노출 |
+| `consentChallenge` | **익명 사인인 후**(uid 필요) | `{ token }` | `{ sessionId }` | ① 토큰 유효·미만료·미소진 ② `markChallengeConsumed`(linkConsumedAt+status=consented) ③ **익명 uid 소유** `sessions/{}` 생성(`challengeId` 세팅, `voiceId` **미저장**, scenarioId·channel=voice·한도·오프닝 라인) ④ status=in_progress |
+| `reportChallenge` | 없음(토큰) | `{ token, reason, note? }` | `{ status:"reported" }` | 챌린지에 reportedAt·reportReason·reportNote(마스킹) 임베드 + status=reported(재생 차단) |
+| `setChallengeResultSharing` | 익명(세션 소유 확인 권장) | `{ token, share }` | `{ shared }` | share=true면 그 세션 리포트를 서버 read→resultSummary 파생·write + resultSharingConsented=true(§14.7.3) |
+
+- **콜러블 인증 비대칭 의도:** landing/report는 챌린지 문서만 보는 **세션 이전** 동작이라 무인증(토큰만)이 자연스럽다(익명 사인인을 랜딩 단순 열람·신고까지 강제할 이유 없음, 크롤러 익명 uid 양산 방지). consent에서 **처음** 익명 사인인해 세션을 소유한다 — AC-040 "동의 전 어떤 복제 음성도 재생 안 됨"과 정합(voiceId 발급은 consent 이후 `createRealtimeCall`에서만).
+- **`createRealtimeCall` challenge 분기(A1 핵심 변경점):** `session.challengeId`가 있으면 `session.voiceId`(부재) 대신 `challenges/{challengeId}` admin read로 voiceId를 얻고, **그 챌린지의 status∈{consented,in_progress}+미만료를 재검증**한 뒤 자격증명을 발급한다. 소유권 검증(`session.uid===request.auth.uid`, 익명 uid)은 그대로. 순수 보이스 세션(challengeId 부재)은 기존 경로 무변경.
+
+#### 14.7.6 §14.0/§14.1 정책 문구 정정
+§14.7 결정에 따라 아래를 정정한다(Architecture는 architect 소유·비-append 문서라 직접 갱신, 근거는 본 절·ADR-0006):
+- §14.0 point 1 "직접 Firestore 접근 없음" → "**챌린지 문서 접근은 Functions 매개**(challenges=`if false`); 사용자2 체험 세션·리포트·메시지는 **익명 uid 소유로 직접 read**(정상 세션과 동일 소유권 격리)". 보증 목표(AC-041/043)는 불변 — 수단만 "전면 Functions 매개"에서 "익명 uid 소유"로 명시화.
+- §14.1 "uid는 사용자2 무계정이므로 소유자 없음/토큰 바운드" → "uid는 **동의 시 발급된 임시 익명 uid**(토큰 매개로 생성). 사용자1(실 uid)은 소유권 불일치로 규칙·콜러블에서 거부(§14.7.2)". `voiceId`는 이 세션 문서에 저장하지 않고 `challengeId`만 둔다(A1).
