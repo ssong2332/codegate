@@ -176,6 +176,101 @@ test("analyzeConversation(): '말씀하신 대로는 못 하겠습니다'처럼 
   assert.equal(result.deceivedMoments.length, 0);
 });
 
+// 회귀 테스트(reviewer 리젝션, 2026-07-24, Critical) — reviewer가 직접 코드 실행으로 재현: 위
+// "말씀하신 대로는 못 하겠습니다" 오탐 방지의 최초 구현(못\s*하겠|안\s*하겠|하지\s*않겠|거절를
+// RESISTANCE_PATTERN 독립 항목으로 추가)은 무엇을 부정하는지 범위가 없는 범용 완곡 표현이라,
+// 망설임-후-순응(hesitation-then-compliance) 문구에서 명백한 순응 신호(계좌번호/송금 등)를
+// 무시하고 메시지 전체를 통째로 저항으로 오판정했다(블랭킷 오버라이드 버그). 아래 4건은 그 정확한
+// 재현 케이스 — 지금은 부정이 "말씀하신/시키는/하라는/알려주신 대로"에 직접 붙을 때만 저항으로
+// 잡는 단일 결합 패턴으로 범위를 좁혀 모두 wasDeceived:true로 올바르게 판정돼야 한다.
+test("analyzeConversation(): '거절하고 싶은데... 계좌번호 알려드릴게요'류 망설임-후-순응은 속은 순간으로 판정한다(회귀, reviewer 재현)", () => {
+  const messages = [
+    {
+      role: "scammer" as const,
+      textMasked: "지금 계좌번호를 알려주셔야 처리됩니다.",
+      turnIndex: 0,
+      createdAtMs: SESSION_START_MS,
+    },
+    {
+      role: "user" as const,
+      textMasked: "정말 거절하고 싶은데 무서워서 계좌번호 알려드릴게요.",
+      turnIndex: 1,
+      createdAtMs: SESSION_START_MS + 6_000,
+    },
+  ];
+
+  const result = analyzeConversation(messages, SESSION_START_MS, WEAKENED_TACTICS);
+
+  assert.equal(result.wasDeceived, true);
+  assert.equal(result.deceivedMoments.length, 1);
+});
+
+test("analyzeConversation(): '못 하겠지만... 송금할게요'류 망설임-후-순응은 속은 순간으로 판정한다(회귀, reviewer 재현)", () => {
+  const messages = [
+    {
+      role: "scammer" as const,
+      textMasked: "지금 바로 처리 안 하시면 불이익이 있습니다.",
+      turnIndex: 0,
+      createdAtMs: SESSION_START_MS,
+    },
+    {
+      role: "user" as const,
+      textMasked: "못 하겠지만 어쩔 수 없이 송금할게요.",
+      turnIndex: 1,
+      createdAtMs: SESSION_START_MS + 6_000,
+    },
+  ];
+
+  const result = analyzeConversation(messages, SESSION_START_MS, WEAKENED_TACTICS);
+
+  assert.equal(result.wasDeceived, true);
+  assert.equal(result.deceivedMoments.length, 1);
+});
+
+test("analyzeConversation(): '안 하겠다고 생각했는데... 계좌번호 불러드릴게요'류 망설임-후-순응은 속은 순간으로 판정한다(회귀, reviewer 재현)", () => {
+  const messages = [
+    {
+      role: "scammer" as const,
+      textMasked: "지금 계좌번호를 불러주셔야 합니다.",
+      turnIndex: 0,
+      createdAtMs: SESSION_START_MS,
+    },
+    {
+      role: "user" as const,
+      textMasked: "안 하겠다고 생각했는데 그냥 계좌번호 불러드릴게요.",
+      turnIndex: 1,
+      createdAtMs: SESSION_START_MS + 6_000,
+    },
+  ];
+
+  const result = analyzeConversation(messages, SESSION_START_MS, WEAKENED_TACTICS);
+
+  assert.equal(result.wasDeceived, true);
+  assert.equal(result.deceivedMoments.length, 1);
+});
+
+test("analyzeConversation(): '거절할 수가 없어서... 보내드리겠습니다'류 망설임-후-순응은 속은 순간으로 판정한다(회귀, reviewer 재현)", () => {
+  const messages = [
+    {
+      role: "scammer" as const,
+      textMasked: "지금 바로 보내주셔야 처리됩니다.",
+      turnIndex: 0,
+      createdAtMs: SESSION_START_MS,
+    },
+    {
+      role: "user" as const,
+      textMasked: "거절할 수가 없어서 결국 보내드리겠습니다.",
+      turnIndex: 1,
+      createdAtMs: SESSION_START_MS + 6_000,
+    },
+  ];
+
+  const result = analyzeConversation(messages, SESSION_START_MS, WEAKENED_TACTICS);
+
+  assert.equal(result.wasDeceived, true);
+  assert.equal(result.deceivedMoments.length, 1);
+});
+
 // 회귀 테스트(2026-07-24, "시도된 수법" 검증 중 발견) — 실제 scenarioPrompts 콘텐츠는 인용구
 // 형식("라벨 — '실제 대사', '실제 대사' 처럼 ...한다")을 쓰는데(institutionalImpersonation.prompt.ts
 // 등), analyzeConversation.ts의 예전 flavor 추출 로직은 인용구를 무시한 "— 이후 전체"였다.
