@@ -19,7 +19,12 @@ import { signInAnonymously } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { getChallengeLanding, consentChallenge, reportChallenge } from "@/lib/api";
 import type { ChallengeReportReason } from "@/lib/api";
-import { setPendingSessionId, setOpeningAudioUrl, setChallengeToken } from "@/lib/recording";
+import {
+  setPendingSessionId,
+  setOpeningAudioUrl,
+  setOpeningMessageText,
+  setChallengeToken,
+} from "@/lib/recording";
 import { Banner, Button } from "@/components/ui";
 
 type PageState = "no-token" | "loading" | "blocked" | "load-error" | "ready";
@@ -99,6 +104,9 @@ export default function ChallengeJoinPage() {
       setPendingSessionId(result.sessionId);
       setChallengeToken(token);
       if (result.openingAudioUrl) setOpeningAudioUrl(result.openingAudioUrl);
+      // 사용자 신고(2026-07-24) — 실시간 통화 "AI가 먼저 말해야" 수정, ScenarioListView.tsx와
+      // 동일 근거.
+      if (result.openingMessageText) setOpeningMessageText(result.openingMessageText);
       router.push("/session/play");
     } catch {
       setConsentError("동의 처리에 실패했습니다. 다시 시도해 주세요.");

@@ -80,6 +80,25 @@ export function consumeOpeningAudioUrl(): string | null {
   return url;
 }
 
+// 사용자 신고(2026-07-24) 반영 — 실시간 음성 통화(ElevenLabs Agents)에서 사용자가 먼저 말해야
+// 대화가 시작되는 문제. createSession이 이미 generateOpeningLine으로 만들어 둔 오프닝 대사
+// (openingAudioUrl과 동일 시점에 생성되는 텍스트, Firestore messages 문서에도 저장됨)를 ElevenLabs
+// 세션 시작 시 `overrides.agent.firstMessage`로 넘기면, 연결 직후 사용자 발화 없이 사기범 캐릭터가
+// 먼저 말을 건다(openingAudioUrl과 동일한 "1회성 힌트, 읽은 뒤 삭제" 패턴).
+const OPENING_MESSAGE_TEXT_KEY = "session.openingMessageText";
+
+export function setOpeningMessageText(text: string): void {
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.setItem(OPENING_MESSAGE_TEXT_KEY, text);
+}
+
+export function consumeOpeningMessageText(): string | null {
+  if (!hasSessionStorage()) return null;
+  const text = window.sessionStorage.getItem(OPENING_MESSAGE_TEXT_KEY);
+  if (text) window.sessionStorage.removeItem(OPENING_MESSAGE_TEXT_KEY);
+  return text;
+}
+
 // Phase B(2026-07-22 사용자 결정) — 시나리오 선택(UX-004)이 이제 녹음(UX-002)보다 먼저 온다
 // (voiceMode:"generic" 시나리오는 녹음 자체를 생략하므로 먼저 골라야 분기가 가능하다). 녹음이
 // 끝난 뒤(clone/wait 화면)에도 어떤 시나리오였는지 알아야 createSession을 호출할 수 있어, 선택한
@@ -105,6 +124,7 @@ export function clearPendingSession(): void {
   window.sessionStorage.removeItem(SESSION_ID_KEY);
   window.sessionStorage.removeItem(IDENTITY_CONFIRMED_KEY);
   window.sessionStorage.removeItem(OPENING_AUDIO_URL_KEY);
+  window.sessionStorage.removeItem(OPENING_MESSAGE_TEXT_KEY);
   window.sessionStorage.removeItem(SELECTED_SCENARIO_ID_KEY);
   window.sessionStorage.removeItem(ANSWERED_SESSION_KEY);
   window.sessionStorage.removeItem(SELECTED_TRAINING_TYPE_KEY);

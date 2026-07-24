@@ -19,6 +19,7 @@ import {
   getPendingSessionId,
   getSelectedScenarioId,
   setOpeningAudioUrl,
+  setOpeningMessageText,
   hasMessengerVoiceSelectReturn,
 } from "@/lib/recording";
 import { createSession } from "@/lib/api";
@@ -93,6 +94,9 @@ export default function CloneWaitPage() {
         const result = await createSession({ sessionId, scenarioId, voiceId });
         if (cancelled) return;
         if (result.openingAudioUrl) setOpeningAudioUrl(result.openingAudioUrl);
+        // 사용자 신고(2026-07-24) — 실시간 통화 "AI가 먼저 말해야" 수정, ScenarioListView.tsx와
+        // 동일 근거.
+        if (result.openingMessage.text) setOpeningMessageText(result.openingMessage.text);
         router.push("/session/play");
       } catch {
         if (!cancelled) setStartState("start-error");

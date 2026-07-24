@@ -20,6 +20,11 @@ import type { CreateRealtimeCallResponse } from "@/lib/api";
 
 export type RealtimeVoiceSessionProps = {
   credentials: CreateRealtimeCallResponse;
+  /** 사용자 신고(2026-07-24) — 연결 직후 사용자가 먼저 말해야 대화가 시작되던 문제 수정.
+   * createSession/consentChallenge가 이미 생성해 둔 오프닝 대사 텍스트(민감 정보 아님, 페르소나
+   * 프롬프트 자체는 여전히 에이전트 쪽에만 있음, ADR-0004 무변경)를 ElevenLabs 세션의
+   * `overrides.agent.firstMessage`로 넘겨, 연결되면 사용자 발화 없이 캐릭터가 먼저 말을 건다. */
+  firstMessage?: string;
   /** 통화가 실제로 연결됐다(onConnect). */
   onActive: () => void;
   /** 상대가 끊었거나 세션이 끝났다. */
@@ -36,6 +41,7 @@ export type RealtimeVoiceSessionProps = {
 
 function SessionRunner({
   credentials,
+  firstMessage,
   onActive,
   onEnded,
   onError,
@@ -67,7 +73,13 @@ function SessionRunner({
         signedUrl: credentials.signedUrl,
         connectionType: "websocket",
         overrides: {
-          agent: { language: credentials.language },
+          agent: {
+            language: credentials.language,
+            // 사용자 신고(2026-07-24) — firstMessage가 있으면 연결 직후 사용자 발화 없이 캐릭터가
+            // 먼저 말한다. 없으면(오프닝 텍스트 소실 등 방어적 상황) 에이전트 자체 기본 동작으로
+            // 폴백 — 조용히 undefined를 넘겨도 SDK가 에이전트 대시보드 기본값을 쓴다.
+            ...(firstMessage ? { firstMessage } : {}),
+          },
           tts: { voiceId: credentials.voiceId },
         },
       });

@@ -17,6 +17,8 @@ export {
   getIdentityConfirmed,
   setOpeningAudioUrl,
   consumeOpeningAudioUrl,
+  setOpeningMessageText,
+  consumeOpeningMessageText,
   setSelectedScenarioId,
   getSelectedScenarioId,
   clearPendingSession,

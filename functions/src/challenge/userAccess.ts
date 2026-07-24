@@ -16,7 +16,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { maskPII } from "../guardrails";
-import { generateOpeningLine, isUsingMockLlm } from "../roleplay";
+import { generateOpeningLine } from "../roleplay";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { GEMINI_API_KEY } from "../shared/config";
 import { MAX_SESSION_MS, MAX_USER_TURNS } from "../shared/constants";
@@ -104,8 +104,10 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
     // Firestore 트랜잭션으로 원자화한다 — challenges/{challengeId} 문서를 같이 읽는 두 트랜잭션은
     // Firestore의 낙관적 동시성 제어로 하나만 커밋되고 나머지는 재시도되어, 재시도 시 이미
     // status="consented"로 바뀐 것을 보고 decideConsentGate가 (다른 uid이므로) reject를 반환한다.
-    const openingMessage = await generateOpeningLine(scenarioId);
-    const isMock = isUsingMockLlm();
+    // isMock은 generateOpeningLine이 실제로 관측한 값을 그대로 쓴다(별도 isUsingMockLlm() 사전
+    // 확인과 분리 — completeWithFallback 도입 후 그 둘이 다른 사실이 될 수 있음, openingLine.ts
+    // 주석 참고. 사용자 실측 신고로 발견된 정합성 버그 수정, 2026-07-24).
+    const { message: openingMessage, isMock } = await generateOpeningLine(scenarioId);
 
     const challengeRef = db.collection("challenges").doc(resolved.challengeId);
     const sessionsQuery = db.collection("sessions").where("challengeId", "==", resolved.challengeId).limit(1);
@@ -195,7 +197,14 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
 
     await challengeRef.update({ status: "in_progress" });
 
-    return { sessionId: claim.sessionId, ...(openingAudioUrl ? { openingAudioUrl } : {}) };
+    // 사용자 신고(2026-07-24) — 실시간 통화에서 사용자가 먼저 말해야 하던 문제. 이미 생성한
+    // openingMessage.text를 함께 반환해 클라가 ElevenLabs 세션의 firstMessage로 쓴다
+    // (createSession의 동일 수정과 짝, src/lib/recording/pendingSession.ts 참고).
+    return {
+      sessionId: claim.sessionId,
+      ...(openingAudioUrl ? { openingAudioUrl } : {}),
+      openingMessageText: openingMessage.text,
+    };
   },
 );
 

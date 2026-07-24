@@ -201,6 +201,10 @@ export type ConsentChallengeRequest = { token: string };
 export type ConsentChallengeResponse = {
   sessionId: string;
   openingAudioUrl?: string;
+  // 사용자 신고(2026-07-24) — 실시간 통화에서 사용자가 먼저 말해야 하던 문제 수정. createSession과
+  // 동일하게 generateOpeningLine 결과 텍스트를 함께 반환해 ElevenLabs 세션의 firstMessage로 쓴다.
+  // resume(재개, 신규 동의 아님) 시에는 새 오프닝을 만들지 않으므로 비어 있다.
+  openingMessageText?: string;
 };
 
 export type ReportChallengeRequest = {
