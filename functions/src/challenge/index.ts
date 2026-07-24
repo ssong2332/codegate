@@ -307,6 +307,10 @@ export type ResolvedChallenge = {
   scenarioId: string;
   /** true면 linkExpiresAt이 이미 지났다(UX-021 "이 링크는 만료되었습니다" 상태 판정용). */
   expired: boolean;
+  // T37 추가 — status(만료·소진 판정에 status만으로는 부족해 §14.4/§14.7.5 "status∈{consented,
+  // in_progress}+미만료" 재검증에 필요) 자체는 민감 필드가 아니라(voiceId/linkTokenHash와 달리)
+  // 반환해도 AC-041 위반이 아니다.
+  status: ChallengeDoc["status"];
 };
 
 /** linkTokenHash로 챌린지를 조회한다. raw voiceId 등 민감 필드는 반환하지 않는다(AC-041 추출 차단). */
@@ -321,14 +325,28 @@ export async function resolveChallengeByTokenHash(tokenHash: string): Promise<Re
     displayName: data.displayName,
     scenarioId: data.scenarioId,
     expired: data.linkExpiresAt.toMillis() <= Date.now(),
+    status: data.status,
   };
 }
 
-/** 동의 통과 시점의 1회성 토큰 소모(§14.4) — linkConsumedAt 세팅 + status를 "consented"로 전이. */
-export async function markChallengeConsumed(challengeId: string): Promise<void> {
+/** 동의 통과 시점의 1회성 토큰 소모(§14.4) — linkConsumedAt 세팅 + status를 "consented"로 전이.
+ * tx가 주어지면(reviewer 리뷰 Major 수정, 2026-07-24 — challenge/userAccess.ts의 "소모+세션 생성"
+ * 원자화 트랜잭션 참고) 그 트랜잭션 안에서 쓰기를 큐잉만 하고 즉시 반환한다 — 커밋은 호출부의
+ * db.runTransaction이 담당한다. tx 없이 단독 호출하면(현재 실사용처 없음, 향후 대비) 기존처럼
+ * 즉시 write한다. */
+export async function markChallengeConsumed(
+  challengeId: string,
+  tx?: FirebaseFirestore.Transaction,
+): Promise<void> {
   const db = getFirestore();
-  await db.collection("challenges").doc(challengeId).update({
+  const ref = db.collection("challenges").doc(challengeId);
+  const payload = {
     linkConsumedAt: Timestamp.now(),
     status: "consented",
-  } satisfies Partial<ChallengeDoc>);
+  } satisfies Partial<ChallengeDoc>;
+  if (tx) {
+    tx.update(ref, payload);
+    return;
+  }
+  await ref.update(payload);
 }

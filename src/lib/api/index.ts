@@ -12,3 +12,7 @@ export { generateReport } from "./generateReport";
 export { createChallenge } from "./createChallenge";
 export { deleteChallenge } from "./deleteChallenge";
 export { listMyChallenges } from "./listMyChallenges";
+export { getChallengeLanding } from "./getChallengeLanding";
+export { consentChallenge } from "./consentChallenge";
+export { reportChallenge } from "./reportChallenge";
+export { setChallengeResultSharing } from "./setChallengeResultSharing";

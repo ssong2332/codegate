@@ -72,8 +72,12 @@ firebase login
 firebase use --add   # 생성한 프로젝트 ID를 선택하고 .firebaserc의 "default" 별칭에 연결
 ```
 `.firebaserc`의 `YOUR_FIREBASE_PROJECT_ID` placeholder는 실제 프로젝트 ID로 자동 갱신된다
-(또는 직접 수정). Firebase 콘솔에서 Authentication(Google Provider)·Firestore·Storage를
-활성화해야 한다(CLI로 프로젝트 자체를 생성할 수는 없음). 이때 `.env`도 에뮬레이터용 데모 값에서
+(또는 직접 수정). Firebase 콘솔에서 Authentication(**Google Provider + Anonymous Provider**)·
+Firestore·Storage를 활성화해야 한다(CLI로 프로젝트 자체를 생성할 수는 없음). **Anonymous
+Provider**는 2인 소셜 챌린지(T37, `/challenge/join`)에서 사용자2가 로그인 없이 링크만으로
+체험을 시작할 때 내부적으로 쓰인다(§14.7/ADR-0006 — 사용자에게는 로그인 UI가 전혀 보이지
+않는다). 에뮬레이터 환경(Auth Emulator)은 프로바이더 활성화 없이도 동작하므로 로컬 개발에는
+영향이 없다 — 실 프로젝트 배포 시에만 필요한 단계다. 이때 `.env`도 에뮬레이터용 데모 값에서
 실제 프로젝트 설정값으로 교체한다.
 
 ### 5. 배포 (실제 배포/데모 준비 시점에만)

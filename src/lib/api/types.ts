@@ -182,3 +182,33 @@ export type ListMyChallengesItem = {
   createdAt: string | null;
 };
 export type ListMyChallengesResponse = { challenges: ListMyChallengesItem[] };
+
+// --- getChallengeLanding / consentChallenge / reportChallenge / setChallengeResultSharing ---
+// (Track A/C · T37 · UX-021/018 · AC-040/042/043/048/049, §14.7/ADR-0006)
+// functions/src/challenge/types.ts와 1:1.
+export type ChallengeReportReason = "unwanted" | "harassment" | "impersonation_concern" | "other";
+
+export type GetChallengeLandingRequest = { token: string };
+export type GetChallengeLandingResponse = {
+  displayName: string;
+  status: string;
+  expired: boolean;
+};
+
+// consentChallenge는 익명 사인인 후(§14.7/ADR-0006 A1) 호출한다 — 클라가 동의 탭 시점에
+// signInAnonymously로 임시 uid를 먼저 확보한 뒤 이 콜러블을 호출해야 한다.
+export type ConsentChallengeRequest = { token: string };
+export type ConsentChallengeResponse = {
+  sessionId: string;
+  openingAudioUrl?: string;
+};
+
+export type ReportChallengeRequest = {
+  token: string;
+  reason: ChallengeReportReason;
+  note?: string;
+};
+export type ReportChallengeResponse = { status: "reported" };
+
+export type SetChallengeResultSharingRequest = { token: string; share: boolean };
+export type SetChallengeResultSharingResponse = { shared: boolean };

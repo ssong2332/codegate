@@ -13,15 +13,41 @@
 // 과신 표현은 쓰지 않는다(PRD Risks — 실제로는 다시 속을 수 있다는 사실을 왜곡하지 않는다).
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { endSession } from "@/lib/api";
 import { clearPendingSession, getPendingSessionId } from "@/lib/recording";
 
 type PageState = "no-session" | "ending" | "ended" | "error";
 
+// T37(UF-005 2인 사용자2 강제 정체 공개, AC-042, UX-007 2인 변형) — challengeId가 있는 세션이면
+// endSession 성공 직후 세션 문서에서 challengeId·challengeCreatorDisplayName을 읽어 문구·인계
+// 대상을 바꾼다. 조회 자체가 실패해도(드묾) 일반(단독) 세션 취급으로 안전하게 폴백한다 — 종료
+// 흐름 자체를 막지 않는다.
+async function fetchChallengeContext(
+  sid: string,
+): Promise<{ challengeId: string; displayName: string } | null> {
+  try {
+    const snap = await getDoc(doc(db, "sessions", sid));
+    const data = snap.data();
+    const challengeId = data?.challengeId as string | undefined;
+    if (!challengeId) return null;
+    return {
+      challengeId,
+      displayName: (data?.challengeCreatorDisplayName as string | undefined) ?? "상대방",
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function SessionEndPage() {
   const router = useRouter();
   const [sessionId] = useState<string | null>(() => getPendingSessionId());
   const [state, setState] = useState<PageState>(sessionId ? "ending" : "no-session");
+  const [challenge, setChallenge] = useState<{ challengeId: string; displayName: string } | null>(
+    null,
+  );
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   // endReason: 현재 이 화면에 도달하는 유일한 실경로는 EndTrainingButton(상시 종료)이라
@@ -41,6 +67,9 @@ export default function SessionEndPage() {
       try {
         await requestEndSession(sessionId);
         if (cancelled) return;
+        const challengeContext = await fetchChallengeContext(sessionId);
+        if (cancelled) return;
+        setChallenge(challengeContext);
         // 종료 성공 시 사전 세션 id·힌트를 비운다 — 같은 탭에서 다음 훈련이 종료된 세션을
         // 되살려 쓰던 치명 버그 차단(pendingSession.clearPendingSession 주석 참고). 이 화면의
         // 로컬 sessionId 변수는 이미 캡처돼 있어 "리포트 보기"(쿼리 파라미터로 전달)는 영향 없다.
@@ -65,7 +94,10 @@ export default function SessionEndPage() {
     if (!sessionId) return;
     setState("ending");
     requestEndSession(sessionId)
-      .then(() => setState("ended"))
+      .then(async () => {
+        setChallenge(await fetchChallengeContext(sessionId));
+        setState("ended");
+      })
       .catch(() => setState("error"));
   };
 
@@ -78,6 +110,16 @@ export default function SessionEndPage() {
     // /report(UX-008)는 아직 T9 스텁이라 sessionId 쿼리를 읽어 쓰지 않지만, T9이 이어받을 때
     // 바로 쓸 수 있도록 미리 전달한다.
     router.push(`/report?sessionId=${encodeURIComponent(sessionId)}`);
+  };
+
+  // T37(UF-005 step4, AC-042 "강제") — 2인 사용자2는 UX-008(리포트, UF-002 전용)을 거치지 않고
+  // 리플레이 해설(UX-018)로 곧장 인계한다(UX.md UX-007 Business Rules "이어서 리플레이 해설로
+  // 반드시 인계"). 이 화면이 "리포트 보기" 버튼 자체를 렌더링하지 않는 것으로 인계를 강제한다 —
+  // 세션 소유자(익명 uid)는 URL을 직접 알면 /report에도 접근은 가능하지만(소유권 규칙상 막을
+  // 이유가 없음), 이 화면이 그 경로로 안내하지 않는다.
+  const handleViewReplay = () => {
+    if (!sessionId) return;
+    router.push(`/report/replay?sessionId=${encodeURIComponent(sessionId)}`);
   };
 
   let body: React.ReactNode;
@@ -133,13 +175,25 @@ export default function SessionEndPage() {
           훈련 중 사용된 음성·합성 파일은 폐기 절차가 시작되었습니다.
         </p>
         <div className="flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={handleViewReport}
-            className="min-h-[56px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800"
-          >
-            리포트 보기
-          </button>
+          {challenge ? (
+            // T37(UF-005 step4, AC-042 "강제") — 2인 사용자2는 리포트(UX-008)가 아니라 리플레이
+            // 해설(UX-018)로 곧장 인계된다. 이 화면에는 "리포트 보기" 버튼을 아예 두지 않는다.
+            <button
+              type="button"
+              onClick={handleViewReplay}
+              className="min-h-[56px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800"
+            >
+              대화 되짚어보기
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleViewReport}
+              className="min-h-[56px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800"
+            >
+              리포트 보기
+            </button>
+          )}
           <button
             type="button"
             onClick={handleGoHome}
@@ -164,11 +218,23 @@ export default function SessionEndPage() {
         <span>이것은 훈련이었습니다</span>
       </h1>
 
-      {/* AC-015 디스컬레이션(안심) 메시지 — 완화 톤·큰 글씨. */}
+      {/* AC-015 디스컬레이션(안심) 메시지 — 완화 톤·큰 글씨. 2인(UF-005) 재사용 시 강제 정체
+          공개 문구로 교체한다(Architecture.md §14 Business Rules "○○님이 준비한 훈련이었습니다.
+          실제 상황이 아니었습니다" 문구를 그대로 쓴다, AC-042). */}
       <p className="text-lg leading-relaxed text-gray-800">
-        지금까지 대화한 상대는 실제 사기범이 아니라 AI 훈련 프로그램이었습니다. 실제로 돈이나
-        개인정보가 오간 것은 없으니 안심하셔도 됩니다. 오늘 연습한 경험을 잘 기억해 두시면,
-        실제 상황에서도 도움이 될 거예요.
+        {challenge ? (
+          <>
+            {challenge.displayName}님이 준비한 훈련이었습니다. 실제 상황이 아니었습니다. 지금까지
+            대화한 상대는 실제 사기범이 아니라 AI로 합성한 목소리였습니다. 실제로 돈이나
+            개인정보가 오간 것은 없으니 안심하셔도 됩니다.
+          </>
+        ) : (
+          <>
+            지금까지 대화한 상대는 실제 사기범이 아니라 AI 훈련 프로그램이었습니다. 실제로 돈이나
+            개인정보가 오간 것은 없으니 안심하셔도 됩니다. 오늘 연습한 경험을 잘 기억해 두시면,
+            실제 상황에서도 도움이 될 거예요.
+          </>
+        )}
       </p>
 
       {body}

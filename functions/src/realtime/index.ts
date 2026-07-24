@@ -9,7 +9,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { ELEVENLABS_API_KEY, GEMINI_API_KEY } from "../shared/config";
 import type { VoiceMode } from "../scenarios/publicMeta";
-import type { SessionDoc, VoiceSelectionSource } from "../shared/types";
+import type { ChallengeDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
 import { getRealtimeProvider } from "./provider";
 import type { CreateRealtimeCallRequest, CreateRealtimeCallResponse } from "./callTypes";
 
@@ -53,13 +53,35 @@ export const createRealtimeCall = onCall<
     throw new HttpsError("failed-precondition", "이미 종료되었거나 활성 상태가 아닌 세션입니다.");
   }
 
+  // T37·§14.7/ADR-0006(A1) — challenge 바운드 세션(session.challengeId 존재)은 session.voiceId를
+  // 절대 저장하지 않는다(유출·onSessionEnded 폐기 격리, 파일 상단 근거는 challenge/userAccess.ts
+  // 헤더 주석 참고). 여기서 challenges/{challengeId}를 admin read로 해석하고, 동시에 §14.2 발급
+  // 게이트(status∈{consented,in_progress}+미만료)를 **재검증**한다 — consentChallenge 시점 이후
+  // 시간이 지났으므로(신고·만료 등) 다시 확인해야 안전하다. 이 재검증 실패는 API.md Errors 표가
+  // 명시한 throw 대상("challenge 만료/미동의")이라 provider 발급 실패의 isMock 폴백과 달리 그대로
+  // 던진다 — 조용히 빈 voiceId로 넘어가지 않는다.
+  let effectiveVoiceId = session.voiceId ?? "";
+  if (session.challengeId) {
+    const challengeSnap = await db.collection("challenges").doc(session.challengeId).get();
+    const challenge = challengeSnap.data() as ChallengeDoc | undefined;
+    const statusOk = challenge?.status === "consented" || challenge?.status === "in_progress";
+    const notExpired = challenge ? challenge.linkExpiresAt.toMillis() > Date.now() : false;
+    if (!challenge || !statusOk || !notExpired) {
+      throw new HttpsError(
+        "failed-precondition",
+        "챌린지가 만료되었거나 더 이상 진행할 수 없습니다.",
+      );
+    }
+    effectiveVoiceId = challenge.voiceId;
+  }
+
   const effectiveVoiceMode = resolveEffectiveVoiceMode(session.voiceSelectionSource);
   const provider = getRealtimeProvider(session.scenarioId, effectiveVoiceMode);
   try {
     const credentials = await provider.createCallCredentials({
       sessionId,
       scenarioId: session.scenarioId,
-      voiceId: session.voiceId ?? "",
+      voiceId: effectiveVoiceId,
     });
     return credentials;
   } catch {
@@ -70,7 +92,7 @@ export const createRealtimeCall = onCall<
       signedUrl: "",
       geminiToken: "",
       geminiModel: "",
-      voiceId: session.voiceId ?? "",
+      voiceId: effectiveVoiceId,
       language: "ko",
       isMock: true,
     };

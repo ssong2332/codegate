@@ -17,6 +17,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { collection, doc, getDoc, getDocs, orderBy, query, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { scenarios } from "@/content/scenarios";
+import { setChallengeResultSharing } from "@/lib/api";
+import { getChallengeToken } from "@/lib/recording";
 import {
   buildReplayTimeline,
   getAnnotatedTurnIndexes,
@@ -28,6 +30,9 @@ type ReportSummary = {
   tacticsUsed: string[];
   createdAt: Timestamp | null;
 };
+
+// T37(UF-005 2인 사용자2, UX-018 "결과 공유 동의") — session.challengeId가 있을 때만 채워진다.
+type ChallengeContext = { challengeId: string; displayName: string };
 
 type PageState = "no-session" | "loading" | "error" | "loaded";
 
@@ -44,6 +49,18 @@ export default function ReplayPage() {
   const [stepPos, setStepPos] = useState(-1);
   const [stepAnnounce, setStepAnnounce] = useState("");
   const itemRefs = useRef<Map<number, HTMLLIElement>>(new Map());
+
+  // T37(UF-005 2인 사용자2 · UX-018 "결과 공유 동의") — challenge가 non-null이면 이 세션은
+  // consentChallenge로 만들어진 챌린지 체험 세션이다(session.challengeId 존재).
+  const [challenge, setChallenge] = useState<ChallengeContext | null>(null);
+  // setChallengeResultSharing({token, share})는 평문 토큰이 필요하다(§14.4) — 동의 시점
+  // (challenge/join)에만 알던 값을 탭 범위로 들고 다닌 것을 여기서 읽는다(pendingSession.ts
+  // setChallengeToken 주석 참고). 이 탭에서 그 동의 흐름을 거치지 않고(예: 새 탭에서 이 URL을
+  // 직접 열어) 도달했다면 값이 없을 수 있다 — 그 경우는 아래에서 버튼 대신 안내만 보여준다.
+  const [challengeToken] = useState<string | null>(() => getChallengeToken());
+  const [shareState, setShareState] = useState<"idle" | "saving" | "shared" | "declined" | "error">(
+    "idle",
+  );
 
   // 네트워크 호출 자체는 setState를 하지 않는 순수 헬퍼로 분리(report/page.tsx·session/end/page.tsx와
   // 동일한 react-hooks/set-state-in-effect 회피 관례).
@@ -79,6 +96,14 @@ export default function ReplayPage() {
     const scenarioId = sessionData.scenarioId as string | undefined;
     const scenario = scenarioId ? scenarios[scenarioId] : undefined;
 
+    const challengeId = sessionData.challengeId as string | undefined;
+    const challengeContext: ChallengeContext | null = challengeId
+      ? {
+          challengeId,
+          displayName: (sessionData.challengeCreatorDisplayName as string | undefined) ?? "상대방",
+        }
+      : null;
+
     return {
       summary: {
         wasDeceived: Boolean(reportData.wasDeceived),
@@ -88,6 +113,7 @@ export default function ReplayPage() {
       timeline: buildReplayTimeline(messages, deceivedMoments),
       scenarioTitle: scenario?.title ?? null,
       callerLabel: scenario?.callerLabel ?? "상대방",
+      challenge: challengeContext,
     };
   }, []);
 
@@ -105,6 +131,7 @@ export default function ReplayPage() {
         setTimeline(result.timeline);
         setScenarioTitle(result.scenarioTitle);
         setCallerLabel(result.callerLabel);
+        setChallenge(result.challenge);
         setStepPos(-1);
         setState("loaded");
       } catch {
@@ -115,6 +142,19 @@ export default function ReplayPage() {
       cancelled = true;
     };
   }, [sessionId, fetchReplay]);
+
+  // T37 — 결과 공유 동의/거부. share=false도 명시 기록한다(§14.1 부재=미동의와 구분되는 "명시적
+  // 아니오", userAccess.ts 주석 참고). 실패해도 리플레이 열람 자체는 막지 않는다(비차단).
+  const handleShareResult = async (share: boolean) => {
+    if (!challengeToken || shareState === "saving") return;
+    setShareState("saving");
+    try {
+      await setChallengeResultSharing({ token: challengeToken, share });
+      setShareState(share ? "shared" : "declined");
+    } catch {
+      setShareState("error");
+    }
+  };
 
   const annotatedTurnIndexes = getAnnotatedTurnIndexes(timeline);
   const hasMultipleChannels = new Set(timeline.map((item) => item.channel ?? "voice")).size > 1;
@@ -143,6 +183,7 @@ export default function ReplayPage() {
         setTimeline(result.timeline);
         setScenarioTitle(result.scenarioTitle);
         setCallerLabel(result.callerLabel);
+        setChallenge(result.challenge);
         setStepPos(-1);
         setState("loaded");
       })
@@ -329,14 +370,73 @@ export default function ReplayPage() {
         ))}
       </ol>
 
+      {/* T37(UF-005 step5, UX-018 "결과 공유 동의", AC-043) — 챌린지 체험 세션에서만 노출된다.
+          challenges/{}는 클라 직접 read가 전면 거부라(firestore.rules) 사용자2는 자기 이전 선택을
+          되읽을 방법이 없다 — 그래서 서버 상태와 동기화된 "토글"이 아니라 액션 버튼 쌍 + 이번
+          세션 동안의 로컬 확인 표시로 구현한다(1회성 결정이라도 여러 번 바꿔 누를 수는 있다). */}
+      {challenge && (
+        <div className="mx-5 mt-4 flex flex-col gap-3 rounded-2xl border border-[#E2DDD3] bg-white p-[18px]">
+          <p className="text-base font-semibold text-[#22303A]">
+            이 결과를 {challenge.displayName}님과 공유하시겠어요?
+          </p>
+          <p className="text-sm leading-relaxed text-[#6B655C]">
+            동의하면 완료 여부만 {challenge.displayName}님에게 전달됩니다. 대화 내용은 전달되지
+            않습니다(AC-043).
+          </p>
+
+          {!challengeToken ? (
+            <p role="status" className="text-sm text-[#6B655C]">
+              결과 공유 동의는 이 훈련을 진행한 브라우저 탭에서만 가능합니다.
+            </p>
+          ) : shareState === "shared" ? (
+            <p role="status" className="text-sm font-semibold text-[#0E6B62]">
+              공유하기로 했습니다.
+            </p>
+          ) : shareState === "declined" ? (
+            <p role="status" className="text-sm font-semibold text-[#6B655C]">
+              공유하지 않기로 했습니다.
+            </p>
+          ) : (
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => void handleShareResult(true)}
+                disabled={shareState === "saving"}
+                className="min-h-[48px] flex-1 rounded-xl bg-[#0E6B62] px-4 py-2 text-base font-bold text-white disabled:opacity-50"
+              >
+                공유합니다
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleShareResult(false)}
+                disabled={shareState === "saving"}
+                className="min-h-[48px] flex-1 rounded-xl border border-[#C9C2B6] px-4 py-2 text-base font-semibold text-[#22303A] disabled:opacity-50"
+              >
+                공유하지 않습니다
+              </button>
+            </div>
+          )}
+          {shareState === "error" && (
+            <p role="alert" className="flex items-center gap-2 text-sm text-[#C6392F]">
+              <span aria-hidden="true">⚠</span>
+              <span>저장에 실패했습니다. 다시 시도해 주세요.</span>
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="mx-5 mt-5 flex flex-col gap-2.5">
-        <button
-          type="button"
-          onClick={handleGoToReport}
-          className="min-h-[52px] rounded-2xl border border-[#C9C2B6] px-6 py-3 text-lg font-semibold text-[#22303A] hover:bg-white"
-        >
-          요약 리포트로 돌아가기
-        </button>
+        {/* UX-007/UX-018 Exit(2인 변형) — 챌린지 세션은 UX-008(리포트, UF-002 전용)로 돌아가는
+            경로를 제공하지 않는다. "(선택)결과 공유 동의 → 종료"만 남긴다. */}
+        {!challenge && (
+          <button
+            type="button"
+            onClick={handleGoToReport}
+            className="min-h-[52px] rounded-2xl border border-[#C9C2B6] px-6 py-3 text-lg font-semibold text-[#22303A] hover:bg-white"
+          >
+            요약 리포트로 돌아가기
+          </button>
+        )}
         <button
           type="button"
           onClick={handleGoHome}

@@ -45,6 +45,16 @@ export function getPendingSessionId(): string | null {
   return window.sessionStorage.getItem(SESSION_ID_KEY);
 }
 
+// T37(UF-005 사용자2) — consentChallenge는 (온보딩 클론 흐름과 달리) 클라가 사전 id를 먼저 만들어
+// 넘기는 게 아니라 **서버가 새 sessionId를 발급**해 응답으로 돌려준다. session/play(UX-014)는
+// 항상 getPendingSessionId()로 대상 세션을 읽으므로(기존 관례, query param 아님), 챌린지 동의
+// 랜딩(challenge/join)이 응답받은 sessionId를 이 키에 그대로 채택해 넣어야 그 화면이 무개정으로
+// 동작한다. getOrCreatePendingSessionId()와 달리 "생성"이 아니라 "주어진 값으로 설정"이다.
+export function setPendingSessionId(sessionId: string): void {
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.setItem(SESSION_ID_KEY, sessionId);
+}
+
 export function setIdentityConfirmed(confirmed: boolean): void {
   if (!hasSessionStorage()) return;
   window.sessionStorage.setItem(IDENTITY_CONFIRMED_KEY, confirmed ? "true" : "false");
@@ -205,4 +215,26 @@ export function consumeChallengeMode(): boolean {
   const had = window.sessionStorage.getItem(CHALLENGE_MODE_KEY) === "true";
   if (had) window.sessionStorage.removeItem(CHALLENGE_MODE_KEY);
   return had;
+}
+
+// T37(UF-005 사용자2 · UX-018 결과 공유 동의) — setChallengeResultSharing({token, share})는 API.md
+// 계약상 평문 토큰이 필요하다(§14.4 "평문 미저장"은 *서버* 저장 금지 원칙이라 클라가 탭 범위로
+// 잠깐 들고 다니는 것과는 무관). 동의 시점(challenge/join)에만 아는 이 토큰을, 통화(UX-014)→
+// 종료(UX-007)→리플레이(UX-018)까지 이어지는 같은 탭 흐름 내내 들고 다녀야 리플레이 화면에서
+// "결과 공유 동의" 콜러블을 호출할 수 있다. session/end의 clearPendingSession()이 다른 온보딩
+// 힌트를 전부 지우는 시점에도 **이 키는 의도적으로 그 목록에서 제외**한다 — 안 그러면 리플레이
+// 화면에 도달하기 전에 값이 사라져 그 화면의 결과 공유 UI 자체가 성립하지 않는다.
+// getSelectedScenarioId()와 동일하게 peek 전용(자동 소비 없음) — 사용자가 리플레이 화면에서
+// 공유 여부를 여러 번 바꿔 누를 수 있어야 하므로 "읽으면 지운다" 패턴(consumeOpeningAudioUrl 등)은
+// 부적합하다.
+const CHALLENGE_TOKEN_KEY = "challenge.token";
+
+export function setChallengeToken(token: string): void {
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.setItem(CHALLENGE_TOKEN_KEY, token);
+}
+
+export function getChallengeToken(): string | null {
+  if (!hasSessionStorage()) return null;
+  return window.sessionStorage.getItem(CHALLENGE_TOKEN_KEY);
 }

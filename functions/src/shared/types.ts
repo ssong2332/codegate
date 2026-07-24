@@ -101,6 +101,17 @@ export type SessionDoc = {
   channelHistory?: ChannelTransitionEntry[];
   // UX-025(§13.6) 확정된 목소리 결정 경로. 에스컬레이션 가능 메신저 시나리오에서만 채워진다.
   voiceSelectionSource?: VoiceSelectionSource;
+  // T37 추가(옵셔널, 하위호환 — Migration Policy) — 2인 소셜 사용자2 체험 세션이면 소속 챌린지
+  // (§14.1, Database.md `sessions.challengeId`). 이 세션의 uid는 동의 시 발급된 임시 익명 uid다
+  // (§14.7/ADR-0006). ⚠️ 챌린지 clone voiceId는 이 세션에 절대 저장하지 않는다(A1 — 유출·폐기
+  // 격리, ADR-0006 "정제" 절 참고). createRealtimeCall이 발급 시점에 challenges/{challengeId}에서
+  // 서버측(admin)으로만 voiceId를 해석한다.
+  challengeId?: string;
+  // T37 추가(옵셔널) — challengeId가 있을 때만 채워지는, 챌린지 생성자(사용자1)의 표시이름.
+  // voiceId와 달리 민감 필드가 아니라(ADR-0006은 voiceId만 명시적으로 금지) 소유자 직접 read로
+  // 노출돼도 무방하다 — session/end(UX-007 2인 변형 문구)·report/replay(UX-018 결과 공유 동의
+  // 문구)가 별도 챌린지 문서 round-trip 없이 이 필드만으로 "○○님" 문구를 렌더링한다.
+  challengeCreatorDisplayName?: string;
 };
 
 // --- users/{uid}/voices/{voiceId} (P-8·AC-046, ADR-0005·Database.md 1:1) ---
