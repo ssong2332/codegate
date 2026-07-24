@@ -8,6 +8,7 @@
 // 실구현체로 교체하고 나서야 이 부분이 진짜로 검증된다(voice/mockProvider.ts와 동일한 "목업 잔존
 // 위험" 원칙 적용, getLlmClient() 참고).
 import type { LlmClient, LlmCompletionInput, LlmCompletionResult, LlmMessage } from "./types";
+import { extractTacticFlavor } from "../scenarios/tacticFlavor";
 
 /** 사용자 입력에서 인젝션/악용 시도를 감지하는 최소 규칙(AC-013 구조를 Mock 수준에서도 보여주기 위함).
  * 실 LLM 단계에서는 guardrailPreamble(ADR-0004)이 이 역할을 대신한다 — 이 정규식은 Mock 전용 보완책. */
@@ -41,24 +42,12 @@ const ESCALATION_FILLERS = ["...", "저기요...", "잠시만요..."];
 // 덧붙여 살려 보낸다(뒤이어 extractLinkMarker/향후 sentinel 파서가 이 텍스트를 정상 처리할 수
 // 있게). 마커는 사용자에게 그대로 노출되면 안 되는 제어 토큰이므로 인용구 앞이 아니라 뒤에 붙여
 // "자연스러운 문장 + 마커"라는 실제 LLM이 낼 법한 순서를 흉내낸다.
-const STRUCTURED_MARKER_PATTERN = /\[\[(?:LINK|SIGNAL):[a-zA-Z0-9_-]+\]\]/g;
-
-function extractStructuredMarkers(tacticText: string): string[] {
-  return [...tacticText.matchAll(STRUCTURED_MARKER_PATTERN)].map((m) => m[0]);
-}
-
-function extractTacticFlavor(tacticText: string): string {
-  const quoted = [...tacticText.matchAll(/'([^']+)'/g)].map((m) => m[1]);
-  const markers = extractStructuredMarkers(tacticText);
-  const markerSuffix = markers.length > 0 ? ` ${markers.join(" ")}` : "";
-
-  if (quoted.length > 0) {
-    return quoted.join(", ") + markerSuffix;
-  }
-  const dashIndex = tacticText.indexOf("—");
-  const flavor = dashIndex === -1 ? tacticText : tacticText.slice(dashIndex + 1).trim();
-  return flavor.replace(/\.$/, "");
-}
+//
+// 2026-07-24 이관 — 이 함수는 원래 여기 로컬로 구현돼 있었으나, functions/src/report/
+// analyzeConversation.ts가 대사를 "분석"할 때 쓰던 별도 구현(단순 "— 이후 전체")과 어긋나
+// tacticsUsed가 항상 빈 배열이 되는 리포트 정확도 버그로 이어졌다(라이브 재현). 이제
+// scenarios/tacticFlavor.ts 공용 함수로 이관해 대사를 "만드는" 이 쪽과 "찾는" 리포트 쪽이 항상
+// 같은 텍스트를 기준으로 삼는다(자세한 배경은 tacticFlavor.ts 헤더 주석 참고).
 
 export class MockLlmClient implements LlmClient {
   readonly providerName = "mock" as const;
