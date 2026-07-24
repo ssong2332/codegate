@@ -61,6 +61,12 @@ export type ChannelTransitionEntry = {
   to: MessengerChannel;
   at: FirebaseFirestore.Timestamp;
   trigger: ChannelTransitionTrigger;
+  // reviewer 리뷰 Major #2 수정(2026-07-24, T40 이후 발견) — `to==="messenger"`인 전이에만 기록.
+  // sendMessage의 max-turn 폴백(MESSENGER_ESCALATION_FALLBACK_TURNS)이 세션 누적 turnCount 대신
+  // "이번 메신저 재진입 이후 턴 수"를 비교하기 위한 기준점이다(functions/src/roleplay/index.ts
+  // 참고) — 없으면 T40으로 보이스→메신저 복귀 직후 다음 메시지에서 누적 turnCount가 이미 6 이상인
+  // 채로 즉시 재-에스컬레이션되는 "핑퐁" 버그가 생긴다(한 번이라도 6턴을 넘긴 세션은 이후 영원히).
+  turnCountAtTransition?: number;
 };
 // UX-025(§13.6) 목소리 결정 경로 — createSession 요청의 voiceSelectionSource와 1:1.
 export type VoiceSelectionSource = "recorded" | "reused" | "fallback_male" | "fallback_female";

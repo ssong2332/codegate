@@ -2,8 +2,9 @@
 
 // UX-020 사용자1 챌린지 결과 열람 (Track A/C, T36, AC-041/043).
 //
-// challenges 컬렉션을 creatorUid로 직접 클라 read한다(firestore.rules가 본인 챌린지만 허용,
-// src/app/(p1)/history/page.tsx와 동일 패턴). T37(사용자2 동의·체험)이 아직 없어 실제 데이터는
+// listMyChallenges 콜러블로 본인 챌린지 목록을 조회한다(reviewer 리뷰 Critical #1 수정 이후 —
+// challenges 컬렉션 클라 직접 read는 voiceId/linkTokenHash 노출 문제로 전면 거부됨, 상세는
+// src/lib/challenge/fetchChallenges.ts 참고). T37(사용자2 동의·체험)이 아직 없어 실제 데이터는
 // 전부 "미완료" 또는 Empty 상태로만 보인다 — 이는 예상된 정상 상태이며 가짜 데이터를 채우지
 // 않는다(태스크 지시).
 import { useCallback, useEffect, useState } from "react";
@@ -24,8 +25,8 @@ export default function ChallengeResultsPage() {
 
   // Firestore 조회는 setState 없는 순수 헬퍼로 분리한다(history/page.tsx와 동일 패턴,
   // react-hooks/set-state-in-effect 회피).
-  const loadChallenges = useCallback(async (uid: string): Promise<ChallengeListItem[]> => {
-    const raw = await fetchMyChallenges(uid);
+  const loadChallenges = useCallback(async (): Promise<ChallengeListItem[]> => {
+    const raw = await fetchMyChallenges();
     const sorted = [...raw].sort(
       (a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0),
     );
@@ -37,7 +38,7 @@ export default function ChallengeResultsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const nextItems = await loadChallenges(user.uid);
+        const nextItems = await loadChallenges();
         if (cancelled) return;
         setItems(nextItems);
         setState(nextItems.length > 0 ? "success" : "empty");
@@ -53,7 +54,7 @@ export default function ChallengeResultsPage() {
   const handleRetry = () => {
     if (!user) return;
     setState("loading");
-    loadChallenges(user.uid)
+    loadChallenges()
       .then((nextItems) => {
         setItems(nextItems);
         setState(nextItems.length > 0 ? "success" : "empty");

@@ -73,12 +73,14 @@ service cloud.firestore {
     }
 
     // challenges/{} — 2인 소셜 챌린지(T36, Database.md §Security Rules 요지 그대로 구현, AC-041/043).
-    // 사용자1(creatorUid) 본인만 read(UX-020 대시보드). 사용자2는 무로그인이라 직접 read 불가 —
-    // 전부 Functions(토큰 매개, T37 소관)로만 접근한다. write는 클라 직접 전면 금지 — 생성·토큰
-    // 검증·개수 상한·삭제 모두 Functions(admin)만 강제한다(AC-041/044/048/049).
+    // read/write 둘 다 클라 직접 전면 금지(reviewer 리뷰 Critical #1 수정, 2026-07-24) — 문서에
+    // ElevenLabs voiceId(원시 클론 id)·linkTokenHash가 그대로 담겨 있어, 소유자 read조차 허용하면
+    // 그 필드들이 브라우저로 그대로 전송된다(ADR-0005 §14.2 "raw voiceId를 반환하는 경로가
+    // 어디에도 없다" 위반). 사용자1의 목록 조회(UX-020)는 이제 `listMyChallenges` 콜러블이
+    // 민감 필드를 제외한 안전한 형태로만 반환한다(functions/src/challenge/index.ts). 사용자2는
+    // 애초에 무로그인이라 직접 read 대상이 아니었다(전부 Functions 토큰 매개, T37 소관).
     match /challenges/{challengeId} {
-      allow read: if request.auth != null && resource.data.creatorUid == request.auth.uid;
-      allow write: if false;
+      allow read, write: if false;
     }
 
     // 그 외 모든 경로는 기본 거부.

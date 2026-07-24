@@ -36,6 +36,9 @@ import type {
   CreateChallengeResponse,
   DeleteChallengeRequest,
   DeleteChallengeResponse,
+  ListMyChallengesItem,
+  ListMyChallengesRequest,
+  ListMyChallengesResponse,
 } from "./types";
 
 ensureFirebaseAdminApp();
@@ -197,6 +200,37 @@ export const deleteChallenge = onCall<DeleteChallengeRequest, Promise<DeleteChal
     return { status: "deleted" };
   },
 );
+
+// 본인 챌린지 목록 조회(UX-020, reviewer 발견 Critical #1 수정) — 예전엔 클라가 challenges
+// 컬렉션을 직접 read해 voiceId(ElevenLabs 클론 id)·linkTokenHash까지 그대로 브라우저로 전송되고
+// 있었다(ADR-0005 §14.2 "raw voiceId를 반환하는 경로가 어디에도 없다" 위반). 이 콜러블이
+// resolveChallengeByTokenHash와 동일한 원칙 — 민감 필드는 서버가 절대 응답에 싣지 않는다 — 으로
+// 안전한 필드만 골라 반환한다. firestore.rules의 challenges read는 이제 전면 거부로 좁혔으므로
+// (아래 및 firestore.rules 참고) 이 콜러블이 유일한 조회 경로다.
+export const listMyChallenges = onCall<
+  ListMyChallengesRequest,
+  Promise<ListMyChallengesResponse>
+>(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+  }
+  const db = getFirestore();
+  const snap = await db.collection("challenges").where("creatorUid", "==", request.auth.uid).get();
+
+  const challenges: ListMyChallengesItem[] = snap.docs.map((doc) => {
+    const data = doc.data() as ChallengeDoc;
+    return {
+      challengeId: data.challengeId,
+      displayName: data.displayName,
+      status: data.status,
+      resultSharingConsented: Boolean(data.resultSharingConsented),
+      suspicionTimeLabel: data.resultSummary?.suspicionTimeLabel ?? null,
+      createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : null,
+    };
+  });
+
+  return { challenges };
+});
 
 /**
  * 챌린지 폐기 실행 지점(부수효과 배선) — deleteChallenge(수동)와 purgeExpiredChallenges(자동, 아래)
