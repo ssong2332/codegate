@@ -52,12 +52,37 @@ function getFunctionsErrorInfo(err: unknown): { code: string | null; reason: str
   return { code, reason };
 }
 
+// T56(#23, D-33, AC-058) — 이 화면이 다루는 챌린지는 이제 3종: clone(딥보이스)·generic-voice(기본
+// AI 음성, 신규)·messenger. 종류별 카피를 구분한다(발신자가 "내 목소리가 가는지, 기본 음성이
+// 가는지, 메시지가 가는지"를 명확히 인지해야 하기 때문 — clone만 AC-041 복제 음성 유출 차단 대상).
+type ChallengeKind = "clone" | "generic-voice" | "messenger";
+
+function resolveChallengeKind(scenario: { channel?: string; voiceMode?: string } | undefined): ChallengeKind {
+  if (scenario?.channel === "messenger") return "messenger";
+  return scenario?.voiceMode === "generic" ? "generic-voice" : "clone";
+}
+
+const CHALLENGE_KIND_LABEL: Record<ChallengeKind, string> = {
+  clone: "딥보이스 체험",
+  "generic-voice": "기본 AI 음성 체험",
+  messenger: "메신저피싱 체험",
+};
+
+// 표시이름 입력 화면(form)의 안내 문구 — clone="내 목소리(딥보이스)로 걸려오는 전화를 보냅니다",
+// generic-voice="기본 AI 음성으로 걸려오는 전화를 보냅니다", messenger="메시지(카톡/문자)를
+// 보냅니다"(D-33 그대로).
+const CHALLENGE_KIND_SEND_DESCRIPTION: Record<ChallengeKind, string> = {
+  clone: "내 목소리(딥보이스)로 걸려오는 전화를 보냅니다",
+  "generic-voice": "기본 AI 음성으로 걸려오는 전화를 보냅니다",
+  messenger: "메시지(카톡/문자)를 보냅니다",
+};
+
 export default function ChallengeCreatePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const scenarioId = searchParams.get("scenarioId");
   const scenario = scenarioId ? scenarios[scenarioId] : undefined;
-  const isMessenger = scenario?.channel === "messenger";
+  const challengeKind = resolveChallengeKind(scenario);
 
   const [displayName, setDisplayName] = useState("");
   const [state, setState] = useState<PageState>(scenarioId ? "form" : "no-scenario");
@@ -106,7 +131,7 @@ export default function ChallengeCreatePage() {
     if (typeof navigator !== "undefined" && "share" in navigator) {
       try {
         await navigator.share({
-          title: isMessenger ? "메신저피싱 체험 챌린지" : "딥보이스 체험 챌린지",
+          title: `${CHALLENGE_KIND_LABEL[challengeKind]} 챌린지`,
           url: shareUrl,
         });
         return;
@@ -286,7 +311,8 @@ export default function ChallengeCreatePage() {
         <h1 className="text-2xl font-bold text-[#22303A]">챌린지 만들기</h1>
         <p className="text-base leading-relaxed text-[#6B655C]">
           지인에게 보일 표시 이름을 입력해 주세요. 「OOO님이 준비한{" "}
-          {isMessenger ? "메신저피싱 체험" : "딥보이스 체험"}」 형태로 보이게 됩니다.
+          {CHALLENGE_KIND_LABEL[challengeKind]}」 형태로 보이게 됩니다. 상대에게{" "}
+          {CHALLENGE_KIND_SEND_DESCRIPTION[challengeKind]}.
         </p>
       </header>
 

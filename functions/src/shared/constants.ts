@@ -27,3 +27,10 @@ export const MESSENGER_ESCALATION_MAX_USER_TURNS = 14;
 export const CHALLENGE_FREE_ACTIVE_CAP = 3; // 사용자1당 동시 활성(pending|consented|in_progress·미만료) 챌린지 상한
 export const CHALLENGE_FREE_LINK_EXPIRY_MS = 3 * 24 * 60 * 60 * 1000; // 공유 링크 만료(3일, AC-048)
 export const CHALLENGE_DEFAULT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 복제 음성 보존 기본값(30일, §14.3). 조정 UI(7~90일)는 범위 밖.
+
+// generic 보이스 2인 챌린지(T56, MVP #23, Architecture.md §14.9.2/§14.9.6, AC-058) — 서버측
+// GENERIC_VOICE_ID 상수. 클라 전용이던 `src/content/scenarios/index.ts`의 `GENERIC_VOICE_ID`와
+// 반드시 동일한 값을 유지한다(consentChallenge가 generic 보이스 챌린지 오프닝을 self-training
+// generic과 동일 값·동일 provider로 합성해야 하므로, §14.9.2). 값 자체는 현재 Mock/Gemini-generic이
+// 무시하지만(placeholder), 실 TTS 전환 시 클라/서버 양쪽의 이 상수만 함께 교체하면 되게 한다.
+export const GENERIC_VOICE_ID = "generic-default-voice";

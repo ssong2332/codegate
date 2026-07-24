@@ -10,6 +10,13 @@
 // 제거했다. 2인 챌린지 발신 진입은 이제 시나리오 확정 직후 화면(UX-026,
 // src/app/scenarios/experience-select/page.tsx)이 유일한 경로다 — 자세한 이유는
 // src/lib/recording/pendingSession.ts의 challengeMode 관련 주석 참고.
+//
+// **T56 갱신(v1.10, D-32/D-33, AC-057/058)**: UX-026이 유형 선택 직후로 상향되면서 이 화면은
+// 이제 **"지인에게 보내기"(send) 경로에서만** 도달한다 — 보이스 self는 UX-026이 이 화면을 건너뛰고
+// generic으로 강제한다(AC-057, clone은 자기 체험에서 완전히 배제). 그 결과 이 화면의 두 카드는
+// 모두 "지인에게 보낼 목소리"를 고르는 화면이 됐다 — 카피를 clone/generic 챌린지 문구로
+// 갱신한다(D-33). generic도 이제 유효한 챌린지 방식이라는 점(AC-058, 신규)도 반영.
+// 뒤로가기는 UX-026(체험/발송 선택)으로 돌아간다(router.back(), 무변경).
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { DrilldownOptionCard } from "@/components/DrilldownOptionCard";
@@ -39,11 +46,11 @@ export default function ScenarioVoiceModeSelectPage() {
           <span aria-hidden="true">←</span> 뒤로
         </button>
         <p className="text-sm font-semibold text-[#0E6B62]" aria-current="step">
-          보이스피싱 › ② 방식
+          보이스피싱 › ③ 방식
         </p>
-        <h1 className="text-2xl font-bold text-[#22303A]">어떤 목소리로 전화가 올까요?</h1>
+        <h1 className="text-2xl font-bold text-[#22303A]">지인에게 어떤 목소리로 보낼까요?</h1>
         <p className="text-base leading-relaxed text-[#6B655C]">
-          내 목소리로 체험할지, 기본 AI 목소리로 바로 체험할지 골라주세요. 고르면 바로 다음
+          내 목소리(딥보이스)로 보낼지, 기본 AI 음성으로 보낼지 골라주세요. 고르면 바로 다음
           단계로 넘어갑니다.
         </p>
       </header>
@@ -52,14 +59,14 @@ export default function ScenarioVoiceModeSelectPage() {
         <DrilldownOptionCard
           icon="🎙"
           title="내 목소리 복제"
-          description="내 목소리 30초 녹음 후 그 목소리로 걸려오는 전화"
+          description="내 목소리 30초 녹음 후, 지인에게 그 목소리(딥보이스)로 걸려오는 전화를 보냅니다"
           selected={selected === "clone"}
           onClick={() => handleSelect("clone")}
         />
         <DrilldownOptionCard
           icon="🔊"
           title="기본 AI 음성"
-          description="녹음 없이 바로 시작"
+          description="녹음 없이, 지인에게 기본 AI 음성으로 걸려오는 전화를 보냅니다"
           selected={selected === "generic"}
           onClick={() => handleSelect("generic")}
         />

@@ -109,3 +109,35 @@ test("channel 생략(부재) → 보이스 챌린지와 동일하게 기존 라�
   ]);
   assert.equal(items[0].statusLabel, "완료");
 });
+
+test("AC-058/OQ-32: generic 보이스 챌린지는 완료+동의라도 의심 시점을 절대 노출하지 않고 '완료 · 상대가 체험을 마침'만 표시한다(D-34)", () => {
+  const items = mapChallengesToListItems([
+    {
+      challengeId: "c8",
+      displayName: "삼촌",
+      status: "completed",
+      resultSharingConsented: true,
+      // 서버가 원래 채우지 않는 값이지만, 화면 쪽 방어(2차 하드닝)도 voiceMode로 무시함을 검증한다.
+      suspicionTimeLabel: "20초",
+      createdAt: new Date("2026-07-24T10:00:00+09:00"),
+      channel: "voice",
+      voiceMode: "generic",
+    },
+  ]);
+  assert.equal(items[0].statusLabel, "완료 · 상대가 체험을 마침");
+});
+
+test("voiceMode 생략(부재→clone) → 기존 clone 챌린지 라벨을 그대로 유지한다(하위호환)", () => {
+  const items = mapChallengesToListItems([
+    {
+      challengeId: "c9",
+      displayName: "조카",
+      status: "completed",
+      resultSharingConsented: true,
+      suspicionTimeLabel: "15초",
+      createdAt: new Date("2026-07-24T10:00:00+09:00"),
+      channel: "voice",
+    },
+  ]);
+  assert.equal(items[0].statusLabel, "완료 · 의심 시점: 약 15초");
+});
