@@ -20,5 +20,5 @@ export const loanScamScenario: ScenarioDoc = {
   difficulty: "쉬움~중간 — 이익 유혹이 강한 편입니다",
   deepvoiceLines,
   voiceMode: "generic",
-  callerLabel: "○○캐피탈 상담원 (사칭)",
+  callerLabel: "070-8842-1176",
 };

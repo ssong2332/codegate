@@ -18,7 +18,7 @@ export const messengerChildImpersonationKakaoScenario: ScenarioDoc = {
   estimatedDuration: "약 5~8분",
   difficulty: "중간 — 정서적 압박과 채널 전환이 결합됩니다",
   deepvoiceLines,
-  callerLabel: "자녀 (사칭)",
+  callerLabel: "010-4471-2298",
   channel: "messenger",
   surface: "kakao",
   escalation: { toChannel: "voice", voiceMode: "clone" },

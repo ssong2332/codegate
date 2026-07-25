@@ -21,5 +21,5 @@ export const courierCustomsScamScenario: ScenarioDoc = {
   difficulty: "쉬움 — 생활 밀착형 소재라 경계심이 낮은 편입니다",
   deepvoiceLines,
   voiceMode: "generic",
-  callerLabel: "택배 고객센터 (사칭)",
+  callerLabel: "070-4218-9930",
 };

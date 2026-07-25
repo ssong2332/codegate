@@ -23,5 +23,5 @@ export const kidnappingThreatScenario: ScenarioDoc = {
   difficulty: "높음 — 공포·협박이 강한 편이라 심리적 부담이 클 수 있습니다",
   deepvoiceLines,
   voiceMode: "generic",
-  callerLabel: "신원 불상 (협박범)",
+  callerLabel: "발신번호 표시제한",
 };

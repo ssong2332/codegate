@@ -462,7 +462,11 @@ export default function SessionCallPage() {
     );
   }
 
-  const callerLabel = scenario.callerLabel ?? "발신자 (사칭)";
+  // T75(2026-07-25, 사용자 요청) — 발신자 표기에서 "(사칭)"을 제거하고 **번호만** 보여준다.
+  // 실제 보이스피싱은 모르는 번호로 걸려오며, 화면에 "사칭"이라고 적혀 있으면 판단 훈련이
+  // 성립하지 않는다(정답을 미리 알려주는 셈). 시뮬레이션 고지는 수신 화면의 사전 고지
+  // (PREROLL_NOTICE)와 상시 합성 표식이 계속 담당한다(AC-012/AC-022 무변경).
+  const callerLabel = scenario.callerLabel ?? "발신번호 표시제한";
   // T72(§15.6 G6) — 자격증명을 아직 못 받았으면(수신 대기 중) 기본은 true다. 실제로 난이도를
   // 반영하지 못하는 경로(ElevenLabs)만 서버가 false로 명시해 내려준다.
   const difficultyApplied = realtime.credentials?.difficultyApplied !== false;
@@ -543,8 +547,13 @@ export default function SessionCallPage() {
               />
             </>
           )}
-          <div className="relative flex h-28 w-28 items-center justify-center rounded-full bg-[#41525E] text-5xl font-bold text-[#C9D4DB]">
-            {callerLabel.slice(0, 1)}
+          {/* T75 — 발신자가 이제 번호이므로 첫 글자를 따면 "0"·"+" 같은 무의미한 문자가 뜬다.
+              실제 전화 앱이 저장되지 않은 번호에 쓰는 일반 아이콘으로 대체한다. */}
+          <div
+            aria-hidden="true"
+            className="relative flex h-28 w-28 items-center justify-center rounded-full bg-[#41525E] text-5xl text-[#C9D4DB]"
+          >
+            ☎
           </div>
         </div>
 

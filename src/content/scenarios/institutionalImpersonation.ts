@@ -21,5 +21,5 @@ export const institutionalImpersonationScenario: ScenarioDoc = {
     { lineId: "line-3", text: "협조하지 않으시면 불이익이 있을 수 있습니다. 지금 통화를 끊지 말고 계속 진행해 주십시오." },
   ] satisfies DeepvoiceLine[],
   voiceMode: "generic",
-  callerLabel: "수사관 (기관 사칭)",
+  callerLabel: "02-6478-2718",
 };
