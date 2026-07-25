@@ -53,8 +53,12 @@ export type GeminiVoiceSessionProps = {
   muted: boolean;
 };
 
-/** 마이크 캡처 버퍼 크기 — 작을수록 지연이 낮지만 콜백이 잦다. 4096은 통화용으로 무난한 절충. */
-const CAPTURE_BUFFER_SIZE = 4096;
+// 마이크 캡처 버퍼 크기 — 작을수록 지연이 낮지만 콜백이 잦다. 사용자 신고(2026-07-25, "내가 말하고
+// ai가 말하는 데 걸리는 시간이 길다") 대응으로 4096→2048로 낮춘다. 48kHz 기준 한 콜백이 모으는
+// 시간이 약 85ms→43ms로 줄어, 발화 끝부분이 서버에 도달하는 시점이 그만큼 앞당겨진다.
+// ⚠️ 이 값이 줄이는 것은 **클라이언트 버퍼링 구간뿐**이다 — 체감 지연의 지배적 요소는 Gemini
+// 서버측 모델 추론·음성 생성 시간이라 앱에서 제거할 수 없다(수십 ms 개선, 실측 아님).
+const CAPTURE_BUFFER_SIZE = 2048;
 
 // 사용자 신고(2026-07-24) — 연결 직후 사용자가 먼저 말해야 대화가 시작되던 문제. Gemini Live는
 // ElevenLabs의 firstMessage 같은 "이 문장을 그대로 말하라" 오버라이드가 없다(sendClientContent로
@@ -175,16 +179,27 @@ export default function GeminiVoiceSession({
       scammerBuffer = "";
     };
 
+    // 자기 말 끊김 버그 수정(2026-07-25, 사용자 신고 "대화가 자연스럽지 않다") — 예전엔 이 타이머가
+    // **청크 도착** 시점 기준 고정 600ms였다. Gemini는 오디오를 실시간보다 빠르게 스트리밍하므로
+    // (4초짜리 발화의 청크가 1초 만에 다 도착할 수 있다) agentSpeaking이 **재생이 끝나기 한참 전에**
+    // false로 떨어졌고, 그 순간 반이중 게이트(`if (agentSpeaking) return`)가 풀려 마이크가 다시
+    // 열렸다 — 스피커로 나가던 AI 목소리가 마이크로 되돌아가 Gemini VAD가 이를 사용자 발화로 오인해
+    // 자기 말을 스스로 끊는(interrupted) 일이 생길 수 있는 구조였다. 이제 **예약된 재생이 실제로
+    // 끝나는 시각**(nextPlayTime) 기준으로 타이머를 잡는다.
+    const SPEAKING_OFF_GRACE_MS = 250;
     const markSpeaking = () => {
       agentSpeaking = true;
       handlersRef.current.onSpeakingChange(true);
       if (speakingTimer) clearTimeout(speakingTimer);
-      // 오디오 청크가 끊기면 곧 "말이 끝났다"고 본다 — 서버가 turnComplete를 늦게 줄 수도 있어
-      // 파형 인디케이터가 계속 켜져 있는 것을 막는 안전장치다. 이 시점에 마이크도 다시 연다.
+      // 남은 재생 시간 + 약간의 여유. 서버가 turnComplete를 늦게 주거나 아예 안 줘도 파형이 계속
+      // 켜져 있지 않도록 하는 안전장치라는 원래 역할은 그대로다.
+      const remainingMs = outputContext
+        ? Math.max(0, (nextPlayTime - outputContext.currentTime) * 1000)
+        : 0;
       speakingTimer = setTimeout(() => {
         agentSpeaking = false;
         handlersRef.current.onSpeakingChange(false);
-      }, 600);
+      }, remainingMs + SPEAKING_OFF_GRACE_MS);
     };
 
     const stopSpeaking = () => {
