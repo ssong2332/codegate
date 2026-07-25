@@ -18,9 +18,22 @@
 // "error-escalation"은 서버가 에스컬레이션 가능 메신저 시나리오를 failed-precondition(reason:
 // "escalation_not_supported")으로 거부할 때만 나타난다 — 기존 "error-clone"(보이스 클론 미완료)과
 // 같은 HttpsError code(failed-precondition)라 `details.reason`으로 구분한다.
+//
+// **T72(#26 · UX-019 v1.11 · D-41/D-42 · AC-064)**: 발신자가 UX-029에서 고른 **난이도**를 요약에
+// 명시하고 `createChallenge`로 함께 보낸다. **고급이면 "상대가 강한 압박을 겪게 됩니다"를 만들기
+// 전에 고지**한다(발신자가 지인에게 무엇을 보내는지 알고 보내게 하는 것 — AC-040 사전 동의 취지의
+// 발신 측 대응). ⚠️ 난이도는 활성 챌린지 상한(AC-049)·링크 토큰(AC-048)·결과 열람 범위(AC-043/055)를
+// 포함해 **어떤 안전·정책 판정도 바꾸지 않는다**(D-42) — 화면 골격·에러 분기 전부 무변경이다.
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createChallenge } from "@/lib/api";
+import { getSelectedDifficultyLevel } from "@/lib/recording";
+import {
+  ADVANCED_SEND_NOTICE,
+  DIFFICULTY_LABEL,
+  DIFFICULTY_SEND_DESCRIPTION,
+  type DifficultyLevel,
+} from "@/lib/difficulty";
 import { scenarios } from "@/content/scenarios";
 import { Button } from "@/components/ui";
 
@@ -84,6 +97,11 @@ export default function ChallengeCreatePage() {
   const scenario = scenarioId ? scenarios[scenarioId] : undefined;
   const challengeKind = resolveChallengeKind(scenario);
 
+  // UX-029에서 확정된 값을 마운트 시 1회만 읽는다(다른 드릴다운 소비자와 동일한 peek 패턴).
+  // 힌트가 없으면(직접 URL 진입 등) 요약에 난이도를 표기하지 않고 필드도 보내지 않는다 —
+  // 서버가 중급으로 확정하며, 근거 없는 난이도 표기를 만들지 않는다.
+  const [difficultyLevel] = useState<DifficultyLevel | null>(() => getSelectedDifficultyLevel());
+
   const [displayName, setDisplayName] = useState("");
   const [state, setState] = useState<PageState>(scenarioId ? "form" : "no-scenario");
   const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -95,7 +113,11 @@ export default function ChallengeCreatePage() {
     if (!scenarioId || !displayName.trim() || isSubmitting) return;
     setState("submitting");
     try {
-      const result = await createChallenge({ scenarioId, displayName: displayName.trim() });
+      const result = await createChallenge({
+        scenarioId,
+        displayName: displayName.trim(),
+        ...(difficultyLevel ? { difficultyLevel } : {}),
+      });
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       // T37이 실제 사용자2 진입 화면(UX-021)을 이 경로에 만들 예정이다 — 지금은 토큰 발급/공유
       // 메커니즘만 준비하고, 이 링크는 아직 존재하지 않는 페이지를 가리킨다(구현 보고서 참고).
@@ -314,7 +336,26 @@ export default function ChallengeCreatePage() {
           {CHALLENGE_KIND_LABEL[challengeKind]}」 형태로 보이게 됩니다. 상대에게{" "}
           {CHALLENGE_KIND_SEND_DESCRIPTION[challengeKind]}.
         </p>
+        {/* T72(UX-019 v1.11) — 발신자가 고른 난이도를 요약에 명시한다(P-22 동일 라벨). */}
+        {difficultyLevel && (
+          <p className="text-base leading-relaxed text-[#22303A]">
+            {scenario?.title ? `${scenario.title} · ` : ""}
+            <strong className="font-bold">{DIFFICULTY_LABEL[difficultyLevel]}</strong> —{" "}
+            {DIFFICULTY_SEND_DESCRIPTION[difficultyLevel]}
+          </p>
+        )}
       </header>
+
+      {/* 고급 사전 고지 — "만들기" 전에 알린다. 난이도가 안전장치를 바꾸지 않는다는 사실도 함께
+          적어 발신자가 오해하지 않게 한다(D-42/AC-065). */}
+      {difficultyLevel === "advanced" && (
+        <div className="rounded-[16px] border-[1.5px] border-[#E8C89A] bg-[#FBF3E8] p-4">
+          <p role="status" className="text-[15px] font-semibold leading-relaxed text-[#B96A1B]">
+            <span aria-hidden="true">⚠ </span>
+            {ADVANCED_SEND_NOTICE}
+          </p>
+        </div>
+      )}
 
       <label className="flex flex-col gap-1.5">
         <span className="text-[13px] font-semibold text-[#22303A]">표시 이름</span>

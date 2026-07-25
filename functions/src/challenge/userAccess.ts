@@ -67,11 +67,15 @@ export const getChallengeLanding = onCall<
   }
   // 소모하지 않는다 — 랜딩 열람은 §14.4 "크롤러 선fetch 방지" 원칙상 비파괴적이어야 한다.
   // T47(#20, §14.8.2) — channel을 함께 반환해 클라가 동의 후 UX-014 vs UX-022 라우팅을 미리 안다.
+  // T72(§15.3.2, UX-021/AC-040/064) — 발신자가 고른 난이도를 동의 **전에** 함께 노출한다. 이는
+  // AC-040 사전 동의의 **정보량을 늘리는 방향**이며, 동의 게이트 로직·무동의 차단(P-15)은 전혀
+  // 바뀌지 않는다(D-42/AC-065 — 난이도는 어떤 안전장치도 게이팅하지 않는다).
   return {
     displayName: resolved.displayName,
     status: resolved.status,
     expired: resolved.expired,
     channel: resolved.channel,
+    difficultyLevel: resolved.difficultyLevel,
   };
 });
 
@@ -120,7 +124,13 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
     // isMock은 generateOpeningLine이 실제로 관측한 값을 그대로 쓴다(별도 isUsingMockLlm() 사전
     // 확인과 분리 — completeWithFallback 도입 후 그 둘이 다른 사실이 될 수 있음, openingLine.ts
     // 주석 참고. 사용자 실측 신고로 발견된 정합성 버그 수정, 2026-07-24).
-    const { message: openingMessage, isMock } = await generateOpeningLine(scenarioId);
+    // T72(§15.3.2/§15.6 G9) — 발신자가 챌린지에 실어 보낸 난이도를 오프닝 조립에 그대로 쓰고,
+    // 아래에서 사용자2 체험 세션 문서에도 **복사**한다(프롬프트는 세션 단위로 조립되므로 복사하지
+    // 않으면 이후 턴(sendMessage)·통화(createRealtimeCall)에서 발신자 선택이 소실된다).
+    const { message: openingMessage, isMock } = await generateOpeningLine(
+      scenarioId,
+      resolved.difficultyLevel,
+    );
 
     const challengeRef = db.collection("challenges").doc(resolved.challengeId);
     const sessionsQuery = db.collection("sessions").where("challengeId", "==", resolved.challengeId).limit(1);
@@ -175,6 +185,9 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
         ...(scenarioSurface ? { surface: scenarioSurface } : {}),
         challengeId: resolved.challengeId,
         challengeCreatorDisplayName: resolved.displayName,
+        // T72(§15.6 G9) — 챌린지의 난이도를 체험 세션으로 복사한다. 이 복사가 빠지면 sendMessage·
+        // createRealtimeCall이 세션에서 난이도를 읽지 못해 항상 중급으로 진행된다.
+        difficultyLevel: resolved.difficultyLevel,
         ...(isMock ? { llmProvider: "mock" as const } : {}),
       };
       // T36 primitive 재사용(파일 상단 지시) — tx를 넘기면 즉시 write하지 않고 이 트랜잭션에

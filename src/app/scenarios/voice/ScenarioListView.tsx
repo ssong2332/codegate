@@ -20,20 +20,16 @@
 // 모드**(또는 힌트 부재로 인한 방어적 기본값)는 generic만 도달 가능하므로(AC-057, UX-026이 클론을
 // 건너뛰게 한다) 기존 createSession 직행 로직을 그대로 쓴다. `scenario.voiceMode==="clone"`인
 // 시나리오는 self 경로로 정상 도달할 수 없으므로(방어적으로도) 항상 send로 취급한다.
+// **T72 갱신(v1.11, D-41, UX-029)**: 위 T56 문단이 설명하는 Exit 분기(send→UX-019 / self→
+// createSession)는 **더 이상 이 화면에 없다.** 난이도 선택(UX-029)이 "세션/챌린지 생성 직전"
+// 단계로 삽입되면서 그 분기 전체가 src/app/scenarios/difficulty/page.tsx로 이관됐다(판정 규칙은
+// 동일). 이 화면은 이제 시나리오를 확정해 sessionStorage에 남기고 UX-029로 넘기기만 한다.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  clearPendingSession,
-  getExperienceMode,
-  getOrCreatePendingSessionId,
-  setOpeningAudioUrl,
-  setOpeningMessageText,
-} from "@/lib/recording";
-import { createSession } from "@/lib/api";
-import { scenarios, GENERIC_VOICE_ID, type ScenarioDoc, type VoiceMode } from "@/content/scenarios";
+import { getExperienceMode, setSelectedScenarioId as persistSelectedScenarioId } from "@/lib/recording";
+import { SCENARIO_TRAIT_LABEL } from "@/lib/difficulty";
+import { scenarios, type ScenarioDoc, type VoiceMode } from "@/content/scenarios";
 import { Badge, Button } from "@/components/ui";
-
-type PageState = "ready" | "starting" | "start-error";
 
 const MODE_LABEL: Record<VoiceMode, string> = {
   clone: "내 목소리 복제",
@@ -42,9 +38,7 @@ const MODE_LABEL: Record<VoiceMode, string> = {
 
 export function ScenarioListView({ mode }: { mode: VoiceMode }) {
   const router = useRouter();
-  const [state, setState] = useState<PageState>("ready");
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
-  const [startError, setStartError] = useState<string | null>(null);
   // 단계 표시(breadcrumb) 전용 — self는 UX-016을 건너뛰어 유형→체험선택→시나리오(③)이고, send는
   // UX-016을 거쳐 유형→체험선택→방식→시나리오(④)다(v1.10 D-31 순서 반영). lazy initializer로 마운트
   // 시 1회만 읽는다(다른 드릴다운 화면과 동일 패턴).
@@ -55,49 +49,15 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
     ([, scenario]) => scenario.voiceMode === mode,
   );
 
-  const handleStart = async () => {
-    if (!selectedScenarioId || state === "starting") return;
-    const scenario = scenarios[selectedScenarioId];
-    if (!scenario) return;
-
-    // (T56, v1.10 D-31/D-33) — 모드(self|send)는 이미 UX-026에서 확정돼 있다(이 화면 도달 시점엔
-    // 시나리오 선택이 나중이므로). send 모드는 clone·generic 둘 다 챌린지 생성(UX-019)으로 직행한다
-    // (AC-058 — generic 보이스 챌린지 신설). clone 시나리오는 self 경로로 정상 도달할 수 없으므로
-    // (AC-057, UX-026이 self일 때 이 화면 자체를 스킵) 힌트가 없거나 어긋나도 항상 send로 취급한다
-    // (방어적 판단 — clone은 "지인에게 보내기" 전용).
-    const isSendMode = getExperienceMode() === "send" || scenario.voiceMode === "clone";
-    if (isSendMode) {
-      router.push(`/challenge/create?scenarioId=${encodeURIComponent(selectedScenarioId)}`);
-      return;
-    }
-
-    // "시작" = 새 훈련의 시작점. 직전 훈련을 "훈련 종료" 없이 빠져나온 경우 이전 사전 세션 id가
-    // 남아 있을 수 있는데(그 세션은 서버에서 active라 createSession이 재사용을 거부한다, #1 가드),
-    // 여기서 비우고 새 id를 발급해 매 훈련 시도가 독립 세션이 되게 한다. ⚠️ 이 clear+create는
-    // 비멱등이라 렌더 경로(useState lazy init 등)에 두면 안 된다 — 반드시 이벤트 핸들러(여기)에서만
-    // 실행한다(구 scenarios/page.tsx의 검증된 판단, 변경 없이 이관).
-    clearPendingSession();
-    const sessionId = getOrCreatePendingSessionId();
-    if (!sessionId) return;
-
-    // voiceMode === "generic" — 녹음/클론 없이 바로 세션을 시작한다(기본 TTS, GENERIC_VOICE_ID).
-    setState("starting");
-    setStartError(null);
-    try {
-      const result = await createSession({
-        sessionId,
-        scenarioId: selectedScenarioId,
-        voiceId: GENERIC_VOICE_ID,
-      });
-      if (result.openingAudioUrl) setOpeningAudioUrl(result.openingAudioUrl);
-      // 사용자 신고(2026-07-24) — 실시간 통화에서 사용자가 먼저 말해야 하던 문제. 오프닝 대사
-      // 텍스트를 함께 넘겨 ElevenLabs 세션의 firstMessage로 쓴다(pendingSession.ts 참고).
-      if (result.openingMessage.text) setOpeningMessageText(result.openingMessage.text);
-      router.push("/session/play");
-    } catch {
-      setStartError("시나리오를 시작하지 못했습니다. 다시 시도해 주세요.");
-      setState("ready");
-    }
+  // (T72, v1.11 D-41) — 이 화면은 이제 **시나리오만 확정**하고 난이도 선택(UX-029)으로 넘긴다.
+  // 세션/챌린지 생성 분기(send → UX-019, self·generic → createSession)는 그 화면이 그대로 넘겨받아
+  // 수행한다 — 난이도가 "세션/챌린지 생성 직전" 단계라 생성 지점 자체를 그 뒤로 옮겨야 어느
+  // 경로에서도 난이도가 누락되지 않는다(판정 규칙 자체는 이관 전과 동일).
+  const handleStart = () => {
+    if (!selectedScenarioId) return;
+    if (!scenarios[selectedScenarioId]) return;
+    persistSelectedScenarioId(selectedScenarioId);
+    router.push("/scenarios/difficulty");
   };
 
   const renderScenarioCard = (scenarioId: string, scenario: ScenarioDoc) => {
@@ -152,14 +112,16 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
               className="flex flex-col gap-1.5 text-sm text-[#6B655C]"
             >
               {/* 소요시간 배지(중립) — 훈련 플로우.dc.html의 "약 {time}" 배지와 동일 톤.
-                  난이도는 자유서술문이라(예: "중간 — 감정적 압박이 강한 편입니다") 색상 등급
+                  이 문자열은 자유서술문이라(예: "중간 — 감정적 압박이 강한 편입니다") 색상 등급
                   배지로 단정 짓지 않고 서술 텍스트로 유지한다(임의 매핑 금지, messenger/page.tsx와
-                  동일 판단). */}
+                  동일 판단).
+                  T72/AC-067 — 라벨을 "난이도"에서 "이 시나리오의 성향"으로 바꾼다. 삭제하지 않고
+                  유지하되(AC-002), "난이도"라는 단어는 사용자가 고르는 3단계(UX-029)에만 쓴다. */}
               <span className="flex flex-wrap items-center gap-2">
                 <Badge variant="neutral">{scenario.estimatedDuration}</Badge>
               </span>
               <span>
-                {scenario.fraudType} · 난이도: {scenario.difficulty}
+                {scenario.fraudType} · {SCENARIO_TRAIT_LABEL}: {scenario.difficulty}
               </span>
             </span>
           </span>
@@ -184,7 +146,7 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
         </p>
         <h1 className="text-2xl font-bold text-[#22303A]">어떤 전화를 받아볼까요?</h1>
         <p className="text-base leading-relaxed text-[#6B655C]">
-          실제 사기가 아니라 훈련용 시뮬레이션입니다. 하나를 고르면 그 사기범이 전화를 겁니다.
+          실제 사기가 아니라 훈련용 시뮬레이션입니다. 하나를 고르면 마지막으로 난이도를 정합니다.
         </p>
       </header>
 
@@ -204,19 +166,10 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
       <div
         className="sticky bottom-0 -mx-6 -mb-28 border-t border-[#E2DDD3] bg-[#FAF8F5]/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur"
       >
-        {startError && (
-          <p role="alert" className="mb-3 flex items-center gap-2 text-base text-[#C6392F]">
-            <span aria-hidden="true">⚠</span>
-            <span>{startError}</span>
-          </p>
-        )}
-
-        <Button
-          type="button"
-          onClick={() => void handleStart()}
-          disabled={!selectedScenarioId || state === "starting"}
-        >
-          {state === "starting" ? "연결하는 중..." : "이 전화 받아보기"}
+        {/* T72(D-41) — 이 단계의 CTA는 더 이상 통화를 시작하지 않고 난이도 선택으로 넘어간다.
+            세션 생성 실패 표시도 그 화면이 담당한다(생성 지점이 그리로 이동했으므로). */}
+        <Button type="button" onClick={handleStart} disabled={!selectedScenarioId}>
+          다음 — 난이도 고르기
         </Button>
       </div>
     </main>

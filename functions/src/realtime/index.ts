@@ -8,6 +8,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { ELEVENLABS_API_KEY, GEMINI_API_KEY } from "../shared/config";
+import { normalizeDifficultyLevel } from "../shared/difficulty";
 import type { VoiceMode } from "../scenarios/publicMeta";
 import type { ChallengeDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
 import { getRealtimeProvider } from "./provider";
@@ -93,6 +94,9 @@ export const createRealtimeCall = onCall<
       sessionId,
       scenarioId: session.scenarioId,
       voiceId: effectiveVoiceId,
+      // T72(§15.3.3) — 세션 문서에 기록된 난이도(부재→중급). Gemini 경로만 실제로 반영하며,
+      // 반영 여부는 각 provider가 credentials.difficultyApplied로 정직하게 보고한다(§15.6 G6).
+      difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
     });
     // T38 QA NO-GO 수정, architect 판정(ADR-0006 Addendum A2, 2026-07-24) — §14.2 "추출 차단"은
     // raw voiceId를 응답에 실어 보내는 모든 경로를 무조건 막지 않는다(ElevenLabs 프로토콜상
@@ -118,6 +122,9 @@ export const createRealtimeCall = onCall<
       voiceId: session.challengeId ? "" : effectiveVoiceId,
       language: "ko",
       isMock: true,
+      // T72 — 이 폴백은 클라를 텍스트 경로(sendMessage)로 보내며, 그 경로는 매 턴 서버가 프롬프트를
+      // 조립하므로 난이도가 정상 반영된다(MockRealtimeProvider와 동일 판단).
+      difficultyApplied: true,
     };
   }
 });

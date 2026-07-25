@@ -1,5 +1,6 @@
 // session 모듈 요청/응답 타입 — src/lib/api/types.ts(클라 계약)와 1:1 대응(API.md).
 import type { ScammerMessage } from "../roleplay/types";
+import type { DifficultyLevel } from "../shared/difficulty";
 import type {
   MessengerChannel,
   MessengerSkin,
@@ -19,6 +20,10 @@ import type {
 // 가능한 메신저 시나리오에서만 채워진다. "fallback_male"|"fallback_female"이면 createSession이
 // 클라가 보낸 voiceId를 FALLBACK_VOICE_MALE_ID/FEMALE_ID(shared/config.ts)로 서버측 재해석한다
 // (미설정 시 클라 값 그대로, 조용한 실패 없음 — functions/src/session/index.ts 참고).
+// difficultyLevel(T72 추가, 옵셔널·하위호환, Architecture.md §15.3.2/UX-029/AC-064) — 드릴다운
+// 마지막 단계(UX-029)에서 사용자가 고른 훈련 강도. 서버가 enum 검증 후 세션 문서에 기록하고,
+// 오프닝 대사 생성에도 그대로 넘긴다. 부재·enum 밖이면 "intermediate"로 확정하되 그 사실을
+// 응답의 difficultyLevel로 돌려줘 클라가 사용자에게 알릴 수 있게 한다(조용한 임의 난이도 진행 금지).
 export type CreateSessionRequest = {
   scenarioId: string;
   voiceId: string;
@@ -28,6 +33,7 @@ export type CreateSessionRequest = {
   messengerSkin?: MessengerSkin;
   skinSource?: MessengerSkinSource;
   voiceSelectionSource?: VoiceSelectionSource;
+  difficultyLevel?: DifficultyLevel;
 };
 export type CreateSessionResponse = {
   sessionId: string;
@@ -45,6 +51,12 @@ export type CreateSessionResponse = {
    * 재생 URL(sendMessage.audioUrl과 동일 패턴). 합성 실패해도 세션 생성 자체는 막지 않는다.
    */
   openingAudioUrl?: string;
+  /**
+   * T72 추가(§15.3.2 "조용한 임의 난이도 진행 금지", AC-064) — 서버가 **실제로 확정해 세션에 기록한**
+   * 난이도. 요청값이 없거나 enum 밖이면 "intermediate"가 담겨 돌아오므로, 클라는 자기가 보낸 값과
+   * 비교해 폴백이 일어났음을 사용자에게 1줄로 알릴 수 있다(침묵 실패 금지).
+   */
+  difficultyLevel: DifficultyLevel;
 };
 
 export type EndSessionReason =

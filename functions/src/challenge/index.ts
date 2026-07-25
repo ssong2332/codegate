@@ -40,6 +40,8 @@ import {
   CHALLENGE_FREE_ACTIVE_CAP,
   CHALLENGE_FREE_LINK_EXPIRY_MS,
 } from "../shared/constants";
+import { normalizeDifficultyLevel } from "../shared/difficulty";
+import type { DifficultyLevel } from "../shared/difficulty";
 import { generateShareToken } from "./token";
 import { purgeChallengeArtifacts, selectChallengesToPurge } from "./purge";
 import type { ChallengeDoc, DeletionLogDoc, MessengerChannel, SessionDoc } from "../shared/types";
@@ -63,7 +65,7 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     }
-    const { scenarioId, displayName } = request.data ?? {};
+    const { scenarioId, displayName, difficultyLevel } = request.data ?? {};
     if (!scenarioId || !displayName || !displayName.trim()) {
       throw new HttpsError("invalid-argument", "scenarioId와 displayName이 필요합니다.");
     }
@@ -94,6 +96,11 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
         );
       }
     }
+
+    // T72(§15.3.2, AC-064/065) — 난이도 enum 확정. ⚠️ 이 값은 아래 **어떤 게이트도 바꾸지 않는다**:
+    // 활성 챌린지 상한(AC-049)·링크 만료(AC-048)·클론 보유 검증(AC-041)·채널/음성모드 분기는
+    // 세 난이도에서 완전히 동일하게 적용된다(D-42). 난이도는 기록·전달만 되는 값이다.
+    const resolvedDifficultyLevel = normalizeDifficultyLevel(difficultyLevel);
 
     const uid = request.auth.uid;
     const db = getFirestore();
@@ -204,6 +211,9 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
       ...(scenarioChannel === "voice" && scenarioVoiceMode === "generic"
         ? { voiceMode: "generic" as const }
         : {}),
+      // T72(§15.3.2/§15.6 G9) — 항상 확정값을 기록한다. consentChallenge가 이 값을 사용자2 체험
+      // 세션에 복사하지 않으면 발신자가 고른 난이도가 수신자 통화에 전혀 반영되지 않는다.
+      difficultyLevel: resolvedDifficultyLevel,
     };
     await challengeRef.set(challengeDoc);
 
@@ -378,6 +388,9 @@ export type ResolvedChallenge = {
   // 과 동형으로 비민감 필드라 반환해도 무방하다(channel==="messenger"면 의미 없음 — 음성모드
   // 개념 없음, 값은 계산 기본값 "clone"이지만 무시된다).
   voiceMode: VoiceMode;
+  // T72 추가(§15.3.2/§15.6 G9) — 발신자가 고른 강도(부재→"intermediate"). getChallengeLanding이
+  // 동의 랜딩 표시에, consentChallenge가 사용자2 체험 세션 복사·오프닝 조립에 쓴다. 비민감 필드.
+  difficultyLevel: DifficultyLevel;
 };
 
 /** linkTokenHash로 챌린지를 조회한다. raw voiceId 등 민감 필드는 반환하지 않는다(AC-041 추출 차단). */
@@ -395,6 +408,7 @@ export async function resolveChallengeByTokenHash(tokenHash: string): Promise<Re
     status: data.status,
     channel: data.channel ?? "voice",
     voiceMode: data.voiceMode ?? "clone",
+    difficultyLevel: normalizeDifficultyLevel(data.difficultyLevel),
   };
 }
 

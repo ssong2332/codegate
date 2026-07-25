@@ -20,6 +20,8 @@
 // 존재하지 않는 세션 문서에는 쓸 수 없다 — 업로드 성공 시점에 sessionStorage에 함께 남겨
 // T4/T8이 실제 `sessions/{sid}` 문서 생성 시 이 값을 채워 넣을 수 있게 한다.
 
+import { isDifficultyLevel, type DifficultyLevel } from "@/lib/difficulty";
+
 const SESSION_ID_KEY = "onboarding.pendingSessionId";
 const IDENTITY_CONFIRMED_KEY = "onboarding.identityConfirmed";
 // 실시간 음성 통화 전환(2026-07-22 사용자 결정, Phase A) — createSession이 반환하는 오프닝 대사
@@ -131,6 +133,9 @@ export function clearPendingSession(): void {
   window.sessionStorage.removeItem(SELECTED_VOICE_MODE_CHOICE_KEY);
   window.sessionStorage.removeItem(MESSENGER_VOICE_SELECT_RETURN_KEY);
   window.sessionStorage.removeItem(EXPERIENCE_MODE_KEY);
+  // T72 — 난이도도 훈련 1회 단위 선택이므로 함께 비운다(다음 훈련은 UX-029에서 다시 고른다,
+  // UX-030 "이 시나리오 다시 훈련"도 난이도를 다시 고르게 하는 것과 같은 취지).
+  window.sessionStorage.removeItem(SELECTED_DIFFICULTY_LEVEL_KEY);
 }
 
 // 드릴다운(UX-015 유형 → UX-016 방식 → UX-017 시나리오, T28/AC-028/AC-029) 단계 간 "뒤로가기 시
@@ -187,6 +192,30 @@ export function getExperienceMode(): ExperienceMode | null {
   if (!hasSessionStorage()) return null;
   const value = window.sessionStorage.getItem(EXPERIENCE_MODE_KEY);
   return value === "self" || value === "send" ? value : null;
+}
+
+// 난이도 선택 힌트(T72, docs/UX.md UX-029/D-41, Architecture.md §15.3) — 드릴다운의 **마지막
+// 단계**에서 고른 값이 하류 여러 지점(세션 생성·챌린지 생성·목소리 선택 경유 세션 생성·세션 셸
+// 배지)에서 소비돼야 한다. 형제 드릴다운 힌트(selectedTrainingType/selectedVoiceModeChoice/
+// experienceMode)와 완전히 동일한 peek 방식(consume-on-read 아님 — 뒤로가기·여러 소비자가 반복
+// 읽어도 유효)을 따른다.
+//
+// ⚠️ 이 값은 **화면 힌트일 뿐 진실의 원천이 아니다.** 실제로 적용된 난이도는 서버가 세션·챌린지
+// 문서에 기록한 값이며(§15.3.2), 세션 셸 배지·리포트 표기는 그 문서 값을 읽는다 — sessionStorage가
+// 비어 있거나 어긋나도 표기가 거짓이 되지 않는다.
+const SELECTED_DIFFICULTY_LEVEL_KEY = "onboarding.selectedDifficultyLevel";
+
+export function setSelectedDifficultyLevel(level: DifficultyLevel): void {
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.setItem(SELECTED_DIFFICULTY_LEVEL_KEY, level);
+}
+
+/** 고르지 않았으면 null을 돌려준다 — 호출부가 "미선택 시 진행 불가"(AC-064)를 판정할 수 있어야
+ * 하므로 여기서 임의로 중급을 채워 넣지 않는다. */
+export function getSelectedDifficultyLevel(): DifficultyLevel | null {
+  if (!hasSessionStorage()) return null;
+  const value = window.sessionStorage.getItem(SELECTED_DIFFICULTY_LEVEL_KEY);
+  return isDifficultyLevel(value) ? value : null;
 }
 
 // 통화를 "받은" 세션 id를 기록한다(finding #4, 2026-07-23). 실시간 경로는 sendMessage를 안 타

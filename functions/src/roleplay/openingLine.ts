@@ -9,13 +9,21 @@ import { completeWithFallback, getLlmClient } from "../llm";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { extractLinkMarker } from "./linkMarker";
 import { buildSystemPrompt } from "./promptAssembly";
+import type { DifficultyLevel } from "../shared/difficulty";
 import type { ScammerMessage } from "./types";
 
 // 사용자 신고(2026-07-25) — 오프닝 대사가 다짜고짜 요구·압박부터 들어가 시나리오 배경이 없다는
 // 피드백. buildSystemPrompt는 모든 턴에 공통으로 쓰이므로(sendMessage도 재사용), "이번이 첫 마디다"
 // 라는 지침은 이 함수(오프닝 전용 호출)에서만 별도로 덧붙인다 — sendMessage의 후속 턴에는 영향 없음.
+//
+// ⚠️ **T72 수정(Architecture.md §15.5/§15.6 G2 — 기존 조립 순서 위반 제거)**: 예전에는 이 상수를
+// `buildSystemPrompt(scenarioPrompt) + OPENING_TURN_INSTRUCTION`으로 **가드레일 뒤에 이어 붙이고
+// 있었다.** 그 자체로는 안전과 무관한 지시라 실질 피해가 관찰되진 않았지만, 같은 방식으로 난이도
+// 블록을 붙이면 그 즉시 D-42/AC-065(난이도가 안전장치를 밀어내지 않는다)가 코드 레벨에서 깨진다.
+// 이제 `opts.turnInstruction`으로 넘겨 조립 함수 **안에서 가드레일 앞**에 삽입되며, 선행 공백
+// ("\n\n")은 조립 배열의 빈 줄이 대신하므로 제거했다.
 const OPENING_TURN_INSTRUCTION =
-  "\n\n[오프닝 지침] 지금이 이 통화/대화의 첫 마디다. 다짜고짜 요구나 압박부터 하지 말고, 먼저 신분(사칭 기관·관계)과 연락한 이유(어떤 사건·문제 때문인지)를 1~2문장으로 밝혀 상황을 설명한 뒤에 이어간다.";
+  "[오프닝 지침] 지금이 이 통화/대화의 첫 마디다. 다짜고짜 요구나 압박부터 하지 말고, 먼저 신분(사칭 기관·관계)과 연락한 이유(어떤 사건·문제 때문인지)를 1~2문장으로 밝혀 상황을 설명한 뒤에 이어간다.";
 
 export type OpeningLineResult = {
   message: ScammerMessage;
@@ -46,14 +54,23 @@ export type OpeningLineResult = {
  * LLM 표기")가 붙는 정합성 버그가 났다. 이 함수가 직접 관측한 `completion.isMock`을 그대로
  * 돌려주는 것만이 유일하게 정확한 정보다.
  */
-export async function generateOpeningLine(scenarioId: string): Promise<OpeningLineResult> {
+export async function generateOpeningLine(
+  scenarioId: string,
+  // T72(§15.3.3) — 오프닝은 세션 문서 write **전에** 만들어지므로 세션에서 읽을 수 없다. 호출부
+  // (createSession/consentChallenge)가 요청값(이미 서버에서 enum 정규화된 값)을 그대로 넘긴다.
+  // 부재면 buildSystemPrompt가 기준선(중급 = 모디파이어 없음)으로 조립한다.
+  difficultyLevel?: DifficultyLevel,
+): Promise<OpeningLineResult> {
   const scenarioPrompt = SCENARIO_PROMPTS[scenarioId];
   if (!scenarioPrompt) {
     throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
   }
 
   const completion = await completeWithFallback(getLlmClient(), {
-    systemPrompt: buildSystemPrompt(scenarioPrompt) + OPENING_TURN_INSTRUCTION,
+    systemPrompt: buildSystemPrompt(scenarioPrompt, {
+      difficultyLevel,
+      turnInstruction: OPENING_TURN_INSTRUCTION,
+    }),
     messages: [], // 오프닝 대사에는 아직 사용자 입력이 없다.
     mockTacticHints: scenarioPrompt.weakenedTactics,
   });

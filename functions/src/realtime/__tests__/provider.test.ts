@@ -73,6 +73,44 @@ test("ElevenLabsRealtimeProvider: 서명 URL 응답을 그대로 자격증명으
   }
 });
 
+// T72(§15.3.3/§15.6 G6, AC-064 "근거 없는 표기 금지") — 난이도가 실제로 반영되는 경로와 그렇지
+// 않은 경로를 자격증명이 정직하게 구분해 보고해야 한다. 이 값이 뒤집히면 클라가 적용되지 않은
+// 난이도를 배지로 표기하거나(근거 없는 표기), 반대로 적용된 난이도를 숨기게 된다.
+test("[T72/G6] difficultyApplied: ElevenLabs 경로는 false(프롬프트 주입 지점 없음), 목업(텍스트 폴백)은 true", async () => {
+  const mockCreds = await new MockRealtimeProvider().createCallCredentials({
+    sessionId: "s1",
+    scenarioId: "family-accident-deepvoice",
+    voiceId: "voice_1",
+    difficultyLevel: "advanced",
+  });
+  assert.equal(
+    mockCreds.difficultyApplied,
+    true,
+    "목업은 클라를 sendMessage(서버 조립) 텍스트 폴백으로 보내므로 난이도가 실제로 반영된다",
+  );
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => ({
+    ok: true,
+    json: async () => ({ signed_url: "wss://example.invalid/convai" }),
+  })) as unknown as typeof globalThis.fetch;
+  try {
+    const creds = await new ElevenLabsRealtimeProvider("test-key", { s1: "agent_a" }).createCallCredentials({
+      sessionId: "sess",
+      scenarioId: "s1",
+      voiceId: "cloned_voice",
+      difficultyLevel: "advanced",
+    });
+    assert.equal(
+      creds.difficultyApplied,
+      false,
+      "ElevenLabs는 프롬프트가 에이전트 쪽에 저장돼 있어 난이도를 주입할 수 없다 — 조용한 미적용 금지",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("ElevenLabsRealtimeProvider: 실패 응답이면 throw한다(호출부가 Mock으로 강등할 수 있게)", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async () => ({ ok: false, status: 401 })) as unknown as typeof globalThis.fetch;

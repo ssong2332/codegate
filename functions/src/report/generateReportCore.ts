@@ -8,6 +8,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { SCENARIO_PROMPTS } from "../scenarios";
+import { normalizeDifficultyLevel } from "../shared/difficulty";
 import type { MessageDoc, ReportDoc, SessionDoc } from "../shared/types";
 import { analyzeConversation, buildPreventionAdvice, type AnalysisMessage } from "./analyzeConversation";
 import { computeDefenseGrade } from "./computeDefenseGrade";
@@ -52,6 +53,11 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
 
   // ② 대화 로그 규칙 기반 분석(analyzeConversation.ts 참고 — Mock 단계 한계 고지 포함) →
   // deceivedMoments/tacticsUsed/wasDeceived 산출.
+  //
+  // ⚠️ T72(§15.3.5) — **난이도는 판정에 입력되지 않는다.** analyzeConversation/buildPreventionAdvice/
+  // computeDefenseGrade의 시그니처는 무변경이다. 판정 기준이 난이도마다 달라지면 실패 아카이브의
+  // 누적 비교("이 수법에 3번 넘어갔습니다")가 서로 다른 잣대의 합이 되어 무의미해지기 때문이다.
+  // 난이도는 아래 리포트 문서에 **표기 전용**으로만 역정규화된다(P-22).
   const analysis = analyzeConversation(messages, session.createdAt.toMillis(), weakenedTactics);
   const preventionAdvice = buildPreventionAdvice(analysis.tacticsUsed, analysis.wasDeceived);
 
@@ -63,6 +69,9 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     deceivedMoments: analysis.deceivedMoments,
     tacticsUsed: analysis.tacticsUsed,
     preventionAdvice,
+    // T72(§15.3.2/§15.4.1) — 세션에서 역정규화(표기 전용). 리포트·리플레이·실패 아카이브가 세션
+    // 문서를 추가로 read하지 않고 같은 라벨을 그릴 수 있게 한다(P-22).
+    difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
     createdAt: Timestamp.now(),
   };
   await reportRef.set(reportDoc);

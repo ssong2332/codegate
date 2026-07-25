@@ -31,6 +31,7 @@ import {
   setOpeningMessageText,
   setChallengeToken,
 } from "@/lib/recording";
+import { DIFFICULTY_LABEL, type DifficultyLevel } from "@/lib/difficulty";
 import { Banner, Button } from "@/components/ui";
 
 type PageState = "no-token" | "loading" | "blocked" | "load-error" | "ready";
@@ -52,6 +53,9 @@ export default function ChallengeJoinPage() {
   const [displayName, setDisplayName] = useState<string>("");
   // T49(#20, D-28) — 부재 없이 항상 확정값이나, 로드 전 기본값은 "voice"(기존 문구 유지).
   const [channel, setChannel] = useState<"voice" | "messenger">("voice");
+  // T72(UX-021 v1.11) — 발신자가 고른 강도. 로드 전에는 null이라 아무 것도 표기하지 않는다
+  // (근거 없는 표기 금지 — 서버가 확정값을 줄 때만 화면에 나타난다).
+  const [difficultyLevel, setDifficultyLevel] = useState<DifficultyLevel | null>(null);
   const [consenting, setConsenting] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
 
@@ -77,6 +81,9 @@ export default function ChallengeJoinPage() {
     }
     setDisplayName(result.displayName);
     setChannel(result.channel);
+    // T72(UX-021 v1.11, AC-040/064) — 발신자가 고른 난이도를 동의 **전에** 함께 보여준다.
+    // 이는 사전 동의의 정보량을 늘리는 방향이며, 동의 게이트 로직은 아무것도 바뀌지 않는다(D-42).
+    setDifficultyLevel(result.difficultyLevel);
     setState("ready");
   };
 
@@ -227,6 +234,21 @@ export default function ChallengeJoinPage() {
           <span className="text-[#0E6B62]">{displayName}</span>님이 보이스피싱 인식 테스트를
           준비했어요
         </h1>
+
+        {/* T72(UX-021 v1.11, AC-040/064) — 발신자가 고른 강도를 동의 전에 알린다. 고급이면 "강한
+            압박이 이어질 수 있습니다"를 **동의 전에 명시**한다(정보량 증가 방향). 난이도는 동의
+            게이트를 우회·완화·게이팅하지 않는다(D-42) — 아래 안내 3개·신고·차단은 전부 무변경. */}
+        {difficultyLevel && (
+          <p className="text-[15px] leading-relaxed text-[#22303A]">
+            훈련 강도: <strong className="font-bold">{DIFFICULTY_LABEL[difficultyLevel]}</strong>
+            {difficultyLevel === "advanced" && (
+              <span className="font-semibold text-[#B96A1B]">
+                {" "}
+                — 실제와 가깝게 강한 압박이 이어질 수 있습니다.
+              </span>
+            )}
+          </p>
+        )}
 
         <div className="flex flex-col gap-3 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4">
           {consentPoints.map((point) => (

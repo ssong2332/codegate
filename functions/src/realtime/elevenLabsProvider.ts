@@ -53,6 +53,12 @@ export class ElevenLabsRealtimeProvider implements RealtimeVoiceProvider {
         voiceId: input.voiceId,
         language: "ko",
         isMock: false,
+        // ⚠️ T72(§15.3.3/§15.6 G6) — 이 경로에는 난이도 주입 지점이 **없다**. 프롬프트가 에이전트
+        // 쪽에 저장돼 있고 클라 오버라이드로 프롬프트를 넘기는 것은 ADR-0004 위반이라 금지돼 있어,
+        // 서버가 조립한 난이도 블록을 실어 보낼 방법이 없다. 조용히 미적용하지 않고 false로 명시해
+        // 클라가 난이도 배지를 띄우지 않게 한다(근거 없는 표기 금지). 확장 경로는 §15.3.3 참고
+        // (ELEVENLABS_AGENT_IDS를 난이도별 에이전트까지 허용하도록 넓히는 설정 변경 — 이번 범위 밖).
+        difficultyApplied: false,
       };
     } finally {
       clearTimeout(timeout);

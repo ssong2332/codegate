@@ -2,6 +2,7 @@
 // 각 트랙은 실제 데이터가 없어도 이 타입에 맞춰 개발한다. 필드/제약 변경은 Database.md와
 // 함께(트랙 간 합의 후) 갱신한다.
 import type { VoiceMode } from "../scenarios/publicMeta";
+import type { DifficultyLevel } from "./difficulty";
 
 // --- users/{uid} (UX-013, AC-027) ---
 export type UserDoc = {
@@ -113,6 +114,11 @@ export type SessionDoc = {
   // 노출돼도 무방하다 — session/end(UX-007 2인 변형 문구)·report/replay(UX-018 결과 공유 동의
   // 문구)가 별도 챌린지 문서 round-trip 없이 이 필드만으로 "○○님" 문구를 렌더링한다.
   challengeCreatorDisplayName?: string;
+  // T72 추가(옵셔널, 하위호환·무백필 — Architecture.md §15.3.2, UX-029/AC-064) — 사용자가 UX-029에서
+  // 고른 훈련 강도. **부재→"intermediate"**(난이도 도입 이전 세션은 전부 부재이며, 중급은 모디파이어
+  // 블록을 내보내지 않아 프롬프트가 도입 전과 완전히 동일하다). 시나리오 메타의 산문 `difficulty`
+  // (ScenarioDoc)와는 이름·의미가 다른 별개 필드다(오버로드 금지, §15.3.2).
+  difficultyLevel?: DifficultyLevel;
 };
 
 // --- users/{uid}/voices/{voiceId} (P-8·AC-046, ADR-0005·Database.md 1:1) ---
@@ -202,6 +208,10 @@ export type ReportDoc = {
   deceivedMoments: DeceivedMoment[];
   tacticsUsed: string[];
   preventionAdvice: string[]; // min 1
+  // T72 추가(옵셔널, 하위호환 — §15.3.2/§15.4.1) — 리포트 생성 시 세션에서 역정규화한 표기용 값.
+  // **난이도는 리포트 판정에 어떤 영향도 주지 않는다**(§15.3.5 — analyzeConversation/
+  // buildPreventionAdvice/computeDefenseGrade 시그니처 무변경). 표기 전용이다(P-22).
+  difficultyLevel?: DifficultyLevel;
   createdAt: FirebaseFirestore.Timestamp;
 };
 
@@ -293,5 +303,12 @@ export type ChallengeDoc = {
   reportReason?: ChallengeReportReason; // T37 소관
   reportNote?: string; // T37 소관, PII 마스킹
   tier?: ChallengeTier;
+  // T72 추가(옵셔널, 하위호환·무백필 — §15.3.2, UX-019/UX-021/AC-064) — 발신자(사용자1)가 UX-029에서
+  // 고른, **수신자(사용자2)가 겪을** 강도. 부재→"intermediate". 수신자 동의 랜딩(UX-021)에 표시돼
+  // AC-040 사전 동의의 정보량을 늘리고(안전장치 강화 방향), consentChallenge가 사용자2 체험 세션에
+  // **복사**한다 — 프롬프트는 세션 단위로 조립되므로 복사하지 않으면 발신자 선택이 소실된다(§15.6 G9).
+  // 난이도는 활성 챌린지 상한(AC-049)·링크 토큰(AC-048)·결과 열람 범위(AC-043/055) 등 **어떤 안전·
+  // 정책 판정도 바꾸지 않는다**(D-42/AC-065).
+  difficultyLevel?: DifficultyLevel;
   createdAt: FirebaseFirestore.Timestamp;
 };

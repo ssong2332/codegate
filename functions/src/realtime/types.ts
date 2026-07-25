@@ -9,6 +9,9 @@
 //   제공하지만 **둘 다 고정된 프리셋 음성만 쓸 수 있다**. 이 앱의 1번 차별점은 "참가자 본인 목소리를
 //   복제한 딥보이스"(AC-018/019)이므로, 런타임에 임의의 클론 voice_id를 지정할 수 있어야 한다.
 //   ElevenLabs는 `tts.voice_id` 오버라이드를 지원하는 유일한 선택지라 이 요구를 만족한다.
+//
+// (T72 주석 추가) 그 구조의 대가가 §15.3.3의 난이도 갭이다 — 프롬프트가 에이전트 쪽에 있어
+// 서버가 난이도 지시를 끼워 넣을 지점이 없다. `difficultyApplied` 필드가 이 사실을 명시한다.
 //   한국어는 `agent.language: "ko"`로 지정하며, 음성 모델은 저지연(Flash 계열) 설정을 에이전트
 //   쪽에 구성한다.
 //
@@ -18,6 +21,8 @@
 //   미리 만들어 두고 프롬프트는 그 에이전트에 저장**하며, 서버는 scenarioId → agentId 매핑과
 //   서명 URL만 발급한다. 클라가 보내는 오버라이드는 민감하지 않은 voice_id(본인 클론 id)뿐이다.
 
+import type { DifficultyLevel } from "../shared/difficulty";
+
 export type RealtimeCallInput = {
   sessionId: string;
   scenarioId: string;
@@ -26,6 +31,14 @@ export type RealtimeCallInput = {
    * 공용 기본 음성 id. 민감 정보가 아니라 클라 오버라이드로 전달해도 무방하다.
    */
   voiceId: string;
+  /**
+   * T72 추가(§15.3.3 호출부 3곳 중 "Gemini Live 토큰") — 세션에 기록된 난이도. Gemini 경로는
+   * 서버가 시스템 프롬프트를 토큰에 고정하므로 그 조립에 그대로 반영된다.
+   * ⚠️ **ElevenLabs 경로에는 반영 지점이 없다** — 프롬프트가 에이전트 쪽에 저장돼 있고 클라
+   * 오버라이드로 프롬프트를 넘기는 것은 ADR-0004 위반이라 금지돼 있다. 그 경로는 이 값을
+   * 무시하며, 그 사실을 `RealtimeCallCredentials.difficultyApplied:false`로 명시한다.
+   */
+  difficultyLevel?: DifficultyLevel;
 };
 
 /**
@@ -58,6 +71,13 @@ export type RealtimeCallCredentials = {
   language: "ko";
   /** true = 실제 실시간 대화가 아니라 목업(키 미설정). 클라는 기존 텍스트 폴백으로 진행한다. */
   isMock: boolean;
+  /**
+   * T72 추가(§15.3.3/§15.6 G6, AC-064 "근거 없는 표기 금지") — 이 통화 경로에 사용자가 고른 난이도가
+   * **실제로 반영됐는가**. ElevenLabs 경로는 프롬프트가 에이전트 쪽에 저장돼 있어 주입 지점 자체가
+   * 없으므로 false다. 클라는 false면 난이도 배지를 표시하지 않는다(적용되지 않은 값을 표기하면
+   * 근거 없는 표기가 된다) — 동시에 "조용한 미적용"도 금지라 미적용 사실 자체는 화면에 알린다.
+   */
+  difficultyApplied: boolean;
 };
 
 export interface RealtimeVoiceProvider {

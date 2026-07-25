@@ -21,6 +21,7 @@ import {
   setOpeningAudioUrl,
   setOpeningMessageText,
   hasMessengerVoiceSelectReturn,
+  getSelectedDifficultyLevel,
 } from "@/lib/recording";
 import { createSession } from "@/lib/api";
 import { Button, ProgressSteps, type ProgressStep } from "@/components/ui";
@@ -91,7 +92,16 @@ export default function CloneWaitPage() {
       }
       setStartState("starting");
       try {
-        const result = await createSession({ sessionId, scenarioId, voiceId });
+        // T72(UX-029/AC-064) — 난이도는 드릴다운 마지막 단계에서 이미 확정돼 sessionStorage 힌트로
+        // 넘어온다(녹음 왕복을 거쳐도 유지). 부재면 필드를 아예 보내지 않아 서버가 중급으로
+        // 확정하고, 그 확정값을 응답으로 되돌려준다(조용한 임의 난이도 진행 금지).
+        const difficultyLevel = getSelectedDifficultyLevel();
+        const result = await createSession({
+          sessionId,
+          scenarioId,
+          voiceId,
+          ...(difficultyLevel ? { difficultyLevel } : {}),
+        });
         if (cancelled) return;
         if (result.openingAudioUrl) setOpeningAudioUrl(result.openingAudioUrl);
         // 사용자 신고(2026-07-24) — 실시간 통화 "AI가 먼저 말해야" 수정, ScenarioListView.tsx와

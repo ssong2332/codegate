@@ -58,7 +58,12 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     }
     // sendMessage/generateOpeningLine과 **같은 조립 함수**를 쓴다 — 프롬프트를 두 곳에 손으로
     // 옮겨 적어 드리프트가 나는 것을 막는다.
-    const systemPrompt = buildSystemPrompt(scenarioPrompt);
+    // T72(§15.3.3 호출부 3곳 중 "Gemini Live 토큰") — 난이도를 여기서도 넘겨야 "텍스트는 난이도가
+    // 먹는데 통화는 안 먹는" 비대칭이 생기지 않는다(§15.6 G5). 조립 순서 불변식(가드레일 최후미)은
+    // buildSystemPrompt 안에서 강제되므로 이 호출부는 문자열을 이어 붙이지 않는다(§15.5).
+    const systemPrompt = buildSystemPrompt(scenarioPrompt, {
+      difficultyLevel: input.difficultyLevel,
+    });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });
     const now = Date.now();
@@ -142,6 +147,8 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       voiceId: "",
       language: "ko",
       isMock: false,
+      // T72(§15.3.3) — 이 경로는 서버가 시스템 프롬프트를 토큰에 고정하므로 난이도가 실제로 반영된다.
+      difficultyApplied: true,
     };
   }
 }

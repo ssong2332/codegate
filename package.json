@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test src/lib/history/mapHistoryItems.test.ts src/lib/age/resolveAgeGateDecision.test.ts src/lib/realtime/pcm.test.ts src/lib/realtime/userSpeechLevel.test.ts src/lib/realtime/prefetchFreshness.test.ts src/lib/messenger/detectSkin.test.ts src/lib/replay/buildReplayTimeline.test.ts src/lib/rewind/buildRewindContext.test.ts src/lib/rewind/rewindEntry.test.ts src/lib/challenge/mapChallengeItems.test.ts src/lib/auth/devSignIn.guard.test.ts",
+    "test": "node --experimental-strip-types --test src/lib/history/mapHistoryItems.test.ts src/lib/age/resolveAgeGateDecision.test.ts src/lib/realtime/pcm.test.ts src/lib/realtime/userSpeechLevel.test.ts src/lib/realtime/prefetchFreshness.test.ts src/lib/messenger/detectSkin.test.ts src/lib/replay/buildReplayTimeline.test.ts src/lib/rewind/buildRewindContext.test.ts src/lib/rewind/rewindEntry.test.ts src/lib/challenge/mapChallengeItems.test.ts src/lib/auth/devSignIn.guard.test.ts src/lib/difficulty/difficulty.test.ts",
     "verify:build": "node scripts/verify-no-dev-auth-in-build.mjs"
   },
   "dependencies": {
