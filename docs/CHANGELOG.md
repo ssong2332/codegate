@@ -4,6 +4,7 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 ### Fixed
+- **통화 오프닝 대사가 배경 설명 없이 다짜고짜 요구부터 시작(T58, 2026-07-25)**: 사용자 신고 — "처음에는 시나리오 진행에서 필요한 배경을 말하면서 시작하자". `generateOpeningLine()`(ElevenLabs/텍스트 폴백 공용)과 Gemini Live 실시간 경로의 오프닝 트리거 문구 양쪽에 "신분과 연락 이유를 먼저 밝히고 이어가라"는 지침을 오프닝 전용으로 추가했다(후속 턴 프롬프트는 무수정). Mock LLM은 이 변경의 영향을 받지 않는다(systemPrompt 문자열을 읽지 않음, 코드 확인). functions 184/184·root 42/42 무회귀.
 - **generic 보이스 통화 성별 다양화(T57, 2026-07-25)**: `functions/src/realtime/geminiProvider.ts`가 Gemini Live 프리셋 음성을 `"Aoede"` 1개로 고정해, generic voiceMode 경로(보이스피싱 self 체험 + generic 보이스 챌린지 수신자 통화)가 사용자 신고대로 항상 같은 음성만 냈다. 신규 음성 풀(`Aoede`+`Puck`)에서 sessionId 해시 기반으로 결정론적으로 하나를 고르도록 교체 — 같은 통화는 재연결·Strict Mode 이중 mount로 다시 호출돼도 목소리가 바뀌지 않고, 세션마다 사실상 무작위로 분산된다. **추정 표시**: Google 공식 문서는 각 프리셋 음성을 톤 특성으로만 설명하고 성별을 공식 라벨링하지 않아, "Aoede=여성/Puck=남성" 분류는 커뮤니티 통용 추정치임을 코드 주석에 명시했다. functions test 184/184(신규 3건). 실제 음색 청취는 API 키·마이크가 없는 이 환경에서 라이브 검증 못함 — 사용자 확인 필요.
 
 ### Added
