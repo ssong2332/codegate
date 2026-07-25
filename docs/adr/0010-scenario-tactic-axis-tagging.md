@@ -3,7 +3,7 @@
 - Status: accepted
 - Date: 2026-07-26
 - Owner: architect
-- DECISIONS.md entry: #38
+- DECISIONS.md entry: #41
 - 관련: PRD v1.6 "시나리오 수법 축 체계" · AC-070/AC-076/AC-077 · MVP #28 / UX.md **D-46** · **OQ-U25** / Architecture.md **§15.10** / Tasks T78 → T81·T82
 - 관계: 기존 ADR을 하나도 뒤집지 않는다. ADR-0004(프롬프트 서버 소유)·ADR-0003(폐기)·ADR-0005/0006(2인)과 접점이 없다. **§0 원칙 4**(송금·계좌 개념 부재)와의 정합은 Decision 절에서 명시 확인한다.
 
@@ -76,4 +76,4 @@ PRD v1.6은 시나리오 라이브러리를 5개 축(A 접근 경로 / B 사칭 
   2. **T81**: `SCENARIO_AXES[].exitBlock`을 L3 입력으로 사용. **현재 D3/D4 보유 시나리오가 0개**이므로 부재 시 폴백 규칙을 명시할 것(조용히 중급처럼 동작 금지).
   3. **T83/T84**: `TACTIC_CATEGORIES` 값 목록은 건드리지 말고 `CATEGORY_RULES` 행 정규식만 확장(§15.10.5).
   4. **planner**: `D0_none` 축 정의 표 등재 비준(G32) · A4 0건 공백 채택 여부(G35) · B1 count 2↔3 정정(G36). **셋 다 T82 착수를 막지 않는다.**
-  5. **별건(implementer)**: `callerLabel` 미러 드리프트 13/13 정리 + 드리프트 테스트 범위 확대(G30) — T78 범위 밖.
+  5. **별건(implementer)**: `callerLabel` 미러 드리프트 13/13 정리 + 드리프트 테스트 범위 확대(G38) — T78 범위 밖.
