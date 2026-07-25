@@ -35,7 +35,7 @@ import {
   computeRmsFromByteTimeDomain,
   nextUserSpeechDebounceState,
 } from "./userSpeechLevel";
-import { computeGateCloseDelayMs } from "./agentSpeechGate";
+import { computeGateCloseDelayMs, resolveTurnInProgress } from "./agentSpeechGate";
 
 export type GeminiVoiceSessionProps = {
   credentials: CreateRealtimeCallResponse;
@@ -221,12 +221,14 @@ export default function GeminiVoiceSession({
     // 비고, 그 순간 게이트가 열려 방 소음이 VAD에 사용자 발화로 잡혀 모델이 **생성 자체를 중단**했다.
     // 이제 대기 시간 계산을 agentSpeechGate.ts(순수 함수·테스트로 고정)에 위임한다 — 턴 진행 중이면
     // 넉넉히, turnComplete 뒤면 꼬리 재생이 끝날 때까지. 판단 근거와 상수 선택 이유는 그쪽 주석 참고.
+    // ⚠️ turnInProgress는 **여기서 직접 뒤집지 않는다.** 이번 메시지의 신호 3개(오디오·turnComplete·
+    // interrupted)를 함께 보고 resolveTurnInProgress가 정한다 — turnComplete가 마지막 오디오 청크와
+    // 같은 메시지로 오기 때문에(reviewer Critical, agentSpeechGate.ts 주석 참고) 어느 한쪽만 보고
+    // 뒤집으면 서로를 덮어쓴다.
     let turnInProgress = false;
     const markSpeaking = () => {
       agentSpeaking = true;
-      turnInProgress = true;
       handlersRef.current.onSpeakingChange(true);
-      scheduleGateClose();
     };
 
     // 게이트를 닫을(=마이크를 다시 열) 시각을 다시 잡는다. 청크가 새로 올 때마다, 그리고
@@ -336,29 +338,44 @@ export default function GeminiVoiceSession({
                 flushScammerTurn();
                 return;
               }
-              if (sc?.turnComplete) {
-                // 게이트를 **즉시 닫지 않는다** — 이 시점에도 재생될 오디오가 남아 있을 수 있다.
-                // 턴이 끝났다는 사실만 반영하고, 실제 개방 시각은 잔여 재생 기준으로 다시 잡는다.
-                turnInProgress = false;
-                scheduleGateClose();
-                flushTranscript();
+              // **오디오를 먼저 예약한다**(reviewer Critical 수정). 두 가지 이유:
+              // (1) nextPlayTime이 갱신된 뒤에 게이트 대기 시간을 계산해야 잔여 재생이 정확히 반영된다.
+              // (2) 예전엔 turnComplete를 먼저 처리하고 그 뒤 markSpeaking()이 turnInProgress를
+              //     되살려, 마지막 청크와 turnComplete가 같은 메시지로 오는 정상 케이스에서 4초
+              //     대기가 걸렸다. 이제 순서와 무관하게 resolveTurnInProgress가 규칙으로 정한다.
+              const samples = message.data ? base64ToFloat32(message.data) : null;
+              const hasAudio = samples !== null && samples.length > 0;
+              if (hasAudio && samples) {
+                const buffer = outputContext.createBuffer(
+                  1,
+                  samples.length,
+                  GEMINI_OUTPUT_SAMPLE_RATE,
+                );
+                buffer.copyToChannel(samples, 0);
+                const source = outputContext.createBufferSource();
+                source.buffer = buffer;
+                source.connect(outputContext.destination);
+                // 이전 청크가 끝나는 시점에 이어붙인다(겹침·끊김 방지).
+                const startAt = Math.max(outputContext.currentTime, nextPlayTime);
+                source.start(startAt);
+                nextPlayTime = startAt + buffer.duration;
+                scheduledSources.add(source);
+                source.onended = () => scheduledSources.delete(source);
+                markSpeaking();
               }
-              if (!message.data) return;
 
-              const samples = base64ToFloat32(message.data);
-              if (samples.length === 0) return;
-              const buffer = outputContext.createBuffer(1, samples.length, GEMINI_OUTPUT_SAMPLE_RATE);
-              buffer.copyToChannel(samples, 0);
-              const source = outputContext.createBufferSource();
-              source.buffer = buffer;
-              source.connect(outputContext.destination);
-              // 이전 청크가 끝나는 시점에 이어붙인다(겹침·끊김 방지).
-              const startAt = Math.max(outputContext.currentTime, nextPlayTime);
-              source.start(startAt);
-              nextPlayTime = startAt + buffer.duration;
-              scheduledSources.add(source);
-              source.onended = () => scheduledSources.delete(source);
-              markSpeaking();
+              const hasTurnComplete = Boolean(sc?.turnComplete);
+              turnInProgress = resolveTurnInProgress({
+                current: turnInProgress,
+                hasAudio,
+                hasTurnComplete,
+                hasInterrupted: false, // interrupted는 위에서 이미 return했다.
+              });
+
+              // 게이트를 **즉시 닫지 않는다** — turnComplete 시점에도 재생될 오디오가 남아 있을 수
+              // 있다. 실제 개방 시각은 항상 잔여 재생 기준으로 다시 잡는다.
+              if (hasAudio || hasTurnComplete) scheduleGateClose();
+              if (hasTurnComplete) flushTranscript();
             },
             onerror: (e: unknown) => {
               log("onerror", e);

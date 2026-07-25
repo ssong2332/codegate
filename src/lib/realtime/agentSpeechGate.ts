@@ -41,6 +41,46 @@ export const TAIL_GRACE_MS = 250;
  */
 export const STALL_GRACE_MS = 4000;
 
+/**
+ * 이번 메시지를 반영한 뒤의 "턴이 아직 진행 중인가" 값.
+ *
+ * **reviewer Critical(2026-07-25)**: 첫 구현은 이 판단을 `markSpeaking()` 안에 숨겨 뒀고,
+ * `turnComplete` 처리가 오디오 처리보다 **먼저** 실행됐다. 그런데 Gemini SDK는 `turnComplete`를
+ * 마지막 오디오 청크와 **같은 메시지에** 실어 보낸다 —
+ * `node_modules/@google/genai/dist/genai.d.ts:9213`: *"Can be set alongside `content`, indicating
+ * that the `content` is the last in the turn."* 그래서 `turnComplete`로 false가 된 직후
+ * `markSpeaking()`이 다시 true로 되돌렸고, **정상적인 턴 종료마다 stallGrace(4초)가 적용**됐다.
+ * 이 fix가 없애려던 "부자연스러운 대화"를 다른 형태로 되살리는 결함이었다.
+ *
+ * 그래서 판단을 규칙으로 못박아 여기로 끄집어낸다 — **turnComplete가 오디오보다 우선한다.**
+ * 순서에 기대지 않으므로 호출부를 어떻게 재배치해도 결과가 같다.
+ */
+export type TurnProgressInput = {
+  /** 직전까지의 값. 이번 메시지에 아무 신호도 없으면 그대로 유지된다. */
+  current: boolean;
+  /** 이번 메시지에 재생할 오디오가 실려 있는가. */
+  hasAudio: boolean;
+  /** 이번 메시지에 turnComplete가 실려 있는가. */
+  hasTurnComplete: boolean;
+  /** 이번 메시지가 끼어들기(interrupted)인가. */
+  hasInterrupted: boolean;
+};
+
+export function resolveTurnInProgress({
+  current,
+  hasAudio,
+  hasTurnComplete,
+  hasInterrupted,
+}: TurnProgressInput): boolean {
+  // 끼어들기는 턴을 즉시 끝낸다(모델이 생성을 중단했다).
+  if (hasInterrupted) return false;
+  // ⚠️ 핵심 규칙 — turnComplete는 같은 메시지의 오디오보다 **우선한다.** 마지막 청크와 함께 오는
+  // 것이 SDK의 정상 동작이므로, 오디오가 있다고 턴을 다시 열면 안 된다.
+  if (hasTurnComplete) return false;
+  if (hasAudio) return true;
+  return current;
+}
+
 export type GateCloseInput = {
   /** 예약된 오디오가 전부 재생되기까지 남은 시간(ms). 재생이 비어 있으면 0. */
   remainingPlaybackMs: number;

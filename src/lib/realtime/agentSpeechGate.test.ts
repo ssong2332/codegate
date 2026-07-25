@@ -2,9 +2,69 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   computeGateCloseDelayMs,
+  resolveTurnInProgress,
   STALL_GRACE_MS,
   TAIL_GRACE_MS,
 } from "./agentSpeechGate.ts";
+
+// ── reviewer Critical(2026-07-25) 회귀 ──────────────────────────────────────
+// 첫 구현은 turnComplete 처리 뒤에 markSpeaking()이 turnInProgress를 다시 true로 되살려,
+// **정상적인 턴 종료마다 4초 대기**가 걸렸다. Gemini SDK가 turnComplete를 마지막 오디오 청크와
+// 같은 메시지에 실어 보내기 때문이다(genai.d.ts:9213 "Can be set alongside `content`").
+// 순수 함수 단위 테스트만으로는 호출 순서 결함을 못 잡았던 것이 이 공백의 교훈이라,
+// 판단 자체를 규칙으로 끄집어내 여기서 고정한다.
+
+test("turnComplete는 같은 메시지의 오디오보다 우선한다(정상 턴 종료에 4초가 걸리던 회귀)", () => {
+  const next = resolveTurnInProgress({
+    current: true,
+    hasAudio: true, // 마지막 청크가 함께 실려 있다 — SDK의 정상 동작
+    hasTurnComplete: true,
+    hasInterrupted: false,
+  });
+
+  assert.equal(
+    next,
+    false,
+    "마지막 오디오 청크가 함께 왔다고 턴을 다시 열면, 그 뒤 게이트 계산이 stallGrace(4초)를 " +
+      "골라 정상 종료마다 마이크가 4초씩 막힌다(reviewer Critical).",
+  );
+
+  // 규칙이 실제로 대기 시간까지 바꾸는지 끝까지 확인 — 이게 사용자가 체감하는 값이다.
+  assert.equal(
+    computeGateCloseDelayMs({ remainingPlaybackMs: 0, turnInProgress: next }),
+    TAIL_GRACE_MS,
+  );
+});
+
+test("오디오만 있으면 턴이 진행 중이 된다", () => {
+  assert.equal(
+    resolveTurnInProgress({
+      current: false,
+      hasAudio: true,
+      hasTurnComplete: false,
+      hasInterrupted: false,
+    }),
+    true,
+  );
+});
+
+test("끼어들기는 턴을 즉시 끝낸다(오디오가 함께 와도)", () => {
+  assert.equal(
+    resolveTurnInProgress({
+      current: true,
+      hasAudio: true,
+      hasTurnComplete: false,
+      hasInterrupted: true,
+    }),
+    false,
+  );
+});
+
+test("아무 신호도 없는 메시지는 직전 상태를 유지한다(전사 조각만 오는 경우)", () => {
+  const flags = { hasAudio: false, hasTurnComplete: false, hasInterrupted: false };
+  assert.equal(resolveTurnInProgress({ current: true, ...flags }), true);
+  assert.equal(resolveTurnInProgress({ current: false, ...flags }), false);
+});
 
 // 회귀 1(사용자 신고 2026-07-25 "말을 하다가 마는 현상") — 모델이 문장 중간에 잠깐 생성을 멈추면
 // 예약 재생이 비는데, 이때 곧바로 마이크를 열면 방 소음이 VAD에 잡혀 모델이 자기 문장을 끊는다.
