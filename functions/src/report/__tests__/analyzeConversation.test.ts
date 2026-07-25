@@ -446,3 +446,80 @@ test("analyzeConversation(): 매치된 수법이 없으면 폴백 라벨과 함�
   assert.equal(result.deceivedMoments[0].tactic, "약화된 사기 수법");
   assert.equal(result.deceivedMoments[0].tacticCategory, "other");
 });
+
+// ── T90(2026-07-25) 하류 커버리지 공백 메우기 ────────────────────────────────
+// 통화 중 끼어들기(interrupted)로 사기범 발화가 문장 중간에 잘리면, 클라이언트는 그 조각을
+// **독립 턴으로** 기록한다(src/lib/realtime/GeminiVoiceSession.tsx flushScammerTurn).
+// 그 결과 이 함수가 여태 본 적 없는 배열 형태가 들어온다 — **scammer 뒤에 곧바로 scammer**가
+// 오고 사이에 user가 없는 경우다. QA가 "코드 판독상 안전해 보이지만 테스트 0건"으로 공백을
+// 지적했고(AC-007/062/063이 의존하는 파이프라인), 그 공백을 여기서 닫는다.
+test("analyzeConversation(): 끼어들기로 잘린 사기범 턴이 연속돼도 판정이 어긋나지 않는다(T90)", () => {
+  const messages = [
+    {
+      // 끼어들기로 잘린 조각 — 뒤에 user가 없다.
+      role: "scammer" as const,
+      textMasked: "여보세요...? 나야... 지금 당장 도와줘야 해, 더 늦으면 큰일나. 혹시",
+      turnIndex: 0,
+      createdAtMs: SESSION_START_MS,
+    },
+    {
+      // 이어서 다시 말한 온전한 발화 — 사용자는 이쪽에 반응했다.
+      role: "scammer" as const,
+      textMasked: "지금은 정신없어서 계좌번호는 문자로 다시 보낼게.",
+      turnIndex: 1,
+      createdAtMs: SESSION_START_MS + 8_000,
+    },
+    {
+      role: "user" as const,
+      textMasked: "알겠어, 계좌번호 뭐야?",
+      turnIndex: 2,
+      createdAtMs: SESSION_START_MS + 20_000,
+    },
+  ];
+
+  const result = analyzeConversation(messages, SESSION_START_MS, WEAKENED_TACTICS);
+
+  // 속은 순간은 **정확히 1건**이어야 한다 — 잘린 조각이 별도의 속은 순간을 만들어내면
+  // 되감기(AC-062)가 있지도 않은 순간을 열고 아카이브(AC-068) 개수가 부풀려진다.
+  assert.equal(result.wasDeceived, true);
+  assert.equal(
+    result.deceivedMoments.length,
+    1,
+    "잘린 조각은 뒤에 user 응답이 없으므로 속은 순간이 되어선 안 된다.",
+  );
+
+  // 그리고 그 1건은 **사용자가 실제로 응답한 발화**(turnIndex 1)의 다음 턴을 가리켜야 한다.
+  // 잘린 조각(turnIndex 0)에 붙으면 되감기가 엉뚱한 순간을 연다.
+  assert.equal(result.deceivedMoments[0].turnIndex, 2);
+  assert.equal(result.deceivedMoments[0].timeLabel, "20초 시점");
+
+  // 잘린 조각에 실린 수법도 "사용된 수법"으로는 집계돼야 한다 — 사기범이 실제로 썼기 때문이다.
+  assert.ok(
+    result.tacticsUsed.some((t) => t.includes("다급함")),
+    "잘린 조각이라도 그 안에서 쓰인 수법은 리포트에 남아야 한다.",
+  );
+});
+
+test("analyzeConversation(): 잘린 사기범 턴만 있고 사용자가 응답하지 않으면 속지 않은 것이다(AC-062 진입점 보호)", () => {
+  const messages = [
+    {
+      role: "scammer" as const,
+      textMasked: "지금은 정신없어서 계좌번호는 문자로 다시 보낼게.",
+      turnIndex: 0,
+      createdAtMs: SESSION_START_MS,
+    },
+    {
+      role: "scammer" as const,
+      textMasked: "여보세요? 듣고 있어? 지금 당장 도와줘야 해, 더 늦으면 큰일나",
+      turnIndex: 1,
+      createdAtMs: SESSION_START_MS + 5_000,
+    },
+  ];
+
+  const result = analyzeConversation(messages, SESSION_START_MS, WEAKENED_TACTICS);
+
+  // 사용자가 한 마디도 안 했는데 속았다고 판정하면, 속은 적 없는 세션에 되감기 진입점이
+  // 생긴다(AC-062 위반) — 이미 병합된 T70/T74가 이 불변식에 의존한다.
+  assert.equal(result.wasDeceived, false);
+  assert.equal(result.deceivedMoments.length, 0);
+});
