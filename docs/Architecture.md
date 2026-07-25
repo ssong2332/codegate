@@ -2,8 +2,10 @@
 
 Owner: architect (see AGENTS.md). Others read-only.
 Major decisions are logged in DECISIONS.md; details in adr/.
-Based on PRD Version: v1.4 · Based on UX Version: 1.10 · Last Updated: 2026-07-24
+Based on PRD Version: v1.4 · Based on UX Version: 1.11 · Last Updated: 2026-07-25
 
+> **갱신 고지(2026-07-25, T57 아키텍트 게이트 — v1.11 신규 기능 4건 / OQ-U16~U19 해소):** 기준을 **UX 1.10→1.11**로 맞춘다. **PRD v1.5 기준으로 정정(2026-07-25 후속).** 이 §15는 architect가 planner와 **병렬 실행**되던 시점에 작성돼 원문은 "PRD v1.4 유지 · AC 부재(OQ-U15 open)"로 적혀 있었으나, 같은 날 planner(T65)가 **AC-059~069를 신설해 OQ-U15는 resolved**다 — 매핑: 통화 중 문자=AC-059/060/061, 즉시 되감기=AC-062/063(AC-007 1리포트 불변식 보호 명시), 난이도=AC-064~067(AC-065가 "난이도는 어떤 안전장치도 게이팅·약화·우회하지 않는다"를 못박음 — §15.5 조립 순서 불변식과 정합), 실패 아카이브=AC-068/069. 따라서 **reviewer·QA는 이 AC들로 완료 판정이 가능하다**(§15.0.6의 "AC 신설 필요" 서술은 해소됨). 이번 갱신 범위는 신규 **§15**(OQ-U16/U17/U18/U19 확정)·DECISIONS #32~#36·**ADR-0007**(통화 중 문자 전달 모델)·**ADR-0008**(되감기 드릴 실행 모델)이며, 기존 §0~§14.9·ADR-0001~0006은 유효하다(재검증: §13.5 "프레젠테이션 레이어는 어떤 안전 판정도 게이팅하지 않는다"·§14.9.1 "부재를 판별자로 오버로드하지 않는다" 두 원칙을 §15 전반에 동형 적용).
+>
 > **갱신 고지(2026-07-24, T55 아키텍트 게이트 — generic 보이스 2인 챌린지 + 체험/발송 모드 배선):** 기준을 **PRD v1.3→v1.4 · UX 1.8→1.10**으로 맞춘다(직전까지 v1.3/1.8이라 버전 갭 존재 — 리포트에 명시). v1.3→v1.4 델타는 신규 AC-056/057/058(체험/발송 선택 상향 + 보이스 clone 자기체험 배제 + generic 보이스 2인 챌린지)·OQ-32(resolved: generic 챌린지 발신자 결과 열람=메신저식 "완료 여부만")이고, UX 1.8→1.10 델타는 T54의 D-31/32/33/34·UX-026 상향·UX-016 조건부 스킵·UX-019 3종 카피다. 이번 갱신은 신규 **§14.9**(generic 보이스 챌린지 — voiceMode 판별자 확장 + 모드 클라 배선)·DECISIONS #31에 한정하며, 기존 §0~§14.8·ADR-0005/0006은 유효하다(재검증: §14.8의 "voiceId-부재를 판별자로 오버로드하지 않는다" 원칙을 이번 clone/generic 판별에도 동형 적용). **새 ADR 없음**: 이 확장도 ADR-0005(챌린지 스코프 클론)·ADR-0006(익명 uid 접근)의 하위호환 옵셔널 증분이지 새 구조 결정이 아니다(§14.8과 동일 논리 — DECISIONS #19/#30 원칙 계승).
 >
 > **갱신 고지(2026-07-24, T47 아키텍트 게이트 — 메신저 2인 챌린지 #20):** 기준을 **PRD v1.1→v1.3 · UX 1.7→1.8**로 맞춘다(직전까지 v1.1/1.7이라 버전 갭 존재). v1.1→v1.3 델타는 순수 결정 확정(OQ-29/30/31 resolved)+신규 AC-051~055(메신저 2인 챌린지 확장)이고, UX 1.7→1.8 델타는 T46의 UF-004/005 메신저 변형·D-27/28/29다. 이번 갱신은 신규 **§14.8**(음성 없는 메신저 2인 챌린지 — 채널 인지 확장)·DECISIONS #30에 한정하며, 기존 §0~§14.7·ADR-0005/0006은 유효하다(재검증: §14.7 익명-uid 접근 모델이 채널 무관임을 코드로 확인 — §14.8.2). **새 ADR 없음**: 이 확장은 ADR-0005(챌린지 스코프 클론)·ADR-0006(익명 uid 접근)의 하위호환 옵셔널 증분이지 새 구조 결정이 아니다(중복 ADR 지양 — DECISIONS #19 원칙 계승).
@@ -700,3 +702,260 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 | UX-021 동의 랜딩(generic 보이스 수신) | `getChallengeLanding`·`consentChallenge`(오프닝 합성 generic 분기) | `challenges`·`sessions`(익명 uid·`voiceId` 부재) | AC-040/058 | §14.9.2 |
 | UX-014 통화 체험(generic 수신자) | `createRealtimeCall`(무개정 — 시나리오 voiceMode="generic"→Gemini) | `sessions`(voiceId 부재) | AC-058 | §14.9.2 |
 | UX-020 발신자 결과(완료 여부만) | `listMyChallenges`·`setChallengeResultSharing`(voiceMode 게이트) | `challenges.resultSummary`(completed만) | AC-055/OQ-32 | §14.9.3 |
+
+---
+
+## 15. v1.11 신규 기능 4건 — 통화 중 문자·즉시 되감기·난이도·실패 아카이브 (T57, UX v1.11, OQ-U16~U19)
+> **소관 UX/OQ 매핑:** UF-008/UX-027(OQ-U16) · UF-009/UX-028(OQ-U17) · UX-029(OQ-U18) · UF-010/UX-030(OQ-U19) / D-35~D-45. **⚠️ 이 절이 implementer 착수 게이트다.** 범위 밖(설계하지 않음): near-miss 개념(OQ-U20/R-8 — planner), 초급 대화 중 실시간 힌트(R-7 — D-6 반전 필요, planner), 기존 고정 `difficulty` 문자열의 **UI 라벨 문구**(OQ-U21 — planner/ux-design. §15.3.3은 **스키마 층위만** 확정한다).
+
+### 15.0 설계 요지 (다른 판단보다 우선)
+1. **기존 안전 불변식은 한 줄도 약화하지 않는다.** AC-006(상시 종료)·AC-012·AC-022/032(모의 표식)·AC-040/041/042/043(2인 4대)·AC-021(폐기)·AC-024/ADR-0004(프롬프트 클라 미노출·PII 마스킹)·**AC-007(세션당 정확히 1리포트)**·ADR-0006 A1/A2(챌린지 voiceId 격리)는 §15의 어떤 결정으로도 게이팅·우회되지 않는다. §15.5가 이 중 프롬프트 조립 순서 불변식을 **코드 레벨로** 강제한다.
+2. **신규 능력은 전부 "프레젠테이션 + 사후 학습" 층위에 둔다.** 통화 중 문자는 통화 셸 위의 오버레이(라우트 아님), 되감기는 원 세션·원 리포트를 **읽기 전용으로만** 참조하는 별도 드릴, 아카이브는 기존 `reports` 읽기 전용 파생이다. **어느 것도 대화 세션·리포트 생성 파이프라인을 재진입시키지 않는다.**
+3. **앱은 자유텍스트를 분류하지 않는다(AC-024 계승).** 통화 중 문자 도착은 **턴 경계(구조적 이벤트)** 와 **서버 소유 콘텐츠 카탈로그**로만 결정되며, 사기범 대사 내용을 문자열 매칭해 "문자 보냈다고 말했네"라고 판단하는 경로를 **어디에도 만들지 않는다**(클라·서버 공통).
+4. **부재(negative)를 판별자로 오버로드하지 않는다(§14.8.1/§14.9.1 원칙 동형).** 난이도는 명시 필드 `difficultyLevel`, 수법 묶기 키는 명시 필드 `tacticCategory`로 둔다. "값이 없으니 기본이겠지"를 안전·집계 판정의 근거로 삼지 않는다(단, **부재→기본값**이라는 하위호환 읽기 규칙은 유지 — 이는 판별이 아니라 마이그레이션 정책이다).
+5. **하위호환 옵셔널 증분만.** 기존 `sessions`·`reports`·`challenges` 문서는 **무백필**로 유효하다. 신규 컬렉션은 세션 하위 `inCallSms`, 리포트 하위 `rewindAttempts` 두 개뿐이며 둘 다 기존 쿼리(`db.collection("reports")` 최상위 조회·`updateDefenseGrade`)에 영향이 없다(서브컬렉션은 최상위 컬렉션 쿼리에 포함되지 않음).
+6. **PRD AC 부재는 architect가 대신 메우지 않는다.** §15는 UX v1.11 스펙과 재사용 AC로만 설계했다. "인증번호 문자가 P0인가", "되감기가 MVP인가" 같은 **범위·우선순위 판단은 planner 소관**(OQ-U15)이며, 이 문서는 그것이 정해지기 전에도 구현이 시작될 수 있도록 **기술 계약만** 확정한다.
+
+### 15.1 (OQ-U16) 통화 중 문자 오버레이 — 계층·신호 경로·마이크 게이팅·프롬프트 위치
+> ADR-0007. UX: UF-008·UX-027·D-35~D-38.
+
+#### 15.1.1 (a) 오버레이 계층 — 같은 라우트·같은 컴포넌트 트리의 형제 노드 (포털 불요)
+**결정: `/session/play`의 `SessionCallPage` 안에서 오버레이를 조건부 렌더하는 형제 노드로 둔다. 신규 라우트·`router.push`·별도 레이아웃·`key` 변경을 통한 재마운트를 금지한다.**
+
+- **왜 이것으로 충분한가(실측):** 실시간 세션 수명은 `GeminiVoiceSession`/`RealtimeVoiceSession` 컴포넌트의 마운트에 묶여 있다 — 오디오 컨텍스트·마이크 스트림·소켓은 그 컴포넌트의 `useEffect(..., [])` 안에서 만들어지고 cleanup에서 닫힌다(`src/lib/realtime/GeminiVoiceSession.tsx:145,222-237,439-442`). 두 세션 컴포넌트는 이미 `<main>` 최상단의 형제로 렌더된다(`src/app/session/play/page.tsx:475-501`). **형제 하나를 더 추가하는 것은 그들을 언마운트하지 않는다** — 포털(`createPortal`)을 써도 결과는 같으므로 더 단순한 조건부 렌더를 택한다(§0.1).
+- **통화 타이머·오디오 재생은 오버레이와 무관하게 계속된다(실측):** 경과 타이머 effect는 `phase`에만 의존하고(`page.tsx:206-210`), 한도 자동 종료도 `callMode/phase/elapsedSec/maxSessionMs`에만 의존한다(`page.tsx:216-228`). 오버레이 상태를 **이 두 effect의 의존성·조건에 넣지 않는다**(넣으면 통화가 멈춘다 — 이 기능의 존재 이유가 무너진다).
+- **implementer가 지켜야 할 금지 목록(위반하면 D-35가 깨짐):**
+  - `if (smsOverlayOpen) return <SmsOverlay/>;` 형태의 **early return 금지**(세션 컴포넌트가 언마운트된다).
+  - 오버레이를 세션 컴포넌트보다 **상위에서** 감싸는 래퍼 추가 금지.
+  - `<main>`의 `key`·부모 라우트 세그먼트 변경 금지.
+  - `/session/sms` 같은 신규 라우트 금지(D-35 하드 요구).
+- **AC-006(상시 종료) 강제:** 오버레이는 `role="dialog" aria-modal="true"` + 포커스 트랩이므로, 통화 셸 하단의 종료 버튼은 트랩 밖이라 **도달 불가**가 된다. 따라서 **오버레이 내부에 자체 "훈련 종료" 컨트롤을 두고 동일한 `handleEndTraining()`을 호출**한다(트랩을 푸는 방식 금지). 선례: `MessengerFakeLanding`도 다이얼로그 안에 `EndTrainingButton`을 자체 배치한다(`src/components/MessengerFakeLanding.tsx:50`).
+- **한도 도달 시:** `maxSessionMs` 자동 종료 경로가 발동하면 오버레이 상태를 먼저 `false`로 내리고 `/session/end`로 이동한다(UX-027 Failure (d) — 고지 문구가 오버레이에 가려지지 않게).
+- **링크형 재사용:** 링크 칩 탭 → 기존 `MessengerFakeLanding`을 **무개정 재사용**한다(props가 `title/onClose/onEndTraining`뿐이고 콘텐츠가 `displayText` 구동이라 landing별 저작이 없다 — `MessengerFakeLanding.tsx:12-19` 실측). 신규 랜딩 콘텐츠 저작 불요(D-37).
+
+#### 15.1.2 (b) 문자 도착 신호 — **앱 오케스트레이션 전달**(마커는 텍스트 경로 전용) + kind 3종
+**결정: 문자 도착은 "서버가 소유한 문자 카탈로그 + 턴 경계 트리거"로 앱이 전달하고, 사기범의 '문자 보냈어요' 대사는 그 순간 주입되는 1줄 지시로 유도한다(인과 역전). 실시간 음성 경로에서는 `[[SMS:id]]` 류 sentinel 마커를 쓸 수 없다.**
+
+- **왜 sentinel 마커가 실시간 경로에서 불가능한가(실측 근거, 이것이 이 결정의 출발점):** Gemini Live 경로는 **서버가 사기범 텍스트를 보는 지점이 없다.** 응답 모달리티가 오디오로 고정돼 있고(`functions/src/realtime/geminiProvider.ts:76` `responseModalities:[Modality.AUDIO]`), 클라는 오디오 청크와 전사(`outputTranscription`)만 받는다(`GeminiVoiceSession.tsx:279-321`). 전사는 종료 직전 일괄 제출된다(`page.tsx:115-124`, `functions/src/realtime/submitTranscript.ts`). 즉 모델 출력에 `[[SMS:otp-1]]`을 넣으면 서버가 제거할 기회가 없고 **모델이 그 마커를 소리 내어 읽는다** — `extractLinkMarker`(어시스턴트 완성 텍스트 스캔, `functions/src/roleplay/linkMarker.ts:27`)가 성립하는 전제(서버가 텍스트 완성본을 손에 쥔다)가 이 경로엔 존재하지 않는다.
+- **왜 function calling(Gemini Live tools)도 택하지 않는가:** 기술적으로는 가능하지만 (a) `tools: []`를 의도적으로 잠근 보안 설계를 건드리고(`geminiProvider.ts:122-123`), (b) DECISIONS #15가 기각한 function-calling 배선 복잡도를 프로바이더별로(ElevenLabs Agents는 client tools 규약이 다름) 다시 떠안으며, (c) **결정적으로 도착을 보장하지 못한다** — 모델이 도구를 안 부르면 문자가 영영 안 온다(= UF-008 Failure (a)를 그대로 남김). 확장 여지로만 남긴다(§15.6).
+- **채택 모델(양 경로 공통):**
+
+| 구성요소 | 위치 | 내용 |
+|---|---|---|
+| 문자 카탈로그 | `functions/src/scenarios/inCallSms.ts`(서버 전용) | `IN_CALL_SMS: Record<scenarioId, InCallSmsItem[]>` |
+| 트리거 규칙 | 카탈로그 항목의 `afterScammerTurns` | "사기범 발화 N턴 완료 후 도착". 시간 기반·랜덤 없음(결정론적·테스트 가능) |
+| 전달(실시간) | 클라 → `deliverInCallSms` 콜러블 | 클라가 턴 경계만 세고 호출 → 서버가 문서 write + `announceInstruction` 반환 |
+| 전달(폴백 텍스트) | `sendMessage` 내부 | 서버가 그 턴에 due 여부를 계산 → 같은 문서 write + 프롬프트에 1줄 지시 주입 |
+| 렌더링 | `onSnapshot(sessions/{sid}/inCallSms)` | **두 경로 모두 같은 컬렉션을 구독**해 렌더한다(DECISIONS #12 계승) |
+
+- **`InCallSmsItem`(콘텐츠 저작 계약, 서버 전용 — 클라에 원문 배포 안 함):**
+  `{ smsId, kind: "account"|"link"|"otp", senderLabel, body, otpCode?, linkDisplayText?, fakeLandingId?, afterScammerTurns }`
+  - **`url` 필드는 존재하지 않는다** — 링크는 `linkDisplayText`(모의 표기) + `fakeLandingId`(인앱 가짜 랜딩 참조)로만 표현한다(AC-032/045의 구조적 금지, `MessengerAttachment`와 동형).
+  - `otpCode`는 **콘텐츠에 고정된 리터럴**(런타임 난수 금지) — 결정론적 테스트 + "모의값" 불변식.
+  - `senderLabel`·`body`의 기관명·계좌 형식은 실존하지 않는 값만(AC-005/013, `SCENARIO_PROGRESSION`의 "페이로드는 가상값만" 규칙과 동일 기준).
+- **`kind`를 `MessengerAttachment`에 우겨넣지 않는 이유:** `MessengerAttachment`는 **채팅 말풍선에 붙는 첨부**(`kind:"link"`)이고, 통화 중 문자는 **발신번호·본문·도착시각을 가진 독립 메시지 객체**다. OTP형은 링크가 아니라 표시용 코드라 `displayText/fakeLandingId/harmless` 형태에 담기지 않는다. 억지 확장은 "link인데 fakeLandingId가 없는 attachment"라는 부재-오버로드를 만든다(§14.9.1이 기각한 안티패턴). **별도 타입 `InCallSmsDoc`** 을 둔다. `MessengerAttachment`는 **무변경**(메신저 채팅 전용).
+- **왜 `messages` 컬렉션에 넣지 않는가(치명적 — implementer 주의):** `analyzeConversation`은 `messages`를 turnIndex 순으로 훑으며 **`sorted[i](scammer)`와 `sorted[i+1](user)`를 짝지어** 속은 순간을 판정한다(`functions/src/report/analyzeConversation.ts:127-154`). 문자 도착을 메시지 행으로 끼워 넣으면 **이 짝짓기가 통째로 어긋나 리포트 판정이 손상된다**(AC-008/009/026 회귀). 따라서 문자는 `messages`가 아니라 **`sessions/{sid}/inCallSms` 서브컬렉션**에 둔다.
+- **`announceInstruction`(사기범이 문자 발송을 알리게 하는 1줄):** 서버가 소유하고 전달 응답으로만 내려준다. 실시간 경로는 이미 존재하는 **같은 Live 세션 텍스트 턴 주입 경로**를 재사용한다(`GeminiVoiceSession.textMessage` → `sendClientContent`, `GeminiVoiceSession.tsx:452-470`; 선례 `OPENING_TRIGGER_TURN`, 같은 파일 :82-83). 폴백 텍스트 경로는 그 턴의 시스템 프롬프트에 `turnInstruction`으로 주입한다(§15.5 순서 규칙 준수).
+- **받아들이는 트레이드오프(정직하게):** 인과가 역전된다 — "모델이 말해서 문자가 오는" 게 아니라 "앱이 문자를 보내고 모델에게 알리라고 시킨다". 그 결과 **문자만 오고 사기범이 언급하지 않는 실패**가 남을 수 있다(모델이 지시를 무시하는 경우). 대신 UX가 지목한 진짜 실패 — **"문자 보냈어요"라고 말했는데 문자가 안 오는 불일치(UF-008 Failure (a))** — 는 **구조적으로 불가능**해진다. 사용자 신고("인증번호를 불러달라는데 화면에 아무것도 없다")를 해소하는 것이 이 기능의 목적이므로 이 방향의 비대칭이 옳다. 또한 배너·aria-live·문자함은 대사와 무관하게 도달하므로 학습 가치가 보존된다(P-4 조용한 실패 금지 충족).
+- **트리거 카운팅은 프레젠테이션 층위다(안전 미게이팅).** 실시간 경로에서 "몇 번째 사기범 턴인가"를 세는 주체는 클라(`turnComplete` 이벤트, `GeminiVoiceSession.tsx:301-304`)다. 이는 §13.5의 스킨 판정과 같은 층위 — **어떤 안전 판정도 게이팅하지 않는다**(문자 내용은 서버 카탈로그에서만 나오고, 클라가 임의 `smsId`를 보내도 서버가 `scenarioId` 카탈로그 소속을 재검증한다). 위조의 최대 효과는 "자기 훈련용 모의 문자를 조금 일찍 본다"뿐이다.
+
+#### 15.1.3 (c) 자동청취(마이크) 게이팅 — 오버레이 열림 = 입력만 정지, 통화는 계속
+**결정: 오버레이가 열린 동안 마이크 입력만 정지하고, 사기범 오디오 재생·경과 타이머·세션 한도·소켓은 그대로 유지한다.**
+
+| 경로 | 구현 지점 | 규칙 |
+|---|---|---|
+| 실시간(Gemini/ElevenLabs) | `page.tsx:475-501`의 `muted` prop | `muted={muted \|\| smsOverlayOpen}` 로 전달한다. 세션 내부 `mutedRef`가 마이크 프레임 전송과 사용자 파형을 이미 억제한다(`GeminiVoiceSession.tsx:404,385`). **버튼의 `aria-pressed`는 사용자 의도(`muted`)에만 바인딩**한다 — 오버레이 때문에 "음소거 중"으로 표시되면 안 된다(사용자가 켜지 않은 상태를 켜졌다고 표기 = 근거 없는 표기). |
+| 폴백(브라우저 STT) | `page.tsx:288-295` 자동 청취 effect | 조건에 `&& !smsOverlayOpen` 추가 + 오버레이 열릴 때 `speech.stop()`. 닫히면 기존 재개 로직이 자동으로 다시 연다(추가 코드 불요). |
+| 재생·타이머 | `page.tsx:206-228`, `<audio>` 노드 | **손대지 않는다.** 오버레이 상태를 이 경로 어디에도 넣지 않는다(§15.1.1). |
+
+- 근거: 오버레이를 보는 동안 사용자의 혼잣말·주변 소음이 발화로 오인되면 사기범이 엉뚱하게 반응해 몰입이 깨진다. 반대로 재생·타이머를 멈추면 "통화가 살아 있다"는 이 기능의 전부가 사라진다(UX-027 Business Rules 하드 요구).
+
+#### 15.1.4 (d) 프롬프트 지시 위치 — 공유 조립 블록(조건부), 시나리오별 저작 아님
+**결정: 문자 관련 지시는 `promptAssembly.ts`의 공유 블록으로 두고, 해당 시나리오에 문자 카탈로그가 있을 때만 켠다. 13개 프롬프트 파일을 각각 고치지 않는다.**
+
+- **⚠️ 기존 프롬프트와의 정면 충돌(반드시 함께 고칠 것 — 안 고치면 기능이 프롬프트에 의해 무력화된다):** 현재 `SCENARIO_PROGRESSION`에는
+  > "**이 앱 화면에 없는 것을 가리키지 않는다.** 참가자가 실제로 보거나 누를 수 없는 것(**문자로 방금 보낸 인증번호**, 방금 뜬 팝업 …)을 '지금 화면에 뜬 걸 불러 달라'는 식으로 요구하지 않는다"
+  라는 규칙이 있다(`functions/src/roleplay/promptAssembly.ts:45`). 이 규칙은 UX-027이 없던 시절 "사용자가 볼 수 없는 것을 요구해 몰입이 깨진다"는 정확한 이유로 들어갔다. **UX-027은 그 전제를 뒤집는다**(인증번호가 실제로 화면에 도착한다 — D-38). 이 문장을 그대로 두면 모델은 인증번호를 불러달라고 요구하지 않아 **기능을 만들어도 발동하지 않는다.**
+  - **수정 규칙:** 이 항목을 무조건형에서 **조건형**으로 바꾼다 — "참가자가 볼 수 없는 것은 가리키지 않는다. **단, 이 훈련에서 실제로 문자로 도착한 내용(인증번호·계좌·링크)은 참가자가 화면에서 볼 수 있으므로 요구해도 된다.**" 조건 문구는 문자 카탈로그가 있는 시나리오에서만 켠다(카탈로그 없는 시나리오는 기존 문장 그대로 — 회귀 없음).
+- **조립 형태:** `buildSystemPrompt(prompt, opts)` 의 `opts.inCallSmsEnabled: boolean`(세션 지시 블록)과 `opts.turnInstruction?: string`(그 턴의 `announceInstruction`). 둘 다 **`guardrailPreamble` 앞**에 삽입한다(§15.5 — 뒤에 붙이면 D-42·AC-024 방어가 밀린다).
+
+### 15.2 (OQ-U17) 즉시 되감기 — 원 세션 미재개·별도 1회성 드릴·전용 판정 콜러블
+> ADR-0008. UX: UF-009·UX-028·D-39/D-40.
+
+#### 15.2.1 (a) 실행 모델 — 원 세션을 재개하지 않는다 (UX 권고 채택)
+**결정: 되감기는 원 세션·원 리포트를 읽기 전용으로만 참조하는 별도 1회성 평가다. 세션 상태(`status`·`turnCount`·`answeredAt`·`channel`)를 어떤 경우에도 쓰지 않으며, 새 세션도 만들지 않는다.**
+
+- 근거: 원 세션은 이미 `status:"ended"`이고 폐기 트리거가 돌았다(ADR-0003 — 음성·Storage 없음). 재개하려면 종료·폐기·리포트 생성을 되돌려야 하는데 그 순간 **AC-007(세션당 정확히 1리포트)** 과 AC-021(즉시 폐기)이 동시에 흔들린다. 되감기는 **새 사기 대사를 생성하지 않는 단발 평가**(UX-028 Business Rules "한 턴 드릴 — 대화가 계속되는 것이 아니다")라 대화 세션이라는 그릇 자체가 필요 없다.
+- 새 세션을 만드는 안도 기각: 세션이 늘면 `updateDefenseGrade`의 `sessionCount`·`defenseGrade`가 오염되고(`generateReportCore.ts:90-95`), 히스토리(UX-012)에 "훈련하지 않은 세션"이 쌓인다.
+
+#### 15.2.2 (b) 저장 위치 — `reports/{reportId}/rewindAttempts/{attemptId}` (AC-007 불변식 보호)
+**결정: 되감기 시도는 리포트 **하위 서브컬렉션**에 기록한다. `reports/{reportId}` 문서 필드는 **한 글자도 수정하지 않는다**.**
+
+| 금지(불변식) | 왜 |
+|---|---|
+| `reports/{id}` 문서의 `wasDeceived`·`deceivedMoments`·`tacticsUsed`·`preventionAdvice` update | AC-007·AC-008/009 — 리포트는 세션 종료 시점의 사실이며 사후 연습으로 바뀌지 않는다 |
+| 두 번째 `reports/*` 문서 생성 | AC-007 "세션당 정확히 1개" — reportId=sessionId 멱등 키(`generateReportCore.ts:28-35`)를 우회하는 어떤 경로도 만들지 않는다 |
+| `updateDefenseGrade` 호출 | 방어등급은 실제 훈련 세션 결과만 반영(연습 반복으로 등급이 올라가면 지표가 무의미) |
+| `sessions/*` write | 종료된 세션은 불변 |
+
+- **최상위 쿼리 무영향(실측 근거):** `db.collection("reports")`(등급 재계산 `generateReportCore.ts:91`, 아카이브 §15.4)는 **최상위 문서만** 반환하며 서브컬렉션 문서를 포함하지 않는다(collection-group 쿼리가 아님). 따라서 시도 기록이 아무리 쌓여도 기존 집계가 오염되지 않는다.
+- **저장 필드:** `{ momentTurnIndex, answerMasked, verdict, reason, judgedBy, createdAt }`. 사용자 답변은 **`maskPII` 적용 후에만** 저장한다(ADR-0004 — 원문 미저장 불변식은 되감기에도 그대로).
+- **왜 저장하는가(비용 대비):** UX-028 Secondary Actions가 "같은 순간 한 번 더 답해보기(횟수 제한 없음)"를 요구하고, UX-030이 반복 패턴 인지를 목적으로 한다 — "몇 번 다시 해봤는가"는 그 흐름의 자연스러운 산출이다. 문서 1개당 수백 바이트 수준이라 비용은 무시할 만하다. 서버측 남용 방지로 **리포트당 시도 50건 상한**(초과 시 `resource-exhausted`)만 둔다(UX의 "횟수 제한 없음"은 사용자 체감 수준의 요구이며, 50건은 학습 흐름에서 도달하지 않는다).
+
+#### 15.2.3 (c) 판정 주체 — 신규 콜러블 `judgeRewindAnswer`(LLM 1차 + 규칙 폴백)
+**결정: `analyzeConversation`을 그대로 재사용하지 않고 전용 콜러블을 신설하되, 그 안에서 **기존 규칙 패턴을 폴백 판정기로 재사용**한다.**
+
+- **왜 `analyzeConversation` 재사용이 부적합한가(실측):** 이 함수는 (i) **대화 전체**를 훑어 scammer/user 쌍을 짝짓는 구조라 단일 답변 1건에 맞지 않고(`analyzeConversation.ts:118-161`), (ii) 산출이 **2치(속았다/아니다)** 라 UX가 요구한 3단계 중 "판단하기 어렵습니다"(기권)를 표현할 수 없으며, (iii) 저항 우선 규칙이 "그 순간의 수법 맥락"을 전혀 보지 않는다.
+- **판정 계약:** `judgeRewindAnswer({ reportId, momentIndex, answerText }) → { verdict: "good"|"risky"|"unclear", reason, correctAction, judgedBy: "llm"|"rule" }`
+  - 1차: LLM 판정. 프롬프트는 **전용 빌더**(`functions/src/rewind/judgePrompt.ts`)로 조립하며 **페르소나·`weakenedTactics` 원문을 넣지 않는다**(역할극 재개가 아니라 평가이므로 — AC-005/013). 입력은 `moment.tactic`·`moment.correctAction`·그 순간의 마스킹된 사기범 대사 + `wrapUserInputAsData(answerText)`(AC-024 인젝션 방어 계승).
+  - 2차(폴백): LLM이 Mock이거나(키 미설정 — `functions/src/llm/index.ts`) 실패·타임아웃이면 **규칙 판정**. `analyzeConversation.ts`의 `RESISTANCE_PATTERN`/`COMPLIANCE_PATTERN`을 export해 재사용한다: 저항 매치→`good`, 순응 매치→`risky`, 둘 다 아님→`unclear`. (저항 우선순위는 원본과 동일하게 유지 — 두 곳에서 규칙이 갈라지지 않게 **패턴 상수를 복제하지 말고 export**할 것.)
+  - **판정 불가여도 `correctAction`은 항상 반환한다**(UX Judge-failed 상태의 학습 최소 보장). `unclear`는 오류가 아니라 정상 결과값이다.
+- **`verdict` 3값의 UI 라벨 매핑(고정):** `good`="잘 대응했습니다" / `risky`="아직 위험합니다" / `unclear`="판단하기 어렵습니다". 값 자체는 색이 아닌 텍스트로 표기(UX Accessibility).
+- **입력 상한(UX Validation "구체 수치는 architect"):** `answerText` **500자**(초과 시 `invalid-argument`; 클라는 입력 단계에서 사전 차단 — P-5). 빈 문자열 거부.
+
+#### 15.2.4 (d) 음성 입력 — v1 미제공(텍스트 전용)
+**결정: 되감기 답변은 텍스트 입력만 제공한다.** 근거: 되감기는 리포트 화면에서 진입하는 **통화 종료 후** 화면이라 마이크 스트림이 이미 닫혀 있고(세션 컴포넌트 언마운트), 한 턴 드릴을 위해 마이크 재권한 프롬프트를 띄우는 비용이 학습 이득보다 크다(UX-028도 "텍스트 기본·음성 선택"으로 이미 텍스트를 기본에 둔다). 확장 시 기존 `useSpeechRecognition` 훅을 그대로 붙이면 되며 콜러블 계약은 무변경이다.
+
+#### 15.2.5 2인(사용자2) 취급
+- 되감기 콜러블은 `report.uid === request.auth.uid`만 검증한다 — 사용자2는 익명 uid로 자기 리포트를 소유하므로(§14.7/ADR-0006) **그대로 동작**한다. 사용자1은 사용자2 리포트에 접근할 수 없다(uid 격리, §14.7.2) — 되감기가 그 격리를 새로 뚫지 않는다.
+- **AC-042 순서(강제 정체공개 → 강제 리플레이 → 그 다음 되감기)는 클라 노출 조건으로 강제**한다(UX-007/UX-018과 동일 층위). 서버는 순서를 게이팅하지 않는다 — 기존 UX-018 강제도 같은 층위이므로 여기서만 서버 게이트를 신설하면 일관성이 깨지고, 되감기는 안전 단계가 아니라 사후 학습 단계다.
+
+### 15.3 (OQ-U18) 난이도 — 공통 모디파이어 블록 + 명시 필드 `difficultyLevel`
+> UX: UX-029·D-41/D-42/D-43.
+
+#### 15.3.1 (a) 프롬프트 모델 — 공통 모디파이어 블록 1곳 (시나리오별 3벌 저작 기각)
+**결정: 시나리오 프롬프트는 그대로 두고, `promptAssembly.ts`에 공통 `DIFFICULTY_MODIFIERS` 블록을 얹는다. 13개 시나리오 × 3 = 39벌 저작을 하지 않는다.**
+
+- 근거: `CONVERSATION_STYLE`·`SCENARIO_PROGRESSION`이 **이미 이 패턴**이다(모든 시나리오·모든 경로가 조립 함수 하나를 공유 — `promptAssembly.ts:12-13` 주석 근거). 39벌은 콘텐츠 유지비뿐 아니라 **드리프트 위험**(한 벌만 고쳐 안전 문구가 빠지는 사고)을 3배로 만든다.
+- **`intermediate`는 블록을 내보내지 않는다(기준선).** 현행 프롬프트 = 중급이라는 뜻이며, 그 결과 **난이도 미지정 기존 세션의 프롬프트 문자열이 한 글자도 바뀌지 않는다**(회귀 위험 0, 기존 `promptAssembly.test.ts` 무개정 통과).
+- `beginner`/`advanced` 블록이 바꾸는 것과 바꾸지 않는 것(D-42 문면을 프롬프트 요건으로 옮긴 것):
+
+| | beginner | advanced |
+|---|---|---|
+| 바꾼다 | 수법을 **눈에 띄게** 쓴다(전형적 문구·서두른 요구·어색한 근거), 압박 강도 낮춤, 상대가 의심하면 쉽게 물러섬 | 압박 강도·요구 도달 속도 상향, 수법을 자연스러운 대화에 **은밀히** 섞음, 의심에 침착히 해명 |
+| **절대 바꾸지 않는다** | 무해화 경계(실계좌·실링크·실행 정보 미노출, AC-005/013/032/033), 가드레일 프리앰블, 요구는 반드시 일어난다(`SCENARIO_PROGRESSION`) | 동일 — **"고급 = 더 진짜 같은 압박"이지 "고급 = 더 진짜에 가까운 위험 정보"가 아니다** |
+
+- **강제 수단은 문구가 아니라 조립 순서다 → §15.5.**
+
+#### 15.3.2 (b) 필드 — `difficultyLevel`(신규 명시 필드), `difficulty`(기존 산문)와 **이름을 겹치지 않는다**
+**결정: 사용자가 고르는 축은 `difficultyLevel: "beginner"|"intermediate"|"advanced"`라는 **새 이름**으로 둔다. 시나리오 메타의 기존 `difficulty: string`(산문)은 **손대지 않는다**.**
+
+| 문서 | 필드 | 규칙 |
+|---|---|---|
+| `sessions/{sid}` | `difficultyLevel?` | 부재→`intermediate`. `createSession` 요청의 옵셔널 값을 서버가 enum 검증 후 기록 |
+| `challenges/{cid}` | `difficultyLevel?` | 부재→`intermediate`. `createChallenge` 요청에서 기록 → `consentChallenge`가 **사용자2 체험 세션에 복사**한다(프롬프트는 세션 단위로 조립되므로 복사하지 않으면 발신자 선택이 소실된다) |
+| `reports/{rid}` | `difficultyLevel?` | 생성 시 세션에서 역정규화(§15.4.1 아카이브 표기용) |
+| `scenarios` 메타 | `difficulty`(기존) | **무변경**(AC-002 유지). 삭제·리네임하지 않는다 |
+
+- **왜 같은 이름 `difficulty`를 재사용하지 않는가:** 기존 값은 "중간 — 감정적 압박이 강한 편입니다"처럼 **성향·심리적 부담 설명**이고(`functions/src/scenarios/publicMeta.ts:52`), 새 값은 사용자가 고르는 **강도 enum**이다. 한 이름에 두 의미를 얹으면 §14.8.1/§14.9.1이 반복해 기각한 오버로드가 된다. 이름을 분리하면 기존 콘텐츠·미러 드리프트 테스트(`scenarios.test.ts`)·AC-002가 **전부 무변경**으로 유지된다.
+- **UI에서 두 표기를 어떻게 부를지(라벨 문구)는 planner/ux-design 소관(OQ-U21)** — 이 절은 스키마 층위만 확정한다.
+- **폴백:** 서버는 값이 없거나 enum 밖이면 **`intermediate`로 확정**한다(조용한 임의 난이도 진행 금지 — UX Failure). 클라는 하류로 전달되지 않은 예외 상황에서 "중급으로 진행합니다" 1줄을 표시한다(침묵 실패 금지).
+
+#### 15.3.3 조립 경로 — 3개 호출부 전부에 전달 + ElevenLabs 경로의 구조적 한계(정직 고지)
+`buildSystemPrompt`는 세 곳에서 호출된다. **한 곳이라도 빠지면 난이도가 그 경로에서만 무시된다:**
+
+| 호출부 | 파일:줄 | 난이도 출처 |
+|---|---|---|
+| 텍스트 턴(sendMessage) | `functions/src/roleplay/index.ts:134` | `session.difficultyLevel` |
+| 오프닝 대사 | `functions/src/roleplay/openingLine.ts:56` | `createSession`이 인자로 전달(세션 문서 write 전이므로 요청값 사용) |
+| Gemini Live 토큰 | `functions/src/realtime/geminiProvider.ts:61` | `RealtimeCallInput`에 `difficultyLevel` 추가 → `createRealtimeCall`이 세션 문서에서 읽어 전달 |
+
+- **⚠️ ElevenLabs 실시간 경로(= clone 시나리오 = 2인 clone 챌린지)에는 프롬프트 주입 지점이 없다.** 프롬프트가 **에이전트 쪽에 저장**돼 있고 클라 오버라이드로 프롬프트를 넘기는 것은 ADR-0004 위반이라 금지돼 있다(`functions/src/realtime/agentMap.ts:3-11`, `realtime/types.ts:15-19`). 따라서:
+  - **v1 기본:** 이 경로에서 난이도는 **적용되지 않는다**. 서버는 `createRealtimeCall` 응답에 **`difficultyApplied: boolean`** 을 실어 이 사실을 명시한다 — 클라는 적용되지 않은 난이도를 배지로 **표기하지 않는다**(근거 없는 표기 금지. 조용한 미적용 금지).
+  - **확장 경로(코드 변경 없이 설정만):** `ELEVENLABS_AGENT_IDS`의 항목 형식을 `scenarioId@difficultyLevel:agentId`까지 허용하도록 `parseAgentMap`을 확장하고, 난이도별 에이전트가 매핑돼 있으면 그것을, 없으면 기존 기본 에이전트를 쓰며 `difficultyApplied`를 그에 맞춰 반환한다(프롬프트는 여전히 에이전트 쪽 — ADR-0004 무변경).
+
+#### 15.3.4 (d) 초급 사전 브리핑 콘텐츠 — `weakenedTactics`의 **라벨만** 파생, 서버 콜러블로 노출
+**결정: 신규 콘텐츠를 저작하지 않고 `weakenedTactics`에서 `extractTacticLabel`로 라벨만 뽑아 제공한다. 설명부·인용구(flavor)는 어떤 경우에도 클라로 내보내지 않는다.**
+
+- 계약: `getBeginnerBriefing({ scenarioId }) → { signals: string[] }`(인증 필요). 예: `["긴급성 조성","확인 절차 차단","개인정보 직접 요구"]`.
+- **ADR-0004 정합 근거:** 노출되는 것은 **수법 라벨**뿐이며, 이미 리포트가 같은 값을 `tacticsUsed`로 클라에 보여준다(`analyzeConversation.ts:133` → `extractTacticLabel`). 페르소나·대사 예시(인용구)·가드레일 원문은 서버에 그대로 남는다. 사전 노출이라는 점만 새로우며 이는 초급의 학습 설계 자체(D-43)다.
+- **대화 중 실시간 표시는 하지 않는다**(D-6 유지) — 브리핑은 세션 **시작 전** 화면(UX-029)에서만 소비된다. 실시간 판정 파이프라인은 신설하지 않는다.
+
+#### 15.3.5 (e) 난이도는 리포트 판정에 영향을 주지 않는다
+**결정: `analyzeConversation`·`buildPreventionAdvice`·`computeDefenseGrade`는 난이도를 입력으로 받지 않는다(시그니처 무변경).** 근거: 판정 기준이 난이도마다 달라지면 실패 아카이브(§15.4)의 누적 비교("이 수법에 3번 넘어갔습니다")가 서로 다른 잣대의 합이 되어 무의미해진다. 난이도는 **표기**로만 리포트·리플레이·아카이브에 흐른다(P-22).
+
+### 15.4 (OQ-U19) 실패 아카이브 — 전수 조회 + 수법 카테고리 정규화
+> UX: UF-010·UX-030·D-44/D-45.
+
+#### 15.4.1 (a) 쿼리 방식 — 본인 `reports` 페이지 조회 후 클라에서 평탄화 (역정규화 컬렉션 기각)
+**결정: 별도 "속은 순간" 컬렉션을 만들지 않는다. 기존 `reports`를 `uid + createdAt desc`로 페이지 조회하고 클라가 `deceivedMoments`를 평탄화한다. 대신 **아카이브 카드가 필요로 하는 세션 메타를 리포트에 역정규화**한다.**
+
+- **신규 Firestore 인덱스 불요(실측):** 필요한 인덱스 `reports: uid ASC + createdAt DESC`가 **이미 존재한다**(`firestore.indexes.json:11-18`, Database.md §Indexes). 추가 인덱스·`collectionGroup` 설정 없음.
+- **리포트 역정규화 필드(신규 옵셔널):** `scenarioId?`·`channel?`·`difficultyLevel?`·`challengeId?`. 없으면 아카이브가 카드 1장을 그리기 위해 세션 문서를 **항목 수만큼 추가 read**해야 한다(N+1). 생성 시점에 `session`을 이미 읽고 있으므로(`generateReportCore.ts:23`) 비용은 0에 가깝다. 시나리오 **제목**은 역정규화하지 않는다 — `scenarioId`로 클라의 `PUBLIC_SCENARIOS`에서 얻을 수 있다(콘텐츠 수정 시 과거 카드도 함께 갱신되는 편이 옳다).
+- **왜 역정규화 컬렉션을 기각하는가:** (i) 개인 사용자의 리포트 수는 수십 건 규모라 성능 이득이 없다, (ii) 같은 사실이 두 곳에 저장되면 리포트 삭제·보존 정책이 생겼을 때 **고아 레코드가 남는다**(= 폐기 불변식 AC-021 문화와 어긋남), (iii) 쓰기 경로가 하나 늘어나면 사용자2 데이터 유입 같은 사고 표면이 늘어난다. 규모가 실제로 문제가 되면 그때 캐시를 얹는 편이 되돌리기 쉽다.
+- **(c) 페이지네이션:** **리포트 50건 단위**로 `startAfter(createdAt, __name__)` 커서 페이징 → 클라가 각 리포트의 `deceivedMoments`를 순간 카드로 펼친다. "더 보기"는 다음 50건. **정직성 요건:** 아직 안 불러온 페이지가 있으면 "수법별 묶기"의 개수는 **불러온 범위의 집계**이므로 그룹 헤더가 이를 드러내야 한다(문구는 ux-design 소관 — §15.7 잔여 항목). 개인 규모에서 첫 페이지가 전부인 경우가 대부분이라 실질 영향은 작다(추정 — 실사용 데이터로 확인 필요).
+- **(d) 수명:** 아카이브 항목은 **원 리포트와 정확히 같은 수명**을 갖는다(파생일 뿐 별도 저장이 없으므로). 리포트 보존·삭제 정책이 신설되면 아카이브는 **자동으로** 따라간다 — 이것이 (a)를 택한 이유 중 하나다.
+
+#### 15.4.2 (b) "수법별 묶기" 그룹 키 — `tacticCategory` 정규화 (자유 문자열 그대로 두지 않는다)
+**결정: 리포트 생성 시점에 `tactic` 라벨을 고정 카테고리 enum으로 정규화해 `DeceivedMoment.tacticCategory?`에 함께 저장한다. 묶기 키는 이 필드이며, 표시 문구는 기존 `tactic` 원문을 그대로 쓴다.**
+
+- **문제(실측):** `tactic`은 시나리오 콘텐츠의 `weakenedTactics` 라벨에서 온다(`analyzeConversation.ts:143` → `extractTacticLabel`). 같은 수법이 시나리오마다 다른 이름이다 — 긴급성: `"긴급성 조성"`(card/courier/institutional) · `"다급함 조성"`(grandchild/family) · `"마감 압박"`(loan) · `"촉박한 결정 압박"`(kidnapping); 확인 차단: `"확인 절차 차단"` · `"확인 차단"` · `"확인 전화 차단 유도"` · `"원격 확인 차단"`. **정규화 없이는 "이 수법에 3번 넘어갔습니다"가 "1번+1번+1번"으로 흩어져 이 화면의 존재 이유가 사라진다.**
+- **카테고리 enum(고정 10종):** `urgency` · `authority` · `affection` · `verification_block` · `payment_demand` · `personal_info_demand` · `link_or_install` · `intimidation` · `benefit_lure` · `other`
+- **매핑은 순서 있는 규칙표**(`functions/src/report/tacticCategory.ts`, 순수 함수 — `sessionLimits`/`analyzeConversation`과 동일 관례). **위에서 먼저 매치하는 행이 이긴다**(라벨에 두 단어가 함께 나오는 경우가 있으므로 순서가 load-bearing):
+
+| 순위 | 카테고리 | 라벨 매칭(정규식 취지) |
+|---|---|---|
+| 1 | `payment_demand` | 송금·이체·입금·상환·결제·계좌·상품권·수수료·보증금·통관비 |
+| 2 | `personal_info_demand` | 주민번호·카드번호·비밀번호·인증번호·개인정보·신원정보·본인확인 요구 |
+| 3 | `link_or_install` | 링크·클릭·설치·앱·URL |
+| 4 | `verification_block` | 확인 차단/절차 차단/재확인 차단·비밀 유지·신고 차단·전화 끊음 저지·고립 |
+| 5 | `urgency` | 긴급·다급·마감·촉박·시간·속사포 |
+| 6 | `intimidation` | 위협·협박·불이익·경고·명령조·냉담 |
+| 7 | `authority` | 권위·기관·수사·경찰·공공·정당성 |
+| 8 | `affection` | 가족·애정·죄책감·친분·비밀(가족 대상)·패닉 |
+| 9 | `benefit_lure` | 이익·혜택·지원금·유혹 |
+| 10 | `other` | 위 어디에도 안 맞음 |
+
+- **드리프트 방지 테스트(필수):** 13개 시나리오의 **모든 `weakenedTactics` 라벨**을 매핑에 통과시켜 **`other`로 떨어지는 라벨이 0건**임을 단언하는 테스트를 둔다. 새 시나리오·라벨이 추가되면 이 테스트가 먼저 깨져 규칙표 갱신을 강제한다(콘텐츠와 집계가 조용히 어긋나는 것을 구조적으로 막음 — `scenarios.test.ts`의 미러 드리프트 탐지와 같은 발상).
+- **하위호환:** 기존 리포트는 `tacticCategory`가 없다 → 아카이브는 **`tacticCategory ?? tactic`(원문 문자열)** 을 키로 쓴다. 과거 기록은 예전처럼 흩어지지만 새 기록부터 정확히 묶인다(무백필 원칙). 백필이 필요하면 별도 1회성 스크립트(범위 밖).
+- **부수 정리(권장, 별건 아님):** `pickCorrectAction`도 지금 자체 키워드 매핑을 갖고 있다(`analyzeConversation.ts:166-183`). 이를 `tacticCategory` 기반으로 바꾸면 매핑이 한 곳으로 모인다. **동작이 바뀌지 않음을 기존 테스트로 확인한 뒤에만** 하고, 아니면 손대지 않는다(요청되지 않은 리팩터 금지).
+
+#### 15.4.3 사용자2(익명) 데이터 제외 — 어디서 보장되는가
+1. **1차(구조적, 이미 성립):** 사용자2 체험 세션의 리포트는 **익명 uid 소유**다(§14.7/ADR-0006). 아카이브 쿼리는 `where("uid","==",request.auth.uid)` 하나뿐이므로 **사용자1의 조회 결과에 애초에 들어오지 않는다** — 규칙(`firestore.rules`)이 같은 조건을 서버측에서도 강제한다(Database.md §Security Rules). 이것이 AC-043/AC-055를 이미 만족하는 주 방어다.
+2. **2차(하드닝, 신규):** 리포트에 역정규화하는 `challengeId?`를 이용해 **아카이브는 `challengeId`가 있는 리포트를 제외**한다. 이유: 익명 사용자2가 자기 브라우저에서 아카이브에 도달할 경로는 없지만(계정·내비 부재), 장래 "익명 세션 승격" 같은 기능이 생기면 챌린지 실패 이력이 누적 화면에 섞일 수 있다. 값이 없어 셀 자체가 비는 §14.8.3의 store-nothing 방어와 같은 벨트+멜빵이다.
+3. **금지:** 사용자1이 사용자2의 순간 데이터를 보는 경로를 **어떤 형태로도 만들지 않는다**(AC-043/055 — UX가 "협상 대상이 아니다"라고 명시). 발신자 결과는 여전히 `challenges.resultSummary`뿐이다(§14.8.3/§14.9.3).
+
+### 15.5 프롬프트 조립 순서 불변식 — D-42를 코드로 강제한다 (⚠️ 기존 위반 1건 포함)
+**규칙: `buildSystemPrompt`가 반환하는 문자열의 마지막 블록은 **언제나** `guardrailPreamble`이다. 난이도 모디파이어·문자 지시·턴 지시 등 모든 추가 블록은 그 **앞**에 삽입되어야 하며, 호출부가 반환값 뒤에 문자열을 이어 붙이는 것을 금지한다.**
+
+- **왜:** 안전 지침이 뒤에 올수록 모델이 앞선 지침보다 우선해 따르는 경향이 있어 현행 조립이 가드레일을 맨 뒤에 두고 있다(`functions/src/roleplay/promptAssembly.ts:52-54` 주석, 테스트로 고정 — `functions/src/roleplay/__tests__/promptAssembly.test.ts:18`). 난이도(특히 `advanced`) 블록이 가드레일 뒤로 밀리면 **D-42(난이도는 안전장치를 게이팅하지 않는다)가 코드 레벨에서 깨진다.**
+- **⚠️ 이미 존재하는 위반(implementer가 함께 고칠 것):** `functions/src/roleplay/openingLine.ts:56`이
+  `systemPrompt: buildSystemPrompt(scenarioPrompt) + OPENING_TURN_INSTRUCTION`
+  로 **가드레일 뒤에 지시를 이어 붙이고 있다.** 지금은 그 지시가 안전과 무관해 실질 피해가 관찰되지 않았지만(추정 — 라이브 검증된 바 없음), **난이도 블록을 같은 방식으로 붙이면 그 즉시 D-42 위반이 된다.** 시그니처를 `buildSystemPrompt(prompt, opts?: { difficultyLevel?, inCallSmsEnabled?, turnInstruction? })`로 확장하고 `OPENING_TURN_INSTRUCTION`도 `turnInstruction`으로 옮겨 **연결(+) 호출을 제거**한다.
+- **확정 조립 순서:**
+  1. `personaPrompt`
+  2. `[사용 가능한 수법(weakenedTactics) …]`
+  3. `CONVERSATION_STYLE`
+  4. `SCENARIO_PROGRESSION`(문자 카탈로그가 있으면 "화면에 없는 것" 항목이 조건형으로 대체됨 — §15.1.4)
+  5. `DIFFICULTY_MODIFIERS[difficultyLevel]`(intermediate이면 없음)
+  6. `turnInstruction`(오프닝 지시 / 문자 announce 지시 등, 있을 때만)
+  7. **`guardrailPreamble` — 항상 마지막**
+- **회귀 방어 테스트(필수 3건):** ① 세 난이도 전부에서 `guardrailPreamble`이 문자열의 끝인지, ② `advanced` 블록이 무해화 문구(`SCENARIO_PROGRESSION`의 "페이로드는 가상값만")를 제거하지 않는지, ③ `intermediate`의 출력이 옵션 미전달 시 출력과 **완전히 동일**한지(회귀 0 보장).
+
+### 15.6 implementer 갭 (놓치기 쉬운 지점 — 전부 실측 근거 있음)
+| # | 갭 | 근거 | 안 고치면 생기는 일 |
+|---|---|---|---|
+| G1 | **`SCENARIO_PROGRESSION`의 "화면에 없는 것을 가리키지 않는다"가 인증번호 요구를 금지한다** | `functions/src/roleplay/promptAssembly.ts:45` | UX-027을 다 만들어도 사기범이 인증번호를 요구하지 않아 기능이 발동하지 않는다(§15.1.4) |
+| G2 | **`openingLine.ts:56`이 가드레일 뒤에 지시를 이어 붙인다** | 같은 파일 :56 vs `promptAssembly.ts:52-54` | 난이도 블록을 같은 방식으로 붙이면 D-42가 코드 레벨에서 깨진다(§15.5) |
+| G3 | **문자를 `messages`에 넣으면 리포트 판정이 손상된다** | `analyzeConversation.ts:127-154`(scammer i ↔ user i+1 짝짓기) | 속은 시점 오판정·`tacticsUsed` 유실(AC-008/009/026 회귀) — 반드시 별도 서브컬렉션(§15.1.2) |
+| G4 | **실시간 경로엔 사기범 텍스트를 서버가 보는 지점이 없다** | `geminiProvider.ts:76`, `GeminiVoiceSession.tsx:279-321`, `submitTranscript.ts` | `[[SMS:…]]` 마커를 넣으면 **모델이 소리 내어 읽는다**(§15.1.2) |
+| G5 | **`buildSystemPrompt` 호출부가 3곳** | `roleplay/index.ts:134`·`openingLine.ts:56`·`geminiProvider.ts:61` | 한 곳만 고치면 "텍스트는 난이도가 먹는데 통화는 안 먹는" 비대칭이 생긴다(§15.3.3) |
+| G6 | **ElevenLabs 경로엔 프롬프트 주입 지점이 없다** | `agentMap.ts:3-11`, `realtime/types.ts:15-19` | 난이도 배지를 표시하면서 실제로는 적용 안 되는 "근거 없는 표기" — `difficultyApplied:false`로 명시할 것(§15.3.3) |
+| G7 | **`RESISTANCE_PATTERN`/`COMPLIANCE_PATTERN`이 모듈 private** | `analyzeConversation.ts:69,105` | 되감기 폴백 판정이 패턴을 복제하면 두 곳이 갈라진다 — **export해서 공유**할 것(§15.2.3) |
+| G8 | **`reports`에 `scenarioId`/`channel`이 없다** | `functions/src/shared/types.ts:197-206` | 아카이브 카드가 항목마다 세션을 추가 read(N+1)하거나 채널·난이도를 못 그린다(§15.4.1) |
+| G9 | **`challenges.difficultyLevel`을 `consentChallenge`가 세션에 복사하지 않으면 소실** | 프롬프트는 세션 단위 조립(§15.3.3) | 발신자가 고른 고급이 수신자 통화에 전혀 반영되지 않는다(§15.3.2) |
+| G10 | **오버레이를 early-return으로 렌더하면 통화가 끊긴다** | `page.tsx:475-501` 형제 렌더 구조, `GeminiVoiceSession.tsx:145,439-442` cleanup | D-35(이 기능의 전부)가 깨진다(§15.1.1) |
+| G11 | **오버레이 포커스 트랩이 종료 버튼을 가둔다** | 종료 컨트롤은 통화 셸 하단(`page.tsx:836-846`) | AC-006 위반 — 오버레이 안에 자체 종료 컨트롤을 둘 것(§15.1.1) |
+| G12 | **`deliverInCallSms`가 `smsId` 소속을 재검증하지 않으면 임의 문자 주입 경로가 된다** | 클라가 호출하는 콜러블 | 다른 시나리오의 문자가 뜬다 — `IN_CALL_SMS[session.scenarioId]` 소속 + 세션 소유권 검증 필수(§15.1.2) |
+| G13 | **되감기가 `reports/{id}` 문서를 update하면 AC-007이 깨진다** | `generateReportCore.ts:28-35` 멱등 키 | 리포트가 사후 연습으로 변조된다 — 서브컬렉션 append만(§15.2.2) |
+| G14 | **`tacticCategory` 없이 묶으면 기능이 무력화된다** | 시나리오별 라벨 편차(§15.4.2 실측 목록) | "3번 넘어갔습니다"가 "1+1+1"로 흩어진다 |
+
+### 15.7 UX Traceability 증분 (화면 → 콜러블/컬렉션)
+| Screen/Flow | 라우트/컴포넌트 | 콜러블 | Firestore | 재사용 AC | §15 매핑 |
+|---|---|---|---|---|---|
+| UF-008 / UX-027 통화 중 문자 오버레이 | `/session/play`(같은 라우트 내 다이얼로그) + `MessengerFakeLanding` 재사용 | `deliverInCallSms`·`recordInCallSmsEvent` | `sessions/{sid}/inCallSms` | AC-045/032/033/022/006/019/026 | §15.1 |
+| UF-009 / UX-028 즉시 되감기 | `/report/rewind`(신규 화면, 통화 아님) | `judgeRewindAnswer` | `reports/{rid}`(read) · `reports/{rid}/rewindAttempts`(write) | AC-026/008/009/038/**007**/024 | §15.2 |
+| UX-029 난이도 선택 | `/scenarios/difficulty`(드릴다운 마지막 단계) | `getBeginnerBriefing` · 하류 `createSession`/`createChallenge`(+`difficultyLevel`) | `sessions.difficultyLevel`·`challenges.difficultyLevel` | AC-002/029/030/012/050 | §15.3 |
+| UF-010 / UX-030 실패 아카이브 | `/report/archive`(신규 화면) | (없음 — Firestore 직접 read) | `reports`(uid+createdAt desc, 기존 인덱스) | AC-026/008/009/016/011/043/055 | §15.4 |
+
+**잔여(architect 소관 아님):** ① 4건에 대한 **PRD AC 신설·MVP 우선순위**(OQ-U15 — planner/User). ② 기존 `difficulty` 산문의 **UI 라벨 문구**(OQ-U21 — planner/ux-design; 스키마는 §15.3.2로 확정). ③ 아카이브 "묶기" 그룹 헤더가 **부분 집계임을 알리는 문구**(§15.4.1 — ux-design). ④ near-miss 신설 여부(OQ-U20/R-8), 초급 실시간 힌트(R-7) — 둘 다 planner/User.

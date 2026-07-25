@@ -43,7 +43,8 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Purpose | 실시간 speech-to-speech 통화 자격증명 발급. 브라우저가 음성 AI와 직접 대화하되 API 키는 서버에만 남는다. |
 | Auth | required. `sid` 소유 + `status:"active"` 검증. |
 | Request | `{ sessionId: string }` |
-| Response | `{ provider: "elevenlabs"\|"gemini"\|"none", signedUrl, geminiToken, geminiModel, voiceId, language: "ko", isMock }` |
+| Response | `{ provider: "elevenlabs"\|"gemini"\|"none", signedUrl, geminiToken, geminiModel, voiceId, language: "ko", isMock, difficultyApplied?: boolean, inCallSmsTriggers?: Array<{ smsId: string, afterScammerTurns: number }> }` |
+| **T57 증분**(§15.1.2·§15.3.3) | ① **`inCallSmsTriggers`** — 이 시나리오의 통화 중 문자 **트리거만**(`smsId` + 몇 번째 사기범 턴 이후) 내려준다. **본문·인증번호·발신번호는 포함하지 않는다**(도착 시점에 `deliverInCallSms`가 서버에서 렌더 — 사전 유출 방지). 카탈로그가 없는 시나리오는 필드 부재. ② **`difficultyApplied`** — 이 통화 경로에 난이도 모디파이어가 실제로 주입됐는지. Gemini Live는 `liveConnectConstraints.systemInstruction`에 조립해 넣으므로 `true`. **ElevenLabs 경로는 프롬프트가 에이전트 쪽에 저장돼 주입 지점이 없어 기본 `false`**(`agentMap.ts:3-11` — 클라 오버라이드로 프롬프트를 넘기는 것은 ADR-0004 위반이라 금지). 클라는 `false`면 난이도 배지를 표시하지 않는다(근거 없는 표기·조용한 미적용 금지). 난이도별 에이전트가 `ELEVENLABS_AGENT_IDS`에 매핑돼 있으면 `true`로 반환(§15.3.3 확장 경로). |
 | 처리 | 서버가 시나리오에 맞는 프로바이더를 고른다(functions/src/realtime/provider.ts). **① ElevenLabs**(키+에이전트 매핑 있을 때): 본인 목소리 클론 가능(유료), `GET /v1/convai/conversation/get-signed-url`로 서명 URL 발급, 프롬프트는 에이전트 쪽 보관. **② Gemini Live**(키 있고 generic 시나리오일 때): 무료 티어 가능하지만 고정 프리셋 음성만, `authTokens.create`로 단기 토큰 발급하며 모델·시스템 프롬프트·도구를 `liveConnectConstraints`로 서버에서 고정(ADR-0004 — 프롬프트가 클라로 안 감, 클라가 setup 프레임을 바꿔치기 못함). 어느 쪽이든 클라가 받는 건 접속 자격증명뿐이다. |
 | **challenge 분기**(T37·§14.7/ADR-0006·A1) | `session.challengeId`가 있으면(2인 사용자2 체험 세션): `session.voiceId`(부재) 대신 `challenges/{challengeId}` admin read로 voiceId 해석 + **그 챌린지 `status∈{consented,in_progress}`+미만료 재검증**(§14.2 발급 게이트) 후 자격증명 발급. 소유권 검증(`session.uid===request.auth.uid`, 익명 uid)은 유지. challengeId 부재 세션은 기존 경로 무변경. **T38 QA 수정, ADR-0006 Addendum A2**: 응답의 `voiceId`는 challenge 세션이면 `provider==="elevenlabs"`일 때만 채워진다(ElevenLabs 프로토콜상 클라 개시 TTS override에 실제로 필요 — `RealtimeVoiceSession`이 그 경우에만 마운트) — mock/none(`isMock:true`) 폴백은 어차피 클라가 쓰지 않으므로 `voiceId:""`로 비워 불필요한 노출을 막는다. challenge 아닌 일반 세션은 무변경(본인 소유 voiceId 그대로 반환). |
 | Errors | 프로바이더 미설정·발급 실패는 **에러가 아니라** `provider:"none"`+`isMock:true`로 응답해 클라가 텍스트 폴백으로 강등한다(P-4 핵심 루프 비차단). `unauthenticated`/`permission-denied`/`failed-precondition`(세션 없음·비활성·challenge 만료/미동의)만 throw. |
@@ -57,6 +58,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Response | `{ sessionId: string, openingMessage: { role: "scammer", text: string }, maxUserTurns: 10, maxSessionMs: 360000 }` |
 | 처리 | `sessions/{sid}` 생성(status=active, turnCount=0, 한도값 DECISIONS #10) → roleplay 모듈 `generateOpeningLine(scenarioId)`(서버 조립 프롬프트, ADR-0004) 호출 → 오프닝 메시지를 `messages`에 마스킹 저장. |
 | Errors | `failed-precondition`(동의/클론 미완), `invalid-argument`(없는 scenarioId), `internal`(LLM 실패). |
+| **T57 증분**(§15.3.2) | Request에 **`difficultyLevel?: "beginner"\|"intermediate"\|"advanced"`**(옵셔널) 추가. 서버가 enum 검증 후 `sessions.difficultyLevel`에 기록하며, **부재·enum 밖이면 조용히 임의값으로 진행하지 않고 `intermediate`로 확정**한다. 이 값은 `generateOpeningLine`에도 전달되어야 한다(오프닝 대사부터 난이도가 반영되도록 — §15.6 G5). 응답 계약 무변경. |
 
 ### `sendMessage` — (Track A · T7 · UX-006)
 | Item | Value |
@@ -67,6 +69,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Response | `{ reply: { role: "scammer", text: string }, turnCount: number, ended: boolean, endReason?: "limit_reached" }` |
 | 처리 | ① `maskPII(userText)` → `messages` write ② 서버에서 `scenarioPrompts/{id}`(클라 read 거부) + 히스토리로 프롬프트 조립 → LLM(어댑터, DECISIONS #11) ③ 응답 마스킹 저장 ④ turnCount++·경과시간 체크 → 한도 도달 시 `ended:true`+자동 종료 트리거. |
 | Errors | `failed-precondition`(세션 미활성/종료됨), `deadline-exceeded`(LLM 지연, AC-004 목표 p95≤10s), `resource-exhausted`, `internal`. |
+| **T57 증분**(§15.1.2 폴백 경로) | 이 턴이 문자 카탈로그의 `afterScammerTurns`에 도달했으면 서버가 ① `sessions/{sid}/inCallSms/{smsId}` 문서를 write하고 ② 그 턴의 시스템 프롬프트에 `turnInstruction`(문자를 보냈다고 알리라는 1줄)을 **`guardrailPreamble` 앞에** 주입한다(§15.5). 응답에 `sms?: { smsId }`를 실어 클라가 즉시 배너를 띄울 수 있게 하되, **렌더링의 단일 소스는 `inCallSms` 구독**이다(실시간 경로와 동일 — 두 경로가 같은 컬렉션을 본다). 난이도 블록도 `session.difficultyLevel`로 이 조립에 포함된다(§15.3.3). |
 
 ### `endSession` — (Track B · T8 · UX-007)
 | Item | Value |
@@ -85,8 +88,9 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Auth | required(또는 `endSession` 후 서버 내부 호출). `sid` 소유 검증. |
 | Request | `{ sessionId: string }` |
 | Response | `{ reportId: string }` — 내용은 `reports/{id}` 구독으로 표시. |
-| 처리 | **마스킹된 `messages`만 입력**(원문·실제 운영정보 배제, AC-005/013). LLM으로 `deceivedMoments[]`·`tacticsUsed[]`·`preventionAdvice[]`·`wasDeceived` 산출 → `reports/{id}` write. |
-| Errors | `failed-precondition`(세션 미종료), `internal`(LLM 실패 → 재시도). |
+| 처리 | **마스킹된 `messages`만 입력**(원문·실제 운영정보 배제, AC-005/013). `deceivedMoments[]`·`tacticsUsed[]`·`preventionAdvice[]`·`wasDeceived` 산출 → `reports/{id}` write. `reportId = sessionId`이며 이미 존재하면 재계산 없이 반환한다(**AC-007 "세션당 정확히 1리포트" 멱등 키** — `generateReportCore.ts:28-35`). ※ **정정(2026-07-25 실측):** 이 산출은 LLM이 아니라 **규칙 기반 순수 함수**다(`functions/src/report/analyzeConversation.ts` — `getLlmClient()`를 호출하지 않음. 기존 "LLM으로 산출" 서술은 코드와 불일치했다). |
+| Errors | `failed-precondition`(세션 미종료), `internal`. |
+| **T57 증분**(§15.4.1·§15.4.2) | ① 각 `deceivedMoments` 항목에 **`tacticCategory`**(고정 10종 enum)를 함께 산출·저장한다 — 자유 문자열 `tactic`을 정규화하는 순수 함수 `functions/src/report/tacticCategory.ts`. ② 세션에서 **`scenarioId`·`channel`·`difficultyLevel`·`challengeId`를 역정규화**해 리포트에 함께 기록한다(아카이브 N+1 방지). 세션 문서는 이 함수가 이미 읽고 있어 추가 read가 없다. ③ **판정 로직 자체는 무변경** — 난이도는 `analyzeConversation`의 입력이 아니다(§15.3.5, 아카이브 누적 비교의 잣대를 통일하기 위해). |
 
 ---
 
@@ -97,7 +101,8 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 |---|---|
 | Trigger | `sessions/{sid}` document update where `status` → `ended`. |
 | Purpose | 생성물 즉시 폐기 + 삭제 로그. ADR-0003. |
-| 처리 | ① `sessions/{sid}/artifacts` 매니페스트 순회 → Storage `users/{uid}/sessions/{sid}/**` 삭제 ② **ElevenLabs DELETE voice**(`session.voiceId`) ③ `session.voiceId` 클리어 ④ `deletionLogs/{id}` write(targets[]·target별 success/partial/failed). |
+| 처리 | ① **Storage prefix 실나열 → 삭제**: `users/{uid}/sessions/{sid}/` 를 `bucket.getFiles({prefix})`로 나열해 삭제 대상을 식별한다(`functions/src/guardrails/purge.ts:15-38` 실측) ② **ElevenLabs DELETE voice**(`session.voiceId`) ③ `session.voiceId` 클리어 ④ `deletionLogs/{id}` write(targets[]·target별 success/partial/failed). |
+| **정정 고지(2026-07-25, UpdateRequests #4 해소 — DECISIONS #36)** | 이 행은 원래 "① `artifacts` 서브컬렉션 **매니페스트 순회**"라고 적혀 있었다(ADR-0003 원안). 실제 구현은 Storage prefix 나열이며, **이 이탈이 원안보다 옳다**: (a) `artifacts`는 합성물 메타만 다루도록 설계돼 원본 녹음 `voice_input.webm`을 **매니페스트로는 절대 식별할 수 없어** 원안대로면 녹음이 영구 잔존하는 **실질적 AC-021 위반**이 발생했을 것이고, (b) T5의 합성 경로가 Storage에 파일을 쓰지 않아 매니페스트가 실제로 비어 있었다. **ADR-0003은 accepted 후 불변이므로 재작성하지 않고 본 정정 + DECISIONS #36으로 비준한다**(ADR-0006 Addendum A2와 동일 처리 방식). 폐기 대상·삭제 로그·부분 실패 재시도 등 나머지 설계는 ADR-0003 그대로 유효하다. |
 | Errors(내부) | 외부 삭제 실패는 `deletionLogs`에 `partial`/`failed`로 기록 후 재시도 가능. 리포트 생성과 독립. |
 
 ---
@@ -186,6 +191,59 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 |---|---|
 | Trigger | 스케줄 함수가 `retentionDeleteAt <= now`인 챌린지를 스캔. |
 | 처리 | 보존기간 도달 챌린지의 복제 음성·녹음을 폐기(ADR-0003 기계 재사용) + `status` 정리. 링크 만료(3일)와 독립. |
+
+---
+
+## Callable Functions — v1.11 신규 기능 4건 (T57 · Architecture.md §15)
+> 신규 콜러블 4개. 시그니처는 기존과 동일하게 `src/lib/api/*`·`functions/src/shared`에서 단일 정의(ADR-0001). **신규 시크릿·신규 외부 의존성 없음**(LLM은 기존 `GEMINI_API_KEY` 어댑터 재사용).
+>
+> **실패 아카이브(UX-030)에는 콜러블이 없다** — 본인 `reports`를 기존 인덱스(`uid + createdAt desc`)로 직접 read하고 클라가 `deceivedMoments`를 평탄화한다(§15.4.1). 신규 컬렉션·신규 인덱스 불요.
+
+### `deliverInCallSms` — 통화 중 문자 도착(실시간 경로) (T57 · UX-027 · §15.1.2)
+| Item | Value |
+|---|---|
+| Purpose | 실시간 통화 중 문자 1건을 **서버 카탈로그에서 렌더해 도착시킨다**. 사기범이 그 사실을 알리도록 하는 지시문도 함께 반환. |
+| Auth | required. `session.uid === request.auth.uid` + `status:"active"` 검증(익명 uid=사용자2도 동일하게 성립). |
+| Request | `{ sessionId: string, smsId: string }` |
+| Response | `{ smsId: string, announceInstruction: string }` |
+| 처리 | ① **`smsId`가 `IN_CALL_SMS[session.scenarioId]` 소속인지 재검증**(⚠️ 이걸 빼면 임의 문자 주입 경로가 된다 — §15.6 G12) ② `sessions/{sid}/inCallSms/{smsId}` 문서 write(멱등 — 이미 있으면 재기록하지 않음) ③ 그 문자에 맞는 `announceInstruction` 반환. 클라는 이 문자열을 **같은 Live 세션에 텍스트 턴으로 주입**해 캐릭터가 문자 발송을 알리게 한다(`GeminiVoiceSession.textMessage` → `sendClientContent` 재사용, 선례 `OPENING_TRIGGER_TURN`). |
+| 렌더링 | 응답은 렌더 소스가 **아니다** — 화면은 `sessions/{sid}/inCallSms` 구독(onSnapshot)으로 그린다(실시간·폴백 단일 소스, DECISIONS #12). |
+| 안전 | 본문·인증번호·계좌·발신번호는 **전부 서버 카탈로그의 모의값**(AC-005/013). **`url` 필드가 스키마에 없어** 외부 이동 경로가 구조적으로 존재하지 않는다(AC-032/045). LLM이 문자 내용을 생성하지 않는다. |
+| Errors | `permission-denied`(타인 세션), `failed-precondition`(세션 미활성), `invalid-argument`(카탈로그 밖 `smsId`). 실패해도 **통화는 계속된다** — 클라는 배너 자리에 인라인 오류+재시도만 표시(P-4). |
+
+### `recordInCallSmsEvent` — 문자 확인·링크 탭 기록 (T57 · UX-027 · §15.1.2)
+| Item | Value |
+|---|---|
+| Purpose | 오버레이에서 문자를 열었는지·링크 칩을 탭했는지를 세션 타임라인에 남긴다(UX-027 Data Operations "Update"). |
+| Auth | required. 세션 소유 검증. |
+| Request | `{ sessionId: string, smsId: string, event: "opened" \| "link_tapped" }` |
+| Response | `{ recorded: true }` |
+| 처리 | `sessions/{sid}/inCallSms/{smsId}`의 `openedAt`/`linkTappedAt`을 최초 1회만 세팅. |
+| 범위 한정(중요) | **v1에서 이 값은 리포트 판정(`analyzeConversation`)의 입력이 아니다** — 리플레이·표시용이다. 판정에 넣으려면 별도 결정이 필요하다(근거 없는 판정 변경 금지). 인증번호를 통화로 불러준 행위는 **전사(음성) 경로로 이미 판정에 들어간다**(숫자만으로 이뤄진 답변을 순응으로 잡는 기존 패턴, `analyzeConversation.ts:106` 말미 앵커). |
+| Errors | 실패는 **조용히 흡수**한다(기록 실패로 훈련을 막지 않는다 — 클라는 무시). |
+
+### `judgeRewindAnswer` — 즉시 되감기 판정 (T57 · UX-028 · §15.2.3)
+| Item | Value |
+|---|---|
+| Purpose | 속은 순간에 대해 사용자가 다시 답한 문장을 3단계로 판정하고 모범 대처를 함께 돌려준다. **새 사기 대사를 생성하지 않는다**(한 턴 드릴). |
+| Auth | required. `report.uid === request.auth.uid`(익명 uid=사용자2도 자기 리포트에 한해 성립, §14.7). |
+| Request | `{ reportId: string, momentIndex: number, answerText: string }` — `answerText` **≤500자**, 빈 문자열 거부. |
+| Response | `{ verdict: "good" \| "risky" \| "unclear", reason: string, correctAction: string, judgedBy: "llm" \| "rule" }` |
+| 처리 | ① `maskPII(answerText)` ② 판정 프롬프트는 **전용 빌더**로 조립하며 **페르소나·`weakenedTactics` 원문을 포함하지 않는다**(역할극 재개가 아니라 평가 — AC-005/013). 사용자 답변은 `wrapUserInputAsData`로 감싼다(AC-024) ③ LLM 실패·Mock이면 **규칙 폴백**: `analyzeConversation`의 `RESISTANCE_PATTERN`/`COMPLIANCE_PATTERN`을 **export해 공유**(복제 금지, §15.6 G7) — 저항→`good`, 순응→`risky`, 둘 다 아님→`unclear` ④ `reports/{rid}/rewindAttempts/{auto}`에 append. |
+| **금지(불변식)** | `reports/{rid}` 문서 필드 update **금지**, 두 번째 `reports/*` 생성 **금지**, `updateDefenseGrade`/`users.defenseGrade`·`sessionCount` 갱신 **금지**, `sessions/*` write **금지**(AC-007·§15.2.2 금지표). |
+| Errors | `permission-denied`, `not-found`(리포트·momentIndex 범위 밖), `invalid-argument`(길이·빈 값), `resource-exhausted`(리포트당 시도 50건 상한). **`unclear`는 에러가 아니라 정상 결과**이며, 이 경우에도 `correctAction`은 반드시 채워 반환한다(학습 최소 보장). |
+
+### `getBeginnerBriefing` — 초급 사전 브리핑 신호 목록 (T57 · UX-029 · §15.3.4)
+| Item | Value |
+|---|---|
+| Purpose | 초급 난이도 선택 시 "이 대화에서 나올 수 있는 신호"를 세션 **시작 전에** 보여주기 위한 수법 라벨 목록. |
+| Auth | required. |
+| Request | `{ scenarioId: string }` |
+| Response | `{ signals: string[] }` — 예: `["긴급성 조성","확인 절차 차단","개인정보 직접 요구"]` |
+| 처리 | `SCENARIO_PROMPTS[scenarioId].weakenedTactics`를 `extractTacticLabel`로 **라벨만** 추출해 반환. |
+| **ADR-0004 경계(중요)** | 나가는 것은 **수법 라벨뿐**이다. 설명부·인용구(`extractTacticFlavor`가 뽑는 대사 예시)·`personaPrompt`·`guardrailPreamble`은 **어떤 경우에도 응답에 싣지 않는다**. 라벨 노출은 이미 리포트 `tacticsUsed`가 하는 것과 같은 등급의 데이터다(`analyzeConversation.ts:133`). |
+| 범위 한정 | 브리핑은 **세션 시작 전 화면에서만** 소비된다 — 대화 중 실시간 힌트·실시간 판정 파이프라인은 신설하지 않는다(D-6 유지, D-43). |
+| Errors | `invalid-argument`(없는 scenarioId). 실패 시 브리핑만 생략하고 난이도 선택·세션 생성은 계속된다(P-4 비차단). |
 
 ---
 

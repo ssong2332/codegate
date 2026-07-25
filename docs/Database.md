@@ -68,6 +68,11 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 
 > 교차채널 세션에서 `maxUserTurns`는 생성 시 상향 발급될 수 있다(§13.3). `maxSessionMs`는 6분 유지.
 
+**T57 난이도 증분(옵셔널, 하위호환 — Architecture.md §15.3.2):**
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| difficultyLevel | string? | `beginner`\|`intermediate`\|`advanced` | 사용자가 UX-029에서 고른 훈련 강도. **부재→`intermediate`**(계산 기본값, 무백필). `createSession` 요청의 옵셔널 값을 서버가 enum 검증 후 기록하며, enum 밖·부재는 조용히 임의값으로 진행하지 않고 `intermediate`로 확정한다. 2인 챌린지 체험 세션은 `consentChallenge`가 `challenges.difficultyLevel`을 **복사**해 채운다(§15.3.2 — 복사하지 않으면 발신자 선택이 소실). ⚠️ 시나리오 메타의 기존 산문 필드 `difficulty`(예: "중간 — 감정적 압박이 강한 편입니다")와 **다른 축이며 이름을 겹치지 않는다**(§15.3.2, AC-002 무변경). 난이도는 압박 강도·요구 도달 속도·수법 은밀함만 바꾸고 **어떤 안전장치도 게이팅하지 않는다**(D-42/AC-050 — 강제는 프롬프트 조립 순서로, §15.5) |
+
 #### `sessions/{sessionId}/messages/{messageId}`  — 대화 로그 (UX-006, AC-024)
 | Field | Type | Constraints | Description |
 |---|---|---|---|
@@ -89,6 +94,25 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | prerollLabel | string? | | 오디오 프리롤 안내 문구(D-3) |
 | voiceProvider | string? | `mock`\|`elevenlabs` | 코드 정합(shared/types.ts T19) — 합성물을 만든 VoiceProvider. UpdateRequests #3 반영 |
 | createdAt | timestamp | | |
+
+#### `sessions/{sessionId}/inCallSms/{smsId}`  — 통화 중 도착 문자 (T57, UX-027/UF-008, Architecture.md §15.1.2)
+> **⚠️ 왜 `messages`가 아니라 별도 서브컬렉션인가(치명적):** `analyzeConversation`은 `messages`를 turnIndex 순으로 훑으며 **scammer(i) ↔ user(i+1) 짝짓기**로 속은 순간을 판정한다(`functions/src/report/analyzeConversation.ts:127-154`). 문자를 메시지 행으로 끼워 넣으면 이 짝짓기가 어긋나 **리포트 판정이 손상된다**(AC-008/009/026 회귀). 문자는 대화 턴이 아니라 통화 중 도착한 별개 객체이므로 컬렉션을 분리한다.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| smsId | string | PK(=doc id) | 시나리오 문자 카탈로그(`functions/src/scenarios/inCallSms.ts`) 항목 id. 서버가 `IN_CALL_SMS[session.scenarioId]` 소속을 **재검증**한 값만 기록(§15.1.2 G12) |
+| kind | string | `account`\|`link`\|`otp` | 계좌·요구형 / 링크형 / 인증번호형(UX-027 Content 3종) |
+| senderLabel | string | required | 발신번호 라벨(실존하지 않는 모의값, AC-005/013) |
+| body | string | required | 본문. **서버 카탈로그가 원천**이며 사용자·LLM이 생성하지 않는다 → PII 마스킹 대상 아님(사용자 텍스트가 아님) |
+| otpCode | string? | `kind==="otp"`일 때만 | **콘텐츠에 고정된 리터럴**(런타임 난수 금지 — 결정론적 테스트 + 모의값 불변식) |
+| linkDisplayText | string? | `kind==="link"`일 때만 | 모의 표기 문자열. UX-023(`MessengerFakeLanding`)의 제목으로 그대로 쓰인다 |
+| fakeLandingId | string? | `kind==="link"`일 때만 | 인앱 가짜 랜딩 참조. **`url`/실 URL 필드는 이 스키마에 존재하지 않는다**(AC-032/045 구조적 금지 — `MessengerAttachment`와 동형) |
+| arrivedAt | timestamp | indexed(정렬) | 도착 시각. 클라는 이 컬렉션을 `onSnapshot`으로 구독해 배너·문자함을 렌더한다(실시간·폴백 **양 경로 공통 단일 소스**) |
+| openedAt | timestamp? | | 사용자가 오버레이에서 열어본 시각(`recordInCallSmsEvent`) |
+| linkTappedAt | timestamp? | | 링크 칩 탭 시각. **v1에서 이 값들은 리포트 판정(analyzeConversation) 입력이 아니다** — 리플레이·표시용(근거 없는 판정 변경 금지) |
+
+> **쓰기 주체는 Functions(admin)뿐**이다(클라 직접 write 거부). 실시간 경로는 `deliverInCallSms`, 폴백 텍스트 경로는 `sendMessage`가 같은 문서를 쓴다. `MessengerAttachment`(메신저 채팅 첨부)는 **무변경** — OTP형은 링크가 아니라 표시용 코드라 그 타입에 담기지 않는다(부재-오버로드 회피, §15.1.2).
+> **폐기(AC-021):** 이 문서들은 Storage 산출물이 아니라 마스킹 불요한 서버 저작 텍스트이므로 `messages`와 동일하게 세션 종료 후에도 잔존한다(리플레이 UX-018 입력). Storage·ElevenLabs voice 폐기 경로는 무변경.
 
 ### `scenarios/{scenarioId}`  — 시나리오 공개 메타 (UX-004, AC-001/002)
 | Field | Type | Constraints | Description |
@@ -131,11 +155,31 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | sessionId | string | required, indexed | |
 | uid | string | required, indexed | 소유자 |
 | wasDeceived | bool | required | 속았는지(AC-009) |
-| deceivedMoments | array<{turnIndex,timeLabel,tactic,correctAction}> | | 속은 시점 타임라인(AC-026) |
+| deceivedMoments | array<{turnIndex,timeLabel,tactic,correctAction,**tacticCategory?**}> | | 속은 시점 타임라인(AC-026). **T57 증분 `tacticCategory?`**(`urgency`\|`authority`\|`affection`\|`verification_block`\|`payment_demand`\|`personal_info_demand`\|`link_or_install`\|`intimidation`\|`benefit_lure`\|`other`): 자유 문자열 `tactic`(시나리오 콘텐츠의 `weakenedTactics` 라벨)을 **리포트 생성 시점에 고정 카테고리로 정규화**한 값. 실패 아카이브(UX-030)의 "수법별 묶기" **그룹 키**이며, 없으면 같은 수법이 시나리오별 표기 차이("긴급성 조성"/"다급함 조성"/"마감 압박")로 흩어져 "이 수법에 3번 넘어갔습니다"가 성립하지 않는다(Architecture.md §15.4.2). 표시 문구는 기존 `tactic` 원문 그대로. **부재→`tactic` 문자열을 키로 폴백**(기존 리포트 무백필) |
 | resistedMoments | array<{turnIndex,timeLabel,tactic,goodResponse}>? | | **T33 소급 결정(DECISIONS #26)** — 사용자가 잘 대응한(저항) 턴 타임라인. UX-018 리플레이 해설의 "잘 대응한 지점"(never-deceived Empty 상태)이 요구하는 per-turn 마커. `deceivedMoments`의 대칭 필드로, 동일 규칙 기반 분석(analyzeConversation.ts의 `RESISTANCE_PATTERN`)이 **이미 매 턴 계산하지만 현재 버리는** 저항 판정을 기록한다. `goodResponse`=그 순간 사용자가 잘한 대응의 긍정 문구(정확 카피는 구현/ux-design 상세). 옵셔널 증분(하위호환, Migration Policy) — 기존 리포트는 부재→빈 배열 취급. **⚠️ 아직 미구현(후속 implementer 태스크): shared/types.ts `ReportDoc`에 필드 추가 + analyzeConversation.ts/generateReportCore.ts가 저항 분기를 기록하도록 확장** |
 | tacticsUsed | array<string> | required | 사용된 조작 수법(AC-008) |
 | preventionAdvice | array<string> | min 1 | 예방 조언(AC-008) |
 | createdAt | timestamp | indexed | 히스토리 정렬(AC-016) |
+
+**T57 아카이브 역정규화 증분(옵셔널, 하위호환 — Architecture.md §15.4.1):** 실패 아카이브(UX-030)가 카드 1장을 그릴 때 세션 문서를 항목 수만큼 추가 read(N+1)하지 않도록, 리포트 생성 시점에 이미 읽고 있는 세션(`generateReportCore.ts:23`)에서 네 값을 역정규화한다.
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| scenarioId | string? | | 카드의 시나리오 식별. **제목은 역정규화하지 않는다** — 클라의 `PUBLIC_SCENARIOS`에서 얻어 콘텐츠 수정이 과거 카드에도 반영되게 한다 |
+| channel | string? | `voice`\|`messenger` | 카드의 채널 표기(보이스/메신저) |
+| difficultyLevel | string? | `beginner`\|`intermediate`\|`advanced` | 카드의 난이도 표기(P-22 동일 라벨). 부재→`intermediate` |
+| challengeId | string? | | 2인 챌린지 체험 세션에서 나온 리포트 표식. **아카이브는 이 값이 있는 리포트를 제외한다**(AC-043/055 2차 하드닝 — 1차 방어는 익명 uid 소유권 격리, §15.4.3) |
+
+#### `reports/{reportId}/rewindAttempts/{attemptId}`  — 즉시 되감기 시도 기록 (T57, UX-028/UF-009, Architecture.md §15.2.2)
+> **⚠️ AC-007 불변식 보호가 이 서브컬렉션의 존재 이유다.** 되감기는 원 리포트를 **읽기 전용으로만** 참조한다 — `reports/{reportId}` 문서 필드(`wasDeceived`·`deceivedMoments`·`tacticsUsed`·`preventionAdvice`)를 **update하지 않고**, 두 번째 `reports/*` 문서를 **만들지 않으며**, `updateDefenseGrade`(`users.defenseGrade`/`sessionCount`)를 **호출하지 않는다**. 최상위 컬렉션 쿼리(`db.collection("reports")`)는 서브컬렉션 문서를 포함하지 않으므로 기존 집계·아카이브가 오염되지 않는다.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| momentTurnIndex | number | required | 어느 `deceivedMoments` 항목에 대한 시도인지 |
+| answerMasked | string | required, ≤500자 | 사용자 새 답변. **`maskPII` 적용 후에만 저장**(원문 미저장, ADR-0004 계승) |
+| verdict | string | `good`\|`risky`\|`unclear` | 3단계 판정. `unclear`("판단하기 어렵습니다")는 오류가 아니라 정상 결과값 |
+| reason | string | | 이유 1줄 |
+| judgedBy | string | `llm`\|`rule` | 판정 주체. LLM 불가·실패 시 기존 `RESISTANCE_PATTERN`/`COMPLIANCE_PATTERN` 규칙 폴백(§15.2.3) |
+| createdAt | timestamp | | 리포트당 시도 **50건 상한**(남용 방지 — 학습 흐름에서 도달하지 않는 값) |
 
 > **생성물 음성은 폐기되므로 리포트·메타만 계정에 잔존**(AC-021). 실제 운영정보(실계좌·실링크) 배제(AC-005/013).
 > **`resistedMoments`(T33/DECISIONS #26):** UX-018 Empty 상태("한 번도 속지 않은 경우 → 시도된 수법과 '잘 대응한 지점' 주석")를 스키마상 충족 가능하게 만드는 추가. AC-038의 "신규 데이터 모델·분석 파이프라인 도입 금지"와 상충하지 않는다 — 새 컬렉션·새 분석 패스가 아니라 **기존 리포트 문서에 옵셔널 필드 1개** + 이미 도는 규칙 기반 분석이 계산해 둔 저항 판정을 **저장만** 하는 대칭 증분이다. PRD AC-009/037(never-deceived=사실 명시+수법 나열)은 이 필드 없이도 충족되므로 PRD 변경 불요이며, UX-018 spec은 이 필드로 spec 그대로 충족 가능해진다(UX.md 변경 불요).
@@ -172,6 +216,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | reportReason | string? | `unwanted`\|`harassment`\|`impersonation_concern`\|`other` | 신고 사유 enum |
 | reportNote | string? | 마스킹 | 선택 신고 메모(PII 마스킹) |
 | tier | string? | `free`\|`paid`(부재=free) | **용량 축에만 영향**(§14.6, AC-050 위반 없음) |
+| difficultyLevel | string? | `beginner`\|`intermediate`\|`advanced`, **부재→`intermediate`** | **T57 증분** — 발신자가 UX-029에서 고른, 수신자가 겪을 강도(§15.3.2). `createChallenge`가 기록 → 동의 랜딩(UX-021) 표시 → **`consentChallenge`가 사용자2 체험 세션의 `difficultyLevel`로 복사**(프롬프트는 세션 단위 조립이라 복사하지 않으면 소실 — §15.6 G9). **난이도는 활성 챌린지 상한(AC-049)·링크 토큰(AC-048)·결과 열람 범위(AC-043/055)를 포함해 어떤 안전·정책 판정도 바꾸지 않는다**(D-42/AC-050) |
 | createdAt | timestamp | | |
 
 > **사용자2 접근은 전부 Functions 매개**(무로그인·토큰). 사용자1은 자기 챌린지 문서를 read하되 `resultSummary`는 동의 시에만 채워진다. **대화 전문 컬렉션(사용자2 체험 세션의 messages)에 사용자1 접근은 규칙으로 거부**(AC-043 스키마 강제). 챌린지 음성 스코프·삭제 구조는 ADR-0005.
@@ -200,7 +245,8 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 
 ## Relationships
 - `users` 1:N `sessions` (uid) · `users` 1:N `consents`(서브컬렉션)
-- `sessions` 1:N `messages`(서브) · 1:N `artifacts`(서브) · 1:1 `reports`(sessionId) · 1:N `deletionLogs`(sessionId)
+- `sessions` 1:N `messages`(서브) · 1:N `artifacts`(서브) · **1:N `inCallSms`(서브, T57)** · 1:1 `reports`(sessionId) · 1:N `deletionLogs`(sessionId)
+- **`reports` 1:N `rewindAttempts`(서브, T57)** — 되감기 시도는 리포트 문서를 바꾸지 않고 하위에만 쌓인다(AC-007, §15.2.2)
 - `scenarios` 1:1 `scenarioPrompts`(같은 id) · `sessions` N:1 `scenarios`(scenarioId)
 - **`users` 1:N `challenges`(creatorUid)** · **`challenges` 1:1 `voiceId`(챌린지 스코프 고정)** · **`challenges` 1:N `sessions`(challengeId — 사용자2 체험 세션)** · **`users` 1:N `voices`(보관함, ADR-0005)**
 
@@ -216,6 +262,8 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | `challenges` | `retentionDeleteAt` | 기간제 자동 삭제 스캔(AC-041) |
 | `sessions` | `challengeId` | 챌린지 체험 세션 조회(§14.1) |
 
+> **T57 실패 아카이브(UX-030) — 신규 인덱스 불요(실측):** 아카이브 쿼리는 `reports where uid == auth.uid orderBy createdAt desc limit 50` + `startAfter` 커서뿐이며, 필요한 복합 인덱스 `reports: uid ASC + createdAt DESC`가 **이미 존재한다**(`firestore.indexes.json:11-18`, 위 표 3행). `collectionGroup` 인덱스도 불요다 — 신규 서브컬렉션(`inCallSms`·`rewindAttempts`)은 부모 문서 경로로만 조회하며 컬렉션 그룹 쿼리를 하지 않는다(Architecture.md §15.4.1).
+
 ## Security Rules (요지 — implementer가 firestore.rules/storage.rules로 구현)
 **Firestore:**
 - `users/{uid}/**`: `request.auth.uid == uid`만 read/write(본인 귀속, DECISIONS #13).
@@ -229,6 +277,8 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
   - `resultSummary`는 사용자2 동의 시에만 Functions가 세션 리포트에서 파생해 채운다(§14.7.3). 대화 전문은 이 문서에 존재하지 않는다(AC-043).
 - **`sessions/{}` (challengeId 바운드, AC-043, §14.7/ADR-0006):** 사용자2 체험 세션은 `uid`가 **임시 익명 uid**(사용자1의 실 uid 아님)이므로 `resource.data.uid == request.auth.uid` 규칙에 의해 **사용자1의 직접 read·콜러블이 거부**된다(§14.7.2 실측). 사용자2 본인(익명 uid)만 자기 세션·리포트·리플레이를 read → UX-014/UX-018 무개정 재사용. 사용자1은 오직 `challenges/{}.resultSummary`만 본다 → 결과 열람 제한을 규칙으로 강제.
 - **`users/{uid}/voices/{}` (ADR-0005):** `request.auth.uid == uid`만 read/write. **오디오 바이트·다운로드 경로 없음**(메타만). 실제 클론 삭제는 Functions.
+- **`sessions/{sid}/inCallSms/{}` (T57, §15.1.2):** read는 부모 세션 소유자(`get(/sessions/$(sid)).data.uid == request.auth.uid`)만. **write는 클라 전면 거부** — 쓰기는 Functions(admin)뿐이다(`deliverInCallSms` / `sendMessage` / `recordInCallSmsEvent`). 문자 본문·인증번호는 **서버 카탈로그가 원천**이며 클라가 임의 문자를 주입하는 경로가 존재하지 않는다.
+- **`reports/{rid}/rewindAttempts/{}` (T57, §15.2.2):** read는 부모 리포트 소유자만(사용자2=익명 uid도 자기 리포트에 한해 동일하게 성립, §14.7/ADR-0006). **write는 클라 전면 거부** — `judgeRewindAnswer` 콜러블만 append한다. 이 콜러블은 **부모 `reports/{rid}` 문서를 절대 update하지 않는다**(AC-007 불변식 — §15.2.2 금지표).
 
 **Storage (ADR-0002 · AC-020) — 본인 목소리만 등록의 서버측 원천 차단:**
 ```
