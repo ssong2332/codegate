@@ -51,6 +51,13 @@ export type GeminiVoiceSessionProps = {
   onTranscriptTurn: (role: "user" | "scammer", text: string) => void;
   stopSignal: number;
   muted: boolean;
+  /** 사용자 신고(2026-07-25) — "키패드가 실제로 작동하지 않는다 + 타이핑으로도 통화할 수 있게 해서
+   * 스스로 검증할 수 있게 해봐". 실시간 통화 중 타이핑한 문장을 **같은 Live 세션 안으로** 넣는다
+   * (`sendClientContent`). 예전엔 실시간 모드에서 텍스트 입력 자체를 숨겼는데, 그 이유는 텍스트를
+   * `sendMessage`(별도 텍스트 LLM+TTS)로 보내면 실시간 음성 위에 다른 목소리가 겹치기 때문이었다
+   * — 같은 세션에 넣으면 그 문제가 원천적으로 없고, 응답도 평소처럼 이 통화의 목소리로 나온다.
+   * `stopSignal`과 동일한 카운터 패턴을 쓴다(값이 바뀔 때 1회 전송). */
+  textMessage: { text: string; seq: number } | null;
 };
 
 // 마이크 캡처 버퍼 크기 — 작을수록 지연이 낮지만 콜백이 잦다. 사용자 신고(2026-07-25, "내가 말하고
@@ -99,6 +106,7 @@ export default function GeminiVoiceSession({
   onTranscriptTurn,
   stopSignal,
   muted,
+  textMessage,
 }: GeminiVoiceSessionProps) {
   const handlersRef = useRef({
     onActive,
@@ -111,6 +119,9 @@ export default function GeminiVoiceSession({
   const mutedRef = useRef(muted);
   // 정리 대상들 — 언마운트 시 전부 닫지 않으면 마이크가 계속 열려 있다.
   const cleanupRef = useRef<(() => void) | null>(null);
+  // 타이핑 입력을 같은 Live 세션에 넣기 위한 참조(아래 textMessage effect가 쓴다). 메인 effect의
+  // 지역 변수 `session`은 밖에서 볼 수 없으므로 연결 직후 여기에 같이 담아 둔다.
+  const liveSessionRef = useRef<GeminiLiveSession | null>(null);
 
   useEffect(() => {
     handlersRef.current = {
@@ -221,6 +232,7 @@ export default function GeminiVoiceSession({
         // 이미 닫혔으면 무시 — 종료는 항상 성공해야 한다(AC-006).
       }
       session = null;
+      liveSessionRef.current = null;
     };
     cleanupRef.current = cleanup;
 
@@ -326,6 +338,8 @@ export default function GeminiVoiceSession({
           return;
         }
         log("connect() resolved");
+        // 타이핑 입력(textMessage effect)이 이 세션에 닿을 수 있도록 노출한다.
+        liveSessionRef.current = session;
 
         // 사용자 신고(2026-07-24) — 연결 직후 캐릭터가 먼저 말을 걸도록 트리거를 보낸다. onopen
         // 콜백(위)이 아니라 connect()가 실제로 resolve된 직후에 보내는 이유: onopen은 소켓 이벤트라
@@ -434,6 +448,26 @@ export default function GeminiVoiceSession({
     if (stopSignal <= 0) return;
     cleanupRef.current?.();
   }, [stopSignal]);
+
+  // 타이핑 입력(사용자 신고 2026-07-25) — 같은 Live 세션에 텍스트 턴으로 넣는다. 음성 응답은
+  // 평소 경로(onmessage → 오디오 재생)로 그대로 돌아오므로 목소리가 겹치지 않는다.
+  //
+  // ⚠️ 전사 기록을 여기서 직접 올린다 — 타이핑한 문장은 마이크를 타지 않아 서버의
+  // inputTranscription에 잡히지 않는다. 이걸 빠뜨리면 리포트가 "사용자가 아무 말도 안 했다"고
+  // 보게 되어(속았는지 판정 불가) 타이핑으로 한 훈련은 리포트에서 통째로 사라진다.
+  useEffect(() => {
+    if (!textMessage || !textMessage.text.trim()) return;
+    const session = liveSessionRef.current;
+    if (!session) return;
+    try {
+      session.sendClientContent({ turns: textMessage.text, turnComplete: true });
+      handlersRef.current.onTranscriptTurn("user", textMessage.text.trim());
+    } catch {
+      // 전송 실패해도 통화 자체는 계속된다(P-4 비차단) — 음성으로 이어서 말하면 된다.
+    }
+    // seq가 바뀔 때만 1회 전송한다(stopSignal과 동일한 카운터 패턴).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [textMessage?.seq]);
 
   return null;
 }

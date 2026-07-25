@@ -334,3 +334,64 @@ test("buildPreventionAdvice(): 과신 표현('면역', '완전') 없이 개선 �
   assert.ok(!/면역/.test(deceivedAdvice));
   assert.ok(!/면역/.test(safeAdvice));
 });
+
+// ── 2026-07-25 정확도 버그 2차 수정 회귀 테스트 ────────────────────────────────
+// 사용자 실측 신고: "시나리오대로 따라가서 대출을 한다고 했는데 리포트는 잘 대처했다고 나온다",
+// "본인인증을 성함과 주민번호 앞자리를 말하는 것이 자동으로 넘어간다".
+// 원인 (A) 마스킹 토큰 미감지 (B) 송금 외 일반 승낙 표현 미감지 (C) 숫자만 있는 답변 미감지.
+
+/** 사기범 1턴 + 사용자 1턴으로 wasDeceived만 뽑는 헬퍼(위 테스트들과 동일한 픽스처 사용). */
+function judge(userText: string): boolean {
+  return analyzeConversation(
+    [
+      {
+        role: "scammer" as const,
+        textMasked: "지금 당장 도와줘야 해, 더 늦으면 큰일나",
+        turnIndex: 0,
+        createdAtMs: SESSION_START_MS,
+      },
+      { role: "user" as const, textMasked: userText, turnIndex: 1, createdAtMs: SESSION_START_MS + 5_000 },
+    ],
+    SESSION_START_MS,
+    WEAKENED_TACTICS,
+  ).wasDeceived;
+}
+
+test("(A) 마스킹된 개인정보를 넘겨준 답변은 순응으로 판정한다 — analyzeConversation은 원문이 아니라 textMasked를 본다", () => {
+  // maskPII가 주민번호/전화/이메일을 토큰으로 치환하므로, 토큰 자체가 순응 신호여야 한다.
+  // 예전엔 [계좌]만 우연히 걸리고 [주민번호]·[전화]·[이메일]은 전부 미감지였다.
+  assert.equal(judge("제 주민번호는 [주민번호] 입니다"), true);
+  assert.equal(judge("이름은 홍길동이고 [주민번호]요"), true);
+  assert.equal(judge("[전화] 이거예요"), true);
+  assert.equal(judge("메일은 [이메일] 입니다"), true);
+  assert.equal(judge("[계좌] 로 보내면 되나요"), true);
+});
+
+test("(B) 송금이 아닌 요구에 응한 일반 승낙 표현도 순응으로 판정한다 — 대출·설치·신청 유도 시나리오", () => {
+  assert.equal(judge("네 대출 진행해주세요"), true);
+  assert.equal(judge("그렇게 할게요"), true);
+  assert.equal(judge("신청할게요"), true);
+  assert.equal(judge("앱 설치했어요"), true);
+  assert.equal(judge("대출 받을게요"), true);
+  assert.equal(judge("불러드릴게요"), true);
+});
+
+test("(C) 답변 전체가 숫자면 순응으로 판정한다 — 키패드로 인증번호를 눌러 보내는 경우", () => {
+  assert.equal(judge("482913"), true);
+  assert.equal(judge("482 913"), true);
+  assert.equal(judge("010-1234"), true);
+});
+
+test("(회귀) 저항 우선순위는 그대로 유지된다 — 신규 순응 항목이 저항 판정을 덮어쓰지 않는다", () => {
+  assert.equal(judge("아니요 없습니다"), false);
+  assert.equal(judge("확인하고 다시 전화드릴게요"), false);
+  assert.equal(judge("말씀하신 대로는 못 하겠습니다"), false);
+  assert.equal(judge("경찰에 신고하겠습니다"), false);
+  assert.equal(judge("의심스러운데요"), false);
+  assert.equal(judge("직접 전화해서 확인할게요"), false);
+});
+
+test("(회귀) T52 reviewer 케이스 — 망설이다 결국 넘겨준 경우는 여전히 속은 것으로 판정한다", () => {
+  // 계좌번호를 실제로 알려줬으므로 true가 맞다(T52 reviewer 확정).
+  assert.equal(judge("정말 거절하고 싶은데 무서워서 계좌번호 알려드릴게요"), true);
+});
