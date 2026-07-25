@@ -91,6 +91,12 @@ export type SendMessageResponse = {
    * 연출(P-18)로 넘어간다 — 자유텍스트를 직접 분류하지 않는다(AC-024).
    */
   escalation?: { toChannel: "voice" };
+  /**
+   * T68 추가(옵셔널, 하위호환) — 이번 턴에 통화 중 문자가 도착했다는 뜻(폴백 텍스트 경로).
+   * ⚠️ **렌더 소스가 아니다** — 화면은 `sessions/{sid}/inCallSms` 구독으로 그린다(실시간 경로와
+   * 동일한 단일 소스). functions/src/roleplay/types.ts와 1:1.
+   */
+  sms?: { smsId: string };
 };
 
 // --- createRealtimeCall (UX-014 live phase · 2026-07-22 실시간 음성 대화 전환) ---
@@ -122,7 +128,30 @@ export type CreateRealtimeCallResponse = {
    * 난이도 배지를 띄우지 않고(근거 없는 표기 금지) 미적용 사실을 알린다(조용한 미적용 금지).
    */
   difficultyApplied: boolean;
+  /**
+   * T68(Architecture.md §15.1.2, UX-027/UF-008) — 이 시나리오의 통화 중 문자 **트리거만**
+   * (`smsId` + 몇 번째 사기범 턴 이후). **본문·인증번호·발신번호는 오지 않는다** — 도착 시점에
+   * `deliverInCallSms`가 서버에서 렌더해 Firestore에 쓰고, 화면은 그 구독으로만 그린다.
+   * 카탈로그가 없는 시나리오는 필드 부재.
+   */
+  inCallSmsTriggers?: InCallSmsTrigger[];
 };
+export type InCallSmsTrigger = { smsId: string; afterScammerTurns: number };
+
+// --- deliverInCallSms / recordInCallSmsEvent (T68 · UX-027/UF-008 · AC-059/060/061) ---
+// 통화 중 문자. functions/src/inCallSms/types.ts와 1:1.
+//
+// ⚠️ **읽기 전용 계약(AC-060)**: 답장·전달·전송 요청 타입이 존재하지 않는다. 실 URL 필드도
+// 어느 타입에도 없다 — 링크는 표시 텍스트 + 인앱 가짜 랜딩 참조로만 표현된다(AC-032/045).
+export type DeliverInCallSmsRequest = { sessionId: string; smsId: string };
+export type DeliverInCallSmsResponse = { smsId: string; announceInstruction: string };
+export type InCallSmsEvent = "opened" | "link_tapped";
+export type RecordInCallSmsEventRequest = {
+  sessionId: string;
+  smsId: string;
+  event: InCallSmsEvent;
+};
+export type RecordInCallSmsEventResponse = { recorded: true };
 
 // --- submitRealtimeTranscript (finding #1 · 2026-07-23) ---
 // 실시간 음성 통화 대화를 리포트가 분석할 수 있도록 종료 직전에 전사를 제출한다.

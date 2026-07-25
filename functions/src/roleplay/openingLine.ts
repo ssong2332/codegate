@@ -7,6 +7,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { maskPII } from "../guardrails";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { SCENARIO_PROMPTS } from "../scenarios";
+import { hasInCallSms } from "../scenarios/inCallSms";
 import { extractLinkMarker } from "./linkMarker";
 import { buildSystemPrompt } from "./promptAssembly";
 import type { DifficultyLevel } from "../shared/difficulty";
@@ -69,6 +70,10 @@ export async function generateOpeningLine(
   const completion = await completeWithFallback(getLlmClient(), {
     systemPrompt: buildSystemPrompt(scenarioPrompt, {
       difficultyLevel,
+      // T68(§15.6 G5와 같은 이유 — 호출부가 갈라지면 "오프닝에만 다른 규칙"이 생긴다). 오프닝
+      // 턴에는 아직 도착한 문자가 없지만(카탈로그 최소 afterScammerTurns는 2), 조건형 문구는
+      // 세션 지시 성격이라 세 호출부에서 동일하게 켠다.
+      inCallSmsEnabled: hasInCallSms(scenarioId),
       turnInstruction: OPENING_TURN_INSTRUCTION,
     }),
     messages: [], // 오프닝 대사에는 아직 사용자 입력이 없다.

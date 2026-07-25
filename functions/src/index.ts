@@ -20,6 +20,9 @@ export { generateReport } from "./report";
 // 즉시 되감기 판정(T70, UX-028/UF-009, AC-062/063) — 원 리포트를 읽기 전용으로만 참조하고
 // reports/{rid}/rewindAttempts에만 append한다(ADR-0008, AC-007 불변식 보호).
 export { judgeRewindAnswer } from "./rewind";
+// 통화 중 문자(T68, UX-027/UF-008, ADR-0007, AC-059/060/061) — 문자 도착(실시간 경로)·확인 기록.
+// 본문은 100% 서버 카탈로그(scenarios/inCallSms.ts)가 원천이며 클라가 내용을 주입할 경로가 없다.
+export { deliverInCallSms, recordInCallSmsEvent } from "./inCallSms";
 // 초급 사전 브리핑(T72, UX-029, §15.3.4, AC-066) — 세션 **시작 전** 화면에서만 소비되는 수법
 // 라벨 조회. 대화 중 실시간 판정 경로는 신설하지 않는다(D-6 유지).
 export { getBeginnerBriefing } from "./scenarios/beginnerBriefing";

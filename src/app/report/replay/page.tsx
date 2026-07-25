@@ -23,6 +23,8 @@ import { Badge, Button } from "@/components/ui";
 import {
   buildReplayTimeline,
   getAnnotatedTurnIndexes,
+  type ReplayDeceivedMomentSource,
+  type ReplaySmsSource,
   type ReplayTimelineItem,
 } from "@/lib/replay/buildReplayTimeline";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
@@ -96,9 +98,16 @@ export default function ReplayPage() {
     });
 
     const deceivedMoments = Array.isArray(reportData.deceivedMoments)
-      ? (reportData.deceivedMoments as ReplayTimelineItem["annotation"][]).filter(
-          (m): m is NonNullable<typeof m> => m !== null,
+      ? (reportData.deceivedMoments as (ReplayDeceivedMomentSource | null)[]).filter(
+          (m): m is ReplayDeceivedMomentSource => m !== null,
         )
+      : [];
+
+    // T89(§15.1.5, AC-059) — 문자 이벤트는 **리포트 문서 안의 표시 전용 스냅샷**에서 온다.
+    // sessions/{sid}/inCallSms를 이 화면이 직접 구독하지 않는 이유: 앵커 해석이 messages를 봐야
+    // 가능해 화면마다 해석 로직이 갈라지기 때문이다(§15.1.5 (1) 기각 사유 3행). 부재→빈 배열.
+    const smsTimeline = Array.isArray(reportData.smsTimeline)
+      ? (reportData.smsTimeline as ReplaySmsSource[])
       : [];
 
     const scenarioId = sessionData.scenarioId as string | undefined;
@@ -118,7 +127,7 @@ export default function ReplayPage() {
         tacticsUsed: Array.isArray(reportData.tacticsUsed) ? (reportData.tacticsUsed as string[]) : [],
         createdAt: reportData.createdAt instanceof Timestamp ? reportData.createdAt : null,
       } satisfies ReportSummary,
-      timeline: buildReplayTimeline(messages, deceivedMoments),
+      timeline: buildReplayTimeline(messages, deceivedMoments, smsTimeline),
       scenarioTitle: scenario?.title ?? null,
       callerLabel: scenario?.callerLabel ?? "상대방",
       challenge: challengeContext,
@@ -179,7 +188,12 @@ export default function ReplayPage() {
     if (!sessionId) return;
     router.push(`/report/rewind?reportId=${encodeURIComponent(sessionId)}&moment=${momentIndex}`);
   };
-  const hasMultipleChannels = new Set(timeline.map((item) => item.channel ?? "voice")).size > 1;
+  const hasMultipleChannels =
+    new Set(
+      timeline
+        .filter((item) => item.kind === "message")
+        .map((item) => (item.kind === "message" ? (item.channel ?? "voice") : "voice")),
+    ).size > 1;
 
   const goToStep = (nextPos: number) => {
     if (nextPos < 0 || nextPos >= annotatedTurnIndexes.length) return;
@@ -188,8 +202,10 @@ export default function ReplayPage() {
     const el = itemRefs.current.get(turnIndex);
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
     el?.focus();
-    const item = timeline.find((t) => t.turnIndex === turnIndex);
-    if (item?.annotation) {
+    // ⚠️ 문자 항목은 앵커 메시지와 turnIndex가 같으므로(§15.1.5 (4)) 반드시 메시지로 좁혀서
+    // 찾는다 — 좁히지 않으면 스텝 안내가 문자 항목을 잡아 주석 문구가 비어 버린다(G17 동류).
+    const item = timeline.find((t) => t.kind === "message" && t.turnIndex === turnIndex);
+    if (item?.kind === "message" && item.annotation) {
       setStepAnnounce(
         `${nextPos + 1}번째 신호 / 총 ${annotatedTurnIndexes.length}개. ${item.annotation.timeLabel}: ${item.annotation.tactic} 신호.`,
       );
@@ -374,6 +390,13 @@ export default function ReplayPage() {
           버블) 그대로. 스크린리더가 항상 대화 순서(DOM 순서)대로 읽는다. */}
       <ol className="mx-5 mt-4 flex flex-col gap-3">
         {timeline.map((item) => {
+          // T89(§15.1.5 (5)) — 문자 항목은 **기존 사기범 말풍선 형식 그대로** 그리고, 이벤트는
+          // **기존 주석 카드(role="note")** 그대로 쓴다. 신규 컴포넌트·신규 색·신규 표기 형식 0건
+          // (UX-008 v1.11 "신규 표기 형식 없음"). 되감기 버튼은 달지 않는다 — 되감기 대상은
+          // deceivedMoments이고 문자 순간에는 대응하는 사기범 대사가 없다(§15.1.5 (5) 근거 4).
+          if (item.kind === "sms") {
+            return <ReplaySmsItem key={item.id} sms={item.sms} />;
+          }
           const channelBadgeLabel = (item.channel ?? "voice") === "messenger" ? "메신저" : "통화";
           return (
             <li
@@ -547,5 +570,80 @@ export default function ReplayPage() {
         </button>
       </div>
     </main>
+  );
+}
+
+/**
+ * T89(§15.1.5 (5)) — 통화 중 도착한 문자 1건 + 그 문자에서 일어난 일들.
+ *
+ * **기존 표기 형식만 재사용한다**: 문자 자체는 사기범 말풍선(좌측 아바타 + 흰 버블), 이벤트는
+ * 주석 카드(`role="note"`, "⚠️ 여기가 신호였어요 / 이렇게 대응했어야")다. `correctAction`이 없는
+ * 이벤트는 **같은 카드의 하단 블록만 생략**한다(카드 자체는 동일).
+ *
+ * ⚠️ 여기서 하지 않는 것: 링크를 **컨트롤로 렌더하지 않는다**(`linkDisplayText`는 표시용 텍스트일
+ * 뿐이고 스냅샷에 `fakeLandingId`가 아예 없어 가짜 랜딩 재진입 자체가 불가능하다 — §15.6 G19,
+ * UX-018은 Read-only 열람 화면). 되감기 버튼도 달지 않는다(§15.1.5 (5) 근거 4).
+ */
+function ReplaySmsItem({ sms }: { sms: ReplaySmsSource }) {
+  return (
+    <li className="outline-none">
+      <div className="flex max-w-[85%] items-end gap-2">
+        <div
+          aria-hidden="true"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#41525E] text-sm text-[#C9D4DB]"
+        >
+          ✉
+        </div>
+        <div>
+          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[#6B655C]">
+            {sms.senderLabel}
+            <Badge variant="neutral">문자</Badge>
+            {/* AC-022/032 계승 — 사후 화면에서도 모의 문자임을 표기한다. */}
+            <span className="rounded-full bg-[#EFEBF7] px-2 py-0.5 text-[11px] font-semibold text-[#463880]">
+              AI 훈련용 모의 문자
+            </span>
+          </p>
+          <div className="rounded-[16px] rounded-bl-[4px] border border-[#E2DDD3] bg-white px-4 py-3">
+            <p className="whitespace-pre-line text-[15px] leading-[1.55] text-[#22303A]">
+              {sms.body}
+            </p>
+            {sms.linkDisplayText && (
+              <p className="mt-2 text-[13px] text-[#6B655C]">
+                <span className="font-semibold">문자 속 링크 표기: </span>
+                {sms.linkDisplayText}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 앵커 미해결 고지(§15.1.5 (4) 규칙 3) — 조용히 버리지 않고 위치를 모른다는 사실을 알린다. */}
+      {!sms.anchorResolved && (
+        <p className="ml-10 mt-1.5 text-[13px] text-[#6B655C]" role="status">
+          이 문자가 대화 중 어느 시점에 도착했는지는 확인하지 못했습니다.
+        </p>
+      )}
+
+      {sms.events.map((event) => (
+        <div
+          key={event.event}
+          role="note"
+          className="ml-10 mt-2 rounded-[12px] border border-[#B96A1B]/30 bg-[#FBF3E8] p-3.5"
+        >
+          <p className="mb-1.5 text-[13px] font-bold text-[#B96A1B]">⚠️ 여기가 신호였어요</p>
+          <p className="text-[13px] leading-[1.6] text-[#22303A]">
+            {sms.timeLabel ? `${sms.timeLabel}: ` : ""}
+            {event.what}
+          </p>
+          {event.correctAction && (
+            <>
+              <div className="my-2.5 h-px bg-[#B96A1B]/20" />
+              <p className="mb-1.5 text-[13px] font-bold text-[#0E6B62]">이렇게 대응했어야</p>
+              <p className="text-[13px] leading-[1.6] text-[#22303A]">{event.correctAction}</p>
+            </>
+          )}
+        </div>
+      ))}
+    </li>
   );
 }

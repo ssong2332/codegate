@@ -29,8 +29,20 @@ import {
   useSpeechRecognition,
 } from "@/lib/recording";
 import { useRealtimeCall } from "@/lib/realtime";
-import { requestReverseEscalation, sendMessage, submitRealtimeTranscript } from "@/lib/api";
+import {
+  deliverInCallSms,
+  recordInCallSmsEvent,
+  requestReverseEscalation,
+  sendMessage,
+  submitRealtimeTranscript,
+} from "@/lib/api";
 import type { TranscriptTurn } from "@/lib/api";
+import {
+  countUnread,
+  pickDueInCallSms,
+  sortByArrival,
+  type InCallSmsView,
+} from "@/lib/incallsms";
 import {
   DIFFICULTY_LABEL,
   normalizeDifficultyLevel,
@@ -38,6 +50,7 @@ import {
 } from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import CallWaveform from "@/components/CallWaveform";
+import InCallSmsOverlay from "@/components/InCallSmsOverlay";
 
 // ⚠️ 지연 로딩 필수 — @elevenlabs/react가 끌어오는 livekit-client(WebRTC)를 이 화면 로드 시점에
 // 함께 불러오면 WebRTC를 못 쓰는 환경에서 렌더러가 통째로 죽는다(실측: 페이지 자체가 로드 실패).
@@ -107,6 +120,21 @@ export default function SessionCallPage() {
   // escalating/escalationError와 동일한 패턴, 방향만 반대.
   const [switchingToMessenger, setSwitchingToMessenger] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
+  // T68 통화 중 문자(UX-027/UF-008, AC-059/060/061) — 전부 **통화 셸 위에 얹히는 상태**다.
+  // ⚠️ 이 값들은 타이머 effect(:phase만 의존)·한도 자동종료 effect·오디오 재생 어디에도 들어가지
+  // 않는다(§15.1.1 — 넣으면 통화가 멈춰 이 기능의 존재 이유가 무너진다).
+  const [inCallSms, setInCallSms] = useState<InCallSmsView[]>([]);
+  const [smsOverlayOpen, setSmsOverlayOpen] = useState(false);
+  const [smsBannerDismissed, setSmsBannerDismissed] = useState(false);
+  const [smsError, setSmsError] = useState<string | null>(null);
+  // 실시간 세션에 넣을 announce 지시(카운터 패턴 — textMessage와 동일).
+  const [smsInstruction, setSmsInstruction] = useState<{ text: string; seq: number } | null>(null);
+  // 사기범 발화 턴 수(실시간 경로) — GeminiVoiceSession의 turnComplete 경계만 센다.
+  const [scammerTurns, setScammerTurns] = useState(0);
+  // 이미 서버에 전달을 요청한 smsId(중복 호출 방지). 렌더와 무관해 ref에 둔다.
+  const requestedSmsRef = useRef<Set<string>>(new Set());
+  // 오버레이를 연 트리거(배너/"문자함") — 닫을 때 포커스를 되돌린다(UX-027 Focus Order).
+  const smsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speech = useSpeechRecognition();
   const realtime = useRealtimeCall();
@@ -213,6 +241,73 @@ export default function SessionCallPage() {
     return unsubscribe;
   }, [sessionId, phase]);
 
+  // T68 — 통화 중 도착 문자 구독(UX-027). **실시간·폴백 양 경로의 단일 렌더 소스**다(§15.1.2):
+  // 실시간은 deliverInCallSms가, 폴백 텍스트는 sendMessage가 같은 컬렉션에 쓰므로 화면 코드가
+  // 갈라지지 않는다. 콜러블 응답은 렌더 소스가 아니다.
+  useEffect(() => {
+    if (!sessionId || phase === "incoming" || phase === "connecting") return;
+    const smsQuery = query(
+      collection(db, "sessions", sessionId, "inCallSms"),
+      orderBy("arrivedAt", "asc"),
+    );
+    const unsubscribe = onSnapshot(smsQuery, (snapshot) => {
+      setInCallSms(
+        snapshot.docs.map((docSnap) => {
+          const data = docSnap.data();
+          const arrivedAt = data.arrivedAt as { toMillis?: () => number } | undefined;
+          const openedAt = data.openedAt as { toMillis?: () => number } | undefined;
+          return {
+            smsId: docSnap.id,
+            kind: data.kind as InCallSmsView["kind"],
+            senderLabel: data.senderLabel as string,
+            body: data.body as string,
+            otpCode: data.otpCode as string | undefined,
+            linkDisplayText: data.linkDisplayText as string | undefined,
+            fakeLandingId: data.fakeLandingId as string | undefined,
+            arrivedAtMs: arrivedAt?.toMillis?.() ?? 0,
+            openedAtMs: openedAt?.toMillis?.(),
+          };
+        }),
+      );
+    });
+    return unsubscribe;
+  }, [sessionId, phase]);
+
+  // T68 — 사기범 턴 경계에 도달하면 문자를 도착시킨다(실시간 경로, §15.1.2 앱 오케스트레이션).
+  // 서버가 문서를 쓰고 announce 지시를 돌려주면 그것을 **같은 Live 세션에 텍스트 턴으로** 넣어
+  // 캐릭터가 "문자 보냈어요"라고 말하게 한다. 실패해도 통화는 계속된다(P-4 — 인라인 안내만).
+  useEffect(() => {
+    if (!sessionId || callMode !== "realtime" || phase !== "live") return;
+    const triggers = realtime.credentials?.inCallSmsTriggers ?? [];
+    if (triggers.length === 0) return;
+    const dueSmsId = pickDueInCallSms({
+      triggers,
+      scammerTurns,
+      deliveredSmsIds: [...requestedSmsRef.current],
+    });
+    if (!dueSmsId) return;
+    requestedSmsRef.current.add(dueSmsId);
+    (async () => {
+      try {
+        const result = await deliverInCallSms({ sessionId, smsId: dueSmsId });
+        setSmsError(null);
+        setSmsBannerDismissed(false);
+        setSmsInstruction((prev) => ({
+          text: result.announceInstruction,
+          seq: (prev?.seq ?? 0) + 1,
+        }));
+      } catch {
+        // 다음 턴 경계에서 다시 시도할 수 있게 요청 기록을 되돌린다.
+        requestedSmsRef.current.delete(dueSmsId);
+        setSmsError("문자를 받지 못했습니다. 통화는 계속됩니다.");
+      }
+    })();
+  }, [sessionId, callMode, phase, scammerTurns, realtime.credentials?.inCallSmsTriggers]);
+
+  const handleScammerTurnComplete = useCallback(() => {
+    setScammerTurns((n) => n + 1);
+  }, []);
+
   // 통화 경과 타이머 — "받기"(answeredAt) 기점, ended면 정지.
   useEffect(() => {
     if (phase === "incoming" || phase === "ended") return;
@@ -229,9 +324,15 @@ export default function SessionCallPage() {
     if (autoEndedRef.current) return;
     if (elapsedSec * 1000 < maxSessionMs) return;
     autoEndedRef.current = true;
+    // T68/UX-027 Failure (d) — 한도 도달 시 오버레이를 **먼저 내린다**. 종료 고지(AC-015/023)가
+    // 문자 화면에 가려지면 안 된다(AC-059). 이 effect의 조건·의존성에는 오버레이 상태를 넣지
+    // 않는다(넣으면 오버레이가 열린 동안 한도 종료가 멈춘다 — §15.1.1).
     audioRef.current?.pause();
     realtime.stop();
+    // 인라인 async IIFE로 감싼다(react-hooks/set-state-in-effect 회피 — 이 화면의 다른 effect들과
+    // 동일한 관례). setSmsOverlayOpen도 그 안에서 호출한다.
     (async () => {
+      setSmsOverlayOpen(false);
       await flushTranscript();
       router.push("/session/end");
     })();
@@ -296,14 +397,19 @@ export default function SessionCallPage() {
   // #7 연속 자동 청취(폴백 경로 전용) — 브라우저 SpeechRecognition은 침묵이 이어지면 스스로 종료해
   // status가 idle로 떨어진다. live 구간에서 재생 중/전송 중이 아니면 idle이 될 때마다 다시 연다.
   // start()가 status를 listening으로 바꿔 이 effect가 곧 멈추므로 타이트 루프가 아니다.
+  //
+  // T68(§15.1.3) — 문자 오버레이가 열려 있는 동안에는 **마이크 입력만** 멈춘다(읽는 중 혼잣말·
+  // 주변 소음이 발화로 오인되면 사기범이 엉뚱하게 반응해 몰입이 깨진다). 오버레이를 닫으면 이
+  // 조건이 다시 참이 되어 기존 재개 로직이 자동으로 청취를 연다(추가 코드 불요).
+  // ⚠️ 재생·타이머는 이 게이팅 대상이 아니다 — 통화가 살아 있다는 것이 이 기능의 전부다.
   useEffect(() => {
-    if (callMode !== "fallback" || phase !== "live") return;
+    if (callMode !== "fallback" || phase !== "live" || smsOverlayOpen) return;
     if (speech.status !== "idle") return;
     if (sending || playbackUrl) return;
     const timer = setTimeout(() => speech.start(), 400);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callMode, phase, speech.status, sending, playbackUrl]);
+  }, [callMode, phase, speech.status, sending, playbackUrl, smsOverlayOpen]);
 
   // P-11 이음새 없는 전환 — 오프닝 재생이 끝나면 확인 버튼 없이 곧바로 실시간 청취로 넘어간다.
   const handlePlaybackEnded = () => {
@@ -336,7 +442,32 @@ export default function SessionCallPage() {
     router.push("/session/end");
   };
 
+  // T68 — 오버레이 열기/닫기. **라우팅을 하지 않는다**(D-35 하드 요구): 상태만 바꾸므로
+  // GeminiVoiceSession/RealtimeVoiceSession은 언마운트되지 않고 통화가 그대로 유지된다.
+  const handleOpenSmsOverlay = (trigger: HTMLButtonElement | null) => {
+    smsTriggerRef.current = trigger;
+    // 폴백 경로에서는 오버레이를 여는 즉시 마이크를 닫는다(위 자동 청취 effect의 재개 조건과 짝).
+    if (callMode === "fallback") speech.stop();
+    setSmsOverlayOpen(true);
+  };
+
+  const handleCloseSmsOverlay = () => {
+    setSmsOverlayOpen(false);
+    setSmsBannerDismissed(true);
+    // 직전 트리거(배너 또는 "문자함" 버튼)로 포커스 복귀(UX-027 Focus Order).
+    smsTriggerRef.current?.focus();
+  };
+
+  const handleRecordSmsEvent = (smsId: string, event: "opened" | "link_tapped") => {
+    if (!sessionId) return;
+    // 기록 실패는 조용히 흡수한다 — 기록 때문에 훈련을 막지 않는다(API.md Errors).
+    void recordInCallSmsEvent({ sessionId, smsId, event }).catch(() => {});
+  };
+
   const handleEndTraining = async () => {
+    // 오버레이가 열려 있어도 종료는 항상 도달 가능해야 한다(AC-006). 종료 고지 화면이 문자에
+    // 가려지지 않도록 먼저 내린다.
+    setSmsOverlayOpen(false);
     audioRef.current?.pause();
     realtime.stop();
     // 실시간 전사를 먼저 제출해 리포트가 실제 대화를 분석할 수 있게 한 뒤 종료 화면으로 이동한다
@@ -397,6 +528,9 @@ export default function SessionCallPage() {
       const result = await sendMessage({ sessionId, userText: text });
       setInput("");
       speech.reset();
+      // T68 폴백 경로 — 서버가 이번 턴에 문자를 도착시켰으면 배너를 다시 띄운다(렌더 자체는
+      // inCallSms 구독이 담당하므로 여기서는 배너 노출 여부만 되돌린다).
+      if (result.sms) setSmsBannerDismissed(false);
       if (result.audioUrl) {
         setPlaybackUrl(result.audioUrl);
       } else if (!result.ended) {
@@ -473,6 +607,13 @@ export default function SessionCallPage() {
   const latestScammerLine =
     [...messages].reverse().find((m) => m.role === "scammer")?.text ?? null;
   const isRinging = phase === "incoming";
+  // T68 — 문자 도착 배너·"문자함"(N) 컨트롤(UX-014 v1.11 추가 state). 통화 phase 전이가 아니라
+  // 셸 위에 얹히는 알림 레이어라 live/opening 어느 phase에서도 뜬다.
+  const sortedSms = sortByArrival(inCallSms);
+  const latestSms = sortedSms.length > 0 ? sortedSms[sortedSms.length - 1] : null;
+  const smsUnreadCount = countUnread(inCallSms);
+  const showSmsBanner =
+    latestSms !== null && !smsBannerDismissed && !smsOverlayOpen && phase !== "ended";
   // 실시간 경로는 SDK의 발화 상태를, 폴백 경로는 오디오 재생 여부를 "상대가 말하는 중"으로 본다.
   const agentSpeaking =
     callMode === "realtime" ? realtime.isAgentSpeaking : Boolean(playbackUrl);
@@ -495,7 +636,9 @@ export default function SessionCallPage() {
           credentials={realtime.credentials}
           firstMessage={openingMessageText ?? undefined}
           stopSignal={realtime.stopSignal}
-          muted={muted}
+          // T68(§15.1.3) — 오버레이가 열린 동안 **마이크 입력만** 멈춘다. 아래 음소거 버튼의
+          // aria-pressed는 사용자 의도(muted)에만 바인딩한다(근거 없는 표기 금지).
+          muted={muted || smsOverlayOpen}
           onActive={realtime.handleActive}
           onEnded={realtime.handleEnded}
           onError={realtime.handleError}
@@ -507,7 +650,7 @@ export default function SessionCallPage() {
         <GeminiVoiceSession
           credentials={realtime.credentials}
           stopSignal={realtime.stopSignal}
-          muted={muted}
+          muted={muted || smsOverlayOpen}
           onActive={realtime.handleActive}
           onEnded={realtime.handleEnded}
           onError={realtime.handleError}
@@ -515,6 +658,8 @@ export default function SessionCallPage() {
           onUserSpeakingChange={realtime.handleUserSpeakingChange}
           onTranscriptTurn={handleTranscriptTurn}
           textMessage={textMessage}
+          onScammerTurnComplete={handleScammerTurnComplete}
+          instructionTurn={smsInstruction}
         />
       )}
 
@@ -530,6 +675,47 @@ export default function SessionCallPage() {
           </span>
         )}
       </div>
+
+      {/* T68 문자 도착 배너(UX-014 `sms-arrived` state / UF-008 Step 2) — 통화는 그대로 진행 중이다.
+          시각 배너와 **aria-live 알림을 동시에** 제공한다(P-20 (6) — 시각에만 의존하지 않는다).
+          탭하면 오버레이가 열릴 뿐 **라우팅이 일어나지 않는다**(D-35). */}
+      {showSmsBanner && latestSms && (
+        <div className="px-4 pt-3">
+          <button
+            type="button"
+            onClick={(event) => handleOpenSmsOverlay(event.currentTarget)}
+            className="flex w-full items-start gap-3 rounded-[14px] border-[1.5px] border-[#C9C2B6] bg-white/95 px-4 py-3 text-left"
+          >
+            <span aria-hidden="true" className="mt-0.5 text-lg">
+              ✉
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-[#22303A]">
+                문자 1건이 도착했습니다 · {latestSms.senderLabel}
+              </span>
+              <span className="block truncate text-sm text-[#6B655C]">
+                {latestSms.body.split("\n")[0]}
+              </span>
+              <span className="mt-1 inline-block rounded-full bg-[#EFEBF7] px-2 py-0.5 text-xs font-semibold text-[#463880]">
+                AI 훈련용 모의 문자
+              </span>
+            </span>
+          </button>
+        </div>
+      )}
+      {/* 스크린리더 알림 — 배너를 닫았거나 보지 못해도 도착 사실이 전달된다(P-4/P-20).
+          ⚠️ 버그 수정(사용자 브라우저 실측, 2026-07-25): 조건이 `latestSms`(도착한 문자가 있는가)라
+          미확인 건수가 0이 된 뒤에도 **"문자 0건이 도착했습니다."** 를 계속 알렸다. 시각적으로는
+          sr-only라 보이지 않지만 스크린리더 사용자에게는 매 렌더마다 들리는 **사실과 다른 안내**다.
+          알릴 사실이 실제로 있을 때(미확인 ≥ 1)만 문구를 채운다. */}
+      <p aria-live="polite" className="sr-only">
+        {smsUnreadCount > 0 ? `문자 ${smsUnreadCount}건이 도착했습니다.` : ""}
+      </p>
+      {smsError && (
+        <p role="alert" className="px-4 pt-2 text-center text-xs text-[#F0A79E]">
+          {smsError}
+        </p>
+      )}
 
       <div className="flex flex-1 flex-col items-center justify-center gap-5 px-8">
         {/* 발신자 아바타 — 수신 중에는 파동, 통화 중 상대 발화 시에도 파동으로 존재감을 준다. */}
@@ -898,6 +1084,30 @@ export default function SessionCallPage() {
               <span className="text-xs text-[#C9D4DB]">키패드</span>
             </div>
 
+            {/* T68 — "문자함"(N) 상시 컨트롤(UX-014 v1.11 추가). 문자가 1건 이상 도착한 뒤부터
+                남아 언제든 UX-027을 다시 연다(미확인 수 배지). 라우팅 없음(D-35). */}
+            {inCallSms.length > 0 && (
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  onClick={(event) => handleOpenSmsOverlay(event.currentTarget)}
+                  aria-label={`문자함 열기 — 도착 ${inCallSms.length}건, 미확인 ${smsUnreadCount}건`}
+                  className="relative flex h-14 w-14 items-center justify-center rounded-full bg-[#41525E] text-xl text-[#C9D4DB] transition active:scale-95"
+                >
+                  <span aria-hidden="true">✉</span>
+                  {smsUnreadCount > 0 && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -right-0.5 -top-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#C6392F] px-1 text-xs font-bold text-white"
+                    >
+                      {smsUnreadCount}
+                    </span>
+                  )}
+                </button>
+                <span className="text-xs text-[#C9D4DB]">문자함</span>
+              </div>
+            )}
+
             {/* T40 fast-follow — 역방향 명시 전환 버튼("메시지로 전환", §13.1/AC-039). 정방향
                 "전화로 확인"(session/messenger/page.tsx)과 대칭이지만, 이쪽은 UX 설계 문서가 없어
                 버튼만(구조화 신호·max-turn 폴백 없음) 최소 배선한다. scenario.channel==="messenger"
@@ -927,6 +1137,22 @@ export default function SessionCallPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* ⚠️ T68/UX-027 — 문자 오버레이는 **세션 컴포넌트(위)의 형제 노드**로 조건부 렌더된다.
+          early return·상위 래퍼·`key` 변경·router.push 중 어느 하나라도 하면 GeminiVoiceSession/
+          RealtimeVoiceSession이 언마운트되어 실시간 세션·마이크·타이머가 끊긴다(§15.1.1/§15.6 G10,
+          D-35 — 이 기능의 존재 이유). 여기서는 형제 하나가 추가로 그려질 뿐이라 통화가 유지된다. */}
+      {smsOverlayOpen && (
+        <InCallSmsOverlay
+          messages={inCallSms}
+          callerLabel={callerLabel}
+          elapsedLabel={formatElapsed(elapsedSec)}
+          onClose={handleCloseSmsOverlay}
+          onEndTraining={() => void handleEndTraining()}
+          onOpened={(smsId) => handleRecordSmsEvent(smsId, "opened")}
+          onLinkTapped={(smsId) => handleRecordSmsEvent(smsId, "link_tapped")}
+        />
       )}
     </main>
   );

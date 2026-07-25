@@ -59,6 +59,20 @@ export type GeminiVoiceSessionProps = {
    * — 같은 세션에 넣으면 그 문제가 원천적으로 없고, 응답도 평소처럼 이 통화의 목소리로 나온다.
    * `stopSignal`과 동일한 카운터 패턴을 쓴다(값이 바뀔 때 1회 전송). */
   textMessage: { text: string; seq: number } | null;
+  /**
+   * T68(UX-027/UF-008, §15.1.2) — 사기범 발화 1턴이 끝날 때마다(=`turnComplete`) 부모에게 알린다.
+   * 부모는 이 카운트만으로 "몇 번째 사기범 턴인가"를 세어 통화 중 문자 도착 트리거를 판단한다.
+   * ⚠️ 이 카운팅은 §13.5 스킨과 같은 **프레젠테이션 층위**다 — 안전 판정을 게이팅하지 않고, 서버가
+   * `smsId`의 시나리오 소속을 재검증한다(G12). 부모가 안 넘기면 아무 일도 일어나지 않는다.
+   */
+  onScammerTurnComplete?: () => void;
+  /**
+   * T68 — 문자 도착 순간 서버가 준 `announceInstruction`을 **같은 Live 세션에 텍스트 턴으로** 주입한다.
+   * `textMessage`와 전송 경로는 같지만(`sendClientContent`) **전사에 기록하지 않는다** — 이건 사용자
+   * 발화가 아니라 오케스트레이션 지시라, 기록하면 리포트가 "사용자가 이런 말을 했다"고 오판한다.
+   * 선례: 같은 파일의 `OPENING_TRIGGER_TURN`(연결 직후 발화 시작 신호, 역시 미기록).
+   */
+  instructionTurn?: { text: string; seq: number } | null;
 };
 
 // 마이크 캡처 버퍼 크기 — 작을수록 지연이 낮지만 콜백이 잦다. 사용자 신고(2026-07-25, "내가 말하고
@@ -108,6 +122,8 @@ export default function GeminiVoiceSession({
   stopSignal,
   muted,
   textMessage,
+  onScammerTurnComplete,
+  instructionTurn,
 }: GeminiVoiceSessionProps) {
   const handlersRef = useRef({
     onActive,
@@ -116,6 +132,7 @@ export default function GeminiVoiceSession({
     onSpeakingChange,
     onUserSpeakingChange,
     onTranscriptTurn,
+    onScammerTurnComplete,
   });
   const mutedRef = useRef(muted);
   // 정리 대상들 — 언마운트 시 전부 닫지 않으면 마이크가 계속 열려 있다.
@@ -132,8 +149,17 @@ export default function GeminiVoiceSession({
       onSpeakingChange,
       onUserSpeakingChange,
       onTranscriptTurn,
+      onScammerTurnComplete,
     };
-  }, [onActive, onEnded, onError, onSpeakingChange, onUserSpeakingChange, onTranscriptTurn]);
+  }, [
+    onActive,
+    onEnded,
+    onError,
+    onSpeakingChange,
+    onUserSpeakingChange,
+    onTranscriptTurn,
+    onScammerTurnComplete,
+  ]);
 
   useEffect(() => {
     mutedRef.current = muted;
@@ -375,7 +401,16 @@ export default function GeminiVoiceSession({
               // 게이트를 **즉시 닫지 않는다** — turnComplete 시점에도 재생될 오디오가 남아 있을 수
               // 있다. 실제 개방 시각은 항상 잔여 재생 기준으로 다시 잡는다.
               if (hasAudio || hasTurnComplete) scheduleGateClose();
-              if (hasTurnComplete) flushTranscript();
+              if (hasTurnComplete) {
+                flushTranscript();
+                // T68 — 사기범 발화 1턴 완료. 부모가 이 경계만 세어 통화 중 문자 도착을 판단한다
+                // (§15.1.2 "앱 오케스트레이션"). 세션 자체에는 아무 영향이 없다.
+                // ⚠️ 병합 정합(T90+T68, 2026-07-26): T90이 핸들러를 "오디오 먼저 → 게이트 계산
+                // 나중"으로 재정렬하면서 turnComplete 처리 위치가 바뀌었다. 이 콜백은 **전사 flush
+                // 직후**라는 원래 순서를 그대로 유지한다 — 문자 도착 판단이 전사보다 앞서면
+                // 앵커 턴 계산(§15.1.5 G21)이 한 턴 어긋난다.
+                handlersRef.current.onScammerTurnComplete?.();
+              }
             },
             onerror: (e: unknown) => {
               log("onerror", e);
@@ -526,6 +561,21 @@ export default function GeminiVoiceSession({
     // seq가 바뀔 때만 1회 전송한다(stopSignal과 동일한 카운터 패턴).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [textMessage?.seq]);
+
+  // T68 — 문자 도착 announce 지시 주입(UX-027/UF-008). textMessage와 같은 경로지만 **전사에
+  // 기록하지 않는다**(사용자 발화가 아니라 오케스트레이션 신호 — OPENING_TRIGGER_TURN과 동일 취지).
+  // 실패해도 문자는 이미 도착해 있으므로 학습 가치는 보존된다(배너·문자함은 대사와 무관, P-4).
+  useEffect(() => {
+    if (!instructionTurn || !instructionTurn.text.trim()) return;
+    const session = liveSessionRef.current;
+    if (!session) return;
+    try {
+      session.sendClientContent({ turns: instructionTurn.text, turnComplete: true });
+    } catch {
+      // 무시 — 통화는 계속된다.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instructionTurn?.seq]);
 
   return null;
 }

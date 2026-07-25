@@ -10,6 +10,8 @@ export { requestEscalation } from "./requestEscalation";
 export { requestReverseEscalation } from "./requestReverseEscalation";
 export { generateReport } from "./generateReport";
 export { judgeRewindAnswer } from "./judgeRewindAnswer";
+export { deliverInCallSms } from "./deliverInCallSms";
+export { recordInCallSmsEvent } from "./recordInCallSmsEvent";
 export { getBeginnerBriefing } from "./getBeginnerBriefing";
 export { createChallenge } from "./createChallenge";
 export { deleteChallenge } from "./deleteChallenge";

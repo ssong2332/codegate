@@ -47,6 +47,17 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/sessions/$(sessionId)).data.uid == request.auth.uid;
         allow write: if false;
       }
+
+      // sessions/{sid}/inCallSms/{} — 통화 중 도착 문자(T68, Database.md §inCallSms, AC-060).
+      // read는 부모 세션 소유자만(2인 챌린지 사용자2=익명 uid도 자기 세션이면 동일하게 성립).
+      // write는 클라 전면 거부 — 쓰기는 Functions(admin)뿐이다(`deliverInCallSms`/`sendMessage`/
+      // `recordInCallSmsEvent`). 문자 본문·인증번호는 **서버 카탈로그가 원천**이며, 클라가 임의
+      // 문자를 주입하는 경로가 존재하지 않는다(messages/artifacts와 동일 원칙).
+      match /inCallSms/{smsId} {
+        allow read: if request.auth != null
+          && get(/databases/$(database)/documents/sessions/$(sessionId)).data.uid == request.auth.uid;
+        allow write: if false;
+      }
     }
 
     // scenarios/{} — 인증 사용자 read 허용(공개 메타). write 금지(seed/admin, Database.md §Migration Policy)

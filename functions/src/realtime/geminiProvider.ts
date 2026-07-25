@@ -14,6 +14,7 @@
 import { GoogleGenAI, Modality, EndSensitivity } from "@google/genai";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { SCENARIO_PROMPTS } from "../scenarios";
+import { hasInCallSms } from "../scenarios/inCallSms";
 import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider } from "./types";
 
 /** 무료 티어에서 쓸 수 있는 네이티브 오디오 모델(공식 가격 페이지 기준, 2026-07 확인). */
@@ -61,8 +62,12 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // T72(§15.3.3 호출부 3곳 중 "Gemini Live 토큰") — 난이도를 여기서도 넘겨야 "텍스트는 난이도가
     // 먹는데 통화는 안 먹는" 비대칭이 생기지 않는다(§15.6 G5). 조립 순서 불변식(가드레일 최후미)은
     // buildSystemPrompt 안에서 강제되므로 이 호출부는 문자열을 이어 붙이지 않는다(§15.5).
+    // T68(§15.1.4/§15.6 G1) — 문자 카탈로그가 있는 시나리오면 "화면에 없는 것을 가리키지 않는다"
+    // 항목이 조건형으로 대체돼 인증번호·계좌·링크를 **요구해도 되는** 문구가 된다. 이걸 빼면
+    // 오버레이를 다 만들어도 사기범이 인증번호를 요구하지 않아 기능이 발동하지 않는다.
     const systemPrompt = buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: input.difficultyLevel,
+      inCallSmsEnabled: hasInCallSms(input.scenarioId),
     });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });
