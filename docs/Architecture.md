@@ -2,8 +2,10 @@
 
 Owner: architect (see AGENTS.md). Others read-only.
 Major decisions are logged in DECISIONS.md; details in adr/.
-Based on PRD Version: v1.4 · Based on UX Version: 1.11 · Last Updated: 2026-07-25
+Based on PRD Version: v1.5 · Based on UX Version: 1.11 · Last Updated: 2026-07-25
 
+> **갱신 고지(2026-07-25, T68 REJECT 후속 아키텍트 패스 — AC-059 잔여 조항):** 헤더의 "Based on PRD Version"을 **v1.4→v1.5로 정정**한다(본문 아래 T57 고지가 이미 "PRD v1.5 기준"이라 적고 있었는데 헤더만 v1.4로 남아 있던 표기 불일치 — 설계 내용 변경 아님). 이번 패스의 범위는 **신규 §15.1.5**(통화 중 문자 이벤트의 리포트·리플레이 타임라인 통합) · **§15.6 갭 G15~G22** · §15.7 행 1건 추가 · Database.md(`inCallSms.anchorScammerTurn`, `reports.smsTimeline?`) · API.md(`generateReport`·`recordInCallSmsEvent` 증분) · **DECISIONS #37**이며, **새 ADR은 만들지 않는다**(ADR-0007의 하위호환 옵셔널 증분 — DECISIONS #19/#30/#31 원칙 계승). 기존 §0~§15.4·ADR-0001~0008은 **전부 유효**하고, §15.1.1~15.1.4(오버레이 계층·전달 모델·마이크 게이팅·프롬프트 위치)는 **한 줄도 바뀌지 않았다**.
+>
 > **갱신 고지(2026-07-25, T57 아키텍트 게이트 — v1.11 신규 기능 4건 / OQ-U16~U19 해소):** 기준을 **UX 1.10→1.11**로 맞춘다. **PRD v1.5 기준으로 정정(2026-07-25 후속).** 이 §15는 architect가 planner와 **병렬 실행**되던 시점에 작성돼 원문은 "PRD v1.4 유지 · AC 부재(OQ-U15 open)"로 적혀 있었으나, 같은 날 planner(T65)가 **AC-059~069를 신설해 OQ-U15는 resolved**다 — 매핑: 통화 중 문자=AC-059/060/061, 즉시 되감기=AC-062/063(AC-007 1리포트 불변식 보호 명시), 난이도=AC-064~067(AC-065가 "난이도는 어떤 안전장치도 게이팅·약화·우회하지 않는다"를 못박음 — §15.5 조립 순서 불변식과 정합), 실패 아카이브=AC-068/069. 따라서 **reviewer·QA는 이 AC들로 완료 판정이 가능하다**(§15.0.6의 "AC 신설 필요" 서술은 해소됨). 이번 갱신 범위는 신규 **§15**(OQ-U16/U17/U18/U19 확정)·DECISIONS #32~#36·**ADR-0007**(통화 중 문자 전달 모델)·**ADR-0008**(되감기 드릴 실행 모델)이며, 기존 §0~§14.9·ADR-0001~0006은 유효하다(재검증: §13.5 "프레젠테이션 레이어는 어떤 안전 판정도 게이팅하지 않는다"·§14.9.1 "부재를 판별자로 오버로드하지 않는다" 두 원칙을 §15 전반에 동형 적용).
 >
 > **갱신 고지(2026-07-24, T55 아키텍트 게이트 — generic 보이스 2인 챌린지 + 체험/발송 모드 배선):** 기준을 **PRD v1.3→v1.4 · UX 1.8→1.10**으로 맞춘다(직전까지 v1.3/1.8이라 버전 갭 존재 — 리포트에 명시). v1.3→v1.4 델타는 신규 AC-056/057/058(체험/발송 선택 상향 + 보이스 clone 자기체험 배제 + generic 보이스 2인 챌린지)·OQ-32(resolved: generic 챌린지 발신자 결과 열람=메신저식 "완료 여부만")이고, UX 1.8→1.10 델타는 T54의 D-31/32/33/34·UX-026 상향·UX-016 조건부 스킵·UX-019 3종 카피다. 이번 갱신은 신규 **§14.9**(generic 보이스 챌린지 — voiceMode 판별자 확장 + 모드 클라 배선)·DECISIONS #31에 한정하며, 기존 §0~§14.8·ADR-0005/0006은 유효하다(재검증: §14.8의 "voiceId-부재를 판별자로 오버로드하지 않는다" 원칙을 이번 clone/generic 판별에도 동형 적용). **새 ADR 없음**: 이 확장도 ADR-0005(챌린지 스코프 클론)·ADR-0006(익명 uid 접근)의 하위호환 옵셔널 증분이지 새 구조 결정이 아니다(§14.8과 동일 논리 — DECISIONS #19/#30 원칙 계승).
@@ -779,6 +781,141 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
   - **수정 규칙:** 이 항목을 무조건형에서 **조건형**으로 바꾼다 — "참가자가 볼 수 없는 것은 가리키지 않는다. **단, 이 훈련에서 실제로 문자로 도착한 내용(인증번호·계좌·링크)은 참가자가 화면에서 볼 수 있으므로 요구해도 된다.**" 조건 문구는 문자 카탈로그가 있는 시나리오에서만 켠다(카탈로그 없는 시나리오는 기존 문장 그대로 — 회귀 없음).
 - **조립 형태:** `buildSystemPrompt(prompt, opts)` 의 `opts.inCallSmsEnabled: boolean`(세션 지시 블록)과 `opts.turnInstruction?: string`(그 턴의 `announceInstruction`). 둘 다 **`guardrailPreamble` 앞**에 삽입한다(§15.5 — 뒤에 붙이면 D-42·AC-024 방어가 밀린다).
 
+#### 15.1.5 (e) 문자 이벤트의 리포트·리플레이 타임라인 통합 — 리포트 생성 시점 스냅샷 + 턴 앵커 병합 (AC-059 잔여 조항)
+> **왜 이 절이 생겼나(정직하게):** T68(`feat/T68-in-call-sms`, `012a5bc`)이 reviewer에게 REJECTED됐고, 사유는 **구현 결함이 아니라 이 절의 부재**다. §15.1.1~15.1.4와 §15.6 G1~G14 어디에도 "문자 이벤트가 리포트·리플레이 타임라인에 어떻게 올라오는가"가 설계돼 있지 않았고, Tasks.md T68의 "완료 판정 필수 증거" 목록에도 그 항목이 없었다. 그래서 구현은 `openedAt`/`linkTappedAt`을 `sessions/{sid}/inCallSms`에만 기록하고 끝났다 — **리포트도 리플레이도 이 서브컬렉션을 읽지 않는다**(실측: `src/app/report/replay/page.tsx`는 `sessions/{sid}/messages`만 조회, `functions/src/report/*`는 T68에서 diff 0). 그 결과 **AC-059의 "문자 확인·링크 탭·인증번호 노출은 하나의 세션 타임라인에 기록되어 리포트(AC-026)·리플레이 해설(AC-038)에서 함께 다뤄진다"** 조항이 문자 그대로 미충족이다.
+>
+> **범위 확정(먼저 못 박는다):** 남은 갭은 **"오버레이 상호작용 이벤트의 타임라인 노출" 한 가지뿐**이다. AC-061의 *"사용자가 인증번호를 통화로 불러준 사실이 리포트에서 속은 시점으로 교육 포인트화된다"* 는 **이미 충족돼 있다** — `COMPLIANCE_PATTERN`의 숫자 전용 답변 앵커 `^\s*[\d\s-]{4,}\s*$`(`functions/src/report/analyzeConversation.ts:115`, T68 이전부터 존재)가 전사에서 이를 잡는다. **이미 되는 것을 다시 만들지 마라.**
+
+**결정 요지(다른 판단보다 우선):**
+1. **설계한다(유예 아님).** UX-027 Priority가 Critical이고 AC-059가 명문 요구이며, 설계 비용이 "리포트 생성 시 서브컬렉션 read 1회 + 리포트 문서에 표시 전용 배열 1개 + 화면 병합"으로 닫힌다. 유예하려면 PRD AC-059 문면 수정이 필요한데 그건 planner 소관이라 오히려 더 무거운 경로다.
+2. **수집은 리포트 생성 시점, 서버 1곳.** `generateReportForSession`이 `sessions/{sid}/inCallSms`를 읽어 `reports/{rid}.smsTimeline`에 **스냅샷 역정규화**한다. 이벤트 발생 시 다른 곳에 함께 쓰는 **이중 기록(dual write)을 하지 않는다.**
+3. **`messages`·`analyzeConversation`·`wasDeceived`·`deceivedMoments`·`tacticsUsed`·`preventionAdvice`는 한 글자도 바뀌지 않는다**(G3 재발 금지 — 아래 (2)).
+4. **병합 축은 시계(wall clock)가 아니라 턴 앵커다.** 실시간 경로에서 시간 병합은 **구조적으로 깨진다**(아래 (4) 실측 근거).
+5. **표시는 기존 항목 형식 재사용.** 신규 컴포넌트·신규 표기 형식 **0건**(UX-008 v1.11 "신규 표기 형식 없음").
+
+##### (1) 수집 지점 — 리포트 생성 시점에 읽어 리포트 문서에 스냅샷한다
+**결정: `generateReportForSession`이 `sessionRef.collection("inCallSms").orderBy("arrivedAt","asc").get()`을 1회 추가로 읽고, 표시 전용 배열 `ReportDoc.smsTimeline?`으로 저장한다.**
+
+| 후보 | 판정 | 근거 |
+|---|---|---|
+| **리포트 생성 시점 수집(채택) ✅** | 채택 | 이미 `session`·`messages`를 읽는 **단일 지점**이라 read 1회 추가로 끝난다. 리포트에 스냅샷이 있으면 리플레이(클라)는 **이미 읽고 있는 `reports/{sid}` 하나만으로** 타임라인을 그린다 — 서브컬렉션 추가 조회·신규 `firestore.rules` 경로가 **불요**하다. §15.4.1의 "아카이브는 리포트를 카드의 단일 소스로 쓴다"(G8 역정규화)와 **동형**이다. |
+| 이벤트 발생 시 다른 곳에도 함께 기록(dual write) | 기각 | 같은 사실이 두 곳에 저장돼 드리프트·고아 레코드가 생긴다(§15.4.1 (ii)와 같은 논거). 쓰기 경로가 하나 늘면 사고 표면도 는다. 게다가 "다른 곳"이 `messages`면 **G3 그 자체**다. |
+| 화면(리플레이)이 `inCallSms`를 직접 구독 | 기각 | 리포트 화면·리플레이 화면·(장래) 아카이브가 각자 해석 로직을 갖게 되어 **표시 규칙이 3벌로 갈라진다**. 앵커 해석(아래 (4))은 서버가 `messages`를 봐야 가능한데, 그러면 클라가 `messages`를 한 번 더 읽어야 한다. |
+
+- **AC-007 정합:** `reports/{rid}` **문서에 필드 하나를 추가할 뿐** 두 번째 리포트 문서를 만들지 않고 서브컬렉션도 만들지 않는다. `reportId = sessionId` 멱등 키와 early-return(`generateReportCore.ts:34`)은 무변경이므로 **리포트는 여전히 세션당 정확히 1개**이며, 스냅샷은 **최초 생성 시 1회만** 기록된다(이미 리포트가 있으면 아무것도 갱신하지 않는다).
+  - 되감기(§15.2.2)가 `reports/{rid}/rewindAttempts` **append 전용**을 택한 이유는 "세션 종료 **후에도 계속 생기는 사용자 행위"** 였기 때문이다. 문자 이벤트는 **세션 종료 시점에 이미 확정된 사실**이라(오버레이는 통화 중에만 존재) 서브컬렉션이 아니라 생성 시 1회 스냅샷이 자연스럽다 — 같은 불변식을 **더 단순한 수단으로** 지킨다.
+- `updateDefenseGrade`는 `wasDeceived`만 읽는다(`generateReportCore.ts:113`) → **무영향**. 아카이브(§15.4.1)는 `deceivedMoments`만 평탄화한다 → **무영향**. 되감기(§15.2)는 `deceivedMoments`만 대상으로 한다 → **무영향**. T70/T72/T74와 충돌 없음.
+- **하위호환:** 기존 리포트는 `smsTimeline` 부재 → 화면은 **빈 배열로 취급**(무백필, Migration Policy).
+
+##### (2) G3 재발 금지 — 분석의 입력이 아니라 산출 후 병합되는 별도 배열이다
+**결정: 문자는 `messages`에 어떤 형태로도 write되지 않고, `analyzeConversation`의 시그니처·입력·`sorted[i](scammer) ↔ sorted[i+1](user)` 짝짓기 루프(`analyzeConversation.ts:136-164`)는 무변경이다.**
+
+- 문자 스냅샷은 `analyzeConversation`이 **끝난 뒤** 리포트 문서에 **나란히 얹히는 배열**이다. 분석 함수에 전달되지 않으므로 짝짓기가 어긋날 경로가 **구조적으로 존재하지 않는다.**
+- **필수 회귀 테스트(2건):** ① 문자 문서가 N건 있는 세션과 0건인 세션에서 `wasDeceived`·`deceivedMoments`·`tacticsUsed`·`preventionAdvice`가 **완전히 동일**함. ② `smsTimeline`이 빈 배열일 때 리플레이 타임라인 산출이 도입 전과 **완전히 동일**함(§15.5 회귀 테스트 ③과 같은 "증분이 기존 출력을 한 글자도 바꾸지 않음" 패턴).
+- **금지:** 문자 상호작용으로 `wasDeceived`를 뒤집거나 `deceivedMoments`에 항목을 추가하는 것. 이유는 아래 (5)에 별도로 적는다(판단이 갈리는 지점이라 근거를 남긴다).
+
+##### (3) 스키마 — `ReportDoc.smsTimeline?`(표시 전용) + `InCallSmsDoc.anchorScammerTurn`(앵커)
+```
+// reports/{rid} 증분 (옵셔널, 하위호환)
+smsTimeline?: SmsTimelineEntry[]        // 리포트 생성 시점에 **최종 표시 순서로 정렬해** 기록
+
+SmsTimelineEntry = {
+  smsId: string
+  kind: "account" | "link" | "otp"
+  senderLabel: string                   // 서버 카탈로그 모의값
+  body: string                          // 서버 카탈로그 원문(사용자·LLM 텍스트가 아니라 마스킹 대상 아님)
+  linkDisplayText?: string              // kind==="link"일 때만. **표시용 텍스트** — 컨트롤로 렌더 금지
+  anchorTurnIndex: number               // 이 turnIndex의 메시지 '뒤'에 놓인다. -1 = 대화 맨 앞
+  anchorResolved: boolean               // false = 위치 확정 실패 → 화면이 정직하게 고지
+  timeLabel?: string                    // 앵커 메시지의 경과 초에서 파생. 미해결·메시지 0건이면 부재
+  events: SmsTimelineEvent[]            // 최소 1건(sms_received). 아래 규칙표 순서 고정
+}
+SmsTimelineEvent = { event: "sms_received" | "sms_opened" | "sms_otp_shown" | "sms_link_tapped",
+                     what: string, correctAction?: string }
+```
+- **스냅샷에 넣지 않는 것(구조적 금지 — 넣으면 사후 화면이 잘못 쓸 수 있다):**
+  | 금지 필드 | 왜 |
+  |---|---|
+  | `fakeLandingId` | 넣으면 리플레이가 **가짜 랜딩 재진입 컨트롤**을 만들 수 있다. AC-045는 **세션 중** 재현이지 사후 열람 화면의 상호작용이 아니다 — 사후 화면에 신규 상호작용 표면을 신설하지 않는다(UX-018 "열람 화면"). |
+  | `otpCode` | `body`에 이미 문구 그대로 들어 있다. 코드만 따로 꺼내 두면 "복사 가능한 필드"를 만들어 AC-061의 *"앱이 복사·전송 동선을 대신 만들지 않는다"* 취지와 어긋난다. |
+  | `arrivedAt`/`openedAt`/`linkTappedAt` 원시 타임스탬프 | 표시 축이 **아니다**(아래 (4)). 넣어 두면 화면이 실수로 그 축을 써서 실시간 경로에서 순서가 뒤집힌다. 원본은 `inCallSms` 문서에 그대로 남는다. |
+  | `url` | **애초에 어느 스키마에도 없다**(AC-032/045 구조적 금지, §15.1.2 유지). |
+- **`sessions/{sid}/inCallSms/{smsId}` 증분:** `anchorScammerTurn: number` **1개만** 추가한다. 클라 입력이 아니라 **서버가 카탈로그 값에서 계산**해 `buildInCallSmsDoc`에서 기록한다(실시간·폴백 **두 write 경로가 같은 헬퍼를 쓰므로 단일 지점** — `functions/src/inCallSms/buildDoc.ts`가 `deliverInCallSms`와 `sendMessage` 양쪽에서 호출된다).
+- `recordInCallSmsEvent`의 요청 enum은 **무변경**(`"opened" | "link_tapped"`) — 아래 (5)의 `sms_otp_shown` 파생 규칙 때문에 신규 이벤트 인자가 **불필요**하다.
+
+##### (4) turnIndex 정합 — ⚠️ 시계로 병합하면 실시간 경로가 구조적으로 깨진다
+**결정: 병합 키는 `arrivedAt`(시각)이 아니라 `anchorTurnIndex`(턴)다. 표시용 `timeLabel`도 앵커 메시지의 경과 초에서 파생해 `deceivedMoments`와 같은 시간축에 강제로 붙인다.**
+
+- **⚠️ 실측 근거(이 결정의 출발점):** 실시간 경로의 `messages.createdAt`은 **실제 발화 시각이 아니라 통화 종료 시점에 합성된 값**이다 — `submitRealtimeTranscript`가 `baseTime = Date.now()`(= 제출 시각, 통화 끝)를 잡고 각 턴에 `Timestamp.fromMillis(baseTime + i * 1000)`을 넣는다(`functions/src/realtime/submitTranscript.ts:64,78`, 같은 파일 :72-73 주석이 "정확한 write 시각이 없어 근사"라고 명시). 반면 `inCallSms.arrivedAt`은 **통화 중 실제 시각**이다. 따라서 시간순 병합을 하면 **모든 문자의 `arrivedAt`이 모든 메시지의 `createdAt`보다 앞서서, 문자가 통째로 대화 맨 앞에 몰린다.** 폴백 텍스트 경로는 `createdAt`이 실제 시각이라 정상 동작한다 — 즉 **시간 병합은 두 경로를 갈라놓는다**(§15.1.2가 "두 경로가 같은 컬렉션 하나를 써서 화면 코드가 갈라지지 않게 한다"고 정한 원칙 위반).
+- **앵커 값(write 시점, 서버 계산):** 두 경로 모두 의미가 하나다 — **"이 문자가 도착한 시점까지 `messages`에 존재하는 `role==="scammer"` 문서 수"**.
+  | 경로 | write 지점 | `anchorScammerTurn` | 근거 |
+  |---|---|---|---|
+  | 실시간 | `deliverInCallSms` | `item.afterScammerTurns` | 클라가 "사기범 N턴 완료"를 세어 호출한 계약 그대로다(`pickDueInCallSms`). 알림 대사는 **그 다음 턴**이므로 문자가 알림 바로 앞에 놓인다. |
+  | 폴백(텍스트) | `sendMessage` | `item.afterScammerTurns - 1` | 이 경로는 **N번째 사기범 응답을 만들기 직전**에 write한다(`functions/src/roleplay/index.ts` `scammerTurnNumber = storedHistory.filter(scammer).length + 1` → 완료된 사기범 발화는 N-1개). 알림 대사가 곧 그 N번째 턴이라 여기서도 문자가 알림 바로 앞에 놓인다. |
+  - 이 배치는 ADR-0007의 인과("앱이 먼저 문자를 보내고 모델에게 알리라고 시킨다")와 **일치**한다 — 문자가 오고, 그 다음 사기범이 알린다.
+- **앵커 해결(리포트 생성 시점, 순수 함수 `functions/src/report/smsTimeline.ts` — `analyzeConversation`·`tacticCategory`와 동일 관례):**
+  | 순위 | 조건(위에서 첫 매치) | 결과 |
+  |---|---|---|
+  | 1 | `anchorScammerTurn <= 0` | `{ anchorTurnIndex: -1, anchorResolved: true }` (대화 맨 앞) |
+  | 2 | `anchorScammerTurn <= scammer 메시지 수` | `{ anchorTurnIndex: scammers[N-1].turnIndex, anchorResolved: true }` |
+  | 3 | 그 외(전사 누락·짧음) | `{ anchorTurnIndex: 마지막 메시지 turnIndex ?? -1, anchorResolved: false }` — **조용히 버리지 않는다**(P-4). 화면이 "대화 중 어느 시점인지 확인하지 못했습니다"를 고지한다 |
+  - 같은 `anchorTurnIndex`에 문자가 여러 건이면 `arrivedAt` 오름차순, 동률이면 `smsId` 사전순(결정론적 — 클라의 `sortByArrival`과 같은 규칙).
+  - **`timeLabel`은 앵커 메시지에서 파생한다**: `Math.max(0, round((anchorMessage.createdAtMs - session.createdAtMs)/1000))`초 → `"N초 시점"`. 실제 `arrivedAt`을 쓰지 않는 이유: 실시간 경로에서 문자 라벨(진짜 시각)이 대화 라벨(합성 시각)보다 **항상 작게** 나와 "12초 시점에 문자 도착 / 180초 시점에 속았습니다"처럼 **순서와 라벨이 모순**된다. 대화 라벨 자체가 이미 근사값이므로(위 실측) **정합성이 정확도보다 우선**한다. 폴백 경로에서는 두 값이 한 턴 이내로 근접한다.
+- **병합(클라, `src/lib/replay/buildReplayTimeline.ts` 3번째 인자로 확장):** 정렬 키 = `(anchorTurnIndex | turnIndex, kindRank, seq)` — 메시지는 `(turnIndex, 0, 0)`, 문자는 `(anchorTurnIndex, 1, 배열 인덱스)`. **문자는 언제나 같은 앵커의 메시지 뒤**에 놓이고, **메시지끼리의 상대 순서는 불변**이다(문자가 0건이면 결과가 지금과 완전히 동일 — (2)의 회귀 테스트 ②).
+- **⚠️ 주석 오염 금지(2건, 아래 G16/G17):** 병합 후 `momentsByTurn.get(...)` 매칭은 **`kind==="message"` 항목에만** 적용하고, `getAnnotatedTurnIndexes`가 반환하는 목록에는 **문자 항목을 절대 포함하지 않는다.**
+
+##### (5) 표시 형식 — 기존 항목 형식 재사용, 신규 표기 형식 0
+**결정: 문자는 판정(`wasDeceived`/`deceivedMoments`)에 들어가지 않고, 기존 타임라인 항목 형식으로 나란히 표시된다.**
+
+- **왜 `deceivedMoments`로 승격하지 않는가(판단이 갈리는 지점이라 근거를 남긴다):**
+  1. AC-059/UX-008 문면은 **"함께 다뤄진다 / 함께 표시된다"**이지 "속은 순간으로 판정된다"가 아니다. 판정을 말하는 조항은 AC-061뿐인데 그건 **인증번호를 통화로 불러준 사용자 발화**이고 이미 충족돼 있다(맨 위 범위 확정).
+  2. 승격하면 `wasDeceived`가 링크 탭만으로 true가 되어 **AC-062(되감기 진입 조건)·AC-068(아카이브 항목)·AC-010/011(방어 등급)이 연쇄로 흔들린다.** §15.0.2("신규 능력은 프레젠테이션 + 사후 학습 층위")·§15.3.5("판정 기준을 흔들지 않는다")와 정면 충돌.
+  3. **채널 간 비대칭이 생긴다:** 메신저 스미싱 링크 탭도 현재 `deceivedMoment`가 아니다(실측 — `analyzeConversation`은 `attachments`를 보지 않는다). 문자 링크 탭만 승격하면 **같은 행위가 채널에 따라 다르게 판정**된다.
+  4. 되감기(§15.2.3)는 판정 입력으로 **"그 순간의 마스킹된 사기범 대사"** 를 전제하는데, 문자 순간에는 대응하는 대사가 없다 — 승격하면 되감기 화면이 깨진다.
+- **이벤트 파생 규칙표(저장 필드 추가 0건 — `InCallSmsDoc`만 보고 계산한다):**
+  | # | 조건(위에서 첫 매치) | `event` | `what`(참고 문구 — 확정 카피는 ux-design) | `correctAction` |
+  |---|---|---|---|---|
+  | 1 | 문서 존재(항상) | `sms_received` | "{senderLabel}에서 문자가 도착했습니다." | 없음(도착은 사용자 행위가 아니다) |
+  | 2 | `kind==="otp"` && `openedAt` 존재 | `sms_otp_shown` | "인증번호 문자를 열어 화면에 인증번호가 표시됐습니다." | "인증번호는 어떤 기관·상담원도 요구하지 않습니다. 요구받는 것 자체가 사기 신호이니 불러 주지 말고 전화를 끊으세요." |
+  | 3 | `openedAt` 존재(`kind!=="otp"`) | `sms_opened` | "문자를 열어 확인했습니다." | 없음(확인 자체는 위험 행동이 아니다) |
+  | 4 | `linkTappedAt` 존재 | `sms_link_tapped` | "문자 속 링크를 눌렀습니다." | "문자 속 링크는 누르지 말고, 기관 공식 앱이나 알고 있는 대표번호로 직접 확인하세요." |
+  - 2와 3은 **상호배타**, 4는 가산. 배열 순서는 표 순서 고정(`arrivedAt ≤ openedAt ≤ linkTappedAt`이 구조적으로 성립 — `recordInCallSmsEvent`는 문서가 존재할 때만 기록하고 각 필드를 최초 1회만 세팅한다, `functions/src/inCallSms/index.ts:93-100`).
+  - **`sms_otp_shown`은 신규 저장 이벤트가 아니라 `kind==="otp" && openedAt != null`의 파생 표기다.** 명시 필드 두 개의 결합이지 "부재를 판별자로 오버로드"가 아니다(§14.9.1 원칙 준수). 이래서 콜러블 계약이 무변경이다.
+  - **`sms_overlay_closed`는 기록하지 않는다(명시적 범위 밖).** 닫힘은 학습 가치가 없고("무슨 일이 일어난 것"이 아니다) 저장하면 타임라인 노이즈만 늘린다. UX-027 Events Emitted는 **분석 이벤트 명세**이지 저장 요건이 아니다.
+- **화면별 재사용 형식(신규 컴포넌트 금지):**
+  | 화면 | 문자 자체 | 이벤트 |
+  |---|---|---|
+  | 리플레이(UX-018) | **기존 사기범 말풍선 형식 그대로**(좌측 아바타 + 흰 버블). 발신자 라벨 자리에 `senderLabel`, 본문 자리에 `body`. 새 색·새 컴포넌트 없음 | **기존 주석 카드**(`role="note"`, "⚠️ 여기가 신호였어요 / 이렇게 대응했어야") 그대로. `correctAction`이 없는 이벤트는 **같은 카드의 하단 블록만 생략**한다(카드 자체는 동일) |
+  | 리포트(UX-008) | 타임라인 아코디언 안에서 **기존 "속은 순간" 항목과 같은 카드**(시각 라벨 + 배지 + "이렇게 했어야 해요:" 줄). 문구만 "…에 속았습니다" → "…에 문자가 도착했습니다 / …에 링크를 눌렀습니다" | 같은 카드 1장 = 이벤트 1건 |
+  - 리포트 타임라인은 `deceivedMoments`(키 `turnIndex`)와 `smsTimeline`(키 `anchorTurnIndex`)을 **같은 키로 정렬해 한 목록**으로 낸다. 값이 같으면 **문자를 뒤에** 둔다(§(4) 병합 규칙과 동일).
+  - **되감기 버튼은 문자 항목에 달지 않는다**(대상이 `deceivedMoments`이므로 — 위 (5) 근거 4).
+
+##### (6) 폴백·실시간 양 경로 동일성 — 어디서 보장되는가
+| 층위 | 단일 지점 | 근거 |
+|---|---|---|
+| 저장 | `sessions/{sid}/inCallSms` 한 컬렉션 | §15.1.2 결정 계승(무변경) |
+| 앵커 write | `buildInCallSmsDoc` 한 함수 | `deliverInCallSms`(실시간)·`sendMessage`(폴백) 양쪽이 이미 이 헬퍼를 호출한다 — 필드를 여기에 넣으면 두 경로가 자동으로 같아진다 |
+| 앵커 해결·스냅샷 | `generateReportForSession` 한 곳 | 경로와 무관하게 리포트 생성은 하나뿐이다 |
+| 표시 | `buildReplayTimeline` + 리포트 타임라인 렌더러 | 스냅샷이 이미 최종 순서로 정렬돼 오므로 화면은 해석하지 않는다 |
+
+- **경로별로 다른 것은 `anchorScammerTurn`의 *값* 하나뿐**이며(위 (4) 표), 그 값의 *의미*는 두 경로에서 동일하다. **리졸버는 절대 두 벌로 갈라지지 않는다.**
+
+##### (7) Open Questions (이 절이 남기는 것)
+| ID | 질문 | 소관 |
+|---|---|---|
+| OQ-A1 | 문자 이벤트 항목의 **확정 카피**(리포트 카드 헤딩 문구, 배지 라벨, `what`/`correctAction` 최종 문장). 위 규칙표의 문구는 **참고값**이다 | ux-design |
+| OQ-A2 | 속은 순간 0건 + 링크 탭 1건인 세션에서 **"한 번도 속지 않았습니다"(AC-009)와 "링크를 눌렀습니다"가 한 화면에 공존**할 때 서로 모순돼 보이지 않게 하는 문구 프레이밍. **판정은 바꾸지 않는다**(위 (5)) — 카피로 푼다 | ux-design |
+| OQ-A3 | 문자 이벤트를 **실패 아카이브(UX-030)** 에도 노출할지. 현재 설계는 **노출하지 않는다**(아카이브 항목 단위는 `deceivedMoments`이고 AC-068이 그렇게 규정) | planner |
+| OQ-A4 | AC-059 문면의 "기록되어"를 **저장**으로 볼지 **표시**까지로 볼지 — 본 설계는 둘 다 충족하므로 실무 영향은 없으나, 유예 논의가 다시 나오면 이 구분이 기준이 된다 | planner |
+
+##### (8) planner 인계 — 후속 태스크 제안(architect는 Tasks.md를 편집하지 않는다)
+> AGENTS.md Document Ownership상 `docs/Tasks.md`는 planner 소유이므로 architect가 행을 추가하지 않는다. 아래는 **제안**이며 번호는 사용자가 고지한 현재 최대 번호(T88) 다음부터 부여했다.
+
+| 제안 번호 | 제안 태스크 | 완료 판정 필수 증거(초안) |
+|---|---|---|
+| **T89** | **[implementer] 통화 중 문자 이벤트의 리포트·리플레이 타임라인 통합(§15.1.5) — AC-059 잔여 조항** | ① 문자 N건 세션과 0건 세션의 `wasDeceived`/`deceivedMoments`/`tacticsUsed`/`preventionAdvice` **완전 동일**(G3 무회귀). ② 실시간·폴백 **양 경로**에서 문자 항목이 announce 대사와 **1턴 이내 인접**(시간 병합이면 맨 앞에 몰림 — G15 재현 방지). ③ 속은 순간 0건 + 문자 있는 세션에서 **되감기 진입점 미노출**(AC-062, G16). ④ 리플레이에서 같은 주석이 **중복 렌더되지 않음**(G17). ⑤ 안 속은 세션에서도 문자 이벤트가 리포트 타임라인에 **표시됨**(G18). ⑥ 리포트 스냅샷에 `fakeLandingId`·`otpCode`·원시 타임스탬프 **부재**(G19). ⑦ 사후 화면에 가짜 랜딩 재진입 컨트롤 **0건**. |
+| **T90** | **[planner] OQ-A3/OQ-A4 판정 + T68 완료 판정 증거 목록 보강** | T68 행의 "완료 판정 필수 증거"에 타임라인 통합 항목이 없었던 것이 이번 REJECT의 직접 원인 — 같은 누락이 반복되지 않도록 §15.1.5 (8) T89 증거 목록을 Tasks.md에 반영. |
+
 ### 15.2 (OQ-U17) 즉시 되감기 — 원 세션 미재개·별도 1회성 드릴·전용 판정 콜러블
 > ADR-0008. UX: UF-009·UX-028·D-39/D-40.
 
@@ -950,12 +1087,26 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 | G13 | **되감기가 `reports/{id}` 문서를 update하면 AC-007이 깨진다** | `generateReportCore.ts:28-35` 멱등 키 | 리포트가 사후 연습으로 변조된다 — 서브컬렉션 append만(§15.2.2) |
 | G14 | **`tacticCategory` 없이 묶으면 기능이 무력화된다** | 시나리오별 라벨 편차(§15.4.2 실측 목록) | "3번 넘어갔습니다"가 "1+1+1"로 흩어진다 |
 
+**§15.1.5 증분 갭(G15~G22 — T68 REJECT 후속. 전부 실측 근거 있음):**
+
+| # | 갭 | 근거 | 안 고치면 생기는 일 |
+|---|---|---|---|
+| G15 | **⚠️ 시계(`arrivedAt`↔`createdAt`)로 병합하면 실시간 경로가 통째로 깨진다** | `functions/src/realtime/submitTranscript.ts:64,78` — `baseTime = Date.now()`(제출=통화 종료 시각) + `i*1000`으로 **합성**된 값이다. `inCallSms.arrivedAt`은 통화 **중** 실제 시각 | 모든 문자가 대화 **맨 앞에 몰린다**. 폴백 경로는 정상 동작해 **두 경로가 갈라진다**(§15.1.2 원칙 위반). 반드시 턴 앵커로 병합(§15.1.5 (4)) |
+| G16 | **문자 주석이 `getAnnotatedTurnIndexes`에 섞이면 되감기가 깨진다** | `src/app/report/replay/page.tsx:447` `goToRewind(annotatedTurnIndexes.indexOf(item.turnIndex))` — 이 목록이 `deceivedMoments` 배열 인덱스와 **1:1이라는 전제**로 되감기 딥링크를 만든다. :174 `resolveRewindEntry({ deceivedMomentCount: annotatedTurnIndexes.length })` | 되감기가 **엉뚱한 순간**을 열고, **속은 순간 0건 세션에 되감기 진입점이 뜬다**(AC-062 위반). T70/T74가 함께 깨진다 — 이 목록에 문자 항목을 **절대 넣지 마라** |
+| G17 | **`momentsByTurn.get(item.turnIndex)`가 문자 항목에도 매치된다** | `src/lib/replay/buildReplayTimeline.ts:37-41` — turnIndex 하나로 Map 조회. 문자의 `anchorTurnIndex`는 앵커 메시지와 **같은 값**이다 | 같은 주석 카드가 **두 번 렌더**된다. annotation은 `kind==="message"`에만 붙일 것(§15.1.5 (4)) |
+| G18 | **리포트 타임라인 섹션이 `wasDeceived`로 게이팅돼 있다** | `src/app/report/page.tsx:330` `{report.wasDeceived ? (…타임라인…) : (…)}` | 안 속은 세션의 문자 이벤트가 **통째로 사라진다**(AC-059 미충족 그대로). 조건을 `deceivedMoments.length > 0 \|\| smsTimeline.length > 0`으로 넓힐 것 |
+| G19 | **스냅샷에 `fakeLandingId`를 넣으면 사후 화면이 가짜 랜딩 재진입 컨트롤을 만들 수 있다** | AC-045는 **세션 중** 재현 규정. UX-018은 "열람 화면"(Data Operations: Read only) | 사후 학습 화면에 **신규 상호작용 표면**이 생긴다. `otpCode`·원시 타임스탬프도 함께 제외(§15.1.5 (3) 금지 표) |
+| G20 | **`recordInCallSmsEvent`가 세션 종료 여부를 검사하지 않는다** | `functions/src/inCallSms/index.ts:88` `loadOwnedSession`만 호출 — `deliverInCallSms`(:53)와 달리 `status !== "active"` 검사가 없다 | 리포트 생성 **이후**에 도착한 기록은 스냅샷에 **영영 반영되지 않는다**(리포트는 멱등 early-return, `generateReportCore.ts:34`). 오버레이는 통화 중에만 존재하므로 정상 경로엔 영향이 없지만, 종료 직전 탭과 `endSession`의 경합이 남는다 — **`status==="active"` 검증을 추가**하고 실패는 기존 계약대로 조용히 흡수하되 로그를 남길 것 |
+| G21 | **앵커 계수 기준(오프닝 대사 포함 여부)이 실시간 경로에서 미검증이다** | 클라 `scammerTurns`는 Live 세션의 `turnComplete`만 센다(`src/app/session/play/page.tsx handleScammerTurnComplete`). `submitRealtimeTranscript`는 기존 메시지 **뒤에** append한다(`submitTranscript.ts:62-63` `nextIndex = historySnap.size`) | 오프닝 대사가 `messages`에 별도 행으로 있으면서 Live 턴으로도 세어지면 앵커가 **1턴 밀린다**. **실측으로 확인하고, 어긋나면 리졸버가 아니라 write 지점의 값(±1)을 고칠 것** — 리졸버는 **단 하나로 유지**(§15.1.5 (6)) |
+| G22 | **문자 이벤트로 `wasDeceived`를 뒤집고 싶은 유혹** | `analyzeConversation`은 메신저 `attachments`(링크 클릭)도 판정에 넣지 않는다 — 실측 | 승격하면 AC-062(되감기 진입 조건)·AC-068(아카이브)·AC-010/011(방어 등급)이 **연쇄로 흔들리고**, 같은 행위가 채널마다 다르게 판정된다. **판정은 무변경, 표시만 통합**(§15.1.5 (5) 근거 4항) |
+
 ### 15.7 UX Traceability 증분 (화면 → 콜러블/컬렉션)
 | Screen/Flow | 라우트/컴포넌트 | 콜러블 | Firestore | 재사용 AC | §15 매핑 |
 |---|---|---|---|---|---|
 | UF-008 / UX-027 통화 중 문자 오버레이 | `/session/play`(같은 라우트 내 다이얼로그) + `MessengerFakeLanding` 재사용 | `deliverInCallSms`·`recordInCallSmsEvent` | `sessions/{sid}/inCallSms` | AC-045/032/033/022/006/019/026 | §15.1 |
+| UX-027 → UX-008/UX-018 문자 이벤트 타임라인 통합 | `/report`(타임라인 아코디언)·`/report/replay`(기존 말풍선·주석 카드 재사용 — 신규 컴포넌트 0) | `generateReport`(스냅샷 수집) | `sessions/{sid}/inCallSms`(read) → `reports/{rid}.smsTimeline`(write 1회) | **AC-059**/026/038/007/009 | **§15.1.5** |
 | UF-009 / UX-028 즉시 되감기 | `/report/rewind`(신규 화면, 통화 아님) | `judgeRewindAnswer` | `reports/{rid}`(read) · `reports/{rid}/rewindAttempts`(write) | AC-026/008/009/038/**007**/024 | §15.2 |
 | UX-029 난이도 선택 | `/scenarios/difficulty`(드릴다운 마지막 단계) | `getBeginnerBriefing` · 하류 `createSession`/`createChallenge`(+`difficultyLevel`) | `sessions.difficultyLevel`·`challenges.difficultyLevel` | AC-002/029/030/012/050 | §15.3 |
 | UF-010 / UX-030 실패 아카이브 | `/report/archive`(신규 화면) | (없음 — Firestore 직접 read) | `reports`(uid+createdAt desc, 기존 인덱스) | AC-026/008/009/016/011/043/055 | §15.4 |
 
-**잔여(architect 소관 아님):** ① 4건에 대한 **PRD AC 신설·MVP 우선순위**(OQ-U15 — planner/User). ② 기존 `difficulty` 산문의 **UI 라벨 문구**(OQ-U21 — planner/ux-design; 스키마는 §15.3.2로 확정). ③ 아카이브 "묶기" 그룹 헤더가 **부분 집계임을 알리는 문구**(§15.4.1 — ux-design). ④ near-miss 신설 여부(OQ-U20/R-8), 초급 실시간 힌트(R-7) — 둘 다 planner/User.
+**잔여(architect 소관 아님):** ① 4건에 대한 **PRD AC 신설·MVP 우선순위**(OQ-U15 — planner/User). ② 기존 `difficulty` 산문의 **UI 라벨 문구**(OQ-U21 — planner/ux-design; 스키마는 §15.3.2로 확정). ③ 아카이브 "묶기" 그룹 헤더가 **부분 집계임을 알리는 문구**(§15.4.1 — ux-design). ④ near-miss 신설 여부(OQ-U20/R-8), 초급 실시간 힌트(R-7) — 둘 다 planner/User. ⑤ **§15.1.5의 OQ-A1~A4**(문자 이벤트 카피·AC-009와의 문구 정합 — ux-design / 아카이브 노출·AC-059 해석 — planner) 및 **제안 태스크 T89/T90**(§15.1.5 (8) — planner가 Tasks.md에 반영).
