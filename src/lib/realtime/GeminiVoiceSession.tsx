@@ -65,7 +65,11 @@ const CAPTURE_BUFFER_SIZE = 4096;
 // 않는다 — 단지 "지금 발화를 시작하라"는 신호일 뿐이다. 텍스트가 아니라 오디오 모달리티로만
 // 응답하도록 config에 이미 고정돼 있어(responseModalities:[AUDIO], geminiProvider.ts) 이 트리거
 // 자체가 사용자에게 텍스트로 노출될 일도 없다.
-const OPENING_TRIGGER_TURN = "(전화가 방금 연결됐다. 지금 막 전화를 받은 상대에게 캐릭터로서 자연스럽게 첫 마디를 건네라.)";
+// 사용자 신고(2026-07-25) — 오프닝이 다짜고짜 요구·압박부터 들어가 시나리오 배경이 없다는 피드백.
+// generateOpeningLine(functions/src/roleplay/openingLine.ts)의 OPENING_TURN_INSTRUCTION과 동일한
+// 취지를 트리거 문구에도 반영 — 신분·연락 이유를 먼저 밝히게 한다.
+const OPENING_TRIGGER_TURN =
+  "(전화가 방금 연결됐다. 지금 막 전화를 받은 상대에게 캐릭터로서 자연스럽게 첫 마디를 건네라. 다짜고짜 요구나 압박부터 하지 말고, 먼저 신분(사칭 기관·관계)과 전화를 건 이유를 1~2문장으로 밝히며 상황을 설명한 뒤에 이어가라.)";
 
 // 이름 있는 타입으로 분리한 이유 — `let session: T | null` 선언부에서 `T`를 인라인으로 쓰면
 // `session = (...) as unknown as typeof session`처럼 자기참조 캐스트를 할 때, 같은 표현식 안의

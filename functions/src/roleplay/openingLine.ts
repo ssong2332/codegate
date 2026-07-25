@@ -11,6 +11,12 @@ import { extractLinkMarker } from "./linkMarker";
 import { buildSystemPrompt } from "./promptAssembly";
 import type { ScammerMessage } from "./types";
 
+// 사용자 신고(2026-07-25) — 오프닝 대사가 다짜고짜 요구·압박부터 들어가 시나리오 배경이 없다는
+// 피드백. buildSystemPrompt는 모든 턴에 공통으로 쓰이므로(sendMessage도 재사용), "이번이 첫 마디다"
+// 라는 지침은 이 함수(오프닝 전용 호출)에서만 별도로 덧붙인다 — sendMessage의 후속 턴에는 영향 없음.
+const OPENING_TURN_INSTRUCTION =
+  "\n\n[오프닝 지침] 지금이 이 통화/대화의 첫 마디다. 다짜고짜 요구나 압박부터 하지 말고, 먼저 신분(사칭 기관·관계)과 연락한 이유(어떤 사건·문제 때문인지)를 1~2문장으로 밝혀 상황을 설명한 뒤에 이어간다.";
+
 export type OpeningLineResult = {
   message: ScammerMessage;
   /** 실제로 이 호출에서 Mock으로 생성됐는지(isMock을 ScammerMessage에 직접 얹지 않는 이유는
@@ -47,7 +53,7 @@ export async function generateOpeningLine(scenarioId: string): Promise<OpeningLi
   }
 
   const completion = await completeWithFallback(getLlmClient(), {
-    systemPrompt: buildSystemPrompt(scenarioPrompt),
+    systemPrompt: buildSystemPrompt(scenarioPrompt) + OPENING_TURN_INSTRUCTION,
     messages: [], // 오프닝 대사에는 아직 사용자 입력이 없다.
     mockTacticHints: scenarioPrompt.weakenedTactics,
   });
