@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getRedirectResult } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { ensureUserProfile, signInWithGoogle } from "@/lib/auth";
+import { DEV_AUTH_ENABLED, devSignIn, ensureUserProfile, signInWithGoogle } from "@/lib/auth";
 
 type ViewState = "idle" | "loading" | "error";
 
@@ -63,6 +63,18 @@ export default function LoginPage() {
       return;
     }
 
+    setViewState("error");
+    setErrorMessage(outcome.message);
+  };
+
+  // 개발 전용 빠른 로그인(아이디어 #1) — Google OAuth 팝업은 별도 창이라 자동화로 끝까지 클릭할
+  // 수 없어 로그인 이후 화면 전체가 검증 사각지대였다. 인증만 익명 사인인으로 대체하고 동의·연령
+  // 확인 화면은 그대로 거친다. 프로덕션 빌드에서는 DEV_AUTH_ENABLED가 false라 통째로 제거된다.
+  const handleDevSignIn = async () => {
+    setViewState("loading");
+    setErrorMessage(null);
+    const outcome = await devSignIn();
+    if (outcome.status === "success") return; // RouteGuard가 다음 화면으로 보낸다.
     setViewState("error");
     setErrorMessage(outcome.message);
   };
@@ -134,6 +146,34 @@ export default function LoginPage() {
       <p className="mt-4 text-center text-[13px] leading-[1.6] text-[#6B655C]">
         로그인 시 개인정보는 훈련 목적으로만 사용됩니다.
       </p>
+
+      {/* 개발 전용 — 실제 배포 빌드에는 이 블록 자체가 남지 않는다(DEV_AUTH_ENABLED 데드코드 제거).
+          일반 사용자용 기능으로 오인되지 않도록 점선 테두리 + "개발 전용" 라벨로 명확히 구분한다. */}
+      {process.env.NODE_ENV !== "production" && DEV_AUTH_ENABLED && (
+        <div className="mt-6 rounded-[14px] border border-dashed border-[#C9C2B6] p-3">
+          <p className="mb-2 text-center text-[12px] font-semibold text-[#B96A1B]">
+            개발 전용 · 배포 빌드에는 표시되지 않습니다
+          </p>
+          <button
+            type="button"
+            onClick={handleDevSignIn}
+            disabled={isLoading}
+            aria-busy={isLoading}
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#41525E] text-[15px] font-semibold text-white disabled:opacity-50"
+          >
+            {/* reviewer Minor #4 — 기본 로그인 버튼은 로딩 중 스피너+문구로 바뀌는데 이 버튼만
+                아무 피드백이 없어 눌러도 변화가 안 보였다. 같은 패턴으로 맞춘다.
+                Minor #5 — 터치 타깃도 UX.md 접근성 기준(≥48px)에 맞춰 44→48px. */}
+            {isLoading && (
+              <span
+                aria-hidden="true"
+                className="h-4 w-4 animate-spin rounded-full border-2 border-white/50 border-t-white"
+              />
+            )}
+            {isLoading ? "로그인 처리 중..." : "익명 계정으로 빠른 로그인"}
+          </button>
+        </div>
+      )}
 
       {viewState === "error" && errorMessage && (
         <p
