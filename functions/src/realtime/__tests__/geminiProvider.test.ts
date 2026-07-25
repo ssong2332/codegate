@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GeminiRealtimeProvider, GEMINI_LIVE_MODEL } from "../geminiProvider";
+import { GeminiRealtimeProvider, GEMINI_LIVE_MODEL, pickGeminiVoiceName } from "../geminiProvider";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { buildSystemPrompt } from "../../roleplay/promptAssembly";
 
@@ -139,6 +139,51 @@ test("GeminiRealtimeProvider: 응답 지연 튜닝 — 발화 종료 침묵 대�
   } finally {
     capture.restore();
   }
+});
+
+test("GeminiRealtimeProvider: 성별 다양화 — sessionId별로 다른 프리셋 음성이 토큰에 실릴 수 있다(2026-07-25)", async () => {
+  const capture = captureTokenRequest();
+  try {
+    const provider = new GeminiRealtimeProvider("test-key");
+    // 서로 다른 sessionId 여러 개를 태워 남/여 두 값이 모두 관측되는지 확인한다(고정 단일 음성으로
+    // 되돌아가는 회귀를 잡는다). 진짜 무작위가 아니라 sessionId 해시 기반이라 실행마다 흔들리지
+    // 않는 결정론적 테스트다.
+    const seenVoices = new Set<string>();
+    for (let i = 0; i < 20; i++) {
+      await provider.createCallCredentials({
+        sessionId: `sess-${i}`,
+        scenarioId: "tax-refund-scam",
+        voiceId: "",
+      });
+      const bodies = capture.bodies();
+      const setup = (bodies[bodies.length - 1] as {
+        bidiGenerateContentSetup?: {
+          generationConfig?: {
+            speechConfig?: { voiceConfig?: { prebuiltVoiceConfig?: { voiceName?: string } } };
+          };
+        };
+      }).bidiGenerateContentSetup;
+      const voiceName = setup?.generationConfig?.speechConfig?.voiceConfig?.prebuiltVoiceConfig?.voiceName;
+      if (voiceName) seenVoices.add(voiceName);
+    }
+    assert.ok(seenVoices.size >= 2, `20개 세션 중 음성이 1종류만 관측됨: ${[...seenVoices]}`);
+  } finally {
+    capture.restore();
+  }
+});
+
+test("pickGeminiVoiceName: 같은 sessionId는 항상 같은 음성을 반환한다(재연결 중 목소리가 바뀌면 안 됨)", () => {
+  const a = pickGeminiVoiceName("session-abc-123");
+  const b = pickGeminiVoiceName("session-abc-123");
+  assert.equal(a, b);
+});
+
+test("pickGeminiVoiceName: 서로 다른 sessionId는 남/여 두 후보 모두를 산출할 수 있다", () => {
+  const results = new Set<string>();
+  for (let i = 0; i < 50; i++) {
+    results.add(pickGeminiVoiceName(`id-${i}`));
+  }
+  assert.ok(results.size >= 2, `50개 id 중 음성이 1종류만 산출됨: ${[...results]}`);
 });
 
 test("GeminiRealtimeProvider: 존재하지 않는 시나리오는 명시적으로 실패한다", async () => {
