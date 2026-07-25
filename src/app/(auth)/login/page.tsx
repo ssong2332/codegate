@@ -158,9 +158,19 @@ export default function LoginPage() {
             type="button"
             onClick={handleDevSignIn}
             disabled={isLoading}
-            className="min-h-[44px] w-full rounded-[12px] bg-[#41525E] text-[15px] font-semibold text-white disabled:opacity-50"
+            aria-busy={isLoading}
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#41525E] text-[15px] font-semibold text-white disabled:opacity-50"
           >
-            익명 계정으로 빠른 로그인
+            {/* reviewer Minor #4 — 기본 로그인 버튼은 로딩 중 스피너+문구로 바뀌는데 이 버튼만
+                아무 피드백이 없어 눌러도 변화가 안 보였다. 같은 패턴으로 맞춘다.
+                Minor #5 — 터치 타깃도 UX.md 접근성 기준(≥48px)에 맞춰 44→48px. */}
+            {isLoading && (
+              <span
+                aria-hidden="true"
+                className="h-4 w-4 animate-spin rounded-full border-2 border-white/50 border-t-white"
+              />
+            )}
+            {isLoading ? "로그인 처리 중..." : "익명 계정으로 빠른 로그인"}
           </button>
         </div>
       )}

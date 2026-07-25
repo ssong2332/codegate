@@ -18,6 +18,7 @@
 //   2. 아래 런타임 가드 — 혹시 코드가 남더라도 프로덕션에서는 무조건 거부한다.
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { useEmulator } from "@/lib/firebase/emulator";
 import { ensureUserProfile } from "./userProfile";
 
 /** 개발용 빠른 로그인을 노출할지. 프로덕션 빌드에서는 리터럴 치환으로 false가 된다. */
@@ -31,7 +32,13 @@ export type DevSignInOutcome = { status: "success" } | { status: "error"; messag
  * (2인 챌린지 수신자 경로가 이미 같은 메커니즘을 쓴다 — §14.7/ADR-0006).
  */
 export async function devSignIn(): Promise<DevSignInOutcome> {
-  if (!DEV_AUTH_ENABLED) {
+  // reviewer Major #2(2026-07-25) — 예전엔 `DEV_AUTH_ENABLED`만 확인했다. 그런데 그 값과
+  // `useEmulator`는 **우연히 같은 식**(`NODE_ENV !== "production"`)일 뿐 서로 묶여 있지 않았다.
+  // 즉 "개발 빌드"라는 사실만 확인하고 "지금 로컬 에뮬레이터를 보고 있다"는 사실은 확인하지 않았다.
+  // 훗날 `useEmulator`가 더 세분화되면(예: NODE_ENV=development인 스테이징 빌드가 실 Firebase
+  // 프로젝트를 보게 되는 경우) 이 익명 인증 우회가 **실 데이터에 조용히 동작**하게 된다.
+  // 이제 둘 다 참일 때만 진행한다 — 우연이 아니라 명시적 조건으로.
+  if (!DEV_AUTH_ENABLED || !useEmulator) {
     return { status: "error", message: "개발용 로그인은 프로덕션에서 사용할 수 없습니다." };
   }
   try {
