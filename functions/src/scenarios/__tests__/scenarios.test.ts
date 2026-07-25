@@ -118,3 +118,86 @@ test("publicMeta.ts는 src/content/scenarios/familyAccidentDeepvoice.ts와 드�
     assert.ok(mirrorSource.includes(line.text), `deepvoiceLines 텍스트(${line.lineId})가 원본 파일과 다릅니다.`);
   }
 });
+
+// ── T91(2026-07-25, 사용자 실측 신고) 회귀 가드 ──────────────────────────────
+//
+// **무엇이 있었나**: 사용자가 `loan-refinance-scam`에서 "대출 받은 적 없다"를 4턴 연속 부인했는데,
+// 사기범이 요구에 도달하지 못하고 같은 압박만 되풀이했다(실측 대화 기록). 원인은 프롬프트가
+// "같은 압박 반복 금지"를 안 지켜서가 아니라 — **지킬 수단이 없어서**였다. 그 시나리오의 요구
+// 수법 2개가 전부 "기존 대출 보유"를 전제로 해서, 참가자가 그 사실을 부인하는 순간 요구로 가는
+// 경로가 **0개**가 됐다. 남은 건 분위기 수법(확인 차단·전화 끊음 저지)뿐이라 그것만 돌려막았다.
+//
+// **13종 전수 점검 결과**(2026-07-25): loan-refinance-scam이 **선행 조건 없는 요구 수법을 하나도
+// 갖지 않은 유일한 시나리오**였다. 나머지 12종은 최소 1개를 갖고 있어 같은 교착이 구조적으로
+// 생기지 않는다.
+//
+// **이 테스트가 고정하는 것**: 각 시나리오마다 "참가자가 무엇을 부인하든 꺼낼 수 있는 요구"를
+// **명시적으로 지명**하고, 그 문구가 실제 프롬프트에 살아 있는지 확인한다.
+//
+// ⚠️ 한계를 정직하게 적는다 — 이 테스트는 **지명된 수법이 사라지거나 이름이 바뀌는 회귀**를 잡는다.
+// "새로 추가한 수법이 은근히 전제에 묶여 있는" 경우는 문자열 검사로 잡을 수 없다(원래 loanScam
+// 결함도 어휘상으로는 조건절이 없었고, 전제 의존은 '기존 대출'이라는 **의미**에 있었다). 그 판단은
+// 표를 갱신하는 사람이 해야 한다 — 그래서 자동 추론이 아니라 **손으로 지명하는 표**로 뒀다.
+const UNCONDITIONAL_DEMAND_BY_SCENARIO: Record<string, string> = {
+  "family-accident-deepvoice": "합의금 송금 요구",
+  "courier-customs-scam": "통관비 결제 요구",
+  "card-company-impersonation": "카드정보 직접 요구",
+  "loan-refinance-scam": "신규 대출 승인 명목 선입금 요구", // ← T91에서 신설. 이전엔 0개였다.
+  "institutional-impersonation": "안전계좌 이체 요구",
+  "kidnapping-threat": "즉시 송금 요구",
+  "tax-refund-scam": "환급 수수료 요구",
+  "reputation-blackmail-scam": "입막음 송금 요구",
+  "grandchild-impersonation": "송금 직접 요구",
+  "messenger-child-impersonation-kakao": "송금 직접 요구",
+  "messenger-friend-loan-kakao": "송금 직접 요구",
+  // 스미싱 문자형의 "요구"는 송금이 아니라 링크 탭이다 — 참가자가 결정을 내리는 순간이 거기다.
+  "messenger-parcel-smishing-sms": "링크 클릭 유도",
+  "messenger-subsidy-smishing-sms": "링크 클릭 유도",
+};
+
+test("SCENARIO_PROMPTS: 모든 시나리오가 선행 조건 없는 요구 수법을 1개 이상 갖는다(T91 교착 방지)", () => {
+  const promptIds = Object.keys(SCENARIO_PROMPTS).sort();
+  const tableIds = Object.keys(UNCONDITIONAL_DEMAND_BY_SCENARIO).sort();
+
+  // 시나리오가 추가됐는데 표를 안 채우면 여기서 걸린다 — 조용히 빠져나가지 못하게 한다.
+  assert.deepEqual(
+    promptIds,
+    tableIds,
+    "시나리오를 추가/삭제했으면 UNCONDITIONAL_DEMAND_BY_SCENARIO 표도 함께 갱신해야 한다. " +
+      "새 시나리오는 '참가자가 무엇을 부인하든 꺼낼 수 있는 요구'를 반드시 하나 지명하라.",
+  );
+
+  for (const [scenarioId, demandLabel] of Object.entries(UNCONDITIONAL_DEMAND_BY_SCENARIO)) {
+    const prompt = SCENARIO_PROMPTS[scenarioId];
+    assert.ok(prompt, `${scenarioId}: SCENARIO_PROMPTS에 존재해야 한다.`);
+
+    const matched = prompt.weakenedTactics.filter((t) => t.startsWith(demandLabel));
+    assert.equal(
+      matched.length,
+      1,
+      `${scenarioId}: "${demandLabel}" 수법이 정확히 1개 있어야 한다(발견 ${matched.length}개). ` +
+        `이게 사라지면 참가자가 시나리오의 전제를 부인했을 때 요구로 갈 길이 막혀, ` +
+        `사기범이 같은 압박만 되풀이하고 훈련이 "결정의 순간"에 도달하지 못한다(T91 실측 결함).`,
+    );
+  }
+});
+
+test("loan-refinance-scam: 참가자가 대출 보유를 부인해도 요구로 갈 경로가 있다(T91 직접 회귀)", () => {
+  const tactics = SCENARIO_PROMPTS["loan-refinance-scam"].weakenedTactics;
+
+  // 부인을 받아 넘기는 대응이 있어야 한다 — 없으면 사기범이 부인을 반박하며 맴돈다.
+  assert.ok(
+    tactics.some((t) => t.startsWith("부인 시 이익 전환")),
+    "'대출 받은 적 없다'는 부인에 대한 대응 수법이 있어야 한다. 없으면 사기범이 " +
+      "'기록이 삭제된 건 없냐'며 같은 질문을 되풀이한다(사용자 실측 대화에서 4턴 연속 발생).",
+  );
+
+  // 그리고 그 대응이 도달할 요구가 기존 대출을 전제하지 않아야 한다.
+  const newLoanDemand = tactics.find((t) => t.startsWith("신규 대출 승인 명목 선입금 요구"));
+  assert.ok(newLoanDemand, "신규 대출 명목의 요구 수법이 있어야 한다.");
+  assert.ok(
+    newLoanDemand.includes("기존 대출이 있든 없든"),
+    "이 요구가 기존 대출 보유와 무관하게 성립한다는 것이 문구에 드러나야 한다 — " +
+      "그래야 모델이 전제가 무너진 상황에서도 이 카드를 꺼낸다.",
+  );
+});
