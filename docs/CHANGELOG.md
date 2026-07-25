@@ -3,6 +3,9 @@
 Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachangelog.com/), newest first.
 
 ## [Unreleased]
+### Changed
+- **"받기" 후 AI 발화까지의 지연 단축 — 수신 중 통화 자격증명 프리페치(T59, 2026-07-25)**: 사용자 신고 — "전화가 연결되서 받으면 바로 말을 하는 걸로". 전화가 울리는 동안(아직 "받기" 전) Gemini/ElevenLabs 자격증명을 미리 받아 둬, "받기" 시점엔 네트워크 왕복 없이 곧장 연결한다(마이크 접근은 여전히 "받기" 이후에만). **트레이드오프(사용자 승인)**: 이 프로젝트의 Gemini 무료 티어 하루 20건 한도(T53에서 한 번 소진된 이력) 특성상, 전화를 안 받거나 거절해도 자격증명 1건이 소모된다 — 사용자에게 명시하고 진행 승인을 받았다.
+
 ### Fixed
 - **통화 오프닝 대사가 배경 설명 없이 다짜고짜 요구부터 시작(T58, 2026-07-25)**: 사용자 신고 — "처음에는 시나리오 진행에서 필요한 배경을 말하면서 시작하자". `generateOpeningLine()`(ElevenLabs/텍스트 폴백 공용)과 Gemini Live 실시간 경로의 오프닝 트리거 문구 양쪽에 "신분과 연락 이유를 먼저 밝히고 이어가라"는 지침을 오프닝 전용으로 추가했다(후속 턴 프롬프트는 무수정). Mock LLM은 이 변경의 영향을 받지 않는다(systemPrompt 문자열을 읽지 않음, 코드 확인). functions 184/184·root 42/42 무회귀.
 - **generic 보이스 통화 성별 다양화(T57, 2026-07-25)**: `functions/src/realtime/geminiProvider.ts`가 Gemini Live 프리셋 음성을 `"Aoede"` 1개로 고정해, generic voiceMode 경로(보이스피싱 self 체험 + generic 보이스 챌린지 수신자 통화)가 사용자 신고대로 항상 같은 음성만 냈다. 신규 음성 풀(`Aoede`+`Puck`)에서 sessionId 해시 기반으로 결정론적으로 하나를 고르도록 교체 — 같은 통화는 재연결·Strict Mode 이중 mount로 다시 호출돼도 목소리가 바뀌지 않고, 세션마다 사실상 무작위로 분산된다. **추정 표시**: Google 공식 문서는 각 프리셋 음성을 톤 특성으로만 설명하고 성별을 공식 라벨링하지 않아, "Aoede=여성/Puck=남성" 분류는 커뮤니티 통용 추정치임을 코드 주석에 명시했다. functions test 184/184(신규 3건). 실제 음색 청취는 API 키·마이크가 없는 이 환경에서 라이브 검증 못함 — 사용자 확인 필요.
