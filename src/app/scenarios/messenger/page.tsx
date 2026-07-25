@@ -108,7 +108,9 @@ export default function MessengerScenarioSelectPage() {
               selected ? "bg-[#0E6B62] text-white" : "bg-[#41525E] text-[#C9D4DB]"
             }`}
           >
-            {scenario.callerLabel.slice(0, 1)}
+            {/* T75 — 발신자 표기가 번호로 바뀌어 첫 글자를 따면 "0"·"+"가 뜬다.
+                저장되지 않은 발신자용 일반 아이콘으로 대체한다. */}
+            <span aria-hidden="true">💬</span>
           </span>
 
           <span className="flex min-w-0 flex-1 flex-col gap-1.5">

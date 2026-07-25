@@ -8,8 +8,15 @@
 export type DeepvoiceLine = { lineId: string; text: string };
 // voiceMode(Phase B, 2026-07-22 사용자 결정): "clone" = 본인 목소리 클론 필요(기존 온보딩 녹음
 // 플로우), "generic" = 클론 불필요 — 온보딩 녹음 자체를 생략하고 기본(비복제) TTS로 진행한다.
-// callerLabel: play/chat 화면에 표시할 발신자 라벨(시나리오마다 다른 캐릭터를 지어내지 않고
-// 여기 한 곳에서만 정의 — 화면 쪽은 이 값을 그대로 쓴다).
+// callerLabel: play/chat 화면에 표시할 발신자 표기(여기 한 곳에서만 정의 — 화면은 그대로 쓴다).
+// **T75(2026-07-25, 사용자 요청)**: 예전에는 "카드사 보안팀 (사칭)"처럼 정체를 적었으나, 실제
+// 보이스피싱은 **모르는 번호**로 걸려오고 화면에 "사칭"이라고 적혀 있으면 정답을 미리 알려주는
+// 셈이라 판단 훈련이 성립하지 않는다. 이제 **번호만** 표기한다(070 인터넷전화·국제전화·
+// 발신번호 표시제한 등 — 2025년 실제 발신 형태를 반영).
+// ⚠️ 전부 **가상 번호**다. 실존 기관·개인의 실제 번호를 절대 쓰지 않는다(AC-005). 이 앱에는
+// 전화를 거는 기능이 자체가 없어 표시된 번호로 연결되는 경로도 없다.
+// 시뮬레이션 고지는 수신 화면의 사전 고지(PREROLL_NOTICE)와 상시 합성 표식이 계속 담당한다
+// (AC-012/AC-022 무변경 — 이 표기는 안전 표식이 아니었다).
 export type VoiceMode = "clone" | "generic";
 // 메신저피싱 확장(2026-07-23, T27, Architecture.md §13.4와 1:1) — channel/surface/escalation은
 // 전부 옵셔널 증분 필드다(Migration Policy 준수, 기존 9종 보이스 시나리오는 필드 부재만으로
@@ -64,5 +71,5 @@ export const familyAccidentDeepvoiceScenario: ScenarioDoc = {
     },
   ],
   voiceMode: "clone",
-  callerLabel: "가족 (사칭)",
+  callerLabel: "010-2447-8815",
 };

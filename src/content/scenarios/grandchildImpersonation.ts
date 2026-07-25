@@ -20,5 +20,5 @@ export const grandchildImpersonationScenario: ScenarioDoc = {
   difficulty: "중간~높음 — 정서적 압박과 디지털 취약 악용이 결합됩니다",
   deepvoiceLines,
   voiceMode: "clone",
-  callerLabel: "손주 (사칭)",
+  callerLabel: "010-9038-4472",
 };

@@ -15,7 +15,7 @@ export const messengerParcelSmishingSmsScenario: ScenarioDoc = {
   estimatedDuration: "약 3~5분",
   difficulty: "쉬움 — 생활 밀착형 소재라 경계심이 낮은 편입니다",
   deepvoiceLines,
-  callerLabel: "택배 배송 안내",
+  callerLabel: "070-7731-4408",
   channel: "messenger",
   surface: "sms",
 };

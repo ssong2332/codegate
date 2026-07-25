@@ -21,5 +21,5 @@ export const cardCompanyImpersonationScenario: ScenarioDoc = {
   difficulty: "쉬움~중간 — 놀람과 확인 압박을 이용합니다",
   deepvoiceLines,
   voiceMode: "generic",
-  callerLabel: "카드사 보안팀 (사칭)",
+  callerLabel: "1588-7742",
 };
