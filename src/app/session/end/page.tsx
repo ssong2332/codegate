@@ -18,6 +18,7 @@ import { db } from "@/lib/firebase";
 import { endSession } from "@/lib/api";
 import { clearPendingSession, getPendingSessionId } from "@/lib/recording";
 import { Button } from "@/components/ui";
+import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 
 type PageState = "no-session" | "ending" | "ended" | "error";
 
@@ -49,6 +50,11 @@ export default function SessionEndPage() {
   const [challenge, setChallenge] = useState<{ challengeId: string; displayName: string } | null>(
     null,
   );
+  // T70(UX-028 진입점, AC-062) — 리포트는 endSession이 비동기로 만들기 때문에 이 화면에 도달한
+  // 시점에 아직 없을 수 있다. 준비될 때까지 폴링하고, 그동안 버튼은 비활성 + "리포트를 준비하고
+  // 있어요"로 알린다(UF-009 Failure (a) — 침묵 실패 금지).
+  const [reportStatus, setReportStatus] = useState<"pending" | "ready" | "error">("pending");
+  const [deceivedMomentCount, setDeceivedMomentCount] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   // endReason: 현재 이 화면에 도달하는 유일한 실경로는 EndTrainingButton(상시 종료)이라
@@ -84,6 +90,45 @@ export default function SessionEndPage() {
       cancelled = true;
     };
   }, [sessionId]);
+
+  // 리포트 준비 폴링(T70) — reports/{sessionId}는 endSession 내부 트리거가 만든다(reportId =
+  // sessionId, generateReportCore.ts). 이 화면은 리포트를 **읽기만** 하며 생성을 재촉하지 않는다
+  // (생성 책임은 UX-008 소관 — replay/page.tsx와 동일 원칙). 실패해도 종료 흐름 자체는 막지 않는다.
+  useEffect(() => {
+    if (!sessionId || state !== "ended") return;
+    let cancelled = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const poll = async () => {
+      attempts += 1;
+      try {
+        const snapshot = await getDoc(doc(db, "reports", sessionId));
+        const data = snapshot.data();
+        if (cancelled) return;
+        if (data) {
+          setDeceivedMomentCount(Array.isArray(data.deceivedMoments) ? data.deceivedMoments.length : 0);
+          setReportStatus("ready");
+          return;
+        }
+      } catch {
+        if (cancelled) return;
+        setReportStatus("error");
+        return;
+      }
+      if (attempts >= 8) {
+        setReportStatus("error");
+        return;
+      }
+      timer = setTimeout(() => void poll(), 1500);
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [sessionId, state]);
 
   // AC-015 Accessibility(UX.md Focus Order): 종료 직후 포커스를 "이것은 훈련이었습니다" 고지
   // 문구로 이동해 스크린리더가 안심 메시지부터 읽도록 한다. 화면 진입 시 1회만 이동하면 된다.
@@ -121,6 +166,22 @@ export default function SessionEndPage() {
   const handleViewReplay = () => {
     if (!sessionId) return;
     router.push(`/report/replay?sessionId=${encodeURIComponent(sessionId)}`);
+  };
+
+  // T70(UX-028 즉시 되감기, AC-062/D-39/D-40) — 속은 순간이 1건 이상일 때만 노출한다. 2인
+  // 사용자2(challenge)는 강제 정체 공개 → 강제 리플레이 해설 순서를 지켜야 하므로 이 화면에서는
+  // 노출하지 않는다(AC-042 — 판정은 resolveRewindEntry가 한 곳에서 담당).
+  const rewindEntry = resolveRewindEntry({
+    reportStatus,
+    deceivedMomentCount,
+    isChallengeSession: challenge !== null,
+    afterForcedReplay: false,
+  });
+
+  const handleRewind = () => {
+    if (!sessionId) return;
+    // reportId = sessionId(generateReportCore.ts 멱등 키) — 이 화면이 방금 읽은 문서 그대로다.
+    router.push(`/report/rewind?reportId=${encodeURIComponent(sessionId)}&moment=0`);
   };
 
   let body: React.ReactNode;
@@ -177,6 +238,23 @@ export default function SessionEndPage() {
           ) : (
             <Button type="button" variant="primary" onClick={handleViewReport}>
               리포트 보기
+            </Button>
+          )}
+          {/* UX-028(즉시 되감기) 진입점 — 리포트 준비 중에는 비활성 + 준비 중 안내 1줄, 속은
+              순간이 0건이면 아예 노출하지 않는다(D-40 near-miss 미발명). */}
+          {rewindEntry === "pending" && (
+            <>
+              <Button type="button" variant="secondary" disabled>
+                그 순간 다시 해보기
+              </Button>
+              <p role="status" className="text-sm text-[#6B655C]">
+                리포트를 준비하고 있어요.
+              </p>
+            </>
+          )}
+          {rewindEntry === "available" && (
+            <Button type="button" variant="secondary" onClick={handleRewind}>
+              그 순간 다시 해보기
             </Button>
           )}
           <Button type="button" variant="secondary" onClick={handleGoHome}>

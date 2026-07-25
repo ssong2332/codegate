@@ -64,6 +64,16 @@ service cloud.firestore {
     match /reports/{reportId} {
       allow read: if request.auth != null && resource.data.uid == request.auth.uid;
       allow write: if false;
+
+      // reports/{rid}/rewindAttempts/{} — 즉시 되감기 시도 기록(T70, Database.md §rewindAttempts).
+      // read는 부모 리포트 소유자만(2인 사용자2=익명 uid도 자기 리포트에 한해 동일하게 성립).
+      // write는 클라 전면 거부 — `judgeRewindAnswer` 콜러블만 append한다(판정·마스킹을 클라가
+      // 우회하지 못하게 원천 차단, messages/artifacts와 동일 원칙).
+      match /rewindAttempts/{attemptId} {
+        allow read: if request.auth != null
+          && get(/databases/$(database)/documents/reports/$(reportId)).data.uid == request.auth.uid;
+        allow write: if false;
+      }
     }
 
     // deletionLogs/{} — 감사 로그. 소유 uid만 read. write는 Functions(admin)만(onSessionEnded, T10).

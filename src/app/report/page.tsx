@@ -16,6 +16,7 @@ import { db } from "@/lib/firebase";
 import { generateReport } from "@/lib/api";
 import { scenarios } from "@/content/scenarios";
 import { Badge, Button } from "@/components/ui";
+import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 
 type DeceivedMoment = {
   turnIndex: number;
@@ -25,6 +26,7 @@ type DeceivedMoment = {
 };
 
 type ReportData = {
+  reportId: string;
   wasDeceived: boolean;
   deceivedMoments: DeceivedMoment[];
   tacticsUsed: string[];
@@ -41,6 +43,9 @@ export default function ReportPage() {
   const [state, setState] = useState<PageState>(sessionId ? "loading" : "no-session");
   const [report, setReport] = useState<ReportData | null>(null);
   const [scenarioTitle, setScenarioTitle] = useState<string | null>(null);
+  // T70(UX-028 진입점 조건) — 2인 챌린지 체험 세션이면 되감기는 강제 해설(UX-018) 이후 단계로만
+  // 노출된다(AC-042). 아래 세션 조회 effect가 함께 채운다.
+  const [isChallengeSession, setIsChallengeSession] = useState(false);
   const [expandedSection, setExpandedSection] = useState<
     "timeline" | "tactics" | "advice" | null
   >(null);
@@ -55,6 +60,7 @@ export default function ReportPage() {
     const data = snapshot.data();
     if (!data) return null;
     return {
+      reportId,
       wasDeceived: Boolean(data.wasDeceived),
       deceivedMoments: Array.isArray(data.deceivedMoments) ? (data.deceivedMoments as DeceivedMoment[]) : [],
       tacticsUsed: Array.isArray(data.tacticsUsed) ? (data.tacticsUsed as string[]) : [],
@@ -95,7 +101,9 @@ export default function ReportPage() {
         const snapshot = await getDoc(doc(db, "sessions", sessionId));
         const scenarioId = snapshot.data()?.scenarioId as string | undefined;
         const title = scenarioId ? scenarios[scenarioId]?.title : undefined;
-        if (!cancelled && title) setScenarioTitle(title);
+        if (cancelled) return;
+        if (title) setScenarioTitle(title);
+        if (snapshot.data()?.challengeId) setIsChallengeSession(true);
       } catch {
         // 장식용 조회 실패는 무시 — 리포트 표시를 막지 않는다.
       }
@@ -190,6 +198,20 @@ export default function ReportPage() {
 
   const toggleSection = (section: "timeline" | "tactics" | "advice") => {
     setExpandedSection((current) => (current === section ? null : section));
+  };
+
+  // T70(UX-028 즉시 되감기 진입점, AC-062/D-39/D-40) — 속은 순간이 1건 이상일 때만 노출한다.
+  // 이 화면은 리포트가 이미 로드된 상태에서만 여기까지 오므로 reportStatus는 "ready"다.
+  const rewindEntry = resolveRewindEntry({
+    reportStatus: "ready",
+    deceivedMomentCount: report.deceivedMoments.length,
+    isChallengeSession,
+    afterForcedReplay: false,
+  });
+  const goToRewind = (momentIndex: number) => {
+    router.push(
+      `/report/rewind?reportId=${encodeURIComponent(report.reportId)}&moment=${momentIndex}`,
+    );
   };
 
   return (
@@ -294,7 +316,7 @@ export default function ReportPage() {
           <section aria-label="속은 시점 타임라인" className="flex flex-col gap-3 px-1">
             {report.wasDeceived ? (
               <ol className="flex flex-col gap-3">
-                {report.deceivedMoments.map((moment) => (
+                {report.deceivedMoments.map((moment, index) => (
                   <li
                     key={`${moment.turnIndex}-${moment.timeLabel}`}
                     className="rounded-2xl border border-[#B96A1B]/30 bg-[#FBF3E8] p-4"
@@ -310,6 +332,17 @@ export default function ReportPage() {
                       <span className="font-semibold">이렇게 했어야 해요: </span>
                       {moment.correctAction}
                     </p>
+                    {/* UX-008 v1.11 — 타임라인 항목마다 "이 순간"을 직접 지목해 되감을 수 있게 한다
+                        (UX.md UX-008 갱신 문면, D-39). */}
+                    {rewindEntry === "available" && (
+                      <button
+                        type="button"
+                        onClick={() => goToRewind(index)}
+                        className="mt-3 min-h-[48px] w-full rounded-xl border border-[#0E6B62] bg-white px-4 text-base font-semibold text-[#0E6B62]"
+                      >
+                        이 순간 다시 해보기
+                      </button>
+                    )}
                   </li>
                 ))}
               </ol>
@@ -379,6 +412,14 @@ export default function ReportPage() {
       </div>
 
       <div className="mx-5 mt-4 flex flex-col gap-2.5">
+        {/* UX-028(즉시 되감기) 진입점 — 속은 순간이 1건 이상일 때만 노출한다(D-40: 안 속았으면
+            띄우지 않고 리플레이 해설만 권한다). 2인 사용자2는 강제 해설 이후 화면에서만 보인다
+            (AC-042, resolveRewindEntry). */}
+        {rewindEntry === "available" && (
+          <Button type="button" variant="primary" onClick={() => goToRewind(0)}>
+            그 순간 다시 해보기
+          </Button>
+        )}
         {/* UX-018(리플레이 해설) 진입점 — UX.md UX-008 Primary Actions "대화 되짚어보기(리플레이
             해설)" → UX-018(T33, AC-038). 요약(무엇을·언제)과 별도 화면(D-18)이라 링크만 연결한다. */}
         {sessionId && (
