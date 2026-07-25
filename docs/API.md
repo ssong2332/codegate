@@ -90,6 +90,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Response | `{ reportId: string }` — 내용은 `reports/{id}` 구독으로 표시. |
 | 처리 | **마스킹된 `messages`만 입력**(원문·실제 운영정보 배제, AC-005/013). `deceivedMoments[]`·`tacticsUsed[]`·`preventionAdvice[]`·`wasDeceived` 산출 → `reports/{id}` write. `reportId = sessionId`이며 이미 존재하면 재계산 없이 반환한다(**AC-007 "세션당 정확히 1리포트" 멱등 키** — `generateReportCore.ts:28-35`). ※ **정정(2026-07-25 실측):** 이 산출은 LLM이 아니라 **규칙 기반 순수 함수**다(`functions/src/report/analyzeConversation.ts` — `getLlmClient()`를 호출하지 않음. 기존 "LLM으로 산출" 서술은 코드와 불일치했다). |
 | Errors | `failed-precondition`(세션 미종료), `internal`. |
+| **§15.1.5 증분**(통화 중 문자 타임라인 통합 · AC-059) | ④ `sessions/{sid}/inCallSms`를 **1회 추가 read**(`orderBy("arrivedAt","asc")`)해 각 문서의 `anchorScammerTurn`을 **실제 `turnIndex`로 해결**하고, 최종 표시 순서로 정렬한 **표시 전용 배열 `smsTimeline`** 을 리포트 문서에 함께 기록한다(Database.md `reports` §15.1.5 증분). **⑤ 판정 로직은 무변경** — 이 배열은 `analyzeConversation`의 **입력이 아니라** 산출 뒤에 얹히는 값이며, `wasDeceived`·`deceivedMoments`·`tacticsUsed`·`preventionAdvice`는 문자 유무와 무관하게 동일하다(회귀 테스트 필수, §15.6 G3/G22). **⑥ 멱등 무변경** — 이미 리포트가 있으면 early-return이라 스냅샷도 **최초 1회만** 기록된다(AC-007). ⑦ 앵커 해결은 순수 함수 `functions/src/report/smsTimeline.ts`(규칙표는 §15.1.5 (4)) — **시각(`arrivedAt`)으로 병합하지 않는다**(실시간 경로의 `messages.createdAt`이 종료 시점 합성값이라 문자가 전부 대화 맨 앞으로 몰린다, §15.6 G15). |
 | **T57 증분**(§15.4.1·§15.4.2) | ① 각 `deceivedMoments` 항목에 **`tacticCategory`**(고정 10종 enum)를 함께 산출·저장한다 — 자유 문자열 `tactic`을 정규화하는 순수 함수 `functions/src/report/tacticCategory.ts`. ② 세션에서 **`scenarioId`·`channel`·`difficultyLevel`·`challengeId`를 역정규화**해 리포트에 함께 기록한다(아카이브 N+1 방지). 세션 문서는 이 함수가 이미 읽고 있어 추가 read가 없다. ③ **판정 로직 자체는 무변경** — 난이도는 `analyzeConversation`의 입력이 아니다(§15.3.5, 아카이브 누적 비교의 잣대를 통일하기 위해). |
 
 ---
@@ -219,8 +220,9 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Request | `{ sessionId: string, smsId: string, event: "opened" \| "link_tapped" }` |
 | Response | `{ recorded: true }` |
 | 처리 | `sessions/{sid}/inCallSms/{smsId}`의 `openedAt`/`linkTappedAt`을 최초 1회만 세팅. |
-| 범위 한정(중요) | **v1에서 이 값은 리포트 판정(`analyzeConversation`)의 입력이 아니다** — 리플레이·표시용이다. 판정에 넣으려면 별도 결정이 필요하다(근거 없는 판정 변경 금지). 인증번호를 통화로 불러준 행위는 **전사(음성) 경로로 이미 판정에 들어간다**(숫자만으로 이뤄진 답변을 순응으로 잡는 기존 패턴, `analyzeConversation.ts:106` 말미 앵커). |
-| Errors | 실패는 **조용히 흡수**한다(기록 실패로 훈련을 막지 않는다 — 클라는 무시). |
+| 범위 한정(중요) | **v1에서 이 값은 리포트 판정(`analyzeConversation`)의 입력이 아니다** — 리플레이·표시용이다. 판정에 넣으려면 별도 결정이 필요하다(근거 없는 판정 변경 금지). 인증번호를 통화로 불러준 행위는 **전사(음성) 경로로 이미 판정에 들어간다**(숫자만으로 이뤄진 답변을 순응으로 잡는 기존 패턴, `analyzeConversation.ts` `COMPLIANCE_PATTERN` 말미 앵커 `^\s*[\d\s-]{4,}\s*$`). |
+| **§15.1.5 증분**(AC-059) | ① **요청 enum은 무변경**(`"opened" \| "link_tapped"`). UX-027 Events Emitted의 `sms_otp_shown`은 신규 저장 이벤트가 **아니라** `kind==="otp" && openedAt != null`의 **파생 표기**이고(명시 필드 두 개의 결합 — 부재 오버로드 아님, §14.9.1 원칙), `sms_overlay_closed`는 **기록하지 않는다**(닫힘은 "무슨 일이 일어난 것"이 아니라 학습 가치가 없다 — UX Events Emitted는 분석 이벤트 명세이지 저장 요건이 아니다). ② **`status === "active"` 검증을 추가한다**(현재 없음 — `functions/src/inCallSms/index.ts:88`은 `loadOwnedSession`만 호출하고 `deliverInCallSms`(:53)와 달리 상태를 보지 않는다). 이유: 리포트 생성 **이후**에 성공한 기록은 스냅샷에 영영 반영되지 않으므로(리포트 멱등 early-return) 종료 후 write를 애초에 받지 않는다. 오버레이는 통화 중에만 존재하므로 정상 경로 영향 0(§15.6 G20). |
+| Errors | 실패는 **조용히 흡수**한다(기록 실패로 훈련을 막지 않는다 — 클라는 무시). 위 ② 추가 후에도 동일 — 종료 후 write는 `failed-precondition`이지만 클라는 무시하고 **로그만** 남긴다. |
 
 ### `judgeRewindAnswer` — 즉시 되감기 판정 (T57 · UX-028 · §15.2.3)
 | Item | Value |
