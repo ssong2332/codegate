@@ -102,3 +102,20 @@ test("[AC-060] 오버레이는 읽기 전용이다 — 전송 경로도, 실 URL
   // 링크는 기존 인앱 가짜 랜딩(UX-023)을 재사용한다 — 신규 랜딩을 만들지 않는다(D-37).
   assert.ok(overlay.includes("MessengerFakeLanding"), "기존 가짜 랜딩을 재사용해야 한다");
 });
+
+// 사용자 브라우저 실측 버그(2026-07-25) — 문자를 전부 읽은 뒤에도 sr-only aria-live 영역이
+// "문자 0건이 도착했습니다."를 계속 알렸다. 시각적으로는 안 보이지만 스크린리더 사용자에게는
+// 사실과 다른 안내가 매번 들린다. 알릴 사실이 있을 때(미확인 ≥ 1)만 문구를 채운다.
+test("[P-4/P-20] 미확인 문자가 0건이면 aria-live 영역이 아무것도 알리지 않는다", () => {
+  const liveStart = page.indexOf('<p aria-live="polite" className="sr-only">');
+  assert.ok(liveStart > 0, "문자 도착용 sr-only aria-live 영역을 찾을 수 있어야 한다");
+  const liveBlock = page.slice(liveStart, page.indexOf("</p>", liveStart));
+  assert.ok(
+    liveBlock.includes("smsUnreadCount > 0 ?"),
+    "미확인 건수를 조건으로 써야 한다(도착 여부 latestSms로 게이팅하면 0건 안내가 남는다)",
+  );
+  assert.ok(
+    !/\{latestSms \?/.test(liveBlock),
+    "latestSms로 게이팅하면 전부 읽은 뒤에도 '문자 0건이 도착했습니다.'가 계속 읽힌다",
+  );
+});

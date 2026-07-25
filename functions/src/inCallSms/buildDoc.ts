@@ -12,6 +12,7 @@ import type { InCallSmsDoc } from "../shared/types";
 export function buildInCallSmsDoc(
   item: InCallSmsItem,
   arrivedAt: FirebaseFirestore.Timestamp,
+  anchorScammerTurn: number,
 ): InCallSmsDoc {
   return {
     smsId: item.smsId,
@@ -26,5 +27,39 @@ export function buildInCallSmsDoc(
       : {}),
     ...(item.kind === "link" && item.fakeLandingId ? { fakeLandingId: item.fakeLandingId } : {}),
     arrivedAt,
+    anchorScammerTurn,
   };
+}
+
+// ── 앵커 값(§15.1.5 (4) / §15.6 G21) ──────────────────────────────────────────────
+// 두 경로에서 **의미는 하나**다 — "이 문자가 도착한 시점까지 `messages`에 존재하는
+// `role==="scammer"` 문서 수". 경로마다 카탈로그 값(`afterScammerTurns`)의 기준점이 달라 값만
+// 갈라지므로, 그 ±보정을 아래 두 헬퍼에 **가둬 둔다**(리졸버는 단 하나로 유지 — §15.1.5 (6)).
+
+/**
+ * 실시간(Gemini Live) 경로의 앵커 = `afterScammerTurns + 1`.
+ *
+ * ⚠️ **+1의 실측 근거(G21이 "실측하고 어긋나면 write 지점 값을 ±1 하라"고 지목한 지점)**:
+ * 클라의 `scammerTurns`는 **Live 세션의 `turnComplete`만** 센다
+ * (`src/lib/realtime/GeminiVoiceSession.tsx` `onScammerTurnComplete`). 그런데 `messages`에는
+ * 그보다 **먼저** `createSession`이 쓴 오프닝 사기범 행이 turnIndex 0으로 이미 존재하고
+ * (`functions/src/session/index.ts` `sessionRef.collection("messages").add({role:"scammer",…,turnIndex:0})`),
+ * 실시간 전사는 그 **뒤에** append된다(`realtime/submitTranscript.ts` `nextIndex = historySnap.size`).
+ * 즉 Live 턴 N개가 끝난 시점의 사기범 문서 수는 N이 아니라 **1 + N**이다. 보정하지 않으면 앵커가
+ * 한 턴 앞으로 밀려 문자가 announce 대사보다 두 턴 앞에 놓인다.
+ */
+export function realtimeAnchorScammerTurn(item: InCallSmsItem): number {
+  return item.afterScammerTurns + 1;
+}
+
+/**
+ * 폴백(텍스트) 경로의 앵커 = `afterScammerTurns - 1`.
+ *
+ * 이 경로는 **N번째 사기범 응답을 만들기 직전**에 write한다
+ * (`functions/src/roleplay/index.ts` `scammerTurnNumber = storedHistory.filter(scammer).length + 1`
+ * 가 카탈로그의 `afterScammerTurns`와 같을 때 도착) → 그 순간 완료된 사기범 발화는 N-1개다.
+ * 여기서는 `createSession` 오프닝 행이 이미 `storedHistory`에 포함돼 세어지므로 추가 보정이 없다.
+ */
+export function fallbackAnchorScammerTurn(item: InCallSmsItem): number {
+  return item.afterScammerTurns - 1;
 }

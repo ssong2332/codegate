@@ -703,9 +703,13 @@ export default function SessionCallPage() {
           </button>
         </div>
       )}
-      {/* 스크린리더 알림 — 배너를 닫았거나 보지 못해도 도착 사실이 전달된다(P-4/P-20). */}
+      {/* 스크린리더 알림 — 배너를 닫았거나 보지 못해도 도착 사실이 전달된다(P-4/P-20).
+          ⚠️ 버그 수정(사용자 브라우저 실측, 2026-07-25): 조건이 `latestSms`(도착한 문자가 있는가)라
+          미확인 건수가 0이 된 뒤에도 **"문자 0건이 도착했습니다."** 를 계속 알렸다. 시각적으로는
+          sr-only라 보이지 않지만 스크린리더 사용자에게는 매 렌더마다 들리는 **사실과 다른 안내**다.
+          알릴 사실이 실제로 있을 때(미확인 ≥ 1)만 문구를 채운다. */}
       <p aria-live="polite" className="sr-only">
-        {latestSms ? `문자 ${smsUnreadCount}건이 도착했습니다.` : ""}
+        {smsUnreadCount > 0 ? `문자 ${smsUnreadCount}건이 도착했습니다.` : ""}
       </p>
       {smsError && (
         <p role="alert" className="px-4 pt-2 text-center text-xs text-[#F0A79E]">

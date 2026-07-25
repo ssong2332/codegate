@@ -13,7 +13,7 @@ import { completeWithFallback, getLlmClient } from "../llm";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { findDueInCallSms, hasInCallSms } from "../scenarios/inCallSms";
-import { buildInCallSmsDoc } from "../inCallSms";
+import { buildInCallSmsDoc, fallbackAnchorScammerTurn } from "../inCallSms";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { GEMINI_API_KEY } from "../shared/config";
 import { MESSENGER_ESCALATION_FALLBACK_TURNS } from "../shared/constants";
@@ -149,7 +149,11 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       try {
         const smsRef = sessionRef.collection("inCallSms").doc(dueSms.smsId);
         if (!(await smsRef.get()).exists) {
-          await smsRef.create(buildInCallSmsDoc(dueSms, Timestamp.now()));
+          // 앵커(§15.1.5 (4)) — 이 경로는 사기범 응답 **직전**에 write하므로 완료된 사기범 발화가
+          // 하나 적다. 보정은 fallbackAnchorScammerTurn이 소유한다(실시간 경로와 대칭).
+          await smsRef.create(
+            buildInCallSmsDoc(dueSms, Timestamp.now(), fallbackAnchorScammerTurn(dueSms)),
+          );
         }
         deliveredSmsId = dueSms.smsId;
       } catch {

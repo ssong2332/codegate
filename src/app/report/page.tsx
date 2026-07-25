@@ -30,12 +30,28 @@ type DeceivedMoment = {
   correctAction: string;
 };
 
+// T89(§15.1.5, AC-059) — 리포트 문서 안의 **표시 전용** 문자 이벤트 스냅샷. 서버가 이미 최종 표시
+// 순서로 정렬해 내려주므로 화면은 순서를 재해석하지 않는다(§15.1.5 (6)).
+type SmsTimelineEntry = {
+  smsId: string;
+  kind: "account" | "link" | "otp";
+  senderLabel: string;
+  body: string;
+  linkDisplayText?: string;
+  anchorTurnIndex: number;
+  anchorResolved: boolean;
+  timeLabel?: string;
+  events: { event: string; what: string; correctAction?: string }[];
+};
+
 type ReportData = {
   reportId: string;
   wasDeceived: boolean;
   deceivedMoments: DeceivedMoment[];
   tacticsUsed: string[];
   preventionAdvice: string[];
+  // 부재→빈 배열(무백필). 문자가 없던 세션·T89 이전 리포트는 기존과 완전히 동일하게 그려진다.
+  smsTimeline: SmsTimelineEntry[];
   // T72(P-22 / AC-064) — 리포트에 역정규화된 표기 전용 값. 난이도는 판정에 영향을 주지 않으며
   // (§15.3.5) 여기서도 "어떤 강도로 훈련했는가"를 알려주는 라벨로만 쓴다.
   difficultyLevel: DifficultyLevel;
@@ -73,6 +89,7 @@ export default function ReportPage() {
       deceivedMoments: Array.isArray(data.deceivedMoments) ? (data.deceivedMoments as DeceivedMoment[]) : [],
       tacticsUsed: Array.isArray(data.tacticsUsed) ? (data.tacticsUsed as string[]) : [],
       preventionAdvice: Array.isArray(data.preventionAdvice) ? (data.preventionAdvice as string[]) : [],
+      smsTimeline: Array.isArray(data.smsTimeline) ? (data.smsTimeline as SmsTimelineEntry[]) : [],
       difficultyLevel: normalizeDifficultyLevel(data.difficultyLevel),
       createdAt: data.createdAt instanceof Timestamp ? data.createdAt : null,
     };
@@ -223,6 +240,29 @@ export default function ReportPage() {
     );
   };
 
+  // T89(§15.1.5 (5), AC-059) — 속은 순간(키 `turnIndex`)과 문자 이벤트(키 `anchorTurnIndex`)를
+  // **같은 키로 정렬해 한 목록**으로 낸다. 값이 같으면 문자를 뒤에 둔다(리플레이 병합 규칙과 동일).
+  //
+  // ⚠️ `momentIndex`는 **원본 `deceivedMoments` 배열의 인덱스**를 그대로 들고 다닌다 — 병합 목록의
+  // 위치가 아니다. 되감기 딥링크(`/report/rewind?moment=`)가 그 인덱스로 순간을 찾으므로, 문자가
+  // 섞인 순서를 넘기면 엉뚱한 순간이 열린다(리플레이 쪽 §15.6 G16과 같은 함정).
+  const timelineEntries = [
+    ...report.deceivedMoments.map((moment, momentIndex) => ({
+      sortKey: [moment.turnIndex, 0, momentIndex] as const,
+      kind: "moment" as const,
+      moment,
+      momentIndex,
+    })),
+    ...report.smsTimeline.map((sms, seq) => ({
+      sortKey: [sms.anchorTurnIndex, 1, seq] as const,
+      kind: "sms" as const,
+      sms,
+    })),
+  ].sort(
+    (a, b) =>
+      a.sortKey[0] - b.sortKey[0] || a.sortKey[1] - b.sortKey[1] || a.sortKey[2] - b.sortKey[2],
+  );
+
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] pb-8">
       <div className="px-5 pt-[22px]">
@@ -327,42 +367,52 @@ export default function ReportPage() {
         </button>
         {expandedSection === "timeline" && (
           <section aria-label="속은 시점 타임라인" className="flex flex-col gap-3 px-1">
-            {report.wasDeceived ? (
-              <ol className="flex flex-col gap-3">
-                {report.deceivedMoments.map((moment, index) => (
-                  <li
-                    key={`${moment.turnIndex}-${moment.timeLabel}`}
-                    className="rounded-2xl border border-[#B96A1B]/30 bg-[#FBF3E8] p-4"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-lg font-semibold text-[#B96A1B]">
-                        <span aria-hidden="true">⚠ </span>
-                        {moment.timeLabel}에 속았습니다
-                      </p>
-                      <Badge variant="caution">{moment.tactic}</Badge>
-                    </div>
-                    <p className="mt-2 text-base text-[#22303A]">
-                      <span className="font-semibold">이렇게 했어야 해요: </span>
-                      {moment.correctAction}
-                    </p>
-                    {/* UX-008 v1.11 — 타임라인 항목마다 "이 순간"을 직접 지목해 되감을 수 있게 한다
-                        (UX.md UX-008 갱신 문면, D-39). */}
-                    {rewindEntry === "available" && (
-                      <button
-                        type="button"
-                        onClick={() => goToRewind(index)}
-                        className="mt-3 min-h-[48px] w-full rounded-xl border border-[#0E6B62] bg-white px-4 text-base font-semibold text-[#0E6B62]"
-                      >
-                        이 순간 다시 해보기
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            ) : (
+            {/* ⚠️ §15.6 G18 — 이 조건을 `report.wasDeceived`로 두면 **안 속은 세션의 문자 이벤트가
+                통째로 사라진다**(AC-059 미충족). 속은 순간이 0건이어도 문자 이벤트가 있으면 목록을
+                낸다. 판정은 그대로다 — 문자는 wasDeceived를 뒤집지 않는다(§15.6 G22). */}
+            {report.deceivedMoments.length === 0 && (
               <p className="rounded-2xl border border-[#E2DDD3] bg-white p-4 text-base text-[#6B655C]">
                 속은 시점이 없습니다 — 이번 훈련에서는 한 번도 속지 않았습니다.
+                {report.smsTimeline.length > 0 &&
+                  " 아래는 훈련 중 도착한 문자에서 있었던 일입니다."}
               </p>
+            )}
+            {timelineEntries.length > 0 && (
+              <ol className="flex flex-col gap-3">
+                {timelineEntries.map((entry) =>
+                  entry.kind === "moment" ? (
+                    <li
+                      key={`moment-${entry.moment.turnIndex}-${entry.moment.timeLabel}`}
+                      className="rounded-2xl border border-[#B96A1B]/30 bg-[#FBF3E8] p-4"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-lg font-semibold text-[#B96A1B]">
+                          <span aria-hidden="true">⚠ </span>
+                          {entry.moment.timeLabel}에 속았습니다
+                        </p>
+                        <Badge variant="caution">{entry.moment.tactic}</Badge>
+                      </div>
+                      <p className="mt-2 text-base text-[#22303A]">
+                        <span className="font-semibold">이렇게 했어야 해요: </span>
+                        {entry.moment.correctAction}
+                      </p>
+                      {/* UX-008 v1.11 — 타임라인 항목마다 "이 순간"을 직접 지목해 되감을 수 있게 한다
+                          (UX.md UX-008 갱신 문면, D-39). */}
+                      {rewindEntry === "available" && (
+                        <button
+                          type="button"
+                          onClick={() => goToRewind(entry.momentIndex)}
+                          className="mt-3 min-h-[48px] w-full rounded-xl border border-[#0E6B62] bg-white px-4 text-base font-semibold text-[#0E6B62]"
+                        >
+                          이 순간 다시 해보기
+                        </button>
+                      )}
+                    </li>
+                  ) : (
+                    <ReportSmsTimelineItem key={`sms-${entry.sms.smsId}`} sms={entry.sms} />
+                  ),
+                )}
+              </ol>
             )}
           </section>
         )}
@@ -468,5 +518,61 @@ export default function ReportPage() {
         </button>
       </div>
     </main>
+  );
+}
+
+/**
+ * T89(§15.1.5 (5)) — 타임라인 아코디언 안의 문자 이벤트 항목.
+ *
+ * **기존 "속은 순간" 카드와 같은 형식**(시각 라벨 + 배지 + "이렇게 했어야 해요:" 줄)을 그대로 쓰고
+ * 문구만 바꾼다. 신규 컴포넌트 스타일·신규 색·신규 표기 형식은 만들지 않는다(UX-008 v1.11
+ * "신규 표기 형식 없음"). 이벤트 1건 = 카드 1장이므로 여러 이벤트는 같은 li 안에 이어 그린다.
+ *
+ * ⚠️ **되감기 버튼을 달지 않는다** — 되감기 대상은 `deceivedMoments`이고, 문자 순간에는 판정이
+ * 전제하는 "그 순간의 사기범 대사"가 없다(§15.1.5 (5) 근거 4). 링크도 컨트롤로 렌더하지 않는다
+ * (스냅샷에 `fakeLandingId`가 아예 없어 재진입 경로가 구조적으로 존재하지 않는다, §15.6 G19).
+ */
+function ReportSmsTimelineItem({ sms }: { sms: SmsTimelineEntry }) {
+  return (
+    <li className="flex flex-col gap-3">
+      {sms.events.map((event) => (
+        <div
+          key={event.event}
+          className="rounded-2xl border border-[#B96A1B]/30 bg-[#FBF3E8] p-4"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-lg font-semibold text-[#B96A1B]">
+              <span aria-hidden="true">⚠ </span>
+              {sms.timeLabel ? `${sms.timeLabel}: ` : ""}
+              {event.what}
+            </p>
+            <Badge variant="neutral">문자</Badge>
+          </div>
+          {/* 도착한 문자 원문 — 어떤 문자였는지 확인할 수 있어야 학습이 성립한다(모의 표식 유지). */}
+          {event.event === "sms_received" && (
+            <p className="mt-2 whitespace-pre-line rounded-xl bg-white/70 p-3 text-base text-[#22303A]">
+              {sms.body}
+              {sms.linkDisplayText && (
+                <span className="mt-1 block text-sm text-[#6B655C]">
+                  문자 속 링크 표기: {sms.linkDisplayText}
+                </span>
+              )}
+            </p>
+          )}
+          {event.correctAction && (
+            <p className="mt-2 text-base text-[#22303A]">
+              <span className="font-semibold">이렇게 했어야 해요: </span>
+              {event.correctAction}
+            </p>
+          )}
+          {/* 앵커 미해결(§15.1.5 (4) 규칙 3) — 조용히 버리지 않고 정직하게 고지한다(P-4). */}
+          {!sms.anchorResolved && event.event === "sms_received" && (
+            <p className="mt-2 text-sm text-[#6B655C]">
+              이 문자가 대화 중 어느 시점에 도착했는지는 확인하지 못했습니다.
+            </p>
+          )}
+        </div>
+      ))}
+    </li>
   );
 }

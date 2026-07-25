@@ -7,11 +7,12 @@
 //   - 답장·전달·전송 경로 제공             (읽기 전용 화면 — AC-060)
 //   - `url`/실 URL 필드 생성               (구조적 금지 — AC-032/045)
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { findInCallSmsItem } from "../scenarios/inCallSms";
 import type { SessionDoc } from "../shared/types";
-import { buildInCallSmsDoc } from "./buildDoc";
+import { buildInCallSmsDoc, realtimeAnchorScammerTurn } from "./buildDoc";
 import type {
   DeliverInCallSmsRequest,
   DeliverInCallSmsResponse,
@@ -21,7 +22,11 @@ import type {
 
 ensureFirebaseAdminApp();
 
-export { buildInCallSmsDoc } from "./buildDoc";
+export {
+  buildInCallSmsDoc,
+  realtimeAnchorScammerTurn,
+  fallbackAnchorScammerTurn,
+} from "./buildDoc";
 
 /** 세션 소유권 검증 — 익명 uid(2인 챌린지 사용자2)도 자기 세션이면 그대로 성립한다(§14.7). */
 async function loadOwnedSession(sessionId: string, uid: string): Promise<SessionDoc> {
@@ -67,7 +72,9 @@ export const deliverInCallSms = onCall<
   const smsRef = db.collection("sessions").doc(sessionId).collection("inCallSms").doc(smsId);
   const existing = await smsRef.get();
   if (!existing.exists) {
-    await smsRef.create(buildInCallSmsDoc(item, Timestamp.now()));
+    // 앵커(§15.1.5 (4)) — 실시간 경로 보정은 realtimeAnchorScammerTurn이 소유한다(근거는 그 함수
+    // doc 주석). 여기서 손으로 ±1 하지 않는다 — 두 경로의 보정이 갈라지지 않게 하기 위해서다.
+    await smsRef.create(buildInCallSmsDoc(item, Timestamp.now(), realtimeAnchorScammerTurn(item)));
   }
 
   return { smsId: item.smsId, announceInstruction: item.announceInstruction };
@@ -85,7 +92,22 @@ export const recordInCallSmsEvent = onCall<
     throw new HttpsError("invalid-argument", "sessionId·smsId·event가 필요합니다.");
   }
 
-  await loadOwnedSession(sessionId, request.auth.uid);
+  const session = await loadOwnedSession(sessionId, request.auth.uid);
+  // §15.6 G20 — 종료된 세션의 기록은 애초에 받지 않는다. 리포트는 멱등 early-return이라
+  // (`report/generateReportCore.ts`) 생성 **이후**에 성공한 write는 smsTimeline 스냅샷에 영영
+  // 반영되지 않는다 — 조용히 성공을 돌려주면 "기록됐는데 어디에도 안 보이는" 상태가 남는다.
+  // 오버레이는 통화 중에만 존재하므로 정상 경로 영향은 0이고, 종료 직전 탭과 endSession의 경합만
+  // 걸린다. 클라는 API.md Errors대로 이 실패를 조용히 흡수하므로(훈련을 막지 않는다) 원인을
+  // 추적할 수 있게 서버 로그만 남긴다.
+  if (session.status !== "active") {
+    logger.warn("종료된 세션의 문자 이벤트 기록 거부(§15.6 G20 — 리포트 스냅샷 이후 write 방지)", {
+      sessionId,
+      smsId,
+      event,
+      status: session.status,
+    });
+    throw new HttpsError("failed-precondition", "이미 종료된 세션입니다.");
+  }
 
   const db = getFirestore();
   const smsRef = db.collection("sessions").doc(sessionId).collection("inCallSms").doc(smsId);
