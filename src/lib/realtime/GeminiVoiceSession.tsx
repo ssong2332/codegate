@@ -35,6 +35,7 @@ import {
   computeRmsFromByteTimeDomain,
   nextUserSpeechDebounceState,
 } from "./userSpeechLevel";
+import { computeGateCloseDelayMs, resolveTurnInProgress } from "./agentSpeechGate";
 
 export type GeminiVoiceSessionProps = {
   credentials: CreateRealtimeCallResponse;
@@ -216,6 +217,23 @@ export default function GeminiVoiceSession({
       scammerBuffer = "";
     };
 
+    // 끼어들기(interrupted)로 모델이 문장 중간에 멈췄을 때 **사기범 조각만** 내보낸다.
+    //
+    // 왜 flushTranscript()가 아닌가(2026-07-25 수정): interrupted 처리에 early return이 있어
+    // scammerBuffer가 flush도 clear도 되지 않고 남았고, 그 조각이 **다음 사기범 말풍선 앞에 그대로
+    // 붙었다.** 리포트 분석은 `scammer(i)` ↔ `user(i+1)` 짝짓기에 의존하므로(analyzeConversation),
+    // 턴 경계가 밀리면 "속은 순간"이 엉뚱한 턴을 가리킨다.
+    //
+    // 그렇다고 flushTranscript()로 둘 다 내보내면 안 된다 — interrupted 시점은 **사용자가 막 말을
+    // 시작한 순간**이라 userBuffer는 아직 채워지는 중이다. 둘 다 내보내면 emit 순서상 사용자 턴이
+    // 사기범의 잘린 턴보다 **앞에** 기록돼 시간 순서가 뒤집힌다. 사용자 조각은 그대로 두고 다음
+    // turnComplete에서 정상적으로 flush되게 한다.
+    const flushScammerTurn = () => {
+      const s = scammerBuffer.trim();
+      if (s) handlersRef.current.onTranscriptTurn("scammer", s);
+      scammerBuffer = "";
+    };
+
     // 자기 말 끊김 버그 수정(2026-07-25, 사용자 신고 "대화가 자연스럽지 않다") — 예전엔 이 타이머가
     // **청크 도착** 시점 기준 고정 600ms였다. Gemini는 오디오를 실시간보다 빠르게 스트리밍하므로
     // (4초짜리 발화의 청크가 1초 만에 다 도착할 수 있다) agentSpeaking이 **재생이 끝나기 한참 전에**
@@ -223,24 +241,43 @@ export default function GeminiVoiceSession({
     // 열렸다 — 스피커로 나가던 AI 목소리가 마이크로 되돌아가 Gemini VAD가 이를 사용자 발화로 오인해
     // 자기 말을 스스로 끊는(interrupted) 일이 생길 수 있는 구조였다. 이제 **예약된 재생이 실제로
     // 끝나는 시각**(nextPlayTime) 기준으로 타이머를 잡는다.
-    const SPEAKING_OFF_GRACE_MS = 250;
+    // **2차 수정(2026-07-25, 사용자 신고 "말을 하다가 마는 현상")**: 위 1차 수정으로도 부족했다.
+    // 기준을 "청크 도착"에서 "재생 종료"로 옮겼지만, 옳은 기준은 한 칸 더 가서 **"턴 종료"**였다.
+    // 모델이 문장 중간에 잠깐 생성을 멈추면(한국어 "혹시…", "저희가…" 같은 연결어 뒤) 예약 재생이
+    // 비고, 그 순간 게이트가 열려 방 소음이 VAD에 사용자 발화로 잡혀 모델이 **생성 자체를 중단**했다.
+    // 이제 대기 시간 계산을 agentSpeechGate.ts(순수 함수·테스트로 고정)에 위임한다 — 턴 진행 중이면
+    // 넉넉히, turnComplete 뒤면 꼬리 재생이 끝날 때까지. 판단 근거와 상수 선택 이유는 그쪽 주석 참고.
+    // ⚠️ turnInProgress는 **여기서 직접 뒤집지 않는다.** 이번 메시지의 신호 3개(오디오·turnComplete·
+    // interrupted)를 함께 보고 resolveTurnInProgress가 정한다 — turnComplete가 마지막 오디오 청크와
+    // 같은 메시지로 오기 때문에(reviewer Critical, agentSpeechGate.ts 주석 참고) 어느 한쪽만 보고
+    // 뒤집으면 서로를 덮어쓴다.
+    let turnInProgress = false;
     const markSpeaking = () => {
       agentSpeaking = true;
       handlersRef.current.onSpeakingChange(true);
-      if (speakingTimer) clearTimeout(speakingTimer);
-      // 남은 재생 시간 + 약간의 여유. 서버가 turnComplete를 늦게 주거나 아예 안 줘도 파형이 계속
-      // 켜져 있지 않도록 하는 안전장치라는 원래 역할은 그대로다.
-      const remainingMs = outputContext
-        ? Math.max(0, (nextPlayTime - outputContext.currentTime) * 1000)
-        : 0;
-      speakingTimer = setTimeout(() => {
-        agentSpeaking = false;
-        handlersRef.current.onSpeakingChange(false);
-      }, remainingMs + SPEAKING_OFF_GRACE_MS);
     };
 
+    // 게이트를 닫을(=마이크를 다시 열) 시각을 다시 잡는다. 청크가 새로 올 때마다, 그리고
+    // turnComplete를 받을 때마다 호출된다.
+    const scheduleGateClose = () => {
+      if (speakingTimer) clearTimeout(speakingTimer);
+      const remainingPlaybackMs = outputContext
+        ? (nextPlayTime - outputContext.currentTime) * 1000
+        : 0;
+      const delay = computeGateCloseDelayMs({ remainingPlaybackMs, turnInProgress });
+      speakingTimer = setTimeout(() => {
+        agentSpeaking = false;
+        turnInProgress = false;
+        handlersRef.current.onSpeakingChange(false);
+      }, delay);
+    };
+
+    // 즉시 게이트를 닫는다 — 재생이 이미 멈춘 경우(interrupted)에만 쓴다. turnComplete에는 쓰지
+    // 않는다: 그 시점엔 아직 재생될 오디오가 남아 있을 수 있어 즉시 열면 꼬리 소리가 마이크로
+    // 되돌아간다(agentSpeechGate.ts 회귀 2).
     const stopSpeaking = () => {
       agentSpeaking = false;
+      turnInProgress = false;
       if (speakingTimer) clearTimeout(speakingTimer);
       handlersRef.current.onSpeakingChange(false);
     };
@@ -322,31 +359,58 @@ export default function GeminiVoiceSession({
               if (sc?.interrupted) {
                 stopAllPlayback();
                 stopSpeaking();
+                // 잘린 사기범 발화를 여기서 내보낸다 — 안 하면 다음 말풍선 앞에 붙어 턴 경계가
+                // 밀리고 리포트의 속은-순간 판정이 어긋난다(flushScammerTurn 주석 참고).
+                flushScammerTurn();
                 return;
               }
-              if (sc?.turnComplete) {
-                stopSpeaking();
+              // **오디오를 먼저 예약한다**(reviewer Critical 수정). 두 가지 이유:
+              // (1) nextPlayTime이 갱신된 뒤에 게이트 대기 시간을 계산해야 잔여 재생이 정확히 반영된다.
+              // (2) 예전엔 turnComplete를 먼저 처리하고 그 뒤 markSpeaking()이 turnInProgress를
+              //     되살려, 마지막 청크와 turnComplete가 같은 메시지로 오는 정상 케이스에서 4초
+              //     대기가 걸렸다. 이제 순서와 무관하게 resolveTurnInProgress가 규칙으로 정한다.
+              const samples = message.data ? base64ToFloat32(message.data) : null;
+              const hasAudio = samples !== null && samples.length > 0;
+              if (hasAudio && samples) {
+                const buffer = outputContext.createBuffer(
+                  1,
+                  samples.length,
+                  GEMINI_OUTPUT_SAMPLE_RATE,
+                );
+                buffer.copyToChannel(samples, 0);
+                const source = outputContext.createBufferSource();
+                source.buffer = buffer;
+                source.connect(outputContext.destination);
+                // 이전 청크가 끝나는 시점에 이어붙인다(겹침·끊김 방지).
+                const startAt = Math.max(outputContext.currentTime, nextPlayTime);
+                source.start(startAt);
+                nextPlayTime = startAt + buffer.duration;
+                scheduledSources.add(source);
+                source.onended = () => scheduledSources.delete(source);
+                markSpeaking();
+              }
+
+              const hasTurnComplete = Boolean(sc?.turnComplete);
+              turnInProgress = resolveTurnInProgress({
+                current: turnInProgress,
+                hasAudio,
+                hasTurnComplete,
+                hasInterrupted: false, // interrupted는 위에서 이미 return했다.
+              });
+
+              // 게이트를 **즉시 닫지 않는다** — turnComplete 시점에도 재생될 오디오가 남아 있을 수
+              // 있다. 실제 개방 시각은 항상 잔여 재생 기준으로 다시 잡는다.
+              if (hasAudio || hasTurnComplete) scheduleGateClose();
+              if (hasTurnComplete) {
                 flushTranscript();
                 // T68 — 사기범 발화 1턴 완료. 부모가 이 경계만 세어 통화 중 문자 도착을 판단한다
                 // (§15.1.2 "앱 오케스트레이션"). 세션 자체에는 아무 영향이 없다.
+                // ⚠️ 병합 정합(T90+T68, 2026-07-26): T90이 핸들러를 "오디오 먼저 → 게이트 계산
+                // 나중"으로 재정렬하면서 turnComplete 처리 위치가 바뀌었다. 이 콜백은 **전사 flush
+                // 직후**라는 원래 순서를 그대로 유지한다 — 문자 도착 판단이 전사보다 앞서면
+                // 앵커 턴 계산(§15.1.5 G21)이 한 턴 어긋난다.
                 handlersRef.current.onScammerTurnComplete?.();
               }
-              if (!message.data) return;
-
-              const samples = base64ToFloat32(message.data);
-              if (samples.length === 0) return;
-              const buffer = outputContext.createBuffer(1, samples.length, GEMINI_OUTPUT_SAMPLE_RATE);
-              buffer.copyToChannel(samples, 0);
-              const source = outputContext.createBufferSource();
-              source.buffer = buffer;
-              source.connect(outputContext.destination);
-              // 이전 청크가 끝나는 시점에 이어붙인다(겹침·끊김 방지).
-              const startAt = Math.max(outputContext.currentTime, nextPlayTime);
-              source.start(startAt);
-              nextPlayTime = startAt + buffer.duration;
-              scheduledSources.add(source);
-              source.onended = () => scheduledSources.delete(source);
-              markSpeaking();
             },
             onerror: (e: unknown) => {
               log("onerror", e);
