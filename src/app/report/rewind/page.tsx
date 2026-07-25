@@ -194,6 +194,9 @@ export default function RewindPage() {
     if (!context) return;
     router.push(`/report/replay?sessionId=${encodeURIComponent(context.sessionId)}`);
   };
+  // UX-028 Exit — "속았던 순간 모아보기" → UX-030(실패 아카이브, T74). 누적 화면이라 이 세션
+  // 컨텍스트를 넘기지 않는다(아카이브가 본인 uid 전체를 스스로 조회한다).
+  const handleGoToArchive = () => router.push("/report/archive");
 
   if (state === "no-report") {
     return (
@@ -448,6 +451,10 @@ export default function RewindPage() {
         </Button>
         <Button type="button" variant="secondary" onClick={handleGoToReplay}>
           대화 전체 되짚어보기
+        </Button>
+        {/* UX-028 Exit "속았던 순간 모아보기" → UX-030(실패 아카이브, T74/UF-010). */}
+        <Button type="button" variant="secondary" onClick={handleGoToArchive}>
+          속았던 순간 모아보기
         </Button>
         <button
           type="button"

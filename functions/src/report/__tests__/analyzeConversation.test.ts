@@ -395,3 +395,54 @@ test("(회귀) T52 reviewer 케이스 — 망설이다 결국 넘겨준 경우�
   // 계좌번호를 실제로 알려줬으므로 true가 맞다(T52 reviewer 확정).
   assert.equal(judge("정말 거절하고 싶은데 무서워서 계좌번호 알려드릴게요"), true);
 });
+
+// T74 / AC-068 — 속은 순간마다 실패 아카이브의 묶기 키(tacticCategory)가 함께 산출된다.
+// ⚠️ 이 필드는 **집계 전용**이다. 아래 테스트는 판정값(wasDeceived·deceivedMoments 개수·
+// timeLabel)이 T74 이전과 동일함을 함께 단언해, 정규화가 판정에 개입하지 않았음을 고정한다.
+test("analyzeConversation(): 속은 순간에 tacticCategory가 함께 기록된다(§15.4.2, 판정값은 무영향)", () => {
+  const messages = [
+    {
+      role: "scammer" as const,
+      textMasked: "엄마야... 지금 당장 도와줘야 해, 더 늦으면 큰일나.",
+      turnIndex: 0,
+      createdAtMs: SESSION_START_MS,
+    },
+    {
+      role: "user" as const,
+      textMasked: "알겠어, 계좌번호 뭐야?",
+      turnIndex: 1,
+      createdAtMs: SESSION_START_MS + 20_000,
+    },
+  ];
+
+  const result = analyzeConversation(messages, SESSION_START_MS, WEAKENED_TACTICS);
+
+  assert.equal(result.wasDeceived, true);
+  assert.equal(result.deceivedMoments.length, 1);
+  assert.equal(result.deceivedMoments[0].timeLabel, "20초 시점");
+  assert.equal(result.deceivedMoments[0].tactic, "다급함 조성");
+  assert.equal(result.deceivedMoments[0].tacticCategory, "urgency");
+});
+
+test("analyzeConversation(): 매치된 수법이 없으면 폴백 라벨과 함께 other 카테고리가 된다(발명하지 않음)", () => {
+  const messages = [
+    {
+      role: "scammer" as const,
+      textMasked: "안녕하세요, 잠시 통화 괜찮으실까요?",
+      turnIndex: 0,
+      createdAtMs: SESSION_START_MS,
+    },
+    {
+      role: "user" as const,
+      textMasked: "네, 말씀하신 대로 바로 처리하겠습니다.",
+      turnIndex: 1,
+      createdAtMs: SESSION_START_MS + 3_000,
+    },
+  ];
+
+  const result = analyzeConversation(messages, SESSION_START_MS, WEAKENED_TACTICS);
+
+  assert.equal(result.deceivedMoments.length, 1);
+  assert.equal(result.deceivedMoments[0].tactic, "약화된 사기 수법");
+  assert.equal(result.deceivedMoments[0].tacticCategory, "other");
+});

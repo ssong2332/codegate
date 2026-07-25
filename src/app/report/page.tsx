@@ -444,6 +444,12 @@ export default function ReportPage() {
             대화 되짚어보기(리플레이 해설)
           </Button>
         )}
+        {/* UX-030(실패 아카이브) 진입점 — UX.md UX-008 v1.11 갱신(D-44). 이번 세션이 아니라
+            **누적된 과거 전체**의 속은 순간을 보는 동선이라, 이번 세션에서 안 속았어도 노출한다
+            (그 경우 아카이브가 빈 상태 2종으로 스스로 구분해 안내한다, AC-068). */}
+        <Button type="button" variant="secondary" onClick={() => router.push("/report/archive")}>
+          내가 속았던 순간 모아보기
+        </Button>
         <Button type="button" variant="primary" onClick={() => router.push("/scenarios")}>
           다른 시나리오 훈련하기
         </Button>

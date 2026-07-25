@@ -34,7 +34,7 @@
 // 확정 직후·생성 직전 단계로 삽입되면서 그 분기 전체가 src/app/scenarios/difficulty/page.tsx로
 // 이관됐다(노출 필터는 이 화면에 그대로 남고, 판정 규칙도 동일).
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getExperienceMode, setSelectedScenarioId as setPendingSelectedScenarioId } from "@/lib/recording";
 import { SCENARIO_TRAIT_LABEL } from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc, type MessengerSurface } from "@/content/scenarios";
@@ -47,7 +47,16 @@ const SURFACE_LABEL: Record<MessengerSurface, string> = {
 
 export default function MessengerScenarioSelectPage() {
   const router = useRouter();
-  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
+  // T74(UX-030 "이 시나리오 다시 훈련") — 아카이브가 시나리오를 미리 지목해 들어온다.
+  // 시작은 여전히 사용자가 누른다. 프리셋은 채널만 검사한다(reviewer m1) — send 모드의
+  // 에스컬레이션 제외 필터까지 재현하지는 않으며, 그 조합은 서버 createChallenge가
+  // escalation_not_supported로 독립 거부한다(2중 방어). 아카이브 진입은 항상
+  // setExperienceMode("self")를 선호출해 send 모드가 되지 않는다.
+  const searchParams = useSearchParams();
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(() => {
+    const preset = searchParams.get("scenarioId");
+    return preset && scenarios[preset]?.channel === "messenger" ? preset : null;
+  });
   // lazy initializer로 마운트 시 1회만 읽는다(다른 드릴다운 화면과 동일 패턴). 힌트 부재(직접 URL
   // 접근 등 방어적 상황)는 self로 취급 — 기존(UX-026 상향 전) "유형→시나리오 직행" 기본 동작과
   // 동일한 최대 노출·자기훈련 우선 기본값이다.

@@ -42,6 +42,10 @@ export default function ReplayPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("sessionId");
+  // T74(UX-030 → UX-018 "그때 대화 보기") — 실패 아카이브가 특정 순간을 지목해 들어온다. 값은
+  // 리포트 `deceivedMoments` 배열의 인덱스이고, 주석이 달린 턴 목록과 순서가 같다(둘 다
+  // turnIndex 오름차순). 없거나 범위를 벗어나면 그냥 처음부터 보여준다(직접 URL 진입 대비).
+  const momentParam = searchParams.get("moment");
   const [state, setState] = useState<PageState>(sessionId ? "loading" : "no-session");
   const [report, setReport] = useState<ReportSummary | null>(null);
   const [timeline, setTimeline] = useState<ReplayTimelineItem[]>([]);
@@ -51,6 +55,8 @@ export default function ReplayPage() {
   const [stepPos, setStepPos] = useState(-1);
   const [stepAnnounce, setStepAnnounce] = useState("");
   const itemRefs = useRef<Map<number, HTMLLIElement>>(new Map());
+  // T74 — 아카이브(UX-030)에서 `?moment=`로 지목해 들어온 순간으로 딱 한 번 이동하기 위한 래치.
+  const deepLinkAppliedRef = useRef(false);
 
   // T37(UF-005 2인 사용자2 · UX-018 "결과 공유 동의") — challenge가 non-null이면 이 세션은
   // consentChallenge로 만들어진 챌린지 체험 세션이다(session.challengeId 존재).
@@ -189,6 +195,26 @@ export default function ReplayPage() {
       );
     }
   };
+  // T74 — 아카이브에서 지목해 들어온 순간으로 한 번만 이동한다(사용자가 이후 직접 스텝을 옮기면
+  // 다시 끌어당기지 않도록 ref로 1회 실행을 고정한다). 목록이 렌더된 뒤여야 itemRefs가 채워져
+  // 있으므로 로드 effect가 아니라 별도 effect이고, 의존성 배열 없이 매 렌더 후 실행하되 래치가
+  // 실제 동작을 1회로 막는다(goToStep이 항상 최신 클로저라 stale 참조가 생기지 않는다).
+  useEffect(() => {
+    if (state !== "loaded" || deepLinkAppliedRef.current) return;
+    const index = Number(momentParam);
+    if (momentParam === null || !Number.isInteger(index)) return;
+    if (index < 0 || index >= annotatedTurnIndexes.length) return;
+    deepLinkAppliedRef.current = true;
+    // 스크롤·포커스는 목록 노드가 실제로 배치된 다음 프레임에 해야 정확하다. 같은 콜백에서
+    // 스텝 위치도 함께 옮겨 "신호 N / M" 표시와 어긋나지 않게 한다(effect 본문에서 동기 setState를
+    // 하지 않는 관례도 함께 지킨다 — react-hooks/set-state-in-effect).
+    const frame = requestAnimationFrame(() => goToStep(index));
+    return () => cancelAnimationFrame(frame);
+    // goToStep은 매 렌더 재생성되지만 위 래치(deepLinkAppliedRef)가 실제 이동을 1회로 고정한다.
+    // 의존성에 넣으면 매 렌더마다 effect가 재실행되며 cleanup이 예약된 프레임을 취소해 이동 자체가
+    // 일어나지 않는다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, momentParam, annotatedTurnIndexes.length]);
 
   const handleRetry = () => {
     if (!sessionId) return;

@@ -3,6 +3,7 @@
 // 함께(트랙 간 합의 후) 갱신한다.
 import type { VoiceMode } from "../scenarios/publicMeta";
 import type { DifficultyLevel } from "./difficulty";
+import type { TacticCategory } from "../report/tacticCategory";
 
 // --- users/{uid} (UX-013, AC-027) ---
 export type UserDoc = {
@@ -199,6 +200,10 @@ export type DeceivedMoment = {
   timeLabel: string;
   tactic: string;
   correctAction: string;
+  // T74 추가(옵셔널, 하위호환 — Migration Policy, §15.4.2/AC-068): 실패 아카이브(UX-030)의
+  // "수법별 묶기" 그룹 키. 표시 문구는 여전히 `tactic` 원문이고 이 값은 묶기에만 쓴다. 기존
+  // 리포트에는 없으므로 아카이브가 `tacticCategory ?? tactic`으로 폴백한다(무백필).
+  tacticCategory?: TacticCategory;
 };
 export type ReportDoc = {
   reportId: string;
@@ -213,6 +218,17 @@ export type ReportDoc = {
   // buildPreventionAdvice/computeDefenseGrade 시그니처 무변경). 표기 전용이다(P-22).
   difficultyLevel?: DifficultyLevel;
   createdAt: FirebaseFirestore.Timestamp;
+  // T74 추가(전부 옵셔널, 하위호환 — §15.4.1 "아카이브 카드가 필요로 하는 세션 메타를 리포트에
+  // 역정규화"). 없으면 아카이브가 카드 1장마다 세션 문서를 추가 read해야 한다(N+1, §15.6 G8).
+  // 생성 시점에 session을 이미 읽고 있으므로 비용은 0에 가깝다. 시나리오 **제목**은 역정규화하지
+  // 않는다 — scenarioId로 클라의 공개 카탈로그에서 얻는다(콘텐츠 수정이 과거 카드에도 반영됨).
+  scenarioId?: string;
+  channel?: MessengerChannel;
+  // ⚠️ AC-069 2차 방어(§15.4.3) — 2인 챌린지 체험 세션에서 나온 리포트임을 표시한다. 아카이브는
+  // 이 값이 있는 리포트를 제외한다(1차 방어는 uid 격리 그 자체). 값이 있는 셀을 만들어 두는
+  // 이유는 장래 "익명 세션 승격" 같은 기능이 생겨도 챌린지 실패 이력이 누적 화면에 섞이지 않게
+  // 하기 위한 벨트+멜빵이다.
+  challengeId?: string;
 };
 
 // --- reports/{reportId}/rewindAttempts/{attemptId} (T70, UX-028/UF-009, §15.2.2, AC-062/063) ---
