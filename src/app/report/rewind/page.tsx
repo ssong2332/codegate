@@ -335,8 +335,11 @@ export default function RewindPage() {
         )}
       </section>
 
-      {/* 다시 답하기(텍스트 전용 — 음성 입력은 v1 미제공, §15.2.4). */}
-      <section className="mx-5 mt-5 flex flex-col gap-2">
+      {/* 다시 답하기(텍스트 전용 — 음성 입력은 v1 미제공, §15.2.4).
+          reviewer Minor m1(2026-07-25) — UX.md UX-028이 "모바일은 입력창 하단 고정"을 명시하는데
+          일반 문서 흐름에 있어 스크롤해야 입력할 수 있었다. session/messenger가 이미 쓰는
+          `sticky bottom-0 + env(safe-area-inset-bottom)` 패턴을 그대로 재사용한다. */}
+      <section className="sticky bottom-0 z-10 mx-5 mt-5 flex flex-col gap-2 border-t border-[#E2DDD3] bg-[#FAF8F5] pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
         <label
           ref={answerLabelRef}
           tabIndex={-1}
