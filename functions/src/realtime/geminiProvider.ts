@@ -19,8 +19,28 @@ import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider 
 /** 무료 티어에서 쓸 수 있는 네이티브 오디오 모델(공식 가격 페이지 기준, 2026-07 확인). */
 export const GEMINI_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
 
-/** 한국어 프리셋 음성. 클론이 아니라 고정 음성이라 시나리오와 무관하게 동일하다. */
-const GEMINI_VOICE_NAME = "Aoede";
+// 한국어 프리셋 음성 풀 — 성별 다양화(2026-07-25, 사용자 신고: generic 보이스피싱이 항상 여성
+// 음성으로만 나옴). Live API는 TTS 모델과 동일한 프리셋 음성을 그대로 쓸 수 있다(ai.google.dev/
+// gemini-api/docs/live-guide 실측: "Native audio output models support any of the voices available
+// for our Text-to-Speech models"). ⚠️ 성별 라벨은 추정이다 — 공식 문서(ai.google.dev/gemini-api/
+// docs/speech-generation)는 각 음성을 "Firm"/"Upbeat" 같은 톤 특성으로만 설명하며 남/여를 명시하지
+// 않는다. 아래 분류는 다수의 데모/튜토리얼에서 통용되는 청감 기준 추정치이며, 실제 청감은 라이브
+// 통화로 사용자가 재확인 필요(끊김·오분류 발견 시 후보만 교체하면 됨).
+const GEMINI_VOICE_POOL = ["Aoede", "Puck"] as const; // Aoede=기존 값(여성 성향 추정), Puck=남성 성향 추정 추가
+
+/**
+ * sessionId로부터 결정론적으로 음성을 고른다(진짜 Math.random이 아님) — 같은 통화는 dev Strict
+ * Mode 이중 mount나 재연결로 이 함수가 여러 번 불려도 항상 같은 성별 음성을 유지해야 한다(통화
+ * 중간에 상대 목소리가 바뀌면 몰입이 깨진다). sessionId는 세션마다 새로 발급되는 Firestore 문서
+ * ID라 세션 간에는 사실상 무작위로 분산된다.
+ */
+export function pickGeminiVoiceName(sessionId: string): (typeof GEMINI_VOICE_POOL)[number] {
+  let hash = 0;
+  for (let i = 0; i < sessionId.length; i++) {
+    hash = (hash * 31 + sessionId.charCodeAt(i)) | 0;
+  }
+  return GEMINI_VOICE_POOL[Math.abs(hash) % GEMINI_VOICE_POOL.length];
+}
 
 /** 토큰 수명 — 통화 1건에만 쓰이므로 짧게 잡는다(유출 시 노출 창 최소화). */
 const TOKEN_EXPIRE_MINUTES = 30;
@@ -57,7 +77,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
             systemInstruction: systemPrompt,
             speechConfig: {
               languageCode: "ko-KR",
-              voiceConfig: { prebuiltVoiceConfig: { voiceName: GEMINI_VOICE_NAME } },
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: pickGeminiVoiceName(input.sessionId) } },
             },
             // 양쪽 발화의 텍스트 전사를 켠다(finding #1) — 실시간 음성 대화도 리포트가 분석할 수
             // 있도록 클라가 이 전사를 모아 종료 시 서버에 제출한다(submitRealtimeTranscript).
