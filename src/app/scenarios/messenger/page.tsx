@@ -48,7 +48,10 @@ const SURFACE_LABEL: Record<MessengerSurface, string> = {
 export default function MessengerScenarioSelectPage() {
   const router = useRouter();
   // T74(UX-030 "이 시나리오 다시 훈련") — 아카이브가 시나리오를 미리 지목해 들어온다.
-  // 시작은 여전히 사용자가 누른다. 목록에 실제로 보이는 시나리오만 프리셋으로 인정한다.
+  // 시작은 여전히 사용자가 누른다. 프리셋은 채널만 검사한다(reviewer m1) — send 모드의
+  // 에스컬레이션 제외 필터까지 재현하지는 않으며, 그 조합은 서버 createChallenge가
+  // escalation_not_supported로 독립 거부한다(2중 방어). 아카이브 진입은 항상
+  // setExperienceMode("self")를 선호출해 send 모드가 되지 않는다.
   const searchParams = useSearchParams();
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(() => {
     const preset = searchParams.get("scenarioId");

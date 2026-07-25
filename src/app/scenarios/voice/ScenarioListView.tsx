@@ -40,6 +40,9 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
   const router = useRouter();
   // T74(UX-030 "이 시나리오 다시 훈련") — 실패 아카이브가 시나리오를 미리 지목해 들어온다.
   // 선택만 채워 두고 시작은 여전히 사용자가 누른다(자동 시작하지 않는다).
+  // ⚠️ 프리셋은 채널/음성모드만 검사한다(reviewer m1) — send 모드의 에스컬레이션 제외 필터까지는 재현하지 않는다. 그 조합은 서버
+  // createChallenge가 escalation_not_supported로 독립 거부하고(2중 방어), 아카이브 진입은 항상
+  // setExperienceMode("self")를 선호출해 send 모드가 되지 않는다.
   // ⚠️ 노출 필터(AC-029/AC-057)를 프리셋이 우회하면 안 된다 — 이 목록에 실제로 보이는 시나리오만
   // 미리 선택한다(예: clone 시나리오를 generic 목록에 손으로 붙여 넣어도 무시된다).
   const searchParams = useSearchParams();
