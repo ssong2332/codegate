@@ -186,3 +186,47 @@ test("toLlmHistory() maps stored messages to LLM roles and wraps user turns as d
   assert.ok(history[1].content.includes("정말 괜찮아?"));
   assert.ok(history[1].content.startsWith("[훈련참가자입력:데이터시작]"));
 });
+
+// --- 전 시나리오 조립 순서 불변식 (QA 제안, 2026-07-25) ---
+//
+// reviewer와 QA가 **각자 임시 스크립트로** 13시나리오 × 3난이도 × 턴지시 유무 = 78조합을 돌려
+// "guardrailPreamble이 항상 최후미"를 확인했지만, 그 스크립트는 저장소에 없어 **다음 회귀를
+// 자동으로 잡지 못한다**. 위의 §15.5 필수 테스트들은 시나리오 1종(가족사고)만 커버한다.
+// 어떤 시나리오 하나만 프롬프트 구조가 달라져도(예: guardrailPreamble이 비거나 개행이 다르거나)
+// 그 시나리오에서만 조용히 불변식이 깨질 수 있으므로, 전수 검사를 상설 테스트로 고정한다.
+test("[전수] 모든 시나리오 × 모든 난이도 × 턴지시 유무에서 guardrailPreamble이 맨 마지막이다(AC-065)", () => {
+  const levels = ["beginner", "intermediate", "advanced"] as const;
+  const turnInstructions = [undefined, "\n\n[오프닝 지침] 첫 마디다."];
+  const ids = Object.keys(SCENARIO_PROMPTS);
+
+  assert.ok(ids.length >= 13, `시나리오가 13종 이상이어야 한다(현재 ${ids.length}종)`);
+
+  let combos = 0;
+  for (const id of ids) {
+    const prompt = SCENARIO_PROMPTS[id];
+    for (const difficultyLevel of levels) {
+      for (const turnInstruction of turnInstructions) {
+        const assembled = buildSystemPrompt(prompt, { difficultyLevel, turnInstruction });
+        combos += 1;
+        assert.ok(
+          assembled.trimEnd().endsWith(prompt.guardrailPreamble.trimEnd()),
+          `guardrailPreamble이 맨 마지막이 아니다 — 시나리오=${id}, 난이도=${difficultyLevel}, 턴지시=${Boolean(turnInstruction)}`,
+        );
+      }
+    }
+  }
+  assert.equal(combos, ids.length * 3 * 2, "모든 조합을 검사해야 한다");
+});
+
+test("[전수] 모든 시나리오에서 intermediate 조립 결과가 난이도 미지정과 완전히 동일하다(회귀 0)", () => {
+  // 중급은 모디파이어 블록을 출력하지 않는다는 설계(§15.3) — 이게 깨지면 난이도 도입만으로
+  // 기존 모든 시나리오의 프롬프트 문자열이 바뀌어 조용한 회귀가 된다.
+  for (const id of Object.keys(SCENARIO_PROMPTS)) {
+    const prompt = SCENARIO_PROMPTS[id];
+    assert.equal(
+      buildSystemPrompt(prompt, { difficultyLevel: "intermediate" }),
+      buildSystemPrompt(prompt),
+      `intermediate가 기준선과 달라졌다 — 시나리오=${id}`,
+    );
+  }
+});
