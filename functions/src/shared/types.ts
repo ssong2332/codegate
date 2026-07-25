@@ -205,6 +205,18 @@ export type ReportDoc = {
   createdAt: FirebaseFirestore.Timestamp;
 };
 
+// --- reports/{reportId}/rewindAttempts/{attemptId} (T70, UX-028/UF-009, §15.2.2, AC-062/063) ---
+// ⚠️ 이 서브컬렉션의 존재 이유가 AC-007 보호다 — 되감기 시도는 리포트 문서를 바꾸지 않고 하위에만
+// 쌓인다(Database.md §rewindAttempts). answerMasked는 maskPII 적용 후 값만 저장한다(ADR-0004).
+export type RewindAttemptDoc = {
+  momentTurnIndex: number;
+  answerMasked: string;
+  verdict: "good" | "risky" | "unclear";
+  reason: string;
+  judgedBy: "llm" | "rule";
+  createdAt: FirebaseFirestore.Timestamp;
+};
+
 // --- deletionLogs/{logId} (AC-021, ADR-0003) ---
 export type DeletionTargetKind = "storage" | "elevenlabs_voice";
 export type DeletionResult = "success" | "partial" | "failed";

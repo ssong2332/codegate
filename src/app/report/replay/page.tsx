@@ -25,6 +25,7 @@ import {
   getAnnotatedTurnIndexes,
   type ReplayTimelineItem,
 } from "@/lib/replay/buildReplayTimeline";
+import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 
 type ReportSummary = {
   wasDeceived: boolean;
@@ -158,6 +159,20 @@ export default function ReplayPage() {
   };
 
   const annotatedTurnIndexes = getAnnotatedTurnIndexes(timeline);
+
+  // T70(UX-028 진입점, AC-062/AC-042) — 이 화면은 2인 사용자2의 **강제 해설 단계 그 자체**이므로
+  // 여기서부터는 되감기를 선택 단계로 노출해도 강제 순서를 앞지르지 않는다(afterForcedReplay).
+  // reportId는 기존 관례대로 sessionId와 같다(이 화면이 이미 reports/{sessionId}를 읽고 있다).
+  const rewindEntry = resolveRewindEntry({
+    reportStatus: state === "loaded" ? "ready" : "pending",
+    deceivedMomentCount: annotatedTurnIndexes.length,
+    isChallengeSession: challenge !== null,
+    afterForcedReplay: true,
+  });
+  const goToRewind = (momentIndex: number) => {
+    if (!sessionId) return;
+    router.push(`/report/rewind?reportId=${encodeURIComponent(sessionId)}&moment=${momentIndex}`);
+  };
   const hasMultipleChannels = new Set(timeline.map((item) => item.channel ?? "voice")).size > 1;
 
   const goToStep = (nextPos: number) => {
@@ -398,6 +413,17 @@ export default function ReplayPage() {
                   <div className="my-2.5 h-px bg-[#B96A1B]/20" />
                   <p className="mb-1.5 text-[13px] font-bold text-[#0E6B62]">이렇게 대응했어야</p>
                   <p className="text-[13px] leading-[1.6] text-[#22303A]">{item.annotation.correctAction}</p>
+                  {/* T70(UX-028) — "읽는 복기"에서 "다시 해보기"로 이어지는 지점(UX-018 Entry).
+                      순간 인덱스는 리포트 deceivedMoments 순서(=turnIndex 오름차순)와 같다. */}
+                  {rewindEntry === "available" && (
+                    <button
+                      type="button"
+                      onClick={() => goToRewind(annotatedTurnIndexes.indexOf(item.turnIndex))}
+                      className="mt-3 min-h-[48px] w-full rounded-xl border border-[#0E6B62] bg-white px-4 text-base font-semibold text-[#0E6B62]"
+                    >
+                      이 순간 다시 해보기
+                    </button>
+                  )}
                 </div>
               )}
             </li>
@@ -472,6 +498,13 @@ export default function ReplayPage() {
       )}
 
       <div className="mx-5 mt-5 flex flex-col gap-2.5">
+        {/* UX-028(즉시 되감기) 진입점 — 속은 순간이 1건 이상일 때만(D-40). 2인 사용자2도 이
+            화면(강제 해설)을 지난 뒤이므로 여기서는 노출한다(AC-042 순서 유지). */}
+        {rewindEntry === "available" && (
+          <Button type="button" variant="primary" onClick={() => goToRewind(0)}>
+            그 순간 다시 해보기
+          </Button>
+        )}
         {/* UX-007/UX-018 Exit(2인 변형) — 챌린지 세션은 UX-008(리포트, UF-002 전용)로 돌아가는
             경로를 제공하지 않는다. "(선택)결과 공유 동의 → 종료"만 남긴다. */}
         {!challenge && (

@@ -9,6 +9,7 @@ export { updateMessengerSkin } from "./updateMessengerSkin";
 export { requestEscalation } from "./requestEscalation";
 export { requestReverseEscalation } from "./requestReverseEscalation";
 export { generateReport } from "./generateReport";
+export { judgeRewindAnswer } from "./judgeRewindAnswer";
 export { createChallenge } from "./createChallenge";
 export { deleteChallenge } from "./deleteChallenge";
 export { listMyChallenges } from "./listMyChallenges";

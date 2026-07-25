@@ -157,6 +157,23 @@ export type RequestReverseEscalationResponse = { escalation: { toChannel: "messe
 export type GenerateReportRequest = { sessionId: string };
 export type GenerateReportResponse = { reportId: string };
 
+// --- judgeRewindAnswer (T70 · UX-028/UF-009 · AC-062/AC-063, Architecture.md §15.2.3) ---
+// functions/src/rewind/types.ts와 1:1. 원 리포트는 읽기 전용으로만 참조되며 이 호출은
+// reports/{rid}/rewindAttempts에만 append한다(AC-007 불변식 보호, ADR-0008).
+export type RewindVerdict = "good" | "risky" | "unclear";
+export type JudgeRewindAnswerRequest = {
+  reportId: string;
+  momentIndex: number;
+  answerText: string;
+};
+export type JudgeRewindAnswerResponse = {
+  verdict: RewindVerdict;
+  reason: string;
+  /** 판정 불가(unclear)여도 항상 채워져 온다(학습 최소 보장). */
+  correctAction: string;
+  judgedBy: "llm" | "rule";
+};
+
 // --- createChallenge / deleteChallenge (Track A/C · T36 · UX-019/020 · AC-041/044/048/049) ---
 // functions/src/challenge/types.ts와 1:1. shareToken은 createChallenge 응답에서만 평문 반환되고
 // 서버 어디에도 저장되지 않는다(§14.4) — 클라도 sessionStorage 등에 지속시키지 않는다.

@@ -17,6 +17,9 @@ export { createRealtimeCall } from "./realtime";
 // 실시간 통화 전사 제출(finding #1) — 음성 대화도 리포트가 분석하도록 종료 직전 클라가 제출한다.
 export { submitRealtimeTranscript } from "./realtime/submitTranscript";
 export { generateReport } from "./report";
+// 즉시 되감기 판정(T70, UX-028/UF-009, AC-062/063) — 원 리포트를 읽기 전용으로만 참조하고
+// reports/{rid}/rewindAttempts에만 append한다(ADR-0008, AC-007 불변식 보호).
+export { judgeRewindAnswer } from "./rewind";
 // 2인 소셜 챌린지 — 사용자1 생성·클론 스코프·공유 링크(T36, Architecture.md §14, ADR-0005).
 export { createChallenge, deleteChallenge, listMyChallenges } from "./challenge";
 // 2인 소셜 챌린지 — 사용자2 동의·체험·신고·결과공유(T37, §14.7/ADR-0006). challenge/index.ts와
