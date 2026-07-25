@@ -1,0 +1,1 @@
+- [ElevenLabs voice selection constraints](reference_elevenlabs_voice_selection.md) — client-only TTS override, no server voice-pin, account-scoped IVC ids; drove ADR-0006 A2

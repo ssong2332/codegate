@@ -35,6 +35,9 @@ export {
   getChallengeToken,
   setExperienceMode,
   getExperienceMode,
+  // T72(UX-029) — 드릴다운 마지막 단계에서 고른 난이도 힌트.
+  setSelectedDifficultyLevel,
+  getSelectedDifficultyLevel,
 } from "./pendingSession";
 export type { TrainingType, ExperienceMode } from "./pendingSession";
 // 실시간 음성 통화 전환(2026-07-22 사용자 결정, Phase A) — 브라우저 STT 래퍼.

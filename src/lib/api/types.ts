@@ -1,6 +1,7 @@
 // Callable 함수 계약 — API.md와 1:1(Architecture.md §4 "계약 원천 2곳" 중 하나, ADR-0001).
 // 클라이언트(src/)와 Functions(functions/)가 이 시그니처에 맞춰 병렬 개발한다.
 // 계약 변경은 트랙 간 합의 후(Architecture.md §8).
+import type { DifficultyLevel } from "@/lib/difficulty";
 
 // 메신저 표면 요소(T29, Architecture.md §13.4, AC-032/045) — 실 URL 필드가 존재하지 않는다.
 // 링크는 displayText(모의 표기)·fakeLandingId(인앱 가짜 랜딩 참조)로만 표현된다.
@@ -41,6 +42,10 @@ export type CreateVoiceCloneResponse = {
 // 가능한 메신저 시나리오의 조건부 목소리 선택 결과(functions/src/session/types.ts와 1:1).
 export type VoiceSelectionSource = "recorded" | "reused" | "fallback_male" | "fallback_female";
 
+// difficultyLevel(T72 추가, 옵셔널·하위호환, docs/UX.md UX-029 · Architecture.md §15.3.2 · AC-064) —
+// 드릴다운 마지막 단계에서 고른 훈련 강도. 서버가 enum 검증 후 세션에 기록하고, **응답의
+// difficultyLevel로 실제 적용값을 되돌려준다**(요청값과 다르면 폴백이 일어난 것 — 조용히 진행하지
+// 않고 사용자에게 알린다). functions/src/session/types.ts와 1:1.
 export type CreateSessionRequest = {
   scenarioId: string;
   voiceId: string;
@@ -50,6 +55,7 @@ export type CreateSessionRequest = {
   messengerSkin?: "ios" | "samsung" | "default";
   skinSource?: "auto" | "manual" | "fallback";
   voiceSelectionSource?: VoiceSelectionSource;
+  difficultyLevel?: DifficultyLevel;
 };
 // isMock(채팅 화면 구현 시 반영, 서버는 이미 반환 중 — functions/src/session/index.ts:96): 서버가
 // LLM 어댑터로 MockLlmClient를 썼다는 뜻(계약 드리프트 해소, API.md 갱신 권장).
@@ -62,6 +68,8 @@ export type CreateSessionResponse = {
   // 실시간 음성 통화 전환(2026-07-22 사용자 결정) — 오프닝 대사 합성 오디오(서버가 이미 반환 중,
   // functions/src/session/types.ts와 1:1).
   openingAudioUrl?: string;
+  // T72 — 서버가 실제로 확정해 기록한 난이도(§15.3.2). 요청값과 다르면 폴백이 일어난 것이다.
+  difficultyLevel: DifficultyLevel;
 };
 
 // --- sendMessage (Track A · T7 · UX-006 · AC-003~005/AC-013/AC-024/AC-007) ---
@@ -108,6 +116,12 @@ export type CreateRealtimeCallResponse = {
   language: "ko";
   /** true = 실시간 대화 불가(키/설정 미비 또는 발급 실패) → 텍스트 폴백으로 진행. */
   isMock: boolean;
+  /**
+   * T72(Architecture.md §15.3.3/§15.6 G6) — 고른 난이도가 이 통화 경로에 **실제로 반영됐는가**.
+   * ElevenLabs 경로는 프롬프트가 에이전트 쪽에 저장돼 있어 주입 지점이 없어 false다. 클라는 false면
+   * 난이도 배지를 띄우지 않고(근거 없는 표기 금지) 미적용 사실을 알린다(조용한 미적용 금지).
+   */
+  difficultyApplied: boolean;
 };
 
 // --- submitRealtimeTranscript (finding #1 · 2026-07-23) ---
@@ -177,7 +191,12 @@ export type JudgeRewindAnswerResponse = {
 // --- createChallenge / deleteChallenge (Track A/C · T36 · UX-019/020 · AC-041/044/048/049) ---
 // functions/src/challenge/types.ts와 1:1. shareToken은 createChallenge 응답에서만 평문 반환되고
 // 서버 어디에도 저장되지 않는다(§14.4) — 클라도 sessionStorage 등에 지속시키지 않는다.
-export type CreateChallengeRequest = { scenarioId: string; displayName: string };
+// difficultyLevel(T72 추가, UX-019/UX-029, AC-064) — 발신자가 고른 "상대가 겪을 강도".
+export type CreateChallengeRequest = {
+  scenarioId: string;
+  displayName: string;
+  difficultyLevel?: DifficultyLevel;
+};
 export type CreateChallengeResponse = {
   challengeId: string;
   shareToken: string;
@@ -219,6 +238,9 @@ export type GetChallengeLandingResponse = {
   // T49(#20 · MVP #20 · Architecture.md §14.8.2) — 부재 없이 항상 확정값. 동의 후 UX-014(voice)
   // vs UX-022(messenger) 라우팅을 이 값으로 분기한다(D-28).
   channel: "voice" | "messenger";
+  // T72(§15.3.2 · UX-021 · AC-040/064) — 발신자가 고른 강도. 동의 **전에** 표시해 사전 동의의
+  // 정보량을 늘린다(고급이면 "강한 압박" 고지). 게이트 로직은 무변경(D-42/AC-065).
+  difficultyLevel: DifficultyLevel;
 };
 
 // consentChallenge는 익명 사인인 후(§14.7/ADR-0006 A1) 호출한다 — 클라가 동의 탭 시점에
@@ -242,3 +264,10 @@ export type ReportChallengeResponse = { status: "reported" };
 
 export type SetChallengeResultSharingRequest = { token: string; share: boolean };
 export type SetChallengeResultSharingResponse = { shared: boolean };
+
+// --- getBeginnerBriefing (T72 · UX-029 초급 사전 브리핑 · Architecture.md §15.3.4 · AC-066) ---
+// functions/src/scenarios/briefingTypes.ts와 1:1. 반환되는 것은 **수법 라벨뿐**이며 페르소나·대사
+// 예시·가드레일 원문은 서버에 남는다(ADR-0004). 세션 **시작 전** 화면에서만 소비되고, 대화 중
+// 실시간 판정 표시에는 쓰지 않는다(D-6 유지).
+export type GetBeginnerBriefingRequest = { scenarioId: string };
+export type GetBeginnerBriefingResponse = { signals: string[] };

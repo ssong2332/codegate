@@ -2,6 +2,7 @@
 // 이 파일이 하는 일은 오직 "문자열 조립"이며 부수효과(Firestore/LLM 호출)는 없다 — sendMessage/
 // generateOpeningLine(index.ts)이 이 함수들의 결과를 LLM 어댑터에 전달한다.
 import type { ScenarioPromptDoc } from "../shared/types";
+import type { DifficultyLevel } from "../shared/difficulty";
 import type { LlmMessage } from "../llm";
 
 // 사용자 신고(2026-07-25) — "사람과 대화한다는 느낌이 안 든다", "대화가 자연스럽지 않다",
@@ -45,16 +46,68 @@ const SCENARIO_PROGRESSION = `[진행 강제 — 반드시 지킨다]
 - **이 앱 화면에 없는 것을 가리키지 않는다.** 참가자가 실제로 보거나 누를 수 없는 것(문자로 방금 보낸 인증번호, 방금 뜬 팝업, 설치된 앱 화면 등)을 "지금 화면에 뜬 걸 불러 달라"는 식으로 요구하지 않는다 — 참가자는 볼 수 없어 몰입이 깨진다. 대신 참가자가 지금 알고 있거나 스스로 정할 수 있는 것(이름·생년월일·계좌 비밀번호·직접 누르는 번호)을 요구한다.
 - **페이로드는 가상값만 쓴다.** 계좌번호·앱 이름·링크·연락처를 요구하거나 불러 줄 때는 **실존하지 않는 기관명**을 쓰되(예: "OO은행", "국민안전지원센터"), 숫자는 실제처럼 들리는 형식으로 또박또박 부른다(예: "OO은행 352-0812-4471-63"). 실존하지 않는 곳의 번호라 어디로도 연결되지 않지만, 참가자에게는 진짜 계좌를 불러주는 것과 똑같이 들려 몰입이 깨지지 않는다. **요구하는 행위 자체는 그대로 하되**, 실존 기관의 실제 계좌·실제 동작하는 앱/링크·실제 연락처만 쓰지 않는다 — 참가자가 겪는 판단 상황은 동일하다.`;
 
+// 난이도 모디파이어(T72, Architecture.md §15.3.1, UX-029/D-41~D-43, AC-064/065/066).
+//
+// **왜 시나리오별 3벌 저작이 아니라 공통 블록 1곳인가(§15.3.1)**: CONVERSATION_STYLE·
+// SCENARIO_PROGRESSION이 이미 이 패턴이다(13개 시나리오·모든 경로가 이 조립 함수 하나를 공유).
+// 13×3=39벌은 유지비뿐 아니라 **드리프트 위험**(한 벌만 고쳐 안전 문구가 빠지는 사고)을 3배로 만든다.
+//
+// **`intermediate`는 블록을 내보내지 않는다(기준선)** — "현행 프롬프트 = 중급"이라는 뜻이며, 그
+// 결과 난이도 미지정 기존 세션의 프롬프트 문자열이 한 글자도 바뀌지 않는다(회귀 위험 0). 이는
+// 테스트로 고정한다(promptAssembly.test.ts "옵션 미전달 출력과 완전히 동일").
+//
+// ⚠️ **AC-065 하드 제약**: 이 블록들은 **압박 강도·요구 도달 속도·수법의 은밀함만** 바꾼다.
+// 무해화 경계(SCENARIO_PROGRESSION의 "페이로드는 가상값만" — 실존 기관의 실제 계좌·실제 동작하는
+// 앱/링크·실제 연락처 금지, AC-005/013/032/033)와 guardrailPreamble은 **세 난이도에서 완전히
+// 동일**하다. "고급 = 더 진짜 같은 압박"이지 "고급 = 더 진짜에 가까운 위험 정보"가 아니다.
+// 이 규칙을 문구가 아니라 **조립 순서**로 강제하는 것이 아래 buildSystemPrompt다(§15.5).
+const DIFFICULTY_MODIFIERS: Record<DifficultyLevel, string | null> = {
+  beginner: `[난이도 — 초급: 수법이 눈에 띄게 드러나게]
+- **수법을 눈에 띄게 쓴다.** 전형적인 사기 문구를 그대로 쓰고, 요구를 서두르며, 근거는 어설프게 댄다 — 참가자가 "이건 사기구나"를 스스로 알아챌 단서를 일부러 남긴다.
+- **압박은 약하게 한다.** 몰아붙이거나 겁을 주는 표현의 강도를 낮추고, 상대가 불안해하면 한 발 물러선다.
+- **상대가 의심하거나 확인하려 하면 쉽게 물러선다.** 끈질기게 되받아치지 않는다.
+- ⚠️ 이 난이도 지시는 **말투·압박 강도·수법의 노출 정도만** 바꾼다. 위 [진행 강제]의 "반드시 구체적인 요구에 도달한다"와 "페이로드는 가상값만", 아래 안전 지침은 **하나도 바꾸지 않는다.**`,
+  // 기준선 — 블록을 내보내지 않는다(현행 프롬프트가 곧 중급, §15.3.1).
+  intermediate: null,
+  advanced: `[난이도 — 고급: 실제처럼 정교하게]
+- **압박 강도를 높이고 요구에 더 빨리 도달한다.** 시간·권위·불이익을 근거로 결정을 재촉한다.
+- **수법을 은밀히 섞는다.** 전형적인 사기 문구를 그대로 읊지 말고, 자연스러운 상담·안내 대화 안에 녹여 말한다.
+- **상대가 의심해도 침착하게 해명한다.** 당황하거나 물러서지 말고 되묻고, 절차를 설명하고, 다른 근거를 대며 대화를 이어간다.
+- ⚠️ **"고급"은 더 진짜 같은 압박이지, 더 진짜에 가까운 위험 정보가 아니다.** 위 [진행 강제]의 "페이로드는 가상값만"(실존 기관의 실제 계좌·실제 동작하는 앱/링크·실제 연락처 금지)과 아래 안전 지침은 고급에서도 **완전히 동일하게** 지킨다. 실제로 쓸 수 있는 사기 절차·정보를 더 알려주는 방향으로는 절대 강화하지 않는다.`,
+};
+
+/**
+ * buildSystemPrompt 확장 옵션(T72, §15.5) — **호출부가 반환값 뒤에 문자열을 이어 붙이는 것을
+ * 대체한다.** 추가 블록은 전부 이 옵션으로 넘겨야 guardrailPreamble 앞에 삽입된다.
+ */
+export type BuildSystemPromptOptions = {
+  /** UX-029에서 사용자가 고른 강도. 부재·intermediate면 블록을 내보내지 않는다(기준선). */
+  difficultyLevel?: DifficultyLevel;
+  /** 이 턴에만 붙는 지시(오프닝 첫 마디 지침 등). 가드레일 **앞**에 삽입된다. */
+  turnInstruction?: string;
+};
+
 /**
  * 시스템 프롬프트 조립(ADR-0004 구조: personaPrompt + weakenedTactics + 대화 방식 + guardrailPreamble).
  * `scenarioPrompts/{scenarioId}` 원문은 클라가 절대 읽을 수 없고(firestore.rules), 이 조립도
  * Cloud Functions 안에서만 실행된다 — 클라이언트는 조립된 문자열을 보거나 전송받지 않는다(AC-024).
  *
- * guardrailPreamble은 항상 **맨 마지막**에 둔다(기존 순서 유지) — 안전 지침이 뒤에 올수록 모델이
- * 앞선 지침보다 우선해 따르는 경향이 있어, 새로 추가한 대화 방식 블록도 그 앞에 넣는다.
+ * ⚠️ **조립 순서 불변식(Architecture.md §15.5, AC-065/D-42) — 깨면 안전 설계가 코드 레벨에서 무너진다**:
+ * 반환 문자열의 **마지막 블록은 언제나 `guardrailPreamble`**이다. 안전 지침이 뒤에 올수록 모델이
+ * 앞선 지침보다 우선해 따르는 경향이 있어 기존 조립도 가드레일을 맨 뒤에 두고 있었다. 난이도
+ * 모디파이어·턴 지시 등 **모든 추가 블록은 그 앞**에 들어가야 하며, 그래서 이 함수는 호출부가
+ * `buildSystemPrompt(...) + 추가지시`로 이어 붙이는 대신 `opts`로 받는다 —
+ * `openingLine.ts`가 실제로 그 방식으로 가드레일 뒤에 지시를 붙이던 기존 위반(§15.6 G2)을
+ * 이번 태스크에서 함께 제거했다.
+ *
+ * 확정 순서: persona → weakenedTactics → 대화 방식 → 진행 강제 → 난이도 → 턴 지시 → **가드레일**.
  */
-export function buildSystemPrompt(prompt: ScenarioPromptDoc): string {
+export function buildSystemPrompt(
+  prompt: ScenarioPromptDoc,
+  opts: BuildSystemPromptOptions = {},
+): string {
   const tactics = prompt.weakenedTactics.map((tactic, i) => `${i + 1}. ${tactic}`).join("\n");
+  const difficultyBlock = opts.difficultyLevel ? DIFFICULTY_MODIFIERS[opts.difficultyLevel] : null;
   return [
     prompt.personaPrompt,
     "",
@@ -65,6 +118,10 @@ export function buildSystemPrompt(prompt: ScenarioPromptDoc): string {
     "",
     SCENARIO_PROGRESSION,
     "",
+    // 아래 두 블록은 "있을 때만" 삽입된다 — intermediate(=블록 없음)·턴 지시 없음인 경우 배열이
+    // 도입 전과 완전히 동일해져 조립 결과 문자열도 한 글자도 달라지지 않는다(회귀 0 보장).
+    ...(difficultyBlock ? [difficultyBlock, ""] : []),
+    ...(opts.turnInstruction ? [opts.turnInstruction, ""] : []),
     prompt.guardrailPreamble,
   ].join("\n");
 }

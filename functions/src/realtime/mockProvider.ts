@@ -17,6 +17,9 @@ export class MockRealtimeProvider implements RealtimeVoiceProvider {
       voiceId: input.voiceId,
       language: "ko",
       isMock: true,
+      // T72(§15.3.3) — 목업은 실시간 대화를 만들지 않고 클라를 **텍스트 폴백**(sendMessage)으로
+      // 보낸다. 그 경로는 서버가 매 턴 프롬프트를 조립하므로 난이도가 정상 반영된다.
+      difficultyApplied: true,
     };
   }
 }

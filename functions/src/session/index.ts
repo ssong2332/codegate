@@ -19,6 +19,7 @@ import {
   MESSENGER_ESCALATION_MAX_USER_TURNS,
 } from "../shared/constants";
 import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, GEMINI_API_KEY } from "../shared/config";
+import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "./channelTransition";
 import type { MessageDoc, SessionDoc } from "../shared/types";
@@ -66,6 +67,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       messengerSkin,
       skinSource,
       voiceSelectionSource,
+      difficultyLevel,
     } = request.data ?? {};
     if (!scenarioId || !voiceId) {
       throw new HttpsError("invalid-argument", "scenarioId와 voiceId가 필요합니다.");
@@ -73,6 +75,12 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     if (!SCENARIO_PROMPTS[scenarioId]) {
       throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
     }
+
+    // T72(§15.3.2, UX-029/AC-064) — 난이도는 enum 검증 후에만 기록한다. 부재·enum 밖이면 조용히
+    // 임의 난이도로 진행하지 않고 "intermediate"로 확정하며, 응답에 그 확정값을 실어 클라가 폴백
+    // 사실을 사용자에게 알릴 수 있게 한다. **난이도는 이 콜러블의 어떤 게이트(동의 확인·세션 한도·
+    // 소유권 검증)도 바꾸지 않는다**(AC-065/D-42) — 아래 게이트들은 세 난이도에서 완전히 동일하다.
+    const resolvedDifficultyLevel = normalizeDifficultyLevel(difficultyLevel);
 
     // 교차채널 세션 총 한도(T30, Architecture.md §13.3, PoC 전 가정치) — 에스컬레이션 가능
     // 시나리오(scenario.escalation 존재)는 두 채널을 합쳐도 기존 10턴 안에 다 담기 어려워
@@ -114,7 +122,12 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     // isMock은 generateOpeningLine이 실제로 관측한 값을 그대로 쓴다(별도 isUsingMockLlm() 사전
     // 확인과 분리 — completeWithFallback 도입 후 그 둘이 다른 사실이 될 수 있음, openingLine.ts
     // 주석 참고. 사용자 실측 신고로 발견된 정합성 버그 수정, 2026-07-24).
-    const { message: openingMessage, isMock } = await generateOpeningLine(scenarioId);
+    // T72(§15.3.3 호출부 3곳 중 "오프닝 대사") — 세션 문서 write 전이라 요청값(정규화 완료)을 직접
+    // 넘긴다. 여기서 빠뜨리면 오프닝 첫 마디만 중급으로 나오는 비대칭이 생긴다(§15.6 G5).
+    const { message: openingMessage, isMock } = await generateOpeningLine(
+      scenarioId,
+      resolvedDifficultyLevel,
+    );
 
     // T4: sessionId(온보딩 "사전 세션 id")가 넘어오면 createVoiceClone이 만들어 둔 pending
     // sessions/{sid} 문서를 새로 만들지 않고 채택한다 — sessionId 불일치 갭 해소. 넘어오지 않으면
@@ -173,6 +186,9 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       ...(skinSource ? { skinSource } : {}),
       // UX-025(§13.6) — 에스컬레이션 가능 메신저 시나리오에서만 채워진다.
       ...(voiceSelectionSource ? { voiceSelectionSource } : {}),
+      // T72(§15.3.2) — 항상 확정값을 기록한다(부재 문서는 하위호환 읽기로만 처리하고, 새 문서는
+      // 명시 필드를 남긴다 — "값이 없으니 기본이겠지"를 판정 근거로 삼지 않는다는 §15.0-4 원칙).
+      difficultyLevel: resolvedDifficultyLevel,
     };
     // merge:true — sessionId를 채택한 경우 pending 문서(createVoiceClone이 만든 voiceProvider 등
     // 부가 필드)를 지우지 않고 scenarioId/status 등을 덧씌운다. 새 문서인 경우는 기존과 동일.
@@ -217,6 +233,8 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       maxSessionMs: MAX_SESSION_MS,
       isMock,
       ...(openingAudioUrl ? { openingAudioUrl } : {}),
+      // T72 — 실제로 적용된 난이도(폴백 감지용, §15.3.2).
+      difficultyLevel: resolvedDifficultyLevel,
     };
   },
 );

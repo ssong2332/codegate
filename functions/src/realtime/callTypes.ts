@@ -14,4 +14,10 @@ export type CreateRealtimeCallResponse = {
   language: "ko";
   /** true = 실시간 대화 불가(키/설정 미비 또는 발급 실패) → 클라는 텍스트 폴백으로 진행. */
   isMock: boolean;
+  /**
+   * T72(§15.3.3/§15.6 G6) — 사용자가 고른 난이도가 이 통화 경로에 실제로 반영됐는가.
+   * ElevenLabs 경로는 프롬프트가 에이전트 쪽에 있어 주입 지점이 없으므로 false.
+   * 클라는 false면 난이도 배지를 표시하지 않는다(근거 없는 표기 금지).
+   */
+  difficultyApplied: boolean;
 };

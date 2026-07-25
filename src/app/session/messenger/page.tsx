@@ -31,6 +31,11 @@ import { detectMessengerSkin, type MessengerSkin } from "@/lib/messenger/detectS
 import EndTrainingButton from "@/components/EndTrainingButton";
 import SyntheticLabel from "@/components/SyntheticLabel";
 import MessengerFakeLanding from "@/components/MessengerFakeLanding";
+import {
+  DIFFICULTY_LABEL,
+  normalizeDifficultyLevel,
+  type DifficultyLevel,
+} from "@/lib/difficulty";
 import { Banner, Button } from "@/components/ui";
 
 type PageState = "checking" | "ready" | "no-session" | "scenario-not-found" | "load-error";
@@ -75,6 +80,8 @@ export default function MessengerSessionPage() {
   const [sessionId] = useState<string | null>(() => getPendingSessionId());
   const [pageState, setPageState] = useState<PageState>(sessionId ? "checking" : "no-session");
   const [scenario, setScenario] = useState<ScenarioDoc | null>(null);
+  // T72 — 이 대화의 난이도(세션 문서 기준, P-22 동일 라벨).
+  const [difficultyLevel, setDifficultyLevel] = useState<DifficultyLevel | null>(null);
   const [ended, setEnded] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -114,6 +121,9 @@ export default function MessengerSessionPage() {
           return;
         }
         setScenario(found);
+        // T72(UX-022 v1.11 난이도 배지, P-22) — 세션 문서에 서버가 실제로 기록한 값을 읽는다.
+        // 메신저 채팅은 매 턴 sendMessage(서버 조립)를 타므로 난이도가 항상 반영된다.
+        setDifficultyLevel(normalizeDifficultyLevel(data.difficultyLevel));
         if (data.status === "ended") {
           setEnded(true);
         }
@@ -298,6 +308,13 @@ export default function MessengerSessionPage() {
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
           <div className="flex items-center gap-2">
             <SyntheticLabel label="AI 훈련용 모의" />
+            {/* T72 난이도 배지(P-22) — 색 단독 금지, 텍스트 라벨. 이 배지가 있든 없든 위 면책
+                배너·모의 표식·아래 "훈련 종료"(AC-006)는 세 난이도에서 동일하다(AC-065). */}
+            {difficultyLevel && (
+              <span className="rounded-full bg-[#F2EFE9] px-3 py-1 text-sm font-semibold text-[#6B655C]">
+                난이도 {DIFFICULTY_LABEL[difficultyLevel]}
+              </span>
+            )}
             {surface === "sms" && (
               <button
                 type="button"

@@ -31,6 +31,11 @@ import {
 import { useRealtimeCall } from "@/lib/realtime";
 import { requestReverseEscalation, sendMessage, submitRealtimeTranscript } from "@/lib/api";
 import type { TranscriptTurn } from "@/lib/api";
+import {
+  DIFFICULTY_LABEL,
+  normalizeDifficultyLevel,
+  type DifficultyLevel,
+} from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import CallWaveform from "@/components/CallWaveform";
 
@@ -95,6 +100,9 @@ export default function SessionCallPage() {
   // 실시간 세션에 넣을 타이핑 입력(카운터 패턴 — seq가 바뀔 때 1회 전송).
   const [textMessage, setTextMessage] = useState<{ text: string; seq: number } | null>(null);
   const [maxSessionMs, setMaxSessionMs] = useState<number | null>(null);
+  // T72 — 이 통화의 난이도(세션 문서 기준). 배지 표기는 실시간 경로가 실제로 난이도를 반영할 때만
+  // 한다(아래 difficultyApplied 참고, §15.6 G6 "근거 없는 표기 금지").
+  const [difficultyLevel, setDifficultyLevel] = useState<DifficultyLevel | null>(null);
   // T40 fast-follow — 역방향 명시 전환 버튼("메시지로 전환") 상태. messenger/page.tsx의
   // escalating/escalationError와 동일한 패턴, 방향만 반대.
   const [switchingToMessenger, setSwitchingToMessenger] = useState(false);
@@ -143,6 +151,9 @@ export default function SessionCallPage() {
         }
         setScenario(found);
         setMaxSessionMs((data.maxSessionMs as number) ?? null);
+        // T72(UX-014 v1.11 난이도 배지, P-22) — 세션 문서에 서버가 **실제로 기록한** 값을 읽는다
+        // (sessionStorage 힌트가 아니라). 부재(난이도 도입 이전 세션)면 중급으로 정규화된다.
+        setDifficultyLevel(normalizeDifficultyLevel(data.difficultyLevel));
         // #4/#5 새로고침 복원: 이미 "받기"를 누른 세션(answered 플래그)이나 대화가 시작된 세션
         // (turnCount≥1)을 다시 열면 "수신 중"으로 되돌아가지 않고 곧바로 대화 상태로 복원한다.
         // 실시간 경로는 sendMessage를 안 타 turnCount가 0에 머무므로, turnCount만으로는 실시간
@@ -452,6 +463,9 @@ export default function SessionCallPage() {
   }
 
   const callerLabel = scenario.callerLabel ?? "발신자 (사칭)";
+  // T72(§15.6 G6) — 자격증명을 아직 못 받았으면(수신 대기 중) 기본은 true다. 실제로 난이도를
+  // 반영하지 못하는 경로(ElevenLabs)만 서버가 false로 명시해 내려준다.
+  const difficultyApplied = realtime.credentials?.difficultyApplied !== false;
   const latestScammerLine =
     [...messages].reverse().find((m) => m.role === "scammer")?.text ?? null;
   const isRinging = phase === "incoming";
@@ -545,6 +559,21 @@ export default function SessionCallPage() {
                   ? "통화 종료"
                   : "통화 중"}
           </p>
+          {/* T72 난이도 배지(UX-014 v1.11, P-22) — 색 단독 금지, 항상 텍스트 라벨.
+              ⚠️ ElevenLabs 실시간 경로는 프롬프트가 에이전트 쪽에 있어 난이도가 반영되지 않는다
+              (§15.3.3/§15.6 G6). 그 경우 배지를 띄우지 않고(근거 없는 표기 금지) 미적용 사실을
+              대신 알린다(조용한 미적용도 금지). 난이도 표기 여부와 무관하게 아래 종료 컨트롤·
+              합성 표식·사전 고지는 세 난이도에서 완전히 동일하다(AC-065). */}
+          {difficultyLevel &&
+            (difficultyApplied ? (
+              <p className="rounded-full bg-[#41525E] px-3 py-1 text-sm font-semibold text-[#C9D4DB]">
+                난이도 {DIFFICULTY_LABEL[difficultyLevel]}
+              </p>
+            ) : (
+              <p className="text-sm text-[#C9D4DB]">
+                이 통화 경로에서는 고른 난이도가 적용되지 않습니다
+              </p>
+            ))}
         </div>
 
         {phase === "incoming" && (

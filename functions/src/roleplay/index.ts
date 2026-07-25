@@ -15,6 +15,7 @@ import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { GEMINI_API_KEY } from "../shared/config";
 import { MESSENGER_ESCALATION_FALLBACK_TURNS } from "../shared/constants";
+import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "../session/channelTransition";
 import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
@@ -130,8 +131,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 턴은 이미 위 트랜잭션(#8, 동시 탭 방지용 원자적 클레임)에서 커밋됐고 turnCount도 이미
     // 소진됐다. LLM 호출 실패 시 던지면 "답 없는 사용자 턴"이 남는다 — completeWithFallback이
     // Mock으로 강등해 절대 답 없이 남기지 않는다(llm/index.ts 주석·유닛테스트 참고).
+    // T72(§15.3.3 호출부 3곳 중 "텍스트 턴") — 세션에 기록된 난이도를 그대로 반영한다. 부재·
+    // enum 밖이면 normalizeDifficultyLevel이 중급으로 확정하며, 중급은 모디파이어 블록을 내보내지
+    // 않으므로 난이도 도입 이전 세션의 프롬프트 문자열이 한 글자도 바뀌지 않는다(회귀 0).
     const completion = await completeWithFallback(getLlmClient(), {
-      systemPrompt: buildSystemPrompt(scenarioPrompt),
+      systemPrompt: buildSystemPrompt(scenarioPrompt, {
+        difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
+      }),
       messages: llmHistory,
       mockTacticHints: scenarioPrompt.weakenedTactics,
     });

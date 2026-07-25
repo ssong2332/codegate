@@ -14,6 +14,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { doc, getDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { generateReport } from "@/lib/api";
+import {
+  DIFFICULTY_LABEL,
+  normalizeDifficultyLevel,
+  type DifficultyLevel,
+} from "@/lib/difficulty";
 import { scenarios } from "@/content/scenarios";
 import { Badge, Button } from "@/components/ui";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
@@ -31,6 +36,9 @@ type ReportData = {
   deceivedMoments: DeceivedMoment[];
   tacticsUsed: string[];
   preventionAdvice: string[];
+  // T72(P-22 / AC-064) — 리포트에 역정규화된 표기 전용 값. 난이도는 판정에 영향을 주지 않으며
+  // (§15.3.5) 여기서도 "어떤 강도로 훈련했는가"를 알려주는 라벨로만 쓴다.
+  difficultyLevel: DifficultyLevel;
   createdAt: Timestamp | null;
 };
 
@@ -65,6 +73,7 @@ export default function ReportPage() {
       deceivedMoments: Array.isArray(data.deceivedMoments) ? (data.deceivedMoments as DeceivedMoment[]) : [],
       tacticsUsed: Array.isArray(data.tacticsUsed) ? (data.tacticsUsed as string[]) : [],
       preventionAdvice: Array.isArray(data.preventionAdvice) ? (data.preventionAdvice as string[]) : [],
+      difficultyLevel: normalizeDifficultyLevel(data.difficultyLevel),
       createdAt: data.createdAt instanceof Timestamp ? data.createdAt : null,
     };
   }, []);
@@ -217,8 +226,12 @@ export default function ReportPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] pb-8">
       <div className="px-5 pt-[22px]">
+        {/* T72(P-22) — 선택(UX-029)·세션 셸과 **같은 3단계 어휘**로 표기한다. 표기 전용이며
+            아래 판정(속은 시점·수법·조언)은 난이도와 무관하게 같은 잣대로 산출됐다(§15.3.5). */}
         <p className="text-[13px] font-semibold text-[#6B655C]">
-          {[dateLabel, scenarioTitle].filter(Boolean).join(" · ")}
+          {[dateLabel, scenarioTitle, `난이도 ${DIFFICULTY_LABEL[report.difficultyLevel]}`]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
         <p className="mt-1.5 text-[24px] font-bold leading-[1.35] text-[#22303A]">
           이번 훈련에서

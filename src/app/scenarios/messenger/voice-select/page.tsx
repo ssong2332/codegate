@@ -28,6 +28,9 @@ import {
   hasMessengerVoiceSelectReturn,
   setMessengerVoiceSelectReturn,
   setSelectedScenarioId as setPendingSelectedScenarioId,
+  // T72(UX-029) — 난이도는 이 화면보다 앞에서 확정되며, 여기서는 소비·보존만 한다.
+  getSelectedDifficultyLevel,
+  setSelectedDifficultyLevel,
 } from "@/lib/recording";
 import { fetchStoredVoices, type StoredVoiceSummary } from "@/lib/voices/fetchStoredVoices";
 import { scenarios, GENERIC_VOICE_ID } from "@/content/scenarios";
@@ -87,6 +90,7 @@ export default function MessengerVoiceSelectPage() {
     let cancelled = false;
     (async () => {
       try {
+        const difficultyLevel = getSelectedDifficultyLevel();
         const pendingId = getPendingSessionId();
         if (!pendingId) throw new Error("no-pending-session");
         const snap = await getDoc(doc(db, "sessions", pendingId));
@@ -103,6 +107,10 @@ export default function MessengerVoiceSelectPage() {
           channel: "messenger",
           surface: scenario.surface,
           voiceSelectionSource: "recorded",
+          // T72(UX-029/AC-064) — 난이도는 이 화면보다 **앞 단계**(UX-029)에서 확정된다. 녹음
+          // 왕복(record→clone/wait) 동안에도 sessionStorage 힌트로 살아남아 여기서 소비된다.
+          // 부재면 서버가 중급으로 확정한다(조용한 임의 난이도 진행 금지 — 서버 응답으로 확인 가능).
+          ...(difficultyLevel ? { difficultyLevel } : {}),
         });
         void result;
         if (!cancelled) router.push("/session/messenger");
@@ -121,7 +129,11 @@ export default function MessengerVoiceSelectPage() {
     setStarting(true);
     setStartError(null);
     try {
+      // T72 — clearPendingSession은 난이도 힌트도 지우므로 지우기 **전에** 읽고 **뒤에** 되심는다
+      // (세션 셸 배지·후속 화면이 계속 참조한다). 값 자체는 아래 createSession에도 그대로 넘긴다.
+      const difficultyLevel = getSelectedDifficultyLevel();
       clearPendingSession();
+      if (difficultyLevel) setSelectedDifficultyLevel(difficultyLevel);
       const sessionId = getOrCreatePendingSessionId();
       if (!sessionId) throw new Error("no-session-storage");
       const result = await createSession({
@@ -131,6 +143,7 @@ export default function MessengerVoiceSelectPage() {
         channel: "messenger",
         surface: scenario.surface,
         voiceSelectionSource,
+        ...(difficultyLevel ? { difficultyLevel } : {}),
       });
       void result;
       router.push("/session/messenger");
@@ -142,10 +155,14 @@ export default function MessengerVoiceSelectPage() {
 
   const handleStartRecording = () => {
     if (!scenarioId || starting) return;
+    const difficultyLevel = getSelectedDifficultyLevel();
     clearPendingSession();
     // clearPendingSession이 방금 지운 선택 시나리오 id를 복원한다 — record→clone/wait 왕복 뒤
     // 이 화면으로 돌아왔을 때도 어떤 시나리오였는지 알아야 createSession을 마무리할 수 있다.
     setPendingSelectedScenarioId(scenarioId);
+    // T72 — 난이도(UX-029에서 이미 확정)도 같은 이유로 복원한다. 안 그러면 녹음 왕복만으로
+    // 사용자가 고른 난이도가 조용히 사라져 중급으로 진행된다.
+    if (difficultyLevel) setSelectedDifficultyLevel(difficultyLevel);
     getOrCreatePendingSessionId();
     setMessengerVoiceSelectReturn();
     router.push("/onboarding/record");

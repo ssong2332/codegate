@@ -29,16 +29,15 @@
 // 이 화면이 직접 createSession을 호출한다(구 UX-026 handleSelfExperience의 isMessenger 분기를
 // 이 화면으로 이관 — UX-026이 시나리오 선택보다 앞서게 되며 그 책임을 넘겨받음). self + 에스컬레이션
 // → voice-select(무변경).
+// **T72 갱신(v1.11, D-41, UX-029)**: 위 T56 문단이 설명하는 Exit 분기(에스컬레이션→UX-025 /
+// send→UX-019 / self→createSession)는 **더 이상 이 화면에 없다.** 난이도 선택(UX-029)이 시나리오
+// 확정 직후·생성 직전 단계로 삽입되면서 그 분기 전체가 src/app/scenarios/difficulty/page.tsx로
+// 이관됐다(노출 필터는 이 화면에 그대로 남고, 판정 규칙도 동일).
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  clearPendingSession,
-  getExperienceMode,
-  getOrCreatePendingSessionId,
-  setSelectedScenarioId as setPendingSelectedScenarioId,
-} from "@/lib/recording";
-import { createSession } from "@/lib/api";
-import { scenarios, GENERIC_VOICE_ID, type ScenarioDoc, type MessengerSurface } from "@/content/scenarios";
+import { getExperienceMode, setSelectedScenarioId as setPendingSelectedScenarioId } from "@/lib/recording";
+import { SCENARIO_TRAIT_LABEL } from "@/lib/difficulty";
+import { scenarios, type ScenarioDoc, type MessengerSurface } from "@/content/scenarios";
 import { Badge, Button } from "@/components/ui";
 
 const SURFACE_LABEL: Record<MessengerSurface, string> = {
@@ -46,13 +45,9 @@ const SURFACE_LABEL: Record<MessengerSurface, string> = {
   sms: "문자",
 };
 
-type PageState = "ready" | "starting";
-
 export default function MessengerScenarioSelectPage() {
   const router = useRouter();
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
-  const [state, setState] = useState<PageState>("ready");
-  const [startError, setStartError] = useState<string | null>(null);
   // lazy initializer로 마운트 시 1회만 읽는다(다른 드릴다운 화면과 동일 패턴). 힌트 부재(직접 URL
   // 접근 등 방어적 상황)는 self로 취급 — 기존(UX-026 상향 전) "유형→시나리오 직행" 기본 동작과
   // 동일한 최대 노출·자기훈련 우선 기본값이다.
@@ -65,47 +60,15 @@ export default function MessengerScenarioSelectPage() {
     ([, scenario]) => scenario.channel === "messenger" && (!isSendMode || !scenario.escalation),
   );
 
-  const handleStart = async () => {
-    if (!selectedScenarioId || state === "starting") return;
-    const scenario = scenarios[selectedScenarioId];
-    if (!scenario) return;
-
-    if (scenario.escalation) {
-      // D-25(UX-025) — 조건부 목소리 선택은 전이 발생 시점이 아니라 시나리오 선택 직후에 미리
-      // 온다. createSession은 이 화면이 아니라 voice-select 화면이 호출한다(voiceId 확정 후).
-      // send 모드에는 에스컬레이션 시나리오가 필터에서 애초에 제외되므로 이 분기는 self 전용이다.
-      setPendingSelectedScenarioId(selectedScenarioId);
-      router.push("/scenarios/messenger/voice-select");
-      return;
-    }
-
-    if (isSendMode) {
-      // (T56, v1.10 D-31/AC-051) — 비에스컬레이션 + 지인에게 보내기 → UX-019(챌린지 만들기)로
-      // 직행한다(구 UX-026 handleSendToFriend와 동일 판단 — 메신저는 클론을 요구하지 않는다).
-      router.push(`/challenge/create?scenarioId=${encodeURIComponent(selectedScenarioId)}`);
-      return;
-    }
-
-    // (T56, v1.10 D-31) — 비에스컬레이션 + 본인이 체험 → 이 화면이 직접 세션을 시작한다(구
-    // UX-026 handleSelfExperience의 isMessenger 분기를 이관, 세션 생성 로직·게이팅은 무변경).
-    clearPendingSession();
-    const sessionId = getOrCreatePendingSessionId();
-    if (!sessionId) return;
-    setState("starting");
-    setStartError(null);
-    try {
-      await createSession({
-        sessionId,
-        scenarioId: selectedScenarioId,
-        voiceId: GENERIC_VOICE_ID,
-        channel: "messenger",
-        surface: scenario.surface,
-      });
-      router.push("/session/messenger");
-    } catch {
-      setStartError("시나리오를 시작하지 못했습니다. 다시 시도해 주세요.");
-      setState("ready");
-    }
+  // (T72, v1.11 D-41) — 이 화면은 이제 **시나리오만 확정**하고 난이도 선택(UX-029)으로 넘긴다.
+  // 하류 분기(에스컬레이션 → UX-025 목소리 선택 / send → UX-019 / self → createSession)는 그
+  // 화면이 그대로 넘겨받는다 — 난이도는 목소리 선택(UX-025)보다도 **앞**이다(UX-024 v1.11 갱신:
+  // 난이도가 전이 도달 속도에 영향을 주므로 먼저 정해져야 한다). 분기 판정 규칙 자체는 무변경.
+  const handleStart = () => {
+    if (!selectedScenarioId) return;
+    if (!scenarios[selectedScenarioId]) return;
+    setPendingSelectedScenarioId(selectedScenarioId);
+    router.push("/scenarios/difficulty");
   };
 
   const renderScenarioCard = (scenarioId: string, scenario: ScenarioDoc) => {
@@ -166,13 +129,14 @@ export default function MessengerScenarioSelectPage() {
               className="flex flex-col gap-1.5 text-sm text-[#6B655C]"
             >
               {/* 소요시간 배지(중립) — 메신저 플로우.dc.html의 "약 {time}" 배지와 동일 톤.
-                  난이도는 자유서술문이라(예: "중간 — 정서적 압박과 채널 전환이 결합됩니다") 색상
-                  등급 배지로 단정 짓지 않고 서술 텍스트로 유지한다(임의 매핑 금지). */}
+                  이 문자열은 자유서술문이라(예: "중간 — 정서적 압박과 채널 전환이 결합됩니다") 색상
+                  등급 배지로 단정 짓지 않고 서술 텍스트로 유지한다(임의 매핑 금지).
+                  T72/AC-067 — 라벨을 "난이도"에서 "이 시나리오의 성향"으로 바꾼다(값은 무변경). */}
               <span className="flex flex-wrap items-center gap-2">
                 <Badge variant="neutral">{scenario.estimatedDuration}</Badge>
               </span>
               <span>
-                {scenario.fraudType} · 난이도: {scenario.difficulty}
+                {scenario.fraudType} · {SCENARIO_TRAIT_LABEL}: {scenario.difficulty}
               </span>
             </span>
           </span>
@@ -198,7 +162,7 @@ export default function MessengerScenarioSelectPage() {
         </p>
         <h1 className="text-2xl font-bold text-[#22303A]">어떤 메시지를 받아볼까요?</h1>
         <p className="text-base leading-relaxed text-[#6B655C]">
-          실제 사기가 아니라 훈련용 시뮬레이션입니다. 하나를 고르면 그 사기범이 메시지를 보냅니다.
+          실제 사기가 아니라 훈련용 시뮬레이션입니다. 하나를 고르면 마지막으로 난이도를 정합니다.
         </p>
       </header>
 
@@ -213,19 +177,9 @@ export default function MessengerScenarioSelectPage() {
       )}
 
       <div className="sticky bottom-0 -mx-6 -mb-28 border-t border-[#E2DDD3] bg-[#FAF8F5]/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur">
-        {startError && (
-          <p role="alert" className="mb-3 flex items-center gap-2 text-base text-[#C6392F]">
-            <span aria-hidden="true">⚠</span>
-            <span>{startError}</span>
-          </p>
-        )}
-
-        <Button
-          type="button"
-          onClick={() => void handleStart()}
-          disabled={!selectedScenarioId || state === "starting"}
-        >
-          {state === "starting" ? "연결하는 중..." : "이 메시지 받아보기"}
+        {/* T72(D-41) — 세션 생성은 난이도 선택(UX-029) 화면으로 이동했다. */}
+        <Button type="button" onClick={handleStart} disabled={!selectedScenarioId}>
+          다음 — 난이도 고르기
         </Button>
       </div>
     </main>
