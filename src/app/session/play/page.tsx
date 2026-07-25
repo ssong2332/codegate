@@ -295,13 +295,23 @@ export default function SessionCallPage() {
     maybeStartListening();
   };
 
+  // 사용자 신고(2026-07-25) — "전화가 연결되면 바로 말하는 걸로". 전화가 울리는 동안(아직 "받기"
+  // 전) 자격증명만 미리 받아 둔다 — 마이크 접근·"받기" 소비는 그대로 handleAnswer에서만 일어나므로
+  // "받기 전엔 아무 것도 새지 않는다"는 관례는 무변경이다(realtime.prefetch 자체가 상태를 안 바꿈).
+  useEffect(() => {
+    if (pageState !== "ready" || !sessionId || phase !== "incoming") return;
+    realtime.prefetch(sessionId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageState, sessionId, phase, realtime.prefetch]);
+
   const handleAnswer = () => {
     if (!sessionId) return;
     // finding #4: "받기"를 누른 세션을 기록해, 통화 중 새로고침 시 벨 화면이 아니라 통화로 복원.
     markSessionAnswered(sessionId);
     setPhase("connecting");
     setCallMode("realtime");
-    // 실시간 연결을 먼저 시도한다. 불가하면 위 effect가 폴백으로 강등한다.
+    // 실시간 연결을 먼저 시도한다(위 prefetch로 미리 받아 둔 자격증명이 신선하면 재사용). 불가하면
+    // 위 effect가 폴백으로 강등한다.
     void realtime.start(sessionId);
   };
 
