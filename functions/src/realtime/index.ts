@@ -9,6 +9,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { ELEVENLABS_API_KEY, GEMINI_API_KEY } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
+import { listInCallSmsTriggers } from "../scenarios/inCallSms";
 import type { VoiceMode } from "../scenarios/publicMeta";
 import type { ChallengeDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
 import { getRealtimeProvider } from "./provider";
@@ -89,6 +90,11 @@ export const createRealtimeCall = onCall<
 
   const effectiveVoiceMode = resolveEffectiveVoiceMode(session.voiceSelectionSource);
   const provider = getRealtimeProvider(session.scenarioId, effectiveVoiceMode);
+  // T68(§15.1.2) — 통화 중 문자 **트리거만** 내려준다(본문·인증번호는 도착 시점에 deliverInCallSms가
+  // 서버에서 렌더). 카탈로그가 없는 시나리오면 빈 배열 → 필드 자체를 붙이지 않는다(API.md).
+  const inCallSmsTriggers = listInCallSmsTriggers(session.scenarioId);
+  const withSmsTriggers = <T extends object>(credentials: T): T =>
+    inCallSmsTriggers.length > 0 ? { ...credentials, inCallSmsTriggers } : credentials;
   try {
     const credentials = await provider.createCallCredentials({
       sessionId,
@@ -106,14 +112,16 @@ export const createRealtimeCall = onCall<
     // provider==="elevenlabs"일 때만 마운트, src/app/session/play/page.tsx:448) 굳이 실어 보낼
     // 이유가 없다 — challenge 세션이면 그 불필요한 노출을 비운다.
     if (session.challengeId && credentials.provider !== "elevenlabs") {
-      return { ...credentials, voiceId: "" };
+      return withSmsTriggers({ ...credentials, voiceId: "" });
     }
-    return credentials;
+    return withSmsTriggers(credentials);
   } catch {
     // 자격증명 발급 실패가 통화 자체를 막지 않도록, 목업(텍스트 폴백)으로 강등해 돌려준다
     // (P-4 핵심 루프 비차단). 클라는 isMock을 보고 폴백 UI를 띄운다 — 조용히 실패하지 않는다.
     // challenge 세션이면 위와 동일한 이유로 voiceId를 비운다(이 폴백은 provider:"none"이라
     // 어차피 클라가 쓰지 않는다).
+    // T68 — 이 폴백은 클라를 텍스트 경로(sendMessage)로 보내며, 그 경로는 서버가 턴마다 due 여부를
+    // 직접 계산해 문자를 도착시킨다. 클라 카운팅 트리거가 필요 없으므로 붙이지 않는다.
     return {
       provider: "none",
       signedUrl: "",

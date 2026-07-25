@@ -170,6 +170,31 @@ export type ArtifactDoc = {
   createdAt: FirebaseFirestore.Timestamp;
 };
 
+// --- sessions/{sessionId}/inCallSms/{smsId} (T68, UX-027/UF-008, §15.1.2, AC-059/060/061) ---
+//
+// ⚠️ **왜 `messages`가 아니라 별도 서브컬렉션인가(치명적 — §15.6 G3)**: `analyzeConversation`은
+// `messages`를 turnIndex 순으로 훑으며 **scammer(i) ↔ user(i+1)를 짝지어** 속은 순간을 판정한다
+// (`report/analyzeConversation.ts`). 문자 도착을 메시지 행으로 끼워 넣으면 이 짝짓기가 통째로
+// 어긋나 **리포트 판정이 손상된다**(AC-008/009/026 회귀). 문자는 대화 턴이 아니라 통화 중 도착한
+// 별개 객체이므로 컬렉션을 분리한다.
+//
+// ⚠️ `MessengerAttachment`는 **무변경**이다 — OTP형은 링크가 아니라 표시용 코드라
+// `{kind:"link",displayText,fakeLandingId,harmless}`에 담기지 않는다. 억지 확장은 "link인데
+// fakeLandingId가 없는" 부재-오버로드를 만든다(§14.9.1이 반복 기각한 안티패턴).
+export type InCallSmsKind = "account" | "link" | "otp";
+export type InCallSmsDoc = {
+  smsId: string; // = 문서 id. 서버가 IN_CALL_SMS[session.scenarioId] 소속을 재검증한 값만 기록
+  kind: InCallSmsKind;
+  senderLabel: string; // 실존하지 않는 모의값(AC-005/013)
+  body: string; // 서버 카탈로그가 원천 — 사용자·LLM 텍스트가 아니므로 PII 마스킹 대상이 아니다
+  otpCode?: string; // kind==="otp"일 때만. 콘텐츠 고정 리터럴(런타임 난수 금지)
+  linkDisplayText?: string; // kind==="link"일 때만
+  fakeLandingId?: string; // kind==="link"일 때만. **url/실 URL 필드는 이 스키마에 존재하지 않는다**
+  arrivedAt: FirebaseFirestore.Timestamp;
+  openedAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("opened")
+  linkTappedAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("link_tapped")
+};
+
 // --- scenarios/{scenarioId} (AC-001/002, 공개 메타) ---
 export type DeepvoiceLine = { lineId: string; text: string };
 export type ScenarioDoc = {

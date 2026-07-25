@@ -12,6 +12,8 @@ import { maskPII } from "../guardrails";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
+import { findDueInCallSms, hasInCallSms } from "../scenarios/inCallSms";
+import { buildInCallSmsDoc } from "../inCallSms";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { GEMINI_API_KEY } from "../shared/config";
 import { MESSENGER_ESCALATION_FALLBACK_TURNS } from "../shared/constants";
@@ -134,9 +136,33 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // T72(§15.3.3 호출부 3곳 중 "텍스트 턴") — 세션에 기록된 난이도를 그대로 반영한다. 부재·
     // enum 밖이면 normalizeDifficultyLevel이 중급으로 확정하며, 중급은 모디파이어 블록을 내보내지
     // 않으므로 난이도 도입 이전 세션의 프롬프트 문자열이 한 글자도 바뀌지 않는다(회귀 0).
+    // ②-b 통화 중 문자(T68, §15.1.2 폴백 경로 — 실시간 경로의 deliverInCallSms와 **같은 컬렉션**에
+    // 쓴다). 실시간 경로에서는 클라가 사기범 턴 경계를 세지만, 이 텍스트 경로에서는 서버가 직접
+    // 셀 수 있다: 지금 만들어질 사기범 응답이 몇 번째인가 = 이력의 사기범 메시지 수 + 1.
+    // 도착은 LLM 호출과 **무관하게** 확정되고(먼저 write), 캐릭터가 그 사실을 알리게 하는 1줄은
+    // 이 턴의 systemPrompt에 turnInstruction으로 주입된다(가드레일 앞 — §15.5 순서 불변식은
+    // buildSystemPrompt 안에서 강제된다).
+    const scammerTurnNumber = storedHistory.filter((m) => m.role === "scammer").length + 1;
+    const dueSms = findDueInCallSms(session.scenarioId, scammerTurnNumber);
+    let deliveredSmsId: string | undefined;
+    if (dueSms) {
+      try {
+        const smsRef = sessionRef.collection("inCallSms").doc(dueSms.smsId);
+        if (!(await smsRef.get()).exists) {
+          await smsRef.create(buildInCallSmsDoc(dueSms, Timestamp.now()));
+        }
+        deliveredSmsId = dueSms.smsId;
+      } catch {
+        // 문자 도착 실패가 대화 자체를 막지 않는다(P-4 핵심 루프 비차단). 이 경우 announce 지시도
+        // 넣지 않는다 — "말은 했는데 문자가 없는" 불일치(UF-008 Failure (a))를 만들지 않기 위해서다.
+      }
+    }
+
     const completion = await completeWithFallback(getLlmClient(), {
       systemPrompt: buildSystemPrompt(scenarioPrompt, {
         difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
+        inCallSmsEnabled: hasInCallSms(session.scenarioId),
+        ...(deliveredSmsId ? { turnInstruction: dueSms?.announceInstruction } : {}),
       }),
       messages: llmHistory,
       mockTacticHints: scenarioPrompt.weakenedTactics,
@@ -286,6 +312,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       isMock: completion.isMock,
       ...(audioUrl ? { audioUrl } : {}),
       ...(escalationTrigger ? { escalation: { toChannel: "voice" as const } } : {}),
+      ...(deliveredSmsId ? { sms: { smsId: deliveredSmsId } } : {}),
     };
   },
 );

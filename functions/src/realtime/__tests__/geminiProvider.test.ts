@@ -64,10 +64,17 @@ test("GeminiRealtimeProvider: 시스템 프롬프트를 토큰에 고정해 발�
       };
     }).bidiGenerateContentSetup;
     const sentPrompt = setup?.systemInstruction?.parts?.[0]?.text ?? "";
+    // T68(§15.6 G1/G5) — tax-refund-scam은 통화 중 문자 카탈로그가 있는 시나리오라, 이 경로도
+    // `inCallSmsEnabled:true`로 조립해야 한다. 이걸 빼면 "텍스트 경로에서는 사기범이 문자를
+    // 요구하는데 실시간 통화에서는 안 하는" 비대칭이 생겨 기능이 통화에서만 발동하지 않는다.
     assert.equal(
       sentPrompt,
-      buildSystemPrompt(SCENARIO_PROMPTS["tax-refund-scam"]),
+      buildSystemPrompt(SCENARIO_PROMPTS["tax-refund-scam"], { inCallSmsEnabled: true }),
       "토큰 발급 시 systemInstruction이 서버에서 고정되어야 한다",
+    );
+    assert.ok(
+      sentPrompt.includes("문자로 도착한 것은 예외"),
+      "문자 카탈로그가 있는 시나리오는 조건형 문구가 켜져야 한다(G1)",
     );
     // 한국어로 말하게 하는 설정도 서버가 고정한다.
     assert.equal(setup?.generationConfig?.speechConfig?.languageCode, "ko-KR");
