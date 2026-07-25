@@ -2,7 +2,11 @@
 
 Owner: architect (see AGENTS.md). Others read-only.
 Major decisions are logged in DECISIONS.md; details in adr/.
-Based on PRD Version: v1.5 · Based on UX Version: 1.11 · Last Updated: 2026-07-25
+Based on PRD Version: v1.6 · Based on UX Version: 1.12 · Last Updated: 2026-07-26
+
+> **갱신 고지(2026-07-26, T79 아키텍트 게이트 — 확인 시도 무력화(D3) / AC-071 / OQ-U22·U23):** 기준을 **PRD v1.5→v1.6 · UX 1.11→1.12**로 맞춘다(직전까지 v1.5/1.11이라 **버전 갭 2건 존재** — 리포트에 명시). v1.5→v1.6 델타는 시나리오 수법 축 체계(A~E)·난이도 4레버 재정의·**AC-070~AC-077 신설**·MVP #28~#32·OQ-38~42 전부 resolved이고, UX 1.11→1.12 델타는 UF-011/UF-012·UX-031·D-46~D-54·P-24~P-26·OQ-U22~U25다. 이번 갱신 범위는 **신규 §16**(확인 시도 무력화 — 트리거·계층·기록·대처)·**DECISIONS #38~#40**·**ADR-0009**(신규 순간의 판정 반영 = 순간 신설이 아니라 기존 순간 주석)·Database.md(`sessions/{}/verifyIntercept`, `reports.verifyTimeline?`, `DeceivedMoment.afterVerifyReconnect?`)·API.md(`deliverVerifyOffer`/`deliverVerifyReconnect`·`createRealtimeCall` 증분)에 **한정**하며, 기존 §0~§15·ADR-0001~0008은 **전부 유효**하다(§15.1~15.4는 한 줄도 바뀌지 않았다). **§16이 확정하지 않는 것**: 모의 앱 설치·3단계 결합(T80/AC-072/073)·축 태깅(T78)·난이도 4레버 프롬프트 조립(T81)·콘텐츠 문안(T83).
+>
+> **⚠️ §15.6 G4 판정 결과(T77 reviewer가 T79의 하드 착수 게이트로 승격한 사안):** **해소(조건부)** — 실시간 경로에 사기범 텍스트 관찰 지점이 없다는 사실은 **그대로이며 바뀌지 않았다**. 대신 **ADR-0007이 이미 같은 벽을 넘은 방식(앱 오케스트레이션 + 인과 역전)을 그대로 복제**해 확인 무력화 트리거를 성립시킨다 — **신규 메커니즘 0건**. 대가로 UF-011 Trigger 문면("사기범 턴에 실린 구조화 신호를 서버가 파싱")은 실시간 경로에서 성립하지 않아 **기술적으로 정정**된다(§16.1). 이는 §15.1.2가 UF-008/D-36에 대해 이미 수행한 정정과 **동일 사안·동일 해법**이며, **UX 화면·상태·판정표(UX-031·D-47/D-48/D-51/D-52)는 한 건도 반려하지 않는다.**
 
 > **갱신 고지(2026-07-25, T68 REJECT 후속 아키텍트 패스 — AC-059 잔여 조항):** 헤더의 "Based on PRD Version"을 **v1.4→v1.5로 정정**한다(본문 아래 T57 고지가 이미 "PRD v1.5 기준"이라 적고 있었는데 헤더만 v1.4로 남아 있던 표기 불일치 — 설계 내용 변경 아님). 이번 패스의 범위는 **신규 §15.1.5**(통화 중 문자 이벤트의 리포트·리플레이 타임라인 통합) · **§15.6 갭 G15~G22** · §15.7 행 1건 추가 · Database.md(`inCallSms.anchorScammerTurn`, `reports.smsTimeline?`) · API.md(`generateReport`·`recordInCallSmsEvent` 증분) · **DECISIONS #37**이며, **새 ADR은 만들지 않는다**(ADR-0007의 하위호환 옵셔널 증분 — DECISIONS #19/#30/#31 원칙 계승). 기존 §0~§15.4·ADR-0001~0008은 **전부 유효**하고, §15.1.1~15.1.4(오버레이 계층·전달 모델·마이크 게이팅·프롬프트 위치)는 **한 줄도 바뀌지 않았다**.
 >
@@ -1109,4 +1113,247 @@ SmsTimelineEvent = { event: "sms_received" | "sms_opened" | "sms_otp_shown" | "s
 | UX-029 난이도 선택 | `/scenarios/difficulty`(드릴다운 마지막 단계) | `getBeginnerBriefing` · 하류 `createSession`/`createChallenge`(+`difficultyLevel`) | `sessions.difficultyLevel`·`challenges.difficultyLevel` | AC-002/029/030/012/050 | §15.3 |
 | UF-010 / UX-030 실패 아카이브 | `/report/archive`(신규 화면) | (없음 — Firestore 직접 read) | `reports`(uid+createdAt desc, 기존 인덱스) | AC-026/008/009/016/011/043/055 | §15.4 |
 
-**잔여(architect 소관 아님):** ① 4건에 대한 **PRD AC 신설·MVP 우선순위**(OQ-U15 — planner/User). ② 기존 `difficulty` 산문의 **UI 라벨 문구**(OQ-U21 — planner/ux-design; 스키마는 §15.3.2로 확정). ③ 아카이브 "묶기" 그룹 헤더가 **부분 집계임을 알리는 문구**(§15.4.1 — ux-design). ④ near-miss 신설 여부(OQ-U20/R-8), 초급 실시간 힌트(R-7) — 둘 다 planner/User. ⑤ **§15.1.5의 OQ-A1~A4**(문자 이벤트 카피·AC-009와의 문구 정합 — ux-design / 아카이브 노출·AC-059 해석 — planner) 및 **제안 태스크 T89/T90**(§15.1.5 (8) — planner가 Tasks.md에 반영).
+**§15 잔여(architect 소관 아님):** ① 4건에 대한 **PRD AC 신설·MVP 우선순위**(OQ-U15 — planner/User). ② 기존 `difficulty` 산문의 **UI 라벨 문구**(OQ-U21 — planner/ux-design; 스키마는 §15.3.2로 확정). ③ 아카이브 "묶기" 그룹 헤더가 **부분 집계임을 알리는 문구**(§15.4.1 — ux-design). ④ near-miss 신설 여부(OQ-U20/R-8), 초급 실시간 힌트(R-7) — 둘 다 planner/User. ⑤ **§15.1.5의 OQ-A1~A4**(문자 이벤트 카피·AC-009와의 문구 정합 — ux-design / 아카이브 노출·AC-059 해석 — planner) 및 **제안 태스크 T89/T90**(§15.1.5 (8) — planner가 Tasks.md에 반영).
+
+---
+
+## 16. v1.12 확인 시도 무력화(축 D3) — 트리거·계층·기록·대처 (T79, UX v1.12, AC-071 / OQ-U22·OQ-U23)
+> **소관 UX/OQ 매핑:** UF-011 · UX-031 · UX-014(v1.12 state 3종) · D-47/D-48/D-51/D-52 · P-24/P-25 / **OQ-U22**(트리거 감지) · **OQ-U23**(재연결 목소리) · OQ-U25의 확인 무력화 부분. **⚠️ 이 절이 T83 implementer 착수 게이트다.**
+> **범위 밖(이 절이 설계하지 않음):** 모의 앱 설치·3단계 결합(AC-072/073 — T80) · 축 태깅·커버리지(AC-070/077 — T78) · 난이도 4레버 프롬프트 조립(AC-074/075 — T81) · **시나리오 콘텐츠 문안 자체**(T83. 이 절은 콘텐츠가 지켜야 할 **계약과 금지 패턴**만 고정한다).
+
+### 16.0 설계 요지 (다른 판단보다 우선)
+1. **§15.6 G4는 해소된다. 단 "서버가 사기범 대사를 보게 만드는" 방식으로가 아니다.** G4의 사실관계(실시간 경로에 관찰 지점 없음)는 그대로다. 확인 무력화는 **ADR-0007이 확립한 앱 오케스트레이션(카탈로그 + 턴 게이트 + announce 지시 주입)을 그대로 복제**해 성립시킨다 — **신규 메커니즘·신규 프로토콜·신규 외부 의존성 0건**.
+2. **"확인을 권하는 대사"와 "확인 컨트롤"은 서로 다른 층에서 나온다.** 대사(참가자의 확인 의사에 대한 반응)는 **프롬프트**가, 컨트롤(UX-031 진입점)은 **앱**이 만든다. 앱은 참가자·사기범의 자유텍스트를 **어디서도 분류하지 않는다**(AC-024/AC-034/AC-060 계승).
+3. **판정(속은 순간)을 새로 만들지 않는다 — 기존 순간에 라벨만 얹는다.** 확인 무력화의 응낙은 **대화 발화**로 일어나므로 `analyzeConversation`이 이미 잡는다. 순간을 추가·삭제·재계상하지 않으므로 **AC-062(0건이면 되감기 진입점 없음)·AC-007(세션당 1리포트)·AC-010/011(방어등급)이 구조적으로 보호된다**(ADR-0009).
+4. **실 발신 표면은 스키마·API·UI 어디에도 만들지 않는다(AC-019 불변).** `tel:`·`url`·전화번호 **입력 필드**·다이얼 인텐트·외부 네비게이션에 해당하는 필드나 콜러블이 **존재하지 않는다**. 번호는 서버 카탈로그의 **표시 텍스트 1개**뿐이다(§15.1.2가 `url` 필드를 만들지 않은 것과 동형).
+5. **세션 중 구조 설명 0건(OQ-38 확정).** "어디에 걸어도 같은 곳으로 이어진다"는 설명·연출은 **세션 중 어떤 경로로도 내려가지 않는다**. 리포트 스냅샷(§16.3)에서 처음 나타나며, **가로채기의 작동 원리·수단은 리포트에서도 다루지 않는다**(AC-005 불변).
+6. **하위호환 옵셔널 증분만.** 신규 컬렉션은 세션 하위 `verifyIntercept` 1개, 신규 리포트 필드는 `verifyTimeline?`·`deceivedMoments[].afterVerifyReconnect?` 2개. 기존 문서는 **무백필**로 유효하고 최상위 `reports` 쿼리(등급 재계산·아카이브)에 영향이 없다.
+
+### 16.1 (a) 트리거 — §15.6 G4 판정과 감지 모델 (OQ-U22 확정)
+> ADR-0007 재적용. UX: UF-011 Trigger/Steps 1~3 · UX-031 Entry · D-47.
+
+#### 16.1.1 G4 재확인 — 무엇이 여전히 불가능한가(실측)
+| 사실 | 근거(파일:줄) |
+|---|---|
+| Gemini Live 응답 모달리티가 오디오 고정이라 모델 출력 텍스트를 서버가 중간에 쥘 수 없다 | `functions/src/realtime/geminiProvider.ts:86` `responseModalities:[Modality.AUDIO]` |
+| 전사는 통화 **종료 시점 일괄 제출**이라 통화 중 서버 관찰 지점이 없다 | `functions/src/realtime/submitTranscript.ts`(제출 시점 합성 타임스탬프), `src/lib/realtime/GeminiVoiceSession.tsx:207-233`(턴 버퍼는 클라에만) |
+| `tools`는 의도적으로 잠겨 있다 | `geminiProvider.ts:133` `tools: []` |
+| **ElevenLabs 경로에는 지시 주입 지점 자체가 없다** | `src/lib/realtime/RealtimeVoiceSession.tsx` props에 `textMessage`/`instructionTurn`/`onScammerTurnComplete`가 **없다**(grep 실측 — `muted`만 존재). 프롬프트는 에이전트 쪽(ADR-0004, `agentMap.ts`) |
+| 반면 **Gemini Live에는 지시 주입·턴 경계 관측이 이미 배선돼 있다** | `GeminiVoiceSession.tsx:61-75`(`textMessage`/`onScammerTurnComplete`/`instructionTurn`), `:97-98` `OPENING_TRIGGER_TURN` 선례, `src/app/session/play/page.tsx:283-309`(due 계산→콜러블→주입→턴 카운트) |
+
+→ **결론: "사기범 대사에 신호를 실어 서버가 파싱한다"는 경로는 실시간에서 영구히 불가능하다.** 그러나 **"앱이 먼저 사건을 일으키고 모델에게 알리라고 시킨다"는 반대 방향은 이미 T68에서 라이브로 동작 중**이다. 확인 무력화는 후자에 올린다.
+
+#### 16.1.2 트리거 후보 판정표 (임의 판단 금지 — 이 표대로만 적용)
+| 후보 | ①실시간 성립 | ②자유텍스트 미분류 | ③UF-011 인과 보존 | ④UX 증분 필요 | ⑤대사↔컨트롤 불일치 위험 | 판정 |
+|---|---|---|---|---|---|---|
+| A. 사기범 턴 sentinel `[[VERIFY:…]]` | ✗ 구조적 불가(16.1.1) | ○ | ○ | 없음 | — | **기각** |
+| B. Gemini Live function calling | △ 가능하나 `tools:[]` 잠금 해제 + 프로바이더별 재배선 | ○ | ○ | 없음 | **높음**(모델이 호출 안 하면 영영 안 뜸) | **기각**(§15.1.2와 동일 근거) |
+| C. 클라 STT 키워드 매칭으로 "확인하겠다" 탐지 | ○ | **✗ 금지** | ○ | 없음 | — | **기각**(AC-024 정면 위반) |
+| D. 실시간 전사 증분 제출 후 서버 탐지 | ○ | ✗ 자유텍스트 분류 | ○ | 없음 | — | **기각** |
+| **E. 앱 오케스트레이션 — 서버 카탈로그 + 턴 게이트(채택) ✅** | ○ **검증된 선례**(T68 라이브) | ○ 트리거는 턴 경계(구조적 이벤트)뿐 | △ **인과 역전**(아래 트레이드오프) | **없음** | 낮음(컨트롤이 뜨면 대사도 같이 발행됨 — 단방향 보장) | **채택** |
+| F. 참가자 명시 의사 컨트롤 신설("직접 확인해 볼게요") | ○ | ○ | ◎ 정확히 보존 | **있음**(신규 컨트롤 = ux-design 소관) | 없음 | **확장 경로로 보류**(16.1.5) |
+
+#### 16.1.3 채택 모델 (양 경로 공통)
+| 구성요소 | 위치 | 내용 |
+|---|---|---|
+| 확인 무력화 카탈로그 | `functions/src/scenarios/verifyIntercept.ts`(**서버 전용**) | `VERIFY_INTERCEPT: Record<scenarioId, VerifyInterceptItem>` — **시나리오당 최대 1건**(이 흐름은 세션당 1회) |
+| 가용 게이트 | 카탈로그의 `availableAfterScammerTurns` | "사기범 발화 N턴 완료 후부터 제안 가능". 시간 기반·랜덤 없음(결정론적·테스트 가능) |
+| 전달(양 경로 공통) | 클라 → `deliverVerifyOffer` 콜러블 | **write 경로가 하나뿐이다**(§15.1.2의 SMS가 두 경로로 갈린 것과 다름 — 더 단순한 쪽을 택했다) |
+| 대사(실시간) | 콜러블 응답 `announceInstruction` → `GeminiVoiceSession.instructionTurn` | 이미 존재하는 주입 경로 재사용(전사에 기록되지 않음 — 오케스트레이션 지시) |
+| 대사(폴백 텍스트) | `sendMessage`가 **미announce 오퍼를 읽어** `turnInstruction`으로 주입 | §15.5 조립 순서(가드레일 최후미) 그대로. 주입 후 `announcedAt` 마크 |
+| 렌더링 | `onSnapshot(sessions/{sid}/verifyIntercept)` | **양 경로가 같은 컬렉션 하나를 구독**해 그린다(DECISIONS #12 계승). 콜러블 응답은 **렌더 소스가 아니다**(응답에는 모델 지시만 실린다) |
+
+- **`VerifyInterceptItem`(콘텐츠 저작 계약, 서버 전용 — 클라에 원문 배포 안 함):**
+  `{ offerId, deskLabel, displayNumber, reconnectedCallerLabel, availableAfterScammerTurns, announceInstruction, reconnectInstruction }`
+  - **`url`·`tel`·`phoneNumberInput` 같은 필드는 존재하지 않는다** — `displayNumber`는 **표시 텍스트**이며 탭 대상은 번호가 아니라 버튼이다(UX-031 Primary Actions, P-24).
+  - `announceInstruction`/`reconnectInstruction`은 **모델 지시**다. `buildInCallSmsDoc`이 `announceInstruction`을 문서에 쓰지 않는 것과 **동일하게**(`functions/src/inCallSms/buildDoc.ts:9-10`) Firestore 문서·리포트 스냅샷 어디에도 쓰지 않는다(AC-024 프롬프트 클라 미노출).
+  - **콘텐츠 하드 제약(T83 저작 + T86 금지 패턴 검증 대상):** `displayNumber`는 **마지막 4자리가 `0000`인 형식**(정규식 `/^\d{3,4}-0000$/`)으로 고정하고, `deskLabel`·`displayNumber`에 **실존 기관명·실존 대표번호(112·1332·1577-xxxx 등)가 부분 문자열로도 등장하지 않음**을 테스트로 고정한다(AC-033/AC-005). ⚠️ **이 금지 목록을 `correctAction` 문구에 적용하면 안 된다** — AC-071이 신고처로 **112·1332를 명시 요구**하므로 검사 대상은 **카탈로그의 `deskLabel`/`displayNumber` 필드로 한정**한다(순진하게 전역 금지어로 만들면 AC-071을 스스로 위반한다).
+
+#### 16.1.4 층 분리 — "권하는 대사"는 프롬프트가, "컨트롤"은 앱이
+| 요구(AC-071 문면) | 누가 성립시키는가 | 근거 |
+|---|---|---|
+| *"참가자가 확인 의사를 밝혔을 때 막지 않고 오히려 권한다"* | **프롬프트**(T81의 L3/D3 블록 — 축 D3 지시) | 모델은 참가자 발화를 **대화 상대로서** 듣는다. 앱이 분류하는 것이 아니므로 AC-024와 무관하며, 실시간·폴백 **양 경로에서 동일하게 성립**한다(Gemini Live는 시스템 프롬프트가 토큰에 고정 — `geminiProvider.ts:68-71`) |
+| *"참가자가 확인을 시도하면 앱 내 모의 재연결로 이어진다"* | **앱**(UX-031 진입 컨트롤 → `deliverVerifyReconnect`) | 참가자의 **시도 = 컨트롤 탭**이라는 구조화 이벤트. 자유텍스트 아님 |
+| 안내 **번호**를 부르는 시점 | **앱**(게이트 도달 후 `announceInstruction`이 주입된 턴부터) | 콘텐츠 지시로 고정: *"앱의 안내 지시가 오기 전에는 번호를 불러 주지 않는다 — 확인 의사에는 막지 않되 '잠시만요, 담당 창구를 확인해 알려드리겠습니다'로 받는다."* 이 조건 문구가 없으면 게이트 이전 구간에서 **대사만 나오고 컨트롤이 없는 창**이 생긴다(§15.1.4의 G1 교정과 같은 방식) |
+
+- **받아들이는 트레이드오프(정직하게):** 오퍼의 **발생 시점**은 참가자의 발화가 아니라 **턴 게이트**가 정한다. 즉 참가자가 확인 의사를 전혀 밝히지 않아도 게이트 도달 시 사기범이 **선제적으로** 확인을 권할 수 있다. 이는 (i) 실태에서도 흔한 D3 변형이고(먼저 "의심되시면 직접 확인해 보세요"로 신뢰를 사는 형태), (ii) 그 대가로 **UF-011 Failure (a)("권한다고 말했는데 컨트롤이 안 뜸")가 구조적으로 사라진다**. §15.1.2가 SMS에서 받아들인 것과 **정확히 같은 비대칭**이며, 같은 이유로 이 방향이 옳다.
+- **게이트 값 권고:** `availableAfterScammerTurns`는 **2~3**으로 잡는다(요구가 한 번은 나온 뒤, 그러나 참가자가 의심을 표하는 전형 구간 안). 최종 값은 콘텐츠 저작(T83) 판단이며 **시나리오별 카탈로그 값**이다.
+
+#### 16.1.5 경로별 적용 범위 — 어디서 성립하고 어디서 성립하지 않는가
+| 경로 | 확인 무력화 | 근거 |
+|---|---|---|
+| **Gemini Live**(generic = 기관·금융 사칭 계열 = AC-071 주 대상) | ✅ 성립 | 지시 주입·턴 경계 관측이 이미 배선(16.1.1). 난이도도 실제 반영(`difficultyApplied:true`) |
+| **텍스트 폴백**(`provider:"none"`) | ✅ 성립 | 매 턴 서버가 프롬프트를 조립하므로 `turnInstruction` 주입이 자연스럽다. `difficultyApplied:true`(`functions/src/realtime/index.ts:125-136`) |
+| **ElevenLabs**(clone 시나리오·clone 2인 챌린지) | ❌ **미적용(구조적)** | 주입 지점 부재(16.1.1) **+ 애초에 난이도 자체가 적용되지 않는다**(`difficultyApplied:false`, §15.3.3/G6). AC-071은 **고급 전용** 능력이므로, 고급이 적용되지 않는 경로에서 이 흐름이 발생하지 않는 것은 **일관된 귀결이지 새로운 결손이 아니다** |
+
+- **게이팅은 두 겹으로 강제한다(클라 신뢰 금지):**
+  1. **자격증명 부착 게이트(1차, 프레젠테이션):** `createRealtimeCall` 응답에 `verifyOffer?: { availableAfterScammerTurns }`를 **카탈로그 보유 && `difficultyLevel==="advanced"` && `difficultyApplied===true`일 때만** 붙인다(`inCallSmsTriggers`의 `withSmsTriggers` 래퍼와 **같은 자리·같은 방식** — `functions/src/realtime/index.ts:95-97`). 필드가 없으면 클라에 컨트롤이 **존재하지 않는다**.
+  2. **콜러블 재검증(2차, 필수 — G12 선례):** `deliverVerifyOffer`가 ① 세션 소유 ② `status==="active"` ③ `hasVerifyIntercept(session.scenarioId)` ④ `normalizeDifficultyLevel(session.difficultyLevel)==="advanced"` ⑤ **해석된 프로바이더가 `elevenlabs`가 아님**(`getRealtimeProvider(scenarioId, resolveEffectiveVoiceMode(...)).providerName`)을 **전부 재검증**한다. 빠뜨리면 위조 호출로 **일어나지 않은 "확인 권유"가 리포트 타임라인에 남는다**(기록 무결성 문제 — 안전 게이팅은 아니지만 조용히 허용하지 않는다).
+
+#### 16.1.6 UF-011 Trigger 문면 정정 요청 (ux-design 인계 — 화면·판정표는 반려하지 않는다)
+| 항목 | 현행 UX 문면 | 정정 요청 |
+|---|---|---|
+| UF-011 Trigger | *"사기범 턴에 실린 구조화 신호를 서버가 파싱해 '확인 권유'로 전달"* | *"서버 카탈로그의 확인 권유가 앱 오케스트레이션으로 전달되고, 사기범 대사는 그 순간 주입되는 지시로 유도된다"* — **§15.1.2가 D-36에 대해 이미 한 정정과 동일**(ADR-0007 Consequences 3번째 항목). UX의 의도(*"UX는 서버가 준 신호만 렌더링하고 자유텍스트를 분류하지 않는다"*)는 **그대로 충족**된다 |
+| UF-011 Steps 1~3 | 참가자 발화 → 사기범 권유 → 컨트롤 등장 | 참가자 발화에 대한 **사기범의 반응은 유지**(프롬프트가 담당, 16.1.4). 다만 **번호 안내와 컨트롤 등장 시점은 게이트가 정한다**는 단서 추가 |
+| UX-031 Entry | *"사기범의 확인 권유 신호가 온 뒤에만 진입 가능"* | **무변경으로 성립**(오퍼 문서가 생기기 전에는 컨트롤이 없다) |
+| UF-011 Alternative (a)·D-51 ① | 권유했으나 걸지 않음 = 시도된 수법 | **무변경으로 성립**(오퍼 문서는 남고 `placedAt`이 없다 — §16.3) |
+- **반려 0건**: UX-031·D-47·D-48·D-51(⑤ 포함)·D-52·P-24·P-25는 **한 건도 수정 요청하지 않는다.**
+
+### 16.2 (b) 계층 — UX-027이 확립한 오버레이 계층 **무개정 재사용**
+**결정: `/session/play`의 같은 컴포넌트 트리에 `VerifyCallOverlay`를 형제 노드로 하나 더 추가한다. 신규 라우트·포털·상위 래퍼·`key` 변경 없음.**
+
+- **재사용 근거(실측):** `InCallSmsOverlay`가 이미 정확히 이 자리에서 그렇게 렌더된다(`src/app/session/play/page.tsx:1146-1151`, 주석이 금지 목록까지 명시). 세션 컴포넌트는 `<main>` 최상단 형제이며 오버레이 상태를 타이머·한도 effect에 **넣지 않는다**(§15.1.1). **형제 하나를 더 추가하는 것은 세션 컴포넌트를 언마운트하지 않는다.**
+- **§15.1.1의 금지 목록이 그대로 적용된다**(early return 금지 / 상위 래퍼 금지 / `key`·라우트 세그먼트 변경 금지 / 신규 `page.tsx` 금지 — D-35·G10).
+- **마이크 게이팅:** `muted={muted || smsOverlayOpen || verifyOverlayOpen}`(§15.1.3 규칙 그대로 — 입력만 정지, **오디오 재생·타이머·한도·소켓은 손대지 않는다**). 버튼 `aria-pressed`는 여전히 사용자 의도 `muted`에만 바인딩한다.
+- **동시 열림 금지(신규 규칙 — G26):** 문자 오버레이와 확인 오버레이는 **동시에 열지 않는다.** 하나를 열 때 다른 하나를 닫는다(중첩 `aria-modal` 다이얼로그는 포커스 트랩이 겹쳐 **AC-006 도달성이 깨진다**). 두 오버레이의 상태를 하나의 판별 상태로 합치는 리팩터는 하지 않는다(요청되지 않은 변경 금지) — **열기 핸들러에서 상대를 닫는 것으로 충분**하다.
+- **AC-006:** 오버레이 안에 자체 `EndTrainingButton`을 포함한다(`src/components/InCallSmsOverlay.tsx:143` 선례, G11).
+- **한도 도달:** 오버레이 상태를 먼저 `false`로 내리고 `/session/end`로 인계한다(§15.1.1 규칙 그대로 — 종료 고지가 가려지지 않게).
+- **발신자 라벨 전환(신규):** 통화 셸의 발신자 표기는 현재 시나리오 콘텐츠에서 파생된다(`page.tsx:603` `scenario.callerLabel ?? "발신번호 표시제한"`). 재연결 후에는 **구독 중인 `verifyIntercept` 문서의 `reconnectedCallerLabel`이 있으면 그것을 우선 표시**한다(`verifyDoc?.reconnectedCallerLabel ?? scenario.callerLabel ?? …`). **클라 상태가 아니라 문서 구독을 소스로 삼는 이유**: 새로고침·재마운트 후에도 재연결 상태가 유지되고, 실시간·폴백 두 경로의 렌더 코드가 갈라지지 않는다(§15.1.2 단일 렌더 소스 원칙).
+- **"연결 중…" 연출:** 클라 상수 **`VERIFY_DIALING_MS = 2500`**(고정값 — 테스트 결정론). 이 구간에도 통화 축소 표시·"훈련 종료"가 계속 보인다(UX-031 States). 재연결 콜러블 실패 시 Error 상태 → 원래 통화 복귀(P-4, 침묵 실패 금지).
+- **폴백 경로의 인사말(명시적 결정):** 폴백에서는 **재연결 인사말을 서버가 별도로 생성하지 않는다.** 표면 전환(`reconnectInstruction`)은 **다음 사기범 턴**에 `turnInstruction`으로 실린다. 근거: 새 생성 경로를 만들면 `openingLine.ts`의 가드레일-뒤-연결 문제(G2)를 복제할 위험이 있고, 생성 파이프라인이 2벌로 갈라진다(§0.1). 공백은 UI의 1줄 상태 문구("연결되었습니다 · {창구명}")가 메운다. 실시간 경로는 지시 주입 직후 모델이 먼저 말하므로(선례 `OPENING_TRIGGER_TURN`) 자연스럽다.
+
+### 16.3 (c) 기록·판정 — 표시 전용 스냅샷 + **기존 순간 주석**(순간 신설 아님)
+> ADR-0009. UX: D-51 판정표(⑤ 포함) · UF-011 Steps 6~7 · UX-008/UX-018/UX-028/UX-030 v1.12 노트.
+
+#### 16.3.1 스키마 (Database.md와 1:1)
+```
+// sessions/{sid}/verifyIntercept/{offerId}  — 신규 서브컬렉션(세션당 최대 1건)
+{
+  offerId: string                     // 카탈로그 항목 id(=doc id)
+  deskLabel: string                   // 모의 창구명(서버 카탈로그)
+  displayNumber: string               // 모의 번호 — **표시 텍스트 전용**
+  offeredAt: Timestamp
+  offerAnchorScammerTurn: number      // 서버 계산(16.3.2)
+  announcedAt?: Timestamp             // 폴백 경로에서 사기범이 실제로 알린 턴(중복 주입 방지)
+  placedAt?: Timestamp                // 참가자가 "확인 전화 걸기"를 누른 시각 = **확인 시도**
+  reconnectAnchorScammerTurn?: number // 서버 계산(16.3.2)
+  reconnectedCallerLabel?: string     // 재연결 후 발신자 라벨(모의) — placedAt과 함께 기록
+}
+
+// reports/{rid} 증분 (옵셔널, 하위호환)
+verifyTimeline?: VerifyTimelineEntry[]      // 표시 전용 스냅샷(§15.1.5와 동일 패턴)
+VerifyTimelineEntry = {
+  offerId, deskLabel, displayNumber
+  anchorTurnIndex: number                   // 표시 위치(= 오퍼 앵커). -1 = 대화 맨 앞
+  anchorResolved: boolean                   // false = 위치 확정 실패 → 화면이 정직하게 고지
+  timeLabel?: string                        // 앵커 메시지의 경과 초에서 파생(§15.1.5 (4)와 같은 시간축)
+  reconnectTimeLabel?: string               // placedAt 있을 때, 재연결 앵커 메시지에서 파생
+  outcome: "offered_not_placed" | "placed_not_complied" | "placed_and_complied"
+  events: VerifyTimelineEvent[]             // 규칙표(16.3.4) 순서 고정
+}
+VerifyTimelineEvent = { event: "verify_offer_shown" | "verify_reconnected", what: string, correctAction?: string }
+
+// reports/{rid}.deceivedMoments[] 증분 (옵셔널)
+afterVerifyReconnect?: true                 // **주석**일 뿐 순간을 만들지 않는다(ADR-0009)
+```
+- **스냅샷에 넣지 않는 것(구조적 금지 — §15.1.5 (3) 금지 표와 동일 발상):**
+  | 금지 필드 | 왜 |
+  |---|---|
+  | `announceInstruction`·`reconnectInstruction` | **모델 지시(프롬프트 재료)**다. 리포트에 실으면 프롬프트가 클라로 내려간다(AC-024/ADR-0004) |
+  | `offeredAt`/`placedAt` 원시 타임스탬프 | 표시 축이 **아니다**(§15.1.5 (4) — 실시간 경로에서 순서가 뒤집힌다). 원본은 세션 하위 문서에 그대로 남는다 |
+  | `url`/`tel`/발신 관련 어떤 필드 | **애초에 어느 스키마에도 없다**(AC-019/AC-032 구조적 금지) |
+  | 가로채기의 수단·작동 원리 서술 | AC-005 불변 — 리포트 카피에도 넣지 않는다(16.4의 금지 패턴 테스트 대상) |
+- **`displayNumber`는 스냅샷에 넣는다**(세션에서 이미 본 모의값이고, 리포트가 "그 번호로 걸었다"를 재현하는 데 필요). 단 **텍스트로만 렌더**하며 링크·복사 버튼·재발신 컨트롤을 만들지 않는다(§15.1.5 G19와 동일 취지 — 사후 화면에 신규 상호작용 표면 0건).
+
+#### 16.3.2 앵커 — 시계가 아니라 턴(§15.1.5 (4) 규칙 계승, 리졸버는 **하나만** 유지)
+| 시점 | 경로 | 값 | 근거 |
+|---|---|---|---|
+| 오퍼 | 실시간 | `scammerTurns + 1` | 클라의 `scammerTurns`는 Live `turnComplete`만 세고, `messages`에는 `createSession`이 쓴 오프닝 사기범 행(turnIndex 0)이 **먼저** 있다(`functions/src/inCallSms/buildDoc.ts:42-52`의 실측 근거와 **동일**) |
+| 오퍼 | 폴백 | 서버가 센 **`messages`의 `role==="scammer"` 문서 수** | 이 경로에는 실제 메시지가 이미 존재하므로 클라 값을 믿을 필요가 없다 |
+| 재연결 | 동일 규칙 | 위와 같은 두 공식 | `deliverVerifyReconnect` 호출 시점에 다시 계산 |
+- 요청에 **명시 판별자 `callMode: "realtime" | "fallback"`** 을 둔다. `scammerTurns`는 `callMode==="realtime"`일 때 **필수**(없으면 `invalid-argument`). **부재를 판별자로 오버로드하지 않는다**(§14.9.1 원칙).
+- 클라가 보내는 `scammerTurns`는 §13.5 스킨과 같은 **프레젠테이션 층위**다 — 어떤 안전 판정도 게이팅하지 않으며, 위조의 최대 효과는 **자기 리포트의 항목 표시 위치가 한 칸 어긋나는 것**뿐이다(내용은 100% 서버 카탈로그).
+- **리졸버는 복제하지 말고 공유한다(G7 방식):** `functions/src/report/smsTimeline.ts:94`의 `resolveAnchor`는 현재 모듈 private다. **export해서 `verifyTimeline.ts`가 같은 함수를 쓴다**(패턴 상수를 복제하지 말고 export하라는 G7과 동일 판단 — 두 리졸버가 갈라지면 문자와 확인 항목의 위치 규칙이 어긋난다).
+- **표시 앵커와 판정 앵커는 다르다(중요 — ±1 추측 금지):**
+  | 용도 | 값 | 정의 |
+  |---|---|---|
+  | 표시 | `anchorTurnIndex` | `resolveAnchor(offerAnchorScammerTurn, …)` — 오퍼가 **권유 대사 바로 앞**에 놓인다 |
+  | 판정 | `judgmentTurnIndex` | `scammers[reconnectAnchorScammerTurn]?.turnIndex ?? null` — **재연결 대사 자체의 turnIndex**. 이 값이 `null`이면(재연결 직후 통화 종료 등) **주석 0건** |
+  - **왜 `judgmentTurnIndex`가 필요한가:** 폴백 경로에서는 참가자가 말을 해야 재연결 대사가 나오므로, 재연결 **앞**에 오는 참가자 발화가 존재한다. 표시 앵커로 잘라내면 **재연결 전 순응까지 "확인했는데도 속은 순간"으로 오분류**된다. `scammers[N]`(=재연결 대사)을 기준으로 하면 그 경계가 **정확**해진다. ⚠️ **G21의 교훈대로 이 산술은 단위 테스트만으로 끝내지 말고 에뮬레이터 실측으로 확인한다**(G28).
+
+#### 16.3.3 판정 반영 — **순간을 만들지 않고 기존 순간에 주석한다** (ADR-0009 / D-51)
+**결정: `analyzeConversation`의 시그니처·입력·짝짓기 루프는 무변경이다. 확인 무력화는 그 산출물이 나온 **뒤에** 순수 함수가 `judgmentTurnIndex`보다 뒤의 순간에 `afterVerifyReconnect: true`를 얹고 `tactic`·`tacticCategory`·`correctAction`을 **덮어쓴다**. 순간의 개수·`turnIndex`·`timeLabel`·`wasDeceived`는 **한 건도 바뀌지 않는다.**
+
+| D-51 행 | 데이터 조건(위에서 첫 매치) | `outcome` | `deceivedMoments` 영향 | 보호되는 불변식 |
+|---|---|---|---|---|
+| ① 권했으나 걸지 않음 | `placedAt` 부재 | `offered_not_placed` | **없음** | AC-062(진입점 미생성)·AC-009 |
+| ⑤ 걸었으나 응하지 않음 | `placedAt` 존재 && `judgmentTurnIndex` 뒤 순간 **0건** | `placed_not_complied` | **없음** — 리포트는 이를 **"잘 대응한 지점"**으로 다룬다(AC-009/AC-038) | AC-062 |
+| ② 걸고 응함 | `placedAt` 존재 && `judgmentTurnIndex` 뒤 순간 **≥1건** | `placed_and_complied` | 해당 순간(들)에 **주석·덮어쓰기만** | AC-007/AC-010/AC-011 |
+
+- **왜 순간을 새로 만들지 않는가(§15.1.5 (5)와는 요구가 다르므로 근거를 남긴다):** AC-071은 이 순간을 *"확인했는데도 속은 순간"*으로 **짚으라**고 명문 요구한다(문자 이벤트에 대한 §15.1.5의 "표시 전용" 금지와 요구 방향이 반대다). 그러나 **확인 무력화의 응낙은 참가자의 대화 발화**이고 그 발화는 `analyzeConversation`이 **이미 순간으로 잡고 있다**(`analyzeConversation.ts:136-164`). 여기서 순간을 하나 더 만들면 **같은 응낙이 두 번 계상**되어 아카이브 항목 수(AC-068)·방어등급(AC-010/011)이 부풀고, 되감기 딥링크 인덱스(§15.6 G16)가 어긋난다. **주석은 이 모두를 건드리지 않으면서 AC-071의 "짚는다"를 충족한다.**
+- **덮어쓰는 값(고정):** `tactic = "확인 시도 무력화"` · `tacticCategory = "verification_block"` · `correctAction = VERIFY_INTERCEPT_CORRECT_ACTION`(16.4).
+  - **왜 `tactic`까지 덮어쓰는가:** `analyzeConversation`의 라벨은 사기범 대사에 `weakenedTactics`의 flavor 앞부분이 섞였는지로 추정하는데(`analyzeConversation.ts:120-125`), 실시간 경로의 대사는 모델 자유 생성이라 **매칭이 보장되지 않는다**(미매칭 시 `"약화된 사기 수법"` → `tacticCategory:"other"`). 재연결 이후 순간의 수법은 **구조적으로 이미 알고 있으므로**(카탈로그가 그 상황을 만들었다) 추정에 맡기지 않는다.
+  - **`verification_block`에 매핑하는 이유(OQ-U25의 확인 무력화 부분 확정):** 아카이브 묶기의 목적은 *"같은 종류의 수법에 반복해 넘어갔다"*는 패턴 인지이고, 사용자 관점에서 **확인 차단(D2/D5)과 확인 무력화(D3)는 같은 학습 축**("확인하려 했는데 실패했다")이다. 신규 enum 값을 추가하면 과거 기록과 갈라져 §15.6 G14가 지적한 흩어짐이 재발한다. 표시 문구는 `tactic` 원문("확인 시도 무력화")이라 **정보 손실이 없다**. 축 D 값(시나리오 설계 좌표)과 `tacticCategory`(리포트 묶기 어휘)는 **직교 개념으로 유지**한다(T78 (e)에 이 판정을 인계).
+  - **⚠️ 규칙표 확장 필수(G29):** `resolveTacticCategory`의 `verification_block` 정규식은 현재 `/확인[^]{0,6}차단|…/`(`functions/src/report/tacticCategory.ts:60-63`)라 **"확인 시도 무력화"는 `other`로 떨어진다**(실측). T83이 이 라벨을 `weakenedTactics`에 저작하는 순간 **드리프트 테스트(`other` 0건 단언)가 깨진다** — 규칙표 4행에 `확인[^]{0,6}무력화`를 **추가**한다(설계대로 깨지는 것이므로 테스트를 완화하지 말 것).
+- **금지(위반 시 연쇄 파손):** ① `wasDeceived` 뒤집기 ② `deceivedMoments`에 항목 추가·삭제 ③ `analyzeConversation` 시그니처·루프 수정 ④ `reports` 문서를 리포트 생성 **이후에** update(§15.6 G13과 동일 — 스냅샷·주석은 **최초 생성 시 1회**뿐).
+- **필수 회귀 테스트(2건, §15.1.5 (2)와 같은 형태):** ① `verifyIntercept` 문서가 0건인 세션에서 리포트 산출이 도입 전과 **완전히 동일**. ② 문서가 있으나 `placedAt` 부재(D-51 ①)일 때 `deceivedMoments`가 **완전히 동일**(주석 0건).
+
+#### 16.3.4 이벤트 파생 규칙표 (저장 필드 추가 0건 — 문서만 보고 계산)
+| # | 조건(위에서 첫 매치) | `event` | `what`(참고 문구 — **확정 카피는 ux-design**, OQ-A5) | `correctAction` |
+|---|---|---|---|---|
+| 1 | 문서 존재(항상) | `verify_offer_shown` | "상대가 '직접 확인해 보시라'며 {deskLabel}({displayNumber})로 걸어 보라고 했습니다." | 없음(권유 자체는 참가자 행위가 아니다) |
+| 2 | `placedAt` 존재 && `outcome==="placed_and_complied"` | `verify_reconnected` | "안내받은 번호로 확인 전화를 걸었고, 같은 요구가 '확인해 드렸다'는 형태로 이어졌습니다." | **`VERIFY_INTERCEPT_CORRECT_ACTION`** |
+| 3 | `placedAt` 존재(그 외 = `placed_not_complied`) | `verify_reconnected` | "안내받은 번호로 확인 전화를 걸었지만, **요구에 응하지 않았습니다.**" | **`VERIFY_INTERCEPT_CORRECT_ACTION`** |
+- 2와 3은 **상호배타**, 1은 항상. 배열 순서는 표 순서 고정(`offeredAt ≤ placedAt`이 구조적으로 성립 — 재연결은 오퍼 문서가 있을 때만 기록된다).
+- **`verify_call_opened`·`verify_call_abandoned`는 저장하지 않는다**(UX-031 Events Emitted는 **분석 이벤트 명세이지 저장 요건이 아니다** — §15.1.5 (5)가 `sms_overlay_closed`에 대해 내린 것과 **같은 판정**). "열었다가 닫음"은 `placedAt` 부재와 학습상 구별되지 않는다.
+- **③에도 `correctAction`을 싣는 이유:** AC-071은 *"리포트는 반드시 실제로 유효한 대처를 함께 제시한다"*를 **속았는지와 무관하게** 요구한다. 속지 않은 참가자에게도 "다음엔 이렇게 하시면 됩니다"가 남아야 하며, 이는 AC-009(과신 금지)와 충돌하지 않는다(칭찬이 아니라 대처 제시).
+
+#### 16.3.5 화면 병합 — 기존 형식 재사용, 신규 표기 형식 0
+- **리플레이(`src/lib/replay/buildReplayTimeline.ts`):** 인자를 하나 더 받아 `verifyTimeline`을 병합한다. 정렬 키 = `(anchorTurnIndex | turnIndex, kindRank, seq)`, **kindRank = 메시지 0 < 문자 1 < 확인 2**(결정론적 동률 처리). 문자가 0건·확인이 0건이면 결과가 **도입 전과 완전히 동일**하다.
+- **⚠️ G16/G17이 그대로 적용된다(신규 항목에도):** `momentsByTurn` 주석 매칭은 **`kind==="message"`에만**, `getAnnotatedTurnIndexes`에는 **확인 항목을 절대 포함하지 않는다**(포함하면 되감기 딥링크 인덱스가 어긋나고 AC-062가 깨진다).
+- **리포트(`src/app/report/page.tsx`):** T89가 넓힌 타임라인 노출 조건에 **`|| verifyTimeline.length > 0`을 추가**한다(G18 계열 — 속은 순간 0건이지만 확인 시도가 있었던 세션[D-51 ①/⑤]에서 항목이 통째로 사라지면 AC-071 미충족).
+- **되감기 버튼은 확인 항목에 달지 않는다** — 되감기 대상은 여전히 `deceivedMoments`뿐이다(§15.1.5 (5) 근거 4와 동일). 다만 **주석된 순간에는 원래대로 달린다**(그 순간은 진짜 `deceivedMoment`이므로) — 그리고 그 화면은 덮어쓴 `correctAction`을 그대로 쓴다.
+
+### 16.4 (d) 유효 대처 — `correctAction` 경로와 무력감 방지(AC-071·D-52)
+**결정: 서버 소유 상수 `VERIFY_INTERCEPT_CORRECT_ACTION` 1개를 두고, ① `verifyTimeline` 이벤트와 ② 주석된 `deceivedMoment.correctAction` **양쪽이 같은 상수를 쓴다**(문구가 두 벌로 갈라지지 않게).**
+
+- **⚠️ 덮어쓰지 않으면 실제로 해로운 문구가 나간다(실측 근거 — 이 결정의 출발점):** `pickCorrectAction`의 **첫 번째 규칙**이 `/확인|전화/`이고 그 반환값은 *"상대가 확인 전화를 막으려 해도 반드시 알고 있는 번호로 직접 전화해 사실을 확인하세요."*다(`functions/src/report/analyzeConversation.ts:176-179`). 확인 무력화 순간에 이 문구가 붙으면 **방금 "확인 전화를 걸었는데 소용없었던" 참가자에게 "확인 전화를 걸라"고 답하는 꼴**이 되어 AC-071의 무력감 방지 요건을 정면으로 훼손한다. **덮어쓰기는 선택이 아니라 필수다.**
+- **상수 내용(참고값 — 확정 카피는 ux-design, OQ-A5):** AC-071이 열거한 4개 대처를 **전부** 담고 D-52의 순서(대처 먼저·크게 / 구조 설명 뒤·짧게 / 수단 설명 0)를 지킨다.
+  > "확인은 **지금 통화를 끊고** 하세요. ① 다른 기기(가족의 전화 등)로 걸어 확인하기 ② 내가 이미 알고 있는 번호로 직접 걸기 ③ 가까운 창구에서 직접 확인하기 ④ 의심되면 112(경찰)·1332(금융감독원)에 신고하기."
+- **금지 표현 테스트(필수, D-52):** 서버 소유 확인 무력화 문구 전체(`VERIFY_INTERCEPT_CORRECT_ACTION` + 16.3.4의 `what` 문구)에 대해 **"소용없", "막을 수 없", "어차피", "방법이 없"** 이 등장하지 않음을 단언한다. **역방향 확인**(금지 표현을 넣으면 테스트가 실패함)도 함께 고정한다(T86 관례).
+- **수단 미설명 테스트(필수, AC-005/AC-071):** 같은 문구 집합에 **가로채기의 수단·절차 서술**(예: "착신전환", "포워딩", "앱을 설치하면 통화가", "번호 목록") 이 등장하지 않음을 단언한다. ⚠️ 결과 상황 서술("그 번호로 걸어도 같은 곳으로 이어졌습니다")은 **허용**이며 AC-071이 리포트 단계에서 요구하는 바다 — 금지 대상은 **수단**이다.
+- **되감기 연동(무개정):** `judgeRewindAnswer`는 이미 `moment.correctAction`을 판정 프롬프트와 실패 폴백에 쓴다(§15.2.3) → **주석된 순간에서 자동으로 AC-071 대처가 흐른다.** 콜러블 계약 변경 **0건**.
+- **아카이브 연동(무개정):** 아카이브 카드는 `deceivedMoments`를 평탄화하므로(§15.4.1) 덮어쓴 `tactic`·`correctAction`·`tacticCategory`가 그대로 반영된다. **신규 쿼리·신규 인덱스 0건.**
+
+### 16.5 OQ-U23 확정 — 재연결 상대의 목소리는 **v1에서 바꾸지 않는다**(대신 표면 전환 4종)
+**결정: 모의 재연결에서 TTS 음성(음색)을 바꾸지 않는다. 대신 발신자 라벨·창구 소개·응대 톤·연결 연출로 "다른 상대"를 표현한다. 이 한계는 숨기지 않고 §16.6 갭과 T87 QA 측정 항목으로 남긴다.**
+
+| 후보 | 판정 | 근거 |
+|---|---|---|
+| Gemini Live 세션 중 음성 전환 | **기각** | 우리 구조에서 음성은 **서버가 단기 토큰의 `liveConnectConstraints`에 고정**한다(`geminiProvider.ts:88-91`). 클라가 바꿀 수 있게 만드는 것은 "모델·프롬프트·도구·음성을 서버가 고정한다"는 **ADR-0004 잠금을 스스로 뚫는 것**이다. 세션 중 `speechConfig` 갱신 가능 여부 자체도 **공식 문서로 확인되지 않았다**(웹 확인 결과 상충·모델별 제한 보고 — **추정에 기능 가치를 걸지 않는다**) |
+| 소켓 재연결(새 토큰·다른 음성) | **기각** | 통화가 실제로 끊기고 **Live 세션의 대화 컨텍스트가 소실**된다(재연결 상대가 앞선 요구를 "확인해 주는" AC-071 요건이 무너진다). 전사·앵커 계수가 두 구간으로 갈라져 G21류 사고 표면이 늘어난다. D-35/AC-007/AC-035 전제 훼손 |
+| 폴백(TTS) 경로만 다른 voiceId | **v1 미적용(확장 경로로 기록)** | 이 경로는 턴마다 서버가 합성하므로(`functions/src/roleplay/index.ts:295-300`) `FALLBACK_VOICE_MALE_ID`/`_FEMALE_ID`(`shared/config.ts:38-39`)로 **기술적으로는 가능**하다. 그러나 **주 경로(Gemini Live)에서 불가능한 것을 폴백에서만 하면 두 경로의 체감이 갈라진다**(§15.1.2가 세운 단일 소스·동일 체감 원칙). 확장 시 카탈로그에 `reconnectVoicePreset?: "male"\|"female"`을 두고 폴백 합성에서만 사용한다 — **코드 구조 변경 없이 값만 추가하면 되는 형태로 남긴다**(§15.3.3의 "확장 경로(설정만)" 관례) |
+| **음색 무변경 + 표면 전환 4종(채택) ✅** | 채택 | 신규 자산·신규 비용·신규 실패 지점 0. UX-031이 요구한 화면 전이(발신자 라벨 변경·"연결 중…")를 **그대로** 성립시킨다 |
+
+- **표면 전환 4종(콘텐츠·UI 계약):** ① 통화 셸 발신자 라벨 → `reconnectedCallerLabel`(16.2) ② "연결 중…" 2.5초 연출 ③ `reconnectInstruction`이 모델에게 **다른 담당자로서** 자기소개(창구명·이름·직급)와 **정형·존대 응대 톤**으로 전환하도록 지시 ④ 재연결 후 첫 대사는 **앞선 요구를 "확인해 드렸다"는 형태로 되풀이**(AC-071 문면).
+- **정직한 한계(숨기지 않는다):** 참가자가 **음색으로 같은 상대임을 알아챌 수 있다.** UX(OQ-U23)는 이 경우 *"재현 목표가 사실상 미달성"*이라고 **추정**했으나 이는 측정된 바 없다 — **T87 QA가 라이브로 확인할 항목으로 넘긴다**(측정 방법: 고급 세션 재연결 직후 참가자에게 "같은 사람 같았는가"를 묻고, "즉시 알아챘다"가 지배적이면 위 확장 경로를 폴백·Live 양쪽에 적용하는 후속 태스크를 planner에 요청). **측정 전에 무거운 재연결 아키텍처를 도입하지 않는다**(§0.1).
+
+### 16.6 implementer 갭 (G23~G31 — 전부 실측 근거 있음)
+| # | 갭 | 근거 | 안 고치면 생기는 일 |
+|---|---|---|---|
+| G23 | **ElevenLabs 경로에는 지시 주입 지점이 없다(확인 무력화 미적용)** | `src/lib/realtime/RealtimeVoiceSession.tsx` props에 `instructionTurn`/`textMessage` 부재(실측), `difficultyApplied:false`(§15.3.3) | 컨트롤은 뜨는데 사기범이 아무 말도 하지 않는 **반대 방향 불일치**. `createRealtimeCall`이 `verifyOffer`를 **붙이지 않는 것**으로 구조적으로 차단할 것(§16.1.5) |
+| G24 | **`deliverVerifyOffer`가 난이도·시나리오·프로바이더를 재검증하지 않으면 위조 호출로 없던 "확인 권유"가 리포트에 남는다** | G12 선례(`functions/src/inCallSms/index.ts:62-67`) | 일어나지 않은 사건이 타임라인에 기록된다 — 5개 조건 전부 서버에서 재검증(§16.1.5) |
+| G25 | **오퍼 문서를 `messages`에 넣고 싶은 유혹** | `analyzeConversation.ts:136-164` scammer(i)↔user(i+1) 짝짓기 | **G3 그 자체** — 리포트 판정이 손상된다. 반드시 `sessions/{sid}/verifyIntercept` 서브컬렉션 |
+| G26 | **문자 오버레이와 확인 오버레이가 동시에 열리면 포커스 트랩이 중첩된다** | 둘 다 `role="dialog" aria-modal="true"`(`InCallSmsOverlay.tsx:107-108`) | **AC-006 도달성 파손**(훈련 종료에 도달 못 하는 상태). 하나를 열 때 다른 하나를 닫을 것(§16.2) |
+| G27 | **`pickCorrectAction`의 첫 규칙 `/확인\|전화/`가 확인 무력화 순간에 "확인 전화를 걸라"는 조언을 붙인다** | `analyzeConversation.ts:176-179` | AC-071 무력감 방지 요건 훼손 + 방금 겪은 경험과 모순되는 조언. **주석 시 `correctAction` 덮어쓰기 필수**(§16.4) |
+| G28 | **판정 앵커(`scammers[reconnectAnchorScammerTurn]`) 산술이 실측되지 않으면 재연결 *전* 순응까지 오분류된다** | G21과 동일 사고 양식(오프닝 행 포함 여부·경로별 write 시점 차이) | "확인했는데도 속은 순간"이 엉뚱한 순간에 붙는다. **에뮬레이터로 양 경로 실측 후 확정**(단위 테스트만으로 끝내지 말 것) |
+| G29 | **`resolveTacticCategory`가 "확인 시도 무력화"를 `other`로 떨어뜨린다** | `functions/src/report/tacticCategory.ts:60-63` 정규식 실측(`확인[^]{0,6}차단` 계열만 매치) | 드리프트 테스트(`other` 0건)가 깨진다 — **설계대로 깨지는 것이니 테스트를 완화하지 말고 규칙표 4행에 `확인[^]{0,6}무력화`를 추가**할 것(§16.3.3) |
+| G30 | **리포트 타임라인 노출 조건이 `deceivedMoments \|\| smsTimeline`에서 멈춰 있다** | T89가 넓힌 조건(§15.6 G18 계열) | D-51 ①/⑤(속은 순간 0건 + 확인 시도 있음) 세션에서 항목이 **통째로 사라진다** — `\|\| verifyTimeline.length > 0` 추가 |
+| G31 | **같은 턴에 문자 announce와 확인 announce가 동시에 due이면 모델이 하나를 흘린다** | `buildSystemPrompt`의 `turnInstruction`은 **문자열 1개**(`functions/src/roleplay/index.ts:166-170`) | 지시 하나가 조용히 유실된다. **규칙 고정: 문자 announce가 우선, 확인 announce는 다음 턴으로 미룬다**(두 지시를 이어 붙이지 말 것 — 조립 순서·길이 모두 위험) |
+
+### 16.7 UX Traceability 증분 (화면 → 콜러블/컬렉션)
+| Screen/Flow | 라우트/컴포넌트 | 콜러블 | Firestore | 재사용 AC | §16 매핑 |
+|---|---|---|---|---|---|
+| UF-011 / UX-031 모의 확인 전화 오버레이 | `/session/play`(같은 라우트 내 다이얼로그, 신규 라우트 0) + `VerifyCallOverlay`(신규 컴포넌트 1, `InCallSmsOverlay` 규칙 복제) | `deliverVerifyOffer`·`deliverVerifyReconnect` | `sessions/{sid}/verifyIntercept` | **AC-071**/AC-019/AC-033/AC-005/AC-006/AC-022/AC-065/AC-074 | §16.1·§16.2 |
+| UX-014 v1.12 state 3종(`verify-offered`/`verify-overlay-open`/`verify-reconnected`) | `/session/play` 통화 셸(발신자 라벨 오버라이드) | `createRealtimeCall`(증분 `verifyOffer?`) | `sessions/{sid}/verifyIntercept`(구독) | AC-007/AC-035/AC-006 | §16.1.5·§16.2 |
+| UX-031 → UX-008/UX-018 확인 순간 타임라인 통합 | `/report`(타임라인)·`/report/replay`(기존 말풍선·주석 카드 재사용 — 신규 표기 형식 0) | `generateReport`(스냅샷 + 주석) | `sessions/{sid}/verifyIntercept`(read) → `reports/{rid}.verifyTimeline`·`deceivedMoments[].afterVerifyReconnect`(write 1회) | AC-071/AC-026/AC-038/**AC-007**/AC-009/**AC-062** | §16.3 |
+| UX-028 되감기 · UX-030 아카이브 | `/report/rewind`·`/report/archive` | `judgeRewindAnswer`(**계약 무변경**) | `reports`(기존 인덱스) | AC-062/AC-063/AC-068/AC-069 | §16.4(무개정 연동) |
+
+### 16.8 이 절이 남기는 Open Questions
+| ID | 질문 | 소관 |
+|---|---|---|
+| OQ-A5 | 확인 무력화 항목의 **확정 카피**(16.3.4 `what` 문구, `VERIFY_INTERCEPT_CORRECT_ACTION` 최종 문장, 리포트 카드 헤딩·배지 라벨). 위 문구는 **참고값**이며 D-52 순서 규칙과 금지 표현 목록은 architect가 고정했다 | ux-design |
+| OQ-A6 | UF-011 Trigger/Steps 문면 정정(§16.1.6) 반영 여부 — **설계는 이 정정을 전제로 확정됐다.** 미반영 시 UX 문면과 구현이 어긋난 채로 남는다 | ux-design |
+| OQ-A7 | 재연결 상대 **음색 무변경**이 실제로 재현 목표를 훼손하는지(§16.5) — 라이브 측정 후 확장 경로 채택 여부 | quality-assurance(T87) → planner |
+| OQ-A8 | 참가자 **명시 의사 컨트롤**("직접 확인해 볼게요", 후보 F)을 추가해 인과를 정확히 보존할지. 추가 시 통화 셸에 컨트롤이 1개 늘어 D-47(어르신 오조작 방지)과 충돌 가능 — **UX 판단 사항**이며 서버 계약은 무변경으로 수용 가능(컨트롤이 `deliverVerifyOffer`를 호출하는 주체만 바뀐다) | ux-design |
+| OQ-A9 | D-51 ③④(모의 설치)의 응낙은 **대화 밖 UI 이벤트**라 이 절의 주석 방식이 그대로 성립하지 않는다(analyzeConversation이 잡지 못한다) — **T80이 별도 결정**한다. 어떤 결정이든 **같은 응낙을 두 번 계상하지 않는다**는 ADR-0009의 계상 단일성 규칙은 지켜야 한다 | architect(T80) |
