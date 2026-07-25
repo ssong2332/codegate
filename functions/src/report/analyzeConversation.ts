@@ -18,6 +18,7 @@
 // 나오는 것을 확인). 이제 대사를 만드는 쪽(mockClient.ts)과 찾는 쪽(여기)이 scenarios/
 // tacticFlavor.ts 공용 함수 하나만 참조해 같은 텍스트를 기준으로 삼는다.
 import { extractTacticFlavor, extractTacticLabel } from "../scenarios/tacticFlavor";
+import { resolveTacticCategory, type TacticCategory } from "./tacticCategory";
 
 export type AnalysisMessage = {
   role: "scammer" | "user";
@@ -31,6 +32,9 @@ export type DeceivedMomentResult = {
   timeLabel: string;
   tactic: string;
   correctAction: string;
+  // T74(§15.4.2/AC-068) — 실패 아카이브의 "수법별 묶기" 그룹 키. 판정 로직에는 전혀 관여하지
+  // 않는다(wasDeceived·deceivedMoments 산출은 무변경) — 집계용 라벨 정규화일 뿐이다.
+  tacticCategory: TacticCategory;
 };
 
 export type ConversationAnalysis = {
@@ -155,6 +159,7 @@ export function analyzeConversation(
       timeLabel: `${elapsedSec}초 시점`,
       tactic,
       correctAction: pickCorrectAction(tactic),
+      tacticCategory: resolveTacticCategory(tactic),
     });
   }
 

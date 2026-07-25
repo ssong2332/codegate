@@ -25,7 +25,7 @@
 // 단계로 삽입되면서 그 분기 전체가 src/app/scenarios/difficulty/page.tsx로 이관됐다(판정 규칙은
 // 동일). 이 화면은 이제 시나리오를 확정해 sessionStorage에 남기고 UX-029로 넘기기만 한다.
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getExperienceMode, setSelectedScenarioId as persistSelectedScenarioId } from "@/lib/recording";
 import { SCENARIO_TRAIT_LABEL } from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc, type VoiceMode } from "@/content/scenarios";
@@ -38,7 +38,15 @@ const MODE_LABEL: Record<VoiceMode, string> = {
 
 export function ScenarioListView({ mode }: { mode: VoiceMode }) {
   const router = useRouter();
-  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
+  // T74(UX-030 "이 시나리오 다시 훈련") — 실패 아카이브가 시나리오를 미리 지목해 들어온다.
+  // 선택만 채워 두고 시작은 여전히 사용자가 누른다(자동 시작하지 않는다).
+  // ⚠️ 노출 필터(AC-029/AC-057)를 프리셋이 우회하면 안 된다 — 이 목록에 실제로 보이는 시나리오만
+  // 미리 선택한다(예: clone 시나리오를 generic 목록에 손으로 붙여 넣어도 무시된다).
+  const searchParams = useSearchParams();
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(() => {
+    const preset = searchParams.get("scenarioId");
+    return preset && scenarios[preset]?.voiceMode === mode ? preset : null;
+  });
   // 단계 표시(breadcrumb) 전용 — self는 UX-016을 건너뛰어 유형→체험선택→시나리오(③)이고, send는
   // UX-016을 거쳐 유형→체험선택→방식→시나리오(④)다(v1.10 D-31 순서 반영). lazy initializer로 마운트
   // 시 1회만 읽는다(다른 드릴다운 화면과 동일 패턴).

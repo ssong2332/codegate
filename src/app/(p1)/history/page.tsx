@@ -108,6 +108,16 @@ export default function HistoryPage() {
       <h1 className="text-2xl font-bold">세션/리포트 히스토리</h1>
       <p className="text-base text-gray-600">지난 훈련 기록을 최신순으로 볼 수 있습니다.</p>
 
+      {/* UX-012 v1.11 갱신(D-44) — 이 화면은 여전히 **세션 단위** 목록이고, UX-030은 **속은 순간
+          단위** 목록이다. 두 화면을 합치지 않고 진입점만 연결한다(T74/UF-010). */}
+      <button
+        type="button"
+        onClick={() => router.push("/report/archive")}
+        className="min-h-[48px] rounded border border-gray-300 px-6 py-3 text-lg font-bold text-black hover:bg-gray-50"
+      >
+        내가 속았던 순간 모아보기
+      </button>
+
       <ul className="flex flex-col gap-4">
         {items.map((item) => (
           <li key={item.reportId}>

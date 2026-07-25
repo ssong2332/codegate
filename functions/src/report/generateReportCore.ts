@@ -61,6 +61,12 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   const analysis = analyzeConversation(messages, session.createdAt.toMillis(), weakenedTactics);
   const preventionAdvice = buildPreventionAdvice(analysis.tacticsUsed, analysis.wasDeceived);
 
+  // ③ 실패 아카이브(UX-030, T74)용 세션 메타 역정규화 — Architecture.md §15.4.1/§15.6 G8.
+  // 아카이브는 리포트만 페이지 조회해 카드를 그리므로(별도 컬렉션 없음), 카드에 필요한 세션 메타가
+  // 리포트에 없으면 항목 수만큼 세션을 추가 read해야 한다(N+1). 여기서는 session을 이미 읽었으므로
+  // 추가 비용이 없다. **옵셔널 필드는 값이 있을 때만 넣는다** — Firestore는 `undefined` 필드 write를
+  // 거부하고(Database.md Migration Policy의 "부재로 하위호환"과도 정합), §14.8.3의 "값이 없으면
+  // 셀 자체가 비는" store-nothing 방어와 같은 형태다.
   const reportDoc: ReportDoc = {
     reportId: sessionId,
     sessionId,
@@ -73,6 +79,12 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     // 문서를 추가로 read하지 않고 같은 라벨을 그릴 수 있게 한다(P-22).
     difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
     createdAt: Timestamp.now(),
+    scenarioId: session.scenarioId,
+    channel: session.channel ?? "voice",
+    // ⚠️ AC-069 2차 방어(§15.4.3) — 2인 챌린지 체험 세션 리포트에 소속 표식을 남긴다. 사용자1의
+    // 아카이브 쿼리에는 uid 격리로 애초에 들어오지 않지만(1차 방어), 이 표식이 있으면 아카이브가
+    // 한 번 더 걸러 낸다. 챌린지 세션이 아니면 필드를 아예 만들지 않는다.
+    ...(session.challengeId ? { challengeId: session.challengeId } : {}),
   };
   await reportRef.set(reportDoc);
 
