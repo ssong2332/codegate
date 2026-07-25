@@ -88,6 +88,12 @@ export default function SessionCallPage() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [showTextInput, setShowTextInput] = useState(false);
+  // 사용자 신고(2026-07-25) — "키패드가 실제로 작동하지 않는다". 실제 통화처럼 숫자 키패드를 띄우고
+  // 누른 숫자를 표시한다(ARS 입력을 요구하는 시나리오의 몰입 요소). 실시간 세션에 텍스트 턴으로
+  // 보낼 수 있어, 상대가 "인증번호 눌러주세요"라고 하면 실제로 눌러서 응답할 수 있다.
+  const [dialpadValue, setDialpadValue] = useState("");
+  // 실시간 세션에 넣을 타이핑 입력(카운터 패턴 — seq가 바뀔 때 1회 전송).
+  const [textMessage, setTextMessage] = useState<{ text: string; seq: number } | null>(null);
   const [maxSessionMs, setMaxSessionMs] = useState<number | null>(null);
   // T40 fast-follow — 역방향 명시 전환 버튼("메시지로 전환") 상태. messenger/page.tsx의
   // escalating/escalationError와 동일한 패턴, 방향만 반대.
@@ -363,10 +369,16 @@ export default function SessionCallPage() {
 
   const handleSend = async (textOverride?: string) => {
     const text = (textOverride ?? input).trim();
-    // finding #3: 실시간 음성 통화 중에는 sendMessage(별도 텍스트 LLM+TTS)를 호출하지 않는다.
-    // 그러면 Gemini/ElevenLabs 음성 위에 다른 AI 목소리가 겹쳐 흐른다. 텍스트 입력은 폴백 경로
-    // 전용이다(실시간 모드에서는 아래 렌더에서 텍스트 입력 자체를 노출하지 않는다).
-    if (callMode === "realtime") return;
+    // finding #3(2026-07-25 갱신): 실시간 통화 중에는 여전히 sendMessage(별도 텍스트 LLM+TTS)를
+    // 호출하지 않는다 — 그러면 실시간 음성 위에 다른 AI 목소리가 겹쳐 흐른다. 대신 **같은 Live
+    // 세션 안으로** 텍스트 턴을 넣는다(GeminiVoiceSession.textMessage). 응답은 평소처럼 이 통화의
+    // 목소리로 돌아오므로 겹침 문제가 원천적으로 없고, 마이크 없이도 훈련을 진행·검증할 수 있다.
+    if (callMode === "realtime") {
+      if (!text || phase !== "live") return;
+      setTextMessage((prev) => ({ text, seq: (prev?.seq ?? 0) + 1 }));
+      setInput("");
+      return;
+    }
     if (!sessionId || !text || sending || phase !== "live") return;
     setSending(true);
     setSendError(null);
@@ -484,6 +496,7 @@ export default function SessionCallPage() {
           onSpeakingChange={realtime.handleSpeakingChange}
           onUserSpeakingChange={realtime.handleUserSpeakingChange}
           onTranscriptTurn={handleTranscriptTurn}
+          textMessage={textMessage}
         />
       )}
 
@@ -632,13 +645,95 @@ export default function SessionCallPage() {
               여기로 모았다. 닫혀 있으면 통화 화면에는 발신자와 컨트롤만 남는다. */}
           {showTextInput && (
             <div className="mb-5 rounded-2xl bg-black/25 p-4">
-              {/* finding #3: 실시간 음성 통화 중에는 텍스트 입력을 노출하지 않는다 — 텍스트를 보내면
-                  sendMessage(별도 텍스트 LLM+TTS)가 실시간 음성 위에 다른 목소리를 겹쳐 재생한다.
-                  실시간 모드에서는 안내만, 폴백 모드에서는 자막+텍스트 입력을 보여준다. */}
+              {/* 실제 통화 키패드(사용자 신고 2026-07-25 — "키패드가 있는데 실제로 작동하지 않는다").
+                  상대가 "인증번호 눌러주세요"류를 요구하는 시나리오에서 실제로 눌러 응답할 수 있다.
+                  누른 숫자는 화면에 그대로 보이고, 전송하면 음성/텍스트와 동일한 경로로 상대에게
+                  전달된다(실시간이면 Live 세션, 폴백이면 sendMessage). */}
+              <div className="mb-4">
+                <div
+                  className="mb-3 flex min-h-[44px] items-center justify-center rounded-xl bg-black/30 px-4 font-mono text-2xl tracking-[0.2em] text-white"
+                  aria-live="polite"
+                  aria-label="입력한 번호"
+                >
+                  {dialpadValue || <span className="text-base tracking-normal text-[#8FA0AC]">번호를 누르세요</span>}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setDialpadValue((v) => (v.length >= 32 ? v : v + key))}
+                      aria-label={`${key} 누르기`}
+                      className="min-h-[52px] rounded-xl bg-white/10 text-xl font-semibold text-white transition active:scale-95 hover:bg-white/20"
+                    >
+                      {key}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDialpadValue((v) => v.slice(0, -1))}
+                    disabled={!dialpadValue}
+                    className="min-h-[44px] flex-1 rounded-xl bg-white/10 text-sm font-semibold text-[#C9D4DB] disabled:opacity-40"
+                  >
+                    ← 지우기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!dialpadValue) return;
+                      void handleSend(dialpadValue);
+                      setDialpadValue("");
+                    }}
+                    disabled={!dialpadValue}
+                    className="min-h-[44px] flex-1 rounded-xl bg-[#0E6B62] text-sm font-bold text-white disabled:opacity-40"
+                  >
+                    번호 전송
+                  </button>
+                </div>
+              </div>
+
+              {/* finding #3(2026-07-25 갱신): 실시간 모드에서도 이제 타이핑할 수 있다 — 다만
+                  sendMessage가 아니라 **같은 Live 세션**에 텍스트 턴으로 넣으므로(handleSend의
+                  realtime 분기) 목소리가 겹치지 않는다. 마이크가 없거나 쓸 수 없는 환경에서도
+                  훈련·검증이 가능해진다(사용자 신고 2026-07-25). */}
               {callMode === "realtime" ? (
-                <p className="text-center text-sm leading-relaxed text-[#C9D4DB]">
-                  지금은 음성으로 대화하는 중입니다. 마이크에 대고 말씀하세요.
-                </p>
+                <>
+                  <p className="mb-3 text-center text-xs leading-relaxed text-[#C9D4DB]">
+                    마이크에 대고 말해도 되고, 아래에 입력해도 상대에게 그대로 전달됩니다.
+                  </p>
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void handleSend();
+                    }}
+                    className="flex items-center gap-2.5"
+                  >
+                    <label htmlFor="realtime-text-input" className="sr-only">
+                      메시지 입력
+                    </label>
+                    <input
+                      id="realtime-text-input"
+                      type="text"
+                      value={input}
+                      onChange={(event) => setInput(event.target.value)}
+                      onFocus={(event) =>
+                        event.currentTarget.scrollIntoView({ behavior: "smooth", block: "center" })
+                      }
+                      placeholder="하고 싶은 말을 입력하세요..."
+                      className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-white/30 bg-white/10 px-[18px] py-3 text-lg text-white placeholder:text-[#C9D4DB]"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!input.trim()}
+                      aria-label="전송"
+                      className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-lg font-bold text-white disabled:opacity-50"
+                    >
+                      ↑
+                    </button>
+                  </form>
+                </>
               ) : (
                 <>
                   {latestScammerLine && (
