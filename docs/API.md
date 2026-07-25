@@ -266,3 +266,30 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | 녹음 업로드(UX-002) | Storage put | storage.rules 강제(ADR-0002) |
 | 시나리오 목록(UX-004) | Firestore read | `scenarios`(공개 메타만). `scenarioPrompts`는 read 거부 |
 | 히스토리(UX-012, P1) | Firestore read | 본인 `sessions`/`reports`만 |
+
+---
+
+## 부록 A — 3단계 결합·모의 앱 설치 (T80 · Architecture.md §15.9 · AC-072/AC-073)
+> **왜 부록인가:** T78·T79 architect 패스와 **병렬 작성**돼 기존 절을 편집하면 병합 충돌이 난다. 병합 후 "Callable Functions" 절로 흡수해도 된다(그때 이 부록은 제거).
+
+### `recordMockScreenEvent` — 인앱 목업 상호작용 기록 (T80 · UX-023 kind=`app-install` · §15.9.6)
+| 항목 | 값 |
+|---|---|
+| 트리거 | 참가자가 목업을 열었을 때(`shown`), 가짜 "권한 허용"에 응했을 때(`consented`) |
+| 호출 주체 | **페이지**(`src/app/session/messenger/page.tsx`). ⚠️ `MessengerFakeLanding` 컴포넌트는 콜백만 위로 올리고 **네트워크 호출을 하지 않는다** — 그 파일의 "전송 경로 부재" 불변식(AC-045)을 kind 추가 후에도 유지하기 위해서다 |
+| Request | `{ sessionId: string, landingId: string, event: "shown" \| "consented" }` |
+| Response | `{ ok: true }` |
+| 서버 검증(순서 고정) | ① 인증 + 세션 소유권 → `permission-denied` ② `session.status === "active"` → `failed-precondition`(§15.6 G20 재발 방지) ③ `MOCK_SCREENS[session.scenarioId]`에 `landingId`가 **소속**되는지 → `failed-precondition`(§15.6 G12 동형 — 임의 landingId로 가짜 "속은 순간"을 만들 수 없다) ④ `event==="consented"`는 `kind==="app-install"`일 때만 → `invalid-argument` |
+| 쓰기 | `sessions/{sessionId}/mockScreens/{landingId}` — `shownAt`/`consentedAt`을 **최초 1회만** 세팅(기존 `recordInCallSmsEvent` 관례) |
+| 실패 처리 | 클라는 **핵심 루프를 막지 않는다**(오버레이는 정상 닫히고 대화 지속). 단 **조용히 삼키지 않고** 1회 재시도 + 실패 로그(§15.6 G56) |
+| 안전 | 참가자 입력값을 **받지 않는다** — 인자는 세션 id·랜딩 id·고정 enum뿐이다(AC-045 "입력값 서버 미전송" 유지). 실 URL·앱명·권한 필드는 요청·응답·스키마 어디에도 없다(AC-072) |
+
+### `sendMessage` **확장** — 모의 설치 응낙의 인과 배선 (T80 · AC-073 · §15.9.3)
+- **계약 무변경**(요청·응답 필드 증분 0건). 서버 내부 동작만 추가된다.
+- `MOCK_SCREENS[session.scenarioId]`에 `app-install` 항목이 있는 시나리오에 한해, 그 턴에 `sessions/{sid}/mockScreens`에서 **`consentedAt`이 있고 `consentAnnouncedAt`이 없는** 항목을 찾으면 `buildSystemPrompt`의 `turnInstruction`으로 **1줄 지시**를 주입하고 `consentAnnouncedAt`을 세팅한다(1회 주입). 주입 위치는 **가드레일 앞**(§15.5 순서 불변식).
+- **슬롯 경합 규칙:** 같은 턴에 통화 중 문자 announce도 due면 **문자 announce가 이기고 설치 지시는 다음 턴으로 이월**한다(§15.9.3 근거).
+- **⚠️ 응낙이 채널 전이를 유발하지 않는다.** 전이는 기존 `[[SIGNAL:ESCALATE_VOICE]]`·max-turn 폴백·명시 버튼으로만 일어난다(AC-073, §15.6 G54).
+
+### `generateReport` **확장** — `stages`·`mockScreenTimeline` 스냅샷 + 승격 (T80 · §15.9.5)
+- **계약 무변경**(응답은 여전히 `{ reportId }`). `generateReportForSession`이 `sessions/{sid}/mockScreens`를 **1회 read**해 ① `mockScreenTimeline` 스냅샷 ② `consented` 항목의 `deceivedMoments` 승격·재정렬 ③ `stages` 파생을 처리한다.
+- **멱등 early-return 무변경** → 리포트는 여전히 **세션당 정확히 1개**(AC-007).

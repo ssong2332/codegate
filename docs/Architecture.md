@@ -1110,3 +1110,235 @@ SmsTimelineEvent = { event: "sms_received" | "sms_opened" | "sms_otp_shown" | "s
 | UF-010 / UX-030 실패 아카이브 | `/report/archive`(신규 화면) | (없음 — Firestore 직접 read) | `reports`(uid+createdAt desc, 기존 인덱스) | AC-026/008/009/016/011/043/055 | §15.4 |
 
 **잔여(architect 소관 아님):** ① 4건에 대한 **PRD AC 신설·MVP 우선순위**(OQ-U15 — planner/User). ② 기존 `difficulty` 산문의 **UI 라벨 문구**(OQ-U21 — planner/ux-design; 스키마는 §15.3.2로 확정). ③ 아카이브 "묶기" 그룹 헤더가 **부분 집계임을 알리는 문구**(§15.4.1 — ux-design). ④ near-miss 신설 여부(OQ-U20/R-8), 초급 실시간 힌트(R-7) — 둘 다 planner/User. ⑤ **§15.1.5의 OQ-A1~A4**(문자 이벤트 카피·AC-009와의 문구 정합 — ux-design / 아카이브 노출·AC-059 해석 — planner) 및 **제안 태스크 T89/T90**(§15.1.5 (8) — planner가 Tasks.md에 반영).
+
+---
+
+## 15.9 3단계 결합 세션 + 모의 앱 설치 단계 (T80, UX v1.12 UF-012·UX-023 kind, PRD v1.6 AC-072/AC-073)
+> **소관 UX/AC 매핑:** UF-012(문자→모의 설치→통화) · UX-023 kind=`app-install` · UX-022 · UX-014 / **AC-072**(모의 설치·원격제어 무해화 하드 제약) · **AC-073**(3단계 결합) / D-49·D-50·D-51 / 재사용 AC-045·AC-032/033·AC-022·AC-006·AC-007·AC-035·AC-034·AC-026·AC-037·AC-009·AC-062·AC-024·AC-019. **⚠️ 이 절이 T84(implementer) 착수 게이트다.**
+>
+> **기준 버전 고지(정직하게):** 본 문서 헤더는 **Based on PRD v1.5 · UX 1.11**인데 이번 패스의 입력은 **PRD v1.6 · UX 1.12**다 — **PRD 1단계·UX 1단계 뒤처져 있었다.** 헤더는 T78/T79와 **동시 편집 충돌을 피하려고 이번 패스에서 고치지 않았다**(기존 절 무수정 지시). 재검증 결과 **§15.9가 딛는 기존 절(§13·§15.1·§15.2·§15.4)은 v1.6/1.12에서 무효화된 것이 하나도 없다** — PRD v1.6은 삭제·통폐합 0건을 명시했고 UX v1.12는 기존 UX-001~030/UF-001~010/D-1~D-45를 한 건도 수정하지 않았다. 헤더 정정은 T78 또는 병합 담당이 **v1.6 / 1.12로 일괄 갱신**해야 한다(잔여 항목 ⑥).
+>
+> **병렬 작성 고지:** 이 절은 T78(§15.7 예약)·T79(§15.8 예약)와 **격리 워크트리에서 병렬 작성**됐다. ⚠️ **번호 충돌 실측**: 본 문서에는 이미 **§15.7 "UX Traceability 증분"(T57)**이 존재한다 — T78이 §15.7을 그대로 쓰면 중복 번호가 된다. 병합 시 조정 필요(잔여 항목 ⑦). 본 절은 지시대로 §15.9를 쓰고 갭 번호는 **G50번대**를 쓴다(T78=G30·T79=G40).
+
+### 15.9.0 설계 요지 (다른 판단보다 우선)
+1. **3단계는 3개 세션도, 3개 상태도 아니다 — 기존 2채널 전이 + 채널 내부 오버레이 1개다.** 2단계(모의 설치)는 **채널이 아니라 메신저 채널 위의 in-page 오버레이**(UX-023, D-37/D-49)다. 따라서 세션의 `channel`은 여전히 `messenger → voice` **정확히 1회** 전이하고, §13.1/§13.2의 전이 모델은 **한 줄도 바뀌지 않는다.** AC-007(세션당 1리포트)·AC-035(연속성)는 **새 방어 코드가 아니라 구조적으로** 유지된다(신규 세션 필드 0건).
+2. **신규 전이 신호 0건.** 1→2는 신호가 아니라 **사용자의 링크 탭**(기존 `[[LINK:id]]` attachment 경로), 2→3은 기존 **`[[SIGNAL:ESCALATE_VOICE]]`** 그대로다. 설치 응낙이 **자동으로 채널 전이를 유발하지 않는다**(§15.9.3 — 그렇게 만들면 AC-073의 "구조화 신호 경로로만"을 깨는 신규 트리거가 된다).
+3. **신규 가짜 화면 계열 0건 — 단 "확장"의 실제 내용은 컴포넌트에 처음으로 콘텐츠 분기를 넣는 것이다**(§15.9.1 실측). AC-072의 하드 제약이 요구하는 것은 "화면이 하나"가 아니라 **안전 검증 경로가 하나**이므로, 구속력 있는 규칙은 **"kind 분기는 `MessengerFakeLanding.tsx` 파일 안에서 한다"**이다.
+4. **§15.1.5의 "표시만, 판정 무변경"(G22)은 문자 이벤트 전용 규칙이고 여기 그대로 적용되지 않는다.** AC-072가 설치 응낙을 *"이 순간 기기를 넘겨준 것"*으로 **속은 시점 교육 포인트화하라고 명문 요구**하기 때문이다. 대신 **D-51 응낙 기준**을 그대로 데이터 규칙으로 옮긴다 — **응낙(가짜 "권한 허용" 탭)만 `deceivedMoments`로 승격**하고, 화면이 뜬 것·닫은 것은 표시 전용이다. 이것이 AC-062("속은 순간 0건이면 되감기 진입점 없음")를 지키는 유일한 경계다(§15.9.5).
+5. **참가자 기기에 무언가가 설치되는 경로는 UI·API·스키마 어디에도 만들지 않는다.** 실 설치 파일·스토어 URL·실존 앱명·OS 권한 API·기기 설정 변경·외부 네비게이션 — **필드도 코드도 두지 않는다**(AC-023 송금 금지·AC-032/045 실 URL 금지와 **동형의 구조적 금지**). "권한 허용"은 **화면 안의 가짜 버튼**이며 브라우저 권한 API(`navigator.permissions`·`getUserMedia`·`Notification.requestPermission` 등)를 **호출하지 않는다.**
+6. **하위호환 옵셔널 증분만.** 신규 컬렉션은 세션 하위 `mockScreens` 1개, 신규 콜러블은 `recordMockScreenEvent` 1개, 리포트 신규 필드는 `stages?`·`mockScreenTimeline?` 2개. 기존 문서는 **무백필**로 유효하다.
+
+### 15.9.1 (a) 모의 설치 화면 = UX-023의 kind — D-49 전제의 실측 검증
+**판정: D-49의 전제는 성립한다. 단 "기존 경로의 확장"이라는 말이 실제 코드에서 뜻하는 바는 "이 컴포넌트에 *처음으로* 콘텐츠 분기를 만드는 것"이며, 이 사실을 모른 채 착수하면 별도 파일로 갈라져 AC-072가 조용히 깨진다.**
+
+**실측 결과(현재 코드):**
+
+| # | 실측 사실 | 근거(file:line) | 함의 |
+|---|---|---|---|
+| 1 | `MessengerFakeLanding`의 props는 `{title, onClose, onEndTraining}` **3개뿐**이고 `fakeLandingId`는 **컴포넌트에 도달하지 않는다** | `src/components/MessengerFakeLanding.tsx:12-19`, 호출부 `src/app/session/messenger/page.tsx:502-506`·`src/components/InCallSmsOverlay.tsx:260` | 랜딩 종류를 구분할 **입력이 지금은 없다** → kind를 props로 내려야 한다 |
+| 2 | 화면 콘텐츠("본인확인이 필요합니다" + 이름/연락처 폼)는 **하드코딩**돼 있고 `title`(=`displayText`)만 가변이다 | 같은 파일 :85-122 | 오늘 이 컴포넌트의 **콘텐츠 분기는 0개**다. §15.1.5의 "콘텐츠가 `displayText` 구동이라 landing별 저작이 없다"(§15.1.1 링크형 재사용 항목)는 **여전히 정확한 서술이며**, 그래서 kind 도입이 **첫 분기**다 |
+| 3 | 안전 계약이 **파일 단위로** 성립한다 — 이 파일은 `src/lib/api` 계열을 하나도 import하지 않고, "확인" 제출은 로컬 state만 바꾼다 | 같은 파일 :8-10(import 전부), :30-34(`handleSubmit`) | **신규 파일로 쪼개면 이 계약이 신규 파일에는 자동으로 적용되지 않는다** → 검증 경로 이중화(AC-072 위반) |
+| 4 | 상시 표식·상시 종료가 이미 이 컴포넌트 안에 있다 | 같은 파일 :45-51(`Banner` "AI 훈련용 모의 화면", `EndTrainingButton`) | kind=`app-install`도 **같은 헤더를 공유**하므로 AC-022/AC-006이 kind와 무관하게 성립 |
+| 5 | ⚠️ **"이 화면에서 나가는 네트워크 경로가 없다"를 고정하는 자동 테스트가 없다** — T29 당시 증거는 **grep 수동 확인**이었다 | `.claude/agent-memory/implementer/project_codegate_t29_messenger_chat.md:50-54`("structural grep evidence … instead of a live emulator click-through"). 사후 화면 쪽에는 같은 형태의 **소스 텍스트 스캔 테스트 선례가 있다** — `src/lib/replay/smsTimelineScreens.test.ts:61-75` | **G50** — kind가 늘어나는 지금이 이 불변식을 테스트로 고정할 시점이다 |
+
+**결정 (구속력 있는 규칙):**
+- **R1. kind 분기는 `src/components/MessengerFakeLanding.tsx` 파일 내부에서 한다.** 신규 컴포넌트 파일·신규 라우트를 만들지 않는다. 파일이 커지면 **같은 파일 안의 서브 컴포넌트**로 나눈다(파일을 나누는 순간 (3)의 파일 단위 계약과 (5)의 스캔 테스트가 갈라진다).
+- **R2. props 증분은 `landingKind?: "credential-form" | "app-install"` 1개.** 부재 → `"credential-form"`(하위호환 읽기 규칙이지 판별자 오버로드가 아니다 — §15.0.4 원칙 준수).
+- **R3. kind의 출처는 서버 소유 고정 카탈로그다.** 클라가 `fakeLandingId` 문자열을 파싱·분류해 kind를 정하지 않는다(자유문자열 분류 금지 — AC-024 원칙 계승). 카탈로그는 `functions/src/scenarios/mockScreens.ts`(신규, **서버 전용**)이며 형태는 기존 `IN_CALL_SMS: Record<scenarioId, InCallSmsItem[]>`(`functions/src/scenarios/inCallSms.ts`)을 **그대로 미러**한다:
+  ```ts
+  export type MockScreenKind = "credential-form" | "app-install";
+  export type MockScreenItem = {
+    landingId: string;          // = MessengerAttachment.fakeLandingId
+    kind: MockScreenKind;
+    headline: string;           // 예: "업무처리 확인 앱을 설치해야 진행됩니다" (실존 앱명 금지)
+    bodyLines: string[];        // 가짜 설치 안내 문구
+    consentLabel: string;       // 가짜 "권한 허용" 버튼 라벨 (app-install 전용)
+    momentTactic: string;       // 승격 시 DeceivedMoment.tactic (예: "앱 설치·원격 허용 유도")
+    correctAction: string;      // 승격 시 DeceivedMoment.correctAction (D-52 카피 규칙)
+  };
+  export const MOCK_SCREENS: Record<string /* scenarioId */, MockScreenItem[]>;
+  ```
+- **R4. `kind`를 `MessengerAttachment`에 싣는 주체는 `extractLinkMarker`다.** `functions/src/roleplay/linkMarker.ts:34-41`이 attachment를 만드는 **유일 지점**이므로 여기에 `landingKind`를 채운다. 시나리오 스코프 조회가 필요하므로 `extractLinkMarker(text, scenarioId)`로 인자 1개를 늘린다(호출부 2곳: `functions/src/roleplay/index.ts:180`·`functions/src/roleplay/openingLine.ts`). **`LINK_LABELS`(같은 파일 :16-20)는 무변경** — 칩 라벨의 진실 원천은 그대로 두고 카탈로그는 kind·화면 콘텐츠만 소유한다(회귀 표면 최소화). 드리프트 테스트로 둘을 묶는다(G53).
+- **R5. 미상 id의 kind 폴백은 `credential-form`이다.** 기존 `DEFAULT_LINK_LABEL` 폴백(같은 파일 :20, "조용히 실패하지 않고 기본 라벨로 대체")과 동형이되, **`app-install`이 사고로 열리는 방향의 폴백은 금지**한다.
+- **R6. 통화 중 문자(`InCallSmsDoc.fakeLandingId`)를 통해 `app-install` kind가 열리는 경로는 이번 범위 밖이다.** UF-012의 설치는 **메신저 단계**에서 일어난다(D-49/UF-012 Step 2). `IN_CALL_SMS` 카탈로그에 `app-install` 랜딩을 참조하는 항목을 두지 않는다 — 두면 통화 중 응낙의 앵커 규칙(§15.9.5)이 실시간 경로의 합성 타임스탬프 문제(§15.6 G15/G21)와 얽힌다. 필요해지면 그때 별도 설계한다.
+
+> **왜 별도 Screen ID(신규 화면)를 기각했는가:** D-49가 이미 기각했고, 여기 실측이 그 판단을 **코드로 뒷받침한다** — 안전 속성(입력 미전송·콜러블 부재·외부 네비 부재·표식·상시 종료)이 **파일 단위로 성립**하므로 화면을 쪼개는 순간 그 계약도 두 벌이 된다(위 실측 3). AC-072의 문면("**신규 가짜 랜딩 화면을 별도 계열로 만들지 않고** 기존 인앱 목업 경로를 재사용해 안전 검증 경로를 이중화하지 않는다")과 정확히 같은 이유다.
+
+### 15.9.2 (b) 3단계 세션 상태 모델 — 신규 상태 0건으로 AC-007/AC-035를 유지한다
+**결정: 세션 상태 모델을 확장하지 않는다. 3단계는 `sessions/{sid}` 하나 위에서 (i) 기존 `channel` 전이 1회 + (ii) 채널 내부의 오버레이 1개로 표현된다.**
+
+**§13이 메신저→보이스에서 이 문제를 어떻게 풀었는지(조사 결과):**
+- 별개 세션을 만들지 않고 **같은 `sessions/{sessionId}` 문서의 `channel` 필드를 바꾸고 `channelHistory`에 append**한다(§13.0.1/§13.1). `messages.turnIndex`는 채널을 넘어 **단조 증가**한다(§13.1).
+- 리포트는 `reportId = sessionId` **멱등 키 + early-return**으로 세션당 정확히 1개다(`functions/src/report/generateReportCore.ts:33-37`).
+- 전이 함수는 트랜잭션 안에서 `status !== "active"`면 **아무것도 하지 않는다**(`functions/src/session/channelTransition.ts:70-83`).
+
+**이 방식이 3단계로 확장 가능한가 — 판정: 확장이 아예 필요 없다.** 2단계는 채널이 아니기 때문이다. 단계 → 표현 매핑:
+
+| 단계 | 표현 | 진실 원천 | 신규 필드 |
+|---|---|---|---|
+| 1 문자 | `entryChannel = "messenger"` | `sessions.entryChannel`(§13.1) | 없음 |
+| 2 모의 설치 | 메신저 채널 위 **오버레이**(UX-023 kind=`app-install`) | `sessions/{sid}/mockScreens/{landingId}` 문서 존재(신규 서브컬렉션) | 서브컬렉션 1개 |
+| 3 통화 | `channel = "voice"` + `channelHistory`에 `{from:"messenger",to:"voice"}` 1건 | `sessions.channel`/`channelHistory`(§13.1) | 없음 |
+
+- **AC-007 유지 근거:** 위 어느 것도 세션을 쪼개지 않고 `reportId` 키를 건드리지 않는다. **3단계를 3개 세션으로 만들면 리포트가 3개가 되어 AC-007이 깨진다 — 그 설계는 명시적으로 금지**한다. 특히 2단계를 "설치용 별도 세션"으로 만드는 유혹(오버레이가 화면상 독립적으로 보이므로)을 **G51**로 못 박는다.
+- **AC-035 유지 근거:** sessionId·`messages.turnIndex` 연속성이 그대로다. 오버레이는 `messages`에 **아무것도 쓰지 않는다**(§15.9.5 — 쓰면 §15.6 G3 재발).
+- **세션 문서 신규 필드 0건**인 이유: "어느 단계까지 갔는가"는 전부 **파생 가능**하다(§15.9.5 판정표). 중복 상태를 두면 `turnCountAtTransition` 논쟁(§13.8.3)이 기각한 "이중 쓰기 동기화" 실패 부류를 다시 연다.
+- **턴 예산(실측 제약, 콘텐츠 저작에 직결):** 에스컬레이션 가능 세션의 `maxUserTurns = MESSENGER_ESCALATION_MAX_USER_TURNS = 14`, 메신저 max-turn 자동 전이는 `MESSENGER_ESCALATION_FALLBACK_TURNS = 6`(`functions/src/shared/constants.ts:30,33`). 즉 **설치 링크 제시가 사용자 6턴 안에 나오지 않으면 2단계는 구조적으로 도달 불가**하고 세션은 문자→통화 2단계로 끝난다. 이 값들은 §13.3이 "PoC 전 가정치"로 남긴 값이라 T84 실측 후 §13.3과 함께 갱신한다(**G52**).
+
+### 15.9.3 (c) 단계 전이 신호 — 기존 신호 재사용, 신설 0건
+**결정: 신규 sentinel·신규 트리거를 만들지 않는다. 1→2는 신호가 아니고, 2→3은 `[[SIGNAL:ESCALATE_VOICE]]` 그대로다. 설치 응낙 사실은 "전이 신호"가 아니라 다음 턴의 프롬프트 1줄 지시로만 모델에게 전달된다.**
+
+| 전이 | 메커니즘 | 신규 여부 | 근거 |
+|---|---|---|---|
+| 1 → 2 | 사기범 메시지의 `[[LINK:id]]` → `MessengerAttachment` → **사용자가 칩을 탭** → 오버레이 | 신규 0 | `functions/src/roleplay/linkMarker.ts:34-41`, `src/app/session/messenger/page.tsx:383-404`. 사용자 행동이라 신호가 필요 없다 |
+| 2 → 3 | 사기범 응답의 `[[SIGNAL:ESCALATE_VOICE]]` → 서버 스캔·제거 → `escalation` 플래그 → `transitionChannel` | 신규 0 | `functions/src/roleplay/index.ts:188-190`, §13.2. `messenger-subsidy-smishing-sms`는 **이미 `escalation:{toChannel:"voice",voiceMode:"generic"}`을 갖는다**(`functions/src/scenarios/publicMeta.ts:227-239`) |
+| 2 → 3 폴백 | max-turn 자동 전이(6턴) / 명시 전환 버튼(`requestEscalation`) | 신규 0 | §13.3. AC-034가 이미 요구·허용한 경로 |
+
+- **⚠️ 금지: 설치 응낙 → 클라가 곧바로 전이 요청.** 그건 "모의 화면 상호작용"이라는 **신규 전이 트리거**를 만드는 것이고 AC-073의 *"단계 전이는 기존 구조화 신호 경로(AC-034/AC-060)로만 일어난다"*를 정면으로 깬다. 응낙 후에도 참가자는 채팅으로 복귀해 대화를 잇고, 사기범이 신호를 실을 때 전이한다(UX **UF-012 Step 4**가 이미 "설치 완료 **또는 사용자가 채팅 복귀 후 신호 도달** 시"로 두 경로를 허용해 뒀다). **G54.**
+- **인과 배선(모델이 설치 사실을 알게 하는 법) — §15.1.2/§15.1.4와 동형:** 오버레이 상호작용은 클라 전용이라 모델이 볼 수 없다. `sendMessage`가 그 턴에 `sessions/{sid}/mockScreens`에서 **응낙됐고 아직 알리지 않은 항목**을 찾으면, `buildSystemPrompt(prompt, { turnInstruction })`에 1줄을 주입한다(예: *"참가자가 방금 안내대로 설치와 권한 허용을 마쳤다. 그 사실을 자연스럽게 확인하고, 이제 담당자가 전화로 이어서 안내하겠다고 말한 뒤 전이 신호를 낸다."*). 주입 지점·형태는 **기존 문자 announce와 완전히 동일**(`functions/src/roleplay/index.ts:165-170`)하고 **가드레일 앞**에 놓인다(§15.5 순서 불변식 — `buildSystemPrompt` 내부가 강제).
+  - 주입 후 `mockScreens` 문서에 `consentAnnouncedAt`을 세팅해 **1회만** 주입한다.
+  - 이 읽기는 `MOCK_SCREENS[session.scenarioId]`에 `app-install` 항목이 있을 때만 수행한다(`hasInCallSms(...)` 게이팅과 동형 — 나머지 12개 시나리오는 read 0회, 회귀 0).
+- **`turnInstruction` 슬롯 경합 규칙(임의 판단 금지):** 한 턴에 문자 announce와 설치 후속 지시가 **동시에 due면 문자 announce가 이긴다.** 이유: 문자는 **이미 화면에 떠 있어** 언급이 없으면 즉시 불일치가 보이지만(§15.1.2가 감수한 실패의 악화), 설치 지시는 **다음 턴으로 이월돼도 사실이 사라지지 않는다**(`consentAnnouncedAt` 미세팅 → 다음 턴 재시도). 현행 콘텐츠에서는 두 카탈로그가 같은 `scenarioId`를 공유하지 않으므로 실제로 경합하지 않으며, **그 비공유를 테스트로 고정**한다(G55).
+- **드리프트 자동 검증(AC-073 명문 요구):** 시나리오 콘텐츠가 "전화드릴게요" 류 대사만 내고 신호를 내지 않는 드리프트는 `functions/src/scenarios/__tests__/scenarios.test.ts` 계열에 **"`escalation` 메타를 가진 모든 시나리오의 `personaPrompt`가 `[[SIGNAL:ESCALATE_VOICE]]` 리터럴 지시를 포함한다"** 를 추가해 잡는다. 안전망은 기존 max-turn 폴백(§13.3)이다.
+
+### 15.9.4 (d) 중간 단계 종료·전이 실패 폴백
+**결정: 어느 단계에서 끊겨도 세션은 하나이므로 리포트도 하나다. 이를 위해 새로 만들 것은 없고, 지켜야 할 금지 사항만 있다.**
+
+| # | 상황 | 동작 | 근거·주의 |
+|---|---|---|---|
+| 1 | 1단계(채팅)에서 "훈련 종료" | 기존 `endSession` → 리포트 1개 | 무변경 |
+| 2 | **2단계(설치 오버레이) 안에서 "훈련 종료"** | 오버레이 안의 `EndTrainingButton`이 **같은 `handleEndTraining`을 호출** → 리포트 1개 | 이미 구현돼 있다 — `src/components/MessengerFakeLanding.tsx:50`, 호출부 `src/app/session/messenger/page.tsx:505`. **kind=`app-install`에서도 이 헤더를 공유해야 한다**(R1이 파일 분리를 금지하는 두 번째 이유) |
+| 3 | 3단계(통화)에서 종료 | 기존 통화 셸 종료 경로 | 무변경 |
+| 4 | 설치 목업 **로드 실패** | 조용히 생략하고 채팅 지속(기존 UX-023 Failure 규칙). 그 단계는 **미도달**로 기록 | `mockScreens` 문서가 생기지 않으므로 §15.9.5 판정표가 자동으로 "미도달"을 낸다 — 별도 코드 불요 |
+| 5 | 응낙 기록(`recordMockScreenEvent`) 실패 | **핵심 루프를 막지 않는다**(오버레이는 정상 닫히고 대화 지속). 단 **조용히 삼키지 않고 로그를 남긴다** | `recordInCallSmsEvent`의 기존 계약과 동형(P-4). 결과: 그 순간이 리포트에서 누락될 수 있다 → **G56**(재시도 1회 권장) |
+| 6 | **2→3 전이 실패(통화 자격증명 발급 실패)** | 재시도(P-4) → 실패 지속 시 **메신저 종료로 폴백**. 리포트는 여전히 1개 | UF-007 Failure (a)와 같은 규칙. ⚠️ `transitionChannel`은 `createRealtimeCall`보다 **먼저** `channel`을 뒤집는다(`functions/src/session/channelTransition.ts:79-82`) → 실패 시 세션은 `channel="voice"` 상태로 남는다 |
+| 7 | 6의 롤백 유혹 | **금지.** `channel`을 되돌리거나 `channelHistory` 항목을 지우지 않는다 | `channelHistory`는 append-only 전이 로그이자 §13.8.3이 확정한 **단일 진실 원천**이다. 되돌리면 `turnsSinceMessengerEntry` 기준점이 오염돼 핑퐁 버그 부류가 되살아난다. 실패는 **화면에 표시**하고(조용한 실패 금지) 종료 경로로 보낸다 |
+| 8 | 종료 후 늦게 도착한 응낙 기록 | 거부 | `recordMockScreenEvent`는 `status === "active"`를 검증한다(§15.6 **G20**이 `recordInCallSmsEvent`에서 지적한 결함을 **신규 콜러블에서는 처음부터** 막는다). 리포트는 멱등 early-return이라 사후 기록은 어차피 반영되지 않는다 |
+
+- **AC-006 불변 확인:** 세 단계 전부에서 "훈련 종료"가 **같은 위치·같은 문구**로 도달 가능하다(UX D-50 연속성 앵커). 오버레이는 `role="dialog" aria-modal="true"`라 트랩 밖 컨트롤이 도달 불가이므로 **오버레이 자체가 종료 컨트롤을 갖는다**(§15.6 G11 선례 — 이미 충족).
+
+### 15.9.5 (e) 리포트 데이터 형태 + **OQ-U24 판정**
+#### (e-1) 승격 규칙 — D-51 판정표를 데이터 규칙으로 옮긴다
+**결정: 참가자가 가짜 "권한 허용"에 응한 경우에만 `deceivedMoments`에 항목 1건을 추가한다. 화면이 뜬 것·닫은 것은 표시 전용이다.**
+
+| # | 상황(D-51) | `mockScreens` 문서 | `deceivedMoments` | 리포트 표시 |
+|---|---|---|---|---|
+| ③ | 설치 화면이 떴으나 **닫음** | `shownAt` only | **추가 안 함** | "시도된 수법"(AC-009 정합) |
+| ④ | **가짜 "권한 허용"에 응함** | `shownAt` + `consentedAt` | **1건 추가** | "이 순간 기기를 넘겨준 것"(AC-072) |
+| — | 링크를 아예 안 누름 | 문서 없음 | 추가 안 함 | 2단계 미도달(아래 e-3) |
+
+- **왜 §15.6 G22를 따르지 않는가(판단이 갈리는 지점이라 근거를 남긴다):** G22는 **문자 이벤트**에 대해 승격을 금지했고 그 근거 4항 중 두 항이 여기서는 **성립하지 않는다.** (i) *"AC 문면이 '함께 다뤄진다'이지 판정이 아니다"* → **AC-072는 반대로 "속은 시점 교육 포인트화"를 명문 요구한다.** (ii) *"되감기가 전제하는 '그 순간의 사기범 대사'가 문자에는 없다"* → **설치에는 있다** — 설치 링크를 실은 바로 그 사기범 메시지다(앵커, 아래 e-2). 나머지 두 항(연쇄 영향·채널 간 비대칭)은 **응낙 기준을 채널 무관하게 일관 적용**함으로써 해소된다: 메신저 스미싱 링크 탭도, 통화 중 문자 링크 탭도 여전히 승격하지 않는다(**탭 = 화면 열림**이지 응낙이 아니다). 승격되는 것은 **응낙 행위 하나뿐**이다.
+- **연쇄 영향(정직하게 고지):** 응낙 1건짜리 세션은 `wasDeceived = true`가 되어 **방어 등급(AC-010/011)·실패 아카이브(AC-068)·되감기 진입점(AC-062)** 에 반영된다. 이는 **AC-072가 의도한 결과**이며, 반대로 응낙하지 않은 참가자에게는 이 중 어느 것도 생기지 않는다(AC-062 불변식 보호).
+- **`tacticsUsed`·`preventionAdvice`·`pickCorrectAction`은 무변경.** `correctAction`은 카탈로그(`MockScreenItem.correctAction`)가 저작한 문구를 그대로 쓴다 — `pickCorrectAction`에 `/설치|앱/` 분기를 추가하면 다른 시나리오의 `preventionAdvice`까지 바뀌어 **회귀가 난다**(`functions/src/report/analyzeConversation.ts:176-193`, :198-209).
+- **`tacticCategory`(OQ-U25의 T80 몫) 판정: 신규 카테고리 0건 — 기존 `resolveTacticCategory(tactic)`를 그대로 통과시킨다.** 고정 10종에 이미 **`link_or_install`**(패턴 `/링크|클릭|설치|앱|URL|디지털\s*취약/`)이 있다(`functions/src/report/tacticCategory.ts:15-26,52-54`) → `momentTactic = "앱 설치·원격 허용 유도"`는 자연히 `link_or_install`로 정규화된다. **축 E3(앱 설치·원격제어)와는 직교 개념**으로 유지한다(축=시나리오 설계 좌표, `tacticCategory`=리포트 묶기 키 — T78 (e)와 정합). 확인 무력화(AC-071) 순간의 카테고리는 **T79 소관으로 남는다**.
+
+#### (e-2) 앵커 — 승격 항목의 `turnIndex`는 "설치 링크를 실은 사기범 메시지"의 turnIndex다
+**결정: 앵커는 리포트 생성 시점에 `messages`에서 해결한다. 해결 실패 시 승격하지 않는다.**
+
+- **해결 규칙(순수 함수, 리포트 생성 시 1회):** `messages`(이미 읽고 있다 — `functions/src/report/generateReportCore.ts:41-50`)에서 `attachments[].fakeLandingId === landingId`인 **가장 이른 `role==="scammer"` 메시지**의 `turnIndex`. `timeLabel`은 그 메시지의 경과 초에서 파생한다(§15.1.5 (4)와 **같은 시간축** — `deceivedMoments`와 라벨 축이 어긋나지 않게).
+- **⚠️ 인덱스 정합(이 설계에서 가장 깨지기 쉬운 지점 — §15.6 G16/G17 부류):**
+  1. **Map 키 충돌 없음(증명):** `analyzeConversation`이 만드는 moment의 `turnIndex`는 **언제나 사용자 턴**이다(`analyzeConversation.ts:158` `turnIndex: userReply.turnIndex`). 설치 moment는 **사기범 턴**이므로 `buildReplayTimeline`의 `momentsByTurn`(`src/lib/replay/buildReplayTimeline.ts:69`)에서 충돌하지 않는다.
+  2. **1:1 인덱스 정합 유지 조건:** `getAnnotatedTurnIndexes`(같은 파일 :100-105)는 **주석이 달린 메시지 항목**을 타임라인 순서(=turnIndex 오름차순)로 낸다. 따라서 저장되는 `deceivedMoments` 배열도 **turnIndex 오름차순으로 병합·정렬**해야 `indexOf`(`src/app/report/replay/page.tsx:470`)가 올바른 순간을 연다.
+  3. **앵커 미해결이면 승격하지 않는다.** 앵커가 `messages`에 없으면 어떤 메시지에도 주석이 붙지 않아 **배열 길이와 주석 개수가 어긋나** 되감기가 엉뚱한 순간을 연다. 이 경우 **표시 전용 항목으로만 남기고**(`anchorResolved:false`) 화면이 "대화 중 어느 시점인지 확인하지 못했습니다"를 고지한다(§15.1.5 (4) 3순위 규칙과 동형, 조용한 누락 금지). 구조상 거의 발생하지 않는다 — 응낙은 attachment를 실은 메시지가 이미 저장된 뒤에만 가능하다.
+  4. **리플레이 주석은 사기범 말풍선에도 정상 렌더된다**(실측: `src/app/report/replay/page.tsx:451-456`이 `item.role === "user"` 여부로 **들여쓰기만** 분기). 신규 컴포넌트 0건(D-51).
+  5. **리포트 타임라인 정렬 키:** `src/app/report/page.tsx:249-264`의 `(turnIndex, kindRank, seq)`에 mock-screen 항목을 **kindRank 2**로 더한다(moment=0, sms=1). 기존 두 종류의 상대 순서는 불변이다.
+- **되감기 호환(필수 수정 1건):** `functions/src/rewind/index.ts:34-53`의 `findScammerLineMasked`는 루프를 `position - 1`부터 시작해 **앵커가 사기범 턴이면 한 칸 앞의 다른 사기범 메시지를 집는다.** 시작점을 **`position`으로 일반화**한다 — 기존 moment는 `messages[position].role === "user"`가 보장되므로(위 증명 1) **한 번 더 도는 반복이 절대 매치되지 않아 기존 동작이 한 글자도 바뀌지 않는다**(회귀 0, 테스트로 고정). **G57.**
+
+#### (e-3) OQ-U24 판정 — **데이터에는 세 단계 전부, 화면에는 도달 단계만 + 상단 1줄 구조 고지**
+**판정(architect 확정): UX 권고를 채택하되, 판정 근거를 화면 규칙이 아니라 데이터에 둔다.**
+
+- **데이터:** `reports.stages`에 **의도된 단계 전부**를 `{ stage, reached }`로 싣는다(미도달 단계도 `reached:false`로 존재).
+- **화면:** **도달한 단계만 항목으로 그리고**, 미도달 단계를 빈 항목으로 그리지 않는다. 대신 리포트 **상단 요약 1줄**로 전체 구조를 사후 고지한다(예: *"이번 훈련은 문자에서 시작해 앱 설치를 거쳐 전화까지 이어지는 수법이었습니다."* — **확정 카피는 ux-design**, OQ-A5).
+- **근거:**
+  1. **QA가 AC-073을 판정할 기준이 생긴다** — "세 단계 구분"을 화면 픽셀이 아니라 `stages` 배열 길이·`reached` 값으로 검증할 수 있다(미정으로 두면 세션마다 리포트 모양이 달라져 판정 불가라는 것이 OQ-U24의 제기 이유였다).
+  2. **데이터에서 빼면 복구 불가다.** 나중에 표시 정책이 바뀌어도 데이터가 있으면 화면만 고치면 되지만, 없으면 "미도달"과 "그런 단계가 애초에 없었다"를 영영 구분할 수 없다.
+  3. **D-50과 충돌하지 않는다.** D-50은 **세션 중** 단계 카운터를 금지한 것이고, 그 결정 자체가 *"단계 구분은 종료 후 리포트에서만 드러난다"*고 명시한다. 리포트 상단 1줄은 그 예외 안이다.
+- **단계 도달 판정표(임의 판단 금지 — 전부 파생, 신규 세션 필드 0건):**
+
+| 단계 | 의도됐는가(리포트 생성 시) | 도달했는가 |
+|---|---|---|
+| `messenger` | `session.entryChannel === "messenger"`(부재 시 `channel` 폴백) | 의도됐으면 **항상 true**(메신저 세션은 채팅으로 시작한다) |
+| `mock_install` | `MOCK_SCREENS[scenarioId]`에 `kind==="app-install"` 항목이 1개 이상 | `sessions/{sid}/mockScreens`에 그 `landingId` 문서가 **존재** |
+| `voice` | `PUBLIC_SCENARIOS[scenarioId].escalation` 존재 | `channelHistory`에 `{from:"messenger", to:"voice"}` 항목이 1건 이상 |
+
+> 표에 없는 케이스(예: 보이스로 시작해 메신저로 역전이한 세션)가 나오면 **임의 판단하지 말고 행 추가 여부를 먼저 묻는다.** 현재 규칙상 `stages`는 **의도된 단계가 2개 이상일 때만** 리포트에 싣고, 그 외에는 필드를 만들지 않는다(무백필 — 기존 12개 시나리오 리포트는 한 글자도 바뀌지 않는다).
+
+#### (e-4) 리포트 스키마 증분(전부 옵셔널)
+```ts
+// reports/{rid} 증분 — 표시 전용, 하위호환(부재 → 빈 배열/미표시)
+stages?: ReportStage[];                       // AC-073 "세 단계 구분"의 판정 근거
+mockScreenTimeline?: MockScreenTimelineEntry[]; // D-51 ③(시도됐으나 응낙 안 함)의 표시 근거
+
+type ReportStage = { stage: "messenger" | "mock_install" | "voice"; reached: boolean };
+
+type MockScreenTimelineEntry = {
+  landingId: string;
+  kind: "credential-form" | "app-install";
+  anchorTurnIndex: number;      // -1 = 대화 맨 앞
+  anchorResolved: boolean;      // false = 위치 확정 실패 → 화면이 정직하게 고지
+  timeLabel?: string;           // 앵커 메시지 경과 초에서 파생(§15.1.5 (4)와 같은 축)
+  consented: boolean;           // true면 같은 순간이 deceivedMoments에도 있다(카드 중복 금지)
+};
+```
+- **스냅샷에 넣지 않는 것(구조적 금지 — §15.1.5 (3)/§15.6 G19 계승):** 실 URL·스토어 URL·실존 앱명(애초에 어느 스키마에도 없다) / `consentLabel`·`headline` 등 **화면 콘텐츠 원문**(사후 화면이 설치 목업을 재구성·재진입할 수 있게 된다 — 사후 화면은 열람 전용) / 원시 타임스탬프(표시 축이 아니다).
+- **중복 카드 금지 규칙:** `consented === true`인 항목은 리포트·리플레이에서 **`deceivedMoments` 카드가 교육 문구를 전담**하고, `mockScreenTimeline` 항목은 "설치 안내 화면이 표시됐습니다" 수준의 **사실 1줄만** 낸다(`correctAction`을 두 곳에 싣지 않는다).
+- **수집 지점은 리포트 생성 1곳:** `generateReportForSession`이 `sessions/{sid}/mockScreens`를 **1회 read**해 스냅샷·승격·`stages` 파생을 모두 처리한다(§15.1.5 (1)과 동형 — dual write 금지). 멱등 early-return 덕에 **최초 생성 시 1회만** 기록된다 → **AC-007 무변경**(문서 필드 추가일 뿐 두 번째 리포트·서브컬렉션을 만들지 않는다).
+- **`analyzeConversation` 무변경:** 승격은 `analyzeConversation`이 **끝난 뒤** 병합되는 후처리다. 시그니처·입력·짝짓기 루프에 손대지 않는다(§15.6 G3 재발 금지). `wasDeceived`만 **병합 후 배열 기준으로 재계산**한다(`merged.length > 0`).
+
+### 15.9.6 스키마·콜러블 계약 (Database.md/API.md 부록과 1:1)
+**`sessions/{sid}/mockScreens/{landingId}`** (신규 서브컬렉션, 문서 id = `landingId` → 멱등)
+
+| 필드 | 타입 | 필수 | 의미 |
+|---|---|---|---|
+| `landingId` | string | ✔ | `MessengerAttachment.fakeLandingId`와 동일 |
+| `kind` | `"credential-form"｜"app-install"` | ✔ | 서버가 카탈로그에서 확정(클라 입력 아님) |
+| `shownAt` | Timestamp | ✔ | 목업이 열린 시각. **최초 1회만** 세팅 |
+| `consentedAt` | Timestamp? | | 가짜 "권한 허용"에 응한 시각. **최초 1회만** 세팅. 부재 = 응낙 없음 |
+| `consentAnnouncedAt` | Timestamp? | | 사기범이 그 사실을 언급하도록 지시를 주입한 시각(§15.9.3, 1회 주입 보장) |
+
+- **저장하지 않는 것:** 참가자가 입력한 어떤 값도(AC-045 계승 — 애초에 이 화면의 입력은 컴포넌트 로컬 state를 벗어나지 않는다), 실 URL·앱명·권한 목록.
+- **rules:** 클라 직접 write **금지**(콜러블 경유). read는 본인 세션 소유자만(기존 `sessions/{sid}/**` 규칙과 동일 패턴).
+
+**`recordMockScreenEvent`**(신규 콜러블) — 요청 `{ sessionId, landingId, event: "shown" | "consented" }`, 응답 `{ ok: true }`
+
+| # | 서버 검증(순서 고정) | 실패 시 |
+|---|---|---|
+| 1 | 인증 + 세션 소유권(`loadOwnedSession`) | `permission-denied` |
+| 2 | `session.status === "active"` | `failed-precondition`(§15.6 G20 재발 방지) |
+| 3 | `MOCK_SCREENS[session.scenarioId]`에 그 `landingId`가 **소속**되는지 | `failed-precondition` — 클라가 임의 landingId를 넣어 가짜 "속은 순간"을 만들 수 없다(§15.6 **G12**와 동형 규칙) |
+| 4 | `event==="consented"`는 `kind==="app-install"`일 때만 허용 | `invalid-argument` |
+
+- 클라 호출 주체는 **페이지**(`src/app/session/messenger/page.tsx`)이고 **컴포넌트가 아니다** — `MessengerFakeLanding`은 `onInstallConsent()` 콜백만 위로 올린다. 이렇게 해야 §15.9.1 실측 3의 "이 파일에 네트워크 경로가 없다"는 불변식이 **kind 추가 후에도 그대로 유지**된다(기존 `onClose`/`onEndTraining`과 같은 패턴).
+- 이 콜러블은 **참가자 입력을 받지 않는다** — 인자는 세션 id·랜딩 id·고정 enum 3개뿐이다. AC-045의 "입력값 서버 미전송"은 그대로 성립한다.
+
+### 15.9.7 implementer 갭 (G50~G57 — §15.6 형식, 전부 실측 근거 있음)
+| # | 갭 | 근거 | 안 고치면 생기는 일 |
+|---|---|---|---|
+| G50 | **`MessengerFakeLanding`의 "네트워크 경로 없음"을 고정하는 자동 테스트가 없다** — T29 증거는 수동 grep이었다 | `.claude/agent-memory/implementer/project_codegate_t29_messenger_chat.md:50-54`. 선례 패턴: `src/lib/replay/smsTimelineScreens.test.ts:61-75`(소스 텍스트 스캔) | kind가 늘면서 누군가 `httpsCallable`·`fetch`·`window.open`·`http(s)://`를 들여와도 **아무도 못 잡는다**. AC-072/AC-045의 "경로가 존재하지 않음"이 증명 불가가 된다 — **kind 전수를 훑는 스캔 테스트를 T84/T86에서 신설할 것** |
+| G51 | **2단계를 "설치용 별도 세션"으로 만들고 싶은 유혹** | 오버레이가 화면상 독립적으로 보인다. 그러나 리포트는 `reportId = sessionId` 멱등(`generateReportCore.ts:33-37`) | 세션이 2개면 **리포트가 2개** → AC-007 파괴 + T70(되감기)·T74(아카이브)가 함께 깨진다. 세션은 **언제나 하나**다(§15.9.2) |
+| G52 | **설치 링크가 6턴 뒤에 나오면 2단계가 구조적으로 도달 불가** | `MESSENGER_ESCALATION_FALLBACK_TURNS = 6` / `MESSENGER_ESCALATION_MAX_USER_TURNS = 14`(`functions/src/shared/constants.ts:30,33`) | max-turn 폴백이 먼저 통화로 넘겨 **설치 단계가 영영 안 나온다**. 콘텐츠가 링크를 **초반 턴에** 제시하도록 저작하고, 실측 후 §13.3 수치를 갱신할 것 |
+| G53 | **`MOCK_SCREENS`의 landingId가 `LINK_LABELS`에 없으면 칩 라벨이 "확인하기" 기본값으로 뜬다** | `functions/src/roleplay/linkMarker.ts:16-20,37` | 설치 유도 링크가 무의미한 라벨로 표시돼 재현이 약해진다. **두 맵의 landingId 집합 정합을 드리프트 테스트로 고정**할 것 |
+| G54 | **설치 응낙으로 채널 전이를 바로 트리거하고 싶은 유혹** | AC-073 *"전이는 기존 구조화 신호 경로로만"*, §13.2 | **신규 전이 트리거 신설** = AC-073 위반 + 검증 경로 증가. 응낙은 **프롬프트 1줄 지시**로만 전달한다(§15.9.3) |
+| G55 | **`turnInstruction` 슬롯이 1개인데 문자 announce와 설치 지시가 경합할 수 있다** | `functions/src/roleplay/index.ts:165-170`(옵션 1개) | 한쪽이 조용히 사라진다. **문자 우선 + 설치는 이월**(§15.9.3) 규칙을 구현하고, 두 카탈로그가 같은 `scenarioId`를 공유하지 않음을 테스트로 고정할 것 |
+| G56 | **응낙 기록 실패 시 그 순간이 리포트에서 통째로 사라진다** | 콜러블 1회 호출에 의존 | 참가자는 속았는데 리포트는 "속지 않았습니다"라고 말한다(AC-008/009 오판정). **비차단은 유지하되 1회 재시도 + 실패 로그**를 남길 것 |
+| G57 | **되감기의 `findScammerLineMasked`가 사기범 앵커에서 한 칸 앞 대사를 집는다** | `functions/src/rewind/index.ts:46`(`for (let i = position - 1; …)`) | 되감기 화면이 **엉뚱한 대사**를 보여준다. 시작점을 `position`으로 일반화(기존 moment는 user 턴이라 결과 불변 — 회귀 0 테스트로 고정) |
+
+### 15.9.8 T84 완료 판정에 반드시 들어가야 할 증거(제안 — Tasks.md는 planner 소유)
+1. 모의 설치 화면 소스에 **실 설치 파일·스토어 URL·실존 앱명·OS 권한 API 호출·외부 네비게이션 0건**(kind 전수 스캔 테스트 출력).
+2. 설치 목업이 **`MessengerFakeLanding.tsx` 한 파일 안**에서 렌더된다(신규 컴포넌트 파일 0건).
+3. 3단계 완주 세션 **리포트 정확히 1개** + `stages` 3행이 전부 `reached:true`.
+4. **2단계에서 종료**한 세션도 리포트 정확히 1개 + `stages`의 `voice.reached === false`.
+5. **응낙 없이 닫은** 세션에서 `deceivedMoments` 증가 0 + **되감기 진입점 미노출**(AC-062).
+6. **응낙한** 세션에서 `deceivedMoments` 1건 증가 + 리플레이 주석이 **설치 링크 메시지에** 붙고 **중복 렌더 0건**(G17 부류) + 되감기가 **그 메시지 대사**를 연다(G57).
+7. 설치 카탈로그가 없는 **기존 12개 시나리오**의 `wasDeceived`/`deceivedMoments`/`tacticsUsed`/`preventionAdvice`/리플레이 타임라인이 **도입 전과 완전히 동일**(회귀 0).
+8. 전이가 **구조화 신호·max-turn·명시 버튼**으로만 발생(응낙 트리거 0건, G54).
+
+### 15.9.9 Open Questions·잔여 (이 절이 남기는 것)
+| ID | 질문 | 소관 |
+|---|---|---|
+| OQ-A5 | 리포트 **상단 1줄 구조 고지**와 미도달 단계 표기의 **확정 카피**(§15.9.5 e-3). 데이터 계약은 확정됐고 문구만 남았다 | ux-design |
+| OQ-A6 | 모의 설치 화면의 **확정 문안**(headline·bodyLines·consentLabel) — 실존 앱명 금지 경계 안에서의 표현 | ux-design(콘텐츠는 T84) |
+| OQ-A7 | **확인 무력화(AC-071) 순간의 `tacticCategory`** — 본 절은 설치 순간만 `link_or_install`로 확정했다. OQ-U25의 나머지 절반 | **T79(architect)** |
+| — | **T79와의 공유 경계(중복 설계 금지):** "모의 화면 상호작용 → `deceivedMoments` 승격"의 **메커니즘·앵커·인덱스 정합 규칙(§15.9.5 e-1/e-2)은 본 절이 확정**했다. T79는 확인 무력화 순간에 **같은 메커니즘을 재사용**하고 그 순간 고유의 앵커·`correctAction`만 정하면 된다 — **두 번째 승격 경로를 만들지 말 것** | T79 |
+| — | 헤더 "Based on PRD/UX Version"을 **v1.6 / 1.12**로 정정(§15.9 도입부 고지) | 병합 담당 architect |
+| — | §15.7 번호 중복(T57 UX Traceability ↔ T78 예약) 조정 | 병합 담당 architect |
