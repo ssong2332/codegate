@@ -16,7 +16,7 @@ export const messengerFriendLoanKakaoScenario: ScenarioDoc = {
   estimatedDuration: "약 5~8분",
   difficulty: "쉬움~중간 — 친분을 이용한 부탁 형태라 경계심이 낮은 편입니다",
   deepvoiceLines,
-  callerLabel: "지인 (사칭)",
+  callerLabel: "010-3320-7714",
   channel: "messenger",
   surface: "kakao",
 };

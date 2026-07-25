@@ -35,4 +35,12 @@ export type SendMessageResponse = {
    * 직접 분류하지 않는다(AC-024 불변).
    */
   escalation?: { toChannel: "voice" };
+  /**
+   * T68 추가(옵셔널, 하위호환, §15.1.2 폴백 경로) — 이번 턴에 통화 중 문자가 도착했다는 뜻.
+   * 서버가 `sessions/{sid}/inCallSms/{smsId}` 문서를 이미 write했고 그 턴의 프롬프트에
+   * `turnInstruction`(문자를 보냈다고 알리라는 1줄)을 주입했다.
+   * ⚠️ **이 필드는 렌더 소스가 아니다** — 화면은 `inCallSms` 구독(onSnapshot)으로 그린다
+   * (실시간 경로와 동일한 단일 소스). 클라가 즉시 반응할 수 있게 하는 힌트일 뿐이다.
+   */
+  sms?: { smsId: string };
 };

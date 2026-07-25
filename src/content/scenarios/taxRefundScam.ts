@@ -19,5 +19,5 @@ export const taxRefundScamScenario: ScenarioDoc = {
   difficulty: "중간 — 이익 유혹과 권위 소구가 결합됩니다",
   deepvoiceLines,
   voiceMode: "generic",
-  callerLabel: "국세청 환급팀 (사칭)",
+  callerLabel: "02-3187-9041",
 };

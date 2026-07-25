@@ -16,7 +16,7 @@ export const messengerSubsidySmishingSmsScenario: ScenarioDoc = {
   estimatedDuration: "약 5~8분",
   difficulty: "중간 — 이익 유혹과 채널 전환이 결합됩니다",
   deepvoiceLines,
-  callerLabel: "지원금 안내센터 (사칭)",
+  callerLabel: "1666-3390",
   channel: "messenger",
   surface: "sms",
   escalation: { toChannel: "voice", voiceMode: "generic" },

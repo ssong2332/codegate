@@ -20,4 +20,15 @@ export type CreateRealtimeCallResponse = {
    * 클라는 false면 난이도 배지를 표시하지 않는다(근거 없는 표기 금지).
    */
   difficultyApplied: boolean;
+  /**
+   * T68(§15.1.2, API.md T57 증분) — 이 시나리오의 통화 중 문자 **트리거만**(`smsId` + 몇 번째
+   * 사기범 턴 이후). **본문·인증번호·발신번호는 포함하지 않는다** — 도착 시점에 `deliverInCallSms`가
+   * 서버 카탈로그에서 렌더해 Firestore에 쓰고, 화면은 그 구독으로만 그린다(사전 유출 방지).
+   * 카탈로그가 없는 시나리오는 필드 부재.
+   *
+   * ⚠️ 이 카운팅은 §13.5 스킨과 같은 **프레젠테이션 층위**다 — 어떤 안전 판정도 게이팅하지 않는다.
+   * 클라가 임의 `smsId`를 보내도 서버가 시나리오 카탈로그 소속을 재검증하므로(G12), 위조의 최대
+   * 효과는 "자기 훈련용 모의 문자를 조금 일찍 보는 것"뿐이다.
+   */
+  inCallSmsTriggers?: { smsId: string; afterScammerTurns: number }[];
 };

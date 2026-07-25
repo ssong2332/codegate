@@ -9,9 +9,10 @@ import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
-import type { MessageDoc, ReportDoc, SessionDoc } from "../shared/types";
+import type { InCallSmsDoc, MessageDoc, ReportDoc, SessionDoc } from "../shared/types";
 import { analyzeConversation, buildPreventionAdvice, type AnalysisMessage } from "./analyzeConversation";
 import { computeDefenseGrade } from "./computeDefenseGrade";
+import { buildSmsTimeline, type SmsTimelineSource } from "./smsTimeline";
 import type { GenerateReportResponse } from "./types";
 
 export async function generateReportForSession(sessionId: string): Promise<GenerateReportResponse> {
@@ -61,6 +62,34 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   const analysis = analyzeConversation(messages, session.createdAt.toMillis(), weakenedTactics);
   const preventionAdvice = buildPreventionAdvice(analysis.tacticsUsed, analysis.wasDeceived);
 
+  // ②-b 통화 중 문자 이벤트 스냅샷(T89, §15.1.5, AC-059) — `sessions/{sid}/inCallSms`를 **1회 추가
+  // read**해 표시 전용 배열로 역정규화한다. 이 화면 데이터가 리포트 문서 안에 있으면 리플레이·리포트
+  // 화면이 **이미 읽고 있는 reports/{sid} 하나만으로** 타임라인을 그린다(서브컬렉션 추가 조회·신규
+  // firestore.rules 경로 불요 — §15.4.1 아카이브 역정규화와 동형).
+  //
+  // ⚠️ **판정 무변경이 이 배치의 전부다**(§15.6 G3/G22): 위 analyzeConversation은 이미 끝났고 이
+  // 배열은 그 **입력이 아니라 산출 뒤에 나란히 얹히는 값**이다. 문자가 N건이든 0건이든
+  // wasDeceived·deceivedMoments·tacticsUsed·preventionAdvice는 완전히 동일하다(회귀 테스트로 고정).
+  // 문자를 messages에 끼워 넣었다면 scammer(i)↔user(i+1) 짝짓기가 어긋나 판정이 손상됐을 것이다(G3).
+  const smsSnap = await sessionRef.collection("inCallSms").orderBy("arrivedAt", "asc").get();
+  const smsSources: SmsTimelineSource[] = smsSnap.docs.map((doc) => {
+    const data = doc.data() as InCallSmsDoc;
+    return {
+      smsId: data.smsId ?? doc.id,
+      kind: data.kind,
+      senderLabel: data.senderLabel,
+      body: data.body,
+      ...(data.linkDisplayText ? { linkDisplayText: data.linkDisplayText } : {}),
+      ...(data.anchorScammerTurn !== undefined
+        ? { anchorScammerTurn: data.anchorScammerTurn }
+        : {}),
+      arrivedAtMs: data.arrivedAt?.toMillis?.() ?? 0,
+      ...(data.openedAt ? { openedAtMs: data.openedAt.toMillis() } : {}),
+      ...(data.linkTappedAt ? { linkTappedAtMs: data.linkTappedAt.toMillis() } : {}),
+    };
+  });
+  const smsTimeline = buildSmsTimeline(smsSources, messages, session.createdAt.toMillis());
+
   // ③ 실패 아카이브(UX-030, T74)용 세션 메타 역정규화 — Architecture.md §15.4.1/§15.6 G8.
   // 아카이브는 리포트만 페이지 조회해 카드를 그리므로(별도 컬렉션 없음), 카드에 필요한 세션 메타가
   // 리포트에 없으면 항목 수만큼 세션을 추가 read해야 한다(N+1). 여기서는 session을 이미 읽었으므로
@@ -85,6 +114,9 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     // 아카이브 쿼리에는 uid 격리로 애초에 들어오지 않지만(1차 방어), 이 표식이 있으면 아카이브가
     // 한 번 더 걸러 낸다. 챌린지 세션이 아니면 필드를 아예 만들지 않는다.
     ...(session.challengeId ? { challengeId: session.challengeId } : {}),
+    // T89(§15.1.5) — 문자가 0건이면 필드 자체를 만들지 않는다(부재→빈 배열 취급, 무백필). 위
+    // 멱등 early-return 덕에 이 스냅샷은 **최초 리포트 생성 시 1회만** 기록된다(AC-007 무변경).
+    ...(smsTimeline.length > 0 ? { smsTimeline } : {}),
   };
   await reportRef.set(reportDoc);
 

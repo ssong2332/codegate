@@ -110,6 +110,9 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | arrivedAt | timestamp | indexed(정렬) | 도착 시각. 클라는 이 컬렉션을 `onSnapshot`으로 구독해 배너·문자함을 렌더한다(실시간·폴백 **양 경로 공통 단일 소스**) |
 | openedAt | timestamp? | | 사용자가 오버레이에서 열어본 시각(`recordInCallSmsEvent`) |
 | linkTappedAt | timestamp? | | 링크 칩 탭 시각. **v1에서 이 값들은 리포트 판정(analyzeConversation) 입력이 아니다** — 리플레이·표시용(근거 없는 판정 변경 금지) |
+| anchorScammerTurn | number | required(신규 문서) | **§15.1.5 증분.** "이 문자가 도착한 시점까지 `messages`에 존재하는 `role==="scammer"` 문서 수". **클라 입력이 아니라 서버가 카탈로그 값에서 계산**해 `functions/src/inCallSms/buildDoc.ts` **한 곳에서** 기록한다(실시간 `deliverInCallSms`·폴백 `sendMessage` 두 write 경로가 이미 이 헬퍼를 공유). 값: 실시간=`item.afterScammerTurns`, 폴백=`item.afterScammerTurns - 1`(폴백은 N번째 사기범 응답을 **만들기 직전**에 write하므로 완료된 발화가 하나 적다). **리포트 생성 시점에 실제 `turnIndex`로 해결**돼 `reports/{rid}.smsTimeline[].anchorTurnIndex`가 된다. 기존 문서는 부재 → 앵커 미해결로 취급(`anchorResolved:false`, 무백필) |
+
+> **⚠️ 이 필드가 왜 필요한가(시계로 병합할 수 없는 이유 — 실측):** 실시간 경로의 `messages.createdAt`은 실제 발화 시각이 아니라 **통화 종료 시점에 합성된 값**이다(`functions/src/realtime/submitTranscript.ts:64,78` — `baseTime = Date.now()`(제출 시각) + `i*1000`). 반면 `arrivedAt`은 통화 **중** 실제 시각이다. 시간순으로 병합하면 **모든 문자가 대화 맨 앞에 몰리고**, 폴백 텍스트 경로는 정상 동작해 **두 경로가 갈라진다**. 그래서 병합 축을 시계가 아니라 **턴 앵커**로 둔다(Architecture.md §15.1.5 (4), §15.6 G15).
 
 > **쓰기 주체는 Functions(admin)뿐**이다(클라 직접 write 거부). 실시간 경로는 `deliverInCallSms`, 폴백 텍스트 경로는 `sendMessage`가 같은 문서를 쓴다. `MessengerAttachment`(메신저 채팅 첨부)는 **무변경** — OTP형은 링크가 아니라 표시용 코드라 그 타입에 담기지 않는다(부재-오버로드 회피, §15.1.2).
 > **폐기(AC-021):** 이 문서들은 Storage 산출물이 아니라 마스킹 불요한 서버 저작 텍스트이므로 `messages`와 동일하게 세션 종료 후에도 잔존한다(리플레이 UX-018 입력). Storage·ElevenLabs voice 폐기 경로는 무변경.
@@ -168,6 +171,27 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | channel | string? | `voice`\|`messenger` | 카드의 채널 표기(보이스/메신저) |
 | difficultyLevel | string? | `beginner`\|`intermediate`\|`advanced` | 카드의 난이도 표기(P-22 동일 라벨). 부재→`intermediate` |
 | challengeId | string? | | 2인 챌린지 체험 세션에서 나온 리포트 표식. **아카이브는 이 값이 있는 리포트를 제외한다**(AC-043/055 2차 하드닝 — 1차 방어는 익명 uid 소유권 격리, §15.4.3) |
+
+**§15.1.5 증분 — 통화 중 문자 이벤트 스냅샷(옵셔널, 하위호환, 표시 전용):** AC-059의 *"문자 확인·링크 탭·인증번호 노출은 하나의 세션 타임라인에 기록되어 리포트(AC-026)·리플레이 해설(AC-038)에서 함께 다뤄진다"* 를 충족한다. 리포트 생성 시점에 `sessions/{sid}/inCallSms`를 **1회 read**해 **최종 표시 순서로 정렬한 배열**을 기록하므로, 리플레이·리포트 화면은 이미 읽고 있는 `reports/{sid}` 하나만으로 타임라인을 그린다(서브컬렉션 추가 조회·신규 rules 경로 불요).
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| smsTimeline | array\<SmsTimelineEntry\>? | | 부재→빈 배열 취급(무백필). **최초 리포트 생성 시 1회만** 기록되고 이후 갱신되지 않는다(`reportId=sessionId` 멱등 early-return 유지 — **AC-007 무변경**). 세션 종료 후에는 문자가 더 생길 수 없다(`deliverInCallSms`가 `status:"active"`만 허용) |
+
+```
+SmsTimelineEntry = {
+  smsId, kind: "account"|"link"|"otp", senderLabel, body,
+  linkDisplayText?,        // kind==="link"일 때만. **표시용 텍스트** — 컨트롤로 렌더 금지
+  anchorTurnIndex: number, // 이 turnIndex의 메시지 '뒤'에 놓인다. -1 = 대화 맨 앞
+  anchorResolved: boolean, // false = 위치 확정 실패 → 화면이 정직하게 고지(조용한 누락 금지)
+  timeLabel?: string,      // 앵커 메시지의 경과 초에서 파생 — deceivedMoments와 **같은 시간축**
+  events: Array<{ event: "sms_received"|"sms_opened"|"sms_otp_shown"|"sms_link_tapped",
+                  what: string, correctAction?: string }>
+}
+```
+
+> **스냅샷에 절대 넣지 않는 필드(구조적 금지 — Architecture.md §15.1.5 (3)/§15.6 G19):** `fakeLandingId`(넣으면 사후 열람 화면이 가짜 랜딩 재진입 컨트롤을 만들 수 있다 — AC-045는 **세션 중** 재현 규정이고 UX-018은 Read-only 화면), `otpCode`(본문에 이미 있고, 따로 두면 "복사 가능한 필드"가 되어 AC-061의 *앱이 복사·전송 동선을 대신 만들지 않는다* 취지와 어긋난다), `arrivedAt`/`openedAt`/`linkTappedAt` 원시 타임스탬프(표시 축이 아니다 — 넣어 두면 화면이 실수로 그 축을 써서 실시간 경로에서 순서가 뒤집힌다), `url`(애초에 어느 스키마에도 없다 — AC-032/045).
+> **판정 무변경(AC-007/008/009/026 보호):** `smsTimeline`은 `analyzeConversation`의 **입력이 아니라 산출 뒤에 나란히 얹히는 배열**이다. `wasDeceived`·`deceivedMoments`·`tacticsUsed`·`preventionAdvice`는 문자 유무와 무관하게 동일해야 하며(회귀 테스트 필수), 문자 상호작용으로 `wasDeceived`를 뒤집거나 `deceivedMoments`에 항목을 추가하는 것은 **금지**다(§15.6 G22 — AC-062/068/010/011이 연쇄로 흔들린다).
 
 #### `reports/{reportId}/rewindAttempts/{attemptId}`  — 즉시 되감기 시도 기록 (T57, UX-028/UF-009, Architecture.md §15.2.2)
 > **⚠️ AC-007 불변식 보호가 이 서브컬렉션의 존재 이유다.** 되감기는 원 리포트를 **읽기 전용으로만** 참조한다 — `reports/{reportId}` 문서 필드(`wasDeceived`·`deceivedMoments`·`tacticsUsed`·`preventionAdvice`)를 **update하지 않고**, 두 번째 `reports/*` 문서를 **만들지 않으며**, `updateDefenseGrade`(`users.defenseGrade`/`sessionCount`)를 **호출하지 않는다**. 최상위 컬렉션 쿼리(`db.collection("reports")`)는 서브컬렉션 문서를 포함하지 않으므로 기존 집계·아카이브가 오염되지 않는다.

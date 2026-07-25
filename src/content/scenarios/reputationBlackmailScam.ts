@@ -23,5 +23,5 @@ export const reputationBlackmailScamScenario: ScenarioDoc = {
   difficulty: "높음 — 수치심과 공포를 이용한 협박이라 심리적 부담이 클 수 있습니다",
   deepvoiceLines,
   voiceMode: "generic",
-  callerLabel: "신원 불상 (협박범)",
+  callerLabel: "+86 131-8842-0067",
 };

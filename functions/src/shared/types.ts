@@ -170,6 +170,68 @@ export type ArtifactDoc = {
   createdAt: FirebaseFirestore.Timestamp;
 };
 
+// --- sessions/{sessionId}/inCallSms/{smsId} (T68, UX-027/UF-008, §15.1.2, AC-059/060/061) ---
+//
+// ⚠️ **왜 `messages`가 아니라 별도 서브컬렉션인가(치명적 — §15.6 G3)**: `analyzeConversation`은
+// `messages`를 turnIndex 순으로 훑으며 **scammer(i) ↔ user(i+1)를 짝지어** 속은 순간을 판정한다
+// (`report/analyzeConversation.ts`). 문자 도착을 메시지 행으로 끼워 넣으면 이 짝짓기가 통째로
+// 어긋나 **리포트 판정이 손상된다**(AC-008/009/026 회귀). 문자는 대화 턴이 아니라 통화 중 도착한
+// 별개 객체이므로 컬렉션을 분리한다.
+//
+// ⚠️ `MessengerAttachment`는 **무변경**이다 — OTP형은 링크가 아니라 표시용 코드라
+// `{kind:"link",displayText,fakeLandingId,harmless}`에 담기지 않는다. 억지 확장은 "link인데
+// fakeLandingId가 없는" 부재-오버로드를 만든다(§14.9.1이 반복 기각한 안티패턴).
+export type InCallSmsKind = "account" | "link" | "otp";
+export type InCallSmsDoc = {
+  smsId: string; // = 문서 id. 서버가 IN_CALL_SMS[session.scenarioId] 소속을 재검증한 값만 기록
+  kind: InCallSmsKind;
+  senderLabel: string; // 실존하지 않는 모의값(AC-005/013)
+  body: string; // 서버 카탈로그가 원천 — 사용자·LLM 텍스트가 아니므로 PII 마스킹 대상이 아니다
+  otpCode?: string; // kind==="otp"일 때만. 콘텐츠 고정 리터럴(런타임 난수 금지)
+  linkDisplayText?: string; // kind==="link"일 때만
+  fakeLandingId?: string; // kind==="link"일 때만. **url/실 URL 필드는 이 스키마에 존재하지 않는다**
+  arrivedAt: FirebaseFirestore.Timestamp;
+  openedAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("opened")
+  linkTappedAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("link_tapped")
+  // §15.1.5 증분 — "이 문자가 도착한 시점까지 messages에 존재하는 role==='scammer' 문서 수".
+  // 클라 입력이 아니라 **서버가 카탈로그 값에서 계산**해 buildInCallSmsDoc 한 곳에서만 기록한다
+  // (실시간·폴백 두 write 경로가 이 헬퍼를 공유하므로 값 산출이 갈라지지 않는다, §15.1.5 (6)).
+  // 타입상 옵셔널인 이유는 **T68 시점에 이미 쓰인 기존 문서에는 없기 때문**이다(무백필, Migration
+  // Policy) — 신규 문서에는 항상 채워진다(buildDoc 단위 테스트가 고정). 부재 문서는 리포트
+  // 스냅샷에서 앵커 미해결(anchorResolved:false)로 정직하게 표기된다.
+  anchorScammerTurn?: number;
+};
+
+// --- reports/{reportId}.smsTimeline (T89, §15.1.5, AC-059) — 표시 전용 스냅샷 ---
+// ⚠️ 이 배열은 analyzeConversation의 **입력이 아니라 산출 뒤에 나란히 얹히는 값**이다.
+// wasDeceived·deceivedMoments·tacticsUsed·preventionAdvice는 문자 유무와 무관하게 동일하며,
+// 문자 상호작용으로 판정을 뒤집지 않는다(§15.6 G22 — AC-062/068/010/011 연쇄 보호).
+export type SmsTimelineEventKind =
+  | "sms_received"
+  | "sms_opened"
+  | "sms_otp_shown"
+  | "sms_link_tapped";
+export type SmsTimelineEvent = {
+  event: SmsTimelineEventKind;
+  what: string;
+  correctAction?: string; // 없는 이벤트는 화면이 카드 하단 블록만 생략한다(카드 형식은 동일)
+};
+export type SmsTimelineEntry = {
+  smsId: string;
+  kind: InCallSmsKind;
+  senderLabel: string;
+  body: string;
+  linkDisplayText?: string; // kind==="link"일 때만. **표시용 텍스트** — 컨트롤로 렌더 금지
+  anchorTurnIndex: number; // 이 turnIndex의 메시지 '뒤'에 놓인다. -1 = 대화 맨 앞
+  anchorResolved: boolean; // false = 위치 확정 실패 → 화면이 정직하게 고지(조용한 누락 금지)
+  timeLabel?: string; // 앵커 메시지의 경과 초에서 파생 — deceivedMoments와 **같은 시간축**
+  events: SmsTimelineEvent[]; // 최소 1건(sms_received)
+};
+// ⚠️ 스냅샷에 **절대 넣지 않는 필드**(§15.1.5 (3) 금지 표 / §15.6 G19): fakeLandingId(사후 화면이
+// 가짜 랜딩 재진입 컨트롤을 만들 수 있다), otpCode(body에 이미 있고 따로 두면 "복사 가능한 필드"가
+// 된다), arrivedAt/openedAt/linkTappedAt 원시 타임스탬프(표시 축이 아니다 — 실시간 경로에서
+// createdAt이 합성값이라 시각으로 정렬하면 순서가 뒤집힌다), url(어느 스키마에도 없다).
+
 // --- scenarios/{scenarioId} (AC-001/002, 공개 메타) ---
 export type DeepvoiceLine = { lineId: string; text: string };
 export type ScenarioDoc = {
@@ -229,6 +291,11 @@ export type ReportDoc = {
   // 이유는 장래 "익명 세션 승격" 같은 기능이 생겨도 챌린지 실패 이력이 누적 화면에 섞이지 않게
   // 하기 위한 벨트+멜빵이다.
   challengeId?: string;
+  // T89 추가(옵셔널, 하위호환 — §15.1.5, AC-059) — 통화 중 문자 이벤트의 **표시 전용 스냅샷**.
+  // 리포트 생성 시점에 sessions/{sid}/inCallSms를 1회 read해 최종 표시 순서로 정렬해 기록하며,
+  // 멱등 early-return 덕에 **최초 생성 시 1회만** 쓰인다(AC-007 무변경 — 두 번째 리포트 문서도
+  // 서브컬렉션도 만들지 않는다). 문자가 0건이면 필드 자체를 만들지 않는다(부재→빈 배열 취급).
+  smsTimeline?: SmsTimelineEntry[];
 };
 
 // --- reports/{reportId}/rewindAttempts/{attemptId} (T70, UX-028/UF-009, §15.2.2, AC-062/063) ---
