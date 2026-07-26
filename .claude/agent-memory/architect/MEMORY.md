@@ -1,1 +1,2 @@
 - [ElevenLabs voice selection constraints](reference_elevenlabs_voice_selection.md) — client-only TTS override, no server voice-pin, account-scoped IVC ids; drove ADR-0006 A2
+- [Gemini Live session constraints](reference_gemini_live_session_constraints.md) — 음성·프롬프트·도구는 토큰에 서버 고정(세션 중 전환 불가); 상대 전환은 지시 주입+연출로
