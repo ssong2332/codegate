@@ -33,3 +33,4 @@
 - [T84 모의 앱 설치·3단계 결합](project_codegate_t84_install_chain.md) — 설계에 없던 문구 전달 경로, kindRank 병렬 충돌, 축 커버리지 게이트 연쇄, 격리 에뮬레이터 config 절대경로 불가.
 - [T85 난이도 4레버](project_codegate_t85_difficulty_levers.md) — 설계 숫자가 병합 현실보다 낡았을 때, 관측 불가 호출부의 소스 게이트, 커버리지 공백 해소의 연쇄, 문구 삭제가 산출물인 경우.
 - [T95 확인 가로채기 전용 시나리오](project_codegate_t95_verify_scenario.md) — 시나리오 1종 추가 시 걸리는 게이트 9곳 전체 표, PRD 축 표에 없는 신규 좌표 판단, D3에 D2·D5를 섞으면 안 되는 이유.
+- [T86 무해화 금지 패턴 공통화](project_codegate_t86_harmlessness_guards.md) — 전역 금지어가 제품 요구를 때리는 3곳, JS `\b`가 한글에서 죽는 함정, 금지형 문맥 예외, 우회 방지 3겹 게이트.

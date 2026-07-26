@@ -20,6 +20,7 @@ import { VERIFY_INTERCEPT } from "../verifyIntercept";
 import { SCENARIO_PROMPTS } from "../index";
 import { PUBLIC_SCENARIOS } from "../publicMeta";
 import { extractLinkMarker } from "../../roleplay/linkMarker";
+import { REAL_WORLD_APP_NAMES } from "./harmlessnessPatterns";
 
 const allItems = Object.values(MOCK_SCREENS).flat();
 const allText = allItems
@@ -27,6 +28,14 @@ const allText = allItems
   .join("\n");
 
 test("[AC-072] 카탈로그 타입·값 어디에도 실 설치 경로(URL·스토어·패키지명·파일)가 없다", () => {
+  // ⚠️ **주의(T86, 2026-07-26) — 아래 목록의 `/\bplay\s*스토어\b/`·`/\b앱\s*스토어\b/` 두 줄은
+  // 사실상 아무것도 잡지 못한다.** JS의 `\b`는 **ASCII 단어 경계**라 한글 앞뒤에서는 경계가
+  // 성립하지 않는다(`"앱 스토어에서 받으세요"` → false). **보호막으로 착각하지 마라.**
+  // 실제 방어는 `harmlessnessPatterns.ts`의 `STORE_AND_INSTALL_PATTERNS`(`\b` 없는 형태)가
+  // 이 카탈로그를 포함한 **전 콘텐츠 도메인**에 걸어 두고 있으며, 죽은 패턴 재발은 그 파일의
+  // `[T86/생존]` 테스트가 막는다. 이 줄들은 T86 범위(테스트 확장) 밖이라 **단언을 고치지 않고
+  // 사실만 적어 둔다** — 고치려면 별도 태스크로 등재할 것.
+  //
   // ① 값에 URL·파일 확장자·스토어 표기가 없다.
   for (const forbidden of [
     /https?:\/\//i,
@@ -61,22 +70,9 @@ test("[역검증] 스토어 URL이 섞이면 위 금지 검사가 실제로 실�
 });
 
 // 실존 앱·서비스명이 부분 문자열로도 등장하면 안 된다(AC-072 "실존 앱명" 금지).
-const REAL_WORLD_APP_NAMES = [
-  "카카오뱅크",
-  "토스",
-  "네이버",
-  "국민은행",
-  "KB스타뱅킹",
-  "신한",
-  "우리은행",
-  "정부24",
-  "손택스",
-  "홈택스",
-  "AnyDesk",
-  "TeamViewer",
-  "애니데스크",
-  "팀뷰어",
-];
+//
+// T86 — 목록 자체는 `harmlessnessPatterns.ts`가 정본이다(이 목록이 모의 화면 카탈로그에만 걸려
+// 있어 확인 무력화·통화 중 문자·시나리오 프롬프트는 검사를 안 탔다). **이 파일의 단언은 그대로**다.
 
 test("[AC-072] 실존 앱·서비스명이 카탈로그 문구에 부분 문자열로도 없다", () => {
   for (const name of REAL_WORLD_APP_NAMES) {

@@ -15,6 +15,7 @@ import { buildVerifyInterceptDoc } from "../../verifyIntercept/buildDoc";
 import { buildSystemPrompt } from "../../roleplay/promptAssembly";
 import { PUBLIC_SCENARIOS } from "../publicMeta";
 import { SCENARIO_PROMPTS } from "../index";
+import { REAL_WORLD_FORBIDDEN } from "./harmlessnessPatterns";
 
 const allItems = Object.values(VERIFY_INTERCEPT);
 
@@ -47,20 +48,9 @@ test("[AC-033/AC-005] displayNumber는 마지막 네 자리가 0000인 고정 �
 
 // ⚠️ 검사 대상은 **카탈로그의 deskLabel/displayNumber로 한정**한다(§16.1.3 경고) — AC-071은 리포트
 // 신고처로 112·1332를 **명시 요구**하므로 이 목록을 전역 금지어로 만들면 AC-071을 스스로 위반한다.
-const REAL_WORLD_FORBIDDEN = [
-  "112",
-  "1332",
-  "1577",
-  "1588",
-  "1544",
-  "국세청",
-  "경찰청",
-  "금융감독원",
-  "검찰청",
-  "금감원",
-  "우체국",
-  "관세청",
-];
+//
+// T86 — 목록 자체는 `harmlessnessPatterns.ts`가 정본이다(같은 목록이 카탈로그마다 복제되던 것을
+// 합쳤다). **이 파일의 단언은 그대로**이며, 정본이 항목을 늘리면 여기도 함께 강해진다.
 
 test("[AC-033/AC-005] deskLabel·displayNumber에 실존 기관명·실존 대표번호가 부분 문자열로도 없다", () => {
   for (const item of allItems) {

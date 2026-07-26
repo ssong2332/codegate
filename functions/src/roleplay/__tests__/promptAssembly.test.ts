@@ -2,6 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "../promptAssembly";
 import { SCENARIO_PROMPTS, FAMILY_ACCIDENT_SCENARIO_ID } from "../../scenarios";
+// T86 — 신규 콘텐츠(T83 확인 무력화 · T84 모의 설치 · T85 난이도 블록 · T95 전용 시나리오)가
+// **실제 조립 값**으로 매트릭스에 들어오게 하는 입력들.
+import { hasInCallSms, IN_CALL_SMS } from "../../scenarios/inCallSms";
+import { hasVerifyIntercept, VERIFY_INTERCEPT } from "../../scenarios/verifyIntercept";
+import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_SCREENS } from "../../scenarios/mockScreens";
+import { isL3Procedural } from "../l3Depth";
+import { scanText } from "../../scenarios/__tests__/harmlessnessPatterns";
 
 const scenarioPrompt = SCENARIO_PROMPTS[FAMILY_ACCIDENT_SCENARIO_ID];
 
@@ -535,4 +542,226 @@ test("[T83 전수] 문자 + 확인 무력화가 동시에 켜져도 가드레일
     }
   }
   assert.equal(combos, ids.length * 3);
+});
+
+// ── T86 무해화 경계 회귀 테스트 확장 — AC-075 (a) ────────────────────────────
+//
+// **왜 또 전수 테스트인가(기존 것과 무엇이 다른가).** 위에 이미 전수 테스트가 5건 있지만
+// 저마다 **옵션을 하나씩만 켠다**:
+//   | 기존 | 켜는 옵션 | 조합 수 |
+//   |---|---|---|
+//   | `[전수]` | 난이도 × 턴지시 | 14×3×2 = 84 |
+//   | `[T68 전수]` | 문자 + 턴지시 | 14×3 = 42 |
+//   | `[T83 전수]` ① | 확인 무력화 × 턴지시 | 14×3×2 = 84 |
+//   | `[T83 전수]` ② | 문자 + 확인 무력화 | 14×3 = 42 |
+//   | `[T85 전수]` | 난이도 × L3 | 14×3×2 = 84 |
+// 그래서 **L3(T85)가 문자·확인 무력화와 함께 켜지는 조합은 어디에도 없었고**, 턴 지시도 전부
+// 자리표시자 문자열("(문자 도착 알림 지시)")이라 **T83·T84가 실제로 넣는 지시 문구가 조립을
+// 통과한 적이 없다.** AC-075는 "신규 콘텐츠가 **실제 프롬프트로 조립될 때에도**"를 요구한다.
+//
+// ⚠️ 기존 5건은 **손대지 않는다**(각자 자기 태스크의 계약을 고정하고 있다). 아래는 증분이다.
+
+/** 조립 순서 불변식 — 이 함수 하나가 아래 매트릭스 전부의 판정 기준이다. */
+function assertGuardrailIsLast(assembled: string, guardrail: string, where: string): void {
+  assert.ok(
+    assembled.trimEnd().endsWith(guardrail.trimEnd()),
+    `guardrailPreamble이 맨 마지막이 아니다 — ${where}`,
+  );
+}
+
+/** 세 난이도·모든 옵션에서 절대 밀려나면 안 되는 문장(AC-005/AC-065/T91). */
+const NON_NEGOTIABLE_SENTENCES = [
+  "페이로드는 가상값만 쓴다",
+  "반드시 구체적인 요구에 도달한다",
+  "실존 기관의 실제 계좌·실제 동작하는 앱/링크·실제 연락처",
+];
+
+/** 이 시나리오가 실제로 받는 옵션 값(카탈로그·판정 함수에서 그대로 가져온다 — 손으로 안 정한다). */
+function realOptionsFor(scenarioId: string): {
+  inCallSmsEnabled: boolean;
+  verifyInterceptEnabled: boolean;
+  l3Procedural: boolean;
+} {
+  return {
+    inCallSmsEnabled: hasInCallSms(scenarioId),
+    verifyInterceptEnabled: hasVerifyIntercept(scenarioId),
+    l3Procedural: isL3Procedural(scenarioId),
+  };
+}
+
+/** T83·T84가 실제로 `turnInstruction`에 싣는 문구 전부(시나리오별). */
+function realTurnInstructionsFor(scenarioId: string): string[] {
+  const instructions: string[] = [];
+  const verify = VERIFY_INTERCEPT[scenarioId];
+  if (verify) instructions.push(verify.announceInstruction, verify.reconnectInstruction);
+  for (const sms of IN_CALL_SMS[scenarioId] ?? []) instructions.push(sms.announceInstruction);
+  if ((MOCK_SCREENS[scenarioId] ?? []).length > 0) {
+    instructions.push(MOCK_INSTALL_CONSENT_INSTRUCTION);
+  }
+  return instructions;
+}
+
+const LEVELS = ["beginner", "intermediate", "advanced"] as const;
+
+test("[T86 전수①] 네 옵션(문자·확인 무력화·L3·턴지시)의 **전 조합**에서 가드레일 최후미와 무해화 문장이 살아 있다(AC-065/AC-075)", () => {
+  const ids = Object.keys(SCENARIO_PROMPTS);
+  assert.ok(ids.length >= 14, `시나리오가 14종 이상이어야 한다(현재 ${ids.length}종)`);
+
+  let combos = 0;
+  const assembledVariants = new Set<string>();
+  for (const id of ids) {
+    const prompt = SCENARIO_PROMPTS[id];
+    for (const difficultyLevel of LEVELS) {
+      for (const inCallSmsEnabled of [false, true]) {
+        for (const verifyInterceptEnabled of [false, true]) {
+          for (const l3Procedural of [false, true]) {
+            for (const turnInstruction of [undefined, "(턴 지시)"]) {
+              const assembled = buildSystemPrompt(prompt, {
+                difficultyLevel,
+                inCallSmsEnabled,
+                verifyInterceptEnabled,
+                l3Procedural,
+                ...(turnInstruction ? { turnInstruction } : {}),
+              });
+              combos += 1;
+              assembledVariants.add(assembled);
+              const where =
+                `${id}/${difficultyLevel}/sms=${inCallSmsEnabled}/verify=${verifyInterceptEnabled}/` +
+                `l3=${l3Procedural}/turn=${Boolean(turnInstruction)}`;
+              assertGuardrailIsLast(assembled, prompt.guardrailPreamble, where);
+              for (const sentence of NON_NEGOTIABLE_SENTENCES) {
+                assert.ok(
+                  assembled.includes(sentence),
+                  `무해화·요구 문장 유실 — ${where}: ${sentence}`,
+                );
+              }
+              // 켠 블록은 전부 가드레일 **앞**에 있어야 한다(뒤로 새면 인젝션 방어가 무너진다).
+              const guardAt = assembled.indexOf(prompt.guardrailPreamble);
+              if (verifyInterceptEnabled) {
+                assert.ok(
+                  assembled.indexOf("[확인 안내 — 이 훈련에서만 적용]") < guardAt,
+                  `확인 안내 블록이 가드레일 뒤에 있다 — ${where}`,
+                );
+              }
+              if (difficultyLevel !== "intermediate") {
+                assert.ok(assembled.indexOf("[난이도 — ") < guardAt, `난이도 블록 위치 — ${where}`);
+              }
+              if (difficultyLevel === "advanced" && l3Procedural) {
+                assert.ok(assembled.indexOf(D4_BLOCK_HEADER) < guardAt, `D4 블록 위치 — ${where}`);
+              }
+              if (turnInstruction) {
+                assert.ok(assembled.indexOf(turnInstruction) < guardAt, `턴 지시 위치 — ${where}`);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  assert.equal(combos, ids.length * 3 * 2 * 2 * 2 * 2, "네 옵션의 전 조합을 다 돌아야 한다");
+
+  // 조립 **산출물** 자체가 금지 패턴을 통과한다(중복 문자열은 한 번만 훑는다 — 같은 검사다).
+  for (const assembled of assembledVariants) {
+    const violations = scanText(assembled, "assembledPrompt");
+    assert.deepEqual(
+      violations.map((v) => `${v.family}: ${v.label} :: ${v.excerpt}`),
+      [],
+      "조립된 시스템 프롬프트에 금지 패턴이 있다 — 블록 문구를 고쳐라(검사를 완화하지 마라)",
+    );
+  }
+});
+
+test("[T86 전수②] T83·T84가 실제로 싣는 **진짜 턴 지시 문구**가 조립돼도 불변식이 유지된다(AC-075)", () => {
+  // 지금까지 전수 테스트의 턴 지시는 전부 자리표시자였다 — 실제 문구는 따옴표·괄호·별표·개행이
+  // 섞여 있어 조립 결과의 마지막 블록 판정에 영향을 줄 수 있는 유일한 입력이다.
+  let combos = 0;
+  const scanned = new Set<string>();
+  for (const id of Object.keys(SCENARIO_PROMPTS)) {
+    const prompt = SCENARIO_PROMPTS[id];
+    const options = realOptionsFor(id);
+    for (const turnInstruction of realTurnInstructionsFor(id)) {
+      for (const difficultyLevel of LEVELS) {
+        const assembled = buildSystemPrompt(prompt, {
+          ...options,
+          difficultyLevel,
+          turnInstruction,
+        });
+        combos += 1;
+        const where = `${id}/${difficultyLevel}/실지시`;
+        assertGuardrailIsLast(assembled, prompt.guardrailPreamble, where);
+        assert.ok(
+          assembled.indexOf(turnInstruction) < assembled.indexOf(prompt.guardrailPreamble),
+          `실제 턴 지시가 가드레일 뒤에 있다 — ${where}`,
+        );
+        for (const sentence of NON_NEGOTIABLE_SENTENCES) {
+          assert.ok(assembled.includes(sentence), `무해화·요구 문장 유실 — ${where}`);
+        }
+        scanned.add(assembled);
+      }
+    }
+  }
+  // 실제 지시를 가진 시나리오가 하나도 없으면 이 테스트가 조용히 무의미해진다.
+  const expected =
+    (Object.keys(VERIFY_INTERCEPT).length * 2 +
+      Object.values(IN_CALL_SMS).flat().length +
+      Object.keys(MOCK_SCREENS).length) *
+    3;
+  assert.equal(combos, expected, `실 턴 지시 조합 수(예상 ${expected})`);
+  assert.ok(combos >= 60, `실 턴 지시 조합이 60건 이상이어야 한다(현재 ${combos})`);
+
+  for (const assembled of scanned) {
+    assert.deepEqual(scanText(assembled, "assembledPrompt"), []);
+  }
+});
+
+test("[T86] 신규 D3/D4/E3 콘텐츠를 실은 **고급** 프롬프트가 하드 금지 2항을 그대로 갖는다(G67 역방향 확인 지점)", () => {
+  // `promptAssembly.ts`의 D4 블록 주석이 "T86이 역방향으로 검증한다"고 지목한 자리다.
+  const proceduralIds = Object.keys(SCENARIO_PROMPTS).filter((id) => isL3Procedural(id));
+  assert.ok(proceduralIds.length >= 10, `L3 절차형 시나리오 수(현재 ${proceduralIds.length})`);
+
+  for (const id of proceduralIds) {
+    const prompt = SCENARIO_PROMPTS[id];
+    const advanced = buildSystemPrompt(prompt, {
+      ...realOptionsFor(id),
+      difficultyLevel: "advanced",
+    });
+    assert.ok(advanced.includes(D4_BLOCK_HEADER), `${id}: D4 블록이 실려야 한다`);
+    assert.ok(
+      advanced.includes("이 대화 안에서만 존재하는 가상값이다"),
+      `${id}: 가상값 명문(G67 하드 금지 ①)이 있어야 한다`,
+    );
+    assert.ok(
+      advanced.includes("실존 기관의 실제 절차·실제 창구 운영 방식·실제 신청 경로를 설명하지 않는다"),
+      `${id}: 실제 절차 미설명 명문(G67 하드 금지 ②)이 있어야 한다`,
+    );
+    assertGuardrailIsLast(advanced, prompt.guardrailPreamble, `${id}/advanced`);
+  }
+
+  // 축소형(가족·지인 사칭 4종)에는 D4 블록이 실리지 않는다 — 반대 방향도 함께 고정한다.
+  for (const id of Object.keys(SCENARIO_PROMPTS).filter((sid) => !isL3Procedural(sid))) {
+    const advanced = buildSystemPrompt(SCENARIO_PROMPTS[id], {
+      ...realOptionsFor(id),
+      difficultyLevel: "advanced",
+    });
+    assert.equal(advanced.includes(D4_BLOCK_HEADER), false, `${id}: 축소형에 D4가 실렸다`);
+  }
+});
+
+test("[T86/역검증] 가드레일이 마지막이 아니면 위 판정 함수가 실제로 실패한다", () => {
+  // ⚠️ 실제 조립 코드를 오염시켰다 되돌리는 방식은 쓰지 않는다 — 되돌리기를 잊으면 그대로 남는다.
+  // 판정 함수에 "가드레일 뒤에 지시가 붙은" 문자열을 직접 만들어 넣어 확인한다.
+  const guardrail = scenarioPrompt.guardrailPreamble;
+  const broken = `${buildSystemPrompt(scenarioPrompt, {
+    difficultyLevel: "advanced",
+  })}\n\n[난이도 — 고급: 추가 지시]`;
+  assert.throws(
+    () => assertGuardrailIsLast(broken, guardrail, "역검증"),
+    /guardrailPreamble이 맨 마지막이 아니다/,
+  );
+  // 정상 산출물은 통과한다(판정 함수가 항상 던지는 것이 아님을 함께 보인다).
+  assertGuardrailIsLast(
+    buildSystemPrompt(scenarioPrompt, { difficultyLevel: "advanced" }),
+    guardrail,
+    "역검증-정상",
+  );
 });
