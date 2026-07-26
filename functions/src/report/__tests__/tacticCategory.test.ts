@@ -113,3 +113,36 @@ test("규칙표 확장이 기존 분류를 흔들지 않는다(T82 회귀 — �
   // "무력화"만으로는 매치하지 않는다("확인"과 함께일 때만 잡는다).
   assert.equal(resolveTacticCategory("무력화"), "other");
 });
+
+// ── T92(2026-07-27, Architecture.md §18.4 표 5) 신규 "부인 대응" 라벨 5종 배정 ──
+//
+// **왜 값을 그대로 적는가**: `other`가 아니라는 것만 확인하면 **의도와 다른 카테고리로 조용히
+// 배정되는 것**을 못 잡는다(§18.7 **G70** — 1행 `payment_demand`가 `재요구`·`금액`·`이체`·`계좌`·
+// `수수료`를 먼저 삼킨다). 그래서 기대값을 문자열로 못박는다.
+//
+// ⚠️ **규칙표(`CATEGORY_RULES`)는 한 줄도 바꾸지 않았다** — 5종 전부 기존 행에 그대로 들어갔다
+// (§18.4 표 5 #1 경로). T82처럼 정규식을 넓힐 필요가 없었다는 뜻이고, `TACTIC_CATEGORIES`
+// 값 추가도 0건이다(§15.10.5).
+test("[T92] 신규 부인 대응 라벨 5종이 의도한 카테고리로 배정된다(값 고정, G70 방어)", () => {
+  const expected: ReadonlyArray<readonly [string, string]> = [
+    // card-company-impersonation · institutional-impersonation (같은 라벨, 같은 묶음)
+    ["부인 시 명의 도용 암시", "intimidation"],
+    ["부인 시 냉담한 떠넘기기", "intimidation"], // kidnapping-threat
+    ["부인 시 애정 호소", "affection"], // family-accident-deepvoice
+    ["부인 시 절차 정당화", "authority"], // tax-refund-scam
+    ["부인 시 친분 호소", "affection"], // messenger-friend-loan-kakao
+  ];
+  for (const [label, category] of expected) {
+    assert.equal(resolveTacticCategory(label), category, label);
+  }
+});
+
+// G69 — 부인 대응은 시나리오마다 **표기가 다른 같은 학습 지점**이다. 아카이브(UX-030)에서 흩어지지
+// 않으려면 기존 형제 라벨과 같은 카테고리로 가야 한다(§15.6 G14 재발 방지).
+test("[T92] 부인 대응 라벨이 기존 형제 라벨과 같은 묶음으로 간다(아카이브 분산 방지)", () => {
+  // courier-customs-scam의 참고 패턴(§18.3 표 3)과 T92 신규 라벨이 같은 묶음이어야 한다.
+  assert.equal(resolveTacticCategory("명의 도용 암시"), "intimidation");
+  assert.equal(resolveTacticCategory("부인 시 명의 도용 암시"), "intimidation");
+  // T91의 라벨은 이번에 개명하지 않았다 — 개명하면 과거 리포트 문자열과 갈라진다(G69).
+  assert.equal(resolveTacticCategory("부인 시 이익 전환"), "benefit_lure");
+});
