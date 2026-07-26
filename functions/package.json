@@ -12,7 +12,8 @@
     "logs": "firebase functions:log",
     "lint": "eslint src",
     "test": "tsc && node --test lib/**/__tests__/*.test.js",
-    "seed:scenarios": "node lib/scenarios/seed.js"
+    "seed:scenarios": "node lib/scenarios/seed.js",
+    "report:axis-coverage": "node lib/scenarios/axisCoverageReport.js"
   },
   "engines": {
     "node": "20"

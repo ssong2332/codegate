@@ -66,3 +66,49 @@ test("카테고리 enum은 고정 10종이다(§15.4.2)", () => {
   assert.equal(TACTIC_CATEGORIES.length, 10);
   assert.ok(TACTIC_CATEGORIES.includes("other"));
 });
+
+// ── T82(2026-07-26) 수법 분류 드리프트 4건 회귀 가드 ────────────────────────
+//
+// **무엇이 있었나**: 오케스트레이터가 `resolveTacticCategory`를 직접 실행해 v1.6 축 체계가 곧
+// 저작할 라벨 4개가 전부 `other`로 떨어지는 것을 실측했다(docs/Tasks.md "구현 전 통합 확인" 표).
+// 이 라벨들은 아직 콘텐츠에 없어서 위의 13종 전수 드리프트 테스트에 걸리지 않는다 — T83/T84/T85가
+// 콘텐츠를 저작하는 순간 `other`로 떨어져 실패 아카이브의 묶기가 흩어졌을 것이다(§15.6 G14 재발).
+//
+// **고친 방향**: 드리프트 테스트를 완화하지 않고 **규칙표 패턴만 넓혔다**(§15.10.5 — enum append는
+// 하지 않는다. `TACTIC_CATEGORIES`는 10종 그대로다).
+//
+// | 라벨 | 축 | 이전 | 이후 | 넓힌 행 |
+// |---|---|---|---|---|
+// | 확인 시도 무력화 | D3 | other | verification_block | 4행 `확인[^]{0,6}무력화` |
+// | 확인 무력화 | D3 | other | verification_block | 〃 |
+// | 권한 허용 유도 | E3 | other | link_or_install | 3행 `권한` |
+// | 절차·서류 정당화 | D4 | other | authority | 7행 `정당화` |
+test("축 D3 계열 '확인 무력화' 라벨이 verification_block으로 묶인다(T82 드리프트 4건 #1·#2)", () => {
+  assert.equal(resolveTacticCategory("확인 시도 무력화"), "verification_block");
+  assert.equal(resolveTacticCategory("확인 무력화"), "verification_block");
+});
+
+test("축 E3 계열 '권한 허용 유도' 라벨이 link_or_install로 묶인다(T82 드리프트 4건 #3)", () => {
+  assert.equal(resolveTacticCategory("권한 허용 유도"), "link_or_install");
+  // 이미 정상 분류되던 설치 계열은 그대로다 — "원격"을 추가할 필요가 없었다는 실측(§15.10.9 G33 정정).
+  for (const label of ["모의 앱 설치", "원격제어 앱 설치", "앱 설치 지시"]) {
+    assert.equal(resolveTacticCategory(label), "link_or_install", label);
+  }
+});
+
+test("축 D4 계열 '절차·서류 정당화' 라벨이 authority로 묶인다(T82 드리프트 4건 #4)", () => {
+  assert.equal(resolveTacticCategory("절차·서류 정당화"), "authority");
+  // 이미 이 행에 있던 형제 라벨과 같은 묶음이어야 의미가 있다(loanScam.prompt.ts).
+  assert.equal(resolveTacticCategory("권위·정당성 포장"), "authority");
+});
+
+test("규칙표 확장이 기존 분류를 흔들지 않는다(T82 회귀 — 순서 load-bearing 유지)", () => {
+  // 3행에 "권한"을 넣었다고 권위(7행) 라벨이 링크·설치로 끌려가면 안 된다.
+  assert.equal(resolveTacticCategory("권위 암시"), "authority");
+  assert.equal(resolveTacticCategory("권위·긴급상황 암시"), "urgency"); // 5행이 7행보다 위
+  // 4행에 "확인 …무력화"를 넣었다고 긴급성 계열 확인 라벨을 삼키면 안 된다.
+  assert.equal(resolveTacticCategory("속사포 확인질문"), "urgency");
+  assert.equal(resolveTacticCategory("본인확인 빙자 정보 수집"), "personal_info_demand");
+  // "무력화"만으로는 매치하지 않는다("확인"과 함께일 때만 잡는다).
+  assert.equal(resolveTacticCategory("무력화"), "other");
+});
