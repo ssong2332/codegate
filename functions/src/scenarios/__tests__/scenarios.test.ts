@@ -604,6 +604,12 @@ const INTERNAL_DOC_NOTATION: ReadonlyArray<{ label: string; pattern: RegExp }> =
   { label: "ADR", pattern: /\bADR-/ },
   { label: "화면 ID", pattern: /\bUX-\d/ },
   { label: "결정 ID", pattern: /\bD-\d/ },
+  // ⚠️ **reviewer Minor(2026-07-27 재리뷰) — 판단하고 그대로 둔다.** 이 행만 한국어 문맥 앵커가
+  // 없는 맨 영어 차용어라, 시나리오가 이 문자열을 포함한 영어 표현을 쓰게 되면 재작성이 필요하다.
+  // **그래도 남기는 이유**: 실제로 프롬프트에 샌 표기 중 하나가 *"reviewer 지적으로 보강"* 류
+  // 저작 메모였다(이 저장소의 실제 습관이다 — 나도 같은 실수를 했다). 다른 10개 행은 문서 기호를
+  // 잡을 뿐 이 형태를 못 잡는다. 현재 14종 전수 **오탐 0**(아래 역검증이 정상 문장으로 확인)이고,
+  // 오탐이 실제로 생기면 그때 한국어 앵커를 붙이면 된다 — 지금 지우면 유일한 방어가 사라진다.
   { label: "에이전트 역할명", pattern: /reviewer|implementer|quality-assurance/ },
 ];
 
@@ -697,6 +703,31 @@ const IDENTITY_FIELD = /성함|생년월일|주민(등록)?번호/;
 const SOLICITATION_FORM =
   /불러\s*주|알려\s*주|말씀\s*(해|주)|보내\s*주|입력해\s*주|찍어\s*보내|대\s*주세요|적어\s*주/;
 
+/**
+ * ⭐ **절 단위 검사**(reviewer Major, 2026-07-27 재리뷰) — 인용구 **전체**에 요구 동사가 하나라도
+ * 있으면 통과시키던 최초 구현은 **절을 섞으면 우회된다**:
+ *   `"성함은 확인됐고요, 생년월일만 불러주세요"` → 성함은 신고된 결함 그대로인데 생년월일 덕분에 통과.
+ *
+ * **왜 "매치 뒤 N자 이내" 대신 절 분리를 골랐나 — 실측으로 결론이 난다(임의 선택이 아니다)**:
+ *   | 문자열 | 신원 필드 → 요구 형태 거리 |
+ *   |---|---|
+ *   | 우회 문자열(막아야 함) | **17자** |
+ *   | `bankSecurityVerifyScam` 정답 문구(통과해야 함) | **26자** |
+ * 즉 N < 17이어야 우회를 막는데 N >= 26이어야 정답 문구가 통과한다 — **어떤 N도 둘을 동시에 만족할
+ * 수 없다.** 절 분리는 이 둘을 정확히 갈라낸다(아래 역검증이 실행으로 고정).
+ *
+ * ⚠️ **한국어 어순 — 아무 쉼표에서나 자르면 안 된다.** `"성함, 생년월일 불러주십시오"`는 쉼표로
+ * 이어진 **명사 나열 한 절**이다. 그래서 **서술어 종결형(다·요·죠·까·오) 뒤의 구두점에서만** 자른다.
+ * 이 규칙으로 14종 전 인용구를 훑은 결과 **오탐 0**이고(신원 언급 인용구 13개 / 걸린 절 0개),
+ * 수정 전 결함 **10/10**을 그대로 잡는다(검출력 손실 0).
+ *
+ * ⚠️ **알려진 보수적 한계(정직 고지)**: 도치형 `"불러주세요, 성함이랑 생년월일"`은 요구 절과 필드
+ * 절이 갈려 **걸린다(오탐)**. 현행 14종에는 이 형태가 0건이고, 걸리는 방향이 **막고 사람을 부르는
+ * 쪽**이라 그대로 둔다(§18.2 (B)의 "틀리는 방향이 안전하다"와 같은 판단). 필요하면 저작자가 자연
+ * 어순으로 쓰면 되고, 그것이 게이트를 푸는 것보다 싸다.
+ */
+const CLAUSE_BOUNDARY = /(?<=[다요죠까오])\s*[,·]\s*|\s*[?!.]\s*/;
+
 /** 프롬프트 문자열 안에서 **사기범이 말할 대사**(따옴표로 감싼 예시)만 뽑는다. */
 function quotedUtterances(text: string): string[] {
   return [
@@ -705,14 +736,21 @@ function quotedUtterances(text: string): string[] {
   ];
 }
 
-test("[신원요구] 사기범 대사가 참가자 신원 정보를 언급하면 반드시 **요구 형태**여야 한다(14종 전수)", () => {
+/** 신원 필드를 언급하면서 **같은 절 안에** 요구 형태가 없는 절만 돌려준다(빈 배열 = 통과). */
+function clausesDemandingWithoutSolicitation(utterance: string): string[] {
+  return utterance
+    .split(CLAUSE_BOUNDARY)
+    .filter((clause) => IDENTITY_FIELD.test(clause) && !SOLICITATION_FORM.test(clause));
+}
+
+test("[신원요구] 사기범 대사가 참가자 신원 정보를 언급하면 **같은 절 안에서** 요구 형태여야 한다(14종 전수)", () => {
   const violations: string[] = [];
   for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
     for (const { field, text } of modelFacingSurfaces(scenarioId)) {
       for (const utterance of quotedUtterances(text)) {
-        if (!IDENTITY_FIELD.test(utterance)) continue;
-        if (SOLICITATION_FORM.test(utterance)) continue;
-        violations.push(`${scenarioId}.${field} :: "${utterance.slice(0, 60)}"`);
+        for (const clause of clausesDemandingWithoutSolicitation(utterance)) {
+          violations.push(`${scenarioId}.${field} :: 절="${clause.slice(0, 50)}"`);
+        }
       }
     }
   }
@@ -721,20 +759,22 @@ test("[신원요구] 사기범 대사가 참가자 신원 정보를 언급하면
     [],
     "참가자의 성함·생년월일·주민번호를 **이미 확인된 것처럼** 말하면 사기범이 묻지 않고 넘어가고, " +
       "참가자가 개인정보를 넘길지 결정할 순간이 사라진다(2026-07-27 사용자 실사용 신고). " +
-      "압박(질문을 몰아친다)은 유지하되 반드시 직접 불러달라고 요구하는 형태로 쓴다.",
+      "압박(질문을 몰아친다)은 유지하되, **신원 정보를 언급하는 절마다** 직접 불러달라고 요구한다.",
   );
 });
 
 test("[신원요구/역검증] 신고된 원본 대사가 이 검사에 실제로 걸린다", () => {
   const reported = "성함이랑 생년월일 확인되시고요, 계좌는 본인 명의 맞으시죠? 바로 답 주셔야 오늘 처리가 돼요";
-  assert.equal(IDENTITY_FIELD.test(reported), true);
-  assert.equal(SOLICITATION_FORM.test(reported), false, "신고 대사는 요구 형태가 아니어야 한다(=검사가 잡는다)");
+  assert.deepEqual(clausesDemandingWithoutSolicitation(reported), ["성함이랑 생년월일 확인되시고요"]);
   // 표현만 바꾼 같은 전제도 걸린다 — 문자열 금지가 아니라 요구 형태를 요구하기 때문이다.
   for (const rephrased of [
     "성함 조회됐고요, 최근에 결제하신 적 있으세요?",
     "생년월일 신원 확인 끝났습니다, 다음 절차로 갑니다",
   ]) {
-    assert.equal(SOLICITATION_FORM.test(rephrased), false, `표현을 바꿔도 통과하면 안 된다: ${rephrased}`);
+    assert.ok(
+      clausesDemandingWithoutSolicitation(rephrased).length > 0,
+      `표현을 바꿔도 통과하면 안 된다: ${rephrased}`,
+    );
   }
   // 정답 패턴(저장소에 이미 있던 것)은 통과한다.
   const correct = SCENARIO_PROMPTS["bank-security-verify-scam"].weakenedTactics.find((t) =>
@@ -743,7 +783,47 @@ test("[신원요구/역검증] 신고된 원본 대사가 이 검사에 실제�
   assert.ok(correct);
   const correctUtterance = quotedUtterances(correct).find((u) => IDENTITY_FIELD.test(u));
   assert.ok(correctUtterance);
-  assert.equal(SOLICITATION_FORM.test(correctUtterance), true);
+  assert.deepEqual(clausesDemandingWithoutSolicitation(correctUtterance), []);
+});
+
+test("[신원요구/역검증] **절 혼합 우회**가 막힌다 — 최초 구현(인용구 전체 검사)은 통과시켰다", () => {
+  // reviewer가 node로 재현한 우회 문자열. 성함은 신고된 결함 그대로인데, 뒤 절의 생년월일 요구
+  // 하나 때문에 "인용구 전체" 검사에서는 통과했다.
+  const bypass = "성함은 확인됐고요, 생년월일만 불러주세요";
+
+  // ① 강화 전 구현(인용구 전체를 한 덩어리로 본다)은 **통과시킨다** — 이 단언이 곧 취약점의 증거다.
+  assert.equal(IDENTITY_FIELD.test(bypass), true);
+  assert.equal(
+    SOLICITATION_FORM.test(bypass),
+    true,
+    "전체 검사로는 요구 동사가 있어 통과한다 — 이것이 막아야 했던 구멍이다.",
+  );
+
+  // ② 강화 후 절 단위 검사는 **전제 절만 정확히 집어낸다**.
+  assert.deepEqual(clausesDemandingWithoutSolicitation(bypass), ["성함은 확인됐고요"]);
+
+  // ③ 그러면서 **쉼표로 이어진 명사 나열 한 절**은 쪼개지 않는다(한국어 어순 오탐 방지).
+  //    현행 institutional-impersonation·bank-security-verify-scam의 실제 문구 형태다.
+  for (const legit of [
+    "성함, 생년월일 불러주십시오, 최근에 통장 개설하신 적 있으세요? 지금 바로 답변 주셔야 절차가 진행됩니다",
+    "조회 자체가 본인 확인부터라서요, 성함이랑 생년월일, 방금 보내드린 확인번호까지 불러주세요",
+  ]) {
+    assert.deepEqual(clausesDemandingWithoutSolicitation(legit), [], `정상 문구를 오탐한다: ${legit}`);
+  }
+
+  // ④ 검출력이 줄지 않았다 — 수정 전 5종 문구(× persona/tactic 2자리 = 10곳)를 그대로 잡는다.
+  for (const before of [
+    "성함, 생년월일 확인되시고요, 최근에 통장 개설하신 적 있으세요? 지금 바로 답변 주셔야 절차가 진행됩니다",
+    "성함 확인되시고요, 지금 대출 있으신 거 몇 건이세요? 바로 답 주셔야 한도 산정이 돼요",
+    "성함이랑 생년월일 확인되시고요, 계좌는 본인 명의 맞으시죠? 바로 답 주셔야 오늘 처리가 돼요",
+    "성함 확인되시고요, 최근에 해외 결제하신 적 있으세요? 지금 결제 진행 중이니 바로 답변 주셔야 해요",
+    "성함이랑 주소 확인되시고요, 최근에 해외 직구하신 거 있으세요? 바로 답 주셔야 확인이 빨리 끝나요",
+  ]) {
+    assert.ok(
+      clausesDemandingWithoutSolicitation(before).length > 0,
+      `강화로 기존 검출력을 잃으면 안 된다: ${before}`,
+    );
+  }
 });
 
 test("[T92/G68] 부인 대응 라벨에 훈련 내부 용어가 들어가지 않는다(사용자 화면에 그대로 노출된다)", () => {
