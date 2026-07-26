@@ -366,3 +366,32 @@ match /users/{uid}/sessions/{sid}/{allPaths=**} {
 - 스키마는 코드가 문서 생성 시점에 형성(NoSQL, 사전 DDL 없음). 필드 추가는 하위호환 우선(옵셔널 필드).
 - `scenarios`/`scenarioPrompts` seed는 `src/content/scenarios`(T6)에서 배포 스크립트로 주입.
 - 규칙 변경은 `firestore.rules`/`storage.rules` 파일로만(수동 콘솔 편집 금지).
+
+---
+
+## 부록 A — 3단계 결합·모의 앱 설치 증분 (T80 · Architecture.md §15.9 · AC-072/AC-073)
+> **왜 부록인가:** T78·T79 architect 패스와 **병렬 작성**돼 기존 표를 편집하면 병합 충돌이 난다. 내용은 위 본문 표와 동등한 계약이며, 병합 후 각 컬렉션 절로 흡수해도 된다(그때 이 부록은 제거).
+> **전부 옵셔널·무백필.** 기존 `sessions`/`reports` 문서는 한 건도 손대지 않고 유효하다.
+
+### A.1 `sessions/{sessionId}/mockScreens/{landingId}` — 인앱 목업 상호작용 (신규 서브컬렉션)
+> 문서 id = `landingId`라 **멱등**(같은 랜딩에 대한 반복 기록이 문서를 늘리지 않는다). 클라 직접 write **금지** — `recordMockScreenEvent` 콜러블 경유(API.md 부록 A). read는 세션 소유자만(기존 `sessions/{sid}/**` 규칙과 동일).
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| landingId | string | ✔ | `MessengerAttachment.fakeLandingId`와 동일 값 |
+| kind | `"credential-form"`\|`"app-install"` | ✔ | **서버가 카탈로그(`functions/src/scenarios/mockScreens.ts`)에서 확정**. 클라 입력을 그대로 믿지 않는다 |
+| shownAt | Timestamp | ✔ | 목업이 열린 시각. 최초 1회만 세팅 |
+| consentedAt | Timestamp? | | 가짜 "권한 허용"에 응한 시각. 최초 1회만 세팅. **부재 = 응낙 없음**(D-51 ③) |
+| consentAnnouncedAt | Timestamp? | | 사기범이 그 사실을 언급하도록 프롬프트 1줄 지시를 주입한 시각(§15.9.3 — 1회 주입 보장) |
+
+- **저장하지 않는 것(구조적 금지):** 참가자 입력값(애초에 컴포넌트 로컬 state를 벗어나지 않는다 — AC-045), 실 URL·스토어 URL·실존 앱명·OS 권한 목록(AC-072). **`url` 계열 필드는 이 스키마에도 존재하지 않는다.**
+
+### A.2 `reports/{reportId}` 증분 — 3단계 구분·목업 타임라인 (전부 옵셔널)
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| stages | array<ReportStage>? | | AC-073 "세 단계 구분"의 판정 근거. **의도된 단계가 2개 이상일 때만** 기록(그 외 필드 부재). `ReportStage = { stage: "messenger"\|"mock_install"\|"voice", reached: boolean }` — **미도달 단계도 `reached:false`로 싣는다**(OQ-U24 판정, §15.9.5 e-3) |
+| mockScreenTimeline | array<MockScreenTimelineEntry>? | | 표시 전용 스냅샷. `{ landingId, kind, anchorTurnIndex, anchorResolved, timeLabel?, consented }`. 리포트 생성 시 `sessions/{sid}/mockScreens` **1회 read**로 역정규화(dual write 금지 — §15.1.5 (1)과 동형) |
+
+- **`deceivedMoments` 증분 규칙(스키마 변경 없음, 생성 규칙만 추가):** `consented === true`인 항목 1건당 `DeceivedMoment` 1건을 **`analyzeConversation` 산출 뒤에 병합**하고 배열을 **`turnIndex` 오름차순으로 정렬**한다. `turnIndex` = 설치 링크를 실은 **사기범 메시지**의 turnIndex, `tactic`/`correctAction` = 카탈로그 저작값, `tacticCategory` = 기존 `resolveTacticCategory` 결과(→ `link_or_install`). **앵커 미해결이면 승격하지 않는다**(§15.9.5 e-2 인덱스 정합 보호). `wasDeceived`는 병합 후 배열 기준으로 재계산한다.
+- **스냅샷에 넣지 않는 것:** 목업 화면 콘텐츠 원문(`headline`/`bodyLines`/`consentLabel`) — 사후 열람 화면이 목업을 재구성·재진입할 수 있게 된다(§15.6 G19와 동형 취지). 원시 타임스탬프도 넣지 않는다(표시 축이 아니다).
+- **인덱스 변경 없음.** 서브컬렉션은 최상위 `reports` 쿼리에 포함되지 않고, `mockScreens`는 세션 단위 전체 조회만 한다.
