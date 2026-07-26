@@ -15,6 +15,7 @@ import { GoogleGenAI, Modality, EndSensitivity } from "@google/genai";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { hasInCallSms } from "../scenarios/inCallSms";
+import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider } from "./types";
 
 /** 무료 티어에서 쓸 수 있는 네이티브 오디오 모델(공식 가격 페이지 기준, 2026-07 확인). */
@@ -65,9 +66,15 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // T68(§15.1.4/§15.6 G1) — 문자 카탈로그가 있는 시나리오면 "화면에 없는 것을 가리키지 않는다"
     // 항목이 조건형으로 대체돼 인증번호·계좌·링크를 **요구해도 되는** 문구가 된다. 이걸 빼면
     // 오버레이를 다 만들어도 사기범이 인증번호를 요구하지 않아 기능이 발동하지 않는다.
+    // T83(§16.1.4) — 확인 무력화가 성립하는 세션(카탈로그 보유 && 고급)이면 앱 오케스트레이션과의
+    // 동기화 블록이 함께 들어간다. 이걸 빼면 게이트 이전에 모델이 먼저 창구를 불러 **대사만 나오고
+    // 컨트롤이 없는 창**이 생긴다(§16.1.4). 시스템 프롬프트는 토큰에 고정되므로(ADR-0004) 통화
+    // 내내 유효하다.
     const systemPrompt = buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: input.difficultyLevel,
       inCallSmsEnabled: hasInCallSms(input.scenarioId),
+      verifyInterceptEnabled:
+        hasVerifyIntercept(input.scenarioId) && input.difficultyLevel === "advanced",
     });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });

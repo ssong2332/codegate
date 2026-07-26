@@ -44,6 +44,21 @@ type SmsTimelineEntry = {
   events: { event: string; what: string; correctAction?: string }[];
 };
 
+// T83(§16.3.1, AC-071) — 확인 시도 무력화의 **표시 전용** 스냅샷. 서버가 최종 표시 순서로 정렬해
+// 내려주므로 화면은 순서를 재해석하지 않는다. `displayNumber`는 **텍스트로만** 렌더한다 — 링크·
+// 복사 버튼·재발신 컨트롤을 만들지 않는다(사후 화면에 신규 상호작용 표면 0건, §16.3.1/AC-019).
+type VerifyTimelineEntry = {
+  offerId: string;
+  deskLabel: string;
+  displayNumber: string;
+  anchorTurnIndex: number;
+  anchorResolved: boolean;
+  timeLabel?: string;
+  reconnectTimeLabel?: string;
+  outcome: "offered_not_placed" | "placed_not_complied" | "placed_and_complied";
+  events: { event: string; what: string; correctAction?: string }[];
+};
+
 type ReportData = {
   reportId: string;
   wasDeceived: boolean;
@@ -52,6 +67,8 @@ type ReportData = {
   preventionAdvice: string[];
   // 부재→빈 배열(무백필). 문자가 없던 세션·T89 이전 리포트는 기존과 완전히 동일하게 그려진다.
   smsTimeline: SmsTimelineEntry[];
+  // 부재→빈 배열(무백필). D-51 ①/⑤(속은 순간 0건 + 확인 시도 있음)에서도 이 배열은 존재한다.
+  verifyTimeline: VerifyTimelineEntry[];
   // T72(P-22 / AC-064) — 리포트에 역정규화된 표기 전용 값. 난이도는 판정에 영향을 주지 않으며
   // (§15.3.5) 여기서도 "어떤 강도로 훈련했는가"를 알려주는 라벨로만 쓴다.
   difficultyLevel: DifficultyLevel;
@@ -90,6 +107,9 @@ export default function ReportPage() {
       tacticsUsed: Array.isArray(data.tacticsUsed) ? (data.tacticsUsed as string[]) : [],
       preventionAdvice: Array.isArray(data.preventionAdvice) ? (data.preventionAdvice as string[]) : [],
       smsTimeline: Array.isArray(data.smsTimeline) ? (data.smsTimeline as SmsTimelineEntry[]) : [],
+      verifyTimeline: Array.isArray(data.verifyTimeline)
+        ? (data.verifyTimeline as VerifyTimelineEntry[])
+        : [],
       difficultyLevel: normalizeDifficultyLevel(data.difficultyLevel),
       createdAt: data.createdAt instanceof Timestamp ? data.createdAt : null,
     };
@@ -258,6 +278,14 @@ export default function ReportPage() {
       kind: "sms" as const,
       sms,
     })),
+    // T83(§16.3.5) — 확인 항목은 같은 축에 kindRank 2로 얹는다(메시지 0 < 문자 1 < 확인 2).
+    // ⚠️ 되감기 버튼을 달지 않는다 — 되감기 대상은 여전히 `deceivedMoments`뿐이다. 다만 **주석된
+    // 순간**에는 원래대로 달리고(그 순간은 진짜 deceivedMoment다) 덮어쓴 correctAction을 쓴다.
+    ...report.verifyTimeline.map((verify, seq) => ({
+      sortKey: [verify.anchorTurnIndex, 2, seq] as const,
+      kind: "verify" as const,
+      verify,
+    })),
   ].sort(
     (a, b) =>
       a.sortKey[0] - b.sortKey[0] || a.sortKey[1] - b.sortKey[1] || a.sortKey[2] - b.sortKey[2],
@@ -375,6 +403,11 @@ export default function ReportPage() {
                 속은 시점이 없습니다 — 이번 훈련에서는 한 번도 속지 않았습니다.
                 {report.smsTimeline.length > 0 &&
                   " 아래는 훈련 중 도착한 문자에서 있었던 일입니다."}
+                {/* T83(§16.6 G30) — 속은 순간 0건 + 확인 시도 있음(D-51 ①/⑤)에서 이 안내가 없으면
+                    항목이 왜 있는지 설명되지 않는다. 판정은 그대로다(확인 시도는 wasDeceived를
+                    뒤집지 않는다 — 걸었지만 응하지 않은 것은 **잘 대응한 지점**이다, D-51 ⑤). */}
+                {report.verifyTimeline.length > 0 &&
+                  " 아래는 훈련 중 있었던 확인 시도입니다."}
               </p>
             )}
             {timelineEntries.length > 0 && (
@@ -408,8 +441,13 @@ export default function ReportPage() {
                         </button>
                       )}
                     </li>
-                  ) : (
+                  ) : entry.kind === "sms" ? (
                     <ReportSmsTimelineItem key={`sms-${entry.sms.smsId}`} sms={entry.sms} />
+                  ) : (
+                    <ReportVerifyTimelineItem
+                      key={`verify-${entry.verify.offerId}`}
+                      verify={entry.verify}
+                    />
                   ),
                 )}
               </ol>
@@ -569,6 +607,59 @@ function ReportSmsTimelineItem({ sms }: { sms: SmsTimelineEntry }) {
           {!sms.anchorResolved && event.event === "sms_received" && (
             <p className="mt-2 text-sm text-[#6B655C]">
               이 문자가 대화 중 어느 시점에 도착했는지는 확인하지 못했습니다.
+            </p>
+          )}
+        </div>
+      ))}
+    </li>
+  );
+}
+
+/**
+ * T83(§16.3.5, AC-071) — 확인 시도 항목. **기존 문자 항목과 같은 카드 형식**을 쓴다(신규 표기
+ * 형식·신규 컴포넌트 0건, UX-008 v1.12 노트).
+ *
+ * ⚠️ **P-25 톤(무력감 방지)**: `correctAction`(유효 대처)이 **먼저·크게**, 결과 상황 서술은 그
+ * 위 한 줄, 구조 설명은 하지 않는다. "소용없다"·"막을 수 없다"류 표현이 이 화면 어디에도 없다 —
+ * 문구는 전부 서버 상수에서 오고 금지 표현 테스트가 그것을 고정한다.
+ * ⚠️ **되감기 버튼을 달지 않는다** — 되감기 대상은 `deceivedMoments`뿐이다. 확인 시도 자체는
+ * 순간이 아니며(D-51 ①/⑤는 속은 순간이 아니다), 응낙 순간에는 **주석된 순간 카드**에 원래대로
+ * 버튼이 달린다.
+ * ⚠️ `displayNumber`는 **텍스트로만** 렌더한다 — 링크·복사·재발신 컨트롤을 만들지 않는다(AC-019).
+ */
+function ReportVerifyTimelineItem({ verify }: { verify: VerifyTimelineEntry }) {
+  return (
+    <li className="flex flex-col gap-3">
+      {verify.events.map((event) => (
+        <div key={event.event} className="rounded-2xl border border-[#B96A1B]/30 bg-[#FBF3E8] p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-lg font-semibold text-[#B96A1B]">
+              <span aria-hidden="true">⚠ </span>
+              {(event.event === "verify_reconnected"
+                ? verify.reconnectTimeLabel
+                : verify.timeLabel)
+                ? `${event.event === "verify_reconnected" ? verify.reconnectTimeLabel : verify.timeLabel}: `
+                : ""}
+              {event.what}
+            </p>
+            <Badge variant="neutral">확인 시도</Badge>
+          </div>
+          {/* D-51 ⑤ — 걸었지만 응하지 않은 세션은 **잘 대응한 지점**으로 다룬다(AC-009/AC-038).
+              과신 표현("이제 면역")은 쓰지 않고, 아래 유효 대처를 그대로 함께 제시한다. */}
+          {event.event === "verify_reconnected" && verify.outcome === "placed_not_complied" && (
+            <p className="mt-2 text-base font-semibold text-[#0E6B62]">
+              잘 대응한 지점입니다 — 확인 뒤에도 요구에 응하지 않았습니다.
+            </p>
+          )}
+          {event.correctAction && (
+            <p className="mt-2 text-base text-[#22303A]">
+              <span className="font-semibold">이렇게 하시면 됩니다: </span>
+              {event.correctAction}
+            </p>
+          )}
+          {!verify.anchorResolved && event.event === "verify_offer_shown" && (
+            <p className="mt-2 text-sm text-[#6B655C]">
+              이 안내가 대화 중 어느 시점에 있었는지는 확인하지 못했습니다.
             </p>
           )}
         </div>

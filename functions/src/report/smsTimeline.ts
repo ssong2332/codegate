@@ -90,8 +90,12 @@ type AnchorResolution = { anchorTurnIndex: number; anchorResolved: boolean; time
  * 3은 **조용히 버리지 않기 위한 것**이다(P-4) — 화면이 "대화 중 어느 시점인지 확인하지 못했습니다"를
  * 고지한다. 리졸버는 경로와 무관하게 **이 하나뿐**이다(§15.1.5 (6) — 경로별로 다른 것은 write 시점
  * 값 하나뿐이고 그 의미는 동일하다).
+ *
+ * ⚠️ **export 이유(T83, §16.3.2 / ADR-0009 follow-up 2)**: 확인 무력화 스냅샷(`verifyTimeline.ts`)이
+ * **같은 리졸버를 공유**한다. 복제하면 문자 항목과 확인 항목의 위치 규칙이 조용히 갈라진다
+ * (§15.6 G7 "패턴 상수를 복제하지 말고 export"와 동일 판단). 이 파일 안에서의 쓰임은 무변경이다.
  */
-function resolveAnchor(
+export function resolveAnchor(
   anchorScammerTurn: number | undefined,
   sortedMessages: readonly SmsTimelineMessage[],
   sessionCreatedAtMs: number,

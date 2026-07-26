@@ -31,4 +31,15 @@ export type CreateRealtimeCallResponse = {
    * 효과는 "자기 훈련용 모의 문자를 조금 일찍 보는 것"뿐이다.
    */
   inCallSmsTriggers?: { smsId: string; afterScammerTurns: number }[];
+  /**
+   * T83(§16.1.5, API.md T79 증분) — 확인 시도 무력화(UF-011)의 **가용 게이트만**. 창구명·번호·모델
+   * 지시는 포함하지 않는다(오퍼 시점에 `deliverVerifyOffer`가 서버 카탈로그에서 렌더 — 사전 유출
+   * 방지). **부착 조건 3개를 전부 만족할 때만 필드가 존재한다**: ① 카탈로그 보유 ② 세션 난이도
+   * advanced ③ `difficultyApplied === true`. → **ElevenLabs 경로에는 구조적으로 붙지 않는다**
+   * (주입 지점 부재 + 난이도 미적용, §16.6 G23) → 클라에 컨트롤이 **존재하지 않는다**.
+   *
+   * ⚠️ 이 카운팅도 §13.5 스킨과 같은 **프레젠테이션 층위**다 — 어떤 안전 판정도 게이팅하지 않으며,
+   * 콜러블이 소유·활성·카탈로그·난이도·프로바이더를 전부 재검증한다(G24).
+   */
+  verifyOffer?: { availableAfterScammerTurns: number };
 };

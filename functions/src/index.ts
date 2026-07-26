@@ -23,6 +23,10 @@ export { judgeRewindAnswer } from "./rewind";
 // 통화 중 문자(T68, UX-027/UF-008, ADR-0007, AC-059/060/061) — 문자 도착(실시간 경로)·확인 기록.
 // 본문은 100% 서버 카탈로그(scenarios/inCallSms.ts)가 원천이며 클라가 내용을 주입할 경로가 없다.
 export { deliverInCallSms, recordInCallSmsEvent } from "./inCallSms";
+// 확인 시도 무력화(T83, UX-031/UF-011, ADR-0009, AC-071) — 확인 권유 도착·모의 재연결 기록.
+// ⚠️ **실제 전화를 걸지 않는다**(AC-019): 두 함수 모두 통신·전화 관련 API 의존이 0건이고, 하는 일은
+// Firestore write 1건 + 모델 지시 문자열 반환뿐이다. 창구명·번호는 100% 서버 카탈로그가 원천이다.
+export { deliverVerifyOffer, deliverVerifyReconnect } from "./verifyIntercept";
 // 초급 사전 브리핑(T72, UX-029, §15.3.4, AC-066) — 세션 **시작 전** 화면에서만 소비되는 수법
 // 라벨 조회. 대화 중 실시간 판정 경로는 신설하지 않는다(D-6 유지).
 export { getBeginnerBriefing } from "./scenarios/beginnerBriefing";
