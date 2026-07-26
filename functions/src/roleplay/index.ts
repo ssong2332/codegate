@@ -14,6 +14,8 @@ import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { findDueInCallSms, hasInCallSms } from "../scenarios/inCallSms";
 import { buildInCallSmsDoc, fallbackAnchorScammerTurn } from "../inCallSms";
+import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
+import { pickFallbackTurnInstruction } from "../verifyIntercept/fallbackTurn";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { GEMINI_API_KEY } from "../shared/config";
 import { MESSENGER_ESCALATION_FALLBACK_TURNS } from "../shared/constants";
@@ -162,11 +164,64 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       }
     }
 
+    // ②-c 확인 시도 무력화의 **폴백 경로 대사 주입**(T83, §16.1.3/§16.2/§16.6 G31). 실시간
+    // 경로에서는 클라가 콜러블 응답을 Live 세션에 즉시 주입하지만, 이 텍스트 경로는 매 턴 서버가
+    // 프롬프트를 조립하므로 여기서 `turnInstruction`으로 넣는다.
+    //   - 권유 대사: 아직 announce되지 않은 오퍼가 있으면 주입하고 `announcedAt`을 마크한다(중복 방지).
+    //   - 재연결 대사: `placedAt`이 있고 이번 턴이 **판정 앵커가 가리키는 바로 그 사기범 대사**일 때
+    //     주입한다(서버가 별도 인사말을 생성하지 않는다 — §16.2 "생성 파이프라인 2벌 금지").
+    // ⚠️ 턴 지시는 문자열 **1개**뿐이라 문자 announce와 충돌할 수 있다 — 선택 규칙은
+    // `verifyIntercept/fallbackTurn.ts`의 순수 함수 한 곳에 모아 두었다(G31).
+    const difficultyLevel = normalizeDifficultyLevel(session.difficultyLevel);
+    const verifyEnabled = hasVerifyIntercept(session.scenarioId) && difficultyLevel === "advanced";
+    const verifyItem = verifyEnabled ? findVerifyInterceptItem(session.scenarioId) : undefined;
+    const scammerDocCount = scammerTurnNumber - 1;
+    let verifyOfferRef: FirebaseFirestore.DocumentReference | undefined;
+    let verifyState: { announced: boolean; placed: boolean; reconnectAnchorScammerTurn?: number } | undefined;
+    if (verifyItem) {
+      try {
+        verifyOfferRef = sessionRef.collection("verifyIntercept").doc(verifyItem.offerId);
+        const verifySnap = await verifyOfferRef.get();
+        if (verifySnap.exists) {
+          verifyState = {
+            announced: Boolean(verifySnap.get("announcedAt")),
+            placed: Boolean(verifySnap.get("placedAt")),
+            reconnectAnchorScammerTurn: verifySnap.get("reconnectAnchorScammerTurn") as
+              | number
+              | undefined,
+          };
+        }
+      } catch {
+        // 조회 실패가 대화를 막지 않는다(P-4 핵심 루프 비차단) — 이번 턴은 지시 없이 진행한다.
+      }
+    }
+    const turnChoice = pickFallbackTurnInstruction({
+      smsDue: Boolean(deliveredSmsId),
+      ...(verifyState ? { verify: verifyState } : {}),
+      scammerDocCount,
+    });
+    let turnInstruction: string | undefined;
+    if (turnChoice === "verify_reconnect") {
+      turnInstruction = verifyItem?.reconnectInstruction;
+    } else if (turnChoice === "sms_announce") {
+      turnInstruction = dueSms?.announceInstruction;
+    } else if (turnChoice === "verify_announce") {
+      turnInstruction = verifyItem?.announceInstruction;
+      if (verifyOfferRef) {
+        try {
+          await verifyOfferRef.update({ announcedAt: Timestamp.now() });
+        } catch {
+          // 마크 실패는 다음 턴에 같은 권유가 한 번 더 나가는 정도의 열화다(대화는 막지 않는다).
+        }
+      }
+    }
+
     const completion = await completeWithFallback(getLlmClient(), {
       systemPrompt: buildSystemPrompt(scenarioPrompt, {
-        difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
+        difficultyLevel,
         inCallSmsEnabled: hasInCallSms(session.scenarioId),
-        ...(deliveredSmsId ? { turnInstruction: dueSms?.announceInstruction } : {}),
+        verifyInterceptEnabled: verifyEnabled,
+        ...(turnInstruction ? { turnInstruction } : {}),
       }),
       messages: llmHistory,
       mockTacticHints: scenarioPrompt.weakenedTactics,

@@ -31,6 +31,8 @@ import {
 import { useRealtimeCall } from "@/lib/realtime";
 import {
   deliverInCallSms,
+  deliverVerifyOffer,
+  deliverVerifyReconnect,
   recordInCallSmsEvent,
   requestReverseEscalation,
   sendMessage,
@@ -44,6 +46,13 @@ import {
   type InCallSmsView,
 } from "@/lib/incallsms";
 import {
+  enqueueInstruction,
+  shouldOfferVerify,
+  takeNextInstruction,
+  type PendingInstruction,
+  type VerifyInterceptView,
+} from "@/lib/verifyintercept";
+import {
   DIFFICULTY_LABEL,
   normalizeDifficultyLevel,
   type DifficultyLevel,
@@ -51,6 +60,7 @@ import {
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import CallWaveform from "@/components/CallWaveform";
 import InCallSmsOverlay from "@/components/InCallSmsOverlay";
+import VerifyCallOverlay from "@/components/VerifyCallOverlay";
 
 // ⚠️ 지연 로딩 필수 — @elevenlabs/react가 끌어오는 livekit-client(WebRTC)를 이 화면 로드 시점에
 // 함께 불러오면 WebRTC를 못 쓰는 환경에서 렌더러가 통째로 죽는다(실측: 페이지 자체가 로드 실패).
@@ -79,6 +89,13 @@ type ChatMessage = {
 
 const PREROLL_NOTICE =
   "지금부터 재생되는 음성은 실제 전화가 아니라 AI로 합성된 훈련용 음성입니다.";
+
+// T83/UX-031 States — "연결 중…" 연출 길이. **고정값**이다(랜덤 없음 = 테스트 결정론, §16.2).
+// ⚠️ 이 구간은 화면 연출일 뿐 실제 발신이 아니다(AC-019). 이 동안에도 통화 축소 표시·"훈련 종료"가
+// 계속 보인다.
+const VERIFY_DIALING_MS = 2500;
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function formatElapsed(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -127,14 +144,29 @@ export default function SessionCallPage() {
   const [smsOverlayOpen, setSmsOverlayOpen] = useState(false);
   const [smsBannerDismissed, setSmsBannerDismissed] = useState(false);
   const [smsError, setSmsError] = useState<string | null>(null);
-  // 실시간 세션에 넣을 announce 지시(카운터 패턴 — textMessage와 동일).
-  const [smsInstruction, setSmsInstruction] = useState<{ text: string; seq: number } | null>(null);
+  // 실시간 세션에 넣을 오케스트레이션 지시(카운터 패턴 — textMessage와 동일).
+  // ⚠️ T83(§16.6 G31) — 문자 announce와 확인 지시가 **같은 슬롯**을 쓰므로 큐를 거쳐 한 턴에
+  // 하나씩만 주입한다(아래 enqueueTurnInstruction 참고). 예전엔 이 상태를 문자 전용으로 직접
+  // 세팅했는데, 그러면 같은 턴 경계에 둘이 겹칠 때 나중 것이 앞것을 조용히 덮어쓴다.
+  const [instructionTurn, setInstructionTurn] = useState<{ text: string; seq: number } | null>(null);
+  const instructionQueueRef = useRef<PendingInstruction[]>([]);
+  // 이번 사기범 턴에 이미 지시를 하나 넣었는가(다음 turnComplete까지 추가 주입을 보류한다).
+  const instructionBusyRef = useRef(false);
   // 사기범 발화 턴 수(실시간 경로) — GeminiVoiceSession의 turnComplete 경계만 센다.
   const [scammerTurns, setScammerTurns] = useState(0);
   // 이미 서버에 전달을 요청한 smsId(중복 호출 방지). 렌더와 무관해 ref에 둔다.
   const requestedSmsRef = useRef<Set<string>>(new Set());
   // 오버레이를 연 트리거(배너/"문자함") — 닫을 때 포커스를 되돌린다(UX-027 Focus Order).
   const smsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  // T83 확인 시도 무력화(UX-031/UF-011, AC-071) — 문자 오버레이와 **같은 계층·같은 규칙**이다
+  // (§16.2 무개정 재사용). 이 값들도 타이머·한도·오디오 effect 어디에도 들어가지 않는다(§15.1.1).
+  const [verifyOffer, setVerifyOffer] = useState<VerifyInterceptView | null>(null);
+  const [verifyOverlayOpen, setVerifyOverlayOpen] = useState(false);
+  const [verifyDialing, setVerifyDialing] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  // 이미 서버에 오퍼 전달을 요청했는가(중복 호출 방지). 렌더와 무관해 ref에 둔다.
+  const requestedVerifyRef = useRef(false);
+  const verifyTriggerRef = useRef<HTMLButtonElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speech = useSpeechRecognition();
   const realtime = useRealtimeCall();
@@ -273,6 +305,59 @@ export default function SessionCallPage() {
     return unsubscribe;
   }, [sessionId, phase]);
 
+  // T83 — 확인 권유(오퍼) 문서 구독(UX-031). **실시간·폴백 양 경로의 단일 렌더 소스**다(§16.1.3):
+  // 콜러블 응답에는 모델 지시만 실리고 창구명·번호는 이 구독으로만 화면에 들어온다(사전 유출 방지).
+  // 문서를 소스로 삼기 때문에 **새로고침·재마운트 후에도 재연결 상태(발신자 라벨)가 유지**된다.
+  useEffect(() => {
+    if (!sessionId || phase === "incoming" || phase === "connecting") return;
+    const verifyQuery = query(
+      collection(db, "sessions", sessionId, "verifyIntercept"),
+      orderBy("offeredAt", "asc"),
+    );
+    const unsubscribe = onSnapshot(verifyQuery, (snapshot) => {
+      const docSnap = snapshot.docs[0];
+      if (!docSnap) {
+        setVerifyOffer(null);
+        return;
+      }
+      const data = docSnap.data();
+      const placedAt = data.placedAt as { toMillis?: () => number } | undefined;
+      setVerifyOffer({
+        offerId: docSnap.id,
+        deskLabel: data.deskLabel as string,
+        displayNumber: data.displayNumber as string,
+        placedAtMs: placedAt?.toMillis?.(),
+        reconnectedCallerLabel: data.reconnectedCallerLabel as string | undefined,
+      });
+    });
+    return unsubscribe;
+  }, [sessionId, phase]);
+
+  // ── 실시간 경로 지시 주입 큐(§16.6 G31 실시간 보강) ──────────────────────────────
+  // 계약: (1) 한 턴 경계에 due가 2건이면 **문자 announce를 먼저** 주입하고 확인 지시는 다음 사기범
+  // 턴 완료까지 보류한다. (2) 보류분은 **버리지 않는다**(큐에 남는다 — 버리면 확인 무력화가 그
+  // 세션에서 영영 안 뜬다). (3) `seq`는 단조 증가시킨다(늦게 도착한 앞 순번이 뒤 순번을 덮어쓰지
+  // 않게). 순서 규칙 자체는 순수 함수(`@/lib/verifyintercept`)로 분리해 단위 테스트로 고정했다.
+  const drainInstructionQueue = useCallback(() => {
+    if (instructionBusyRef.current) return;
+    const { item, rest } = takeNextInstruction(instructionQueueRef.current);
+    if (!item) return;
+    instructionQueueRef.current = rest;
+    instructionBusyRef.current = true;
+    setInstructionTurn((prev) => ({ text: item.text, seq: (prev?.seq ?? 0) + 1 }));
+  }, []);
+
+  const enqueueTurnInstruction = useCallback(
+    (text: string, priority: PendingInstruction["priority"]) => {
+      instructionQueueRef.current = enqueueInstruction(instructionQueueRef.current, {
+        text,
+        priority,
+      });
+      drainInstructionQueue();
+    },
+    [drainInstructionQueue],
+  );
+
   // T68 — 사기범 턴 경계에 도달하면 문자를 도착시킨다(실시간 경로, §15.1.2 앱 오케스트레이션).
   // 서버가 문서를 쓰고 announce 지시를 돌려주면 그것을 **같은 Live 세션에 텍스트 턴으로** 넣어
   // 캐릭터가 "문자 보냈어요"라고 말하게 한다. 실패해도 통화는 계속된다(P-4 — 인라인 안내만).
@@ -292,21 +377,77 @@ export default function SessionCallPage() {
         const result = await deliverInCallSms({ sessionId, smsId: dueSmsId });
         setSmsError(null);
         setSmsBannerDismissed(false);
-        setSmsInstruction((prev) => ({
-          text: result.announceInstruction,
-          seq: (prev?.seq ?? 0) + 1,
-        }));
+        // T83 — 직접 세팅하지 않고 큐를 통한다(같은 턴에 확인 지시와 겹쳐도 유실되지 않게, G31).
+        enqueueTurnInstruction(result.announceInstruction, "sms");
       } catch {
         // 다음 턴 경계에서 다시 시도할 수 있게 요청 기록을 되돌린다.
         requestedSmsRef.current.delete(dueSmsId);
         setSmsError("문자를 받지 못했습니다. 통화는 계속됩니다.");
       }
     })();
-  }, [sessionId, callMode, phase, scammerTurns, realtime.credentials?.inCallSmsTriggers]);
+    // enqueueTurnInstruction은 안정 참조(useCallback, 의존성 없음)라 이 목록에 넣어도 effect가
+    // 추가로 재실행되지 않는다 — 기존 트리거 조건은 그대로다.
+  }, [
+    sessionId,
+    callMode,
+    phase,
+    scammerTurns,
+    realtime.credentials?.inCallSmsTriggers,
+    enqueueTurnInstruction,
+  ]);
+
+  // T83 — 사기범 턴이 가용 게이트에 도달하면 **확인 권유**를 도착시킨다(§16.1.3 앱 오케스트레이션).
+  // 서버가 오퍼 문서를 쓰고 지시를 돌려주면, 실시간 경로는 그것을 같은 Live 세션에 넣어 캐릭터가
+  // "직접 확인해 보시라"고 권하게 한다(폴백 경로는 서버가 다음 턴 프롬프트에 직접 싣는다).
+  //
+  // ⚠️ **게이트가 없으면 아무 일도 일어나지 않는다** — `verifyOffer` 필드는 카탈로그 보유 && 고급 &&
+  // 난이도 반영 경로일 때만 서버가 붙인다(§16.1.5). 즉 컨트롤이 **존재하지 않는** 세션이 기본이다.
+  // 실패해도 통화는 계속된다(P-4 — 인라인 안내만, UF-011 Failure (b)).
+  useEffect(() => {
+    if (!sessionId || phase !== "live") return;
+    if (callMode !== "realtime" && callMode !== "fallback") return;
+    const trigger = realtime.credentials?.verifyOffer;
+    // 완료된 사기범 발화 수: 실시간은 Live 턴 카운터, 폴백은 이미 쌓인 대화 로그(오프닝 포함).
+    const completedScammerTurns =
+      callMode === "realtime" ? scammerTurns : messages.filter((m) => m.role === "scammer").length;
+    if (
+      !shouldOfferVerify({
+        ...(trigger ? { trigger } : {}),
+        scammerTurns: completedScammerTurns,
+        alreadyRequested: requestedVerifyRef.current,
+      })
+    ) {
+      return;
+    }
+    requestedVerifyRef.current = true;
+    const requestCallMode = callMode;
+    (async () => {
+      try {
+        const result = await deliverVerifyOffer({
+          sessionId,
+          callMode: requestCallMode,
+          // 앵커 판별자(§16.3.2) — 실시간일 때만 필수다. 폴백은 서버가 messages를 직접 센다.
+          ...(requestCallMode === "realtime" ? { scammerTurns } : {}),
+        });
+        setVerifyError(null);
+        // 폴백 경로는 서버가 다음 sendMessage 턴에 직접 주입하므로 클라가 넣지 않는다(중복 방지).
+        if (requestCallMode === "realtime") {
+          enqueueTurnInstruction(result.announceInstruction, "verify");
+        }
+      } catch {
+        // 다음 턴 경계에서 다시 시도할 수 있게 요청 기록을 되돌린다(조용한 실패 금지).
+        requestedVerifyRef.current = false;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, callMode, phase, scammerTurns, messages, realtime.credentials?.verifyOffer]);
 
   const handleScammerTurnComplete = useCallback(() => {
     setScammerTurns((n) => n + 1);
-  }, []);
+    // 턴이 끝났으니 보류분을 하나 더 내보낸다(위 계약 (2)).
+    instructionBusyRef.current = false;
+    drainInstructionQueue();
+  }, [drainInstructionQueue]);
 
   // 통화 경과 타이머 — "받기"(answeredAt) 기점, ended면 정지.
   useEffect(() => {
@@ -333,6 +474,8 @@ export default function SessionCallPage() {
     // 동일한 관례). setSmsOverlayOpen도 그 안에서 호출한다.
     (async () => {
       setSmsOverlayOpen(false);
+      // T83/UX-031 Exit — 확인 오버레이도 같은 규칙으로 먼저 내린다(종료 고지가 가려지지 않게).
+      setVerifyOverlayOpen(false);
       await flushTranscript();
       router.push("/session/end");
     })();
@@ -402,14 +545,16 @@ export default function SessionCallPage() {
   // 주변 소음이 발화로 오인되면 사기범이 엉뚱하게 반응해 몰입이 깨진다). 오버레이를 닫으면 이
   // 조건이 다시 참이 되어 기존 재개 로직이 자동으로 청취를 연다(추가 코드 불요).
   // ⚠️ 재생·타이머는 이 게이팅 대상이 아니다 — 통화가 살아 있다는 것이 이 기능의 전부다.
+  // T83(§16.2) — 확인 오버레이도 **같은 규칙**으로 마이크만 게이팅한다(오디오 재생·타이머·한도·
+  // 소켓은 손대지 않는다). 음소거 버튼의 aria-pressed는 여전히 사용자 의도 `muted`에만 바인딩한다.
   useEffect(() => {
-    if (callMode !== "fallback" || phase !== "live" || smsOverlayOpen) return;
+    if (callMode !== "fallback" || phase !== "live" || smsOverlayOpen || verifyOverlayOpen) return;
     if (speech.status !== "idle") return;
     if (sending || playbackUrl) return;
     const timer = setTimeout(() => speech.start(), 400);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callMode, phase, speech.status, sending, playbackUrl, smsOverlayOpen]);
+  }, [callMode, phase, speech.status, sending, playbackUrl, smsOverlayOpen, verifyOverlayOpen]);
 
   // P-11 이음새 없는 전환 — 오프닝 재생이 끝나면 확인 버튼 없이 곧바로 실시간 청취로 넘어간다.
   const handlePlaybackEnded = () => {
@@ -448,6 +593,10 @@ export default function SessionCallPage() {
     smsTriggerRef.current = trigger;
     // 폴백 경로에서는 오버레이를 여는 즉시 마이크를 닫는다(위 자동 청취 effect의 재개 조건과 짝).
     if (callMode === "fallback") speech.stop();
+    // ⚠️ 동시 열림 금지(§16.2 신규 규칙 / §16.6 G26) — 두 오버레이 모두 `aria-modal="true"`라
+    // 겹치면 **포커스 트랩이 중첩돼 "훈련 종료" 도달성이 깨진다**(AC-006). 상태를 하나로 합치는
+    // 리팩터는 하지 않는다(요청되지 않은 변경 금지) — 여는 쪽에서 상대를 닫는 것으로 충분하다.
+    setVerifyOverlayOpen(false);
     setSmsOverlayOpen(true);
   };
 
@@ -464,10 +613,67 @@ export default function SessionCallPage() {
     void recordInCallSmsEvent({ sessionId, smsId, event }).catch(() => {});
   };
 
-  const handleEndTraining = async () => {
-    // 오버레이가 열려 있어도 종료는 항상 도달 가능해야 한다(AC-006). 종료 고지 화면이 문자에
-    // 가려지지 않도록 먼저 내린다.
+  // T83 — 확인 오버레이 열기/닫기. **라우팅을 하지 않는다**(D-35 하드 요구, §16.2): 상태만 바꾸므로
+  // 통화 세션 컴포넌트가 언마운트되지 않고 통화·타이머·오디오가 그대로 유지된다.
+  const handleOpenVerifyOverlay = (trigger: HTMLButtonElement | null) => {
+    verifyTriggerRef.current = trigger;
+    if (callMode === "fallback") speech.stop();
+    // 동시 열림 금지(§16.6 G26) — 반대 방향도 동일하게 상대를 닫는다.
     setSmsOverlayOpen(false);
+    setVerifyError(null);
+    setVerifyOverlayOpen(true);
+  };
+
+  const handleCloseVerifyOverlay = () => {
+    setVerifyOverlayOpen(false);
+    // 직전 트리거로 포커스 복귀(UX-031 Accessibility). 재연결 뒤에는 트리거가 사라지므로
+    // 포커스는 그대로 두고 상태 문구(aria-live)가 상황을 알린다.
+    verifyTriggerRef.current?.focus();
+  };
+
+  /**
+   * "확인 전화 걸기"(UX-031 Primary Action ①) — ⚠️ **실제 발신이 아니다**(AC-019). 하는 일은
+   * 콜러블 1회 호출(서버는 Firestore write 1건 + 지시 문자열 반환)과 화면 연출뿐이며, 이 함수는
+   * `tel:`·다이얼 인텐트·외부 네비게이션을 **어디에서도** 쓰지 않는다.
+   *
+   * 흐름(UX-031 States): Dialing("연결 중…" 2.5초 고정) → 오버레이 자동 닫힘 → 통화 셸의
+   * `verify-reconnected`(발신자 라벨이 문서의 `reconnectedCallerLabel`로 바뀐다). 실패 시 Error
+   * 상태 후 **원래 통화 유지**(세션·리포트는 정상 진행 — UF-011 Failure (c), 침묵 실패 금지).
+   */
+  const handlePlaceVerifyCall = async () => {
+    if (!sessionId || !verifyOffer || verifyDialing) return;
+    setVerifyError(null);
+    setVerifyDialing(true);
+    const requestCallMode = callMode === "realtime" ? "realtime" : "fallback";
+    try {
+      // 연출 시간과 서버 호출을 **동시에** 흘려보낸다 — 실패는 곧바로 드러나고(즉시 reject),
+      // 성공은 항상 같은 길이의 "연결 중…"을 거친다(결정론).
+      const [result] = await Promise.all([
+        deliverVerifyReconnect({
+          sessionId,
+          offerId: verifyOffer.offerId,
+          callMode: requestCallMode,
+          ...(requestCallMode === "realtime" ? { scammerTurns } : {}),
+        }),
+        delay(VERIFY_DIALING_MS),
+      ]);
+      // 실시간 경로만 클라가 주입한다(폴백은 서버가 다음 턴 프롬프트에 싣는다 — §16.2).
+      if (requestCallMode === "realtime") {
+        enqueueTurnInstruction(result.reconnectInstruction, "verify");
+      }
+      setVerifyOverlayOpen(false);
+    } catch {
+      setVerifyError("확인 전화를 연결하지 못했습니다. 통화는 그대로 이어집니다.");
+    } finally {
+      setVerifyDialing(false);
+    }
+  };
+
+  const handleEndTraining = async () => {
+    // 오버레이가 열려 있어도 종료는 항상 도달 가능해야 한다(AC-006). 종료 고지 화면이 문자·확인
+    // 화면에 가려지지 않도록 **둘 다** 먼저 내린다(T83/UX-031 Exit도 같은 규칙).
+    setSmsOverlayOpen(false);
+    setVerifyOverlayOpen(false);
     audioRef.current?.pause();
     realtime.stop();
     // 실시간 전사를 먼저 제출해 리포트가 실제 대화를 분석할 수 있게 한 뒤 종료 화면으로 이동한다
@@ -600,7 +806,14 @@ export default function SessionCallPage() {
   // 실제 보이스피싱은 모르는 번호로 걸려오며, 화면에 "사칭"이라고 적혀 있으면 판단 훈련이
   // 성립하지 않는다(정답을 미리 알려주는 셈). 시뮬레이션 고지는 수신 화면의 사전 고지
   // (PREROLL_NOTICE)와 상시 합성 표식이 계속 담당한다(AC-012/AC-022 무변경).
-  const callerLabel = scenario.callerLabel ?? "발신번호 표시제한";
+  // T83(§16.2 발신자 라벨 전환) — 모의 재연결 후에는 구독 중인 **문서의** `reconnectedCallerLabel`을
+  // 우선 표시한다(UX-014 `verify-reconnected` state). 클라 상태가 아니라 문서를 소스로 삼는 이유:
+  // 새로고침·재마운트 후에도 재연결 상태가 유지되고, 실시간·폴백 두 경로의 렌더 코드가 갈라지지
+  // 않는다(§15.1.2 단일 렌더 소스 원칙).
+  // ⚠️ 라벨만 바뀐다 — "같은 사기범입니다"·"어디에 걸어도 같은 곳입니다"류 문구는 이 화면 어디에도
+  // 두지 않는다(OQ-38 확정 = 세션 중엔 상황만, D-6 유지).
+  const callerLabel =
+    verifyOffer?.reconnectedCallerLabel ?? scenario.callerLabel ?? "발신번호 표시제한";
   // T72(§15.6 G6) — 자격증명을 아직 못 받았으면(수신 대기 중) 기본은 true다. 실제로 난이도를
   // 반영하지 못하는 경로(ElevenLabs)만 서버가 false로 명시해 내려준다.
   const difficultyApplied = realtime.credentials?.difficultyApplied !== false;
@@ -614,6 +827,17 @@ export default function SessionCallPage() {
   const smsUnreadCount = countUnread(inCallSms);
   const showSmsBanner =
     latestSms !== null && !smsBannerDismissed && !smsOverlayOpen && phase !== "ended";
+  // T83(UX-014 `verify-offered` state) — 확인 권유가 도착했고 아직 걸지 않았을 때만 보조 컨트롤이
+  // 뜬다. 재연결 이후(placedAt 존재)에는 사라진다 — 이 흐름은 세션당 한 번이다(§16.1.3).
+  const showVerifyTrigger =
+    verifyOffer !== null &&
+    verifyOffer.placedAtMs === undefined &&
+    !verifyOverlayOpen &&
+    phase !== "ended";
+  // 재연결 완료 상태의 1줄 고지(§16.2 "폴백 경로의 인사말" 공백을 UI가 메운다). 구조 설명이
+  // 아니라 **연결 사실**만 알린다(OQ-38).
+  const verifyConnectedLabel =
+    verifyOffer?.placedAtMs !== undefined ? `연결되었습니다 · ${verifyOffer.deskLabel}` : null;
   // 실시간 경로는 SDK의 발화 상태를, 폴백 경로는 오디오 재생 여부를 "상대가 말하는 중"으로 본다.
   const agentSpeaking =
     callMode === "realtime" ? realtime.isAgentSpeaking : Boolean(playbackUrl);
@@ -638,7 +862,7 @@ export default function SessionCallPage() {
           stopSignal={realtime.stopSignal}
           // T68(§15.1.3) — 오버레이가 열린 동안 **마이크 입력만** 멈춘다. 아래 음소거 버튼의
           // aria-pressed는 사용자 의도(muted)에만 바인딩한다(근거 없는 표기 금지).
-          muted={muted || smsOverlayOpen}
+          muted={muted || smsOverlayOpen || verifyOverlayOpen}
           onActive={realtime.handleActive}
           onEnded={realtime.handleEnded}
           onError={realtime.handleError}
@@ -650,7 +874,7 @@ export default function SessionCallPage() {
         <GeminiVoiceSession
           credentials={realtime.credentials}
           stopSignal={realtime.stopSignal}
-          muted={muted || smsOverlayOpen}
+          muted={muted || smsOverlayOpen || verifyOverlayOpen}
           onActive={realtime.handleActive}
           onEnded={realtime.handleEnded}
           onError={realtime.handleError}
@@ -659,7 +883,7 @@ export default function SessionCallPage() {
           onTranscriptTurn={handleTranscriptTurn}
           textMessage={textMessage}
           onScammerTurnComplete={handleScammerTurnComplete}
-          instructionTurn={smsInstruction}
+          instructionTurn={instructionTurn}
         />
       )}
 
@@ -769,6 +993,14 @@ export default function SessionCallPage() {
                 이 통화 경로에서는 고른 난이도가 적용되지 않습니다
               </p>
             ))}
+          {/* T83(§16.2/UX-014 `verify-reconnected`) — 재연결 후 1줄 상태 문구. 폴백 경로에서
+              서버가 별도 인사말을 생성하지 않기 때문에 이 자리가 그 공백을 메운다. **연결 사실만**
+              알리고 구조 설명은 하지 않는다(OQ-38 확정 = 세션 중엔 상황만). */}
+          {verifyConnectedLabel && phase !== "ended" && (
+            <p role="status" className="text-sm text-[#C9D4DB]">
+              {verifyConnectedLabel}
+            </p>
+          )}
         </div>
 
         {phase === "incoming" && (
@@ -1037,6 +1269,33 @@ export default function SessionCallPage() {
             </p>
           )}
 
+          {/* T83 확인 권유 컨트롤(UX-014 `verify-offered` state / UF-011 Step 3) — 통화는 그대로
+              진행 중이다. 탭하면 UX-031 오버레이가 열릴 뿐 **라우팅이 일어나지 않는다**(D-35).
+              ⚠️ D-47 — 아래 "종료"(빨강 원형, 가운데)는 **자리·문구·크기 그대로**이고 이 컨트롤은
+              **다른 영역·다른 문구·다른 모양**이다(색이 아니라 문구·위치로 구분 — 어르신이 "끊고
+              확인하기"와 "훈련 종료"를 혼동하면 AC-006 도달성 문제로 번진다). "훈련은 계속됩니다"
+              보조 문구를 병기한다. */}
+          {showVerifyTrigger && verifyOffer && (
+            <div className="mb-4">
+              <button
+                type="button"
+                ref={verifyTriggerRef}
+                onClick={(event) => handleOpenVerifyOverlay(event.currentTarget)}
+                className="flex min-h-[56px] w-full flex-col items-center justify-center rounded-[14px] border-[1.5px] border-[#C9C2B6] bg-white/95 px-4 py-2.5 text-center"
+              >
+                <span className="text-base font-bold text-[#22303A]">
+                  안내받은 번호로 확인 전화 걸기
+                </span>
+                <span className="text-xs text-[#6B655C]">훈련은 계속됩니다</span>
+              </button>
+            </div>
+          )}
+          {verifyError && !verifyOverlayOpen && (
+            <p role="alert" className="mb-3 text-center text-xs leading-relaxed text-[#F0A79E]">
+              {verifyError}
+            </p>
+          )}
+
           {/* 실제 폰 통화의 컨트롤 행: 음소거 · 통화 종료(빨강, 가운데) · 키패드 · (해당 시) 메시지로
               전환. 가운데 빨강 버튼이 AC-006의 "상시 즉시 종료" 컨트롤을 겸한다 — 별도 "훈련 종료"
               버튼을 두면 통화 화면처럼 보이지 않는다는 피드백을 반영하되, 종료 수단은 모든
@@ -1152,6 +1411,23 @@ export default function SessionCallPage() {
           onEndTraining={() => void handleEndTraining()}
           onOpened={(smsId) => handleRecordSmsEvent(smsId, "opened")}
           onLinkTapped={(smsId) => handleRecordSmsEvent(smsId, "link_tapped")}
+        />
+      )}
+
+      {/* ⚠️ T83/UX-031 — 확인 오버레이도 **같은 자리의 형제 노드**다(§16.2 오버레이 계층 무개정
+          재사용): 신규 라우트·포털·상위 래퍼·`key` 변경 0건. 위 문자 오버레이와 **동시에 열리지
+          않는다**(§16.6 G26 — 중첩 aria-modal은 포커스 트랩이 겹쳐 AC-006 도달성을 깬다). 여는
+          핸들러가 상대를 닫으므로 이 두 조건은 구조적으로 상호배타다. */}
+      {verifyOverlayOpen && verifyOffer && (
+        <VerifyCallOverlay
+          offer={verifyOffer}
+          callerLabel={callerLabel}
+          elapsedLabel={formatElapsed(elapsedSec)}
+          dialing={verifyDialing}
+          errorMessage={verifyError}
+          onPlaceCall={() => void handlePlaceVerifyCall()}
+          onClose={handleCloseVerifyOverlay}
+          onEndTraining={() => void handleEndTraining()}
         />
       )}
     </main>

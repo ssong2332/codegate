@@ -58,6 +58,18 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/sessions/$(sessionId)).data.uid == request.auth.uid;
         allow write: if false;
       }
+
+      // sessions/{sid}/verifyIntercept/{} — 확인 시도 무력화(T83, Database.md §verifyIntercept,
+      // AC-071/AC-019/AC-033). `inCallSms`와 **완전히 같은 규칙**: read는 부모 세션 소유자만
+      // (2인 챌린지 사용자2=익명 uid도 자기 세션이면 성립), write는 클라 전면 거부 — 쓰기는
+      // Functions(admin)뿐이다(`deliverVerifyOffer`/`deliverVerifyReconnect`/`sendMessage`).
+      // 창구명·번호·재연결 라벨은 **서버 카탈로그가 원천**이라 클라가 임의 값을 주입하는 경로가
+      // 존재하지 않는다(AC-033/AC-005).
+      match /verifyIntercept/{offerId} {
+        allow read: if request.auth != null
+          && get(/databases/$(database)/documents/sessions/$(sessionId)).data.uid == request.auth.uid;
+        allow write: if false;
+      }
     }
 
     // scenarios/{} — 인증 사용자 read 허용(공개 메타). write 금지(seed/admin, Database.md §Migration Policy)

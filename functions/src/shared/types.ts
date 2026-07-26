@@ -202,6 +202,64 @@ export type InCallSmsDoc = {
   anchorScammerTurn?: number;
 };
 
+// --- sessions/{sessionId}/verifyIntercept/{offerId} (T83, UX-031/UF-011, §16.3.1, AC-071/019) ---
+//
+// ⚠️ **세션당 최대 1건**(이 흐름은 세션에서 한 번만 일어난다). `inCallSms`와 마찬가지로 `messages`에
+// 넣지 않는 이유는 같다 — `analyzeConversation`의 scammer(i)↔user(i+1) 짝짓기가 어긋나 리포트
+// 판정이 손상된다(§15.6 G3/G25).
+//
+// ⚠️ **실 발신 표면 부재(AC-019 하드)**: 이 스키마에는 `url`·`tel`·전화번호 **입력** 필드·발신 대상
+// 식별자가 **존재하지 않는다.** `displayNumber`는 화면에 글자로만 나오는 모의값이며(형식
+// `/^\d{3,4}-0000$/`), 탭 대상은 번호가 아니라 버튼이다(UX-031 P-24).
+// ⚠️ `announceInstruction`·`reconnectInstruction`(모델 지시)은 이 문서에 **없다**(AC-024/ADR-0004).
+export type VerifyInterceptDoc = {
+  offerId: string; // = 문서 id. 서버가 VERIFY_INTERCEPT[session.scenarioId] 소속을 재검증한 값만 기록
+  deskLabel: string; // 모의 창구명(실존 기관·창구 아님 — AC-033/AC-005)
+  displayNumber: string; // **표시 텍스트 전용** 모의 번호
+  offeredAt: FirebaseFirestore.Timestamp;
+  // "이 시점까지 messages에 존재하는 role==='scammer' 문서 수"(서버 계산, verifyIntercept/buildDoc.ts
+  // 단일 지점). 리포트 생성 시 실제 turnIndex로 해결돼 verifyTimeline[].anchorTurnIndex가 된다.
+  offerAnchorScammerTurn: number;
+  // 폴백 경로 전용 — sendMessage가 권유 대사를 turnInstruction으로 주입한 턴(중복 주입 방지 마크).
+  // 실시간 경로는 클라가 즉시 주입하므로 세팅되지 않는다.
+  announcedAt?: FirebaseFirestore.Timestamp;
+  // 참가자가 UX-031에서 "확인 전화 걸기"를 누른 시각 = **확인 시도**. 부재 = D-51 ①(속은 순간 아님).
+  placedAt?: FirebaseFirestore.Timestamp;
+  // **판정 앵커**(재연결 대사 = scammers[이 값])의 근거. 표시 앵커와 구분된다(§16.3.2 — 혼동 시
+  // 재연결 **전** 순응까지 "확인했는데도 속은 순간"으로 오분류된다).
+  reconnectAnchorScammerTurn?: number;
+  reconnectedCallerLabel?: string; // 재연결 후 통화 셸 발신자 라벨(모의값)
+};
+
+// --- reports/{reportId}.verifyTimeline (T83, §16.3.1, AC-071) — 표시 전용 스냅샷 ---
+// ⚠️ `smsTimeline`과 같은 패턴이지만 **요구가 하나 다르다**: 이 사건은 `deceivedMoments`를 만들지도
+// 지우지도 않되(ADR-0009), 이미 존재하는 순간에 `afterVerifyReconnect` **주석**을 남긴다. 순간의
+// 개수·turnIndex·timeLabel·wasDeceived는 한 건도 바뀌지 않는다.
+export type VerifyTimelineOutcome =
+  | "offered_not_placed" // D-51 ① 권했으나 걸지 않음 — 속은 순간 아님
+  | "placed_not_complied" // D-51 ⑤ 걸었으나 응하지 않음 — **잘 대응한 지점**(속은 순간 아님)
+  | "placed_and_complied"; // D-51 ② 걸고 응함 — 기존 순간에 주석
+export type VerifyTimelineEventKind = "verify_offer_shown" | "verify_reconnected";
+export type VerifyTimelineEvent = {
+  event: VerifyTimelineEventKind;
+  what: string;
+  correctAction?: string;
+};
+export type VerifyTimelineEntry = {
+  offerId: string;
+  deskLabel: string;
+  displayNumber: string; // 텍스트로만 렌더 — 링크·복사 버튼·재발신 컨트롤을 만들지 않는다(§16.3.1)
+  anchorTurnIndex: number; // 표시 위치(= 오퍼 앵커). -1 = 대화 맨 앞
+  anchorResolved: boolean; // false = 위치 확정 실패 → 화면이 정직하게 고지(조용한 누락 금지)
+  timeLabel?: string; // 앵커 메시지의 경과 초에서 파생 — deceivedMoments와 **같은 시간축**
+  reconnectTimeLabel?: string; // placedAt 있을 때, 재연결 앵커 메시지에서 파생
+  outcome: VerifyTimelineOutcome;
+  events: VerifyTimelineEvent[]; // 최소 1건(verify_offer_shown), 순서 고정(§16.3.4)
+};
+// ⚠️ 스냅샷에 **절대 넣지 않는 필드**(§16.3.1 금지 표): announceInstruction/reconnectInstruction
+// (모델 지시 — 프롬프트가 클라로 내려간다), offeredAt/placedAt 원시 타임스탬프(표시 축이 아니다),
+// url/tel/발신 관련 필드(어느 스키마에도 없다), 가로채기의 수단·작동 원리 서술(AC-005 불변).
+
 // --- reports/{reportId}.smsTimeline (T89, §15.1.5, AC-059) — 표시 전용 스냅샷 ---
 // ⚠️ 이 배열은 analyzeConversation의 **입력이 아니라 산출 뒤에 나란히 얹히는 값**이다.
 // wasDeceived·deceivedMoments·tacticsUsed·preventionAdvice는 문자 유무와 무관하게 동일하며,
@@ -266,6 +324,13 @@ export type DeceivedMoment = {
   // "수법별 묶기" 그룹 키. 표시 문구는 여전히 `tactic` 원문이고 이 값은 묶기에만 쓴다. 기존
   // 리포트에는 없으므로 아카이브가 `tacticCategory ?? tactic`으로 폴백한다(무백필).
   tacticCategory?: TacticCategory;
+  // T83 추가(옵셔널, 하위호환 — §16.3.3/ADR-0009): 이 순간이 **모의 재연결 이후**의 응낙임을
+  // 표시하는 **주석**이다. 순간을 만들지도 지우지도 않는다. 이 플래그가 붙은 순간은
+  // `tactic="확인 시도 무력화"`·`tacticCategory="verification_block"`·
+  // `correctAction=VERIFY_INTERCEPT_CORRECT_ACTION`으로 덮어쓰여 저장된다(덮어쓰기가 **안전
+  // 요건**인 이유는 §16.4/G27 — `pickCorrectAction`의 첫 규칙이 방금 확인 전화가 소용없던
+  // 참가자에게 "확인 전화를 걸라"고 답한다).
+  afterVerifyReconnect?: true;
 };
 export type ReportDoc = {
   reportId: string;
@@ -296,6 +361,11 @@ export type ReportDoc = {
   // 멱등 early-return 덕에 **최초 생성 시 1회만** 쓰인다(AC-007 무변경 — 두 번째 리포트 문서도
   // 서브컬렉션도 만들지 않는다). 문자가 0건이면 필드 자체를 만들지 않는다(부재→빈 배열 취급).
   smsTimeline?: SmsTimelineEntry[];
+  // T83 추가(옵셔널, 하위호환 — §16.3.1, AC-071) — 확인 무력화의 **표시 전용 스냅샷**. smsTimeline과
+  // 같은 수집 지점·같은 1회 기록 규칙. ⚠️ D-51 ①/⑤(속은 순간 0건 + 확인 시도 있음)에서도 이
+  // 배열은 존재할 수 있다 — 리포트 타임라인 노출 조건이 deceivedMoments에만 걸려 있으면 항목이
+  // 통째로 사라진다(§16.6 G30).
+  verifyTimeline?: VerifyTimelineEntry[];
 };
 
 // --- reports/{reportId}/rewindAttempts/{attemptId} (T70, UX-028/UF-009, §15.2.2, AC-062/063) ---

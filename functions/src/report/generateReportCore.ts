@@ -9,10 +9,17 @@ import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
-import type { InCallSmsDoc, MessageDoc, ReportDoc, SessionDoc } from "../shared/types";
+import type {
+  InCallSmsDoc,
+  MessageDoc,
+  ReportDoc,
+  SessionDoc,
+  VerifyInterceptDoc,
+} from "../shared/types";
 import { analyzeConversation, buildPreventionAdvice, type AnalysisMessage } from "./analyzeConversation";
 import { computeDefenseGrade } from "./computeDefenseGrade";
 import { buildSmsTimeline, type SmsTimelineSource } from "./smsTimeline";
+import { applyVerifyIntercept, type VerifyTimelineSource } from "./verifyTimeline";
 import type { GenerateReportResponse } from "./types";
 
 export async function generateReportForSession(sessionId: string): Promise<GenerateReportResponse> {
@@ -90,6 +97,39 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   });
   const smsTimeline = buildSmsTimeline(smsSources, messages, session.createdAt.toMillis());
 
+  // ②-c 확인 시도 무력화 스냅샷 + **기존 순간 주석**(T83, §16.3, ADR-0009, AC-071) —
+  // `sessions/{sid}/verifyIntercept`를 **1회 추가 read**한다(위 문자 수집과 같은 지점).
+  //
+  // ⚠️ **순간을 새로 만들지 않는다는 것이 이 배치의 전부다**(ADR-0009): 확인 무력화의 응낙은
+  // 참가자의 **대화 발화**라 위 analyzeConversation이 **이미 순간으로 잡았다**. 여기서는 그
+  // 산출물에 `afterVerifyReconnect` 주석을 얹고 `tactic`·`tacticCategory`·`correctAction`만
+  // 덮어쓴다 — 순간 **개수**·`turnIndex`·`timeLabel`·`wasDeceived`는 한 건도 바뀌지 않으므로
+  // 되감기 진입 조건(AC-062)·방어등급(AC-010/011)·아카이브 항목 수(AC-068)·딥링크 인덱스가
+  // **정의상** 흔들릴 수 없다. 순간을 하나 더 만들었다면 같은 응낙이 두 번 계상됐을 것이다(G16).
+  const verifySnap = await sessionRef.collection("verifyIntercept").orderBy("offeredAt", "asc").get();
+  const verifySources: VerifyTimelineSource[] = verifySnap.docs.map((doc) => {
+    const data = doc.data() as VerifyInterceptDoc;
+    return {
+      offerId: data.offerId ?? doc.id,
+      deskLabel: data.deskLabel,
+      displayNumber: data.displayNumber,
+      ...(data.offerAnchorScammerTurn !== undefined
+        ? { offerAnchorScammerTurn: data.offerAnchorScammerTurn }
+        : {}),
+      offeredAtMs: data.offeredAt?.toMillis?.() ?? 0,
+      ...(data.placedAt ? { placedAtMs: data.placedAt.toMillis() } : {}),
+      ...(data.reconnectAnchorScammerTurn !== undefined
+        ? { reconnectAnchorScammerTurn: data.reconnectAnchorScammerTurn }
+        : {}),
+    };
+  });
+  const verify = applyVerifyIntercept(
+    verifySources,
+    analysis.deceivedMoments,
+    messages,
+    session.createdAt.toMillis(),
+  );
+
   // ③ 실패 아카이브(UX-030, T74)용 세션 메타 역정규화 — Architecture.md §15.4.1/§15.6 G8.
   // 아카이브는 리포트만 페이지 조회해 카드를 그리므로(별도 컬렉션 없음), 카드에 필요한 세션 메타가
   // 리포트에 없으면 항목 수만큼 세션을 추가 read해야 한다(N+1). 여기서는 session을 이미 읽었으므로
@@ -101,7 +141,9 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     sessionId,
     uid: session.uid,
     wasDeceived: analysis.wasDeceived,
-    deceivedMoments: analysis.deceivedMoments,
+    // T83 — 주석이 얹힌 배열이지만 **개수·turnIndex·timeLabel은 analysis.deceivedMoments와
+    // 동일**하다(확인 문서가 0건이면 같은 값 그대로다 — 회귀 테스트로 고정).
+    deceivedMoments: verify.deceivedMoments,
     tacticsUsed: analysis.tacticsUsed,
     preventionAdvice,
     // T72(§15.3.2/§15.4.1) — 세션에서 역정규화(표기 전용). 리포트·리플레이·실패 아카이브가 세션
@@ -117,6 +159,10 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     // T89(§15.1.5) — 문자가 0건이면 필드 자체를 만들지 않는다(부재→빈 배열 취급, 무백필). 위
     // 멱등 early-return 덕에 이 스냅샷은 **최초 리포트 생성 시 1회만** 기록된다(AC-007 무변경).
     ...(smsTimeline.length > 0 ? { smsTimeline } : {}),
+    // T83(§16.3.1) — 확인 안내가 0건이면 필드 자체를 만들지 않는다(부재→빈 배열 취급, 무백필).
+    // 위 멱등 early-return 덕에 이 스냅샷·주석은 **최초 리포트 생성 시 1회만** 기록된다(AC-007
+    // 무변경 — 생성 이후 이 문서를 update하지 않는다, §15.6 G13과 동일 규칙).
+    ...(verify.verifyTimeline.length > 0 ? { verifyTimeline: verify.verifyTimeline } : {}),
   };
   await reportRef.set(reportDoc);
 

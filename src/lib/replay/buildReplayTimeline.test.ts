@@ -162,3 +162,67 @@ test("[G17] 앵커 메시지와 turnIndex가 같아도 문자 항목에는 주�
     "문자 항목에는 annotation 필드 자체가 없다",
   );
 });
+
+// ── T83(§16.3.5) 확인 항목 병합 ────────────────────────────────────────────────
+function verifySource(overrides: Record<string, unknown> = {}) {
+  return {
+    offerId: "institution-verify-desk",
+    deskLabel: "○○금융범죄대응센터 확인창구",
+    displayNumber: "1500-0000",
+    anchorTurnIndex: 2,
+    anchorResolved: true,
+    timeLabel: "20초 시점",
+    outcome: "offered_not_placed" as const,
+    events: [{ event: "verify_offer_shown", what: "직접 확인해 보라고 했습니다." }],
+    ...overrides,
+  };
+}
+
+test("[T83] 확인 항목이 0건이면 결과가 도입 전과 **완전히 동일**하다(회귀 0)", () => {
+  const before = buildReplayTimeline(CONVERSATION, [], [smsSource()]);
+  const after = buildReplayTimeline(CONVERSATION, [], [smsSource()], []);
+  assert.deepEqual(after, before);
+});
+
+test("[T83/§16.3.5] 정렬 kindRank = 메시지 0 < 문자 1 < 확인 2 (같은 앵커에서 결정론적)", () => {
+  const timeline = buildReplayTimeline(
+    CONVERSATION,
+    [],
+    [smsSource({ anchorTurnIndex: 2 })],
+    [verifySource({ anchorTurnIndex: 2 })],
+  );
+  assert.deepEqual(
+    timeline.map((item) => item.id),
+    ["m0", "m1", "m2", "sms-otp-1", "verify-institution-verify-desk", "m3"],
+  );
+});
+
+test("[T83/G16] 확인 항목은 getAnnotatedTurnIndexes에 절대 포함되지 않는다(되감기 딥링크 보호)", () => {
+  const timeline = buildReplayTimeline(
+    CONVERSATION,
+    [{ turnIndex: 3, timeLabel: "20초 시점", tactic: "t", correctAction: "a" }],
+    [],
+    [verifySource({ anchorTurnIndex: 2 }), verifySource({ offerId: "x", anchorTurnIndex: 3 })],
+  );
+  assert.deepEqual(getAnnotatedTurnIndexes(timeline), [3]);
+});
+
+test("[T83/AC-062] 속은 순간 0건 + 확인 시도만 있는 세션은 주석 목록이 비어 있다(진입점 미노출)", () => {
+  const timeline = buildReplayTimeline(CONVERSATION, [], [], [verifySource()]);
+  assert.deepEqual(getAnnotatedTurnIndexes(timeline), []);
+});
+
+test("[T83/G17] 앵커 메시지와 turnIndex가 같아도 확인 항목에는 주석이 붙지 않는다", () => {
+  const timeline = buildReplayTimeline(
+    CONVERSATION,
+    [{ turnIndex: 2, timeLabel: "12초 시점", tactic: "t", correctAction: "a" }],
+    [],
+    [verifySource({ anchorTurnIndex: 2 })],
+  );
+  const verifyItem = timeline.find((item) => item.kind === "verify");
+  assert.equal(
+    (verifyItem as unknown as Record<string, unknown>).annotation,
+    undefined,
+    "확인 항목에는 annotation 필드 자체가 없다",
+  );
+});

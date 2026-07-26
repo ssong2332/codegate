@@ -12,6 +12,8 @@ export { generateReport } from "./generateReport";
 export { judgeRewindAnswer } from "./judgeRewindAnswer";
 export { deliverInCallSms } from "./deliverInCallSms";
 export { recordInCallSmsEvent } from "./recordInCallSmsEvent";
+export { deliverVerifyOffer } from "./deliverVerifyOffer";
+export { deliverVerifyReconnect } from "./deliverVerifyReconnect";
 export { getBeginnerBriefing } from "./getBeginnerBriefing";
 export { createChallenge } from "./createChallenge";
 export { deleteChallenge } from "./deleteChallenge";

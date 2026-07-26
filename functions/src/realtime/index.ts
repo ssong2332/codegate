@@ -10,6 +10,7 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { ELEVENLABS_API_KEY, GEMINI_API_KEY } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { listInCallSmsTriggers } from "../scenarios/inCallSms";
+import { getVerifyOfferTrigger } from "../scenarios/verifyIntercept";
 import type { VoiceMode } from "../scenarios/publicMeta";
 import type { ChallengeDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
 import { getRealtimeProvider } from "./provider";
@@ -95,6 +96,20 @@ export const createRealtimeCall = onCall<
   const inCallSmsTriggers = listInCallSmsTriggers(session.scenarioId);
   const withSmsTriggers = <T extends object>(credentials: T): T =>
     inCallSmsTriggers.length > 0 ? { ...credentials, inCallSmsTriggers } : credentials;
+  // T83(§16.1.5) — 확인 시도 무력화의 **가용 게이트만** 내려준다(창구명·번호·모델 지시는 오퍼
+  // 시점에 deliverVerifyOffer가 서버 카탈로그에서 렌더 — `withSmsTriggers`와 같은 자리·같은 원칙).
+  //
+  // ⚠️ **부착 조건 3개를 전부 만족할 때만 필드가 존재한다**(1차 게이트, 프레젠테이션):
+  //   ① 카탈로그 보유 ② 세션 난이도 advanced ③ `difficultyApplied === true`.
+  // ③이 **ElevenLabs 경로를 구조적으로 차단**한다(§16.6 G23 — 그 경로엔 지시 주입 지점이 없어
+  // 컨트롤만 뜨고 사기범이 아무 말도 하지 않는 반대 방향 불일치가 생긴다). 필드가 없으면 클라에
+  // 컨트롤이 **존재하지 않는다**. 2차 게이트는 콜러블의 재검증 5종이다(G24).
+  const verifyOffer = getVerifyOfferTrigger(session.scenarioId);
+  const isAdvanced = normalizeDifficultyLevel(session.difficultyLevel) === "advanced";
+  const withVerifyOffer = <T extends { difficultyApplied: boolean }>(credentials: T): T =>
+    verifyOffer && isAdvanced && credentials.difficultyApplied === true
+      ? { ...credentials, verifyOffer }
+      : credentials;
   try {
     const credentials = await provider.createCallCredentials({
       sessionId,
@@ -112,9 +127,9 @@ export const createRealtimeCall = onCall<
     // provider==="elevenlabs"일 때만 마운트, src/app/session/play/page.tsx:448) 굳이 실어 보낼
     // 이유가 없다 — challenge 세션이면 그 불필요한 노출을 비운다.
     if (session.challengeId && credentials.provider !== "elevenlabs") {
-      return withSmsTriggers({ ...credentials, voiceId: "" });
+      return withVerifyOffer(withSmsTriggers({ ...credentials, voiceId: "" }));
     }
-    return withSmsTriggers(credentials);
+    return withVerifyOffer(withSmsTriggers(credentials));
   } catch {
     // 자격증명 발급 실패가 통화 자체를 막지 않도록, 목업(텍스트 폴백)으로 강등해 돌려준다
     // (P-4 핵심 루프 비차단). 클라는 isMock을 보고 폴백 UI를 띄운다 — 조용히 실패하지 않는다.
@@ -122,7 +137,12 @@ export const createRealtimeCall = onCall<
     // 어차피 클라가 쓰지 않는다).
     // T68 — 이 폴백은 클라를 텍스트 경로(sendMessage)로 보내며, 그 경로는 서버가 턴마다 due 여부를
     // 직접 계산해 문자를 도착시킨다. 클라 카운팅 트리거가 필요 없으므로 붙이지 않는다.
-    return {
+    // ⚠️ T83은 다르다(§16.1.5) — 확인 오퍼는 **폴백에서도 클라가 컨트롤을 띄워야** 하고 write
+    // 경로가 `deliverVerifyOffer` 하나뿐이므로, 이 분기에도 게이트를 붙인다(이 경로는
+    // `difficultyApplied:true`라 확인 무력화가 성립한다).
+    // 명시 타입 인자 — 제네릭 래퍼를 통과하면 객체 리터럴의 문자열 리터럴 타입이 넓어져
+    // `provider: string`이 된다(실측 TS2345). 반환 계약을 그대로 고정한다.
+    return withVerifyOffer<CreateRealtimeCallResponse>({
       provider: "none",
       signedUrl: "",
       geminiToken: "",
@@ -133,6 +153,6 @@ export const createRealtimeCall = onCall<
       // T72 — 이 폴백은 클라를 텍스트 경로(sendMessage)로 보내며, 그 경로는 매 턴 서버가 프롬프트를
       // 조립하므로 난이도가 정상 반영된다(MockRealtimeProvider와 동일 판단).
       difficultyApplied: true,
-    };
+    });
   }
 });

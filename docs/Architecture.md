@@ -1821,7 +1821,7 @@ afterVerifyReconnect?: true                 // **주석**일 뿐 순간을 만�
 - **표면 전환 4종(콘텐츠·UI 계약):** ① 통화 셸 발신자 라벨 → `reconnectedCallerLabel`(16.2) ② "연결 중…" 2.5초 연출 ③ `reconnectInstruction`이 모델에게 **다른 담당자로서** 자기소개(창구명·이름·직급)와 **정형·존대 응대 톤**으로 전환하도록 지시 ④ 재연결 후 첫 대사는 **앞선 요구를 "확인해 드렸다"는 형태로 되풀이**(AC-071 문면).
 - **정직한 한계(숨기지 않는다):** 참가자가 **음색으로 같은 상대임을 알아챌 수 있다.** UX(OQ-U23)는 이 경우 *"재현 목표가 사실상 미달성"*이라고 **추정**했으나 이는 측정된 바 없다 — **T87 QA가 라이브로 확인할 항목으로 넘긴다**(측정 방법: 고급 세션 재연결 직후 참가자에게 "같은 사람 같았는가"를 묻고, "즉시 알아챘다"가 지배적이면 위 확장 경로를 폴백·Live 양쪽에 적용하는 후속 태스크를 planner에 요청). **측정 전에 무거운 재연결 아키텍처를 도입하지 않는다**(§0.1).
 
-### 16.6 implementer 갭 (G23~G31 — 전부 실측 근거 있음)
+### 16.6 implementer 갭 (G23~G31 + G58 — 전부 실측 근거 있음. ⚠️ G58은 T83 구현 중 발견돼 사후 추인된 행이라 번호가 이어지지 않는다 — G32~G57은 T78·T80이 선점했다)
 | # | 갭 | 근거 | 안 고치면 생기는 일 |
 |---|---|---|---|
 | G23 | **ElevenLabs 경로에는 지시 주입 지점이 없다(확인 무력화 미적용)** | `src/lib/realtime/RealtimeVoiceSession.tsx` props에 `instructionTurn`/`textMessage` 부재(실측), `difficultyApplied:false`(§15.3.3) | 컨트롤은 뜨는데 사기범이 아무 말도 하지 않는 **반대 방향 불일치**. `createRealtimeCall`이 `verifyOffer`를 **붙이지 않는 것**으로 구조적으로 차단할 것(§16.1.5) |
@@ -1833,6 +1833,7 @@ afterVerifyReconnect?: true                 // **주석**일 뿐 순간을 만�
 | G29 | **`resolveTacticCategory`가 "확인 시도 무력화"를 `other`로 떨어뜨린다** | `functions/src/report/tacticCategory.ts:60-63` 정규식 실측(`확인[^]{0,6}차단` 계열만 매치) | 드리프트 테스트(`other` 0건)가 깨진다 — **설계대로 깨지는 것이니 테스트를 완화하지 말고 규칙표 4행에 `확인[^]{0,6}무력화`를 추가**할 것(§16.3.3) |
 | G30 | **리포트 타임라인 노출 조건이 `deceivedMoments \|\| smsTimeline`에서 멈춰 있다** | T89가 넓힌 조건(§15.6 G18 계열) | D-51 ①/⑤(속은 순간 0건 + 확인 시도 있음) 세션에서 항목이 **통째로 사라진다** — `\|\| verifyTimeline.length > 0` 추가 |
 | G31 | **같은 턴에 문자 announce와 확인 announce가 동시에 due이면 모델이 하나를 흘린다** | `buildSystemPrompt`의 `turnInstruction`은 **문자열 1개**(`functions/src/roleplay/index.ts:166-170`) | 지시 하나가 조용히 유실된다. **규칙 고정: 문자 announce가 우선, 확인 announce는 다음 턴으로 미룬다**(두 지시를 이어 붙이지 말 것 — 조립 순서·길이 모두 위험) ⚠️ **실시간 경로 보강(T79 reviewer Major 2, 2026-07-26)**: 위 규칙은 **폴백 텍스트 경로**(`sendMessage`가 `turnInstruction`을 읽는 지점)만 규율한다. **실시간 경로에는 같은 규칙이 걸려 있지 않다** — `deliverInCallSms`와 `deliverVerifyOffer`가 각각 독립 콜러블이고, 두 결과가 클라이언트의 **같은 `instructionTurn` prop**(`src/lib/realtime/GeminiVoiceSession.tsx:75`, `{text, seq}` 단일 슬롯)으로 들어간다. 같은 턴 경계에 둘 다 due면 **나중 것이 앞것을 덮어써 조용히 유실**된다(prop 교체이므로 에러도 나지 않는다). **클라이언트 시퀀싱 계약을 implementer가 명시 구현할 것**: (1) 한 턴 경계에 due가 2건이면 **문자 announce를 먼저 주입**하고 확인 announce는 **다음 사기범 턴 완료(`onScammerTurnComplete`)까지 보류**한다. (2) 보류분은 버리지 않고 큐에 남긴다 — 버리면 확인 무력화가 그 세션에서 영영 안 뜬다. (3) `seq`는 단조 증가시켜 늦게 도착한 앞 순번이 뒤 순번을 덮어쓰지 않게 한다. **완료 판정 증거**: 두 콜러블이 같은 턴에 due인 상황을 재현해 **두 지시가 모두 소비됨**(순서대로 1턴 간격)을 확인할 것 — 단위 테스트로 끝내지 말 것(G21·G28과 같은 실측 요구). |
+| G58 | **G31이 규율하지 않은 충돌 — 폴백에서 문자 announce ↔ 재연결 *대사*가 같은 턴에 겹친다** | G31은 "문자 announce ↔ 확인 **announce**"만 고정했다. 재연결 **대사**는 그 사각지대다(`functions/src/verifyIntercept/fallbackTurn.ts`) | **확정 규칙: 재연결 우선**(T83 구현자 판정 → T83 reviewer 타당성 확인 → 여기 사후 추인, 2026-07-26). **근거**: 재연결 대사는 `reconnectAnchorScammerTurn`이 **이미 기록돼 그 턴 하나에만 자리가 있어** 미루면 영영 유실된다. 반면 문자는 미뤄도 **문서가 그대로 도착**해 열화에 그친다. 즉 두 손실의 크기가 비대칭이다. ⚠️ **이 규칙을 코드 주석에만 두지 말 것** — 반복 가능한 판단은 표로 승격한다(CLAUDE.md "판단은 규칙으로"). 판정표 원문은 `fallbackTurn.ts` 주석에 있고 이 행이 그 정본 참조다. |
 
 ### 16.7 UX Traceability 증분 (화면 → 콜러블/컬렉션)
 | Screen/Flow | 라우트/컴포넌트 | 콜러블 | Firestore | 재사용 AC | §16 매핑 |

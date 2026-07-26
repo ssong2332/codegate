@@ -54,7 +54,31 @@ export type ReplayTimelineSmsItem = {
   sms: ReplaySmsSource;
 };
 
-export type ReplayTimelineItem = ReplayTimelineMessageItem | ReplayTimelineSmsItem;
+/** `reports/{rid}.verifyTimeline[]`의 클라 표현(읽기 전용, 표시 전용) — T83, §16.3.5. */
+export type ReplayVerifySource = {
+  offerId: string;
+  deskLabel: string;
+  /** **표시 텍스트 전용**. 링크·복사·재발신 컨트롤로 렌더하지 않는다(AC-019). */
+  displayNumber: string;
+  anchorTurnIndex: number;
+  anchorResolved: boolean;
+  timeLabel?: string;
+  reconnectTimeLabel?: string;
+  outcome: "offered_not_placed" | "placed_not_complied" | "placed_and_complied";
+  events: { event: string; what: string; correctAction?: string }[];
+};
+
+export type ReplayTimelineVerifyItem = {
+  kind: "verify";
+  id: string;
+  turnIndex: number;
+  verify: ReplayVerifySource;
+};
+
+export type ReplayTimelineItem =
+  | ReplayTimelineMessageItem
+  | ReplayTimelineSmsItem
+  | ReplayTimelineVerifyItem;
 
 /** messages를 turnIndex 오름차순으로 정렬하고, deceivedMoments 중 같은 turnIndex를 가진 항목을
  * annotation으로 매칭시킨다(§13.1 "turnIndex는 채널을 넘어 단조 증가" — 교차채널 세션도 하나의
@@ -65,10 +89,12 @@ export function buildReplayTimeline(
   messages: readonly ReplayMessageSource[],
   deceivedMoments: readonly ReplayDeceivedMomentSource[],
   smsTimeline: readonly ReplaySmsSource[] = [],
+  verifyTimeline: readonly ReplayVerifySource[] = [],
 ): ReplayTimelineItem[] {
   const momentsByTurn = new Map(deceivedMoments.map((moment) => [moment.turnIndex, moment]));
-  // 정렬 키 = (turnIndex | anchorTurnIndex, kindRank, seq). 메시지는 rank 0, 문자는 rank 1이라
-  // 같은 앵커에서 문자가 **항상 메시지 뒤**에 온다. seq는 서버가 준 배열 순서를 그대로 보존한다.
+  // 정렬 키 = (turnIndex | anchorTurnIndex, kindRank, seq). 메시지는 rank 0, 문자는 rank 1,
+  // 확인 항목은 rank 2라(§16.3.5) 같은 앵커에서 **항상 메시지 뒤**에 온다. seq는 서버가 준 배열
+  // 순서를 그대로 보존한다. 문자·확인이 모두 0건이면 결과가 도입 전과 완전히 동일하다.
   const keyed: { sortKey: [number, number, number]; item: ReplayTimelineItem }[] = [
     ...messages.map((message, seq) => ({
       sortKey: [message.turnIndex, 0, seq] as [number, number, number],
@@ -82,6 +108,15 @@ export function buildReplayTimeline(
       sortKey: [sms.anchorTurnIndex, 1, seq] as [number, number, number],
       item: { kind: "sms" as const, id: `sms-${sms.smsId}`, turnIndex: sms.anchorTurnIndex, sms },
     })),
+    ...verifyTimeline.map((verify, seq) => ({
+      sortKey: [verify.anchorTurnIndex, 2, seq] as [number, number, number],
+      item: {
+        kind: "verify" as const,
+        id: `verify-${verify.offerId}`,
+        turnIndex: verify.anchorTurnIndex,
+        verify,
+      },
+    })),
   ];
   keyed.sort(
     (a, b) =>
@@ -93,7 +128,8 @@ export function buildReplayTimeline(
 /** 주석(신호)이 달린 항목만 turnIndex 순서로 추출 — 스텝 내비게이션("다음/이전 신호로 점프",
  * P-13)이 이동할 대상 목록이다.
  *
- * ⚠️ **문자 항목을 절대 포함하지 않는다**(§15.6 G16). 이 배열의 인덱스는 리포트 `deceivedMoments`
+ * ⚠️ **문자·확인 항목을 절대 포함하지 않는다**(§15.6 G16 / §16.3.5 — 신규 항목에도 그대로 적용).
+ * 이 배열의 인덱스는 리포트 `deceivedMoments`
  * 배열 인덱스와 **1:1이라는 전제**로 되감기 딥링크(`/report/rewind?moment=`)와 진입 조건
  * (`resolveRewindEntry({ deceivedMomentCount })`)에 그대로 쓰인다 — 문자를 섞으면 되감기가 엉뚱한
  * 순간을 열고, 속은 순간 0건 세션에 되감기 진입점이 떠 AC-062가 깨진다(T70/T74 동반 파손). */

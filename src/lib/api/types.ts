@@ -135,8 +135,17 @@ export type CreateRealtimeCallResponse = {
    * 카탈로그가 없는 시나리오는 필드 부재.
    */
   inCallSmsTriggers?: InCallSmsTrigger[];
+  /**
+   * T83(Architecture.md §16.1.5, UX-031/UF-011) — 확인 시도 무력화의 **가용 게이트만**
+   * (몇 번째 사기범 턴 이후부터 확인 권유가 가능한가). **창구명·번호는 오지 않는다** — 오퍼 시점에
+   * `deliverVerifyOffer`가 서버 카탈로그에서 렌더해 Firestore에 쓰고, 화면은 그 구독으로만 그린다.
+   * **필드가 없으면 이 세션에는 확인 컨트롤이 존재하지 않는다**(카탈로그 없음 / 고급 아님 /
+   * 난이도가 반영되지 않는 경로).
+   */
+  verifyOffer?: VerifyOfferTrigger;
 };
 export type InCallSmsTrigger = { smsId: string; afterScammerTurns: number };
+export type VerifyOfferTrigger = { availableAfterScammerTurns: number };
 
 // --- deliverInCallSms / recordInCallSmsEvent (T68 · UX-027/UF-008 · AC-059/060/061) ---
 // 통화 중 문자. functions/src/inCallSms/types.ts와 1:1.
@@ -152,6 +161,29 @@ export type RecordInCallSmsEventRequest = {
   event: InCallSmsEvent;
 };
 export type RecordInCallSmsEventResponse = { recorded: true };
+
+// --- deliverVerifyOffer / deliverVerifyReconnect (T83 · UX-031/UF-011 · AC-071/AC-019) ---
+// 확인 시도 무력화(모의 확인 전화). functions/src/verifyIntercept/types.ts와 1:1.
+//
+// ⚠️ **실 발신 표면 부재(AC-019 하드)**: 요청 타입에 전화번호·URL·발신 대상 필드가 **존재하지
+// 않는다** — 이 화면에는 자유 입력 필드가 없고, 참가자가 할 수 있는 것은 "안내받은 번호로
+// 걸어보기" 버튼 탭뿐이다. 응답에도 창구명·번호가 없다(화면은 Firestore 구독으로만 그린다 —
+// 단일 렌더 소스). 두 콜러블은 **어떤 통신·전화 API도 호출하지 않는다**(인앱 재현).
+export type VerifyCallMode = "realtime" | "fallback";
+export type DeliverVerifyOfferRequest = {
+  sessionId: string;
+  callMode: VerifyCallMode;
+  /** `callMode==="realtime"`일 때만 필요(폴백은 서버가 직접 센다). */
+  scammerTurns?: number;
+};
+export type DeliverVerifyOfferResponse = { offerId: string; announceInstruction: string };
+export type DeliverVerifyReconnectRequest = {
+  sessionId: string;
+  offerId: string;
+  callMode: VerifyCallMode;
+  scammerTurns?: number;
+};
+export type DeliverVerifyReconnectResponse = { reconnectInstruction: string };
 
 // --- submitRealtimeTranscript (finding #1 · 2026-07-23) ---
 // 실시간 음성 통화 대화를 리포트가 분석할 수 있도록 종료 직전에 전사를 제출한다.

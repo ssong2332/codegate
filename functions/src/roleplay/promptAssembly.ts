@@ -70,6 +70,23 @@ function buildScenarioProgression(inCallSmsEnabled: boolean): string {
   );
 }
 
+// 확인 시도 무력화 동기화 블록(T83, Architecture.md §16.1.4 — §15.1.4/G1 교정과 **같은 방식**).
+//
+// ⚠️ **왜 필요한가(§16.1.4)**: 오퍼가 발행되는 시점은 **앱의 턴 게이트**가 정한다. 이 조건 문구가
+// 없으면 게이트 이전 구간에서 모델이 먼저 "○○로 걸어 확인해 보세요"라고 말해 버려 **대사만 나오고
+// 컨트롤이 없는 창**이 생긴다(UF-011 Failure (a)와 같은 불일치).
+//
+// ⚠️ 이 블록은 **"확인을 권하는 대사"를 저작하지 않는다** — 그건 T81/T85의 난이도 L3(축 D3) 소관이며
+// (§16.1.4 층 분리), 여기 있는 것은 **앱 오케스트레이션과의 동기화 규칙**뿐이다. 마지막 항목은
+// OQ-38 확정값("세션 중에는 상황만")을 프롬프트 층위에서 강제한다 — 구조 설명은 리포트에서만 한다.
+//
+// 카탈로그가 없거나 고급이 아닌 세션에서는 이 블록이 **삽입되지 않아** 프롬프트 문자열이 도입 전과
+// 한 글자도 달라지지 않는다(회귀 0, 테스트로 고정).
+const VERIFY_INTERCEPT_RULE = `[확인 안내 — 이 훈련에서만 적용]
+- **상대가 "끊고 직접 확인해 보겠다"고 하면 막지 않는다.** 다만 **앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다** — "잠시만요, 담당 창구를 확인해 알려드리겠습니다"처럼 받아 두고 기다린다.
+- 확인 창구를 안내하라는 지시가 이 프롬프트에 함께 들어온 턴에만 창구 이름을 말한다. **번호를 네가 지어내 읽어 주지 않는다** — 번호는 참가자 화면에 안내로 떠 있다.
+- **"어디에 걸어도 같은 곳으로 이어진다"는 취지의 설명·암시를 어떤 형태로도 하지 않는다.** 참가자는 확인이 정상적으로 이뤄졌다고 믿는 상태 그대로 통화를 이어가야 한다.`;
+
 // 난이도 모디파이어(T72, Architecture.md §15.3.1, UX-029/D-41~D-43, AC-064/065/066).
 //
 // **왜 시나리오별 3벌 저작이 아니라 공통 블록 1곳인가(§15.3.1)**: CONVERSATION_STYLE·
@@ -114,6 +131,12 @@ export type BuildSystemPromptOptions = {
    * false(기본)면 문자열이 도입 전과 완전히 동일하다(회귀 0).
    */
   inCallSmsEnabled?: boolean;
+  /**
+   * T83(§16.1.4) — 이 세션에서 확인 시도 무력화가 성립하는가(카탈로그 보유 **&& 고급**).
+   * true면 앱 오케스트레이션과의 동기화 블록이 삽입된다(게이트 이전에 창구를 먼저 부르지 않게).
+   * false(기본)면 문자열이 도입 전과 완전히 동일하다(회귀 0).
+   */
+  verifyInterceptEnabled?: boolean;
   /** 이 턴에만 붙는 지시(오프닝 첫 마디 지침·문자 도착 announce 지시 등). 가드레일 **앞**에 삽입된다. */
   turnInstruction?: string;
 };
@@ -132,7 +155,8 @@ export type BuildSystemPromptOptions = {
  * 이번 태스크에서 함께 제거했다.
  *
  * 확정 순서: persona → weakenedTactics → 대화 방식 → 진행 강제(문자 카탈로그가 있으면 "화면에 없는
- * 것" 항목이 조건형으로 대체됨, T68) → 난이도 → 턴 지시 → **가드레일**.
+ * 것" 항목이 조건형으로 대체됨, T68) → 확인 안내 동기화(T83, 조건형) → 난이도 → 턴 지시 →
+ * **가드레일**.
  */
 export function buildSystemPrompt(
   prompt: ScenarioPromptDoc,
@@ -152,8 +176,10 @@ export function buildSystemPrompt(
     // 블록 위치 자체는 이동하지 않는다).
     buildScenarioProgression(opts.inCallSmsEnabled === true),
     "",
-    // 아래 두 블록은 "있을 때만" 삽입된다 — intermediate(=블록 없음)·턴 지시 없음인 경우 배열이
-    // 도입 전과 완전히 동일해져 조립 결과 문자열도 한 글자도 달라지지 않는다(회귀 0 보장).
+    // 아래 세 블록은 "있을 때만" 삽입된다 — intermediate(=블록 없음)·확인 무력화 미적용·턴 지시
+    // 없음인 경우 배열이 도입 전과 완전히 동일해져 조립 결과 문자열도 한 글자도 달라지지 않는다
+    // (회귀 0 보장).
+    ...(opts.verifyInterceptEnabled === true ? [VERIFY_INTERCEPT_RULE, ""] : []),
     ...(difficultyBlock ? [difficultyBlock, ""] : []),
     ...(opts.turnInstruction ? [opts.turnInstruction, ""] : []),
     prompt.guardrailPreamble,

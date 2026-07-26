@@ -306,3 +306,68 @@ test("[전수] 모든 시나리오에서 intermediate 조립 결과가 난이도
     );
   }
 });
+
+// ── T83 QA 지적(2026-07-26) — AC-075 회귀 방지망 ──────────────────────────────
+//
+// **왜 필요한가**: QA가 AC-075를 **PARTIAL**로 판정했다. 확인 무력화 블록이 켜진
+// (`verifyInterceptEnabled:true`) 조합에서 "가드레일이 조립 순서 맨 마지막"이라는 불변식이
+// **어떤 자동 테스트에도 걸려 있지 않았다.** QA가 수동 스크립트로 117조합을 돌려 기능은 정상임을
+// 확인했지만, AC-075 원문이 요구하는 것은 "**자동 테스트로 고정**"이다 — 오늘 정상이어도
+// 내일 조립 순서가 실수로 바뀌면 아무도 모른다.
+//
+// T68이 문자 조건형에 대해 같은 가드를 이미 세웠다(위 `[T68 전수]`). 확인 무력화도 같은 이유로
+// 같은 가드가 필요하다 — 블록이 하나 늘 때마다 조립 순서가 깨질 자리도 하나 는다.
+//
+// ⚠️ 이 테스트가 실패하면 **테스트를 고치지 말고 조립 순서를 고쳐라.** guardrailPreamble이
+// 마지막이 아니면 사용자 입력이 안전 지침 뒤에 오게 되어 인젝션 방어가 무너진다(§15.5/AC-065).
+test("[T83 전수] 확인 무력화 블록이 켜진 모든 시나리오 × 난이도에서도 가드레일이 맨 마지막이다(AC-065/AC-075)", () => {
+  const ids = Object.keys(SCENARIO_PROMPTS);
+  let combos = 0;
+  for (const id of ids) {
+    const prompt = SCENARIO_PROMPTS[id];
+    for (const difficultyLevel of ["beginner", "intermediate", "advanced"] as const) {
+      // 턴 지시 유무 양쪽 — 확인 announce가 실린 턴과 안 실린 턴이 둘 다 존재한다.
+      for (const turnInstruction of [undefined, "(확인 전화 안내 지시)"]) {
+        const assembled = buildSystemPrompt(prompt, {
+          difficultyLevel,
+          verifyInterceptEnabled: true,
+          ...(turnInstruction ? { turnInstruction } : {}),
+        });
+        combos += 1;
+        assert.ok(
+          assembled.trimEnd().endsWith(prompt.guardrailPreamble.trimEnd()),
+          `guardrailPreamble이 맨 마지막이 아니다 — 시나리오=${id}, 난이도=${difficultyLevel}, ` +
+            `턴지시=${turnInstruction ? "있음" : "없음"}`,
+        );
+        // 무해화 경계도 함께 고정한다 — AC-075가 "고급에서도 동일"을 요구한다.
+        assert.ok(assembled.includes("페이로드는 가상값만 쓴다"), `무해화 문구 유실 — ${id}`);
+      }
+    }
+  }
+  assert.equal(combos, ids.length * 3 * 2);
+});
+
+// 문자와 확인 무력화가 **동시에** 켜지는 조합도 고정한다 — 실제로 같은 세션에서 둘 다 켜질 수
+// 있고(§16.6 G31/G58이 그 충돌을 규율한다), 블록이 둘 겹칠 때가 조립 순서가 가장 깨지기 쉽다.
+test("[T83 전수] 문자 + 확인 무력화가 동시에 켜져도 가드레일이 맨 마지막이다(AC-065/AC-075)", () => {
+  const ids = Object.keys(SCENARIO_PROMPTS);
+  let combos = 0;
+  for (const id of ids) {
+    const prompt = SCENARIO_PROMPTS[id];
+    for (const difficultyLevel of ["beginner", "intermediate", "advanced"] as const) {
+      const assembled = buildSystemPrompt(prompt, {
+        difficultyLevel,
+        inCallSmsEnabled: true,
+        verifyInterceptEnabled: true,
+        turnInstruction: "(문자 도착 + 확인 안내 지시)",
+      });
+      combos += 1;
+      assert.ok(
+        assembled.trimEnd().endsWith(prompt.guardrailPreamble.trimEnd()),
+        `두 블록 동시 조립에서 guardrailPreamble이 맨 마지막이 아니다 — ${id}/${difficultyLevel}`,
+      );
+      assert.ok(assembled.includes("페이로드는 가상값만 쓴다"), `무해화 문구 유실 — ${id}`);
+    }
+  }
+  assert.equal(combos, ids.length * 3);
+});

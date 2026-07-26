@@ -26,6 +26,7 @@ import {
   type ReplayDeceivedMomentSource,
   type ReplaySmsSource,
   type ReplayTimelineItem,
+  type ReplayVerifySource,
 } from "@/lib/replay/buildReplayTimeline";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 
@@ -110,6 +111,11 @@ export default function ReplayPage() {
       ? (reportData.smsTimeline as ReplaySmsSource[])
       : [];
 
+    // T83(§16.3.5, AC-071/AC-038) — 확인 시도도 같은 리포트 스냅샷에서 온다(부재→빈 배열).
+    const verifyTimeline = Array.isArray(reportData.verifyTimeline)
+      ? (reportData.verifyTimeline as ReplayVerifySource[])
+      : [];
+
     const scenarioId = sessionData.scenarioId as string | undefined;
     const scenario = scenarioId ? scenarios[scenarioId] : undefined;
 
@@ -127,7 +133,7 @@ export default function ReplayPage() {
         tacticsUsed: Array.isArray(reportData.tacticsUsed) ? (reportData.tacticsUsed as string[]) : [],
         createdAt: reportData.createdAt instanceof Timestamp ? reportData.createdAt : null,
       } satisfies ReportSummary,
-      timeline: buildReplayTimeline(messages, deceivedMoments, smsTimeline),
+      timeline: buildReplayTimeline(messages, deceivedMoments, smsTimeline, verifyTimeline),
       scenarioTitle: scenario?.title ?? null,
       callerLabel: scenario?.callerLabel ?? "상대방",
       challenge: challengeContext,
@@ -397,6 +403,11 @@ export default function ReplayPage() {
           if (item.kind === "sms") {
             return <ReplaySmsItem key={item.id} sms={item.sms} />;
           }
+          // T83(§16.3.5) — 확인 항목도 **기존 주석 카드 형식 그대로** 쓴다(신규 표기 형식 0건).
+          // 되감기 버튼은 달지 않는다(대상은 deceivedMoments뿐 — 주석된 순간에는 원래대로 달린다).
+          if (item.kind === "verify") {
+            return <ReplayVerifyItem key={item.id} verify={item.verify} />;
+          }
           const channelBadgeLabel = (item.channel ?? "voice") === "messenger" ? "메신저" : "통화";
           return (
             <li
@@ -639,6 +650,71 @@ function ReplaySmsItem({ sms }: { sms: ReplaySmsSource }) {
             <>
               <div className="my-2.5 h-px bg-[#B96A1B]/20" />
               <p className="mb-1.5 text-[13px] font-bold text-[#0E6B62]">이렇게 대응했어야</p>
+              <p className="text-[13px] leading-[1.6] text-[#22303A]">{event.correctAction}</p>
+            </>
+          )}
+        </div>
+      ))}
+    </li>
+  );
+}
+
+/**
+ * T83(§16.3.5, AC-071/AC-038) — 확인 시도 항목. **기존 P-13 주석 카드 형식 그대로**이며 신규
+ * 컴포넌트·신규 색·신규 표기 형식이 없다.
+ *
+ * ⚠️ **P-25 톤**: 결과 상황 한 줄 → **유효 대처**(서버 상수) 순서다. 가로채기의 수단·작동 원리는
+ * 여기서도 설명하지 않는다(AC-005 불변). 번호는 텍스트로만 나오고 재발신·복사 컨트롤이 없다.
+ */
+function ReplayVerifyItem({ verify }: { verify: ReplayVerifySource }) {
+  return (
+    <li className="outline-none">
+      <div className="flex max-w-[85%] items-end gap-2">
+        <div
+          aria-hidden="true"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#41525E] text-sm text-[#C9D4DB]"
+        >
+          ✆
+        </div>
+        <div>
+          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[#6B655C]">
+            {verify.deskLabel}
+            <Badge variant="neutral">확인 시도</Badge>
+            <span className="rounded-full bg-[#EFEBF7] px-2 py-0.5 text-[11px] font-semibold text-[#463880]">
+              AI 훈련용 모의 번호
+            </span>
+          </p>
+          <div className="rounded-[16px] rounded-bl-[4px] border border-[#E2DDD3] bg-white px-4 py-3">
+            <p className="text-[15px] leading-[1.55] text-[#22303A]">
+              안내받은 번호: <span className="font-mono">{verify.displayNumber}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {!verify.anchorResolved && (
+        <p className="ml-10 mt-1.5 text-[13px] text-[#6B655C]" role="status">
+          이 안내가 대화 중 어느 시점에 있었는지는 확인하지 못했습니다.
+        </p>
+      )}
+
+      {verify.events.map((event) => (
+        <div
+          key={event.event}
+          role="note"
+          className="ml-10 mt-2 rounded-[12px] border border-[#B96A1B]/30 bg-[#FBF3E8] p-3.5"
+        >
+          <p className="mb-1.5 text-[13px] font-bold text-[#B96A1B]">⚠️ 여기가 신호였어요</p>
+          <p className="text-[13px] leading-[1.6] text-[#22303A]">
+            {(event.event === "verify_reconnected" ? verify.reconnectTimeLabel : verify.timeLabel)
+              ? `${event.event === "verify_reconnected" ? verify.reconnectTimeLabel : verify.timeLabel}: `
+              : ""}
+            {event.what}
+          </p>
+          {event.correctAction && (
+            <>
+              <div className="my-2.5 h-px bg-[#B96A1B]/20" />
+              <p className="mb-1.5 text-[13px] font-bold text-[#0E6B62]">이렇게 하시면 됩니다</p>
               <p className="text-[13px] leading-[1.6] text-[#22303A]">{event.correctAction}</p>
             </>
           )}

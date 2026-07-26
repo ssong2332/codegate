@@ -59,8 +59,10 @@ test("[AC-059] 문자 오버레이는 라우트가 아니다 — 신규 라우�
 });
 
 test("[AC-059/§15.1.3] 오버레이 상태는 마이크 게이팅에만 들어가고 타이머·한도 종료에는 들어가지 않는다", () => {
-  // 마이크 입력만 정지 — 두 세션 컴포넌트 모두에 muted || smsOverlayOpen 이 전달돼야 한다.
-  const mutedProps = page.match(/muted=\{muted \|\| smsOverlayOpen\}/g) ?? [];
+  // 마이크 입력만 정지 — 두 세션 컴포넌트 모두에 오버레이 상태가 muted와 함께 전달돼야 한다.
+  // ⚠️ T83(§16.2)에서 확인 오버레이가 **같은 규칙**으로 추가됐다: `muted || smsOverlayOpen ||
+  // verifyOverlayOpen`. 검사를 느슨하게 푼 것이 아니라 **두 오버레이 모두**를 요구하도록 좁혔다.
+  const mutedProps = page.match(/muted=\{muted \|\| smsOverlayOpen \|\| verifyOverlayOpen\}/g) ?? [];
   assert.equal(mutedProps.length, 2, "실시간 두 경로 모두 마이크만 게이팅해야 한다");
 
   // 경과 타이머 effect의 의존성에 오버레이 상태가 들어가면 통화 타이머가 멈춘다.
