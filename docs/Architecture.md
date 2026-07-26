@@ -1557,6 +1557,7 @@ PRD "현재 13종 축 매핑"을 그대로 옮기되 **D열 "(없음)" 4종을 `
 
 | scenarioId | access(A) | impersonation(B) | pressure(C) | exitBlock(D) | demand(E) |
 |---|---|---|---|---|---|
+| bank-security-verify-scam | 은행 보안팀 | ✅ | procedural | **d3_and_d4** | **T95 신설(2026-07-26).** §17.10 계약 14항이 예고한 증분 — `hasVerifyIntercept=true`이므로 procedural이다. 확인 무력화 **전용** 시나리오라 D4 절차 톤이 캐릭터와 정합한다. |
 | family-accident-deepvoice | A1 | B4 | C5, C3 | D2, D5 | E1 |
 | institutional-impersonation | A1 | B1 | C1, C6, C3 | D2, D5 | E1, E2 |
 | loan-refinance-scam | A1 | B2 | C2, C3 | D1 | E1 |
@@ -2064,12 +2065,12 @@ PRD 난이도 표는 중급을 *"D1·D2·D5"* 로 적었다. **이를 강제하�
 | messenger-child-impersonation-kakao | 가족 | ❌(통화 셸 없음) | **reduced** | **reduced** | 동일 |
 | messenger-friend-loan-kakao | 지인 | ❌(통화 셸 없음) | **reduced** | **reduced** | 동일 |
 
-**분포: `d3_and_d4` 5 / `d4_only` 4 / `reduced` 4 = 13.** → **`isL3Applied` = 9/13 true, 4/13 false.**
+**분포: `d3_and_d4` 6 / `d4_only` 4 / `reduced` 4 = 14.** → **`isL3Applied` = 10/14 true.** ⚠️ **정정(2026-07-26)**: 이 절 최초 작성 시점(T81)에는 13종·5/4/4였으나 **T95가 `bank-security-verify-scam`을 신설**해 14종·6/4/4가 됐다. **§17.10 계약 14항이 정확히 이 증분을 예고**했고(*"T95가 +1종 하면 그 행은 procedural이어야 한다"*), T85 구현자가 그 조항을 근거로 6/4/4를 채택했다 — 임의 판단이 아니다. ⚠️ 그 시점 오케스트레이터 지시는 "5/4/4를 고정하라"였는데 **그 지시가 T95 병합 이전 기준이라 틀렸다**; 문자 그대로 따르면 키 `deepEqual` 게이트와 충돌해 어느 쪽이든 하나는 못 지킨다. 구현자 판단이 옳았다.
 
 **강제 장치(구현 필수 3건):**
 1. **키 1:1 게이트** — `deepEqual(Object.keys(L3_DEPTH_TABLE).sort(), Object.keys(PUBLIC_SCENARIOS).sort())`. §15.10.4의 T91식 게이트를 그대로 재사용한다. **신규 시나리오(T95의 확인 가로채기 전용 1종 포함)는 이 행을 채우기 전까지 테스트가 실패한다** — 조용한 누락 불가.
 2. **일관성 단언** — `hasVerifyIntercept(id) === true`인 5종은 `L3_DEPTH_TABLE[id] === "procedural"`이어야 한다(D3를 가졌는데 D4를 못 쓸 이유가 없다). 두 표가 어긋나면 실패.
-3. **분포 고정** — 위 5/4/4를 단언한다. 누가 한 행을 `reduced`로 바꾸면 **테스트가 먼저 깨진다**(고급이 조용히 무력해지는 것을 막는 장치).
+3. **분포 고정** — 위 **6/4/4**를 단언한다(2026-07-26 정정 — T95 신설 반영). 누가 한 행을 `reduced`로 바꾸면 **테스트가 먼저 깨진다**(고급이 조용히 무력해지는 것을 막는 장치).
 
 **⚠️ 이 표가 증명하는 것과 못 하는 것(정직 고지 — §15.10.4 문장을 그대로 계승).** 이 표는 **처방(prescription)**이지 서술(description)이 아니다 — "이 시나리오가 D4를 *갖고 있다*"가 아니라 "이 시나리오의 고급에 D4를 *얹는다*"는 설계 결정이다. 그래서 `SCENARIO_AXES`처럼 *콘텐츠보다 좁을* 수는 없지만, **각 행의 페르소나 적합성 판단이 맞다는 것은 여전히 사람의 판단**이며 라이브(T87 (1)) 대조로만 확인된다.
 
