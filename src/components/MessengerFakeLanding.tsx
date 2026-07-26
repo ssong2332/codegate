@@ -45,6 +45,11 @@ type MessengerFakeLandingProps = {
    * ⚠️ 이 컴포넌트는 **네트워크 호출을 하지 않는다** — 기록은 페이지가 담당한다(§15.9.6).
    */
   onInstallConsent?: () => void;
+  /** 연속성 앵커(UX.md UF-012 Steps §6) — 3단계 내내 자리를 지켜야 하는 난이도 표기.
+   *  ⚠️ **레벨 코드가 아니라 이미 번역된 라벨을 받는다.** 이 컴포넌트가 난이도 사전을 알게 되면
+   *  표기 정본이 두 곳으로 갈라진다(페이지 헤더 ↔ 오버레이). 페이지가 자기 헤더에 쓰는 값을
+   *  그대로 내려보내면 두 표기가 구조적으로 같아진다. */
+  difficultyLabel?: string;
 };
 
 export default function MessengerFakeLanding({
@@ -53,6 +58,7 @@ export default function MessengerFakeLanding({
   onClose,
   onEndTraining,
   onInstallConsent,
+  difficultyLabel,
 }: MessengerFakeLandingProps) {
   return (
     <div
@@ -72,6 +78,18 @@ export default function MessengerFakeLanding({
             ? "실제 설치·권한 부여가 아닙니다"
             : "실제 로그인/전송이 아닙니다"}
         </Banner>
+        {/* T84 reviewer Major 1(2026-07-26) — UX.md UF-012 Steps §6은 **연속성 앵커 3종**이
+            "세 단계 내내 자리를 지킨다"고 요구하는데, 이 오버레이가 `fixed inset-0`으로 페이지
+            헤더를 통째로 덮어 **2단계에서만 난이도 배지가 사라졌다.** 앵커의 존재 이유가
+            "지금 같은 훈련 안에 있다"는 감각을 끊지 않는 것이라, 한 단계에서만 사라지면 그
+            목적이 무너진다. 표기·스타일은 페이지 헤더(P-22)와 동일하게 맞춘다.
+            ⚠️ 난이도는 표기일 뿐 **어떤 안전장치도 게이팅하지 않는다**(AC-065) — 이 배지가
+            있든 없든 위 모의 표식과 아래 "훈련 종료"는 세 난이도에서 동일하다. */}
+        {difficultyLabel && (
+          <span className="rounded-full bg-[#F2EFE9] px-3 py-1 text-sm font-semibold text-[#6B655C]">
+            난이도 {difficultyLabel}
+          </span>
+        )}
         <EndTrainingButton onClick={onEndTraining} />
       </div>
 

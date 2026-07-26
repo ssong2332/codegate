@@ -540,6 +540,10 @@ export default function MessengerSessionPage() {
           landingKind={fakeLanding.landingKind}
           onClose={() => setFakeLanding(null)}
           onEndTraining={handleEndTraining}
+          // T84 reviewer Major 1 — 연속성 앵커(UX.md UF-012 Steps §6). 오버레이가 페이지 헤더를
+          // 덮으므로 난이도 배지를 함께 내려보낸다. **위 헤더가 쓰는 값을 그대로 넘긴다** —
+          // 두 표기가 갈라지지 않게 하는 유일한 방법이다.
+          difficultyLabel={difficultyLevel ? DIFFICULTY_LABEL[difficultyLevel] : undefined}
           // T84(D-51 ④) — 가짜 "권한 허용"에 **응한** 순간만 기록되고, 리포트 생성 시 속은 순간
           // 1건으로 승격된다(§15.9.5 e-1). ⚠️ 응낙이 채널 전이를 유발하지 않는다(G54) — 전이는
           // 기존 구조화 신호·max-turn 폴백·명시 버튼으로만 일어난다.
