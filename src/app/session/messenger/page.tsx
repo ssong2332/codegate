@@ -21,10 +21,13 @@ import { collection, doc, getDoc, onSnapshot, orderBy, query } from "firebase/fi
 import { db } from "@/lib/firebase";
 import { getPendingSessionId } from "@/lib/recording";
 import {
+  recordMockScreenEvent,
   requestEscalation,
   sendMessage,
   updateMessengerSkin,
   type MessengerAttachment,
+  type MockScreenEvent,
+  type MockScreenKind,
 } from "@/lib/api";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import { detectMessengerSkin, type MessengerSkin } from "@/lib/messenger/detectSkin";
@@ -89,9 +92,13 @@ export default function MessengerSessionPage() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [messengerSkin, setMessengerSkin] = useState<MessengerSkin>("default");
   const [skinSource, setSkinSource] = useState<SkinSourceState>("fallback");
-  const [fakeLanding, setFakeLanding] = useState<{ fakeLandingId: string; displayText: string } | null>(
-    null,
-  );
+  // T84 — 열린 목업의 종류(landingKind)는 **서버가 attachment에 실어 준 값**을 그대로 들고 온다
+  // (클라가 fakeLandingId 문자열을 분류하지 않는다 — §15.9.1 R3, AC-024 원칙 계승).
+  const [fakeLanding, setFakeLanding] = useState<{
+    fakeLandingId: string;
+    displayText: string;
+    landingKind?: MockScreenKind;
+  } | null>(null);
   // T30 — 에스컬레이션 전이 연출(P-18) 표시 중. true가 되면 잠시 후 /session/play로 이동한다.
   const [escalating, setEscalating] = useState(false);
   const [escalationError, setEscalationError] = useState<string | null>(null);
@@ -252,6 +259,31 @@ export default function MessengerSessionPage() {
     router.push("/session/end");
   };
 
+  // T84(§15.9.6/§15.9.7 G56) — 모의 화면 상호작용 기록. **핵심 루프를 막지 않는다**(오버레이는
+  // 정상 열리고 닫히며 대화도 계속된다). 다만 **조용히 삼키지 않는다**: 이 write가 유실되면 그
+  // 순간이 리포트에서 통째로 사라져 "참가자는 속았는데 리포트는 속지 않았다고 말하는" 상태가
+  // 되므로(AC-008/009 오판정), 1회 재시도하고 실패는 콘솔 경고로 남긴다.
+  // ⚠️ 이 호출은 **페이지**가 한다 — `MessengerFakeLanding`은 콜백만 올린다(그 파일의 "네트워크
+  // 경로 부재" 불변식 유지, AC-045/AC-072).
+  const recordMockScreen = (landingId: string, event: MockScreenEvent) => {
+    if (!sessionId) return;
+    void (async () => {
+      try {
+        await recordMockScreenEvent({ sessionId, landingId, event });
+      } catch {
+        try {
+          await recordMockScreenEvent({ sessionId, landingId, event });
+        } catch (err) {
+          console.warn("[T84] 모의 화면 이벤트 기록 실패(비차단 — 훈련은 계속됩니다)", {
+            landingId,
+            event,
+            err,
+          });
+        }
+      }
+    })();
+  };
+
   if (pageState === "no-session" || pageState === "scenario-not-found" || pageState === "load-error") {
     const message =
       pageState === "no-session"
@@ -385,12 +417,16 @@ export default function MessengerSessionPage() {
                 <button
                   key={i}
                   type="button"
-                  onClick={() =>
+                  onClick={() => {
                     setFakeLanding({
                       fakeLandingId: attachment.fakeLandingId,
                       displayText: attachment.displayText,
-                    })
-                  }
+                      ...(attachment.landingKind ? { landingKind: attachment.landingKind } : {}),
+                    });
+                    // 목업이 열린 사실만 남긴다 — **이것은 속은 순간이 아니다**(D-51 ③,
+                    // AC-062 보호). 승격되는 것은 아래 onInstallConsent뿐이다.
+                    recordMockScreen(attachment.fakeLandingId, "shown");
+                  }}
                   aria-label={`링크(모의): ${attachment.displayText}`}
                   className="mt-1 flex min-h-[44px] items-center gap-2 rounded-xl border-2 border-[#0E6B62] bg-[#E4F0EC] px-4 py-2 text-sm font-bold text-[#0E6B62] underline decoration-2 underline-offset-2"
                 >
@@ -501,8 +537,17 @@ export default function MessengerSessionPage() {
       {fakeLanding && (
         <MessengerFakeLanding
           title={fakeLanding.displayText}
+          landingKind={fakeLanding.landingKind}
           onClose={() => setFakeLanding(null)}
           onEndTraining={handleEndTraining}
+          // T84 reviewer Major 1 — 연속성 앵커(UX.md UF-012 Steps §6). 오버레이가 페이지 헤더를
+          // 덮으므로 난이도 배지를 함께 내려보낸다. **위 헤더가 쓰는 값을 그대로 넘긴다** —
+          // 두 표기가 갈라지지 않게 하는 유일한 방법이다.
+          difficultyLabel={difficultyLevel ? DIFFICULTY_LABEL[difficultyLevel] : undefined}
+          // T84(D-51 ④) — 가짜 "권한 허용"에 **응한** 순간만 기록되고, 리포트 생성 시 속은 순간
+          // 1건으로 승격된다(§15.9.5 e-1). ⚠️ 응낙이 채널 전이를 유발하지 않는다(G54) — 전이는
+          // 기존 구조화 신호·max-turn 폴백·명시 버튼으로만 일어난다.
+          onInstallConsent={() => recordMockScreen(fakeLanding.fakeLandingId, "consented")}
         />
       )}
 

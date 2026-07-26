@@ -83,7 +83,9 @@ export async function generateOpeningLine(
   // 메신저 확장(T29) — 스미싱 링크 마커([[LINK:id]])를 텍스트에서 제거하고 attachments로 변환한다
   // (§13.2 sentinel 패턴 재사용, linkMarker.ts 근거 참고). 마스킹 전/후 순서는 무관(마커는 PII가
   // 아니다) — 여기서는 마커 제거를 먼저 해 마스킹이 이미 정돈된 텍스트만 보게 한다.
-  const { text: linkFreeText, attachments } = extractLinkMarker(completion.text);
+  // T84(§15.9.1 R4) — 오프닝 대사에 실린 링크에도 같은 규칙으로 `landingKind`가 붙는다(호출부가
+  // 갈라지면 "오프닝 링크만 kind가 없는" 비대칭이 생긴다 — §15.6 G5와 같은 이유).
+  const { text: linkFreeText, attachments } = extractLinkMarker(completion.text, scenarioId);
   return {
     message: {
       role: "scammer",

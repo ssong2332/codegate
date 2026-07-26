@@ -30,3 +30,4 @@
 - [T52 report accuracy fix (wasDeceived + tacticsUsed)](project_codegate_t52_report_accuracy_fix.md) — two regex root causes, mock/analyze tactic-flavor duplication drift, Windows bash+curl UTF-8 mojibake gotcha, mid-task branch-moved-under-me recovery.
 - [T83 확인 시도 무력화](project_codegate_t83_verify_intercept.md) — 설계가 규율 안 한 충돌 판정법, 격리 포트도 점유돼 있던 사례, 리졸버 1-base↔0-base 재사용, 금지어 테스트가 자기 주석에 걸린 함정.
 - [T82 수법 축 데이터 모델](project_codegate_t82_axis_model.md) — 정본 표가 콘텐츠보다 좁은 3건(E3=0의 해석 주의), 미지정 카테고리 판정, TS6133이 3겹째 게이트, `unknown` 부분일치 함정.
+- [T84 모의 앱 설치·3단계 결합](project_codegate_t84_install_chain.md) — 설계에 없던 문구 전달 경로, kindRank 병렬 충돌, 축 커버리지 게이트 연쇄, 격리 에뮬레이터 config 절대경로 불가.

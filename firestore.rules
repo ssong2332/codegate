@@ -70,6 +70,17 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/sessions/$(sessionId)).data.uid == request.auth.uid;
         allow write: if false;
       }
+
+      // sessions/{sid}/mockScreens/{} — 인앱 모의 화면 상호작용(T84, Database.md 부록 A.1,
+      // AC-072/AC-073). `inCallSms`·`verifyIntercept`와 **완전히 같은 규칙**: read는 부모 세션
+      // 소유자만, write는 클라 전면 거부 — 쓰기는 Functions(admin)뿐이다(`recordMockScreenEvent`/
+      // `sendMessage`). 화면 종류(kind)는 **서버 카탈로그가 원천**이라 클라가 임의 landingId로
+      // 가짜 "속은 순간"을 만드는 경로가 존재하지 않는다(§15.6 G12 동형).
+      match /mockScreens/{landingId} {
+        allow read: if request.auth != null
+          && get(/databases/$(database)/documents/sessions/$(sessionId)).data.uid == request.auth.uid;
+        allow write: if false;
+      }
     }
 
     // scenarios/{} — 인증 사용자 read 허용(공개 메타). write 금지(seed/admin, Database.md §Migration Policy)

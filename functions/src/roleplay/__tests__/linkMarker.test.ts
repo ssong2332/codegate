@@ -40,3 +40,42 @@ test("extractLinkMarker(): 여러 마커가 있으면 각각 attachments 항목�
   assert.equal(result.attachments![1].fakeLandingId, "subsidy-apply");
   assert.ok(!result.text.includes("[[LINK"));
 });
+
+// ── T84(§15.9.1 R2~R5) — landingKind 부착 ────────────────────────────────────
+
+test("[R4] 카탈로그의 app-install 랜딩이면 landingKind를 싣는다(서버가 정한다 — 클라 분류 금지)", () => {
+  const result = extractLinkMarker(
+    "신청 접수는 확인 앱을 설치하셔야 진행됩니다 [[LINK:subsidy-install]]",
+    "messenger-subsidy-smishing-sms",
+  );
+  assert.ok(result.attachments);
+  assert.deepEqual(result.attachments![0], {
+    kind: "link",
+    displayText: "지원금 신청 앱 설치하기",
+    fakeLandingId: "subsidy-install",
+    harmless: true,
+    landingKind: "app-install",
+  });
+});
+
+test("[R2 회귀 0] 기본 kind(credential-form)면 키 자체를 만들지 않는다 — 기존 12개 시나리오 attachment 무변경", () => {
+  const withScenario = extractLinkMarker(
+    "여기서 확인해 주세요 [[LINK:parcel-redelivery]]",
+    "messenger-parcel-smishing-sms",
+  );
+  const withoutScenario = extractLinkMarker("여기서 확인해 주세요 [[LINK:parcel-redelivery]]");
+  assert.deepEqual(withScenario.attachments, withoutScenario.attachments);
+  assert.equal("landingKind" in withScenario.attachments![0], false);
+});
+
+test("[R5] 미상 id·다른 시나리오의 id는 app-install로 폴백하지 않는다(사고 개방 금지)", () => {
+  // 같은 landingId라도 **다른 시나리오**에서는 카탈로그 소속이 아니다.
+  const otherScenario = extractLinkMarker(
+    "[[LINK:subsidy-install]]",
+    "messenger-parcel-smishing-sms",
+  );
+  assert.equal("landingKind" in otherScenario.attachments![0], false);
+
+  const unknownId = extractLinkMarker("[[LINK:unknown-id]]", "messenger-subsidy-smishing-sms");
+  assert.equal("landingKind" in unknownId.attachments![0], false);
+});

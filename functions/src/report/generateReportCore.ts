@@ -8,10 +8,13 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { SCENARIO_PROMPTS } from "../scenarios";
+import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import { listAppInstallMockScreens, MOCK_SCREENS } from "../scenarios/mockScreens";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import type {
   InCallSmsDoc,
   MessageDoc,
+  MockScreenDoc,
   ReportDoc,
   SessionDoc,
   VerifyInterceptDoc,
@@ -20,6 +23,12 @@ import { analyzeConversation, buildPreventionAdvice, type AnalysisMessage } from
 import { computeDefenseGrade } from "./computeDefenseGrade";
 import { buildSmsTimeline, type SmsTimelineSource } from "./smsTimeline";
 import { applyVerifyIntercept, type VerifyTimelineSource } from "./verifyTimeline";
+import {
+  applyMockScreens,
+  deriveReportStages,
+  type MockScreenMessage,
+  type MockScreenSource,
+} from "./mockScreenTimeline";
 import type { GenerateReportResponse } from "./types";
 
 export async function generateReportForSession(sessionId: string): Promise<GenerateReportResponse> {
@@ -55,6 +64,19 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       createdAtMs: data.createdAt.toMillis(),
     };
   });
+  // T84(§15.9.5 e-2) — 설치 순간의 앵커는 "N번째 사기범 턴"이 아니라 **그 링크를 실은 사기범
+  // 메시지**라 attachment의 landingId가 필요하다. `AnalysisMessage`를 넓히지 않고(판정 입력을
+  // 건드리면 §15.6 G3 부류) 같은 스냅샷에서 별도 뷰를 만든다(추가 read 0회).
+  const mockScreenMessages: MockScreenMessage[] = messagesSnap.docs.map((doc) => {
+    const data = doc.data() as MessageDoc;
+    const landingIds = (data.attachments ?? []).map((a) => a.fakeLandingId);
+    return {
+      role: data.role,
+      turnIndex: data.turnIndex,
+      createdAtMs: data.createdAt.toMillis(),
+      ...(landingIds.length > 0 ? { landingIds } : {}),
+    };
+  });
 
   const scenarioPrompt = SCENARIO_PROMPTS[session.scenarioId];
   const weakenedTactics = scenarioPrompt?.weakenedTactics ?? [];
@@ -67,7 +89,6 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   // 누적 비교("이 수법에 3번 넘어갔습니다")가 서로 다른 잣대의 합이 되어 무의미해지기 때문이다.
   // 난이도는 아래 리포트 문서에 **표기 전용**으로만 역정규화된다(P-22).
   const analysis = analyzeConversation(messages, session.createdAt.toMillis(), weakenedTactics);
-  const preventionAdvice = buildPreventionAdvice(analysis.tacticsUsed, analysis.wasDeceived);
 
   // ②-b 통화 중 문자 이벤트 스냅샷(T89, §15.1.5, AC-059) — `sessions/{sid}/inCallSms`를 **1회 추가
   // read**해 표시 전용 배열로 역정규화한다. 이 화면 데이터가 리포트 문서 안에 있으면 리플레이·리포트
@@ -130,6 +151,57 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     session.createdAt.toMillis(),
   );
 
+  // ②-d 모의 화면 스냅샷 + **신규 순간 합성** + 3단계 파생(T84, §15.9.5, DECISIONS #42,
+  // AC-072/AC-073) — `sessions/{sid}/mockScreens`를 **1회 추가 read**한다(위 두 수집과 같은 지점,
+  // dual write 금지). 멱등 early-return 덕에 **최초 생성 시 1회만** 기록된다(AC-007 무변경).
+  //
+  // ⚠️ **적용 순서가 설계다**(§15.9.9): `analyzeConversation` → **T83 주석(길이 불변)** →
+  // **T84 push + 재정렬(길이 증가)**. 역순이면 T84의 삽입으로 인덱스가 밀려 T83이 엉뚱한 순간에
+  // 주석을 단다. 그래서 이 블록은 반드시 `applyVerifyIntercept` **뒤**에 온다.
+  // ⚠️ 승격되는 것은 **응낙(가짜 "권한 허용" 탭)뿐**이다 — 화면이 뜬 것·닫은 것은 표시 전용이라
+  // 응하지 않은 참가자에게는 되감기 진입점이 생기지 않는다(AC-062 불변식 보호, D-51 ③).
+  const mockSnap = await sessionRef.collection("mockScreens").orderBy("shownAt", "asc").get();
+  const mockSources: MockScreenSource[] = mockSnap.docs.map((doc) => {
+    const data = doc.data() as MockScreenDoc;
+    return {
+      landingId: data.landingId ?? doc.id,
+      kind: data.kind,
+      shownAtMs: data.shownAt?.toMillis?.() ?? 0,
+      ...(data.consentedAt ? { consentedAtMs: data.consentedAt.toMillis() } : {}),
+    };
+  });
+  const mock = applyMockScreens(
+    mockSources,
+    verify.deceivedMoments,
+    mockScreenMessages,
+    session.createdAt.toMillis(),
+    MOCK_SCREENS[session.scenarioId] ?? [],
+  );
+
+  // 단계 도달 판정(§15.9.5 e-3, OQ-U24) — 전부 파생이라 세션 문서에 신규 필드가 0건이다.
+  const installLandingIds = listAppInstallMockScreens(session.scenarioId).map((i) => i.landingId);
+  const stages = deriveReportStages({
+    ...(session.entryChannel ?? session.channel
+      ? { entryChannel: session.entryChannel ?? session.channel }
+      : {}),
+    installIntended: installLandingIds.length > 0,
+    reachedLandingIds: mockSources.map((d) => d.landingId),
+    installLandingIds,
+    voiceIntended: Boolean(PUBLIC_SCENARIOS[session.scenarioId]?.escalation),
+    voiceReached: (session.channelHistory ?? []).some(
+      (entry) => entry.from === "messenger" && entry.to === "voice",
+    ),
+  });
+
+  // `wasDeceived`는 **병합 후 배열 기준으로 재계산**한다(§15.9.5 e-4). 모의 화면 문서가 0건이면
+  // `mock.deceivedMoments === verify.deceivedMoments`이므로 값이 도입 전과 완전히 동일하다(회귀 0).
+  const wasDeceived = mock.deceivedMoments.length > 0;
+  // ⚠️ `buildPreventionAdvice`·`pickCorrectAction`은 **무변경**이다(§15.9.5 e-1 — `/설치|앱/`
+  // 분기를 넣으면 다른 시나리오의 조언까지 바뀐다). 여기서는 호출 **시점**만 병합 뒤로 옮겼다:
+  // 앞에서 부르면 승격이 일어난 세션에서 "속았습니다"(wasDeceived)와 "응하지 않았습니다"(조언
+  // 마무리 문장)가 같은 리포트에 함께 실린다. 문서가 0건이면 인자가 이전과 동일하다.
+  const preventionAdvice = buildPreventionAdvice(analysis.tacticsUsed, wasDeceived);
+
   // ③ 실패 아카이브(UX-030, T74)용 세션 메타 역정규화 — Architecture.md §15.4.1/§15.6 G8.
   // 아카이브는 리포트만 페이지 조회해 카드를 그리므로(별도 컬렉션 없음), 카드에 필요한 세션 메타가
   // 리포트에 없으면 항목 수만큼 세션을 추가 read해야 한다(N+1). 여기서는 session을 이미 읽었으므로
@@ -140,10 +212,11 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     reportId: sessionId,
     sessionId,
     uid: session.uid,
-    wasDeceived: analysis.wasDeceived,
-    // T83 — 주석이 얹힌 배열이지만 **개수·turnIndex·timeLabel은 analysis.deceivedMoments와
-    // 동일**하다(확인 문서가 0건이면 같은 값 그대로다 — 회귀 테스트로 고정).
-    deceivedMoments: verify.deceivedMoments,
+    wasDeceived,
+    // T83 주석(길이 불변) → T84 승격(길이 증가, turnIndex 오름차순 재정렬)이 이 순서로 적용된
+    // 배열이다. 확인 문서·모의 화면 문서가 둘 다 0건이면 `analysis.deceivedMoments`와 완전히
+    // 같은 값이다(회귀 테스트로 고정).
+    deceivedMoments: mock.deceivedMoments,
     tacticsUsed: analysis.tacticsUsed,
     preventionAdvice,
     // T72(§15.3.2/§15.4.1) — 세션에서 역정규화(표기 전용). 리포트·리플레이·실패 아카이브가 세션
@@ -163,6 +236,12 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     // 위 멱등 early-return 덕에 이 스냅샷·주석은 **최초 리포트 생성 시 1회만** 기록된다(AC-007
     // 무변경 — 생성 이후 이 문서를 update하지 않는다, §15.6 G13과 동일 규칙).
     ...(verify.verifyTimeline.length > 0 ? { verifyTimeline: verify.verifyTimeline } : {}),
+    // T84(§15.9.5 e-3/e-4) — 의도된 단계가 2개 미만이거나 모의 화면이 0건이면 필드 자체를 만들지
+    // 않는다(부재→미표시, 무백필). 기존 12개 시나리오 리포트는 한 글자도 바뀌지 않는다.
+    ...(stages.length > 0 ? { stages } : {}),
+    ...(mock.mockScreenTimeline.length > 0
+      ? { mockScreenTimeline: mock.mockScreenTimeline }
+      : {}),
   };
   await reportRef.set(reportDoc);
 

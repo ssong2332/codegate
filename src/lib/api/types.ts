@@ -5,11 +5,18 @@ import type { DifficultyLevel } from "@/lib/difficulty";
 
 // 메신저 표면 요소(T29, Architecture.md §13.4, AC-032/045) — 실 URL 필드가 존재하지 않는다.
 // 링크는 displayText(모의 표기)·fakeLandingId(인앱 가짜 랜딩 참조)로만 표현된다.
+// 인앱 목업의 종류(T84, UX-023 kind 축 · §15.9.1 R2/R3). **서버 카탈로그가 정한다** — 클라는
+// fakeLandingId 문자열을 분류하지 않는다(AC-024 원칙 계승).
+export type MockScreenKind = "credential-form" | "app-install";
+
 export type MessengerAttachment = {
   kind: "link";
   displayText: string;
   fakeLandingId: string;
   harmless: true;
+  // **부재 → `credential-form`**(하위호환 읽기 규칙, §15.9.1 R2). `app-install` 방향으로 폴백하지
+  // 않는다 — 사고로 설치 목업이 열리는 방향은 금지다(R5).
+  landingKind?: MockScreenKind;
 };
 
 // attachments(T29 추가, 옵셔널·하위호환) — 메신저 채팅(UX-022)의 스미싱 링크. 보이스 세션은
@@ -161,6 +168,21 @@ export type RecordInCallSmsEventRequest = {
   event: InCallSmsEvent;
 };
 export type RecordInCallSmsEventResponse = { recorded: true };
+
+// --- recordMockScreenEvent (T84 · UX-023 kind=`app-install`/UF-012 · AC-072/AC-073) ---
+// 인앱 모의 화면 상호작용 기록. functions/src/mockScreens/types.ts와 1:1(API.md 부록 A).
+//
+// ⚠️ **참가자 입력을 받지 않는다**(AC-045 유지): 인자는 세션 id·랜딩 id·고정 enum 3개뿐이다.
+// ⚠️ **AC-072 구조적 금지**: 실 설치 파일·스토어 URL·실존 앱명·OS 권한 목록에 해당하는 필드가
+// 요청·응답 어디에도 존재하지 않는다. 호출 주체는 **페이지**이고 목업 컴포넌트가 아니다 —
+// `MessengerFakeLanding`의 "네트워크 경로 부재" 불변식을 kind 추가 후에도 유지하기 위해서다.
+export type MockScreenEvent = "shown" | "consented";
+export type RecordMockScreenEventRequest = {
+  sessionId: string;
+  landingId: string;
+  event: MockScreenEvent;
+};
+export type RecordMockScreenEventResponse = { ok: true };
 
 // --- deliverVerifyOffer / deliverVerifyReconnect (T83 · UX-031/UF-011 · AC-071/AC-019) ---
 // 확인 시도 무력화(모의 확인 전화). functions/src/verifyIntercept/types.ts와 1:1.

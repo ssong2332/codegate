@@ -27,6 +27,11 @@ export { deliverInCallSms, recordInCallSmsEvent } from "./inCallSms";
 // ⚠️ **실제 전화를 걸지 않는다**(AC-019): 두 함수 모두 통신·전화 관련 API 의존이 0건이고, 하는 일은
 // Firestore write 1건 + 모델 지시 문자열 반환뿐이다. 창구명·번호는 100% 서버 카탈로그가 원천이다.
 export { deliverVerifyOffer, deliverVerifyReconnect } from "./verifyIntercept";
+// 인앱 모의 화면 상호작용(T84, UX-023 kind=`app-install`/UF-012, §15.9.6, AC-072/AC-073) —
+// 목업이 열린 것·가짜 "권한 허용"에 응한 것을 세션 타임라인에 남긴다.
+// ⚠️ **참가자 기기에 실제로 무언가가 설치되지 않는다**(AC-072): 이 함수의 요청·응답·스키마
+// 어디에도 실 설치 파일·스토어 URL·실존 앱명·OS 권한 필드가 없고, 하는 일은 Firestore write 1건뿐이다.
+export { recordMockScreenEvent } from "./mockScreens";
 // 초급 사전 브리핑(T72, UX-029, §15.3.4, AC-066) — 세션 **시작 전** 화면에서만 소비되는 수법
 // 라벨 조회. 대화 중 실시간 판정 경로는 신설하지 않는다(D-6 유지).
 export { getBeginnerBriefing } from "./scenarios/beginnerBriefing";

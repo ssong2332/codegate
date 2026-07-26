@@ -165,17 +165,37 @@ test("데이터 순회로 계산하면 E4가 사라진다 — 그래서 도메�
   assert.ok(findCoverageRow(computeAxisCoverage(), "E4_in_person_cash_demand"));
 });
 
-test("0건 축 값은 정확히 7개(A3·A4·D3·D4·E3·E4·E5)다(§15.10.7 사전 계산값)", () => {
+// ⚠️ **T84(2026-07-26) 갱신** — §15.10.7의 사전 계산값은 7개(A3·A4·D3·D4·E3·E4·E5)였다. T84가
+// 3단계 결합(`messenger-subsidy-smishing-sms`)에 **A3·E3를 태깅해 두 공백을 실제로 채웠고**,
+// axisCoverage.ts의 규약("공백을 채우면 이 테스트가 먼저 깨진다 — 해당 행 삭제가 해소 기록")에
+// 따라 기대값을 5개로 내린다. 남은 D3·D4는 T85(MVP #31) 몫이고 A4·E4·E5는 잔여 공백이다.
+test("0건 축 값은 정확히 5개(A4·D3·D4·E4·E5)다 — T84가 A3·E3를 해소(§15.10.7 사전 계산값 7개에서 갱신)", () => {
   const coverage = computeAxisCoverage();
   assert.deepEqual([...coverage.zeroCountValues].sort(), [
-    "A3_post_install_contact",
     "A4_account_takeover",
     "D3_verification_hijack",
     "D4_procedural_legitimacy",
-    "E3_install_remote_demand",
     "E4_in_person_cash_demand",
     "E5_giftcard_crypto_demand",
   ]);
+});
+
+test("[AC-076] T84가 채운 A3·E3는 각각 최소 1개 시나리오에서 0건이 아니다", () => {
+  const coverage = computeAxisCoverage();
+  for (const value of ["A3_post_install_contact", "E3_install_remote_demand"] as const) {
+    const row = findCoverageRow(coverage, value);
+    assert.ok(row, `${value} 행이 커버리지에 존재해야 한다`);
+    assert.ok(row.count >= 1, `${value}: AC-076 필수 4값 중 하나 — 0건이면 미충족이다`);
+    assert.ok(
+      row.scenarioIds.includes("messenger-subsidy-smishing-sms"),
+      `${value}: 3단계 결합 시나리오가 이 값을 갖는다(T84)`,
+    );
+    assert.equal(
+      row.declaredGapReason,
+      undefined,
+      `${value}: 채워진 값에 공백 사유가 남아 있으면 안 된다(DECLARED_COVERAGE_GAPS 행 삭제가 해소 기록)`,
+    );
+  }
 });
 
 test("실측 0건 집합 ↔ DECLARED_COVERAGE_GAPS 양방향 일치(공백이 조용히 사라지지도, 채워지지도 않는다)", () => {

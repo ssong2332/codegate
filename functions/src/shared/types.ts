@@ -2,6 +2,7 @@
 // 각 트랙은 실제 데이터가 없어도 이 타입에 맞춰 개발한다. 필드/제약 변경은 Database.md와
 // 함께(트랙 간 합의 후) 갱신한다.
 import type { VoiceMode } from "../scenarios/publicMeta";
+import type { MockScreenKind } from "../scenarios/mockScreens";
 import type { DifficultyLevel } from "./difficulty";
 import type { TacticCategory } from "../report/tacticCategory";
 
@@ -142,6 +143,12 @@ export type MessengerAttachment = {
   displayText: string;
   fakeLandingId: string;
   harmless: true;
+  // T84 추가(옵셔널, 하위호환 — §15.9.1 R2/R3/R5, DECISIONS #42 ②): 이 링크가 여는 **인앱 목업의
+  // 종류**. 서버 카탈로그(`scenarios/mockScreens.ts`)가 확정해 `extractLinkMarker` 한 지점에서만
+  // 붙이며, 클라는 문자열을 분류하지 않는다(AC-024 원칙 계승). **부재 → `credential-form`**
+  // (판별자 오버로드가 아니라 하위호환 읽기 규칙) — 그래서 카탈로그가 없는 12개 시나리오의
+  // attachment는 도입 전과 완전히 동일하다. `app-install` 방향으로 폴백하지 않는다(R5).
+  landingKind?: MockScreenKind;
 };
 
 // --- sessions/{sessionId}/messages/{messageId} (AC-024) ---
@@ -260,6 +267,48 @@ export type VerifyTimelineEntry = {
 // (모델 지시 — 프롬프트가 클라로 내려간다), offeredAt/placedAt 원시 타임스탬프(표시 축이 아니다),
 // url/tel/발신 관련 필드(어느 스키마에도 없다), 가로채기의 수단·작동 원리 서술(AC-005 불변).
 
+// --- sessions/{sessionId}/mockScreens/{landingId} (T84, UX-023 kind/UF-012, §15.9.6, AC-072/073) ---
+//
+// ⚠️ **문서 id = `landingId`라 멱등**하다(같은 랜딩에 대한 반복 기록이 문서를 늘리지 않는다).
+// `inCallSms`·`verifyIntercept`와 같은 이유로 `messages`에 넣지 않는다 — `analyzeConversation`의
+// scammer(i)↔user(i+1) 짝짓기가 어긋나 리포트 판정이 손상된다(§15.6 G3).
+//
+// ⚠️ **저장하지 않는 것(구조적 금지, AC-072/AC-045)**: 참가자가 입력한 어떤 값도(애초에 목업의
+// 입력은 컴포넌트 로컬 state를 벗어나지 않는다), 실 URL·스토어 URL·**실존 앱명**·OS 권한 목록.
+// `url`·`packageName` 계열 필드는 이 스키마에 **존재하지 않는다**.
+export type MockScreenDoc = {
+  landingId: string; // = 문서 id. 서버가 MOCK_SCREENS[session.scenarioId] 소속을 재검증한 값만 기록
+  kind: MockScreenKind; // 서버가 카탈로그에서 확정(클라 입력이 아니다)
+  shownAt: FirebaseFirestore.Timestamp; // 목업이 열린 시각. **최초 1회만** 세팅
+  // 가짜 "권한 허용"에 응한 시각. **최초 1회만** 세팅. **부재 = 응낙 없음**(D-51 ③ — 화면이
+  // 뜬 것·닫은 것은 표시 전용이고 속은 순간이 아니다, AC-062 불변식 보호).
+  consentedAt?: FirebaseFirestore.Timestamp;
+  // 사기범이 응낙 사실을 언급하도록 `turnInstruction` 1줄을 주입한 시각(§15.9.3 — 1회 주입 보장).
+  consentAnnouncedAt?: FirebaseFirestore.Timestamp;
+};
+
+// --- reports/{reportId}.stages / .mockScreenTimeline (T84, §15.9.5, AC-073) ---
+//
+// ⚠️ **OQ-U24 판정(§15.9.5 e-3)**: `stages`에는 **의도된 단계 전부**를 싣는다 — 미도달 단계도
+// `reached:false`로 존재한다. 데이터에서 빼면 "미도달"과 "그런 단계가 애초에 없었다"를 영영
+// 구분할 수 없다. **화면은 도달 단계만 그리고** 전체 구조는 상단 1줄로 사후 고지한다(D-50 예외 안).
+export type ReportStageName = "messenger" | "mock_install" | "voice";
+export type ReportStage = { stage: ReportStageName; reached: boolean };
+
+export type MockScreenTimelineEntry = {
+  landingId: string;
+  kind: MockScreenKind;
+  anchorTurnIndex: number; // 표시 위치(= 설치 링크를 실은 사기범 메시지). -1 = 대화 맨 앞
+  anchorResolved: boolean; // false = 위치 확정 실패 → 화면이 정직하게 고지(조용한 누락 금지)
+  timeLabel?: string; // 앵커 메시지의 경과 초에서 파생 — deceivedMoments와 **같은 시간축**
+  // true면 **같은 순간이 `deceivedMoments`에도 있다** — 중복 카드 금지 규칙(§15.9.5 e-4)에 따라
+  // 교육 문구(correctAction)는 그쪽이 전담하고 이 항목은 사실 1줄만 낸다.
+  consented: boolean;
+};
+// ⚠️ 스냅샷에 **절대 넣지 않는 필드**(§15.9.5 e-4 금지 표): headline/bodyLines/consentLabel 등
+// 화면 콘텐츠 원문(사후 화면이 목업을 재구성·재진입할 수 있게 된다 — §15.6 G19 동형 취지),
+// shownAt/consentedAt 원시 타임스탬프(표시 축이 아니다), url·앱명(어느 스키마에도 없다).
+
 // --- reports/{reportId}.smsTimeline (T89, §15.1.5, AC-059) — 표시 전용 스냅샷 ---
 // ⚠️ 이 배열은 analyzeConversation의 **입력이 아니라 산출 뒤에 나란히 얹히는 값**이다.
 // wasDeceived·deceivedMoments·tacticsUsed·preventionAdvice는 문자 유무와 무관하게 동일하며,
@@ -366,6 +415,12 @@ export type ReportDoc = {
   // 배열은 존재할 수 있다 — 리포트 타임라인 노출 조건이 deceivedMoments에만 걸려 있으면 항목이
   // 통째로 사라진다(§16.6 G30).
   verifyTimeline?: VerifyTimelineEntry[];
+  // T84 추가(옵셔널, 하위호환 — §15.9.5 e-3/e-4, AC-073) — 3단계 결합의 **판정 근거**와 모의 화면
+  // **표시 전용 스냅샷**. smsTimeline·verifyTimeline과 같은 수집 지점·같은 1회 기록 규칙이다.
+  // ⚠️ `stages`는 **의도된 단계가 2개 이상일 때만** 만든다 — 기존 12개 시나리오 리포트는 한 글자도
+  // 바뀌지 않는다(무백필).
+  stages?: ReportStage[];
+  mockScreenTimeline?: MockScreenTimelineEntry[];
 };
 
 // --- reports/{reportId}/rewindAttempts/{attemptId} (T70, UX-028/UF-009, §15.2.2, AC-062/063) ---
