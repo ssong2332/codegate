@@ -29,3 +29,7 @@ ui-debug.log
 # Misc
 .DS_Store
 *.log
+
+# Firebase Functions 에뮬레이터가 defineSecret 파라미터를 읽는 파일 — 절대 커밋 금지
+functions/.secret.local
+.secret.local
