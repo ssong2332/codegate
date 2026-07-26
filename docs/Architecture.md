@@ -8,6 +8,8 @@ Based on PRD Version: v1.6 · Based on UX Version: 1.12 · Last Updated: 2026-07
 >
 > **⚠️ §15.6 G4 판정 결과(T77 reviewer가 T79의 하드 착수 게이트로 승격한 사안):** **해소(조건부)** — 실시간 경로에 사기범 텍스트 관찰 지점이 없다는 사실은 **그대로이며 바뀌지 않았다**. 대신 **ADR-0007이 이미 같은 벽을 넘은 방식(앱 오케스트레이션 + 인과 역전)을 그대로 복제**해 확인 무력화 트리거를 성립시킨다 — **신규 메커니즘 0건**. 대가로 UF-011 Trigger 문면("사기범 턴에 실린 구조화 신호를 서버가 파싱")은 실시간 경로에서 성립하지 않아 **기술적으로 정정**된다(§16.1). 이는 §15.1.2가 UF-008/D-36에 대해 이미 수행한 정정과 **동일 사안·동일 해법**이며, **UX 화면·상태·판정표(UX-031·D-47/D-48/D-51/D-52)는 한 건도 반려하지 않는다.**
 
+> **갱신 고지(2026-07-26, T78 아키텍트 패스 — 수법 축 데이터 모델·커버리지 산출 / AC-070·AC-076·AC-077):** 기준을 **PRD v1.5→v1.6 · UX 1.11→1.12**로 맞춘다. **버전 갭 보고(정직 고지)**: 직전 헤더는 v1.5/1.11이었고 그 사이에 PRD v1.6(축 체계 A~E·난이도 4레버·AC-070~AC-077·MVP #28~#32·OQ-38~42 전부 resolved)과 UX v1.12(D-46~D-54·UF-011/012·UX-031·OQ-U22~U25)가 확정됐다 — **두 버전 뒤처져 있었다.** 재검증 결과 **기존 §0~§15.7은 한 줄도 무효화되지 않았다**(PRD v1.6이 삭제·통폐합 0건·AC-064~067 무변경을 명시 판정했고, UX v1.12도 기존 D-1~D-45를 supersede하지 않는다). 이번 패스의 범위는 **신규 §15.10**(축 열거형·배치·커버리지 산출·태깅 누락 강제·OQ-U25 판정) · **§15.6 갭 G32~G39** · **DECISIONS #41** · **ADR-0010**이며, **Database.md·API.md는 무변경**이다(신규 컬렉션·필드·콜러블이 없다 — §15.10.6). ⚠️ **절 번호 고지**: 이 패스는 원래 §15.7을 배정받았으나 **§15.7이 이미 "UX Traceability 증분"으로 사용 중**이어서(중복 번호 금지) 병렬 진행 중인 T79(**§16** — 예측한 §15.8이 아니다)·T80(§15.9)과 충돌하지 않는 **§15.10**으로 배정했다.
+>
 > **갱신 고지(2026-07-25, T68 REJECT 후속 아키텍트 패스 — AC-059 잔여 조항):** 헤더의 "Based on PRD Version"을 **v1.4→v1.5로 정정**한다(본문 아래 T57 고지가 이미 "PRD v1.5 기준"이라 적고 있었는데 헤더만 v1.4로 남아 있던 표기 불일치 — 설계 내용 변경 아님). 이번 패스의 범위는 **신규 §15.1.5**(통화 중 문자 이벤트의 리포트·리플레이 타임라인 통합) · **§15.6 갭 G15~G22** · §15.7 행 1건 추가 · Database.md(`inCallSms.anchorScammerTurn`, `reports.smsTimeline?`) · API.md(`generateReport`·`recordInCallSmsEvent` 증분) · **DECISIONS #37**이며, **새 ADR은 만들지 않는다**(ADR-0007의 하위호환 옵셔널 증분 — DECISIONS #19/#30/#31 원칙 계승). 기존 §0~§15.4·ADR-0001~0008은 **전부 유효**하고, §15.1.1~15.1.4(오버레이 계층·전달 모델·마이크 게이팅·프롬프트 위치)는 **한 줄도 바뀌지 않았다**.
 >
 > **갱신 고지(2026-07-25, T57 아키텍트 게이트 — v1.11 신규 기능 4건 / OQ-U16~U19 해소):** 기준을 **UX 1.10→1.11**로 맞춘다. **PRD v1.5 기준으로 정정(2026-07-25 후속).** 이 §15는 architect가 planner와 **병렬 실행**되던 시점에 작성돼 원문은 "PRD v1.4 유지 · AC 부재(OQ-U15 open)"로 적혀 있었으나, 같은 날 planner(T65)가 **AC-059~069를 신설해 OQ-U15는 resolved**다 — 매핑: 통화 중 문자=AC-059/060/061, 즉시 되감기=AC-062/063(AC-007 1리포트 불변식 보호 명시), 난이도=AC-064~067(AC-065가 "난이도는 어떤 안전장치도 게이팅·약화·우회하지 않는다"를 못박음 — §15.5 조립 순서 불변식과 정합), 실패 아카이브=AC-068/069. 따라서 **reviewer·QA는 이 AC들로 완료 판정이 가능하다**(§15.0.6의 "AC 신설 필요" 서술은 해소됨). 이번 갱신 범위는 신규 **§15**(OQ-U16/U17/U18/U19 확정)·DECISIONS #32~#36·**ADR-0007**(통화 중 문자 전달 모델)·**ADR-0008**(되감기 드릴 실행 모델)이며, 기존 §0~§14.9·ADR-0001~0006은 유효하다(재검증: §13.5 "프레젠테이션 레이어는 어떤 안전 판정도 게이팅하지 않는다"·§14.9.1 "부재를 판별자로 오버로드하지 않는다" 두 원칙을 §15 전반에 동형 적용).
@@ -1117,6 +1119,268 @@ SmsTimelineEvent = { event: "sms_received" | "sms_opened" | "sms_otp_shown" | "s
 
 ---
 
+## 15.10 (T78) 수법 축 데이터 모델 · 커버리지 산출 — AC-070 / AC-076 / AC-077
+> PRD v1.6 "시나리오 수법 축 체계"(A 접근 경로 / B 사칭 주체 / C 압박 기제 / D 이탈 차단 / E 요구 형태) · MVP #28 · UX v1.12 **D-46**(축 전면 미노출) · **OQ-U25**(축 ↔ `tacticCategory` 관계) 판정.
+>
+> ⚠️ **절 번호**: §15.7이 이미 "UX Traceability 증분"이라 이 절은 §15.10이다(중복 번호 금지). 병렬 진행 중인 **T79=§15.8 · T80=§15.9**와 충돌하지 않는다.
+>
+> **이 절이 하지 않는 것(먼저 못 박는다):** 시나리오 콘텐츠를 저작하지 않는다 · 신규 Firestore 컬렉션·필드를 만들지 않는다 · 신규 콜러블을 만들지 않는다 · 화면을 만들지 않는다(**커버리지 대시보드 금지 — D-46/D-45**) · 기존 시나리오 식별자·메타를 건드리지 않는다(AC-077) · 과거 리포트·아카이브 항목을 소급 수정하지 않는다(AC-077).
+
+### 15.10.0 설계 요지 (다른 판단보다 우선 — 6줄)
+1. **축 값은 고정 열거형 5벌**이며 자유 문자열이 아니다. `other` 폴백을 **두지 않는다**(있으면 AC-070의 "태깅 없으면 등록 불가"가 무력화된다).
+2. **축 태깅은 `ScenarioMeta`/`ScenarioDoc`에 넣지 않는다.** 미러 2벌·Firestore `scenarios/{}` 문서·클라 계약 어디에도 들어가지 않고, **`functions/` 안 단일 소스 모듈** `functions/src/scenarios/axes.ts` 한 곳에만 산다.
+3. **커버리지는 빌드타임 상수 순회**(순수 함수)다. 런타임 조회·집계 쿼리·콜러블이 없다.
+4. **커버리지는 태깅된 값이 아니라 열거형 전(全) 도메인을 순회**한다 — 이게 AC-076(E4를 0건으로 드러내기)의 유일한 성립 조건이다.
+5. **태깅 누락 강제는 2겹**: 타입 수준(5축 전부 required + 비어 있지 않은 배열) + T91식 `deepEqual` 키 1:1 게이트.
+6. **축과 `tacticCategory`는 직교(orthogonal)다.** 서로를 import하지 않고, 어느 쪽도 상대의 값을 흡수하지 않는다(**OQ-U25 판정** — §15.10.5).
+
+---
+
+### 15.10.1 (a) 축 값의 고정 열거형 — 5벌 + D0 sentinel
+**결정: 축마다 `as const` 배열 + 파생 union 타입 1벌씩(저장소 관례 — `TACTIC_CATEGORIES`[`report/tacticCategory.ts:15-28`]·`DIFFICULTY_LEVELS`[`src/lib/difficulty/index.ts:17-19`]와 동일 형태). 값 이름은 `<PRD코드>_<의미>` 형식으로 고정한다.**
+
+```ts
+// functions/src/scenarios/axes.ts (신규 · 순수 상수 + 순수 함수, Firestore 없음)
+export const AXIS_ACCESS = [
+  "A1_cold_call", "A2_smishing_lure", "A3_post_install_contact", "A4_account_takeover",
+] as const;
+export const AXIS_IMPERSONATION = [
+  "B1_authority", "B2_financial", "B3_service", "B4_family", "B5_acquaintance", "B6_unknown_threatener",
+] as const;
+export const AXIS_PRESSURE = [
+  "C1_fear_punishment", "C2_benefit_gain", "C3_urgency_time",
+  "C4_shame_reputation", "C5_attachment_guilt", "C6_authority_obedience",
+] as const;
+export const AXIS_EXIT_BLOCK = [
+  "D0_none", "D1_time_pressure", "D2_secrecy", "D3_verification_hijack",
+  "D4_procedural_legitimacy", "D5_call_retention", "D6_report_blocking",
+] as const;
+export const AXIS_DEMAND = [
+  "E1_transfer_demand", "E2_credential_demand", "E3_install_remote_demand",
+  "E4_in_person_cash_demand", "E5_giftcard_crypto_demand", "E6_link_entry_demand",
+] as const;
+```
+
+**왜 `<코드>_<의미>` 복합 이름인가.** 코드만(`"D3"`)이면 오타가 눈에 안 보인다(`D2`↔`D3`는 한 글자 차이인데 의미가 정반대 — 확인을 *막는다* vs 확인을 *권한다*). 의미만(`"verification_hijack"`)이면 QA·planner가 PRD 표·AC-076 문면("**A3·D3·D4·E3**")과 대조할 때 매번 번역해야 한다. 둘을 합치면 `grep D3` 한 번으로 PRD ↔ 코드 ↔ 커버리지 출력이 전부 이어진다.
+
+**⭐ `D0_none`(sentinel)을 두는 이유 — PRD 매핑 표와 AC-070의 충돌 해소.** PRD "현재 13종 축 매핑" 표는 4종(`courier-customs-scam`·`messenger-friend-loan-kakao`·`messenger-parcel-smishing-sms`·`messenger-subsidy-smishing-sms`)의 D열에 **"(없음)"** 을 적었는데, AC-070은 *"모든 시나리오는 5개 축 각각에 최소 1개 값이 태깅된다"* 를 요구한다. **이 둘은 문면상 충돌한다.** 해소 선택지와 판정:
+
+| 안 | 판정 | 근거 |
+|---|---|---|
+| D축만 빈 배열 허용 | **기각** | AC-070 "각 축 최소 1개"를 정면으로 어기고, 무엇보다 **"D 수법이 없다"와 "아직 태깅 안 했다"를 구분할 수 없게 된다** — 그 구분 불가가 정확히 AC-070이 막으려는 상태다. 부재를 판별자로 오버로드하는 안티패턴은 §14.8.1·§14.9.1이 이미 두 번 기각했다 |
+| 그 4종에 D 값을 새로 배정 | **기각** | 콘텐츠를 바꾸지 않고 좌표만 바꾸는 것은 **사실과 다른 태깅**이다(AC-070의 커버리지 산출이 곧바로 거짓이 된다). 콘텐츠 저작은 T83~T85 소관이며 architect가 임의 배정할 대상이 아니다 |
+| **`D0_none`을 축 D의 정식 값으로 추가(채택) ✅** | 채택 | PRD 표가 이미 쓴 **"(없음)"에 표현형을 준 것**이지 새 *수법*을 발명한 것이 아니다. 모든 시나리오가 5축 전부에 값을 갖게 되어 AC-070이 문자 그대로 성립하고, **난이도 L3("초급 = 축 D 수법 0~1개", AC-074)의 "0개"가 그대로 표현 가능한 값**이 된다(T81이 곧 쓴다) |
+
+- **`D0_none`은 공백 산정에서 제외한다**(§15.10.3). `D0_none`의 count가 0이 되는 것은 "공백"이 아니라 오히려 **전 시나리오가 이탈 차단 수법을 갖게 된 목표 상태**다. 이 제외는 **한 곳**(`GAP_EXEMPT_VALUES`)에만 선언한다.
+- ⚠️ **planner 비준 필요(잔여)**: PRD 축 정의 표는 *"표에 없는 값이 필요하면 임의 판단 말고 행을 추가할지 먼저 묻는다"* 고 규정한다. `D0_none`은 새 수법이 아니라 PRD 표의 "(없음)" 셀의 인코딩이라고 판단해 **구현을 막지 않기 위해 확정**했으나, 축 정의 표에 닿는 값이므로 planner가 축 정의 표에 `D0` 행을 추가할지 확인해 주기를 요청한다(§15.10.9 **G32**).
+
+**§0 원칙 4(송금·계좌 개념 부재)와의 정합 확인**: `E1_transfer_demand`는 **분류 어휘**이지 기능 필드·엔드포인트가 아니다. 같은 판단이 이미 적용된 선례가 있다 — `TACTIC_CATEGORIES`의 `"payment_demand"`(`report/tacticCategory.ts:39`). §0 원칙 4가 금지하는 것은 **금전을 실제로 움직일 수 있는 스키마·엔드포인트**이며, 사기 수법을 *부르는 이름*이 아니다.
+
+---
+
+### 15.10.2 (b) 배치 — `ScenarioMeta` **미증분**, `functions/` 단일 소스 (미러 0벌)
+**결정: 축 태깅은 `ScenarioMeta`(`functions/src/scenarios/publicMeta.ts`)에도 `ScenarioDoc`(`src/content/scenarios/*.ts`)에도 넣지 않는다. `functions/src/scenarios/axes.ts`의 `SCENARIO_AXES: Record<string, ScenarioAxes>` 한 곳이 유일한 소스이며, 미러도 Firestore 문서도 만들지 않는다.**
+
+```ts
+export type ScenarioAxes = {
+  // 5축 전부 required · 각 축은 "비어 있지 않은 배열" 타입(AC-070 "각 축 최소 1개"를 타입으로 강제)
+  readonly access:        readonly [AxisAccess, ...AxisAccess[]];
+  readonly impersonation: readonly [AxisImpersonation, ...AxisImpersonation[]];
+  readonly pressure:      readonly [AxisPressure, ...AxisPressure[]];
+  readonly exitBlock:     readonly [AxisExitBlock, ...AxisExitBlock[]];
+  readonly demand:        readonly [AxisDemand, ...AxisDemand[]];
+};
+export const SCENARIO_AXES: Record<string, ScenarioAxes> = { /* 13종 — §15.10.7 표 그대로 */ };
+```
+
+**왜 `ScenarioMeta` 증분을 기각하는가 — 실측 4건.**
+
+| # | 실측 | 함의 |
+|---|---|---|
+| 1 | **`scenarios/{}`는 클라 read 허용 문서다** — `firestore.rules:63-67` `allow read: if request.auth != null`. `ScenarioMeta`의 모든 필드는 정의상 **사용자에게 갈 수 있는 값**이다 | **D-46**("축은 값도 이름도 사용자 화면 어디에도 표기하지 않는다")을 지키는 가장 강한 방법은 "안 그리기"가 아니라 **애초에 화면 계약에 넣지 않기**다. UX도 같은 인계를 남겼다(D-46 Impact: *"`ScenarioMeta`의 사용자 노출 필드가 아니라 내부 태깅·커버리지 산출용으로만 설계하면 된다"*) |
+| 2 | **미러 드리프트 테스트가 실제로 지키는 범위는 1/13 시나리오 × 3필드다** — `scenarios.test.ts:108-120`은 `familyAccidentDeepvoice.ts` **한 파일**만 읽어 `title`·`fraudType`·`deepvoiceLines[].text`를 `includes()`로 확인한다 | 나머지 12종·나머지 필드(`estimatedDuration`·`difficulty`·`voiceMode`·`callerLabel`·`channel`·`surface`·`escalation`)에는 **드리프트 방어가 없다.** 축 5축 × 13종을 이 위에 얹는 것은 **존재하지 않는 방어에 얹는 것**이다 |
+| 3 | **두 미러는 지금 이미 드리프트해 있다** — `callerLabel`이 13/13 불일치. 예: `publicMeta.ts:68` `"가족 (사칭)"` vs `src/content/scenarios/familyAccidentDeepvoice.ts:74` `"010-2447-8815"`. T75가 클라 파일만 갱신했고 테스트는 `callerLabel`을 검사하지 않아 **드러나지 않았다** | (2)가 이론이 아니라 **이미 일어난 사고**임을 보여준다. 기능 영향은 현재 없다(서버는 `callerLabel`을 읽지 않는다 — `functions/` 전체에서 주석·타입 선언 외 참조 0건, 실측). 별건 갭으로 등재(**G38**) |
+| 4 | **`scenarios/{}`는 `seed.ts`가 `batch.set`으로 주입한다**(`seed.ts:34-36`) | 미러에 필드를 추가하면 **재시딩이 필요한 운영 단계가 생기고**, 시딩 전까지 Firestore 문서와 코드가 어긋난다. 축을 코드 상수에만 두면 커버리지 산출이 **배포 상태와 무관하게 항상 정확**하다 |
+
+**왜 미러를 두지 않아도 되는가 — 소비자 전수 확인.** 축 값을 읽을 주체는 (i) 커버리지 산출(테스트·리포트 스크립트, `functions/`), (ii) 난이도 L3 조립(T81 — `functions/src/roleplay/promptAssembly.ts`, 서버), (iii) 시나리오 저작 시 사람이 읽는 표. **전부 `functions/` 쪽이거나 문서다. 클라(`src/`)에는 소비자가 하나도 없다** — D-46이 화면 노출을 전면 금지했기 때문에 구조적으로 그렇다.
+- **역방향 규칙(중요)**: 앞으로 **클라가 축 값을 필요로 하는 순간이 오면 그것은 D-46 위반이 논의되고 있다는 신호**다. 미러를 만들지 말고 **멈추고 ux-design에 확인**한다(**G37**).
+
+**트레이드오프(정직 고지).** 시나리오 하나의 사실이 두 파일(`publicMeta.ts` + `axes.ts`)에 나뉜다 — 시나리오를 추가할 때 손댈 곳이 하나 늘어난다. 이 비용은 §15.10.4의 `deepEqual` 키 게이트가 **잊으면 즉시 실패**로 만들어 회수한다. 반대 방향(미러 2벌 × 5축)의 비용은 이미 (2)(3)에서 실측으로 드러났다.
+
+---
+
+### 15.10.3 (c) 커버리지 산출 — 빌드타임 상수 순회(순수 함수) + 전 도메인 순회
+**결정: 커버리지는 `SCENARIO_AXES` 상수를 순회하는 순수 함수 `computeAxisCoverage()`가 산출한다. 런타임 Firestore 집계·콜러블·화면은 만들지 않는다. 소비처는 ① 테스트 단언 ② 사람이 읽는 리포트 스크립트 2곳뿐이다.**
+
+| Option | Pros | Cons |
+|---|---|---|
+| **빌드타임 상수 순회(채택) ✅** | 배포·시딩 상태와 무관하게 항상 정확 · Firestore read 0 · 규칙 표면 0 · 테스트에서 결정론적으로 단언 가능 · **커버리지가 CI에서 깨질 수 있다**(= 조용한 누락 불가) | 운영 중 Firestore에 사람이 손으로 넣은 시나리오는 반영 못 함 — 그런 경로가 애초에 없다(`scenarios` write는 `if false`, `firestore.rules:66`) |
+| 런타임 Firestore 집계 | "실제 배포된 것"을 센다 | 시딩 안 된 환경에서 0건을 **거짓 공백**으로 보고 · read 비용·규칙 표면 증가 · **AC-076 검증을 CI에서 할 수 없다** |
+| 커버리지 화면·대시보드 | 사람이 보기 쉬움 | **D-45/D-46 정면 위반**(요청되지 않은 Dashboard/Analytics = 스코프 크립). UX v1.12가 *"커버리지 산출물은 빌드·테스트 산출물이지 화면이 아니다"* 로 이미 못 박았다 |
+
+**⭐ AC-076의 유일한 성립 조건 — 전(全) 열거형 도메인 순회.**
+```
+// 옳음: 열거형 전체를 순회하며 count를 채운다 → 0건 값이 결과에 "0"으로 남는다
+for (const value of AXIS_DEMAND) coverage[value] = scenariosUsing(value).length;   // E4 = 0 이 보인다
+// 틀림: 태깅된 값을 순회하며 카운트를 올린다 → 0건 값은 키 자체가 생기지 않는다
+for (const s of scenarios) for (const v of s.demand) coverage[v] = (coverage[v] ?? 0) + 1;  // E4 가 사라진다
+```
+두 번째 방식은 **E4가 결과에서 조용히 사라진다** — AC-076이 *"커버리지 산출물이 E4를 0건으로 드러내지 못하면 이 AC는 미충족"* 이라고 명시한 바로 그 실패다. 그래서 산출 함수는 **입력 데이터가 아니라 열거형을 순회**하고, 테스트가 `Object.keys(coverage).length === 전 열거형 값 수`를 단언한다.
+
+**잔여 공백의 "명시 기록" — 선언 표 + 양방향 `deepEqual`.**
+```ts
+/** 0건인 채로 남는 것이 **의도된** 축 값과 그 사유. 사유 없는 공백은 허용하지 않는다(AC-076). */
+export const DECLARED_COVERAGE_GAPS: Partial<Record<AxisValue, string>> = {
+  A3_post_install_contact:  "MVP #30(T84)에서 해소 예정 — AC-076 필수 4값",
+  D3_verification_hijack:   "MVP #29(T83)에서 해소 예정 — AC-076 필수 4값",
+  D4_procedural_legitimacy: "MVP #31(T85)에서 해소 예정 — AC-076 필수 4값",
+  E3_install_remote_demand: "MVP #30(T84)에서 해소 예정 — AC-076 필수 4값",
+  E4_in_person_cash_demand: "OQ-39 미채택 확정(2026-07-25) — 재구성 후에도 잔여 공백으로 유지",
+  E5_giftcard_crypto_demand:"MVP #32 P1 착수 보류(T88) — 잔여 공백",
+  A4_account_takeover:      "⚠️ PRD v1.6 '드러난 공백' 표에 등재되지 않은 0건(T78 발견, G35). planner 확인 전까지 채택 계획 없음",
+};
+export const GAP_EXEMPT_VALUES = ["D0_none"] as const; // sentinel — 0건이어도 공백이 아니다
+```
+- **테스트 단언(양방향)**: `deepEqual(계산된 0건 값 집합, Object.keys(DECLARED_COVERAGE_GAPS))`. 이 한 줄이 **공백이 조용히 사라지는 것**(E4가 결과에서 빠짐)과 **공백이 조용히 채워지는 것**(누가 D3를 태깅했는데 표를 안 고침)을 동시에 잡는다.
+- **T83~T85가 공백을 채우면 이 테스트가 먼저 깨진다** — 그게 정상이며, 해당 행을 삭제하는 것이 "해소 기록"이다.
+- **B1(과소 축)은 0건이 아니므로 위 표에 없다.** AC-076의 B1 "명시 기록" 요건은 **커버리지 리포트가 모든 값의 count를 빠짐없이 출력**하는 것으로 충족된다(B1의 실측 count가 표에 그대로 찍힌다). **목표 비중 수치는 넣지 않는다 — OQ-40 확정("라인업 분포를 실태 비중에 맞추지 않는다").**
+
+**리포트 스크립트(필수 — QA 증거물).** `functions/package.json`에 `"report:axis-coverage": "node lib/scenarios/axisCoverageReport.js"`를 추가한다(`seed:scenarios` 관례와 동형 — `npm run build` 선행). 근거: **T87 (6)이 *"커버리지 산출이 잔여 공백(E4/E5)을 명시 보고"* 를 GO/NO-GO 증거로 요구**하므로, 테스트 통과 여부만으로는 부족하고 **사람이 붙여넣을 수 있는 표 출력**이 있어야 한다. 출력은 축별 `값 · count · 시나리오 목록 · (0건이면) 사유`.
+
+---
+
+### 15.10.4 (d) 태깅 누락 강제 — 타입 2겹 + T91식 `deepEqual` 키 게이트
+**결정: 타입 수준 강제(5축 required + 비어 있지 않은 배열)와 테스트 게이트(`SCENARIO_AXES` 키 ↔ `PUBLIC_SCENARIOS` 키 `deepEqual`)를 **둘 다** 쓴다. 어느 한쪽만으로는 AC-070의 "태깅 없는 시나리오는 등록되지 않는다"가 성립하지 않는다.**
+
+| 강제 수단 | 잡는 것 | 못 잡는 것 |
+|---|---|---|
+| 타입: `ScenarioAxes` 5필드 전부 required | 축 하나를 통째로 빠뜨림 | 시나리오 **행 자체**를 안 만든 경우 |
+| 타입: `readonly [T, ...T[]]`(비어 있지 않은 배열) | `exitBlock: []` | 위와 동일 |
+| 테스트: `deepEqual(Object.keys(SCENARIO_AXES).sort(), Object.keys(PUBLIC_SCENARIOS).sort())` | **시나리오를 추가했는데 축 표를 안 채움 / 축 표에만 있고 시나리오가 없음** | 값이 **틀린** 경우(사람 판단) |
+
+**왜 타입만으로는 안 되는가(실측).** `PUBLIC_SCENARIOS`는 `Record<string, ScenarioMeta>`다(`publicMeta.ts:241`). 키가 `string`이라 TypeScript가 **망라성(exhaustiveness)을 검사할 수 없다** — `SCENARIO_AXES`에 행이 하나 없어도 컴파일은 통과한다. 망라성을 타입으로 얻으려면 `PUBLIC_SCENARIOS`의 선언 타입을 리터럴 union 키로 바꿔야 하는데, 그것은 **요청되지 않은 공용 타입 리팩터**이고 `challenge`·`session`·`roleplay`·`realtime` 등 6개 모듈의 참조에 파급된다(실측: `PUBLIC_SCENARIOS` 참조 8개 파일) — AC-077(회귀 금지)과 정면으로 어긋나는 위험 대비 이득이 없다.
+
+**T91 선례 판정 — 무엇을 가져오고 무엇을 버리는가.** T91은 `UNCONDITIONAL_DEMAND_BY_SCENARIO`(`scenarios.test.ts:156-198`)로 ① 표 키 ↔ 시나리오 키 `deepEqual` ② 지명 라벨이 `weakenedTactics`에 `startsWith`로 살아 있는지 를 함께 고정했다.
+
+| T91 요소 | 축 태깅에 적용? | 근거 |
+|---|---|---|
+| **① 키 1:1 `deepEqual` 게이트** | **그대로 채택 ✅** | 이 저장소가 이미 쓰고 있고 실제로 작동하는 패턴이며, 위 표의 "타입이 못 잡는 것"을 정확히 메운다 |
+| **② 손으로 지명한 문자열 라벨 + `startsWith` 검사** | **불채택** | T91이 문자열 검사를 쓴 이유는 **단언 대상이 자유 저작 산문 안에 있어 가리킬 구조가 없었기 때문**이다. 축 값은 처음부터 열거형이라 **가리킬 구조가 이미 있고**, 멤버십은 컴파일러가 검사한다. 여기에 문자열 검사를 얹으면 방어가 아니라 중복이다 |
+
+**T91의 한계는 여기서도 그대로 남는다(정직 고지 — 같은 문장을 반복한다).** 이 게이트가 증명하는 것은 시나리오가 축 값을 **가졌다**는 사실이지, 그 값이 **맞다**는 사실이 아니다. `courier-customs-scam`에 `D0_none` 대신 `D2_secrecy`를 적어 넣어도 테스트는 전부 통과한다 — 콘텐츠와 좌표가 실제로 일치하는지는 **표를 갱신하는 사람의 판단**이다. T91이 *"자동 추론이 아니라 손으로 지명하는 표로 뒀다"* 고 적은 것과 같은 이유로, 축 표도 손으로 유지하되 **각 행에 근거를 주석으로 남긴다**(어느 대사·어느 `weakenedTactics` 항목이 그 좌표의 근거인지).
+
+---
+
+### 15.10.5 (e) **OQ-U25 판정 — 축과 `tacticCategory`는 직교(orthogonal)다**
+**판정: 직교. 두 열거형은 서로를 import하지 않고, 어느 쪽도 상대의 값을 흡수·대체하지 않으며, `DeceivedMoment`에 축 필드를 추가하지 않고 `TACTIC_CATEGORIES`에 축 코드를 추가하지 않는다.**
+
+근거 4건 — "이름이 비슷하다"가 아니라 **구조가 다르다**:
+
+| # | 축(A~E) | `tacticCategory`(고정 10종) |
+|---|---|---|
+| 1 **부착 대상** | `scenarioId` = **콘텐츠**. 저작 시점에 고정된 **설계 좌표**(상수) | `DeceivedMoment` = **한 세션의 한 순간**. 실행 후에 계산되는 **런타임 관측값** |
+| 2 **기수** | 시나리오 1개 → 축 C 값 1~3개(고정) | 같은 시나리오의 한 세션 → 속은 순간 0~n개, 각각 다른 카테고리. **축 → 카테고리는 함수가 아니다**(세션마다 다르다) |
+| 3 **정규화 방향** | **사전 선언형**. `other` 폴백이 **없어야 한다** — 있으면 AC-070("태깅 없으면 등록 불가")이 무력화된다 | **사후 흡수형**. 자유 저작 라벨을 규칙표로 흡수하고 **`other` 폴백이 반드시 있어야 한다**(§15.4.2 — 새 라벨이 들어오면 드리프트 테스트가 깨지는 장치) |
+| 4 **AC-077 요구** | 병합하면(축 값을 묶기 키로 쓰면) **과거 리포트의 묶기 의미가 바뀐다** = AC-077 "과거 리포트·아카이브 항목 소급 수정 금지" 위반 | 직교로 두면 `DeceivedMoment`에 **필드가 하나도 추가되지 않아** 소급이 **구조적으로 불가능**하다 |
+
+**금지 3건(코드 리뷰 체크포인트):**
+1. `DeceivedMoment`에 `axis*` 필드를 추가하지 않는다.
+2. `TACTIC_CATEGORIES`에 `"D3_..."`·`"E3_..."` 같은 축 코드를 넣지 않는다.
+3. `axes.ts`와 `report/tacticCategory.ts`는 서로를 import하지 않는다(의존 0 — 리뷰에서 grep으로 확인 가능).
+
+**명명 규칙으로 혼동을 원천 차단**: **축 값은 항상 코드 접두사를 갖는다**(`E2_credential_demand`) · **`tacticCategory` 값은 절대 코드 접두사를 갖지 않는다**(`personal_info_demand`). 어느 열거형의 값인지 **값만 보고 판별 가능**해진다.
+
+**OQ-U25가 실제로 물은 것 — 신규 순간 2종은 어느 카테고리로 묶이는가.**
+
+| 신규 순간 | 판정 | 근거 |
+|---|---|---|
+| **모의 앱 설치·원격제어 응낙**(AC-072) | 기존 **`link_or_install`**. enum append **불요** | 그 카테고리의 정의 그대로다. 카드 표시 문구는 여전히 `tactic` 원문이라 사용자가 보는 글자는 겹치지 않는다(§15.4.2) |
+| **확인 시도 무력화 응낙**(AC-071) | 기존 **`verification_block`**. enum append **불요** | 수법의 *기법*은 정반대(막는다 vs 권한다)지만, 묶기 키의 목적은 *"참가자가 반복해서 넘어가는 지점"* 을 모으는 것이고 참가자 관점에서 둘 다 **"확인이 무력화된 결과"** 로 같은 학습 묶음이다. 오히려 분리하면 "확인 관련해서 3번 넘어갔다"가 "2번+1번"으로 흩어져 §15.6 **G14**의 실패가 재발한다 |
+
+⚠️ **단, 규칙표 패턴은 확장이 필요하다 — enum append와 혼동하지 말 것(실측).** 현행 `CATEGORY_RULES`는 신규 라벨을 흡수하지 못한다:
+- `link_or_install` 패턴 `/링크|클릭|설치|앱|URL|디지털\s*취약/`(`tacticCategory.ts:53`)에 **"원격"이 없다** → `"원격 지원 허용 유도"` 같은 라벨은 매치되지 않는다.
+- `verification_block` 패턴 `/확인[^]{0,6}차단|…|채널\s*전환/`(`tacticCategory.ts:62`)에 **확인 *권유* 계열이 없다** → `"확인 권유 후 모의 재연결"` 같은 라벨은 매치되지 않는다.
+→ 두 경우 모두 `other`로 떨어지고 **§15.4.2의 드리프트 테스트가 먼저 깨진다**(설계대로 작동하는 것이다). T83/T84는 **`TACTIC_CATEGORIES`(값 목록)를 건드리지 말고 `CATEGORY_RULES`의 해당 행 정규식만 확장**한다.
+- ⚠️ **순서가 load-bearing**(§15.4.2): `payment_demand`(1행)·`personal_info_demand`(2행)·`link_or_install`(3행)이 `verification_block`(4행)보다 위다. D3 라벨에 "계좌"·"이체"·"본인 확인" 같은 단어를 넣으면 **위 행이 먼저 먹는다** — 라벨 저작 시 주의(**G34**).
+
+**UX 권고와의 대조(정직 고지)**: UX v1.12는 *"직교 유지 + 신규 순간 2종은 기존 10종 중 가장 가까운 값에 매핑하거나 **필요 시 append**"* 를 권고했다. **직교는 채택하되 append는 불필요하다고 판정**했다 — 두 순간 모두 기존 값의 정의 안에 들어가고, append는 `other` 폴백이 있는 사후 흡수형 열거형을 **선언형처럼 취급하게 만들어** §15.4.2의 드리프트 방어 논리를 흐린다.
+
+---
+
+### 15.10.6 AC-077 회귀 무(無)영향 — 무엇이 바뀌지 않는지 파일 단위로
+| 대상 | 이번 설계의 영향 | 확인 방법 |
+|---|---|---|
+| `scenarioId`·`title`·`channel`/`surface`·`voiceMode` | **0** — `publicMeta.ts`·`src/content/scenarios/*` 무편집 | 두 경로에 diff가 없어야 한다(T82 완료 증거) |
+| 시나리오 삭제·통합 | **0건**(PRD v1.6 판정 계승) | `deepEqual` 키 게이트가 13개 그대로임을 단언 |
+| Firestore 스키마 | **0** — 신규 컬렉션·필드 없음. `scenarios/{}` 문서 형태 무변경 → **재시딩 불요** | **Database.md 무변경** |
+| 콜러블 계약 | **0** — 신규·변경 콜러블 없음 | **API.md 무변경** |
+| `firestore.rules`/인덱스 | **0** | 신규 read 경로가 없다 |
+| **과거 리포트·아카이브 항목** | **0** — `DeceivedMoment`·`ReportDoc`에 필드를 추가하지 않으므로 **소급 수정이 구조적으로 불가능**(§15.10.5 근거 4) | 아카이브는 계속 `tacticCategory ?? tactic`으로 묶는다(§15.4.2 무변경) |
+| T70(되감기)·T74(아카이브)·T68(문자 타임라인) | **0** — 세 기능이 의존하는 데이터 형태를 하나도 건드리지 않는다 | `reports`·`rewindAttempts`·`smsTimeline` 무변경 |
+| AC-001/AC-002/AC-030 충족 상태 | **0** — 검사 대상 필드가 그대로다 | `scenarios.test.ts` 기존 단언 전부 통과 |
+
+---
+
+### 15.10.7 T82 인계 — 13종 축 태깅 정본 표
+PRD "현재 13종 축 매핑"을 그대로 옮기되 **D열 "(없음)" 4종을 `D0_none`으로 인코딩**한 것이 유일한 차이다(§15.10.1). 이 표가 `SCENARIO_AXES` 초기값의 정본이다.
+
+| scenarioId | access(A) | impersonation(B) | pressure(C) | exitBlock(D) | demand(E) |
+|---|---|---|---|---|---|
+| family-accident-deepvoice | A1 | B4 | C5, C3 | D2, D5 | E1 |
+| institutional-impersonation | A1 | B1 | C1, C6, C3 | D2, D5 | E1, E2 |
+| loan-refinance-scam | A1 | B2 | C2, C3 | D1 | E1 |
+| tax-refund-scam | A1 | B1 | C2, C6 | D2 | E2 |
+| grandchild-impersonation | A1 | B4 | C5, C3 | D2 | E1 |
+| card-company-impersonation | A1 | B2 | C1, C3 | D5 | E2 |
+| courier-customs-scam | A1 | B3 | C3 | **D0** | E1, E2 |
+| kidnapping-threat | A1 | B6 | C1 | D5, D6 | E1 |
+| reputation-blackmail-scam | A1 | B6 | C4, C1 | D2 | E1 |
+| messenger-child-impersonation-kakao | A2 | B4 | C5 | D2 | E1 |
+| messenger-friend-loan-kakao | A2 | B5 | C5 | **D0** | E1 |
+| messenger-parcel-smishing-sms | A2 | B3 | C3 | **D0** | E6 |
+| messenger-subsidy-smishing-sms | A2 | B1 | C2 | **D0** | E6 |
+
+**이 표를 넣었을 때 커버리지가 보고해야 할 값(T82 완료 판정 기준 — 미리 계산해 둔다):**
+- **0건 = `A3`·`A4`·`D3`·`D4`·`E3`·`E4`·`E5` 7개.** (`D0_none`은 4건이며 공백 산정에서 제외)
+- **A4가 0건인 것은 PRD "드러난 공백" 표에 없다** — T78이 기계 계산으로 발견했다(**G35**).
+- **B1 = 3건**(institutional-impersonation · tax-refund-scam · messenger-subsidy-smishing-sms). PRD 공백 표의 *"13종 중 2종(15%)"* 과 어긋난다 — **PRD 문면이 아니라 매핑 표가 정본**이며, 기계 산출은 3을 보고한다(**G36**). B1이 실태 비중 대비 과소라는 AC-076의 판단 자체는 3/13(23%)에서도 그대로 성립한다.
+- **AC-076 필수 4값**(A3·D3·D4·E3)이 전부 0건으로 시작하는 것이 **정상**이다 — T83~T85가 채운다.
+
+### 15.10.8 T81 인계 — 난이도 L3가 축 D를 읽는 방식
+- `SCENARIO_AXES[scenarioId].exitBlock`이 **L3(이탈 차단 깊이)의 입력**이다. AC-074의 *"고급 = D3 또는 D4를 최소 1개 포함"*·*"초급 = 축 D 수법 0~1개"* 를 판정할 데이터가 이 필드 하나로 확보된다.
+- **`D0_none`이 "0개"의 표현형**이다(§15.10.1) — 초급 판정에서 빈 배열을 특수 처리할 필요가 없다.
+- ⚠️ **AC-065/§15.5 불변식 계승**: 축 D 값을 프롬프트에 반영하더라도 **`guardrailPreamble`은 언제나 마지막**이며, 조립 블록은 그 **앞**에 들어간다. 축 값이 새로 생겼다고 해서 조립 순서 예외를 만들지 않는다.
+- ⚠️ **현재 13종 중 D3·D4를 가진 시나리오가 0개**다(§15.10.7). 즉 **T81이 설계한 고급 L3는 T83/T85가 콘텐츠를 채우기 전까지 어떤 시나리오에서도 "D3 또는 D4 포함"을 만족시킬 수 없다.** T81은 이 사실을 폴백 규칙(예: D3/D4 부재 시 무엇을 하는가)으로 명시해야 하며, **조용히 중급처럼 동작하게 두면 AC-074 미충족이 라이브에서만 드러난다.**
+  **폴백 권고안(T78 reviewer Major 3 반영, 2026-07-26 — architect가 옵션 비교까지는 내고 확정은 T81에 넘긴다)**:
+  - **(권고) 옵션 A — 고급 조립을 계속하되 L3만 축소하고 그 사실을 산출물에 남긴다.** D3·D4가 없으면 L3 블록을 D5(끊기 어려움) 등 보유 값으로 대체 조립하고, **프롬프트 산출 메타에 `l3Applied:false`를 남긴다.** 근거: ① 사용자는 이미 "고급"을 골랐는데 세션을 거부하거나 중급으로 되돌리면 **AC-064(사용자 선택형 3단계)가 화면과 어긋난다.** ② 조용한 축소가 위험한 진짜 이유는 "축소" 자체가 아니라 **드러나지 않음**이다 — 기록이 남으면 QA가 "고급인데 L3 미적용" 세션을 셀 수 있어 AC-074 미충족이 라이브가 아니라 **테스트에서** 드러난다. ③ ElevenLabs 경로가 이미 `difficultyApplied:false`로 같은 패턴을 쓰고 있어 신규 개념이 아니다.
+  - **옵션 B — 고급에서 D3/D4 부재 시나리오를 선택 목록에서 제외.** 커버리지가 채워지기 전까지 **고급으로 고를 수 있는 시나리오가 0개**가 되어 기능이 통째로 사라진다. 기각 권고.
+  - **옵션 C — 사용자에게 "이 시나리오는 고급 수법이 아직 없습니다" 고지.** 정직하지만 훈련 몰입을 깨고, 미완성 인상을 준다. 콘텐츠가 채워지면 사라질 UI라 유지비만 남는다. 기각 권고.
+  - ⚠️ **어느 옵션이든 T81이 옵션 비교표로 확정하고 근거를 남길 것.** 이 절은 권고이지 확정이 아니다.
+
+### 15.10.9 §15.6 증분 갭 (G32~G39 — §15.6 형식 계승, 병합 충돌 회피를 위해 본문 대신 여기 둔다)
+| # | 갭 | 근거 | 안 고치면 생기는 일 |
+|---|---|---|---|
+| G32 | **PRD 매핑 표의 D열 "(없음)" 4종과 AC-070("각 축 최소 1개")이 충돌한다** | PRD "현재 13종 축 매핑" 7·11·12·13행 vs AC-070 문면 | 빈 배열로 두면 "수법 없음"과 "미태깅"이 구분 불가 → AC-070 무력화. `D0_none`으로 해소했으나 **축 정의 표에 닿는 값이라 planner 비준 필요** |
+| G33 | **`tacticCategory` 규칙표가 신규 순간 2종 라벨을 흡수하지 못한다** | `tacticCategory.ts:53`(패턴에 "원격" 없음) · `:62`(확인 *권유* 계열 없음) | 라벨이 `other`로 떨어져 §15.4.2 드리프트 테스트가 깨진다(정상 동작). T83/T84는 **enum append가 아니라 `CATEGORY_RULES` 행 패턴 확장**으로 처리할 것 |
+| G34 | **`CATEGORY_RULES`는 순서가 load-bearing** | `tacticCategory.ts:35-92`(§15.4.2 명시) | D3 라벨에 "계좌"·"이체"·"본인 확인"이 섞이면 1·2행이 먼저 먹어 `verification_block`에 안 간다 → 묶기가 갈라진다 |
+| G35 | **⚠️ `A4`(지인·가족 계정 도용)가 0건인데 PRD "드러난 공백" 표에 없다** | PRD 매핑 표 13행 어디에도 A4 없음 vs PRD 공백 표에 A4 행 부재 | 커버리지가 A4=0을 보고하면 "PRD에 없는 공백"이 드러난다. **implementer가 임의로 A4 시나리오를 만들면 스코프 크립** — `DECLARED_COVERAGE_GAPS`에 사유와 함께 등재하고 **planner 확인 대기**로 둔다 |
+| G36 | **PRD 공백 표의 "B1 13종 중 2종"이 매핑 표(3종)와 어긋난다** | PRD 매핑 표 2·4·13행 = B1 3종 vs 공백 표 *"13종 중 2종(15%)"* | 기계 산출은 3을 보고하므로 QA가 PRD 문면과 대조하면 불일치로 보인다. **매핑 표가 정본**이며 AC-076의 "B1 과소" 판단은 3/13에서도 성립 — planner에 정정 여부 확인 |
+| G37 | **축 값을 클라(`src/`)로 가져가고 싶은 유혹** | D-46(축 전면 미노출) · UX v1.12 *"커버리지 산출물은 화면이 아니다"* | 클라가 축을 필요로 하는 순간 = **화면 노출이 논의되고 있다는 신호**. 미러를 만들지 말고 멈추고 ux-design에 확인할 것 |
+| G38 | **두 미러가 이미 드리프트해 있다 — `callerLabel` 13/13 불일치** | `publicMeta.ts:68` `"가족 (사칭)"` vs `src/content/scenarios/familyAccidentDeepvoice.ts:74` `"010-2447-8815"`(T75가 클라만 갱신). 드리프트 테스트는 `title`/`fraudType`/`deepvoiceLines`만, **1종만** 검사(`scenarios.test.ts:108-120`) | seed 시 Firestore `scenarios/{}`에 낡은 `callerLabel`이 주입된다. **현재 기능 영향 없음**(서버는 이 필드를 읽지 않는다 — 실측). **T78 범위 밖 별건**이며, 이 실측이 "축을 미러에 두지 않는다"(§15.10.2)의 근거다 |
+| G39 | **커버리지를 "태깅된 값 순회"로 계산하면 0건 값이 결과에서 사라진다** | §15.10.3 코드 대비 | **E4가 보고되지 않아 AC-076이 즉시 미충족**이 된다. 반드시 열거형 전 도메인 순회 |
+
+### 15.10.10 Traceability (PRD/UX → 산출물)
+| PRD/UX 항목 | Screen ID | 산출물 | 비고 |
+|---|---|---|---|
+| AC-070(축 태깅·커버리지) · MVP #28 | **없음(D-46)** | `functions/src/scenarios/axes.ts` · `axisCoverage.ts` · `axisCoverageReport.ts` | UX v1.12 명시: *"AC-070은 사용자 화면을 갖지 않는다"* |
+| AC-076(공백 해소·명시 기록) | **없음** | `DECLARED_COVERAGE_GAPS` + 양방향 `deepEqual` 테스트 + `npm run report:axis-coverage` 출력 | T87 (6)의 GO/NO-GO 증거물 |
+| AC-077(회귀 금지) | — | §15.10.6 표 | Database.md·API.md 무변경 |
+| **OQ-U25**(축 ↔ `tacticCategory`) | UX-030 · UX-008 | §15.10.5 판정 | **직교 확정 · enum append 0건 · 규칙표 패턴 확장만** |
+| D-46(축 미노출) | UX-017·UX-024·UX-029·UX-030 | §15.10.2 (배치가 곧 강제) | 축이 클라 계약에 **존재하지 않는다** |
+| AC-074 L3(T81) | UX-029 | `SCENARIO_AXES[].exitBlock` | §15.10.8 |
+| AC-071/072(T79/T80) | UX-031 · UX-023(kind) | 축 좌표 D3 / E3·A3 | 콘텐츠는 T83/T84 |
+
+**잔여(architect 소관 아님):** ① **`D0_none` 축 정의 표 등재 비준**(G32 — planner). ② **A4 0건 공백의 채택 여부**(G35 — planner). ③ **B1 count 2↔3 정정**(G36 — planner). ④ `callerLabel` 미러 드리프트 정리(G38 — 별건 버그 태스크, implementer). **①~③은 T82 착수를 막지 않는다** — 셋 다 `DECLARED_COVERAGE_GAPS`에 사유와 함께 기록된 채로 진행 가능하며, 그것이 AC-076의 "조용한 누락 금지"가 요구하는 상태다.
 ## 16. v1.12 확인 시도 무력화(축 D3) — 트리거·계층·기록·대처 (T79, UX v1.12, AC-071 / OQ-U22·OQ-U23)
 > **소관 UX/OQ 매핑:** UF-011 · UX-031 · UX-014(v1.12 state 3종) · D-47/D-48/D-51/D-52 · P-24/P-25 / **OQ-U22**(트리거 감지) · **OQ-U23**(재연결 목소리) · OQ-U25의 확인 무력화 부분. **⚠️ 이 절이 T83 implementer 착수 게이트다.**
 > **범위 밖(이 절이 설계하지 않음):** 모의 앱 설치·3단계 결합(AC-072/073 — T80) · 축 태깅·커버리지(AC-070/077 — T78) · 난이도 4레버 프롬프트 조립(AC-074/075 — T81) · **시나리오 콘텐츠 문안 자체**(T83. 이 절은 콘텐츠가 지켜야 할 **계약과 금지 패턴**만 고정한다).
