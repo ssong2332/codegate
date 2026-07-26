@@ -128,7 +128,15 @@ export const REAL_WORLD_APP_NAMES: readonly string[] = [
   "VNC",
 ];
 
-/** 실 스토어·설치 경로 표기(문구·값 층위). 클라 소스 토큰 스캔은 `mockScreenCopy.test.ts`가 맡는다. */
+/**
+ * 실 스토어·설치 경로 표기(문구·값 층위). 클라 소스 토큰 스캔은 `mockScreenCopy.test.ts`가 맡는다.
+ *
+ * ⚠️ **한글이 닿는 패턴에 `\b`를 쓰지 마라(T86 reviewer Major 1).** JS의 `\b`는 **ASCII 단어 경계**라
+ * 한글 앞뒤에서는 경계가 성립하지 않는다 — `/\bplay\s*스토어\b/`는 `"play 스토어"`·`"Play 스토어"`를
+ * **하나도 잡지 못한다**(검출력 0인데 겉보기엔 정상 규칙이라 더 위험하다). 이 파일을 만든 이유가
+ * 정확히 그 버그를 없애는 것이었는데 최초 작성에서 같은 형태가 그대로 옮겨 심어졌다.
+ * 아래 `[T86/생존] 모든 규칙이 자기 양성 샘플을 실제로 잡는다` 테스트가 재발을 막는다.
+ */
 export const STORE_AND_INSTALL_PATTERNS: readonly RegExp[] = [
   /https?:\/\//i,
   /\.apk\b/i,
@@ -137,7 +145,9 @@ export const STORE_AND_INSTALL_PATTERNS: readonly RegExp[] = [
   /\bapps\.apple\b/i,
   /\bapp\s*store\b/i,
   /\bappstore\b/i,
-  /\bplay\s*스토어\b/,
+  // 안드로이드 한국어 UI의 실제 표기가 "Play 스토어"라 한영 혼용형을 따로 둔다(형제 규칙
+  // `/플레이\s*스토어/`와 중복이 아니다). `\b` 없이 — 위 경고 참고.
+  /play\s*스토어/i,
   /플레이\s*스토어/,
   /앱\s*스토어/,
   /원스토어/,
@@ -243,10 +253,15 @@ function patternRules(
   }));
 }
 
-/** 스토어 **일반명**만 금지형 예외를 받는다(실 도메인·스킴·확장자는 위 표대로 예외 없음). */
+/**
+ * 스토어 **일반명**만 금지형 예외를 받는다(실 도메인·스킴·확장자는 위 표대로 예외 없음).
+ * ⚠️ `"Play 스토어"`와 `"플레이 스토어"`는 **같은 것의 두 표기**이므로 반드시 같은 버킷에 둔다 —
+ * 한쪽만 예외를 받으면 같은 금지형 문장이 표기에 따라 다르게 판정된다.
+ */
 const STORE_NAME_ONLY_PATTERNS: readonly RegExp[] = [
   /\bapp\s*store\b/i,
   /\bappstore\b/i,
+  /play\s*스토어/i,
   /플레이\s*스토어/,
   /앱\s*스토어/,
   /원스토어/,

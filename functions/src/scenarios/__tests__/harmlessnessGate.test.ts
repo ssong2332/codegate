@@ -19,6 +19,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
+  FORBIDDEN_RULES,
   SCAN_PROFILES,
   scanSurfaces,
   scanText,
@@ -431,5 +432,137 @@ test("[T86/(c)] 프로파일 표에 정의된 패턴군만 쓰이고, 모든 프
     usedProfiles,
     definedProfiles.filter((p) => p !== "assembledPrompt"),
     "정의만 하고 아무 표면에도 안 쓰는 프로파일이 있으면 검사가 있다고 착각하게 된다",
+  );
+});
+
+// ── T86 reviewer Major 1 — **죽은 패턴 재발 방지 게이트** ────────────────────
+//
+// **무엇이 있었나.** 이 파일을 만든 이유가 *"기존 `mockScreens.test.ts`의 `/\b앱\s*스토어\b/`가
+// JS의 `\b`(ASCII 단어 경계) 때문에 한글 문맥에서 사실상 매치되지 않는다"* 는 진단이었는데,
+// 정작 정본 파일 최초 작성에서 **같은 형태(`/\bplay\s*스토어\b/`)를 그대로 옮겨 심었다.**
+// 게다가 그것이 "금지형 예외 없음" 버킷에 있어서 **검출력 0인데 겉보기엔 가장 강한 규칙**이었다.
+//
+// **재발 방지 방식**: 규칙마다 *"이 규칙은 이런 문자열을 잡으라고 만들었다"* 는 **양성 샘플**을
+// 등록하고, 규칙 목록과 샘플 목록이 1:1임을 강제한다(T82 축 태깅 `deepEqual` 게이트와 같은 형태).
+//   - 새 정규식을 추가하면 → 샘플을 등록하기 전까지 실패한다.
+//   - 규칙이 죽어 있으면(양성 샘플조차 못 잡으면) → 실패한다.
+//   - 리터럴 규칙(앱명·대표번호·기관명)은 **자기 이름 자체가 양성 샘플**이라 자동 검사한다.
+
+/** 규칙 식별 키 — `/https?:\/\//i`처럼 **두 패턴군에 같은 정규식이 있으므로** 라벨만으로는 부족하다. */
+function ruleKey(rule: { family: string; label: string }): string {
+  return `${rule.family} ${rule.label}`;
+}
+
+/** 손수 쓴 정규식 규칙의 양성 샘플. 값이 그 정규식에 실제로 걸려야 한다. */
+const PATTERN_LIVENESS_SAMPLES: Record<string, string> = {
+  "operationalPayload /\\d{8,}/": "계좌 35208124471603 입니다",
+  "operationalPayload /https?:\\/\\//i": "https://example.com",
+  "storeAndInstall /https?:\\/\\//i": "https://example.com/app",
+  "storeAndInstall /\\.apk\\b/i": "confirm.apk 를 받으세요",
+  "storeAndInstall /\\.ipa\\b/i": "confirm.ipa 를 받으세요",
+  "storeAndInstall /\\bplay\\.google\\b/i": "play.google.com/store/apps",
+  "storeAndInstall /\\bapps\\.apple\\b/i": "apps.apple.com/kr/app/x",
+  "storeAndInstall /\\bmarket:\\/\\//i": "market://details?id=com.example",
+  "storeAndInstall /\\bintent:\\/\\//i": "intent://scan#Intent;end",
+  "storeAndInstall /\\bpackage(Name)?\\s*[:=]/i": "packageName: com.example.app",
+  "storeAndInstall /\\bapp\\s*store\\b/i": "App Store에서 받으세요",
+  "storeAndInstall /\\bappstore\\b/i": "appstore 링크로 받으세요",
+  // ⚠️ reviewer Major 1이 지목한 바로 그 규칙 — `\b`가 붙어 있으면 이 샘플에서 실패한다.
+  "storeAndInstall /play\\s*스토어/i": "Play 스토어에서 설치하세요",
+  "storeAndInstall /플레이\\s*스토어/": "플레이 스토어에서 설치하세요",
+  "storeAndInstall /앱\\s*스토어/": "앱 스토어에서 받으세요",
+  "storeAndInstall /원스토어/": "원스토어에서 받으세요",
+  "remoteControlProcedure /접근성\\s*(서비스|권한|설정)/": "접근성 서비스를 켜 주세요",
+  "remoteControlProcedure /화면\\s*(공유|미러링)[을를]?\\s*(켜|허용|활성)/": "화면 공유를 켜 주세요",
+  "remoteControlProcedure /원격\\s*(제어|지원)[^.\\n]{0,12}(설치|연결|접속)\\s*(방법|절차|법)/":
+    "원격 제어 앱 설치 방법을 알려드릴게요",
+  "remoteControlProcedure /알림\\s*접근\\s*권한[^.\\n]{0,8}(켜|허용|활성)/":
+    "알림 접근 권한을 허용해 주세요",
+  "remoteControlProcedure /개발자\\s*(옵션|모드)[^.\\n]{0,8}(켜|활성|들어가)/":
+    "개발자 옵션을 켜 주세요",
+  "remoteControlProcedure /알\\s*수\\s*없는\\s*(출처|앱)[^.\\n]{0,10}(허용|설치|켜)/":
+    "알 수 없는 출처 설치를 허용해 주세요",
+  "remoteControlProcedure /출처를?\\s*알\\s*수\\s*없는\\s*앱/": "출처를 알 수 없는 앱입니다",
+  "remoteControlProcedure /USB\\s*디버깅/i": "USB 디버깅을 켜 주세요",
+  "remoteControlProcedure /기기\\s*관리자\\s*권한[^.\\n]{0,8}(허용|활성)/":
+    "기기 관리자 권한을 허용해 주세요",
+  "remoteControlProcedure /설정\\s*[>·→-]\\s*(보안|앱|일반)/": "설정 > 보안 메뉴로 들어가세요",
+  "interceptionMeans /착신\\s*전환/": "착신 전환을 걸어 둡니다",
+  "interceptionMeans /포워딩/": "포워딩 설정이 되어 있습니다",
+  "interceptionMeans /중계기/": "중계기를 거칩니다",
+  "interceptionMeans /번호\\s*목록/": "번호 목록을 넘깁니다",
+  "interceptionMeans /앱을\\s*설치하면\\s*통화가/": "앱을 설치하면 통화가 넘어갑니다",
+};
+
+test("[T86/생존] 손수 쓴 정규식 규칙과 양성 샘플이 1:1이다(새 규칙이 샘플 없이 들어오지 못한다)", () => {
+  const patternRuleKeys = FORBIDDEN_RULES.filter((rule) => rule.label.startsWith("/"))
+    .map(ruleKey)
+    .sort();
+  assert.deepEqual(
+    patternRuleKeys,
+    Object.keys(PATTERN_LIVENESS_SAMPLES).sort(),
+    "정규식 규칙을 추가·삭제했으면 PATTERN_LIVENESS_SAMPLES도 함께 갱신하라 — " +
+      "샘플 없이 들어온 규칙은 죽어 있어도 아무도 모른다(reviewer Major 1).",
+  );
+});
+
+test("[T86/생존] 모든 규칙이 자기 양성 샘플을 **실제로** 잡는다 — 죽은 패턴 재발 차단", () => {
+  const dead: string[] = [];
+  for (const rule of FORBIDDEN_RULES) {
+    // 리터럴 규칙(앱명·대표번호·기관명)은 자기 이름이 곧 양성 샘플이다.
+    // → `literalRule`의 이스케이프·숫자 경계 처리가 깨져도 여기서 드러난다.
+    const sample = rule.label.startsWith("/")
+      ? PATTERN_LIVENESS_SAMPLES[ruleKey(rule)]
+      : rule.label;
+    if (sample === undefined || !rule.pattern.test(sample)) {
+      dead.push(`${ruleKey(rule)}  ← 샘플 "${sample}"을 잡지 못한다`);
+    }
+  }
+  assert.deepEqual(
+    dead,
+    [],
+    "검출력 0인 규칙이 있다:\n" +
+      dead.join("\n") +
+      "\n⚠️ 가장 흔한 원인은 **한글에 닿는 패턴에 붙은 `\\b`**다 — JS의 `\\b`는 ASCII 단어 경계라 " +
+      "한글 앞뒤에서는 경계가 성립하지 않는다. `\\b`를 빼라(형제 규칙 `/플레이\\s*스토어/` 참고).",
+  );
+});
+
+test("[T86/역검증] `\\b`가 붙은 한글 패턴은 위 생존 검사에서 실제로 걸린다", () => {
+  // reviewer가 `node -e`로 재현한 것을 테스트로 고정한다 — 이 사실이 코드에 남아 있어야
+  // 다음 사람이 "한글에도 \b를 쓰면 되겠지"라고 판단하지 않는다.
+  const deadPattern = /\bplay\s*스토어\b/;
+  const livePattern = /play\s*스토어/i;
+  for (const sample of ["play 스토어", "play스토어", " play 스토어 ", "Play 스토어"]) {
+    assert.equal(deadPattern.test(sample), false, `죽은 패턴이 우연히 잡으면 이 예시가 무의미하다: ${sample}`);
+    assert.equal(livePattern.test(sample), true, `고친 패턴은 잡아야 한다: ${sample}`);
+  }
+  // 정본에 죽은 패턴이 다시 들어오면 위 [T86/생존] 테스트가 실패한다는 것을 여기서 직접 보인다.
+  const sample = PATTERN_LIVENESS_SAMPLES["storeAndInstall /play\\s*스토어/i"];
+  assert.equal(deadPattern.test(sample), false);
+  assert.equal(livePattern.test(sample), true);
+});
+
+test("[T86/생존] 정본 소스에 한글이 닿는 `\\b` 패턴이 남아 있지 않다(정적 검사)", () => {
+  // 생존 검사는 "샘플을 잡는가"만 본다 — 샘플을 함께 약하게 쓰면 통과할 수 있다.
+  // 그래서 소스 텍스트에서 **한글 옆의 `\b`** 자체를 금지한다(두 겹).
+  const source = fs.readFileSync(
+    path.resolve(__dirname, "../../../src/scenarios/__tests__/harmlessnessPatterns.ts"),
+    "utf8",
+  );
+  const offenders: string[] = [];
+  source.split(/\r?\n/).forEach((line, i) => {
+    const literal = /^\s*\/(.+)\/([a-z]*),\s*$/.exec(line);
+    if (literal === null) return;
+    const body = literal[1];
+    // `\b`가 한글 바로 앞이나 바로 뒤에 오는 경우만 잡는다(ASCII 전용 패턴의 `\b`는 정상이다).
+    if (/[가-힣][^\\]{0,2}\\b|\\b[^가-힣]{0,2}[가-힣]/.test(body)) {
+      offenders.push(`${i + 1}: /${body}/${literal[2]}`);
+    }
+  });
+  assert.deepEqual(
+    offenders,
+    [],
+    "한글에 닿는 `\\b`는 ASCII 단어 경계라 매치되지 않는다(reviewer Major 1):\n" + offenders.join("\n"),
   );
 });
