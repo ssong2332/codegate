@@ -576,6 +576,176 @@ test("[T92/역검증] 명시구를 지운 사본은 (A)를 실패시킨다", () 
   assert.ok(PREMISE_VOCABULARY.some((entry) => entry.pattern.test(stripped)));
 });
 
+// ── T92 reviewer Major 1(2026-07-27) 내부 문서 표기가 **모델에 전송되는 문자열**에 섞였다 ──
+//
+// **무엇이 있었나**: T92가 6종 `personaPrompt`의 `[캐릭터]`에 추가한 줄에 `(T92, Architecture.md
+// §18.3 표 4)` 같은 출처 표기를 그대로 적었다. `weakenedTactics` 쪽은 TS `//` 주석이라 런타임
+// 문자열에 안 가지만, **`personaPrompt`는 템플릿 리터럴이라 그 안이 곧 모델 지시다** — 사기범
+// 페르소나 시스템 프롬프트로 Gemini/ElevenLabs에 `"Architecture.md"`·`"표 4"`가 그대로 갔다.
+//
+// **기존 테스트가 왜 못 잡았나(실측)**: `assertNoOperationalFraudInfo`는 8자리+ 숫자열·URL만 보고,
+// `[T92/G68]`은 `weakenedTactics` **라벨만** 훑는다. 어느 쪽도 persona 본문을 보지 않았다.
+//
+// ⚠️ **기존 위반도 있었다(전수 스캔 실측, T92가 넣은 6건이 전부가 아니다)**:
+//   | 위반 | 위치 | 넣은 시점 |
+//   |---|---|---|
+//   | `(T92, Architecture.md §18.3 표 4)` × 6 | 6종 personaPrompt | T92(이번) |
+//   | `(T91, 사용자 실측 신고)` | `loanScam.prompt.ts` personaPrompt | T91(기존) |
+//   | `(DECISIONS #10 데모 타겟과 정합)` × 2 | family-accident · institutional personaPrompt | T6/Phase B(기존) |
+// 전부 `//` 주석으로 옮겼다 — **지시 내용은 프롬프트에 남기고 출처 표기만 뺐다.**
+const INTERNAL_DOC_NOTATION: ReadonlyArray<{ label: string; pattern: RegExp }> = [
+  { label: "문서 파일명", pattern: /Architecture\.md|Tasks\.md|PRD\.md|DECISIONS|CHANGELOG/ },
+  { label: "절 기호", pattern: /§/ },
+  { label: "표 번호", pattern: /표\s*\d/ },
+  { label: "태스크 번호", pattern: /\bT\d{1,3}\b/ },
+  { label: "AC 번호", pattern: /AC-\d/ },
+  { label: "갭 번호", pattern: /\bG\d{1,3}\b/ },
+  { label: "미결 질문", pattern: /\bOQ-/ },
+  { label: "ADR", pattern: /\bADR-/ },
+  { label: "화면 ID", pattern: /\bUX-\d/ },
+  { label: "결정 ID", pattern: /\bD-\d/ },
+  { label: "에이전트 역할명", pattern: /reviewer|implementer|quality-assurance/ },
+];
+
+/** 모델에게 실제로 전송되는 문자열 표면 전부(조립은 promptAssembly가 이 셋을 이어 붙인다). */
+function modelFacingSurfaces(scenarioId: string): Array<{ field: string; text: string }> {
+  const prompt = SCENARIO_PROMPTS[scenarioId];
+  const surfaces = [
+    { field: "personaPrompt", text: prompt.personaPrompt },
+    { field: "guardrailPreamble", text: prompt.guardrailPreamble },
+    ...prompt.weakenedTactics.map((text, i) => ({ field: `weakenedTactics[${i}]`, text })),
+  ];
+  for (const [i, keyword] of (prompt.suspicionKeywords ?? []).entries()) {
+    surfaces.push({ field: `suspicionKeywords[${i}]`, text: keyword });
+  }
+  return surfaces;
+}
+
+test("[T92/내부표기] 모델에 전송되는 문자열에 내부 문서 표기가 없다(14종 전수, reviewer Major 1)", () => {
+  const violations: string[] = [];
+  for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
+    for (const { field, text } of modelFacingSurfaces(scenarioId)) {
+      for (const { label, pattern } of INTERNAL_DOC_NOTATION) {
+        const match = pattern.exec(text);
+        if (match === null) continue;
+        violations.push(
+          `${scenarioId}.${field} [${label}] :: ` +
+            `"${text.slice(Math.max(0, match.index - 20), match.index + 25).replace(/\n/g, " ")}"`,
+        );
+      }
+    }
+  }
+  assert.deepEqual(
+    violations,
+    [],
+    "설계 근거·태스크 번호·문서 절 번호는 소스 `//` 주석에만 적는다 — 템플릿 리터럴 안에 적으면 " +
+      "사기범 페르소나 시스템 지시로 모델에 그대로 전송된다(훈련 내부 사정 노출, D-6 취지).",
+  );
+});
+
+test("[T92/내부표기 역검증] 각 금지 표기가 실제로 잡힌다(죽은 패턴 방지)", () => {
+  const samples: ReadonlyArray<readonly [string, string]> = [
+    ["문서 파일명", "이 지시는 Architecture.md 근거다"],
+    ["절 기호", "근거는 §18.3이다"],
+    ["표 번호", "판정은 표 4를 따른다"],
+    ["태스크 번호", "T92에서 추가했다"],
+    ["AC 번호", "AC-005를 지킨다"],
+    ["갭 번호", "G68 참고"],
+    ["미결 질문", "OQ-A14 확인 사항"],
+    ["ADR", "ADR-0004 경계"],
+    ["화면 ID", "UX-029에서 쓴다"],
+    ["결정 ID", "D-42 유지"],
+    ["에이전트 역할명", "reviewer 지적으로 보강"],
+  ];
+  for (const [label, sample] of samples) {
+    const rule = INTERNAL_DOC_NOTATION.find((r) => r.label === label);
+    assert.ok(rule, `${label}: 규칙이 있어야 한다`);
+    assert.equal(rule.pattern.test(sample), true, `${label}: 자기 양성 샘플을 못 잡는다 — 죽은 패턴이다`);
+  }
+  // 정상 프롬프트 문장이 오탐으로 걸리지 않는지도 함께 본다(과차단 방지).
+  for (const benign of [
+    "고객님, 지금 바로 확인해 드릴게요",
+    "weakenedTactics에 정의된 수법만 사용한다",
+    "세션은 짧게(5~8분, 5~8턴 내외) 마무리되도록 진행한다",
+  ]) {
+    for (const { label, pattern } of INTERNAL_DOC_NOTATION) {
+      assert.equal(pattern.test(benign), false, `${label}이 정상 문장을 오탐한다: ${benign}`);
+    }
+  }
+});
+
+// ── 2026-07-27 사용자 실사용 신고 — 확인 요구가 **요구로 발화되지 않는다** ─────────
+//
+// **무엇이 있었나**: `tax-refund-scam` 고급 세션에서 사용자가 신고했다 — *"보통 성함과 생년월일을
+// 사용자에게 묻는데, 바로 확인되었다고 넘어가고 있어."* 실제 대사는 *"성함이랑 생년월일
+// 확인되시고요, 계좌는 본인 명의 맞으시죠?"* 였다. **모델은 지시대로 정확히 연기했다** — 프롬프트가
+// "확인되시고요"(=이미 확인됐다)라고 적혀 있었기 때문이다.
+//
+// **왜 결함인가**: 참가자가 **개인정보를 넘길지 말지 결정할 순간이 사라진다.** 이 훈련이 만들어야
+// 할 판단 지점 그 자체다. T91의 교착(요구에 도달 못 함)과 같은 계열이지만 축이 다르다 — T92 (B)는
+// *"요구가 부인 가능한 전제에 묶였는가"* 를 보는데, 이건 *"요구가 요구로 발화되는가"* 다.
+//
+// **실측 범위**: 5종 × 2자리(personaPrompt와 weakenedTactics에 같은 문구가 중복) — tax-refund-scam ·
+// institutional-impersonation · card-company-impersonation · courier-customs-scam ·
+// loan-refinance-scam. 한쪽만 고치면 부분 정정이라 두 자리를 모두 고쳤다.
+//
+// ⚠️ **왜 "확인되시고요" 문자열 금지가 아닌가**: 같은 전제를 *"성함 조회됐고요"*·*"신원 확인 끝났고요"*
+// 로 바꿔 쓰면 그대로 통과한다. 그래서 **긍정 요건**으로 고정한다 — 사기범 대사 인용구가 참가자의
+// 신원 정보를 언급하면 그 대사 안에 **요구 형태**가 반드시 있어야 한다. 정답 패턴은 저장소에 이미
+// 있었다: `bankSecurityVerifyScam.prompt.ts`의 "…성함이랑 생년월일, … 확인번호까지 **불러주세요**".
+const IDENTITY_FIELD = /성함|생년월일|주민(등록)?번호/;
+const SOLICITATION_FORM =
+  /불러\s*주|알려\s*주|말씀\s*(해|주)|보내\s*주|입력해\s*주|찍어\s*보내|대\s*주세요|적어\s*주/;
+
+/** 프롬프트 문자열 안에서 **사기범이 말할 대사**(따옴표로 감싼 예시)만 뽑는다. */
+function quotedUtterances(text: string): string[] {
+  return [
+    ...[...text.matchAll(/'([^']+)'/g)].map((m) => m[1]),
+    ...[...text.matchAll(/"([^"]+)"/g)].map((m) => m[1]),
+  ];
+}
+
+test("[신원요구] 사기범 대사가 참가자 신원 정보를 언급하면 반드시 **요구 형태**여야 한다(14종 전수)", () => {
+  const violations: string[] = [];
+  for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
+    for (const { field, text } of modelFacingSurfaces(scenarioId)) {
+      for (const utterance of quotedUtterances(text)) {
+        if (!IDENTITY_FIELD.test(utterance)) continue;
+        if (SOLICITATION_FORM.test(utterance)) continue;
+        violations.push(`${scenarioId}.${field} :: "${utterance.slice(0, 60)}"`);
+      }
+    }
+  }
+  assert.deepEqual(
+    violations,
+    [],
+    "참가자의 성함·생년월일·주민번호를 **이미 확인된 것처럼** 말하면 사기범이 묻지 않고 넘어가고, " +
+      "참가자가 개인정보를 넘길지 결정할 순간이 사라진다(2026-07-27 사용자 실사용 신고). " +
+      "압박(질문을 몰아친다)은 유지하되 반드시 직접 불러달라고 요구하는 형태로 쓴다.",
+  );
+});
+
+test("[신원요구/역검증] 신고된 원본 대사가 이 검사에 실제로 걸린다", () => {
+  const reported = "성함이랑 생년월일 확인되시고요, 계좌는 본인 명의 맞으시죠? 바로 답 주셔야 오늘 처리가 돼요";
+  assert.equal(IDENTITY_FIELD.test(reported), true);
+  assert.equal(SOLICITATION_FORM.test(reported), false, "신고 대사는 요구 형태가 아니어야 한다(=검사가 잡는다)");
+  // 표현만 바꾼 같은 전제도 걸린다 — 문자열 금지가 아니라 요구 형태를 요구하기 때문이다.
+  for (const rephrased of [
+    "성함 조회됐고요, 최근에 결제하신 적 있으세요?",
+    "생년월일 신원 확인 끝났습니다, 다음 절차로 갑니다",
+  ]) {
+    assert.equal(SOLICITATION_FORM.test(rephrased), false, `표현을 바꿔도 통과하면 안 된다: ${rephrased}`);
+  }
+  // 정답 패턴(저장소에 이미 있던 것)은 통과한다.
+  const correct = SCENARIO_PROMPTS["bank-security-verify-scam"].weakenedTactics.find((t) =>
+    t.startsWith("본인확인 정보 직접 요구"),
+  );
+  assert.ok(correct);
+  const correctUtterance = quotedUtterances(correct).find((u) => IDENTITY_FIELD.test(u));
+  assert.ok(correctUtterance);
+  assert.equal(SOLICITATION_FORM.test(correctUtterance), true);
+});
+
 test("[T92/G68] 부인 대응 라벨에 훈련 내부 용어가 들어가지 않는다(사용자 화면에 그대로 노출된다)", () => {
   // 라벨은 초급 사전 브리핑(UX-029)과 리포트 tacticsUsed로 **그대로** 화면에 나간다(§18.7 G68).
   const INTERNAL_JARGON = ["무조건 요구", "부인 대응", "전제", "P1", "P2", "P3", "P4", "축 "];
