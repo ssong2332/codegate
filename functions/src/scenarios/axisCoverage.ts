@@ -55,9 +55,12 @@ export const DECLARED_COVERAGE_GAPS: Partial<Record<AxisValue, string>> = {
   // (axes.ts 주석 + `functions/src/scenarios/verifyIntercept.ts`의 `bank-security-verify-desk`).
   // ⚠️ 재현 **메커닉**은 T83이 이미 만들었고(카탈로그·오퍼·모의 재연결·리포트 대처), T95가 채운 것은
   // **콘텐츠**다 — 축 커버리지는 콘텐츠 태깅을 세므로 T83 시점에는 여전히 0건이었다.
+  // D4_procedural_legitimacy — **T85(MVP #31)에서 해소됨**(2026-07-26). `loan-refinance-scam`에
+  // 절차·서류 정당화 수법을 콘텐츠로 추가했다(§17.9 — PRD 근거 데이터 #5가 이름으로 지목한 시나리오).
+  // ⚠️ 고급 난이도가 얹는 D4 **오버레이**(roleplay/l3Depth.ts)는 이 커버리지에 세지 않는다 — 축 표는
+  // *중급 기준선* 좌표표이고 커버리지는 콘텐츠 태깅을 센다(T83↔T95의 메커닉↔콘텐츠 분리와 동형).
   A4_account_takeover:
     "⚠️ PRD v1.6 '드러난 공백' 표에 등재되지 않은 0건(T78 발견, §15.10.9 G35). planner 확인 전까지 채택 계획 없음 — implementer가 임의로 A4 시나리오를 만들면 스코프 크립",
-  D4_procedural_legitimacy: "MVP #31(T85)에서 해소 예정 — AC-076 필수 4값",
   E4_in_person_cash_demand: "OQ-39 미채택 확정(2026-07-25) — 재구성 후에도 잔여 공백으로 유지",
   E5_giftcard_crypto_demand: "MVP #32 P1 착수 보류(T88) — 잔여 공백",
 };

@@ -8,6 +8,7 @@ import { maskPII } from "../guardrails";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { hasInCallSms } from "../scenarios/inCallSms";
+import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
 import { buildSystemPrompt } from "./promptAssembly";
 import type { DifficultyLevel } from "../shared/difficulty";
@@ -74,6 +75,12 @@ export async function generateOpeningLine(
       // 턴에는 아직 도착한 문자가 없지만(카탈로그 최소 afterScammerTurns는 2), 조건형 문구는
       // 세션 지시 성격이라 세 호출부에서 동일하게 켠다.
       inCallSmsEnabled: hasInCallSms(scenarioId),
+      // T85(§17.3 호출부 3곳 중 "오프닝 대사", G63) — 고급에서 D4(절차·서류 정당화) 블록을 얹을
+      // 시나리오인지. 세 호출부가 갈라지면 "오프닝만 축소"라는 비대칭이 조용히 생긴다.
+      // ⚠️ 오프닝 턴 특례(§17.6.2): 위 OPENING_TURN_INSTRUCTION이 "다짜고짜 요구부터 하지 말고"를
+      // 명시하며 조립 순서상 **난이도 블록보다 뒤**에 온다 — 첫 마디는 신분·이유 설명이고 L4의
+      // 2단 요구 예산은 그 뒤부터 센다(두 지시가 충돌하지 않는다).
+      l3Procedural: isL3Procedural(scenarioId),
       turnInstruction: OPENING_TURN_INSTRUCTION,
     }),
     messages: [], // 오프닝 대사에는 아직 사용자 입력이 없다.

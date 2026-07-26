@@ -179,6 +179,62 @@ test("GeminiRealtimeProvider: 성별 다양화 — sessionId별로 다른 프리
   }
 });
 
+// ── T85(§17.3 G63) — 이 경로가 실제로 L3를 싣는다는 **행동 단언** ──────────────
+//
+// ⚠️ 세 호출부(sendMessage·오프닝·이 토큰 경로) 중 조립 결과를 밖에서 관측할 수 있는 것은 여기뿐이라
+// (systemInstruction이 발급 요청 본문에 그대로 실린다), G63 방어의 행동 증거를 여기에 둔다. 나머지
+// 두 경로는 `roleplay/__tests__/l3Depth.test.ts`의 소스 게이트가 함께 막는다.
+// ⚠️ 아래 시나리오 선택은 **프롬프트 조립**에 대한 것이지 "이 시나리오가 이 경로로 라우팅된다"는
+// 주장이 아니다(clone 2종은 ElevenLabs 경로다 — §15.3.3/G65).
+test("[T85/G63] 통화 토큰 경로도 고급에서 D4(절차 정당화) 블록을 싣는다 — procedural/reduced가 1:1로 갈린다", async () => {
+  const capture = captureTokenRequest();
+  const D4_BLOCK_HEADER = "[난이도 — 고급(심화): 절차로 정당화한다]";
+  try {
+    const provider = new GeminiRealtimeProvider("test-key");
+    const readLastPrompt = (): string => {
+      const bodies = capture.bodies();
+      const setup = (bodies[bodies.length - 1] as {
+        bidiGenerateContentSetup?: { systemInstruction?: { parts?: { text?: string }[] } };
+      }).bidiGenerateContentSetup;
+      return setup?.systemInstruction?.parts?.[0]?.text ?? "";
+    };
+
+    // procedural(d3_and_d4) — 기관·금융 사칭 계열
+    await provider.createCallCredentials({
+      sessionId: "sess",
+      scenarioId: "loan-refinance-scam",
+      voiceId: "",
+      difficultyLevel: "advanced",
+    });
+    assert.ok(
+      readLastPrompt().includes(D4_BLOCK_HEADER),
+      "이 경로에 l3Procedural을 안 넘기면 통화에서만 고급이 조용히 축소된다(G63)",
+    );
+
+    // reduced — 가족 사칭(접수번호를 부르면 페르소나가 무너진다)
+    await provider.createCallCredentials({
+      sessionId: "sess",
+      scenarioId: "family-accident-deepvoice",
+      voiceId: "",
+      difficultyLevel: "advanced",
+    });
+    assert.equal(readLastPrompt().includes(D4_BLOCK_HEADER), false);
+
+    // 초급 — L3는 고급 전용이다(상한 규칙).
+    await provider.createCallCredentials({
+      sessionId: "sess",
+      scenarioId: "loan-refinance-scam",
+      voiceId: "",
+      difficultyLevel: "beginner",
+    });
+    const beginner = readLastPrompt();
+    assert.equal(beginner.includes(D4_BLOCK_HEADER), false);
+    assert.ok(beginner.includes("상대가 빠져나가려 하면 붙잡지 않는다"), "초급 이탈 차단 억제(L3 상한)");
+  } finally {
+    capture.restore();
+  }
+});
+
 test("pickGeminiVoiceName: 같은 sessionId는 항상 같은 음성을 반환한다(재연결 중 목소리가 바뀌면 안 됨)", () => {
   const a = pickGeminiVoiceName("session-abc-123");
   const b = pickGeminiVoiceName("session-abc-123");
