@@ -80,10 +80,13 @@ test("SCENARIO_AXES 키가 PUBLIC_SCENARIOS 키와 1:1이다(태깅 누락 강�
     "시나리오를 추가/삭제했으면 SCENARIO_AXES(functions/src/scenarios/axes.ts)도 함께 갱신해야 한다. " +
       "축 태깅이 없는 시나리오는 라이브러리에 등록되지 않는다(AC-070).",
   );
-  assert.equal(scenarioIds.length, 13, "현재 시나리오는 13종이다(AC-077 — 삭제·통합 0건)");
+  // T95(2026-07-26) — 확인 무력화 전용 시나리오 1종이 **추가**되어 14종이다. 기존 13종은
+  // 식별자·제목 무변경(AC-002/AC-077) — 아래 "AC-077: 기존 13종 scenarioId가 그대로다" 테스트가
+  // 그 사실을 목록으로 고정한다.
+  assert.equal(scenarioIds.length, 14, "현재 시나리오는 14종이다(AC-077 — 삭제·통합 0건, T95에서 +1)");
 });
 
-test("13종 전부가 5개 축 각각에 최소 1개 값을 갖는다(AC-070)", () => {
+test("14종 전부가 5개 축 각각에 최소 1개 값을 갖는다(AC-070)", () => {
   for (const [scenarioId, axes] of Object.entries(SCENARIO_AXES)) {
     for (const axis of AXIS_KEYS) {
       const values = axes[axis] as readonly AxisValue[];
@@ -118,7 +121,7 @@ test("키 게이트가 실제로 실패한다 — 시나리오 1종의 축 태�
 
 test("커버리지는 열거형 전 도메인을 순회한다 — 0건 값도 행이 남는다(AC-076의 성립 조건, §15.10.3)", () => {
   const coverage = computeAxisCoverage();
-  assert.equal(coverage.totalScenarios, 13);
+  assert.equal(coverage.totalScenarios, 14);
   let rowCount = 0;
   for (const axis of AXIS_KEYS) {
     assert.equal(
@@ -165,15 +168,15 @@ test("데이터 순회로 계산하면 E4가 사라진다 — 그래서 도메�
   assert.ok(findCoverageRow(computeAxisCoverage(), "E4_in_person_cash_demand"));
 });
 
-// ⚠️ **T84(2026-07-26) 갱신** — §15.10.7의 사전 계산값은 7개(A3·A4·D3·D4·E3·E4·E5)였다. T84가
-// 3단계 결합(`messenger-subsidy-smishing-sms`)에 **A3·E3를 태깅해 두 공백을 실제로 채웠고**,
-// axisCoverage.ts의 규약("공백을 채우면 이 테스트가 먼저 깨진다 — 해당 행 삭제가 해소 기록")에
-// 따라 기대값을 5개로 내린다. 남은 D3·D4는 T85(MVP #31) 몫이고 A4·E4·E5는 잔여 공백이다.
-test("0건 축 값은 정확히 5개(A4·D3·D4·E4·E5)다 — T84가 A3·E3를 해소(§15.10.7 사전 계산값 7개에서 갱신)", () => {
+// ⚠️ **T95(2026-07-26) 갱신** — §15.10.7의 사전 계산값은 7개(A3·A4·D3·D4·E3·E4·E5)였고, T84가
+// 3단계 결합(`messenger-subsidy-smishing-sms`)에 A3·E3를 태깅해 5개로 내렸다. 이번엔 **T95가
+// 확인 무력화 전용 시나리오(`bank-security-verify-scam`)를 신설해 D3를 채웠다** — axisCoverage.ts의
+// 규약("공백을 채우면 이 테스트가 먼저 깨진다 — 해당 행 삭제가 해소 기록")에 따라 기대값을 4개로
+// 내린다. 남은 D4는 T85(MVP #31) 몫이고 A4·E4·E5는 잔여 공백이다.
+test("0건 축 값은 정확히 4개(A4·D4·E4·E5)다 — T95가 D3를 해소(T84의 5개에서 갱신)", () => {
   const coverage = computeAxisCoverage();
   assert.deepEqual([...coverage.zeroCountValues].sort(), [
     "A4_account_takeover",
-    "D3_verification_hijack",
     "D4_procedural_legitimacy",
     "E4_in_person_cash_demand",
     "E5_giftcard_crypto_demand",
@@ -196,6 +199,31 @@ test("[AC-076] T84가 채운 A3·E3는 각각 최소 1개 시나리오에서 0�
       `${value}: 채워진 값에 공백 사유가 남아 있으면 안 된다(DECLARED_COVERAGE_GAPS 행 삭제가 해소 기록)`,
     );
   }
+});
+
+// ── T95(MVP #29 잔여 — OQ-41 "전용 1종") D3 공백 해소 ───────────────────────
+//
+// ⚠️ **왜 T83이 아니라 T95인가**(범위 분리, docs/Tasks.md T95 행): T83은 확인 무력화의 **메커닉**
+// (카탈로그·오퍼·모의 재연결·리포트 유효 대처)을 만들었고, 커버리지는 **콘텐츠 태깅**을 세므로 그
+// 시점에 D3는 여전히 0건이었다. 축을 실제로 채우는 것은 시나리오 저작이며 그것이 T95다.
+test("[AC-076] T95가 채운 D3는 전용 시나리오에서 0건이 아니다(확인 무력화 = MVP #29의 핵심 값)", () => {
+  const coverage = computeAxisCoverage();
+  const row = findCoverageRow(coverage, "D3_verification_hijack");
+  assert.ok(row, "D3 행이 커버리지에 존재해야 한다");
+  assert.ok(row.count >= 1, "D3: AC-076 필수 4값 중 하나 — 0건이면 미충족이다");
+  assert.deepEqual(row.scenarioIds, ["bank-security-verify-scam"]);
+  assert.equal(
+    row.declaredGapReason,
+    undefined,
+    "채워진 값에 공백 사유가 남아 있으면 안 된다(DECLARED_COVERAGE_GAPS의 D3 행 삭제가 해소 기록)",
+  );
+});
+
+test("[AC-071/AC-076] D3 전용 시나리오는 **확인을 막는 수법과 같은 축에 공존하지 않는다**(설계 확인)", () => {
+  // 확인을 권하는 캐릭터(D3)에 확인을 막는 수법(D2 비밀유지·D5 전화 끊음 저지)을 함께 얹으면 두
+  // 수법이 한 통화 안에서 서로를 부정한다 — verifyIntercept.ts가 협박 계열을 카탈로그에서 뺀 것과
+  // 같은 판단이다. 이 단언이 깨졌다면 축 표가 아니라 **콘텐츠 설계**를 다시 봐야 한다.
+  assert.deepEqual(SCENARIO_AXES["bank-security-verify-scam"].exitBlock, ["D3_verification_hijack"]);
 });
 
 test("실측 0건 집합 ↔ DECLARED_COVERAGE_GAPS 양방향 일치(공백이 조용히 사라지지도, 채워지지도 않는다)", () => {
@@ -264,8 +292,10 @@ test("커버리지 행의 count와 scenarioIds가 일치하고, 시나리오별 
 
 // ── AC-077 회귀 금지 — 축 도입이 기존 데이터 형태를 건드리지 않는다 ─────────
 
-test("AC-077: 기존 13종 scenarioId가 그대로다(축 태깅이 식별자를 바꾸지 않는다)", () => {
+test("AC-077: 기존 13종 scenarioId가 그대로다(신규 시나리오는 **추가만**, 기존 식별자 변경 0건)", () => {
   assert.deepEqual(Object.keys(SCENARIO_AXES).sort(), [
+    // ↓ T95 신규(추가만 — 아래 13개는 한 글자도 바뀌지 않았다)
+    "bank-security-verify-scam",
     "card-company-impersonation",
     "courier-customs-scam",
     "family-accident-deepvoice",

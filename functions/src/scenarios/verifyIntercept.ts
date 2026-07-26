@@ -102,6 +102,24 @@ const COURIER_CUSTOMS_SCAM: VerifyInterceptItem = {
 };
 
 /**
+ * T95 신규 — **확인 무력화 전용 시나리오**(`bank-security-verify-scam`)의 항목.
+ *
+ * 위 5종은 "기관·금융 사칭 계열에 확인 무력화를 얹은" 것이고, 이 항목은 **시나리오 자체가 이 흐름을
+ * 위해 저작된** 유일한 항목이다(OQ-41 확정 "레버 + 전용 1종"의 전용 1종). 그래서 게이트가 **2턴**으로
+ * 가장 이르다 — 확인 우회로가 이 훈련의 본론이라 참가자가 확인을 시도할 시간을 넉넉히 줘야 한다
+ * (§16.1.4 권고 범위 2~3 안).
+ */
+const BANK_SECURITY_VERIFY_SCAM: VerifyInterceptItem = {
+  offerId: "bank-security-verify-desk",
+  deskLabel: "○○은행 금융사고대응 확인창구",
+  displayNumber: "1620-0000",
+  reconnectedCallerLabel: "○○은행 금융사고대응 확인창구",
+  availableAfterScammerTurns: 2,
+  announceInstruction: `(참가자가 직접 확인해 보고 싶어 할 만한 시점이다. 지금 캐릭터로서 한두 문장으로 **확인을 막지 말고 오히려 권하라** — 예: "의심하시는 게 정상입니다. 금융사고대응 확인창구로 직접 걸어서 확인해 보세요. 저는 끊지 않고 기다리겠습니다." 안내 창구 이름은 '○○은행 금융사고대응 확인창구'다. ${NO_NUMBER_INVENTION})`,
+  reconnectInstruction: `(참가자가 안내받은 번호로 확인 전화를 걸어 지금 막 연결됐다. 지금부터 너는 '○○은행 금융사고대응 확인창구'의 **다른 담당자**다. 한두 문장으로 창구 이름과 직책을 밝히며 정형적이고 사무적인 존대로 응대를 시작하라. ${RECONNECT_TAIL})`,
+};
+
+/**
  * 시나리오별 확인 무력화 카탈로그 — **시나리오당 최대 1건**(이 흐름은 세션에서 한 번만 일어난다,
  * §16.1.3). 카탈로그가 없는 시나리오는 이 기능이 아예 켜지지 않는다(프롬프트의 조건형 블록도 함께
  * 꺼져 기존 동작이 한 글자도 바뀌지 않는다 — 회귀 0).
@@ -116,6 +134,11 @@ const COURIER_CUSTOMS_SCAM: VerifyInterceptItem = {
  *     보시라"고 권하는 것 자체가 캐릭터와 모순된다(그 시나리오의 수법은 **확인 차단**이다).
  *     확인 무력화(D3)를 억지로 얹으면 두 수법이 한 통화 안에서 서로를 부정한다.
  *   - 메신저 채널 시나리오는 통화 셸이 없어 오버레이 계층 자체가 성립하지 않는다.
+ *
+ * **T95 증분(2026-07-26)**: 위 5종에 더해 **확인 무력화 전용 시나리오 1종**이 들어왔다
+ * (`bank-security-verify-scam`). 5종은 "다른 수법의 시나리오에 이 흐름을 얹은" 것이고 전용 1종은
+ * "이 흐름을 겪으려고 고르는" 것이라는 점이 다르다 — 사용자가 *"확인 전화도 가로채진다"* 를
+ * **목적의식적으로 골라 훈련**할 수 있어야 한다는 OQ-41 확정 근거가 그 차이다.
  */
 export const VERIFY_INTERCEPT: Record<string, VerifyInterceptItem> = {
   "institutional-impersonation": INSTITUTIONAL_IMPERSONATION,
@@ -123,6 +146,7 @@ export const VERIFY_INTERCEPT: Record<string, VerifyInterceptItem> = {
   "loan-refinance-scam": LOAN_SCAM,
   "tax-refund-scam": TAX_REFUND_SCAM,
   "courier-customs-scam": COURIER_CUSTOMS_SCAM,
+  "bank-security-verify-scam": BANK_SECURITY_VERIFY_SCAM,
 };
 
 /** 이 시나리오가 확인 무력화를 쓰는가(프롬프트 조건형 블록·오퍼 게이트 노출의 단일 판정). */

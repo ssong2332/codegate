@@ -10,7 +10,7 @@ import { SCENARIO_PROMPTS } from "../../scenarios";
 // 카테고리에 매핑되는지 확인한다. 새 시나리오·라벨이 추가되면 이 테스트가 먼저 깨져 규칙표 갱신을
 // 강제한다(scenarios.test.ts의 미러 드리프트 탐지와 같은 발상). 여기서 `other`가 하나라도 나오면
 // 그 수법은 아카이브에서 원문 문자열끼리만 묶여 "이 수법에 3번 넘어갔습니다"가 흩어진다(§15.6 G14).
-test("13개 시나리오의 모든 weakenedTactics 라벨이 other로 떨어지지 않는다(드리프트 방지, §15.4.2)", () => {
+test("전 시나리오의 모든 weakenedTactics 라벨이 other로 떨어지지 않는다(드리프트 방지, §15.4.2)", () => {
   const unmapped: string[] = [];
   let labelCount = 0;
   for (const [scenarioId, prompt] of Object.entries(SCENARIO_PROMPTS)) {
@@ -20,7 +20,8 @@ test("13개 시나리오의 모든 weakenedTactics 라벨이 other로 떨어지�
       if (resolveTacticCategory(label) === "other") unmapped.push(`${scenarioId}: ${label}`);
     }
   }
-  assert.equal(Object.keys(SCENARIO_PROMPTS).length, 13, "시나리오 13종 전수 검사 전제");
+  // T95(2026-07-26) — 확인 무력화 전용 시나리오 1종 추가로 14종이다(추가만, 삭제·통합 0건).
+  assert.equal(Object.keys(SCENARIO_PROMPTS).length, 14, "시나리오 14종 전수 검사 전제");
   assert.ok(labelCount > 0, "라벨을 하나도 읽지 못했다면 테스트 자체가 무의미하다");
   assert.deepEqual(unmapped, [], `카테고리 미매핑 라벨(규칙표 갱신 필요): ${unmapped.join(" / ")}`);
 });

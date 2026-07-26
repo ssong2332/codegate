@@ -34,6 +34,7 @@ import {
   MESSENGER_FRIEND_LOAN_KAKAO_SCENARIO_ID,
   MESSENGER_PARCEL_SMISHING_SMS_SCENARIO_ID,
   MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID,
+  BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID,
 } from "./publicMeta";
 
 // ── (a) 축 값의 고정 열거형 5벌 (§15.10.1) ───────────────────────────────────
@@ -290,5 +291,31 @@ export const SCENARIO_AXES: Record<string, ScenarioAxes> = {
     pressure: ["C2_benefit_gain"],
     exitBlock: ["D0_none"],
     demand: ["E6_link_entry_demand", "E3_install_remote_demand"],
+  },
+  // ── T95 신규(14번째) — 확인 시도 무력화(D3) 전용 시나리오 ────────────────────
+  //
+  // ⚠️ **이 행의 좌표는 PRD 표에서 옮겨온 것이 아니다.** PRD v1.6의 "현재 13종 축 매핑" 표는
+  // 이름 그대로 **기존 13종**의 정본이고, 이 시나리오는 그 표가 작성된 뒤 OQ-41 확정("레버 +
+  // 전용 1종")에 따라 신설됐다. 좌표는 아래 근거대로 **저작 시점에 결정**했으며, PRD 표에 14번째
+  // 행을 추가하는 것은 planner 소관이다(implementer는 PRD를 수정하지 않는다 — 보고에 요청으로 남김).
+  //
+  // A1 전화 수신(콜드콜) · B2 "○○은행 금융사고대응팀"(line-1 — 기관이 아니라 금융기관 사칭이라
+  // B1이 아니다) · C1 "비정상 출금 시도" 공포 C3 "몇 분 안에 결정하셔야" · **D3 "확인 시도
+  // 무력화"**(이 시나리오의 존재 이유 — weakenedTactics 1번 항목 + verifyIntercept.ts 카탈로그
+  // `bank-security-verify-desk`) · E2 "본인확인 정보 직접 요구" E1 "보호계좌 이체 요구"
+  //
+  // ⚠️ **D열에 D3만 있는 것은 누락이 아니라 설계다.** 확인을 *막는* 수법(D2 비밀유지·D5 전화 끊음
+  // 저지)을 함께 태깅하려면 콘텐츠에 그 수법이 있어야 하는데, 이 시나리오는 정반대로 확인을
+  // 권하는 캐릭터라 두 수법이 한 통화 안에서 서로를 부정한다(bankSecurityVerifyScam.prompt.ts
+  // 상단 근거). 그래서 프롬프트에도 넣지 않았고 여기에도 넣지 않았다.
+  // ⚠️ **D4(절차·서류 정당화)는 태깅하지 않는다** — 아직 0건이며 MVP #31(T85) 몫이다. 여기서
+  // 임의로 채우면 T85의 범위를 앞당겨 먹는 스코프 크립이고, `DECLARED_COVERAGE_GAPS`의 D4 행과도
+  // 어긋난다.
+  [BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID]: {
+    access: ["A1_cold_call"],
+    impersonation: ["B2_financial"],
+    pressure: ["C1_fear_punishment", "C3_urgency_time"],
+    exitBlock: ["D3_verification_hijack"],
+    demand: ["E2_credential_demand", "E1_transfer_demand"],
   },
 };

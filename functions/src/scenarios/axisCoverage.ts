@@ -50,9 +50,13 @@ export const DECLARED_COVERAGE_GAPS: Partial<Record<AxisValue, string>> = {
   // (`messenger-subsidy-smishing-sms`)의 3단계 통화가 설치·권한 허용 뒤에 걸려온다(axes.ts 주석).
   // E3_install_remote_demand — **T84(MVP #30)에서 해소됨**(2026-07-26). 같은 시나리오의
   // "앱 설치·권한 허용 유도"(`[[LINK:subsidy-install]]` → UX-023 kind=`app-install`).
+  // D3_verification_hijack — **T95(MVP #29 잔여, OQ-41 "전용 1종")에서 해소됨**(2026-07-26).
+  // 신규 시나리오 `bank-security-verify-scam`이 확인 시도 무력화를 유일한 이탈 차단 수법으로 갖는다
+  // (axes.ts 주석 + `functions/src/scenarios/verifyIntercept.ts`의 `bank-security-verify-desk`).
+  // ⚠️ 재현 **메커닉**은 T83이 이미 만들었고(카탈로그·오퍼·모의 재연결·리포트 대처), T95가 채운 것은
+  // **콘텐츠**다 — 축 커버리지는 콘텐츠 태깅을 세므로 T83 시점에는 여전히 0건이었다.
   A4_account_takeover:
     "⚠️ PRD v1.6 '드러난 공백' 표에 등재되지 않은 0건(T78 발견, §15.10.9 G35). planner 확인 전까지 채택 계획 없음 — implementer가 임의로 A4 시나리오를 만들면 스코프 크립",
-  D3_verification_hijack: "MVP #29(T83)에서 해소 예정 — AC-076 필수 4값",
   D4_procedural_legitimacy: "MVP #31(T85)에서 해소 예정 — AC-076 필수 4값",
   E4_in_person_cash_demand: "OQ-39 미채택 확정(2026-07-25) — 재구성 후에도 잔여 공백으로 유지",
   E5_giftcard_crypto_demand: "MVP #32 P1 착수 보류(T88) — 잔여 공백",

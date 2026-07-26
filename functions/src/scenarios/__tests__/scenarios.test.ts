@@ -149,6 +149,106 @@ test("publicMeta.ts는 src/content/scenarios/familyAccidentDeepvoice.ts와 드�
   }
 });
 
+// ── T95(2026-07-26) 신규 시나리오 미러·콘텐츠 가드 ───────────────────────────
+//
+// ⚠️ **왜 이 시나리오만 `callerLabel`까지 비교하는가(§15.10.9 G38)**: 기존 13종은 T75에서 클라 쪽
+// callerLabel만 번호 표기로 바꾸면서 publicMeta.ts와 **13/13 어긋난 상태**다. 그 드리프트를 지금
+// 소급 정리하는 것은 T95 범위가 아니지만(요청받지 않은 수정 금지), **새 시나리오가 같은 상태로
+// 태어나는 것은 막는다.** 전 필드 미러를 여기서 고정한다.
+const BANK_VERIFY_SCENARIO_ID = "bank-security-verify-scam";
+
+test("[T95] bank-security-verify-scam: publicMeta.ts가 src/content/scenarios/bankSecurityVerifyScam.ts와 **callerLabel까지** 드리프트 없이 동기화돼 있다(G38 재발 방지)", () => {
+  const mirrorSourcePath = path.resolve(
+    __dirname,
+    "../../../../src/content/scenarios/bankSecurityVerifyScam.ts",
+  );
+  const mirrorSource = fs.readFileSync(mirrorSourcePath, "utf-8");
+  const scenario = PUBLIC_SCENARIOS[BANK_VERIFY_SCENARIO_ID];
+  assert.ok(scenario, "공개 메타에 신규 시나리오가 등록돼 있어야 한다");
+
+  for (const [field, value] of [
+    ["title", scenario.title],
+    ["fraudType", scenario.fraudType],
+    ["estimatedDuration", scenario.estimatedDuration],
+    ["difficulty", scenario.difficulty],
+    // ↓ 기존 13종이 전부 어긋나 있는 바로 그 필드.
+    ["callerLabel", scenario.callerLabel],
+  ] as const) {
+    assert.ok(
+      mirrorSource.includes(value),
+      `${field}이 원본 파일과 다릅니다 — 두 파일을 함께 갱신하세요(G38 드리프트 재발).`,
+    );
+  }
+  assert.equal(scenario.voiceMode, "generic", "clone 경로에는 확인 무력화 지시 주입 지점이 없다(§16.6 G23)");
+  assert.equal(scenario.channel, undefined, "통화 셸이 있어야 확인 오버레이 계층이 성립한다(channel 부재=voice)");
+  for (const line of scenario.deepvoiceLines) {
+    assert.ok(mirrorSource.includes(line.text), `deepvoiceLines(${line.lineId})가 원본 파일과 다릅니다.`);
+  }
+});
+
+// AC-071의 **표현 수위 경계**(OQ-38 확정 "(a) 상황만 재현", D-6 유지) — 세션 중에 구조를 알려주면
+// 참가자는 "확인했으니 안전하다"고 믿는 상태를 겪지 못해 이 훈련 자체가 성립하지 않는다.
+test("[AC-071/OQ-38] 신규 시나리오 콘텐츠에 구조 설명이 **긍정형으로** 등장하지 않는다(세션 중 구조 설명 0건)", () => {
+  const prompt = SCENARIO_PROMPTS[BANK_VERIFY_SCENARIO_ID];
+  const scenario = PUBLIC_SCENARIOS[BANK_VERIFY_SCENARIO_ID];
+  const surfaces = [
+    prompt.personaPrompt,
+    ...prompt.weakenedTactics,
+    ...scenario.deepvoiceLines.map((line) => line.text),
+    scenario.title,
+    scenario.fraudType,
+    scenario.difficulty,
+  ];
+  const STRUCTURE = /같은 곳으로 이어|같은 조직|같은 사람|가로채/g;
+  for (const text of surfaces) {
+    for (const match of text.matchAll(STRUCTURE)) {
+      const after = text.slice(match.index ?? 0, (match.index ?? 0) + 60);
+      assert.ok(
+        /하지\s*않는다|하지\s*마라|말하지/.test(after),
+        `구조 설명이 금지형이 아니면 세션 중에 실제로 나간다: "${after}"`,
+      );
+    }
+  }
+  // 가로채기의 **수단** 서술은 금지형으로도 등장하지 않는다(AC-005 불변 — 설명 대상 자체가 아니다).
+  for (const text of surfaces) {
+    assert.equal(
+      /착신\s*전환|포워딩|중계기|번호 목록/.test(text),
+      false,
+      `수단 서술이 콘텐츠에 들어가면 안 된다: "${text.slice(0, 60)}"`,
+    );
+  }
+});
+
+test("[T95/T91] 신규 시나리오의 지명 요구는 참가자가 전제를 부인해도 꺼낼 수 있다(교착 방지 직접 회귀)", () => {
+  const tactics = SCENARIO_PROMPTS[BANK_VERIFY_SCENARIO_ID].weakenedTactics;
+  const demand = tactics.find((t) => t.startsWith("본인확인 정보 직접 요구"));
+  assert.ok(demand, "지명된 요구 수법이 있어야 한다.");
+  assert.ok(
+    demand.includes("부인해도"),
+    "이 요구가 참가자의 부인과 무관하게 성립한다는 것이 문구에 드러나야 한다 — " +
+      "그래야 모델이 전제가 무너진 상황에서도 이 카드를 꺼낸다(T91 실측 결함과 같은 구조).",
+  );
+  // 부인을 받아 넘기는 대응이 별도로 있어야 사기범이 부인을 반박하며 맴돌지 않는다(courier 패턴).
+  assert.ok(
+    tactics.some((t) => t.startsWith("부인 시 명의 도용 암시")),
+    "부인 대응 수법이 있어야 한다(T92가 지목한 '부인 대응 문구 부재 6종'을 새로 늘리지 않는다).",
+  );
+});
+
+test("[T95/AC-071] 확인을 **막는** 수법을 함께 싣지 않는다(한 통화 안에서 두 수법이 서로를 부정하지 않게)", () => {
+  const labels = SCENARIO_PROMPTS[BANK_VERIFY_SCENARIO_ID].weakenedTactics.map(
+    (t) => t.split("—")[0].trim(),
+  );
+  assert.ok(labels.includes("확인 시도 무력화"), "이 시나리오의 존재 이유인 D3 수법이 있어야 한다.");
+  for (const forbidden of ["확인 절차 차단", "확인 차단", "전화 끊음 저지"]) {
+    assert.equal(
+      labels.includes(forbidden),
+      false,
+      `"${forbidden}"은 확인을 권하는 캐릭터와 모순된다 — 축 표(exitBlock: D3 단독)와도 어긋난다.`,
+    );
+  }
+});
+
 // ── T91(2026-07-25, 사용자 실측 신고) 회귀 가드 ──────────────────────────────
 //
 // **무엇이 있었나**: 사용자가 `loan-refinance-scam`에서 "대출 받은 적 없다"를 4턴 연속 부인했는데,
@@ -202,6 +302,12 @@ const UNCONDITIONAL_DEMAND_BY_SCENARIO: Record<string, string> = {
   // 요구**다 — 참가자가 지원금 대상임을 부인해도 "확인 앱부터 설치하셔야 조회가 됩니다"로 그대로
   // 밀어붙일 수 있고, 결정의 순간(설치 링크 탭 → 권한 허용)이 그대로 남는다.
   "messenger-subsidy-smishing-sms": "앱 설치·권한 허용 유도",
+  // ⚠️ T95(2026-07-26) 신규 — 확인 무력화 전용 시나리오. 이 요구를 고른 이유는 **전제가 없기
+  // 때문**이다: "본인 확인"은 참가자가 계좌 보유·거래 사실을 부인해도 성립한다("그러면 명의 도용
+  // 여부부터 확인해야 합니다"로 그대로 이어진다 — 프롬프트 문구에 명시). 같은 시나리오의 다른 요구
+  // ("보호계좌 이체 요구")는 **잔액이라는 전제**에 묶여 있어 T91의 loanScam과 같은 교착을 만들 수
+  // 있으므로 지명하지 않았다.
+  "bank-security-verify-scam": "본인확인 정보 직접 요구",
 };
 
 test("SCENARIO_PROMPTS: 모든 시나리오가 선행 조건 없는 요구 수법을 1개 이상 갖는다(T91 교착 방지)", () => {
