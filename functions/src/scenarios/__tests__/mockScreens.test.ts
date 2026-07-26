@@ -20,6 +20,7 @@ import { VERIFY_INTERCEPT } from "../verifyIntercept";
 import { SCENARIO_PROMPTS } from "../index";
 import { PUBLIC_SCENARIOS } from "../publicMeta";
 import { extractLinkMarker } from "../../roleplay/linkMarker";
+import { REAL_WORLD_APP_NAMES } from "./harmlessnessPatterns";
 
 const allItems = Object.values(MOCK_SCREENS).flat();
 const allText = allItems
@@ -61,22 +62,9 @@ test("[역검증] 스토어 URL이 섞이면 위 금지 검사가 실제로 실�
 });
 
 // 실존 앱·서비스명이 부분 문자열로도 등장하면 안 된다(AC-072 "실존 앱명" 금지).
-const REAL_WORLD_APP_NAMES = [
-  "카카오뱅크",
-  "토스",
-  "네이버",
-  "국민은행",
-  "KB스타뱅킹",
-  "신한",
-  "우리은행",
-  "정부24",
-  "손택스",
-  "홈택스",
-  "AnyDesk",
-  "TeamViewer",
-  "애니데스크",
-  "팀뷰어",
-];
+//
+// T86 — 목록 자체는 `harmlessnessPatterns.ts`가 정본이다(이 목록이 모의 화면 카탈로그에만 걸려
+// 있어 확인 무력화·통화 중 문자·시나리오 프롬프트는 검사를 안 탔다). **이 파일의 단언은 그대로**다.
 
 test("[AC-072] 실존 앱·서비스명이 카탈로그 문구에 부분 문자열로도 없다", () => {
   for (const name of REAL_WORLD_APP_NAMES) {
