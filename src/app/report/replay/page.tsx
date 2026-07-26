@@ -24,6 +24,7 @@ import {
   buildReplayTimeline,
   getAnnotatedTurnIndexes,
   type ReplayDeceivedMomentSource,
+  type ReplayMockScreenSource,
   type ReplaySmsSource,
   type ReplayTimelineItem,
   type ReplayVerifySource,
@@ -116,6 +117,13 @@ export default function ReplayPage() {
       ? (reportData.verifyTimeline as ReplayVerifySource[])
       : [];
 
+    // T84(§15.9.5 e-4, AC-072/AC-073) — 모의 화면 항목도 같은 리포트 스냅샷에서 온다(부재→빈
+    // 배열). 3단계 결합 세션은 세 단계가 **하나의 시간축에 병합**돼 표시된다(기존 AC-037 규칙의
+    // 연장 — 신규 규칙 없음).
+    const mockScreenTimeline = Array.isArray(reportData.mockScreenTimeline)
+      ? (reportData.mockScreenTimeline as ReplayMockScreenSource[])
+      : [];
+
     const scenarioId = sessionData.scenarioId as string | undefined;
     const scenario = scenarioId ? scenarios[scenarioId] : undefined;
 
@@ -133,7 +141,13 @@ export default function ReplayPage() {
         tacticsUsed: Array.isArray(reportData.tacticsUsed) ? (reportData.tacticsUsed as string[]) : [],
         createdAt: reportData.createdAt instanceof Timestamp ? reportData.createdAt : null,
       } satisfies ReportSummary,
-      timeline: buildReplayTimeline(messages, deceivedMoments, smsTimeline, verifyTimeline),
+      timeline: buildReplayTimeline(
+        messages,
+        deceivedMoments,
+        smsTimeline,
+        verifyTimeline,
+        mockScreenTimeline,
+      ),
       scenarioTitle: scenario?.title ?? null,
       callerLabel: scenario?.callerLabel ?? "상대방",
       challenge: challengeContext,
@@ -407,6 +421,11 @@ export default function ReplayPage() {
           // 되감기 버튼은 달지 않는다(대상은 deceivedMoments뿐 — 주석된 순간에는 원래대로 달린다).
           if (item.kind === "verify") {
             return <ReplayVerifyItem key={item.id} verify={item.verify} />;
+          }
+          // T84(§15.9.5 e-4) — 모의 화면 항목도 **기존 주석 카드 형식 그대로** 쓴다. 되감기 버튼은
+          // 달지 않는다(승격된 순간에는 그 사기범 말풍선에 원래대로 달린다 — 중복 카드 금지).
+          if (item.kind === "mockScreen") {
+            return <ReplayMockScreenItem key={item.id} mockScreen={item.mockScreen} />;
           }
           const channelBadgeLabel = (item.channel ?? "voice") === "messenger" ? "메신저" : "통화";
           return (
@@ -720,6 +739,72 @@ function ReplayVerifyItem({ verify }: { verify: ReplayVerifySource }) {
           )}
         </div>
       ))}
+    </li>
+  );
+}
+
+/**
+ * T84(§15.9.5 e-4, AC-072/AC-073) — 모의 화면 항목. **기존 P-13 주석 카드 형식 그대로**이며 신규
+ * 컴포넌트·신규 색·신규 표기 형식이 없다.
+ *
+ * ⚠️ **중복 카드 금지(§15.9.5 e-4)**: `consented === true`면 같은 순간이 `deceivedMoments`에도
+ * 있어 **바로 그 사기범 말풍선에 주석이 이미 달린다** — 여기서 교육 문구를 다시 내지 않는다.
+ * ⚠️ **되감기 버튼을 달지 않는다** — 대상은 `deceivedMoments`뿐이고, 승격된 순간에는 원래대로
+ * 그 말풍선에 달린다. 목업 재진입 컨트롤도 없다(스냅샷에 `fakeLandingId`가 아예 없다).
+ */
+function ReplayMockScreenItem({ mockScreen }: { mockScreen: ReplayMockScreenSource }) {
+  const what =
+    mockScreen.kind === "app-install"
+      ? "앱 설치 안내 화면이 표시됐습니다."
+      : "본인확인 입력 화면이 표시됐습니다.";
+  return (
+    <li className="outline-none">
+      <div className="flex max-w-[85%] items-end gap-2">
+        <div
+          aria-hidden="true"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#41525E] text-sm text-[#C9D4DB]"
+        >
+          ▣
+        </div>
+        <div>
+          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[#6B655C]">
+            <Badge variant="neutral">모의 화면</Badge>
+            <span className="rounded-full bg-[#EFEBF7] px-2 py-0.5 text-[11px] font-semibold text-[#463880]">
+              AI 훈련용 모의 화면
+            </span>
+          </p>
+          <div className="rounded-[16px] rounded-bl-[4px] border border-[#E2DDD3] bg-white px-4 py-3">
+            <p className="text-[15px] leading-[1.55] text-[#22303A]">
+              {mockScreen.timeLabel ? `${mockScreen.timeLabel}: ` : ""}
+              {what}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {!mockScreen.anchorResolved && (
+        <p className="ml-10 mt-1.5 text-[13px] text-[#6B655C]" role="status">
+          이 화면이 대화 중 어느 시점에 표시됐는지는 확인하지 못했습니다.
+        </p>
+      )}
+
+      <div role="note" className="ml-10 mt-2 rounded-[12px] border border-[#B96A1B]/30 bg-[#FBF3E8] p-3.5">
+        {mockScreen.consented ? (
+          <>
+            <p className="mb-1.5 text-[13px] font-bold text-[#B96A1B]">⚠️ 여기가 신호였어요</p>
+            <p className="text-[13px] leading-[1.6] text-[#22303A]">
+              이 화면에서 권한 허용에 응했습니다 — 대처 방법은 위 말풍선의 주석에 있습니다.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="mb-1.5 text-[13px] font-bold text-[#0E6B62]">잘 대응한 지점</p>
+            <p className="text-[13px] leading-[1.6] text-[#22303A]">
+              화면이 떴지만 권한 허용에 응하지 않았습니다.
+            </p>
+          </>
+        )}
+      </div>
     </li>
   );
 }

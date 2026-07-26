@@ -105,6 +105,36 @@ test("PUBLIC_SCENARIOS: escalation이 있는 시나리오는 channel='messenger'
   }
 });
 
+// T84(§15.9.3 — AC-073 명문 요구 "전이 신호 없는 대사 드리프트를 자동 검증이 잡는다").
+// 시나리오 콘텐츠가 "전화드릴게요" 류 대사만 내고 **구조화 신호를 내지 않는** 드리프트는 화면에서
+// 즉시 보이지 않는다(max-turn 폴백이 결국 전이시켜 버리기 때문에 사람 눈으로는 정상처럼 보인다).
+// 그래서 여기서 리터럴 지시의 존재를 기계로 고정한다. 안전망은 기존 max-turn 폴백(§13.3)이다.
+const ESCALATION_SIGNAL_LITERAL = "[[SIGNAL:ESCALATE_VOICE]]";
+
+test("[AC-073] escalation 메타를 가진 모든 시나리오의 personaPrompt가 구조화 신호 리터럴 지시를 포함한다", () => {
+  const escalationIds = Object.entries(PUBLIC_SCENARIOS)
+    .filter(([, meta]) => meta.escalation !== undefined)
+    .map(([id]) => id);
+  assert.ok(escalationIds.length >= 1, "에스컬레이션 가능 시나리오가 최소 1종은 있어야 한다");
+
+  for (const scenarioId of escalationIds) {
+    const prompt = SCENARIO_PROMPTS[scenarioId];
+    assert.ok(prompt, `${scenarioId}: SCENARIO_PROMPTS에 존재해야 한다`);
+    assert.ok(
+      prompt.personaPrompt.includes(ESCALATION_SIGNAL_LITERAL),
+      `${scenarioId}: personaPrompt에 ${ESCALATION_SIGNAL_LITERAL} 리터럴 지시가 있어야 한다 — ` +
+        `없으면 모델이 "전화드릴게요"라고 말만 하고 전이 신호를 내지 않는 드리프트가 조용히 생긴다(AC-073).`,
+    );
+  }
+});
+
+test("[역검증] 신호 리터럴이 빠지면 위 드리프트 검사가 실패한다", () => {
+  const drifted = SCENARIO_PROMPTS["messenger-subsidy-smishing-sms"].personaPrompt.split(
+    ESCALATION_SIGNAL_LITERAL,
+  ).join("(신호 없음)");
+  assert.equal(drifted.includes(ESCALATION_SIGNAL_LITERAL), false);
+});
+
 test("publicMeta.ts는 src/content/scenarios/familyAccidentDeepvoice.ts와 드리프트 없이 동기화되어 있다", () => {
   // functions/(별도 TS 빌드 루트)라 직접 import 대신 소스 텍스트를 비교해 두 사본의 드리프트를
   // 탐지한다(publicMeta.ts 상단 주석 참고).
@@ -167,7 +197,11 @@ const UNCONDITIONAL_DEMAND_BY_SCENARIO: Record<string, string> = {
   "messenger-friend-loan-kakao": "송금 직접 요구",
   // 스미싱 문자형의 "요구"는 송금이 아니라 링크 탭이다 — 참가자가 결정을 내리는 순간이 거기다.
   "messenger-parcel-smishing-sms": "링크 클릭 유도",
-  "messenger-subsidy-smishing-sms": "링크 클릭 유도",
+  // ⚠️ T84(2026-07-26) 갱신 — 3단계 결합(UF-012)으로 이 시나리오의 요구가 "링크 클릭 유도"에서
+  // **"앱 설치·권한 허용 유도"**로 바뀌었다(축 E3 태깅과 같은 근거). 여전히 **선행 조건이 없는
+  // 요구**다 — 참가자가 지원금 대상임을 부인해도 "확인 앱부터 설치하셔야 조회가 됩니다"로 그대로
+  // 밀어붙일 수 있고, 결정의 순간(설치 링크 탭 → 권한 허용)이 그대로 남는다.
+  "messenger-subsidy-smishing-sms": "앱 설치·권한 허용 유도",
 };
 
 test("SCENARIO_PROMPTS: 모든 시나리오가 선행 조건 없는 요구 수법을 1개 이상 갖는다(T91 교착 방지)", () => {

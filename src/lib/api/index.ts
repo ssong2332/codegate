@@ -12,6 +12,7 @@ export { generateReport } from "./generateReport";
 export { judgeRewindAnswer } from "./judgeRewindAnswer";
 export { deliverInCallSms } from "./deliverInCallSms";
 export { recordInCallSmsEvent } from "./recordInCallSmsEvent";
+export { recordMockScreenEvent } from "./recordMockScreenEvent";
 export { deliverVerifyOffer } from "./deliverVerifyOffer";
 export { deliverVerifyReconnect } from "./deliverVerifyReconnect";
 export { getBeginnerBriefing } from "./getBeginnerBriefing";

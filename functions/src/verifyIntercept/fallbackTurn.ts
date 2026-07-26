@@ -17,12 +17,20 @@ export type FallbackTurnState = {
   };
   /** 지금까지 `messages`에 존재하는 `role==="scammer"` 문서 수(이번 응답을 만들기 **전**). */
   scammerDocCount: number;
+  /**
+   * T84(§15.9.3) — 참가자가 모의 설치의 가짜 "권한 허용"에 응했고(`consentedAt` 존재) 아직 사기범이
+   * 그 사실을 언급하지 않은(`consentAnnouncedAt` 부재) 항목이 있는가.
+   * ⚠️ **이 값이 true라고 채널이 전이되지 않는다**(§15.9.7 G54) — 응낙은 전이 신호가 아니라
+   * 다음 턴 프롬프트 1줄 지시일 뿐이다.
+   */
+  installConsentDue?: boolean;
 };
 
 export type FallbackTurnChoice =
   | "verify_reconnect"
   | "sms_announce"
   | "verify_announce"
+  | "install_consent"
   | "none";
 
 /**
@@ -33,6 +41,7 @@ export type FallbackTurnChoice =
  * | 1 | `placed && reconnectAnchorScammerTurn === scammerDocCount` | `verify_reconnect` | 재연결 대사는 **이번 턴 하나에만** 자리가 있다 — `reconnectAnchorScammerTurn`은 이미 서버에 기록됐고 리포트의 판정 앵커가 `scammers[그 값]`(=이번 턴에 만들어질 대사)을 가리키기 때문이다(§16.3.2). 미루면 큐가 없어 **영영 유실**된다 |
  * | 2 | `smsDue` | `sms_announce` | G31의 고정 규칙 그대로 — 문자 announce가 확인 **announce**보다 우선한다 |
  * | 3 | 오퍼 문서가 있고 아직 `announced`가 아님 | `verify_announce` | 2에 밀렸어도 **버리지 않는다**(G31 (2)) — `announcedAt` 부재가 곧 큐라서 다음 턴에 다시 due가 된다 |
+ * | 4 | `installConsentDue` | `install_consent` | T84(§15.9.3 G55). **문자 announce가 이긴다** — 문자는 이미 화면에 떠 있어 언급이 없으면 즉시 불일치가 보이지만, 설치 지시는 다음 턴으로 이월돼도 사실이 사라지지 않는다(`consentAnnouncedAt` 미세팅 → 다음 턴 재시도). 현행 콘텐츠에서 `MOCK_SCREENS`는 `IN_CALL_SMS`·`VERIFY_INTERCEPT`와 **scenarioId를 공유하지 않아** 실제로 경합하지 않으며, 그 비공유를 테스트로 고정한다 |
  *
  * ⚠️ **1이 2보다 앞선 것은 implementer 판정이다**(G31이 규율한 것은 "문자 announce ↔ 확인
  * **announce**"이고 재연결 대사는 그 표에 없다). 근거: (a) 확인 announce는 `announcedAt` 부재로
@@ -51,5 +60,6 @@ export function pickFallbackTurnInstruction(state: FallbackTurnState): FallbackT
   }
   if (state.smsDue) return "sms_announce";
   if (verify && !verify.announced) return "verify_announce";
+  if (state.installConsentDue === true) return "install_consent";
   return "none";
 }

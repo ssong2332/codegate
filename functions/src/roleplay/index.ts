@@ -13,6 +13,10 @@ import { completeWithFallback, getLlmClient } from "../llm";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { findDueInCallSms, hasInCallSms } from "../scenarios/inCallSms";
+import {
+  hasAppInstallMockScreen,
+  MOCK_INSTALL_CONSENT_INSTRUCTION,
+} from "../scenarios/mockScreens";
 import { buildInCallSmsDoc, fallbackAnchorScammerTurn } from "../inCallSms";
 import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { pickFallbackTurnInstruction } from "../verifyIntercept/fallbackTurn";
@@ -195,13 +199,45 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         // 조회 실패가 대화를 막지 않는다(P-4 핵심 루프 비차단) — 이번 턴은 지시 없이 진행한다.
       }
     }
+    // ②-d 모의 설치 응낙의 **인과 배선**(T84, §15.9.3 — §15.1.2/§15.1.4와 동형). 오버레이
+    // 상호작용은 클라 전용이라 모델이 볼 수 없다. 이 턴에 `sessions/{sid}/mockScreens`에서
+    // **응낙됐고(consentedAt) 아직 알리지 않은(consentAnnouncedAt 부재)** 항목을 찾으면 다음
+    // 응답의 `turnInstruction`으로 1줄을 주입하고 `consentAnnouncedAt`을 세팅해 **1회만** 주입한다.
+    //
+    // ⚠️ 이 read는 **카탈로그에 `app-install` 항목이 있는 시나리오에서만** 수행한다
+    // (`hasInCallSms(...)` 게이팅과 동형) — 나머지 12개 시나리오는 read 0회, 회귀 0.
+    // ⚠️ 응낙이 **채널 전이를 유발하지 않는다**(§15.9.7 G54, AC-073) — 아래 ④-b 전이 판단은
+    // 여전히 구조화 신호·max-turn 폴백만 본다.
+    let mockConsentRef: FirebaseFirestore.DocumentReference | undefined;
+    if (hasAppInstallMockScreen(session.scenarioId)) {
+      try {
+        // 세션당 문서가 한 자릿수라(카탈로그 항목 수 상한) 전체를 읽고 메모리에서 고른다 —
+        // 부등호 쿼리·복합 인덱스를 새로 만들지 않는다(Database.md 인덱스 표 무변경).
+        const mockSnap = await sessionRef.collection("mockScreens").get();
+        const pending = mockSnap.docs.find(
+          (doc) => Boolean(doc.get("consentedAt")) && !doc.get("consentAnnouncedAt"),
+        );
+        if (pending) mockConsentRef = pending.ref;
+      } catch {
+        // 조회 실패가 대화를 막지 않는다(P-4 핵심 루프 비차단) — 이번 턴은 지시 없이 진행한다.
+      }
+    }
+
     const turnChoice = pickFallbackTurnInstruction({
       smsDue: Boolean(deliveredSmsId),
       ...(verifyState ? { verify: verifyState } : {}),
       scammerDocCount,
+      installConsentDue: mockConsentRef !== undefined,
     });
     let turnInstruction: string | undefined;
-    if (turnChoice === "verify_reconnect") {
+    if (turnChoice === "install_consent") {
+      turnInstruction = MOCK_INSTALL_CONSENT_INSTRUCTION;
+      try {
+        await mockConsentRef?.update({ consentAnnouncedAt: Timestamp.now() });
+      } catch {
+        // 마크 실패는 다음 턴에 같은 확인이 한 번 더 나가는 정도의 열화다(대화는 막지 않는다).
+      }
+    } else if (turnChoice === "verify_reconnect") {
       turnInstruction = verifyItem?.reconnectInstruction;
     } else if (turnChoice === "sms_announce") {
       turnInstruction = dueSms?.announceInstruction;
@@ -232,8 +268,11 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 응답에는 애초에 마커가 없으므로 attachments가 항상 undefined로 빠져 기존 동작에 영향 없다.
     // 응답도 저장 전 마스킹(원칙상 사기범 발화엔 사용자 PII가 섞일 일이 적지만, 저장 전 마스킹
     // 원칙을 대화 로그 전체에 일관 적용 — ADR-0004).
+    // T84(§15.9.1 R4) — 시나리오를 함께 넘겨 attachment에 `landingKind`가 실린다(서버 카탈로그가
+    // 진실 원천, 클라 분류 금지). 카탈로그가 없는 시나리오는 키 자체가 붙지 않아 무변경이다.
     const { text: linkFreeReplyText, attachments: replyAttachments } = extractLinkMarker(
       completion.text,
+      session.scenarioId,
     );
 
     // ③-b 에스컬레이션 확장(T30, Architecture.md §13.2, AC-034/024) — 구조화 신호

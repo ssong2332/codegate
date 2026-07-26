@@ -75,10 +75,31 @@ export type ReplayTimelineVerifyItem = {
   verify: ReplayVerifySource;
 };
 
+/** `reports/{rid}.mockScreenTimeline[]`의 클라 표현(읽기 전용, 표시 전용) — T84, §15.9.5 e-4.
+ *  ⚠️ 화면 콘텐츠 원문·`fakeLandingId` 재진입 컨트롤에 해당하는 값이 **타입에 없다** — 사후 화면이
+ *  목업을 재구성하거나 다시 열 수 없다(§15.6 G19 동형 취지). */
+export type ReplayMockScreenSource = {
+  landingId: string;
+  kind: "credential-form" | "app-install";
+  anchorTurnIndex: number;
+  anchorResolved: boolean;
+  timeLabel?: string;
+  /** true면 같은 순간이 `deceivedMoments`에도 있다 — 교육 문구는 그쪽 주석이 전담한다. */
+  consented: boolean;
+};
+
+export type ReplayTimelineMockScreenItem = {
+  kind: "mockScreen";
+  id: string;
+  turnIndex: number;
+  mockScreen: ReplayMockScreenSource;
+};
+
 export type ReplayTimelineItem =
   | ReplayTimelineMessageItem
   | ReplayTimelineSmsItem
-  | ReplayTimelineVerifyItem;
+  | ReplayTimelineVerifyItem
+  | ReplayTimelineMockScreenItem;
 
 /** messages를 turnIndex 오름차순으로 정렬하고, deceivedMoments 중 같은 turnIndex를 가진 항목을
  * annotation으로 매칭시킨다(§13.1 "turnIndex는 채널을 넘어 단조 증가" — 교차채널 세션도 하나의
@@ -90,6 +111,7 @@ export function buildReplayTimeline(
   deceivedMoments: readonly ReplayDeceivedMomentSource[],
   smsTimeline: readonly ReplaySmsSource[] = [],
   verifyTimeline: readonly ReplayVerifySource[] = [],
+  mockScreenTimeline: readonly ReplayMockScreenSource[] = [],
 ): ReplayTimelineItem[] {
   const momentsByTurn = new Map(deceivedMoments.map((moment) => [moment.turnIndex, moment]));
   // 정렬 키 = (turnIndex | anchorTurnIndex, kindRank, seq). 메시지는 rank 0, 문자는 rank 1,
@@ -115,6 +137,19 @@ export function buildReplayTimeline(
         id: `verify-${verify.offerId}`,
         turnIndex: verify.anchorTurnIndex,
         verify,
+      },
+    })),
+    // T84 — 모의 화면은 rank 3이라 같은 앵커에서 **항상 메시지 뒤**에 온다(§15.9.5 e-2 (5)는
+    // rank 2라고 적었지만 T79가 이미 2를 썼다 — 의도는 그대로, 번호만 3). 모의 화면 항목도
+    // **주석 매칭 대상이 아니다**(§15.6 G17 — 앵커가 사기범 메시지라 turnIndex가 같아 Map으로
+    // 조회하면 같은 주석 카드가 두 번 렌더된다).
+    ...mockScreenTimeline.map((mockScreen, seq) => ({
+      sortKey: [mockScreen.anchorTurnIndex, 3, seq] as [number, number, number],
+      item: {
+        kind: "mockScreen" as const,
+        id: `mock-${mockScreen.landingId}`,
+        turnIndex: mockScreen.anchorTurnIndex,
+        mockScreen,
       },
     })),
   ];

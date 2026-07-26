@@ -22,6 +22,7 @@ import {
 import { scenarios } from "@/content/scenarios";
 import { Badge, Button } from "@/components/ui";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
+import { buildStageNotice, type ReportStage } from "@/lib/report/stageNotice";
 
 type DeceivedMoment = {
   turnIndex: number;
@@ -59,6 +60,19 @@ type VerifyTimelineEntry = {
   events: { event: string; what: string; correctAction?: string }[];
 };
 
+// T84(§15.9.5 e-4, AC-072/AC-073) — 모의 화면 상호작용의 **표시 전용** 스냅샷. 화면 콘텐츠 원문
+// (headline/bodyLines/consentLabel)이 이 타입에 **없다** — 사후 화면이 목업을 재구성·재진입할 수
+// 있게 되면 안 되기 때문이다(§15.6 G19 동형 취지).
+type MockScreenTimelineEntry = {
+  landingId: string;
+  kind: "credential-form" | "app-install";
+  anchorTurnIndex: number;
+  anchorResolved: boolean;
+  timeLabel?: string;
+  /** true면 같은 순간이 `deceivedMoments`에도 있다 — 교육 문구는 그쪽이 전담한다(중복 카드 금지). */
+  consented: boolean;
+};
+
 type ReportData = {
   reportId: string;
   wasDeceived: boolean;
@@ -69,6 +83,9 @@ type ReportData = {
   smsTimeline: SmsTimelineEntry[];
   // 부재→빈 배열(무백필). D-51 ①/⑤(속은 순간 0건 + 확인 시도 있음)에서도 이 배열은 존재한다.
   verifyTimeline: VerifyTimelineEntry[];
+  // T84 — 부재→빈 배열(무백필). `stages`는 **의도된 단계가 2개 이상일 때만** 서버가 만든다.
+  mockScreenTimeline: MockScreenTimelineEntry[];
+  stages: ReportStage[];
   // T72(P-22 / AC-064) — 리포트에 역정규화된 표기 전용 값. 난이도는 판정에 영향을 주지 않으며
   // (§15.3.5) 여기서도 "어떤 강도로 훈련했는가"를 알려주는 라벨로만 쓴다.
   difficultyLevel: DifficultyLevel;
@@ -110,6 +127,10 @@ export default function ReportPage() {
       verifyTimeline: Array.isArray(data.verifyTimeline)
         ? (data.verifyTimeline as VerifyTimelineEntry[])
         : [],
+      mockScreenTimeline: Array.isArray(data.mockScreenTimeline)
+        ? (data.mockScreenTimeline as MockScreenTimelineEntry[])
+        : [],
+      stages: Array.isArray(data.stages) ? (data.stages as ReportStage[]) : [],
       difficultyLevel: normalizeDifficultyLevel(data.difficultyLevel),
       createdAt: data.createdAt instanceof Timestamp ? data.createdAt : null,
     };
@@ -254,6 +275,8 @@ export default function ReportPage() {
     isChallengeSession,
     afterForcedReplay: false,
   });
+  // T84 — 의도된 단계가 2개 미만이면 null이라 기존 단일 표면 리포트는 한 글자도 바뀌지 않는다.
+  const stageNotice = buildStageNotice(report.stages);
   const goToRewind = (momentIndex: number) => {
     router.push(
       `/report/rewind?reportId=${encodeURIComponent(report.reportId)}&moment=${momentIndex}`,
@@ -286,6 +309,17 @@ export default function ReportPage() {
       kind: "verify" as const,
       verify,
     })),
+    // T84 — 모의 화면 항목은 같은 축에 **kindRank 3**으로 얹는다(순간 0 < 문자 1 < 확인 2 < 모의
+    // 화면 3). ⚠️ §15.9.5 e-2 (5)는 "kindRank 2"라고 적었지만 그 절은 T79(확인 항목)와 **병렬
+    // 작성**돼 rank 2가 이미 쓰이는 것을 몰랐다 — 의도(메시지·문자 **뒤**에 온다)는 그대로 지키고
+    // 번호만 3으로 내린다. 두 종류는 시나리오가 겹치지 않아 같은 앵커에서 만나지 않는다.
+    // ⚠️ 되감기 버튼을 달지 않는다 — **응낙 순간에는 승격된 `deceivedMoments` 카드**에 원래대로
+    // 달리고(그 순간이 진짜 속은 순간이다), 이 항목은 사실 1줄만 낸다(중복 카드 금지, e-4).
+    ...report.mockScreenTimeline.map((mockScreen, seq) => ({
+      sortKey: [mockScreen.anchorTurnIndex, 3, seq] as const,
+      kind: "mockScreen" as const,
+      mockScreen,
+    })),
   ].sort(
     (a, b) =>
       a.sortKey[0] - b.sortKey[0] || a.sortKey[1] - b.sortKey[1] || a.sortKey[2] - b.sortKey[2],
@@ -306,6 +340,13 @@ export default function ReportPage() {
           <br />
           확인된 것
         </p>
+        {/* T84(§15.9.5 e-3, OQ-U24 판정) — 여러 표면으로 이어지는 세션의 **구조 고지 1줄**.
+            ⚠️ 세션 중에는 단계 카운터를 두지 않는다(D-50) — 단계 구분은 **종료 후 리포트에서만**
+            드러나며, 이 줄이 그 예외 안이다. 미도달 단계는 아래 타임라인에 **빈 항목으로 그리지
+            않고**, 데이터(`stages`)에만 `reached:false`로 남는다. */}
+        {stageNotice && (
+          <p className="mt-2 text-base leading-relaxed text-[#6B655C]">{stageNotice}</p>
+        )}
       </div>
 
       {/* AC-009: 한 번도 속지 않은 경우 이를 명시(요약 카드 상단, 색이 아닌 텍스트로). */}
@@ -408,6 +449,11 @@ export default function ReportPage() {
                     뒤집지 않는다 — 걸었지만 응하지 않은 것은 **잘 대응한 지점**이다, D-51 ⑤). */}
                 {report.verifyTimeline.length > 0 &&
                   " 아래는 훈련 중 있었던 확인 시도입니다."}
+                {/* T84(G18 동류) — 설치 화면을 열었다가 **응하지 않고 닫은** 세션(D-51 ③)이 정확히
+                    이 상태다. 여기서 안내하지 않으면 항목이 왜 있는지 설명되지 않는다. 판정은
+                    그대로다 — 화면이 뜬 것만으로는 속은 순간이 아니다(AC-062 보호). */}
+                {report.mockScreenTimeline.length > 0 &&
+                  " 아래는 훈련 중 표시된 모의 화면입니다."}
               </p>
             )}
             {timelineEntries.length > 0 && (
@@ -443,10 +489,15 @@ export default function ReportPage() {
                     </li>
                   ) : entry.kind === "sms" ? (
                     <ReportSmsTimelineItem key={`sms-${entry.sms.smsId}`} sms={entry.sms} />
-                  ) : (
+                  ) : entry.kind === "verify" ? (
                     <ReportVerifyTimelineItem
                       key={`verify-${entry.verify.offerId}`}
                       verify={entry.verify}
+                    />
+                  ) : (
+                    <ReportMockScreenTimelineItem
+                      key={`mock-${entry.mockScreen.landingId}`}
+                      mockScreen={entry.mockScreen}
                     />
                   ),
                 )}
@@ -627,6 +678,54 @@ function ReportSmsTimelineItem({ sms }: { sms: SmsTimelineEntry }) {
  * 버튼이 달린다.
  * ⚠️ `displayNumber`는 **텍스트로만** 렌더한다 — 링크·복사·재발신 컨트롤을 만들지 않는다(AC-019).
  */
+/**
+ * T84(§15.9.5 e-4, AC-072/AC-073) — 모의 화면 항목. **기존 문자·확인 항목과 같은 카드 형식**을
+ * 쓴다(신규 표기 형식·신규 컴포넌트 스타일 0건).
+ *
+ * ⚠️ **중복 카드 금지 규칙(§15.9.5 e-4)**: `consented === true`인 항목은 같은 순간이
+ * `deceivedMoments`에도 있으므로 **교육 문구(`correctAction`)를 여기서 다시 내지 않는다** —
+ * 그쪽 카드가 전담하고 여기서는 "설치 안내 화면이 표시됐습니다" 수준의 사실 1줄만 낸다.
+ * ⚠️ **되감기 버튼을 달지 않는다** — 되감기 대상은 `deceivedMoments`이고, 응낙 순간에는 승격된
+ * 그 카드에 원래대로 버튼이 달린다.
+ * ⚠️ 화면 콘텐츠 원문(headline/bodyLines/consentLabel)·목업 재진입 컨트롤이 **스냅샷에 아예
+ * 없어서** 여기서 그릴 수도 없다(구조적 금지, §15.6 G19 동형).
+ */
+function ReportMockScreenTimelineItem({ mockScreen }: { mockScreen: MockScreenTimelineEntry }) {
+  const what =
+    mockScreen.kind === "app-install"
+      ? "앱 설치 안내 화면이 표시됐습니다."
+      : "본인확인 입력 화면이 표시됐습니다.";
+  return (
+    <li className="flex flex-col gap-3">
+      <div className="rounded-2xl border border-[#B96A1B]/30 bg-[#FBF3E8] p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-lg font-semibold text-[#B96A1B]">
+            <span aria-hidden="true">⚠ </span>
+            {mockScreen.timeLabel ? `${mockScreen.timeLabel}: ` : ""}
+            {what}
+          </p>
+          <Badge variant="neutral">모의 화면</Badge>
+        </div>
+        {mockScreen.consented ? (
+          <p className="mt-2 text-base text-[#22303A]">
+            이 화면에서 권한 허용에 응했습니다 — 위의 속은 시점 카드에서 자세히 볼 수 있습니다.
+          </p>
+        ) : (
+          // D-51 ③ — 응하지 않고 닫은 것은 **속은 순간이 아니다**. 과신 표현은 쓰지 않는다(P-8).
+          <p className="mt-2 text-base font-semibold text-[#0E6B62]">
+            잘 대응한 지점입니다 — 권한 허용에 응하지 않았습니다.
+          </p>
+        )}
+        {!mockScreen.anchorResolved && (
+          <p className="mt-2 text-sm text-[#6B655C]">
+            이 화면이 대화 중 어느 시점에 표시됐는지는 확인하지 못했습니다.
+          </p>
+        )}
+      </div>
+    </li>
+  );
+}
+
 function ReportVerifyTimelineItem({ verify }: { verify: VerifyTimelineEntry }) {
   return (
     <li className="flex flex-col gap-3">

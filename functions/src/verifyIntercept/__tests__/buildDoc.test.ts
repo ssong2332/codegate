@@ -83,3 +83,34 @@ test("확인 문서가 없으면 선택 결과가 기존 T68 동작과 동일하
   assert.equal(pickFallbackTurnInstruction({ smsDue: true, scammerDocCount: 3 }), "sms_announce");
   assert.equal(pickFallbackTurnInstruction({ smsDue: false, scammerDocCount: 3 }), "none");
 });
+
+// ── T84 증분: 모의 설치 응낙 지시(§15.9.3 / §15.9.7 G55) ──────────────────────
+test("[T84] 설치 응낙 지시는 다른 지시가 없을 때 선택된다", () => {
+  assert.equal(
+    pickFallbackTurnInstruction({ smsDue: false, scammerDocCount: 2, installConsentDue: true }),
+    "install_consent",
+  );
+});
+
+test("[G55] 문자 announce가 같은 턴에 due면 문자가 이기고 설치 지시는 **이월**된다", () => {
+  assert.equal(
+    pickFallbackTurnInstruction({ smsDue: true, scammerDocCount: 2, installConsentDue: true }),
+    "sms_announce",
+  );
+  // 이월된 지시는 버려지지 않는다 — `consentAnnouncedAt` 미세팅이 곧 큐라서 다음 턴에 다시 due다.
+  assert.equal(
+    pickFallbackTurnInstruction({ smsDue: false, scammerDocCount: 3, installConsentDue: true }),
+    "install_consent",
+  );
+});
+
+test("[T84 회귀 0] installConsentDue가 없으면 기존 선택 결과가 한 건도 바뀌지 않는다", () => {
+  for (const smsDue of [true, false]) {
+    for (const installConsentDue of [undefined, false]) {
+      assert.equal(
+        pickFallbackTurnInstruction({ smsDue, scammerDocCount: 3, installConsentDue }),
+        smsDue ? "sms_announce" : "none",
+      );
+    }
+  }
+});

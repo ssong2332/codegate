@@ -226,3 +226,61 @@ test("[T83/G17] 앵커 메시지와 turnIndex가 같아도 확인 항목에는 �
     "확인 항목에는 annotation 필드 자체가 없다",
   );
 });
+
+// ── T84(§15.9.5 e-2/e-4) — 모의 화면 항목 ─────────────────────────────────────
+
+function mockScreenSource(overrides: Record<string, unknown> = {}) {
+  return {
+    landingId: "subsidy-install",
+    kind: "app-install" as const,
+    anchorTurnIndex: 2,
+    anchorResolved: true,
+    timeLabel: "12초 시점",
+    consented: false,
+    ...overrides,
+  };
+}
+
+test("[T84] 모의 화면 항목이 0건이면 결과가 도입 전과 **완전히 동일**하다(회귀 0)", () => {
+  const before = buildReplayTimeline(CONVERSATION, [], [smsSource()], [verifySource()]);
+  const after = buildReplayTimeline(CONVERSATION, [], [smsSource()], [verifySource()], []);
+  assert.deepEqual(after, before);
+});
+
+test("[T84] 정렬 kindRank = 메시지 0 < 문자 1 < 확인 2 < 모의 화면 3 (같은 앵커에서 결정론적)", () => {
+  const timeline = buildReplayTimeline(
+    CONVERSATION,
+    [],
+    [smsSource({ anchorTurnIndex: 2 })],
+    [verifySource({ anchorTurnIndex: 2 })],
+    [mockScreenSource({ anchorTurnIndex: 2 })],
+  );
+  assert.deepEqual(
+    timeline.map((item) => item.id),
+    ["m0", "m1", "m2", "sms-otp-1", "verify-institution-verify-desk", "mock-subsidy-install", "m3"],
+  );
+});
+
+test("[T84/G16] 모의 화면 항목은 getAnnotatedTurnIndexes에 절대 포함되지 않는다(되감기 딥링크 보호)", () => {
+  // 승격된 순간(turnIndex 2 = 설치 링크를 실은 사기범 메시지)과 모의 화면 항목의 앵커가 **같다** —
+  // 이 상태가 바로 §15.6 G17이 경고한 형태다.
+  const timeline = buildReplayTimeline(
+    CONVERSATION,
+    [{ turnIndex: 2, timeLabel: "12초 시점", tactic: "앱 설치·권한 허용 유도", correctAction: "a" }],
+    [],
+    [],
+    [mockScreenSource({ anchorTurnIndex: 2, consented: true })],
+  );
+  assert.deepEqual(getAnnotatedTurnIndexes(timeline), [2], "주석은 사기범 말풍선 하나에만 붙는다");
+  const mockItem = timeline.find((item) => item.kind === "mockScreen");
+  assert.equal(
+    (mockItem as unknown as Record<string, unknown>).annotation,
+    undefined,
+    "모의 화면 항목에는 annotation 필드 자체가 없다(중복 렌더 0건)",
+  );
+});
+
+test("[T84/AC-062] 응낙 없이 닫은 세션은 주석 목록이 비어 있다(되감기 진입점 미노출)", () => {
+  const timeline = buildReplayTimeline(CONVERSATION, [], [], [], [mockScreenSource()]);
+  assert.deepEqual(getAnnotatedTurnIndexes(timeline), []);
+});

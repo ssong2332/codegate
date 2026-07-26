@@ -46,12 +46,14 @@ export type AxisCoverage = {
  * **T83~T85가 공백을 채우면 이 테스트가 먼저 깨진다 — 그게 정상이며, 해당 행을 삭제하는 것이
  * "해소 기록"이다.** */
 export const DECLARED_COVERAGE_GAPS: Partial<Record<AxisValue, string>> = {
-  A3_post_install_contact: "MVP #30(T84)에서 해소 예정 — AC-076 필수 4값",
+  // A3_post_install_contact — **T84(MVP #30)에서 해소됨**(2026-07-26). 3단계 결합
+  // (`messenger-subsidy-smishing-sms`)의 3단계 통화가 설치·권한 허용 뒤에 걸려온다(axes.ts 주석).
+  // E3_install_remote_demand — **T84(MVP #30)에서 해소됨**(2026-07-26). 같은 시나리오의
+  // "앱 설치·권한 허용 유도"(`[[LINK:subsidy-install]]` → UX-023 kind=`app-install`).
   A4_account_takeover:
     "⚠️ PRD v1.6 '드러난 공백' 표에 등재되지 않은 0건(T78 발견, §15.10.9 G35). planner 확인 전까지 채택 계획 없음 — implementer가 임의로 A4 시나리오를 만들면 스코프 크립",
   D3_verification_hijack: "MVP #29(T83)에서 해소 예정 — AC-076 필수 4값",
   D4_procedural_legitimacy: "MVP #31(T85)에서 해소 예정 — AC-076 필수 4값",
-  E3_install_remote_demand: "MVP #30(T84)에서 해소 예정 — AC-076 필수 4값",
   E4_in_person_cash_demand: "OQ-39 미채택 확정(2026-07-25) — 재구성 후에도 잔여 공백으로 유지",
   E5_giftcard_crypto_demand: "MVP #32 P1 착수 보류(T88) — 잔여 공백",
 };

@@ -273,11 +273,22 @@ export const SCENARIO_AXES: Record<string, ScenarioAxes> = {
   },
   // A2 스미싱 문자 · B1 "[지원금 안내] ... 정부 지원금 대상자"(line-1) · C2 "이익 유혹"
   // · D0 PRD 표 D열 "(없음)" · E6 "링크 클릭 유도"
+  //
+  // ⚠️ **T84 증분(3단계 결합 — AC-072/AC-073/AC-076, OQ-42 확정 "(b) 지원금 문자 확장")**:
+  // 이 시나리오가 ① 미끼 문자 → ② 모의 앱 설치 → ③ 통화로 확장되면서 두 축 값이 채워진다.
+  //   - **E3**: weakenedTactics의 "앱 설치·권한 허용 유도"(`[[LINK:subsidy-install]]` → UX-023
+  //     kind=`app-install`)가 최종 요구 형태로 추가됐다. 기존 E6(링크 클릭)는 그대로 성립한다 —
+  //     설치 링크를 누르는 행위 자체는 여전히 링크 진입이다.
+  //   - **A3**: PRD의 3단계 결합 정의가 `A2→E3→A1/A3 통화`이고 A3는 *"악성앱이 이미 깔린
+  //     상태에서의 통화·알림"*이다(PRD "축 체계" A열). 이 시나리오의 3단계 통화는 설치·권한
+  //     허용을 마친 **뒤에** 걸려오므로 A3에 해당한다. 진입 경로 A2는 그대로 유지한다(둘 다 참).
+  // 두 값이 채워지면 `DECLARED_COVERAGE_GAPS`의 해당 행을 삭제하는 것이 "해소 기록"이다
+  // (axisCoverage.ts 주석 — T83~T85 규약).
   [MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID]: {
-    access: ["A2_smishing_lure"],
+    access: ["A2_smishing_lure", "A3_post_install_contact"],
     impersonation: ["B1_authority"],
     pressure: ["C2_benefit_gain"],
     exitBlock: ["D0_none"],
-    demand: ["E6_link_entry_demand"],
+    demand: ["E6_link_entry_demand", "E3_install_remote_demand"],
   },
 };

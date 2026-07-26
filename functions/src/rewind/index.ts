@@ -17,6 +17,7 @@ import { getLlmClient } from "../llm";
 import { GEMINI_API_KEY } from "../shared/config";
 import type { MessageDoc, ReportDoc, RewindAttemptDoc } from "../shared/types";
 import { judgeRewindAnswerWith, REWIND_ANSWER_MAX_LENGTH, REWIND_ATTEMPT_LIMIT } from "./judge";
+import { pickScammerLineForMoment } from "./scammerLine";
 import type { JudgeRewindAnswerRequest, JudgeRewindAnswerResponse } from "./types";
 
 ensureFirebaseAdminApp();
@@ -25,13 +26,12 @@ export { judgeByRule, judgeRewindAnswerWith, parseLlmJudgement } from "./judge";
 export { buildRewindJudgePrompt } from "./judgePrompt";
 
 /**
- * 그 순간 사기범이 한 말(마스킹됨)을 찾는다 — `deceivedMoments[i].turnIndex`는 **사용자 응답 턴**의
- * 인덱스이고(analyzeConversation.ts:149), 짝이 되는 사기범 발화는 정렬 순서상 바로 앞 항목이다.
- * turnIndex 산술(−1)이 아니라 정렬 위치로 찾는 이유는 채널 전이 등으로 turnIndex가 연속이 아닐 수
- * 있기 때문이다. 실패하거나 못 찾으면 빈 문자열 — 판정은 tactic/correctAction만으로도 계속된다
- * (비차단, P-4).
+ * 그 순간 사기범이 한 말(마스킹됨)을 찾는다 — 선택 규칙 자체는 순수 함수
+ * `pickScammerLineForMoment`(rewind/scammerLine.ts)가 소유하고, 여기서는 Firestore 조회만 한다
+ * (⚠️ **T84 §15.9.7 G57 수정**이 그 함수에 들어 있다 — 근거·회귀 0 논증은 그 doc 주석 참고).
+ * 조회에 실패하면 빈 문자열 — 판정은 tactic/correctAction만으로도 계속된다(비차단, P-4).
  */
-async function findScammerLineMasked(sessionId: string, userTurnIndex: number): Promise<string> {
+async function findScammerLineMasked(sessionId: string, momentTurnIndex: number): Promise<string> {
   try {
     const db = getFirestore();
     const snap = await db
@@ -41,12 +41,7 @@ async function findScammerLineMasked(sessionId: string, userTurnIndex: number): 
       .orderBy("turnIndex", "asc")
       .get();
     const messages = snap.docs.map((doc) => doc.data() as MessageDoc);
-    const position = messages.findIndex((m) => m.turnIndex === userTurnIndex);
-    if (position < 0) return "";
-    for (let i = position - 1; i >= 0; i -= 1) {
-      if (messages[i].role === "scammer") return messages[i].textMasked;
-    }
-    return "";
+    return pickScammerLineForMoment(messages, momentTurnIndex);
   } catch {
     return "";
   }
