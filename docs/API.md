@@ -47,6 +47,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | **T57 증분**(§15.1.2·§15.3.3) | ① **`inCallSmsTriggers`** — 이 시나리오의 통화 중 문자 **트리거만**(`smsId` + 몇 번째 사기범 턴 이후) 내려준다. **본문·인증번호·발신번호는 포함하지 않는다**(도착 시점에 `deliverInCallSms`가 서버에서 렌더 — 사전 유출 방지). 카탈로그가 없는 시나리오는 필드 부재. ② **`difficultyApplied`** — 이 통화 경로에 난이도 모디파이어가 실제로 주입됐는지. Gemini Live는 `liveConnectConstraints.systemInstruction`에 조립해 넣으므로 `true`. **ElevenLabs 경로는 프롬프트가 에이전트 쪽에 저장돼 주입 지점이 없어 기본 `false`**(`agentMap.ts:3-11` — 클라 오버라이드로 프롬프트를 넘기는 것은 ADR-0004 위반이라 금지). 클라는 `false`면 난이도 배지를 표시하지 않는다(근거 없는 표기·조용한 미적용 금지). 난이도별 에이전트가 `ELEVENLABS_AGENT_IDS`에 매핑돼 있으면 `true`로 반환(§15.3.3 확장 경로). |
 | 처리 | 서버가 시나리오에 맞는 프로바이더를 고른다(functions/src/realtime/provider.ts). **① ElevenLabs**(키+에이전트 매핑 있을 때): 본인 목소리 클론 가능(유료), `GET /v1/convai/conversation/get-signed-url`로 서명 URL 발급, 프롬프트는 에이전트 쪽 보관. **② Gemini Live**(키 있고 generic 시나리오일 때): 무료 티어 가능하지만 고정 프리셋 음성만, `authTokens.create`로 단기 토큰 발급하며 모델·시스템 프롬프트·도구를 `liveConnectConstraints`로 서버에서 고정(ADR-0004 — 프롬프트가 클라로 안 감, 클라가 setup 프레임을 바꿔치기 못함). 어느 쪽이든 클라가 받는 건 접속 자격증명뿐이다. |
 | **challenge 분기**(T37·§14.7/ADR-0006·A1) | `session.challengeId`가 있으면(2인 사용자2 체험 세션): `session.voiceId`(부재) 대신 `challenges/{challengeId}` admin read로 voiceId 해석 + **그 챌린지 `status∈{consented,in_progress}`+미만료 재검증**(§14.2 발급 게이트) 후 자격증명 발급. 소유권 검증(`session.uid===request.auth.uid`, 익명 uid)은 유지. challengeId 부재 세션은 기존 경로 무변경. **T38 QA 수정, ADR-0006 Addendum A2**: 응답의 `voiceId`는 challenge 세션이면 `provider==="elevenlabs"`일 때만 채워진다(ElevenLabs 프로토콜상 클라 개시 TTS override에 실제로 필요 — `RealtimeVoiceSession`이 그 경우에만 마운트) — mock/none(`isMock:true`) 폴백은 어차피 클라가 쓰지 않으므로 `voiceId:""`로 비워 불필요한 노출을 막는다. challenge 아닌 일반 세션은 무변경(본인 소유 voiceId 그대로 반환). |
+| **T79 증분**(§16.1.5) | **`verifyOffer?: { availableAfterScammerTurns: number }`** — 확인 시도 무력화(UF-011)의 **가용 게이트만** 내려준다. **창구명·번호·모델 지시는 포함하지 않는다**(오퍼 시점에 `deliverVerifyOffer`가 서버 카탈로그에서 렌더 — `inCallSmsTriggers`와 동일 원칙). **부착 조건 3개를 전부 만족할 때만 필드가 존재한다**: ① `VERIFY_INTERCEPT[scenarioId]` 보유 ② `session.difficultyLevel === "advanced"` ③ `difficultyApplied === true`. → **ElevenLabs 경로에는 구조적으로 붙지 않는다**(주입 지점 부재 + 난이도 미적용, §16.6 G23) → 클라에 컨트롤이 **존재하지 않는다**. 부착 지점은 `inCallSmsTriggers`의 `withSmsTriggers` 래퍼와 **같은 자리**(`functions/src/realtime/index.ts:95-97`)이며, `provider:"none"` 폴백 분기에도 **붙인다**(그 경로는 `difficultyApplied:true`이고 확인 무력화가 성립한다 — `index.ts:125-136`). |
 | Errors | 프로바이더 미설정·발급 실패는 **에러가 아니라** `provider:"none"`+`isMock:true`로 응답해 클라가 텍스트 폴백으로 강등한다(P-4 핵심 루프 비차단). `unauthenticated`/`permission-denied`/`failed-precondition`(세션 없음·비활성·challenge 만료/미동의)만 throw. |
 
 ### `createSession` — (Track B · T8 · UX-006 진입)
@@ -246,6 +247,44 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | **ADR-0004 경계(중요)** | 나가는 것은 **수법 라벨뿐**이다. 설명부·인용구(`extractTacticFlavor`가 뽑는 대사 예시)·`personaPrompt`·`guardrailPreamble`은 **어떤 경우에도 응답에 싣지 않는다**. 라벨 노출은 이미 리포트 `tacticsUsed`가 하는 것과 같은 등급의 데이터다(`analyzeConversation.ts:133`). |
 | 범위 한정 | 브리핑은 **세션 시작 전 화면에서만** 소비된다 — 대화 중 실시간 힌트·실시간 판정 파이프라인은 신설하지 않는다(D-6 유지, D-43). |
 | Errors | `invalid-argument`(없는 scenarioId). 실패 시 브리핑만 생략하고 난이도 선택·세션 생성은 계속된다(P-4 비차단). |
+
+---
+
+## Callable Functions — v1.12 확인 시도 무력화 (T79 · Architecture.md §16)
+> 신규 콜러블 2개. **신규 시크릿·신규 외부 의존성 0건**(통신·전화 관련 API 의존 0건 — AC-019). 두 콜러블 모두 `deliverInCallSms`와 **같은 형태**다: 응답에는 **모델 지시만** 실리고, 화면은 `sessions/{sid}/verifyIntercept` 구독으로만 그린다(단일 렌더 소스, DECISIONS #12).
+>
+> **⚠️ 이 두 함수가 하지 않는 것(리뷰 체크포인트):** 실제 발신·리다이렉트·통신 설정 변경(**그런 API 의존이 없다**) / 참가자가 입력한 번호 수신(**요청 스키마에 번호 필드가 없다**) / `messages` write(§15.6 G3·G25) / 모델 지시를 Firestore·리포트에 기록(AC-024).
+
+### `deliverVerifyOffer` — 확인 권유 도착(양 경로 공통) (T79 · UX-031 · §16.1.3)
+| Item | Value |
+|---|---|
+| Purpose | 사기범이 "직접 확인해 보시라"며 **모의 창구·모의 번호**를 안내한 사실을 서버 카탈로그에서 도착시키고, 캐릭터가 그것을 말하도록 하는 지시문을 반환한다. |
+| Auth | required. `session.uid === request.auth.uid` + `status:"active"`. |
+| Request | `{ sessionId: string, callMode: "realtime" \| "fallback", scammerTurns?: number }` — `scammerTurns`는 `callMode==="realtime"`일 때 **필수**(없으면 `invalid-argument`). **부재를 판별자로 오버로드하지 않는다**(§14.9.1) — 그래서 `callMode`를 명시로 받는다. |
+| Response | `{ offerId: string, announceInstruction: string }` |
+| 처리 | ① **재검증 5종(G24 — 하나라도 빠지면 위조 호출로 "일어나지 않은 확인 권유"가 리포트에 남는다)**: 세션 소유 · `status:"active"` · `hasVerifyIntercept(session.scenarioId)` · `normalizeDifficultyLevel(session.difficultyLevel)==="advanced"` · **해석된 프로바이더가 `elevenlabs`가 아님**. ② `sessions/{sid}/verifyIntercept/{offerId}` write(**멱등** — 이미 있으면 재기록 없이 같은 값 반환). 앵커는 서버 계산(`realtime=scammerTurns+1` / `fallback=서버가 센 scammer 문서 수`, `functions/src/verifyIntercept/buildDoc.ts` 단일 지점). ③ `announceInstruction` 반환 — **실시간**: 클라가 `GeminiVoiceSession.instructionTurn`으로 같은 Live 세션에 주입(선례 `OPENING_TRIGGER_TURN`). **폴백**: 클라는 쓰지 않고, 다음 `sendMessage` 턴이 미announce 오퍼를 읽어 `turnInstruction`으로 주입한 뒤 `announcedAt`을 마크한다. |
+| 렌더링 | 응답은 렌더 소스가 **아니다** — 창구명·번호는 `sessions/{sid}/verifyIntercept` 구독으로만 화면에 들어온다(사전 유출 방지). |
+| 안전 | 창구명·번호·재연결 라벨은 **전부 서버 카탈로그의 모의값**(AC-033/AC-005). `displayNumber`는 **표시 텍스트**이며 `url`/`tel`/발신 대상 필드가 **스키마에 없다**(AC-019 구조적 금지). LLM이 번호·기관명을 생성하지 않는다. |
+| Errors | `permission-denied`(타인 세션) · `failed-precondition`(세션 미활성 / 난이도 미달 / 주입 불가 프로바이더) · `invalid-argument`(카탈로그 없는 시나리오, realtime인데 `scammerTurns` 부재). 실패해도 **통화는 계속된다** — 클라는 컨트롤 자리에 인라인 오류+재시도만 표시(P-4, UF-011 Failure (b)). |
+
+### `deliverVerifyReconnect` — 모의 재연결(참가자의 확인 시도) (T79 · UX-031 · §16.1.3)
+| Item | Value |
+|---|---|
+| Purpose | 참가자가 UX-031에서 "확인 전화 걸기"를 누른 사실을 기록하고, **같은 세션 위에서** 상대 표면이 바뀌도록 하는 지시문을 반환한다. **새 세션을 만들지 않는다**(AC-007/AC-035). |
+| Auth | required. 세션 소유 + `status:"active"`. |
+| Request | `{ sessionId: string, offerId: string, callMode: "realtime" \| "fallback", scammerTurns?: number }` |
+| Response | `{ reconnectInstruction: string }` |
+| 처리 | ① 오퍼 문서 존재 확인(없으면 `failed-precondition` — 오퍼 없이 재연결이 성립하지 않는다) ② `placedAt`·`reconnectAnchorScammerTurn`·`reconnectedCallerLabel` 기록(**멱등** — `placedAt`이 이미 있으면 밀지 않는다) ③ `reconnectInstruction` 반환(주입 경로는 `deliverVerifyOffer`와 동일). |
+| **발신 없음(하드)** | 이 함수는 **어떤 통신 API도 호출하지 않는다.** 하는 일은 Firestore write 1건 + 문자열 반환뿐이며, 함수명의 "reconnect"는 **인앱 재현**을 뜻한다(PSTN·다이얼 인텐트·리다이렉트 경로 부재 — AC-019). |
+| 판정 연결 | `reconnectAnchorScammerTurn`이 리포트 생성 시 **판정 앵커**(`scammers[N]` = 재연결 대사의 turnIndex)로 해석되어, **그 뒤의 기존 `deceivedMoment`에만** `afterVerifyReconnect` 주석이 붙는다(ADR-0009/§16.3.3). **순간을 새로 만들지 않는다.** |
+| Errors | `failed-precondition`(오퍼 없음·세션 미활성) · `permission-denied`. 실패 시 재연결 없이 원래 통화로 복귀 + 1줄 고지(침묵 실패 금지, UF-011 Failure (c)) — 세션·리포트는 정상 진행. |
+
+### `generateReport` **증분** — 확인 무력화 스냅샷 + 순간 주석 (T79 · §16.3)
+| 항목 | 내용 |
+|---|---|
+| 추가 read | `sessions/{sid}/verifyIntercept` **1회**(`smsTimeline` 수집과 같은 지점 — `generateReportCore.ts:91` 옆). |
+| 추가 write | `reports/{rid}.verifyTimeline?`(표시 전용 스냅샷) + 해당 `deceivedMoments[]` 항목의 **주석·덮어쓰기**(`afterVerifyReconnect`/`tactic`/`tacticCategory`/`correctAction`). **최초 생성 시 1회**만(멱등 early-return 무변경 — AC-007). |
+| **무변경 보장** | `analyzeConversation` 시그니처·입력·짝짓기 루프 **0줄 diff**(§15.6 G3). 순간 **개수**·`turnIndex`·`timeLabel`·`wasDeceived` 무변경 → `updateDefenseGrade`·아카이브 항목 수·되감기 딥링크 인덱스 **전부 무영향**(AC-062/007/010/011/068). 확인 문서 0건이면 산출이 도입 전과 **완전히 동일**(회귀 테스트 필수). |
 
 ---
 
