@@ -121,3 +121,89 @@ test("GeminiLlmClient: mockTacticHints가 있어도 없어도 요청 본문이 �
 
   assert.deepEqual(bodyWithHints, bodyWithoutHints, "mockTacticHints 유무가 실 Gemini 요청 본문에 어떤 영향도 주면 안 된다");
 });
+
+// T87 라이브 검증(2026-07-26) — 실 LLM 호출 18건 중 12건이 LLM_TIMEOUT_MS(10초)를 넘겨 Mock으로
+// 강등됐고, 원인이 추론 토큰(출력의 4.6배)임을 실측으로 좁혔다(geminiClient.ts 상단 주석 근거).
+// 이 단언이 없으면 thinkingConfig가 조용히 빠져도 유닛 테스트는 전부 통과하고, 회귀는 오직
+// 라이브에서 "첫 마디가 가끔 이상하다"로만 드러난다 — 그게 원래 이 버그가 오래 안 잡힌 이유다.
+test("GeminiLlmClient: 모든 요청에 thinkingBudget=0을 실어 보낸다(AC-004 지연 회귀 방지)", async () => {
+  const capture = captureGenerateContentRequest("(dummy)");
+  try {
+    const client = new GeminiLlmClient("test-key");
+    // 오프닝 대사(messages: [])와 일반 턴 둘 다 확인한다 — 실측에서 강등이 가장 잦았던 쪽이
+    // 오프닝(14건 중 9건)이라 그 경로가 빠지면 수정의 의미가 없다.
+    await client.complete({ systemPrompt: "(system)", messages: [] });
+    await client.complete({ systemPrompt: "(system)", messages: [{ role: "user", content: "안녕" }] });
+
+    const bodies = capture.bodies() as { generationConfig?: { thinkingConfig?: { thinkingBudget?: number } } }[];
+    assert.equal(bodies.length, 2);
+    for (const [i, body] of bodies.entries()) {
+      assert.equal(
+        body.generationConfig?.thinkingConfig?.thinkingBudget,
+        0,
+        `요청 ${i}(${i === 0 ? "오프닝" : "일반 턴"})에 thinkingBudget=0이 실려야 한다`,
+      );
+    }
+  } finally {
+    capture.restore();
+  }
+});
+
+// reviewer Major #1(2026-07-26) — GEMINI_TEXT_MODEL이 `"-latest"` 부동 별칭이고 thinkingBudget은
+// 벤더 타입 정의가 폐기를 예고한 필드다(genai.d.ts:11227, :8810-8813). 별칭이 재매핑돼 400이 나면
+// completeWithFallback이 전부 Mock으로 강등해 **66%가 100%로 악화**된다. 그래서 거부당하면 추론
+// 설정 없이 한 번 재시도한다. `thinkingBudget:0`의 API 수용 여부 자체가 429로 미검증이므로, 이
+// 안전장치가 없으면 미검증 설정을 무방비로 넣는 셈이 된다.
+test("GeminiLlmClient: thinkingConfig가 거부되면 추론 설정 없이 1회 재시도한다(부동 별칭 재매핑 대비)", async () => {
+  const originalFetch = globalThis.fetch;
+  const bodies: { generationConfig?: { thinkingConfig?: unknown } }[] = [];
+  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+    const body = init?.body ? JSON.parse(init.body) : {};
+    bodies.push(body);
+    // 1차: thinkingConfig가 실려 있으면 모델이 거부하는 상황을 흉내낸다.
+    if (body?.generationConfig?.thinkingConfig) {
+      return new Response(
+        JSON.stringify({
+          error: { code: 400, status: "INVALID_ARGUMENT", message: "Unable to submit request because thinking_budget is not supported by this model." },
+        }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      );
+    }
+    return new Response(
+      JSON.stringify({ candidates: [{ content: { role: "model", parts: [{ text: "재시도 성공" }] } }] }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }) as unknown as typeof globalThis.fetch;
+
+  try {
+    const result = await new GeminiLlmClient("test-key").complete({ systemPrompt: "(system)", messages: [] });
+    assert.equal(result.text, "재시도 성공", "거부 후 재시도 결과가 반환돼야 한다(Mock 강등 아님)");
+    assert.equal(result.isMock, false, "재시도로 얻은 응답도 실 LLM이므로 isMock은 false여야 한다");
+    assert.equal(bodies.length, 2, "정확히 1회만 재시도해야 한다(무한 재시도 금지)");
+    assert.ok(bodies[0].generationConfig?.thinkingConfig, "1차 요청에는 thinkingConfig가 있어야 한다");
+    assert.equal(bodies[1].generationConfig?.thinkingConfig, undefined, "재시도 요청에는 thinkingConfig가 없어야 한다");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+// 위 재시도가 "아무 실패에나 재시도하는" 넓은 그물이 되면, 안전차단·인증오류까지 두 번씩 때려
+// 할당량만 태운다. 추론과 무관한 실패는 그대로 던져야 한다.
+test("GeminiLlmClient: 추론과 무관한 실패는 재시도하지 않고 그대로 던진다", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return new Response(
+      JSON.stringify({ error: { code: 429, status: "RESOURCE_EXHAUSTED", message: "You exceeded your current quota." } }),
+      { status: 429, headers: { "content-type": "application/json" } },
+    );
+  }) as unknown as typeof globalThis.fetch;
+
+  try {
+    await assert.rejects(() => new GeminiLlmClient("test-key").complete({ systemPrompt: "(system)", messages: [] }));
+    assert.equal(calls, 1, "할당량 초과 같은 무관한 실패에 재시도하면 안 된다");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
