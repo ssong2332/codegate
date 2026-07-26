@@ -543,26 +543,89 @@ test("[T86/역검증] `\\b`가 붙은 한글 패턴은 위 생존 검사에서 �
   assert.equal(livePattern.test(sample), true);
 });
 
-test("[T86/생존] 정본 소스에 한글이 닿는 `\\b` 패턴이 남아 있지 않다(정적 검사)", () => {
-  // 생존 검사는 "샘플을 잡는가"만 본다 — 샘플을 함께 약하게 쓰면 통과할 수 있다.
-  // 그래서 소스 텍스트에서 **한글 옆의 `\b`** 자체를 금지한다(두 겹).
+// 정본 소스에서 정규식 리터럴을 인식하는 **두 가지 서식**.
+//   ELEMENT — 배열 원소(`  /x/i,`) 및 변수 선언의 다음 줄로 넘어간 리터럴(`  /x/;`)
+//   DECL    — 한 줄짜리 단일 선언(`export const URL_PATTERN = /https?:\/\//i;`)
+// ⚠️ QA Minor 2가 지적한 그대로다: 최초 구현은 ELEMENT(콤마로 끝나는 줄)만 인식했고, 정본에는
+// 이미 `LONG_DIGIT_SEQUENCE`·`URL_PATTERN`·`PROHIBITIVE_CONTEXT`가 DECL/세미콜론 서식으로
+// 선언돼 있어 **그 줄들은 통째로 건너뛰어졌다.**
+const REGEX_ELEMENT_LINE = /^\s*\/(.+)\/([a-z]*)[,;]?\s*$/;
+const REGEX_DECL_LINE = /^\s*(?:export\s+)?const\s+\w+(?::\s*RegExp)?\s*=\s*\/(.+)\/([a-z]*);\s*$/;
+
+test("[T86/생존] 정본 소스에 한글이 닿는 `\\b` 패턴이 남아 있지 않다(정적 검사 — 서식 무관)", () => {
+  // **이 검사의 역할과 한계를 정확히 적는다(QA Minor 2).**
+  // 역할: 생존 검사(위 두 건)는 "등록된 양성 샘플을 잡는가"만 본다 — 샘플을 함께 약하게 쓰면
+  //       통과할 수 있다. 그래서 소스에서 **한글 옆의 `\b`** 자체를 금지하는 겹을 하나 더 둔다.
+  // 한계: 이 검사는 **소스 서식에 의존한다.** TS 소스에서 정규식 리터럴을 완전하게 렉싱하지
+  //       않기 때문이다(나눗셈 연산자·문자열·주석 안의 슬래시와 구분하려면 파서가 필요하다).
+  //       그래서 "모든 형식을 안다"고 주장하지 않고, **판정할 수 없는 `\b`를 만나면 통과시키지
+  //       않고 실패**시킨다(아래 `unparsed`). 즉 서식이 넓어지면 검사가 조용히 빠지는 것이
+  //       아니라 **시끄럽게 막힌다.**
+  // 최종 backstop: 이 검사가 아니라 위 `[T86/생존]` 두 건이다 — 그 둘은 런타임
+  //       `FORBIDDEN_RULES` 배열을 보므로 **선언 서식과 완전히 무관**하다. 어떤 서식으로 쓰든
+  //       규칙이 죽어 있으면 "자기 양성 샘플을 잡지 못한다"에서 걸린다.
   const source = fs.readFileSync(
     path.resolve(__dirname, "../../../src/scenarios/__tests__/harmlessnessPatterns.ts"),
     "utf8",
   );
+  // 주석은 제외한다 — 이 파일의 주석은 `\b` 함정을 설명하느라 `\b`를 인용한다.
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
   const offenders: string[] = [];
-  source.split(/\r?\n/).forEach((line, i) => {
-    const literal = /^\s*\/(.+)\/([a-z]*),\s*$/.exec(line);
-    if (literal === null) return;
-    const body = literal[1];
+  const unparsed: string[] = [];
+  code.split(/\r?\n/).forEach((line, i) => {
+    if (!line.includes("\\b")) return;
+    const literal = REGEX_ELEMENT_LINE.exec(line) ?? REGEX_DECL_LINE.exec(line);
+    if (literal === null) {
+      unparsed.push(`${i + 1}: ${line.trim()}`);
+      return;
+    }
     // `\b`가 한글 바로 앞이나 바로 뒤에 오는 경우만 잡는다(ASCII 전용 패턴의 `\b`는 정상이다).
-    if (/[가-힣][^\\]{0,2}\\b|\\b[^가-힣]{0,2}[가-힣]/.test(body)) {
-      offenders.push(`${i + 1}: /${body}/${literal[2]}`);
+    if (/[가-힣][^\\]{0,2}\\b|\\b[^가-힣]{0,2}[가-힣]/.test(literal[1])) {
+      offenders.push(`${i + 1}: /${literal[1]}/${literal[2]}`);
     }
   });
+
+  assert.deepEqual(
+    unparsed,
+    [],
+    "`\\b`가 있는데 이 검사가 **정규식 리터럴로 판정할 수 없는 서식**이다. 통과시키지 않는다 — " +
+      "인식 가능한 서식(배열 원소 / 한 줄 const 선언)으로 쓰거나 위 REGEX_*_LINE을 넓혀라:\n" +
+      unparsed.join("\n"),
+  );
   assert.deepEqual(
     offenders,
     [],
     "한글에 닿는 `\\b`는 ASCII 단어 경계라 매치되지 않는다(reviewer Major 1):\n" + offenders.join("\n"),
   );
+});
+
+test("[T86/생존] 위 정적 검사가 **단일 선언 서식**도 실제로 판정한다(QA Minor 2 회귀)", () => {
+  // QA가 든 예시를 그대로 고정한다: `export const SNEAKY = /\b교묘한\b/;`
+  // 최초 구현(콤마로 끝나는 줄만 인식)에서는 이 줄이 통째로 건너뛰어졌다.
+  const declLine = "export const SNEAKY = /\\b교묘한\\b/;";
+  const elementLine = "  /\\b교묘한\\b/,";
+  const continuationLine = "  /\\b교묘한\\b/;";
+  const koreanAdjacentB = /[가-힣][^\\]{0,2}\\b|\\b[^가-힣]{0,2}[가-힣]/;
+
+  for (const [label, line] of [
+    ["단일 선언", declLine],
+    ["배열 원소", elementLine],
+    ["선언 다음 줄", continuationLine],
+  ] as const) {
+    const literal = REGEX_ELEMENT_LINE.exec(line) ?? REGEX_DECL_LINE.exec(line);
+    assert.ok(literal, `${label} 서식을 인식하지 못한다: ${line}`);
+    assert.ok(koreanAdjacentB.test(literal[1]), `${label}: 한글 옆 \\b를 잡아야 한다`);
+  }
+
+  // 그리고 실제로 그 패턴이 죽어 있다는 사실도 함께 못박는다(왜 금지하는지의 근거).
+  assert.equal(/\b교묘한\b/.test("이건 교묘한 수법이다"), false);
+  assert.equal(/교묘한/.test("이건 교묘한 수법이다"), true);
+
+  // ⚠️ ASCII 전용 패턴의 `\b`는 정상이므로 오탐하면 안 된다(정본에 11개 있다).
+  for (const safe of ["  /\\bapp\\s*store\\b/i,", "  /\\.apk\\b/i,", "  /\\bmarket:\\/\\//i,"]) {
+    const literal = REGEX_ELEMENT_LINE.exec(safe) ?? REGEX_DECL_LINE.exec(safe);
+    assert.ok(literal, safe);
+    assert.equal(koreanAdjacentB.test(literal[1]), false, `ASCII 전용 \\b를 오탐했다: ${safe}`);
+  }
 });

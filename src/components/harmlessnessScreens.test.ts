@@ -28,10 +28,15 @@ function codeOnly(source: string): string {
 function canonicalArrayBlock(constName: string): string {
   const start = canonicalSource.indexOf(`export const ${constName}`);
   assert.ok(start > 0, `${CANONICAL_PATH}에 ${constName}이 없다 — 정본이 옮겨졌는지 확인하라`);
-  const open = canonicalSource.indexOf("[", start);
+  // ⚠️ **대입 `=` 뒤의 `[`를 찾아야 한다.** 선언이 `: readonly RegExp[] = [` 형태라 단순히
+  // 첫 `[`를 잡으면 **타입 표기 `RegExp[]`의 대괄호**에 걸려 블록이 `] = [` 부터 시작한다.
+  // (문자열 목록은 블록 전체를 정규식으로 훑어 티가 안 났고, 정규식 목록에서 파싱 못 한 줄을
+  //  실패로 바꾸자 그제서야 드러났다 — "조용히 건너뛰기"가 왜 위험한지의 실례다.)
+  const assign = canonicalSource.indexOf("=", start);
+  const open = canonicalSource.indexOf("[", assign);
   const close = canonicalSource.indexOf("];", open);
-  assert.ok(open > 0 && close > open, `${constName} 배열 리터럴을 파싱하지 못했다`);
-  return codeOnly(canonicalSource.slice(open, close));
+  assert.ok(assign > 0 && open > assign && close > open, `${constName} 배열 리터럴을 파싱하지 못했다`);
+  return codeOnly(canonicalSource.slice(open + 1, close));
 }
 
 /** `[ "a", "b" ]` 형태의 문자열 리터럴 목록. */
@@ -51,8 +56,16 @@ function canonicalStringList(constName: string): string[] {
 function canonicalPatternList(constName: string): RegExp[] {
   const patterns: RegExp[] = [];
   for (const line of canonicalArrayBlock(constName).split(/\r?\n/)) {
+    // ⚠️ **파싱 못 한 줄을 조용히 건너뛰지 않는다**(QA Minor 2와 같은 부류의 결함). 건너뛰면
+    // 정본에 규칙이 있는데도 클라 화면 스캔만 좁아지고, 그 사실이 어디에도 드러나지 않는다.
+    // 배열 블록 안의 내용 있는 줄은 **전부** 정규식 리터럴이어야 한다(주석은 이미 제거됐다).
+    if (line.trim() === "") continue;
     const m = /^\s*\/(.+)\/([a-z]*),\s*$/.exec(line);
-    if (m === null) continue;
+    assert.ok(
+      m,
+      `${constName}: 정규식 리터럴로 파싱할 수 없는 줄이 있다 — 건너뛰면 클라 스캔이 ` +
+        `조용히 좁아진다. 파서를 넓히거나 한 줄 한 원소 서식을 지켜라: ${line.trim()}`,
+    );
     patterns.push(new RegExp(m[1], m[2]));
   }
   return patterns;
