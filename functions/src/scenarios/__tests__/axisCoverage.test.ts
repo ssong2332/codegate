@@ -168,19 +168,51 @@ test("데이터 순회로 계산하면 E4가 사라진다 — 그래서 도메�
   assert.ok(findCoverageRow(computeAxisCoverage(), "E4_in_person_cash_demand"));
 });
 
-// ⚠️ **T95(2026-07-26) 갱신** — §15.10.7의 사전 계산값은 7개(A3·A4·D3·D4·E3·E4·E5)였고, T84가
-// 3단계 결합(`messenger-subsidy-smishing-sms`)에 A3·E3를 태깅해 5개로 내렸다. 이번엔 **T95가
-// 확인 무력화 전용 시나리오(`bank-security-verify-scam`)를 신설해 D3를 채웠다** — axisCoverage.ts의
-// 규약("공백을 채우면 이 테스트가 먼저 깨진다 — 해당 행 삭제가 해소 기록")에 따라 기대값을 4개로
-// 내린다. 남은 D4는 T85(MVP #31) 몫이고 A4·E4·E5는 잔여 공백이다.
-test("0건 축 값은 정확히 4개(A4·D4·E4·E5)다 — T95가 D3를 해소(T84의 5개에서 갱신)", () => {
+// ⚠️ **T85(2026-07-26) 갱신** — §15.10.7의 사전 계산값은 7개(A3·A4·D3·D4·E3·E4·E5)였고, T84가
+// 3단계 결합(`messenger-subsidy-smishing-sms`)에 A3·E3를 태깅해 5개로, T95가 확인 무력화 전용
+// 시나리오(`bank-security-verify-scam`)로 D3를 채워 4개로 내렸다. 이번엔 **T85가
+// `loan-refinance-scam`에 절차·서류 정당화를 저작해 D4를 채웠다**(§17.9 — PRD 근거 #5 지목) —
+// axisCoverage.ts의 규약("공백을 채우면 이 테스트가 먼저 깨진다 — 해당 행 삭제가 해소 기록")에
+// 따라 기대값을 3개로 내린다. 남은 A4·E4·E5는 잔여 공백이며 AC-076 필수 4값(A3·D3·D4·E3)은 전부 찼다.
+test("0건 축 값은 정확히 3개(A4·E4·E5)다 — T85가 D4를 해소(T95의 4개에서 갱신)", () => {
   const coverage = computeAxisCoverage();
   assert.deepEqual([...coverage.zeroCountValues].sort(), [
     "A4_account_takeover",
-    "D4_procedural_legitimacy",
     "E4_in_person_cash_demand",
     "E5_giftcard_crypto_demand",
   ]);
+});
+
+// ── T85(MVP #31) D4 공백 해소 — AC-076 필수 4값의 마지막 하나 ────────────────
+//
+// ⚠️ **왜 축 표가 아니라 콘텐츠로 채웠는가**(§17.9): 이 설계의 D4는 **난이도 레버**(고급 프롬프트
+// 오버레이, `roleplay/l3Depth.ts`)이기도 하지만, `SCENARIO_AXES`는 *중급 기준선* 좌표표라 난이도
+// 오버레이를 써 넣지 않는다. 레버만 만들고 끝냈다면 D4 count는 **0인 채로 남아** AC-076이 계속
+// 미충족이었을 것이다 — 그래서 콘텐츠(weakenedTactics)로도 1종을 채웠다.
+test("[AC-076] T85가 채운 D4는 loan-refinance-scam에서 0건이 아니다(PRD 근거 #5가 지목한 시나리오)", () => {
+  const coverage = computeAxisCoverage();
+  const row = findCoverageRow(coverage, "D4_procedural_legitimacy");
+  assert.ok(row, "D4 행이 커버리지에 존재해야 한다");
+  assert.ok(row.count >= 1, "D4: AC-076 필수 4값 중 하나 — 0건이면 미충족이다");
+  assert.deepEqual(row.scenarioIds, ["loan-refinance-scam"]);
+  assert.equal(
+    row.declaredGapReason,
+    undefined,
+    "채워진 값에 공백 사유가 남아 있으면 안 된다(DECLARED_COVERAGE_GAPS의 D4 행 삭제가 해소 기록)",
+  );
+});
+
+test("[AC-076] 필수 4값(A3·D3·D4·E3)이 전부 0건이 아니다 — 재구성의 커버리지 목표 달성", () => {
+  const coverage = computeAxisCoverage();
+  for (const value of [
+    "A3_post_install_contact",
+    "D3_verification_hijack",
+    "D4_procedural_legitimacy",
+    "E3_install_remote_demand",
+  ] as const) {
+    const row = findCoverageRow(coverage, value);
+    assert.ok(row && row.count >= 1, `${value}: AC-076 필수 4값이 0건이면 미충족이다`);
+  }
 });
 
 test("[AC-076] T84가 채운 A3·E3는 각각 최소 1개 시나리오에서 0건이 아니다", () => {

@@ -183,12 +183,22 @@ export const SCENARIO_AXES: Record<string, ScenarioAxes> = {
     demand: ["E1_transfer_demand", "E2_credential_demand"],
   },
   // A1 전화 수신 · B2 "○○캐피탈 상담원"(callerLabel) · C2 "이익 유혹" C3 "마감 압박"
-  // · D1 "오늘까지만 신청 가능"(line-2, 시간으로 이탈을 막는다) · E1 "선상환 송금 요구"
+  // · D1 "오늘까지만 신청 가능"(line-2, 시간으로 이탈을 막는다) **D4 "절차·서류 정당화"**(T85)
+  // · E1 "선상환 송금 요구"
+  //
+  // ⚠️ **D4는 T85가 채운 콘텐츠 태깅이다**(Architecture.md §17.9, AC-076). 근거는 이 시나리오의
+  // `weakenedTactics`에 추가된 `"절차·서류 정당화 — '접수번호 하나 남겨드릴게요' …"` 항목이며,
+  // PRD 근거 데이터 #5가 이 시나리오를 D4의 원형("실제 상담처럼 서류까지 갖춰")으로 이름 지어
+  // 지목했다. `DECLARED_COVERAGE_GAPS`의 D4 행 삭제가 그 해소 기록이다(axisCoverage.ts 규약).
+  // ⚠️ **난이도 레버로서의 D4와는 다른 사안이다**(§17.9): 고급 프롬프트가 얹는 D4 오버레이는
+  // `roleplay/l3Depth.ts`가 담당하며 **이 표에 써 넣지 않는다** — 이 표는 *중급 기준선* 좌표표다.
+  // ⚠️ **다른 행의 D 좌표는 이 태스크에서 건드리지 않았다**(§17.10 계약 13항 — 9/13행 언더카운트
+  // 정정은 G60으로 별건 등재돼 있고, T85 diff에 섞으면 AC-074 증거가 오염된다).
   [LOAN_SCAM_SCENARIO_ID]: {
     access: ["A1_cold_call"],
     impersonation: ["B2_financial"],
     pressure: ["C2_benefit_gain", "C3_urgency_time"],
-    exitBlock: ["D1_time_pressure"],
+    exitBlock: ["D1_time_pressure", "D4_procedural_legitimacy"],
     demand: ["E1_transfer_demand"],
   },
   // A1 전화 수신 · B1 "국세청 환급 담당"(line-1) · C2 "공짜 돈 유혹" C6 "권위 포장"

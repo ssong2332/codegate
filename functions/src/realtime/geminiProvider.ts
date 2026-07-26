@@ -12,6 +12,7 @@
 //   2. 제약 없이 발급한 토큰은 클라이언트가 setup 프레임을 임의로 주입해 모델·프롬프트·도구를
 //      바꿔치기할 수 있다고 보고된 바 있다. 도구는 빈 배열로 명시적으로 잠근다.
 import { GoogleGenAI, Modality, EndSensitivity } from "@google/genai";
+import { isL3Procedural } from "../roleplay/l3Depth";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { hasInCallSms } from "../scenarios/inCallSms";
@@ -70,11 +71,15 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // 동기화 블록이 함께 들어간다. 이걸 빼면 게이트 이전에 모델이 먼저 창구를 불러 **대사만 나오고
     // 컨트롤이 없는 창**이 생긴다(§16.1.4). 시스템 프롬프트는 토큰에 고정되므로(ADR-0004) 통화
     // 내내 유효하다.
+    // T85(§17.3 호출부 3곳 중 "Gemini Live 토큰", G63) — 고급에서 D4(절차·서류 정당화) 블록을
+    // 얹을 시나리오인지. 이걸 빼면 **통화 경로에서만** 고급이 조용히 축소된다(기본값이 축소형이라
+    // 에러가 나지 않는다). 값은 난이도와 무관하게 항상 넘기고, 고급이 아닐 때는 조립 함수가 무시한다.
     const systemPrompt = buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: input.difficultyLevel,
       inCallSmsEnabled: hasInCallSms(input.scenarioId),
       verifyInterceptEnabled:
         hasVerifyIntercept(input.scenarioId) && input.difficultyLevel === "advanced",
+      l3Procedural: isL3Procedural(input.scenarioId),
     });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });

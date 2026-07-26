@@ -28,6 +28,7 @@ import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "../session/channelTransition";
 import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
 import { extractEscalationSignal } from "./escalationSignal";
+import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
@@ -253,10 +254,14 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     }
 
     const completion = await completeWithFallback(getLlmClient(), {
+      // T85(§17.3 호출부 3곳 중 "텍스트 턴", G63) — 고급에서 D4(절차·서류 정당화) 블록을 얹을
+      // 시나리오인지. 세 호출부가 같은 판정 함수를 쓰지 않으면 "텍스트 턴은 고급인데 오프닝만
+      // 축소" 같은 비대칭이 **에러 없이** 생긴다(기본값이 축소형이다).
       systemPrompt: buildSystemPrompt(scenarioPrompt, {
         difficultyLevel,
         inCallSmsEnabled: hasInCallSms(session.scenarioId),
         verifyInterceptEnabled: verifyEnabled,
+        l3Procedural: isL3Procedural(session.scenarioId),
         ...(turnInstruction ? { turnInstruction } : {}),
       }),
       messages: llmHistory,
