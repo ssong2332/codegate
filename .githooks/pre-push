@@ -1,0 +1,34 @@
+#!/bin/sh
+# T100 — main으로의 직접 push 거부(pre-commit의 2차 방어).
+#
+# pre-commit만으로는 충분하지 않다: 이번 세션의 실제 사고는 "다른 에이전트가 공유 저장소를
+# main으로 체크아웃한 상태에서 커밋이 떨어진" 경우였고, 그런 커밋이 이미 만들어진 뒤라면
+# push 단계가 마지막 방어선이다. 또 `git branch -f main <커밋>` 같은 복구 조작 후 잘못
+# push하는 경로도 여기서 걸린다.
+#
+# stdin 형식(githooks(5)): <local ref> <local sha> <remote ref> <remote sha>
+#
+# ⚠️ 한계: `--no-verify`로 우회된다. 우회 불가능한 강제는 GitHub 브랜치 보호 규칙뿐이다.
+
+protected_refs="refs/heads/main refs/heads/master"
+zero="0000000000000000000000000000000000000000"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+	[ -z "$remote_ref" ] && continue
+
+	for protected in $protected_refs; do
+		if [ "$remote_ref" = "$protected" ]; then
+			# 브랜치 삭제(local_sha가 0)도 막는다.
+			if [ "$local_sha" = "$zero" ]; then
+				printf '\n\033[31m✖ %s 삭제는 허용되지 않습니다.\033[0m\n\n' "$remote_ref" >&2
+				exit 1
+			fi
+			printf '\n\033[31m✖ %s 로 직접 push할 수 없습니다.\033[0m\n' "$remote_ref" >&2
+			printf '\n  docs/GitWorkflow.md: 모든 변경은 브랜치 → PR → 병합을 거칩니다.\n' >&2
+			printf '  병합은 PR에서 하십시오 (gh pr create → gh pr merge).\n\n' >&2
+			exit 1
+		fi
+	done
+done
+
+exit 0
