@@ -2,8 +2,10 @@
 
 Owner: architect (see AGENTS.md). Others read-only.
 Major decisions are logged in DECISIONS.md; details in adr/.
-Based on PRD Version: v1.6 · Based on UX Version: 1.12 · Last Updated: 2026-07-27
+Based on PRD Version: v1.7.1 · Based on UX Version: 1.13 · Last Updated: 2026-07-27
 
+> **갱신 고지(2026-07-27, OQ-U26·OQ-U27 판정 — 상황별 링크 랜딩 콘텐츠 / 통화 필 자막 연속성):** 기준을 **PRD v1.6→v1.7.1 · UX 1.12→1.13**으로 맞춘다(직전까지 v1.6/1.12라 **버전 갭 2건 존재** — 리포트에 명시). PRD v1.7·v1.7.1은 둘 다 *"AC 신설·변경 0건, 스코프 변경 0건"* 정정 릴리스이고(PRD.md:10,15), UX v1.13은 기존 UX-001~031·UF-001~012·D-1~D-54를 **한 건도 삭제·재번호하지 않았다**(UX.md:16) — 재검증 결과 **§0~§18은 한 줄도 무효화되지 않았고 Deprecated 이관·Superseded 0건**이다. 이번 패스의 범위는 **신규 §19**(게이트 정밀화 판정 · 콘텐츠 소유 위치 · 통화 경로 배선 · 자막 연속성) · **§19.8 갭 G75~G81** · **DECISIONS #47·#48** · **ADR-0012** · Database.md(`inCallSms.landingKind?` 1행)이며, **API.md는 무변경**(신규 콜러블·시그니처 변경 0). 기존 §0~§18·ADR-0001~0011은 **전부 유효**하고 **한 줄도 수정하지 않았다** — 단 아래 §15.3.3 정정 1건은 예외이며 그 사유를 그 자리에 적었다(docs/UpdateRequests.md #5 resolve). ⚠️ **§15.9.7 G53·G55와 `mockScreens.test.ts`의 `channel==="messenger"` 단언은 삭제되지 않는다 — 키만 정밀화되고, 정밀화 이전에 신규 게이트 G-A~G-E가 먼저 들어간다**(§19.2, 순서 강제 G75). ⚠️ **절 번호 고지**: §18까지 사용 중이라 **§19**로 배정했다.
+>
 > **갱신 고지(2026-07-27, T92 architect 선행 판단 — 숨은 전제 의존 시나리오 6종 보강 / "무조건 요구" 가드의 형태):** **버전 갭 없음** — 헤더가 이미 **PRD v1.6 · UX 1.12**이고 현재 `docs/PRD.md`는 v1.6(2026-07-25), `docs/UX.md`는 1.12(Based on PRD v1.6)라 세 문서가 같은 기준선에 있다(대조 실측). 이번 패스의 범위는 **신규 §18**(스키마 선언 필드 기각 판정 · 3겹 가드 · 전제 분류표 · implementer 계약) · **§18.7 갭 G68~G74** · **DECISIONS #46**이며, **Database.md·API.md·ADR은 무변경**이다(신규 컬렉션·필드·콜러블 0 — §18.1 판정의 직접 귀결). 기존 **§0~§17·ADR-0001~0011은 전부 유효**하고 **한 줄도 수정하지 않았다**. ⚠️ **T91 reviewer 제안을 기각한다** — *"가드를 스키마 선언 필드로 올린다"* 는 **채택하지 않는다**(근거 §18.1: 검증력 증가 0 · Firestore 계약/재시딩 비용 · 죽은 필드 또는 드리프트 원천). 대신 선언을 **모델이 실제로 읽는 `weakenedTactics` 문구 안**에 두고 그 존재·모순을 기계로 고정한다. ⚠️ **절 번호 고지**: §17까지 사용 중이라 **§18**로 배정했다.
 >
 > **갱신 고지(2026-07-26, T81 아키텍트 게이트 — 난이도 4레버 프롬프트 조립 재설계 / AC-074·AC-075):** **버전 갭 없음** — 헤더가 이미 **PRD v1.6 · UX 1.12**이고 이 절은 그 기준 위에서 작성됐다(직전 T78/T79 패스가 맞춰 놓은 상태 그대로). 이번 패스의 범위는 **신규 §17**(4레버 조립 모델 · 세 난이도 사전 정의값 · L3 깊이 모드 선언표 · 폴백 확정) · **§17.11 갭 G60~G67** · **DECISIONS #43~#45** · **ADR-0011**이며, **Database.md·API.md는 무변경**(신규 컬렉션·필드·콜러블 0 — §17.10 계약 12번). 기존 **§0~§16·ADR-0001~0010은 전부 유효**하고 **한 줄도 수정하지 않았다**. ⚠️ **단, §15.10.8의 인계 1건을 명시적으로 뒤집는다** — *"`SCENARIO_AXES[scenarioId].exitBlock`이 L3의 입력이다"* 는 **채택하지 않는다**(근거 §17.1, DECISIONS #43). 이는 §15.10.8이 *"어느 옵션이든 T81이 확정하고 근거를 남길 것 — 이 절은 권고이지 확정이 아니다"* 로 T81에 위임한 범위 안의 결정이다. ⚠️ **절 번호 고지**: §15.7·§15.9·§15.10·§16이 사용 중이라 **§17**로 배정했다.
@@ -1009,7 +1011,8 @@ SmsTimelineEvent = { event: "sms_received" | "sms_opened" | "sms_otp_shown" | "s
 
 - **⚠️ ElevenLabs 실시간 경로(= clone 시나리오 = 2인 clone 챌린지)에는 프롬프트 주입 지점이 없다.** 프롬프트가 **에이전트 쪽에 저장**돼 있고 클라 오버라이드로 프롬프트를 넘기는 것은 ADR-0004 위반이라 금지돼 있다(`functions/src/realtime/agentMap.ts:3-11`, `realtime/types.ts:15-19`). 따라서:
   - **v1 기본:** 이 경로에서 난이도는 **적용되지 않는다**. 서버는 `createRealtimeCall` 응답에 **`difficultyApplied: boolean`** 을 실어 이 사실을 명시한다 — 클라는 적용되지 않은 난이도를 배지로 **표기하지 않는다**(근거 없는 표기 금지. 조용한 미적용 금지).
-  - **확장 경로(코드 변경 없이 설정만):** `ELEVENLABS_AGENT_IDS`의 항목 형식을 `scenarioId@difficultyLevel:agentId`까지 허용하도록 `parseAgentMap`을 확장하고, 난이도별 에이전트가 매핑돼 있으면 그것을, 없으면 기존 기본 에이전트를 쓰며 `difficultyApplied`를 그에 맞춰 반환한다(프롬프트는 여전히 에이전트 쪽 — ADR-0004 무변경).
+  - **확장 경로(⚠️ 코드 변경이 필요하다 — 2026-07-27 정정):** `ELEVENLABS_AGENT_IDS`의 항목 형식을 `scenarioId@difficultyLevel:agentId`까지 허용하도록 `parseAgentMap`을 확장하고, 난이도별 에이전트가 매핑돼 있으면 그것을, 없으면 기존 기본 에이전트를 쓰며 `difficultyApplied`를 그에 맞춰 반환한다(프롬프트는 여전히 에이전트 쪽 — ADR-0004 무변경).
+    > **정정 근거(docs/UpdateRequests.md #5 — 원문은 이 경로를 "코드 변경 없이 설정만"으로 서술했다):** 실측상 **설정만으로는 불가능하다.** `functions/src/realtime/agentMap.ts:20-34`의 `parseAgentMap`은 `entry.indexOf(":")` 한 번으로 `scenarioId:agentId`만 파싱하며 `@`를 인식하지 않는다(형식 주석 :13-14도 `scenarioId:agentId`만 규정). 실제 지원에는 **파서 확장 + `functions/src/realtime/provider.ts`의 선택 로직 + `difficultyApplied` 반환값 결정**이 전부 필요하다. 착수 규모를 오판하지 않도록 문면을 정정한다 — **설계 판단 변경이 아니라 사실관계 정정**이며, 위 v1 기본(난이도 미적용 + `difficultyApplied:false` 명시)은 무변경이다.
 
 #### 15.3.4 (d) 초급 사전 브리핑 콘텐츠 — `weakenedTactics`의 **라벨만** 파생, 서버 콜러블로 노출
 **결정: 신규 콘텐츠를 저작하지 않고 `weakenedTactics`에서 `extractTacticLabel`로 라벨만 뽑아 제공한다. 설명부·인용구(flavor)는 어떤 경우에도 클라로 내보내지 않는다.**
@@ -2438,3 +2441,245 @@ PRD 난이도 표는 중급을 *"D1·D2·D5"* 로 적었다. **이를 강제하�
 | **OQ-A16** | **나머지 8종에 대한 전수 적용 시점.** (A)(B) 게이트는 14종 전체에 걸리므로, 8종 중 표 2 #3에 걸리는 시나리오가 나오면 T92 범위를 넘는다. 그 경우 **T92는 6종만 고치고 나머지는 별건 등재**한다(범위 확대 금지) | planner → architect |
 
 **⚠️ planner 정정 요청(architect는 `docs/Tasks.md`를 수정할 수 없다 — AGENTS.md:61):** T92 행의 **완료 판정 필수 증거가 "4종 각각에 부인 대응 경로가 있을 것"** 으로 남아 있으나, 같은 행의 범위는 **QA 실측으로 6종으로 정정**돼 있다. 부분 정정이 남은 상태이며, 이대로면 **6종을 고쳐도 완료 판정 기준은 4종만 요구**해 reviewer/QA가 2종 누락을 통과시킬 수 있다. `4종 → 6종`으로 정정 요청한다.
+
+## 19. 상황별 링크 랜딩 콘텐츠 + 통화 필 자막 연속성 (UX v1.13 D-55~D-58 · OQ-U26 · OQ-U27)
+
+> **소관 UX/AC 매핑:** UX-023(v1.13 콘텐츠 축) · UX-027(v1.13 주/부 반전) · UF-006 · UF-008 · UF-012 / D-55·D-56·D-57·D-58 · P-27·P-28 / 재사용 AC-045·AC-059·AC-060·AC-061·AC-072·AC-022·AC-006·AC-024·AC-032/033.
+> **절 번호 고지:** §18까지 사용 중이라 **§19**로 배정했다. 갭 번호는 **G75~G81**(G1~G74 사용 중).
+> **버전 갭 고지(정직하게):** 이 패스 직전 헤더는 **PRD v1.6 · UX 1.12**였고 입력은 **PRD v1.7.1 · UX 1.13**이었다 — **PRD 1건(v1.7 정정 + v1.7.1 정정)·UX 1건 뒤처져 있었다.** 재검증 결과 **§0~§18은 한 줄도 무효화되지 않았다**: PRD v1.7/v1.7.1은 둘 다 *"AC 신설·변경 0건, 스코프 변경 0건"* 정정 릴리스이고(PRD.md:10,15), UX v1.13은 기존 UX-001~031·UF-001~012·D-1~D-54를 **한 건도 삭제·재번호하지 않았다**(UX.md:16). 헤더를 **v1.7.1 / 1.13**으로 전진시켰다. **Deprecated 이관 0건 · Superseded 0건.**
+> **이 절이 확정하지 않는 것:** 랜딩 4종의 **정본 문자열**(콘텐츠 저작 — 아래 §19.3 표는 스키마와 제약이고 문안이 아니다) / AC 신설(**OQ-U28은 planner 소관**, 이 절은 권고만 남긴다) / 자동 이동 여부(**R-9는 사용자 판단**, D-56 현행 유지를 전제로 설계했다).
+
+### 19.0 설계 요지 (다른 판단보다 우선 — 금지 먼저)
+1. **⛔ 게이트를 삭제하지 않는다.** G53·G55·`channel==="messenger"` 단언 중 **어느 것도 지우지 않는다.** 셋 다 **키를 바꿔 정밀화**할 뿐이고, 정밀화의 대가로 **신규 게이트 2건(G-A/G-B, §19.5)을 먼저 넣는다.** 순서가 반대이면(먼저 풀고 나중에 조인다) 그 사이에 정확히 원래 막으려던 사고가 열린다.
+2. **⛔ 신규 카탈로그 파일을 만들지 않는다.** 콘텐츠는 **`functions/src/scenarios/mockScreens.ts`의 `MockScreenItem` 필드 증분**으로 들어간다. 별도 콘텐츠 카탈로그를 새 파일로 만들면 T86 무해화 게이트의 `collectAllSurfaces()`(`harmlessnessGate.test.ts:126-174`)가 **그 도메인을 순회하지 않아** 실존 기관명 검사를 통째로 건너뛴다 — 환급·통관 랜딩이 정확히 그 위험군이다(§19.3 판정 근거 ③).
+3. **⛔ 클라가 `landingId`로 kind를 정하지 않는다**(§15.9.1 R3 불변). 클라가 `landingId`로 정하는 것은 **같은 kind 안의 문구**뿐이며, kind 분기는 **서버가 준 `landingKind`로 먼저 끝난다**(신규 규칙 **R8**, §19.4).
+4. **⛔ `app-install` 방향 폴백 금지**(§15.9.1 R5 불변). 콘텐츠 미스는 **현행 범용 credential-form 화면**으로만 떨어진다.
+5. **신규 컴포넌트 파일 0건 · 신규 라우트 0건 · 신규 콜러블 0건 · 신규 컬렉션 0건 · 신규 세션/리포트 필드 0건.** 증분은 (i) `MockScreenItem` 옵셔널 필드, (ii) `InCallSmsDoc.landingKind?`, (iii) React prop 3개, (iv) 페이지 지역 state 1개뿐이다.
+6. **OQ-U27은 표현 계층 전용이다.** 서버 변경 0건 · 신규 구독 0건 · 실시간 세션 생명주기 변경 0건(§19.6 AC-059 증명).
+
+### 19.1 ⭐ OQ-U26 (a) 판정 — 게이트 3건의 원문 사유와 적용 여부
+
+**판정: G55·`channel==="messenger"` 단언의 명시 사유는 `credential-form` 통화 경로 항목에 적용되지 않는다. 단 ux-design이 센 "깨지는 테스트 2건"은 실측상 부족하다 — 실제로는 3개 테스트 4개 단언이 깨진다(G53과 G55의 VERIFY_INTERCEPT 절반을 UX가 놓쳤다).**
+
+#### (1) 게이트가 왜 세워졌는가 — 원문 근거 (추정 아님, 전부 인용)
+
+| 게이트 | 위치 | **원문 사유(인용)** | 사유의 진짜 대상 |
+|---|---|---|---|
+| **G53** | `mockScreens.test.ts:120-134` / §15.9.7 G53(본 문서 1330행) | *"`extractLinkMarker`가 기본 라벨(**"확인하기"**)로 떨어지면 설치 유도 링크가 무의미한 라벨로 뜬다"* / *"`MOCK_SCREENS`의 landingId가 `LINK_LABELS`에 없으면 칩 라벨이 '확인하기' 기본값으로 뜬다"* | **`extractLinkMarker`가 칩을 그리는 랜딩** — 즉 프롬프트가 `[[LINK:id]]`로 내보내는 것 |
+| **G55** | `mockScreens.test.ts:136-152` / §15.9.7 G55(1332행) / §15.9.3(1211행) | *"`turnInstruction` 슬롯은 문자열 1개뿐이라 같은 시나리오에서 두 지시가 due이면 하나가 밀린다. 우선순위 규칙(`pickFallbackTurnInstruction`)이 있지만, **현행 콘텐츠에서는 애초에 경합하지 않는다**는 사실 자체를 여기서 고정한다"* | **`turnInstruction`을 만드는 항목** — 현행 코드에서 그것은 `kind==="app-install"` 하나뿐이다 |
+| **`channel==="messenger"`** | `mockScreens.test.ts:174-179` | 단언 메시지 원문: *"모의 설치는 메신저 단계에서 일어난다(UF-012 Step 2)"*. 상위 규칙은 §15.9.1 **R6**(1173행): *"통화 중 문자(`InCallSmsDoc.fakeLandingId`)를 통해 **`app-install` kind가 열리는 경로**는 이번 범위 밖이다 … 두면 통화 중 응낙의 앵커 규칙(§15.9.5)이 실시간 경로의 합성 타임스탬프 문제(§15.6 G15/G21)와 얽힌다"* | **`app-install`이 통화 경로로 열리는 것** — 채널 자체가 아니다 |
+
+> **세 사유가 전부 `app-install`(또는 `[[LINK:]]` 렌더 경로)을 가리킨다.** 어느 사유도 *"통화 채널 시나리오는 모의 화면을 가질 수 없다"* 를 말하지 않는다. 채널·scenarioId 수준의 단언은 그 사유를 **가장 거칠게 근사한 것**이고, T80이 §15.9.3에서 *"현행 콘텐츠에서는"* 이라고 스스로 조건을 달아 둔 자리다.
+
+#### (2) 사유가 `credential-form` 통화 경로 항목에 적용되는가 — **코드로 판정**
+
+| # | 주장 | 실측 근거(file:line) | 결과 |
+|---|---|---|---|
+| ① | `credential-form` 항목은 `turnInstruction`을 **만들 수 없다** — 주입 블록 자체가 `app-install` 유무로 게이팅된다 | `roleplay/index.ts:213` `if (hasAppInstallMockScreen(session.scenarioId))` → `mockScreens.ts:117-124` `listAppInstallMockScreens(...).filter(item => item.kind === "app-install")` | **G55 사유 미적용** |
+| ② | 설령 블록에 들어와도 지시는 `consentedAt` 있는 문서에서만 나오고, `consentedAt`은 `app-install`에만 세팅된다 | `mockScreens/index.ts:74-76` `if (event === "consented" && item.kind !== "app-install") throw invalid-argument` | **독립 2차 방어** |
+| ③ | 경합이 실제로 나더라도 **규칙은 이미 코드로 구현돼 있다** — 유실이 아니라 이월이다 | `verifyIntercept/fallbackTurn.ts:52-65` — `install_consent`가 **최하위**(`:63`), 문자 announce가 `:61`에서 이김 | G55는 **안전 불변식이 아니라 사실 고정용 트립와이어** |
+| ④ | R6의 앵커 위험은 **응낙 승격**의 문제다. `credential-form`은 승격 경로가 없다 | §15.9.5 e-1 표(1234-1238행): 승격은 `consentedAt`일 때만. 본 설계는 통화 경로에서 `recordMockScreenEvent`를 **호출하지 않는다**(§19.4 (4)) → `mockScreens` 문서 0건 → 앵커 자체가 생기지 않는다 | **channel 단언 사유 미적용** |
+| ⑤ | `stages`·AC-073 배선도 kind 스코프라 영향 없음 | §15.9.5 e-3 표(1271행) `mock_install` 의도 = *"`kind==="app-install"` 항목이 1개 이상"* / `mockScreens.test.ts:184` `if (!hasAppInstallMockScreen(scenarioId)) continue` | **회귀 0** |
+
+**⇒ 판정: 적용되지 않는다. 게이트를 `app-install`·`[[LINK:]]` 렌더 경로로 정밀화한다(§19.2).**
+
+#### (3) ⚠️ ux-design 실측의 정정 — 깨지는 것은 테스트 2건이 아니라 **3개 테스트 4개 단언**이다
+
+| landingId | 소속 시나리오 | G53(`LINK_LABELS`) | G55(IN_CALL_SMS) | G55(VERIFY_INTERCEPT) | channel==="messenger" |
+|---|---|---|---|---|---|
+| `parcel-redelivery` | `messenger-parcel-smishing-sms` | pass(`linkMarker.ts:22`에 라벨 있음) | pass | pass | pass |
+| `loan-refinance-apply` | `loan-refinance-scam` | **FAIL** | **FAIL** | **FAIL** | **FAIL** |
+| `tax-refund-claim` | `tax-refund-scam` | **FAIL** | **FAIL** | **FAIL** | **FAIL** |
+| `courier-customs-check` | `courier-customs-scam` | **FAIL** | **FAIL** | **FAIL** | **FAIL** |
+
+- **G53 추가 발견:** 세 landingId는 `LINK_LABELS`(`linkMarker.ts:21-25` — `parcel-redelivery`·`subsidy-apply`·`subsidy-install` 3종뿐)에 **없다.** 통화 경로 칩 라벨은 `InCallSmsItem.linkDisplayText`(`inCallSms.ts:58,107,121`)가 `InCallSmsOverlay.tsx:230`에서 그리며 **`extractLinkMarker`를 타지 않는다.** `MOCK_SCREENS`에 넣는 순간 G53 루프(`:122-133`)가 이들을 훑어 `"확인하기"` 단언에 걸린다.
+- **G55 추가 발견:** 세 시나리오는 `IN_CALL_SMS`(`inCallSms.ts:146,149,150`)와 **`VERIFY_INTERCEPT`(`verifyIntercept.ts:146,147,148`) 양쪽에 모두 있다.** G55는 두 단언(`:141-146`, `:147-151`)이라 시나리오당 2건씩 깨진다.
+- ⛔ **`LINK_LABELS`에 3종을 추가해 G53을 통과시키는 우회는 금지한다.** 그 맵은 *"프롬프트가 `[[LINK:]]`로 내보내는 id"* 의 정본인데(같은 파일 :15-20 주석), 세 id는 어떤 프롬프트도 내보내지 않는다. 넣으면 `subsidy-apply`와 같은 **죽은 라벨**이 3개 늘고(UX.md:1091이 이미 지적한 부류), 드리프트 방향이 반대로 뒤집힌다.
+
+### 19.2 게이트 정밀화 — "무엇을 여전히 막아야 하는가"를 먼저 확정한다
+
+#### (1) 여전히 막아야 하는 것 (이 목록이 조건보다 먼저다)
+
+| # | 여전히 막아야 하는 사고 | 왜 |
+|---|---|---|
+| M1 | **같은 시나리오에서 `app-install` 응낙 지시와 문자/확인 지시가 경합해 하나가 조용히 유실** | G55 원문 사유 |
+| M2 | **`app-install` 목업이 통화 중 문자에서 열림** | §15.9.1 R6 · 앵커 ↔ 합성 타임스탬프(G15/G21) |
+| M3 | **프롬프트가 내보내는 `[[LINK:]]` 랜딩의 칩 라벨이 `"확인하기"` 기본값으로 뜸** | G53 원문 사유 |
+| M4 | **클라가 임의 `landingId`로 가짜 "속은 순간"을 만듦** | §15.6 G12 동형 — `findMockScreenItem` 소속 재검증 |
+| M5 | **통화 경로 랜딩이 어떤 정합 게이트도 안 타는 현재 상태**(신규 — 지금 열려 있는 구멍) | `inCallSms.ts`의 `fakeLandingId` 3종이 `LINK_LABELS`에 없어 G53을 **애초에 타지 않는다** |
+| M6 | **랜딩 문구에 실존 기관명·스토어·실존 앱명·원격제어 절차가 섞임** | AC-032/033/072 · `mockSurface` 프로파일 |
+
+#### (2) 그 다음이 조건 — 판정표 (임의 판단 금지)
+
+| 게이트 | 현행 조건 | **정밀화된 조건** | 무엇을 계속 막는가 |
+|---|---|---|---|
+| **G53** | `MOCK_SCREENS`의 **모든** landingId ∈ `LINK_LABELS` | `entrySurface === "messenger-link"` **인 항목만** ∈ `LINK_LABELS` | M3 |
+| **G55-a** | `MOCK_SCREENS` scenarioId ∩ `IN_CALL_SMS` = ∅ | **`app-install` 항목을 가진** scenarioId ∩ `IN_CALL_SMS` = ∅ | M1 |
+| **G55-b** | `MOCK_SCREENS` scenarioId ∩ `VERIFY_INTERCEPT` = ∅ | **`app-install` 항목을 가진** scenarioId ∩ `VERIFY_INTERCEPT` = ∅ | M1 |
+| **channel** | 모든 scenarioId의 `channel === "messenger"` | **`app-install` 항목을 가진** scenarioId만 `channel === "messenger"` | M2 |
+| **R6(:154)** | `IN_CALL_SMS.fakeLandingId` ∉ app-install id 집합 | **무변경**(양방향 중 한쪽) | M2 |
+| **G-A(신규)** | — | `entrySurface === "in-call-sms"` ⇒ `kind !== "app-install"` | M2 (반대쪽에서 한 번 더) |
+| **G-B(신규)** | — | **양방향 참조 정합**(§19.5) | **M5** |
+| **findMockScreenItem** | scenarioId 소속 재검증 | **무변경** | M4 |
+| **`mockSurface` 프로파일** | `MOCK_SCREEN_FIELDS` 전 필드 스캔 | **무변경 + 신규 필드 등록**(§19.3) | M6 |
+
+> **표에 없는 케이스가 나오면 임의 판단하지 말고 행 추가 여부를 먼저 묻는다**(CLAUDE.md 1항).
+
+#### (3) 정밀화를 성립시키는 스키마 1건 — `entrySurface`
+게이트 3건을 각각 다른 임시 조건으로 좁히는 대신, **항목이 자기 진입 표면을 선언**하게 한다. 조건이 하나의 선언 필드에 모이면 (a) 게이트마다 조건이 갈리지 않고, (b) 새 항목이 표면을 declare하지 않으면 **타입이 깨져** 넘어갈 수 없다.
+
+```ts
+/** 이 랜딩이 어느 표면에서 열리는가 — 게이트의 단일 판정 키(§19.2). */
+export type MockScreenEntrySurface = "messenger-link" | "in-call-sms";
+```
+- **필수 필드**로 둔다(옵셔널이면 새 항목이 조용히 빠진다). `subsidy-install`·`parcel-redelivery` = `"messenger-link"`, 나머지 3종 = `"in-call-sms"`.
+- `harmlessnessGate.test.ts`의 `MOCK_SCREEN_FIELDS`(`:74-83`)에 **`entrySurface: { skip: "열거형 — 자유 문자열이 아니다" }`** 를 등록해야 컴파일이 통과한다(`Record<keyof T, FieldPolicy>` 타입 게이트가 강제한다 — 의도된 동작).
+
+### 19.3 ⭐ OQ-U26 (a) 판정 — 콘텐츠 소유 위치 = `MockScreenItem` 필드 증분
+
+**판정: 콘텐츠의 정본은 서버 `functions/src/scenarios/mockScreens.ts`이고, 렌더 문자열은 `MessengerFakeLanding.tsx` 안의 모듈 상수이며, 둘을 기존 드리프트 테스트가 묶는다. 신규 카탈로그 파일·신규 컴포넌트 파일 0건.**
+
+#### (1) 판정 근거 (셋 다 코드 근거)
+- ① **선례가 이미 그 형태다.** `app-install` 문구는 지금도 클라 상수(`MessengerFakeLanding.tsx:206-212` `INSTALL_HEADLINE`/`INSTALL_BODY_LINES`/`INSTALL_CONSENT_LABEL`)이고 서버 카탈로그가 정본이며 `src/components/mockScreenCopy.test.ts:115-138`이 소스 텍스트를 직접 대조한다. 두 패키지라 import로 공유할 수 없다는 제약(`mockScreenCopy.test.ts:104-109`)은 credential-form에도 똑같다.
+- ② **AC-045 불변식이 유지된다.** 문구가 클라 상수이므로 이 화면을 위한 콜러블·fetch가 여전히 0건이고, `mockScreenCopy.test.ts:24-59`의 금지 토큰 스캔이 그대로 성립한다.
+- ③ **⚠️ 이것이 별도 카탈로그 파일을 기각한 결정적 이유다 — 실존 기관명 검사.** `mockSurface` 프로파일만 `realInstitutionName`을 포함하고(`harmlessnessPatterns.ts:290-292` 판정표, `SCAN_PROFILES.mockSurface:310-318`), 그 스캔은 **`collectAllSurfaces()`가 순회하는 카탈로그**에만 걸린다(`harmlessnessGate.test.ts:126-174`). **신규 카탈로그 파일은 그 순회에 자동으로 들어가지 않는다.** 반면 클라 쪽 스캔은 기관명을 **의도적으로 제외**한다(`harmlessnessScreens.test.ts:80-82`: *"기관명은 클라 코드에서 금지 대상이 아니다 — 사칭 대상 라벨은 서버 카탈로그에서 내려온다"*). 즉 콘텐츠를 클라에만 두거나 새 서버 파일에 두면 **국세청·관세청·우체국이 어디에서도 안 걸린다** — D-58이 가장 위험하다고 지목한 바로 그 지점(UX.md:1088-1089)이다. `MockScreenItem` 필드로 넣으면 `MOCK_SCREEN_FIELDS`(`harmlessnessGate.test.ts:74-83`) 등록만으로 검사를 **자동으로** 탄다.
+
+#### (2) `MockScreenItem` 스키마 증분 (전부 kind 스코프 · 부재를 판별자로 오버로드하지 않는다 — §14.9.1)
+
+| 필드 | 타입 | 어느 kind | 프로파일 등록 | 제약 |
+|---|---|---|---|---|
+| `entrySurface` | `"messenger-link" \| "in-call-sms"` | 공통 **필수** | `{ skip: "열거형" }` | §19.2 (3) |
+| `headline` | string | 공통 필수(**기존**) | `mockSurface`(기존) | — |
+| `bodyLines` | string[] | 공통 필수(**기존**) | `mockSurface`(기존) | — |
+| `issuerLabel` | string | 공통 **필수** | **`mockSurface`(신규 등록)** | 화면 하단 발신 주체 표기. 현행 하드코딩(`"ⓒ 본인확인센터"` :191 / `"ⓒ 업무처리 확인센터"` :280)을 카탈로그로 올린다 |
+| `fields` | `string[]`? | **`credential-form` 전용** | **`mockSurface`(신규 등록)** | **최대 3개**(UX-023 표). ⛔ `app-install`이면 **반드시 `undefined`**(AC-072 "입력 필드 0"). ⛔ 라벨 안에 숫자열 금지 — `operationalPayload`(`\d{8,}`)가 잡는다 |
+| `submitLabel` | string? | **`credential-form` 전용** | **`mockSurface`(신규 등록)** | 가짜 CTA. 현행 `"확인"` |
+| `successHeadline` | string? | **`credential-form` 전용** | **`mockSurface`(신규 등록)** | 가짜 성공 문구. 현행 `"입력되었습니다."` |
+| `consentLabel` | string → **string?** | **`app-install` 전용**(필수 → 옵셔널) | `mockSurface`(기존) | credential-form에 무의미한 값을 강제로 채우게 하지 않는다(`InCallSmsItem.otpCode`/`linkDisplayText`와 **동형** — `inCallSms.ts:30-36`) |
+| `momentTactic`·`correctAction` | string | 공통 필수(**기존**) | 기존 그대로 | ⚠️ credential-form 항목도 채운다 — 승격은 안 되지만 `mockScreenTimeline`(§15.9.5 e-4)에 실릴 수 있는 자리이고, `correctAction`은 `correctiveGuidance` 프로파일이라 D-52/P-25 카피 규칙 테스트(`mockScreens.test.ts:103-118`)를 그대로 탄다 |
+
+**kind ↔ 필드 정합 게이트(신규 단언, §19.5 G-C):**
+```
+kind === "app-install"    ⇒ consentLabel !== undefined && fields === undefined
+kind === "credential-form" ⇒ consentLabel === undefined && fields !== undefined && 1 <= fields.length <= 3
+```
+
+#### (3) ⛔ 상황이 갈려도 **절대 카탈로그 필드가 되지 않는 것** (P-28 ⑤ · AC-022/045)
+| 문자열 | 어디에 있어야 하는가 | 왜 |
+|---|---|---|
+| `"AI 훈련용 모의 화면"` 표식 + `"실제 로그인/전송이 아닙니다"` | **공유 헤더 하드코딩**(`MessengerFakeLanding.tsx:74-94`) | AC-022가 kind·상황과 무관해야 한다. 카탈로그 필드가 되면 항목마다 다른 표식이 가능해진다 |
+| `"(실제로는 어디에도 전송되지 않았습니다 — 훈련용 모의 화면입니다.)"` | **컴포넌트 상수**(`:136-138`) | 갈리는 것은 가짜 성공 문구(`successHeadline`)뿐이고 **안전 고지는 모든 랜딩에서 동일**하다(P-28 ⑤). ⇒ 신규 단언: 이 문자열은 카탈로그 어느 필드에도 등장하지 않는다 |
+| `"훈련 종료"` 컨트롤 | 공유 헤더(`:93`) | AC-006 |
+
+#### (4) 기존 드리프트 테스트에 이미 뚫려 있는 구멍 2건 (⚠️ 이번에 반드시 함께 막는다 — **G76**)
+- `mockScreenCopy.test.ts:129-138`은 `catalog.indexOf("bodyLines: [")`로 **첫 번째 `bodyLines` 블록 하나만** 검사한다. 항목이 1개일 때는 전수였지만 **5개가 되는 순간 4개가 조용히 검사를 안 탄다.**
+- 같은 파일 `:115-127`의 `extractCatalogStrings`는 `field: "..."` 정규식이라 **배열·옵셔널 필드를 못 읽는다.** 신규 필드(`issuerLabel`·`submitLabel`·`successHeadline`·`fields`)를 넣어도 자동으로 검사 대상이 되지 않는다.
+- **처방:** 파서를 **항목 단위 순회**로 바꾼다(카탈로그를 `import`할 수 없으므로 소스 텍스트 파싱 유지 — 단 `landingId:` 로 블록을 잘라 항목별로 훑는다). 검사 대상 필드 목록을 **하드코딩하지 말고** `MockScreenItem`의 문자열 필드 전부로 두되, 목록이 빠지면 걸리도록 **"항목 수 × 필드 수 = 대조 건수"** 를 함께 단언한다.
+
+### 19.4 OQ-U26 (b) — 통화 경로 `landingKind`·`landingId` 배선
+
+**결정: 서버가 `InCallSmsDoc`에 `landingKind?`를 실어 내리고, 클라는 그 값과 이미 갖고 있는 `fakeLandingId`를 `MessengerFakeLanding`에 그대로 전달한다. 클라의 문자열 분류는 0건이다.**
+
+| # | 층 | 변경 | 근거·규칙 |
+|---|---|---|---|
+| 1 | 서버 스키마 | `InCallSmsDoc`에 `landingKind?: MockScreenKind` 추가(`shared/types.ts:192-210`) | `fakeLandingId`와 **같은 kind==="link" 스코프**. ⛔ 실 URL 필드는 여전히 없다(AC-060 구조적 금지 무변경) |
+| 2 | 서버 write | `buildInCallSmsDoc(item, arrivedAt, anchor, **scenarioId**)` — 인자 1개 증가. 내부에서 `resolveMockScreenKind(scenarioId, item.fakeLandingId)` | 호출부 2곳 모두 `session.scenarioId`를 이미 갖고 있다(`inCallSms/index.ts:77`·`roleplay/index.ts:162`). **kind의 진실 원천은 서버**(§15.9.1 R3) |
+| 3 | 생략 규칙 | 값이 `DEFAULT_MOCK_SCREEN_KIND`이면 **키를 만들지 않는다** | `extractLinkMarker`(`linkMarker.ts:58`)와 **글자 그대로 같은 규칙.** 같은 개념에 생략 규칙이 두 벌이면 그게 드리프트다. ⇒ **오늘 실제로 쓰이는 문서는 한 바이트도 바뀌지 않는다**(3종 전부 credential-form). 읽기 규칙도 동일: `landingKind ?? "credential-form"` |
+| 4 | ⛔ **`recordMockScreenEvent`를 통화 경로에서 호출하지 않는다** | 통화 경로 랜딩 열람은 **기존 `recordInCallSmsEvent("link_tapped")`** 로 이미 기록된다(`InCallSmsOverlay.tsx:220`) | 호출하면 `sessions/{sid}/mockScreens` 문서가 생겨 §15.9.5 e-2 앵커 해결·`mockScreenTimeline`·`stages` 파생이 통화 세션에서 처음으로 돌기 시작한다 = **R6이 피하려던 얽힘 그 자체.** 리포트 회귀 0을 원하면 여기서 멈춰야 한다 |
+| 5 | 클라 view | `InCallSmsView`에 `landingKind?` 추가, 구독부에서 매핑(`play/page.tsx:291-300` 옆) | 기존 `fakeLandingId` 매핑(`:298`) 바로 옆 1줄 |
+| 6 | 오버레이 | `setFakeLanding({ smsId, displayText, **landingId: sms.fakeLandingId, landingKind: sms.landingKind** })`(`InCallSmsOverlay.tsx:221-224`) → `<MessengerFakeLanding title landingId landingKind onClose onEndTraining>`(`:259-265`) | 현재 `title`만 넘긴다 |
+| 7 | 메신저 경로 | `<MessengerFakeLanding>` 호출에 `landingId={fakeLanding.fakeLandingId}` 1개 추가 | `landingKind`는 이미 전달 중(`session/messenger/page.tsx:95-101`) |
+| 8 | 컴포넌트 | props에 `landingId?: string` 추가 | 아래 R7/R8 |
+
+**신규 구속 규칙 (§15.9.1 R1~R6에 이어서):**
+- **R7. 콘텐츠 조회는 kind 분기 *안쪽*에서만 일어난다.** `landingKind`로 `AppInstallMockup` / `CredentialFormMockup`을 고른 **뒤**, 선택된 서브 컴포넌트가 `LANDING_COPY[landingId]`를 본다. 미스면 **같은 kind의 기본 문구**(현행 범용 화면)로 떨어진다. ⛔ 콘텐츠 조회가 kind를 바꾸는 경로는 만들지 않는다 — 그것이 §15.9.1 R5(`app-install` 방향 폴백 금지)를 우회하는 유일한 구멍이다.
+- **R8. `landingId`는 클라에서 *조회 키*로만 쓴다.** 정규식·`startsWith`·`includes`·부분 문자열 분해로 랜딩 성격을 추론하는 코드를 두지 않는다(AC-024 자유문자열 분류 금지 원칙 계승 — `session/messenger/page.tsx:95-96` 주석이 세운 선). **정확 일치 키 조회만 허용**한다.
+- **R9. 분기는 계속 `MessengerFakeLanding.tsx` 한 파일 안이다**(R1 무변경). 상황 4종은 **같은 파일 안의 콘텐츠 표 + 서브 컴포넌트**이며, `src/components/`에 파일이 늘면 `harmlessnessScreens.test.ts:108-119`의 등록부 게이트와 `mockScreenCopy.test.ts:76-79`의 형제 파일 검사가 **둘 다** 걸린다. ⇒ **`CLIENT_SCREEN_INVENTORY` 무변경**(T86 게이트 영향 0).
+
+### 19.5 신규 게이트 — 통화 경로 랜딩의 정합 구멍(M5)을 닫는다
+
+**판정: 닫는다.** 현재 `inCallSms.ts`의 `fakeLandingId` 3종은 `LINK_LABELS`에 없어 G53을 **애초에 타지 않고**, `MOCK_SCREENS`에도 없어 `findMockScreenItem` 재검증도 타지 않는다 — **어떤 정합 게이트도 없는 상태**다. 콘텐츠를 붙이는 이번이 닫을 시점이다(안 닫으면 오탈자 1글자로 랜딩이 조용히 범용 화면으로 떨어지고, 그게 정확히 이번 사용자 신고의 재발 경로다).
+
+| ID | 신규 단언 | 위치 | 안 넣으면 |
+|---|---|---|---|
+| **G-A** | `entrySurface === "in-call-sms"` ⇒ `kind !== "app-install"` | `mockScreens.test.ts` | R6이 `IN_CALL_SMS` 쪽에서만(:154) 지켜진다 — 카탈로그 쪽에서 app-install을 선언해도 안 걸린다 |
+| **G-B** | **양방향 참조 정합**: ① 모든 `IN_CALL_SMS` 항목의 `fakeLandingId` ⇒ **같은 scenarioId**의 `MOCK_SCREENS`에 그 landingId가 존재하고 `entrySurface === "in-call-sms"` ② 모든 `entrySurface === "in-call-sms"` 항목 ⇒ 같은 scenarioId의 `IN_CALL_SMS`에 그 id를 참조하는 항목 1건 이상 | `mockScreens.test.ts` | **M5 그대로** — G53의 통화 경로 대응물이 영영 없다 |
+| **G-C** | kind ↔ 필드 정합(§19.3 (2) 하단 규칙) | `mockScreens.test.ts` | `app-install`에 `fields`가 생겨 **AC-072 "입력 필드 0"이 조용히 깨진다** |
+| **G-D** | 안전 고지 문자열(§19.3 (3))이 카탈로그 어느 필드에도 없다 | `mockScreens.test.ts` | 상황별로 안전 고지가 갈릴 수 있다(P-28 ⑤ 파괴) |
+| **G-E** | 각 정밀화 게이트에 **역검증** 1건씩(현행 파일 관례 — `:66`,`:87`) | `mockScreens.test.ts` | 좁힌 조건이 실제로는 아무것도 안 잡는 상태를 아무도 못 본다 |
+
+### 19.6 ⭐ OQ-U27 — 통화 필 자막 연속성 (표현 계층 전용)
+
+#### (1) ⚠️ 먼저 실측 정정 — "자막을 필로 옮긴다"의 전제가 현행 코드와 다르다
+| # | 실측 사실 | 근거(file:line) | 함의 |
+|---|---|---|---|
+| 1 | 통화 셸의 **기본 화면에는 자막이 없다.** 자막은 접혀 있는 키패드 패널 안에서만 그려진다 | `play/page.tsx:1019-1021` 주석(*"자막·안내문·오류는 여기 두지 않는다 … 키패드 패널 안으로 옮긴다"*), 렌더는 `:1195-1199` | "문자함이 전면이면 자막이 시야에서 사라진다"는 UX 진단은 **전면 전환 이전에도 부분적으로 참**이었다 |
+| 2 | 자막 소스 `latestScammerLine`은 **`messages` 구독**에서 온다 | `:820-821` ← `:254-274`(`textMasked`) | 폴백(텍스트) 경로에서는 매 턴 갱신된다 |
+| 3 | ⚠️ **실시간(Gemini Live) 경로에서는 통화 중 `messages`가 갱신되지 않는다.** 전사는 ref에 쌓였다가 **세션 종료 직전 1회** 제출된다 | `:175-179`(`transcriptRef.current.push`), `:183-192`(`flushTranscript` — 종료 직전 1회), `:252` 주석(*"실시간 경로는 음성이 주채널이라 자막이 없을 수 있다"*) | **`latestScammerLine`은 실시간 통화 내내 `null`이다.** 필이 이 값을 그대로 쓰면 **주 경로에서 자막이 영영 안 뜬다** — 청각 접근성 회귀를 막으려던 요건이 주 경로에서만 조용히 실패한다 |
+| 4 | 그러나 **턴 단위 자막 신호는 이미 클라에 도착해 있다** | `GeminiVoiceSession.tsx:211-218` `flushTranscript()`(turnComplete), `:231-235` `flushScammerTurn()`(interrupted) → `onTranscriptTurn("scammer", s)` | 신규 데이터 경로가 **필요 없다.** 이미 흐르는 콜백을 화면이 안 받고 있을 뿐이다 |
+
+#### (2) 결정 — 페이지 지역 state 1개, 서버 변경 0건
+```
+handleTranscriptTurn(role, text)              // play/page.tsx:177-179 (기존)
+  ├─ transcriptRef.current.push(...)          // 무변경 — 제출 경로 손대지 않는다
+  └─ if (role === "scammer") setLiveScammerCaption(text)   // 신규 1줄
+
+const pillCaption = liveScammerCaption ?? latestScammerLine;   // 실시간 우선, 폴백 계승
+<InCallSmsOverlay ... scammerCaption={pillCaption} />           // 신규 prop 1개
+```
+- **UX 권고 채택(a): 최신 1~2줄 + `aria-live="polite"`.** 스크롤 가능한 전체 자막 스트립은 채택하지 않는다 — 필이 커지면 문자함이 좁아져 반전의 의미가 준다(UX.md OQ-U27 권고). 2줄 클램프.
+- **⛔ 갱신 단위는 "턴"이다. 청크 단위 `setState` 금지**(**G78**). `onTranscriptTurn`은 이미 `turnComplete`에서만 불리므로 그대로 쓰면 턴 단위다. 스트리밍 조각마다 state를 갱신하도록 바꾸면 통화당 수백 번 리렌더가 되고, 그것이 OQ-U27 (c)가 우려한 프레임 부담이다.
+- **⛔ 사용자 턴은 필에 그리지 않는다.** 필의 존재 이유는 *"사기범 음성 대사에 항상 자막을 동시 제공"*(UX-014 Accessibility)이다.
+
+#### (3) AC-059 안전 증명 — 왜 이것이 실시간 세션을 건드리지 않는가 (코드 근거)
+| # | 우려 | 근거(file:line) | 결론 |
+|---|---|---|---|
+| ① | 새 state가 페이지를 리렌더해 Live 세션이 끊기지 않는가 | `GeminiVoiceSession.tsx:172` 세션 effect의 의존성 배열이 **`}, []);`**(`:537`) | **재실행 불가.** 리렌더는 언마운트가 아니고, 이 effect는 마운트 시 1회만 돈다 |
+| ② | `handleTranscriptTurn`의 identity가 바뀌면 effect가 다시 도는가 | 핸들러는 `handlersRef`를 통해 읽힌다(`:128-136`), 갱신 effect는 별개(`:144-162`) | **세션 effect와 무관** |
+| ③ | 오버레이 렌더 계층이 바뀌는가 | `play/page.tsx:1401-1415` — 형제 노드 조건부 렌더 **무변경**(prop 1개만 추가) | D-35/§15.1.1 불변식 유지 |
+| ④ | 자동청취 게이팅(OQ-U27 (b))이 바뀌는가 | **무변경.** 폴백 자동청취 `:551`(`smsOverlayOpen \|\| verifyOverlayOpen`이면 return), 실시간 `muted={muted \|\| smsOverlayOpen \|\| verifyOverlayOpen}`(`:865`,`:877`) | UX 권고(P-20 (4) 유지)와 일치하며 **코드가 이미 그렇게 돼 있다 — 손대지 않는다** |
+| ⑤ | 서버·스키마·콜러블 | **0건** | 세션 문서·리포트·Firestore 어디에도 자막 상태를 쓰지 않는다 |
+
+#### (4) 마스킹 판정 (정직 고지)
+`latestScammerLine`은 서버 마스킹된 `textMasked`이고 `liveScammerCaption`은 **원문 전사**다 — 두 소스의 처리 수준이 다르다. **판정: 사기범 턴에 한해 잔여 위험이 없다.** 근거: 필에 그리는 것은 **방금 스피커로 재생된 사기범 오디오의 전사**이며, 참가자가 이미 귀로 들은 내용 외에 **새 노출 표면을 만들지 않는다**(마스킹의 보호 대상은 저장·리포트에 남는 참가자 PII이고, 그 경로는 `submitRealtimeTranscript`가 그대로 담당한다 — 무변경). ⛔ 단 **사용자 턴을 필에 그리는 순간 이 논거가 무너진다**(참가자가 말한 계좌·주민번호가 마스킹 없이 화면에 남는다) — (2)의 `role === "scammer"` 조건은 **접근성 취향이 아니라 안전 조건**이다(**G79**).
+
+### 19.7 계약 요약 · 회귀 0 근거
+
+| 대상 | 변경 | Database.md / API.md |
+|---|---|---|
+| `sessions/{sid}/inCallSms/{smsId}` | `landingKind?: "credential-form"\|"app-install"` 추가(옵셔널·무백필) | **Database.md 갱신 1행** |
+| `sessions/{sid}/mockScreens/{landingId}` | **무변경** | — |
+| 콜러블 | **신설 0 · 시그니처 변경 0** | — |
+| `reports/{rid}` | **무변경** | — |
+| `firestore.rules` | **무변경** | — |
+
+**회귀 0 근거(전부 kind·표면 스코프):** `hasAppInstallMockScreen`(`mockScreens.ts:117-124`) → 프롬프트 조건형 블록·`sendMessage` 추가 read 게이팅 무변경 / `resolveMockScreenKind` 반환값이 3종 모두 `credential-form`(=기본값) → `extractLinkMarker` 출력 attachment **바이트 동일**(`linkMarker.ts:58` 생략 규칙) / `landingKind` 생략 규칙 동일 → 기존 `inCallSms` 문서 **바이트 동일** / `stages`·AC-073 배선 kind 스코프(§15.9.5 e-3, `mockScreens.test.ts:184`) / `recordMockScreenEvent` 미호출 → `deceivedMoments`·`mockScreenTimeline` **증가 0** / `CLIENT_SCREEN_INVENTORY` 무변경.
+
+### 19.8 implementer 갭 (G75~G81 — §15.6 형식, 전부 실측 근거 있음)
+
+| # | 갭 | 근거 | 안 고치면 생기는 일 |
+|---|---|---|---|
+| **G75** | **게이트를 먼저 풀고 콘텐츠를 나중에 넣고 싶은 유혹** — 테스트가 빨개지니 단언부터 지우게 된다 | §19.2 (1) M1~M6 | 그 사이에 `app-install`이 통화 경로로 들어와도 아무도 못 잡는다. **순서 강제: ① `entrySurface` 필드 + G-A~G-E 신규 게이트 → ② 기존 4개 단언 정밀화 → ③ 콘텐츠 항목 추가.** ①과 ②를 같은 커밋에 두고, ③은 그 뒤 |
+| **G76** | **드리프트 테스트가 항목 1개 전제로 짜여 있다** — `bodyLines`는 **첫 블록만**, 신규 필드는 정규식이 못 읽는다 | `src/components/mockScreenCopy.test.ts:129-138`(`catalog.indexOf("bodyLines: [")`), `:110-113`(`field: "..."` 단일 패턴) | 5개 항목 중 **4개 문구가 조용히 대조를 안 탄다.** 서버·클라 문구가 갈라져도 통과한다. §19.3 (4)대로 **항목 단위 순회 + 대조 건수 단언**으로 바꿀 것 |
+| **G77** | **`LINK_LABELS`에 통화 경로 3종을 넣어 G53을 통과시키는 우회** | `linkMarker.ts:15-25`(맵의 정본 역할), UX.md:1091(`subsidy-apply` 죽은 라벨 선례) | 어떤 프롬프트도 안 내보내는 죽은 라벨이 3개 늘고, G53의 의미가 *"프롬프트가 내보내는 id"* 에서 *"카탈로그에 있는 id"* 로 조용히 바뀐다. **금지 — `entrySurface`로 좁힌다** |
+| **G78** | **자막 필을 청크 단위로 갱신하고 싶은 유혹**("실시간처럼 보이게") | `GeminiVoiceSession.tsx:207-218` — 전사는 조각으로 스트리밍되고 `turnComplete`에서 flush된다 | 통화당 수백 번 페이지 리렌더 → OQ-U27 (c)가 우려한 프레임 부담이 실제로 발생. **`onTranscriptTurn` 그대로(턴 단위)만 쓸 것** |
+| **G79** | **자막 필에 사용자 턴까지 그리고 싶은 유혹**("대화가 보이니까") | `handleTranscriptTurn`은 `role: "user"`도 받는다(`play/page.tsx:177`). 실시간 전사는 **마스킹 전 원문**이다(`submitRealtimeTranscript`가 서버에서 마스킹) | 참가자가 통화 중 말한 계좌·생년월일이 **마스킹 없이 화면에 남는다.** §19.6 (4)의 안전 논거가 무너진다. `role === "scammer"` 조건은 **안전 조건**이다 |
+| **G80** | **`InCallSmsOverlay`를 문자앱처럼 만들다 하단 입력창을 넣는 실수**(D-57 ② 말풍선 전환의 최빈 사고 — UX가 직접 경고) | UX.md D-57 Impact 행, AC-060 *"답장·전달·전송 경로가 UI·API에 존재하지 않는다"* | **AC-060 정면 위반.** 이 파일은 전송 계열 API를 import하지 않는다는 불변식(`InCallSmsOverlay.tsx:10-12`)도 함께 깨진다. ⇒ `harmlessnessScreens.test.ts` 등록부에 이 파일이 이미 있으므로(`:97`), **입력 어포던스 부재를 소스 스캔 단언으로 추가**할 것(`<input`·`<textarea`·`onSubmit` 0건) |
+| **G81** | **통화 경로에서 `recordMockScreenEvent`를 호출하고 싶은 유혹**("메신저 경로와 똑같이 기록해야 하지 않나") | §19.4 #4 · §15.9.1 R6 · §15.9.5 e-2 앵커 규칙 | 통화 세션에 `mockScreens` 문서가 처음 생겨 앵커 해결·`mockScreenTimeline`·`stages` 파생이 돌기 시작한다 = R6이 피하려던 합성 타임스탬프 얽힘(G15/G21). **통화 경로 기록은 기존 `recordInCallSmsEvent("link_tapped")` 하나로 충분하다** |
+
+### 19.9 Traceability · 이 절이 남기는 Open Questions
+
+| UX/AC 항목 | Screen ID / Flow ID | 산출물 |
+|---|---|---|
+| **D-58 · P-28**(상황별 콘텐츠) | **UX-023** / UF-006 · UF-008 · UF-012 | `functions/src/scenarios/mockScreens.ts`(필드 증분 + 항목 4종) · `src/components/MessengerFakeLanding.tsx`(콘텐츠 표 + 서브 컴포넌트) |
+| **AC-045/AC-060/AC-072**(안전 불변식) | UX-023 | `mockScreens.test.ts` G-A~G-E · `mockScreenCopy.test.ts`(G76 개편) · `harmlessnessGate.test.ts` `MOCK_SCREEN_FIELDS` 신규 필드 등록 |
+| **OQ-U26 (b)**(통화 경로 배선) | **UX-027 → UX-023** / UF-008 | `shared/types.ts` `InCallSmsDoc.landingKind?` · `inCallSms/buildDoc.ts` · `InCallSmsOverlay.tsx:259-265` · `play/page.tsx` 구독 매핑 |
+| **D-55·P-27 ④ · OQ-U27**(자막 연속성) | **UX-027 · UX-014** / UF-008 | `play/page.tsx`(state 1개 + prop 1개) · `InCallSmsOverlay.tsx`(필 렌더) |
+| **D-56 · D-57**(탭 진입 · 부드럽게) | UX-027 | **이 절의 범위 밖**(순수 표현 — implementer가 UX-023/027 v1.13 노트대로 구현). 단 **G80**이 그 구현의 안전 경계다 |
+
+| ID | 질문 | 소관 |
+|---|---|---|
+| **OQ-A17** | **랜딩 4종의 정본 문자열**(`headline`·`bodyLines`·`issuerLabel`·`fields`·`submitLabel`·`successHeadline`·`momentTactic`·`correctAction`). 스키마·제약은 §19.3이 확정했고 **문안만** 남았다. ⚠️ `mockSurface` 프로파일(실존 기관명 포함)을 통과해야 한다 — 환급·통관이 특히 걸리기 쉽다 | **ux-design**(OQ-A6와 동일 양식) |
+| **OQ-A18** | **필 자막의 줄 수·클램프 확정 문구**(1줄인가 2줄인가, 넘칠 때 말줄임인가 롤). §19.6은 "최신 1~2줄"까지만 확정했다 | ux-design |
+| **OQ-A19** | **`credential-form` 랜딩의 "속은 순간" 취급.** 현행 설계는 승격 0건(§19.4 #4)이라 참가자가 상황에 맞는 가짜 폼에 **정보를 다 입력해도** 리포트의 `deceivedMoments`에 아무것도 안 남는다. 이는 §15.9.5 e-1이 세운 *"탭 = 화면 열림이지 응낙이 아니다"* 와 정합하지만, **콘텐츠가 상황에 맞아진 뒤에는 "입력 완료 = 응낙"으로 볼 여지가 생긴다.** 승격시키려면 AC 근거가 필요하다 | **planner → architect**(AC 근거가 planner 소관) |
+| **OQ-U28 관련 권고(planner)** | UX가 권고한 AC 신설안에 **검증 가능한 술어 2개를 덧붙일 것을 권고**한다: (i) *"링크가 등장하는 각 시나리오의 랜딩은 서로 다른 `headline`을 갖는다"*(=범용 화면 수렴 금지를 기계로 판정 가능), (ii) *"상황별 콘텐츠는 kind의 안전 계약을 바꾸지 않는다"*(=AC-072 이중화 금지 계승). 이 두 술어가 있으면 reviewer·QA가 §19.5 G-B/G-C 출력만으로 완료 판정할 수 있다 | planner |

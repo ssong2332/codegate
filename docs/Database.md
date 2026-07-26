@@ -7,6 +7,8 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 > **소급 리뷰 증분(2026-07-24, T40·T33):** ① `channelHistory` 항목에 `turnCountAtTransition?`(역방향 핑퐁 방지, Architecture.md §13.8) 정식 편입 ② `reports`에 `resistedMoments?`(UX-018 "잘 대응한 지점", 후속 implementer 태스크로 구현) 추가. 근거 DECISIONS #25/#26. 둘 다 옵셔널 증분.
 > **v1.3 증분(2026-07-24, T47 — 메신저 2인 챌린지 #20):** `challenges`에 `channel?`(부재→voice) 추가 + `voiceId`를 required→optional 완화(메신저 챌린지는 클론 없음, AC-051). 사용자2 체험 세션은 `channel:"messenger"`·voiceId 부재로 생성 가능. **모두 옵셔널·하위호환**(기존 보이스 챌린지 문서 무마이그레이션). 설계 근거 Architecture.md §14.8, DECISIONS #30.
 > **v1.4 증분(2026-07-24, T55 — generic 보이스 2인 챌린지 #23):** `challenges`에 `voiceMode?`(부재→clone) 추가 — `channel`=voice 챌린지의 clone/generic 판별자(voiceId-부재로 오버로드하지 않음, Architecture.md §14.9.1). generic 보이스 챌린지는 `voiceMode:"generic"`·`voiceId` 부재·`channel` 부재(→voice)로 생성. `deriveChallengeResultSummary`가 이 필드로 결과 요약을 완료-전용 게이트(AC-055/OQ-32). **옵셔널·하위호환**(기존 clone 챌린지 문서 무마이그레이션). 설계 근거 Architecture.md §14.9, DECISIONS #31.
+> **v1.13 증분(2026-07-27, OQ-U26 (b) — 통화 경로 랜딩 kind 배선):** `sessions/{sid}/inCallSms/{smsId}`에 **`landingKind?`** 1개 추가(`kind==="link"` + 기본값이 아닐 때만). 서버가 `resolveMockScreenKind`로 확정해 `inCallSms/buildDoc.ts` 한 곳에서만 기록하며, 기본값이면 **키를 만들지 않아** 기존 문서가 바이트 동일하게 유지된다(`MessengerAttachment.landingKind` 생략 규칙과 동일). **다른 컬렉션은 전부 무변경** — 특히 `sessions/{sid}/mockScreens/{landingId}`는 필드·rules 모두 그대로이고, 상황별 랜딩 콘텐츠는 Firestore가 아니라 **서버 소스 카탈로그(`functions/src/scenarios/mockScreens.ts`)의 `MockScreenItem` 필드**로만 존재한다(클라 원문 배포 없음). 신규 컬렉션·인덱스·rules 변경 0건. 설계 근거 Architecture.md §19.4/§19.7, DECISIONS #47·#48, ADR-0012.
+> ⚠️ **헤더 "Based on PRD/UX Version"(v1.1 / 1.7)은 이 문서의 관례상 갱신되지 않고 위 증분 노트가 기준선을 대신해 왔다** — 실제 기준은 **PRD v1.7.1 · UX 1.13**(Architecture.md 헤더와 동일)이다. 표기 방식을 이번 패스에서 바꾸지 않고 사실만 적어 둔다.
 
 ## Engine
 **Cloud Firestore**(NoSQL 문서 DB) + **Firebase Storage**(오브젝트). 이유는 DECISIONS #1(스택 확정)·#12(실시간 onSnapshot). 관계형 마이그레이션 없음 — 컬렉션/문서는 코드가 생성.
@@ -107,6 +109,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | otpCode | string? | `kind==="otp"`일 때만 | **콘텐츠에 고정된 리터럴**(런타임 난수 금지 — 결정론적 테스트 + 모의값 불변식) |
 | linkDisplayText | string? | `kind==="link"`일 때만 | 모의 표기 문자열. UX-023(`MessengerFakeLanding`)의 제목으로 그대로 쓰인다 |
 | fakeLandingId | string? | `kind==="link"`일 때만 | 인앱 가짜 랜딩 참조. **`url`/실 URL 필드는 이 스키마에 존재하지 않는다**(AC-032/045 구조적 금지 — `MessengerAttachment`와 동형) |
+| landingKind | string? | `kind==="link"` + **기본값이 아닐 때만** | **§19.4 증분(OQ-U26 (b)).** `credential-form`\|`app-install`. 서버가 `resolveMockScreenKind(session.scenarioId, fakeLandingId)`로 확정해 `functions/src/inCallSms/buildDoc.ts` **한 곳에서만** 기록한다 — **클라가 `fakeLandingId` 문자열로 kind를 추론하지 않는다**(§15.9.1 R3, AC-024 계승). **값이 기본값(`credential-form`)이면 키 자체를 만들지 않는다** — `MessengerAttachment.landingKind`의 생략 규칙(`functions/src/roleplay/linkMarker.ts:58`)과 **글자 그대로 동일**하며, 같은 개념에 생략 규칙이 두 벌이 되는 것을 막는다. 읽기 규칙: `landingKind ?? "credential-form"`(무백필 — 기존 문서 바이트 동일). ⚠️ 생략된 키가 `app-install`을 뜻할 수 없음은 게이트 **G-A**(`entrySurface==="in-call-sms"` ⇒ `kind!=="app-install"`, Architecture.md §19.5)가 보장한다 |
 | arrivedAt | timestamp | indexed(정렬) | 도착 시각. 클라는 이 컬렉션을 `onSnapshot`으로 구독해 배너·문자함을 렌더한다(실시간·폴백 **양 경로 공통 단일 소스**) |
 | openedAt | timestamp? | | 사용자가 오버레이에서 열어본 시각(`recordInCallSmsEvent`) |
 | linkTappedAt | timestamp? | | 링크 칩 탭 시각. **v1에서 이 값들은 리포트 판정(analyzeConversation) 입력이 아니다** — 리플레이·표시용(근거 없는 판정 변경 금지) |
