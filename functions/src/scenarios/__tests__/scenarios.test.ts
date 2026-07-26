@@ -725,8 +725,37 @@ const SOLICITATION_FORM =
  * 절이 갈려 **걸린다(오탐)**. 현행 14종에는 이 형태가 0건이고, 걸리는 방향이 **막고 사람을 부르는
  * 쪽**이라 그대로 둔다(§18.2 (B)의 "틀리는 방향이 안전하다"와 같은 판단). 필요하면 저작자가 자연
  * 어순으로 쓰면 되고, 그것이 게이트를 푸는 것보다 싸다.
+ *
+ * ⚠️ **QA 실측(2026-07-27) — 이 경계 목록만으로는 부족하다.** QA가 **막히지 않는 우회 6종**을
+ * 찾았다: 종결형 `-네`, 연결어미 `-고`·`-는데`, 그리고 구분자 **슬래시·대시·줄바꿈**. 목록을
+ * 넓히긴 했지만(아래), **어미 열거는 방어의 본체가 아니다** — 열거는 길어질수록 빠진 어미가 생기고
+ * 그게 곧 다음 우회다. 본체는 아래 `PRESUMED_VERIFICATION`(축 2)이며, 그쪽은 **절 경계를 전혀 보지
+ * 않는다**(실측: `→` 화살표·`-으며`·`-으니`·`-습니다만` 4종은 이 경계 목록이 놓치지만 축 2가 잡는다).
  */
-const CLAUSE_BOUNDARY = /(?<=[다요죠까오])\s*[,·]\s*|\s*[?!.]\s*/;
+const CLAUSE_BOUNDARY =
+  // 서술어 종결형/연결어미 뒤의 쉼표·가운뎃점(명사 나열 "성함, 생년월일"은 쪼개지 않는다)
+  /(?<=[다요죠까오네고]|는데|지만)\s*[,·]\s*|\s*[?!.]\s*|\s+[/;–—-]\s+|\n+/;
+
+/**
+ * ⭐ **축 2 — 전제 표현 근접 금지**(QA NO-GO 대응, 2026-07-27). 절 경계를 **전혀 보지 않는다.**
+ *
+ * **왜 이 축을 더했나**: 축 1(절 분리)의 방어력은 "한국어 어미·구분자를 빠짐없이 열거했는가"에
+ * 의존한다. 그건 열거가 끝나지 않는 싸움이다. 반면 이 결함의 **본질**은 구분자가 아니라 *"신원
+ * 정보가 **이미 확인됐다**고 말한다"* 는 것이고, 그 표현은 신원 필드 **바로 옆에** 붙는다. 그래서
+ * 필드 주변 좁은 창(±{@link PRESUMPTION_WINDOW}자)에서 **완료형 확인 표현**만 금지한다.
+ *
+ * ⚠️ **"확인"이라는 말 자체를 막는 게 아니다** — 반드시 **완료**를 뜻하는 꼬리와 붙을 때만 잡는다.
+ * 아래는 전부 **정상이라 잡으면 안 되는** 현행 문구이고, 실측으로 통과를 확인했다:
+ *   | 정상 문구 | 왜 안 걸리나 |
+ *   |---|---|
+ *   | `"본인 확인이 안 되면 공범으로 분류됩니다, 주민번호 …"`(institutional) | `확인이` 뒤가 `안 되면`이라 완료형이 아니다 |
+ *   | `"조회 자체가 본인 확인부터라서요, 성함이랑 …"`(bank-security) | `확인부터`는 완료형이 아니고, `확인번호`도 마찬가지 |
+ *   | `"성함, 생년월일 불러주십시오, …"`(institutional) | 확인 표현 자체가 없다 |
+ */
+const PRESUMED_VERIFICATION =
+  /(확인|조회|대조|인증)\s*(이|은|는|도|까지)?\s*(완료|끝났|끝|됐|되었|되셨|되시고|된\s*상태|처리됐)/;
+/** 신원 필드 앞뒤 몇 글자까지를 "그 필드에 붙은 말"로 볼 것인가. 좁게 잡아 무관한 확인 표현을 배제한다. */
+const PRESUMPTION_WINDOW = 12;
 
 /** 프롬프트 문자열 안에서 **사기범이 말할 대사**(따옴표로 감싼 예시)만 뽑는다. */
 function quotedUtterances(text: string): string[] {
@@ -736,11 +765,33 @@ function quotedUtterances(text: string): string[] {
   ];
 }
 
-/** 신원 필드를 언급하면서 **같은 절 안에** 요구 형태가 없는 절만 돌려준다(빈 배열 = 통과). */
+/** 축 1 — 신원 필드를 언급하면서 **같은 절 안에** 요구 형태가 없는 절만 돌려준다(빈 배열 = 통과). */
 function clausesDemandingWithoutSolicitation(utterance: string): string[] {
   return utterance
     .split(CLAUSE_BOUNDARY)
     .filter((clause) => IDENTITY_FIELD.test(clause) && !SOLICITATION_FORM.test(clause));
+}
+
+/** 축 2 — 신원 필드 **바로 옆**에서 "이미 확인됐다"고 말하는 구간만 돌려준다(절 경계 무관). */
+function presumedVerificationNearIdentity(utterance: string): string[] {
+  const hits: string[] = [];
+  for (const match of utterance.matchAll(new RegExp(IDENTITY_FIELD.source, "g"))) {
+    const at = match.index ?? 0;
+    const window = utterance.slice(
+      Math.max(0, at - PRESUMPTION_WINDOW),
+      at + match[0].length + PRESUMPTION_WINDOW,
+    );
+    if (PRESUMED_VERIFICATION.test(window)) hits.push(window);
+  }
+  return hits;
+}
+
+/** 두 축을 합친 판정. 어느 한쪽이라도 걸리면 결함이다. */
+function identityDefects(utterance: string): string[] {
+  return [
+    ...clausesDemandingWithoutSolicitation(utterance).map((c) => `[요구 없음] 절="${c.slice(0, 50)}"`),
+    ...presumedVerificationNearIdentity(utterance).map((w) => `[이미 확인됨] "${w.slice(0, 50)}"`),
+  ];
 }
 
 test("[신원요구] 사기범 대사가 참가자 신원 정보를 언급하면 **같은 절 안에서** 요구 형태여야 한다(14종 전수)", () => {
@@ -748,8 +799,8 @@ test("[신원요구] 사기범 대사가 참가자 신원 정보를 언급하면
   for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
     for (const { field, text } of modelFacingSurfaces(scenarioId)) {
       for (const utterance of quotedUtterances(text)) {
-        for (const clause of clausesDemandingWithoutSolicitation(utterance)) {
-          violations.push(`${scenarioId}.${field} :: 절="${clause.slice(0, 50)}"`);
+        for (const defect of identityDefects(utterance)) {
+          violations.push(`${scenarioId}.${field} :: ${defect}`);
         }
       }
     }
@@ -823,6 +874,80 @@ test("[신원요구/역검증] **절 혼합 우회**가 막힌다 — 최초 구
       clausesDemandingWithoutSolicitation(before).length > 0,
       `강화로 기존 검출력을 잃으면 안 된다: ${before}`,
     );
+  }
+});
+
+// ── QA NO-GO 대응(2026-07-27) — 절 경계 목록을 빠져나가는 우회 6종 ────────────
+//
+// QA가 `node -e`로 **전부 PASS-THROUGH를 실측**했다. 원인은 앞선 `CLAUSE_BOUNDARY`가 (i) 쉼표
+// 앞에만 종결형 조건을 걸고 (ii) 줄바꿈·슬래시·대시를 아예 경계로 안 봤기 때문이다. 특히 `-고`는
+// 구어에서 매우 흔하고, 내가 고친 원본 문구도 `"성함 확인되시고요"`로 `-고` 계열이었다.
+//
+// **강화 방향(축을 하나 더 세웠다 — 어미를 무한정 열거하지 않는다)**:
+//   | 축 | 무엇을 보나 | 경계 목록에 의존하나 |
+//   |---|---|---|
+//   | 1 `clausesDemandingWithoutSolicitation` | 신원 필드 절에 요구 형태가 있는가 | **예**(그래서 본체가 아니다) |
+//   | 2 `presumedVerificationNearIdentity` | 신원 필드 **바로 옆**에 "이미 확인됨"이 붙었는가 | **아니오** |
+// 축 2는 구분자를 보지 않으므로 **경계 목록에서 빠진 형태에도 면역**이다 — 아래 ③이 그 증거로,
+// 경계 목록에 **없는** 화살표(`→`)·`-으며`·`-으니`·`-습니다만` 4종을 축 1은 놓치고 축 2가 잡는다.
+const LEGACY_CLAUSE_BOUNDARY = /(?<=[다요죠까오])\s*[,·]\s*|\s*[?!.]\s*/;
+
+/** 강화 **전** 구현(직전 커밋 `c494931`의 판정)을 그대로 재현한다 — 역검증 비교 기준. */
+function legacyIdentityDefects(utterance: string): string[] {
+  return utterance
+    .split(LEGACY_CLAUSE_BOUNDARY)
+    .filter((clause) => IDENTITY_FIELD.test(clause) && !SOLICITATION_FORM.test(clause));
+}
+
+test("[신원요구/역검증] QA가 찾은 우회 6종 — 강화 전 통과, 강화 후 전부 차단", () => {
+  const qaBypasses: ReadonlyArray<readonly [string, string]> = [
+    ["종결형 -네(목록 밖)", "성함 확인됐네, 생년월일만 불러주세요"],
+    ["연결어미 -고", "성함은 확인됐고, 생년월일만 불러주세요"],
+    ["연결어미 -는데", "성함은 확인됐는데, 생년월일만 불러주세요"],
+    ["슬래시 구분", "성함 확인 완료 / 생년월일만 불러주세요"],
+    ["대시 구분", "성함 확인 완료 - 생년월일만 불러주세요"],
+    ["줄바꿈 구분", "성함 확인 완료\n생년월일만 불러주세요"],
+  ];
+  for (const [label, bypass] of qaBypasses) {
+    // ① 강화 전 판정은 **통과시켰다** — 되돌리면 이 단언이 먼저 깨진다.
+    assert.deepEqual(
+      legacyIdentityDefects(bypass),
+      [],
+      `${label}: 강화 전 구현이 통과시켰다는 전제가 깨졌다(비교 기준 오류)`,
+    );
+    // ② 강화 후에는 잡힌다.
+    assert.ok(identityDefects(bypass).length > 0, `${label}: 강화 후에도 우회된다 — ${bypass}`);
+  }
+});
+
+test("[신원요구/역검증] 축 2는 절 경계 목록에 **없는** 형태도 잡는다(어미 열거에 의존하지 않는다)", () => {
+  // 아래 4종은 경계 목록에 없는 구분자·어미다. 축 1은 놓치고 축 2가 잡는다 — 그것이 축 2를 둔 이유다.
+  for (const beyondBoundaryList of [
+    "성함 확인 완료 → 생년월일만 불러주세요",
+    "성함은 확인됐으며 생년월일만 불러주세요",
+    "성함 조회됐으니 생년월일만 불러주세요",
+    "성함은 인증 처리됐습니다만 생년월일만 불러주세요",
+  ]) {
+    assert.deepEqual(
+      clausesDemandingWithoutSolicitation(beyondBoundaryList),
+      [],
+      `이 문자열은 축 1이 놓치는 사례여야 한다(축 2의 존재 이유): ${beyondBoundaryList}`,
+    );
+    assert.ok(
+      presumedVerificationNearIdentity(beyondBoundaryList).length > 0,
+      `축 2가 잡아야 한다: ${beyondBoundaryList}`,
+    );
+  }
+});
+
+test("[신원요구/역검증] 축 2가 '확인'이라는 말 자체를 막지는 않는다(현행 정상 문구 오탐 0)", () => {
+  // 완료형 꼬리가 붙을 때만 잡는다 — 아래는 전부 현행 콘텐츠의 실제 문구다.
+  for (const legit of [
+    "본인 확인이 안 되면 공범으로 분류됩니다, 주민번호 뒤 7자리랑 계좌 비밀번호 불러주세요",
+    "조회 자체가 본인 확인부터라서요, 성함이랑 생년월일, 방금 보내드린 확인번호까지 불러주세요",
+    "성함, 생년월일 불러주십시오, 최근에 통장 개설하신 적 있으세요? 지금 바로 답변 주셔야 절차가 진행됩니다",
+  ]) {
+    assert.deepEqual(identityDefects(legit), [], `정상 문구를 오탐한다: ${legit}`);
   }
 });
 
