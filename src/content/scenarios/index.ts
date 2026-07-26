@@ -13,6 +13,7 @@ export * from "./messengerChildImpersonationKakao";
 export * from "./messengerFriendLoanKakao";
 export * from "./messengerParcelSmishingSms";
 export * from "./messengerSubsidySmishingSms";
+export * from "./bankSecurityVerifyScam";
 
 import { FAMILY_ACCIDENT_SCENARIO_ID, familyAccidentDeepvoiceScenario, type ScenarioDoc } from "./familyAccidentDeepvoice";
 import {
@@ -54,6 +55,10 @@ import {
   MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID,
   messengerSubsidySmishingSmsScenario,
 } from "./messengerSubsidySmishingSms";
+import {
+  BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID,
+  bankSecurityVerifyScamScenario,
+} from "./bankSecurityVerifyScam";
 
 export const scenarios: Record<string, ScenarioDoc> = {
   [FAMILY_ACCIDENT_SCENARIO_ID]: familyAccidentDeepvoiceScenario,
@@ -69,6 +74,9 @@ export const scenarios: Record<string, ScenarioDoc> = {
   [MESSENGER_FRIEND_LOAN_KAKAO_SCENARIO_ID]: messengerFriendLoanKakaoScenario,
   [MESSENGER_PARCEL_SMISHING_SMS_SCENARIO_ID]: messengerParcelSmishingSmsScenario,
   [MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID]: messengerSubsidySmishingSmsScenario,
+  // T95(MVP #29 잔여) — 확인 시도 무력화(D3) 전용 시나리오. voiceMode:"generic"이라 UX-017의
+  // "기본 AI 음성" 목록에 자동으로 나타난다(화면 코드 변경 0건).
+  [BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID]: bankSecurityVerifyScamScenario,
 };
 
 // Phase B(2026-07-22 사용자 결정) — voiceMode:"generic" 시나리오는 온보딩 녹음/클론을 생략하고

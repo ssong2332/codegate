@@ -12,6 +12,7 @@ import {
   hasVerifyIntercept,
 } from "../verifyIntercept";
 import { buildVerifyInterceptDoc } from "../../verifyIntercept/buildDoc";
+import { buildSystemPrompt } from "../../roleplay/promptAssembly";
 import { PUBLIC_SCENARIOS } from "../publicMeta";
 import { SCENARIO_PROMPTS } from "../index";
 
@@ -188,6 +189,50 @@ test("카탈로그의 모든 scenarioId가 실제 시나리오이며 **지시 �
       "clone",
       `clone 경로에는 확인 무력화가 성립하지 않는다(G23): ${scenarioId}`,
     );
+  }
+});
+
+// ── T95 — 전용 시나리오에서 **메커닉이 실제로 켜지는지** ────────────────────
+//
+// 카탈로그에 항목이 없으면 이 기능은 그 시나리오에서 아예 발동하지 않는다(프롬프트의 조건형 블록도
+// 함께 꺼진다). 즉 "확인 무력화 전용 시나리오"를 만들어 놓고 카탈로그를 빠뜨리면 **D3를 태깅했는데
+// 실제로는 아무 일도 일어나지 않는** 조용한 결손이 된다 — 이 테스트가 그것을 막는다.
+test("[T95/AC-071] 확인 무력화 전용 시나리오가 카탈로그를 갖고, 고급에서 게이트가 실제로 내려간다", () => {
+  const scenarioId = "bank-security-verify-scam";
+  assert.equal(hasVerifyIntercept(scenarioId), true, "전용 시나리오인데 카탈로그가 없으면 기능이 영영 안 뜬다");
+
+  const item = findVerifyInterceptItem(scenarioId);
+  assert.ok(item);
+  assert.equal(item.offerId, "bank-security-verify-desk");
+  // 이 시나리오는 확인 우회로가 본론이라 가장 이른 게이트(2턴)를 쓴다(§16.1.4 권고 범위 2~3 안).
+  assert.equal(item.availableAfterScammerTurns, 2);
+
+  // `createRealtimeCall`이 클라에 내려보내는 것은 게이트뿐이다(창구명·번호·지시 미노출).
+  assert.deepEqual(getVerifyOfferTrigger(scenarioId), { availableAfterScammerTurns: 2 });
+
+  // 다른 시나리오의 offerId로는 이 시나리오에 오퍼를 꽂을 수 없다(G24 위조 차단).
+  assert.equal(findVerifyInterceptItem(scenarioId, "institution-verify-desk"), undefined);
+});
+
+// AC-075 — 신규 D3 콘텐츠가 **고급으로 조립될 때에도** 가드레일 최후미 불변식이 유지되는지
+// (§15.5/AC-065). 조립 함수 자체는 시나리오와 무관하지만, AC-075는 "신규 콘텐츠 전부"에 대한
+// 확인을 명문 요구하므로 이 시나리오로 직접 한 번 더 고정한다.
+test("[T95/AC-075] 신규 시나리오를 고급으로 조립하면 확인 안내 블록이 붙고, 가드레일은 여전히 맨 마지막이다", () => {
+  const prompt = SCENARIO_PROMPTS["bank-security-verify-scam"];
+  const advanced = buildSystemPrompt(prompt, {
+    difficultyLevel: "advanced",
+    verifyInterceptEnabled: hasVerifyIntercept("bank-security-verify-scam"),
+  });
+  assert.ok(advanced.includes("[확인 안내 — 이 훈련에서만 적용]"), "고급에서 확인 동기화 블록이 붙어야 한다");
+  assert.ok(
+    advanced.trimEnd().endsWith(prompt.guardrailPreamble.trimEnd()),
+    "guardrailPreamble이 맨 마지막이어야 한다(AC-065 불변)",
+  );
+  // 초급·중급에서는 메커닉이 꺼지므로 블록도 붙지 않는다(회귀 0 — 프롬프트가 도입 전과 동일).
+  for (const level of ["beginner", "intermediate"] as const) {
+    const assembled = buildSystemPrompt(prompt, { difficultyLevel: level, verifyInterceptEnabled: false });
+    assert.equal(assembled.includes("[확인 안내 — 이 훈련에서만 적용]"), false, level);
+    assert.ok(assembled.trimEnd().endsWith(prompt.guardrailPreamble.trimEnd()), level);
   }
 });
 

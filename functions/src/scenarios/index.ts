@@ -45,6 +45,10 @@ import {
   MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID,
   messengerSubsidySmishingSmsPrompt,
 } from "./messengerSubsidySmishingSms.prompt";
+import {
+  BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID,
+  bankSecurityVerifyScamPrompt,
+} from "./bankSecurityVerifyScam.prompt";
 
 export { FAMILY_ACCIDENT_SCENARIO_ID, familyAccidentDeepvoicePrompt };
 export { INSTITUTIONAL_IMPERSONATION_SCENARIO_ID, institutionalImpersonationPrompt };
@@ -62,6 +66,7 @@ export {
 export { MESSENGER_FRIEND_LOAN_KAKAO_SCENARIO_ID, messengerFriendLoanKakaoPrompt };
 export { MESSENGER_PARCEL_SMISHING_SMS_SCENARIO_ID, messengerParcelSmishingSmsPrompt };
 export { MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID, messengerSubsidySmishingSmsPrompt };
+export { BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID, bankSecurityVerifyScamPrompt };
 
 export const SCENARIO_PROMPTS: Record<string, ScenarioPromptDoc> = {
   [FAMILY_ACCIDENT_SCENARIO_ID]: familyAccidentDeepvoicePrompt,
@@ -77,4 +82,5 @@ export const SCENARIO_PROMPTS: Record<string, ScenarioPromptDoc> = {
   [MESSENGER_FRIEND_LOAN_KAKAO_SCENARIO_ID]: messengerFriendLoanKakaoPrompt,
   [MESSENGER_PARCEL_SMISHING_SMS_SCENARIO_ID]: messengerParcelSmishingSmsPrompt,
   [MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID]: messengerSubsidySmishingSmsPrompt,
+  [BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID]: bankSecurityVerifyScamPrompt,
 };

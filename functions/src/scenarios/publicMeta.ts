@@ -44,6 +44,7 @@ export const MESSENGER_CHILD_IMPERSONATION_KAKAO_SCENARIO_ID = "messenger-child-
 export const MESSENGER_FRIEND_LOAN_KAKAO_SCENARIO_ID = "messenger-friend-loan-kakao";
 export const MESSENGER_PARCEL_SMISHING_SMS_SCENARIO_ID = "messenger-parcel-smishing-sms";
 export const MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID = "messenger-subsidy-smishing-sms";
+export const BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID = "bank-security-verify-scam";
 
 export const familyAccidentDeepvoiceScenario: ScenarioMeta = {
   title: "가족 납치·사고 딥보이스",
@@ -238,6 +239,24 @@ export const messengerSubsidySmishingSmsScenario: ScenarioMeta = {
   escalation: { toChannel: "voice", voiceMode: "generic" },
 };
 
+// T95(2026-07-26, MVP #29 잔여 — OQ-41 "전용 1종") 확인 시도 무력화(D3) 전용 시나리오 미러.
+// ⚠️ **이 미러는 `callerLabel`까지 원본과 글자 그대로 같다.** 기존 13종은 T75에서 클라 쪽
+// callerLabel만 번호 표기로 바꾸면서 이 파일과 13/13 어긋난 상태다(§15.10.9 G38) — 새 시나리오에서
+// 같은 드리프트를 반복하지 않는다. 원본은 src/content/scenarios/bankSecurityVerifyScam.ts다.
+export const bankSecurityVerifyScamScenario: ScenarioMeta = {
+  title: "직접 확인해 보라는 은행 사칭",
+  fraudType: "금융기관 사칭(확인 유도형)",
+  estimatedDuration: "약 5~8분",
+  difficulty: "높음 — 상대가 먼저 확인을 권해서 의심이 풀리기 쉽습니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "안녕하세요, 고객님. ○○은행 금융사고대응팀입니다. 고객님 계좌에서 비정상 출금 시도가 확인되어 연락드렸습니다." },
+    { lineId: "line-2", text: "의심스러우신 게 당연합니다. 직접 확인해 보셔도 됩니다. 저는 끊지 않고 기다리겠습니다." },
+    { lineId: "line-3", text: "확인되시는 대로 이어서 진행하시죠. 그 사이에 출금이 나가지 않도록 저희가 붙잡아 두겠습니다." },
+  ],
+  voiceMode: "generic",
+  callerLabel: "070-4133-2085",
+};
+
 export const PUBLIC_SCENARIOS: Record<string, ScenarioMeta> = {
   [FAMILY_ACCIDENT_SCENARIO_ID]: familyAccidentDeepvoiceScenario,
   [INSTITUTIONAL_IMPERSONATION_SCENARIO_ID]: institutionalImpersonationScenario,
@@ -252,4 +271,5 @@ export const PUBLIC_SCENARIOS: Record<string, ScenarioMeta> = {
   [MESSENGER_FRIEND_LOAN_KAKAO_SCENARIO_ID]: messengerFriendLoanKakaoScenario,
   [MESSENGER_PARCEL_SMISHING_SMS_SCENARIO_ID]: messengerParcelSmishingSmsScenario,
   [MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID]: messengerSubsidySmishingSmsScenario,
+  [BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID]: bankSecurityVerifyScamScenario,
 };
