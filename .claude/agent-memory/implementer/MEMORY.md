@@ -28,4 +28,5 @@
 - [Messenger/transition flow restyle](project_codegate_t_messenger_transition_restyle.md) — OQ-U6 brand-skin carve-out resolved (scope narrower than mockup implied), SelectableCard misuse avoided for non-two-step buttons, live same-file worktree clobber recovered mid-task (not just concurrent-different-file), cross-file Button-adoption fragmentation call.
 - [T49 messenger 2-person challenge (MVP #20)](project_codegate_t49_messenger_challenge.md) — createChallenge channel branching, first use of HttpsError.details.reason, UX-026 retires T36's challengeMode flag entirely, emulator-needs-rebuild-before-test gotcha.
 - [T52 report accuracy fix (wasDeceived + tacticsUsed)](project_codegate_t52_report_accuracy_fix.md) — two regex root causes, mock/analyze tactic-flavor duplication drift, Windows bash+curl UTF-8 mojibake gotcha, mid-task branch-moved-under-me recovery.
+- [T83 확인 시도 무력화](project_codegate_t83_verify_intercept.md) — 설계가 규율 안 한 충돌 판정법, 격리 포트도 점유돼 있던 사례, 리졸버 1-base↔0-base 재사용, 금지어 테스트가 자기 주석에 걸린 함정.
 - [T82 수법 축 데이터 모델](project_codegate_t82_axis_model.md) — 정본 표가 콘텐츠보다 좁은 3건(E3=0의 해석 주의), 미지정 카테고리 판정, TS6133이 3겹째 게이트, `unknown` 부분일치 함정.
