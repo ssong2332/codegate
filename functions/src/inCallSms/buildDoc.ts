@@ -1,5 +1,6 @@
 // 카탈로그 항목 → Firestore 문서 변환 (T68). 부수효과 없는 순수 함수라 단위 테스트 대상이다.
 import type { InCallSmsItem } from "../scenarios/inCallSms";
+import { DEFAULT_MOCK_SCREEN_KIND, resolveMockScreenKind } from "../scenarios/mockScreens";
 import type { InCallSmsDoc } from "../shared/types";
 
 /**
@@ -13,7 +14,14 @@ export function buildInCallSmsDoc(
   item: InCallSmsItem,
   arrivedAt: FirebaseFirestore.Timestamp,
   anchorScammerTurn: number,
+  scenarioId: string,
 ): InCallSmsDoc {
+  // T104(§19.4 #2) — 링크형 문자가 여는 랜딩의 **목업 종류를 서버가 확정해 실어 보낸다**
+  // (§15.9.1 R3 — 클라가 `fakeLandingId` 문자열로 kind를 추론하지 않는다).
+  const landingKind =
+    item.kind === "link" && item.fakeLandingId
+      ? resolveMockScreenKind(scenarioId, item.fakeLandingId)
+      : DEFAULT_MOCK_SCREEN_KIND;
   return {
     smsId: item.smsId,
     kind: item.kind,
@@ -26,6 +34,9 @@ export function buildInCallSmsDoc(
       ? { linkDisplayText: item.linkDisplayText }
       : {}),
     ...(item.kind === "link" && item.fakeLandingId ? { fakeLandingId: item.fakeLandingId } : {}),
+    // 기본값이면 **키 자체를 만들지 않는다** — `extractLinkMarker`의 생략 규칙과 동일하며,
+    // 같은 개념에 생략 규칙이 두 벌이면 그게 드리프트다(§19.4 #3).
+    ...(landingKind === DEFAULT_MOCK_SCREEN_KIND ? {} : { landingKind }),
     arrivedAt,
     anchorScammerTurn,
   };

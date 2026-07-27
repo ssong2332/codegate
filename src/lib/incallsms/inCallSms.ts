@@ -16,6 +16,9 @@ export type InCallSmsView = {
   otpCode?: string;
   linkDisplayText?: string;
   fakeLandingId?: string;
+  /** T104 — 그 랜딩의 목업 종류. **서버가 확정해 내려준 값**이며 클라가 문자열로 추론하지 않는다
+   *  (§15.9.1 R3). 부재 → `credential-form`(하위호환 읽기 규칙, §15.9.1 R2). */
+  landingKind?: "credential-form" | "app-install";
   /** 도착 순서 정렬용(ms). 서버 Timestamp가 아직 반영되기 전이면 0. */
   arrivedAtMs: number;
   openedAtMs?: number;

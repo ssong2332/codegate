@@ -48,9 +48,14 @@ export default function InCallSmsOverlay({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(() => latestSmsId(messages));
-  const [fakeLanding, setFakeLanding] = useState<{ smsId: string; displayText: string } | null>(
-    null,
-  );
+  // T104 — 상황별 랜딩을 열려면 `fakeLandingId`(조회 키)와 서버가 확정한 `landingKind`가 함께
+  // 필요하다. 둘 다 문자 문서에서 온 값이며 **클라가 문자열로 분류하지 않는다**(§15.9.1 R3/R8).
+  const [fakeLanding, setFakeLanding] = useState<{
+    smsId: string;
+    displayText: string;
+    landingId?: string;
+    landingKind?: "credential-form" | "app-install";
+  } | null>(null);
 
   // 열릴 때 포커스를 오버레이 제목으로 이동한다(UX-027 Focus Order). 닫을 때의 복귀는 호출부가
   // 직전 트리거(배너/"문자함" 버튼)로 되돌린다.
@@ -221,6 +226,8 @@ export default function InCallSmsOverlay({
                                 setFakeLanding({
                                   smsId: sms.smsId,
                                   displayText: sms.linkDisplayText ?? "",
+                                  landingId: sms.fakeLandingId,
+                                  landingKind: sms.landingKind,
                                 });
                               }}
                               aria-label={`모의 링크: ${sms.linkDisplayText}`}
@@ -255,10 +262,14 @@ export default function InCallSmsOverlay({
       </div>
 
       {/* UX-023 재사용(무개정) — 닫으면 이 문자 오버레이로 복귀하고, 거기서 다시 통화로 돌아간다.
-          "훈련 종료"는 가짜 랜딩 안에서도 그대로 도달 가능하다(AC-006). */}
+          "훈련 종료"는 가짜 랜딩 안에서도 그대로 도달 가능하다(AC-006).
+          T104(§19.4 #6) — `landingId`·`landingKind`를 함께 넘겨 **상황에 맞는 화면**이 뜨게 한다.
+          ⛔ 이 파일은 콘텐츠를 하나도 갖지 않는다(그리는 곳은 여전히 MessengerFakeLanding 한 파일). */}
       {fakeLanding && (
         <MessengerFakeLanding
           title={fakeLanding.displayText}
+          landingId={fakeLanding.landingId}
+          landingKind={fakeLanding.landingKind}
           onClose={() => setFakeLanding(null)}
           onEndTraining={onEndTraining}
         />

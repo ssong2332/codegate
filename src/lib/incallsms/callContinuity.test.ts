@@ -14,6 +14,14 @@ import { join } from "node:path";
 const page = readFileSync("src/app/session/play/page.tsx", "utf8");
 const overlay = readFileSync("src/components/InCallSmsOverlay.tsx", "utf8");
 
+/** 금지 토큰 검사는 **주석을 제외한 실제 코드**만 본다 — 이 저장소는 "왜 하지 않는가"를 주석에
+ *  길게 남기는 관례라, 주석까지 세면 근거를 적었다는 이유로 테스트가 깨진다
+ *  (`src/components/mockScreenCopy.test.ts`와 같은 관례). */
+function codeOnly(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+}
+const overlayCode = codeOnly(overlay);
+
 test("[AC-059/G10] 문자 오버레이는 세션 컴포넌트의 형제 노드로, 그 뒤에 조건부 렌더된다", () => {
   const gemini = page.indexOf("<GeminiVoiceSession");
   const elevenlabs = page.indexOf("<RealtimeVoiceSession");
@@ -103,6 +111,68 @@ test("[AC-060] 오버레이는 읽기 전용이다 — 전송 경로도, 실 URL
   assert.ok(!page.includes("clipboard"));
   // 링크는 기존 인앱 가짜 랜딩(UX-023)을 재사용한다 — 신규 랜딩을 만들지 않는다(D-37).
   assert.ok(overlay.includes("MessengerFakeLanding"), "기존 가짜 랜딩을 재사용해야 한다");
+});
+
+// ── G80(Architecture.md §19.8) — **입력 어포던스 부재**를 소스 스캔으로 고정한다 ────────────
+//
+// **왜 지금 넣는가.** UX가 D-57 Impact에서 *"문자앱을 닮게 만들다 하단 입력창을 넣는 것이 가장 흔한
+// 실수"* 라고 직접 경고했고, Architecture.md:2667(G80)이 *"입력 어포던스 부재를 소스 스캔 단언으로
+// 추가할 것(`<input`·`<textarea`·`onSubmit` 0건)"* 을 명시했다. 위 `[AC-060]` 테스트는 **전송
+// 경로**(`sendMessage`·`href=`·`window.open`·clipboard)만 보고 **입력 어포던스는 보지 않는다** —
+// 입력창은 전송 API 없이도 들어올 수 있고(로컬 state만 바꾸는 가짜 답장 입력창), 그 순간 AC-060의
+// *"답장·전달·전송 경로가 UI·API에 존재하지 않는다"* 가 UI 쪽에서 먼저 깨진다.
+//
+// ⚠️ **검사 대상은 이 파일(`InCallSmsOverlay.tsx`) 하나다.** 이 오버레이가 열어 주는 가짜 랜딩
+// (`MessengerFakeLanding.tsx`)에는 입력 필드가 **정당하게 있다**(kind=`credential-form`은 입력을
+// 허용하는 안전 계약이다 — UX-023 v1.13 (2)). 별도 파일이라 이 스캔에 잡히지 않으며, 그것이 맞다.
+// 여기서 막는 것은 **문자함 자체가 대화·답장 표면이 되는 것**이다(읽기 전용 문자함, UX-027 v1.11).
+//
+// ⚠️ **T103(문자 표면 반전)과의 관계 — 이 단언은 T103을 방해하지 않는다.** T103 범위는 주/부 반전·
+// 전환 연출·아코디언 카드 → 말풍선 스레드·상단 문단 제거·여백 통일이며(docs/Tasks.md T103), 그중
+// 입력 어포던스를 **추가하는 항목은 없다.** 오히려 T103의 완료 판정 필수 증거 ②가 *"입력창·답장·
+// 전달 어포던스가 0건임을 자동 검증하고, 입력창을 하나 넣으면 실제로 실패한다는 역방향 확인 출력"*
+// 을 요구한다 — 이 테스트가 바로 그 자동 검증이다. T103이 이 파일을 개편해도 말풍선·스크롤·
+// 애니메이션은 전부 표시 요소라 아래 토큰과 무관하다.
+const INPUT_AFFORDANCE_TOKENS = [
+  // G80이 이름을 콕 집은 3종.
+  "<input",
+  "<textarea",
+  "onSubmit",
+  // 같은 부류의 우회 형태 — 폼·편집 가능 영역·텍스트박스 롤도 "답장을 쓰는 자리"를 만든다.
+  "<form",
+  "contentEditable",
+  'role="textbox"',
+];
+
+test("[G80/AC-060] 문자함에 입력 어포던스가 **하나도 없다**(읽기 전용 — D-57 최빈 사고)", () => {
+  for (const token of INPUT_AFFORDANCE_TOKENS) {
+    assert.ok(
+      !overlayCode.includes(token),
+      `읽기 전용 문자함에 입력 어포던스가 들어왔다: ${token} — ` +
+        "사용자가 답장을 쓰는 채널을 만들면 AC-060(답장·전달·전송 경로 부재)이 깨진다(G80). " +
+        "가짜 랜딩(MessengerFakeLanding.tsx)의 입력 필드는 별개이며 정당하다.",
+    );
+  }
+  // 스캔이 실제 코드를 보고 있다는 것도 함께 고정한다(빈 문자열을 훑고 통과하는 상태 방지).
+  assert.ok(overlayCode.includes("InCallSmsOverlay"), "주석 제거 후에도 컴포넌트 코드가 남아야 한다");
+});
+
+test("[G80/역검증] 입력창을 하나 넣으면 위 스캔이 실제로 실패한다", () => {
+  // ⚠️ 실제 파일을 오염시켰다 되돌리는 방식은 쓰지 않는다(되돌리기를 잊으면 그대로 배포된다) —
+  // 이 저장소의 기존 관례대로 **테스트 코드 안에서만** 오염시킨다(mockScreenCopy.test.ts 선례).
+  const poisoned = `${overlayCode}
+        <form onSubmit={handleReply}>
+          <input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="답장 입력" />
+          <textarea />
+        </form>`;
+  const caught = INPUT_AFFORDANCE_TOKENS.filter((token) => poisoned.includes(token));
+  assert.deepEqual(
+    caught.sort(),
+    ["<form", "<input", "<textarea", "onSubmit"].sort(),
+    `오염 샘플이 G80 토큰에 실제로 걸려야 한다(잡힌 것: ${caught.join(", ")})`,
+  );
+  // 그리고 깨끗한 현재 소스는 하나도 걸리지 않는다(대조군).
+  assert.deepEqual(INPUT_AFFORDANCE_TOKENS.filter((token) => overlayCode.includes(token)), []);
 });
 
 // 사용자 브라우저 실측 버그(2026-07-25) — 문자를 전부 읽은 뒤에도 sr-only aria-live 영역이

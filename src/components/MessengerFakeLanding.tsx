@@ -36,6 +36,13 @@ type MessengerFakeLandingProps = {
   title: string;
   /** 서버 카탈로그가 확정한 목업 종류(§15.9.1 R3). 클라가 문자열로 추론하지 않는다. */
   landingKind?: MessengerFakeLandingKind;
+  /**
+   * 상황별 콘텐츠 조회 키(T104 · §19.4 R8). **정확 일치 조회에만 쓴다** — 정규식·`startsWith`·
+   * `includes`·부분 문자열 분해로 랜딩 성격을 추론하는 코드를 두지 않는다(AC-024 자유문자열 분류
+   * 금지 원칙 계승). 미스면 **같은 kind의 기본 문구**로 떨어진다(R7 — 조회가 kind를 바꾸는 경로는
+   * 만들지 않는다. 그것이 R5 "app-install 방향 폴백 금지"를 우회하는 유일한 구멍이다).
+   */
+  landingId?: string;
   /** 닫기/복귀 — UX-022 채팅으로 되돌아간다. */
   onClose: () => void;
   /** "훈련 종료"는 이 화면에서도 접근 가능해야 한다(AC-006). */
@@ -55,6 +62,7 @@ type MessengerFakeLandingProps = {
 export default function MessengerFakeLanding({
   title,
   landingKind = "credential-form",
+  landingId,
   onClose,
   onEndTraining,
   onInstallConsent,
@@ -105,20 +113,129 @@ export default function MessengerFakeLanding({
       </div>
 
       <div className="mx-auto flex w-full max-w-sm flex-1 flex-col gap-6 p-6">
+        {/* ⚠️ **kind 분기가 먼저 끝난다**(§19.4 R7). 상황별 콘텐츠 조회는 선택된 서브 컴포넌트
+            **안쪽**에서만 일어나며, 조회 결과가 kind를 바꾸는 경로는 존재하지 않는다. */}
+        {/* ⚠️ `app-install`은 상황 축을 갖지 않는다 — 도달 가능한 항목이 `subsidy-install` 1종뿐이고
+            D-58이 "무변경"으로 확정했다. 조회 표를 억지로 만들면 도달 불가 콘텐츠가 생긴다. */}
         {landingKind === "app-install" ? (
           <AppInstallMockup onClose={onClose} onConsent={onInstallConsent} />
         ) : (
-          <CredentialFormMockup onClose={onClose} />
+          <CredentialFormMockup landingId={landingId} onClose={onClose} />
         )}
       </div>
     </div>
   );
 }
 
-/** 기존 kind — 가짜 로그인/정보입력 랜딩(T29 원본 그대로, 문구·동작 무변경). */
-function CredentialFormMockup({ onClose }: { onClose: () => void }) {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
+/** 상황별 랜딩 문구(T104 · UX-023 v1.13). **서버 카탈로그
+ *  (`functions/src/scenarios/mockScreens.ts`)가 정본**이고 여기는 렌더 문자열이다 —
+ *  두 패키지라 import로 공유할 수 없어 `mockScreenCopy.test.ts`가 소스 텍스트를 직접 대조한다.
+ *  ⚠️ `placeholder`는 카탈로그 필드가 아닌 **순수 표현 힌트**다(숫자열 금지 — AC-005). */
+type CredentialFieldCopy = { label: string; placeholder: string };
+type CredentialCopy = {
+  headline: string;
+  bodyLines: string[];
+  fields: CredentialFieldCopy[];
+  submitLabel: string;
+  successHeadline: string;
+  issuerLabel: string;
+};
+
+/** 콘텐츠가 없는 landingId의 폴백(§15.9.1 R5 · AC-078 (d)) — **범용 화면**이다.
+ *  ⛔ 어떤 경우에도 `app-install` 방향으로 떨어지지 않는다(그쪽은 kind가 정하며 이 표는 kind를
+ *  바꾸지 못한다 — 애초에 `AppInstallMockup`은 이 표를 보지 않는다). T29 원본 문구 그대로. */
+const GENERIC_CREDENTIAL_COPY: CredentialCopy = {
+  headline: "본인확인이 필요합니다",
+  bodyLines: ["안전한 서비스 이용을 위해 아래 정보를 입력해 주세요."],
+  fields: [
+    { label: "이름", placeholder: "이름을 입력하세요" },
+    { label: "연락처", placeholder: "연락처를 입력하세요" },
+  ],
+  submitLabel: "확인",
+  successHeadline: "입력되었습니다.",
+  issuerLabel: "ⓒ 본인확인센터",
+};
+
+/** landingId → 상황별 문구. **정확 일치 조회만 한다**(R8). */
+const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
+  "parcel-redelivery": {
+    headline: "주소가 확인되지 않아 배송이 보류되었습니다",
+    bodyLines: [
+      "받는 분 정보가 일부 확인되지 않아 물품이 접수처에 보관 중입니다.",
+      "아래 정보를 확인해 주시면 오늘 중으로 재배송이 접수됩니다.",
+    ],
+    fields: [
+      { label: "받는 분 성함", placeholder: "성함을 입력하세요" },
+      { label: "연락처", placeholder: "연락처를 입력하세요" },
+      { label: "받으실 주소", placeholder: "주소를 입력하세요" },
+    ],
+    submitLabel: "재배송 신청하기",
+    successHeadline: "재배송이 접수되었습니다.",
+    issuerLabel: "ⓒ 종합물류 재배송 접수처",
+  },
+  "loan-refinance-apply": {
+    headline: "전환 신청서 본인확인이 필요합니다",
+    bodyLines: [
+      "저금리 전환 승인을 위해 신청인 본인 확인이 남아 있습니다.",
+      "아래 정보를 입력하시면 상담사가 접수 완료를 안내해 드립니다.",
+    ],
+    fields: [
+      { label: "성함", placeholder: "성함을 입력하세요" },
+      { label: "생년월일", placeholder: "생년월일을 입력하세요" },
+      { label: "연락처", placeholder: "연락처를 입력하세요" },
+    ],
+    submitLabel: "본인확인 완료하기",
+    successHeadline: "본인확인이 완료되었습니다.",
+    issuerLabel: "ⓒ ○○캐피탈 전환심사팀",
+  },
+  "tax-refund-claim": {
+    headline: "환급금 받으실 계좌를 등록해 주세요",
+    bodyLines: [
+      "조회된 미수령 환급금이 확인되었습니다.",
+      "받으실 계좌를 등록하시면 당일 지급 처리됩니다.",
+    ],
+    fields: [
+      { label: "예금주", placeholder: "예금주를 입력하세요" },
+      { label: "은행", placeholder: "은행을 입력하세요" },
+      { label: "계좌번호", placeholder: "계좌번호를 입력하세요" },
+    ],
+    submitLabel: "계좌 등록하기",
+    successHeadline: "계좌가 등록되었습니다.",
+    issuerLabel: "ⓒ 환급금 지급 안내센터",
+  },
+  "courier-customs-check": {
+    headline: "수취인 정보가 일치하지 않아 통관이 보류되었습니다",
+    bodyLines: [
+      "국제 배송 물품의 수취인 정보가 확인되지 않았습니다.",
+      "아래 정보를 확인해 주셔야 통관 절차가 재개됩니다.",
+    ],
+    fields: [
+      { label: "수취인 성함", placeholder: "성함을 입력하세요" },
+      { label: "연락처", placeholder: "연락처를 입력하세요" },
+      { label: "생년월일", placeholder: "생년월일을 입력하세요" },
+    ],
+    submitLabel: "수취인 정보 확인하기",
+    successHeadline: "수취인 정보가 확인되었습니다.",
+    issuerLabel: "ⓒ 국제통관지원센터",
+  },
+};
+
+/**
+ * kind=`credential-form` — 가짜 로그인/정보입력 랜딩.
+ *
+ * T104: 그리는 문구만 landingId로 갈리고 **안전 계약은 하나도 갈리지 않는다**(P-28) —
+ * 네트워크 호출 0건, 제출은 로컬 state만 변경, 완료 화면의 안전 고지는 상황과 무관하게 동일하다.
+ */
+function CredentialFormMockup({
+  landingId,
+  onClose,
+}: {
+  landingId?: string;
+  onClose: () => void;
+}) {
+  // R8 — **정확 일치 키 조회**만 한다(문자열 분해·부분 일치 금지).
+  const copy = (landingId ? CREDENTIAL_LANDING_COPY[landingId] : undefined) ?? GENERIC_CREDENTIAL_COPY;
+  const [values, setValues] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -131,8 +248,10 @@ function CredentialFormMockup({ onClose }: { onClose: () => void }) {
     return (
       <div className="flex flex-col gap-4 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-5">
         <p role="status" className="text-lg font-semibold text-[#0E6B62]">
-          입력되었습니다.
+          {copy.successHeadline}
         </p>
+        {/* ⚠️ **상황이 갈려도 이 고지는 갈리지 않는다**(P-28 ⑤ · G-D) — 컴포넌트 상수이며
+            카탈로그 필드가 아니다. 갈리는 것은 위 가짜 성공 문구뿐이다. */}
         <p className="text-sm leading-relaxed text-[#6B655C]">
           (실제로는 어디에도 전송되지 않았습니다 — 훈련용 모의 화면입니다.)
         </p>
@@ -151,44 +270,43 @@ function CredentialFormMockup({ onClose }: { onClose: () => void }) {
         </span>
       </div>
       <div className="-mt-4 flex flex-col gap-2">
-        <h1 className="text-xl font-bold leading-snug text-[#22303A]">본인확인이 필요합니다</h1>
-        <p className="text-sm leading-relaxed text-[#6B655C]">
-          안전한 서비스 이용을 위해 아래 정보를 입력해 주세요.
-        </p>
+        <h1 className="text-xl font-bold leading-snug text-[#22303A]">{copy.headline}</h1>
+        {copy.bodyLines.map((line) => (
+          <p key={line} className="text-sm leading-relaxed text-[#6B655C]">
+            {line}
+          </p>
+        ))}
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#22303A]">
-          이름
-          <input
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="이름을 입력하세요"
-            className="min-h-[48px] rounded-[10px] border border-[#E2DDD3] px-3.5 text-base text-[#22303A] outline-none focus:border-[#6B655C]"
-          />
-        </label>
-        <label className="flex flex-col gap-1.5 text-sm font-semibold text-[#22303A]">
-          연락처
-          <input
-            type="text"
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            placeholder="연락처를 입력하세요"
-            className="min-h-[48px] rounded-[10px] border border-[#E2DDD3] px-3.5 text-base text-[#22303A] outline-none focus:border-[#6B655C]"
-          />
-        </label>
+        {copy.fields.map((field) => (
+          <label
+            key={field.label}
+            className="flex flex-col gap-1.5 text-sm font-semibold text-[#22303A]"
+          >
+            {field.label}
+            <input
+              type="text"
+              value={values[field.label] ?? ""}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, [field.label]: event.target.value }))
+              }
+              placeholder={field.placeholder}
+              className="min-h-[48px] rounded-[10px] border border-[#E2DDD3] px-3.5 text-base text-[#22303A] outline-none focus:border-[#6B655C]"
+            />
+          </label>
+        ))}
 
-        {/* "확인" 버튼은 일부러 앱 브랜드 청록(#0E6B62)이 아닌 중립 회색(#41525E)을 쓴다 —
+        {/* 제출 버튼은 일부러 앱 브랜드 청록(#0E6B62)이 아닌 중립 회색(#41525E)을 쓴다 —
             이 화면이 우리 앱의 정식 CTA가 아니라 "낯선 가짜 사이트"라는 느낌을 유지해 훈련
             효과(진짜 앱 버튼과 구분)를 살린다(메신저 플로우.dc.html의 동일 의도적 선택). */}
         <button
           type="submit"
           className="min-h-[52px] rounded-[10px] bg-[#41525E] text-base font-semibold text-white transition-colors hover:bg-[#374049]"
         >
-          확인
+          {copy.submitLabel}
         </button>
-        <p className="text-center text-xs text-[#C9C2B6]">ⓒ 본인확인센터</p>
+        <p className="text-center text-xs text-[#C9C2B6]">{copy.issuerLabel}</p>
         <button
           type="button"
           onClick={onClose}
@@ -210,6 +328,7 @@ const INSTALL_BODY_LINES = [
   "설치 후 접근 권한을 허용하면 담당자가 신청을 대신 처리해 드립니다.",
 ];
 const INSTALL_CONSENT_LABEL = "권한 허용하고 계속하기";
+const INSTALL_ISSUER_LABEL = "ⓒ 업무처리 확인센터";
 
 /** 가짜 설치 진행 표시의 단계(UX-023 v1.12 ①→②→③→④). 전부 **로컬 state**이며 시간 경과 외에
  *  아무 부수효과가 없다 — 타이머는 진행률 숫자만 올린다. */
@@ -277,7 +396,7 @@ function AppInstallMockup({ onClose, onConsent }: { onClose: () => void; onConse
           >
             설치 진행하기
           </button>
-          <p className="text-center text-xs text-[#C9C2B6]">ⓒ 업무처리 확인센터</p>
+          <p className="text-center text-xs text-[#C9C2B6]">{INSTALL_ISSUER_LABEL}</p>
           <button
             type="button"
             onClick={onClose}

@@ -78,8 +78,17 @@ const MOCK_SCREEN_FIELDS: Record<keyof MockScreenItem, FieldPolicy> = {
   momentTactic: { profile: "mockSurface" },
   // ⚠️ 대처 문구만 프로파일이 다르다 — AC-071이 신고처(112·1332·금융감독원)를 **명시 요구**한다.
   correctAction: { profile: "correctiveGuidance" },
+  // T104(§19.3 (2)) — 상황별 랜딩 콘텐츠. **여기 등록하는 것이 D-58 최대 위험(실존 기관명)을
+  // 기계로 막는 유일한 지점**이다: `realInstitutionName` 패턴군은 `mockSurface` 프로파일에만
+  // 들어 있고(`harmlessnessPatterns.ts` 판정표), 클라 쪽 스캔은 기관명을 의도적으로 제외한다
+  // (`harmlessnessScreens.test.ts` — 사칭 대상 라벨은 서버 카탈로그에서 내려온다).
+  issuerLabel: { profile: "mockSurface" },
+  fields: { profile: "mockSurface" },
+  submitLabel: { profile: "mockSurface" },
+  successHeadline: { profile: "mockSurface" },
   landingId: { skip: "식별자" },
   kind: { skip: "열거형 MockScreenKind — 아래 kind 게이트가 별도로 본다" },
+  entrySurface: { skip: "열거형 MockScreenEntrySurface — 자유 문자열이 아니다(§19.2 (3))" },
 };
 
 const IN_CALL_SMS_FIELDS: Record<keyof InCallSmsItem, FieldPolicy> = {
@@ -212,9 +221,21 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
     0,
   );
   const expectedVerify = Object.keys(VERIFY_INTERCEPT).length * 5;
+  // T104 — kind별 옵셔널 필드가 생겨 항목마다 표면 수가 갈린다. 공통 4필드(headline·issuerLabel·
+  // momentTactic·correctAction) + bodyLines + kind 전용 필드로 **다시 계산**한다.
   const expectedMock = Object.values(MOCK_SCREENS)
     .flat()
-    .reduce((n, i) => n + 4 + i.bodyLines.length, 0);
+    .reduce(
+      (n, i) =>
+        n +
+        4 +
+        i.bodyLines.length +
+        (i.consentLabel === undefined ? 0 : 1) +
+        (i.fields?.length ?? 0) +
+        (i.submitLabel === undefined ? 0 : 1) +
+        (i.successHeadline === undefined ? 0 : 1),
+      0,
+    );
   const expectedSms = Object.values(IN_CALL_SMS)
     .flat()
     .reduce((n, i) => n + 3 + (i.linkDisplayText ? 1 : 0) + (i.otpCode ? 1 : 0), 0);
@@ -222,7 +243,11 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
   assert.equal(byDomain.get("scenarioPrompt"), expectedPrompt, "persona+guardrail+수법+의심키워드");
   assert.equal(byDomain.get("publicMeta"), expectedMeta, "메타 5필드 + 딥보이스 대사");
   assert.equal(byDomain.get("verifyIntercept"), expectedVerify, "T83/T95 확인 무력화 항목당 5필드");
-  assert.equal(byDomain.get("mockScreens"), expectedMock, "T84 모의 화면 항목당 4필드 + bodyLines");
+  assert.equal(
+    byDomain.get("mockScreens"),
+    expectedMock,
+    "T84/T104 모의 화면 항목당 공통 4필드 + bodyLines + kind 전용 필드",
+  );
   assert.equal(byDomain.get("inCallSms"), expectedSms, "T68 통화 중 문자 항목당 3필드 + 옵셔널 2");
   assert.equal(byDomain.get("moduleConstant"), 1, "MOCK_INSTALL_CONSENT_INSTRUCTION");
   assert.equal(

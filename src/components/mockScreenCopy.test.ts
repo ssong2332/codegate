@@ -107,34 +107,205 @@ test("[§15.9.6] 응낙 기록은 콜백으로 위임한다(컴포넌트가 직�
 // 한다(두 패키지라 import로 공유할 수 없다 — functions/는 별도 TS 빌드 루트다). 그래서 **소스
 // 텍스트를 대조해** 한쪽만 고쳐지는 드리프트를 잡는다(publicMeta.ts ↔ src/content 미러 검사와
 // 같은 관례).
-function extractCatalogStrings(field: string): string[] {
-  const pattern = new RegExp(`${field}:\\s*"([^"]+)"`, "g");
-  return [...catalog.matchAll(pattern)].map((m) => m[1]);
+// ⚠️ **T104/G76 — 이 파서는 "항목 1개" 전제로 짜여 있었다.** 이전 구현은
+//   (a) `catalog.indexOf("bodyLines: [")`로 **첫 번째 블록 하나만** 검사했고,
+//   (b) `field: "..."` 단일 정규식이라 **배열·옵셔널 필드를 읽지 못했다.**
+// 항목이 5개가 되는 순간 4개 문구가 조용히 대조를 안 타는 상태였다. 그래서 **항목 단위 순회**로
+// 바꾸고, **필드 이름 등록부**(아래 세 목록)와 **대조 건수**를 함께 단언한다 — 새 필드가 등록 없이
+// 들어오면 실패하고, 항목이 늘었는데 대조 건수가 안 늘어도 실패한다.
+
+/** 화면에 그려지는 문자열 필드 — 컴포넌트 소스에 **그대로 있어야** 한다. */
+const RENDERED_FIELDS = [
+  "headline",
+  "bodyLines",
+  "issuerLabel",
+  "fields",
+  "submitLabel",
+  "successHeadline",
+  "consentLabel",
+];
+/** 화면이 아니라 **리포트**로 가는 문자열 필드 — 컴포넌트에 있으면 오히려 잘못이다(§15.9.5 e-4). */
+const REPORT_ONLY_FIELDS = ["momentTactic", "correctAction"];
+/** 식별자·열거형 — 문구가 아니다. */
+const NON_TEXT_FIELDS = ["landingId", "kind", "entrySurface"];
+
+const KNOWN_FIELDS = [...RENDERED_FIELDS, ...REPORT_ONLY_FIELDS, ...NON_TEXT_FIELDS];
+
+type CatalogItem = { landingId: string; fields: Map<string, string[]> };
+
+/** 카탈로그 소스를 **항목 단위**로 자른다. `MOCK_SCREENS` 선언 이후는 항목 리터럴이 아니다. */
+function parseCatalogItems(): CatalogItem[] {
+  const anchor = catalog.indexOf("export const MOCK_SCREENS");
+  assert.ok(anchor > 0, "카탈로그에 MOCK_SCREENS 선언이 있어야 한다");
+  const starts = [...catalog.matchAll(/landingId:\s*"([^"]+)"/g)].map((m) => ({
+    landingId: m[1],
+    at: m.index ?? 0,
+  }));
+  assert.ok(starts.length > 0, "카탈로그에서 항목을 하나도 찾지 못했다 — 파서가 죽었다");
+  for (const start of starts) {
+    assert.ok(
+      start.at < anchor,
+      `항목 '${start.landingId}'가 MOCK_SCREENS 선언 뒤에 있다 — 파서가 이 항목을 건너뛴다`,
+    );
+  }
+  return starts.map((start, index) => {
+    const block = catalog.slice(start.at, starts[index + 1]?.at ?? anchor);
+    const fields = new Map<string, string[]>();
+    for (const name of KNOWN_FIELDS) {
+      const values = extractFieldValues(block, name);
+      if (values !== null) fields.set(name, values);
+    }
+    // 등록되지 않은 속성이 항목에 있으면 그 문구는 어떤 검사도 타지 않는다.
+    for (const [, key] of block.matchAll(/^ {4}(\w+):/gm)) {
+      assert.ok(
+        KNOWN_FIELDS.includes(key),
+        `'${start.landingId}'의 필드 '${key}'가 이 파일의 등록부에 없다 — ` +
+          "RENDERED/REPORT_ONLY/NON_TEXT 중 하나에 넣어라(안 넣으면 드리프트 검사를 통째로 우회한다)",
+      );
+    }
+    return { landingId: start.landingId, fields };
+  });
 }
 
-test("[드리프트] 카탈로그의 headline·consentLabel이 화면 문구와 정확히 일치한다", () => {
-  const headlines = extractCatalogStrings("headline");
-  const consentLabels = extractCatalogStrings("consentLabel");
-  assert.ok(headlines.length >= 1, "카탈로그에 headline이 있어야 한다");
-  assert.ok(consentLabels.length >= 1, "카탈로그에 consentLabel이 있어야 한다");
-  for (const text of [...headlines, ...consentLabels]) {
-    // ⚠️ 주석을 제거한 코드에서 찾는다 — 주석에 문구를 적어 두는 것으로 통과하면 안 된다.
-    assert.ok(
-      componentCode.includes(text),
-      `카탈로그 문구가 화면에 없다(드리프트): ${text}`,
-    );
+/** 문자열 필드와 문자열 배열 필드를 **둘 다** 읽는다(이전 파서가 못 읽던 자리). */
+function extractFieldValues(block: string, field: string): string[] | null {
+  const single = new RegExp(`(?:^|\\n)\\s*${field}:\\s*(?:\\n\\s*)?"([^"]*)"`).exec(block);
+  if (single) return [single[1]];
+  const arrayStart = new RegExp(`(?:^|\\n)\\s*${field}:\\s*\\[`).exec(block);
+  if (arrayStart) {
+    const from = block.indexOf("[", arrayStart.index);
+    const to = block.indexOf("]", from);
+    return [...block.slice(from, to).matchAll(/"([^"]*)"/g)].map((m) => m[1]);
+  }
+  return null;
+}
+
+const catalogItems = parseCatalogItems();
+
+test("[G76/드리프트] 카탈로그 **모든 항목**의 화면 문구가 컴포넌트에 그대로 있다", () => {
+  let compared = 0;
+  for (const item of catalogItems) {
+    // 항목마다 최소한 headline·bodyLines·issuerLabel은 있어야 한다(공통 필수 필드).
+    for (const required of ["headline", "bodyLines", "issuerLabel"]) {
+      assert.ok(
+        item.fields.has(required),
+        `${item.landingId}: 필수 필드 '${required}'를 파서가 읽지 못했다 — 서식이 바뀌었으면 파서를 넓혀라`,
+      );
+    }
+    for (const name of RENDERED_FIELDS) {
+      for (const text of item.fields.get(name) ?? []) {
+        // ⚠️ 주석을 제거한 코드에서 찾는다 — 주석에 문구를 적어 두는 것으로 통과하면 안 된다.
+        assert.ok(
+          componentCode.includes(text),
+          `카탈로그 문구가 화면에 없다(드리프트) — ${item.landingId}.${name}: ${text}`,
+        );
+        compared += 1;
+      }
+    }
+  }
+  // **대조 건수 단언**(§19.3 (4)) — 항목이 늘었는데 대조가 안 늘면 여기서 걸린다.
+  const expected = catalogItems.reduce(
+    (n, item) => n + RENDERED_FIELDS.reduce((m, name) => m + (item.fields.get(name)?.length ?? 0), 0),
+    0,
+  );
+  assert.equal(compared, expected, "대조 건수가 파싱 결과와 다르다 — 순회가 중간에 빠졌다");
+  assert.ok(
+    compared >= 4 * catalogItems.length,
+    `항목당 최소 4건(headline+bodyLines+issuerLabel+kind 전용)은 대조돼야 한다(현재 ${compared}건 / ${catalogItems.length}항목)`,
+  );
+});
+
+test("[G76/역검증] 항목이 하나라도 순회에서 빠지면 위 검사가 의미를 잃는다는 것을 고정한다", () => {
+  // 파서가 "첫 블록만" 보던 이전 구현을 재현해 **검사 범위가 실제로 넓어졌음**을 보인다.
+  const firstOnly = catalog.slice(catalog.indexOf("bodyLines: ["), catalog.indexOf("]", catalog.indexOf("bodyLines: [")));
+  const firstOnlyLines = [...firstOnly.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  const allLines = catalogItems.flatMap((item) => item.fields.get("bodyLines") ?? []);
+  assert.ok(
+    allLines.length > firstOnlyLines.length || catalogItems.length === 1,
+    `항목이 ${catalogItems.length}개인데 첫 블록만 보던 이전 파서와 대조 범위가 같다 — G76이 안 고쳐졌다`,
+  );
+  // 그리고 카탈로그에만 있고 화면에 없는 문구는 실제로 잡힌다.
+  assert.equal(componentCode.includes("이 문구는 어느 화면에도 없다"), false);
+});
+
+test("[G76] 리포트 전용 문구(momentTactic·correctAction)는 화면 컴포넌트에 들어가지 않는다", () => {
+  // §15.9.5 e-4 — 목업 문구를 리포트 스냅샷에 싣지 않는 것과 **반대 방향**의 규칙이다.
+  // 대처 문구가 화면에 섞이면 훈련 도중에 정답이 노출된다(D-6 취지).
+  for (const item of catalogItems) {
+    for (const name of REPORT_ONLY_FIELDS) {
+      for (const text of item.fields.get(name) ?? []) {
+        assert.equal(
+          componentCode.includes(text),
+          false,
+          `리포트 전용 문구가 화면에 있다 — ${item.landingId}.${name}`,
+        );
+      }
+    }
   }
 });
 
-test("[드리프트] 카탈로그의 bodyLines가 화면 문구와 정확히 일치한다", () => {
-  const start = catalog.indexOf("bodyLines: [");
-  assert.ok(start > 0, "카탈로그에 bodyLines 배열이 있어야 한다");
-  const block = catalog.slice(start, catalog.indexOf("]", start));
-  const lines = [...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  assert.ok(lines.length >= 1, "카탈로그 bodyLines가 비어 있으면 안 된다");
-  for (const line of lines) {
-    assert.ok(componentCode.includes(line), `카탈로그 bodyLine이 화면에 없다(드리프트): ${line}`);
+// ── T104 — 상황별 콘텐츠 조회의 구조 규칙(§19.4 R7/R8 · AC-078 (d)) ─────────────
+
+test("[T104/R8] landingId는 **정확 일치 조회 키**로만 쓰인다(문자열 분류 0건)", () => {
+  // AC-024 자유문자열 분류 금지 원칙의 계승 — `startsWith`·`includes`·정규식으로 랜딩 성격을
+  // 추론하기 시작하면 서버가 kind를 정한다는 R3이 클라에서 조용히 무너진다.
+  for (const forbidden of [
+    "landingId.startsWith",
+    "landingId.includes",
+    "landingId.split",
+    "landingId.match",
+    "landingId.indexOf",
+    "landingId.replace",
+    "landingId.endsWith",
+    "test(landingId",
+  ]) {
+    assert.equal(componentCode.includes(forbidden), false, `landingId 문자열 분류 금지(R8): ${forbidden}`);
   }
+  assert.ok(
+    componentCode.includes("CREDENTIAL_LANDING_COPY[landingId]"),
+    "정확 일치 키 조회가 있어야 한다",
+  );
+});
+
+test("[T104/R7·AC-078 (d)] 콘텐츠 미스는 **같은 kind의 범용 화면**으로만 떨어진다", () => {
+  // 폴백 대상이 GENERIC_CREDENTIAL_COPY(=범용 credential-form)임을 소스로 고정한다.
+  assert.ok(
+    /CREDENTIAL_LANDING_COPY\[landingId\][^;]*\?\?\s*GENERIC_CREDENTIAL_COPY/.test(componentCode),
+    "콘텐츠 미스의 폴백이 범용 credential-form 문구여야 한다(§15.9.1 R5)",
+  );
+  // ⛔ app-install 렌더가 credential 콘텐츠 표를 보지 않는다 — 조회가 kind를 바꾸는 경로 0건.
+  const installStart = componentCode.indexOf("function AppInstallMockup");
+  assert.ok(installStart > 0);
+  const installBody = componentCode.slice(installStart);
+  assert.equal(
+    installBody.includes("CREDENTIAL_LANDING_COPY"),
+    false,
+    "app-install이 credential 콘텐츠 표를 읽으면 kind 경계가 콘텐츠로 새어 R5 폴백 금지를 우회한다",
+  );
+  // 그리고 kind 분기 자체는 콘텐츠보다 **먼저** 끝난다(R7).
+  const branchAt = componentCode.indexOf('landingKind === "app-install" ? (');
+  const lookupAt = componentCode.indexOf("CREDENTIAL_LANDING_COPY[landingId]");
+  assert.ok(branchAt > 0 && lookupAt > branchAt, "콘텐츠 조회가 kind 분기보다 먼저 일어나면 안 된다");
+});
+
+test("[T104] 화면 콘텐츠 표의 키가 **전부 카탈로그에 있는 landingId**다(반대 방향 드리프트)", () => {
+  const tableStart = componentCode.indexOf("const CREDENTIAL_LANDING_COPY");
+  assert.ok(tableStart > 0, "상황별 콘텐츠 표가 있어야 한다");
+  const tableBody = componentCode.slice(tableStart, componentCode.indexOf("\n};", tableStart));
+  const keys = [...tableBody.matchAll(/^ {2}"([a-z0-9-]+)":/gm)].map((m) => m[1]);
+  assert.ok(keys.length >= 4, `상황별 랜딩 4종이 있어야 한다(현재 ${keys.length}종): ${keys}`);
+  const catalogIds = catalogItems.map((item) => item.landingId);
+  for (const key of keys) {
+    assert.ok(
+      catalogIds.includes(key),
+      `화면에만 있는 랜딩 콘텐츠다 — 서버 카탈로그에 없는 키: ${key}`,
+    );
+  }
+  // 카탈로그의 credential-form 항목은 전부 표에 있어야 한다(범용 화면으로 떨어지면 사용자 신고 재발).
+  const credentialIds = catalogItems
+    .filter((item) => (item.fields.get("kind") ?? [])[0] !== "app-install")
+    .map((item) => item.landingId);
+  assert.deepEqual(keys.slice().sort(), credentialIds.slice().sort());
 });
 
 test("[AC-072] 화면 문구에도 실존 앱명·스토어 표기가 없다", () => {

@@ -23,17 +23,46 @@
 
 export type MockScreenKind = "credential-form" | "app-install";
 
+/**
+ * 이 랜딩이 어느 표면에서 열리는가 — **게이트의 단일 판정 키**(T104, Architecture.md §19.2 (3),
+ * ADR-0012).
+ *
+ * ⚠️ **왜 필수 필드인가**: G53·G55·`channel==="messenger"` 세 단언은 원래 *"카탈로그의 모든
+ * scenarioId"* 를 훑었다. 그 조건은 세 단언의 **원문 사유**(전부 `app-install` 또는
+ * `[[LINK:]]` 렌더 경로를 가리킨다 — §19.1)를 가장 거칠게 근사한 것이라, 통화 중 문자로 열리는
+ * `credential-form` 랜딩을 카탈로그에 넣는 순간 **사유와 무관하게** 깨진다. 게이트를 지우는 대신
+ * 판정 키를 여기로 옮긴다. 옵셔널로 두면 새 항목이 조용히 빠지므로 **필수**다 — 표면을 선언하지
+ * 않은 항목은 타입이 깨져 넘어갈 수 없다.
+ */
+export type MockScreenEntrySurface = "messenger-link" | "in-call-sms";
+
 export type MockScreenItem = {
   /** 카탈로그 안에서 유일한 id. `MessengerAttachment.fakeLandingId`와 같은 값이며
    * Firestore `sessions/{sid}/mockScreens/{landingId}`의 문서 id가 된다(멱등). */
   landingId: string;
   kind: MockScreenKind;
-  /** 목업 제목 — **실존 앱명 금지**(AC-072). */
+  /** 이 항목이 열리는 진입 표면(§19.2 (3)) — 안전 게이트가 이 값으로 스코프를 판정한다. */
+  entrySurface: MockScreenEntrySurface;
+  /** 목업 제목 — **실존 앱명·실존 기관명 금지**(AC-072/AC-075 `mockSurface` 프로파일). */
   headline: string;
-  /** 가짜 설치 안내 문구. */
+  /** 화면 안내 문구. */
   bodyLines: string[];
-  /** 가짜 "권한 허용" 버튼 라벨(`app-install` 전용) — 실제 권한 요청이 아니다. */
-  consentLabel: string;
+  /** 화면 하단 발신 주체 표기(현행 하드코딩 `"ⓒ 본인확인센터"`·`"ⓒ 업무처리 확인센터"`를
+   * 카탈로그로 올린 것). **실존 기관명 금지** — `mockSurface` 프로파일을 탄다. */
+  issuerLabel: string;
+  /** 입력 필드 라벨(`credential-form` 전용, **최대 3개** — UX-023 v1.13 표).
+   * ⛔ `app-install`이면 반드시 `undefined`다(AC-072 *"입력 필드 0"*). G-C가 단언한다.
+   * ⛔ 라벨 안에 숫자열을 넣지 않는다(`LONG_DIGIT_SEQUENCE`). */
+  fields?: string[];
+  /** 가짜 제출 CTA 라벨(`credential-form` 전용). */
+  submitLabel?: string;
+  /** 가짜 성공 문구(`credential-form` 전용). ⚠️ 그 아래 **안전 고지**는 상황과 무관하게 동일하며
+   * 카탈로그 필드가 아니다(§19.3 (3) · P-28 ⑤ — G-D가 단언한다). */
+  successHeadline?: string;
+  /** 가짜 "권한 허용" 버튼 라벨(`app-install` 전용) — 실제 권한 요청이 아니다.
+   * `InCallSmsItem.otpCode`/`linkDisplayText`와 **동형인 kind 스코프 옵셔널 필드**이며,
+   * 부재를 판별자로 오버로드하지 않는다(§14.9.1 — kind가 유일한 판별자이고 G-C가 정합을 단언한다). */
+  consentLabel?: string;
   /** 승격 시 `DeceivedMoment.tactic`(§15.9.5 e-1). 기존 `resolveTacticCategory`가
    * `link_or_install`로 정규화한다 — **신규 카테고리 0건**. */
   momentTactic: string;
@@ -65,16 +94,140 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
   {
     landingId: "subsidy-install",
     kind: "app-install",
+    entrySurface: "messenger-link",
     headline: "업무처리 확인 앱을 설치해야 진행됩니다",
     bodyLines: [
       "지원금 신청은 본인확인 절차가 끝난 뒤에 접수됩니다.",
       "아래에서 확인용 앱 설치를 진행해 주세요.",
       "설치 후 접근 권한을 허용하면 담당자가 신청을 대신 처리해 드립니다.",
     ],
+    issuerLabel: "ⓒ 업무처리 확인센터",
     consentLabel: "권한 허용하고 계속하기",
     momentTactic: "앱 설치·원격 허용 유도",
     correctAction:
       "설치나 권한 허용을 요구받으면 그 자리에서 허용하지 말고 화면을 닫으세요. ① 앱은 기관 공식 경로에서만 설치하기 ② 설치를 권유받으면 대화를 멈추고 이미 알고 있는 번호로 직접 확인하기 ③ 가족·가까운 창구에서 함께 확인하기 ④ 이미 허용했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+];
+
+// ── T104 상황별 랜딩 콘텐츠 (UX-023 v1.13 (3) · D-58 · P-28 · AC-078) ────────────
+//
+// **왜 콘텐츠가 서버 카탈로그에 있는가(§19.3 (1) ③ — 결정적 이유)**: `mockSurface` 프로파일만
+// `realInstitutionName`(국세청·관세청·우체국…)을 포함하고, 그 스캔은 `harmlessnessGate.test.ts`의
+// `collectAllSurfaces()`가 순회하는 **이 카탈로그**에만 걸린다. 클라 상수에만 두거나 새 서버 파일을
+// 만들면 환급·통관 랜딩의 실존 기관명이 **어디에서도 안 걸린다** — D-58이 최대 위험으로 지목한 지점.
+//
+// ⚠️ 아래 4종은 전부 `credential-form`이다(**신규 kind 0건** — D-58). 새로 붙는 화면이 모두
+// "정보를 입력하게 만드는 화면"이라 기존 안전 계약(입력 허용·서버 미전송·외부 네비게이션 부재)과
+// 정확히 일치하고, kind를 늘리면 안전 계약이 한 벌 더 늘어 AC-072가 금지한 "검증 경로 이중화"에
+// 스스로 다가간다.
+//
+// ── ⭐ AC-078 (c) 미끼 → 랜딩 대조표 (구현 산출물 — AC 본문이 "대조표가 없으면 미충족"이라 규정) ──
+//
+// 각 랜딩의 **헤드라인·CTA**가, 그 랜딩으로 이어진 **미끼 문면**이 예고한 행위를 그대로 수행하게
+// 하는지를 보이는 표다. reviewer·QA는 이 표로 (c)를 판정한다.
+//
+// | landingId | 미끼 문면 출처(파일:줄 — 스냅샷) | 미끼 인용 | 미끼가 예고한 행위 | 랜딩 헤드라인 | 랜딩 CTA |
+// |---|---|---|---|---|---|
+// | `parcel-redelivery` | `roleplay/linkMarker.ts:22`(칩 라벨) · `messengerParcelSmishingSms.prompt.ts:37` | "재배송 신청 확인하기" | 주소 확인 → 재배송 신청 | "주소가 확인되지 않아 배송이 보류되었습니다" | "재배송 신청하기" |
+// | `subsidy-install` | `roleplay/linkMarker.ts:24`(칩 라벨) · `messengerSubsidySmishingSms.prompt.ts:64` | "지원금 신청 앱 설치하기" | 확인 앱 설치 | "업무처리 확인 앱을 설치해야 진행됩니다" | "권한 허용하고 계속하기" |
+// | `loan-refinance-apply` | `scenarios/inCallSms.ts:57-58`(문자 본문·칩) | "아래에서 본인확인 후 신청을 완료해 주세요." | 링크에서 본인확인 → 신청 완료 | "전환 신청서 본인확인이 필요합니다" | "본인확인 완료하기" |
+// | `tax-refund-claim` | `scenarios/inCallSms.ts:106-107`(문자 본문·칩) | "아래에서 계좌를 등록하시면 당일 지급됩니다." | 수령 계좌 등록 → 당일 지급 | "환급금 받으실 계좌를 등록해 주세요" | "계좌 등록하기" |
+// | `courier-customs-check` | `scenarios/inCallSms.ts:120-121`(문자 본문·칩) | "수취인 정보 불일치로 통관이 보류되었습니다." | 수취인 정보 확인 → 통관 재개 | "수취인 정보가 일치하지 않아 통관이 보류되었습니다" | "수취인 정보 확인하기" |
+//
+// ⚠️ **이 표가 조용히 낡지 않게 하는 장치(주석은 강제가 아니다).** 위 **줄 번호는 스냅샷일 뿐이며
+// 앵커가 아니다** — 파일이 바뀌면 줄은 밀린다. 진짜 앵커는 `__tests__/mockScreens.test.ts`의
+// `BAIT_TO_LANDING` 표이고, 그 테스트가 매 실행마다 다음 넷을 **런타임 카탈로그 값으로** 검사한다:
+//   ① 표의 landingId 집합 == `MOCK_SCREENS`의 landingId 집합(새 랜딩이 표를 건너뛸 수 없다)
+//   ② "미끼 인용" 문자열이 **실제 미끼 텍스트에 지금도 존재**한다(미끼가 바뀌면 실패)
+//   ③ 랜딩마다 정한 **앵커 토큰**이 미끼 인용과 랜딩 헤드라인+CTA **양쪽에** 있다(어느 쪽이 바뀌어도 실패)
+//   ④ 위 주석 표에 5개 landingId와 5개 미끼 인용이 전부 들어 있다(주석 ↔ 테스트 표 1:1)
+// **자동화의 한계(정직 고지)**: "상황이 맞는가"는 의미 판정이라 기계로 할 수 없다. 앵커 토큰 공유는
+// 그 **필요조건**일 뿐 충분조건이 아니므로, 사람이 읽는 표를 여기 남기고 그 표를 ①~④로 묶는다.
+
+// UF-006 Step 4 — 메신저 채팅(UX-022)의 `[[LINK:parcel-redelivery]]` 칩에서 열린다.
+const MESSENGER_PARCEL_SMISHING_SMS: MockScreenItem[] = [
+  {
+    landingId: "parcel-redelivery",
+    kind: "credential-form",
+    entrySurface: "messenger-link",
+    headline: "주소가 확인되지 않아 배송이 보류되었습니다",
+    bodyLines: [
+      "받는 분 정보가 일부 확인되지 않아 물품이 접수처에 보관 중입니다.",
+      "아래 정보를 확인해 주시면 오늘 중으로 재배송이 접수됩니다.",
+    ],
+    issuerLabel: "ⓒ 종합물류 재배송 접수처",
+    fields: ["받는 분 성함", "연락처", "받으실 주소"],
+    submitLabel: "재배송 신청하기",
+    successHeadline: "재배송이 접수되었습니다.",
+    momentTactic: "배송 보류를 빌미로 한 개인정보 입력 유도",
+    correctAction:
+      "문자 링크로 배송 정보를 입력하지 말고 화면을 닫으세요. ① 배송 상태는 주문한 판매처나 택배사 공식 경로에서 직접 조회하기 ② 주소·연락처를 링크로 요구하면 일단 멈추기 ③ 가족이나 가까운 사람에게 화면을 보여 주고 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+];
+
+// UF-008 — 통화 중 문자(UX-027)의 `loan-apply-link` 칩에서 열린다(`inCallSms.ts` LOAN_SCAM).
+const LOAN_REFINANCE_SCAM: MockScreenItem[] = [
+  {
+    landingId: "loan-refinance-apply",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "전환 신청서 본인확인이 필요합니다",
+    bodyLines: [
+      "저금리 전환 승인을 위해 신청인 본인 확인이 남아 있습니다.",
+      "아래 정보를 입력하시면 상담사가 접수 완료를 안내해 드립니다.",
+    ],
+    // 문자 본문의 가상 발신 주체(`inCallSms.ts` LOAN_SCAM `senderLabel`)와 표기를 맞춘다.
+    issuerLabel: "ⓒ ○○캐피탈 전환심사팀",
+    fields: ["성함", "생년월일", "연락처"],
+    submitLabel: "본인확인 완료하기",
+    successHeadline: "본인확인이 완료되었습니다.",
+    momentTactic: "저금리 전환 승인을 빌미로 한 신상정보 입력 유도",
+    correctAction:
+      "전환 신청서라며 링크로 본인확인을 요구하면 입력하지 말고 화면을 닫으세요. ① 대출 상담은 이미 알고 있는 금융회사 대표번호로 직접 걸어 확인하기 ② 생년월일·연락처를 링크에 넣지 않기 ③ 가족이나 가까운 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+];
+
+// UF-008 — `tax-refund-link` 칩에서 열린다. ⚠️ 실존 기관명(국세청) 금지라 가상 안내센터 표기를 쓴다.
+const TAX_REFUND_SCAM: MockScreenItem[] = [
+  {
+    landingId: "tax-refund-claim",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "환급금 받으실 계좌를 등록해 주세요",
+    bodyLines: [
+      "조회된 미수령 환급금이 확인되었습니다.",
+      "받으실 계좌를 등록하시면 당일 지급 처리됩니다.",
+    ],
+    issuerLabel: "ⓒ 환급금 지급 안내센터",
+    // ⛔ 라벨에 숫자열을 넣지 않는다(`LONG_DIGIT_SEQUENCE`) — 안내 텍스트만 쓴다.
+    fields: ["예금주", "은행", "계좌번호"],
+    submitLabel: "계좌 등록하기",
+    successHeadline: "계좌가 등록되었습니다.",
+    momentTactic: "미수령 환급금을 빌미로 한 계좌정보 입력 유도",
+    correctAction:
+      "돈을 준다며 계좌를 입력하라고 하면 그 자리에서 멈추세요 — 환급은 계좌번호를 링크로 받지 않습니다. ① 환급 여부는 공식 기관 창구에 직접 문의해 확인하기 ② 예금주·계좌번호를 문자 링크에 넣지 않기 ③ 가족이나 가까운 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+];
+
+// UF-008 — `courier-customs-link` 칩에서 열린다. ⚠️ 관세청·우체국 등 실존 기관명 금지.
+const COURIER_CUSTOMS_SCAM: MockScreenItem[] = [
+  {
+    landingId: "courier-customs-check",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "수취인 정보가 일치하지 않아 통관이 보류되었습니다",
+    bodyLines: [
+      "국제 배송 물품의 수취인 정보가 확인되지 않았습니다.",
+      "아래 정보를 확인해 주셔야 통관 절차가 재개됩니다.",
+    ],
+    // 문자 본문의 가상 발신 주체(`inCallSms.ts` COURIER_CUSTOMS_SCAM)와 표기를 맞춘다.
+    issuerLabel: "ⓒ 국제통관지원센터",
+    fields: ["수취인 성함", "연락처", "생년월일"],
+    submitLabel: "수취인 정보 확인하기",
+    successHeadline: "수취인 정보가 확인되었습니다.",
+    momentTactic: "통관 보류를 빌미로 한 수취인 정보 입력 유도",
+    correctAction:
+      "통관이 보류됐다며 링크로 정보를 확인하라고 하면 입력하지 말고 화면을 닫으세요. ① 배송 상태는 주문한 판매처나 배송사 공식 경로에서 직접 조회하기 ② 생년월일·연락처를 문자 링크에 넣지 않기 ③ 가족이나 가까운 사람에게 화면을 보여 주고 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
   },
 ];
 
@@ -85,12 +238,21 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
  * attachment 문서가 도입 전과 한 바이트도 같고, `sendMessage`의 추가 read도 일어나지 않는다
  * (`hasInCallSms(...)` 게이팅과 동형 — 나머지 12개 시나리오 회귀 0).
  *
- * ⚠️ **R6(§15.9.1)**: 통화 중 문자(`InCallSmsDoc.fakeLandingId`)로 `app-install`이 열리는 경로는
- * 이번 범위 밖이다 — `IN_CALL_SMS`에 이 카탈로그의 landingId를 참조하는 항목을 두지 않는다
- * (테스트로 고정). UF-012의 설치는 **메신저 단계**에서 일어난다.
+ * ⚠️ **R6(§15.9.1) — 무변경**: 통화 중 문자(`InCallSmsDoc.fakeLandingId`)로 **`app-install`이**
+ * 열리는 경로는 여전히 범위 밖이다. T104 이후 이 불변식은 **양쪽에서** 검사된다 —
+ * `IN_CALL_SMS` 쪽(R6 단언)과 카탈로그 쪽(G-A: `entrySurface === "in-call-sms"` ⇒
+ * `kind !== "app-install"`). UF-012의 설치는 **메신저 단계**에서 일어난다.
+ *
+ * ⚠️ **T104**: 통화 경로 `credential-form` 랜딩 3종이 여기 등재된다. 이들은 `turnInstruction`을
+ * 만들지 않고(`listAppInstallMockScreens` 게이팅), `consentedAt`도 가질 수 없어(콜러블이 거부)
+ * G55가 막던 지시 경합(M1)과 R6이 막던 앵커 얽힘(M2) 어느 쪽도 발생시키지 않는다(§19.1 (2)).
  */
 export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   "messenger-subsidy-smishing-sms": MESSENGER_SUBSIDY_SMISHING_SMS,
+  "messenger-parcel-smishing-sms": MESSENGER_PARCEL_SMISHING_SMS,
+  "loan-refinance-scam": LOAN_REFINANCE_SCAM,
+  "tax-refund-scam": TAX_REFUND_SCAM,
+  "courier-customs-scam": COURIER_CUSTOMS_SCAM,
 };
 
 /**
