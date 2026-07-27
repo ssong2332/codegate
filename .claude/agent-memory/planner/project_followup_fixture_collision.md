@@ -1,0 +1,12 @@
+---
+name: followup-fixture-collision
+description: 후속 결함을 등재할 때 신고 발화가 선행 태스크 게이트의 "정상 샘플"로 박혀 있는지 먼저 grep하라 — 이 저장소에서 실제로 그랬다
+metadata:
+  type: project
+---
+
+**"T92가 고친 자리에서 나온 후속 신고"처럼 선행 태스크가 있는 결함을 등재할 때는, 신고된 발화 문자열을 선행 게이트의 테스트 파일에 그대로 grep해 본다.** 히트하면 그 사실을 태스크 행의 별도 항목으로 올린다("기존 게이트와 정면 충돌").
+
+**Why:** 2026-07-27 사용자 신고 *"질문을 한 턴에 몰아넣는다"* 의 발화 원문이 `functions/src/scenarios/__tests__/scenarios.test.ts:859`에 **오탐 0을 요구하는 "정상 문구" fixture로 박혀 있었다**(T92가 저작). 즉 새 게이트를 그냥 얹으면 기존 fixture와 서로를 부정한다. 이걸 등재 시점에 못 잡으면 구현자가 착수해서야 발견하고, 최악은 **T92가 우회 6종을 재현해 쌓은 역검증 자산을 조용히 지우는 것**이다. 같은 이유로 신고 발화가 프롬프트 파일에 **그대로 저작돼 있는지**도 본다 — 이번 건은 `institutionalImpersonation.prompt.ts:33`(personaPrompt)과 `:61`(weakenedTactics) **두 자리 모두**에 있었고, 5개 시나리오에 복제돼 있었다(모델 창작이 아니라 지시가 요구한 동작).
+
+**How to apply:** 후속 결함 등재 전 3단계 — ① 신고 발화의 특징 문자열을 `functions/src/scenarios` 전체에 grep, ② 히트를 **정본(프롬프트) / 게이트 fixture**로 분류, ③ fixture 히트가 있으면 태스크 행에 *"기존 게이트를 깨지 않고 축을 얹는 방법을 착수 전 보고"* 를 넣고, fixture 수정이 불가피하면 **근거를 테스트 주석에 남길 것**을 완료 조건에 건다. 관련: [[planner-ac-verifiability]], [[user-scope-narrowing-corrections]]
