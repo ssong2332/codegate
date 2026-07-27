@@ -122,13 +122,14 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 
 #### `sessions/{sessionId}/verifyIntercept/{offerId}`  — 확인 시도 무력화(모의 확인 전화) (T79, UX-031/UF-011, Architecture.md §16.3.1)
 > **⚠️ 세션당 최대 1건**(이 흐름은 세션에서 한 번만 일어난다). 문자(`inCallSms`)와 **별개 컬렉션**인 이유는 같다 — `messages`에 넣으면 `analyzeConversation`의 scammer(i)↔user(i+1) 짝짓기가 어긋나 리포트 판정이 손상된다(§15.6 G3/G25).
-> **⚠️ 실 발신 표면 부재(AC-019 하드):** 이 스키마에는 `url`·`tel`·전화번호 **입력** 필드·발신 대상 식별자가 **존재하지 않는다.** `displayNumber`는 화면에 글자로만 나오는 모의값이며, 탭 대상은 번호가 아니라 버튼이다(UX-031 P-24).
+> **⚠️ 실 발신 표면 부재(AC-019 하드):** 이 스키마에는 `url`·`tel`·전화번호 **입력** 필드·발신 대상 식별자가 **존재하지 않는다.** 탭 대상은 번호가 아니라 버튼이다(UX-031 P-24).
+> **⭐ T110 갱신(2026-07-28 — `Architecture.md` §22.3 `:3105-3125`가 예약해 둔 델타. 원문은 지우지 않고 아래 표의 해당 행에 갱신 고지를 남긴다):** 호 전환(넘겨주기) 모델에는 **참가자가 걸 안내 번호 자체가 없다.** `displayNumber`는 **카탈로그 타입 `VerifyInterceptItem`에서 제거**됐고 **신규 문서에는 기록되지 않는다** — 이 스키마에서는 **옵셔널**로 낮춰 **이미 생성된 과거 문서·리포트를 그때 본 대로 살린다**(백필 0건 · 마이그레이션 0건 · 렌더는 값이 있을 때만).
 
 | Field | Type | Constraints | Description |
 |---|---|---|---|
 | offerId | string | PK(=doc id) | 카탈로그(`functions/src/scenarios/verifyIntercept.ts`) 항목 id. 서버가 `VERIFY_INTERCEPT[session.scenarioId]` 소속을 **재검증**한 값만 기록(§16.1.5, G24) |
 | deskLabel | string | required | 모의 창구명(실존 기관·실존 창구 아님 — AC-033/AC-005, 금지 패턴 검증 대상) |
-| displayNumber | string | required, `/^\d{3,4}-0000$/` | **표시 텍스트 전용** 모의 번호. 형식(마지막 4자리 `0000`)을 architect가 고정해 구현 임의 판단을 막는다. 실존 대표번호(112·1332·1577-xxxx 등)와 부분 일치 금지 |
+| displayNumber | string**?** | **T110 이후 신규 문서에는 기록하지 않음**(옵셔널·무백필). 과거 문서에 남아 있는 값의 제약은 아래 원문 그대로 | ⭐ **T110 갱신(2026-07-28)**: 카탈로그에서 **제거**돼 신규 문서에 실리지 않는다. 값이 있는 과거 문서는 **텍스트로만** 렌더한다. **이하 이전 정의(원문 보존)** — *"`string` / required, `/^\d{3,4}-0000$/` / **표시 텍스트 전용** 모의 번호. 형식(마지막 4자리 `0000`)을 architect가 고정해 구현 임의 판단을 막는다. 실존 대표번호(112·1332·1577-xxxx 등)와 부분 일치 금지"* |
 | offeredAt | timestamp | required | 확인 권유가 도착한 시각(표시 축 아님 — §16.3.2) |
 | offerAnchorScammerTurn | number | required | "이 시점까지 `messages`에 존재하는 `role==="scammer"` 문서 수". **클라 입력이 아니라 서버 계산**(실시간=`scammerTurns+1`, 폴백=서버가 센 scammer 문서 수 — `functions/src/verifyIntercept/buildDoc.ts` 단일 지점, `inCallSms/buildDoc.ts:42-65`와 동형) |
 | announcedAt | timestamp? | | **폴백 경로 전용** — `sendMessage`가 `turnInstruction`으로 권유 대사를 주입한 턴(중복 주입 방지 마크). 실시간 경로는 클라가 즉시 주입하므로 세팅되지 않는다 |
@@ -225,7 +226,9 @@ SmsTimelineEntry = {
 
 ```
 VerifyTimelineEntry = {
-  offerId, deskLabel, displayNumber,   // displayNumber는 **텍스트로만** 렌더(링크·복사·재발신 컨트롤 금지)
+  offerId, deskLabel, displayNumber?,  // ⭐ T110(2026-07-28): displayNumber는 **옵셔널**이며 신규 스냅샷에는
+                                       //    실리지 않는다(카탈로그에서 제거). 값이 있는 과거 리포트에서만
+                                       //    **텍스트로만** 렌더한다(링크·복사·재발신 컨트롤 금지)
   anchorTurnIndex: number,             // 표시 위치(= 오퍼 앵커). -1 = 대화 맨 앞
   anchorResolved: boolean,             // false = 위치 확정 실패 → 화면이 정직하게 고지
   timeLabel?: string,                  // 앵커 메시지의 경과 초에서 파생 — deceivedMoments와 같은 시간축
