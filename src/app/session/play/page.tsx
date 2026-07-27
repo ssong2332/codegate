@@ -144,6 +144,12 @@ export default function SessionCallPage() {
   const [smsOverlayOpen, setSmsOverlayOpen] = useState(false);
   const [smsBannerDismissed, setSmsBannerDismissed] = useState(false);
   const [smsError, setSmsError] = useState<string | null>(null);
+  // T103(P-27 (2) ④ · OQ-U27 (a) · §19.6) — 전면 문자함의 통화 필에 이어 붙일 **최신 사기범 자막**.
+  // ⚠️ 실시간(Gemini Live) 경로에서는 통화 중 `messages`가 갱신되지 않아(전사는 종료 직전 1회 제출)
+  // `latestScammerLine`이 통화 내내 null이다 — 그래서 이미 흐르고 있는 턴 콜백을 화면 지역 state로
+  // 한 번 받아 둔다(신규 데이터 경로·서버 변경 0건). ⛔ 갱신 단위는 **턴**이다(G78 — 청크마다
+  // setState하면 통화당 수백 번 리렌더가 되고 그것이 OQ-U27 (c)가 우려한 프레임 부담이다).
+  const [liveScammerCaption, setLiveScammerCaption] = useState<string | null>(null);
   // 실시간 세션에 넣을 오케스트레이션 지시(카운터 패턴 — textMessage와 동일).
   // ⚠️ T83(§16.6 G31) — 문자 announce와 확인 지시가 **같은 슬롯**을 쓰므로 큐를 거쳐 한 턴에
   // 하나씩만 주입한다(아래 enqueueTurnInstruction 참고). 예전엔 이 상태를 문자 전용으로 직접
@@ -176,6 +182,10 @@ export default function SessionCallPage() {
 
   const handleTranscriptTurn = useCallback((role: "user" | "scammer", text: string) => {
     transcriptRef.current.push({ role, text });
+    // T103 — 제출 경로(위 한 줄)는 손대지 않고, 통화 필 자막만 여기서 갈라 받는다.
+    // ⛔ **사기범 턴만 그린다**(G79/G93). 참가자 턴을 그리면 참가자가 말한 계좌·생년월일이
+    // 마스킹 없이 화면에 남는다 — 접근성 취향이 아니라 **안전 조건**이다(§19.6 (4)).
+    if (role === "scammer") setLiveScammerCaption(text);
   }, []);
 
   // 실시간 음성 통화 전사를 서버에 제출한다(finding #1). 종료 직전에 1회 호출. 실패해도 통화
@@ -823,6 +833,8 @@ export default function SessionCallPage() {
   const difficultyApplied = realtime.credentials?.difficultyApplied !== false;
   const latestScammerLine =
     [...messages].reverse().find((m) => m.role === "scammer")?.text ?? null;
+  // T103 — 통화 필 자막의 단일 소스: 실시간 턴 자막 우선, 없으면 폴백 경로의 마지막 사기범 대사.
+  const pillCaption = liveScammerCaption ?? latestScammerLine;
   const isRinging = phase === "incoming";
   // T68 — 문자 도착 배너·"문자함"(N) 컨트롤(UX-014 v1.11 추가 state). 통화 phase 전이가 아니라
   // 셸 위에 얹히는 알림 레이어라 live/opening 어느 phase에서도 뜬다.
@@ -906,9 +918,14 @@ export default function SessionCallPage() {
 
       {/* T68 문자 도착 배너(UX-014 `sms-arrived` state / UF-008 Step 2) — 통화는 그대로 진행 중이다.
           시각 배너와 **aria-live 알림을 동시에** 제공한다(P-20 (6) — 시각에만 의존하지 않는다).
-          탭하면 오버레이가 열릴 뿐 **라우팅이 일어나지 않는다**(D-35). */}
+          탭하면 오버레이가 열릴 뿐 **라우팅이 일어나지 않는다**(D-35).
+          T103/P-27 (5) ① — 한 프레임에 튀어나오지 않도록 배너도 같은 규칙으로 부드럽게 내려온다
+          (`prefers-reduced-motion`이면 즉시 교체 — globals.css의 폴백 블록).
+          ⚠️ **도착은 배너만 띄운다**(D-56) — 여기서 `setSmsOverlayOpen(true)`를 부르지 않는다.
+          문자함으로 넘어갈지는 훈련 대상인 참가자의 결정이고, 자동 전환은 한도 도달·종료 고지
+          순간을 덮을 수 있다(AC-059). */}
       {showSmsBanner && latestSms && (
-        <div className="px-4 pt-3">
+        <div className="sms-banner-enter px-4 pt-3">
           <button
             type="button"
             onClick={(event) => handleOpenSmsOverlay(event.currentTarget)}
@@ -1411,6 +1428,7 @@ export default function SessionCallPage() {
           messages={inCallSms}
           callerLabel={callerLabel}
           elapsedLabel={formatElapsed(elapsedSec)}
+          scammerCaption={pillCaption}
           onClose={handleCloseSmsOverlay}
           onEndTraining={() => void handleEndTraining()}
           onOpened={(smsId) => handleRecordSmsEvent(smsId, "opened")}
