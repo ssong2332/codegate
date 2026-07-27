@@ -40,3 +40,4 @@
 - [T110 호 전환(warm transfer)](project_codegate_t110_warm_transfer.md) — 착수 지시 내부 모순(A1이 금지 파일 안) 처리법, 합집합 게이트 G85 역검증 설계, codeOnly()가 JSX 주석을 못 걷는 함정.
 - [T101 lib 스테일 산출물 차단](project_codegate_t101_clean_lib.md) — clean 기준선 462, A/B probe 함정 4건(main 체크아웃 충돌·리다이렉트 가드·probe 커밋 필수·타이밍 노이즈).
 - [T107 필드 단위 수렴 검출](project_codegate_t107_field_divergence.md) — 새 워크트리 npm install이 functions/package.json을 몰래 고침, t.diagnostic 증거 출력, 공회전 규칙을 단언으로 못박기.
+- [T98 회귀 — thinkingConfig 400 → 100% Mock 강등](project_codegate_t98_thinking_regression.md) — 공유 에뮬레이터는 워크트리 lib을 못 집는다, 죽은 안전장치 삭제 기준, `-latest` 별칭 금지, 1회 호출로 증거 4종.
