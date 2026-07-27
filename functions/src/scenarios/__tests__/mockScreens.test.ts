@@ -6,6 +6,8 @@
 // 주장만으로는 증명되지 않으므로 여기서 기계로 훑는다.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import * as path from "node:path";
 import {
   DEFAULT_MOCK_SCREEN_KIND,
   findMockScreenItem,
@@ -600,6 +602,206 @@ test("[AC-078 (b) 역검증] 두 항목을 같게 만들면 쌍별 비교가 실
   const cloned = { ...MOCK_SCREENS["courier-customs-scam"][0], landingId: "cloned" };
   assert.notEqual(bodySignature(real), bodySignature(cloned));
   assert.equal(bodySignature(cloned), bodySignature(MOCK_SCREENS["courier-customs-scam"][0]));
+});
+
+// ── AC-078 (c) — 미끼 → 랜딩 대조표를 **기계로 묶는다** ────────────────────────
+//
+// AC-078 (c)는 대조표가 *"구현 산출물에 포함된다(대조표가 없으면 미충족)"* 이라고 규정했다.
+// 사람이 읽는 표는 `mockScreens.ts`의 콘텐츠 항목 바로 위 주석에 있고, **여기가 그 표의 강제
+// 장치**다. 주석은 강제가 아니므로 — 미끼 문면과 랜딩 문안이 따로 바뀌면 표가 조용히 낡는다 —
+// 아래 표를 **런타임 카탈로그 값**에 대고 검사한다.
+//
+// ⚠️ **줄 번호는 앵커가 아니다.** `baitSource`의 `파일:줄`은 사람이 찾아가기 위한 스냅샷이고,
+// 기계가 붙잡는 것은 `baitExcerpt`(실제 미끼 텍스트에 지금도 있어야 하는 인용)와 앵커 토큰이다.
+// 줄이 밀려도 검사는 살아 있고, **문면이 바뀌면 반드시 실패한다.**
+//
+// ⚠️ **헤드라인과 CTA를 합쳐서 검사하지 않는다(실측으로 발견한 구멍).** 최초 구현은
+// `headline + CTA` 한 덩어리에 앵커가 있는지만 봤는데, 그러면 **헤드라인만 범용 문구로
+// 되돌려도**(= 정확히 이번 사용자 신고 상태) CTA가 앵커를 갖고 있어 통과했다 — 역검증에서
+// 실제로 통과하는 것을 확인하고 아래처럼 **면별로** 쪼갰다.
+const BAIT_TO_LANDING: {
+  landingId: string;
+  baitSource: string;
+  baitExcerpt: string;
+  /** 랜딩 **헤드라인**에 반드시 있어야 하는 토큰(≥1). */
+  headlineAnchors: string[];
+  /**
+   * 랜딩 **CTA**에 반드시 있어야 하는 토큰.
+   * ⚠️ `app-install`만 빈 배열이 허용된다 — 그 kind의 CTA는 미끼 행위의 반복이 아니라
+   * **가짜 "권한 허용" 버튼**이고(AC-072가 규정한 안전 계약), D-58이 `subsidy-install`을
+   * "무변경"으로 확정했다. 아래 테스트가 이 예외를 kind로 좁혀 강제한다.
+   */
+  ctaAnchors: string[];
+}[] = [
+  {
+    landingId: "parcel-redelivery",
+    baitSource: "roleplay/linkMarker.ts:22 (칩 라벨) · messengerParcelSmishingSms.prompt.ts:37",
+    baitExcerpt: "재배송 신청 확인하기",
+    headlineAnchors: ["배송"],
+    ctaAnchors: ["재배송", "신청"],
+  },
+  {
+    landingId: "subsidy-install",
+    baitSource: "roleplay/linkMarker.ts:24 (칩 라벨) · messengerSubsidySmishingSms.prompt.ts:64",
+    baitExcerpt: "지원금 신청 앱 설치하기",
+    headlineAnchors: ["앱", "설치"],
+    ctaAnchors: [], // app-install — 위 주석의 예외(권한 허용 버튼)
+  },
+  {
+    landingId: "loan-refinance-apply",
+    baitSource: "scenarios/inCallSms.ts:57-58 (문자 본문·칩)",
+    baitExcerpt: "아래에서 본인확인 후 신청을 완료해 주세요.",
+    headlineAnchors: ["본인확인", "신청"],
+    ctaAnchors: ["본인확인", "완료"],
+  },
+  {
+    landingId: "tax-refund-claim",
+    baitSource: "scenarios/inCallSms.ts:106-107 (문자 본문·칩)",
+    baitExcerpt: "아래에서 계좌를 등록하시면 당일 지급됩니다.",
+    headlineAnchors: ["계좌", "등록"],
+    ctaAnchors: ["계좌", "등록"],
+  },
+  {
+    landingId: "courier-customs-check",
+    baitSource: "scenarios/inCallSms.ts:120-121 (문자 본문·칩)",
+    baitExcerpt: "수취인 정보 불일치로 통관이 보류되었습니다.",
+    headlineAnchors: ["수취인", "통관", "보류"],
+    ctaAnchors: ["수취인"],
+  },
+];
+
+/** 그 랜딩을 **불러낸** 문면 전부 — 칩 라벨(메신저) + 프롬프트 + 통화 중 문자 본문/칩. */
+function baitTextFor(scenarioId: string, item: MockScreenItem): string {
+  const parts: string[] = [];
+  if (item.entrySurface === "messenger-link") {
+    const { attachments } = extractLinkMarker(`[[LINK:${item.landingId}]]`, scenarioId);
+    if (attachments) parts.push(attachments[0].displayText);
+    const prompt = SCENARIO_PROMPTS[scenarioId];
+    if (prompt) {
+      parts.push(prompt.personaPrompt, ...prompt.weakenedTactics);
+    }
+  }
+  for (const sms of IN_CALL_SMS[scenarioId] ?? []) {
+    if (sms.fakeLandingId !== item.landingId) continue;
+    parts.push(sms.body, sms.linkDisplayText ?? "");
+  }
+  return parts.join("\n");
+}
+
+/** 랜딩 쪽 CTA 라벨 — kind별로 필드가 다르다(G-C가 정합을 단언한다). */
+function landingCta(item: MockScreenItem): string {
+  return item.submitLabel ?? item.consentLabel ?? "";
+}
+
+function findItemByLandingId(landingId: string): { scenarioId: string; item: MockScreenItem } {
+  for (const [scenarioId, items] of Object.entries(MOCK_SCREENS)) {
+    const item = items.find((i) => i.landingId === landingId);
+    if (item) return { scenarioId, item };
+  }
+  throw new Error(`대조표의 landingId가 카탈로그에 없다: ${landingId}`);
+}
+
+test("[AC-078 (c)] 대조표가 카탈로그를 하나도 빠뜨리지 않는다(새 랜딩이 표를 건너뛸 수 없다)", () => {
+  assert.deepEqual(
+    BAIT_TO_LANDING.map((row) => row.landingId).sort(),
+    allItems.map((item) => item.landingId).sort(),
+    "랜딩을 추가·삭제했으면 BAIT_TO_LANDING과 mockScreens.ts의 주석 대조표를 함께 갱신하라",
+  );
+  for (const row of BAIT_TO_LANDING) {
+    const { item } = findItemByLandingId(row.landingId);
+    assert.ok(row.headlineAnchors.length >= 1, `${row.landingId}: 헤드라인 앵커가 최소 1개 필요하다`);
+    for (const anchor of [...row.headlineAnchors, ...row.ctaAnchors]) {
+      assert.ok(anchor.length >= 1, `${row.landingId}: 빈 앵커는 아무것도 검사하지 않는다`);
+    }
+    // ⛔ CTA 앵커를 비우는 예외는 **`app-install`에만** 열려 있다(위 표의 사유).
+    if (item.kind !== "app-install") {
+      assert.ok(
+        row.ctaAnchors.length >= 1,
+        `${row.landingId}: credential-form은 CTA도 미끼 행위를 수행해야 한다(AC-078 (c))`,
+      );
+    }
+    assert.ok(row.baitSource.includes(":"), `${row.landingId}: 미끼 출처를 파일:줄로 적어라`);
+  }
+});
+
+test("[AC-078 (c)] 미끼 인용이 **실제 미끼 문면에 지금도 존재**한다(미끼가 바뀌면 실패)", () => {
+  for (const row of BAIT_TO_LANDING) {
+    const { scenarioId, item } = findItemByLandingId(row.landingId);
+    const bait = baitTextFor(scenarioId, item);
+    assert.ok(bait.length > 0, `${row.landingId}: 미끼 문면을 하나도 못 모았다 — 수집기가 죽었다`);
+    assert.ok(
+      bait.includes(row.baitExcerpt),
+      `${row.landingId}: 대조표의 미끼 인용이 실제 문면에 없다(미끼가 바뀌었다). ` +
+        `출처=${row.baitSource} / 인용="${row.baitExcerpt}"`,
+    );
+  }
+});
+
+test("[AC-078 (c)] 앵커 토큰이 미끼와 랜딩 **헤드라인·CTA 각각에** 있다(한 면만 바뀌어도 실패)", () => {
+  for (const row of BAIT_TO_LANDING) {
+    const { item } = findItemByLandingId(row.landingId);
+    for (const [face, text, anchors] of [
+      ["헤드라인", item.headline, row.headlineAnchors],
+      ["CTA", landingCta(item), row.ctaAnchors],
+    ] as const) {
+      for (const anchor of anchors) {
+        assert.ok(
+          row.baitExcerpt.includes(anchor),
+          `${row.landingId}: 앵커 '${anchor}'가 미끼 인용에 없다 — 대조가 성립하지 않는다`,
+        );
+        assert.ok(
+          text.includes(anchor),
+          `${row.landingId}: 앵커 '${anchor}'가 랜딩 ${face}에 없다 — ` +
+            `미끼가 예고한 행위를 화면이 수행하지 않는다(AC-078 (c)). 현재 ${face}="${text}"`,
+        );
+      }
+    }
+  }
+});
+
+test("[AC-078 (c)] 사람이 읽는 대조표가 **소스에 실제로 있고** 테스트 표와 1:1이다", () => {
+  // AC 본문: "그 대조표는 구현 산출물에 포함된다(대조표가 없으면 미충족)".
+  // 보고서·PR 본문은 저장소가 아니므로, 카탈로그 소스의 주석 표를 여기서 붙잡는다.
+  const source = readFileSync(
+    path.resolve(__dirname, "../../../src/scenarios/mockScreens.ts"),
+    "utf8",
+  );
+  const start = source.indexOf("AC-078 (c) 미끼 → 랜딩 대조표");
+  assert.ok(start > 0, "mockScreens.ts에 사람이 읽는 대조표 주석이 있어야 한다(AC-078 (c) 산출물)");
+  const table = source.slice(start, source.indexOf("const MESSENGER_PARCEL_SMISHING_SMS", start));
+  for (const row of BAIT_TO_LANDING) {
+    assert.ok(table.includes(row.landingId), `주석 대조표에 ${row.landingId} 행이 없다`);
+    assert.ok(
+      table.includes(row.baitExcerpt),
+      `주석 대조표의 미끼 인용이 테스트 표와 다르다: ${row.landingId}`,
+    );
+  }
+});
+
+test("[AC-078 (c) 역검증] 미끼나 랜딩 문안 한쪽만 바뀌면 대조가 실제로 깨진다", () => {
+  const { item } = findItemByLandingId("tax-refund-claim");
+  const row = BAIT_TO_LANDING.find((r) => r.landingId === "tax-refund-claim");
+  assert.ok(row);
+  // ① **헤드라인만** 범용 문구로 되돌려도 잡힌다 — 최초 구현(헤드라인+CTA 합산)이 놓치던 자리다.
+  const genericHeadline = "본인확인이 필요합니다";
+  assert.equal(
+    row.headlineAnchors.every((anchor) => genericHeadline.includes(anchor)),
+    false,
+    "헤드라인만 범용으로 되돌려도 실패해야 한다(= 정확히 이번 사용자 신고 상태)",
+  );
+  // ② **CTA만** 범용 문구로 되돌려도 잡힌다.
+  const genericCta = "확인";
+  assert.equal(
+    row.ctaAnchors.every((anchor) => genericCta.includes(anchor)),
+    false,
+    "CTA만 범용으로 되돌려도 실패해야 한다",
+  );
+  // ③ 미끼 쪽 문면이 바뀌면 — 인용 존재 검사가 잡는다.
+  const changedBait = "[환급안내] 조회 결과가 있습니다.";
+  assert.equal(changedBait.includes(row.baitExcerpt), false);
+  // ④ 그리고 현재 실제 값은 셋 다 통과한다(대조군).
+  assert.ok(row.headlineAnchors.every((anchor) => item.headline.includes(anchor)));
+  assert.ok(row.ctaAnchors.every((anchor) => landingCta(item).includes(anchor)));
 });
 
 test("[AC-078 (d)] 콘텐츠 없는 식별자는 범용 화면으로만 폴백하고 app-install로는 절대 폴백하지 않는다", () => {
