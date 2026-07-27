@@ -261,7 +261,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Purpose | 사기범이 "직접 확인해 보시라"며 **모의 창구·모의 번호**를 안내한 사실을 서버 카탈로그에서 도착시키고, 캐릭터가 그것을 말하도록 하는 지시문을 반환한다. |
 | Auth | required. `session.uid === request.auth.uid` + `status:"active"`. |
 | Request | `{ sessionId: string, callMode: "realtime" \| "fallback", scammerTurns?: number }` — `scammerTurns`는 `callMode==="realtime"`일 때 **필수**(없으면 `invalid-argument`). **부재를 판별자로 오버로드하지 않는다**(§14.9.1) — 그래서 `callMode`를 명시로 받는다. |
-| Response | `{ offerId: string, announceInstruction: string }` |
+| Response | `{ offerId: string, announceInstruction?: string }` — ⭐ **T118/R-1(§25.5 (4))로 `announceInstruction`이 옵셔널로 낮아졌다**: 오퍼 문서에 **`placedAt`이 이미 있으면**(=호 전환이 끝난 뒤면) **생략한다.** 값이 없으면 클라는 **주입하지 않는다.** 전환이 끝난 뒤의 확인 권유는 참가자가 겪은 사실과 모순이고, 그 재주입 경로가 열려 있는 것이 증상 ①(전환 후 같은 오퍼 재발화)의 (가) 갈래였다. 계약 원천은 `functions/src/verifyIntercept/types.ts:19-29` ↔ `src/lib/api/types.ts`(ADR-0001 "계약 원천 2곳"). |
 | 처리 | ① **재검증 5종(G24 — 하나라도 빠지면 위조 호출로 "일어나지 않은 확인 권유"가 리포트에 남는다)**: 세션 소유 · `status:"active"` · `hasVerifyIntercept(session.scenarioId)` · `normalizeDifficultyLevel(session.difficultyLevel)==="advanced"` · **해석된 프로바이더가 `elevenlabs`가 아님**. ② `sessions/{sid}/verifyIntercept/{offerId}` write(**멱등** — 이미 있으면 재기록 없이 같은 값 반환). 앵커는 서버 계산(`realtime=scammerTurns+1` / `fallback=서버가 센 scammer 문서 수`, `functions/src/verifyIntercept/buildDoc.ts` 단일 지점). ③ `announceInstruction` 반환 — **실시간**: 클라가 `GeminiVoiceSession.instructionTurn`으로 같은 Live 세션에 주입(선례 `OPENING_TRIGGER_TURN`). **폴백**: 클라는 쓰지 않고, 다음 `sendMessage` 턴이 미announce 오퍼를 읽어 `turnInstruction`으로 주입한 뒤 `announcedAt`을 마크한다. |
 | 렌더링 | 응답은 렌더 소스가 **아니다** — 창구명·번호는 `sessions/{sid}/verifyIntercept` 구독으로만 화면에 들어온다(사전 유출 방지). |
 | 안전 | 창구명·번호·재연결 라벨은 **전부 서버 카탈로그의 모의값**(AC-033/AC-005). `displayNumber`는 **표시 텍스트**이며 `url`/`tel`/발신 대상 필드가 **스키마에 없다**(AC-019 구조적 금지). LLM이 번호·기관명을 생성하지 않는다. |
@@ -273,8 +273,8 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Purpose | 참가자가 UX-031에서 "확인 전화 걸기"를 누른 사실을 기록하고, **같은 세션 위에서** 상대 표면이 바뀌도록 하는 지시문을 반환한다. **새 세션을 만들지 않는다**(AC-007/AC-035). |
 | Auth | required. 세션 소유 + `status:"active"`. |
 | Request | `{ sessionId: string, offerId: string, callMode: "realtime" \| "fallback", scammerTurns?: number }` |
-| Response | `{ reconnectInstruction: string }` |
-| 처리 | ① 오퍼 문서 존재 확인(없으면 `failed-precondition` — 오퍼 없이 재연결이 성립하지 않는다) ② `placedAt`·`reconnectAnchorScammerTurn`·`reconnectedCallerLabel` 기록(**멱등** — `placedAt`이 이미 있으면 밀지 않는다) ③ `reconnectInstruction` 반환(주입 경로는 `deliverVerifyOffer`와 동일). |
+| Response | `{ reconnectInstruction: string, transferStateLine: string }` — ⭐ **T118/A5(§25.3)로 `transferStateLine` 1필드가 추가됐다**(둘 다 **필수**). 전환 이후 사기범 턴 경계마다 클라가 **다시 넣는** 전환 상태 단언 1줄이며, 클라가 반복 주입하려면 손에 쥐고 있어야 하므로 응답으로 내려보낸다(**신규 콜러블 0건**). 계약 원천은 `functions/src/verifyIntercept/types.ts:37-46` ↔ `src/lib/api/types.ts`. |
+| 처리 | ① 오퍼 문서 존재 확인(없으면 `failed-precondition` — 오퍼 없이 재연결이 성립하지 않는다) ② `placedAt`·`reconnectAnchorScammerTurn`·`reconnectedCallerLabel` 기록(**멱등** — `placedAt`이 이미 있으면 밀지 않는다) ③ `reconnectInstruction` + **`transferStateLine`** 반환(주입 경로는 `deliverVerifyOffer`와 동일). ⚠️ **`transferStateLine`은 Firestore 문서에 쓰지 않는다**(A5-4 — 모델 지시는 문서에 기록하지 않는다, AC-024) ⇒ **`Database.md` 무변경 · 스키마 증분 0건.** 구현 지점 `functions/src/verifyIntercept/index.ts:192-196`. |
 | **발신 없음(하드)** | 이 함수는 **어떤 통신 API도 호출하지 않는다.** 하는 일은 Firestore write 1건 + 문자열 반환뿐이며, 함수명의 "reconnect"는 **인앱 재현**을 뜻한다(PSTN·다이얼 인텐트·리다이렉트 경로 부재 — AC-019). |
 | 판정 연결 | `reconnectAnchorScammerTurn`이 리포트 생성 시 **판정 앵커**(`scammers[N]` = 재연결 대사의 turnIndex)로 해석되어, **그 뒤의 기존 `deceivedMoment`에만** `afterVerifyReconnect` 주석이 붙는다(ADR-0009/§16.3.3). **순간을 새로 만들지 않는다.** |
 | Errors | `failed-precondition`(오퍼 없음·세션 미활성) · `permission-denied`. 실패 시 재연결 없이 원래 통화로 복귀 + 1줄 고지(침묵 실패 금지, UF-011 Failure (c)) — 세션·리포트는 정상 진행. |
