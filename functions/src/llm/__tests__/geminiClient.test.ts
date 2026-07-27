@@ -1,16 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GeminiLlmClient } from "../geminiClient";
+import { GeminiLlmClient, GEMINI_TEXT_MODEL } from "../geminiClient";
 
 /** realtime/__tests__/geminiProvider.test.ts와 동일한 방식 — SDK 내부를 가로챌 수 없으므로
  * fetch 계층에서 요청 본문을 캡처하고 실제 API 응답 형태를 흉내낸 응답을 돌려준다. */
 function captureGenerateContentRequest(replyText: string): {
   restore: () => void;
   bodies: () => unknown[];
+  urls: () => string[];
 } {
   const originalFetch = globalThis.fetch;
   const bodies: unknown[] = [];
+  const urls: string[] = [];
   globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+    urls.push(String(_url));
     if (init?.body) {
       try {
         bodies.push(JSON.parse(init.body));
@@ -30,6 +33,7 @@ function captureGenerateContentRequest(replyText: string): {
       globalThis.fetch = originalFetch;
     },
     bodies: () => bodies,
+    urls: () => urls,
   };
 }
 
@@ -122,26 +126,26 @@ test("GeminiLlmClient: mockTacticHints가 있어도 없어도 요청 본문이 �
   assert.deepEqual(bodyWithHints, bodyWithoutHints, "mockTacticHints 유무가 실 Gemini 요청 본문에 어떤 영향도 주면 안 된다");
 });
 
-// T87 라이브 검증(2026-07-26) — 실 LLM 호출 18건 중 12건이 LLM_TIMEOUT_MS(10초)를 넘겨 Mock으로
-// 강등됐고, 원인이 추론 토큰(출력의 4.6배)임을 실측으로 좁혔다(geminiClient.ts 상단 주석 근거).
-// 이 단언이 없으면 thinkingConfig가 조용히 빠져도 유닛 테스트는 전부 통과하고, 회귀는 오직
-// 라이브에서 "첫 마디가 가끔 이상하다"로만 드러난다 — 그게 원래 이 버그가 오래 안 잡힌 이유다.
-test("GeminiLlmClient: 모든 요청에 thinkingBudget=0을 실어 보낸다(AC-004 지연 회귀 방지)", async () => {
+// T98 회귀 수정(2026-07-27) — 이 단언은 **이전 버전의 정반대**다. T98은 "모든 요청에
+// thinkingBudget=0이 실려야 한다"를 단언했는데, 재매핑된 현재 모델(gemini-3.6-flash)이 그 설정을
+// HTTP 400/INVALID_ARGUMENT로 거부해 텍스트 LLM 경로가 100% Mock 강등됐다(라이브 실측).
+// 추론을 켠 채로도 2,959ms라 AC-004 컷오프(10초) 안에 든다 — 그래서 설정을 아예 보내지 않는다.
+test("GeminiLlmClient: 어떤 요청에도 thinkingConfig를 싣지 않는다(400 INVALID_ARGUMENT 회귀 방지)", async () => {
   const capture = captureGenerateContentRequest("(dummy)");
   try {
     const client = new GeminiLlmClient("test-key");
-    // 오프닝 대사(messages: [])와 일반 턴 둘 다 확인한다 — 실측에서 강등이 가장 잦았던 쪽이
-    // 오프닝(14건 중 9건)이라 그 경로가 빠지면 수정의 의미가 없다.
+    // 오프닝 대사(messages: [])와 일반 턴 둘 다 확인한다 — 강등이 가장 눈에 띄는 쪽이 오프닝이라
+    // 그 경로가 빠지면 수정의 의미가 없다.
     await client.complete({ systemPrompt: "(system)", messages: [] });
     await client.complete({ systemPrompt: "(system)", messages: [{ role: "user", content: "안녕" }] });
 
-    const bodies = capture.bodies() as { generationConfig?: { thinkingConfig?: { thinkingBudget?: number } } }[];
-    assert.equal(bodies.length, 2);
+    const bodies = capture.bodies() as { generationConfig?: { thinkingConfig?: unknown } }[];
+    assert.equal(bodies.length, 2, "재시도 없이 요청 1건당 1회만 호출해야 한다");
     for (const [i, body] of bodies.entries()) {
       assert.equal(
-        body.generationConfig?.thinkingConfig?.thinkingBudget,
-        0,
-        `요청 ${i}(${i === 0 ? "오프닝" : "일반 턴"})에 thinkingBudget=0이 실려야 한다`,
+        body.generationConfig?.thinkingConfig,
+        undefined,
+        `요청 ${i}(${i === 0 ? "오프닝" : "일반 턴"})에 thinkingConfig가 실리면 400으로 거부된다`,
       );
     }
   } finally {
@@ -149,47 +153,28 @@ test("GeminiLlmClient: 모든 요청에 thinkingBudget=0을 실어 보낸다(AC-
   }
 });
 
-// reviewer Major #1(2026-07-26) — GEMINI_TEXT_MODEL이 `"-latest"` 부동 별칭이고 thinkingBudget은
-// 벤더 타입 정의가 폐기를 예고한 필드다(genai.d.ts:11227, :8810-8813). 별칭이 재매핑돼 400이 나면
-// completeWithFallback이 전부 Mock으로 강등해 **66%가 100%로 악화**된다. 그래서 거부당하면 추론
-// 설정 없이 한 번 재시도한다. `thinkingBudget:0`의 API 수용 여부 자체가 429로 미검증이므로, 이
-// 안전장치가 없으면 미검증 설정을 무방비로 넣는 셈이 된다.
-test("GeminiLlmClient: thinkingConfig가 거부되면 추론 설정 없이 1회 재시도한다(부동 별칭 재매핑 대비)", async () => {
-  const originalFetch = globalThis.fetch;
-  const bodies: { generationConfig?: { thinkingConfig?: unknown } }[] = [];
-  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
-    const body = init?.body ? JSON.parse(init.body) : {};
-    bodies.push(body);
-    // 1차: thinkingConfig가 실려 있으면 모델이 거부하는 상황을 흉내낸다.
-    if (body?.generationConfig?.thinkingConfig) {
-      return new Response(
-        JSON.stringify({
-          error: { code: 400, status: "INVALID_ARGUMENT", message: "Unable to submit request because thinking_budget is not supported by this model." },
-        }),
-        { status: 400, headers: { "content-type": "application/json" } },
-      );
-    }
-    return new Response(
-      JSON.stringify({ candidates: [{ content: { role: "model", parts: [{ text: "재시도 성공" }] } }] }),
-      { status: 200, headers: { "content-type": "application/json" } },
-    );
-  }) as unknown as typeof globalThis.fetch;
+// T98 회귀의 진짜 방아쇠는 `"-latest"` 부동 별칭이었다 — 코드는 그대로인데 별칭이 가리키는 실체가
+// 아무 신호 없이 gemini-3.6-flash로 바뀌어 설정이 거부됐다. 고정 버전으로 못박아, 모델 변경이
+// 반드시 커밋으로 드러나게 한다. (`"gemini-2.5-flash"`는 이 계정에서 404라 되돌릴 수 없다.)
+test("GeminiLlmClient: 고정 버전 모델을 쓰고 '-latest' 부동 별칭을 쓰지 않는다(조용한 재매핑 차단)", async () => {
+  assert.equal(GEMINI_TEXT_MODEL, "gemini-3.6-flash");
+  assert.ok(!GEMINI_TEXT_MODEL.includes("latest"), "부동 별칭은 재매핑을 조용히 삼켜 라이브 장애를 만든다");
 
+  const capture = captureGenerateContentRequest("(dummy)");
   try {
-    const result = await new GeminiLlmClient("test-key").complete({ systemPrompt: "(system)", messages: [] });
-    assert.equal(result.text, "재시도 성공", "거부 후 재시도 결과가 반환돼야 한다(Mock 강등 아님)");
-    assert.equal(result.isMock, false, "재시도로 얻은 응답도 실 LLM이므로 isMock은 false여야 한다");
-    assert.equal(bodies.length, 2, "정확히 1회만 재시도해야 한다(무한 재시도 금지)");
-    assert.ok(bodies[0].generationConfig?.thinkingConfig, "1차 요청에는 thinkingConfig가 있어야 한다");
-    assert.equal(bodies[1].generationConfig?.thinkingConfig, undefined, "재시도 요청에는 thinkingConfig가 없어야 한다");
+    await new GeminiLlmClient("test-key").complete({ systemPrompt: "(system)", messages: [] });
+    assert.ok(
+      capture.urls()[0]?.includes(GEMINI_TEXT_MODEL),
+      `실제 요청 URL에 ${GEMINI_TEXT_MODEL}이 들어가야 한다(실제 URL: ${capture.urls()[0]})`,
+    );
   } finally {
-    globalThis.fetch = originalFetch;
+    capture.restore();
   }
 });
 
-// 위 재시도가 "아무 실패에나 재시도하는" 넓은 그물이 되면, 안전차단·인증오류까지 두 번씩 때려
-// 할당량만 태운다. 추론과 무관한 실패는 그대로 던져야 한다.
-test("GeminiLlmClient: 추론과 무관한 실패는 재시도하지 않고 그대로 던진다", async () => {
+// 실패 시 재시도하지 않는다 — 재시도는 무료 티어 할당량(일 20건/분 5건)만 태우고, 실패는
+// completeWithFallback이 Mock 강등으로 이미 흡수한다(llm/index.ts:110).
+test("GeminiLlmClient: 실패는 재시도하지 않고 그대로 던진다", async () => {
   const originalFetch = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = (async () => {
