@@ -6,4 +6,5 @@
 - [인계된 base 커밋·줄번호는 미검증이다](project_handoff_base_commit_unverified.md) — `.git/refs`를 직접 읽어 확인하고 어긋난 줄번호는 인계 정정으로 남길 것
 - [규범 규칙이 정본, 예시를 고친다](feedback_norm_beats_example.md) — 게이트 능력을 과소 서술한 "못 잡는 형태" 목록도 결함; 확장 여부는 결정 말고 OQ로
 - [상속받은 "불가"는 층을 갈라라](feedback_inherited_impossibility_is_layered.md) — 런타임 차단 불가 ≠ 사후 판정 불가; 열린 층에서만 넓히고 "보는 것/막는 것"을 구분
+- [예외는 조건을 아는 층에 둔다](feedback_exception_belongs_to_conditional_layer.md) — 무조건 방출 콘텐츠를 좁히면 조건 없는 세션까지 약해진다; 반대 조건도 같은 블록에 명문화
 - [하드 게이트는 실행 가능성을 먼저 확인](feedback_hard_gate_executability.md) — 참조 대상이 나중 커밋에 오는 게이트를 앞 커밋에 못 박지 말 것(사후 추인 2회: G58·G-B)
