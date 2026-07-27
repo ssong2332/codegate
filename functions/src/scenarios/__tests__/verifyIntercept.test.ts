@@ -223,14 +223,9 @@ test("[AC-071] announceInstruction은 확인을 **막지 않고 권하게** 하�
 // ⛔ 그러므로 이 게이트들이 보증하는 것은 **"겹침을 요구하는 문자열이 모델에게 가지 않는다"** 까지다.
 // **원 화자의 침묵은 보증하지 않는다** — 실제 발화 확인은 라이브 검증 소관이다(§22.8 (1)).
 
-/** 원 화자 **잔류 요구** 표현(G83) — 이 결함의 직접 원인이었던 문구군. */
-const RESIDENCY_DEMANDS: readonly RegExp[] = [
-  /끊지\s*않고/,
-  /기다리겠습니다/,
-  /끊지\s*마시/,
-  /대기하겠습니다/,
-  /끊지\s*말고\s*기다/,
-];
+// 원 화자 **잔류 요구** 표현군의 정본은 아래 G85 절의 `RESIDENCY_DEMANDS`다(형태별 `quotable`
+// 플래그를 함께 갖는다). 여기 G83은 **예외 없이** 부분 문자열만 보므로 패턴만 뽑은
+// `RESIDENCY_PATTERNS`를 쓴다 — `announceInstruction`에는 금지형 용례가 없기 때문이다.
 
 /** 참가자의 **신규 발신 전제**(G84) — 호 전환 모델에서는 어느 지시에도 있으면 안 된다. */
 const DIAL_OUT_PREMISES: readonly RegExp[] = [/걸어/, /전화를\s*걸/, /안내받은\s*번호/];
@@ -240,7 +235,7 @@ const TRANSFER_PREMISES: readonly RegExp[] = [/넘겼다/, /넘겨/, /연결해\
 
 test("[T110/G83] announceInstruction ×6 — 원 화자 잔류 요구 표현이 0건이고, 호 전환을 제안한다", () => {
   for (const item of allItems) {
-    for (const pattern of RESIDENCY_DEMANDS) {
+    for (const pattern of RESIDENCY_PATTERNS) {
       assert.ok(
         !pattern.test(item.announceInstruction),
         `잔류 요구가 남아 있으면 원 화자가 세션에 머무는 것이 프롬프트로 요구된다(${pattern}): ${item.offerId}`,
@@ -255,7 +250,7 @@ test("[T110/G83] announceInstruction ×6 — 원 화자 잔류 요구 표현이 
 
 test("[T110/G83 역검증] 잔류 요구 문구를 되살린 샘플은 실제로 실패한다", () => {
   const tainted = "확인해 보세요. 저는 끊지 않고 기다리겠습니다.";
-  assert.ok(RESIDENCY_DEMANDS.some((pattern) => pattern.test(tainted)), "죽은 정규식이면 안 된다");
+  assert.ok(RESIDENCY_PATTERNS.some((pattern) => pattern.test(tainted)), "죽은 정규식이면 안 된다");
 });
 
 test("[T110/G84] reconnectInstruction ×6 — 신규 발신 전제 0건 · 전환 전제 존재 · 복귀 금지 명문", () => {
@@ -478,50 +473,126 @@ function modelReachableStrings(scenarioId: string): {
   };
 }
 
-/**
- * 매치 지점부터 **같은 절이 끝날 때까지**(문장부호·줄바꿈 전까지) 잘라낸다.
- *
- * ⚠️ **왜 고정폭 윈도가 아니라 절 단위인가(실측)**: 고정폭(예: 40자)으로 하면 뒤 문장의 "…마라"가
- * 우연히 창에 들어와 **진짜 위반을 놓친다.** 실제 결함 문구 *"저는 끊지 않고 기다리겠습니다."* 는
- * 바로 뒤 문장이 *"…지어내 읽어 주지 마라"* 라서 창 크기에 따라 통과해 버린다. 절 단위면 그 문장은
- * 자기 절 안에 금지 표지가 없어 **항상 걸린다.**
- */
+// ── 금지형 문맥 예외의 **판정 규칙**(reviewer Major / QA NO-GO로 한 번 좁혔다) ────────────────
+//
+// ⚠️ **최초 구현이 틀렸던 지점(원인 진단 그대로 인용)**: 예외 조건이 *"부정어가 그 잔류 요구를
+// 부정하는가"* 가 아니라 *"부정어가 절 어딘가에 있는가"* 로 느슨하게 걸려 있었다. 매치 지점부터
+// 다음 종결부호까지를 한 절로 보고 **그 구간 어디에든** 부정어가 있으면 예외를 줬으므로,
+// 뒤에 무관한 부정문을 덧붙이는 것만으로 우회됐다(아래 역검증 ④~⑦이 그 4종을 고정한다).
+//
+// ⚠️ **고정폭 윈도로는 돌아가지 않는다(이미 실측으로 반증했다)**: 결함 원문
+// *"저는 끊지 않고 기다리겠습니다."* 는 **바로 뒤 문장**이 *"…지어내 읽어 주지 마라"* 라서, 창을
+// 넓히면 그 "마라"가 들어와 통과해 버린다. 아래 규칙은 창 크기에 **의존하지 않는다** — 부정어가
+// 매치를 실제로 지배하는지를 **문법 형태**로 본다.
+//
+// **판정표(이 표에 없는 케이스는 임의 판단하지 말고 행을 추가할지 물을 것)**
+// | # | 조건 | 판정 |
+// |---|---|---|
+// | 1 | 매치가 **종결형 서술**(`~습니다`)이다 | **예외 없음 — 항상 위반.** 이미 문장이 끝난 서술은 뒤에 무엇이 오든 부정되지 않는다. `대기하겠습니다 재촉하지 마라`가 여기서 걸린다 |
+// | 2 | 매치 **바로 뒤**에 인용·내포 표지(`라고`/`라는`/`라며`/`다고`)가 붙고, **같은 절**에 부정 표지가 있다 | **예외 인정.** §22.1 A1 ⓐ *"끊지 마시**라고** 붙잡지도 않는다"* 가 정확히 이 형태다 |
+// | 3 | 그 밖의 전부 | **위반.** 부정어가 뒤에 따로 붙어 있어도 매치를 지배하지 않는다 |
+//
+// 절 경계에 **쉼표(`,`)를 포함**시킨다 — 한국어 만연체에서 종결부호만 경계로 잡으면 구간이 무한정
+// 늘어나 우회 표면이 커진다(reviewer 권고). 규칙 1·2가 이미 대부분을 막지만 경계는 좁을수록 좋다.
+
+/** 매치 지점부터 같은 절이 끝날 때까지(**쉼표 포함** 절 경계 전까지). */
 function clauseAt(text: string, index: number): string {
   const rest = text.slice(index);
-  const end = rest.search(/[.!?\n]/);
+  const end = rest.search(/[.,!?\n]/);
   return end < 0 ? rest : rest.slice(0, end);
 }
 
+/** 인용·내포 표지 — 매치 **직후**에 붙어야만 그 매치를 부정문의 목적어로 만든다. */
+const QUOTATION_MARKER = /^(라고|라는|라며|다고|란)/;
+
+/** 부정·금지 표지. */
+const NEGATION_MARKER = /않는다|않겠다|마라|말라|하지\s*마|금지/;
+
+type ResidencyDemand = {
+  pattern: RegExp;
+  /**
+   * 인용·내포 구문에 실려 **부정될 수 있는** 형태인가.
+   * `false` = 종결형 서술(판정표 1행) — 예외 자체가 성립하지 않는다.
+   */
+  quotable: boolean;
+};
+
 /**
- * 잔류 요구가 **긍정형으로** 남아 있는 자리만 모은다(G85).
+ * 원 화자 **잔류 요구** 표현(G83/G85) — 이 결함의 직접 원인이었던 문구군.
+ * `quotable`은 위 판정표 1행을 데이터로 옮긴 것이다.
+ */
+const RESIDENCY_DEMANDS: readonly ResidencyDemand[] = [
+  { pattern: /끊지\s*않고/, quotable: false }, // 연결형이지만 "끊지 않고라고"는 비문 — 인용 용례가 없다
+  { pattern: /기다리겠습니다/, quotable: false }, // 종결형 서술
+  { pattern: /끊지\s*마시/, quotable: true }, // A1 ⓐ "끊지 마시라고 붙잡지도 않는다"
+  { pattern: /대기하겠습니다/, quotable: false }, // 종결형 서술
+  { pattern: /끊지\s*말고\s*기다/, quotable: false },
+];
+
+/** G83처럼 **예외 없이** 부분 문자열만 보는 자리용(지시문 2종은 금지형 용례가 없다). */
+const RESIDENCY_PATTERNS: readonly RegExp[] = RESIDENCY_DEMANDS.map((demand) => demand.pattern);
+
+/**
+ * 잔류 요구가 **긍정형으로**(= 부정어의 지배를 받지 않은 채) 남아 있는 자리만 모은다(G85).
  *
- * ⚠️ **금지형 문맥 예외가 필요한 이유(T86이 세운 관례)**: §22.1 A1 ⓐ는 *"끊지 마시라고 붙잡지도
- * 않는다"* 라고 **금지형으로** 같은 어휘를 쓴다 — 이것은 잔류 요구가 아니라 그 반대다. 예외 없이
- * 부분 문자열만 보면 **설계가 요구한 문구가 자기 게이트에 걸린다.**
- * ⚠️ 단 예외는 **같은 절 안의 금지 표지**로만 열린다(위 `clauseAt`). 긍정형 잔류 요구는 그대로 걸린다
- * (아래 역검증 ②가 그것을 고정한다 — `harmlessnessGate.test.ts`의 *"금지형 문맥 예외가 긍정형
- * 언급까지 봐주지는 않는다"* 와 같은 양식).
+ * 위 판정표를 그대로 구현한다. 예외는 **인용 표지가 매치에 직접 붙었을 때만** 열리므로,
+ * "뒤에 아무 부정문이나 덧붙여 우회"가 구조적으로 불가능하다.
  */
 function positiveResidencyDemands(text: string): string[] {
   const found: string[] = [];
-  for (const pattern of RESIDENCY_DEMANDS) {
-    const global = new RegExp(pattern.source, "g");
+  for (const demand of RESIDENCY_DEMANDS) {
+    const global = new RegExp(demand.pattern.source, "g");
     for (const match of text.matchAll(global)) {
-      const clause = clauseAt(text, match.index ?? 0);
-      if (!/않는다|마라|말라|하지\s*마|금지/.test(clause)) found.push(clause);
+      const index = match.index ?? 0;
+      const clause = clauseAt(text, index);
+      if (!demand.quotable) {
+        found.push(clause); // 판정표 1행 — 종결형·비인용형은 예외가 없다
+        continue;
+      }
+      const after = text.slice(index + match[0].length);
+      const governed = QUOTATION_MARKER.test(after) && NEGATION_MARKER.test(clause);
+      if (!governed) found.push(clause); // 판정표 3행
     }
   }
   return found;
 }
 
-/** 앞 담당자 언급이 **퇴장·금지 문맥**에서만 나오는가(복귀 허용 표현 0건). */
+/**
+ * 앞 담당자 언급이 **퇴장·금지 술어의 지배를 받는가**(복귀 허용 표현 0건, G85).
+ *
+ * ⚠️ **여기도 같은 결함이 있었다(대칭 확인 결과: 있었다 — 함께 고친다)**: 종전에는 90자 고정 윈도
+ * 안에 `마라|않는다|…` 가 있기만 하면 예외였다 → *"앞 담당자가 이어서 말하게 하라, 무리하지는
+ * 않는다"* 처럼 **무관한 부정문을 덧붙이면 통과**했다(역검증 ⑧이 고정한다).
+ *
+ * 좁힌 규칙: 언급이 속한 절에 **§22.1이 확정한 퇴장 술어 3종 중 하나**가 있어야 한다. 일반 부정어는
+ * 예외를 열지 못한다 — 이 흐름에서 앞 담당자를 말해도 되는 문맥은 그 셋뿐이기 때문이다(A1 ⓑ ·
+ * `RECONNECT_TAIL`). 술어 목록이 곧 **허용 문맥의 정본**이라 다음 사람이 임의 판단할 여지가 없다.
+ */
+const EXIT_PREDICATES: readonly RegExp[] = [
+  // (ㄱ) 호가 넘어왔다·앞 화자가 빠졌다는 **전환·퇴장 서술**(§22.1 A3 확정 문면)
+  /이\s*통화를\s*너에게\s*넘겼다/,
+  /통화에서\s*빠졌다/,
+  /빠진\s*사람이다/,
+  // (ㄴ) 앞 화자로서·앞 화자를 대신해 **말하지 말라는 금지**(A1 ⓑ · `RECONNECT_TAIL` 확정 문면)
+  /다시\s*말하지\s*(않는다|마라)/,
+  /인용하는\s*형태도\s*만들지\s*(않는다|마라)/,
+  /같은\s*사람이라는\s*사실[^.]*말하지\s*마라/,
+];
+
+/**
+ * **허용 술어가 있어도 예외를 닫는 거부권** — 같은 절에 "앞 화자가 말하게 하라"류 **허용 구문**이
+ * 섞이면 그 절은 퇴장 문맥이 아니다. 이것이 없으면 *"앞 담당자가 이어서 말하게 하되 이름은 말하지
+ * 마라"* 처럼 **허용 + 금지를 한 절에 섞는** 우회가 남는다.
+ */
+const PERMISSIVE_VERBS = /말하게\s*하|이어서\s*말|대신\s*말|응대하게\s*하|설명하게\s*하/;
+
 function returnAllowingMentions(text: string): string[] {
   const found: string[] = [];
   for (const match of text.matchAll(/앞\s*담당자|앞사람|원래\s*담당자/g)) {
-    const index = match.index ?? 0;
-    const window = text.slice(index, index + 90);
-    const prohibitive = /마라|말라|않는다|하지\s*마|빠졌다|빠진\s*사람|빠진다/.test(window);
-    if (!prohibitive) found.push(window);
+    const clause = clauseAt(text, match.index ?? 0);
+    const governed =
+      EXIT_PREDICATES.some((predicate) => predicate.test(clause)) && !PERMISSIVE_VERBS.test(clause);
+    if (!governed) found.push(clause);
   }
   return found;
 }
@@ -639,7 +710,7 @@ test("[T110/G85 ⭐역검증] 잔류 요구를 **상시 블록에** 넣으면 �
 
   // ① 개별 필드 검사(G83·G84)는 **그대로 통과한다** — 두 필드가 깨끗하기 때문이다.
   assert.ok(
-    RESIDENCY_DEMANDS.every((pattern) => !pattern.test(announce)),
+    RESIDENCY_PATTERNS.every((pattern) => !pattern.test(announce)),
     "G83(announce 단독)은 통과한다",
   );
   assert.ok(
@@ -672,6 +743,82 @@ test("[T110/G85 역검증 ②] 복귀 허용 문맥이 섞이면 G85가 잡는�
   const tainted = "앞 담당자가 옆에서 확인해 주면 이어서 설명하게 하라.";
   assert.deepEqual(returnAllowingMentions(clean), []);
   assert.equal(returnAllowingMentions(tainted).length, 1);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐ T110 재작업 — **금지형 문맥 예외 우회 4종 회귀 고정**(reviewer Major · QA NO-GO)
+//
+// 최초 구현의 예외 조건이 *"부정어가 그 잔류 요구를 부정하는가"* 가 아니라 *"부정어가 절 어딘가에
+// 있는가"* 였다. 아래 4종은 **무관한 부정문을 덧붙이는 것만으로** 게이트를 통과했던 실제 재현
+// 입력이다. ⚠️ **한 테스트에 섞지 않는다** — 섞으면 하나만 잡혀도 통과해 나머지 구멍을 못 본다
+// (G86-d에서 이미 세운 관례).
+// 판정 규칙은 `positiveResidencyDemands` 위의 판정표에 있다.
+// ══════════════════════════════════════════════════════════════════════════════
+
+test("[T110/G85 우회회귀 ⓪ 대조군] 결함 원문은 BLOCKED다", () => {
+  assert.ok(positiveResidencyDemands("저는 끊지 않고 기다리겠습니다.").length > 0);
+});
+
+test("[T110/G85 우회회귀 ①] 뒤에 무관한 부정 서술을 덧붙여도 BLOCKED다", () => {
+  // 종전: 절 안에 "않는다"가 있다는 이유로 전체가 예외 처리돼 0건이었다(BYPASS).
+  const bypass = "저는 끊지 않고 기다리겠습니다 다른 데로는 가지 않는다.";
+  assert.ok(positiveResidencyDemands(bypass).length > 0, "무관한 부정어는 예외를 열지 못한다");
+});
+
+test("[T110/G85 우회회귀 ②] 뒤에 무관한 금지 명령을 덧붙여도 BLOCKED다", () => {
+  const bypass = "저는 끊지 않고 기다리겠습니다 걱정은 하지 마라.";
+  assert.ok(positiveResidencyDemands(bypass).length > 0);
+});
+
+test("[T110/G85 우회회귀 ③] 종결형 잔류 요구는 뒤에 무엇이 와도 BLOCKED다", () => {
+  // 판정표 1행 — "대기하겠습니다"는 이미 끝난 서술이라 뒤 문장이 부정할 수 없다.
+  const bypass = "대기하겠습니다 재촉하지 마라.";
+  assert.ok(positiveResidencyDemands(bypass).length > 0);
+});
+
+test("[T110/G85 우회회귀 ④] 쉼표로 이어붙인 만연체(절 늘이기)로도 BLOCKED다", () => {
+  // 종전: 절 경계가 종결부호뿐이라 한국어 만연체에서 구간이 무한정 늘어났다 → 쉼표를 경계에 넣었다.
+  const bypass =
+    "고객이 원할 때까지 저는 끊지 않고 기다리겠습니다, 이건 절차상 어쩔 수 없는 방침이며 다른 방식은 허용되지 않는다.";
+  assert.ok(positiveResidencyDemands(bypass).length > 0);
+});
+
+test("[T110/G85 우회회귀 ⑤ 과차단 0건] 정상 금지형 2종은 그대로 통과한다", () => {
+  // ⚠️ 좁히면서 **설계가 요구한 문구를 때리지 않았는지**가 이 재작업의 실패 조건이다.
+  // (a) §22.1 A1 ⓐ 원문 — 예외가 인정돼야 한다(인용 표지 "라고"가 매치에 직접 붙는다).
+  assert.deepEqual(
+    positiveResidencyDemands("상대가 끊고 직접 확인해 보겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다."),
+    [],
+  );
+  // (b) 금지형 뒤에 긍정형이 이어지면 **긍정형만** 걸린다(과차단도 과소차단도 아니다).
+  const mixed = "끊지 말라고 하지는 않겠지만 끊지 않고 기다리겠습니다.";
+  assert.ok(positiveResidencyDemands(mixed).length > 0, "뒤의 긍정형 잔류 요구는 잡힌다");
+});
+
+test("[T110/G85 우회회귀 ⑥] `returnAllowingMentions`도 같은 결함이었다 — 함께 좁혔다", () => {
+  // ⚠️ 대칭 확인 결과 **같은 구조였다**: 90자 윈도 안에 아무 부정어나 있으면 예외였다.
+  const bypass = "앞 담당자가 이어서 말하게 하라, 무리하지는 않는다.";
+  assert.ok(
+    returnAllowingMentions(bypass).length > 0,
+    "일반 부정어는 예외를 열지 못한다 — §22.1이 확정한 퇴장 술어만 연다",
+  );
+  // 확정 퇴장·전환 술어는 그대로 통과한다(A1 ⓑ · A3 · RECONNECT_TAIL의 실제 문장).
+  for (const approved of [
+    "앞 담당자가 이 통화를 너에게 넘겼다.",
+    "앞 담당자는 통화에서 빠졌다.",
+    "앞 담당자는 이 통화에서 빠진 사람이다",
+    "그 인물의 이름·직책·1인칭으로 앞 담당자를 다시 말하지 않는다",
+    "앞 담당자를 대신 인용하는 형태도 만들지 마라",
+    "네가 앞사람과 같은 사람이라는 사실·통화가 어디로 이어졌는지는 어떤 형태로도 말하지 마라",
+  ]) {
+    assert.deepEqual(returnAllowingMentions(approved), [], approved);
+  }
+});
+
+test("[T110/G85 우회회귀 ⑦] 허용 구문과 금지를 한 절에 섞어도 BLOCKED다(거부권)", () => {
+  // 퇴장 술어가 절에 있어도 "말하게 하라"류 허용 구문이 함께 있으면 퇴장 문맥이 아니다.
+  const bypass = "앞 담당자가 이어서 말하게 하되 이름은 다시 말하지 마라";
+  assert.ok(returnAllowingMentions(bypass).length > 0, "허용 구문이 섞이면 예외가 닫힌다");
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
