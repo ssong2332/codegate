@@ -22,6 +22,18 @@
 //  "대기 중"으로 되돌릴 것. ⚠️ 이 줄은 **사람이 손으로 유지하는 기록**이라 실제 에이전트 상태와
 //  어긋날 수 있다 — 자동 검출은 **T106**으로 등재됐다. 이 마커는 T109 reviewer가 Major로
 //  지적해 신설됐다: clone 2종 중 이 파일에만 고지가 없어 재생성 필요가 저장소에 안 남았다.)
+// (T110 2026-07-27: 공통 조립부를 고쳤지만 **이 시나리오의 조립 산출물은 한 바이트도 바뀌지 않았다
+//  — 재생성 불요.** T110이 손댄 `VERIFY_INTERCEPT_RULE`은 **조건형 블록**이라
+//  `verifyInterceptEnabled === true`일 때만 삽입되는데, clone 2종은 확인 무력화 카탈로그에 없어
+//  (`hasVerifyIntercept === false`, §16.6 G23) 이 블록이 애초에 붙지 않는다.
+//  ⚠️ **실측으로 확인했다(추정 아님)**: 이 시나리오 × 3난이도의 조립 문자열을 main(`2fb1e98`)과
+//  T110 브랜치에서 각각 만들어 sha256을 대조했고 **6/6 전부 동일**했다
+//  (beginner len=5298 sha=a9f8d7bed8f8e05f · intermediate len=4558 sha=1a7efc0c9c1b3f9f ·
+//   advanced len=5440 sha=fedae8ea96ef8d4b — 양쪽 값이 같다).
+//  ⚠️ **다음 사람에게**: 바로 위 문단이 경고한 *"이 파일의 diff가 비어 있어도 재생성이 필요하다"* 의
+//  **역도 참이 아니다** — 공통부가 바뀌었다고 자동으로 재생성이 필요한 것도 아니다. 조건형 블록이면
+//  이 시나리오에 닿지 않는다. 판단하지 말고 위와 같이 조립 문자열을 대조할 것.
+//  ⚠️ 위 T109 재생성 대기 상태는 **그대로 유효하다** — T110이 그것을 해소하지 않는다.)
 import type { ScenarioPromptDoc } from "../shared/types";
 
 // src/content/scenarios/grandchildImpersonation.ts의 상수와 동일한 문자열이어야 한다.

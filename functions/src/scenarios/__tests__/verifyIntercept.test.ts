@@ -478,6 +478,42 @@ function modelReachableStrings(scenarioId: string): {
   };
 }
 
+/**
+ * 매치 지점부터 **같은 절이 끝날 때까지**(문장부호·줄바꿈 전까지) 잘라낸다.
+ *
+ * ⚠️ **왜 고정폭 윈도가 아니라 절 단위인가(실측)**: 고정폭(예: 40자)으로 하면 뒤 문장의 "…마라"가
+ * 우연히 창에 들어와 **진짜 위반을 놓친다.** 실제 결함 문구 *"저는 끊지 않고 기다리겠습니다."* 는
+ * 바로 뒤 문장이 *"…지어내 읽어 주지 마라"* 라서 창 크기에 따라 통과해 버린다. 절 단위면 그 문장은
+ * 자기 절 안에 금지 표지가 없어 **항상 걸린다.**
+ */
+function clauseAt(text: string, index: number): string {
+  const rest = text.slice(index);
+  const end = rest.search(/[.!?\n]/);
+  return end < 0 ? rest : rest.slice(0, end);
+}
+
+/**
+ * 잔류 요구가 **긍정형으로** 남아 있는 자리만 모은다(G85).
+ *
+ * ⚠️ **금지형 문맥 예외가 필요한 이유(T86이 세운 관례)**: §22.1 A1 ⓐ는 *"끊지 마시라고 붙잡지도
+ * 않는다"* 라고 **금지형으로** 같은 어휘를 쓴다 — 이것은 잔류 요구가 아니라 그 반대다. 예외 없이
+ * 부분 문자열만 보면 **설계가 요구한 문구가 자기 게이트에 걸린다.**
+ * ⚠️ 단 예외는 **같은 절 안의 금지 표지**로만 열린다(위 `clauseAt`). 긍정형 잔류 요구는 그대로 걸린다
+ * (아래 역검증 ②가 그것을 고정한다 — `harmlessnessGate.test.ts`의 *"금지형 문맥 예외가 긍정형
+ * 언급까지 봐주지는 않는다"* 와 같은 양식).
+ */
+function positiveResidencyDemands(text: string): string[] {
+  const found: string[] = [];
+  for (const pattern of RESIDENCY_DEMANDS) {
+    const global = new RegExp(pattern.source, "g");
+    for (const match of text.matchAll(global)) {
+      const clause = clauseAt(text, match.index ?? 0);
+      if (!/않는다|마라|말라|하지\s*마|금지/.test(clause)) found.push(clause);
+    }
+  }
+  return found;
+}
+
 /** 앞 담당자 언급이 **퇴장·금지 문맥**에서만 나오는가(복귀 허용 표현 0건). */
 function returnAllowingMentions(text: string): string[] {
   const found: string[] = [];
@@ -490,15 +526,101 @@ function returnAllowingMentions(text: string): string[] {
   return found;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐ T110 / §22.6 1단계 — **G82(조립 게이트): 퇴장 규칙이 상시 블록에 실제로 들어가는가**
+//
+// ⚠️ §22.7 G82가 경고한 실패 양식: *"퇴장 규칙을 `reconnectInstruction`에만 넣고 상시 블록에 안
+// 넣는다(전환 순간에만 필요하니까)"*. 1회성 턴 주입은 다음 턴이면 컨텍스트 뒤로 밀리고, 시스템
+// 프롬프트는 매 턴 선두다 → 전환 직후 1턴만 지켜지고 **2~3턴 뒤 원 화자가 돌아온다**.
+// ⚠️ 위치도 함께 고정한다 — 퇴장 규칙이 `guardrailPreamble`보다 **앞**이어야 한다(AC-065 불변:
+// 가드레일은 언제나 맨 마지막이다).
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** §22.1 A1 ⓑ 퇴장 규칙의 필수 성분 — 문면이 바뀌어도 **의미 3요소**는 남아야 한다. */
+const EXIT_RULE_PARTS: readonly RegExp[] = [
+  /빠진\s*사람이다/, // 앞 담당자는 통화에서 빠졌다
+  /다시\s*말하지\s*않는다/, // 이름·직책·1인칭으로 복귀 금지
+  /번갈아\s*말하/, // 두 화자가 번갈아 말하는 형태 금지(신고된 증상)
+];
+
+test("[T110/G82] 6종 × 고급 × 확인 무력화 — 조립 프롬프트의 **상시 블록**에 퇴장 규칙이 들어 있고 가드레일보다 앞이다", () => {
+  const seen: string[] = [];
+  for (const scenarioId of Object.keys(VERIFY_INTERCEPT)) {
+    const prompt = SCENARIO_PROMPTS[scenarioId];
+    const assembled = buildSystemPrompt(prompt, {
+      difficultyLevel: "advanced",
+      verifyInterceptEnabled: true,
+    });
+    const ruleBlock = extractVerifyRuleBlock(assembled);
+    for (const part of EXIT_RULE_PARTS) {
+      assert.ok(
+        part.test(ruleBlock),
+        `퇴장 규칙이 상시 블록에 없으면 전환 2~3턴 뒤 원 화자가 돌아온다(${part}): ${scenarioId}`,
+      );
+    }
+    // ⓐ 붙잡지 않기 — 전환 제안으로 받아 두는 문구도 상시 블록에 있어야 한다.
+    assert.ok(/붙잡지도\s*않는다/.test(ruleBlock), `A1 ⓐ 누락: ${scenarioId}`);
+    assert.ok(/확인 부서를 연결해 드리겠습니다/.test(ruleBlock), `A1 ⓐ 보류 문구 누락: ${scenarioId}`);
+
+    const exitIndex = assembled.indexOf("빠진 사람이다");
+    const guardrailIndex = assembled.indexOf(prompt.guardrailPreamble.trimEnd().slice(0, 40));
+    assert.ok(exitIndex >= 0 && guardrailIndex >= 0, scenarioId);
+    assert.ok(
+      exitIndex < guardrailIndex,
+      `가드레일은 언제나 맨 마지막이다(AC-065): ${scenarioId}`,
+    );
+    seen.push(scenarioId);
+  }
+  assert.equal(seen.length, 6, "6종 전수여야 한다(부분 정정 차단)");
+});
+
+// ⚠️ **T110 / G73·G23 인접 사실 — clone 2종은 A1의 영향을 받지 않는다.**
+// "공통 조립부가 바뀌었으니 ElevenLabs 에이전트 재생성이 필요하다"는 추론은 **자동으로 참이 아니다**:
+// `VERIFY_INTERCEPT_RULE`은 조건형 블록이고 clone 2종은 카탈로그가 없어 블록이 붙지 않는다.
+// 주석으로만 남기면 다음 사람이 다시 틀리게 추론하므로 **기계로 고정**한다(clone 2종 프롬프트
+// 파일 상단의 재생성 상태 줄이 이 단언과 같은 사실을 말한다).
+test("[T110/G73] clone 2종의 조립 산출물에는 확인 안내 블록이 붙지 않는다(= A1이 닿지 않는다)", () => {
+  for (const scenarioId of ["family-accident-deepvoice", "grandchild-impersonation"]) {
+    assert.equal(hasVerifyIntercept(scenarioId), false, `clone 경로에는 카탈로그가 없다: ${scenarioId}`);
+    for (const level of ["beginner", "intermediate", "advanced"] as const) {
+      const assembled = buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], {
+        difficultyLevel: level,
+        verifyInterceptEnabled: hasVerifyIntercept(scenarioId),
+      });
+      assert.equal(
+        assembled.includes("[확인 안내 — 이 훈련에서만 적용]"),
+        false,
+        `${scenarioId}/${level}: 블록이 붙으면 clone 에이전트 재생성이 실제로 필요해진다(G73)`,
+      );
+      assert.equal(assembled.includes("빠진 사람이다"), false, `${scenarioId}/${level}: A1 ⓑ 미유입`);
+    }
+  }
+});
+
+test("[T110/G82 역검증] 퇴장 규칙을 뺀 조립 결과는 **실제로 실패한다**(죽은 게이트가 아니다)", () => {
+  const assembled = buildSystemPrompt(SCENARIO_PROMPTS["bank-security-verify-scam"], {
+    difficultyLevel: "advanced",
+    verifyInterceptEnabled: true,
+  });
+  const ruleBlock = extractVerifyRuleBlock(assembled);
+  // A1 ⓑ가 없던 상태(= T110 착수 전 상시 블록)를 **테스트 코드 안에서만** 되만든다.
+  const withoutExitRule = ruleBlock
+    .split("\n")
+    .filter((line) => !/빠진\s*사람이다/.test(line))
+    .join("\n");
+  assert.notEqual(withoutExitRule, ruleBlock, "실제로 한 줄이 제거돼야 역검증이 성립한다");
+  const missing = EXIT_RULE_PARTS.filter((part) => !part.test(withoutExitRule));
+  assert.equal(missing.length, EXIT_RULE_PARTS.length, "세 성분 전부가 그 한 줄에 있었다 = G82가 살아 있다");
+});
+
 test("[T110/G85] 모델에 도달하는 문자열 3종을 **합쳐도** 잔류 요구·복귀 허용 표현이 0건이다", () => {
   for (const scenarioId of Object.keys(VERIFY_INTERCEPT)) {
     const { combined } = modelReachableStrings(scenarioId);
-    for (const pattern of RESIDENCY_DEMANDS) {
-      assert.ok(
-        !pattern.test(combined),
-        `합집합에 잔류 요구가 남으면 두 전제가 다시 공존한다(${pattern}): ${scenarioId}`,
-      );
-    }
+    assert.deepEqual(
+      positiveResidencyDemands(combined),
+      [],
+      `합집합에 잔류 요구가 남으면 두 전제가 다시 공존한다: ${scenarioId}`,
+    );
     assert.deepEqual(
       returnAllowingMentions(combined),
       [],
@@ -527,8 +649,22 @@ test("[T110/G85 ⭐역검증] 잔류 요구를 **상시 블록에** 넣으면 �
 
   // ② 그런데 모델이 실제로 받는 합집합에는 잔류 요구가 들어 있다 → **G85만 잡는다.**
   const combined = [taintedRuleBlock, announce, reconnect].join("\n");
-  const fired = RESIDENCY_DEMANDS.filter((pattern) => pattern.test(combined));
-  assert.ok(fired.length > 0, "합쳐서 검사하지 않으면 이번 결함은 영영 잡히지 않는다");
+  const fired = positiveResidencyDemands(combined);
+  // `clauseAt`은 **매치 지점부터** 절 끝까지를 돌려주므로 두 패턴이 각각의 절 조각으로 잡힌다.
+  assert.deepEqual(
+    fired,
+    ["끊지 않고 기다리겠습니다", "기다리겠습니다"],
+    "합쳐서 검사하지 않으면 이번 결함은 영영 잡히지 않는다",
+  );
+});
+
+test("[T110/G85 역검증 ③] 금지형 문맥 예외가 **긍정형 잔류 요구까지 봐주지는 않는다**", () => {
+  // §22.1 A1 ⓐ의 금지형("끊지 마시라고 붙잡지도 않는다")은 통과해야 하고,
+  const prohibitive = "상대가 끊고 확인하겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다.";
+  assert.deepEqual(positiveResidencyDemands(prohibitive), []);
+  // 결함 원문(긍정형)은 **반드시 걸려야** 한다. 뒤 문장에 "…마라"가 있어도 절이 다르므로 봐주지 않는다.
+  const positive = "저는 끊지 않고 기다리겠습니다. 번호를 네가 지어내 읽어 주지 마라.";
+  assert.equal(positiveResidencyDemands(positive).length, 2, "끊지 않고 · 기다리겠습니다 둘 다 걸린다");
 });
 
 test("[T110/G85 역검증 ②] 복귀 허용 문맥이 섞이면 G85가 잡는다", () => {
