@@ -1,0 +1,23 @@
+---
+name: upstream-cited-identifiers-may-not-exist
+description: 상류 문서(UX/PRD/Tasks)가 "기존 이벤트·API·필드가 이미 있다"고 인용한 식별자는 코드에 없을 수 있다 — 설계 전에 전수 grep으로 실재를 확인할 것
+metadata:
+  type: project
+---
+
+상류 문서가 *"기존 X가 이미 그 경계를 그린다"* 로 인용한 **식별자(이벤트명·콜러블·필드)** 는
+착수 전에 `**/*.{ts,tsx}` 전수 grep으로 **실재를 확인**한다. 이름이 없으면 그 문장은 *"이미 된다"* 가
+아니라 **"새로 만들어야 한다"** 이고, 그 차이가 태스크의 크기·선행 조건·AC 필요 여부를 통째로 바꾼다.
+
+**Why:** T121에서 `docs/UX.md`(v1.16 D-60/P-29)가 `fake_landing_shown`/`fake_landing_submitted`를
+*"기존 이벤트"* 로 4곳에 인용했으나 **코드에는 0건**이었다(실재하는 것은
+`recordMockScreenEvent("shown"|"consented")`·`recordInCallSmsEvent("opened"|"link_tapped")`뿐이고,
+"제출" 이벤트는 어디에도 없었다). 그대로 받았으면 *"행동 변경 0건"* 으로 설계했을 텍이고,
+실제로는 **응낙 판정이 기록 층에서 성립하지 않는다**는 결론이 나왔다.
+같은 계열: [[upstream-breakage-counts-undercount]](수치) · [[handoff-base-commit-unverified]](줄번호·커밋).
+
+**How to apply:** 상류가 인용한 식별자를 **설계 근거로 쓰기 전에** grep한다. 부재하면
+① 정정을 판정문 상단에 두고 ② 상류 소유 문서는 **고치지 말고** 해당 에이전트에 인계하며
+③ *"착수 게이트가 아니다"* 를 함께 적어 구현이 정정을 기다리지 않게 한다.
+✅ 유효한 반대 방향도 있다 — T121의 G-B는 상류가 *"확장이 필요할 수 있다"* 고 본 게이트였는데
+구현이 kind가 아니라 **필드 존재**만 보고 있어 **확장 0건**이었다. 실측은 범위를 늘리기도, 줄이기도 한다.

@@ -2,6 +2,7 @@
 - [ElevenLabs agent prompt API](reference_elevenlabs_agent_prompt_api.md) — 프롬프트는 `/v1/convai/agents/{id}`의 GET/PATCH; 저장소엔 이 경로 코드가 없다. PATCH 200 말고 되읽기로 검증
 - [Gemini Live session constraints](reference_gemini_live_session_constraints.md) — 음성·프롬프트·도구는 토큰에 서버 고정(세션 중 전환 불가); 상대 전환은 지시 주입+연출로
 - [상류 인계 수치는 과소집계된다](project_upstream_breakage_counts_undercount.md) — UX/PRD가 넘긴 "깨지는 테스트 N건"·"N종"은 재집계하고 정정을 보고 상단에 둘 것
+- [상류가 인용한 식별자는 없을 수 있다](project_upstream_cited_identifiers_may_not_exist.md) — "기존 이벤트/API가 이미 있다"는 인용은 전수 grep으로 실재 확인 후 설계할 것
 - [인계된 base 커밋·줄번호는 미검증이다](project_handoff_base_commit_unverified.md) — `.git/refs`를 직접 읽어 확인하고 어긋난 줄번호는 인계 정정으로 남길 것
 - [규범 규칙이 정본, 예시를 고친다](feedback_norm_beats_example.md) — 게이트 능력을 과소 서술한 "못 잡는 형태" 목록도 결함; 확장 여부는 결정 말고 OQ로
 - [상속받은 "불가"는 층을 갈라라](feedback_inherited_impossibility_is_layered.md) — 런타임 차단 불가 ≠ 사후 판정 불가; 열린 층에서만 넓히고 "보는 것/막는 것"을 구분
