@@ -19,4 +19,7 @@ metadata:
 4. 고친 자리에 **정정 이력 한 줄**(원래 값 · 정정 근거 · 측정 커밋 SHA)을 남기고, **손대지 않기로 한 자리는 "미정정 1건"으로 명시**해 다음 패스가 놓치지 않게 한다.
 5. **다른 에이전트가 점유 중인 행은 고치지 않고 보고만 한다** — [[planner-edit-only-handoff]] 참조.
 
-테스트 수 측정은 항상 **`functions/lib` 삭제 후**여야 한다(T101). 관련: [[planner-ac-verifiability]]
+6. **수치와 함께 "측정 커밋 SHA + 착수 시 재측정 요구"를 반드시 같이 적는다.** 이 저장소가 실제로 겪은 문제가 *"수치만 있고 출처가 없어 낡은 줄 몰랐다"* 이고, 기준선은 하루 만에 `427`→`442/165`(main `299c5e7`)→`462/171`(main `0532b0e`)로 **두 번** 옮겨갔다. 문서에 **줄 번호를 박아 미정정 위치를 표기하지 말 것** — 편집 한 번에 전부 밀린다(실제로 `:194`·`:212` 등을 적어 둔 유보 문구가 낡았다). 위치는 **행 ID + 전수 grep**으로 지시한다.
+7. **`git` 셸이 없는 세션(planner에 Bash 미제공)의 병합 확인 절차**: `.git/HEAD`(→ `refs/heads/main`)와 `.git/logs/refs/heads/main` 마지막 줄로 **main HEAD SHA**를 읽고, **main 워크트리(`C:\codegate`)의 산출물 파일 실재**로 병합을 확인한다(예: T95 = `bankSecurityVerifyScam.prompt.ts`, T104 = `mockScreens.ts`의 랜딩 4종). **커밋 SHA 대조는 못 했다는 사실을 보고와 문서에 함께 적는다.**
+
+**⚠️ 측정 방식이 바뀌었다(2026-07-27, T101 병합)**: `npm --prefix functions test`가 `functions/lib`를 **자동으로 지운다**(`functions/package.json:15` = `node scripts/clean-lib.mjs && tsc && …`) — **수동 삭제 문구는 폐기됐다.** 단 `npx tsc` 등 npm 스크립트를 우회한 직접 실행은 여전히 오염된다. 관련: [[planner-ac-verifiability]]
