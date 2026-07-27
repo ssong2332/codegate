@@ -4,6 +4,8 @@ Owner: architect (see AGENTS.md). Others read-only.
 Major decisions are logged in DECISIONS.md; details in adr/.
 Based on PRD Version: v1.7.1 · Based on UX Version: 1.13 · Last Updated: 2026-07-27
 
+> **갱신 고지(2026-07-27, T101 architect 방식 선정 — `functions/lib` 스테일 컴파일 산출물):** 이번 패스는 **툴체인 한정**이다. 범위는 **신규 §20**(스테일 산출물 차단 방식 선정 · Windows 삭제 수단 · 완료 판정 증거 절차 · 잔여 한계)와 **DECISIONS #50**뿐이며, **PRD/UX의 AC·화면·플로우에 대응하는 설계 변경이 0건**이라 §0~§19·ADR-0001~0012는 **한 줄도 수정하지 않았다**(Database.md·API.md 무변경 — 신규 컬렉션·필드·콜러블 0). ⚠️ **버전 갭 고지(정직하게)**: 헤더는 **PRD v1.7.1 · UX 1.13**인데 현재 `docs/PRD.md:4`는 **v1.8**(AC-078 신설 · MVP #33)이다 — **PRD 1건 뒤처져 있다.** 이번 패스에서 **헤더를 전진시키지 않았다**: 기준선을 v1.8로 옮긴다는 것은 §0~§19를 v1.8 기준으로 재검증했다는 주장인데, 이 패스는 T101(테스트 툴체인) 한정이라 그 재검증을 **하지 않았다**. AC-078 대응 설계는 T103/T104 계열 패스에서 처리한다. ⚠️ **절 번호 고지**: §19까지 사용 중이라 **§20**으로 배정했다. **갭 번호는 신설하지 않는다**(G-번호는 제품 안전 게이트 체계이고 이 절은 제품 산출물이 아니다 — §20.6이 대신 "완료 판정 증거표"를 쓴다).
+>
 > **갱신 고지(2026-07-27, OQ-U26·OQ-U27 판정 — 상황별 링크 랜딩 콘텐츠 / 통화 필 자막 연속성):** 기준을 **PRD v1.6→v1.7.1 · UX 1.12→1.13**으로 맞춘다(직전까지 v1.6/1.12라 **버전 갭 2건 존재** — 리포트에 명시). PRD v1.7·v1.7.1은 둘 다 *"AC 신설·변경 0건, 스코프 변경 0건"* 정정 릴리스이고(PRD.md:10,15), UX v1.13은 기존 UX-001~031·UF-001~012·D-1~D-54를 **한 건도 삭제·재번호하지 않았다**(UX.md:16) — 재검증 결과 **§0~§18은 한 줄도 무효화되지 않았고 Deprecated 이관·Superseded 0건**이다. 이번 패스의 범위는 **신규 §19**(게이트 정밀화 판정 · 콘텐츠 소유 위치 · 통화 경로 배선 · 자막 연속성) · **§19.8 갭 G75~G81** · **DECISIONS #47·#48** · **ADR-0012** · Database.md(`inCallSms.landingKind?` 1행)이며, **API.md는 무변경**(신규 콜러블·시그니처 변경 0). 기존 §0~§18·ADR-0001~0011은 **전부 유효**하고 **한 줄도 수정하지 않았다** — 단 아래 §15.3.3 정정 1건은 예외이며 그 사유를 그 자리에 적었다(docs/UpdateRequests.md #5 resolve). ⚠️ **§15.9.7 G53·G55와 `mockScreens.test.ts`의 `channel==="messenger"` 단언은 삭제되지 않는다 — 키만 정밀화되고, 정밀화 이전에 신규 게이트 G-A~G-E가 먼저 들어간다**(§19.2, 순서 강제 G75). ⚠️ **절 번호 고지**: §18까지 사용 중이라 **§19**로 배정했다.
 >
 > **갱신 고지(2026-07-27, T92 architect 선행 판단 — 숨은 전제 의존 시나리오 6종 보강 / "무조건 요구" 가드의 형태):** **버전 갭 없음** — 헤더가 이미 **PRD v1.6 · UX 1.12**이고 현재 `docs/PRD.md`는 v1.6(2026-07-25), `docs/UX.md`는 1.12(Based on PRD v1.6)라 세 문서가 같은 기준선에 있다(대조 실측). 이번 패스의 범위는 **신규 §18**(스키마 선언 필드 기각 판정 · 3겹 가드 · 전제 분류표 · implementer 계약) · **§18.7 갭 G68~G74** · **DECISIONS #46**이며, **Database.md·API.md·ADR은 무변경**이다(신규 컬렉션·필드·콜러블 0 — §18.1 판정의 직접 귀결). 기존 **§0~§17·ADR-0001~0011은 전부 유효**하고 **한 줄도 수정하지 않았다**. ⚠️ **T91 reviewer 제안을 기각한다** — *"가드를 스키마 선언 필드로 올린다"* 는 **채택하지 않는다**(근거 §18.1: 검증력 증가 0 · Firestore 계약/재시딩 비용 · 죽은 필드 또는 드리프트 원천). 대신 선언을 **모델이 실제로 읽는 `weakenedTactics` 문구 안**에 두고 그 존재·모순을 기계로 고정한다. ⚠️ **절 번호 고지**: §17까지 사용 중이라 **§18**로 배정했다.
@@ -2705,3 +2707,130 @@ const pillCaption = liveScammerCaption ?? latestScammerLine;   // 실시간 우�
 | **OQ-A18** | **필 자막의 줄 수·클램프 확정 문구**(1줄인가 2줄인가, 넘칠 때 말줄임인가 롤). §19.6은 "최신 1~2줄"까지만 확정했다 | ux-design |
 | **OQ-A19** | **`credential-form` 랜딩의 "속은 순간" 취급.** 현행 설계는 승격 0건(§19.4 #4)이라 참가자가 상황에 맞는 가짜 폼에 **정보를 다 입력해도** 리포트의 `deceivedMoments`에 아무것도 안 남는다. 이는 §15.9.5 e-1이 세운 *"탭 = 화면 열림이지 응낙이 아니다"* 와 정합하지만, **콘텐츠가 상황에 맞아진 뒤에는 "입력 완료 = 응낙"으로 볼 여지가 생긴다.** 승격시키려면 AC 근거가 필요하다 | **planner → architect**(AC 근거가 planner 소관) |
 | **OQ-U28 관련 권고(planner)** | UX가 권고한 AC 신설안에 **검증 가능한 술어 2개를 덧붙일 것을 권고**한다: (i) *"링크가 등장하는 각 시나리오의 랜딩은 서로 다른 `headline`을 갖는다"*(=범용 화면 수렴 금지를 기계로 판정 가능), (ii) *"상황별 콘텐츠는 kind의 안전 계약을 바꾸지 않는다"*(=AC-072 이중화 금지 계승). 이 두 술어가 있으면 reviewer·QA가 §19.5 G-B/G-C 출력만으로 완료 판정할 수 있다 | planner |
+
+---
+
+## 20. (T101) `functions/lib` 스테일 컴파일 산출물 차단 — 테스트 근거 오염 제거
+
+> **소관**: `docs/Tasks.md` **T101**. **제품 AC 매핑 없음 · UX Screen ID/Flow ID 매핑 없음** — 이 절은 화면도 엔드포인트도 컬렉션도 만들지 않는다(테스트 툴체인). 판정 근거 문서: `docs/DefinitionOfDone.md:18`(*"actual test run output attached, not claimed"*)·`:27`(*"'Tests pass' without attached output = not done"*), CLAUDE.md **Prohibitions**(근거 없는 성공 보고 금지).
+> **소유권 고지**: 이 절이 지정하는 변경 대상(`functions/package.json`, 신규 `functions/scripts/clean-lib.mjs`)은 **전부 implementer 소유**다(`AGENTS.md:74`). 이 절은 **계약이고 코드가 아니다** — architect는 `functions/` 아래 어떤 파일도 만들지 않았다.
+> **이 절이 확정하지 않는 것**: 루트 `package.json:11`의 테스트 실행 방식(T101 범위 밖 — 그 경로는 `.ts` 직접 실행이라 이 오염 자체가 없다) / CI 도입 / T100 E항(좀비 프로세스·포트) / **이미 문서에 기록된 오염 수치의 소급 정정**(별건 — T101 행 상태 열의 미결 질문, 사용자 확정 대기).
+
+### 20.0 설계 요지 (금지 먼저)
+1. **⛔ 삭제를 `pretest`/`prebuild` 훅에만 맡기지 않는다.** `npm run test --ignore-scripts`는 `pre*`를 건너뛴다 — 이 결함의 본질이 *"아는 사람만 우회한다"* 인데, 건너뛸 수 있는 자리에 두면 같은 실패 양식을 반복한다. 삭제는 **`test`·`build` 스크립트 본문 안**에 인라인으로 들어간다.
+2. **⛔ `rm -rf`를 쓰지 않는다.** Windows 개발 환경이다(`.git/config`의 `filemode=false`·`ignorecase=true`, T100 참조). 삭제는 **Node 코어 `fs.rmSync(..., {recursive:true, force:true})`** 로만 한다(§20.4).
+3. **⛔ `lib` 이외의 경로를 지우지 않는다.** 삭제 스크립트는 **자기 파일 위치 기준**으로 대상 경로를 계산하고(cwd에 의존하지 않는다), 대상이 `<functions>/lib`가 아니면 **삭제하지 않고 종료코드 1로 중단**한다. 이 저장소에서 폭발 반경이 가장 큰 한 줄이므로 가드 없이 두지 않는다.
+4. **⛔ 삭제 실패를 무시하고 진행하지 않는다.** 실패 시 비-0 종료로 **테스트까지 중단**한다. 실패를 삼키면 정확히 T101이 고치려는 상태(조용히 오염된 채 초록불)로 되돌아간다.
+5. **⛔ 이 절의 결정을 "수치가 맞아졌다"로 완료 판정하지 않는다.** 완료 근거는 §20.6의 **실행 출력표**다 — 개수 일치는 우연히도 성립할 수 있어 `[T101-probe]` **문자열 부재**를 함께 본다.
+
+### 20.1 이 판정의 1차 근거 — E항 확장 위험 실측 (오케스트레이터 실행, 2026-07-27, base main `2dec45b`)
+
+| 단계 | `npx tsc` 종료코드 | `lib/__probe__/` 산출물 | 테스트 수 | probe 테스트 |
+|---|---|---|---|---|
+| probe 소스 존재 | 0 | `probeMod.js` · `__tests__/probe.test.js` 존재 | 463 (pass 463 / fail 0) | 실행·통과 |
+| **probe 소스 삭제 후** | **0** | **둘 다 잔존** | **463** (pass 463 / fail 0) | **여전히 실행·통과**(`ok 1 - [T101-probe] …`) |
+
+⇒ **T101 E항은 추정이 아니라 실재한다.** 삭제된 소스의 산출물이 `lib/`에 남고, 그것을 참조하는 테스트가 **삭제 후에도 통과하며**, `tsc`는 **exit 0** 으로 끝나 **어떤 신호도 내지 않는다.**
+**⚠️ 출처 고지**: 이 표와 "main clean 기준선 = functions **462**"는 **오케스트레이터 실측이며 architect가 재현하지 않았다**(architect는 이 세션에서 명령 실행 수단이 없다). 다만 기준선 462는 `docs/Tasks.md:229`가 독립적으로 같은 값(main `0532b0e` 기준)을 기록하고 있어 **문서상 교차 확인 1건**은 있다. **implementer는 462를 신뢰하지 말고 §20.6 절차의 `P_B_clean`으로 직접 재산출**할 것(상류 인계 수치는 과소·과대집계된 전례가 이 저장소에 있다 — Tasks.md:194의 `424`·`427` 정정 이력).
+
+### 20.2 후보 판정표 — 각 후보가 §20.1 실측을 실제로 막는가
+
+| 후보 | ⓐ 수치 오염 차단 | ⓑ **삭제 모듈 참조 통과(E)** 차단 | 판정 |
+|---|---|---|---|
+| **① `lib` 삭제 후 `tsc`** | **○** | **○** — `lib` 전체가 매 실행마다 **현재 소스에서만** 재생성되므로 삭제된 소스의 산출물이 존재할 수 있는 창 자체가 없다 | **채택**(§20.3) |
+| ② `tsc --build` + `--build --clean` | △ | **✗(추정)** — `--build --clean`이 지우는 것은 **현재 프로젝트의 파일 목록에서 산출한 출력 경로**다. 소스가 **이미 삭제된** 파일의 출력은 그 목록에 없으므로 열거되지 않는다. 게다가 buildinfo가 없거나(새 clone·새 워크트리) 다른 브랜치에서 만들어졌으면 **삭제 대상 산출 자체가 어긋난다**. 즉 ②는 ①의 **열등 변종**이다 — 같은 일을 하되 "무엇을 지울지"를 상태 파일에 의존한다. **확인 방법**: §20.6 절차를 ②로 1회 돌려 `[T101-probe]` 잔존 여부를 본다 | **기각** |
+| ③ `incremental`/`tsBuildInfoFile` | **✗** | **✗** — 재컴파일 **속도** 최적화이지 산출물 정리 수단이 아니다. 고아 `.js`를 지우는 동작이 없다. **역효과 위험(추정)**: buildinfo를 `outDir` 밖에 두면 `lib`을 지운 뒤에도 tsc가 "최신"으로 판단해 **emit을 건너뛸 수 있다** → `lib`이 빈 채로 테스트 0건이 초록불이 된다. **확인 방법**: `incremental` 활성 상태에서 `lib` 삭제 후 `tsc` 1회 실행해 `lib` 재생성 여부 확인 | **기각**(§20.7 (7)에 향후 도입 시 제약을 남긴다) |
+| ④ 테스트 글롭을 **소스 기준**으로 전환 | ○ | ○ | **기각** — 아래 3개가 **추정이 아니라 코드로 확인되는 비용**이다 |
+
+**④를 기각하는 근거(전부 파일:줄)**
+1. **기존 테스트가 "lib에서 실행된다"는 전제로 경로를 계산한다.** `functions/src/scenarios/__tests__/harmlessnessGate.test.ts:437`은 `path.resolve(__dirname, "../../../src/scenarios")` — `lib/scenarios/__tests__`에서 3단계 올라가야 `functions/`가 된다. 소스에서 직접 실행하면 같은 식이 `functions/src/src/scenarios`를 가리켜 **깨진다**. `axisCoverage.test.ts:366`(`"../../../../src/content/scenarios"`)도 동형.
+2. **`__dirname`을 쓴다** (위 두 곳) — strip-types 실행은 `import` 구문 때문에 ESM으로 해석되고 ESM에는 `__dirname`이 없다.
+3. **import 지정자가 확장자 없는 CJS 관례다** — `axisCoverage.test.ts:19`의 `from "../axes"`. 루트 경로는 반대로 확장자를 명시한다(`src/lib/verifyintercept/verifyIntercept.test.ts:9` → `"./verifyIntercept.ts"`). 즉 ④는 **`functions/src` 전역(142개 파일)의 import 지정자 재작성**을 수반하고, 그러고도 **배포 산출물은 여전히 CommonJS**(`functions/tsconfig.json:2` `module: "commonjs"`, `functions/package.json:21` `main: "lib/index.js"`)라 **테스트가 배포와 다른 모듈 의미론에서 돌게 된다** — 테스트 신뢰도를 낮추는 방향이다.
+4. 부수 비용: 루트 `package.json:11`이 글롭 대신 **파일 23개를 손으로 나열**하는 방식이라 이를 따라가면 **48개 테스트 파일**(2026-07-27 실측: `functions/src/**/__tests__/*.test.ts` = 48)을 손으로 유지해야 하고, 새 테스트 파일 누락이 **조용히** 발생한다.
+
+**⚠️ T101 행의 분기 가정 1건을 명시적으로 뒤집는다.** T101 행은 *"단순 수치 오염이면 ①로 충분하나, **삭제 모듈 참조가 통과한다면 ②④가 필요해진다**"* 라고 적었다. 실측 결과 삭제 모듈 참조는 통과했지만, **그 사실은 ②④를 요구하지 않는다** — ①이 매 실행마다 `lib`을 통째로 재생성하므로 고아 산출물의 존재 창이 0이 되어 E를 ②④와 **동등하게** 막는다(오히려 ②는 못 막는다, 위 표 ⓑ). 이 뒤집기의 근거는 후보별 **메커니즘**이지 취향이 아니다.
+
+### 20.3 확정 방식 — ① 단독 채택, `test`·`build` 양쪽 인라인
+
+`functions/package.json`의 `scripts`를 다음 **의미**로 바꾼다(정확한 문자열은 implementer가 확정하되, 아래 4개 성질을 모두 만족해야 한다).
+
+| 키 | 확정 내용 | 필수 성질 |
+|---|---|---|
+| `clean` (**신설**) | `node scripts/clean-lib.mjs` | 단독 실행 가능(수동 클린·증거 산출용) |
+| `test` (**변경**) | `node scripts/clean-lib.mjs && tsc && node --test lib/**/__tests__/*.test.js` | **글롭·테스트 러너·tsc 호출은 한 글자도 바꾸지 않는다.** 앞에 clean 1단계만 붙는다 — 변경 표면을 최소화해 이 커밋이 테스트 수치를 바꾼 원인이 clean뿐임을 자명하게 만든다 |
+| `build` (**변경**) | `node scripts/clean-lib.mjs && tsc` | 아래 "⚠️ 범위 확장 고지" 참조 |
+| 그 외 8개 키 | **무변경** | `serve`·`shell`은 `npm run build`를 경유하므로 자동으로 clean을 탄다 |
+
+**⚠️ 범위 확장 고지(사용자 판단 필요 — 조용히 넓히지 않는다)**: T101 행이 요구한 최소치는 **테스트 경로**뿐이다. `build`까지 clean을 붙이는 것은 **architect가 추가한 항목**이며 근거는 두 가지다 — (i) `firebase.json:17`의 predeploy가 `npm --prefix "$RESOURCE_DIR" run build`이고 `firebase.json:16`의 `ignore` 목록에 `lib`이 **없어** 고아 산출물(컴파일된 `*.test.js` 포함)이 **그대로 업로드된다**, (ii) `serve`/`shell` 에뮬레이터가 삭제된 모듈의 옛 코드를 로드할 수 있다. **대가**는 배포·에뮬레이터 기동 시 전량 재컴파일(§20.7 (4)). **사용자가 최소 범위를 원하면 `build` 행만 빼도 §20.6의 완료 증거는 그대로 성립한다.**
+
+### 20.4 Windows 삭제 수단 판정 — `node:fs` 스크립트 채택, `rimraf` 기각
+
+| 수단 | 판정 | 근거 |
+|---|---|---|
+| **`functions/scripts/clean-lib.mjs`(Node 코어 `fs.rmSync`)** | **채택** | (a) **신규 의존성 0** — `rm(recursive, force)`는 Node 코어이고 이 저장소의 실행 환경(`functions/package.json:19` engines node 20)에서 사용 가능하다. (b) **셸 인용에 의존하지 않는다** — npm 스크립트는 Windows에서 `cmd.exe`를 경유하므로 `node -e "…{recursive:true}…"` 형태의 인라인 한 줄은 중첩 인용이 깨지기 쉬운 자리다. (c) **증거를 출력할 수 있다** — T101이 요구하는 증거 ⓓ(*"Windows에서 삭제 수단이 실제로 동작한 출력"*)를 스크립트가 직접 만든다. (d) **가드를 넣을 수 있다**(§20.0 (3)) |
+| 인라인 `node -e "…"` in package.json | 기각 | 위 (b)(c)(d)를 전부 잃는다. 동작할 가능성은 높지만(**추정** — 확인 방법: Windows에서 1회 실행) 이 결정의 목적이 "우연히 되는 것"의 제거다 |
+| `rimraf` devDependency 추가 | **기각** | (a) Node 코어가 하는 일에 의존성을 추가한다, (b) `functions/`는 **배포 대상 패키지**라 의존성 목록을 늘리는 판단은 이 결함 하나로 정당화되지 않는다, (c) 새 워크트리·새 clone마다 설치 성공에 의존하게 된다 — 이 태스크가 고치려는 것이 *"환경에 따라 결과가 달라진다"* 인데 같은 성질을 도입한다 |
+
+**`clean-lib.mjs` 계약(implementer가 만족시켜야 할 조건 — 코드는 implementer가 쓴다)**
+1. 대상 경로는 **스크립트 파일 위치 기준**(`import.meta.url` → `..`/`lib`)으로 계산한다. **`process.cwd()`에 의존하지 않는다** — `npm --prefix`(firebase predeploy가 쓰는 형태, `firebase.json:17`)로 호출될 때 cwd 가정이 깨질 수 있다.
+2. 가드: 계산된 경로의 basename이 `lib`이고 그 부모에 `package.json`이 존재할 때만 삭제한다. 아니면 **삭제하지 않고 exit 1**.
+3. `rmSync(target, { recursive: true, force: true })` — 대상이 없으면 조용히 성공(첫 실행·새 clone에서 실패하면 안 된다).
+4. 표준출력 1줄: 삭제했으면 `[clean] removed <절대경로>`, 없었으면 `[clean] nothing to remove: <절대경로>`. **이 출력이 §20.6 증거 ⓓ다.**
+5. 예외는 삼키지 않는다 — 실패 시 메시지와 함께 비-0 종료(§20.0 (4)).
+6. `.mjs` 확장자를 쓴다(`functions/package.json`에 `"type"` 키가 없어 `.js`는 CommonJS로 해석된다). `functions/tsconfig.json:16`의 `include`가 `src/**/*.ts`라 이 파일은 **컴파일 대상이 아니고**, `lint` 스크립트(`:13`)도 `eslint src`라 린트 대상이 아니다 — 기존 설정 변경 없이 들어간다.
+
+### 20.5 배치 위치 — 왜 `functions/scripts/`인가
+`functions/src/` 아래에 두면 `tsc`가 컴파일하려 들고(`tsconfig.json:16`), 하필 **삭제 스크립트 자신이 삭제 대상 `lib` 안으로 산출**되는 자기참조가 생긴다. `functions/scripts/`는 `include`·`lint` 어느 쪽에도 걸리지 않는 유일한 자리다. **⚠️ `functions/src/scenarios/` 아래에는 어떤 신규 파일도 두지 말 것** — `harmlessnessGate.test.ts:436-448`이 그 디렉터리의 `.ts` 파일 목록을 `SCENARIO_MODULE_INVENTORY`와 **정확히 일치**하도록 단언한다(§20.6의 probe 파일 배치에도 같은 제약이 걸린다).
+
+### 20.6 완료 판정 필수 증거 — 실행 가능한 절차
+
+T101 행의 요구 원문: *"브랜치 A에서 테스트를 돌린 뒤 브랜치 B로 전환해 다시 돌렸을 때, B의 결과가 B를 clean checkout해서 돌린 결과와 같다는 것을 실행해 보인 출력"*. 아래는 그 요구를 **결정적으로 재현 가능한 형태**로 구체화한 것이다.
+
+**설계 의도**: A/B를 기존 기능 브랜치에서 고르면 (i) 두 브랜치의 테스트 수 차이를 독립적으로 알 수 없고 (ii) 수정 후 측정 시 **A가 수정을 포함하지 않는다**. 그래서 **A와 B를 같은 base에서 만들고 차이를 probe 2파일로 고정**한다.
+
+**probe 파일 2개(임시 — 절대 `main`에 병합하지 않는다)**
+- `functions/src/__t101probe__/probeMod.ts` — 상수 1개 export.
+- `functions/src/__t101probe__/__tests__/probe.test.ts` — 그 상수를 단언하는 테스트 1건. **테스트 이름에 `[T101-probe]` 문자열을 반드시 포함**한다(개수 대신 문자열로 판정하기 위해).
+- **⚠️ 함정 3건**: ① **두 파일은 반드시 커밋한다.** untracked면 `git switch`가 그대로 들고 넘어가 A/B 구분이 사라진다(= 실험 자체가 무효). ② 디렉터리는 `functions/src/scenarios/` 밖이어야 한다(§20.5). ③ 단계 사이에 **`lib`을 손으로 지우지 않는다** — 그것이 지금 시험 대상이다.
+
+**1단계 — 결함 재현(수정 전, base = 현재 `main`)**
+
+| # | 명령(격리 워크트리에서) | 기록할 것 | 기대 |
+|---|---|---|---|
+| 1 | `git switch -c t101-probe-A` → probe 2파일 추가·커밋 | 커밋 SHA | — |
+| 2 | `npm --prefix functions test` | 종료코드 · `# pass` 수 = **P_A** | `P_B_clean + 1` |
+| 3 | `git switch main` | `git status` 요약 | probe 소스 **사라짐** |
+| 4 | `npm --prefix functions test` | 종료코드 · pass 수 = **P_B_polluted** · 출력에 `[T101-probe]` 유무 | **P_A와 같고 `[T101-probe]` 존재** ⇒ 오염 재현 |
+| 5 | `git worktree add <clean경로> main` → `npm ci --prefix <clean경로>/functions` → `npm --prefix <clean경로>/functions test` | pass 수 = **P_B_clean** | `[T101-probe]` **0건** |
+
+**4 ≠ 5**(수치 또는 `[T101-probe]` 유무)가 결함의 증거다. **4 == 5이면 재현 실패이므로 그대로 보고하고 진행하지 말 것**(CLAUDE.md 5항).
+
+**2단계 — 수정 후(같은 절차, 양쪽 브랜치 모두 수정 포함)**
+
+| # | 명령 | 기록할 것 | **합격 기준** |
+|---|---|---|---|
+| 6 | `git switch -c fix/T101-stale-lib main` → §20.3·§20.4 변경 커밋 | 커밋 SHA | — |
+| 7 | `git switch -c t101-probe-A2 fix/T101-stale-lib` → 같은 probe 2파일 커밋 | — | — |
+| 8 | `npm --prefix functions test` | 종료코드 · pass 수 = **P_A2** | `P_B_clean + 1` · `[T101-probe]` 존재 |
+| 9 | `git switch fix/T101-stale-lib` → `npm --prefix functions test` | 종료코드 · pass 수 = **P_B2** · `[T101-probe]` 유무 | **P_B2 == P_B_clean** 이고 **`[T101-probe]` 0건** |
+| 10 | `git worktree add <clean2> fix/T101-stale-lib` → `npm ci` → `npm ... test` | pass 수 = **P_B2_clean** | **P_B2 == P_B2_clean** ← T101 행이 요구한 문면 그 자체 |
+| 11 | 9 직후 `functions\lib\__t101probe__` 존재 확인 | 명령 출력 | **없음**(증거 ⓒ = E항 재확인) |
+| 12 | `npm --prefix functions run clean` **2회 연속** | 두 번의 출력 원문 | 1회차 `removed …`, 2회차 `nothing to remove …`(멱등 확인, 증거 ⓓ) |
+| 13 | `node -v` · `npm -v` · OS 표기 | 출력 원문 | ④·③ 판정의 전제(런타임 버전)를 보고서에 고정 |
+
+**정리(필수)**: `git worktree remove`로 임시 워크트리 2개 제거, `git branch -D t101-probe-A t101-probe-A2`. **probe 브랜치는 절대 push하지 않는다**(`docs/GitWorkflow.md`). 최종 PR에는 **`functions/package.json` 변경 + `functions/scripts/clean-lib.mjs` 신설만** 남는다 — probe 파일은 산출물에 포함되지 않는다.
+
+**보고 시 함께 남길 것**: 12에서 측정한 **`npm test` 소요 시간(수정 전/후)** — §20.7 (4)의 비용을 추정이 아니라 수치로 남긴다.
+
+### 20.7 이 방식이 **못 막는 것** (자기 고지)
+1. **`npm`을 거치지 않는 실행은 여전히 오염된다.** `npx tsc && node --test lib/**/__tests__/*.test.js`를 손으로 치면 clean이 돌지 않는다. 이 결정은 그것을 **기계적으로 막지 못한다** — `.githooks/`(T100)는 커밋 시점 훅이라 테스트 실행을 가로챌 수 없다. 완화는 문서·습관뿐이며, 그래서 §20.8의 Verified Commands 등재를 권고한다.
+2. **다른 에이전트/사람이 이미 오염된 `lib`을 가진 채 측정한 과거 수치는 이 변경으로 정정되지 않는다.** 소급 정정은 T101 범위 밖(사용자 미결).
+3. **에뮬레이터가 `lib`을 물고 있는 동안의 삭제 실패 가능성**(Windows 파일 잠금 — **추정**). 발생하면 §20.0 (4)에 따라 **테스트가 비-0으로 중단**된다(조용한 실패는 아니다). **확인 방법**: `npm run serve` 실행 중 다른 창에서 `npm test` 1회.
+4. **매 실행 전량 재컴파일 비용**을 감수한다(소스 142개). 수치는 §20.6 절차에서 측정해 남긴다 — 지금 이 문서에 시간을 적지 않는 이유는 측정하지 않았기 때문이다.
+5. **테스트 자체의 정확성은 이 결정의 대상이 아니다.** 이 절이 보장하는 것은 *"돌아간 테스트 집합이 현재 소스와 정확히 일치한다"* 이지 *"테스트가 옳다"* 가 아니다.
+6. **루트 경로(`package.json:11`)는 무변경**이며, 그쪽의 다른 비용(파일 23개 수동 나열 → 새 테스트 누락)은 이 결정이 손대지 않는다.
+7. **향후 `incremental` 도입 시의 제약**: 만약 빌드 속도 때문에 ③을 다시 검토한다면 **`tsBuildInfoFile`은 반드시 `outDir`(=`lib`) 안에** 두어야 한다. 밖에 두면 clean이 buildinfo를 남겨 tsc가 "최신"으로 오판하고 emit을 건너뛸 수 있다(§20.2 ③, **추정**). 이 제약을 어기면 **테스트 0건이 초록불로 보이는** 최악의 실패가 가능하다.
+8. **고아 산출물 탐지기(예: `lib`의 `.js` 중 대응 `.ts`가 없는 것을 단언하는 테스트)는 채택하지 않았다.** ①이 npm 경로에서 고아의 존재 창을 0으로 만들어 중복이고, 후보 ①~④ 밖의 신규 수단이라 T101 범위를 넓힌다. (1)이 문제가 될 만큼 재발하면 그때 별건으로 판단한다.
+
+### 20.8 권고 (소유자 User — architect가 직접 고치지 않는다)
+- CLAUDE.md **"Verified Commands"** 표에 §20.6에서 성공한 명령을 **원문 그대로** 등재: Test = `npm --prefix functions test`, Build = `npm --prefix functions run build`. 근거: §20.7 (1)이 남긴 유일한 구멍이 *"사람이 다른 명령을 친다"* 인데, 이 저장소의 규칙(CLAUDE.md 3항)이 이미 *"기록된 명령이 있으면 변형하지 말고 그대로 쓴다"* 를 요구한다 — 등재는 그 규칙을 이 명령에 적용시키는 유일한 수단이다.
