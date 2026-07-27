@@ -63,11 +63,18 @@ When introducing a new dependency, configuration option, environment variable, o
 ## Verified Commands
 Record commands verbatim after the first success. Reuse without modification; if a change is needed, state what and why first.
 
+> ⚠️ **npm 스크립트를 거치지 않고 직접 명령을 치지 말 것.** `npx tsc` 같은 직접 실행은
+> `functions/lib`의 스테일 컴파일 산출물을 지우는 단계를 건너뛰어 **테스트 수치를 조용히 오염시킨다**
+> (T101 / `docs/Architecture.md` §20.7 (1) — 실측으로 확인된 유일한 잔여 구멍이며 이 표가 그 완화 수단이다).
+> 이 오염으로 2026-07-26~27 세션에서 **테스트 수 오보가 3회** 발생했다.
+
 | Purpose | Command | Verified on |
 |---|---|---|
-| Build | {{...}} | {{date}} |
-| Test | {{...}} | {{date}} |
-| Run | {{...}} | {{date}} |
+| Build (functions) | `npm --prefix functions run build` | 2026-07-27 |
+| Test (functions) | `npm --prefix functions test` | 2026-07-27 — 462 pass / 0 fail |
+| Test (root) | `npm test` | 2026-07-27 — 171 pass / 0 fail |
+| Lint (functions) | `npm --prefix functions run lint` | 2026-07-27 |
+| Clean (functions) | `npm --prefix functions run clean` | 2026-07-27 — 멱등 |
 
 ## Report Template
 ```
