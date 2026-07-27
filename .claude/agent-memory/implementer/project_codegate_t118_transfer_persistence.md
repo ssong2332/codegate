@@ -17,4 +17,12 @@ metadata:
 
 **격리 에뮬레이터**: 공유 에뮬레이터는 main 코드를 쥐고 있어 내 변경이 안 보인다. `firebase.t118.json`(포트 전부 다르게 · `ui:false`) + `firebase emulators:start --config firebase.t118.json`으로 워크트리 코드를 띄웠고, **`C:\codegate\functions\.env`를 워크트리로 복사**해야 실 Gemini 키가 붙는다(양쪽 `.gitignore`가 `.env`·`functions/.env`를 이미 덮는다). 끝나면 **키 사본과 임시 config를 지울 것.** 종료는 `TaskStop`이 아니라 **포트 PID를 netstat으로 찾아 taskkill** — 에뮬레이터는 자식 프로세스를 2개(hub/functions와 firestore가 다른 PID) 남긴다.
 
-관련: [[codegate-t83-verify-intercept]] · [[feedback-background-emulator-task-tracking]] · [[feedback-emulator-script-sdk-split]]
+**⭐ 라이브에서 본 것을 보고에만 쓰고 산출물에 안 옮기면 없는 것이 된다.** 전환 후 모델이 *"앞서 담당자는 현재 다른 업무를 진행 중이십니다"* 라고 말한 것을 오케스트레이터에게 구두 보고했지만 PR·Tasks.md·메모리 어디에도 안 남겼고, reviewer가 `git grep`으로 그 부재를 잡아냈다. 판정은 합격이었다(기준이 *"이름·직책·1인칭"* 만 본다) — 문제는 **다음 사람이 완전히 닫힌 문제로 오인한다**는 것. 라이브 관찰은 **합격이어도 원문 인용으로 산출물에 남겨라.**
+
+**그 관찰이 드러낸 구조적 한계**: 이 저장소의 잔류 요구 게이트(`positiveResidencyDemands`/`returnAllowingMentions`)는 **카탈로그 문자열만** 본다. 모델이 즉흥으로 만든 **잔류 암시형 3인칭 서술**은 A5·R-1·R-2 어느 것도 막지 못한다. 서버가 강제할 수 있는 지점이 *"모델에게 도달하는 문자열 집합"* 하나뿐이라는 §22.2 판정의 직접적 귀결이다.
+
+**역검증 A·B가 증명하는 범위를 스스로 좁혀 적어라**: 순수 함수·데이터 단위 테스트는 ***"선언된 조건대로 배선됐고 죽은 게이트가 아니다"* 까지**만 증명한다. 증상 소멸은 증명하지 않는다 — 안 적으면 *"테스트가 늘었으니 고쳐졌다"* 로 읽힌다.
+
+**대조군 없는 라이브 증거의 한계**: QA가 **base main(패치 전 코드)** 을 같은 하네스로 완주시켰더니 거기서도 원 증상이 미재현이었다. ⇒ 사용자 신고 증상이 저빈도라면 **패치 전/후 각 1~2회 관측으로는 인과가 서지 않는다.** 라이브 예산이 적은 이 저장소에서는 *"미재현"* 이 최대 주장치임을 처음부터 계획에 넣어라.
+
+관련: [[codegate-t83-verify-intercept]] · [[feedback-background-emulator-task-tracking]] · [[feedback-emulator-script-sdk-split]] · [[feedback-unobservable-behavior-gates]]
