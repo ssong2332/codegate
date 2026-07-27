@@ -10,6 +10,7 @@ import {
   findVerifyInterceptItem,
   getVerifyOfferTrigger,
   hasVerifyIntercept,
+  type VerifyInterceptItem,
 } from "../verifyIntercept";
 import { buildVerifyInterceptDoc } from "../../verifyIntercept/buildDoc";
 import { buildSystemPrompt } from "../../roleplay/promptAssembly";
@@ -307,13 +308,88 @@ test("[AC-071] reconnectInstruction은 **다른 담당자**로 전환시키고 �
   }
 });
 
-test("가용 게이트는 2~3턴(§16.1.4 권고 범위)이고 결정론적이다", () => {
-  for (const item of allItems) {
-    assert.ok(
-      item.availableAfterScammerTurns >= 2 && item.availableAfterScammerTurns <= 3,
-      `게이트가 범위를 벗어나면 요구 전/후 맥락이 어긋난다: ${item.offerId}`,
-    );
-  }
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐ T119 / §26.4 — **오퍼 게이트 값의 전수 대응표**(구 범위 단언 `>=2 && <=3`의 대체)
+//
+// **왜 범위식이 아니라 전수 대응표인가(§26.3 근거 3 · G110)**: 종전 게이트는 6종 전부에
+// `>=2 && <=3`을 걸었다. 그 형태의 실제 구멍은 두 가지다 —
+//   ① **범위가 계열을 가르지 못한다.** §26.3이 권고 범위를 계열 A(확인 우회가 **본론**인 전용
+//      시나리오, 2~3)와 계열 B(다른 수법에 **얹은** 것, 4~5)로 쪼갰는데, 계열은 카탈로그 필드로
+//      선언하지 않는다(신규 필드 = 죽은 필드·드리프트 원천, §26.3 말미). ⇒ 하나의 범위식으로는
+//      A와 B를 구분할 수단이 없다.
+//   ② **범위 안에서 값이 바뀌어도 초록불이다.** 계열 B가 다시 2로 내려와도 범위식은 통과한다 —
+//      이번 결함(오퍼가 너무 이르다)의 **재발 경로가 그대로 열려 있다**. 이 파일 아래의 역검증
+//      테스트가 그 사실을 실행 출력으로 증명한다.
+//
+// ⛔ **이 표를 범위식으로 되돌리지 말 것(G110).** 값을 바꾸려면 §26.3 계열 표를 먼저 갱신하고
+// 이 표의 해당 행을 함께 고쳐야 한다 — **부분 정정이 구조적으로 불가능**해지는 것이 이 형태의 목적이다.
+// ⛔ **행을 지워 통과시키지 말 것**: 아래 단언은 `deepEqual`이라 카탈로그에만 있고 표에 없는
+// offerId(신규 시나리오)도 **불일치로 잡는다**. 신규 시나리오는 §26.3 "표에 없는 신규 시나리오"
+// 행에 따라 **architect에 값을 먼저 물어야 한다**(임의 판단 금지).
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** §26.4 값 표의 기계 사본 — **offerId 6종 전수**. 이 표가 게이트 값의 정본이다. */
+const EXPECTED_GATE_BY_OFFER_ID: Record<string, number> = {
+  // ── 계열 B — 본론이 다른 수법(기관·금융 사칭 등)이고 확인 무력화는 **부가**다. 확정값 4.
+  //    근거: 사기범 턴 1~3이 인사·사안 고지·본인 확인으로 소비되는 전형 구간이라, 원 권고의
+  //    조건절 *"요구가 한 번은 나온 뒤"* 를 만족시키는 **최소 값**이 4다(§26.3 계열 B 행).
+  "institution-verify-desk": 4,
+  "card-verify-desk": 4,
+  "loan-verify-desk": 4,
+  "tax-verify-desk": 4,
+  "courier-verify-desk": 4,
+  // ── 계열 A — 시나리오 **자체가** 확인 무력화 체험을 위해 저작된 것. 확정값 2(**유지**).
+  //    ⛔ 일관성을 이유로 4로 올리지 말 것(G108) — 확인 우회가 본론이라 참가자가 확인을 시도할
+  //    시간을 넉넉히 줘야 하고, 그것이 T95가 이 시나리오를 만든 이유다(`verifyIntercept.ts:155-162`).
+  "bank-security-verify-desk": 2,
+};
+
+/** 카탈로그에서 `offerId → 게이트 값` 맵을 만든다(대응표 비교의 단일 정의). */
+const gateMapOf = (items: readonly VerifyInterceptItem[]): Record<string, number> =>
+  Object.fromEntries(items.map((item) => [item.offerId, item.availableAfterScammerTurns]));
+
+test("[T119/§26.4] 가용 게이트는 offerId→값 전수 대응표와 정확히 일치한다(계열 A=2 · 계열 B=4)", () => {
+  assert.deepEqual(
+    gateMapOf(allItems),
+    EXPECTED_GATE_BY_OFFER_ID,
+    "게이트 값이 §26.4 표와 어긋나면 오퍼 시점이 대화 흐름과 맞지 않는다(부분 정정 금지 — G107)",
+  );
+});
+
+test("[T119 역검증] 계열 B를 옛 값 2로 되돌린 사본 — **전수 대응표는 잡고, 범위식은 놓친다**(G110)", (t) => {
+  // ⛔ 실제 카탈로그를 고쳤다 되돌리지 않는다 — 오염은 **테스트 코드 안 사본에서만** 만든다
+  //    (관례: `src/lib/incallsms/callContinuity.test.ts:161-162`).
+  const tainted = allItems.map((item) =>
+    item.offerId === "institution-verify-desk"
+      ? { ...item, availableAfterScammerTurns: 2 } // ← T119 이전 값(사용자가 실제로 겪은 시나리오)
+      : item,
+  );
+
+  // ① 전수 대응표 게이트는 이 오염에서 **실제로 실패한다**(죽은 게이트가 아니다).
+  const failure = (() => {
+    try {
+      assert.deepEqual(gateMapOf(tainted), EXPECTED_GATE_BY_OFFER_ID);
+      return undefined;
+    } catch (error) {
+      return error as Error;
+    }
+  })();
+  assert.ok(failure, "오염 사본이 통과하면 이 게이트는 값을 지키지 못한다");
+
+  // ② 같은 오염을 **범위식은 통과시킨다** — 계열 A/B를 함께 담으려면 범위가 2~5여야 하는데,
+  //    그 범위 안에서 계열 B가 2로 내려앉는 것이 바로 이번 결함이다(G110이 경고한 재발 경로).
+  assert.ok(
+    tainted.every((i) => i.availableAfterScammerTurns >= 2 && i.availableAfterScammerTurns <= 5),
+    "범위식 2~5는 오염을 놓친다 — 이것이 범위식을 폐기한 이유다",
+  );
+
+  // 증거를 실행 출력에 남긴다(reviewer·QA가 재현 없이 판정할 수 있게).
+  t.diagnostic(
+    `역검증 ①: 대응표 게이트가 오염을 잡았다 — institution-verify-desk 기대 ` +
+      `${EXPECTED_GATE_BY_OFFER_ID["institution-verify-desk"]} / 오염 사본 ` +
+      `${gateMapOf(tainted)["institution-verify-desk"]} (${failure.name}: ${failure.message.split("\n")[0]})`,
+  );
+  t.diagnostic("역검증 ②: 같은 오염을 범위식(>=2 && <=5)은 통과시킨다 ⇒ 범위식은 재발을 못 막는다");
 });
 
 test("offerId는 전역 유일하고, 시나리오당 최대 1건이다(§16.1.3)", () => {
