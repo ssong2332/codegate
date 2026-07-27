@@ -69,6 +69,9 @@ const VERIFY_INTERCEPT_FIELDS: Record<keyof VerifyInterceptItem, FieldPolicy> = 
   // 모델 지시는 사칭 캐릭터를 지목할 수 있어 기관명 금지에서 빠진다(프로파일 표 참고).
   announceInstruction: { profile: "modelInstruction" },
   reconnectInstruction: { profile: "modelInstruction" },
+  // ⭐ T118(§25.3 A5) — 전환 상태 단언도 **모델에게 도달하는 지시 문자열**이라 위 둘과 같은
+  // 프로파일이다(사용자에게 보이는 표면이 아니다). 이 행을 지우면 타입 게이트 ①이 막는다.
+  transferStateLine: { profile: "modelInstruction" },
   offerId: { skip: "식별자 — 콘텐츠가 아니다" },
   availableAfterScammerTurns: { skip: "숫자 게이트" },
 };
@@ -226,7 +229,9 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
   // 번호가 없다). ⚠️ 이 수치를 줄이는 것이 **검사 약화가 아니라는 근거**: 사라진 필드가 지키던
   // 3종 단언은 `verifyIntercept.test.ts`의 **G86-a/b/c 전 필드 순회 게이트**로 승격됐고, 종전
   // 하드코딩(3필드)이 놓치던 **신규 필드 누락 구멍**까지 함께 닫혔다.
-  const expectedVerify = Object.keys(VERIFY_INTERCEPT).length * 4;
+  // ⭐ T118(§25.3 A5) — 항목당 표면이 **4 → 5**로 늘었다(`transferStateLine` 신설: 전환 이후 매
+  // 사기범 턴 경계에 다시 주입되는 상태 단언 1줄). 늘어난 것은 **검사 대상**이지 예외가 아니다.
+  const expectedVerify = Object.keys(VERIFY_INTERCEPT).length * 5;
   // T104 — kind별 옵셔널 필드가 생겨 항목마다 표면 수가 갈린다. 공통 4필드(headline·issuerLabel·
   // momentTactic·correctAction) + bodyLines + kind 전용 필드로 **다시 계산**한다.
   const expectedMock = Object.values(MOCK_SCREENS)
@@ -248,7 +253,11 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
 
   assert.equal(byDomain.get("scenarioPrompt"), expectedPrompt, "persona+guardrail+수법+의심키워드");
   assert.equal(byDomain.get("publicMeta"), expectedMeta, "메타 5필드 + 딥보이스 대사");
-  assert.equal(byDomain.get("verifyIntercept"), expectedVerify, "T83/T95 확인 무력화 항목당 4필드(T110)");
+  assert.equal(
+    byDomain.get("verifyIntercept"),
+    expectedVerify,
+    "T83/T95 확인 무력화 항목당 5필드(T110 −displayNumber / T118 +transferStateLine)",
+  );
   assert.equal(
     byDomain.get("mockScreens"),
     expectedMock,

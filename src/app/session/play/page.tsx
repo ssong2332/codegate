@@ -48,6 +48,8 @@ import {
 import {
   enqueueInstruction,
   shouldOfferVerify,
+  shouldReinjectTransferState,
+  shouldRetryVerifyOffer,
   takeNextInstruction,
   type PendingInstruction,
   type VerifyInterceptView,
@@ -172,6 +174,16 @@ export default function SessionCallPage() {
   const [verifyError, setVerifyError] = useState<string | null>(null);
   // 이미 서버에 오퍼 전달을 요청했는가(중복 호출 방지). 렌더와 무관해 ref에 둔다.
   const requestedVerifyRef = useRef(false);
+  // T118 / 층 A5-α(§25.3) — 전환 상태 재확인 1줄. `instructionTurn` 큐를 타지 않는 **별도 슬롯**이며
+  // 턴 슬롯을 소비하지 않는다(P-1 실측: turnComplete:false는 발화를 유발하지 않았다).
+  const [personaStateTurn, setPersonaStateTurn] = useState<{ text: string; seq: number } | null>(
+    null,
+  );
+  // 서버가 준 전환 상태 단언(전환 성공 이후에만 채워진다 = `placed`의 단일 소스). 문자열을 클라가
+  // 만들지 않는다(**G101** — 카탈로그가 소유해야 G86 전 필드 순회 검사망에 들어온다).
+  const transferStateLineRef = useRef<string | null>(null);
+  // 직전 주입 이후 참가자가 말한 턴 수 — ⛔ 이 값 없이 매 턴 주입하면 자기 구동 루프가 된다(**G99**).
+  const userTurnsSinceInjectionRef = useRef(0);
   const verifyTriggerRef = useRef<HTMLButtonElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speech = useSpeechRecognition();
@@ -182,6 +194,8 @@ export default function SessionCallPage() {
 
   const handleTranscriptTurn = useCallback((role: "user" | "scammer", text: string) => {
     transcriptRef.current.push({ role, text });
+    // T118(§25.3 (3)) — A5 재주입 조건의 관측 지점. 참가자가 한 번이라도 말한 뒤에만 다시 넣는다.
+    if (role === "user") userTurnsSinceInjectionRef.current += 1;
     // T103 — 제출 경로(위 한 줄)는 손대지 않고, 통화 필 자막만 여기서 갈라 받는다.
     // ⛔ **사기범 턴만 그린다**(G79/G93). 참가자 턴을 그리면 참가자가 말한 계좌·생년월일이
     // 마스킹 없이 화면에 남는다 — 접근성 취향이 아니라 **안전 조건**이다(§19.6 (4)).
@@ -444,12 +458,16 @@ export default function SessionCallPage() {
         });
         setVerifyError(null);
         // 폴백 경로는 서버가 다음 sendMessage 턴에 직접 주입하므로 클라가 넣지 않는다(중복 방지).
-        if (requestCallMode === "realtime") {
+        // T118/R-1 — 전환이 이미 끝난 오퍼면 서버가 지시를 **생략**한다(§25.5 (4)). 값이 없으면
+        // 주입하지 않는다: 전환 이후의 확인 권유는 참가자가 겪은 사실과 모순이다.
+        if (requestCallMode === "realtime" && result.announceInstruction) {
           enqueueTurnInstruction(result.announceInstruction, "verify");
         }
-      } catch {
+      } catch (error) {
         // 다음 턴 경계에서 다시 시도할 수 있게 요청 기록을 되돌린다(조용한 실패 금지).
-        requestedVerifyRef.current = false;
+        // T118/R-2 — 단, **재시도해도 같은 결과인 오류**에서는 되돌리지 않는다(§25.5 (4)).
+        // 그 재시도가 곧 중복 주입 경로다. 판정은 순수 함수에 있다(`shouldRetryVerifyOffer`).
+        if (shouldRetryVerifyOffer(error)) requestedVerifyRef.current = false;
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -460,6 +478,20 @@ export default function SessionCallPage() {
     // 턴이 끝났으니 보류분을 하나 더 내보낸다(위 계약 (2)).
     instructionBusyRef.current = false;
     drainInstructionQueue();
+    // T118 / A5-α — 전환 이후에는 같은 턴 경계에서 전환 상태 단언을 **다시** 넣는다(§25.3).
+    // 큐를 타지 않으므로 위 드레인과 경합하지 않는다(턴 슬롯 소비 0 ⇒ G31/G58 무변경).
+    const line = transferStateLineRef.current;
+    if (
+      line &&
+      shouldReinjectTransferState({
+        placed: true,
+        userTurnsSinceLastInjection: userTurnsSinceInjectionRef.current,
+        atScammerTurnBoundary: true,
+      })
+    ) {
+      userTurnsSinceInjectionRef.current = 0;
+      setPersonaStateTurn((prev) => ({ text: line, seq: (prev?.seq ?? 0) + 1 }));
+    }
   }, [drainInstructionQueue]);
 
   // 통화 경과 타이머 — "받기"(answeredAt) 기점, ended면 정지.
@@ -674,6 +706,11 @@ export default function SessionCallPage() {
       // 실시간 경로만 클라가 주입한다(폴백은 서버가 다음 턴 프롬프트에 싣는다 — §16.2).
       if (requestCallMode === "realtime") {
         enqueueTurnInstruction(result.reconnectInstruction, "verify");
+        // T118 / A5 — 이 시점부터 전환 상태 단언이 참이 된다(`placed`). 카운터를 0으로 두어
+        // **참가자가 한 번 말한 뒤**부터 재주입되게 한다(G99 — 여기서 0으로 두지 않으면 다음
+        // 사기범 턴 경계에서 곧바로 한 번 더 들어간다).
+        transferStateLineRef.current = result.transferStateLine;
+        userTurnsSinceInjectionRef.current = 0;
       }
       setVerifyOverlayOpen(false);
     } catch {
@@ -900,6 +937,7 @@ export default function SessionCallPage() {
           textMessage={textMessage}
           onScammerTurnComplete={handleScammerTurnComplete}
           instructionTurn={instructionTurn}
+          personaStateTurn={personaStateTurn}
         />
       )}
 

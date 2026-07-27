@@ -193,6 +193,92 @@ test("[D-48] 오버레이에 '유효 대처' 선택지를 두지 않는다(무�
   assert.ok(!/112|1332/.test(rendered), "신고처 안내도 세션 중이 아니라 리포트에서 나온다");
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐ T118 / §25.3 — **층 A5-α 배선의 소스 수준 고정**
+//
+// ⚠️ **왜 소스를 보는가**: A5의 발동 **판정**은 순수 함수로 내려 단위 테스트로 고정했지만
+// (`verifyIntercept.test.ts`), 그 판정을 **어디에 걸었는지**(턴 경계 · turnComplete:false · 전사
+// 미기록)는 브라우저 이벤트 위에서만 관측된다. 이 저장소에는 React 렌더러 러너가 없으므로 —
+// 이 파일이 이미 그 이유로 존재한다 — **깨지는 방식이 정해져 있는** 배선을 소스로 못박는다.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const geminiSession = readFileSync("src/lib/realtime/GeminiVoiceSession.tsx", "utf8");
+
+test("[T118/A5-α] 전환 상태 단언은 `turnComplete: false`로 나간다(턴 슬롯 소비 0)", () => {
+  const source = codeOnly(geminiSession);
+  const effect = source.slice(source.indexOf("personaStateTurn.text.trim()"));
+  assert.ok(effect.length > 0, "personaStateTurn effect가 있어야 한다");
+  assert.ok(
+    /sendClientContent\(\{\s*turns: personaStateTurn\.text,\s*turnComplete: false\s*\}\)/.test(
+      effect.slice(0, 400),
+    ),
+    "true로 바꾸면 주입이 곧 발화를 유발해 사기범이 한 턴에 두 번 말한다(§25.3 (4) P-1 실측)",
+  );
+});
+
+test("[T118/G105] A5 주입은 전사에 기록되지 않는다(리포트가 '사용자가 말했다'고 오판하지 않게)", () => {
+  const source = codeOnly(geminiSession);
+  const effect = source.slice(source.indexOf("personaStateTurn.text.trim()"), source.length);
+  const body = effect.slice(0, effect.indexOf("}, [personaStateTurn?.seq]"));
+  assert.ok(body.length > 0, "effect 본문을 잘라낼 수 있어야 한다");
+  assert.ok(!/onTranscriptTurn/.test(body), "오케스트레이션 신호는 전사가 아니다(G105)");
+});
+
+test("[T118/§25.4] 같은 렌더에서 겹치면 `instructionTurn`이 먼저 나간다(effect 선언 순서로 강제)", () => {
+  const source = codeOnly(geminiSession);
+  assert.ok(
+    source.indexOf("}, [instructionTurn?.seq]") < source.indexOf("}, [personaStateTurn?.seq]"),
+    "순서가 정해져 있지 않으면 재현 불가능한 관찰이 생긴다(A5-α 결정론 계약)",
+  );
+});
+
+test("[T118/G99] 재주입은 **사기범 턴 경계**에서 순수 함수 판정을 거쳐서만 일어난다", () => {
+  const rendered = codeOnly(page);
+  const handler = rendered.slice(
+    rendered.indexOf("const handleScammerTurnComplete"),
+    rendered.indexOf("// 통화 경과 타이머"),
+  );
+  assert.ok(handler.includes("shouldReinjectTransferState("), "판정을 호출부에 인라인하지 않는다");
+  assert.ok(
+    handler.includes("userTurnsSinceLastInjection: userTurnsSinceInjectionRef.current"),
+    "사용자 발화 카운터를 넘기지 않으면 자기 구동 루프가 된다(G99)",
+  );
+  assert.ok(
+    handler.includes("userTurnsSinceInjectionRef.current = 0"),
+    "주입 직후 카운터를 0으로 되돌리지 않으면 매 턴 재주입이 된다(G99)",
+  );
+  // 카운터를 올리는 자리는 사용자 전사 턴 하나뿐이다(관측 지점 §25.3 (3)).
+  assert.ok(rendered.includes("userTurnsSinceInjectionRef.current += 1"));
+});
+
+test("[T118/G101] 클라는 전환 상태 문자열을 **만들지 않는다** — 서버 응답을 그대로 쥔다", () => {
+  const rendered = codeOnly(page);
+  assert.ok(
+    rendered.includes("transferStateLineRef.current = result.transferStateLine"),
+    "카탈로그가 소유해야 G86 전 필드 순회 검사망(번호·실존 기관명·url/tel)에 들어온다",
+  );
+  assert.ok(
+    !/transferStateLineRef\.current\s*=\s*["'`(]/.test(rendered),
+    "클라에서 문자열을 조립하면 그 값이 서버 검사망 밖으로 빠진다",
+  );
+});
+
+test("[T118/R-1·R-2] 전환 이후 재주입 경로가 클라에서도 닫혀 있다", () => {
+  const rendered = codeOnly(page);
+  assert.ok(
+    rendered.includes("requestCallMode === \"realtime\" && result.announceInstruction"),
+    "R-1 — 서버가 지시를 생략하면 클라도 주입하지 않는다",
+  );
+  assert.ok(
+    rendered.includes("if (shouldRetryVerifyOffer(error)) requestedVerifyRef.current = false"),
+    "R-2 — 되돌림을 오류 코드로 좁힌다(재시도가 곧 중복 주입 경로)",
+  );
+  assert.ok(
+    !/catch\s*\{\s*\n\s*requestedVerifyRef\.current = false/.test(rendered),
+    "무조건 롤백이 남아 있으면 R-2가 무력화된다",
+  );
+});
+
 test("[OQ-38/D-6] 세션 중 구조 설명이 화면 어디에도 없다", () => {
   for (const [name, raw] of [
     ["VerifyCallOverlay.tsx", overlay],

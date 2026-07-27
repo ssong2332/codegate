@@ -83,6 +83,56 @@ export function takeNextInstruction(queue: readonly PendingInstruction[]): {
   return { item: first, rest };
 }
 
+// ── T118 / 층 A5 — 전환 상태 재확인 1줄의 발동 조건(§25.3 (3)) ──────────────────
+//
+// ⚠️ **왜 순수 함수인가**: 이 판정은 브라우저 이벤트(턴 경계·전사 콜백) 위에서만 관측되는데, 그
+// 자리에 조건을 직접 쓰면 게이트를 전건 통과해도 조건이 틀린 것을 아무도 잡지 못한다(이 저장소가
+// 반복해서 데인 양식). 판정을 여기로 내려 단위 테스트로 고정한다.
+
+/** `shouldReinjectTransferState`의 입력 — 세 조건 전부가 필수다(하나라도 빠지면 아래 주석 참조). */
+export type TransferStateReinjectInput = {
+  /** `deliverVerifyReconnect` 성공 이후인가. 전환 전에는 상태 단언이 **거짓**이다. */
+  placed: boolean;
+  /** 직전 주입 이후 참가자가 말한 턴 수(관측 지점: `onTranscriptTurn("user", …)`). */
+  userTurnsSinceLastInjection: number;
+  /** 사기범 발화 1턴이 끝난 경계인가(기존 주입과 같은 경계 — `handleScammerTurnComplete`). */
+  atScammerTurnBoundary: boolean;
+};
+
+/**
+ * 지금 전환 상태 단언을 **다시** 넣어야 하는가(결정론적).
+ *
+ * ⛔ **`userTurnsSinceLastInjection >= 1`을 빼지 말 것(G99).** 빼면 *"매 사기범 턴마다 재주입"* 이
+ * 되는데, 주입 자체가 모델 응답을 유발할 수 있어 **주입 → 발화 → 턴 완료 → 주입**의 자기 구동
+ * 루프가 된다 — 참가자가 끼어들 수 없고 **에러가 나지 않아 조용히 망가진다.**
+ * ⚠️ 회수 상한은 두지 않는다 — 사용자 발화가 조건이라 자기 구동이 불가능하고, 세션 시간 한도
+ * (AC-007)가 이미 상한이다. 근거 없는 임의 상한은 두지 않는다(§25.3 (3)).
+ */
+export function shouldReinjectTransferState(input: TransferStateReinjectInput): boolean {
+  if (!input.placed) return false;
+  if (!input.atScammerTurnBoundary) return false;
+  return input.userTurnsSinceLastInjection >= 1;
+}
+
+// ── T118 / R-2 — 오퍼 전달 실패의 롤백 범위(§25.5 (4)) ────────────────────────────
+
+/**
+ * 이 오류로 실패했을 때 **재시도 창을 다시 열어도 되는가**(= `requestedVerifyRef`를 되돌려도 되는가).
+ *
+ * 되돌리지 않는 셋(`failed-precondition`·`invalid-argument`·`permission-denied`)은 서버가 **같은
+ * 입력에 항상 같은 판정**을 내리는 자리라(세션 비활성·카탈로그 불일치·소유권 불일치) 재시도해도
+ * 결과가 같고, 그 재시도가 곧 **중복 주입 경로**다.
+ * ⛔ 롤백을 통째로 없애지 말 것 — 일시 오류(`unavailable`·`internal`·네트워크)에서 되돌리지 않으면
+ * 그 세션에서 확인 무력화가 **영영 뜨지 않는다**(기능 소실 > 중복 주입).
+ */
+export function shouldRetryVerifyOffer(error: unknown): boolean {
+  const raw = (error as { code?: unknown } | null)?.code;
+  if (typeof raw !== "string") return true; // 네트워크 실패 등 코드가 없는 실패 — 재시도 가능
+  // Firebase 콜러블은 `functions/failed-precondition` 형태로 준다.
+  const code = raw.includes("/") ? raw.slice(raw.indexOf("/") + 1) : raw;
+  return !["failed-precondition", "invalid-argument", "permission-denied"].includes(code);
+}
+
 // ⭐ T110(§22.1 C10) — `spellOutDisplayNumber`는 **삭제**했다. 호 전환 모델에는 번호 카드가 없어
 // 호출부가 사라졌고, 쓰는 곳이 없는 export는 죽은 코드다(G77 취지). 스크린리더가 번호를 수사로
 // 읽는 위험 자체가 "읽어 줄 번호가 없다"로 소멸했다.
