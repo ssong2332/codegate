@@ -231,7 +231,11 @@ test("[T103/§23.6 A2] 신설 전환 클래스는 **전부** prefers-reduced-mot
   // 화면이 실제로 쓰는 전환 클래스만 대상으로 한다(정의만 하고 안 쓰는 클래스는 검증 의미가 없다).
   const used = [
     ...new Set(
-      [...overlayCode.matchAll(/\bsms-[a-z-]+\b/g), ...codeOnly(page).matchAll(/\bsms-[a-z-]+\b/g)].map(
+      // ⚠️ 전환 클래스만 잡는다 — `data-sms-id` 같은 다른 `sms-` 토큰까지 긁으면 오탐이 난다.
+      [
+        ...overlayCode.matchAll(/\bsms-(?:surface|dim|banner)-(?:enter|exit)\b/g),
+        ...codeOnly(page).matchAll(/\bsms-(?:surface|dim|banner)-(?:enter|exit)\b/g),
+      ].map(
         (m) => m[0],
       ),
     ),
@@ -263,13 +267,48 @@ test("[T103/G89] 퇴장 연출은 컴포넌트 내부 상태로만 — 호스트
   for (const forbidden of ["smsOverlayVisible", "smsOverlayClosing", "smsOverlayExiting"]) {
     assert.ok(!page.includes(forbidden), `호스트에 퇴장 지연 상태가 생겼다: ${forbidden}`);
   }
-  assert.ok(overlayCode.includes("onAnimationEnd"), "퇴장 완료는 컴포넌트 안에서 감지해야 한다");
   assert.ok(overlayCode.includes("setClosing"), "퇴장 상태는 컴포넌트 내부에 있어야 한다");
-  // reduced-motion이면 animationend가 영영 오지 않으므로 즉시 닫는 갈래가 반드시 있어야 한다.
+  // reduced-motion이면 연출 자체가 없으므로 즉시 닫는 갈래가 반드시 있어야 한다.
   assert.ok(
     overlayCode.includes("prefersReducedMotion()"),
     "연출이 꺼진 환경에서 문자함이 닫히지 않는 상태가 된다(§23.6 A3)",
   );
+});
+
+test("[T103/닫힘⭐] 언마운트를 `onAnimationEnd` 하나에 걸지 않는다(2026-07-27 라이브 결함)", () => {
+  // 라이브에서 퇴장 애니메이션이 `finished` 상태로 끝났는데도 오버레이가 안 닫혀 참가자가
+  // opacity 0 레이어에 갇혔다. 그 이벤트는 이 저장소에서 관측 불가라 불변식 6건이 전부 통과했다.
+  assert.ok(
+    !overlayCode.includes("onAnimationEnd"),
+    "완료 신호를 이벤트 전달 하나에 의존하면 그것이 안 왔을 때 문자함이 영영 안 닫힌다",
+  );
+  // 대신 실제로 도는 애니메이션 객체를 붙잡고, 그 위에 상한 안전망을 얹는다.
+  assert.ok(overlayCode.includes("getAnimations"), "퇴장 완료는 애니메이션 객체에서 직접 받는다");
+  assert.ok(
+    overlayCode.includes("runExitSequence"),
+    "퇴장 시퀀스는 closeSequence.ts의 검증된 상태 기계를 써야 한다(closeSequence.test.ts가 고정)",
+  );
+});
+
+test("[T103/AC-026⭐] 열람 기록은 **뷰포트 교차**로만 발생한다 — 그려진 것 전부가 아니다", () => {
+  // QA 지적: 문자함을 한 번 열기만 해도 스크롤 안 한 하단 문자까지 openedAt이 영구 기록됐다.
+  assert.ok(
+    overlayCode.includes("IntersectionObserver"),
+    "열람 판정은 실제로 보였는지로 해야 한다(서버 계약 openedAt은 되돌릴 수 없다)",
+  );
+  assert.ok(
+    overlayCode.includes("takeNewlyVisibleSmsIds"),
+    "선별은 inCallSms.test.ts가 고정한 순수 함수를 써야 한다",
+  );
+  // ⛔ 목록 전체를 훑어 기록하는 형태가 되살아나지 않게 고정한다.
+  assert.ok(
+    !/sorted\s*\.\s*map\([^)]*\)\s*\.\s*forEach|for\s*\([^)]*of\s+sorted\s*\)\s*[^{]*onOpened/.test(
+      overlayCode,
+    ),
+    "정렬된 목록 전체에 대고 onOpened를 부르면 과다 기록이 되살아난다",
+  );
+  // 서버 계약은 손대지 않는다(고치는 것은 "언제 부르는가" 뿐).
+  assert.ok(overlayCode.includes("onOpened"), "열람 기록 콜백 자체는 그대로 쓴다");
 });
 
 test("[T103/D-56] 문자 도착만으로는 문자함이 열리지 않는다 — 여는 경로는 참가자 탭 하나뿐", () => {

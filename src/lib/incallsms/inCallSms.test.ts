@@ -6,6 +6,7 @@ import {
   pickDueInCallSms,
   sortByArrival,
   spellOutOtp,
+  takeNewlyVisibleSmsIds,
   type InCallSmsView,
 } from "./inCallSms.ts";
 
@@ -73,4 +74,55 @@ test("countUnread / latestSmsId: 미확인 배지와 기본 펼침 대상", () =
   assert.equal(countUnread([]), 0);
   assert.equal(latestSmsId(items), "b");
   assert.equal(latestSmsId([]), null);
+});
+
+// ── T103 QA 지적 회귀 방어 — **AC-026 과다 기록** ────────────────────────────────
+//
+// 아코디언을 없애면서 "스레드에 그려진 문자 전부"를 열람으로 기록했더니, 문자함을 한 번 열기만
+// 해도 **스크롤조차 안 한 하단 문자까지** `openedAt`이 박혔다. 서버는 그 값을 최초 1회만 세팅하고
+// 되돌리지 않으며, 리포트·리플레이는 그것만 보고 *"화면에 인증번호가 표시됐습니다"* 캡션을 만든다.
+// ⇒ 보지도 못한 인증번호에 "표시됐다"가 붙는다. 판정 기준은 **"뷰포트에 들어왔는가" 하나**다.
+
+test("[T103/AC-026⭐] 뷰포트에 들어오지 않은 문자는 기록 대상이 아니다", () => {
+  const picked = takeNewlyVisibleSmsIds(
+    [
+      { isIntersecting: true, smsId: "seen" },
+      { isIntersecting: false, smsId: "below-the-fold" },
+    ],
+    new Set(),
+  );
+  assert.deepEqual(picked, ["seen"], "스크롤 아래의 문자를 열람으로 기록하면 리포트가 거짓을 말한다");
+});
+
+test("[T103/AC-026] 나중에 스크롤해 들어오면 그때 기록 대상이 된다", () => {
+  const recorded = new Set<string>();
+  for (const id of takeNewlyVisibleSmsIds([{ isIntersecting: false, smsId: "otp" }], recorded)) {
+    recorded.add(id);
+  }
+  assert.deepEqual([...recorded], [], "아직 안 봤다");
+  const later = takeNewlyVisibleSmsIds([{ isIntersecting: true, smsId: "otp" }], recorded);
+  assert.deepEqual(later, ["otp"], "스크롤해서 들어온 순간 기록된다");
+});
+
+test("[T103/AC-026] 같은 문자를 두 번 기록하지 않는다(재교차·중복 항목 모두)", () => {
+  assert.deepEqual(
+    takeNewlyVisibleSmsIds([{ isIntersecting: true, smsId: "a" }], new Set(["a"])),
+    [],
+    "이미 보낸 건 다시 보내지 않는다",
+  );
+  assert.deepEqual(
+    takeNewlyVisibleSmsIds(
+      [
+        { isIntersecting: true, smsId: "a" },
+        { isIntersecting: true, smsId: "a" },
+      ],
+      new Set(),
+    ),
+    ["a"],
+    "한 배치에 같은 id가 두 번 와도 한 번만",
+  );
+});
+
+test("[T103/AC-026] id를 못 읽은 항목은 조용히 건너뛴다(잘못된 id를 서버로 보내지 않는다)", () => {
+  assert.deepEqual(takeNewlyVisibleSmsIds([{ isIntersecting: true, smsId: undefined }], new Set()), []);
 });

@@ -29,7 +29,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import EndTrainingButton from "./EndTrainingButton";
 import MessengerFakeLanding from "./MessengerFakeLanding";
 import SyntheticLabel from "./SyntheticLabel";
-import { sortByArrival, spellOutOtp, type InCallSmsView } from "@/lib/incallsms";
+import { sortByArrival, spellOutOtp, takeNewlyVisibleSmsIds, type InCallSmsView } from "@/lib/incallsms";
+import { runExitSequence } from "@/lib/incallsms/closeSequence";
 
 type InCallSmsOverlayProps = {
   messages: InCallSmsView[];
@@ -77,6 +78,18 @@ export default function InCallSmsOverlay({
   const sorted = sortByArrival(messages);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
+  // 말풍선 스레드의 스크롤 컨테이너 = 열람 판정의 뷰포트(IntersectionObserver root).
+  const threadRef = useRef<HTMLDivElement | null>(null);
+  const bubbleRefs = useRef(new Map<string, HTMLLIElement>());
+  const recordedRef = useRef(new Set<string>());
+  // 콜백 prop의 identity가 매 렌더 바뀌어도 effect를 재실행시키지 않는다(호출부의 핸들러는
+  // useCallback으로 감싸여 있지 않다 — 이 화면의 다른 곳과 같은 ref 경유 관례).
+  const onCloseRef = useRef(onClose);
+  const onOpenedRef = useRef(onOpened);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    onOpenedRef.current = onOpened;
+  });
   // 퇴장 연출 진행 상태. `closingRef`는 중복 호출 멱등성(§23.6 A6)을 렌더와 무관하게 지킨다.
   const [closing, setClosing] = useState(false);
   const closingRef = useRef(false);
@@ -106,6 +119,29 @@ export default function InCallSmsOverlay({
     setClosing(true);
   }, [onClose]);
 
+  // ⭐ 퇴장 시퀀스 — **`closing`이 켜진 커밋 이후** 패널에서 실제로 도는 애니메이션을 직접
+  // 붙잡아 기다린다(Web Animations API).
+  //
+  // ⚠️ **왜 `onAnimationEnd`를 쓰지 않는가(2026-07-27 라이브 결함).** 예전 구현은 언마운트를
+  // React 합성 이벤트 `onAnimationEnd` **하나**에 걸어 뒀는데, 라이브에서 퇴장 애니메이션이
+  // `state:"finished"`로 끝났는데도 `onClose()`가 불리지 않아 **문자함이 닫히지 않았다**
+  // (opacity 0인 `fixed inset-0` 레이어가 화면 전체를 계속 덮어 참가자가 통화 화면에 갇힌다).
+  // 그 이벤트는 이 저장소의 어떤 테스트로도 관측할 수 없어 T103 불변식 6건이 전부 통과한 채로
+  // 결함이 빠져나갔다. ⇒ **완료 신호를 이벤트 전달에 의존하지 않는 경로로 바꾸고**(애니메이션
+  // 객체의 `finished` 프로미스), 그 위에 **상한 안전망**을 얹는다(§23.6 A4 계약은 그대로 —
+  // 퇴장은 여전히 이 컴포넌트 내부 상태이고 호스트는 손대지 않는다).
+  useEffect(() => {
+    if (!closing) return;
+    const node = panelRef.current;
+    const animations = typeof node?.getAnimations === "function" ? node.getAnimations() : [];
+    return runExitSequence({
+      animations,
+      schedule: (fn, ms) => window.setTimeout(fn, ms),
+      cancelScheduled: (handle) => window.clearTimeout(handle as number),
+      onDone: () => onCloseRef.current(),
+    });
+  }, [closing]);
+
   // 열릴 때 포커스를 오버레이 제목으로 이동한다(UX-027 Focus Order). 닫을 때의 복귀는 호출부가
   // 직전 트리거(배너/"문자함" 버튼)로 되돌린다.
   useEffect(() => {
@@ -121,17 +157,43 @@ export default function InCallSmsOverlay({
     })();
   }, []);
 
-  // 화면에 그려진 문자는 전부 "열어봤다"로 기록한다(UX-027 Data Operations Update).
-  // ⚠️ T103에서 아코디언을 없애 **모든 문자가 펼쳐진 채로 보이므로**(D-57 ㄴ), 예전처럼 "펼쳐진
-  // 한 건"만 기록하면 실제로 읽은 문자가 미확인으로 남는다. 서버가 최초 1회만 세팅한다.
-  // 인라인 async IIFE로 감싼다(위와 같은 관례). 의존성은 id 목록의 문자열 스냅샷이다.
-  const visibleIds = sorted.map((sms) => sms.smsId).join(",");
+  // ⭐ 열람 기록(UX-027 Data Operations Update) — **실제로 뷰포트에 들어온 문자만** 기록한다.
+  //
+  // ⚠️ **왜 "그려진 것 전부"가 아닌가(2026-07-27 QA 지적).** 아코디언을 없애면서 스레드에 그려진
+  // id 전부를 기록했더니, 문자함을 **한 번 열기만 해도 스크롤조차 안 한 하단 문자까지** 열람으로
+  // 박혔다. 서버 `openedAt`은 최초 1회만 세팅되고 **되돌릴 수 없으며**, 리포트·리플레이는 그 값만
+  // 보고 *"문자를 열어 확인했습니다"*·*"화면에 인증번호가 표시됐습니다"* 캡션을 만든다 ⇒ 보지도
+  // 못한 인증번호에 "표시됐다"가 붙어 **훈련 피드백이 거짓을 말한다**(AC-026 보조 타임라인).
+  // ⛔ 판정 기준은 **"뷰포트에 들어왔는가" 하나**다 — 노출 시간·읽음 확인 같은 새 개념을 만들지
+  // 않는다. 서버 계약(1회성·영구 기록)도 무변경이며, 고치는 것은 **언제 부르는가** 뿐이다.
+  // ⚠️ 관측 수단이 없으면(구형 브라우저) **기록하지 않는다** — 과다 기록보다 누락이 낫다.
+  const threadIds = sorted.map((sms) => sms.smsId).join(",");
   useEffect(() => {
-    (async () => {
-      for (const smsId of visibleIds.split(",").filter(Boolean)) onOpened(smsId);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleIds]);
+    const root = threadRef.current;
+    if (!root || typeof IntersectionObserver !== "function") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const newlyVisible = takeNewlyVisibleSmsIds(
+          entries.map((entry) => ({
+            isIntersecting: entry.isIntersecting,
+            smsId: (entry.target as HTMLElement).dataset.smsId,
+          })),
+          recordedRef.current,
+        );
+        for (const smsId of newlyVisible) {
+          recordedRef.current.add(smsId);
+          const node = bubbleRefs.current.get(smsId);
+          if (node) observer.unobserve(node); // 같은 문자를 다시 세지 않는다
+          onOpenedRef.current(smsId);
+        }
+      },
+      { root }, // threshold 기본값 0 = "한 조각이라도 뷰포트에 들어왔다"
+    );
+    for (const [smsId, node] of bubbleRefs.current) {
+      if (!recordedRef.current.has(smsId)) observer.observe(node);
+    }
+    return () => observer.disconnect();
+  }, [threadIds]);
 
   // Esc 닫기 + 포커스 트랩(AC-006 — 트랩 안에 "훈련 종료"가 포함돼 있어 종료는 항상 도달 가능).
   useEffect(() => {
@@ -187,11 +249,6 @@ export default function InCallSmsOverlay({
             여백 이중 규칙(`sm:rounded-[20px]` 등)을 두지 않는다(D-57 ㄹ). */}
         <div
           ref={panelRef}
-          onAnimationEnd={(event) => {
-            // 퇴장 연출이 끝난 순간에만 닫는다. 진입 연출·자식 요소의 애니메이션과 구분한다.
-            if (!closing || event.target !== event.currentTarget) return;
-            onClose();
-          }}
           className={`relative mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-[#FAF8F5] ${
             closing ? "sms-surface-exit" : "sms-surface-enter"
           }`}
@@ -239,7 +296,7 @@ export default function InCallSmsOverlay({
           {/* ── 말풍선 스레드(D-57 ㄴ) — 아코디언 카드·▼/▲ 토글을 없애 탭 1회가 줄어든다.
               ⚠️ 상단 설명 문단("통화는 그대로 연결돼 있습니다…")은 제거했다(D-57 ㄷ) — 그 사실은
               위 통화 필이 상시·실시간으로 증명한다. 제목은 스크린리더용 접근 이름으로만 남긴다. */}
-          <div className="flex-1 overflow-y-auto px-4 py-4">
+          <div ref={threadRef} className="flex-1 overflow-y-auto px-4 py-4">
             <h2 ref={titleRef} tabIndex={-1} className="sr-only outline-none">
               문자 메시지
             </h2>
@@ -256,7 +313,16 @@ export default function InCallSmsOverlay({
                   // (실제 문자앱의 묶음 표시). 색이 아니라 **텍스트 라벨**로 구분한다.
                   const showSender = index === 0 || sorted[index - 1].senderLabel !== sms.senderLabel;
                   return (
-                    <li key={sms.smsId} className="flex flex-col items-start gap-1.5">
+                    <li
+                      key={sms.smsId}
+                      data-sms-id={sms.smsId}
+                      ref={(node) => {
+                        // 열람 판정 대상 등록. 언마운트 시 지워 관측자가 죽은 노드를 붙들지 않게 한다.
+                        if (node) bubbleRefs.current.set(sms.smsId, node);
+                        else bubbleRefs.current.delete(sms.smsId);
+                      }}
+                      className="flex flex-col items-start gap-1.5"
+                    >
                       {showSender && (
                         <p className="font-mono text-xs font-semibold text-[#6B655C]">
                           {sms.senderLabel}
