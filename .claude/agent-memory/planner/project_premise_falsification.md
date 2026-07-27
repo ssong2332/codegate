@@ -1,0 +1,12 @@
+---
+name: premise-falsification
+description: 등재 지시문이 "구조적으로 불가능"이라고 단정한 전제도 grep으로 반증하라 — 실측하면 "불가능"이 아니라 "약하다"인 경우가 있다
+metadata:
+  type: project
+---
+
+**오케스트레이터가 *"X 경로에는 …할 지점이 없다 / 구조적으로 불가능하다"* 라고 단정해도, 등재 전에 그 지점을 직접 grep한다.** 반증되면 **행의 A항이 아니라 별도 C항("지시문 전제 정정")으로 올리고, architect의 1차 입력이라고 명시**한다.
+
+**Why:** 2026-07-27 라이브 신고 등재에서 지시문이 *"실시간(Gemini Live) 경로는 세션 중간에 전환 지시를 주입할 지점이 없다"* 고 단정했는데, **주입 지점은 실재했다** — `src/app/session/play/page.tsx:666`이 `enqueueTurnInstruction(reconnectInstruction, "verify")`를 호출하고 `src/lib/realtime/GeminiVoiceSession.tsx`의 `instructionTurn` prop을 거쳐 **같은 Live 세션에 `sendClientContent` 텍스트 턴으로** 들어간다. 실제로 없는 것은 **주입 지점**이 아니라 **주입의 지속성**이었다(1회성 턴은 다음 턴이면 컨텍스트 뒤로 밀리고, `systemInstruction`은 토큰 발급 시 1회 고정이라 원 페르소나가 매 턴 선두에 남는다). **이 차이가 해결 방향을 통째로 바꾼다** — "불가능"이면 아키텍처를 뒤집어야 하지만 "약하다"면 **재주입 빈도** 문제이고, 실제로 설계 문서가 이미 그 후보를 적어 두고 유보하고 있었다(§22.9). 전제를 그대로 베꼈으면 착수자가 **없는 벽을 우회하려다** 기각된 후보(소켓 재연결)로 갔을 것이다.
+
+**How to apply:** 지시문에 *"없다·불가능·못 한다"* 가 나오면 그 대상의 **심볼 이름을 저장소 전수 grep**한다(위 사례는 `reconnectInstruction` 1회 grep으로 끝났다). 반증 시 ① 원래 전제를 인용하고 ② 반증 근거를 `파일:줄`로 달고 ③ **"그래서 진짜 없는 것은 무엇인가"** 를 한 문장으로 다시 정의한다. 또 설계 문서가 그 갭을 **이미 자기 고지했는지**(§22.8 류 "남는 한계" 절)와 **다음 후보를 유보해 뒀는지**(§22.9 류 "인계" 절)를 함께 찾아, 태스크를 *"설계를 뒤집는 일"* 이 아니라 *"유보 사유가 해소됐는지 판정하는 일"* 로 좁힌다. 관련: [[no-shell-measurement]], [[followup-fixture-collision]], [[planner-ac-verifiability]]

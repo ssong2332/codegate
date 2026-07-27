@@ -8,4 +8,5 @@
 - [사용자의 범위 좁히기 정정](feedback_user_scope_narrowing.md) — "그건 A에서 말한 거고 B는 아니야"는 새 요구가 아니라 범위 정정, 제외 범위와 담당 태스크를 명시
 - [셸 없이 실측하는 법](project_no_shell_measurement.md) — base 커밋은 `.git/logs/refs/heads/main` 마지막 줄, 러너 제약은 package.json으로 대체하고 그 사실을 명시
 - [점유된 행은 통째로 회피](feedback_row_ownership_conflict.md) — 브랜치명에 걸린 행·merged 행은 포인터 한 줄도 금지, todo 행만 append, 편집 후 열 수 8 재검증
+- [지시문 전제 반증](project_premise_falsification.md) — "구조적으로 불가능"도 grep해 보라, "없다"가 아니라 "약하다"면 해결 방향이 통째로 바뀐다
 - [수치 정정 규칙](project_baseline_correction.md) — 현재형 기준선만 고치고 과거 기록은 보존, 정정 전 전수 grep(부분 정정이 반복 실패 양식)
