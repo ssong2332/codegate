@@ -107,3 +107,91 @@ body {
     animation: none;
   }
 }
+
+/* --- 전면 문자함 전환(UX-027 v1.13 · P-27 (5) ① · D-57 ㄱ, T103) ---
+   문자함이 "아래에서 올라오는" 주 표면이 된다는 방향성을 슬라이드업+페이드로 표현하고, 퇴장은
+   역방향으로 돌린다. 도착 배너도 같은 규칙으로 부드럽게 내려온다.
+   ⚠️ **CSS 키프레임만 쓴다**(Architecture.md §23.6 A1) — JS 프레임 루프·프레임마다 도는 setState는
+   실시간 통화 오디오와 같은 메인 스레드를 먹는다(OQ-U27 (c)).
+   prefers-reduced-motion이면 즉시 교체(애니메이션 없음, 흐름·기능·도달 가능한 컨트롤은 완전히
+   동일하다 — §23.6 A3, 위 두 선례와 같은 형태). */
+@keyframes sms-surface-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sms-surface-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+@keyframes sms-dim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sms-dim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sms-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sms-surface-enter {
+  animation: sms-surface-in 0.24s cubic-bezier(0.22, 0.7, 0.3, 1);
+}
+
+.sms-surface-exit {
+  animation: sms-surface-out 0.18s ease-in forwards;
+}
+
+.sms-dim-enter {
+  animation: sms-dim-in 0.24s ease-out;
+}
+
+.sms-dim-exit {
+  animation: sms-dim-out 0.18s ease-in forwards;
+}
+
+.sms-banner-enter {
+  animation: sms-banner-in 0.22s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sms-surface-enter,
+  .sms-surface-exit,
+  .sms-dim-enter,
+  .sms-dim-exit,
+  .sms-banner-enter {
+    animation: none;
+  }
+}

@@ -68,3 +68,39 @@ export function latestSmsId(items: readonly InCallSmsView[]): string | null {
   const sorted = sortByArrival(items);
   return sorted.length > 0 ? sorted[sorted.length - 1].smsId : null;
 }
+
+/** `IntersectionObserverEntry` 중 이 판정이 실제로 쓰는 부분만(테스트에서 가짜로 대체 가능하게). */
+export type SmsVisibilityEntry = {
+  readonly isIntersecting: boolean;
+  readonly smsId: string | undefined;
+};
+
+/**
+ * **실제로 뷰포트에 들어온** 문자 id만 골라낸다(T103 QA 지적 — AC-026 과다 기록).
+ *
+ * **왜 필요한가.** 아코디언을 없애면서 "화면에 그려진 문자 전부"를 열람으로 기록했더니,
+ * 문자함을 한 번 열기만 해도 **스크롤을 전혀 하지 않은 하단의 문자까지** `openedAt`이 박혔다.
+ * 서버는 `openedAt`을 **최초 1회만 세팅하고 되돌리지 않으며**(설계상 옳다), 리포트·리플레이는
+ * 그 값만 보고 *"문자를 열어 확인했습니다"*·*"화면에 인증번호가 표시됐습니다"* 캡션을 만든다.
+ * ⇒ 보지도 못한 인증번호에 "표시됐다"가 붙어 **훈련 피드백이 거짓을 말한다.**
+ *
+ * ⚠️ **판정 기준은 "뷰포트에 들어왔는가" 하나다.** "몇 초 이상 보였는가"·"읽음 확인" 같은
+ * 새 개념을 만들지 않는다(범위 밖). 서버 계약(`recordInCallSmsEvent`의 1회성 기록)도 무변경 —
+ * 고치는 것은 **언제 부르는가** 뿐이다.
+ *
+ * @param alreadyRecorded 이미 기록을 보낸 id — 같은 문자를 두 번 보내지 않는다.
+ */
+export function takeNewlyVisibleSmsIds(
+  entries: readonly SmsVisibilityEntry[],
+  alreadyRecorded: ReadonlySet<string>,
+): string[] {
+  const picked: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    const { smsId } = entry;
+    if (!smsId) continue;
+    if (alreadyRecorded.has(smsId) || picked.includes(smsId)) continue;
+    picked.push(smsId);
+  }
+  return picked;
+}
