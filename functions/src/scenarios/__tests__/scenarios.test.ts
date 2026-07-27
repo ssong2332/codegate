@@ -6,6 +6,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { SCENARIO_PROMPTS, FAMILY_ACCIDENT_SCENARIO_ID } from "../index";
 import { PUBLIC_SCENARIOS } from "../publicMeta";
+// T109 — 요구 몰림 게이트는 **조립 결과**까지 본다. 규칙과 예시가 서로 다른 파일에 있기 때문이다
+// (규칙 = promptAssembly의 공통 블록 / 예시 = 각 시나리오 인용구). 한쪽만 보면 다른 쪽에서 재발한다.
+import { buildSystemPrompt } from "../../roleplay/promptAssembly";
+import type { DifficultyLevel } from "../../shared/difficulty";
 
 // AC-005: 실제 운영 가능한 사기 정보(실계좌번호 패턴·실제 송금 절차 지시·실제 URL)가 절대
 // 포함되면 안 된다. 계좌번호형 숫자(8자리 이상 연속 숫자)와 http(s) 링크를 금지 패턴으로 검사한다.
@@ -948,6 +952,257 @@ test("[신원요구/역검증] 축 2가 '확인'이라는 말 자체를 막지�
     "성함, 생년월일 불러주십시오, 최근에 통장 개설하신 적 있으세요? 지금 바로 답변 주셔야 절차가 진행됩니다",
   ]) {
     assert.deepEqual(identityDefects(legit), [], `정상 문구를 오탐한다: ${legit}`);
+  }
+});
+
+// ── T109(2026-07-27 사용자 라이브 2차 신고) — **한 턴에 요구가 몰린다** ──────────────
+//
+// **무엇이 있었나**: 실제 발화 *"본인 확인을 위해 성함과 생년월일을 불러주십시오. 최근에 통장을
+// 개설하신 적이 있으신가요? 지금 바로 답변 주셔야 절차가 신속하게 진행됩니다."* — 한 턴에 **요구
+// 2건 + 압박 1건**. 사용자 확정: *"성함과 생년월일은 같이 묶을 수 있지만 최근에 통장을 개설했는지는
+// 다음 질문으로 가는 게 좋겠다."* 실제 사기범은 한 번에 하나씩 묻고, 참가자는 **문항 단위로**
+// "이상하다"를 감지한다 — 몰아치면 그 감지 기회 자체가 사라진다(이 앱이 훈련시키는 것이 그것이다).
+//
+// ⚠️ **바로 위 [신원요구] 게이트(T92)와 판정 대상이 다르다 — 이것이 이 게이트를 따로 세운 이유다.**
+//   | 게이트 | 무엇을 보나 | 신고 발화에 대한 판정 |
+//   |---|---|---|
+//   | T92 [신원요구] | 신원 필드가 **요구로 발화되는가**(전제로 넘어가지 않는가) | **정상**(요구로 발화된다) |
+//   | T109 [요구몰림] | 한 차례에 **독립 요구가 몇 건인가** | **위반**(신원 1 + 조회 1 = 2건) |
+// 그래서 T92가 `:862`에서 *"정상 문구"* 로 못박은 문자열이 여기서는 위반이 된다. **T92 쪽 판정
+// 함수는 한 글자도 바꾸지 않았다** — 바꾸면 T92가 6종 우회를 재현해 쌓은 검출력이 훼손된다
+// (같은 파일 `[신원요구/역검증]` 4건이 그 자산이다). 두 게이트는 각자의 축으로 나란히 선다.
+//
+// ⚠️ **어디를 보나 — 조립 결과 전체다.** 이번 결함은 **규칙의 부재**가 아니라 **지시의 존재**였다:
+// 5종의 [말투/톤]에 *"확인 질문을 한 번에 여러 개 이어 붙여"* 가 복제돼 있었고, 같은 형태가
+// weakenedTactics 인용구에도 있었다(= persona와 tactic **두 자리**, 이 저장소의 반복 패턴).
+// 규칙은 이제 공통 조립부([진행 강제])에 **한 벌만** 있으므로, 게이트도 시나리오 문서가 아니라
+// **조립 산출물**을 본다 — 그래야 공통부에 몰아치기 지시가 되살아나도 잡힌다.
+
+/**
+ * ⭐ **묶음 판정표 — 무엇을 요구 1건으로 셀 것인가**(사용자·오케스트레이터 확정, 2026-07-27).
+ * **이 표를 안 적으면 다음 사람이 다르게 센다.** 표에 없는 케이스는 임의 판단하지 말고 행을 추가할지
+ * 먼저 물어야 한다.
+ *
+ *   | 요구 유형 | 예 | 판정 |
+ *   |---|---|---|
+ *   | 본인 확인 인적사항 | 성함·생년월일·주민번호·주소 | **한 묶음 = 1건**(사용자 확정: *"성함과 생년월일은 같이 묶을 수 있다"*) |
+ *   | 별개 사실 조회 | 통장 개설 여부·대출 건수·계좌 명의·해외 결제 | **별개 턴**(사용자 확정: *"최근에 통장을 개설했는지는 다음 질문으로"*) |
+ *   | 인증·자격증명 | 확인번호·OTP·비밀번호·카드번호 | **별개 턴** |
+ *   | 금전·설치 행위 | 이체·송금·앱 설치 | **별개 턴** |
+ *   | 압박·재촉 문장 | *"지금 바로 답변 주셔야…"* | **요구로 세지 않는다**(압박 유지는 T92 행의 확정) |
+ *
+ * **인증번호를 별개 턴으로 가른 근거**(미결이었고 오케스트레이터가 확정했다): 인증번호 요구는 이
+ * 훈련에서 **가장 강한 단일 신호**다 — 앱의 코칭 문구 자체가 *"인증번호는 어떤 기관·상담원도 요구하지
+ * 않습니다. 요구받는 것 자체가 사기 신호"* 라고 말한다. 성함·생년월일 뒤에 묶여 흘러가면 참가자가
+ * 그 신호를 놓친다. 그 직접 귀결로 `bankSecurityVerifyScam`의 *"성함이랑 생년월일, 방금 보내드린
+ * 확인번호까지"* 를 두 차례로 나눴다(T92가 정답 패턴으로 인용했던 문구지만, T92가 인용한 이유는
+ * **요구 형태**였고 그 성질은 나눈 뒤에도 그대로다 — 위 [신원요구] 게이트가 계속 통과시킨다).
+ *
+ * **왜 종(kind)당 1건으로 접는가**(`countsPerMatch: false`): `"카드번호 앞 8자리랑 유효기간"`은
+ * 한 가지 확인 수단을 부르는 **한 번의 요구**이지 두 건이 아니다. 표는 *종이 다르면 나눈다*고
+ * 말할 뿐, 같은 종 안을 쪼개라고 하지 않는다. **사실 조회만 예외로 매치마다 센다** — 서로 다른 두
+ * 조회 질문(통장 개설 + 대출 건수)은 실제로 두 건이기 때문이다.
+ */
+type DemandKind = "identity" | "credential" | "moneyOrInstall" | "factInquiry";
+
+const DEMAND_KINDS: ReadonlyArray<{
+  kind: DemandKind;
+  /** 표의 "요구 유형" 열. 위반 메시지에 그대로 실린다. */
+  label: string;
+  pattern: RegExp;
+  /** true면 매치마다 1건(사실 조회), false면 종 전체가 1건(나머지 3종). */
+  countsPerMatch: boolean;
+  /** 죽은 정규식 방지 — 이 패턴이 실제로 잡아야 하는 최소 샘플. */
+  selfSample: string;
+}> = [
+  {
+    kind: "identity",
+    label: "본인 확인 인적사항",
+    pattern: /성함|생년월일|주민(등록)?번호|주소/,
+    countsPerMatch: false,
+    selfSample: "성함이랑 생년월일 불러주세요",
+  },
+  {
+    kind: "credential",
+    label: "인증·자격증명",
+    pattern: /인증번호|확인번호|비밀번호|카드\s*번호|보안\s*카드|유효기간|OTP/,
+    countsPerMatch: false,
+    selfSample: "방금 보내드린 확인번호 불러주세요",
+  },
+  {
+    kind: "moneyOrInstall",
+    label: "금전·설치 행위",
+    pattern: /이체|송금|입금|상환|보내\s*(주|줘|세요|주세요)|넣어\s*주|설치/,
+    countsPerMatch: false,
+    selfSample: "지금 바로 이체해 주세요",
+  },
+  {
+    // ⚠️ **어휘가 아니라 형태로 잡는다.** "통장 개설"·"해외 결제" 같은 소재를 열거하면 다음
+    // 시나리오가 새 소재를 쓰는 순간 조용히 빠져나간다(T86에서 데인 방식이다). 사실 조회는
+    // **"참가자의 과거·현재 사실을 되묻는 의문형"** 이라는 공통 형태를 가지므로 그쪽을 본다.
+    kind: "factInquiry",
+    label: "별개 사실 조회",
+    pattern: /하신\s*적\s*(이\s*)?(있|없)|하신\s*거\s*(있|없)|있으신\s*거\s*몇|몇\s*(건|번|개)(이세|인가|예)|맞으시죠|맞으신가요/,
+    countsPerMatch: true,
+    selfSample: "최근에 통장 개설하신 적 있으세요?",
+  },
+];
+
+/** 한 차례 발화(인용구 하나)에 들어 있는 **독립 요구 건수**를 판정표대로 센다. */
+function demandsInUtterance(utterance: string): string[] {
+  const found: string[] = [];
+  for (const { label, pattern, countsPerMatch } of DEMAND_KINDS) {
+    if (!countsPerMatch) {
+      const match = pattern.exec(utterance);
+      if (match !== null) found.push(`${label}("${match[0]}")`);
+      continue;
+    }
+    for (const match of utterance.matchAll(new RegExp(pattern.source, "g"))) {
+      found.push(`${label}("${match[0]}")`);
+    }
+  }
+  return found;
+}
+
+/**
+ * **몰아치기 지시 금지** — 이번 결함의 실제 원인은 인용구가 아니라 그 위의 **지시 문장**이었다
+ * (*"확인 질문을 한 번에 여러 개 이어 붙여"*). 인용구만 고치면 모델은 지시 쪽을 따라간다.
+ *
+ * ⚠️ **금지형 문맥은 예외로 둔다** — *"…몰아치지 않는다"* 같은 문장은 규칙을 **지키는** 문장이다.
+ * 매치 직후 구간에 부정 표현이 있으면 위반으로 세지 않는다(T86에서 세운 관례와 같다).
+ */
+const STACKING_DIRECTIVE = /한\s*번에\s*여러|이어\s*붙[여인이]|연달아|쏟아[붓내]|몰아치|한꺼번에|속사포/;
+const NEGATION_AFTER = /않|말고|말 것|금지|없이/;
+/** 부정 표현을 찾을 매치 직후 구간의 길이. 좁게 잡아 무관한 부정문에 면제되지 않게 한다. */
+const NEGATION_WINDOW = 14;
+
+function stackingDirectives(text: string): string[] {
+  const hits: string[] = [];
+  for (const match of text.matchAll(new RegExp(STACKING_DIRECTIVE.source, "g"))) {
+    const at = match.index ?? 0;
+    const after = text.slice(at + match[0].length, at + match[0].length + NEGATION_WINDOW);
+    if (NEGATION_AFTER.test(after)) continue; // "몰아치지 않는다" = 규칙을 지키는 문장
+    hits.push(text.slice(Math.max(0, at - 15), at + match[0].length + 15).replace(/\n/g, " "));
+  }
+  return hits;
+}
+
+/** 조립 결과 전수 — 난이도 블록까지 포함해야 공통부 재발을 놓치지 않는다. */
+function assembledPrompts(): Array<{ label: string; text: string }> {
+  const levels: Array<DifficultyLevel | undefined> = [
+    undefined,
+    "beginner",
+    "intermediate",
+    "advanced",
+  ];
+  const out: Array<{ label: string; text: string }> = [];
+  for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
+    for (const level of levels) {
+      for (const inCallSmsEnabled of [false, true]) {
+        out.push({
+          label: `${scenarioId}[${level ?? "기본"}${inCallSmsEnabled ? "/문자" : ""}]`,
+          text: buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], {
+            difficultyLevel: level,
+            inCallSmsEnabled,
+          }),
+        });
+      }
+    }
+  }
+  return out;
+}
+
+test("[T109/요구몰림] 사기범 대사 한 차례에 독립 요구가 2건 이상 들어가지 않는다(조립 결과 전수)", () => {
+  const violations: string[] = [];
+  for (const { label, text } of assembledPrompts()) {
+    for (const utterance of quotedUtterances(text)) {
+      const demands = demandsInUtterance(utterance);
+      if (demands.length < 2) continue;
+      violations.push(`${label} :: [${demands.join(" + ")}] "${utterance.slice(0, 60)}"`);
+    }
+  }
+  assert.deepEqual(
+    violations,
+    [],
+    "한 차례에 요구를 몰아넣으면 참가자가 **문항 단위로** 의심할 기회를 잃는다(2026-07-27 사용자 " +
+      "라이브 신고). 인적사항(성함·생년월일 등)은 한 묶음으로 함께 물어도 되지만, 사실 조회·인증 " +
+      "수단·금전/설치 행위는 각각 다음 차례로 나눈다. 압박은 질문 개수가 아니라 재촉으로 만든다.",
+  );
+});
+
+test("[T109/요구몰림] 몰아치기를 지시하는 문장이 남아 있지 않다(조립 결과 전수)", () => {
+  const violations: string[] = [];
+  for (const { label, text } of assembledPrompts()) {
+    for (const hit of stackingDirectives(text)) violations.push(`${label} :: "${hit}"`);
+  }
+  assert.deepEqual(
+    violations,
+    [],
+    "인용구만 고치고 지시 문장을 두면 모델은 지시 쪽을 따라간다 — 이번 결함의 발생 경로가 " +
+      "정확히 그것이었다(5종 [말투/톤]의 '확인 질문을 한 번에 여러 개 이어 붙여').",
+  );
+});
+
+test("[T109/역검증] 신고된 원본 발화가 이 게이트에 실제로 걸린다(죽은 게이트 방지)", () => {
+  // ⚠️ 오염 샘플은 **테스트 코드 안에서만** 만든다(콘텐츠에 되돌려 넣지 않는다).
+  const reported = "본인 확인을 위해 성함과 생년월일을 불러주십시오. 최근에 통장을 개설하신 적이 있으신가요? 지금 바로 답변 주셔야 절차가 신속하게 진행됩니다";
+  const demands = demandsInUtterance(reported);
+  assert.equal(demands.length, 2, `신고 발화가 2건으로 세어져야 한다(실제: ${demands.join(" + ")})`);
+
+  // 수정 전 5종에 실제로 있던 문구도 전부 걸린다 — "1종만 고치고 끝내기"를 막는다.
+  for (const before of [
+    "성함, 생년월일 불러주십시오, 최근에 통장 개설하신 적 있으세요? 지금 바로 답변 주셔야 절차가 진행됩니다",
+    "성함부터 불러주세요, 지금 대출 있으신 거 몇 건이세요? 바로 답 주셔야 한도 산정이 돼요",
+    "성함이랑 생년월일 불러주세요, 계좌는 본인 명의 맞으시죠? 바로 답 주셔야 오늘 처리가 돼요",
+    "성함부터 불러주세요, 최근에 해외 결제하신 적 있으세요? 지금 결제 진행 중이니 바로 답변 주셔야 해요",
+    "성함이랑 주소부터 불러주세요, 최근에 해외 직구하신 거 있으세요? 바로 답 주셔야 확인이 빨리 끝나요",
+    // 인증·자격증명 분리(오케스트레이터 확정) — 수정 전 3곳.
+    "조회 자체가 본인 확인부터라서요, 성함이랑 생년월일, 방금 보내드린 확인번호까지 불러주세요",
+    "본인 확인이 안 되면 공범으로 분류됩니다, 주민번호 뒤 7자리랑 계좌 비밀번호 불러주세요",
+    "수취인 본인 확인해야 해서요, 주민번호 뒤 7자리랑 카드번호 불러주시겠어요?",
+  ]) {
+    assert.ok(
+      demandsInUtterance(before).length >= 2,
+      `수정 전 문구가 안 걸리면 게이트가 죽은 것이다: ${before}`,
+    );
+  }
+
+  // 지시 문장 쪽 역검증 — 수정 전 5종 [말투/톤]의 실제 문구와 라벨.
+  for (const directive of [
+    "확인 질문을 한 번에 여러 개 이어 붙여 생각할 틈을 주지 않되",
+    "정보를 직접 요구하는 질문을 연달아 쏟아붓는다",
+    "속사포 확인질문",
+  ]) {
+    assert.ok(stackingDirectives(directive).length > 0, `지시 문장이 안 걸린다: ${directive}`);
+  }
+});
+
+test("[T109/역검증] 각 요구 유형 패턴이 자기 샘플을 잡는다(죽은 정규식 방지)", () => {
+  for (const { label, pattern, selfSample } of DEMAND_KINDS) {
+    assert.equal(pattern.test(selfSample), true, `${label}: 자기 양성 샘플을 못 잡는다 — 죽은 패턴이다`);
+  }
+});
+
+test("[T109/오탐] 정상 문구는 1건 이하로 세고, 금지형 지시 문장은 위반이 아니다", () => {
+  // ① 판정표대로 요구가 **1건 이하**인 것들 — 전부 통과해야 한다(건수를 그대로 단언한다).
+  for (const [expected, legit] of [
+    [1, "성함이랑 생년월일 불러주십시오, 지금 바로 답변 주셔야 절차가 진행됩니다"], // 인적사항 묶음 = 1
+    [1, "성함이랑 주민번호, 주소까지 불러주세요"], // 인적사항 3개도 한 묶음 = 1
+    [1, "최근에 통장 개설하신 적 있으세요?"], // 사실 조회 1건
+    [1, "카드번호 앞 8자리랑 유효기간 불러주세요"], // 같은 종(확인 수단) = 1
+    [0, "지금 바로 답변 주셔야 절차가 신속하게 진행됩니다"], // 압박만 — 요구로 세지 않는다
+  ] as const) {
+    const demands = demandsInUtterance(legit);
+    assert.equal(demands.length, expected, `오탐: "${legit}" → [${demands.join(" + ")}]`);
+  }
+
+  // ② 금지형 문맥은 면제된다 — 규칙 자체를 서술하는 문장이 게이트에 걸리면 규칙을 못 쓴다.
+  for (const negated of [
+    "여러 수법을 한 번에 몰아서 늘어놓지 않는다",
+    "질문을 연달아 쏟아붓지 않는다",
+    "확인 질문을 한 번에 여러 개 이어 붙이지 말고 하나씩 던진다",
+  ]) {
+    assert.deepEqual(stackingDirectives(negated), [], `금지형 문장을 오탐한다: ${negated}`);
   }
 });
 

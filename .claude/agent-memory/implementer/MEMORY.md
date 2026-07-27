@@ -35,5 +35,6 @@
 - [T95 확인 가로채기 전용 시나리오](project_codegate_t95_verify_scenario.md) — 시나리오 1종 추가 시 걸리는 게이트 9곳 전체 표, PRD 축 표에 없는 신규 좌표 판단, D3에 D2·D5를 섞으면 안 되는 이유.
 - [T86 무해화 금지 패턴 공통화](project_codegate_t86_harmlessness_guards.md) — 전역 금지어가 제품 요구를 때리는 3곳, JS `\b`가 한글에서 죽는 함정, 금지형 문맥 예외, 우회 방지 3겹 게이트.
 - [T92 부인 대응 6종](project_codegate_t92_denial_pivot.md) — 설계 문서 **내부** 모순 해소법, 전제 어휘가 범위 밖을 때리는 실측, 참가자 대사 인용구가 Mock으로 새는 함정, 새 워크트리 셋업 3종.
+- [T109 요구 몰림 분리](project_codegate_t109_demand_splitting.md) — 기존 게이트가 신고 문자열을 정상으로 못박았을 때 축을 더 세우는 법, 조립 결과를 스캔 대상으로, 라벨 자체가 지시인 경우.
 - [T104 상황별 랜딩 4종](project_codegate_t104_situational_landings.md) — 착수 순서 강제 시 어떤 게이트를 뒤로 미룰지 판단 기준, channel 옵셔널 함정, 격리 에뮬레이터 REST 레시피(동의 문서·functions/.env).
 - [T101 lib 스테일 산출물 차단](project_codegate_t101_clean_lib.md) — clean 기준선 462, A/B probe 함정 4건(main 체크아웃 충돌·리다이렉트 가드·probe 커밋 필수·타이밍 노이즈).
