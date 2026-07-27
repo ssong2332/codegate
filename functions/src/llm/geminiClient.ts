@@ -13,42 +13,27 @@
 // role 분리+구분자 감싸기가 구조적 1차 방어다.
 import { GoogleGenAI } from "@google/genai";
 import type { Content } from "@google/genai";
-import { logger } from "firebase-functions";
 import type { LlmClient, LlmCompletionInput, LlmCompletionResult, LlmMessage } from "./types";
 
 /** 텍스트 생성용 Gemini 모델 — 음성 전용 모델(GEMINI_LIVE_MODEL)과 다르다(realtime과 별개 경로).
- * "gemini-2.5-flash" 고정 버전은 이 프로젝트 API 키 계정에서 실측 시 404("no longer available to
- * new users")로 거부됐다(2026-07-24) — 계정/키 발급 시점에 따라 구버전 고정 모델 접근이 막힌
- * 것으로 보인다. "-latest" 별칭은 Google이 시점마다 현재 권장 flash 모델로 자동 매핑해 이런
- * 계정별 구버전 차단에 흔들리지 않는다(실측 확인: 아래 이 파일이 통과하는 라이브 스모크 테스트). */
-export const GEMINI_TEXT_MODEL = "gemini-flash-latest";
-
-/**
- * 추론(thinking) 비활성 — AC-004(p95 ≤ 10초) 회복용. **실측 근거(2026-07-26, T87 라이브 검증)**:
  *
- * - 에뮬레이터 경유 실 LLM 호출 18건 중 **12건(66.7%)이 `LLM_TIMEOUT_MS`(10초)를 넘겨**
- *   `completeWithFallback`으로 Mock 강등됐다. 오프닝 대사만 보면 14건 중 9건(64.3%)이다.
- *   강등되면 사기범 첫 마디가 문맥 없는 고정 문구로 나와, 사용자가 앞서 신고했던
- *   "문맥 미반영 Mock" 증상으로 조용히 되돌아간다(logger.warn만 남고 화면엔 티가 안 난다).
- * - 원인은 에뮬레이터가 **아니다**: 동의 게이트(session/index.ts:116)가 generateOpeningLine
- *   앞이라 LLM을 타지 않는 createSession 왕복을 5회 측정하니 **중앙값 23ms**(19~32ms)였다.
- *   10초 중 사실상 전부가 Gemini 생성 시간이다.
- * - Gemini 직접 호출(에뮬레이터 우회) 1건 실측: 4,486ms에 `thoughtsTokenCount` **588** /
- *   출력 127 토큰 — **생성 토큰의 82%가 추론**이었다. 실제 조립 프롬프트(페르소나+수법
- *   11개+가드레일+난이도 블록)는 이 측정에 쓴 합성 프롬프트(769토큰)보다 크므로 추론량도
- *   더 늘어 10초를 넘긴다.
+ * **고정 버전으로 못박는다(2026-07-27, T98 회귀 수정).** 이전 값은 `"gemini-flash-latest"`
+ * 부동 별칭이었고, 그게 이번 라이브 장애의 원인이었다:
+ *   - `latest` 별칭이 가리키는 실체가 **아무 신호 없이** `gemini-3.6-flash`로 재매핑됐다
+ *     (429 응답 로그에 `model: gemini-3.6-flash`로 찍혀 드러났다). 코드는 한 줄도 안 바뀌었는데
+ *     대상 모델이 바뀌어, 그 모델이 받지 않는 설정(`thinkingConfig`, 아래 참조)이 400으로
+ *     거부됐고 텍스트 LLM 경로가 **100% Mock 강등**됐다.
+ *   - 즉 `latest`는 "계정별 구버전 차단을 피한다"는 이득 대신 **재매핑을 조용히 삼키는**
+ *     비용을 지운다. 이 저장소가 겪은 다른 "낡은 사본" 사고(T101 스테일 `lib` 등)와 같은 부류이며
+ *     방향만 반대다 — 내가 안 바꿨는데 상대가 바뀐다.
  *
- * 역할극 대사 한 줄 생성은 다단계 추론이 필요한 과제가 아니다 — 인격·수법·가드레일이 전부
- * systemPrompt에 이미 고정돼 있고 모델은 그 캐릭터로 다음 한 마디를 만들 뿐이다. 그래서
- * 품질을 지키는 방향은 추론이 아니라 프롬프트 조립(promptAssembly.ts)이고, 추론은 지연과
- * 무료 티어 토큰만 소모한다.
+ * `gemini-3.6-flash`는 `models?pageSize=200` 조회로 실재와 `generateContent` 지원을 확인했다
+ * (2026-07-27). ⚠️ `"gemini-2.5-flash"`로 되돌리지 말 것 — 이 프로젝트 API 키 계정에서는
+ * 404("no longer available to new users")로 거부된다(2026-07-24 실측, 2026-07-27 재확인).
  *
- * ⚠️ **미검증(정직 고지)**: 이 값을 넣은 뒤의 실제 지연 감소폭은 아직 측정하지 못했다 —
- * 비교 측정(`thinkingBudget: 0` 호출)이 **Gemini 무료 일일 한도 20회 소진(429)** 으로 거부됐다.
- * 위 82% 수치로부터 "생성 시간이 크게 줄 것"이라고 **추정**할 뿐이며, 확인 방법은 할당량
- * 회복 후 오프닝 Mock 강등률을 같은 절차로 재측정하는 것이다(T87 재개 조건과 동일 절차).
- */
-export const GEMINI_THINKING_BUDGET = 0;
+ * 모델을 올릴 때는 이 상수를 **의도적으로** 바꾸고 라이브 1회 호출로 확인한다(그게 별칭 대신
+ * 고정 버전을 쓰는 목적이다 — 변경 시점을 커밋으로 남기고 검증을 강제한다). */
+export const GEMINI_TEXT_MODEL = "gemini-3.6-flash";
 
 // 오프닝 대사(messages:[])에는 실제 사용자 입력이 없어 Gemini에 보낼 "첫 turn"이 없다 — systemPrompt
 // 만으로는 생성이 시작되지 않는 모델도 있어(빈 contents), 화면에 노출되지 않는 내부 트리거 turn을
@@ -64,27 +49,30 @@ function toGeminiContent(message: LlmMessage): Content {
 }
 
 /**
- * `thinkingConfig`가 **모델에 거부당했는지** 판정한다(reviewer Major #1, 2026-07-26).
+ * **왜 `thinkingConfig`(추론 비활성)와 그 재시도 안전장치가 여기 없는가 — 삭제 근거(2026-07-27).**
  *
- * 왜 필요한가: `GEMINI_TEXT_MODEL`은 고정 버전이 아니라 `"-latest"` **부동 별칭**이라 Google이
- * 시점마다 다른 모델로 재매핑한다(위 상수 주석 — 계정별 구버전 차단을 피하려 일부러 이렇게 뒀다).
- * 그런데 SDK가 실어 나르는 `thinkingBudget`은 벤더 타입 정의가 스스로 폐기를 예고한 필드다:
- *   - `@google/genai/dist/genai.d.ts:11227` — "Starting from Gemini 3.5 models, the old
- *     thinking_budget will no longer be supported and will result in a user error if set."
- *   - 같은 파일 :8810-8813 — "An error will be returned if this field is set for models that
- *     don't support thinking."
- * 즉 **별칭이 재매핑되는 순간 모든 요청이 400으로 죽을 수 있다.** 그러면 completeWithFallback이
- * 전부 Mock으로 강등해, 이 커밋이 고치려던 66%가 **100%로 악화**된다(현상보다 나빠짐).
+ * T98이 넣었던 `thinkingConfig: { thinkingBudget: 0 }`과, 그게 거부되면 추론 설정 없이 한 번
+ * 재시도하던 `isThinkingConfigRejected()` 게이트를 **둘 다 제거**했다. 라이브 실측 근거:
  *
- * ⚠️ 이 위험이 이론이 아닌 이유: `thinkingBudget: 0`을 **실제 API가 수용하는지 아직 확인하지
- * 못했다** — 확인용 호출이 무료 일일 한도 소진(429)으로 거부됐다. 수용 여부가 미검증인 설정을
- * 무방비로 넣는 대신, 거부당하면 **추론 설정 없이 한 번 재시도**해 최소한 이전 동작으로 복귀한다.
+ * 1. **설정 자체가 거부된다.** 재매핑된 현재 모델(`gemini-3.6-flash`)은 최소 요청
+ *    (`contents:[{parts:[{text:"안녕"}]}]`)에도 `thinkingBudget:0`이 실리면
+ *    `HTTP 400 / INVALID_ARGUMENT`를 낸다.
+ * 2. **안전장치가 그 400을 못 알아봤다.** 실제 에러 메시지는 `"Request contains an invalid
+ *    argument."` 로, `/thinking/i` 정규식에 걸리는 문자열이 **없다**. 그래서 게이트는 false를
+ *    반환했고 재시도는 한 번도 발동하지 않은 채 에러가 그대로 전파돼, `completeWithFallback`이
+ *    **매 호출 Mock으로 강등**했다(로그: `"LLM 1차 클라이언트 실패 — Mock으로 강등"`).
+ *    T98이 우려한 "66%가 100%로 악화"가 그대로 현실이 됐고, 안전장치는 **작동한다는 착각만**
+ *    제공했다. 이 저장소는 T86에서 같은 종류(실제 케이스를 못 잡는 죽은 게이트)에 데인 적이 있다 —
+ *    그래서 남겨두는 대신 지웠다. 이력은 이 주석과 git(T98 커밋)에 남는다.
+ * 3. **T98의 전제가 현재 모델에서 성립하지 않는다.** 추론을 켠 상태로 같은 시스템 프롬프트
+ *    (5,903자)를 A/B한 결과 **2,959ms**(출력 48토큰 / 추론 269토큰)로 `LLM_TIMEOUT_MS`(10초,
+ *    AC-004 컷오프) 안에 넉넉히 들었다. 즉 "추론 때문에 10초를 넘긴다"는 T98의 근거는 이전
+ *    모델의 특성이었고, 지금은 추론 기본값이 지연 문제를 만들지 않는다.
+ *
+ * 재도입 조건: 지연이 다시 AC-004를 위협한다는 **재측정 수치**가 있고, 그때의 고정 모델이
+ * `thinkingConfig`를 수용함을 라이브 1회 호출로 확인한 경우에만. 판정을 에러 **메시지 문자열**로
+ * 하지 말 것(위 2가 그 방식의 실패 사례다).
  */
-function isThinkingConfigRejected(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /thinking/i.test(message);
-}
-
 export class GeminiLlmClient implements LlmClient {
   readonly providerName = "gemini" as const;
 
@@ -97,32 +85,11 @@ export class GeminiLlmClient implements LlmClient {
         ? input.messages.map(toGeminiContent)
         : [{ role: "user", parts: [{ text: OPENING_TRIGGER_TURN }] }];
 
-    const generate = (withThinkingConfig: boolean) =>
-      client.models.generateContent({
-        model: GEMINI_TEXT_MODEL,
-        contents,
-        config: {
-          systemInstruction: input.systemPrompt,
-          ...(withThinkingConfig
-            ? { thinkingConfig: { thinkingBudget: GEMINI_THINKING_BUDGET } }
-            : {}),
-        },
-      });
-
-    let response;
-    try {
-      response = await generate(true);
-    } catch (error) {
-      if (!isThinkingConfigRejected(error)) throw error;
-      // 폴백 발동을 관측 가능하게 남긴다 — 이걸 안 남기면 "별칭이 재매핑돼 추론 설정이 죽었다"는
-      // 사실이 completeWithFallback의 일반 warn과 구분되지 않아, 지연이 조용히 원래대로 돌아가도
-      // 아무도 눈치채지 못한다(llm/index.ts:104-108이 같은 이유로 warn을 남긴다).
-      logger.warn("Gemini가 thinkingConfig를 거부 — 추론 설정 없이 재시도", {
-        model: GEMINI_TEXT_MODEL,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      response = await generate(false);
-    }
+    const response = await client.models.generateContent({
+      model: GEMINI_TEXT_MODEL,
+      contents,
+      config: { systemInstruction: input.systemPrompt },
+    });
 
     const text = response.text;
     if (!text) {
