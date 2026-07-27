@@ -13,4 +13,6 @@ metadata:
 
 **How to apply:** ux-design·architect가 "AC가 없다"를 OQ로 넘겨올 때(OQ-U15·OQ-U28 양식), 기능을 발명하는 것이 아니라 **이미 확정된 설계를 검증 가능한 조건으로 옮기는 것**이므로 planner가 AC를 신설한다. 신설 시 (1) 기존 AC 문면은 건드리지 않고 append, (2) MVP Scope 행을 함께 만들되 **우선순위는 기존 if/then 표를 그대로 적용**하고 새 규칙을 만들지 않으며, (3) ux-design이 Related AC를 소급 갱신하고 OQ Status를 flip하도록 Tasks.md에 인계 행을 만든다(planner는 UX.md를 편집하지 않는다).
 
+**⚠️ 완료 증거에 "읽을 필드"를 지정할 때는 그 필드가 코드에 실재하는지 먼저 grep한다 — 없는 필드는 항상 falsy라 "정상"으로 읽힌다.** 2026-07-27 실제 사고: 라이브 검증자가 `message.degraded`를 읽고 *"mock 강등 0/5, 66%→0% 개선"* 으로 보고했는데, `degraded`는 `functions/src`·`src` 양쪽에 **0히트**였고 실제로는 **100% Mock**이었다(올바른 필드는 `result.isMock`). ⇒ 태스크의 완료 증거란에는 **필드명 + 그 필드가 정의된 `파일:줄`** 을 함께 박고, **오독 위험이 있는 이름은 ⛔로 명시 금지**한다. 같은 이유로 *"로그 문자열 부재"* 같은 **독립 교차 확인 1건을 항상 짝으로** 요구한다(응답 필드와 로그 두 경로가 일치해야 한다).
+
 관련: [[ac-number-reservation]]
