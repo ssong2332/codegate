@@ -604,6 +604,211 @@ test("[AC-078 (b) 역검증] 두 항목을 같게 만들면 쌍별 비교가 실
   assert.equal(bodySignature(cloned), bodySignature(MOCK_SCREENS["courier-customs-scam"][0]));
 });
 
+// ── AC-079 — 수렴 금지를 **필드 단위**로 좁힌다 (T107 · PRD v1.9) ──────────────
+//
+// AC-078 (b)는 **전체 조합의 완전 동일성**만 금지한다. 그래서 **헤드라인·CTA만 서로 다르게 둔 채**
+// `bodyLines`·`fields`·`successHeadline`·`issuerLabel`을 전부 범용으로 되돌리면 — 조합이 완전히
+// 같지는 않으므로 — 위 두 단언(전체 조합 · 헤드라인 단독)이 **둘 다 통과한다.** 아래
+// `[AC-079 (c) 역검증]`이 그 사실을 **같은 출력에 나란히** 보인다. AC-079는 그 사이를 메운다.
+//
+// ⭐ **비교 단위 기준 — AC-079 (a). 이 문단이 기준의 정본이며, 다음 사람이 판정을 달리하지
+// 않도록 코드에 문장으로 남긴다.**
+//   각 필드의 비교 단위는 **카탈로그에 저작된 값 전체**다.
+//   · `fields` = **라벨 문자열 배열 전체이며 순서를 포함**한다(같은 라벨을 순서만 바꿔 배열해도
+//     "서로 다르다"로 본다). **placeholder는 비교 단위가 아니다 — 애초에 카탈로그 필드가 아니다**
+//     (`mockScreens.ts`의 `fields?: string[]`).
+//   · `bodyLines` = 줄 배열 전체(순서 포함). `successHeadline`·`issuerLabel` = 문자열 전체.
+//   · 장래 스키마가 확장돼 항목이 하위 값을 갖게 되더라도 비교 단위는 **카탈로그 값 전체**로
+//     유지한다 — 하위 값 일부만 뽑아 비교하도록 좁히지 않는다.
+//
+// ⭐ **옵셔널 필드 제외 규칙 — AC-079 (b).** `fields`·`successHeadline`은 `kind`에 따라 부재한다
+//   (`kind="app-install"`인 `subsidy-install`에는 **둘 다 없다**).
+//   · **양쪽 모두 부재인 쌍은 그 필드의 비교에서 제외**한다(`undefined` 대 `undefined`를
+//     "동일 = 위반"으로 판정하지 않는다 — 안 그러면 정상 카탈로그가 오탐으로 실패한다).
+//   · **한쪽만 부재인 쌍은 서로 다른 것으로 본다.**
+const DIVERGENCE_FIELDS = ["bodyLines", "fields", "successHeadline", "issuerLabel"] as const;
+
+type DivergenceField = (typeof DIVERGENCE_FIELDS)[number];
+
+/** 비교 단위 = 카탈로그 값 전체(배열은 순서 포함). **부재는 `undefined`로 남긴다**(제외 판정용). */
+function fieldValue(item: MockScreenItem, field: DivergenceField): string | undefined {
+  const raw = item[field];
+  return raw === undefined ? undefined : JSON.stringify(raw);
+}
+
+type FieldStats = {
+  field: DivergenceField;
+  /** 실제로 비교한 쌍 수. */
+  compared: number;
+  /** 양쪽 다 부재라 제외한 쌍 수(AC-079 (b)). */
+  excluded: number;
+  /** 수렴한 쌍 — `landingId ↔ landingId`. */
+  converged: string[];
+};
+
+/**
+ * 필드별 쌍별 비교 통계.
+ * @param excludeBothAbsent AC-079 (b) 제외 규칙. **`false`는 그 규칙이 없을 때 무슨 일이
+ *   일어나는지(정상 카탈로그 오탐)를 출력으로 보이기 위한 역검증 전용**이며 본 검사는 항상 기본값을 쓴다.
+ */
+function fieldDivergenceStats(
+  items: MockScreenItem[],
+  { excludeBothAbsent = true }: { excludeBothAbsent?: boolean } = {},
+): FieldStats[] {
+  return DIVERGENCE_FIELDS.map((field) => {
+    const stats: FieldStats = { field, compared: 0, excluded: 0, converged: [] };
+    for (let i = 0; i < items.length; i += 1) {
+      for (let j = i + 1; j < items.length; j += 1) {
+        const a = fieldValue(items[i], field);
+        const b = fieldValue(items[j], field);
+        if (a === undefined && b === undefined) {
+          if (excludeBothAbsent) {
+            stats.excluded += 1;
+            continue;
+          }
+        }
+        stats.compared += 1;
+        if (a === b) stats.converged.push(`${items[i].landingId} ↔ ${items[j].landingId}`);
+      }
+    }
+    return stats;
+  });
+}
+
+/** 위반 목록 — `field: landingId ↔ landingId`. 빈 배열이면 AC-079 충족. */
+function findFieldConvergence(
+  items: MockScreenItem[],
+  options?: { excludeBothAbsent?: boolean },
+): string[] {
+  return fieldDivergenceStats(items, options).flatMap((stats) =>
+    stats.converged.map((pair) => `${stats.field}: ${pair}`),
+  );
+}
+
+test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
+  const items = Object.values(MOCK_SCREENS).flat();
+  assert.equal(items.length, 5, "현행 비교 대상은 도달 가능 랜딩 5종이다");
+  const stats = fieldDivergenceStats(items);
+  for (const { field, compared, excluded, converged } of stats) {
+    t.diagnostic(
+      `${field}: 비교쌍 ${compared} / 제외쌍 ${excluded} / 수렴쌍 ${converged.length}`,
+    );
+    assert.ok(compared >= 1, `${field}: 비교한 쌍이 0개면 이 검사는 아무것도 보증하지 않는다`);
+  }
+  assert.deepEqual(
+    findFieldConvergence(items),
+    [],
+    "헤드라인·CTA가 달라도 본문·필드·완료 문구가 같으면 열었을 때 같은 화면이다(AC-079)",
+  );
+});
+
+test("[AC-079 (c) 역검증] 헤드라인·CTA만 남기고 4필드를 범용화하면 — 기존 두 단언은 통과하고 AC-079만 실패한다", (t) => {
+  const items = Object.values(MOCK_SCREENS).flat();
+  // 오염은 **테스트 코드 안에서만** 만든다(실제 카탈로그를 고쳤다 되돌리지 않는다 —
+  // `callContinuity.test.ts:161-162`가 세운 관례).
+  const GENERIC = {
+    bodyLines: ["본인확인이 필요합니다.", "아래 정보를 입력해 주세요."],
+    fields: ["성함", "연락처"],
+    successHeadline: "정상 처리되었습니다.",
+    issuerLabel: "ⓒ 확인센터",
+  };
+  const poisoned: MockScreenItem[] = items.map((item) => ({
+    ...item,
+    // headline·submitLabel·consentLabel은 **실제 값 그대로** 둔다(= 서로 다름을 유지).
+    bodyLines: GENERIC.bodyLines,
+    issuerLabel: GENERIC.issuerLabel,
+    ...(item.fields ? { fields: GENERIC.fields } : {}),
+    ...(item.successHeadline ? { successHeadline: GENERIC.successHeadline } : {}),
+  }));
+
+  // ① 기존 AC-078 (b) 전체 조합 단언 — 이 오염 샘플에서 **통과한다**(위반 0건).
+  const signatureViolations: string[] = [];
+  const headlineViolations: string[] = [];
+  for (let i = 0; i < poisoned.length; i += 1) {
+    for (let j = i + 1; j < poisoned.length; j += 1) {
+      const pair = `${poisoned[i].landingId} ↔ ${poisoned[j].landingId}`;
+      if (bodySignature(poisoned[i]) === bodySignature(poisoned[j])) signatureViolations.push(pair);
+      if (poisoned[i].headline === poisoned[j].headline) headlineViolations.push(pair);
+    }
+  }
+  t.diagnostic(`오염 샘플: 전체 조합(bodySignature) 위반 ${signatureViolations.length}건 → 기존 단언 통과`);
+  t.diagnostic(`오염 샘플: 헤드라인 단독 위반 ${headlineViolations.length}건 → 기존 단언 통과`);
+  assert.deepEqual(signatureViolations, [], "헤드라인이 달라 조합이 완전히 같지는 않다 — (b)는 통과한다");
+  assert.deepEqual(headlineViolations, [], "헤드라인은 서로 다르게 유지했다 — 헤드라인 단언도 통과한다");
+
+  // ② 같은 샘플에서 AC-079 검사는 **실제로 실패한다** — 그 사이가 비어 있었다는 직접 증거.
+  const violations = findFieldConvergence(poisoned);
+  t.diagnostic(`오염 샘플: AC-079 필드별 위반 ${violations.length}건 → 신규 검사 실패`);
+  assert.ok(violations.length > 0, "AC-079 검사가 이 샘플을 잡지 못하면 구멍이 그대로다");
+  for (const field of DIVERGENCE_FIELDS) {
+    assert.ok(
+      violations.some((v) => v.startsWith(`${field}:`)),
+      `${field}를 범용화했는데 위반으로 잡히지 않았다`,
+    );
+  }
+  // ③ 대조군 — 현행 카탈로그는 같은 검사를 통과한다(오염 때문에 실패한 것이 맞다).
+  assert.deepEqual(findFieldConvergence(items), []);
+});
+
+test("[AC-079 (b)] 옵셔널 필드가 **양쪽 다 부재인 쌍**은 비교에서 제외된다(제외가 없으면 오탐)", (t) => {
+  // `fields`·`successHeadline`이 둘 다 없는 `app-install` 두 항목 — 나머지는 서로 다르다.
+  const twoInstalls: MockScreenItem[] = [
+    fixtureItem({
+      landingId: "install-a",
+      kind: "app-install",
+      headline: "A 앱을 설치해야 진행됩니다",
+      bodyLines: ["A 안내문."],
+      issuerLabel: "ⓒ A센터",
+      consentLabel: "권한 허용하고 계속하기",
+      fields: undefined,
+      submitLabel: undefined,
+      successHeadline: undefined,
+    }),
+    fixtureItem({
+      landingId: "install-b",
+      kind: "app-install",
+      headline: "B 앱을 설치해야 진행됩니다",
+      bodyLines: ["B 안내문."],
+      issuerLabel: "ⓒ B센터",
+      consentLabel: "허용하고 진행하기",
+      fields: undefined,
+      submitLabel: undefined,
+      successHeadline: undefined,
+    }),
+  ];
+  const excluded = fieldDivergenceStats(twoInstalls)
+    .filter((s) => s.excluded > 0)
+    .map((s) => `${s.field}(제외 ${s.excluded}쌍)`);
+  t.diagnostic(`제외 규칙 적용: ${excluded.join(" · ")} → 위반 ${findFieldConvergence(twoInstalls).length}건`);
+  assert.deepEqual(excluded, ["fields(제외 1쌍)", "successHeadline(제외 1쌍)"]);
+  assert.deepEqual(findFieldConvergence(twoInstalls), [], "부재 대 부재를 '동일'로 보면 오탐이다");
+
+  // 제외 규칙을 끄면 같은 샘플이 **실제로 오탐으로 실패한다** — 규칙이 일하고 있다는 증거.
+  const withoutRule = findFieldConvergence(twoInstalls, { excludeBothAbsent: false });
+  t.diagnostic(`제외 규칙 해제 시: 오탐 ${withoutRule.length}건 (${withoutRule.join(" / ")})`);
+  assert.deepEqual(withoutRule, [
+    "fields: install-a ↔ install-b",
+    "successHeadline: install-a ↔ install-b",
+  ]);
+
+  // 한쪽만 부재인 쌍은 **서로 다른 것으로 본다**(현행 카탈로그가 정확히 이 형태다 —
+  // `subsidy-install`만 app-install이라 **오늘 실제로 제외되는 쌍은 0**이다).
+  const realStats = fieldDivergenceStats(Object.values(MOCK_SCREENS).flat());
+  t.diagnostic(
+    `현행 카탈로그 제외쌍: ${realStats.map((s) => `${s.field}=${s.excluded}`).join(" · ")}`,
+  );
+  assert.deepEqual(
+    realStats.map((s) => s.excluded),
+    [0, 0, 0, 0],
+    "app-install이 2종 이상 되면 이 값이 늘고, 그때 위 제외 규칙이 실제로 일한다",
+  );
+  const oneSideAbsent = fieldDivergenceStats([
+    twoInstalls[0],
+    fixtureItem({ landingId: "form-a" }),
+  ]).find((s) => s.field === "fields");
+  assert.deepEqual([oneSideAbsent?.compared, oneSideAbsent?.converged], [1, []]);
+});
+
 // ── AC-078 (c) — 미끼 → 랜딩 대조표를 **기계로 묶는다** ────────────────────────
 //
 // AC-078 (c)는 대조표가 *"구현 산출물에 포함된다(대조표가 없으면 미충족)"* 이라고 규정했다.

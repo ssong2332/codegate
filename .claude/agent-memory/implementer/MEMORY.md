@@ -38,3 +38,4 @@
 - [T109 요구 몰림 분리](project_codegate_t109_demand_splitting.md) — 기존 게이트가 신고 문자열을 정상으로 못박았을 때 축을 더 세우는 법, 조립 결과를 스캔 대상으로, 라벨 자체가 지시인 경우.
 - [T104 상황별 랜딩 4종](project_codegate_t104_situational_landings.md) — 착수 순서 강제 시 어떤 게이트를 뒤로 미룰지 판단 기준, channel 옵셔널 함정, 격리 에뮬레이터 REST 레시피(동의 문서·functions/.env).
 - [T101 lib 스테일 산출물 차단](project_codegate_t101_clean_lib.md) — clean 기준선 462, A/B probe 함정 4건(main 체크아웃 충돌·리다이렉트 가드·probe 커밋 필수·타이밍 노이즈).
+- [T107 필드 단위 수렴 검출](project_codegate_t107_field_divergence.md) — 새 워크트리 npm install이 functions/package.json을 몰래 고침, t.diagnostic 증거 출력, 공회전 규칙을 단언으로 못박기.
