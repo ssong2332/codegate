@@ -23,17 +23,46 @@
 
 export type MockScreenKind = "credential-form" | "app-install";
 
+/**
+ * 이 랜딩이 어느 표면에서 열리는가 — **게이트의 단일 판정 키**(T104, Architecture.md §19.2 (3),
+ * ADR-0012).
+ *
+ * ⚠️ **왜 필수 필드인가**: G53·G55·`channel==="messenger"` 세 단언은 원래 *"카탈로그의 모든
+ * scenarioId"* 를 훑었다. 그 조건은 세 단언의 **원문 사유**(전부 `app-install` 또는
+ * `[[LINK:]]` 렌더 경로를 가리킨다 — §19.1)를 가장 거칠게 근사한 것이라, 통화 중 문자로 열리는
+ * `credential-form` 랜딩을 카탈로그에 넣는 순간 **사유와 무관하게** 깨진다. 게이트를 지우는 대신
+ * 판정 키를 여기로 옮긴다. 옵셔널로 두면 새 항목이 조용히 빠지므로 **필수**다 — 표면을 선언하지
+ * 않은 항목은 타입이 깨져 넘어갈 수 없다.
+ */
+export type MockScreenEntrySurface = "messenger-link" | "in-call-sms";
+
 export type MockScreenItem = {
   /** 카탈로그 안에서 유일한 id. `MessengerAttachment.fakeLandingId`와 같은 값이며
    * Firestore `sessions/{sid}/mockScreens/{landingId}`의 문서 id가 된다(멱등). */
   landingId: string;
   kind: MockScreenKind;
-  /** 목업 제목 — **실존 앱명 금지**(AC-072). */
+  /** 이 항목이 열리는 진입 표면(§19.2 (3)) — 안전 게이트가 이 값으로 스코프를 판정한다. */
+  entrySurface: MockScreenEntrySurface;
+  /** 목업 제목 — **실존 앱명·실존 기관명 금지**(AC-072/AC-075 `mockSurface` 프로파일). */
   headline: string;
-  /** 가짜 설치 안내 문구. */
+  /** 화면 안내 문구. */
   bodyLines: string[];
-  /** 가짜 "권한 허용" 버튼 라벨(`app-install` 전용) — 실제 권한 요청이 아니다. */
-  consentLabel: string;
+  /** 화면 하단 발신 주체 표기(현행 하드코딩 `"ⓒ 본인확인센터"`·`"ⓒ 업무처리 확인센터"`를
+   * 카탈로그로 올린 것). **실존 기관명 금지** — `mockSurface` 프로파일을 탄다. */
+  issuerLabel: string;
+  /** 입력 필드 라벨(`credential-form` 전용, **최대 3개** — UX-023 v1.13 표).
+   * ⛔ `app-install`이면 반드시 `undefined`다(AC-072 *"입력 필드 0"*). G-C가 단언한다.
+   * ⛔ 라벨 안에 숫자열을 넣지 않는다(`LONG_DIGIT_SEQUENCE`). */
+  fields?: string[];
+  /** 가짜 제출 CTA 라벨(`credential-form` 전용). */
+  submitLabel?: string;
+  /** 가짜 성공 문구(`credential-form` 전용). ⚠️ 그 아래 **안전 고지**는 상황과 무관하게 동일하며
+   * 카탈로그 필드가 아니다(§19.3 (3) · P-28 ⑤ — G-D가 단언한다). */
+  successHeadline?: string;
+  /** 가짜 "권한 허용" 버튼 라벨(`app-install` 전용) — 실제 권한 요청이 아니다.
+   * `InCallSmsItem.otpCode`/`linkDisplayText`와 **동형인 kind 스코프 옵셔널 필드**이며,
+   * 부재를 판별자로 오버로드하지 않는다(§14.9.1 — kind가 유일한 판별자이고 G-C가 정합을 단언한다). */
+  consentLabel?: string;
   /** 승격 시 `DeceivedMoment.tactic`(§15.9.5 e-1). 기존 `resolveTacticCategory`가
    * `link_or_install`로 정규화한다 — **신규 카테고리 0건**. */
   momentTactic: string;
@@ -65,12 +94,14 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
   {
     landingId: "subsidy-install",
     kind: "app-install",
+    entrySurface: "messenger-link",
     headline: "업무처리 확인 앱을 설치해야 진행됩니다",
     bodyLines: [
       "지원금 신청은 본인확인 절차가 끝난 뒤에 접수됩니다.",
       "아래에서 확인용 앱 설치를 진행해 주세요.",
       "설치 후 접근 권한을 허용하면 담당자가 신청을 대신 처리해 드립니다.",
     ],
+    issuerLabel: "ⓒ 업무처리 확인센터",
     consentLabel: "권한 허용하고 계속하기",
     momentTactic: "앱 설치·원격 허용 유도",
     correctAction:
@@ -85,9 +116,14 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
  * attachment 문서가 도입 전과 한 바이트도 같고, `sendMessage`의 추가 read도 일어나지 않는다
  * (`hasInCallSms(...)` 게이팅과 동형 — 나머지 12개 시나리오 회귀 0).
  *
- * ⚠️ **R6(§15.9.1)**: 통화 중 문자(`InCallSmsDoc.fakeLandingId`)로 `app-install`이 열리는 경로는
- * 이번 범위 밖이다 — `IN_CALL_SMS`에 이 카탈로그의 landingId를 참조하는 항목을 두지 않는다
- * (테스트로 고정). UF-012의 설치는 **메신저 단계**에서 일어난다.
+ * ⚠️ **R6(§15.9.1) — 무변경**: 통화 중 문자(`InCallSmsDoc.fakeLandingId`)로 **`app-install`이**
+ * 열리는 경로는 여전히 범위 밖이다. T104 이후 이 불변식은 **양쪽에서** 검사된다 —
+ * `IN_CALL_SMS` 쪽(R6 단언)과 카탈로그 쪽(G-A: `entrySurface === "in-call-sms"` ⇒
+ * `kind !== "app-install"`). UF-012의 설치는 **메신저 단계**에서 일어난다.
+ *
+ * ⚠️ **T104**: 통화 경로 `credential-form` 랜딩 3종이 여기 등재된다. 이들은 `turnInstruction`을
+ * 만들지 않고(`listAppInstallMockScreens` 게이팅), `consentedAt`도 가질 수 없어(콜러블이 거부)
+ * G55가 막던 지시 경합(M1)과 R6이 막던 앵커 얽힘(M2) 어느 쪽도 발생시키지 않는다(§19.1 (2)).
  */
 export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   "messenger-subsidy-smishing-sms": MESSENGER_SUBSIDY_SMISHING_SMS,
