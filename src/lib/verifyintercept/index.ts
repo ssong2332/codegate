@@ -1,7 +1,6 @@
 export {
   enqueueInstruction,
   shouldOfferVerify,
-  spellOutDisplayNumber,
   takeNextInstruction,
 } from "./verifyIntercept";
 export type {

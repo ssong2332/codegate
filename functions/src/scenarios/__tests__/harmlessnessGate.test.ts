@@ -60,9 +60,11 @@ const SCENARIO_META_FIELDS: Record<keyof ScenarioMeta, FieldPolicy> = {
 };
 
 const VERIFY_INTERCEPT_FIELDS: Record<keyof VerifyInterceptItem, FieldPolicy> = {
-  // 모의 창구·모의 번호·재연결 라벨 — 실존 기관명까지 금지(T83이 세운 규칙을 그대로 계승).
+  // 모의 창구·재연결 라벨 — 실존 기관명까지 금지(T83이 세운 규칙을 그대로 계승).
+  // ⭐ T110(§22.3) — `displayNumber`는 카탈로그에서 제거됐다(호 전환 모델에는 안내 번호가 없다).
+  // 이 맵은 `Record<keyof VerifyInterceptItem, …>`이라 **필드를 지우지 않으면 컴파일이 깨진다** —
+  // 즉 "필드가 사라졌는데 정책 표만 남는" 드리프트가 타입으로 차단된다.
   deskLabel: { profile: "mockSurface" },
-  displayNumber: { profile: "mockSurface" },
   reconnectedCallerLabel: { profile: "mockSurface" },
   // 모델 지시는 사칭 캐릭터를 지목할 수 있어 기관명 금지에서 빠진다(프로파일 표 참고).
   announceInstruction: { profile: "modelInstruction" },
@@ -220,7 +222,11 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
     (n, m) => n + 5 + m.deepvoiceLines.length,
     0,
   );
-  const expectedVerify = Object.keys(VERIFY_INTERCEPT).length * 5;
+  // ⭐ T110(§22.3) — 항목당 표면이 **5 → 4**로 줄었다(`displayNumber` 제거: 호 전환 모델에는 안내
+  // 번호가 없다). ⚠️ 이 수치를 줄이는 것이 **검사 약화가 아니라는 근거**: 사라진 필드가 지키던
+  // 3종 단언은 `verifyIntercept.test.ts`의 **G86-a/b/c 전 필드 순회 게이트**로 승격됐고, 종전
+  // 하드코딩(3필드)이 놓치던 **신규 필드 누락 구멍**까지 함께 닫혔다.
+  const expectedVerify = Object.keys(VERIFY_INTERCEPT).length * 4;
   // T104 — kind별 옵셔널 필드가 생겨 항목마다 표면 수가 갈린다. 공통 4필드(headline·issuerLabel·
   // momentTactic·correctAction) + bodyLines + kind 전용 필드로 **다시 계산**한다.
   const expectedMock = Object.values(MOCK_SCREENS)
@@ -242,7 +248,7 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
 
   assert.equal(byDomain.get("scenarioPrompt"), expectedPrompt, "persona+guardrail+수법+의심키워드");
   assert.equal(byDomain.get("publicMeta"), expectedMeta, "메타 5필드 + 딥보이스 대사");
-  assert.equal(byDomain.get("verifyIntercept"), expectedVerify, "T83/T95 확인 무력화 항목당 5필드");
+  assert.equal(byDomain.get("verifyIntercept"), expectedVerify, "T83/T95 확인 무력화 항목당 4필드(T110)");
   assert.equal(
     byDomain.get("mockScreens"),
     expectedMock,

@@ -297,6 +297,13 @@ export const FORBIDDEN_RULES: readonly ForbiddenRule[] = [
  * ⚠️ `correctiveGuidance`에서 `operationalPayload`를 빼는 이유: 대처 문구는 신고 전화번호를
  * 나열하며 `LONG_DIGIT_SEQUENCE`와 무관하지만, 신고처 번호가 늘어 8자리 형태가 되는 경우를
  * 미리 허용한다. 대신 스토어·앱명·원격절차는 그대로 금지다(대처 문구에 들어갈 이유가 없다).
+ *
+ * ⚠️ **`modelInstruction`의 `institution` ✗ 는 전역 허용이 아니다(T110)** — 확인 무력화 카탈로그의
+ * `announceInstruction`·`reconnectInstruction`은 **`verifyIntercept.test.ts`의 G86-b가 실존 기관명까지
+ * 별도로 금지**한다(§22.3 — `displayNumber` 제거로 사라진 3필드 하드코딩 검사를 **전 문자열 필드
+ * 순회**로 승격한 게이트다). 이 표만 보고 *"모델 지시에는 기관명을 써도 된다"* 고 판단하지 말 것 —
+ * 그 카탈로그의 창구는 전부 모의(`○○…`)라 지시문에도 실존 기관명이 등장할 이유가 없다.
+ * 이 칸의 ✗ 가 여전히 유효한 범위는 **시나리오 프롬프트 계열의 지시문**(사칭 대상을 지목해야 하는 쪽)이다.
  */
 export const SCAN_PROFILES = {
   scenarioContent: [

@@ -58,8 +58,12 @@ export type ReplayTimelineSmsItem = {
 export type ReplayVerifySource = {
   offerId: string;
   deskLabel: string;
-  /** **표시 텍스트 전용**. 링크·복사·재발신 컨트롤로 렌더하지 않는다(AC-019). */
-  displayNumber: string;
+  /**
+   * **표시 텍스트 전용**. 링크·복사·재발신 컨트롤로 렌더하지 않는다(AC-019).
+   * ⭐ T110(§22.3) — 옵셔널. 호 전환 모델의 **신규 리포트에는 없고** 과거 리포트에만 있다.
+   * 화면은 **값이 있을 때만** 그린다(무백필 — 그때 실제로 본 것을 정직하게 보여준다).
+   */
+  displayNumber?: string;
   anchorTurnIndex: number;
   anchorResolved: boolean;
   timeLabel?: string;

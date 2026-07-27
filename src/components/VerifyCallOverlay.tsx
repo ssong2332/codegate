@@ -1,12 +1,19 @@
 "use client";
 
-// UX-031 모의 확인 전화 — "안내받은 번호로 걸어보기" 오버레이 (T83, UF-011, D-47/D-48, P-24,
-// AC-071/AC-019/AC-006/AC-022/AC-033).
+// UX-031 확인 부서 연결 요청 — **호 전환(넘겨주기)** 오버레이 (T83 → T110/§22.1 층 C, UF-011,
+// D-47/D-48, P-24, AC-071/AC-019/AC-006/AC-022/AC-033).
+//
+// ⭐ **T110 — 이 화면은 "안내받은 번호로 걸어보기"가 아니다.** 통화→통화는 상담센터처럼 **넘겨주는**
+// 형태이며(ADR-0013), 참가자가 번호를 안내받아 새로 거는 형태는 폐기됐다. 그래서 **번호 카드가
+// 통째로 사라졌고**(C4) 버튼의 은유도 발신("걸기")에서 요청("연결해 달라고 하기")으로 바뀌었다(C5).
+// ⚠️ *"같은 통화가 이어집니다"* 라고 쓰지 않는다(C3 하드) — 전환 모델에서 그 문장은 **화자 잔류**를
+// 암시해 이번 결함(화자 겹침)을 문구로 되살린다. 유지되는 것은 **세션·소켓·타이머**이고 유지되지
+// 않는 것은 **화자**다.
 //
 // ⚠️ **이 화면은 전화 앱이 아니다(AC-019 하드).** 다이얼패드·연락처·통화기록·자유 번호 입력·
 // `tel:` 링크·발신 인텐트·외부 네비게이션이 **존재하지 않는다.** 이 파일은 그런 API를 import하지도
-// 않는다 — 번호는 **표시 텍스트**이고 탭 대상은 번호가 아니라 버튼이다(P-24, P-17과 동형 구조).
-// 참가자가 할 수 있는 것은 **걸어보기 / 그만두고 통화로 돌아가기 / 훈련 종료** 세 가지뿐이다.
+// 않는다 — 화면에 **번호 자체가 없고** 탭 대상은 버튼뿐이다(P-24는 자동 충족).
+// 참가자가 할 수 있는 것은 **연결 요청 / 그만두고 통화로 돌아가기 / 훈련 종료** 세 가지뿐이다.
 //
 // ⚠️ **유효 대처를 여기서 시뮬레이션하지 않는다(D-48).** "내가 아는 번호로 걸기"·"다른 기기로 걸기"
 // 선택지를 두지 않는다 — 두면 (ㄱ) 그것마저 같은 곳으로 연결시켜 무력감을 남기거나(AC-071 정면
@@ -20,18 +27,18 @@
 import { useEffect, useRef } from "react";
 import EndTrainingButton from "./EndTrainingButton";
 import SyntheticLabel from "./SyntheticLabel";
-import { spellOutDisplayNumber, type VerifyInterceptView } from "@/lib/verifyintercept";
+import { type VerifyInterceptView } from "@/lib/verifyintercept";
 
 type VerifyCallOverlayProps = {
   offer: VerifyInterceptView;
   /** 통화가 살아 있다는 증거(P-20) — 발신자 라벨과 경과 시간을 오버레이 위에 계속 보여준다. */
   callerLabel: string;
   elapsedLabel: string;
-  /** "연결 중…" 진행 상태(UX-031 States Dialing). */
+  /** "연결 중…" 진행 상태(UX-031 States Dialing — 호 전환에서도 이 표현이 정확하다, C7). */
   dialing: boolean;
-  /** 재연결 처리 실패 시 1줄 고지(P-4 — 침묵 실패 금지). */
+  /** 전환 처리 실패 시 1줄 고지(P-4 — 침묵 실패 금지). */
   errorMessage: string | null;
-  /** "확인 전화 걸기" — 실제 발신이 아니라 **인앱 재현 요청**이다(AC-019). */
+  /** "연결해 달라고 하기" — 발신이 아니라 **인앱 호 전환 요청**이다(AC-019/T110 C5). */
   onPlaceCall: () => void;
   onClose: () => void;
   onEndTraining: () => void;
@@ -92,7 +99,7 @@ export default function VerifyCallOverlay({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="모의 확인 전화 — 훈련용 모의 화면"
+      aria-label="확인 부서 연결 요청 — 훈련용 모의 화면"
       className="fixed inset-0 z-40 flex items-stretch justify-center bg-black/55 sm:items-center sm:p-6"
     >
       {/* 바깥 탭으로 닫기(UX-031 Exit — 재연결 없이 원래 통화가 계속된다). */}
@@ -133,24 +140,22 @@ export default function VerifyCallOverlay({
             tabIndex={-1}
             className="mb-1 text-xl font-bold text-[#22303A] outline-none"
           >
-            안내받은 번호로 확인해 보기
+            확인 부서로 연결 요청
           </h2>
           <p className="mb-4 text-sm leading-relaxed text-[#6B655C]">
-            통화는 그대로 연결돼 있습니다. 확인이 끝나면 같은 통화가 이어집니다.
+            통화는 끊기지 않습니다. 담당자가 바뀌어 이어집니다.
           </p>
 
-          {/* 안내받은 창구·번호 — **정적 텍스트**다(복사·직접 입력·연락처 저장·다이얼패드 없음). */}
+          {/* ⭐ T110 §22.1 C4 — 연락 수단 표기 카드는 통째로 제거됐다. 남는 것은 창구명 1줄 +
+              모의 화면 고지다. 카탈로그에도 값이 없으므로 되돌리려면 스키마부터 되살려야 한다
+              (= 되돌릴 수 없게 만드는 것이 이 제거의 목적이다, G85).
+              ⚠️ 이 JSX 주석은 `codeOnly()`가 걷어내지 못하므로 G85-UI 스캔 대상에 남는다 —
+              그래서 금지 단어를 서술에 쓰지 않는다(파일 서두 `//` 주석이 전문을 담는다). */}
           <div className="rounded-[14px] border-[1.5px] border-[#E2DDD3] bg-white p-5">
-            <p className="text-base text-[#6B655C]">상대가 알려준 확인 창구</p>
+            <p className="text-base text-[#6B655C]">상대가 연결해 주겠다는 확인 창구</p>
             <p className="mt-1 text-xl font-bold text-[#22303A]">{offer.deskLabel}</p>
-            <p
-              className="mt-2 font-mono text-2xl font-bold tracking-[0.12em] text-[#22303A]"
-              aria-label={`모의 번호 ${spellOutDisplayNumber(offer.displayNumber)}`}
-            >
-              {offer.displayNumber}
-            </p>
             <p className="mt-2 text-sm text-[#6B655C]">
-              훈련용 모의 번호입니다. 이 화면에서만 재현되며 실제로 전화가 걸리지 않습니다.
+              훈련용 모의 화면입니다. 이 화면에서만 재현되며 실제로 전화가 걸리지 않습니다.
             </p>
           </div>
 
@@ -178,9 +183,9 @@ export default function VerifyCallOverlay({
         </div>
 
         <div className="flex shrink-0 flex-col gap-2 border-t border-[#E2DDD3] bg-white px-4 py-3">
-          {/* ① "확인 전화 걸기" — 탭 대상은 **번호가 아니라 이 버튼**이다(P-24). "훈련 종료"와는
-              색이 아니라 문구·아이콘·위치로 구분한다(D-47 — 두 컨트롤 혼동은 AC-006 도달성 문제로
-              번진다). "훈련 종료"는 위쪽 고정 영역에 원래 자리·문구 그대로 남아 있다. */}
+          {/* ① "연결해 달라고 하기"(T110 C5 — 발신 은유 금지). "훈련 종료"와는 색이 아니라 문구·
+              아이콘·위치로 구분한다(D-47 — 두 컨트롤 혼동은 AC-006 도달성 문제로 번진다).
+              "훈련 종료"는 위쪽 고정 영역에 원래 자리·문구 그대로 남아 있다. */}
           <button
             type="button"
             onClick={onPlaceCall}
@@ -188,7 +193,7 @@ export default function VerifyCallOverlay({
             className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-[14px] bg-[#0E6B62] text-lg font-bold text-white disabled:opacity-60"
           >
             <span aria-hidden="true">✆</span>
-            {errorMessage ? "다시 걸어보기" : "확인 전화 걸기"}
+            {errorMessage ? "다시 요청하기" : "연결해 달라고 하기"}
           </button>
           {/* ② 그만두고 통화로 돌아가기 — 재연결 없이 원래 통화가 계속된다(UF-011 Alternative (b)). */}
           <button

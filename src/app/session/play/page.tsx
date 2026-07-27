@@ -327,7 +327,8 @@ export default function SessionCallPage() {
       setVerifyOffer({
         offerId: docSnap.id,
         deskLabel: data.deskLabel as string,
-        displayNumber: data.displayNumber as string,
+        // T110(§22.3/C4) — 호 전환 모델에는 안내 번호가 없다. 신규 문서에 필드 자체가 없고
+        // 화면에도 그릴 자리가 없으므로 **읽지 않는다**(과거 문서에 남아 있어도 무시한다).
         placedAtMs: placedAt?.toMillis?.(),
         reconnectedCallerLabel: data.reconnectedCallerLabel as string | undefined,
       });
@@ -634,7 +635,8 @@ export default function SessionCallPage() {
   };
 
   /**
-   * "확인 전화 걸기"(UX-031 Primary Action ①) — ⚠️ **실제 발신이 아니다**(AC-019). 하는 일은
+   * "연결해 달라고 하기"(UX-031 Primary Action ①, T110 C5) — ⚠️ **실제 발신이 아니다**(AC-019).
+   * 참가자가 요청하는 것은 **호 전환(넘겨주기)** 이지 신규 발신이 아니다. 하는 일은
    * 콜러블 1회 호출(서버는 Firestore write 1건 + 지시 문자열 반환)과 화면 연출뿐이며, 이 함수는
    * `tel:`·다이얼 인텐트·외부 네비게이션을 **어디에서도** 쓰지 않는다.
    *
@@ -665,7 +667,7 @@ export default function SessionCallPage() {
       }
       setVerifyOverlayOpen(false);
     } catch {
-      setVerifyError("확인 전화를 연결하지 못했습니다. 통화는 그대로 이어집니다.");
+      setVerifyError("확인 부서로 연결하지 못했습니다. 통화는 그대로 이어집니다.");
     } finally {
       setVerifyDialing(false);
     }
@@ -1286,7 +1288,7 @@ export default function SessionCallPage() {
                 className="flex min-h-[56px] w-full flex-col items-center justify-center rounded-[14px] border-[1.5px] border-[#C9C2B6] bg-white/95 px-4 py-2.5 text-center"
               >
                 <span className="text-base font-bold text-[#22303A]">
-                  안내받은 번호로 확인 전화 걸기
+                  확인 부서로 연결해 달라고 하기
                 </span>
                 <span className="text-xs text-[#6B655C]">훈련은 계속됩니다</span>
               </button>

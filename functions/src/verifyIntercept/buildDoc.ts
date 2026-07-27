@@ -5,8 +5,10 @@ import type { VerifyInterceptDoc } from "../shared/types";
 
 /**
  * ⚠️ **여기서 나가는 필드가 곧 클라가 볼 수 있는 전부다**(AC-019/AC-024 구조적 금지의 마지막 관문).
- * `url`·`tel`·발신 대상 필드는 소스 타입(`VerifyInterceptItem`)에도 없고 여기서도 만들지 않는다 —
- * 번호는 `displayNumber`(표시 텍스트)로만 존재한다. `announceInstruction`/`reconnectInstruction`
+ * `url`·`tel`·발신 대상 필드는 소스 타입(`VerifyInterceptItem`)에도 없고 여기서도 만들지 않는다.
+ * ⭐ **T110(§22.3)**: 호 전환 모델에서 참가자는 번호를 받지 않으므로 `displayNumber`는 카탈로그에서
+ * 사라졌고 **신규 문서에는 기록되지 않는다**(문서 타입에서는 옵셔널로 남아 과거 문서를 무백필로
+ * 읽는다 — 백필 0건·마이그레이션 0건). `announceInstruction`/`reconnectInstruction`
  * (모델용 지시)은 **문서에 쓰지 않는다** — 그건 프롬프트 재료이지 사용자가 볼 내용이 아니다
  * (`buildInCallSmsDoc`이 `announceInstruction`을 문서에 쓰지 않는 것과 동일한 규칙).
  */
@@ -18,7 +20,6 @@ export function buildVerifyInterceptDoc(
   return {
     offerId: item.offerId,
     deskLabel: item.deskLabel,
-    displayNumber: item.displayNumber,
     offeredAt,
     offerAnchorScammerTurn,
   };

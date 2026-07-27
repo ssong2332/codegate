@@ -260,5 +260,44 @@ test("[ADR-0009] 스냅샷에 모델 지시·원시 타임스탬프·발신 필�
   ]) {
     assert.equal(entry[banned], undefined, `스냅샷 금지 필드: ${banned}`);
   }
-  assert.equal(entry.displayNumber, "1500-0000", "번호는 표시용으로만 실린다");
+  // ⭐ T110(§22.3 하위호환) — 이 fixture는 **과거 문서**를 흉내 낸다(`displayNumber` 보유).
+  // 값이 있으면 그대로 통과시켜 *"그때 실제로 본 번호"* 를 정직하게 보여준다. **백필 0건.**
+  assert.equal(entry.displayNumber, "1500-0000", "과거 문서의 번호는 표시용으로 그대로 실린다");
+});
+
+test("[T110/§22.3] 신규 문서(번호 없음)에서는 스냅샷에 displayNumber 키 자체가 없다", () => {
+  const { displayNumber: _drop, ...withoutNumber } = offer({ placedAtMs: SESSION_CREATED_MS + 40_000 });
+  void _drop;
+  const result = applyVerifyIntercept([withoutNumber], [moment(3)], messages, SESSION_CREATED_MS);
+  const entry = result.verifyTimeline[0] as unknown as Record<string, unknown>;
+  assert.ok(!("displayNumber" in entry), "호 전환 모델의 신규 리포트에는 번호가 실리지 않는다");
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐ T110 / §22.7 G88 — **리포트 서술이 세션에서 실제로 일어난 일과 같아야 한다**
+// 세션은 "상대가 확인 부서로 통화를 넘겼다"인데 리포트가 "안내받은 번호로 걸었다"고 말하면
+// **참가자가 겪지 않은 일을 리포트가 서술**하게 된다(기록 정직성).
+// ══════════════════════════════════════════════════════════════════════════════
+test("[T110/G88] 리포트 `what` 3종이 호 전환으로 서술된다 — 신규 발신 전제 0건", () => {
+  const whats = [
+    ...deriveVerifyEvents(offer(), "offered_not_placed"),
+    ...deriveVerifyEvents(offer({ placedAtMs: 1 }), "placed_and_complied"),
+    ...deriveVerifyEvents(offer({ placedAtMs: 1 }), "placed_not_complied"),
+  ].map((event) => event.what);
+
+  for (const what of whats) {
+    for (const premise of [/안내받은\s*번호/, /확인\s*전화를\s*걸/, /걸어\s*보라고/]) {
+      assert.ok(!premise.test(what), `폐기된 dial-out 서술이 남아 있다(${premise}): ${what}`);
+    }
+  }
+  assert.ok(whats.some((what) => /통화를\s*넘겼습니다/.test(what)), "오퍼 서술은 호 전환이다");
+  assert.ok(
+    whats.filter((what) => /넘겨받은\s*담당자/.test(what)).length === 2,
+    "전환 이후 서술 2종(응함/응하지 않음)이 모두 '넘겨받은 담당자'로 서술돼야 한다",
+  );
+});
+
+test("[T110/G88 역검증] 폐기된 dial-out 서술을 되살린 샘플은 실제로 실패한다", () => {
+  const tainted = "안내받은 번호로 확인 전화를 걸었고, 같은 요구가 이어졌습니다.";
+  assert.ok([/안내받은\s*번호/, /확인\s*전화를\s*걸/].some((premise) => premise.test(tainted)));
 });
