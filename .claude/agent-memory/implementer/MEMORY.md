@@ -41,3 +41,4 @@
 - [T101 lib 스테일 산출물 차단](project_codegate_t101_clean_lib.md) — clean 기준선 462, A/B probe 함정 4건(main 체크아웃 충돌·리다이렉트 가드·probe 커밋 필수·타이밍 노이즈).
 - [T107 필드 단위 수렴 검출](project_codegate_t107_field_divergence.md) — 새 워크트리 npm install이 functions/package.json을 몰래 고침, t.diagnostic 증거 출력, 공회전 규칙을 단언으로 못박기.
 - [T98 회귀 — thinkingConfig 400 → 100% Mock 강등](project_codegate_t98_thinking_regression.md) — 공유 에뮬레이터는 워크트리 lib을 못 집는다, 죽은 안전장치 삭제 기준, `-latest` 별칭 금지, 1회 호출로 증거 4종.
+- [T103 전면 문자함 반전](project_codegate_t103_sms_inversion.md) — 신규 파일 0건이 안전 게이트 제약인 이유, reduced-motion에서 퇴장이 멈추는 버그, 자기 주석이 게이트를 때린 재발, 워크트리 착수 비용 3종.
