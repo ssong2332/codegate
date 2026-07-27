@@ -3,7 +3,8 @@
   "description": "Cloud Functions — 안 당해본 사기는 못 막는다 (AI 금융사기 백신)",
   "private": true,
   "scripts": {
-    "build": "tsc",
+    "clean": "node scripts/clean-lib.mjs",
+    "build": "node scripts/clean-lib.mjs && tsc",
     "build:watch": "tsc --watch",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
@@ -11,7 +12,7 @@
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
     "lint": "eslint src",
-    "test": "tsc && node --test lib/**/__tests__/*.test.js",
+    "test": "node scripts/clean-lib.mjs && tsc && node --test lib/**/__tests__/*.test.js",
     "seed:scenarios": "node lib/scenarios/seed.js",
     "report:axis-coverage": "node lib/scenarios/axisCoverageReport.js"
   },
