@@ -73,6 +73,19 @@ export type GeminiVoiceSessionProps = {
    * 선례: 같은 파일의 `OPENING_TRIGGER_TURN`(연결 직후 발화 시작 신호, 역시 미기록).
    */
   instructionTurn?: { text: string; seq: number } | null;
+  /**
+   * ⭐ **T118 / 층 A5-α(§25.3)** — 호 전환 이후 사기범 턴 경계마다 다시 넣는 **전환 상태 단언 1줄**.
+   *
+   * `instructionTurn`과 **다른 슬롯**인 이유(설계 확정, 임의로 합치지 말 것):
+   *   - **턴 슬롯을 소비하지 않는다.** `turnComplete: false`로 보내 모델 응답을 유발하지 않으므로
+   *     문자 announce·확인 지시의 큐(§16.6 G31)와 경합하지 않는다. 같은 슬롯에 합치면 이 값이 매
+   *     사용자 턴마다 큐를 차지해 다른 지시를 밀어낸다.
+   *   - **P-1 프로브 실측이 근거다**(§25.3 (4)): 전환 후 `turnComplete:false`로 1회 보내고 30초
+   *     무발화를 유지했을 때 소켓 오류 0건·close 0건·신규 사기범 발화 0건이었다 ⇒ A5-α 채택.
+   * ⚠️ `instructionTurn`과 마찬가지로 **전사에 기록하지 않는다**(**G105**) — 기록하면 리포트가
+   * "사용자가 이런 말을 했다"고 오판해 속았는지 판정이 오염된다.
+   */
+  personaStateTurn?: { text: string; seq: number } | null;
 };
 
 // 마이크 캡처 버퍼 크기 — 작을수록 지연이 낮지만 콜백이 잦다. 사용자 신고(2026-07-25, "내가 말하고
@@ -124,6 +137,7 @@ export default function GeminiVoiceSession({
   textMessage,
   onScammerTurnComplete,
   instructionTurn,
+  personaStateTurn,
 }: GeminiVoiceSessionProps) {
   const handlersRef = useRef({
     onActive,
@@ -576,6 +590,26 @@ export default function GeminiVoiceSession({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instructionTurn?.seq]);
+
+  // T118 / A5-α — 전환 상태 단언 재주입(§25.3). **위 instructionTurn effect보다 뒤에 선언한다**:
+  // 같은 렌더에서 둘이 함께 바뀌면 지시가 먼저 나가야 한다(§25.4 A5-α 결정론 계약). α는 응답을
+  // 유발하지 않아 실질 순서는 무관하지만, 순서가 정해져 있지 않으면 재현 불가능한 관찰이 생긴다.
+  //
+  // ⚠️ `turnComplete: false`가 핵심이다 — 이 턴은 컨텍스트에 상태를 얹을 뿐 **모델 차례를 넘기지
+  // 않는다.** true로 바꾸면 주입이 곧 발화를 유발해 사기범이 한 턴에 두 번 말한다(§25.3 (4)).
+  // ⚠️ 전사에 기록하지 않는다(G105) — 사용자 발화가 아니라 오케스트레이션 신호다.
+  useEffect(() => {
+    if (!personaStateTurn || !personaStateTurn.text.trim()) return;
+    const session = liveSessionRef.current;
+    if (!session) return;
+    try {
+      session.sendClientContent({ turns: personaStateTurn.text, turnComplete: false });
+      log("personaStateTurn", personaStateTurn.seq, personaStateTurn.text.slice(0, 12));
+    } catch {
+      // 무시 — 통화는 계속된다(P-4 비차단). 다음 사용자 턴 경계에서 다시 due가 된다.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [personaStateTurn?.seq]);
 
   return null;
 }

@@ -959,3 +959,103 @@ test("[T110/§22.6 7단계] 위 게이트의 순회 대상은 카탈로그 **6�
   // 순회 대상이 곧 `Object.values(VERIFY_INTERCEPT)`라는 사실을 같은 자리에서 고정한다.
   assert.deepEqual(allItems, Object.values(VERIFY_INTERCEPT));
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐⭐ T118 / §25.9 — **층 A5(전환 상태 재확인 1줄)의 카탈로그 게이트**
+//
+// A5가 메우는 것은 §22.8 (3)이 자기 고지한 **경로 비대칭**이다: 폴백은 매 턴 상시 블록이 재삽입돼
+// 조건절(*"전환 지시가 온 턴부터"*)이 매 턴 판정 가능한데, 실시간은 시스템 프롬프트가 setup 1회
+// 고정이라 그 조건이 **어느 턴에도 참이 되지 않는다**(§25.2 (2) ㉡). 그래서 A5가 나르는 것은
+// **상태 단언**이고, ⛔ **규칙 문장이 아니다**(G100 — 규칙의 자리는 상시 블록 하나뿐이다).
+//
+// ⚠️ 아래 게이트는 §22.3 G86-a/b/c(전 필드 순회)와 **중복이 아니다**: 그쪽은 번호·실존 기관명·
+// url/tel을 보고, 이쪽은 **"이 필드가 규칙을 복창하지 않는가"** 를 본다.
+// ══════════════════════════════════════════════════════════════════════════════
+
+test("[T118/§25.9 ②] `transferStateLine`이 6종 **전수**에 존재한다(부분 정정 차단)", () => {
+  const withLine = Object.values(VERIFY_INTERCEPT)
+    .filter((item) => typeof item.transferStateLine === "string" && item.transferStateLine.trim())
+    .map((item) => item.offerId)
+    .sort();
+  assert.deepEqual(withLine, [
+    "bank-security-verify-desk",
+    "card-verify-desk",
+    "courier-verify-desk",
+    "institution-verify-desk",
+    "loan-verify-desk",
+    "tax-verify-desk",
+  ]);
+});
+
+/** F2(규칙 문장 0건) 판정식 — 본 검사와 역검증이 **같은 식**을 쓴다. */
+const RULE_SENTENCE = /하지\s*않는다|말라|금지|하지\s*마|마라/;
+
+test("[T118/G100] `transferStateLine` ×6 — 규칙 문장 0건 · 번호 형태 0건 · 실존 기관명 0건 · 구조 설명 0건", () => {
+  for (const item of allItems) {
+    const line = item.transferStateLine;
+    assert.ok(
+      !RULE_SENTENCE.test(line),
+      `규칙이 두 벌이 되면 드리프트 원천이고, 긴 지시문은 모델이 대사로 낭독할 위험이 커진다: ${item.offerId}`,
+    );
+    for (const shape of PHONE_SHAPES) assert.ok(!shape.test(line), `${item.offerId}: 번호 형태`);
+    for (const forbidden of REAL_WORLD_FORBIDDEN) {
+      assert.ok(!line.includes(forbidden), `${item.offerId}: 실존 기관명 ${forbidden}`);
+    }
+    assert.ok(
+      !/같은 곳으로 이어|같은 조직|같은 사람|어디에 걸어도/.test(line),
+      `가로채기의 구조를 설명하면 OQ-38 확정(세션 중 상황만)이 깨진다: ${item.offerId}`,
+    );
+    // F1 — 메워야 할 공백은 **상태**다. 세 성분(앞 담당자 퇴장·현 화자·안내 종료)이 남아야 한다.
+    assert.ok(/빠졌다/.test(line), `${item.offerId}: 앞 담당자 퇴장 단언`);
+    assert.ok(line.includes(item.deskLabel), `${item.offerId}: 창구명은 카탈로그 값 그대로여야 한다`);
+    assert.ok(/이미 끝났다/.test(line), `${item.offerId}: 안내 종료 단언(오퍼 재발화의 ㉡ 공백)`);
+    // F5 — 괄호 지문 형태(낭독 대상이 아니라 지문임이 이 저장소에서 확인된 유일한 형태).
+    assert.ok(line.startsWith("(") && line.endsWith(")"), `${item.offerId}: 괄호 지문 형태`);
+  }
+});
+
+test("[T118/G100 역검증 ①] **규칙 문장**을 섞은 오염 샘플은 실제로 실패한다", () => {
+  // 오염은 테스트 코드 안에서만 만든다(실제 소스를 고쳤다 되돌리는 방식 금지 — 이 저장소 관례).
+  const tainted = "(앞 담당자는 이미 이 통화에서 빠졌다. 앞 담당자의 이름으로 다시 말하지 마라.)";
+  assert.ok(RULE_SENTENCE.test(tainted), "죽은 정규식이면 안 된다");
+  assert.ok(allItems.every((item) => !RULE_SENTENCE.test(item.transferStateLine)));
+});
+
+test("[T118/G100 역검증 ②] **번호**를 섞은 오염 샘플은 실제로 실패한다(①과 섞지 않는다)", () => {
+  const tainted = "(지금 통화 중인 사람은 1500-0000 확인창구의 담당자다.)";
+  assert.ok(PHONE_SHAPES.some((shape) => shape.test(tainted)));
+  assert.ok(!RULE_SENTENCE.test(tainted), "샘플에 두 오염을 섞으면 죽은 게이트를 못 알아챈다");
+});
+
+test("[T118/§25.9 ④-B 역검증] `transferStateLine`이 **빈 문자열**이면 전수 존재 게이트가 실패한다", () => {
+  const tainted = allItems.map((item, index) =>
+    index === 3 ? { ...item, transferStateLine: "" } : item,
+  );
+  const withLine = tainted.filter((item) => item.transferStateLine.trim()).map((i) => i.offerId);
+  assert.equal(withLine.length, 5, "한 종만 비어도 6종 전수 단언이 깨져야 한다");
+  assert.notDeepEqual(
+    withLine.sort(),
+    allItems.map((item) => item.offerId).sort(),
+  );
+});
+
+test("[T118/§25.9 ④] 모델에 도달하는 문자열이 **4종**이 됐고, 합쳐도 잔류 요구·복귀 허용이 0건이다", () => {
+  // §22.6 ④가 세운 합집합 검사를 3종 → 4종으로 넓힌다(§22.2 F행의 "정확히 3개"는 이후 4개로 읽는다).
+  // ⚠️ §22.6 표 자체는 고치지 않았다 — 이 테스트가 위에 얹는다.
+  for (const scenarioId of Object.keys(VERIFY_INTERCEPT)) {
+    const item = findVerifyInterceptItem(scenarioId);
+    assert.ok(item, scenarioId);
+    const { combined } = modelReachableStrings(scenarioId);
+    const combined4 = [combined, item.transferStateLine].join("\n");
+    assert.notEqual(combined4, combined, "4종째가 실제로 합쳐져야 한다");
+    assert.deepEqual(positiveResidencyDemands(combined4), [], scenarioId);
+    assert.deepEqual(returnAllowingMentions(combined4), [], scenarioId);
+  }
+});
+
+test("[T118/§25.9 ④ 역검증] 4종 합집합에 잔류 요구를 넣으면 실제로 잡힌다", () => {
+  const { combined } = modelReachableStrings("bank-security-verify-scam");
+  const taintedLine = "(앞 담당자는 끊지 않고 기다리겠습니다.)";
+  const fired = positiveResidencyDemands([combined, taintedLine].join("\n"));
+  assert.ok(fired.length > 0, "4종째가 오염되면 합집합 게이트가 잡아야 한다");
+});

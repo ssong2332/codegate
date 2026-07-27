@@ -198,14 +198,26 @@ export type DeliverVerifyOfferRequest = {
   /** `callMode==="realtime"`일 때만 필요(폴백은 서버가 직접 센다). */
   scammerTurns?: number;
 };
-export type DeliverVerifyOfferResponse = { offerId: string; announceInstruction: string };
+/**
+ * ⚠️ **T118/R-1** — `announceInstruction`은 **옵셔널**이다. 호 전환이 이미 끝난(`placedAt`) 오퍼에는
+ * 서버가 싣지 않는다(§25.5 (4)). 값이 없으면 클라는 **주입하지 않는다** — 전환 이후의 확인 권유는
+ * 참가자가 겪은 사실과 모순이기 때문이다.
+ */
+export type DeliverVerifyOfferResponse = { offerId: string; announceInstruction?: string };
 export type DeliverVerifyReconnectRequest = {
   sessionId: string;
   offerId: string;
   callMode: VerifyCallMode;
   scammerTurns?: number;
 };
-export type DeliverVerifyReconnectResponse = { reconnectInstruction: string };
+/**
+ * ⚠️ **T118/A5** — `transferStateLine`은 전환 이후 사기범 턴 경계마다 클라가 **다시 넣는** 전환 상태
+ * 단언 1줄이다(§25.3). 서버 카탈로그가 소유하며 클라는 값을 만들지 않는다(**G101**).
+ */
+export type DeliverVerifyReconnectResponse = {
+  reconnectInstruction: string;
+  transferStateLine: string;
+};
 
 // --- submitRealtimeTranscript (finding #1 · 2026-07-23) ---
 // 실시간 음성 통화 대화를 리포트가 분석할 수 있도록 종료 직전에 전사를 제출한다.

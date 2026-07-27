@@ -1,7 +1,8 @@
-// 카탈로그 항목 → Firestore 문서 변환 + 앵커 계산 (T83, §16.3.1/§16.3.2). 부수효과 없는 순수
-// 함수라 단위 테스트 대상이다(`inCallSms/buildDoc.ts`와 동형).
+// 카탈로그 항목 → Firestore 문서 변환 + 앵커 계산 + 오퍼 응답 조립 (T83 · T118, §16.3.1/§16.3.2/
+// §25.5 (4)). 부수효과 없는 순수 함수라 단위 테스트 대상이다(`inCallSms/buildDoc.ts`와 동형).
 import type { VerifyInterceptItem } from "../scenarios/verifyIntercept";
 import type { VerifyInterceptDoc } from "../shared/types";
+import type { DeliverVerifyOfferResponse } from "./types";
 
 /**
  * ⚠️ **여기서 나가는 필드가 곧 클라가 볼 수 있는 전부다**(AC-019/AC-024 구조적 금지의 마지막 관문).
@@ -23,6 +24,26 @@ export function buildVerifyInterceptDoc(
     offeredAt,
     offerAnchorScammerTurn,
   };
+}
+
+/**
+ * ⭐ **T118 / R-1(§25.5 (4))** — 오퍼 응답을 조립한다. **호 전환이 이미 끝난 오퍼(`placed`)에는
+ * `announceInstruction`을 싣지 않는다.**
+ *
+ * 왜 응답에서 빼는가(코드 실측이 근거이지 이번 재발화의 원인 확정이 근거가 아니다 — §25.5 (3) 1):
+ * 종전 구현은 오퍼 문서가 **이미 존재해도**(=`placedAt`이 찍혀 전환이 끝난 뒤여도) 지시를 **무조건**
+ * 돌려줬고, 클라의 실패 롤백(`requestedVerifyRef`)과 맞물리면 **전환 이후에 확인 권유가 다시 주입될
+ * 수 있는 경로**가 열려 있었다. 전환이 끝난 뒤의 확인 권유는 참가자가 겪은 사실과 모순이다.
+ *
+ * ⛔ 이 함수는 (나)(모델이 컨텍스트에 남은 지시를 스스로 반복)를 **대체하지 않는다** — 그쪽은 층 A5의
+ * 소관이고 둘은 독립이다(**G102**).
+ */
+export function buildVerifyOfferResponse(
+  item: VerifyInterceptItem,
+  input: { placed: boolean },
+): DeliverVerifyOfferResponse {
+  if (input.placed) return { offerId: item.offerId };
+  return { offerId: item.offerId, announceInstruction: item.announceInstruction };
 }
 
 // ── 앵커 값(§16.3.2 / §16.6 G28) ────────────────────────────────────────────────

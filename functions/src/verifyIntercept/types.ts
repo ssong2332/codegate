@@ -18,8 +18,14 @@ export type DeliverVerifyOfferRequest = {
 };
 export type DeliverVerifyOfferResponse = {
   offerId: string;
-  /** 클라가 **같은 Live 세션에 텍스트 턴으로 주입**해 캐릭터가 확인을 권하게 하는 1줄(실시간). */
-  announceInstruction: string;
+  /**
+   * 클라가 **같은 Live 세션에 텍스트 턴으로 주입**해 캐릭터가 확인을 권하게 하는 1줄(실시간).
+   *
+   * ⭐ **T118/R-1(§25.5 (4))** — `placedAt`이 이미 찍힌(=호 전환이 끝난) 오퍼에는 **생략된다.**
+   * 전환이 끝난 뒤의 확인 권유는 참가자가 겪은 사실과 모순이고, 그 재주입 경로가 열려 있는 것이
+   * 증상 ①(전환 후 같은 오퍼 재발화)의 (가) 갈래다. 값이 없으면 클라는 **주입하지 않는다.**
+   */
+  announceInstruction?: string;
 };
 
 export type DeliverVerifyReconnectRequest = {
@@ -31,4 +37,10 @@ export type DeliverVerifyReconnectRequest = {
 export type DeliverVerifyReconnectResponse = {
   /** 재연결 직후 캐릭터가 **다른 담당자**로 응대하게 하는 1줄(실시간 주입 / 폴백은 다음 턴). */
   reconnectInstruction: string;
+  /**
+   * ⭐ **T118/A5(§25.3)** — 전환 이후 사기범 턴 경계마다 클라가 **다시 넣는** 전환 상태 단언 1줄.
+   * 클라가 반복 주입하려면 손에 쥐고 있어야 하므로 응답으로 내려보낸다(신규 콜러블 0건).
+   * ⚠️ Firestore 문서에는 쓰지 않는다(A5-4 — 모델 지시는 문서에 기록하지 않는다, AC-024).
+   */
+  transferStateLine: string;
 };

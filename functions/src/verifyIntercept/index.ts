@@ -20,6 +20,7 @@ import { getRealtimeProvider } from "../realtime/provider";
 import { resolveEffectiveVoiceMode } from "../realtime";
 import {
   buildVerifyInterceptDoc,
+  buildVerifyOfferResponse,
   fallbackVerifyAnchor,
   realtimeVerifyAnchor,
 } from "./buildDoc";
@@ -35,6 +36,7 @@ ensureFirebaseAdminApp();
 
 export {
   buildVerifyInterceptDoc,
+  buildVerifyOfferResponse,
   fallbackVerifyAnchor,
   realtimeVerifyAnchor,
 } from "./buildDoc";
@@ -144,7 +146,8 @@ export const deliverVerifyOffer = onCall<
     await offerRef.create(buildVerifyInterceptDoc(item, Timestamp.now(), anchor));
   }
 
-  return { offerId: item.offerId, announceInstruction: item.announceInstruction };
+  // T118/R-1 — 전환이 이미 끝난 오퍼면 지시를 싣지 않는다(§25.5 (4)). 판정은 순수 함수에 있다.
+  return buildVerifyOfferResponse(item, { placed: Boolean(existing.get("placedAt")) });
 });
 
 export const deliverVerifyReconnect = onCall<
@@ -186,5 +189,9 @@ export const deliverVerifyReconnect = onCall<
     });
   }
 
-  return { reconnectInstruction: item.reconnectInstruction };
+  // T118/A5-3 — 전환 상태 단언 1줄을 함께 내려보낸다(클라가 이후 턴 경계마다 다시 넣는다, §25.3).
+  return {
+    reconnectInstruction: item.reconnectInstruction,
+    transferStateLine: item.transferStateLine,
+  };
 });

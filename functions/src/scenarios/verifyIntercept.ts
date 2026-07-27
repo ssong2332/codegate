@@ -56,7 +56,31 @@ export type VerifyInterceptItem = {
   announceInstruction: string;
   /** 호가 넘어온 직후 캐릭터가 **다른 담당자**로서 응대하게 하는 1줄 지시(서버 소유, §22.1 A3). */
   reconnectInstruction: string;
+  /**
+   * ⭐ **T118(§25.3, 층 A5) — 전환 상태 재확인 1줄(실시간 경로 전용).**
+   *
+   * 전환 이후 사기범 턴 경계마다 **다시** 모델에게 넣는 문자열이다. 왜 필요한가(§25.2 (2) 실측):
+   * 실시간 경로는 시스템 프롬프트가 **setup 1회 고정**이라, 상시 블록이 쓰는 턴 상대 지시어
+   * (*"전환 지시가 온 턴부터"*)가 **어느 턴에도 참/거짓으로 판정되지 않는다**(㉡ 참조 대상 부재).
+   * 폴백은 매 턴 재조립돼 같은 문제가 없다 — 이 필드는 **그 경로 비대칭(§22.8 (3))만** 메운다.
+   *
+   * ⛔ **규칙 문장을 넣지 말 것(G100).** 규칙의 자리는 상시 블록 하나뿐이고, 이 필드가 나르는 것은
+   * **상태 단언**뿐이다. ⛔ **클라 하드코딩·응답 전용 상수로 옮기지 말 것(G101)** — 카탈로그 필드로
+   * 두어야 G86-a/b/c의 `Object.entries` 전 필드 순회(번호 형태·실존 기관명·url/tel)에 자동으로 들어온다.
+   */
+  transferStateLine: string;
 };
+
+/**
+ * 전환 상태 단언의 단일 소스(§25.3 (2) F1~F5) — 6종에 문면을 복제하지 않는다(`RECONNECT_TAIL`과
+ * 같은 이유: 한 종만 어긋나면 그 시나리오만 옛 상태로 동작한다, G84).
+ *
+ * 형태는 **괄호 지문**이다(F5) — 이 저장소에서 *"낭독 대상이 아니라 지문"* 으로 동작이 확인된 유일한
+ * 형태다(`OPENING_TRIGGER_TURN` 선례). 창구명은 카탈로그 `deskLabel` 값을 그대로 쓴다(F3 — 신규
+ * 고유명 0건).
+ */
+const transferStateLineFor = (deskLabel: string) =>
+  `(앞 담당자는 이미 이 통화에서 빠졌다. 지금 통화 중인 사람은 '${deskLabel}'의 담당자다. 확인 부서 연결 안내는 이미 끝났다.)`;
 
 /**
  * 오퍼 지시의 공통 꼬리 — 번호 창작 금지(AC-005/033).
@@ -85,6 +109,7 @@ const INSTITUTIONAL_IMPERSONATION: VerifyInterceptItem = {
   availableAfterScammerTurns: 2,
   announceInstruction: `(참가자가 직접 확인해 보고 싶어 할 만한 시점이다. 지금 캐릭터로서 한두 문장으로 **확인을 막지 말고 오히려 권하되, 참가자가 새로 전화를 걸게 하지 말고 네가 확인 부서로 호를 넘겨 주겠다고 하라** — 예: "의심되시는 게 당연합니다. 제가 확인창구로 바로 연결해 드리겠습니다." 넘겨줄 창구 이름은 '○○금융범죄대응센터 확인창구'다. ${NO_NUMBER_INVENTION})`,
   reconnectInstruction: `(앞 담당자가 이 통화를 너에게 넘겼다. 앞 담당자는 통화에서 빠졌다. 지금부터 너는 '○○금융범죄대응센터 확인창구'의 **다른 담당자**다. 한두 문장으로 창구 이름과 직책을 밝히며 정형적이고 사무적인 존대로 응대를 시작하라. ${RECONNECT_TAIL})`,
+  transferStateLine: transferStateLineFor("○○금융범죄대응센터 확인창구"),
 };
 
 const CARD_COMPANY_IMPERSONATION: VerifyInterceptItem = {
@@ -94,6 +119,7 @@ const CARD_COMPANY_IMPERSONATION: VerifyInterceptItem = {
   availableAfterScammerTurns: 2,
   announceInstruction: `(참가자가 직접 확인해 보고 싶어 할 만한 시점이다. 지금 캐릭터로서 한두 문장으로 **확인을 막지 말고 오히려 권하되, 참가자가 새로 전화를 걸게 하지 말고 네가 확인 부서로 호를 넘겨 주겠다고 하라** — 예: "확인해 보시는 게 맞습니다. 제가 보안확인창구로 바로 연결해 드리겠습니다." 넘겨줄 창구 이름은 '○○카드 보안확인창구'다. ${NO_NUMBER_INVENTION})`,
   reconnectInstruction: `(앞 담당자가 이 통화를 너에게 넘겼다. 앞 담당자는 통화에서 빠졌다. 지금부터 너는 '○○카드 보안확인창구'의 **다른 상담원**이다. 한두 문장으로 창구 이름과 본인 직책을 밝히며 정형적이고 사무적인 존대로 응대를 시작하라. ${RECONNECT_TAIL})`,
+  transferStateLine: transferStateLineFor("○○카드 보안확인창구"),
 };
 
 const LOAN_SCAM: VerifyInterceptItem = {
@@ -103,6 +129,7 @@ const LOAN_SCAM: VerifyInterceptItem = {
   availableAfterScammerTurns: 3,
   announceInstruction: `(참가자가 직접 확인해 보고 싶어 할 만한 시점이다. 지금 캐릭터로서 한두 문장으로 **확인을 막지 말고 오히려 권하되, 참가자가 새로 전화를 걸게 하지 말고 네가 확인 부서로 호를 넘겨 주겠다고 하라** — 예: "확인해 보시는 게 맞습니다. 제가 여신확인창구로 바로 넘겨 드리겠습니다." 넘겨줄 창구 이름은 '○○캐피탈 여신확인창구'다. ${NO_NUMBER_INVENTION})`,
   reconnectInstruction: `(앞 담당자가 이 통화를 너에게 넘겼다. 앞 담당자는 통화에서 빠졌다. 지금부터 너는 '○○캐피탈 여신확인창구'의 **다른 담당자**다. 한두 문장으로 창구 이름과 직책을 밝히며 정형적이고 사무적인 존대로 응대를 시작하라. ${RECONNECT_TAIL})`,
+  transferStateLine: transferStateLineFor("○○캐피탈 여신확인창구"),
 };
 
 const TAX_REFUND_SCAM: VerifyInterceptItem = {
@@ -112,6 +139,7 @@ const TAX_REFUND_SCAM: VerifyInterceptItem = {
   availableAfterScammerTurns: 2,
   announceInstruction: `(참가자가 직접 확인해 보고 싶어 할 만한 시점이다. 지금 캐릭터로서 한두 문장으로 **확인을 막지 말고 오히려 권하되, 참가자가 새로 전화를 걸게 하지 말고 네가 확인 부서로 호를 넘겨 주겠다고 하라** — 예: "확인하고 진행하셔도 됩니다. 제가 환급 확인창구로 바로 연결해 드리겠습니다." 넘겨줄 창구 이름은 '○○환급지원센터 확인창구'다. ${NO_NUMBER_INVENTION})`,
   reconnectInstruction: `(앞 담당자가 이 통화를 너에게 넘겼다. 앞 담당자는 통화에서 빠졌다. 지금부터 너는 '○○환급지원센터 확인창구'의 **다른 담당자**다. 한두 문장으로 창구 이름과 직책을 밝히며 정형적이고 사무적인 존대로 응대를 시작하라. ${RECONNECT_TAIL})`,
+  transferStateLine: transferStateLineFor("○○환급지원센터 확인창구"),
 };
 
 const COURIER_CUSTOMS_SCAM: VerifyInterceptItem = {
@@ -121,6 +149,7 @@ const COURIER_CUSTOMS_SCAM: VerifyInterceptItem = {
   availableAfterScammerTurns: 2,
   announceInstruction: `(참가자가 직접 확인해 보고 싶어 할 만한 시점이다. 지금 캐릭터로서 한두 문장으로 **확인을 막지 말고 오히려 권하되, 참가자가 새로 전화를 걸게 하지 말고 네가 확인 부서로 호를 넘겨 주겠다고 하라** — 예: "확인해 보셔도 됩니다. 제가 통관 확인창구로 바로 연결해 드리겠습니다." 넘겨줄 창구 이름은 '○○통관지원센터 확인창구'다. ${NO_NUMBER_INVENTION})`,
   reconnectInstruction: `(앞 담당자가 이 통화를 너에게 넘겼다. 앞 담당자는 통화에서 빠졌다. 지금부터 너는 '○○통관지원센터 확인창구'의 **다른 담당자**다. 한두 문장으로 창구 이름과 직책을 밝히며 정형적이고 사무적인 존대로 응대를 시작하라. ${RECONNECT_TAIL})`,
+  transferStateLine: transferStateLineFor("○○통관지원센터 확인창구"),
 };
 
 /**
@@ -138,6 +167,7 @@ const BANK_SECURITY_VERIFY_SCAM: VerifyInterceptItem = {
   availableAfterScammerTurns: 2,
   announceInstruction: `(참가자가 직접 확인해 보고 싶어 할 만한 시점이다. 지금 캐릭터로서 한두 문장으로 **확인을 막지 말고 오히려 권하되, 참가자가 새로 전화를 걸게 하지 말고 네가 확인 부서로 호를 넘겨 주겠다고 하라** — 예: "의심하시는 게 정상입니다. 제가 금융사고대응 확인창구로 바로 연결해 드리겠습니다." 넘겨줄 창구 이름은 '○○은행 금융사고대응 확인창구'다. ${NO_NUMBER_INVENTION})`,
   reconnectInstruction: `(앞 담당자가 이 통화를 너에게 넘겼다. 앞 담당자는 통화에서 빠졌다. 지금부터 너는 '○○은행 금융사고대응 확인창구'의 **다른 담당자**다. 한두 문장으로 창구 이름과 직책을 밝히며 정형적이고 사무적인 존대로 응대를 시작하라. ${RECONNECT_TAIL})`,
+  transferStateLine: transferStateLineFor("○○은행 금융사고대응 확인창구"),
 };
 
 /**

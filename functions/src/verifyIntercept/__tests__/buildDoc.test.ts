@@ -4,8 +4,9 @@
 // 확인한다". 이 파일은 그 실측 **전에** 값을 못박는 회귀 그물이고, 실측 결과는 구현 보고서에 남는다.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fallbackVerifyAnchor, realtimeVerifyAnchor } from "../buildDoc";
+import { buildVerifyOfferResponse, fallbackVerifyAnchor, realtimeVerifyAnchor } from "../buildDoc";
 import { pickFallbackTurnInstruction } from "../fallbackTurn";
+import { VERIFY_INTERCEPT } from "../../scenarios/verifyIntercept";
 
 test("[§16.3.2] 실시간 앵커 = scammerTurns + 1(오프닝 사기범 행 보정)", () => {
   // 실측 사실: `createSession`이 오프닝 사기범 메시지를 turnIndex 0으로 **먼저** 쓰고, 실시간
@@ -113,4 +114,38 @@ test("[T84 회귀 0] installConsentDue가 없으면 기존 선택 결과가 한 
       );
     }
   }
+});
+
+// ── T118 / R-1 (§25.5 (4) · §25.9 ⑤) ─────────────────────────────────────────────
+// 전환이 끝난 뒤(`placedAt` 존재)의 확인 권유는 참가자가 겪은 사실과 모순이다. 종전 구현은 오퍼
+// 문서가 이미 있어도 지시를 **무조건** 돌려줬고, 그것이 증상 ①의 (가) 갈래(중복 주입)의 경로였다.
+// ⛔ 이 처방은 (나)(모델이 스스로 반복)를 대체하지 않는다 — 그쪽은 층 A5다(**G102**).
+
+test("[T118/R-1] `placedAt`이 있는 오퍼에는 announceInstruction을 **싣지 않는다**(6종 전수)", () => {
+  for (const item of Object.values(VERIFY_INTERCEPT)) {
+    const placed = buildVerifyOfferResponse(item, { placed: true });
+    assert.equal(placed.announceInstruction, undefined, item.offerId);
+    assert.equal(placed.offerId, item.offerId, "offerId는 그대로 돌려준다(클라 렌더 소스)");
+  }
+});
+
+test("[T118/R-1] 전환 **전**에는 종전과 똑같이 지시를 싣는다(회귀 0)", () => {
+  for (const item of Object.values(VERIFY_INTERCEPT)) {
+    assert.deepEqual(buildVerifyOfferResponse(item, { placed: false }), {
+      offerId: item.offerId,
+      announceInstruction: item.announceInstruction,
+    });
+  }
+});
+
+test("[T118/R-1 역검증] 분기를 되돌린 **사본**은 실제로 지시를 실어 버린다(죽은 게이트가 아니다)", () => {
+  // 되돌린 구현을 테스트 코드 안에서만 재현한다(실제 소스를 고쳤다 되돌리는 방식 금지 —
+  // `callContinuity.test.ts`가 세운 관례).
+  const beforeR1 = (item: (typeof VERIFY_INTERCEPT)[string]) => ({
+    offerId: item.offerId,
+    announceInstruction: item.announceInstruction,
+  });
+  const item = VERIFY_INTERCEPT["bank-security-verify-scam"];
+  assert.notEqual(beforeR1(item).announceInstruction, undefined, "종전 동작 재현");
+  assert.equal(buildVerifyOfferResponse(item, { placed: true }).announceInstruction, undefined);
 });
