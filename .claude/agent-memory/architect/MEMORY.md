@@ -2,5 +2,6 @@
 - [ElevenLabs agent prompt API](reference_elevenlabs_agent_prompt_api.md) — 프롬프트는 `/v1/convai/agents/{id}`의 GET/PATCH; 저장소엔 이 경로 코드가 없다. PATCH 200 말고 되읽기로 검증
 - [Gemini Live session constraints](reference_gemini_live_session_constraints.md) — 음성·프롬프트·도구는 토큰에 서버 고정(세션 중 전환 불가); 상대 전환은 지시 주입+연출로
 - [상류 인계 수치는 과소집계된다](project_upstream_breakage_counts_undercount.md) — UX/PRD가 넘긴 "깨지는 테스트 N건"·"N종"은 재집계하고 정정을 보고 상단에 둘 것
+- [인계된 base 커밋·줄번호는 미검증이다](project_handoff_base_commit_unverified.md) — `.git/refs`를 직접 읽어 확인하고 어긋난 줄번호는 인계 정정으로 남길 것
 - [규범 규칙이 정본, 예시를 고친다](feedback_norm_beats_example.md) — 게이트 능력을 과소 서술한 "못 잡는 형태" 목록도 결함; 확장 여부는 결정 말고 OQ로
 - [하드 게이트는 실행 가능성을 먼저 확인](feedback_hard_gate_executability.md) — 참조 대상이 나중 커밋에 오는 게이트를 앞 커밋에 못 박지 말 것(사후 추인 2회: G58·G-B)
