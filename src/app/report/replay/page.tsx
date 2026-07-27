@@ -700,12 +700,20 @@ function ReplayVerifyItem({ verify }: { verify: ReplayVerifySource }) {
             {verify.deskLabel}
             <Badge variant="neutral">확인 시도</Badge>
             <span className="rounded-full bg-[#EFEBF7] px-2 py-0.5 text-[11px] font-semibold text-[#463880]">
-              AI 훈련용 모의 번호
+              AI 훈련용 모의 창구
             </span>
           </p>
+          {/* ⭐ T110(§22.3) — `displayNumber`는 **과거 리포트에만** 있다(무백필). 값이 있으면 그때
+              실제로 본 그대로 보여주고(정직), 호 전환 모델의 신규 리포트에서는 이 줄이 아예 없다. */}
           <div className="rounded-[16px] rounded-bl-[4px] border border-[#E2DDD3] bg-white px-4 py-3">
             <p className="text-[15px] leading-[1.55] text-[#22303A]">
-              안내받은 번호: <span className="font-mono">{verify.displayNumber}</span>
+              {verify.displayNumber !== undefined ? (
+                <>
+                  안내받은 번호: <span className="font-mono">{verify.displayNumber}</span>
+                </>
+              ) : (
+                <>상대가 {verify.deskLabel}로 통화를 넘겼습니다.</>
+              )}
             </p>
           </div>
         </div>

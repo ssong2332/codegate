@@ -133,7 +133,9 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     return {
       offerId: data.offerId ?? doc.id,
       deskLabel: data.deskLabel,
-      displayNumber: data.displayNumber,
+      // T110(§22.3) — 과거 문서에만 존재한다. 있으면 그대로 통과시키고(그때 실제로 본 값을 정직하게
+      // 보여준다), 없으면 필드를 만들지 않는다. **백필하지 않는다.**
+      ...(data.displayNumber !== undefined ? { displayNumber: data.displayNumber } : {}),
       ...(data.offerAnchorScammerTurn !== undefined
         ? { offerAnchorScammerTurn: data.offerAnchorScammerTurn }
         : {}),

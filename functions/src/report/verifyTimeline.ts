@@ -20,7 +20,8 @@ import type { VerifyTimelineEntry, VerifyTimelineEvent, VerifyTimelineOutcome } 
 export type VerifyTimelineSource = {
   offerId: string;
   deskLabel: string;
-  displayNumber: string;
+  /** ⭐ T110(§22.3) — 옵셔널. 신규 문서에는 없고 **과거 문서에만** 실려 있다(무백필). */
+  displayNumber?: string;
   offerAnchorScammerTurn?: number;
   offeredAtMs: number;
   /** 존재 = 참가자가 "확인 전화 걸기"를 눌렀다(D-51 ①과 ②/⑤를 가르는 유일한 조건). */
@@ -43,7 +44,7 @@ export type VerifyTimelineSource = {
  * 설명하지 않는다**. "소용없다"·"막을 수 없다"·"어차피"·"방법이 없다" 류 무력감 표현을 쓰지
  * 않는다(금지 표현 테스트가 이 상수와 아래 `what` 문구를 함께 훑는다).
  * ⚠️ 112·1332는 **AC-071이 신고처로 명시 요구**한 값이라 여기서는 실번호를 그대로 쓴다 — 실존
- * 번호 금지는 **카탈로그의 `deskLabel`/`displayNumber`에만** 적용되는 규칙이다(§16.1.3).
+ * 번호 금지는 **카탈로그의 문자열 필드에만** 적용되는 규칙이다(§16.1.3, T110 이후 G86-b).
  *
  * 확정 카피는 ux-design(OQ-A5)이며, 아래는 architect가 §16.4에 고정한 참고값 그대로다.
  */
@@ -127,10 +128,15 @@ export function deriveVerifyEvents(
   doc: VerifyTimelineSource,
   outcome: VerifyTimelineOutcome,
 ): VerifyTimelineEvent[] {
+  // ⭐ T110(§22.5, G88) — 문구를 **호 전환**으로 재저작했다. 세션에서 실제로 일어난 일은 "번호를
+  // 안내받아 새로 걸었다"가 아니라 "상대가 확인 부서로 통화를 넘겼다"이며, 리포트가 참가자가 겪지
+  // 않은 일을 서술하면 그 자체가 기록 정직성 위반이다. **참고값은 §22.5 표 그대로.**
+  // ⚠️ 금지 표현("소용없다"·"막을 수 없다"·"어차피"·"방법이 없다")·수단 미설명 규칙(§16.4)은
+  // 새 문구에도 그대로 적용된다 — 같은 테스트가 이 문자열들을 계속 훑는다.
   const events: VerifyTimelineEvent[] = [
     {
       event: "verify_offer_shown",
-      what: `상대가 '직접 확인해 보시라'며 ${doc.deskLabel}(${doc.displayNumber})로 걸어 보라고 했습니다.`,
+      what: `상대가 '확인 부서로 바로 연결해 드리겠다'며 ${doc.deskLabel}로 통화를 넘겼습니다.`,
     },
   ];
   if (doc.placedAtMs === undefined) return events;
@@ -138,8 +144,8 @@ export function deriveVerifyEvents(
     event: "verify_reconnected",
     what:
       outcome === "placed_and_complied"
-        ? "안내받은 번호로 확인 전화를 걸었고, 같은 요구가 '확인해 드렸다'는 형태로 이어졌습니다."
-        : "안내받은 번호로 확인 전화를 걸었지만, 요구에 응하지 않았습니다.",
+        ? "넘겨받은 담당자가 같은 요구를 '확인해 드렸다'는 형태로 이어갔고, 그 요구에 응했습니다."
+        : "넘겨받은 담당자의 요구에 응하지 않았습니다.",
     correctAction: VERIFY_INTERCEPT_CORRECT_ACTION,
   });
   return events;
@@ -199,7 +205,8 @@ export function applyVerifyIntercept(
     entries.push({
       offerId: doc.offerId,
       deskLabel: doc.deskLabel,
-      displayNumber: doc.displayNumber,
+      // T110 — 과거 문서에 값이 있을 때만 스냅샷에 싣는다(신규 세션에서는 필드 자체가 없다).
+      ...(doc.displayNumber !== undefined ? { displayNumber: doc.displayNumber } : {}),
       anchorTurnIndex: anchor.anchorTurnIndex,
       anchorResolved: anchor.anchorResolved,
       ...(anchor.timeLabel ? { timeLabel: anchor.timeLabel } : {}),

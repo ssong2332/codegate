@@ -222,13 +222,15 @@ export type InCallSmsDoc = {
 // 판정이 손상된다(§15.6 G3/G25).
 //
 // ⚠️ **실 발신 표면 부재(AC-019 하드)**: 이 스키마에는 `url`·`tel`·전화번호 **입력** 필드·발신 대상
-// 식별자가 **존재하지 않는다.** `displayNumber`는 화면에 글자로만 나오는 모의값이며(형식
-// `/^\d{3,4}-0000$/`), 탭 대상은 번호가 아니라 버튼이다(UX-031 P-24).
+// 식별자가 **존재하지 않는다.** 호 전환 모델(T110/§22)에서는 화면에 번호 자체가 없고, 탭 대상은
+// 버튼뿐이다(UX-031 P-24).
 // ⚠️ `announceInstruction`·`reconnectInstruction`(모델 지시)은 이 문서에 **없다**(AC-024/ADR-0004).
 export type VerifyInterceptDoc = {
   offerId: string; // = 문서 id. 서버가 VERIFY_INTERCEPT[session.scenarioId] 소속을 재검증한 값만 기록
   deskLabel: string; // 모의 창구명(실존 기관·창구 아님 — AC-033/AC-005)
-  displayNumber: string; // **표시 텍스트 전용** 모의 번호
+  // ⭐ T110(§22.3) — **옵셔널. 신규 문서에는 기록하지 않는다**(호 전환 모델에는 안내 번호가 없다).
+  // 남겨 둔 이유는 오직 하나: 이미 생성된 과거 문서를 **백필 없이** 그대로 읽기 위해서다.
+  displayNumber?: string;
   offeredAt: FirebaseFirestore.Timestamp;
   // "이 시점까지 messages에 존재하는 role==='scammer' 문서 수"(서버 계산, verifyIntercept/buildDoc.ts
   // 단일 지점). 리포트 생성 시 실제 turnIndex로 해결돼 verifyTimeline[].anchorTurnIndex가 된다.
@@ -261,7 +263,10 @@ export type VerifyTimelineEvent = {
 export type VerifyTimelineEntry = {
   offerId: string;
   deskLabel: string;
-  displayNumber: string; // 텍스트로만 렌더 — 링크·복사 버튼·재발신 컨트롤을 만들지 않는다(§16.3.1)
+  // ⭐ T110(§22.3) — **옵셔널. 신규 리포트에는 실리지 않는다.** 과거 리포트는 그때 실제로 본 번호를
+  // 그대로 보여준다(정직·무백필). 존재할 때만 텍스트로 렌더한다 — 링크·복사 버튼·재발신 컨트롤을
+  // 만들지 않는다(§16.3.1/AC-019).
+  displayNumber?: string;
   anchorTurnIndex: number; // 표시 위치(= 오퍼 앵커). -1 = 대화 맨 앞
   anchorResolved: boolean; // false = 위치 확정 실패 → 화면이 정직하게 고지(조용한 누락 금지)
   timeLabel?: string; // 앵커 메시지의 경과 초에서 파생 — deceivedMoments와 **같은 시간축**

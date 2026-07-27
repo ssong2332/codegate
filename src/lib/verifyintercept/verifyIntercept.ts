@@ -11,11 +11,15 @@
 export type VerifyInterceptView = {
   offerId: string;
   deskLabel: string;
-  /** **표시 텍스트 전용** 모의 번호. 링크·복사·재발신 컨트롤로 렌더하지 않는다(P-24). */
-  displayNumber: string;
-  /** 존재 = 참가자가 이미 확인 전화를 걸었다(재연결 완료 상태). */
+  /** 존재 = 참가자가 이미 확인 부서 연결을 요청했다(호 전환 완료 상태). */
   placedAtMs?: number;
-  /** 재연결 후 통화 셸에 표시할 발신자 라벨(모의값). */
+  /**
+   * 호 전환 후 통화 셸에 표시할 발신자 라벨(모의값).
+   *
+   * ⚠️ **T110(§22.1 C8)** — 이것이 원 화자 퇴장의 **유일한 시각적 보증**이다. 모델이 흔들려도
+   * 화면은 흔들리지 않는다. `play/page.tsx`의 우선순위(`reconnectedCallerLabel ?? callerLabel ??
+   * "발신번호 표시제한"`)를 통화 필/상단 고정 필도 그대로 계승해야 한다(**G87**, T103 인계).
+   */
   reconnectedCallerLabel?: string;
 };
 
@@ -79,15 +83,6 @@ export function takeNextInstruction(queue: readonly PendingInstruction[]): {
   return { item: first, rest };
 }
 
-/**
- * 모의 번호를 스크린리더가 **한 자씩** 읽도록 띄어 쓴다(UX-031 Accessibility — "모의 번호 1 5 0 0,
- * 0 0 0 0"). 붙여 쓰면 "천오백..."처럼 수사로 읽혀 실제 번호로 오인될 수 있다(P-17/UX-027 인증번호
- * 관례 계승). 하이픈은 쉼표로 바꿔 자연스러운 쉼을 만든다.
- */
-export function spellOutDisplayNumber(displayNumber: string): string {
-  return displayNumber
-    .split("")
-    .map((char) => (char === "-" ? "," : char))
-    .join(" ")
-    .replace(/\s+,/g, ",");
-}
+// ⭐ T110(§22.1 C10) — `spellOutDisplayNumber`는 **삭제**했다. 호 전환 모델에는 번호 카드가 없어
+// 호출부가 사라졌고, 쓰는 곳이 없는 export는 죽은 코드다(G77 취지). 스크린리더가 번호를 수사로
+// 읽는 위험 자체가 "읽어 줄 번호가 없다"로 소멸했다.

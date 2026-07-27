@@ -51,7 +51,8 @@ type SmsTimelineEntry = {
 type VerifyTimelineEntry = {
   offerId: string;
   deskLabel: string;
-  displayNumber: string;
+  /** ⭐ T110(§22.3) — 옵셔널. **신규 리포트에는 없다**(호 전환 모델). 과거 리포트만 값을 갖는다. */
+  displayNumber?: string;
   anchorTurnIndex: number;
   anchorResolved: boolean;
   timeLabel?: string;

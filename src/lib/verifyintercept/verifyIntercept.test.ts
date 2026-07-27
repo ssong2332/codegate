@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   enqueueInstruction,
   shouldOfferVerify,
-  spellOutDisplayNumber,
   takeNextInstruction,
   type PendingInstruction,
 } from "./verifyIntercept.ts";
@@ -67,7 +66,10 @@ test("빈 지시는 큐에 넣지 않는다(주입해도 모델이 받을 게 �
 });
 
 // ── 접근성(UX-031 Accessibility) ────────────────────────────────────────────────
-test("모의 번호는 스크린리더가 한 자씩 읽도록 띄어 쓴다(실제 번호 오인 방지)", () => {
-  assert.equal(spellOutDisplayNumber("1500-0000"), "1 5 0 0, 0 0 0 0");
-  assert.equal(spellOutDisplayNumber("160-0000"), "1 6 0, 0 0 0 0");
-});
+// ⭐ T110(§22.1 C10 / §22.3 표) — *"모의 번호는 스크린리더가 한 자씩 읽도록 띄어 쓴다"* 단언은
+// `spellOutDisplayNumber`와 함께 **삭제**됐다. 호 전환 모델에는 읽어 줄 번호가 없다(번호 카드
+// 제거 = C4). 그 자리를 대신하는 검사는 다음 두 가지다:
+//   - **G85-UI**(`verifyCallContinuity.test.ts`) — 화면 소스에 `displayNumber` 참조 0건 ·
+//     렌더 문자열에 "번호" 0건. 번호가 되살아나면 여기서 걸린다.
+//   - **G86-a**(`functions/src/scenarios/__tests__/verifyIntercept.test.ts`) — 카탈로그 전 문자열
+//     필드에 전화번호 형태 0건.
