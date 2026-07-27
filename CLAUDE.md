@@ -71,8 +71,8 @@ Record commands verbatim after the first success. Reuse without modification; if
 | Purpose | Command | Verified on |
 |---|---|---|
 | Build (functions) | `npm --prefix functions run build` | 2026-07-27 |
-| Test (functions) | `npm --prefix functions test` | 2026-07-27 — 462 pass / 0 fail |
-| Test (root) | `npm test` | 2026-07-27 — 171 pass / 0 fail |
+| Test (functions) | `npm --prefix functions test` | 2026-07-27 — 470 pass / 0 fail (main `95cc684`) |
+| Test (root) | `npm test` | 2026-07-27 — 171 pass / 0 fail (main `95cc684`) |
 | Lint (functions) | `npm --prefix functions run lint` | 2026-07-27 |
 | Clean (functions) | `npm --prefix functions run clean` | 2026-07-27 — 멱등 |
 
