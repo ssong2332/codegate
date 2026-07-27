@@ -216,7 +216,9 @@ test("[G80/역검증] 입력창을 하나 넣으면 위 스캔이 실제로 실�
 // ⚠️ **자기 고지(§24.12) — ⛔ "이제 우회 불가"가 아니다.** 이 게이트의 위협 모델은 **개발자의
 // 우발적 실수**이지 고의 난독화가 아니다. 런타임에 조립되는 값(`f()` 반환·객체 속성 경유·
 // `atob("aW5wdXQ=")`·외부 값)과 표현식이 낀 템플릿은 정적으로 결정 불가라 **4번째 형태를 만드는
-// 비용은 여전히 낮고**, 폴딩은 새 문자열을 만들므로 **새 오탐 표면**이기도 하다. 렌더 결과도
+// 비용은 여전히 낮고**, 폴딩은 새 문자열을 만들므로 **새 오탐 표면**이기도 하다. 그리고
+// **속성 스프레드가 인라인 객체 리터럴이 아니라 참조일 때는 속성 축이 닿지 않는다**(QA-14 —
+// 실제로 이 태스크의 QA가 찾아낸 형태다. 참조 추적은 S3/G95가 금지한 확장이라 넓히지 않았다). 렌더 결과도
 // 관측하지 못한다(이 저장소에는 React 렌더러 테스트 러너가 없다 — 소스 게이트는 필요조건일 뿐이다).
 // 그리고 **스캔 대상 파일 집합은 고정이며 파일 분할로 무력화된다**: 입력 UI를 새 컴포넌트 파일이나
 // 기존 허용 import(`MessengerFakeLanding.tsx`) 안으로 옮기면 이 스캔은 아무것도 보지 못한다.
@@ -335,12 +337,28 @@ test("[T108/한계] 아래 형태는 이 스캔이 **잡지 못한다** — 통�
     ["객체 속성 경유", 'const M: any = { t: "inp"+"ut" };', "    <M.t onChange={props.setReply} />"],
     ["base64 디코딩", 'const B: any = atob("aW5wdXQ=");', "    <div>{B}</div>"],
     ["표현식이 낀 템플릿", "const P = \"inp\";\nconst Q: any = `${P}ut`;", "    <div>{Q}</div>"],
+    // ⚠️ **QA-14(2026-07-27 QA 발견)** — 속성 스프레드 대상이 **인라인 객체 리터럴이 아니라
+    // 변수 참조**면 속성 축이 닿지 않는다(`scanSource.ts`의 `collectAttributes`가 인라인 객체
+    // 리터럴만 걷는다 — S2가 정한 범위 그대로다). computed key까지 겹치면 소스에 `"onSubmit"`
+    // 문자열이 남지 않아 **리터럴 검사의 구제 경로까지 사라진다**(아래 literal 0건이 그 증거).
+    // ⛔ 참조를 따라가려면 데이터 흐름 분석이 필요하고 그것은 S3/G95가 금지한 확장이다 —
+    // **넓히지 않고 못 잡는다고 적는다.**
+    [
+      "참조 스프레드 + computed key(QA-14)",
+      'const replyProps: any = { [("onSub" + "mit")]: handleReply };',
+      "    <div {...replyProps} />",
+    ],
   ];
   for (const [label, preamble, jsx] of samples) {
     const parsed = poisonedOverlay(preamble, jsx);
     const hits = [...scanTokens(parsed, "G80", G80_AXES), ...findDynamicTagHits(parsed, "G80")];
-    t.diagnostic(`[한계] ${label} → 검출 ${hits.length}건 ${JSON.stringify(shape(hits))}`);
+    // 현행 리터럴 검사도 함께 찍는다 — "완전 미탐지"인지 "리터럴이 구제하는지"를 구분해 고지한다.
+    const literal = INPUT_AFFORDANCE_TOKENS.filter((token) => `${preamble}\n${jsx}`.includes(token));
+    t.diagnostic(
+      `[한계] ${label} → AST ${hits.length}건 ${JSON.stringify(shape(hits))} / 리터럴 ${literal.length}건`,
+    );
     assert.deepEqual(shape(hits), [], `${label}: 잡히게 됐다면 이 고지를 갱신하라`);
+    assert.deepEqual(literal, [], `${label}: 리터럴이 구제한다면 "완전 미탐지"라는 고지가 과장이다`);
   }
   // 그리고 **파일 분할**은 어떤 축으로도 잡지 못한다 — 스캔 대상 파일 집합이 고정이기 때문이다(§24.8).
   t.diagnostic("[한계] 파일 분할: 스캔 대상은 고정 파일 집합이라 입력 UI를 다른 파일로 옮기면 0건이 된다");

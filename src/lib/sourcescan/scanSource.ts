@@ -13,6 +13,9 @@
 // 어떤 방식으로도 고의 난독화에 완전할 수 없다 — 런타임에 조립되는 문자열(`f()` 반환값, 객체
 // 속성 경유, `atob("aW5wdXQ=")`, 외부 값)은 정적으로 결정 불가이고, 표현식이 낀 템플릿
 // (`` `${a}뱅크` ``)은 접히지 않으며, 폴딩은 **새 문자열을 만들므로 새 오탐 표면**이기도 하다.
+// **속성 스프레드가 인라인 객체 리터럴이 아니라 참조일 때는 속성 축이 닿지 않는다**(QA-14 —
+// `const p: any = {[("onSub"+"mit")]: h}; <div {...p} />` 는 리터럴 검사도 AST도 잡지 못한다.
+// 참조 추적은 S3/G95가 금지한 확장이라 **넓히지 않고 고지한다** — 아래 `collectAttributes` 주석).
 // 렌더 결과도 관측하지 못한다(이 저장소에는 React 렌더러 테스트 러너가 없다) — 소스 게이트는
 // 필요조건일 뿐이다. 그리고 **스캔 대상 파일 집합은 고정이며 파일 분할로 무력화된다**(§24.8 —
 // 파일 집합의 일반화는 요구 층 판단이라 T108 범위 밖으로 판정됐다). 게이트는 CI가 없어 사람이
@@ -178,6 +181,13 @@ export function parseTsx(file: string, code: string): ParsedSource {
         continue;
       }
       // `{...{["onSub"+"mit"]: handler}}` — spread된 **객체 리터럴**의 키까지 본다.
+      //
+      // ⚠️ **이 범위 제한은 의도적이다 — 버그가 아니다(QA-14).** 스프레드 대상이 인라인 객체
+      // 리터럴이 아니라 **변수 참조**(`const p: any = {[("onSub"+"mit")]: h}; <div {...p} />`)면
+      // 여기서 걷지 못하고, 그 형태는 **리터럴 검사도 AST도 잡지 못한다.** 따라와서 보려면 참조
+      // 추적 = 데이터 흐름 분석이 필요한데, 그것은 S3가 명시적으로 금지한 확장이다(G95 — 넓힐수록
+      // 오탐이 정상 코드를 물어 게이트가 삭제된다). **넓히지 말고** 못 잡는다고 적어 둔다:
+      // 미탐지 사실은 `callContinuity.test.ts`의 `[T108/한계]`가 `deepEqual([])`로 고정한다.
       if (ts.isJsxSpreadAttribute(property) && ts.isObjectLiteralExpression(property.expression)) {
         for (const member of property.expression.properties) {
           if (!member.name) continue;
