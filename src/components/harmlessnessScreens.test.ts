@@ -15,6 +15,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
+import { parseTsx, parseTsxFile } from "../lib/sourcescan/scanSource.ts";
 
 const CANONICAL_PATH = "functions/src/scenarios/__tests__/harmlessnessPatterns.ts";
 const canonicalSource = readFileSync(CANONICAL_PATH, "utf8");
@@ -139,6 +140,72 @@ test("[T86/(b)] 모의 사기 표면 화면 전부가 실존 앱명·스토어 �
       );
     }
   }
+});
+
+// ── T108(docs/Architecture.md §24.7) — 위 문구 스캔에 **`foldedStringLiterals` 축 1개만** 더한다 ──
+//
+// **왜 이 게이트도 포함인가.** 금지 대상이 화면에 그려지는 문구라 리터럴로 저작되는 것이 보통이지만,
+// 그것은 *오탐이 낮다*는 뜻이지 *우회가 어렵다*는 뜻이 아니다 — `"카카오"+"뱅크"`는 소스에 금지
+// 문자열이 없어 위 `code` 스캔을 그대로 통과한다. 폴딩은 **소스에서 실제로 이어붙는 문자열만**
+// 만들므로, 그 결과가 금지 앱명·패턴에 걸리면 정의상 진짜 위반이다.
+//
+// ⚠️ **넓히는 것은 검출 축 1개의 재사용뿐이다** — 금지 앱명·패턴 목록(요구)과 정본 파싱 구조는
+// **한 건도 바뀌지 않았다**(위 `canonicalPatternList`·`REAL_WORLD_APP_NAMES` 그대로). 요소·속성·
+// 호출 축은 이 게이트에 적용하지 않는다.
+// ⚠️ **N1** — 위 `[T86/(b)]`의 리터럴 스캔은 그대로 살아 있다. 이것은 합집합의 두 번째 항이다.
+// ⚠️ **자기 고지**: 표현식이 낀 템플릿(`` `${prefix}뱅크` ``)은 접히지 않고, 런타임 조립·외부 값은
+// 정적으로 결정 불가다. **스캔 대상 파일 집합도 고정**이라 파일 분할로 무력화된다(등록부 게이트
+// `[T86/(c)]`가 `src/components/*.tsx` 한 디렉터리만 본다). 전체 한계는
+// `src/lib/sourcescan/scanSource.ts` 머리말에 있다 — ⛔ "이제 우회 불가"가 아니다.
+
+test("[T86/(b)·T108] 조립된 문자열까지 펴서 봐도 금지 앱명·패턴이 0건이다", (t) => {
+  const scanned = Object.entries(CLIENT_SCREEN_INVENTORY).filter(([, isSurface]) => isSurface);
+  assert.ok(scanned.length >= 4, `스캔 대상 화면이 4개 이상이어야 한다(현재 ${scanned.length})`);
+
+  for (const [fileName] of scanned) {
+    const path = `src/components/${fileName}`;
+    const literals = parseTsxFile(path).foldedStringLiterals();
+    // S5 — 파싱이 죽은 채 "0건"으로 통과하지 않는다.
+    assert.ok(literals.length > 0, `${path}: 문자열 리터럴을 하나도 파싱하지 못했다(스캔이 죽었다)`);
+
+    const hits: string[] = [];
+    for (const literal of literals) {
+      for (const name of REAL_WORLD_APP_NAMES) {
+        if (literal.text.toLowerCase().includes(name.toLowerCase())) {
+          hits.push(`${path}:${literal.line} 실존 앱명 ${name} — ${literal.text}`);
+        }
+      }
+      for (const pattern of SCREEN_FORBIDDEN_PATTERNS) {
+        if (pattern.test(literal.text)) {
+          hits.push(`${path}:${literal.line} 금지 패턴 ${pattern} — ${literal.text}`);
+        }
+      }
+    }
+    t.diagnostic(`[오탐 전수] ${path} / T86 folded → 위반 ${hits.length}건 (리터럴 ${literals.length}개) ${JSON.stringify(hits)}`);
+    assert.deepEqual(hits, [], hits.join("\n"));
+  }
+});
+
+test("[T108/역검증 5] 이어붙인 앱명·패턴은 리터럴 스캔을 통과하고 폴딩 축이 잡는다", (t) => {
+  // 오염은 **테스트 코드 안에서만**(위 [T86/역검증] 관례와 동일).
+  const poison = 'const a = "카카오"+"뱅크";\nconst b = "앱 스토"+"어에서 설치하고 접근성 서비스를 켜세요";';
+  const code = codeOnly(poison);
+  const literalNameHits = REAL_WORLD_APP_NAMES.filter((n) => code.toLowerCase().includes(n.toLowerCase()));
+  const literalPatternHits = SCREEN_FORBIDDEN_PATTERNS.filter((p) => p.test(code));
+
+  const literals = parseTsx("poisoned.tsx", poison).foldedStringLiterals();
+  const foldedNameHits = REAL_WORLD_APP_NAMES.filter((n) =>
+    literals.some((l) => l.text.toLowerCase().includes(n.toLowerCase())),
+  );
+  const foldedPatternHits = SCREEN_FORBIDDEN_PATTERNS.filter((p) => literals.some((l) => p.test(l.text)));
+
+  t.diagnostic(
+    `리터럴 스캔: 앱명 ${literalNameHits.length}건·패턴 ${literalPatternHits.length}건 / ` +
+      `폴딩 축: 앱명 ${foldedNameHits.length}건(${foldedNameHits.join(",")})·패턴 ${foldedPatternHits.length}건`,
+  );
+  assert.deepEqual(literalNameHits, [], "이 형태가 리터럴로 잡혔다면 샘플이 조립 형태가 아니다");
+  assert.ok(foldedNameHits.length >= 1, "폴딩 축이 이어붙인 앱명을 잡아야 한다");
+  assert.ok(foldedPatternHits.length >= 1, "폴딩 축이 이어붙인 금지 패턴을 잡아야 한다");
 });
 
 test("[T86/(c)] 서버 정본 앱명 목록이 T84 사본을 포함한다(두 목록 드리프트 차단)", () => {

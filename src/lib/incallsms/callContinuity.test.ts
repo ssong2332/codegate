@@ -10,6 +10,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import {
+  findDynamicTagHits,
+  formatHits,
+  parseTsx,
+  scanTokens,
+  type Axis,
+  type ScanHit,
+} from "../sourcescan/scanSource.ts";
 
 const page = readFileSync("src/app/session/play/page.tsx", "utf8");
 const overlay = readFileSync("src/components/InCallSmsOverlay.tsx", "utf8");
@@ -102,8 +110,11 @@ test("[AC-006/G11] 오버레이 안에서 '훈련 종료'와 모의 표식에 �
   assert.ok(panelStart > 0 && overlay.indexOf("EndTrainingButton", panelStart) > panelStart);
 });
 
+/** AC-060 금지 토큰(요구 무변경 — T108은 **검출 축만** 더한다). 아래 `AC060_AXES`와 짝이다. */
+const READ_ONLY_TOKENS = ["sendMessage", "href=", "http://", "https://", "window.open", "clipboard"];
+
 test("[AC-060] 오버레이는 읽기 전용이다 — 전송 경로도, 실 URL도 없다", () => {
-  for (const forbidden of ["sendMessage", "href=", "http://", "https://", "window.open"]) {
+  for (const forbidden of READ_ONLY_TOKENS.filter((token) => token !== "clipboard")) {
     assert.ok(!overlay.includes(forbidden), `읽기 전용 화면에 있으면 안 되는 것: ${forbidden}`);
   }
   // 클립보드 자동 복사 금지(AC-061 — 앱이 "복사해서 붙여 넣는" 동선을 대신 만들지 않는다).
@@ -188,6 +199,151 @@ test("[G80/역검증] 입력창을 하나 넣으면 위 스캔이 실제로 실�
   );
   // 그리고 깨끗한 현재 소스는 하나도 걸리지 않는다(대조군).
   assert.deepEqual(INPUT_AFFORDANCE_TOKENS.filter((token) => overlayCode.includes(token)), []);
+});
+
+// ── T108(docs/Architecture.md §24) — 위 리터럴 게이트 2곳에 **AST 축을 합집합으로 더한다** ────
+//
+// **왜.** T104 QA가 위 6토큰을 **전부 동시에 피하는 3종**을 재현했다: `role={"textbox"}`(표현식
+// 컨테이너) · `const Tag: any = "inp"+"ut"; <Tag …/>`(동적 태그명) · `const El: any = "fo"+"rm";
+// <El {...{["onSub"+"mit"]: h}} />`(동적 태그+computed key). 셋 다 **소스에 금지 문자열 자체가
+// 없어서** 리터럴 검사로는 원리적으로 잡히지 않는다(정규식은 문자열 연결을 평가하지 않는다).
+// 아래 `[T108/역검증 1~3]`이 3종을 **각각 독립 샘플**로 걸어 어느 축에 걸리는지를 출력으로 고정한다.
+//
+// ⚠️ **N1 — 위 리터럴 검사를 걷어내지 않는다.** AST는 **더하기만** 한다(교체가 아니라 합집합).
+// 걷어내면 "강화했는데 예전에 잡던 표기를 놓치는" 회귀가 구조적으로 가능해진다.
+// ⚠️ **요구는 한 건도 바뀌지 않았다** — 금지 토큰 목록은 위 그대로이고 바뀐 것은 *어떻게 찾는가*뿐이다.
+//
+// ⚠️ **자기 고지(§24.12) — ⛔ "이제 우회 불가"가 아니다.** 이 게이트의 위협 모델은 **개발자의
+// 우발적 실수**이지 고의 난독화가 아니다. 런타임에 조립되는 값(`f()` 반환·객체 속성 경유·
+// `atob("aW5wdXQ=")`·외부 값)과 표현식이 낀 템플릿은 정적으로 결정 불가라 **4번째 형태를 만드는
+// 비용은 여전히 낮고**, 폴딩은 새 문자열을 만들므로 **새 오탐 표면**이기도 하다. 렌더 결과도
+// 관측하지 못한다(이 저장소에는 React 렌더러 테스트 러너가 없다 — 소스 게이트는 필요조건일 뿐이다).
+// 그리고 **스캔 대상 파일 집합은 고정이며 파일 분할로 무력화된다**: 입력 UI를 새 컴포넌트 파일이나
+// 기존 허용 import(`MessengerFakeLanding.tsx`) 안으로 옮기면 이 스캔은 아무것도 보지 못한다.
+// (파일 집합의 일반화는 "어느 파일이 입력 없이 있어야 하는가"라는 **요구 층 판단**이라 T108 범위
+// 밖으로 판정됐다 — §24.8.) CI도 없어 사람이 `npm test`를 칠 때만 돈다. 잡지 못하는 구체적 형태는
+// 아래 `[T108/한계]`가 **출력으로** 고지한다.
+
+const overlayFile = "src/components/InCallSmsOverlay.tsx";
+/** AST는 주석을 구조적으로 제외하므로 **원본**을 파싱한다(N3 — `codeOnly`는 리터럴 축에만 남는다). */
+const overlayAst = parseTsx(overlayFile, overlay);
+
+/** §24.6 매핑표 — 토큰(요구)은 그대로 두고 **어느 축에서 찾을지**만 지정한다. */
+const G80_AXES: Record<string, Axis[]> = {
+  "<input": ["jsxElement"],
+  "<textarea": ["jsxElement"],
+  "<form": ["jsxElement"],
+  onSubmit: ["jsxAttribute"],
+  contentEditable: ["jsxAttribute"],
+  'role="textbox"': ["jsxAttribute"],
+};
+const AC060_AXES: Record<string, Axis[]> = {
+  sendMessage: ["callOrMember"],
+  "href=": ["jsxAttribute"],
+  "http://": ["foldedString"],
+  "https://": ["foldedString"],
+  "window.open": ["callOrMember"],
+  clipboard: ["callOrMember"],
+};
+
+/** 오염은 **테스트 코드 안에서만**(`:161-162` 관례). 실제 파일에 붙여도 구문이 성립하는 형태로 만든다. */
+function poisonedOverlay(preamble: string, jsx: string) {
+  const code = `${overlay}\n${preamble}\nfunction ThreadInputBar(props: any) {\n  return (\n${jsx}\n  );\n}\n`;
+  return parseTsx("InCallSmsOverlay.poisoned.tsx", code);
+}
+/** 위반을 안정된 문자열로 접는다 — 줄번호는 샘플 길이에 따라 변하므로 축·토큰만 고정한다. */
+const shape = (hits: ScanHit[]) => hits.map((hit) => `${hit.axis}/${hit.token}`).sort();
+
+test("[G80/T108] AST 축에서도 입력 어포던스가 0건이다(리터럴 검사와 **합집합** — N1)", (t) => {
+  // 새 토큰이 요구에 추가되면 축 지정 없이는 통과하지 못한다(축 없는 토큰 = 조용한 구멍).
+  assert.deepEqual(
+    Object.keys(G80_AXES).sort(),
+    [...INPUT_AFFORDANCE_TOKENS].sort(),
+    "금지 토큰과 검출 축 매핑이 어긋났다 — 토큰을 늘렸으면 §24.6 표에 축을 지정하라",
+  );
+  const hits = [...scanTokens(overlayAst, "G80", G80_AXES), ...findDynamicTagHits(overlayAst, "G80")];
+  t.diagnostic(`[오탐 전수] ${overlayFile} / G80 → 위반 ${hits.length}건 ${JSON.stringify(hits)}`);
+  assert.deepEqual(hits, [], formatHits(hits));
+  // S5 — 파싱이 죽은 채 "0건"으로 통과하는 상태를 막는다(빈 AST는 아무것도 못 본다).
+  assert.ok(overlayAst.jsxElementNames().length > 10, "AST가 실제 JSX를 보고 있어야 한다");
+});
+
+test("[AC-060/T108] AST 축에서도 전송 경로·실 URL이 0건이다", (t) => {
+  assert.deepEqual(
+    Object.keys(AC060_AXES).sort(),
+    [...READ_ONLY_TOKENS].sort(),
+    "AC-060 금지 토큰과 검출 축 매핑이 어긋났다",
+  );
+  const hits = scanTokens(overlayAst, "AC-060", AC060_AXES);
+  t.diagnostic(`[오탐 전수] ${overlayFile} / AC-060 → 위반 ${hits.length}건 ${JSON.stringify(hits)}`);
+  assert.deepEqual(hits, [], formatHits(hits));
+  assert.ok(overlayAst.callAndMemberNames().length > 10, "AST가 실제 호출·멤버 접근을 보고 있어야 한다");
+});
+
+test('[T108/역검증 1] role={"textbox"} — 표현식 컨테이너', (t) => {
+  const jsx = `    <div className="flex shrink-0 gap-2 border-t px-4 py-3">
+      <div role={"textbox"} className="min-h-[44px] flex-1 rounded-full border px-4" />
+    </div>`;
+  const parsed = poisonedOverlay("", jsx);
+  const literal = INPUT_AFFORDANCE_TOKENS.filter((token) => jsx.includes(token));
+  const hits = [...scanTokens(parsed, "G80", G80_AXES), ...findDynamicTagHits(parsed, "G80")];
+  t.diagnostic(`현행 리터럴 검사: ${literal.length}건 / AST 축: ${shape(hits).join(", ")}`);
+  assert.deepEqual(literal, [], "이 형태가 리터럴로 잡혔다면 T108의 전제가 없다");
+  assert.deepEqual(shape(hits), ['jsxAttribute/role="textbox"']);
+});
+
+test("[T108/역검증 2] 동적 태그명 — const Tag: any = \"inp\"+\"ut\"", (t) => {
+  const preamble = 'const Tag: any = "inp"+"ut";';
+  const jsx = `    <Tag value={props.reply} onChange={(event: any) => props.setReply(event.target.value)} />`;
+  const parsed = poisonedOverlay(preamble, jsx);
+  const literal = INPUT_AFFORDANCE_TOKENS.filter((token) => `${preamble}\n${jsx}`.includes(token));
+  const hits = [...scanTokens(parsed, "G80", G80_AXES), ...findDynamicTagHits(parsed, "G80")];
+  t.diagnostic(`현행 리터럴 검사: ${literal.length}건 / AST 축: ${shape(hits).join(", ")}`);
+  assert.deepEqual(literal, [], "이 형태가 리터럴로 잡혔다면 T108의 전제가 없다");
+  // 상수 폴딩이 `Tag`를 `input`으로 해석한다(값이 접히므로 N2까지 갈 필요가 없다).
+  assert.deepEqual(shape(hits), ["jsxElement/<input"]);
+});
+
+test("[T108/역검증 3] 동적 태그 + computed prop key — <El {...{[\"onSub\"+\"mit\"]: h}} />", (t) => {
+  const preamble = 'const El: any = "fo"+"rm";';
+  const jsx = `    <El {...{["onSub"+"mit"]: props.handleReply}} className="flex flex-1 gap-2" />`;
+  const parsed = poisonedOverlay(preamble, jsx);
+  const literal = INPUT_AFFORDANCE_TOKENS.filter((token) => `${preamble}\n${jsx}`.includes(token));
+  const hits = [...scanTokens(parsed, "G80", G80_AXES), ...findDynamicTagHits(parsed, "G80")];
+  t.diagnostic(`현행 리터럴 검사: ${literal.length}건 / AST 축: ${shape(hits).join(", ")}`);
+  assert.deepEqual(literal, [], "이 형태가 리터럴로 잡혔다면 T108의 전제가 없다");
+  // 요소 축·속성 축 **둘 다** 걸린다(어느 한쪽만 성공해도 검출된다).
+  assert.deepEqual(shape(hits), ["jsxAttribute/onSubmit", "jsxElement/<form"]);
+});
+
+test("[T108/N2] 폴딩이 실패해도 **미해석 동적 태그**는 실패시킨다(조용한 통과 금지)", (t) => {
+  // 값이 무엇인지 몰라도 실패시키는 것이 N2다 — 폴딩(`"inp"+"ut"`)은 접지만 함수 반환값은 못 접는다.
+  const parsed = poisonedOverlay('const T: any = makeTag();', "    <T onChange={props.setReply} />");
+  const hits = findDynamicTagHits(parsed, "G80");
+  t.diagnostic(`N2 검출: ${JSON.stringify(hits.map((hit) => `${hit.token}:${hit.detail}`))}`);
+  assert.deepEqual(shape(hits), ["dynamicTag/T"]);
+  // ⚠️ **§24.10 ④와의 차이(architect에 보고함)**: 설계 문서는 `const T = mk()`를 "못 잡는 형태"의
+  // 예로 들었으나, N2를 문면 그대로("import도 함수/컴포넌트 선언도 아니면 위반") 구현하면 **잡힌다.**
+  // 못 잡는 형태를 좁게 적는 쪽이 정직하므로 이쪽을 택하고, 실제로 남는 공백은 아래 [T108/한계]에 둔다.
+});
+
+test("[T108/한계] 아래 형태는 이 스캔이 **잡지 못한다** — 통과는 자랑이 아니라 고지다", (t) => {
+  // ⚠️ 이 테스트가 초록불인 것은 **게이트의 능력 경계를 적어 둔 것**이지 안전하다는 뜻이 아니다.
+  // 넓히려면 데이터 흐름 분석이 필요하고, 넓힐수록 오탐이 정상 코드를 물어 게이트가 삭제된다(G95).
+  const samples: Array<[string, string, string]> = [
+    ["createElement 경유", 'const E: any = React.createElement("inp"+"ut", null);', "    <div>{E}</div>"],
+    ["객체 속성 경유", 'const M: any = { t: "inp"+"ut" };', "    <M.t onChange={props.setReply} />"],
+    ["base64 디코딩", 'const B: any = atob("aW5wdXQ=");', "    <div>{B}</div>"],
+    ["표현식이 낀 템플릿", "const P = \"inp\";\nconst Q: any = `${P}ut`;", "    <div>{Q}</div>"],
+  ];
+  for (const [label, preamble, jsx] of samples) {
+    const parsed = poisonedOverlay(preamble, jsx);
+    const hits = [...scanTokens(parsed, "G80", G80_AXES), ...findDynamicTagHits(parsed, "G80")];
+    t.diagnostic(`[한계] ${label} → 검출 ${hits.length}건 ${JSON.stringify(shape(hits))}`);
+    assert.deepEqual(shape(hits), [], `${label}: 잡히게 됐다면 이 고지를 갱신하라`);
+  }
+  // 그리고 **파일 분할**은 어떤 축으로도 잡지 못한다 — 스캔 대상 파일 집합이 고정이기 때문이다(§24.8).
+  t.diagnostic("[한계] 파일 분할: 스캔 대상은 고정 파일 집합이라 입력 UI를 다른 파일로 옮기면 0건이 된다");
 });
 
 // ── T103(전면 문자함 + 통화 필) 구조 불변식 ────────────────────────────────────
