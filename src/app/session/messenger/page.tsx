@@ -537,6 +537,8 @@ export default function MessengerSessionPage() {
       {fakeLanding && (
         <MessengerFakeLanding
           title={fakeLanding.displayText}
+          // T104 — 상황별 콘텐츠 조회 키(§19.4 R8: 정확 일치 조회 전용).
+          landingId={fakeLanding.fakeLandingId}
           landingKind={fakeLanding.landingKind}
           onClose={() => setFakeLanding(null)}
           onEndTraining={handleEndTraining}

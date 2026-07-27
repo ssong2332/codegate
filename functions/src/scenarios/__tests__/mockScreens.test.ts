@@ -226,6 +226,53 @@ function findEntrySurfaceKindViolations(catalog: Catalog): string[] {
   return failures;
 }
 
+/** G-B — `IN_CALL_SMS.fakeLandingId` ↔ 카탈로그 **양방향** 참조 정합(M5를 닫는다).
+ *
+ * 이 게이트 이전에는 통화 경로 랜딩이 **어떤 정합 검사도 타지 않았다** — `LINK_LABELS`에 없어
+ * G53을 애초에 우회하고, `MOCK_SCREENS`에 없어 `findMockScreenItem` 재검증도 타지 않았다.
+ * 오탈자 1글자로 랜딩이 조용히 범용 화면으로 떨어지는 것이 정확히 이번 사용자 신고의 재발 경로다. */
+function findCrossReferenceViolations(
+  catalog: Catalog,
+  smsCatalog: Record<string, { smsId: string; fakeLandingId?: string }[]>,
+): string[] {
+  const failures: string[] = [];
+  // ① 통화 중 문자가 가리키는 landingId는 **같은 시나리오** 카탈로그에 in-call-sms 표면으로 있다.
+  for (const [scenarioId, items] of Object.entries(smsCatalog)) {
+    for (const sms of items) {
+      if (!sms.fakeLandingId) continue;
+      const item = (catalog[scenarioId] ?? []).find((i) => i.landingId === sms.fakeLandingId);
+      if (!item) {
+        failures.push(
+          `${scenarioId}/${sms.smsId}: fakeLandingId '${sms.fakeLandingId}'가 카탈로그에 없다(G-B ①)`,
+        );
+        continue;
+      }
+      if (item.entrySurface !== "in-call-sms") {
+        failures.push(
+          `${scenarioId}/${sms.smsId}: '${sms.fakeLandingId}'의 entrySurface가 ` +
+            `'${item.entrySurface}'다 — 통화 중 문자가 참조하면 in-call-sms여야 한다(G-B ①)`,
+        );
+      }
+    }
+  }
+  // ② 반대 방향 — in-call-sms 표면 항목은 자기를 참조하는 문자가 최소 1건 있어야 한다(도달 가능).
+  for (const [scenarioId, items] of Object.entries(catalog)) {
+    for (const item of items) {
+      if (item.entrySurface !== "in-call-sms") continue;
+      const referenced = (smsCatalog[scenarioId] ?? []).some(
+        (sms) => sms.fakeLandingId === item.landingId,
+      );
+      if (!referenced) {
+        failures.push(
+          `${scenarioId}/${item.landingId}: 이 랜딩을 참조하는 통화 중 문자가 없다 — ` +
+            "도달할 수 없는 화면이다(G-B ②)",
+        );
+      }
+    }
+  }
+  return failures;
+}
+
 /** G-C — kind ↔ 필드 정합(§19.3 (2)). `app-install`에 입력 필드가 생기면 AC-072가 조용히 깨진다. */
 function findKindFieldViolations(catalog: Catalog): string[] {
   const failures: string[] = [];
@@ -287,6 +334,37 @@ test("[T104/G-A 역검증] 통화 표면에 app-install을 넣으면 실제로 �
   assert.equal(findEntrySurfaceKindViolations(poisoned).length, 1);
 });
 
+test("[T104/G-B] IN_CALL_SMS ↔ MOCK_SCREENS 양방향 참조 정합(통화 경로 랜딩의 M5를 닫는다)", () => {
+  assert.deepEqual(findCrossReferenceViolations(MOCK_SCREENS, IN_CALL_SMS), []);
+});
+
+test("[T104/G-B 역검증] 한쪽에서 1건을 빼거나 표면을 틀리면 실제로 실패한다", () => {
+  // ① 카탈로그에서 통화 경로 항목 1건을 빼면 — 문자 → 랜딩 참조가 끊긴다.
+  const withoutOne: Catalog = Object.fromEntries(
+    Object.entries(MOCK_SCREENS).map(([scenarioId, items]) => [
+      scenarioId,
+      scenarioId === "loan-refinance-scam" ? [] : items,
+    ]),
+  );
+  const dropped = findCrossReferenceViolations(withoutOne, IN_CALL_SMS);
+  assert.ok(
+    dropped.some((f) => f.includes("loan-refinance-apply")),
+    `카탈로그에서 1건을 빼면 G-B ①이 잡아야 한다: ${dropped.join(" / ")}`,
+  );
+  // ② 아무도 참조하지 않는 통화 표면 항목을 넣으면 — 반대 방향이 잡는다.
+  const orphan = findCrossReferenceViolations(
+    { "tax-refund-scam": [fixtureItem({ landingId: "nobody-links-here", entrySurface: "in-call-sms" })] },
+    {},
+  );
+  assert.ok(orphan.some((f) => f.includes("nobody-links-here")));
+  // ③ 표면을 messenger-link로 잘못 선언하면 — 정밀화된 G53 쪽으로 새는 것을 여기서 막는다.
+  const wrongSurface = findCrossReferenceViolations(
+    { "tax-refund-scam": [fixtureItem({ landingId: "tax-refund-claim", entrySurface: "messenger-link" })] },
+    IN_CALL_SMS,
+  );
+  assert.ok(wrongSurface.some((f) => f.includes("entrySurface")));
+});
+
 test("[T104/G-C] kind ↔ 필드 정합 — app-install에 입력 필드가 0건이다(AC-072)", () => {
   assert.deepEqual(findKindFieldViolations(MOCK_SCREENS), []);
 });
@@ -337,11 +415,30 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
 
   // G55·channel — app-install 판정 키가 실제 카탈로그에서 비어 있지 않다(공회전 방지).
   assert.deepEqual(appInstallScenarioIds, ["messenger-subsidy-smishing-sms"]);
-  // 통화 채널 시나리오가 카탈로그에 들어와도 **app-install은 하나도 없다**(정밀화의 안전 전제).
-  for (const scenarioId of Object.keys(MOCK_SCREENS)) {
-    if (PUBLIC_SCENARIOS[scenarioId].channel === "messenger") continue;
+  // 통화 채널 시나리오가 **실제로** 카탈로그에 들어와 있다 — 정밀화가 없었다면 여기서 깨졌을 상태다.
+  // ⚠️ `channel`은 옵셔널이고 **음성 시나리오는 아예 필드를 갖지 않는다**(`publicMeta.ts:29`) —
+  // `=== "voice"`로 세면 0건이 나온다. 정밀화된 단언과 같은 판정("messenger가 아닌 것")을 쓴다.
+  const voiceScoped = Object.keys(MOCK_SCREENS).filter(
+    (scenarioId) => PUBLIC_SCENARIOS[scenarioId].channel !== "messenger",
+  );
+  assert.deepEqual(
+    voiceScoped.sort(),
+    ["courier-customs-scam", "loan-refinance-scam", "tax-refund-scam"],
+    "통화 채널 3종이 카탈로그에 없으면 정밀화가 아무것도 안 푼 것이다",
+  );
+  // 그리고 그 3종은 **app-install을 하나도 갖지 않는다**(정밀화의 안전 전제 = M2 차단).
+  for (const scenarioId of voiceScoped) {
     assert.equal(hasAppInstallMockScreen(scenarioId), false, `${scenarioId}: 통화 채널에 설치 목업 금지`);
   }
+  // entrySurface 분포도 고정한다 — 표면 선언이 통째로 한쪽으로 쏠리면 G53/G-B 중 하나가 공회전한다.
+  const surfaces = allItems.map((item) => item.entrySurface).sort();
+  assert.deepEqual(surfaces, [
+    "in-call-sms",
+    "in-call-sms",
+    "in-call-sms",
+    "messenger-link",
+    "messenger-link",
+  ]);
 });
 
 test("landingId는 전역 유일하고, 카탈로그의 모든 scenarioId가 실제 시나리오다", () => {
@@ -399,6 +496,126 @@ test("hasAppInstallMockScreen / listAppInstallMockScreens — 게이팅 판정�
     listAppInstallMockScreens("messenger-subsidy-smishing-sms").map((i) => i.landingId),
     ["subsidy-install"],
   );
+});
+
+// ── AC-078 (a)(b)(d) — 상황별 랜딩의 완료 판정 조건 (T104 · PRD v1.8) ──────────
+//
+// ⚠️ **"도달 가능"의 정의는 AC 안에 고정돼 있다**: *"시나리오 프롬프트 또는 통화 중 문자 카탈로그가
+// **실제로 그 링크 마커를 방출하는** 경우만 도달 가능이다 — 라벨·식별자만 등재돼 있고 어떤
+// 프롬프트도 내지 않는 항목은 대상이 아니다."* 그래서 `LINK_LABELS`가 아니라 **프롬프트 본문**과
+// **`IN_CALL_SMS.fakeLandingId`** 를 원천으로 삼는다(`subsidy-apply`는 라벨만 있고 이 마커를 내는
+// 프롬프트가 0개라 도달 불가 — 대상이 아니다).
+
+const LINK_MARKER_IN_PROMPT = /\[\[LINK:([a-zA-Z0-9_-]+)\]\]/g;
+
+/** `scenarioId::landingId` 형태의 **도달 가능 랜딩** 집합(정렬). */
+function reachableLandingKeys(): string[] {
+  const keys = new Set<string>();
+  for (const [scenarioId, prompt] of Object.entries(SCENARIO_PROMPTS)) {
+    const promptText = [
+      prompt.personaPrompt,
+      prompt.guardrailPreamble,
+      ...prompt.weakenedTactics,
+      ...(prompt.suspicionKeywords ?? []),
+    ].join("\n");
+    for (const [, landingId] of promptText.matchAll(LINK_MARKER_IN_PROMPT)) {
+      keys.add(`${scenarioId}::${landingId}`);
+    }
+  }
+  for (const [scenarioId, items] of Object.entries(IN_CALL_SMS)) {
+    for (const sms of items) {
+      if (sms.fakeLandingId) keys.add(`${scenarioId}::${sms.fakeLandingId}`);
+    }
+  }
+  return [...keys].sort();
+}
+
+function catalogLandingKeys(catalog: Catalog): string[] {
+  return Object.entries(catalog)
+    .flatMap(([scenarioId, items]) => items.map((item) => `${scenarioId}::${item.landingId}`))
+    .sort();
+}
+
+test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **양방향으로** 일치한다", () => {
+  assert.deepEqual(catalogLandingKeys(MOCK_SCREENS), reachableLandingKeys());
+  // 도달 불가 라벨은 대상이 아니다 — 여기 들어오면 스코프 크립이다.
+  assert.equal(
+    reachableLandingKeys().some((key) => key.endsWith("::subsidy-apply")),
+    false,
+    "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
+  );
+  assert.equal(reachableLandingKeys().length, 5, "도달 가능 랜딩은 5종이다(UX-023 v1.13 (1))");
+});
+
+test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
+  const withoutOne: Catalog = Object.fromEntries(
+    Object.entries(MOCK_SCREENS).filter(([scenarioId]) => scenarioId !== "tax-refund-scam"),
+  );
+  assert.notDeepEqual(catalogLandingKeys(withoutOne), reachableLandingKeys());
+  // 반대 방향 — 도달 경로가 없는 항목을 카탈로그에 넣어도 어긋난다.
+  const withExtra: Catalog = {
+    ...MOCK_SCREENS,
+    "family-accident-deepvoice": [fixtureItem({ landingId: "unreachable-landing" })],
+  };
+  assert.notDeepEqual(catalogLandingKeys(withExtra), reachableLandingKeys());
+});
+
+/** (b) 수렴 금지 판정용 본문 조합 — 헤드라인·안내문·필드 라벨 구성·CTA·완료 문구. */
+function bodySignature(item: MockScreenItem): string {
+  return JSON.stringify([
+    item.headline,
+    item.bodyLines,
+    item.fields ?? null,
+    item.submitLabel ?? item.consentLabel ?? null,
+    item.successHeadline ?? null,
+    item.issuerLabel,
+  ]);
+}
+
+test("[AC-078 (b)] 서로 다른 랜딩의 본문이 **하나도 수렴하지 않는다**(쌍별 비교)", () => {
+  const items = Object.values(MOCK_SCREENS).flat();
+  assert.ok(items.length >= 5, "비교 대상이 5종 이상이어야 한다");
+  for (let i = 0; i < items.length; i += 1) {
+    for (let j = i + 1; j < items.length; j += 1) {
+      assert.notEqual(
+        bodySignature(items[i]),
+        bodySignature(items[j]),
+        `${items[i].landingId} ↔ ${items[j].landingId}: 링크 라벨만 다르고 열면 같은 화면이면 AC-078 위반`,
+      );
+      // OQ-U28 권고 (i) — 헤드라인만으로도 갈린다(기계 판정 가능한 최소 조건).
+      assert.notEqual(
+        items[i].headline,
+        items[j].headline,
+        `${items[i].landingId} ↔ ${items[j].landingId}: 헤드라인이 같으면 상황이 갈리지 않은 것이다`,
+      );
+    }
+  }
+});
+
+test("[AC-078 (b) 역검증] 두 항목을 같게 만들면 쌍별 비교가 실제로 실패한다", () => {
+  const twin = fixtureItem({ landingId: "twin-a" });
+  assert.equal(bodySignature(twin), bodySignature(fixtureItem({ landingId: "twin-b" })));
+  // 실제 항목 하나를 다른 항목의 본문으로 덮어써도 마찬가지다.
+  const real = MOCK_SCREENS["tax-refund-scam"][0];
+  const cloned = { ...MOCK_SCREENS["courier-customs-scam"][0], landingId: "cloned" };
+  assert.notEqual(bodySignature(real), bodySignature(cloned));
+  assert.equal(bodySignature(cloned), bodySignature(MOCK_SCREENS["courier-customs-scam"][0]));
+});
+
+test("[AC-078 (d)] 콘텐츠 없는 식별자는 범용 화면으로만 폴백하고 app-install로는 절대 폴백하지 않는다", () => {
+  const scenarioIds = [...Object.keys(MOCK_SCREENS), "family-accident-deepvoice", "no-such-scenario"];
+  for (const scenarioId of scenarioIds) {
+    for (const landingId of ["", "unknown", "subsidy-install-", "SUBSIDY-INSTALL", "app-install"]) {
+      assert.equal(
+        resolveMockScreenKind(scenarioId, landingId),
+        "credential-form",
+        `${scenarioId}/${landingId}: 부재 id가 app-install로 열리면 안 된다(§15.9.1 R5)`,
+      );
+    }
+  }
+  // 다른 시나리오의 app-install id를 빌려 와도 소속 재검증에서 막힌다(§15.6 G12 동형).
+  assert.equal(resolveMockScreenKind("tax-refund-scam", "subsidy-install"), "credential-form");
+  assert.equal(DEFAULT_MOCK_SCREEN_KIND, "credential-form");
 });
 
 test("[§15.9.7 G54] 응낙 턴 지시가 채널 전이 신호를 담지 않는다(신규 전이 트리거 0건)", () => {

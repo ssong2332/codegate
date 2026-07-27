@@ -296,6 +296,8 @@ export default function SessionCallPage() {
             otpCode: data.otpCode as string | undefined,
             linkDisplayText: data.linkDisplayText as string | undefined,
             fakeLandingId: data.fakeLandingId as string | undefined,
+            // T104(§19.4 #5) — 서버가 확정한 목업 종류. 클라는 그대로 나른다(§15.9.1 R3).
+            landingKind: data.landingKind as InCallSmsView["landingKind"],
             arrivedAtMs: arrivedAt?.toMillis?.() ?? 0,
             openedAtMs: openedAt?.toMillis?.(),
           };

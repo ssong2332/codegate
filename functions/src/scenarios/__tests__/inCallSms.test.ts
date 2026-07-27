@@ -21,6 +21,10 @@ import { PUBLIC_SCENARIOS } from "../publicMeta";
 import { SCENARIO_PROMPTS } from "../index";
 
 const allItems = Object.values(IN_CALL_SMS).flat();
+/** T104 — `buildInCallSmsDoc`이 `landingKind` 판정을 위해 scenarioId를 받는다(§19.4 #2). */
+const allEntries = Object.entries(IN_CALL_SMS).flatMap(([scenarioId, items]) =>
+  items.map((item) => ({ scenarioId, item })),
+);
 
 test("[AC-060] 카탈로그 어디에도 실 URL(스킴/도메인) 필드·문자열이 존재하지 않는다(구조적 금지)", () => {
   assert.ok(allItems.length > 0, "카탈로그가 비어 있으면 이 기능은 영영 발동하지 않는다");
@@ -154,8 +158,8 @@ test("hasInCallSms / findDueInCallSms — 폴백 경로의 서버측 턴 계산�
 
 test("buildInCallSmsDoc은 announceInstruction(모델용 지시)을 문서에 넣지 않는다(AC-024 계승)", () => {
   const fakeTimestamp = { seconds: 0, nanoseconds: 0 } as unknown as FirebaseFirestore.Timestamp;
-  for (const item of allItems) {
-    const doc = buildInCallSmsDoc(item, fakeTimestamp, realtimeAnchorScammerTurn(item));
+  for (const { scenarioId, item } of allEntries) {
+    const doc = buildInCallSmsDoc(item, fakeTimestamp, realtimeAnchorScammerTurn(item), scenarioId);
     assert.equal(
       (doc as unknown as Record<string, unknown>).announceInstruction,
       undefined,
@@ -172,11 +176,26 @@ test("buildInCallSmsDoc은 announceInstruction(모델용 지시)을 문서에 �
   }
 });
 
+test("[T104/§19.4 #3] buildInCallSmsDoc의 landingKind는 기본값이면 **키를 만들지 않는다**(무백필)", () => {
+  const fakeTimestamp = { seconds: 0, nanoseconds: 0 } as unknown as FirebaseFirestore.Timestamp;
+  for (const { scenarioId, item } of allEntries) {
+    const doc = buildInCallSmsDoc(item, fakeTimestamp, realtimeAnchorScammerTurn(item), scenarioId);
+    const raw = doc as unknown as Record<string, unknown>;
+    // 현행 통화 경로 랜딩 3종은 전부 credential-form(=기본값)이라 **오늘 쓰이는 문서는 한 바이트도
+    // 바뀌지 않는다.** `extractLinkMarker`의 생략 규칙과 글자 그대로 같은 규칙이다(드리프트 방지).
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(raw, "landingKind"),
+      false,
+      `${scenarioId}/${item.smsId}: 기본값 kind에 키를 만들면 기존 문서와 형태가 갈라진다`,
+    );
+  }
+});
+
 // ── T89(§15.1.5 (4) / §15.6 G21) — 앵커 write 값 ────────────────────────────────
 test("[T89] buildInCallSmsDoc은 신규 문서에 anchorScammerTurn을 **항상** 채운다(리졸버가 미해결로 떨어지지 않게)", () => {
   const fakeTimestamp = { seconds: 0, nanoseconds: 0 } as unknown as FirebaseFirestore.Timestamp;
-  for (const item of allItems) {
-    const doc = buildInCallSmsDoc(item, fakeTimestamp, realtimeAnchorScammerTurn(item));
+  for (const { scenarioId, item } of allEntries) {
+    const doc = buildInCallSmsDoc(item, fakeTimestamp, realtimeAnchorScammerTurn(item), scenarioId);
     assert.equal(
       typeof doc.anchorScammerTurn,
       "number",

@@ -109,6 +109,105 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
   },
 ];
 
+// ── T104 상황별 랜딩 콘텐츠 (UX-023 v1.13 (3) · D-58 · P-28 · AC-078) ────────────
+//
+// **왜 콘텐츠가 서버 카탈로그에 있는가(§19.3 (1) ③ — 결정적 이유)**: `mockSurface` 프로파일만
+// `realInstitutionName`(국세청·관세청·우체국…)을 포함하고, 그 스캔은 `harmlessnessGate.test.ts`의
+// `collectAllSurfaces()`가 순회하는 **이 카탈로그**에만 걸린다. 클라 상수에만 두거나 새 서버 파일을
+// 만들면 환급·통관 랜딩의 실존 기관명이 **어디에서도 안 걸린다** — D-58이 최대 위험으로 지목한 지점.
+//
+// ⚠️ 아래 4종은 전부 `credential-form`이다(**신규 kind 0건** — D-58). 새로 붙는 화면이 모두
+// "정보를 입력하게 만드는 화면"이라 기존 안전 계약(입력 허용·서버 미전송·외부 네비게이션 부재)과
+// 정확히 일치하고, kind를 늘리면 안전 계약이 한 벌 더 늘어 AC-072가 금지한 "검증 경로 이중화"에
+// 스스로 다가간다.
+
+// UF-006 Step 4 — 메신저 채팅(UX-022)의 `[[LINK:parcel-redelivery]]` 칩에서 열린다.
+const MESSENGER_PARCEL_SMISHING_SMS: MockScreenItem[] = [
+  {
+    landingId: "parcel-redelivery",
+    kind: "credential-form",
+    entrySurface: "messenger-link",
+    headline: "주소가 확인되지 않아 배송이 보류되었습니다",
+    bodyLines: [
+      "받는 분 정보가 일부 확인되지 않아 물품이 접수처에 보관 중입니다.",
+      "아래 정보를 확인해 주시면 오늘 중으로 재배송이 접수됩니다.",
+    ],
+    issuerLabel: "ⓒ 종합물류 재배송 접수처",
+    fields: ["받는 분 성함", "연락처", "받으실 주소"],
+    submitLabel: "재배송 신청하기",
+    successHeadline: "재배송이 접수되었습니다.",
+    momentTactic: "배송 보류를 빌미로 한 개인정보 입력 유도",
+    correctAction:
+      "문자 링크로 배송 정보를 입력하지 말고 화면을 닫으세요. ① 배송 상태는 주문한 판매처나 택배사 공식 경로에서 직접 조회하기 ② 주소·연락처를 링크로 요구하면 일단 멈추기 ③ 가족이나 가까운 사람에게 화면을 보여 주고 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+];
+
+// UF-008 — 통화 중 문자(UX-027)의 `loan-apply-link` 칩에서 열린다(`inCallSms.ts` LOAN_SCAM).
+const LOAN_REFINANCE_SCAM: MockScreenItem[] = [
+  {
+    landingId: "loan-refinance-apply",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "전환 신청서 본인확인이 필요합니다",
+    bodyLines: [
+      "저금리 전환 승인을 위해 신청인 본인 확인이 남아 있습니다.",
+      "아래 정보를 입력하시면 상담사가 접수 완료를 안내해 드립니다.",
+    ],
+    // 문자 본문의 가상 발신 주체(`inCallSms.ts` LOAN_SCAM `senderLabel`)와 표기를 맞춘다.
+    issuerLabel: "ⓒ ○○캐피탈 전환심사팀",
+    fields: ["성함", "생년월일", "연락처"],
+    submitLabel: "본인확인 완료하기",
+    successHeadline: "본인확인이 완료되었습니다.",
+    momentTactic: "저금리 전환 승인을 빌미로 한 신상정보 입력 유도",
+    correctAction:
+      "전환 신청서라며 링크로 본인확인을 요구하면 입력하지 말고 화면을 닫으세요. ① 대출 상담은 이미 알고 있는 금융회사 대표번호로 직접 걸어 확인하기 ② 생년월일·연락처를 링크에 넣지 않기 ③ 가족이나 가까운 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+];
+
+// UF-008 — `tax-refund-link` 칩에서 열린다. ⚠️ 실존 기관명(국세청) 금지라 가상 안내센터 표기를 쓴다.
+const TAX_REFUND_SCAM: MockScreenItem[] = [
+  {
+    landingId: "tax-refund-claim",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "환급금 받으실 계좌를 등록해 주세요",
+    bodyLines: [
+      "조회된 미수령 환급금이 확인되었습니다.",
+      "받으실 계좌를 등록하시면 당일 지급 처리됩니다.",
+    ],
+    issuerLabel: "ⓒ 환급금 지급 안내센터",
+    // ⛔ 라벨에 숫자열을 넣지 않는다(`LONG_DIGIT_SEQUENCE`) — 안내 텍스트만 쓴다.
+    fields: ["예금주", "은행", "계좌번호"],
+    submitLabel: "계좌 등록하기",
+    successHeadline: "계좌가 등록되었습니다.",
+    momentTactic: "미수령 환급금을 빌미로 한 계좌정보 입력 유도",
+    correctAction:
+      "돈을 준다며 계좌를 입력하라고 하면 그 자리에서 멈추세요 — 환급은 계좌번호를 링크로 받지 않습니다. ① 환급 여부는 공식 기관 창구에 직접 문의해 확인하기 ② 예금주·계좌번호를 문자 링크에 넣지 않기 ③ 가족이나 가까운 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+];
+
+// UF-008 — `courier-customs-link` 칩에서 열린다. ⚠️ 관세청·우체국 등 실존 기관명 금지.
+const COURIER_CUSTOMS_SCAM: MockScreenItem[] = [
+  {
+    landingId: "courier-customs-check",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "수취인 정보가 일치하지 않아 통관이 보류되었습니다",
+    bodyLines: [
+      "국제 배송 물품의 수취인 정보가 확인되지 않았습니다.",
+      "아래 정보를 확인해 주셔야 통관 절차가 재개됩니다.",
+    ],
+    // 문자 본문의 가상 발신 주체(`inCallSms.ts` COURIER_CUSTOMS_SCAM)와 표기를 맞춘다.
+    issuerLabel: "ⓒ 국제통관지원센터",
+    fields: ["수취인 성함", "연락처", "생년월일"],
+    submitLabel: "수취인 정보 확인하기",
+    successHeadline: "수취인 정보가 확인되었습니다.",
+    momentTactic: "통관 보류를 빌미로 한 수취인 정보 입력 유도",
+    correctAction:
+      "통관이 보류됐다며 링크로 정보를 확인하라고 하면 입력하지 말고 화면을 닫으세요. ① 배송 상태는 주문한 판매처나 배송사 공식 경로에서 직접 조회하기 ② 생년월일·연락처를 문자 링크에 넣지 않기 ③ 가족이나 가까운 사람에게 화면을 보여 주고 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+];
+
 /**
  * 시나리오별 모의 화면 카탈로그(`IN_CALL_SMS` 미러 — `Record<scenarioId, Item[]>`).
  *
@@ -127,6 +226,10 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
  */
 export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   "messenger-subsidy-smishing-sms": MESSENGER_SUBSIDY_SMISHING_SMS,
+  "messenger-parcel-smishing-sms": MESSENGER_PARCEL_SMISHING_SMS,
+  "loan-refinance-scam": LOAN_REFINANCE_SCAM,
+  "tax-refund-scam": TAX_REFUND_SCAM,
+  "courier-customs-scam": COURIER_CUSTOMS_SCAM,
 };
 
 /**

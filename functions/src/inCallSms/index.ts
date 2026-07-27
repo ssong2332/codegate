@@ -74,7 +74,9 @@ export const deliverInCallSms = onCall<
   if (!existing.exists) {
     // 앵커(§15.1.5 (4)) — 실시간 경로 보정은 realtimeAnchorScammerTurn이 소유한다(근거는 그 함수
     // doc 주석). 여기서 손으로 ±1 하지 않는다 — 두 경로의 보정이 갈라지지 않게 하기 위해서다.
-    await smsRef.create(buildInCallSmsDoc(item, Timestamp.now(), realtimeAnchorScammerTurn(item)));
+    await smsRef.create(
+      buildInCallSmsDoc(item, Timestamp.now(), realtimeAnchorScammerTurn(item), session.scenarioId),
+    );
   }
 
   return { smsId: item.smsId, announceInstruction: item.announceInstruction };

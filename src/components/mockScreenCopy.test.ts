@@ -244,6 +244,70 @@ test("[G76] 리포트 전용 문구(momentTactic·correctAction)는 화면 컴�
   }
 });
 
+// ── T104 — 상황별 콘텐츠 조회의 구조 규칙(§19.4 R7/R8 · AC-078 (d)) ─────────────
+
+test("[T104/R8] landingId는 **정확 일치 조회 키**로만 쓰인다(문자열 분류 0건)", () => {
+  // AC-024 자유문자열 분류 금지 원칙의 계승 — `startsWith`·`includes`·정규식으로 랜딩 성격을
+  // 추론하기 시작하면 서버가 kind를 정한다는 R3이 클라에서 조용히 무너진다.
+  for (const forbidden of [
+    "landingId.startsWith",
+    "landingId.includes",
+    "landingId.split",
+    "landingId.match",
+    "landingId.indexOf",
+    "landingId.replace",
+    "landingId.endsWith",
+    "test(landingId",
+  ]) {
+    assert.equal(componentCode.includes(forbidden), false, `landingId 문자열 분류 금지(R8): ${forbidden}`);
+  }
+  assert.ok(
+    componentCode.includes("CREDENTIAL_LANDING_COPY[landingId]"),
+    "정확 일치 키 조회가 있어야 한다",
+  );
+});
+
+test("[T104/R7·AC-078 (d)] 콘텐츠 미스는 **같은 kind의 범용 화면**으로만 떨어진다", () => {
+  // 폴백 대상이 GENERIC_CREDENTIAL_COPY(=범용 credential-form)임을 소스로 고정한다.
+  assert.ok(
+    /CREDENTIAL_LANDING_COPY\[landingId\][^;]*\?\?\s*GENERIC_CREDENTIAL_COPY/.test(componentCode),
+    "콘텐츠 미스의 폴백이 범용 credential-form 문구여야 한다(§15.9.1 R5)",
+  );
+  // ⛔ app-install 렌더가 credential 콘텐츠 표를 보지 않는다 — 조회가 kind를 바꾸는 경로 0건.
+  const installStart = componentCode.indexOf("function AppInstallMockup");
+  assert.ok(installStart > 0);
+  const installBody = componentCode.slice(installStart);
+  assert.equal(
+    installBody.includes("CREDENTIAL_LANDING_COPY"),
+    false,
+    "app-install이 credential 콘텐츠 표를 읽으면 kind 경계가 콘텐츠로 새어 R5 폴백 금지를 우회한다",
+  );
+  // 그리고 kind 분기 자체는 콘텐츠보다 **먼저** 끝난다(R7).
+  const branchAt = componentCode.indexOf('landingKind === "app-install" ? (');
+  const lookupAt = componentCode.indexOf("CREDENTIAL_LANDING_COPY[landingId]");
+  assert.ok(branchAt > 0 && lookupAt > branchAt, "콘텐츠 조회가 kind 분기보다 먼저 일어나면 안 된다");
+});
+
+test("[T104] 화면 콘텐츠 표의 키가 **전부 카탈로그에 있는 landingId**다(반대 방향 드리프트)", () => {
+  const tableStart = componentCode.indexOf("const CREDENTIAL_LANDING_COPY");
+  assert.ok(tableStart > 0, "상황별 콘텐츠 표가 있어야 한다");
+  const tableBody = componentCode.slice(tableStart, componentCode.indexOf("\n};", tableStart));
+  const keys = [...tableBody.matchAll(/^ {2}"([a-z0-9-]+)":/gm)].map((m) => m[1]);
+  assert.ok(keys.length >= 4, `상황별 랜딩 4종이 있어야 한다(현재 ${keys.length}종): ${keys}`);
+  const catalogIds = catalogItems.map((item) => item.landingId);
+  for (const key of keys) {
+    assert.ok(
+      catalogIds.includes(key),
+      `화면에만 있는 랜딩 콘텐츠다 — 서버 카탈로그에 없는 키: ${key}`,
+    );
+  }
+  // 카탈로그의 credential-form 항목은 전부 표에 있어야 한다(범용 화면으로 떨어지면 사용자 신고 재발).
+  const credentialIds = catalogItems
+    .filter((item) => (item.fields.get("kind") ?? [])[0] !== "app-install")
+    .map((item) => item.landingId);
+  assert.deepEqual(keys.slice().sort(), credentialIds.slice().sort());
+});
+
 test("[AC-072] 화면 문구에도 실존 앱명·스토어 표기가 없다", () => {
   // 주석은 제외한다 — 이 파일의 주석은 "무엇을 하면 안 되는가"를 적고 있어 금지어를 인용한다.
   for (const forbidden of ["카카오뱅크", "토스", "네이버", "정부24", "AnyDesk", "TeamViewer", "플레이스토어", "앱스토어"]) {

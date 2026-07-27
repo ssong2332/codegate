@@ -159,7 +159,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
           // 앵커(§15.1.5 (4)) — 이 경로는 사기범 응답 **직전**에 write하므로 완료된 사기범 발화가
           // 하나 적다. 보정은 fallbackAnchorScammerTurn이 소유한다(실시간 경로와 대칭).
           await smsRef.create(
-            buildInCallSmsDoc(dueSms, Timestamp.now(), fallbackAnchorScammerTurn(dueSms)),
+            buildInCallSmsDoc(
+              dueSms,
+              Timestamp.now(),
+              fallbackAnchorScammerTurn(dueSms),
+              session.scenarioId,
+            ),
           );
         }
         deliveredSmsId = dueSms.smsId;
