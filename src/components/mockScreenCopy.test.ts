@@ -9,6 +9,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
+import {
+  formatHits,
+  parseTsx,
+  parseTsxFile,
+  scanTokens,
+  type Axis,
+} from "../lib/sourcescan/scanSource.ts";
 
 const componentPath = "src/components/MessengerFakeLanding.tsx";
 const component = readFileSync(componentPath, "utf8");
@@ -21,8 +28,8 @@ function codeOnly(source: string): string {
 }
 const componentCode = codeOnly(component);
 
-test("[G50/AC-045/AC-072] 목업 화면에 나가는 네트워크·외부 이동·권한 API 경로가 **하나도 없다**", () => {
-  for (const forbidden of [
+/** AC-045/G50 금지 토큰(요구 무변경 — T108은 **검출 축만** 더한다). 아래 `G50_AXES`와 짝이다. */
+const NETWORK_AND_PERMISSION_TOKENS = [
     // 네트워크(입력값 서버 미전송 — AC-045)
     "httpsCallable",
     "fetch(",
@@ -49,7 +56,10 @@ test("[G50/AC-045/AC-072] 목업 화면에 나가는 네트워크·외부 이동
     "market://",
     "intent://",
     "beforeinstallprompt",
-  ]) {
+];
+
+test("[G50/AC-045/AC-072] 목업 화면에 나가는 네트워크·외부 이동·권한 API 경로가 **하나도 없다**", () => {
+  for (const forbidden of NETWORK_AND_PERMISSION_TOKENS) {
     assert.equal(
       componentCode.includes(forbidden),
       false,
@@ -246,25 +256,136 @@ test("[G76] 리포트 전용 문구(momentTactic·correctAction)는 화면 컴�
 
 // ── T104 — 상황별 콘텐츠 조회의 구조 규칙(§19.4 R7/R8 · AC-078 (d)) ─────────────
 
+/** R8 금지 토큰(요구 무변경 — T108은 **검출 축만** 더한다). 아래 `R8_AXES`와 짝이다. */
+const LANDING_ID_CLASSIFY_TOKENS = [
+  "landingId.startsWith",
+  "landingId.includes",
+  "landingId.split",
+  "landingId.match",
+  "landingId.indexOf",
+  "landingId.replace",
+  "landingId.endsWith",
+  "test(landingId",
+];
+
 test("[T104/R8] landingId는 **정확 일치 조회 키**로만 쓰인다(문자열 분류 0건)", () => {
   // AC-024 자유문자열 분류 금지 원칙의 계승 — `startsWith`·`includes`·정규식으로 랜딩 성격을
   // 추론하기 시작하면 서버가 kind를 정한다는 R3이 클라에서 조용히 무너진다.
-  for (const forbidden of [
-    "landingId.startsWith",
-    "landingId.includes",
-    "landingId.split",
-    "landingId.match",
-    "landingId.indexOf",
-    "landingId.replace",
-    "landingId.endsWith",
-    "test(landingId",
-  ]) {
+  for (const forbidden of LANDING_ID_CLASSIFY_TOKENS) {
     assert.equal(componentCode.includes(forbidden), false, `landingId 문자열 분류 금지(R8): ${forbidden}`);
   }
   assert.ok(
     componentCode.includes("CREDENTIAL_LANDING_COPY[landingId]"),
     "정확 일치 키 조회가 있어야 한다",
   );
+});
+
+// ── T108(docs/Architecture.md §24) — 위 두 리터럴 게이트에 **AST 축을 합집합으로 더한다** ─────
+//
+// **왜.** T104 QA가 소스 텍스트 스캔을 피하는 형태 3종을 재현했다(표현식 컨테이너·동적 태그명·
+// computed prop key). 같은 부류의 회피는 여기에도 그대로 통한다 — `globalThis["fet"+"ch"]`·
+// `navigator["geo"+"location"]`·`landingId["start"+"sWith"]`는 소스에 금지 문자열이 없다.
+// AST 축은 **표기와 무관하게** 호출·멤버 접근·import 지정자·문자열 값을 구조로 본다.
+//
+// ⚠️ **N1 — 위 리터럴 검사를 걷어내지 않는다.** 합집합이지 교체가 아니다.
+// ⚠️ **요구 무변경** — 금지 토큰 목록은 위 두 상수 그대로다(§24.10 ⑧).
+// ⚠️ **자기 고지**: 이 축도 고의 난독화에 완전하지 않다(런타임 조립·표현식이 낀 템플릿은 정적
+// 결정 불가). **속성 스프레드가 인라인 객체 리터럴이 아니라 참조일 때도 속성 축이 닿지 않는다**
+// (QA-14 — 참조 추적은 S3/G95가 금지한 확장이라 넓히지 않았다).
+// 전체 한계와 그 근거는 `src/lib/sourcescan/scanSource.ts` 머리말과
+// `src/lib/incallsms/callContinuity.test.ts`의 `[T108/한계]`에 있다 — **스캔 대상 파일 집합이
+// 고정이라 파일 분할로 무력화된다**는 것을 포함한다.
+
+const landingAst = parseTsxFile(componentPath);
+
+const G50_AXES: Record<string, Axis[]> = {
+  httpsCallable: ["callOrMember"],
+  "fetch(": ["callOrMember"],
+  "@/lib/api": ["importSpecifier"],
+  "firebase/functions": ["importSpecifier"],
+  "firebase/firestore": ["importSpecifier"],
+  XMLHttpRequest: ["callOrMember"],
+  "navigator.sendBeacon": ["callOrMember"],
+  "window.open": ["callOrMember"],
+  "location.href": ["callOrMember"],
+  "href=": ["jsxAttribute"],
+  "http://": ["foldedString"],
+  "https://": ["foldedString"],
+  "navigator.permissions": ["callOrMember"],
+  getUserMedia: ["callOrMember"],
+  "Notification.requestPermission": ["callOrMember"],
+  requestPermission: ["callOrMember"],
+  "navigator.mediaDevices": ["callOrMember"],
+  "navigator.geolocation": ["callOrMember"],
+  ".apk": ["foldedString"],
+  "market://": ["foldedString"],
+  "intent://": ["foldedString"],
+  beforeinstallprompt: ["foldedString"],
+};
+
+const R8_AXES: Record<string, Axis[]> = {
+  "landingId.startsWith": ["callOrMember"],
+  "landingId.includes": ["callOrMember"],
+  "landingId.split": ["callOrMember"],
+  "landingId.match": ["callOrMember"],
+  "landingId.indexOf": ["callOrMember"],
+  "landingId.replace": ["callOrMember"],
+  "landingId.endsWith": ["callOrMember"],
+  "test(landingId": ["callOrMember"],
+};
+
+test("[G50/T108] AST 축에서도 네트워크·외부 이동·권한 API가 0건이다(합집합 — N1)", (t) => {
+  assert.deepEqual(
+    Object.keys(G50_AXES).sort(),
+    [...NETWORK_AND_PERMISSION_TOKENS].sort(),
+    "금지 토큰과 검출 축 매핑이 어긋났다 — 토큰을 늘렸으면 §24.6 표에 축을 지정하라",
+  );
+  const hits = scanTokens(landingAst, "G50", G50_AXES);
+  t.diagnostic(`[오탐 전수] ${componentPath} / G50 → 위반 ${hits.length}건 ${JSON.stringify(hits)}`);
+  assert.deepEqual(hits, [], formatHits(hits));
+  // S5 — 파싱이 죽은 채 "0건"으로 통과하지 않는다.
+  assert.ok(landingAst.jsxElementNames().length > 10, "AST가 실제 JSX를 보고 있어야 한다");
+  assert.ok(landingAst.importModuleSpecifiers().length > 0, "AST가 import를 보고 있어야 한다");
+});
+
+test("[T104/R8·T108] AST 축에서도 landingId 문자열 분류가 0건이다", (t) => {
+  assert.deepEqual(
+    Object.keys(R8_AXES).sort(),
+    [...LANDING_ID_CLASSIFY_TOKENS].sort(),
+    "R8 금지 토큰과 검출 축 매핑이 어긋났다",
+  );
+  const hits = scanTokens(landingAst, "R8", R8_AXES);
+  t.diagnostic(`[오탐 전수] ${componentPath} / R8 → 위반 ${hits.length}건 ${JSON.stringify(hits)}`);
+  assert.deepEqual(hits, [], formatHits(hits));
+  // 정상 경로(정확 일치 조회)는 계속 있어야 한다 — 위 [T104/R8]의 단언과 같은 계약.
+  assert.ok(componentCode.includes("CREDENTIAL_LANDING_COPY[landingId]"));
+  assert.ok(landingAst.callAndMemberNames().length > 10, "AST가 호출·멤버 접근을 보고 있어야 한다");
+});
+
+test("[T108/역검증 4] 조립된 표기가 섞이면 AST 축이 실제로 잡는다(리터럴 검사는 못 잡는다)", (t) => {
+  // 오염은 **테스트 코드 안에서만**(callContinuity.test.ts:161-162 관례).
+  const poison = [
+    'const G: any = (globalThis as any)["fet"+"ch"];',
+    'const U: any = navigator["geo"+"location"];',
+    'const K: any = landingId["start"+"sWith"]("card");',
+    'const S = "htt"+"ps://example.com/app"+"."+"apk";',
+  ].join("\n");
+  const parsed = parseTsx("MessengerFakeLanding.poisoned.tsx", `${component}\n${poison}\n`);
+
+  const literalCaught = [...NETWORK_AND_PERMISSION_TOKENS, ...LANDING_ID_CLASSIFY_TOKENS].filter(
+    (token) => poison.includes(token),
+  );
+  const hits = [...scanTokens(parsed, "G50", G50_AXES), ...scanTokens(parsed, "R8", R8_AXES)];
+  const shape = [...new Set(hits.map((hit) => `${hit.axis}/${hit.token}`))].sort();
+  t.diagnostic(`현행 리터럴 검사: ${literalCaught.length}건 / AST 축: ${shape.join(", ")}`);
+  assert.deepEqual(literalCaught, [], "이 형태가 리터럴로 잡혔다면 샘플이 조립 형태가 아니다");
+  assert.deepEqual(shape, [
+    "callOrMember/fetch(",
+    "callOrMember/landingId.startsWith",
+    "callOrMember/navigator.geolocation",
+    "foldedString/.apk",
+    "foldedString/https://",
+  ]);
 });
 
 test("[T104/R7·AC-078 (d)] 콘텐츠 미스는 **같은 kind의 범용 화면**으로만 떨어진다", () => {
