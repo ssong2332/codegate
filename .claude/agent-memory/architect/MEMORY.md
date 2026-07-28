@@ -11,4 +11,5 @@
 - [충돌은 인접 줄로 이동한다](feedback_conflict_moves_to_adjacent_line.md) — 사용자 확정이 결함을 설계로 바꾸면 대상 집합 철회로 끝내지 말고 이웃 줄을 읽을 것(철회/재지정/보류 3택)
 - [횟수 말고 순서로 쓴다](reference_count_vs_order_in_prompts.md) — 프롬프트의 횟수·턴 인덱스는 판정 불가; 참조 대상이 대화 기록 안이면 성립. 서버가 뭘 세는지는 코드로 확인
 - [유보한 "위험"은 "불가능"일 수 있다](feedback_reserved_risk_may_be_impossibility.md) — 재판정은 유보 문장이 아니라 코드에서; 결론이 더 강해지거나 과다 서술이 드러난다
+- [역검증이 방식 순위를 뒤집는다](feedback_negative_test_flips_the_method.md) — 정상 경로만 보고 1순위 정하지 말 것; 프로브에 "오염 사본을 같은 수단으로" 단계를 독립으로
 - [하드 게이트는 실행 가능성을 먼저 확인](feedback_hard_gate_executability.md) — 참조 대상이 나중 커밋에 오는 게이트를 앞 커밋에 못 박지 말 것(사후 추인 2회: G58·G-B)
