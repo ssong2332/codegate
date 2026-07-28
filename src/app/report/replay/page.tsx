@@ -30,6 +30,7 @@ import {
   type ReplayVerifySource,
 } from "@/lib/replay/buildReplayTimeline";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
+import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
 
 type ReportSummary = {
   wasDeceived: boolean;
@@ -53,6 +54,11 @@ export default function ReplayPage() {
   const [state, setState] = useState<PageState>(sessionId ? "loading" : "no-session");
   const [report, setReport] = useState<ReportSummary | null>(null);
   const [timeline, setTimeline] = useState<ReplayTimelineItem[]>([]);
+  // D-61 — 모의 화면 항목의 표시 문구는 **같은 순간에 승격된 `deceivedMoment`가 있는가**로 갈린다
+  // (`consented` 한 필드로 이분하지 않는다). 타임라인의 `annotation`에서 역산하지 않고 원본 배열을
+  // 그대로 들고 있는 이유: 주석 매칭은 **메시지 항목에만** 걸려(§15.6 G17) 앵커 미해결 등에서
+  // 근거가 조용히 달라진다 — 판정 근거는 서버가 준 배열 하나로 고정한다.
+  const [deceivedMoments, setDeceivedMoments] = useState<ReplayDeceivedMomentSource[]>([]);
   const [scenarioTitle, setScenarioTitle] = useState<string | null>(null);
   const [callerLabel, setCallerLabel] = useState<string>("상대방");
   // 스텝 내비게이션(P-13) — 주석이 달린 항목 중 현재 위치(-1=아직 이동 안 함).
@@ -148,6 +154,7 @@ export default function ReplayPage() {
         verifyTimeline,
         mockScreenTimeline,
       ),
+      deceivedMoments,
       scenarioTitle: scenario?.title ?? null,
       callerLabel: scenario?.callerLabel ?? "상대방",
       challenge: challengeContext,
@@ -166,6 +173,7 @@ export default function ReplayPage() {
         if (cancelled) return;
         setReport(result.summary);
         setTimeline(result.timeline);
+        setDeceivedMoments(result.deceivedMoments);
         setScenarioTitle(result.scenarioTitle);
         setCallerLabel(result.callerLabel);
         setChallenge(result.challenge);
@@ -259,6 +267,7 @@ export default function ReplayPage() {
       .then((result) => {
         setReport(result.summary);
         setTimeline(result.timeline);
+        setDeceivedMoments(result.deceivedMoments);
         setScenarioTitle(result.scenarioTitle);
         setCallerLabel(result.callerLabel);
         setChallenge(result.challenge);
@@ -425,7 +434,13 @@ export default function ReplayPage() {
           // T84(§15.9.5 e-4) — 모의 화면 항목도 **기존 주석 카드 형식 그대로** 쓴다. 되감기 버튼은
           // 달지 않는다(승격된 순간에는 그 사기범 말풍선에 원래대로 달린다 — 중복 카드 금지).
           if (item.kind === "mockScreen") {
-            return <ReplayMockScreenItem key={item.id} mockScreen={item.mockScreen} />;
+            return (
+              <ReplayMockScreenItem
+                key={item.id}
+                mockScreen={item.mockScreen}
+                deceivedMoments={deceivedMoments}
+              />
+            );
           }
           const channelBadgeLabel = (item.channel ?? "voice") === "messenger" ? "메신저" : "통화";
           return (
@@ -759,12 +774,25 @@ function ReplayVerifyItem({ verify }: { verify: ReplayVerifySource }) {
  * 있어 **바로 그 사기범 말풍선에 주석이 이미 달린다** — 여기서 교육 문구를 다시 내지 않는다.
  * ⚠️ **되감기 버튼을 달지 않는다** — 대상은 `deceivedMoments`뿐이고, 승격된 순간에는 원래대로
  * 그 말풍선에 달린다. 목업 재진입 컨트롤도 없다(스냅샷에 `fakeLandingId`가 아예 없다).
+ *
+ * ⭐ **D-61 / P-29 (8)** — 문구는 `consented` 한 필드로 이분하지 않는다. 폼을 **제출한** 참가자도
+ * `consented:false`라(T123/AC-080은 `submittedAt`을 별도 축으로 신설했다) 그 값만 보고
+ * *"응하지 않았습니다"* 를 그리면 **속은 참가자에게 거짓을 말한다**. 판정 규칙은 리포트(UX-008)와
+ * 한 벌이며 `@/lib/report/mockScreenTimelineCopy`가 소유한다.
  */
-function ReplayMockScreenItem({ mockScreen }: { mockScreen: ReplayMockScreenSource }) {
+function ReplayMockScreenItem({
+  mockScreen,
+  deceivedMoments,
+}: {
+  mockScreen: ReplayMockScreenSource;
+  deceivedMoments: readonly ReplayDeceivedMomentSource[];
+}) {
   const what =
     mockScreen.kind === "app-install"
       ? "앱 설치 안내 화면이 표시됐습니다."
       : "본인확인 입력 화면이 표시됐습니다.";
+  // D-51 ③의 칭찬 문구는 **분기 "다"에서만** 나온다 — 살아 있되 제출 항목으로 새지 않는다.
+  const copy = resolveMockScreenCopy(mockScreen, deceivedMoments, "replay");
   return (
     <li className="outline-none">
       <div className="flex max-w-[85%] items-end gap-2">
@@ -797,21 +825,18 @@ function ReplayMockScreenItem({ mockScreen }: { mockScreen: ReplayMockScreenSour
       )}
 
       <div role="note" className="ml-10 mt-2 rounded-[12px] border border-[#B96A1B]/30 bg-[#FBF3E8] p-3.5">
-        {mockScreen.consented ? (
-          <>
-            <p className="mb-1.5 text-[13px] font-bold text-[#B96A1B]">⚠️ 여기가 신호였어요</p>
-            <p className="text-[13px] leading-[1.6] text-[#22303A]">
-              이 화면에서 권한 허용에 응했습니다 — 대처 방법은 위 말풍선의 주석에 있습니다.
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="mb-1.5 text-[13px] font-bold text-[#0E6B62]">잘 대응한 지점</p>
-            <p className="text-[13px] leading-[1.6] text-[#22303A]">
-              화면이 떴지만 권한 허용에 응하지 않았습니다.
-            </p>
-          </>
+        {copy.heading && (
+          <p
+            className={
+              copy.tone === "praise"
+                ? "mb-1.5 text-[13px] font-bold text-[#0E6B62]"
+                : "mb-1.5 text-[13px] font-bold text-[#B96A1B]"
+            }
+          >
+            {copy.heading}
+          </p>
         )}
+        <p className="text-[13px] leading-[1.6] text-[#22303A]">{copy.text}</p>
       </div>
     </li>
   );

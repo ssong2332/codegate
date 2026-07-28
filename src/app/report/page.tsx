@@ -23,6 +23,7 @@ import { scenarios } from "@/content/scenarios";
 import { Badge, Button } from "@/components/ui";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { buildStageNotice, type ReportStage } from "@/lib/report/stageNotice";
+import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
 
 type DeceivedMoment = {
   turnIndex: number;
@@ -499,6 +500,7 @@ export default function ReportPage() {
                     <ReportMockScreenTimelineItem
                       key={`mock-${entry.mockScreen.landingId}`}
                       mockScreen={entry.mockScreen}
+                      deceivedMoments={report.deceivedMoments}
                     />
                   ),
                 )}
@@ -690,12 +692,26 @@ function ReportSmsTimelineItem({ sms }: { sms: SmsTimelineEntry }) {
  * 그 카드에 원래대로 버튼이 달린다.
  * ⚠️ 화면 콘텐츠 원문(headline/bodyLines/consentLabel)·목업 재진입 컨트롤이 **스냅샷에 아예
  * 없어서** 여기서 그릴 수도 없다(구조적 금지, §15.6 G19 동형).
+ *
+ * ⭐ **D-61 / P-29 (8)** — 문구는 `consented` 한 필드로 이분하지 않는다. 제출은 했는데
+ * `consented:false`인 항목이 실제로 생기므로(T123/AC-080), 그 값 하나로 *"응하지 않았습니다"* 를
+ * 그리면 **속은 참가자에게 리포트가 거짓을 말한다** — 위쪽의 승격된 속은 시점 카드와 정면으로
+ * 모순된다. 판정은 `deceivedMoments`와의 대조로만 하고 그 규칙은
+ * `@/lib/report/mockScreenTimelineCopy`가 리플레이(UX-018)와 **공유**한다.
  */
-function ReportMockScreenTimelineItem({ mockScreen }: { mockScreen: MockScreenTimelineEntry }) {
+function ReportMockScreenTimelineItem({
+  mockScreen,
+  deceivedMoments,
+}: {
+  mockScreen: MockScreenTimelineEntry;
+  deceivedMoments: readonly DeceivedMoment[];
+}) {
   const what =
     mockScreen.kind === "app-install"
       ? "앱 설치 안내 화면이 표시됐습니다."
       : "본인확인 입력 화면이 표시됐습니다.";
+  // D-51 ③의 칭찬 문구는 **분기 "다"에서만** 나온다 — 살아 있되 제출 항목으로 새지 않는다.
+  const copy = resolveMockScreenCopy(mockScreen, deceivedMoments, "report");
   return (
     <li className="flex flex-col gap-3">
       <div className="rounded-2xl border border-[#B96A1B]/30 bg-[#FBF3E8] p-4">
@@ -707,16 +723,15 @@ function ReportMockScreenTimelineItem({ mockScreen }: { mockScreen: MockScreenTi
           </p>
           <Badge variant="neutral">모의 화면</Badge>
         </div>
-        {mockScreen.consented ? (
-          <p className="mt-2 text-base text-[#22303A]">
-            이 화면에서 권한 허용에 응했습니다 — 위의 속은 시점 카드에서 자세히 볼 수 있습니다.
-          </p>
-        ) : (
-          // D-51 ③ — 응하지 않고 닫은 것은 **속은 순간이 아니다**. 과신 표현은 쓰지 않는다(P-8).
-          <p className="mt-2 text-base font-semibold text-[#0E6B62]">
-            잘 대응한 지점입니다 — 권한 허용에 응하지 않았습니다.
-          </p>
-        )}
+        <p
+          className={
+            copy.tone === "praise"
+              ? "mt-2 text-base font-semibold text-[#0E6B62]"
+              : "mt-2 text-base text-[#22303A]"
+          }
+        >
+          {copy.text}
+        </p>
         {!mockScreen.anchorResolved && (
           <p className="mt-2 text-sm text-[#6B655C]">
             이 화면이 대화 중 어느 시점에 표시됐는지는 확인하지 못했습니다.
