@@ -32,4 +32,27 @@ for protected in $protected_branches; do
 	fi
 done
 
+# ─────────────────────────────────────────────────────────────────────────────
+# T130 — 매니페스트에 섞여 들어간 로컬 경로 의존성(`file:`/`link:`/`portal:`) 거부.
+#
+# 왜: `npm --prefix <dir> install` 이 `package.json`에 `"fraud-vaccine-web": "file:.."` 를
+# 조용히 추가한다(docs/Architecture.md §36). 오늘까지 매번 사람이 눈으로 잡아 되돌렸다 —
+# 안전장치 때문이 아니라 운이 좋아서다. 이 블록이 그 운에 의존하는 상태를 닫는다.
+#
+# ⛔ 이것은 트립와이어다 — **오염을 막지 않는다. 오염이 커밋되는 것을 막을 뿐이다.**
+# ⛔ 훅은 파일을 고치지 않는다(자동 복구 금지, §36.0 4). 알리고 멈춘다.
+#
+# 판정 로직은 scripts/local-dep-guard.mjs 한 곳에만 있다(postinstall과 공유 — 복제 금지).
+# 위 T100 블록은 건드리지 않았다.
+guard="$(git rev-parse --show-toplevel)/scripts/local-dep-guard.mjs"
+
+if [ -f "$guard" ]; then
+	if command -v node >/dev/null 2>&1; then
+		node "$guard" --staged || exit 1
+	else
+		# 통과시킨 것이 아니라 **검사를 수행하지 못했다** — 조용히 넘기지 않는다.
+		printf '\n\033[33m⚠ node를 찾지 못해 로컬 경로 의존성 검사(T130)를 수행하지 못했습니다.\033[0m\n\n' >&2
+	fi
+fi
+
 exit 0

@@ -15,7 +15,8 @@
     "test": "node scripts/clean-lib.mjs && tsc && node lib/devtools/recordLibBuild.js && node --test lib/**/__tests__/*.test.js",
     "seed:scenarios": "node lib/scenarios/seed.js",
     "report:axis-coverage": "node lib/scenarios/axisCoverageReport.js",
-    "emu:check": "node lib/devtools/emulatorFreshnessCli.js"
+    "emu:check": "node lib/devtools/emulatorFreshnessCli.js",
+    "postinstall": "node ../scripts/local-dep-guard.mjs --worktree || exit 0"
   },
   "engines": {
     "node": "20"
