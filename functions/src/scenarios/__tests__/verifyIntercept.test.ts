@@ -5,6 +5,10 @@
 // 현실적인 회귀다(AC-033/AC-005/AC-019).
 import { test } from "node:test";
 import assert from "node:assert/strict";
+// T114 — 아래 화이트리스트 2종은 `docs/Architecture.md` §22.1 확정 문면에서 **역산한 것**이다.
+// 그 연결을 기계로 잇기 위해 문서를 읽는다(§22.1 ↔ 이 게이트 **한 쌍만** — 일반화는 별건이다).
+import * as fs from "node:fs";
+import * as path from "node:path";
 import {
   VERIFY_INTERCEPT,
   findVerifyInterceptItem,
@@ -549,6 +553,42 @@ function modelReachableStrings(scenarioId: string): {
   };
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐⭐ **T114 — §22.1 확정 문면 ↔ 화이트리스트를 기계로 잇는다(2026-07-28).**
+//
+// **무엇이 문제였나(착수 시 실측)**: 아래 두 화이트리스트(`QUOTED_EXCEPTION_LINKS` 1건 ·
+// `EXIT_PREDICATE_LINKS` 6건)는 §22.1 확정 문면에서 **역산한 것**인데(T110 implementer 자기 고지),
+// 그 연결이 **주석으로만** 있었다. 실측: 이 파일에 문서를 읽는 코드가 **0건**이었고, §22.1 A1 ⓐ의
+// `"끊지 마시라고 붙잡지도 않는다."` 를 다른 문면으로 바꾼 **사본**을 만들어도 게이트 판정은
+// 한 글자도 달라지지 않았다 ⇒ **설계 문면이 갱신돼도 게이트는 옛 문면 기준으로 초록불을 낸다.**
+//
+// **채택안(T114 D항 ③ = 최소안) — ①(문서 파싱)과 ②(양방향 주석)를 기각한 근거 1줄**:
+// ①은 *"문서를 기계 판독 정본으로 취급한다"* 는 **설계 판단**이라 architect 소집 사유가 되고
+// (T114 소유 열 명시), ②는 건수 단언만으로는 **문면이 바뀌었는데 건수가 같은 경우**를 못 잡는다.
+// ⇒ ③ **출처 문면을 리터럴로 박고 그 리터럴이 문서에 실재하는지 검사한다.** 문면이 바뀌면
+// 리터럴이 사라져 즉시 빨간불이고, 검사 비용은 파일 1개 읽기다.
+//
+// ⛔ **범위 하드 제한**: §22.1 ↔ 이 게이트 **한 쌍뿐**이다. 저장소의 모든 문서-코드 연결을
+// 일반화하는 장치가 아니다(일반화는 별건·architect 판정 — T113 F항이 같은 취지로 잘라 둔 선례).
+// ⚠️ **약화 금지**: 아래 두 배열은 **패턴을 한 글자도 바꾸지 않았다**. T110/T125가 네 라운드에 걸쳐
+// 쌓은 검출력이 그 패턴에 들어 있다 — 이번 변경은 **메타데이터를 붙이는 것**이 전부다.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** 화이트리스트 1항목 ↔ 그것이 역산해 온 확정 문면의 연결(T114). */
+type CanonLinkedPattern = {
+  pattern: RegExp;
+  /** 정본 위치. `"§22.1 …"` = `docs/Architecture.md` / `"RECONNECT_TAIL"` = 카탈로그 상수. */
+  origin: string;
+  /**
+   * 정본에 **그대로(바이트 일치) 존재해야 하는** 문면.
+   * ⚠️ 마크다운 강조(`**`)를 포함하지 않는 **최단 구간**으로 잡는다 — 강조 표기가 바뀐 것만으로
+   * 빨간불이 나면 다음 사람이 이 게이트를 끈다(이 저장소는 고마찰로 게이트를 잃은 전례가 있다).
+   */
+  canon: string;
+  /** 이 패턴이 `canon` 안에서 실제로 잡아야 하는 구간(**죽은 역산 방지** — 패턴↔문면 반대 방향). */
+  probe: string;
+};
+
 // ── 금지형 문맥 예외의 **판정 규칙** — 세 번 좁힌 끝에 **규칙을 버리고 화이트리스트로 갔다** ──────
 //
 // ⚠️ **왜 "더 나은 규칙"을 네 번째로 시도하지 않는가 — 축 이동이 근거다(전부 독립 재현됨)**:
@@ -607,13 +647,20 @@ function clauseAt(text: string, index: number): string {
  *
  * ⚠️ **정본은 §22.1 A1 ⓐ 문면 그 자체다.** 임의 문구를 넣지 않는다. 목록이 1건인 것은 결함이 아니라
  * **예외의 존재 이유가 그 한 줄뿐**이기 때문이다(아래 `RESIDENCY_DEMANDS` 주석 참조).
- * ⚠️ **A1 ⓐ 문면이 바뀌면 이 목록도 함께 바뀌어야 한다** — 그 연결을 기계로 잇는 것은 **T114**
- * (하드 선행 = T110 병합)로 등재돼 있다. 여기서 해결하지 않는다.
+ * ⭐ **A1 ⓐ 문면이 바뀌면 이 목록도 함께 바뀌어야 한다 — 그 연결을 T114가 기계로 이었다**
+ * (아래 `CANON_LINKS` / `[T114]` 게이트 3건). 각 항목은 자기가 역산해 온 §22.1 문면을 리터럴로
+ * 들고 있고, 그 문면이 문서에서 사라지면 **빨간불이 난다.**
  */
-const QUOTED_EXCEPTIONS: readonly RegExp[] = [
-  // §22.1 A1 ⓐ: "…끊고 직접 확인해 보겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다."
-  /^라고\s*붙잡지도\s*않는다/,
+const QUOTED_EXCEPTION_LINKS: readonly CanonLinkedPattern[] = [
+  {
+    pattern: /^라고\s*붙잡지도\s*않는다/,
+    origin: "§22.1 A1 ⓐ",
+    canon: "끊지 마시라고 붙잡지도 않는다.",
+    probe: "라고 붙잡지도 않는다",
+  },
 ];
+
+const QUOTED_EXCEPTIONS: readonly RegExp[] = QUOTED_EXCEPTION_LINKS.map((link) => link.pattern);
 
 type ResidencyDemand = {
   pattern: RegExp;
@@ -693,16 +740,52 @@ function positiveResidencyDemands(text: string): string[] {
 // 통화에서 물러났다."` 는 뜻이 같아도 위반으로 잡힌다(각각 1건). 이것은 **닫히는 방향의 오차**라
 // 안전 저하가 아니며, 콘텐츠가 §22.1 확정 문면을 쓰는 한 실제로 걸리지 않는다. 문면을 확장하려면
 // **이 목록에 행을 추가**할 것 — 임의로 일반 부정어 예외를 되살리면 우회가 다시 열린다.
-const EXIT_PREDICATES: readonly RegExp[] = [
+// ⭐ **T114** — 각 항목이 자기 근거 문면을 들고 있다(아래 `[T114]` 게이트가 문서와 대조한다).
+const EXIT_PREDICATE_LINKS: readonly CanonLinkedPattern[] = [
   // (ㄱ) 호가 넘어왔다·앞 화자가 빠졌다는 **전환·퇴장 서술**(§22.1 A3 확정 문면)
-  /이\s*통화를\s*너에게\s*넘겼다/,
-  /통화에서\s*빠졌다/,
-  /빠진\s*사람이다/,
+  {
+    pattern: /이\s*통화를\s*너에게\s*넘겼다/,
+    origin: "§22.1 A3",
+    canon: "앞 담당자가 이 통화를 너에게 넘겼다.",
+    probe: "이 통화를 너에게 넘겼다",
+  },
+  {
+    pattern: /통화에서\s*빠졌다/,
+    origin: "§22.1 A3",
+    canon: "앞 담당자는 통화에서 빠졌다.",
+    probe: "통화에서 빠졌다",
+  },
+  {
+    pattern: /빠진\s*사람이다/,
+    origin: "§22.1 A1 ⓑ",
+    canon: "앞 담당자는 이 통화에서 빠진 사람이다",
+    probe: "빠진 사람이다",
+  },
   // (ㄴ) 앞 화자로서·앞 화자를 대신해 **말하지 말라는 금지**(A1 ⓑ · `RECONNECT_TAIL` 확정 문면)
-  /다시\s*말하지\s*(않는다|마라)/,
-  /인용하는\s*형태도\s*만들지\s*(않는다|마라)/,
-  /같은\s*사람이라는\s*사실[^.]*말하지\s*마라/,
+  {
+    pattern: /다시\s*말하지\s*(않는다|마라)/,
+    origin: "§22.1 A1 ⓑ",
+    canon: "다시 말하지 않는다",
+    probe: "다시 말하지 않는다",
+  },
+  {
+    pattern: /인용하는\s*형태도\s*만들지\s*(않는다|마라)/,
+    origin: "§22.1 A1 ⓑ",
+    canon: "앞 담당자를 대신 인용하는 형태도 만들지 않는다",
+    probe: "인용하는 형태도 만들지 않는다",
+  },
+  {
+    // ⚠️ 이 한 건만 정본이 **문서가 아니라 카탈로그 상수**다 — §22.1 A3는 문면을 적지 않고
+    // *"기존 `RECONNECT_TAIL` 유지"* 라고 **지목만** 한다. 그래서 대조 대상도 그 상수다
+    // (문서에서 찾으면 영원히 못 찾는다 = 거짓 빨간불).
+    pattern: /같은\s*사람이라는\s*사실[^.]*말하지\s*마라/,
+    origin: "RECONNECT_TAIL",
+    canon: "같은 사람이라는 사실·통화가 어디로 이어졌는지는 어떤 형태로도 말하지 마라",
+    probe: "같은 사람이라는 사실·통화가 어디로 이어졌는지는 어떤 형태로도 말하지 마라",
+  },
 ];
+
+const EXIT_PREDICATES: readonly RegExp[] = EXIT_PREDICATE_LINKS.map((link) => link.pattern);
 
 /**
  * **허용 술어가 있어도 예외를 닫는 거부권** — 같은 절에 "앞 화자가 말하게 하라"류 **허용 구문**이
@@ -721,6 +804,98 @@ function returnAllowingMentions(text: string): string[] {
   }
   return found;
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐ T114 게이트 — 위 화이트리스트 7건이 **지금도 §22.1 문면과 같은 것을 가리키는가**
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** 테스트는 `lib/`에서 실행되므로 저장소 루트를 명시적으로 잡는다(axisCoverage.test.ts 관례). */
+const REPO_ROOT = path.resolve(__dirname, "../../../..");
+
+/** `docs/Architecture.md`에서 §22.1 절만 잘라 온다. 절을 못 찾으면 **빈 문자열**(= 게이트 실패). */
+function readCanon22_1(): string {
+  const doc = fs.readFileSync(path.join(REPO_ROOT, "docs/Architecture.md"), "utf-8");
+  const start = doc.indexOf("### 22.1 전환 모델");
+  if (start < 0) return "";
+  const end = doc.indexOf("### 22.2 ", start);
+  return end < 0 ? doc.slice(start) : doc.slice(start, end);
+}
+
+const ALL_CANON_LINKS: readonly CanonLinkedPattern[] = [
+  ...QUOTED_EXCEPTION_LINKS,
+  ...EXIT_PREDICATE_LINKS,
+];
+
+/**
+ * ⭐ **T114의 판정 핵심** — 화이트리스트가 근거로 삼은 문면이 **정본에 그대로 남아 있는가**.
+ * 순수 함수라 **역검증에서 변조 사본을 그대로 넣을 수 있다**(실제 문서를 고쳤다 되돌리지 않는다 —
+ * `callContinuity.test.ts:161-162` 관례).
+ */
+function missingCanonLiterals(canon22_1: string, reconnectTail: string): string[] {
+  return ALL_CANON_LINKS.filter((link) => {
+    const haystack = link.origin === "RECONNECT_TAIL" ? reconnectTail : canon22_1;
+    return !haystack.includes(link.canon);
+  }).map((link) => `${link.origin} :: "${link.canon}"`);
+}
+
+/** `RECONNECT_TAIL` 정본 — 상수가 export되지 않으므로 카탈로그 산출물에서 그대로 가져온다. */
+const RECONNECT_TAIL_TEXT = allItems.map((item) => item.reconnectInstruction).join("\n");
+
+test("[T114] 화이트리스트 7건의 근거 문면이 §22.1(과 그것이 지목한 정본)에 지금도 실재한다", () => {
+  const canon = readCanon22_1();
+  assert.ok(
+    canon.length > 1000,
+    "docs/Architecture.md에서 §22.1 절을 못 잘랐다 — 절 제목이 바뀌었거나 문서가 옮겨졌다. " +
+      "이 게이트가 조용히 죽는 것을 막기 위해 여기서 실패시킨다.",
+  );
+  assert.deepEqual(
+    missingCanonLiterals(canon, RECONNECT_TAIL_TEXT),
+    [],
+    "화이트리스트가 역산해 온 확정 문면이 정본에서 사라졌다. §22.1이 갱신됐다면 이 목록도 함께 " +
+      "갱신해야 한다 — 갱신하지 않으면 게이트는 **옛 문면 기준으로 초록불**을 낸다(T114가 없앤 상태).",
+  );
+});
+
+test("[T114] 각 패턴이 자기 근거 문면을 실제로 잡는다(역산이 죽지 않았는지 — 반대 방향)", () => {
+  for (const link of ALL_CANON_LINKS) {
+    assert.ok(
+      link.canon.includes(link.probe),
+      `${link.origin}: probe "${link.probe}"가 canon 안에 없다 — 메타데이터가 자기모순이다`,
+    );
+    assert.ok(
+      link.pattern.test(link.probe),
+      `${link.origin}: 패턴 ${link.pattern} 이 자기 근거 문면 "${link.probe}"을 못 잡는다 — ` +
+        `문면이 바뀐 뒤 패턴만 옛것으로 남았거나, 애초에 죽은 정규식이다.`,
+    );
+  }
+  // 건수를 그대로 못박는다 — 항목이 늘었는데 대조가 안 늘면 여기서 걸린다.
+  assert.equal(QUOTED_EXCEPTION_LINKS.length, 1, "인용 예외 문면 화이트리스트는 1건이 정본이다(§22.1 A1 ⓐ)");
+  assert.equal(EXIT_PREDICATE_LINKS.length, 6, "퇴장·전환 술어는 6종이 정본이다(§22.1 A1 ⓑ · A3 · RECONNECT_TAIL)");
+});
+
+test("[T114/역검증] §22.1 문면을 바꾼 **사본**에서 이 게이트가 실제로 실패한다", () => {
+  const canon = readCanon22_1();
+  // before — 현행 문면에서는 오탐 0건이다.
+  assert.deepEqual(missingCanonLiterals(canon, RECONNECT_TAIL_TEXT), []);
+
+  // after — 문면을 **한 군데씩** 바꾼 사본마다 정확히 그 항목이 잡혀야 한다.
+  // ⚠️ 항목별 **독립 사본**이다(한 사본에 섞으면 하나만 잡혀도 통과한다).
+  for (const link of ALL_CANON_LINKS) {
+    const isDocLink = link.origin !== "RECONNECT_TAIL";
+    // ⚠️ **전수 치환이어야 한다.** `RECONNECT_TAIL`은 6종 항목에 각각 들어 있어 1회 치환으로는
+    // 첫 한 벌만 지워지고 나머지 5벌 때문에 게이트가 계속 초록불이 난다 — 실제로 그렇게 한 번
+    // **거짓 음성**이 났다. 정본이 여러 자리에 복제돼 있으면 역검증 조작도 전수여야 한다.
+    // (`replaceAll`은 이 tsconfig의 target/lib에서 못 쓴다 — split/join으로 같은 일을 한다.)
+    const eraseAll = (text: string) => text.split(link.canon).join("「문면이 갱신됨」");
+    const mutatedCanon = isDocLink ? eraseAll(canon) : canon;
+    const mutatedTail = isDocLink ? RECONNECT_TAIL_TEXT : eraseAll(RECONNECT_TAIL_TEXT);
+    assert.deepEqual(
+      missingCanonLiterals(mutatedCanon, mutatedTail),
+      [`${link.origin} :: "${link.canon}"`],
+      `${link.origin} 문면을 바꿨는데 게이트가 반응하지 않는다 — 연결이 끊긴 것이다.`,
+    );
+  }
+});
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ⭐ T110 / §22.6 1단계 — **G82(조립 게이트): 퇴장 규칙이 상시 블록에 실제로 들어가는가**
