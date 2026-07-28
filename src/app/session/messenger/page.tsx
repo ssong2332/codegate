@@ -550,6 +550,12 @@ export default function MessengerSessionPage() {
           // 1건으로 승격된다(§15.9.5 e-1). ⚠️ 응낙이 채널 전이를 유발하지 않는다(G54) — 전이는
           // 기존 구조화 신호·max-turn 폴백·명시 버튼으로만 일어난다.
           onInstallConsent={() => recordMockScreen(fakeLanding.fakeLandingId, "consented")}
+          // T123/AC-080 — 가짜 랜딩 폼을 **제출한 사실**만 기록한다(기존 recordMockScreen 재사용 —
+          // 1회 재시도·비차단 정책까지 그대로 상속). 리포트 생성 시 속은 순간 1건으로 승격된다.
+          // ⛔ 참가자가 입력한 계좌번호·예금주명은 이 경로에 실리지 않는다(콜백이 무인자다 — G138).
+          // ⚠️ 위 링크 칩 탭의 "shown"과 달리 이것만 승격된다(AC-080 (b) — 열어보고 닫은 참가자를
+          // 실패로 낙인찍지 않는다).
+          onCredentialSubmit={() => recordMockScreen(fakeLanding.fakeLandingId, "submitted")}
         />
       )}
 
