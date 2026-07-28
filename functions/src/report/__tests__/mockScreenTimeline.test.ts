@@ -181,6 +181,73 @@ test("[AC-080/경로 B 역검증] 제출 경로를 끊으면 승격이 사라진
   assert.deepEqual(noSubmit.deceivedMoments, [], "제출 0건이면 입력 그대로다");
 });
 
+// ⭐ **OQ-U32 확정 — 화면이 두 항목을 "같은 순간"으로 묶는 키는 무엇인가.**
+//
+// D-61 / P-29 (8)은 `MockScreenTimelineEntry`의 표시 문구를 **"같은 순간에 승격된
+// `deceivedMoment`가 있는가"** 로 가른다. 그 대조가 성립하려면 두 항목이 공통 키로 묶여야 하고,
+// ux-design은 그것을 실행으로 확인하지 못한 채 `OQ-U32`로 남겼다.
+//
+// 여기서 확정한다: **키 = `deceivedMoment.turnIndex` ↔ `MockScreenTimelineEntry.anchorTurnIndex`**.
+// 승격 조립이 `buildLandingSubmitMoment(item, anchor.anchorTurnIndex, …)` **한 곳**이라(G137)
+// 승격된 순간의 `turnIndex`는 정의상 그 항목의 앵커다. `landingId`는 순간 쪽에 **아예 없어서**
+// 키가 될 수 없고, `timeLabel`은 같은 앵커에서 복사된 중복 확인일 뿐이다.
+test("[OQ-U32] 승격된 순간의 turnIndex == 그 항목의 anchorTurnIndex (표시 층 대조 키)", (t) => {
+  const result = applyMockScreens(
+    [parcelSubmitted],
+    [],
+    parcelMessages,
+    SESSION_CREATED_MS,
+    PARCEL_CATALOG,
+  );
+  const entry = result.mockScreenTimeline[0];
+  const promotedMoment = result.deceivedMoments[0];
+  t.diagnostic(
+    `entry=${JSON.stringify(entry)} / moment=${JSON.stringify({
+      turnIndex: promotedMoment.turnIndex,
+      timeLabel: promotedMoment.timeLabel,
+    })}`,
+  );
+  // 제출했는데 consented는 false다 — 이 한 필드로 이분하면 화면이 거짓을 말한다(D-61의 전제).
+  assert.equal(entry.consented, false, "consented는 '권한 허용' 전용 축이다");
+  assert.equal(
+    promotedMoment.turnIndex,
+    entry.anchorTurnIndex,
+    "대조 키는 turnIndex↔anchorTurnIndex",
+  );
+  assert.equal(promotedMoment.timeLabel, entry.timeLabel, "timeLabel도 같은 앵커에서 온다(중복 확인)");
+  // `landingId`는 순간 쪽 스키마에 존재하지 않는다 — 키 후보에서 구조적으로 탈락한다.
+  assert.equal("landingId" in promotedMoment, false);
+});
+
+test("[OQ-U32 역검증] 제출이 없으면 그 앵커 턴에 순간이 없다(분기 '다'가 성립한다)", (t) => {
+  const result = applyMockScreens(
+    [parcelShown],
+    [],
+    parcelMessages,
+    SESSION_CREATED_MS,
+    PARCEL_CATALOG,
+  );
+  const entry = result.mockScreenTimeline[0];
+  t.diagnostic(`entry=${JSON.stringify(entry)} / 순간 수=${result.deceivedMoments.length}`);
+  assert.equal(entry.consented, false);
+  assert.equal(
+    result.deceivedMoments.some((m) => m.turnIndex === entry.anchorTurnIndex),
+    false,
+    "열어보고 닫은 항목은 대조에서 순간을 찾지 못한다 = 분기 '다'",
+  );
+});
+
+test("[OQ-U32/폴백] 앵커 미해결이면 제출해도 승격이 없다 — 화면은 '나'로 떨어져야 한다", (t) => {
+  // 화면이 이 상태를 "승격 없음 ⇒ 응하지 않았다"로 읽으면 **제출한 참가자를 낙인찍는다**.
+  // 그래서 클라이언트 판정(`resolveMockScreenBranch`)은 `anchorResolved:false`를 대조 불성립으로
+  // 보고 분기 "나"로 떨어뜨린다 — src/lib/report/mockScreenTimelineCopy.ts의 폴백 테스트와 짝이다.
+  const result = applyMockScreens([parcelSubmitted], [], [], SESSION_CREATED_MS, PARCEL_CATALOG);
+  const entry = result.mockScreenTimeline[0];
+  t.diagnostic(`entry=${JSON.stringify(entry)} / 승격=${result.promotedCount}`);
+  assert.equal(entry.anchorResolved, false);
+  assert.equal(result.promotedCount, 0, "미해결 앵커는 승격하지 않는다(e-2 규칙 3)");
+});
+
 test("[T123] `consented`는 여전히 '권한 허용'만 뜻한다 — 제출 항목은 consented:false로 남는다", () => {
   const result = applyMockScreens(
     [parcelSubmitted],
