@@ -15,3 +15,5 @@
 - [예산은 "1건 = 몇 호출"부터](feedback_budget_unit_assumption.md) — 미실행 고지는 오류를 막지 못한다; 단위 가정을 명시하고 검산을 실행자에게 인계
 - [관측 지점을 늘릴 땐 범주를 늘리지 마라](feedback_split_observation_point.md) — 기존 범주를 지점별 적용; 새 지점의 "좋은 값" 방향부터 확인(부호가 뒤집힌다)
 - [하드 게이트는 실행 가능성을 먼저 확인](feedback_hard_gate_executability.md) — 참조 대상이 나중 커밋에 오는 게이트를 앞 커밋에 못 박지 말 것(사후 추인 2회: G58·G-B)
+- ["없다"는 인계는 SDK를 열어 확인](feedback_absence_claims_check_the_sdk.md) — 저장소 grep 0건 ≠ 동작 부재; SDK가 이미 처리 중일 수 있다(워크트리엔 node_modules가 없다)
+- [전역 가드에는 상태별 예외가 필요하다](feedback_global_guard_needs_per_state_exception.md) — 즉시 이탈 처방은 진행 중 세션을 죽인다; 훈련 밖/진행 중/복구 불가로 갈라라
