@@ -8,4 +8,6 @@
 - [상속받은 "불가"는 층을 갈라라](feedback_inherited_impossibility_is_layered.md) — 런타임 차단 불가 ≠ 사후 판정 불가; 열린 층에서만 넓히고 "보는 것/막는 것"을 구분
 - [예외는 조건을 아는 층에 둔다](feedback_exception_belongs_to_conditional_layer.md) — 무조건 방출 콘텐츠를 좁히면 조건 없는 세션까지 약해진다; 반대 조건도 같은 블록에 명문화
 - [문면 2회 실패면 층을 바꿔라](feedback_prompt_layer_two_strikes.md) — 프롬프트 문면 수정 2회 실패 시 3번째 문면안 금지; 층 지도(문면→조건부 치환→런타임→사후 판정)로 내려간다
+- [충돌은 인접 줄로 이동한다](feedback_conflict_moves_to_adjacent_line.md) — 사용자 확정이 결함을 설계로 바꾸면 대상 집합 철회로 끝내지 말고 이웃 줄을 읽을 것(철회/재지정/보류 3택)
+- [횟수 말고 순서로 쓴다](reference_count_vs_order_in_prompts.md) — 프롬프트의 횟수·턴 인덱스는 판정 불가; 참조 대상이 대화 기록 안이면 성립. 서버가 뭘 세는지는 코드로 확인
 - [하드 게이트는 실행 가능성을 먼저 확인](feedback_hard_gate_executability.md) — 참조 대상이 나중 커밋에 오는 게이트를 앞 커밋에 못 박지 말 것(사후 추인 2회: G58·G-B)
