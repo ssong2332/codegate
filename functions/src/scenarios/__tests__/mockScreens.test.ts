@@ -562,6 +562,73 @@ test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다"
   assert.notDeepEqual(catalogLandingKeys(withExtra), reachableLandingKeys());
 });
 
+// ── G159 트립와이어 — 시나리오당 도달 가능 랜딩 기수 (T129 · Architecture.md §35.6/§35.7) ────
+//
+// ⚠️ **이것은 계약이 아니라 트립와이어다.** *"시나리오당 랜딩은 1건이어야 한다"* 를 규정하지
+// 않는다 — 그렇게 읽으면 다음 사람이 **콘텐츠를 되돌리거나 이 단언을 지운다**(§35.9 G159).
+//
+// **무엇을 보는가**: D-61의 표시 분기 매칭 키는 `entry.anchorTurnIndex === moment.turnIndex`
+// **하나**다(`src/lib/report/mockScreenTimelineCopy.ts:73`). 같은 사기범 메시지(= 같은
+// turnIndex)에 서로 다른 `landingId`가 앵커되고 **그중 한쪽만 승격**되면, 나머지 한쪽이 분기
+// "나"로 **오분류**된다(정답은 "다" — 정당한 칭찬 누락). 그 결함의 **4중 연접 중 기계로 관측
+// 가능한 것은 조건 1**(한 시나리오의 도달 가능 랜딩 ≥2)뿐이다(§35.3).
+//
+// ⛔ **이 블록이 하지 않는 것**: 오분류를 막지 않는다. `mockScreenTimelineCopy.ts`는 한 글자도
+// 바뀌지 않았다(G160). 여기서 만드는 것은 **조기 경보**이며, 오늘 새로 잡는 것은 **0건**이다
+// (설계 의도 — 값은 잡는 개수가 아니라 발화 시점에 있다, §35.7).
+//
+// ⚠️ 기존 `:549`의 총계 단언(`length === 5`)은 **이 결함을 잡지 못한다** — 기존 시나리오에 두
+// 번째 랜딩을 얹고 총계를 6으로 고치면 집합 일치도 총계도 전부 초록불이다(§35.2 (2)).
+
+/** G159 처방 — 빨간불일 때 **무엇을 해야 하는지**가 메시지에 있어야 한다(§35.6 1행). */
+const G159_PRESCRIPTION =
+  "⛔ 콘텐츠를 되돌리거나 이 단언의 숫자를 고쳐 통과시키지 말 것 — 그것이 이 저장소가 게이트를 잃는 방식이다. " +
+  "docs/Architecture.md §35.6 표에 따라 **T129 (b)(D-61 매칭 키를 landingId 인식형으로)** 를 " +
+  "**선행 커밋**으로 넣은 뒤 콘텐츠를 얹어라. (b) 없이 이 상태가 병합되면 같은 사기범 메시지에 " +
+  "앵커된 두 랜딩 중 한쪽이 분기 '나'로 오분류되어 정당한 칭찬이 사라진다.";
+
+/**
+ * `scenarioId::landingId` 키 배열 → **도달 가능 랜딩이 2건 이상인 scenarioId 목록**(정렬).
+ *
+ * ⛔ 모듈 전역을 직접 읽지 않는다 — 인자로 받아야 역검증에서 오염 입력을 넣을 수 있다
+ * (§35.7 1 · G139 계열).
+ */
+function findMultiLandingScenarios(keys: readonly string[]): string[] {
+  const byScenario = new Map<string, Set<string>>();
+  for (const key of keys) {
+    const separator = key.indexOf("::");
+    const scenarioId = separator < 0 ? key : key.slice(0, separator);
+    const landingId = separator < 0 ? "" : key.slice(separator + 2);
+    const landings = byScenario.get(scenarioId) ?? new Set<string>();
+    landings.add(landingId);
+    byScenario.set(scenarioId, landings);
+  }
+  return [...byScenario.entries()]
+    .filter(([, landings]) => landings.size >= 2)
+    .map(([scenarioId]) => scenarioId)
+    .sort();
+}
+
+test("[G159 트립와이어] 한 시나리오에 도달 가능 랜딩이 2건 이상 들어오면 알린다(T129 §35.6)", () => {
+  const offenders = findMultiLandingScenarios(reachableLandingKeys());
+  assert.deepEqual(
+    offenders,
+    [],
+    `도달 가능 랜딩이 2건 이상인 시나리오: ${offenders.join(", ")} — ${G159_PRESCRIPTION}`,
+  );
+});
+
+test("[G159 트립와이어 역검증] 오염 키 1건을 주입하면 해당 scenarioId를 실제로 돌려준다", () => {
+  const polluted = [...reachableLandingKeys(), "tax-refund-scam::extra-landing"];
+  assert.deepEqual(findMultiLandingScenarios(polluted), ["tax-refund-scam"]);
+  // 같은 시나리오의 **같은** 랜딩이 중복돼도 발화하지 않는다(오탐 0 — 조건 1과 정확히 일치).
+  const duplicated = [...reachableLandingKeys(), reachableLandingKeys()[0]];
+  assert.deepEqual(findMultiLandingScenarios(duplicated), []);
+  // 처방 문구가 비어 있으면 빨간불이 "숫자를 고쳐라"로 읽힌다(§35.7 4 · G159).
+  assert.ok(G159_PRESCRIPTION.includes("§35.6"));
+  assert.ok(G159_PRESCRIPTION.includes("선행 커밋"));
+});
+
 /** (b) 수렴 금지 판정용 본문 조합 — 헤드라인·안내문·필드 라벨 구성·CTA·완료 문구. */
 function bodySignature(item: MockScreenItem): string {
   return JSON.stringify([
