@@ -22,3 +22,5 @@
 - [계약이 아니라 트립와이어로 걸어라](feedback_tripwire_not_contract.md) — 정적 검사 조건이 문면보다 넓으면 계약은 기각·트립와이어는 채택; 실패 메시지에 처방을 담는다
 - [간헐 결함은 검출이 1순위](feedback_intermittent_defect_picks_detection.md) — "고친 뒤 안 났다"는 증거 0; 1회 클린런을 완료 증거로 요구한 상류 명세는 정정 대상(T130 G④)
 - [타 에이전트 메모리가 1차 증거다](feedback_peer_agent_memory_is_evidence.md) — 셸 없이 재현 못 할 때 `.claude/agent-memory/*/`의 1인칭 기록을 전수 grep; 인용값으로 표기
+- [Gemini 429의 구조](reference_gemini_quota_429_shape.md) — 일일/분당 판별자는 `quotaId`뿐, `retryDelay`는 판별력 0; ApiError는 status+message뿐이라 JSON.parse 필요
+- [시크릿 선언은 자리가 아니라 목록이다](feedback_secret_declaration_is_a_list_not_a_site.md) — 핸들러마다 손으로 선언하면 반드시 밀린다; 단일 배열 상수 + 반대 방향(읽는데 선언 안 한 곳) grep
