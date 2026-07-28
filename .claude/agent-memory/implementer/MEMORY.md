@@ -50,4 +50,5 @@
 - [T125 3차 — F11 게이트 견고화](project_codegate_t125_f11_gate_hardening.md) — ⭐ 토큰 화이트리스트가 QA에 실측 우회당함, 한국어 수사 2계열(제안 정규식이 제안자 우회를 못 잡음), 경계 lookbehind가 오탐 방지선.
 - [T115 에뮬레이터 신선도](project_codegate_t115_emulator_freshness.md) — ⭐ `/backends`가 로드된 디렉터리·함수 목록을 그대로 준다, 자동 재로드 안 함 실측, mtime 대신 내용 해시, java 잔존 프로세스.
 - ["거짓 OK"는 "못 잡는다"와 급이 다르다](feedback_false_reassurance_over_precision.md) — 검증 도구에서 거짓 OK 경로를 찾으면 고지로 끝내지 말고 그 라운드에 닫아라; 정밀도보다 테스트 가능한 층.
+- [T123 가짜 랜딩 제출 기록](project_codegate_t123_landing_submitted.md) — ⭐ 라이브 가드가 **다른 이유로 먼저 걸려** 미검증이던 함정(400을 성공으로 오독), 격리 에뮬레이터 3단 장애물, 설계가 빨간불 커밋을 지시했을 때.
 - [관측 불가 지점에 동작 걸지 말 것](feedback_unobservable_behavior_gates.md) — 브라우저 이벤트에 건 동작은 게이트 전건 통과해도 안 잡힌다; 순수 함수로 내려 고정.

@@ -38,7 +38,7 @@ import {
   sendMessage,
   submitRealtimeTranscript,
 } from "@/lib/api";
-import type { TranscriptTurn } from "@/lib/api";
+import type { InCallSmsEvent, TranscriptTurn } from "@/lib/api";
 import {
   countUnread,
   pickDueInCallSms,
@@ -652,7 +652,9 @@ export default function SessionCallPage() {
     smsTriggerRef.current?.focus();
   };
 
-  const handleRecordSmsEvent = (smsId: string, event: "opened" | "link_tapped") => {
+  // T123 — enum을 여기서 다시 적지 않고 **계약 타입을 그대로 쓴다**. 값을 복제해 두면 서버가
+  // 값을 늘릴 때마다 이 자리가 조용히 뒤처진다(§18.1 드리프트 원천).
+  const handleRecordSmsEvent = (smsId: string, event: InCallSmsEvent) => {
     if (!sessionId) return;
     // 기록 실패는 조용히 흡수한다 — 기록 때문에 훈련을 막지 않는다(API.md Errors).
     void recordInCallSmsEvent({ sessionId, smsId, event }).catch(() => {});
@@ -1471,6 +1473,10 @@ export default function SessionCallPage() {
           onEndTraining={() => void handleEndTraining()}
           onOpened={(smsId) => handleRecordSmsEvent(smsId, "opened")}
           onLinkTapped={(smsId) => handleRecordSmsEvent(smsId, "link_tapped")}
+          // T123/AC-080 — 가짜 랜딩 폼을 **제출한 사실**만 기록한다(기존 핸들러 재사용).
+          // ⛔ 참가자가 입력한 값은 이 경로에 실리지 않는다(콜백이 무인자다 — G138/AC-045).
+          // ⚠️ 위 `link_tapped`와 달리 이 이벤트만 리포트에서 "속은 순간"으로 승격된다(AC-080 (b)).
+          onLandingSubmitted={(smsId) => handleRecordSmsEvent(smsId, "landing_submitted")}
         />
       )}
 

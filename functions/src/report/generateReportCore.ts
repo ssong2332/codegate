@@ -21,7 +21,11 @@ import type {
 } from "../shared/types";
 import { analyzeConversation, buildPreventionAdvice, type AnalysisMessage } from "./analyzeConversation";
 import { computeDefenseGrade } from "./computeDefenseGrade";
-import { buildSmsTimeline, type SmsTimelineSource } from "./smsTimeline";
+import {
+  buildSmsTimeline,
+  promoteSmsLandingSubmits,
+  type SmsTimelineSource,
+} from "./smsTimeline";
 import { applyVerifyIntercept, type VerifyTimelineSource } from "./verifyTimeline";
 import {
   applyMockScreens,
@@ -114,6 +118,13 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       arrivedAtMs: data.arrivedAt?.toMillis?.() ?? 0,
       ...(data.openedAt ? { openedAtMs: data.openedAt.toMillis() } : {}),
       ...(data.linkTappedAt ? { linkTappedAtMs: data.linkTappedAt.toMillis() } : {}),
+      // T123/AC-080 — 제출 승격의 **판정 입력**이다(아래 ②-c-2). ⛔ `fakeLandingId`는 여기까지만
+      // 오고 `SmsTimelineEntry`에는 실리지 않는다(§15.6 G19 — buildSmsTimeline이 필드를 만들지
+      // 않는 것으로 구조적으로 보장된다).
+      ...(data.landingSubmittedAt
+        ? { landingSubmittedAtMs: data.landingSubmittedAt.toMillis() }
+        : {}),
+      ...(data.fakeLandingId ? { fakeLandingId: data.fakeLandingId } : {}),
     };
   });
   const smsTimeline = buildSmsTimeline(smsSources, messages, session.createdAt.toMillis());
@@ -153,6 +164,22 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     session.createdAt.toMillis(),
   );
 
+  // ②-c-2 통화 표면(경로 A)의 **가짜 랜딩 제출 승격**(T123, §31.6 (1), AC-080) —
+  // **추가 read 0회**다(위 ②-b의 `smsSources`를 그대로 다시 본다).
+  //
+  // ⚠️ **적용 순서가 설계다**(§31.6 (1) · G136): 주석(길이 불변)이 먼저, push(길이 증가)가 뒤 —
+  // 그래서 이 블록은 `applyVerifyIntercept` **뒤**, `applyMockScreens` **앞**이다. 앞에 넣으면
+  // 인덱스가 밀려 T83이 엉뚱한 순간에 주석을 달고, 뒤에 넣으면 재정렬이 두 번 돌아 안정 정렬
+  // 전제가 흐려진다. 여기 두면 최종 재정렬이 `applyMockScreens` 안에서 **한 번에** 끝난다.
+  // ⚠️ 승격되는 것은 **제출뿐**이다 — 링크 탭·화면 노출·입력 중은 승격되지 않는다(AC-080 (b)).
+  const smsLandingSubmits = promoteSmsLandingSubmits(
+    smsSources,
+    verify.deceivedMoments,
+    messages,
+    session.createdAt.toMillis(),
+    MOCK_SCREENS[session.scenarioId] ?? [],
+  );
+
   // ②-d 모의 화면 스냅샷 + **신규 순간 합성** + 3단계 파생(T84, §15.9.5, DECISIONS #42,
   // AC-072/AC-073) — `sessions/{sid}/mockScreens`를 **1회 추가 read**한다(위 두 수집과 같은 지점,
   // dual write 금지). 멱등 early-return 덕에 **최초 생성 시 1회만** 기록된다(AC-007 무변경).
@@ -170,11 +197,15 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       kind: data.kind,
       shownAtMs: data.shownAt?.toMillis?.() ?? 0,
       ...(data.consentedAt ? { consentedAtMs: data.consentedAt.toMillis() } : {}),
+      // T123/AC-080 — 메신저 표면(경로 B)의 제출 승격 입력. 부재면 이 기능 도입 전과 동일하다.
+      ...(data.submittedAt ? { submittedAtMs: data.submittedAt.toMillis() } : {}),
     };
   });
   const mock = applyMockScreens(
     mockSources,
-    verify.deceivedMoments,
+    // T123 — 경로 A 승격이 이미 병합된 배열을 넘긴다(제출 0건이면 `verify.deceivedMoments`와
+    // 동일한 값이라 이 기능 도입 전 산출과 한 바이트도 다르지 않다).
+    smsLandingSubmits.deceivedMoments,
     mockScreenMessages,
     session.createdAt.toMillis(),
     MOCK_SCREENS[session.scenarioId] ?? [],

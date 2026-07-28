@@ -52,7 +52,11 @@ export const recordMockScreenEvent = onCall<
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
   const { sessionId, landingId, event } = request.data ?? {};
-  if (!sessionId || !landingId || (event !== "shown" && event !== "consented")) {
+  if (
+    !sessionId ||
+    !landingId ||
+    (event !== "shown" && event !== "consented" && event !== "submitted")
+  ) {
     throw new HttpsError("invalid-argument", "sessionId·landingId·event가 필요합니다.");
   }
 
@@ -74,6 +78,12 @@ export const recordMockScreenEvent = onCall<
   if (event === "consented" && item.kind !== "app-install") {
     throw new HttpsError("invalid-argument", "이 화면에는 권한 허용 단계가 없습니다.");
   }
+  // T123/AC-080 — 위 가드의 **정확한 거울**이다. `app-install` 목업에는 입력 필드가 0개이므로
+  // (AC-072) 제출이라는 행위 자체가 없다. 두 이벤트가 kind로 상호배타라 같은 문서에서 승격이
+  // 두 번 일어나지 않는다.
+  if (event === "submitted" && item.kind === "app-install") {
+    throw new HttpsError("invalid-argument", "이 화면에는 입력 제출 단계가 없습니다.");
+  }
 
   const db = getFirestore();
   const ref = db.collection("sessions").doc(sessionId).collection("mockScreens").doc(landingId);
@@ -88,6 +98,7 @@ export const recordMockScreenEvent = onCall<
       kind: item.kind,
       shownAt: now,
       ...(event === "consented" ? { consentedAt: now } : {}),
+      ...(event === "submitted" ? { submittedAt: now } : {}),
     };
     await ref.create(doc);
     return { ok: true };
@@ -95,7 +106,8 @@ export const recordMockScreenEvent = onCall<
 
   // 최초 1회만 세팅한다(§15.9.6) — 다시 열어봐도 "처음 열어본 시각"·"처음 응낙한 시각"이 밀리지
   // 않는다(`recordInCallSmsEvent`의 기존 관례와 동일).
-  const field = event === "shown" ? "shownAt" : "consentedAt";
+  const field =
+    event === "shown" ? "shownAt" : event === "consented" ? "consentedAt" : "submittedAt";
   if (!snap.get(field)) {
     await ref.update({ [field]: now });
   }

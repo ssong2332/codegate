@@ -206,6 +206,11 @@ export type InCallSmsDoc = {
   arrivedAt: FirebaseFirestore.Timestamp;
   openedAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("opened")
   linkTappedAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("link_tapped")
+  // T123/AC-080 — 이 문자가 연 가짜 랜딩의 입력 폼을 **제출한 시각**. **최초 1회만** 세팅.
+  // **부재 = 제출 없음**(링크 탭·화면 노출·입력 중은 승격 대상이 아니다 — AC-080 (b)).
+  // ⛔ 저장되는 것은 **시각 하나뿐**이다: 참가자가 입력한 계좌번호·예금주명에 해당하는 필드는
+  // 이 스키마에 **존재하지 않는다**(AC-045 구조적 금지 — `MockScreenDoc`과 같은 형태).
+  landingSubmittedAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("landing_submitted")
   // §15.1.5 증분 — "이 문자가 도착한 시점까지 messages에 존재하는 role==='scammer' 문서 수".
   // 클라 입력이 아니라 **서버가 카탈로그 값에서 계산**해 buildInCallSmsDoc 한 곳에서만 기록한다
   // (실시간·폴백 두 write 경로가 이 헬퍼를 공유하므로 값 산출이 갈라지지 않는다, §15.1.5 (6)).
@@ -296,6 +301,11 @@ export type MockScreenDoc = {
   consentedAt?: FirebaseFirestore.Timestamp;
   // 사기범이 응낙 사실을 언급하도록 `turnInstruction` 1줄을 주입한 시각(§15.9.3 — 1회 주입 보장).
   consentAnnouncedAt?: FirebaseFirestore.Timestamp;
+  // T123/AC-080 — 이 랜딩의 입력 폼을 **제출한 시각**. **최초 1회만** 세팅. **부재 = 제출 없음**
+  // (링크 탭·화면 노출·입력 중은 승격 대상이 아니다 — AC-080 (b)).
+  // ⛔ `consentedAt`(가짜 "권한 허용")과 **다른 필드다** — 같은 값을 재사용하면 과거 리포트의
+  // 의미가 소급해 갈라진다. 저장되는 것은 **시각 하나뿐**이고 입력값 필드는 존재하지 않는다.
+  submittedAt?: FirebaseFirestore.Timestamp;
 };
 
 // --- reports/{reportId}.stages / .mockScreenTimeline (T84, §15.9.5, AC-073) ---
