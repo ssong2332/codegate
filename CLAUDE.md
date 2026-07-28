@@ -71,7 +71,7 @@ Record commands verbatim after the first success. Reuse without modification; if
 | Purpose | Command | Verified on |
 |---|---|---|
 | Build (functions) | `npm --prefix functions run build` | 2026-07-27 |
-| Test (functions) | `npm --prefix functions test` | 2026-07-28 — 524 pass / 0 fail (main `1420c5e`) |
+| Test (functions) | `npm --prefix functions test` | 2026-07-28 — 525 pass / 0 fail (main `38b419f`) |
 | Test (root) | `npm test` | 2026-07-28 — 216 pass / 0 fail (main `32b3da2`) |
 | Build (root) | `npm run build` | 2026-07-27 — 통과 (main `1157d7d`). ⚠️ **`.env`가 있는 트리에서만 통과한다** — 격리 워크트리처럼 `.env`가 없으면 TS 컴파일은 성공한 뒤 정적 생성 단계에서 `auth/invalid-api-key`로 실패한다. 이것은 코드 결함이 아니다(T108에서 base main 대조로 실측 확인) |
 | Lint (functions) | `npm --prefix functions run lint` | 2026-07-27 |
