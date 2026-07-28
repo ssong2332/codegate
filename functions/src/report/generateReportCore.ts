@@ -197,6 +197,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       kind: data.kind,
       shownAtMs: data.shownAt?.toMillis?.() ?? 0,
       ...(data.consentedAt ? { consentedAtMs: data.consentedAt.toMillis() } : {}),
+      // T123/AC-080 — 메신저 표면(경로 B)의 제출 승격 입력. 부재면 이 기능 도입 전과 동일하다.
+      ...(data.submittedAt ? { submittedAtMs: data.submittedAt.toMillis() } : {}),
     };
   });
   const mock = applyMockScreens(

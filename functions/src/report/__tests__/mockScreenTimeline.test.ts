@@ -115,6 +115,88 @@ test("[D-51 ④] 가짜 '권한 허용'에 응하면 순간 1건이 **사기범 
   assert.equal(result.mockScreenTimeline[0].consented, true);
 });
 
+// ── T123 / AC-080 — 메신저 표면(경로 B)의 가짜 랜딩 **제출 승격** ────────────────────────────
+//
+// 경로 A(`smsTimeline.test.ts`)와 **같은 승격 규칙**을 쓴다(G137 — 조립은 buildLandingSubmitMoment
+// 한 곳이 소유). 여기서 고정하는 것은 이 표면에서도 제출이 실제로 승격을 만들고, 그 경로를 끊으면
+// 승격이 사라진다는 것이다(각각 독립 샘플).
+
+const PARCEL_CATALOG = MOCK_SCREENS["messenger-parcel-smishing-sms"];
+const PARCEL_LANDING_ID = "parcel-redelivery";
+/** scammer(0, credential-form 링크 실림) user(1) scammer(2) — 경로 B의 최소 대화. */
+const parcelMessages: MockScreenMessage[] = [
+  {
+    role: "scammer",
+    turnIndex: 0,
+    createdAtMs: SESSION_CREATED_MS + 5_000,
+    landingIds: [PARCEL_LANDING_ID],
+  },
+  { role: "user", turnIndex: 1, createdAtMs: SESSION_CREATED_MS + 12_000 },
+  { role: "scammer", turnIndex: 2, createdAtMs: SESSION_CREATED_MS + 20_000 },
+];
+const parcelShown: MockScreenSource = {
+  landingId: PARCEL_LANDING_ID,
+  kind: "credential-form",
+  shownAtMs: SESSION_CREATED_MS + 9_000,
+};
+const parcelSubmitted: MockScreenSource = {
+  ...parcelShown,
+  submittedAtMs: SESSION_CREATED_MS + 15_000,
+};
+
+test("[AC-080/경로 B] 메신저 랜딩 제출이 속은 순간 1건으로 승격된다", (t) => {
+  const result = applyMockScreens(
+    [parcelSubmitted],
+    [],
+    parcelMessages,
+    SESSION_CREATED_MS,
+    PARCEL_CATALOG,
+  );
+  const item = PARCEL_CATALOG.find((c) => c.landingId === PARCEL_LANDING_ID);
+  t.diagnostic(`승격=${result.promotedCount} / 순간=${JSON.stringify(result.deceivedMoments)}`);
+  assert.equal(result.promotedCount, 1);
+  assert.equal(result.deceivedMoments[0].turnIndex, 0, "링크를 실은 사기범 메시지가 앵커다");
+  // 문면은 카탈로그 저작 문자열 그대로 — 경로 A와 **같은 규칙**이다(G137).
+  assert.equal(result.deceivedMoments[0].tactic, item?.momentTactic);
+  assert.equal(result.deceivedMoments[0].correctAction, item?.correctAction);
+});
+
+test("[AC-080/경로 B 역검증] 제출 경로를 끊으면 승격이 사라진다(독립 샘플)", (t) => {
+  const noSubmit = applyMockScreens(
+    [parcelShown],
+    [],
+    parcelMessages,
+    SESSION_CREATED_MS,
+    PARCEL_CATALOG,
+  );
+  const noAnchor = applyMockScreens([parcelSubmitted], [], [], SESSION_CREATED_MS, PARCEL_CATALOG);
+  const noCatalog = applyMockScreens([parcelSubmitted], [], parcelMessages, SESSION_CREATED_MS, []);
+  t.diagnostic(
+    `끊은 경로별 승격 수 — 제출필드 제거=${noSubmit.promotedCount} / ` +
+      `앵커 미해결=${noAnchor.promotedCount} / 카탈로그 미소속=${noCatalog.promotedCount}`,
+  );
+  assert.equal(noSubmit.promotedCount, 0, "화면만 뜬 세션은 AC-062대로 진입점이 없다");
+  assert.equal(noAnchor.promotedCount, 0);
+  assert.equal(noCatalog.promotedCount, 0);
+  assert.deepEqual(noSubmit.deceivedMoments, [], "제출 0건이면 입력 그대로다");
+});
+
+test("[T123] `consented`는 여전히 '권한 허용'만 뜻한다 — 제출 항목은 consented:false로 남는다", () => {
+  const result = applyMockScreens(
+    [parcelSubmitted],
+    [],
+    parcelMessages,
+    SESSION_CREATED_MS,
+    PARCEL_CATALOG,
+  );
+  assert.equal(result.promotedCount, 1, "승격은 일어난다");
+  assert.equal(
+    result.mockScreenTimeline[0].consented,
+    false,
+    "표시 스냅샷의 의미는 갈리지 않는다(스키마 무변경 — 화면 문면은 ux-design 소관)",
+  );
+});
+
 test("[§15.9.5 e-2 규칙 2] 병합 결과는 turnIndex 오름차순이다(되감기 딥링크 1:1 전제)", () => {
   const result = applyMockScreens([consented], [moment(3), moment(1)], messages, SESSION_CREATED_MS, CATALOG);
   assert.deepEqual(

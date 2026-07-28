@@ -35,6 +35,13 @@ export type MockScreenSource = {
   shownAtMs: number;
   /** 존재 = 참가자가 가짜 "권한 허용"에 응했다(D-51 ③과 ④를 가르는 유일한 조건). */
   consentedAtMs?: number;
+  /**
+   * T123/AC-080 — 존재 = 참가자가 이 랜딩의 **입력 폼을 제출했다**(부재 = 제출 없음).
+   * ⛔ `consentedAtMs`와 **다른 축이다**: 서버 가드상 두 값은 `kind`로 상호배타라
+   * (`mockScreens/index.ts` — 제출은 `app-install`이 아닐 때만, 응낙은 `app-install`일 때만)
+   * 같은 문서에서 승격이 두 번 일어나지 않는다.
+   */
+  submittedAtMs?: number;
 };
 
 /**
@@ -160,6 +167,14 @@ export function applyMockScreens(
     const anchor = resolveMockScreenAnchor(doc.landingId, sortedMessages, sessionCreatedAtMs);
     const item = catalog.find((c) => c.landingId === doc.landingId);
     const consented = doc.consentedAtMs !== undefined && anchor.anchorResolved && item !== undefined;
+    // T123/AC-080 — 제출 승격. ⭐ `anchorTurnIndex >= 0`을 함께 본다(§31.6 **G135**): 이 리졸버는
+    // 오늘 그 값을 내지 않지만(항상 실제 메시지 turnIndex), 조건을 표면마다 다르게 적으면 다음
+    // 사람이 어느 쪽이 맞는지 판정할 수 없다. 승격 조건은 두 표면에서 **한 벌**이다.
+    const submitted =
+      doc.submittedAtMs !== undefined &&
+      anchor.anchorResolved &&
+      anchor.anchorTurnIndex >= 0 &&
+      item !== undefined;
 
     entries.push({
       landingId: doc.landingId,
@@ -167,10 +182,13 @@ export function applyMockScreens(
       anchorTurnIndex: anchor.anchorTurnIndex,
       anchorResolved: anchor.anchorResolved,
       ...(anchor.timeLabel ? { timeLabel: anchor.timeLabel } : {}),
+      // ⚠️ `consented`는 **"권한 허용 응낙"만** 뜻한다(스키마 무변경 — 늘리면 §18.1 죽은 필드).
+      // 제출은 했지만 `consented:false`인 항목이 생긴다(표시 전용). 화면 문면이 그것을
+      // "응하지 않음"으로 읽히게 그리면 참가자에게 거짓을 말한다 — 표시 카피는 ux-design 소관.
       consented,
     });
 
-    if (!consented || !item) continue;
+    if ((!consented && !submitted) || !item) continue;
     // 조립은 `buildLandingSubmitMoment` **한 곳**이 소유한다(§31.6 G137 — 동작 무변경 추출).
     promoted.push(buildLandingSubmitMoment(item, anchor.anchorTurnIndex, anchor.timeLabel));
   }

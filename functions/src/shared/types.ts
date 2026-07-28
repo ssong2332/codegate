@@ -301,6 +301,11 @@ export type MockScreenDoc = {
   consentedAt?: FirebaseFirestore.Timestamp;
   // 사기범이 응낙 사실을 언급하도록 `turnInstruction` 1줄을 주입한 시각(§15.9.3 — 1회 주입 보장).
   consentAnnouncedAt?: FirebaseFirestore.Timestamp;
+  // T123/AC-080 — 이 랜딩의 입력 폼을 **제출한 시각**. **최초 1회만** 세팅. **부재 = 제출 없음**
+  // (링크 탭·화면 노출·입력 중은 승격 대상이 아니다 — AC-080 (b)).
+  // ⛔ `consentedAt`(가짜 "권한 허용")과 **다른 필드다** — 같은 값을 재사용하면 과거 리포트의
+  // 의미가 소급해 갈라진다. 저장되는 것은 **시각 하나뿐**이고 입력값 필드는 존재하지 않는다.
+  submittedAt?: FirebaseFirestore.Timestamp;
 };
 
 // --- reports/{reportId}.stages / .mockScreenTimeline (T84, §15.9.5, AC-073) ---
