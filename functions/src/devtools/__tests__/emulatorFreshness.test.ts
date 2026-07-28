@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import {
   decideFreshness,
   diffTriggerNames,
+  findIntermediateBuilds,
   foldLibHash,
   isEmulatorLoadedLibFile,
   normalizeDir,
@@ -58,7 +59,8 @@ test("기동 뒤 lib 내용이 바뀌면 STALE-CODE를 낸다", () => {
 });
 
 test("⭐ 재빌드로 mtime만 바뀌고 내용이 같으면 STALE-CODE를 내지 않는다(npm test 오탐 방지)", () => {
-  // `npm --prefix functions test`가 lib를 지웠다 다시 만드는 경로. 해시가 같으므로 경고하지 않는다.
+  // `npm --prefix functions test`가 lib를 지웠다 다시 만드는 경로. **내용이 같은** 빌드만 추가되므로
+  // 아래 "중간 빌드" 규칙(#10)에도 걸리지 않는다 — 편집 없이 테스트만 반복 실행하는 흐름은 조용하다.
   const result = decideFreshness({
     ...freshInput(),
     buildHistory: [
@@ -68,6 +70,68 @@ test("⭐ 재빌드로 mtime만 바뀌고 내용이 같으면 STALE-CODE를 내�
     latestLibMtimeMs: Date.parse("2026-07-28T06:00:00.000Z"),
   });
   assert.equal(result.verdict, "FRESH");
+});
+
+test("⭐ 기동 이후 내용이 다른 빌드가 있었으면 해시가 되돌아와도 FRESH가 아니라 UNKNOWN이다", () => {
+  // ⚠️ **이 기대값은 2026-07-28에 바뀌었다.** 이전에는 "고쳤다가 되돌려 재빌드 → FRESH 복귀"였다.
+  // 실측 결과 코드를 붙들고 있는 것은 부모가 아니라 **첫 요청 때 뜨는 워커**라, 되돌리기 전에 워커가
+  // 중간 빌드를 물었으면 해시가 같아져도 **워커는 중간 빌드를 계속 서빙한다**(부모 PID 56888 /
+  // 워커 PID 65372 실측). 그 상태에서 `FRESH`라고 답하는 것이 거짓이므로 `UNKNOWN`으로 내린다.
+  const result = decideFreshness({
+    ...freshInput(),
+    buildHistory: [
+      { at: "2026-07-28T04:59:00.000Z", hash: HASH_OLD }, // 기동 시점
+      { at: "2026-07-28T05:30:00.000Z", hash: HASH_NEW }, // 중간 빌드 — 워커가 이걸 물었을 수 있다
+      { at: "2026-07-28T06:00:00.000Z", hash: HASH_OLD }, // 되돌려 재빌드
+    ],
+    latestLibMtimeMs: Date.parse("2026-07-28T06:00:00.000Z"),
+  });
+  assert.equal(result.verdict, "UNKNOWN");
+  assert.equal(result.findings.length, 1);
+  assert.match(result.findings[0].detail, /워커/);
+  assert.match(result.findings[0].detail, /재기동을 권한다/);
+});
+
+test("중간 빌드 규칙은 STALE-CODE를 대체하지 않는다 — 진짜로 낡았으면 STALE-CODE가 이긴다", () => {
+  const result = decideFreshness({
+    ...freshInput(),
+    currentLibHash: HASH_NEW,
+    buildHistory: [
+      { at: "2026-07-28T04:59:00.000Z", hash: HASH_OLD },
+      { at: "2026-07-28T05:30:00.000Z", hash: "c".repeat(64) },
+      { at: "2026-07-28T06:00:00.000Z", hash: HASH_NEW },
+    ],
+    latestLibMtimeMs: Date.parse("2026-07-28T06:00:00.000Z"),
+  });
+  assert.equal(result.verdict, "STALE-CODE");
+  assert.equal(result.findings.length, 1);
+});
+
+test("findIntermediateBuilds는 기동 이후 & 현재와 다른 해시만 오래된 순으로 고른다", () => {
+  const history = [
+    { at: "2026-07-28T04:00:00.000Z", hash: "before-and-different" },
+    { at: "2026-07-28T06:00:00.000Z", hash: "after-but-same" },
+    { at: "2026-07-28T07:00:00.000Z", hash: "after-and-different-2" },
+    { at: "2026-07-28T05:30:00.000Z", hash: "after-and-different-1" },
+  ];
+  const found = findIntermediateBuilds(history, "2026-07-28T05:00:00.000Z", "after-but-same");
+  assert.deepEqual(
+    found.map((r) => r.hash),
+    ["after-and-different-1", "after-and-different-2"],
+  );
+  // 편집 없이 재빌드만 반복한 경우 = 전부 현재 해시와 같다 → 0건(노이즈 없음).
+  assert.deepEqual(
+    findIntermediateBuilds(
+      [
+        { at: "2026-07-28T06:00:00.000Z", hash: "same" },
+        { at: "2026-07-28T07:00:00.000Z", hash: "same" },
+      ],
+      "2026-07-28T05:00:00.000Z",
+      "same",
+    ),
+    [],
+  );
+  assert.deepEqual(findIntermediateBuilds(history, "not-a-date", "x"), []);
 });
 
 test("다른 트리에서 기동된 에뮬레이터는 OTHER-TREE이며 코드 대조로 넘어가지 않는다", () => {

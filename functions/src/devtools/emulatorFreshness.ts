@@ -203,6 +203,45 @@ export function pickLoadedBuildRecord(
   return candidates.length > 0 ? candidates[candidates.length - 1] : null;
 }
 
+/**
+ * 에뮬레이터 기동 **이후**에 기록된 빌드 중 **현재 `lib` 해시와 내용이 다른** 것들(오래된 것 → 최신).
+ *
+ * **왜 필요한가(2026-07-28 실측)**: 코드를 실제로 붙들고 있는 것은 부모 프로세스가 아니라
+ * `functionsEmulatorRuntime` **워커**이고, 워커는 **첫 요청 때** 뜬다. 그래서
+ * ⓐ 기동 → ⓑ 빌드(버전 X) → ⓒ 첫 호출(워커가 **X** 를 물고 상주) → ⓓ 되돌려 빌드(해시가 기동
+ * 시점과 같아짐) 순서가 되면, *기동 시점 해시 == 현재 해시* 인데도 **워커는 X를 계속 서빙한다.**
+ * 증거: 부모 PID 56888(기동 `04:49:35.435Z`, hash `b32587476ebf`) / 워커 PID 65372
+ * (spawn `04:51:52.859Z`, 직전 빌드 `04:51:52.687Z` hash `801e97fc1cd1`) 상태에서 호출 응답이
+ * 중간 빌드의 문자열이었다.
+ *
+ * ⇒ 이 경우 `FRESH`가 아니라 **`UNKNOWN`** 을 낸다. *"거짓 `FRESH`로는 가지 않는다"* 가 이 도구의
+ * 핵심 성질이고, 이 한 갈래가 그 성질을 깨고 있었다.
+ *
+ * ⚠️ **더 정밀한 대안은 따로 있다**: 살아 있는 워커들의 spawn 시각을 OS로 조회해 기준선을
+ * *부모 기동 시각 ∪ 워커 spawn 시각* 으로 넓히면 `UNKNOWN` 대신 정확한 `FRESH`/`STALE-CODE`를 낼 수
+ * 있다. 채택하지 않은 이유는 그 경로가 **자동 테스트가 없는 통합 표면**(`netstat`·CIM 조회)을 키우기
+ * 때문이다. 이 함수는 이미 가진 빌드 기록만 쓰므로 순수 함수 층에서 전부 테스트된다. 정밀도가 필요해지면
+ * 그때 대안으로 갈아타라.
+ *
+ * ⚠️ **노이즈 성질**: 조건이 *"내용이 **다른** 빌드"* 이므로, 편집 없이 `build`·`test`를 반복해서
+ * 돌리는 것만으로는 해시가 같아 **뜨지 않는다**(`isEmulatorLoadedLibFile`의 범위 축소가 그것을
+ * 보장한다). 실제로 제품 코드를 고쳤다가 되돌린 경우에만 뜬다.
+ */
+export function findIntermediateBuilds(
+  history: readonly BuildRecord[],
+  processStartedAt: string,
+  currentLibHash: string,
+): BuildRecord[] {
+  const startedMs = Date.parse(processStartedAt);
+  if (Number.isNaN(startedMs)) return [];
+  return history
+    .filter((r) => {
+      const ms = Date.parse(r.at);
+      return !Number.isNaN(ms) && ms > startedMs && r.hash !== currentLibHash;
+    })
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+}
+
 function worst(findings: readonly Finding[]): FreshnessCode | null {
   let picked: FreshnessCode | null = null;
   for (const f of findings) {
@@ -227,6 +266,7 @@ function worst(findings: readonly Finding[]): FreshnessCode | null {
  * | 7 | 프로세스 기동 시각을 못 구함 | UNKNOWN |
  * | 8 | 기동 시점의 빌드 기록이 없음 | UNKNOWN |
  * | 9 | 기동 시점 해시 ≠ 현재 `lib` 해시 | STALE-CODE |
+ * | 10 | (9가 아닐 때) 기동 이후 **내용이 다른** 빌드가 있었음 | UNKNOWN (워커가 어느 쪽을 물었는지 모른다) |
  */
 export function decideFreshness(input: FreshnessInput): FreshnessResult {
   const findings: Finding[] = [];
@@ -308,6 +348,26 @@ export function decideFreshness(input: FreshnessInput): FreshnessResult {
         `${loaded.at} hash ${loaded.hash.slice(0, 12)} ≠ 현재 lib hash ` +
         `${input.currentLibHash.slice(0, 12)}. 재기동해야 반영된다.`,
     });
+  } else {
+    // 기동 시점 해시와 현재 해시가 **같아도** 안심할 수 없다 — 그 사이에 내용이 다른 빌드가 있었다면
+    // 워커가 그 중간 빌드를 붙들고 있을 수 있다(아래 함수 주석의 실측 근거).
+    const intermediates = findIntermediateBuilds(
+      input.buildHistory,
+      input.processStartedAt,
+      input.currentLibHash,
+    );
+    if (intermediates.length > 0) {
+      const newest = intermediates[intermediates.length - 1];
+      findings.push({
+        code: "UNKNOWN",
+        detail:
+          `기동(${input.processStartedAt}) 이후 **내용이 다른** 빌드가 ${intermediates.length}건 ` +
+          `있었다(가장 최근 ${newest.at} hash ${newest.hash.slice(0, 12)}, 현재 lib hash ` +
+          `${input.currentLibHash.slice(0, 12)}). 코드를 붙들고 있는 것은 부모가 아니라 첫 요청 때 뜨는 ` +
+          `워커라, 워커가 그 중간 빌드를 붙들고 있는지 지금 lib과 같은 것을 붙들고 있는지 ` +
+          `**알 수 없다** — 재기동을 권한다.`,
+      });
+    }
   }
 
   return { verdict: worst(findings) ?? "FRESH", findings };
