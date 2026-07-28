@@ -11,6 +11,10 @@
 //   - `fakeLandingId`·`otpCode`·원시 타임스탬프를 스냅샷에 싣기 (§15.6 G19 — 사후 열람 화면에
 //     가짜 랜딩 재진입 컨트롤·복사 가능 필드를 만들 수 있다)
 import type { InCallSmsKind, SmsTimelineEntry, SmsTimelineEvent } from "../shared/types";
+// T123 — 승격 객체 조립은 **두 표면이 공유하는 단일 지점**이 소유한다(§31.6 G137). 여기서 다시
+// 조립하면 표면마다 "속은 순간"의 문면 규칙이 조용히 갈라진다.
+import type { DeceivedMomentResult } from "./analyzeConversation";
+import { buildLandingSubmitMoment } from "./mockScreenTimeline";
 
 /** `sessions/{sid}/inCallSms/{smsId}` 1건의 순수값 표현(Timestamp → ms). */
 export type SmsTimelineSource = {
@@ -24,6 +28,18 @@ export type SmsTimelineSource = {
   arrivedAtMs: number;
   openedAtMs?: number;
   linkTappedAtMs?: number;
+  /**
+   * T123/AC-080 — 이 문자가 연 가짜 랜딩의 폼을 **제출한 시각**(부재 = 제출 없음).
+   * ⚠️ **승격 판정 입력 전용**이다. `deriveSmsEvents`는 이 값을 보지 않는다 — 표시 이벤트를
+   * 함께 신설하면 같은 순간이 문자 항목과 순간 주석으로 **두 번 렌더**된다(§15.6 G17).
+   */
+  landingSubmittedAtMs?: number;
+  /**
+   * T123 — 제출된 랜딩의 카탈로그 조회 키.
+   * ⛔ **승격 판정 입력으로만 쓰고 `SmsTimelineEntry`(리포트 스냅샷)에는 절대 싣지 않는다** —
+   * §15.6 **G19**가 금지한 자리다(사후 열람 화면에 가짜 랜딩 재진입 컨트롤이 생긴다).
+   */
+  fakeLandingId?: string;
 };
 
 /** 앵커 해결에 필요한 최소 메시지 정보(analyzeConversation의 AnalysisMessage와 같은 모양). */
@@ -166,4 +182,89 @@ export function buildSmsTimeline(
 /** 정렬용으로만 원본 `arrivedAtMs`를 참조한다 — 스냅샷 **결과물에는 싣지 않는다**(§15.6 G19). */
 function arrivedAtOf(docs: readonly SmsTimelineSource[], smsId: string): number {
   return docs.find((d) => d.smsId === smsId)?.arrivedAtMs ?? 0;
+}
+
+// ── T123 / AC-080 — 통화 표면(경로 A)의 **가짜 랜딩 제출 승격** ────────────────────────────────
+//
+// ⭐ **왜 이 파일인가**: 이 파일이 `resolveAnchor`의 소유자다(위 `:98` 인근, 이미 `verifyTimeline.ts`
+// 와 공유 중). 다른 파일에 두면 리졸버를 import해 오는 세 번째 소비자가 생겨 앵커 규칙이 갈라진다
+// (§15.1.5 (6) "리졸버는 단 하나").
+//
+// ⭐ **왜 `mockScreens` 문서를 만들지 않는가**(§31.1): `resolveMockScreenAnchor`의 유일한 입력은
+// `attachments[].fakeLandingId`를 가진 사기범 **메시지**이고, 그 `attachments`는 LLM 완성 텍스트의
+// `[[LINK:id]]` 마커에서만 생기는 **메신저 전용** 값이다. 통화 세션에는 마커가 애초에 없어
+// `mockScreens` 문서를 만들면 앵커가 **항상 미해결**로 떨어져 승격이 구조적으로 0건이 된다.
+// 반면 `inCallSms` 문서는 `anchorScammerTurn`을 **이미 갖고 있다**(서버가 경로별 ±보정까지 끝내
+// 기록) — 그래서 여기서는 **기존 문서의 필드 하나**만 보면 된다(신규 문서 종류 0건, G81 무변경).
+//
+// ⚠️ 이 함수가 **하지 않는 것**:
+//   - 표시 이벤트 신설 (§15.6 G17 — 같은 순간이 두 번 렌더된다. `deriveSmsEvents` 무변경)
+//   - `link_tapped`/`opened`의 승격 (AC-080 (b) — **협상 대상이 아니다.** §15.6 G22는 그 4종에
+//     대해 **그대로 살아 있다**. 예외는 제출 하나뿐이고 그것은 AC-080이 신설한 승격 대상이다)
+//   - `fakeLandingId`를 스냅샷에 싣기 (§15.6 G19)
+
+/** 승격 대상 카탈로그 항목의 최소 모양 — `MockScreenItem`이 그대로 들어맞는다(구조적 부분집합). */
+export type LandingSubmitCatalogItem = {
+  landingId: string;
+  momentTactic: string;
+  correctAction: string;
+};
+
+export type PromoteSmsLandingSubmitsResult = {
+  /** 승격 항목이 병합된 순간 배열(정렬은 뒤이어 도는 `applyMockScreens`가 한 번에 끝낸다). */
+  deceivedMoments: DeceivedMomentResult[];
+  /** 승격된 순간 수(로그·테스트용 — 저장되지 않는다). */
+  promotedCount: number;
+};
+
+/**
+ * 통화 중 문자가 연 가짜 랜딩의 **제출 문서 → 속은 순간** 승격(§31.6 (1)).
+ *
+ * | 조건 | 결과 |
+ * |---|---|
+ * | `landingSubmittedAtMs` 부재 | 승격 안 함(링크만 눌러 보고 닫은 세션 = 0건, AC-080 (b)) |
+ * | `fakeLandingId`가 카탈로그에 없음 | 승격 안 함(문면 원천이 없으면 순간을 만들지 않는다) |
+ * | 앵커 미해결 | 승격 안 함(§15.9.5 e-2 규칙 3과 동일 — 되감기 1:1 전제 보호) |
+ * | ⭐ `anchorTurnIndex < 0` | **승격 안 함**(아래 G135) |
+ * | 그 외 | 순간 1건 추가 |
+ *
+ * ⭐⭐ **G135(§31.6 (3)) — `anchorResolved`만 보면 안 된다.** `resolveAnchor` 규칙 1은
+ * `anchorScammerTurn <= 0`일 때 **`{ anchorTurnIndex: -1, anchorResolved: true }`** 를 돌려준다
+ * (위 규칙표 1행). turnIndex **-1**에는 메시지가 없어 `getAnnotatedTurnIndexes`가 그 순간을
+ * 내보내지 못하고, 그러면 `deceivedMoments`↔주석 메시지의 **1:1 전제가 깨져 되감기가 엉뚱한 순간을
+ * 연다**(§15.6 G16 재발 = AC-062 위반). `resolveMockScreenAnchor`에는 이 경로가 없어 **경로 A에만
+ * 있는 함정**이다. 현행 카탈로그(`afterScammerTurns`)로 도달 가능한지와 **무관하게** 방어한다.
+ *
+ * ⚠️ **제출이 0건이면 `deceivedMoments`를 입력 그대로 돌려준다** — 리포트 산출이 이 기능 도입
+ * 전과 완전히 동일하다(AC-062 "0건이면 되감기 진입점 없음", 테스트로 고정).
+ */
+export function promoteSmsLandingSubmits(
+  docs: readonly SmsTimelineSource[],
+  deceivedMoments: readonly DeceivedMomentResult[],
+  messages: readonly SmsTimelineMessage[],
+  sessionCreatedAtMs: number,
+  catalog: readonly LandingSubmitCatalogItem[] = [],
+): PromoteSmsLandingSubmitsResult {
+  const submitted = docs.filter((doc) => doc.landingSubmittedAtMs !== undefined);
+  if (submitted.length === 0) {
+    return { deceivedMoments: [...deceivedMoments], promotedCount: 0 };
+  }
+  const sortedMessages = [...messages].sort((a, b) => a.turnIndex - b.turnIndex);
+
+  const promoted: DeceivedMomentResult[] = [];
+  for (const doc of submitted) {
+    const item = doc.fakeLandingId
+      ? catalog.find((c) => c.landingId === doc.fakeLandingId)
+      : undefined;
+    if (!item) continue;
+    const anchor = resolveAnchor(doc.anchorScammerTurn, sortedMessages, sessionCreatedAtMs);
+    // ⭐ G135 — 두 조건 **모두**여야 한다. `anchorResolved`만 보면 turnIndex -1이 통과한다.
+    if (!anchor.anchorResolved || anchor.anchorTurnIndex < 0) continue;
+    promoted.push(buildLandingSubmitMoment(item, anchor.anchorTurnIndex, anchor.timeLabel));
+  }
+
+  return {
+    deceivedMoments: [...deceivedMoments, ...promoted],
+    promotedCount: promoted.length,
+  };
 }

@@ -52,6 +52,16 @@ type MessengerFakeLandingProps = {
    * ⚠️ 이 컴포넌트는 **네트워크 호출을 하지 않는다** — 기록은 페이지가 담당한다(§15.9.6).
    */
   onInstallConsent?: () => void;
+  /**
+   * kind=`credential-form`에서 참가자가 입력 폼을 **제출한 순간**(T123 · AC-080 (b) — 응낙 판정
+   * 지점은 제출 하나다. 링크 탭·화면 노출·입력 중은 승격되지 않는다).
+   * ⛔⛔ **무인자다(§31.6 G138).** 인자를 실으면 참가자가 입력한 계좌번호·예금주명이 컴포넌트
+   * 밖으로 나가는 첫 경로가 생기고, 그 순간부터 페이지가 그 값을 어디로도 보낼 수 있다 —
+   * 이 파일의 금지 토큰 스캔은 그것을 잡지 못한다(AC-045). `mockScreenCopy.test.ts`의 G138
+   * 블록이 무인자 형태를 단언하고 역검증까지 같이 둔다.
+   * ⚠️ 이 컴포넌트는 **네트워크 호출을 하지 않는다** — 기록은 페이지가 담당한다(§15.9.6).
+   */
+  onCredentialSubmit?: () => void;
   /** 연속성 앵커(UX.md UF-012 Steps §6) — 3단계 내내 자리를 지켜야 하는 난이도 표기.
    *  ⚠️ **레벨 코드가 아니라 이미 번역된 라벨을 받는다.** 이 컴포넌트가 난이도 사전을 알게 되면
    *  표기 정본이 두 곳으로 갈라진다(페이지 헤더 ↔ 오버레이). 페이지가 자기 헤더에 쓰는 값을
@@ -66,6 +76,7 @@ export default function MessengerFakeLanding({
   onClose,
   onEndTraining,
   onInstallConsent,
+  onCredentialSubmit,
   difficultyLabel,
 }: MessengerFakeLandingProps) {
   return (
@@ -120,7 +131,11 @@ export default function MessengerFakeLanding({
         {landingKind === "app-install" ? (
           <AppInstallMockup onClose={onClose} onConsent={onInstallConsent} />
         ) : (
-          <CredentialFormMockup landingId={landingId} onClose={onClose} />
+          <CredentialFormMockup
+            landingId={landingId}
+            onClose={onClose}
+            onCredentialSubmit={onCredentialSubmit}
+          />
         )}
       </div>
     </div>
@@ -229,9 +244,12 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
 function CredentialFormMockup({
   landingId,
   onClose,
+  onCredentialSubmit,
 }: {
   landingId?: string;
   onClose: () => void;
+  /** ⛔ 무인자 콜백이다 — 입력값은 아래 `values` state를 벗어나지 않는다(§31.6 G138/AC-045). */
+  onCredentialSubmit?: () => void;
 }) {
   // R8 — **정확 일치 키 조회**만 한다(문자열 분해·부분 일치 금지).
   const copy = (landingId ? CREDENTIAL_LANDING_COPY[landingId] : undefined) ?? GENERIC_CREDENTIAL_COPY;
@@ -242,6 +260,9 @@ function CredentialFormMockup({
     event.preventDefault();
     // AC-045 핵심 — 여기서 어떤 네트워크 호출도 하지 않는다. 로컬 state만 바꿔 가짜 피드백을 준다.
     setSubmitted(true);
+    // T123/AC-080 — **"제출했다는 사실" 하나만** 위로 올린다. 기록은 페이지가 한다(§15.9.6).
+    // ⛔ `values`를 넘기지 않는다(G138) — 넘기는 순간 입력값이 이 파일을 벗어난다.
+    onCredentialSubmit?.();
   };
 
   if (submitted) {

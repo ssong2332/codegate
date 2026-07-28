@@ -51,6 +51,13 @@ type InCallSmsOverlayProps = {
   onOpened: (smsId: string) => void;
   /** 링크 칩 탭 기록. */
   onLinkTapped: (smsId: string) => void;
+  /**
+   * 그 링크가 연 가짜 랜딩의 폼을 **제출한 사실** 기록(T123 · AC-080).
+   * ⚠️ 이 파일도 콜러블을 부르지 않는다 — `onOpened`·`onLinkTapped`와 정확히 같은 형태로
+   * 콜백만 위로 올리고, 실제 기록은 **페이지**가 한다(§15.9.6 · §31.3 (2) 3).
+   * ⛔ 인자는 `smsId` 하나다 — 참가자 입력값은 이 경로에 실리지 않는다(G138/AC-045).
+   */
+  onLandingSubmitted: (smsId: string) => void;
 };
 
 const FOCUSABLE =
@@ -74,6 +81,7 @@ export default function InCallSmsOverlay({
   onEndTraining,
   onOpened,
   onLinkTapped,
+  onLandingSubmitted,
 }: InCallSmsOverlayProps) {
   const sorted = sortByArrival(messages);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -408,6 +416,9 @@ export default function InCallSmsOverlay({
           landingKind={fakeLanding.landingKind}
           onClose={() => setFakeLanding(null)}
           onEndTraining={onEndTraining}
+          // T123/AC-080 — 제출 **사실 하나**를 페이지로 중계한다. 인자는 이 문자의 id뿐이고
+          // 참가자 입력값은 콜백 자체가 무인자라 여기까지 오지 않는다(G138).
+          onCredentialSubmit={() => onLandingSubmitted(fakeLanding.smsId)}
         />
       )}
     </>

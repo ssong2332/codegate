@@ -161,7 +161,9 @@ export type VerifyOfferTrigger = { availableAfterScammerTurns: number };
 // 어느 타입에도 없다 — 링크는 표시 텍스트 + 인앱 가짜 랜딩 참조로만 표현된다(AC-032/045).
 export type DeliverInCallSmsRequest = { sessionId: string; smsId: string };
 export type DeliverInCallSmsResponse = { smsId: string; announceInstruction: string };
-export type InCallSmsEvent = "opened" | "link_tapped";
+// T123/AC-080 — `landing_submitted` = "그 문자가 연 가짜 랜딩의 폼을 제출했다"는 **사실 하나**.
+// ⛔ 참가자 입력값(계좌번호·예금주명)을 담을 필드가 아래 요청 타입에 **존재하지 않는다**(AC-045).
+export type InCallSmsEvent = "opened" | "link_tapped" | "landing_submitted";
 export type RecordInCallSmsEventRequest = {
   sessionId: string;
   smsId: string;
@@ -176,7 +178,8 @@ export type RecordInCallSmsEventResponse = { recorded: true };
 // ⚠️ **AC-072 구조적 금지**: 실 설치 파일·스토어 URL·실존 앱명·OS 권한 목록에 해당하는 필드가
 // 요청·응답 어디에도 존재하지 않는다. 호출 주체는 **페이지**이고 목업 컴포넌트가 아니다 —
 // `MessengerFakeLanding`의 "네트워크 경로 부재" 불변식을 kind 추가 후에도 유지하기 위해서다.
-export type MockScreenEvent = "shown" | "consented";
+// T123/AC-080 — `submitted`("입력 폼 제출")는 `consented`("가짜 **권한 허용**")와 **다른 축**이다.
+export type MockScreenEvent = "shown" | "consented" | "submitted";
 export type RecordMockScreenEventRequest = {
   sessionId: string;
   landingId: string;
