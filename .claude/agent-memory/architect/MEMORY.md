@@ -17,4 +17,6 @@
 - [하드 게이트는 실행 가능성을 먼저 확인](feedback_hard_gate_executability.md) — 참조 대상이 나중 커밋에 오는 게이트를 앞 커밋에 못 박지 말 것(사후 추인 2회: G58·G-B)
 - ["없다"는 인계는 SDK를 열어 확인](feedback_absence_claims_check_the_sdk.md) — 저장소 grep 0건 ≠ 동작 부재; SDK가 이미 처리 중일 수 있다(워크트리엔 node_modules가 없다)
 - [전역 가드에는 상태별 예외가 필요하다](feedback_global_guard_needs_per_state_exception.md) — 즉시 이탈 처방은 진행 중 세션을 죽인다; 훈련 밖/진행 중/복구 불가로 갈라라
+- [인계된 "미처리 N곳"은 이미 닫혔을 수 있다](feedback_handoff_todos_may_be_discharged.md) — 착수 전 각 지점을 열어 close 표기 확인; T131에서 6곳 전건이 이미 닫혀 있었다
+- [낡은 헤더 ≠ 재검증 부재](feedback_stale_header_vs_actual_baseline.md) — 인용 줄번호가 현행과 일치하면 최신 트리 작성(선언만 유보), 밀려 있으면 구 트리 작성
 - [계약이 아니라 트립와이어로 걸어라](feedback_tripwire_not_contract.md) — 정적 검사 조건이 문면보다 넓으면 계약은 기각·트립와이어는 채택; 실패 메시지에 처방을 담는다
