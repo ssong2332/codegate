@@ -45,4 +45,5 @@
 - [T108 AST 검출 축](project_codegate_t108_ast_source_scan.md) — 루트 러너에서 `typescript` API가 된다(최초 선례), 문서 **내부** 모순 처리, 워크트리 .env 부재 build 실패 판별, stash가 줄끝을 바꿈.
 - [T118 호 전환 지속성(A5)](project_codegate_t118_transfer_persistence.md) — ⭐ Gemini Live를 Node에서 헤드리스로 여는 하네스 레시피(브라우저·마이크 불필요), P-1 결과, 화면 스크린샷만 못 내는 경계.
 - [T119 오퍼 게이트 값 재조정](project_codegate_t119_offer_gate_values.md) — 범위식→전수 대응표 교체의 **이중** 역검증 형식, T118 하네스를 턴 계수 실측으로 확장, Status 열에 planner 원문이 섞였을 때.
+- [T125 확인 저지 조건 분리](project_codegate_t125_verify_scope.md) — ⭐ 게이트 전부 초록인데 라이브 1/3만 먹힌 첫 **부분 음성** 사례, 대조군이 실제로 갈랐다, 방출 조건으로 편집 지점 고르기.
 - [관측 불가 지점에 동작 걸지 말 것](feedback_unobservable_behavior_gates.md) — 브라우저 이벤트에 건 동작은 게이트 전건 통과해도 안 잡힌다; 순수 함수로 내려 고정.
