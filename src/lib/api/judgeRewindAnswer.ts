@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { JudgeRewindAnswerRequest, JudgeRewindAnswerResponse } from "./types";
 
 /**
@@ -10,10 +9,8 @@ import type { JudgeRewindAnswerRequest, JudgeRewindAnswerResponse } from "./type
 export async function judgeRewindAnswer(
   request: JudgeRewindAnswerRequest,
 ): Promise<JudgeRewindAnswerResponse> {
-  const callable = httpsCallable<JudgeRewindAnswerRequest, JudgeRewindAnswerResponse>(
-    functionsClient,
+  return callCallable<JudgeRewindAnswerRequest, JudgeRewindAnswerResponse>(
     "judgeRewindAnswer",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }

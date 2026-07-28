@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { CreateRealtimeCallRequest, CreateRealtimeCallResponse } from "./types";
 
 /**
@@ -13,10 +12,8 @@ import type { CreateRealtimeCallRequest, CreateRealtimeCallResponse } from "./ty
 export async function createRealtimeCall(
   request: CreateRealtimeCallRequest,
 ): Promise<CreateRealtimeCallResponse> {
-  const callable = httpsCallable<CreateRealtimeCallRequest, CreateRealtimeCallResponse>(
-    functionsClient,
+  return callCallable<CreateRealtimeCallRequest, CreateRealtimeCallResponse>(
     "createRealtimeCall",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }

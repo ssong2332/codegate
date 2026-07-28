@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { EndSessionRequest, EndSessionResponse } from "./types";
 
 /**
@@ -10,10 +9,5 @@ import type { EndSessionRequest, EndSessionResponse } from "./types";
 export async function endSession(
   request: EndSessionRequest,
 ): Promise<EndSessionResponse> {
-  const callable = httpsCallable<EndSessionRequest, EndSessionResponse>(
-    functionsClient,
-    "endSession",
-  );
-  const { data } = await callable(request);
-  return data;
+  return callCallable<EndSessionRequest, EndSessionResponse>("endSession", request);
 }

@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { UpdateMessengerSkinRequest, UpdateMessengerSkinResponse } from "./types";
 
 /**
@@ -11,10 +10,8 @@ import type { UpdateMessengerSkinRequest, UpdateMessengerSkinResponse } from "./
 export async function updateMessengerSkin(
   request: UpdateMessengerSkinRequest,
 ): Promise<UpdateMessengerSkinResponse> {
-  const callable = httpsCallable<UpdateMessengerSkinRequest, UpdateMessengerSkinResponse>(
-    functionsClient,
+  return callCallable<UpdateMessengerSkinRequest, UpdateMessengerSkinResponse>(
     "updateMessengerSkin",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }

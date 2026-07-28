@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { SetChallengeResultSharingRequest, SetChallengeResultSharingResponse } from "./types";
 
 /**
@@ -9,10 +8,8 @@ import type { SetChallengeResultSharingRequest, SetChallengeResultSharingRespons
 export async function setChallengeResultSharing(
   request: SetChallengeResultSharingRequest,
 ): Promise<SetChallengeResultSharingResponse> {
-  const callable = httpsCallable<SetChallengeResultSharingRequest, SetChallengeResultSharingResponse>(
-    functionsClient,
+  return callCallable<SetChallengeResultSharingRequest, SetChallengeResultSharingResponse>(
     "setChallengeResultSharing",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }

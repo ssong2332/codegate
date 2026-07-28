@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { RequestEscalationRequest, RequestEscalationResponse } from "./types";
 
 /**
@@ -9,10 +8,8 @@ import type { RequestEscalationRequest, RequestEscalationResponse } from "./type
 export async function requestEscalation(
   request: RequestEscalationRequest,
 ): Promise<RequestEscalationResponse> {
-  const callable = httpsCallable<RequestEscalationRequest, RequestEscalationResponse>(
-    functionsClient,
+  return callCallable<RequestEscalationRequest, RequestEscalationResponse>(
     "requestEscalation",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }

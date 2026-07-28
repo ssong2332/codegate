@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type {
   CreateVoiceCloneRequest,
   CreateVoiceCloneResponse,
@@ -14,10 +13,8 @@ import type {
 export async function createVoiceClone(
   request: CreateVoiceCloneRequest,
 ): Promise<CreateVoiceCloneResponse> {
-  const callable = httpsCallable<CreateVoiceCloneRequest, CreateVoiceCloneResponse>(
-    functionsClient,
+  return callCallable<CreateVoiceCloneRequest, CreateVoiceCloneResponse>(
     "createVoiceClone",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }

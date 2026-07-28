@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { RecordMockScreenEventRequest, RecordMockScreenEventResponse } from "./types";
 
 /**
@@ -13,10 +12,8 @@ import type { RecordMockScreenEventRequest, RecordMockScreenEventResponse } from
 export async function recordMockScreenEvent(
   request: RecordMockScreenEventRequest,
 ): Promise<RecordMockScreenEventResponse> {
-  const callable = httpsCallable<RecordMockScreenEventRequest, RecordMockScreenEventResponse>(
-    functionsClient,
+  return callCallable<RecordMockScreenEventRequest, RecordMockScreenEventResponse>(
     "recordMockScreenEvent",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }

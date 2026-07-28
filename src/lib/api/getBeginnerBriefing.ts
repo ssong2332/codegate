@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { GetBeginnerBriefingRequest, GetBeginnerBriefingResponse } from "./types";
 
 /**
@@ -10,10 +9,8 @@ import type { GetBeginnerBriefingRequest, GetBeginnerBriefingResponse } from "./
 export async function getBeginnerBriefing(
   request: GetBeginnerBriefingRequest,
 ): Promise<GetBeginnerBriefingResponse> {
-  const callable = httpsCallable<GetBeginnerBriefingRequest, GetBeginnerBriefingResponse>(
-    functionsClient,
+  return callCallable<GetBeginnerBriefingRequest, GetBeginnerBriefingResponse>(
     "getBeginnerBriefing",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }

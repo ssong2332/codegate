@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { DeliverVerifyOfferRequest, DeliverVerifyOfferResponse } from "./types";
 
 /**
@@ -13,10 +12,8 @@ import type { DeliverVerifyOfferRequest, DeliverVerifyOfferResponse } from "./ty
 export async function deliverVerifyOffer(
   request: DeliverVerifyOfferRequest,
 ): Promise<DeliverVerifyOfferResponse> {
-  const callable = httpsCallable<DeliverVerifyOfferRequest, DeliverVerifyOfferResponse>(
-    functionsClient,
+  return callCallable<DeliverVerifyOfferRequest, DeliverVerifyOfferResponse>(
     "deliverVerifyOffer",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }

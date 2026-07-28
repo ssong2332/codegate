@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { GetChallengeLandingRequest, GetChallengeLandingResponse } from "./types";
 
 /**
@@ -9,10 +8,8 @@ import type { GetChallengeLandingRequest, GetChallengeLandingResponse } from "./
 export async function getChallengeLanding(
   request: GetChallengeLandingRequest,
 ): Promise<GetChallengeLandingResponse> {
-  const callable = httpsCallable<GetChallengeLandingRequest, GetChallengeLandingResponse>(
-    functionsClient,
+  return callCallable<GetChallengeLandingRequest, GetChallengeLandingResponse>(
     "getChallengeLanding",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }

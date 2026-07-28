@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { DeleteChallengeRequest, DeleteChallengeResponse } from "./types";
 
 /**
@@ -9,10 +8,5 @@ import type { DeleteChallengeRequest, DeleteChallengeResponse } from "./types";
 export async function deleteChallenge(
   request: DeleteChallengeRequest,
 ): Promise<DeleteChallengeResponse> {
-  const callable = httpsCallable<DeleteChallengeRequest, DeleteChallengeResponse>(
-    functionsClient,
-    "deleteChallenge",
-  );
-  const { data } = await callable(request);
-  return data;
+  return callCallable<DeleteChallengeRequest, DeleteChallengeResponse>("deleteChallenge", request);
 }

@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type {
   SubmitRealtimeTranscriptRequest,
   SubmitRealtimeTranscriptResponse,
@@ -16,10 +15,8 @@ import type {
 export async function submitRealtimeTranscript(
   request: SubmitRealtimeTranscriptRequest,
 ): Promise<SubmitRealtimeTranscriptResponse> {
-  const callable = httpsCallable<SubmitRealtimeTranscriptRequest, SubmitRealtimeTranscriptResponse>(
-    functionsClient,
+  return callCallable<SubmitRealtimeTranscriptRequest, SubmitRealtimeTranscriptResponse>(
     "submitRealtimeTranscript",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }
