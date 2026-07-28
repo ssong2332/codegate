@@ -48,4 +48,5 @@
 - [T125 확인 저지 조건 분리](project_codegate_t125_verify_scope.md) — ⭐ 게이트 전부 초록인데 라이브 1/3만 먹힌 첫 **부분 음성** 사례, 대조군이 실제로 갈랐다, 방출 조건으로 편집 지점 고르기.
 - [T125 2차 — 만류 후 이양(문면 교체)](project_codegate_t125_persuade_once.md) — ⭐ base 대비 **바이트 동일**을 sha256으로 증명하는 레시피, 초안 vs 금지어 충돌 처리, 라이브 예산 0 스코프 컷.
 - [T125 3차 — F11 게이트 견고화](project_codegate_t125_f11_gate_hardening.md) — ⭐ 토큰 화이트리스트가 QA에 실측 우회당함, 한국어 수사 2계열(제안 정규식이 제안자 우회를 못 잡음), 경계 lookbehind가 오탐 방지선.
+- [T123 가짜 랜딩 제출 기록](project_codegate_t123_landing_submitted.md) — ⭐ 라이브 가드가 **다른 이유로 먼저 걸려** 미검증이던 함정(400을 성공으로 오독), 격리 에뮬레이터 3단 장애물, 설계가 빨간불 커밋을 지시했을 때.
 - [관측 불가 지점에 동작 걸지 말 것](feedback_unobservable_behavior_gates.md) — 브라우저 이벤트에 건 동작은 게이트 전건 통과해도 안 잡힌다; 순수 함수로 내려 고정.
