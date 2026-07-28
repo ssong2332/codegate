@@ -56,3 +56,4 @@
 - [T113·T114 게이트 사각 2건](project_codegate_t113_t114_gate_blindspots.md) — ⭐ 역검증 조작이 부분만 먹혀 난 거짓 음성, 정본이 문서가 아닌 항목, 곱할지/더할지 판정표.
 - [D-61 리포트 자기모순](project_codegate_d61_report_lie.md) — ⭐ 조인 키를 "조립 지점 1곳"으로 확정, 폴백은 낙인찍지 않는 쪽, 루트 러너가 functions/src를 못 읽어 증명을 2조각으로.
 - [T122 securetoken 400 조사](project_codegate_t122_securetoken_probe.md) — ⭐ 벤더 에뮬레이터 소스로 원인 **전수 열거**(브라우저 없이 판정), 서명 없는 토큰이 실패를 가린다, 다른 트리 node_modules를 `file:///`로 빌려 쓰는 SDK 하네스.
+- [T129 다중 랜딩 트립와이어](project_codegate_t129_tripwire.md) — ⭐ functions/lib(.js) + 루트 src(.ts)를 한 프로브에서 부르는 `file:///` strip-types 레시피, 실패 메시지 원문 확보법, 픽스처 보존 vs 신규 파일 0건 충돌.
