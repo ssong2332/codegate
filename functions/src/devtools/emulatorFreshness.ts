@@ -92,6 +92,37 @@ export function normalizeDir(dir: string): string {
 }
 
 /**
+ * 해시 대상에서 **제외**하는 `lib` 하위 경로. 에뮬레이터가 로드하지도 서빙하지도 않는 것들이다.
+ *
+ * **왜 제외해야 하는가(reviewer Major, 2026-07-28)**: 이것들을 세면 **테스트 파일 하나만 고쳐도**
+ * 해시가 바뀌어 `STALE-CODE`가 뜬다 — 에뮬레이터의 실제 동작은 한 글자도 안 바뀌었는데도.
+ * 그 오탐은 이 파일이 mtime을 버리고 내용 해시를 고른 이유(*"상시 경고가 뜨면 다음 사람이 끈다"*)를
+ * 정면으로 깎는다.
+ *
+ * - `__tests__/**` — `node --test`만 읽는다. `src/index.ts` export 그래프에서 도달 불가.
+ * - `devtools/**` — 이 검사 도구 자신. `emulatorFreshness.ts` 머리말대로 어떤 배포 함수도 로드하지
+ *   않으며, 포함하면 도구를 고칠 때마다 자기 자신을 낡았다고 신고한다.
+ *
+ * ⚠️ **왜 `src/index.ts` export 그래프 정밀 추적을 쓰지 않았는가**: 컴파일된 `lib`의 `require`
+ * 그래프를 정적으로 따라가려면 조건부 `require`·재export 체인·`firebase-admin` 부작용 import까지
+ * 다뤄야 하고, 그래프 해석이 어긋나는 순간 **진짜 변경을 놓치는(= 반대 방향의) 고장**이 된다.
+ * 이 도구는 정확도보다 **안 꺼지는 것**과 **진짜 변경을 놓치지 않는 것**이 우선이므로, 도달 불가가
+ * 명백한 두 갈래만 이름으로 제외하는 보수적 최소안을 골랐다. 제외 목록에 없는 것은 전부 센다.
+ */
+export const LIB_HASH_EXCLUDED_PREFIXES = ["devtools/"] as const;
+
+/**
+ * 그 `lib` 파일이 **에뮬레이터가 로드하는 표면**에 속하는가. 경로는 `lib` 기준 상대경로다
+ * (구분자는 `/`·`\` 어느 쪽이어도 된다).
+ */
+export function isEmulatorLoadedLibFile(relPath: string): boolean {
+  const normalized = relPath.replace(/\\/g, "/");
+  if (!normalized.endsWith(".js")) return false;
+  if (normalized.split("/").includes("__tests__")) return false;
+  return !LIB_HASH_EXCLUDED_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
+/**
  * `lib` 파일별 해시 목록을 하나의 해시로 접는다. 경로 순서에 의존하지 않는다.
  * (파일 읽기는 호출부가 한다 — 이 함수는 순수해야 테스트가 된다.)
  */

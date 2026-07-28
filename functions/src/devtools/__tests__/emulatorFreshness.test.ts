@@ -8,6 +8,7 @@ import {
   decideFreshness,
   diffTriggerNames,
   foldLibHash,
+  isEmulatorLoadedLibFile,
   normalizeDir,
   parseIndexExports,
   parseListeningPid,
@@ -179,6 +180,46 @@ test("foldLibHash는 파일 순서에 의존하지 않고 내용 변화에는 �
   assert.notEqual(foldLibHash(a), foldLibHash([{ relPath: "index.js", sha256: "9" }, a[1]]));
   // 경로 구분자가 달라도 같은 파일로 본다(Windows/POSIX 혼재).
   assert.equal(foldLibHash(a), foldLibHash([a[0], { relPath: "voice\\index.js", sha256: "2" }]));
+});
+
+test("⭐ 해시 대상은 에뮬레이터가 로드하는 것만 — 테스트·devtools는 제외한다(reviewer Major)", () => {
+  // 포함: 실제로 서빙되는 함수 본문.
+  assert.equal(isEmulatorLoadedLibFile("index.js"), true);
+  assert.equal(isEmulatorLoadedLibFile("scenarios/beginnerBriefing.js"), true);
+  assert.equal(isEmulatorLoadedLibFile("challenge/userAccess.js"), true);
+  // 제외 ①: 컴파일된 테스트 — `node --test`만 읽는다.
+  assert.equal(isEmulatorLoadedLibFile("scenarios/__tests__/axisCoverage.test.js"), false);
+  assert.equal(isEmulatorLoadedLibFile("__tests__/anything.js"), false);
+  // 제외 ②: 이 검사 도구 자신 — 포함하면 도구를 고칠 때마다 자기를 낡았다고 신고한다.
+  assert.equal(isEmulatorLoadedLibFile("devtools/emulatorFreshness.js"), false);
+  assert.equal(isEmulatorLoadedLibFile("devtools/__tests__/emulatorFreshness.test.js"), false);
+  // `.js`가 아닌 산출물(.js.map, .d.ts)은 애초에 로드 대상이 아니다.
+  assert.equal(isEmulatorLoadedLibFile("index.js.map"), false);
+  // Windows 구분자여도 같은 판정이어야 한다.
+  assert.equal(isEmulatorLoadedLibFile("scenarios\\__tests__\\axisCoverage.test.js"), false);
+  assert.equal(isEmulatorLoadedLibFile("devtools\\recordLibBuild.js"), false);
+  // ⚠️ 이름이 비슷할 뿐인 경로는 제외하지 않는다(과잉 제외 = 진짜 변경을 놓치는 반대 방향 고장).
+  assert.equal(isEmulatorLoadedLibFile("devtoolsHelper.js"), true);
+  assert.equal(isEmulatorLoadedLibFile("report/__tests__helper.js"), true);
+});
+
+test("⭐ 제외 대상만 바뀌면 접힌 해시가 변하지 않는다 — 무관한 변경에 STALE-CODE를 내지 않는다", () => {
+  const all = [
+    { relPath: "index.js", sha256: "prod-1" },
+    { relPath: "scenarios/__tests__/axisCoverage.test.js", sha256: "test-1" },
+    { relPath: "devtools/emulatorFreshness.js", sha256: "tool-1" },
+  ];
+  const testAndToolChanged = [
+    { relPath: "index.js", sha256: "prod-1" },
+    { relPath: "scenarios/__tests__/axisCoverage.test.js", sha256: "test-2" },
+    { relPath: "devtools/emulatorFreshness.js", sha256: "tool-2" },
+  ];
+  const keep = (files: typeof all) => files.filter((f) => isEmulatorLoadedLibFile(f.relPath));
+  assert.equal(foldLibHash(keep(all)), foldLibHash(keep(testAndToolChanged)));
+
+  // 반대 방향 — 진짜 함수 본문이 바뀌면 반드시 달라야 한다(범위를 좁히다 놓치면 도구가 무의미해진다).
+  const prodChanged = [{ relPath: "index.js", sha256: "prod-2" }, ...all.slice(1)];
+  assert.notEqual(foldLibHash(keep(all)), foldLibHash(keep(prodChanged)));
 });
 
 test("normalizeDir은 Windows 경로 표기 차이를 흡수한다", () => {

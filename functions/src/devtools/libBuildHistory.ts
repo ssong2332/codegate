@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { foldLibHash, type BuildRecord } from "./emulatorFreshness";
+import { foldLibHash, isEmulatorLoadedLibFile, type BuildRecord } from "./emulatorFreshness";
 
 const HISTORY_DIR_NAME = "codegate-lib-build-history";
 /** 기록 상한 — 무한히 자라지 않게 한다. */
@@ -26,7 +26,13 @@ export function historyFilePath(functionsDir: string): string {
   return path.join(os.tmpdir(), HISTORY_DIR_NAME, `${key.slice(0, 16)}.jsonl`);
 }
 
-/** `lib` 아래 모든 `.js`를 훑어 내용 해시를 만든다. `lib`가 없으면 `null`. */
+/**
+ * **에뮬레이터가 실제로 로드하는** `lib` 파일만 훑어 내용 해시를 만든다. `lib`가 없으면 `null`.
+ *
+ * ⚠️ 대상 판정은 `isEmulatorLoadedLibFile`이 정본이다 — 컴파일된 테스트(`__tests__/**`)와 이 검사
+ * 도구 자신(`devtools/**`)은 제외한다. 넣으면 **테스트 파일만 고쳐도 `STALE-CODE`가 뜨는 오탐**이
+ * 생기고, 그 오탐이 이 파일이 mtime 대신 해시를 고른 이유를 그대로 무너뜨린다(reviewer Major).
+ */
 export function computeLibHash(functionsDir: string): string | null {
   const libDir = path.join(functionsDir, "lib");
   if (!fs.existsSync(libDir)) return null;
@@ -36,12 +42,15 @@ export function computeLibHash(functionsDir: string): string | null {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(full);
-      } else if (entry.isFile() && entry.name.endsWith(".js")) {
-        files.push({
-          relPath: path.relative(libDir, full),
-          sha256: createHash("sha256").update(fs.readFileSync(full)).digest("hex"),
-        });
+        continue;
       }
+      if (!entry.isFile()) continue;
+      const relPath = path.relative(libDir, full);
+      if (!isEmulatorLoadedLibFile(relPath)) continue;
+      files.push({
+        relPath,
+        sha256: createHash("sha256").update(fs.readFileSync(full)).digest("hex"),
+      });
     }
   };
   walk(libDir);
