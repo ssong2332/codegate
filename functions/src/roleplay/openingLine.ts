@@ -24,7 +24,10 @@ import type { ScammerMessage } from "./types";
 // 블록을 붙이면 그 즉시 D-42/AC-065(난이도가 안전장치를 밀어내지 않는다)가 코드 레벨에서 깨진다.
 // 이제 `opts.turnInstruction`으로 넘겨 조립 함수 **안에서 가드레일 앞**에 삽입되며, 선행 공백
 // ("\n\n")은 조립 배열의 빈 줄이 대신하므로 제거했다.
-const OPENING_TURN_INSTRUCTION =
+// ⚠️ **export인 이유(T113)**: 이 문자열은 `turnInstruction`으로 조립 산출물에 들어가므로
+// **T109 요구몰림 게이트의 스캔 대상**이다(`scenarios.test.ts`의 `turnInstructionSources()`).
+// 모듈 지역 상수로 두면 게이트가 이 자리를 볼 수 없다 — 그것이 T113이 없앤 사각의 형태다.
+export const OPENING_TURN_INSTRUCTION =
   "[오프닝 지침] 지금이 이 통화/대화의 첫 마디다. 다짜고짜 요구나 압박부터 하지 말고, 먼저 신분(사칭 기관·관계)과 연락한 이유(어떤 사건·문제 때문인지)를 1~2문장으로 밝혀 상황을 설명한 뒤에 이어간다.";
 
 export type OpeningLineResult = {

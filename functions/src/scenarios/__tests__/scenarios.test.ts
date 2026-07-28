@@ -10,6 +10,12 @@ import { PUBLIC_SCENARIOS } from "../publicMeta";
 // (규칙 = promptAssembly의 공통 블록 / 예시 = 각 시나리오 인용구). 한쪽만 보면 다른 쪽에서 재발한다.
 import { buildSystemPrompt } from "../../roleplay/promptAssembly";
 import type { DifficultyLevel } from "../../shared/difficulty";
+// T113 — `turnInstruction`으로 조립에 들어오는 문자열의 **원본 4곳**. 이 값들은 조립 산출물의
+// 일부인데도 종전 축(난이도 × 문자)이 순회하지 않아 요구몰림 게이트의 스캔 대상 밖이었다.
+import { OPENING_TURN_INSTRUCTION } from "../../roleplay/openingLine";
+import { MOCK_INSTALL_CONSENT_INSTRUCTION } from "../mockScreens";
+import { VERIFY_INTERCEPT } from "../verifyIntercept";
+import { IN_CALL_SMS } from "../inCallSms";
 
 // AC-005: 실제 운영 가능한 사기 정보(실계좌번호 패턴·실제 송금 절차 지시·실제 URL)가 절대
 // 포함되면 안 된다. 계좌번호형 숫자(8자리 이상 연속 숫자)와 http(s) 링크를 금지 패턴으로 검사한다.
@@ -1087,27 +1093,105 @@ function stackingDirectives(text: string): string[] {
   return hits;
 }
 
-/** 조립 결과 전수 — 난이도 블록까지 포함해야 공통부 재발을 놓치지 않는다. */
-function assembledPrompts(): Array<{ label: string; text: string }> {
-  const levels: Array<DifficultyLevel | undefined> = [
-    undefined,
-    "beginner",
-    "intermediate",
-    "advanced",
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐⭐ **T113 — 조립 산출물 전수 스캔이 축을 다 돌지 않던 것을 고친다(2026-07-28).**
+//
+// **무엇이 사각이었나(착수 시 실측 — 추정이 아니다)**: 이 헬퍼는 `difficultyLevel` 4값 ×
+// `inCallSmsEnabled` 2값 = **시나리오당 8조합**만 돌았는데 `buildSystemPrompt`의 옵션은 **5개**다.
+// 나머지 3개(`verifyInterceptEnabled`·`l3Procedural`·`turnInstruction`)를 순회하지 않았고,
+// 그래서 **켜져야만 삽입되는 블록의 인용구가 한 번도 검사된 적이 없었다.** 실측 결과:
+//   · `verifyInterceptEnabled: true` 전용 인용구 **2건** — `"잠시만요, 확인 부서를 연결해 드리겠습니다"` ·
+//     `"옆에서 확인해 보니"`(둘 다 `promptAssembly.ts`의 `VERIFY_INTERCEPT_RULE` 안)
+//   · `l3Procedural: true` 전용 인용구 **5건**(`ADVANCED_L3_PROCEDURAL` 안)
+//   · `turnInstruction`으로 주입되는 문자열의 인용구 **44건**(확인 무력화 카탈로그 36 + 문자 카탈로그 8)
+// **지금 그 문구들이 무해한 것은 검사를 통과해서가 아니라 검사 대상이 아니었기 때문이다.**
+//
+// ⚠️ **축 3개를 전부 곱하지 않는다 — 판정표(조합 폭발 방지, T113 D항 근거 기록)**
+//   | 옵션 | 채택 | 근거 |
+//   |---|---|---|
+//   | `verifyInterceptEnabled` | **곱한다**(2값) | 상시 블록과 **함께** 조립됐을 때만 보이는 것이 있다 — `stackingDirectives`는 매치 직후 14자를 보므로 블록 경계를 넘는다. 시나리오당 8 → 16. |
+//   | `l3Procedural` | **고급에만 곱한다**(난이도 변형 4 → 5) | `buildDifficultyBlock`이 고급이 아니면 이 값을 **읽지 않는다**(`promptAssembly.ts:290-293`). 초·중급에 곱하면 **완전히 같은 문자열**이 한 벌씩 더 생길 뿐이라 검출력이 0이고 조합만 2배가 된다. |
+//   | `turnInstruction` | **곱하지 않고 더한다**(+22벌) | 이 옵션은 상수가 아니라 **호출부가 넘기는 문자열**이라 "축"이 아니라 **값의 집합**이다(실제 값 22종 — 아래 `turnInstructionSources`). 22를 곱하면 시나리오당 20 → 440(총 6,160)이 되는데, 두 게이트의 판정은 **인용구 단위 / 매치 지점 ±14자**라 곱해서 얻는 검출력이 없다. 각 값을 **자기 시나리오에 한 번씩** 얹어 스캔 목록에 넣는 것으로 같은 사각을 없앤다. |
+//
+// ⚠️ **남는 사각(자기 고지 — 이 태스크에서 닫지 않는다)**: `turnInstruction`을 곱하지 않았으므로
+// *"턴 지시가 특정 난이도 블록과 **함께** 있을 때만 생기는 위반"* 은 여전히 안 잡힌다. 그런 위반은
+// 두 게이트의 판정 폭(인용구 1개 / ±14자)을 넘는 형태여야 성립하므로 현재 판정 로직으로는
+// 원리적으로 검출 대상이 아니다 — **판정 폭을 넓히는 것은 별건**이다.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** 난이도 변형 — `l3Procedural`은 고급에서만 읽히므로 고급에만 붙인다(위 판정표 2행). */
+const ASSEMBLY_LEVEL_VARIANTS: ReadonlyArray<{
+  suffix: string;
+  opts: { difficultyLevel?: DifficultyLevel; l3Procedural?: boolean };
+}> = [
+  { suffix: "기본", opts: {} },
+  { suffix: "beginner", opts: { difficultyLevel: "beginner" } },
+  { suffix: "intermediate", opts: { difficultyLevel: "intermediate" } },
+  { suffix: "advanced", opts: { difficultyLevel: "advanced" } },
+  { suffix: "advanced+L3절차", opts: { difficultyLevel: "advanced", l3Procedural: true } },
+];
+
+/**
+ * `turnInstruction`으로 **실제로 주입되는** 문자열 전수 — 호출부는 4곳뿐이다
+ * (`roleplay/index.ts:240·247·249·251`, `roleplay/openingLine.ts:84`).
+ *
+ * ⚠️ 여기에 없는 값이 호출부에 생기면 그 문자열은 다시 무검사 구간이 된다. 새 주입 지점을 만들면
+ * **이 목록에 행을 추가할 것.**
+ */
+function turnInstructionSources(): Array<{ scenarioId?: string; label: string; value: string }> {
+  const out: Array<{ scenarioId?: string; label: string; value: string }> = [
+    { label: "오프닝", value: OPENING_TURN_INSTRUCTION },
+    { label: "모의설치응낙", value: MOCK_INSTALL_CONSENT_INSTRUCTION },
   ];
+  for (const [scenarioId, item] of Object.entries(VERIFY_INTERCEPT)) {
+    out.push({ scenarioId, label: `확인안내:${item.offerId}`, value: item.announceInstruction });
+    out.push({ scenarioId, label: `재연결:${item.offerId}`, value: item.reconnectInstruction });
+  }
+  for (const [scenarioId, items] of Object.entries(IN_CALL_SMS)) {
+    for (const item of items) {
+      out.push({ scenarioId, label: `문자도착:${item.smsId}`, value: item.announceInstruction });
+    }
+  }
+  return out;
+}
+
+/** 조립 결과 전수 — 조립 옵션 5개를 모두 돈다(T113 판정표 그대로). */
+function assembledPrompts(): Array<{ label: string; text: string }> {
   const out: Array<{ label: string; text: string }> = [];
-  for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
-    for (const level of levels) {
+  const scenarioIds = Object.keys(SCENARIO_PROMPTS);
+  for (const scenarioId of scenarioIds) {
+    for (const variant of ASSEMBLY_LEVEL_VARIANTS) {
       for (const inCallSmsEnabled of [false, true]) {
-        out.push({
-          label: `${scenarioId}[${level ?? "기본"}${inCallSmsEnabled ? "/문자" : ""}]`,
-          text: buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], {
-            difficultyLevel: level,
-            inCallSmsEnabled,
-          }),
-        });
+        for (const verifyInterceptEnabled of [false, true]) {
+          out.push({
+            label:
+              `${scenarioId}[${variant.suffix}` +
+              `${inCallSmsEnabled ? "/문자" : ""}${verifyInterceptEnabled ? "/확인안내" : ""}]`,
+            text: buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], {
+              ...variant.opts,
+              inCallSmsEnabled,
+              verifyInterceptEnabled,
+            }),
+          });
+        }
       }
     }
+  }
+  // 턴 지시는 곱하지 않고 더한다(판정표 3행) — 값마다 **운영에서 실제로 성립하는 조합**에 한 번씩.
+  // 확인 무력화는 `카탈로그 보유 && 고급`에서만 켜지므로(`roleplay/index.ts:186`) 그 조합을 쓴다.
+  const fallbackScenarioId = scenarioIds[0];
+  for (const { scenarioId, label, value } of turnInstructionSources()) {
+    const targetId = scenarioId ?? fallbackScenarioId;
+    out.push({
+      label: `${targetId}[턴지시:${label}]`,
+      text: buildSystemPrompt(SCENARIO_PROMPTS[targetId], {
+        difficultyLevel: "advanced",
+        l3Procedural: true,
+        inCallSmsEnabled: true,
+        verifyInterceptEnabled: true,
+        turnInstruction: value,
+      }),
+    });
   }
   return out;
 }
@@ -1203,6 +1287,134 @@ test("[T109/오탐] 정상 문구는 1건 이하로 세고, 금지형 지시 문
     "확인 질문을 한 번에 여러 개 이어 붙이지 말고 하나씩 던진다",
   ]) {
     assert.deepEqual(stackingDirectives(negated), [], `금지형 문장을 오탐한다: ${negated}`);
+  }
+});
+
+// ── T113 — 새로 순회하는 축이 **실제로 스캔 목록에 들어왔는지**와 **거기서 잡히는지** ──────────
+//
+// ⚠️ 축마다 **독립 테스트 + 독립 오염 샘플**이다. 한 테스트에 섞으면 축 하나만 살아 있어도 통과한다.
+// ⚠️ 오염 샘플은 **테스트 코드 안에서만** 만든다(`:1147` 관례 — 콘텐츠에 되돌려 넣지 않는다).
+
+/** 축 전용 블록의 고유 표지 — 그 축을 켜야만 조립 산출물에 등장한다. */
+const VERIFY_BLOCK_MARKER = "[확인 안내 — 이 훈련에서만 적용]";
+const L3_BLOCK_MARKER = "[난이도 — 고급(심화): 절차로 정당화한다]";
+/** 종전 축에서도 돌던 블록 — 축이 조용히 줄어드는 것을 막는 대조군이다. */
+const BEGINNER_MARKER = "[난이도 — 초급: 수법이 눈에 띄게 드러나게]";
+
+/** 조립 산출물 전수에서 요구가 2건 이상인 인용구만 모은다(= 요구몰림 게이트의 판정 그대로). */
+function stackedUtterances(text: string): string[] {
+  return quotedUtterances(text).filter((u) => demandsInUtterance(u).length >= 2);
+}
+
+test("[T113] 축 전용 블록이 스캔 목록에 실제로 들어왔다(`verifyInterceptEnabled`·`l3Procedural`·`turnInstruction`)", (t) => {
+  const all = assembledPrompts();
+  // 스캔 대상 규모를 **출력으로 남긴다** — 다음 사람이 축을 줄이면 이 수치가 먼저 눈에 띈다.
+  const uniqueQuotes = new Set(all.flatMap(({ text }) => quotedUtterances(text)));
+  t.diagnostic(
+    `[T113] 조립 조합 ${all.length}벌(종전 112벌) · 검사 대상 인용구 ${uniqueQuotes.size}종(종전 310종)`,
+  );
+  for (const [axis, marker] of [
+    ["verifyInterceptEnabled", VERIFY_BLOCK_MARKER],
+    ["l3Procedural", L3_BLOCK_MARKER],
+  ] as const) {
+    assert.ok(
+      all.some(({ text }) => text.includes(marker)),
+      `${axis} 축을 켠 조립본이 스캔 목록에 없다 — 그 블록의 인용구는 아무도 검사하지 않는다(T113).`,
+    );
+  }
+  // 턴 지시는 값의 집합이라 표지가 아니라 **값 자체**가 들어왔는지로 확인한다.
+  const scanned = all.map(({ text }) => text);
+  for (const { label, value } of turnInstructionSources()) {
+    assert.ok(
+      scanned.some((text) => text.includes(value)),
+      `턴 지시 "${label}"이 스캔 목록에 없다 — 조립 산출물의 일부인데 무검사 구간으로 남는다.`,
+    );
+  }
+  // 종전 축(난이도 4 × 문자 2)에서만 등장하던 인용구도 그대로 남아 있어야 한다(축소 방지).
+  assert.ok(
+    scanned.some((text) => text.includes(BEGINNER_MARKER)),
+    "초급 블록이 스캔 목록에서 사라졌다 — 축이 줄었다.",
+  );
+});
+
+test("[T113/역검증] `verifyInterceptEnabled` 블록에 위반 인용구를 넣으면 실제로 걸린다", () => {
+  const scenarioId = Object.keys(VERIFY_INTERCEPT)[0];
+  const prompt = SCENARIO_PROMPTS[scenarioId];
+  const on = buildSystemPrompt(prompt, { verifyInterceptEnabled: true });
+  const off = buildSystemPrompt(prompt, { verifyInterceptEnabled: false });
+
+  // ① 축을 끄면 그 구간이 **아예 없다** = 종전 축 집합은 이 구간을 본 적이 없다(T113이 없앤 사각).
+  assert.ok(on.includes(VERIFY_BLOCK_MARKER));
+  assert.equal(off.includes(VERIFY_BLOCK_MARKER), false);
+
+  // ② 그 구간에 위반 인용구를 넣으면 게이트 판정이 잡는다.
+  const sample = "성함이랑 생년월일 불러주시고, 방금 보내드린 인증번호도 불러주세요";
+  const polluted = on.replace(VERIFY_BLOCK_MARKER, `${VERIFY_BLOCK_MARKER}\n- 예: "${sample}"`);
+  assert.deepEqual(stackedUtterances(polluted), [sample]);
+  assert.deepEqual(stackedUtterances(on), [], "현행 문면에서는 오탐 0건이어야 한다");
+});
+
+test("[T113/역검증] `l3Procedural` 블록에 위반 인용구를 넣으면 실제로 걸린다", () => {
+  const scenarioId = Object.keys(SCENARIO_PROMPTS)[0];
+  const prompt = SCENARIO_PROMPTS[scenarioId];
+  const on = buildSystemPrompt(prompt, { difficultyLevel: "advanced", l3Procedural: true });
+  const off = buildSystemPrompt(prompt, { difficultyLevel: "advanced" });
+
+  assert.ok(on.includes(L3_BLOCK_MARKER));
+  assert.equal(off.includes(L3_BLOCK_MARKER), false);
+
+  const sample = "주민번호 뒤 7자리 불러주시고, 그대로 이체해 주세요";
+  const polluted = on.replace(L3_BLOCK_MARKER, `${L3_BLOCK_MARKER}\n- 예: "${sample}"`);
+  assert.deepEqual(stackedUtterances(polluted), [sample]);
+  assert.deepEqual(stackedUtterances(on), [], "현행 문면에서는 오탐 0건이어야 한다");
+});
+
+test("[T113/역검증] `turnInstruction`으로 들어온 위반 인용구가 실제로 걸린다", () => {
+  const scenarioId = Object.keys(SCENARIO_PROMPTS)[0];
+  const sample = "카드번호 불러주시고, 최근에 해외 결제하신 적 있으세요?";
+  // 이 축만 **주입 자체가 실제 옵션**이라 우회 없이 끝까지 통과시킬 수 있다.
+  const polluted = buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], {
+    turnInstruction: `[턴 지시] 이렇게 말하라: "${sample}"`,
+  });
+  assert.deepEqual(stackedUtterances(polluted), [sample]);
+  const clean = buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], {});
+  assert.deepEqual(stackedUtterances(clean), []);
+});
+
+// ⭐ **T113의 재발 방지 — 옵션이 늘면 스캔도 늘어야 한다.**
+// 이번 사각의 원인은 "`buildSystemPrompt`에 옵션이 3개 더 생겼는데 스캔 헬퍼가 안 따라갔다"이다.
+// 그 연결이 주석에만 있으면 다음 옵션에서 같은 일이 반복된다 — 여기서 기계로 잇는다.
+// ⚠️ **주석은 걷어내고 본다**(자기 주석에 걸려 거짓 초록이 나는 것을 막는다 — 이 저장소의 반복 함정).
+const FUNCTIONS_SRC_DIR_T113 = path.resolve(__dirname, "../../../src");
+
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
+test("[T113] `BuildSystemPromptOptions`의 옵션이 전부 조립 스캔 헬퍼에서 쓰인다(옵션이 늘면 여기서 걸린다)", () => {
+  const assemblySource = fs.readFileSync(
+    path.join(FUNCTIONS_SRC_DIR_T113, "roleplay/promptAssembly.ts"),
+    "utf-8",
+  );
+  const block = /export type BuildSystemPromptOptions = \{([\s\S]*?)\n\};/.exec(assemblySource);
+  assert.ok(block, "BuildSystemPromptOptions 정의를 못 찾았다 — 이 게이트가 죽은 것이다");
+  const optionKeys = [...stripComments(block[1]).matchAll(/^\s{2}(\w+)\??:/gm)].map((m) => m[1]);
+  assert.ok(optionKeys.length >= 5, `옵션 키 파싱 실패(추출: ${optionKeys.join(", ")})`);
+
+  const ownSource = stripComments(
+    fs.readFileSync(path.join(FUNCTIONS_SRC_DIR_T113, "scenarios/__tests__/scenarios.test.ts"), "utf-8"),
+  );
+  const helperRegion = ownSource.slice(
+    ownSource.indexOf("const ASSEMBLY_LEVEL_VARIANTS"),
+    ownSource.indexOf("test(\"[T109/요구몰림]"),
+  );
+  assert.ok(helperRegion.length > 0, "조립 스캔 헬퍼 구간을 못 찾았다 — 이 게이트가 죽은 것이다");
+  for (const key of optionKeys) {
+    assert.ok(
+      helperRegion.includes(key),
+      `buildSystemPrompt 옵션 "${key}"를 조립 스캔 헬퍼가 순회하지 않는다 — 그 옵션을 켜야만 ` +
+        `삽입되는 블록의 인용구가 무검사 구간이 된다(T113이 없앤 사각의 형태 그대로다).`,
+    );
   }
 });
 
