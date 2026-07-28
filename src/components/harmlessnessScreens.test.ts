@@ -100,6 +100,7 @@ const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   "SpoofImage.tsx": true, // 발신번호 위조 카드(T12)
   // 사기 표면이 아닌 공용 컨트롤·표식 — 문구 스캔 대상이 아니다(그래도 등록은 강제한다).
   "AgeGate.tsx": false, // 연령 확인 게이트
+  "AuthInvalidationBanner.tsx": false, // 인증 무효화 안내 배너(T128) — 앱 자신의 고지이지 사기 표면이 아니다
   "CallWaveform.tsx": false, // 통화 파형 시각화
   "DrilldownOptionCard.tsx": false, // 드릴다운 선택 카드
   "EndTrainingButton.tsx": false, // 상시 종료 버튼

@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { CreateSessionRequest, CreateSessionResponse } from "./types";
 
 /**
@@ -11,10 +10,5 @@ import type { CreateSessionRequest, CreateSessionResponse } from "./types";
 export async function createSession(
   request: CreateSessionRequest,
 ): Promise<CreateSessionResponse> {
-  const callable = httpsCallable<CreateSessionRequest, CreateSessionResponse>(
-    functionsClient,
-    "createSession",
-  );
-  const { data } = await callable(request);
-  return data;
+  return callCallable<CreateSessionRequest, CreateSessionResponse>("createSession", request);
 }

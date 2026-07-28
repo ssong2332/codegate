@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { SendMessageRequest, SendMessageResponse } from "./types";
 
 /**
@@ -11,10 +10,5 @@ import type { SendMessageRequest, SendMessageResponse } from "./types";
 export async function sendMessage(
   request: SendMessageRequest,
 ): Promise<SendMessageResponse> {
-  const callable = httpsCallable<SendMessageRequest, SendMessageResponse>(
-    functionsClient,
-    "sendMessage",
-  );
-  const { data } = await callable(request);
-  return data;
+  return callCallable<SendMessageRequest, SendMessageResponse>("sendMessage", request);
 }

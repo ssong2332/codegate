@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { CreateChallengeRequest, CreateChallengeResponse } from "./types";
 
 /**
@@ -10,10 +9,5 @@ import type { CreateChallengeRequest, CreateChallengeResponse } from "./types";
 export async function createChallenge(
   request: CreateChallengeRequest,
 ): Promise<CreateChallengeResponse> {
-  const callable = httpsCallable<CreateChallengeRequest, CreateChallengeResponse>(
-    functionsClient,
-    "createChallenge",
-  );
-  const { data } = await callable(request);
-  return data;
+  return callCallable<CreateChallengeRequest, CreateChallengeResponse>("createChallenge", request);
 }

@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { RequestReverseEscalationRequest, RequestReverseEscalationResponse } from "./types";
 
 /**
@@ -10,10 +9,8 @@ import type { RequestReverseEscalationRequest, RequestReverseEscalationResponse 
 export async function requestReverseEscalation(
   request: RequestReverseEscalationRequest,
 ): Promise<RequestReverseEscalationResponse> {
-  const callable = httpsCallable<RequestReverseEscalationRequest, RequestReverseEscalationResponse>(
-    functionsClient,
+  return callCallable<RequestReverseEscalationRequest, RequestReverseEscalationResponse>(
     "requestReverseEscalation",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }

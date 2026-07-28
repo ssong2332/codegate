@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { DeliverVerifyReconnectRequest, DeliverVerifyReconnectResponse } from "./types";
 
 /**
@@ -14,10 +13,8 @@ import type { DeliverVerifyReconnectRequest, DeliverVerifyReconnectResponse } fr
 export async function deliverVerifyReconnect(
   request: DeliverVerifyReconnectRequest,
 ): Promise<DeliverVerifyReconnectResponse> {
-  const callable = httpsCallable<DeliverVerifyReconnectRequest, DeliverVerifyReconnectResponse>(
-    functionsClient,
+  return callCallable<DeliverVerifyReconnectRequest, DeliverVerifyReconnectResponse>(
     "deliverVerifyReconnect",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }

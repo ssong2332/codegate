@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { ConsentChallengeRequest, ConsentChallengeResponse } from "./types";
 
 /**
@@ -10,10 +9,8 @@ import type { ConsentChallengeRequest, ConsentChallengeResponse } from "./types"
 export async function consentChallenge(
   request: ConsentChallengeRequest,
 ): Promise<ConsentChallengeResponse> {
-  const callable = httpsCallable<ConsentChallengeRequest, ConsentChallengeResponse>(
-    functionsClient,
+  return callCallable<ConsentChallengeRequest, ConsentChallengeResponse>(
     "consentChallenge",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }

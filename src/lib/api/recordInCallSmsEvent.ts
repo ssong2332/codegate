@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { RecordInCallSmsEventRequest, RecordInCallSmsEventResponse } from "./types";
 
 /**
@@ -11,10 +10,8 @@ import type { RecordInCallSmsEventRequest, RecordInCallSmsEventResponse } from "
 export async function recordInCallSmsEvent(
   request: RecordInCallSmsEventRequest,
 ): Promise<RecordInCallSmsEventResponse> {
-  const callable = httpsCallable<RecordInCallSmsEventRequest, RecordInCallSmsEventResponse>(
-    functionsClient,
+  return callCallable<RecordInCallSmsEventRequest, RecordInCallSmsEventResponse>(
     "recordInCallSmsEvent",
+    request,
   );
-  const { data } = await callable(request);
-  return data;
 }

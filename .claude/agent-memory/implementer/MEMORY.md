@@ -58,3 +58,4 @@
 - [T122 securetoken 400 조사](project_codegate_t122_securetoken_probe.md) — ⭐ 벤더 에뮬레이터 소스로 원인 **전수 열거**(브라우저 없이 판정), 서명 없는 토큰이 실패를 가린다, 다른 트리 node_modules를 `file:///`로 빌려 쓰는 SDK 하네스.
 - [T129 다중 랜딩 트립와이어](project_codegate_t129_tripwire.md) — ⭐ functions/lib(.js) + 루트 src(.ts)를 한 프로브에서 부르는 `file:///` strip-types 레시피, 실패 메시지 원문 확보법, 픽스처 보존 vs 신규 파일 0건 충돌.
 - [T130 npm file: 오염 트립와이어](project_codegate_t130_npm_drift_guard.md) — ⭐ "간헐"이 실은 명령 형태 종속(`npm --prefix` 3/3), 훅 블록을 뒤에 얹으면 detached HEAD에서 안 도는 함정, postinstall이 --prefix에서 미실행, 병합 전 훅 테스트는 `git -c core.hooksPath`.
+- [T128 인증 무효화](project_codegate_t128_auth_invalidation.md) — ⭐ 에뮬레이터 자동 signOut은 delete가 아니라 disable로 관측된다, stsTokenManager 훼손 레시피, react-hooks lint 2연타 회피, 더미 .env로 build 무결성 증명.

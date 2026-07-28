@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type { ListMyChallengesRequest, ListMyChallengesResponse } from "./types";
 
 /**
@@ -10,10 +9,5 @@ import type { ListMyChallengesRequest, ListMyChallengesResponse } from "./types"
  * read는 전면 거부로 좁혀졌다(이 콜러블이 유일한 조회 경로).
  */
 export async function listMyChallenges(): Promise<ListMyChallengesResponse> {
-  const callable = httpsCallable<ListMyChallengesRequest, ListMyChallengesResponse>(
-    functionsClient,
-    "listMyChallenges",
-  );
-  const { data } = await callable({});
-  return data;
+  return callCallable<ListMyChallengesRequest, ListMyChallengesResponse>("listMyChallenges", {});
 }

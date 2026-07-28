@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functionsClient } from "@/lib/firebase";
+import { callCallable } from "./callable";
 import type {
   GenerateReportRequest,
   GenerateReportResponse,
@@ -13,10 +12,5 @@ import type {
 export async function generateReport(
   request: GenerateReportRequest,
 ): Promise<GenerateReportResponse> {
-  const callable = httpsCallable<GenerateReportRequest, GenerateReportResponse>(
-    functionsClient,
-    "generateReport",
-  );
-  const { data } = await callable(request);
-  return data;
+  return callCallable<GenerateReportRequest, GenerateReportResponse>("generateReport", request);
 }
