@@ -111,6 +111,104 @@ test("[§15.9.6] 응낙 기록은 콜백으로 위임한다(컴포넌트가 직�
   );
 });
 
+// ── G138 / AC-080 (a) — **제출 콜백은 무인자다**(T123, Architecture.md §31.6 (3)(4)) ─────────
+//
+// 참가자가 가짜 랜딩 폼을 제출하면 **"제출했다는 사실"만** 기록된다(AC-080). 입력값(계좌번호·
+// 예금주명)은 `CredentialFormMockup`의 로컬 state를 벗어나지 않는다(AC-045 무변경).
+// 그 경계를 지키는 **유일한 기계적 방어**가 이 블록이다 — 콜백에 인자가 실리는 순간 값이 페이지로
+// 넘어가고, 페이지에는 `fetch(`·`httpsCallable`이 정상적으로 존재하므로 **위 금지 토큰 스캔은
+// 그것을 잡지 못한다**(아래 역검증이 그 사실 자체를 출력으로 보인다).
+//
+// ⚠️ **한계(정직 고지)**: 이 검사도 소스 텍스트 스캔이라 **스캔 대상 파일 집합이 고정**이고
+// 파일 분할로 무력화된다(`src/lib/incallsms/callContinuity.test.ts`의 `[T108/한계]`와 동일).
+// 그리고 **T116이 미해결**이라 *"참가자가 실제로 그 화면을 보고 제출했다"* 는 여전히 렌더 층에서
+// 검증되지 않는다 — 이 게이트가 판정하는 것은 **콜백의 모양**뿐이다.
+
+/** ① 무인자 호출이 실제로 있는가. */
+const SUBMIT_CALLBACK_NO_ARG = /onCredentialSubmit\??\.?\(\s*\)/;
+/** ② 인자를 실은 호출이 있는가 — 있으면 위반이다(§31.6 G138). */
+const SUBMIT_CALLBACK_WITH_ARG = /onCredentialSubmit\??\.?\(\s*[^)\s]/;
+
+/** ③ 콜백 호출과 입력 state(`values`/`setValues`)가 **같은 식(줄)** 에 등장하는 지점. */
+function submitCallbackLinesTouchingValues(source: string): string[] {
+  return source
+    .split("\n")
+    .filter(
+      (line) =>
+        /onCredentialSubmit\??\.?\(/.test(line) && /\bvalues\b|\bsetValues\b/.test(line),
+    );
+}
+
+test("[G138/AC-080 (a)] 제출 콜백은 **무인자**다 — 입력값이 컴포넌트 밖으로 나가지 않는다", () => {
+  // ① 위임 형태가 실제로 존재한다(§15.9.6 관례 = `onInstallConsent`와 같은 축).
+  assert.ok(
+    componentCode.includes("onCredentialSubmit"),
+    "제출 사실을 페이지로 올리는 콜백 prop이 있어야 한다",
+  );
+  assert.ok(
+    SUBMIT_CALLBACK_NO_ARG.test(componentCode),
+    "`onCredentialSubmit?.()` 형태의 **무인자** 호출이 있어야 한다",
+  );
+  // ② 인자를 실은 호출이 0건이다 — 이것이 G138의 본체다.
+  assert.equal(
+    SUBMIT_CALLBACK_WITH_ARG.test(componentCode),
+    false,
+    "제출 콜백에 인자를 실으면 참가자 입력이 컴포넌트 밖으로 나가는 첫 경로가 생긴다(AC-045 위반)",
+  );
+  // ③ 입력 state가 콜백 경로에 닿지 않는다.
+  assert.deepEqual(
+    submitCallbackLinesTouchingValues(componentCode),
+    [],
+    "입력 state(values/setValues)가 제출 콜백과 같은 식에 등장하면 안 된다",
+  );
+  // ④ 기록 콜러블 **2종 모두**가 이 파일에 부재하다(위 `[§15.9.6]`의 축을 양쪽으로 넓힌다 —
+  //    요구 확장이 아니라 같은 요구의 누락 축 보완이다. 랜딩은 이제 통화 표면에서도 열린다).
+  for (const callable of ["recordMockScreenEvent", "recordInCallSmsEvent"]) {
+    assert.equal(
+      componentCode.includes(callable),
+      false,
+      `${callable} 호출은 페이지가 한다 — 컴포넌트가 부르면 이 파일의 네트워크 경로 부재가 깨진다`,
+    );
+  }
+});
+
+test("[G138/역검증] 인자를 실은 제출 콜백이 섞이면 위 ②·③이 **실제로 실패**한다", (t) => {
+  // 오염은 **테스트 코드 안에서만** 만든다(callContinuity.test.ts:161-162 관례) —
+  // 실제 컴포넌트를 고쳤다 되돌리지 않는다.
+  const poisoned = componentCode.replace("onCredentialSubmit?.()", "onCredentialSubmit?.(values)");
+  assert.notEqual(
+    poisoned,
+    componentCode,
+    "오염 샘플이 만들어지지 않았다 = 정상 경로에 무인자 호출이 없다는 뜻이다",
+  );
+
+  const real = {
+    withArg: SUBMIT_CALLBACK_WITH_ARG.test(componentCode),
+    valuesLines: submitCallbackLinesTouchingValues(componentCode).length,
+  };
+  const bad = {
+    withArg: SUBMIT_CALLBACK_WITH_ARG.test(poisoned),
+    valuesLines: submitCallbackLinesTouchingValues(poisoned).length,
+  };
+  t.diagnostic(
+    `정상 경로: ②인자실은호출=${real.withArg} ③values동거줄=${real.valuesLines} / ` +
+      `오염 샘플: ②인자실은호출=${bad.withArg} ③values동거줄=${bad.valuesLines}`,
+  );
+  assert.deepEqual(real, { withArg: false, valuesLines: 0 }, "정상 경로는 통과해야 한다");
+  assert.deepEqual(bad, { withArg: true, valuesLines: 1 }, "오염 샘플은 두 검사 모두에 걸려야 한다");
+
+  // ⭐ 이 게이트가 왜 필요한가 — **기존 금지 토큰 스캔은 이 오염을 하나도 잡지 못한다.**
+  const literalCaught = NETWORK_AND_PERMISSION_TOKENS.filter(
+    (token) => poisoned.includes(token) !== componentCode.includes(token),
+  );
+  t.diagnostic(`같은 오염에 대한 기존 G50 리터럴 스캔 검출: ${literalCaught.length}건`);
+  assert.deepEqual(
+    literalCaught,
+    [],
+    "기존 토큰 스캔이 이 오염을 잡는다면 G138 게이트는 불필요하다는 뜻이다",
+  );
+});
+
 // ── 서버 카탈로그 ↔ 화면 문구 드리프트(§15.9.1 R3) ───────────────────────────
 //
 // 카탈로그(`functions/src/scenarios/mockScreens.ts`)가 문구의 정본이고, 실제 렌더는 이 컴포넌트가
