@@ -765,3 +765,171 @@ test("[T86/역검증] 가드레일이 마지막이 아니면 위 판정 함수�
     "역검증-정상",
   );
 });
+
+// ── T125 확인 시도 저지의 **조건 분리** — 적용 범위 선언 (§28.6 1·2, AC-071/AC-074 L2) ──────
+//
+// **왜 필요한가(실측).** 라이브 누적 **4/4** 회차에서 모델이 확인 시도를 **저지**했다
+// (*"끊으시면 조사에 비협조적인 것으로 기록"* — `institutionalImpersonation.prompt.ts:62`의
+// 인용구와 거의 글자 그대로 같다). ⭐ **base(오퍼 게이트 2)에서도 재현됐다** ⇒ T119의 게이트
+// 상향은 원인이 아니다. 원인은 **같은 프롬프트 안의 정면 충돌**이고, 규칙이 이미 뒤에 있었는데도
+// 저지가 나왔으므로 **"뒤에 온다"가 곧 우선이 아니다** — 그래서 우선순위를 **명문으로** 적었다.
+//
+// ⛔ **이 테스트가 실패하면 테스트를 고치지 말고 선언을 되살려라.** 선언이 빠지면 확인 무력화
+// (AC-071)가 켜진 세션에서 참가자가 가짜 창구에 **도달하지 못해** *"확인했는데도 속은 순간"* 이라는
+// 교육 포인트 자체가 생기지 않는다.
+//
+// ⛔ **F2(반대 조건)를 이 게이트에서 빼지 말 것 — G117.** F1만 남으면 모델이 이탈 저지 **전반**을
+// 무효로 읽어 AC-074 L2와 축 D5가 통째로 꺼진다(사용자 확정 위반). **두 문장은 한 쌍이고 게이트도
+// 한 쌍으로 건다.**
+//
+// ⚠️ **라벨로 지목하지 않는다 — G118.** 아래 마커는 `"확인 절차 차단"` 같은 **수법 라벨이 아니라**
+// 선언 문면 자체다(라벨은 시나리오마다 6가지라 지목하면 조용히 빠진다 — §17.4.2).
+
+/** F1 — 적용 범위를 가르는 문장(⛔ *"목록을 무시하라"* 가 아니다). */
+const T125_SCOPE_F1 = "상대가 확인해 보려고 끊겠다고 하는 경우에는 아래 항목이 그 목록보다 우선한다";
+/** F2 — 반대 조건 명문(이게 빠지면 과일반화된다 — G117). */
+const T125_SCOPE_F2 = "확인과 무관한 이유로 끊으려 할 때";
+/** 조립 순서 판정 기준점 — 수법 목록 블록의 헤더 원문. */
+const TACTICS_BLOCK_HEADER = "[사용 가능한 수법(weakenedTactics)";
+
+/**
+ * 적용 범위 선언 판정 — 이 함수 하나가 아래 전수 순회와 역검증(a)의 **공통 기준**이다.
+ * ① F1 존재 ② F2 존재(한 쌍) ③ 선언이 수법 목록 블록보다 **뒤** ④ 가드레일이 여전히 **최후미**.
+ */
+function assertVerifyInterceptScopeDeclared(
+  assembled: string,
+  guardrail: string,
+  where: string,
+): void {
+  assert.ok(assembled.includes(T125_SCOPE_F1), `F1 적용 범위 선언이 없다 — ${where}`);
+  assert.ok(assembled.includes(T125_SCOPE_F2), `F2 반대 조건이 없다(과일반화 위험) — ${where}`);
+
+  const tacticsAt = assembled.indexOf(TACTICS_BLOCK_HEADER);
+  const scopeAt = assembled.indexOf(T125_SCOPE_F1);
+  assert.ok(tacticsAt >= 0, `수법 목록 블록을 찾지 못했다 — ${where}`);
+  assert.ok(
+    tacticsAt < scopeAt,
+    `적용 범위 선언이 [사용 가능한 수법] 목록보다 앞에 있다(우선 선언이 성립하지 않는다) — ${where}`,
+  );
+  assert.ok(
+    scopeAt < assembled.indexOf(guardrail),
+    `적용 범위 선언이 가드레일 뒤에 있다 — ${where}`,
+  );
+  assertGuardrailIsLast(assembled, guardrail, where);
+}
+
+test("[T125 전수] 확인 무력화가 켜진 조립에는 적용 범위 선언이 수법 목록 뒤·가드레일 앞에 있다(AC-071/AC-075)", () => {
+  // ⛔ 대표 1종 금지(G120) — 카탈로그 보유 6종을 **판정 함수에서 그대로** 가져와 전수 순회한다.
+  const catalogIds = Object.keys(SCENARIO_PROMPTS).filter((id) => hasVerifyIntercept(id));
+  assert.ok(catalogIds.length >= 6, `확인 무력화 카탈로그가 6종 이상이어야 한다(현재 ${catalogIds.length}종)`);
+
+  let combos = 0;
+  for (const id of catalogIds) {
+    const prompt = SCENARIO_PROMPTS[id];
+    for (const difficultyLevel of LEVELS) {
+      // 실제로 창구가 켜지는 조건은 고급뿐이지만(`roleplay/index.ts:186`), 조립 함수 계약은
+      // 난이도와 독립이어야 한다 — 셋 다 고정한다.
+      for (const turnInstruction of [undefined, ...realTurnInstructionsFor(id)]) {
+        const assembled = buildSystemPrompt(prompt, {
+          ...realOptionsFor(id),
+          difficultyLevel,
+          verifyInterceptEnabled: true,
+          ...(turnInstruction ? { turnInstruction } : {}),
+        });
+        combos += 1;
+        assertVerifyInterceptScopeDeclared(
+          assembled,
+          prompt.guardrailPreamble,
+          `${id}/${difficultyLevel}/turn=${turnInstruction ? "있음" : "없음"}`,
+        );
+      }
+    }
+  }
+  assert.ok(combos >= 6 * 3 * 3, `조합 수가 너무 적다(${combos}) — 순회가 비었을 수 있다`);
+});
+
+test("[T125/역검증(a)] 적용 범위 선언을 지운 사본은 위 판정 함수를 실제로 실패시킨다", () => {
+  // ⚠️ 실제 조립 코드를 오염시켰다 되돌리는 방식은 쓰지 않는다(위 [T86/역검증]과 같은 이유) —
+  // 산출물 문자열에서 선언 줄만 걷어낸 **사본**을 판정 함수에 직접 먹인다.
+  const id = Object.keys(SCENARIO_PROMPTS).filter((sid) => hasVerifyIntercept(sid))[0];
+  const prompt = SCENARIO_PROMPTS[id];
+  const assembled = buildSystemPrompt(prompt, {
+    ...realOptionsFor(id),
+    difficultyLevel: "advanced",
+    verifyInterceptEnabled: true,
+  });
+
+  const stripped = assembled
+    .split("\n")
+    .filter((line) => !line.includes(T125_SCOPE_F1))
+    .join("\n");
+  assert.equal(stripped.includes(T125_SCOPE_F1), false, "사본에서 선언이 지워지지 않았다");
+  assert.throws(
+    () => assertVerifyInterceptScopeDeclared(stripped, prompt.guardrailPreamble, "역검증(a)"),
+    /F1 적용 범위 선언이 없다/,
+    "선언을 지웠는데도 게이트가 통과했다 — 게이트가 아무것도 잡지 않는다",
+  );
+
+  // F2만 지운 사본도 잡혀야 한다(G117 — F1만 남으면 이탈 저지 전반이 꺼진다).
+  const strippedF2 = assembled.replace(T125_SCOPE_F2, "(삭제됨)");
+  assert.throws(
+    () => assertVerifyInterceptScopeDeclared(strippedF2, prompt.guardrailPreamble, "역검증(a)-F2"),
+    /F2 반대 조건이 없다/,
+  );
+
+  // 판정 함수가 항상 던지는 것이 아님을 함께 보인다.
+  assertVerifyInterceptScopeDeclared(assembled, prompt.guardrailPreamble, "역검증(a)-정상");
+});
+
+test("[T125/역검증(b)] verifyInterceptEnabled=false 조립에는 선언이 없다 — 초급·중급·비카탈로그 무변경", () => {
+  // ⛔ 역검증(a)와 **한 샘플에 섞지 않는다**(§25.6 관례) — (a)는 "게이트가 잡는가", (b)는
+  // "꺼진 세션이 오염되지 않았는가"로 **묻는 것이 다르다**.
+  //
+  // 이것이 후보 (B)를 채택한 이유의 기계적 증거다(§28.3): 선언이 `VERIFY_INTERCEPT_RULE` 안에만
+  // 있으므로 **창구가 없는 세션의 프롬프트는 한 글자도 바뀌지 않는다.** 수법 목록을 좁혔다면
+  // (후보 A) 이 테스트가 통과할 수 없다 — 중급 세션의 수법까지 무뎌졌을 것이기 때문이다(G116).
+  for (const id of Object.keys(SCENARIO_PROMPTS)) {
+    const prompt = SCENARIO_PROMPTS[id];
+    for (const difficultyLevel of LEVELS) {
+      const off = buildSystemPrompt(prompt, {
+        ...realOptionsFor(id),
+        difficultyLevel,
+        verifyInterceptEnabled: false,
+      });
+      const where = `${id}/${difficultyLevel}`;
+      assert.equal(off.includes(T125_SCOPE_F1), false, `꺼진 조립에 F1이 샜다 — ${where}`);
+      assert.equal(off.includes(T125_SCOPE_F2), false, `꺼진 조립에 F2가 샜다 — ${where}`);
+      assert.equal(
+        off.includes("[확인 안내 — 이 훈련에서만 적용]"),
+        false,
+        `꺼진 조립에 확인 안내 블록이 샜다 — ${where}`,
+      );
+    }
+  }
+});
+
+test("[T125] 선언은 기존 4개 항목·수법 목록 문면을 바꾸지 않는다(F6 — G116 회귀 방지)", () => {
+  // `*.prompt.ts` diff 0줄은 git이 증명하지만(§28.6 3), **조립 산출물 층에서도** 고정해 둔다 —
+  // 나중에 조립 함수가 수법 문자열을 가공하기 시작하면 git diff로는 안 잡히기 때문이다.
+  for (const id of Object.keys(SCENARIO_PROMPTS).filter((sid) => hasVerifyIntercept(sid))) {
+    const prompt = SCENARIO_PROMPTS[id];
+    const assembled = buildSystemPrompt(prompt, {
+      ...realOptionsFor(id),
+      difficultyLevel: "advanced",
+      verifyInterceptEnabled: true,
+    });
+    for (const tactic of prompt.weakenedTactics) {
+      assert.ok(assembled.includes(tactic), `수법 문면이 바뀌었다 — ${id}: ${tactic}`);
+    }
+    assert.ok(assembled.includes(prompt.personaPrompt), `페르소나 문면이 바뀌었다 — ${id}`);
+    // 상시 블록의 기존 4개 항목도 그대로 있어야 한다(F6).
+    assert.ok(
+      assembled.includes('상대가 "끊고 직접 확인해 보겠다"고 하면 막지 않는다'),
+      `상시 블록 1항이 사라졌다 — ${id}`,
+    );
+    assert.ok(
+      assembled.includes("어디에 걸어도 같은 곳으로 이어진다"),
+      `상시 블록 3항(AC-071 표현 수위)이 사라졌다 — ${id}`,
+    );
+  }
+});
