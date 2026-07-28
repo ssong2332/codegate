@@ -53,3 +53,4 @@
 - [T123 가짜 랜딩 제출 기록](project_codegate_t123_landing_submitted.md) — ⭐ 라이브 가드가 **다른 이유로 먼저 걸려** 미검증이던 함정(400을 성공으로 오독), 격리 에뮬레이터 3단 장애물, 설계가 빨간불 커밋을 지시했을 때.
 - [관측 불가 지점에 동작 걸지 말 것](feedback_unobservable_behavior_gates.md) — 브라우저 이벤트에 건 동작은 게이트 전건 통과해도 안 잡힌다; 순수 함수로 내려 고정.
 - [T113·T114 게이트 사각 2건](project_codegate_t113_t114_gate_blindspots.md) — ⭐ 역검증 조작이 부분만 먹혀 난 거짓 음성, 정본이 문서가 아닌 항목, 곱할지/더할지 판정표.
+- [D-61 리포트 자기모순](project_codegate_d61_report_lie.md) — ⭐ 조인 키를 "조립 지점 1곳"으로 확정, 폴백은 낙인찍지 않는 쪽, 루트 러너가 functions/src를 못 읽어 증명을 2조각으로.
