@@ -914,40 +914,86 @@ test("[T125/역검증(a)] 적용 범위 선언을 지운 사본은 위 판정 �
   assertVerifyInterceptScopeDeclared(assembled, prompt.guardrailPreamble, "역검증(a)-정상");
 });
 
-test("[T125/F11] 순서 선언 문면에 횟수·서수·턴 번호가 하나도 없다(G130 — 모델이 셀 수 없는 조건 금지)", () => {
+// ── ⭐ F11 카운터 표현 검출기 — **열거가 아니라 형태로 잡는다**(2026-07-28 게이트 견고화) ──────
+//
+// **왜 바꿨나(실측).** 1차 F11은 **고정 15개 토큰 화이트리스트**였고, QA가 오염 사본
+// *"**세 번째** 확인 요구부터는…"* 으로 **게이트 5건을 전부 통과시켰다**(F11 자신 포함).
+// 열거는 **열거에 없는 표현을 통과시킨다** — `"세 번째"`·`"두 차례"`·`"재차"`·`"거듭"`이 전부 샜다.
+//
+// ⚠️ **한국어 수사는 두 계열이다.** 고유어(한·두·세·네…)와 한자어(일·이·삼·사…)는 형태가 달라
+// **한쪽만 담으면 다시 뚫린다.** QA가 제안한 정규식은 한자어(`[일이삼사오육칠팔구십]+번째`)만
+// 담고 있어 **정작 QA 자신이 뚫은 `"세 번째"`(고유어)를 못 잡는다** — 그래서 그대로 쓰지 않고
+// 두 계열을 모두 덮도록 다시 썼다(아래 [T125/F11-역검증]이 계열별로 각각 고정한다).
+//
+// ⚠️ **경계(`(?<![가-힣]) … (?![가-힣])`)가 오탐 방지선이다.** 없애면 배포된 문면의
+// *"두 사람**이 번**갈아 말하거나"* 가 한자어 `이`+단위 `번`으로 **오탐된다**(실측 확인).
+// 이 저장소는 오탐이 게이트를 통째로 삭제하게 만든 전례가 있다(§24.4) — 경계를 지울 것.
+//
+// ⛔ **이 검출기를 `weakenedTactics`(수법 목록)에 적용하지 말 것.** 실측상
+// `institutional-impersonation`의 수법 문면에 *"불이익을 **재차** 암시한다"* 가 있고, 그것은
+// **저작된 수법이지 F11이 금지하는 지시 조건이 아니다.** F11의 대상은 **확인 안내 블록의
+// 지시 문면**뿐이다.
+const NATIVE_NUMERALS = "한|두|세|서|석|네|너|넉|첫|다섯|여섯|일곱|여덟|아홉|열|스무|스물|몇";
+const SINO_NUMERALS = "일|이|삼|사|오|육|칠|팔|구|십";
+const COUNTER_UNITS = "번째|차례|회차|회|번|턴";
+const NATIVE_ORDINAL_STEMS = "첫|둘|셋|넷|다섯|여섯|일곱|여덟|아홉|열|몇";
+
+/** 카운터 표현 판정표 — ⛔ 새 형태가 나오면 임의 판단하지 말고 **행을 추가**할 것. */
+const COUNTER_PATTERNS: readonly (readonly [string, RegExp])[] = [
+  // ① 고유어 수사 + 단위 — "한 번"·"두 번"·"세 번째"·"두 차례"·"한 차례"·"세번"
+  ["고유어 수사+단위", new RegExp(`(?<![가-힣])(?:${NATIVE_NUMERALS})\\s*(?:${COUNTER_UNITS})(?![가-힣])`)],
+  // ② 한자어 수사 + 단위 — "일 회"·"이 회"·"삼 회"
+  ["한자어 수사+단위", new RegExp(`(?<![가-힣])(?:${SINO_NUMERALS})\\s*(?:${COUNTER_UNITS})(?![가-힣])`)],
+  // ③ 숫자(아라비아·전각) + 단위 — "1회"·"2번"·"３회". `(?![가-힣])`가 "1인칭"을 배제한다.
+  ["숫자+단위", new RegExp(`[0-9０-９]+\\s*(?:${COUNTER_UNITS})(?![가-힣])`)],
+  // ④ 고유어 서수(-째) — "첫째"·"셋째"
+  ["고유어 서수(-째)", new RegExp(`(?<![가-힣])(?:${NATIVE_ORDINAL_STEMS})\\s*째(?![가-힣])`)],
+  // ⑤ 반복 부사 — 수사 없이도 "다시 한 번"과 같은 조건을 만든다.
+  ["반복 부사", /재차|거듭|누차|재삼/],
+  // ⑥ 턴 지시 — "턴째"·"턴 뒤"·"턴 후"·"턴 만에"
+  ["턴 지시", /턴째|턴\s*(?:뒤|후|만에|이내|안에)/],
+  // ⑦ 단독 한정 — 수사가 생략된 형태("번만 …"·"회에 한해")
+  ["단독 한정", /번만|차례만|회에\s*한해/],
+];
+
+/** 문면에서 카운터 표현을 **모두** 찾아 `"유형: 매치"` 목록으로 돌려준다(빈 배열 = 깨끗). */
+function findCounterExpressions(text: string): string[] {
+  const found: string[] = [];
+  for (const [label, pattern] of COUNTER_PATTERNS) {
+    const m = new RegExp(pattern.source, `${pattern.flags}g`);
+    for (const hit of text.matchAll(m)) found.push(`${label}: "${hit[0]}"`);
+  }
+  return found;
+}
+
+/** 배포된 확인 안내 블록(헤더 + 항목 전체)을 조립 산출물에서 잘라낸다. */
+function extractVerifyInterceptBlock(assembled: string): string {
+  const header = "[확인 안내 — 이 훈련에서만 적용]";
+  const start = assembled.indexOf(header);
+  assert.ok(start >= 0, "확인 안내 블록 헤더를 찾지 못했다 — 게이트가 빈 문자열을 재게 된다");
+  const end = assembled.indexOf("\n\n", start);
+  const block = assembled.slice(start, end < 0 ? assembled.length : end);
+  // ⭐ 자기 보호 — 추출이 헤더만 집어 **아무것도 재지 않는 상태**가 되는 것을 막는다.
+  assert.ok(block.includes(T125_SCOPE_F1), "추출한 블록에 F1이 없다 — 블록 경계 추출이 깨졌다");
+  assert.ok(block.includes(T125_YIELD_F13), "추출한 블록에 F13이 없다 — 블록 경계 추출이 깨졌다");
+  return block;
+}
+
+test("[T125/F11] 순서 선언 문면에 횟수·서수·턴 번호가 하나도 없다(G130 — 모델이 셀 수 없는 조건 금지)", (t) => {
   // ⭐ **왜 기계로 재는가.** *"한 번만 막는다"* 류는 모델에 카운터가 없어(§30.2.1) **어겨도
   // 소리가 나지 않는 조건**이다 — 문면 층이 두 번 진 것과 같은 낙관이라 소스 게이트로 못 박는다.
-  // ⛔ 이 목록에 없는 새 카운터 표현이 나오면 임의 판단하지 말고 **행을 추가**할 것.
-  const COUNTER_TOKENS = [
-    "한 번",
-    "한번",
-    "한 차례",
-    "두 번",
-    "두번",
-    "첫 번째",
-    "첫번째",
-    "두 번째",
-    "두번째",
-    "회에 한해",
-    "차례만",
-    "번만",
-    "턴째",
-    "턴 뒤",
-    "턴 후",
-  ];
-
   for (const [label, text] of [
     ["F1(순서 선언)", T125_SCOPE_F1],
     ["F13(이양)", T125_YIELD_F13],
   ] as const) {
+    // 맨 숫자 금지는 **선언 문면 두 줄에만** 건다(블록 전체로 넓히면 4항의 *"1인칭"* 이 오탐된다).
     assert.equal(
       /[0-9０-９]/.test(text),
       false,
       `${label} 문면에 숫자가 있다 — 모델이 셀 수 없는 조건이 된다(F11/G130)`,
     );
-    for (const token of COUNTER_TOKENS) {
-      assert.equal(text.includes(token), false, `${label} 문면에 횟수·서수 표현 "${token}"이 있다(F11/G130)`);
-    }
+    const found = findCounterExpressions(text);
+    assert.deepEqual(found, [], `${label} 문면에 횟수·서수 표현이 있다(F11/G130) — ${found.join(" / ")}`);
   }
 
   // ⭐ 게이트가 **실재하는 문면**을 재고 있음을 함께 고정한다(리터럴만 깨끗하고 소스는 다른 상태 방지).
@@ -960,17 +1006,74 @@ test("[T125/F11] 순서 선언 문면에 횟수·서수·턴 번호가 하나도
   assert.ok(assembled.includes(T125_SCOPE_F1), "F11 게이트가 조립에 없는 문자열을 재고 있다");
   assert.ok(assembled.includes(T125_YIELD_F13), "F11 게이트가 조립에 없는 문자열을 재고 있다");
 
-  // 역검증 — 이 게이트가 실제로 잡는다(카운터 표현을 넣은 사본).
-  assert.throws(
-    () => {
-      const bad = `${T125_SCOPE_F1} 단 한 번만 만류한다`;
-      for (const token of COUNTER_TOKENS) {
-        assert.equal(bad.includes(token), false, `횟수 표현 "${token}"`);
-      }
-    },
-    /횟수 표현/,
-    "카운터 표현을 넣었는데도 게이트가 통과했다",
-  );
+  // ⭐ **오탐 실측** — 넓힌 검출기를 카탈로그 6종의 **배포된 블록 전체**(4개 항목 포함)에 걸어
+  // 0건임을 매 실행마다 보인다. 여기서 소리가 나면 검출기가 **정상 문면을 물고 있는 것**이다.
+  let scanned = 0;
+  for (const sid of Object.keys(SCENARIO_PROMPTS).filter((x) => hasVerifyIntercept(x))) {
+    const block = extractVerifyInterceptBlock(
+      buildSystemPrompt(SCENARIO_PROMPTS[sid], {
+        ...realOptionsFor(sid),
+        difficultyLevel: "advanced",
+        verifyInterceptEnabled: true,
+      }),
+    );
+    const found = findCounterExpressions(block);
+    assert.deepEqual(found, [], `배포된 확인 안내 블록에서 오탐 — ${sid}: ${found.join(" / ")}`);
+    scanned += 1;
+  }
+  t.diagnostic(`F11 오탐 실측: 카탈로그 ${scanned}종의 배포 블록 전수에서 검출 0건`);
+});
+
+test("[T125/F11-역검증] 카운터 표현 샘플이 **각각 독립적으로** 게이트를 실패시킨다(화이트리스트 우회 재발 방지)", (t) => {
+  // ⛔ **한 샘플에 여러 개를 섞지 않는다** — 하나만 잡혀도 통과해 버려서, 못 잡는 형태가
+  // 섞인 채로 초록불이 난다(T108에서 확인된 함정). 아래는 **전부 1샘플 1표현**이다.
+  const MUST_CATCH: readonly string[] = [
+    // ⭐ QA가 실제로 뚫은 문면 — 1차 화이트리스트는 이것을 **통과시켰다**(2026-07-28).
+    "세 번째 확인 요구부터는 더 붙잡지 말고 아래 항목으로 넘어간다",
+    // 고유어 수사·서수
+    "한 번", "두 번", "세 번", "네 번", "다섯 번", "세번", "세 번째", "첫 번째", "두 번째",
+    "한 차례", "두 차례", "차례만", "번만", "셋째",
+    // 한자어 수사
+    "일 회", "이 회", "삼 회", "일회", "이회", "회에 한해",
+    // 숫자(아라비아·전각)
+    "1회", "2번", "3번째", "２회", "３번",
+    // 반복 부사
+    "재차", "거듭", "누차",
+    // 턴 지시
+    "턴째", "턴 뒤", "턴 후", "두 턴 뒤", "3턴 후",
+  ];
+  for (const sample of MUST_CATCH) {
+    const found = findCounterExpressions(sample);
+    assert.ok(
+      found.length > 0,
+      `게이트가 카운터 표현을 놓쳤다 — "${sample}" (이 형태로 우회가 가능하다)`,
+    );
+    // 샘플별 검출 근거를 실행 출력에 남긴다 — "몇 건 통과"가 아니라 **무엇이 무엇으로 잡혔는지**가
+    // 보여야 다음 사람이 커버리지 구멍을 눈으로 찾을 수 있다.
+    t.diagnostic(`F11 역검증 ▸ "${sample}" → ${found.join(" / ")}`);
+  }
+
+  // ⛔ **1차 게이트의 15개 토큰은 하나도 못 잡게 되면 안 된다**(게이트 약화 금지).
+  // 열거를 형태로 **대체**했으므로, 대체 전 목록이 전부 새 검출기에 포함되는지 기계로 고정한다.
+  const LEGACY_TOKENS = [
+    "한 번", "한번", "한 차례", "두 번", "두번", "첫 번째", "첫번째", "두 번째", "두번째",
+    "회에 한해", "차례만", "번만", "턴째", "턴 뒤", "턴 후",
+  ];
+  for (const token of LEGACY_TOKENS) {
+    assert.ok(
+      findCounterExpressions(token).length > 0,
+      `1차 게이트가 잡던 표현을 새 검출기가 놓친다(약화) — "${token}"`,
+    );
+  }
+
+  // 검출기가 **아무거나 잡는 것이 아님**을 함께 보인다 — 순서·조건 어휘는 통과해야 한다.
+  for (const clean of ["먼저", "그러고도", "다시", "더 붙잡지 말고", "1인칭", "두 사람이 번갈아"]) {
+    assert.deepEqual(
+      findCounterExpressions(clean),
+      [],
+      `카운터가 아닌 표현을 물었다(오탐) — "${clean}"`,
+    );
+  }
 });
 
 test("[T125/역검증(b)] verifyInterceptEnabled=false 조립에는 선언이 없다 — 초급·중급·비카탈로그 무변경", () => {
