@@ -30,6 +30,8 @@ metadata:
 
 **How to apply:** `postinstall` 기반 장치를 설계하면 *"어떤 install 형태에서 실제로 도는지"* 를 **로그의 배너 줄로 실측**하라. 도는 것을 전제하지 말 것. 관련: [[unobservable-behavior-gates]].
 
+**⛔ 여러 매니페스트에 같은 `postinstall`을 걸 때는 종료코드 처리를 대칭으로 하라.** 루트에만 `|| exit 0`이 빠져 있었고, 스크립트를 치우고 실측하니 **루트 install exit 1 / functions install exit 0** 으로 갈렸다 — *"스크립트가 무조건 exit 0이니 안전하다"* 는 **스크립트가 실행조차 안 되는 경우**(모듈 못 찾음)를 못 덮는다. 안전망은 **셸 레벨에도** 있어야 한다. reviewer가 잡았다.
+
 부작용 1건: `postinstall`을 추가하면 npm이 lockfile `packages[""]`에 **`"hasInstallScript": true`** 를 기록한다. **이 락 갱신을 같이 커밋하지 않으면 이후 모든 `npm install`이 락을 더럽힌다**(없애려던 잡음을 새로 만든다).
 
 ## 병합 전에는 워크트리에서 새 훅을 태울 수 없다 — 테스트 레시피
