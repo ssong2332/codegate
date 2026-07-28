@@ -22,6 +22,10 @@
  *                install 직후에는 아직 스테이징 전이라 `git diff --cached`가 비어 있다.
  *                ⛔ **언제나 exit 0**. 여기서 터져 install을 실패시키면 다음 사람이 이 단계를
  *                지운다(그러면 장치 전체가 죽는다) — functions/src/devtools/recordLibBuild.ts와 같은 원칙.
+ *                ⭐ 그 원칙은 **셸 레벨에서도** 지킨다: 양쪽 `postinstall`이 모두 `|| exit 0` 로 끝난다
+ *                (`package.json` · `functions/package.json`). 이 스크립트 자체가 깨지거나 node가
+ *                파일을 못 찾는 경우 — 즉 이 파일의 `exit 0` 이 아예 도달되지 못하는 경우 — 까지
+ *                덮기 위해서다. 한쪽만 붙이면 그쪽만 살아남는 **비대칭 실패**가 된다.
  *
  * ⚠️ 자기 고지 — 이 장치가 **못 막는 것**:
  *   1. `--staged`(pre-commit 훅)는 `git commit --no-verify`로 우회되고,
