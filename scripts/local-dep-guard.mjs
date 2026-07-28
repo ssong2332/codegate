@@ -29,6 +29,12 @@
  *      (T100의 잔여 한계를 그대로 물려받는다 — docs/GitWorkflow.md).
  *   2. `--worktree`(postinstall)는 **`npm install --ignore-scripts`로 건너뛰어진다**
  *      (docs/Architecture.md §20.0 (1)이 경고한 바로 그 자리다).
+ *   3. ⭐⭐ **실측된 사각 — `npm --prefix <dir> install` 에서는 postinstall이 아예 실행되지 않는다.**
+ *      T130 실측(2026-07-28, npm 10.9.2 / node 22.14.0): `npm --prefix functions install` 은
+ *      **3/3 회 오염을 만들었지만 postinstall 줄이 로그에 0건**이었다(`node_modules` 를 지운
+ *      완전 신규 설치에서도 동일). `cd functions && npm install` 과 루트 `npm install` 에서는
+ *      정상적으로 실행된다. ⇒ **하필 오염을 만드는 그 명령 형태를 postinstall은 못 잡는다.**
+ *      그 경로를 실제로 잡는 것은 `--staged`(pre-commit 훅)뿐이다.
  *   ⇒ 두 경로가 서로의 구멍을 덮으라고 **둘 다** 두는 것이지, 어느 하나도 강제가 아니다.
  */
 import { execFileSync } from "node:child_process";

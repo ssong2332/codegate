@@ -14,6 +14,35 @@
 # 강제 수단이 아니다. 우회 불가능한 강제는 GitHub 브랜치 보호 규칙(서버측)뿐이다 —
 # docs/GitWorkflow.md의 T100 절 참고.
 
+# ─────────────────────────────────────────────────────────────────────────────
+# T130 — 매니페스트에 섞여 들어간 로컬 경로 의존성(`file:`/`link:`/`portal:`) 거부.
+#
+# 왜: `npm --prefix <dir> install` 이 `package.json`에 `"fraud-vaccine-web": "file:.."` 를
+# 조용히 추가한다(docs/Architecture.md §36). 오늘까지 매번 사람이 눈으로 잡아 되돌렸다 —
+# 안전장치 때문이 아니라 운이 좋아서다. 이 블록이 그 운에 의존하는 상태를 닫는다.
+#
+# ⛔ 이것은 트립와이어다 — **오염을 막지 않는다. 오염이 커밋되는 것을 막을 뿐이다.**
+# ⛔ 훅은 파일을 고치지 않는다(자동 복구 금지, §36.0 4). 알리고 멈춘다.
+#
+# ⭐ **왜 T100 블록보다 앞인가 — 실측으로 확인한 것**: 아래 T100 블록의 첫 줄은
+#   `git symbolic-ref ... || exit 0` 으로 **detached HEAD에서 훅 전체를 즉시 통과시킨다.**
+#   이 블록을 그 뒤에 두면 detached HEAD 워크트리에서 검사가 **한 번도 실행되지 않는다**
+#   (T130 P-4에서 실측: 뒤에 뒀을 때 오염 커밋이 그대로 통과했다). 이 저장소는 에이전트
+#   워크트리를 `git worktree add --detach` 로 만드는 경우가 많아 사각이 크다.
+#   ⇒ 순서만 앞으로 옮겼고 **T100 블록의 내용은 한 줄도 바꾸지 않았다.**
+#
+# 판정 로직은 scripts/local-dep-guard.mjs 한 곳에만 있다(postinstall과 공유 — 복제 금지).
+guard="$(git rev-parse --show-toplevel)/scripts/local-dep-guard.mjs"
+
+if [ -f "$guard" ]; then
+	if command -v node >/dev/null 2>&1; then
+		node "$guard" --staged || exit 1
+	else
+		# 통과시킨 것이 아니라 **검사를 수행하지 못했다** — 조용히 넘기지 않는다.
+		printf '\n\033[33m⚠ node를 찾지 못해 로컬 경로 의존성 검사(T130)를 수행하지 못했습니다.\033[0m\n\n' >&2
+	fi
+fi
+
 protected_branches="main master"
 
 branch="$(git symbolic-ref --short -q HEAD)" || exit 0  # detached HEAD(rebase·bisect 등)는 통과
@@ -31,28 +60,5 @@ for protected in $protected_branches; do
 		exit 1
 	fi
 done
-
-# ─────────────────────────────────────────────────────────────────────────────
-# T130 — 매니페스트에 섞여 들어간 로컬 경로 의존성(`file:`/`link:`/`portal:`) 거부.
-#
-# 왜: `npm --prefix <dir> install` 이 `package.json`에 `"fraud-vaccine-web": "file:.."` 를
-# 조용히 추가한다(docs/Architecture.md §36). 오늘까지 매번 사람이 눈으로 잡아 되돌렸다 —
-# 안전장치 때문이 아니라 운이 좋아서다. 이 블록이 그 운에 의존하는 상태를 닫는다.
-#
-# ⛔ 이것은 트립와이어다 — **오염을 막지 않는다. 오염이 커밋되는 것을 막을 뿐이다.**
-# ⛔ 훅은 파일을 고치지 않는다(자동 복구 금지, §36.0 4). 알리고 멈춘다.
-#
-# 판정 로직은 scripts/local-dep-guard.mjs 한 곳에만 있다(postinstall과 공유 — 복제 금지).
-# 위 T100 블록은 건드리지 않았다.
-guard="$(git rev-parse --show-toplevel)/scripts/local-dep-guard.mjs"
-
-if [ -f "$guard" ]; then
-	if command -v node >/dev/null 2>&1; then
-		node "$guard" --staged || exit 1
-	else
-		# 통과시킨 것이 아니라 **검사를 수행하지 못했다** — 조용히 넘기지 않는다.
-		printf '\n\033[33m⚠ node를 찾지 못해 로컬 경로 의존성 검사(T130)를 수행하지 못했습니다.\033[0m\n\n' >&2
-	fi
-fi
 
 exit 0
