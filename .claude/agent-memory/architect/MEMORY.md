@@ -20,3 +20,5 @@
 - [인계된 "미처리 N곳"은 이미 닫혔을 수 있다](feedback_handoff_todos_may_be_discharged.md) — 착수 전 각 지점을 열어 close 표기 확인; T131에서 6곳 전건이 이미 닫혀 있었다
 - [낡은 헤더 ≠ 재검증 부재](feedback_stale_header_vs_actual_baseline.md) — 인용 줄번호가 현행과 일치하면 최신 트리 작성(선언만 유보), 밀려 있으면 구 트리 작성
 - [계약이 아니라 트립와이어로 걸어라](feedback_tripwire_not_contract.md) — 정적 검사 조건이 문면보다 넓으면 계약은 기각·트립와이어는 채택; 실패 메시지에 처방을 담는다
+- [간헐 결함은 검출이 1순위](feedback_intermittent_defect_picks_detection.md) — "고친 뒤 안 났다"는 증거 0; 1회 클린런을 완료 증거로 요구한 상류 명세는 정정 대상(T130 G④)
+- [타 에이전트 메모리가 1차 증거다](feedback_peer_agent_memory_is_evidence.md) — 셸 없이 재현 못 할 때 `.claude/agent-memory/*/`의 1인칭 기록을 전수 grep; 인용값으로 표기
