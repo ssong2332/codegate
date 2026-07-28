@@ -12,4 +12,6 @@
 - [횟수 말고 순서로 쓴다](reference_count_vs_order_in_prompts.md) — 프롬프트의 횟수·턴 인덱스는 판정 불가; 참조 대상이 대화 기록 안이면 성립. 서버가 뭘 세는지는 코드로 확인
 - [유보한 "위험"은 "불가능"일 수 있다](feedback_reserved_risk_may_be_impossibility.md) — 재판정은 유보 문장이 아니라 코드에서; 결론이 더 강해지거나 과다 서술이 드러난다
 - [역검증이 방식 순위를 뒤집는다](feedback_negative_test_flips_the_method.md) — 정상 경로만 보고 1순위 정하지 말 것; 프로브에 "오염 사본을 같은 수단으로" 단계를 독립으로
+- [예산은 "1건 = 몇 호출"부터](feedback_budget_unit_assumption.md) — 미실행 고지는 오류를 막지 못한다; 단위 가정을 명시하고 검산을 실행자에게 인계
+- [관측 지점을 늘릴 땐 범주를 늘리지 마라](feedback_split_observation_point.md) — 기존 범주를 지점별 적용; 새 지점의 "좋은 값" 방향부터 확인(부호가 뒤집힌다)
 - [하드 게이트는 실행 가능성을 먼저 확인](feedback_hard_gate_executability.md) — 참조 대상이 나중 커밋에 오는 게이트를 앞 커밋에 못 박지 말 것(사후 추인 2회: G58·G-B)
