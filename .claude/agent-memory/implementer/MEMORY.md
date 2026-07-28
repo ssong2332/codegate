@@ -54,3 +54,4 @@
 - [관측 불가 지점에 동작 걸지 말 것](feedback_unobservable_behavior_gates.md) — 브라우저 이벤트에 건 동작은 게이트 전건 통과해도 안 잡힌다; 순수 함수로 내려 고정.
 - [T112 사실 조회 어형 슬롯](project_codegate_t112_fact_inquiry_forms.md) — ⭐ `-는지`가 내포절 어미라 난 유일한 오탐, A/B 프로브는 뽑고 지운다, 워크트리 install이 루트 package.json도 고침.
 - [T113·T114 게이트 사각 2건](project_codegate_t113_t114_gate_blindspots.md) — ⭐ 역검증 조작이 부분만 먹혀 난 거짓 음성, 정본이 문서가 아닌 항목, 곱할지/더할지 판정표.
+- [T122 securetoken 400 조사](project_codegate_t122_securetoken_probe.md) — ⭐ 벤더 에뮬레이터 소스로 원인 **전수 열거**(브라우저 없이 판정), 서명 없는 토큰이 실패를 가린다, 다른 트리 node_modules를 `file:///`로 빌려 쓰는 SDK 하네스.
