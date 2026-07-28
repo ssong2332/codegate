@@ -4,6 +4,8 @@ Owner: architect (see AGENTS.md). Others read-only.
 Major decisions are logged in DECISIONS.md; details in adr/.
 Based on PRD Version: v1.7.1 · Based on UX Version: 1.13 · Last Updated: 2026-07-27
 
+> **갱신 고지(2026-07-28, T123 architect 판정 — **가짜 랜딩 "제출함" 기록의 착수 게이트**):** 이번 패스의 범위는 **한 건뿐**이다 — **신규 §31**(① ⭐ **R6 얽힘 재판정 = 착수 게이트**: **실재한다. 단 §27.3이 기술한 형태와 다르다** — 통화 세션에 `mockScreens` 문서를 만들면 앵커 리졸버의 **입력이 아예 없어**(`mockScreenTimeline.ts:70-89`의 유일 입력이 `messages[].attachments`이고 통화 경로는 그것을 만들지 않는다 — `roleplay/index.ts:277-278` 원문) `anchorResolved:false` → `consented` 강제 false(`:133`) → **승격 0건** ⇒ 그 경로는 *"위험하다"* 가 아니라 ***"AC-080을 만족시킬 수 없다"***. ⭐ **§27.3 (2) 2의 과다 서술 2건 정정**: `stages`는 **얽히지 않고**(`:206-208` `entryChannel!=="messenger"` 즉시 `[]`), G15의 **시계 병합**도 새로 깨지지 않는다(두 리졸버 모두 앵커 메시지 `createdAt` 파생). ② ⭐ **해법 — 새 문서를 만들지 않는 경로가 실재한다**: 통화 표면은 **기존 `inCallSms` 문서에 `landingSubmittedAt` 1필드**(앵커는 그 문서가 이미 가진 `anchorScammerTurn` + **G15/G21을 이미 푼 기존 리졸버** `smsTimeline.ts:98-126`), 메신저 표면은 **기존 `mockScreens` 문서에 `submittedAt` 1필드** ⇒ **신규 컬렉션·콜러블·컴포넌트 파일·`kind` 0건**, **G81·R6 무변경**. ③ ⭐ **게이트 충돌 — 충돌하지 않는다**: `mockScreenCopy.test.ts` **재작성 0건**(금지 토큰 21개·AST 축 어디에도 걸리지 않는다). 기록 주체는 **페이지**이고 컴포넌트는 **무인자 콜백만** 올린다 — `:105-112`가 **이미 요구하는 형태**다. ⚠️ **planner 실측 1건 정정**: `link_tapped`를 기록하는 것은 `InCallSmsOverlay`가 **아니라 페이지**다(`play/page.tsx:1473`) ⇒ 패턴은 *"부모"* 가 아니라 ***"잎은 콜백, 페이지가 기록"*** 이며 이번 설계는 **3단 위임**이다. ④ **OQ-A19 — 착수를 막지 않는다**(요구가 *"AC 근거"* 단일 조건이고 **AC-080이 충족**했다) + ⚠️ **줄번호 정정 2건: 정본은 `:2726`이며 §27.3의 `:2718`도 planner 인계값 `:2720`도 둘 다 틀렸다**. ⑤ **이벤트 이름 — `"consented"` 재사용 기각**(소스상 *"권한 허용"* 전용: `mockScreens/index.ts:74-76` 거부 가드 · `types.ts:294-296` · `mockScreens.ts:87-88` 지시문) ⇒ **`"landing_submitted"`(문자) · `"submitted"`(랜딩)** 2값 신설, ⛔ `fake_landing_submitted`는 만들지 않는다. **리포트 표시 이벤트는 0건**(G17 이중 렌더 + 저장 enum 확장 회피 — 승격된 `deceivedMoment` 하나가 AC-080 (d)를 충족). ⑥ 갭 **G135~G138**(⭐ **G135 = `anchorTurnIndex >= 0` 미검사** — `smsTimeline.ts:108-110`이 `{-1, resolved:true}`를 돌려주는 **경로 A 전용 함정**, 밟으면 G16 재발 = AC-062 위반) · 프로브 **P-3** + if/then 강등표 6행 · 커밋 배치 5단 · **OQ-A20 1건**). **DECISIONS #62.** ⛔ **§0~§30·ADR-0001~0013은 한 줄도 고치지 않았다** — 단 **§27.3의 OQ-A19 인용 줄번호 1개만 정정**했고(사실 오류) 그 정정 사실을 같은 줄에 명시했다. ⛔ **소스 코드를 한 글자도 고치지 않았다**(`functions/src/**`·`src/**`는 implementer 소유). ⛔ **`docs/UX.md`(ux-design)·`docs/Tasks.md`·`docs/PRD.md`(planner) 무편집 · AC 신설 0건 · AC 번호 예약 0건 · ADR 신설 0건.** ✅ **`API.md`·`Database.md`는 이번에 갱신했다**(enum 2값 · 필드 2개 — architect 소유 문서). ⚠️ **실측 기준선**: 이 절의 모든 `파일:줄`은 **`C:\codegate\.git\refs\heads\main` = `e75237a07c46521291607d9668b02568d7ebd8e4`**(직접 판독 — 지정 base `e75237a`와 **일치**) 기준 워크트리에서 직접 읽은 값이다. ⚠️ **architect는 셸이 없다** — 테스트·게이트·라이브·`git log`를 **한 건도 실행하지 않았다**(**525/216은 인용값**, 착수 시 P-3로 재측정). ⚠️ **버전 갭 고지**: 헤더는 **PRD v1.7.1 · UX 1.13**인데 `docs/PRD.md:4`는 **v1.10**, `docs/UX.md:10`은 **1.16** — **PRD 3건 · UX 3건 뒤처져 있다**(§28~§30과 동일, 더 벌어지지 않았다). 같은 이유로 **이번에도 헤더를 전진시키지 않았다**. ⚠️ **절 번호 고지**: §30까지 사용 중이라 **§31**, **갭은 G135부터**(직전 최대 G134), **OQ는 OQ-A20부터**(직전 최대 OQ-A19). ⭐ **planner 인계 1건(차단 아님)**: **T123 선행 ③ *"T121 병합"* 은 실측과 어긋난다** — `credential-form` 랜딩이 **이미 4종**(`mockScreens.ts:152`·`:173`·`:195`·`:217`, 그중 **3종이 `in-call-sms` 표면**)이라 **T121 없이 착수·검증이 가능**하다.
+>
 > **갱신 고지(2026-07-28, T125 후속 — **§28.5 대안이 사용자 확정으로 채택됐다** / 1회 만류를 설계로 받는다):** 이번 패스의 범위는 **한 건뿐**이다 — **신규 §30**(①**(C)의 운명 확정**: **§29.2.3의 대상 4건은 대상에서 철회**한다 — 그 문장이 기술하는 행동(*"확인하려 하면 압박한다"*)이 **채택된 설계**가 됐다 ⇒ 치환은 설계 삭제가 된다. **단 (C) 자체는 철회가 아니라 보류** — ⭐ **실측으로 충돌이 한 줄 아래로 이동했다**(지속 압박 절 institutional `:37`·card `:36`·courier `:30`·loan `:31`·tax `:32`가 *"물러서지 않고 계속 밀어붙인다"* 로 채택 후반부와 충돌한다. **이 5줄은 2026-07-24 사용자 요청으로 저작된 문장**이다) · ②⭐**"한 번"의 정의** — **횟수 문면 불가**(모델 카운터 부재) · **서버 계수 불가**(오퍼 게이트가 세는 것은 **사기범 턴 경계**이지 참가자 의사가 아니다 — `verifyIntercept.ts:33-40`·`page.tsx:437-444` 실측. 의사 계수는 **AC-024 정면 위반**) ⇒ **순서·조건 근사를 채택**(*"먼저 … 그러고도 다시 …하면"*. 참조 대상이 **대화 기록 안**에 있어 §25.2 ㉡의 구조적 불가에 해당하지 않는다) · 문면 요건 **F11~F14** + **초안 2문장** · ③**오퍼 게이트** — ⭐ **오퍼는 참가자 요구와 무관하게 자동 도착**하므로(`page.tsx:433-449`) 미성립 경로는 *"참가자가 통화를 끊는 경우"* 로 **좁혀진다**. 완화 (ㄱ)채택·(ㄴ)기각(AC-024)·(ㄷ)**T119 인계**(⛔ 값 무변경) · ④**검증** — 판정 대상이 *"저지 소멸"* → ***"만류 후 이양"*** 으로 바뀌고 **⓵ base 재차 고집 3회를 첫 번째로 잰다**(⭐ **아무도 본 적 없는 구간**이며 **(C) 발동 판정표의 유일한 입력**), 세트 **9건** 유지 · **4범주 분류(㈎㈏㈐㈑)** + 판정표 6행 · ⑤**난이도 축** — 조건 추가 **0건**·AC-065 저촉 **0**·L3 중복 **아님** 전부 **유지**, **§17 순서 축 신설 안 함** · 갭 **G128~G134** · 문면 요건 **F11~F14**). **DECISIONS #61**. ⛔ **§0~§29·ADR-0001~0013은 한 줄도 고치지 않았다** — **§28·§29는 틀린 게 아니라 전제가 바뀐 것**이다(§29.1의 문면 층 2회 실패 실측은 지금도 옳고, 두 패스가 이기려던 목표 *"1회 저지를 없앤다"* 가 **철회**됐을 뿐이다). ⛔ **소스 코드를 한 글자도 고치지 않았다**(`functions/src/**`·`src/**`는 implementer 소유). ⛔ **`docs/UX.md`(ux-design)·`docs/Tasks.md`·`docs/PRD.md`(planner) 무편집 · 제품 AC 신설 0건 · AC 번호 예약 0건 · 신규 OQ 0건 · `API.md`·`Database.md` 무변경 · ADR 신설 0건 · 오퍼 게이트 값 변경 0건**. ⚠️ **실측 기준선**: 이 절의 모든 `파일:줄`은 **`C:\codegate\.git\refs\heads\main` = `f9af6dfdcc1488f95c89c27f7acaa4809ea0c67c`**(직접 판독 — 오케스트레이터 지정 base `f9af6df`와 **일치**) 기준 워크트리에서 직접 읽은 값이다. ⭐ **§29가 읽지 못했다고 고지한 PR #121의 결과물(F1·F2 문면)을 이번엔 직접 읽었다** — `promptAssembly.ts:145-150`, 원문은 §30.1.2. ⚠️ **줄번호 정정 5건**: §29의 base(`03e0102`)와 현행 사이에 PR #121이 병합돼 `promptAssembly.ts`가 약 20줄 밀렸다(`personaPrompt` `:309`→**`:329`** · 삽입 지점 `:323`→**`:343`** 외 — §30.1.1. **§29 표는 고치지 않았다**). **`*.prompt.ts` 대상 4건의 줄번호는 변동 없다.** ⚠️ **architect는 셸이 없다** — 테스트·라이브·`git log`를 **한 번도 실행하지 않았다**(519/216과 라이브 5회·예산은 전부 **인용값**). ⚠️ **버전 갭 고지**: 헤더는 **PRD v1.7.1 · UX 1.13**인데 `docs/PRD.md:4`는 **v1.10**, `docs/UX.md:10`은 **1.16** — **PRD 3건 · UX 3건 뒤처져 있다**(§28·§29와 동일, 더 벌어지지 않았다). 같은 이유로 **이번에도 헤더를 전진시키지 않았다**. ⚠️ **절 번호 고지**: §29까지 사용 중이라 **§30**, **갭은 G128부터**(직전 최대 G127), **문면 요건은 F11부터**(직전 최대 F10).
 >
 > **갱신 고지(2026-07-28, T125 후속 판정 — §28 (B)의 라이브 결과 판정 / 문면 층을 닫고 조건부 치환 층으로):** 이번 패스의 범위는 **한 건뿐**이다 — **신규 §29**(①**층위 판정**: *"선언을 더 강하게"* 는 **아니오** — 문면 층은 **2회 시험 2회 실패**했다(1차 = `promptAssembly.ts:127`의 기존 무조건 금지문 → BASE-1 저지 재현 / 2차 = §28 F1·F2 → PR 3회 중 2회 재현) ⇒ **층 1을 닫는다** · ②**후보 (C) 채택** — §28.3의 (C) 기각 사유 3건 중 **2건이 성립하지 않는다**(축 증가 0건 · 지목 수단은 라벨이 아니라 **문장 원문**이라 실패가 **소리 난다**), **(A) 기각 사유는 상속하지 않는다**(조립 함수는 **조건을 아는 자리**라 중급은 바이트 동일) · ③**PR #121 병합** — 근거 4건 + 조건 **M1·M2** · ④**최소 관측 세트 9건**(base 3 + 후속 5 + 반대 1, **같은 날**)과 **판정표 5행** · ⛔ **오늘 라이브 0건**(잔여 2건으로는 세트 미성립) · 갱신 고지 3건(**§28.2 personaPrompt 계수 6 → 확인 목적 대상 **4건** · 줄번호 2건 정정 · `tax-refund-scam` 대상 0건**) · 문면 요건 **F7~F10** · 갭 **G122~G127**). **DECISIONS #60**. ⛔ **§0~§28·ADR-0001~0013은 한 줄도 고치지 않았다** — **§28은 틀린 게 아니라 불충분했다**(§28.3의 (B) 채택 논거는 지금도 옳고 §29가 계승한다). **§28.2·§28.3·§15.5·`promptAssembly.ts:286-289`의 문면도 원문 그대로 두고 §29가 위에 얹는다**(이 저장소 관례). ⛔ **소스 코드를 한 글자도 고치지 않았다**(`functions/src/**`·`src/**`는 implementer 소유). ⛔ **`docs/UX.md`(ux-design)·`docs/Tasks.md`·`docs/PRD.md`(planner) 무편집 · 제품 AC 신설 0건 · AC 번호 예약 0건 · 신규 OQ 0건 · `API.md`·`Database.md` 무변경 · ADR 신설 0건**(스키마·응답 델타 0건 — 바뀌는 것은 조립 결과 문자열 하나다). ⚠️ **실측 기준선**: 이 절의 모든 `파일:줄`은 **`C:\codegate\.git\refs\heads\main` = `03e0102899137bcb5cf31f6e770e99aa69ee25ac`**(직접 판독 — 오케스트레이터 지정 base `03e0102`와 **일치**) 기준 워크트리에서 직접 읽은 값이다. ⚠️ **architect는 셸이 없다** — 테스트·게이트·라이브·`git log`를 **한 번도 실행하지 않았고 PR #121의 diff도 읽지 못했다**. `CLAUDE.md`의 **519/216**과 **라이브 5회 전사·예산 18/20**은 전부 **인용값**이다. ⭐ **단 실측으로 배제한 것 1건**: 라이브 회차가 **ElevenLabs 경로였을 가능성**(그 경로는 `buildSystemPrompt`를 호출하지 않아 §28 선언이 도달조차 안 한다)은 **`elevenLabsProvider.ts:61`이 `difficultyApplied`를 하드코딩 `false`로 반환**하므로 인계된 `difficultyApplied=true`가 **배제한다** ⇒ **Gemini Live 확정**(§29.1.3 판정표). ⚠️ **버전 갭 고지**: 헤더는 **PRD v1.7.1 · UX 1.13**인데 `docs/PRD.md:4`는 **v1.10**, `docs/UX.md:10`은 **1.16** — **PRD 3건 · UX 3건 뒤처져 있다**(§28 패스와 동일, 더 벌어지지 않았다). 같은 이유로 **이번에도 헤더를 전진시키지 않았다**. ⚠️ **절 번호 고지**: §28까지 사용 중이라 **§29**, **갭은 G122부터**(직전 최대 G121).
@@ -4266,7 +4268,7 @@ shouldReinjectTransferState({ placed, userTurnsSinceLastInjection, atScammerTurn
 
 1. **AC 근거가 없다.** *"제출 시점에만 속은 순간이 성립한다"* 를 요구하는 조항이 `docs/PRD.md`에 **없다** — UX 스스로 **OQ-U31**(`UX.md:2355`)로 planner에 넘겼고 **미해소(open)** 다. AC 근거 없이 `deceivedMoments`를 늘리면 **리포트 판정(AC-008/009/026/062)을 AC 없이 바꾸는 것**이 된다.
 2. **R6 얽힘이 그대로 살아 있다.** 통화 세션에 `sessions/{sid}/mockScreens` 문서가 처음 생기는 순간 §15.9.5 e-2 앵커 해결·`mockScreenTimeline`·`stages` 파생이 **통화 경로에서 처음 돌기 시작한다** — 그것이 §15.9.1 R6이 피하려던 **합성 타임스탬프 얽힘**(§15.6 G15/G21)이고 **G81의 존재 이유**다. 이 재판정은 T121 범위 밖이며 **별건**이다.
-3. **이미 열려 있는 미결과 같은 질문이다.** **OQ-A19**(§19.9, `Architecture.md:2718` 원문 *"참가자가 상황에 맞는 가짜 폼에 **정보를 다 입력해도** 리포트의 `deceivedMoments`에 아무것도 안 남는다 … 승격시키려면 AC 근거가 필요하다"*)가 **글자 그대로 이 질문**이다. **신규 OQ를 만들지 않는다** — 번호만 늘고 소유자가 갈린다.
+3. **이미 열려 있는 미결과 같은 질문이다.** **OQ-A19**(§19.9, **`Architecture.md:2726`** ⚠️ **줄번호 정정(2026-07-28, §31.4)** — 이 줄에 원래 적혀 있던 **`:2718`은 틀렸고**(그 줄은 §19.7 UX Traceability 표의 *"OQ-U26 (b)"* 행이다) **planner가 인계한 `:2720`도 틀렸다**(같은 표의 *"D-56·D-57"* 행). **정본은 `:2726`이다.** 원문 인용 *"참가자가 상황에 맞는 가짜 폼에 **정보를 다 입력해도** 리포트의 `deceivedMoments`에 아무것도 안 남는다 … 승격시키려면 AC 근거가 필요하다"*)가 **글자 그대로 이 질문**이다. **신규 OQ를 만들지 않는다** — 번호만 늘고 소유자가 갈린다. ⭐ **갱신 고지(§31.4)**: 이 사유는 **해소됐다** — AC-080이 그 *"AC 근거"* 이고 소관 사슬의 나머지 절반(*"→ architect"*)이 **§31**이다. **⇒ OQ-A19는 §31로 해소(resolved)** 되며, 위 (2) 1·2도 §31.1·§31.4가 해소했다. **이 절의 다른 문면은 한 글자도 고치지 않았다** — T121 범위에서 만들지 않는다는 판정은 **그 태스크 안에서는 여전히 옳다**(만드는 것은 **T123**이다).
 
 > **⭐ OQ-A19 승격 고지(원문은 고치지 않는다).** OQ-A19는 T104 시점에 *"콘텐츠가 상황에 맞아진 뒤에는 볼 **여지가 생긴다**"* 는 **이론적 여지**로 열렸다. **T121이 그것을 사용자 요구로 승격시켰다** — 사용자 원문 *"지금은 실제로 걸리는지 확인이 불가능하니까"* 가 정확히 이 갭을 가리킨다. **소관·경로는 그대로**(planner가 AC를 확정 → architect가 R6 얽힘을 재판정 → implementer). §19.9의 OQ-A19 행 문면은 **한 글자도 고치지 않았다.**
 
@@ -5125,3 +5127,302 @@ P-2 (착수 0단계, 코드 변경 0줄):
 - **planner(`docs/Tasks.md`·`docs/PRD.md` 소유) — 3건**: ⓐ **T125 행 갱신** — **§28.5 대안이 사용자 확정으로 채택됐고**(2026-07-28) 후속 판정이 **§30**이다. ⛔ *"해결됐다"*·*"저지를 제거했다"* 로 적지 말 것 — **1회 만류는 설계다**. ⓑ **§28.9 ⓒ·§29.8 ⓑ의 AC 신설 의견은 그대로 유지**(신설하지 않음) — AC-071이 *"막지 않고 오히려 권한다"* 를 요구하는 문면과 **채택된 "먼저 한 차례 만류"** 사이의 관계는 ⚠️ **문면 정합 검토가 필요할 수 있다**(architect 의견: AC-071은 *"확인 시도를 무력화한다"* 는 결과를 요구하므로 **1회 만류가 그 요구를 깨지 않는다** — 그러나 **문면 갱신 여부는 planner·사용자 소관**이며 architect는 PRD를 고치지 않았다). ⓒ **§30.4.1의 예산 제약(최소 세트 9건, 하루 한 세트)** 은 §29.8과 동일하게 일정 반영이 필요하다.
 - **ux-design(`docs/UX.md` 소유) — 이번 패스 신규 요구 0건.** ⚠️ 단 §30.2.2가 기각한 *"참가자가 확인 의사를 누르는 컨트롤"* 은 **존재하지 않으며** 신설하려면 **UX 화면 요구 + AC 근거가 선행**이다(architect는 만들지 않았다).
 - **사용자 판단 대기 — 1건(신규)**: ⭐ **§30.1.4 행 2에 도달했을 때** — 즉 base 관측에서 *"재차 고집하면 계속 밀어붙인다"* 가 재현되면, **`:37` 계열 지속 압박 절을 확인 목적에 한해 좁힐 것인가**(= (C) 대상 재지정). ⛔ **architect는 이 질문에 답하지 않았다** — 그 5줄은 **2026-07-24 사용자 요청으로 저작된 문장**이라(§30.1.3) 좁히는 것은 **이전 확정을 뒤집는 일**이다. ⚠️ **관측 없이 먼저 묻지 않는다** — ⓵ 3회가 그 질문을 물을 가치가 있는지부터 정한다.
+
+---
+
+## 31. (T123) 가짜 랜딩 "제출함" 기록 — **R6 얽힘 재판정(착수 하드 게이트)** + 기록 위치·이벤트 이름·게이트 충돌 판정
+
+> **소관 AC:** **AC-080**(`PRD.md:582` v1.10 신설 — 이 절이 그 집행 설계다). 재사용 **AC-045·AC-062·AC-063·AC-007·AC-026·AC-024·AC-068·AC-069·AC-022·AC-032·AC-060·AC-072·AC-078·AC-079**. **AC 신설 0건 · 번호 예약 0건.**
+> **소관 UX:** **D-60 · P-29**(`UX.md:280`) / **UX-023 v1.16** / **UF-008**. ⛔ architect는 `docs/UX.md`를 편집하지 않는다.
+> **기준선(정직 고지, 실측):** 이 절의 모든 `파일:줄`은 **`C:\codegate\.git\refs\heads\main` = `e75237a07c46521291607d9668b02568d7ebd8e4`**(`.git` 직접 판독 — 오케스트레이터 지정 base `e75237a`와 **일치**) 기준 워크트리에서 **직접 열람·grep한 값**이다.
+> ⚠️ **architect는 셸이 없다** — 테스트·게이트·라이브·`git log`를 **한 건도 실행하지 않았다.** `CLAUDE.md`의 **525/216**은 **인용값**이며 착수 시 재측정한다(**P-3**, §31.7).
+> ⚠️ **버전 갭 고지**: 헤더는 **PRD v1.7.1 · UX 1.13**인데 `docs/PRD.md:4`는 **v1.10**, `docs/UX.md:10`은 **1.16** — **PRD 3건 · UX 3건 뒤처져 있다**(§28~§30과 동일, 더 벌어지지 않았다). 같은 이유로 **이번에도 헤더를 전진시키지 않았다.**
+> ⚠️ **절·번호 고지**: §30까지 사용 중이라 **§31**, **갭은 G135부터**(직전 최대 G134), **OQ는 OQ-A20부터**(직전 최대 OQ-A19). **DECISIONS #62.**
+> **이 절이 확정하지 않는 것:** 랜딩 콘텐츠·문면(**T121**) / **R-10 ②(모의 이체 = T124)** / 렌더 층 검증(**T116**) / AC 문면(planner·사용자).
+
+### 31.0 판정 요지 (금지 먼저 — 다른 판단보다 우선)
+
+1. ⛔ **통화 경로에서 `sessions/{sid}/mockScreens` 문서를 만들지 않는다**(**G81·R6 무변경 재확인**). §27.3 (2) 2의 유보는 **해소된 것이 아니라 우회된다** — 그 경로는 위험할 뿐 아니라 **AC-080을 만족시킬 수 없다**(§31.1).
+2. ⛔ **신규 컬렉션 0건 · 신규 콜러블 0건 · 신규 컴포넌트 파일 0건 · 신규 라우트/Screen ID 0건 · 신규 `kind` 0건.** 늘어나는 것은 **기존 enum 값 2개 + 기존 문서 옵셔널 필드 2개**뿐이다.
+3. ⛔ **`"consented"` 를 재사용하지 않는다.** 그 값의 현행 의미는 소스로 확정된 *"가짜 **권한 허용**에 응했다"* 이며 재사용은 게이트 약화를 요구한다(§31.4).
+4. ⛔ **`fake_landing_submitted`·`fake_landing_shown` 이라는 이름을 만들지 않는다** — 코드에 0건인 UX 인용 이름이다(§27.2 ① 계승).
+5. ⛔ **`src/components/mockScreenCopy.test.ts`의 G50 단언을 재작성하지 않는다.** 이번 설계에서는 **깨지지 않는다**(§31.3) — 재작성 대상이 아니라 **추가 대상**이며, 추가 게이트는 **역검증 1건을 같은 커밋에** 동반한다.
+6. ⛔ **`MessengerFakeLanding.tsx`가 네트워크 호출을 하지 않는다.** 기록은 **페이지**가 한다(§15.9.6 관례 계승, `mockScreenCopy.test.ts:105-112`가 이미 요구하는 형태).
+7. ⛔ **승격 대상은 "제출" 하나다.** 링크 탭·화면 노출·입력 중은 **승격되지 않는다**(AC-080 (b)). §15.6 **G22**는 그 4종에 대해 **그대로 살아 있다**(§31.2 (4)).
+8. ⛔ **참가자 입력값은 콜백 인자·요청 필드·문서 필드·로그 어디에도 실리지 않는다**(AC-045). 콜백은 **무인자**다(**G138**).
+
+---
+
+### 31.1 ⭐ ① R6 얽힘 재판정 — **착수 게이트의 답: 실재한다. 단 §27.3이 기술한 형태와 다르다.**
+
+**판정: 얽힘은 "위험"이 아니라 ⭐ 경로 자체의 불성립이다. 통화 세션에 `mockScreens` 문서를 만들면 앵커가 해결되지 않아 승격이 구조적으로 0건이 되고, AC-080이 요구하는 되감기 진입점이 생기지 않는다. 따라서 그 경로는 "위험하니 피한다"가 아니라 ⛔ 쓸 수 없어서 배제한다.**
+
+#### (1) 실측 — 왜 통화 경로에서 앵커가 해결되지 않는가 (전부 소스 직접 판독)
+
+| # | 사실 | 근거(파일:줄) |
+|---|---|---|
+| ① | `mockScreens` 앵커 리졸버의 **유일한 입력**은 `attachments[].fakeLandingId`를 가진 **scammer 메시지**다 | `functions/src/report/mockScreenTimeline.ts:70-89`(`sortedMessages.find(m => m.role==="scammer" && (m.landingIds ?? []).includes(landingId))`) |
+| ② | 그 `landingIds`는 `messages/{}.attachments[].fakeLandingId`에서만 만들어진다 | `functions/src/report/generateReportCore.ts:70-79` |
+| ③ | `attachments`는 **LLM 완성 텍스트의 `[[LINK:id]]` 마커**에서만 생긴다 — **메신저 전용 경로**다 | `functions/src/roleplay/linkMarker.ts:29-72` · `roleplay/index.ts:283-301`(*"보이스 세션의 응답에는 애초에 마커가 없으므로 attachments가 항상 undefined"* — 원문 주석) |
+| ④ | 통화 중 문자의 링크는 **`messages`가 아니라 `sessions/{sid}/inCallSms/{smsId}.fakeLandingId`** 로 표현된다 | `functions/src/inCallSms/buildDoc.ts:33-36` · `shared/types.ts:199` |
+| ⑤ | ⇒ 통화 세션의 `mockScreens` 문서는 **항상 `anchorResolved:false`** 로 떨어진다 | `mockScreenTimeline.ts:78-82`(미해결 시 *"마지막 메시지 turnIndex + resolved:false"*) |
+| ⑥ | 미해결이면 `consented`가 **강제 false**가 되고 **승격이 일어나지 않는다** | `mockScreenTimeline.ts:133`(`consented = doc.consentedAtMs !== undefined && anchor.anchorResolved && item !== undefined`) · `:144`(`if (!consented \|\| !item) continue;`) |
+
+⇒ **§27.3 (2) 2의 유보는 옳았다. 다만 사유가 한 칸 더 아래에 있다** — 문제는 *"합성 타임스탬프가 얽힌다"* 가 아니라 ***"앵커 입력이 아예 없다"*** 이고, 결과는 *"라벨이 어긋난다"* 가 아니라 ***"AC-080이 성립하지 않는다"*** 이다.
+
+#### (2) ⭐ §27.3 (2) 2의 **과다 서술 2건 정정**(원문은 고치지 않는다 — 이 항이 갱신 고지다)
+
+| §27.3의 서술 | 실측 판정 | 근거 |
+|---|---|---|
+| *"`stages` 파생이 통화 경로에서 처음 돌기 시작한다"* | ⚠️ **성립하지 않는다.** `deriveReportStages`는 `entryChannel !== "messenger"`면 **즉시 `[]`** 를 돌려주고, `mock_install` 도달 판정은 **`app-install` landingId 집합만** 본다 ⇒ credential-form 문서가 몇 건 생기든 `stages`는 **한 바이트도 바뀌지 않는다** | `mockScreenTimeline.ts:206-208` · `:216` · `generateReportCore.ts:184-189` |
+| *"§15.6 G15/G21의 합성 타임스탬프 문제와 얽힌다"* | ⚠️ **직접적으로는 성립하지 않는다.** G15가 금지한 것은 **`arrivedAt` 시계로 병합하는 것**인데 두 리졸버 **모두** `timeLabel`을 **앵커 메시지의 `createdAt`** 에서 파생한다(같은 시간축) | `mockScreenTimeline.ts:83-88` · `smsTimeline.ts:116-125` |
+| *"`mockScreenTimeline` 파생이 돌기 시작한다"* | ✅ **성립한다**(유일하게 남는 실제 파급). `anchorResolved:false` 항목이 **마지막 메시지 turnIndex 자리에** 표시 전용으로 들어간다 | `mockScreenTimeline.ts:135-142` |
+
+> ⛔ **이 정정을 "R6이 과장이었다"로 읽지 말 것.** 결론은 **더 강해졌다** — §27.3은 *"위험하다"* 였고 이 절은 ***"불가능하다"*** 다.
+
+#### (3) ⭐ 해법 — **새 문서를 만들지 않는 경로가 실재한다.** 표면별 2경로 · 승격 규칙은 1벌
+
+| 표면(`MockScreenItem.entrySurface`) | 기록 위치 | 앵커 리졸버 | 왜 되는가 |
+|---|---|---|---|
+| **`in-call-sms`**(경로 A) | **기존** `sessions/{sid}/inCallSms/{smsId}` 문서에 **`landingSubmittedAt` 필드 1개** | **기존** `resolveAnchor`(`smsTimeline.ts:98-126`) | 그 문서는 **`anchorScammerTurn`을 이미 갖고 있다**(`shared/types.ts:215`, 서버가 `buildDoc.ts:62-76`에서 경로별 ±보정까지 끝내 기록). ⭐ **이 리졸버가 바로 G15/G21을 이미 푼 리졸버**다 — 얽힘이 **열리지 않는다.** `mockScreens` 문서 **0건 유지 ⇒ G81·R6 무변경** |
+| **`messenger-link`**(경로 B) | **기존** `sessions/{sid}/mockScreens/{landingId}` 문서에 **`submittedAt` 필드 1개** | **기존** `resolveMockScreenAnchor` | 이 표면에는 `attachments`가 실제로 있고, 문서도 **이미 `"shown"` 으로 생성된다**(`src/app/session/messenger/page.tsx:428`) ⇒ 앵커가 정상 해결된다. **새 문서 종류 0건** |
+
+**⇒ 착수 게이트 판정: 통과. T123은 착수할 수 있다.** 단 아래 §31.2의 하드 규칙 4건을 지킬 때만이다.
+
+#### (4) 기각한 대안 (표에 없는 케이스가 나오면 임의 판단 금지 — architect에게 행 추가를 먼저 물을 것)
+
+| 후보 | 판정 | 결정적 사유 |
+|---|---|---|
+| 통화 경로에서도 `mockScreens` 문서를 만든다 | ⛔ **기각** | (1) 그대로 — **승격 0건**이라 AC-080 미충족. G81 정면 위반 |
+| `MockScreenDoc`에 앵커 필드(`anchorScammerTurn` 등)를 추가해 통화 경로를 살린다 | ⛔ **기각** | **앵커 규칙이 두 벌**이 된다 — §15.1.5 (6)이 *"리졸버는 단 하나"* 로 못 박은 자리이고, `InCallSmsDoc.anchorScammerTurn`이 **이미 같은 값을 갖고 있다**(§18.1·§22.3 `displayNumber` 교훈 = 죽은 필드 또는 드리프트 원천) |
+| 신규 컬렉션 `sessions/{sid}/landingSubmits` | ⛔ **기각** | 신규 컬렉션 + `firestore.rules` 경로 + 리포트 추가 read 1회 + 백필 정책이 딸려 온다. **기존 두 문서가 이미 그 자리에 있다** |
+| 신규 콜러블 `recordLandingSubmit` | ⛔ **기각** | 세션 소유권·`status==="active"`·카탈로그 소속 재검증 로직이 **세 번째 사본**이 된다(현행 2곳도 *"각자 지역 헬퍼"* 가 관례상 상한 — `mockScreens/index.ts:21-23` 원문) |
+| `smsTimeline`/`mockScreenTimeline` **표시 이벤트**를 함께 신설 | ⛔ **기각**(§31.5) | 같은 순간이 **두 번 렌더**된다(§15.6 **G17** — 문자 항목과 메시지 주석이 같은 `anchorTurnIndex`를 갖는다) + `SmsTimelineEvent`는 **리포트 스냅샷에 저장되는 enum**이라 값 집합이 넓어진다(§27.0 1과 같은 형태) |
+
+---
+
+### 31.2 ⭐ 안전 불변식 — AC-007·AC-062·AC-063이 깨지지 않는가 (필드 단위 증명표)
+
+| AC | 요구 | 성립 근거(코드) | 이번 변경으로 달라지는 것 |
+|---|---|---|---|
+| **AC-007** | 세션당 정확히 1리포트 | `generateReportCore`는 **멱등 early-return**이다(`generateReportCore.ts:34` 인근 — §27/§15.9.6이 인용한 지점). 이번 변경은 **리포트 생성 트리거를 하나도 만들지 않는다**(신규 콜러블 0건, 세션 전이 0건) | **없음** |
+| **AC-063** | 되감기가 새 리포트를 만들지 않고 원 리포트를 덮어쓰지 않는다 | 되감기는 **읽기 전용 딥링크**다(`src/app/report/replay/page.tsx:447` `goToRewind(annotatedTurnIndexes.indexOf(...))`) — write 경로가 없다 | **없음** |
+| **AC-062** | 0건이면 되감기 진입점 없음 / 1건 이상이면 있음 | 제출 문서가 0건이면 승격 0건 ⇒ `deceivedMoments`가 **입력 그대로**(경로 A는 §31.6 HR-2의 early-return, 경로 B는 `mockScreenTimeline.ts:122-124`의 기존 early-return) | **양방향으로 바뀐다 — 이것이 AC-080이 요구한 것**이다. 제출 1건 ⇒ 승격 1건 ⇒ 진입점 노출 |
+| **AC-045** | 입력값 서버 미전송 | 제출은 `MessengerFakeLanding.tsx:238-245` 로컬 state이고, 새 콜백은 **무인자**다(**G138**). 요청 타입은 `{sessionId, smsId\|landingId, event}` 고정 enum뿐(`inCallSms/types.ts:16-20` · `mockScreens/types.ts`) — **입력값을 담을 필드가 타입에 존재하지 않는다** | **없음**(구조적 금지 유지) |
+| **AC-026/AC-069/AC-024** | 리포트에 사실 + 올바른 대처만, 입력값 원문 0건 | 승격 순간의 `tactic`·`correctAction`은 **서버 카탈로그 저작 문자열**을 그대로 쓴다(`mockScreens.ts:66-71` 필드 정의, 예: `tax-refund-claim` `:206-208`) — 참가자 입력이 개입하는 자리가 없다 | **없음** |
+| **AC-060/AC-022/AC-032/AC-072/AC-078/AC-079** | 읽기 전용·모의 표식·외부 네비 부재·수렴 금지 | 카탈로그 항목 수·필드 집합이 **하나도 늘지 않는다**(콘텐츠는 T121 소관). `MOCK_SCREEN_FIELDS` 등록 변경 0건 | **없음** |
+
+#### (4) ⭐ §15.6 **G22**와의 관계 — **뒤집지 않는다. 예외 조건을 이 절이 명문화한다**
+
+G22 원문은 *"문자 이벤트로 `wasDeceived`를 뒤집고 싶은 유혹"* 을 금지한다. **그 금지는 그대로 살아 있다.**
+
+| 대상 | G22 적용 | 근거 |
+|---|---|---|
+| `sms_received` · `sms_opened` · `sms_otp_shown` · **`sms_link_tapped`** | ✅ **금지 유지**(승격 0건) | G22 원문 + **AC-080 (b)** 가 *"링크 탭·화면 노출·입력 중은 승격되지 않는다"* 를 **협상 대상이 아니라고** 명시(`PRD.md:582`) |
+| **제출**(`landingSubmittedAt` / `submittedAt`) | ⭐ **예외 — AC-080이 신설한 승격 대상** | G22의 사유는 *"AC 근거 없이 판정을 바꾸면 AC-062/068/010/011이 연쇄로 흔들린다"* 였다. **그 사유가 해소됐다** — AC-080이 (c)에서 그 연쇄를 **명시적으로 규정**한다 |
+
+> ⚠️ **정직 고지 — 연쇄는 실제로 일어나며 그것이 설계다.** `wasDeceived`는 **병합 후 배열 기준으로 재계산**되므로(`generateReportCore.ts:200` `const wasDeceived = mock.deceivedMoments.length > 0`) 제출 승격은 **`wasDeceived`를 뒤집고**, 그 값이 `computeDefenseGrade`(AC-010/011, `:272-274`)와 실패 아카이브(AC-068)에 반영된다. **이것은 T84의 `consented` 승격이 이미 만든 것과 글자 그대로 같은 형태**이며 회피 대상이 아니다. ⛔ **완료 보고에 *"판정에 영향이 없다"* 라고 쓰지 말 것.**
+
+---
+
+### 31.3 ⭐ ② 게이트 충돌 판정 — **충돌하지 않는다. `mockScreenCopy.test.ts` 재작성 0건**
+
+**판정: 기록 주체를 페이지로 두는 형태에서는 G50이 깨지지 않는다. planner가 실측한 충돌은 *"컴포넌트 안에서 구현하면"* 이라는 조건절 아래에서만 성립하며, 이 절은 그 조건을 성립시키지 않는다.**
+
+#### (1) 왜 안 깨지는가 (실측)
+
+| 검사 | 새 코드가 걸리는가 | 근거 |
+|---|---|---|
+| 리터럴 금지 토큰 21개(`mockScreenCopy.test.ts:32-59`, 단언 `:61-69`) | ❌ **걸리지 않는다** | 추가되는 것은 **prop 1개(`onCredentialSubmit`)와 그 호출 1줄**뿐이다. 목록의 어느 항목과도 문자열이 겹치지 않는다 |
+| AST 축(`G50_AXES` `:301-324`, 단언 `:337-349`) | ❌ **걸리지 않는다** | 축은 `callOrMember`·`importSpecifier`·`jsxAttribute`·`foldedString` 4종이고, 매핑 키는 **위 21개 토큰과 정확히 같은 집합이어야 한다**고 `:338-342`가 단언한다 ⇒ **토큰을 늘리지 않으면 축도 안 늘어난다** |
+| `[§15.9.6] 응낙 기록은 콜백으로 위임한다`(`:105-112`) | ✅ **오히려 이 형태를 요구하는 단언이다** | `onInstallConsent` prop 존재 + `recordMockScreenEvent` **부재**를 단언한다 — 새 콜백은 **정확히 같은 관례**다 |
+| `[R1] kind 분기가 이 파일 안에서`(`:78-90`) | ❌ | 신규 컴포넌트 파일 0건 |
+| `[G76/드리프트]`(`:195-226`) · `[T104]` 키 정합(`:412-430`) | ❌ | 카탈로그 필드·항목 변경 0건(콘텐츠는 T121) |
+
+#### (2) ⭐ if/then 확정표 — **implementer 판단 여지를 남기지 않는다**
+
+| # | 조건 | 확정 행동 |
+|---|---|---|
+| **1** | 제출 사실을 **기록**해야 한다 | **`CredentialFormMockup`이 무인자 콜백을 올린다.** `handleSubmit`(`MessengerFakeLanding.tsx:241-245`)에서 `setSubmitted(true)` **뒤에** `onCredentialSubmit?.()` **한 줄**. ⛔ 인자 금지(**G138**) |
+| **2** | 그 콜백을 컴포넌트 밖으로 올린다 | `MessengerFakeLanding`에 **옵셔널 prop `onCredentialSubmit?: () => void`** 를 추가하고 `CredentialFormMockup`에 그대로 내린다(`:123` 호출 지점). ⛔ `AppInstallMockup`에는 내리지 않는다(`onInstallConsent`와 축이 다르다) |
+| **3** | 통화 표면(경로 A)에서 올라온다 | **`InCallSmsOverlay`가 중계만 한다** — 신규 prop `onLandingSubmitted: (smsId: string) => void` 를 받아 `:405-411`의 `<MessengerFakeLanding … onCredentialSubmit={() => onLandingSubmitted(fakeLanding.smsId)} />`. ⛔ **이 파일도 콜러블을 부르지 않는다**(현행 `onOpened`·`onLinkTapped`와 정확히 같은 형태 — `InCallSmsOverlay.tsx:50-53`) |
+| **4** | 실제 콜러블 호출 주체 | **페이지다.** 통화: `src/app/session/play/page.tsx:1465-1474`에 `onLandingSubmitted={(smsId) => handleRecordSmsEvent(smsId, "landing_submitted")}` **1줄 추가**(기존 핸들러 재사용). 메신저: `src/app/session/messenger/page.tsx:538-553`에 `onCredentialSubmit={() => recordMockScreen(fakeLanding.fakeLandingId, "submitted")}` **1줄 추가**(기존 `recordMockScreen` 재사용 — 1회 재시도·비차단 정책까지 그대로 상속) |
+| **5** | 게이트를 손대야 하는가 | **아니다. 기존 단언 삭제·완화·`skip` 0건.** 대신 **G138 단언 1건을 추가**하고 **역검증 1건을 같은 커밋에** 둔다(§31.6) |
+| **6** | 표에 없는 형태가 필요해졌다 | ⛔ **임의 판단 금지.** 구현을 멈추고 architect에게 **행 추가**를 먼저 물을 것 |
+
+> ⭐ **planner 실측 1건 정정(원문은 고치지 않는다)**: *"현행 `link_tapped`도 `InCallSmsOverlay.tsx`가 기록한다"* 는 **한 단계 부정확하다.** 오버레이는 **콜백 prop을 올릴 뿐**이고(`InCallSmsOverlay.tsx:52-53`, `:76`), 콜러블을 부르는 것은 **페이지**다(`play/page.tsx:1473` → `handleRecordSmsEvent`). ⇒ 이 저장소의 패턴은 *"부모가 기록한다"* 가 아니라 ***"잎은 콜백만 올리고 페이지가 기록한다"*** 이며, 이번 설계는 **3단 위임**(`CredentialFormMockup` → `MessengerFakeLanding` → `InCallSmsOverlay` → 페이지)으로 그 패턴을 그대로 연장한다.
+
+---
+
+### 31.4 ③ OQ-A19 판정 — **T123의 착수를 막지 않는다. 이 절로 해소된다**
+
+**판정: 막지 않는다.**
+
+| 항목 | 내용 |
+|---|---|
+| **원문 위치(정본)** | **`docs/Architecture.md:2726`** — ⚠️ **줄번호 정정 2건**: §27.3 (2) 3이 적은 **`:2718`은 틀렸고**(그 줄은 §19.7 UX Traceability 표의 *"OQ-U26 (b) 통화 경로 배선"* 행이다), planner가 실측이라며 인계한 **`:2720`도 틀렸다**(그 줄은 같은 표의 *"D-56·D-57"* 행이다). **양쪽 인계값이 모두 어긋난 사례**다 |
+| **원문 요구** | *"승격시키려면 **AC 근거가 필요하다**"* · 소관 **planner → architect** |
+| **왜 막지 않는가** | 그 요구는 **단일 조건**이고 **충족됐다** — `docs/PRD.md` v1.10이 **AC-080**을 신설했다(`PRD.md:582`, 사용자 확정 2026-07-28). 소관 사슬의 나머지 절반(*"→ architect"*)이 **이 §31**이다 ⇒ **OQ-A19는 이 절로 해소(resolved)** 된다 |
+| **§19.9 원문 처리** | ⛔ **한 글자도 고치지 않았다.** 이 항이 **갱신 고지**다(§27.3 (2) 3의 *"신규 OQ를 만들지 않는다"* 판단도 유지 — 신규 OQ는 §31.8의 **OQ-A20 1건**뿐이며 그것은 **범위 질문**이지 같은 질문이 아니다) |
+
+---
+
+### 31.5 ④ 이벤트 이름 판정 — **`"consented"` 재사용 기각. enum 값 2개 신설**
+
+#### (1) `"consented"` 가 지금 무엇을 뜻하는가 (소스로 확인)
+
+| 근거 | 내용 |
+|---|---|
+| `functions/src/mockScreens/index.ts:74-76` | `event === "consented" && item.kind !== "app-install"` ⇒ **`invalid-argument`로 거부**. *"이 화면에는 권한 허용 단계가 없습니다."* |
+| `functions/src/shared/types.ts:294-296` | `consentedAt` = *"가짜 **'권한 허용'** 에 응한 시각"* |
+| `functions/src/report/mockScreenTimeline.ts:36` | *"존재 = 참가자가 가짜 **'권한 허용'** 에 응했다"* |
+| `functions/src/scenarios/mockScreens.ts:87-88` | `MOCK_INSTALL_CONSENT_INSTRUCTION` = *"**설치와 권한 허용**을 마쳤다"* — `consentedAt`이 채워지면 이 지시가 사기범 턴에 주입된다(`API.md:328`) |
+
+⇒ **`"consented"` 는 "권한 허용 응낙" 전용 이름이다.**
+
+#### (2) 후보 전수 판정표
+
+| 후보 | 판정 | 결정적 사유 |
+|---|---|---|
+| 기존 `"consented"` 재사용 | ⛔ **기각** | (i) 통과시키려면 `index.ts:74-76`의 **kind 가드를 약화**해야 한다 = §31.0 5(게이트를 지워 통과)와 동형. (ii) `consentedAt`이 채워지면 **설치 응낙 지시가 계좌 제출에도 붙는 경로**가 열린다(`API.md:328`, `listAppInstallMockScreens` 게이팅에 의존). (iii) 과거 리포트의 `consented:true`가 **두 의미**가 된다(§22.3 `displayNumber` 교훈) |
+| `"fake_landing_submitted"` | ⛔ **기각** | 코드에 0건인 **UX 인용 이름**이고(§27.2 ①), 두 enum 중 어디에도 스코프가 맞지 않는다 |
+| ⭐ **경로 A `"landing_submitted"` · 경로 B `"submitted"`**(신설 2값) | ✅ **채택** | 각 enum의 **대상이 다르다** — `InCallSmsEvent`는 **문자**(`{sessionId, smsId, event}`)라 *"그 문자가 연 랜딩을 제출했다"* 를 뜻하는 `landing_submitted`가 정확하고, `MockScreenEvent`는 **랜딩**(`{sessionId, landingId, event}`)이라 `submitted`로 충분하다. 이름이 대상과 1:1이면 **되추론 코드가 생기지 않는다**(§27.1 (2) R10 계승) |
+| 리포트 표시 이벤트(`sms_landing_submitted` 등) 동반 신설 | ⛔ **기각** | §31.1 (4) 마지막 행 — **G17 이중 렌더** + 저장 enum 확장. **승격된 `deceivedMoment` 하나가 AC-080 (d)의 표시 요구를 이미 충족**한다(사실 + `correctAction`) |
+
+#### (3) 확정 식별자 (implementer 판단 여지를 남기지 않는다)
+
+| 대상 | 확정값 |
+|---|---|
+| `InCallSmsEvent`(`functions/src/inCallSms/types.ts:15` · `src/lib/api/types.ts:167` 미러) | `"opened" \| "link_tapped" \| **"landing_submitted"**` |
+| `InCallSmsDoc` 신규 필드(`shared/types.ts:208` 다음) | **`landingSubmittedAt?: Timestamp`** — 최초 1회만 세팅 |
+| `MockScreenEvent`(`src/lib/api/types.ts:179` · `functions/src/mockScreens/types.ts` 미러) | `"shown" \| "consented" \| **"submitted"**` |
+| `MockScreenDoc` 신규 필드(`shared/types.ts:296` 다음) | **`submittedAt?: Timestamp`** — 최초 1회만 세팅 |
+| 승격 순간의 `tactic`·`correctAction`·`tacticCategory` | **카탈로그 `MockScreenItem.momentTactic`·`correctAction` 그대로** + `resolveTacticCategory(...)`(`mockScreenTimeline.ts:150-154`와 **같은 규칙 · 같은 함수**) — **신규 카테고리 0건** |
+| 서버 검증 추가 | 경로 A: `event === "landing_submitted"` ⇒ 그 문서에 **`fakeLandingId`가 있어야 한다**(없으면 `failed-precondition`). 경로 B: `event === "submitted"` ⇒ **`kind !== "app-install"`** 이어야 한다(`invalid-argument`) — 기존 `"consented"` 가드의 **정확한 거울** |
+
+---
+
+### 31.6 ⭐ 리포트 파생 설계 + implementer 하드 규칙 (G135~G138)
+
+#### (1) 적용 순서 — **이 순서가 설계다**
+
+```
+analyzeConversation                     (판정 산출)
+  → applyVerifyIntercept   (T83, 주석 — 길이 불변)
+  → promoteSmsLandingSubmits  ★신규 (경로 A, push + turnIndex 재정렬)
+  → applyMockScreens       (T84 + 경로 B, push + turnIndex 재정렬)
+  → wasDeceived = mock.deceivedMoments.length > 0
+```
+근거: 주석(길이 불변)이 먼저, push(길이 증가)가 뒤 — `mockScreenTimeline.ts:15-17` 원문 규칙 그대로다. 경로 A를 `applyMockScreens` **앞**에 두면 최종 재정렬이 기존 지점(`:162`)에서 **한 번에** 끝난다.
+
+#### (2) 함수 배치 (⛔ 신규 파일 0건)
+
+| 신규 심볼 | 파일 | 이유 |
+|---|---|---|
+| `promoteSmsLandingSubmits(docs, deceivedMoments, messages, sessionCreatedAtMs, catalog)` | **`functions/src/report/smsTimeline.ts`**(기존 파일) | 이 파일이 **`resolveAnchor`의 소유자**다(`:98`, 이미 `verifyTimeline.ts`와 공유 중 — `:94-96` 원문). 다른 파일에 두면 리졸버를 import해 오는 세 번째 소비자가 생긴다 |
+| `buildLandingSubmitMoment(item, anchorTurnIndex, timeLabel)` | **`functions/src/report/mockScreenTimeline.ts`**(기존 파일) — **export** | 두 경로가 **같은 승격 규칙**을 쓰게 하는 단일 지점. `applyMockScreens`의 `:145-155` 블록을 **이 함수 호출로 치환**한다(동작 무변경) |
+| `SmsTimelineSource.landingSubmittedAtMs?` · `fakeLandingId?` | `smsTimeline.ts:16-27` | ⚠️ **`fakeLandingId`는 승격 판정 입력으로만 쓰고 `SmsTimelineEntry`(스냅샷)에는 **절대 싣지 않는다** — §15.6 **G19**가 금지한 자리다(`smsTimeline.ts:11-12` 원문) |
+
+#### (3) 하드 규칙 = implementer 갭 (§15.6 형식, 전부 실측 근거 있음)
+
+| # | 갭(하지 말 것) | 근거 | 안 지키면 생기는 일 |
+|---|---|---|---|
+| **G135** | ⭐ **`anchorResolved`만 보고 승격한다**(`anchorTurnIndex >= 0` 검사를 빠뜨린다) | `smsTimeline.ts:108-110` — 규칙 1(`anchorScammerTurn <= 0`)은 **`{ anchorTurnIndex: -1, anchorResolved: true }`** 를 돌려준다. **`resolveMockScreenAnchor`에는 이 경로가 없어**(항상 실제 메시지 turnIndex) **경로 A에만 있는 함정**이다 | turnIndex **-1**에는 메시지가 없어 `getAnnotatedTurnIndexes`(`src/lib/replay/buildReplayTimeline.ts`)가 그 순간을 **내보내지 않는다** ⇒ **1:1 전제가 깨져 되감기가 엉뚱한 순간을 연다**(§15.6 **G16** 재발, AC-062 위반). ⇒ **승격 조건은 `anchorResolved === true && anchorTurnIndex >= 0`** 이다. 현행 카탈로그(`inCallSms.ts` `afterScammerTurns`)로 도달 가능한지와 **무관하게** 방어한다 |
+| **G136** | **승격을 `applyMockScreens` 뒤나 `applyVerifyIntercept` 앞에 끼워 넣는다** | `mockScreenTimeline.ts:15-17` · `generateReportCore.ts:160-162` | 앞에 넣으면 **인덱스가 밀려 T83이 엉뚱한 순간에 주석**을 단다. 뒤에 넣으면 **재정렬이 두 번** 돌아 안정 정렬 전제가 흐려진다 |
+| **G137** | **승격 객체를 두 곳에서 각자 만든다**(`tactic`·`correctAction`·`tacticCategory` 조립 복제) | §15.6 **G7** 관례(*"패턴 상수를 복제하지 말고 export"*) · `mockScreenTimeline.ts:145-155` | 표면마다 **속은 순간의 문면 규칙이 조용히 갈라진다** — 리포트가 같은 행위를 채널마다 다르게 말한다(§15.6 G22가 걱정한 것과 같은 계열) |
+| **G138** | ⭐ **제출 콜백에 인자를 싣는다**(`onCredentialSubmit(values)` · `onCredentialSubmit({fields})` 등) | **AC-045 하드 경계**(`PRD.md:582` (a)) · `MessengerFakeLanding.tsx:238` `values` state | 참가자가 입력한 **계좌번호·예금주명이 컴포넌트 밖으로 나가는 첫 경로**가 생긴다. 그 순간부터는 페이지가 그 값을 어디로도 보낼 수 있고, **소스 스캔은 그것을 잡지 못한다**(금지 토큰 목록에 없다). ⇒ **콜백은 무인자**이며 **새 게이트가 그것을 단언**한다 |
+
+#### (4) 신규 게이트 **1건**(추가이지 재작성이 아니다) + 역검증
+
+**`G138` 게이트 — `src/components/mockScreenCopy.test.ts`에 단언 블록 1개 추가**(기존 단언 **삭제·완화 0건**):
+
+| 단언 | 내용 |
+|---|---|
+| ① | `componentCode`에 **`onCredentialSubmit?.()`** 또는 `onCredentialSubmit()` 형태의 **무인자 호출**이 존재한다 |
+| ② | ⭐ **인자를 실은 호출이 0건**이다 — `/onCredentialSubmit\??\.?\(\s*[^)\s]/` **불일치**를 단언 |
+| ③ | `CredentialFormMockup` 본문에서 **`values`·`setValues`가 콜백 호출과 같은 식에 등장하지 않는다**(입력 state가 콜백 경로에 닿지 않는다) |
+| ④ | 기존 `:105-112`와 **같은 형태로** `recordInCallSmsEvent`·`recordMockScreenEvent`가 이 파일에 **부재**함을 단언(현행 후자만 있던 것을 **양쪽으로 넓힌다** — 요구 확장이 아니라 **같은 요구의 누락 축 보완**) |
+| **역검증(같은 커밋 필수)** | 오염 샘플 `onCredentialSubmit?.(values)` 를 **테스트 코드 안에서만** 만들어(`callContinuity.test.ts:161-162` 관례 · `mockScreenCopy.test.ts:71-76`·`:365-389` 선례) ②가 **실제로 실패**하고 정상 경로는 통과함을 **같은 출력에 나란히** 보인다 |
+
+> ⚠️ **이 게이트의 한계(정직 고지 — 완료 보고에 그대로 옮길 것)**: 소스 텍스트/AST 스캔은 **스캔 대상 파일 집합이 고정**이라 **파일 분할로 무력화된다**(`callContinuity.test.ts:223-224` 원문). 그리고 **T116이 미해결**이라 *"참가자가 실제로 그 화면을 보고 제출했다"* 는 여전히 렌더 층에서 검증되지 않는다. ⛔ ***"이제 실제로 걸리는지 완전히 판정할 수 있다"* 라고 일반화하지 말 것**(T123 E항 ⑦).
+
+---
+
+### 31.7 프로브 **P-3** + 커밋 배치 + if/then 강등표 (T108·T118의 P-1 선례 형식)
+
+**⚠️ architect는 셸이 없다. 아래 (1)은 실행 결과가 아니라 목록 대조에 의한 정적 판정이며, 확정은 implementer의 실행 출력이다.**
+
+#### (1) 정적 판정 — 깨질 것으로 **예상되는** 기존 단언
+
+| 파일 | 판정 | 근거 |
+|---|---|---|
+| `src/components/mockScreenCopy.test.ts` | **깨지지 않는다**(정적) | §31.3 (1) 전건 대조 |
+| `functions/src/scenarios/__tests__/mockScreens.test.ts` | **깨지지 않는다**(정적) | 카탈로그 항목·필드 변경 0건. `items.length === 5` 하드코딩(`:690`)도 **건드리지 않는다**(그 갱신은 **T121 소관 — G114**) |
+| `functions/src/report/__tests__/mockScreenTimeline.test.ts` | ⚠️ **미확인 — 실행이 정본** | `applyMockScreens` 내부를 `buildLandingSubmitMoment` 호출로 치환하면 **동작은 같아야** 하지만 구조 단언이 있으면 걸린다 |
+| `src/lib/replay/buildReplayTimeline.test.ts` · `smsTimelineScreens.test.ts` | ⚠️ **미확인** | 승격 1건이 늘면 `getAnnotatedTurnIndexes` 기대값이 바뀌는 케이스가 있을 수 있다 |
+| `functions/src/inCallSms/__tests__/*` · `report/__tests__/smsTimeline.test.ts` | ⚠️ **미확인** | enum·필드 추가의 직격 지점 |
+
+#### (2) **P-3** — 착수 **0단계**로 실행한다(코드 변경 0줄)
+
+```
+P-3 (착수 0단계):
+  npm --prefix functions test     # CLAUDE.md Verified Commands 원문
+  npm test                        # 〃
+  → 관측: before 총계(pass/fail) + 위 5개 파일의 개별 결과
+  ⚠️ CLAUDE.md의 525/216은 인용값이다 — 이 출력이 before의 정본이다.
+```
+⛔ **`npx tsc` 등 npm 스크립트를 우회하는 직접 실행 금지**(CLAUDE.md 경고 — `functions/lib` 스테일 오염, §20.7 (1)). 이 오염으로 테스트 수 오보가 **3회** 있었다.
+
+#### (3) if/then 판정표 (⛔ 임의 판단 금지. 표에 없는 케이스면 architect에게 행 추가를 먼저 물을 것)
+
+| # | P-3 / 구현 중 관측 | 확정 행동 |
+|---|---|---|
+| **1** | before가 **전건 통과** | 그대로 §31.7 (4) 배치 순서로 진행 |
+| **2** | before에 **이미 실패가 있다** | ⛔ **T123을 착수하지 말 것.** 실패 내용만 보고하고 멈춘다(CLAUDE.md 5 — 에러 발생 시 다음 단계 금지). 그 실패는 **별건**이다 |
+| **3** | 기존 단언이 **깨지고, 요구가 낡아서 깨진 것**(예: enum 값 수를 하드코딩) | **좁게 갱신 + 역검증 1건을 같은 커밋에**(§19.5 G-E 관례). ⛔ 삭제·`skip` 금지 |
+| **4** | 기존 단언이 **깨지고, 요구가 여전히 옳은데 설계가 어긴 것** | ⛔ **게이트를 고치지 말고 설계를 고친다.** architect에게 되돌린다 |
+| **5** | `mockScreenCopy.test.ts`가 **예상과 달리 깨진다** | ⛔ **멈추고 보고.** §31.3 (1)의 정적 판정이 틀렸다는 뜻이며, **판정 근거가 무너진 상태에서 재작성하지 않는다**(§31.0 5) |
+| **6** | 경로 B(메신저)의 범위를 줄여야 한다는 판단이 선다 | ⛔ **implementer가 정하지 않는다** — **OQ-A20**(§31.8)이 그 질문이고 **사용자·planner 소관**이다. 경로 A만 먼저 병합하는 것은 **허용**되며 배치가 이미 갈려 있다 |
+
+#### (4) 커밋 배치 (⛔ 순서 고정)
+
+| 배치 | 내용 | 하드 조건 |
+|---|---|---|
+| **0** | **P-3 실행 · before 수치 기록**(코드 0줄) | 예외 없음 |
+| **1** | **G138 게이트 추가 + 역검증 1건** | ⭐ **같은 커밋.** 기존 단언 삭제 0건. 이 배치는 **구현 전에** 들어간다(빨간불에서 시작해 초록불로 끝나는 형태가 아니라, **아직 없는 심볼을 단언하므로** 배치-2·3 직후에 초록이 된다 ⇒ **배치-1·2·3을 하나의 PR로 묶되 커밋은 나눈다**) |
+| **2a** | **서버 경로 A** — `InCallSmsEvent` +1값 · `InCallSmsDoc.landingSubmittedAt` · `recordInCallSmsEvent` 가드 · `promoteSmsLandingSubmits` · `generateReportCore` 배선 | 오염 샘플 역검증(입력값을 실은 요청이 **타입에서** 거부됨) 같은 커밋 |
+| **2b** | **서버 경로 B** — `MockScreenEvent` +1값 · `MockScreenDoc.submittedAt` · `recordMockScreenEvent` 가드 · `applyMockScreens` 승격 조건 + `buildLandingSubmitMoment` 추출 | ⭐ **2a와 분리한다**(OQ-A20이 열려 있어 **잘라낼 수 있어야** 한다) |
+| **3** | **클라 배선** — prop 3단 위임 + 두 페이지 각 1줄 | ⛔ 2a·2b **뒤**에 온다(서버 enum이 없으면 클라 타입이 안 맞는다) |
+| **4** | **문서** — `docs/API.md`·`docs/Database.md`는 **이 절이 이미 반영했다**(§31.9). implementer 추가 편집 **0건** |
+
+---
+
+### 31.8 신규 OQ — **1건**(⛔ architect가 답하지 않는다)
+
+| ID | 질문 | 소관 |
+|---|---|---|
+| **OQ-A20** | ⭐ **AC-080의 적용 표면은 두 곳인가 한 곳인가.** AC-080 문면(`PRD.md:582`)은 *"인앱 가짜 랜딩(AC-045)의 입력 폼"* 으로 **표면을 한정하지 않는다.** 실측상 `credential-form` 랜딩은 **두 표면 모두에 이미 존재**한다 — `entrySurface:"in-call-sms"` **3종**(`mockScreens.ts:173`·`:195`·`:217`), `"messenger-link"` **1종**(`:152`). ⇒ 경로 A만 구현하면 **메신저 표면의 제출은 계속 기록되지 않아** AC-080이 **절반만 충족**된다. **둘 다인가(배치 2a+2b), 통화 표면만인가(배치 2a)?** ⚠️ architect 의견: **둘 다가 문면에 맞고 증분도 작다**(2b는 필드 1개·enum 1값·조건 1줄). 그러나 **범위는 planner·사용자 확정 사항**이다 | **planner → 사용자** |
+
+---
+
+### 31.9 산출물 · 인계 (표면 ↔ Screen/Flow ID 추적)
+
+| UX/AC 항목 | Screen ID / Flow ID | 산출물 |
+|---|---|---|
+| **AC-080 (a)(e)**(값 미전송 유지) | **UX-023** / UF-008 · UF-006 | `src/components/mockScreenCopy.test.ts` **G138 블록 추가 + 역검증 1건**(⛔ 기존 단언 무변경) |
+| **AC-080 (b)**(응낙 지점 = 제출 하나) | UX-023 · **UX-027** / UF-008 | `recordInCallSmsEvent`·`recordMockScreenEvent` 가드 2건 · **G22 예외 명문화**(§31.2 (4)) — `deriveSmsEvents` **무변경** |
+| **AC-080 (c)**(AC-062/063/007 보존) | UX-018 · UX-023 | `promoteSmsLandingSubmits`(신규, `smsTimeline.ts`) · `buildLandingSubmitMoment`(추출, `mockScreenTimeline.ts`) · `generateReportCore` 배선 1블록 |
+| **AC-080 (d)**(리포트 표현 경계) | **UX-018** / UF-009 | **산출물 0건** — 승격된 `deceivedMoment`의 `tactic`·`correctAction`이 그대로 기존 리포트·리플레이·아카이브 렌더를 탄다(신규 표시 이벤트 **0건**, §31.5 (2)) |
+| **D-60 · P-29**(응낙 판정 3단계) | UX-023 / UF-008 | ⭐ **③ 응낙(제출)이 이 절로 성립한다** — §27.3 (1) 표의 ③ 행이 *"T121에서 만들지 않는다"* 에서 ***"T123에서 만든다"*** 로 바뀐다(§27.3 원문은 고치지 않았다. 이 행이 갱신 고지) |
+| **`docs/API.md`** | — | **§31.9 델타 반영 완료**(recordInCallSmsEvent·recordMockScreenEvent 두 절) |
+| **`docs/Database.md`** | — | **§31.9 델타 반영 완료**(`inCallSms.landingSubmittedAt` · `mockScreens.submittedAt` 두 행) |
+
+- **implementer — 착수 순서 고정**: ⓪ **P-3**(§31.7 (2))로 before 재측정 → ① 배치-1(G138 + 역검증) → ② 배치-2a → ③ 배치-2b(**OQ-A20이 "통화만"으로 확정되면 생략**) → ④ 배치-3 → ⑤ 무회귀 전건 + **양방향 확인**(제출 0건 세션 진입점 **미노출** / 1건 이상 **노출**) + **입력값 원문 0건 문자열 검색 출력**. **⛔ G135~G138과 §31.0을 먼저 읽을 것.** 완료 보고에는 **§31.6 (4)의 한계 문단을 그대로 옮길 것.**
+- **reviewer — 3건**: ⓐ ⭐ **G138 역검증이 같은 커밋에 있는가**(없으면 반려 — 이 게이트가 AC-045의 유일한 기계적 방어다). ⓑ **G135의 `anchorTurnIndex >= 0` 검사가 실제 코드에 있는가**(문서에만 있고 코드에 없으면 반려). ⓒ 주석·커밋 메시지에 ***"이제 실제로 걸리는지 판정할 수 있다"* 로 읽히는 표현 금지**(T116 미해결 — §31.6 (4)).
+- **quality-assurance — 3건**: ⓐ **양방향 확인을 같은 출력에** 나란히(0건 미노출 / 1건 노출). ⓑ **오염 샘플 역검증 출력**이 정상 경로와 나란히 있는가. ⓒ ⛔ *"제출이 리포트에 남는지"* 는 **이제 판정 대상이다** — §27.9의 *"판정 대상이 아니다"* 는 **T121 범위 한정**이었고 T123이 그것을 뒤집는다(§27 원문 무변경, 이 항이 갱신 고지).
+- **planner(`docs/Tasks.md`·`docs/PRD.md` 소유) — 3건**:
+  ⓐ ⭐ **T123 선행 ③(*"T121 병합"*)은 실측과 어긋난다 — 차단 선행이 아니다.** `credential-form` 랜딩은 **이미 4종**이 카탈로그에 있고(`mockScreens.ts:152`·`:173`·`:195`·`:217`) 그중 **3종이 `entrySurface:"in-call-sms"`** 다 ⇒ **T121 없이 착수·완료 검증이 가능**하다. T121이 병합되면 6번째 항목이 **같은 경로를 자동으로 탄다**(카탈로그 전수 순회). ⛔ **architect는 `docs/Tasks.md`를 고치지 않았다.**
+  ⓑ **OQ-A20 등재·확정**(§31.8) — 범위가 두 표면인가 한 표면인가.
+  ⓒ ⚠️ **AC-080 (c)의 "불변식 보존" 문면과 실제 파급의 관계를 확인해 달라** — 제출 승격은 **`wasDeceived`를 뒤집고 방어등급(AC-010/011)·아카이브(AC-068)에 반영된다**(§31.2 (4) 정직 고지). AC-080은 그것을 금지하지 않으며 **T84의 `consented` 승격이 이미 같은 형태**지만, *"불변식 보존"* 이 그 파급까지 부정하는 뜻으로 읽히면 문면 정합이 필요하다. **문면 갱신 여부는 planner·사용자 소관**이며 architect는 PRD를 고치지 않았다.
+- **ux-design(`docs/UX.md` 소유) — 1건**: ⚠️ `MockScreenTimelineEntry.consented`(`shared/types.ts` · `Database.md` A.2)는 **여전히 "권한 허용 응낙"만** 뜻한다 ⇒ 메신저 표면에서 **제출은 했지만 `consented:false`** 인 항목이 생긴다(표시 전용). **화면 문면이 그것을 "응하지 않음"으로 읽히게 그리면 참가자에게 거짓을 말한다.** 표시 카피 판정은 ux-design 소관이며 **architect는 스키마를 늘리지 않았다**(늘리면 §18.1 죽은 필드).
+- **사용자 판단 대기 — 1건**: **OQ-A20**(적용 표면). ⛔ architect는 답하지 않았다.

@@ -113,6 +113,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | arrivedAt | timestamp | indexed(정렬) | 도착 시각. 클라는 이 컬렉션을 `onSnapshot`으로 구독해 배너·문자함을 렌더한다(실시간·폴백 **양 경로 공통 단일 소스**) |
 | openedAt | timestamp? | | 사용자가 오버레이에서 열어본 시각(`recordInCallSmsEvent`) |
 | linkTappedAt | timestamp? | | 링크 칩 탭 시각. **v1에서 이 값들은 리포트 판정(analyzeConversation) 입력이 아니다** — 리플레이·표시용(근거 없는 판정 변경 금지) |
+| **landingSubmittedAt** | timestamp? | | ⭐ **§31 증분(T123 · AC-080).** 그 문자가 연 **인앱 가짜 랜딩의 입력 폼을 제출한 시각**(`recordInCallSmsEvent("landing_submitted")`). **최초 1회만** 세팅. **부재 = 제출 없음.** ⛔ **참가자가 입력한 값(계좌번호·예금주명 등)은 이 문서에도, 어떤 요청 필드·로그에도 실리지 않는다** — 남는 것은 **시각 하나**다(AC-045 무변경). ⭐ **위 두 행과 달리 이 값은 리포트 판정 입력이다** — `deceivedMoments`에 **1건 승격**된다(AC-080 (c)). 승격 조건은 **`anchorScammerTurn`이 해결되고 `anchorTurnIndex >= 0`일 때만**(Architecture.md **G135**). `fakeLandingId`가 없는 문서에는 세팅될 수 없다(서버가 거부) |
 | anchorScammerTurn | number | required(신규 문서) | **§15.1.5 증분.** "이 문자가 도착한 시점까지 `messages`에 존재하는 `role==="scammer"` 문서 수". **클라 입력이 아니라 서버가 카탈로그 값에서 계산**해 `functions/src/inCallSms/buildDoc.ts` **한 곳에서** 기록한다(실시간 `deliverInCallSms`·폴백 `sendMessage` 두 write 경로가 이미 이 헬퍼를 공유). 값: 실시간=`item.afterScammerTurns`, 폴백=`item.afterScammerTurns - 1`(폴백은 N번째 사기범 응답을 **만들기 직전**에 write하므로 완료된 발화가 하나 적다). **리포트 생성 시점에 실제 `turnIndex`로 해결**돼 `reports/{rid}.smsTimeline[].anchorTurnIndex`가 된다. 기존 문서는 부재 → 앵커 미해결로 취급(`anchorResolved:false`, 무백필) |
 
 > **⚠️ 이 필드가 왜 필요한가(시계로 병합할 수 없는 이유 — 실측):** 실시간 경로의 `messages.createdAt`은 실제 발화 시각이 아니라 **통화 종료 시점에 합성된 값**이다(`functions/src/realtime/submitTranscript.ts:64,78` — `baseTime = Date.now()`(제출 시각) + `i*1000`). 반면 `arrivedAt`은 통화 **중** 실제 시각이다. 시간순으로 병합하면 **모든 문자가 대화 맨 앞에 몰리고**, 폴백 텍스트 경로는 정상 동작해 **두 경로가 갈라진다**. 그래서 병합 축을 시계가 아니라 **턴 앵커**로 둔다(Architecture.md §15.1.5 (4), §15.6 G15).
@@ -389,6 +390,7 @@ match /users/{uid}/sessions/{sid}/{allPaths=**} {
 | shownAt | Timestamp | ✔ | 목업이 열린 시각. 최초 1회만 세팅 |
 | consentedAt | Timestamp? | | 가짜 "권한 허용"에 응한 시각. 최초 1회만 세팅. **부재 = 응낙 없음**(D-51 ③) |
 | consentAnnouncedAt | Timestamp? | | 사기범이 그 사실을 언급하도록 프롬프트 1줄 지시를 주입한 시각(§15.9.3 — 1회 주입 보장) |
+| **submittedAt** | Timestamp? | | ⭐ **§31 증분(T123 · AC-080 · 경로 B).** `kind==="credential-form"` 랜딩의 **입력 폼을 제출한 시각**(`recordMockScreenEvent("submitted")`). 최초 1회만 세팅. **부재 = 제출 없음.** ⛔ **`consentedAt`과 겹치지 않는다** — 서버가 `consented`는 `app-install`에만, `submitted`는 `credential-form`에만 허용한다. **승격**: 존재 ⇒ `deceivedMoments` 1건 추가(앵커 해결 시). `shownAt`만 있는 항목은 **여전히 승격되지 않는다**(D-51 ③ · AC-080 (b)) |
 
 - **저장하지 않는 것(구조적 금지):** 참가자 입력값(애초에 컴포넌트 로컬 state를 벗어나지 않는다 — AC-045), 실 URL·스토어 URL·실존 앱명·OS 권한 목록(AC-072). **`url` 계열 필드는 이 스키마에도 존재하지 않는다.**
 
