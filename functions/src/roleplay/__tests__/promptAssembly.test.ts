@@ -785,16 +785,40 @@ test("[T86/역검증] 가드레일이 마지막이 아니면 위 판정 함수�
 // ⚠️ **라벨로 지목하지 않는다 — G118.** 아래 마커는 `"확인 절차 차단"` 같은 **수법 라벨이 아니라**
 // 선언 문면 자체다(라벨은 시나리오마다 6가지라 지목하면 조용히 빠진다 — §17.4.2).
 
-/** F1 — 적용 범위를 가르는 문장(⛔ *"목록을 무시하라"* 가 아니다). */
-const T125_SCOPE_F1 = "상대가 확인해 보려고 끊겠다고 하는 경우에는 아래 항목이 그 목록보다 우선한다";
-/** F2 — 반대 조건 명문(이게 빠지면 과일반화된다 — G117). */
+// ── ⭐ T125 2차(Architecture.md §30) — F1이 **교체**됐다(덧쓰기가 아니다) ──────────────────
+//
+// **무엇이 바뀌었나.** 사용자 확정(2026-07-28): ***"고급에서는 한 차례 만류해 보고, 참가자가
+// 재차 고집하면 그때 확인 창구로 넘긴다."*** ⇒ ⭐ **만류가 남는 것이 설계다.** 1차 F1은
+// *"…경우에는 아래 항목이 그 목록보다 **우선한다**"* 라는 **무조건형**이라 이 확정과 정면으로
+// 어긋났고, 옆에 조건형을 덧쓰면 **한 블록 안에 모순 2문장**이 생겨 §28이 없애려던 상태를
+// 자기 안에 재생산한다(**G128**) — 그래서 **같은 자리에서 교체**했다.
+//
+// ⛔ **이 게이트를 *"저지가 사라졌는지"* 로 읽지 말 것.** 고정하는 것은 ***순서***다:
+// 만류 → (상대가 다시 확인 요구) → 이양. 저지의 **소멸**은 이 태스크의 목표가 아니다.
+// ⛔ **F2(반대 조건)는 한 글자도 바뀌지 않았다 — G117/F14.** 아래 `T125_SCOPE_F2` 리터럴이
+// 1차와 **동일한 문자열**이라는 것이 그 기계적 증거다.
+// ⛔ **횟수·서수·턴 번호를 문면에 쓰지 않는다 — F11/G130.** 모델에 카운터가 없어(§30.2.1)
+// *"한 번만"* 류는 **어겨도 소리가 나지 않는 조건**이다. 아래 [T125/F11] 테스트가 이것을
+// 기계로 확인한다.
+
+/**
+ * F1 — ⭐ **순서 선언**(§30 채택분). *"먼저 만류 → 그러고도 다시 확인 요구 → 더 붙잡지 않고 이양"*.
+ * ⛔ *"목록을 무시하라"* 도 아니고 *"무조건 우선한다"* 도 아니다.
+ */
+const T125_SCOPE_F1 =
+  "상대가 확인해 보려고 끊겠다고 하면 **먼저 그 목록에 있는 방식으로 만류해 보되, " +
+  "그러고도 상대가 다시 확인하겠다고 하면 더 붙잡지 말고 아래 항목으로 넘어간다.**";
+/** F13 — 이양 문장. *"넘긴다"* 만으로는 지속 압박 절과 병존 가능하게 읽힌다(§30.2.4 F13). */
+const T125_YIELD_F13 = "상대가 그렇게 다시 확인하겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다";
+/** F2 — 반대 조건 명문(이게 빠지면 과일반화된다 — G117). ⭐ §30에서 **무변경**(F14). */
 const T125_SCOPE_F2 = "확인과 무관한 이유로 끊으려 할 때";
 /** 조립 순서 판정 기준점 — 수법 목록 블록의 헤더 원문. */
 const TACTICS_BLOCK_HEADER = "[사용 가능한 수법(weakenedTactics)";
 
 /**
  * 적용 범위 선언 판정 — 이 함수 하나가 아래 전수 순회와 역검증(a)의 **공통 기준**이다.
- * ① F1 존재 ② F2 존재(한 쌍) ③ 선언이 수법 목록 블록보다 **뒤** ④ 가드레일이 여전히 **최후미**.
+ * ① F1(순서 선언) 존재 ② F2 존재(한 쌍) ③ F13(이양) 존재 ④ 선언이 수법 목록 블록보다 **뒤**
+ * ⑤ 가드레일이 여전히 **최후미**.
  */
 function assertVerifyInterceptScopeDeclared(
   assembled: string,
@@ -803,6 +827,7 @@ function assertVerifyInterceptScopeDeclared(
 ): void {
   assert.ok(assembled.includes(T125_SCOPE_F1), `F1 적용 범위 선언이 없다 — ${where}`);
   assert.ok(assembled.includes(T125_SCOPE_F2), `F2 반대 조건이 없다(과일반화 위험) — ${where}`);
+  assert.ok(assembled.includes(T125_YIELD_F13), `F13 이양 문장이 없다(더 붙잡지 않는다) — ${where}`);
 
   const tacticsAt = assembled.indexOf(TACTICS_BLOCK_HEADER);
   const scopeAt = assembled.indexOf(T125_SCOPE_F1);
@@ -877,8 +902,75 @@ test("[T125/역검증(a)] 적용 범위 선언을 지운 사본은 위 판정 �
     /F2 반대 조건이 없다/,
   );
 
+  // F13(이양)만 지운 사본도 잡혀야 한다 — *"먼저 만류"* 만 남으면 **만류만 하고 넘기지 않는**
+  // 상태가 되어 채택의 후반부가 통째로 빠진다(§30.2.4 F13).
+  const strippedF13 = assembled.replace(T125_YIELD_F13, "(삭제됨)");
+  assert.throws(
+    () => assertVerifyInterceptScopeDeclared(strippedF13, prompt.guardrailPreamble, "역검증(a)-F13"),
+    /F13 이양 문장이 없다/,
+  );
+
   // 판정 함수가 항상 던지는 것이 아님을 함께 보인다.
   assertVerifyInterceptScopeDeclared(assembled, prompt.guardrailPreamble, "역검증(a)-정상");
+});
+
+test("[T125/F11] 순서 선언 문면에 횟수·서수·턴 번호가 하나도 없다(G130 — 모델이 셀 수 없는 조건 금지)", () => {
+  // ⭐ **왜 기계로 재는가.** *"한 번만 막는다"* 류는 모델에 카운터가 없어(§30.2.1) **어겨도
+  // 소리가 나지 않는 조건**이다 — 문면 층이 두 번 진 것과 같은 낙관이라 소스 게이트로 못 박는다.
+  // ⛔ 이 목록에 없는 새 카운터 표현이 나오면 임의 판단하지 말고 **행을 추가**할 것.
+  const COUNTER_TOKENS = [
+    "한 번",
+    "한번",
+    "한 차례",
+    "두 번",
+    "두번",
+    "첫 번째",
+    "첫번째",
+    "두 번째",
+    "두번째",
+    "회에 한해",
+    "차례만",
+    "번만",
+    "턴째",
+    "턴 뒤",
+    "턴 후",
+  ];
+
+  for (const [label, text] of [
+    ["F1(순서 선언)", T125_SCOPE_F1],
+    ["F13(이양)", T125_YIELD_F13],
+  ] as const) {
+    assert.equal(
+      /[0-9０-９]/.test(text),
+      false,
+      `${label} 문면에 숫자가 있다 — 모델이 셀 수 없는 조건이 된다(F11/G130)`,
+    );
+    for (const token of COUNTER_TOKENS) {
+      assert.equal(text.includes(token), false, `${label} 문면에 횟수·서수 표현 "${token}"이 있다(F11/G130)`);
+    }
+  }
+
+  // ⭐ 게이트가 **실재하는 문면**을 재고 있음을 함께 고정한다(리터럴만 깨끗하고 소스는 다른 상태 방지).
+  const id = Object.keys(SCENARIO_PROMPTS).filter((sid) => hasVerifyIntercept(sid))[0];
+  const assembled = buildSystemPrompt(SCENARIO_PROMPTS[id], {
+    ...realOptionsFor(id),
+    difficultyLevel: "advanced",
+    verifyInterceptEnabled: true,
+  });
+  assert.ok(assembled.includes(T125_SCOPE_F1), "F11 게이트가 조립에 없는 문자열을 재고 있다");
+  assert.ok(assembled.includes(T125_YIELD_F13), "F11 게이트가 조립에 없는 문자열을 재고 있다");
+
+  // 역검증 — 이 게이트가 실제로 잡는다(카운터 표현을 넣은 사본).
+  assert.throws(
+    () => {
+      const bad = `${T125_SCOPE_F1} 단 한 번만 만류한다`;
+      for (const token of COUNTER_TOKENS) {
+        assert.equal(bad.includes(token), false, `횟수 표현 "${token}"`);
+      }
+    },
+    /횟수 표현/,
+    "카운터 표현을 넣었는데도 게이트가 통과했다",
+  );
 });
 
 test("[T125/역검증(b)] verifyInterceptEnabled=false 조립에는 선언이 없다 — 초급·중급·비카탈로그 무변경", () => {
@@ -923,10 +1015,8 @@ test("[T125] 선언은 기존 4개 항목·수법 목록 문면을 바꾸지 않
     }
     assert.ok(assembled.includes(prompt.personaPrompt), `페르소나 문면이 바뀌었다 — ${id}`);
     // 상시 블록의 기존 4개 항목도 그대로 있어야 한다(F6).
-    assert.ok(
-      assembled.includes('상대가 "끊고 직접 확인해 보겠다"고 하면 막지 않는다'),
-      `상시 블록 1항이 사라졌다 — ${id}`,
-    );
+    // ⭐ §30에서 이 항목의 **첫 절만** 교체됐다(무조건형 → 조건형). 항목 자체는 그대로다.
+    assert.ok(assembled.includes(T125_YIELD_F13), `상시 블록 1항이 사라졌다 — ${id}`);
     assert.ok(
       assembled.includes("어디에 걸어도 같은 곳으로 이어진다"),
       `상시 블록 3항(AC-071 표현 수위)이 사라졌다 — ${id}`,
