@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "clean": "node scripts/clean-lib.mjs",
-    "build": "node scripts/clean-lib.mjs && tsc",
+    "build": "node scripts/clean-lib.mjs && tsc && node lib/devtools/recordLibBuild.js",
     "build:watch": "tsc --watch",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
@@ -12,9 +12,10 @@
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
     "lint": "eslint src",
-    "test": "node scripts/clean-lib.mjs && tsc && node --test lib/**/__tests__/*.test.js",
+    "test": "node scripts/clean-lib.mjs && tsc && node lib/devtools/recordLibBuild.js && node --test lib/**/__tests__/*.test.js",
     "seed:scenarios": "node lib/scenarios/seed.js",
-    "report:axis-coverage": "node lib/scenarios/axisCoverageReport.js"
+    "report:axis-coverage": "node lib/scenarios/axisCoverageReport.js",
+    "emu:check": "node lib/devtools/emulatorFreshnessCli.js"
   },
   "engines": {
     "node": "20"
