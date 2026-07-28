@@ -12,7 +12,11 @@ export type DeliverInCallSmsResponse = {
   announceInstruction: string;
 };
 
-export type InCallSmsEvent = "opened" | "link_tapped";
+// T123/AC-080 — `landing_submitted`는 **"그 문자가 연 가짜 랜딩의 폼을 제출했다"**는 사실 하나다.
+// ⛔ 참가자가 입력한 값은 이 요청에 실리지 않는다 — 담을 필드가 타입에 **존재하지 않는다**(AC-045).
+// ⛔ `link_tapped`(링크를 눌렀다)와 의미가 다르다: 탭은 속은 순간으로 승격되지 않고 제출만 된다
+//    (AC-080 (b) — 의심해서 열어보고 닫은 참가자를 실패로 낙인찍지 않기 위해서다).
+export type InCallSmsEvent = "opened" | "link_tapped" | "landing_submitted";
 export type RecordInCallSmsEventRequest = {
   sessionId: string;
   smsId: string;

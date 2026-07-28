@@ -209,6 +209,44 @@ test("[G138/역검증] 인자를 실은 제출 콜백이 섞이면 위 ②·③�
   );
 });
 
+// ── G138 반대편 — **서버 요청 타입에 입력값을 담을 필드가 존재하지 않는다**(AC-080 (a)) ────────
+//
+// 위 블록이 *"값이 컴포넌트 밖으로 나가지 않는다"* 를 고정한다면, 이 블록은 *"설령 나가더라도
+// 실어 보낼 자리가 없다"* 를 고정한다 — **구조적 금지**가 이 저장소의 AC-045 방어 형태다
+// (`mockScreens/types.ts` 머리말 원문: *"인자는 세션 id·랜딩 id·고정 enum 3개뿐"*).
+// 두 방어는 합집합이지 교체가 아니다.
+
+/** `export type X = { ... }` 본문의 필드 키 집합. */
+function requestFieldKeys(source: string, typeName: string): string[] {
+  const match = new RegExp(`export type ${typeName} = \\{([^}]*)\\}`).exec(source);
+  assert.ok(match, `${typeName} 선언을 찾지 못했다 — 타입이 옮겨졌으면 이 게이트를 따라가야 한다`);
+  return [...match[1].matchAll(/^\s*(\w+)\??\s*:/gm)].map((m) => m[1]).sort();
+}
+
+const inCallSmsTypes = readFileSync("functions/src/inCallSms/types.ts", "utf8");
+const mockScreenTypes = readFileSync("functions/src/mockScreens/types.ts", "utf8");
+
+test("[G138/AC-080 (a)] 기록 콜러블 2종의 요청 타입에 **입력값을 담을 필드가 없다**", (t) => {
+  const sms = requestFieldKeys(inCallSmsTypes, "RecordInCallSmsEventRequest");
+  const mock = requestFieldKeys(mockScreenTypes, "RecordMockScreenEventRequest");
+  t.diagnostic(`요청 필드 — recordInCallSmsEvent: ${sms.join(",")} / recordMockScreenEvent: ${mock.join(",")}`);
+  assert.deepEqual(sms, ["event", "sessionId", "smsId"], "세션 id·문자 id·고정 enum 3개뿐이어야 한다");
+  assert.deepEqual(mock, ["event", "landingId", "sessionId"], "세션 id·랜딩 id·고정 enum 3개뿐이어야 한다");
+});
+
+test("[G138/역검증] 요청 타입에 입력값 필드가 하나라도 붙으면 위 단언이 실제로 실패한다", (t) => {
+  // 오염은 **테스트 코드 안에서만**(callContinuity.test.ts:161-162 관례).
+  const poisoned = inCallSmsTypes.replace(
+    "  event: InCallSmsEvent;",
+    "  event: InCallSmsEvent;\n  accountNumber: string;",
+  );
+  assert.notEqual(poisoned, inCallSmsTypes, "오염 샘플이 실제로 만들어져야 한다");
+  const badKeys = requestFieldKeys(poisoned, "RecordInCallSmsEventRequest");
+  t.diagnostic(`오염 샘플의 요청 필드: ${badKeys.join(",")}`);
+  assert.notDeepEqual(badKeys, ["event", "sessionId", "smsId"], "오염이 검출되지 않으면 게이트가 무의미하다");
+  assert.ok(badKeys.includes("accountNumber"));
+});
+
 // ── 서버 카탈로그 ↔ 화면 문구 드리프트(§15.9.1 R3) ───────────────────────────
 //
 // 카탈로그(`functions/src/scenarios/mockScreens.ts`)가 문구의 정본이고, 실제 렌더는 이 컴포넌트가
