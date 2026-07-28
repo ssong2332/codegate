@@ -64,6 +64,20 @@ npm run dev                 # Next.js 개발 서버
 연결된다(별도 설정 불필요). `npm run build`(프로덕션 빌드)에서는 이 플래그가 꺼져 에뮬레이터
 연결 코드가 완전히 제거된다.
 
+#### 3-1. 에뮬레이터가 지금 어떤 코드를 물고 있는지 확인 (T115)
+에뮬레이터는 **기동 시점의 `functions/lib`를 1회 로드**한다. 그 뒤 `npm --prefix functions run build`나
+`npm --prefix functions test`로 `lib`가 바뀌어도 **아무 경고 없이 옛 코드로 계속 응답한다**(감시·자동
+재로드 없음 — 실측). 포트가 응답한다는 사실만으로는 *무엇이* 떠 있는지 알 수 없으므로, 라이브 검증을
+시작하기 전에 다음을 돌린다.
+```
+npm --prefix functions run build        # lib 최신화 + 빌드 기록 남기기
+npm --prefix functions run emu:check    # 다른 포트면 -- --port 5711
+```
+로드된 디렉터리·함수 목록·기동 시각을 표로 찍고 `FRESH` / `STALE-CODE` / `STALE-BUILD` /
+`STALE-EXPORTS` / `OTHER-TREE`(다른 트리에서 기동됨) / `UNKNOWN` / `NOT-RUNNING` 중 하나로 판정한다
+(`FRESH`·`NOT-RUNNING`만 종료 코드 0). **판정에 필요한 값이 없으면 "괜찮다"가 아니라 `UNKNOWN`을 낸다.**
+`STALE-*`가 뜨면 에뮬레이터를 **재기동**해야 반영된다.
+
 ### 4. Firebase 프로젝트 연결 (실제 배포/데모 준비 시점에만 필요, 최초 1회, 수동)
 로컬 개발에는 필요 없다 — 실 Firebase 콘솔 프로젝트로 배포하거나 실제 Google OAuth 로그인을
 데모해야 할 때만 아래를 수행한다. Firebase 콘솔에서 실제 프로젝트를 생성한 뒤:
