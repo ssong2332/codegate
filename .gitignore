@@ -1,6 +1,7 @@
 # Environment variables — never commit real secrets
 .env
 .env.local
+.env.production
 functions/.env
 functions/.env.local
 
