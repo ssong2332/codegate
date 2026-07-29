@@ -59,3 +59,4 @@
 - [T129 다중 랜딩 트립와이어](project_codegate_t129_tripwire.md) — ⭐ functions/lib(.js) + 루트 src(.ts)를 한 프로브에서 부르는 `file:///` strip-types 레시피, 실패 메시지 원문 확보법, 픽스처 보존 vs 신규 파일 0건 충돌.
 - [T130 npm file: 오염 트립와이어](project_codegate_t130_npm_drift_guard.md) — ⭐ "간헐"이 실은 명령 형태 종속(`npm --prefix` 3/3), 훅 블록을 뒤에 얹으면 detached HEAD에서 안 도는 함정, postinstall이 --prefix에서 미실행, 병합 전 훅 테스트는 `git -c core.hooksPath`.
 - [T128 인증 무효화](project_codegate_t128_auth_invalidation.md) — ⭐ 에뮬레이터 자동 signOut은 delete가 아니라 disable로 관측된다, stsTokenManager 훼손 레시피, react-hooks lint 2연타 회피, 더미 .env로 build 무결성 증명.
+- [T132 Gemini 키 순환](project_codegate_t132_key_failover.md) — ⭐ defineSecret은 미설정이어도 프롬프트 0건(defineString과 다르다), 워크트리 .env 부재가 P-1을 가린 함정, "호출 2회" 단언이 못 잡은 것을 헤더 비교가 잡은 A/B 실측.
