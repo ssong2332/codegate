@@ -1,3 +1,4 @@
+- [정정한 문장의 재사용처를 전수 grep](feedback_correction_sweep_reuse_sites.md) — 거짓으로 고친 문장이 다른 절의 전제로 살아 있다; DECISIONS·adr까지 훑고 "N곳뿐"을 근거와 함께
 - [순서 역전 신고는 배치 앵커부터](feedback_order_report_check_anchor_first.md) — 런타임 의심 전에 ①앵커가 하나뿐인가 ②이벤트 문면이 무조건 방출인가; 표시 층은 라이브 0회로 확정된다
 - [ElevenLabs voice selection constraints](reference_elevenlabs_voice_selection.md) — client-only TTS override, no server voice-pin, account-scoped IVC ids; drove ADR-0006 A2
 - [ElevenLabs agent prompt API](reference_elevenlabs_agent_prompt_api.md) — 프롬프트는 `/v1/convai/agents/{id}`의 GET/PATCH; 저장소엔 이 경로 코드가 없다. PATCH 200 말고 되읽기로 검증
