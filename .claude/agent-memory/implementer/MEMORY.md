@@ -63,4 +63,5 @@
 - [T116 렌더 층 게이트](project_codegate_t116_render_gate.md) — ⭐ Node 22.14에서 .tsx를 테스트에 로드하는 require 확장 훅 레시피(의존성 0), 배럴은 .ts 등록에 달렸다, 격리 워크트리에서 층2 돌리는 법.
 - [T102 축 표 D 좌표 정정](project_codegate_t102_exitblock_correction.md) — ⭐ 요약표↔원본 드리프트 게이트 3단(규칙표+양방향+의심어휘 백스톱), 라벨부만 매칭, 문서 실측표 재현 시 줄번호만 밀리는 정상 케이스.
 - [§38 확인창구 전환 순서](project_codegate_s38_verify_ordering.md) — ⭐ 새 필드 대신 **write 시점을 미뤄** 문서 존재를 판별자로, 소스 게이트가 신설 설계와 충돌할 때 옮기는 법, 격리 에뮬레이터 REST 4단 장애물.
+- [픽셀 측정 — CDP 하네스](project_codegate_pixel_measurement_cdp.md) — ⭐ OQ-U34("측정 수단 0건")를 의존성 0으로 뚫는 법; `next dev`는 헤드리스에서 하이드레이트 안 됨(실측), 정적 프로덕션 빌드로 재라.
 - [T133 시크릿 선언-사용 정합 게이트](project_codegate_t133_secret_declaration_gate.md) — ⭐ `__endpoint.secretEnvironmentVariables` 실재(스프레드까지 해석), SDK가 이미 미주입 경고를 내므로 자체 신호는 중복, 폐포는 `export … from`도 따라가야 한다, before/after를 게이트 함수 자신으로.
