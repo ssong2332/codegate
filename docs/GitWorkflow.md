@@ -42,6 +42,51 @@ git config core.hooksPath .githooks
 2. **`core.hooksPath`가 상대 경로라 워크트리마다 따로 해석된다.** 체크아웃된 브랜치에 `.githooks/`가 없으면 훅이 존재하지 않아 강제되지 않는다. T100 병합 이후 main 기반 브랜치에서는 문제가 없지만, **병합 이전에 분기한 오래된 브랜치는 여전히 무방비다.**
 3. 훅은 `detached HEAD`(rebase·bisect 중)를 통과시킨다 — 그 상태의 커밋은 어떤 브랜치에도 직접 얹히지 않기 때문이다.
 
+### ⛔ 설치 — clone당 1회. 안 하면 위 훅이 **전부 존재하지 않는다**
+
+```bash
+git config core.hooksPath "$(git rev-parse --show-toplevel)/.githooks"
+```
+
+⭐ **절대 경로로 설정하는 것이 핵심이다.** 확인:
+
+```bash
+git config core.hooksPath   # 값이 비어 있으면 훅은 한 줄도 돌지 않는다
+```
+
+> **갱신 고지 (2026-07-29, T130 인계 ⓒ — 위 항목 2를 지우지 않고 정정한다).**
+> 항목 2는 *"`core.hooksPath`가 **상대 경로**라 워크트리마다 따로 해석된다"* 고 적었고, 그것은 **`.githooks/pre-commit:11`이 안내하는 설치 형태**(`git config core.hooksPath .githooks`)에 대해 **참**이다.
+> ⚠️ **그러나 이 머신의 실제 설정값은 절대 경로다** — 실측 `C:\codegate\.githooks`. 그래서 **모든 워크트리가 같은 훅 파일 하나를 본다**(실측: 메인 트리와 에이전트 워크트리 양쪽 `훅파일존재=YES`).
+> ⇒ **두 설치 형태의 결과가 다르다:**
+>
+> | 설치 형태 | 워크트리에서의 실효 |
+> |---|---|
+> | **상대**(`.githooks` — 훅 주석이 안내하는 형태) | 각 워크트리가 **자기 체크아웃의** `.githooks`를 본다 ⇒ 그 브랜치에 파일이 없으면 **무방비** |
+> | ⭐ **절대**(위 명령 — 현재 이 머신의 상태) | 전 워크트리가 **한 파일**을 본다 ⇒ 브랜치 내용과 무관하게 강제된다 |
+>
+> ⛔ **절대 경로를 쓸 것.** 다만 **경로가 박히므로 저장소를 옮기거나 다른 머신에서 clone하면 다시 설정해야 한다.**
+> ⚠️ **T130 QA 실측**: 병합 이전에는 이 절대 경로가 **main의 `.githooks`** 를 가리켰기 때문에 **어느 워크트리도 T130 검사를 받지 못했다** — 병합 자체가 그 구멍을 닫은 조치였다.
+
+### T130 트립와이어 — 무엇을 잡고 무엇을 못 잡는가
+
+`.githooks/pre-commit`은 T100의 `main` 직접 커밋 거부에 더해, **매니페스트에 섞여 들어간 로컬 경로 의존성**(`file:` / `link:` / `portal:`)을 거부한다.
+
+⭐ **원인은 확정돼 있다**(T130 실측): **`npm --prefix <dir> install` 이 `package.json`에 `"fraud-vaccine-web": "file:.."` 를 조용히 주입한다.**
+
+| 명령 | 오염 |
+|---|---|
+| `npm --prefix functions install` | ⛔ **3/3 오염** |
+| `cd functions && npm install` | ✅ **0/3** |
+| 루트 `npm install` | ✅ **0/3** |
+| `npm --prefix functions test` · `run build` · `run lint` | ✅ **오염 안 됨** — `install` 형태만 문제다 |
+
+⇒ ⛔ **`npm --prefix <dir> install` 을 쓰지 말고 `cd <dir> && npm install`** 로 쓴다(`CLAUDE.md` 동일 등재).
+
+⛔ **이 트립와이어가 못 막는 것:**
+1. **`--no-verify`** — 위 한계 1과 같다.
+2. **`core.hooksPath` 미설정 clone** — 훅 자체가 없다(위 설치 절 참조).
+3. ⛔ ***"고쳤다"가 아니라 "알린다"이다.*** 트립와이어는 오염된 커밋을 **거부**할 뿐 이미 들어간 오염을 **되돌리지 않는다**(자동 `git checkout` 실행은 **G164로 금지**됐다 — 훅이 작업물을 지우면 안 된다).
+
 ## Worktree Hygiene (T100)
 
 에이전트를 격리 워크트리로 띄우면 워크트리가 계속 쌓인다(2026-07-26 세션 기준 **24개**). `git worktree prune`은 **디렉터리가 사라진 항목만** 잡으므로 이들에는 아무 효과가 없다.
