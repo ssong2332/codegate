@@ -1,3 +1,4 @@
+- [순서 역전 신고는 배치 앵커부터](feedback_order_report_check_anchor_first.md) — 런타임 의심 전에 ①앵커가 하나뿐인가 ②이벤트 문면이 무조건 방출인가; 표시 층은 라이브 0회로 확정된다
 - [ElevenLabs voice selection constraints](reference_elevenlabs_voice_selection.md) — client-only TTS override, no server voice-pin, account-scoped IVC ids; drove ADR-0006 A2
 - [ElevenLabs agent prompt API](reference_elevenlabs_agent_prompt_api.md) — 프롬프트는 `/v1/convai/agents/{id}`의 GET/PATCH; 저장소엔 이 경로 코드가 없다. PATCH 200 말고 되읽기로 검증
 - [Gemini Live session constraints](reference_gemini_live_session_constraints.md) — 음성·프롬프트·도구는 토큰에 서버 고정(세션 중 전환 불가); 상대 전환은 지시 주입+연출로
