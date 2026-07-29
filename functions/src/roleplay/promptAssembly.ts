@@ -238,13 +238,83 @@ const BEGINNER_BLOCK = `[난이도 — 초급: 수법이 눈에 띄게 드러나
 // ⚠️ **G64 — 이미 선행 단계가 있는 흐름은 3단으로 늘리지 않는다.** 3단계 결합 시나리오
 // (`messenger-subsidy-smishing-sms`)는 모의 앱 설치가 이미 선행 요구다(§15.9). 고급이 하나를 더
 // 만들면 턴 예산 안에서 최종 요구에 도달하지 못해 L4가 오히려 T91 결함을 유발한다.
-const ADVANCED_BASE = `[난이도 — 고급: 실제처럼 정교하게]
+//
+// ⭐⭐ **§43(사용자 프로덕션 신고 2026-07-29) — L4 예시가 *두 군데* 모두 조건화되지 않았다.**
+//
+// 신고 원문: *"납치 시나리오 난이도 상인데도 본인확인을 하고, 무의미한 대화만 오간다."*
+// 실측(§43.2 재집계, P-1로 재현): 카탈로그(`IN_CALL_SMS` ∪ `MOCK_SCREENS`)가 **하나도 없는
+// 시나리오가 7/14**다. 그 세션에서 아래 선행 요구 예시 3개 중 2개(*"안내 문자·링크 확인"*·
+// *"조회용 모의 앱 설치"*)는 **이 훈련이 재현하지 않는 것**이라 남는 선택지가 *"본인확인 항목
+// 확인"* **하나로 붕괴**한다. 그래서 신원 불상의 협박범이 본인확인 절차를 시작한다.
+//
+// ⭐ **결함은 하나가 아니라 둘이고, 하나만 고치면 다른 쪽이 더 나빠진다(§43.2 / G228)**:
+//   **①-a 카탈로그 미조건화** — 예시 2개가 카탈로그 유무를 묻지 않는다 ⇒ 아래 **B(조건형 치환)**.
+//   **①-b 페르소나 미조건화** — 남은 *"본인확인 항목 확인"* 에 `ADVANCED_L3_PROCEDURAL`이 이미
+//   쓰는 페르소나 조건절이 없다 ⇒ 아래 **C(조건절 이식)**.
+//   ⛔ B만 하면 협박 계열이 여전히 본인확인을 하고(신고 미해소), C만 하면 그 계열의 선행 요구가
+//   **0개**가 되어 G62(요구 미도달)가 고급에서 재발한다. **두 정정은 한 커밋에 함께 있어야 한다.**
+//
+// ⚠️ **B의 판별자는 기존 `opts.inCallSmsEnabled` 하나뿐이다(§43.4 B-2)** — 신규 옵션을 만들면
+// 호출부 3곳 배선이 늘어 **G63**(한 곳이 빠져 그 경로에서만 조용히 축소)을 그대로 재생산한다.
+// ⚠️ **잔여 오차 2종을 숨기지 않는다(G229)**: `inCallSmsEnabled`는 `MOCK_SCREENS`의 대리
+// 판별자가 **아니다**. `messenger-parcel-smishing-sms`·`messenger-subsidy-smishing-sms`는 화면
+// 카탈로그를 가졌는데 `inCallSmsEnabled=false`라 "없음" 분기를 받아 *"조회용 모의 앱 설치"* 예시를
+// **잃는다.** 그대로 받는 것이 §43.4 (ㄱ)의 채택안이다(subsidy는 G64 특례라 예시가 필요 없고,
+// parcel은 링크형 단시간 시나리오라 2단 요구가 턴 예산에 안 맞는다 — 대가는 예시 1개 손실인데
+// 대안은 신규 옵션 + 배선 3곳이다).
+//
+// ⚠️ **"있음" 분기의 문면은 종전 문자열 그대로다(§43.4 B-4, 회귀 0)** — 카탈로그를 가진 7종의
+// 프롬프트가 한 글자도 달라지지 않는 것을 테스트로 고정한다(`[§43/B]`).
+// ⚠️ **"없음" 분기의 대체 원천은 전부 "이미 이 프롬프트에 있는 것"이다(§43.5 (2) ㉠㉡㉣)** —
+// [진행 강제]의 *"사실 확인 질문(…조회)"*·*"요구 조건을 낮춰 재제안"*, 협박 계열 수법 목록의
+// *"전화 끊음 저지"*. ⇒ **신규 요구 형태 0건 = 무해화 검증 표면 증가 0**(AC-075/G226 무영향).
+// ⛔ **§43.5 ㉢(확인 창구 전환)은 이 목록에 넣지 않았다** — 그 문장은 확인 안내 블록
+// (`VERIFY_INTERCEPT_RULE`)이 *"앱의 안내 지시가 오기 전에는 창구 이름을 먼저 꺼내지 않는다"* 로
+// 금지하는 행동을 **선행 요구로 권하는 형태**가 되어 §16.1.4/G58이 막던 *"대사만 나오고 컨트롤이
+// 없는 창"* 을 되살린다. 그 원천이 필요한 유일한 시나리오(`bank-security-verify-scam`)는 기관
+// 사칭 페르소나라 **C 조건절에 걸리지 않고 ㉤(본인확인)을 그대로 유지**하므로 예시가 0이 되지 않는다.
+const PRIOR_DEMAND_EXAMPLES_WITH_CATALOG = "본인확인 항목 확인, 안내 문자·링크 확인, 조회용 모의 앱 설치 등";
+const PRIOR_DEMAND_EXAMPLES_DEFAULT =
+  "본인확인 항목 확인, 상황을 되짚는 사실 확인 질문, 통화를 끊지 않고 그 자리에서 계속 답하게 하기, 조건을 낮춘 작은 요구 먼저 통과시키기 등";
+const EXISTING_STEP_EXAMPLES_WITH_CATALOG = "안내 링크 확인, 앱 설치 등";
+const EXISTING_STEP_EXAMPLES_DEFAULT = "이미 받아 낸 확인 절차, 이미 통과시킨 작은 요구 등";
+
+// C(페르소나 조건절, §43.4 (2)) — 형태는 바로 아래 `ADVANCED_L3_PROCEDURAL`의 같은 문장을 따른다
+// (*"네가 …가 아니라면 …은 쓰지 않는다 — 그 경우에는 …만 쓴다"* = **금지 + 대체를 한 문장에**).
+// ⛔ **금지만 쓰면 선행 요구가 0개가 된다(C-1/G62).** ⛔ **라벨·시나리오 id로 지목하지 않는다
+// (C-2/G230)** — 표기가 시나리오마다 갈려 다른 시나리오에서 조용히 빠진다. **캐릭터 속성**으로 쓴다.
+// ⛔ **끄는 것은 "본인확인 항목 확인" 하나뿐이고 L4(2단 요구) 자체는 끄지 않는다(C-3)** — 그것은
+// §43.3 후보 G(고급 L4 축소)이고 기각됐다.
+// ⛔ **횟수·서수·턴 번호를 쓰지 않았다(C-4, F11/G130 계승)** — 모델에 카운터가 없어 판정 불가다.
+// ⛔ **이 문장은 `ADVANCED_BASE` 안에 있어야 한다(C-5)** — `ADVANCED_L3_PROCEDURAL`에 넣으면
+// `l3Procedural===false`인 `messenger-child-impersonation-kakao`·`messenger-friend-loan-kakao`가
+// 이 블록을 못 받아 **결함 5종 중 2종에서 조건절이 조용히 빠진다**(`l3Depth.ts` 실측).
+const ADVANCED_BASE_TEMPLATE = `[난이도 — 고급: 실제처럼 정교하게]
 - **수법을 은밀히 섞는다.** 전형적인 사기 문구를 그대로 읊지 말고, 자연스러운 상담·안내 대화 안에 녹여 말한다.
 - **상대가 의심해도 침착하게 해명하고, 물러서지 않되 매번 다른 근거를 낸다.** 당황하지 말고 되묻고 설명한다 — **의심 1회에 근거 1개씩, 최소 2회는 서로 다른 근거·절차를 낸다.** 같은 취지의 해명을 두 번 쓰지 않는다.
-- **요구는 두 단계로 나눈다.** 곧바로 최종 요구로 직행하지 말고, 먼저 **무해해 보이는 선행 요구**를 하나 통과시킨 뒤 최종 요구로 넘어간다. 선행 요구는 **이 훈련이 이미 재현하는 것 중에서만** 고른다(본인확인 항목 확인, 안내 문자·링크 확인, 조회용 모의 앱 설치 등) — **새로운 형태의 요구를 발명하지 않는다.**
+- **요구는 두 단계로 나눈다.** 곧바로 최종 요구로 직행하지 말고, 먼저 **무해해 보이는 선행 요구**를 하나 통과시킨 뒤 최종 요구로 넘어간다. 선행 요구는 **이 훈련이 이미 재현하는 것 중에서만** 고른다({{PRIOR_DEMAND_EXAMPLES}}) — **새로운 형태의 요구를 발명하지 않는다.**
+- **네가 신원을 밝히는 기관·기업·서비스의 담당자가 아니라면 선행 요구로 본인확인 항목을 확인하지 않는다** — 그 경우에는 상황을 되짚는 사실 확인 질문, 통화를 끊지 않고 그 자리에서 계속 답하게 하기, 조건을 낮춘 작은 요구 먼저 통과시키기 중에서 고른다. 캐릭터에 없는 확인 절차를 시작하면 오히려 정체가 드러난다.
 - **선행 요구도 구체적 행동 지시여야 한다.** 위 [진행 강제]의 "대화 초반 2~3턴 안에 지금 당장 무엇을 해야 하는지 지시한다"는 **선행 요구에 그대로 적용된다** — 요구를 미루거나 얼버무리는 것이 아니라, 작은 요구를 먼저 **실제로 하는** 것이다.
-- **단계는 두 개까지다.** 세 단계 이상으로 늘리지 않는다. 이 대화의 흐름에 이미 앞선 단계(안내 링크 확인, 앱 설치 등)가 있다면 **그것이 곧 선행 요구이므로 새로 만들지 않고** 곧장 최종 요구로 이어간다.
+- **단계는 두 개까지다.** 세 단계 이상으로 늘리지 않는다. 이 대화의 흐름에 이미 앞선 단계({{EXISTING_STEP_EXAMPLES}})가 있다면 **그것이 곧 선행 요구이므로 새로 만들지 않고** 곧장 최종 요구로 이어간다.
 - ⚠️ **"고급"은 더 진짜 같은 압박이지, 더 진짜에 가까운 위험 정보가 아니다.** 위 [진행 강제]의 "페이로드는 가상값만"(실존 기관의 실제 계좌·실제 동작하는 앱/링크·실제 연락처 금지)과 아래 안전 지침은 고급에서도 **완전히 동일하게** 지킨다. 실제로 쓸 수 있는 사기 절차·정보를 더 알려주는 방향으로는 절대 강화하지 않는다.`;
+
+/**
+ * 조건형 고급 공통 블록 조립(§43.4 B — `buildScenarioProgression`과 **같은 방식·같은 파일**).
+ *
+ * ⭐ **치환 슬롯은 "선행 요구 예시 목록" 두 자리뿐이다.** 슬롯 경계가 [T85/G61]·[T85/L4]가
+ * 단언하는 4문장(*"요구는 두 단계로 나눈다"*·*"선행 요구도 구체적 행동 지시여야 한다"*·
+ * *"새로운 형태의 요구를 발명하지 않는다"*·*"세 단계 이상으로 늘리지 않는다"*)을 삼키면 그
+ * 테스트가 즉시 빨간불이 난다 — **그것이 의도된 보호다**(§43.9 7).
+ */
+function buildAdvancedBase(inCallSmsEnabled: boolean): string {
+  return ADVANCED_BASE_TEMPLATE.replace(
+    "{{PRIOR_DEMAND_EXAMPLES}}",
+    inCallSmsEnabled ? PRIOR_DEMAND_EXAMPLES_WITH_CATALOG : PRIOR_DEMAND_EXAMPLES_DEFAULT,
+  ).replace(
+    "{{EXISTING_STEP_EXAMPLES}}",
+    inCallSmsEnabled ? EXISTING_STEP_EXAMPLES_WITH_CATALOG : EXISTING_STEP_EXAMPLES_DEFAULT,
+  );
+}
 
 // 고급 L3 절차형(D4 = 절차·서류 정당화) — `l3Procedural === true`인 시나리오에만 얹힌다.
 // 어느 시나리오가 이 블록을 받는지는 `roleplay/l3Depth.ts`가 단독으로 정한다(이 파일은 시나리오
@@ -272,7 +342,7 @@ const ADVANCED_L3_PROCEDURAL = `[난이도 — 고급(심화): 절차로 정당�
  * |---|---|---|
  * | 1 | `BEGINNER_BLOCK` | `beginner` |
  * | — | *(없음, `null`)* | `intermediate` — **기준선. 블록 미출력** |
- * | 2 | `ADVANCED_BASE` | `advanced` |
+ * | 2 | `ADVANCED_BASE_TEMPLATE`(조건형 치환) | `advanced` — 선행 요구 예시가 `inCallSmsEnabled`로 갈린다(§43.4 B) |
  * | 3 | `ADVANCED_L3_PROCEDURAL` | `advanced` && `l3Procedural` |
  * | 4 | *(빈 블록)* | `advanced` && !`l3Procedural` — **축소형: 문구를 저작하지 않는다**(§17.6.3) |
  *
@@ -285,12 +355,14 @@ const ADVANCED_L3_PROCEDURAL = `[난이도 — 고급(심화): 절차로 정당�
  */
 function buildDifficultyBlock(
   level: DifficultyLevel,
-  opts: { l3Procedural?: boolean } = {},
+  opts: { l3Procedural?: boolean; inCallSmsEnabled?: boolean } = {},
 ): string | null {
   if (level === "beginner") return BEGINNER_BLOCK;
   // 기준선 — 블록을 내보내지 않는다(현행 프롬프트가 곧 중급, §15.3.1/§17.4.1).
   if (level === "intermediate") return null;
-  return opts.l3Procedural === true ? `${ADVANCED_BASE}\n\n${ADVANCED_L3_PROCEDURAL}` : ADVANCED_BASE;
+  // §43.4 B — 고급 공통 블록의 **선행 요구 예시만** 카탈로그 유무로 갈린다(블록 신설 0건).
+  const advancedBase = buildAdvancedBase(opts.inCallSmsEnabled === true);
+  return opts.l3Procedural === true ? `${advancedBase}\n\n${ADVANCED_L3_PROCEDURAL}` : advancedBase;
 }
 
 /**
@@ -305,6 +377,12 @@ export type BuildSystemPromptOptions = {
    * (`scenarios/inCallSms.ts` `hasInCallSms`). true면 [진행 강제]의 "화면에 없는 것을 가리키지
    * 않는다" 항목이 조건형으로 대체돼 **인증번호·계좌·링크를 요구해도 되는** 문구로 바뀐다.
    * false(기본)면 문자열이 도입 전과 완전히 동일하다(회귀 0).
+   *
+   * ⭐ **§43.4 B(2026-07-29 사용자 신고) — 이 값은 고급 블록의 선행 요구 예시도 함께 가른다.**
+   * 카탈로그가 없는 세션에서 *"안내 문자·링크 확인"*·*"조회용 모의 앱 설치"* 는 이 훈련이
+   * 재현하지 않는 요구라, 예시가 *"본인확인 항목 확인"* 하나로 붕괴한다(그 결과가 신고 증상이다).
+   * ⛔ **`MOCK_SCREENS`의 대리 판별자가 아니다 — G229**(메신저 스미싱 2종은 화면을 가졌는데
+   * 이 값이 false라 "없음" 분기를 받는다. 잔여 오차로 그대로 받는다, §43.4 (ㄱ)).
    */
   inCallSmsEnabled?: boolean;
   /**
@@ -350,8 +428,13 @@ export function buildSystemPrompt(
   const tactics = prompt.weakenedTactics.map((tactic, i) => `${i + 1}. ${tactic}`).join("\n");
   // T85(§17.8 순서 6번) — 블록을 **추가하지 않고** 6번 항목이 내보내는 문자열만 길어진다. 그래서
   // 조립 순서 불변식(가드레일 최후미)에 영향이 0이고, T83이 세운 `[T83 전수]` 2건이 무개정 통과한다.
+  // §43.4 B — 난이도 블록도 같은 판별자(`inCallSmsEnabled`)를 받는다. **신규 옵션 0건**이며
+  // 호출부 3곳(sendMessage·오프닝·Gemini Live 토큰)은 이미 이 값을 넘기고 있다(G63 무영향).
   const difficultyBlock = opts.difficultyLevel
-    ? buildDifficultyBlock(opts.difficultyLevel, { l3Procedural: opts.l3Procedural })
+    ? buildDifficultyBlock(opts.difficultyLevel, {
+        l3Procedural: opts.l3Procedural,
+        inCallSmsEnabled: opts.inCallSmsEnabled,
+      })
     : null;
   return [
     prompt.personaPrompt,

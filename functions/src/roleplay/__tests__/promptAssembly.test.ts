@@ -1126,3 +1126,219 @@ test("[T125] 선언은 기존 4개 항목·수법 목록 문면을 바꾸지 않
     );
   }
 });
+
+// ══════════════════════════════════════════════════════════════════════════════════════════
+// §43 — 사용자 프로덕션 신고(2026-07-29) *"납치 시나리오 난이도 상인데도 본인확인을 하고,
+// 무의미한 대화만 오간다."*
+//
+// ⭐ **결함은 두 줄이다(§43.2)**: L4의 선행 요구 예시가 **①-a 카탈로그 유무**를 묻지 않고
+// (`ADVANCED_BASE`의 두 자리), 남은 *"본인확인 항목 확인"* 에 **①-b 페르소나 조건절**이 없다.
+// 카탈로그 0인 시나리오가 **7/14**(P-1 실측)라 그 세션에서 선택지가 하나로 붕괴한다.
+// ⛔ **한쪽만 고치면 다른 쪽이 더 나빠진다(G228)** — 그래서 아래 게이트들은 한 벌이다.
+// ══════════════════════════════════════════════════════════════════════════════════════════
+
+/** 현행 배포 문면(카탈로그 보유 분기) — B-4가 요구하는 **회귀 0**의 기준 문자열 두 줄. */
+const S43_L4_EXAMPLES_LINE_WITH_CATALOG =
+  "선행 요구는 **이 훈련이 이미 재현하는 것 중에서만** 고른다(본인확인 항목 확인, 안내 문자·링크 확인, 조회용 모의 앱 설치 등) — **새로운 형태의 요구를 발명하지 않는다.**";
+const S43_L4_EXISTING_STEP_LINE_WITH_CATALOG =
+  "이 대화의 흐름에 이미 앞선 단계(안내 링크 확인, 앱 설치 등)가 있다면 **그것이 곧 선행 요구이므로 새로 만들지 않고** 곧장 최종 요구로 이어간다.";
+
+/** 카탈로그가 없는 세션에서 **재현되지 않는** 요구를 가리키는 문구(있으면 선택지가 붕괴한다). */
+const S43_CATALOG_ONLY_EXAMPLES = ["안내 문자·링크 확인", "조회용 모의 앱 설치", "안내 링크 확인, 앱 설치 등"];
+
+/** 카탈로그 0 분기가 주는 대체 원천 — 전부 **이미 이 프롬프트에 있는 것**이다(§43.5 (2) ㉠㉡㉣). */
+const S43_FALLBACK_SOURCES = [
+  "상황을 되짚는 사실 확인 질문",
+  "통화를 끊지 않고 그 자리에서 계속 답하게 하기",
+  "조건을 낮춘 작은 요구 먼저 통과시키기",
+];
+
+/** C(페르소나 조건절) — 이 문장이 빠지면 협박·가족 사칭이 캐릭터에 없는 확인 절차를 시작한다. */
+const S43_PERSONA_CONDITION =
+  "**네가 신원을 밝히는 기관·기업·서비스의 담당자가 아니라면 선행 요구로 본인확인 항목을 확인하지 않는다**";
+
+/**
+ * [T85/G61]·[T85/L4]가 단언하는 4문장 — §43.9 7이 *"치환 슬롯 밖"* 이라고 판정한 그것.
+ * ⛔ 슬롯 경계가 이 문장들을 삼키면 여기서 **즉시** 빨간불이 난다(의도된 보호).
+ */
+const S43_SLOT_BOUNDARY_SENTENCES = [
+  "요구는 두 단계로 나눈다",
+  "선행 요구도 구체적 행동 지시여야 한다",
+  "새로운 형태의 요구를 발명하지 않는다",
+  "세 단계 이상으로 늘리지 않는다",
+];
+
+test("[§43/B] 문자 카탈로그 보유 세션의 고급 문면은 **한 글자도 달라지지 않는다**(B-4 회귀 0 — 그 시나리오들은 예시를 잃지 않는다, G223)", (t) => {
+  // ⚠️ **"있음" 분기의 모집단은 `hasInCallSms` 5종**이지 §43.2의 카탈로그 보유 7종이 아니다 —
+  // 판별자가 `inCallSmsEnabled` 하나뿐이기 때문이다(B-2). 그 차이가 곧 G229 잔여 오차 2종이며
+  // 아래 [§43/G229]가 그것을 따로 고정한다.
+  const withCatalog = Object.keys(SCENARIO_PROMPTS).filter((id) => hasInCallSms(id));
+  assert.ok(withCatalog.length > 0, "문자 카탈로그 보유 시나리오가 하나도 없다 — 게이트가 빈 집합을 잰다");
+  for (const id of withCatalog) {
+    for (const l3Procedural of [false, true]) {
+      const assembled = buildSystemPrompt(SCENARIO_PROMPTS[id], {
+        difficultyLevel: "advanced",
+        inCallSmsEnabled: true,
+        l3Procedural,
+      });
+      assert.ok(
+        assembled.includes(S43_L4_EXAMPLES_LINE_WITH_CATALOG),
+        `${id}: 카탈로그 보유 분기의 선행 요구 예시 줄이 바뀌었다 — 이 시나리오들에는 그 예시가 정확히 맞는다(G223).`,
+      );
+      assert.ok(
+        assembled.includes(S43_L4_EXISTING_STEP_LINE_WITH_CATALOG),
+        `${id}: 카탈로그 보유 분기의 "이미 앞선 단계" 줄이 바뀌었다(§43.4 B-3 — 정정 대상은 2줄이다).`,
+      );
+    }
+  }
+  t.diagnostic(`B-4 회귀 0 실측: 카탈로그 보유 ${withCatalog.length}종 × l3Procedural 2값에서 두 줄 모두 원문 유지`);
+});
+
+test("[§43/B] 카탈로그 0인 세션의 고급 문면에는 **재현되지 않는 요구가 하나도 없다**(①-a — 신고 증상의 절반)", (t) => {
+  const noCatalog = Object.keys(SCENARIO_PROMPTS).filter((id) => !hasInCallSms(id));
+  assert.ok(noCatalog.length > 0, "카탈로그 0 시나리오가 없다 — 게이트가 빈 집합을 잰다");
+  for (const id of noCatalog) {
+    const assembled = buildSystemPrompt(SCENARIO_PROMPTS[id], {
+      difficultyLevel: "advanced",
+      inCallSmsEnabled: false,
+      l3Procedural: isL3Procedural(id),
+    });
+    for (const phrase of S43_CATALOG_ONLY_EXAMPLES) {
+      assert.equal(
+        assembled.includes(phrase),
+        false,
+        `${id}: 이 훈련이 재현하지 않는 요구("${phrase}")가 선행 요구 예시로 남아 있다 — ` +
+          "그러면 실제로 고를 수 있는 것이 하나뿐이라 선택지가 붕괴한다(§43.2 ①-a).",
+      );
+    }
+    for (const source of S43_FALLBACK_SOURCES) {
+      assert.ok(assembled.includes(source), `${id}: 대체 선행 요구 원천이 없다 — "${source}"`);
+    }
+  }
+  t.diagnostic(`①-a 실측: 카탈로그 0 ${noCatalog.length}종 전수에서 카탈로그 전용 예시 0건`);
+});
+
+test("[§43/C] 페르소나 조건절이 **고급 공통 블록**에 있다 — l3Procedural 축소형에서도 빠지지 않는다(C-5)", (t) => {
+  // ⛔ 이 문장을 `ADVANCED_L3_PROCEDURAL`에 넣으면 `l3Procedural===false`인 시나리오가 블록을
+  // 못 받아 **결함 5종 중 2종에서 조건절이 조용히 빠진다**(§43.4 C-5 — messenger 가족·지인 2종).
+  const ids = Object.keys(SCENARIO_PROMPTS);
+  let combos = 0;
+  for (const id of ids) {
+    for (const l3Procedural of [false, true]) {
+      for (const inCallSmsEnabled of [false, true]) {
+        const assembled = buildSystemPrompt(SCENARIO_PROMPTS[id], {
+          difficultyLevel: "advanced",
+          l3Procedural,
+          inCallSmsEnabled,
+        });
+        combos += 1;
+        assert.ok(
+          assembled.includes(S43_PERSONA_CONDITION),
+          `${id}(l3Procedural=${l3Procedural}, sms=${inCallSmsEnabled}): 페르소나 조건절이 없다 — ` +
+            "협박·가족 사칭 페르소나가 캐릭터에 없는 본인확인 절차를 시작한다(§43.2 ①-b).",
+        );
+        // C-1 — **금지만 쓰면 선행 요구가 0개**가 되어 G62가 고급에서 재발한다. 대체가 함께 있어야 한다.
+        assert.ok(
+          assembled.includes("그 경우에는 상황을 되짚는 사실 확인 질문"),
+          `${id}: 조건절이 금지만 하고 대체를 주지 않는다(C-1/G62).`,
+        );
+      }
+    }
+  }
+  // C-3 — L4 자체(2단 요구)는 끄지 않는다. 후보 G(고급 L4 축소)는 기각됐다.
+  const kidnap = buildSystemPrompt(SCENARIO_PROMPTS["kidnapping-threat"], {
+    difficultyLevel: "advanced",
+    l3Procedural: isL3Procedural("kidnapping-threat"),
+    inCallSmsEnabled: false,
+  });
+  assert.ok(kidnap.includes("요구는 두 단계로 나눈다"), "조건절이 L4 자체를 껐다 — 그것은 기각된 후보 G다(C-3).");
+  t.diagnostic(`C 실측: ${ids.length}종 × l3Procedural 2값 × sms 2값 = ${combos}조합 전수에서 조건절 존재`);
+});
+
+test("[§43/C-2] 조건절은 **라벨·시나리오 id로 지목하지 않는다**(G230 — 표기가 갈리면 다른 시나리오에서 조용히 빠진다)", () => {
+  const assembled = buildSystemPrompt(SCENARIO_PROMPTS["kidnapping-threat"], {
+    difficultyLevel: "advanced",
+    l3Procedural: true,
+    inCallSmsEnabled: false,
+  });
+  const start = assembled.indexOf(S43_PERSONA_CONDITION);
+  assert.ok(start >= 0, "조건절을 찾지 못했다 — 게이트가 빈 문자열을 잰다");
+  const line = assembled.slice(start, assembled.indexOf("\n", start));
+  for (const id of Object.keys(SCENARIO_PROMPTS)) {
+    assert.equal(line.includes(id), false, `조건절이 시나리오 id를 지목한다 — ${id}(G230)`);
+  }
+  for (const label of ["협박", "납치", "자녀 사칭", "지인 사칭", "가족 사칭"]) {
+    assert.equal(line.includes(label), false, `조건절이 계열 라벨을 지목한다 — "${label}"(G230)`);
+  }
+  // C-4 — 횟수·서수·턴 번호 금지(F11/G130 계승). 모델에 카운터가 없어 판정 자체가 불가능하다.
+  assert.deepEqual(findCounterExpressions(line), [], "조건절에 카운터 표현이 있다(C-4/F11/G130)");
+  assert.equal(/[0-9０-９]/.test(line), false, "조건절에 숫자가 있다(C-4/F11/G130)");
+});
+
+test("[§43/슬롯경계] 치환 슬롯이 [T85/G61]·[T85/L4]의 4문장을 **삼키지 않는다**(§43.9 7 — 무약화 하드 제약)", (t) => {
+  let combos = 0;
+  for (const id of Object.keys(SCENARIO_PROMPTS)) {
+    for (const inCallSmsEnabled of [false, true]) {
+      for (const l3Procedural of [false, true]) {
+        const assembled = buildSystemPrompt(SCENARIO_PROMPTS[id], {
+          difficultyLevel: "advanced",
+          inCallSmsEnabled,
+          l3Procedural,
+        });
+        combos += 1;
+        for (const sentence of S43_SLOT_BOUNDARY_SENTENCES) {
+          assert.ok(
+            assembled.includes(sentence),
+            `${id}(sms=${inCallSmsEnabled}, l3=${l3Procedural}): 치환 슬롯이 L4 불변 문장을 삼켰다 — "${sentence}"`,
+          );
+        }
+        // AC-065/AC-075 — 무해화 경계는 양 분기에서 동일하다(§43.9 2·6).
+        assert.ok(assembled.includes("페이로드는 가상값만 쓴다"), `${id}: 무해화 문구 유실`);
+        assert.ok(
+          assembled.includes("더 진짜에 가까운 위험 정보가 아니다"),
+          `${id}: 고급 무해화 경계 문장 유실`,
+        );
+        assert.deepEqual(
+          scanText(assembled, "assembledPrompt"),
+          [],
+          `${id}: 조건형 치환이 무해화 금지 패턴을 끌고 들어왔다(AC-075)`,
+        );
+      }
+    }
+  }
+  t.diagnostic(`슬롯 경계 실측: ${combos}조합 전수에서 L4 불변 4문장 유지 + 무해화 스캔 0건`);
+});
+
+test("[§43/P-2 회귀] 신고 시나리오(kidnapping-threat·고급·카탈로그 0)에서 **붕괴가 재현되지 않는다**", (t) => {
+  // ⭐ 착수 시점의 P-2 재현값: 이 조합에서 `"본인확인 항목 확인"`·`"안내 문자·링크 확인"`·
+  // `"조회용 모의 앱 설치"` 3개가 **모두** 프롬프트에 있었고, 앞의 둘은 이 훈련이 재현하지 않아
+  // 실질 선택지가 *"본인확인"* 하나였다. 아래가 그 상태로 되돌아가지 않는 것을 고정한다.
+  const assembled = buildSystemPrompt(SCENARIO_PROMPTS["kidnapping-threat"], {
+    difficultyLevel: "advanced",
+    l3Procedural: isL3Procedural("kidnapping-threat"),
+    inCallSmsEnabled: false,
+  });
+  assert.equal(assembled.includes("안내 문자·링크 확인"), false, "재현되지 않는 요구가 남아 있다(①-a)");
+  assert.equal(assembled.includes("조회용 모의 앱 설치"), false, "재현되지 않는 요구가 남아 있다(①-a)");
+  assert.ok(assembled.includes(S43_PERSONA_CONDITION), "본인확인을 끄는 조건절이 없다(①-b)");
+  // ⛔ **선행 요구가 0개가 되면 안 된다(G62/G231)** — 협박 계열에 남는 원천이 실제로 있어야 한다.
+  const remaining = S43_FALLBACK_SOURCES.filter((s) => assembled.includes(s));
+  assert.ok(remaining.length >= 1, "협박 계열에 남는 선행 요구 원천이 0개다 — L4가 통째로 발동하지 못한다(G62).");
+  t.diagnostic(`P-2 회귀: 카탈로그 전용 예시 0건 · 조건절 존재 · 남는 원천 ${remaining.length}종`);
+});
+
+test('[§43/G229] 잔여 오차를 숨기지 않는다 — 화면 카탈로그만 가진 메신저 2종은 "없음" 분기를 받는다', (t) => {
+  // ⚠️ `inCallSmsEnabled`는 `MOCK_SCREENS`의 **대리 판별자가 아니다**(§43.4 G229). 이 두 종은
+  // 화면을 가졌는데 이 값이 false라 *"조회용 모의 앱 설치"* 예시를 **잃는다** — §43.4 (ㄱ)이
+  // 그대로 받기로 채택한 대가다. ⛔ 이것이 **의도된 상태**임을 게이트로 남긴다(조용한 손실 금지).
+  for (const id of ["messenger-parcel-smishing-sms", "messenger-subsidy-smishing-sms"]) {
+    assert.ok(Object.keys(MOCK_SCREENS).includes(id), `${id}: 화면 카탈로그 전제가 깨졌다`);
+    assert.equal(hasInCallSms(id), false, `${id}: 문자 카탈로그가 생겼다 — G229 잔여 오차의 전제가 바뀌었다`);
+    const assembled = buildSystemPrompt(SCENARIO_PROMPTS[id], {
+      ...realOptionsFor(id),
+      difficultyLevel: "advanced",
+    });
+    assert.equal(assembled.includes("조회용 모의 앱 설치"), false, `${id}: 잔여 오차 서술과 실제가 다르다`);
+  }
+  t.diagnostic('G229 잔여 오차 실측: 메신저 2종은 "없음" 분기 — 예시 1개 손실은 채택된 대가다(§43.4 (ㄱ))');
+});
