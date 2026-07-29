@@ -68,14 +68,33 @@ git fetch origin main:main
 | Docs | `docs/{{slug}}` | docs/update-api |
 
 ## Commit Messages
+
+> **갱신 고지 (2026-07-29, T144 — User 판정 ⓒ).** 종전 규정은 `{{type}}: {{summary ≤ 50 chars}}` + `Refs:` 필수였다.
+> **367 커밋 전수 실측 결과 문서와 관행이 갈려 있었다:** 제목 50자 이하 **3/367 = 0%** · `Refs:` 트레일러 **193/367 = 53%** · 실제 형태는 `docs(T106):` 처럼 **scope 괄호**를 쓰는데 종전 문서엔 그 규정이 **없었다**.
+> ⇒ **50자 상한은 폐기**(한국어 제목에서 성립하지 않는다 — 현행 평균 100자) · **`Refs:` 는 필수로 복원** · **scope 괄호를 규정에 명시**.
+> ⛔ **과거 커밋을 소급 정정하지 않는다.** 이 규정은 **2026-07-29 이후 커밋**에만 적용된다.
+
 ```
-{{type}}: {{summary ≤ 50 chars}}
+{{type}}({{scope}}): {{summary — 한 줄, 상한 없음}}
 
 {{body — what and why, not how}}
 
 Refs: {{task ID}}
 ```
-Types: `feat` / `fix` / `refactor` / `docs` / `test` / `chore`
+
+| 요소 | 규칙 |
+|---|---|
+| `{{type}}` | `feat` / `fix` / `refactor` / `docs` / `test` / `chore` |
+| `({{scope}})` | **선택.** 태스크 ID(`T133`) · 절 번호(`§38`) · AC 번호 중 하나. 여러 개면 `~`로 범위(`T138~T144`) |
+| `{{summary}}` | **한 줄. 글자 수 상한 없다.** ⛔ 다만 *"무엇을 했는가"* 가 제목만으로 서야 한다 |
+| `Refs:` | ⭐ **필수.** 대응하는 `docs/Tasks.md` ID를 적는다 |
+
+### ⭐ `Refs:` 가 필수인 이유 (T144 판정 근거)
+
+**PR #166**(§38, 사용자 신고 결함)이 **설계 → 구현 → reviewer → QA → 병합**까지 전 과정을 통과했는데 `docs/Tasks.md`에 **추적 행이 아예 없었다.** 뒤늦게 T138~T144로 등재해야 했다(**PR #167**).
+⇒ **커밋에서 태스크로 되짚을 수단이 없어서 생긴 부채**이며, 그것이 정확히 `Refs:` 가 하는 일이다.
+
+⚠️ **대응 태스크 행이 아직 없으면** `Refs: (미등재 — planner 인계)` 로 적고 **그 사실을 PR 본문에 남긴다.** ⛔ 없는 태스크 ID를 지어내지 마라.
 
 ## Merge Rules
 - One task (docs/Tasks.md ID) = one branch = one PR.
