@@ -3,7 +3,8 @@
 - [정정한 문장의 재사용처를 전수 grep](feedback_correction_sweep_reuse_sites.md) — 거짓으로 고친 문장이 다른 절의 전제로 살아 있다; DECISIONS·adr까지 훑고 "N곳뿐"을 근거와 함께
 - [순서 역전 신고는 배치 앵커부터](feedback_order_report_check_anchor_first.md) — 런타임 의심 전에 ①앵커가 하나뿐인가 ②이벤트 문면이 무조건 방출인가; 표시 층은 라이브 0회로 확정된다
 - [ElevenLabs voice selection constraints](reference_elevenlabs_voice_selection.md) — client-only TTS override, no server voice-pin, account-scoped IVC ids; drove ADR-0006 A2
-- [ElevenLabs agent prompt API](reference_elevenlabs_agent_prompt_api.md) — 프롬프트는 `/v1/convai/agents/{id}`의 GET/PATCH; 저장소엔 이 경로 코드가 없다. PATCH 200 말고 되읽기로 검증
+- [ElevenLabs agent prompt API](reference_elevenlabs_agent_prompt_api.md) — GET/PATCH `/v1/convai/agents/{id}`; 목록 1콜로 12쌍; 이름 규약 `codegate-{scenarioId}`; AGENT_IDS는 빈 값
+- [제약 전제는 자원 실재부터 확인](feedback_constraint_premise_check_resources.md) — "키가 없어서 못 한다"가 틀리면 기각했던 후보가 부활한다; 부재 환경 설계는 지우지 말고 환경별 강등으로
 - [Gemini Live session constraints](reference_gemini_live_session_constraints.md) — 음성·프롬프트·도구는 토큰에 서버 고정(세션 중 전환 불가); 상대 전환은 지시 주입+연출로
 - [인계 수치는 양방향으로 어긋난다](project_upstream_breakage_counts_undercount.md) — 상류는 과소, 내 이전 절은 범주 혼합으로 과다; 편집 범위로 쓸 수치는 대상/비대상을 갈라 재집계
 - [상류가 인용한 식별자는 없을 수 있다](project_upstream_cited_identifiers_may_not_exist.md) — "기존 이벤트/API가 이미 있다"는 인용은 전수 grep으로 실재 확인 후 설계할 것
