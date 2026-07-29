@@ -1,9 +1,13 @@
 ---
 name: codegate-pixel-measurement-cdp
-description: 이 저장소의 "픽셀 측정 수단 0건"(OQ-U34)을 의존성 0으로 뚫는 법 — Node 22 전역 WebSocket + Chrome CDP. next dev는 헤드리스에서 하이드레이트되지 않으니 정적 프로덕션 빌드를 써라.
+description: 픽셀 측정 하네스는 `scripts/measure-vertical-slack.mjs`로 저장소에 있다 — 측정 도구를 커밋하지 않으면 리뷰가 Critical로 막힌다(PR #180 C1). next dev는 헤드리스에서 하이드레이트 안 됨.
 metadata:
   type: project
 ---
+
+⭐ **하네스는 이미 저장소에 있다 — `scripts/measure-vertical-slack.mjs`**(의존성 0, 수동 실행 전용). 새로 만들지 말고 `--screen` / `--viewports` / `--probe` 인자를 읽어라.
+
+⛔ **측정 결과를 보고할 거면 측정 도구를 같은 커밋에 넣어라.** PR #180이 **Critical로 반려**된 사유가 정확히 이것이다 — 수치는 소수점까지 재현됐는데 **도구가 세션과 함께 사라져** reviewer·QA가 한 값도 독립 검증하지 못했다. 산문 레시피(메모리·커밋 본문)는 **재현 가능성으로 인정되지 않는다.**
 
 **여백·레이아웃 픽셀은 `npm run build`(정적 export) 결과물 `out/`을 로컬 정적 서버로 띄우고 헤드리스 Chrome을 CDP로 몰아서 잰다. `npm run dev`로는 못 잰다.**
 
