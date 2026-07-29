@@ -275,13 +275,12 @@ test("D0_none은 sentinel이라 공백 산정에서 제외된다(§15.10.1)", ()
   const coverage = computeAxisCoverage();
   const row = findCoverageRow(coverage, "D0_none");
   assert.ok(row);
-  assert.equal(row.count, 4, "PRD 표에서 D열이 '(없음)'인 시나리오는 4종이다");
-  assert.deepEqual([...row.scenarioIds].sort(), [
-    "courier-customs-scam",
-    "messenger-friend-loan-kakao",
-    "messenger-parcel-smishing-sms",
-    "messenger-subsidy-smishing-sms",
-  ]);
+  // ⚠️ **T102(2026-07-27) 갱신**: 4종 → **1종**. PRD 표 D열의 "(없음)"을 그대로 옮긴 4종 중
+  // 3종(courier-customs·parcel·subsidy)은 콘텐츠에 확인 차단·전화 끊음 저지 라벨이 실재해
+  // `D0_none`이 **사실과 달랐다**(Architecture.md §17.1.1, 갭 G60). 근거 대조는
+  // `exitBlockEvidence.test.ts`가 상시 고정한다.
+  assert.equal(row.count, 1, "이탈 차단 수법이 콘텐츠에 0건인 시나리오는 1종이다(T102 정정)");
+  assert.deepEqual([...row.scenarioIds].sort(), ["messenger-friend-loan-kakao"]);
   // D0이 0건이 되는 것은 결핍이 아니라 목표 상태다 — 그때도 공백으로 보고되지 않아야 한다.
   const allTagged: Record<string, ScenarioAxes> = Object.fromEntries(
     Object.entries(SCENARIO_AXES).map(([id, axes]) => [
