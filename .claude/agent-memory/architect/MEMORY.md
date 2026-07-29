@@ -1,5 +1,6 @@
 - [인계된 원인이 수치를 설명하는가](feedback_cited_cause_must_explain_the_number.md) — 설명 못 하면 사실이 둘; 전제가 참이면 관측 불가라는 결론이 나오면 프로브 0단계는 전제 검증
 - [지시받은 판정이 이미 절로 있을 수 있다](feedback_judgment_may_already_be_a_section.md) — 착수 전 `^## ` 전수 grep + UpdateRequests `open`; 있으면 재작성 말고 "위에 얹는 절"
+- [경로로 닫은 안전은 문면을 남긴다](feedback_safety_closed_by_path_leaves_the_wording.md) — 화면이 새로 주장한 것을 고지가 부정하는가; 갈래 말고 넓히기, 게이트 하드코딩 문자열 grep
 - [겹친 플래그는 확장 후보로 판정한다](feedback_overloaded_flag_judge_by_live_extension.md) — "오늘 값 4/4 동일"로 닫지 말 것; 이름 말고 판별자를 갈고 방향은 허용목록
 - [오염 샘플은 기존 게이트를 피해야 한다](feedback_poison_sample_must_dodge_existing_gates.md) — "새 게이트만 빨강"이 요구면 오염 모양이 설계 사항; 입력 불변 단언으로 보인다
 - [정정한 문장의 재사용처를 전수 grep](feedback_correction_sweep_reuse_sites.md) — 거짓으로 고친 문장이 다른 절의 전제로 살아 있다; DECISIONS·adr까지 훑고 "N곳뿐"을 근거와 함께
