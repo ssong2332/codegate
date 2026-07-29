@@ -15,6 +15,7 @@ import type { VoiceMode } from "../scenarios/publicMeta";
 import type { ChallengeDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
 import { getRealtimeProvider } from "./provider";
 import type { CreateRealtimeCallRequest, CreateRealtimeCallResponse } from "./callTypes";
+import type { RealtimeProviderName } from "./types";
 
 /**
  * 에스컬레이션된 세션(§13.6 통합 버그 수정)의 "유효 voiceMode" 유추 — session.voiceSelectionSource가
@@ -27,6 +28,48 @@ export function resolveEffectiveVoiceMode(
   if (!voiceSelectionSource) return undefined;
   if (voiceSelectionSource === "recorded" || voiceSelectionSource === "reused") return "clone";
   return "generic"; // fallback_male | fallback_female
+}
+
+/**
+ * ⭐⭐ **턴 지시 주입 자격 허용목록(§43.7 ⓑ, 2026-07-29).**
+ *
+ * **왜 `difficultyApplied`를 그대로 쓰지 않는가**: 그 필드는 **한 이름으로 두 가지**를 말한다 —
+ *   **M1** *"사용자가 고른 난이도가 이 통화의 프롬프트에 실렸는가"*(클라 난이도 배지가 쓴다,
+ *     `src/app/session/play/page.tsx`) /
+ *   **M2** *"이 경로에 서버가 턴 지시를 넣을 수 있는가"*(= 오퍼 대사가 실제로 나오는가).
+ * 현행 4경로에서 두 값이 같은 것은 우연이 아니라 **하나의 구조적 사실**(ElevenLabs는 프롬프트가
+ * 에이전트 쪽에 있다)이 두 성질을 동시에 만들기 때문이라 **오늘은 무해하다.** 그러나 §15.3.3의
+ * 확장 경로(`ELEVENLABS_AGENT_IDS`를 난이도별 에이전트까지 허용)가 구현되면 **M1=true인데
+ * M2=false**가 되어, 아래 게이트가 **조용히 열리고** §16.6 G23이 막던 *"컨트롤은 뜨는데 사기범이
+ * 아무 말도 하지 않는"* 불일치가 되살아난다. ⇒ 판별자를 **의미 그대로**(주입 지점이 있는
+ * 경로인가) 묻는 것으로 교체한다. **신규 응답 필드 0건 · `docs/API.md` 무변경.**
+ *
+ * ⛔ **차단목록(`!== "elevenlabs"`)으로 쓰지 말 것 — G233.** 새 외부 에이전트 프로바이더가
+ * 추가되면 **기본 통과**가 되어 같은 결함이 재발한다. **허용목록이어야 새 프로바이더가 기본
+ * 차단**되고, 자격을 확인한 사람이 명시적으로 여기에 추가한다.
+ *
+ * ⛔ **하드 규칙 — G236: §15.3.3 확장 경로를 구현할 때 `difficultyApplied`만 `true`로 올리고 이
+ * 허용목록은 건드리지 말 것.** ElevenLabs는 난이도가 반영되더라도 **턴 지시 주입 지점이 생기는
+ * 것이 아니다.** 두 값은 서로의 근거가 아니다.
+ *
+ * 현행 4경로 판정(§43.7 (3) — 교체 전후 **4/4 동일**, `[§43/G234]`가 역검증까지 고정한다):
+ * `gemini`(Live) ✅ 통과 · `elevenlabs` ⛔ 차단 · `none`(Mock) ✅ 통과 · `none`(텍스트 폴백) ✅ 통과.
+ */
+export const TURN_INSTRUCTION_CAPABLE_PROVIDERS: readonly RealtimeProviderName[] = ["gemini", "none"];
+
+/**
+ * 이 경로에 서버가 턴 지시를 주입할 수 있는가(= 오퍼 대사가 실제로 나오는가).
+ *
+ * ⚠️ `allowlist`는 **테스트 주입용**이다(이 저장소의 DI 게이트 관례 — T10). G234가 요구하는
+ * 역검증은 *"허용목록을 좁혔더니 판정이 뒤집힌다"* 를 **이 함수 자신**으로 보여야 성립한다 —
+ * 테스트 안에 같은 모양의 사본을 만들어 재면 **정작 이 함수가 목록을 안 봐도 초록**이 난다.
+ * 호출부는 인자를 넘기지 않는다(정본은 위 상수 하나뿐).
+ */
+export function isTurnInstructionCapable(
+  provider: RealtimeProviderName,
+  allowlist: readonly RealtimeProviderName[] = TURN_INSTRUCTION_CAPABLE_PROVIDERS,
+): boolean {
+  return allowlist.includes(provider);
 }
 
 ensureFirebaseAdminApp();
@@ -100,14 +143,20 @@ export const createRealtimeCall = onCall<
   // 시점에 deliverVerifyOffer가 서버 카탈로그에서 렌더 — `withSmsTriggers`와 같은 자리·같은 원칙).
   //
   // ⚠️ **부착 조건 3개를 전부 만족할 때만 필드가 존재한다**(1차 게이트, 프레젠테이션):
-  //   ① 카탈로그 보유 ② 세션 난이도 advanced ③ `difficultyApplied === true`.
+  //   ① 카탈로그 보유 ② 세션 난이도 advanced ③ **턴 지시 주입 자격이 있는 프로바이더인가**.
   // ③이 **ElevenLabs 경로를 구조적으로 차단**한다(§16.6 G23 — 그 경로엔 지시 주입 지점이 없어
   // 컨트롤만 뜨고 사기범이 아무 말도 하지 않는 반대 방향 불일치가 생긴다). 필드가 없으면 클라에
-  // 컨트롤이 **존재하지 않는다**. 2차 게이트는 콜러블의 재검증 5종이다(G24).
+  // 컨트롤이 **존재하지 않는다**. 2차 게이트는 콜러블의 재검증 5종이다(G24 — §41 소관이라 이
+  // 패스에서 손대지 않았다, G235).
+  //
+  // ⭐ **§43.7 ⓑ — ③의 판별자가 `difficultyApplied === true`에서 프로바이더 허용목록으로 바뀌었다.**
+  // 그 필드는 M1(난이도 반영)과 M2(지시 주입 자격)를 **한 이름으로 겸하고 있었고**, §15.3.3
+  // 확장 경로가 구현되는 순간 둘이 갈라져 이 게이트가 조용히 열린다. **행동 변화는 0이다** —
+  // 현행 4경로에서 판정이 4/4 동일하다(위 `TURN_INSTRUCTION_CAPABLE_PROVIDERS` 주석 · `[§43/G234]`).
   const verifyOffer = getVerifyOfferTrigger(session.scenarioId);
   const isAdvanced = normalizeDifficultyLevel(session.difficultyLevel) === "advanced";
-  const withVerifyOffer = <T extends { difficultyApplied: boolean }>(credentials: T): T =>
-    verifyOffer && isAdvanced && credentials.difficultyApplied === true
+  const withVerifyOffer = <T extends { provider: RealtimeProviderName }>(credentials: T): T =>
+    verifyOffer && isAdvanced && isTurnInstructionCapable(credentials.provider)
       ? { ...credentials, verifyOffer }
       : credentials;
   try {
