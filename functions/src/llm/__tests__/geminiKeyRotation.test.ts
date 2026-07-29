@@ -9,6 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { logger } from "firebase-functions";
+import { GeminiLlmClient } from "../geminiClient";
 import { classifyQuotaError } from "../quotaClass";
 import { createRotatingGeminiClient, readAttemptedKeys } from "../rotatingClient";
 import { completeWithFallback, getGeminiApiKeys, getLlmClient, withTimeout } from "../index";
@@ -153,8 +154,15 @@ test("증거①: 일일 429(quotaId에 PerDay)면 다음 키로 넘어가 실제
     { status: 200, body: OK_BODY },
   ]);
   const log = captureLogger();
+  // ⭐ 증인 1 — **주입 지점**(순환기가 어느 키를 달라고 했는가). 아래 헤더 비교(증인 2)와
+  //    독립된 관측이라, 둘이 어긋나면 원인이 순환기가 아니라 그 아래 계층임을 가려낸다.
+  const requestedKeys: string[] = [];
   try {
-    const result = await completeWithFallback(createRotatingGeminiClient(TWO_SLOTS), INPUT);
+    const rotating = createRotatingGeminiClient(TWO_SLOTS, (apiKey) => {
+      requestedKeys.push(apiKey);
+      return new GeminiLlmClient(apiKey);
+    });
+    const result = await completeWithFallback(rotating, INPUT);
 
     // ⓐ 왕복 2회 — 1번 키가 죽었으므로 2번 키까지 갔다.
     assert.equal(fetchStub.calls(), 2, "일일 429면 다음 키로 한 번 더 시도해야 한다");
@@ -162,12 +170,29 @@ test("증거①: 일일 429(quotaId에 PerDay)면 다음 키로 넘어가 실제
     //    (isMock 계약은 바뀌지 않았다 — "이번 호출의 텍스트가 Mock 산출물인가" 그대로다.)
     assert.equal(result.isMock, false, "2번 키로 성공했으면 Mock이 아니다");
     assert.equal(result.text, "정상 응답");
-    // ⓒ ⭐ 실제로 **다른 키**를 썼는가 — ⓐ만으로는 "같은 키로 두 번"과 구분되지 않는다.
-    //    ⛔ 헤더 값을 출력하지 않고 비교 결과만 단언한다(G170).
+
+    // ⓒ ⭐⭐ 실제로 **다른 키**를 썼는가 — ⓐ만으로는 "같은 키로 두 번"과 구분되지 않는다.
+    //    (실측: 순환기가 항상 slots[0]을 쓰도록 조작하면 ⓐ는 2회로 멀쩡한 채 ⓒ만 실패한다.)
+    //    ⛔ 이 단언을 느슨하게 하거나 지우면 이 파일 전체가 무의미해진다.
+    assert.deepEqual(
+      requestedKeys,
+      [SENTINEL_A, SENTINEL_B],
+      "순환기는 1번 키 다음에 반드시 **2번 슬롯의 키**를 요청해야 한다(주입 지점 관측)",
+    );
     const headers = fetchStub.apiKeyHeaders();
     assert.equal(headers.length, 2);
     assert.ok(headers[0], "1회차 요청에 x-goog-api-key 헤더가 실려야 한다");
-    assert.notEqual(headers[0], headers[1], "2번째 요청은 반드시 다른 키로 나가야 한다(순환의 본체)");
+    assert.notEqual(
+      headers[0],
+      headers[1],
+      // ⭐ 이 메시지는 "간헐 실패니까 지우자"를 막기 위한 것이다. 두 증인이 갈리면 원인이 다르다.
+      `2번째 요청은 반드시 다른 키로 나가야 한다(순환의 본체). ` +
+        `⚠️ 바로 위 requestedKeys 단언이 **통과했는데** 이것만 실패했다면 순환기는 정상이고 ` +
+        `전송 계층이 다른 키를 보낸 것이다 — 이 저장소에서 그 원인은 대개 (ㄱ) functions/lib의 ` +
+        `스테일/오염 산출물(T101) 또는 (ㄴ) 공유 워크트리에서 다른 에이전트가 동시에 소스를 ` +
+        `고치고 재빌드한 것이다. ⛔ 그 경우 이 단언을 고치지 말고 lib을 재빌드해 원인을 먼저 가려라. ` +
+        `관측된 헤더(센티넬 더미): [${headers.map((h) => String(h)).join(", ")}]`,
+    );
   } finally {
     log.restore();
     fetchStub.restore();
@@ -352,32 +377,50 @@ test("순환기의 providerName은 'gemini' 그대로다(G176 — rewind/judge.t
   assert.equal(createRotatingGeminiClient(ONE_SLOT).providerName, "gemini");
 });
 
-test("withTimeout은 순환기 **바깥**이라 모든 시도의 총합이 예산 안에 갇힌다(AC-004)", async () => {
-  // 키마다 60ms 걸려 일일 429로 죽는 클라이언트 2개 = 순차 합계 120ms.
-  // withTimeout이 바깥이면 100ms 예산에서 **전체**가 끊긴다. 안쪽이면 키마다 100ms라 통과해버린다.
+test("withTimeout은 순환기 **바깥**이라 예산 타이머가 시도마다가 아니라 전체에 한 번 걸린다(AC-004)", async () => {
+  // ⭐ 이 테스트는 **벽시계 상한을 단언하지 않는다**(reviewer 지적 — 부하 변동으로 123ms가 나와
+  //    간헐 실패했다). 대신 부하와 무관하게 결정적인 두 증인을 쓴다:
+  //      증인 1: 예산(BUDGET_MS) 타이머가 **정확히 1개** 생성된다 — 순환기 안쪽이면 키마다 1개라 2개다.
+  //      증인 2: 거부 사유가 **deadline**이다 — 안쪽이면 키마다 예산이 새로 주어져 429로 거부된다.
+  //    두 증인 다 시간 측정이 아니라 **사건 수/사유**라 느려져도 뒤집히지 않는다.
+  const BUDGET_MS = 100;
+  const PER_KEY_MS = 60; // 2키 합계 120ms > 예산 100ms (부하가 늘면 격차는 더 벌어질 뿐이다)
   const slowDailyFailure = (): LlmClient => ({
     providerName: "gemini",
     async complete() {
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      await new Promise((resolve) => setTimeout(resolve, PER_KEY_MS));
       throw Object.assign(new Error(JSON.stringify(DAILY_429)), {
         status: 429,
         message: JSON.stringify(DAILY_429),
       });
     },
   });
+
+  const originalSetTimeout = globalThis.setTimeout;
+  let budgetTimers = 0;
+  globalThis.setTimeout = ((handler: () => void, delay?: number, ...rest: unknown[]) => {
+    if (delay === BUDGET_MS) budgetTimers += 1;
+    return (originalSetTimeout as (...args: unknown[]) => unknown)(handler, delay, ...rest);
+  }) as unknown as typeof globalThis.setTimeout;
+
   const rotating = createRotatingGeminiClient(TWO_SLOTS, slowDailyFailure);
   const log = captureLogger();
-  const startedAt = Date.now();
   try {
     await assert.rejects(
-      () => withTimeout(rotating, 100).complete(INPUT),
-      (error: Error) => error.message.includes("100ms"),
-      "총합 예산(100ms)이 2키 합계(120ms)보다 먼저 끊어야 한다",
+      () => withTimeout(rotating, BUDGET_MS).complete(INPUT),
+      (error: Error) => error.message.includes(`${BUDGET_MS}ms`),
+      "거부 사유가 deadline이어야 한다 — 429로 거부됐다면 키마다 예산이 새로 주어진 것이다(순서가 뒤집혔다)",
     );
   } finally {
+    globalThis.setTimeout = originalSetTimeout;
     log.restore();
   }
-  assert.ok(Date.now() - startedAt < 120, `타임아웃이 키마다 걸리면 안 된다(경과 ${Date.now() - startedAt}ms)`);
+  assert.equal(
+    budgetTimers,
+    1,
+    `예산 타이머는 시도마다가 아니라 **전체에 한 번**만 걸려야 한다(관측 ${budgetTimers}개). ` +
+      `2개면 withTimeout이 순환기 안쪽으로 들어간 것이고, 키가 N개일 때 최대 ${BUDGET_MS}×N ms가 되어 AC-004가 깨진다.`,
+  );
 });
 
 test("전 키가 일일 소진되면 attemptedKeys가 Mock 강등 로그에 남는다(단일 키 실패와 구분)", async () => {
