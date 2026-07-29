@@ -66,3 +66,4 @@
 - [픽셀 측정 — CDP 하네스](project_codegate_pixel_measurement_cdp.md) — ⭐ 하네스는 `scripts/measure-vertical-slack.mjs`로 **이미 커밋돼 있다**; 측정 도구를 안 넣으면 리뷰 Critical(PR #180), `next dev`는 헤드리스 하이드레이트 실패.
 - [T133 시크릿 선언-사용 정합 게이트](project_codegate_t133_secret_declaration_gate.md) — ⭐ `__endpoint.secretEnvironmentVariables` 실재(스프레드까지 해석), SDK가 이미 미주입 경고를 내므로 자체 신호는 중복, 폐포는 `export … from`도 따라가야 한다, before/after를 게이트 함수 자신으로.
 - [T136 리포트 자기모순 — 수법 합집합](project_codegate_t136_tactics_union.md) — ⭐ 설계 절 **내부** 규칙 충돌을 3안으로 닫는 법, P-1 "접근 불가"가 정상 경로, TS6133이 역검증 1층.
+- [§43 L4 선행 요구 조건화(B+C)](project_codegate_s43_l4_conditioning.md) — ⭐ 삼항 되돌림이 TS6133에 먼저 잡혀 테스트 층에 못 닿는다, 허용목록 역검증은 정본 함수에 주입해야 거짓 OK를 면한다, 설계가 지목한 원천 1개를 다른 블록 금지와 충돌해 제외한 판단.
