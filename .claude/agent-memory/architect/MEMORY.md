@@ -32,4 +32,6 @@
 - [Gemini 429의 구조](reference_gemini_quota_429_shape.md) — 일일/분당 판별자는 `quotaId`뿐, `retryDelay`는 판별력 0; ApiError는 status+message뿐이라 JSON.parse 필요
 - [시크릿 선언은 자리가 아니라 목록이다](feedback_secret_declaration_is_a_list_not_a_site.md) — 핸들러마다 손으로 선언하면 반드시 밀린다; 단일 배열 상수 + 반대 방향(읽는데 선언 안 한 곳) grep
 - [Firebase SecretParam의 실제 의미](reference_firebase_secret_param_semantics.md) — 런타임에 throw 안 함(warn+""); `__endpoint.secretEnvironmentVariables`로 선언 집합 기계 판독
+- [번호는 병합 순서로 확정된다](feedback_numbering_is_settled_by_merge_order.md) — 동시 패스면 예약 불가; 쓴 번호를 보고에 명시하고, 재번호는 전역 치환 말고 자기 절/타 인용을 갈라서
+- [최적화는 경계를 대가로 산다](feedback_optimization_buys_a_boundary.md) — 통합·절감 후보는 직전 패스의 최소권한 경계를 지운다; 대가 0인 후보를 먼저 찾으면 대가 있는 후보는 자동 기각
 - [관측값이 같으면 차단 설계를 하지 마라](feedback_indistinguishable_states_pick_the_signal.md) — 정당한 강등 vs 결함 강등이 같은 값이면 원인 제거+신호로; 허용목록 뒤집기는 하나도 못 닫는다
