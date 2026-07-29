@@ -11,6 +11,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { ELEVENLABS_API_KEY, GEMINI_KEY_SECRETS } from "../shared/config";
 import { findVerifyInterceptItem } from "../scenarios/verifyIntercept";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import type { SessionDoc } from "../shared/types";
@@ -130,10 +131,27 @@ function readOfferStage(value: unknown): VerifyOfferStage | undefined {
   throw new HttpsError("invalid-argument", "stage는 announce 또는 commit이어야 합니다.");
 }
 
+/**
+ * ⭐ T133/AC-081 — 시크릿 선언(원인 제거). 이 콜러블은 `assertVerifyEligible`→`getRealtimeProvider`
+ * 경로로 자격증명을 읽어 **재검증 ⑤(안전 차단)** 을 판정하는데, 선언이 하나도 없었다.
+ *
+ * ⚠️ 결함의 형태(Architecture.md §41.3 (3)) — ⛔ "G23이 무력해진다"가 아니다:
+ *   컨트롤 부착 판정은 **선언이 있는** `createRealtimeCall`(realtime/index.ts)이 하므로 **1차
+ *   게이트는 멀쩡**하다. 미주입이 실재한다면 문제는 **두 콜러블이 서로 다른 프로바이더를 본다**는
+ *   것이고(createRealtimeCall=elevenlabs / 여기=mock), 그 상태에서 **위조 호출**(§16.1.5)이 오면
+ *   2차 게이트만 무력해진다.
+ * ⛔ **배포 환경에서 실제로 미주입이 일어나는지는 재현하지 못했다**(§41.10 (1)) — 이 선언이
+ *   보증하는 것은 "선언-사용 정합"이지 배포 동작이 아니다.
+ *
+ * 선언 목록이 `createRealtimeCall`과 같은 이유: `resolveEffectiveVoiceMode`를 `../realtime`에서
+ * 재사용하므로 이 파일의 폐포가 realtime/index.ts를 포함한다(비교 단위 = 파일 폐포, §41.5).
+ * ⛔ 이 목록을 손으로 유지하지 않는다 — devtools/__tests__/secretDeclarationGate.test.ts가
+ * 기계적으로 대조한다(AC-081 (a)).
+ */
 export const deliverVerifyOffer = onCall<
   DeliverVerifyOfferRequest,
   Promise<DeliverVerifyOfferResponse>
->(async (request) => {
+>({ secrets: [ELEVENLABS_API_KEY, ...GEMINI_KEY_SECRETS] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
@@ -170,10 +188,11 @@ export const deliverVerifyOffer = onCall<
   return buildVerifyOfferResponse(item, { placed, ...(stage ? { stage } : {}) });
 });
 
+/** ⭐ T133/AC-081 — deliverVerifyOffer와 같은 이유·같은 선언(같은 재검증 5종을 거친다). */
 export const deliverVerifyReconnect = onCall<
   DeliverVerifyReconnectRequest,
   Promise<DeliverVerifyReconnectResponse>
->(async (request) => {
+>({ secrets: [ELEVENLABS_API_KEY, ...GEMINI_KEY_SECRETS] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }

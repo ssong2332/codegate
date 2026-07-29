@@ -239,7 +239,12 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
   },
 );
 
+// ⚠️ T133/AC-081 — 이 파일은 `../roleplay`→`../llm` 경로로 GEMINI 키를 읽으므로, 이 파일의
+// **모든** 콜러블이 같은 시크릿을 선언한다(비교 단위 = 파일 폐포, Architecture.md §41.5).
+// ⛔ "이 핸들러가 직접 읽는다"는 뜻이 아니다(§41.10 (6)). 선언 프로필이 다른 콜러블을 이 파일에
+// 새로 추가하지 말 것 — 파일을 나눠라(G212).
 export const endSession = onCall<EndSessionRequest, Promise<EndSessionResponse>>(
+  { secrets: [...GEMINI_KEY_SECRETS] },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
@@ -293,7 +298,7 @@ export const endSession = onCall<EndSessionRequest, Promise<EndSessionResponse>>
 export const updateMessengerSkin = onCall<
   UpdateMessengerSkinRequest,
   Promise<UpdateMessengerSkinResponse>
->(async (request) => {
+>({ secrets: [...GEMINI_KEY_SECRETS] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
@@ -324,7 +329,7 @@ export const updateMessengerSkin = onCall<
 export const requestEscalation = onCall<
   RequestEscalationRequest,
   Promise<RequestEscalationResponse>
->(async (request) => {
+>({ secrets: [...GEMINI_KEY_SECRETS] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
@@ -376,7 +381,7 @@ export const requestEscalation = onCall<
 export const requestReverseEscalation = onCall<
   RequestReverseEscalationRequest,
   Promise<RequestReverseEscalationResponse>
->(async (request) => {
+>({ secrets: [...GEMINI_KEY_SECRETS] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
