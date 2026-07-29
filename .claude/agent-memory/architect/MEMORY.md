@@ -35,3 +35,5 @@
 - [번호는 병합 순서로 확정된다](feedback_numbering_is_settled_by_merge_order.md) — 동시 패스면 예약 불가; 쓴 번호를 보고에 명시하고, 재번호는 전역 치환 말고 자기 절/타 인용을 갈라서
 - [최적화는 경계를 대가로 산다](feedback_optimization_buys_a_boundary.md) — 통합·절감 후보는 직전 패스의 최소권한 경계를 지운다; 대가 0인 후보를 먼저 찾으면 대가 있는 후보는 자동 기각
 - [관측값이 같으면 차단 설계를 하지 마라](feedback_indistinguishable_states_pick_the_signal.md) — 정당한 강등 vs 결함 강등이 같은 값이면 원인 제거+신호로; 허용목록 뒤집기는 하나도 못 닫는다
+- [번호는 두 번 잰다 — 착수 시·병합 직전](feedback_handoff_numbers_may_run_ahead.md) — 인계값이 앞서 있었고 그 뒤 실제로 도착했다; 리넘버 시 기계적 전역 치환 금지
+- [낡은 예측은 이미 무효화됐을 수 있다](feedback_stale_prediction_may_be_discharged.md) — "②가 오면 신규 kind 불가피"류 예측은 그 뒤 들어온 태스크가 이미 풀었을 수 있다; 논거를 코드로 다시 친다
