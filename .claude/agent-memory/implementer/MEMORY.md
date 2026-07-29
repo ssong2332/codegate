@@ -61,4 +61,5 @@
 - [T128 인증 무효화](project_codegate_t128_auth_invalidation.md) — ⭐ 에뮬레이터 자동 signOut은 delete가 아니라 disable로 관측된다, stsTokenManager 훼손 레시피, react-hooks lint 2연타 회피, 더미 .env로 build 무결성 증명.
 - [T132 Gemini 키 순환](project_codegate_t132_key_failover.md) — ⭐ "간헐 실패"가 실은 공유 워크트리 동시 편집(서명이 A/B 프로브 출력과 바이트 동일), defineSecret 미설정 프롬프트 0건, sed `[0]` 되돌리기 함정, 타이밍은 사건 수로 단언.
 - [T116 렌더 층 게이트](project_codegate_t116_render_gate.md) — ⭐ Node 22.14에서 .tsx를 테스트에 로드하는 require 확장 훅 레시피(의존성 0), 배럴은 .ts 등록에 달렸다, 격리 워크트리에서 층2 돌리는 법.
+- [T102 축 표 D 좌표 정정](project_codegate_t102_exitblock_correction.md) — ⭐ 요약표↔원본 드리프트 게이트 3단(규칙표+양방향+의심어휘 백스톱), 라벨부만 매칭, 문서 실측표 재현 시 줄번호만 밀리는 정상 케이스.
 - [§38 확인창구 전환 순서](project_codegate_s38_verify_ordering.md) — ⭐ 새 필드 대신 **write 시점을 미뤄** 문서 존재를 판별자로, 소스 게이트가 신설 설계와 충돌할 때 옮기는 법, 격리 에뮬레이터 REST 4단 장애물.
