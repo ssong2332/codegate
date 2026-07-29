@@ -23,6 +23,7 @@ import {
   buildVerifyOfferResponse,
   fallbackVerifyAnchor,
   realtimeVerifyAnchor,
+  resolveVerifyOfferPlan,
 } from "./buildDoc";
 import type {
   DeliverVerifyOfferRequest,
@@ -30,6 +31,7 @@ import type {
   DeliverVerifyReconnectRequest,
   DeliverVerifyReconnectResponse,
   VerifyCallMode,
+  VerifyOfferStage,
 } from "./types";
 
 ensureFirebaseAdminApp();
@@ -39,6 +41,7 @@ export {
   buildVerifyOfferResponse,
   fallbackVerifyAnchor,
   realtimeVerifyAnchor,
+  resolveVerifyOfferPlan,
 } from "./buildDoc";
 
 /** 세션 소유권 검증 — 익명 uid(2인 챌린지 사용자2)도 자기 세션이면 그대로 성립한다(§14.7). */
@@ -116,6 +119,17 @@ function readCallMode(value: unknown): VerifyCallMode {
   throw new HttpsError("invalid-argument", "callMode는 realtime 또는 fallback이어야 합니다.");
 }
 
+/**
+ * ⭐ §38.4 E — `stage` 판별자 읽기. **부재는 유효**하며 "종전 동작"을 뜻한다(폴백 경로가 그대로
+ * 쓴다). 알 수 없는 값을 조용히 부재로 떨어뜨리면 **오타 하나가 2단 게이트를 통째로 무력화**하므로
+ * 거절한다(§16.1.5의 "조용한 통과 금지"와 같은 판단).
+ */
+function readOfferStage(value: unknown): VerifyOfferStage | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (value === "announce" || value === "commit") return value;
+  throw new HttpsError("invalid-argument", "stage는 announce 또는 commit이어야 합니다.");
+}
+
 export const deliverVerifyOffer = onCall<
   DeliverVerifyOfferRequest,
   Promise<DeliverVerifyOfferResponse>
@@ -128,6 +142,7 @@ export const deliverVerifyOffer = onCall<
     throw new HttpsError("invalid-argument", "sessionId가 필요합니다.");
   }
   const callMode = readCallMode(request.data?.callMode);
+  const stage = readOfferStage(request.data?.stage);
 
   const session = await loadOwnedActiveSession(sessionId, request.auth.uid);
   const item = assertVerifyEligible(session);
@@ -141,13 +156,18 @@ export const deliverVerifyOffer = onCall<
   // 멱등 — 이미 도착한 오퍼는 다시 쓰지 않는다(클라의 중복 호출·재연결로 offeredAt이 밀리거나
   // placedAt이 지워지면 안 된다). `inCallSms`의 멱등 규칙과 동일.
   const existing = await offerRef.get();
-  if (!existing.exists) {
+  const placed = Boolean(existing.get("placedAt"));
+  // ⭐⭐ §38.4 후보 E — **write 시점만 뒤로 옮긴다.** 재검증 5종(위 `loadOwnedActiveSession` +
+  // `assertVerifyEligible`)은 **단계와 무관하게 전부** 통과해야 한다 — 1단계라고 검사를 건너뛰면
+  // §16.1.5/G24가 막으려던 위조 호출 표면이 그대로 열린다.
+  // T118/R-1(전환 후 재권유 금지)도 여기서 함께 곱해진다 — 판정은 순수 함수 한 곳이 소유한다.
+  const plan = resolveVerifyOfferPlan({ placed, ...(stage ? { stage } : {}) });
+  if (plan.persist && !existing.exists) {
     const anchor = await resolveAnchorScammerTurn(sessionId, callMode, scammerTurns);
     await offerRef.create(buildVerifyInterceptDoc(item, Timestamp.now(), anchor));
   }
 
-  // T118/R-1 — 전환이 이미 끝난 오퍼면 지시를 싣지 않는다(§25.5 (4)). 판정은 순수 함수에 있다.
-  return buildVerifyOfferResponse(item, { placed: Boolean(existing.get("placedAt")) });
+  return buildVerifyOfferResponse(item, { placed, ...(stage ? { stage } : {}) });
 });
 
 export const deliverVerifyReconnect = onCall<

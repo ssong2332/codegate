@@ -269,13 +269,57 @@ test("[T118/R-1·R-2] 전환 이후 재주입 경로가 클라에서도 닫혀 �
     rendered.includes("requestCallMode === \"realtime\" && result.announceInstruction"),
     "R-1 — 서버가 지시를 생략하면 클라도 주입하지 않는다",
   );
+  // ⭐ **§38.7 6 / G187 갱신(2026-07-29)** — 종전에는 이 자리가
+  // `if (shouldRetryVerifyOffer(error)) requestedVerifyRef.current = false` 한 줄을 문자열로
+  // 못박고 있었다. 2단 오퍼(§38.4 E)가 들어오면서 boolean이 **단계 상태**로 바뀌었으므로 같은
+  // 보호를 새 모양으로 옮긴다 — ⛔ **검사를 지운 것이 아니다**(R-2의 취지 3건을 모두 유지한다).
   assert.ok(
-    rendered.includes("if (shouldRetryVerifyOffer(error)) requestedVerifyRef.current = false"),
+    rendered.includes("retryable: shouldRetryVerifyOffer(error)"),
     "R-2 — 되돌림을 오류 코드로 좁힌다(재시도가 곧 중복 주입 경로)",
   );
   assert.ok(
-    !/catch\s*\{\s*\n\s*requestedVerifyRef\.current = false/.test(rendered),
+    rendered.includes("rollbackVerifyOfferPhase({"),
+    "R-2 — 롤백 판정은 순수 함수가 소유한다(호출부에 조건을 흩지 않는다)",
+  );
+  assert.ok(
+    !/catch\s*\{\s*\n\s*verify(OfferPhase|AnnounceTurns)Ref\.current\s*=/.test(rendered),
     "무조건 롤백이 남아 있으면 R-2가 무력화된다",
+  );
+  // ⭐ **G187** — boolean으로 되돌아오면 *"1단계 성공 · 2단계 실패"* 가 **재시도 불가**로 굳어
+  // 오퍼가 영영 안 뜬다(T118 R-2가 막으려던 바로 그 실패 방향).
+  assert.ok(
+    !/requestedVerifyRef/.test(rendered),
+    "⛔ 단계 상태를 boolean으로 되돌리지 말 것(G187)",
+  );
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐⭐ §38 런타임 층 — **컨트롤 가시성이 화면에서 재판정되지 않는다**(관측 불가 지점 방지)
+// ══════════════════════════════════════════════════════════════════════════════
+test("[§38 / G184] 컨트롤 가시성은 순수 함수가 판정하고 클라 ref 단독 게이팅이 아니다", () => {
+  const rendered = codeOnly(page);
+  assert.ok(
+    rendered.includes("shouldRevealVerifyOffer({"),
+    "판정을 화면에 직접 쓰면 브라우저 이벤트 위에서만 관측돼 게이트가 조용히 틀려도 안 잡힌다",
+  );
+  // ⛔ 종전 조건(문서 존재만 보면 열림)이 화면에 되살아나면 여기서 걸린다.
+  assert.ok(
+    !/showVerifyTrigger\s*=\s*\n?\s*verifyOffer !== null/.test(rendered),
+    "⛔ '문서만 있으면 연다'로 되돌리면 버튼이 다시 예고보다 먼저 뜬다",
+  );
+  // ⭐ 가시성 판정 입력에 ref가 섞이면 새로고침에서 무너진다(§38.4 D의 ④열).
+  assert.ok(
+    !/shouldRevealVerifyOffer\(\{[^}]*Ref\.current/.test(rendered),
+    "⛔ 컨트롤 가시성을 클라 ref로 게이팅하지 말 것(G184)",
+  );
+});
+
+test("[§38 / G188] 실시간 경로에 announcedAt을 **찍지** 않는다 — 읽기만 추가했다", () => {
+  const rendered = codeOnly(page);
+  assert.ok(rendered.includes("data.announcedAt"), "폴백 판정(후보 C)의 읽기 지점");
+  assert.ok(
+    !/announcedAt\s*:\s*(Timestamp|serverTimestamp|new Date)/.test(rendered),
+    "⛔ 클라가 announcedAt을 쓰면 §25.6의 의미 오버로드 기각이 뒤집힌다",
   );
 });
 

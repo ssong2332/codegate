@@ -14,6 +14,16 @@ export type VerifyInterceptView = {
   /** 존재 = 참가자가 이미 확인 부서 연결을 요청했다(호 전환 완료 상태). */
   placedAtMs?: number;
   /**
+   * ⭐ **§38.4 후보 C — 폴백 경로에서 "사기범이 예고를 실제로 말했다"의 유일한 관측점.**
+   * 서버(`roleplay/index.ts`)가 **예고 지시를 이번 턴 프롬프트에 실은 그 자리에서** 마크한다.
+   * 폴백은 *"응답이 곧 대사"* 라 그 턴에 반드시 발화된다 ⇒ 관측 강도가 실시간보다 오히려 높다.
+   *
+   * ⛔ **읽기 전용이다(G188).** 뜻을 바꾸거나 **실시간 경로에 같은 이름을 찍지 말 것** — §25.6이
+   * 이미 기각했고 그 근거(의미 오버로드)는 지금도 유효하다. 실시간은 **문서 존재 자체**를
+   * 판별자로 쓴다(후보 E) — 신규 필드 0건.
+   */
+  announcedAtMs?: number;
+  /**
    * 호 전환 후 통화 셸에 표시할 발신자 라벨(모의값).
    *
    * ⚠️ **T110(§22.1 C8)** — 이것이 원 화자 퇴장의 **유일한 시각적 보증**이다. 모델이 흔들려도
@@ -37,6 +47,94 @@ export function shouldOfferVerify(input: {
 }): boolean {
   if (!input.trigger || input.alreadyRequested) return false;
   return input.scammerTurns >= input.trigger.availableAfterScammerTurns;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐⭐ §38 런타임 층 — **컨트롤은 예고보다 먼저 열리지 않는다**(후보 E + C)
+//
+// 사용자 신고: *"내가 보안확인창구로 넘긴다고 한 적이 없는데, 연결한다고 혼자서 하면서 사용자가
+// 부자연스럽게 느낄 거 같아."* 런타임 쪽 원인은 **컨트롤 가시성의 유일한 조건이 오퍼 문서의
+// 존재**였다는 것이다 — 그 문서는 예고가 큐에 들어가기도 전에 쓰였다(§38.1 (3)).
+//
+// ⛔ **이 게이트가 보증하지 않는 것(§38.11 (c) — 보고 문구가 여기서 갈린다)**:
+//   말할 수 있는 최대치는 ***"예고 지시가 들어간 뒤 사기범 턴이 한 번 끝나기 전에는 컨트롤이
+//   열리지 않는다"*** 다. ⛔ ***"이제 반드시 말한 뒤 전환된다"* 로 쓰지 말 것** — 실시간 경로가
+//   관측하는 것은 **턴 완료**이지 **대사 내용**이 아니다(Gemini Live가 오디오 전용이라 서버가
+//   사기범 텍스트를 쥐는 지점이 없다).
+//
+// ⛔ **게이트 값(`availableAfterScammerTurns` 계열 4 · 전용 2)을 내려 이 지연을 상쇄하지 말 것** —
+// 사용자가 명시적으로 기각했다(§38.13 (2)). 실효 노출 시점이 5턴(계열)/3턴(전용)으로 밀리는 것은
+// **알고 받아들인 결정**이며, 짧은 세션에서 컨트롤이 뜨지 않고 끝나는 회차가 생기는 것도 마찬가지다.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 지금 확인 컨트롤을 노출해도 되는가(결정론적).
+ *
+ * | callMode | 조건 | 후보 | 왜 그 값인가 |
+ * |---|---|---|---|
+ * | `realtime` | **문서 존재**(+ 미전환) | **E** | 문서는 예고 턴이 **끝난 뒤**(`commit`)에만 만들어진다 |
+ * | `fallback` | 문서 존재 **+ `announcedAtMs`**(+ 미전환) | **C** | 폴백은 문서가 곧 announce 트리거라 존재만으로는 부족하다 |
+ *
+ * ⭐ **왜 클라 ref가 아니라 문서인가(G184 — 이것이 후보 D를 단독 기각한 판별자다)**: `verifyOffer`가
+ * 문서 구독인 이유가 *"새로고침·재마운트 후에도 상태가 유지되게"* 다(§16.2). ref 단독이면 기본값이
+ * hidden일 때 **새로고침 후 기능이 영구 소실**되고, shown일 때 **구멍이 그대로** 남는다.
+ * ⇒ 이 함수의 입력에는 **ref·타이머·렌더 상태가 하나도 없다.**
+ */
+export function shouldRevealVerifyOffer(input: {
+  callMode: "realtime" | "fallback";
+  offer: Pick<VerifyInterceptView, "placedAtMs" | "announcedAtMs"> | null;
+}): boolean {
+  if (!input.offer) return false;
+  // 전환이 끝나면 컨트롤은 사라진다(세션당 한 번 — §16.1.3, 종전 규칙 그대로).
+  if (input.offer.placedAtMs !== undefined) return false;
+  if (input.callMode === "fallback") return input.offer.announcedAtMs !== undefined;
+  return true;
+}
+
+/**
+ * ⭐ **§38.4 E / G187 — 오퍼 요청의 단계 상태.** ⛔ **boolean(`requestedVerifyRef`)으로 되돌리지 말 것.**
+ *
+ * 요청이 2단계가 되면 *"1단계 성공 · 2단계 실패"* 라는 상태가 처음으로 존재하는데, boolean 하나로는
+ * 그것을 *"이미 요청했다(=다시 하지 않는다)"* 로밖에 표현할 수 없다 ⇒ **오퍼가 영영 안 뜬다**
+ * (T118 R-2가 막으려던 바로 그 실패 방향).
+ */
+export type VerifyOfferPhase = "idle" | "announced" | "committed";
+
+/**
+ * 다음에 보낼 요청 단계(없으면 `null` = 지금은 보내지 않는다).
+ *
+ * | 상태 | 예고 턴이 끝났는가 | 다음 단계 |
+ * |---|---|---|
+ * | `idle` | — | `announce` (게이트 판정은 `shouldOfferVerify`가 따로 한다) |
+ * | `announced` | ❌ | `null` — **기다린다**(이 대기가 곧 순서 교정이다) |
+ * | `announced` | ✅ | `commit` |
+ * | `committed` | — | `null` |
+ */
+export function nextVerifyOfferStage(input: {
+  phase: VerifyOfferPhase;
+  announceTurnComplete: boolean;
+}): "announce" | "commit" | null {
+  if (input.phase === "idle") return "announce";
+  if (input.phase === "committed") return null;
+  return input.announceTurnComplete ? "commit" : null;
+}
+
+/**
+ * 요청 실패 시 되돌릴 상태(§25.5 (4) R-2를 **단계별로** 확장한다).
+ *
+ * ⛔ **2단계 실패에서 `idle`로 되돌리지 말 것** — 예고는 이미 발화됐으므로 다시 `announce`를 보내면
+ * **같은 권유가 두 번 나간다**(중복 주입). `announced`에 남아 다음 턴 경계에서 `commit`만 재시도한다.
+ * ⚠️ 재시도 불가 오류(세션 비활성·카탈로그 불일치·소유권)에서는 단계를 **그대로 굳힌다** — 그 세션은
+ * 애초에 자격이 없으므로 컨트롤이 뜨지 않는 것이 옳다.
+ */
+export function rollbackVerifyOfferPhase(input: {
+  /** 요청 **직전에 이미 전진시킨** 현재 단계(`announced` 또는 `committed`). */
+  currentPhase: VerifyOfferPhase;
+  stage: "announce" | "commit";
+  retryable: boolean;
+}): VerifyOfferPhase {
+  if (!input.retryable) return input.currentPhase;
+  return input.stage === "announce" ? "idle" : "announced";
 }
 
 // ── 실시간 경로의 지시 주입 큐(§16.6 G31 실시간 보강) ────────────────────────────

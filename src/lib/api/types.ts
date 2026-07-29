@@ -195,11 +195,18 @@ export type RecordMockScreenEventResponse = { ok: true };
 // 걸어보기" 버튼 탭뿐이다. 응답에도 창구명·번호가 없다(화면은 Firestore 구독으로만 그린다 —
 // 단일 렌더 소스). 두 콜러블은 **어떤 통신·전화 API도 호출하지 않는다**(인앱 재현).
 export type VerifyCallMode = "realtime" | "fallback";
+/**
+ * ⭐ **§38.4 후보 E — 2단 오퍼**(실시간 경로 전용). `announce`는 지시만 받고 **문서를 만들지
+ * 않는다**, `commit`은 예고 턴이 끝난 뒤 문서를 만든다 ⇒ **문서 존재 = 예고 완료**가 성립해
+ * 컨트롤이 예고보다 먼저 뜨지 않는다. **부재 = 종전 동작**(폴백 경로가 그대로 쓴다).
+ */
+export type VerifyOfferStage = "announce" | "commit";
 export type DeliverVerifyOfferRequest = {
   sessionId: string;
   callMode: VerifyCallMode;
   /** `callMode==="realtime"`일 때만 필요(폴백은 서버가 직접 센다). */
   scammerTurns?: number;
+  stage?: VerifyOfferStage;
 };
 /**
  * ⚠️ **T118/R-1** — `announceInstruction`은 **옵셔널**이다. 호 전환이 이미 끝난(`placedAt`) 오퍼에는

@@ -47,12 +47,16 @@ import {
 } from "@/lib/incallsms";
 import {
   enqueueInstruction,
+  nextVerifyOfferStage,
+  rollbackVerifyOfferPhase,
   shouldOfferVerify,
   shouldReinjectTransferState,
   shouldRetryVerifyOffer,
+  shouldRevealVerifyOffer,
   takeNextInstruction,
   type PendingInstruction,
   type VerifyInterceptView,
+  type VerifyOfferPhase,
 } from "@/lib/verifyintercept";
 import {
   DIFFICULTY_LABEL,
@@ -172,8 +176,13 @@ export default function SessionCallPage() {
   const [verifyOverlayOpen, setVerifyOverlayOpen] = useState(false);
   const [verifyDialing, setVerifyDialing] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
-  // 이미 서버에 오퍼 전달을 요청했는가(중복 호출 방지). 렌더와 무관해 ref에 둔다.
-  const requestedVerifyRef = useRef(false);
+  // ⭐ **§38.4 E / G187** — 오퍼 요청의 **단계 상태**(종전에는 boolean ref 하나였다).
+  // ⛔ boolean으로 되돌리지 말 것: 2단계가 생기면서 *"1단계 성공 · 2단계 실패"* 상태가 처음
+  // 존재하게 됐는데, boolean으로는 그것을 "이미 요청함"으로밖에 못 적어 **오퍼가 영영 안 뜬다.**
+  // 렌더와 무관해 ref에 둔다(가시성 판정은 문서 구독이 한다 — G184).
+  const verifyOfferPhaseRef = useRef<VerifyOfferPhase>("idle");
+  // 1단계(예고 지시 주입)를 보낸 시점의 완료 사기범 턴 수. `null` = 아직 안 보냈다.
+  const verifyAnnounceTurnsRef = useRef<number | null>(null);
   // T118 / 층 A5-α(§25.3) — 전환 상태 재확인 1줄. `instructionTurn` 큐를 타지 않는 **별도 슬롯**이며
   // 턴 슬롯을 소비하지 않는다(P-1 실측: turnComplete:false는 발화를 유발하지 않았다).
   const [personaStateTurn, setPersonaStateTurn] = useState<{ text: string; seq: number } | null>(
@@ -348,12 +357,17 @@ export default function SessionCallPage() {
       }
       const data = docSnap.data();
       const placedAt = data.placedAt as { toMillis?: () => number } | undefined;
+      // ⭐ **§38.4 후보 C** — 폴백 경로의 컨트롤 선행 조건. 서버가 예고 지시를 **이번 턴 프롬프트에
+      // 실은 그 자리에서** 마크한다(`roleplay/index.ts`). ⛔ **읽기만 추가한다**(G188) — 뜻을
+      // 바꾸지도, 실시간 경로에 같은 이름을 찍지도 않는다(§25.6 유지).
+      const announcedAt = data.announcedAt as { toMillis?: () => number } | undefined;
       setVerifyOffer({
         offerId: docSnap.id,
         deskLabel: data.deskLabel as string,
         // T110(§22.3/C4) — 호 전환 모델에는 안내 번호가 없다. 신규 문서에 필드 자체가 없고
         // 화면에도 그릴 자리가 없으므로 **읽지 않는다**(과거 문서에 남아 있어도 무시한다).
         placedAtMs: placedAt?.toMillis?.(),
+        announcedAtMs: announcedAt?.toMillis?.(),
         reconnectedCallerLabel: data.reconnectedCallerLabel as string | undefined,
       });
     });
@@ -430,6 +444,13 @@ export default function SessionCallPage() {
   // ⚠️ **게이트가 없으면 아무 일도 일어나지 않는다** — `verifyOffer` 필드는 카탈로그 보유 && 고급 &&
   // 난이도 반영 경로일 때만 서버가 붙인다(§16.1.5). 즉 컨트롤이 **존재하지 않는** 세션이 기본이다.
   // 실패해도 통화는 계속된다(P-4 — 인라인 안내만, UF-011 Failure (b)).
+  //
+  // ⭐⭐ **§38.4 후보 E — 실시간 경로는 2단계다**(순서 교정의 본체). 1단계(`announce`)는 지시만
+  // 받고 **문서를 만들지 않는다**. 예고 턴이 한 번 끝난 뒤 2단계(`commit`)가 문서를 만든다
+  // ⇒ **문서 존재 = 예고 완료**가 되어 컨트롤이 예고보다 먼저 뜨지 않는다.
+  // ⛔ **폴백 경로는 종전 그대로 1회 호출이다** — 그쪽은 **문서가 곧 announce 트리거**라
+  // (`roleplay/index.ts`) 문서를 미루면 예고가 영영 안 나온다. 폴백의 순서 보장은 **후보 C**
+  // (`announcedAt`을 컨트롤 선행 조건으로 읽는다)가 맡는다 — 아래 `showVerifyTrigger` 참조.
   useEffect(() => {
     if (!sessionId || phase !== "live") return;
     if (callMode !== "realtime" && callMode !== "fallback") return;
@@ -437,16 +458,33 @@ export default function SessionCallPage() {
     // 완료된 사기범 발화 수: 실시간은 Live 턴 카운터, 폴백은 이미 쌓인 대화 로그(오프닝 포함).
     const completedScammerTurns =
       callMode === "realtime" ? scammerTurns : messages.filter((m) => m.role === "scammer").length;
+    // ⭐ 예고 턴이 끝났는가 = **주입 시점보다 사기범 턴이 한 번 더 완료됐는가.** 관측점은 이미
+    // 있던 것을 재사용한다(`onScammerTurnComplete` → `scammerTurns`) — 신규 관측점 0건(§38.2 3).
+    const announcedAtTurns = verifyAnnounceTurnsRef.current;
+    const announceTurnComplete =
+      announcedAtTurns !== null && completedScammerTurns > announcedAtTurns;
+    // 폴백은 2단계를 쓰지 않는다(위 ⛔) — `stage` 부재 = 종전 동작.
+    const stage =
+      callMode === "realtime"
+        ? nextVerifyOfferStage({ phase: verifyOfferPhaseRef.current, announceTurnComplete })
+        : verifyOfferPhaseRef.current === "idle"
+          ? "announce"
+          : null;
+    if (stage === null) return;
+    // 게이트(`availableAfterScammerTurns`)는 **1단계에만** 건다. 2단계는 이미 열린 흐름의 이어짐이고
+    // 게이트를 다시 걸면 같은 조건을 두 번 판정하게 된다.
     if (
+      stage === "announce" &&
       !shouldOfferVerify({
         ...(trigger ? { trigger } : {}),
         scammerTurns: completedScammerTurns,
-        alreadyRequested: requestedVerifyRef.current,
+        alreadyRequested: verifyOfferPhaseRef.current !== "idle",
       })
     ) {
       return;
     }
-    requestedVerifyRef.current = true;
+    verifyOfferPhaseRef.current = stage === "announce" ? "announced" : "committed";
+    if (stage === "announce") verifyAnnounceTurnsRef.current = completedScammerTurns;
     const requestCallMode = callMode;
     (async () => {
       try {
@@ -455,11 +493,14 @@ export default function SessionCallPage() {
           callMode: requestCallMode,
           // 앵커 판별자(§16.3.2) — 실시간일 때만 필수다. 폴백은 서버가 messages를 직접 센다.
           ...(requestCallMode === "realtime" ? { scammerTurns } : {}),
+          // ⭐ 폴백은 `stage`를 보내지 않는다(종전 동작 유지).
+          ...(requestCallMode === "realtime" ? { stage } : {}),
         });
         setVerifyError(null);
         // 폴백 경로는 서버가 다음 sendMessage 턴에 직접 주입하므로 클라가 넣지 않는다(중복 방지).
         // T118/R-1 — 전환이 이미 끝난 오퍼면 서버가 지시를 **생략**한다(§25.5 (4)). 값이 없으면
         // 주입하지 않는다: 전환 이후의 확인 권유는 참가자가 겪은 사실과 모순이다.
+        // ⭐ 2단계(`commit`)에는 서버가 지시를 싣지 않는다 — 실으면 같은 권유가 두 번 나간다.
         if (requestCallMode === "realtime" && result.announceInstruction) {
           enqueueTurnInstruction(result.announceInstruction, "verify");
         }
@@ -467,7 +508,14 @@ export default function SessionCallPage() {
         // 다음 턴 경계에서 다시 시도할 수 있게 요청 기록을 되돌린다(조용한 실패 금지).
         // T118/R-2 — 단, **재시도해도 같은 결과인 오류**에서는 되돌리지 않는다(§25.5 (4)).
         // 그 재시도가 곧 중복 주입 경로다. 판정은 순수 함수에 있다(`shouldRetryVerifyOffer`).
-        if (shouldRetryVerifyOffer(error)) requestedVerifyRef.current = false;
+        // ⭐ **G187** — 2단계 실패는 `idle`이 아니라 `announced`로 되돌린다(예고는 이미 나갔다).
+        verifyOfferPhaseRef.current = rollbackVerifyOfferPhase({
+          currentPhase: verifyOfferPhaseRef.current,
+          stage,
+          retryable: shouldRetryVerifyOffer(error),
+        });
+        // 되돌린 단계가 1단계면 주입 시점 기록도 함께 지운다(다음 시도에서 다시 잰다).
+        if (verifyOfferPhaseRef.current === "idle") verifyAnnounceTurnsRef.current = null;
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -884,9 +932,14 @@ export default function SessionCallPage() {
     latestSms !== null && !smsBannerDismissed && !smsOverlayOpen && phase !== "ended";
   // T83(UX-014 `verify-offered` state) — 확인 권유가 도착했고 아직 걸지 않았을 때만 보조 컨트롤이
   // 뜬다. 재연결 이후(placedAt 존재)에는 사라진다 — 이 흐름은 세션당 한 번이다(§16.1.3).
+  // ⭐⭐ **§38 — 순서 판정은 순수 함수가 소유한다**(`shouldRevealVerifyOffer`). 조건을 이 자리에
+  // 직접 쓰면 브라우저 이벤트 위에서만 관측돼 게이트를 전건 통과해도 틀린 것을 아무도 못 잡는다
+  // (이 저장소가 반복해서 데인 양식 — `shouldReinjectTransferState`가 같은 이유로 순수 함수다).
   const showVerifyTrigger =
-    verifyOffer !== null &&
-    verifyOffer.placedAtMs === undefined &&
+    shouldRevealVerifyOffer({
+      callMode: callMode === "realtime" ? "realtime" : "fallback",
+      offer: verifyOffer,
+    }) &&
     !verifyOverlayOpen &&
     phase !== "ended";
   // 재연결 완료 상태의 1줄 고지(§16.2 "폴백 경로의 인사말" 공백을 UI가 메운다). 구조 설명이
