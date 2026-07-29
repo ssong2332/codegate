@@ -11,4 +11,6 @@
 - [지시문 전제 반증](project_premise_falsification.md) — "구조적으로 불가능"도 grep해 보라, "없다"가 아니라 "약하다"면 해결 방향이 통째로 바뀐다
 - [워크트리 편집 격리](project_worktree_edit_isolation.md) — main 체크아웃은 읽기만 되고 편집은 거부된다, 워크트리 사본의 base 동일성을 먼저 증명하라
 - [리뷰 판정 기록처](reference_codereview_log.md) — docs/CodeReview.md가 유일한 reviewer·QA 기록이나 항상 뒤처진다, PR 번호는 검증 불가
+- [선례 인용은 라벨로 재grep](project_precedent_citation_drift.md) — "T116의 P1" 인용이 실제로는 T115였다, 한 칸 어긋난 선례가 근거를 통째로 무효화한다
+- [판정표 확장 절차](project_rule_table_extension.md) — 적용 결과를 닫아 서술한 표엔 섞지 말고 분리, 강등 선례 보존용 방어 행 필수
 - [수치 정정 규칙](project_baseline_correction.md) — 현재형 기준선만 고치고 과거 기록은 보존, 정정 전 전수 grep(부분 정정이 반복 실패 양식)
