@@ -164,7 +164,7 @@ cp functions/.env.example functions/.env
 
 **이 키 하나가 두 가지 경로를 동시에 활성화한다(DECISIONS #29):**
 - generic 시나리오 3종(기관사칭·대출·환급금)의 실시간 음성 통화(Gemini Live, 고정 프리셋 음성만).
-- **모든 시나리오**(보이스·메신저 공통)의 텍스트 대화(`sendMessage`/`createSession`) — `functions/src/llm/index.ts`의 `getLlmClient()`가 이 키가 있으면 규칙 기반 목업 대신 실제 Gemini로 사기범 캐릭터를 생성한다. 텍스트 생성은 음성과 별도 모델(`gemini-flash-latest`)을 쓰고 고정 프리셋 음성 제약이 없다 — 클론 시나리오의 채팅/에스컬레이션 전 텍스트 구간도 이 경로를 탄다.
+- **모든 시나리오**(보이스·메신저 공통)의 텍스트 대화(`sendMessage`/`createSession`) — `functions/src/llm/index.ts`의 `getLlmClient()`가 이 키가 있으면 규칙 기반 목업 대신 실제 Gemini로 사기범 캐릭터를 생성한다. 텍스트 생성은 음성과 별도 모델(`GEMINI_TEXT_MODEL` 상수 = 고정 버전 `gemini-3.6-flash`, `functions/src/llm/geminiClient.ts:36`)을 쓰고 고정 프리셋 음성 제약이 없다 — 클론 시나리오의 채팅/에스컬레이션 전 텍스트 구간도 이 경로를 탄다. ⚠️ 부동 별칭(`gemini-flash-latest` 등)으로 되돌리지 말 것 — 과거 그 별칭이 조용히 재매핑되면서 텍스트 대화가 100% Mock으로 강등되는 장애를 낸 적이 있다(T98/T117, `docs/CHANGELOG.md` 참조). `geminiClient.test.ts`가 `latest` 포함 금지를 회귀 게이트로 고정하고 있다.
 
 키가 없으면 음성은 텍스트 폴백으로, 텍스트 대화는 규칙 기반 목업(`MockLlmClient`)으로 강등된다 —
 즉 키 없이도 전체 흐름을 개발·시연할 수 있다. 시스템 프롬프트는 서버가 조립·고정해서 전달하므로
