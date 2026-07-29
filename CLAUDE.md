@@ -68,11 +68,20 @@ Record commands verbatim after the first success. Reuse without modification; if
 > (T101 / `docs/Architecture.md` §20.7 (1) — 실측으로 확인된 유일한 잔여 구멍이며 이 표가 그 완화 수단이다).
 > 이 오염으로 2026-07-26~27 세션에서 **테스트 수 오보가 3회** 발생했다.
 
+> ⛔ **`npm --prefix <dir> install` 을 쓰지 말 것.** 이 형태에서만 `package.json`에
+> `"fraud-vaccine-web": "file:.."` 의존성이 주입된다 — **T130에서 원인이 확정됐다**
+> (`npm --prefix functions install` **3/3 오염** vs `cd functions && npm install` **0/3** ·
+> 루트 `npm install` **0/3**). 저장소 밖 워크트리에서도 나므로 조상 디렉터리 문제가 아니다.
+> ⇒ **필요하면 `cd functions && npm install`** 로 쓴다.
+> ⚠️ 위 표의 `--prefix` 명령들(`test`·`run build`·`run lint`)은 **오염시키지 않는다**(실측) —
+> **`install` 형태만** 문제다. `.githooks/pre-commit` 트립와이어가 오염된 커밋을 거부하지만,
+> **`--no-verify`·`core.hooksPath` 미설정으로 뚫린다**(T130 잔여 한계).
+
 | Purpose | Command | Verified on |
 |---|---|---|
 | Build (functions) | `npm --prefix functions run build` | 2026-07-27 |
-| Test (functions) | `npm --prefix functions test` | 2026-07-28 — 574 pass / 0 fail (main `17126a7`) |
-| Test (root) | `npm test` | 2026-07-28 — 228 pass / 0 fail (main `17126a7`) |
+| Test (functions) | `npm --prefix functions test` | 2026-07-29 — **589 pass / 0 fail** (main `73690ed`) |
+| Test (root) | `npm test` | 2026-07-29 — **255 pass / 0 fail** (main `73690ed`) |
 | Build (root) | `npm run build` | 2026-07-27 — 통과 (main `1157d7d`). ⚠️ **`.env`가 있는 트리에서만 통과한다** — 격리 워크트리처럼 `.env`가 없으면 TS 컴파일은 성공한 뒤 정적 생성 단계에서 `auth/invalid-api-key`로 실패한다. 이것은 코드 결함이 아니다(T108에서 base main 대조로 실측 확인) |
 | Lint (functions) | `npm --prefix functions run lint` | 2026-07-27 |
 | Clean (functions) | `npm --prefix functions run clean` | 2026-07-27 — 멱등 |
