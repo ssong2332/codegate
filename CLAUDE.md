@@ -77,11 +77,18 @@ Record commands verbatim after the first success. Reuse without modification; if
 > **`install` 형태만** 문제다. `.githooks/pre-commit` 트립와이어가 오염된 커밋을 거부하지만,
 > **`--no-verify`·`core.hooksPath` 미설정으로 뚫린다**(T130 잔여 한계).
 
+> ⛔ **같은 체크아웃에서 `npm test` / `npm --prefix functions test` 를 동시에 두 번 이상 돌리지 말 것.**
+> 이 스크립트는 매번 `clean-lib` → `tsc` 를 하므로, **한 실행이 `lib/`를 지우는 동안 다른 실행이 그것을 읽어**
+> `MODULE_NOT_FOUND` 가 무더기로 난다 — **테스트 파일 자체가 실행 중 사라진다.**
+> 2026-07-29 실측: 동시 실행 시 **437 tests / 13 fail**(제품 결함 아님) vs 단독 실행 **616 / 0**.
+> ⇒ **동시에 검증할 때는 에이전트마다 격리 워크트리를 강제**하라(지시문으로 *"워크트리를 만들어라"* 라고
+> 쓰는 것만으로는 안 막힌다 — 실제로 안 만들고 메인에서 돌린 사례가 있다).
+
 | Purpose | Command | Verified on |
 |---|---|---|
 | Build (functions) | `npm --prefix functions run build` | 2026-07-27 |
-| Test (functions) | `npm --prefix functions test` | 2026-07-29 — **589 pass / 0 fail** (main `73690ed`) |
-| Test (root) | `npm test` | 2026-07-29 — **255 pass / 0 fail** (main `73690ed`) |
+| Test (functions) | `npm --prefix functions test` | 2026-07-29 — **616 pass / 0 fail** (main `1121255`) |
+| Test (root) | `npm test` | 2026-07-29 — **278 pass / 0 fail** (main `1121255`) |
 | Build (root) | `npm run build` | 2026-07-27 — 통과 (main `1157d7d`). ⚠️ **`.env`가 있는 트리에서만 통과한다** — 격리 워크트리처럼 `.env`가 없으면 TS 컴파일은 성공한 뒤 정적 생성 단계에서 `auth/invalid-api-key`로 실패한다. 이것은 코드 결함이 아니다(T108에서 base main 대조로 실측 확인) |
 | Lint (functions) | `npm --prefix functions run lint` | 2026-07-27 |
 | Clean (functions) | `npm --prefix functions run clean` | 2026-07-27 — 멱등 |

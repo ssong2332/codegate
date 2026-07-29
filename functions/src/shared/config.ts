@@ -49,7 +49,18 @@ export const GEMINI_KEY_SECRETS = [GEMINI_API_KEY, GEMINI_API_KEY2] as const;
 export function getElevenLabsAgentIds(): string {
   return process.env.ELEVENLABS_AGENT_IDS ?? "";
 }
-export const LLM_API_KEY = defineSecret("LLM_API_KEY");
+/**
+ * ⛔ `LLM_API_KEY`의 `defineSecret` 선언은 2026-07-29에 제거됐다. 되살리지 말 것 —
+ * 되살리려면 같은 커밋에서 실제 소비처(ClaudeLlmClient 분기)도 함께 만들어야 한다.
+ *
+ * 사유(첫 배포에서 실측): `defineSecret`으로 선언만 해 두면, 어느 onCall의 `secrets:`
+ * 배열에도 들어가지 않고 런타임에서 한 번도 읽히지 않아도, **배포 분석 단계가 값을
+ * 요구하며 대화형으로 멈춰 세운다.** 위 `getElevenLabsAgentIds` 주석이 `defineString`에
+ * 대해 적어 둔 것과 같은 함정이며, `defineSecret`에서도 동일하다는 것이 이번에 확인됐다.
+ *
+ * 이 선언은 `llm/index.ts`의 TODO(Claude 분기, DECISIONS #11)를 위한 자리표였는데,
+ * 그 분기가 만들어지지 않은 채 남아 첫 배포를 막았다. 소비처 없는 선언은 두지 않는다.
+ */
 export const LLM_PROVIDER = defineString("LLM_PROVIDER", { default: "claude" });
 export const FALLBACK_VOICE_ID = defineString("FALLBACK_VOICE_ID");
 
