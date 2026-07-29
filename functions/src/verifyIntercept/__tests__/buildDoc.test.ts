@@ -4,7 +4,12 @@
 // 확인한다". 이 파일은 그 실측 **전에** 값을 못박는 회귀 그물이고, 실측 결과는 구현 보고서에 남는다.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildVerifyOfferResponse, fallbackVerifyAnchor, realtimeVerifyAnchor } from "../buildDoc";
+import {
+  buildVerifyOfferResponse,
+  fallbackVerifyAnchor,
+  realtimeVerifyAnchor,
+  resolveVerifyOfferPlan,
+} from "../buildDoc";
 import { pickFallbackTurnInstruction } from "../fallbackTurn";
 import { VERIFY_INTERCEPT } from "../../scenarios/verifyIntercept";
 
@@ -148,4 +153,63 @@ test("[T118/R-1 역검증] 분기를 되돌린 **사본**은 실제로 지시를
   const item = VERIFY_INTERCEPT["bank-security-verify-scam"];
   assert.notEqual(beforeR1(item).announceInstruction, undefined, "종전 동작 재현");
   assert.equal(buildVerifyOfferResponse(item, { placed: true }).announceInstruction, undefined);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐⭐ §38.4 후보 E — **2단 오퍼**(P-2). `stage` × `placed` 4칸 전수.
+//
+// 이 표가 흩어지면 *"1단계는 R-1을 보는데 2단계는 안 본다"* 같은 비대칭이 **에러 없이** 생긴다
+// (§38.7 5). 판정은 `resolveVerifyOfferPlan` 한 곳이 소유하고 여기서 전수로 못박는다.
+// ══════════════════════════════════════════════════════════════════════════════
+test("[§38.4 E / P-2] stage × placed 판정표 전수", () => {
+  const rows = [
+    // stage 부재 = 종전 동작(폴백 경로) — 문서를 쓰고 지시를 싣는다.
+    { stage: undefined, placed: false, persist: true, includeInstruction: true },
+    { stage: undefined, placed: true, persist: false, includeInstruction: false },
+    // ⭐ 1단계 — write를 미룬다(E의 본체). 지시는 그대로 나간다.
+    { stage: "announce" as const, placed: false, persist: false, includeInstruction: true },
+    { stage: "announce" as const, placed: true, persist: false, includeInstruction: false },
+    // ⭐ 2단계 — 예고 턴이 끝난 뒤 문서를 만든다. 지시는 **다시 주지 않는다**(중복 주입 금지).
+    { stage: "commit" as const, placed: false, persist: true, includeInstruction: false },
+    { stage: "commit" as const, placed: true, persist: false, includeInstruction: false },
+  ];
+  for (const row of rows) {
+    assert.deepEqual(
+      resolveVerifyOfferPlan({ placed: row.placed, ...(row.stage ? { stage: row.stage } : {}) }),
+      { persist: row.persist, includeInstruction: row.includeInstruction },
+      `stage=${row.stage ?? "(부재)"} placed=${row.placed}`,
+    );
+  }
+});
+
+test("[§38.4 E / P-2 역검증] 1단계에서 write를 하면 순서 교정이 통째로 무의미해진다", () => {
+  // ⭐ 종전 동작(= stage 부재)이 정확히 그것이다 — 같은 입력에서 persist가 갈린다.
+  assert.equal(resolveVerifyOfferPlan({ placed: false }).persist, true, "종전 동작 재현");
+  assert.equal(
+    resolveVerifyOfferPlan({ stage: "announce", placed: false }).persist,
+    false,
+    "⭐ 1단계는 문서를 만들지 않는다 — 문서 존재 = 예고 완료라는 판별자가 여기서 성립한다",
+  );
+});
+
+test("[§38.4 E / T118 R-1 유지] 전환이 끝난 오퍼에는 **어느 단계에서도** 지시가 실리지 않는다", () => {
+  const item = VERIFY_INTERCEPT["bank-security-verify-scam"];
+  for (const stage of [undefined, "announce", "commit"] as const) {
+    assert.equal(
+      buildVerifyOfferResponse(item, { placed: true, ...(stage ? { stage } : {}) })
+        .announceInstruction,
+      undefined,
+      `stage=${stage ?? "(부재)"}`,
+    );
+  }
+});
+
+test("[§38.4 E] 1단계 응답은 종전 응답과 **바이트 동일**하다(응답 스키마 델타 0건)", () => {
+  for (const item of Object.values(VERIFY_INTERCEPT)) {
+    assert.deepEqual(
+      buildVerifyOfferResponse(item, { placed: false, stage: "announce" }),
+      buildVerifyOfferResponse(item, { placed: false }),
+      "클라가 1단계에서 받는 것은 종전과 같다 — 바뀐 것은 **문서 write 시점**뿐이다",
+    );
+  }
 });

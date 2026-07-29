@@ -2,7 +2,7 @@
 // §25.5 (4)). 부수효과 없는 순수 함수라 단위 테스트 대상이다(`inCallSms/buildDoc.ts`와 동형).
 import type { VerifyInterceptItem } from "../scenarios/verifyIntercept";
 import type { VerifyInterceptDoc } from "../shared/types";
-import type { DeliverVerifyOfferResponse } from "./types";
+import type { DeliverVerifyOfferResponse, VerifyOfferStage } from "./types";
 
 /**
  * ⚠️ **여기서 나가는 필드가 곧 클라가 볼 수 있는 전부다**(AC-019/AC-024 구조적 금지의 마지막 관문).
@@ -37,13 +37,61 @@ export function buildVerifyInterceptDoc(
  *
  * ⛔ 이 함수는 (나)(모델이 컨텍스트에 남은 지시를 스스로 반복)를 **대체하지 않는다** — 그쪽은 층 A5의
  * 소관이고 둘은 독립이다(**G102**).
+ *
+ * ⭐ **§38.4 E 추가(2026-07-29)** — `stage`가 함께 곱해진다. 판정은 `resolveVerifyOfferPlan` **한
+ * 곳**이 소유하고 이 함수는 그 결과를 조립만 한다(§38.7 5 — 분기가 흩어지지 않게).
  */
 export function buildVerifyOfferResponse(
   item: VerifyInterceptItem,
-  input: { placed: boolean },
+  input: { placed: boolean; stage?: VerifyOfferStage },
 ): DeliverVerifyOfferResponse {
-  if (input.placed) return { offerId: item.offerId };
+  const plan = resolveVerifyOfferPlan({ placed: input.placed, ...(input.stage ? { stage: input.stage } : {}) });
+  if (!plan.includeInstruction) return { offerId: item.offerId };
   return { offerId: item.offerId, announceInstruction: item.announceInstruction };
+}
+
+// ── ⭐⭐ §38.4 후보 E — **2단 오퍼**(실시간 경로 전용) ────────────────────────────
+//
+// **왜**: 컨트롤 가시성의 유일한 조건이 **오퍼 문서의 존재**인데(`session/play/page.tsx`), 그 문서는
+// 예고 지시가 **큐에 들어가기도 전에** 쓰였다 ⇒ *"아무도 연결해 준다고 말하지 않았는데 '연결해
+// 달라고 하기' 버튼이 떠 있는 창"* 이 구조적으로 존재했다(§38.1 (3), 사용자 신고의 런타임 층).
+//
+// **어떻게**: 요청에 판별자 1개(`stage`)를 더해 write 시점만 뒤로 옮긴다.
+//   - `announce` : 재검증 5종을 **전부 그대로** 통과시키고 지시만 돌려준다. **문서 write 0건.**
+//   - `commit`   : 예고 턴이 **끝난 뒤**(첫 `turnComplete`) 문서를 만든다 ⇒ **문서 존재 = 예고 완료.**
+//
+// ⭐ **④ 새로고침 생존이 이 후보를 고른 이유다**(§38.4 D의 ④열 · **G184**) — 판별자가 클라 ref가
+// 아니라 **문서 존재**라 새로고침·재마운트를 그대로 넘긴다(§16.2 "문서 구독이 단일 렌더 소스").
+// ⭐ **부수 이득**: 앵커가 **예고 턴에서** 계산돼(`realtimeVerifyAnchor`가 commit 시점의
+// `scammerTurns`를 받는다) 오퍼 카드가 예고 대사 **자리**에 놓인다.
+// ⛔ **폴백 경로에 쓰지 말 것 — 순환한다.** 폴백은 **문서가 곧 announce 트리거**이므로
+// (`roleplay/index.ts`가 문서를 읽어 `verify_announce`를 고르고 `announcedAt`을 마크한다) 문서를
+// 미루면 예고가 영영 안 나온다. 폴백은 **후보 C**(`announcedAt`을 컨트롤 선행 조건으로 **읽기만**)를
+// 쓴다 — 마킹 지점은 **0줄** 그대로다(**G188**).
+/**
+ * ⭐ **§38.7 5 — `stage` 판별자와 `placed` 판별자가 곱해지는 4칸을 이 함수 하나에 가둔다**(G187 인접).
+ * 호출부에 흩으면 *"1단계는 R-1을 보는데 2단계는 안 본다"* 같은 비대칭이 **에러 없이** 생긴다.
+ *
+ * | stage | placed | persist | instruction | 근거 |
+ * |---|---|---|---|---|
+ * | 부재(폴백·레거시) | false | ✅ | ✅ | 종전 동작 그대로 — 폴백은 문서가 announce 트리거다 |
+ * | 부재            | true  | ❌ | ❌ | R-1(전환 후 재권유 금지) |
+ * | `announce`      | false | ❌ | ✅ | ⭐ **write를 미룬다**(E의 본체) |
+ * | `announce`      | true  | ❌ | ❌ | R-1 |
+ * | `commit`        | false | ✅ | ❌ | 지시는 1단계에서 이미 받았다 — 다시 주면 **중복 주입**이다 |
+ * | `commit`        | true  | ❌ | ❌ | R-1 |
+ *
+ * ⚠️ `persist`는 *"쓰기를 시도해도 되는가"* 다. 실제 write는 **문서 부재일 때만**(멱등 — `create`)
+ * 일어나며 그 판정은 호출부의 기존 규칙 그대로다.
+ */
+export function resolveVerifyOfferPlan(input: {
+  stage?: VerifyOfferStage;
+  placed: boolean;
+}): { persist: boolean; includeInstruction: boolean } {
+  if (input.placed) return { persist: false, includeInstruction: false };
+  if (input.stage === "announce") return { persist: false, includeInstruction: true };
+  if (input.stage === "commit") return { persist: true, includeInstruction: false };
+  return { persist: true, includeInstruction: true };
 }
 
 // ── 앵커 값(§16.3.2 / §16.6 G28) ────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import {
   buildReplayTimeline,
   getAnnotatedTurnIndexes,
+  hasVerifyTransfer,
   type ReplayTimelineItem,
   type ReplayTimelineMessageItem,
 } from "./buildReplayTimeline.ts";
@@ -193,7 +194,7 @@ test("[T83/§16.3.5] 정렬 kindRank = 메시지 0 < 문자 1 < 확인 2 (같은
   );
   assert.deepEqual(
     timeline.map((item) => item.id),
-    ["m0", "m1", "m2", "sms-otp-1", "verify-institution-verify-desk", "m3"],
+    ["m0", "m1", "m2", "sms-otp-1", "verify-institution-verify-desk-0", "m3"],
   );
 });
 
@@ -210,6 +211,85 @@ test("[T83/G16] 확인 항목은 getAnnotatedTurnIndexes에 절대 포함되지 
 test("[T83/AC-062] 속은 순간 0건 + 확인 시도만 있는 세션은 주석 목록이 비어 있다(진입점 미노출)", () => {
   const timeline = buildReplayTimeline(CONVERSATION, [], [], [verifySource()]);
   assert.deepEqual(getAnnotatedTurnIndexes(timeline), []);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐⭐ §38.6 S2·S3 (E2) — **오퍼 항목과 전환 항목이 각자의 앵커로 정렬된다 + G182 tie-breaker**
+// ══════════════════════════════════════════════════════════════════════════════
+const offerItem = () =>
+  verifySource({ anchorTurnIndex: 0, timeLabel: "5초 시점", outcome: "placed_and_complied" });
+const reconnectItem = (anchorTurnIndex: number) =>
+  verifySource({
+    anchorTurnIndex,
+    outcome: "placed_and_complied",
+    reconnectTimeLabel: "40초 시점",
+    events: [{ event: "verify_reconnected", what: "요구에 응했습니다." }],
+  });
+
+test("[§38.6 S3 / E2] 확인 항목 2건이 **서로 다른 앵커**로 갈라져 정렬된다", () => {
+  const timeline = buildReplayTimeline(CONVERSATION, [], [], [offerItem(), reconnectItem(2)]);
+  const ids = timeline.map((item) => item.id);
+  assert.deepEqual(ids, [
+    "m0",
+    "verify-institution-verify-desk-0",
+    "m1",
+    "m2",
+    "verify-institution-verify-desk-1",
+    "m3",
+  ]);
+  // ⭐ 전환 카드가 오퍼 카드와 **다른 메시지 뒤**에 온다 = 표시 층에서 순서가 바로잡혔다.
+  assert.ok(ids.indexOf("verify-institution-verify-desk-0") < ids.indexOf("m2"));
+  assert.ok(ids.indexOf("verify-institution-verify-desk-1") > ids.indexOf("m2"));
+});
+
+test("[§38.6 / G182 역검증] 같은 앵커로 해결돼도 배열 순서(오퍼 → 전환)가 보존된다", () => {
+  const timeline = buildReplayTimeline(
+    CONVERSATION,
+    [],
+    [],
+    [verifySource({ anchorTurnIndex: 2 }), reconnectItem(2)],
+  );
+  const events = timeline
+    .filter((item) => item.kind === "verify")
+    .map((item) => (item as { verify: { events: { event: string }[] } }).verify.events[0].event);
+  assert.deepEqual(
+    events,
+    ["verify_offer_shown", "verify_reconnected"],
+    "⛔ 서버 배열 순서를 뒤집으면 전환이 오퍼보다 앞에 온다(G182)",
+  );
+  // 역검증: 입력 순서를 실제로 뒤집으면 결과도 뒤집힌다 ⇒ 이 단언은 살아 있다.
+  const reversed = buildReplayTimeline(
+    CONVERSATION,
+    [],
+    [],
+    [reconnectItem(2), verifySource({ anchorTurnIndex: 2 })],
+  )
+    .filter((item) => item.kind === "verify")
+    .map((item) => (item as { verify: { events: { event: string }[] } }).verify.events[0].event);
+  assert.deepEqual(reversed, ["verify_reconnected", "verify_offer_shown"]);
+});
+
+test("[§38.6 S2] hasVerifyTransfer — 전환 단언은 `verify_reconnected`를 든 항목에서만 참이다", () => {
+  assert.equal(hasVerifyTransfer(verifySource()), false, "오퍼만 있는 항목은 전환을 말하지 않는다");
+  assert.equal(
+    hasVerifyTransfer(offerItem()),
+    false,
+    "⭐ outcome이 placed_*여도 **오퍼 항목**은 전환을 단언하지 않는다(두 항목이 outcome을 공유한다)",
+  );
+  assert.equal(hasVerifyTransfer(reconnectItem(2)), true);
+  // 하위호환(무백필) — §38.6 S3 이전 리포트는 한 항목에 이벤트 2건이다.
+  assert.equal(
+    hasVerifyTransfer(
+      verifySource({
+        events: [
+          { event: "verify_offer_shown", what: "a" },
+          { event: "verify_reconnected", what: "b" },
+        ],
+      }),
+    ),
+    true,
+    "과거 리포트는 종전과 같은 문면이 나와야 한다",
+  );
 });
 
 test("[T83/G17] 앵커 메시지와 turnIndex가 같아도 확인 항목에는 주석이 붙지 않는다", () => {
@@ -257,7 +337,7 @@ test("[T84] 정렬 kindRank = 메시지 0 < 문자 1 < 확인 2 < 모의 화면 
   );
   assert.deepEqual(
     timeline.map((item) => item.id),
-    ["m0", "m1", "m2", "sms-otp-1", "verify-institution-verify-desk", "mock-subsidy-install", "m3"],
+    ["m0", "m1", "m2", "sms-otp-1", "verify-institution-verify-desk-0", "mock-subsidy-install", "m3"],
   );
 });
 

@@ -1,8 +1,11 @@
 export {
   enqueueInstruction,
+  nextVerifyOfferStage,
+  rollbackVerifyOfferPhase,
   shouldOfferVerify,
   shouldReinjectTransferState,
   shouldRetryVerifyOffer,
+  shouldRevealVerifyOffer,
   takeNextInstruction,
 } from "./verifyIntercept";
 export type {
@@ -10,4 +13,5 @@ export type {
   PendingInstruction,
   TransferStateReinjectInput,
   VerifyInterceptView,
+  VerifyOfferPhase,
 } from "./verifyIntercept";

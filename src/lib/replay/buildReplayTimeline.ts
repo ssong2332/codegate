@@ -79,6 +79,21 @@ export type ReplayTimelineVerifyItem = {
   verify: ReplayVerifySource;
 };
 
+/**
+ * ⭐ **§38.6 S2** — *"상대가 통화를 넘겼다"* 를 말해도 되는 항목인가. **화면이 새로 판정하지 않고
+ * 서버 스냅샷이 실어 보낸 이벤트를 그대로 읽는다**(§16.3.5 원칙).
+ *
+ * ⚠️ **`outcome`만으로 갈라선 안 된다.** §38.6 S3 이후 한 문서가 **오퍼 항목 + 전환 항목** 두 건으로
+ * 갈라지는데 `outcome`은 **두 항목이 공유**한다 ⇒ `outcome`으로 분기하면 **오퍼 항목까지** 전환을
+ * 단언한다. 그 항목이 실제로 서술하는 사실은 자기가 들고 있는 이벤트가 정본이다.
+ *
+ * ⚠️ **하위호환(무백필)**: S3 이전에 생성된 과거 리포트는 한 항목에 이벤트 2건이 함께 들어 있다 —
+ * 그 경우에도 `verify_reconnected`가 있으므로 종전과 **같은 문면**이 나온다.
+ */
+export function hasVerifyTransfer(verify: ReplayVerifySource): boolean {
+  return verify.events.some((event) => event.event === "verify_reconnected");
+}
+
 /** `reports/{rid}.mockScreenTimeline[]`의 클라 표현(읽기 전용, 표시 전용) — T84, §15.9.5 e-4.
  *  ⚠️ 화면 콘텐츠 원문·`fakeLandingId` 재진입 컨트롤에 해당하는 값이 **타입에 없다** — 사후 화면이
  *  목업을 재구성하거나 다시 열 수 없다(§15.6 G19 동형 취지). */
@@ -138,7 +153,10 @@ export function buildReplayTimeline(
       sortKey: [verify.anchorTurnIndex, 2, seq] as [number, number, number],
       item: {
         kind: "verify" as const,
-        id: `verify-${verify.offerId}`,
+        // ⭐ §38.6 S3 — 한 문서가 **오퍼 항목 + 전환 항목**으로 갈라지므로 `offerId`만으로는 id가
+        // 중복된다(React key 충돌). 배열 순서(`seq`)를 붙여 유일하게 만든다 — 순서는 서버가 준
+        // 그대로이므로 G182(오퍼 → 전환)도 함께 보존된다.
+        id: `verify-${verify.offerId}-${seq}`,
         turnIndex: verify.anchorTurnIndex,
         verify,
       },

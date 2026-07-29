@@ -492,8 +492,10 @@ export default function ReportPage() {
                   ) : entry.kind === "sms" ? (
                     <ReportSmsTimelineItem key={`sms-${entry.sms.smsId}`} sms={entry.sms} />
                   ) : entry.kind === "verify" ? (
+                    // ⭐ §38.6 S3 — 한 문서가 오퍼 항목 + 전환 항목으로 갈라지므로 `offerId`만으로는
+                    // key가 중복된다. 정렬 키의 seq(= 서버가 준 배열 순서)를 붙여 유일하게 만든다.
                     <ReportVerifyTimelineItem
-                      key={`verify-${entry.verify.offerId}`}
+                      key={`verify-${entry.verify.offerId}-${entry.sortKey[2]}`}
                       verify={entry.verify}
                     />
                   ) : (
@@ -772,7 +774,12 @@ function ReportVerifyTimelineItem({ verify }: { verify: VerifyTimelineEntry }) {
               {event.correctAction}
             </p>
           )}
-          {!verify.anchorResolved && event.event === "verify_offer_shown" && (
+          {/* ⭐ §38.6 S3 — 항목이 갈라진 뒤로 `anchorResolved`는 **그 항목 자신의** 앵커를 뜻한다
+              (오퍼 항목 = 오퍼 앵커 / 전환 항목 = 재연결 앵커). 종전의 `verify_offer_shown` 한정은
+              두 이벤트가 한 항목에 있던 시절의 조건이었고, 그대로 두면 **전환 항목의 미해결이 조용히
+              누락**된다(P-4 "조용히 버리지 않는다"). 과거 리포트(이벤트 2건 한 항목)에서는 두 카드에
+              같은 고지가 붙는데, 그 항목의 `anchorResolved`가 실제로 둘 다에 적용되므로 맞다. */}
+          {!verify.anchorResolved && (
             <p className="mt-2 text-sm text-[#6B655C]">
               이 안내가 대화 중 어느 시점에 있었는지는 확인하지 못했습니다.
             </p>

@@ -2,9 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   enqueueInstruction,
+  nextVerifyOfferStage,
+  rollbackVerifyOfferPhase,
   shouldOfferVerify,
   shouldReinjectTransferState,
   shouldRetryVerifyOffer,
+  shouldRevealVerifyOffer,
   takeNextInstruction,
   type PendingInstruction,
 } from "./verifyIntercept.ts";
@@ -147,3 +150,119 @@ test("[T118/R-2] 일시 오류·네트워크 실패에서는 반드시 되돌린
 //     렌더 문자열에 "번호" 0건. 번호가 되살아나면 여기서 걸린다.
 //   - **G86-a**(`functions/src/scenarios/__tests__/verifyIntercept.test.ts`) — 카탈로그 전 문자열
 //     필드에 전화번호 형태 0건.
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐⭐ §38 런타임 층 (E3) — **컨트롤은 예고보다 먼저 열리지 않는다**
+//
+// 사용자 신고: *"내가 보안확인창구로 넘긴다고 한 적이 없는데, 연결한다고 혼자서 하면서…"*
+// 종전 조건은 `verifyOffer !== null && placedAtMs === undefined`뿐이었고, 그 문서는 예고가
+// **큐에 들어가기도 전에** 쓰였다 ⇒ 아무도 말하지 않았는데 버튼이 떠 있었다(§38.1 (3)).
+//
+// ⛔ **이 테스트가 증명하지 않는 것**: *"사기범이 실제로 그 대사를 말했다"*. 관측되는 것은
+// **턴 완료**(실시간) / **프롬프트 적재**(폴백)이지 대사 내용이 아니다(§38.11 (c)).
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── E3-ⓐ/ⓑ 실시간(후보 E — 판별자는 **문서 존재**) ──────────────────────────────
+test("[§38 / E3-ⓐ] 실시간: 예고 턴이 끝나 문서가 생긴 뒤에는 컨트롤이 열린다", () => {
+  assert.equal(
+    shouldRevealVerifyOffer({ callMode: "realtime", offer: { announcedAtMs: undefined } }),
+    true,
+    "실시간에서 문서 존재 자체가 '예고 턴 완료'다(2단 오퍼의 commit 단계에서만 만들어진다)",
+  );
+});
+
+test("[§38 / E3-ⓑ 역검증] ⛔ 예고 미완(문서 부재)에서 true가 나오면 실패다", () => {
+  // 이 단언이 없으면 게이트가 조용히 죽어도 아무도 모른다(반려 사유 — §38.12 implementer ⓒ).
+  assert.equal(shouldRevealVerifyOffer({ callMode: "realtime", offer: null }), false);
+  assert.equal(shouldRevealVerifyOffer({ callMode: "fallback", offer: null }), false);
+  // 종전 구현을 테스트 코드 안에서만 재현한다 — 그것은 이 입력에서 **true를 냈다**.
+  const beforeS38 = (offer: { placedAtMs?: number } | null) =>
+    offer !== null && offer.placedAtMs === undefined;
+  assert.equal(beforeS38({}), true, "종전 동작 재현: 문서만 있으면 열렸다");
+  assert.equal(
+    shouldRevealVerifyOffer({ callMode: "fallback", offer: {} }),
+    false,
+    "⭐ 같은 입력에서 새 게이트는 닫는다 — 죽은 게이트가 아니다",
+  );
+});
+
+test("[§38 / E3-ⓒ · G184] 새로고침 시나리오(문서만 있고 클라 ref 없음)에서도 값이 유지된다", () => {
+  // ⭐ 이 함수의 입력에는 ref·타이머·렌더 상태가 **하나도 없다** — 새로고침 후 문서 구독만으로
+  // 같은 값이 나온다. 후보 D(클라 ref 단독)를 단독 기각한 판별자가 바로 이 성질이다.
+  const afterReload = { announcedAtMs: 1_700_000_000_000 };
+  assert.equal(shouldRevealVerifyOffer({ callMode: "realtime", offer: afterReload }), true);
+  assert.equal(shouldRevealVerifyOffer({ callMode: "fallback", offer: afterReload }), true);
+});
+
+// ── 폴백(후보 C — 판별자는 `announcedAt`) ────────────────────────────────────────
+test("[§38 / 후보 C] 폴백: 문서가 있어도 announcedAt 전에는 컨트롤이 열리지 않는다", () => {
+  assert.equal(shouldRevealVerifyOffer({ callMode: "fallback", offer: {} }), false);
+  assert.equal(
+    shouldRevealVerifyOffer({ callMode: "fallback", offer: { announcedAtMs: 1 } }),
+    true,
+    "서버가 예고 지시를 **이번 턴 프롬프트에 실은 자리**에서 마크한다 — 폴백은 응답이 곧 대사다",
+  );
+});
+
+test("[§38] 전환이 끝나면(placedAt) 경로와 무관하게 컨트롤이 사라진다(종전 규칙 유지)", () => {
+  for (const callMode of ["realtime", "fallback"] as const) {
+    assert.equal(
+      shouldRevealVerifyOffer({ callMode, offer: { placedAtMs: 1, announcedAtMs: 1 } }),
+      false,
+      callMode,
+    );
+  }
+});
+
+// ── G187 — 단계 상태(⛔ boolean 금지) ────────────────────────────────────────────
+test("[§38 / G187] 2단 오퍼의 단계 전이표", () => {
+  assert.equal(nextVerifyOfferStage({ phase: "idle", announceTurnComplete: false }), "announce");
+  assert.equal(
+    nextVerifyOfferStage({ phase: "announced", announceTurnComplete: false }),
+    null,
+    "⭐ 예고 턴이 끝나기 전에는 기다린다 — 이 대기가 곧 순서 교정이다",
+  );
+  assert.equal(nextVerifyOfferStage({ phase: "announced", announceTurnComplete: true }), "commit");
+  assert.equal(nextVerifyOfferStage({ phase: "committed", announceTurnComplete: true }), null);
+});
+
+test("[§38 / G187] 2단계 실패는 idle이 아니라 announced로 되돌린다(중복 예고 금지)", () => {
+  assert.equal(
+    rollbackVerifyOfferPhase({ currentPhase: "committed", stage: "commit", retryable: true }),
+    "announced",
+    "⛔ idle로 되돌리면 예고가 두 번 나간다 — 예고는 이미 발화됐다",
+  );
+  assert.equal(
+    rollbackVerifyOfferPhase({ currentPhase: "announced", stage: "announce", retryable: true }),
+    "idle",
+    "1단계 실패는 처음부터 다시 — 아직 아무 말도 안 나갔다",
+  );
+  // 재시도 불가 오류(세션 비활성·카탈로그 불일치·소유권)는 단계를 굳힌다.
+  assert.equal(
+    rollbackVerifyOfferPhase({ currentPhase: "committed", stage: "commit", retryable: false }),
+    "committed",
+  );
+  assert.equal(
+    rollbackVerifyOfferPhase({ currentPhase: "announced", stage: "announce", retryable: false }),
+    "announced",
+  );
+});
+
+test("[§38 / G187 역검증] boolean 하나로는 '1단계 성공 · 2단계 실패'를 표현하지 못한다", () => {
+  // 종전 boolean 재현: 값이 true로 굳으면 commit을 다시 시도할 방법이 없다.
+  let requested = false;
+  requested = true; // 1단계 성공
+  assert.equal(requested, true, "boolean은 '어느 단계까지 갔는가'를 담지 못한다");
+  // 단계 상태는 같은 상황에서 **commit만** 다시 시도한다.
+  assert.equal(
+    nextVerifyOfferStage({
+      phase: rollbackVerifyOfferPhase({
+        currentPhase: "committed",
+        stage: "commit",
+        retryable: true,
+      }),
+      announceTurnComplete: true,
+    }),
+    "commit",
+  );
+});

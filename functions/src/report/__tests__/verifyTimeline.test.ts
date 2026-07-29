@@ -14,6 +14,7 @@ import {
   applyVerifyIntercept,
   deriveVerifyEvents,
   resolveJudgmentAnchor,
+  resolveReconnectAnchor,
   resolveVerifyOutcome,
   type VerifyTimelineSource,
 } from "../verifyTimeline";
@@ -85,11 +86,13 @@ test("[D-51 ⑤] 걸었으나 응하지 않음 → placed_not_complied · **주�
     messages,
     SESSION_CREATED_MS,
   );
-  const entry = result.verifyTimeline[0];
-  assert.equal(entry.outcome, "placed_not_complied");
+  assert.equal(result.verifyTimeline[0].outcome, "placed_not_complied");
   assert.equal(result.annotatedCount, 0, "실제로 방어에 성공한 케이스다 — 순간을 만들지 않는다");
   assert.deepEqual(result.deceivedMoments, [moment(3)]);
-  const reconnected = entry.events.find((e) => e.event === "verify_reconnected");
+  // ⭐ §38.6 S3 이후 전환 이벤트는 **자기 앵커를 가진 별도 항목**에 있다.
+  const reconnected = result.verifyTimeline
+    .flatMap((entry) => entry.events)
+    .find((e) => e.event === "verify_reconnected");
   assert.ok(reconnected, "걸었다는 사실 자체는 기록된다");
   assert.equal(
     reconnected?.correctAction,
@@ -290,7 +293,8 @@ test("[T110/G88] 리포트 `what` 3종이 호 전환으로 서술된다 — 신�
       assert.ok(!premise.test(what), `폐기된 dial-out 서술이 남아 있다(${premise}): ${what}`);
     }
   }
-  assert.ok(whats.some((what) => /통화를\s*넘겼습니다/.test(what)), "오퍼 서술은 호 전환이다");
+  // ⭐ §38.6 S1 — 호 전환 서술 자체는 유지되지만 **자리가 바뀌었다**(오퍼 → 전환 이벤트).
+  assert.ok(whats.some((what) => /통화를\s*넘겼습니다/.test(what)), "전환 서술은 호 전환이다");
   assert.ok(
     whats.filter((what) => /넘겨받은\s*담당자/.test(what)).length === 2,
     "전환 이후 서술 2종(응함/응하지 않음)이 모두 '넘겨받은 담당자'로 서술돼야 한다",
@@ -300,4 +304,111 @@ test("[T110/G88] 리포트 `what` 3종이 호 전환으로 서술된다 — 신�
 test("[T110/G88 역검증] 폐기된 dial-out 서술을 되살린 샘플은 실제로 실패한다", () => {
   const tainted = "안내받은 번호로 확인 전화를 걸었고, 같은 요구가 이어졌습니다.";
   assert.ok([/안내받은\s*번호/, /확인\s*전화를\s*걸/].some((premise) => premise.test(tainted)));
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐⭐ §38.6 S1·S3 (E1) — **리포트가 일어나지 않은 전환을 단언하지 않는다 + 전환은 자기 앵커에 놓인다**
+//
+// 출발점(라이브 0회 실측, 오케스트레이터): `placedAt`이 **부재**인 세션의 리포트에
+// *"… 확인창구로 통화를 넘겼습니다"* 가 실려 있었다. 원인은 그 문면이 `verify_offer_shown`
+// (= "오퍼 카드가 떴다")에 붙어 있고 `placedAtMs` 조기 반환보다 **위**에 있었던 것이다.
+// ══════════════════════════════════════════════════════════════════════════════
+const TRANSFER_ASSERTION = /넘겼|넘겨받은/;
+
+test("[§38.6 S1 / E1-ⓐ] placedAt 부재면 **어떤 이벤트 문면에도** 전환 단언이 없다", () => {
+  const events = deriveVerifyEvents(offer(), "offered_not_placed");
+  assert.equal(events.length, 1, "전환이 없으면 이벤트는 오퍼 1건뿐이다");
+  for (const event of events) {
+    assert.ok(
+      !TRANSFER_ASSERTION.test(event.what),
+      `전환한 적 없는 세션에 전환 단언이 남아 있다: ${event.what}`,
+    );
+  }
+  // 스냅샷 종단에서도 같아야 한다(applyVerifyIntercept 경유 — 화면이 읽는 값 그대로).
+  const timeline = applyVerifyIntercept([offer()], [], messages, SESSION_CREATED_MS).verifyTimeline;
+  assert.equal(timeline.length, 1, "전환이 없으면 항목도 1건이다");
+  for (const what of timeline.flatMap((entry) => entry.events).map((e) => e.what)) {
+    assert.ok(!TRANSFER_ASSERTION.test(what), `스냅샷에 전환 단언이 남아 있다: ${what}`);
+  }
+});
+
+test("[§38.6 S1 역검증] 종전 문면(오퍼에 전환 단언)을 되살린 샘플은 위 검사에 실제로 걸린다", () => {
+  const previous = "상대가 '확인 부서로 바로 연결해 드리겠다'며 ○○확인창구로 통화를 넘겼습니다.";
+  assert.ok(
+    TRANSFER_ASSERTION.test(previous),
+    "역검증이 죽어 있으면 S1은 조용히 되돌아갈 수 있다",
+  );
+});
+
+test("[§38.6 S1] placedAt이 **있으면** 전환은 그대로 서술된다(정보 손실 0건)", () => {
+  for (const outcome of ["placed_and_complied", "placed_not_complied"] as const) {
+    const whats = deriveVerifyEvents(offer({ placedAtMs: 1 }), outcome).map((e) => e.what);
+    assert.ok(
+      whats.some((what) => /통화를\s*넘겼습니다/.test(what)),
+      `전환이 실제로 있었던 경로에서는 전환을 서술해야 한다(${outcome})`,
+    );
+  }
+});
+
+test("[§38.6 S3 / E1-ⓑ] 전환 이벤트는 **reconnectAnchorScammerTurn에서 해결된 앵커**를 갖는다", () => {
+  // offerAnchorScammerTurn=2 → scammers[1] = turnIndex 2 / reconnectAnchorScammerTurn=2 →
+  // resolveAnchor(3) = scammers[2] = turnIndex 4. **두 항목의 앵커가 서로 다르다**가 이 절의 본체다.
+  const timeline = applyVerifyIntercept(
+    [offer({ placedAtMs: SESSION_CREATED_MS + 32_000, reconnectAnchorScammerTurn: 2 })],
+    [],
+    messages,
+    SESSION_CREATED_MS,
+  ).verifyTimeline;
+
+  assert.equal(timeline.length, 2, "오퍼 항목 + 전환 항목");
+  assert.deepEqual(
+    timeline.map((entry) => entry.events.map((e) => e.event)),
+    [["verify_offer_shown"], ["verify_reconnected"]],
+    "항목당 이벤트 1건 · 오퍼가 먼저(G182)",
+  );
+  assert.equal(timeline[0].anchorTurnIndex, 2);
+  assert.equal(timeline[0].timeLabel, "20초 시점");
+  assert.equal(timeline[1].anchorTurnIndex, 4, "전환은 재연결 대사 앵커에 놓인다");
+  assert.equal(timeline[1].anchorResolved, true);
+  assert.equal(timeline[1].reconnectTimeLabel, "40초 시점");
+  assert.ok(
+    timeline[0].anchorTurnIndex < timeline[1].anchorTurnIndex,
+    "⭐ 전환 서술이 오퍼보다 뒤에 놓인다 — 이것이 §38.6의 '순서만 바로잡는다'의 표시 층 본체다",
+  );
+});
+
+test("[§38.6 S3 역검증] 종전 배치(두 이벤트가 오퍼 앵커 하나)는 위 단언을 통과하지 못한다", () => {
+  // 종전 산출을 그대로 재구성한 값 — 항목 1건 · 이벤트 2건 · 앵커 1개.
+  const previous = [{ anchorTurnIndex: 2, events: ["verify_offer_shown", "verify_reconnected"] }];
+  assert.notEqual(previous.length, 2);
+  assert.equal(previous[0].events.length, 2, "종전에는 전환이 오퍼와 같은 앵커에 묶여 있었다");
+});
+
+test("[§38.6 S3 / 무백필] 재연결 앵커가 미해결이면 전환 항목이 anchorResolved:false로 고지된다", () => {
+  // 과거 문서에는 `reconnectAnchorScammerTurn`이 아예 없을 수 있다 ⇒ 조용히 버리지 않는다(P-4).
+  const timeline = applyVerifyIntercept(
+    [offer({ placedAtMs: SESSION_CREATED_MS + 32_000 })],
+    [],
+    messages,
+    SESSION_CREATED_MS,
+  ).verifyTimeline;
+  assert.equal(timeline.length, 2, "앵커를 못 찾아도 전환 사실 자체는 기록된다");
+  assert.equal(timeline[1].anchorResolved, false);
+  assert.equal(timeline[1].reconnectTimeLabel, undefined);
+});
+
+test("[§38.6 S3 / G183] resolveReconnectAnchor는 0-기반 문서 수를 1-기반 리졸버로 넘긴다", () => {
+  assert.equal(
+    resolveReconnectAnchor(2, messages, SESSION_CREATED_MS).anchorTurnIndex,
+    4,
+    "N=2 → resolveAnchor(3) → scammers[2] = turnIndex 4",
+  );
+  // ⛔ 음수·부재를 `N + 1`로 만들면 -1이 "대화 맨 앞(resolved:true)"으로 **잘못 해결**된다.
+  assert.equal(resolveReconnectAnchor(-1, messages, SESSION_CREATED_MS).anchorResolved, false);
+  assert.equal(resolveReconnectAnchor(undefined, messages, SESSION_CREATED_MS).anchorResolved, false);
+  // 판정 앵커와 값이 갈라지지 않는다(리졸버는 하나 — §16.3.2).
+  assert.equal(
+    resolveJudgmentAnchor(2, messages, SESSION_CREATED_MS).judgmentTurnIndex,
+    resolveReconnectAnchor(2, messages, SESSION_CREATED_MS).anchorTurnIndex,
+  );
 });

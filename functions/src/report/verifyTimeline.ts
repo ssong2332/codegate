@@ -74,19 +74,44 @@ export function resolveJudgmentAnchor(
   sortedMessages: readonly SmsTimelineMessage[],
   sessionCreatedAtMs: number,
 ): { judgmentTurnIndex: number | null; reconnectTimeLabel?: string } {
-  if (
-    reconnectAnchorScammerTurn === undefined ||
-    !Number.isFinite(reconnectAnchorScammerTurn) ||
-    reconnectAnchorScammerTurn < 0
-  ) {
-    return { judgmentTurnIndex: null };
-  }
-  const resolved = resolveAnchor(reconnectAnchorScammerTurn + 1, sortedMessages, sessionCreatedAtMs);
+  const resolved = resolveReconnectAnchor(
+    reconnectAnchorScammerTurn,
+    sortedMessages,
+    sessionCreatedAtMs,
+  );
   if (!resolved.anchorResolved) return { judgmentTurnIndex: null };
   return {
     judgmentTurnIndex: resolved.anchorTurnIndex,
     ...(resolved.timeLabel ? { reconnectTimeLabel: resolved.timeLabel } : {}),
   };
+}
+
+/**
+ * ⭐ **§38.6 S3** — 재연결 항목의 **표시 앵커**. 판정 앵커(`resolveJudgmentAnchor`)와 **같은 값**을
+ * 쓰지만 미해결일 때의 처리가 다르다: 판정은 `null`(주석 0건)로 떨어지고, 표시는 `resolveAnchor`의
+ * 3순위 규칙 그대로 **`anchorResolved:false`** 로 떨어져 화면이 *"어느 시점인지 확인하지 못했습니다"*
+ * 를 고지한다(조용한 누락 금지 — P-4).
+ *
+ * ⚠️ **G183 — ±1을 추측하지 않는다.** `reconnectAnchorScammerTurn`은 0-기반 "사기범 문서 수"라
+ * 1-기반 리졸버에 `N + 1`로 넘긴다(위 `resolveJudgmentAnchor` 주석이 정본). **리졸버는 여전히
+ * `resolveAnchor` 하나뿐이다**(§16.3.2) — 이 함수는 인자 규약만 감싼다.
+ */
+export function resolveReconnectAnchor(
+  reconnectAnchorScammerTurn: number | undefined,
+  sortedMessages: readonly SmsTimelineMessage[],
+  sessionCreatedAtMs: number,
+): ReturnType<typeof resolveAnchor> {
+  const invalid =
+    reconnectAnchorScammerTurn === undefined ||
+    !Number.isFinite(reconnectAnchorScammerTurn) ||
+    reconnectAnchorScammerTurn < 0;
+  // 값이 아예 없거나 음수면 `undefined`를 그대로 넘긴다 — `N + 1`로 만들면 음수 -1이 "대화 맨 앞
+  // (resolved:true)"으로 잘못 해결된다.
+  return resolveAnchor(
+    invalid ? undefined : reconnectAnchorScammerTurn + 1,
+    sortedMessages,
+    sessionCreatedAtMs,
+  );
 }
 
 /**
@@ -133,19 +158,29 @@ export function deriveVerifyEvents(
   // 않은 일을 서술하면 그 자체가 기록 정직성 위반이다. **참고값은 §22.5 표 그대로.**
   // ⚠️ 금지 표현("소용없다"·"막을 수 없다"·"어차피"·"방법이 없다")·수단 미설명 규칙(§16.4)은
   // 새 문구에도 그대로 적용된다 — 같은 테스트가 이 문자열들을 계속 훑는다.
+  //
+  // ⭐⭐ **§38.6 S1 — 오퍼 서술에서 *전환 단언*을 제거했다(실측 근거 있는 결함 수정).**
+  // 종전 문면은 *"… 통화를 넘겼습니다"* 였는데, 이 이벤트가 서술하는 사실은 **"오퍼 카드가 떴다"**
+  // 뿐이고(§16.3.4 규칙표 1행 — *"문서 존재(항상)"*) 그 뒤의 `placedAtMs` 조기 반환보다 **위**에
+  // 있어 **참가자가 전환을 요청한 적 없는 세션에서도 리포트가 전환을 단언**했다(D-51 ①).
+  // 라이브 0회 실측: `offerId/deskLabel/offeredAt/offerAnchorScammerTurn`만 있고 `placedAt` 부재인
+  // 세션의 리포트에 *"통화를 넘겼습니다"* 가 실렸다. ⇒ **전환 서술은 `placedAt`이 있는 아래
+  // 이벤트로 옮긴다.** ⛔ 이 문면은 **잠정값**이다 — 확정 카피는 ux-design 소관(OQ-A5 선례).
   const events: VerifyTimelineEvent[] = [
     {
       event: "verify_offer_shown",
-      what: `상대가 '확인 부서로 바로 연결해 드리겠다'며 ${doc.deskLabel}로 통화를 넘겼습니다.`,
+      what: `상대가 '확인 부서로 바로 연결해 드리겠다'며 ${doc.deskLabel}로 연결해 주겠다고 했습니다.`,
     },
   ];
   if (doc.placedAtMs === undefined) return events;
+  // ⭐ 전환이 **실제로 있었던** 경로에서만 전환을 서술한다(S1). 첫 문장이 §22.5의 호 전환 서술을
+  // 그대로 이어받는다 — 옮겨졌을 뿐 사라지지 않았다.
   events.push({
     event: "verify_reconnected",
     what:
       outcome === "placed_and_complied"
-        ? "넘겨받은 담당자가 같은 요구를 '확인해 드렸다'는 형태로 이어갔고, 그 요구에 응했습니다."
-        : "넘겨받은 담당자의 요구에 응하지 않았습니다.",
+        ? `상대가 ${doc.deskLabel}로 통화를 넘겼습니다. 넘겨받은 담당자가 같은 요구를 '확인해 드렸다'는 형태로 이어갔고, 그 요구에 응했습니다.`
+        : `상대가 ${doc.deskLabel}로 통화를 넘겼습니다. 넘겨받은 담당자의 요구에 응하지 않았습니다.`,
     correctAction: VERIFY_INTERCEPT_CORRECT_ACTION,
   });
   return events;
@@ -191,9 +226,13 @@ export function applyVerifyIntercept(
   for (const doc of docs) {
     const anchor = resolveAnchor(doc.offerAnchorScammerTurn, sortedMessages, sessionCreatedAtMs);
     const placed = doc.placedAtMs !== undefined;
-    const { judgmentTurnIndex, reconnectTimeLabel } = placed
-      ? resolveJudgmentAnchor(doc.reconnectAnchorScammerTurn, sortedMessages, sessionCreatedAtMs)
-      : { judgmentTurnIndex: null, reconnectTimeLabel: undefined };
+    const reconnectAnchor = placed
+      ? resolveReconnectAnchor(doc.reconnectAnchorScammerTurn, sortedMessages, sessionCreatedAtMs)
+      : undefined;
+    const judgmentTurnIndex =
+      reconnectAnchor !== undefined && reconnectAnchor.anchorResolved
+        ? reconnectAnchor.anchorTurnIndex
+        : null;
 
     const momentsAfter =
       judgmentTurnIndex === null
@@ -202,18 +241,42 @@ export function applyVerifyIntercept(
     for (const moment of momentsAfter) annotatedTurnIndexes.add(moment.turnIndex);
 
     const outcome = resolveVerifyOutcome(placed, momentsAfter.length);
-    entries.push({
+    const events = deriveVerifyEvents(doc, outcome);
+    /** 두 항목이 공유하는 값 — **판정은 문서 1건당 한 번만** 한다(§16.3 단일 진입점 취지). */
+    const shared = {
       offerId: doc.offerId,
       deskLabel: doc.deskLabel,
       // T110 — 과거 문서에 값이 있을 때만 스냅샷에 싣는다(신규 세션에서는 필드 자체가 없다).
       ...(doc.displayNumber !== undefined ? { displayNumber: doc.displayNumber } : {}),
+      outcome,
+    };
+
+    // ⭐⭐ **§38.6 S3 — 두 이벤트를 각자의 앵커로 쪼갠다**(저장 스키마 델타 0건 · 신규 필드 0건).
+    // 종전에는 두 이벤트가 **오퍼 앵커 하나**에 함께 놓여, 전환 서술이 사기범의 예고 대사보다
+    // **항상 앞**에 렌더됐다(§38.1 (2): 표시 앵커는 `offerAnchorScammerTurn`에서만 나오고
+    // `reconnectAnchorScammerTurn`은 배치에 쓰이지 않았다).
+    // ⛔ **G182 — 이 push 순서를 뒤집지 말 것.** 두 항목이 **같은 앵커로 해결되는 경우**(전환이 오퍼와
+    // 같은 턴) 정렬 tie-breaker가 배열 순서다(`buildReplayTimeline.ts:138` `sortKey[2]=seq`) —
+    // 뒤집으면 전환이 오퍼보다 앞에 온다.
+    entries.push({
+      ...shared,
       anchorTurnIndex: anchor.anchorTurnIndex,
       anchorResolved: anchor.anchorResolved,
       ...(anchor.timeLabel ? { timeLabel: anchor.timeLabel } : {}),
-      ...(reconnectTimeLabel ? { reconnectTimeLabel } : {}),
-      outcome,
-      events: deriveVerifyEvents(doc, outcome),
+      events: events.filter((event) => event.event === "verify_offer_shown"),
     });
+    const reconnectEvents = events.filter((event) => event.event === "verify_reconnected");
+    if (reconnectAnchor !== undefined && reconnectEvents.length > 0) {
+      entries.push({
+        ...shared,
+        anchorTurnIndex: reconnectAnchor.anchorTurnIndex,
+        anchorResolved: reconnectAnchor.anchorResolved,
+        // 렌더러는 `verify_reconnected` 이벤트의 시각을 **`reconnectTimeLabel`** 에서 읽는다
+        // (report/page.tsx · replay/page.tsx 공통) — 항목이 갈라져도 그 규약은 그대로다.
+        ...(reconnectAnchor.timeLabel ? { reconnectTimeLabel: reconnectAnchor.timeLabel } : {}),
+        events: reconnectEvents,
+      });
+    }
   }
 
   // ⚠️ **주석은 map이다 — filter도 push도 아니다.** 배열 길이·순서·turnIndex·timeLabel·
@@ -234,6 +297,9 @@ export function applyVerifyIntercept(
   );
 
   return {
+    // ⚠️ **G182** — 비교자가 0을 돌려주는 경우(같은 문서의 오퍼/전환이 같은 앵커로 해결됨)
+    // `Array.prototype.sort`의 **안정 정렬**(ES2019 이후 명세 보장)이 push 순서를 그대로 남긴다.
+    // ⇒ 오퍼 → 전환 순서가 보존된다. 비교자에 offerId 뒤 tie-breaker를 추가하지 말 것.
     verifyTimeline: entries.sort(
       (a, b) => a.anchorTurnIndex - b.anchorTurnIndex || a.offerId.localeCompare(b.offerId),
     ),

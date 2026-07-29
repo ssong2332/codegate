@@ -10,11 +10,24 @@
 /** 앵커 계산에 쓰는 명시 판별자 — 부재를 판별자로 오버로드하지 않는다(§14.9.1 원칙, §16.3.2). */
 export type VerifyCallMode = "realtime" | "fallback";
 
+/**
+ * ⭐ **§38.4 후보 E — 2단 오퍼의 단계 판별자.** 판정표는 `buildDoc.ts`의 `resolveVerifyOfferPlan`.
+ * ⛔ 부재를 판별자로 오버로드하지 않는다(§14.9.1) — **부재는 "종전 동작(폴백)"이라는 뜻**이다.
+ */
+export type VerifyOfferStage = "announce" | "commit";
+
 export type DeliverVerifyOfferRequest = {
   sessionId: string;
   callMode: VerifyCallMode;
   /** `callMode==="realtime"`일 때 **필수**(없으면 invalid-argument). 폴백은 서버가 직접 센다. */
   scammerTurns?: number;
+  /**
+   * ⭐ **§38.4 후보 E — 2단 오퍼의 유일한 신규 필드**(응답·문서 스키마 델타 **0건**).
+   * `announce` = 지시만 받는다(**문서 write 0건**) / `commit` = 예고 턴이 끝난 뒤 문서를 만든다.
+   * **부재 = 종전 동작**(폴백 경로가 그대로 쓴다 — 그쪽은 문서가 곧 announce 트리거라 미룰 수 없다).
+   * 판정표는 `buildDoc.ts`의 `resolveVerifyOfferPlan`이 정본이다.
+   */
+  stage?: VerifyOfferStage;
 };
 export type DeliverVerifyOfferResponse = {
   offerId: string;
