@@ -20,15 +20,68 @@ import { GeminiRealtimeProvider } from "./geminiProvider";
 import { MockRealtimeProvider } from "./mockProvider";
 import type { RealtimeVoiceProvider } from "./types";
 
-/** defineSecret은 바인딩되지 않은 컨텍스트(단위 테스트 등)에서 throw하므로 안전하게 감싼다. */
-function readSecret(param: { value: () => string }): string {
+/**
+ * 자격증명 판독 상태 3값(T133/AC-081 (c), Architecture.md §41.6 (나)).
+ *   - `set`    : 쓸 수 있는 값이 있다
+ *   - `empty`  : 주입은 됐지만 빈 문자열이거나 `.env.example`의 `YOUR_` placeholder다
+ *   - `absent` : `process.env`에 키 자체가 없다(= 미주입)
+ * ⛔ 값·길이·접두·해시는 어디에도 싣지 않는다 — 드러내는 것은 **이름과 이 판별 결과**까지다(G211).
+ */
+export type SecretReadState = "set" | "empty" | "absent";
+
+export type SecretParamLike = { readonly name?: string; value: () => string };
+
+/**
+ * ⭐⭐ 전제 정정(G203) — 아래 `catch`는 **런타임에 발동하지 않는다.**
+ * `firebase-functions@7.3.0`의 `SecretParam.value()`는 `process.env.FUNCTIONS_CONTROL_API === "true"`
+ * (배포 **분석** 단계)일 때만 throw하고, 그 밖에서는 `runtimeValue()`가 `process.env[name]`을 읽어
+ * 없으면 `logger.warn` 1줄을 남기고 `""` 를 돌려준다(`node_modules/firebase-functions/lib/params/
+ * types.js`의 `SecretParam.runtimeValue`/`value`). ⇒ 배포·에뮬레이터·단위테스트에서 `""` 를 만드는
+ * 것은 catch가 아니라 `!value` 분기다. ⛔ *"throw를 catch가 삼킨다"* 로 읽지 말 것 — 다음 사람이
+ * catch를 지워 고쳤다고 믿게 된다. catch는 배포 분석 단계 대비로만 남긴다.
+ *
+ * ⛔ `param.value()`는 **1회만** 부른다 — SDK가 미주입 시 호출마다 경고를 찍으므로 두 번 부르면
+ * 관측 신호가 그대로 2배가 된다(§41.6 (나)가 피하려는 중복 로그).
+ */
+function readSecretDetail(
+  param: SecretParamLike,
+  env: NodeJS.ProcessEnv = process.env,
+): { readonly state: SecretReadState; readonly value: string } {
+  let value: string;
   try {
-    const value = param.value();
-    // .env.example의 placeholder가 그대로 들어온 경우도 "미설정"으로 본다.
-    return !value || value.startsWith("YOUR_") ? "" : value;
+    value = param.value();
   } catch {
-    return "";
+    return { state: "absent", value: "" };
   }
+  if (value && !value.startsWith("YOUR_")) return { state: "set", value };
+  // 빈 문자열이 "미주입"인지 "빈 값 주입"인지는 process.env 존재 여부로만 갈린다.
+  const name = param.name;
+  if (name !== undefined && env[name] === undefined) return { state: "absent", value: "" };
+  return { state: "empty", value: "" };
+}
+
+export function classifySecret(
+  param: SecretParamLike,
+  env: NodeJS.ProcessEnv = process.env,
+): SecretReadState {
+  return readSecretDetail(param, env).state;
+}
+
+/**
+ * ⚠️ 반환 계약은 종전과 동일한 **문자열**이다(§41.8 강등표 8행) — 3값 구분은 내부에만 둔다.
+ *
+ * ⭐ **`absent`에 대한 신호는 새로 만들지 않는다.** P-3 실측에서 SDK가 이미 같은 조건
+ * (`process.env[name] === undefined`)에 정확히 그 처방까지 담은 경고를 낸다:
+ *   *"No value found for secret parameter "{name}". A function can only access a secret if you
+ *    include the secret in the function's dependency array."*
+ * 호출 1회당 읽는 시크릿 수만큼(실측 2줄) 나오므로, 여기서 또 찍으면 **중복 로그**다.
+ * ⇒ AC-081 (c)가 요구하는 *"거부되거나 관측 가능한 신호로 드러난다"* 중 **후자**를 SDK 경고가
+ *    담당한다. ⛔ **차단하지 않는다** — 키 없는 개발·격리 워크트리의 Mock 강등은 **정당한 동작**이고
+ *    `__tests__/provider.test.ts`가 그것을 단언한다(G210).
+ * ⚠️ 잔여 한계: `empty`(빈 값·placeholder 주입)에는 SDK 경고가 **나지 않는다** — 관측되지 않는다.
+ */
+function readSecret(param: SecretParamLike): string {
+  return readSecretDetail(param).value;
 }
 
 /**
