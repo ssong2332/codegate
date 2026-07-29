@@ -1,3 +1,5 @@
+- [지시받은 판정이 이미 절로 있을 수 있다](feedback_judgment_may_already_be_a_section.md) — 착수 전 `^## ` 전수 grep + UpdateRequests `open`; 있으면 재작성 말고 "위에 얹는 절"
+- [오염 샘플은 기존 게이트를 피해야 한다](feedback_poison_sample_must_dodge_existing_gates.md) — "새 게이트만 빨강"이 요구면 오염 모양이 설계 사항; 입력 불변 단언으로 보인다
 - [정정한 문장의 재사용처를 전수 grep](feedback_correction_sweep_reuse_sites.md) — 거짓으로 고친 문장이 다른 절의 전제로 살아 있다; DECISIONS·adr까지 훑고 "N곳뿐"을 근거와 함께
 - [순서 역전 신고는 배치 앵커부터](feedback_order_report_check_anchor_first.md) — 런타임 의심 전에 ①앵커가 하나뿐인가 ②이벤트 문면이 무조건 방출인가; 표시 층은 라이브 0회로 확정된다
 - [ElevenLabs voice selection constraints](reference_elevenlabs_voice_selection.md) — client-only TTS override, no server voice-pin, account-scoped IVC ids; drove ADR-0006 A2
