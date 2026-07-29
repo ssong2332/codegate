@@ -23,6 +23,7 @@ import { Badge, Button } from "@/components/ui";
 import {
   buildReplayTimeline,
   getAnnotatedTurnIndexes,
+  hasVerifyTransfer,
   type ReplayDeceivedMomentSource,
   type ReplayMockScreenSource,
   type ReplaySmsSource,
@@ -721,13 +722,18 @@ function ReplayVerifyItem({ verify }: { verify: ReplayVerifySource }) {
           {/* ⭐ T110(§22.3) — `displayNumber`는 **과거 리포트에만** 있다(무백필). 값이 있으면 그때
               실제로 본 그대로 보여주고(정직), 호 전환 모델의 신규 리포트에서는 이 줄이 아예 없다. */}
           <div className="rounded-[16px] rounded-bl-[4px] border border-[#E2DDD3] bg-white px-4 py-3">
+            {/* ⭐⭐ §38.6 S2 — 종전에는 이 줄이 `displayNumber` 유무로만 갈라져 **참가자가 전환을
+                요청한 적 없는 세션에서도** *"통화를 넘겼습니다"* 를 단언했다(기록 무결성 위반).
+                판정은 `hasVerifyTransfer` 하나가 소유하고 화면은 새로 판정하지 않는다. */}
             <p className="text-[15px] leading-[1.55] text-[#22303A]">
               {verify.displayNumber !== undefined ? (
                 <>
                   안내받은 번호: <span className="font-mono">{verify.displayNumber}</span>
                 </>
-              ) : (
+              ) : hasVerifyTransfer(verify) ? (
                 <>상대가 {verify.deskLabel}로 통화를 넘겼습니다.</>
+              ) : (
+                <>상대가 {verify.deskLabel}로 연결해 주겠다고 했습니다.</>
               )}
             </p>
           </div>

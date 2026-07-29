@@ -272,12 +272,17 @@ export type VerifyTimelineEntry = {
   // 그대로 보여준다(정직·무백필). 존재할 때만 텍스트로 렌더한다 — 링크·복사 버튼·재발신 컨트롤을
   // 만들지 않는다(§16.3.1/AC-019).
   displayNumber?: string;
-  anchorTurnIndex: number; // 표시 위치(= 오퍼 앵커). -1 = 대화 맨 앞
+  // ⭐ §38.6 S3 — **항목 자신의** 표시 위치다. 한 문서(offerId)가 **최대 2건**의 항목으로 나온다:
+  // 오퍼 항목(= 오퍼 앵커) + 전환 항목(= 재연결 앵커). 종전에는 두 이벤트가 오퍼 앵커 하나에 함께
+  // 놓여 전환 서술이 사기범 예고 대사보다 **항상 앞**에 렌더됐다. **저장 필드 델타 0건.**
+  anchorTurnIndex: number; // -1 = 대화 맨 앞
   anchorResolved: boolean; // false = 위치 확정 실패 → 화면이 정직하게 고지(조용한 누락 금지)
-  timeLabel?: string; // 앵커 메시지의 경과 초에서 파생 — deceivedMoments와 **같은 시간축**
-  reconnectTimeLabel?: string; // placedAt 있을 때, 재연결 앵커 메시지에서 파생
-  outcome: VerifyTimelineOutcome;
-  events: VerifyTimelineEvent[]; // 최소 1건(verify_offer_shown), 순서 고정(§16.3.4)
+  timeLabel?: string; // 오퍼 항목의 앵커 경과 초 — deceivedMoments와 **같은 시간축**
+  reconnectTimeLabel?: string; // 전환 항목의 앵커 경과 초(렌더러가 verify_reconnected에서 읽는다)
+  outcome: VerifyTimelineOutcome; // ⚠️ **두 항목이 공유한다**(문서 1건당 한 번 판정)
+  // 항목당 1건이 정상이다(§38.6 S3 이후). ⚠️ **과거 리포트는 한 항목에 2건**이 실려 있다(무백필) —
+  // 읽는 쪽은 항목당 1건을 가정하지 말 것.
+  events: VerifyTimelineEvent[];
 };
 // ⚠️ 스냅샷에 **절대 넣지 않는 필드**(§16.3.1 금지 표): announceInstruction/reconnectInstruction
 // (모델 지시 — 프롬프트가 클라로 내려간다), offeredAt/placedAt 원시 타임스탬프(표시 축이 아니다),
