@@ -30,6 +30,7 @@ import { applyVerifyIntercept, type VerifyTimelineSource } from "./verifyTimelin
 import {
   applyMockScreens,
   deriveReportStages,
+  mergePromotedTactics,
   type MockScreenMessage,
   type MockScreenSource,
 } from "./mockScreenTimeline";
@@ -235,6 +236,20 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   // 마무리 문장)가 같은 리포트에 함께 실린다. 문서가 0건이면 인자가 이전과 동일하다.
   const preventionAdvice = buildPreventionAdvice(analysis.tacticsUsed, wasDeceived);
 
+  // ②-e ⭐ **승격 순간의 수법 합집합**(T136, §42.6 B, AC-008/AC-009) — 카드가 이름으로 부르는
+  // 수법이 아코디언 목록에서 빠져 **같은 리포트가 자기 안에서 어긋나던 것**을 닫는다.
+  //
+  // ⚠️ **판정은 하나도 바뀌지 않는다**(§15.6 G3/G22 · §42.8): 이 값은 `deceivedMoments`·
+  // `wasDeceived`·`preventionAdvice`·`stages`가 **전부 확정된 뒤에** 읽기 전용으로 파생된다.
+  // 승격이 0건이면 `analysis.tacticsUsed`와 한 바이트도 다르지 않다(§42.7 if/then 8, 테스트로 고정).
+  // ⛔ 아래 `buildPreventionAdvice` 인자는 **위 그대로 `analysis.tacticsUsed`** 다(B-2 · G215).
+  const tacticsUsed = mergePromotedTactics(
+    analysis.tacticsUsed,
+    // B-1 — `analysis.deceivedMoments`가 아니라 T83 주석·승격이 모두 적용된 **최종** 배열이다.
+    mock.deceivedMoments,
+    MOCK_SCREENS[session.scenarioId] ?? [],
+  );
+
   // ③ 실패 아카이브(UX-030, T74)용 세션 메타 역정규화 — Architecture.md §15.4.1/§15.6 G8.
   // 아카이브는 리포트만 페이지 조회해 카드를 그리므로(별도 컬렉션 없음), 카드에 필요한 세션 메타가
   // 리포트에 없으면 항목 수만큼 세션을 추가 read해야 한다(N+1). 여기서는 session을 이미 읽었으므로
@@ -250,7 +265,9 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     // 배열이다. 확인 문서·모의 화면 문서가 둘 다 0건이면 `analysis.deceivedMoments`와 완전히
     // 같은 값이다(회귀 테스트로 고정).
     deceivedMoments: mock.deceivedMoments,
-    tacticsUsed: analysis.tacticsUsed,
+    // T136(§42.6 B) — `analysis.tacticsUsed` + **승격 순간의 카탈로그 수법** 합집합. 승격 0건이면
+    // `analysis.tacticsUsed`와 완전히 같은 값이다. 필드·스키마는 무변경이다(`docs/Database.md:188`).
+    tacticsUsed,
     preventionAdvice,
     // T72(§15.3.2/§15.4.1) — 세션에서 역정규화(표기 전용). 리포트·리플레이·실패 아카이브가 세션
     // 문서를 추가로 read하지 않고 같은 라벨을 그릴 수 있게 한다(P-22).

@@ -64,3 +64,4 @@
 - [T102 축 표 D 좌표 정정](project_codegate_t102_exitblock_correction.md) — ⭐ 요약표↔원본 드리프트 게이트 3단(규칙표+양방향+의심어휘 백스톱), 라벨부만 매칭, 문서 실측표 재현 시 줄번호만 밀리는 정상 케이스.
 - [§38 확인창구 전환 순서](project_codegate_s38_verify_ordering.md) — ⭐ 새 필드 대신 **write 시점을 미뤄** 문서 존재를 판별자로, 소스 게이트가 신설 설계와 충돌할 때 옮기는 법, 격리 에뮬레이터 REST 4단 장애물.
 - [T133 시크릿 선언-사용 정합 게이트](project_codegate_t133_secret_declaration_gate.md) — ⭐ `__endpoint.secretEnvironmentVariables` 실재(스프레드까지 해석), SDK가 이미 미주입 경고를 내므로 자체 신호는 중복, 폐포는 `export … from`도 따라가야 한다, before/after를 게이트 함수 자신으로.
+- [T136 리포트 자기모순 — 수법 합집합](project_codegate_t136_tactics_union.md) — ⭐ 설계 절 **내부** 규칙 충돌을 3안으로 닫는 법, P-1 "접근 불가"가 정상 경로, TS6133이 역검증 1층.

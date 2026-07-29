@@ -208,6 +208,56 @@ export function applyMockScreens(
   };
 }
 
+/**
+ * ⭐ **T136 / §42.6 B — 승격된 순간의 수법을 리포트의 수법 목록에 합집합으로 싣는다.**
+ *
+ * **왜 필요한가**: 같은 리포트가 자기 안에서 어긋났다 — 속은 시점 카드는 승격 순간의 수법을
+ * **이름으로 부르는데**(`buildLandingSubmitMoment`가 카탈로그 `momentTactic`을 그대로 싣는다)
+ * 아코디언은 *"시도된 수법 0가지"* 라고 말했다. `tacticsUsed`를 채우는 유일한 경로가
+ * `analyzeConversation.findMatchedTactic`(대화 텍스트 **추정**)뿐이라, 승격 순간의 수법이
+ * 목록으로 흘러드는 코드가 **0건**이었기 때문이다(§42.1·§42.2 **F1**).
+ *
+ * ⚠️ **이 함수가 하지 않는 것**(§42.6 기각안 — 되살리지 말 것):
+ *   - `tacticsUsed`를 승격 수법으로 **대체**하지 않는다(C 기각 — AC-009가 무너진다)
+ *   - 시나리오 `weakenedTactics` **전체를 나열**하지 않는다(D 기각 — 반대 방향의 거짓)
+ *   - `analyzeConversation`의 시그니처·입력·짝짓기 루프를 **건드리지 않는다**(G 기각 / §15.6 G3 ·
+ *     **G216**) — 이것은 산출 **뒤에** 도는 읽기 전용 파생이다
+ *   - 아코디언 **문면**은 고치지 않는다(A는 ux-design 소관 — **G221**)
+ *
+ * **합집합 규칙(§42.6 B-1·B-3·B-4를 그대로 옮긴 것)**
+ *   - **입력은 `applyMockScreens` 산출의 *최종* `deceivedMoments`다**(B-1) — `analysis.deceivedMoments`가
+ *     아니다. T83 주석이 `tactic`을 덮어쓰므로(`generateReportCore.ts` ②-c) 앞 단계 값을 쓰면
+ *     덮어쓰기 **전** 라벨이 목록에 들어가 AC-071 표시와 어긋난다.
+ *   - **합집합에 들어가는 것은 "제출/응낙이 실제로 일어난 승격"의 수법뿐이다**(B-4 · AC-080 (b)).
+ *     그것을 **카탈로그 `momentTactic` 소속 여부**로 가른다 — 승격 순간의 수법은 **정의상**
+ *     카탈로그가 저작한 상수이고(`buildLandingSubmitMoment`가 유일한 조립 지점, G137), 대화 추정
+ *     라벨(`extractTacticLabel`)·T83 라벨은 그 집합에 없다. ⇒ **승격 0건이면 이 함수는 항등이다**
+ *     (§42.7 if/then 8 — 기존 12개 시나리오 리포트 무변경).
+ *   - **중복 제거는 라벨 문자열 동일성(Set)으로 하고 정렬은 넣지 않는다**(B-3) — 기존
+ *     `tacticsUsed`의 등장 순서를 앞에 두고 승격분을 뒤에 붙인다. 정렬을 새로 넣으면 기존 리포트의
+ *     배열 순서가 바뀐다(무회귀 §15.9.5).
+ *
+ * ⛔ **`buildPreventionAdvice`의 인자는 이 값이 아니라 `analysis.tacticsUsed` 그대로다**(B-2 ·
+ * **G215**) — 늘리면 승격 순간의 `correctAction`과 조언이 중복된다(§15.9.5 e-1).
+ * ⚠️ **부분 해소다**(§42.9 (4)): 승격과 무관한 수법의 누락(실 LLM 세션에서 추정이 얇은 것)은
+ * 그대로 남는다. 이 함수가 닫는 것은 **한 리포트 안의 두 서술이 어긋나는 것**이다.
+ */
+export function mergePromotedTactics(
+  tacticsUsed: readonly string[],
+  deceivedMoments: readonly DeceivedMomentResult[],
+  catalog: readonly Pick<MockScreenItem, "momentTactic">[],
+): string[] {
+  const promotedTactics = new Set(catalog.map((item) => item.momentTactic));
+  const merged = [...tacticsUsed];
+  const seen = new Set(merged);
+  for (const moment of deceivedMoments) {
+    if (!promotedTactics.has(moment.tactic) || seen.has(moment.tactic)) continue;
+    seen.add(moment.tactic);
+    merged.push(moment.tactic);
+  }
+  return merged;
+}
+
 /** 단계 도달 판정(§15.9.5 e-3)의 입력 — **전부 기존 값에서 파생**된다(신규 세션 필드 0건). */
 export type StageDerivationInput = {
   /** `session.entryChannel`(부재 시 `session.channel` 폴백). */
