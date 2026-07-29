@@ -19,7 +19,7 @@ import { maskPII } from "../guardrails";
 import { generateOpeningLine } from "../roleplay";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
-import { GEMINI_API_KEY } from "../shared/config";
+import { GEMINI_KEY_SECRETS } from "../shared/config";
 import { GENERIC_VOICE_ID, MAX_SESSION_MS, MAX_USER_TURNS } from "../shared/constants";
 import { getVoiceProvider } from "../voice/provider";
 import { hashToken } from "./token";
@@ -83,7 +83,7 @@ export const getChallengeLanding = onCall<
 // GEMINI_API_KEY 선언(2026-07-24) — generateOpeningLine()이 getLlmClient()를 통해 실 Gemini로
 // 격상될 수 있어(llm/index.ts 참고) Functions v2가 배포 환경에서 이 secret을 주입하도록 명시한다.
 export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentChallengeResponse>>(
-  { secrets: [GEMINI_API_KEY] },
+  { secrets: [...GEMINI_KEY_SECRETS] },
   async (request) => {
     // §14.7/ADR-0006 A1 — 로그인 UI는 없지만 클라가 동의 탭 시점에 signInAnonymously로 이미
     // 익명 uid를 확보한 뒤 호출한다. 그 uid가 곧 생성될 체험 세션의 소유자가 된다.

@@ -21,7 +21,7 @@ import { buildInCallSmsDoc, fallbackAnchorScammerTurn } from "../inCallSms";
 import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { pickFallbackTurnInstruction } from "../verifyIntercept/fallbackTurn";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
-import { GEMINI_API_KEY } from "../shared/config";
+import { GEMINI_KEY_SECRETS } from "../shared/config";
 import { MESSENGER_ESCALATION_FALLBACK_TURNS } from "../shared/constants";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
@@ -44,7 +44,7 @@ ensureFirebaseAdminApp();
 // 배포 환경에서 이 secret을 런타임에 주입하도록 명시해야 한다(realtime/index.ts의
 // createRealtimeCall과 동일 이유).
 export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageResponse>>(
-  { secrets: [GEMINI_API_KEY] },
+  { secrets: [...GEMINI_KEY_SECRETS] },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");

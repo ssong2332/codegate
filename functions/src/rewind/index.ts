@@ -14,7 +14,7 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { maskPII } from "../guardrails";
 import { getLlmClient } from "../llm";
-import { GEMINI_API_KEY } from "../shared/config";
+import { GEMINI_KEY_SECRETS } from "../shared/config";
 import type { MessageDoc, ReportDoc, RewindAttemptDoc } from "../shared/types";
 import { judgeRewindAnswerWith, REWIND_ANSWER_MAX_LENGTH, REWIND_ATTEMPT_LIMIT } from "./judge";
 import { pickScammerLineForMoment } from "./scammerLine";
@@ -50,7 +50,7 @@ async function findScammerLineMasked(sessionId: string, momentTurnIndex: number)
 export const judgeRewindAnswer = onCall<
   JudgeRewindAnswerRequest,
   Promise<JudgeRewindAnswerResponse>
->({ secrets: [GEMINI_API_KEY] }, async (request) => {
+>({ secrets: [...GEMINI_KEY_SECRETS] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
