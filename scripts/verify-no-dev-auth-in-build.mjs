@@ -13,10 +13,20 @@ import { join } from "node:path";
 const OUT_DIR = "out";
 
 // 산출물에 절대 남아서는 안 되는 문자열 — 개발용 로그인 UI와 실제 사인인 호출.
+//
+// T116(2026-07-29) — **층 2 확장 1건.** 렌더 검증 하네스(`src/lib/mockscreenrender/renderHarness.ts`)는
+// `typescript`와 Node 내장을 쓰는 **테스트 전용** 모듈이라, 앱 코드가 실수로 import하면 테스트
+// 도구가 제품 번들에 실린다. 소스 레벨 회귀는 `src/lib/mockscreenrender/harnessIsolation.test.ts`가
+// `npm test`에서 항상 잡고(층 1), 이쪽은 **최종 산출물**로 실제 결과를 확인한다 — 위 devSignIn
+// 2층 분업과 같은 형태다. ⚠️ 센티널 문자열 기반이라 번들러가 문자열을 변형하면 조용히 통과한다
+// (그래서 `transpileModule` 토큰을 함께 본다. 그래도 완전하지 않으며 층 1이 그 구멍을 받는다).
 const FORBIDDEN = [
   "익명 계정으로 빠른 로그인",
   "개발 전용 · 배포 빌드에는",
   "signInAnonymously",
+  // T116 층 2 — 렌더 하네스 격리(Architecture.md §39.4)
+  "T116-RENDER-HARNESS-TEST-ONLY",
+  "transpileModule",
 ];
 
 function walk(dir) {
