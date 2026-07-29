@@ -1,3 +1,4 @@
+- [인계된 원인이 수치를 설명하는가](feedback_cited_cause_must_explain_the_number.md) — 설명 못 하면 사실이 둘; 전제가 참이면 관측 불가라는 결론이 나오면 프로브 0단계는 전제 검증
 - [지시받은 판정이 이미 절로 있을 수 있다](feedback_judgment_may_already_be_a_section.md) — 착수 전 `^## ` 전수 grep + UpdateRequests `open`; 있으면 재작성 말고 "위에 얹는 절"
 - [오염 샘플은 기존 게이트를 피해야 한다](feedback_poison_sample_must_dodge_existing_gates.md) — "새 게이트만 빨강"이 요구면 오염 모양이 설계 사항; 입력 불변 단언으로 보인다
 - [정정한 문장의 재사용처를 전수 grep](feedback_correction_sweep_reuse_sites.md) — 거짓으로 고친 문장이 다른 절의 전제로 살아 있다; DECISIONS·adr까지 훑고 "N곳뿐"을 근거와 함께
