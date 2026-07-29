@@ -155,7 +155,13 @@ export default function CloneWaitPage() {
       </div>
 
       {showProgressCard && (
-        <div className="flex flex-1 flex-col justify-center">
+        /* UX.md v1.18 P-30(세로 여백 상한) · D-62 · D-63 — login/page.tsx와 같은 형태.
+           `justify-center` 를 위·아래 두 탄성 스페이서로 분해하고 **카드 위**에만 상한을 건다
+           (D-62 = max(375×812 실측 132.55px, 256px) = 256px). 남는 높이는 카드 아래(= 카드 ↔
+           하단 상태 문구 사이)에 쌓인다(D-63). 짧은 화면 배치는 산술적으로 무변경.
+           ⛔ 카드 폭·내부 여백·gap-7·pt-10/pb-10·로딩/오류 분기는 손대지 않았다. */
+        <div className="flex flex-1 flex-col">
+          <div aria-hidden="true" className="max-h-[256px] flex-1" />
           <div className="flex flex-col gap-6 rounded-[20px] border-[1.5px] border-[#E2DDD3] bg-white p-6">
             {steps.map((step) => (
               <div key={step.label} className="flex items-center gap-4">
@@ -195,6 +201,7 @@ export default function CloneWaitPage() {
               />
             </div>
           </div>
+          <div aria-hidden="true" className="flex-1" />
         </div>
       )}
 

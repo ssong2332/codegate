@@ -83,7 +83,15 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] px-6 pb-10 pt-16">
-      <div className="flex flex-1 flex-col items-center justify-center text-center">
+      {/* UX.md v1.18 P-30(세로 여백 상한) · D-62 · D-63 — 사용자 지적 "비율이 좀 별로야".
+          기존 `justify-center` 한 개를 위·아래 두 개의 탄성 스페이서로 분해했다(중앙 정렬 =
+          남는 높이를 위아래로 반씩 나눈 것과 산술적으로 동일하므로 짧은 화면 배치는 무변경).
+          **상단 스페이서에만** 상한을 걸어(D-62 = max(375×812 실측 209.02px, 256px) = 256px)
+          긴 화면에서 콘텐츠가 아래로 밀려나는 것을 끊고, 상한을 넘긴 높이는 전부 하단
+          스페이서(= 본문 ↔ 로그인 버튼 사이)에 쌓이게 한다(D-63 — 버튼의 하단 고정 유지).
+          ⛔ 뷰포트 높이에 대한 단일 규칙이다. sm:/md:/lg: 세로 분기 금지(D-57 ㄹ 계승). */}
+      <div className="flex flex-1 flex-col items-center text-center">
+        <div aria-hidden="true" className="max-h-[256px] flex-1" />
         <div className="mb-6 flex h-[72px] w-[72px] items-center justify-center rounded-[20px] bg-[#E4F0EC]">
           <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
@@ -105,6 +113,7 @@ export default function LoginPage() {
         <p className="mt-4 max-w-sm text-[16px] leading-[1.65] text-[#6B655C]">
           Google 계정으로 로그인하면 훈련 기록이 내 계정에 안전하게 저장됩니다.
         </p>
+        <div aria-hidden="true" className="flex-1" />
       </div>
 
       <button
