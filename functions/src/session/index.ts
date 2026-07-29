@@ -18,7 +18,7 @@ import {
   MAX_USER_TURNS,
   MESSENGER_ESCALATION_MAX_USER_TURNS,
 } from "../shared/constants";
-import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, GEMINI_API_KEY } from "../shared/config";
+import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, GEMINI_KEY_SECRETS } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "./channelTransition";
@@ -53,7 +53,7 @@ function readOptionalConfigString(param: { value: () => string }): string {
 // GEMINI_API_KEY 선언(2026-07-24) — generateOpeningLine()이 getLlmClient()를 통해 실 Gemini로
 // 격상될 수 있어(llm/index.ts 참고) Functions v2가 배포 환경에서 이 secret을 주입하도록 명시한다.
 export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionResponse>>(
-  { secrets: [GEMINI_API_KEY] },
+  { secrets: [...GEMINI_KEY_SECRETS] },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");

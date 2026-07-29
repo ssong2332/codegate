@@ -7,7 +7,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
-import { ELEVENLABS_API_KEY, GEMINI_API_KEY } from "../shared/config";
+import { ELEVENLABS_API_KEY, GEMINI_KEY_SECRETS } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { listInCallSmsTriggers } from "../scenarios/inCallSms";
 import { getVerifyOfferTrigger } from "../scenarios/verifyIntercept";
@@ -34,7 +34,7 @@ ensureFirebaseAdminApp();
 export const createRealtimeCall = onCall<
   CreateRealtimeCallRequest,
   Promise<CreateRealtimeCallResponse>
->({ secrets: [ELEVENLABS_API_KEY, GEMINI_API_KEY] }, async (request) => {
+>({ secrets: [ELEVENLABS_API_KEY, ...GEMINI_KEY_SECRETS] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }

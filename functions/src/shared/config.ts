@@ -13,6 +13,31 @@ export const ELEVENLABS_API_KEY = defineSecret("ELEVENLABS_API_KEY");
 export const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 
 /**
+ * 키 순환(failover)용 2번 이후 슬롯(T132, Architecture.md §37.5 (2)).
+ *
+ * ⛔ 1번 키를 `GEMINI_API_KEY1`로 개명하지 말 것(G178) — `.env`·배포 시크릿·README·핸들러 5곳이
+ * 전부 기존 이름에 묶여 있고, 개명은 순환과 무관한 파괴적 변경이다.
+ * ⚠️ **추가하는 키는 반드시 다른 GCP 프로젝트의 것이어야 한다** — 같은 프로젝트 키를 넣으면 쿼터를
+ * 공유하므로 순환이 무효가 되는데, **코드는 그것을 감지할 방법이 없다**(429가 오기 전까지 구분
+ * 불가). 운영 규칙으로만 보장된다(§37.8 (f), functions/.env.example·README 참고).
+ */
+export const GEMINI_API_KEY2 = defineSecret("GEMINI_API_KEY2");
+
+/**
+ * ⭐ 텍스트 LLM 경로가 **순서대로** 시도하는 Gemini 키 슬롯 목록 — 이 배열이 유일한 정본이다.
+ *
+ * 키를 늘릴 때 고치는 자리는 **이 파일 한 줄**이다(`defineSecret` 선언 + 이 배열에 추가).
+ * 모든 onCall 핸들러는 `{ secrets: [...GEMINI_KEY_SECRETS] }` 로 **스프레드**하므로 핸들러는
+ * 한 곳도 손대지 않는다 — 손으로 유지하던 목록이 실제로 드리프트를 낳았기 때문이다
+ * (llm/index.ts의 주석이 "3곳"이라 적는 동안 실제 선언은 5곳이었다, §37.5 (4) A).
+ *
+ * ⛔ 개수를 2로 못박은 것이 아니다(G171) — 슬롯을 더 선언해 이 배열에 이어 붙이면 되고,
+ * **값이 없는 슬롯은 읽기 단계(llm/index.ts의 readSecret)가 조용히 걸러낸다**. 슬롯이 선언만
+ * 되고 값이 없어도 빌드·에뮬레이터 기동을 막지 않는다(T132 P-1 실측 — 대화형 프롬프트 0건).
+ */
+export const GEMINI_KEY_SECRETS = [GEMINI_API_KEY, GEMINI_API_KEY2] as const;
+
+/**
  * 실시간 음성 대화용 시나리오별 에이전트 매핑(2026-07-22) — `scenarioId:agentId` 쉼표 구분.
  * 페르소나 프롬프트는 이 에이전트들에 저장하고 클라로 내려보내지 않는다(ADR-0004,
  * functions/src/realtime/agentMap.ts 주석 참고).

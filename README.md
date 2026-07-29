@@ -134,6 +134,7 @@ cp functions/.env.example functions/.env
 | Variable | Purpose |
 |---|---|
 | `GEMINI_API_KEY` | **무료** 실시간 음성 통화(Gemini Live, generic 3종) + **텍스트 대화(사기범 역할극) LLM**(DECISIONS #29) — 아래 설명 참조 |
+| `GEMINI_API_KEY2` | (선택) 1번 키가 일일 할당량을 소진했을 때 넘어갈 **2번 키** — 아래 "키 순환" 참조. ⚠️ **반드시 다른 GCP 프로젝트의 키여야 한다** |
 | `ELEVENLABS_API_KEY` | ElevenLabs Instant Voice Cloning + TTS + Agents(실시간 통화) API 키 |
 | `ELEVENLABS_AGENT_IDS` | 실시간 음성 통화용 `scenarioId:agentId` 매핑(쉼표 구분) — 아래 설명 참조 |
 | `LLM_API_KEY` | 사기범 역할극/리포트 생성용 LLM API 키 |
@@ -174,6 +175,33 @@ cp functions/.env.example functions/.env
 
 > ⚠️ 무료 티어는 대화 내용이 구글 모델 학습에 사용된다. 실제 사용자를 대상으로 배포할 때는
 > 유료 티어(학습 미사용)로 올릴 것.
+
+##### 일일 할당량 소진 시 키 순환 (`GEMINI_API_KEY2` …)
+
+무료 티어는 **모델·프로젝트당 하루 20호출**이라 훈련 1~2회차만 돌려도 그날의 텍스트 대화가 전부
+목업으로 강등된다. 키를 **순서 있는 목록**으로 두면, 1번 키가 **일일 429**를 돌려줄 때 서버가
+자동으로 다음 키로 넘어가 계속 진행한다(`functions/src/llm/rotatingClient.ts`).
+
+1. 두 번째 키를 발급한다. ⛔ **반드시 다른 GCP 프로젝트에서 발급해야 한다** — 같은 프로젝트의
+   키는 할당량을 공유하므로 순환이 아무 효과가 없는데, **코드는 그것을 감지할 방법이 없다**
+   (429가 오기 전까지 두 키를 구분할 수 없다). **운영 규칙으로만 보장된다.**
+2. `functions/.env`에 `GEMINI_API_KEY2=발급받은_키`를 추가하고 에뮬레이터를 재시작한다.
+3. 3번째 이후 키가 필요하면 `functions/src/shared/config.ts`의 `GEMINI_KEY_SECRETS` 배열에
+   슬롯을 한 줄 추가한다(핸들러는 한 곳도 고치지 않는다 — 배열을 스프레드하기 때문이다).
+   ⛔ 1번 키를 `GEMINI_API_KEY1`로 개명하지 말 것(배포 시크릿·문서가 기존 이름에 묶여 있다).
+
+**슬롯 이름 규약**: `GEMINI_API_KEY`(1번, 이름 불변) · `GEMINI_API_KEY2` · `GEMINI_API_KEY3` …
+값이 없는 슬롯은 조용히 건너뛴다 — **2번 키가 없는 환경의 동작은 키 순환 도입 전과 동일하다.**
+
+넘기는 조건은 **일일 소진(`quotaId`에 `PerDay`)뿐**이다. **분당 제한(`PerMinute`)에는 키를 바꾸지
+않는다** — 분당 제한은 같은 키가 잠시 뒤 회복되므로, 거기서 넘기면 멀쩡한 키의 하루치를 조기에
+태운다. 분류가 불확실하면(`unknown`) **키를 바꾸지 않는 쪽**이 기본값이다.
+
+> ⚠️ **이것은 할당량 문제의 해결이 아니라 완충이다.** 1일 수요는 약 26호출이고 키 1개의 캡이
+> 20이라, 키 2개(캡 40)로도 여유는 14회분뿐이다. 회차를 늘리면 다시 모자란다.
+
+> 어느 키로 넘어갔는지는 **서버 로그에만** 남는다(`geminiKeySlot`·`geminiKeyIndex`·`quotaClass`).
+> ⛔ 키 값은 로그·응답·리포트 어디에도 기록하지 않는다.
 
 ##### 본인 목소리 클론까지 (`ELEVENLABS_AGENT_IDS`)
 

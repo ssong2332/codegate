@@ -13,9 +13,10 @@ export { GeminiLlmClient } from "./geminiClient";
 
 import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
-import { GEMINI_API_KEY } from "../shared/config";
-import { GeminiLlmClient } from "./geminiClient";
+import { GEMINI_KEY_SECRETS } from "../shared/config";
 import { MockLlmClient } from "./mockClient";
+import { createRotatingGeminiClient, readAttemptedKeys } from "./rotatingClient";
+import type { GeminiKeySlot } from "./rotatingClient";
 import type { LlmClient, LlmCompletionInput, LlmCompletionResult } from "./types";
 
 /** realtime/provider.ts의 readSecret과 동일 규칙(모듈 경계상 별도 파일에 중복, 같은 컨벤션이라
@@ -28,6 +29,20 @@ function readSecret(param: { value: () => string }): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * 설정된 Gemini 키 슬롯을 **선언 순서대로** 돌려준다(T132, Architecture.md §37.5 (2)).
+ *
+ * ⭐ "없는 슬롯은 조용히 건너뛴다"가 기존 `readSecret`으로 이미 성립한다 — 바인딩 안 된 컨텍스트의
+ * throw와 `.env.example`의 `YOUR_` placeholder를 둘 다 ""로 만들기 때문이다. 그래서 **2번 키가
+ * 없는 환경은 길이 1짜리 배열을 받고 오늘과 동일하게 동작한다**(§37.6 증거 ③).
+ * ⛔ 값은 슬롯 이름과 짝지어 돌려주지만, **관측(로그)에 나가는 것은 이름과 인덱스뿐**이다(G170).
+ */
+export function getGeminiApiKeys(): GeminiKeySlot[] {
+  return GEMINI_KEY_SECRETS.map((param) => ({ slot: param.name, key: readSecret(param) })).filter(
+    (entry) => entry.key !== "",
+  );
 }
 
 // AC-004 목표(95% 턴 기준 ≤10초, API.md sendMessage Errors "deadline-exceeded(LLM 지연, AC-004
@@ -79,14 +94,26 @@ export function withTimeout(client: LlmClient, timeoutMs: number): LlmClient {
  * 추가한다(DECISIONS #11). 지금은 LLM_API_KEY가 여전히 placeholder라 이 분기는 만들지 않는다.
  *
  * ⚠️ 호출부 주의: 이 함수를 (직접 또는 generateOpeningLine/sendMessage를 통해 간접) 호출하는 모든
- * onCall 핸들러는 `{ secrets: [GEMINI_API_KEY] }`를 옵션에 선언해야 한다(realtime/index.ts의
+ * onCall 핸들러는 `{ secrets: [...GEMINI_KEY_SECRETS] }`를 옵션에 선언해야 한다(realtime/index.ts의
  * createRealtimeCall과 동일한 이유 — Firebase Functions v2는 선언되지 않은 secret을 배포 환경에서
- * 런타임에 주입하지 않는다). 현재 sendMessage(roleplay/index.ts)·createSession(session/index.ts)·
- * consentChallenge(challenge/userAccess.ts) 3곳이 해당하며 이번 변경에서 함께 선언했다.
+ * 런타임에 주입하지 않는다).
+ *
+ * ⭐ 해당 핸들러는 **5곳**이다(T132에서 전수 grep으로 정정 — 이전 주석은 "3곳"이라 적어
+ * rewind·realtime을 빠뜨리고 있었다. 목록을 손으로 유지하는 방식 자체가 그 드리프트를 낳았고,
+ * 그래서 키 목록은 이제 `GEMINI_KEY_SECRETS` 단일 배열을 스프레드한다):
+ *   1. sendMessage        — roleplay/index.ts
+ *   2. createSession      — session/index.ts
+ *   3. consentChallenge   — challenge/userAccess.ts
+ *   4. judgeRewindAnswer  — rewind/index.ts
+ *   5. createRealtimeCall — realtime/index.ts (ELEVENLABS_API_KEY와 함께)
+ * ⚠️ deliverVerifyOffer·deliverVerifyReconnect(verifyIntercept/index.ts)는 getRealtimeProvider를
+ * 부르면서도 시크릿 선언이 아예 없다 — **선재 결함이며 T133 별건**이다(이 목록에 넣지 않는다).
  */
 export function getLlmClient(): LlmClient {
-  const geminiKey = readSecret(GEMINI_API_KEY);
-  const client = geminiKey ? new GeminiLlmClient(geminiKey) : new MockLlmClient();
+  const keys = getGeminiApiKeys();
+  const client = keys.length > 0 ? createRotatingGeminiClient(keys) : new MockLlmClient();
+  // ⛔ withTimeout이 순환기 **바깥**이다(§37.5 (1)) — 모든 시도의 **총합**이 10초로 갇힌다.
+  // 뒤집으면 키마다 10초라 2키에서 최대 20초가 되어 AC-004 목표가 깨진다.
   return withTimeout(client, LLM_TIMEOUT_MS);
 }
 
@@ -114,8 +141,12 @@ export async function completeWithFallback(
   try {
     return await primary.complete(input);
   } catch (error) {
+    // T132 — `attemptedKeys`가 있어야 **전 키 소진으로 Mock에 도달한 것**과 **단일 키 실패로
+    // 도달한 것**을 구분할 수 있다(§37.4). 없으면 "키를 늘렸는데 여전히 Mock"의 원인을 가릴 수 없다.
+    // (순환기를 거치지 않은 실패 — 예: withTimeout의 deadline-exceeded — 에서는 undefined다.)
     logger.warn("LLM 1차 클라이언트 실패 — Mock으로 강등", {
       providerName: primary.providerName,
+      attemptedKeys: readAttemptedKeys(error),
       error: error instanceof Error ? error.message : String(error),
     });
     return await new MockLlmClient().complete(input);
