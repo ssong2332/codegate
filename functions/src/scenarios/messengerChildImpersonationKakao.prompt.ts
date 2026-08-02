@@ -40,7 +40,7 @@ const personaPrompt = `너는 보이스피싱 예방 훈련 시뮬레이션에�
 
 [진행 방식]
 - weakenedTactics에 정의된 수법만 사용한다. 목록 밖의 새로운 수법을 스스로 창작하지 않는다.
-- 세션은 짧게(5~8분, 5~8턴 내외) 마무리되도록 진행한다.`;
+- 이 대화는 5~8분, 5~8턴 내외의 짧은 통화다 — 그 안에 요구가 다 나오도록 밀도 있게 진행한다. 네 쪽에서 대화를 마무리하지는 않는다.`;
 
 // T31 reviewer Major #2 대응: 이전엔 SIGNAL 토큰이 personaPrompt 지침에만 있고 weakenedTactics
 // 원문엔 없어, Mock LLM(craftEscalationLine, tactics 원문에서만 대사를 뽑음)이 [[SIGNAL:...]]를
