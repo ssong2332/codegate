@@ -179,7 +179,7 @@ export default function DifficultySelectPage() {
   const advancedNotice = isSendMode ? ADVANCED_SEND_NOTICE : ADVANCED_SELF_NOTICE;
 
   return (
-    <main className="drilldown-step mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-6 pb-28">
+    <main className="drilldown-step mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-6 pb-28 lg:max-w-3xl xl:max-w-5xl">
       <header className="flex flex-col gap-2 pt-2">
         <button
           type="button"
@@ -209,7 +209,7 @@ export default function DifficultySelectPage() {
         </p>
       </header>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 lg:grid lg:grid-cols-3">
         {DIFFICULTY_LEVELS.map((level) => (
           <SelectableCard
             key={level}

@@ -104,7 +104,7 @@ export default function HistoryPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-8 p-8">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-8 p-8 lg:max-w-3xl xl:max-w-5xl">
       <h1 className="text-2xl font-bold">세션/리포트 히스토리</h1>
       <p className="text-base text-gray-600">지난 훈련 기록을 최신순으로 볼 수 있습니다.</p>
 
@@ -118,7 +118,7 @@ export default function HistoryPage() {
         내가 속았던 순간 모아보기
       </button>
 
-      <ul className="flex flex-col gap-4">
+      <ul className="flex flex-col gap-4 lg:grid lg:grid-cols-2">
         {items.map((item) => (
           <li key={item.reportId}>
             <button

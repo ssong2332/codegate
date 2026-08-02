@@ -268,7 +268,7 @@ export default function RewindPage() {
   const answerTooLong = answer.length > ANSWER_MAX_LENGTH;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] pb-8">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] pb-8 lg:max-w-3xl">
       <div className="px-5 pt-[22px]">
         <p className="text-[13px] font-semibold text-[#6B655C]">
           {[context.scenarioTitle, moment.timeLabel].filter(Boolean).join(" · ")}

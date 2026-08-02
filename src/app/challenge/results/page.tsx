@@ -148,7 +148,7 @@ export default function ChallengeResultsPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-[#FAF8F5] p-6">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-[#FAF8F5] p-6 lg:max-w-3xl">
       <header className="flex flex-col gap-2 pt-2">
         <h1 className="text-2xl font-bold text-[#22303A]">내 챌린지</h1>
         <p className="text-sm leading-relaxed text-[#6B655C]">
