@@ -89,8 +89,12 @@ test("[§16.6 G26] 두 오버레이는 동시에 열리지 않는다 — 여는 
 });
 
 test("[AC-006] 오버레이 안에 자체 '훈련 종료'가 있고, 한도 도달·종료 시 먼저 닫힌다", () => {
-  assert.ok(overlay.includes("EndTrainingButton"), "포커스 트랩 안에 종료 컨트롤이 있어야 한다");
-  assert.ok(overlay.includes('aria-modal="true"'), "다이얼로그 관례는 UX-027과 동일하다");
+  assert.ok(overlay.includes("EndTrainingButton"), "종료 컨트롤이 시트 안에 있어야 한다");
+  // ⭐ §47.4 W4/D-68(2026-08-02) — 시트는 이제 **비모달**이다(수락 컨트롤이 없어 참가자가 이
+  // 화면에서 결정할 것이 없다 — 포커스를 빼앗지 않는다). `aria-modal="true"`가 되살아나면
+  // D-68이 명시적으로 금지한 포커스 트랩이 돌아온 것이다.
+  assert.ok(!overlay.includes('aria-modal="true"'), "D-68 — 이 시트는 더 이상 모달이 아니다");
+  assert.ok(!overlay.includes('role="dialog"'), "D-68 — dialog 역할도 되돌리지 않는다");
   const autoEndStart = page.indexOf("const autoEndedRef");
   const autoEndBlock = page.slice(
     autoEndStart,
@@ -167,13 +171,25 @@ test("[T110/G85-UI] 확인 오버레이의 렌더 문자열에 '번호'가 0건�
     !/같은 통화가 이어집니다/.test(rendered),
     "전환 모델에서 그 문장은 **화자 잔류**를 암시한다(§22.1 C3 하드)",
   );
-  assert.ok(rendered.includes("연결해 달라고 하기"), "주 버튼은 연결 요청이다(C5)");
+  // ⭐⭐ §47.4 W4/D-68 — 수락 Primary Action이 없다(C3: 두 번째 확인 컨트롤을 두지 않는다).
+  // 남는 컨트롤은 "그만두고 통화로 돌아가기" 하나뿐이다.
+  assert.ok(
+    !/onPlaceCall|다시 요청하기/.test(rendered),
+    "D-68 — 수락/재시도 컨트롤이 되살아나면 안 된다(두 번째 확인 컨트롤 금지)",
+  );
+  assert.ok(rendered.includes("그만두고 통화로 돌아가기"), "남는 컨트롤은 시트를 치우는 것뿐이다");
 });
 
 test("[T110/G85-UI] 통화 셸의 트리거 컨트롤에도 번호 은유가 없다 — 단, C8 발신자 라벨은 무변경", () => {
   const rendered = codeOnly(page);
   assert.ok(!/안내받은 번호/.test(rendered), "'안내받은 번호'는 폐기된 dial-out 모델의 문구다");
-  assert.ok(rendered.includes("확인 부서로 연결해 달라고 하기"), "트리거 문구는 전환 요청이다(C1)");
+  // ⭐⭐ §47.4 W4/D-67 — 오퍼 개시가 참가자 탭으로 옮겨지며 트리거 문구도 중립 1인칭으로
+  // 바뀐다(§16.1.4 3행 — 앱이 창구 이름을 사기범보다 먼저 꺼내지 않는다, P-32 (2) ⓓ 채택).
+  assert.ok(
+    !rendered.includes("확인 부서로 연결해 달라고 하기"),
+    "D-67 — 앱이 창구 존재를 앞지르는 옛 문구가 되살아나면 안 된다(§16.1.4 3행 위반)",
+  );
+  assert.ok(rendered.includes("직접 확인해 볼게요"), "새 문구는 참가자 1인칭이다(D-67 (3))");
   // ⚠️ **여기서 '번호' 전면 금지를 걸지 않는 이유(근거를 남긴다)**: 이 화면에는 확인 흐름과 무관한
   // '번호' 문자열이 정당하게 존재한다 — 다이얼패드(AC-026)와 **C8 발신자 라벨 폴백**이다.
   // C8은 §22.1이 **무변경**으로 못박은 값이고, 그 라벨 전환이 원 화자 퇴장의 **유일한 시각적
@@ -334,4 +350,136 @@ test("[OQ-38/D-6] 세션 중 구조 설명이 화면 어디에도 없다", () =>
       `세션 중 구조 설명은 리포트로 미룬다(OQ-38 확정): ${name}`,
     );
   }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐⭐ §47(W4)/D-67~D-69 — 오퍼 개시를 참가자 구조화 이벤트로 옮긴다(턴 게이트는 AND로 남는다)
+//
+// 순수 함수 층(`shouldAnnounceVerifyOffer`·`verifySeriesFor`)은 verifyIntercept.test.ts가 고정한다.
+// 여기서는 그 판정이 **화면 배선에 실제로 물려 있는지**만 본다(관측 불가 지점 방지 — G184와
+// 같은 이유, [[feedback-unobservable-behavior-gates]]).
+// ══════════════════════════════════════════════════════════════════════════════
+
+test("[§47.3 C1] 오퍼 개시 판정은 `shouldAnnounceVerifyOffer`가 소유한다 — 화면이 직접 재판정하지 않는다", () => {
+  const rendered = codeOnly(page);
+  assert.ok(
+    rendered.includes("shouldAnnounceVerifyOffer({"),
+    "AND 조건(턴 게이트 · 계열 · 참가자 의사)을 화면에 흩어 쓰면 조건 하나가 빠져도 아무도 못 잡는다",
+  );
+  assert.ok(
+    rendered.includes("series: verifySeries"),
+    "계열 판별은 verifySeriesFor 한 곳(§47.6 P-5)의 결과를 그대로 넘겨야 한다 — 화면에서 재판별하면 안 된다",
+  );
+  assert.ok(
+    rendered.includes("gateReached: shouldOfferVerify({"),
+    "⛔ 턴 게이트(shouldOfferVerify) 자체는 무변경으로 재사용돼야 한다(G263)",
+  );
+  assert.ok(
+    rendered.includes("intentExpressed: verifyIntentExpressed"),
+    "참가자 의사 상태가 실제로 판정에 들어가야 한다",
+  );
+});
+
+test("[§47.3 C2/G264] 계열 A는 예외다 — `shouldAnnounceVerifyOffer`가 그 예외를 소유하고, 화면이 따로 만들지 않는다", () => {
+  const rendered = codeOnly(page);
+  // ⛔ 화면 쪽에 "계열 A면 참가자 조건 생략" 같은 별도 분기가 새로 생기면 판별이 두 곳으로
+  // 복제된 것이다(G84). 오퍼 개시 effect 주변에는 `verifySeries === "A"` 분기가 없어야 한다 —
+  // 그 처리는 오직 `shouldAnnounceVerifyOffer` 내부(순수 함수, verifyIntercept.test.ts가 고정)뿐이다.
+  const effectStart = rendered.indexOf("shouldAnnounceVerifyOffer({");
+  assert.ok(effectStart > 0, "오퍼 개시 effect를 찾을 수 있어야 한다");
+  const effectBody = rendered.slice(effectStart, effectStart + 400);
+  assert.ok(
+    !/verifySeries\s*===\s*["']A["']/.test(effectBody),
+    "계열 A 예외는 shouldAnnounceVerifyOffer 내부 1곳에만 있어야 한다(§47.6 P-5 — 클라·서버 복제 금지 원칙의 클라 내부판)",
+  );
+});
+
+test("[§47.4 W4/D-69] 계열 A에서는 탭이 곧 수락이다 — 오퍼가 이미 revealed일 때만 즉시 전환한다", () => {
+  const rendered = codeOnly(page);
+  const tapHandler = rendered.slice(
+    rendered.indexOf("const handleVerifyControlTap"),
+    rendered.indexOf("const handleVerifyControlTap") + 400,
+  );
+  assert.ok(
+    /verifySeries === ["']A["'] && showVerifyTrigger/.test(tapHandler),
+    "계열 A의 '탭 = 수락'은 오퍼가 이미 드러난 뒤에만 성립한다(D-69 계열 A row 3)",
+  );
+  assert.ok(
+    tapHandler.includes("void handlePlaceVerifyCall()"),
+    "그 조건이 참이면 곧바로 전환을 시작해야 한다 — 두 번째 컨트롤을 거치지 않는다(C3)",
+  );
+  assert.ok(
+    tapHandler.includes("setVerifyIntentExpressed(true)"),
+    "그 밖의 모든 경우(계열 B 전체 · 계열 A의 오퍼 도착 전)는 의사 표명 접수일 뿐이다(P-32 (4))",
+  );
+});
+
+test("[§47.3 C3/D-69] 계열 B 자동 전환 effect — 참가자 재탭 없이 예고 완료만으로 전환을 시작한다", () => {
+  const rendered = codeOnly(page);
+  const autoEffect = rendered.slice(
+    rendered.indexOf('if (verifySeries !== "B" || phase !== "live" || verifyOverlayOpen) return;') - 200,
+    rendered.indexOf('if (verifySeries !== "B" || phase !== "live" || verifyOverlayOpen) return;') + 700,
+  );
+  assert.ok(autoEffect.length > 200, "계열 B 자동 전환 effect를 찾을 수 있어야 한다");
+  assert.ok(
+    autoEffect.includes("shouldRevealVerifyOffer({"),
+    "예고 완료 판정은 §38이 소유한 같은 순수 함수를 재사용해야 한다(G268 — 삭제 금지)",
+  );
+  assert.ok(
+    autoEffect.includes("autoReconnectOfferIdRef.current = verifyOffer.offerId"),
+    "오퍼당 1회만 자동 시도해야 한다 — latch 없이는 재렌더마다 재호출될 위험이 있다",
+  );
+  assert.ok(
+    autoEffect.includes("await handlePlaceVerifyCall()"),
+    "참가자의 두 번째 탭 없이 전환이 자동으로 이어져야 한다(C3) — async IIFE로 감싼다" +
+      "(react-hooks/set-state-in-effect 회피, 이 화면의 다른 effect들과 동일한 관례)",
+  );
+});
+
+test("[§47.4 W4/D-68] 수락 컨트롤(onPlaceCall)이 <VerifyCallOverlay>에 더 이상 전달되지 않는다", () => {
+  const rendered = codeOnly(page);
+  assert.ok(
+    !/onPlaceCall=/.test(rendered),
+    "D-68 — 오버레이는 이제 Primary Action이 없는 비모달 시트다(props에서도 제거돼야 한다)",
+  );
+});
+
+test("[D-67] 상시 컨트롤은 자격증명 보유로 표시되고, 오퍼 문서 존재로 나타났다 사라지지 않는다(R4)", () => {
+  const rendered = codeOnly(page);
+  assert.ok(
+    rendered.includes("hasVerifyCredential && phase === \"live\""),
+    "P-32 (1) T1 — 등장 시점은 live phase 진입부터이지 오퍼 도착이 아니다",
+  );
+  assert.ok(
+    rendered.includes("const hasVerifyCredential = Boolean(realtime.credentials?.verifyOffer)"),
+    "자격증명 판별자는 카탈로그 보유 && 고급 && 난이도 반영 경로 값을 그대로 재사용해야 한다",
+  );
+  // ⛔ 옛 조건(오퍼 문서 존재가 곧 컨트롤 등장)이 컨트롤 렌더 조건으로 되돌아오면 R4가 되살아난다.
+  assert.ok(
+    !/\{showVerifyTrigger && verifyOffer && \(/.test(rendered),
+    "옛 2단 컨트롤(오퍼 도착 후에만 등장)이 되돌아오면 안 된다 — 상시 컨트롤로 대체됐다(D-67)",
+  );
+});
+
+test("[G268] `shouldRevealVerifyOffer`는 삭제되지 않았다 — 계열 A와 계열 B 자동 전환 양쪽에서 살아 있다", () => {
+  const rendered = codeOnly(page);
+  const hits = rendered.match(/shouldRevealVerifyOffer\(\{/g) ?? [];
+  assert.ok(hits.length >= 2, "showVerifyTrigger 계산과 계열 B 자동 전환 effect 두 곳에서 재사용돼야 한다");
+});
+
+test("[G272] 전환 완료 고지의 정본 자리는 오버레이가 아니라 통화 셸(verifyConnectedLabel 블록)이다", () => {
+  const rendered = codeOnly(page);
+  const labelBlockStart = rendered.indexOf("{verifyConnectedLabel && phase !== \"ended\" && (");
+  assert.ok(labelBlockStart > 0, "verifyConnectedLabel 렌더 블록을 찾을 수 있어야 한다");
+  const labelBlock = rendered.slice(labelBlockStart, labelBlockStart + 400);
+  assert.ok(
+    /실제로 전화가 걸리지 않습니다/.test(labelBlock),
+    "G272 — 오버레이가 자동으로 닫힌 뒤에도 고지가 남는 자리가 이 블록이어야 한다(§46.3 (2) 규범)",
+  );
+  // ⛔ 오버레이가 닫히면 사라지는 자리(overlay 전용)만으로는 §46.3 (2)를 어긴다 — page.tsx 쪽에도
+  // 있어야 한다. VerifyCallOverlay.tsx 쪽 고지는 삭제 대상이 아니므로(중복은 안전) 별도로 확인한다.
+  assert.ok(
+    /실제로 전화가 걸리지 않습니다/.test(codeOnly(overlay)),
+    "오버레이 안의 기존 고지도 함께 유지돼야 한다(삭제 금지 — 중복은 안전)",
+  );
 });

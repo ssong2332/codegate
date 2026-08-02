@@ -3,11 +3,13 @@ export {
   enqueueInstruction,
   nextVerifyOfferStage,
   rollbackVerifyOfferPhase,
+  shouldAnnounceVerifyOffer,
   shouldOfferVerify,
   shouldReinjectTransferState,
   shouldRetryVerifyOffer,
   shouldRevealVerifyOffer,
   takeNextInstruction,
+  verifySeriesFor,
 } from "./verifyIntercept";
 export type {
   InstructionPriority,
@@ -15,4 +17,5 @@ export type {
   TransferStateReinjectInput,
   VerifyInterceptView,
   VerifyOfferPhase,
+  VerifySeries,
 } from "./verifyIntercept";

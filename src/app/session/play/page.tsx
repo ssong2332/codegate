@@ -50,11 +50,13 @@ import {
   enqueueInstruction,
   nextVerifyOfferStage,
   rollbackVerifyOfferPhase,
+  shouldAnnounceVerifyOffer,
   shouldOfferVerify,
   shouldReinjectTransferState,
   shouldRetryVerifyOffer,
   shouldRevealVerifyOffer,
   takeNextInstruction,
+  verifySeriesFor,
   type PendingInstruction,
   type VerifyInterceptView,
   type VerifyOfferPhase,
@@ -187,6 +189,12 @@ export default function SessionCallPage() {
   const [verifyOverlayOpen, setVerifyOverlayOpen] = useState(false);
   const [verifyDialing, setVerifyDialing] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
+  // ⭐⭐ §47.3 C1/D-67 — 참가자가 상시 컨트롤("직접 확인해 볼게요")을 탭해 확인 의사를 표했는가
+  // (P-32 (4) latch). 계열 B에서 오퍼 개시의 AND 조건 절반을 이룬다. 계열 A에는 영향이 없다(C2).
+  const [verifyIntentExpressed, setVerifyIntentExpressed] = useState(false);
+  // 세션 문서에서 읽은 scenarioId(§47.6 P-5 — 계열 판별 입력). 카탈로그 객체 자체에는 id 필드가
+  // 없어(src/content/scenarios) 로드 시점에 별도로 보관한다.
+  const [scenarioId, setScenarioId] = useState<string | undefined>(undefined);
   // ⭐ **§38.4 E / G187** — 오퍼 요청의 **단계 상태**(종전에는 boolean ref 하나였다).
   // ⛔ boolean으로 되돌리지 말 것: 2단계가 생기면서 *"1단계 성공 · 2단계 실패"* 상태가 처음
   // 존재하게 됐는데, boolean으로는 그것을 "이미 요청함"으로밖에 못 적어 **오퍼가 영영 안 뜬다.**
@@ -205,6 +213,9 @@ export default function SessionCallPage() {
   // 직전 주입 이후 참가자가 말한 턴 수 — ⛔ 이 값 없이 매 턴 주입하면 자기 구동 루프가 된다(**G99**).
   const userTurnsSinceInjectionRef = useRef(0);
   const verifyTriggerRef = useRef<HTMLButtonElement | null>(null);
+  // ⭐ §47.3 C3/D-69 계열 B — 오퍼별 자동 전환 시도를 1회로 latch한다(offerId 키). 실패해도
+  // 재시도를 자동으로 걸지 않는다(재시도는 §47.3 C3가 금지한 "두 번째 컨트롤" 없이는 불가능하다).
+  const autoReconnectOfferIdRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speech = useSpeechRecognition();
   const realtime = useRealtimeCall();
@@ -261,6 +272,7 @@ export default function SessionCallPage() {
           return;
         }
         setScenario(found);
+        setScenarioId(scenarioId);
         setMaxSessionMs((data.maxSessionMs as number) ?? null);
         // T72(UX-014 v1.11 난이도 배지, P-22) — 세션 문서에 서버가 **실제로 기록한** 값을 읽는다
         // (sessionStorage 힌트가 아니라). 부재(난이도 도입 이전 세션)면 중급으로 정규화된다.
@@ -465,6 +477,10 @@ export default function SessionCallPage() {
     enqueueTurnInstruction,
   ]);
 
+  // §47.3 C2/§47.6 P-5 — 계열 판별은 이 한 곳에서만 한다(클라·서버 복제 금지, G84). scenarioId가
+  // 아직 없으면(로드 전) 계열 B로 취급된다 — 참가자 조건이 걸리는 쪽이 더 안전한 기본값이다.
+  const verifySeries = verifySeriesFor(scenarioId);
+
   // T83 — 사기범 턴이 가용 게이트에 도달하면 **확인 권유**를 도착시킨다(§16.1.3 앱 오케스트레이션).
   // 서버가 오퍼 문서를 쓰고 지시를 돌려주면, 실시간 경로는 그것을 같은 Live 세션에 넣어 캐릭터가
   // "직접 확인해 보시라"고 권하게 한다(폴백 경로는 서버가 다음 턴 프롬프트에 직접 싣는다).
@@ -499,14 +515,19 @@ export default function SessionCallPage() {
           ? "announce"
           : null;
     if (stage === null) return;
-    // 게이트(`availableAfterScammerTurns`)는 **1단계에만** 건다. 2단계는 이미 열린 흐름의 이어짐이고
-    // 게이트를 다시 걸면 같은 조건을 두 번 판정하게 된다.
+    // ⭐⭐ §47.3 C1/C2 — 게이트(`availableAfterScammerTurns`)는 **1단계에만** 건다(2단계는 이미
+    // 열린 흐름의 이어짐). `shouldOfferVerify` 자체는 무변경(G263) — 그 결과 위에 참가자 조건을
+    // **조합**하는 것은 `shouldAnnounceVerifyOffer` 한 곳이다(계열 A는 예외 없이 통과, C2·G264).
     if (
       stage === "announce" &&
-      !shouldOfferVerify({
-        ...(trigger ? { trigger } : {}),
-        scammerTurns: completedScammerTurns,
-        alreadyRequested: verifyOfferPhaseRef.current !== "idle",
+      !shouldAnnounceVerifyOffer({
+        series: verifySeries,
+        gateReached: shouldOfferVerify({
+          ...(trigger ? { trigger } : {}),
+          scammerTurns: completedScammerTurns,
+          alreadyRequested: verifyOfferPhaseRef.current !== "idle",
+        }),
+        intentExpressed: verifyIntentExpressed,
       })
     ) {
       return;
@@ -549,7 +570,16 @@ export default function SessionCallPage() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, callMode, phase, scammerTurns, messages, realtime.credentials?.verifyOffer]);
+  }, [
+    sessionId,
+    callMode,
+    phase,
+    scammerTurns,
+    messages,
+    realtime.credentials?.verifyOffer,
+    verifySeries,
+    verifyIntentExpressed,
+  ]);
 
   const handleScammerTurnComplete = useCallback(() => {
     // ⭐ **§45.7 V2** — ref를 **먼저** 올린다. 아래 드레인이 이 값으로 예고 시점을 재기 때문에,
@@ -743,8 +773,10 @@ export default function SessionCallPage() {
 
   // T83 — 확인 오버레이 열기/닫기. **라우팅을 하지 않는다**(D-35 하드 요구, §16.2): 상태만 바꾸므로
   // 통화 세션 컴포넌트가 언마운트되지 않고 통화·타이머·오디오가 그대로 유지된다.
-  const handleOpenVerifyOverlay = (trigger: HTMLButtonElement | null) => {
-    verifyTriggerRef.current = trigger;
+  // ⭐⭐ §47.4 W4/D-68 — 이 오버레이는 이제 참가자가 여는 화면이 아니라 **전환이 시작되는 순간**
+  // 앱이 띄우는 비모달 전환 시트다(Primary Action 없음). 트리거 컨트롤은 상시 렌더되므로 `ref`를
+  // JSX에서 직접 건다(`verifyTriggerRef`) — 클릭 시점에 별도로 캡처할 필요가 없다.
+  const handleOpenVerifyOverlay = () => {
     if (callMode === "fallback") speech.stop();
     // 동시 열림 금지(§16.6 G26) — 반대 방향도 동일하게 상대를 닫는다.
     setSmsOverlayOpen(false);
@@ -754,20 +786,26 @@ export default function SessionCallPage() {
 
   const handleCloseVerifyOverlay = () => {
     setVerifyOverlayOpen(false);
-    // 직전 트리거로 포커스 복귀(UX-031 Accessibility). 재연결 뒤에는 트리거가 사라지므로
-    // 포커스는 그대로 두고 상태 문구(aria-live)가 상황을 알린다.
+    // ⛔ **전환을 취소하지 않는다**(D-68) — 이미 시작된 `handlePlaceVerifyCall`이 있다면 배경에서
+    // 그대로 이어진다. 이 핸들러는 시트를 치울 뿐이다. 직전 트리거(상시 컨트롤)로 포커스 복귀.
     verifyTriggerRef.current?.focus();
   };
 
   /**
-   * "연결해 달라고 하기"(UX-031 Primary Action ①, T110 C5) — ⚠️ **실제 발신이 아니다**(AC-019).
-   * 참가자가 요청하는 것은 **호 전환(넘겨주기)** 이지 신규 발신이 아니다. 하는 일은
-   * 콜러블 1회 호출(서버는 Firestore write 1건 + 지시 문자열 반환)과 화면 연출뿐이며, 이 함수는
-   * `tel:`·다이얼 인텐트·외부 네비게이션을 **어디에서도** 쓰지 않는다.
+   * 확인 부서로의 호 전환(넘겨주기) 실행 — ⚠️ **실제 발신이 아니다**(AC-019). 참가자가 요청하는
+   * 것은 **호 전환**이지 신규 발신이 아니다. 하는 일은 콜러블 1회 호출(서버는 Firestore write
+   * 1건 + 지시 문자열 반환)과 화면 연출뿐이며, 이 함수는 `tel:`·다이얼 인텐트·외부 네비게이션을
+   * **어디에서도** 쓰지 않는다.
    *
-   * 흐름(UX-031 States): Dialing("연결 중…" 2.5초 고정) → 오버레이 자동 닫힘 → 통화 셸의
+   * ⭐ §47.4 W4/D-69 — 호출부는 둘뿐이다: 계열 A의 탭(=수락, `handleVerifyControlTap`)과 계열 B의
+   * 자동 전환 effect(아래). ⛔ **두 번째 확인 컨트롤이 없으므로**(C3) 이 함수가 스스로 오버레이를
+   * 열지는 않는다 — 호출부가 `handleOpenVerifyOverlay()`를 먼저 부른다.
+   *
+   * 흐름(UX-031 States): Dialing("연결 중…" 2.5초 고정) → 성공 시 오버레이 자동 닫힘 → 통화 셸의
    * `verify-reconnected`(발신자 라벨이 문서의 `reconnectedCallerLabel`로 바뀐다). 실패 시 Error
-   * 상태 후 **원래 통화 유지**(세션·리포트는 정상 진행 — UF-011 Failure (c), 침묵 실패 금지).
+   * 상태를 시트 안에 보여주고 **원래 통화 유지**(세션·리포트는 정상 진행 — UF-011 Failure (c),
+   * 침묵 실패 금지). 재시도 컨트롤은 없다 — 계열 A는 상시 컨트롤 재탭으로, 계열 B는 재시도하지
+   * 않는다(C3가 두 번째 컨트롤을 금지하므로 자동 재시도도 만들지 않는다).
    */
   const handlePlaceVerifyCall = async () => {
     if (!sessionId || !verifyOffer || verifyDialing) return;
@@ -802,6 +840,45 @@ export default function SessionCallPage() {
       setVerifyDialing(false);
     }
   };
+
+  /**
+   * ⭐⭐ §47.4 W4/D-67 — 상시 확인 의사 표명 컨트롤의 탭 핸들러(P-32). **계열 A**에서 오퍼가 이미
+   * 도착한 뒤에는 이 탭이 "수락"으로 작동해 곧바로 전환을 시작한다(D-69 계열 A row 3 — "컨트롤은
+   * 하나이고 의미는 맥락이 정한다"). 그 밖의 모든 경우(계열 B 전체 · 계열 A의 오퍼 도착 전)는
+   * **의사 표명 접수**일 뿐이다(P-32 (4) latch) — 게이트의 존재를 참가자에게 노출하지 않는다.
+   */
+  const handleVerifyControlTap = () => {
+    if (verifySeries === "A" && showVerifyTrigger) {
+      handleOpenVerifyOverlay();
+      void handlePlaceVerifyCall();
+      return;
+    }
+    setVerifyIntentExpressed(true);
+  };
+
+  // ⭐⭐ §47.3 C3/D-69 — 계열 B에서는 예고 턴이 끝나 오퍼가 드러나는 순간 전환이 **자동으로**
+  // 이어진다(두 번째 확인 컨트롤을 두지 않는다). 참가자는 이미 탭으로 의사를 표했다 — 그 사실이
+  // 이 오퍼를 존재하게 만든 조건 자체다(C1의 AND). 계열 A는 참가자 탭 자체가 "수락"이므로
+  // (D-69 계열 A row 3) 여기서 자동 발화하지 않는다 — `handleVerifyControlTap`이 처리한다.
+  // ⚠️ `autoReconnectOfferIdRef`로 오퍼당 1회만 자동 시도한다 — 실패해도 자동 재시도는 없다
+  // (재시도 컨트롤 자체가 C3에 의해 없다, §47.3 (2) R1과 같은 급의 알려진 한계).
+  useEffect(() => {
+    if (verifySeries !== "B" || phase !== "live" || verifyOverlayOpen) return;
+    if (!verifyOffer || autoReconnectOfferIdRef.current === verifyOffer.offerId) return;
+    const revealed = shouldRevealVerifyOffer({
+      callMode: callMode === "realtime" ? "realtime" : "fallback",
+      offer: verifyOffer,
+    });
+    if (!revealed) return;
+    autoReconnectOfferIdRef.current = verifyOffer.offerId;
+    // 인라인 async IIFE로 감싼다(react-hooks/set-state-in-effect 회피 — 이 화면의 다른 effect들과
+    // 동일한 관례, 예: :615 · :628 · :949).
+    (async () => {
+      handleOpenVerifyOverlay();
+      await handlePlaceVerifyCall();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verifySeries, phase, verifyOverlayOpen, callMode, verifyOffer]);
 
   const handleEndTraining = async () => {
     // 오버레이가 열려 있어도 종료는 항상 도달 가능해야 한다(AC-006). 종료 고지 화면이 문자·확인
@@ -965,9 +1042,10 @@ export default function SessionCallPage() {
   const smsUnreadCount = countUnread(inCallSms);
   const showSmsBanner =
     latestSms !== null && !smsBannerDismissed && !smsOverlayOpen && phase !== "ended";
-  // T83(UX-014 `verify-offered` state) — 확인 권유가 도착했고 아직 걸지 않았을 때만 보조 컨트롤이
-  // 뜬다. 재연결 이후(placedAt 존재)에는 사라진다 — 이 흐름은 세션당 한 번이다(§16.1.3).
-  // ⭐⭐ **§38 — 순서 판정은 순수 함수가 소유한다**(`shouldRevealVerifyOffer`). 조건을 이 자리에
+  // ⭐⭐ §47.4 W4/D-69 — 오퍼가 "노출 가능"해졌는가(§38 순서 판정, `shouldRevealVerifyOffer` 무변경
+  // — G268). ⛔ 더 이상 **두 번째 컨트롤**을 여닫는 스위치가 아니다(C3 — 그 컨트롤은 사라졌다).
+  // 이제 쓰이는 곳은 둘: **계열 A**의 탭이 "수락"인지 판별(`handleVerifyControlTap`)과 **계열 B**의
+  // 자동 전환 트리거(위 effect). ⭐⭐ **§38 — 순서 판정은 순수 함수가 소유한다.** 조건을 이 자리에
   // 직접 쓰면 브라우저 이벤트 위에서만 관측돼 게이트를 전건 통과해도 틀린 것을 아무도 못 잡는다
   // (이 저장소가 반복해서 데인 양식 — `shouldReinjectTransferState`가 같은 이유로 순수 함수다).
   const showVerifyTrigger =
@@ -977,6 +1055,10 @@ export default function SessionCallPage() {
     }) &&
     !verifyOverlayOpen &&
     phase !== "ended";
+  // ⭐ P-32 (1) T1/D-67 — 상시 확인 의사 표명 컨트롤의 표시 조건. 오퍼 문서(`verifyOffer`) 존재
+  // 여부가 아니라 **자격증명 보유**로 앞당겨진다(오퍼 도착 여부로 나타났다 사라지지 않는다, R4).
+  // ⛔ `shouldRevealVerifyOffer`는 삭제하지 않는다(G268) — 위 `showVerifyTrigger`가 계속 쓴다.
+  const hasVerifyCredential = Boolean(realtime.credentials?.verifyOffer);
   // 재연결 완료 상태의 1줄 고지(§16.2 "폴백 경로의 인사말" 공백을 UI가 메운다). 구조 설명이
   // 아니라 **연결 사실**만 알린다(OQ-38).
   const verifyConnectedLabel =
@@ -1144,11 +1226,21 @@ export default function SessionCallPage() {
             ))}
           {/* T83(§16.2/UX-014 `verify-reconnected`) — 재연결 후 1줄 상태 문구. 폴백 경로에서
               서버가 별도 인사말을 생성하지 않기 때문에 이 자리가 그 공백을 메운다. **연결 사실만**
-              알리고 구조 설명은 하지 않는다(OQ-38 확정 = 세션 중엔 상황만). */}
+              알리고 구조 설명은 하지 않는다(OQ-38 확정 = 세션 중엔 상황만).
+              ⭐⭐ G272/D-68 — 오버레이(전환 시트)는 전환이 성사되면 자동으로 닫힌다(`handlePlaceVerifyCall`
+              의 `setVerifyOverlayOpen(false)`). "실제로 전화가 걸리지 않습니다" 취지 고지의 **정본
+              자리**는 이제 여기다 — 오버레이가 닫힌 뒤에도 세션 종료까지 상시 유지된다(§46.3 (2)
+              규범 — "화면이 X를 했다고 말하면, 고지는 X를 하지 않았다고 말한다"). 문면은
+              `VerifyCallOverlay.tsx`의 기존 고지와 같은 취지 — 새로 발명하지 않는다. */}
           {verifyConnectedLabel && phase !== "ended" && (
-            <p role="status" className="text-sm text-[#C9D4DB]">
-              {verifyConnectedLabel}
-            </p>
+            <div className="flex flex-col items-center gap-0.5">
+              <p role="status" className="text-sm text-[#C9D4DB]">
+                {verifyConnectedLabel}
+              </p>
+              <p role="status" className="text-xs text-[#8FA0AC]">
+                훈련용 모의 화면입니다 · 실제로 전화가 걸리지 않습니다
+              </p>
+            </div>
           )}
         </div>
 
@@ -1421,25 +1513,31 @@ export default function SessionCallPage() {
             </p>
           )}
 
-          {/* T83 확인 권유 컨트롤(UX-014 `verify-offered` state / UF-011 Step 3) — 통화는 그대로
-              진행 중이다. 탭하면 UX-031 오버레이가 열릴 뿐 **라우팅이 일어나지 않는다**(D-35).
+          {/* ⭐⭐ §47.4 W4/D-67 확인 의사 표명 컨트롤(UF-011 v1.20 Step 1 / P-32) — 확인 오퍼
+              자격증명이 실린 고급 통화라면 live phase 진입부터 종료까지 **상시** 보인다. 오퍼 도착
+              여부로 나타났다 사라지지 않는다(P-32 (3) — R4 힌트 위험을 등장 타이밍을 무상관으로
+              만들어 닫는다). 탭은 참가자의 구조화 이벤트다(AC-024 무관 — 자유텍스트 아님).
               ⚠️ D-47 — 아래 "종료"(빨강 원형, 가운데)는 **자리·문구·크기 그대로**이고 이 컨트롤은
-              **다른 영역·다른 문구·다른 모양**이다(색이 아니라 문구·위치로 구분 — 어르신이 "끊고
-              확인하기"와 "훈련 종료"를 혼동하면 AC-006 도달성 문제로 번진다). "훈련은 계속됩니다"
-              보조 문구를 병기한다. */}
-          {showVerifyTrigger && verifyOffer && (
+              **다른 영역·다른 문구·다른 모양**이다. "훈련은 계속됩니다" 보조 문구를 병기한다. */}
+          {hasVerifyCredential && phase === "live" && (
             <div className="mb-4">
               <button
                 type="button"
                 ref={verifyTriggerRef}
-                onClick={(event) => handleOpenVerifyOverlay(event.currentTarget)}
+                aria-pressed={verifyIntentExpressed}
+                onClick={handleVerifyControlTap}
                 className="flex min-h-[56px] w-full flex-col items-center justify-center rounded-[14px] border-[1.5px] border-[#C9C2B6] bg-white/95 px-4 py-2.5 text-center"
               >
-                <span className="text-base font-bold text-[#22303A]">
-                  확인 부서로 연결해 달라고 하기
-                </span>
+                <span className="text-base font-bold text-[#22303A]">직접 확인해 볼게요</span>
                 <span className="text-xs text-[#6B655C]">훈련은 계속됩니다</span>
               </button>
+              {/* P-32 (4) — 탭 접수 1줄(비차단·aria-live=polite). "곧 연결됩니다"·게이트 존재를
+                  알리는 문구는 절대 쓰지 않는다(그 자체가 R4를 뒷문으로 되살린다). */}
+              {verifyIntentExpressed && !verifyOverlayOpen && verifyOffer?.placedAtMs === undefined && (
+                <p role="status" aria-live="polite" className="mt-2 text-center text-xs text-[#6B655C]">
+                  확인해 보겠다고 표시해 두었습니다 · 통화는 계속됩니다
+                </p>
+              )}
             </div>
           )}
           {verifyError && !verifyOverlayOpen && (
@@ -1582,7 +1680,6 @@ export default function SessionCallPage() {
           elapsedLabel={formatElapsed(elapsedSec)}
           dialing={verifyDialing}
           errorMessage={verifyError}
-          onPlaceCall={() => void handlePlaceVerifyCall()}
           onClose={handleCloseVerifyOverlay}
           onEndTraining={() => void handleEndTraining()}
         />

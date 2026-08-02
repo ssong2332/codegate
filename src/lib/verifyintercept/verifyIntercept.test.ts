@@ -7,11 +7,13 @@ import {
   enqueueInstruction,
   nextVerifyOfferStage,
   rollbackVerifyOfferPhase,
+  shouldAnnounceVerifyOffer,
   shouldOfferVerify,
   shouldReinjectTransferState,
   shouldRetryVerifyOffer,
   shouldRevealVerifyOffer,
   takeNextInstruction,
+  verifySeriesFor,
   type PendingInstruction,
   type VerifyOfferPhase,
 } from "./verifyIntercept.ts";
@@ -32,6 +34,63 @@ test("게이트에 도달하면 한 번만 도착시킨다(중복 호출 방지)
   const trigger = { availableAfterScammerTurns: 2 };
   assert.equal(shouldOfferVerify({ trigger, scammerTurns: 2, alreadyRequested: false }), true);
   assert.equal(shouldOfferVerify({ trigger, scammerTurns: 5, alreadyRequested: true }), false);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐⭐ §47.3 C1~C2 — 오퍼 개시를 참가자 구조화 이벤트로 옮긴다(턴 게이트는 AND로 남는다)
+//
+// 사용자 신고 2회째(§26.2 ㉡) — "의심하지도 않았는데 사기범이 먼저 확인 창구를 제안했다."
+// ⛔ `shouldOfferVerify`(위) 자체는 이 절 전체에서 **한 글자도 바뀌지 않는다**(G263). 아래는
+// 그 위에 참가자 조건을 조합하는 `shouldAnnounceVerifyOffer`와 계열 판별 `verifySeriesFor`다.
+// ══════════════════════════════════════════════════════════════════════════════
+
+test("[§47.6 P-5] 계열 판별 — bank-security-verify-scam만 계열 A, 나머지는 전부 계열 B", () => {
+  assert.equal(verifySeriesFor("bank-security-verify-scam"), "A");
+  assert.equal(verifySeriesFor("institutional-impersonation"), "B");
+  assert.equal(verifySeriesFor("family-accident-deepvoice"), "B");
+  // 카탈로그 미로드 등으로 scenarioId가 아직 없을 때도 계열 B(참가자 조건이 걸리는 쪽 = 더 안전한
+  // 기본값)로 취급한다 — 계열 A 예외가 조용히 새어 나가지 않게 한다.
+  assert.equal(verifySeriesFor(undefined), "B");
+});
+
+test("[§47.3 C1/P-6 ⓐ] 계열 B: 게이트에 도달해도 참가자 의사가 없으면 오퍼가 뜨지 않는다", () => {
+  assert.equal(
+    shouldAnnounceVerifyOffer({ series: "B", gateReached: true, intentExpressed: false }),
+    false,
+    "AND 조건의 절반(참가자 의사)이 없으면 개시하지 않는다 — 이것이 ③-a를 닫는 바로 그 조건이다",
+  );
+});
+
+test("[§47.3 C2/G264/P-6 ⓑ 역검증] 계열 A: 참가자 의사가 없어도 게이트 도달만으로 뜬다(현행 무변경)", () => {
+  assert.equal(
+    shouldAnnounceVerifyOffer({ series: "A", gateReached: true, intentExpressed: false }),
+    true,
+    "계열 A(확인 우회가 본론)는 예외다 — 참가자 조건을 걸면 그 시나리오의 존재 이유가 사라진다(G264)",
+  );
+});
+
+test("[§47.3 C1] 계열 B — 게이트와 참가자 의사가 둘 다 있어야 뜬다(AND, 편측 결여 전수)", () => {
+  assert.equal(
+    shouldAnnounceVerifyOffer({ series: "B", gateReached: true, intentExpressed: true }),
+    true,
+  );
+  assert.equal(
+    shouldAnnounceVerifyOffer({ series: "B", gateReached: false, intentExpressed: true }),
+    false,
+    "참가자가 먼저 탭해도 턴 게이트에 아직 안 왔으면 뜨지 않는다 — 게이트 값은 무변경이다(G263)",
+  );
+  assert.equal(
+    shouldAnnounceVerifyOffer({ series: "B", gateReached: false, intentExpressed: false }),
+    false,
+  );
+});
+
+test("[G264] 계열 A는 게이트 미도달이면 참가자 의사와 무관하게 뜨지 않는다(AND의 게이트 절반은 계열 불문)", () => {
+  assert.equal(
+    shouldAnnounceVerifyOffer({ series: "A", gateReached: false, intentExpressed: true }),
+    false,
+    "계열 A 예외는 '참가자 조건을 생략한다'이지 '게이트까지 생략한다'가 아니다",
+  );
 });
 
 // ── 지시 주입 큐(§16.6 G31 실시간 보강) ─────────────────────────────────────────
