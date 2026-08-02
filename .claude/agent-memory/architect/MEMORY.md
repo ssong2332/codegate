@@ -1,3 +1,4 @@
+- [스키마 판정은 소비자가 가른다](feedback_schema_choice_decided_by_consumers.md) — 복사냐 참조냐는 읽는 화면의 read 형태(N+1·빈 catch)로 갈린다; 이유와 결론은 따로 판정
 - [인계된 원인이 수치를 설명하는가](feedback_cited_cause_must_explain_the_number.md) — 설명 못 하면 사실이 둘; 전제가 참이면 관측 불가라는 결론이 나오면 프로브 0단계는 전제 검증
 - [지시받은 판정이 이미 절로 있을 수 있다](feedback_judgment_may_already_be_a_section.md) — 착수 전 `^## ` 전수 grep + UpdateRequests `open`; 있으면 재작성 말고 "위에 얹는 절"
 - [경로로 닫은 안전은 문면을 남긴다](feedback_safety_closed_by_path_leaves_the_wording.md) — 화면이 새로 주장한 것을 고지가 부정하는가; 갈래 말고 넓히기, 게이트 하드코딩 문자열 grep

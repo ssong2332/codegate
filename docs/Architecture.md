@@ -10021,3 +10021,239 @@ AC-081의 대상 정의는 ***"자격증명 판독 결과로 프로바이더·�
 > ⚠️ **`§47`·`47.x`·`OQ-A39/X2`·`#82`는 충돌 0건**(전수 grep — 이 절과 #82 행 밖 히트 0). ⛔ **타 절·타 파일 인용(§16·§17·§18·§22·§25·§26·§28~§30·§38·§41·§42·§45·**§46** · G23·G26·G30·G31·G58·G84·G86·G99·G108·G129·G181~G188·G244~G253·G254~G259 · OQ-A27·OQ-A36 · AC 번호 · `파일:줄`)은 실제 번호 그대로 두었다.**
 ⚠️ **§46 접점 1건을 얹었다(중단 후 재개 시 추가, 2026-08-02)** — §47.7 (†) · **G272** · 47.10 인계 1ⓑ **3곳**. ⛔ **§46의 판정을 하나도 재판정하지 않았고 §46 원문을 한 글자도 고치지 않았다** — 인용만 했다. ⭐ **§46은 이 워크트리(base `b668576`)에 없고 공유 체크아웃 `C:\codegate\docs\Architecture.md:9494-9515`에서 읽었다**(⚠️ 그 시점 `main` = `82f4605` — 오케스트레이터 인용값이며 architect는 `.git` 재판독을 하지 않았다). **인용한 소스 줄(`VerifyCallOverlay.tsx:158`)은 이 워크트리에서 직접 재실측해 일치를 확인했다.**
 ⚠️ **정정 2건은 전부 "시점 부착" 형식이며 원문 무수정**이다: **§16.1.4 `:1731` 트레이드오프 선언의 교환 조건이 §38.3에서 이미 한쪽으로 기울었다**(§47.7 10) · **§45.8 P-2의 실행 전제 변경**(§47.5 (3) b).
+
+## 48. (T158 착수 게이트) Mock 강등 고지의 **데이터 경로 2건** — ⭐ **OQ-U36은 UX 결론 채택·이유 정정** / ⭐⭐ **OQ-U37은 (a)도 (b)도 아니다 — "불가능"이 층을 착각했다** — architect 판정
+
+> **소관**: **AC-084**(`docs/PRD.md:697`) · **`docs/UX.md` v1.19 D-64**(`:2523`)·**D-65**(`:2533`)·**D-66**(`:2543`)·**P-31**(`:1791`) · **OQ-U36**(`docs/UX.md:2593`)·**OQ-U37**(`:2594`) · **UX-003·UX-008·UX-014·UX-021·UX-022·UX-018·UX-030** · 선행 판정 **§14(2인 챌린지)·§15.3.2/§15.4.1(역정규화)·§42(리포트 자기모순)·§44.8(강등 침묵의 발견처)**.
+> **⚠️ 실측 기준선**: `C:\codegate\.git\refs\heads\main` = **`650ce65548bf53fb9bc934792c9f352c41bb272a`**(⭐ **`.git` 직접 판독** — 지시문이 지정한 base `650ce65`와 **일치**). 이 워크트리 HEAD = `refs/heads/worktree-agent-abc2d79145ae13f74`. ⇒ 이 절의 모든 `파일:줄`은 **직접 열람·grep한 값**이다.
+> **⚠️ architect는 이 세션에 셸이 없다** — 테스트·빌드·에뮬레이터·라이브·`git log` 실행 **0건**. 실측 수단은 **파일 열람 · grep · `.git` 판독** 셋뿐이다. ⛔ **강등된 화면을 본 적이 없다**(ux-design·planner도 못 봤다 — `docs/Tasks.md:615`).
+> **⚠️ 버전 갭**: 헤더 **PRD v1.7.1 · UX 1.13**(`Architecture.md:5`) ↔ 현행 **PRD v1.14**(`docs/PRD.md:4`) · **UX 1.19**(`docs/UX.md:10`) ⇒ **PRD 7건 · UX 6건** 뒤처졌다(§47 시점과 **동일 — 더 벌어지지 않았다**). **재검증 판정**: 이 절의 판정 입력은 **AC-084 문면 · D-64/D-65/D-66 · P-31**이며 **전부 현행 최신본(PRD v1.14 · UX v1.19)에서 직접 읽었다** ⇒ 낡은 헤더가 이 판정의 근거를 오염시키지 않는다. ⛔ **헤더는 전진시키지 않았다**(T131 계열 별건 — §41~§47과 같은 처분).
+> **⛔ 이 절이 하지 않는 것**: D-64~D-66·P-31·AC-084·**알리는 화면 4개**·문면 9후보 판정 **재판정 0건**(확정분 위에 얹기만 한다) · **문면 저작 0건**(ux-design 소유) · **§45/§46/§47 무접촉** · **소스 0줄**.
+
+### 48.0 선행 판정 확인 — 같은 판정이 이미 다른 이름으로 있는가
+
+| 확인 | 방법 | 결과 |
+|---|---|---|
+| 같은 판정의 기존 절 | `docs/Architecture.md` `^## ` **47건 전수 열람** + `OQ-U36`·`OQ-U37`·`T158` 전수 grep | ⭐ **0건.** 가장 가까운 것은 **§44.8**(강등이 화면에서 침묵한다는 **발견**)과 **§42.3**(`isMock` 갈림길 — **다른 축**: 그쪽은 *"정말 Mock이었나"* 를 따졌고 이 절은 *"Mock이었음을 어디서 읽나"* 를 정한다) ⇒ **§48 신설** |
+| `docs/UpdateRequests.md` `open` 행 | `\| open` 전수 grep | **2건** — `:7`(템플릿 플레이스홀더) · `:21`(**#14**, Owning Agent **User**) ⇒ ⭐ **architect 소관 `open` 0건** |
+| 번호 실측 | `^## ` 최대 = **47**(`:9702`) · `G\d{3}` 최대 = **G272**(`:10009`) · `OQ-A\d+` 최대 = **OQ-A40**(`:10011`) · `docs/DECISIONS.md` 행 최대 = **#82**(`:92`) · `docs/adr/` 최대 = **0014** | ⇒ **§48 · G273~G283 · OQ-A41/A42 · DECISIONS #83**. ⛔ **번호 예약 0건** — 동시 패스가 있으면 병합 순서가 번호를 확정한다(§44.10 교훈). 조정이 필요하면 **48.11**의 치환 스코프를 쓸 것 |
+
+### 48.1 실측 — 이 판정이 딛고 선 14건 (전부 base `650ce65` 트리 직접 열람)
+
+| # | 확인한 것 | 결과 | 근거 (파일:줄) |
+|---|---|---|---|
+| **1** | `functions/src/report/**` 의 `llmProvider`·`isMock` 참조 | ⭐ **실질 0건** — 히트 1건은 **테스트 파일의 주석**이다 | `functions/src/report/__tests__/promotedTactics.test.ts:20`(*"⛔ `isMock=true`로 재현하지 않는다"*). 제품 코드 히트 **0** |
+| **2** | `SessionDoc.llmProvider` 정의 | 존재 · **옵셔널** · `LlmProviderName` | `functions/src/shared/types.ts:91` · `docs/Database.md:54` |
+| **3** | 리포트 생성기가 세션 문서를 **이미 읽는가** | ⭐ **읽는다** — 함수 첫 동작이 세션 read다 | `functions/src/report/generateReportCore.ts:41-46` |
+| **4** | ⭐⭐ **세션 문서 폐기 정책**(UX가 확인하지 못한 것) | ⭐⭐ **세션 문서를 삭제하는 코드가 저장소에 0건이다.** AC-021 "즉시 폐기"가 지우는 것은 **Storage 객체 · ElevenLabs voice · `voiceId` *필드* 하나**뿐 | `functions/src/guardrails/index.ts:88`(Storage `.delete()`) · **`:113`**(`update({ voiceId: FieldValue.delete() })` — ⭐ **문서가 아니라 필드**) · `functions/src/guardrails/purge.ts` 전문. `sessions.*\.delete\(`·`recursiveDelete`·`deleteCollection` 전수 grep = **히트 1건**이며 그것이 `:113`이다 |
+| **5** | 30일 보존 만료(`retentionDeleteAt`)가 지우는 것 | **`challenges/{id}.status="deleted"` 표시 + voice 폐기**뿐 — **챌린지 문서도 세션 문서도 삭제하지 않는다** | `functions/src/challenge/index.ts:324`·`:340-345` · `functions/src/challenge/purge.ts:49-53` |
+| **6** | `llmProvider` 태그의 **스티키성** | ⭐ **스티키다** — `isMock`일 때만 write하고 **해제 write가 0건**이다(3개 write 지점 전수) | `functions/src/roleplay/index.ts:346` · `functions/src/session/index.ts:180` · `functions/src/challenge/userAccess.ts:195` |
+| **7** | 태그 write ↔ 리포트 생성 **순서** | ⭐ **태그가 먼저다** — 태그 트랜잭션이 커밋된 **뒤에** 리포트가 트리거된다 | `functions/src/roleplay/index.ts:340-363`(tx) → **`:373-374`**(`triggerReportGeneration`) · `functions/src/session/index.ts:289` |
+| **8** | 리포트 화면의 데이터 원천 | `reports/{reportId}` **직접 read + 필드 매핑** | `src/app/report/page.tsx:119-138` |
+| **9** | ⭐ UX-008이 세션 문서를 읽는가 | **읽는다 — 단 "장식용"이고 실패를 삼킨다** | `src/app/report/page.tsx:165-183`, ⭐ **`:176-178`** *"장식용 조회 실패는 무시 — 리포트 표시를 막지 않는다"* |
+| **10** | UX-030(아카이브)의 read 형태 | ⭐ **`reports`만** 읽는다(50건 커서 페이징). 세션 read **0건** | `src/lib/archive/fetchArchivePage.ts:1-14`·`ARCHIVE_PAGE_SIZE = 50`(`:31`) |
+| **11** | `ConsentChallengeResponse`에 `isMock` | **없다 — 양쪽 파일 모두** | `src/lib/api/types.ts:354-361` · `functions/src/challenge/types.ts:81-84` |
+| **12** | `consentChallenge`가 `isMock`을 **계산은 하는가** | ⭐ **한다. 세션 문서에 쓰고, 반환만 안 한다** | `functions/src/challenge/userAccess.ts:134`(`generateOpeningLine`이 반환) · `:195`(세션 문서 write) · `:259-263`(응답 조립 — `isMock` 미포함) |
+| **13** | `createSession`의 대칭 | **반환한다** ⇒ 두 진입점이 비대칭이다 | `functions/src/session/index.ts:234` · 계약 `src/lib/api/types.ts:74` |
+| **14** | ⭐⭐ **사용자2가 세션 *중* 강등을 알 수 있는 경로가 정말 0인가** | ⭐⭐ **0이 아니다** — ⓐ `SendMessageResponse.isMock`·ⓑ `CreateRealtimeCallResponse.isMock`이 **이미 계약에 있고 사용자2도 같은 콜러블을 탄다**, ⓒ **두 화면이 마운트 시 이미 세션 문서를 read한다** | ⓐ `src/lib/api/types.ts:91` · ⓑ `:131` · ⓒ **`src/app/session/play/page.tsx:238`** · **`src/app/session/messenger/page.tsx:117`** · 권한 `firestore.rules:34`(+ `:52` 주석 *"2인 챌린지 사용자2=익명 uid도 자기 세션이면 동일하게 성립"*) |
+
+**보조 실측(결함 본체의 재확인)**: `src/app/**` 의 `isMock` 참조 = **0건**(전수 grep). 저장소 전체에서 `isMock`을 **읽는** 화면 코드는 **`src/lib/realtime/useRealtimeCall.ts:198` 단 한 곳**이다(실시간 경로 — §44.8이 *"이쪽만 정직하다"* 고 적은 그 자리). ⇒ **T158 A항의 결함 서술은 이 base에서도 참이다.**
+
+---
+
+### 48.2 ⭐ OQ-U36 판정 — **리포트 문서에 필드를 신설한다**(= UX 선호와 같은 결론). ⛔ **단 UX가 든 이유는 이 저장소에서 성립하지 않는다**
+
+**판정: (A) 리포트 문서에 역정규화 · 리포트 생성 시점 1회 기록.** UX의 결론과 같다.
+
+⚠️ **그러나 전제를 정정한다 — 결론이 같다고 이유까지 같은 것은 아니다.**
+
+| UX가 든 이유(`docs/UX.md:2593`) | 검증 | 판정 |
+|---|---|---|
+| *"세션 문서가 정리·폐기(AC-021 계열)되면 표기가 조용히 사라져 **같은 리포트가 어제와 오늘 다른 말을 한다**"* | 실측 **4·5**(48.1) — ⭐⭐ **이 저장소에는 세션 문서를 삭제하는 코드가 0건이다.** AC-021이 지우는 것은 Storage 객체·ElevenLabs voice·`voiceId` **필드 하나**이고(`guardrails/index.ts:113`), 30일 만료는 `challenges` 문서에 `status="deleted"` 를 **표시**할 뿐이다(`challenge/index.ts:324`) | ⛔ **이 근거는 오늘 성립하지 않는다.** ⭐ 다만 **"세션 문서는 영구히 남는다"는 보장 또한 문서 어디에도 없다** — AC-021이 강화되면 성립할 수 있는 **장래 리스크**로 강등해 보존한다(G283) |
+
+⇒ **채택 근거는 아래 4건으로 교체한다. 전부 오늘의 코드에서 확인된 것이다.**
+
+| # | 채택 근거 | 근거 (파일:줄) |
+|---|---|---|
+| **가** | ⭐⭐ **UX-030(실패 아카이브)은 세션 문서를 읽지 않는다.** 세션 참조 경로를 택하면 아카이브 카드 **50장마다 세션 문서 50건 추가 read**(N+1)가 필요하다 — **§15.4.1이 정확히 이 이유로 역정규화를 확정했고** `difficultyLevel`·`scenarioId`·`channel`이 이미 그 규칙으로 리포트에 들어와 있다 | `src/lib/archive/fetchArchivePage.ts:3-6`·`:31` · `functions/src/shared/types.ts:418-433` · §15.4.1 |
+| **나** | ⭐⭐ **UX-008의 세션 read는 "장식용"이고 실패를 삼킨다.** 그 경로로 고지를 읽으면 **read가 실패·거부될 때 고지가 조용히 사라져 "강등 없음"으로 읽힌다** — T158 D② 가 명시한 *"없는 필드는 항상 falsy라 정상으로 읽힌다"* 사고와 **같은 형태**다 | `src/app/report/page.tsx:176-178` |
+| **다** | ⭐ **추가 비용이 0이다.** 리포트 생성기는 **함수 첫 줄에서 이미 세션을 읽고 있다** — 복사는 read 0회 추가다(`smsTimeline`·`stages`가 밟은 것과 같은 길) | `functions/src/report/generateReportCore.ts:41-46`·`:259-296` |
+| **라** | ⭐ **값이 굳는 시점이 리포트 생성보다 확실히 앞선다.** 리포트는 `status==="ended"` 를 요구하고(`:47-49`), 태그 write 트랜잭션은 `triggerReportGeneration` **앞에서** 커밋된다 ⇒ 스냅샷이 "미완성 값"을 굳힐 위험이 실질적으로 없다(잔여 창 1건은 **48.9 G282**) | `generateReportCore.ts:47-49` · `roleplay/index.ts:340-374` |
+
+#### 48.2.1 확정 스키마 — 필드 이름·타입·기록 지점 (⛔ implementer는 이 이름을 그대로 쓴다)
+
+| 항목 | 확정값 |
+|---|---|
+| **필드** | **`ReportDoc.llmProvider?: LlmProviderName`** — 세션 문서와 **같은 이름·같은 타입**을 그대로 복사한다 |
+| **정의 위치(신설)** | `functions/src/shared/types.ts` — **`ReportDoc`**(현재 `:410-450`) 안. `mockScreenTimeline`(`:449`) 다음에 append |
+| **기록 지점(신설)** | `functions/src/report/generateReportCore.ts` — `reportDoc` 리터럴(현재 `:259-295`) 안에 **조건부 스프레드 1줄**: `...(session.llmProvider ? { llmProvider: session.llmProvider } : {})`. ⛔ **`session`은 이미 `:46`에 있다 — 추가 read 0회** |
+| **읽는 지점(화면)** | `src/app/report/page.tsx` — `fetchReport` 매핑(현재 `:122-138`)에 1줄 추가. **표시 조건자 = `report.llmProvider === "mock"`** |
+| **무백필** | ⛔ **기존 리포트 문서를 한 건도 update하지 않는다**(백필 스크립트 0건). `stages`·`smsTimeline`과 **같은 규칙**이며 **AC-007**(*"생성 이후 이 문서를 update하지 않는다"*, `generateReportCore.ts:286-287`)을 지킨다 |
+| **왜 boolean이 아니라 값 복사인가** | ⓐ **앱 전체가 조건자 하나(`=== "mock"`)로 통일된다** — 48.5의 화면 판정도 같은 조건자를 쓴다 ⇒ grep 1회로 전수 확인된다. ⓑ `isMock`이라는 이름은 **엔드포인트마다 뜻이 다른 4개의 응답 필드**(`types.ts:34`·`:74`·`:91`·`:131` — 각각 **목소리 / 오프닝 / 턴 / 실시간 자격증명**)와 충돌한다 ⇒ 문서 필드에 그 이름을 재사용하면 *"어느 isMock인가"* 가 리뷰에서 다시 갈린다. ⓒ 장래에 `claude`/`gemini` 구분이 필요해져도 **스키마 변경 0건** |
+
+#### 48.2.2 ⛔ 이 판정에 딸린 **금지 1건** — 긍정 표기를 만들지 마라 (G274)
+
+무백필이므로 **이 변경 이전에 생성된 모든 리포트에는 이 필드가 없다.** 그 리포트들이 실제로 강등 세션이었을 수 있다. ⇒ ⛔ **화면은 "이 훈련은 실제 AI로 진행됐습니다" 류의 *긍정* 표기를 어디에도 만들지 않는다.** 필드 부재 = **아무 말도 하지 않음**이어야 하며, 부재를 *"정상이었다"* 로 렌더하는 순간 **구 리포트 전량이 거짓을 말하게 된다.** (⭐ D-65·P-31이 이미 "강등이면 1줄, 아니면 없음"만 규정했으므로 이 금지는 **문면 저작이 아니라 그 규정의 보존**이다.)
+
+---
+
+### 48.3 축을 가른다 — **대사 축 ≠ 목소리 축** (⛔ implementer가 합치지 않도록 명문화)
+
+이 저장소에는 **강등 신호가 두 축**으로 있고 **둘 다 세션 문서에 남는다.** 섞으면 리포트가 **근거 없는 말**을 한다.
+
+| 축 | 세션 문서 필드 | write 지점 | write 규칙 | 채택된 문면 |
+|---|---|---|---|---|
+| **대사(dialogue)** | **`llmProvider`** | `roleplay/index.ts:346` · `session/index.ts:180` · `challenge/userAccess.ts:195` | ⭐ **mock일 때만 write**(부재 = 강등 관측 없음) | **ⓔ**(대사 표면) · **ⓖ**(리포트) — `docs/UX.md:1801`·`:1803` |
+| **목소리(voice)** | **`voiceProvider`** | `functions/src/voice/index.ts:77` | ⚠️ **항상 write**(`"mock"` 또는 `"elevenlabs"`) — 대사 축과 **규칙이 다르다** | **ⓕ**(UX-003 전용) — `docs/UX.md:1802` |
+
+⇒ **판정: 48.2가 확정한 리포트 1줄은 *대사 축만* 읽는다**(`llmProvider`). 이유는 D-66이다 — 채택 문면 **ⓖ**는 *"이 훈련의 **대화 일부**는 미리 준비된 대사로 진행됐습니다"* 이고, **임시 음성 + 실제 AI 대사** 세션에 그 문장을 붙이면 **사실이 아닌 말**이 된다. **ⓕ는 UX-003 전용으로 채택됐고 리포트용 문면은 채택된 것이 없다.** ⇒ 리포트가 목소리 축도 표기할 것인가는 **문면이 없으므로 지금 정할 수 없다** → **OQ-A41**(ux-design·planner 소관). ⛔ **architect가 문면을 만들어 메우지 않는다.**
+
+---
+
+### 48.4 UX-021 → UX-014/UX-022 데이터 흐름 실측 — OQ-U37이 딛고 선 전제의 검증
+
+OQ-U37은 *"`ConsentChallengeResponse`에 `isMock`이 없어 **세션 중 고지가 구조적으로 불가능**하다"* 고 적었고, **AC-084 (a)** 도 사용자2를 *"계약에 그 값이 없어 **구조적으로 알릴 수 없는** 표면"* 으로 분류했다.
+
+⭐⭐ **실측 결과: 전반부(계약에 없다)는 참이고, 후반부(알릴 수 없다)는 거짓이다. 두 문장은 같은 층이 아니다.**
+
+| 사용자2가 지나는 지점 | 강등 신호가 도달하는가 | 근거 |
+|---|---|---|
+| **UX-021 동의 → `consentChallenge`** | ⛔ **콜러블 응답에는 없다**(전반부 = 참) | `src/lib/api/types.ts:354-361` · `functions/src/challenge/types.ts:81-84` |
+| **UX-014/UX-022 마운트** | ⭐⭐ **온다** — 두 화면이 **이미** `sessions/{sid}` 를 read하고 있고, `consentChallenge`가 강등이었다면 그 문서에 **`llmProvider:"mock"` 이 이미 찍혀 있다** | 화면 read `play/page.tsx:238` · `messenger/page.tsx:117` / 서버 write `challenge/userAccess.ts:195` / 권한 `firestore.rules:34`·`:52` |
+| **이후 매 턴(`sendMessage`)** | ⭐ **온다** — `SendMessageResponse.isMock`은 **이미 계약에 있고 사용자2도 같은 콜러블을 탄다** | `src/lib/api/types.ts:91` · `functions/src/roleplay/index.ts` |
+| **실시간 자격증명(`createRealtimeCall`)** | ⭐ **온다** | `src/lib/api/types.ts:131` · 유일한 기존 소비자 `src/lib/realtime/useRealtimeCall.ts:198` |
+| **새로고침 복원** | ⭐ **온다**(세션 문서는 스티키·서버 소유) | 실측 6 |
+
+⇒ **사용자2에게 실제로 비어 있던 칸은 "세션 전체"가 아니라 오프닝 1턴의 *응답 경로* 하나뿐이고, 그 칸조차 세션 문서가 이미 메우고 있다.**
+
+---
+
+### 48.5 ⭐⭐ OQ-U37 판정 — **(a)도 (b)도 아니다: 계약을 확장하지 않고, 화면이 이미 하는 read에 1줄을 얹는다**
+
+**판정: 제3안 채택.** `ConsentChallengeResponse`에 `isMock`을 **추가하지 않는다.** 대신 **UX-014/UX-022가 마운트 시 이미 읽는 세션 문서에서 `llmProvider`를 함께 읽는다.**
+
+| 후보 | 판정 | 이유 |
+|---|---|---|
+| **(a)** `ConsentChallengeResponse`에 `isMock: boolean` 추가 | ⛔ **기각** | ⓐ **필요가 없다** — 48.4가 보인 대로 같은 사실이 세션 문서로 이미 도달한다. ⓑ **소비자가 없다** — **D-64는 UX-021(동의 화면)을 고지 표면 4개에 넣지 않았다**(`docs/UX.md:2526`) ⇒ 값을 받아도 **다음 화면으로 넘기는 일밖에 못 한다.** ⓒ 그 넘기기 수단인 `sessionStorage`는 **탭 범위이고 소비 시 삭제된다**(`pendingSession.ts:97-101` `consumeOpeningMessageText`) ⇒ **새로고침 한 번에 고지가 사라진다** — P-31 (3) sticky 위반. ⓓ **이 저장소가 이미 같은 함정을 겪고 명문 규칙을 세웠다**: *"세션 셸 배지·리포트 표기는 **그 문서 값**을 읽는다 — sessionStorage가 아니라"*(`src/lib/recording/pendingSession.ts:204-206`, T72/P-22). ⓔ 계약 확장은 **두 파일 동기화 부채**를 늘리는데, 그 부채가 **이미 터져 있다**(48.6) |
+| **(b)** 리포트 층 고지로 충분하다고 보고 *"세션 중엔 알릴 수 없다"* 를 기록 | ⛔ **기각** | **전제가 거짓이다**(48.4). 기록해 버리면 **닫을 수 있는 구멍을 "구조적 한계"로 봉인**하게 된다 — AC-084 (a)가 요구한 *"명시 기록"* 은 **정말 불가능할 때의 처분**이지 **미확인의 처분이 아니다** |
+| **(c)** ⭐ **채택** — 화면이 이미 하는 세션 read에 `llmProvider`를 얹는다 | ⭕ **채택** | ⓐ **신규 계약·신규 read·신규 표면 0건**. ⓑ **사용자1·사용자2가 완전히 같은 코드 경로**를 탄다(분기 0건) — 사용자1의 `createSession.isMock`(`types.ts:74`)도 화면이 안 읽고 있으므로 **두 진입점 모두 같은 방식으로 닫힌다**. ⓒ **새로고침에 강하다**(서버 문서가 원천). ⓓ **T72 난이도 배지가 밟은 길과 글자 그대로 같은 자리**다 — `play/page.tsx:253-255` / `messenger/page.tsx:131-133`. ⓔ read 실패 시 화면은 이미 `load-error`로 가므로(`play/page.tsx:241-243`) **"조용히 정상으로 읽히는" 상태가 만들어지지 않는다** |
+
+#### 48.5.1 세션 중 고지 상태의 확정 규칙 (⛔ implementer 계약)
+
+```
+degradedDialogue  :=  (마운트 시 sessions/{sid}.llmProvider === "mock")
+                   OR (이번 세션에서 받은 어떤 SendMessageResponse.isMock === true)
+                   OR (이번 세션에서 받은 CreateRealtimeCallResponse.isMock === true)
+```
+- ⭐ **OR 폴드이며 절대 되돌리지 않는다**(false로 내리는 대입 0건) — P-31 (3) sticky·⛔ 점멸 금지의 구현 형태이고, **서버 태그가 스티키인 것과 같은 의미**다(실측 6).
+- ⛔ **`createVoiceClone.isMock`(`types.ts:34`)은 이 식에 넣지 않는다** — **목소리 축**이며 UX-003 전용이다(48.3).
+- ⛔ **이 값은 훈련을 차단·게이팅하지 않는다**(P-31 (5) · AC-065 · AC-084 (e)).
+
+#### 48.5.2 그러면 AC-084 (a)의 "구조적 불가 표면"은 어떻게 되는가
+
+⇒ ⭐ **이 판정 이후 "구조적으로 알릴 수 없는 표면" = 0건이다.** T158 D③(침묵 표면 0건 표)은 *"구조적 불가라 기록만 한다"* 행 없이 **전 표면이 닫힌 표**로 제출되어야 한다. ⚠️ **AC-084 (a)의 괄호 서술**(*"계약에 그 값이 없어 구조적으로 알릴 수 없는 표면(2인 챌린지 사용자2 — `ConsentChallengeResponse`)"*)은 **콜러블 계약 층에 한해 참이고 표면 층에서는 거짓**이다 — ⛔ **architect는 `docs/PRD.md`를 편집하지 않는다.** planner 인계 **48.10 ②**.
+
+---
+
+### 48.6 ⚠️ 이 패스가 발견한 **기존 계약 드리프트 2건** (T158이 밟게 될 지뢰 — ⛔ 이 절이 만든 것이 아니다)
+
+| # | 드리프트 | 실측 | 함의 |
+|---|---|---|---|
+| **드-1** | ⭐ **`src/lib/api/types.ts:335`가 선언한 *"`functions/src/challenge/types.ts`와 1:1"* 이 오늘 거짓이다.** 서버 핸들러는 `openingMessageText`를 반환하고 클라는 그것을 읽는데, **서버측 타입에는 그 필드가 없다** | 반환 `functions/src/challenge/userAccess.ts:262` · 소비 `src/app/challenge/join/page.tsx:125` · 클라 타입 `src/lib/api/types.ts:360` · ⛔ **서버 타입 `functions/src/challenge/types.ts:81-84` 에 부재** | ⭐⭐ **타입 검사가 이 불일치를 잡지 못했다** — 핸들러가 `onCall<…, Promise<ConsentChallengeResponse>>`로 명시 제네릭을 달고 있는데도(`userAccess.ts:89`) 빌드가 통과한다(`CLAUDE.md` 검증표 2026-07-27). ⚠️ **왜 통과하는지는 추정이다**(제네릭에 `Promise<…>`를 넘겨 문맥 타이핑이 풀린 것으로 보인다) — **검증법**: 두 파일 중 하나에만 필드를 더해 보고 빨강이 나는지 확인한다. ⇒ ⛔ **implementer는 "타입이 잡아 줄 것"에 기대지 말고 두 파일을 눈으로 맞춰라**(G277) |
+| **드-2** | `docs/API.md:160`의 `consentChallenge` Response = `{ sessionId: string }` — **이미 반환 중인 `openingAudioUrl`·`openingMessageText` 2필드가 문서에 없다** | `docs/API.md:160` ↔ `functions/src/challenge/userAccess.ts:259-263` | 48.8에서 **API.md에 증분 절을 append해 사실을 기록**했다(⛔ `:160` 원문 무수정 — 그 줄은 T35 시점의 사실 기록이다) |
+
+---
+
+### 48.7 기존 게이트 무약화 — 전수 확인 10행
+
+| # | 게이트 | 이 판정이 건드리는가 | 근거 |
+|---|---|---|---|
+| 1 | **AC-007** *"종료된 모든 세션은 정확히 1개 리포트"* + *"생성 이후 update 안 함"* | ⛔ **무변경** — 필드는 **최초 생성 리터럴에만** 들어가고 멱등 early-return은 그대로다 | `generateReportCore.ts:54-58`·`:286-287` |
+| 2 | **판정 무변경**(§15.6 G3/G22) — `analyzeConversation`·`buildPreventionAdvice`·`computeDefenseGrade` | ⛔ **무변경** — 새 필드는 **판정 산출 뒤에 나란히 얹히는 표시 전용 값**이다(`smsTimeline`과 동형). 시그니처·입력 **0줄 변경** | `generateReportCore.ts:96`·`:236`·`:259` |
+| 3 | **AC-080**(제출 = 응낙) · **AC-062**(과신·질책 금지) | ⛔ **무변경** — D-65가 *"판정을 무효로 선언하지 않는다"* 를 이미 못 박았고 이 절은 데이터 경로만 정한다 | `docs/UX.md:2536` |
+| 4 | **AC-022**(합성 표식) | ⛔ **대체되지 않는다 · 축이 다르다** — 48.3이 축을 명문으로 갈랐다 | `docs/PRD.md:697` (e) |
+| 5 | **AC-021 / ADR-0003**(즉시 폐기) | ⛔ **무변경** — 폐기 대상(Storage·voice·`voiceId`)에 **`llmProvider`도 리포트 필드도 포함되지 않는다**. ⚠️ 다만 **AC-021이 장래에 "세션 문서 삭제"로 강화되면** 48.2의 근거 **가/나/다**는 그대로 유효하고 UX의 원래 우려가 **비로소 성립**한다(G283) | `guardrails/purge.ts` · `guardrails/index.ts:113` |
+| 6 | **§14 A1**(사용자2 세션에 챌린지 `voiceId` 미저장) · **ADR-0006 A2**(raw voiceId 반환 경로 한정) | ⛔ **무변경** — 이 절은 **계약을 확장하지 않았고**(48.5), 화면이 읽는 값은 `llmProvider` **하나**다. ⭐ 만약 (a)를 택했더라도 `isMock: boolean`은 **비민감 스칼라**라 §14.2 위반은 아니었을 것이다(선례: `difficultyLevel`을 *"비민감 필드다 — voiceId/linkTokenHash와 달리 반환해도 AC-041 위반이 아니다"* 로 명시, `functions/src/challenge/types.ts:73`) — **기각 사유는 안전이 아니라 불필요함이다** | `functions/src/challenge/userAccess.ts:11-14` · §14.2 |
+| 7 | **AC-043**(사용자1의 사용자2 결과 열람 제한) | ⛔ **무변경** — `challenges.resultSummary` 스키마 **무변경**. 새 필드는 **사용자2 소유 리포트 문서 안**이며 사용자1은 read 권한이 없다 | `firestore.rules:98-100` · §14.1 |
+| 8 | **firestore.rules / indexes** | ⛔ **무변경 0줄** — 기존 문서에 옵셔널 필드 1개를 더할 뿐이고 **쿼리·인덱스 대상이 아니다** | `firestore.rules:98` · `firestore.indexes.json` |
+| 9 | **AC-006**(훈련 종료 상시 도달) · **P-4**(핵심 루프 비차단) · **AC-065**(안전장치 무게이팅) | ⛔ **무변경** — 48.5.1이 *"차단·게이팅하지 않는다"* 를 계약으로 못 박았다 | P-31 (5) |
+| 10 | **§42 / T136 회귀**(`tacticsUsed` 합집합) | ⛔ **무접촉** — `deceivedMoments`·`tacticsUsed` 생성 규칙 **0줄 변경** | §42.6 B |
+
+---
+
+### 48.8 이 절이 확정한 스키마 델타 — 문서 반영 위치
+
+| 문서 | 반영 | ⛔ 이것은 |
+|---|---|---|
+| `docs/Database.md` | **부록 B** 신설 — `reports/{reportId}` 증분 1필드 | **스키마를 *정한* 것**이지 구현이 아니다(소스 0줄) |
+| `docs/API.md` | **`consentChallenge` 증분** 절 신설 — ⭐ **계약 무변경임을 명시 기록** + 드-2(문서 누락 2필드) 정정 | 침묵으로 남기지 않기 위한 기록 |
+| `docs/DECISIONS.md` | **#83** 1행 append | |
+
+**UX Screen ID ↔ 산출물 매핑**(추적성):
+
+| Screen/Flow ID | 이 절이 확정한 것 | 자리 |
+|---|---|---|
+| **UX-008**(리포트) | `ReportDoc.llmProvider` 신설 + `=== "mock"` 조건자 | `functions/src/shared/types.ts` ReportDoc · `generateReportCore.ts:259-295` · `src/app/report/page.tsx:122-138` |
+| **UX-018**(리플레이) · **UX-030**(아카이브) | ⭐ **신규 read 0건 · 신규 필드 0건** — UX-008 표기를 **리포트 문서 필드로 상속**(D-65) | `src/app/report/replay/page.tsx:91-93` · `src/lib/archive/fetchArchivePage.ts` |
+| **UX-014**(통화 텍스트 폴백 phase) · **UX-022**(메신저) | 48.5.1 `degradedDialogue` OR 폴드 | `play/page.tsx:238`·`253-255`(선례) · `messenger/page.tsx:117`·`131-133`(선례) |
+| **UX-021**(사용자2 동의) | ⭐ **계약 무변경 · 화면 무변경 0건** | `src/app/challenge/join/page.tsx` |
+| **UX-003**(임시 음성) | ⛔ **이 절 범위 밖 — 목소리 축**이며 `CreateVoiceCloneResponse.isMock`(`types.ts:34`)을 그대로 쓴다 | 48.3 |
+
+---
+
+### 48.9 갭 · 신규 OQ
+
+| # | 갭(implementer/reviewer/QA가 지켜야 할 것) |
+|---|---|
+| **G273** | 리포트 고지의 조건자는 **`reports/{sid}.llmProvider === "mock"` 하나**다. ⛔ **UX-008·UX-018·UX-030 어디에서도 이 목적으로 세션 문서를 읽지 않는다**(검증: 세 화면의 세션 read가 늘지 않았는가) |
+| **G274** | ⛔ **긍정 표기 금지** — *"실제 AI로 진행됐습니다"* 류 0건(48.2.2). 무백필 구 리포트가 거짓을 말하게 된다 |
+| **G275** | ⛔ **축 분리** — 리포트 1줄은 **대사 축(`llmProvider`)만** 읽는다. `voiceProvider`·`createVoiceClone.isMock`을 섞지 않는다(48.3) |
+| **G276** | ⛔ **무백필** — 기존 `reports` 문서 update 0건 · 마이그레이션 스크립트 0건 · 부재 필드는 **표시 없음**으로만 처리 |
+| **G277** | ⭐ **타입 검사에 기대지 마라** — 계약을 만지게 되면 `src/lib/api/types.ts`와 `functions/src/challenge/types.ts` **두 파일을 눈으로 맞춘다**(드-1: 오늘 이미 어긋나 있는데 빌드가 통과한다) |
+| **G278** | ⭐ **sticky는 OR 폴드로만** — `degradedDialogue`를 false로 내리는 대입 0건(48.5.1). 검증: `setDegraded(false)`·`= false` 형태 grep 0건 |
+| **G279** | ⛔ **`sessionStorage`로 강등 사실을 나르지 않는다**(P-22 선례 `pendingSession.ts:204-206`) — 새로고침에 사라지는 고지는 P-31 (3) 위반이다 |
+| **G280** | ⛔ **판정 무변경** — `analyzeConversation`/`buildPreventionAdvice`/`computeDefenseGrade` 시그니처·입력 0줄. 회귀 테스트(`smsTimeline.test.ts` 계열)가 그대로 통과해야 한다 |
+| **G281** | ⛔ **추가 Firestore read 0회** — 리포트 생성기는 `:46`의 `session`을 재사용한다. 화면은 이미 하는 read를 재사용한다 |
+| **G282** | ⚠️ **닫지 못한 잔여 창(설계로 수용)**: 참가자가 `endSession`을 누른 **직후 도착하는 in-flight Mock 턴**은 태그를 리포트 생성 **뒤에** 쓸 수 있다 ⇒ 그 희귀 케이스에서 **리포트가 침묵**한다(거짓 주장이 아니라 누락). ⭐ 이것은 **이 절이 만든 것이 아니라** `roleplay/index.ts:332-339`가 이미 문서화한 종료 레이스의 그림자다. **OQ-A42** |
+| **G283** | ⚠️ **장래 리스크 보존** — AC-021이 *"세션 문서 자체 삭제"* 로 강화되면 UX의 원래 우려(*"어제와 오늘 다른 말"*)가 **비로소 성립**한다. 48.2 채택안은 그 경우에도 **이미 안전하다** ⇒ ⛔ **이 판정을 되돌리지 말 것** |
+
+| OQ | 내용 | 소관 · 상태 |
+|---|---|---|
+| **OQ-A41** | ⭐ **리포트가 *목소리 축* 강등(`voiceProvider:"mock"`)도 표기할 것인가.** 오늘은 **채택된 리포트 문면이 대사 축(ⓖ)뿐**이라 데이터가 있어도 붙일 문장이 없다(48.3). ⛔ **architect가 문면을 만들지 않는다** | **ux-design · planner** · **open** |
+| **OQ-A42** | **G282의 종료 레이스 창을 지금 닫을 것인가**(예: 리포트 생성 직전 세션 재read, 또는 `endSession`이 in-flight 턴을 기다림). ⚠️ **빈도 미측정**이고 결과가 *"거짓"* 이 아니라 *"침묵"* 이라 P0가 아니다 | **planner · architect(차기 패스)** · **open** |
+
+---
+
+### 48.10 implementer 인계 — **T158 D항 "완료 판정 필수 증거" 6개**에 이 판정이 채워 넣은 값
+
+⚠️ **인계 정정 1건 먼저**: `docs/UX.md:1792`(P-31 (1))·`:2527`(D-64 Reason)이 UX-014의 자리로 인용한 **`src/app/session/play/page.tsx:1315-1329`** 는 **base `650ce65`에서 그 위치가 아니다** — 그 구간은 현재 **입력창·전송 버튼**이다(직접 열람). ⇒ ⛔ **줄번호로 찾지 말고 "텍스트 폴백 phase의 기존 상태 1줄"이라는 *내용*으로 찾을 것.** (UX.md는 architect 소유가 아니므로 고치지 않았다 — **T159 ux-design 인계 항목에 추가**.)
+
+| T158 D항 | 이 절이 확정해 준 것 |
+|---|---|
+| **①** 역방향 확인(강등/비강등 나란히) | 재현 손잡이 3개 — ⓐ `sessions/{sid}.llmProvider` 를 `"mock"`으로 둔 픽스처(마운트 경로) · ⓑ `SendMessageResponse.isMock` 스텁(턴 경로) · ⓒ `reports/{sid}.llmProvider` 유/무 2케이스(리포트 경로). **비강등 케이스 = 세 값 전부 부재/false** ⇒ **G274·M-6**이 요구하는 *"고지 0건"* 이 같은 출력에 나온다 |
+| **②** ⛔ **읽는 값의 이름 + 정의 위치(파일:줄)** | ⭐ **여기 있다** — 화면이 읽는 값 3개: **`SessionDoc.llmProvider`** = `functions/src/shared/types.ts:91`(기존) · **`SendMessageResponse.isMock`** = `src/lib/api/types.ts:91`(기존) · **`CreateRealtimeCallResponse.isMock`** = `src/lib/api/types.ts:131`(기존). 리포트가 읽는 값 1개: **`ReportDoc.llmProvider`** = `functions/src/shared/types.ts` **ReportDoc**(현재 `:410-450`, **이 태스크가 신설**) — 기록 지점 `functions/src/report/generateReportCore.ts:259-295`. ⭐ **"응답 필드 ↔ 로그 두 경로 교차 확인"의 짝**: `roleplay/index.ts`의 `logger.warn` 강등 로그 ↔ 같은 턴의 `SendMessageResponse.isMock`(§44.8이 *"운영자는 알고 참가자는 모른다"* 고 지목한 그 쌍이다) |
+| **③** 침묵 표면 0건 표 | ⭐ **"구조적 불가" 행이 0이 되었다**(48.5.2). 표는 **5행**이어야 한다 — `CreateVoiceCloneResponse`(UX-003) · `CreateSessionResponse`(사용자1 진입, ⚠️ **오늘 화면이 안 읽는다**) · `SendMessageResponse`(UX-014/UX-022) · `CreateRealtimeCallResponse`(UX-014, **이미 읽고 있다** — `useRealtimeCall.ts:198`) · **`consentChallenge` 경유 사용자2**(⭐ **계약이 아니라 `sessions/{sid}.llmProvider` 로 닫힌다** — 48.5) |
+| **④** AC-084 (c) 네 금지 대조 | ⛔ **문면은 이 절이 만들지 않는다** — `docs/UX.md:1795-1805` 판정표 **ⓔ/ⓕ/ⓖ 채택 3건**을 그대로 쓰고 **ⓐ~ⓓ·ⓗ·ⓘ 기각 6건**과 문안 그대로 대조한다 |
+| **⑤** 테스트 수 before/after | ⛔ **착수 시 재측정**(`CLAUDE.md` 표의 616/278은 2026-07-29 인용값이며 **architect는 이 패스에서 실행 0건**). ⚠️ **격리 워크트리 필수 · `npm --prefix functions install` 금지**(`CLAUDE.md` 경고) |
+| **⑥** 재현 실패 시 명시 | ⭐ **architect도 재현하지 못했다** — 48.11에 그대로 기록했다. implementer가 못 하면 **같은 형식으로 명시**하고 **대신하는 검사**(순수 함수 픽스처 3개 — ①)를 적을 것 |
+
+**타 에이전트 인계 3건(⛔ architect가 그 문서를 편집하지 않았다):**
+1. **ux-design(T159에 append)** — ⓐ **OQ-U36 → `resolved`**(Decision: *"architect가 §48.2에서 리포트 문서 필드 `llmProvider` 신설로 확정. ⚠️ UX가 든 이유(세션 문서 폐기)는 이 저장소에서 성립하지 않으며 채택 근거는 N+1·장식용 read·비용 0·시점 확정 4건이다"*). ⓑ **OQ-U37 → `resolved`**(Decision: *"계약 확장 없이 §48.5 제3안 채택 — 세션 문서 read. '구조적으로 불가능'은 콜러블 계약 층에 한해 참이다"*). ⓒ **P-31 (1)·D-64 Reason의 인용 좌표 `play/page.tsx:1315-1329` 정정**. ⛔ **Question·Reason 열은 그 시점의 사실 기록이므로 고치지 않는다**(OQ-U38 처리 관례와 동일).
+2. **planner** — **AC-084 (a)** 괄호 안 *"구조적으로 알릴 수 없는 표면(2인 챌린지 사용자2)"* 서술이 **표면 층에서 거짓이 되었다**(48.5.2). 문면 정정 여부는 planner 판단이며, ⚠️ **정정하지 않아도 구현은 막히지 않는다**(요구는 *"침묵 0건"* 이고 이 판정은 그것을 **더 강하게** 만족시킨다).
+3. **planner/QA** — **G282**(종료 레이스 창)와 **OQ-A41/A42**.
+
+---
+
+### 48.11 이 패스의 편집 범위 · ⛔ 닫지 못한 것 (⛔ 정본)
+
+**편집한 파일 4개**: `docs/Architecture.md`(**신규 §48** 1곳) · `docs/Database.md`(**부록 B** append) · `docs/API.md`(**`consentChallenge` 증분** append) · `docs/DECISIONS.md`(**#83** 1행 append).
+⛔ **소스 0줄 · 신규 의존성 0건 · AC 0건 · ADR 0건 · 번호 예약 0건 · §0~§47·ADR-0001~0014 원문 삭제 0건 · `docs/PRD.md`·`docs/UX.md`·`docs/Tasks.md`·`CLAUDE.md`·`firestore.rules`·`functions/**`·`src/**` 무편집 · 커밋·push 0건.**
+⚠️ **번호 고지**: **§48 · 48.0~48.11 · G273~G283 · OQ-A41/A42 · #83** — 착수 시 실측 최대는 **§47 · G272 · OQ-A40 · #82**였다(48.0). ⭐ **동시 패스가 있으면 이 번호는 병합 순서로 확정된다** — 조정이 필요하면 치환 대상은 **`docs/Architecture.md`의 §48 헤딩 이후**와 **`docs/DECISIONS.md` #83 행 안**뿐이다. ⛔ **전역 치환 금지**(§47.11이 기록한 `G-[A-M]` 사고와 같은 함정 — `G27x`는 이 절 밖에도 있다).
+
+**⛔ 닫지 못한 것 (지우지 말 것 — G284 대신 이 목록이 그 역할을 한다):**
+1. ⭐⭐ **architect는 강등된 화면을 한 번도 보지 못했다.** 이 절의 모든 판정은 **파일 열람·grep**만으로 세웠다. **라이브·에뮬레이터·테스트·빌드 실행 0건**(셸 없음).
+2. **강등 발생 빈도는 여전히 미측정**이다(쿼터 잔량 실측 수단 0건 — §44). 이 절은 빈도를 가정하지 않는다.
+3. **드-1의 "왜 빌드가 통과하는가"는 추정이다**(48.6) — 검증법을 함께 적었다.
+4. **G282의 종료 레이스 창은 코드로 확인한 *가능성*이지 관측된 사고가 아니다** — 재현 0건.
+5. `docs/UX.md`가 인용한 **`play/page.tsx:1315-1329`** 가 어디로 밀렸는지 **정확한 새 좌표는 찾지 않았다**(그 자리는 ux-design·implementer가 내용으로 특정한다). 확인한 것은 **"그 줄번호가 상태 1줄이 아니다"** 까지다.
+6. **`CLAUDE.md` 검증표의 테스트 수(616/278)는 인용값**이며 이 패스에서 재측정하지 않았다.

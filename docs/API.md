@@ -334,3 +334,26 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 ### `generateReport` **확장** — `stages`·`mockScreenTimeline` 스냅샷 + 승격 (T80 · §15.9.5)
 - **계약 무변경**(응답은 여전히 `{ reportId }`). `generateReportForSession`이 `sessions/{sid}/mockScreens`를 **1회 read**해 ① `mockScreenTimeline` 스냅샷 ② `consented` 항목의 `deceivedMoments` 승격·재정렬 ③ `stages` 파생을 처리한다.
 - **멱등 early-return 무변경** → 리포트는 여전히 **세션당 정확히 1개**(AC-007).
+
+## 부록 B — Mock 강등 고지 (T158 · Architecture.md **§48** · AC-084 · UX v1.19 D-64/D-65/P-31)
+> **⛔ 이 부록은 계약을 *정한다*. 구현은 T158이며 이 패스의 소스 편집은 0줄이다.**
+
+### `consentChallenge` **증분** — ⭐ **계약 무변경 판정**(OQ-U37) (T158 · §48.5)
+- ⭐⭐ **판정: `ConsentChallengeResponse`에 `isMock`을 추가하지 않는다.** OQ-U37(`docs/UX.md:2594`)이 제시한 두 후보 **(a) 계약 확장 / (b) 리포트 층으로 충분** 중 **어느 쪽도 아닌 제3안**이다 — 자세한 판정표는 **§48.5**.
+- **왜 확장하지 않는가(요지):** ⓐ 사용자2가 세션 **중** 강등을 알 경로가 **이미 3개** 있다 — `SendMessageResponse.isMock`(`src/lib/api/types.ts:91`) · `CreateRealtimeCallResponse.isMock`(`:131`) · ⭐ **UX-014/UX-022가 마운트 시 이미 read하는 `sessions/{sid}.llmProvider`**(`src/app/session/play/page.tsx:238` · `src/app/session/messenger/page.tsx:117`, 권한 `firestore.rules:34`). ⓑ **D-64는 UX-021(동의 화면)을 고지 표면 4개에 넣지 않았다** ⇒ 값을 받아도 소비자가 없고 다음 화면으로 넘기는 일밖에 못 한다. ⓒ 그 넘기기 수단인 `sessionStorage`는 **탭 범위이고 소비 시 삭제**되어(`src/lib/recording/pendingSession.ts:97-101`) **새로고침에 고지가 사라진다** — P-31 (3) sticky 위반이며, 이 저장소는 같은 함정에 대해 이미 *"세션 셸 배지·리포트 표기는 **그 문서 값**을 읽는다 — sessionStorage가 아니라"*(`pendingSession.ts:204-206`, T72/P-22) 라는 규칙을 갖고 있다.
+- ⚠️ **"세션 중 고지가 구조적으로 불가능"은 층을 착각한 서술이다** — **콜러블 응답 계약 층에서는 참**이고 **표면 층에서는 거짓**이다(§48.4 실측표). ⇒ **AC-084 (a)의 "구조적으로 알릴 수 없는 표면" 집합은 이 판정 이후 0건**이며, T158의 침묵 표면 표는 *"구조적 불가라 기록만 한다"* 행 없이 **전 표면이 닫힌 표**로 제출된다(§48.5.2).
+- **서버 동작 무변경 0줄.** `consentChallenge`는 이미 강등 사실을 세션 문서에 기록하고 있다(`functions/src/challenge/userAccess.ts:134` → `:195` — `isMock`이면 `llmProvider:"mock"`). ⛔ **그 write를 이 태스크가 만지지 않는다.**
+- **§14 A1 / ADR-0006 A2 무약화 0건** — 응답 형태가 바뀌지 않으므로 raw `voiceId`·오디오·`linkTokenHash` 노출면이 **한 글자도 넓어지지 않는다**.
+
+#### ⚠️ 문서 정정 — 위 `:160` Response 서술이 코드보다 뒤처져 있다 (⛔ 이 패스가 만든 드리프트가 아니다)
+| 항목 | 문서(`docs/API.md:160`) | 코드(실측) |
+|---|---|---|
+| Response | `{ sessionId: string }` | `{ sessionId, openingAudioUrl?, openingMessageText? }` — `functions/src/challenge/userAccess.ts:259-263` |
+- ⛔ **`:160` 원문은 고치지 않았다**(T35 시점의 사실 기록이며 소유 이력을 지우지 않는다) — 현행 사실은 이 행이 정본이다.
+- ⭐⭐ **파생 경고(T158 implementer 필수)**: `src/lib/api/types.ts:335`가 선언한 *"`functions/src/challenge/types.ts`와 1:1"* 이 **오늘 거짓이다** — 서버 타입(`functions/src/challenge/types.ts:81-84`)에는 `openingMessageText`가 **없는데도** 핸들러가 그것을 반환하고(`userAccess.ts:262`) 클라가 소비하며(`src/app/challenge/join/page.tsx:125`) **빌드가 통과한다**(핸들러가 `onCall<…, Promise<ConsentChallengeResponse>>` 명시 제네릭을 달고 있음에도 — `userAccess.ts:89`). ⇒ ⛔ **이 계약을 만지게 되면 타입 검사가 잡아 줄 것이라고 기대하지 말고 두 파일을 눈으로 맞출 것**(§48 G277). ⚠️ **왜 통과하는지는 추정이다** — 검증법: 두 파일 중 하나에만 필드를 더해 빨강이 나는지 본다.
+
+### `generateReport` **증분** — 대사 출처 역정규화 (T158 · §48.2 · AC-084 (b))
+- **계약 무변경**(응답은 여전히 `{ reportId }`). `generateReportForSession`이 **이미 읽고 있는 세션 문서**(`functions/src/report/generateReportCore.ts:41-46`)에서 **`llmProvider`를 리포트 문서로 1회 복사**한다 — **추가 Firestore read 0회**.
+- 필드 정의는 `docs/Database.md` **부록 B.1**. 값이 없으면 필드를 만들지 않는다(무백필).
+- **멱등 early-return 무변경** → 세션당 정확히 1개(AC-007), **생성 이후 update 0건**.
+- ⛔ **판정 무변경**(§15.6 G3/G22) — `analyzeConversation`/`buildPreventionAdvice`/`computeDefenseGrade` 시그니처·입력 **0줄**. 새 값은 판정 산출 **뒤에 나란히 얹히는 표시 전용 값**이다(`smsTimeline`과 동형).
