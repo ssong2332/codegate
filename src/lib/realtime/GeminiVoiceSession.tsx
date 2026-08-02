@@ -273,12 +273,24 @@ export default function GeminiVoiceSession({
 
     // 게이트를 닫을(=마이크를 다시 열) 시각을 다시 잡는다. 청크가 새로 올 때마다, 그리고
     // turnComplete를 받을 때마다 호출된다.
-    const scheduleGateClose = () => {
+    // ⭐ 사용자 라이브 신고 ④(Architecture.md §50.8.5) — `overrides`는 stopSpeaking()이 창③
+    // (interrupted 직후)에서 쓴다. 재생이 이미 멈춘 시점이라 `nextPlayTime`을 그대로 읽으면
+    // stopAllPlayback()이 방금 0으로 되돌린 값이 잡히지만, 명시적으로 넘겨 그 의도를 코드에도
+    // 남긴다(§50.8.1 창③ — "예약 재생은 멈췄어도 이미 출력 버퍼로 나간 소리는 stop()으로 취소되지
+    // 않는다"의 방어).
+    const scheduleGateClose = (overrides?: {
+      remainingPlaybackMs: number;
+      turnInProgress: boolean;
+    }) => {
       if (speakingTimer) clearTimeout(speakingTimer);
-      const remainingPlaybackMs = outputContext
-        ? (nextPlayTime - outputContext.currentTime) * 1000
-        : 0;
-      const delay = computeGateCloseDelayMs({ remainingPlaybackMs, turnInProgress });
+      const remainingPlaybackMs =
+        overrides?.remainingPlaybackMs ??
+        (outputContext ? (nextPlayTime - outputContext.currentTime) * 1000 : 0);
+      const turnInProgressForDelay = overrides?.turnInProgress ?? turnInProgress;
+      const delay = computeGateCloseDelayMs({
+        remainingPlaybackMs,
+        turnInProgress: turnInProgressForDelay,
+      });
       speakingTimer = setTimeout(() => {
         agentSpeaking = false;
         turnInProgress = false;
@@ -286,14 +298,17 @@ export default function GeminiVoiceSession({
       }, delay);
     };
 
-    // 즉시 게이트를 닫는다 — 재생이 이미 멈춘 경우(interrupted)에만 쓴다. turnComplete에는 쓰지
-    // 않는다: 그 시점엔 아직 재생될 오디오가 남아 있을 수 있어 즉시 열면 꼬리 소리가 마이크로
-    // 되돌아간다(agentSpeechGate.ts 회귀 2).
+    // ⭐ 사용자 라이브 신고 ④(Architecture.md §50.8.1 창③, §50.8.5) — **즉시 게이트를 열지
+    // 않는다.** 예전에는 interrupted 직후 곧바로 마이크를 열었는데, 예약 재생(scheduledSources)은
+    // stop()으로 멈춰도 **이미 출력 버퍼로 나가 스피커에서 물리적으로 재생 중인 소리**는 취소되지
+    // 않는다 — 그 잔향이 곧바로 열린 마이크로 되돌아가 새 `interrupted`를 연쇄시킬 수 있었다.
+    // `scheduleGateClose`(turnComplete 경로와 같은 함수)를 재사용해 TAIL_GRACE_MS(250ms) 뒤에
+    // 연다 — `remainingPlaybackMs: 0`이므로 지연은 정확히 tailGraceMs다.
+    // ⛔ `stopAllPlayback()`(호출부에서 이 함수보다 먼저 실행됨)은 그대로 즉시 호출된다 — 겹침
+    // 방지는 유지한다.
     const stopSpeaking = () => {
-      agentSpeaking = false;
       turnInProgress = false;
-      if (speakingTimer) clearTimeout(speakingTimer);
-      handlersRef.current.onSpeakingChange(false);
+      scheduleGateClose({ remainingPlaybackMs: 0, turnInProgress: false });
     };
 
     const cleanup = () => {
