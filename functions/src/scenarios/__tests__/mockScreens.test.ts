@@ -388,6 +388,7 @@ test("[T104/G-C 역검증] app-install에 fields를 넣거나 credential-form에
 // 카탈로그 필드가 되면 항목마다 다른 고지가 가능해져 "상황이 갈려도 안 갈리는 것"이 무너진다.
 const SHARED_SAFETY_NOTICES = [
   "(실제로는 어디에도 전송되지 않았습니다 — 훈련용 모의 화면입니다.)",
+  "(실제로는 어디에도 전송되지 않았고 돈도 오가지 않았습니다 — 훈련용 모의 화면입니다.)",
   "AI 훈련용 모의 화면",
   "훈련 종료",
 ];
@@ -403,7 +404,7 @@ test("[T104/G-D] 공유 안전 고지 문구가 카탈로그 어느 필드에도
 });
 
 test("[T104/G-D 역검증] 안전 고지를 카탈로그 문구에 넣으면 위 검사가 실패한다", () => {
-  const poisoned = `${allText}\n(실제로는 어디에도 전송되지 않았습니다 — 훈련용 모의 화면입니다.)`;
+  const poisoned = `${allText}\n(실제로는 어디에도 전송되지 않았고 돈도 오가지 않았습니다 — 훈련용 모의 화면입니다.)`;
   assert.ok(SHARED_SAFETY_NOTICES.some((notice) => poisoned.includes(notice)));
 });
 

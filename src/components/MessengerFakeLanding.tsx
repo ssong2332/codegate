@@ -95,7 +95,7 @@ export default function MessengerFakeLanding({
           <span className="font-semibold text-[#B96A1B]">AI 훈련용 모의 화면</span> ·{" "}
           {landingKind === "app-install"
             ? "실제 설치·권한 부여가 아닙니다"
-            : "실제 로그인/전송이 아닙니다"}
+            : "실제 로그인/전송이 아니며 돈도 오가지 않습니다"}
         </Banner>
         {/* T84 reviewer Major 1(2026-07-26) — UX.md UF-012 Steps §6은 **연속성 앵커 3종**이
             "세 단계 내내 자리를 지킨다"고 요구하는데, 이 오버레이가 `fixed inset-0`으로 페이지
@@ -274,7 +274,7 @@ function CredentialFormMockup({
         {/* ⚠️ **상황이 갈려도 이 고지는 갈리지 않는다**(P-28 ⑤ · G-D) — 컴포넌트 상수이며
             카탈로그 필드가 아니다. 갈리는 것은 위 가짜 성공 문구뿐이다. */}
         <p className="text-sm leading-relaxed text-[#6B655C]">
-          (실제로는 어디에도 전송되지 않았습니다 — 훈련용 모의 화면입니다.)
+          (실제로는 어디에도 전송되지 않았고 돈도 오가지 않았습니다 — 훈련용 모의 화면입니다.)
         </p>
         <Button type="button" onClick={onClose}>
           채팅으로 돌아가기
