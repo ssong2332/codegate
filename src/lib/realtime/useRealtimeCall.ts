@@ -38,6 +38,10 @@ export type RealtimeCallState = {
   /** RealtimeVoiceSession에 넘길 종료 신호(증가시키면 세션이 끊긴다). */
   stopSignal: number;
   errorMessage: string | null;
+  /** T158(§48.1 실측 14, §48.5.1) — `CreateRealtimeCallResponse.isMock`이 한 번이라도 true였는가
+   * (sticky OR — false로 되돌리는 대입 0건, G278). 이 저장소에서 `isMock`을 읽는 유일한 기존
+   * 지점(아래 `start()` 안)의 결과를 그대로 밖으로 노출한다 — 신규 read 0건. */
+  isMock: boolean;
 };
 
 export type RealtimeCallControls = {
@@ -97,6 +101,8 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
   const [isUserSpeaking, setIsUserSpeaking] = useState(false);
   const [stopSignal, setStopSignal] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // T158 — sticky OR. 한 번 true가 되면 false로 되돌리지 않는다(48.5.1 sticky 규칙과 동형).
+  const [isMock, setIsMock] = useState(false);
   // 언마운트 후 늦게 도착한 비동기 결과가 setState를 호출하지 않도록 가드한다.
   const mountedRef = useRef(true);
   // 수신(전화 울림) 중 미리 받아 둔 자격증명 — start()가 "받기" 시점에 신선하면 그대로 쓰고,
@@ -195,6 +201,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     const hasUsableCredentials =
       (issued.provider === "elevenlabs" && Boolean(issued.signedUrl)) ||
       (issued.provider === "gemini" && Boolean(issued.geminiToken));
+    if (issued.isMock) setIsMock(true);
     if (issued.isMock || !hasUsableCredentials) {
       setStatus("fallback");
       return;
@@ -249,6 +256,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     isUserSpeaking,
     stopSignal,
     errorMessage,
+    isMock,
     prefetch,
     start,
     stop,
