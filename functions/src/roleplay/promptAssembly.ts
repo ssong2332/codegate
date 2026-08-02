@@ -24,6 +24,20 @@ const CONVERSATION_STYLE = `[대화 방식 — 반드시 지킨다]
 - **말투는 글이 아니라 말이다.** 문어체 문장이나 낭독조 안내문이 아니라, 실제로 입으로 하는 구어체로 말한다. 상대가 되묻거나 말을 끊으면 자연스럽게 받아준다.
 - **시나리오의 목적지는 유지하되 경로는 상대에 맞춘다.** 상대가 순순히 따라오면 다음 단계로 빨리 넘어가고, 의심하거나 저항하면 그 의심 자체를 먼저 다루면서(해명·되묻기·압박) 목적지로 되돌린다. 상대의 말을 무시한 채 원래 대본으로 되돌아가지 않는다.`;
 
+// 사용자 라이브 신고 ①(2026-07-30, Architecture.md §50.3) — 음성 성별이 통화마다 랜덤해 캐릭터의
+// 이름·자기소개와 어긋나는 경우가 있었다. 원인은 두 층이 서로를 몰랐기 때문이다: 층 1(실제 음성,
+// `realtime/geminiProvider.ts`의 `pickGeminiVoiceName`)은 서버가 토큰 발급 시점에 고정하고, 층
+// 2(이름·자기소개)는 모델이 첫 마디에서 즉흥으로 정한다. 이 블록이 층 2에 층 1의 배정을 알려
+// 두 층을 맞춘다(`realtime/scenarioVoice.ts`의 `SCENARIO_SPEAKER_GENDER`가 **단일 원천**이다).
+// ⛔ **금지 문구(G297)**: "네 목소리는 Puck 음성이다"처럼 시스템 내부 사정(음성 이름·표 이름)을
+// 적지 않는다 — 모델이 그것을 대사로 흘릴 수 있다(§17.6.3이 이미 세운 금지와 같은 근거).
+const SPEAKER_GENDER_BLOCK_TEMPLATE = `[화자 — 이 훈련에서만 적용]
+- **너는 {{GENDER_WORD}} 화자다.** 이름을 대거나 자기 소개를 할 때 그 성별에 맞는 이름과 호칭을 쓰고, 통화 내내 바꾸지 않는다. 상대가 확인하려 들면 캐릭터를 유지한 채 그대로 답한다.`;
+
+function buildSpeakerGenderBlock(gender: "male" | "female"): string {
+  return SPEAKER_GENDER_BLOCK_TEMPLATE.replace("{{GENDER_WORD}}", gender === "male" ? "남성" : "여성");
+}
+
 // 사용자 신고(2026-07-25, 실사용 스크린샷 첨부) — "내가 사기를 당하려고 해도 실질적으로 나에게
 // 피해를 주려는 행동이 보이지 않는다". 실측 확인 결과 **12개 시나리오 전부**가 구조적으로 요구에
 // 도달할 수 없었다: weakenedTactics가 전부 분위기 조성(놀람·긴급성·확인차단·안심유도·끊기저지)뿐이고
@@ -48,7 +62,13 @@ const CONVERSATION_STYLE = `[대화 방식 — 반드시 지킨다]
 // ⚠️ 이 교체는 **무해화 경계를 건드리지 않는다**(AC-005 무변경): 아래 "페이로드는 가상값만 쓴다"
 // 항목은 세 난이도·문자 유무와 무관하게 그대로 남아 있고, 문자에 실리는 값도 100% 서버 카탈로그의
 // 모의값이다(functions/src/scenarios/inCallSms.ts).
-const OFF_SCREEN_RULE_DEFAULT = `- **이 앱 화면에 없는 것을 가리키지 않는다.** 참가자가 실제로 보거나 누를 수 없는 것(문자로 방금 보낸 인증번호, 방금 뜬 팝업, 설치된 앱 화면 등)을 "지금 화면에 뜬 걸 불러 달라"는 식으로 요구하지 않는다 — 참가자는 볼 수 없어 몰입이 깨진다. 대신 참가자가 지금 알고 있거나 스스로 정할 수 있는 것(이름·생년월일·계좌 비밀번호·직접 누르는 번호)을 요구한다.`;
+// §50.4.4 (2) — identityCheckAllowed(§50.4 신설, personaAuthority.ts)로 한 번 더 갈린다. "있음"
+// 분기(TRUE)는 종전 문자열과 한 글자도 다르지 않다(회귀 0, §43.4 B-4 관례). "없음" 분기(FALSE)는
+// 괄호 안 예시 목록에서 "이름·생년월일"을 빼고 "지금 손에 든 것"을 넣는다 — 금지를 추가한 것이
+// 아니라 예시를 갈아 끼웠을 뿐이다(무해화 검증 표면 증가 0).
+const OFF_SCREEN_RULE_DEFAULT_TRUE = `- **이 앱 화면에 없는 것을 가리키지 않는다.** 참가자가 실제로 보거나 누를 수 없는 것(문자로 방금 보낸 인증번호, 방금 뜬 팝업, 설치된 앱 화면 등)을 "지금 화면에 뜬 걸 불러 달라"는 식으로 요구하지 않는다 — 참가자는 볼 수 없어 몰입이 깨진다. 대신 참가자가 지금 알고 있거나 스스로 정할 수 있는 것(이름·생년월일·계좌 비밀번호·직접 누르는 번호)을 요구한다.`;
+
+const OFF_SCREEN_RULE_DEFAULT_FALSE = `- **이 앱 화면에 없는 것을 가리키지 않는다.** 참가자가 실제로 보거나 누를 수 없는 것(문자로 방금 보낸 인증번호, 방금 뜬 팝업, 설치된 앱 화면 등)을 "지금 화면에 뜬 걸 불러 달라"는 식으로 요구하지 않는다 — 참가자는 볼 수 없어 몰입이 깨진다. 대신 참가자가 지금 알고 있거나 스스로 정할 수 있는 것(계좌 비밀번호, 직접 누르는 번호, 지금 손에 든 것)을 요구한다.`;
 
 const OFF_SCREEN_RULE_WITH_SMS = `- **참가자가 볼 수 없는 것은 가리키지 않는다. 단, 문자로 도착한 것은 예외다.** 이 훈련에서는 네가 통화 중에 보내는 문자(계좌 안내·링크·인증번호)가 **참가자 화면에 실제로 도착해 표시된다.** 따라서 "방금 문자로 간 인증번호를 불러 달라", "문자로 보낸 계좌로 보내 달라", "문자 속 링크를 눌러 달라"고 요구해도 된다 — 참가자는 화면에서 실제로 볼 수 있다. 반대로 문자로 도착하지 않은 것(방금 뜬 팝업, 설치된 앱 화면 등)은 여전히 가리키지 않는다.
 - **문자는 네가 임의로 "보냈다"고 지어내지 않는다.** 문자가 실제로 도착한 순간에는 그 사실을 알리라는 별도 지시가 이 프롬프트에 함께 들어온다 — 그 지시가 없을 때 문자를 보냈다고 말하지 않는다. 인증번호·계좌번호의 **구체적인 값을 네가 지어내 읽어 주지도 않는다**(값은 참가자 화면의 문자에 이미 있다).`;
@@ -74,21 +94,53 @@ const OFF_SCREEN_RULE_WITH_SMS = `- **참가자가 볼 수 없는 것은 가리�
 // ⚠️ 이 블록은 **clone 실시간 경로(ElevenLabs 에이전트)의 조립 산출물도 바꾼다** — 그쪽은 프롬프트가
 // 외부에 저장돼 있어 **에이전트 재생성이라는 운영 조치**가 따로 필요하다(familyAccidentDeepvoice.
 // prompt.ts 상단 주석의 재생성 상태 줄을 "재생성 대기 중"으로 되돌려 뒀다).
+//
+// 사용자 라이브 신고 ⑪(Architecture.md §50.7) — 모델이 "그럼 통화 종료하겠습니다"처럼 스스로 통화를
+// 끝내겠다고 선언했다. 원천은 이 블록이 아니라 `*.prompt.ts` 14벌의 [진행 방식] 공통 문구였지만
+// ("세션은 짧게 마무리되도록 진행한다" — 대화를 마무리시키라는 상시 지시), 그 문구를 지우기만 하면
+// 규칙이 없는 상태가 될 뿐이라 **여기 [진행 강제]에 무조건형 규칙을 신설**하고 14벌의 문구를 그
+// 규칙과 모순되지 않게 정정한다(한 커밋 — §30 G128과 같은 이유: 같은 프롬프트 안에 모순 2문장을
+// 남기지 않는다). ⛔ **이 규칙은 모델의 발화만 다룬다** — 세션 종료는 여전히 참가자의
+// `stopSignal`/`endSession`이 한다(AC-006 종료 경로 무접촉).
 const SCENARIO_PROGRESSION_TEMPLATE = `[진행 강제 — 반드시 지킨다]
 - **반드시 구체적인 요구에 도달한다.** 이 역할극의 목적은 참가자가 "실제로 요구를 받고 응할지 결정해 보는 것"이다. 불안만 조성하다 끝내지 말고, 대화 초반(2~3턴 안)에 상대가 **지금 당장 무엇을 해야 하는지** 구체적인 행동으로 지시한다. 예: 얼마를 어디로 이체하라, 카드번호·주민번호·인증번호를 불러 달라, 현금을 찾아 어디로 가라, 앱을 설치하라, 화면에 뜬 번호를 읽어 달라 등 — 어떤 요구인지는 시나리오의 수법 목록과 상황에 맞춘다.
 - **요구를 미루거나 얼버무리지 않는다.** 상대가 "어떻게 하면 되냐", "계좌가 어디냐"라고 물으면 그것은 넘어오고 있다는 신호다 — 답을 미루지 말고 **곧바로 구체적으로 지시해 다음 단계로 진행시킨다.** 여기서 얼버무리면 훈련이 성립하지 않는다.
 - **요구는 한 차례에 하나씩 꺼낸다.** 한 번 말할 때 서로 다른 요구를 겹쳐 넣지 말고, 하나를 요구한 뒤 상대의 답을 받고 나서 다음 요구로 넘어간다. 본인 확인 인적사항(성함·생년월일·주민번호·주소)은 서로 한 묶음이라 함께 물어도 되지만, 그와 별개인 것 — 사실 확인 질문("최근에 ○○하신 적 있으세요?" 같은 조회), 인증번호·비밀번호·카드번호 같은 확인 수단, 이체·송금·앱 설치 같은 행동 — 은 각각 다음 차례로 나눈다. **이것은 요구를 미루는 것이 아니다** — 요구는 바로 하되 한 번에 하나만 한다. 생각할 틈을 주지 않는 압박은 질문 개수가 아니라 재촉과 불이익 암시로 만든다.
 - **같은 압박을 반복하지 않는다.** 상대가 거절·의심하면 직전에 쓴 말을 바꿔 말하는 수준으로 되풀이하지 말고, **매번 다른 카드를 꺼낸다**: 다른 수법으로 갈아타거나, 요구 조건을 낮춰 재제안하거나(전액이 어려우면 일부만, 이체가 어려우면 다른 방법으로), 더 강한 압박으로 올린다. 같은 취지의 말을 두 번 연속 하지 않는다.
 - **상대가 응하면 실제로 진행시킨다.** 참가자가 요구에 따르면 "확인됐다"며 멈추지 말고, 다음 단계 요구로 이어가 상황이 어디까지 굴러가는지 겪게 한다(추가 이체, 추가 정보, 비밀 유지 요구 등).
-- **본인확인을 그냥 통과시키지 않는다.** 이름·주민번호·인증번호 같은 걸 받았으면 곧바로 "확인됐습니다"로 넘기지 말고, 실제 상담원처럼 한 번 더 확인한다 — 받은 값을 되읽어 확인시키거나("○○○님 맞으시죠?"), 조회가 안 된다며 다시 불러 달라고 하거나, 추가 항목을 하나 더 요구한다. 그래야 참가자가 "개인정보를 여러 번 넘기고 있다"는 사실을 체감한다.
+{{IDENTITY_CHECK_HANDLING}}
 {{OFF_SCREEN_RULE}}
+- **통화를 끝내는 것은 상대다 — 너는 끝내지 않는다.** "그럼 통화 종료하겠습니다", "끊겠습니다", "여기까지 하겠습니다"처럼 네가 통화를 마치겠다는 말을 어떤 표현으로도 하지 않는다. 상대가 침묵하거나 대화가 소강 상태가 되어도 네 쪽에서 마무리 인사를 하지 않고, 상황에 맞는 말로 대화를 이어 둔다. 상대가 스스로 끊는 것은 상대의 몫이다.
 - **페이로드는 가상값만 쓴다.** 계좌번호·앱 이름·링크·연락처를 요구하거나 불러 줄 때는 **실존하지 않는 기관명**을 쓰되(예: "OO은행", "국민안전지원센터"), 숫자는 실제처럼 들리는 형식으로 또박또박 부른다(예: "OO은행 352-0812-4471-63"). 실존하지 않는 곳의 번호라 어디로도 연결되지 않지만, 참가자에게는 진짜 계좌를 불러주는 것과 똑같이 들려 몰입이 깨지지 않는다. **요구하는 행위 자체는 그대로 하되**, 실존 기관의 실제 계좌·실제 동작하는 앱/링크·실제 연락처만 쓰지 않는다 — 참가자가 겪는 판단 상황은 동일하다.`;
 
-/** 조건형 [진행 강제] 블록 조립 — 문자 카탈로그 유무에 따라 "화면에 없는 것" 항목만 갈아 끼운다. */
-function buildScenarioProgression(inCallSmsEnabled: boolean): string {
+// §50.4.4 (3) — identityCheckAllowed로 갈리는 "본인확인을 그냥 통과시키지 않는다" 항목. TRUE는
+// 종전 문자열 그대로다(회귀 0). FALSE는 "○○○님 맞으시죠?" 이름 단정 템플릿을 빼고, 이름을 먼저
+// 말하거나 단정하지 않는다는 금지를 명문으로 넣는다 — 사용자 라이브 신고 ⑩ⓐ(이름 단정)의 직접
+// 처방이다.
+const IDENTITY_CHECK_HANDLING_TRUE = `- **본인확인을 그냥 통과시키지 않는다.** 이름·주민번호·인증번호 같은 걸 받았으면 곧바로 "확인됐습니다"로 넘기지 말고, 실제 상담원처럼 한 번 더 확인한다 — 받은 값을 되읽어 확인시키거나("○○○님 맞으시죠?"), 조회가 안 된다며 다시 불러 달라고 하거나, 추가 항목을 하나 더 요구한다. 그래야 참가자가 "개인정보를 여러 번 넘기고 있다"는 사실을 체감한다.`;
+
+const IDENTITY_CHECK_HANDLING_FALSE = `- **상대가 응한 것을 그냥 통과시키지 않는다.** 상대가 무언가를 답하거나 넘겼으면 곧바로 "확인됐습니다"로 넘기지 말고, 한 번 더 되짚는다 — 답이 맞는지 다시 묻거나, 조회가 안 된다며 다시 말해 달라고 하거나, 요구를 하나 더 얹는다. **상대의 이름을 네가 먼저 말하거나 단정하지 않는다** — 너는 상대가 누구인지 이름으로 알지 못한다.`;
+
+/**
+ * 조건형 [진행 강제] 블록 조립 — 문자 카탈로그 유무에 따라 "화면에 없는 것" 항목을, 페르소나
+ * 권한(identityCheckAllowed, §50.4.4)에 따라 "본인확인을 그냥 통과시키지 않는다" 항목과(카탈로그가
+ * 없을 때만) "화면에 없는 것" 항목의 예시 목록을 갈아 끼운다.
+ *
+ * ⚠️ 카탈로그가 있으면(inCallSmsEnabled) "화면에 없는 것" 항목은 identityCheckAllowed와 무관하게
+ * `OFF_SCREEN_RULE_WITH_SMS`로 고정된다 — 문자로 도착한 것을 요구해도 된다는 규칙은 페르소나
+ * 권한과 별개다(§50.6.2 부작용 1).
+ */
+function buildScenarioProgression(inCallSmsEnabled: boolean, identityCheckAllowed: boolean): string {
   return SCENARIO_PROGRESSION_TEMPLATE.replace(
+    "{{IDENTITY_CHECK_HANDLING}}",
+    identityCheckAllowed ? IDENTITY_CHECK_HANDLING_TRUE : IDENTITY_CHECK_HANDLING_FALSE,
+  ).replace(
     "{{OFF_SCREEN_RULE}}",
-    inCallSmsEnabled ? OFF_SCREEN_RULE_WITH_SMS : OFF_SCREEN_RULE_DEFAULT,
+    inCallSmsEnabled
+      ? OFF_SCREEN_RULE_WITH_SMS
+      : identityCheckAllowed
+        ? OFF_SCREEN_RULE_DEFAULT_TRUE
+        : OFF_SCREEN_RULE_DEFAULT_FALSE,
   );
 }
 
@@ -273,9 +325,24 @@ const BEGINNER_BLOCK = `[난이도 — 초급: 수법이 눈에 띄게 드러나
 // 금지하는 행동을 **선행 요구로 권하는 형태**가 되어 §16.1.4/G58이 막던 *"대사만 나오고 컨트롤이
 // 없는 창"* 을 되살린다. 그 원천이 필요한 유일한 시나리오(`bank-security-verify-scam`)는 기관
 // 사칭 페르소나라 **C 조건절에 걸리지 않고 ㉤(본인확인)을 그대로 유지**하므로 예시가 0이 되지 않는다.
-const PRIOR_DEMAND_EXAMPLES_WITH_CATALOG = "본인확인 항목 확인, 안내 문자·링크 확인, 조회용 모의 앱 설치 등";
-const PRIOR_DEMAND_EXAMPLES_DEFAULT =
+// §50.6.2 부작용 2(G304) — 카탈로그가 있고(inCallSmsEnabled) identityCheckAllowed===false(협박
+// 계열)면 "본인확인 항목 확인"·"조회용 모의 앱 설치"가 캐릭터에 맞지 않는다. `:325`의 페르소나
+// 조건절은 "본인확인 항목 확인"만 막고 "조회용 모의 앱 설치"는 막지 못하므로, 이 목록 자체를 한
+// 번 더 갈라야 한다 — 안 하면 §43이 닫은 신고(고급 L4 선행 요구가 캐릭터에 안 맞는 예시를 제시)가
+// 문자 카탈로그를 가진 협박 시나리오에서 되살아난다.
+const PRIOR_DEMAND_EXAMPLES_WITH_CATALOG_TRUE =
+  "본인확인 항목 확인, 안내 문자·링크 확인, 조회용 모의 앱 설치 등";
+const PRIOR_DEMAND_EXAMPLES_WITH_CATALOG_FALSE =
+  "안내 문자 확인, 상황을 되짚는 사실 확인 질문, 조건을 낮춘 작은 요구 먼저 통과시키기 등";
+// ⚠️ **구현 중 발견 — G301 게이트와의 정합을 위해 DEFAULT도 갈랐다(architect 원안은 이 목록을
+// identityCheckAllowed와 무관하다고 판단했으나, §50.4.4 (5)의 금지 문자열 "본인확인 항목"이 이
+// 목록에 그대로 남아 있으면 카탈로그 없음(inCallSmsEnabled=false) 축에서 항상 걸린다 — `:325`의
+// 페르소나 조건절이 *행동*은 막아도 이 예시 목록의 *문자열*은 지우지 않기 때문이다).** TRUE는
+// 종전 문자열 그대로다(회귀 0).
+const PRIOR_DEMAND_EXAMPLES_DEFAULT_TRUE =
   "본인확인 항목 확인, 상황을 되짚는 사실 확인 질문, 통화를 끊지 않고 그 자리에서 계속 답하게 하기, 조건을 낮춘 작은 요구 먼저 통과시키기 등";
+const PRIOR_DEMAND_EXAMPLES_DEFAULT_FALSE =
+  "상황을 되짚는 사실 확인 질문, 통화를 끊지 않고 그 자리에서 계속 답하게 하기, 조건을 낮춘 작은 요구 먼저 통과시키기 등";
 const EXISTING_STEP_EXAMPLES_WITH_CATALOG = "안내 링크 확인, 앱 설치 등";
 const EXISTING_STEP_EXAMPLES_DEFAULT = "이미 받아 낸 확인 절차, 이미 통과시킨 작은 요구 등";
 
@@ -305,12 +372,22 @@ const ADVANCED_BASE_TEMPLATE = `[난이도 — 고급: 실제처럼 정교하게
  * 단언하는 4문장(*"요구는 두 단계로 나눈다"*·*"선행 요구도 구체적 행동 지시여야 한다"*·
  * *"새로운 형태의 요구를 발명하지 않는다"*·*"세 단계 이상으로 늘리지 않는다"*)을 삼키면 그
  * 테스트가 즉시 빨간불이 난다 — **그것이 의도된 보호다**(§43.9 7).
+ *
+ * ⚠️ **§50.6.2 부작용 2(G304) + 구현 중 발견** — `identityCheckAllowed`가 카탈로그 유무와
+ * **독립으로** 선행 요구 예시 목록을 가른다(WITH_CATALOG·DEFAULT 두 목록 모두). "본인확인 항목
+ * 확인"은 `identityCheckAllowed===true`일 때만 예시로 남는다 — G301 게이트(§50.4.4 (5))가 이
+ * 문자열이 non-institution 조립 산출물에 **0건**이어야 한다고 요구하는데, `:325`의 페르소나
+ * 조건절은 행동만 막을 뿐 이 예시 목록의 문자열 자체는 지우지 않기 때문이다.
  */
-function buildAdvancedBase(inCallSmsEnabled: boolean): string {
-  return ADVANCED_BASE_TEMPLATE.replace(
-    "{{PRIOR_DEMAND_EXAMPLES}}",
-    inCallSmsEnabled ? PRIOR_DEMAND_EXAMPLES_WITH_CATALOG : PRIOR_DEMAND_EXAMPLES_DEFAULT,
-  ).replace(
+function buildAdvancedBase(inCallSmsEnabled: boolean, identityCheckAllowed: boolean): string {
+  const priorDemandExamples = inCallSmsEnabled
+    ? identityCheckAllowed
+      ? PRIOR_DEMAND_EXAMPLES_WITH_CATALOG_TRUE
+      : PRIOR_DEMAND_EXAMPLES_WITH_CATALOG_FALSE
+    : identityCheckAllowed
+      ? PRIOR_DEMAND_EXAMPLES_DEFAULT_TRUE
+      : PRIOR_DEMAND_EXAMPLES_DEFAULT_FALSE;
+  return ADVANCED_BASE_TEMPLATE.replace("{{PRIOR_DEMAND_EXAMPLES}}", priorDemandExamples).replace(
     "{{EXISTING_STEP_EXAMPLES}}",
     inCallSmsEnabled ? EXISTING_STEP_EXAMPLES_WITH_CATALOG : EXISTING_STEP_EXAMPLES_DEFAULT,
   );
@@ -331,7 +408,7 @@ function buildAdvancedBase(inCallSmsEnabled: boolean): string {
 const ADVANCED_L3_PROCEDURAL = `[난이도 — 고급(심화): 절차로 정당화한다]
 - **상대가 의심하면 다그치지 말고 "절차"로 답한다.** 접수번호를 남겨 주고, 지금이 몇 단계인지 알려 주고, 언제까지 처리돼야 하는지 기한을 말하고, 담당 부서·담당자를 대며 **정상적인 업무를 처리하는 것처럼** 차분히 진행한다.
 - **상대가 미루면 앞서 든 것과 다른 절차적 근거로 재대응한다.** 재확인 절차, 처리 기한, 누락 시 불이익 같은 **서로 다른 절차 근거**를 하나씩 꺼낸다(같은 근거를 두 번 쓰지 않는다).
-- **네가 기관·기업을 사칭하는 캐릭터가 아니라면 공문·서류·부서 같은 기관 절차 톤은 쓰지 않는다** — 그 경우에는 "기한"과 "처리·입금 확인" 형식만 쓴다. 캐릭터에 없는 격식을 흉내 내면 오히려 정체가 드러난다.
+- **네가 기관·기업을 사칭하는 캐릭터가 아니라면 공문·서류·부서 같은 기관 절차 톤은 쓰지 않는다** — 그 경우에는 "기한"과 "돈이 들어왔는지 직접 확인한다"는 형식만 쓴다. **"절차", "심사", "검토", "보안 확인"처럼 어딘가 다른 곳에서 무언가가 진행된다는 말은 쓰지 않는다** — 너에게는 그런 조직이 없다. 캐릭터에 없는 격식을 흉내 내면 오히려 정체가 드러난다.
 - ⚠️ **접수번호·부서명·문서명·담당자명은 이 대화 안에서만 존재하는 가상값이다.** 위 [진행 강제]의 "페이로드는 가상값만 쓴다"가 여기에도 그대로 적용되며, 이 지시는 그것을 **조금도 완화하지 않는다.**
 - ⚠️ **실존 기관의 실제 절차·실제 창구 운영 방식·실제 신청 경로를 설명하지 않는다.** 네가 재현하는 것은 절차의 **형식**(번호가 붙고, 단계가 있고, 기한이 있다)이지 절차의 **내용**이 아니다. 상대가 "원래 어떻게 하는 거냐"고 물어도 실제 방법을 알려주지 말고 캐릭터를 유지한 채 이 대화의 절차로만 답한다.`;
 
@@ -355,13 +432,16 @@ const ADVANCED_L3_PROCEDURAL = `[난이도 — 고급(심화): 절차로 정당�
  */
 function buildDifficultyBlock(
   level: DifficultyLevel,
-  opts: { l3Procedural?: boolean; inCallSmsEnabled?: boolean } = {},
+  opts: { l3Procedural?: boolean; inCallSmsEnabled?: boolean; identityCheckAllowed?: boolean } = {},
 ): string | null {
   if (level === "beginner") return BEGINNER_BLOCK;
   // 기준선 — 블록을 내보내지 않는다(현행 프롬프트가 곧 중급, §15.3.1/§17.4.1).
   if (level === "intermediate") return null;
-  // §43.4 B — 고급 공통 블록의 **선행 요구 예시만** 카탈로그 유무로 갈린다(블록 신설 0건).
-  const advancedBase = buildAdvancedBase(opts.inCallSmsEnabled === true);
+  // §43.4 B/§50.4.4 (4) — 고급 공통 블록의 선행 요구 예시가 카탈로그 유무·페르소나 권한으로 갈린다.
+  const advancedBase = buildAdvancedBase(
+    opts.inCallSmsEnabled === true,
+    opts.identityCheckAllowed !== false,
+  );
   return opts.l3Procedural === true ? `${advancedBase}\n\n${ADVANCED_L3_PROCEDURAL}` : advancedBase;
 }
 
@@ -400,6 +480,36 @@ export type BuildSystemPromptOptions = {
    * 빠지면 기본값 `false` 때문에 **그 경로에서만** 고급이 조용히 축소된다(에러가 나지 않는다).
    */
   l3Procedural?: boolean;
+  /**
+   * ⭐ §50.4.4(사용자 라이브 신고 ②+⑩ⓐⓑ) — 이 페르소나가 신원을 밝히는 기관·기업·서비스의
+   * 담당자라 선행 요구로 본인확인 항목을 확인해도 캐릭터와 부합하는가
+   * (`roleplay/personaAuthority.ts`의 `asksIdentityCheck(scenarioId)`로 정한다 — 판정 지점 단일화).
+   * `false`면 [진행 강제]의 "화면에 없는 것"(카탈로그 없을 때) 예시에서 이름·생년월일이 빠지고,
+   * "본인확인을 그냥 통과시키지 않는다" 항목이 "상대의 이름을 네가 먼저 말하거나 단정하지
+   * 않는다"로 대체되며(신고 ⑩ⓐ 처방), 고급 L4 선행 요구 예시(카탈로그 보유 시)에서 "조회용 모의
+   * 앱 설치"가 빠진다(G304).
+   *
+   * **부재(기본)면 `true`로 취급한다(다른 옵션과 반대 방향 기본값)** — 이 옵션 도입 전 문자열은
+   * 전부 "본인확인 항목 확인이 캐릭터에 맞다"는 전제로 쓰였으므로, 기본값이 `false`면 오히려 모든
+   * 기존 호출부가 조용히 바뀐다. `identityCheckAllowed: false`를 **명시로 넘길 때만** 문구가
+   * 바뀐다(회귀 0은 "옵션 미전달"과 "명시적 true"가 동일한 것으로 보장된다).
+   *
+   * ⚠️ **호출부 3곳(sendMessage·오프닝·Gemini Live 토큰) 전부에 넘겨야 한다**(G298 — G63과 같은
+   * 이유). 기본값이 `true`(=관대한 쪽)라, 빠뜨려도 에러 없이 institution 취급으로 조용히 축소된다.
+   */
+  identityCheckAllowed?: boolean;
+  /**
+   * ⭐ §50.3.3(사용자 라이브 신고 ① 음성 성별 불일치의 층 2) — 이 세션의 화자 성별
+   * (`realtime/scenarioVoice.ts`의 `speakerGenderFor(scenarioId)`로 정한다). 값이 있으면
+   * [화자] 블록이 삽입돼 모델이 스스로 성별에 맞는 이름·호칭을 쓰게 한다. `undefined`(기본,
+   * `notApplicable` 시나리오 포함)면 블록 자체가 삽입되지 않아 문자열이 도입 전과 완전히
+   * 동일하다(회귀 0).
+   *
+   * ⚠️ 이 값은 **층 1**(서버가 고정하는 실제 음성, `realtime/geminiProvider.ts`의
+   * `pickGeminiVoiceName`)과 **같은 표에서 파생**돼야 한다 — 서로 다른 표를 쓰면 목소리와 말이
+   * 다시 어긋난다(§50.3.1). 호출부 3곳 전부에 넘긴다(G298).
+   */
+  speakerGender?: "male" | "female";
   /** 이 턴에만 붙는 지시(오프닝 첫 마디 지침·문자 도착 announce 지시 등). 가드레일 **앞**에 삽입된다. */
   turnInstruction?: string;
 };
@@ -417,23 +527,26 @@ export type BuildSystemPromptOptions = {
  * `openingLine.ts`가 실제로 그 방식으로 가드레일 뒤에 지시를 붙이던 기존 위반(§15.6 G2)을
  * 이번 태스크에서 함께 제거했다.
  *
- * 확정 순서: persona → weakenedTactics → 대화 방식 → 진행 강제(문자 카탈로그가 있으면 "화면에 없는
- * 것" 항목이 조건형으로 대체됨, T68) → 확인 안내 동기화(T83, 조건형) → 난이도 → 턴 지시 →
- * **가드레일**.
+ * 확정 순서: persona → weakenedTactics → [화자](§50.3.3, 조건형) → 대화 방식 → 진행 강제(문자
+ * 카탈로그·페르소나 권한에 따라 조건형 대체됨, T68/§50.4.4) → 확인 안내 동기화(T83, 조건형) →
+ * 난이도 → 턴 지시 → **가드레일**.
  */
 export function buildSystemPrompt(
   prompt: ScenarioPromptDoc,
   opts: BuildSystemPromptOptions = {},
 ): string {
   const tactics = prompt.weakenedTactics.map((tactic, i) => `${i + 1}. ${tactic}`).join("\n");
+  // §50.4.4 — 부재(기본)는 institution 취급(true)이다(다른 옵션과 반대 방향 기본값, 옵션 도입 전
+  // 문자열이 전부 "본인확인이 캐릭터에 맞다"는 전제였기 때문 — BuildSystemPromptOptions 주석 참고).
+  const identityCheckAllowed = opts.identityCheckAllowed !== false;
   // T85(§17.8 순서 6번) — 블록을 **추가하지 않고** 6번 항목이 내보내는 문자열만 길어진다. 그래서
   // 조립 순서 불변식(가드레일 최후미)에 영향이 0이고, T83이 세운 `[T83 전수]` 2건이 무개정 통과한다.
-  // §43.4 B — 난이도 블록도 같은 판별자(`inCallSmsEnabled`)를 받는다. **신규 옵션 0건**이며
-  // 호출부 3곳(sendMessage·오프닝·Gemini Live 토큰)은 이미 이 값을 넘기고 있다(G63 무영향).
+  // §43.4 B/§50.4.4 — 난이도 블록도 같은 판별자를 받는다.
   const difficultyBlock = opts.difficultyLevel
     ? buildDifficultyBlock(opts.difficultyLevel, {
         l3Procedural: opts.l3Procedural,
         inCallSmsEnabled: opts.inCallSmsEnabled,
+        identityCheckAllowed,
       })
     : null;
   return [
@@ -442,11 +555,14 @@ export function buildSystemPrompt(
     "[사용 가능한 수법(weakenedTactics) — 이 목록 밖의 수법, 특히 실제 운영 가능한 사기 수법을 스스로 만들지 않는다]",
     tactics,
     "",
+    // §50.3.3 — 화자 성별(층 2). notApplicable/미전달이면 블록 자체가 빠져 문자열이 도입 전과
+    // 완전히 동일하다(회귀 0). CONVERSATION_STYLE 바로 앞에 넣는다(확정 좌표).
+    ...(opts.speakerGender ? [buildSpeakerGenderBlock(opts.speakerGender), ""] : []),
     CONVERSATION_STYLE,
     "",
-    // T68 — 문자 카탈로그가 있으면 "화면에 없는 것" 항목만 조건형으로 대체된다(§15.5 확정 순서 4번,
-    // 블록 위치 자체는 이동하지 않는다).
-    buildScenarioProgression(opts.inCallSmsEnabled === true),
+    // T68/§50.4.4 — 문자 카탈로그·페르소나 권한에 따라 "화면에 없는 것"·"본인확인 처리" 항목이
+    // 조건형으로 대체된다(§15.5 확정 순서 4번, 블록 위치 자체는 이동하지 않는다).
+    buildScenarioProgression(opts.inCallSmsEnabled === true, identityCheckAllowed),
     "",
     // 아래 세 블록은 "있을 때만" 삽입된다 — intermediate(=블록 없음)·확인 무력화 미적용·턴 지시
     // 없음인 경우 배열이 도입 전과 완전히 동일해져 조립 결과 문자열도 한 글자도 달라지지 않는다
