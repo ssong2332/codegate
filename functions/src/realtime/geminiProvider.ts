@@ -11,12 +11,14 @@
 //      클라는 그 값을 읽을 수도 바꿀 수도 없다).
 //   2. 제약 없이 발급한 토큰은 클라이언트가 setup 프레임을 임의로 주입해 모델·프롬프트·도구를
 //      바꿔치기할 수 있다고 보고된 바 있다. 도구는 빈 배열로 명시적으로 잠근다.
-import { GoogleGenAI, Modality, EndSensitivity } from "@google/genai";
+import { GoogleGenAI, Modality, EndSensitivity, StartSensitivity } from "@google/genai";
+import { asksIdentityCheck } from "../roleplay/personaAuthority";
 import { isL3Procedural } from "../roleplay/l3Depth";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { hasInCallSms } from "../scenarios/inCallSms";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
+import { SCENARIO_SPEAKER_GENDER, speakerGenderFor } from "./scenarioVoice";
 import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider } from "./types";
 
 /** 무료 티어에서 쓸 수 있는 네이티브 오디오 모델(공식 가격 페이지 기준, 2026-07 확인). */
@@ -29,20 +31,34 @@ export const GEMINI_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
 // docs/speech-generation)는 각 음성을 "Firm"/"Upbeat" 같은 톤 특성으로만 설명하며 남/여를 명시하지
 // 않는다. 아래 분류는 다수의 데모/튜토리얼에서 통용되는 청감 기준 추정치이며, 실제 청감은 라이브
 // 통화로 사용자가 재확인 필요(끊김·오분류 발견 시 후보만 교체하면 됨).
-const GEMINI_VOICE_POOL = ["Aoede", "Puck"] as const; // Aoede=기존 값(여성 성향 추정), Puck=남성 성향 추정 추가
+//
+// ⭐ 사용자 라이브 신고 ①(Architecture.md §50.3) — 성별이 sessionId 해시로만 갈려 시나리오
+// 페르소나(예: "낮고 차갑고 명령조"인 협박범)와 반대 성별이 나올 수 있었다. 이제 **시나리오별
+// 성별 배정표**(`./scenarioVoice.ts`의 `SCENARIO_SPEAKER_GENDER`)가 풀을 먼저 고르고, sessionId
+// 해시는 그 풀 **안에서만** 결정론적으로 고른다. ⛔ 오늘은 각 풀이 1개뿐이라 해시가 사실상
+// 무의미해도 배열 구조를 유지한다 — 풀이 늘어도 호출부가 무변경이어야 한다.
+const FEMALE_VOICES = ["Aoede"] as const;
+const MALE_VOICES = ["Puck"] as const;
+/** `notApplicable` 폴백 — 두 풀의 합집합이라 **오늘 동작과 바이트 단위로 동일**하다(회귀 0). */
+const GEMINI_VOICE_POOL = [...FEMALE_VOICES, ...MALE_VOICES] as const;
 
 /**
- * sessionId로부터 결정론적으로 음성을 고른다(진짜 Math.random이 아님) — 같은 통화는 dev Strict
- * Mode 이중 mount나 재연결로 이 함수가 여러 번 불려도 항상 같은 성별 음성을 유지해야 한다(통화
- * 중간에 상대 목소리가 바뀌면 몰입이 깨진다). sessionId는 세션마다 새로 발급되는 Firestore 문서
- * ID라 세션 간에는 사실상 무작위로 분산된다.
+ * scenarioId(성별 배정) + sessionId(같은 풀 안에서 결정론적 선택)로 음성을 고른다(진짜
+ * Math.random이 아님) — 같은 통화는 dev Strict Mode 이중 mount나 재연결로 이 함수가 여러 번
+ * 불려도 항상 같은 목소리를 유지해야 한다(통화 중간에 상대 목소리가 바뀌면 몰입이 깨진다).
+ *
+ * ⚠️ `scenarioId`가 `notApplicable`이거나 표에 없으면 **두 풀의 합집합에서 고른다**(throw하지
+ * 않는다 — 배선이 바뀌어 도달해도 통화를 죽이지 않는다, P-4 비차단 관례). 이 폴백은 도입 전
+ * `pickGeminiVoiceName(sessionId)`의 동작과 바이트 단위로 동일하다.
  */
-export function pickGeminiVoiceName(sessionId: string): (typeof GEMINI_VOICE_POOL)[number] {
+export function pickGeminiVoiceName(scenarioId: string, sessionId: string): string {
+  const gender = SCENARIO_SPEAKER_GENDER[scenarioId];
+  const pool = gender === "male" ? MALE_VOICES : gender === "female" ? FEMALE_VOICES : GEMINI_VOICE_POOL;
   let hash = 0;
   for (let i = 0; i < sessionId.length; i++) {
     hash = (hash * 31 + sessionId.charCodeAt(i)) | 0;
   }
-  return GEMINI_VOICE_POOL[Math.abs(hash) % GEMINI_VOICE_POOL.length];
+  return pool[Math.abs(hash) % pool.length];
 }
 
 /** 토큰 수명 — 통화 1건에만 쓰이므로 짧게 잡는다(유출 시 노출 창 최소화). */
@@ -74,12 +90,18 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // T85(§17.3 호출부 3곳 중 "Gemini Live 토큰", G63) — 고급에서 D4(절차·서류 정당화) 블록을
     // 얹을 시나리오인지. 이걸 빼면 **통화 경로에서만** 고급이 조용히 축소된다(기본값이 축소형이라
     // 에러가 나지 않는다). 값은 난이도와 무관하게 항상 넘기고, 고급이 아닐 때는 조립 함수가 무시한다.
+    // §50.4.4(G298 호출부 3곳 중 "Gemini Live 토큰") — identityCheckAllowed도 표에서 파생해 항상
+    // 넘긴다(기본값이 institution 취급이라 빠뜨려도 에러는 안 나지만 조용히 축소된다).
+    // §50.3.3(G298) — speakerGender도 같은 표(scenarioVoice.ts)에서 파생한다. 층 1(음성, 아래
+    // pickGeminiVoiceName)과 층 2(이 프롬프트 옵션)가 **같은 원천**을 읽어야 목소리와 말이 맞는다.
     const systemPrompt = buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: input.difficultyLevel,
       inCallSmsEnabled: hasInCallSms(input.scenarioId),
       verifyInterceptEnabled:
         hasVerifyIntercept(input.scenarioId) && input.difficultyLevel === "advanced",
       l3Procedural: isL3Procedural(input.scenarioId),
+      identityCheckAllowed: asksIdentityCheck(input.scenarioId),
+      speakerGender: speakerGenderFor(input.scenarioId),
     });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });
@@ -99,7 +121,11 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
             systemInstruction: systemPrompt,
             speechConfig: {
               languageCode: "ko-KR",
-              voiceConfig: { prebuiltVoiceConfig: { voiceName: pickGeminiVoiceName(input.sessionId) } },
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: pickGeminiVoiceName(input.scenarioId, input.sessionId),
+                },
+              },
             },
             // 양쪽 발화의 텍스트 전사를 켠다(finding #1) — 실시간 음성 대화도 리포트가 분석할 수
             // 있도록 클라가 이 전사를 모아 종료 시 서버에 제출한다(submitRealtimeTranscript).
@@ -135,8 +161,25 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
             // endOfSpeechSensitivity=HIGH는 Live API 기본값과 동일(SDK 타입 주석 "The default is
             // ... END_SENSITIVITY_HIGH for Gemini Live")이라 이 설정만으로는 추가 지연 단축 효과가
             // 없다 — 명시적으로 남겨 향후 기본값이 바뀌어도 이 앱의 의도(민감 감지)가 고정되게 한다.
+            //
+            // ⭐ 사용자 라이브 신고 ④(Architecture.md §50.8, 2026-07-30) — AI가 자기 말을 스스로
+            // 끊는 현상. 위 두 손잡이(endOfSpeechSensitivity·silenceDurationMs)는 발화 **종료**
+            // 판정이고, 이 신고의 원인은 발화 **시작** 판정 손잡이(startOfSpeechSensitivity·
+            // prefixPaddingMs)가 미설정 상태였던 것이다 — SDK 기본값이 Gemini Live에서는
+            // START_SENSITIVITY_HIGH(가장 쉽게 "사용자가 말하기 시작했다"로 판정)라, 스피커
+            // 잔향·짧은 잡음도 발화 시작으로 오판되기 쉬웠다(`GeminiVoiceSession.tsx`의 반이중
+            // 게이트 주석이 기록한 자기-끊김 계열과 같은 부류).
+            // ⚠️ **대가를 정직하게 적는다(G311)**: LOW + prefixPaddingMs 300ms는 **짧고 조용한
+            // 발화**("네", "응", "아니요")가 시작 발화로 안 잡힐 수 있다 — 참가자가 짧게 답했는데
+            // 모델이 반응하지 않는 증상이 새로 생길 수 있다. 재현되면 `prefixPaddingMs`를 먼저
+            // 낮추고(300→150) `LOW`는 유지한다(신고 ④의 주 손잡이라 되돌리지 않는다).
+            // ⚠️ `prefixPaddingMs: 300`은 **측정값이 아니라 판단값이다**(`agentSpeechGate.ts`의
+            // `STALL_GRACE_MS`와 같은 형식) — 라이브 A/B로 검증하지 못했다(P-0/P-1 미실행, 아래
+            // implementer 보고서 참고).
             realtimeInputConfig: {
               automaticActivityDetection: {
+                startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW,
+                prefixPaddingMs: 300,
                 endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
                 silenceDurationMs: 400,
               },

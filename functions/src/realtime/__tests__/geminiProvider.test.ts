@@ -67,11 +67,17 @@ test("GeminiRealtimeProvider: 시스템 프롬프트를 토큰에 고정해 발�
     // T68(§15.6 G1/G5) — tax-refund-scam은 통화 중 문자 카탈로그가 있는 시나리오라, 이 경로도
     // `inCallSmsEnabled:true`로 조립해야 한다. 이걸 빼면 "텍스트 경로에서는 사기범이 문자를
     // 요구하는데 실시간 통화에서는 안 하는" 비대칭이 생겨 기능이 통화에서만 발동하지 않는다.
+    // §50.4.4/§50.3.3 — tax-refund-scam은 institution(identityCheckAllowed:true)·female이다.
     assert.equal(
       sentPrompt,
-      buildSystemPrompt(SCENARIO_PROMPTS["tax-refund-scam"], { inCallSmsEnabled: true }),
+      buildSystemPrompt(SCENARIO_PROMPTS["tax-refund-scam"], {
+        inCallSmsEnabled: true,
+        identityCheckAllowed: true,
+        speakerGender: "female",
+      }),
       "토큰 발급 시 systemInstruction이 서버에서 고정되어야 한다",
     );
+    assert.ok(sentPrompt.includes("[화자"), "§50.3.3 — 화자 성별 블록이 조립돼야 한다");
     assert.ok(
       sentPrompt.includes("문자로 도착한 것은 예외"),
       "문자 카탈로그가 있는 시나리오는 조건형 문구가 켜져야 한다(G1)",
@@ -148,20 +154,53 @@ test("GeminiRealtimeProvider: 응답 지연 튜닝 — 발화 종료 침묵 대�
   }
 });
 
-test("GeminiRealtimeProvider: 성별 다양화 — sessionId별로 다른 프리셋 음성이 토큰에 실릴 수 있다(2026-07-25)", async () => {
+test("GeminiRealtimeProvider: 신고 ④ 대응 — 발화 시작 민감도(startOfSpeechSensitivity)를 LOW로, prefixPaddingMs를 300ms로 토큰에 고정한다(§50.8.5)", async () => {
   const capture = captureTokenRequest();
   try {
     const provider = new GeminiRealtimeProvider("test-key");
-    // 서로 다른 sessionId 여러 개를 태워 남/여 두 값이 모두 관측되는지 확인한다(고정 단일 음성으로
-    // 되돌아가는 회귀를 잡는다). 진짜 무작위가 아니라 sessionId 해시 기반이라 실행마다 흔들리지
-    // 않는 결정론적 테스트다.
+    await provider.createCallCredentials({
+      sessionId: "sess",
+      scenarioId: "tax-refund-scam",
+      voiceId: "",
+    });
+    const setup = (capture.bodies()[0] as {
+      bidiGenerateContentSetup?: {
+        realtimeInputConfig?: {
+          automaticActivityDetection?: {
+            startOfSpeechSensitivity?: string;
+            prefixPaddingMs?: number;
+          };
+        };
+      };
+    }).bidiGenerateContentSetup;
+    const aad = setup?.realtimeInputConfig?.automaticActivityDetection;
+    // 미설정 시 SDK 기본값이 Gemini Live에서 START_SENSITIVITY_HIGH라 스피커 잔향도 발화 시작으로
+    // 오판되기 쉬웠다(자기-끊김의 원인, §50.8.1 창②③). LOW로 낮추고 prefixPaddingMs로 시작
+    // 판정에 여유를 둔다.
+    assert.equal(aad?.startOfSpeechSensitivity, "START_SENSITIVITY_LOW");
+    assert.equal(aad?.prefixPaddingMs, 300);
+  } finally {
+    capture.restore();
+  }
+});
+
+// ⚠️ **구현 중 발견 — §50.3.3 도입 후 이 테스트의 원래 형태(같은 scenarioId·다른 sessionId)는
+// 구조적으로 항상 실패한다(architect가 지목한 2건 :238·:244 외의 세 번째 파손, 반드시 보고할
+// 것).** 음성은 이제 시나리오의 성별 배정표로 먼저 고정되고(`tax-refund-scam` = female = 풀
+// 크기 1), 그 풀 안에서만 sessionId 해시가 돈다 — 그래서 같은 시나리오는 sessionId를 아무리
+// 바꿔도 **항상 같은 음성 하나**만 나온다(이것이 §50.3의 의도된 동작이다: 목소리와 캐릭터가
+// 어긋나지 않게 하는 것이 이번 신고의 요구사항이었다). 원 테스트의 취지(고정 단일 음성 전체
+// 회귀 방지)는 시나리오 축으로 옮겨 그대로 보존한다.
+test("GeminiRealtimeProvider: 성별 다양화 — 시나리오별로 다른 프리셋 음성이 토큰에 실릴 수 있다(2026-07-25, §50.3.3 갱신)", async () => {
+  const capture = captureTokenRequest();
+  try {
+    const provider = new GeminiRealtimeProvider("test-key");
+    // female 배정(tax-refund-scam)과 male 배정(kidnapping-threat)을 같은 sessionId로 태워도
+    // 다른 음성이 나오는지 확인한다 — "앱 전체가 고정 단일 음성으로 되돌아가는 회귀"를 이제
+    // 시나리오 축으로 잡는다.
     const seenVoices = new Set<string>();
-    for (let i = 0; i < 20; i++) {
-      await provider.createCallCredentials({
-        sessionId: `sess-${i}`,
-        scenarioId: "tax-refund-scam",
-        voiceId: "",
-      });
+    for (const scenarioId of ["tax-refund-scam", "kidnapping-threat"]) {
+      await provider.createCallCredentials({ sessionId: "sess-fixed", scenarioId, voiceId: "" });
       const bodies = capture.bodies();
       const setup = (bodies[bodies.length - 1] as {
         bidiGenerateContentSetup?: {
@@ -173,7 +212,10 @@ test("GeminiRealtimeProvider: 성별 다양화 — sessionId별로 다른 프리
       const voiceName = setup?.generationConfig?.speechConfig?.voiceConfig?.prebuiltVoiceConfig?.voiceName;
       if (voiceName) seenVoices.add(voiceName);
     }
-    assert.ok(seenVoices.size >= 2, `20개 세션 중 음성이 1종류만 관측됨: ${[...seenVoices]}`);
+    assert.ok(
+      seenVoices.size >= 2,
+      `female 배정(tax-refund-scam)·male 배정(kidnapping-threat) 2개 시나리오 중 음성이 1종류만 관측됨: ${[...seenVoices]}`,
+    );
   } finally {
     capture.restore();
   }
@@ -235,18 +277,46 @@ test("[T85/G63] 통화 토큰 경로도 고급에서 D4(절차 정당화) 블록
   }
 });
 
+// G295 — 시그니처 변경(scenarioId 인자 추가, §50.3.3)으로 깨지는 기존 2건. `notApplicable`
+// 시나리오(family-accident-deepvoice, voiceMode:"clone")로 넘겨 통과시킨다 — 이 분기는 두 풀의
+// 합집합을 쓰므로 단언의 의미(결정론·두 후보 산출)가 그대로 성립한다(architect 지시).
 test("pickGeminiVoiceName: 같은 sessionId는 항상 같은 음성을 반환한다(재연결 중 목소리가 바뀌면 안 됨)", () => {
-  const a = pickGeminiVoiceName("session-abc-123");
-  const b = pickGeminiVoiceName("session-abc-123");
+  const a = pickGeminiVoiceName("family-accident-deepvoice", "session-abc-123");
+  const b = pickGeminiVoiceName("family-accident-deepvoice", "session-abc-123");
   assert.equal(a, b);
 });
 
-test("pickGeminiVoiceName: 서로 다른 sessionId는 남/여 두 후보 모두를 산출할 수 있다", () => {
+test("pickGeminiVoiceName: notApplicable 시나리오는 서로 다른 sessionId에서 남/여 두 후보 모두를 산출할 수 있다(오늘 동작 보존)", () => {
   const results = new Set<string>();
   for (let i = 0; i < 50; i++) {
-    results.add(pickGeminiVoiceName(`id-${i}`));
+    results.add(pickGeminiVoiceName("family-accident-deepvoice", `id-${i}`));
   }
   assert.ok(results.size >= 2, `50개 id 중 음성이 1종류만 산출됨: ${[...results]}`);
+});
+
+// ── [P-5] §50.10 프로브 — 라이브 0회, 순수 함수만으로 완료 증거를 만든다 ──────────────────────
+test("[P-5] pickGeminiVoiceName: 남성 배정 시나리오는 sessionId 100개 전부 같은 음성이다(§50.10 P-5)", () => {
+  const results = new Set<string>();
+  for (let i = 0; i < 100; i++) {
+    results.add(pickGeminiVoiceName("kidnapping-threat", `p5-${i}`));
+  }
+  assert.deepEqual([...results], ["Puck"], `100개 세션 중 Puck 아닌 값이 섞였다: ${[...results]}`);
+});
+
+test("[P-5] pickGeminiVoiceName: 여성 배정 시나리오는 sessionId 100개 전부 같은 음성이다(§50.10 P-5)", () => {
+  const results = new Set<string>();
+  for (let i = 0; i < 100; i++) {
+    results.add(pickGeminiVoiceName("tax-refund-scam", `p5-${i}`));
+  }
+  assert.deepEqual([...results], ["Aoede"], `100개 세션 중 Aoede 아닌 값이 섞였다: ${[...results]}`);
+});
+
+test("[P-5] pickGeminiVoiceName: notApplicable 시나리오는 sessionId 100개에서 두 후보가 모두 나온다(§50.10 P-5, 오늘 동작 보존)", () => {
+  const results = new Set<string>();
+  for (let i = 0; i < 100; i++) {
+    results.add(pickGeminiVoiceName("family-accident-deepvoice", `p5-na-${i}`));
+  }
+  assert.deepEqual([...results].sort(), ["Aoede", "Puck"]);
 });
 
 test("GeminiRealtimeProvider: 존재하지 않는 시나리오는 명시적으로 실패한다", async () => {
