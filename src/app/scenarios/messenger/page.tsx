@@ -157,7 +157,7 @@ export default function MessengerScenarioSelectPage() {
   };
 
   return (
-    <main className="drilldown-step mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-6 pb-28">
+    <main className="drilldown-step mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-6 pb-28 lg:max-w-3xl xl:max-w-5xl">
       <header className="flex flex-col gap-2 pt-2">
         <button
           type="button"
@@ -182,7 +182,7 @@ export default function MessengerScenarioSelectPage() {
           메신저 시나리오가 아직 없습니다.
         </p>
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2">
           {filteredEntries.map(([scenarioId, scenario]) => renderScenarioCard(scenarioId, scenario))}
         </ul>
       )}

@@ -341,7 +341,7 @@ export default function ReportPage() {
   );
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] pb-8">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] pb-8 lg:max-w-3xl">
       <div className="px-5 pt-[22px]">
         {/* T72(P-22) — 선택(UX-029)·세션 셸과 **같은 3단계 어휘**로 표기한다. 표기 전용이며
             아래 판정(속은 시점·수법·조언)은 난이도와 무관하게 같은 잣대로 산출됐다(§15.3.5). */}

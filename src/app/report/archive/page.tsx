@@ -316,7 +316,7 @@ export default function FailureArchivePage() {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] pb-8">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] pb-8 lg:max-w-3xl xl:max-w-5xl">
       <div className="px-5 pt-[22px]">
         <h1
           ref={headingRef}
@@ -369,7 +369,9 @@ export default function FailureArchivePage() {
       )}
 
       {sortMode === "recent" ? (
-        <ul className="mx-5 mt-4 flex flex-col gap-3">{items.map(renderCard)}</ul>
+        <ul className="mx-5 mt-4 flex flex-col gap-3 lg:grid lg:grid-cols-2">
+          {items.map(renderCard)}
+        </ul>
       ) : (
         <div className="mx-5 mt-4 flex flex-col gap-5">
           {groups.map((group) => (
@@ -385,7 +387,9 @@ export default function FailureArchivePage() {
                     ` (같은 수법의 다른 표기: ${group.otherLabels.join(" · ")})`}
                 </p>
               </div>
-              <ul className="mt-2 flex flex-col gap-3">{group.items.map(renderCard)}</ul>
+              <ul className="mt-2 flex flex-col gap-3 lg:grid lg:grid-cols-2">
+                {group.items.map(renderCard)}
+              </ul>
             </section>
           ))}
         </div>

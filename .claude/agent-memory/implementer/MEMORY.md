@@ -69,3 +69,4 @@
 - [§45 ⓑ 확인창구 앵커 순서](project_codegate_s45b_verify_anchor.md) — ⭐ 프로브가 write 시점만 읽어 "안 고쳐졌다"로 오독한 사례, 순수함수 게이트의 사각(호출부)을 소스 스캔으로, TS6133 우회 2층 역검증, 같은 문서에 1-기반·0-기반 앵커 공존.
 - [§43 L4 선행 요구 조건화(B+C)](project_codegate_s43_l4_conditioning.md) — ⭐ 삼항 되돌림이 TS6133에 먼저 잡혀 테스트 층에 못 닿는다, 허용목록 역검증은 정본 함수에 주입해야 거짓 OK를 면한다, 설계가 지목한 원천 1개를 다른 블록 금지와 충돌해 제외한 판단.
 - [§47/W4 확인 오퍼 참가자 탭 이전](project_codegate_s47_verify_offer_participant_intent.md) — ⭐ 게이트 무변경 제약은 원 함수를 조합형 새 함수로 감싸 지킨다, node 테스트 러너가 `@/` 별칭을 못 푼다, JSX 주석은 codeOnly()를 못 걷어낸다(양방향 함정), set-state-in-effect는 IIFE로 감싼다, G271은 코드 없이 보고로 닫힌 사례.
+- [P-34 PC/모바일 폭 계약(8화면)](project_codegate_p34_pc_mobile_width.md) — ⭐ gap-N 재사용으로 lg:gap-* 0건 만드는 법, verticalSlackCap 게이트가 딱 2파일만 본다, CDP 실측 시도가 RouteGuard 인증에 막힌 전말+재현 절차.
