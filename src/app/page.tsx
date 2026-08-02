@@ -4,25 +4,53 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/auth";
+import { hasGrantedConsent } from "@/lib/consent";
+import { hasVerifiedAge } from "@/lib/age";
 
 // 루트 진입점. RouteGuard(lib/auth/RouteGuard.tsx)는 "/"가 PUBLIC_PATHS에 없어 비로그인
 // 사용자를 이 화면이 그려지기 전에 이미 /login으로 보낸다 — 즉 이 화면의 콘텐츠가 실제로
-// 렌더되는 것은 "로그인된 사용자가 '/'로 직접 이동한" 경우뿐이다. 그런데 아래 카드는 원래
-// "로그인하고 시작하기" 링크만 있었다 — 이미 로그인한 사용자에게 다시 로그인을 권하는
-// 화면이 되어 있었다(N-1, 자체 감사에서 발견). RouteGuard가 /login에서 로그인 사용자를
-// 이미 POST_LOGIN_PATH로 튕기는 것과 같은 목적지로, 여기서도 직접 리다이렉트한다.
+// 렌더되는 것은 "로그인된 사용자가 '/'로 직접 이동한" 경우뿐이다.
+//
+// 사용자 요청(2026-08-02) — 이미 온보딩(동의+연령 확인)을 마친 사용자는 유형 선택 화면
+// (`/scenarios`, "보이스피싱/메신저피싱 고르기")으로 바로 가야 한다. `/scenarios`는 자체
+// 게이트가 없다(온보딩 여부는 상류 화면만 확인한다, `onboarding/age-gate/page.tsx` 동일 패턴).
+// 그래서 여기서 무조건 `/onboarding/consent`로 보내던 것을 age-gate와 같은 2단계 체크
+// (동의 → 연령)로 바꿔, 둘 다 통과한 사용자만 `/scenarios`로 직행시키고 — 하나라도 미완료면
+// 그 게이트로 보내 기존 보호를 그대로 유지한다(AC-012/AC-017 우회 금지). 렌더 여부는 `loading`/
+// `user`만으로 파생된다(state 불필요) — 로그인 사용자는 리다이렉트가 끝나기 전까지 null만 그린다.
 export default function Home() {
   const { user, loading } = useCurrentUser();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && user) {
-      router.replace("/onboarding/consent");
-    }
-  }, [loading, user, router]);
+    if (loading || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const granted = await hasGrantedConsent(user.uid);
+        if (cancelled) return;
+        if (!granted) {
+          router.replace("/onboarding/consent");
+          return;
+        }
+        const ageVerified = await hasVerifiedAge(user.uid);
+        if (cancelled) return;
+        router.replace(ageVerified ? "/scenarios" : "/onboarding/age-gate");
+      } catch {
+        // 조회 실패 시 안전한 기본값은 "가장 상류 게이트로 보낸다"다 — 동의를 이미 마친
+        // 사용자가 한 번 더 보는 쪽이, 미동의 사용자를 건너뛰는 쪽보다 낫다(consent/page.tsx
+        // 의 동일한 폴백 판단).
+        if (!cancelled) router.replace("/onboarding/consent");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, loading, router]);
 
-  // 로딩 중이거나 로그인 사용자(곧 리다이렉트됨)는 아무것도 그리지 않아 스텁이 잠깐이라도
-  // 노출되는 것을 막는다(RouteGuard의 동일한 "판정 전엔 null" 원칙).
+  // 로딩 중이거나 로그인 사용자(게이트 조회·리다이렉트 중)면 아무것도 그리지 않아 스텁·중간
+  // 상태가 잠깐이라도 노출되는 것을 막는다(RouteGuard의 동일한 "판정 전엔 null" 원칙). 여기
+  // 도달하는 것은 로딩이 끝나고 비로그인일 때뿐이다.
   if (loading || user) return null;
 
   return (
