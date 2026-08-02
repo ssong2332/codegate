@@ -403,3 +403,20 @@ match /users/{uid}/sessions/{sid}/{allPaths=**} {
 - **`deceivedMoments` 증분 규칙(스키마 변경 없음, 생성 규칙만 추가):** `consented === true`인 항목 1건당 `DeceivedMoment` 1건을 **`analyzeConversation` 산출 뒤에 병합**하고 배열을 **`turnIndex` 오름차순으로 정렬**한다. `turnIndex` = 설치 링크를 실은 **사기범 메시지**의 turnIndex, `tactic`/`correctAction` = 카탈로그 저작값, `tacticCategory` = 기존 `resolveTacticCategory` 결과(→ `link_or_install`). **앵커 미해결이면 승격하지 않는다**(§15.9.5 e-2 인덱스 정합 보호). `wasDeceived`는 병합 후 배열 기준으로 재계산한다.
 - **스냅샷에 넣지 않는 것:** 목업 화면 콘텐츠 원문(`headline`/`bodyLines`/`consentLabel`) — 사후 열람 화면이 목업을 재구성·재진입할 수 있게 된다(§15.6 G19와 동형 취지). 원시 타임스탬프도 넣지 않는다(표시 축이 아니다).
 - **인덱스 변경 없음.** 서브컬렉션은 최상위 `reports` 쿼리에 포함되지 않고, `mockScreens`는 세션 단위 전체 조회만 한다.
+
+## 부록 B — Mock 강등 고지 데이터 경로 (T158 · Architecture.md **§48** · AC-084 · UX v1.19 D-65/P-31)
+> **왜 부록인가:** 부록 A와 같은 이유(병렬 패스의 병합 충돌 회피). 내용은 위 `reports/{reportId}` 표와 동등한 계약이며 병합 후 그 절로 흡수해도 된다.
+> **⛔ 이 부록은 스키마를 *정한다*. 구현은 T158이며 이 패스의 소스 편집은 0줄이다.**
+
+### B.1 `reports/{reportId}` 증분 — 대사 출처(강등) 1필드 (옵셔널·무백필)
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| **llmProvider** | `"mock"`\|`"claude"`\|`"gemini"`? | optional | ⭐ **§48.2 판정** — `sessions/{sid}.llmProvider`(`functions/src/shared/types.ts:91`)를 **리포트 생성 시점에 1회 복사**한 값. 리포트 생성기는 세션을 **이미 읽고 있으므로**(`functions/src/report/generateReportCore.ts:41-46`) **추가 read 0회**다. **표시 조건자 = `=== "mock"`.** 값이 없으면 필드 자체를 만들지 않는다(무백필 — `stages`·`smsTimeline`과 동일 규칙, Migration Policy). ⛔ **부재는 "정상이었다"가 아니라 "표시하지 않음"이다** — 이 변경 이전 리포트에는 항상 부재하므로 **긍정 표기를 만들면 구 리포트 전량이 거짓을 말한다**(§48.2.2 · G274) |
+
+- **왜 세션 문서 참조가 아니라 복사인가(§48.2 근거 4건 요약):** ⓐ **UX-030 아카이브는 `reports`만 읽는다**(`src/lib/archive/fetchArchivePage.ts`, 50건 페이징) ⇒ 참조 방식은 카드 수만큼 N+1 read. ⓑ **UX-008의 세션 read는 "장식용"이며 실패를 삼킨다**(`src/app/report/page.tsx:176-178`) ⇒ 그 경로의 고지는 조용히 사라진다. ⓒ 복사 비용 0. ⓓ 값이 굳는 시점(세션 태그 write)이 리포트 생성보다 **확실히 앞선다**(`functions/src/roleplay/index.ts:340-374`).
+- ⚠️ **UX가 든 원래 이유("세션 문서가 폐기되면 리포트가 말을 바꾼다")는 오늘 이 저장소에서 성립하지 않는다** — **세션 문서를 삭제하는 코드가 0건**이다. AC-021 폐기가 지우는 것은 Storage 객체·ElevenLabs voice·**`voiceId` 필드 하나**뿐이고(`functions/src/guardrails/index.ts:113`), 30일 보존 만료는 `challenges` 문서에 `status="deleted"` 를 **표시**할 뿐이다(`functions/src/challenge/index.ts:324`). 장래 AC-021이 강화되면 성립하는 리스크로만 보존한다(§48 G283).
+- **축 분리(⛔ 섞지 말 것 — §48.3):** 이 필드는 **대사 축**이다. **목소리 축은 `sessions.voiceProvider`**(`functions/src/voice/index.ts:77`)이며 write 규칙도 다르다(목소리는 항상 write, 대사는 mock일 때만 write). 리포트에 채택된 문면(UX.md `:1803` ⓖ)은 **대사 축 문장**이라 목소리 축을 이 필드로 표기하면 사실이 아닌 말이 된다 → **OQ-A41**.
+- **`sessions/{sessionId}` 스키마 변경 0건.** `llmProvider`(`:54`)는 이미 존재하며 이 태스크가 만지지 않는다.
+- **`firestore.rules` 변경 0건 · 인덱스 변경 0건.** 기존 문서에 옵셔널 스칼라 1개를 더할 뿐이며 쿼리 대상이 아니다. `reports` read 규칙(소유 uid만)이 그대로 이 필드를 덮는다.
+- **AC-007 무변경:** 필드는 **최초 생성 리터럴에만** 들어간다(`generateReportCore.ts:259-295`). ⛔ **생성 이후 리포트 문서를 update하지 않는다**(`:286-287` 규칙 유지).
