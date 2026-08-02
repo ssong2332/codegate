@@ -16,6 +16,13 @@ import { OPENING_TURN_INSTRUCTION } from "../../roleplay/openingLine";
 import { MOCK_INSTALL_CONSENT_INSTRUCTION } from "../mockScreens";
 import { VERIFY_INTERCEPT } from "../verifyIntercept";
 import { IN_CALL_SMS } from "../inCallSms";
+import { scanText } from "./harmlessnessPatterns";
+// §50.4.4/§50.3.3 — 두 표가 조립에 실제로 반영되는지 assembledPrompts()가 exercising하게 한다
+// (표만 추가하고 조립에 안 먹이면 G301/G303/G308 게이트가 아무것도 검사하지 않는 채로 초록불이
+// 난다 — "거짓 OK"). 값은 시나리오별로 **derive**한다(수동 토글 축이 아니다 — §50.4.4가
+// personaAuthority/scenarioVoice를 "단일 원천"으로 못박았다).
+import { PERSONA_AUTHORITY, asksIdentityCheck } from "../../roleplay/personaAuthority";
+import { speakerGenderFor } from "../../realtime/scenarioVoice";
 
 // AC-005: 실제 운영 가능한 사기 정보(실계좌번호 패턴·실제 송금 절차 지시·실제 URL)가 절대
 // 포함되면 안 된다. 계좌번호형 숫자(8자리 이상 연속 숫자)와 http(s) 링크를 금지 패턴으로 검사한다.
@@ -1271,11 +1278,21 @@ function turnInstructionSources(): Array<{ scenarioId?: string; label: string; v
   return out;
 }
 
-/** 조립 결과 전수 — 조립 옵션 5개를 모두 돈다(T113 판정표 그대로). */
+/**
+ * 조립 결과 전수 — 조립 옵션 5개를 모두 돈다(T113 판정표 그대로).
+ *
+ * ⭐ §50 — `identityCheckAllowed`/`speakerGender`는 **시나리오별 derive 값**이다(수동 토글 축이
+ * 아니다). 실 호출부(`roleplay/index.ts`·`openingLine.ts`·`realtime/geminiProvider.ts`)가 항상
+ * `personaAuthority`/`scenarioVoice` 표에서 값을 읽어 넘기는 것과 동일하게 맞춘다 — 여기서 두
+ * 값을 안 넘기면(기본값에 의존하면) 이 함수가 institution 취급만 exercising해 G301/G303/G308
+ * 게이트가 non-institution 분기를 한 번도 검사하지 않는 채로 통과한다("거짓 OK").
+ */
 function assembledPrompts(): Array<{ label: string; text: string }> {
   const out: Array<{ label: string; text: string }> = [];
   const scenarioIds = Object.keys(SCENARIO_PROMPTS);
   for (const scenarioId of scenarioIds) {
+    const identityCheckAllowed = asksIdentityCheck(scenarioId);
+    const speakerGender = speakerGenderFor(scenarioId);
     for (const variant of ASSEMBLY_LEVEL_VARIANTS) {
       for (const inCallSmsEnabled of [false, true]) {
         for (const verifyInterceptEnabled of [false, true]) {
@@ -1287,6 +1304,8 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
               ...variant.opts,
               inCallSmsEnabled,
               verifyInterceptEnabled,
+              identityCheckAllowed,
+              ...(speakerGender ? { speakerGender } : {}),
             }),
           });
         }
@@ -1298,6 +1317,7 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
   const fallbackScenarioId = scenarioIds[0];
   for (const { scenarioId, label, value } of turnInstructionSources()) {
     const targetId = scenarioId ?? fallbackScenarioId;
+    const speakerGender = speakerGenderFor(targetId);
     out.push({
       label: `${targetId}[턴지시:${label}]`,
       text: buildSystemPrompt(SCENARIO_PROMPTS[targetId], {
@@ -1305,12 +1325,181 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
         l3Procedural: true,
         inCallSmsEnabled: true,
         verifyInterceptEnabled: true,
+        identityCheckAllowed: asksIdentityCheck(targetId),
+        ...(speakerGender ? { speakerGender } : {}),
         turnInstruction: value,
       }),
     });
   }
   return out;
 }
+
+// ── §50.4.4 (5) — G301: 페르소나 조건화 정적 게이트(트립와이어, 기존 assembledPrompts() 재사용) ──
+//
+// ⚠️ **구현 중 발견 — 금지 문자열 "본인확인 항목"의 리터럴 스코프를 좁혔다(architect 원안과의
+// 차이, 반드시 보고할 것).** `promptAssembly.ts`의 `ADVANCED_BASE_TEMPLATE`은 §43이 이미 세운
+// 페르소나 조건절(구 `:296`, 이 패스에서 좌표만 이동)을 **무조건** 포함한다 — 그 문장 자체가
+// *"…아니라면 선행 요구로 **본인확인 항목**을 확인하지 않는다"* 처럼 금지 대상을 이름으로
+// 불러야 하므로, 문자열 그대로는 institution 여부와 무관하게 **항상** "본인확인 항목"을 포함한다
+// (§50.11 #6이 이 문장을 "무변경 — 지우지 않는다"로 못박아 이 문장을 없앨 수도 없다). 그래서
+// 이 문장 원문을 스캔에서 제외한 뒤 "본인확인 항목"을 찾는다 — 실제로 잡아야 하는 것은 예시
+// 목록의 "본인확인 항목 확인"(권유형)이지 이 문장의 "본인확인 항목을 확인하지 않는다"(금지형)가
+// 아니다.
+const PERSONA_CONDITION_SENTENCE_43C =
+  "- **네가 신원을 밝히는 기관·기업·서비스의 담당자가 아니라면 선행 요구로 본인확인 항목을 확인하지 않는다** — 그 경우에는 상황을 되짚는 사실 확인 질문, 통화를 끊지 않고 그 자리에서 계속 답하게 하기, 조건을 낮춘 작은 요구 먼저 통과시키기 중에서 고른다. 캐릭터에 없는 확인 절차를 시작하면 오히려 정체가 드러난다.";
+
+const G301_FORBIDDEN = ["이름·생년월일", "○○○님 맞으시죠", "본인확인 항목"] as const;
+
+/** §43 C 조건절(무조건 포함, 삭제 금지)을 제거한 뒤 스캔한다 — 위 발견 사항 참고. */
+function scanG301(text: string): string[] {
+  const scanned = text.split(PERSONA_CONDITION_SENTENCE_43C).join("");
+  return G301_FORBIDDEN.filter((needle) => scanned.includes(needle));
+}
+
+test("[§50/신원확인 G301] anonymous·acquaintance 페르소나의 조립 산출물에 본인확인 인적사항 요구가 없다", () => {
+  const nonInstitutionIds = new Set(
+    Object.keys(PERSONA_AUTHORITY).filter((id) => PERSONA_AUTHORITY[id] !== "institution"),
+  );
+  assert.equal(nonInstitutionIds.size, 6, "anonymous(2) + acquaintance(4) = 6종이어야 한다");
+
+  const violations: string[] = [];
+  for (const { label, text } of assembledPrompts()) {
+    const scenarioId = label.split("[")[0];
+    if (!nonInstitutionIds.has(scenarioId)) continue;
+    const hits = scanG301(text);
+    if (hits.length > 0) violations.push(`${label} :: [${hits.join(", ")}]`);
+  }
+  assert.deepEqual(
+    violations,
+    [],
+    "이 문자열이 anonymous/acquaintance 분기에 들어왔다 — personaAuthority.ts의 조건형 분기를 " +
+      "확인하라(§50.4.4).",
+  );
+});
+
+test("[§50/신원확인 G301 역방향] institution 8종에는 세 문자열이 그대로 남아 있다(축소 방지)", () => {
+  const institutionIds = Object.keys(PERSONA_AUTHORITY).filter(
+    (id) => PERSONA_AUTHORITY[id] === "institution",
+  );
+  assert.equal(institutionIds.length, 8);
+
+  const byScenario = new Map<string, string[]>();
+  for (const { label, text } of assembledPrompts()) {
+    const scenarioId = label.split("[")[0];
+    if (!institutionIds.includes(scenarioId)) continue;
+    (byScenario.get(scenarioId) ?? byScenario.set(scenarioId, []).get(scenarioId)!).push(text);
+  }
+  for (const id of institutionIds) {
+    const texts = byScenario.get(id) ?? [];
+    assert.ok(texts.length > 0, `${id}: 조립 산출물이 비었다`);
+    for (const needle of G301_FORBIDDEN) {
+      assert.ok(
+        texts.some((t) => t.includes(needle)),
+        `${id}: institution 조립 산출물 전체에서 "${needle}"이 한 번도 안 나온다(축소 사고) — ` +
+          `identityCheckAllowed 기본값(true)이 뒤집혔을 수 있다.`,
+      );
+    }
+  }
+});
+
+test("[§50/신원확인 G301 역검증] scanG301이 실제로 잡는다(죽은 게이트 방지)", () => {
+  assert.deepEqual(scanG301("이 화자는 이름·생년월일을 요구한다"), ["이름·생년월일"]);
+  assert.deepEqual(scanG301('상대에게 "○○○님 맞으시죠?" 라고 되묻는다'), ["○○○님 맞으시죠"]);
+  assert.deepEqual(scanG301("본인확인 항목 확인, 안내 문자 확인 등"), ["본인확인 항목"]);
+  // §43 C 조건절 원문은 스캔에서 제외된다 — 무조건 포함돼 있어도 이 게이트가 잡지 않는다.
+  assert.deepEqual(scanG301(PERSONA_CONDITION_SENTENCE_43C), []);
+});
+
+// ── §50.5.3 — G303: "절차/심사/검토" 금지는 [난이도 — 고급(심화)] 블록 안으로 한정 ────────────
+//
+// ⚠️ **구현 중 발견 — 문서가 요구한 "블록 전체 무검출"은 문자 그대로 검사하면 항상 실패한다
+// (architect 원안과의 차이, 반드시 보고할 것).** D4 블록의 헤더 자체가
+// `"[난이도 — 고급(심화): 절차로 정당화한다]"`이고, 첫 두 항목("절차"로 답한다·"절차적 근거")은
+// **페르소나 무관 공통 문구**라 institution/anonymous 모두에서 무조건 "절차"를 포함한다. 게다가
+// §50.5.3이 신설한 금지 문장 자체가 *"절차, 심사, 검토, 보안 확인처럼…쓰지 않는다"* 로 **금지 대상
+// 어휘를 이름으로 불러야** 하므로(구 `:325` 자기지시 문제와 같은 형태), 이 문장이 있는 한 "절차"
+// 라는 토큰의 완전 부재는 D4 블록 전체에서 구조적으로 불가능하다. ⇒ **검사 범위를 "협박 계열의
+// 자기소개(캐릭터가 실제로 하는 말)"로 좁혔다** — 실제로 고쳐야 했던 결함(신고 ⑨: "보안 관련
+// 절차"라는 **기관 절차 톤**이 새어 나온 것)은 옛 문구 "처리·입금 확인"의 모호함이었지, D4 헤더나
+// 공통 항목이 아니다. 아래는 그 결함이 실제로 고쳐졌는지를 직접 검증한다.
+test("[§50/절차어휘 G303] anonymous 페르소나는 옛 모호 문구('처리·입금 확인') 대신 새 문구('돈이 들어왔는지 직접 확인한다')를 쓴다", () => {
+  const D4_HEADER = "[난이도 — 고급(심화): 절차로 정당화한다]";
+  const anonymousIds = Object.keys(PERSONA_AUTHORITY).filter(
+    (id) => PERSONA_AUTHORITY[id] === "anonymous",
+  );
+  assert.equal(anonymousIds.length, 2, "kidnapping-threat · reputation-blackmail-scam 2종이어야 한다");
+
+  let checked = 0;
+  for (const { label, text } of assembledPrompts()) {
+    const scenarioId = label.split("[")[0];
+    if (!anonymousIds.includes(scenarioId)) continue;
+    if (!text.includes(D4_HEADER)) continue;
+    checked += 1;
+    assert.equal(
+      text.includes("처리·입금 확인"),
+      false,
+      `${label}: 옛 모호 문구("처리·입금 확인" — 기관 절차 어휘와 구별 안 됨, §50.5.1)가 남아 있다`,
+    );
+    assert.ok(
+      text.includes('돈이 들어왔는지 직접 확인한다'),
+      `${label}: 새 문구가 없다 — promptAssembly.ts의 ADVANCED_L3_PROCEDURAL을 확인하라(§50.5.3)`,
+    );
+    assert.ok(
+      text.includes("어딘가 다른 곳에서 무언가가 진행된다는 말은 쓰지 않는다"),
+      `${label}: "절차/심사/검토/보안 확인" 금지 문장이 없다(§50.5.3)`,
+    );
+  }
+  assert.ok(checked > 0, "L3 절차형 블록을 받는 협박 시나리오 조합이 비었다 — 순회가 비었을 수 있다");
+});
+
+// ⚠️ **§50.5.3의 이 문장은 identityCheckAllowed로 갈리는 서버측 템플릿이 아니다 — §43(구 `:325`
+// 조건절)과 같은 형태의 "모델이 스스로 조건 분기하는 단일 문장"이다.** `:334`(구 좌표) 원문 자체가
+// "네가 …가 아니라면 …쓴다"는 if/then 구문 하나로 institution·non-institution을 함께 다루므로,
+// 이번 문구 교체는 **이 블록을 받는 10개 시나리오 전부**(institution 6 + anonymous 2 중 D4 보유
+// 시나리오 — family/grandchild/messenger-child-kakao/messenger-friend-loan-kakao 4종은 reduced라
+// D4 블록 자체가 없다)에 동일하게 적용된다. 그래서 institution 쪽 "회귀 0" 단언은 이 문장에는
+// 성립하지 않는다(institution 8종 회귀 0 보장은 §50.4.4의 identityCheckAllowed 조건형 3자리
+// (`:51`·`:83`·L4 예시)에만 해당한다, G300).
+test("[§50/절차어휘 G303 전수] D4 블록을 받는 모든 시나리오가 새 문구를 공유한다(단일 문장 — 페르소나 무관)", () => {
+  const D4_HEADER = "[난이도 — 고급(심화): 절차로 정당화한다]";
+  let checked = 0;
+  for (const { label, text } of assembledPrompts()) {
+    if (!text.includes(D4_HEADER)) continue;
+    checked += 1;
+    assert.equal(text.includes("처리·입금 확인"), false, `${label}: 옛 모호 문구가 남아 있다`);
+    assert.ok(text.includes("돈이 들어왔는지 직접 확인한다"), `${label}: 새 문구가 없다`);
+  }
+  assert.ok(checked > 0, "D4 블록을 받는 조합이 비었다");
+});
+
+// ── §50.11 #11 — P-2에서 T86 무해화 역검증을 신설 [화자] 블록·identityCheckAllowed 축과 함께
+// 돌린다(스캔 창이 CONVERSATION_STYLE 앞으로 넓어졌으므로 새 축을 반드시 exercising해야 한다) ──
+test("[§50/P-2 무해화] 신설 축(speakerGender·identityCheckAllowed)이 반영된 조립 산출물 전수에 금지 패턴이 없다", () => {
+  const violations: string[] = [];
+  for (const { label, text } of assembledPrompts()) {
+    for (const v of scanText(text, "assembledPrompt")) {
+      violations.push(`${label} :: ${v.family}: ${v.label} :: ${v.excerpt}`);
+    }
+  }
+  assert.deepEqual(
+    violations,
+    [],
+    "신설 [화자] 블록·페르소나 조건형 문구가 무해화 경계(AC-005/AC-075)를 건드렸다.",
+  );
+});
+
+// ── §50.7.2 — G308: "마무리되도록 진행한다"는 조립 산출물 전수에서 0건 ─────────────────────────
+test("[§50/종료선언 G308] 조립 산출물 전수에 '마무리되도록 진행한다'가 0건이다(14벌 전건 정정의 완료 증거)", () => {
+  const violations: string[] = [];
+  for (const { label, text } of assembledPrompts()) {
+    if (text.includes("마무리되도록 진행한다")) violations.push(label);
+  }
+  assert.deepEqual(
+    violations,
+    [],
+    "이 문구가 남아 있으면 모델이 통화를 스스로 마무리해도 된다는 지시가 살아 있는 것이다(§50.7.2).",
+  );
+});
 
 test("[T109/요구몰림] 사기범 대사 한 차례에 독립 요구가 2건 이상 들어가지 않는다(조립 결과 전수)", () => {
   const violations: string[] = [];
