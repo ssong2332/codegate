@@ -122,3 +122,24 @@ export function realtimeVerifyAnchor(scammerTurns: number): number {
 export function fallbackVerifyAnchor(scammerDocCount: number): number {
   return Math.max(0, Math.trunc(scammerDocCount));
 }
+
+/**
+ * ⭐⭐ **§45.7 V1 — 폴백 경로의 앵커 *재계산*(예고를 실제로 말하는 턴).**
+ *
+ * **왜 필요한가(§45.6 F2-b · P-2로 100% 재현)**: `fallbackVerifyAnchor`는 `deliverVerifyOffer`가
+ * 호출된 **그 시점**의 사기범 문서 수를 쓴다. 그런데 폴백에서 예고 대사는 그 **뒤** `sendMessage`
+ * 턴에서 주입되므로(`roleplay/index.ts`의 `verify_announce` 분기), 앵커는 **항상 한 턴 이르다** —
+ * 리포트 리플레이에서 확인 오퍼 카드가 예고 대사보다 **앞에** 놓인다(구조적 · 간헐 아님).
+ *
+ * **무엇을 받는가**: 이번 응답을 만들기 **전**의 사기범 문서 수(`scammerDocCount`). 이번 턴에
+ * 생성될 사기범 응답이 곧 예고 대사이므로 그 응답의 **1-기반 순번**은 `scammerDocCount + 1`이다.
+ * 리졸버(`report/smsTimeline.ts`의 `resolveAnchor`)가 1-기반이라 그대로 넘긴다.
+ *
+ * ⛔ **새 리졸버도 새 필드도 아니다(G252)** — 기존 `offerAnchorScammerTurn` **한 필드의 값을**
+ * announce 시점에 1회 갱신할 뿐이다. `announcedAt`이 한 번만 마크되므로 갱신도 1회 = 멱등이다.
+ * ⛔ **실시간 경로에 쓰지 말 것** — 그쪽은 `realtimeVerifyAnchor`(+1 보정)와 후보 E의 commit
+ * 시점이 소유한다(§45.7 V2).
+ */
+export function announcedVerifyAnchor(scammerDocCount: number): number {
+  return Math.max(0, Math.trunc(scammerDocCount)) + 1;
+}

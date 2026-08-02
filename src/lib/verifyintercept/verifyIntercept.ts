@@ -72,8 +72,13 @@ export function shouldOfferVerify(input: {
  *
  * | callMode | 조건 | 후보 | 왜 그 값인가 |
  * |---|---|---|---|
- * | `realtime` | **문서 존재**(+ 미전환) | **E** | 문서는 예고 턴이 **끝난 뒤**(`commit`)에만 만들어진다 |
+ * | `realtime` | **문서 존재**(+ 미전환) | **E** | 문서는 **예고 지시가 큐를 떠난 뒤 사기범 턴이 한 번 끝나야**(`commit`) 만들어진다 |
  * | `fallback` | 문서 존재 **+ `announcedAtMs`**(+ 미전환) | **C** | 폴백은 문서가 곧 announce 트리거라 존재만으로는 부족하다 |
+ *
+ * ⛔ **G253(§45.6 (3) F2-a) — 종전 문면 정정(2026-07-29).** 이 표의 realtime 행은 원래
+ * *"문서는 예고 턴이 **끝난 뒤**(`commit`)에만 만들어진다"* 였다. 그 문장은 **참이지만
+ * *"그 턴이 예고 턴이다"* 를 함의하지 않는다** — 지시가 큐에서 한 턴 밀리면 commit이 세는 턴은
+ * 예고 턴이 **아니다**. 그 구멍은 `announceTurnsOnInstructionDispatch`(§45.7 V2)가 닫는다.
  *
  * ⭐ **왜 클라 ref가 아니라 문서인가(G184 — 이것이 후보 D를 단독 기각한 판별자다)**: `verifyOffer`가
  * 문서 구독인 이유가 *"새로고침·재마운트 후에도 상태가 유지되게"* 다(§16.2). ref 단독이면 기본값이
@@ -179,6 +184,39 @@ export function takeNextInstruction(queue: readonly PendingInstruction[]): {
   if (queue.length === 0) return { item: null, rest: [] };
   const [first, ...rest] = queue;
   return { item: first, rest };
+}
+
+/**
+ * ⭐⭐ **§45.7 V2 — 예고 시점 기록을 *요청 발신*이 아니라 *큐를 떠난 시점*으로 옮긴다.**
+ *
+ * **왜(§45.6 F2-b가 아니라 F2-a — 실시간 경로 · 경합 의존 = 간헐)**: 종전에는 `deliverVerifyOffer`
+ * 1단계(`announce`)를 **보내는 자리**에서 `verifyAnnounceTurnsRef = completedScammerTurns`를 찍었다.
+ * 그런데 그 응답의 지시는 **큐를 거쳐** 주입되고(G31 — 같은 턴에 문자 announce가 있으면 뒤로 밀린다),
+ * 밀리면 예고 발화가 A+2 턴인데 commit은 A+1에서 이미 앵커를 굳힌다 ⇒ **오퍼 카드가 예고 대사보다
+ * 정확히 한 턴 앞**. ⛔ **큐가 안 밀린 회차에서는 멀쩡하다 — 그래서 *"고친 뒤 안 났다"* 가 증거가
+ * 되지 못한다(G251).** 결정적 증거는 이 함수의 단위 테스트다.
+ *
+ * | priority | phase | 결과 |
+ * |---|---|---|
+ * | `verify` | `announced` | ⭐ `completedScammerTurns` — **예고 지시가 지금 큐를 떠났다** |
+ * | `verify` | `idle`·`committed` | `current` 유지 |
+ * | `sms` | — | `current` 유지 |
+ *
+ * ⚠️ **`phase` 조건을 빼지 말 것**: 재연결 지시(`deliverVerifyReconnect`)도 **같은 `verify`
+ * 우선순위**로 큐를 타는데, 그때는 이미 `committed`라 기록을 덮어쓰면 안 된다.
+ * ⛔ **이 함수가 보증하지 않는 것**: *"그 턴에 실제로 예고를 말했다"* 는 여전히 보증되지 않는다
+ * (§38.11 (c) 불변 — Gemini Live는 오디오 전용이라 대사 내용을 서버가 쥐는 지점이 없다). 닫히는
+ * 것은 **큐 지연이라는 알려진 원인 하나**다.
+ */
+export function announceTurnsOnInstructionDispatch(input: {
+  priority: InstructionPriority;
+  phase: VerifyOfferPhase;
+  completedScammerTurns: number;
+  current: number | null;
+}): number | null {
+  if (input.priority !== "verify") return input.current;
+  if (input.phase !== "announced") return input.current;
+  return input.completedScammerTurns;
 }
 
 // ── T118 / 층 A5 — 전환 상태 재확인 1줄의 발동 조건(§25.3 (3)) ──────────────────

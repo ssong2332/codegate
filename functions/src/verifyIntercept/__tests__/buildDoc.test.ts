@@ -4,7 +4,10 @@
 // 확인한다". 이 파일은 그 실측 **전에** 값을 못박는 회귀 그물이고, 실측 결과는 구현 보고서에 남는다.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import * as path from "node:path";
 import {
+  announcedVerifyAnchor,
   buildVerifyOfferResponse,
   fallbackVerifyAnchor,
   realtimeVerifyAnchor,
@@ -31,6 +34,55 @@ test("앵커는 음수·소수를 흘려보내지 않는다(위조 입력 방어
   assert.equal(realtimeVerifyAnchor(-3), 1);
   assert.equal(realtimeVerifyAnchor(2.9), 3);
   assert.equal(fallbackVerifyAnchor(-1), 0);
+  assert.equal(announcedVerifyAnchor(-3), 1);
+  assert.equal(announcedVerifyAnchor(2.9), 3);
+});
+
+// ── §45.7 V1 — 폴백 앵커를 **예고를 말하는 턴**으로 옮긴다(§45.6 F2-b · P-2로 100% 재현) ──────
+test("[§45.7 V1] announce 시점 앵커 = 이번 턴에 생성될 사기범 응답의 1-기반 순번", () => {
+  // 이번 응답을 만들기 **전**의 사기범 문서 수가 N이면, 지금 만들어질 예고 대사는 N+1번째다.
+  assert.equal(announcedVerifyAnchor(0), 1);
+  assert.equal(announcedVerifyAnchor(4), 5);
+});
+
+test("[§45.7 V1] ⛔ F2-b 회귀 그물 — announce 앵커는 오퍼 write 시점 앵커보다 **정확히 1 크다**", () => {
+  // P-2 실측(격리 에뮬레이터 3/3, institutional-impersonation):
+  //   오퍼 write 시점 scammerDocCount=4 ⇒ offerAnchorScammerTurn=4 ⇒ turnIndex 6
+  //   예고 대사는 그 **다음** sendMessage 턴 ⇒ 사기범 5번째 ⇒ turnIndex 8
+  // ⇒ 두 값이 같아지면(=갱신이 사라지면) 카드가 다시 예고보다 앞에 놓인다.
+  const scammerDocCountAtOffer = 4;
+  const scammerDocCountAtAnnounce = 4; // 오퍼 요청 직후 턴이라 아직 같은 값이다
+  assert.equal(fallbackVerifyAnchor(scammerDocCountAtOffer), 4);
+  assert.equal(announcedVerifyAnchor(scammerDocCountAtAnnounce), 5);
+  assert.equal(
+    announcedVerifyAnchor(scammerDocCountAtAnnounce) - fallbackVerifyAnchor(scammerDocCountAtOffer),
+    1,
+  );
+});
+
+/**
+ * ⭐⭐ **배선 게이트 — 순수 함수 테스트만으로는 V1을 지킬 수 없다.**
+ *
+ * `announcedVerifyAnchor`는 옳은데 **호출부가 사라지면** 위 테스트는 전부 초록인 채로 결함이
+ * 되돌아온다(이 저장소가 반복해서 데인 양식 — 관측 불가 지점에 걸린 동작). 호출부가 Firestore
+ * write라 유닛으로 관측할 수 없으므로 **소스 스캔**으로 고정한다(`secretInjectionLayer1.test.ts`
+ * 관례 — 테스트는 `lib/`에서 돌므로 소스 경로를 명시적으로 잡는다).
+ */
+const ROLEPLAY_SRC = path.resolve(__dirname, "../../../src/roleplay/index.ts");
+
+test("[§45.7 V1 배선] verify_announce 분기가 announcedAt과 **같은 write**로 앵커를 갱신한다", () => {
+  const src = readFileSync(ROLEPLAY_SRC, "utf8");
+  const branch = src.slice(src.indexOf('turnChoice === "verify_announce"'));
+  const updateCall = branch.slice(branch.indexOf("verifyOfferRef.update("));
+  const updateArgs = updateCall.slice(0, updateCall.indexOf("})") + 2);
+  assert.ok(
+    updateArgs.includes("announcedAt:"),
+    "announcedAt 마킹이 이 분기에 있어야 한다(§38.4 C — 폴백 컨트롤 선행 조건, G188)",
+  );
+  assert.ok(
+    /offerAnchorScammerTurn:\s*announcedVerifyAnchor\(scammerDocCount\)/.test(updateArgs),
+    "⛔ 앵커 갱신이 사라지면 F2-b(카드가 예고 대사보다 앞)가 그대로 되돌아온다 — §45.7 V1",
+  );
 });
 
 // ── 폴백 경로 턴 지시 선택(§16.6 G31) ──────────────────────────────────────────

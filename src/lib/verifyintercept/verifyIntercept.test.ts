@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import * as path from "node:path";
 import {
+  announceTurnsOnInstructionDispatch,
   enqueueInstruction,
   nextVerifyOfferStage,
   rollbackVerifyOfferPhase,
@@ -10,6 +13,7 @@ import {
   shouldRevealVerifyOffer,
   takeNextInstruction,
   type PendingInstruction,
+  type VerifyOfferPhase,
 } from "./verifyIntercept.ts";
 
 // ── 오퍼 게이트(§16.1.3/§16.1.5) ────────────────────────────────────────────────
@@ -264,5 +268,180 @@ test("[§38 / G187 역검증] boolean 하나로는 '1단계 성공 · 2단계 �
       announceTurnComplete: true,
     }),
     "commit",
+  );
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// §45.7 V2 — 예고 시점 기록을 **큐를 떠난 시점**으로 옮긴다(§45.6 (3) F2-a)
+//
+// ⛔ **G251** — F2-a는 큐 경합 의존이라 **간헐**이다. *"고친 뒤 안 났다"* 는 증거가 되지 못한다.
+// 결정적 증거는 아래 시뮬레이션이며, **경합이 없는 회차에서는 종전 배선도 통과한다**는 것까지
+// 함께 못박는다(그것이 이 결함이 몇 달간 안 보인 이유다).
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * `session/play/page.tsx`의 큐·ref 배선을 **순수 함수만으로** 재현한다.
+ * 좌표계는 "완료된 Live 사기범 턴 수"이고, 사기범 문서의 1-기반 순번은 `1 + 턴번호`다
+ * (오프닝 사기범 행이 turnIndex 0으로 먼저 있기 때문 — `realtimeVerifyAnchor`의 +1과 같은 사실).
+ */
+function simulateRealtimeOffer(input: {
+  gate: number;
+  /** 게이트 턴에 문자 announce가 그 턴의 지시 슬롯을 먼저 차지하는가(G31 경합). */
+  smsCollision: boolean;
+  /** `dispatch` = §45.7 V2(현행) · `request` = 종전 배선(요청 발신 시점 기록). */
+  recordAt: "dispatch" | "request";
+  maxTurns?: number;
+}): { anchorScammerDoc: number | null; announceSpokenScammerDoc: number | null } {
+  let scammerTurns = 0;
+  let phase: VerifyOfferPhase = "idle";
+  let queue: PendingInstruction[] = [];
+  let busy = false;
+  let announceTurns: number | null = null;
+  let anchorScammerDoc: number | null = null;
+  let announceSpokenScammerDoc: number | null = null;
+  /** 예고 지시가 주입됐으므로 **이 턴 번호에** 예고 대사가 발화된다. */
+  let speakAtTurn: number | null = null;
+
+  const drain = () => {
+    if (busy) return;
+    const { item, rest } = takeNextInstruction(queue);
+    if (!item) return;
+    queue = rest;
+    busy = true;
+    if (input.recordAt === "dispatch") {
+      announceTurns = announceTurnsOnInstructionDispatch({
+        priority: item.priority,
+        phase,
+        completedScammerTurns: scammerTurns,
+        current: announceTurns,
+      });
+    }
+    if (item.priority === "verify" && phase === "announced") speakAtTurn = scammerTurns + 1;
+  };
+
+  const runEffect = () => {
+    const completed = scammerTurns;
+    const announceTurnComplete = announceTurns !== null && completed > announceTurns;
+    const stage = nextVerifyOfferStage({ phase, announceTurnComplete });
+    if (stage === null) return;
+    if (
+      stage === "announce" &&
+      !shouldOfferVerify({
+        trigger: { availableAfterScammerTurns: input.gate },
+        scammerTurns: completed,
+        alreadyRequested: phase !== "idle",
+      })
+    ) {
+      return;
+    }
+    phase = stage === "announce" ? "announced" : "committed";
+    if (stage === "announce") {
+      if (input.recordAt === "request") announceTurns = completed;
+      queue = enqueueInstruction(queue, { text: "예고 지시", priority: "verify" });
+      drain();
+    } else {
+      // 서버의 `realtimeVerifyAnchor(scammerTurns)` = completed + 1 (1-기반 사기범 문서 순번).
+      anchorScammerDoc = completed + 1;
+    }
+  };
+
+  for (let turn = 1; turn <= (input.maxTurns ?? 10); turn += 1) {
+    if (speakAtTurn === turn) announceSpokenScammerDoc = 1 + turn;
+    scammerTurns = turn;
+    busy = false;
+    drain();
+    if (input.smsCollision && turn === input.gate) {
+      queue = enqueueInstruction(queue, { text: "문자 announce", priority: "sms" });
+      drain();
+    }
+    runEffect();
+  }
+  return { anchorScammerDoc, announceSpokenScammerDoc };
+}
+
+test("[§45.7 V2] 큐 경합이 있으면 종전 배선은 앵커가 예고 대사보다 **한 턴 앞**이다(F2-a 재현)", () => {
+  const before = simulateRealtimeOffer({ gate: 4, smsCollision: true, recordAt: "request" });
+  assert.equal(before.announceSpokenScammerDoc, 7, "예고 대사는 7번째 사기범 문서다");
+  assert.equal(before.anchorScammerDoc, 6, "⛔ 그런데 앵커는 6을 가리킨다 = 카드가 대사보다 앞");
+});
+
+test("[§45.7 V2] 같은 경합에서 현행 배선은 앵커가 **예고 대사 바로 그 자리**에 놓인다", () => {
+  const after = simulateRealtimeOffer({ gate: 4, smsCollision: true, recordAt: "dispatch" });
+  assert.equal(after.announceSpokenScammerDoc, 7);
+  assert.equal(after.anchorScammerDoc, 7, "⭐ 앵커 == 예고 대사");
+});
+
+test("[§45.7 V2 / G251] ⛔ 경합이 없는 회차에서는 **종전 배선도 통과한다** — 그래서 1회 통과가 증거가 못 된다", () => {
+  const before = simulateRealtimeOffer({ gate: 4, smsCollision: false, recordAt: "request" });
+  const after = simulateRealtimeOffer({ gate: 4, smsCollision: false, recordAt: "dispatch" });
+  assert.deepEqual(before, { anchorScammerDoc: 6, announceSpokenScammerDoc: 6 });
+  assert.deepEqual(after, { anchorScammerDoc: 6, announceSpokenScammerDoc: 6 });
+});
+
+test("[§45.7 V2] 기록 판정표 — verify 지시가 announced 단계에서 큐를 떠날 때만 기록한다", () => {
+  assert.equal(
+    announceTurnsOnInstructionDispatch({
+      priority: "verify",
+      phase: "announced",
+      completedScammerTurns: 5,
+      current: null,
+    }),
+    5,
+  );
+  assert.equal(
+    announceTurnsOnInstructionDispatch({
+      priority: "sms",
+      phase: "announced",
+      completedScammerTurns: 5,
+      current: null,
+    }),
+    null,
+    "문자 지시가 큐를 떠난 것은 예고가 나간 것이 아니다",
+  );
+  assert.equal(
+    announceTurnsOnInstructionDispatch({
+      priority: "verify",
+      phase: "committed",
+      completedScammerTurns: 9,
+      current: 4,
+    }),
+    4,
+    "⛔ 재연결 지시도 같은 verify 우선순위로 큐를 탄다 — 기록을 덮어쓰면 안 된다",
+  );
+  assert.equal(
+    announceTurnsOnInstructionDispatch({
+      priority: "verify",
+      phase: "idle",
+      completedScammerTurns: 3,
+      current: null,
+    }),
+    null,
+  );
+});
+
+/**
+ * ⭐⭐ **배선 게이트 — 순수 함수만으로는 V2를 지킬 수 없다.**
+ *
+ * 위 시뮬레이션은 *"이렇게 배선하면 옳다"* 를 보일 뿐, **page.tsx가 실제로 그렇게 배선돼 있는지**는
+ * 보지 못한다. 그 배선은 브라우저 이벤트(턴 완료 콜백) 위에서만 관측되는 자리라 유닛으로 잡히지
+ * 않는다 ⇒ **소스 스캔**으로 두 가지를 함께 고정한다: (a) 새 기록 지점이 있다, (b) **옛 기록
+ * 지점이 없다**. (b)가 없으면 두 지점이 공존해도 게이트가 초록이다.
+ */
+const PLAY_PAGE_SRC = path.resolve(import.meta.dirname, "../../app/session/play/page.tsx");
+
+test("[§45.7 V2 배선] 예고 시점은 큐 드레인에서 기록되고, 요청 발신 시점 기록은 **남아 있지 않다**", () => {
+  const src = readFileSync(PLAY_PAGE_SRC, "utf8");
+  assert.ok(
+    /verifyAnnounceTurnsRef\.current\s*=\s*announceTurnsOnInstructionDispatch\(/.test(src),
+    "드레인 시점 기록이 있어야 한다(§45.7 V2)",
+  );
+  assert.ok(
+    src.includes("completedScammerTurns: scammerTurnsRef.current"),
+    "⛔ state가 아니라 ref로 재야 한다 — 턴 완료 콜백 안에서는 state가 한 턴 낡았다",
+  );
+  assert.equal(
+    /verifyAnnounceTurnsRef\.current\s*=\s*completedScammerTurns/.test(src),
+    false,
+    "⛔ 요청 발신 시점 기록(종전 배선)이 되살아나면 F2-a가 그대로 돌아온다 — §45.6 (3) F2-a c",
   );
 });
