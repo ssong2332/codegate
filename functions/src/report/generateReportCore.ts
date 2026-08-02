@@ -27,6 +27,7 @@ import {
   type SmsTimelineSource,
 } from "./smsTimeline";
 import { applyVerifyIntercept, type VerifyTimelineSource } from "./verifyTimeline";
+import { deriveReportLlmProviderField } from "./reportLlmProvider";
 import {
   applyMockScreens,
   deriveReportStages,
@@ -292,6 +293,9 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     ...(mock.mockScreenTimeline.length > 0
       ? { mockScreenTimeline: mock.mockScreenTimeline }
       : {}),
+    // T158(§48.2.1, AC-084) — 세션의 대사 축 강등 태그를 리포트로 역정규화(read 0회 추가,
+    // `session`은 위에서 이미 읽었다). 순수 함수로 뽑아 단위 테스트한다(§reportLlmProvider.test.ts).
+    ...deriveReportLlmProviderField(session),
   };
   await reportRef.set(reportDoc);
 

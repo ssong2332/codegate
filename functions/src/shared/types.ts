@@ -447,6 +447,12 @@ export type ReportDoc = {
   // 바뀌지 않는다(무백필).
   stages?: ReportStage[];
   mockScreenTimeline?: MockScreenTimelineEntry[];
+  // T158 추가(옵셔널, 하위호환 — §48.2.1, AC-084) — 리포트 생성 시점에 세션 문서의
+  // `llmProvider`(대사 축, `:91`)를 그대로 복사한 값. 목소리 축(`voiceProvider`)은 포함하지
+  // 않는다(§48.3, 두 축은 섞이지 않는다). "mock"이면 대화 일부가 미리 준비된 대사로 진행됐음을
+  // 참가자 문면(P-31 ⓖ)이 근거로 삼는다. 무백필 — 이 필드 신설 이전 리포트에는 값이 없고, 부재는
+  // "정상이었다"는 긍정 표기로 렌더하지 않는다(§48.2.2 G274).
+  llmProvider?: LlmProviderName;
 };
 
 // --- reports/{reportId}/rewindAttempts/{attemptId} (T70, UX-028/UF-009, §15.2.2, AC-062/063) ---

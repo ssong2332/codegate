@@ -24,6 +24,11 @@ import { Badge, Button } from "@/components/ui";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { buildStageNotice, type ReportStage } from "@/lib/report/stageNotice";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
+import {
+  isReportDialogueDegraded,
+  REPORT_DEGRADED_NOTICE,
+  type LlmProviderName,
+} from "@/lib/report/degradedDisclosure";
 
 type DeceivedMoment = {
   turnIndex: number;
@@ -92,6 +97,10 @@ type ReportData = {
   // (§15.3.5) 여기서도 "어떤 강도로 훈련했는가"를 알려주는 라벨로만 쓴다.
   difficultyLevel: DifficultyLevel;
   createdAt: Timestamp | null;
+  // T158(§48.2.1, AC-084) — 리포트 생성 시점에 세션에서 복사된 대사 축 강등 태그. "mock"이면
+  // 대화 일부가 미리 준비된 대사로 진행됐음을 P-31 ⓖ 고지의 근거로 쓴다. 부재는 "강등 관측 없음"
+  // 이며(무백필) 긍정 표기("실제 AI로 진행됐습니다")로 렌더하지 않는다(G274).
+  llmProvider?: LlmProviderName;
 };
 
 type PageState = "no-session" | "loading" | "error" | "loaded";
@@ -135,6 +144,10 @@ export default function ReportPage() {
       stages: Array.isArray(data.stages) ? (data.stages as ReportStage[]) : [],
       difficultyLevel: normalizeDifficultyLevel(data.difficultyLevel),
       createdAt: data.createdAt instanceof Timestamp ? data.createdAt : null,
+      llmProvider:
+        data.llmProvider === "mock" || data.llmProvider === "claude" || data.llmProvider === "gemini"
+          ? data.llmProvider
+          : undefined,
     };
   }, []);
 
@@ -422,6 +435,15 @@ export default function ReportPage() {
           </div>
         </div>
       </div>
+
+      {/* P-31 ⓖ(§48.2.1, AC-084) — 대사 축 강등 고지. 타임라인 위, 접히지 않는 과거형 1줄.
+          `report.llmProvider === "mock"` 조건자 하나만 쓴다(48.2.1 "화면 판정도 같은 조건자를
+          쓴다"). 부재(undefined)는 아무 말도 하지 않는다 — 긍정 표기를 만들지 않는다(G274). */}
+      {isReportDialogueDegraded(report.llmProvider) && (
+        <p role="status" className="mx-5 mt-3.5 text-base leading-relaxed text-[#6B655C]">
+          {REPORT_DEGRADED_NOTICE}
+        </p>
+      )}
 
       {/* 아코디언 3종 — 타임라인/시도된 수법/대처법을 접어서 밀도를 낮춘다. */}
       <div className="mx-5 mt-3.5 flex flex-col gap-2.5">

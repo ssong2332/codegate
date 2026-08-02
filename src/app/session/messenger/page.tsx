@@ -40,6 +40,7 @@ import {
   type DifficultyLevel,
 } from "@/lib/difficulty";
 import { Banner, Button } from "@/components/ui";
+import { foldDegraded, DIALOGUE_DEGRADED_NOTICE } from "@/lib/report/degradedDisclosure";
 
 type PageState = "checking" | "ready" | "no-session" | "scenario-not-found" | "load-error";
 // detectSkin.ts의 MessengerSkinSource는 auto|fallback만 다룬다(자동 감지 결과 타입) — 이 화면은
@@ -85,6 +86,9 @@ export default function MessengerSessionPage() {
   const [scenario, setScenario] = useState<ScenarioDoc | null>(null);
   // T72 — 이 대화의 난이도(세션 문서 기준, P-22 동일 라벨).
   const [difficultyLevel, setDifficultyLevel] = useState<DifficultyLevel | null>(null);
+  // T158(§48.5.1, AC-084, P-31) — 대사 축 강등 관측. sticky OR-fold, false로 되돌리는 대입 0건
+  // (G278). 마운트 시 `sessions/{sid}.llmProvider` + 매 턴 `SendMessageResponse.isMock`의 합.
+  const [dialogueDegraded, setDialogueDegraded] = useState(false);
   const [ended, setEnded] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -131,6 +135,8 @@ export default function MessengerSessionPage() {
         // T72(UX-022 v1.11 난이도 배지, P-22) — 세션 문서에 서버가 실제로 기록한 값을 읽는다.
         // 메신저 채팅은 매 턴 sendMessage(서버 조립)를 타므로 난이도가 항상 반영된다.
         setDifficultyLevel(normalizeDifficultyLevel(data.difficultyLevel));
+        // T158(§48.5.1) — 마운트 시 관측(OR-fold 첫 항). `foldDegraded`가 sticky를 보장한다.
+        setDialogueDegraded((current) => foldDegraded(current, data.llmProvider === "mock"));
         if (data.status === "ended") {
           setEnded(true);
         }
@@ -205,6 +211,8 @@ export default function MessengerSessionPage() {
     setSendError(null);
     try {
       const result = await sendMessage({ sessionId, userText: text });
+      // T158(§48.5.1) — OR-fold 두 번째 항.
+      setDialogueDegraded((current) => foldDegraded(current, result.isMock));
       setInput("");
       // T30(§13.2) — 자동 신호든 max-turn 폴백이든, 서버가 이미 transitionChannel을 마쳤다는
       // 뜻이다. 클라는 이 플래그만 보고 전이 연출로 넘어간다(자유텍스트 직접 분류 안 함).
@@ -392,6 +400,14 @@ export default function MessengerSessionPage() {
         {scenario.callerLabel}(으)로부터 {surface === "kakao" ? "카카오톡" : "문자"} 메시지가
         도착했습니다.
       </p>
+
+      {/* P-31 ⓔ(§48.5.1, AC-084 M-3/M-4) — 대화 영역 안의 비차단 고지 1줄. 말풍선으로 그리지
+          않는다(P-31 (1) 금지). sticky — 한 번 뜨면 세션 동안 유지되고 재시도 버튼을 만들지 않는다. */}
+      {dialogueDegraded && (
+        <p role="status" className="px-4 pt-2 text-sm leading-relaxed text-[#6B655C]">
+          {DIALOGUE_DEGRADED_NOTICE}
+        </p>
+      )}
 
       {/* 대화 목록 — 발신자 구분은 색이 아니라 라벨로(위에 "나"/callerLabel 텍스트). */}
       <ul className="flex flex-1 flex-col gap-3 px-4 py-4" aria-live="polite">

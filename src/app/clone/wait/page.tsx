@@ -25,6 +25,11 @@ import {
 } from "@/lib/recording";
 import { createSession } from "@/lib/api";
 import { Button, ProgressSteps, type ProgressStep } from "@/components/ui";
+import {
+  isVoiceDegraded,
+  VOICE_DEGRADED_NOTICE,
+  type VoiceProviderName,
+} from "@/lib/report/degradedDisclosure";
 
 type CloneState = "checking" | "pending" | "ready" | "failed" | "no-session" | "read-error";
 type StartState = "idle" | "starting" | "start-error" | "no-scenario";
@@ -45,6 +50,11 @@ export default function CloneWaitPage() {
   const [voiceId, setVoiceId] = useState<string | null>(null);
   const [startState, setStartState] = useState<StartState>("idle");
   const [startAttempt, setStartAttempt] = useState(0);
+  // T158(§48.3, AC-084, P-31 ⓕ) — 목소리 축 강등 신호. `createVoiceClone`이 항상 write하는
+  // `sessions/{sid}.voiceProvider`(functions/src/voice/index.ts:77)를 아래 Effect 1이 이미
+  // 구독 중인 같은 스냅샷에서 함께 읽는다(신규 read 0건). 대사 축(`llmProvider`)과는 다른 값이라
+  // 섞지 않는다(48.3).
+  const [voiceProvider, setVoiceProvider] = useState<VoiceProviderName | null>(null);
 
   // Effect 1 — cloneStatus 구독만 담당(클론 진행 상태 표시). voiceId가 확보되면 저장만 하고,
   // 실제 createSession 호출은 Effect 2로 넘긴다.
@@ -55,6 +65,8 @@ export default function CloneWaitPage() {
       (snapshot) => {
         const data = snapshot.data();
         const status = data?.cloneStatus;
+        const provider = data?.voiceProvider;
+        if (provider === "mock" || provider === "elevenlabs") setVoiceProvider(provider);
         if (status === "ready") {
           setVoiceId((data?.voiceId as string) ?? null);
           setCloneState("ready");
@@ -152,6 +164,13 @@ export default function CloneWaitPage() {
         <p className="text-[15px] leading-[1.6] text-[#6B655C]">
           잠시만 기다려 주세요. 훈련용 가상 음성을 준비하고 있어요.
         </p>
+        {/* P-31 ⓕ(§48.3, AC-084) — 목소리 축 강등 고지. "준비 완료" 상태(isReady)에만 붙는다.
+            부재/elevenlabs면 아무 말도 하지 않는다(긍정 표기 금지, G274와 같은 원칙). */}
+        {isReady && isVoiceDegraded(voiceProvider) && (
+          <p role="status" className="text-[15px] leading-[1.6] text-[#6B655C]">
+            {VOICE_DEGRADED_NOTICE}
+          </p>
+        )}
       </div>
 
       {showProgressCard && (

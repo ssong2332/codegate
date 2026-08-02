@@ -67,6 +67,7 @@ import {
   type DifficultyLevel,
 } from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
+import { foldDegraded, buildFallbackStatusLine } from "@/lib/report/degradedDisclosure";
 import CallWaveform from "@/components/CallWaveform";
 import InCallSmsOverlay from "@/components/InCallSmsOverlay";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
@@ -142,6 +143,10 @@ export default function SessionCallPage() {
   // T72 — 이 통화의 난이도(세션 문서 기준). 배지 표기는 실시간 경로가 실제로 난이도를 반영할 때만
   // 한다(아래 difficultyApplied 참고, §15.6 G6 "근거 없는 표기 금지").
   const [difficultyLevel, setDifficultyLevel] = useState<DifficultyLevel | null>(null);
+  // T158(§48.5.1, AC-084, P-31) — 대사 축 강등 관측. sticky OR-fold, false로 되돌리는 대입 0건
+  // (G278). 마운트 시 `sessions/{sid}.llmProvider`(아래 세션 read effect) + 매 턴
+  // `SendMessageResponse.isMock`(handleSend) + `realtime.isMock`(useRealtimeCall)의 합.
+  const [dialogueDegraded, setDialogueDegraded] = useState(false);
   // T40 fast-follow — 역방향 명시 전환 버튼("메시지로 전환") 상태. messenger/page.tsx의
   // escalating/escalationError와 동일한 패턴, 방향만 반대.
   const [switchingToMessenger, setSwitchingToMessenger] = useState(false);
@@ -218,6 +223,13 @@ export default function SessionCallPage() {
   // 되어야 하므로 ref에 쌓는다.
   const transcriptRef = useRef<TranscriptTurn[]>([]);
 
+  // T158(§48.5.1) — OR-fold 세 번째 항. `realtime.isMock`은 훅 안에서 이미 sticky이므로(never
+  // 되돌아가지 않음) effect로 로컬 state에 미러링하지 않고 렌더 시점에 바로 OR한다
+  // (react-hooks/set-state-in-effect 회피 — effect 안 동기 setState는 이 저장소 다른 화면에서도
+  // 쓰지 않는 패턴이다). `dialogueDegraded`(state, mount+turn 관측분)와 `realtime.isMock`의 합이
+  // 실제 "대사가 강등됐다"는 참값이다 — 아래 JSX는 이 값을 쓴다.
+  const dialogueIsDegraded = foldDegraded(dialogueDegraded, realtime.isMock);
+
   const handleTranscriptTurn = useCallback((role: "user" | "scammer", text: string) => {
     transcriptRef.current.push({ role, text });
     // T118(§25.3 (3)) — A5 재주입 조건의 관측 지점. 참가자가 한 번이라도 말한 뒤에만 다시 넣는다.
@@ -265,6 +277,8 @@ export default function SessionCallPage() {
         // T72(UX-014 v1.11 난이도 배지, P-22) — 세션 문서에 서버가 **실제로 기록한** 값을 읽는다
         // (sessionStorage 힌트가 아니라). 부재(난이도 도입 이전 세션)면 중급으로 정규화된다.
         setDifficultyLevel(normalizeDifficultyLevel(data.difficultyLevel));
+        // T158(§48.5.1) — 마운트 시 관측(OR-fold의 첫 항). `foldDegraded`가 sticky를 보장한다.
+        setDialogueDegraded((current) => foldDegraded(current, data.llmProvider === "mock"));
         // #4/#5 새로고침 복원: 이미 "받기"를 누른 세션(answered 플래그)이나 대화가 시작된 세션
         // (turnCount≥1)을 다시 열면 "수신 중"으로 되돌아가지 않고 곧바로 대화 상태로 복원한다.
         // 실시간 경로는 sendMessage를 안 타 turnCount가 0에 머무므로, turnCount만으로는 실시간
@@ -929,6 +943,8 @@ export default function SessionCallPage() {
     setSendError(null);
     try {
       const result = await sendMessage({ sessionId, userText: text });
+      // T158(§48.5.1) — OR-fold 두 번째 항.
+      setDialogueDegraded((current) => foldDegraded(current, result.isMock));
       setInput("");
       speech.reset();
       // T68 폴백 경로 — 서버가 이번 턴에 문자를 도착시켰으면 배너를 다시 띄운다(렌더 자체는
@@ -1432,9 +1448,12 @@ export default function SessionCallPage() {
                     >
                       {sendError ??
                         (callMode === "fallback"
-                          ? `실시간 음성 통화를 사용할 수 없어 텍스트로 진행합니다.${
-                              realtime.errorMessage ? ` ${realtime.errorMessage}` : ""
-                            }`
+                          ? // T158(P-31 ⓔ, §48.5.1, AC-084 M-2) — 기존 상태 1줄에 대사 출처 사실을
+                            // 합친다(신규 요소 0건). dialogueIsDegraded가 아니면 기존 문구 그대로다.
+                            `${buildFallbackStatusLine(
+                              "실시간 음성 통화를 사용할 수 없어 텍스트로 진행합니다.",
+                              dialogueIsDegraded,
+                            )}${realtime.errorMessage ? ` ${realtime.errorMessage}` : ""}`
                           : speech.errorMessage)}
                     </p>
                   )}
