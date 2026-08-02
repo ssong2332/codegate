@@ -10,7 +10,9 @@ import { SCENARIO_PROMPTS } from "../scenarios";
 import { hasInCallSms } from "../scenarios/inCallSms";
 import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
+import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt } from "./promptAssembly";
+import { speakerGenderFor } from "../realtime/scenarioVoice";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { ScammerMessage } from "./types";
 
@@ -84,6 +86,11 @@ export async function generateOpeningLine(
       // 명시하며 조립 순서상 **난이도 블록보다 뒤**에 온다 — 첫 마디는 신분·이유 설명이고 L4의
       // 2단 요구 예산은 그 뒤부터 센다(두 지시가 충돌하지 않는다).
       l3Procedural: isL3Procedural(scenarioId),
+      // §50.4.4/§50.3.3(G298 호출부 3곳 중 "오프닝 대사") — 표에서 파생해 항상 넘긴다. 오프닝은
+      // 화자가 스스로 이름·성별을 드러내는 **첫 마디**라 speakerGender가 특히 중요하다(§50.3.1
+      // 층 2가 정확히 이 시점에 정해진다).
+      identityCheckAllowed: asksIdentityCheck(scenarioId),
+      speakerGender: speakerGenderFor(scenarioId),
       turnInstruction: OPENING_TURN_INSTRUCTION,
     }),
     messages: [], // 오프닝 대사에는 아직 사용자 입력이 없다.

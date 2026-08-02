@@ -32,7 +32,9 @@ import { extractEscalationSignal } from "./escalationSignal";
 import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
+import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
+import { speakerGenderFor } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
 
@@ -276,11 +278,16 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       // T85(§17.3 호출부 3곳 중 "텍스트 턴", G63) — 고급에서 D4(절차·서류 정당화) 블록을 얹을
       // 시나리오인지. 세 호출부가 같은 판정 함수를 쓰지 않으면 "텍스트 턴은 고급인데 오프닝만
       // 축소" 같은 비대칭이 **에러 없이** 생긴다(기본값이 축소형이다).
+      // §50.4.4/§50.3.3(G298 호출부 3곳 중 "텍스트 턴") — identityCheckAllowed·speakerGender도
+      // 표에서 파생해 항상 넘긴다(기본값이 관대한 쪽/미출력이라 빠뜨려도 에러는 안 나지만 조용히
+      // 축소되거나 목소리·말이 어긋난다).
       systemPrompt: buildSystemPrompt(scenarioPrompt, {
         difficultyLevel,
         inCallSmsEnabled: hasInCallSms(session.scenarioId),
         verifyInterceptEnabled: verifyEnabled,
         l3Procedural: isL3Procedural(session.scenarioId),
+        identityCheckAllowed: asksIdentityCheck(session.scenarioId),
+        speakerGender: speakerGenderFor(session.scenarioId),
         ...(turnInstruction ? { turnInstruction } : {}),
       }),
       messages: llmHistory,
