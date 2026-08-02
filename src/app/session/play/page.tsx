@@ -1441,7 +1441,8 @@ export default function SessionCallPage() {
 
                   {(callMode === "fallback" || sendError || speech.errorMessage) && (
                     <p
-                      role={sendError ? "alert" : undefined}
+                      role={sendError ? "alert" : "status"}
+                      aria-live={sendError ? "assertive" : "polite"}
                       className={`mb-3 text-center text-xs leading-relaxed ${
                         sendError ? "text-[#F0A79E]" : "text-[#C9D4DB]"
                       }`}

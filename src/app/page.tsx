@@ -1,8 +1,30 @@
-import Link from "next/link";
+"use client";
 
-// 루트 진입점 — 온보딩 흐름 시작점(로그인)으로 안내하는 최소 스텁.
-// 실제 랜딩/마케팅 카피, 인증 상태 분기(lib/auth)는 T18에서 구현.
+import Link from "next/link";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useCurrentUser } from "@/lib/auth";
+
+// 루트 진입점. RouteGuard(lib/auth/RouteGuard.tsx)는 "/"가 PUBLIC_PATHS에 없어 비로그인
+// 사용자를 이 화면이 그려지기 전에 이미 /login으로 보낸다 — 즉 이 화면의 콘텐츠가 실제로
+// 렌더되는 것은 "로그인된 사용자가 '/'로 직접 이동한" 경우뿐이다. 그런데 아래 카드는 원래
+// "로그인하고 시작하기" 링크만 있었다 — 이미 로그인한 사용자에게 다시 로그인을 권하는
+// 화면이 되어 있었다(N-1, 자체 감사에서 발견). RouteGuard가 /login에서 로그인 사용자를
+// 이미 POST_LOGIN_PATH로 튕기는 것과 같은 목적지로, 여기서도 직접 리다이렉트한다.
 export default function Home() {
+  const { user, loading } = useCurrentUser();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace("/onboarding/consent");
+    }
+  }, [loading, user, router]);
+
+  // 로딩 중이거나 로그인 사용자(곧 리다이렉트됨)는 아무것도 그리지 않아 스텁이 잠깐이라도
+  // 노출되는 것을 막는다(RouteGuard의 동일한 "판정 전엔 null" 원칙).
+  if (loading || user) return null;
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[#FAF8F5] p-8 text-center">
       <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[20px] bg-[#E4F0EC]">
@@ -27,7 +49,7 @@ export default function Home() {
           안 당해본 사기는 못 막는다
         </h1>
         <p className="text-[15px] leading-[1.6] text-[#6B655C]">
-          AI 금융사기 백신 — 스캐폴딩 단계 (T2)
+          미리 겪어보고 대처법을 익히는 AI 금융사기 훈련
         </p>
       </div>
       <Link

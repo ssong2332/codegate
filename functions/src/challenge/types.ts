@@ -81,6 +81,12 @@ export type ConsentChallengeRequest = { token: string };
 export type ConsentChallengeResponse = {
   sessionId: string;
   openingAudioUrl?: string;
+  // 사용자 신고(2026-07-24) 수정분 — generateOpeningLine 결과 텍스트를 ElevenLabs 세션의
+  // firstMessage로 쓰기 위해 반환한다(resume 시에는 새 오프닝을 만들지 않아 비어 있음).
+  // 실제로는 userAccess.ts 핸들러가 신설 당시부터 이 필드를 반환해 왔고 클라 타입
+  // (src/lib/api/types.ts)에는 이미 있었는데, 이 서버 타입에만 누락돼 있었다(타입 검사가
+  // 못 잡는 드리프트 — §48 architect 감사에서 발견, 소급 정정).
+  openingMessageText?: string;
 };
 
 // --- reportChallenge (T37 · UX-021 · AC-049) ---
