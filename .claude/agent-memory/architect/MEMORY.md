@@ -39,3 +39,4 @@
 - [관측값이 같으면 차단 설계를 하지 마라](feedback_indistinguishable_states_pick_the_signal.md) — 정당한 강등 vs 결함 강등이 같은 값이면 원인 제거+신호로; 허용목록 뒤집기는 하나도 못 닫는다
 - [번호는 두 번 잰다 — 착수 시·병합 직전](feedback_handoff_numbers_may_run_ahead.md) — 인계값이 앞서 있었고 그 뒤 실제로 도착했다; 리넘버 시 기계적 전역 치환 금지
 - [낡은 예측은 이미 무효화됐을 수 있다](feedback_stale_prediction_may_be_discharged.md) — "②가 오면 신규 kind 불가피"류 예측은 그 뒤 들어온 태스크가 이미 풀었을 수 있다; 논거를 코드로 다시 친다
+- [지우라는 요청은 층으로 갈라라](feedback_removal_request_split_the_layers.md) — 지목 말고 이유 문장이 판별자; 요소는 갈래가 둘일 수 있고 도입 신고를 grep하면 철회/판단갱신이 갈린다
