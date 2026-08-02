@@ -112,6 +112,27 @@ const TAX_REFUND_SCAM: InCallSmsItem[] = [
   },
 ];
 
+// 사용자 라이브 신고 ⑩ⓒ(Architecture.md §50.6) — "계좌 전달 수단"이 이 시나리오에 없다는 신고.
+// 실측 판정: 음성 전달은 이미 있었다(`reputationBlackmailScam.prompt.ts`의 weakenedTactics가
+// 계좌를 **모델이 불러 주게** 지시한다) — 없는 것은 **문자 전달**이었다. 이 항목을 추가하면
+// `hasInCallSms("reputation-blackmail-scam")`가 true가 되어 프롬프트 3곳이 함께 뒤집힌다(§50.6.2)
+// — 그 부작용을 전부 처리한 뒤(§50.4.4의 identityCheckAllowed 조건화, `reputationBlackmailScam.
+// prompt.ts:39` 음성 계좌 제거) 이 항목을 더한다. **한 커밋**이어야 한다(G305) — 나뉘면 문자와
+// 음성이 서로 다른 계좌를 부르는 상태가 생긴다.
+const REPUTATION_BLACKMAIL_SCAM: InCallSmsItem[] = [
+  {
+    smsId: "blackmail-hush-account",
+    kind: "account",
+    senderLabel: "0000-0000",
+    body: "예금주: 김민재\nOO은행 352-0812-4471-63\n금액: 3,000,000원\n오늘 안에 입금 확인되면 정리됩니다.",
+    // afterScammerTurns=3 — 이 시나리오는 "5~8턴 내외"로 마무리되도록 지시받아(prompt.ts 진행
+    // 방식) 기존 최빈값 3과 맞춘다(`:49`·`:73`·`:95`·`:109` 참고).
+    afterScammerTurns: 3,
+    announceInstruction:
+      '(참가자 휴대전화로 방금 계좌 안내 문자가 실제로 도착했다. 지금 캐릭터로서 한두 문장으로 그 사실을 차갑게 알리고 오늘 안에 넣으라고 재촉하라 — 예: "계좌 문자로 보냈습니다. 오늘 안에 넣으세요." 계좌번호·금액을 새로 지어내 말하지 말고, 문자를 보냈다는 사실과 재촉만 하라.)',
+  },
+];
+
 const COURIER_CUSTOMS_SCAM: InCallSmsItem[] = [
   {
     smsId: "courier-customs-link",
@@ -148,6 +169,9 @@ export const IN_CALL_SMS: Record<string, InCallSmsItem[]> = {
   "card-company-impersonation": CARD_COMPANY_IMPERSONATION,
   "tax-refund-scam": TAX_REFUND_SCAM,
   "courier-customs-scam": COURIER_CUSTOMS_SCAM,
+  // §50.6 — 신고 ⑩ⓒ(계좌 전달 수단) 대응. ⚠️ `kidnapping-threat`에는 넣지 않는다(G306) —
+  // "이 통화 끊지 말고 그대로 있어요"(kidnappingThreat.prompt.ts)와 충돌한다.
+  "reputation-blackmail-scam": REPUTATION_BLACKMAIL_SCAM,
 };
 
 /** 이 시나리오가 통화 중 문자를 쓰는가(프롬프트 조건형 블록·트리거 노출의 단일 판정). */
