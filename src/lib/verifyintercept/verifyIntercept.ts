@@ -50,6 +50,60 @@ export function shouldOfferVerify(input: {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// ⭐⭐ §47.3 C1~C2 — 오퍼 **개시**를 참가자 구조화 이벤트로 옮긴다(턴 게이트는 AND로 남는다)
+//
+// 사용자 신고(2회째, §26.2 ㉡) — "의심하지도 않았는데 사기범이 먼저 확인 창구를 제안했다." 원인은
+// §47.1 (3)이 확정했다: 상시 블록은 "참가자가 먼저 말하면"을 전제하는데 게이트는 턴 수만 본다.
+// ⛔ 이 절이 하는 일은 **AND 조건을 조합**하는 것뿐이다 — `shouldOfferVerify`(턴 게이트) 자체는
+// 한 글자도 바뀌지 않는다(**G263** — 게이트 값 무변경).
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * §26.3 계열 표를 코드 **한 곳**으로 옮긴 판별자(§47.6 P-5 · G84 — 클라·서버 양쪽에 복제하지
+ * 않는다. 서버는 이 판별에 의존하지 않는다 — 계열 A 예외는 클라 게이트 층에만 있다, §47.3 C2).
+ *
+ * ⚠️ **크로스 디렉터리 import를 새로 만들지 않는다.** 이 값은
+ * `src/content/scenarios/bankSecurityVerifyScam.ts`의 `BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID`와
+ * **미러링**한다 — 이 파일(`src/lib/verifyintercept`)은 `node --experimental-strip-types`로 직접
+ * 실행되는 테스트 러너(`package.json` test 스크립트)가 `@/` 경로 별칭을 해석하지 못해, 그런 import는
+ * 테스트를 조용히 깨뜨린다. `functions/`↔`src/` 사이의 기존 "필드 미러링" 관례와 같은 판단이다.
+ */
+const BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID = "bank-security-verify-scam";
+
+export type VerifySeries = "A" | "B";
+
+/**
+ * 계열 A(확인 우회가 본론 — 현재 `bank-security-verify-scam` 1종) / 계열 B(다른 수법에 얹은 것,
+ * 나머지 전부). `scenarioId`가 없으면(카탈로그 미로드 등) 계열 B로 취급한다 — 계열 A 예외는
+ * **명시적으로 그 시나리오일 때만** 열리고, 그 외에는 항상 참가자 조건이 적용되는 쪽이 안전하다.
+ */
+export function verifySeriesFor(scenarioId: string | undefined): VerifySeries {
+  return scenarioId === BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID ? "A" : "B";
+}
+
+/**
+ * ⭐⭐ **§47.3 C1 — 오퍼 개시(1단계 `announce`)를 실제로 보낼지 최종 판정한다.**
+ *
+ * AND 조건: 턴 게이트(`gateReached` — `shouldOfferVerify`의 결과를 그대로 받는다)에 도달했고,
+ * **그리고** 계열 B라면 참가자가 이미 의사를 표했어야 한다("직접 확인해 볼게요" 탭, 구조화
+ * 이벤트 — AC-024 무관).
+ *
+ * ⛔ **계열 A(`bank-security-verify-scam`)는 예외다(C2 · G264)** — 확인 우회 체험이 그 시나리오의
+ * 본론이라 참가자 의사와 무관하게 턴 게이트 단독으로 발동해야 한다(현행 동작 무변경, T95 저작
+ * 근거 `verifyIntercept.ts:155-162`). ⛔ **`shouldOfferVerify` 자체는 이 함수 위에서 그대로
+ * 재사용될 뿐**이다 — 게이트 값을 감싸거나 바꾸지 않는다.
+ */
+export function shouldAnnounceVerifyOffer(input: {
+  series: VerifySeries;
+  gateReached: boolean;
+  intentExpressed: boolean;
+}): boolean {
+  if (!input.gateReached) return false;
+  if (input.series === "A") return true;
+  return input.intentExpressed;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // ⭐⭐ §38 런타임 층 — **컨트롤은 예고보다 먼저 열리지 않는다**(후보 E + C)
 //
 // 사용자 신고: *"내가 보안확인창구로 넘긴다고 한 적이 없는데, 연결한다고 혼자서 하면서 사용자가
