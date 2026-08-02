@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/auth";
-import { grantConsent } from "@/lib/consent";
+import { grantConsent, hasGrantedConsent } from "@/lib/consent";
 import { Banner, Button } from "@/components/ui";
 
 // AC-012 필수 3요소: (1) 시뮬레이션임 (2) 실제 금전·자격증명 미관여 (3) 언제든 종료 가능.
@@ -16,9 +16,14 @@ const NOTICE_POINTS = [
   "훈련 중 언제든지 화면의 \"훈련 종료\" 버튼을 누르면 그 자리에서 바로 멈출 수 있습니다.",
 ];
 
+// checking: 기존 동의 여부 조회 중 / ready: 미동의 — 폼 노출 / redirecting: 이미 동의 — 다음
+// 화면으로 넘어가는 중이라 폼을 그리지 않음. age-gate/page.tsx의 hasVerifiedAge 스킵 패턴과 동일.
+type GateState = "checking" | "ready" | "redirecting";
+
 export default function ConsentPage() {
   const { user, loading: userLoading } = useCurrentUser();
   const router = useRouter();
+  const [gateState, setGateState] = useState<GateState>("checking");
   const [checked, setChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +32,32 @@ export default function ConsentPage() {
   useEffect(() => {
     if (error) errorRef.current?.focus();
   }, [error]);
+
+  useEffect(() => {
+    if (userLoading || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        // 재방문 사용자는 매 로그인마다 동의를 다시 체크하지 않는다 — age-gate가 hasVerifiedAge로
+        // 이미 하는 것과 같은 판단이다(동의는 계정 단위 플래그이지 세션 단위가 아니다).
+        const granted = await hasGrantedConsent(user.uid);
+        if (cancelled) return;
+        if (granted) {
+          setGateState("redirecting");
+          router.replace("/onboarding/age-gate");
+          return;
+        }
+        setGateState("ready");
+      } catch {
+        // 조회 실패 시 안전한 기본값은 "동의 화면을 보여준다"다 — 이미 동의한 사용자를 잘못
+        // 건너뛰어 AC-012 고지를 누락시키는 쪽보다, 이미 동의한 사용자가 한 번 더 보는 쪽이 낫다.
+        if (!cancelled) setGateState("ready");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, userLoading, router]);
 
   const handleSubmit = async () => {
     if (!user || !checked || submitting) return;
@@ -44,7 +75,7 @@ export default function ConsentPage() {
     }
   };
 
-  if (userLoading) return null;
+  if (userLoading || gateState === "checking" || gateState === "redirecting") return null;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] px-6 pt-6">
