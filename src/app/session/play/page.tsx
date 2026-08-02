@@ -46,6 +46,7 @@ import {
   type InCallSmsView,
 } from "@/lib/incallsms";
 import {
+  announceTurnsOnInstructionDispatch,
   enqueueInstruction,
   nextVerifyOfferStage,
   rollbackVerifyOfferPhase,
@@ -166,6 +167,11 @@ export default function SessionCallPage() {
   const instructionBusyRef = useRef(false);
   // 사기범 발화 턴 수(실시간 경로) — GeminiVoiceSession의 turnComplete 경계만 센다.
   const [scammerTurns, setScammerTurns] = useState(0);
+  // ⭐ **§45.7 V2** — 같은 값의 ref 사본. `drainInstructionQueue`는 턴 완료 콜백 **안에서** 불리는데
+  // 그 시점의 `scammerTurns` state는 아직 리렌더 전이라 **한 턴 낡은 값**이다. 큐를 떠난 시점을
+  // 재려면 그 순간의 값이 필요하므로 ref로 함께 센다(⛔ 갱신 지점은 아래 handleScammerTurnComplete
+  // **한 곳**뿐이다 — 두 곳이 되면 state와 조용히 어긋난다).
+  const scammerTurnsRef = useRef(0);
   // 이미 서버에 전달을 요청한 smsId(중복 호출 방지). 렌더와 무관해 ref에 둔다.
   const requestedSmsRef = useRef<Set<string>>(new Set());
   // 오버레이를 연 트리거(배너/"문자함") — 닫을 때 포커스를 되돌린다(UX-027 Focus Order).
@@ -385,6 +391,14 @@ export default function SessionCallPage() {
     if (!item) return;
     instructionQueueRef.current = rest;
     instructionBusyRef.current = true;
+    // ⭐⭐ **§45.7 V2 — 예고 시점은 *여기서* 잰다.** 요청을 보낸 자리가 아니라 지시가 **실제로 큐를
+    // 떠나 `instructionTurn`에 실리는** 이 자리다(§45.6 (3) F2-a c·d). 판정은 순수 함수가 소유한다.
+    verifyAnnounceTurnsRef.current = announceTurnsOnInstructionDispatch({
+      priority: item.priority,
+      phase: verifyOfferPhaseRef.current,
+      completedScammerTurns: scammerTurnsRef.current,
+      current: verifyAnnounceTurnsRef.current,
+    });
     setInstructionTurn((prev) => ({ text: item.text, seq: (prev?.seq ?? 0) + 1 }));
   }, []);
 
@@ -484,7 +498,9 @@ export default function SessionCallPage() {
       return;
     }
     verifyOfferPhaseRef.current = stage === "announce" ? "announced" : "committed";
-    if (stage === "announce") verifyAnnounceTurnsRef.current = completedScammerTurns;
+    // ⛔ **§45.7 V2 — 여기서 `verifyAnnounceTurnsRef`를 찍지 않는다**(종전 1줄 삭제). 요청 발신 시점은
+    // *지시가 주입된 시점*이 아니다 — 큐에 밀리면 실제 발화가 한 턴 뒤로 가는데 commit은 그것을
+    // 모른 채 앵커를 굳혔다(§45.6 (3) F2-a). 기록은 `drainInstructionQueue`가 한다.
     const requestCallMode = callMode;
     (async () => {
       try {
@@ -522,7 +538,10 @@ export default function SessionCallPage() {
   }, [sessionId, callMode, phase, scammerTurns, messages, realtime.credentials?.verifyOffer]);
 
   const handleScammerTurnComplete = useCallback(() => {
-    setScammerTurns((n) => n + 1);
+    // ⭐ **§45.7 V2** — ref를 **먼저** 올린다. 아래 드레인이 이 값으로 예고 시점을 재기 때문에,
+    // state 갱신만 하면(리렌더 전이라) 한 턴 낡은 값이 기록된다.
+    scammerTurnsRef.current += 1;
+    setScammerTurns(scammerTurnsRef.current);
     // 턴이 끝났으니 보류분을 하나 더 내보낸다(위 계약 (2)).
     instructionBusyRef.current = false;
     drainInstructionQueue();

@@ -20,6 +20,7 @@ import {
 import { buildInCallSmsDoc, fallbackAnchorScammerTurn } from "../inCallSms";
 import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { pickFallbackTurnInstruction } from "../verifyIntercept/fallbackTurn";
+import { announcedVerifyAnchor } from "../verifyIntercept/buildDoc";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { GEMINI_KEY_SECRETS } from "../shared/config";
 import { MESSENGER_ESCALATION_FALLBACK_TURNS } from "../shared/constants";
@@ -251,9 +252,22 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       turnInstruction = verifyItem?.announceInstruction;
       if (verifyOfferRef) {
         try {
-          await verifyOfferRef.update({ announcedAt: Timestamp.now() });
+          // ⭐⭐ **§45.7 V1** — `announcedAt` 마킹과 **같은 write**로 표시 앵커를 이 턴으로 옮긴다.
+          // `deliverVerifyOffer`가 굳혀 둔 `offerAnchorScammerTurn`은 **오퍼 요청 시점**의 사기범
+          // 문서 수라, 예고 대사가 나오는 이 턴보다 **항상 앞**을 가리킨다(§45.6 F2-b — 구조적).
+          // 그 결과 리포트 리플레이에서 확인 오퍼 카드가 예고 대사보다 먼저 그려졌다.
+          // ⛔ **카드를 지우거나 렌더 순서를 손대는 방식이 아니다**(§45.7 V3·V4 기각) — 고치는 것은
+          // **앵커 값 하나**이고, 리졸버·필드·컬렉션은 전부 그대로다(G252).
+          // ⚠️ 이 자리가 옳은 이유: 폴백은 *"응답이 곧 대사"* 라 이 턴에 예고가 **반드시** 발화된다
+          // (§38.4 C ③열). `announcedAt`은 `pickFallbackTurnInstruction`이 `!announced`일 때만
+          // 이 분기를 고르므로 한 번만 마크되고, 따라서 이 갱신도 **1회 = 멱등**이다.
+          await verifyOfferRef.update({
+            announcedAt: Timestamp.now(),
+            offerAnchorScammerTurn: announcedVerifyAnchor(scammerDocCount),
+          });
         } catch {
           // 마크 실패는 다음 턴에 같은 권유가 한 번 더 나가는 정도의 열화다(대화는 막지 않는다).
+          // 앵커 갱신도 함께 미뤄진다 — 다음 턴에 같은 분기가 다시 잡혀 그 턴 값으로 갱신된다.
         }
       }
     }

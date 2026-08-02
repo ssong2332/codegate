@@ -38,6 +38,7 @@ import type {
 ensureFirebaseAdminApp();
 
 export {
+  announcedVerifyAnchor,
   buildVerifyInterceptDoc,
   buildVerifyOfferResponse,
   fallbackVerifyAnchor,
