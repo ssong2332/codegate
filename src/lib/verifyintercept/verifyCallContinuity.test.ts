@@ -180,16 +180,20 @@ test("[T110/G85-UI] 확인 오버레이의 렌더 문자열에 '번호'가 0건�
   assert.ok(rendered.includes("그만두고 통화로 돌아가기"), "남는 컨트롤은 시트를 치우는 것뿐이다");
 });
 
-test("[T110/G85-UI] 통화 셸의 트리거 컨트롤에도 번호 은유가 없다 — 단, C8 발신자 라벨은 무변경", () => {
+test("[T110/G85-UI/§49 V5] 통화 셸에 번호 은유·상시 트리거 문구가 없다 — 단, C8 발신자 라벨은 무변경", () => {
   const rendered = codeOnly(page);
   assert.ok(!/안내받은 번호/.test(rendered), "'안내받은 번호'는 폐기된 dial-out 모델의 문구다");
-  // ⭐⭐ §47.4 W4/D-67 — 오퍼 개시가 참가자 탭으로 옮겨지며 트리거 문구도 중립 1인칭으로
-  // 바뀐다(§16.1.4 3행 — 앱이 창구 이름을 사기범보다 먼저 꺼내지 않는다, P-32 (2) ⓓ 채택).
   assert.ok(
     !rendered.includes("확인 부서로 연결해 달라고 하기"),
     "D-67 — 앱이 창구 존재를 앞지르는 옛 문구가 되살아나면 안 된다(§16.1.4 3행 위반)",
   );
-  assert.ok(rendered.includes("직접 확인해 볼게요"), "새 문구는 참가자 1인칭이다(D-67 (3))");
+  // ⭐⭐ §49(V5, 2026-08-02 정정) — 참가자가 탭하던 상시 트리거 컨트롤("직접 확인해 볼게요")
+  // 자체가 완전히 삭제됐다. 되살아나면 게이트 도달 즉시 자동 전환이라는 새 계약과 모순된다
+  // (두 번째 확인 컨트롤을 두지 않는다는 C3 원칙이 계열 A까지 넓어진 것).
+  assert.ok(
+    !rendered.includes("직접 확인해 볼게요"),
+    "V5 — 상시 트리거 컨트롤 문구가 되살아나면 안 된다(컨트롤 완전 제거)",
+  );
   // ⚠️ **여기서 '번호' 전면 금지를 걸지 않는 이유(근거를 남긴다)**: 이 화면에는 확인 흐름과 무관한
   // '번호' 문자열이 정당하게 존재한다 — 다이얼패드(AC-026)와 **C8 발신자 라벨 폴백**이다.
   // C8은 §22.1이 **무변경**으로 못박은 값이고, 그 라벨 전환이 원 화자 퇴장의 **유일한 시각적
@@ -394,33 +398,34 @@ test("[§47.3 C2/G264] 계열 A는 예외다 — `shouldAnnounceVerifyOffer`가 
   );
 });
 
-test("[§47.4 W4/D-69] 계열 A에서는 탭이 곧 수락이다 — 오퍼가 이미 revealed일 때만 즉시 전환한다", () => {
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐⭐ §49(V5, 2026-08-02 정정) — 상시 확인 컨트롤이 완전히 삭제되고, 자동 전환 effect가
+// 계열 A·B 공통으로 확장됐다(과거 "계열 A는 탭=수락 · 계열 B만 자동 전환"에서 변경).
+// ══════════════════════════════════════════════════════════════════════════════
+
+test("[§49 V5] 상시 컨트롤의 탭 핸들러(`handleVerifyControlTap`)는 죽은 참조 없이 완전히 삭제됐다", () => {
   const rendered = codeOnly(page);
-  const tapHandler = rendered.slice(
-    rendered.indexOf("const handleVerifyControlTap"),
-    rendered.indexOf("const handleVerifyControlTap") + 400,
+  assert.ok(
+    !rendered.includes("handleVerifyControlTap"),
+    "V5 — 탭 핸들러가 소스 어디에도 남아 있으면 안 된다(호출부·정의 모두)",
   );
   assert.ok(
-    /verifySeries === ["']A["'] && showVerifyTrigger/.test(tapHandler),
-    "계열 A의 '탭 = 수락'은 오퍼가 이미 드러난 뒤에만 성립한다(D-69 계열 A row 3)",
-  );
-  assert.ok(
-    tapHandler.includes("void handlePlaceVerifyCall()"),
-    "그 조건이 참이면 곧바로 전환을 시작해야 한다 — 두 번째 컨트롤을 거치지 않는다(C3)",
-  );
-  assert.ok(
-    tapHandler.includes("setVerifyIntentExpressed(true)"),
-    "그 밖의 모든 경우(계열 B 전체 · 계열 A의 오퍼 도착 전)는 의사 표명 접수일 뿐이다(P-32 (4))",
+    !rendered.includes("setVerifyIntentExpressed(true)"),
+    "V5 — 참가자가 탭으로 의사를 표하는 경로가 남아 있으면 컨트롤이 되살아난 것이다",
   );
 });
 
-test("[§47.3 C3/D-69] 계열 B 자동 전환 effect — 참가자 재탭 없이 예고 완료만으로 전환을 시작한다", () => {
+test("[§47.3 C3/D-69/§49 V5] 자동 전환 effect — 계열 A·B 공통으로, 참가자 조건 없이 게이트 도달만으로 전환한다", () => {
   const rendered = codeOnly(page);
-  const autoEffect = rendered.slice(
-    rendered.indexOf('if (verifySeries !== "B" || phase !== "live" || verifyOverlayOpen) return;') - 200,
-    rendered.indexOf('if (verifySeries !== "B" || phase !== "live" || verifyOverlayOpen) return;') + 700,
+  const anchor = 'if (phase !== "live" || verifyOverlayOpen) return;';
+  const anchorIdx = rendered.indexOf(anchor);
+  assert.ok(anchorIdx > 0, "series 배제 조건이 없는 자동 전환 effect를 찾을 수 있어야 한다");
+  const autoEffect = rendered.slice(Math.max(0, anchorIdx - 200), anchorIdx + 700);
+  // ⛔ 역검증(양방향) — 계열 배제 조건이 되살아나면 여기서 걸린다(계열 A 자동 전환이 다시 막힌다).
+  assert.ok(
+    !/verifySeries\s*!==\s*["']B["']/.test(autoEffect) && !/verifySeries\s*===\s*["']B["']/.test(autoEffect),
+    "⛔ 이 effect가 다시 계열 B로만 좁혀지면 계열 A는 자동 전환되지 않는다(오늘 정정의 핵심)",
   );
-  assert.ok(autoEffect.length > 200, "계열 B 자동 전환 effect를 찾을 수 있어야 한다");
   assert.ok(
     autoEffect.includes("shouldRevealVerifyOffer({"),
     "예고 완료 판정은 §38이 소유한 같은 순수 함수를 재사용해야 한다(G268 — 삭제 금지)",
@@ -431,7 +436,7 @@ test("[§47.3 C3/D-69] 계열 B 자동 전환 effect — 참가자 재탭 없이
   );
   assert.ok(
     autoEffect.includes("await handlePlaceVerifyCall()"),
-    "참가자의 두 번째 탭 없이 전환이 자동으로 이어져야 한다(C3) — async IIFE로 감싼다" +
+    "참가자 탭 없이 전환이 자동으로 이어져야 한다(C3 확장) — async IIFE로 감싼다" +
       "(react-hooks/set-state-in-effect 회피, 이 화면의 다른 effect들과 동일한 관례)",
   );
 });
@@ -444,27 +449,38 @@ test("[§47.4 W4/D-68] 수락 컨트롤(onPlaceCall)이 <VerifyCallOverlay>에 �
   );
 });
 
-test("[D-67] 상시 컨트롤은 자격증명 보유로 표시되고, 오퍼 문서 존재로 나타났다 사라지지 않는다(R4)", () => {
+test("[D-67/§49 V5] 상시 컨트롤의 표시 조건자(`hasVerifyCredential`·`showVerifyTrigger`)도 함께 삭제됐다", () => {
   const rendered = codeOnly(page);
+  // ⛔ 컨트롤 렌더 조건이 어떤 형태로든 되살아나면 여기서 걸린다(예전 상시형·예전 2단형 둘 다).
   assert.ok(
-    rendered.includes("hasVerifyCredential && phase === \"live\""),
-    "P-32 (1) T1 — 등장 시점은 live phase 진입부터이지 오퍼 도착이 아니다",
+    !rendered.includes('hasVerifyCredential && phase === "live"'),
+    "V5 — 컨트롤 렌더 조건이 되살아나면 안 된다(컨트롤 자체가 없다)",
   );
   assert.ok(
-    rendered.includes("const hasVerifyCredential = Boolean(realtime.credentials?.verifyOffer)"),
-    "자격증명 판별자는 카탈로그 보유 && 고급 && 난이도 반영 경로 값을 그대로 재사용해야 한다",
+    !rendered.includes("const hasVerifyCredential"),
+    "V5 — 컨트롤 등장 시점 판별자는 소비하는 곳이 없어 함께 삭제돼야 한다(죽은 참조 금지)",
   );
-  // ⛔ 옛 조건(오퍼 문서 존재가 곧 컨트롤 등장)이 컨트롤 렌더 조건으로 되돌아오면 R4가 되살아난다.
+  assert.ok(
+    !rendered.includes("const showVerifyTrigger"),
+    "V5 — 컨트롤 표시 조건자도 소비하는 곳이 없어 함께 삭제돼야 한다(죽은 참조 금지)",
+  );
   assert.ok(
     !/\{showVerifyTrigger && verifyOffer && \(/.test(rendered),
-    "옛 2단 컨트롤(오퍼 도착 후에만 등장)이 되돌아오면 안 된다 — 상시 컨트롤로 대체됐다(D-67)",
+    "옛 2단 컨트롤(오퍼 도착 후에만 등장)이 되돌아오면 안 된다",
   );
 });
 
-test("[G268] `shouldRevealVerifyOffer`는 삭제되지 않았다 — 계열 A와 계열 B 자동 전환 양쪽에서 살아 있다", () => {
+test("[G268/§49 V5] `shouldRevealVerifyOffer`는 삭제되지 않았다 — 계열 무관 자동 전환 effect가 유일한 호출부다", () => {
   const rendered = codeOnly(page);
   const hits = rendered.match(/shouldRevealVerifyOffer\(\{/g) ?? [];
-  assert.ok(hits.length >= 2, "showVerifyTrigger 계산과 계열 B 자동 전환 effect 두 곳에서 재사용돼야 한다");
+  // ⛔ V5 이전에는 `showVerifyTrigger` 계산과 자동 전환 effect 두 곳이었다. 컨트롤 삭제로 전자가
+  // 사라져 이제 정확히 1곳이어야 한다 — 0이면 함수 자체가 삭제된 것(G268 위반), 2 이상이면 옛
+  // 컨트롤 조건자가 되살아난 것이다(위 D-67 테스트와 상호보완).
+  assert.strictEqual(
+    hits.length,
+    1,
+    "자동 전환 effect 한 곳에서만 재사용돼야 한다(G268 — 삭제 금지 · 중복 호출부 금지)",
+  );
 });
 
 test("[G272] 전환 완료 고지의 정본 자리는 오버레이가 아니라 통화 셸(verifyConnectedLabel 블록)이다", () => {
