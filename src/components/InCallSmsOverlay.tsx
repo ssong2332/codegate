@@ -360,8 +360,10 @@ export default function InCallSmsOverlay({
                         )}
 
                         {/* 링크형(D-37/AC-045) — 실 URL이 없고, 탭하면 **기존** 인앱 가짜 랜딩으로만
-                            전환된다. 신규 랜딩을 만들지 않는다. 스크린리더에는 "모의 링크"로 안내. */}
-                        {sms.kind === "link" && sms.linkDisplayText && (
+                            전환된다. 신규 랜딩을 만들지 않는다. 스크린리더에는 "모의 링크"로 안내.
+                            §51.6 R10/G317 — kind가 아니라 필드 존재로 판정한다("account"형도 이제
+                            링크를 병기할 수 있다, kind로 링크 부착 여부를 추론하지 않는다). */}
+                        {sms.linkDisplayText && (
                           <button
                             type="button"
                             onClick={() => {

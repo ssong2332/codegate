@@ -30,10 +30,10 @@ export function buildInCallSmsDoc(
     // 종류별 필드는 해당 kind일 때만 채운다(부재를 판별자로 오버로드하지 않되, 무의미한 빈 값도
     // 만들지 않는다 — kind가 유일한 판별자다, §14.9.1 원칙).
     ...(item.kind === "otp" && item.otpCode ? { otpCode: item.otpCode } : {}),
-    ...(item.kind === "link" && item.linkDisplayText
-      ? { linkDisplayText: item.linkDisplayText }
-      : {}),
-    ...(item.kind === "link" && item.fakeLandingId ? { fakeLandingId: item.fakeLandingId } : {}),
+    // §51.6 R10/G317 — kind가 아니라 필드 존재로 판정한다("account"도 이제 링크를 병기할 수
+    // 있다). kind로 링크 부착 여부를 추론하는 코드를 두지 않는다(R10 양방향 금지).
+    ...(item.linkDisplayText ? { linkDisplayText: item.linkDisplayText } : {}),
+    ...(item.fakeLandingId ? { fakeLandingId: item.fakeLandingId } : {}),
     // 기본값이면 **키 자체를 만들지 않는다** — `extractLinkMarker`의 생략 규칙과 동일하며,
     // 같은 개념에 생략 규칙이 두 벌이면 그게 드리프트다(§19.4 #3).
     ...(landingKind === DEFAULT_MOCK_SCREEN_KIND ? {} : { landingKind }),

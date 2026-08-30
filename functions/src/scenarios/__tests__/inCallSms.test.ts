@@ -66,13 +66,43 @@ test("[AC-060] kind별 필수 필드 계약 — link는 표시텍스트+가짜�
         )?.otpCode,
         item.otpCode,
       );
+      // §51.6 R10 — otp에는 링크 부착을 금지한다("link"·"account"에만 열려 있다).
       assert.equal(item.fakeLandingId, undefined, `otp형에 링크가 있으면 안 된다: ${item.smsId}`);
+      assert.equal(item.linkDisplayText, undefined, `otp형에 링크가 있으면 안 된다: ${item.smsId}`);
     }
     if (item.kind === "account") {
       assert.equal(item.otpCode, undefined);
-      assert.equal(item.fakeLandingId, undefined);
+      // §51.6 R10(G111·G112 좁은 재작성) — account도 이제 링크 필드를 병기할 수 있다
+      // (`institution-safe-account` 등). "항상 부재"였던 옛 단언을 지우지 않고, 아래 [G111]
+      // 테스트가 "짝으로만 존재/부재한다"는 더 정확한 계약으로 대체해 전수 고정한다.
     }
   }
+});
+
+// §51.6 R11/G111 — 링크 부착(linkDisplayText+fakeLandingId)은 항상 짝으로 존재하거나 함께
+// 부재한다. 한쪽만 있는 상태를 타입으로는 표현할 수 있지만 이 게이트가 금지한다
+// (docs/Architecture.md §27.1 (2)).
+test("[G111] linkDisplayText·fakeLandingId는 항상 짝으로 존재하거나 함께 부재한다", () => {
+  for (const item of allItems) {
+    const hasLink = item.linkDisplayText !== undefined;
+    const hasLanding = item.fakeLandingId !== undefined;
+    assert.equal(
+      hasLink,
+      hasLanding,
+      `${item.smsId}: linkDisplayText·fakeLandingId 중 한쪽만 있으면 안 된다 — ` +
+        "칩은 떴는데 열 랜딩이 없거나, 랜딩은 있는데 칩이 안 뜨는 상태가 생긴다(R11).",
+    );
+  }
+  // 역검증 — 카탈로그에 짝이 하나도 없으면 위 대칭 단언은 전부 자명하게 통과해 죽은 게이트가
+  // 된다. account형이 링크를 병기하는 실제 항목이 최소 1건 있어야 이 게이트가 일하고 있다는
+  // 증거가 된다(§27.7 커밋 ① 역검증 관례).
+  const pairedAccounts = allItems.filter(
+    (item) => item.kind === "account" && item.linkDisplayText !== undefined,
+  );
+  assert.ok(
+    pairedAccounts.length > 0,
+    "account형 + 링크 병기 항목이 0건이면 이 게이트가 검증할 대상을 잃는다",
+  );
 });
 
 test("[AC-061] 인증번호형 문자는 본문에 '타인에게 알려주지 마세요'류 경고를 그대로 재현한다", () => {
@@ -171,9 +201,27 @@ test("buildInCallSmsDoc은 announceInstruction(모델용 지시)을 문서에 �
     assert.equal(doc.body, item.body);
     if (item.kind === "otp") assert.equal(doc.otpCode, item.otpCode);
     else assert.equal(doc.otpCode, undefined);
-    if (item.kind === "link") assert.equal(doc.fakeLandingId, item.fakeLandingId);
+    // §51.6 G317 — kind가 아니라 필드 존재로 판정한다(account도 이제 링크를 병기할 수 있다, R10).
+    if (item.linkDisplayText) assert.equal(doc.linkDisplayText, item.linkDisplayText);
+    else assert.equal(doc.linkDisplayText, undefined);
+    if (item.fakeLandingId) assert.equal(doc.fakeLandingId, item.fakeLandingId);
     else assert.equal(doc.fakeLandingId, undefined);
   }
+});
+
+// §51.6 G317 역검증 — 위 재작성이 "kind==='link'가 아니면 항상 undefined"라는 옛 단언을 그대로
+// 우회한 것이 아님을, kind==="account"이면서 링크 필드를 가진 실제 항목으로 직접 고정한다.
+test("[G317 역검증] kind===\"account\"이면서 fakeLandingId를 가진 문서는 그 값을 그대로 싣는다", () => {
+  const withLanding = allEntries.find(
+    ({ item }) => item.kind === "account" && item.fakeLandingId !== undefined,
+  );
+  assert.ok(withLanding, "account+링크 병기 항목이 카탈로그에 없으면 이 테스트가 검증 대상을 잃는다");
+  const fakeTimestamp = { seconds: 0, nanoseconds: 0 } as unknown as FirebaseFirestore.Timestamp;
+  const { scenarioId, item } = withLanding!;
+  const doc = buildInCallSmsDoc(item, fakeTimestamp, realtimeAnchorScammerTurn(item), scenarioId);
+  assert.equal(doc.kind, "account");
+  assert.equal(doc.fakeLandingId, item.fakeLandingId);
+  assert.equal(doc.linkDisplayText, item.linkDisplayText);
 });
 
 test("[T104/§19.4 #3] buildInCallSmsDoc의 landingKind는 기본값이면 **키를 만들지 않는다**(무백필)", () => {

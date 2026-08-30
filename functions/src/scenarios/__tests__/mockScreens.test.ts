@@ -426,8 +426,9 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
   );
   assert.deepEqual(
     voiceScoped.sort(),
-    ["courier-customs-scam", "loan-refinance-scam", "tax-refund-scam"],
-    "통화 채널 3종이 카탈로그에 없으면 정밀화가 아무것도 안 푼 것이다",
+    // §51 — institutional-impersonation이 §45 ⓐ 집행으로 신규 등재된다(통화 채널, credential-form).
+    ["courier-customs-scam", "institutional-impersonation", "loan-refinance-scam", "tax-refund-scam"],
+    "통화 채널 4종이 카탈로그에 없으면 정밀화가 아무것도 안 푼 것이다",
   );
   // 그리고 그 3종은 **app-install을 하나도 갖지 않는다**(정밀화의 안전 전제 = M2 차단).
   for (const scenarioId of voiceScoped) {
@@ -436,6 +437,8 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
   // entrySurface 분포도 고정한다 — 표면 선언이 통째로 한쪽으로 쏠리면 G53/G-B 중 하나가 공회전한다.
   const surfaces = allItems.map((item) => item.entrySurface).sort();
   assert.deepEqual(surfaces, [
+    // §51 — institutional-impersonation의 safe-account-transfer(in-call-sms)가 추가됐다.
+    "in-call-sms",
     "in-call-sms",
     "in-call-sms",
     "in-call-sms",
@@ -547,7 +550,7 @@ test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **�
     false,
     "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
   );
-  assert.equal(reachableLandingKeys().length, 5, "도달 가능 랜딩은 5종이다(UX-023 v1.13 (1))");
+  assert.equal(reachableLandingKeys().length, 6, "도달 가능 랜딩은 6종이다(§51 — safe-account-transfer 추가)");
 });
 
 test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
@@ -755,7 +758,7 @@ function findFieldConvergence(
 
 test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
   const items = Object.values(MOCK_SCREENS).flat();
-  assert.equal(items.length, 5, "현행 비교 대상은 도달 가능 랜딩 5종이다");
+  assert.equal(items.length, 6, "현행 비교 대상은 도달 가능 랜딩 6종이다(§51 — safe-account-transfer 추가)");
   const stats = fieldDivergenceStats(items);
   for (const { field, compared, excluded, converged } of stats) {
     t.diagnostic(
@@ -940,6 +943,13 @@ const BAIT_TO_LANDING: {
     baitExcerpt: "수취인 정보 불일치로 통관이 보류되었습니다.",
     headlineAnchors: ["수취인", "통관", "보류"],
     ctaAnchors: ["수취인"],
+  },
+  {
+    landingId: "safe-account-transfer",
+    baitSource: "scenarios/inCallSms.ts:87-91 (문자 본문·칩)",
+    baitExcerpt: "아래에서 안전계좌 이체를 진행해 주세요.",
+    headlineAnchors: ["안전계좌", "이체"],
+    ctaAnchors: ["안전계좌", "이체"],
   },
 ];
 
