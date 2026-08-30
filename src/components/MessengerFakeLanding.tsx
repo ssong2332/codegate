@@ -249,6 +249,22 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     successHeadline: "안전계좌로 이체가 완료되었습니다.",
     issuerLabel: "ⓒ 자산보호 이체 안내센터",
   },
+  // §51 — 이체형 가짜 랜딩(§45 ⓐ 집행, UX-023 v1.25 (2)/(17-a) 정본 — bodyLines 둘째 줄은
+  // T116 G194 정정 후 문면, 서버 카탈로그(mockScreens.ts)와 글자 단위로 동일).
+  "card-relief-transfer": {
+    headline: "피해금 이관 신청이 완료되지 않았습니다",
+    bodyLines: [
+      "진행 중인 해외 결제 승인을 막으려면 잔액을 이관 전용 계좌로 옮기셔야 합니다.",
+      "문자로 안내된 이관 계좌와 금액을 아래에 입력해 주세요.",
+    ],
+    fields: [
+      { label: "이관 전용 계좌번호", placeholder: "문자로 받은 이관 계좌번호를 입력하세요" },
+      { label: "이관 금액", placeholder: "이관하실 금액을 입력하세요" },
+    ],
+    submitLabel: "피해금 이관하기",
+    successHeadline: "피해금 이관이 접수되었습니다.",
+    issuerLabel: "ⓒ 카드 피해금 이관 지원센터",
+  },
 };
 
 /**

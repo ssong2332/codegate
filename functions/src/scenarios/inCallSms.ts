@@ -106,6 +106,21 @@ const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
     announceInstruction:
       "(참가자 휴대전화로 방금 6자리 인증번호 문자가 실제로 도착했다. 지금 캐릭터로서 결제 취소 처리를 위해 그 번호를 불러 달라고 요구하라 — 예: \"취소 처리하려면 방금 문자로 간 여섯 자리 번호가 필요합니다, 화면 보시고 불러 주세요.\" **번호를 네가 지어내서 말하지 마라** — 참가자가 화면에서 읽어 불러주게 해야 한다.)",
   },
+  // §51(§51.3 F1 해소의 후속 — card-company-impersonation.prompt.ts:53 계좌 확인형 교체와 짝) —
+  // 이 시나리오 최초의 계좌 문자. afterScammerTurns=5: ⛔ 4가 아니다(이 시나리오의 확인 게이트
+  // availableAfterScammerTurns가 4라 큐가 충돌한다 — E2, verifyIntercept.ts 계열 값) · ⛔ 3도
+  // 아니다(위 card-otp가 이미 3을 쓴다 — 시나리오 내 중복 금지).
+  {
+    smsId: "card-relief-account",
+    kind: "account",
+    senderLabel: "0000-0000 (피해금 이관 안내)",
+    body: "[승인취소 지원] 피해금 이관 전용 계좌 안내\n예금주: 카드피해대응지원센터\nOO은행 417-0625-3082-19\n금액: 2,340,000원\n아래에서 피해금 이관을 진행해 주세요.",
+    linkDisplayText: "피해금 이관 진행하기",
+    fakeLandingId: "card-relief-transfer",
+    afterScammerTurns: 5,
+    announceInstruction:
+      '(참가자 휴대전화로 방금 피해금 이관 계좌 안내 문자가 실제로 도착했다. 지금 캐릭터로서 한두 문장으로 그 사실을 다급하게 알리고 문자 속 링크를 눌러 이관을 마쳐 달라고 요구하라 — 예: "이관 전용 계좌는 방금 문자로 보내드렸어요, 문자에 있는 링크 눌러서 바로 진행해 주세요." 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)',
+  },
 ];
 
 const TAX_REFUND_SCAM: InCallSmsItem[] = [
