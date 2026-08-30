@@ -41,4 +41,6 @@
 - [낡은 예측은 이미 무효화됐을 수 있다](feedback_stale_prediction_may_be_discharged.md) — "②가 오면 신규 kind 불가피"류 예측은 그 뒤 들어온 태스크가 이미 풀었을 수 있다; 논거를 코드로 다시 친다
 - [지우라는 요청은 층으로 갈라라](feedback_removal_request_split_the_layers.md) — 지목 말고 이유 문장이 판별자; 요소는 갈래가 둘일 수 있고 도입 신고를 grep하면 철회/판단갱신이 갈린다
 - [인계된 "0건"은 스캔 집합부터 재라](feedback_stated_absence_check_the_scan_set.md) — 공유 블록만 보고 시나리오 14벌을 안 봤다; "애드리브"·"문면 층 소진" 결론은 특히 의심
+- ["이미 구현돼 있다"는 절반만 참일 수 있다](feedback_decision_merged_is_not_implemented.md) — 확정 식별자 grep + 게이트 숫자 단언으로 판정/집행을 갈라라; 부분 구현이 단서
+- [대상 집합은 분류 축이 아니라 게이트가 가른다](feedback_scope_is_decided_by_gates_not_taxonomy.md) — 인계된 계열 축은 표에서 값을 직접 확인; 제외 조건마다 단언 파일:줄을 붙인다
 - [Gemini Live VAD 손잡이 4개](reference_gemini_live_vad_knobs.md) — 자기-끊김=시작 손잡이(미설정·기본 HIGH), 지연=종료 손잡이(이미 한계); 트레이드오프가 아니다
