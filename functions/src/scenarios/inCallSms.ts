@@ -30,9 +30,12 @@ export type InCallSmsItem = {
   body: string;
   /** `kind==="otp"`일 때만. 6자리 고정 리터럴(난수 금지). */
   otpCode?: string;
-  /** `kind==="link"`일 때만. 모의 표기 문자열 — 가짜 랜딩(UX-023)의 제목으로 그대로 쓰인다. */
+  /** `kind==="link"|"account"`일 때 병기 가능(§51.6 R10 — `"otp"`에는 금지). 모의 표기 문자열 —
+   * 가짜 랜딩(UX-023)의 제목으로 그대로 쓰인다. `fakeLandingId`와 항상 짝으로 존재하거나 함께
+   * 부재한다(R11/G111 — `inCallSms.test.ts`의 `[G111]` 테스트가 전수로 고정한다). */
   linkDisplayText?: string;
-  /** `kind==="link"`일 때만. 기존 인앱 가짜 랜딩 참조(실 URL 필드는 존재하지 않는다). */
+  /** `kind==="link"|"account"`일 때 병기 가능(§51.6 R10 — `"otp"`에는 금지). 기존 인앱 가짜 랜딩
+   * 참조(실 URL 필드는 존재하지 않는다). */
   fakeLandingId?: string;
   /** "사기범 발화 N턴이 완료된 뒤 도착". 시간 기반·랜덤 없음(결정론적·테스트 가능). */
   afterScammerTurns: number;
@@ -78,10 +81,17 @@ const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [
     smsId: "institution-safe-account",
     kind: "account",
     senderLabel: "0000-0000 (자산보호 안내)",
-    body: "[자산보호절차] 임시 안전계좌 안내\n예금주: 국민안전지원센터\nOO은행 210-3391-5540-08\n이체 후 담당자에게 바로 알려 주세요.",
+    // §51(사용자 라이브 신고 — §45 ⓐ 미집행) — 기존 4줄은 한 글자도 지우지 않고 예고 1줄을
+    // 더했다(D-59 관례). 새 4번째 줄이 아래 `fakeLandingId`가 여는 이체 랜딩(UX-023
+    // safe-account-transfer)을 예고한다.
+    body: "[자산보호절차] 임시 안전계좌 안내\n예금주: 국민안전지원센터\nOO은행 210-3391-5540-08\n아래에서 안전계좌 이체를 진행해 주세요.\n이체 후 담당자에게 바로 알려 주세요.",
+    // §51.6 R10 — 기존 account 항목에 링크 필드를 병기한다(신규 항목 신설 0건, G245 — 도착 턴
+    // 그대로 6 유지).
+    linkDisplayText: "안전계좌 이체 진행하기",
+    fakeLandingId: "safe-account-transfer",
     afterScammerTurns: 6,
     announceInstruction:
-      "(참가자 휴대전화로 방금 안전계좌 안내 문자가 실제로 도착했다. 지금 캐릭터로서 한두 문장으로 그 사실을 알리고 이체를 재촉하라 — 예: \"안전계좌는 문자로 보내드렸습니다, 지금 확인하시고 그대로 이체해 주세요.\" 계좌번호를 새로 지어내 말하지 말고 문자를 보라고만 하라.)",
+      '(참가자 휴대전화로 방금 안전계좌 안내 문자가 실제로 도착했다. 지금 캐릭터로서 한두 문장으로 그 사실을 알리고 문자 속 링크를 눌러 이체를 진행해 달라고 재촉하라 — 예: "안전계좌는 문자로 보내드렸습니다, 문자에 있는 링크 눌러서 그대로 진행해 주세요." 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)',
   },
 ];
 
@@ -95,6 +105,21 @@ const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
     afterScammerTurns: 3,
     announceInstruction:
       "(참가자 휴대전화로 방금 6자리 인증번호 문자가 실제로 도착했다. 지금 캐릭터로서 결제 취소 처리를 위해 그 번호를 불러 달라고 요구하라 — 예: \"취소 처리하려면 방금 문자로 간 여섯 자리 번호가 필요합니다, 화면 보시고 불러 주세요.\" **번호를 네가 지어내서 말하지 마라** — 참가자가 화면에서 읽어 불러주게 해야 한다.)",
+  },
+  // §51(§51.3 F1 해소의 후속 — card-company-impersonation.prompt.ts:53 계좌 확인형 교체와 짝) —
+  // 이 시나리오 최초의 계좌 문자. afterScammerTurns=5: ⛔ 4가 아니다(이 시나리오의 확인 게이트
+  // availableAfterScammerTurns가 4라 큐가 충돌한다 — E2, verifyIntercept.ts 계열 값) · ⛔ 3도
+  // 아니다(위 card-otp가 이미 3을 쓴다 — 시나리오 내 중복 금지).
+  {
+    smsId: "card-relief-account",
+    kind: "account",
+    senderLabel: "0000-0000 (피해금 이관 안내)",
+    body: "[승인취소 지원] 피해금 이관 전용 계좌 안내\n예금주: 카드피해대응지원센터\nOO은행 417-0625-3082-19\n금액: 2,340,000원\n아래에서 피해금 이관을 진행해 주세요.",
+    linkDisplayText: "피해금 이관 진행하기",
+    fakeLandingId: "card-relief-transfer",
+    afterScammerTurns: 5,
+    announceInstruction:
+      '(참가자 휴대전화로 방금 피해금 이관 계좌 안내 문자가 실제로 도착했다. 지금 캐릭터로서 한두 문장으로 그 사실을 다급하게 알리고 문자 속 링크를 눌러 이관을 마쳐 달라고 요구하라 — 예: "이관 전용 계좌는 방금 문자로 보내드렸어요, 문자에 있는 링크 눌러서 바로 진행해 주세요." 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)',
   },
 ];
 

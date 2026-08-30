@@ -116,10 +116,16 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // `collectAllSurfaces()`가 순회하는 **이 카탈로그**에만 걸린다. 클라 상수에만 두거나 새 서버 파일을
 // 만들면 환급·통관 랜딩의 실존 기관명이 **어디에서도 안 걸린다** — D-58이 최대 위험으로 지목한 지점.
 //
-// ⚠️ 아래 4종은 전부 `credential-form`이다(**신규 kind 0건** — D-58). 새로 붙는 화면이 모두
+// ⚠️ 아래 6종은 전부 `credential-form`이다(**신규 kind 0건** — D-58). 새로 붙는 화면이 모두
 // "정보를 입력하게 만드는 화면"이라 기존 안전 계약(입력 허용·서버 미전송·외부 네비게이션 부재)과
 // 정확히 일치하고, kind를 늘리면 안전 계약이 한 벌 더 늘어 AC-072가 금지한 "검증 경로 이중화"에
 // 스스로 다가간다.
+//
+// ⚠️ **§51(사용자 라이브 신고) — `safe-account-transfer`·`card-relief-transfer` 2종이 여기
+// 더해졌다.** §45 ⓐ가 판정만 하고 구현이 0줄이던 이체형 랜딩(계좌번호·금액을 입력해 이체를
+// 완료하는 화면)의 집행이다. 나머지 이체형 1종(`protect-account-transfer`)은 §51.5 판정 +
+// P-1 라이브 프로브 결과에 따라 후속 커밋에서 더해진다 — 대상 판정·회피 방지(G319)의 근거는
+// `docs/Architecture.md` §51.
 //
 // ── ⭐ AC-078 (c) 미끼 → 랜딩 대조표 (구현 산출물 — AC 본문이 "대조표가 없으면 미충족"이라 규정) ──
 //
@@ -133,6 +139,8 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `loan-refinance-apply` | `scenarios/inCallSms.ts:57-58`(문자 본문·칩) | "아래에서 본인확인 후 신청을 완료해 주세요." | 링크에서 본인확인 → 신청 완료 | "전환 신청서 본인확인이 필요합니다" | "본인확인 완료하기" |
 // | `tax-refund-claim` | `scenarios/inCallSms.ts:106-107`(문자 본문·칩) | "아래에서 계좌를 등록하시면 당일 지급됩니다." | 수령 계좌 등록 → 당일 지급 | "환급금 받으실 계좌를 등록해 주세요" | "계좌 등록하기" |
 // | `courier-customs-check` | `scenarios/inCallSms.ts:120-121`(문자 본문·칩) | "수취인 정보 불일치로 통관이 보류되었습니다." | 수취인 정보 확인 → 통관 재개 | "수취인 정보가 일치하지 않아 통관이 보류되었습니다" | "수취인 정보 확인하기" |
+// | `safe-account-transfer` | `scenarios/inCallSms.ts:87-91`(문자 본문·칩) | "아래에서 안전계좌 이체를 진행해 주세요." | 링크에서 안전계좌 이체 | "안전계좌 이체가 아직 완료되지 않았습니다" | "안전계좌로 이체하기" |
+// | `card-relief-transfer` | `scenarios/inCallSms.ts:117-119`(문자 본문·칩) | "아래에서 피해금 이관을 진행해 주세요." | 링크에서 피해금 이관 | "피해금 이관 신청이 완료되지 않았습니다" | "피해금 이관하기" |
 //
 // ⚠️ **이 표가 조용히 낡지 않게 하는 장치(주석은 강제가 아니다).** 위 **줄 번호는 스냅샷일 뿐이며
 // 앵커가 아니다** — 파일이 바뀌면 줄은 밀린다. 진짜 앵커는 `__tests__/mockScreens.test.ts`의
@@ -140,7 +148,7 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 //   ① 표의 landingId 집합 == `MOCK_SCREENS`의 landingId 집합(새 랜딩이 표를 건너뛸 수 없다)
 //   ② "미끼 인용" 문자열이 **실제 미끼 텍스트에 지금도 존재**한다(미끼가 바뀌면 실패)
 //   ③ 랜딩마다 정한 **앵커 토큰**이 미끼 인용과 랜딩 헤드라인+CTA **양쪽에** 있다(어느 쪽이 바뀌어도 실패)
-//   ④ 위 주석 표에 5개 landingId와 5개 미끼 인용이 전부 들어 있다(주석 ↔ 테스트 표 1:1)
+//   ④ 위 주석 표에 7개 landingId와 7개 미끼 인용이 전부 들어 있다(주석 ↔ 테스트 표 1:1)
 // **자동화의 한계(정직 고지)**: "상황이 맞는가"는 의미 판정이라 기계로 할 수 없다. 앵커 토큰 공유는
 // 그 **필요조건**일 뿐 충분조건이 아니므로, 사람이 읽는 표를 여기 남기고 그 표를 ①~④로 묶는다.
 
@@ -231,6 +239,65 @@ const COURIER_CUSTOMS_SCAM: MockScreenItem[] = [
   },
 ];
 
+// ── §51 이체형 가짜 랜딩 (§45 ⓐ 집행 · UX-023 v1.25 (2)/(17-a) 정본 — 문면 그대로 복사, 의역 금지) ──
+//
+// UF-008 — `institution-safe-account` 문자에 병기된 링크 칩(`institution-safe-account-transfer`가
+// 아니라 `safe-account-transfer`)에서 열린다. §51.6 R10 — 기존 account 항목에 링크만 병기했고
+// 신규 `InCallSmsKind`·`MockScreenKind`는 0건이다.
+//
+// ⚠️ **UX v1.25 정정 — bodyLines 둘째 줄만.** v1.24 원안 "문자로 안내된 안전계좌 번호와 이체
+// 금액을 입력해 주세요."는 `fields` 라벨을 문자 그대로 반복해 렌더 텍스트에 그 라벨이 2회
+// 등장했다(T116 게이트 G194 — `renderGate.test.ts:191-199`). `fields`·헤드라인·CTA 등 나머지는
+// 무변경.
+const INSTITUTIONAL_IMPERSONATION: MockScreenItem[] = [
+  {
+    landingId: "safe-account-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "안전계좌 이체가 아직 완료되지 않았습니다",
+    bodyLines: [
+      "범죄 연루가 확인된 자금은 임시 안전계좌로 옮겨야 보호 조치가 적용됩니다.",
+      "문자로 안내된 계좌번호와 금액을 아래에 입력해 주세요.",
+    ],
+    // 문자 발신 라벨(`inCallSms.ts` INSTITUTIONAL_IMPERSONATION `institution-safe-account`
+    // "(자산보호 안내)")과 일관되게 맞춘다(P-28 (6)).
+    issuerLabel: "ⓒ 자산보호 이체 안내센터",
+    fields: ["안전계좌 번호", "이체 금액"],
+    submitLabel: "안전계좌로 이체하기",
+    successHeadline: "안전계좌로 이체가 완료되었습니다.",
+    momentTactic: "범죄 연루 자금 보호를 빌미로 한 안전계좌 이체 유도",
+    correctAction:
+      "'안전계좌로 옮기라'며 계좌번호와 금액을 입력하라고 하면 그 자리에서 멈추세요 — 어떤 수사·금융기관도 돈을 다른 계좌로 옮기라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 은행 대표번호로 직접 확인하기 ② 계좌번호·금액을 문자 링크에 넣지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+];
+
+// UF-008 — `card-relief-account` 문자(§51.3 F1 해소 후속)에서 열린다. §51.6 R10 — 신규
+// `InCallSmsKind`·`MockScreenKind` 0건.
+//
+// ⚠️ **UX v1.25 정정 — bodyLines 둘째 줄만.** v1.24 원안은 fields 라벨("이관 전용 계좌번호"·
+// "이관 금액")을 문자 그대로 반복해 T116 G194에 걸렸다(institutional과 같은 형태).
+const CARD_COMPANY_IMPERSONATION: MockScreenItem[] = [
+  {
+    landingId: "card-relief-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "피해금 이관 신청이 완료되지 않았습니다",
+    bodyLines: [
+      "진행 중인 해외 결제 승인을 막으려면 잔액을 이관 전용 계좌로 옮기셔야 합니다.",
+      "문자로 안내된 이관 계좌와 금액을 아래에 입력해 주세요.",
+    ],
+    // 문자 발신 라벨(`inCallSms.ts` CARD_COMPANY_IMPERSONATION `card-relief-account`
+    // "(피해금 이관 안내)")과 일관되게 맞춘다(P-28 (6)).
+    issuerLabel: "ⓒ 카드 피해금 이관 지원센터",
+    fields: ["이관 전용 계좌번호", "이관 금액"],
+    submitLabel: "피해금 이관하기",
+    successHeadline: "피해금 이관이 접수되었습니다.",
+    momentTactic: "부정결제 피해를 빌미로 한 피해금 이관 이체 유도",
+    correctAction:
+      "'피해금을 다른 계좌로 옮기라'고 하면 그 자리에서 멈추세요 — 카드사는 결제를 막기 위해 고객 돈을 옮기지 않습니다. ① 통화를 끊고 카드 뒷면이나 명세서에 적힌 번호로 직접 확인하기 ② 계좌번호·금액을 문자 링크에 넣지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+];
+
 /**
  * 시나리오별 모의 화면 카탈로그(`IN_CALL_SMS` 미러 — `Record<scenarioId, Item[]>`).
  *
@@ -246,10 +313,17 @@ const COURIER_CUSTOMS_SCAM: MockScreenItem[] = [
  * ⚠️ **T104**: 통화 경로 `credential-form` 랜딩 3종이 여기 등재된다. 이들은 `turnInstruction`을
  * 만들지 않고(`listAppInstallMockScreens` 게이팅), `consentedAt`도 가질 수 없어(콜러블이 거부)
  * G55가 막던 지시 경합(M1)과 R6이 막던 앵커 얽힘(M2) 어느 쪽도 발생시키지 않는다(§19.1 (2)).
+ *
+ * ⚠️ **§51**: `institutional-impersonation`·`card-company-impersonation`이 여기 신규
+ * 등재된다(§45 ⓐ 집행 — 통화 경로 `credential-form` 이체형 랜딩 각 1건, `IN_CALL_SMS`의
+ * `institution-safe-account`·`card-relief-account`가 병기한 `fakeLandingId`를 가리킨다).
+ * G159 트립와이어 — 두 시나리오 모두 도달 가능 랜딩은 **1건뿐**이다.
  */
 export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   "messenger-subsidy-smishing-sms": MESSENGER_SUBSIDY_SMISHING_SMS,
   "messenger-parcel-smishing-sms": MESSENGER_PARCEL_SMISHING_SMS,
+  "institutional-impersonation": INSTITUTIONAL_IMPERSONATION,
+  "card-company-impersonation": CARD_COMPANY_IMPERSONATION,
   "loan-refinance-scam": LOAN_REFINANCE_SCAM,
   "tax-refund-scam": TAX_REFUND_SCAM,
   "courier-customs-scam": COURIER_CUSTOMS_SCAM,
