@@ -123,6 +123,31 @@ const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
   },
 ];
 
+// §51(사용자 라이브 신고 F2 · OQ-A31 확정) — 이 시나리오 최초의 통화 중 문자 카탈로그
+// (bankSecurityVerifyScam.prompt.ts:62 계좌 확인형 교체와 짝 — G316, 같은 커밋).
+//
+// ⚠️ afterScammerTurns=1: ⛔ 2가 아니다 — 이 시나리오의 확인 게이트 `availableAfterScammerTurns`가
+// **2**라 그 값과 같으면 §38.13 (4) b가 지키는 "큐 경합 0"이 깨진다(E2 —
+// `verifyIntercept.ts:119` "전용 2"). UX-027 v1.24 노트 (1) ㉰가 이 값에 건 제약은
+// ⓐ ≠2(E2) · ⓑ 5~8턴 안에서 도달 가능 · ⓒ P-1이 재는 "전환이 실제로 일어나는 턴"보다 앞이며,
+// P-1 라이브 프로브(오케스트레이터 직접 실측, 2026-08-31) 결과 전환은 사기범 턴 3에서
+// 예고·완료된다(턴4부터 확인 데스크 화자) — ⓒ ⇒ 2 미만. ⓐ와 ⓒ를 동시에 만족하는 값은 **1**뿐이다.
+// (`verifyIntercept.ts:213`의 sms 우선순위 큐 규칙상 turn=1은 gate=2 경계와 아예 겹치지 않아
+// 확인 예고 지연도 만들지 않는다 — E2 위반도 없고 전환 타이밍도 P-1 실측과 일치한다.)
+const BANK_SECURITY_VERIFY_SCAM: InCallSmsItem[] = [
+  {
+    smsId: "bank-protect-account",
+    kind: "account",
+    senderLabel: "0000-0000 (계좌보호 안내)",
+    body: "[금융사고대응] 보호계좌 이체 안내\n예금주: 계좌보호대응센터\nOO은행 100-2043-7788-21\n금액: 4,120,000원\n아래에서 보호계좌로 옮기기를 진행해 주세요.",
+    linkDisplayText: "보호계좌 이체 진행하기",
+    fakeLandingId: "protect-account-transfer",
+    afterScammerTurns: 1,
+    announceInstruction:
+      '(참가자 휴대전화로 방금 보호계좌 안내 문자가 실제로 도착했다. 지금 캐릭터로서 한두 문장으로 침착하게 그 사실을 알리고 문자 속 링크를 눌러 옮기기를 마쳐 달라고 안내하라 — 예: "보호계좌는 방금 문자로 보내드렸습니다, 문자에 있는 링크 눌러서 그대로 진행하시면 됩니다." 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)',
+  },
+];
+
 const TAX_REFUND_SCAM: InCallSmsItem[] = [
   {
     smsId: "tax-refund-link",
@@ -192,6 +217,7 @@ export const IN_CALL_SMS: Record<string, InCallSmsItem[]> = {
   "loan-refinance-scam": LOAN_SCAM,
   "institutional-impersonation": INSTITUTIONAL_IMPERSONATION,
   "card-company-impersonation": CARD_COMPANY_IMPERSONATION,
+  "bank-security-verify-scam": BANK_SECURITY_VERIFY_SCAM,
   "tax-refund-scam": TAX_REFUND_SCAM,
   "courier-customs-scam": COURIER_CUSTOMS_SCAM,
   // §50.6 — 신고 ⑩ⓒ(계좌 전달 수단) 대응. ⚠️ `kidnapping-threat`에는 넣지 않는다(G306) —

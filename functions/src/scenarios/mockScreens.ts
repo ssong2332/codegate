@@ -121,10 +121,11 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // 정확히 일치하고, kind를 늘리면 안전 계약이 한 벌 더 늘어 AC-072가 금지한 "검증 경로 이중화"에
 // 스스로 다가간다.
 //
-// ⚠️ **§51(사용자 라이브 신고) — `safe-account-transfer`·`card-relief-transfer` 2종이 여기
-// 더해졌다.** §45 ⓐ가 판정만 하고 구현이 0줄이던 이체형 랜딩(계좌번호·금액을 입력해 이체를
-// 완료하는 화면)의 집행이다. 나머지 이체형 1종(`protect-account-transfer`)은 §51.5 판정 +
-// P-1 라이브 프로브 결과에 따라 후속 커밋에서 더해진다 — 대상 판정·회피 방지(G319)의 근거는
+// ⚠️ **§51(사용자 라이브 신고) — `safe-account-transfer`·`card-relief-transfer`·
+// `protect-account-transfer` 3종이 여기 더해졌다.** §45 ⓐ가 판정만 하고 구현이 0줄이던 이체형
+// 랜딩(계좌번호·금액을 입력해 이체를 완료하는 화면)의 집행이다. 마지막 1종
+// (`protect-account-transfer`)은 §51.5 (3)·§51.7 (3)이 요구한 P-1 라이브 프로브(전환이 실제로
+// 몇 번째 사기범 턴에 일어나는지) 통과 후 커밋됐다 — 대상 판정·회피 방지(G319)의 근거는
 // `docs/Architecture.md` §51.
 //
 // ── ⭐ AC-078 (c) 미끼 → 랜딩 대조표 (구현 산출물 — AC 본문이 "대조표가 없으면 미충족"이라 규정) ──
@@ -141,6 +142,7 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `courier-customs-check` | `scenarios/inCallSms.ts:120-121`(문자 본문·칩) | "수취인 정보 불일치로 통관이 보류되었습니다." | 수취인 정보 확인 → 통관 재개 | "수취인 정보가 일치하지 않아 통관이 보류되었습니다" | "수취인 정보 확인하기" |
 // | `safe-account-transfer` | `scenarios/inCallSms.ts:87-91`(문자 본문·칩) | "아래에서 안전계좌 이체를 진행해 주세요." | 링크에서 안전계좌 이체 | "안전계좌 이체가 아직 완료되지 않았습니다" | "안전계좌로 이체하기" |
 // | `card-relief-transfer` | `scenarios/inCallSms.ts:117-119`(문자 본문·칩) | "아래에서 피해금 이관을 진행해 주세요." | 링크에서 피해금 이관 | "피해금 이관 신청이 완료되지 않았습니다" | "피해금 이관하기" |
+// | `protect-account-transfer` | `scenarios/inCallSms.ts:142-143`(문자 본문·칩) | "아래에서 보호계좌로 옮기기를 진행해 주세요." | 링크에서 보호계좌로 옮기기 | "보호계좌로 옮기기가 아직 처리되지 않았습니다" | "보호계좌로 옮기기" |
 //
 // ⚠️ **이 표가 조용히 낡지 않게 하는 장치(주석은 강제가 아니다).** 위 **줄 번호는 스냅샷일 뿐이며
 // 앵커가 아니다** — 파일이 바뀌면 줄은 밀린다. 진짜 앵커는 `__tests__/mockScreens.test.ts`의
@@ -298,6 +300,33 @@ const CARD_COMPANY_IMPERSONATION: MockScreenItem[] = [
   },
 ];
 
+// UF-008 — `bank-protect-account` 문자(§51.3 F2 후속, 이 시나리오 최초의 계좌 문자)에서 열린다.
+// §51.6 R10 — 신규 `InCallSmsKind`·`MockScreenKind` 0건.
+//
+// bodyLines 둘째 줄은 UX-023 v1.25 정정값을 그대로 옮겼다(T116 G194 — 라벨 중복 등장 정정,
+// v1.24 원안 대비 institutional·card와 같은 형태).
+const BANK_SECURITY_VERIFY_SCAM: MockScreenItem[] = [
+  {
+    landingId: "protect-account-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "보호계좌로 옮기기가 아직 처리되지 않았습니다",
+    bodyLines: [
+      "비정상 출금 시도가 확인되어 잔액을 옮겨 두셔야 출금이 막힙니다.",
+      "문자로 안내된 계좌번호와 옮기실 금액을 아래에 입력해 주세요.",
+    ],
+    // 문자 발신 라벨(`inCallSms.ts` BANK_SECURITY_VERIFY_SCAM `bank-protect-account`
+    // "(계좌보호 안내)")과 일관되게 맞춘다(P-28 (6)).
+    issuerLabel: "ⓒ 금융사고대응 보호계좌센터",
+    fields: ["보호계좌 번호", "옮길 금액"],
+    submitLabel: "보호계좌로 옮기기",
+    successHeadline: "보호계좌로 옮기기가 처리되었습니다.",
+    momentTactic: "비정상 출금 차단을 빌미로 한 보호계좌 이체 유도",
+    correctAction:
+      "'출금을 막아 주겠다'며 잔액을 다른 계좌로 옮기라고 하면 그 자리에서 멈추세요 — 은행은 고객 돈을 옮겨서 지켜 주지 않습니다. ① 통화를 완전히 끊은 뒤, 통화 중 안내받은 번호가 아니라 통장·카드·공식 창구에서 직접 찾은 번호로 확인하기 ② 계좌번호·금액을 문자 링크에 넣지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+];
+
 /**
  * 시나리오별 모의 화면 카탈로그(`IN_CALL_SMS` 미러 — `Record<scenarioId, Item[]>`).
  *
@@ -314,16 +343,18 @@ const CARD_COMPANY_IMPERSONATION: MockScreenItem[] = [
  * 만들지 않고(`listAppInstallMockScreens` 게이팅), `consentedAt`도 가질 수 없어(콜러블이 거부)
  * G55가 막던 지시 경합(M1)과 R6이 막던 앵커 얽힘(M2) 어느 쪽도 발생시키지 않는다(§19.1 (2)).
  *
- * ⚠️ **§51**: `institutional-impersonation`·`card-company-impersonation`이 여기 신규
- * 등재된다(§45 ⓐ 집행 — 통화 경로 `credential-form` 이체형 랜딩 각 1건, `IN_CALL_SMS`의
- * `institution-safe-account`·`card-relief-account`가 병기한 `fakeLandingId`를 가리킨다).
- * G159 트립와이어 — 두 시나리오 모두 도달 가능 랜딩은 **1건뿐**이다.
+ * ⚠️ **§51**: `institutional-impersonation`·`card-company-impersonation`·
+ * `bank-security-verify-scam`이 여기 신규 등재된다(§45 ⓐ 집행 — 통화 경로 `credential-form`
+ * 이체형 랜딩 각 1건, `IN_CALL_SMS`의 `institution-safe-account`·`card-relief-account`·
+ * `bank-protect-account`가 병기한 `fakeLandingId`를 가리킨다).
+ * G159 트립와이어 — 세 시나리오 모두 도달 가능 랜딩은 **1건뿐**이다.
  */
 export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   "messenger-subsidy-smishing-sms": MESSENGER_SUBSIDY_SMISHING_SMS,
   "messenger-parcel-smishing-sms": MESSENGER_PARCEL_SMISHING_SMS,
   "institutional-impersonation": INSTITUTIONAL_IMPERSONATION,
   "card-company-impersonation": CARD_COMPANY_IMPERSONATION,
+  "bank-security-verify-scam": BANK_SECURITY_VERIFY_SCAM,
   "loan-refinance-scam": LOAN_REFINANCE_SCAM,
   "tax-refund-scam": TAX_REFUND_SCAM,
   "courier-customs-scam": COURIER_CUSTOMS_SCAM,
