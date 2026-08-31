@@ -46,3 +46,5 @@
 - [Gemini Live VAD 손잡이 4개](reference_gemini_live_vad_knobs.md) — 자기-끊김=시작 손잡이(미설정·기본 HIGH), 지연=종료 손잡이(이미 한계); 트레이드오프가 아니다
 - [인용된 리터럴은 대상을 배신한다](feedback_cited_literals_betray_the_subject.md) — 신고의 구체값을 카탈로그로 역 grep하면 지목된 시나리오/화면이 바뀐다; 메커니즘과 대상을 갈라 적어라
 - [가드를 찾으면 형제 슬롯을 전수 대조하라](feedback_guard_exists_check_sibling_slots.md) — 같은 함정을 한 슬롯에서만 막아 둔다(G99는 있고 G31 큐엔 없다); 처방은 그 가드와 같은 형태로
+- [해가 없는 제약은 층이 틀린 것이다](feedback_unsolvable_constraints_mean_wrong_layer.md) — 제약→"실제 요구"→"아는 층" 3열 표; 값으로 표현 불가한 행이 범인이고 인접 모듈에 선례 게이트가 있다
+- [경로 A 결함 신고는 경로 B부터 추적](feedback_defect_report_recheck_the_other_path.md) — `===` vs `<=`·카운터 시작점이 다르다; "도달 불가"가 실은 "너무 일찍 도착"일 수 있다
