@@ -116,16 +116,18 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // `collectAllSurfaces()`가 순회하는 **이 카탈로그**에만 걸린다. 클라 상수에만 두거나 새 서버 파일을
 // 만들면 환급·통관 랜딩의 실존 기관명이 **어디에서도 안 걸린다** — D-58이 최대 위험으로 지목한 지점.
 //
-// ⚠️ 아래 6종은 전부 `credential-form`이다(**신규 kind 0건** — D-58). 새로 붙는 화면이 모두
+// ⚠️ 아래 7종은 전부 `credential-form`이다(**신규 kind 0건** — D-58). 새로 붙는 화면이 모두
 // "정보를 입력하게 만드는 화면"이라 기존 안전 계약(입력 허용·서버 미전송·외부 네비게이션 부재)과
 // 정확히 일치하고, kind를 늘리면 안전 계약이 한 벌 더 늘어 AC-072가 금지한 "검증 경로 이중화"에
 // 스스로 다가간다.
 //
 // ⚠️ **§51(사용자 라이브 신고) — `safe-account-transfer`·`card-relief-transfer` 2종이 여기
 // 더해졌다.** §45 ⓐ가 판정만 하고 구현이 0줄이던 이체형 랜딩(계좌번호·금액을 입력해 이체를
-// 완료하는 화면)의 집행이다. 나머지 이체형 1종(`protect-account-transfer`)은 §51.5 판정 +
-// P-1 라이브 프로브 결과에 따라 후속 커밋에서 더해진다 — 대상 판정·회피 방지(G319)의 근거는
-// `docs/Architecture.md` §51.
+// 완료하는 화면)의 집행이다. 대상 판정·회피 방지(G319)의 근거는 `docs/Architecture.md` §51.
+//
+// ⚠️ **§53(§51 커밋 D) — 나머지 이체형 1종 `protect-account-transfer`가 여기 더해졌다.**
+// §51.5 판정이 남겨 둔 3순위 후보를, §53이 값(`afterScammerTurns:3`)과 서버 게이트(§53.6 (3))로
+// 마무리한 것의 집행이다.
 //
 // ── ⭐ AC-078 (c) 미끼 → 랜딩 대조표 (구현 산출물 — AC 본문이 "대조표가 없으면 미충족"이라 규정) ──
 //
@@ -141,6 +143,7 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `courier-customs-check` | `scenarios/inCallSms.ts:120-121`(문자 본문·칩) | "수취인 정보 불일치로 통관이 보류되었습니다." | 수취인 정보 확인 → 통관 재개 | "수취인 정보가 일치하지 않아 통관이 보류되었습니다" | "수취인 정보 확인하기" |
 // | `safe-account-transfer` | `scenarios/inCallSms.ts:87-91`(문자 본문·칩) | "아래에서 안전계좌 이체를 진행해 주세요." | 링크에서 안전계좌 이체 | "안전계좌 이체가 아직 완료되지 않았습니다" | "안전계좌로 이체하기" |
 // | `card-relief-transfer` | `scenarios/inCallSms.ts:117-119`(문자 본문·칩) | "아래에서 피해금 이관을 진행해 주세요." | 링크에서 피해금 이관 | "피해금 이관 신청이 완료되지 않았습니다" | "피해금 이관하기" |
+// | `protect-account-transfer` | `scenarios/inCallSms.ts:173-175`(문자 본문·칩) | "아래에서 보호계좌로 옮기기를 진행해 주세요." | 링크에서 보호계좌로 옮기기 | "보호계좌로 옮기기가 아직 처리되지 않았습니다" | "보호계좌로 옮기기" |
 //
 // ⚠️ **이 표가 조용히 낡지 않게 하는 장치(주석은 강제가 아니다).** 위 **줄 번호는 스냅샷일 뿐이며
 // 앵커가 아니다** — 파일이 바뀌면 줄은 밀린다. 진짜 앵커는 `__tests__/mockScreens.test.ts`의
@@ -298,6 +301,37 @@ const CARD_COMPANY_IMPERSONATION: MockScreenItem[] = [
   },
 ];
 
+// UF-008 — `bank-protect-account` 문자(§53/§51 커밋 D)에서 열린다. §51.6 R10 — 신규
+// `InCallSmsKind`·`MockScreenKind` 0건.
+//
+// ⚠️ **UX v1.25 정정 — bodyLines 둘째 줄만.** v1.24 원안은 fields 라벨("보호계좌 번호"·"옮길
+// 금액")을 문자 그대로 반복해 T116 G194에 걸렸다(institutional·card와 같은 형태).
+const BANK_SECURITY_VERIFY_SCAM: MockScreenItem[] = [
+  {
+    landingId: "protect-account-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "보호계좌로 옮기기가 아직 처리되지 않았습니다",
+    bodyLines: [
+      "비정상 출금 시도가 확인되어 잔액을 옮겨 두셔야 출금이 막힙니다.",
+      "문자로 안내된 계좌번호와 옮기실 금액을 아래에 입력해 주세요.",
+    ],
+    // 문자 발신 라벨(`inCallSms.ts` BANK_SECURITY_VERIFY_SCAM `bank-protect-account`
+    // "(계좌보호 안내)")과 일관되게 맞춘다(P-28 (6)).
+    issuerLabel: "ⓒ 금융사고대응 보호계좌센터",
+    fields: ["보호계좌 번호", "옮길 금액"],
+    submitLabel: "보호계좌로 옮기기",
+    successHeadline: "보호계좌로 옮기기가 처리되었습니다.",
+    momentTactic: "비정상 출금 차단을 빌미로 한 보호계좌 이체 유도",
+    // ⚠️ ①만 다른 이유(의도적, UX-023 v1.24 (2) 각주) — 이 시나리오의 수법 축이 확인 시도
+    // 무력화(D3)라 "대표번호로 확인하세요"만 적으면 참가자가 방금 겪은 일(확인했는데도 속았다)과
+    // 어긋난다. 가로채기의 수단·원리는 적지 않는다(AC-071 표현 수위) — 적는 것은 "번호를 어디서
+    // 얻는가"뿐이다.
+    correctAction:
+      "'출금을 막아 주겠다'며 잔액을 다른 계좌로 옮기라고 하면 그 자리에서 멈추세요 — 은행은 고객 돈을 옮겨서 지켜 주지 않습니다. ① 통화를 완전히 끊은 뒤, 통화 중 안내받은 번호가 아니라 통장·카드·공식 창구에서 직접 찾은 번호로 확인하기 ② 계좌번호·금액을 문자 링크에 넣지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+];
+
 /**
  * 시나리오별 모의 화면 카탈로그(`IN_CALL_SMS` 미러 — `Record<scenarioId, Item[]>`).
  *
@@ -318,6 +352,10 @@ const CARD_COMPANY_IMPERSONATION: MockScreenItem[] = [
  * 등재된다(§45 ⓐ 집행 — 통화 경로 `credential-form` 이체형 랜딩 각 1건, `IN_CALL_SMS`의
  * `institution-safe-account`·`card-relief-account`가 병기한 `fakeLandingId`를 가리킨다).
  * G159 트립와이어 — 두 시나리오 모두 도달 가능 랜딩은 **1건뿐**이다.
+ *
+ * ⚠️ **§53(§51 커밋 D)**: `bank-security-verify-scam`이 여기 신규 등재된다(OQ-A31 (b) 집행 —
+ * `IN_CALL_SMS`의 `bank-protect-account`가 병기한 `fakeLandingId`를 가리킨다). 이 시나리오도
+ * 도달 가능 랜딩은 **1건뿐**이다(G159).
  */
 export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   "messenger-subsidy-smishing-sms": MESSENGER_SUBSIDY_SMISHING_SMS,
@@ -327,6 +365,7 @@ export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   "loan-refinance-scam": LOAN_REFINANCE_SCAM,
   "tax-refund-scam": TAX_REFUND_SCAM,
   "courier-customs-scam": COURIER_CUSTOMS_SCAM,
+  "bank-security-verify-scam": BANK_SECURITY_VERIFY_SCAM,
 };
 
 /**

@@ -458,7 +458,11 @@ export default function SessionCallPage() {
         setSmsError(null);
         setSmsBannerDismissed(false);
         // T83 — 직접 세팅하지 않고 큐를 통한다(같은 턴에 확인 지시와 겹쳐도 유실되지 않게, G31).
-        enqueueTurnInstruction(result.announceInstruction, "sms");
+        // §53.6 (3) — 전환이 끝난 오퍼가 연 문자에는 값이 없다(서버가 생략). 값이 없으면
+        // 주입하지 않는다 — 문서 자체(계좌·링크)는 그대로 도착했으니 배너·문자함은 정상 표시된다.
+        if (result.announceInstruction) {
+          enqueueTurnInstruction(result.announceInstruction, "sms");
+        }
       } catch {
         // 다음 턴 경계에서 다시 시도할 수 있게 요청 기록을 되돌린다.
         requestedSmsRef.current.delete(dueSmsId);

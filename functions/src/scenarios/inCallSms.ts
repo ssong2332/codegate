@@ -158,6 +158,27 @@ const REPUTATION_BLACKMAIL_SCAM: InCallSmsItem[] = [
   },
 ];
 
+// §53(§51 커밋 D 집행 — UX-027 v1.24 (1) ㉰ / v1.25 정본, `docs/Architecture.md` §53.6/§53.8) —
+// `bank-security-verify-scam` 최초의 통화 중 문자 항목(OQ-A31 (b) 집행). `afterScammerTurns: 3`은
+// §53.6 (5)의 확정값(ⓐ ≠2 ∩ ⓓ >=2의 유일한 최솟값 — 하한 트립와이어는 inCallSms/__tests__/
+// buildDoc.test.ts가 고정한다). ⚠️ 전환(확인 데스크로의 호 전환) 이후에는 원 사기범이 이미
+// 사라지므로, 이 항목의 `announceInstruction`이 실제로 응답에 실리는지는 카탈로그가 아니라
+// `deliverInCallSms`의 서버 게이트(§53.6 (3) — `verifyIntercept/{offerId}.placedAt` 조건부 생략)가
+// 결정한다. 문서 자체(계좌·링크)는 전환 여부와 무관하게 항상 도착한다.
+const BANK_SECURITY_VERIFY_SCAM: InCallSmsItem[] = [
+  {
+    smsId: "bank-protect-account",
+    kind: "account",
+    senderLabel: "0000-0000 (계좌보호 안내)",
+    body: "[금융사고대응] 보호계좌 이체 안내\n예금주: 계좌보호대응센터\nOO은행 100-2043-7788-21\n금액: 4,120,000원\n아래에서 보호계좌로 옮기기를 진행해 주세요.",
+    linkDisplayText: "보호계좌 이체 진행하기",
+    fakeLandingId: "protect-account-transfer",
+    afterScammerTurns: 3,
+    announceInstruction:
+      '(참가자 휴대전화로 방금 보호계좌 안내 문자가 실제로 도착했다. 지금 캐릭터로서 한두 문장으로 침착하게 그 사실을 알리고 문자 속 링크를 눌러 옮기기를 마쳐 달라고 안내하라 — 예: "보호계좌는 방금 문자로 보내드렸습니다, 문자에 있는 링크 눌러서 그대로 진행하시면 됩니다." 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)',
+  },
+];
+
 const COURIER_CUSTOMS_SCAM: InCallSmsItem[] = [
   {
     smsId: "courier-customs-link",
@@ -197,6 +218,8 @@ export const IN_CALL_SMS: Record<string, InCallSmsItem[]> = {
   // §50.6 — 신고 ⑩ⓒ(계좌 전달 수단) 대응. ⚠️ `kidnapping-threat`에는 넣지 않는다(G306) —
   // "이 통화 끊지 말고 그대로 있어요"(kidnappingThreat.prompt.ts)와 충돌한다.
   "reputation-blackmail-scam": REPUTATION_BLACKMAIL_SCAM,
+  // §53(§51 커밋 D) — 카탈로그 자체가 신설(이 시나리오 첫 항목). OQ-A31 (b) 집행.
+  "bank-security-verify-scam": BANK_SECURITY_VERIFY_SCAM,
 };
 
 /** 이 시나리오가 통화 중 문자를 쓰는가(프롬프트 조건형 블록·트리거 노출의 단일 판정). */

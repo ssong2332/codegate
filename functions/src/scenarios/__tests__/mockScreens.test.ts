@@ -427,15 +427,17 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
   assert.deepEqual(
     voiceScoped.sort(),
     // §51 — institutional-impersonation·card-company-impersonation이 §45 ⓐ 집행으로 신규
-    // 등재된다(통화 채널, credential-form).
+    // 등재된다(통화 채널, credential-form). §53(§51 커밋 D) — bank-security-verify-scam이
+    // OQ-A31 (b) 집행으로 신규 등재된다.
     [
+      "bank-security-verify-scam",
       "card-company-impersonation",
       "courier-customs-scam",
       "institutional-impersonation",
       "loan-refinance-scam",
       "tax-refund-scam",
     ],
-    "통화 채널 5종이 카탈로그에 없으면 정밀화가 아무것도 안 푼 것이다",
+    "통화 채널 6종이 카탈로그에 없으면 정밀화가 아무것도 안 푼 것이다",
   );
   // 그리고 그 5종은 **app-install을 하나도 갖지 않는다**(정밀화의 안전 전제 = M2 차단).
   for (const scenarioId of voiceScoped) {
@@ -445,7 +447,8 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
   const surfaces = allItems.map((item) => item.entrySurface).sort();
   assert.deepEqual(surfaces, [
     // §51 — institutional-impersonation·card-company-impersonation의 이체형 랜딩(in-call-sms)이
-    // 추가됐다.
+    // 추가됐다. §53(§51 커밋 D) — bank-security-verify-scam의 이체형 랜딩(in-call-sms)이 추가됐다.
+    "in-call-sms",
     "in-call-sms",
     "in-call-sms",
     "in-call-sms",
@@ -559,7 +562,7 @@ test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **�
     false,
     "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
   );
-  assert.equal(reachableLandingKeys().length, 7, "도달 가능 랜딩은 7종이다(§51 — safe-account-transfer·card-relief-transfer 추가)");
+  assert.equal(reachableLandingKeys().length, 8, "도달 가능 랜딩은 8종이다(§53/§51 커밋 D — protect-account-transfer 추가)");
 });
 
 test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
@@ -767,7 +770,7 @@ function findFieldConvergence(
 
 test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
   const items = Object.values(MOCK_SCREENS).flat();
-  assert.equal(items.length, 7, "현행 비교 대상은 도달 가능 랜딩 7종이다(§51 — safe-account-transfer·card-relief-transfer 추가)");
+  assert.equal(items.length, 8, "현행 비교 대상은 도달 가능 랜딩 8종이다(§53/§51 커밋 D — protect-account-transfer 추가)");
   const stats = fieldDivergenceStats(items);
   for (const { field, compared, excluded, converged } of stats) {
     t.diagnostic(
@@ -966,6 +969,13 @@ const BAIT_TO_LANDING: {
     baitExcerpt: "아래에서 피해금 이관을 진행해 주세요.",
     headlineAnchors: ["피해금", "이관"],
     ctaAnchors: ["피해금", "이관"],
+  },
+  {
+    landingId: "protect-account-transfer",
+    baitSource: "scenarios/inCallSms.ts:173-175 (문자 본문·칩)",
+    baitExcerpt: "아래에서 보호계좌로 옮기기를 진행해 주세요.",
+    headlineAnchors: ["보호계좌", "옮기기"],
+    ctaAnchors: ["보호계좌", "옮기기"],
   },
 ];
 

@@ -160,7 +160,9 @@ export type VerifyOfferTrigger = { availableAfterScammerTurns: number };
 // ⚠️ **읽기 전용 계약(AC-060)**: 답장·전달·전송 요청 타입이 존재하지 않는다. 실 URL 필드도
 // 어느 타입에도 없다 — 링크는 표시 텍스트 + 인앱 가짜 랜딩 참조로만 표현된다(AC-032/045).
 export type DeliverInCallSmsRequest = { sessionId: string; smsId: string };
-export type DeliverInCallSmsResponse = { smsId: string; announceInstruction: string };
+// ⭐ §53.6 (3)(T118/R-1과 동형) — 전환(호 전환)이 끝난 오퍼가 연 문자에는 `announceInstruction`이
+// 생략된다. 값이 없으면 클라는 주입하지 않는다. 계약 원천은 `functions/src/inCallSms/types.ts`.
+export type DeliverInCallSmsResponse = { smsId: string; announceInstruction?: string };
 // T123/AC-080 — `landing_submitted` = "그 문자가 연 가짜 랜딩의 폼을 제출했다"는 **사실 하나**.
 // ⛔ 참가자 입력값(계좌번호·예금주명)을 담을 필드가 아래 요청 타입에 **존재하지 않는다**(AC-045).
 export type InCallSmsEvent = "opened" | "link_tapped" | "landing_submitted";
