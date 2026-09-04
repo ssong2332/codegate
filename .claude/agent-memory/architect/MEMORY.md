@@ -50,4 +50,5 @@
 - [경로 A 결함 신고는 경로 B부터 추적](feedback_defect_report_recheck_the_other_path.md) — `===` vs `<=`·카운터 시작점이 다르다; "도달 불가"가 실은 "너무 일찍 도착"일 수 있다
 - [입력이 그 경로에 도달하는가부터](feedback_check_input_reaches_the_path.md) — 판정 함수는 무죄일 수 있다; 유일한 대입 지점 grep + 입구 전수표 + 같은 세션 대조군
 - [Mock은 입력을 무시하고도 "했다"고 기록한다](feedback_mock_ignores_input_marks_anyway.md) — 강등 경로 타임라인엔 실 구현 전제를 조건으로; 마킹은 산출물에 종속시키고 앞층과 같은 커밋으로
+- ["로그에 0건"은 기록 여부부터 확인](feedback_absence_in_logs_check_if_logged.md) — 성공 무로그면 정상에서도 0건; 키를 공유해도 엔드포인트·모델이 다르면 쿼터 무죄 근거가 아니다
 - [파생 라벨엔 관측된 경계가 필요하다](feedback_derived_label_needs_observed_boundary.md) — 문자열은 이미 있고 없는 건 경계다; 요청 시점 계수는 예측이라 라벨 대신 문면 층으로 내려간다
