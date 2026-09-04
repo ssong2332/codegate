@@ -8,8 +8,16 @@
 export type DeliverInCallSmsRequest = { sessionId: string; smsId: string };
 export type DeliverInCallSmsResponse = {
   smsId: string;
-  /** 클라가 **같은 Live 세션에 텍스트 턴으로 주입**해 캐릭터가 문자 발송을 알리게 하는 1줄. */
-  announceInstruction: string;
+  /**
+   * 클라가 **같은 Live 세션에 텍스트 턴으로 주입**해 캐릭터가 문자 발송을 알리게 하는 1줄.
+   *
+   * ⭐ **§53.6 (3)(T118/R-1과 동형, Architecture.md §53)** — 이 문자가 연 확인 시도 무력화
+   * 오퍼에 이미 `placedAt`이 있으면(=호 전환이 끝난 뒤면) **생략된다.** 전환 이후에는 원
+   * 사기범이 아니라 확인 데스크 화자만 남아 있고, 그 화자가 "내가 방금 이 문자를 보냈다"고
+   * 말하면 참가자가 겪은 사실과 모순된다. 값이 없으면 클라는 **주입하지 않는다** — 문서
+   * 자체(계좌·링크)는 전환 여부와 무관하게 그대로 도착한다.
+   */
+  announceInstruction?: string;
 };
 
 // T123/AC-080 — `landing_submitted`는 **"그 문자가 연 가짜 랜딩의 폼을 제출했다"**는 사실 하나다.

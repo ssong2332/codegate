@@ -142,6 +142,42 @@ test("확인 문서가 없으면 선택 결과가 기존 T68 동작과 동일하
   assert.equal(pickFallbackTurnInstruction({ smsDue: false, scammerDocCount: 3 }), "none");
 });
 
+// ── §53.6 (3)/G337 — 전환(placed)이 끝난 뒤에는 문자 due여도 announce를 고르지 않는다 ──────
+// (inCallSms/buildDoc.ts의 resolveInCallSmsPlan/버전 게이트와 같은 판정을 폴백 경로에도 적용)
+
+test("[§53.6 (3)/G337] `placed:true`에서는 문자 due여도 sms_announce를 고르지 않는다(차단)", () => {
+  assert.equal(
+    pickFallbackTurnInstruction({
+      smsDue: true,
+      verify: { announced: true, placed: true },
+      scammerDocCount: 5,
+    }),
+    "none",
+  );
+});
+
+test("[§53.6 (3) 역검증] `placed:false`에서는 종전대로 문자가 우선한다(회귀 0)", () => {
+  assert.equal(
+    pickFallbackTurnInstruction({
+      smsDue: true,
+      verify: { announced: true, placed: false },
+      scammerDocCount: 5,
+    }),
+    "sms_announce",
+  );
+});
+
+test("[§53.6 (3)] `placed:true`여도 재연결 대사(우선순위 1)는 그대로 우선한다(G337이 순서를 안 바꾼다)", () => {
+  assert.equal(
+    pickFallbackTurnInstruction({
+      smsDue: true,
+      verify: { announced: true, placed: true, reconnectAnchorScammerTurn: 5 },
+      scammerDocCount: 5,
+    }),
+    "verify_reconnect",
+  );
+});
+
 // ── T84 증분: 모의 설치 응낙 지시(§15.9.3 / §15.9.7 G55) ──────────────────────
 test("[T84] 설치 응낙 지시는 다른 지시가 없을 때 선택된다", () => {
   assert.equal(

@@ -265,6 +265,22 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     successHeadline: "피해금 이관이 접수되었습니다.",
     issuerLabel: "ⓒ 카드 피해금 이관 지원센터",
   },
+  // §53(§51 커밋 D) — 이체형 가짜 랜딩(UX-023 v1.25 (2)/(17-a) 정본 — bodyLines 둘째 줄은
+  // T116 G194 정정 후 문면, 서버 카탈로그(mockScreens.ts)와 글자 단위로 동일).
+  "protect-account-transfer": {
+    headline: "보호계좌로 옮기기가 아직 처리되지 않았습니다",
+    bodyLines: [
+      "비정상 출금 시도가 확인되어 잔액을 옮겨 두셔야 출금이 막힙니다.",
+      "문자로 안내된 계좌번호와 옮기실 금액을 아래에 입력해 주세요.",
+    ],
+    fields: [
+      { label: "보호계좌 번호", placeholder: "문자로 받은 계좌번호를 입력하세요" },
+      { label: "옮길 금액", placeholder: "옮기실 금액을 입력하세요" },
+    ],
+    submitLabel: "보호계좌로 옮기기",
+    successHeadline: "보호계좌로 옮기기가 처리되었습니다.",
+    issuerLabel: "ⓒ 금융사고대응 보호계좌센터",
+  },
 };
 
 /**
