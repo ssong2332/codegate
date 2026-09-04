@@ -74,4 +74,5 @@
 - [§53 bank 이체 문자 전환 게이트(§51 커밋 D)](project_codegate_s53_bank_transfer_gate.md) — ⭐ 원칙 뒤 if/then 예외를 사용자 지시가 이미 밟고 있던 사례, "같은 형태로" 지시가 API.md 무변경 제약과 충돌해 코드만 선례 따르고 문서는 권고로 남긴 판단, 신선 워크트리 npm install 필수(functions+root).
 - [§54 D1·D2 목업 무음화 + 폴백 자격증명](project_codegate_s54_d1_d2.md) — ⭐ "판단 여지 0" 설계도 부작용 범위는 입구별로 재야 한다(E3만 안전, E1·E2는 Live 마운트), 루트 tsc 선재 오류 거르는 법.
 - [배포 라우팅 — 정적 export ↔ Hosting](project_hosting_static_export_routing.md) — ⭐ cleanUrls 없으면 루트 외 전 경로 404(상태는 200이라 안 보인다), cleanUrls만으론 슬래시 경로 미해결, hosting 에뮬레이터 sha256 A/B 프로브 레시피.
+- [§56 텍스트 LLM 모델 교체 + 관측 증분](project_codegate_s56_model_swap.md) — ⭐ 리터럴 상수 트립와이어는 tsc가 먼저 잡는다(2층 역검증), TS6133 없이 로그 값만 죽이는 조작(`x * 0`), 없는 토큰을 0으로 채우지 않는 이유.
 - [§55 D3·D4 notSpoken 오프닝 + 전환 연결문장](project_codegate_s55_d3_d4.md) — ⭐ 타입 밖 필드로 앵커 불변 증명하는 제네릭 스프레드, heredoc append가 워크트리 격리에 거부됨(→Write 새 파일), 스테일 클로저 ref 래치.
