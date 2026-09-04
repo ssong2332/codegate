@@ -10,6 +10,11 @@ export type RewindMessageSource = {
   role: "scammer" | "user";
   textMasked: string;
   turnIndex: number;
+  /**
+   * §55 D3 — 참가자에게 **도달하지 않은** 문서(부재 = 도달함, 무백필). 되감기 맥락 창(앞 2턴)에
+   * 들어오면 참가자가 들은 적 없는 대사를 "그때 상황"으로 보여주게 된다.
+   */
+  notSpoken?: true;
 };
 
 export type RewindMomentSource = {
@@ -52,7 +57,11 @@ export function buildRewindContext(
 ): RewindContext {
   const before = options.before ?? 2;
   const after = options.after ?? 1;
-  const sorted = [...messages].sort((a, b) => a.turnIndex - b.turnIndex);
+  // ⭐ §55 D3 — 낭독되지 않은 문서는 맥락에서 제외한다(`scammer-focus` 후보에서도 함께 빠진다).
+  // ⛔ `moment.turnIndex` 값 자체는 손대지 않는다 — 매칭은 종전대로 **같은 값**으로 한다(G350).
+  const sorted = [...messages]
+    .filter((m) => !m.notSpoken)
+    .sort((a, b) => a.turnIndex - b.turnIndex);
 
   const answerPos = sorted.findIndex(
     (m) => m.role === "user" && m.turnIndex === moment.turnIndex,

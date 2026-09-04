@@ -13,12 +13,26 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { maskPII } from "../guardrails";
+import { findOpeningToMarkNotSpoken } from "./openingMark";
 import type { MessageDoc, SessionDoc } from "../shared/types";
 
 ensureFirebaseAdminApp();
 
 export type TranscriptTurn = { role: "user" | "scammer"; text: string };
-export type SubmitRealtimeTranscriptRequest = { sessionId: string; turns: TranscriptTurn[] };
+/**
+ * §55 D3 — `openingNotSpoken`: 오프닝(`turnIndex:0`) 대사가 참가자에게 **낭독되지 않았는가**를
+ * 클라가 알려준다(부재 = `false` = 종전 동작).
+ *
+ * ⛔ **서버가 "전사를 제출했으니 오프닝은 안 들렸다"로 추론하지 말 것(G351).** Gemini로 시작했다가
+ * 폴백으로 강등된 세션에서는 그 행이 실제로 표시·재생된다(`session/play/page.tsx` 폴백 분기 —
+ * `consumeOpeningAudioUrl()` 재생 + 메시지 구독이 그 행을 말풍선으로 그린다). 추론하면 참가자가
+ * **본 대사를 지운다.** 판별자는 클라 래치 1개뿐이다.
+ */
+export type SubmitRealtimeTranscriptRequest = {
+  sessionId: string;
+  turns: TranscriptTurn[];
+  openingNotSpoken?: boolean;
+};
 export type SubmitRealtimeTranscriptResponse = { written: number };
 
 /** 한 번에 제출 가능한 턴 수 상한 — 악의적/폭주 입력 방지(정상 통화는 수십 턴 이내). */
@@ -32,7 +46,7 @@ export const submitRealtimeTranscript = onCall<
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
-  const { sessionId, turns } = request.data ?? {};
+  const { sessionId, turns, openingNotSpoken } = request.data ?? {};
   if (!sessionId || !Array.isArray(turns)) {
     throw new HttpsError("invalid-argument", "sessionId와 turns가 필요합니다.");
   }
@@ -60,7 +74,20 @@ export const submitRealtimeTranscript = onCall<
     }
 
     const historySnap = await tx.get(messagesRef.orderBy("turnIndex", "asc"));
+    // ⛔ **G350** — 이어 붙일 인덱스는 `historySnap.size`(문서 수) 그대로다. 아래 `notSpoken`
+    // 마크는 이 값에 **절대 반영하지 않는다**(반영하면 실시간 앵커 `+1`이 무너진다, G348).
     let nextIndex = historySnap.size;
+
+    // §55 D3 — 클라가 "오프닝이 낭독되지 않았다"고 알려준 세션에서만, 이미 읽어 둔 `historySnap`
+    // 안의 오프닝 문서에 마크를 붙인다(**추가 read 0회**, 같은 트랜잭션, 멱등).
+    // ⛔ `turnIndex`·`createdAt`·기존 필드는 한 줄도 고치지 않는다(문서를 지우거나 옮기지도 않는다).
+    const openingPos = findOpeningToMarkNotSpoken(
+      historySnap.docs.map((doc) => doc.data() as MessageDoc),
+      openingNotSpoken,
+    );
+    if (openingPos >= 0) {
+      tx.update(historySnap.docs[openingPos].ref, { notSpoken: true });
+    }
     const baseTime = Date.now();
     let count = 0;
 

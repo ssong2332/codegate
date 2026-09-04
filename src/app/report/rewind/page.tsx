@@ -87,6 +87,8 @@ export default function RewindPage() {
         role: data.role as "scammer" | "user",
         textMasked: data.textMasked as string,
         turnIndex: data.turnIndex as number,
+        // §55 D3 — 낭독되지 않은 문서 표시를 그대로 넘긴다(제외 판단은 순수 함수가 한다).
+        ...(data.notSpoken === true ? { notSpoken: true as const } : {}),
       };
     });
 
