@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createRealtimeCall } from "@/lib/api";
 import type { CreateRealtimeCallResponse } from "@/lib/api";
 import { isPrefetchFresh as isPrefetchTimestampFresh } from "./prefetchFreshness";
+import { toFallbackCredentials } from "./fallbackCredentials";
 
 export type RealtimeCallStatus =
   | "idle"
@@ -153,10 +154,33 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     })();
   }, []);
 
+  // ⭐⭐ D2/F1(§54.9 (4) 2, G342) — **실시간이 불가능해도 자격증명은 받아 둔다.** 폴백 대화의 확인
+  // 시도 무력화 게이트는 `credentials.verifyOffer`를 유일한 입력으로 쓰므로(§54.2 (1)), 이 값이
+  // 없으면 사기범 턴이 아무리 쌓여도 확인 데스크 전환이 **구조적으로 0회**다.
+  // ⚠️ 화면 상태(status)는 이미 확정된 뒤에 부르는 fire-and-forget이다 — 발급 왕복이 폴백 진입을
+  // 늦추지 않고, 실패해도 대화를 막지 않는다(P-4 핵심 루프 비차단, prefetch와 같은 관례).
+  // ⛔ 발급 응답은 `toFallbackCredentials`로 낮춰서 보관한다(그 파일의 근거 주석 참고) — 그대로
+  // 담으면 마이크가 없는데 실시간 세션 컴포넌트가 마운트된다.
+  const retainFallbackCredentials = useCallback(async (sessionId: string) => {
+    try {
+      const prefetched = prefetchRef.current;
+      prefetchRef.current = null; // 어느 쪽이든 소모 — 재사용하지 않는다(성공 경로와 같은 관례).
+      const issued = isFreshPrefetch(prefetched, sessionId, Date.now(), PREFETCH_STALE_MS)
+        ? prefetched.issued
+        : await createRealtimeCall({ sessionId });
+      if (!mountedRef.current) return;
+      if (issued.isMock) setIsMock(true);
+      setCredentials(toFallbackCredentials(issued));
+    } catch {
+      // 발급 실패는 폴백 진행을 막지 않는다 — 확인 오퍼만 열리지 않는다(종전 동작 그대로).
+    }
+  }, []);
+
   const start = useCallback(async (sessionId: string) => {
     if (!hasMicrophoneSupport()) {
       setStatus("unsupported");
       setErrorMessage("이 브라우저는 실시간 음성 통화를 지원하지 않아 텍스트로 진행합니다.");
+      void retainFallbackCredentials(sessionId); // E2 — 폴백 트리거 보관(D2/F1)
       return;
     }
 
@@ -174,6 +198,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
       setErrorMessage(
         "마이크 권한이 필요합니다. 브라우저 설정에서 허용한 뒤 다시 시도하거나 텍스트로 진행해 주세요.",
       );
+      void retainFallbackCredentials(sessionId); // E1 — 폴백 트리거 보관(D2/F1)
       return;
     }
 
@@ -203,14 +228,20 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
       (issued.provider === "gemini" && Boolean(issued.geminiToken));
     if (issued.isMock) setIsMock(true);
     if (issued.isMock || !hasUsableCredentials) {
+      // E3 — 이미 받아 둔 값을 버리지 않는다(D2/F1, §54.9 (4) 1). 이 경로의 응답은 `provider:"none"`
+      // 이므로(서버 실측: MockRealtimeProvider·발급 실패 분기 둘 다 "none") 낮춤은 무효과이고,
+      // 실시간 세션 컴포넌트도 종전대로 마운트되지 않는다 — 부작용 0.
+      setCredentials(toFallbackCredentials(issued));
       setStatus("fallback");
       return;
     }
 
     // ④ 자격증명을 세팅하면 통화 화면이 RealtimeVoiceSession(지연 로딩)을 마운트하고,
     //    그 컴포넌트가 실제 speech-to-speech 세션을 시작한 뒤 handleActive로 알려준다.
+    // ⛔ 이 줄은 D2에서 **한 글자도 바뀌지 않았다**(§54.9 (4) 6 역검증) — 실시간 경로는 종전 그대로
+    // 발급 응답을 낮추지 않고 그대로 세팅한다.
     setCredentials(issued);
-  }, []);
+  }, [retainFallbackCredentials]);
 
   const stop = useCallback(() => {
     setStopSignal((n) => n + 1);

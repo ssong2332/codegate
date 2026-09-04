@@ -72,3 +72,4 @@
 - [P-34 PC/모바일 폭 계약(8화면)](project_codegate_p34_pc_mobile_width.md) — ⭐ gap-N 재사용으로 lg:gap-* 0건 만드는 법, verticalSlackCap 게이트가 딱 2파일만 본다, CDP 실측 시도가 RouteGuard 인증에 막힌 전말+재현 절차.
 - [§50 라이브 신고 6건(음성·본인확인·절차·계좌·종료선언·자기끊김)](project_codegate_s50_live_reports_6.md) — ⭐ 자기지시 게이트 함정 재발(금지 문구가 방어 문장 자신과 충돌), architect 미지목 3번째 파손 테스트, 배치편집 후 커밋분할 도구 한계, 강등표를 "일부만 걸림"으로 정밀하게 읽어 스코프컷.
 - [§53 bank 이체 문자 전환 게이트(§51 커밋 D)](project_codegate_s53_bank_transfer_gate.md) — ⭐ 원칙 뒤 if/then 예외를 사용자 지시가 이미 밟고 있던 사례, "같은 형태로" 지시가 API.md 무변경 제약과 충돌해 코드만 선례 따르고 문서는 권고로 남긴 판단, 신선 워크트리 npm install 필수(functions+root).
+- [§54 D1·D2 목업 무음화 + 폴백 자격증명](project_codegate_s54_d1_d2.md) — ⭐ "판단 여지 0" 설계도 부작용 범위는 입구별로 재야 한다(E3만 안전, E1·E2는 Live 마운트), 루트 tsc 선재 오류 거르는 법.
