@@ -4,7 +4,13 @@
 // **왜 별도 모듈인가**: `rewind/index.ts`는 `onCall`·firebase-admin에 의존해 node:test에서 부트스트랩
 // 없이 부를 수 없다. 이 선택 규칙은 **G57이 지적한 실제 결함 지점**이라 회귀 테스트로 고정해야
 // 하므로, 부수효과 없는 로직만 여기로 분리한다(judge.ts·sessionLimits.ts와 동일 관례).
-export type ScammerLineMessage = { role: "scammer" | "user"; textMasked: string; turnIndex: number };
+export type ScammerLineMessage = {
+  role: "scammer" | "user";
+  textMasked: string;
+  turnIndex: number;
+  /** §55 D3 — 참가자에게 도달하지 않은 문서(부재 = 도달함). 후보에서 제외한다. */
+  notSpoken?: true;
+};
 
 /**
  * `deceivedMoments[i].turnIndex`가 가리키는 순간의 사기범 대사를 찾는다.
@@ -26,10 +32,14 @@ export function pickScammerLineForMoment(
   messages: readonly ScammerLineMessage[],
   momentTurnIndex: number,
 ): string {
-  const position = messages.findIndex((m) => m.turnIndex === momentTurnIndex);
+  // ⭐ §55 D3 — 낭독되지 않은 문서는 후보에서 뺀다. 그것을 집으면 되감기가 참가자가 **들은 적 없는
+  // 대사**를 "그 순간 사기범이 한 말"로 제시한다. ⛔ `momentTurnIndex` 값은 손대지 않는다 —
+  // 매칭은 종전대로 같은 값으로 하고(G350), 상대 순서도 필터로 바뀌지 않는다.
+  const visible = messages.filter((m) => !m.notSpoken);
+  const position = visible.findIndex((m) => m.turnIndex === momentTurnIndex);
   if (position < 0) return "";
   for (let i = position; i >= 0; i -= 1) {
-    if (messages[i].role === "scammer") return messages[i].textMasked;
+    if (visible[i].role === "scammer") return visible[i].textMasked;
   }
   return "";
 }

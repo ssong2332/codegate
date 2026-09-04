@@ -222,6 +222,17 @@ export default function SessionCallPage() {
   // 되어야 하므로 ref에 쌓는다.
   const transcriptRef = useRef<TranscriptTurn[]>([]);
 
+  // ⭐⭐ §55 D3(G351) — "오프닝(`turnIndex:0`)이 참가자에게 낭독되지 않았는가"의 **유일한 판별자**.
+  // `createSession`은 경로와 무관하게 그 행을 쓰지만, Gemini Live에는 그 텍스트를 넘길 방법이 없어
+  // (`GeminiVoiceSession` — firstMessage 오버라이드 부재) **실시간 경로에서만** 낭독되지 않는다.
+  // 서버는 이 사실을 사후에 유추할 수 없다(세션 문서에 실시간 프로바이더 기록 0건).
+  //
+  // ⛔ **state가 아니라 ref인 이유**: 아래 `flushTranscript`의 deps는 `[sessionId]`이고 호출부가
+  // 3곳이라, 그 클로저에서 `callMode`·`realtime`을 읽으면 **스테일 값을 읽는다**(§55.12 4).
+  // ⛔ **폴백으로 강등되면 반드시 false로 되돌린다** — 그 경로에서는 오프닝이 실제로 재생·표시되고
+  // (`consumeOpeningAudioUrl()` + 메시지 구독), 마크를 남기면 **참가자가 본 대사를 지운다**.
+  const openingNotSpokenRef = useRef(false);
+
   // T158(§48.5.1) — OR-fold 세 번째 항. `realtime.isMock`은 훅 안에서 이미 sticky이므로(never
   // 되돌아가지 않음) effect로 로컬 state에 미러링하지 않고 렌더 시점에 바로 OR한다
   // (react-hooks/set-state-in-effect 회피 — effect 안 동기 setState는 이 저장소 다른 화면에서도
@@ -246,7 +257,13 @@ export default function SessionCallPage() {
     if (!sessionId || turns.length === 0) return;
     transcriptRef.current = [];
     try {
-      await submitRealtimeTranscript({ sessionId, turns });
+      // §55 D3 — 3개 호출부 전부 **같은 값**을 싣는다(호출부별 분기 0건). 값은 위 래치 ref에서만
+      // 온다(이 클로저에서 `callMode`·`realtime`을 읽으면 스테일이다).
+      await submitRealtimeTranscript({
+        sessionId,
+        turns,
+        openingNotSpoken: openingNotSpokenRef.current,
+      });
     } catch {
       // 무시 — 다음 단계(endSession→리포트)는 그대로 진행한다.
     }
@@ -655,6 +672,10 @@ export default function SessionCallPage() {
         realtime.status === "permission-denied" ||
         realtime.status === "error"
       ) {
+        // ⛔ §55 D3(G351) — **이 분기의 첫 줄**에서 래치를 되돌린다. 아래에서 오프닝 오디오를
+        // 재생하고 메시지 구독이 그 행을 말풍선으로 그리므로, 여기서부터 그 대사는 **실제로
+        // 참가자에게 도달한다**. Gemini로 연결됐다가 뒤늦게 강등된 세션이 정확히 이 경로다.
+        openingNotSpokenRef.current = false;
         // 실시간 불가 — 기존 텍스트/STT 경로로 강등한다. 오프닝 오디오가 있으면 그것부터 재생.
         setCallMode("fallback");
         const audio = consumeOpeningAudioUrl();
@@ -669,6 +690,21 @@ export default function SessionCallPage() {
       }
     })();
   }, [callMode, realtime.status]);
+
+  // ⭐ §55 D3(G351) — 래치 세팅 지점. **Gemini Live 세션이 실제로 연결된 것을 관측했을 때만** 켠다.
+  //
+  // 두 조건을 모두 요구하는 이유(`useRealtimeCall.ts` 직접 판독):
+  //  ① `status === "active"`는 **세션 컴포넌트가 `handleActive`를 올려야만** 세팅된다 — 자격증명을
+  //     받았지만 연결이 매달리거나 조용히 닫힌 경우는 `connecting`→`error`로 가고 여기 오지 않는다.
+  //  ② `provider === "gemini"`가 필요한 것은 ElevenLabs 경로가 오프닝을 **실제로 낭독하기**
+  //     때문이다(`firstMessage={openingMessageText}`). 그리고 폴백으로 내려간 자격증명은
+  //     `toFallbackCredentials`가 `provider:"none"`으로 낮추므로 이 조건에 걸리지 않는다.
+  // ⛔ `provider`만 보고 세팅하면 강등 세션에서 오탐한다 — 되돌리는 쪽은 위 폴백 분기가 맡는다.
+  useEffect(() => {
+    if (realtime.status === "active" && realtime.credentials?.provider === "gemini") {
+      openingNotSpokenRef.current = true;
+    }
+  }, [realtime.status, realtime.credentials]);
 
   // 폴백 경로 오디오 자동재생 — 브라우저 정책으로 막히면 "탭하여 듣기" 버튼만 최소로 노출(P-4).
   useEffect(() => {

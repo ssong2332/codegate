@@ -68,6 +68,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       textMasked: data.textMasked,
       turnIndex: data.turnIndex,
       createdAtMs: data.createdAt.toMillis(),
+      // §55 D3 — 낭독되지 않은 문서 표시를 그대로 실어 준다(부재 = 도달함, 무백필).
+      ...(data.notSpoken === true ? { notSpoken: true as const } : {}),
     };
   });
   // T84(§15.9.5 e-2) — 설치 순간의 앵커는 "N번째 사기범 턴"이 아니라 **그 링크를 실은 사기범

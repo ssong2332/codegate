@@ -17,6 +17,12 @@ export type ReplayMessageSource = {
   textMasked: string;
   turnIndex: number;
   channel?: "voice" | "messenger";
+  /**
+   * §55 D3 — 참가자에게 **도달하지 않은** 문서(부재 = 도달함, 무백필). 오늘 이 값이 붙는 것은
+   * Gemini Live 세션의 오프닝 1건뿐이다. 리플레이는 **들린 적 없는 문장을 첫 말풍선으로 그리면
+   * 안 된다.**
+   */
+  notSpoken?: true;
 };
 
 export type ReplayDeceivedMomentSource = {
@@ -132,12 +138,17 @@ export function buildReplayTimeline(
   verifyTimeline: readonly ReplayVerifySource[] = [],
   mockScreenTimeline: readonly ReplayMockScreenSource[] = [],
 ): ReplayTimelineItem[] {
+  // ⭐ §55 D3 — 낭독되지 않은 문서는 타임라인에 넣지 않는다. ⛔ **문자·확인·모의화면 항목의
+  // `anchorTurnIndex`는 손대지 않는다**(G350) — 앵커는 서버가 문서 **개수**로 계산한 값이고, 그
+  // 행은 지워지지도 재인덱싱되지도 않았다(G348). 즉 이 필터는 **표시에서 한 행을 빼는 것뿐**이며
+  // 카드 위치는 한 칸도 밀리지 않는다.
+  const visibleMessages = messages.filter((message) => !message.notSpoken);
   const momentsByTurn = new Map(deceivedMoments.map((moment) => [moment.turnIndex, moment]));
   // 정렬 키 = (turnIndex | anchorTurnIndex, kindRank, seq). 메시지는 rank 0, 문자는 rank 1,
   // 확인 항목은 rank 2라(§16.3.5) 같은 앵커에서 **항상 메시지 뒤**에 온다. seq는 서버가 준 배열
   // 순서를 그대로 보존한다. 문자·확인이 모두 0건이면 결과가 도입 전과 완전히 동일하다.
   const keyed: { sortKey: [number, number, number]; item: ReplayTimelineItem }[] = [
-    ...messages.map((message, seq) => ({
+    ...visibleMessages.map((message, seq) => ({
       sortKey: [message.turnIndex, 0, seq] as [number, number, number],
       item: {
         ...message,

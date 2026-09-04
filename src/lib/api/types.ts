@@ -234,7 +234,19 @@ export type DeliverVerifyReconnectResponse = {
 // --- submitRealtimeTranscript (finding #1 · 2026-07-23) ---
 // 실시간 음성 통화 대화를 리포트가 분석할 수 있도록 종료 직전에 전사를 제출한다.
 export type TranscriptTurn = { role: "user" | "scammer"; text: string };
-export type SubmitRealtimeTranscriptRequest = { sessionId: string; turns: TranscriptTurn[] };
+/**
+ * §55 D3 — `openingNotSpoken`: 이 세션의 오프닝(`turnIndex:0`) 대사가 **참가자에게 낭독되지
+ * 않았는가**. 부재 = `false` = 종전 동작.
+ *
+ * ⛔ 서버는 이 플래그 없이 추론하지 않는다(**G351**) — Gemini로 시작했다가 폴백으로 강등된
+ * 세션에서는 그 대사가 **실제로 표시·재생되므로**, "전사를 제출했으니 안 들렸다"로 추론하면
+ * 참가자가 본 대사를 리플레이에서 지운다. 판별자를 아는 층은 클라 하나뿐이다.
+ */
+export type SubmitRealtimeTranscriptRequest = {
+  sessionId: string;
+  turns: TranscriptTurn[];
+  openingNotSpoken?: boolean;
+};
 export type SubmitRealtimeTranscriptResponse = { written: number };
 
 // --- endSession (Track B · T8 · UX-007 · AC-006/AC-007/AC-021) ---

@@ -25,6 +25,8 @@ export type AnalysisMessage = {
   textMasked: string;
   turnIndex: number;
   createdAtMs: number;
+  /** §55 D3 — 참가자에게 도달하지 않은 문서(부재 = 도달함). 분석 입력에서 제외한다. */
+  notSpoken?: true;
 };
 
 export type DeceivedMomentResult = {
@@ -129,7 +131,14 @@ export function analyzeConversation(
   sessionCreatedAtMs: number,
   weakenedTactics: string[],
 ): ConversationAnalysis {
-  const sorted = [...messages].sort((a, b) => a.turnIndex - b.turnIndex);
+  // ⭐ §55 D3 — **낭독되지 않은 문서는 분석에 넣지 않는다.** 넣으면 ⓐ 말한 적 없는 대사가
+  // `tacticsUsed`("시도된 수법")에 오르고 ⓑ 바로 뒤 참가자 발화와 **짝지어져** 없는 "속은 순간"을
+  // 만든다(아래 루프의 `sorted[i + 1]` 짝짓기). 표시뿐 아니라 **판정도** 여기서 정정된다.
+  // ⛔ 이 필터는 앵커·문서 수 계산에 전파하지 않는다(G350) — `generateReportCore`의
+  // `mockScreenMessages` 뷰는 **필터 없는 원본**을 그대로 쓴다.
+  const sorted = [...messages]
+    .filter((m) => !m.notSpoken)
+    .sort((a, b) => a.turnIndex - b.turnIndex);
   const deceivedMoments: DeceivedMomentResult[] = [];
   const tacticLabelsUsed = new Set<string>();
 

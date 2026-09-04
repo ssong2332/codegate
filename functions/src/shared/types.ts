@@ -162,6 +162,10 @@ export type MessageDoc = {
   // T30 추가(옵셔널, 하위호환, §13.1) — 이 턴이 발생한 채널(교차채널 타임라인, AC-037). 기존
   // 보이스 전용 세션은 항상 부재.
   channel?: MessengerChannel;
+  // §55 D3(OQ-A53 확정) — 참가자에게 도달하지 않은 문서(오늘은 Gemini Live 세션의 오프닝 1건뿐).
+  // **부재 = 도달함**(무백필). ⛔ `false`를 쓰지 말 것 — 부재와 `false`가 같은 뜻이면 판별자가
+  // 둘이 된다(§14.9.1 오버로드 금지). ⛔ 이 필드를 앵커·문서 수 계산에 반영하지 말 것(G350).
+  notSpoken?: true;
 };
 
 // --- sessions/{sessionId}/artifacts/{artifactId} (AC-022, ADR-0003) ---
