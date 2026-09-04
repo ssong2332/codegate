@@ -25,7 +25,8 @@ export type SendMessageResponse = {
   /**
    * 실시간 음성 통화 전환(2026-07-22 사용자 결정) — 사기범 응답을 VoiceProvider(voice/provider.ts)로
    * 합성한 재생 URL. 합성이 실패해도 텍스트 응답 자체는 막지 않으므로 옵셔널이다(P-4 "핵심 루프
-   * 비차단" 원칙). Mock 단계에서는 항상 고정 beep data URI가 온다(isMock으로 구분).
+   * 비차단" 원칙). Mock 단계에서는 항상 고정 무음 클립 data URI가 온다(isMock으로 구분 — 소리로는
+   * 구분하지 않는다, D1/§54.9 (1)).
    */
   audioUrl?: string;
   /**

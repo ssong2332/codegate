@@ -4,7 +4,7 @@
 // TODO 참조). 이 파일이 만드는 모든 산출물은 `isMock: true` + `mock-` 접두사로 육안 식별된다.
 import { randomUUID } from "node:crypto";
 import { SYNTHETIC_LABEL } from "../shared/constants";
-import { buildMockBeepWavDataUri } from "./mockAudio";
+import { buildMockSilentWavDataUri } from "./mockAudio";
 import type {
   CreateVoiceCloneInput,
   SynthesizeInput,
@@ -32,9 +32,11 @@ export class MockVoiceProvider implements VoiceProvider {
   }
 
   async synthesize(input: SynthesizeInput): Promise<VoiceSynthesisResult> {
-    void input; // Mock은 실제 텍스트를 음성으로 합성하지 않고 고정 경고음(beep)을 반환한다.
+    // Mock은 실제 텍스트를 음성으로 합성하지 않고 고정 무음 클립을 반환한다(D1, §54.9 (1)).
+    // 목업 식별은 소리가 아니라 아래 `isMock`/`synthetic`/`syntheticLabel`과 화면 표식이 담당한다.
+    void input;
     return {
-      audioUrl: buildMockBeepWavDataUri(),
+      audioUrl: buildMockSilentWavDataUri(),
       synthetic: true,
       syntheticLabel: SYNTHETIC_LABEL,
       isMock: true,
