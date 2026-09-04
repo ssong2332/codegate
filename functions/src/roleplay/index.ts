@@ -28,6 +28,7 @@ import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "../session/channelTransition";
 import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
+import { wasTurnInstructionSpoken } from "./announceMarking";
 import { extractEscalationSignal } from "./escalationSignal";
 import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
@@ -238,40 +239,20 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       scammerDocCount,
       installConsentDue: mockConsentRef !== undefined,
     });
+    // ⛔⛔ **지시 선택과 "예고 완료" 마킹은 분리돼 있다**(D2/F2 · §54.9 (4) 4 · G343). 여기서는
+    // **문자열만 고르고 아무것도 기록하지 않는다** — 기록은 LLM 응답을 받은 뒤, 그 응답이 실제로
+    // 지시를 반영할 수 있었던 경우에만 한다(아래 `wasTurnInstructionSpoken` 블록).
+    // 예전에는 이 자리에서 곧바로 마크했고, Mock 강등 턴(= systemPrompt를 읽지 않는다)에서
+    // **말하지 않은 예고가 "예고 완료"로 기록**돼 자동 전환이 열렸다(§54.2 (3)).
     let turnInstruction: string | undefined;
     if (turnChoice === "install_consent") {
       turnInstruction = MOCK_INSTALL_CONSENT_INSTRUCTION;
-      try {
-        await mockConsentRef?.update({ consentAnnouncedAt: Timestamp.now() });
-      } catch {
-        // 마크 실패는 다음 턴에 같은 확인이 한 번 더 나가는 정도의 열화다(대화는 막지 않는다).
-      }
     } else if (turnChoice === "verify_reconnect") {
       turnInstruction = verifyItem?.reconnectInstruction;
     } else if (turnChoice === "sms_announce") {
       turnInstruction = dueSms?.announceInstruction;
     } else if (turnChoice === "verify_announce") {
       turnInstruction = verifyItem?.announceInstruction;
-      if (verifyOfferRef) {
-        try {
-          // ⭐⭐ **§45.7 V1** — `announcedAt` 마킹과 **같은 write**로 표시 앵커를 이 턴으로 옮긴다.
-          // `deliverVerifyOffer`가 굳혀 둔 `offerAnchorScammerTurn`은 **오퍼 요청 시점**의 사기범
-          // 문서 수라, 예고 대사가 나오는 이 턴보다 **항상 앞**을 가리킨다(§45.6 F2-b — 구조적).
-          // 그 결과 리포트 리플레이에서 확인 오퍼 카드가 예고 대사보다 먼저 그려졌다.
-          // ⛔ **카드를 지우거나 렌더 순서를 손대는 방식이 아니다**(§45.7 V3·V4 기각) — 고치는 것은
-          // **앵커 값 하나**이고, 리졸버·필드·컬렉션은 전부 그대로다(G252).
-          // ⚠️ 이 자리가 옳은 이유: 폴백은 *"응답이 곧 대사"* 라 이 턴에 예고가 **반드시** 발화된다
-          // (§38.4 C ③열). `announcedAt`은 `pickFallbackTurnInstruction`이 `!announced`일 때만
-          // 이 분기를 고르므로 한 번만 마크되고, 따라서 이 갱신도 **1회 = 멱등**이다.
-          await verifyOfferRef.update({
-            announcedAt: Timestamp.now(),
-            offerAnchorScammerTurn: announcedVerifyAnchor(scammerDocCount),
-          });
-        } catch {
-          // 마크 실패는 다음 턴에 같은 권유가 한 번 더 나가는 정도의 열화다(대화는 막지 않는다).
-          // 앵커 갱신도 함께 미뤄진다 — 다음 턴에 같은 분기가 다시 잡혀 그 턴 값으로 갱신된다.
-        }
-      }
     }
 
     const completion = await completeWithFallback(getLlmClient(), {
@@ -293,6 +274,42 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       messages: llmHistory,
       mockTacticHints: scenarioPrompt.weakenedTactics,
     });
+
+    // ②-e ⭐⭐ **"예고 완료" 마킹 — 발화된 턴에만**(D2/F2 · §54.9 (4) 4 · **G343**).
+    // `MockLlmClient.complete()`는 `systemPrompt`를 읽지 않으므로 강등 턴에서는 위 `turnInstruction`이
+    // 0효과다. 그 턴에 마크해 버리면 *"말하지 않은 예고"* 가 완료로 남아, 폴백의 노출 조건이 그것을
+    // 참으로 읽고 **예고 대사 없이 확인 데스크 전환**을 연다(§38이 실시간에서 닫은 결함의 재발).
+    // ⇒ 마크하지 않으면 다음 턴에 같은 분기가 다시 잡혀 예고가 **재시도**된다(중복이 아니다).
+    // ⛔ 마킹 대상 2종은 전수 확인 결과다 — `sms_announce`·`verify_reconnect`는 마킹이 없어 무해.
+    if (wasTurnInstructionSpoken(completion)) {
+      if (turnChoice === "install_consent") {
+        try {
+          await mockConsentRef?.update({ consentAnnouncedAt: Timestamp.now() });
+        } catch {
+          // 마크 실패는 다음 턴에 같은 확인이 한 번 더 나가는 정도의 열화다(대화는 막지 않는다).
+        }
+      } else if (turnChoice === "verify_announce" && verifyOfferRef) {
+        try {
+          // ⭐⭐ **§45.7 V1** — `announcedAt` 마킹과 **같은 write**로 표시 앵커를 이 턴으로 옮긴다.
+          // `deliverVerifyOffer`가 굳혀 둔 `offerAnchorScammerTurn`은 **오퍼 요청 시점**의 사기범
+          // 문서 수라, 예고 대사가 나오는 이 턴보다 **항상 앞**을 가리킨다(§45.6 F2-b — 구조적).
+          // 그 결과 리포트 리플레이에서 확인 오퍼 카드가 예고 대사보다 먼저 그려졌다.
+          // ⛔ **카드를 지우거나 렌더 순서를 손대는 방식이 아니다**(§45.7 V3·V4 기각) — 고치는 것은
+          // **앵커 값 하나**이고, 리졸버·필드·컬렉션은 전부 그대로다(G252).
+          // ⚠️ 앵커 값(`scammerDocCount`)은 이 이동으로 바뀌지 않는다 — 같은 턴 안이고, 사기범
+          // 응답 문서는 아직 쓰이지 않았다(아래 ③에서 쓴다).
+          // `announcedAt`은 `pickFallbackTurnInstruction`이 `!announced`일 때만 이 분기를 고르므로
+          // 한 번만 마크되고, 따라서 이 갱신도 **1회 = 멱등**이다.
+          await verifyOfferRef.update({
+            announcedAt: Timestamp.now(),
+            offerAnchorScammerTurn: announcedVerifyAnchor(scammerDocCount),
+          });
+        } catch {
+          // 마크 실패는 다음 턴에 같은 권유가 한 번 더 나가는 정도의 열화다(대화는 막지 않는다).
+          // 앵커 갱신도 함께 미뤄진다 — 다음 턴에 같은 분기가 다시 잡혀 그 턴 값으로 갱신된다.
+        }
+      }
+    }
 
     // ③ 메신저 확장(T29) — 스미싱 링크 마커([[LINK:id]])를 저장 전 텍스트에서 제거하고
     // attachments로 변환한다(§13.2 sentinel 패턴 재사용, linkMarker.ts 근거 참고). 보이스 세션의
