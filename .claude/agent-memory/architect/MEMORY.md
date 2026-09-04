@@ -48,3 +48,5 @@
 - [가드를 찾으면 형제 슬롯을 전수 대조하라](feedback_guard_exists_check_sibling_slots.md) — 같은 함정을 한 슬롯에서만 막아 둔다(G99는 있고 G31 큐엔 없다); 처방은 그 가드와 같은 형태로
 - [해가 없는 제약은 층이 틀린 것이다](feedback_unsolvable_constraints_mean_wrong_layer.md) — 제약→"실제 요구"→"아는 층" 3열 표; 값으로 표현 불가한 행이 범인이고 인접 모듈에 선례 게이트가 있다
 - [경로 A 결함 신고는 경로 B부터 추적](feedback_defect_report_recheck_the_other_path.md) — `===` vs `<=`·카운터 시작점이 다르다; "도달 불가"가 실은 "너무 일찍 도착"일 수 있다
+- [입력이 그 경로에 도달하는가부터](feedback_check_input_reaches_the_path.md) — 판정 함수는 무죄일 수 있다; 유일한 대입 지점 grep + 입구 전수표 + 같은 세션 대조군
+- [Mock은 입력을 무시하고도 "했다"고 기록한다](feedback_mock_ignores_input_marks_anyway.md) — 강등 경로 타임라인엔 실 구현 전제를 조건으로; 마킹은 산출물에 종속시키고 앞층과 같은 커밋으로
