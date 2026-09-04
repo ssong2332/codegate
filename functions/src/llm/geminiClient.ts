@@ -11,6 +11,7 @@
 // INJECTION_PATTERN 정규식(파일 자체 주석: "실 LLM 단계에서는 guardrailPreamble이 이 역할을
 // 대신한다")도 여기선 의도적으로 없다 — systemPrompt에 이미 guardrailPreamble이 포함돼 있고,
 // role 분리+구분자 감싸기가 구조적 1차 방어다.
+import { logger } from "firebase-functions";
 import { GoogleGenAI } from "@google/genai";
 import type { Content } from "@google/genai";
 import type { LlmClient, LlmCompletionInput, LlmCompletionResult, LlmMessage } from "./types";
@@ -29,11 +30,36 @@ import type { LlmClient, LlmCompletionInput, LlmCompletionResult, LlmMessage } f
  *
  * `gemini-3.6-flash`는 `models?pageSize=200` 조회로 실재와 `generateContent` 지원을 확인했다
  * (2026-07-27). ⚠️ `"gemini-2.5-flash"`로 되돌리지 말 것 — 이 프로젝트 API 키 계정에서는
- * 404("no longer available to new users")로 거부된다(2026-07-24 실측, 2026-07-27 재확인).
+ * 404로 거부된다(2026-07-24 실측, 2026-07-27 재확인).
+ * ⚠️ **정정(2026-09-05)**: 위 404의 응답 본문은 `"no longer available to new users"` 다 —
+ * 이전 주석은 이 문구를 *"이 프로젝트 API 키 계정에서는"* 이라는 **계정 고유 사정**으로 서술했는데,
+ * 실측 문면은 **신규 사용자 일반에 대한 모델 은퇴** 고지다. **되돌리지 말라는 결론은 그대로**이고
+ * **이유만** 계정 문제 → 모델 은퇴로 정정한다.
+ *
+ * ⭐ **갱신(2026-09-05, §56 후속 — 값이 `gemini-3.6-flash` → `gemini-3.1-flash-lite`로 바뀌었다).**
+ * 위 T98 서술(별칭 금지)은 **전부 유효**하다. 바뀐 것은 **고른 고정 버전**뿐이며, 근거는 실 API 키로
+ * 돌린 라이브 프로브다(오케스트레이터 실측, 같은 키·같은 코드 경로):
+ *
+ * | 프로브 | 조건 | 결과 |
+ * |---|---|---|
+ * | P-1 | `gemini-3.6-flash` · 최소 요청 `"안녕"`(3토큰) | **47,554ms** (추론 334 / 출력 12) |
+ * | P-2 | 〃 + `thinkingBudget:0` | **400 INVALID_ARGUMENT**, 488ms |
+ * | P-3 | 〃 + `thinkingLevel:"MINIMAL"` | **62,384ms** (추론 **0** / 출력 12) |
+ * | P-5 | `gemini-3.5-flash` · 최소 요청 | 8,069ms |
+ * | P-6a | `gemini-3.5-flash` · **실제 시스템 프롬프트**(institutional advanced, 8,637자) | **21,158ms** ❌ |
+ * | P-6b | **`gemini-3.1-flash-lite`** · **같은 실제 프롬프트** | **2,509ms** (추론 0 / 출력 161) ✅ |
+ *
+ * ⇒ 판정: **프롬프트 길이 무죄**(3토큰도 47초) · **추론 토큰 무죄**(0토큰으로 만들어도 62초) ·
+ * **네트워크/키/엔드포인트 무죄**(400·404는 300~490ms에 즉시 온다) · **쿼터 무죄**(로그 300건에
+ * 429 분류 0건, 키 순환기 미발동) ⇒ **`gemini-3.6-flash` 모델 자체의 서빙 지연**이다.
+ * 이것이 §56.4 T2("고정 버전은 재매핑을 막지만 *같은 이름의 서빙 설정 변경*은 막지 못한다")의
+ * 실현 사례다 — `LLM_TIMEOUT_MS`(10초)는 **건드리지 않았다**(OQ-A62, planner/User 소관).
+ * ⛔ `-preview` 접미사 모델(`gemini-3.1-flash-lite-preview`)로 바꾸지 말 것 — 프로브는 **비-preview**
+ * 로 했고, preview는 별칭과 같은 부류의 조용한 변경 위험을 진다.
  *
  * 모델을 올릴 때는 이 상수를 **의도적으로** 바꾸고 라이브 1회 호출로 확인한다(그게 별칭 대신
  * 고정 버전을 쓰는 목적이다 — 변경 시점을 커밋으로 남기고 검증을 강제한다). */
-export const GEMINI_TEXT_MODEL = "gemini-3.6-flash";
+export const GEMINI_TEXT_MODEL = "gemini-3.1-flash-lite";
 
 // 오프닝 대사(messages:[])에는 실제 사용자 입력이 없어 Gemini에 보낼 "첫 turn"이 없다 — systemPrompt
 // 만으로는 생성이 시작되지 않는 모델도 있어(빈 contents), 화면에 노출되지 않는 내부 트리거 turn을
@@ -69,9 +95,23 @@ function toGeminiContent(message: LlmMessage): Content {
  *    AC-004 컷오프) 안에 넉넉히 들었다. 즉 "추론 때문에 10초를 넘긴다"는 T98의 근거는 이전
  *    모델의 특성이었고, 지금은 추론 기본값이 지연 문제를 만들지 않는다.
  *
+ * ⭐ **갱신 고지(2026-09-05, §56 라이브 프로브) — 위 1·2는 여전히 참, 3의 수치는 더 이상 성립하지
+ * 않는다.** 원문은 이력으로 남기고 아래로 정정한다:
+ *   - **1은 재확인됐다(P-2)**: `gemini-3.6-flash` + `thinkingBudget:0` = **400 INVALID_ARGUMENT**
+ *     (488ms). 2도 그대로다(메시지에 `thinking` 문자열이 없다).
+ *   - ⭐ **다만 "이 모델은 추론을 못 끈다"로 읽지 말 것** — **`thinkingLevel:"MINIMAL"`은 수용된다**
+ *     (P-3: 400 없이 200 응답, `thoughtsTokenCount` **0**). 거부되는 것은 `thinkingBudget:0`
+ *     **한 형태**이지 추론 억제 **일반**이 아니다.
+ *   - ⛔ **3의 `2,959ms`는 *이전 모델*(2026-07-27 시점의 서빙)의 수치다.** 2026-09-05 재측정에서
+ *     같은 모델은 **3토큰짜리 최소 요청에도 47,554ms**(P-1)였고, 추론을 0으로 만든 P-3조차
+ *     **62,384ms**였다 ⇒ **추론은 이 지연의 원인이 아니다**(그래서 `thinkingConfig`를 되살려도
+ *     아무것도 나아지지 않는다). 처방은 **모델 교체**였다(위 상수 주석의 프로브 표 참조).
+ *
  * 재도입 조건: 지연이 다시 AC-004를 위협한다는 **재측정 수치**가 있고, 그때의 고정 모델이
  * `thinkingConfig`를 수용함을 라이브 1회 호출로 확인한 경우에만. 판정을 에러 **메시지 문자열**로
- * 하지 말 것(위 2가 그 방식의 실패 사례다).
+ * 하지 말 것(위 2가 그 방식의 실패 사례다). ⭐ 그리고 **재도입 전에 §56.8 A안 관측 로그**
+ * (`complete()`가 남기는 `elapsedMs`·`thoughtsTokenCount`)를 먼저 읽어라 — 추론이 진짜 원인인지
+ * 그 수치가 말해준다(2026-09-05 이전에는 그 수치가 존재하지 않아 이 판단을 추정으로만 할 수 있었다).
  */
 export class GeminiLlmClient implements LlmClient {
   readonly providerName = "gemini" as const;
@@ -85,10 +125,28 @@ export class GeminiLlmClient implements LlmClient {
         ? input.messages.map(toGeminiContent)
         : [{ role: "user", parts: [{ text: OPENING_TRIGGER_TURN }] }];
 
+    const startedAt = Date.now();
     const response = await client.models.generateContent({
       model: GEMINI_TEXT_MODEL,
       contents,
       config: { systemInstruction: input.systemPrompt },
+    });
+    const elapsedMs = Date.now() - startedAt;
+
+    // §56.8 A안(관측 최소 증분) — **성공 경로의 유일한 로그다.** 그 전까지 이 클래스는 성공에
+    // 아무것도 남기지 않았고, `completeWithFallback`의 성공 분기도 마찬가지였다 ⇒ "정상 100%인 날"과
+    // "100% Mock 강등된 날"의 로그 관측값이 **똑같이 0줄**이라 구분이 불가능했다(§56.5 — 그 착시가
+    // 실제로 3주 가까이 100% 강등을 가렸다). 강등율의 **분모**를 만드는 것이 이 한 줄의 목적이다.
+    // ⛔ **G170/ADR-0004 계승 — 수치와 모델명만 싣는다.** systemPrompt·messages·응답 본문·API 키는
+    // 어떤 형태로도 넣지 말 것(PII와 프롬프트 본문이 로그로 새는 경로가 된다).
+    const usage = response.usageMetadata;
+    logger.info("Gemini 텍스트 생성 성공", {
+      model: GEMINI_TEXT_MODEL,
+      elapsedMs,
+      // 추론 토큰은 모델·요청에 따라 아예 오지 않는다(그때는 필드 자체를 생략한다 — 0으로 채우면
+      // "추론 안 함"과 "정보 없음"이 §56.5와 같은 종류로 구분 불가능해진다).
+      ...(usage?.thoughtsTokenCount === undefined ? {} : { thoughtsTokenCount: usage.thoughtsTokenCount }),
+      ...(usage?.totalTokenCount === undefined ? {} : { totalTokenCount: usage.totalTokenCount }),
     });
 
     const text = response.text;
