@@ -34,7 +34,12 @@ export {
 /**
  * §53.6 (3)/§53.8 2 — 이 세션의 확인 시도 무력화 오퍼가 이미 **전환 완료**(`placedAt` 존재)
  * 상태인지 읽는다. `hasVerifyIntercept`가 있는 시나리오에서만 read한다(`roleplay/index.ts`의
- * `verifyEnabled` 게이팅과 동형 — 나머지 8종은 read 0회, 회귀 0).
+ * `verifyEnabled` 게이팅과 동형).
+ * ⚠️ **read는 1종이 아니라 6종에서 발생한다**(institutional·card·loan-refinance·tax-refund·
+ * courier-customs·bank — `scenarios/verifyIntercept.ts:195-200` 카탈로그 전수 확인, reviewer
+ * 지적으로 정정). 다만 계열 B(bank 제외 5종)는 `verifyIntentExpressed`가 영구 `false`라
+ * `placedAt`이 세팅되지 않아(§52.2 P4) **출력은 변하지 않는다**(회귀 0) — 무해한 것은 read 범위가
+ * 아니라 출력 불변이다. read 비용 자체가 무시 가능한지는 실측하지 않았다.
  *
  * ⛔ **throw하지 않는다(P-4 핵심 루프 비차단)** — 조회 실패는 `catch`로 흡수하고 `false`(=
  * 종전대로 지시를 싣는다)로 떨어진다.
