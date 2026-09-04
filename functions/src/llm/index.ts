@@ -138,14 +138,21 @@ export async function completeWithFallback(
   primary: LlmClient,
   input: LlmCompletionInput,
 ): Promise<LlmCompletionResult> {
+  const startedAt = Date.now();
   try {
     return await primary.complete(input);
   } catch (error) {
     // T132 — `attemptedKeys`가 있어야 **전 키 소진으로 Mock에 도달한 것**과 **단일 키 실패로
     // 도달한 것**을 구분할 수 있다(§37.4). 없으면 "키를 늘렸는데 여전히 Mock"의 원인을 가릴 수 없다.
     // (순환기를 거치지 않은 실패 — 예: withTimeout의 deadline-exceeded — 에서는 undefined다.)
+    //
+    // §56.8 A안 ② — `elapsedMs`가 없으면 **"10.1초라 아깝게 잘렸다"와 "47초라 모델이 죽었다"가
+    // 같은 줄로 보인다**(§56이 실제로 그 구분을 못 해 원인을 미확정으로 남겼다). 타임아웃 문자열은
+    // 항상 `LLM_TIMEOUT_MS` **상수**를 그대로 인용할 뿐 실제 소요를 담지 않는다 ⇒ 실측값을 따로 잰다.
+    // ⛔ 실패 사유는 에러 메시지까지만 — 프롬프트·응답 본문은 여기서도 싣지 않는다(G170).
     logger.warn("LLM 1차 클라이언트 실패 — Mock으로 강등", {
       providerName: primary.providerName,
+      elapsedMs: Date.now() - startedAt,
       attemptedKeys: readAttemptedKeys(error),
       error: error instanceof Error ? error.message : String(error),
     });
