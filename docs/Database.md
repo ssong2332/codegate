@@ -83,6 +83,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | turnIndex | number | | 순서/타임라인(AC-026). 채널을 넘어 **단조 증가**(연속성) |
 | channel | string? | `messenger`\|`voice` | T26 증분 — 이 턴의 채널(AC-037 교차채널 타임라인). 부재→voice |
 | attachments | array<MessengerAttachment>? | | T26 증분 — 메신저 표면 요소. `MessengerAttachment={kind:"link",displayText,fakeLandingId,harmless:true}`. **실 URL 필드 없음**(AC-045/032, 외부 네비 경로 스키마 부재) |
+| notSpoken | true? | 서버만 write · **부재 = 도달함** | ⭐ **§55(OQ-A53 확정, 2026-09-04)** — **이 문서가 참가자에게 도달하지 않았다**는 사실. 오늘 붙는 대상은 **Gemini Live 세션의 오프닝 1건뿐**이다(`createSession`이 경로와 무관하게 쓴 `turnIndex:0` 행인데 Gemini는 그 텍스트를 낭독하지 않는다 — §52.4). **`submitRealtimeTranscript`가 요청의 `openingNotSpoken`이 `true`일 때만** 마크한다. ⛔ **`false`를 쓰지 않는다**(부재와 뜻이 같아지면 판별자가 둘이 된다) · ⛔ **백필 없음** · ⛔ **행을 지우거나 `turnIndex`를 재부여하지 말 것**(실시간 앵커 `+1`이 이 행에 의존 — §55 G348). **소비는 표시·집계 3곳뿐**(리플레이 타임라인 · `analyzeConversation` · 되감기 컨텍스트)이며 ⛔ **앵커·문서 수 계산에는 적용 금지**(§55 G350) |
 | createdAt | timestamp | indexed(정렬) | |
 
 #### `sessions/{sessionId}/artifacts/{artifactId}`  — 합성물 메타 = 폐기 매니페스트 (AC-022, ADR-0003)

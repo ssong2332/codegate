@@ -357,3 +357,12 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 - 필드 정의는 `docs/Database.md` **부록 B.1**. 값이 없으면 필드를 만들지 않는다(무백필).
 - **멱등 early-return 무변경** → 세션당 정확히 1개(AC-007), **생성 이후 update 0건**.
 - ⛔ **판정 무변경**(§15.6 G3/G22) — `analyzeConversation`/`buildPreventionAdvice`/`computeDefenseGrade` 시그니처·입력 **0줄**. 새 값은 판정 산출 **뒤에 나란히 얹히는 표시 전용 값**이다(`smsTimeline`과 동형).
+
+### `submitRealtimeTranscript` **증분** — 오프닝 도달 여부 판별자 (§55 · OQ-A53 확정 · AC-038/AC-083)
+| Item | Value |
+|---|---|
+| Request 증분 | `{ sessionId, turns, **openingNotSpoken?: boolean** }` — **부재 = `false` = 종전 동작**(과거 클라이언트 호환). |
+| 의미 | *"이 세션의 오프닝 문서(`messages` `turnIndex:0`)가 참가자에게 **도달하지 않았다**"*. **오늘 `true`가 되는 유일한 경우는 Gemini Live로 통화가 끝까지 진행된 세션**이다 — Gemini에는 `firstMessage` 같은 *"이 문장을 그대로 말하라"* 오버라이드가 없어 그 텍스트가 낭독되지 않는다(§52.4). ⛔ **폴백으로 강등된 세션은 `false`** — 그때 그 텍스트가 실제로 화면·오디오로 도달한다. |
+| 처리 증분 | **기존 트랜잭션 안**에서, 플래그가 `true`일 때만 이미 읽어 둔 메시지 스냅샷에서 `turnIndex === 0 && role === "scammer"` 문서에 `notSpoken: true`를 **update**한다. **추가 read 0회 · 멱등 · write 건수와 무관.** 필드 정의는 `docs/Database.md` `messages` 표. |
+| ⛔ 금지 | **서버가 플래그 없이 추론하지 말 것**(세션 문서에 실시간 프로바이더 기록이 없고, 강등 세션과 구분되지 않는다 — §55 G351) · **오프닝 행 삭제·미작성·`turnIndex` 재부여 금지**(실시간 앵커 `+1`이 그 행에 의존 — §55 G348) · **`turnIndex`·`createdAt`·기존 필드 0줄 수정** · **백필 0건**. |
+| 소비 | **표시·집계 3곳뿐** — 리플레이 타임라인 · `analyzeConversation` · 되감기 컨텍스트. ⛔ **앵커·문서 수 계산(`historySnap.size`·`resolveAnchor` 계열·`mockScreenMessages`)에는 적용 금지**(§55 G350). |
