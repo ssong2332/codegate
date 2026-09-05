@@ -1,9 +1,12 @@
 export {
   announceTurnsOnInstructionDispatch,
   enqueueInstruction,
+  INSTRUCTION_DRAIN_BACKSTOP_SEC,
+  INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES,
   nextVerifyOfferStage,
   rollbackVerifyOfferPhase,
   shouldAnnounceVerifyOffer,
+  shouldDrainInstructionQueue,
   shouldOfferVerify,
   shouldReinjectTransferState,
   shouldRetryVerifyOffer,
@@ -12,6 +15,7 @@ export {
   verifySeriesFor,
 } from "./verifyIntercept";
 export type {
+  InstructionDrainGateInput,
   InstructionPriority,
   PendingInstruction,
   TransferStateReinjectInput,

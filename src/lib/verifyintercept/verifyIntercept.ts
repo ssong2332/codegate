@@ -304,6 +304,84 @@ export function shouldReinjectTransferState(input: TransferStateReinjectInput): 
   return input.userTurnsSinceLastInjection >= 1;
 }
 
+// ── §52.7 (5) 가·나 / §57.5 — G31 큐 드레인에 참가자 턴 조건을 곱한다 ────────────────
+//
+// ⚠️ **왜 필요한가(실측, §52.7 (1)(2))**: `instructionTurn`은 `turnComplete: true`로 나가 모델이
+// 즉시 새 턴을 발화한다. 드레인이 사기범 턴 완료 콜백(`handleScammerTurnComplete`) 안에서
+// **무조건** 일어나 지시 주입이 연속되면 참가자가 말할 창이 없다(T-4). `personaStateTurn`
+// (G99·`shouldReinjectTransferState`)은 같은 함정을 이미 `userTurnsSinceLastInjection >= 1`로
+// 막았는데, G31 큐(`takeNextInstruction`)에는 그 조건이 없었다 — 이 함수가 그 비대칭을 닫는다.
+
+/** `shouldDrainInstructionQueue`의 입력. */
+export type InstructionDrainGateInput = {
+  /**
+   * 직전 지시 주입 이후 참가자가 **한 번이라도** 말했는가(관측 지점: `onTranscriptTurn("user", …)`
+   * — §57.4 D3 이후로는 항상 *턴 완료(flush) 시각*이며 입력 시각이 아니다. G369 — D3와 이 함수는
+   * 같은 커밋으로 이동한다).
+   */
+  userSpokeSinceLastInjection: boolean;
+  /**
+   * 참가자가 말하지 않은 채로 이 조건에 걸려 억제된 연속 경계 수(이번 경계 이전까지 누적).
+   * 상한(나) 판정에만 쓴다.
+   */
+  suppressedBoundaryStreak: number;
+};
+
+/**
+ * ⭐ **상한(§52.7 (5) 나)** — 참가자가 끝내 말하지 않아도 무한히 억제하지 않는다. `agentSpeechGate.ts`
+ * 의 `STALL_GRACE_MS`(측정이 아니라 판단으로 고른 값 — "정지 대비 안전장치")와 같은 이유다. 값은
+ * **1**: bank 시나리오의 원 결함이 정확히 "억제 없이 2경계 연속 강제 발화"였다(§52.7 (4)) — 억제를
+ * 1경계까지만 허용하면 최소 한 번은 참가자에게 마이크가 열린 창이 보장되면서도, 시나리오 전체가
+ * "5~8턴 내외"(`bankSecurityVerifyScam.prompt.ts:51`)로 짧아 상한을 더 늘리면 큐 적체 항목(예:
+ * 확인 무력화 재연결 지시)이 세션 시간 한도(AC-007) 전에 도착하지 못할 위험이 커진다.
+ */
+export const INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES = 1;
+
+/**
+ * ⭐⭐ **재평가 안전장치(reviewer REJECTED, e4414c3 후속 — Action Item 1)** — 상한(나)에 닿아도
+ * `drainInstructionQueue`가 **다시 불릴 자연적인 이벤트가 아예 없을 수 있다**. 이 큐를 다시 부르는
+ * 경로는 `handleScammerTurnComplete`(모델이 실제로 말해야 온다)와 `enqueueTurnInstruction`(새
+ * 지시가 생겨야 온다)뿐인데, 억제된 항목은 **말해지지 않으므로** 스스로 다음 턴을 만들지 못하고,
+ * 이게 큐의 마지막 항목이면(예: `handlePlaceVerifyCall`의 재연결 지시) 참가자가 계속 침묵할 때
+ * 새 지시도 생기지 않는다 ⇒ 상한에 닿은 채로 세션 타임아웃(AC-007)까지 **영영 재판정되지 않는다.**
+ *
+ * ⛔ **`shouldDrainInstructionQueue` 자체(경계 조건)나 `drainInstructionQueue`의 억제 판정을
+ * "이번 억제로 상한 도달 시 그 자리에서 즉시 방출"로 바꾸지 않는다** — bank 시나리오의 턴3(예고)
+ * →턴4(재연결) 전환은 **참가자 발화 없이도 항상 이 조건(streak 0→상한)을 그 즉시 통과**하므로
+ * (§49 V5 자동 전환은 참가자 의사와 무관하게 게이트 도달만으로 진행된다), 그 전환에 "즉시 방출"을
+ * 적용하면 T-4(연속 강제 발화)가 **일반 경로에서 항상** 재현된다 — 침묵이 드문 예외일 때만이
+ * 아니라 **매번**. 이 상수가 지키는 것은 `shouldDrainInstructionQueue({false, 0}) === false`
+ * (T-4 회귀 가드, `verifyIntercept.test.ts` 참가자 턴 조건 테스트)다.
+ *
+ * 대신 `agentSpeechGate.ts`의 `STALL_GRACE_MS`(정지 대비 안전장치, "측정이 아니라 판단으로 고른
+ * 값")와 같은 논리로 **별도의 유예 시간**을 둔다 — 상한 도달 시점부터 이 초만큼 지나면, 이미
+ * 세션에 떠 있는 통화 경과 타이머(`elapsedSec`, `play/page.tsx`)가 `drainInstructionQueue`를
+ * 다시 불러 재판정시킨다(그 시점엔 스트릭이 이미 상한이므로 `shouldDrainInstructionQueue`가
+ * 정상적으로 `true`를 반환해 방출한다 — 이 함수 자체는 변경되지 않는다). ⛔ **매 틱(1초)마다
+ * 무조건 재호출하지 않는다** — 그러면 §52.7 (5) 가의 "참가자 턴 대기" 창이 사실상 1초로 줄어
+ * 상한 도달 여부와 무관하게 모든 억제가 즉시 풀린다. 상한 **도달 시점부터의 경과만** 잰다.
+ */
+export const INSTRUCTION_DRAIN_BACKSTOP_SEC = 5;
+
+/**
+ * 지금 이 턴 경계에서 큐의 다음 지시를 내보내도 되는가(결정론적). ⛔ **호출부는 큐가 비어 있지
+ * 않을 때만 이 함수를 부른다** — "비어 있음"은 이 함수의 관심사가 아니다(G31 계약 (2), 큐 자체는
+ * 절대 버리지 않는다).
+ *
+ * ⛔ **첫 지시까지 미루지 말 것(§52.7 (5) 가)** — 문자는 이미 화면에 도착해 있다(§53.6 (4) 정정).
+ * 이 함수가 막는 것은 **직전 지시 이후 참가자가 말하지 않은 채 나가려는 추가(두 번째 이상) 지시**
+ * 뿐이다 — 그래서 호출부의 `userSpokeSinceLastInjection`은 **아직 한 번도 주입한 적이 없는 상태**
+ * 에서 `true`(=열림, 억제 없음)로 시작해야 한다. 실제 지시를 보낸 시점에만 `false`(=닫힘)로
+ * 바꾸고, 참가자가 말하면 다시 `true`로 되돌린다.
+ * ⛔ **큐에서 버리지 말 것(G31 계약 (2))** — `false`를 반환해도 항목은 큐에 그대로 남아 다음 경계에서
+ * 재시도된다.
+ */
+export function shouldDrainInstructionQueue(input: InstructionDrainGateInput): boolean {
+  if (input.userSpokeSinceLastInjection) return true;
+  if (input.suppressedBoundaryStreak >= INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES) return true;
+  return false;
+}
+
 // ── T118 / R-2 — 오퍼 전달 실패의 롤백 범위(§25.5 (4)) ────────────────────────────
 
 /**
