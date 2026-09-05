@@ -5,6 +5,7 @@ import * as path from "node:path";
 import {
   announceTurnsOnInstructionDispatch,
   enqueueInstruction,
+  INSTRUCTION_DRAIN_BACKSTOP_SEC,
   INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES,
   nextVerifyOfferStage,
   rollbackVerifyOfferPhase,
@@ -247,6 +248,113 @@ test("[§52.7/§25.9 ④-A 역검증] 상한 조건을 뒤집은 **사본**에�
   assert.equal(shouldDrainInstructionQueue(stalled), true);
   // 상한 가드를 없앤 사본은 같은 입력에서도 계속 억제한다 = 이 상한이 실제로 살아 있다는 증명.
   assert.equal(withoutCapGuard(stalled), false);
+});
+
+// ── Action Item 1(reviewer REJECTED, e4414c3 후속) — 상한 재평가 안전장치 ──────────
+//
+// ⛔ 배경: `drainInstructionQueue`는 `handleScammerTurnComplete`(모델이 실제로 말해야 온다)와
+// `enqueueTurnInstruction`(새 지시가 생겨야 온다)에서만 다시 불린다. 억제된 항목은 스스로
+// 발화를 만들지 못하므로, 이게 큐의 **마지막** 항목이고(예: `handlePlaceVerifyCall`의 재연결
+// 지시) 참가자가 계속 침묵하면 상한(나)에 닿아도 재판정할 다음 호출이 **영영 오지 않을 수 있다.**
+//
+// 아래 시뮬레이션은 `play/page.tsx`의 ref 상태 기계(스트릭·상한 도달 시각·통화 경과 타이머)를
+// **순수 함수만으로** 재현한다 — `shouldDrainInstructionQueue` 자체는 건드리지 않는다(위 [§52.7
+// 가/T-4] 테스트가 이미 그 함수를 고정한다).
+
+/**
+ * `play/page.tsx`의 억제 스트릭 + `instructionCapReachedAtSecRef` + 통화 경과 타이머(1초 틱)
+ * 배선을 순수 함수로 재현한다. `ticksAfterSuppression`은 최초 억제 이후 "자연적인 호출"(모델
+ * 발화·새 지시) 없이 흐르는 통화 경과 타이머 틱 횟수다.
+ */
+function simulateOrphanedInstructionDrain(input: {
+  ticksAfterSuppression: number;
+  backstopSec: number;
+}): { drainedAtTick: number | null } {
+  let streak = 0;
+  let capReachedAtSec: number | null = null;
+  let elapsedSec = 0;
+  let drainedAtTick: number | null = null;
+
+  // 최초(그리고 이 시나리오에서는 유일한) 자연적 드레인 시도 — 큐의 마지막 항목이 off-boundary로
+  // 들어와 게이트가 닫힌 채(참가자 미발화) 억제된다(guarded [§52.7 가/T-4] 테스트와 같은 입력).
+  const firstAttempt = shouldDrainInstructionQueue({
+    userSpokeSinceLastInjection: false,
+    suppressedBoundaryStreak: streak,
+  });
+  assert.equal(firstAttempt, false, "전제: 첫 억제는 그대로 억제여야 한다(T-4 가드)");
+  streak += 1;
+  if (streak >= INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES && capReachedAtSec === null) {
+    capReachedAtSec = elapsedSec;
+  }
+
+  // 그 뒤로는 **자연적 호출이 0건**이다(참가자 침묵·신규 지시 없음) — 오직 통화 경과 타이머 틱만
+  // `drainInstructionQueue`를 다시 불러 재판정을 시도한다.
+  for (let tick = 1; tick <= input.ticksAfterSuppression; tick += 1) {
+    elapsedSec += 1;
+    if (capReachedAtSec === null) continue;
+    if (elapsedSec - capReachedAtSec < input.backstopSec) continue;
+    const drained = shouldDrainInstructionQueue({
+      userSpokeSinceLastInjection: false,
+      suppressedBoundaryStreak: streak,
+    });
+    if (drained) {
+      drainedAtTick = tick;
+      break;
+    }
+  }
+  return { drainedAtTick };
+}
+
+test("[Action Item 1] 유예 시간 전에는 재판정을 강제하지 않는다 — 참가자 턴 대기가 살아 있다", () => {
+  const result = simulateOrphanedInstructionDrain({
+    ticksAfterSuppression: INSTRUCTION_DRAIN_BACKSTOP_SEC - 1,
+    backstopSec: INSTRUCTION_DRAIN_BACKSTOP_SEC,
+  });
+  assert.equal(result.drainedAtTick, null, "유예 시간 전에는 방출되면 안 된다");
+});
+
+test("[Action Item 1] 자연적 호출이 0건이어도 유예 시간 뒤에는 방출된다 — 정체 재현·해소", () => {
+  // ⛔ 역검증: 안전장치 없이(=틱을 전혀 안 준다) 자연적 호출도 0건이면 영영 방출되지 않는다(구
+  // 결함 재현) — reviewer가 보고한 그 정체다.
+  const stalledForever = simulateOrphanedInstructionDrain({
+    ticksAfterSuppression: 0,
+    backstopSec: INSTRUCTION_DRAIN_BACKSTOP_SEC,
+  });
+  assert.equal(stalledForever.drainedAtTick, null, "안전장치가 틱을 못 받으면 여전히 정체된다");
+
+  // 실제 배선(통화 경과 타이머가 매초 틱)에서는 유예 시간만큼 틱이 쌓이면 방출된다.
+  const resolved = simulateOrphanedInstructionDrain({
+    ticksAfterSuppression: INSTRUCTION_DRAIN_BACKSTOP_SEC + 2,
+    backstopSec: INSTRUCTION_DRAIN_BACKSTOP_SEC,
+  });
+  assert.equal(resolved.drainedAtTick, INSTRUCTION_DRAIN_BACKSTOP_SEC, "유예 시간 도달 즉시 방출");
+});
+
+test("[Action Item 1 배선] page.tsx가 상한 도달 시각을 기록하고, 통화 경과 타이머로 재판정한다", () => {
+  const src = readFileSync(PLAY_PAGE_SRC, "utf8");
+  assert.ok(
+    /instructionCapReachedAtSecRef\.current\s*=\s*elapsedSecRef\.current/.test(src),
+    "상한 도달 시각을 기록하는 지점이 있어야 한다",
+  );
+  assert.ok(
+    /elapsedSec\s*-\s*capReachedAtSec\s*<\s*INSTRUCTION_DRAIN_BACKSTOP_SEC/.test(src),
+    "유예 시간 미도달이면 재시도하지 않는 가드가 있어야 한다",
+  );
+  assert.ok(
+    /if\s*\(elapsedSec - capReachedAtSec < INSTRUCTION_DRAIN_BACKSTOP_SEC\) return;\s*\n\s*drainInstructionQueue\(\);/.test(
+      src,
+    ),
+    "유예 시간이 지나면 drainInstructionQueue를 다시 불러야 한다",
+  );
+  // ⛔ 이번 처방은 판정 함수 자체를 바꾸지 않는다 — 상한 경계 조건은 여전히 사전(pre-increment)
+  // 비교다(post-increment로 바꾸면 bank 턴3→턴4가 참가자 발화 없이 매번 즉시 통과해 T-4가
+  // 일반 경로에서 재현된다, verifyIntercept.ts의 INSTRUCTION_DRAIN_BACKSTOP_SEC 주석 참고).
+  assert.ok(
+    /if \(input\.suppressedBoundaryStreak >= INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES\) return true;/.test(
+      readFileSync(path.resolve(import.meta.dirname, "./verifyIntercept.ts"), "utf8"),
+    ),
+    "shouldDrainInstructionQueue의 상한 비교(사전값, >=)는 그대로여야 한다",
+  );
 });
 
 // ── T118 / R-2 오퍼 실패 롤백 범위(§25.5 (4)) ────────────────────────────────────

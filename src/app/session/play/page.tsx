@@ -48,6 +48,8 @@ import {
 import {
   announceTurnsOnInstructionDispatch,
   enqueueInstruction,
+  INSTRUCTION_DRAIN_BACKSTOP_SEC,
+  INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES,
   nextVerifyOfferStage,
   rollbackVerifyOfferPhase,
   shouldAnnounceVerifyOffer,
@@ -125,6 +127,9 @@ export default function SessionCallPage() {
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
+  // Action Item 1 — `drainInstructionQueue`(deps `[]`)가 `elapsedSec` state를 리렌더 없이
+  // 최신값으로 읽기 위한 사본. 갱신 지점은 아래 통화 경과 타이머 effect **한 곳**뿐이다.
+  const elapsedSecRef = useRef(0);
   const [muted, setMuted] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -177,6 +182,12 @@ export default function SessionCallPage() {
   // 위 게이트가 닫힌 채로 억제된 연속 경계 수 — 상한(나) 판정에만 쓴다. 지시를 실제로 보내거나
   // 참가자가 말하면 0으로 되돌아간다.
   const instructionSuppressedStreakRef = useRef(0);
+  // Action Item 1(reviewer REJECTED, e4414c3 후속) — 위 스트릭이 상한에 **처음** 닿은 시점의
+  // `elapsedSec` 값. `null` = 상한 미도달(또는 그 뒤 실제로 방출/참가자 발화로 초기화됨). 아래
+  // 통화 경과 타이머 effect가 이 값 + `INSTRUCTION_DRAIN_BACKSTOP_SEC`을 넘기면 재판정을
+  // 강제한다 — `shouldDrainInstructionQueue`·`drainInstructionQueue`의 판정 자체는 바꾸지 않는다
+  // (`verifyIntercept.ts`의 `INSTRUCTION_DRAIN_BACKSTOP_SEC` 주석 참고).
+  const instructionCapReachedAtSecRef = useRef<number | null>(null);
   // 사기범 발화 턴 수(실시간 경로) — GeminiVoiceSession의 turnComplete 경계만 센다.
   const [scammerTurns, setScammerTurns] = useState(0);
   // ⭐ **§45.7 V2** — 같은 값의 ref 사본. `drainInstructionQueue`는 턴 완료 콜백 **안에서** 불리는데
@@ -259,6 +270,7 @@ export default function SessionCallPage() {
       // 불린다(G369) — "참가자가 말했는가"의 뜻이 ①과 ③에서 하나로 맞는다.
       instructionGateOpenRef.current = true;
       instructionSuppressedStreakRef.current = 0;
+      instructionCapReachedAtSecRef.current = null;
     }
     // T103 — 제출 경로(위 한 줄)는 손대지 않고, 통화 필 자막만 여기서 갈라 받는다.
     // ⛔ **사기범 턴만 그린다**(G79/G93). 참가자 턴을 그리면 참가자가 말한 계좌·생년월일이
@@ -455,6 +467,15 @@ export default function SessionCallPage() {
       })
     ) {
       instructionSuppressedStreakRef.current += 1;
+      // Action Item 1 — 스트릭이 이번에 상한에 **처음** 닿았으면(재진입 아님) 재평가 안전장치의
+      // 기산 시각을 찍는다. 판정 자체(`shouldDrainInstructionQueue`)는 바꾸지 않는다 — 아래 통화
+      // 경과 타이머 effect가 유예 시간 뒤에 이 함수를 다시 불러 정상 경로로 방출시킬 뿐이다.
+      if (
+        instructionSuppressedStreakRef.current >= INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES &&
+        instructionCapReachedAtSecRef.current === null
+      ) {
+        instructionCapReachedAtSecRef.current = elapsedSecRef.current;
+      }
       return;
     }
     const { item, rest } = takeNextInstruction(instructionQueueRef.current);
@@ -463,6 +484,7 @@ export default function SessionCallPage() {
     instructionBusyRef.current = true;
     instructionGateOpenRef.current = false;
     instructionSuppressedStreakRef.current = 0;
+    instructionCapReachedAtSecRef.current = null;
     // ⭐⭐ **§45.7 V2 — 예고 시점은 *여기서* 잰다.** 요청을 보낸 자리가 아니라 지시가 **실제로 큐를
     // 떠나 `instructionTurn`에 실리는** 이 자리다(§45.6 (3) F2-a c·d). 판정은 순수 함수가 소유한다.
     verifyAnnounceTurnsRef.current = announceTurnsOnInstructionDispatch({
@@ -658,9 +680,27 @@ export default function SessionCallPage() {
   // 통화 경과 타이머 — "받기"(answeredAt) 기점, ended면 정지.
   useEffect(() => {
     if (phase === "incoming" || phase === "ended") return;
-    const interval = setInterval(() => setElapsedSec((s) => s + 1), 1000);
+    const interval = setInterval(() => {
+      elapsedSecRef.current += 1;
+      setElapsedSec(elapsedSecRef.current);
+    }, 1000);
     return () => clearInterval(interval);
   }, [phase]);
+
+  // Action Item 1(reviewer REJECTED, e4414c3 후속) — G31 큐 드레인이 상한(나)에 닿았는데
+  // `handleScammerTurnComplete`/`enqueueTurnInstruction` 어느 쪽도 다시 부르지 않으면(참가자가
+  // 계속 침묵하고 새 지시도 없으면) 영영 재판정되지 않는다(`verifyIntercept.ts`의
+  // `INSTRUCTION_DRAIN_BACKSTOP_SEC` 주석 참고). 이미 떠 있는 통화 경과 타이머(위 effect)의 매
+  // 틱마다 유예 시간 경과를 확인해, 지났으면 `drainInstructionQueue`를 다시 불러 정상 경로로
+  // 재판정시킨다 — 판정 함수(`shouldDrainInstructionQueue`) 자체는 손대지 않는다.
+  useEffect(() => {
+    if (phase !== "live") return;
+    if (instructionQueueRef.current.length === 0) return;
+    const capReachedAtSec = instructionCapReachedAtSecRef.current;
+    if (capReachedAtSec === null) return;
+    if (elapsedSec - capReachedAtSec < INSTRUCTION_DRAIN_BACKSTOP_SEC) return;
+    drainInstructionQueue();
+  }, [elapsedSec, phase, drainInstructionQueue]);
 
   // finding #2: 실시간 음성 통화의 시간 한도 자동 종료. 폴백 경로는 sendMessage가 서버에서
   // 한도를 판정해 자동 종료하지만(AC-007), 실시간 경로는 sendMessage를 안 타 한도가 강제되지
