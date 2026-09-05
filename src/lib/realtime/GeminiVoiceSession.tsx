@@ -154,6 +154,12 @@ export default function GeminiVoiceSession({
   // 타이핑 입력을 같은 Live 세션에 넣기 위한 참조(아래 textMessage effect가 쓴다). 메인 effect의
   // 지역 변수 `session`은 밖에서 볼 수 없으므로 연결 직후 여기에 같이 담아 둔다.
   const liveSessionRef = useRef<GeminiLiveSession | null>(null);
+  // §57.4 D3(G369) — 타이핑 텍스트를 음성/모델 발화와 **같은 flush 큐**(메인 effect의 지역 변수
+  // `userBuffer`)에 넣기 위한 참조. 메인 effect의 지역 변수는 밖에서 볼 수 없으므로 연결 직후
+  // liveSessionRef와 함께 여기에 담아 둔다(같은 브리지 패턴). textMessage effect가 이 ref를 통해
+  // `userBuffer`에 적립하면, 다음 `flushTranscript()`(turnComplete 또는 onclose)에서 음성 입력과
+  // 정확히 같은 시계로 `onTranscriptTurn`이 호출된다 — 두 기록 시점을 하나로 모으는 것이 D3의 목적.
+  const appendUserTranscriptRef = useRef<((text: string) => void) | null>(null);
 
   useEffect(() => {
     handlersRef.current = {
@@ -221,6 +227,13 @@ export default function GeminiVoiceSession({
     // 전사(transcript)는 조각으로 스트리밍되므로 턴이 끝날 때(turnComplete)까지 모았다가 flush한다.
     let userBuffer = "";
     let scammerBuffer = "";
+
+    // §57.4 D3 — 음성 입력(`inputTranscription`)과 타이핑 입력(textMessage effect, 아래
+    // `appendUserTranscriptRef` 경유)이 **같은 자리**에 적립되도록 모은 함수. 기존 `userBuffer +=`
+    // 자리도 이 함수를 거치게 해 적립 규칙을 한 곳에 둔다.
+    const appendUserBuffer = (text: string) => {
+      userBuffer += text;
+    };
 
     const flushTranscript = () => {
       const u = userBuffer.trim();
@@ -325,6 +338,7 @@ export default function GeminiVoiceSession({
       }
       session = null;
       liveSessionRef.current = null;
+      appendUserTranscriptRef.current = null;
     };
     cleanupRef.current = cleanup;
 
@@ -381,7 +395,7 @@ export default function GeminiVoiceSession({
               const sc = message.serverContent;
 
               // 전사 조각 누적(리포트 기록용). input=사용자 발화, output=사기범(모델) 발화.
-              if (sc?.inputTranscription?.text) userBuffer += sc.inputTranscription.text;
+              if (sc?.inputTranscription?.text) appendUserBuffer(sc.inputTranscription.text);
               if (sc?.outputTranscription?.text) scammerBuffer += sc.outputTranscription.text;
 
               // 사용자가 말을 끊으면 예약된 재생을 전부 멈춰 새 응답과 겹치지 않게 한다.
@@ -462,6 +476,8 @@ export default function GeminiVoiceSession({
         log("connect() resolved");
         // 타이핑 입력(textMessage effect)이 이 세션에 닿을 수 있도록 노출한다.
         liveSessionRef.current = session;
+        // §57.4 D3 — 타이핑 입력이 이 effect의 `userBuffer`에 적립될 수 있도록 노출한다.
+        appendUserTranscriptRef.current = appendUserBuffer;
 
         // 사용자 신고(2026-07-24) — 연결 직후 캐릭터가 먼저 말을 걸도록 트리거를 보낸다. onopen
         // 콜백(위)이 아니라 connect()가 실제로 resolve된 직후에 보내는 이유: onopen은 소켓 이벤트라
@@ -574,16 +590,23 @@ export default function GeminiVoiceSession({
   // 타이핑 입력(사용자 신고 2026-07-25) — 같은 Live 세션에 텍스트 턴으로 넣는다. 음성 응답은
   // 평소 경로(onmessage → 오디오 재생)로 그대로 돌아오므로 목소리가 겹치지 않는다.
   //
-  // ⚠️ 전사 기록을 여기서 직접 올린다 — 타이핑한 문장은 마이크를 타지 않아 서버의
-  // inputTranscription에 잡히지 않는다. 이걸 빠뜨리면 리포트가 "사용자가 아무 말도 안 했다"고
-  // 보게 되어(속았는지 판정 불가) 타이핑으로 한 훈련은 리포트에서 통째로 사라진다.
+  // ⚠️ 전사 기록을 여기서 올린다 — 타이핑한 문장은 마이크를 타지 않아 서버의 inputTranscription에
+  // 잡히지 않는다. 이걸 빠뜨리면 리포트가 "사용자가 아무 말도 안 했다"고 보게 되어(속았는지 판정
+  // 불가) 타이핑으로 한 훈련은 리포트에서 통째로 사라진다.
+  //
+  // ⭐⭐ §57.4 D3(G369) — **즉시 `onTranscriptTurn`을 부르지 않는다.** 과거엔 여기서 바로 불렀는데,
+  // 음성 입력·모델 발화는 `turnComplete`에서만 flush되는 반면 타이핑은 입력 즉시 기록돼 **기록
+  // 시계가 둘**이었다(§57.4 (1)). 모델 턴이 진행 중일 때 타이핑하면 그 텍스트가 아직 flush되지
+  // 않은 사기범 발화보다 먼저 기록되어 `scammer(i)↔user(i+1)` 짝짓기(analyzeConversation)가 깨졌다.
+  // 이제 음성 입력과 같은 자리(`userBuffer`, `appendUserTranscriptRef` 경유)에 넣어 다음
+  // `flushTranscript()`(turnComplete 또는 onclose)에서 함께 내보낸다 — 유실 없음.
   useEffect(() => {
     if (!textMessage || !textMessage.text.trim()) return;
     const session = liveSessionRef.current;
     if (!session) return;
     try {
       session.sendClientContent({ turns: textMessage.text, turnComplete: true });
-      handlersRef.current.onTranscriptTurn("user", textMessage.text.trim());
+      appendUserTranscriptRef.current?.(textMessage.text.trim());
     } catch {
       // 전송 실패해도 통화 자체는 계속된다(P-4 비차단) — 음성으로 이어서 말하면 된다.
     }

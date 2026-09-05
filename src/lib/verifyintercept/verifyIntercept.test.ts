@@ -5,9 +5,11 @@ import * as path from "node:path";
 import {
   announceTurnsOnInstructionDispatch,
   enqueueInstruction,
+  INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES,
   nextVerifyOfferStage,
   rollbackVerifyOfferPhase,
   shouldAnnounceVerifyOffer,
+  shouldDrainInstructionQueue,
   shouldOfferVerify,
   shouldReinjectTransferState,
   shouldRetryVerifyOffer,
@@ -186,6 +188,65 @@ test("[T118] 사기범 턴 경계가 아니면 재주입하지 않는다(기존 
     }),
     false,
   );
+});
+
+// ── §52.7 (5) 가·나 / §57.5 — G31 큐 드레인 참가자 턴 조건(T-4) ───────────────────
+
+test("[§52.7 가] 첫 지시(게이트 열림)는 참가자가 말하지 않았어도 내보낸다 — 미루면 안 된다", () => {
+  // ⛔ 이 단언이 무너지면 문자가 이미 화면에 도착해 있는데 announce가 미뤄져 §53.6 (4)의
+  // "문자는 이미 도착해 있다"는 전제와 어긋난다.
+  assert.equal(
+    shouldDrainInstructionQueue({
+      userSpokeSinceLastInjection: true,
+      suppressedBoundaryStreak: 0,
+    }),
+    true,
+  );
+});
+
+test("[§52.7 가/T-4] 직전 주입 이후 참가자가 한 번도 말하지 않았으면 다음 경계에서는 억제한다", () => {
+  // ⛔ 이 단언이 무너지면 연속 강제 발화(T-4)가 그대로 재현된다 — bank 시나리오의 턴3→턴4.
+  assert.equal(
+    shouldDrainInstructionQueue({
+      userSpokeSinceLastInjection: false,
+      suppressedBoundaryStreak: 0,
+    }),
+    false,
+  );
+});
+
+test("[§52.7 가] 참가자가 말한 뒤에는 다시 내보낸다(게이트가 열린다)", () => {
+  assert.equal(
+    shouldDrainInstructionQueue({
+      userSpokeSinceLastInjection: true,
+      suppressedBoundaryStreak: 3,
+    }),
+    true,
+  );
+});
+
+test("[§52.7 나] 참가자가 끝내 말하지 않아도 상한(N=1) 경계 뒤에는 강제 방출한다 — 무한 대기 금지", () => {
+  // agentSpeechGate.ts의 STALL_GRACE_MS와 같은 이유(정지 대비 안전장치) — 상한 없는 대기는
+  // 원래 증상(연속 강제 발화)보다 나쁜 고장(큐 적체 항목이 영영 안 나감)이 된다.
+  assert.equal(INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES, 1);
+  assert.equal(
+    shouldDrainInstructionQueue({
+      userSpokeSinceLastInjection: false,
+      suppressedBoundaryStreak: INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES,
+    }),
+    true,
+  );
+});
+
+test("[§52.7/§25.9 ④-A 역검증] 상한 조건을 뒤집은 **사본**에서는 상한이 되어도 계속 억제한다", () => {
+  // 오염은 테스트 코드 안의 사본으로만 만든다(실제 소스를 고쳤다 되돌리는 방식 금지).
+  const withoutCapGuard = (input: { userSpokeSinceLastInjection: boolean }) =>
+    input.userSpokeSinceLastInjection;
+  const stalled = { userSpokeSinceLastInjection: false, suppressedBoundaryStreak: 99 };
+  // 실제 구현은 상한에 도달하면 강제 방출하고,
+  assert.equal(shouldDrainInstructionQueue(stalled), true);
+  // 상한 가드를 없앤 사본은 같은 입력에서도 계속 억제한다 = 이 상한이 실제로 살아 있다는 증명.
+  assert.equal(withoutCapGuard(stalled), false);
 });
 
 // ── T118 / R-2 오퍼 실패 롤백 범위(§25.5 (4)) ────────────────────────────────────
