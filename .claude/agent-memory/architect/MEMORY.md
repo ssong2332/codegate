@@ -51,4 +51,5 @@
 - [입력이 그 경로에 도달하는가부터](feedback_check_input_reaches_the_path.md) — 판정 함수는 무죄일 수 있다; 유일한 대입 지점 grep + 입구 전수표 + 같은 세션 대조군
 - [Mock은 입력을 무시하고도 "했다"고 기록한다](feedback_mock_ignores_input_marks_anyway.md) — 강등 경로 타임라인엔 실 구현 전제를 조건으로; 마킹은 산출물에 종속시키고 앞층과 같은 커밋으로
 - ["로그에 0건"은 기록 여부부터 확인](feedback_absence_in_logs_check_if_logged.md) — 성공 무로그면 정상에서도 0건; 키를 공유해도 엔드포인트·모델이 다르면 쿼터 무죄 근거가 아니다
+- [핀에는 기준선이 딸려야 한다](feedback_version_pin_needs_a_baseline.md) — 고정 버전은 재매핑만 막고 서빙 특성 변화엔 게이트가 영원히 초록; 판정은 상수 옆 지연 기준선 한 줄이 한다
 - [파생 라벨엔 관측된 경계가 필요하다](feedback_derived_label_needs_observed_boundary.md) — 문자열은 이미 있고 없는 건 경계다; 요청 시점 계수는 예측이라 라벨 대신 문면 층으로 내려간다
