@@ -155,7 +155,13 @@ export type MessengerAttachment = {
 export type MessageRole = "scammer" | "user";
 export type MessageDoc = {
   role: MessageRole;
-  textMasked: string; // PII 마스킹된 텍스트만 저장(원문 미저장, ADR-0004)
+  // `role==="user"`: PII 마스킹된 텍스트만 저장(원문 미저장, ADR-0004).
+  // `role==="scammer"`: 2026-09-06부터 LLM 완성 텍스트를 그대로 저장한다(마스킹 미적용,
+  // `roleplay/scammerReplyMasking.ts` 헤더 주석 — 모델은 참가자 원문 PII를 입력으로 받은 적이
+  // 없어 지킬 PII가 없고, 프롬프트가 의도적으로 만들게 하는 가짜 계좌·접수번호 숫자열이 마스킹에
+  // 걸려 리터럴 "[계좌]" 토큰으로 참가자에게 노출되는 라이브 버그가 있었다). 필드명은 하위호환을
+  // 위해 그대로 유지한다(스키마 변경 아님, docs/Database.md 정본 문구는 architect 소관 — 갱신 요청).
+  textMasked: string;
   turnIndex: number;
   createdAt: FirebaseFirestore.Timestamp;
   attachments?: MessengerAttachment[]; // T29 추가 — 스미싱 링크(§13.4/AC-045)

@@ -35,6 +35,7 @@ import { extractLinkMarker } from "./linkMarker";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
+import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { speakerGenderFor } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
@@ -330,10 +331,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const { text: signalFreeReplyText, escalate: signalEscalate } = extractEscalationSignal(
       linkFreeReplyText,
     );
-    const maskedReplyText = maskPII(signalFreeReplyText);
+    // 2026-09-06 버그수정 — 사기범(LLM) 응답에는 maskPII를 적용하지 않는다(scammerReplyMasking.ts
+    // 헤더 주석 참고 — 라이브 신고 "[계좌]" 리터럴 노출, 시나리오·난이도 무관 공통 재현).
+    const finalReplyText = finalizeScammerReplyText(signalFreeReplyText);
     await messagesRef.add({
       role: "scammer",
-      textMasked: maskedReplyText,
+      textMasked: finalReplyText,
       turnIndex: nextIndex + 1,
       createdAt: Timestamp.now(),
       ...(replyAttachments ? { attachments: replyAttachments } : {}),
@@ -437,7 +440,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         const synthesis = await getVoiceProvider().synthesize({
           sessionId,
           voiceId: session.voiceId ?? "",
-          text: maskedReplyText,
+          text: finalReplyText,
         });
         audioUrl = synthesis.audioUrl;
       } catch {
@@ -447,7 +450,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
 
     const reply: ScammerMessage = {
       role: "scammer",
-      text: maskedReplyText,
+      text: finalReplyText,
       ...(replyAttachments ? { attachments: replyAttachments } : {}),
     };
     return {

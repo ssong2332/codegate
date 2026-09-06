@@ -4,7 +4,6 @@
 // 초기화가 전혀 필요 없는 순수 조합(LLM 어댑터 호출)이라 node:test에서 admin 앱 부트스트랩 없이도
 // 바로 단위 테스트할 수 있다.
 import { HttpsError } from "firebase-functions/v2/https";
-import { maskPII } from "../guardrails";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { hasInCallSms } from "../scenarios/inCallSms";
@@ -12,6 +11,7 @@ import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt } from "./promptAssembly";
+import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { speakerGenderFor } from "../realtime/scenarioVoice";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { ScammerMessage } from "./types";
@@ -103,10 +103,12 @@ export async function generateOpeningLine(
   // T84(§15.9.1 R4) — 오프닝 대사에 실린 링크에도 같은 규칙으로 `landingKind`가 붙는다(호출부가
   // 갈라지면 "오프닝 링크만 kind가 없는" 비대칭이 생긴다 — §15.6 G5와 같은 이유).
   const { text: linkFreeText, attachments } = extractLinkMarker(completion.text, scenarioId);
+  // 2026-09-06 버그수정 — 사기범(LLM) 응답에는 maskPII를 적용하지 않는다(scammerReplyMasking.ts
+  // 헤더 주석 참고 — 라이브 신고 "[계좌]" 리터럴 노출, 시나리오·난이도 무관 공통 재현).
   return {
     message: {
       role: "scammer",
-      text: maskPII(linkFreeText),
+      text: finalizeScammerReplyText(linkFreeText),
       ...(attachments ? { attachments } : {}),
     },
     isMock: completion.isMock,
