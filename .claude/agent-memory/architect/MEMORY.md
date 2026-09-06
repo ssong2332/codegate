@@ -54,3 +54,4 @@
 - [핀에는 기준선이 딸려야 한다](feedback_version_pin_needs_a_baseline.md) — 고정 버전은 재매핑만 막고 서빙 특성 변화엔 게이트가 영원히 초록; 판정은 상수 옆 지연 기준선 한 줄이 한다
 - [기각된 후보는 백스톱과 함께 부활한다](feedback_rejected_candidate_revives_with_backstop.md) — 기각 사유를 행으로 펼쳐 재판정; "보장 못 한다"만 남으면 기존 경로를 천장으로 남겨 산다
 - [파생 라벨엔 관측된 경계가 필요하다](feedback_derived_label_needs_observed_boundary.md) — 문자열은 이미 있고 없는 건 경계다; 요청 시점 계수는 예측이라 라벨 대신 문면 층으로 내려간다
+- [신고문은 소스 주석에 이미 있을 수 있다](feedback_report_may_already_have_a_prescription.md) — 신고 어구로 주석 grep; 히트면 축이 "원인 규명"에서 "이미 있는 처방이 왜 지는가"로 바뀐다
