@@ -80,3 +80,4 @@
 - [§58 P1 — 시나리오 14벌 죽은 마감 문구 치환](project_codegate_s58_p1_deadline_lines.md) — ⭐ planner 미언급 G379(clone 재생성 상태 되돌리기)를 architect 설계에서 찾아 자발 적용, 스테일 근거 주석 2곳 의도적 미수정(스코프 경계), OQ-A70은 문서상 여전히 open.
 - ["[계좌]" 리터럴 노출 버그 수정](project_codegate_account_placeholder_leak_fix.md) — ⭐ maskPII를 사기범 응답에도 적용하던 공통층 버그, llmHistory 추적으로 "마스킹할 실제 PII가 없다" 증명, realtime과 fallback의 경계 판단(왜 한쪽만 고쳤나).
 - [§59 커밋 A·B — 모델 도구 타이밍 배선](project_codegate_s59_commit_ab_tool_timing.md) — ⭐ 지시문 요약과 Architecture.md §59.10 원문의 불일치(createRealtimeCall이 B냐 C냐)를 원문 우선으로 해소, deliverVerifyOffer 거절문구 공백을 implementer 초안+명시적 인계로 처리, 소스스캔으로 "동작 0 변화" 증명.
+- [§59.6 갱신 — VERIFY_DECLINE 정본 반영](project_codegate_s59_verify_decline_canon.md) — ⭐ 두 문서(Architecture+API.md) 원문 대조, "8줄" 요약 대신 실제 11줄 원문 그대로 복사, failureInstruction 인계를 "코드에 아직 없는 필드"로 실측 확인 후 무수정 판단, 상수 문자열 고정 테스트 신규 관례.
