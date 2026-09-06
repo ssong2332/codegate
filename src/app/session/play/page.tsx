@@ -65,6 +65,11 @@ import {
   type VerifyOfferPhase,
 } from "@/lib/verifyintercept";
 import { shouldFireBackstop } from "@/lib/realtime/toolWindow";
+import {
+  claimAnnounceSlot,
+  releaseAnnounceSlot,
+  type AnnounceSlotState,
+} from "@/lib/realtime/verifyAnnounceGuard";
 import { normalizeDifficultyLevel, type DifficultyLevel } from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import { foldDegraded, buildFallbackStatusLine } from "@/lib/report/degradedDisclosure";
@@ -236,6 +241,19 @@ export default function SessionCallPage() {
   const verifyOfferPhaseRef = useRef<VerifyOfferPhase>("idle");
   // 1단계(예고 지시 주입)를 보낸 시점의 완료 사기범 턴 수. `null` = 아직 안 보냈다.
   const verifyAnnounceTurnsRef = useRef<number | null>(null);
+  // ⭐ §59 Critical 수정(reviewer REJECTED) — announce 요청 상호배제 슬롯. 백스톱 경로(아래 오퍼
+  // 이펙트)와 모델 도구 경로(`GeminiVoiceSession.dispatchToolCall`의 `offer_verification_desk`
+  // 분기)가 이 **같은 객체**를 공유한다 — 서버가 announce를 멱등하게 구분하지 못하므로
+  // (`verifyAnnounceGuard.ts` 근거 주석 참고) 요청을 보내기 **전에** 클라가 직접 막아야 한다.
+  const verifyAnnounceSlotRef = useRef<AnnounceSlotState>({ inFlight: false });
+  const claimVerifyAnnounceSlot = useCallback(
+    () => claimAnnounceSlot(verifyAnnounceSlotRef.current),
+    [],
+  );
+  const releaseVerifyAnnounceSlot = useCallback(
+    () => releaseAnnounceSlot(verifyAnnounceSlotRef.current),
+    [],
+  );
   // T118 / 층 A5-α(§25.3) — 전환 상태 재확인 1줄. `instructionTurn` 큐를 타지 않는 **별도 슬롯**이며
   // 턴 슬롯을 소비하지 않는다(P-1 실측: turnComplete:false는 발화를 유발하지 않았다).
   const [personaStateTurn, setPersonaStateTurn] = useState<{ text: string; seq: number } | null>(
@@ -673,6 +691,12 @@ export default function SessionCallPage() {
         toolCallFailed: verifyToolCallFailedRef.current,
       });
       if (!fire) return;
+      // ⭐ §59 Critical 수정(reviewer REJECTED) — 서버가 announce를 멱등하게 구분하지 못하므로
+      // (`verifyAnnounceGuard.ts` 근거 주석) 요청을 보내기 **전에** 클라가 직접 막는다. 이미 모델
+      // 도구 경로(`GeminiVoiceSession.dispatchToolCall`)가 요청 중이면 여기서는 아무 것도 하지
+      // 않고 되돌아간다 — 다음 사기범 턴 경계에서 단계가 이미 전진해 있으면 이 이펙트 자체가
+      // 재실행되지 않는다(자연 소멸, 재시도 로직 불필요).
+      if (!claimVerifyAnnounceSlot()) return;
     }
     verifyOfferPhaseRef.current = stage === "announce" ? "announced" : "committed";
     // ⛔ **§45.7 V2 — 여기서 `verifyAnnounceTurnsRef`를 찍지 않는다**(종전 1줄 삭제). 요청 발신 시점은
@@ -709,6 +733,13 @@ export default function SessionCallPage() {
         });
         // 되돌린 단계가 1단계면 주입 시점 기록도 함께 지운다(다음 시도에서 다시 잰다).
         if (verifyOfferPhaseRef.current === "idle") verifyAnnounceTurnsRef.current = null;
+      } finally {
+        // ⭐ §59 Critical 수정 — 위에서 클레임한 슬롯을 성공·실패 무관하게 되돌린다(다음 재시도가
+        // 영영 막히지 않게). 클레임은 `stage === "announce" && callMode === "realtime"`일 때만
+        // 있었으므로 release도 그 조건에서만 한다(그 외 경로는 애초에 슬롯을 건드리지 않았다).
+        if (stage === "announce" && requestCallMode === "realtime") {
+          releaseVerifyAnnounceSlot();
+        }
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1319,6 +1350,8 @@ export default function SessionCallPage() {
             onModelToolSmsFailed={handleModelToolSmsFailed}
             onModelToolVerifyAnnounced={handleModelToolVerifyAnnounced}
             onModelToolVerifyFailed={handleModelToolVerifyFailed}
+            claimVerifyAnnounceSlot={claimVerifyAnnounceSlot}
+            releaseVerifyAnnounceSlot={releaseVerifyAnnounceSlot}
             instructionTurn={instructionTurn}
             personaStateTurn={personaStateTurn}
           />

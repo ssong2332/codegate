@@ -154,3 +154,92 @@ test("[중복 발동 방지] handleModelToolVerifyAnnounced는 idle일 때만 ve
     /if \(verifyOfferPhaseRef\.current === "idle"\) \{\s*verifyOfferPhaseRef\.current = "announced";\s*verifyAnnounceTurnsRef\.current = scammerTurnsRef\.current;\s*\}/,
   );
 });
+
+// ── §59 Critical 수정(reviewer REJECTED) — announce 요청 상호배제 슬롯 배선 ──────────────
+
+test("[Critical 수정] play/page.tsx가 verifyAnnounceGuard의 claim/release를 import한다", () => {
+  assert.match(
+    page,
+    /import \{\s*claimAnnounceSlot,\s*releaseAnnounceSlot,\s*type AnnounceSlotState,\s*\} from "@\/lib\/realtime\/verifyAnnounceGuard";/,
+  );
+});
+
+test("[Critical 수정] 백스톱 이펙트가 shouldFireBackstop 통과 직후 claimVerifyAnnounceSlot()을 체크한다(서버 호출 전 동기 클레임)", () => {
+  const fireAt = pageCode.indexOf("if (!fire) return;");
+  const claimAt = pageCode.indexOf("if (!claimVerifyAnnounceSlot()) return;");
+  const phaseAssignAt = pageCode.indexOf(
+    'verifyOfferPhaseRef.current = stage === "announce" ? "announced" : "committed";',
+  );
+  assert.ok(fireAt >= 0 && claimAt >= 0 && phaseAssignAt >= 0, "세 지점을 모두 찾지 못했다");
+  assert.ok(
+    fireAt < claimAt && claimAt < phaseAssignAt,
+    "클레임은 백스톱 발동 판정 다음, 단계를 굳히기 전에 있어야 한다(그래야 클레임 실패 시 그대로 return할 수 있다)",
+  );
+});
+
+test("[Critical 수정] 오퍼 요청 완료(성공/실패 무관) 후 releaseVerifyAnnounceSlot()을 finally에서 부른다", () => {
+  assert.ok(
+    pageCode.includes(
+      "} finally {\nif (stage === \"announce\" && requestCallMode === \"realtime\") {\nreleaseVerifyAnnounceSlot();\n}\n}",
+    ) ||
+      /\}\s*finally\s*\{\s*if \(stage === "announce" && requestCallMode === "realtime"\) \{\s*releaseVerifyAnnounceSlot\(\);\s*\}\s*\}/.test(
+        pageCode,
+      ),
+    "release가 finally에 없으면 요청 실패 시 슬롯이 영원히 잠긴 채 남아 재시도가 막힌다",
+  );
+});
+
+test("[Critical 수정 역검증] finally를 지운 오염본은 이 검사식이 잡아낸다", () => {
+  const poisoned = pageCode.replace(
+    /\}\s*finally\s*\{\s*if \(stage === "announce" && requestCallMode === "realtime"\) \{\s*releaseVerifyAnnounceSlot\(\);\s*\}\s*\}/,
+    "}",
+  );
+  assert.ok(!/\}\s*finally\s*\{\s*if \(stage === "announce"/.test(poisoned));
+  assert.ok(/\}\s*finally\s*\{\s*if \(stage === "announce"/.test(pageCode));
+});
+
+test("[Critical 수정] play/page.tsx가 GeminiVoiceSession에 claim/release 콜백을 넘긴다", () => {
+  assert.ok(pageCode.includes("claimVerifyAnnounceSlot={claimVerifyAnnounceSlot}"));
+  assert.ok(pageCode.includes("releaseVerifyAnnounceSlot={releaseVerifyAnnounceSlot}"));
+});
+
+test("[Critical 수정] GeminiVoiceSessionProps의 claim/release는 옵셔널이 아니다(가드 누락 마운트 방지)", () => {
+  assert.match(sessionCode, /claimVerifyAnnounceSlot: \(\) => boolean;/);
+  assert.match(sessionCode, /releaseVerifyAnnounceSlot: \(\) => void;/);
+  assert.ok(
+    !/claimVerifyAnnounceSlot\?: \(\) => boolean;/.test(sessionCode),
+    "claimVerifyAnnounceSlot이 옵셔널이면 가드 없이도 컴파일이 통과해 이중 발동 방지가 조용히 빠질 수 있다",
+  );
+});
+
+test("[Critical 수정] dispatchToolCall의 offer_verification_desk 분기가 deliverVerifyOffer 호출 전에 claim을 체크한다", () => {
+  const claimAt = sessionCode.indexOf("if (!handlersRef.current.claimVerifyAnnounceSlot()) {");
+  const deliverAt = sessionCode.indexOf("await deliverVerifyOffer({");
+  assert.ok(claimAt >= 0, "claim 체크를 찾지 못했다");
+  assert.ok(deliverAt >= 0, "offer_verification_desk의 deliverVerifyOffer 호출을 찾지 못했다");
+  assert.equal(
+    sessionCode.split("deliverVerifyOffer({").length - 1,
+    1,
+    "이 파일에서 deliverVerifyOffer 호출은 offer_verification_desk 분기 1곳뿐이어야 한다(그래야 이 인덱스 비교가 유효하다)",
+  );
+  assert.ok(claimAt < deliverAt, "claim은 서버 호출보다 먼저(동기적으로) 있어야 한다");
+});
+
+test("[Critical 수정] dispatchToolCall이 claim 실패 시 서버를 부르지 않고 즉시 리턴한다", () => {
+  const claimAt = sessionCode.indexOf("if (!handlersRef.current.claimVerifyAnnounceSlot()) {");
+  const nextTryAt = sessionCode.indexOf("try {", claimAt);
+  const returnAt = sessionCode.indexOf("return {", claimAt);
+  assert.ok(claimAt >= 0 && nextTryAt >= 0 && returnAt >= 0);
+  assert.ok(
+    returnAt < nextTryAt,
+    "claim 실패 분기의 return이 그 뒤의 try(실제 서버 호출)보다 먼저 나와야 서버가 안 불린다",
+  );
+});
+
+test("[Critical 수정] dispatchToolCall의 offer_verification_desk 분기가 성공/실패 무관 finally에서 release한다", () => {
+  assert.match(
+    sessionCode,
+    /\}\s*catch\s*\{\s*handlersRef\.current\.onModelToolVerifyFailed\?\.\(\);\s*return failureResponse\(\);\s*\}\s*finally\s*\{\s*handlersRef\.current\.releaseVerifyAnnounceSlot\(\);\s*\}/,
+    "release가 finally에 없으면 실패 경로에서 슬롯이 잠긴 채 남는다",
+  );
+});
