@@ -83,3 +83,4 @@
 - [§59.6 갱신 — VERIFY_DECLINE 정본 반영](project_codegate_s59_verify_decline_canon.md) — ⭐ 두 문서(Architecture+API.md) 원문 대조, "8줄" 요약 대신 실제 11줄 원문 그대로 복사, failureInstruction 인계를 "코드에 아직 없는 필드"로 실측 확인 후 무수정 판단, 상수 문자열 고정 테스트 신규 관례.
 - [§59 커밋 C — Live 도구 점화](project_codegate_s59_commit_c_tool_ignition.md) — ⭐ "grep 0건=배선 누락" 지시문 전제를 스프레드 패스스루로 반증(코드는 이미 맞았다), 관측 불가 지점 증명 공백만 소스스캔 테스트로 마저 닫음, 클라 스테일 주석 인계(범위 밖 판단).
 - [§59 커밋 C reviewer REJECT 수정](project_codegate_s59_commit_c_review_fixes.md) — ⭐ Critical #1(실제 도구 라우팅 판정/부수효과 분리)·#2(verifyOfferSeries 게이팅), T113 소스스캔이 옵션 추가를 걸러낸 사례, node 디렉터리-import 제약 재확인.
+- [§59 커밋 C APPROVED Major #1 수정 — collectToolResponses](project_codegate_s59_commit_c_major1_fallback.md) — ⭐ Promise.all 무방비 구간에 구조적 폴백 추가, 순수함수 단위테스트+소스스캔 배선 게이트 이중 검증, 이중 방어(안쪽 콜러블별 vs 바깥쪽 구조적) 설계.
