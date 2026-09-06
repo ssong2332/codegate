@@ -78,3 +78,4 @@
 - [§55 D3·D4 notSpoken 오프닝 + 전환 연결문장](project_codegate_s55_d3_d4.md) — ⭐ 타입 밖 필드로 앵커 불변 증명하는 제네릭 스프레드, heredoc append가 워크트리 격리에 거부됨(→Write 새 파일), 스테일 클로저 ref 래치.
 - [§52.7(5)가·나 + §57.4 D3 — G31 드레인 게이트+상한, 전사 시계 통합](project_codegate_s52_7_s57_drain_gate_d3.md) — ⭐ G369 동일 커밋 제약(D3가 참가자-발화 관측 시점을 옮기고 가가 그 값을 읽는다), GeminiVoiceSession 크로스-effect ref 브리지 패턴 재사용.
 - [§58 P1 — 시나리오 14벌 죽은 마감 문구 치환](project_codegate_s58_p1_deadline_lines.md) — ⭐ planner 미언급 G379(clone 재생성 상태 되돌리기)를 architect 설계에서 찾아 자발 적용, 스테일 근거 주석 2곳 의도적 미수정(스코프 경계), OQ-A70은 문서상 여전히 open.
+- ["[계좌]" 리터럴 노출 버그 수정](project_codegate_account_placeholder_leak_fix.md) — ⭐ maskPII를 사기범 응답에도 적용하던 공통층 버그, llmHistory 추적으로 "마스킹할 실제 PII가 없다" 증명, realtime과 fallback의 경계 판단(왜 한쪽만 고쳤나).

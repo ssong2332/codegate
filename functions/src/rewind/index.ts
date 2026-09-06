@@ -26,8 +26,10 @@ export { judgeByRule, judgeRewindAnswerWith, parseLlmJudgement } from "./judge";
 export { buildRewindJudgePrompt } from "./judgePrompt";
 
 /**
- * 그 순간 사기범이 한 말(마스킹됨)을 찾는다 — 선택 규칙 자체는 순수 함수
- * `pickScammerLineForMoment`(rewind/scammerLine.ts)가 소유하고, 여기서는 Firestore 조회만 한다
+ * 그 순간 사기범이 한 말을 찾는다 — `textMasked` 필드명과 달리 사기범(scammer) 역할 텍스트는
+ * `finalizeScammerReplyText`(identity, scammerReplyMasking.ts — "[계좌]" 오적용 버그 수정)를
+ * 거쳐 저장되므로 원문 그대로다. 선택 규칙 자체는 순수 함수 `pickScammerLineForMoment`
+ * (rewind/scammerLine.ts)가 소유하고, 여기서는 Firestore 조회만 한다
  * (⚠️ **T84 §15.9.7 G57 수정**이 그 함수에 들어 있다 — 근거·회귀 0 논증은 그 doc 주석 참고).
  * 조회에 실패하면 빈 문자열 — 판정은 tactic/correctAction만으로도 계속된다(비차단, P-4).
  */
@@ -95,7 +97,9 @@ export const judgeRewindAnswer = onCall<
     throw new HttpsError("resource-exhausted", "이 리포트에서 되감기를 너무 많이 실행했습니다.");
   }
 
-  // 저장·판정에 들어가는 텍스트는 전부 마스킹 후 값이다(원문 미저장, ADR-0004 계승).
+  // answerMasked(참가자 입력)는 maskPII를 거친 마스킹 후 값이다(원문 미저장, ADR-0004 계승).
+  // scammerLineMasked(사기범 발화)는 이름과 달리 마스킹되지 않는다 — finalizeScammerReplyText
+  // (identity)를 거쳐 저장된 원문 그대로다(scammerReplyMasking.ts, "[계좌]" 오적용 버그 수정).
   const answerMasked = maskPII(answerText.trim());
   const scammerLineMasked = await findScammerLineMasked(report.sessionId, moment.turnIndex);
 
