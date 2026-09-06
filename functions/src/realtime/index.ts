@@ -175,6 +175,17 @@ export const createRealtimeCall = onCall<
     // 판단). 그러나 mock/none 경로는 이 값을 아예 쓰지 않으므로(RealtimeVoiceSession은
     // provider==="elevenlabs"일 때만 마운트, src/app/session/play/page.tsx:448) 굳이 실어 보낼
     // 이유가 없다 — challenge 세션이면 그 불필요한 노출을 비운다.
+    //
+    // §59.6/§59.10 커밋 C(G385/G386, `docs/API.md` 부록 C `createRealtimeCall` 증분) —
+    // `credentials.liveTools`(있다면)는 아래 두 반환 경로 모두에서 `credentials`를 스프레드하는
+    // 것만으로 그대로 전달된다. "Gemini 프로바이더 && 도구가 하나라도 선언될 때만" 이라는 부착
+    // 조건은 이미 `GeminiRealtimeProvider.createCallCredentials`(`geminiProvider.ts`) 층에서
+    // 결정돼 있다 — `buildLiveToolNames`를 호출하는 곳은 그 provider뿐이고, ElevenLabs/Mock
+    // provider와 아래 `catch` 폴백은 이 필드를 아예 채우지 않는다. 그래서 이 파일은 별도의
+    // `withLiveTools` 게이트를 두지 않는다(`withSmsTriggers`/`withVerifyOffer`와 달리, 이 필드는
+    // 세션/난이도가 아니라 provider 선택만으로 이미 갈리기 때문). ⛔ 아래 두 `return` 중 어느 쪽도
+    // `credentials`를 필드별로 재구성하지 말 것 — 그러면 `liveTools`가 조용히 누락된다
+    // (`toolDeclarationUnchanged.test.ts`의 소스 스캔 테스트가 이 형태를 고정한다).
     if (session.challengeId && credentials.provider !== "elevenlabs") {
       return withVerifyOffer(withSmsTriggers({ ...credentials, voiceId: "" }));
     }

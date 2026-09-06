@@ -18,6 +18,7 @@ import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { hasInCallSms } from "../scenarios/inCallSms";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
+import { buildLiveToolDeclarations, buildLiveToolNames, verifySeriesFor } from "./liveTools";
 import { SCENARIO_SPEAKER_GENDER, speakerGenderFor } from "./scenarioVoice";
 import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider } from "./types";
 
@@ -94,6 +95,10 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // 넘긴다(기본값이 institution 취급이라 빠뜨려도 에러는 안 나지만 조용히 축소된다).
     // §50.3.3(G298) — speakerGender도 같은 표(scenarioVoice.ts)에서 파생한다. 층 1(음성, 아래
     // pickGeminiVoiceName)과 층 2(이 프롬프트 옵션)가 **같은 원천**을 읽어야 목소리와 말이 맞는다.
+    // §59.5/§59.10 커밋 C — 이 세션에 실제로 선언할 Live 도구(조건은 buildLiveToolDeclarations
+    // 자신이 진다 — hasInCallSms/hasVerifyIntercept+advanced+계열A). 프롬프트 조건부 치환
+    // (toolDrivenTiming)과 **같은 트리거로 묶지 않는다** — 아래 buildSystemPrompt 호출부 주석 참고.
+    const liveToolDeclarations = buildLiveToolDeclarations(input.scenarioId, input.difficultyLevel);
     const systemPrompt = buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: input.difficultyLevel,
       inCallSmsEnabled: hasInCallSms(input.scenarioId),
@@ -102,6 +107,16 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       l3Procedural: isL3Procedural(input.scenarioId),
       identityCheckAllowed: asksIdentityCheck(input.scenarioId),
       speakerGender: speakerGenderFor(input.scenarioId),
+      // §59.3 — 이 경로가 §59 커밋 C가 정한 **유일한 `true` 호출부**다(폴백 sendMessage·오프닝은
+      // Live 세션이 없어 도구가 존재하지 않으므로 넘기지 않는다, G382).
+      toolDrivenTiming: true,
+      // ⭐ reviewer Critical #2 수정(§59 커밋 C 리뷰 — 이전에는 이 값을 넘기지 않아 위 toolDrivenTiming
+      // 단독으로 [확인 안내] TOOL_DRIVEN 문구가 갈렸다) — `offer_verification_desk` 도구는 계열 A
+      // (`bank-security-verify-scam`) 1종에만 선언되므로(G392, buildLiveToolDeclarations 참고),
+      // 계열 판정을 그대로 재사용해 넘긴다. 계열 B 5종(advanced)은 promptAssembly.ts가 DEFAULT
+      // 문구를 유지한다(문면-선언 불일치 해소). 로직 중복 구현 금지 — verifySeriesFor()가 유일한
+      // 원천이다(같은 판단이 buildLiveToolDeclarations/buildLiveToolNames에도 이미 쓰인다).
+      verifyOfferSeries: verifySeriesFor(input.scenarioId),
     });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });
@@ -184,8 +199,19 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
                 silenceDurationMs: 400,
               },
             },
-            // 도구를 명시적으로 비운다 — 이걸 잠그지 않으면 클라가 임의 도구를 주입할 수 있다.
-            tools: [],
+            // §59.5/§59.10 커밋 C — 이 세션에 걸리는 도구만 서버가 고정해 선언한다(빈 배열이면
+            // 오늘과 바이트 단위로 동일 — 회귀 0, G388). 클라는 이 배열을 읽지도 바꾸지도 못한다
+            // (`geminiProvider.ts:187` 잠금 취지 무변경 — 잠금이 막던 것은 "클라가 임의 도구를
+            // 주입"이지, 서버가 선언 자체를 하는 것이 아니다).
+            //
+            // ⚠️ **인계(architect 재확인 필요)** — §59.5는 `toolConfig.functionCallingConfig.mode =
+            // AUTO`를 명시적으로 넣으라고 지시하지만, 이 자격증명이 쓰는 `LiveConnectConfig`
+            // 타입에는 `toolConfig` 필드 자체가 없다(`@google/genai` `genai.d.ts:8762-8859` 실측 —
+            // `toolConfig`는 `GenerateContentConfig` 계열에만 있고 Live 쪽 타입에는 없다). 그
+            // 필드를 넣으면 `tsc`가 초과 속성 오류를 낸다. `FunctionCallingConfigMode.AUTO`가 애초에
+            // "모델이 함수 호출 여부를 스스로 결정하는" **기본값**이라(`:4668`) 필드를 생략해도 같은
+            // 동작이 되지만, 이것은 이 패스의 추정이며 architect의 명시적 재확인 대상이다.
+            tools: liveToolDeclarations,
           },
         },
         httpOptions: { apiVersion: "v1alpha" },
@@ -196,6 +222,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     if (!tokenName) {
       throw new Error("Gemini 단기 토큰 발급 응답에 name이 없습니다.");
     }
+    const liveTools = buildLiveToolNames(input.scenarioId, input.difficultyLevel);
 
     return {
       provider: "gemini",
@@ -209,6 +236,9 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       isMock: false,
       // T72(§15.3.3) — 이 경로는 서버가 시스템 프롬프트를 토큰에 고정하므로 난이도가 실제로 반영된다.
       difficultyApplied: true,
+      // §59.6/§59.10 커밋 C(G385/G386) — 도구가 하나도 선언되지 않으면 필드 자체를 붙이지 않는다
+      // (buildLiveToolNames가 undefined를 돌려준다 — buildLiveToolDeclarations와 같은 판정).
+      ...(liveTools !== undefined ? { liveTools } : {}),
     };
   }
 }

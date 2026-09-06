@@ -23,6 +23,7 @@
 import { useEffect, useRef } from "react";
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { CreateRealtimeCallResponse } from "@/lib/api";
+import { deliverInCallSms, deliverVerifyOffer } from "@/lib/api";
 import {
   GEMINI_INPUT_SAMPLE_RATE,
   GEMINI_OUTPUT_SAMPLE_RATE,
@@ -36,10 +37,22 @@ import {
   nextUserSpeechDebounceState,
 } from "./userSpeechLevel";
 import { computeGateCloseDelayMs, resolveTurnInProgress } from "./agentSpeechGate";
-import { buildUnsupportedToolResponses } from "./liveToolResponse";
+import {
+  buildUnsupportedToolResponses,
+  collectToolResponses,
+  pickModelToolSmsId,
+  resolveToolCallKind,
+} from "./liveToolResponse";
 
 export type GeminiVoiceSessionProps = {
   credentials: CreateRealtimeCallResponse;
+  /**
+   * ⭐ §59.6 ③(reviewer Critical #1) — 이 통화의 세션 id. Live 도구가 실제로 부르는
+   * `deliverInCallSms`/`deliverVerifyOffer`는 소유권 재검증에 이 값이 필요하다(G12/G24). 이
+   * 컴포넌트는 `realtime.credentials?.provider === "gemini"`일 때만 마운트되며, 그 시점에는
+   * 호출부(`session/play/page.tsx`)가 이미 이 값으로 `createRealtimeCall`을 발급받은 뒤다.
+   */
+  sessionId: string;
   onActive: () => void;
   onEnded: () => void;
   onError: () => void;
@@ -135,6 +148,7 @@ const log = (...args: unknown[]) => {
 
 export default function GeminiVoiceSession({
   credentials,
+  sessionId,
   onActive,
   onEnded,
   onError,
@@ -236,6 +250,104 @@ export default function GeminiVoiceSession({
     // 전사(transcript)는 조각으로 스트리밍되므로 턴이 끝날 때(turnComplete)까지 모았다가 flush한다.
     let userBuffer = "";
     let scammerBuffer = "";
+
+    // ⭐ §59.6(reviewer Critical #1) — Live 도구 라우팅이 쓰는 상태 2종.
+    // `modelToolScammerTurns`는 부모(session/play/page.tsx)의 `scammerTurnsRef`와 **같은 경계**
+    // (turnComplete)에서 증가하는 이 컴포넌트 자체의 사본이다 — `toolCall`은 이 effect의 onmessage
+    // 클로저 안에서 **동기적으로** 처리해야 하는데, 부모의 최신 `scammerTurns` state는 prop으로
+    // 내려오지 않는다(리렌더 지연). `deliveredSmsIds`는 이 세션이 model_tool 경로로 도착시켰다고
+    // **확인한**(서버 응답 `status`가 delivered/already_delivered) smsId만 담는다 — 앱 오케스트레이션
+    // (백스톱) 경로가 같은 문자를 먼저 보냈어도 이 Set은 그 사실을 모를 수 있지만, 그래도 안전하다:
+    // 서버가 같은 smsId로 다시 호출되면 멱등하게 `already_delivered`로만 응답할 뿐 중복 write가
+    // 없다(§59.6 status 표, G387).
+    let modelToolScammerTurns = 0;
+    const deliveredSmsIds = new Set<string>();
+
+    /**
+     * §59.6 ②~⑥ — 도구 이름을 실제 콜러블로 라우팅하고, 호출 결과(또는 실패)를 모델에게 돌려줄
+     * `{status, guidance}` 응답으로 변환한다. **`sendToolResponse`가 생략되는 경로는 없다**(G390)
+     * — 모든 분기가 반드시 응답 객체를 반환한다(unsupported·성공·거절·실패 전부).
+     */
+    const dispatchToolCall = async (
+      call: { id?: string; name?: string },
+    ): Promise<{ id?: string; name: string; response: { status: string; guidance?: string } }> => {
+      const liveTools = credentials.liveTools;
+      const kind = resolveToolCallKind(call.name, liveTools);
+      if (kind === "unsupported" || !liveTools) {
+        return buildUnsupportedToolResponses([call])[0];
+      }
+      // §59.6 "실패(콜러블이 아예 닿지 않음)" 행 — 서버가 내려준 문면 1종을 그대로 쓴다(G386,
+      // 클라가 한국어 문자열을 새로 저작하지 않는다). `liveTools.failureInstruction`은 `LiveTools`
+      // 타입상 필수 필드라 여기서는 항상 존재한다(위 `if (!liveTools)`로 이미 걸러졌다).
+      const failureResponse = () => ({
+        id: call.id,
+        name: call.name ?? "unknown",
+        response: { status: "unavailable", guidance: liveTools.failureInstruction },
+      });
+
+      if (kind === "send_prepared_sms") {
+        const smsId = pickModelToolSmsId(
+          credentials.inCallSmsTriggers ?? [],
+          [...deliveredSmsIds],
+        );
+        // 구조적으로 도달 불가(도구가 선언됐다는 것 자체가 카탈로그 비어있지 않음을 뜻한다,
+        // §59.5) — 그래도 방어적으로 unsupported로 안전하게 떨어뜨린다(G390, 응답 생략 금지).
+        if (!smsId) return buildUnsupportedToolResponses([call])[0];
+        try {
+          const result = await deliverInCallSms({
+            sessionId,
+            smsId,
+            scammerTurns: modelToolScammerTurns,
+            trigger: "model_tool",
+          });
+          if (result.status === "delivered" || result.status === "already_delivered") {
+            deliveredSmsIds.add(smsId);
+          }
+          return {
+            id: call.id,
+            name: call.name ?? "unknown",
+            response: {
+              status: result.status,
+              guidance:
+                result.status === "delivered" ? result.announceInstruction : result.declineInstruction,
+            },
+          };
+        } catch {
+          // ⚠️ **G390(콜러블이 던지든 네트워크가 끊기든 반드시 응답을 보낸다) — architect 원문에
+          // 정확한 실패 상태값의 명문 지정은 없다(§59.6은 "실패" 행의 문면만 정했다). 통화를 막지
+          // 않는 방향(P-4)으로 판단해 `status:"unavailable"` + 서버가 이미 저작해 둔
+          // `failureInstruction`을 그대로 돌려준다 — architect 재확인이 필요하면 이 상태 이름을
+          // 바꾸면 된다(문면은 이미 정본이라 바뀌지 않는다).
+          return failureResponse();
+        }
+      }
+
+      // kind === "offer_verification_desk" — §59.6은 announce 단계만 이 경로로 태운다. commit
+      // 단계(문서 실제 생성, §38.4 후보 E)는 여전히 부모(session/play/page.tsx)의 기존 이펙트가
+      // 사기범 턴 경계를 관측해 진다 — 그 배선은 이번 수정으로 0줄도 건드리지 않는다(범위 밖,
+      // §59.10 커밋 D의 몫). announce는 문서를 쓰지 않는 멱등 단계라(§38.4 후보 E) 두 경로가
+      // 동시에 존재해도 경합이 생기지 않는다.
+      try {
+        const result = await deliverVerifyOffer({
+          sessionId,
+          callMode: "realtime",
+          scammerTurns: modelToolScammerTurns,
+          stage: "announce",
+          trigger: "model_tool",
+        });
+        return {
+          id: call.id,
+          name: call.name ?? "unknown",
+          response: {
+            status: result.status,
+            guidance:
+              result.status === "announced" ? result.announceInstruction : result.declineInstruction,
+          },
+        };
+      } catch {
+        return failureResponse();
+      }
+    };
 
     // §57.4 D3 — 음성 입력(`inputTranscription`)과 타이핑 입력(textMessage effect, 아래
     // `appendUserTranscriptRef` 경유)이 **같은 자리**에 적립되도록 모은 함수. 기존 `userBuffer +=`
@@ -406,21 +518,38 @@ export default function GeminiVoiceSession({
             }) => {
               if (cancelled) return;
 
-              // ⭐ §59.10 커밋 A(G383/G386/G390) — 도구가 아직 선언되지 않아(`geminiProvider.ts`의
-              // `tools: []`, 이 커밋이 0줄 건드리지 않는다) Gemini는 `toolCall`을 보낼 수 없다 — 이
-              // 분기는 오늘 **도달 불가**다(회귀 0). 그래도 `BLOCKING` 도구는 응답이 없으면 통화가
-              // 멈추므로(§59.0 1) 무조건 응답부터 보장해 둔다. 실제 라우팅(도구 이름 →
-              // `deliverInCallSms`/`deliverVerifyOffer`, §59.6 ②~⑥)은 도구가 실제로 선언되는 이후
-              // 커밋(§59 커밋 C+)의 몫이라 여기서 하지 않는다.
+              // ⭐ §59.10 커밋 A + reviewer Critical #1 수정(G383/G385/G386/G390) — 도구가 실제로
+              // 선언되는 세션(SMS 카탈로그 보유 시나리오 대부분·bank-security-verify-scam
+              // advanced)에서는 이제 이 분기가 **도달 가능**하다(`credentials.liveTools`, §59.6 ②).
+              // `dispatchToolCall`(위, 이 effect 스코프)이 이름을 실제 콜러블로 라우팅하고 결과를
+              // `{status, guidance}`로 돌려준다 — 미선언 세션·알 수 없는 이름은 여전히
+              // `buildUnsupportedToolResponses`(unsupported)로 안전하게 떨어진다. `BLOCKING` 도구는
+              // 응답이 없으면 통화가 멈추므로(§59.0 1) **어떤 경로에서도 응답을 생략하지 않는다**
+              // (G390 — `dispatchToolCall`의 모든 분기가 값을 반환하고, 콜러블이 던져도
+              // `failureResponse()`로 대체한다).
+              // ⭐ reviewer APPROVED Major #1 수정 — `dispatchToolCall`이 값을 반환하는 것은 "오늘
+              // 이 파일의 모든 분기가 우연히 안 던진다"는 사실에 기댄 것이지, 구조적 보장이 아니었다.
+              // `collectToolResponses`(`liveToolResponse.ts`, 순수 함수·테스트로 고정)가 그 구조적
+              // 보장이다: `dispatchToolCall`이 무엇을 던지든(내부 헬퍼가 나중에 수정되며 throw
+              // 경로가 생기는 경우 포함) 절대 throw하지 않고 `buildUnsupportedToolResponses(calls)`
+              // 폴백을 돌려줘 아래 `sendToolResponse` 호출까지 반드시 도달한다 — "무엇이 잘못되든
+              // 이 함수가 끝나기 전에 sendToolResponse가 최소 한 번은 불린다"가 이제 코드 구조
+              // 자체에서 나온다(안쪽 try/catch — 콜러블별 실패 처리 — 와 겹치는 이중 방어).
               if (message.toolCall) {
-                const responses = buildUnsupportedToolResponses(message.toolCall.functionCalls);
-                if (responses.length > 0 && session) {
-                  try {
-                    session.sendToolResponse({ functionResponses: responses });
-                  } catch {
-                    // G390 — 전송 실패도 통화를 막지 않는다(P-4 비차단). 무응답만은 피하는 것이
-                    // 이 배선의 목적이지만, 소켓 자체가 끊긴 경우까지 되살릴 수는 없다.
-                  }
+                const calls = message.toolCall.functionCalls ?? [];
+                const activeSession = session;
+                if (calls.length > 0 && activeSession) {
+                  void (async () => {
+                    const responses = await collectToolResponses(calls, dispatchToolCall);
+                    // 대기 중 언마운트되거나 세션이 교체됐으면 죽은 소켓에 쓰지 않는다.
+                    if (cancelled || !session) return;
+                    try {
+                      session.sendToolResponse({ functionResponses: responses });
+                    } catch {
+                      // G390 — 전송 실패도 통화를 막지 않는다(P-4 비차단). 무응답만은 피하는 것이
+                      // 이 배선의 목적이지만, 소켓 자체가 끊긴 경우까지 되살릴 수는 없다.
+                    }
+                  })();
                 }
                 return;
               }
@@ -483,6 +612,11 @@ export default function GeminiVoiceSession({
               if (hasAudio || hasTurnComplete) scheduleGateClose();
               if (hasTurnComplete) {
                 flushTranscript();
+                // ⭐ §59.6 ③(reviewer Critical #1) — 부모의 `scammerTurnsRef`(session/play/page.tsx)
+                // 와 **같은 경계**에서 이 컴포넌트 자신의 사본을 올린다. `dispatchToolCall`은 이
+                // effect 클로저 밖(부모 리렌더)의 최신 prop을 기다릴 수 없어 별도로 센다 — 두 값은
+                // 항상 같은 turnComplete 이벤트에서 함께 오르므로 갈릴 일이 없다.
+                modelToolScammerTurns += 1;
                 // T68 — 사기범 발화 1턴 완료. 부모가 이 경계만 세어 통화 중 문자 도착을 판단한다
                 // (§15.1.2 "앱 오케스트레이션"). 세션 자체에는 아무 영향이 없다.
                 // ⚠️ 병합 정합(T90+T68, 2026-07-26): T90이 핸들러를 "오디오 먼저 → 게이트 계산

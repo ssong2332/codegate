@@ -150,9 +150,22 @@ export type CreateRealtimeCallResponse = {
    * 난이도가 반영되지 않는 경로).
    */
   verifyOffer?: VerifyOfferTrigger;
+  /**
+   * ⭐ §59.6/§59.10 커밋 C(Architecture.md §59, G385/G386) — Live 도구 이름의 하향 전달. 클라는
+   * `toolCall.functionCalls[].name`을 이 값과 **비교**해 어느 콜러블인지 정한다(하드코딩 금지,
+   * G385). **부착 조건 = Gemini 프로바이더 && 도구가 하나라도 선언될 때만**(functions/src/realtime/
+   * liveTools.ts와 1:1). `failureInstruction`은 콜러블이 아예 닿지 못했을 때 모델에게 돌려줄 서버
+   * 소유 한국어 1줄(G386 — 클라가 저작하지 않는다).
+   */
+  liveTools?: LiveTools;
 };
 export type InCallSmsTrigger = { smsId: string; afterScammerTurns: number };
 export type VerifyOfferTrigger = { availableAfterScammerTurns: number };
+export type LiveTools = {
+  sendPreparedSms?: string;
+  offerVerificationDesk?: string;
+  failureInstruction: string;
+};
 
 // --- deliverInCallSms / recordInCallSmsEvent (T68 · UX-027/UF-008 · AC-059/060/061) ---
 // 통화 중 문자. functions/src/inCallSms/types.ts와 1:1.

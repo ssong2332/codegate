@@ -8,6 +8,7 @@ import { hasInCallSms, IN_CALL_SMS } from "../../scenarios/inCallSms";
 import { hasVerifyIntercept, VERIFY_INTERCEPT } from "../../scenarios/verifyIntercept";
 import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_SCREENS } from "../../scenarios/mockScreens";
 import { isL3Procedural } from "../l3Depth";
+import { verifySeriesFor } from "../../realtime/liveTools";
 import { scanText } from "../../scenarios/__tests__/harmlessnessPatterns";
 
 const scenarioPrompt = SCENARIO_PROMPTS[FAMILY_ACCIDENT_SCENARIO_ID];
@@ -581,11 +582,14 @@ function realOptionsFor(scenarioId: string): {
   inCallSmsEnabled: boolean;
   verifyInterceptEnabled: boolean;
   l3Procedural: boolean;
+  verifyOfferSeries: "A" | "B" | undefined;
 } {
   return {
     inCallSmsEnabled: hasInCallSms(scenarioId),
     verifyInterceptEnabled: hasVerifyIntercept(scenarioId),
     l3Procedural: isL3Procedural(scenarioId),
+    // reviewer Critical #2 — geminiProvider.ts와 같은 원천(verifySeriesFor)에서 파생한다.
+    verifyOfferSeries: verifySeriesFor(scenarioId),
   };
 }
 
@@ -1341,4 +1345,153 @@ test('[§43/G229] 잔여 오차를 숨기지 않는다 — 화면 카탈로그�
     assert.equal(assembled.includes("조회용 모의 앱 설치"), false, `${id}: 잔여 오차 서술과 실제가 다르다`);
   }
   t.diagnostic('G229 잔여 오차 실측: 메신저 2종은 "없음" 분기 — 예시 1개 손실은 채택된 대가다(§43.4 (ㄱ))');
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════
+// §59 커밋 C — 모델 주도 발동 시점(Live 도구). R2(프롬프트 회귀 0)·R3(치환 정합)·R4(호출부 비대칭
+// 방지) — docs/Architecture.md §59.9.
+
+// R2 — toolDrivenTiming 부재/false는 전 시나리오 × 전 난이도에서 문자열이 바이트 단위로 동일하다.
+test("[§59.9 R2] toolDrivenTiming 부재/false — 전 시나리오 × 전 난이도에서 프롬프트가 바이트 단위로 동일하다(회귀 0)", () => {
+  for (const id of Object.keys(SCENARIO_PROMPTS)) {
+    const prompt = SCENARIO_PROMPTS[id];
+    for (const difficultyLevel of LEVELS) {
+      const opts = { ...realOptionsFor(id), difficultyLevel };
+      const withoutOpt = buildSystemPrompt(prompt, opts);
+      const withFalse = buildSystemPrompt(prompt, { ...opts, toolDrivenTiming: false });
+      assert.equal(withFalse, withoutOpt, `${id}/${difficultyLevel} — toolDrivenTiming:false는 부재와 동일해야 한다`);
+    }
+  }
+});
+
+// R3 — toolDrivenTiming:true 산출물에 도구 이름 2개가 등장하고(계열 A·advanced 세션), 보존 절
+// 4개가 그대로 있으며, 옛 금지 문구가 사라졌는지.
+test("[§59.9 R3] toolDrivenTiming:true(계열 A·advanced) — 도구 이름 2개 등장 + 보존 절 4개 유지 + 옛 금지 문구 0건", () => {
+  const scenarioId = "bank-security-verify-scam"; // 계열 A(§59.5 G392) — 두 도구 모두 뜨는 유일한 세션.
+  const prompt = SCENARIO_PROMPTS[scenarioId];
+  const assembled = buildSystemPrompt(prompt, {
+    ...realOptionsFor(scenarioId),
+    difficultyLevel: "advanced",
+    toolDrivenTiming: true,
+  });
+
+  // ① 도구 이름 2개가 문자열로 등장 — 이름을 바꾸면 여기서 빨간불이 난다.
+  assert.ok(assembled.includes("send_prepared_sms"), "send_prepared_sms 도구 이름이 등장해야 한다");
+  assert.ok(assembled.includes("offer_verification_desk"), "offer_verification_desk 도구 이름이 등장해야 한다");
+
+  // ② 보존 절 4개(G386-b) — 값 창작 금지 · "어디에 걸어도 같은 곳" 금지 · 앞 담당자 퇴장 · 만류 조건 분리.
+  assert.ok(
+    assembled.includes("인증번호·계좌번호의 **구체적인 값을 네가 지어내 읽어 주지도 않는다**"),
+    "값 창작 금지 절(:74 꼬리)이 사라졌다",
+  );
+  assert.ok(
+    assembled.includes('"어디에 걸어도 같은 곳으로 이어진다"는 취지의 설명·암시를 어떤 형태로도 하지 않는다'),
+    "어디에 걸어도 같은 곳 금지 절(:229)이 사라졌다",
+  );
+  assert.ok(
+    assembled.includes("담당자 전환 지시가 온 턴부터 앞 담당자는 이 통화에서 빠진 사람이다"),
+    "앞 담당자 퇴장 절(:230)이 사라졌다",
+  );
+  assert.ok(
+    assembled.includes("먼저 그 목록에 있는 방식으로 만류해 보되"),
+    "만류 조건 분리 절(:226)이 사라졌다",
+  );
+
+  // ③ 옛 금지 문구는 0건이어야 한다(도구 경로에서는 "지시를 기다려라"가 아니라 "도구를 불러라"다).
+  assert.equal(
+    assembled.includes("별도 지시가 이 프롬프트에 함께 들어온다"),
+    false,
+    "옛 SMS 대기 문구가 남아 있다",
+  );
+  assert.equal(
+    assembled.includes("앱의 안내 지시가 오기 전에는"),
+    false,
+    "옛 확인창구 대기 문구가 남아 있다",
+  );
+});
+
+// R4 — 호출부 비대칭 방지: 폴백(sendMessage)·오프닝 조립에는 toolDrivenTiming을 넘기지 않으므로
+// (Live 세션이 없어 도구가 존재하지 않는다, G382) 도구 이름이 조립 산출물에 등장하지 않는다.
+// ⚠️ roleplay/index.ts·openingLine.ts를 직접 import하지 않고(순환 의존 회피), 그 두 경로가 실제로
+// 넘기는 옵션 형태(toolDrivenTiming 부재)를 이 파일에서 재현해 **조립 산출물 문자열**로 검사한다
+// (메모리 feedback_tripwire_not_contract — 소스 정적 검사가 아니라 산출물 검사로 건다).
+test("[§59.9 R4] 폴백/오프닝 경로가 넘기는 옵션 형태(toolDrivenTiming 미전달)에는 도구 이름이 0건이다", () => {
+  for (const id of ["bank-security-verify-scam", "reputation-blackmail-scam"]) {
+    const prompt = SCENARIO_PROMPTS[id];
+    for (const difficultyLevel of LEVELS) {
+      // 폴백/오프닝 호출부와 동일하게 toolDrivenTiming을 아예 넘기지 않는다.
+      const assembled = buildSystemPrompt(prompt, { ...realOptionsFor(id), difficultyLevel });
+      assert.equal(assembled.includes("send_prepared_sms"), false, `${id}/${difficultyLevel}에 도구 이름이 샜다`);
+      assert.equal(
+        assembled.includes("offer_verification_desk"),
+        false,
+        `${id}/${difficultyLevel}에 도구 이름이 샜다`,
+      );
+    }
+  }
+});
+
+// ⭐ reviewer Critical #2 — [확인 안내] TOOL_DRIVEN 치환은 `toolDrivenTiming`만으로 켜지지 않는다.
+// `offer_verification_desk` 도구는 계열 A(bank-security-verify-scam) 1종에만 선언되므로(G392),
+// 계열 B 5종은 toolDrivenTiming:true여도 DEFAULT 문구를 유지해야 한다(문면-선언 불일치 방지).
+const VERIFY_SERIES_B_SCENARIOS = [
+  "institutional-impersonation",
+  "card-company-impersonation",
+  "loan-refinance-scam",
+  "tax-refund-scam",
+  "courier-customs-scam",
+] as const;
+
+test("[reviewer Critical #2] 계열 B 5종 × advanced — toolDrivenTiming:true여도 확인 안내는 DEFAULT 그대로다", () => {
+  for (const id of VERIFY_SERIES_B_SCENARIOS) {
+    assert.ok(hasVerifyIntercept(id), `${id}: 확인 무력화 카탈로그 전제가 깨졌다`);
+    assert.equal(verifySeriesFor(id), "B", `${id}: 계열 B 전제가 깨졌다`);
+    const prompt = SCENARIO_PROMPTS[id];
+    const assembled = buildSystemPrompt(prompt, {
+      ...realOptionsFor(id),
+      difficultyLevel: "advanced",
+      toolDrivenTiming: true,
+    });
+
+    // DEFAULT 문구가 그대로 있어야 한다(VERIFY_OFFER_LINE_DEFAULT·VERIFY_NAME_LINE_DEFAULT 원문 일부).
+    assert.ok(
+      assembled.includes("앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다"),
+      `${id}: VERIFY_OFFER_LINE_DEFAULT가 사라졌다`,
+    );
+    assert.ok(
+      assembled.includes("확인 부서로 연결하라는 지시가 이 프롬프트에 함께 들어온 턴에만 창구 이름을 말한다"),
+      `${id}: VERIFY_NAME_LINE_DEFAULT가 사라졌다`,
+    );
+    // TOOL_DRIVEN 문구·도구 이름은 0건이어야 한다(도구가 이 세션에 선언되지 않는다, G392).
+    assert.equal(
+      assembled.includes("offer_verification_desk"),
+      false,
+      `${id}: 선언되지 않는 도구 이름이 프롬프트에 등장했다`,
+    );
+    assert.equal(
+      assembled.includes("도구가 창구 안내를 돌려준 뒤에만"),
+      false,
+      `${id}: VERIFY_NAME_LINE_TOOL_DRIVEN 문구가 새어 나왔다`,
+    );
+  }
+});
+
+// SMS 쪽은 계열 제약이 없다(카탈로그 존재로만 게이팅) — 계열 B라도 SMS 카탈로그가 있으면
+// SMS_METHOD_LINE_TOOL_DRIVEN은 그대로 켜져야 한다(reviewer 지시 — 실수로 계열에 안 걸리는지 재확인).
+test("[reviewer Critical #2 역검증] 계열 B라도 SMS 카탈로그가 있으면 SMS 쪽 TOOL_DRIVEN 문구는 toolDrivenTiming만으로 켜진다", () => {
+  const withCatalog = VERIFY_SERIES_B_SCENARIOS.filter((id) => hasInCallSms(id));
+  assert.ok(withCatalog.length > 0, "이 역검증의 전제(SMS 카탈로그를 가진 계열 B 시나리오)가 깨졌다");
+  for (const id of withCatalog) {
+    const prompt = SCENARIO_PROMPTS[id];
+    const assembled = buildSystemPrompt(prompt, {
+      ...realOptionsFor(id),
+      difficultyLevel: "advanced",
+      toolDrivenTiming: true,
+    });
+    assert.ok(assembled.includes("send_prepared_sms"), `${id}: 계열 B라도 SMS 도구 이름은 실려야 한다`);
+    assert.ok(
+      assembled.includes("도구가 결과를 돌려준 뒤에"),
+      `${id}: SMS_METHOD_LINE_TOOL_DRIVEN 문구가 계열 B에서 빠졌다`,
+    );
+  }
 });
