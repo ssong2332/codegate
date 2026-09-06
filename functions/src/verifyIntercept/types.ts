@@ -16,6 +16,9 @@ export type VerifyCallMode = "realtime" | "fallback";
  */
 export type VerifyOfferStage = "announce" | "commit";
 
+// ⭐ §59.6/§59.10 커밋 B(§59, `docs/API.md` 부록 C) — `trigger?` 옵셔널 1개 추가. 부재 = 오늘
+// 동작. `trigger:"model_tool"`을 보내는 클라는 아직 없다(§59 커밋 C 이전) — 회귀 0.
+export type DeliverVerifyOfferTrigger = "backstop" | "model_tool";
 export type DeliverVerifyOfferRequest = {
   sessionId: string;
   callMode: VerifyCallMode;
@@ -28,7 +31,12 @@ export type DeliverVerifyOfferRequest = {
    * 판정표는 `buildDoc.ts`의 `resolveVerifyOfferPlan`이 정본이다.
    */
   stage?: VerifyOfferStage;
+  /** §59.6 — `stage==="announce"`와 함께일 때만 하한 재검증을 켠다(§59.7). */
+  trigger?: DeliverVerifyOfferTrigger;
 };
+// ⭐ §59.6 — `status`·`declineInstruction` 필드 2개 추가(관측용, §59.11). 기존 `offerId`/
+// `announceInstruction` 계산은 한 글자도 바뀌지 않는다 — 새 필드는 그 위에 얹힐 뿐이다.
+export type DeliverVerifyOfferStatus = "announced" | "too_early" | "already_announced";
 export type DeliverVerifyOfferResponse = {
   offerId: string;
   /**
@@ -39,6 +47,13 @@ export type DeliverVerifyOfferResponse = {
    * 증상 ①(전환 후 같은 오퍼 재발화)의 (가) 갈래다. 값이 없으면 클라는 **주입하지 않는다.**
    */
   announceInstruction?: string;
+  /** ⭐ §59.6/§59.11 — 관측용. `plan.includeInstruction`이 참이면 `"announced"`, 아니면
+   * `"already_announced"`다(§38.4 E의 stage×placed 표를 그대로 재해석). `trigger:"model_tool"`
+   * 의 announce 하한 미도달만 `"too_early"`. 이 값을 읽는 클라는 아직 없다(추가만 됐다). */
+  status: DeliverVerifyOfferStatus;
+  /** ⭐ §59.6 — `status !== "announced"`일 때만 실리는 서버 소유 거절 지시(G386, implementer
+   * 초안 — `scenarios/verifyIntercept.ts`의 `VERIFY_DECLINE_*` 주석 참고). */
+  declineInstruction?: string;
 };
 
 export type DeliverVerifyReconnectRequest = {

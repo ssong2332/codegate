@@ -13643,6 +13643,39 @@ ADR-0007 채택 행이 스스로 적었다: *"**인과가 역전**된다(앱이 
 
 ⛔ **`sendToolResponse`는 어떤 경로에서도 생략하지 않는다(G390 전반부).** 콜러블이 던지든 네트워크가 끊기든 **반드시 응답을 보낸다** — 안 보내면 `BLOCKING` 도구가 통화를 멈춘다(§59.0 1).
 
+> **⭐ 갱신(2026-09-06 — `deliverVerifyOffer` 거절 문구 **정본 확정** · reviewer Major 대응. ⛔ 위 원문 한 줄도 고치지 않았다 · ⛔ 소스 0줄 — 이 블록은 *확정*이고 반영은 implementer 후속 커밋이다):**
+>
+> **왜 이 블록이 필요한가.** 위 *"서버 소유 거절 문자열(정본 초안 …)"* 3줄은 **`deliverInCallSms`만** 저작했다(`SMS_DECLINE_TOO_EARLY`/`SMS_DECLINE_ALREADY` — 오늘 `functions/src/scenarios/inCallSms.ts:229-232`에 **문면 그대로** 들어가 있다, 직접 열람 확인). 그런데 §59.10 **커밋 B**(`be92485`)가 `deliverVerifyOffer`의 `trigger:"model_tool"` 경로에도 거절 지시 2종을 넣었고(`functions/src/scenarios/verifyIntercept.ts:212-215`, 소비 지점 `functions/src/verifyIntercept/index.ts:224`·`:245`), **그 값은 implementer 초안이며 이 절에도 `docs/API.md` 부록 C에도 원문이 없었다.** reviewer가 이번 세션에서 *"`deliverVerifyOffer`는 공개 콜러블이라 UI를 거치지 않는 직접 호출로 이 draft 문구가 노출될 수 있다"* 를 **Major**로 지적했다 ⇒ 이 블록이 **architect 정본**을 확정한다(`docs/API.md` 부록 C `deliverVerifyOffer` 증분 표에 같은 원문을 등재했다 — 두 자리가 정본이고 소스는 사본이다).
+>
+> **정본 문면(2종 — `functions/src/scenarios/verifyIntercept.ts` 모듈 상수, `NO_NUMBER_INVENTION`/`SMS_DECLINE_*` 선례와 같은 자리)**
+>
+> | 상수 | 정본 원문 | 초안 대비 | 근거 |
+> |---|---|---|---|
+> | **`VERIFY_DECLINE_TOO_EARLY`** | *"(아직 확인 부서로 연결해 드릴 단계가 아니다. 연결해 드리겠다고 말하지 말고, 지금 하던 이야기를 그대로 이어가라. 조금 뒤에 다시 시도해도 된다.)"* | ⭕ **초안 그대로 채택 — 한 글자도 바꾸지 않는다** | `SMS_DECLINE_TOO_EARLY`와 **4절 구조가 동형**(① 단계 아님 ② 했다고 말하지 마라 ③ 하던 이야기 유지 ④ 뒤에 다시 시도 가능). *"확인 부서"* 는 카탈로그 `deskLabel`이 아니라 `announceInstruction`·`transferStateLine`이 이미 쓰는 **일반명**이다(`verifyIntercept.ts:83`·`:110`) ⇒ **창구명 유출 0건** |
+> | **`VERIFY_DECLINE_ALREADY`** | *"(그 안내는 이미 전달했다. 새로 안내하지 말고, 연결해 드리겠다는 말도 다시 하지 말고, 지금 하던 이야기를 그대로 이어가라.)"* | ⚠️ **초안 수정** — 초안의 *"이미 안내한 확인창구로 연결해 드리겠다고 하거나"* 절을 **삭제하고 재연결 제안 금지로 뒤집었다** | ⭐ 아래 "두 상태" 표 — 초안 문면은 **①(전환 완료) 상태에서 T118/R-1을 정면으로 위반**한다 |
+>
+> **⭐ `already_announced`는 *한 상태가 아니라 두 상태*에서 나간다 — 이것이 초안을 고친 유일한 이유다.** 상태 판정은 `resolveVerifyOfferPlan`의 `includeInstruction:false` 하나이고(`functions/src/verifyIntercept/buildDoc.ts:90-98`), 그 값을 그대로 `status`로 옮긴다(`functions/src/verifyIntercept/index.ts:241`).
+>
+> | # | 발생 상태 | 그때 말하는 사람 | 초안 문면이 시키는 것 | 판정 |
+> |---|---|---|---|---|
+> | ① | `placedAt` 존재(**호 전환 완료**) — `stage` 무관 | **확인창구의 다른 담당자**(`reconnectedCallerLabel`) | *"이미 안내한 확인창구로 연결해 드리겠다"* = **자기 자신에게 다시 연결해 주겠다** | ⛔ **T118/R-1(전환 후 재권유 금지)** 과 `transferStateLine`(*"확인 부서 연결 안내는 이미 끝났다"*, `verifyIntercept.ts:83`) **양쪽과 어긋난다** ⇒ 초안 폐기 |
+> | ② | `stage:"commit"`(예고는 이미 나갔고 문서를 쓰는 단계 — 클라가 보낸다, G391) | 원 사기범 | 재안내 금지(옳다) + 재연결 제안(불필요) | ⚠️ 오늘 이 상태는 **모델이 부른 것이 아니다** — 문자열이 모델에 닿지 않으므로 무해하지만, **정본은 두 상태 모두에서 참이어야 한다** |
+>
+> ⇒ 정본은 **재안내·재연결 제안을 둘 다 금지**하고 **하던 이야기 유지**만 남긴다 — ①②에서 동시에 참인 유일한 문면이다. ⚠️ `SMS_DECLINE_ALREADY`가 *"이미 보낸 문자를 확인해 달라고 하거나"* 라는 **대체 행동 절을 갖는 것과 여기서 갈라지는 이유**: 문자는 **이미 참가자 화면에 도착해 있어** 그 지시가 사실과 맞지만, 확인창구 오퍼는 ① 상태에서 **이미 소비된 사건**이라 대체 행동이 존재하지 않는다. ⛔ **`SMS_DECLINE_*` 2종은 이 갱신으로 한 글자도 바뀌지 않는다.**
+>
+> **⛔ 노출 판정(reviewer Major에 대한 답 — 문면 조건으로 닫는다).** `deliverVerifyOffer`는 인증된 공개 콜러블이므로 **UI를 거치지 않는 직접 호출로 `declineInstruction`이 응답에 실려 나가는 것은 사실**이다. 그래서 정본 문면은 **아래 4조건을 자기 문면으로 만족**하며, 이것이 확정 조건이다(문면을 바꾸려면 이 4행을 다시 통과시켜야 한다).
+>
+> | 조건 | 정본이 만족하는가 | 근거 |
+> |---|---|---|
+> | 카탈로그 고유값(창구명 `deskLabel`·`offerId`·기관명) **0건** | ⭕ | 두 문면에 고유명사 0개 — *"확인 부서"* 는 일반명 |
+> | 번호·계좌·금액 형태 **0건**(G86-a 계열 요구) | ⭕ | 숫자 0개 |
+> | 가로채기의 **작동 원리·수단** 서술 0건(AC-005 불변 · OQ-38 확정) | ⭕ | 두 문면은 *"지금 하지 마라 / 하던 이야기를 이어가라"* 뿐이다 |
+> | 노출 표면이 **새로 열리는가** | ❌ **열리지 않는다 — 오히려 덜 민감하다** | 같은 콜러블이 **오늘 이미** `announceInstruction`(창구명 원문 포함, `verifyIntercept.ts:110`)을 정상 응답으로 돌려준다. 거절 문면은 그보다 **엄격히 적은 정보**를 담는다 ⇒ 이 2종이 새 유출 경로를 만들지 않는다 |
+>
+> ⚠️ **이 갱신이 확정하지 않는 것(자기 고지 — 지우지 말 것)**: (1) ⛔ **거절 문자열 4종(`SMS_DECLINE_*`·`VERIFY_DECLINE_*`)은 카탈로그 *필드*가 아니라 모듈 상수라 G86-a/b/c의 `Object.entries` 전 필드 순회 밖에 있다**(스캔 집합 실측 — `scenarios/__tests__/verifyIntercept.test.ts`·`inCallSms.test.ts`는 카탈로그 항목을 순회한다). 위 4조건의 오늘 유일한 보증은 **문면 자체**이며 **기계 집행은 없다** — 게이트 신설 여부는 **이 갱신의 범위 밖**(후속 §59 패스 소관, 번호 선점 0건). (2) ⚠️ **`liveTools.failureInstruction`은 §59.5/§59.6이 문자 경로 문면 1종(*"(지금은 문자를 보낼 수 없다 …)"*)만 저작해 두었고 `offer_verification_desk` 실패 시에도 같은 문자열이 나간다** — 이 갱신은 그것을 **재판정하지 않았다**(커밋 C 착수 전 확인 대상). (3) ⚠️ **모델이 이 지시를 실제로 지키는지는 라이브 미검증**(§59.13 (4)와 동일한 한계 — architect는 이 세션에서도 라이브·셸·테스트·빌드 **0회**).
+>
+> **⇒ 인계 1건(implementer — §59.10 커밋 B 후속).** `functions/src/scenarios/verifyIntercept.ts`에서 **① `VERIFY_DECLINE_ALREADY`의 값을 위 정본 원문으로 교체**하고(`VERIFY_DECLINE_TOO_EARLY`는 **무수정**), **② `:206-211`의 *"정본 미확정 고지"* 주석 6줄을 삭제하고 정본 확정 주석으로 교체**한다(원문은 §59.16 인계 항 참조 — *"어디에도 저작돼 있지 않다"* 는 서술이 이 블록으로 **거짓이 됐다**). ⛔ **`:203-205`의 3줄(경로 한정·회귀 0 고지)은 그대로 둔다** — 여전히 참이다.
+
 ### 59.7 ⭐ 하한(바닥) — **값은 하나도 바뀌지 않는다**
 
 | 대상 | 값 | 출처 | (라) 이후 |
@@ -13777,3 +13810,26 @@ shouldFireBackstop({
 ⛔ **`src/**`·`functions/**` 0줄**(전부 **읽기만** 했다) · ⛔ `docs/PRD.md`·`docs/UX.md`·`docs/Tasks.md`·`docs/Database.md`·`docs/CHANGELOG.md`·`README.md`·`CLAUDE.md`·`firestore.rules` **무편집** · ⛔ **번호 예약 0건** · ⛔ **브랜치·커밋·push 0건**(셸 부재 — §59.13 (8)).
 **⇒ 인계 2건**: ① **`docs/Tasks.md` 담당 행 등재**(planner — 커밋 A~E + P-D/P-E/P-F) · ② **OQ-A73 확정 후 계열 B 확장**(architect 후속 패스 — 선언 조건 1줄 + R1 기대 집합 갱신).
 **UX 추적성**: 신규 Screen ID·Flow ID·라우트 **0건**. 닿는 기존 항목은 **UX-027/UF-008**(통화 중 문자 — T1 도구) · **UX-031/UF-011**(확인 시도 무력화 — T2 도구) · **UX-014**(통화 셸 — 백스톱 창이 여는 타이밍) 이며 **신규 매핑 0건**이다.
+
+> **⭐ 갱신(2026-09-06 — 거절 문구 정본 확정 패스의 편집 범위 · 위 원문 무수정):**
+> 편집 파일은 **`docs/Architecture.md`(§59.6 갱신 블록 + 이 블록) · `docs/API.md`(부록 C `deliverVerifyOffer` 증분 표 — 행 2개 추가, 기존 행 0줄 수정) · `docs/DECISIONS.md`(#97 1행 추가)** **3파일뿐**이다. ⛔ **`src/**`·`functions/**` 0줄**(전부 **읽기만** 했다 — `verifyIntercept.ts`·`inCallSms.ts`·`verifyIntercept/index.ts`·`verifyIntercept/buildDoc.ts`·`inCallSms/buildDoc.ts`) · ⛔ **ADR 0건**(문면 확정은 구조 결정이 아니다 — 콜러블 시그니처·Firestore 스키마·이벤트·kind·Screen ID·rules **0건 증가**) · ⛔ `docs/PRD.md`·`docs/UX.md`·`docs/Tasks.md`·`docs/Database.md`·`CLAUDE.md`·`firestore.rules` **무편집** · ⛔ **게이트·OQ·절 번호 신설 0건**(G393·OQ-A73·§59가 최대 그대로) · ⛔ **다른 §59 내용 재판정 0건**(도구 스키마 · 하한/천장 값 · 커밋 순서 · R1~R8 **무접촉**).
+> **base**: `C:\codegate\.git\HEAD` = `ref: refs/heads/feat/s59-tool-timing-wiring` → `.git/refs/heads/feat/s59-tool-timing-wiring` = **`be92485d3a37855c037126d8b6669f0e53af6848`**(`.git` 직접 판독 — 인계받은 `be92485`와 **일치**. `32dbc67`은 이 세션에서 확인하지 못한 **인계 인용값**이다). ⚠️ **버전 갭 무변동**: 헤더 **PRD v1.7.1 · UX 1.13**(`Architecture.md:5`) ↔ 현행 **PRD v1.14 · UX 1.25** ⇒ **PRD 7건 · UX 12건**(§52~§59와 **동일 — 더 벌어지지 않았다**). ⛔ 헤더 무전진(T131 계열 별건) — 이 패스의 판정은 **소스 직접 열람**이라 갭이 오염시키지 않는다. ⚠️ **셸 없음** — 라이브·테스트·빌드·`git log` **0회**, **커밋·push 0건**(워킹 트리 직접 편집).
+>
+> **⛔ implementer 인계 — 소스 반영 지시(architect는 소스를 고치지 않는다).** `functions/src/scenarios/verifyIntercept.ts`에서 **`:206-211`의 6줄(*"⚠️ **정본 문구 미확정 고지** …"* ~ *"§59 커밋 C 착수 시 재확인 필요."*)을 삭제하고 아래로 교체**한 뒤, **`VERIFY_DECLINE_ALREADY`의 문자열만** 정본으로 바꾼다(`VERIFY_DECLINE_TOO_EARLY`·`:203-205` 3줄은 **무수정**).
+>
+> ```
+> // ⭐ **정본 확정(§59.6 갱신 블록, 2026-09-06)** — 아래 2종의 원문 소유자는 architect이며 정본은
+> // `docs/Architecture.md` §59.6 갱신 블록과 `docs/API.md` 부록 C `deliverVerifyOffer` 증분 표에
+> // 있다. 이 파일의 값은 그 사본이다. ⛔ 문면을 여기서 고치지 말 것 — 고치려면 문서가 먼저다
+> // (G386: 모델 대면 한국어 문자열은 서버가 소유하고, 그 원문의 소유자는 architect다).
+> // ⚠️ **`VERIFY_DECLINE_ALREADY`는 두 상태에서 나간다**(`verifyIntercept/index.ts`의 status 판정 =
+> // `resolveVerifyOfferPlan`의 `includeInstruction:false`): ① **이미 전환됨**(`placedAt` 존재 —
+> // T118/R-1) ② `stage:"commit"`. ①에서 화자는 이미 **확인창구의 다른 담당자**라, "이미 안내한
+> // 창구로 연결해 드리겠다"는 재권유는 R-1과 `transferStateLine`(*"확인 부서 연결 안내는 이미
+> // 끝났다"*)에 정면으로 어긋난다 ⇒ 정본은 **재안내·재연결 제안을 둘 다 금지**한다.
+> // ⚠️ 이 콜러블은 공개(인증) 콜러블이라 직접 호출로 이 문자열이 응답에 실려 나갈 수 있다 —
+> // 그래서 정본은 **창구명·번호·기전 서술 0건**이다(§59.6 갱신 블록 노출 판정 4행).
+> ```
+>
+> **⇒ 그 결과 `VERIFY_DECLINE_ALREADY`의 값은 다음 한 줄이 된다**(⛔ 다른 상수·주석·로직 무수정):
+> *"(그 안내는 이미 전달했다. 새로 안내하지 말고, 연결해 드리겠다는 말도 다시 하지 말고, 지금 하던 이야기를 그대로 이어가라.)"*

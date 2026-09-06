@@ -11,6 +11,7 @@ import {
   buildVerifyOfferResponse,
   fallbackVerifyAnchor,
   realtimeVerifyAnchor,
+  resolveModelToolVerifyGate,
   resolveVerifyOfferPlan,
 } from "../buildDoc";
 import { pickFallbackTurnInstruction } from "../fallbackTurn";
@@ -300,4 +301,41 @@ test("[§38.4 E] 1단계 응답은 종전 응답과 **바이트 동일**하다(�
       "클라가 1단계에서 받는 것은 종전과 같다 — 바뀐 것은 **문서 write 시점**뿐이다",
     );
   }
+});
+
+// ── §59.7/§59.9 R5 — 모델 도구 경로 하한 재검증(순수 판정, verifyOffer) ────────────────────
+// `docs/API.md` 부록 C `deliverVerifyOffer` 증분 · `docs/Architecture.md` §59.7 ⚠️(비교 방향).
+
+test("[§59.9 R5] scammerTurns < availableAfterScammerTurns면 too_early", () => {
+  assert.deepEqual(
+    resolveModelToolVerifyGate({ scammerTurns: 1, availableAfterScammerTurns: 2 }),
+    { allowed: false, status: "too_early" },
+  );
+});
+
+test("[§59.9 R5 ⚠️ 비교 방향] scammerTurns === availableAfterScammerTurns면 통과한다(>= 방향)", () => {
+  assert.deepEqual(
+    resolveModelToolVerifyGate({ scammerTurns: 4, availableAfterScammerTurns: 4 }),
+    { allowed: true },
+  );
+});
+
+test("[§59.9 R5] scammerTurns > availableAfterScammerTurns(한 턴 늦은 호출)도 통과한다", () => {
+  assert.deepEqual(
+    resolveModelToolVerifyGate({ scammerTurns: 6, availableAfterScammerTurns: 4 }),
+    { allowed: true },
+  );
+});
+
+test("[§59.9 R5] bank-security-verify-scam(availableAfterScammerTurns=2)의 실제 값으로도 성립한다", () => {
+  const item = VERIFY_INTERCEPT["bank-security-verify-scam"];
+  assert.equal(item.availableAfterScammerTurns, 2, "카탈로그 값이 바뀌면 이 테스트도 함께 갱신해야 한다");
+  assert.deepEqual(
+    resolveModelToolVerifyGate({ scammerTurns: 1, availableAfterScammerTurns: item.availableAfterScammerTurns }),
+    { allowed: false, status: "too_early" },
+  );
+  assert.deepEqual(
+    resolveModelToolVerifyGate({ scammerTurns: 2, availableAfterScammerTurns: item.availableAfterScammerTurns }),
+    { allowed: true },
+  );
 });

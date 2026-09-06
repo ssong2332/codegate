@@ -222,6 +222,15 @@ export const IN_CALL_SMS: Record<string, InCallSmsItem[]> = {
   "bank-security-verify-scam": BANK_SECURITY_VERIFY_SCAM,
 };
 
+// ── §59.6/§59.10 커밋 B — 모델 도구 경로의 거절 지시(서버 소유, G386) ─────────────────
+// ⚠️ 이 두 상수는 `deliverInCallSms`의 `trigger:"model_tool"` 경로에서만 쓰인다(§59.7 하한
+// 재검증 신규). 오늘은 그 트리거를 보내는 클라가 없어(§59 커밋 C 이전) **어떤 응답에도 실리지
+// 않는다**(회귀 0) — 정본 문구는 `docs/Architecture.md` §59.6이 이미 확정해 둔 것을 그대로 옮긴다.
+export const SMS_DECLINE_TOO_EARLY =
+  "(아직 그 안내를 보낼 단계가 아니다. 문자를 보냈다고 말하지 말고, 지금 하던 이야기를 그대로 이어가라. 조금 뒤에 다시 시도해도 된다.)";
+export const SMS_DECLINE_ALREADY =
+  "(그 안내는 이미 보냈다. 새로 보냈다고 말하지 말고, 이미 보낸 문자를 확인해 달라고 하거나 하던 이야기를 이어가라.)";
+
 /** 이 시나리오가 통화 중 문자를 쓰는가(프롬프트 조건형 블록·트리거 노출의 단일 판정). */
 export function hasInCallSms(scenarioId: string): boolean {
   return (IN_CALL_SMS[scenarioId]?.length ?? 0) > 0;

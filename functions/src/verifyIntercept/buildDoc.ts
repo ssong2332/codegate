@@ -40,11 +40,14 @@ export function buildVerifyInterceptDoc(
  *
  * ⭐ **§38.4 E 추가(2026-07-29)** — `stage`가 함께 곱해진다. 판정은 `resolveVerifyOfferPlan` **한
  * 곳**이 소유하고 이 함수는 그 결과를 조립만 한다(§38.7 5 — 분기가 흩어지지 않게).
+ *
+ * ⚠️ **§59.6 — `status`는 여기서 붙이지 않는다.** `inCallSms/buildDoc.ts`의 `buildInCallSmsResponse`와
+ * 같은 이유 — 호출부(`deliverVerifyOffer`)가 `plan.includeInstruction`을 그대로 재해석해 얹는다.
  */
 export function buildVerifyOfferResponse(
   item: VerifyInterceptItem,
   input: { placed: boolean; stage?: VerifyOfferStage },
-): DeliverVerifyOfferResponse {
+): Omit<DeliverVerifyOfferResponse, "status" | "declineInstruction"> {
   const plan = resolveVerifyOfferPlan({ placed: input.placed, ...(input.stage ? { stage: input.stage } : {}) });
   if (!plan.includeInstruction) return { offerId: item.offerId };
   return { offerId: item.offerId, announceInstruction: item.announceInstruction };
@@ -121,6 +124,23 @@ export function realtimeVerifyAnchor(scammerTurns: number): number {
  */
 export function fallbackVerifyAnchor(scammerDocCount: number): number {
   return Math.max(0, Math.trunc(scammerDocCount));
+}
+
+// ── §59.7/§59.10 커밋 B — 모델 도구 경로의 하한 재검증(순수 판정, G391) ─────────────────
+// `docs/API.md` 부록 C `deliverVerifyOffer` 증분 — `trigger:"model_tool" && stage==="announce"`
+// 일 때만 재검증한다. `commit` 단계·부재 트리거는 재검증하지 않는다(§59.6 — announce 시점에 이미
+// 통과했다). ⚠️ 비교는 `>=`다(§59.7 ⚠️) — `deliverInCallSms`의 `resolveModelToolSmsGate`와 같은
+// 방향(inCallSms/buildDoc.ts 참고).
+export type VerifyOfferModelToolGate = { allowed: true } | { allowed: false; status: "too_early" };
+
+export function resolveModelToolVerifyGate(input: {
+  scammerTurns: number;
+  availableAfterScammerTurns: number;
+}): VerifyOfferModelToolGate {
+  if (input.scammerTurns < input.availableAfterScammerTurns) {
+    return { allowed: false, status: "too_early" };
+  }
+  return { allowed: true };
 }
 
 /**
