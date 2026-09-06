@@ -77,3 +77,4 @@
 - [§56 텍스트 LLM 모델 교체 + 관측 증분](project_codegate_s56_model_swap.md) — ⭐ 리터럴 상수 트립와이어는 tsc가 먼저 잡는다(2층 역검증), TS6133 없이 로그 값만 죽이는 조작(`x * 0`), 없는 토큰을 0으로 채우지 않는 이유.
 - [§55 D3·D4 notSpoken 오프닝 + 전환 연결문장](project_codegate_s55_d3_d4.md) — ⭐ 타입 밖 필드로 앵커 불변 증명하는 제네릭 스프레드, heredoc append가 워크트리 격리에 거부됨(→Write 새 파일), 스테일 클로저 ref 래치.
 - [§52.7(5)가·나 + §57.4 D3 — G31 드레인 게이트+상한, 전사 시계 통합](project_codegate_s52_7_s57_drain_gate_d3.md) — ⭐ G369 동일 커밋 제약(D3가 참가자-발화 관측 시점을 옮기고 가가 그 값을 읽는다), GeminiVoiceSession 크로스-effect ref 브리지 패턴 재사용.
+- [§58 P1 — 시나리오 14벌 죽은 마감 문구 치환](project_codegate_s58_p1_deadline_lines.md) — ⭐ planner 미언급 G379(clone 재생성 상태 되돌리기)를 architect 설계에서 찾아 자발 적용, 스테일 근거 주석 2곳 의도적 미수정(스코프 경계), OQ-A70은 문서상 여전히 open.
