@@ -81,3 +81,5 @@
 - ["[계좌]" 리터럴 노출 버그 수정](project_codegate_account_placeholder_leak_fix.md) — ⭐ maskPII를 사기범 응답에도 적용하던 공통층 버그, llmHistory 추적으로 "마스킹할 실제 PII가 없다" 증명, realtime과 fallback의 경계 판단(왜 한쪽만 고쳤나).
 - [§59 커밋 A·B — 모델 도구 타이밍 배선](project_codegate_s59_commit_ab_tool_timing.md) — ⭐ 지시문 요약과 Architecture.md §59.10 원문의 불일치(createRealtimeCall이 B냐 C냐)를 원문 우선으로 해소, deliverVerifyOffer 거절문구 공백을 implementer 초안+명시적 인계로 처리, 소스스캔으로 "동작 0 변화" 증명.
 - [§59.6 갱신 — VERIFY_DECLINE 정본 반영](project_codegate_s59_verify_decline_canon.md) — ⭐ 두 문서(Architecture+API.md) 원문 대조, "8줄" 요약 대신 실제 11줄 원문 그대로 복사, failureInstruction 인계를 "코드에 아직 없는 필드"로 실측 확인 후 무수정 판단, 상수 문자열 고정 테스트 신규 관례.
+- [§59 커밋 C — Live 도구 점화](project_codegate_s59_commit_c_tool_ignition.md) — ⭐ "grep 0건=배선 누락" 지시문 전제를 스프레드 패스스루로 반증(코드는 이미 맞았다), 관측 불가 지점 증명 공백만 소스스캔 테스트로 마저 닫음, 클라 스테일 주석 인계(범위 밖 판단).
+- [§59 커밋 C reviewer REJECT 수정](project_codegate_s59_commit_c_review_fixes.md) — ⭐ Critical #1(실제 도구 라우팅 판정/부수효과 분리)·#2(verifyOfferSeries 게이팅), T113 소스스캔이 옵션 추가를 걸러낸 사례, node 디렉터리-import 제약 재확인.

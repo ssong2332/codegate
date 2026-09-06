@@ -18,7 +18,7 @@ import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { hasInCallSms } from "../scenarios/inCallSms";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
-import { buildLiveToolDeclarations, buildLiveToolNames } from "./liveTools";
+import { buildLiveToolDeclarations, buildLiveToolNames, verifySeriesFor } from "./liveTools";
 import { SCENARIO_SPEAKER_GENDER, speakerGenderFor } from "./scenarioVoice";
 import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider } from "./types";
 
@@ -109,15 +109,14 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       speakerGender: speakerGenderFor(input.scenarioId),
       // §59.3 — 이 경로가 §59 커밋 C가 정한 **유일한 `true` 호출부**다(폴백 sendMessage·오프닝은
       // Live 세션이 없어 도구가 존재하지 않으므로 넘기지 않는다, G382).
-      //
-      // ⚠️ **인계(architect 재확인 필요)** — 이 값은 시나리오·난이도와 무관하게 항상 `true`다(§59.3
-      // 원문이 "판별자는 toolDrivenTiming 1개"로 신규 옵션을 못박아, promptAssembly.ts가 시나리오별
-      // 계열(A/B)을 알 방법이 없다). 그 결과 확인 무력화 카탈로그 6종 중 계열 B 5종(advanced)은
-      // `offer_verification_desk` 도구가 **선언되지 않는데도**(G392 — 아래 buildLiveToolDeclarations
-      // 참고) 프롬프트는 그 도구를 부르라고 안내한다. Gemini Live 함수 호출은 그 세션에 실제로
-      // 선언된 함수만 예측할 수 있어 통화 정지(G383) 위험은 없지만, 문면-선언 불일치가 남는다 —
-      // `promptAssembly.ts`의 buildVerifyInterceptRule 주석 참고.
       toolDrivenTiming: true,
+      // ⭐ reviewer Critical #2 수정(§59 커밋 C 리뷰 — 이전에는 이 값을 넘기지 않아 위 toolDrivenTiming
+      // 단독으로 [확인 안내] TOOL_DRIVEN 문구가 갈렸다) — `offer_verification_desk` 도구는 계열 A
+      // (`bank-security-verify-scam`) 1종에만 선언되므로(G392, buildLiveToolDeclarations 참고),
+      // 계열 판정을 그대로 재사용해 넘긴다. 계열 B 5종(advanced)은 promptAssembly.ts가 DEFAULT
+      // 문구를 유지한다(문면-선언 불일치 해소). 로직 중복 구현 금지 — verifySeriesFor()가 유일한
+      // 원천이다(같은 판단이 buildLiveToolDeclarations/buildLiveToolNames에도 이미 쓰인다).
+      verifyOfferSeries: verifySeriesFor(input.scenarioId),
     });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });

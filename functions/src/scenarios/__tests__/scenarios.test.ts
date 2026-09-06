@@ -23,6 +23,7 @@ import { scanText } from "./harmlessnessPatterns";
 // personaAuthority/scenarioVoice를 "단일 원천"으로 못박았다).
 import { PERSONA_AUTHORITY, asksIdentityCheck } from "../../roleplay/personaAuthority";
 import { speakerGenderFor } from "../../realtime/scenarioVoice";
+import { verifySeriesFor } from "../../realtime/liveTools";
 
 // AC-005: 실제 운영 가능한 사기 정보(실계좌번호 패턴·실제 송금 절차 지시·실제 URL)가 절대
 // 포함되면 안 된다. 계좌번호형 숫자(8자리 이상 연속 숫자)와 http(s) 링크를 금지 패턴으로 검사한다.
@@ -1294,6 +1295,12 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
   for (const scenarioId of scenarioIds) {
     const identityCheckAllowed = asksIdentityCheck(scenarioId);
     const speakerGender = speakerGenderFor(scenarioId);
+    // ⭐ reviewer Critical #2(§59 커밋 C 리뷰) — `identityCheckAllowed`/`speakerGender`와 같은
+    // 이유로 **시나리오별 derive 값**이다(수동 토글 축이 아니다). 실 호출부(geminiProvider.ts)가
+    // 항상 `verifySeriesFor(scenarioId)`로 계산해 넘기는 것과 동일하게 맞춘다 — 여기서 안 넘기면
+    // (기본값 undefined에 의존하면) 계열 A(bank-security-verify-scam)의 TOOL_DRIVEN 분기를 이
+    // 함수가 한 번도 exercising하지 못한 채 통과한다("거짓 OK").
+    const verifyOfferSeries = verifySeriesFor(scenarioId);
     for (const variant of ASSEMBLY_LEVEL_VARIANTS) {
       for (const inCallSmsEnabled of [false, true]) {
         for (const verifyInterceptEnabled of [false, true]) {
@@ -1313,6 +1320,7 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
                 toolDrivenTiming,
                 identityCheckAllowed,
                 ...(speakerGender ? { speakerGender } : {}),
+                ...(verifyOfferSeries ? { verifyOfferSeries } : {}),
               }),
             });
           }
@@ -1326,6 +1334,7 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
   for (const { scenarioId, label, value } of turnInstructionSources()) {
     const targetId = scenarioId ?? fallbackScenarioId;
     const speakerGender = speakerGenderFor(targetId);
+    const verifyOfferSeries = verifySeriesFor(targetId);
     out.push({
       label: `${targetId}[턴지시:${label}]`,
       text: buildSystemPrompt(SCENARIO_PROMPTS[targetId], {
@@ -1335,6 +1344,7 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
         verifyInterceptEnabled: true,
         identityCheckAllowed: asksIdentityCheck(targetId),
         ...(speakerGender ? { speakerGender } : {}),
+        ...(verifyOfferSeries ? { verifyOfferSeries } : {}),
         turnInstruction: value,
       }),
     });

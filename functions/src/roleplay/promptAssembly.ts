@@ -249,6 +249,18 @@ function buildScenarioProgression(
 // TOOL_DRIVEN은 모델이 먼저 `offer_verification_desk` 도구를 부르는 경로를 안내한다.
 // ⛔ **보존 절(G386-b, 한 글자도 바꾸지 않는다)**: 적용 범위 절(원문 :226) · "어디에 걸어도 같은
 // 곳" 금지(:229) · 앞 담당자 퇴장 절(:230) — 이 세 줄은 템플릿 밖에 그대로 남아 두 변형이 공유한다.
+//
+// ⭐ **reviewer Critical #2 수정(§59 커밋 C 리뷰) — 아래 함수는 이제 `toolDrivenTiming` 단독이 아니라
+// `toolDrivenTiming && verifyOfferSeries === "A"`로 갈린다.** 이전에는 이 함수 자신의 주석이 남긴
+// 인계 사항이었다: `offer_verification_desk` 도구 **선언**은 계열 A(`bank-security-verify-scam`)
+// 1종에만 걸리는데(G392/OQ-A73, `realtime/liveTools.ts`), 문면은 `toolDrivenTiming` 하나로만
+// 갈려 계열 B 5종(advanced)에서도 "도구를 불러라"는 문구가 실렸다 — 그 세션의 `tools`에는 그
+// 이름의 함수가 없어 **문면-선언 불일치**가 남았다(통화 정지 위험은 없다, 모델은 미선언 함수를
+// 예측 방출하지 않는다). 계열 판정은 `realtime/liveTools.ts`의 `verifySeriesFor()`가 유일한
+// 원천이며, 그 로직을 여기서 다시 구현하지 않는다 — 호출부(`realtime/geminiProvider.ts`)가 그
+// 함수로 계산한 결과를 `verifyOfferSeries` 옵션으로 넘긴다. `promptAssembly.ts`가 시나리오
+// 카탈로그를 직접 읽지 않는다는 원칙(§17.3)은 그대로 유지된다 — 여기서는 캐릭터 이름이 아니라
+// 호출부가 이미 계산해 준 "A"/"B" 값만 비교한다.
 const VERIFY_OFFER_LINE_DEFAULT = `- **상대가 그렇게 다시 확인하겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다.** 다만 **앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다** — "잠시만요, 확인 부서를 연결해 드리겠습니다"처럼 받아 두고 기다린다.`;
 
 const VERIFY_OFFER_LINE_TOOL_DRIVEN = `- **상대가 그렇게 다시 확인하겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다.** 상대가 직접 확인해 보고 싶어 한다고 판단되면 **\`offer_verification_desk\` 도구를 부르고, 그 결과가 돌아온 뒤에만** 창구 이름을 꺼낸다 — 그전에는 "잠시만요, 확인 부서를 연결해 드리겠습니다"처럼 받아 두고 기다린다.`;
@@ -267,25 +279,23 @@ const VERIFY_INTERCEPT_RULE_TEMPLATE = `[확인 안내 — 이 훈련에서만 �
 /**
  * §59.3 조건부 치환 — `toolDrivenTiming` 부재/false는 오늘 문자열과 바이트 단위로 동일하다(회귀 0).
  *
- * ⚠️ **인계(architect 재확인 필요, 미확정 지점)**: 이 함수는 `verifyInterceptEnabled`가 true인
- * **모든** 시나리오(계열 A·B 6종 전부)에서 `toolDrivenTiming:true`면 TOOL_DRIVEN 문구를 싣는다.
- * 그러나 `offer_verification_desk` 도구 **선언**은 계열 A(`bank-security-verify-scam`) 1종에만
- * 걸린다(G392/OQ-A73, `liveTools.ts`). 즉 계열 B 5종(advanced)에서는 프롬프트가 "도구를 불러라"라고
- * 말하지만 그 세션의 `tools`에는 그 이름의 함수가 없다. `docs/Architecture.md` §59.3은 신규 옵션을
- * `toolDrivenTiming` **1개**로 못박아(G63/G229 계열 재발 방지) 이 함수가 시나리오별 계열을 알 방법이
- * 없다(promptAssembly.ts는 시나리오 카탈로그를 읽지 않는다, §17.3 원칙). Gemini Live의 함수 호출은
- * 그 세션에 실제로 선언된 함수 이름만 예측할 수 있어(model이 미선언 함수를 호출로 방출할 수 없다)
- * 통화 정지(G383) 위험은 없지만, 계열 B에서 "도구를 부르겠다"는 문면이 실제로 뒷받침되지 않는
- * **문면-선언 불일치**가 남는다. 계열까지 반영하려면 신규 옵션 추가 또는 scenarioId 전달이 필요해
- * 이 패스의 범위(§59 커밋 C 체크리스트 1~7)를 벗어난다 — architect 확인 후 처리할 인계 사항이다.
+ * ⭐ **인계 해소(reviewer Critical #2, 위 헤더 주석 참고)**: 이전 버전은 `verifyInterceptEnabled`가
+ * true인 **모든** 시나리오(계열 A·B 6종 전부)에서 `toolDrivenTiming:true`면 TOOL_DRIVEN 문구를
+ * 실었다. 이제 `verifyOfferSeries === "A"`(호출부가 `realtime/liveTools.ts`의 `verifySeriesFor()`로
+ * 계산해 넘긴 값)와 **함께** 곱해, 도구가 실제로 선언되는 세션(계열 A 1종)에서만 TOOL_DRIVEN
+ * 문구가 실린다. 계열 B 5종(advanced)은 `toolDrivenTiming`이 true여도 DEFAULT 그대로다.
  */
-function buildVerifyInterceptRule(toolDrivenTiming: boolean): string {
+function buildVerifyInterceptRule(
+  toolDrivenTiming: boolean,
+  verifyOfferSeries: "A" | "B" | undefined,
+): string {
+  const useToolDriven = toolDrivenTiming && verifyOfferSeries === "A";
   return VERIFY_INTERCEPT_RULE_TEMPLATE.replace(
     "{{VERIFY_OFFER_LINE}}",
-    toolDrivenTiming ? VERIFY_OFFER_LINE_TOOL_DRIVEN : VERIFY_OFFER_LINE_DEFAULT,
+    useToolDriven ? VERIFY_OFFER_LINE_TOOL_DRIVEN : VERIFY_OFFER_LINE_DEFAULT,
   ).replace(
     "{{VERIFY_NAME_LINE}}",
-    toolDrivenTiming ? VERIFY_NAME_LINE_TOOL_DRIVEN : VERIFY_NAME_LINE_DEFAULT,
+    useToolDriven ? VERIFY_NAME_LINE_TOOL_DRIVEN : VERIFY_NAME_LINE_DEFAULT,
   );
 }
 
@@ -585,6 +595,17 @@ export type BuildSystemPromptOptions = {
    * 부재(기본)·`false`면 두 절이 오늘 문자열과 바이트 단위로 동일하다(회귀 0).
    */
   toolDrivenTiming?: boolean;
+  /**
+   * ⭐ reviewer Critical #2(§59 커밋 C 리뷰) — [확인 안내] 블록의 TOOL_DRIVEN 치환을
+   * `toolDrivenTiming`과 **함께** 게이팅한다. `offer_verification_desk` 도구는 계열 A
+   * (`bank-security-verify-scam`) 1종에만 선언되므로(G392, `realtime/liveTools.ts`), 값이
+   * `"A"`일 때만 TOOL_DRIVEN 문구가 실린다 — `"B"`·부재는 `toolDrivenTiming`이 true여도 DEFAULT
+   * 그대로다(문면-선언 불일치 방지). ⛔ **SMS 쪽 치환(`SMS_METHOD_LINE_TOOL_DRIVEN`)은 이 값과
+   * 무관하다** — `send_prepared_sms`는 카탈로그 존재 여부로만 게이팅되고 계열 제약이 없다.
+   * 값은 호출부(`realtime/geminiProvider.ts`)가 `verifySeriesFor(scenarioId)`로 계산해 넘긴다 —
+   * 이 파일은 시나리오 카탈로그를 직접 읽지 않는다(§17.3).
+   */
+  verifyOfferSeries?: "A" | "B";
 };
 
 /**
@@ -646,7 +667,7 @@ export function buildSystemPrompt(
     // 없음인 경우 배열이 도입 전과 완전히 동일해져 조립 결과 문자열도 한 글자도 달라지지 않는다
     // (회귀 0 보장).
     ...(opts.verifyInterceptEnabled === true
-      ? [buildVerifyInterceptRule(opts.toolDrivenTiming === true), ""]
+      ? [buildVerifyInterceptRule(opts.toolDrivenTiming === true, opts.verifyOfferSeries), ""]
       : []),
     ...(difficultyBlock ? [difficultyBlock, ""] : []),
     ...(opts.turnInstruction ? [opts.turnInstruction, ""] : []),

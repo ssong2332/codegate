@@ -1205,21 +1205,29 @@ export default function SessionCallPage() {
         />
       )}
       {realtime.credentials?.provider === "gemini" && (
-        <GeminiVoiceSession
-          credentials={realtime.credentials}
-          stopSignal={realtime.stopSignal}
-          muted={muted || smsOverlayOpen || verifyOverlayOpen}
-          onActive={realtime.handleActive}
-          onEnded={realtime.handleEnded}
-          onError={realtime.handleError}
-          onSpeakingChange={realtime.handleSpeakingChange}
-          onUserSpeakingChange={realtime.handleUserSpeakingChange}
-          onTranscriptTurn={handleTranscriptTurn}
-          textMessage={textMessage}
-          onScammerTurnComplete={handleScammerTurnComplete}
-          instructionTurn={instructionTurn}
-          personaStateTurn={personaStateTurn}
-        />
+        // ⭐ §59.6 ③(reviewer Critical #1) — GeminiVoiceSession의 `sessionId` prop은 Live 도구
+        // 라우팅(deliverInCallSms/deliverVerifyOffer)이 소유권 재검증에 쓴다(G12/G24). 실제로는
+        // 이 분기에 도달하는 시점에 `sessionId`가 이미 non-null이다(`handleAnswer`가 `!sessionId`면
+        // `realtime.start`조차 부르지 않는다, 위 참고) — 여기 null 검사는 그 불변식을 TS 타입으로
+        // 표현할 뿐, 런타임에서 이 분기가 실제로 스킵되는 경우는 없다.
+        sessionId && (
+          <GeminiVoiceSession
+            credentials={realtime.credentials}
+            sessionId={sessionId}
+            stopSignal={realtime.stopSignal}
+            muted={muted || smsOverlayOpen || verifyOverlayOpen}
+            onActive={realtime.handleActive}
+            onEnded={realtime.handleEnded}
+            onError={realtime.handleError}
+            onSpeakingChange={realtime.handleSpeakingChange}
+            onUserSpeakingChange={realtime.handleUserSpeakingChange}
+            onTranscriptTurn={handleTranscriptTurn}
+            textMessage={textMessage}
+            onScammerTurnComplete={handleScammerTurnComplete}
+            instructionTurn={instructionTurn}
+            personaStateTurn={personaStateTurn}
+          />
+        )
       )}
 
       {/* 상단 상태 바 — 통신사/신호 자리에 통화 상태와 경과 시간(실제 통화 화면 관례). */}

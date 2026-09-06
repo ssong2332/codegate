@@ -4,6 +4,7 @@ import { GeminiRealtimeProvider, GEMINI_LIVE_MODEL, pickGeminiVoiceName } from "
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { buildSystemPrompt } from "../../roleplay/promptAssembly";
 import { isL3Procedural } from "../../roleplay/l3Depth";
+import { verifySeriesFor } from "../liveTools";
 
 /**
  * 토큰 발급 호출을 가로채기 위해 provider 내부의 GoogleGenAI 인스턴스를 대신할 수 없으므로,
@@ -419,9 +420,46 @@ test("GeminiRealtimeProvider: 토큰 발급 시 systemInstruction이 toolDrivenT
         identityCheckAllowed: true,
         speakerGender: "male",
         toolDrivenTiming: true,
+        // reviewer Critical #2 — 계열 A(bank-security-verify-scam)라 TOOL_DRIVEN 문구가 실린다.
+        verifyOfferSeries: verifySeriesFor("bank-security-verify-scam"),
       }),
     );
     assert.ok(sentPrompt.includes("send_prepared_sms"), "도구 이름이 토큰에 실린 프롬프트에 있어야 한다");
+    assert.ok(
+      sentPrompt.includes("offer_verification_desk"),
+      "계열 A는 offer_verification_desk 도구 이름도 프롬프트에 있어야 한다",
+    );
+  } finally {
+    capture.restore();
+  }
+});
+
+// ⭐ reviewer Critical #2 회귀 — 계열 B(advanced)는 toolDrivenTiming:true여도 확인 안내는 DEFAULT
+// 그대로다(도구가 선언되지 않는 세션에서 "도구를 불러라"는 문면-선언 불일치를 남기지 않는다).
+test("GeminiRealtimeProvider: 계열 B(advanced)는 toolDrivenTiming:true여도 확인 안내가 DEFAULT로 조립된다(reviewer Critical #2)", async () => {
+  const capture = captureTokenRequest();
+  try {
+    const provider = new GeminiRealtimeProvider("test-key");
+    await provider.createCallCredentials({
+      sessionId: "sess",
+      scenarioId: "tax-refund-scam",
+      voiceId: "",
+      difficultyLevel: "advanced",
+    });
+    const setup = (capture.bodies()[0] as {
+      bidiGenerateContentSetup?: { systemInstruction?: { parts?: { text?: string }[] } };
+    }).bidiGenerateContentSetup;
+    const sentPrompt = setup?.systemInstruction?.parts?.[0]?.text ?? "";
+    assert.equal(verifySeriesFor("tax-refund-scam"), "B", "이 테스트의 전제(계열 B)가 깨졌다");
+    assert.ok(
+      sentPrompt.includes("앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다"),
+      "계열 B는 확인 안내 DEFAULT 문구를 유지해야 한다",
+    );
+    assert.equal(
+      sentPrompt.includes("offer_verification_desk"),
+      false,
+      "계열 B는 선언되지 않는 도구 이름이 프롬프트에 등장하면 안 된다",
+    );
   } finally {
     capture.restore();
   }
