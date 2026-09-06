@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { GeminiRealtimeProvider, GEMINI_LIVE_MODEL, pickGeminiVoiceName } from "../geminiProvider";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { buildSystemPrompt } from "../../roleplay/promptAssembly";
+import { isL3Procedural } from "../../roleplay/l3Depth";
 
 /**
  * 토큰 발급 호출을 가로채기 위해 provider 내부의 GoogleGenAI 인스턴스를 대신할 수 없으므로,
@@ -68,12 +69,14 @@ test("GeminiRealtimeProvider: 시스템 프롬프트를 토큰에 고정해 발�
     // `inCallSmsEnabled:true`로 조립해야 한다. 이걸 빼면 "텍스트 경로에서는 사기범이 문자를
     // 요구하는데 실시간 통화에서는 안 하는" 비대칭이 생겨 기능이 통화에서만 발동하지 않는다.
     // §50.4.4/§50.3.3 — tax-refund-scam은 institution(identityCheckAllowed:true)·female이다.
+    // §59.3 — 이 경로는 toolDrivenTiming:true를 항상 넘긴다(geminiProvider.ts:97의 유일한 호출부).
     assert.equal(
       sentPrompt,
       buildSystemPrompt(SCENARIO_PROMPTS["tax-refund-scam"], {
         inCallSmsEnabled: true,
         identityCheckAllowed: true,
         speakerGender: "female",
+        toolDrivenTiming: true,
       }),
       "토큰 발급 시 systemInstruction이 서버에서 고정되어야 한다",
     );
@@ -89,7 +92,11 @@ test("GeminiRealtimeProvider: 시스템 프롬프트를 토큰에 고정해 발�
   }
 });
 
-test("GeminiRealtimeProvider: 모델과 도구를 토큰에 잠근다(클라의 setup 프레임 주입 차단)", async () => {
+// §59.9 R1(G371) — "도구를 넣어도 초록"이던 옛 약한 단언(body.includes("tools"))을 대체한다.
+// 이제 도구 자체가 조건부로 채워지므로(§59.5), "잠긴다"는 것은 **서버가 선언한 이름만 실린다**는
+// 뜻으로 재정의한다 — 클라가 주입한 게 아니라 서버가 hasInCallSms/hasVerifyIntercept로 정한 이름만
+// 토큰에 담긴다.
+test("GeminiRealtimeProvider: 도구는 서버가 조건에 따라 선언한 이름만 토큰에 잠근다(클라의 setup 프레임 주입 차단, §59.9 R1 대체)", async () => {
   const capture = captureTokenRequest();
   try {
     const provider = new GeminiRealtimeProvider("test-key");
@@ -97,11 +104,41 @@ test("GeminiRealtimeProvider: 모델과 도구를 토큰에 잠근다(클라의 
       sessionId: "sess",
       scenarioId: "loan-refinance-scam",
       voiceId: "",
+      difficultyLevel: "advanced",
     });
-    const body = JSON.stringify(capture.bodies());
-    assert.ok(body.includes(GEMINI_LIVE_MODEL), "모델이 토큰에 고정되어야 한다");
-    // 도구를 비워 잠그지 않으면 클라이언트가 임의 도구를 주입할 수 있다고 보고된 바 있다.
-    assert.ok(body.includes("tools"), "tools를 명시적으로 잠가야 한다");
+    const setup = (capture.bodies()[0] as {
+      bidiGenerateContentSetup?: {
+        model?: string;
+        tools?: { functionDeclarations?: { name?: string }[] }[];
+      };
+    }).bidiGenerateContentSetup;
+    assert.ok(
+      JSON.stringify(capture.bodies()).includes(GEMINI_LIVE_MODEL),
+      "모델이 토큰에 고정되어야 한다",
+    );
+    const names = (setup?.tools ?? []).flatMap((t) => t.functionDeclarations ?? []).map((d) => d.name);
+    // loan-refinance-scam은 문자 카탈로그(계열 B, verify)를 가진 시나리오다 — 계열 B는 advanced에서도
+    // offer_verification_desk를 선언하지 않는다(G392/OQ-A73).
+    assert.deepEqual(names, ["send_prepared_sms"], "loan-refinance-scam(계열 B) advanced에 선언된 이름 집합");
+  } finally {
+    capture.restore();
+  }
+});
+
+test("GeminiRealtimeProvider: 카탈로그·게이트 둘 다 없는 시나리오는 오늘과 동일하게 tools가 빈 배열이다(회귀 0)", async () => {
+  const capture = captureTokenRequest();
+  try {
+    const provider = new GeminiRealtimeProvider("test-key");
+    await provider.createCallCredentials({
+      sessionId: "sess",
+      scenarioId: "kidnapping-threat",
+      voiceId: "",
+      difficultyLevel: "advanced",
+    });
+    const setup = (capture.bodies()[0] as {
+      bidiGenerateContentSetup?: { tools?: unknown[] };
+    }).bidiGenerateContentSetup;
+    assert.deepEqual(setup?.tools, [], "카탈로그·게이트가 없는 세션은 tools가 빈 배열이어야 한다(G388)");
   } finally {
     capture.restore();
   }
@@ -317,6 +354,77 @@ test("[P-5] pickGeminiVoiceName: notApplicable 시나리오는 sessionId 100개�
     results.add(pickGeminiVoiceName("family-accident-deepvoice", `p5-na-${i}`));
   }
   assert.deepEqual([...results].sort(), ["Aoede", "Puck"]);
+});
+
+// §59.6 — createRealtimeCall 응답 liveTools 필드(도구 이름의 하향 전달, G385/G386).
+test("GeminiRealtimeProvider: 도구가 선언되면 credentials.liveTools에 이름이 실린다(§59.6 ②, G385)", async () => {
+  const capture = captureTokenRequest();
+  try {
+    const provider = new GeminiRealtimeProvider("test-key");
+    const creds = await provider.createCallCredentials({
+      sessionId: "sess",
+      scenarioId: "bank-security-verify-scam",
+      voiceId: "",
+      difficultyLevel: "advanced",
+    });
+    assert.deepEqual(creds.liveTools, {
+      sendPreparedSms: "send_prepared_sms",
+      offerVerificationDesk: "offer_verification_desk",
+      failureInstruction: "(지금은 문자를 보낼 수 없다. 문자를 보냈다고 말하지 말고 하던 이야기를 그대로 이어가라.)",
+    });
+  } finally {
+    capture.restore();
+  }
+});
+
+test("GeminiRealtimeProvider: 도구가 하나도 선언되지 않으면 credentials.liveTools 필드 자체가 없다(회귀 0)", async () => {
+  const capture = captureTokenRequest();
+  try {
+    const provider = new GeminiRealtimeProvider("test-key");
+    const creds = await provider.createCallCredentials({
+      sessionId: "sess",
+      scenarioId: "kidnapping-threat",
+      voiceId: "",
+      difficultyLevel: "advanced",
+    });
+    assert.equal("liveTools" in creds, false, "도구 미선언 세션은 liveTools 필드가 없어야 한다");
+  } finally {
+    capture.restore();
+  }
+});
+
+// §59.3 — 이 경로가 toolDrivenTiming:true를 유일하게 넘기는 호출부다. 실제로 토큰에 실리는
+// systemInstruction이 buildSystemPrompt(..., {toolDrivenTiming:true})와 일치하는지 확인한다.
+test("GeminiRealtimeProvider: 토큰 발급 시 systemInstruction이 toolDrivenTiming:true로 조립된다(§59.3)", async () => {
+  const capture = captureTokenRequest();
+  try {
+    const provider = new GeminiRealtimeProvider("test-key");
+    await provider.createCallCredentials({
+      sessionId: "sess",
+      scenarioId: "bank-security-verify-scam",
+      voiceId: "",
+      difficultyLevel: "advanced",
+    });
+    const setup = (capture.bodies()[0] as {
+      bidiGenerateContentSetup?: { systemInstruction?: { parts?: { text?: string }[] } };
+    }).bidiGenerateContentSetup;
+    const sentPrompt = setup?.systemInstruction?.parts?.[0]?.text ?? "";
+    assert.equal(
+      sentPrompt,
+      buildSystemPrompt(SCENARIO_PROMPTS["bank-security-verify-scam"], {
+        difficultyLevel: "advanced",
+        inCallSmsEnabled: true,
+        verifyInterceptEnabled: true,
+        l3Procedural: isL3Procedural("bank-security-verify-scam"),
+        identityCheckAllowed: true,
+        speakerGender: "male",
+        toolDrivenTiming: true,
+      }),
+    );
+    assert.ok(sentPrompt.includes("send_prepared_sms"), "도구 이름이 토큰에 실린 프롬프트에 있어야 한다");
+  } finally {
+    capture.restore();
+  }
 });
 
 test("GeminiRealtimeProvider: 존재하지 않는 시나리오는 명시적으로 실패한다", async () => {

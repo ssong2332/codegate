@@ -42,4 +42,23 @@ export type CreateRealtimeCallResponse = {
    * 콜러블이 소유·활성·카탈로그·난이도·프로바이더를 전부 재검증한다(G24).
    */
   verifyOffer?: { availableAfterScammerTurns: number };
+  /**
+   * ⭐ §59.6/§59.10 커밋 C(G385/G386, `docs/API.md` 부록 C `createRealtimeCall` 증분) — Live 도구
+   * 이름의 하향 전달. 클라는 `toolCall.functionCalls[].name`을 이 값과 **비교**해 어느 콜러블인지
+   * 정한다(하드코딩 금지, G385) — 드리프트 게이트를 만드는 대신 드리프트가 성립할 자리를 없앤다.
+   *
+   * **부착 조건 = Gemini 프로바이더 && 도구가 하나라도 선언될 때만.** `sendPreparedSms`는
+   * `hasInCallSms(scenarioId)`, `offerVerificationDesk`는 `hasVerifyIntercept && difficultyLevel===
+   * "advanced" && verifySeriesFor()==="A"`(오늘은 `bank-security-verify-scam` 1종뿐 — 계열 B 확장은
+   * OQ-A73, G392). 도구 선언 자체는 여전히 토큰(`liveConnectConstraints.config.tools`)에 서버
+   * 고정이다 — 이 필드는 **이름 사본**일 뿐이라 클라가 바꿔도 세션의 도구 집합은 달라지지 않는다.
+   *
+   * `failureInstruction`은 콜러블이 아예 닿지 못했을 때 모델에게 돌려줄 서버 소유 한국어 1줄
+   * (G386 — 클라가 저작하지 않는다).
+   */
+  liveTools?: {
+    sendPreparedSms?: string;
+    offerVerificationDesk?: string;
+    failureInstruction: string;
+  };
 };

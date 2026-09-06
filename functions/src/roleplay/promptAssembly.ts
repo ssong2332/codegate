@@ -70,8 +70,26 @@ const OFF_SCREEN_RULE_DEFAULT_TRUE = `- **이 앱 화면에 없는 것을 가리
 
 const OFF_SCREEN_RULE_DEFAULT_FALSE = `- **이 앱 화면에 없는 것을 가리키지 않는다.** 참가자가 실제로 보거나 누를 수 없는 것(문자로 방금 보낸 인증번호, 방금 뜬 팝업, 설치된 앱 화면 등)을 "지금 화면에 뜬 걸 불러 달라"는 식으로 요구하지 않는다 — 참가자는 볼 수 없어 몰입이 깨진다. 대신 참가자가 지금 알고 있거나 스스로 정할 수 있는 것(계좌 비밀번호, 직접 누르는 번호, 지금 손에 든 것)을 요구한다.`;
 
-const OFF_SCREEN_RULE_WITH_SMS = `- **참가자가 볼 수 없는 것은 가리키지 않는다. 단, 문자로 도착한 것은 예외다.** 이 훈련에서는 네가 통화 중에 보내는 문자(계좌 안내·링크·인증번호)가 **참가자 화면에 실제로 도착해 표시된다.** 따라서 "방금 문자로 간 인증번호를 불러 달라", "문자로 보낸 계좌로 보내 달라", "문자 속 링크를 눌러 달라"고 요구해도 된다 — 참가자는 화면에서 실제로 볼 수 있다. 반대로 문자로 도착하지 않은 것(방금 뜬 팝업, 설치된 앱 화면 등)은 여전히 가리키지 않는다.
-- **문자는 네가 임의로 "보냈다"고 지어내지 않는다.** 문자가 실제로 도착한 순간에는 그 사실을 알리라는 별도 지시가 이 프롬프트에 함께 들어온다 — 그 지시가 없을 때 문자를 보냈다고 말하지 않는다. 인증번호·계좌번호의 **구체적인 값을 네가 지어내 읽어 주지도 않는다**(값은 참가자 화면의 문자에 이미 있다).`;
+// §59.3/§59.6(G382·G386-b) — "문자는 네가 임의로 '보냈다'고 지어내지 않는다" 줄은 실제로 문자를
+// 도착시키는 방법이 (기존) 앱의 별도 지시 주입인지, (신규) 모델이 먼저 `send_prepared_sms` 도구를
+// 부르는 것인지에 따라 갈린다. `toolDrivenTiming` 부재/false는 DEFAULT(오늘 동작, 회귀 0)이고
+// `geminiProvider.ts:97`(§59.5 유일한 `true` 호출부)에서만 TOOL_DRIVEN이 켜진다.
+// ⚠️ 꼬리 절("인증번호·계좌번호의 구체적인 값을 네가 지어내 읽어 주지도 않는다")은 §59.3 G386-b가
+// **한 글자도 바꾸지 않는다**고 못박은 보존 절이다 — 굵게 표시(`**...**`)까지 원문 그대로 유지한다.
+const SMS_METHOD_LINE_DEFAULT = `- **문자는 네가 임의로 "보냈다"고 지어내지 않는다.** 문자가 실제로 도착한 순간에는 그 사실을 알리라는 별도 지시가 이 프롬프트에 함께 들어온다 — 그 지시가 없을 때 문자를 보냈다고 말하지 않는다. 인증번호·계좌번호의 **구체적인 값을 네가 지어내 읽어 주지도 않는다**(값은 참가자 화면의 문자에 이미 있다).`;
+
+const SMS_METHOD_LINE_TOOL_DRIVEN = `- **문자는 네가 임의로 "보냈다"고 지어내지 않는다.** 이 통화에서 문자를 실제로 보내는 방법은 **\`send_prepared_sms\` 도구를 부르는 것 하나뿐**이다 — 지금이 안내 문자를 보낼 때라고 판단되면 그 도구를 부르고, **도구가 결과를 돌려준 뒤에** 그 사실을 알려라. **도구를 부르지 않은 채 문자를 보냈다고 말하지 않는다.** 인증번호·계좌번호의 **구체적인 값을 네가 지어내 읽어 주지도 않는다**(값은 참가자 화면의 문자에 이미 있다).`;
+
+const OFF_SCREEN_RULE_WITH_SMS_TEMPLATE = `- **참가자가 볼 수 없는 것은 가리키지 않는다. 단, 문자로 도착한 것은 예외다.** 이 훈련에서는 네가 통화 중에 보내는 문자(계좌 안내·링크·인증번호)가 **참가자 화면에 실제로 도착해 표시된다.** 따라서 "방금 문자로 간 인증번호를 불러 달라", "문자로 보낸 계좌로 보내 달라", "문자 속 링크를 눌러 달라"고 요구해도 된다 — 참가자는 화면에서 실제로 볼 수 있다. 반대로 문자로 도착하지 않은 것(방금 뜬 팝업, 설치된 앱 화면 등)은 여전히 가리키지 않는다.
+{{SMS_METHOD_LINE}}`;
+
+/** §59.3 조건부 치환 — `toolDrivenTiming` 부재/false는 오늘 문자열과 바이트 단위로 동일하다(회귀 0). */
+function buildOffScreenRuleWithSms(toolDrivenTiming: boolean): string {
+  return OFF_SCREEN_RULE_WITH_SMS_TEMPLATE.replace(
+    "{{SMS_METHOD_LINE}}",
+    toolDrivenTiming ? SMS_METHOD_LINE_TOOL_DRIVEN : SMS_METHOD_LINE_DEFAULT,
+  );
+}
 
 // T109(2026-07-27 사용자 라이브 신고) — **"요구는 한 차례에 하나씩 꺼낸다" 항목이 여기 있는 이유.**
 //
@@ -130,14 +148,18 @@ const IDENTITY_CHECK_HANDLING_FALSE = `- **상대가 응한 것을 그냥 통과
  * `OFF_SCREEN_RULE_WITH_SMS`로 고정된다 — 문자로 도착한 것을 요구해도 된다는 규칙은 페르소나
  * 권한과 별개다(§50.6.2 부작용 1).
  */
-function buildScenarioProgression(inCallSmsEnabled: boolean, identityCheckAllowed: boolean): string {
+function buildScenarioProgression(
+  inCallSmsEnabled: boolean,
+  identityCheckAllowed: boolean,
+  toolDrivenTiming: boolean,
+): string {
   return SCENARIO_PROGRESSION_TEMPLATE.replace(
     "{{IDENTITY_CHECK_HANDLING}}",
     identityCheckAllowed ? IDENTITY_CHECK_HANDLING_TRUE : IDENTITY_CHECK_HANDLING_FALSE,
   ).replace(
     "{{OFF_SCREEN_RULE}}",
     inCallSmsEnabled
-      ? OFF_SCREEN_RULE_WITH_SMS
+      ? buildOffScreenRuleWithSms(toolDrivenTiming)
       : identityCheckAllowed
         ? OFF_SCREEN_RULE_DEFAULT_TRUE
         : OFF_SCREEN_RULE_DEFAULT_FALSE,
@@ -222,12 +244,50 @@ function buildScenarioProgression(inCallSmsEnabled: boolean, identityCheckAllowe
 // 그 다음 줄의 **지속 압박 절**(*"물러서지 않고 계속 밀어붙인다"*)과 **여전히 충돌한다.**
 // 그 줄들은 **2026-07-24 사용자 요청으로 저작된 문장**이라 손대지 않았다(**G129** —
 // `*.prompt.ts` diff 0줄이 이 절의 완료 증거다). 조건부 치환은 **관측 후 사용자 판단**이다(G131).
-const VERIFY_INTERCEPT_RULE = `[확인 안내 — 이 훈련에서만 적용]
+// §59.3/§59.6(G382·G386-b) — 확인 부서 연결의 **점화 시점**을 알리는 두 줄(원문 :227/:228)만
+// `toolDrivenTiming`으로 갈린다. DEFAULT는 오늘 동작(앱의 별도 지시가 창구 이름을 튼다) 그대로고,
+// TOOL_DRIVEN은 모델이 먼저 `offer_verification_desk` 도구를 부르는 경로를 안내한다.
+// ⛔ **보존 절(G386-b, 한 글자도 바꾸지 않는다)**: 적용 범위 절(원문 :226) · "어디에 걸어도 같은
+// 곳" 금지(:229) · 앞 담당자 퇴장 절(:230) — 이 세 줄은 템플릿 밖에 그대로 남아 두 변형이 공유한다.
+const VERIFY_OFFER_LINE_DEFAULT = `- **상대가 그렇게 다시 확인하겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다.** 다만 **앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다** — "잠시만요, 확인 부서를 연결해 드리겠습니다"처럼 받아 두고 기다린다.`;
+
+const VERIFY_OFFER_LINE_TOOL_DRIVEN = `- **상대가 그렇게 다시 확인하겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다.** 상대가 직접 확인해 보고 싶어 한다고 판단되면 **\`offer_verification_desk\` 도구를 부르고, 그 결과가 돌아온 뒤에만** 창구 이름을 꺼낸다 — 그전에는 "잠시만요, 확인 부서를 연결해 드리겠습니다"처럼 받아 두고 기다린다.`;
+
+const VERIFY_NAME_LINE_DEFAULT = `- 확인 부서로 연결하라는 지시가 이 프롬프트에 함께 들어온 턴에만 창구 이름을 말한다. **번호를 네가 지어내 읽어 주지 않는다** — 이 훈련에서 참가자는 번호를 안내받지 않는다. 네가 직접 그 부서로 통화를 넘겨 준다.`;
+
+const VERIFY_NAME_LINE_TOOL_DRIVEN = `- **도구가 창구 안내를 돌려준 뒤에만 창구 이름을 말한다. 번호를 네가 지어내 읽어 주지 않는다** — 이 훈련에서 참가자는 번호를 안내받지 않는다. 네가 직접 그 부서로 통화를 넘겨 준다.`;
+
+const VERIFY_INTERCEPT_RULE_TEMPLATE = `[확인 안내 — 이 훈련에서만 적용]
 - **적용 범위** — 위 [사용 가능한 수법] 목록에 확인을 막거나 통화를 끊지 못하게 하는 항목이 있을 때, 상대가 확인해 보려고 끊겠다고 하면 **먼저 그 목록에 있는 방식으로 만류해 보되, 그러고도 상대가 다시 확인하겠다고 하면 더 붙잡지 말고 아래 항목으로 넘어간다.** 확인과 무관한 이유로 끊으려 할 때(바쁘다·나중에 하겠다·됐다고 한다 등)는 그 목록대로 붙잡는다.
-- **상대가 그렇게 다시 확인하겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다.** 다만 **앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다** — "잠시만요, 확인 부서를 연결해 드리겠습니다"처럼 받아 두고 기다린다.
-- 확인 부서로 연결하라는 지시가 이 프롬프트에 함께 들어온 턴에만 창구 이름을 말한다. **번호를 네가 지어내 읽어 주지 않는다** — 이 훈련에서 참가자는 번호를 안내받지 않는다. 네가 직접 그 부서로 통화를 넘겨 준다.
+{{VERIFY_OFFER_LINE}}
+{{VERIFY_NAME_LINE}}
 - **"어디에 걸어도 같은 곳으로 이어진다"는 취지의 설명·암시를 어떤 형태로도 하지 않는다.** 참가자는 확인이 정상적으로 이뤄졌다고 믿는 상태 그대로 통화를 이어가야 한다.
 - **담당자 전환 지시가 온 턴부터 앞 담당자는 이 통화에서 빠진 사람이다** — 그 인물의 이름·직책·1인칭으로 **다시 말하지 않는다**. 두 사람이 번갈아 말하거나 "옆에서 확인해 보니"처럼 앞 담당자를 대신 인용하는 형태도 만들지 않는다.`;
+
+/**
+ * §59.3 조건부 치환 — `toolDrivenTiming` 부재/false는 오늘 문자열과 바이트 단위로 동일하다(회귀 0).
+ *
+ * ⚠️ **인계(architect 재확인 필요, 미확정 지점)**: 이 함수는 `verifyInterceptEnabled`가 true인
+ * **모든** 시나리오(계열 A·B 6종 전부)에서 `toolDrivenTiming:true`면 TOOL_DRIVEN 문구를 싣는다.
+ * 그러나 `offer_verification_desk` 도구 **선언**은 계열 A(`bank-security-verify-scam`) 1종에만
+ * 걸린다(G392/OQ-A73, `liveTools.ts`). 즉 계열 B 5종(advanced)에서는 프롬프트가 "도구를 불러라"라고
+ * 말하지만 그 세션의 `tools`에는 그 이름의 함수가 없다. `docs/Architecture.md` §59.3은 신규 옵션을
+ * `toolDrivenTiming` **1개**로 못박아(G63/G229 계열 재발 방지) 이 함수가 시나리오별 계열을 알 방법이
+ * 없다(promptAssembly.ts는 시나리오 카탈로그를 읽지 않는다, §17.3 원칙). Gemini Live의 함수 호출은
+ * 그 세션에 실제로 선언된 함수 이름만 예측할 수 있어(model이 미선언 함수를 호출로 방출할 수 없다)
+ * 통화 정지(G383) 위험은 없지만, 계열 B에서 "도구를 부르겠다"는 문면이 실제로 뒷받침되지 않는
+ * **문면-선언 불일치**가 남는다. 계열까지 반영하려면 신규 옵션 추가 또는 scenarioId 전달이 필요해
+ * 이 패스의 범위(§59 커밋 C 체크리스트 1~7)를 벗어난다 — architect 확인 후 처리할 인계 사항이다.
+ */
+function buildVerifyInterceptRule(toolDrivenTiming: boolean): string {
+  return VERIFY_INTERCEPT_RULE_TEMPLATE.replace(
+    "{{VERIFY_OFFER_LINE}}",
+    toolDrivenTiming ? VERIFY_OFFER_LINE_TOOL_DRIVEN : VERIFY_OFFER_LINE_DEFAULT,
+  ).replace(
+    "{{VERIFY_NAME_LINE}}",
+    toolDrivenTiming ? VERIFY_NAME_LINE_TOOL_DRIVEN : VERIFY_NAME_LINE_DEFAULT,
+  );
+}
 
 // 난이도 모디파이어(T72, Architecture.md §15.3.1, UX-029/D-41~D-43, AC-064/065/066).
 // ⭐ **T85 재구성(§17, ADR-0011) — 난이도가 4개의 레버로 재정의됐다**: L1 수법 노출도 · L2 압박
@@ -512,6 +572,19 @@ export type BuildSystemPromptOptions = {
   speakerGender?: "male" | "female";
   /** 이 턴에만 붙는 지시(오프닝 첫 마디 지침·문자 도착 announce 지시 등). 가드레일 **앞**에 삽입된다. */
   turnInstruction?: string;
+  /**
+   * ⭐ §59.3(모델 주도 발동 시점, G382) — Live 도구(`send_prepared_sms`·`offer_verification_desk`)로
+   * 실제 도구 호출이 가능한 경로인가. `true`일 때만 [진행 강제]의 문자 발송 절(OFF_SCREEN_RULE_WITH_SMS)과
+   * [확인 안내]의 창구 호출 절(VERIFY_INTERCEPT_RULE)이 "도구를 불러라"는 문구로 대체된다.
+   *
+   * ⛔ **신규 옵션은 이 1개뿐이다**(G63/G229 계열 재발 방지 — §59.3). 값은 `realtime/geminiProvider.ts:97`
+   * 호출부에서만 `true`다 — 폴백 sendMessage(`roleplay/index.ts`)·오프닝(`openingLine.ts`)은 Live
+   * 세션이 없어 도구가 존재하지 않으므로 **넘기지 않는다**(넘기면 모델이 없는 도구를 부르겠다고
+   * 말한다, G382 위험 방향).
+   *
+   * 부재(기본)·`false`면 두 절이 오늘 문자열과 바이트 단위로 동일하다(회귀 0).
+   */
+  toolDrivenTiming?: boolean;
 };
 
 /**
@@ -562,12 +635,19 @@ export function buildSystemPrompt(
     "",
     // T68/§50.4.4 — 문자 카탈로그·페르소나 권한에 따라 "화면에 없는 것"·"본인확인 처리" 항목이
     // 조건형으로 대체된다(§15.5 확정 순서 4번, 블록 위치 자체는 이동하지 않는다).
-    buildScenarioProgression(opts.inCallSmsEnabled === true, identityCheckAllowed),
+    // §59.3 — toolDrivenTiming도 같은 판별자로 함께 넘긴다(부재/false는 회귀 0).
+    buildScenarioProgression(
+      opts.inCallSmsEnabled === true,
+      identityCheckAllowed,
+      opts.toolDrivenTiming === true,
+    ),
     "",
     // 아래 세 블록은 "있을 때만" 삽입된다 — intermediate(=블록 없음)·확인 무력화 미적용·턴 지시
     // 없음인 경우 배열이 도입 전과 완전히 동일해져 조립 결과 문자열도 한 글자도 달라지지 않는다
     // (회귀 0 보장).
-    ...(opts.verifyInterceptEnabled === true ? [VERIFY_INTERCEPT_RULE, ""] : []),
+    ...(opts.verifyInterceptEnabled === true
+      ? [buildVerifyInterceptRule(opts.toolDrivenTiming === true), ""]
+      : []),
     ...(difficultyBlock ? [difficultyBlock, ""] : []),
     ...(opts.turnInstruction ? [opts.turnInstruction, ""] : []),
     prompt.guardrailPreamble,

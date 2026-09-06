@@ -1212,6 +1212,7 @@ function stackingDirectives(text: string): string[] {
 //   | `verifyInterceptEnabled` | **곱한다**(2값) | 상시 블록과 **함께** 조립됐을 때만 보이는 것이 있다 — `stackingDirectives`는 매치 직후 14자를 보므로 블록 경계를 넘는다. 시나리오당 8 → 16. |
 //   | `l3Procedural` | **고급에만 곱한다**(난이도 변형 4 → 5) | `buildDifficultyBlock`이 고급이 아니면 이 값을 **읽지 않는다**(`promptAssembly.ts:290-293`). 초·중급에 곱하면 **완전히 같은 문자열**이 한 벌씩 더 생길 뿐이라 검출력이 0이고 조합만 2배가 된다. |
 //   | `turnInstruction` | **곱하지 않고 더한다**(+22벌) | 이 옵션은 상수가 아니라 **호출부가 넘기는 문자열**이라 "축"이 아니라 **값의 집합**이다(실제 값 22종 — 아래 `turnInstructionSources`). 22를 곱하면 시나리오당 20 → 440(총 6,160)이 되는데, 두 게이트의 판정은 **인용구 단위 / 매치 지점 ±14자**라 곱해서 얻는 검출력이 없다. 각 값을 **자기 시나리오에 한 번씩** 얹어 스캔 목록에 넣는 것으로 같은 사각을 없앤다. |
+//   | `toolDrivenTiming`(§59 커밋 C 신설) | **곱한다**(2값) | `verifyInterceptEnabled`와 같은 이유 — `inCallSmsEnabled`/`verifyInterceptEnabled`와 **함께** 조립됐을 때만 보이는 대체 문구(`OFF_SCREEN_RULE_WITH_SMS`·`VERIFY_INTERCEPT_RULE`의 도구-주도 변형)가 있다. 시나리오당 20 → 40(총 조합 2배). ⚠️ 실측: 이 옵션의 두 변형(`SMS_METHOD_LINE_TOOL_DRIVEN`·`VERIFY_NAME_LINE_TOOL_DRIVEN`)은 **인용구를 새로 만들지 않는다**(따옴표 `"..."` 0건 신설) — `VERIFY_OFFER_LINE_TOOL_DRIVEN`만 기존과 동일한 인용구(`"잠시만요, 확인 부서를 연결해 드리겠습니다"`)를 재사용한다. 그래도 곱하는 이유는 T113 자기 고지(`stackingDirectives`의 14자 윈도가 블록 경계를 넘는다)가 이 축에도 적용되기 때문 — 문면이 바뀌면 창이 다르게 열린다. |
 //
 // ⚠️ **남는 사각(자기 고지 — 이 태스크에서 닫지 않는다). 노출되는 게이트를 이름으로 적는다.**
 //
@@ -1296,18 +1297,25 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
     for (const variant of ASSEMBLY_LEVEL_VARIANTS) {
       for (const inCallSmsEnabled of [false, true]) {
         for (const verifyInterceptEnabled of [false, true]) {
-          out.push({
-            label:
-              `${scenarioId}[${variant.suffix}` +
-              `${inCallSmsEnabled ? "/문자" : ""}${verifyInterceptEnabled ? "/확인안내" : ""}]`,
-            text: buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], {
-              ...variant.opts,
-              inCallSmsEnabled,
-              verifyInterceptEnabled,
-              identityCheckAllowed,
-              ...(speakerGender ? { speakerGender } : {}),
-            }),
-          });
+          // §59(모델 주도 발동 시점) 커밋 C — toolDrivenTiming도 곱한다(판정표 갱신, 아래 참고).
+          // verifyInterceptEnabled와 같은 이유: 상시 블록과 **함께** 조립됐을 때만 보이는 문면이
+          // 있다(OFF_SCREEN_RULE_WITH_SMS·VERIFY_INTERCEPT_RULE의 도구-주도 대체 문구).
+          for (const toolDrivenTiming of [false, true]) {
+            out.push({
+              label:
+                `${scenarioId}[${variant.suffix}` +
+                `${inCallSmsEnabled ? "/문자" : ""}${verifyInterceptEnabled ? "/확인안내" : ""}` +
+                `${toolDrivenTiming ? "/도구주도" : ""}]`,
+              text: buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], {
+                ...variant.opts,
+                inCallSmsEnabled,
+                verifyInterceptEnabled,
+                toolDrivenTiming,
+                identityCheckAllowed,
+                ...(speakerGender ? { speakerGender } : {}),
+              }),
+            });
+          }
         }
       }
     }

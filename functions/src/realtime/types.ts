@@ -22,6 +22,7 @@
 //   서명 URL만 발급한다. 클라가 보내는 오버라이드는 민감하지 않은 voice_id(본인 클론 id)뿐이다.
 
 import type { DifficultyLevel } from "../shared/difficulty";
+import type { LiveToolNames } from "./liveTools";
 
 export type RealtimeCallInput = {
   sessionId: string;
@@ -78,6 +79,13 @@ export type RealtimeCallCredentials = {
    * 근거 없는 표기가 된다) — 동시에 "조용한 미적용"도 금지라 미적용 사실 자체는 화면에 알린다.
    */
   difficultyApplied: boolean;
+  /**
+   * ⭐ §59.6/§59.10 커밋 C(G385/G386) — Live 도구 이름의 하향 전달(`docs/API.md` 부록 C
+   * `createRealtimeCall` 증분). Gemini 프로바이더가 도구를 하나라도 선언할 때만 존재한다
+   * (`realtime/liveTools.ts`의 `buildLiveToolNames`와 같은 판정). elevenlabs/none이거나 도구가
+   * 하나도 선언되지 않으면 필드 자체가 없다.
+   */
+  liveTools?: LiveToolNames;
 };
 
 export interface RealtimeVoiceProvider {
