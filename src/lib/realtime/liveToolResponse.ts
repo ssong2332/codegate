@@ -57,6 +57,25 @@ export function buildUnsupportedToolResponses(
   }));
 }
 
+/**
+ * §59 reviewer APPROVED Major #1 — `dispatch`(=`GeminiVoiceSession.tsx`의 `dispatchToolCall`)가
+ * 오늘 모든 분기에서 값을 반환하는 것은 우연이지 구조적 보장이 아니었다. 이 함수가 그 구조적
+ * 보장이다: `dispatch`가(또는 `Promise.all` 자체가) 어떤 이유로든 reject해도 **절대 throw하지
+ * 않고** `buildUnsupportedToolResponses(calls)` 폴백을 돌려준다 — 호출부(`sendToolResponse`)가
+ * 반드시 도달할 수 있게 한다(G390). `dispatch` 내부의 개별 try/catch(콜러블별 실패 처리)와
+ * 겹치는 **바깥쪽** 이중 방어다 — 하나가 언젠가 빠지거나 새 분기가 추가돼도 이 함수가 남는다.
+ */
+export async function collectToolResponses(
+  calls: LiveToolFunctionCall[],
+  dispatch: (call: LiveToolFunctionCall) => Promise<LiveToolFunctionResponse>,
+): Promise<LiveToolFunctionResponse[]> {
+  try {
+    return await Promise.all(calls.map((call) => dispatch(call)));
+  } catch {
+    return buildUnsupportedToolResponses(calls);
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════════════════════════════
 // §59.6 ②~⑥ — 실제 라우팅(판정만, 부수효과 0)
 

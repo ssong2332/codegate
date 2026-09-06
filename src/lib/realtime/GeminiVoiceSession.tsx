@@ -39,6 +39,7 @@ import {
 import { computeGateCloseDelayMs, resolveTurnInProgress } from "./agentSpeechGate";
 import {
   buildUnsupportedToolResponses,
+  collectToolResponses,
   pickModelToolSmsId,
   resolveToolCallKind,
 } from "./liveToolResponse";
@@ -526,12 +527,20 @@ export default function GeminiVoiceSession({
               // 응답이 없으면 통화가 멈추므로(§59.0 1) **어떤 경로에서도 응답을 생략하지 않는다**
               // (G390 — `dispatchToolCall`의 모든 분기가 값을 반환하고, 콜러블이 던져도
               // `failureResponse()`로 대체한다).
+              // ⭐ reviewer APPROVED Major #1 수정 — `dispatchToolCall`이 값을 반환하는 것은 "오늘
+              // 이 파일의 모든 분기가 우연히 안 던진다"는 사실에 기댄 것이지, 구조적 보장이 아니었다.
+              // `collectToolResponses`(`liveToolResponse.ts`, 순수 함수·테스트로 고정)가 그 구조적
+              // 보장이다: `dispatchToolCall`이 무엇을 던지든(내부 헬퍼가 나중에 수정되며 throw
+              // 경로가 생기는 경우 포함) 절대 throw하지 않고 `buildUnsupportedToolResponses(calls)`
+              // 폴백을 돌려줘 아래 `sendToolResponse` 호출까지 반드시 도달한다 — "무엇이 잘못되든
+              // 이 함수가 끝나기 전에 sendToolResponse가 최소 한 번은 불린다"가 이제 코드 구조
+              // 자체에서 나온다(안쪽 try/catch — 콜러블별 실패 처리 — 와 겹치는 이중 방어).
               if (message.toolCall) {
                 const calls = message.toolCall.functionCalls ?? [];
                 const activeSession = session;
                 if (calls.length > 0 && activeSession) {
                   void (async () => {
-                    const responses = await Promise.all(calls.map((call) => dispatchToolCall(call)));
+                    const responses = await collectToolResponses(calls, dispatchToolCall);
                     // 대기 중 언마운트되거나 세션이 교체됐으면 죽은 소켓에 쓰지 않는다.
                     if (cancelled || !session) return;
                     try {
