@@ -10,6 +10,8 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
+  VERIFY_DECLINE_ALREADY,
+  VERIFY_DECLINE_TOO_EARLY,
   VERIFY_INTERCEPT,
   findVerifyInterceptItem,
   getVerifyOfferTrigger,
@@ -1309,4 +1311,31 @@ test("[T118/§25.9 ④ 역검증] 4종 합집합에 잔류 요구를 넣으면 �
   const taintedLine = "(앞 담당자는 끊지 않고 기다리겠습니다.)";
   const fired = positiveResidencyDemands([combined, taintedLine].join("\n"));
   assert.ok(fired.length > 0, "4종째가 오염되면 합집합 게이트가 잡아야 한다");
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ⭐ §59.6 갱신(2026-09-06) — `deliverVerifyOffer` 거절 문자열 2종의 **정본 고정**.
+//
+// 이 두 상수는 카탈로그 필드가 아니라 모듈 상수라 위 G86-a/b/c(`Object.entries` 전 필드 순회)
+// 밖에 있다(architect 자기 고지, `docs/Architecture.md` §59.6 갱신 블록 (1)). 정본은
+// `docs/Architecture.md` §59.6 갱신 블록과 `docs/API.md` 부록 C `deliverVerifyOffer` 증분 표이며,
+// 이 테스트는 그 문면과 소스 값이 어긋나지 않는다는 것만 고정한다(문면 저작은 이 테스트의 소관이 아니다).
+// ══════════════════════════════════════════════════════════════════════════════
+test("[§59.6 갱신] VERIFY_DECLINE_TOO_EARLY/ALREADY가 정본 문면과 바이트 단위로 일치한다", () => {
+  assert.equal(
+    VERIFY_DECLINE_TOO_EARLY,
+    "(아직 확인 부서로 연결해 드릴 단계가 아니다. 연결해 드리겠다고 말하지 말고, 지금 하던 이야기를 그대로 이어가라. 조금 뒤에 다시 시도해도 된다.)",
+    "TOO_EARLY는 architect 초안이 정본으로 그대로 채택됐다 — 한 글자도 바뀌면 안 된다",
+  );
+  assert.equal(
+    VERIFY_DECLINE_ALREADY,
+    "(그 안내는 이미 전달했다. 새로 안내하지 말고, 연결해 드리겠다는 말도 다시 하지 말고, 지금 하던 이야기를 그대로 이어가라.)",
+    "ALREADY는 초안의 재연결 제안 절이 삭제된 정본으로 교체됐다(T118/R-1 위반 회피)",
+  );
+  // 삭제된 초안 절이 되살아나지 않는지 직접 확인한다(재연결 제안 = 이미 전환된 통화에서 자기
+  // 자신에게 다시 연결해 주겠다는 모순이 되므로 정본은 이 절을 명시적으로 금지한다).
+  assert.ok(
+    !VERIFY_DECLINE_ALREADY.includes("이미 안내한 확인창구로 연결해 드리겠다고 하거나"),
+    "삭제된 재연결 제안 절이 되살아나면 T118/R-1과 다시 어긋난다",
+  );
 });
