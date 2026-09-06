@@ -388,4 +388,40 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | 안전 | ⭐ **클라 제공 시각은 표시 전용이며 안전 판정·앵커·정렬·한도를 하나도 게이팅하지 않는다** ⇒ **위조의 최대 효과 = 자기 리포트 라벨이 이상해지는 것**(ADR-0007 Consequences의 *"트리거 카운팅이 클라에 있다"* 판단과 **동형**). 클램프가 **세션 창 밖으로는 못 나가게** 막는다. AC-005/013/024·ADR-0004(프롬프트·마스킹) **무접촉**. |
 | ⛔ 금지 | **리포트 라벨의 기준점을 `session.answeredAt`으로 바꾸지 말 것**(§57.0 3 · **G367** — 실시간 경로에서 그 값은 통화 종료 시각으로 백필돼 **모든 라벨이 0초 근처로 무너진다**) · **문자 `arrivedAt` 등 서버 실시각으로 병합하지 말 것**(§15.6 **G15** — 문자가 대화 맨 앞에 몰린다) · **클라 시각을 판정·앵커·한도 입력으로 쓰지 말 것.** |
 | 회귀 게이트 | `functions/src/realtime/__tests__/transcriptTiming.test.ts` — **7건**((a) 부재 동일 · (a') `answeredAtMs`만 있을 때 · (b) 상대 계산 · (b') 기준점 폴백 · (c)(c') 상·하한 클램프 · (c'') **합성 경로 비클램프 역검증**). |
+
+## 부록 C — 모델 주도 발동 시점(Gemini Live function calling) (**ADR-0015** · `docs/Architecture.md` **§59** · **OQ-A66 User 확정** · `docs/DECISIONS.md` **#96**)
+
+> ⛔ **이 부록은 *구현 전 계약 명세*다** — 위 §57 D1 절과 달리 **소스는 아직 없다**(architect 실측: `src/**`·`functions/**`에 `toolCall`·`sendToolResponse`·`liveTools`·`toolDrivenTiming` **전수 grep 0건**, base `45304d6`). 구현 순서·게이트는 **§59.10**이 정본이며, 이 부록은 **그 커밋들이 만들어야 할 계약**만 적는다.
+> ⭐ **적용 범위 = Gemini 실시간 경로 1개뿐.** ElevenLabs 경로·폴백(텍스트) 경로는 **0줄**이며, 도구가 없는 세션에서는 **아래 필드가 전부 부재하고 그때의 동작은 오늘과 바이트 단위로 같다**(G388).
+
+### `createRealtimeCall` **증분** — 도구 이름·실패 지시의 하향 전달 (§59.5 · §59.6 · **G385/G386**)
+| Item | Value |
+|---|---|
+| Response 증분 | `{ …기존, liveTools?: { sendPreparedSms?: string; offerVerificationDesk?: string; failureInstruction: string } }` — **옵셔널 객체 1개 추가.** Request **무변경**. |
+| 부착 조건 | **Gemini 프로바이더 && 도구가 하나라도 선언될 때만** 필드가 존재한다. `sendPreparedSms`는 `hasInCallSms(scenarioId)`, `offerVerificationDesk`는 `hasVerifyIntercept && difficultyLevel==="advanced" && verifySeriesFor()==="A"`(⚠️ 오늘은 `bank-security-verify-scam` **1종뿐** — 계열 B 확장은 **OQ-A73**, **G392**). |
+| 왜 이름을 내려보내는가 | ⛔ **클라가 도구 이름을 하드코딩하지 않게 하려는 것이다(G385).** 클라는 `toolCall.functionCalls[].name`을 **이 값과 비교**해 어느 콜러블인지 정한다 ⇒ 서버가 이름을 바꿔도 **드리프트가 성립할 자리가 없다**(드리프트 게이트를 만드는 대신 자리를 없앤다). |
+| `failureInstruction` | 콜러블이 **아예 닿지 못했을 때** 모델에게 돌려줄 **서버 소유 한국어 1줄**. ⛔ **클라가 저작하지 않는다(G386)** — 저작하면 G86-a/b/c·G101이 카탈로그 필드로 묶어 둔 "모델 대면 문자열" 경계가 풀린다. |
+| 안전 | 도구 **선언 자체는 여전히 토큰(`liveConnectConstraints.config.tools`)에 서버 고정**이다 — 이 필드는 **이름 사본**일 뿐이라 클라가 바꿔도 세션의 도구 집합은 달라지지 않는다(`geminiProvider.ts:187` 잠금 취지 무변경). 페르소나 프롬프트·카탈로그 본문은 **여전히 내려가지 않는다**(AC-024/AC-060). |
+
+### `deliverInCallSms` **증분** — 하한 서버 재검증 + 도구 응답 상태 (§59.6 · §59.7 · **G387**)
+| Item | Value |
+|---|---|
+| Request 증분 | `{ sessionId, smsId, scammerTurns?: number, trigger?: "backstop" \| "model_tool" }` — **옵셔널 2개 추가**. **둘 다 부재 = 오늘 동작 100%**(하한 검사 없음, 하위호환). |
+| Response 증분 | `{ smsId, status: "delivered" \| "too_early" \| "already_delivered" \| "none_pending", announceInstruction?: string, declineInstruction?: string }` — **필드 2개 추가**(`status`·`declineInstruction`). `announceInstruction`은 **`status==="delivered"`일 때만** 실린다(§53.6 (3)의 `placed` 생략 규칙과 **AND**로 곱해진다 — 그쪽이 생략하면 여기서도 없다). |
+| **하한 재검증**(신규) | `trigger==="model_tool"` ⇒ `scammerTurns` **필수**. `scammerTurns >= item.afterScammerTurns` 가 아니면 **`status:"too_early"`**. ⚠️ **비교는 `>=`다** — 폴백 경로의 `findDueInCallSms`가 쓰는 `===`(`inCallSms.ts:260`)를 베끼면 **모델이 한 턴 늦게 부른 순간 영영 거절**된다(§59.7 ⚠️). |
+| ⛔ **write 규칙** | **`status:"delivered"`일 때만 Firestore 문서를 만든다(G387)** — 문서 존재 = **실제 도착**이고 문자함·리포트·랜딩(AC-080)이 전부 그 위에 있다. `too_early`/`none_pending`은 **write 0회**. `already_delivered`는 **오늘의 멱등 규칙 그대로**(재기록하지 않는다). |
+| ⛔ **throw하지 않는다** | 하한 미도달은 **`HttpsError`가 아니라 `status`로 돌려준다.** 던지면 클라가 모델에게 돌려줄 **서버 문면을 잃고** 스스로 한국어를 저작하게 된다(G386 위반). 기존 오류(미인증·타인 세션·비활성·카탈로그 밖 `smsId`)는 **종전 그대로 throw**한다. |
+| 거절 문자열 | `declineInstruction`은 **`functions/src/scenarios/inCallSms.ts`의 모듈 상수**(`NO_NUMBER_INVENTION` 선례와 같은 자리) — 시나리오별 저작 0건, 2종(`too_early` / `already_delivered`·`none_pending`). |
+| 관측 | `trigger` 값을 **`logger.info` 1줄**로 남긴다(§59.11 — 도착 경로 비율이 백스톱 N 조정의 유일한 근거다). ⛔ **Firestore 필드는 늘리지 않는다**(`docs/Database.md` 무변경). |
+| 무변경 | **G12 카탈로그 소속 재검증 · 소유권 · `status==="active"` · 본문/인증번호/발신번호의 서버 카탈로그 소유 · `url` 필드 부재 · 앵커 계산(`realtimeAnchorScammerTurn`)** 전건. |
+
+### `deliverVerifyOffer` **증분** — 도구 경로 판별자 + 상태 (§59.6 · **G391/G392**)
+| Item | Value |
+|---|---|
+| Request 증분 | `{ …기존(sessionId, callMode, scammerTurns?, stage?), trigger?: "backstop" \| "model_tool" }` — **옵셔널 1개 추가.** 부재 = 오늘 동작. |
+| Response 증분 | `{ …기존, status: "announced" \| "too_early" \| "already_announced", declineInstruction?: string }` — **필드 2개 추가.** `announceInstruction`의 실림 규칙은 **무변경**(T118/R-1의 `placed` 생략 · 2단계에서 `commit`엔 안 싣는다). |
+| **하한 재검증**(신규) | `trigger==="model_tool" && stage==="announce"` ⇒ `scammerTurns >= item.availableAfterScammerTurns` 가 아니면 **`status:"too_early"`**(⛔ throw 금지 — 위와 같은 이유). |
+| ⛔ **2단계 유지(G391)** | 도구 경로에서도 **`stage:"announce"`는 문서를 쓰지 않고 `stage:"commit"`에서만 쓴다**(§38.4 후보 E 무변경) ⇒ **컨트롤은 여전히 예고 턴이 끝난 뒤에만 뜬다.** `commit`은 **모델이 부르는 것이 아니라** 클라가 다음 사기범 턴 경계에서 보낸다(`nextVerifyOfferStage`·`announceTurnComplete` 재사용). |
+| ⛔ 노출 금지 | **`deliverVerifyReconnect`는 도구가 아니다(G389)** — 호 전환의 인과 주체는 **참가자의 탭**(`handlePlaceVerifyCall`)이다. 이 콜러블의 계약은 **0줄 변경**. |
+| 무변경 | **G24 · 재검증 5종(소유·활성·카탈로그·난이도·프로바이더) · `resolveVerifyOfferPlan` · `shouldOfferVerify`/`shouldAnnounceVerifyOffer`(클라 순수 함수) · 시크릿 선언(AC-081)** 전건. ⭐ **`verifyIntentExpressed`는 되살리지 않는다(G393)** — 도구 호출이 그 자리를 대신하는 것은 **실시간 경로뿐**이고 **폴백은 무변경**이다. |
 | UX 추적성 | 값을 **만드는** 화면 = **UX-014**(통화 셸 — `play/page.tsx`), 값을 **읽는** 화면 = **UX-008 · UF-012**(리포트·리플레이 타임라인). **신규 Screen ID·Flow ID·라우트 0건.** |
