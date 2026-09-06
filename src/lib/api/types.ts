@@ -159,10 +159,25 @@ export type VerifyOfferTrigger = { availableAfterScammerTurns: number };
 //
 // ⚠️ **읽기 전용 계약(AC-060)**: 답장·전달·전송 요청 타입이 존재하지 않는다. 실 URL 필드도
 // 어느 타입에도 없다 — 링크는 표시 텍스트 + 인앱 가짜 랜딩 참조로만 표현된다(AC-032/045).
-export type DeliverInCallSmsRequest = { sessionId: string; smsId: string };
+// ⭐ §59.6/§59.10 커밋 B(§59, `docs/API.md` 부록 C) — 옵셔널 2개 추가. **둘 다 부재 = 오늘 동작
+// 100%**(하위호환). `trigger:"model_tool"`을 보내는 호출부는 아직 없다(§59 커밋 C 이전) — 회귀 0.
+export type DeliverInCallSmsTrigger = "backstop" | "model_tool";
+export type DeliverInCallSmsRequest = {
+  sessionId: string;
+  smsId: string;
+  scammerTurns?: number;
+  trigger?: DeliverInCallSmsTrigger;
+};
 // ⭐ §53.6 (3)(T118/R-1과 동형) — 전환(호 전환)이 끝난 오퍼가 연 문자에는 `announceInstruction`이
 // 생략된다. 값이 없으면 클라는 주입하지 않는다. 계약 원천은 `functions/src/inCallSms/types.ts`.
-export type DeliverInCallSmsResponse = { smsId: string; announceInstruction?: string };
+export type DeliverInCallSmsStatus = "delivered" | "too_early" | "already_delivered" | "none_pending";
+export type DeliverInCallSmsResponse = {
+  smsId: string;
+  announceInstruction?: string;
+  /** ⭐ §59.6/§59.11 — 관측용(도착 경로). 오늘 이 값을 읽는 호출부는 없다(추가만 됐다). */
+  status: DeliverInCallSmsStatus;
+  declineInstruction?: string;
+};
 // T123/AC-080 — `landing_submitted` = "그 문자가 연 가짜 랜딩의 폼을 제출했다"는 **사실 하나**.
 // ⛔ 참가자 입력값(계좌번호·예금주명)을 담을 필드가 아래 요청 타입에 **존재하지 않는다**(AC-045).
 export type InCallSmsEvent = "opened" | "link_tapped" | "landing_submitted";
@@ -203,19 +218,30 @@ export type VerifyCallMode = "realtime" | "fallback";
  * 컨트롤이 예고보다 먼저 뜨지 않는다. **부재 = 종전 동작**(폴백 경로가 그대로 쓴다).
  */
 export type VerifyOfferStage = "announce" | "commit";
+// ⭐ §59.6/§59.10 커밋 B — `trigger?` 옵셔널 1개 추가. 부재 = 오늘 동작. 아직 이 필드를 보내는
+// 호출부는 없다(§59 커밋 C 이전) — 회귀 0.
+export type DeliverVerifyOfferTrigger = "backstop" | "model_tool";
 export type DeliverVerifyOfferRequest = {
   sessionId: string;
   callMode: VerifyCallMode;
   /** `callMode==="realtime"`일 때만 필요(폴백은 서버가 직접 센다). */
   scammerTurns?: number;
   stage?: VerifyOfferStage;
+  trigger?: DeliverVerifyOfferTrigger;
 };
 /**
  * ⚠️ **T118/R-1** — `announceInstruction`은 **옵셔널**이다. 호 전환이 이미 끝난(`placedAt`) 오퍼에는
  * 서버가 싣지 않는다(§25.5 (4)). 값이 없으면 클라는 **주입하지 않는다** — 전환 이후의 확인 권유는
  * 참가자가 겪은 사실과 모순이기 때문이다.
  */
-export type DeliverVerifyOfferResponse = { offerId: string; announceInstruction?: string };
+export type DeliverVerifyOfferStatus = "announced" | "too_early" | "already_announced";
+export type DeliverVerifyOfferResponse = {
+  offerId: string;
+  announceInstruction?: string;
+  /** ⭐ §59.6/§59.11 — 관측용. 오늘 이 값을 읽는 호출부는 없다(추가만 됐다). */
+  status: DeliverVerifyOfferStatus;
+  declineInstruction?: string;
+};
 export type DeliverVerifyReconnectRequest = {
   sessionId: string;
   offerId: string;

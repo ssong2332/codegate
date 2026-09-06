@@ -200,6 +200,20 @@ export const VERIFY_INTERCEPT: Record<string, VerifyInterceptItem> = {
   "bank-security-verify-scam": BANK_SECURITY_VERIFY_SCAM,
 };
 
+// ── §59.6/§59.10 커밋 B — 모델 도구 경로의 거절 지시(서버 소유, G386) ─────────────────
+// ⚠️ `deliverVerifyOffer`의 `trigger:"model_tool"` 경로에서만 쓰인다(§59.7 하한 재검증 신규).
+// 오늘은 그 트리거를 보내는 클라가 없어(§59 커밋 C 이전) 어떤 응답에도 실리지 않는다(회귀 0).
+// ⚠️ **정본 문구 미확정 고지** — `docs/Architecture.md` §59.6은 `deliverInCallSms`(위 파일)의
+// 거절 문구 2종만 "정본 초안"으로 확정했고, `deliverVerifyOffer`의 거절 문구는 어디에도 저작돼
+// 있지 않다(API.md 부록 C `deliverVerifyOffer` 증분 표에 텍스트가 없다 — 확인 실측). 아래 2종은
+// 그 형식(괄호 지문 · NO_NUMBER_INVENTION/`SMS_DECLINE_*`와 같은 어조)을 그대로 따른 **implementer
+// 초안**이며, 오늘 실행 경로가 없어 무해하지만 architect의 정본 확정 전에는 사용자 대면(모델
+// 발화 소스)으로 배포하지 말 것 — §59 커밋 C 착수 시 재확인 필요.
+export const VERIFY_DECLINE_TOO_EARLY =
+  "(아직 확인 부서로 연결해 드릴 단계가 아니다. 연결해 드리겠다고 말하지 말고, 지금 하던 이야기를 그대로 이어가라. 조금 뒤에 다시 시도해도 된다.)";
+export const VERIFY_DECLINE_ALREADY =
+  "(그 안내는 이미 전달했다. 새로 안내하지 말고, 이미 안내한 확인창구로 연결해 드리겠다고 하거나 하던 이야기를 이어가라.)";
+
 /** 이 시나리오가 확인 무력화를 쓰는가(프롬프트 조건형 블록·오퍼 게이트 노출의 단일 판정). */
 export function hasVerifyIntercept(scenarioId: string): boolean {
   return VERIFY_INTERCEPT[scenarioId] !== undefined;

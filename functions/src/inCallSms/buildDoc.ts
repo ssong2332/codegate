@@ -94,12 +94,36 @@ export function resolveInCallSmsPlan(input: { placed: boolean }): { includeInstr
 /**
  * 응답 조립(§53.8 3) — `buildVerifyOfferResponse`와 동형. 판정은 `resolveInCallSmsPlan` 한 곳이
  * 소유하고 이 함수는 그 결과를 조립만 한다(호출부에 `if`를 흩지 않는다).
+ *
+ * ⚠️ **§59.6 — `status`는 여기서 붙이지 않는다.** 이 함수는 `placed` 게이트(§53.6 (3))만 알고
+ * "이 호출이 신규 create였는가/이미 있었는가"는 모른다(그건 호출부 `deliverInCallSms`가 Firestore
+ * 조회 결과로 안다) — 그래서 반환 타입은 `status`를 뺀 부분집합이고, 호출부가 그 값을 얹는다.
  */
 export function buildInCallSmsResponse(
   item: InCallSmsItem,
   input: { placed: boolean },
-): DeliverInCallSmsResponse {
+): Omit<DeliverInCallSmsResponse, "status" | "declineInstruction"> {
   const plan = resolveInCallSmsPlan(input);
   if (!plan.includeInstruction) return { smsId: item.smsId };
   return { smsId: item.smsId, announceInstruction: item.announceInstruction };
+}
+
+// ── §59.7/§59.10 커밋 B — 모델 도구 경로의 하한 재검증(순수 판정, G387) ─────────────────
+// `docs/API.md` 부록 C `deliverInCallSms` 증분 — `trigger:"model_tool"`일 때만 재검증한다.
+// ⚠️ 비교는 `>=`다(§59.7 ⚠️) — 폴백 경로의 `findDueInCallSms`가 쓰는 `===`(`scenarios/inCallSms.ts`
+// `findDueInCallSms`)를 베끼면 모델이 한 턴 늦게 부른 순간 영영 거절된다.
+// ⛔ `alreadyDelivered`가 `scammerTurns` 비교보다 **우선한다** — 이미 도착한 항목은 턴 수와 무관하게
+// "already_delivered"다(재전달 요청이 아니라 상태 질의에 가깝다).
+export type InCallSmsModelToolGate =
+  | { allowed: true }
+  | { allowed: false; status: "already_delivered" | "too_early" };
+
+export function resolveModelToolSmsGate(input: {
+  alreadyDelivered: boolean;
+  scammerTurns: number;
+  afterScammerTurns: number;
+}): InCallSmsModelToolGate {
+  if (input.alreadyDelivered) return { allowed: false, status: "already_delivered" };
+  if (input.scammerTurns < input.afterScammerTurns) return { allowed: false, status: "too_early" };
+  return { allowed: true };
 }

@@ -5,7 +5,21 @@
 // 하나로만 그린다(실시간·폴백 단일 렌더 소스, DECISIONS #12 계승). 응답은 "도착시켰다 + 캐릭터가
 // 알리게 할 1줄 지시"만 돌려준다.
 
-export type DeliverInCallSmsRequest = { sessionId: string; smsId: string };
+// ⭐ §59.6/§59.10 커밋 B(§59 — 모델 주도 발동 시점, `docs/API.md` 부록 C) — 옵셔널 2개 추가.
+// **둘 다 부재 = 오늘 동작 100%**(하위호환). `trigger:"model_tool"`을 보내는 클라는 아직 없다
+// (§59 커밋 C 이전) — 그래서 아래 신규 필드는 오늘 어떤 요청·응답에도 실리지 않는다(회귀 0).
+export type DeliverInCallSmsTrigger = "backstop" | "model_tool";
+export type DeliverInCallSmsRequest = {
+  sessionId: string;
+  smsId: string;
+  /** `trigger:"model_tool"`일 때만 필수(§59.7 하한 재검증). 그 외에는 읽지 않는다. */
+  scammerTurns?: number;
+  trigger?: DeliverInCallSmsTrigger;
+};
+// ⭐ §59.6 — `status`·`declineInstruction` 필드 2개 추가. `status`는 관측용(§59.11)이며
+// `trigger:"model_tool"`이 아닌 호출(오늘 유일한 실호출)에서는 기존 `smsId`/`announceInstruction`
+// 계산을 **한 글자도 바꾸지 않는다** — 새 필드는 그 위에 얹힐 뿐이다.
+export type DeliverInCallSmsStatus = "delivered" | "too_early" | "already_delivered" | "none_pending";
 export type DeliverInCallSmsResponse = {
   smsId: string;
   /**
@@ -16,8 +30,15 @@ export type DeliverInCallSmsResponse = {
    * 사기범이 아니라 확인 데스크 화자만 남아 있고, 그 화자가 "내가 방금 이 문자를 보냈다"고
    * 말하면 참가자가 겪은 사실과 모순된다. 값이 없으면 클라는 **주입하지 않는다** — 문서
    * 자체(계좌·링크)는 전환 여부와 무관하게 그대로 도착한다.
+   *
+   * ⭐ §59.6 — `status==="delivered"`일 때만 실린다(위 §53.6 (3) 생략 규칙과 **AND**로 곱해진다).
    */
   announceInstruction?: string;
+  /** ⭐ §59.6/§59.11 — 도착 경로 관측용. 오늘 유일한 실호출(트리거 부재)에서는 `"delivered"`
+   * 또는 `"already_delivered"`로만 채워지며, 이 값을 읽는 클라는 아직 없다(추가만 됐다). */
+  status: DeliverInCallSmsStatus;
+  /** ⭐ §59.6 — `status !== "delivered"`일 때만 실리는 서버 소유 거절 지시(G386). */
+  declineInstruction?: string;
 };
 
 // T123/AC-080 — `landing_submitted`는 **"그 문자가 연 가짜 랜딩의 폼을 제출했다"**는 사실 하나다.

@@ -10,13 +10,19 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
-import { findInCallSmsItem } from "../scenarios/inCallSms";
+import { SMS_DECLINE_ALREADY, SMS_DECLINE_TOO_EARLY, findInCallSmsItem } from "../scenarios/inCallSms";
 import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import type { SessionDoc } from "../shared/types";
-import { buildInCallSmsDoc, buildInCallSmsResponse, realtimeAnchorScammerTurn } from "./buildDoc";
+import {
+  buildInCallSmsDoc,
+  buildInCallSmsResponse,
+  realtimeAnchorScammerTurn,
+  resolveModelToolSmsGate,
+} from "./buildDoc";
 import type {
   DeliverInCallSmsRequest,
   DeliverInCallSmsResponse,
+  DeliverInCallSmsTrigger,
   RecordInCallSmsEventRequest,
   RecordInCallSmsEventResponse,
 } from "./types";
@@ -29,6 +35,7 @@ export {
   realtimeAnchorScammerTurn,
   fallbackAnchorScammerTurn,
   resolveInCallSmsPlan,
+  resolveModelToolSmsGate,
 } from "./buildDoc";
 
 /**
@@ -79,6 +86,17 @@ async function loadOwnedSession(sessionId: string, uid: string): Promise<Session
   return session;
 }
 
+/**
+ * §59.6/§59.10 커밋 B — `trigger` 판별자 읽기. **부재는 유효**하며 "종전 동작"을 뜻한다(오늘
+ * 유일한 실호출). 알 수 없는 값을 조용히 부재로 떨어뜨리면 오타 하나가 §59.7 하한 재검증을
+ * 통째로 무력화하므로 거절한다(`verifyIntercept/index.ts`의 `readOfferStage`와 같은 판단).
+ */
+function readTrigger(value: unknown): DeliverInCallSmsTrigger | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (value === "backstop" || value === "model_tool") return value;
+  throw new HttpsError("invalid-argument", "trigger는 backstop 또는 model_tool이어야 합니다.");
+}
+
 export const deliverInCallSms = onCall<
   DeliverInCallSmsRequest,
   Promise<DeliverInCallSmsResponse>
@@ -86,10 +104,11 @@ export const deliverInCallSms = onCall<
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
-  const { sessionId, smsId } = request.data ?? {};
+  const { sessionId, smsId, scammerTurns } = request.data ?? {};
   if (!sessionId || !smsId) {
     throw new HttpsError("invalid-argument", "sessionId와 smsId가 필요합니다.");
   }
+  const trigger = readTrigger(request.data?.trigger);
 
   const session = await loadOwnedSession(sessionId, request.auth.uid);
   if (session.status !== "active") {
@@ -108,7 +127,41 @@ export const deliverInCallSms = onCall<
   const db = getFirestore();
   const smsRef = db.collection("sessions").doc(sessionId).collection("inCallSms").doc(smsId);
   const existing = await smsRef.get();
-  if (!existing.exists) {
+  const alreadyDelivered = existing.exists;
+
+  // §59.11 관측 — 도착 경로 비율(model_tool vs backstop)이 백스톱 창 크기 조정의 유일한 근거다.
+  // Firestore 필드는 늘리지 않는다(§59.11 — 로그 1종으로 충분).
+  logger.info("[§59.11] deliverInCallSms 발동 경로", {
+    sessionId,
+    smsId,
+    trigger: trigger ?? null,
+    scammerTurns: scammerTurns ?? null,
+  });
+
+  // ⭐ §59.7/§59.10 커밋 B — `trigger:"model_tool"`에서만 하한을 재검증한다(G387). 부재·"backstop"
+  // 은 재검증 없이 **아래 종전 로직을 한 글자도 바꾸지 않고** 그대로 탄다 — 오늘 유일한 실호출이라
+  // 회귀 0을 이 분기로 보증한다.
+  if (trigger === "model_tool") {
+    if (typeof scammerTurns !== "number" || !Number.isFinite(scammerTurns)) {
+      throw new HttpsError("invalid-argument", "model_tool 트리거에는 scammerTurns가 필요합니다.");
+    }
+    const gate = resolveModelToolSmsGate({
+      alreadyDelivered,
+      scammerTurns,
+      afterScammerTurns: item.afterScammerTurns,
+    });
+    if (!gate.allowed) {
+      // ⛔ Firestore write 0회(G387) — too_early/already_delivered는 문서를 만들지도 건드리지도
+      // 않는다. throw하지 않는다 — 던지면 클라가 모델에게 돌려줄 서버 문면을 잃는다(API.md).
+      return {
+        smsId: item.smsId,
+        status: gate.status,
+        declineInstruction: gate.status === "too_early" ? SMS_DECLINE_TOO_EARLY : SMS_DECLINE_ALREADY,
+      };
+    }
+  }
+
+  if (!alreadyDelivered) {
     // 앵커(§15.1.5 (4)) — 실시간 경로 보정은 realtimeAnchorScammerTurn이 소유한다(근거는 그 함수
     // doc 주석). 여기서 손으로 ±1 하지 않는다 — 두 경로의 보정이 갈라지지 않게 하기 위해서다.
     await smsRef.create(
@@ -117,7 +170,10 @@ export const deliverInCallSms = onCall<
   }
 
   const placed = await isVerifyOfferPlaced(db, sessionId, session.scenarioId);
-  return buildInCallSmsResponse(item, { placed });
+  return {
+    ...buildInCallSmsResponse(item, { placed }),
+    status: alreadyDelivered ? "already_delivered" : "delivered",
+  };
 });
 
 export const recordInCallSmsEvent = onCall<

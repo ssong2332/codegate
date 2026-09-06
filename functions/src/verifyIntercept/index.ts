@@ -9,10 +9,15 @@
 //   - `messages` 컬렉션 write          (§15.6 G3/G25 — scammer↔user 짝짓기가 깨져 리포트가 손상된다)
 //   - 모델 지시를 Firestore·리포트에 기록 (AC-024/ADR-0004 — 프롬프트 재료는 응답으로만 나간다)
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { ELEVENLABS_API_KEY, GEMINI_KEY_SECRETS } from "../shared/config";
-import { findVerifyInterceptItem } from "../scenarios/verifyIntercept";
+import {
+  VERIFY_DECLINE_ALREADY,
+  VERIFY_DECLINE_TOO_EARLY,
+  findVerifyInterceptItem,
+} from "../scenarios/verifyIntercept";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import type { SessionDoc } from "../shared/types";
 import { getRealtimeProvider } from "../realtime/provider";
@@ -24,11 +29,14 @@ import {
   buildVerifyOfferResponse,
   fallbackVerifyAnchor,
   realtimeVerifyAnchor,
+  resolveModelToolVerifyGate,
   resolveVerifyOfferPlan,
 } from "./buildDoc";
 import type {
   DeliverVerifyOfferRequest,
   DeliverVerifyOfferResponse,
+  DeliverVerifyOfferStatus,
+  DeliverVerifyOfferTrigger,
   DeliverVerifyReconnectRequest,
   DeliverVerifyReconnectResponse,
   VerifyCallMode,
@@ -43,6 +51,7 @@ export {
   buildVerifyOfferResponse,
   fallbackVerifyAnchor,
   realtimeVerifyAnchor,
+  resolveModelToolVerifyGate,
   resolveVerifyOfferPlan,
 } from "./buildDoc";
 
@@ -133,6 +142,16 @@ function readOfferStage(value: unknown): VerifyOfferStage | undefined {
 }
 
 /**
+ * §59.6/§59.10 커밋 B — `trigger` 판별자 읽기. **부재는 유효**하며 "종전 동작"을 뜻한다(오늘
+ * 유일한 실호출). `readOfferStage`와 같은 이유로 알 수 없는 값을 조용히 부재로 떨어뜨리지 않는다.
+ */
+function readTrigger(value: unknown): DeliverVerifyOfferTrigger | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (value === "backstop" || value === "model_tool") return value;
+  throw new HttpsError("invalid-argument", "trigger는 backstop 또는 model_tool이어야 합니다.");
+}
+
+/**
  * ⭐ T133/AC-081 — 시크릿 선언(원인 제거). 이 콜러블은 `assertVerifyEligible`→`getRealtimeProvider`
  * 경로로 자격증명을 읽어 **재검증 ⑤(안전 차단)** 을 판정하는데, 선언이 하나도 없었다.
  *
@@ -162,6 +181,7 @@ export const deliverVerifyOffer = onCall<
   }
   const callMode = readCallMode(request.data?.callMode);
   const stage = readOfferStage(request.data?.stage);
+  const trigger = readTrigger(request.data?.trigger);
 
   const session = await loadOwnedActiveSession(sessionId, request.auth.uid);
   const item = assertVerifyEligible(session);
@@ -176,6 +196,35 @@ export const deliverVerifyOffer = onCall<
   // placedAt이 지워지면 안 된다). `inCallSms`의 멱등 규칙과 동일.
   const existing = await offerRef.get();
   const placed = Boolean(existing.get("placedAt"));
+
+  // §59.11 관측 — 도착 경로 비율(model_tool vs backstop)이 백스톱 창 크기 조정의 유일한 근거다.
+  logger.info("[§59.11] deliverVerifyOffer 발동 경로", {
+    sessionId,
+    trigger: trigger ?? null,
+    stage: stage ?? null,
+  });
+
+  // ⭐ §59.7/§59.10 커밋 B — `trigger:"model_tool" && stage==="announce"`에서만 하한을
+  // 재검증한다(G391 — 2단계 유지, `commit`은 재검증하지 않는다). 부재·"backstop"·`commit`은
+  // **아래 종전 로직을 한 글자도 바꾸지 않고** 그대로 탄다 — 오늘 유일한 실호출이라 회귀 0을
+  // 이 분기로 보증한다.
+  if (trigger === "model_tool" && stage === "announce") {
+    if (typeof scammerTurns !== "number" || !Number.isFinite(scammerTurns)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "model_tool 트리거의 announce 단계에는 scammerTurns가 필요합니다.",
+      );
+    }
+    const gate = resolveModelToolVerifyGate({
+      scammerTurns,
+      availableAfterScammerTurns: item.availableAfterScammerTurns,
+    });
+    if (!gate.allowed) {
+      // ⛔ Firestore write 0회 — throw하지 않는다(클라가 모델에게 돌려줄 서버 문면을 잃지 않게).
+      return { offerId: item.offerId, status: "too_early", declineInstruction: VERIFY_DECLINE_TOO_EARLY };
+    }
+  }
+
   // ⭐⭐ §38.4 후보 E — **write 시점만 뒤로 옮긴다.** 재검증 5종(위 `loadOwnedActiveSession` +
   // `assertVerifyEligible`)은 **단계와 무관하게 전부** 통과해야 한다 — 1단계라고 검사를 건너뛰면
   // §16.1.5/G24가 막으려던 위조 호출 표면이 그대로 열린다.
@@ -186,7 +235,15 @@ export const deliverVerifyOffer = onCall<
     await offerRef.create(buildVerifyInterceptDoc(item, Timestamp.now(), anchor));
   }
 
-  return buildVerifyOfferResponse(item, { placed, ...(stage ? { stage } : {}) });
+  const response = buildVerifyOfferResponse(item, { placed, ...(stage ? { stage } : {}) });
+  // ⭐ §59.6/§59.11 — 관측용 상태 태그. `announceInstruction` 유무를 그대로 재해석할 뿐 새로운
+  // 판정을 추가하지 않는다(응답 필드 추가는 하위호환 — 이 값을 읽는 클라는 아직 없다).
+  const status: DeliverVerifyOfferStatus = plan.includeInstruction ? "announced" : "already_announced";
+  return {
+    ...response,
+    status,
+    ...(status === "already_announced" ? { declineInstruction: VERIFY_DECLINE_ALREADY } : {}),
+  };
 });
 
 /** ⭐ T133/AC-081 — deliverVerifyOffer와 같은 이유·같은 선언(같은 재검증 5종을 거친다). */
