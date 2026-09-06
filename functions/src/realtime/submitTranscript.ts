@@ -14,11 +14,16 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { maskPII } from "../guardrails";
 import { findOpeningToMarkNotSpoken } from "./openingMark";
+import { resolveTurnCreatedAtMs } from "./transcriptTiming";
 import type { MessageDoc, SessionDoc } from "../shared/types";
 
 ensureFirebaseAdminApp();
 
-export type TranscriptTurn = { role: "user" | "scammer"; text: string };
+/**
+ * §57.2 (6) 처방 D1 — `atMs`: 참가자 시계 기준 상대 ms(`answeredAtMs` 대비). 부재 = 현행 합성
+ * 로직 그대로(무백필 · 과거 클라이언트 무영향). 계산·클램프 규칙은 `transcriptTiming.ts` 참고.
+ */
+export type TranscriptTurn = { role: "user" | "scammer"; text: string; atMs?: number };
 /**
  * §55 D3 — `openingNotSpoken`: 오프닝(`turnIndex:0`) 대사가 참가자에게 **낭독되지 않았는가**를
  * 클라가 알려준다(부재 = `false` = 종전 동작).
@@ -28,10 +33,16 @@ export type TranscriptTurn = { role: "user" | "scammer"; text: string };
  * `consumeOpeningAudioUrl()` 재생 + 메시지 구독이 그 행을 말풍선으로 그린다). 추론하면 참가자가
  * **본 대사를 지운다.** 판별자는 클라 래치 1개뿐이다.
  */
+/**
+ * §57.2 (6) 처방 D1 — `answeredAtMs`: 참가자가 "받기"를 누른 시각(클라 타임스탬프). 부재 =
+ * `session.createdAt`으로 대체(둘 다 없으면 현행 합성 로직 그대로 — G366/G367 참고,
+ * `docs/Architecture.md` §57.2 (6)).
+ */
 export type SubmitRealtimeTranscriptRequest = {
   sessionId: string;
   turns: TranscriptTurn[];
   openingNotSpoken?: boolean;
+  answeredAtMs?: number;
 };
 export type SubmitRealtimeTranscriptResponse = { written: number };
 
@@ -46,7 +57,7 @@ export const submitRealtimeTranscript = onCall<
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
-  const { sessionId, turns, openingNotSpoken } = request.data ?? {};
+  const { sessionId, turns, openingNotSpoken, answeredAtMs } = request.data ?? {};
   if (!sessionId || !Array.isArray(turns)) {
     throw new HttpsError("invalid-argument", "sessionId와 turns가 필요합니다.");
   }
@@ -89,6 +100,8 @@ export const submitRealtimeTranscript = onCall<
       tx.update(historySnap.docs[openingPos].ref, { notSpoken: true });
     }
     const baseTime = Date.now();
+    // §57.2 (6) 처방 D1 — 클램프 하한이자 `answeredAtMs` 부재 시 기준점 폴백.
+    const sessionCreatedAtMs = session.createdAt.toMillis();
     let count = 0;
 
     turns.forEach((turn, i) => {
@@ -97,12 +110,23 @@ export const submitRealtimeTranscript = onCall<
       const masked = maskPII(raw).trim();
       if (!masked) return;
       // 전사에는 정확한 write 시각이 없으므로 제출 시각 기준으로 턴 간격을 근사한다(리포트
-      // 타임라인 "N초 시점"용 — 실시간 통화는 정밀 턴 타이밍이 없어 근사가 불가피하다).
+      // 타임라인 "N초 시점"용 — 실시간 통화는 정밀 턴 타이밍이 없어 근사가 불가피하다). D1 —
+      // 클라가 `answeredAtMs`·`turn.atMs`를 실어 보낸 경우 그 값을 우선하고, 부재 시(과거
+      // 클라이언트·과거 세션 포함)에는 위 합성 로직과 100% 동일하게 남는다(`transcriptTiming.ts`).
       tx.create(messagesRef.doc(), {
         role,
         textMasked: masked,
         turnIndex: nextIndex,
-        createdAt: Timestamp.fromMillis(baseTime + i * 1000),
+        createdAt: Timestamp.fromMillis(
+          resolveTurnCreatedAtMs({
+            index: i,
+            atMs: typeof turn.atMs === "number" ? turn.atMs : undefined,
+            answeredAtMs: typeof answeredAtMs === "number" ? answeredAtMs : undefined,
+            sessionCreatedAtMs,
+            baseTimeMs: baseTime,
+            nowMs: baseTime,
+          }),
+        ),
         // T30 추가(§13.1) — 교차채널 타임라인(AC-037)용 채널 표기. 실시간 통화 전사는 항상
         // channel="voice" 단계에서 발생한다(에스컬레이션 세션이든 순수 보이스 세션이든 동일).
         channel: "voice",

@@ -241,6 +241,12 @@ export default function SessionCallPage() {
   // 실시간 음성 통화의 전사 턴을 모아 종료 직전에 제출한다(finding #1). 리렌더와 무관하게 누적
   // 되어야 하므로 ref에 쌓는다.
   const transcriptRef = useRef<TranscriptTurn[]>([]);
+  // §57.2 (6) 처방 D1 — 참가자가 "받기"를 누른 시각(클라 타임스탬프, `handleAnswer`에서 1회
+  // 설정). 리포트 타임라인 라벨이 실제 발화 시각과 어긋나던 문제(T-1, `docs/Architecture.md`
+  // §57.2)의 처방 — 각 전사 턴의 `atMs`(아래 `handleTranscriptTurn`)는 이 시각 기준 상대 ms다.
+  // `null` = 아직 받기 전이거나(있을 수 없음 — 이 화면은 받은 뒤에만 전사를 쌓는다) 폴백 복원
+  // 경로처럼 이 화면에서 "받기"를 누르지 않은 세션 — 그때는 서버가 현행 합성 로직으로 대체한다.
+  const answeredAtMsRef = useRef<number | null>(null);
 
   // ⭐⭐ §55 D3(G351) — "오프닝(`turnIndex:0`)이 참가자에게 낭독되지 않았는가"의 **유일한 판별자**.
   // `createSession`은 경로와 무관하게 그 행을 쓰지만, Gemini Live에는 그 텍스트를 넘길 방법이 없어
@@ -261,7 +267,13 @@ export default function SessionCallPage() {
   const dialogueIsDegraded = foldDegraded(dialogueDegraded, realtime.isMock);
 
   const handleTranscriptTurn = useCallback((role: "user" | "scammer", text: string) => {
-    transcriptRef.current.push({ role, text });
+    // §57.2 (6) 처방 D1 — 이 콜백은 §57.4 D3 이후 항상 **턴 완료(flush) 시각**에만 불린다(G369
+    // 주석 참고) — "이 턴이 실제로 일어난 시각"과 "기록된 시각"이 같아, 여기서 잰 상대 ms를 그
+    // 턴의 발생 시각으로 실어 보내도 안전하다. `answeredAtMsRef`가 없으면(이 화면에서 "받기"를
+    // 누르지 않은 극히 드문 경로) `atMs` 없이 보내 서버가 현행 합성 로직으로 대체하게 둔다.
+    const atMs =
+      answeredAtMsRef.current !== null ? Date.now() - answeredAtMsRef.current : undefined;
+    transcriptRef.current.push({ role, text, atMs });
     // T118(§25.3 (3)) — A5 재주입 조건의 관측 지점. 참가자가 한 번이라도 말한 뒤에만 다시 넣는다.
     if (role === "user") {
       userTurnsSinceInjectionRef.current += 1;
@@ -287,10 +299,13 @@ export default function SessionCallPage() {
     try {
       // §55 D3 — 3개 호출부 전부 **같은 값**을 싣는다(호출부별 분기 0건). 값은 위 래치 ref에서만
       // 온다(이 클로저에서 `callMode`·`realtime`을 읽으면 스테일이다).
+      // §57.2 (6) 처방 D1 — `answeredAtMsRef`가 null이면(위 handleTranscriptTurn과 동일 사유로
+      // "받기"를 누르지 않은 경로) 필드 자체를 생략한다 — 부재 = 서버 현행 합성 로직 그대로.
       await submitRealtimeTranscript({
         sessionId,
         turns,
         openingNotSpoken: openingNotSpokenRef.current,
+        answeredAtMs: answeredAtMsRef.current ?? undefined,
       });
     } catch {
       // 무시 — 다음 단계(endSession→리포트)는 그대로 진행한다.
@@ -841,6 +856,9 @@ export default function SessionCallPage() {
     if (!sessionId) return;
     // finding #4: "받기"를 누른 세션을 기록해, 통화 중 새로고침 시 벨 화면이 아니라 통화로 복원.
     markSessionAnswered(sessionId);
+    // §57.2 (6) 처방 D1 — 통화 타이머(`elapsedSec`)가 0이 되는 바로 이 지점의 시각을 참가자 시계
+    // 기준으로 래치한다. 이후 모든 전사 턴의 `atMs`는 이 값 기준 상대 ms다(T-1 처방).
+    answeredAtMsRef.current = Date.now();
     setPhase("connecting");
     setCallMode("realtime");
     // 실시간 연결을 먼저 시도한다(위 prefetch로 미리 받아 둔 자격증명이 신선하면 재사용). 불가하면

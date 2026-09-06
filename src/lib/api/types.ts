@@ -233,7 +233,11 @@ export type DeliverVerifyReconnectResponse = {
 
 // --- submitRealtimeTranscript (finding #1 · 2026-07-23) ---
 // 실시간 음성 통화 대화를 리포트가 분석할 수 있도록 종료 직전에 전사를 제출한다.
-export type TranscriptTurn = { role: "user" | "scammer"; text: string };
+/**
+ * §57.2 (6) 처방 D1 — `atMs`: 이 턴이 실제로 발생한, `answeredAtMs` 기준 **상대 ms**. 부재 =
+ * 서버가 현행 합성 로직(제출 시각 + 턴 인덱스×1초)을 그대로 쓴다(무백필 · 과거 세션 무영향).
+ */
+export type TranscriptTurn = { role: "user" | "scammer"; text: string; atMs?: number };
 /**
  * §55 D3 — `openingNotSpoken`: 이 세션의 오프닝(`turnIndex:0`) 대사가 **참가자에게 낭독되지
  * 않았는가**. 부재 = `false` = 종전 동작.
@@ -242,10 +246,16 @@ export type TranscriptTurn = { role: "user" | "scammer"; text: string };
  * 세션에서는 그 대사가 **실제로 표시·재생되므로**, "전사를 제출했으니 안 들렸다"로 추론하면
  * 참가자가 본 대사를 리플레이에서 지운다. 판별자를 아는 층은 클라 하나뿐이다.
  */
+/**
+ * §57.2 (6) 처방 D1 — `answeredAtMs`: 참가자가 "받기"를 누른 시각(클라 타임스탬프). 부재 =
+ * 서버가 `session.createdAt`으로 대체(둘 다 없으면 리포트 라벨 산출은 현행 합성 로직 그대로 —
+ * `docs/Architecture.md` §57.2 (6)).
+ */
 export type SubmitRealtimeTranscriptRequest = {
   sessionId: string;
   turns: TranscriptTurn[];
   openingNotSpoken?: boolean;
+  answeredAtMs?: number;
 };
 export type SubmitRealtimeTranscriptResponse = { written: number };
 
