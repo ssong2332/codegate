@@ -57,3 +57,4 @@
 - [구두 확정은 DECISIONS 행으로 물질화한다](feedback_verbal_confirmation_needs_a_decisions_row.md) — 결정은 유효한데 자리가 비면 파생 편집이 REJECTED된다(OQ-A68); 행 먼저, 문면 나중
 - [셸이 없다 — git 지시는 신고한다](feedback_no_shell_report_the_git_blocker.md) — 브랜치/커밋/push 불가, 편집만; 실측은 열람·grep·`.git` 판독 셋뿐이고 해시는 인용값
 - [신고문은 소스 주석에 이미 있을 수 있다](feedback_report_may_already_have_a_prescription.md) — 신고 어구로 주석 grep; 히트면 축이 "원인 규명"에서 "이미 있는 처방이 왜 지는가"로 바뀐다
+- [Gemini Live function calling 제약 4개](reference_gemini_live_function_calling.md) — BLOCKING 기본(무응답=통화 정지)·allowedFunctionNames는 ANY 전용·tools와 오디오 모달리티 공존

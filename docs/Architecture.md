@@ -13509,3 +13509,271 @@ ADR-0007 채택 행이 스스로 적었다: *"**인과가 역전**된다(앱이 
 ⛔ **`src/**`·`functions/**` 0줄**(전부 **읽기만** 했다) · ⛔ `docs/PRD.md`·`docs/UX.md`·`docs/Tasks.md`·`docs/API.md`·`docs/Database.md`·`docs/CHANGELOG.md`·`README.md`·`CLAUDE.md` **무편집** · ⛔ **ADR 0건**(문면 1줄 정정·블록 위치는 구조 결정이 아니다 — 인터페이스·스키마·이벤트·kind·Screen ID **0건 증가**) · ⛔ **번호 예약 0건**.
 **⇒ 인계 2건**: ① **`docs/Tasks.md` 담당 행 등재**(planner — P-D / P1 / P-E) · ② **clone 2종 재생성 요청**(운영 — P1 병합 시, G379).
 **UX 추적성**: 신규 Screen ID·Flow ID·라우트 **0건**. 닿는 기존 항목은 **UX-014**(통화 셸 — 대화 체감) · **UX-029**(난이도 선택 — 고급 블록과 같은 조립 산출물) · **UF-008/UF-011**(통화 중 문자·확인 시도 — 같은 프롬프트를 공유) 이며 **신규 매핑 0건**이다.
+
+## 59. (User 확정 집행 — **OQ-A66 resolved** · P-A 프로브 통과) §57.8 **(라) "턴 게이트는 바닥, 모델이 시점, 카운터가 천장"** 구현 스펙 확정 — ⭐⭐ **P-A가 §57.9 사유 ③을 무너뜨렸다: `toolCall` 왕복은 오디오 모달리티에서 실측으로 성립한다** / ⭐⭐ **가장 무거운 발견은 도구가 아니라 *프롬프트가 도구를 금지하고 있다*는 것이다 — `OFF_SCREEN_RULE_WITH_SMS`와 `VERIFY_INTERCEPT_RULE`이 "지시가 오기 전에는 먼저 꺼내지 마라"고 명문으로 적는다** / ⭐⭐ **AC-060 원문은 (라)를 약화시키기는커녕 *오늘 구현보다 (라)에 더 가깝다* — 그 조항이 요구한 것은 "사기범 턴에 실린 구조화 신호"다** — architect 판정
+
+### 59.0 판정 요지 (⛔ 금지 먼저 — 다른 모든 판단보다 우선)
+
+1. ⛔ **도구 선언(`tools:[]` 해제)을 클라의 `toolCall` 수신 배선보다 먼저 배포하지 말 것(G383).** 도구는 기본이 `BLOCKING`이라(`@google/genai` `Behavior.BLOCKING` — *"the system will wait to receive the function response before continuing"*, `genai.d.ts:1206-1209`) **클라가 답하지 않으면 모델이 그 자리에서 멈춘다.** 이것은 회귀가 아니라 **통화 정지**다.
+2. ⛔ **프롬프트 조건부 치환을 도구 선언보다 먼저 배포하지 말 것(G382).** 반대 방향(도구 먼저·문면 나중)은 안전하다 — 도구가 그냥 안 쓰이고 백스톱이 오늘처럼 발동할 뿐이다. **위험은 한 방향뿐이다.**
+3. ⛔ **도구에 인자를 주지 말 것(G384 — G373 계승·확장).** `smsId`도 `offerId`도 주지 않는다. 인자가 생기는 순간 **카탈로그 선택권이 모델로 넘어가** `findInCallSmsItem`/`findVerifyInterceptItem`의 G12/G24 재검증이 형해화된다.
+4. ⛔ **`deliverVerifyReconnect`(호 전환 실행)를 도구로 노출하지 말 것(G389).** 재연결의 원인은 **참가자의 탭**이다(`handlePlaceVerifyCall`, `play/page.tsx:939`). 모델이 부르면 **참가자가 누르지 않은 전환**이 일어나 §22/ADR-0013의 인과가 뒤집힌다.
+5. ⛔ **이 절은 소스를 0줄 고친다.** 확정하는 것은 **도구 스키마 · 계층 배치 · 하한/천장 값 · 커밋 순서 · 회귀 게이트 형태**까지다. architect는 **라이브·셸·테스트·빌드 0회**이며 P-A 결과는 **전부 인계 인용값**이다(§59.12 (1)).
+
+### 59.1 착수 전 확인 — 선행 판정 · 번호 실측 · base
+
+| 항목 | 실측 | 근거 |
+|---|---|---|
+| 선행 판정 | ⭐ **(라)의 *판정*은 §57.8에 있고 *구현 스펙*은 어디에도 없다.** `^## ` **59건 전수**(§0~§58) 확인 · `function calling`·`toolCall`·`sendToolResponse`·`ADR-0015` 전수 grep ⇒ 히트는 **§57.9 ③·§57.13 (4)·§57.14 OQ-A66 · DECISIONS #93**뿐이고 **전부 "미확인·조건부"** 로 적혀 있다 ⇒ **§59를 신설**한다(재작성 아님 — §57 위에 얹는 절) | `docs/Architecture.md` grep |
+| `docs/UpdateRequests.md` `open` | **architect 소관 0건** (`open` 행은 템플릿 `#1`과 `#14`뿐이고 Owning Agent가 각각 `planner`·`User`) | `UpdateRequests.md:7`·`:21` |
+| 번호 (착수 시점) | `^## ` 최대 **58** · 게이트 최대 **G381** · OQ 최대 **OQ-A72** · DECISIONS 최대 **#95** · `docs/adr/` 최대 **0014** ⇒ **§59 · G382~G393 · OQ-A73 · #96 · ADR-0015** | grep 실측 |
+| base | `C:\codegate\.git\refs\heads\main` = **`45304d657be5cbaeb44a32b6702d6b243ea55f0f`** (`.git` 직접 판독). ⚠️ **인계·세션 스냅샷의 `fd6e325`보다 4커밋 앞서 있다**(`.git/logs/refs/heads/main:229-232` — `fd6e325 → 9ab1476 → 85d502f → 5def713 → 45304d6`, 전부 `pull --ff-only`) ⇒ **이 절의 인용은 전부 `45304d6` 트리 직접 열람이다.** | `.git` 판독 |
+| ⭐ **인계 정정 1건** | 지시문이 인용한 **`play/page.tsx:187-188`(`tools:[]`)** 는 **`functions/src/realtime/geminiProvider.ts:187-188`** 이며(§57.9 ①이 이미 정정한 자리) **오늘 트리에서도 그대로 `:187`(주석)·`:188`(`tools: []`)** 다 — **밀리지 않았다**(직접 열람 확인) | — |
+| 버전 갭 | 헤더 **PRD v1.7.1 · UX 1.13**(`Architecture.md:5`) ↔ 현행 **PRD v1.14**(`PRD.md:4`) **· UX 1.25**(`UX.md:10`) ⇒ **PRD 7건 · UX 12건** 뒤처졌다(§52~§58과 **동일 — 더 벌어지지 않았다**). ⛔ 헤더 무전진(T131 계열 별건). ⭐ 이 절의 판정은 **소스 직접 열람**이라 갭이 오염시키지 않는다 | — |
+
+### 59.2 ⭐ P-A 결과 — §57.9 사유 ③의 **시점 부착 정정**(⛔ §57 원문 무수정)
+
+§57.9 ③은 *"`toolResponse` 왕복을 오디오 루프에 넣어야 한다 — ⭕ **유효 · 실측 미확인**"* 이었고 그 미확인의 이유는 *"워크트리에 `node_modules`가 없어 SDK가 이 API를 어떤 이름으로 노출하는지 확인하지 못했다"* 였다. **둘 다 오늘 트리에서 해소됐다.**
+
+| # | §57.9 ③의 서술 | 2026-09-06 재판정 |
+|---|---|---|
+| ① | *"워크트리에 `node_modules`가 없다"* | ⚠️ **오늘은 있다** — `functions/node_modules/@google/genai/dist/genai.d.ts` 직접 열람 성립(메모리 `feedback_absence_claims_check_the_sdk`가 예고한 그대로다) |
+| ② | *"`toolCall` 수신·`sendToolResponse` API의 실제 이름 미확인"* | ⭕ **확인** — 수신은 `LiveServerMessage.toolCall?: LiveServerToolCall`(`genai.d.ts:9262`, `functionCalls?: FunctionCall[]` `:9322-9325`) · 응답은 `session.sendToolResponse(params: LiveSendToolResponseParameters)`(`:12177`, `functionResponses: FunctionResponse[] \| FunctionResponse` `:9201-9204`) · 취소 통보는 `toolCallCancellation?`(`:9264`) |
+| ③ | *"오디오 모달리티에서 함수 호출이 실제로 오는가"* | ⭕⭕ **판정 A = 완전 지원**(P-A 라이브 1호출 — **인계 인용값**): `toolCallReceived:true` · `sendToolResponseThrew:null` · `sawServerContentAfterToolResponse:true`. **`responseModalities`(`:8777`)와 `tools`(`:8826`)가 같은 `LiveConnectConfig`에 공존 가능**하다는 타입 사실과 정합 |
+| ④ | *"신규 배선 필요"* | ⭕ **여전히 참** — `src/**` 전수 grep에서 `toolCall`·`sendToolResponse` **0건**이고 클라의 `GeminiLiveSession` 타입은 여전히 `sendRealtimeInput`·`sendClientContent`·`close` **3개뿐**이다(`GeminiVoiceSession.tsx:117-121`) ⇒ **이 절의 커밋 A가 그 배선이다** |
+
+⇒ ⭐ **판정: §57.9 ③은 "유효했으나 이제 비용 항목이지 기각 사유가 아니다."** ADR-0007이 든 4사유 중 **오늘 (라)를 막는 것은 0건**이다(① 약화 · ② 범위 축소로 미발동 · ③ 해소 · ④ 백스톱으로 소멸). ⛔ **ADR-0007 원문·§57 원문은 한 줄도 고치지 않는다** — 시점 부착 정정이다(§31·§32·T117·§58.1 선례).
+
+### 59.3 ⭐⭐ 착수 전에 반드시 알아야 할 것 — **프롬프트가 도구를 명시적으로 금지하고 있다**
+
+도구만 선언하면 (라)가 켜질 것 같지만, **모델은 부르지 않는다.** 시스템 프롬프트에 *"먼저 꺼내지 마라"* 가 **문자열로 박혀 있기 때문이다.**
+
+| 자리 | 현행 문면(원문) | (라)와의 관계 |
+|---|---|---|
+| `promptAssembly.ts:74`<br>(`OFF_SCREEN_RULE_WITH_SMS` 둘째 항목) | *"**문자는 네가 임의로 '보냈다'고 지어내지 않는다.** 문자가 실제로 도착한 순간에는 그 사실을 알리라는 **별도 지시가 이 프롬프트에 함께 들어온다** — **그 지시가 없을 때 문자를 보냈다고 말하지 않는다.**"* | ⛔ **정면 충돌.** (라)에서 문자를 도착시키는 유일한 방법은 **모델이 먼저 도구를 부르는 것**인데, 이 줄은 *"지시가 올 때까지 기다려라"* 로 읽힌다 |
+| `promptAssembly.ts:227` | *"**앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다**"* | ⛔ **정면 충돌** |
+| `promptAssembly.ts:228` | *"확인 부서로 연결하라는 **지시가 이 프롬프트에 함께 들어온 턴에만** 창구 이름을 말한다"* | ⛔ **정면 충돌** |
+
+⭐ 이것은 메모리 `feedback_safety_closed_by_path_leaves_the_wording`의 정면 사례다 — **경로(앱 오케스트레이션)로 닫아 둔 안전을 새 경로가 열었는데, 그것을 부정하는 고지가 문면에 그대로 남아 있다.**
+
+**⇒ 처방 = 삭제가 아니라 조건부 치환**(§30/§29가 확정한 층 지도에서 **문면 아래 한 칸**: 문면 → **조건부 치환** → 런타임 → 사후 판정). 신규 옵션 **`toolDrivenTiming?: boolean`** 하나를 `BuildSystemPromptOptions`에 더하고, **`true`일 때만** 위 3줄을 갈아 끼운다.
+
+| 규칙 | 내용 |
+|---|---|
+| 판별자 | **`toolDrivenTiming` 1개**(⛔ 신규 옵션을 둘 이상 만들지 않는다 — G63/G229 계열 재발 방지). 값은 **`geminiProvider.ts:97` 호출부에서만 `true`** 다 |
+| 호출부 3곳 | ⭕ `realtime/geminiProvider.ts:97` = **`true`** · ⛔ `roleplay/index.ts:266`(폴백 sendMessage) = **넘기지 않는다** · ⛔ `roleplay/openingLine.ts:77` = **넘기지 않는다**. **폴백 경로에는 Live 세션이 없어 도구가 존재하지 않는다** — 넘기면 모델이 **없는 도구를 부르겠다고 말한다** |
+| 회귀 0 | `toolDrivenTiming` 부재·`false` ⇒ **조립 문자열이 바이트 단위로 오늘과 동일**(`inCallSmsEnabled`·`verifyInterceptEnabled` 선례와 같은 형태) ⇒ **12종 조립 산출물 diff 0 · clone 2종 재생성 불요** |
+| ⛔ 보존 절(한 글자도 바꾸지 않는다) | **`:74`의 *"인증번호·계좌번호의 구체적인 값을 네가 지어내 읽어 주지도 않는다"*** · **`:229`의 *"'어디에 걸어도 같은 곳으로 이어진다'는 취지의 설명·암시를 어떤 형태로도 하지 않는다"*** · **`:230`의 앞 담당자 퇴장 절**(T110/§22.1 A3) · **`:226`의 만류 조건 분리절**(§28/§30 사용자 확정) ⇒ **G386-b** |
+
+**치환 문면(정본 초안 — 기전 문장만 바꾸고 안전 절은 그대로 옮긴다)**
+
+- `:74` 대체분: *"**문자는 네가 임의로 '보냈다'고 지어내지 않는다.** 이 통화에서 문자를 실제로 보내는 방법은 **`send_prepared_sms` 도구를 부르는 것 하나뿐**이다 — 지금이 안내 문자를 보낼 때라고 판단되면 그 도구를 부르고, **도구가 결과를 돌려준 뒤에** 그 사실을 알려라. **도구를 부르지 않은 채 문자를 보냈다고 말하지 않는다.** 인증번호·계좌번호의 구체적인 값을 네가 지어내 읽어 주지도 않는다(값은 참가자 화면의 문자에 이미 있다)."*
+- `:227` 대체분: *"**상대가 그렇게 다시 확인하겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다.** 상대가 직접 확인해 보고 싶어 한다고 판단되면 **`offer_verification_desk` 도구를 부르고, 그 결과가 돌아온 뒤에만** 창구 이름을 꺼낸다 — 그전에는 *'잠시만요, 확인 부서를 연결해 드리겠습니다'* 처럼 받아 두고 기다린다."*
+- `:228` 대체분: *"**도구가 창구 안내를 돌려준 뒤에만 창구 이름을 말한다. 번호를 네가 지어내 읽어 주지 않는다** — 이 훈련에서 참가자는 번호를 안내받지 않는다. 네가 직접 그 부서로 통화를 넘겨 준다."*
+
+⚠️ **§58 P1(OQ-A70, 14벌 마감 문면)과 충돌하지 않는다** — 그쪽이 고치는 것은 `functions/src/scenarios/*.prompt.ts` **14벌**이고 이쪽이 고치는 것은 `functions/src/roleplay/promptAssembly.ts` **공통 상수 3줄**이다. **파일이 겹치지 않는다**(직접 확인). ⛔ **`[진행 강제]`(`:105-114`)·`CONVERSATION_STYLE`은 이 절이 0줄 고친다**(G372·G377 준수).
+
+### 59.4 ⭐ 계층 판정 — **수신은 클라, 판정·콘텐츠는 서버.** 새 층은 하나도 생기지 않는다
+
+**구조 사실**: 실시간 경로에서 **Gemini Live 소켓을 쥔 것은 브라우저뿐**이다(`GeminiVoiceSession.tsx:376` `ai.live.connect`). 서버(Cloud Functions)는 그 소켓에 붙어 있지 않으므로 **`toolCall`을 받을 수도, `sendToolResponse`를 보낼 수도 없다.** ⇒ **수신·응답의 층은 클라 하나뿐이며 선택지가 아니다.**
+
+| 무엇 | 층 | 근거 |
+|---|---|---|
+| `toolCall` 수신 · `sendToolResponse` 송신 | ⭐ **클라**(`GeminiVoiceSession.tsx` `onmessage`) | 소켓 보유자가 거기뿐이다 |
+| 도구 **선언**(어떤 도구가 이 세션에 존재하는가) | ⭐ **서버**(`geminiProvider.ts` `liveConnectConstraints.config.tools`) | 토큰에 고정된다 ⇒ **클라가 도구를 추가·개명할 수 없다**(`:187` 잠금 취지 그대로 유지) |
+| **하한 게이트 재검증**(지금 불러도 되는가) | ⭐ **서버**(`deliverInCallSms` / `deliverVerifyOffer`) | G12/G24와 같은 자리 |
+| 문자 **본문·인증번호·계좌·발신번호** | ⭐ **서버 카탈로그**(무변경) | AC-060 |
+| 모델에게 돌려줄 **모든 한국어 문자열**(성공·거절·실패 3종) | ⭐ **서버**(카탈로그 모듈) | **G386** |
+| **천장(백스톱) 발동 판정** | ⭐ **클라**(순수 함수) | 서버는 실시간 턴 경계를 관측하지 못한다(전사는 종료 직전 1회) |
+
+⭐⭐ **§16.1.3/G84("안전 판정 클라 위임 금지")는 약화되지 않는다.** 오늘 이미 **턴 카운팅은 클라가 하고 서버가 재검증**하는 분업이며, 저장소가 그것을 *"§13.5 스킨과 같은 프레젠테이션 층위 — 어떤 안전 판정도 게이팅하지 않는다"* 라고 **스스로 명문화해 두었다**(`callTypes.ts:41-42` · `GeminiVoiceSession.tsx:65-66`). (라)는 그 분업을 **한 칸 강화**한다 — 오늘 하한 게이트는 **클라 단독**이고(`pickDueInCallSms` · `shouldOfferVerify`) 서버는 턴을 **보지도 않는다**(`deliverInCallSms`에 `scammerTurns` 인자가 아예 없다), (라) 이후에는 **서버가 클라 신고값으로 재검증**한다.
+⚠️ **정직 고지**: 그 재검증은 **클라가 신고한 수**에 대한 것이라 위조 클라를 막지 못한다. ⛔ **막지 못한다고 적어 두는 것이 이 표의 목적이다** — 위조의 최대 효과는 오늘과 동일하게 *"자기 훈련용 모의 문자를 조금 일찍 보는 것"* 이고(`callTypes.ts:30-31`), **콘텐츠·소유권·활성·카탈로그 소속은 전부 서버가 쥔다**(무변경).
+
+### 59.5 ⭐ 도구 스키마 확정 (§57.13 (9)가 남긴 자리)
+
+**선언 위치**: 신규 서버 모듈 **`functions/src/realtime/liveTools.ts`**(순수 — Firestore·네트워크 접근 0). `geminiProvider.ts`는 이 모듈이 만든 배열을 **그대로** `tools`에 넣는다.
+
+| # | 이름 | 인자 | 선언 조건 | `description`(모델이 읽는 유일한 사용 설명 — 정본 초안) |
+|---|---|---|---|---|
+| **T1** | **`send_prepared_sms`** | ⛔ **없음**(`parameters: { type: Type.OBJECT, properties: {} }`) | `hasInCallSms(scenarioId) === true` | *"지금 이 순간 상대의 휴대전화로 **미리 준비된 안내 문자 한 통**을 실제로 보낸다. 계좌 안내·링크·인증번호 중 무엇이 나갈지는 시스템이 정하며 너는 고르지 않는다. 지금이 문자를 보낼 적절한 때라고 판단될 때 부른다. 아직 이를 때는 거절될 수 있고, 그때는 그냥 대화를 이어가면 된다."* |
+| **T2** | **`offer_verification_desk`** | ⛔ **없음** | `hasVerifyIntercept(scenarioId) && difficultyLevel === "advanced"`<br>**AND** `verifySeriesFor(scenarioId) === "A"` ← ⚠️ **오늘은 `bank-security-verify-scam` 1종뿐이다(G392 · OQ-A73)** | *"상대가 직접 확인해 보고 싶어 한다고 판단될 때 부른다. 확인 부서로 호를 넘겨 주겠다는 안내를 시작할 수 있게 된다. 아직 이를 때는 거절될 수 있고, 그때는 그냥 대화를 이어가면 된다."* |
+
+**둘 다 선언 조건에 걸리지 않으면 `tools: []` 를 그대로 보낸다 ⇒ 그 시나리오는 토큰 요청 바이트가 오늘과 동일하다(회귀 0).**
+
+**⛔ 노출하지 않는 것(전수 판정)**
+
+| 후보 | 판정 |
+|---|---|
+| `deliverVerifyReconnect`(호 전환 실행) | ⛔ **기각(G389)** — 원인은 참가자의 탭이다. 모델이 부르면 참가자가 누르지 않은 전환이 일어나 §22/ADR-0013·§38의 인과가 뒤집힌다 |
+| `endSession`·통화 종료 | ⛔ **기각** — §50.7이 *"모델의 자기 종료 선언"* 을 이미 결함으로 판정했다. 종료권을 도구로 주는 것은 그 판정의 정반대다 |
+| `recordInCallSmsEvent`(열람·탭 기록) | ⛔ **기각** — 참가자 행동의 기록이다. 모델이 부르면 **일어나지 않은 행동이 리포트에 남는다**(§42.5 계열) |
+| 난이도·수법 선택 | ⛔ **기각** — 카탈로그 선택권 이전(G373/G384의 본체) |
+| `smsId`/`offerId` 인자 | ⛔ **기각(G384)** — 위와 같다 |
+
+**`toolConfig`**: `functionCallingConfig.mode = AUTO`(`genai.d.ts:4670` — *"model decides"*)를 **명시적으로** 넣는다. ⛔ `ANY`/`VALIDATED`는 쓰지 않는다(모델이 매 턴 도구를 부르도록 강제돼 T-4가 도구 층에서 재현된다). ⚠️ `allowedFunctionNames`는 **`ANY`일 때만 유효**하다고 SDK가 명시하므로(`:4653-4654`) **허용목록을 그 필드로 걸 수 없다** — 허용목록은 **선언 배열 자체**가 지고, 그 잠금은 **G371 회귀 테스트**가 진다(§59.9).
+
+### 59.6 ⭐ 왕복 계약 — **`announceInstruction`이 별도 턴에서 *도구 응답 페이로드*로 옮겨온다**
+
+⭐⭐ **이것이 (라)가 T-2·T-4를 동시에 닫는 기전이다.** 오늘 announce 지시는 `sendClientContent({ turnComplete: true })` 로 **별도의 턴 슬롯을 소비하며** 들어간다(`GeminiVoiceSession.tsx:625`) — 그래서 예고가 도착보다 늦고(T-2), 참가자 차례를 뺏는다(T-4). 도구 응답은 **모델이 이미 진행 중인 자기 턴 안에서** 소비되므로 **턴 슬롯을 0개 쓴다.**
+
+| 단계 | 주체 | 동작 |
+|---|---|---|
+| ① | 모델 | `toolCall { functionCalls: [{ id, name: "send_prepared_sms" }] }` 송신 |
+| ② | 클라 | `name`을 **`credentials.liveTools`의 값과 비교**해 어느 콜러블인지 정한다(⛔ 이름 하드코딩 금지 — G385) |
+| ③ | 클라 | 해당 콜러블 호출 — `deliverInCallSms({ sessionId, smsId: <다음 미도착 항목>, scammerTurns, trigger: "model_tool" })` |
+| ④ | 서버 | 소유·활성·**카탈로그 소속(G12)** 재검증 → **하한 재검증**(`scammerTurns >= item.afterScammerTurns`) → 통과 시에만 **Firestore write**(G387) |
+| ⑤ | 서버 | `{ smsId, status, announceInstruction? \| declineInstruction? }` 반환 |
+| ⑥ | 클라 | `session.sendToolResponse({ functionResponses: [{ id, name, response: { status, guidance } }] })` — **`guidance`는 ⑤가 준 서버 문자열 그대로** |
+| ⑦ | 모델 | 같은 턴 안에서 이어 말한다 ⇒ ⭐ **T-2 간격 0 · 주입 0건 ⇒ T-4 0건** |
+| ⑧ | 클라 | `verifyAnnounceTurnsRef`를 **⑥ 시점에** 기록한다 — 판정은 **기존 순수 함수 `announceTurnsOnInstructionDispatch`를 그대로 재사용**한다(§45.7 V2 계약: *"지시가 실제로 모델에 닿은 시점"*. 도구 경로에서 그 시점은 ⑥이다) |
+
+**`status` 값(정본, 4값 고정)**
+
+| `status` | 언제 | Firestore write | 응답에 실리는 문자열 |
+|---|---|---|---|
+| `"delivered"` | 하한 통과 · 최초 | ⭕ **한다** | `announceInstruction`(카탈로그 원문 — 오늘과 동일) |
+| `"too_early"` | 하한 미도달 | ⛔ **안 한다(G387)** | `declineInstruction` = 서버 소유 공통 상수 |
+| `"already_delivered"` | 그 항목이 이미 도착함(멱등 재호출) | ⛔ 추가 write 없음(오늘 멱등 그대로) | `declineInstruction` |
+| `"none_pending"` | 이 시나리오의 미도착 항목이 0건 | ⛔ | `declineInstruction` |
+
+**서버 소유 거절 문자열(정본 초안 — `functions/src/scenarios/inCallSms.ts` 모듈 상수, `NO_NUMBER_INVENTION` 선례와 같은 자리)**
+- `too_early`: *"(아직 그 안내를 보낼 단계가 아니다. 문자를 보냈다고 말하지 말고, 지금 하던 이야기를 그대로 이어가라. 조금 뒤에 다시 시도해도 된다.)"*
+- `already_delivered` / `none_pending`: *"(그 안내는 이미 보냈다. 새로 보냈다고 말하지 말고, 이미 보낸 문자를 확인해 달라고 하거나 하던 이야기를 이어가라.)"*
+- **실패(콜러블이 아예 닿지 않음)**: `credentials.liveTools.failureInstruction` = *"(지금은 문자를 보낼 수 없다. 문자를 보냈다고 말하지 말고 하던 이야기를 그대로 이어가라.)"* ⭐ **이 문자열도 서버가 소유해 자격증명으로 내려온다(G386)** — 그러지 않으면 **클라가 모델 대면 한국어 지시를 저작하게 되고**, 그것은 G101이 카탈로그 필드로 묶어 둔 것을 푸는 방향이다.
+
+⛔ **`sendToolResponse`는 어떤 경로에서도 생략하지 않는다(G390 전반부).** 콜러블이 던지든 네트워크가 끊기든 **반드시 응답을 보낸다** — 안 보내면 `BLOCKING` 도구가 통화를 멈춘다(§59.0 1).
+
+### 59.7 ⭐ 하한(바닥) — **값은 하나도 바뀌지 않는다**
+
+| 대상 | 값 | 출처 | (라) 이후 |
+|---|---|---|---|
+| 문자 7종 | `afterScammerTurns` = loan 3·5 / institution 3·6 / card 3·5 / **tax 3** / courier 2·5 / blackmail 3 / bank 3 | `functions/src/scenarios/inCallSms.ts:52`·`:63`·`:76`·`:92`·`:105`·`:120`·`:134`·`:155`·`:176`·`:190`·`:199` | **무변경** — 그 턴 **이전** 도구 호출은 서버가 `too_early`로 거절 |
+| 확인 오퍼 | `availableAfterScammerTurns` = **4가 5종**(`verifyIntercept.ts:109`·`:119`·`:129`·`:139`·`:149`) · **2가 1종**(`:167` bank) | 동 | **무변경** |
+
+⛔ **하한 값을 (라)를 이유로 조정하지 않는다** — G368(간격은 정수가 아니라 턴 슬롯 경쟁이 만든다)이 그대로 유효하고, §53이 `bank-protect-account`의 `3`을 **유일한 정수 해**로 못 박았다(§53.6 (5)).
+⚠️ **비교 방향 주의**: 오늘 클라 판정은 `afterScammerTurns <= scammerTurns`(`inCallSms.ts:41`)이고 서버 폴백 판정은 `=== scammerTurnNumber`(`:260`)다 — **서버의 새 하한 재검증은 `>=`(클라와 같은 방향)** 여야 한다. `===`로 쓰면 모델이 한 턴 늦게 부른 순간 **영영 거절**된다(메모리 `feedback_defect_report_recheck_the_other_path`).
+
+### 59.8 ⭐ 천장(백스톱) — **값과 근거**
+
+**모듈**: 신규 순수 모듈 **`src/lib/realtime/toolWindow.ts`**(⛔ `src/lib/verifyintercept/verifyIntercept.ts`에 더 얹지 않는다 — 이미 4개 축이 들어 있다).
+
+| 상수 | 값 | 근거 |
+|---|---|---|
+| **`TOOL_WINDOW_MAX_BOUNDARIES`** | **2** | ⚠️ **판단값이다**(`INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES`·`STALL_GRACE_MS`·`prefixPaddingMs`와 같은 형식 — 측정이 아니다). ⭐ 근거 3줄: ① **0은 오늘 동작**(모델에게 시점을 주지 않는다) ⇒ 최솟값은 1 · ② **한 시나리오 안에서 두 트리거가 가장 가까운 간격이 1턴**이다(bank verify@2 → sms@3 · card verify@4 → sms@5) — 창을 3 이상으로 열면 **두 항목이 같은 경계에 몰려** G31 큐가 직렬화하는 동안 뒤 항목이 밀린다 · ③ **2 = 모델 턴 두 번 = 참가자와 한 번 주고받을 창**이며, 이것이 *"모델이 시점을 고른다"* 가 실제로 성립하는 최소치다 |
+| **`TOOL_WINDOW_STALL_SEC`** | **90** | ⚠️ **판단값.** ⛔ **경계 수만으로는 닫히지 않는 구멍이 있다** — 모델이 `turnComplete`를 더 내지 않으면 **경계가 영영 안 온다**(`INSTRUCTION_DRAIN_BACKSTOP_SEC`가 존재하는 이유와 **정확히 같은 형태**, `verifyIntercept.ts:340-363`). 이 타이머는 **사기범 턴 경계마다 리셋**되므로 *느린 대화*를 선점하지 않고 **정지만** 잡는다. 90초는 `AC-007` 한도(100턴/60분, `shared/constants.ts:5-16`)에 비해 충분히 짧고, 한 번의 모델 턴 + 참가자 응답(체감 수십 초)보다 충분히 길다 |
+
+**판정 함수(순수, 결정론적)**
+
+```
+shouldFireBackstop({
+  toolAvailable,             // credentials.liveTools에 그 도구 이름이 있는가
+  boundariesSinceDue,        // 하한 도달 이후 완료된 사기범 턴 경계 수
+  secondsSinceLastBoundary,  // 마지막 경계(없으면 하한 도달) 이후 경과 초
+  toolCallFailed,            // 그 항목에 대해 도구 경로가 실패했는가(G390)
+}): boolean
+```
+규칙(⛔ 이 순서 그대로):
+1. `toolAvailable === false` ⇒ **`true`**  ← ⭐ **회귀 0의 유일한 레버(G388).** 도구가 없는 세션(카탈로그 없음 · 폴백 강등 · ElevenLabs · 계열 B verify)에서는 **오늘 코드 경로와 바이트 단위로 같은 타이밍**이 된다.
+2. `toolCallFailed === true` ⇒ **`true`**(창을 즉시 닫는다 — G390)
+3. `boundariesSinceDue >= TOOL_WINDOW_MAX_BOUNDARIES` ⇒ **`true`**
+4. `secondsSinceLastBoundary >= TOOL_WINDOW_STALL_SEC` ⇒ **`true`**
+5. 그 외 ⇒ `false`
+
+**백스톱 경로는 오늘 경로 그대로다** — `deliverInCallSms({ ..., trigger: "backstop" })` → `announceInstruction` → `enqueueTurnInstruction` → G31 큐 → `drainInstructionQueue`(§52.7 가·나 게이트가 그대로 곱해진다) ⇒ **AC-059/060/061의 결정론적 도착이 그대로 보장된다.**
+
+### 59.9 ⭐ 회귀 게이트 형태 (⛔ G371 집행 포함)
+
+| # | 게이트 | 형태 |
+|---|---|---|
+| **R1** | ⭐ **G371 집행** — `tools`가 **허용목록과 정확히 일치**함을 단언 | 오늘의 `geminiProvider.test.ts:104`(`body.includes("tools")` — **도구를 넣어도 초록**)를 **대체**한다. 새 단언: ① 카탈로그·게이트 **둘 다 없는** 시나리오(예: `kidnapping-threat`) ⇒ `setup.…config.tools` 가 **`[]`** · ② 문자만 있는 시나리오 ⇒ `functionDeclarations`의 `name` 집합이 **정확히 `{send_prepared_sms}`** · ③ bank·고급 ⇒ **정확히 `{send_prepared_sms, offer_verification_desk}`** · ④ **선언된 모든 함수의 `parameters.properties`가 빈 객체**(G384 기계 집행) · ⑤ **허용목록 밖 이름 0건**(집합 동등 비교이므로 자동) |
+| **R2** | 프롬프트 **회귀 0** | `buildSystemPrompt(p, {...opts})` 와 `buildSystemPrompt(p, {...opts, toolDrivenTiming: false})` 가 **문자열 동등**(전 시나리오 × 전 난이도). `inCallSmsEnabled` 선례(`promptAssembly.test.ts:152-153`)와 같은 형태 |
+| **R3** | 프롬프트 **치환 정합** | `toolDrivenTiming: true` 산출물에 ① **도구 이름 2개가 문자열로 등장**(⇒ 이름을 바꾸면 여기서 빨간불) ② **보존 절 4개가 그대로 존재**(G386-b) ③ *"별도 지시가 이 프롬프트에 함께 들어온다"*·*"앱의 안내 지시가 오기 전에는"* **0건** |
+| **R4** | 호출부 비대칭 방지 | `roleplay/index.ts`·`openingLine.ts`의 조립 산출물에 **도구 이름 0건**(폴백에 도구가 없다는 사실의 기계 집행). ⚠️ 소스 정적 검사가 아니라 **조립 산출물 문자열 검사**로 건다(메모리 `feedback_tripwire_not_contract`) |
+| **R5** | 하한 재검증 | `deliverInCallSms`: `trigger:"model_tool"` + `scammerTurns < afterScammerTurns` ⇒ `status:"too_early"` **AND Firestore write 0회**(G387). `>=` 방향 단언 포함(§59.7 ⚠️) |
+| **R6** | 백스톱 순수 함수 | `shouldFireBackstop` 규칙 5행 전수 + **`toolAvailable:false` ⇒ 항상 `true`**(G388 회귀 0 레버) |
+| **R7** | 모델 대면 문자열의 소유 | `src/**` 전수에서 **모델에게 보내는 한국어 지시 리터럴 0건**(오늘 유일한 예외 `OPENING_TRIGGER_TURN`은 **허용목록으로 명시**). 실패 메시지에 처방을 담는다: *"이 문자열은 서버 카탈로그로 옮기고 `credentials`로 내려받아라(G386)"* |
+| **R8** | 2단계 보존 | 도구 경로에서도 `deliverVerifyOffer`가 **`stage:"announce"`에서 문서를 쓰지 않고 `commit`에서만 쓴다**(§38.4 E 무변경 — G391) |
+
+### 59.10 ⭐ 커밋 경계 — **순서가 설계다** (⛔ 한 커밋에 몰지 말 것 — G369 관례 계승)
+
+| # | 커밋 | 내용 | 그 순서인 이유 · 그 시점의 관측 가능한 동작 |
+|---|---|---|---|
+| **A** | **클라 수신 배선**(동작 0 변화) | `GeminiLiveSession` 타입에 **`sendToolResponse` 추가** · `onmessage`에 `toolCall`/`toolCallCancellation` 분기 · `credentials.liveTools` **부재면 즉시 `{ status:"unsupported" }` 로 답하고 끝**(한국어 문자열 0건 — 이 분기는 오늘 도달 불가다) · 순수 매핑 함수 + 테스트 | ⛔ **G383** — `BLOCKING` 도구를 답 없이 두면 통화가 멈춘다. **도구가 아직 선언되지 않았으므로 이 커밋의 관측 가능한 동작 변화는 0**이다 |
+| **B** | **서버 콜러블 증분**(동작 0 변화) | `deliverInCallSms`에 `scammerTurns?`·`trigger?` 수용 + 하한 재검증 + `status`/`declineInstruction` 응답 · `deliverVerifyOffer`에 `trigger?` + `status`/`declineInstruction` · **거절 문자열 상수 2종** · **`logger.info`로 `trigger` 기록**(§59.11 관측) · R5 | **클라가 아직 새 필드를 보내지 않으므로 부재=오늘 동작**이다. 응답 필드 추가는 하위호환(클라가 모르는 필드는 무시) |
+| **C** | ⭐ **(라) 점화 — 한 커밋** | `liveTools.ts` 신설(선언 + 이름 상수 + `failureInstruction`) · `geminiProvider.ts`의 `tools:[]` → 조건부 배열 + `toolConfig.mode=AUTO` · `createRealtimeCall` 응답에 **`liveTools`** · **프롬프트 조건부 치환**(`toolDrivenTiming`) · **R1(G371)·R2·R3·R4** | ⛔ **셋을 가르지 말 것(G382)** — 문면만 먼저 가면 모델이 **없는 도구**를 부르겠다고 말하고, 선언만 먼저 가면 모델이 **금지 문면 때문에 안 부른다**(무해하지만 (라)가 안 켜진다). ⚠️ **이 시점에는 백스톱이 여전히 즉시 발동**하므로 앱이 모델보다 먼저 보낼 수 있다 = **오늘 동작과 같거나 그보다 이르다** = 안전한 중간 상태 |
+| **D** | **천장(창) 열기** | `toolWindow.ts` 신설 · `play/page.tsx`의 문자·오퍼 발동 effect를 **지연 발동**으로 전환 · `toolCallFailed` 배선 · **R6·R8** | ⛔ **C보다 먼저 넣지 말 것** — 도구가 없는데 창만 열면 **문자가 최대 2경계/90초 늦게 도착**할 뿐이다(순수 후퇴) |
+| **E** | **라이브 관측 + N 조정**(코드 0줄일 수 있음) | **P-E**(§59.11) 실행 → 로그에서 `model_tool` vs `backstop` 비율 확인 → 필요 시 `TOOL_WINDOW_MAX_BOUNDARIES`만 조정 | ⭐ **N은 판단값이므로 조정 근거를 로그로 남긴 뒤에만 바꾼다** |
+
+⛔ **A·B는 서로 순서 의존이 없다**(둘 다 동작 0 변화) — 병렬 가능. **C는 A·B 둘 다 뒤**, **D는 C 뒤**, **E는 D 뒤**.
+
+### 59.11 프로브 · 관측
+
+| # | 무엇을 재는가 | 예산 |
+|---|---|---|
+| **P-A** | ⭕ **완료(판정 A)** — §59.2 | 라이브 1호출(소모됨) |
+| **P-D** | ⛔ **선결** — 관측 세션이 **Mock 강등이 아닌지**(§58 G378 계승). 강등이면 시스템 프롬프트가 읽히지 않아 이 절의 판정 전부가 그 세션에 대해 성립하지 않는다 | 라이브 0회(서버 로그 판독) |
+| **P-E** | **(라)가 실제로 켜졌는가** — ① `toolCall`이 세션당 몇 회 오는가 ② `status` 분포(`delivered`/`too_early`/…) ③ **도착 경로 비율**(`model_tool` vs `backstop`) ④ 도착→예고 간격(T-2 지표) | 라이브 1통화 |
+| **P-F** | **T-4 재현 0건 확인** — 도구 경로로 도착한 세션에서 `instructionTurn` 주입이 **0건**인가(=턴 슬롯 소비 0) | P-E와 **같은 통화**(추가 0) |
+
+⭐ **관측 수단 = `logger.info` 1종**(커밋 B). ⛔ **Firestore 필드는 늘리지 않는다** — 리포트·리플레이가 그 값을 필요로 하지 않고, 스냅샷을 읽는 문서에 필드를 더하면 §15.6 G계열 파급을 다시 전수해야 한다(대가 > 이득). ⚠️ **대가를 적어 둔다**: 로그는 보존 기간이 짧아 **사후 재분석 창이 제한된다.**
+
+### 59.12 무약화 전수
+
+| 대상 | 확인 |
+|---|---|
+| **AC-060**(트리거·콘텐츠 안전) | ⭐⭐ **약화 0 — 오히려 원문에 더 가깝다.** AC-060은 *"문자 도착은 **사기범 턴에 실린 구조화 신호**를 서버가 파싱해 전달하는 경우에만 발생하고, 앱·클라이언트는 사기범 대사나 사용자 발화를 **자유텍스트로 분류해** 도착을 판정하지 않는다"* 라고 적는다(`PRD.md:673`). **function call은 정확히 "사기범 턴에 실린 구조화 신호"** 이며 **자유텍스트 분류를 0건 도입한다**(§57.8 (가) 기각의 핵심이 그대로 살아 있다). ⚠️ *"서버가 파싱해"* 에 대한 정직한 읽기: **수신은 클라, 판정·렌더는 서버**이며 이는 **오늘의 분업과 동일**하다(오늘도 클라가 턴을 세어 서버에 알린다). 본문·인증번호·계좌·발신번호·`url` 부재는 **전부 무변경** |
+| **AC-059**(통화 유지 불변식) | **무변경** — 오버레이·복귀·상시 종료·표식 경로 **0줄** |
+| **AC-061**(인증번호 도착) | **무변경** — ⭐ **천장(백스톱)이 결정론적 도착을 그대로 진다.** 모델이 끝내 안 불러도 최대 **2경계 또는 90초** 뒤 오늘 경로로 도착한다 |
+| **§16.1.3 / G84**(안전 판정 클라 위임 금지) | **무변경** — §59.4 표. 클라가 얻는 것은 **시점 신고**뿐이고 소유·활성·카탈로그·난이도·프로바이더 재검증 5종은 서버에 그대로 있다. ⭐ 하한이 **클라 단독 → 서버 재검증**으로 **한 칸 강화**된다 |
+| **G12 / G24**(카탈로그 소속 재검증) | **무변경 · 강화** — 도구에 인자가 없어(G384) 모델은 항목을 **고를 수 없다**. `findInCallSmsItem`/`findVerifyInterceptItem`은 그대로 유일한 관문이다 |
+| **AC-005 / AC-013 / AC-024 / ADR-0004** | **0줄** — PII 마스킹·입력/프롬프트 분리·페르소나 프롬프트 토큰 고정 **무접촉**. ⚠️ 새로 클라에 닿는 문자열은 **`failureInstruction` 1개**이며(`announceInstruction`이 이미 그 계열이다) **페르소나·수법 내용을 담지 않는다** |
+| **`tools:[]` 잠금의 취지**(`geminiProvider.ts:187`) | **무변경** — 잠금이 막던 것은 *"클라가 임의 도구를 주입"* 이고, 도구는 여전히 **토큰에 서버 고정**이다. 클라는 선언을 **읽지도 바꾸지도** 못한다 |
+| **§52.7 / G369 / G370 / G99 / G31 큐 계약** | **무접촉** — 백스톱 경로가 그 게이트를 **그대로 통과**한다. 도구 경로는 큐를 **아예 타지 않는다**(턴 슬롯 0) |
+| **§38.4 E**(컨트롤은 예고보다 먼저 열리지 않는다) | **무변경(G391)** — 2단계 announce/commit를 도구 경로에서도 유지한다. `verifyAnnounceTurnsRef` 기록 지점만 **드레인 → 도구 응답 송신**으로 옮기고 **판정 함수는 그대로 재사용**한다(§45.7 V2) |
+| **§47.3 C1/C2 · §49 V5 · G263/G264/G284/G285** | **무변경** — `shouldAnnounceVerifyOffer`·`shouldOfferVerify` **0줄**. ⭐ **`verifyIntentExpressed`를 되살리지 않는다(G393)** — 오늘 죽은 채 그대로 두고, **도구는 계열 A(bank 1종)에만** 선언한다(G392). 계열 B 5종의 확장은 **OQ-A73** |
+| **§57 D1 / §55 D3·D4 / §15.1.5 앵커 / G15·G19·G21·G22·G135** | **무접촉** — `createdAt`·`turnIndex`·앵커 산식 **0줄** |
+| **§58 P1 / OQ-A70~A72 / `[진행 강제]` / `CONVERSATION_STYLE`** | **선취 0건** — 편집 파일이 겹치지 않는다(§59.3 ⚠️). G372·G377 준수 |
+| **ADR-0007 / ADR-0013 / §22 / §52.7 / §57 원문** | **무수정** — 이 절은 **위에 얹는다**. ADR-0007의 function calling 기각에 조건이 붙는 것은 **신규 ADR-0015**가 기록한다 |
+| **§20.7 · `.githooks` · `CLAUDE.md` · `firestore.rules` · `docs/Database.md`** | **무접촉**(Firestore 스키마 **0건 증가** — §59.11) |
+
+### 59.13 ⛔ 닫지 못한 것 (자기 고지 — 지우지 말 것)
+
+1. ⛔ **architect는 라이브·셸·테스트·빌드·에뮬레이터를 0회 실행했다.** **P-A 결과(`toolCallReceived:true` 등)는 전부 인계 인용값**이다. ⭐ **인용값 비의존 구간**: SDK 타입 사실(`toolCall`·`sendToolResponse`·`Behavior.BLOCKING`·`FunctionCallingConfigMode`·`allowedFunctionNames`가 `ANY` 전용) · 프롬프트 3줄의 금지 문면 · 카탈로그 값 전건 · 계층 배치 · `tools:[]`와 그 테스트 — **파일 열람만으로 성립한다.**
+2. ⚠️ **`TOOL_WINDOW_MAX_BOUNDARIES=2`·`TOOL_WINDOW_STALL_SEC=90`은 판단값이며 라이브로 검증되지 않았다.** 근거는 §59.8의 3줄이고, **틀리면 P-E가 드러낸다**(모델이 창 안에 한 번도 안 부르면 비율이 `backstop` 100%로 나온다).
+3. ⚠️ **모델이 도구를 실제로 얼마나 자주 부를지 모른다.** P-A는 *"부를 수 있다"* 를 보였을 뿐 *"적절한 때에 부른다"* 를 보이지 않았다 — **(라)의 핵심 가치(흐름 주도)는 P-E 전까지 미검증**이다.
+4. ⚠️ **`too_early` 응답을 받은 모델이 그 지시를 지킬지 검증하지 못했다.** 지키지 않으면 *"문자 보냈어요"* 라고 말한 뒤 실제 도착이 없는 **UF-008 Failure (a)** 가 재현된다. ⛔ 완화 수단은 있다(G390 — 도구 실패·거절 뒤 백스톱 창을 즉시 닫아 **말과 사실을 사후에 맞춘다**) 그러나 **간격 자체를 0으로 만들지는 못한다.**
+5. ⚠️ **`toolCallCancellation`(`genai.d.ts:9264`) 처리 규약을 실측하지 못했다.** 이 절은 *"취소 통보가 온 id는 아직 콜러블을 부르지 않았으면 부르지 않고, 이미 불렀으면 되돌리지 않는다(문자는 이미 도착했다)"* 로 정했는데, **이 조합이 실제로 발생하는지는 미확인**이다.
+6. ⚠️ **`send_prepared_sms`가 여러 항목을 가진 시나리오(loan·institution·card·courier)에서 "다음 미도착 항목"을 고르는 규칙은 `pickDueInCallSms`를 재사용한다** — 그런데 그 함수는 `afterScammerTurns <= scammerTurns` 를 만족하는 것 중 **가장 이른 것**을 고른다. **하한을 아직 안 넘긴 항목이 유일한 후보일 때 `null`이 돌아온다** ⇒ 클라가 `status:"none_pending"` 으로 답하게 되는데, ⛔ 이때 **`too_early`와 구분되지 않는다.** 구현 시 **클라가 아니라 서버가 두 상태를 가르도록** `smsId` 선택도 서버로 옮길지는 **implementer 재량이 아니라 §59.6 ③의 미해결 지점**이다(권고: 클라가 `smsId` 없이 부르고 **서버가 고른다** — 그러면 G12 재검증이 자기 카탈로그 안에서 닫히고 두 상태가 갈린다).
+7. ⚠️ **`docs/Tasks.md` 담당 행이 있는지 확인하지 못했다**(planner 소관). **테스트 수는 `CLAUDE.md` 인용값**(재측정 0회).
+8. ⛔ **셸이 없어 브랜치를 만들지 못했다** — 지시받은 `docs/s59-flow-leading-design` 브랜치 생성·커밋·push **0건**. 편집은 **워킹 트리에 직접** 들어갔다(§59.15).
+9. ⚠️ **도구 `description`·거절 문자열·프롬프트 치환 문면은 "정본 초안"이다.** 페르소나 문면이 아니라 기전 서술이라 architect가 저작했으나(§58이 문면 저작을 미룬 것과 범주가 다르다), **모델이 어떻게 읽는지는 라이브 전까지 미검증**이다.
+
+### 59.14 신규 게이트
+
+| # | 규칙 |
+|---|---|
+| **G382** | ⛔ **프롬프트 조건부 치환(`toolDrivenTiming`)을 도구 선언보다 먼저 배포하지 않는다.** 반대 방향은 안전하다 — **위험은 한 방향뿐이다**(모델이 없는 도구를 부르겠다고 말한다). 그래서 §59.10 커밋 C는 **한 커밋**이다 |
+| **G383** | ⛔ **도구 선언을 클라의 `toolCall` 수신 배선보다 먼저 배포하지 않는다.** 도구는 기본 `BLOCKING`(`genai.d.ts:1206-1209`)이라 **응답이 없으면 통화가 멈춘다**(회귀가 아니라 정지) |
+| **G384** | ⛔ **Live 도구에 인자를 두지 않는다**(G373 계승·확장 — `offerId`도 금지). 회귀 게이트가 `parameters.properties` **빈 객체**를 기계로 단언한다(R1 ④) |
+| **G385** | ⛔ **도구 이름을 클라에 하드코딩하지 않는다.** `createRealtimeCall` 응답 `liveTools`로 내려받아 비교한다 — 드리프트 게이트를 만드는 대신 **드리프트가 성립할 자리를 없앤다** |
+| **G386** | ⛔ **모델에게 돌아가는 한국어 문자열은 전부 서버가 소유한다**(성공·거절·실패 3종). 클라가 저작하면 G86-a/b/c·G101이 카탈로그 필드로 묶어 둔 것이 풀린다. **G386-b**: 조건부 치환 시 **보존 절 4개**(값 창작 금지 · *"어디에 걸어도 같은 곳"* 금지 · 앞 담당자 퇴장 · 만류 조건 분리)는 **한 글자도 바꾸지 않는다** |
+| **G387** | ⛔ **`too_early` 판정에서 Firestore 문서를 쓰지 않는다.** 문서 존재 = **실제 도착**이며 문자함·리포트·랜딩이 전부 그 위에 있다 |
+| **G388** | ⛔ **백스톱 지연 창은 `credentials.liveTools`에 그 도구가 있을 때만 연다.** 없으면 **즉시 발동 = 오늘 경로**다 — 이것이 회귀 0의 **유일한 레버**이며 지우면 도구 없는 세션의 문자가 늦어진다 |
+| **G389** | ⛔ **`deliverVerifyReconnect`(호 전환 실행)를 도구로 노출하지 않는다.** 그 인과의 주체는 **참가자의 탭**이다(§22/ADR-0013·§38) |
+| **G390** | ⛔ **`sendToolResponse`를 어떤 경로에서도 생략하지 않는다**(콜러블 throw·네트워크 실패 포함). 그리고 **도구 경로가 실패한 항목은 백스톱 창을 즉시 닫는다** — 실패를 조용히 흡수하면 *"보냈다는 말"* 과 *"도착 없음"* 의 간격이 무한이 된다 |
+| **G391** | ⛔ **도구 경로에서도 verify 2단계(announce/commit)를 없애지 않는다**(§38.4 E). 컨트롤은 여전히 **예고 턴이 끝난 뒤**에만 뜬다 |
+| **G392** | ⛔ **`offer_verification_desk`를 계열 B 5종에 선언하려면 OQ-A73 확정이 먼저다.** 사용자가 **두 번** 축소를 요구한 컨트롤이다(§47 신고 ③-b · §49 신고 7) |
+| **G393** | ⛔ **`verifyIntentExpressed`를 되살리지 않는다**(§57.12 계승). 도구 호출이 그 자리를 대신하는 것은 **실시간 경로뿐**이며, **폴백(텍스트) 경로는 무변경**이다(계열 B는 그쪽에서 여전히 열리지 않는다 — OQ-A73이 그 비대칭도 함께 묻는다) |
+
+### 59.15 신규 OQ
+
+| OQ | 질문 | 소유 |
+|---|---|---|
+| **OQ-A73** | **`offer_verification_desk`를 계열 B 5종**(`institutional-impersonation`·`card-company-impersonation`·`loan-refinance-scam`·`tax-refund-scam`·`courier-customs-scam`)**에도 선언할 것인가** — 오늘 그 5종은 확인창구 오퍼가 **영구히 열리지 않는다**(`verifyIntentExpressed`가 죽어 있다, §57.7 · §49.9 row 5). 도구를 주면 **모델이 "참가자가 의심했다"를 듣고 부르므로 §47 신고 ③-a(*"오퍼가 참가자 의심과 무관하게 뜬다"*)의 원인이 오히려 제거된다.** ⭐ **architect 권고 = 채택**(그러나 **사용자가 두 번 축소를 요구한 컨트롤**이라 architect가 단독 확정하지 않는다 — G392). ⛔ 채택하면 **OQ-A69는 실시간 경로에 대해 소멸**하고, **폴백 경로의 비대칭**(그쪽은 여전히 안 열린다)만 남는다 | **User** |
+
+### 59.16 이 패스의 편집 범위 (⛔ 정본)
+
+`docs/Architecture.md`(**§59 신설 — §0~§58 원문 0줄 수정**) · `docs/DECISIONS.md`(**#96 1행 추가**) · `docs/adr/0015-model-initiated-live-tool-timing.md`(**신설**) · `docs/API.md`(**증분 3건 추가 — 기존 절 0줄 수정**) **4파일뿐**.
+⛔ **`src/**`·`functions/**` 0줄**(전부 **읽기만** 했다) · ⛔ `docs/PRD.md`·`docs/UX.md`·`docs/Tasks.md`·`docs/Database.md`·`docs/CHANGELOG.md`·`README.md`·`CLAUDE.md`·`firestore.rules` **무편집** · ⛔ **번호 예약 0건** · ⛔ **브랜치·커밋·push 0건**(셸 부재 — §59.13 (8)).
+**⇒ 인계 2건**: ① **`docs/Tasks.md` 담당 행 등재**(planner — 커밋 A~E + P-D/P-E/P-F) · ② **OQ-A73 확정 후 계열 B 확장**(architect 후속 패스 — 선언 조건 1줄 + R1 기대 집합 갱신).
+**UX 추적성**: 신규 Screen ID·Flow ID·라우트 **0건**. 닿는 기존 항목은 **UX-027/UF-008**(통화 중 문자 — T1 도구) · **UX-031/UF-011**(확인 시도 무력화 — T2 도구) · **UX-014**(통화 셸 — 백스톱 창이 여는 타이밍) 이며 **신규 매핑 0건**이다.
