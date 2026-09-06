@@ -366,3 +366,26 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | 처리 증분 | **기존 트랜잭션 안**에서, 플래그가 `true`일 때만 이미 읽어 둔 메시지 스냅샷에서 `turnIndex === 0 && role === "scammer"` 문서에 `notSpoken: true`를 **update**한다. **추가 read 0회 · 멱등 · write 건수와 무관.** 필드 정의는 `docs/Database.md` `messages` 표. |
 | ⛔ 금지 | **서버가 플래그 없이 추론하지 말 것**(세션 문서에 실시간 프로바이더 기록이 없고, 강등 세션과 구분되지 않는다 — §55 G351) · **오프닝 행 삭제·미작성·`turnIndex` 재부여 금지**(실시간 앵커 `+1`이 그 행에 의존 — §55 G348) · **`turnIndex`·`createdAt`·기존 필드 0줄 수정** · **백필 0건**. |
 | 소비 | **표시·집계 3곳뿐** — 리플레이 타임라인 · `analyzeConversation` · 되감기 컨텍스트. ⛔ **앵커·문서 수 계산(`historySnap.size`·`resolveAnchor` 계열·`mockScreenMessages`)에는 적용 금지**(§55 G350). |
+
+### `submitRealtimeTranscript` **증분** — 참가자 시계 기준 상대 시각 (§57.2 (6) 처방 **D1** · **OQ-A68 User 확정** · `docs/DECISIONS.md` **#95**)
+
+> ⭐ **이 절은 사후 문서화다 — 계약 증분은 이미 main에 병합돼 있다**(`functions/src/realtime/transcriptTiming.ts` · `functions/src/realtime/submitTranscript.ts`). 아래 문면은 **그 소스를 직접 열람해 옮긴 것**이며, 새 요구·새 필드를 만들지 않는다.
+> ⚠️ **문서 이력 고지**: 이 증분을 처음 쓴 것은 implementer였고 reviewer가 **REJECTED** 했다(① `docs/API.md`는 architect 전용 — `AGENTS.md:64` ② *"OQ-A68 확정"* 단언의 근거가 `docs/DECISIONS.md`에 없었다). 그 편집은 되돌려졌고 **User 확정이 `#95`로 등재된 지금 architect가 정식으로 쓴다.**
+
+| Item | Value |
+|---|---|
+| Request 증분 | `{ sessionId, turns: Array<{ role, text, **atMs?: number** }>, openingNotSpoken?, **answeredAtMs?: number** }` — **옵셔널 2개 추가**(`functions/src/realtime/submitTranscript.ts:26`·`:41-46`, 클라 대칭 정의 `src/lib/api/types.ts:240`·`:258`). **Response 무변경**(`{ written: number }`). |
+| 의미 | **`answeredAtMs`** = 참가자가 **"받기"를 누른 시각**(클라 벽시계 ms, `src/app/session/play/page.tsx:861`). **`turns[].atMs`** = **그 시각 기준 상대 ms**(`play/page.tsx:274-275` — `Date.now() - answeredAtMsRef.current`). ⭐ **전사에는 정확한 write 시각이 없다**는 실시간 경로의 한계를 클라 시계로 메우는 것이 이 증분의 전부다. |
+| **처리 규칙**(⛔ 정본 — `transcriptTiming.ts`의 `resolveTurnCreatedAtMs`) | 턴 하나의 `createdAt`(ms)을 다음 **두 갈래**로 정한다.<br>**① `atMs` 부재** → `baseTimeMs + i * 1000` — **현행 합성 로직 그대로, 클램프 없음**(`transcriptTiming.ts:41-43`). `i`는 **`turns` 배열 인덱스**이며 마스킹으로 버려진 턴도 인덱스를 소모한다(종전과 동일).<br>**② `atMs` 존재** → `base = answeredAtMs ?? session.createdAt`, `raw = base + atMs`, **클램프 `[session.createdAt, nowMs]`** (`transcriptTiming.ts:44-46`). |
+| 기준점·클램프 값의 출처 | `session.createdAt`은 **서버가 쓴 Timestamp**(`submitTranscript.ts:104` — 클램프 하한이자 `answeredAtMs` 부재 시 기준점 폴백). `baseTimeMs`·`nowMs`는 **둘 다 트랜잭션 안에서 1회 캡처한 같은 값**(`submitTranscript.ts:102` `const baseTime = Date.now()` → `:126-127`) ⇒ **클램프 상한 = 전사 제출 시각**이다. |
+| ⛔ **클램프는 ② 경로에만 적용된다** | 합성 경로(①)를 클램프하면 *"턴마다 1초씩 벌어진다"* 는 기존 산식이 `now` 근처로 뭉개져 **과거 동작이 바뀐다** — *"부재 시 100% 동일"* 이라는 D1의 하드 요구 위반이다(`transcriptTiming.ts:35-37`, 회귀 게이트 `__tests__/transcriptTiming.test.ts:90-104`). |
+| 조합별 결과(4행) | **`atMs` 없음 + `answeredAtMs` 없음** = 레거시 합성 · **`atMs` 없음 + `answeredAtMs` 있음** = **그 턴은 여전히 레거시 합성**(게이트 `transcriptTiming.test.ts:29-39`) · **`atMs` 있음 + `answeredAtMs` 없음** = `session.createdAt + atMs` · **둘 다 있음** = `answeredAtMs + atMs`. ⇒ ⭐ **판별자는 턴 단위 `atMs`이지 `answeredAtMs`가 아니다.** |
+| 입력 검증 | 두 값 모두 **`typeof === "number"` 일 때만 채택하고 아니면 부재로 강등**한다(`submitTranscript.ts:123-124`). ⚠️ **`NaN`/`Infinity`는 이 가드를 통과한다**(`typeof NaN === "number"`) — 오늘 트리의 사실이며 이 절이 새로 만든 요구가 아니다. 음수·미래값은 **클램프가 흡수**한다(게이트 `transcriptTiming.test.ts:66-88`). |
+| 하위 호환 | ⭐ **부재 = 무영향.** 과거 클라이언트·과거 세션·`atMs`를 못 만든 경로(이 화면에서 *"받기"* 를 누르지 않은 드문 경로 — `play/page.tsx:272-275`·`:302-308`)는 **한 글자도 달라지지 않는다.** **백필 0건**(과거 문서를 다시 쓰지 않는다). |
+| ⛔ 무변경(같은 콜러블 안에서 건드리지 않는 것) | **`turnIndex` 부여**(여전히 `historySnap.size`부터 1씩 — §55 G350) · **`session.answeredAt` 백필은 여전히 *전사 제출 시각*으로 쓴다**(`submitTranscript.ts:140-141` — ⛔ `answeredAtMs`로 바꾸지 않았다. 그 값의 유일한 실소비처는 **AC-007 한도 판정**이다: `docs/Architecture.md` §57.2 (5)) · **`openingNotSpoken` 경로와 교차 0건** · **PII 마스킹·`MAX_TURNS`/`MAX_TEXT_LEN`·소유권 검증 무변경.** |
+| Firestore 스키마 | **0건 — `docs/Database.md` 무변경.** `messages.createdAt`의 **값**만 달라지고 필드는 늘지 않는다. |
+| 소비(달라지는 것) | **경과초 라벨 3곳뿐** — `analyzeConversation.ts:165-168`(*"N초 시점"*) · `smsTimeline.ts:136` · `mockScreenTimeline.ts:90`. ⛔ **정렬 축은 여전히 `turnIndex`** 이고(`functions/src/report/generateReportCore.ts:63` — `orderBy("turnIndex","asc")`) 앵커 리졸버(§15.1.5 · G15/G19/G21/G22/G135)는 **이 값을 읽지 않는다.** |
+| 안전 | ⭐ **클라 제공 시각은 표시 전용이며 안전 판정·앵커·정렬·한도를 하나도 게이팅하지 않는다** ⇒ **위조의 최대 효과 = 자기 리포트 라벨이 이상해지는 것**(ADR-0007 Consequences의 *"트리거 카운팅이 클라에 있다"* 판단과 **동형**). 클램프가 **세션 창 밖으로는 못 나가게** 막는다. AC-005/013/024·ADR-0004(프롬프트·마스킹) **무접촉**. |
+| ⛔ 금지 | **리포트 라벨의 기준점을 `session.answeredAt`으로 바꾸지 말 것**(§57.0 3 · **G367** — 실시간 경로에서 그 값은 통화 종료 시각으로 백필돼 **모든 라벨이 0초 근처로 무너진다**) · **문자 `arrivedAt` 등 서버 실시각으로 병합하지 말 것**(§15.6 **G15** — 문자가 대화 맨 앞에 몰린다) · **클라 시각을 판정·앵커·한도 입력으로 쓰지 말 것.** |
+| 회귀 게이트 | `functions/src/realtime/__tests__/transcriptTiming.test.ts` — **7건**((a) 부재 동일 · (a') `answeredAtMs`만 있을 때 · (b) 상대 계산 · (b') 기준점 폴백 · (c)(c') 상·하한 클램프 · (c'') **합성 경로 비클램프 역검증**). |
+| UX 추적성 | 값을 **만드는** 화면 = **UX-014**(통화 셸 — `play/page.tsx`), 값을 **읽는** 화면 = **UX-008 · UF-012**(리포트·리플레이 타임라인). **신규 Screen ID·Flow ID·라우트 0건.** |
