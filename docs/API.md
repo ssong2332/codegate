@@ -366,3 +366,13 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | 처리 증분 | **기존 트랜잭션 안**에서, 플래그가 `true`일 때만 이미 읽어 둔 메시지 스냅샷에서 `turnIndex === 0 && role === "scammer"` 문서에 `notSpoken: true`를 **update**한다. **추가 read 0회 · 멱등 · write 건수와 무관.** 필드 정의는 `docs/Database.md` `messages` 표. |
 | ⛔ 금지 | **서버가 플래그 없이 추론하지 말 것**(세션 문서에 실시간 프로바이더 기록이 없고, 강등 세션과 구분되지 않는다 — §55 G351) · **오프닝 행 삭제·미작성·`turnIndex` 재부여 금지**(실시간 앵커 `+1`이 그 행에 의존 — §55 G348) · **`turnIndex`·`createdAt`·기존 필드 0줄 수정** · **백필 0건**. |
 | 소비 | **표시·집계 3곳뿐** — 리플레이 타임라인 · `analyzeConversation` · 되감기 컨텍스트. ⛔ **앵커·문서 수 계산(`historySnap.size`·`resolveAnchor` 계열·`mockScreenMessages`)에는 적용 금지**(§55 G350). |
+
+### `submitRealtimeTranscript` **증분** — 참가자 시계 상대 시각 (§57.2 (6) 처방 D1 · OQ-A68 확정)
+| Item | Value |
+|---|---|
+| Request 증분 | `{ sessionId, turns, openingNotSpoken?, **answeredAtMs?: number**, turns[].**atMs?: number** }` — **부재 = 현행 합성 로직 그대로**(무백필 · 과거 클라이언트 무영향). |
+| 의미 | **`answeredAtMs`**: 참가자가 "받기"를 누른 시각(클라 타임스탬프). **`turns[i].atMs`**: 그 턴이 실제로 발생한, `answeredAtMs` 기준 **상대 ms**(턴별 부분 제공 허용 — 일부 턴만 `atMs`가 있어도 된다). |
+| 처리 증분 | `base = answeredAtMs ?? session.createdAt`, `createdAt = base + atMs`(해당 턴의 `atMs`가 있을 때만). **클램프**: 그렇게 계산된 `createdAt`은 `[session.createdAt, now]`로 잘린다(세션 생성 이전·미래 시각이 리포트에 실리는 것을 막는 안전장치). `atMs`가 없는 턴은 **현행 합성 로직**(`제출 시각 + 턴 인덱스×1초`)을 그대로 쓰고 **클램프하지 않는다**(합성 로직 자체가 의도적으로 미래로 흩어지므로, 클램프하면 과거 동작이 바뀐다). 계산 규칙은 순수 함수 `functions/src/realtime/transcriptTiming.ts`(`resolveTurnCreatedAtMs`)로 분리돼 있다. |
+| 배경 | T-1(§57.2) — 실시간 경로의 `messages.createdAt`이 "전사 제출 시각 + 턴 인덱스×1초"로 합성돼, 리포트 타임라인 라벨이 실제 통화 타이머보다 커질 수 있었다(관측: 108초 타이머 vs 148/150초 라벨). 값은 **표시 전용**이고 안전 판정·앵커·정렬(`turnIndex`)을 게이팅하지 않는다(ADR-0007 Consequences의 클라 턴 카운팅과 동형). |
+| ⛔ 금지 | **기준점을 `answeredAt`(서버 필드)으로 바꾸지 말 것(G367)** — 실시간 경로에서 그 값은 전사 제출 시각으로 백필되므로 모든 라벨이 0초 근처로 무너진다. **정렬 축(`turnIndex`)·앵커·승격 규칙 무변경**(D1은 `createdAt` **값**만 바꾼다). |
+| Firestore 스키마 | **무변경**(`createdAt` 값만 달라진다) — `docs/Database.md` 수정 없음. |
