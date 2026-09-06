@@ -58,8 +58,9 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     return { reportId: sessionId };
   }
 
-  // ① 마스킹된 messages만 입력(원문·실제 운영정보 배제, AC-005/013 — MessageDoc.textMasked는
-  // 이미 저장 전 maskPII를 거친 값이다, T11 실구현 전까지는 passthrough).
+  // ① messages 입력(원문·실제 운영정보 배제, AC-005/013) — role별로 저장 전 처리가 다르다:
+  // user는 maskPII를 거친 값, scammer는 finalizeScammerReplyText(identity — "[계좌]" 오적용
+  // 버그 수정, scammerReplyMasking.ts)를 거친 값이다. T11 실구현 전까지는 passthrough.
   const messagesSnap = await sessionRef.collection("messages").orderBy("turnIndex", "asc").get();
   const messages: AnalysisMessage[] = messagesSnap.docs.map((doc) => {
     const data = doc.data() as MessageDoc;
