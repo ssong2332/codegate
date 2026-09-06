@@ -36,6 +36,7 @@ import {
   nextUserSpeechDebounceState,
 } from "./userSpeechLevel";
 import { computeGateCloseDelayMs, resolveTurnInProgress } from "./agentSpeechGate";
+import { buildUnsupportedToolResponses } from "./liveToolResponse";
 
 export type GeminiVoiceSessionProps = {
   credentials: CreateRealtimeCallResponse;
@@ -117,6 +118,14 @@ const OPENING_TRIGGER_TURN =
 type GeminiLiveSession = {
   sendRealtimeInput: (i: unknown) => void;
   sendClientContent: (i: { turns?: unknown; turnComplete?: boolean }) => void;
+  /**
+   * §59.10 커밋 A(G383) — `BLOCKING` 도구 호출에 반드시 응답을 돌려주기 위한 배선.
+   * SDK 시그니처: `session.sendToolResponse(params: LiveSendToolResponseParameters)`,
+   * `functionResponses: FunctionResponse[] | FunctionResponse`(`genai.d.ts:12177`·`:9201-9204`).
+   */
+  sendToolResponse: (params: {
+    functionResponses: { id?: string; name?: string; response?: Record<string, unknown> }[];
+  }) => void;
   close: () => void;
 };
 
@@ -390,8 +399,36 @@ export default function GeminiVoiceSession({
                 inputTranscription?: { text?: string };
                 outputTranscription?: { text?: string };
               };
+              // §59.2 ②(genai.d.ts:9262) — `toolCall?: LiveServerToolCall`.
+              toolCall?: { functionCalls?: { id?: string; name?: string; args?: unknown }[] };
+              // §59.2 ②(genai.d.ts:9264) — `toolCallCancellation?: LiveServerToolCallCancellation`.
+              toolCallCancellation?: { ids?: string[] };
             }) => {
-              if (cancelled || !outputContext) return;
+              if (cancelled) return;
+
+              // ⭐ §59.10 커밋 A(G383/G386/G390) — 도구가 아직 선언되지 않아(`geminiProvider.ts`의
+              // `tools: []`, 이 커밋이 0줄 건드리지 않는다) Gemini는 `toolCall`을 보낼 수 없다 — 이
+              // 분기는 오늘 **도달 불가**다(회귀 0). 그래도 `BLOCKING` 도구는 응답이 없으면 통화가
+              // 멈추므로(§59.0 1) 무조건 응답부터 보장해 둔다. 실제 라우팅(도구 이름 →
+              // `deliverInCallSms`/`deliverVerifyOffer`, §59.6 ②~⑥)은 도구가 실제로 선언되는 이후
+              // 커밋(§59 커밋 C+)의 몫이라 여기서 하지 않는다.
+              if (message.toolCall) {
+                const responses = buildUnsupportedToolResponses(message.toolCall.functionCalls);
+                if (responses.length > 0 && session) {
+                  try {
+                    session.sendToolResponse({ functionResponses: responses });
+                  } catch {
+                    // G390 — 전송 실패도 통화를 막지 않는다(P-4 비차단). 무응답만은 피하는 것이
+                    // 이 배선의 목적이지만, 소켓 자체가 끊긴 경우까지 되살릴 수는 없다.
+                  }
+                }
+                return;
+              }
+              // §59.13 (5) — 취소 통보 처리 규약은 미실측(도구를 아직 부르지 않아 되돌릴 것이
+              // 없다). 오늘은 안전하게 무시한다.
+              if (message.toolCallCancellation) return;
+
+              if (!outputContext) return;
               const sc = message.serverContent;
 
               // 전사 조각 누적(리포트 기록용). input=사용자 발화, output=사기범(모델) 발화.
