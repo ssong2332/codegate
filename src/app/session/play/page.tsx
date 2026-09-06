@@ -64,6 +64,7 @@ import {
   type VerifyInterceptView,
   type VerifyOfferPhase,
 } from "@/lib/verifyintercept";
+import { shouldFireBackstop } from "@/lib/realtime/toolWindow";
 import { normalizeDifficultyLevel, type DifficultyLevel } from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import { foldDegraded, buildFallbackStatusLine } from "@/lib/report/degradedDisclosure";
@@ -195,8 +196,22 @@ export default function SessionCallPage() {
   // 재려면 그 순간의 값이 필요하므로 ref로 함께 센다(⛔ 갱신 지점은 아래 handleScammerTurnComplete
   // **한 곳**뿐이다 — 두 곳이 되면 state와 조용히 어긋난다).
   const scammerTurnsRef = useRef(0);
-  // 이미 서버에 전달을 요청한 smsId(중복 호출 방지). 렌더와 무관해 ref에 둔다.
+  // 이미 서버에 전달을 요청한 smsId(중복 호출 방지). 렌더와 무관해 ref에 둔다. §59.10 커밋 D부터는
+  // 앱이 직접 요청한 것뿐 아니라 모델이 도구로 **성공시킨** smsId도 여기 더해진다
+  // (handleModelToolSmsDelivered) — `pickDueInCallSms`가 그 값을 "이미 처리됨"으로 걸러내
+  // 백스톱이 같은 문자를 중복으로 다시 요청하지 않는다.
   const requestedSmsRef = useRef<Set<string>>(new Set());
+  // §59.10 커밋 D(G390) — 모델의 도구 경로가 **실패**했다고 알려온 마지막 smsId. 문자는 한 번에
+  // 하나만 "due" 상태가 되므로(카탈로그 순서상 가장 이른 미도착 항목, pickDueInCallSms) 슬롯 하나로
+  // 충분하다 — 다음 문자가 due가 되면 이 값은 그 문자의 smsId와 더 이상 일치하지 않아 자연히 무시된다.
+  const smsToolCallFailedIdRef = useRef<string | null>(null);
+  // §59.10 커밋 D(G390) — 확인 오퍼(offer_verification_desk) 도구 경로 실패 신호. 세션당 오퍼가
+  // 하나뿐이라(계열 A 1종에만 도구가 선언된다, G392) id 없이 boolean 하나로 충분하다.
+  const verifyToolCallFailedRef = useRef(false);
+  // §59.8 — "마지막 사기범 턴 경계(없으면 하한 도달) 이후 경과 초"의 분모 시계. 매 사기범 턴 경계
+  // (`handleScammerTurnComplete`)마다 그 순간의 통화 경과초로 갱신된다 — 새 타이머를 만들지 않고
+  // 이미 떠 있는 통화 경과 타이머(`elapsedSec`)에 올라탄다(§52.7 (5) 나가 확립한 관례와 동일).
+  const lastScammerBoundaryAtSecRef = useRef(0);
   // 오버레이를 연 트리거(배너/"문자함") — 닫을 때 포커스를 되돌린다(UX-027 Focus Order).
   const smsTriggerRef = useRef<HTMLButtonElement | null>(null);
   // T83 확인 시도 무력화(UX-031/UF-011, AC-071) — 문자 오버레이와 **같은 계층·같은 규칙**이다
@@ -525,6 +540,12 @@ export default function SessionCallPage() {
   // T68 — 사기범 턴 경계에 도달하면 문자를 도착시킨다(실시간 경로, §15.1.2 앱 오케스트레이션).
   // 서버가 문서를 쓰고 announce 지시를 돌려주면 그것을 **같은 Live 세션에 텍스트 턴으로** 넣어
   // 캐릭터가 "문자 보냈어요"라고 말하게 한다. 실패해도 통화는 계속된다(P-4 — 인라인 안내만).
+  //
+  // ⭐⭐ **§59.10 커밋 D — 지연 발동(백스톱).** 이 문자에 Live 도구(`send_prepared_sms`)가 선언된
+  // 세션에서는 하한 도달 즉시 앱이 보내지 않는다 — 모델이 스스로 도구를 부를 창을 먼저 준다
+  // (`shouldFireBackstop`, §59.8). 도구가 선언되지 않은 세션은 **지연 0**(오늘과 바이트 단위로
+  // 같은 타이밍, G388). `trigger:"backstop"`을 명시해 서버 로그(§59.11)가 이 발동을 `model_tool`과
+  // 구분할 수 있게 한다(서버 로직 자체는 부재·"backstop" 둘 다 동일하게 처리한다).
   useEffect(() => {
     if (!sessionId || callMode !== "realtime" || phase !== "live") return;
     const triggers = realtime.credentials?.inCallSmsTriggers ?? [];
@@ -535,16 +556,30 @@ export default function SessionCallPage() {
       deliveredSmsIds: [...requestedSmsRef.current],
     });
     if (!dueSmsId) return;
+    const dueTrigger = triggers.find((t) => t.smsId === dueSmsId);
+    const toolAvailable = Boolean(realtime.credentials?.liveTools?.sendPreparedSms);
+    const fire = shouldFireBackstop({
+      toolAvailable,
+      boundariesSinceDue: dueTrigger ? Math.max(0, scammerTurns - dueTrigger.afterScammerTurns) : 0,
+      secondsSinceLastBoundary: Math.max(0, elapsedSec - lastScammerBoundaryAtSecRef.current),
+      toolCallFailed: smsToolCallFailedIdRef.current === dueSmsId,
+    });
+    if (!fire) return;
     requestedSmsRef.current.add(dueSmsId);
     (async () => {
       try {
-        const result = await deliverInCallSms({ sessionId, smsId: dueSmsId });
+        const result = await deliverInCallSms({ sessionId, smsId: dueSmsId, trigger: "backstop" });
         setSmsError(null);
         setSmsBannerDismissed(false);
         // T83 — 직접 세팅하지 않고 큐를 통한다(같은 턴에 확인 지시와 겹쳐도 유실되지 않게, G31).
         // §53.6 (3) — 전환이 끝난 오퍼가 연 문자에는 값이 없다(서버가 생략). 값이 없으면
         // 주입하지 않는다 — 문서 자체(계좌·링크)는 그대로 도착했으니 배너·문자함은 정상 표시된다.
-        if (result.announceInstruction) {
+        // ⭐ §59.10 커밋 D — `status`도 함께 본다. 서버는 `alreadyDelivered`(모델이 먼저 도구로
+        // 이미 전달한 경우 포함)에서도 `announceInstruction`을 생략하지 않으므로(응답 조립 자체는
+        // §59 범위 밖 무변경), 여기서 `"delivered"`일 때만 주입해 이미 도착한 문자를 캐릭터가
+        // 두 번 말하지 않게 한다(중복 발동 방지의 마지막 안전망 — 1차 방어는 위 `requestedSmsRef`
+        // 에 모델 성공을 미리 반영하는 `handleModelToolSmsDelivered`).
+        if (result.status === "delivered" && result.announceInstruction) {
           enqueueTurnInstruction(result.announceInstruction, "sms");
         }
       } catch {
@@ -554,13 +589,16 @@ export default function SessionCallPage() {
       }
     })();
     // enqueueTurnInstruction은 안정 참조(useCallback, 의존성 없음)라 이 목록에 넣어도 effect가
-    // 추가로 재실행되지 않는다 — 기존 트리거 조건은 그대로다.
+    // 추가로 재실행되지 않는다 — 기존 트리거 조건은 그대로다. `elapsedSec`은 §59.8의 정지(stall)
+    // 시계를 재판정하기 위한 것 — 새 타이머가 아니라 이미 떠 있는 통화 경과 타이머에 올라탄다.
   }, [
     sessionId,
     callMode,
     phase,
     scammerTurns,
+    elapsedSec,
     realtime.credentials?.inCallSmsTriggers,
+    realtime.credentials?.liveTools?.sendPreparedSms,
     enqueueTurnInstruction,
   ]);
 
@@ -619,6 +657,23 @@ export default function SessionCallPage() {
     ) {
       return;
     }
+    // ⭐⭐ **§59.10 커밋 D — 지연 발동(백스톱), announce 단계 · 실시간 경로 전용.** 폴백 경로는
+    // Live 도구 개념이 없으므로(`GeminiVoiceSession` 자체가 마운트되지 않는다) 이 게이트를 타지
+    // 않는다 — `toFallbackCredentials`가 `liveTools`를 지우지 않아 값이 남아 있어도 무관하게
+    // **callMode==="realtime"일 때만** 적용한다(그러지 않으면 폴백 텍스트 경로의 예고가 불필요하게
+    // 늦어지는 회귀가 생긴다). commit 단계는 여전히 게이팅하지 않는다(R8/§38.4 후보 E 무변경).
+    if (stage === "announce" && callMode === "realtime") {
+      const verifyToolAvailable = Boolean(realtime.credentials?.liveTools?.offerVerificationDesk);
+      const fire = shouldFireBackstop({
+        toolAvailable: verifyToolAvailable,
+        boundariesSinceDue: trigger
+          ? Math.max(0, completedScammerTurns - trigger.availableAfterScammerTurns)
+          : 0,
+        secondsSinceLastBoundary: Math.max(0, elapsedSec - lastScammerBoundaryAtSecRef.current),
+        toolCallFailed: verifyToolCallFailedRef.current,
+      });
+      if (!fire) return;
+    }
     verifyOfferPhaseRef.current = stage === "announce" ? "announced" : "committed";
     // ⛔ **§45.7 V2 — 여기서 `verifyAnnounceTurnsRef`를 찍지 않는다**(종전 1줄 삭제). 요청 발신 시점은
     // *지시가 주입된 시점*이 아니다 — 큐에 밀리면 실제 발화가 한 턴 뒤로 가는데 commit은 그것을
@@ -663,7 +718,9 @@ export default function SessionCallPage() {
     phase,
     scammerTurns,
     messages,
+    elapsedSec,
     realtime.credentials?.verifyOffer,
+    realtime.credentials?.liveTools?.offerVerificationDesk,
     verifySeries,
     verifyIntentExpressed,
   ]);
@@ -673,6 +730,8 @@ export default function SessionCallPage() {
     // state 갱신만 하면(리렌더 전이라) 한 턴 낡은 값이 기록된다.
     scammerTurnsRef.current += 1;
     setScammerTurns(scammerTurnsRef.current);
+    // §59.8 — 이 경계가 곧 "마지막 사기범 턴 경계"다. 백스톱의 정지(stall) 시계를 여기서 리셋한다.
+    lastScammerBoundaryAtSecRef.current = elapsedSecRef.current;
     // 턴이 끝났으니 보류분을 하나 더 내보낸다(위 계약 (2)).
     instructionBusyRef.current = false;
     drainInstructionQueue();
@@ -691,6 +750,38 @@ export default function SessionCallPage() {
       setPersonaStateTurn((prev) => ({ text: line, seq: (prev?.seq ?? 0) + 1 }));
     }
   }, [drainInstructionQueue]);
+
+  // §59.10 커밋 D — 모델이 Live 도구로 직접 문자를 도착시켰다(또는 이미 도착해 있었다). 앱의 지연
+  // 발동(백스톱) 효과가 같은 smsId를 다시 요청하지 않도록 요청-완료 집합에 더한다(`pickDueInCallSms`
+  // 재사용, 새 판정 로직 불필요).
+  const handleModelToolSmsDelivered = useCallback((smsId: string) => {
+    requestedSmsRef.current.add(smsId);
+  }, []);
+
+  // §59.10 커밋 D(G390) — 모델의 도구 경로가 이 smsId에 대해 실패했다. 다음 렌더의 백스톱 판정이
+  // `toolCallFailed: true`를 보고 창을 즉시 닫도록 기록만 한다(판정 자체는 SMS 효과가 한다).
+  const handleModelToolSmsFailed = useCallback((smsId: string) => {
+    smsToolCallFailedIdRef.current = smsId;
+  }, []);
+
+  // §59.10 커밋 D — 모델이 확인 오퍼 예고를 도구로 직접 성공시켰다. 앱의 `verifyOfferPhaseRef`를
+  // 전진시켜야 (1) 백스톱이 같은 예고를 중복으로 다시 보내지 않고 (2) commit 단계(문서 실제 생성)가
+  // 다음 사기범 턴 경계에서 이어질 수 있다 — `nextVerifyOfferStage`는 `phase !== "idle"`이어야
+  // commit으로 넘어간다(§38.4 후보 E). 앵커는 이 시점의 `scammerTurnsRef`(§45.7 V2와 같은 근거로
+  // ref를 쓴다 — state는 리렌더 전이라 낡을 수 있다). ⚠️ **정확한 턴 경계 정합은 라이브 미검증**
+  // 이다(§59.13류 한계와 동일 — 도구 호출은 `turnComplete`보다 먼저 도착할 수 있어 최대 한 턴
+  // 어긋날 수 있다, 구현 보고서에 인계).
+  const handleModelToolVerifyAnnounced = useCallback(() => {
+    if (verifyOfferPhaseRef.current === "idle") {
+      verifyOfferPhaseRef.current = "announced";
+      verifyAnnounceTurnsRef.current = scammerTurnsRef.current;
+    }
+  }, []);
+
+  // §59.10 커밋 D(G390) — 확인 오퍼 도구 경로 실패(SMS와 동형).
+  const handleModelToolVerifyFailed = useCallback(() => {
+    verifyToolCallFailedRef.current = true;
+  }, []);
 
   // 통화 경과 타이머 — "받기"(answeredAt) 기점, ended면 정지.
   useEffect(() => {
@@ -1224,6 +1315,10 @@ export default function SessionCallPage() {
             onTranscriptTurn={handleTranscriptTurn}
             textMessage={textMessage}
             onScammerTurnComplete={handleScammerTurnComplete}
+            onModelToolSmsDelivered={handleModelToolSmsDelivered}
+            onModelToolSmsFailed={handleModelToolSmsFailed}
+            onModelToolVerifyAnnounced={handleModelToolVerifyAnnounced}
+            onModelToolVerifyFailed={handleModelToolVerifyFailed}
             instructionTurn={instructionTurn}
             personaStateTurn={personaStateTurn}
           />
