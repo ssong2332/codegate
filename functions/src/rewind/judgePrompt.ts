@@ -5,7 +5,9 @@
 //   - `personaPrompt`·`weakenedTactics` 원문을 넣지 않는다(AC-005/013 — 새 사기 대사를 만들 근거를
 //     모델에게 주지 않는다). 입력은 그 순간의 `tactic` 라벨·`correctAction`·마스킹된 사기범 대사뿐이다.
 //   - 사용자 답변은 `wrapUserInputAsData`로 감싸 지시가 아니라 데이터로 전달한다(AC-024, ADR-0004).
-// 저장·전달되는 텍스트는 전부 maskPII를 이미 거친 값이다(호출부 rewind/index.ts 책임).
+// answerMasked(참가자 답변)는 항상 maskPII를 거친 값이다. scammerLineMasked(사기범 대사)는 이름과
+// 달리 세션 경로에 따라 다르다 — 텍스트/역할극 경로는 원문, 실시간 음성 경로는 마스킹된 값이다
+// (§60, 호출부 rewind/index.ts 주석 참고). 둘 다 이 파일은 그대로 받아 프롬프트에 실을 뿐이다.
 import type { LlmCompletionInput } from "../llm";
 import { wrapUserInputAsData } from "../roleplay/promptAssembly";
 

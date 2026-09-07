@@ -26,9 +26,11 @@ export { judgeByRule, judgeRewindAnswerWith, parseLlmJudgement } from "./judge";
 export { buildRewindJudgePrompt } from "./judgePrompt";
 
 /**
- * 그 순간 사기범이 한 말을 찾는다 — `textMasked` 필드명과 달리 사기범(scammer) 역할 텍스트는
- * `finalizeScammerReplyText`(identity, scammerReplyMasking.ts — "[계좌]" 오적용 버그 수정)를
- * 거쳐 저장되므로 원문 그대로다. 선택 규칙 자체는 순수 함수 `pickScammerLineForMoment`
+ * 그 순간 사기범이 한 말을 찾는다 — `textMasked` 필드명과 달리 사기범(scammer) 역할 텍스트가
+ * 원문 그대로인지는 **세션 경로에 따라 다르다**(§60): 텍스트/역할극 경로는 `finalizeScammerReplyText`
+ * (identity, scammerReplyMasking.ts — "[계좌]" 오적용 버그 수정)를 거쳐 원문 그대로 저장되지만,
+ * 실시간 음성 경로(realtime/submitTranscript.ts)는 role 무관 여전히 `maskPII`를 거친다(신뢰 경계상
+ * 의도적으로 무변경 — §60.4·OQ-A74). 선택 규칙 자체는 순수 함수 `pickScammerLineForMoment`
  * (rewind/scammerLine.ts)가 소유하고, 여기서는 Firestore 조회만 한다
  * (⚠️ **T84 §15.9.7 G57 수정**이 그 함수에 들어 있다 — 근거·회귀 0 논증은 그 doc 주석 참고).
  * 조회에 실패하면 빈 문자열 — 판정은 tactic/correctAction만으로도 계속된다(비차단, P-4).

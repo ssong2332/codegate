@@ -79,7 +79,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | Field | Type | Constraints | Description |
 |---|---|---|---|
 | role | string | `scammer`\|`user` | 발신자 |
-| textMasked | string | required | **PII 마스킹된 텍스트만 저장**(원문 미저장, ADR-0004). ⚠️ **어시스턴트 sentinel 토큰 `[[SIGNAL:*]]`는 저장 전 제거**(§13.2). 사용자 입력의 sentinel 형태 문자열도 수신 시 선제거 |
+| textMasked | string | required | ⭐ **필드 이름이 실제 처리를 다 말하지 못한다 — 오늘 이 필드는 세 가지 서로 다른 처리를 담는다**(`docs/Architecture.md` **§60.9** · **G397**). ⛔ **경로 조건 없이 *"전부 마스킹된다"* 나 *"사기범은 전부 원문이다"* 로 인용하지 말 것.** ① **서버 저작 오프닝**(`turnIndex:0`) = **마스킹 미적용**(서버 카탈로그 텍스트라 대상이 아니다 — `functions/src/session/index.ts:199`·`functions/src/challenge/userAccess.ts:205`) · ② **텍스트/역할극 경로의 `role==="scammer"`** = **마스킹 미적용**(2026-09-06~, `functions/src/roleplay/scammerReplyMasking.ts`의 `finalizeScammerReplyText` — 모델이 참가자 원문 PII를 입력으로 받은 적이 없어 지킬 PII가 없고, 프롬프트가 의도적으로 만들게 하는 **가짜** 계좌·접수번호가 `[계좌]`로 오탐되던 라이브 버그를 닫았다. `roleplay/index.ts:339`·`roleplay/openingLine.ts:106`) · ③ **그 밖의 전부** = **`maskPII` 적용**(원문 미저장, ADR-0004/AC-024) — 텍스트 경로의 참가자 입력(`roleplay/index.ts:114`)과 ⭐ **실시간 음성 전사 제출의 *양쪽 role 전부*** (`functions/src/realtime/submitTranscript.ts:110` — **`role`이 클라 주장값이고 서버에 대조 신호가 없어 의도적으로 role 무관 마스킹을 유지한다**, §60.6 판정 · **G395**). ⚠️ **어시스턴트 sentinel 토큰 `[[SIGNAL:*]]`는 저장 전 제거**(§13.2). 사용자 입력의 sentinel 형태 문자열도 수신 시 선제거. ⛔ **어느 경로에서도 원문 필드를 따로 만들지 않는다**(아래 §Purge/Retention 표 *"원문 필드 자체가 없음"* 무변경) |
 | turnIndex | number | | 순서/타임라인(AC-026). 채널을 넘어 **단조 증가**(연속성) |
 | channel | string? | `messenger`\|`voice` | T26 증분 — 이 턴의 채널(AC-037 교차채널 타임라인). 부재→voice |
 | attachments | array<MessengerAttachment>? | | T26 증분 — 메신저 표면 요소. `MessengerAttachment={kind:"link",displayText,fakeLandingId,harmless:true}`. **실 URL 필드 없음**(AC-045/032, 외부 네비 경로 스키마 부재) |
