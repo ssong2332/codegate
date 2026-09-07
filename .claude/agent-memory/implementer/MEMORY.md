@@ -86,3 +86,4 @@
 - [§59 커밋 C APPROVED Major #1 수정 — collectToolResponses](project_codegate_s59_commit_c_major1_fallback.md) — ⭐ Promise.all 무방비 구간에 구조적 폴백 추가, 순수함수 단위테스트+소스스캔 배선 게이트 이중 검증, 이중 방어(안쪽 콜러블별 vs 바깥쪽 구조적) 설계.
 - [§59 커밋 D — 도구 천장(백스톱) + 지연 발동](project_codegate_s59_commit_d_tool_backstop.md) — ⭐ 지연 발동이 만드는 중복 서술 위험을 커밋 C 주석에서 미리 인계받아 콜백 4종+status 게이트 이중 방어로 닫음, 새 타이머 없이 기존 elapsedSec에 올라탄 설계.
 - [§59 커밋 D reviewer REJECT 수정 — verify announce 이중 발동](project_codegate_s59_critical_verify_announce_race.md) — ⭐ SMS와 달리 서버측 뮤텍스가 없어(persist:false ≠ 멱등) 클라 사전 클레임 가드 신설, 실제 레이스를 흉내 낸 대조군 있는 시뮬레이션 테스트.
+- [§59.6 갱신 2(G394) — verify claim 실패 guidance 배선](project_codegate_s59_g394_guidance_wiring.md) — ⭐ buildAlreadyAnnouncedToolResponse 순수함수화, 리터럴→함수 치환이 기존 하드코딩 테스트 2건(geminiProvider·toolWindowWiring)을 깨 필수 갱신한 사례.
