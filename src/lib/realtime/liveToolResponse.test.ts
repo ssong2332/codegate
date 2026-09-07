@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  buildAlreadyAnnouncedToolResponse,
   buildUnsupportedToolResponses,
   collectToolResponses,
   pickModelToolSmsId,
@@ -95,6 +96,45 @@ test("pickModelToolSmsId — 전부 이미 도착했으면 카탈로그에서 �
 
 test("pickModelToolSmsId — 카탈로그 자체가 비어 있으면 null이다(도구 선언 조건상 오늘 도달 불가, 방어값)", () => {
   assert.equal(pickModelToolSmsId([], []), null);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════
+// §59.6 갱신 2(G394) — buildAlreadyAnnouncedToolResponse(클레임 실패 조기 응답, guidance 필수).
+
+const VERIFY_ALREADY_TEXT =
+  "(그 안내는 이미 전달했다. 새로 안내하지 말고, 연결해 드리겠다는 말도 다시 하지 말고, 지금 하던 이야기를 그대로 이어가라.)";
+
+test("[G394] buildAlreadyAnnouncedToolResponse — liveTools에 필드가 있으면 guidance를 정확히 그 값으로 채운다", () => {
+  const liveTools = {
+    offerVerificationDesk: "offer_verification_desk",
+    verifyAlreadyAnnouncedInstruction: VERIFY_ALREADY_TEXT,
+    failureInstruction: "(지금은 문자를 보낼 수 없다. 문자를 보냈다고 말하지 말고 하던 이야기를 그대로 이어가라.)",
+  };
+  const response = buildAlreadyAnnouncedToolResponse(
+    { id: "call-1", name: "offer_verification_desk" },
+    liveTools,
+  );
+  assert.deepEqual(response, {
+    id: "call-1",
+    name: "offer_verification_desk",
+    response: { status: "already_announced", guidance: VERIFY_ALREADY_TEXT },
+  });
+});
+
+test("[G394] buildAlreadyAnnouncedToolResponse — 필드가 없으면(구조적 도달 불가) unsupported로 안전하게 폴백한다", () => {
+  const liveTools = {
+    offerVerificationDesk: "offer_verification_desk",
+    failureInstruction: "(지금은 문자를 보낼 수 없다. 문자를 보냈다고 말하지 말고 하던 이야기를 그대로 이어가라.)",
+  };
+  assert.deepEqual(
+    buildAlreadyAnnouncedToolResponse({ id: "call-1", name: "offer_verification_desk" }, liveTools),
+    buildUnsupportedToolResponses([{ id: "call-1", name: "offer_verification_desk" }])[0],
+  );
+  // liveTools 자체가 undefined인 경우도 같은 폴백이어야 한다(방어값).
+  assert.deepEqual(
+    buildAlreadyAnnouncedToolResponse({ id: "call-2", name: "offer_verification_desk" }, undefined),
+    buildUnsupportedToolResponses([{ id: "call-2", name: "offer_verification_desk" }])[0],
+  );
 });
 
 // ══════════════════════════════════════════════════════════════════════════════════════════

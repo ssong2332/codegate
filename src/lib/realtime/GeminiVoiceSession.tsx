@@ -38,6 +38,7 @@ import {
 } from "./userSpeechLevel";
 import { computeGateCloseDelayMs, resolveTurnInProgress } from "./agentSpeechGate";
 import {
+  buildAlreadyAnnouncedToolResponse,
   buildUnsupportedToolResponses,
   collectToolResponses,
   pickModelToolSmsId,
@@ -87,6 +88,38 @@ export type GeminiVoiceSessionProps = {
    * 선례: 같은 파일의 `OPENING_TRIGGER_TURN`(연결 직후 발화 시작 신호, 역시 미기록).
    */
   instructionTurn?: { text: string; seq: number } | null;
+  /**
+   * §59.10 커밋 D(G390) — 이 통화에서 모델이 `send_prepared_sms`를 실제로 성공시킨(`delivered` 또는
+   * `already_delivered`) smsId를 부모에게 알린다. 부모(`session/play/page.tsx`)는 이 값을 자신의
+   * 요청 완료 집합에 더해, 지연된(백스톱 창이 아직 열려 있는) 앱 오케스트레이션 경로가 **같은
+   * 문자를 중복으로 다시 요청하지 않게** 한다(`pickDueInCallSms`의 `deliveredSmsIds` 필터 재사용).
+   */
+  onModelToolSmsDelivered?: (smsId: string) => void;
+  /**
+   * §59.10 커밋 D(G390) — 모델이 `send_prepared_sms`를 불렀지만 콜러블 경로 자체가 실패했을 때
+   * (네트워크·throw, `dispatchToolCall`의 catch) 그 smsId를 알린다. 부모는 이 신호로 백스톱 창을
+   * **즉시 닫아**(`shouldFireBackstop`의 `toolCallFailed` 입력) 말과 사실의 간격을 사후에 맞춘다.
+   */
+  onModelToolSmsFailed?: (smsId: string) => void;
+  /**
+   * §59.10 커밋 D — 모델이 `offer_verification_desk`(announce 단계)를 실제로 성공시켰을 때 알린다.
+   * 부모는 자신의 `verifyOfferPhaseRef`를 `"announced"`로 전진시켜야 한다 — 그래야 commit 단계
+   * (문서 실제 생성, §38.4 후보 E)가 이어질 수 있다. 이 파일은 announce만 다루고 commit은 여전히
+   * 부모의 기존 턴 경계 관측 이펙트가 진다(§59.6 리뷰 수정 주석 참고 — 무변경).
+   */
+  onModelToolVerifyAnnounced?: () => void;
+  /** §59.10 커밋 D(G390) — `offer_verification_desk` 콜러블 경로 실패 신호(위 SMS와 동형). */
+  onModelToolVerifyFailed?: () => void;
+  /**
+   * ⭐ §59 Critical 수정(reviewer REJECTED, `verifyAnnounceGuard.ts` 근거) — announce 요청을
+   * **보내기 직전(동기)**에 부모가 소유한 상호배제 슬롯을 클레임한다. `false`면 백스톱 경로가
+   * 이미 같은 요청을 보내는 중이라는 뜻이므로, 이 컴포넌트는 `deliverVerifyOffer`를 호출하지
+   * 않고 안전한 응답을 즉시 돌려준다(선택적 콜백이 아니다 — 이 가드 없이 마운트되면 이중 발동
+   * 방지가 통째로 무력화된다).
+   */
+  claimVerifyAnnounceSlot: () => boolean;
+  /** 위 클레임에 대응하는 해제(성공·실패 무관, `dispatchToolCall`의 finally에서 부른다). */
+  releaseVerifyAnnounceSlot: () => void;
   /**
    * ⭐ **T118 / 층 A5-α(§25.3)** — 호 전환 이후 사기범 턴 경계마다 다시 넣는 **전환 상태 단언 1줄**.
    *
@@ -159,6 +192,12 @@ export default function GeminiVoiceSession({
   muted,
   textMessage,
   onScammerTurnComplete,
+  onModelToolSmsDelivered,
+  onModelToolSmsFailed,
+  onModelToolVerifyAnnounced,
+  onModelToolVerifyFailed,
+  claimVerifyAnnounceSlot,
+  releaseVerifyAnnounceSlot,
   instructionTurn,
   personaStateTurn,
 }: GeminiVoiceSessionProps) {
@@ -170,6 +209,12 @@ export default function GeminiVoiceSession({
     onUserSpeakingChange,
     onTranscriptTurn,
     onScammerTurnComplete,
+    onModelToolSmsDelivered,
+    onModelToolSmsFailed,
+    onModelToolVerifyAnnounced,
+    onModelToolVerifyFailed,
+    claimVerifyAnnounceSlot,
+    releaseVerifyAnnounceSlot,
   });
   const mutedRef = useRef(muted);
   // 정리 대상들 — 언마운트 시 전부 닫지 않으면 마이크가 계속 열려 있다.
@@ -193,6 +238,12 @@ export default function GeminiVoiceSession({
       onUserSpeakingChange,
       onTranscriptTurn,
       onScammerTurnComplete,
+      onModelToolSmsDelivered,
+      onModelToolSmsFailed,
+      onModelToolVerifyAnnounced,
+      onModelToolVerifyFailed,
+      claimVerifyAnnounceSlot,
+      releaseVerifyAnnounceSlot,
     };
   }, [
     onActive,
@@ -202,6 +253,12 @@ export default function GeminiVoiceSession({
     onUserSpeakingChange,
     onTranscriptTurn,
     onScammerTurnComplete,
+    onModelToolSmsDelivered,
+    onModelToolSmsFailed,
+    onModelToolVerifyAnnounced,
+    onModelToolVerifyFailed,
+    claimVerifyAnnounceSlot,
+    releaseVerifyAnnounceSlot,
   ]);
 
   useEffect(() => {
@@ -302,6 +359,8 @@ export default function GeminiVoiceSession({
           });
           if (result.status === "delivered" || result.status === "already_delivered") {
             deliveredSmsIds.add(smsId);
+            // §59.10 커밋 D — 부모에게도 알린다(백스톱이 같은 smsId를 중복 요청하지 않도록).
+            handlersRef.current.onModelToolSmsDelivered?.(smsId);
           }
           return {
             id: call.id,
@@ -318,6 +377,8 @@ export default function GeminiVoiceSession({
           // 않는 방향(P-4)으로 판단해 `status:"unavailable"` + 서버가 이미 저작해 둔
           // `failureInstruction`을 그대로 돌려준다 — architect 재확인이 필요하면 이 상태 이름을
           // 바꾸면 된다(문면은 이미 정본이라 바뀌지 않는다).
+          // §59.10 커밋 D(G390) — 백스톱이 이 항목의 창을 즉시 닫도록 부모에게 실패를 알린다.
+          handlersRef.current.onModelToolSmsFailed?.(smsId);
           return failureResponse();
         }
       }
@@ -325,8 +386,22 @@ export default function GeminiVoiceSession({
       // kind === "offer_verification_desk" — §59.6은 announce 단계만 이 경로로 태운다. commit
       // 단계(문서 실제 생성, §38.4 후보 E)는 여전히 부모(session/play/page.tsx)의 기존 이펙트가
       // 사기범 턴 경계를 관측해 진다 — 그 배선은 이번 수정으로 0줄도 건드리지 않는다(범위 밖,
-      // §59.10 커밋 D의 몫). announce는 문서를 쓰지 않는 멱등 단계라(§38.4 후보 E) 두 경로가
-      // 동시에 존재해도 경합이 생기지 않는다.
+      // §59.10 커밋 D의 몫).
+      // ⚠️ **정정(§59 Critical 수정, reviewer REJECTED)** — 예전 주석은 "announce는 문서를 쓰지
+      // 않는 멱등 단계라 두 경로가 동시에 존재해도 경합이 생기지 않는다"고 적었는데 **틀렸다**:
+      // `persist:false`는 맞지만 `placed===false`인 한 몇 번을 불러도 서버는 **무조건**
+      // `includeInstruction:true`를 돌려준다(멱등 = 같은 결과를 반복해도 안전, 이 경우는 결과가
+      // "말하라"는 지시라서 반복하면 실제로 중복 서술이 난다). 그래서 서버 응답이 아니라 요청을
+      // **보내기 전에** 클라가 부모와 공유하는 슬롯(`verifyAnnounceGuard.ts`)으로 막는다.
+      if (!handlersRef.current.claimVerifyAnnounceSlot()) {
+        // 백스톱 경로(부모)가 이미 같은 announce를 요청 중이다 — 서버를 다시 부르지 않는다.
+        // `already_announced`는 서버가 실제로 쓰는 상태값(`DeliverVerifyOfferStatus`)을 그대로
+        // 재사용한 것 — 모델 입장에서도 "이미 처리 중/처리됨"이라는 뜻이 정확히 같다.
+        // ⭐ §59.6 갱신 2(G394) — 상태값만 돌려주면 BLOCKING 도구가 억제 근거 없이 모델 턴을
+        // 재개시킨다. `guidance`(=liveTools.verifyAlreadyAnnouncedInstruction, 서버
+        // VERIFY_DECLINE_ALREADY의 사본)를 순수 함수로 함께 실어 돌려준다.
+        return buildAlreadyAnnouncedToolResponse(call, liveTools);
+      }
       try {
         const result = await deliverVerifyOffer({
           sessionId,
@@ -335,6 +410,13 @@ export default function GeminiVoiceSession({
           stage: "announce",
           trigger: "model_tool",
         });
+        if (result.status === "announced") {
+          // §59.10 커밋 D — 부모의 `verifyOfferPhaseRef`를 전진시켜야 commit 단계(문서 실제 생성)가
+          // 이어진다. 이 announce 성공은 이 컴포넌트의 클로저 밖(부모 state machine)이라 콜백으로
+          // 알리는 수밖에 없다 — announce는 문서를 쓰지 않아(§38.4 후보 E) Firestore 구독으로는
+          // 관측되지 않는다(§59.10 커밋 C 리뷰 수정 주석이 이 배선을 "커밋 D의 몫"으로 인계한 지점).
+          handlersRef.current.onModelToolVerifyAnnounced?.();
+        }
         return {
           id: call.id,
           name: call.name ?? "unknown",
@@ -345,7 +427,14 @@ export default function GeminiVoiceSession({
           },
         };
       } catch {
+        // §59.10 커밋 D(G390) — 백스톱이 즉시 닫히도록 부모에게 실패를 알린다(SMS와 동형).
+        handlersRef.current.onModelToolVerifyFailed?.();
         return failureResponse();
+      } finally {
+        // ⭐ §59 Critical 수정 — 위에서 클레임에 성공했을 때만 이 finally에 도달한다(클레임
+        // 실패는 그 자리에서 이미 return했다) — 성공·실패 무관하게 슬롯을 되돌려 백스톱 경로의
+        // 다음 시도를 막지 않는다.
+        handlersRef.current.releaseVerifyAnnounceSlot();
       }
     };
 

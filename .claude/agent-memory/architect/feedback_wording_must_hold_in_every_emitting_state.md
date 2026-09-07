@@ -15,4 +15,6 @@ metadata:
 - 공개 콜러블의 모델 대면 문자열은 **직접 호출로 노출된다**를 전제하고, 노출 판정을 "새 표면이 열리는가"로 물어라 — 같은 콜러블이 이미 더 민감한 값(`announceInstruction`의 창구명)을 돌려주면 표면은 새로 열리지 않는다.
 - ⚠️ 거절 문구 같은 **모듈 상수**는 카탈로그 필드 순회 게이트(G86 계열)의 스캔 집합 **밖**이다 — "문면 조건을 만족한다"는 기계 집행이 아니라 문면 자체가 유일한 보증임을 고지하라([[feedback_stated_absence_check_the_scan_set]]).
 
-관련: [[feedback_exception_belongs_to_conditional_layer]] · [[feedback_overloaded_flag_judge_by_live_extension]] · [[feedback_scope_is_decided_by_gates_not_taxonomy]]
+- ⭐ **상태 집합은 나중에 *다른 층에서* 늘어난다.** 2026-09-07 후속 패스에서 같은 `already_announced` 문면에 **③ 클라 클레임 실패**(백스톱과 경합해 진 도구 호출이 서버를 안 부르고 조기 응답)가 추가됐다 — 서버 판정 함수를 아무리 세어도 **안 나오는 상태**다. ⇒ 진리표를 다시 열 때는 **그 문자열을 쓰는 클라 지점까지** 세고, 시제가 어긋나면(*"이미 전달했다"* vs 실제로는 *"전달 중"*) **새 문면을 만들지 말고** 대가(과잉 억제)를 고지한 뒤 관측 항목을 프로브에 1줄 얹어라(문면이 상태마다 갈라지면 정본이 N벌이 된다).
+
+관련: [[feedback_exception_belongs_to_conditional_layer]] · [[feedback_overloaded_flag_judge_by_live_extension]] · [[feedback_scope_is_decided_by_gates_not_taxonomy]] · [[feedback_client_shortcut_loses_the_contract_half]]

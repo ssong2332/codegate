@@ -13676,6 +13676,84 @@ ADR-0007 채택 행이 스스로 적었다: *"**인과가 역전**된다(앱이 
 >
 > **⇒ 인계 1건(implementer — §59.10 커밋 B 후속).** `functions/src/scenarios/verifyIntercept.ts`에서 **① `VERIFY_DECLINE_ALREADY`의 값을 위 정본 원문으로 교체**하고(`VERIFY_DECLINE_TOO_EARLY`는 **무수정**), **② `:206-211`의 *"정본 미확정 고지"* 주석 6줄을 삭제하고 정본 확정 주석으로 교체**한다(원문은 §59.16 인계 항 참조 — *"어디에도 저작돼 있지 않다"* 는 서술이 이 블록으로 **거짓이 됐다**). ⛔ **`:203-205`의 3줄(경로 한정·회귀 0 고지)은 그대로 둔다** — 여전히 참이다.
 
+> **⭐⭐ 갱신 2(2026-09-07 — §59.10 **커밋 D** reviewer REJECTED 대응 · **클라 조기 응답의 `guidance` 출처 확정**. ⛔ 위 원문·갱신 1 블록 **한 줄도 고치지 않았다** · ⛔ **소스 0줄** — 이 블록은 *확정*이고 반영은 implementer 후속 커밋이다):**
+>
+> **무엇이 REJECTED됐는가(오늘 트리의 사실).** 커밋 D가 verify 오퍼 announce의 이중 발동을 막는 **클라이언트 클레임 가드**를 신설했다(`src/lib/realtime/verifyAnnounceGuard.ts` — `claimAnnounceSlot`/`releaseAnnounceSlot`, 부모 `play/page.tsx:699`와 자식 `GeminiVoiceSession.tsx:395`가 같은 슬롯을 공유). **모델 도구 호출이 백스톱 경로와 경합해 지면**(클레임 실패) 서버를 아예 부르지 않고 즉시 답하는데, 그 응답이 **`{ status:"already_announced" }` 뿐이고 `guidance`가 없다**(`GeminiVoiceSession.tsx:399-403`). ⛔ **위 왕복 계약 ⑥은 `response: { status, guidance }` 를 규정**하고, 서버가 실제로 `already_announced`를 돌려줄 때는 **항상 `declineInstruction`(=`VERIFY_DECLINE_ALREADY`)를 함께** 보낸다(`functions/src/verifyIntercept/index.ts:245`). ⇒ **도구가 `BLOCKING`인데 억제 지시 없이 상태값만 오면**, 모델이 자기 판단으로 창구 안내를 **또** 말해 원래 버그(두 번 안내)가 다른 경로로 재현될 수 있다.
+>
+> **⭐ 대상 전수 — `guidance` 없는 응답 지점은 오늘 트리에 *1곳뿐*이다**(`src/lib/realtime/**` 전수 grep: `response: { status` 3히트 + `buildUnsupportedToolResponses` 1곳).
+>
+> | # | 응답 지점 | `guidance` | 판정 |
+> |---|---|---|---|
+> | 1 | `liveToolResponse.ts:53-57` `buildUnsupportedToolResponses`(이름 불일치·도구 미선언) | ⛔ 없음 | ⭕ **설계대로다(G386)** — 그 세션에 **돌려줄 서버 콘텐츠 자체가 없다** |
+> | 2 | `GeminiVoiceSession.tsx:351`(`!smsId` 방어 — 구조적 도달 불가) | ⛔ 없음 | ⭕ 1과 같은 형태(unsupported 재사용) |
+> | 3 | `GeminiVoiceSession.tsx:338-342` `failureResponse`(콜러블 미도달) | ⭕ `liveTools.failureInstruction` | ⚠️ **문면이 문자 전용이다** — 갱신 1 자기 고지 (2)가 이미 등재한 **별건**이며 **이 블록도 재판정하지 않는다**(아래 "닫지 못한 것" (1)) |
+> | 4 | `GeminiVoiceSession.tsx:399-403`(**클레임 실패 조기 응답**) | ⛔ **없음** | ⛔ **결함 — 이 블록이 닫는 유일한 대상** |
+>
+> ⚠️ **SMS 경로에는 같은 자리가 없다** — `send_prepared_sms`는 클레임 가드를 타지 않고 **언제나 서버를 부른다**(`GeminiVoiceSession.tsx:353-358`) ⇒ 서버 문면(`SMS_DECLINE_*`)을 항상 받는다. **대상은 verify 1곳뿐**이다.
+>
+> **⭐ 후보 전수 판정 — 왜 "새 자격증명 필드"인가**
+>
+> | # | 후보 | 판정 | 근거(코드) |
+> |---|---|---|---|
+> | **A** | ⭐ **`credentials.liveTools`에 억제 문구를 실어 미리 내려보낸다**(`failureInstruction`과 **동형**) | ⭕⭕ **채택** | 그 필드가 이미 *"서버 호출 없이도 모델에게 돌려줄 수 있는 서버 소유 문자열"* 이라는 **같은 문제를 푼 선례**다(`liveTools.ts:75-77`). 클라는 문자열을 **저작하지 않고 재사용만** 한다 ⇒ **G386 유지** |
+> | **B** | 이 상태에서만 클라가 서버를 **1회 호출**하도록 허용(SMS의 `pickModelToolSmsId` 선례 — 이미 도착한 항목을 일부러 다시 물어 `already_delivered` 문면을 받아 오는 형태, `liveToolResponse.ts:106-113`) | ⛔ **기각 — 구조적으로 불가능하다** | `resolveVerifyOfferPlan`은 **`placed===false`인 한 몇 번을 불러도 `includeInstruction:true`** 를 돌려준다(`functions/src/verifyIntercept/buildDoc.ts:90-98`) ⇒ 이 상태에서 서버를 부르면 받는 것은 `already_announced`가 **아니라** `announced` + `announceInstruction`이고, 그것이 곧 **두 번 안내**다. **경합 상태는 문서를 남기지 않는 클라 전용 상태**(announce는 `persist:false` — §38.4 E/G391)라 **서버가 관측할 수 있는 자리가 없다.** SMS에서 B가 성립한 이유는 그쪽 서버가 **`.create()` 원자적 존재 검사**라는 상태를 갖기 때문이다 — verify에는 그 상태가 애초에 없다 |
+> | **C** | 기존 `failureInstruction` 재사용 | ⛔ **기각** | 문면이 *"(지금은 **문자**를 보낼 수 없다 …)"* 라 **verify 상태에서 거짓**이다. 갱신 1 자기 고지 (2)가 이미 *"문자 경로 문면 1종뿐"* 이라고 등재한 미해결 항목이며, **그 부적합을 새 상태로 확대하는 방향**이다 |
+> | **D** | 자식이 부모의 in-flight 요청을 **await** 해 그 결과를 그대로 돌려준다 | ⛔ **기각** | ① 부모가 성공하면 그 문자열은 `announceInstruction`이고 **큐로도 주입된다**(`play/page.tsx:722`) ⇒ 도구 응답으로도 주면 **확정적 이중 안내** · ② `BLOCKING` 도구를 **남의 네트워크 왕복만큼 붙잡는다**(§59.0 1) |
+> | **E** | 프롬프트 문면으로 억제(*"앱이 이미 안내 중이면 말하지 마라"*) | ⛔ **기각** | 모델은 **앱 내부의 in-flight 상태를 관측할 수 없다** — 조건을 아는 층은 클라뿐이다(메모리 규범: 예외는 **그 조건을 아는 층**에 둔다). 게다가 문면 층은 §59.3에서 이미 한 번 갈아 끼웠다 |
+>
+> **⭐ 확정 스펙(정본)**
+>
+> | 항목 | 값 |
+> |---|---|
+> | **필드명** | **`verifyAlreadyAnnouncedInstruction`** |
+> | **타입** | **`string`(옵셔널 — `verifyAlreadyAnnouncedInstruction?: string`)** |
+> | **자리** | `LiveTools`/`liveTools` 객체 안, **`offerVerificationDesk` 바로 아래 · `failureInstruction` 위**(그 도구에 딸린 문자열이므로 이름 필드 옆에 붙인다) |
+> | **값** | ⛔ **새 문면 저작 0건** — **`VERIFY_DECLINE_ALREADY` 상수를 그대로 재사용**한다(갱신 1이 확정한 정본: *"(그 안내는 이미 전달했다. 새로 안내하지 말고, 연결해 드리겠다는 말도 다시 하지 말고, 지금 하던 이야기를 그대로 이어가라.)"*). ⛔ **문자열 리터럴을 `liveTools.ts`에 복사하지 말 것** — `functions/src/scenarios/verifyIntercept.ts`에서 **import**한다(그 파일은 이미 같은 모듈에서 `hasVerifyIntercept`를 import하고 있다, `liveTools.ts:14` ⇒ **신규 의존성 0건**) |
+> | **부착 조건** | ⭐ **`offerVerificationDesk`와 정확히 같은 술어**(`hasVerifyIntercept && difficultyLevel==="advanced" && verifySeriesFor()==="A"`) — **같은 스프레드 안**에 넣는다. 도구가 없는 세션에 이 문자열이 내려가면 **부착 조건 1:1 원칙**(`liveTools.ts:86-89`)이 깨지고 §59.9 R1 계열 패리티 단언이 의미를 잃는다 |
+> | **채우는 함수** | ⭐ **`functions/src/realtime/liveTools.ts`의 `buildLiveToolNames()` 한 곳뿐**(`:95-104`의 `offerDeclared` 스프레드). ⛔ **`buildLiveToolDeclarations()`는 0줄** — 그쪽은 토큰에 고정되는 **도구 선언**이고 이 값은 **자격증명 사본**이다 |
+> | **타입 선언 3곳(1:1)** | `functions/src/realtime/liveTools.ts`의 `LiveToolNames`(`:79-83`) · `functions/src/realtime/callTypes.ts`의 `liveTools?:{…}`(`:59-63`) · `src/lib/api/types.ts`의 `LiveTools`(`:164-168`) |
+> | **상태값** | ⭕ **`"already_announced"` 그대로**(신규 상태 이름 0건) — `DeliverVerifyOfferStatus` 3값 유니온은 **무변경**이다. 바뀌는 것은 **`guidance` 유무 하나뿐** |
+>
+> **⭐ 왕복 계약 ⑥의 예외 1행(위 ①~⑧ 표에 얹는다 — 원문 무수정)**
+>
+> | 단계 | 주체 | 동작 |
+> |---|---|---|
+> | ⑥-예외 | 클라 | **`offer_verification_desk`에서 클레임 실패 시**(백스톱 경로가 같은 announce를 요청 중) ③~⑤를 **건너뛰고** `sendToolResponse({ … response: { status:"already_announced", guidance: credentials.liveTools.verifyAlreadyAnnouncedInstruction } })`. ⛔ **서버 호출 0회**(위 후보 B 기각 사유) · ⛔ **응답 생략 0회**(G390) · ⛔ **클라 저작 문자열 0건**(G386) |
+>
+> **⭐ 문면 진리표 — 이 문자열이 나가는 상태가 *셋*이 됐다**(갱신 1은 둘을 세었다). ⚠️ 규범: **문면은 방출되는 모든 상태에서 참이어야 한다.**
+>
+> | # | 상태 | 방출 층 | *"이미 전달했다"* 가 참인가 | 판정 |
+> |---|---|---|---|---|
+> | ① | `placedAt` 존재(호 전환 완료) | 서버 | ⭕ 참 | 갱신 1에서 확정(무변경) |
+> | ② | `stage:"commit"` | 서버 | ⭕ 참 | 갱신 1에서 확정(무변경) |
+> | ③ | ⭐ **신규 — 백스톱 경로가 같은 announce를 요청 중**(클라 클레임 실패) | **클라** | ⚠️ **엄밀히는 "전달 중"이다** — 요청은 나갔고(부모가 이미 `verifyOfferPhaseRef`를 `announced`로 전진시켰다, `play/page.tsx:701`) 지시는 **G31 큐를 거쳐 다음 드레인에 모델에 닿는다**(`:722`) | ⭕ **채택** — 아래 3줄 |
+>
+> ⇒ ③에서 **문면이 시키는 행동은 정확히 옳다**: *"새로 안내하지 말고, 연결해 드리겠다는 말도 다시 하지 말고, 지금 하던 이야기를 그대로 이어가라."* ③에서 모델이 자기 판단으로 창구를 꺼내면 **곧 도착할 앱 지시와 겹쳐 두 번 안내가 된다** — 그게 이 가드의 존재 이유다. ⚠️ **대가(자기 고지)**: *"이미 전달했다"* 는 시제가 ③에서 **한 박자 앞선다**. 그 대가로 **모델이 곧 도착할 앱 announce 지시를 무시할 위험**(과잉 억제)이 남는다. 그럼에도 채택하는 이유 3줄 — ⓐ 앱 지시는 **더 나중에·더 구체적으로** 온다(괄호 지문 *"지금 캐릭터로서 … 하라"*, `verifyIntercept.ts:110`) ⓑ 클레임 실패 창은 **콜러블 왕복 1회 폭**이고 실패 시 부모가 `rollbackVerifyOfferPhase`로 되돌려 다음 경계에서 재시도한다(`play/page.tsx:729-735`) ⓒ **반대 선택지(guidance 없음 = 오늘)의 대가는 *확정적* 두 번 안내**이고 이쪽 대가는 *확률적* 한 번 지연이다. ⛔ **새 문면을 저작해 ③ 전용 문장을 만들지 않는다** — 문면이 상태마다 갈라지면 정본이 3벌이 되고 G84 계열 드리프트가 열린다.
+>
+> **⛔ 노출 판정(갱신 1의 4조건을 자격증명 하향 전달에 재적용).**
+>
+> | 조건 | 만족하는가 | 근거 |
+> |---|---|---|
+> | 카탈로그 고유값(`deskLabel`·`offerId`·기관명) 0건 | ⭕ | 문면에 고유명사 0개 — *"확인 부서"* 는 일반명. ⭐ **그래서 통화 시작 시점에 미리 내려보내도 사전 유출이 아니다**(§16.1.5의 *"창구명은 오퍼 시점에만"* 취지 무변경 — `announceInstruction`은 여전히 credentials에 실리지 않는다) |
+> | 번호·계좌·금액 0건 | ⭕ | 숫자 0개 |
+> | 가로채기 기전 서술 0건(AC-005/OQ-38) | ⭕ | *"지금 하지 마라 / 하던 이야기를 이어가라"* 뿐 |
+> | 노출 표면이 새로 열리는가 | ❌ **열리지 않는다** | 같은 응답이 **오늘 이미** `failureInstruction`(동일 계열 서버 소유 지시문)을 싣고 있다(`liveTools.ts:103`) ⇒ **필드 1개 추가이지 새 경로가 아니다.** AC-024/AC-060(페르소나·카탈로그 본문 미하향) **무접촉** |
+>
+> **⭐ 신규 게이트 — G394**(§59.14에 얹는다). ⛔ **`credentials.liveTools`의 모델 대면 지시 문자열은 ① 서버가 소유하고(원문은 서버 모듈 상수에서 import — 사본 저작 금지) ② 부착 조건이 자기 도구의 선언 조건과 1:1이며 ③ 서버를 부르지 않는 조기 응답도 `guidance`를 반드시 싣는다.** 집행 2건:
+> - **(a)** `functions/src/realtime/__tests__/toolDeclarationUnchanged.test.ts`의 부착 조건 패리티 테스트(`:151-178`)에 단언 추가 — 전 시나리오 × 전 난이도에서 **`verifyAlreadyAnnouncedInstruction`은 `offerVerificationDesk`가 있을 때만·있으면 반드시** 존재하고, 그 값이 **`VERIFY_DECLINE_ALREADY`와 문자열 동등**(리터럴 복사 드리프트를 여기서 잡는다).
+> - **(b)** ⭐ **조기 응답 조립을 순수 함수로 내린다** — `src/lib/realtime/liveToolResponse.ts`에 **`buildAlreadyAnnouncedToolResponse(call, liveTools)`** 를 신설하고 `GeminiVoiceSession.tsx`는 **그 함수를 부르기만** 한다. 그러면 *"guidance가 실리는가"* 를 **소스 문자열 검사가 아니라 단위 단언**으로 걸 수 있다(`liveToolResponse.test.ts`). ⚠️ 실패 메시지에 처방을 담는다: *"클레임 실패 조기 응답에도 `guidance`(=`liveTools.verifyAlreadyAnnouncedInstruction`)를 실어라 — 상태값만 돌려주면 BLOCKING 도구가 억제 근거 없이 모델 턴을 재개시킨다(§59.6 갱신 2 · G394)."*
+>
+> **⚠️ 필드가 없을 때의 처방(구조적 도달 불가지만 명문화한다).** `resolveToolCallKind`가 `"offer_verification_desk"` 를 돌려주려면 `liveTools.offerVerificationDesk`가 있어야 하고(`liveToolResponse.ts:96`), 그 값과 새 필드는 **같은 술어로 함께 붙는다** ⇒ 정상 서버 응답에서는 항상 존재한다. 그럼에도 `undefined`면 **`buildUnsupportedToolResponses([call])[0]` 로 떨어뜨린다**(`GeminiVoiceSession.tsx:351`의 기존 방어와 **같은 형태**). ⛔ **`failureInstruction`으로 대체하지 말 것**(문자 전용 문면 — 위 후보 C) · ⛔ **클라가 한국어를 저작하지 말 것**(G386).
+>
+> **⇒ ⛔ implementer 인계 — 소스 반영 지시(architect는 소스를 0줄 고친다).** 순서대로:
+> 1. **`functions/src/realtime/liveTools.ts`** — ⓐ `:14`의 `import { hasVerifyIntercept } from "../scenarios/verifyIntercept";` 에 **`VERIFY_DECLINE_ALREADY` 를 추가**(같은 모듈 · 신규 의존성 0건) · ⓑ `LiveToolNames`(`:79-83`)에 **`verifyAlreadyAnnouncedInstruction?: string;`** 을 `offerVerificationDesk` **아래**에 추가 · ⓒ `buildLiveToolNames`(`:100-104`)의 **`offerDeclared` 스프레드 안**에 `verifyAlreadyAnnouncedInstruction: VERIFY_DECLINE_ALREADY` 를 함께 넣는다(⛔ **별도 `if`를 새로 만들지 말 것** — 술어가 두 벌이 되면 1:1이 깨진다). ⛔ `buildLiveToolDeclarations`·`LIVE_TOOL_FAILURE_INSTRUCTION`·계열 판정 **무수정**.
+> 2. **`functions/src/realtime/callTypes.ts:59-63`** · **`src/lib/api/types.ts:164-168`** — 같은 옵셔널 필드 1줄씩 추가(3곳 1:1). 주석 1줄: *"클레임 실패 조기 응답 전용(§59.6 갱신 2) — 값은 서버 `VERIFY_DECLINE_ALREADY`의 사본이다."*
+> 3. **`src/lib/realtime/liveToolResponse.ts`** — `buildAlreadyAnnouncedToolResponse(call: LiveToolFunctionCall, liveTools: LiveTools | undefined): LiveToolFunctionResponse` 신설. 필드가 있으면 `{ id: call.id, name: call.name ?? "unknown", response: { status: "already_announced", guidance: <그 값> } }`, 없으면 `buildUnsupportedToolResponses([call])[0]`. ⛔ **한국어 리터럴 0건.**
+> 4. **`src/lib/realtime/GeminiVoiceSession.tsx:399-403`** — 그 객체 리터럴을 **`return buildAlreadyAnnouncedToolResponse(call, liveTools);`** 한 줄로 교체. ⛔ **클레임 가드 자체(`:395`)·`finally` release(`:433-438`)·SMS 분기·부모 `play/page.tsx` 무수정.**
+> 5. **게이트 2건**(위 G394 (a)(b)) 추가. ⛔ **기존 R1~R8·`toolWindow*` 테스트 무수정.**
+>
+> **⚠️ 닫지 못한 것(자기 고지 — 지우지 말 것)**: (1) ⛔ **`failureInstruction`의 문자 전용 문면은 이 블록도 재판정하지 않았다** — 갱신 1 자기 고지 (2)가 **여전히 열려 있고**, 위 표 3행이 그 현행 동작(`GeminiVoiceSession.tsx:341`이 verify 실패에도 *"문자를 보낼 수 없다"* 를 돌려준다)을 **확인만** 했다(범위 밖 — 후속 §59 패스 소관, **번호 선점 0건**). (2) ⚠️ **③에서 모델이 이 지시를 지키는지·과잉 억제가 실제로 일어나는지 라이브 미검증**이다 — **P-E(§59.11)에 관측 1줄을 얹는다**: *"도구 응답 `already_announced` 이후 그 통화에서 창구 안내가 **정확히 1회** 나갔는가."* ⛔ **추가 라이브 예산 0회**(P-E와 같은 통화). (3) ⚠️ **모델이 announce 성공 뒤 같은 도구를 다시 부르는 순차 재호출**은 클레임 가드의 사정거리 밖이다(가드는 **동시**만 막는다) — 이 블록의 대상이 아니며 재판정 0건. (4) ⛔ **architect는 이 패스에서도 라이브·셸·테스트·빌드 0회**다.
+
 ### 59.7 ⭐ 하한(바닥) — **값은 하나도 바뀌지 않는다**
 
 | 대상 | 값 | 출처 | (라) 이후 |
@@ -13797,6 +13875,7 @@ shouldFireBackstop({
 | **G391** | ⛔ **도구 경로에서도 verify 2단계(announce/commit)를 없애지 않는다**(§38.4 E). 컨트롤은 여전히 **예고 턴이 끝난 뒤**에만 뜬다 |
 | **G392** | ⛔ **`offer_verification_desk`를 계열 B 5종에 선언하려면 OQ-A73 확정이 먼저다.** 사용자가 **두 번** 축소를 요구한 컨트롤이다(§47 신고 ③-b · §49 신고 7) |
 | **G393** | ⛔ **`verifyIntentExpressed`를 되살리지 않는다**(§57.12 계승). 도구 호출이 그 자리를 대신하는 것은 **실시간 경로뿐**이며, **폴백(텍스트) 경로는 무변경**이다(계열 B는 그쪽에서 여전히 열리지 않는다 — OQ-A73이 그 비대칭도 함께 묻는다) |
+| **G394**<br>(2026-09-07 · **§59.6 갱신 2**가 정본) | ⛔ **`credentials.liveTools`의 모델 대면 지시 문자열은 ① 서버가 소유하고(원문은 서버 모듈 상수에서 **import** — 리터럴 사본 저작 금지) ② 부착 조건이 자기 도구의 선언 조건과 **1:1** 이며 ③ 서버를 부르지 않는 *조기 응답*도 `guidance`를 반드시 싣는다.** 상태값만 돌려주면 `BLOCKING` 도구가 **억제 근거 없이** 모델 턴을 재개시켜 *"두 번 안내"* 가 다른 경로로 재현된다. 집행: 부착 조건 패리티 단언(`toolDeclarationUnchanged.test.ts`) + 조기 응답 조립의 **순수 함수화**(`liveToolResponse.ts`) 단위 단언 |
 
 ### 59.15 신규 OQ
 
@@ -13833,3 +13912,9 @@ shouldFireBackstop({
 >
 > **⇒ 그 결과 `VERIFY_DECLINE_ALREADY`의 값은 다음 한 줄이 된다**(⛔ 다른 상수·주석·로직 무수정):
 > *"(그 안내는 이미 전달했다. 새로 안내하지 말고, 연결해 드리겠다는 말도 다시 하지 말고, 지금 하던 이야기를 그대로 이어가라.)"*
+
+> **⭐ 갱신 2(2026-09-07 — 커밋 D reviewer REJECTED 대응 패스의 편집 범위 · 위 원문·갱신 1 무수정):**
+> 편집 파일은 **`docs/Architecture.md`(§59.6 갱신 2 블록 + **§59.14 표에 G394 행 1개 추가**(기존 12행 0줄 수정) + 이 블록) · `docs/API.md`(부록 C `createRealtimeCall` 증분 표 — **행 4개 추가**, 기존 행 0줄 수정) · `docs/DECISIONS.md`(#98 1행 추가)** **3파일뿐**이다. ⛔ **`src/**`·`functions/**` 0줄**(전부 **읽기만** 했다 — `realtime/liveTools.ts`·`realtime/callTypes.ts`·`realtime/types.ts`·`src/lib/api/types.ts`·`src/lib/realtime/liveToolResponse.ts`·`GeminiVoiceSession.tsx`·`verifyAnnounceGuard.ts`·`src/app/session/play/page.tsx`·`scenarios/verifyIntercept.ts`·`verifyIntercept/index.ts`·`roleplay/promptAssembly.ts`) · ⛔ **ADR 0건** — 기존 옵셔널 객체(`liveTools`, ADR-0015 소관) **안에 옵셔널 문자열 1개**를 더하는 것이며 **콜러블 시그니처·Firestore 스키마·이벤트·kind·Screen ID·`firestore.rules` 0건 증가**, 되돌리는 비용 = **필드 1개 삭제** · ⛔ `docs/PRD.md`·`docs/UX.md`·`docs/Tasks.md`·`docs/Database.md`·`docs/CHANGELOG.md`·`CLAUDE.md`·`firestore.rules` **무편집** · ⛔ **OQ·절 번호 신설 0건**(OQ-A73·§59가 최대 그대로), **게이트는 G394 1건 신설**(착수 시 최대 **G393** — `docs/**` 전수 grep 실측) · ⛔ **다른 §59 내용 재판정 0건**(백스톱 상수 `TOOL_WINDOW_*` · 계열 게이팅(G392/OQ-A73) · 도구 스키마 · 하한 값 · 커밋 순서 · R1~R8 · `failureInstruction` 문면 **전부 무접촉**).
+> **base**: `C:\codegate\.git\HEAD` = `ref: refs/heads/feat/s59-tool-backstop` → `.git/refs/heads/feat/s59-tool-backstop` = **`68205c1c321923178cb13426fde2ed956324373f`**(`.git` 직접 판독). ⚠️ **인계값 `a91950f`보다 1커밋 앞서 있다** — `.git/logs/refs/heads/feat/s59-tool-backstop:3-4`에 `a2869e7 → a91950f`(*"확인 오퍼 announce 이중 발동 방지"*) → `68205c1c`(*"docs(memory)"*)가 보인다 ⇒ **인계 커밋은 실재하고 그 위에 문서 커밋 1건이 더 얹혔다.** 이 절의 인용은 전부 `68205c1c` 트리 직접 열람이다.
+> ⚠️ **버전 갭 무변동**: 헤더 **PRD v1.7.1 · UX 1.13**(`Architecture.md:5`) ↔ 현행 **PRD v1.14 · UX 1.25** ⇒ **PRD 7건 · UX 12건**(§52~§59와 **동일 — 더 벌어지지 않았다**). ⛔ 헤더 무전진(T131 계열 별건) — 이 패스의 판정은 **소스 직접 열람**이라 갭이 오염시키지 않는다. **UX 추적성**: 신규 Screen ID·Flow ID·라우트 **0건**, 닿는 항목은 **UX-031/UF-011**(확인 시도 무력화 — `offer_verification_desk`) · **UX-014**(통화 셸) 이며 **신규 매핑 0건**.
+> ⚠️ **셸 없음** — 라이브·테스트·빌드·`git log` **0회**, **커밋·push 0건**(워킹 트리 직접 편집). `docs/UpdateRequests.md` `open` 행 중 **architect 소관 0건**(행 #1 = `planner` 템플릿 · 행 #14 = `User`, 직접 열람 확인).

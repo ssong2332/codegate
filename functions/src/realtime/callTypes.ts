@@ -59,6 +59,8 @@ export type CreateRealtimeCallResponse = {
   liveTools?: {
     sendPreparedSms?: string;
     offerVerificationDesk?: string;
+    /** 클레임 실패 조기 응답 전용(§59.6 갱신 2) — 값은 서버 `VERIFY_DECLINE_ALREADY`의 사본이다. */
+    verifyAlreadyAnnouncedInstruction?: string;
     failureInstruction: string;
   };
 };

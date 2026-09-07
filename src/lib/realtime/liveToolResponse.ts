@@ -122,3 +122,29 @@ export function pickModelToolSmsId(
   const nextUndelivered = sorted.find((t) => !delivered.has(t.smsId));
   return (nextUndelivered ?? sorted[0]).smsId;
 }
+
+/**
+ * §59.6 갱신 2(G394) — `offer_verification_desk` 클레임 실패(백스톱 경로가 같은 announce를 요청
+ * 중) 조기 응답 조립. 서버를 부르지 않으므로(왕복 계약 ⑥-예외) `guidance`를 이 함수가 직접
+ * 채운다 — 상태값만 돌려주면 `BLOCKING` 도구가 억제 근거 없이 모델 턴을 재개시킨다.
+ *
+ * ⛔ **`liveTools.failureInstruction`을 재사용하지 않는다** — 그 문면은 "지금은 문자를 보낼 수
+ * 없다"는 문자 경로 전용이라 verify 상태에서 거짓이다(§59.6 갱신 2 후보 C 기각).
+ * ⛔ **한국어 리터럴을 여기서 저작하지 않는다(G386)** — 값은 `liveTools.verifyAlreadyAnnouncedInstruction`
+ * (서버 `VERIFY_DECLINE_ALREADY`의 사본)을 그대로 옮길 뿐이다.
+ *
+ * 필드가 없으면(구조적으로 도달 불가 — `offerVerificationDesk`와 같은 술어로 함께 붙으므로 정상
+ * 서버 응답에서는 항상 존재한다) 방어적으로 `buildUnsupportedToolResponses([call])[0]`로 떨어진다.
+ */
+export function buildAlreadyAnnouncedToolResponse(
+  call: LiveToolFunctionCall,
+  liveTools: LiveTools | undefined,
+): LiveToolFunctionResponse {
+  const guidance = liveTools?.verifyAlreadyAnnouncedInstruction;
+  if (guidance === undefined) return buildUnsupportedToolResponses([call])[0];
+  return {
+    id: call.id,
+    name: call.name ?? "unknown",
+    response: { status: "already_announced", guidance },
+  };
+}
