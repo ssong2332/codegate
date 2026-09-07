@@ -60,4 +60,5 @@
 - [셸이 없다 — git 지시는 신고한다](feedback_no_shell_report_the_git_blocker.md) — 브랜치/커밋/push 불가, 편집만; 실측은 열람·grep·`.git` 판독 셋뿐이고 해시는 인용값
 - [신고문은 소스 주석에 이미 있을 수 있다](feedback_report_may_already_have_a_prescription.md) — 신고 어구로 주석 grep; 히트면 축이 "원인 규명"에서 "이미 있는 처방이 왜 지는가"로 바뀐다
 - [Gemini Live function calling 제약 4개](reference_gemini_live_function_calling.md) — BLOCKING 기본(무응답=통화 정지)·allowedFunctionNames는 ANY 전용·tools와 오디오 모달리티 공존
+- [편집 범위 절이 중단 복구 체크리스트다](feedback_edit_scope_section_is_the_resume_checklist.md) — 끊긴 패스는 그 목록과 실제 diff를 1:1 대조해 빠진 것만 채운다; 재분석 금지
 - [전파하는 수정은 근거를 다시 세운다](feedback_propagated_fix_recheck_premises.md) — diff 말고 원 판정의 근거를 새 경로에서 참/거짓 판정; 클라 값 삼항의 "모르면 B" 기본 방향을 읽어라
