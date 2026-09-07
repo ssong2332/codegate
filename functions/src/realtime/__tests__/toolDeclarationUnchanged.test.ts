@@ -21,6 +21,7 @@ import {
   LIVE_TOOL_OFFER_VERIFICATION_DESK,
   verifySeriesFor,
 } from "../liveTools";
+import { VERIFY_DECLINE_ALREADY } from "../../scenarios/verifyIntercept";
 
 const ALLOWED_NAMES = new Set([LIVE_TOOL_SEND_PREPARED_SMS, LIVE_TOOL_OFFER_VERIFICATION_DESK]);
 
@@ -178,6 +179,43 @@ test("[§59.6 liveTools] buildLiveToolNames의 부착 조건은 buildLiveToolDec
       assert.ok(names!.failureInstruction.length > 0, "failureInstruction은 항상 채워져야 한다(G386)");
     }
   }
+});
+
+// §59.6 갱신 2(G394) — verifyAlreadyAnnouncedInstruction의 부착 조건은 offerVerificationDesk와
+// 정확히 1:1이어야 한다(별도 if 신설 금지 — 술어가 두 벌이 되면 부착 조건 패리티가 깨진다).
+test("[§59.6 갱신 2/G394] verifyAlreadyAnnouncedInstruction — offerVerificationDesk와 정확히 같은 조건에서만 존재하고 값이 VERIFY_DECLINE_ALREADY와 동일하다", () => {
+  const SCENARIO_IDS = [
+    "loan-refinance-scam",
+    "institutional-impersonation",
+    "reputation-blackmail-scam",
+    "bank-security-verify-scam",
+    "kidnapping-threat",
+  ];
+  let checkedWithOffer = 0;
+  for (const scenarioId of SCENARIO_IDS) {
+    for (const difficultyLevel of ["beginner", "intermediate", "advanced", undefined] as const) {
+      const names = buildLiveToolNames(scenarioId, difficultyLevel);
+      const hasOffer = names?.offerVerificationDesk !== undefined;
+      const hasAlready = names?.verifyAlreadyAnnouncedInstruction !== undefined;
+      assert.equal(
+        hasAlready,
+        hasOffer,
+        `${scenarioId}/${difficultyLevel} — verifyAlreadyAnnouncedInstruction 부착 조건은 offerVerificationDesk와 1:1이어야 한다`,
+      );
+      if (hasOffer) {
+        assert.equal(
+          names!.verifyAlreadyAnnouncedInstruction,
+          VERIFY_DECLINE_ALREADY,
+          `${scenarioId}/${difficultyLevel} — 값은 VERIFY_DECLINE_ALREADY와 문자열 동등이어야 한다(리터럴 복사 드리프트 금지)`,
+        );
+        checkedWithOffer += 1;
+      }
+    }
+  }
+  assert.ok(
+    checkedWithOffer >= 1,
+    "offerVerificationDesk가 존재하는 조합을 최소 1개 이상 실제로 검사해야 한다(bank-security-verify-scam advanced)",
+  );
 });
 
 // G389 계승 — deliverVerifyReconnect(호 전환 실행)는 절대 Live 도구로 노출하지 않는다. 그 콜러블의

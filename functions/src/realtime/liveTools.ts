@@ -11,7 +11,7 @@ import { Type } from "@google/genai";
 import type { FunctionDeclaration, Tool } from "@google/genai";
 import type { DifficultyLevel } from "../shared/difficulty";
 import { hasInCallSms } from "../scenarios/inCallSms";
-import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
+import { hasVerifyIntercept, VERIFY_DECLINE_ALREADY } from "../scenarios/verifyIntercept";
 
 /** §59.5 T1 — 인자 없음(G384). 클라가 하드코딩하지 않도록 이름은 `createRealtimeCall` 응답으로도 내려간다(G385). */
 export const LIVE_TOOL_SEND_PREPARED_SMS = "send_prepared_sms";
@@ -79,6 +79,12 @@ export const LIVE_TOOL_FAILURE_INSTRUCTION =
 export type LiveToolNames = {
   sendPreparedSms?: string;
   offerVerificationDesk?: string;
+  /**
+   * §59.6 갱신 2(G394) — `offer_verification_desk` 클레임 실패(백스톱 경로가 같은 announce를
+   * 요청 중) 조기 응답 전용. 서버를 부르지 않으므로 이 값을 그대로 `guidance`로 실어 돌려준다.
+   * 값은 `VERIFY_DECLINE_ALREADY`의 사본이다 — 새 문면 저작 0건(리터럴 복사 금지, import 재사용).
+   */
+  verifyAlreadyAnnouncedInstruction?: string;
   failureInstruction: string;
 };
 
@@ -99,7 +105,12 @@ export function buildLiveToolNames(
   if (!smsDeclared && !offerDeclared) return undefined;
   return {
     ...(smsDeclared ? { sendPreparedSms: LIVE_TOOL_SEND_PREPARED_SMS } : {}),
-    ...(offerDeclared ? { offerVerificationDesk: LIVE_TOOL_OFFER_VERIFICATION_DESK } : {}),
+    ...(offerDeclared
+      ? {
+          offerVerificationDesk: LIVE_TOOL_OFFER_VERIFICATION_DESK,
+          verifyAlreadyAnnouncedInstruction: VERIFY_DECLINE_ALREADY,
+        }
+      : {}),
     failureInstruction: LIVE_TOOL_FAILURE_INSTRUCTION,
   };
 }

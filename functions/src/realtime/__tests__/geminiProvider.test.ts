@@ -371,6 +371,9 @@ test("GeminiRealtimeProvider: 도구가 선언되면 credentials.liveTools에 �
     assert.deepEqual(creds.liveTools, {
       sendPreparedSms: "send_prepared_sms",
       offerVerificationDesk: "offer_verification_desk",
+      // §59.6 갱신 2(G394) — offerVerificationDesk와 1:1로 붙는 클레임 실패 조기 응답용 문자열.
+      verifyAlreadyAnnouncedInstruction:
+        "(그 안내는 이미 전달했다. 새로 안내하지 말고, 연결해 드리겠다는 말도 다시 하지 말고, 지금 하던 이야기를 그대로 이어가라.)",
       failureInstruction: "(지금은 문자를 보낼 수 없다. 문자를 보냈다고 말하지 말고 하던 이야기를 그대로 이어가라.)",
     });
   } finally {

@@ -38,6 +38,7 @@ import {
 } from "./userSpeechLevel";
 import { computeGateCloseDelayMs, resolveTurnInProgress } from "./agentSpeechGate";
 import {
+  buildAlreadyAnnouncedToolResponse,
   buildUnsupportedToolResponses,
   collectToolResponses,
   pickModelToolSmsId,
@@ -396,11 +397,10 @@ export default function GeminiVoiceSession({
         // 백스톱 경로(부모)가 이미 같은 announce를 요청 중이다 — 서버를 다시 부르지 않는다.
         // `already_announced`는 서버가 실제로 쓰는 상태값(`DeliverVerifyOfferStatus`)을 그대로
         // 재사용한 것 — 모델 입장에서도 "이미 처리 중/처리됨"이라는 뜻이 정확히 같다.
-        return {
-          id: call.id,
-          name: call.name ?? "unknown",
-          response: { status: "already_announced" },
-        };
+        // ⭐ §59.6 갱신 2(G394) — 상태값만 돌려주면 BLOCKING 도구가 억제 근거 없이 모델 턴을
+        // 재개시킨다. `guidance`(=liveTools.verifyAlreadyAnnouncedInstruction, 서버
+        // VERIFY_DECLINE_ALREADY의 사본)를 순수 함수로 함께 실어 돌려준다.
+        return buildAlreadyAnnouncedToolResponse(call, liveTools);
       }
       try {
         const result = await deliverVerifyOffer({

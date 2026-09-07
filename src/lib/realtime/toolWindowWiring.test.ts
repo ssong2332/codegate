@@ -228,7 +228,9 @@ test("[Critical 수정] dispatchToolCall의 offer_verification_desk 분기가 de
 test("[Critical 수정] dispatchToolCall이 claim 실패 시 서버를 부르지 않고 즉시 리턴한다", () => {
   const claimAt = sessionCode.indexOf("if (!handlersRef.current.claimVerifyAnnounceSlot()) {");
   const nextTryAt = sessionCode.indexOf("try {", claimAt);
-  const returnAt = sessionCode.indexOf("return {", claimAt);
+  // §59.6 갱신 2(G394) — claim 실패 분기는 이제 객체 리터럴이 아니라
+  // buildAlreadyAnnouncedToolResponse(call, liveTools) 순수 함수 호출로 guidance를 싣는다.
+  const returnAt = sessionCode.indexOf("return buildAlreadyAnnouncedToolResponse(call, liveTools);", claimAt);
   assert.ok(claimAt >= 0 && nextTryAt >= 0 && returnAt >= 0);
   assert.ok(
     returnAt < nextTryAt,
