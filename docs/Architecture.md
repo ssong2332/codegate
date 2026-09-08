@@ -14116,3 +14116,269 @@ shouldFireBackstop({
 
 **편집 파일 3개뿐**: `docs/Architecture.md`(이 §60 신설 — **§0~§59 한 줄도 수정하지 않았다**) · `docs/Database.md`(**`textMasked` 행 1개 정정** — §60.9 (1), 다른 행 0줄) · `docs/DECISIONS.md`(**#99 1행 추가**). ⛔ **`src/**`·`functions/**` 0줄**(전부 **읽기만** 했다 — `realtime/submitTranscript.ts`·`realtime/geminiProvider.ts`·`roleplay/scammerReplyMasking.ts`·`roleplay/promptAssembly.ts`·`guardrails/index.ts`·`shared/types.ts`·`report/generateReportCore.ts`·`rewind/index.ts`·`rewind/judgePrompt.ts`·`session/index.ts`·`challenge/userAccess.ts`·`firestore.rules`·`src/lib/realtime/GeminiVoiceSession.tsx`·`src/app/session/play/page.tsx`·`src/lib/api/submitRealtimeTranscript.ts`·`src/lib/replay/buildReplayTimeline.ts`) · ⛔ **ADR 0건**(구조 결정이 아니다 — 콜러블 시그니처·Firestore 스키마·이벤트·kind·Screen ID·`firestore.rules` **0건 증가**. C1이 채택돼도 **함수 호출 1줄**이라 ADR 대상이 아니다) · ⛔ **`docs/API.md` 무편집**(계약 증분 0건 — `submitRealtimeTranscript`의 요청·응답이 달라지지 않는다. ⚠️ C1 채택 시에도 **계약은 무변경**이고 달라지는 것은 **저장 값**뿐이다) · ⛔ **`docs/PRD.md`·`docs/UX.md`·`docs/Tasks.md`·`docs/CHANGELOG.md`·`CLAUDE.md`·`firestore.rules` 무편집** · ⛔ **브랜치·커밋·push 0건**(셸 부재 — 워킹 트리 직접 편집).
 > `docs/UpdateRequests.md` `open` 행 중 **architect 소관 0건**(직접 열람: 행 #1 = `planner` 템플릿 · 행 #14 = `User` 소유 `docs/GitWorkflow.md`).
+
+---
+
+## 61. (User 확정 집행 — **OQ-A73 resolved**) `offer_verification_desk` **계열 B 5종 확대** + ⭐⭐ **verify-offer 백스톱이 `trigger`를 보내지 않아 §59.11 관측이 처음부터 성립하지 않았다** — ⭐⭐ **G392 주석의 인용은 사용자 요청을 *약하게* 옮겼다: "두 번 축소 요구"가 아니라 §49.4.1/OQ-A43에서 *완전 제거*가 확정·집행됐다** / ⭐⭐ **그러므로 이번 확대는 "복구"가 아니다 — 계열 B에는 백스톱 천장이 없어 *모델 단독 호출 경로 1개*가 더해질 뿐이다** — architect 판정
+
+> **기준선(정직 고지, 실측)**: 이 절의 모든 `파일:줄`은 **`C:\codegate` 워킹 트리 직접 열람**이다. `.git/HEAD` = `ref: refs/heads/main` → `.git/refs/heads/main` = **`29fae8e5f2e4889cc1c00418aca7996ce95d1596`**(`.git` 직접 판독). ⚠️ **세션 스냅샷이 적은 `fd6e325`보다 앞서 있다**(§60과 같은 상황 — 그 절이 판독한 `6805a94`보다도 앞이다).
+> ⚠️ **architect는 이 세션에 셸이 없다** — 테스트·빌드·에뮬레이터·라이브·`git log` 실행 **0회**. `CLAUDE.md`의 **616 / 278**은 인용값이며 재측정 0회. **P-E 로그 실측(`trigger:"backstop"`이 SMS에서는 찍히고 verify-offer에서는 항상 `null`이었다)은 이 세션의 오케스트레이터 인용값**이며 architect는 §61.7에서 **그 원인을 소스로 독립 확인**했다(호출부에 필드가 없다 — 인용값에 기대지 않는 구간이다).
+> ⚠️ **버전 갭**: 헤더 **PRD v1.7.1 · UX 1.13**(`Architecture.md:5`) ↔ 현행 **PRD v1.14**(`docs/PRD.md:4`) **· UX 1.26**(`docs/UX.md:10`) ⇒ **PRD 7건 · UX 13건**(§60 시점의 7/12에서 **UX가 1건 더 벌어졌다** — 1.25 → 1.26). ⛔ 헤더 무전진(T131 계열 별건) — 이 절의 판정 입력은 **소스 직접 열람**이라 갭이 오염시키지 않는다. ⚠️ 다만 **UX 1.26의 증분이 UX-031/UF-011(확인 시도 무력화)을 건드렸는지는 확인하지 않았다** — 확인 필요 시 ux-design 소관.
+> **⛔ 이 절이 확정하지 않는 것**: 백스톱 상수(`TOOL_WINDOW_MAX_BOUNDARIES`·`TOOL_WINDOW_STALL_SEC`) 값 · 도구 `description` 문면 · 거절 문자열 문면(§59.6 갱신 1/2가 정본) · 게이트 값 `availableAfterScammerTurns`(**G263 — 사용자가 명시 기각**) · 폴백(텍스트) 경로의 비대칭 해소 · `docs/Tasks.md` 태스크 번호(planner 소관).
+
+### 61.0 판정 요지 (⛔ 금지 먼저 — 다른 모든 판단보다 우선)
+
+1. ⛔ ***"§49 V5를 되돌렸다" · "계열 B의 AC-071 커버리지를 복구했다"* 로 쓰지 말 것(G401).** **참가자가 탭하던 컨트롤은 여전히 없고**(`page.tsx:1096-1097` — 함수 자체가 폐기됐다), **계열 B에는 앱 백스톱(천장)이 없다**(§61.2). 이 확대가 더하는 것은 **모델이 스스로 부르는 경로 1개**뿐이며, **모델이 안 부르면 그 통화의 오퍼는 여전히 0회**다.
+2. ⛔ **G392 주석의 문장을 그대로 재인용하지 말 것.** *"사용자가 두 번 축소를 요구한 컨트롤"* 은 **약한 인용**이다 — 실제 이력은 **§47 신고 ③-b = *"확인 컨트롤을 지워 달라"*(그 자체가 이미 2회째 요청, `Architecture.md:9702`)** → **§49 OQ-A43 = *"제거"* 로 사용자 확정, V5 집행(`:10374`·`:10555`)** 이다. 즉 **요구는 축소가 아니라 삭제였고, 집행도 삭제였다.** 그리고 G392가 함께 인용한 ***"§49 신고 7"은 확인 컨트롤 건이 아니다*** — §49 헤딩(`:10263`)이 적는 신고 7은 **난이도 배지·발화 파형 제거**다. ⇒ **§61.1의 정정표가 정본**이며, 소스 주석 정정은 implementer 인계 ③.
+3. ⛔ **`VERIFY_SERIES_A_SCENARIOS`에 계열 B 5종을 넣어서 확대하지 말 것(G399 · §61.4 D-C 기각).** 그렇게 하면 **서버의 `verifySeriesFor()`가 6종 전부 "A"** 를 돌려주는데, **클라에 같은 이름의 함수가 따로 있고**(`src/lib/verifyintercept/verifyIntercept.ts:80-82`) 그쪽은 **참가자 의사 게이트**를 진다 ⇒ 두 동명 함수가 **반대 답**을 내는 상태가 되고, 나중에 누군가 *"불일치를 고친다"* 며 클라를 맞추는 순간 **사용자가 두 번 요구해 제거한 앱 주도 오퍼가 계열 B에서 되살아난다.**
+4. ⛔ **도구 선언 조건을 복사해 쓰지 말 것(G400).** 오늘 같은 3절 조건이 **`liveTools.ts:64-68`과 `:101-104`에 두 벌**로 있고, 세 번째 사본이 `promptAssembly` 쪽 게이트다 — **§59 reviewer Critical #2(문면-선언 불일치)가 정확히 그 복제에서 났다.** 이번 패스는 **술어를 1개로 합치고 세 자리가 전부 그것을 부르게** 한다.
+5. ⛔ **`trigger` 누락을 "로그가 좀 부실하다"로 축소하지 말 것(G402).** `deliverVerifyOffer`의 백스톱 호출부는 **필드 자체를 보내지 않았고**(`page.tsx:708-715` — 실측), 서버는 `trigger: trigger ?? null`로 찍는다(`verifyIntercept/index.ts:201-205`) ⇒ **§59.11 P-E의 지표 ③(도착 경로 비율)은 verify-offer에 대해 *처음부터 산출 불가*였다.** 커밋 D가 "지연 발동"을 넣은 이래 **그 창이 실제로 쓰였는지 아무도 모른다.**
+6. ⛔ ***"OQ-A73 확대로 §47 신고 ③-a(오퍼가 참가자 의심과 무관하게 뜬다)가 해결된다"* 로 단정하지 말 것.** OQ-A73의 권고 근거(`:13884`)는 *"모델이 참가자의 의심을 듣고 부르므로 ③-a의 원인이 제거된다"* 인데, **그것은 모델의 판단에 대한 기대이지 보증이 아니다** — 모델은 의심과 무관하게도 부를 수 있다. 확률적 완화이며 **라이브 관측(P-E2, §61.9)이 판정한다.**
+
+### 61.1 ⭐⭐ 경위 — 이전 결정 → 재확대 사유 → User 재확정 (⛔ 이 절이 G392 인용의 정정본이다)
+
+| 시점 | 무슨 일이 있었나 | 근거(직접 열람) |
+|---|---|---|
+| **①** | **§47 신고 ③-b — *"확인 컨트롤을 지워 달라"*.** 헤딩이 **"(2회째 요청)"** 이라고 적는다 ⇒ **이 시점에 이미 삭제 요청 2회**다. 그때 architect는 **단독 삭제를 기각**했다(G261 — 지우면 AC-071 흐름 후반부가 도달 불가) | `Architecture.md:9702` · `:9713` |
+| **②** | **§49 — 사용자 문장 *"상시 노출은 원하는 게 아니다"* 재판정.** architect는 V1~V7을 전수 판정하고 **V5(완전 제거)를 기각하되 OQ-A43의 한 갈래로 남겼다**(대가: **계열 B에서 AC-071 흐름 소멸**) | `:10330` · `:10366` · `:10533` |
+| **③** | ⭐⭐ **OQ-A43 CLOSED = ⓑ(V5, 컨트롤 완전 제거) — 사용자 확정, 2026-08-02 집행.** 사용자 원문은 *"대화를 통해서 감지하거나 그게 어려우면 제거"* 였고, 앞쪽(자유텍스트 의도 감지)은 **AC-024 위반으로 이미 3회 기각된 형태**라 사용자 자신의 대체 지시(**제거**)를 집행했다. **집행 결과가 명문으로 적혀 있다: *"계열 B(시나리오 5종)에서 AC-071 확인창구 흐름은 구조적으로 다시는 발동하지 않는다."*** | `:10368` · `:10370` · `:10372` · **`:10374`** · `:10438` · `:10555` |
+| **④** | **집행의 소스 흔적** — 컨트롤 UI와 `handleVerifyControlTap`이 삭제됐고, `verifyIntentExpressed`는 **`true`로 만드는 호출부가 사라진 채 `useState(false)`로 남아** 계열 B의 AND 게이트를 영구히 닫는다 | `src/app/session/play/page.tsx:1096-1097` · **`:228-233`** · `src/lib/verifyintercept/verifyIntercept.ts:96-104` |
+| **⑤** | **§59(모델 주도 발동 시점) — 도구를 계열 A 1종에만 선언하고, 계열 B 확장은 OQ-A73으로 User에게 물었다.** architect 권고는 **채택**이었으나 *"사용자가 축소를 요구한 컨트롤"* 이라 단독 확정하지 않았다(G392) | `:13876` · `:13884` · `functions/src/realtime/liveTools.ts:21-27` |
+| **⑥** | ⭐⭐ **OQ-A73 = 채택. User가 직접 확정**(2026-09-07, 이 패스의 지시). 즉 **③에서 User가 확정했던 "완전 제거"를 User 자신이 실시간 경로에 한해 다시 연다** | 이 절 · `docs/DECISIONS.md` **#100** |
+
+> **⛔ G392 주석 인용 오류 2건 — 정정본(소스 반영은 implementer 인계 ③)**
+>
+> | # | 오늘 주석(`liveTools.ts:24-25`) | 실제 | 왜 중요한가 |
+> |---|---|---|---|
+> | **(a)** | *"사용자가 **두 번 축소**를 요구한 컨트롤"* | **요구는 *삭제*였고**(§47 ③-b 헤딩이 *"지워 달라(2회째 요청)"*), **집행도 *삭제*였다**(OQ-A43 = V5) | *"축소"* 로 적으면 **되돌리는 비용이 실제보다 싸게 읽힌다.** 이번 확대는 *"조금 줄여 둔 것을 도로 늘린다"* 가 아니라 **사용자가 확정·집행한 구조적 제거의 일부를 User 재확정으로 다시 여는 것**이다 |
+> | **(b)** | *"(§47 신고 ③-b·**§49 신고 7**)"* | **§49의 "신고 7"은 난이도 배지·발화 파형 제거 건**이다(§49 헤딩 `:10263`). 확인 컨트롤 건은 **§49.4.1 / OQ-A43** | 근거가 아닌 곳을 가리키므로 **다음 사람이 원문을 찾아가면 다른 이야기가 나온다** — 인용이 검증을 막는 형태다 |
+>
+> ⭐ **정정의 방향은 "약하게"가 아니라 "정확하게"다.** 정정 후에도 결론(계열 B 확장은 User 확정 없이는 금지)은 **§61 이전까지 옳았다** — 바뀌는 것은 *그 금지의 무게*이며, 그래서 이 확대에는 **DECISIONS 행(#100)과 G401(보고 금지)이 함께 붙는다.**
+
+### 61.2 ⭐⭐ 무엇이 실제로 켜지는가 — ⛔ **"복구"가 아니다** (E-3 정직 고지의 정본)
+
+**계열 B 5종 · advanced · Gemini 실시간 세션**에서 확대 후 실제 경로:
+
+| 경로 | 확대 전 | 확대 후 | 근거 |
+|---|---|---|---|
+| **모델이 도구를 부른다** | ⛔ 불가(도구 미선언) | ⭕ **가능** — `GeminiVoiceSession`이 `deliverVerifyOffer({stage:"announce", trigger:"model_tool"})` 호출 → 서버가 **하한(턴 게이트)을 재검증**(`resolveModelToolVerifyGate`) → `announced` | `GeminiVoiceSession.tsx:405-412` · `verifyIntercept/index.ts:211-226` |
+| **announce 이후 commit(문서 생성)** | — | ⭕ **이어진다** — `onModelToolVerifyAnnounced`가 부모의 `verifyOfferPhaseRef`/`verifyAnnounceTurnsRef`를 전진시키고, 다음 사기범 턴 경계에서 `stage==="commit"` 호출이 나간다. **commit은 `shouldAnnounceVerifyOffer` 게이트를 타지 않는다**(그 검사는 `stage === "announce"` 조건 안에 있다) | `page.tsx:805-810` · `:654-659` · **`:664-677`** |
+| **앱 백스톱(천장)** | ⛔ 없음 | ⛔ **여전히 없음** — `shouldAnnounceVerifyOffer({series:"B", intentExpressed:false})`가 **`false`** 이고, 그 `return`이 **백스톱 블록(`:683`)보다 먼저** 걸린다 ⇒ `shouldFireBackstop`은 계열 B에서 **도달하지 않는 코드**다 | `verifyIntercept.ts:101-103` · `page.tsx:664-677` **before** `:683-693` |
+| **도구 호출 실패(G390)** | — | ⚠️ `verifyToolCallFailedRef`가 `true`가 되지만 **그 값을 읽는 백스톱이 계열 B에는 없다** ⇒ **실패 = 그 통화의 오퍼 0회**(SMS와 달리 사후 보정이 없다) | `page.tsx:813-815` · `:685-692` |
+| **폴백(텍스트) 경로** | ⛔ 안 열림 | ⛔ **여전히 안 열림**(G393 무변경 — 도구 개념이 없고 `verifyIntentExpressed`가 계속 `false`) | `page.tsx:641-677` · `:13877` |
+| **계열 A** | ⭕ 턴 게이트 단독 발동 + 도구 + 백스톱 | ⭕ **무변경**(G264 무접촉) | — |
+
+> ⇒ ⭐⭐ **정본 문장(보고·커밋 메시지·리뷰에 이대로 쓴다)**: ***"계열 B 5종의 advanced·실시간 세션에 `offer_verification_desk` 도구가 선언된다. 그 결과 **모델이 스스로 부르는 경로 하나**가 생긴다. 앱이 대신 발동해 주는 천장(백스톱)은 계열 B에 여전히 없으므로, 모델이 부르지 않으면 그 통화에서 확인창구 흐름은 일어나지 않는다. AC-071의 결정론적 도착은 계열 A 1종에서만 유효하다."***
+> ⚠️ **왜 백스톱까지 열지 않는가**: 그것은 **§49 V5(사용자 확정)의 본체**를 되돌리는 것이다 — 앱이 참가자 의사와 무관하게 오퍼를 띄우는 동작이 정확히 **신고 ③-a**였다. **User가 확정한 것은 "도구를 계열 B에도 준다"이지 "앱 주도 발동을 되살린다"가 아니다.** 백스톱까지 원한다면 **별건 OQ로 User에게 다시 물어야 한다**(architect 단독 확정 금지 — **G401**).
+
+### 61.3 ⭐ 채택 설계 **D-A** — 도구 **선언 자격**을 **계열 분류**에서 분리한다 (⛔ 술어 1개)
+
+**형태**: `verifySeriesFor()`(계열 분류)는 **값·시그니처 무변경**으로 남기고, **선언 자격만** 새 순수 함수 하나가 진다. 그 함수를 **선언·`liveTools` 이름·프롬프트 문면 세 자리가 전부** 호출한다.
+
+**(1) `functions/src/realtime/liveTools.ts`**
+
+```ts
+// ── 신설(파일 상단 상수부, `verifySeriesFor` 아래) ────────────────────────────
+/**
+ * §61(OQ-A73 User 확정) — `offer_verification_desk` **선언 자격**. ⛔ **이 술어가 유일한 원천이다
+ * (G400)**: 도구 선언(`buildLiveToolDeclarations`) · 이름 하향(`buildLiveToolNames`) ·
+ * 프롬프트 문면(`geminiProvider` → `promptAssembly.offerToolDeclared`) 세 자리가 **전부 이 함수를
+ * 부른다**. 조건식을 복사하면 §59 reviewer Critical #2(문면-선언 불일치)가 그대로 재발한다.
+ * ⛔ **계열(A/B)은 더 이상 이 판정에 들어오지 않는다** — 계열은 `verifySeriesFor`가 계속 소유하되
+ * 그것이 게이팅하는 것은 **클라의 참가자 의사 조건**뿐이다(§61.2 · G399).
+ */
+export function declaresOfferVerificationDesk(
+  scenarioId: string,
+  difficultyLevel?: DifficultyLevel,
+): boolean {
+  return hasVerifyIntercept(scenarioId) && difficultyLevel === "advanced";
+}
+```
+
+| 자리 | 변경 전(실측) | 변경 후 |
+|---|---|---|
+| `:18` 주석 | *"계열 A(오늘은 `bank-security-verify-scam` 1종)에만 선언된다(G392)"* | *"§61(OQ-A73 User 확정) — **확인 무력화 카탈로그 6종 전부** · advanced에 선언된다. 계열 A/B 구분은 선언 조건이 아니다"* |
+| `:21-27` 주석 | *"…도구는 계열 B에 선언하지 않는다 — 사용자가 두 번 축소를 요구한 컨트롤이라(§47 신고 ③-b·§49 신고 7) 계열 B 확장은 User 확정(OQ-A73) 전까지 보류한다."* | **§61.1 정정본으로 교체**(삭제 요구 2회 → OQ-A43 V5 완전 제거 → **OQ-A73 User 재확정으로 실시간 경로에 한해 재개**) + **G399**(이 집합에 계열 B를 넣지 말 것 · 클라 동명 함수와 반대 답을 내는 것이 설계다) |
+| `:27` 상수 | `new Set(["bank-security-verify-scam"])` | ⭕ **무변경**(⛔ 여기에 5종을 넣는 것이 D-C 기각안이다) |
+| `:64-68` | `hasVerifyIntercept(...) && difficultyLevel === "advanced" && verifySeriesFor(...) === "A"` | `declaresOfferVerificationDesk(scenarioId, difficultyLevel)` |
+| `:101-104` | 같은 3절 조건의 **두 번째 사본** | `const offerDeclared = declaresOfferVerificationDesk(scenarioId, difficultyLevel);` |
+
+**(2) `functions/src/roleplay/promptAssembly.ts` — 옵션의 *이름과 타입*을 바꾼다(⛔ 값만 바꾸지 말 것)**
+
+| 자리 | 변경 전 | 변경 후 |
+|---|---|---|
+| `:288-292` | `function buildVerifyInterceptRule(toolDrivenTiming: boolean, verifyOfferSeries: "A" \| "B" \| undefined)` / `const useToolDriven = toolDrivenTiming && verifyOfferSeries === "A";` | `function buildVerifyInterceptRule(toolDrivenTiming: boolean, offerToolDeclared: boolean)` / `const useToolDriven = toolDrivenTiming && offerToolDeclared;` |
+| `:608` 옵션 | `verifyOfferSeries?: "A" \| "B";` | `offerToolDeclared?: boolean;` |
+| `:670` 호출 | `buildVerifyInterceptRule(opts.toolDrivenTiming === true, opts.verifyOfferSeries)` | `buildVerifyInterceptRule(opts.toolDrivenTiming === true, opts.offerToolDeclared === true)` |
+| `:253-263`·`:282-286`·`:600-601` 주석 | *"계열 A 1종에만 선언되므로…"* | *"이 옵션은 **그 세션에 도구가 실제로 선언되는가**를 그대로 받는다(계열이 아니다). 값의 원천은 `realtime/liveTools.ts`의 `declaresOfferVerificationDesk()` 하나이며, `promptAssembly`는 시나리오 카탈로그를 직접 읽지 않는다는 §17.3 원칙은 그대로다"* |
+
+> ⭐ **왜 이름을 바꾸는가(값만 완화하지 않는가)**: `verifyOfferSeries === "A"` 를 `!== undefined` 로 완화하면 **옵션이 곧 죽은 값이 된다**(카탈로그가 있으면 항상 정의된다 ⇒ 조건이 `toolDrivenTiming` 단독으로 되돌아간다 = **reviewer Critical #2 이전 상태**). 그 상태는 *"우연히 맞는"* 것이라, 다음에 `verifyInterceptEnabled`와 선언 조건이 갈리는 호출부가 하나만 생겨도 **문면-선언 불일치가 조용히 재발**한다. **옵션이 묻는 질문 자체를 *"도구가 선언되는가"* 로 바꾸는 것이 유일하게 정직한 형태**다.
+
+**(3) `functions/src/realtime/geminiProvider.ts:119`**
+
+```ts
+// 변경 전
+      verifyOfferSeries: verifySeriesFor(input.scenarioId),
+// 변경 후
+      // ⭐ §61 — 계열이 아니라 **이 세션에 도구가 선언되는가**를 넘긴다. 바로 위 `:101`의
+      // buildLiveToolDeclarations와 **같은 술어**라 문면-선언 불일치가 구조적으로 성립하지 않는다.
+      offerToolDeclared: declaresOfferVerificationDesk(input.scenarioId, input.difficultyLevel),
+```
+⚠️ **import 교체**: 이 파일에서 `verifySeriesFor`의 사용처는 **`:119` 1곳뿐**(실측) ⇒ import를 `declaresOfferVerificationDesk`로 바꾼다. `:113-118` 주석도 함께 정정한다.
+
+### 61.4 기각안 (⛔ 판정 기록 — 다음 패스가 다시 열지 않도록)
+
+| # | 안 | 편집량 | 왜 기각인가 |
+|---|---|---|---|
+| **D-B** | `promptAssembly`는 그대로 두고 **`liveTools`의 조건 2곳만** 완화(옵션 이름 유지, `verifyOfferSeries !== undefined`로 비교 완화) | 가장 작다 | ⛔ **옵션이 죽는다**(§61.3 (2) 아래 ⭐) — 조건이 사실상 `toolDrivenTiming` 단독으로 회귀하며, **reviewer가 Critical로 잡았던 형태와 구별 불가능한 코드**가 남는다 |
+| **D-C** | ⭐ **`VERIFY_SERIES_A_SCENARIOS`에 5종을 추가**(1줄) — 선언·이름·문면이 전부 자동으로 따라온다 | **1줄** | ⛔⛔ **기각(G399)** — ① **분류가 거짓이 된다**(계열 B 5종이 서버에서 "A"로 불린다. §47.6 P-5가 세운 이름이 뜻을 잃는다) ② ⭐⭐ **클라에 같은 이름의 함수가 있고**(`src/lib/verifyintercept/verifyIntercept.ts:80`) 그쪽은 **참가자 의사 게이트**를 진다 ⇒ **같은 이름 · 반대 답**. 누군가 *"서버·클라가 어긋난다"* 를 버그로 보고 클라를 맞추면 **§49 V5로 제거된 앱 주도 오퍼가 계열 B에서 부활**한다(사용자가 두 번 요구해 없앤 동작) ③ 테스트가 `verifySeriesFor(x)==="B"`를 단언하고 있어(`toolDeclarationUnchanged.test.ts:90`) **그 단언까지 뒤집어야 한다** — 뒤집는 순간 위 ②의 함정이 게이트에서도 사라진다 |
+| **D-D** | 확대와 함께 **계열 B에도 백스톱(천장)을 연다**(`shouldAnnounceVerifyOffer`의 계열 B 조건 완화) | 중간 | ⛔ **기각 — architect 단독 확정 금지 사안**(§61.2 ⚠️). 그것은 **§49 V5의 본체를 되돌리는 것**이고 신고 ③-a의 동작 그 자체다. 필요하면 **별건 OQ로 User에게 묻는다** |
+| **D-E** | `verifyIntentExpressed`를 되살려 계열 B 조건을 만족시킨다 | — | ⛔ **G393 정면 위반**(§57.12 계승). 되살릴 탭 대상 UI 자체가 없다 |
+
+### 61.5 ⛔ G382 — **한 커밋** 요구사항 (⛔ 나누면 반드시 한쪽이 거짓말을 한다)
+
+**같은 커밋에 들어가야 하는 것(전부):** `liveTools.ts`(술어 신설 + 두 조건 교체) · `promptAssembly.ts`(옵션 교체) · `geminiProvider.ts:119`(옵션 전달) · **위 4파일에 걸린 게이트 테스트 갱신**(§61.6).
+
+| 쪼개면 | 그 시점의 관측 가능한 상태 |
+|---|---|
+| **선언만 먼저**(문면 DEFAULT 유지) | 계열 B 모델이 *"앱의 안내 지시가 오기 전에는 창구 이름을 먼저 꺼내지 않는다"* 는 **금지 문면**을 받은 채 도구를 갖는다 ⇒ **무해하지만 (라)가 안 켜진다**(확대의 효과 0 — 배포해도 아무 일도 안 일어나고, P-E는 그것을 *"모델이 안 부른다"* 로 오독한다) |
+| **문면만 먼저** | 계열 B 세션의 `tools`에 없는 함수를 **부르라고 지시**한다 ⇒ **§59가 G382로 금지한 바로 그 방향**(모델이 없는 도구를 부르겠다고 말한다) |
+
+⛔ **`page.tsx`의 `trigger` 수정(§61.7)은 위 묶음과 별개 커밋으로 둔다** — 관측 배선 결함이라 **확대와 독립적으로 참**이고, 섞으면 P-E 로그의 변화가 *"확대 때문인지 배선 수정 때문인지"* 갈리지 않는다(§59.10/§60.14의 관례 계승). **순서는 `trigger` 수정이 먼저**여야 P-E가 확대 전/후를 같은 척도로 잰다.
+
+### 61.6 게이트 테스트 갱신 목록 (⛔ 같은 커밋 · 빠지면 반려)
+
+| # | 파일 | 무엇을 |
+|---|---|---|
+| **T-1** | `functions/src/realtime/__tests__/toolDeclarationUnchanged.test.ts:79-99` | **의미를 뒤집는다** — *"계열 B 5종은 advanced에서도 선언하지 않는다"* → ***"계열 B 5종은 advanced에서 `{send_prepared_sms, offer_verification_desk}` 둘 다 선언한다"***. ⭐ **`assert.equal(verifySeriesFor(scenarioId), "B")`는 남긴다**(메시지만 갱신) — *"계열 B인데도 도구는 선언된다"* 가 이 설계의 핵심이라 그 단언이 **D-C 회귀를 잡는 그물**이 된다. `SERIES_B_SCENARIOS.length === 5`도 남긴다(확대 대상 전수의 뜻) |
+| **T-2** | 같은 파일 `:68-77` 옆 | **신규 역검증** — 계열 B 시나리오 1종(예 `tax-refund-scam`)의 **beginner·intermediate**에는 `offer_verification_desk`가 **없다**(난이도 절이 살아 있는지 · 확대가 난이도까지 열지 않았는지) |
+| **T-3** | 같은 파일 | **신규(G400)** — `declaresOfferVerificationDesk()`의 결과가 **전 시나리오 × 전 난이도**에서 `declaredNames(...).has(LIVE_TOOL_OFFER_VERIFICATION_DESK)` 및 `buildLiveToolNames(...)?.offerVerificationDesk !== undefined` 와 **3자 동일**함을 단언(술어가 두 벌이 되면 여기서 빨간불) |
+| **T-4** | 같은 파일 `:152-219` | ⭕ **무변경**(부착 조건 패리티 · G394 1:1 단언은 자동으로 확대 커버리지를 얻는다 — `checkedWithOffer` 수만 늘어난다) |
+| **T-5** | `functions/src/realtime/__tests__/geminiProvider.test.ts:100-127` | **의미를 뒤집는다** — `loan-refinance-scam` advanced의 기대 이름 집합이 `["send_prepared_sms"]` → **`["send_prepared_sms", "offer_verification_desk"]`**(⚠️ `deepEqual`이라 **순서까지** 맞춰야 한다 — 선언 push 순서는 SMS → offer다, `liveTools.ts:63-70`) |
+| **T-6** | 같은 파일 `:402-438` | 기대 프롬프트 조립 옵션을 `verifyOfferSeries: verifySeriesFor(...)` → **`offerToolDeclared: true`** 로 교체(계열 A, 무동작 변화) |
+| **T-7** | 같은 파일 `:442-469` | **의미를 뒤집는다** — `tax-refund-scam` advanced는 이제 **TOOL_DRIVEN 문면**이어야 하고 `offer_verification_desk`가 프롬프트에 **있어야** 한다. ⛔ **이 테스트를 지우지 말고 뒤집어라** — 뒤집힌 형태가 *"확대가 문면까지 실제로 켰다"* 의 유일한 기계 증거다 |
+| **T-8** | `functions/src/roleplay/__tests__/promptAssembly.test.ts:585-592` | 옵션 교체 + ⭐ **신규 역검증(문면-선언 불일치 방지의 새 자리)**: `buildSystemPrompt(p, {verifyInterceptEnabled:true, toolDrivenTiming:true, **offerToolDeclared:false**})` ⇒ **DEFAULT 문구 · `offer_verification_desk` 0건**. ⚠️ 확대 후 `geminiProvider` 경로에서는 두 조건이 항상 같아져 **provider 층에서는 이 케이스가 재현되지 않는다** ⇒ 불변식은 **순수 함수 층에서만** 지킬 수 있다 |
+| **T-9** | `functions/src/scenarios/__tests__/scenarios.test.ts:1303`·`:1323`·`:1337`·`:1347` | `verifySeriesFor(scenarioId)` → **`hasVerifyIntercept(scenarioId)`(= `offerToolDeclared`)** 로 교체(필요 시 import 추가). 그 결과 조립 매트릭스가 **카탈로그 보유 6종 전부**에서 TOOL_DRIVEN 문면을 실제로 exercising한다 |
+| **T-10** | `src/lib/realtime/toolWindowWiring.test.ts:68-73` 옆 | ⭐ **신규(G402)** — `deliverVerifyOffer` 백스톱 호출부에도 `trigger: "backstop"` 이 있는지 소스 스캔 단언(오늘 SMS에만 있는 그물의 짝. §61.7이 고치는 결함을 **다시는 못 나게 하는 유일한 수단**) |
+| **T-11** | `functions/src/realtime/__tests__/toolDeclarationUnchanged.test.ts:128-149`(R1⑤) · `:39-58`(R1①②) · `functions/src/realtime/__tests__/geminiProvider.test.ts:129-146`·`:384-398` | ⭕ **무변경 확인만**(허용목록 2개 유지 · 카탈로그 없는 시나리오는 여전히 `[]` · 도구 미선언 세션은 `liveTools` 필드 부재). ⛔ **이 4건이 초록이 아니면 확대가 범위를 넘은 것이다** |
+
+### 61.7 ⭐⭐ verify-offer **`trigger` 로깅 배선 결함** — 원인·범위·수정 설계
+
+**(1) 실측(소스 직접 열람 — 인용값 아님)**
+
+| 경로 | `trigger` 전송 | 근거 |
+|---|---|---|
+| SMS **백스톱**(앱) | ⭕ `trigger:"backstop"` | `src/app/session/play/page.tsx:589` |
+| SMS **모델 도구** | ⭕ `trigger:"model_tool"` | `src/lib/realtime/GeminiVoiceSession.tsx`(SMS 분기) |
+| verify **모델 도구** | ⭕ `trigger:"model_tool"` | `GeminiVoiceSession.tsx:405-412` |
+| **verify 백스톱(앱)** | ⛔ **필드 자체가 없다** | **`page.tsx:708-715`** — `sessionId`·`callMode`·조건부 `scammerTurns`·조건부 `stage`뿐 |
+| 서버 로그 | `trigger: trigger ?? null` | `functions/src/verifyIntercept/index.ts:201-205` |
+
+⇒ ⭐⭐ **`deliverVerifyOffer` 로그의 `trigger`는 `model_tool` 아니면 `null` 두 값만 나온다.** *"백스톱으로 도착"* 과 *"폴백 경로"* 와 *"옛 번들"* 이 **같은 `null`** 이므로 **§59.11 P-E 지표 ③(도착 경로 비율)은 verify-offer에 대해 산출 불가**다. ⛔ **이것은 §59.11이 설계한 관측 인프라 자체의 구멍**이며, 확대 여부와 무관하게 참이다(§61.5 — 별도 선행 커밋).
+
+**(2) 수정 설계 — `src/app/session/play/page.tsx:708-715`**
+
+```ts
+        const result = await deliverVerifyOffer({
+          sessionId,
+          callMode: requestCallMode,
+          // 앵커 판별자(§16.3.2) — 실시간일 때만 필수다. 폴백은 서버가 messages를 직접 센다.
+          ...(requestCallMode === "realtime" ? { scammerTurns } : {}),
+          // ⭐ 폴백은 `stage`를 보내지 않는다(종전 동작 유지).
+          ...(requestCallMode === "realtime" ? { stage } : {}),
+          // ⭐ §61.7 — **이 호출부는 앱 주도(백스톱)다.** 모델 도구 경로가 보내는
+          // `trigger:"model_tool"`(GeminiVoiceSession)과 서버 로그에서 갈리게 명시한다(§59.11 P-E).
+          // ⛔ 폴백에는 보내지 않는다 — 그 경로엔 도구 창 자체가 없어 "백스톱"이 거짓 라벨이 된다
+          // (로그에선 `null` = 폴백/앱 주도 텍스트 경로). 조건은 바로 위 `stage`와 **같은 조건**이다.
+          ...(requestCallMode === "realtime" ? { trigger: "backstop" as const } : {}),
+        });
+```
+- **서버 로직 영향 0** — `readTrigger`가 `"backstop"`을 허용하고(`verifyIntercept/index.ts:148-152`), 하한 재검증 분기는 **`trigger === "model_tool" && stage === "announce"`** 에서만 돈다(`:211`) ⇒ **`"backstop"`은 부재와 동일 경로**다(회귀 0).
+- **`stage:"commit"` 호출도 `backstop`으로 찍힌다** — 의도된 것이다(commit은 정의상 앱이 보낸다). **분석 시 `stage:"announce"`로 필터**한다(로그에 `stage`가 이미 있다).
+- ⚠️ **`as const` 는 추정이다** — 삼항 안의 객체 리터럴이 `{ trigger: string }`으로 넓혀지면 `DeliverVerifyOfferTrigger`에 대입되지 않을 수 있어 붙였다(이웃 `{ stage }`는 이미 유니온 타입 **변수**라 이 문제가 없다). **타입 검사가 없이도 통과하면 빼도 된다** — 확인 방법: 루트 빌드/타입체크(⚠️ `CLAUDE.md` — `npm run build`는 `.env` 있는 트리에서만 끝까지 간다).
+
+**(3) 서버 로그 1줄 보강 — `functions/src/verifyIntercept/index.ts:201-205`**
+
+```ts
+  logger.info("[§59.11] deliverVerifyOffer 발동 경로", {
+    sessionId,
+    trigger: trigger ?? null,
+    stage: stage ?? null,
+    callMode,            // ⭐ §61.7 — `null` 버킷을 "폴백"과 "옛 번들"로 가른다(:182에서 이미 읽는다)
+  });
+```
+⭐ **이유**: (2)를 넣어도 **`trigger:null`은 여전히 두 원인**(폴백 경로 / `trigger`를 안 보내는 캐시된 옛 번들)을 섞는다. `callMode`는 **이미 파싱된 지역 변수**(`:182`)라 추가 비용이 0이고, 이것이 없으면 **배포 직후 관측이 "옛 번들이 얼마나 남았는가"에 오염된다.** ⛔ Firestore 필드는 **늘리지 않는다**(§59.11 원칙 유지 — 로그 1종).
+
+**(4) 이 결함이 남긴 것(정직 고지)** — 커밋 D 배포 이후 **verify-offer의 도구 창(`TOOL_WINDOW_*`)이 실제로 쓰였는지에 대한 증거는 0건**이다. §59.13 (2)가 *"틀리면 P-E가 드러낸다"* 고 적은 그 P-E가 **verify 쪽에서는 애초에 돌지 않았다.** ⇒ **N 값 조정 근거는 여전히 없고**, 이번 수정 이후의 관측이 **최초 측정**이다.
+
+### 61.8 ⭐ 확대의 **파급 1건** — `deliverInCallSms`의 "출력 불변" 근거가 거짓이 된다 (⛔ 새 결함 아님 · 주석 정정 대상)
+
+`functions/src/inCallSms/index.ts:41-52`는 `isVerifyOfferPlaced`(전환 완료 여부 read)에 대해 이렇게 적는다: *"다만 **계열 B(bank 제외 5종)는 `verifyIntentExpressed`가 영구 `false`라 `placedAt`이 세팅되지 않아** 출력은 변하지 않는다(회귀 0)."*
+
+⇒ ⭐ **확대 후 그 문장은 거짓이 된다.** 계열 B에서도 모델 도구 → announce → commit → 문서 생성 → **자동 전환**(`page.tsx:1099-1106`, 계열 A·B 공통)이 이어지므로 **`placedAt`이 실제로 생길 수 있고**, 그때 §53.6 (3)의 규칙(**전환이 끝난 오퍼가 연 문자에는 `announceInstruction`을 싣지 않는다**)이 **계열 B에서 처음으로 발동**한다.
+
+| 판정 | 내용 |
+|---|---|
+| **결함인가** | ⛔ **아니다.** §53.6 (3)은 *"전환 이후의 문자 예고는 참가자가 겪은 사실과 모순"* 이라 만든 규칙이며, 계열 B에서 그것이 켜지는 것은 **설계대로**다 |
+| **해야 할 일** | **주석 정정 1건**(implementer 인계 ③) — *"계열 B는 `placedAt`이 안 생긴다"* → *"§61(OQ-A73) 이후 계열 B에서도 모델 도구 경로로 `placedAt`이 생길 수 있다 ⇒ 이 read의 출력은 6종 전부에서 유효하다"* |
+| **테스트** | ⭕ **신규 0건** — `deliverVerifyOfferGateOrdering.test.ts`/`buildDoc.test.ts`는 시나리오 계열을 전제하지 않는다(순수 함수 입력이 `placed` 불리언이다) |
+
+### 61.9 ⛔ 닫지 못한 것 (자기 고지 — 지우지 말 것)
+
+1. ⛔ **셸 0회** — 테스트·빌드·라이브·`git log` 실행 **0건**. 테스트 수(**616/278**)는 `CLAUDE.md` 인용값이며, **§61.6의 갱신 후 개수 변화는 예측하지 않았다**(뒤집는 단언 3건 + 신규 4건 ⇒ 순증 추정 3~4건, **추정**).
+2. ⛔ **라이브 0회** — 계열 B에서 모델이 `offer_verification_desk`를 **실제로 부르는지 미검증**이다. §59.13 (3)이 적은 한계(*"부를 수 있다"는 보였지만 "적절한 때에 부른다"는 못 보였다*)가 **계열 B에서는 아예 관측 0회**로 남아 있고, 계열 B에는 **천장이 없어** 안 부르면 그대로 0회다.
+3. ⚠️ **신고 ③-a 재발 가능성 미판정** — 모델이 *참가자의 의심과 무관하게* 부를 수 있다. **P-E2**(§61.10)가 없으면 판정 불가이며, ⛔ **"③-a가 해결됐다"로 쓰지 말 것**(G401).
+4. ⚠️ **`toolCall` 도착과 사기범 턴 경계의 정합은 여전히 미실측**(§59.13 계승 — `page.tsx:802-804` 주석이 *"최대 한 턴 어긋날 수 있다"* 고 적는다). 계열 B는 **백스톱 보정이 없어** 이 어긋남이 그대로 드러난다.
+5. ⚠️ **UX 문서 미확인** — `docs/UX.md`가 1.26으로 올라갔고, **UX-031/UF-011 및 §49 V5로 폐기된 D-67 서술이 이 확대와 어긋나는지 확인하지 않았다**(ux-design 소관 인계). 특히 **§49 집행 때 UX에 남긴 *"계열 B에서 AC-071 미발동"* 문장**은 이제 **부분적으로만 참**이다(모델 경로에서는 발동 가능).
+6. ⚠️ **`docs/Tasks.md` 담당 행 미확인·미신설**(planner 소관). §59.16 인계 ①(커밋 A~E 등재)이 처리됐는지 확인하지 않았다.
+7. ⚠️ **P-E 로그 실측(SMS는 `backstop`이 찍힌다)은 오케스트레이터 인용값**이다. architect가 독립 확인한 것은 **소스**(누가 무엇을 보내는가)뿐이다.
+8. ⚠️ **계열 B 5종 각각의 `availableAfterScammerTurns` 값이 도구 경로에서 현실적인지 검토하지 않았다** — 하한이 너무 늦으면 모델이 부르려던 순간 `too_early`로 거절되고(그 뒤 백스톱이 없어) 오퍼가 영영 안 열린다. ⛔ **값은 이 절이 건드리지 않는다(G263)** — 관측 대상으로만 남긴다(P-E2 ③).
+
+### 61.10 프로브 · 관측 (§59.11 P-E의 후속)
+
+| # | 무엇을 재는가 | 예산 | 선행 조건 |
+|---|---|---|---|
+| **P-E1** | ⭐ **verify-offer 도착 경로 비율이 이제 실제로 산출되는가** — 로그에 `trigger:"backstop"`이 **한 번이라도** 찍히는가(계열 A 세션 1통화면 충분) | 라이브 1통화(P-E와 겸함) | §61.7 (2) 배포 |
+| **P-E2** | **계열 B에서 모델이 부르는가 · 언제 부르는가** — ① `toolCall` 수신 여부 ② `status` 분포(`announced`/`too_early`) ③ **참가자가 의심을 표한 뒤였는가**(③-a 재발 판정 — 전사 육안) ④ announce→예고 간격 | 라이브 1통화(계열 B 1종, advanced) | 확대 배포 |
+| **P-E3** | **계열 B 전환 후 문자 예고 생략(§61.8)이 실제로 걸리는가** — 그 세션에서 전환 이후 도착한 문자에 announce 지시가 없는가 | P-E2와 **같은 통화**(추가 0) | — |
+
+### 61.11 무약화 전수 (⛔ 이 절이 건드리지 않는 것)
+
+| 대상 | 확인 |
+|---|---|
+| **§47.3 C1/C2 · `shouldAnnounceVerifyOffer` · `shouldOfferVerify` · `verifySeriesFor`(클라)** | **0줄** — 클라 순수 함수 4개 **무접촉**. 계열 B의 앱 주도 오퍼는 **여전히 닫혀 있다**(§61.2) |
+| **§49 V5(컨트롤 삭제) · G285~G293** | **0줄** — UI·`handleVerifyControlTap` 부활 **0건**. `verifyIntentExpressed`도 `useState(false)` 그대로(**G393**) |
+| **G263/G264** | **0줄** — 게이트 값·계열 A 예외 무접촉 |
+| **G382~G391 · G394 · ADR-0015** | **무변경** — 도구 스키마(인자 없음·G384) · 이름 하향(G385) · 서버 소유 문면(G386) · `too_early` write 0회(G387) · 백스톱 레버(G388) · `deliverVerifyReconnect` 비노출(G389) · `sendToolResponse` 필수(G390) · 2단계 유지(G391) · 부착 조건 1:1(G394) 전건 |
+| **콜러블 계약** | **시그니처 0건 증가** — `trigger`는 **§59 커밋 B에서 이미 계약에 있는 옵셔널 필드**다(`docs/API.md` 부록 C `deliverVerifyOffer` 증분 · `src/lib/api/types.ts:245`). 이 절은 **원래 보냈어야 할 값을 보내게 할 뿐**이다 |
+| **Firestore 스키마 · `firestore.rules` · `docs/Database.md`** | **0건 증가 · 무편집** |
+| **AC-005/013/024/060/061 · ADR-0004** | **0줄** — 새로 모델에 닿는 문자열 0건(도구 `description`·거절 문면 무수정), 자유텍스트 분류 도입 **0건**(도구 호출 = 구조화 신호, §59.12 판정 계승) |
+| **§60 / `submitTranscript.ts` / OQ-A74** | **선취 0건** — 편집 파일 교집합 0 |
+| **폴백(텍스트) 경로 · `roleplay/index.ts` · `openingLine.ts`** | **0줄** — `toolDrivenTiming`을 넘기지 않으므로 조립 산출물 무변경(R4 그대로 초록이어야 한다) |
+
+### 61.12 신규 게이트 (G399~G402)
+
+| # | 규칙 |
+|---|---|
+| **G399** | ⛔ **`VERIFY_SERIES_A_SCENARIOS`에 계열 B 시나리오를 넣지 말 것 · `verifySeriesFor()`를 도구 선언 게이트로 되돌리지 말 것.** 서버(`functions/src/realtime/liveTools.ts`)와 클라(`src/lib/verifyintercept/verifyIntercept.ts`)에 **같은 이름의 함수가 둘** 있고 **다른 답을 내는 것이 설계다**(서버=분류만, 클라=참가자 의사 게이트). ⛔ **"불일치"로 보고 한쪽을 다른 쪽에 맞추면 §49 V5로 사용자가 제거한 앱 주도 오퍼가 계열 B에서 부활한다** |
+| **G400** | ⛔ **`offer_verification_desk` 선언 판정은 술어 1개(`declaresOfferVerificationDesk`)만 쓴다.** 선언·`liveTools` 이름·프롬프트 문면 **세 자리가 전부 이 함수를 호출**한다(조건식 복사 금지 — §59 reviewer Critical #2가 그 복제에서 났다). 집행: 3자 동치 단언(§61.6 T-3) + 순수 함수 층 역검증(T-8) |
+| **G401** | ⛔ ***"§49 V5를 되돌렸다" · "계열 B AC-071 커버리지를 복구했다" · "신고 ③-a를 해결했다"* 로 쓰지 말 것.** 참인 문장은 §61.2의 정본 문단 하나뿐이다(**모델 단독 호출 경로 1개 추가 · 백스톱 천장 없음 · 모델이 안 부르면 0회**). ⛔ **계열 B에 백스톱을 여는 것은 architect가 단독 확정하지 않는다 — 별건 OQ로 User에게 묻는다** |
+| **G402** | ⛔ **앱이 발동 콜러블(`deliverInCallSms`/`deliverVerifyOffer`)을 부르는 모든 자리는 `trigger`를 명시한다.** 안 보내면 §59.11 로그에서 모델 경로와 구분되지 않아 **관측이 성립하지 않는다**(실측: verify-offer가 커밋 D 이래 그 상태였다 — §61.7). 집행: `src/lib/realtime/toolWindowWiring.test.ts`가 **두 호출부 모두**를 소스 스캔으로 단언(T-10) |
+
+### 61.13 implementer 인계 (⛔ 커밋 2개 · 순서 고정)
+
+| 커밋 | 무엇을 | 어디를 |
+|---|---|---|
+| **①**(먼저) | **관측 배선 수정** — `trigger:"backstop"` 1줄 + 서버 로그 `callMode` 1줄 + 게이트 T-10 | `src/app/session/play/page.tsx:708-715` · `functions/src/verifyIntercept/index.ts:201-205` · `src/lib/realtime/toolWindowWiring.test.ts` |
+| **②** | ⭐ **계열 B 확대(G382 — 한 커밋)** — §61.3 (1)(2)(3) + 게이트 T-1~T-9, T-11 확인 | `functions/src/realtime/liveTools.ts` · `functions/src/roleplay/promptAssembly.ts` · `functions/src/realtime/geminiProvider.ts` + 테스트 5파일 |
+| **③**(②와 같은 커밋 권고) | **주석 정정 5곳**(로직 0줄) — G392 오인용(§61.1 정정표) · 계열 A 1종 서술 · §61.8의 "placedAt 안 생긴다" | `functions/src/realtime/liveTools.ts:2`·`:18`·`:21-27`·`:31` · `functions/src/realtime/callTypes.ts:52-53` · `functions/src/realtime/geminiProvider.ts:113-118` · `functions/src/roleplay/promptAssembly.ts:253-263`·`:282-286`·`:600-601` · `src/app/session/play/page.tsx:213-215` · `src/lib/realtime/liveToolResponse.ts:18` · `src/lib/realtime/GeminiVoiceSession.tsx:611` · **`functions/src/inCallSms/index.ts:45-49`** |
+
+⛔ **검증**: `npm --prefix functions test` · `npm test`(루트) — ⛔ **동시 실행 금지 · `npm --prefix <dir> install` 금지**(`CLAUDE.md`). ⛔ **테스트 수를 인용값으로 보고하지 말 것**(재측정 필수).
+
+### 61.14 이 패스의 편집 범위 (⛔ 정본)
+
+**편집 파일 3개뿐**: `docs/Architecture.md`(**이 §61 신설 — §0~§60 한 줄도 수정하지 않았다**) · `docs/API.md`(**부록 C에 증분 행 추가 — 기존 행 0줄 수정**) · `docs/DECISIONS.md`(**#100 1행 추가**).
+⛔ **`src/**`·`functions/**` 0줄**(전부 **읽기만** 했다 — `realtime/liveTools.ts`·`realtime/geminiProvider.ts`·`realtime/index.ts`·`realtime/callTypes.ts`·`roleplay/promptAssembly.ts`·`scenarios/verifyIntercept.ts`·`verifyIntercept/index.ts`·`inCallSms/index.ts`·`realtime/__tests__/toolDeclarationUnchanged.test.ts`·`realtime/__tests__/geminiProvider.test.ts`·`scenarios/__tests__/scenarios.test.ts`·`src/app/session/play/page.tsx`·`src/lib/realtime/GeminiVoiceSession.tsx`·`src/lib/realtime/toolWindowWiring.test.ts`·`src/lib/realtime/liveToolResponse.ts`·`src/lib/verifyintercept/verifyIntercept.ts`·`src/lib/api/types.ts`·`src/lib/api/deliverVerifyOffer.ts`) · ⛔ **ADR 0건**(콜러블 시그니처·Firestore 스키마·이벤트·kind·Screen ID·`firestore.rules` **0건 증가** — 순수 함수 1개 신설 + 옵션 1개 이름 교체다. ADR-0015의 **적용 범위가 넓어지는 것**은 이 절과 `#100`이 기록한다) · ⛔ **OQ 신설 0건**(**OQ-A73 = resolved**) · **게이트 G399~G402 4건 신설**(착수 시 최대 **G398** — `docs/**` 전수 grep 실측) · ⛔ `docs/PRD.md`·`docs/UX.md`·`docs/Tasks.md`·`docs/Database.md`·`docs/CHANGELOG.md`·`README.md`·`CLAUDE.md`·`firestore.rules` **무편집** · ⛔ **브랜치·커밋·push 0건**(셸 부재 — 워킹 트리 직접 편집).
+> **번호 실측(착수 시점, `docs/**` 전수 grep)**: `^## ` 최대 **60** · 게이트 최대 **G398** · OQ 최대 **OQ-A74** · DECISIONS 최대 **#99** · `docs/adr/` 최대 **0015** ⇒ **§61 · G399~G402 · #100 · OQ/ADR 신설 0건**. ⛔ 예약 0건 — 동시 패스가 있으면 **병합 순서로 확정**된다(치환 스코프: `## 61.` 헤딩 이후 + `docs/DECISIONS.md` #100 행 + `docs/API.md` 증분 행뿐. ⛔ **전역 치환 금지**).
+> **UX 추적성**: 신규 Screen ID·Flow ID·라우트 **0건**. 닿는 기존 항목은 **UX-031/UF-011**(확인 시도 무력화 — 계열 B 5종에서 모델 경로로 도달 가능해진다) · **UX-014**(통화 셸 — 자동 전환이 계열 B에서 처음 발동할 수 있다) · **UX-027/UF-008**(§61.8 — 전환 후 문자 예고 생략이 계열 B에서 켜진다)이며 **신규 매핑 0건**이다.
+> `docs/UpdateRequests.md` `open` 행 중 **architect 소관 0건**(직접 열람: #1 = `planner` 템플릿 · #14 = `User` 소유 `docs/GitWorkflow.md`. 나머지 `open` 표기는 해당 행 안의 서술 문자열이다).
