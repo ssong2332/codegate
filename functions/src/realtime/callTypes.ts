@@ -48,10 +48,11 @@ export type CreateRealtimeCallResponse = {
    * 정한다(하드코딩 금지, G385) — 드리프트 게이트를 만드는 대신 드리프트가 성립할 자리를 없앤다.
    *
    * **부착 조건 = Gemini 프로바이더 && 도구가 하나라도 선언될 때만.** `sendPreparedSms`는
-   * `hasInCallSms(scenarioId)`, `offerVerificationDesk`는 `hasVerifyIntercept && difficultyLevel===
-   * "advanced" && verifySeriesFor()==="A"`(오늘은 `bank-security-verify-scam` 1종뿐 — 계열 B 확장은
-   * OQ-A73, G392). 도구 선언 자체는 여전히 토큰(`liveConnectConstraints.config.tools`)에 서버
-   * 고정이다 — 이 필드는 **이름 사본**일 뿐이라 클라가 바꿔도 세션의 도구 집합은 달라지지 않는다.
+   * `hasInCallSms(scenarioId)`, `offerVerificationDesk`는 `declaresOfferVerificationDesk(scenarioId,
+   * difficultyLevel)` = `hasVerifyIntercept && difficultyLevel==="advanced"`(§61(OQ-A73 User
+   * 확정) — 확인 무력화 카탈로그 6종 전부의 advanced에서 선언된다. 계열 A/B 구분은 선언 조건이
+   * 아니다, G399/G400). 도구 선언 자체는 여전히 토큰(`liveConnectConstraints.config.tools`)에
+   * 서버 고정이다 — 이 필드는 **이름 사본**일 뿐이라 클라가 바꿔도 세션의 도구 집합은 달라지지 않는다.
    *
    * `failureInstruction`은 콜러블이 아예 닿지 못했을 때 모델에게 돌려줄 서버 소유 한국어 1줄
    * (G386 — 클라가 저작하지 않는다).

@@ -4,7 +4,7 @@ import { GeminiRealtimeProvider, GEMINI_LIVE_MODEL, pickGeminiVoiceName } from "
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { buildSystemPrompt } from "../../roleplay/promptAssembly";
 import { isL3Procedural } from "../../roleplay/l3Depth";
-import { verifySeriesFor } from "../liveTools";
+import { verifySeriesFor, declaresOfferVerificationDesk } from "../liveTools";
 
 /**
  * 토큰 발급 호출을 가로채기 위해 provider 내부의 GoogleGenAI 인스턴스를 대신할 수 없으므로,
@@ -118,9 +118,14 @@ test("GeminiRealtimeProvider: 도구는 서버가 조건에 따라 선언한 이
       "모델이 토큰에 고정되어야 한다",
     );
     const names = (setup?.tools ?? []).flatMap((t) => t.functionDeclarations ?? []).map((d) => d.name);
-    // loan-refinance-scam은 문자 카탈로그(계열 B, verify)를 가진 시나리오다 — 계열 B는 advanced에서도
-    // offer_verification_desk를 선언하지 않는다(G392/OQ-A73).
-    assert.deepEqual(names, ["send_prepared_sms"], "loan-refinance-scam(계열 B) advanced에 선언된 이름 집합");
+    // §61(OQ-A73 User 확정) — loan-refinance-scam(계열 B)도 확인 무력화 카탈로그를 가지므로
+    // advanced에서 offer_verification_desk가 함께 선언된다. 순서는 send_prepared_sms → offer 다
+    // (liveTools.ts의 push 순서, deepEqual이라 순서까지 맞춰야 한다).
+    assert.deepEqual(
+      names,
+      ["send_prepared_sms", "offer_verification_desk"],
+      "loan-refinance-scam(계열 B) advanced에 선언된 이름 집합",
+    );
   } finally {
     capture.restore();
   }
@@ -423,8 +428,9 @@ test("GeminiRealtimeProvider: 토큰 발급 시 systemInstruction이 toolDrivenT
         identityCheckAllowed: true,
         speakerGender: "male",
         toolDrivenTiming: true,
-        // reviewer Critical #2 — 계열 A(bank-security-verify-scam)라 TOOL_DRIVEN 문구가 실린다.
-        verifyOfferSeries: verifySeriesFor("bank-security-verify-scam"),
+        // §61(OQ-A73 User 확정) — bank-security-verify-scam은 도구가 선언되므로(advanced)
+        // offerToolDeclared:true라 TOOL_DRIVEN 문구가 실린다.
+        offerToolDeclared: declaresOfferVerificationDesk("bank-security-verify-scam", "advanced"),
       }),
     );
     assert.ok(sentPrompt.includes("send_prepared_sms"), "도구 이름이 토큰에 실린 프롬프트에 있어야 한다");
@@ -437,9 +443,10 @@ test("GeminiRealtimeProvider: 토큰 발급 시 systemInstruction이 toolDrivenT
   }
 });
 
-// ⭐ reviewer Critical #2 회귀 — 계열 B(advanced)는 toolDrivenTiming:true여도 확인 안내는 DEFAULT
-// 그대로다(도구가 선언되지 않는 세션에서 "도구를 불러라"는 문면-선언 불일치를 남기지 않는다).
-test("GeminiRealtimeProvider: 계열 B(advanced)는 toolDrivenTiming:true여도 확인 안내가 DEFAULT로 조립된다(reviewer Critical #2)", async () => {
+// ⭐ §61(OQ-A73 User 확정) — 계열 B(advanced)도 이제 도구가 선언되므로 toolDrivenTiming:true면
+// TOOL_DRIVEN 확인 안내가 실려야 한다(확대가 문면까지 실제로 켰다는 유일한 기계 증거 — 이 테스트를
+// 지우지 않고 뒤집는다, §61.6 T-7).
+test("GeminiRealtimeProvider: 계열 B(advanced)는 toolDrivenTiming:true면 TOOL_DRIVEN 확인 안내로 조립된다(§61)", async () => {
   const capture = captureTokenRequest();
   try {
     const provider = new GeminiRealtimeProvider("test-key");
@@ -453,15 +460,15 @@ test("GeminiRealtimeProvider: 계열 B(advanced)는 toolDrivenTiming:true여도 
       bidiGenerateContentSetup?: { systemInstruction?: { parts?: { text?: string }[] } };
     }).bidiGenerateContentSetup;
     const sentPrompt = setup?.systemInstruction?.parts?.[0]?.text ?? "";
-    assert.equal(verifySeriesFor("tax-refund-scam"), "B", "이 테스트의 전제(계열 B)가 깨졌다");
-    assert.ok(
-      sentPrompt.includes("앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다"),
-      "계열 B는 확인 안내 DEFAULT 문구를 유지해야 한다",
-    );
+    assert.equal(verifySeriesFor("tax-refund-scam"), "B", "이 테스트의 전제(계열 B)가 깨졌다 — 분류 자체는 §61 이후에도 무변경(G399)");
     assert.equal(
-      sentPrompt.includes("offer_verification_desk"),
+      sentPrompt.includes("앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다"),
       false,
-      "계열 B는 선언되지 않는 도구 이름이 프롬프트에 등장하면 안 된다",
+      "계열 B도 §61 이후에는 DEFAULT 문구가 남아 있으면 안 된다(도구가 선언되므로 TOOL_DRIVEN이어야 한다)",
+    );
+    assert.ok(
+      sentPrompt.includes("offer_verification_desk"),
+      "계열 B도 §61 이후에는 도구 이름이 프롬프트에 등장해야 한다",
     );
   } finally {
     capture.restore();

@@ -250,17 +250,17 @@ function buildScenarioProgression(
 // ⛔ **보존 절(G386-b, 한 글자도 바꾸지 않는다)**: 적용 범위 절(원문 :226) · "어디에 걸어도 같은
 // 곳" 금지(:229) · 앞 담당자 퇴장 절(:230) — 이 세 줄은 템플릿 밖에 그대로 남아 두 변형이 공유한다.
 //
-// ⭐ **reviewer Critical #2 수정(§59 커밋 C 리뷰) — 아래 함수는 이제 `toolDrivenTiming` 단독이 아니라
-// `toolDrivenTiming && verifyOfferSeries === "A"`로 갈린다.** 이전에는 이 함수 자신의 주석이 남긴
-// 인계 사항이었다: `offer_verification_desk` 도구 **선언**은 계열 A(`bank-security-verify-scam`)
-// 1종에만 걸리는데(G392/OQ-A73, `realtime/liveTools.ts`), 문면은 `toolDrivenTiming` 하나로만
-// 갈려 계열 B 5종(advanced)에서도 "도구를 불러라"는 문구가 실렸다 — 그 세션의 `tools`에는 그
-// 이름의 함수가 없어 **문면-선언 불일치**가 남았다(통화 정지 위험은 없다, 모델은 미선언 함수를
-// 예측 방출하지 않는다). 계열 판정은 `realtime/liveTools.ts`의 `verifySeriesFor()`가 유일한
-// 원천이며, 그 로직을 여기서 다시 구현하지 않는다 — 호출부(`realtime/geminiProvider.ts`)가 그
-// 함수로 계산한 결과를 `verifyOfferSeries` 옵션으로 넘긴다. `promptAssembly.ts`가 시나리오
-// 카탈로그를 직접 읽지 않는다는 원칙(§17.3)은 그대로 유지된다 — 여기서는 캐릭터 이름이 아니라
-// 호출부가 이미 계산해 준 "A"/"B" 값만 비교한다.
+// ⭐ **§61(OQ-A73 User 확정) — 아래 함수는 이제 `toolDrivenTiming` 단독이 아니라
+// `toolDrivenTiming && offerToolDeclared`로 갈린다.** reviewer Critical #2(§59 커밋 C 리뷰)가
+// 원래 잡은 문제(문면은 `toolDrivenTiming` 하나로만 갈려, 도구가 실제로는 선언되지 않는 세션에서도
+// "도구를 불러라"는 문구가 실릴 수 있었다 — 문면-선언 불일치)는 그대로 유효하지만, **판별 기준이
+// 계열(A/B)에서 "이 세션에 도구가 실제로 선언되는가"로 바뀌었다(G400).** 옵션 이름도 계열이 아니라
+// 그 질문을 그대로 받도록 `offerToolDeclared`로 바꿨다 — 계열로 남겨 두면 §61 확대 후에는 "계열 B도
+// 선언된다"는 사실과 옵션 이름이 모순된다. 판정은 `realtime/liveTools.ts`의
+// `declaresOfferVerificationDesk()`가 유일한 원천이며, 그 로직을 여기서 다시 구현하지 않는다 —
+// 호출부(`realtime/geminiProvider.ts`)가 그 함수로 계산한 결과를 `offerToolDeclared` 옵션으로
+// 넘긴다. `promptAssembly.ts`가 시나리오 카탈로그를 직접 읽지 않는다는 원칙(§17.3)은 그대로
+// 유지된다 — 여기서는 캐릭터 이름이 아니라 호출부가 이미 계산해 준 불리언만 비교한다.
 const VERIFY_OFFER_LINE_DEFAULT = `- **상대가 그렇게 다시 확인하겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다.** 다만 **앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다** — "잠시만요, 확인 부서를 연결해 드리겠습니다"처럼 받아 두고 기다린다.`;
 
 const VERIFY_OFFER_LINE_TOOL_DRIVEN = `- **상대가 그렇게 다시 확인하겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다.** 상대가 직접 확인해 보고 싶어 한다고 판단되면 **\`offer_verification_desk\` 도구를 부르고, 그 결과가 돌아온 뒤에만** 창구 이름을 꺼낸다 — 그전에는 "잠시만요, 확인 부서를 연결해 드리겠습니다"처럼 받아 두고 기다린다.`;
@@ -279,17 +279,18 @@ const VERIFY_INTERCEPT_RULE_TEMPLATE = `[확인 안내 — 이 훈련에서만 �
 /**
  * §59.3 조건부 치환 — `toolDrivenTiming` 부재/false는 오늘 문자열과 바이트 단위로 동일하다(회귀 0).
  *
- * ⭐ **인계 해소(reviewer Critical #2, 위 헤더 주석 참고)**: 이전 버전은 `verifyInterceptEnabled`가
- * true인 **모든** 시나리오(계열 A·B 6종 전부)에서 `toolDrivenTiming:true`면 TOOL_DRIVEN 문구를
- * 실었다. 이제 `verifyOfferSeries === "A"`(호출부가 `realtime/liveTools.ts`의 `verifySeriesFor()`로
- * 계산해 넘긴 값)와 **함께** 곱해, 도구가 실제로 선언되는 세션(계열 A 1종)에서만 TOOL_DRIVEN
- * 문구가 실린다. 계열 B 5종(advanced)은 `toolDrivenTiming`이 true여도 DEFAULT 그대로다.
+ * ⭐ **§61(OQ-A73 User 확정) — 판별 기준이 계열에서 "도구가 이 세션에 선언되는가"로 바뀌었다.**
+ * reviewer Critical #2(§59 커밋 C 리뷰)가 세운 정합 자체(문면과 실제 선언이 갈리면 안 된다)는
+ * 그대로 유지하되, 그 정합의 판정 원천이 `verifySeriesFor() === "A"`에서
+ * `declaresOfferVerificationDesk()`(`realtime/liveTools.ts`, 계열 무관)로 바뀌었다. §61 확대 후
+ * 확인 무력화 카탈로그 6종은 advanced에서 전부 도구가 선언되므로, `offerToolDeclared`가 그 6종
+ * advanced에서 전부 `true`가 되어 TOOL_DRIVEN 문구가 실린다.
  */
 function buildVerifyInterceptRule(
   toolDrivenTiming: boolean,
-  verifyOfferSeries: "A" | "B" | undefined,
+  offerToolDeclared: boolean,
 ): string {
-  const useToolDriven = toolDrivenTiming && verifyOfferSeries === "A";
+  const useToolDriven = toolDrivenTiming && offerToolDeclared;
   return VERIFY_INTERCEPT_RULE_TEMPLATE.replace(
     "{{VERIFY_OFFER_LINE}}",
     useToolDriven ? VERIFY_OFFER_LINE_TOOL_DRIVEN : VERIFY_OFFER_LINE_DEFAULT,
@@ -596,16 +597,16 @@ export type BuildSystemPromptOptions = {
    */
   toolDrivenTiming?: boolean;
   /**
-   * ⭐ reviewer Critical #2(§59 커밋 C 리뷰) — [확인 안내] 블록의 TOOL_DRIVEN 치환을
-   * `toolDrivenTiming`과 **함께** 게이팅한다. `offer_verification_desk` 도구는 계열 A
-   * (`bank-security-verify-scam`) 1종에만 선언되므로(G392, `realtime/liveTools.ts`), 값이
-   * `"A"`일 때만 TOOL_DRIVEN 문구가 실린다 — `"B"`·부재는 `toolDrivenTiming`이 true여도 DEFAULT
-   * 그대로다(문면-선언 불일치 방지). ⛔ **SMS 쪽 치환(`SMS_METHOD_LINE_TOOL_DRIVEN`)은 이 값과
-   * 무관하다** — `send_prepared_sms`는 카탈로그 존재 여부로만 게이팅되고 계열 제약이 없다.
-   * 값은 호출부(`realtime/geminiProvider.ts`)가 `verifySeriesFor(scenarioId)`로 계산해 넘긴다 —
-   * 이 파일은 시나리오 카탈로그를 직접 읽지 않는다(§17.3).
+   * ⭐ §61(OQ-A73 User 확정) — [확인 안내] 블록의 TOOL_DRIVEN 치환을 `toolDrivenTiming`과 **함께**
+   * 게이팅한다(reviewer Critical #2, §59 커밋 C 리뷰가 세운 정합 유지). 값이 `true`일 때만
+   * TOOL_DRIVEN 문구가 실린다 — `false`·부재는 `toolDrivenTiming`이 true여도 DEFAULT 그대로다
+   * (문면-선언 불일치 방지). ⛔ **SMS 쪽 치환(`SMS_METHOD_LINE_TOOL_DRIVEN`)은 이 값과 무관하다**
+   * — `send_prepared_sms`는 카탈로그 존재 여부로만 게이팅되고 이 옵션과 관계없다.
+   * 값은 호출부(`realtime/geminiProvider.ts`)가 `declaresOfferVerificationDesk(scenarioId,
+   * difficultyLevel)`(`realtime/liveTools.ts`)로 계산해 넘긴다 — 이 파일은 시나리오 카탈로그를
+   * 직접 읽지 않는다(§17.3).
    */
-  verifyOfferSeries?: "A" | "B";
+  offerToolDeclared?: boolean;
 };
 
 /**
@@ -667,7 +668,7 @@ export function buildSystemPrompt(
     // 없음인 경우 배열이 도입 전과 완전히 동일해져 조립 결과 문자열도 한 글자도 달라지지 않는다
     // (회귀 0 보장).
     ...(opts.verifyInterceptEnabled === true
-      ? [buildVerifyInterceptRule(opts.toolDrivenTiming === true, opts.verifyOfferSeries), ""]
+      ? [buildVerifyInterceptRule(opts.toolDrivenTiming === true, opts.offerToolDeclared === true), ""]
       : []),
     ...(difficultyBlock ? [difficultyBlock, ""] : []),
     ...(opts.turnInstruction ? [opts.turnInstruction, ""] : []),

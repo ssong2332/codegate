@@ -608,8 +608,8 @@ export default function GeminiVoiceSession({
               if (cancelled) return;
 
               // ⭐ §59.10 커밋 A + reviewer Critical #1 수정(G383/G385/G386/G390) — 도구가 실제로
-              // 선언되는 세션(SMS 카탈로그 보유 시나리오 대부분·bank-security-verify-scam
-              // advanced)에서는 이제 이 분기가 **도달 가능**하다(`credentials.liveTools`, §59.6 ②).
+              // 선언되는 세션(SMS 카탈로그 보유 시나리오 대부분 · 확인 무력화 카탈로그 보유 6종의
+              // advanced, §61)에서는 이제 이 분기가 **도달 가능**하다(`credentials.liveTools`, §59.6 ②).
               // `dispatchToolCall`(위, 이 effect 스코프)이 이름을 실제 콜러블로 라우팅하고 결과를
               // `{status, guidance}`로 돌려준다 — 미선언 세션·알 수 없는 이름은 여전히
               // `buildUnsupportedToolResponses`(unsupported)로 안전하게 떨어진다. `BLOCKING` 도구는

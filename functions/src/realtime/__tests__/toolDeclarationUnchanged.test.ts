@@ -20,6 +20,7 @@ import {
   LIVE_TOOL_SEND_PREPARED_SMS,
   LIVE_TOOL_OFFER_VERIFICATION_DESK,
   verifySeriesFor,
+  declaresOfferVerificationDesk,
 } from "../liveTools";
 import { VERIFY_DECLINE_ALREADY } from "../../scenarios/verifyIntercept";
 
@@ -76,8 +77,10 @@ test("[§59.9 R1③ 계열A/난이도] bank-security-verify-scam — advanced가
   }
 });
 
-// G392/OQ-A73 — 계열 B 5종은 advanced에서도 offer_verification_desk를 선언하지 않는다(User 확정 전).
-test("[§59.9 R1③ 계열B] 확인 무력화 계열 B 5종 — advanced에서도 offer_verification_desk를 선언하지 않는다", () => {
+// §61(OQ-A73 User 확정) — 계열 B 5종은 advanced에서 {send_prepared_sms, offer_verification_desk}
+// 둘 다 선언한다. `verifySeriesFor(scenarioId)==="B"` 단언은 남긴다 — "계열 B인데도 도구는
+// 선언된다"가 이 설계의 핵심이라 그 단언이 D-C 회귀(§61.4)를 잡는 그물이 된다.
+test("[§61 R1③ 계열B] 확인 무력화 계열 B 5종 — advanced에서 send_prepared_sms·offer_verification_desk 둘 다 선언한다", () => {
   const SERIES_B_SCENARIOS = [
     "institutional-impersonation",
     "card-company-impersonation",
@@ -85,17 +88,58 @@ test("[§59.9 R1③ 계열B] 확인 무력화 계열 B 5종 — advanced에서�
     "tax-refund-scam",
     "courier-customs-scam",
   ];
-  assert.equal(SERIES_B_SCENARIOS.length, 5, "계열 B는 5종이어야 한다(OQ-A73 확장 전)");
+  assert.equal(SERIES_B_SCENARIOS.length, 5, "계열 B는 5종이어야 한다(OQ-A73 확장 대상 전수)");
   for (const scenarioId of SERIES_B_SCENARIOS) {
-    assert.equal(verifySeriesFor(scenarioId), "B", `${scenarioId}는 계열 B여야 한다`);
+    assert.equal(verifySeriesFor(scenarioId), "B", `${scenarioId}는 계열 B여야 한다(§61 이후에도 분류는 무변경, G399)`);
     const names = declaredNames(scenarioId, "advanced");
     assert.ok(
-      !names.has(LIVE_TOOL_OFFER_VERIFICATION_DESK),
-      `${scenarioId}(계열 B, advanced)에 offer_verification_desk가 선언되면 안 된다(G392)`,
+      names.has(LIVE_TOOL_OFFER_VERIFICATION_DESK),
+      `${scenarioId}(계열 B, advanced)에 offer_verification_desk가 선언돼야 한다(§61)`,
     );
-    // 이 5종도 문자 카탈로그를 함께 가지므로 send_prepared_sms는 정상 선언된다(§59.7 표).
     assert.ok(names.has(LIVE_TOOL_SEND_PREPARED_SMS), `${scenarioId}는 문자 카탈로그도 가진다`);
   }
+});
+
+// §61.6 T-2 — 난이도 절이 살아 있는지(확대가 난이도까지 열지 않았는지)의 역검증. beginner·
+// intermediate에는 offer_verification_desk가 여전히 없다(카탈로그 보유 계열 B 시나리오 1종 대표).
+test("[§61 T-2 역검증] tax-refund-scam(계열 B) — beginner·intermediate에는 offer_verification_desk가 없다", () => {
+  for (const difficultyLevel of ["beginner", "intermediate"] as const) {
+    const names = declaredNames("tax-refund-scam", difficultyLevel);
+    assert.ok(
+      !names.has(LIVE_TOOL_OFFER_VERIFICATION_DESK),
+      `tax-refund-scam/${difficultyLevel}에 offer_verification_desk가 선언되면 안 된다(advanced 전용)`,
+    );
+    assert.ok(names.has(LIVE_TOOL_SEND_PREPARED_SMS), `tax-refund-scam/${difficultyLevel}는 문자 카탈로그를 가진다`);
+  }
+});
+
+// §61.6 T-3/G400 — declaresOfferVerificationDesk()의 결과가 buildLiveToolDeclarations/
+// buildLiveToolNames의 실제 부착 여부와 전 시나리오 × 전 난이도에서 3자 동일해야 한다(술어가 두
+// 벌이 되면 여기서 빨간불).
+test("[§61 T-3/G400] declaresOfferVerificationDesk가 선언·liveTools 이름 부착과 전 조합에서 3자 동일하다", () => {
+  const SCENARIO_IDS = [
+    "loan-refinance-scam",
+    "institutional-impersonation",
+    "card-company-impersonation",
+    "tax-refund-scam",
+    "courier-customs-scam",
+    "reputation-blackmail-scam",
+    "bank-security-verify-scam",
+    "kidnapping-threat",
+  ];
+  let checked = 0;
+  for (const scenarioId of SCENARIO_IDS) {
+    for (const difficultyLevel of ["beginner", "intermediate", "advanced", undefined] as const) {
+      const predicate = declaresOfferVerificationDesk(scenarioId, difficultyLevel);
+      const declared = declaredNames(scenarioId, difficultyLevel).has(LIVE_TOOL_OFFER_VERIFICATION_DESK);
+      const names = buildLiveToolNames(scenarioId, difficultyLevel);
+      const namesAttached = names?.offerVerificationDesk !== undefined;
+      assert.equal(predicate, declared, `${scenarioId}/${difficultyLevel} — 술어와 선언이 갈렸다`);
+      assert.equal(predicate, namesAttached, `${scenarioId}/${difficultyLevel} — 술어와 liveTools 이름이 갈렸다`);
+      checked += 1;
+    }
+  }
+  assert.ok(checked >= 30, "전 조합을 충분히 검사해야 한다");
 });
 
 // R1 ④ — 선언된 모든 함수의 parameters.properties가 빈 객체다(G384 기계 집행 — 인자 없음).

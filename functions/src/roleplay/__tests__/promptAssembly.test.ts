@@ -582,14 +582,18 @@ function realOptionsFor(scenarioId: string): {
   inCallSmsEnabled: boolean;
   verifyInterceptEnabled: boolean;
   l3Procedural: boolean;
-  verifyOfferSeries: "A" | "B" | undefined;
+  offerToolDeclared: boolean;
 } {
   return {
     inCallSmsEnabled: hasInCallSms(scenarioId),
     verifyInterceptEnabled: hasVerifyIntercept(scenarioId),
     l3Procedural: isL3Procedural(scenarioId),
-    // reviewer Critical #2 — geminiProvider.ts와 같은 원천(verifySeriesFor)에서 파생한다.
-    verifyOfferSeries: verifySeriesFor(scenarioId),
+    // §61(OQ-A73 User 확정) — verifyInterceptEnabled(=hasVerifyIntercept)와 같은 판별자다. 실
+    // 호출부(geminiProvider.ts)는 difficultyLevel===advanced도 곱하지만(declaresOfferVerificationDesk),
+    // 이 헬퍼는 verifyInterceptEnabled와 동일하게 시나리오 구조(카탈로그 보유)만 반영한다 — 이
+    // 파일의 난이도 게이팅은 buildSystemPrompt 자신이 아니라 호출부 책임이라는 기존 전제(§59.3)를
+    // verifyInterceptEnabled와 같은 방식으로 따른다.
+    offerToolDeclared: hasVerifyIntercept(scenarioId),
   };
 }
 
@@ -1367,7 +1371,7 @@ test("[§59.9 R2] toolDrivenTiming 부재/false — 전 시나리오 × 전 난�
 // R3 — toolDrivenTiming:true 산출물에 도구 이름 2개가 등장하고(계열 A·advanced 세션), 보존 절
 // 4개가 그대로 있으며, 옛 금지 문구가 사라졌는지.
 test("[§59.9 R3] toolDrivenTiming:true(계열 A·advanced) — 도구 이름 2개 등장 + 보존 절 4개 유지 + 옛 금지 문구 0건", () => {
-  const scenarioId = "bank-security-verify-scam"; // 계열 A(§59.5 G392) — 두 도구 모두 뜨는 유일한 세션.
+  const scenarioId = "bank-security-verify-scam"; // 계열 A(§59.5) — §61 이후에는 카탈로그 보유 6종 전부의 advanced에서 두 도구가 뜬다(이 시나리오가 유일한 것은 아니다).
   const prompt = SCENARIO_PROMPTS[scenarioId];
   const assembled = buildSystemPrompt(prompt, {
     ...realOptionsFor(scenarioId),
@@ -1431,9 +1435,10 @@ test("[§59.9 R4] 폴백/오프닝 경로가 넘기는 옵션 형태(toolDrivenT
   }
 });
 
-// ⭐ reviewer Critical #2 — [확인 안내] TOOL_DRIVEN 치환은 `toolDrivenTiming`만으로 켜지지 않는다.
-// `offer_verification_desk` 도구는 계열 A(bank-security-verify-scam) 1종에만 선언되므로(G392),
-// 계열 B 5종은 toolDrivenTiming:true여도 DEFAULT 문구를 유지해야 한다(문면-선언 불일치 방지).
+// ⭐ §61(OQ-A73 User 확정) — [확인 안내] TOOL_DRIVEN 치환은 `toolDrivenTiming`만으로 켜지지
+// 않는다는 정합(reviewer Critical #2, §59 커밋 C 리뷰) 자체는 유지되지만, 판정 원천이 계열에서
+// "도구가 이 세션에 선언되는가"로 바뀌었다. 계열 B 5종도 확인 무력화 카탈로그를 가지므로
+// advanced에서는 도구가 선언되고(§61), 따라서 TOOL_DRIVEN 문구가 실려야 한다.
 const VERIFY_SERIES_B_SCENARIOS = [
   "institutional-impersonation",
   "card-company-impersonation",
@@ -1442,10 +1447,10 @@ const VERIFY_SERIES_B_SCENARIOS = [
   "courier-customs-scam",
 ] as const;
 
-test("[reviewer Critical #2] 계열 B 5종 × advanced — toolDrivenTiming:true여도 확인 안내는 DEFAULT 그대로다", () => {
+test("[§61] 계열 B 5종 × advanced — toolDrivenTiming:true면 확인 안내가 TOOL_DRIVEN으로 조립된다", () => {
   for (const id of VERIFY_SERIES_B_SCENARIOS) {
     assert.ok(hasVerifyIntercept(id), `${id}: 확인 무력화 카탈로그 전제가 깨졌다`);
-    assert.equal(verifySeriesFor(id), "B", `${id}: 계열 B 전제가 깨졌다`);
+    assert.equal(verifySeriesFor(id), "B", `${id}: 계열 B 전제가 깨졌다(분류 자체는 §61 이후에도 무변경, G399)`);
     const prompt = SCENARIO_PROMPTS[id];
     const assembled = buildSystemPrompt(prompt, {
       ...realOptionsFor(id),
@@ -1453,27 +1458,45 @@ test("[reviewer Critical #2] 계열 B 5종 × advanced — toolDrivenTiming:true
       toolDrivenTiming: true,
     });
 
-    // DEFAULT 문구가 그대로 있어야 한다(VERIFY_OFFER_LINE_DEFAULT·VERIFY_NAME_LINE_DEFAULT 원문 일부).
+    // TOOL_DRIVEN 문구·도구 이름이 등장해야 한다(§61 이후 계열 B도 도구가 선언된다).
     assert.ok(
-      assembled.includes("앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다"),
-      `${id}: VERIFY_OFFER_LINE_DEFAULT가 사라졌다`,
-    );
-    assert.ok(
-      assembled.includes("확인 부서로 연결하라는 지시가 이 프롬프트에 함께 들어온 턴에만 창구 이름을 말한다"),
-      `${id}: VERIFY_NAME_LINE_DEFAULT가 사라졌다`,
-    );
-    // TOOL_DRIVEN 문구·도구 이름은 0건이어야 한다(도구가 이 세션에 선언되지 않는다, G392).
-    assert.equal(
       assembled.includes("offer_verification_desk"),
-      false,
-      `${id}: 선언되지 않는 도구 이름이 프롬프트에 등장했다`,
+      `${id}: offer_verification_desk 도구 이름이 등장해야 한다`,
     );
-    assert.equal(
+    assert.ok(
       assembled.includes("도구가 창구 안내를 돌려준 뒤에만"),
+      `${id}: VERIFY_NAME_LINE_TOOL_DRIVEN 문구가 실려야 한다`,
+    );
+    // 옛 DEFAULT 문구는 0건이어야 한다.
+    assert.equal(
+      assembled.includes("앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다"),
       false,
-      `${id}: VERIFY_NAME_LINE_TOOL_DRIVEN 문구가 새어 나왔다`,
+      `${id}: DEFAULT 문구가 남아 있으면 안 된다`,
     );
   }
+});
+
+// §61.6 T-8 — 문면-선언 불일치 방지의 새 자리(순수 함수 층 역검증). §61 확대 후 실 호출부
+// (geminiProvider.ts)에서는 offerToolDeclared가 항상 verifyInterceptEnabled와 같은 값이 되므로
+// (둘 다 declaresOfferVerificationDesk에서 파생) provider 층에서는 이 불일치 케이스가 재현되지
+// 않는다 — 이 불변식은 순수 함수(buildSystemPrompt) 층에서만 지킬 수 있다.
+test("[§61.6 T-8] verifyInterceptEnabled:true라도 offerToolDeclared:false면 TOOL_DRIVEN 문구가 실리지 않는다", () => {
+  const prompt = SCENARIO_PROMPTS["bank-security-verify-scam"];
+  const assembled = buildSystemPrompt(prompt, {
+    difficultyLevel: "advanced",
+    verifyInterceptEnabled: true,
+    toolDrivenTiming: true,
+    offerToolDeclared: false,
+  });
+  assert.equal(
+    assembled.includes("offer_verification_desk"),
+    false,
+    "offerToolDeclared:false면 도구가 선언되지 않는 세션이므로 도구 이름이 등장하면 안 된다",
+  );
+  assert.ok(
+    assembled.includes("앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다"),
+    "offerToolDeclared:false면 DEFAULT 문구를 유지해야 한다",
+  );
 });
 
 // SMS 쪽은 계열 제약이 없다(카탈로그 존재로만 게이팅) — 계열 B라도 SMS 카탈로그가 있으면

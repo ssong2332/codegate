@@ -1,5 +1,8 @@
 // §59.10 커밋 C — Live 도구 선언(순수 — Firestore·네트워크 접근 0). docs/Architecture.md §59.5·
-// §59.6·§59.9(R1) · docs/API.md 부록 C `createRealtimeCall` 증분 · G384·G385·G386·G392.
+// §59.6·§59.9(R1) · docs/API.md 부록 C `createRealtimeCall` 증분 · G384·G385·G386.
+// §61(OQ-A73 User 확정) — `offer_verification_desk` 선언 자격이 계열 분류에서 분리됐다(G399~G402,
+// `declaresOfferVerificationDesk` 참고). `VERIFY_SERIES_A_SCENARIOS`/`verifySeriesFor`는 값·시그니처
+// 무변경으로 남는다 — 클라의 참가자 의사 게이트가 여전히 그 분류를 쓴다(§61.2).
 //
 // ⛔ 이 파일이 하지 않는 것: 클라의 `toolCall` 이름 → `deliverInCallSms`/`deliverVerifyOffer` 실제
 // 라우팅(§59.6 ②~⑥). `docs/Architecture.md` §59.10 커밋 표는 그 라우팅을 이 커밋(C)의 항목으로
@@ -15,23 +18,49 @@ import { hasVerifyIntercept, VERIFY_DECLINE_ALREADY } from "../scenarios/verifyI
 
 /** §59.5 T1 — 인자 없음(G384). 클라가 하드코딩하지 않도록 이름은 `createRealtimeCall` 응답으로도 내려간다(G385). */
 export const LIVE_TOOL_SEND_PREPARED_SMS = "send_prepared_sms";
-/** §59.5 T2 — 인자 없음(G384). 계열 A(오늘은 `bank-security-verify-scam` 1종)에만 선언된다(G392). */
+/**
+ * §59.5 T2 — 인자 없음(G384). §61(OQ-A73 User 확정) — 확인 무력화 카탈로그 6종 전부 · advanced에
+ * 선언된다. 계열 A/B 구분은 선언 조건이 아니다(`declaresOfferVerificationDesk` 참고).
+ */
 export const LIVE_TOOL_OFFER_VERIFICATION_DESK = "offer_verification_desk";
 
 /**
- * §59.5 G392/OQ-A73 — 확인 무력화 카탈로그(`VERIFY_INTERCEPT`) 6종 중 **이 훈련을 위해 저작된
+ * §61.1(OQ-A73 정정본) — 확인 무력화 카탈로그(`VERIFY_INTERCEPT`) 6종 중 **이 훈련을 위해 저작된
  * 전용 시나리오(T95)** 1종만 "계열 A"다. 나머지 5종("다른 수법의 시나리오에 이 흐름을 얹은 것")은
- * "계열 B"이며, `offer_verification_desk` 도구는 계열 B에 선언하지 않는다 — 사용자가 두 번 축소를
- * 요구한 컨트롤이라(§47 신고 ③-b·§49 신고 7) 계열 B 확장은 User 확정(OQ-A73) 전까지 보류한다.
+ * "계열 B"다. ⛔ **이 분류는 더 이상 `offer_verification_desk` 도구 선언 자격을 정하지 않는다** —
+ * 선언 자격은 `declaresOfferVerificationDesk()`(계열과 무관)가 유일한 원천이다(G400). 이 함수와
+ * `VERIFY_SERIES_A_SCENARIOS`는 **클라의 참가자 의사 게이트**(`src/lib/verifyintercept/
+ * verifyIntercept.ts`의 동명 함수, 계열 A만 앱 주도 오퍼를 허용)를 위해 그대로 남는다 — ⛔ **계열
+ * B를 이 Set에 추가하지 말 것(G399)**: 그러면 클라·서버 두 동명 함수가 계열 B에 대해 같은 답을
+ * 내게 되고, §49 V5(사용자 확정)로 제거된 앱 주도 오퍼가 계열 B에서 부활한다.
  */
 const VERIFY_SERIES_A_SCENARIOS: ReadonlySet<string> = new Set(["bank-security-verify-scam"]);
 
 export type VerifyOfferSeries = "A" | "B";
 
-/** 이 시나리오가 확인 무력화 카탈로그를 갖는다면 계열 A/B 중 무엇인지. 카탈로그가 없으면 `undefined`. */
+/**
+ * 이 시나리오가 확인 무력화 카탈로그를 갖는다면 계열 A/B 중 무엇인지. 카탈로그가 없으면 `undefined`.
+ * ⛔ §61 이후 이 함수는 **도구 선언 게이트가 아니다** — 클라의 참가자 의사 게이트 판별용으로만
+ * 남는다(G399). 도구 선언 자격은 아래 `declaresOfferVerificationDesk()`를 쓴다.
+ */
 export function verifySeriesFor(scenarioId: string): VerifyOfferSeries | undefined {
   if (!hasVerifyIntercept(scenarioId)) return undefined;
   return VERIFY_SERIES_A_SCENARIOS.has(scenarioId) ? "A" : "B";
+}
+
+/**
+ * §61(OQ-A73 User 확정) — `offer_verification_desk` **선언 자격**. ⛔ **이 술어가 유일한 원천이다
+ * (G400)**: 도구 선언(`buildLiveToolDeclarations`) · 이름 하향(`buildLiveToolNames`) ·
+ * 프롬프트 문면(`geminiProvider` → `promptAssembly.offerToolDeclared`) 세 자리가 **전부 이 함수를
+ * 부른다**. 조건식을 복사하면 §59 reviewer Critical #2(문면-선언 불일치)가 그대로 재발한다.
+ * ⛔ **계열(A/B)은 더 이상 이 판정에 들어오지 않는다** — 계열은 `verifySeriesFor`가 계속 소유하되
+ * 그것이 게이팅하는 것은 **클라의 참가자 의사 조건**뿐이다(§61.2 · G399).
+ */
+export function declaresOfferVerificationDesk(
+  scenarioId: string,
+  difficultyLevel?: DifficultyLevel,
+): boolean {
+  return hasVerifyIntercept(scenarioId) && difficultyLevel === "advanced";
 }
 
 /** §59.5 — 두 도구 모두 인자 없음(G384). `parameters.properties`가 빈 객체임을 R1 ④가 기계로 단언한다. */
@@ -61,11 +90,7 @@ export function buildLiveToolDeclarations(
 ): Tool[] {
   const declarations: FunctionDeclaration[] = [];
   if (hasInCallSms(scenarioId)) declarations.push(SEND_PREPARED_SMS_DECLARATION);
-  if (
-    hasVerifyIntercept(scenarioId) &&
-    difficultyLevel === "advanced" &&
-    verifySeriesFor(scenarioId) === "A"
-  ) {
+  if (declaresOfferVerificationDesk(scenarioId, difficultyLevel)) {
     declarations.push(OFFER_VERIFICATION_DESK_DECLARATION);
   }
   if (declarations.length === 0) return [];
@@ -98,10 +123,7 @@ export function buildLiveToolNames(
   difficultyLevel?: DifficultyLevel,
 ): LiveToolNames | undefined {
   const smsDeclared = hasInCallSms(scenarioId);
-  const offerDeclared =
-    hasVerifyIntercept(scenarioId) &&
-    difficultyLevel === "advanced" &&
-    verifySeriesFor(scenarioId) === "A";
+  const offerDeclared = declaresOfferVerificationDesk(scenarioId, difficultyLevel);
   if (!smsDeclared && !offerDeclared) return undefined;
   return {
     ...(smsDeclared ? { sendPreparedSms: LIVE_TOOL_SEND_PREPARED_SMS } : {}),

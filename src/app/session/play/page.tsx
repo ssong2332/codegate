@@ -211,7 +211,8 @@ export default function SessionCallPage() {
   // 충분하다 — 다음 문자가 due가 되면 이 값은 그 문자의 smsId와 더 이상 일치하지 않아 자연히 무시된다.
   const smsToolCallFailedIdRef = useRef<string | null>(null);
   // §59.10 커밋 D(G390) — 확인 오퍼(offer_verification_desk) 도구 경로 실패 신호. 세션당 오퍼가
-  // 하나뿐이라(계열 A 1종에만 도구가 선언된다, G392) id 없이 boolean 하나로 충분하다.
+  // 하나뿐이라(카탈로그 보유 && advanced 세션에만 도구가 선언된다, §61) id 없이 boolean 하나로
+  // 충분하다.
   const verifyToolCallFailedRef = useRef(false);
   // §59.8 — "마지막 사기범 턴 경계(없으면 하한 도달) 이후 경과 초"의 분모 시계. 매 사기범 턴 경계
   // (`handleScammerTurnComplete`)마다 그 순간의 통화 경과초로 갱신된다 — 새 타이머를 만들지 않고
