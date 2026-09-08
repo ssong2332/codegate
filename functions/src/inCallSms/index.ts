@@ -44,9 +44,12 @@ export {
  * `verifyEnabled` 게이팅과 동형).
  * ⚠️ **read는 1종이 아니라 6종에서 발생한다**(institutional·card·loan-refinance·tax-refund·
  * courier-customs·bank — `scenarios/verifyIntercept.ts:195-200` 카탈로그 전수 확인, reviewer
- * 지적으로 정정). 다만 계열 B(bank 제외 5종)는 `verifyIntentExpressed`가 영구 `false`라
- * `placedAt`이 세팅되지 않아(§52.2 P4) **출력은 변하지 않는다**(회귀 0) — 무해한 것은 read 범위가
- * 아니라 출력 불변이다. read 비용 자체가 무시 가능한지는 실측하지 않았다.
+ * 지적으로 정정). ⭐ **§61(OQ-A73) 이후 계열 B(bank 제외 5종)에서도 모델 도구 경로로 `placedAt`이
+ * 생길 수 있다** — 계열 B는 앱 주도 오퍼(`verifyIntentExpressed`)는 여전히 영구 `false`지만
+ * (§61.2 · G393), 모델이 `offer_verification_desk` 도구를 불러 announce→commit이 이어지면
+ * 전환이 완료된다. ⇒ **이 read의 출력은 6종 전부에서 유효하다** — 전환이 끝난 오퍼가 연 문자에는
+ * `announceInstruction`을 싣지 않는 §53.6 (3) 규칙이 계열 B에서도 발동할 수 있다(§61.8, 회귀
+ * 아님 — 설계대로다). read 비용 자체가 무시 가능한지는 실측하지 않았다.
  *
  * ⛔ **throw하지 않는다(P-4 핵심 루프 비차단)** — 조회 실패는 `catch`로 흡수하고 `false`(=
  * 종전대로 지시를 싣는다)로 떨어진다.

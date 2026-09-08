@@ -18,7 +18,7 @@ import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { hasInCallSms } from "../scenarios/inCallSms";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
-import { buildLiveToolDeclarations, buildLiveToolNames, verifySeriesFor } from "./liveTools";
+import { buildLiveToolDeclarations, buildLiveToolNames, declaresOfferVerificationDesk } from "./liveTools";
 import { SCENARIO_SPEAKER_GENDER, speakerGenderFor } from "./scenarioVoice";
 import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider } from "./types";
 
@@ -96,7 +96,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // §50.3.3(G298) — speakerGender도 같은 표(scenarioVoice.ts)에서 파생한다. 층 1(음성, 아래
     // pickGeminiVoiceName)과 층 2(이 프롬프트 옵션)가 **같은 원천**을 읽어야 목소리와 말이 맞는다.
     // §59.5/§59.10 커밋 C — 이 세션에 실제로 선언할 Live 도구(조건은 buildLiveToolDeclarations
-    // 자신이 진다 — hasInCallSms/hasVerifyIntercept+advanced+계열A). 프롬프트 조건부 치환
+    // 자신이 진다 — hasInCallSms · declaresOfferVerificationDesk, §61). 프롬프트 조건부 치환
     // (toolDrivenTiming)과 **같은 트리거로 묶지 않는다** — 아래 buildSystemPrompt 호출부 주석 참고.
     const liveToolDeclarations = buildLiveToolDeclarations(input.scenarioId, input.difficultyLevel);
     const systemPrompt = buildSystemPrompt(scenarioPrompt, {
@@ -110,13 +110,11 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       // §59.3 — 이 경로가 §59 커밋 C가 정한 **유일한 `true` 호출부**다(폴백 sendMessage·오프닝은
       // Live 세션이 없어 도구가 존재하지 않으므로 넘기지 않는다, G382).
       toolDrivenTiming: true,
-      // ⭐ reviewer Critical #2 수정(§59 커밋 C 리뷰 — 이전에는 이 값을 넘기지 않아 위 toolDrivenTiming
-      // 단독으로 [확인 안내] TOOL_DRIVEN 문구가 갈렸다) — `offer_verification_desk` 도구는 계열 A
-      // (`bank-security-verify-scam`) 1종에만 선언되므로(G392, buildLiveToolDeclarations 참고),
-      // 계열 판정을 그대로 재사용해 넘긴다. 계열 B 5종(advanced)은 promptAssembly.ts가 DEFAULT
-      // 문구를 유지한다(문면-선언 불일치 해소). 로직 중복 구현 금지 — verifySeriesFor()가 유일한
-      // 원천이다(같은 판단이 buildLiveToolDeclarations/buildLiveToolNames에도 이미 쓰인다).
-      verifyOfferSeries: verifySeriesFor(input.scenarioId),
+      // ⭐ §61(OQ-A73 User 확정) — 계열이 아니라 **이 세션에 도구가 선언되는가**를 넘긴다. 바로 위
+      // `:101`의 buildLiveToolDeclarations와 **같은 술어**라 문면-선언 불일치가 구조적으로 성립하지
+      // 않는다(reviewer Critical #2가 세운 정합 유지, G400). 로직 중복 구현 금지 —
+      // declaresOfferVerificationDesk()가 유일한 원천이다.
+      offerToolDeclared: declaresOfferVerificationDesk(input.scenarioId, input.difficultyLevel),
     });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });

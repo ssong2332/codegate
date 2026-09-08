@@ -211,7 +211,8 @@ export default function SessionCallPage() {
   // 충분하다 — 다음 문자가 due가 되면 이 값은 그 문자의 smsId와 더 이상 일치하지 않아 자연히 무시된다.
   const smsToolCallFailedIdRef = useRef<string | null>(null);
   // §59.10 커밋 D(G390) — 확인 오퍼(offer_verification_desk) 도구 경로 실패 신호. 세션당 오퍼가
-  // 하나뿐이라(계열 A 1종에만 도구가 선언된다, G392) id 없이 boolean 하나로 충분하다.
+  // 하나뿐이라(카탈로그 보유 && advanced 세션에만 도구가 선언된다, §61) id 없이 boolean 하나로
+  // 충분하다.
   const verifyToolCallFailedRef = useRef(false);
   // §59.8 — "마지막 사기범 턴 경계(없으면 하한 도달) 이후 경과 초"의 분모 시계. 매 사기범 턴 경계
   // (`handleScammerTurnComplete`)마다 그 순간의 통화 경과초로 갱신된다 — 새 타이머를 만들지 않고
@@ -712,6 +713,11 @@ export default function SessionCallPage() {
           ...(requestCallMode === "realtime" ? { scammerTurns } : {}),
           // ⭐ 폴백은 `stage`를 보내지 않는다(종전 동작 유지).
           ...(requestCallMode === "realtime" ? { stage } : {}),
+          // ⭐ §61.7 — **이 호출부는 앱 주도(백스톱)다.** 모델 도구 경로가 보내는
+          // `trigger:"model_tool"`(GeminiVoiceSession)과 서버 로그에서 갈리게 명시한다(§59.11 P-E).
+          // ⛔ 폴백에는 보내지 않는다 — 그 경로엔 도구 창 자체가 없어 "백스톱"이 거짓 라벨이 된다
+          // (로그에선 `null` = 폴백/앱 주도 텍스트 경로). 조건은 바로 위 `stage`와 **같은 조건**이다.
+          ...(requestCallMode === "realtime" ? { trigger: "backstop" as const } : {}),
         });
         setVerifyError(null);
         // 폴백 경로는 서버가 다음 sendMessage 턴에 직접 주입하므로 클라가 넣지 않는다(중복 방지).

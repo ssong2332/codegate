@@ -14,7 +14,7 @@ import type { DifficultyLevel } from "../../shared/difficulty";
 // 일부인데도 종전 축(난이도 × 문자)이 순회하지 않아 요구몰림 게이트의 스캔 대상 밖이었다.
 import { OPENING_TURN_INSTRUCTION } from "../../roleplay/openingLine";
 import { MOCK_INSTALL_CONSENT_INSTRUCTION } from "../mockScreens";
-import { VERIFY_INTERCEPT } from "../verifyIntercept";
+import { VERIFY_INTERCEPT, hasVerifyIntercept } from "../verifyIntercept";
 import { IN_CALL_SMS } from "../inCallSms";
 import { scanText } from "./harmlessnessPatterns";
 // §50.4.4/§50.3.3 — 두 표가 조립에 실제로 반영되는지 assembledPrompts()가 exercising하게 한다
@@ -23,7 +23,6 @@ import { scanText } from "./harmlessnessPatterns";
 // personaAuthority/scenarioVoice를 "단일 원천"으로 못박았다).
 import { PERSONA_AUTHORITY, asksIdentityCheck } from "../../roleplay/personaAuthority";
 import { speakerGenderFor } from "../../realtime/scenarioVoice";
-import { verifySeriesFor } from "../../realtime/liveTools";
 
 // AC-005: 실제 운영 가능한 사기 정보(실계좌번호 패턴·실제 송금 절차 지시·실제 URL)가 절대
 // 포함되면 안 된다. 계좌번호형 숫자(8자리 이상 연속 숫자)와 http(s) 링크를 금지 패턴으로 검사한다.
@@ -1295,12 +1294,12 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
   for (const scenarioId of scenarioIds) {
     const identityCheckAllowed = asksIdentityCheck(scenarioId);
     const speakerGender = speakerGenderFor(scenarioId);
-    // ⭐ reviewer Critical #2(§59 커밋 C 리뷰) — `identityCheckAllowed`/`speakerGender`와 같은
-    // 이유로 **시나리오별 derive 값**이다(수동 토글 축이 아니다). 실 호출부(geminiProvider.ts)가
-    // 항상 `verifySeriesFor(scenarioId)`로 계산해 넘기는 것과 동일하게 맞춘다 — 여기서 안 넘기면
-    // (기본값 undefined에 의존하면) 계열 A(bank-security-verify-scam)의 TOOL_DRIVEN 분기를 이
-    // 함수가 한 번도 exercising하지 못한 채 통과한다("거짓 OK").
-    const verifyOfferSeries = verifySeriesFor(scenarioId);
+    // ⭐ §61(OQ-A73 User 확정) — `identityCheckAllowed`/`speakerGender`와 같은 이유로 **시나리오별
+    // derive 값**이다(수동 토글 축이 아니다). 카탈로그 보유 6종 전부에서 TOOL_DRIVEN 문면을 실제로
+    // exercising하려면 계열 분류가 아니라 `hasVerifyIntercept`(= `declaresOfferVerificationDesk`의
+    // 카탈로그 조건)를 넘긴다 — 여기서 안 넘기면(기본값 undefined에 의존하면) 그 6종의 TOOL_DRIVEN
+    // 분기를 이 함수가 한 번도 exercising하지 못한 채 통과한다("거짓 OK").
+    const offerToolDeclared = hasVerifyIntercept(scenarioId);
     for (const variant of ASSEMBLY_LEVEL_VARIANTS) {
       for (const inCallSmsEnabled of [false, true]) {
         for (const verifyInterceptEnabled of [false, true]) {
@@ -1320,7 +1319,7 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
                 toolDrivenTiming,
                 identityCheckAllowed,
                 ...(speakerGender ? { speakerGender } : {}),
-                ...(verifyOfferSeries ? { verifyOfferSeries } : {}),
+                ...(offerToolDeclared ? { offerToolDeclared } : {}),
               }),
             });
           }
@@ -1334,7 +1333,7 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
   for (const { scenarioId, label, value } of turnInstructionSources()) {
     const targetId = scenarioId ?? fallbackScenarioId;
     const speakerGender = speakerGenderFor(targetId);
-    const verifyOfferSeries = verifySeriesFor(targetId);
+    const offerToolDeclared = hasVerifyIntercept(targetId);
     out.push({
       label: `${targetId}[턴지시:${label}]`,
       text: buildSystemPrompt(SCENARIO_PROMPTS[targetId], {
@@ -1344,7 +1343,7 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
         verifyInterceptEnabled: true,
         identityCheckAllowed: asksIdentityCheck(targetId),
         ...(speakerGender ? { speakerGender } : {}),
-        ...(verifyOfferSeries ? { verifyOfferSeries } : {}),
+        ...(offerToolDeclared ? { offerToolDeclared } : {}),
         turnInstruction: value,
       }),
     });

@@ -72,6 +72,16 @@ test("[백스톱 발동] 서버 관측(§59.11)을 위해 backstop 발동 호출
   );
 });
 
+// §61.7/G402 — verify-offer 백스톱 호출부도 SMS와 같은 방식으로 `trigger`를 명시해야 한다.
+// 이전에는 이 필드 자체가 빠져 있어(§59.11 P-E 관측이 verify-offer에 대해 산출 불가였다), 서버
+// 로그에서 `model_tool` 아니면 `null` 두 값만 나왔다(백스톱과 폴백/옛 번들을 구분할 수 없었다).
+test("[G402] verify-offer 백스톱 호출부도 realtime 경로에서 trigger:\"backstop\"을 명시한다", () => {
+  assert.ok(
+    pageCode.includes('...(requestCallMode === "realtime" ? { trigger: "backstop" as const } : {}),'),
+    "verify-offer 백스톱 호출부가 trigger를 보내지 않으면 §59.11 로그가 model_tool과 이 경로를 구분하지 못한다",
+  );
+});
+
 test("[R8] 백스톱 게이트는 announce 단계 · realtime 경로에만 걸린다(commit·폴백은 무변경)", () => {
   const gateAt = pageCode.indexOf('if (stage === "announce" && callMode === "realtime") {');
   assert.ok(gateAt >= 0, "오퍼 백스톱 게이트 조건문을 찾지 못했다");
