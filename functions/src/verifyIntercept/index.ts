@@ -202,6 +202,7 @@ export const deliverVerifyOffer = onCall<
     sessionId,
     trigger: trigger ?? null,
     stage: stage ?? null,
+    callMode,            // ⭐ §61.7 — `null` 버킷을 "폴백"과 "옛 번들"로 가른다(:182에서 이미 읽는다)
   });
 
   // ⭐ §59.7/§59.10 커밋 B — `trigger:"model_tool" && stage==="announce"`에서만 하한을

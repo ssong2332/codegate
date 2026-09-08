@@ -712,6 +712,11 @@ export default function SessionCallPage() {
           ...(requestCallMode === "realtime" ? { scammerTurns } : {}),
           // ⭐ 폴백은 `stage`를 보내지 않는다(종전 동작 유지).
           ...(requestCallMode === "realtime" ? { stage } : {}),
+          // ⭐ §61.7 — **이 호출부는 앱 주도(백스톱)다.** 모델 도구 경로가 보내는
+          // `trigger:"model_tool"`(GeminiVoiceSession)과 서버 로그에서 갈리게 명시한다(§59.11 P-E).
+          // ⛔ 폴백에는 보내지 않는다 — 그 경로엔 도구 창 자체가 없어 "백스톱"이 거짓 라벨이 된다
+          // (로그에선 `null` = 폴백/앱 주도 텍스트 경로). 조건은 바로 위 `stage`와 **같은 조건**이다.
+          ...(requestCallMode === "realtime" ? { trigger: "backstop" as const } : {}),
         });
         setVerifyError(null);
         // 폴백 경로는 서버가 다음 sendMessage 턴에 직접 주입하므로 클라가 넣지 않는다(중복 방지).
