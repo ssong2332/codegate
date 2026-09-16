@@ -197,13 +197,18 @@ export const deliverVerifyOffer = onCall<
   const existing = await offerRef.get();
   const placed = Boolean(existing.get("placedAt"));
 
-  // §59.11 관측 — 도착 경로 비율(model_tool vs backstop)이 백스톱 창 크기 조정의 유일한 근거다.
-  logger.info("[§59.11] deliverVerifyOffer 발동 경로", {
-    sessionId,
-    trigger: trigger ?? null,
-    stage: stage ?? null,
-    callMode,            // ⭐ §61.7 — `null` 버킷을 "폴백"과 "옛 번들"로 가른다(:182에서 이미 읽는다)
-  });
+  // §59.11/§62.7 관측 — 도착 경로 비율(model_tool vs backstop)과 그 결과(status)가 백스톱 창
+  // 크기 조정·too_early 비율 판정의 유일한 근거다. status가 실제로 정해지는 두 지점
+  // (too_early 조기 반환 · 최종 반환) 각각에서 1번씩만 찍는다 — 콜러블 1회 호출당 로그 1건.
+  const logOfferOutcome = (status: DeliverVerifyOfferStatus) => {
+    logger.info("[§59.11] deliverVerifyOffer 발동 경로", {
+      sessionId,
+      trigger: trigger ?? null,
+      stage: stage ?? null,
+      callMode,   // ⭐ §61.7 — `null` 버킷을 "폴백"과 "옛 번들"로 가른다(:182에서 이미 읽는다)
+      status,     // ⭐ §62.7 — H1/H2 판별·too_early 비율 산출에 쓰는 관측 필드
+    });
+  };
 
   // ⭐ §59.7/§59.10 커밋 B — `trigger:"model_tool" && stage==="announce"`에서만 하한을
   // 재검증한다(G391 — 2단계 유지, `commit`은 재검증하지 않는다). 부재·"backstop"·`commit`은
@@ -222,6 +227,7 @@ export const deliverVerifyOffer = onCall<
     });
     if (!gate.allowed) {
       // ⛔ Firestore write 0회 — throw하지 않는다(클라가 모델에게 돌려줄 서버 문면을 잃지 않게).
+      logOfferOutcome("too_early");
       return { offerId: item.offerId, status: "too_early", declineInstruction: VERIFY_DECLINE_TOO_EARLY };
     }
   }
@@ -240,6 +246,7 @@ export const deliverVerifyOffer = onCall<
   // ⭐ §59.6/§59.11 — 관측용 상태 태그. `announceInstruction` 유무를 그대로 재해석할 뿐 새로운
   // 판정을 추가하지 않는다(응답 필드 추가는 하위호환 — 이 값을 읽는 클라는 아직 없다).
   const status: DeliverVerifyOfferStatus = plan.includeInstruction ? "announced" : "already_announced";
+  logOfferOutcome(status);
   return {
     ...response,
     status,
