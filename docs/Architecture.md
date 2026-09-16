@@ -14517,3 +14517,95 @@ export function declaresOfferVerificationDesk(
 > ⚠️ **버전 갭**: 헤더 **PRD v1.7.1 · UX 1.13**(`Architecture.md:5`) ↔ 현행 **PRD v1.14**(`docs/PRD.md:4`) **· UX 1.26**(`docs/UX.md:10`) ⇒ **PRD 7건 · UX 13건**(§61 시점 대비 **UX가 1건 더 벌어졌다** — 1.25 → 1.26). ⛔ 헤더 무전진(T131 계열 별건) — 이 절의 판정은 **소스 직접 열람**이라 갭이 오염시키지 않는다.
 > **UX 추적성**: 신규 Screen ID·Flow ID·라우트 **0건**. 닿는 기존 항목은 **UX-031/UF-011**(확인 시도 무력화 — 빈 약속은 이 플로우의 **미완결 상태**다) · **UX-014**(통화 셸 — 전환이 끝내 일어나지 않는다)이며 **신규 매핑 0건**이다.
 > `docs/UpdateRequests.md` `open` 행 중 **architect 소관 0건**(직접 열람: #1 = `{{planner}}` 템플릿 · #14 = `User` 소유 `docs/GitWorkflow.md` · #11·#12는 `docs/Tasks.md`(planner 소관)).
+
+## 63. (D-5 배포 후 User 라이브 1회 — `bank-security-verify-scam`(계열 A) · advanced · 실시간) **OQ-A75/A76 최종 권고** — ⭐⭐ **`too_early → backstop → announced` 가 로그로 처음 관측됐다: §62.3 ①~④의 거절 경로는 실재하고 도달 가능하다** / ⭐⭐ **그러나 이 증거가 바꾸는 것은 가설 판별이 아니라 *편집 대상 집합*이다 — D-1이 고칠 TOOL_DRIVEN 문면은 계열 A advanced 실시간에도 실린다** / ⭐ **D-3(하한 하향)은 이 관측 하나로 기대효과가 약해진다 — 계열 A는 하한이 `2`인데도 `too_early`가 났다** — architect 판정
+
+### 63.0 판정 요지 (⛔ 금지 먼저)
+
+1. ⛔ **확정 0건.** OQ-A75·OQ-A76은 **User 결정 사항**이다(G401 · DECISIONS #100 · §62.9). 이 절은 **권고를 굳히거나 정정할 뿐** 어느 것도 채택하지 않는다.
+2. ⛔ **§62 원문은 한 줄도 고치지 않았다**(§62.10 정본 존중) — 이 절은 **위에 얹는다**. §62.6 D-1의 대가 열과 §62.9 OQ-A75의 조건문은 **여기서 정정**된다(§63.2).
+3. ⛔ ***"L-1의 H1/H2가 판별됐다"* 로 쓰지 말 것.** 이번 관측은 **다른 세션·다른 시나리오·다른 계열**이고 **전사를 보지 않았다** ⇒ §62.3 판별표(L-1 세션의 `[§59.11]` 라인 수 · `verifyIntercept` 문서 존재)는 **여전히 미실행**이다.
+4. ⛔ **빈도를 주장하지 말 것.** 계열 B 6턴 도구 0회가 하나 더 쌓였지만(§62.5 4행 재확인) 이 절의 주장은 **기전**이지 비율이 아니다.
+5. ⛔ **소스 0줄**(전부 읽기만 했다 — §63.7).
+
+### 63.1 새 증거 — 무엇을 증명하고 무엇을 증명하지 않는가
+
+**관측(⚠️ 전부 User 인계 인용값)** — 세션 `3a687a07-964b-41b2-b799-512d3f84aaad`, 같은 통화의 `[§59.11]` 로그 2줄:
+`12:30:52Z {stage:"announce", trigger:"model_tool", callMode:"realtime", status:"too_early"}` → `12:31:51Z {stage:"announce", trigger:"backstop", callMode:"realtime", status:"announced"}` ⇒ 확인창구 SMS 발송·전환 화면까지 **정상 완주(리그레션 0)**.
+
+| # | 증명되는가 | 내용 | architect가 소스로 독립 확인한 것 |
+|---|---|---|---|
+| ① | ⭕ **증명** | **`too_early` 거절 경로는 실재하고 라이브에서 도달 가능하다** — 모델이 스스로 도구를 불렀고(`trigger:"model_tool"`) 하한 미도달로 거절됐다(§62.3 ①~④가 라이브에서 그대로 성립) | 하한 재검증 분기 `functions/src/verifyIntercept/index.ts:231-244` · 거절 문면 `functions/src/scenarios/verifyIntercept.ts:218` |
+| ② | ⭕ **증명** | **D-5가 실제로 관측을 성립시켰다** — §62.7이 지목한 구멍(`status` 부재)이 닫혔고, **H1이 그리는 상태값이 로그로 직접 읽힌다** | `index.ts:211-225`(`logOfferOutcome`, PR #236 병합본 = 이 절의 base `716b920`) |
+| ③ | ⭕ **증명** | **계열 A의 앱 주도 백스톱은 거절 뒤에도 이행을 완주시킨다** — §62.6 D-1이 *"계열 A에서는 그 약속이 사후에 참이 된다"* 고 적은 그 동작의 **첫 라이브 실측**(n=1) | 백스톱 발동 `src/app/session/play/page.tsx:684-694` · 판정 함수 `src/lib/realtime/toolWindow.ts:49-55` |
+| ④ | ❌ **미증명** | **L-1(`cce1c405-…`)이 H1이었는지** — 새 세션이고, `too_early` 직후 모델이 **자기모순 발화를 했는지 관측하지 않았다**(전사 미열람) | — (§62.3 판별표 **미실행** 상태 그대로) |
+| ⑤ | ❌ **미증명** | **"이미 약속한 뒤"에 거절이 도착했는지**(D-2의 대상 상태) — ⚠️ **강한 정황은 있다**: TOOL_DRIVEN 문면이 *"도구를 부르고, 결과가 돌아온 뒤에만 창구 이름을 꺼낸다 — **그전에는 '…연결해 드리겠습니다'처럼 받아 두고 기다린다**"* 라 **도구 호출 경로 자체가 약속 발화를 선행시킨다**(`functions/src/roleplay/promptAssembly.ts:266`). 그래도 **발화 관측은 0건** | 문면 리터럴 `promptAssembly.ts:266` |
+| ⑥ | ❌ **미증명** | **계열 B에서 패턴 B(빈 약속)가 오늘도 났는지** — 같은 날 계열 B 세션은 **도구 0회**만 확인됐고 발화 내용은 인계되지 않았다 | — |
+
+### 63.2 ⭐⭐ 정정 1건 — **D-1의 편집 대상은 계열 A를 포함한다**(§62.6 D-1 대가 열 · §62.9 OQ-A75 조건문)
+
+§62는 D-1의 대가를 *"DEFAULT(`:264`)는 손대지 말 것 — **계열 A**는 앱 천장이 약속을 실제로 이행시키므로 오늘 그 문장이 참이다"* 로 적었고, OQ-A75의 조건을 *"DEFAULT 문면·**계열 A 동작**은 건드리지 않는 조건부"* 로 달았다. ⛔ **그 조건은 성립할 수 없다** — 두 변형을 가르는 축은 **계열이 아니라 "이 세션에 도구가 선언되는가"** 이기 때문이다(§61/G400에서 이미 바뀐 축인데 §62가 계열 축으로 읽었다).
+
+| 경로 | 받는 문면 | 근거(파일:줄) |
+|---|---|---|
+| **계열 A · advanced · 실시간**(= **오늘의 관측 세션**) | ⭐ **TOOL_DRIVEN** | `promptAssembly.ts:293`(`toolDrivenTiming && offerToolDeclared`) · `realtime/geminiProvider.ts:112`(`toolDrivenTiming:true`)·`:117`(`offerToolDeclared: declaresOfferVerificationDesk(...)`) · 술어 = `hasVerifyIntercept && advanced`(`realtime/callTypes.ts:51-53`) · **게이트가 이것을 단언한다**: `realtime/__tests__/geminiProvider.test.ts:431-433` |
+| **계열 B 5종 · advanced · 실시간** | **TOOL_DRIVEN** | `roleplay/__tests__/promptAssembly.test.ts:1450-1476` |
+| **폴백(텍스트) 경로 · 도구 미선언 세션**(계열 A·B 공통) | **DEFAULT** | `toolDrivenTiming`을 넘기는 호출부가 `geminiProvider.ts` **하나뿐**(§59.3/G382, `:110-112` 주석) |
+
+⇒ ⭐⭐ **DEFAULT 무수정이 실제로 보호하는 것은 "계열 A"가 아니라 *폴백(텍스트) 경로와 도구 미선언 세션*이다.** TOOL_DRIVEN만 바꿔도 **계열 A advanced 실시간의 문면은 바뀐다.**
+
+⭐ **그럼에도 D-1은 계열 A에서 안전하다 — 이유를 다시 세운다(§62의 이유는 무효, 결론은 유지).** 계열 A의 **이행 연출을 소유한 문자열은 보류 문구가 아니라 `announceInstruction`** 이다(*"제가 금융사고대응 확인창구로 바로 연결해 드리겠습니다"* — `functions/src/scenarios/verifyIntercept.ts:168`). 그 문자열은 **`status:"announced"`일 때만 모델에 닿고**(`verifyIntercept/index.ts` 최종 반환 → `GeminiVoiceSession.tsx:420-428`) **D-1의 편집 대상이 아니다** ⇒ 보류 문구를 비약속형으로 바꿔도 **계열 A의 이행 대사·전환 흐름은 한 글자도 줄지 않는다.** 오히려 오늘 관측된 **거절~백스톱 사이의 공백**(실측 59초)에서 *"약속했다"* 와 *"약속했다고 말하지 마라"* 가 겹칠 소재가 줄어든다.
+
+⭐ **D-1 구현 제약 3건(문면 저작 시 반드시 지켜야 한다 — §62는 DEFAULT 게이트 1건만 적었다)**:
+
+| # | 제약 | 게이트(파일:줄) |
+|---|---|---|
+| **가** | 교체 문구는 **`offer_verification_desk` 리터럴을 유지**해야 한다(TOOL_DRIVEN 줄이 그 이름의 **유일한 자리**다 — `VERIFY_NAME_LINE_TOOL_DRIVEN`에는 없다) | `roleplay/__tests__/promptAssembly.test.ts:1462-1465` |
+| **나** | `VERIFY_NAME_LINE_TOOL_DRIVEN`(*"도구가 창구 안내를 돌려준 뒤에만"*)은 **무접촉** · 옛 DEFAULT 문구가 TOOL_DRIVEN에 섞이면 안 된다 | 같은 파일 `:1466-1476` |
+| **다** | **DEFAULT(`:264`)는 무접촉** — A1 ⓐ 게이트는 **DEFAULT 조립**을 6종 전수로 검사한다(§62.2 재확인, 실측 일치) | `scenarios/__tests__/verifyIntercept.test.ts:923-936` |
+
+### 63.3 ⭐ **OQ-A75 최종 권고 — D-1·D-2 둘 다 채택(권고 유지 · 근거 강화 · 선행조건 완화)**
+
+| 항목 | §62.9 시점 | **이 절의 최종 권고** | 근거 |
+|---|---|---|---|
+| **D-1**(TOOL_DRIVEN 보류 문구 → 비약속형) | 권고 채택, 선행조건 = H1/H2 판별 | ⭐ **채택 권고 유지 · 선행조건 불요** | D-1의 근거는 **패턴 B**(도구 미호출 + 말로만 약속)이고 그 근거는 §62.2의 **리터럴 역대조**로 이미 섰다 — **H1/H2(패턴 A의 원인) 판별과 논리적으로 독립**이다. ⛔ 즉 §62.9가 단 선행조건은 **D-2에만 걸리는 것을 OQ 전체에 건 것**이다 |
+| **D-2**(`VERIFY_DECLINE_TOO_EARLY` 재판정) | 권고 채택, 선행조건 = H1/H2 판별 | ⭐ **채택 권고 유지 · 선행조건은 "충족으로 갈음"** | 오늘 **거절 문면이 실제로 방출됐다는 것이 로그로 증명됐다**(§63.1 ①). 규범(*"문면은 방출되는 모든 상태에서 참이어야 한다"*)은 **"그 상태가 얼마나 자주 오는가"가 아니라 "오는가"** 로 판정된다 ⇒ **온다.** ⚠️ 남는 미확인(§63.1 ⑤ — 그 순간 모델이 이미 약속했는가)은 **채택의 필요조건이 아니다**: 약속 전 상태에서도 오늘 문면은 참이고, 약속 후 상태에서만 거짓이므로 **재판정은 "참인 범위를 넓히는 것"이지 기존 참을 버리는 것이 아니다** |
+| **적용 범위** | *"계열 A 동작 무접촉"* | ⛔ **그 조건은 삭제하고 §63.2의 제약 3건(가·나·다)으로 대체한다** | §63.2 |
+| **문면 원문** | 미저작(§62.8 4) | ⛔ **이 절도 저작하지 않는다** — 확정 절차(G386 · 노출 판정 4조건)가 붙는 **별건**이며, User가 OQ-A75를 채택하면 그때 architect가 한 패스로 쓴다 | §59.6 갱신 블록 |
+| **문면 층 예산** | D-1/D-2 = **두 번째** | ⭐ **유지** — ⛔ 세 번째 문면안은 만들지 않는다. 그러므로 **D-1과 D-2는 한 번에 같이** 쓰는 것을 권고한다(따로 쓰면 예산을 두 번 쓴다) | §62.6 말미 |
+
+⇒ ⭐⭐ **결론: 새 증거는 OQ-A75 권고를 *강화한다*. 유보할 이유는 없다** — 유보 사유였던 *"H1/H2 미판별"* 은 **D-1과 무관**하고, **D-2에 대해서는 오늘 관측이 그 자리를 메웠다.**
+
+### 63.4 ⭐ **OQ-A76 최종 권고 — ⓒ 먼저(권고 *변경 없음* · 근거 1건 강화 · 오해 1건 차단)**
+
+| 선택지 | 최종 권고 | 근거 |
+|---|---|---|
+| **ⓒ 열지 않고 사후 지표만**(D-6) | ⭐ **권고 유지 — 이것부터** | 이유가 기술이 아니라 **소유권**이기 때문이다: ⓐⓑ는 §49 V5(User 확정·집행)의 본체를 되돌린다 ⇒ **G401 · #100** |
+| **ⓑ 협소 천장** | ⛔ **"가벼운 변형"이 아님이 *코드로 확정됐다*(§62의 서술 → 실측)** | 계열 B에서 막히는 지점은 `shouldFireBackstop`이 **아니라 그 앞의** `shouldAnnounceVerifyOffer`다 — `src/app/session/play/page.tsx:665-678`의 `return`이 백스톱 블록(`:684`)보다 **먼저** 걸리고, `verifyIntentExpressed`는 `useState(false)` 고정(`:234`)이라 `intentExpressed`가 **영구 false**(`src/lib/verifyintercept/verifyIntercept.ts:96-104`) ⇒ **ⓑ를 구현하려면 반드시 V5 본체를 건드려야 하고**, 그 복원을 막는 **회귀 게이트가 이미 있다**(`src/lib/verifyintercept/verifyCallContinuity.test.ts:405-415`) |
+| **ⓐ 백스톱 개방** | ⛔ **동상(G401)** | 위와 같다 |
+| — | ⭐ **User 결정에 도움이 되는 *새* 정보 1건** | **백스톱 메커니즘의 기술적 미지수는 줄었다** — 오늘 계열 A에서 `too_early` 이후 백스톱이 **SMS·전환까지 완주**시켰다(§63.1 ③). ⛔ **그러나 이것은 ⓐⓑ의 금지 사유를 하나도 풀지 않는다** — 금지는 *"작동할지 모른다"* 가 아니라 *"User가 지우라고 확정한 동작"* 이기 때문이다 |
+
+⇒ ⭐ **결론: 새 증거는 OQ-A76 권고를 바꾸지 않는다.** 바뀌는 것은 **ⓑ의 비용 서술이 추정에서 실측으로 굳은 것**뿐이다.
+
+### 63.5 부수 실측 2건 (⛔ 확정 0건 — 다음 판단의 입력으로만)
+
+1. ⭐⭐ **D-3(하한 하향)의 기대효과가 약해진다.** 오늘 `too_early`가 난 **계열 A의 하한은 `4`가 아니라 `2`** 다(`functions/src/scenarios/verifyIntercept.ts:167`). ⇒ **하한을 4 → 2로 낮춰도 같은 모양(모델이 하한보다 먼저 부름)이 재현될 수 있다**는 실물 사례가 하나 생겼다. ⛔ **그러므로 D-3을 OQ-A75/A76의 대안으로 제시하지 말 것** — 값은 **G263 잠금**이고, 이제 *"낮추면 해결된다"* 는 기대에 **반례가 있다**(n=1).
+2. ⭐ **`too_early`는 백스톱을 앞당기지 않는다.** 거절은 **정상 반환**이라 `catch`에 들어가지 않고(`src/lib/realtime/GeminiVoiceSession.tsx:413-432`) `onModelToolVerifyFailed`가 안 불려 `verifyToolCallFailedRef`가 **false로 남는다**(`page.tsx:818-821`) ⇒ `shouldFireBackstop`의 규칙 2가 발동하지 않고(`src/lib/realtime/toolWindow.ts:49-55`) 규칙 3(`TOOL_WINDOW_MAX_BOUNDARIES=2`, `:17`) 또는 규칙 4(`TOOL_WINDOW_STALL_SEC=90`, `:24`)를 기다린다 — **오늘 실측 공백 = 59초**(⚠️ 어느 규칙이 열었는지는 로그만으로 **못 가른다**). ⇒ ⚠️ **"거절을 `toolCallFailed`와 같은 신호로 취급해 창을 즉시 닫는다"는 후보가 성립한다**(계열 A 한정이면 V5·G401 무관). ⛔ **이 절은 그것을 제안도 확정도 하지 않는다** — 대가(§59.8이 모델에게 넘긴 "시점의 창"을 스스로 좁힌다)를 평가하지 않았고, **OQ 신설 0건**이다. User가 원하면 **별건**으로 연다.
+
+### 63.6 ⛔ 닫지 못한 것 (지우지 말 것)
+
+1. ⛔ **architect는 라이브·셸·테스트·빌드·`git log`·로그 조회를 0회 했다.** 로그 2줄·완주 여부는 **전부 User 인계 인용값**이고, 독립 확인한 것은 **소스 열람뿐**이다.
+2. ⚠️ **§62.3 판별표는 여전히 미실행**(L-1 세션) — **H1/H2는 아직 갈리지 않았다**(§63.1 ④).
+3. ⚠️ **n=1**(계열 A 새 세션). §62.8 (5)가 적은 *"계열 A 관측 0건"* 은 **1건**이 됐을 뿐이다.
+4. ⚠️ **§62.8 (6) 승계 — `toolCall` 도착과 사기범 턴 경계의 정합은 여전히 미실측.** 오늘 `too_early`가 *"정말 일렀던 것"* 인지 *"경계 계수가 어긋난 것"* 인지 **못 가른다**(`page.tsx:806-810` 주석이 그 어긋남을 이미 고지한다).
+5. ⚠️ **`docs/UX.md` 1.26 미확인**(§61.9 (5)·§62.8 (7) 승계) · `docs/Tasks.md` 담당 행 **미확인·미신설**(planner 소관).
+
+### 63.7 이 패스의 편집 범위 (⛔ 정본)
+
+**편집 파일 2개뿐**: `docs/Architecture.md`(**이 §63 신설 — §0~§62 한 줄도 수정하지 않았다**) · `docs/DECISIONS.md`(**#102 1행 추가**).
+⛔ **`src/**`·`functions/**` 0줄**(읽기만 — `functions/src/roleplay/promptAssembly.ts` · `functions/src/scenarios/verifyIntercept.ts` · `functions/src/verifyIntercept/index.ts` · `functions/src/realtime/geminiProvider.ts` · `functions/src/realtime/callTypes.ts` · `functions/src/scenarios/__tests__/verifyIntercept.test.ts` · `functions/src/roleplay/__tests__/promptAssembly.test.ts` · `functions/src/realtime/__tests__/geminiProvider.test.ts` · `src/app/session/play/page.tsx` · `src/lib/realtime/GeminiVoiceSession.tsx` · `src/lib/realtime/toolWindow.ts` · `src/lib/verifyintercept/verifyIntercept.ts` · `src/lib/verifyintercept/verifyCallContinuity.test.ts`) · ⛔ `docs/PRD.md`·`docs/UX.md`·`docs/API.md`·`docs/Database.md`·`docs/Tasks.md`·`docs/CHANGELOG.md`·`README.md`·`CLAUDE.md`·`firestore.rules` **무편집** · ⛔ **게이트 0건 · ADR 0건 · OQ 신설 0건**(OQ-A75·OQ-A76은 **열린 채로 User 결정 대기**) · ⛔ **브랜치·커밋·push 0건**(셸 부재 — 워킹 트리 직접 편집).
+> **번호 실측(착수 시점, `docs/**` 전수 grep)**: `^## ` 최대 **62** · 게이트 최대 **G402**(`G40[3-9]`·`G4[1-9][0-9]` **0히트**) · OQ 최대 **OQ-A76**(`OQ-A7[7-9]`·`OQ-A8[0-9]` **0히트**) · DECISIONS 최대 **#101** · `docs/adr/` 최대 **0015** ⇒ **§63 · #102**. ⛔ 예약 0건 — 동시 패스가 있으면 **병합 순서로 확정**된다(치환 스코프: `## 63.` 헤딩 이후 + `docs/DECISIONS.md` #102 행뿐. ⛔ **전역 치환 금지**).
+> **base**: `C:\codegate\.git\HEAD` = `ref: refs/heads/main` → `.git/refs/heads/main` = **`716b9201a1d80913845392624c59b1c12f98dce4`**(`.git` 직접 판독 — 세션 스냅샷 `716b920`과 **일치**, **D-5 구현 PR #236 병합본**이라 §63.1 ②의 `status` 필드가 실제로 트리에 있다).
+> ⚠️ **버전 갭**: 헤더 **PRD v1.7.1 · UX 1.13**(`Architecture.md:5`) ↔ 현행 **PRD v1.14**(`docs/PRD.md:4`) **· UX 1.26**(`docs/UX.md:10`) ⇒ **PRD 7건 · UX 13건**(§62 시점과 **동일 — 더 벌어지지 않았다**). ⛔ **헤더는 전진시키지 않았다**(T131 계열 별건) — 이 절은 **플로우·화면 재검증을 수행하지 않았으므로** 헤더를 옮기면 하지 않은 재검증을 주장하게 된다.
+> **UX 추적성**: 신규 Screen ID·Flow ID·라우트 **0건**. 닿는 기존 항목은 **UX-031/UF-011**(확인 시도 무력화 — 오늘 계열 A에서 이 플로우가 **완결됐다**) · **UX-014**(통화 셸)이며 **신규 매핑 0건**이다.
+> `docs/UpdateRequests.md` `open` 행 중 **architect 소관 0건**(재확인 — #1 `{{planner}}` 템플릿 · #14 `User` 소유 · #11·#12 planner 소관).
