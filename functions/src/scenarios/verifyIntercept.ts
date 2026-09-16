@@ -203,10 +203,12 @@ export const VERIFY_INTERCEPT: Record<string, VerifyInterceptItem> = {
 // ── §59.6/§59.10 커밋 B — 모델 도구 경로의 거절 지시(서버 소유, G386) ─────────────────
 // ⚠️ `deliverVerifyOffer`의 `trigger:"model_tool"` 경로에서만 쓰인다(§59.7 하한 재검증 신규).
 // 오늘은 그 트리거를 보내는 클라가 없어(§59 커밋 C 이전) 어떤 응답에도 실리지 않는다(회귀 0).
-// ⭐ **정본 확정(§59.6 갱신 블록, 2026-09-06)** — 아래 2종의 원문 소유자는 architect이며 정본은
-// `docs/Architecture.md` §59.6 갱신 블록과 `docs/API.md` 부록 C `deliverVerifyOffer` 증분 표에
-// 있다. 이 파일의 값은 그 사본이다. ⛔ 문면을 여기서 고치지 말 것 — 고치려면 문서가 먼저다
-// (G386: 모델 대면 한국어 문자열은 서버가 소유하고, 그 원문의 소유자는 architect다).
+// ⭐ **정본 확정** — 아래 2종의 원문 소유자는 architect이다. `VERIFY_DECLINE_TOO_EARLY`의 정본은
+// **`docs/Architecture.md` §64.5(`#103`)**(D-2, 2026-09-16 교체)에 있고, `VERIFY_DECLINE_ALREADY`의
+// 정본은 종전 그대로 **`docs/Architecture.md` §59.6 갱신 블록과 `docs/API.md` 부록 C
+// `deliverVerifyOffer` 증분 표**(`#97`)에 있다. 이 파일의 값은 그 사본이다. ⛔ 문면을 여기서 고치지
+// 말 것 — 고치려면 문서가 먼저다(G386: 모델 대면 한국어 문자열은 서버가 소유하고, 그 원문의 소유자는
+// architect다).
 // ⚠️ **`VERIFY_DECLINE_ALREADY`는 두 상태에서 나간다**(`verifyIntercept/index.ts`의 status 판정 =
 // `resolveVerifyOfferPlan`의 `includeInstruction:false`): ① **이미 전환됨**(`placedAt` 존재 —
 // T118/R-1) ② `stage:"commit"`. ①에서 화자는 이미 **확인창구의 다른 담당자**라, "이미 안내한
@@ -215,7 +217,7 @@ export const VERIFY_INTERCEPT: Record<string, VerifyInterceptItem> = {
 // ⚠️ 이 콜러블은 공개(인증) 콜러블이라 직접 호출로 이 문자열이 응답에 실려 나갈 수 있다 —
 // 그래서 정본은 **창구명·번호·기전 서술 0건**이다(§59.6 갱신 블록 노출 판정 4행).
 export const VERIFY_DECLINE_TOO_EARLY =
-  "(아직 확인 부서로 연결해 드릴 단계가 아니다. 연결해 드리겠다고 말하지 말고, 지금 하던 이야기를 그대로 이어가라. 조금 뒤에 다시 시도해도 된다.)";
+  "(아직 확인 부서로 연결해 드릴 단계가 아니다. 연결해 주겠다는 말을 아직 하지 않았다면 하지 말고, 이미 그런 취지로 말했다면 그 말을 뒤집지도 더 확실히 약속하지도 말고, 지금 하던 이야기를 그대로 이어가라. 조금 뒤에 다시 시도해도 된다.)";
 export const VERIFY_DECLINE_ALREADY =
   "(그 안내는 이미 전달했다. 새로 안내하지 말고, 연결해 드리겠다는 말도 다시 하지 말고, 지금 하던 이야기를 그대로 이어가라.)";
 

@@ -1518,3 +1518,68 @@ test("[reviewer Critical #2 역검증] 계열 B라도 SMS 카탈로그가 있으
     );
   }
 });
+
+// ══════════════════════════════════════════════════════════════════════════════════════════
+// ⭐ §64.8 G403(D-1, 2026-09-16) — VERIFY_OFFER_LINE_TOOL_DRIVEN 정본 교체(§64.3) 이후,
+// TOOL_DRIVEN 조립 산출물에 이행 약속 표현이 남아 있으면 안 된다. 양방향으로 건다 — 같은 6종의
+// DEFAULT 조립에서는 종전 이행 약속 문구가 계속 존재해야 한다(그래야 "DEFAULT까지 같이 지웠다"를
+// 잡는다). 확인 무력화 카탈로그 6종은 계열 A(`bank-security-verify-scam`) 1종 + 계열 B
+// (`VERIFY_SERIES_B_SCENARIOS`) 5종이다(§64.2 — "계열"이 아니라 "도구가 이 세션에 선언되는가"가
+// D-1의 실제 편집 대상을 가른다).
+const VERIFY_INTERCEPT_CATALOG_IDS = Object.keys(VERIFY_INTERCEPT);
+const G403_PROMISE_LITERALS = ["연결해 드리겠습니다", "연결해 드릴", "확인해 드리겠습니다"];
+
+test("[§64.8 G403] TOOL_DRIVEN 조립(카탈로그 6종 × advanced × 도구 선언) — 이행 약속 표현 0건 + DEFAULT는 존재 유지(양방향)", () => {
+  assert.equal(
+    VERIFY_INTERCEPT_CATALOG_IDS.length,
+    6,
+    "확인 무력화 카탈로그 전제(6종)가 깨졌다 — G403의 순회 범위가 바뀐다",
+  );
+  for (const id of VERIFY_INTERCEPT_CATALOG_IDS) {
+    const prompt = SCENARIO_PROMPTS[id];
+
+    const toolDriven = buildSystemPrompt(prompt, {
+      ...realOptionsFor(id),
+      difficultyLevel: "advanced",
+      toolDrivenTiming: true,
+      offerToolDeclared: true,
+    });
+    for (const literal of G403_PROMISE_LITERALS) {
+      assert.equal(
+        toolDriven.includes(literal),
+        false,
+        `${id}: TOOL_DRIVEN 조립에 이행 약속 표현 "${literal}"이 남아 있다(G403)`,
+      );
+    }
+
+    // 양방향 — 같은 6종의 DEFAULT 조립(도구 미선언)에서는 이행 약속 문구가 그대로 있어야 한다.
+    const defaultAssembled = buildSystemPrompt(prompt, {
+      ...realOptionsFor(id),
+      difficultyLevel: "advanced",
+    });
+    assert.ok(
+      defaultAssembled.includes("확인 부서를 연결해 드리겠습니다"),
+      `${id}: DEFAULT 조립에서까지 이행 약속 문구가 사라지면 안 된다(G403 양방향 — DEFAULT는 §64 무접촉)`,
+    );
+  }
+});
+
+test("[§64.8 G403 역검증] 옛 TOOL_DRIVEN 이행 약속 문구를 끼운 사본은 이 게이트에 실제로 걸린다", () => {
+  const id = "bank-security-verify-scam";
+  const prompt = SCENARIO_PROMPTS[id];
+  const toolDriven = buildSystemPrompt(prompt, {
+    ...realOptionsFor(id),
+    difficultyLevel: "advanced",
+    toolDrivenTiming: true,
+    offerToolDeclared: true,
+  });
+  // 옛 정본(§64.3 "수정 전")의 약속형 절을 사본에 끼워 넣는다 — G403이 실제로 반응하는지 확인한다.
+  const tainted =
+    toolDriven +
+    `\n그전에는 "잠시만요, 확인 부서를 연결해 드리겠습니다"처럼 받아 두고 기다린다.`;
+  const hits = G403_PROMISE_LITERALS.filter((literal) => tainted.includes(literal));
+  assert.ok(
+    hits.length > 0,
+    "역검증 실패 — 옛 이행 약속 문구를 끼워도 G403이 못 잡는다면 죽은 게이트다",
+  );
+});
