@@ -200,14 +200,28 @@ export const deliverVerifyOffer = onCall<
   // §59.11/§62.7 관측 — 도착 경로 비율(model_tool vs backstop)과 그 결과(status)가 백스톱 창
   // 크기 조정·too_early 비율 판정의 유일한 근거다. status가 실제로 정해지는 두 지점
   // (too_early 조기 반환 · 최종 반환) 각각에서 1번씩만 찍는다 — 콜러블 1회 호출당 로그 1건.
-  const logOfferOutcome = (status: DeliverVerifyOfferStatus) => {
-    logger.info("[§59.11] deliverVerifyOffer 발동 경로", {
+  //
+  // ⭐ §62.6 D-5 reviewer Major #1 수정 — 위 "1건" 불변은 **정상 반환 2갈래에서만** 참이었다.
+  // 이 정의와 마지막 로그(:249 부근) 사이에는 두 예외 경로(스캠 턴 유효성 검사 실패·오퍼 문서
+  // persist 실패)가 있고, 그쪽은 로그 없이 throw로 함수가 끝났다. `status`를 억지로 세 값 중
+  // 하나로 채우면 "됐다"는 거짓 관측이 남으므로(§59.11 원칙 위반), 로그 전용 값 `"error"`를
+  // 별도로 추가한다 — 응답 계약(`DeliverVerifyOfferStatus`, `docs/API.md`)에는 새지 않는다
+  // (그 두 경로는 응답을 만들지 않고 throw만 한다).
+  type LoggedOfferOutcome = DeliverVerifyOfferStatus | "error";
+  const logOfferOutcome = (status: LoggedOfferOutcome, reason?: string) => {
+    const payload = {
       sessionId,
       trigger: trigger ?? null,
       stage: stage ?? null,
       callMode,   // ⭐ §61.7 — `null` 버킷을 "폴백"과 "옛 번들"로 가른다(:182에서 이미 읽는다)
       status,     // ⭐ §62.7 — H1/H2 판별·too_early 비율 산출에 쓰는 관측 필드
-    });
+      ...(reason ? { reason } : {}),
+    };
+    if (status === "error") {
+      logger.error("[§59.11] deliverVerifyOffer 발동 경로", payload);
+    } else {
+      logger.info("[§59.11] deliverVerifyOffer 발동 경로", payload);
+    }
   };
 
   // ⭐ §59.7/§59.10 커밋 B — `trigger:"model_tool" && stage==="announce"`에서만 하한을
@@ -216,6 +230,10 @@ export const deliverVerifyOffer = onCall<
   // 이 분기로 보증한다.
   if (trigger === "model_tool" && stage === "announce") {
     if (typeof scammerTurns !== "number" || !Number.isFinite(scammerTurns)) {
+      // ⭐ §62.6 D-5 reviewer Major #1 — 이 throw는 status가 정해지기 전이라 위 3값 중 아무거나
+      // 찍으면 거짓 관측이 된다. "error"로 남겨 최소한 "이 호출은 로그가 있는데 응답은 없다"를
+      // 구분 가능하게 한다.
+      logOfferOutcome("error", "invalid_scammerTurns");
       throw new HttpsError(
         "invalid-argument",
         "model_tool 트리거의 announce 단계에는 scammerTurns가 필요합니다.",
@@ -238,8 +256,16 @@ export const deliverVerifyOffer = onCall<
   // T118/R-1(전환 후 재권유 금지)도 여기서 함께 곱해진다 — 판정은 순수 함수 한 곳이 소유한다.
   const plan = resolveVerifyOfferPlan({ placed, ...(stage ? { stage } : {}) });
   if (plan.persist && !existing.exists) {
-    const anchor = await resolveAnchorScammerTurn(sessionId, callMode, scammerTurns);
-    await offerRef.create(buildVerifyInterceptDoc(item, Timestamp.now(), anchor));
+    // ⭐ §62.6 D-5 reviewer Major #1 — `resolveAnchorScammerTurn`(realtime에서 scammerTurns 무효)
+    // 이나 `offerRef.create`(Firestore write 실패)가 던지면 아래 최종 로그(:일반 흐름)에 닿지
+    // 못하고 함수가 끝난다. 여기도 같은 이유로 "error"를 찍는다 — 판정 로직·게이트 순서는 그대로다.
+    try {
+      const anchor = await resolveAnchorScammerTurn(sessionId, callMode, scammerTurns);
+      await offerRef.create(buildVerifyInterceptDoc(item, Timestamp.now(), anchor));
+    } catch (err) {
+      logOfferOutcome("error", "persist_failed");
+      throw err;
+    }
   }
 
   const response = buildVerifyOfferResponse(item, { placed, ...(stage ? { stage } : {}) });
