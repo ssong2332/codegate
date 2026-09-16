@@ -14784,3 +14784,272 @@ export const VERIFY_DECLINE_TOO_EARLY =
 > ⚠️ **버전 갭**: 헤더 **PRD v1.7.1 · UX 1.13**(`Architecture.md:5`) ↔ 현행 **PRD v1.14**(`docs/PRD.md:4`) **· UX 1.26**(`docs/UX.md:10`) ⇒ **PRD 7건 · UX 13건**(§62 시점과 **동일 — 그 사이 벌어지지 않았다**). ⛔ 헤더 무전진(T131 계열 별건) — 이 절의 판정은 **소스 직접 열람**이라 갭이 오염시키지 않는다.
 > **UX 추적성**: 신규 Screen ID·Flow ID·라우트 **0건**. 닿는 기존 항목은 **UX-031/UF-011**(확인 시도 무력화 — D-1은 이 플로우의 *"빈 약속"* 종결 상태를 없앤다) · **UX-014**(통화 셸)이며 **신규 매핑 0건**이다.
 > `docs/UpdateRequests.md` `open` 행 중 **architect 소관 0건**(직접 열람 — Owning Agent가 `architect`인 행 4건은 **전부 `resolved`**, 남은 `open`은 `planner`·`User` 소관).
+
+## 65. (**OQ-A76 User 확정 집행 — ⓒ 채택**) §62.6 **D-6 "빈 약속 지표" 설계** — ⭐⭐ **이 지표의 자리는 리포트 *필드*가 아니라 리포트 생성 시점의 *구조화 로그*다(§59.11 계보 · Firestore 델타 0건)** / ⭐⭐ **대상 집합은 계열(A/B)이 아니라 `hasVerifyIntercept && advanced` — 코드에 이미 있는 술어 하나가 가른다(`roleplay/index.ts:191` ≡ `realtime/geminiProvider.ts:105`)** / ⭐⭐ **D-1 전/후를 *둘 다* 덮어야 한다 — 기준선이 없으면 D-1의 효과를 측정할 수 없고, 그 측정이 이 지표의 유일한 존재 이유다** — architect 설계
+
+### 65.0 판정 요지 (⛔ 금지 먼저 — 다른 모든 판단보다 우선)
+
+1. ⛔ **런타임 차단 로직을 만들지 않는다.** OQ-A76에서 채택된 것은 **ⓒ뿐**이다 — ⓐ(백스톱 천장 개방) · ⓑ(협소 천장)는 **열리지 않았고 G401·#100의 금지가 그대로 산다**(§63.4). 이 절의 산출물은 **관측 1줄**이며 **훈련 흐름·화면·모델 문면을 한 글자도 바꾸지 않는다**.
+2. ⛔ **전사 경로를 선취하지 않는다.** `functions/src/realtime/submitTranscript.ts` · `functions/src/guardrails/index.ts`(`maskPII`) · `functions/src/roleplay/scammerReplyMasking.ts` **전건 0줄**(§60/OQ-A74 소관). 이 지표는 **이미 저장된 `messages` 문서를 읽기만** 한다.
+3. ⛔ **Firestore 필드 0건 증가** — `ReportDoc`·`SessionDoc`·`MessageDoc`·`VerifyInterceptDoc` **무변경**, `firestore.rules` **무변경**, `docs/Database.md`·`docs/API.md` **델타 0건**. 콜러블 신설 0건 · 클라(`src/**`) 0줄.
+4. ⛔ **이 절은 소스를 0줄 고쳤다** — 설계·정본 명세뿐이고 **구현은 implementer 후속 1커밋**이다(§65.9).
+5. ⛔ **§0~§64 원문은 한 줄도 고치지 않았다** — 이 절은 **위에 얹는다**. §62.6 D-6 행의 *"⚠️ 전사 경로는 §60/OQ-A74가 소유(선취 금지)"* 는 **제약으로 그대로 승계**되고, 같은 행의 *"`verifyIntercept` 문서가 0건"* 초안 판정 기준은 **폐기가 아니라 4조건으로 정밀화**된다(§65.2).
+6. ⛔ **이 지표로 빈도를 주장하지 말 것**(§62.0 4 · §63.0 4 승계). 지표가 생겼다는 사실은 *"셀 수 있게 됐다"* 이지 *"얼마나 나는지 안다"* 가 아니다. **첫 배치가 쌓이기 전에는 어떤 수치도 인용 금지.**
+
+### 65.1 착수 시 실측 (⛔ 지우지 말 것)
+
+| # | 항목 | 실측 | 판정 |
+|---|---|---|---|
+| **1** | 인계가 지목한 *"§63.9의 OQ-A76 권고"* | ⛔ **§63에 `.9` 항은 없다** — §63은 `63.0`~`63.7`까지다. OQ-A76 최종 권고의 실제 자리는 **§63.4**이고, OQ-A76 원문은 **§62.9 표 2행**이다 | ⚠️ **인용처 정정**(내용은 인계대로 — ⓒ 권고가 §63.4에 실재한다) |
+| **2** | D-1/D-2가 소스에 들어왔는가 | ⛔ **아직이다.** `functions/src/scenarios/verifyIntercept.ts:217-218`은 **옛 TOO_EARLY 원문 그대로**이고 `functions/src/roleplay/promptAssembly.ts:266`도 **옛 약속형 예시 그대로**다(직접 열람) — §64는 **문서만 병합**됐다(`3b4ea10` = `docs(§64)`) | ⭐⭐ **이 사실이 §65.3의 판정을 지배한다** — 지표는 **D-1 이전 트리에서 먼저 돌기 시작**한다 |
+| **3** | 적용 술어가 두 경로에서 같은가 | ⭕ **바이트 수준으로 같다**: `hasVerifyIntercept(session.scenarioId) && normalizeDifficultyLevel(session.difficultyLevel) === "advanced"` — 폴백 `functions/src/roleplay/index.ts:191`(`verifyEnabled`) · 실시간 `functions/src/realtime/geminiProvider.ts:105-106`(`verifyInterceptEnabled`) | ⭐ **재구현 금지** — 지표는 이 술어를 **호출부가 계산해 넘긴 불리언으로만** 받는다(G400 선례) |
+| **4** | 실시간 사기범 발화가 `messages`에 남는가 | ⭕ **남는다** — `functions/src/realtime/submitTranscript.ts:107-133`이 `role`·`textMasked`·`turnIndex`·`createdAt`·`channel:"voice"`로 `tx.create` 한다 | ⭐ **지표가 계산 가능한 근거 1** |
+| **5** | `maskPII`가 한국어 약속 문구를 훼손하는가 | ❌ **훼손하지 않는다** — 치환 대상은 **이메일·주민번호·전화·8자리 이상 숫자 4종뿐**이다(`functions/src/guardrails/index.ts:32-48`) | ⭐ **지표가 계산 가능한 근거 2** |
+| **6** | 리포트 생성 시점에 두 입력이 모두 손에 있는가 | ⭕ **있다 — 추가 read 0회**: `messages`(`generateReportCore.ts:64-75`) · `verifyIntercept` 문서(`:146-164`, `verifySources`) | ⭐ **지표가 계산 가능한 근거 3 · §65.4 (a) 채택의 결정적 사유** |
+| **7** | 세션 문서에 **통화 경로(실시간/폴백) 판별자**가 있는가 | ⛔ **없다.** `SessionDoc`(`functions/src/shared/types.ts:78-155`)에 `callMode`·`realtime*` 필드 **0건**이고, `llmProvider`는 **Mock 강등 때만 write되는 sticky 태그**라(`report/reportLlmProvider.ts:12-15`) 경로 판별자가 아니다. `submitTranscript.ts`는 세션 문서에 `answeredAt`만 쓴다(`:140-142`) | ⛔ **로그에 `callMode`를 싣지 않는다**(추론하면 거짓 관측이 된다) — 대체 절차는 §65.8 (3) |
+
+### 65.2 ⭐⭐ 판정 기준 — **무엇을 "빈 약속"으로 세는가**(if/then 정본 · 위에서 첫 매치)
+
+⛔ **이 표 밖의 케이스를 임의 판단하지 말 것.** 새 케이스가 나오면 행을 추가할지 묻는다.
+
+**4조건 전부 참일 때만 `emptyPromise = true`다.**
+
+| # | 조건 | 값의 출처(파일:줄) | 왜 이 조건인가 |
+|---|---|---|---|
+| **C1** | **적용 대상 세션인가** — `verifyInterceptEnabled === true` | 호출부가 `hasVerifyIntercept(session.scenarioId) && normalizeDifficultyLevel(session.difficultyLevel)==="advanced"` 로 계산(`scenarios/verifyIntercept.ts:223-225` · `shared/difficulty.ts`) | ⭐ **이 술어가 거짓이면 확인 안내 블록 자체가 프롬프트에 붙지 않는다**(`promptAssembly.ts:670`) ⇒ 약속 문구가 모델에 **도달한 적이 없다** ⇒ 그 세션의 매치는 **전부 무관한 문맥**이다 |
+| **C2** | **`verifyIntercept` 서브컬렉션 문서가 0건인가** — `verifyOfferDocs === 0` | `generateReportCore.ts:146`의 `verifySnap`(= `verifySources.length`) | ⭐ 문서가 **1건이라도 있으면 오퍼가 실제로 화면에 떴다**는 뜻이다(`deliverVerifyOffer`가 `plan.persist`에서만 write — `verifyIntercept/index.ts:257-258`) ⇒ 약속이 **이행됐다**. ⛔ `placedAt` 유무로 더 좁히지 말 것 — 참가자가 안 누른 것(D-51 ①)은 **참가자의 선택**이지 빈 약속이 아니다 |
+| **C3** | **사기범 턴에 이행 약속 표현이 1건 이상 있는가** — `connectPromiseTurns > 0` | `messages`의 `role==="scammer"` 문서 `textMasked`(§65.3 패턴) | 빈 약속의 **정의 그 자체** |
+| **C4** | **그 턴이 참가자에게 도달했는가** — `notSpoken !== true` | `MessageDoc.notSpoken`(`shared/types.ts:175-178`) | ⭐ 낭독되지 않은 문서는 **참가자가 듣지 못했다**(§55 D3) ⇒ 훈련 피해 0 ⇒ 세면 과다 계상이다. ⛔ **이 필드를 앵커·문서 수 계산에 쓰지 말 것**(G350)은 그대로 — 여기서는 **스캔 대상 필터로만** 쓴다 |
+
+**부수 판정 2건(같은 스캔에서 함께 산출 · 헤드라인 아님)**
+
+| 값 | 정의 | 용도 |
+|---|---|---|
+| `verifyPromiseTurns` | *"확인해 드리겠다"* 계열 매치 턴 수(§65.3 **P2**) | ⚠️ **정밀도가 낮다**(*"계좌 내역 확인해 드리겠습니다"* 류가 섞인다) ⇒ **헤드라인에서 제외**하고 별도 칸으로만 센다. D-1 §64.3 ②가 *"확인해 주겠다"* 까지 금지했으므로 **D-1의 효과 측정에는 필요**하다 |
+| `emptyPromiseWide` | C1·C2·C4 + `(connectPromiseTurns + verifyPromiseTurns) > 0` | 상한 추정치. ⛔ **`emptyPromise`와 나란히 쓰고 둘 중 하나만 인용하지 말 것** — 둘의 간격이 곧 P2의 잡음 폭이다 |
+
+### 65.3 ⭐⭐ 문구 집합 — **D-1 전/후를 둘 다 덮는다**(지시받은 질문 1의 답)
+
+**판정: 단일 패턴 집합으로 *전 기간*을 덮는다. D-1 이후 세션만 대상으로 하지 않는다.**
+
+| 근거 | 내용 |
+|---|---|
+| **결정적 사유** | ⭐⭐ **기준선이 없으면 D-1의 효과를 측정할 수 없다.** 이 지표의 첫 소비자는 *"D-1이 빈 약속을 줄였는가"* 이고, 그 질문은 **D-1 이전 값과 이후 값의 비교**로만 답해진다. D-1 이후만 세면 **비교 대상이 영원히 없다** |
+| **가능한 이유** | ⭐ **검출 대상 발화의 *모양*은 두 시기에 동일하다.** D-1이 바꾸는 것은 **프롬프트 문면**이고 모델이 뱉는 약속 문장의 형태가 아니다. 달라지는 것은 **해석**뿐이다 — **D-1 이전 = 프롬프트 준수의 산물**(§62.2), **D-1 이후 = 프롬프트 위반** |
+| **시기 축을 코드에 넣지 않는 이유** | ⛔ **후보 기각 1건**: *"배포된 `VERIFY_OFFER_LINE_TOOL_DRIVEN` 상수에 옛 약속 예시가 남아 있는지를 지표가 직접 읽어 시기를 라벨링한다"* — **기각**. ⓐ 프롬프트 내부 상수를 export해야 해 D-1 커밋(§64.7 커밋 ①)과 **파일이 겹친다** ⓑ §64.0 2가 *"이 문면이 또 지면 층을 내린다"* 고 적었으므로 그 상수는 **또 바뀐다** ⇒ 바이트 의존 라벨은 **조용히 오분류**된다. ⭐ **백스톱(대체 수단)**: 시기 구분은 **로그 타임스탬프 vs D-1 배포 커밋 시각**으로 오프라인에서 가른다(§65.8 (2)) |
+
+**패턴 정본 (⛔ implementer는 이 목록을 바이트 그대로 옮긴다 — 임의 추가·삭제 금지)**
+
+```ts
+/**
+ * P1 — **연결(이관) 약속**. 헤드라인 판정(`emptyPromise`)이 쓰는 유일한 집합.
+ * G403의 프롬프트측 금지 리터럴 3종(`연결해 드리겠습니다`·`연결해 드릴`·`확인해 드리겠습니다`)에서
+ * 출발하되, **전사는 모델 자유 발화라 어미가 갈린다**(드리/드릴/주겠/줄게)는 것만 넓혔다.
+ * ⛔ 넓히기는 **어미 축 하나뿐**이다 — 동사(연결/넘기기/바꾸기)는 실제 관측·카탈로그 어휘에서만 왔다.
+ */
+const CONNECT_PROMISE_PATTERNS: readonly RegExp[] = [
+  /연결\s*해?\s*(드리|드릴|주겠|줄게)/,
+  /연결\s*하겠/,
+  /연결\s*시켜\s*(드리|드릴|주겠|줄게)/,
+  /(넘겨|돌려|바꿔)\s*(드리|드릴|주겠|줄게)/,
+];
+
+/**
+ * P2 — **"확인해 주겠다" 약속**. ⚠️ 정밀도가 낮다(확인의 목적어가 창구가 아닐 수 있다).
+ * 헤드라인에서 제외하고 `verifyPromiseTurns`로만 센다(§65.2 부수 판정).
+ */
+const VERIFY_PROMISE_PATTERNS: readonly RegExp[] = [
+  /확인\s*해?\s*(드리|드릴|주겠|줄게)/,
+];
+```
+
+**어휘 출처 대조(⛔ 지어내지 않았다는 근거)**
+
+| 패턴 | 출처 | 파일:줄 |
+|---|---|---|
+| `연결해 드리/드릴` | ① 옛 TOOL_DRIVEN 예시 *"잠시만요, 확인 부서를 **연결해 드리겠습니다**"* ② DEFAULT 동문 ③ 라이브 관측 L-1/L-2 | `promptAssembly.ts:266`·`:264` · §62.1 |
+| `바로 연결하겠` | 라이브 관측 L-2 마지막 대사 *"…**바로 연결하겠습니다.**"* | §62.1 L-2 행 |
+| `넘겨 드리` | 카탈로그 어휘 — *"제가 여신확인창구로 바로 **넘겨 드리겠습니다**"* | `scenarios/verifyIntercept.ts:130` |
+| `확인해 드리/드릴` | D-1이 새로 금지한 우회 형태(§64.3 ②) + G403 금지 리터럴 3번째 | §64.3 · §64.8 |
+
+⚠️ **완전성은 보증하지 않는다** — 모델 자유 발화의 어휘 공간을 전수로 덮을 방법은 없다. ⇒ **이 지표의 오차는 과소 계상 방향**이고, 그 방향이 **안전한 쪽**이다(*"안 났다"* 고 말하기보다 *"못 봤다"* 로 남는다). ⛔ 그럼에도 **패턴을 사후에 조용히 늘리지 말 것** — 늘리면 **그 전후 수치가 비교 불가**가 된다(늘릴 땐 §65 아래에 얹는 절로 기록하고 시점을 남긴다).
+
+### 65.4 ⭐⭐ 구현 위치 판정 (지시받은 질문 2의 답)
+
+| 후보 | 판정 | 근거 |
+|---|---|---|
+| **(a) 리포트 생성 시 계산 — 단, *저장하지 않고* 구조화 로그 1줄로 방출** | ⭐⭐ **채택** | ⓐ **추가 read 0회** — 두 입력이 이미 손에 있다(§65.1 6) ⓑ **세션당 정확히 1줄** — `generateReportForSession`의 멱등 early-return(`generateReportCore.ts:56-59`)이 그것을 구조적으로 보증한다 ⓒ **`[§59.11]` 로그 계보와 동형**이고 그 방식은 **D-5에서 한 배포 주기 만에 실제로 판독됐다**(§63.1 ②) ⓓ **Firestore·rules·API·클라 델타 0건** |
+| (a′) 같은 계산을 **`ReportDoc` 필드로 저장** | ⛔ **기각** | ⓐ `reports/{sid}`는 **참가자가 직접 read하는 표시 계약**이다 — 진단값을 얹으면 화면이 그것을 렌더할 표면이 생긴다(§16.6 G30 계열의 반대 방향 사고) ⓑ **§59.11 원칙 위반**(*"Firestore 필드는 늘리지 않는다"* — §62.7) ⓒ `docs/Database.md` 스키마 델타가 붙는다 ⓓ ⭐ **지표이지 처방이 아니다**(§62.6 D-6)라는 제약과 정면 충돌 — 저장하는 순간 소비자가 화면이 될 수 있다 |
+| (b) 별도 배치/스케줄 집계 | ⛔ **기각** | ⓐ **신규 인프라**(`onSchedule`)다 — 저장소 전체에 `onSchedule` 선언은 **1건뿐**이고(§44.5) 그 희소성 자체가 이 저장소의 경계다 ⓑ **전 세션 재스캔 = 대량 read**로 §44(트래픽 0일 때 0원) 판정을 되돌린다 ⓒ (a)가 **같은 값을 0원·0 read로 준다** ⇒ 대가 0인 후보가 있으면 대가 있는 후보는 자동 기각 |
+| (c) 관리자용 조회 콜러블 | ⛔ **기각** | ⓐ 이 저장소에 **관리자 역할·클레임이 존재하지 않는다**(인증은 소유자 uid 검증뿐 — §7) ⇒ 역할 체계를 새로 만들어야 한다 ⓑ 공개(인증) 콜러블 신설 = **노출 표면 증가**(§59.6 노출 판정 4조건이 걸린다) ⓒ 읽을 사람이 오늘은 **User 한 명**이고 그는 이미 서버 로그를 읽고 있다(§63.1의 로그 2줄이 그 증거) |
+
+⇒ ⭐ **채택안 한 줄 요약**: **순수 함수 1개(신규 파일) + 호출부 1블록(`reportRef.set()` *뒤*) + `logger.info` 1줄.**
+
+⛔ **호출 위치가 설계다.** 이 블록은 **반드시 `await reportRef.set(reportDoc)` 뒤**에 둔다 — 앞에 두면 *"판정에 영향을 주지 않는다"* 가 **주장**이 되지만, 뒤에 두면 **구조적 사실**이 된다(§15.6 G3/G22가 `applyVerifyIntercept`·`applyMockScreens` 순서에 적용한 것과 같은 원칙). ⛔ **try/catch 비차단** — `updateDefenseGrade`(`generateReportCore.ts:310-318`)와 같은 형태다. 지표 산출 실패가 리포트 생성을 막으면 **관측 도구가 제품을 깨뜨린다**.
+
+### 65.5 ⭐ 로그 페이로드 정본 (⛔ 필드 추가·개명은 이 표를 고친 뒤에)
+
+**태그**: `[§65.5] 빈 약속 지표` · **레벨**: `logger.info` **고정**(⛔ `emptyPromise:true`여도 `error`로 올리지 말 것 — 지표는 장애가 아니고, error 버킷을 오염시키면 §59.11 `"error"` 값의 판별력이 죽는다).
+
+| 필드 | 타입 | 의미 | ⛔ 주의 |
+|---|---|---|---|
+| `sessionId` | string | 세션 id | ⭐ **`[§59.11]` 라인과 조인하는 유일한 키**(§65.8 (1)) |
+| `scenarioId` | string | 시나리오 id | ⛔ **`series`(A/B) 필드를 만들지 말 것** — §63.2/§64.2가 그 축을 이미 기각했다. 계열은 카탈로그에서 오프라인 파생한다 |
+| `difficultyLevel` | string | `normalizeDifficultyLevel(session.difficultyLevel)` | 오늘은 항상 `"advanced"`(C1) — 술어가 바뀌면 여기서 드러난다 |
+| `verifyOfferDocs` | number | `verifySources.length` | `0`이어야 지표 후보(C2) |
+| `scammerTurns` | number | `role==="scammer"` 문서 수(`notSpoken` 제외) | 분모 해석용 — *"6턴짜리 세션이었나 2턴이었나"* |
+| `connectPromiseTurns` | number | P1 매치 턴 수 | 헤드라인 입력 |
+| `verifyPromiseTurns` | number | P2 매치 턴 수 | 잡음 폭 |
+| `firstPromiseTurnIndex` | number \| null | 최초 매치 턴의 `turnIndex` | 하한(`availableAfterScammerTurns`)과의 거리 해석용 — ⚠️ **D-3의 근거로 쓰지 말 것**(G263 잠금 · §63.5 1의 반례) |
+| `emptyPromise` | boolean | C1∧C2∧C3∧C4 | ⭐ **헤드라인** |
+| `emptyPromiseWide` | boolean | P2 포함 상한 | `emptyPromise`와 **항상 같이** 인용 |
+
+⛔ **방출 조건**: `verifyInterceptEnabled === true`인 세션에서만 찍는다(그 외에는 **0줄**). ⭐ **그러나 그 안에서는 `emptyPromise`가 `false`여도 반드시 찍는다** — *"로그에 0건"* 이 *"결함 0건"* 인지 *"기록을 안 했다"* 인지 가를 수 없게 되면 지표 자체가 무의미해진다(§56이 그 함정을 이미 한 번 밟았다). **분모는 방출된 라인 수 그 자체다.**
+
+⛔ **전사 원문·발화 내용은 페이로드에 싣지 않는다** — 개수와 인덱스만이다(AC-024/ADR-0004 계열 보수적 처리).
+
+### 65.6 ⭐ 범위 판정 — **계열 B 5종에 한정하지 않는다**(지시받은 질문 3의 답)
+
+**판정: 카탈로그 6종 전부(= 계열 A 포함)를 센다. 단, 계열별로 *해석 규칙*이 다르다.**
+
+| 근거 | 내용 |
+|---|---|
+| **대상 집합을 가르는 것은 게이트다** | ⭐ 코드에 실재하는 술어는 `hasVerifyIntercept && advanced` **하나**이고(§65.1 3 실측), **계열 A/B 축은 코드 어디에도 없다**. §63.2·§64.2가 *"가르는 축은 계열이 아니라 도구 선언 여부"* 로 이미 두 번 정정했다 ⇒ **계열로 좁히면 세 번째 같은 실수**다 |
+| **계열 A를 넣는 비용이 0이다** | 같은 술어·같은 스캔·같은 로그 1줄. 분기 0건 |
+| **계열 A가 주는 것: 대조군** | ⭐⭐ 계열 A는 **앱 백스톱 천장이 있다**(§63.1 ③ 실측 — `too_early` 뒤에도 완주). ⇒ **정상이라면 계열 A의 `emptyPromise`는 0에 수렴해야 한다.** 계열 A에서 이 값이 뜨면 그것은 *"빈 약속 문제"* 가 아니라 **백스톱이 실패했다는 신규 신호**이며, 그것은 계열 B 수치의 **해석 기준선**이 된다 |
+| ⛔ **섞어서 하나의 수로 만들지 말 것** | 두 계열은 **같은 값이 다른 뜻**이다(§62.6/§63.4가 이미 적은 것). 로그가 `scenarioId`를 싣는 이유가 이것이고, 집계는 **언제나 시나리오별로** 한다 |
+
+**제외되는 것과 그 근거(⛔ 각 행에 단언 지점을 붙인다)**
+
+| 제외 대상 | 근거(파일:줄) |
+|---|---|
+| 카탈로그 밖 8종 | `VERIFY_INTERCEPT`에 항목 없음 ⇒ `hasVerifyIntercept === false`(`scenarios/verifyIntercept.ts:194-201`·`:223-225`) — 확인 안내 블록이 프롬프트에 **아예 없다** |
+| 6종 × beginner·intermediate | `verifyEnabled`가 `advanced` 요구(`roleplay/index.ts:191` · `realtime/geminiProvider.ts:105-106`) — 동상 |
+| clone 2종(`family-accident-deepvoice`·`grandchild-impersonation`) | 카탈로그 부재(G23 — 지시 주입 지점이 구조적으로 없다, `scenarios/verifyIntercept.ts:181-183`) |
+| `role==="user"` 턴 | 참가자 발화는 약속의 화자가 아니다 |
+| `notSpoken:true` 문서 | C4(`shared/types.ts:175-178`) |
+
+### 65.7 ⭐ 계산 가능성 실측 (지시받은 질문 4의 답 — ⛔ "될 것이다"가 아니라 "코드가 이렇게 되어 있다")
+
+| # | 필요한 것 | 실재하는가 | 파일:줄 |
+|---|---|---|---|
+| 1 | 사기범 발화 텍스트가 세션 종료 후에도 남아 있는가 | ⭕ — **실시간**: `submitRealtimeTranscript`가 `role:"scammer"`·`textMasked`로 append · **폴백**: `sendMessage`가 같은 컬렉션에 쓴다 | `realtime/submitTranscript.ts:116-133` · `shared/types.ts:156-179` |
+| 2 | 그 텍스트가 마스킹으로 훼손되는가 | ❌ — 4개 숫자/이메일 패턴만 치환 | `guardrails/index.ts:32-48` |
+| 3 | `verifyIntercept` 문서 수를 리포트 생성 시 알 수 있는가 | ⭕ — 이미 읽고 있다 | `report/generateReportCore.ts:146`·`:147-164` |
+| 4 | 시나리오·난이도를 알 수 있는가 | ⭕ — `session`을 함수 첫 줄에서 읽는다 | `report/generateReportCore.ts:43-47` · `:278`(`normalizeDifficultyLevel` 이미 import, `:13`) |
+| 5 | 세션당 1회만 도는가 | ⭕ — 멱등 early-return | `report/generateReportCore.ts:56-59` |
+| 6 | 순수 함수 관례가 있는가 | ⭕ — `verifyTimeline.ts`·`smsTimeline.ts`·`reportLlmProvider.ts` 3건이 같은 형태(Firestore 접근 0, 호출부가 read) | `report/reportLlmProvider.ts:1-21` |
+| 7 | 테스트 관례 | ⭕ — `node:test` + `assert/strict` | `report/__tests__/verifyTimeline.test.ts:7-8` |
+
+⛔ **계산 불가능한 것 1건(§65.1 7 재확인)**: **통화 경로(실시간/폴백)** — 세션 문서에 판별자가 없다. ⇒ **로그에 싣지 않는다.** 필요하면 §65.8 (3)의 조인 절차로 사후 파생한다.
+
+### 65.8 ⭐ 해석 규칙 (⛔ 이 숫자로 말할 수 있는 것과 없는 것)
+
+1. **패턴 A(자기모순) vs 패턴 B(도구 미호출)를 가르는 절차** — 이 지표 **단독으로는 못 가른다**(둘 다 `verifyOfferDocs===0`으로 끝난다). ⇒ **Cloud Logging에서 같은 `sessionId`의 `[§59.11]` 라인 존재 여부로 조인한다**: 라인 **있음** = 도구는 불렸다(패턴 A 계열 · `status`가 `too_early`인지까지 읽힌다) / 라인 **0건** = 도구를 아예 안 불렀다(패턴 B = §62.4가 **높음**으로 판정한 쪽).
+2. **D-1 전/후 구분** — 로그 타임스탬프를 **D-1 구현 커밋의 배포 시각**과 비교한다(§65.3의 백스톱). ⛔ 배포 시각을 모르면 **구분하지 말고 구분 불가로 적을 것** — 추정으로 시기를 가르면 D-1의 효과를 **없는 것으로도 있는 것으로도** 만들 수 있다.
+3. **통화 경로** — `[§59.11]` 라인이 있는 세션에서만 `callMode`로 파생된다. ⛔ **라인이 없는 세션(= 패턴 B)의 경로는 오늘 어느 층도 모른다** — 이것이 이 지표가 닫지 못하는 가장 큰 구멍이다.
+4. **과소 계상 방향 3건**(⛔ 지우지 말 것): ⓐ 어휘 미포착(§65.3) ⓑ **리포트가 생성되지 않은 세션은 라인이 0건**이다(탭을 닫아 `endSession`이 안 불린 경우 등) ⓒ `role`은 실시간에서 **클라 주장값**이라(§60.5) 사기범 발화가 `user`로 표기되면 스캔에서 빠진다.
+5. **과다 계상 방향 2건**: ⓐ P2의 목적어 모호성(§65.2) ⓑ 약속이 **참가자의 확인 의사와 무관한 문맥**에서 나온 경우 — ⛔ 조건화하지 않았다(참가자 의심 표현을 서버가 판정하는 층이 없다).
+6. ⛔ **이 지표는 처방을 촉발하지 않는다.** 값이 높아도 자동으로 열리는 것은 **아무것도 없다** — OQ-A76 ⓐⓑ는 **G401·#100으로 잠긴 채**이고, 재개 여부는 **User 결정**이다(§65.12 OQ-A78).
+
+### 65.9 ⛔ implementer 인계 (**커밋 1개 · 신규 파일 2개 · 수정 파일 1개**)
+
+⛔ **`functions/src/realtime/submitTranscript.ts`·`functions/src/guardrails/**`·`functions/src/roleplay/**`·`src/**`·`firestore.rules`·`docs/Database.md`·`docs/API.md` — 전건 무접촉.**
+
+**신규 ① `functions/src/report/emptyPromiseMetric.ts`** (순수 함수 — ⛔ `firebase-admin`·`firebase-functions`를 **import 하지 않는다**)
+
+```ts
+export type EmptyPromiseScanMessage = {
+  role: "user" | "scammer";
+  textMasked: string;
+  turnIndex: number;
+  notSpoken?: true;
+};
+
+export type EmptyPromiseMetric = {
+  applicable: boolean;
+  verifyOfferDocs: number;
+  scammerTurns: number;
+  connectPromiseTurns: number;
+  verifyPromiseTurns: number;
+  firstPromiseTurnIndex: number | null;
+  emptyPromise: boolean;
+  emptyPromiseWide: boolean;
+};
+
+export function computeEmptyPromiseMetric(input: {
+  /** ⛔ 여기서 재계산하지 말 것 — 호출부가 `hasVerifyIntercept && advanced`로 넘긴다(G400 선례). */
+  verifyInterceptEnabled: boolean;
+  verifyOfferDocs: number;
+  messages: readonly EmptyPromiseScanMessage[];
+}): EmptyPromiseMetric;
+```
+
+계산 규칙: `role==="scammer" && notSpoken !== true` 인 문서만 스캔 → P1/P2 패턴(§65.3) 매치 턴 수를 센다 → `emptyPromise = applicable && verifyOfferDocs === 0 && connectPromiseTurns > 0` · `emptyPromiseWide = applicable && verifyOfferDocs === 0 && (connectPromiseTurns + verifyPromiseTurns) > 0`. ⛔ **`applicable === false`여도 카운트 필드는 정상 산출한다**(게이트는 `emptyPromise*` 두 불리언에만 건다 — 테스트가 스캔 로직을 독립으로 검증할 수 있어야 한다).
+
+**수정 ② `functions/src/report/generateReportCore.ts`** — ⛔ **`await reportRef.set(reportDoc);`(`:303`) 바로 뒤**, `updateDefenseGrade` try 블록 **앞**에 1블록 추가. import 2줄 추가(`computeEmptyPromiseMetric` · `hasVerifyIntercept`). ⛔ **`:1-302` 한 줄도 고치지 않는다**(`reportDoc` 필드 0건 증가).
+
+```ts
+// ②-f §65(OQ-A76 ⓒ) — 빈 약속 지표(사후 관측 전용 · 차단 아님).
+// ⛔ 리포트 산출물에 0바이트도 기여하지 않는다: 이 블록은 reportRef.set() **뒤**에 있고
+// 산출값은 어디에도 저장되지 않는다(로그 1줄 — Firestore 필드 0건, §59.11 원칙).
+try {
+  const emptyPromise = computeEmptyPromiseMetric({
+    verifyInterceptEnabled:
+      hasVerifyIntercept(session.scenarioId) &&
+      normalizeDifficultyLevel(session.difficultyLevel) === "advanced",
+    verifyOfferDocs: verifySources.length,
+    messages,
+  });
+  if (emptyPromise.applicable) {
+    logger.info("[§65.5] 빈 약속 지표", {
+      sessionId,
+      scenarioId: session.scenarioId,
+      difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
+      ...emptyPromise,
+    });
+  }
+} catch (err) {
+  // ⛔ 비차단 — 관측 도구가 제품을 깨뜨리지 않는다(updateDefenseGrade와 같은 형태).
+  logger.error("[§65.5] 빈 약속 지표 산출 실패(비차단)", { sessionId, err });
+}
+```
+
+**신규 ③ `functions/src/report/__tests__/emptyPromiseMetric.test.ts`** — §65.10의 G405~G407.
+
+### 65.10 신규 게이트 (**G405 · G406 · G407** — ⛔ 참조 대상이 전부 같은 커밋 안에 있다)
+
+| 게이트 | 내용 | 어디에 |
+|---|---|---|
+| **G405** | ⭐⭐ **양방향 역검증.** ⓐ **오염 샘플**: 옛 TOOL_DRIVEN 약속 문장(*"잠시만요, 확인 부서를 연결해 드리겠습니다"*)을 `role:"scammer"` 턴으로 넣고 `verifyInterceptEnabled:true` · `verifyOfferDocs:0` ⇒ **`emptyPromise === true`**. ⓑ **같은 입력에 `verifyOfferDocs:1`** ⇒ **`false`**(C2가 실제로 무죄를 만든다). ⓒ 라이브 관측 L-2 대사(*"바로 연결하겠습니다"*)·카탈로그 어휘(*"넘겨 드리겠습니다"*)도 ⓐ와 같은 결과 | `emptyPromiseMetric.test.ts` |
+| **G406** | ⭐ **적용 범위 + 무로그.** `verifyInterceptEnabled:false`면 약속 문장이 있어도 `emptyPromise === false` **이고** `applicable === false`다. ⛔ **호출부 단언 1건 동반**: `applicable === false`일 때 `logger.info`가 **불리지 않는다**(분모 오염 금지 — §65.5) | `emptyPromiseMetric.test.ts` + 호출부 스텁 테스트 |
+| **G407** | ⭐ **스캔 대상 제외 + 순수성.** ⓐ `role:"user"` 턴의 약속 문장은 **세지 않는다** ⓑ `notSpoken:true` 턴도 **세지 않는다**(C4) ⓒ `scammerTurns` 역시 `notSpoken` 문서를 제외한다 ⓓ **모듈이 `firebase-admin`·`firebase-functions`를 import하지 않는다**(소스 텍스트 검사 — 순수 함수 보증) | `emptyPromiseMetric.test.ts` |
+
+⛔ **ADR 0건 · Firestore 스키마 0건 · 콜러블 시그니처 0건 · 응답 필드 0건 · `firestore.rules` 0줄 · 클라 0줄.**
+
+### 65.11 ⛔ 닫지 못한 것 (자기 고지 — 지우지 말 것)
+
+1. ⛔ **architect는 라이브·셸·테스트·빌드·`git log`·로그 조회를 0회 했다.** 이 절의 모든 판정은 **소스·테스트 파일 직접 열람 + `.git` 판독**이다. ⚠️ **이 지표가 실제로 무엇을 잡는지 관측 0건** — 첫 배치가 쌓이기 전까지 이 절은 **가설의 계측기**일 뿐이다.
+2. ⛔ **§62.4 B의 피해 ⓑ(*"가짜 창구로 되돌아온다"* 핵심 학습 미전달)는 이 절도 닫지 못한다.** 지표는 **보는 것**이고 그 문은 **막는 것**(OQ-A76 ⓐⓑ · G401·#100)이다 — §64.9 3을 그대로 승계한다.
+3. ⚠️ **패턴 집합의 완전성 미보증**(§65.3) · **P2의 정밀도 미측정**(실전사 없이는 측정 불가) · **참가자 확인 의사와의 조건화 0건**(§65.8 5 ⓑ).
+4. ⚠️ **패턴 B 세션의 통화 경로는 여전히 미관측**(§65.8 3) — `[§59.11]` 라인이 없으므로 조인할 대상이 없다. ⛔ 이것을 닫으려면 세션 문서에 경로 판별자를 **신설**해야 하고, 그것은 §65.0 3(Firestore 델타 0건)과 충돌한다 ⇒ **이번 범위 밖**.
+5. ⚠️ **리포트 미생성 세션은 지표에 나타나지 않는다**(§65.8 4 ⓑ). 분모가 *"종료된 세션"* 이 아니라 *"리포트가 생성된 세션"* 이라는 것을 집계 시 반드시 적을 것.
+6. ⚠️ **§62.3 H1/H2 판별은 여전히 미수행**(§64.9 2 승계). ⭐ 단 이 지표가 배포되면 **§65.8 (1)의 조인 절차가 그 판별을 사후 자동화**한다 — 다음 라이브부터는 전사 없이도 갈린다.
+7. ⚠️ **`docs/API.md:431`의 옛 TOO_EARLY 인용 정정 미수행**(§64.7·§64.9 5 승계 — D-2 병합 시점부터 거짓이 된다) · **`docs/Tasks.md` 담당 행 미확인·미신설**(planner 소관) · **`docs/UX.md` 1.26 미확인**(§61.9 (5) 승계).
+8. ⚠️ **D-1/D-2 구현이 아직 트리에 없다**(§65.1 2). ⇒ 이 지표가 먼저 병합되면 **D-1 이전 기준선을 실제로 수집한다** — ⭐ **그것이 바람직한 순서**이지만(기준선 확보), ⛔ **순서가 뒤바뀌어도 지표는 성립한다**(§65.3 전 기간 커버).
+
+### 65.12 신규 OQ
+
+| OQ | 질문 | 소유 | 선행 조건 |
+|---|---|---|---|
+| **OQ-A78** | **빈 약속 지표가 어떤 값이면 OQ-A76 ⓐ/ⓑ(계열 B 이행 천장)를 다시 여는가** — 즉 이 관측의 **소비 규칙**. ⭐ **architect 권고 = 지금 임계치를 숫자로 못 박지 않는다**: ⓐ 오늘 n이 너무 작고(§62.0 4·§63.0 4) ⓑ **D-1이 아직 배포되지 않아**(§65.1 2) 지표가 측정할 개입이 존재하지 않는다 ⇒ **D-1 배포 전/후 각각 라인이 쌓인 뒤 User가 두 값을 보고 판단**한다. ⛔ **architect가 임계치를 정하면 그것이 곧 G401이 금지한 단독 확정이 된다** — 재개 판단은 **처음부터 끝까지 User 소관**이다 | **User** | 이 지표의 배포 + D-1 배포 + 양 시기의 라인 |
+
+### 65.13 이 패스의 편집 범위 (⛔ 정본)
+
+**편집 파일 2개뿐**: `docs/Architecture.md`(**이 §65 신설 — §0~§64 한 줄도 수정하지 않았다**) · `docs/DECISIONS.md`(**#104 1행 추가**).
+⛔ **`src/**`·`functions/**` 0줄**(전부 **읽기만** 했다 — `functions/src/report/generateReportCore.ts` · `functions/src/report/verifyTimeline.ts` · `functions/src/report/reportLlmProvider.ts` · `functions/src/report/__tests__/verifyTimeline.test.ts` · `functions/src/realtime/submitTranscript.ts` · `functions/src/guardrails/index.ts` · `functions/src/scenarios/verifyIntercept.ts` · `functions/src/roleplay/promptAssembly.ts` · `functions/src/roleplay/index.ts` · `functions/src/verifyIntercept/index.ts` · `functions/src/shared/types.ts`) · ⛔ `docs/PRD.md`·`docs/UX.md`·`docs/API.md`·`docs/Database.md`·`docs/Tasks.md`·`docs/CHANGELOG.md`·`docs/UpdateRequests.md`·`README.md`·`CLAUDE.md`·`firestore.rules` **무편집** · ⛔ **ADR 0건 · 게이트 3건 신설(G405~G407) · OQ 1건 신설(OQ-A78)** · ⛔ **브랜치·커밋·push 0건**(셸 부재 — 워킹 트리 직접 편집).
+> **번호 실측(착수 시점, `docs/**` 전수 grep)**: `^## ` 최대 **64**(`^## 6[5-9]\.`·`^## 7[0-9]\.` **0히트**) · 게이트 최대 **G404**(`G4(0[5-9]|[1-9][0-9])` **0히트**) · OQ 최대 **OQ-A77**(`OQ-A(7[89]|[89][0-9])` **0히트**) · DECISIONS 최대 **#103**(`DECISIONS.md:113`) · `docs/adr/` 최대 **0015** ⇒ **§65 · G405~G407 · OQ-A78 · #104**. ⛔ 예약 0건 — 동시 패스가 있으면 **병합 순서로 확정**된다(치환 스코프: `## 65.` 헤딩 이후 + `docs/DECISIONS.md` #104 행뿐. ⛔ **전역 치환 금지**).
+> **base**: `C:\codegate\.git\HEAD` = `ref: refs/heads/main` → `.git/refs/heads/main` = **`3b4ea10773fec1df958600aab477e8af909aeac3`**(`.git` 직접 판독 — 세션 스냅샷 `3b4ea10`과 **일치**, **§64 문서 병합본 PR #239**). ⚠️ **§64가 선언한 base(`716b920`)보다 한 칸 앞이다** — §64 자신이 병합됐기 때문이며, **§64.3/§64.5의 인용 줄번호가 현행 트리와 일치함을 재확인했다**(`promptAssembly.ts:266`·`scenarios/verifyIntercept.ts:217-218` — 둘 다 **옛 값 그대로**, §65.1 2).
+> ⚠️ **버전 갭**: 헤더 **PRD v1.7.1 · UX 1.13**(`Architecture.md:5`) ↔ 현행 **PRD v1.14**(`docs/PRD.md:4`) **· UX 1.26**(`docs/UX.md:10`) ⇒ **PRD 7건 · UX 13건**(§64 시점과 **동일 — 그 사이 벌어지지 않았다**). ⛔ 헤더 무전진(T131 계열 별건) — 이 절의 판정은 **소스 직접 열람**이라 갭이 오염시키지 않는다.
+> **UX 추적성**: 신규 Screen ID·Flow ID·라우트·컴포넌트 **0건**. 닿는 기존 항목은 **UX-031/UF-011**(확인 시도 무력화 — 이 지표가 세는 것은 그 플로우의 *"빈 약속"* 종결 상태다) · **UX-008**(리포트 — ⛔ **화면에 아무것도 추가하지 않는다**, 산출물은 서버 로그뿐)이며 **신규 매핑 0건**이다.
+> `docs/UpdateRequests.md` `open` 행 중 **architect 소관 0건**(직접 열람 재확인 — `open`은 #1 `{{planner}}` 템플릿 · #11·#12 `planner` · #14 `User`).
