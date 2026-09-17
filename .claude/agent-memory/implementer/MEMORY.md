@@ -89,3 +89,4 @@
 - [§59.6 갱신 2(G394) — verify claim 실패 guidance 배선](project_codegate_s59_g394_guidance_wiring.md) — ⭐ buildAlreadyAnnouncedToolResponse 순수함수화, 리터럴→함수 치환이 기존 하드코딩 테스트 2건(geminiProvider·toolWindowWiring)을 깨 필수 갱신한 사례.
 - [§62.6 D-5 reviewer Major 수정 — verify-offer 로그 불변](project_codegate_s62_verify_offer_log_invariant.md) — ⭐ 로그 전용 "error" 상태값(응답 계약 무변경), onCall 핸들러 직접 실행 0건 전례 재확인, 소스 스캔 테스트 7종.
 - [§64 D-1/D-2 정본 문면 교체(순수 구현)](project_codegate_s64_d1_d2_verify_wording.md) — ⭐ "순수 구현"에서도 게이트 설계는 implementer 몫(G403/G404), 상수별 분리 포인터 갱신, 역검증으로 "죽은 게이트" 배제.
+- [T174 §65 D-6 빈 약속 지표](project_codegate_t174_empty_promise_metric.md) — ⭐ 금지어 grep이 자기 설명 주석에 걸리는 함정 재발(소스 주석까지 리터럴 회피), 관측 불가 호출부를 스텁+소스스캔 이중 증거로 닫음, "순수 구현"도 게이트 코드 자체는 implementer 몫.
