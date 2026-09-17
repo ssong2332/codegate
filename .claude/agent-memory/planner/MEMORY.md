@@ -13,4 +13,5 @@
 - [리뷰 판정 기록처](reference_codereview_log.md) — docs/CodeReview.md가 유일한 reviewer·QA 기록이나 항상 뒤처진다, PR 번호는 검증 불가
 - [선례 인용은 라벨로 재grep](project_precedent_citation_drift.md) — "T116의 P1" 인용이 실제로는 T115였다, 한 칸 어긋난 선례가 근거를 통째로 무효화한다
 - [판정표 확장 절차](project_rule_table_extension.md) — 적용 결과를 닫아 서술한 표엔 섞지 말고 분리, 강등 선례 보존용 방어 행 필수
+- [커밋 제목·PR 번호는 주장이다](project_commit_metadata_unreliable.md) — 정본 절의 "편집 범위" 블록과 base 체인으로 반증, 제목 오류·PR 역순 병합 실측
 - [수치 정정 규칙](project_baseline_correction.md) — 현재형 기준선만 고치고 과거 기록은 보존, 정정 전 전수 grep(부분 정정이 반복 실패 양식)
