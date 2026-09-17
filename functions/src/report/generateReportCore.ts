@@ -10,6 +10,7 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { listAppInstallMockScreens, MOCK_SCREENS } from "../scenarios/mockScreens";
+import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import type {
   InCallSmsDoc,
@@ -27,6 +28,7 @@ import {
   type SmsTimelineSource,
 } from "./smsTimeline";
 import { applyVerifyIntercept, type VerifyTimelineSource } from "./verifyTimeline";
+import { computeEmptyPromiseMetric } from "./emptyPromiseMetric";
 import { deriveReportLlmProviderField } from "./reportLlmProvider";
 import {
   applyMockScreens,
@@ -301,6 +303,30 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     ...deriveReportLlmProviderField(session),
   };
   await reportRef.set(reportDoc);
+
+  // ②-f §65(OQ-A76 ⓒ) — 빈 약속 지표(사후 관측 전용 · 차단 아님).
+  // ⛔ 리포트 산출물에 0바이트도 기여하지 않는다: 이 블록은 reportRef.set() **뒤**에 있고
+  // 산출값은 어디에도 저장되지 않는다(로그 1줄 — Firestore 필드 0건, §59.11 원칙).
+  try {
+    const emptyPromise = computeEmptyPromiseMetric({
+      verifyInterceptEnabled:
+        hasVerifyIntercept(session.scenarioId) &&
+        normalizeDifficultyLevel(session.difficultyLevel) === "advanced",
+      verifyOfferDocs: verifySources.length,
+      messages,
+    });
+    if (emptyPromise.applicable) {
+      logger.info("[§65.5] 빈 약속 지표", {
+        sessionId,
+        scenarioId: session.scenarioId,
+        difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
+        ...emptyPromise,
+      });
+    }
+  } catch (err) {
+    // ⛔ 비차단 — 관측 도구가 제품을 깨뜨리지 않는다(updateDefenseGrade와 같은 형태).
+    logger.error("[§65.5] 빈 약속 지표 산출 실패(비차단)", { sessionId, err });
+  }
 
   // P1(AC-010/AC-011, T13) — 방어 등급/세션 횟수 갱신. Database.md `users/{uid}.defenseGrade`·
   // `.sessionCount`(둘 다 옵셔널 P1 필드)에 반영한다. 새 리포트가 정확히 1회 write될 때만 이
