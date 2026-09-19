@@ -66,3 +66,6 @@
 - [전파하는 수정은 근거를 다시 세운다](feedback_propagated_fix_recheck_premises.md) — diff 말고 원 판정의 근거를 새 경로에서 참/거짓 판정; 클라 값 삼항의 "모르면 B" 기본 방향을 읽어라
 - [선행조건은 처방마다 따로 건다](feedback_precondition_per_prescription.md) — OQ 전체에 걸면 무관한 처방까지 언다; 규범형 근거는 빈도가 아니라 도달 가능성 1건으로 충족
 - [append-only 표는 마지막 행 꼬리를 앵커로](feedback_append_only_table_anchor_last_row.md) — 직전 행 머리를 잡으면 역순 삽입되고, 거대한 줄을 두 번 더 타이핑해야 복구된다
+- [부정 배제는 어순이 방식을 정한다](feedback_negation_follows_word_order.md) — 한국어 부정은 후치라 lookbehind는 0건을 막는다; 사례별 오프셋을 세면 창 길이가 나온다
+- [규칙 변경엔 시기 표식을 같이 넣는다](feedback_rule_change_needs_an_epoch_marker.md) — 배포 시각 추정 말고 새 필드의 존재가 판별자; 좁히는 필터는 과소 계상을 조용하게 만든다
+- ["범위 밖" 강등은 사유가 죽으면 같이 죽는다](feedback_out_of_scope_downgrade_expires.md) — 재신고 시 항목 말고 강등 사유 문장을 코드로 재판정; 그 표에 실측이 이미 있다
