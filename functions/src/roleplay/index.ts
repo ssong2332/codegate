@@ -23,7 +23,7 @@ import { pickFallbackTurnInstruction } from "../verifyIntercept/fallbackTurn";
 import { announcedVerifyAnchor } from "../verifyIntercept/buildDoc";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { GEMINI_KEY_SECRETS } from "../shared/config";
-import { MESSENGER_ESCALATION_FALLBACK_TURNS } from "../shared/constants";
+import { MESSENGER_ESCALATION_FALLBACK_TURNS, SEND_MESSAGE_MAX_LENGTH } from "../shared/constants";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "../session/channelTransition";
@@ -57,6 +57,14 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const { sessionId, userText } = request.data ?? {};
     if (!sessionId || !userText || !userText.trim()) {
       throw new HttpsError("invalid-argument", "sessionId와 userText가 필요합니다.");
+    }
+    // §66.2 — 길이 상한. ⛔ 절단이 아니라 거절(AC-039 "조용한 실패 금지", rewind/index.ts:68-73와
+    // 동일 순서). ⛔ Firestore read·LLM 호출 앞에 둔다 — 거절되는 요청이 그 비용을 태우지 않는다.
+    if (userText.length > SEND_MESSAGE_MAX_LENGTH) {
+      throw new HttpsError(
+        "invalid-argument",
+        `메시지는 ${SEND_MESSAGE_MAX_LENGTH}자까지 보낼 수 있습니다.`,
+      );
     }
 
     const db = getFirestore();

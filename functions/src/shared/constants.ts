@@ -15,6 +15,13 @@
 export const MAX_USER_TURNS = 100;
 export const MAX_SESSION_MS = 60 * 60 * 1000; // 60분
 
+/** §66.2 — sendMessage `userText` 1턴 상한. 거절(절단 아님, AC-039). rewind 500 < 이 값 < 전사 2000. */
+export const SEND_MESSAGE_MAX_LENGTH = 1000;
+
+/** §66.3 — createSession 롤링 윈도우. ⛔ 쿼터 보호가 아니라 폭주 백스톱이다(G180 승계). */
+export const CREATE_SESSION_WINDOW_MS = 10 * 60 * 1000; // 10분
+export const CREATE_SESSION_WINDOW_MAX = 6;
+
 // 합성 표식(AC-022, DECISIONS #7).
 export const SYNTHETIC_LABEL = "AI 훈련용 합성" as const;
 
@@ -38,6 +45,13 @@ export const MESSENGER_ESCALATION_MAX_USER_TURNS = 14;
 export const CHALLENGE_FREE_ACTIVE_CAP = 3; // 사용자1당 동시 활성(pending|consented|in_progress·미만료) 챌린지 상한
 export const CHALLENGE_FREE_LINK_EXPIRY_MS = 3 * 24 * 60 * 60 * 1000; // 공유 링크 만료(3일, AC-048)
 export const CHALLENGE_DEFAULT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 복제 음성 보존 기본값(30일, §14.3). 조정 UI(7~90일)는 범위 밖.
+
+// 자체 감사 결함 5 — 자유 텍스트 상한(architect 설계 불요, 기존 선례 rewind/judge.ts의
+// REWIND_ANSWER_MAX_LENGTH=500 적용). 초과 시 조용히 자르지 않고 거절한다(AC-039와 동일 원칙).
+// displayName은 화면 표시용(UX-020 목록·UX-021 동의 랜딩에 그대로 노출)이라 짧게, note는 신고
+// 사유 자유서술이라 rewind 답변과 같은 길이로 잡았다.
+export const CHALLENGE_DISPLAY_NAME_MAX_LENGTH = 50;
+export const CHALLENGE_REPORT_NOTE_MAX_LENGTH = 500;
 
 // generic 보이스 2인 챌린지(T56, MVP #23, Architecture.md §14.9.2/§14.9.6, AC-058) — 서버측
 // GENERIC_VOICE_ID 상수. 클라 전용이던 `src/content/scenarios/index.ts`의 `GENERIC_VOICE_ID`와

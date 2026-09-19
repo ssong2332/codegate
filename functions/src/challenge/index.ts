@@ -37,6 +37,7 @@ import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import type { VoiceMode } from "../scenarios/publicMeta";
 import {
   CHALLENGE_DEFAULT_RETENTION_MS,
+  CHALLENGE_DISPLAY_NAME_MAX_LENGTH,
   CHALLENGE_FREE_ACTIVE_CAP,
   CHALLENGE_FREE_LINK_EXPIRY_MS,
 } from "../shared/constants";
@@ -68,6 +69,15 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
     const { scenarioId, displayName, difficultyLevel } = request.data ?? {};
     if (!scenarioId || !displayName || !displayName.trim()) {
       throw new HttpsError("invalid-argument", "scenarioId와 displayName이 필요합니다.");
+    }
+    // 자체 감사 결함 5 — displayName은 UX-020 목록·UX-021 동의 랜딩에 그대로 노출되는 표시용
+    // 문자열이라 길이 상한을 둔다(rewind/judge.ts REWIND_ANSWER_MAX_LENGTH 선례와 동일 원칙 —
+    // 조용히 자르지 않고 거절한다).
+    if (displayName.length > CHALLENGE_DISPLAY_NAME_MAX_LENGTH) {
+      throw new HttpsError(
+        "invalid-argument",
+        `displayName은 ${CHALLENGE_DISPLAY_NAME_MAX_LENGTH}자까지 입력할 수 있습니다.`,
+      );
     }
     const scenario = PUBLIC_SCENARIOS[scenarioId];
     if (!scenario) {

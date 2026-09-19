@@ -14,15 +14,17 @@ import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import {
+  CREATE_SESSION_WINDOW_MAX,
   MAX_SESSION_MS,
   MAX_USER_TURNS,
   MESSENGER_ESCALATION_MAX_USER_TURNS,
 } from "../shared/constants";
+import { isCreateSessionRateLimited } from "./rateLimit";
 import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, GEMINI_KEY_SECRETS } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "./channelTransition";
-import type { MessageDoc, SessionDoc } from "../shared/types";
+import type { MessageDoc, MessengerSkin, MessengerSkinSource, SessionDoc } from "../shared/types";
 import type {
   CreateSessionRequest,
   CreateSessionResponse,
@@ -48,6 +50,22 @@ function readOptionalConfigString(param: { value: () => string }): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * 신고 항목 4 — `updateMessengerSkin`의 enum 런타임 검증(§60의 `turn.role` 신뢰 경계 판정과 동일
+ * 함정: 클라 TS 타입은 컴파일 시점 계약일 뿐, 실제로는 JSON 페이로드가 임의 문자열을 실어 나를 수
+ * 있다). 알 수 없는 값을 조용히 통과시키지 않는다 — verifyIntercept/index.ts의
+ * `readOfferStage`/`readTrigger`와 동일한 패턴(선례 재사용, architect 설계 불요).
+ */
+function readMessengerSkin(value: unknown): MessengerSkin {
+  if (value === "ios" || value === "samsung" || value === "default") return value;
+  throw new HttpsError("invalid-argument", "messengerSkin은 ios·samsung·default 중 하나여야 합니다.");
+}
+
+function readSkinSource(value: unknown): MessengerSkinSource {
+  if (value === "auto" || value === "manual" || value === "fallback") return value;
+  throw new HttpsError("invalid-argument", "skinSource는 auto·manual·fallback 중 하나여야 합니다.");
 }
 
 // GEMINI_API_KEY 선언(2026-07-24) — generateOpeningLine()이 getLlmClient()를 통해 실 Gemini로
@@ -115,6 +133,33 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       .get();
     if (consentSnap.empty) {
       throw new HttpsError("failed-precondition", "훈련 참여 동의가 필요합니다.");
+    }
+
+    // §66.3 — createSession 롤링 윈도우(폭주 백스톱, G180 승계). ⛔ 위치가 설계다: 동의 게이트
+    // 뒤(동의 오류가 먼저 나와야 한다) · generateOpeningLine 앞(이 게이트의 존재 이유가 그 LLM
+    // 호출을 막는 것이다, challenge/index.ts:108-110과 동일 원칙) · 세션 문서 write 앞(거절된
+    // 시도가 창을 더럽히지 않는다).
+    const recentSnap = await db
+      .collection("sessions")
+      .where("uid", "==", request.auth.uid)
+      .orderBy("createdAt", "desc")
+      .limit(CREATE_SESSION_WINDOW_MAX + 1)
+      .get();
+    const nowMs = Date.now();
+    if (
+      isCreateSessionRateLimited({
+        // ⛔ createdAt 부재 문서는 세지 않는다 — "값이 없으니 기본이겠지"를 판정 근거로 삼지 않는다
+        // (§15.0-4 승계, §66.3).
+        recentCreatedAtMs: recentSnap.docs
+          .map((d) => (d.get("createdAt") as FirebaseFirestore.Timestamp | undefined)?.toMillis())
+          .filter((t): t is number => typeof t === "number"),
+        nowMs,
+      })
+    ) {
+      throw new HttpsError(
+        "resource-exhausted",
+        "짧은 시간에 너무 많이 시작했습니다. 잠시 후 다시 시도해 주세요.",
+      );
     }
 
     // roleplay 모듈(트랙 A 내부 계약, Architecture.md §4)에 오프닝 사기범 대사 생성을 위임한다.
@@ -302,10 +347,14 @@ export const updateMessengerSkin = onCall<
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
-  const { sessionId, messengerSkin, skinSource } = request.data ?? {};
-  if (!sessionId || !messengerSkin || !skinSource) {
+  const { sessionId } = request.data ?? {};
+  if (!sessionId || !request.data?.messengerSkin || !request.data?.skinSource) {
     throw new HttpsError("invalid-argument", "sessionId·messengerSkin·skinSource가 필요합니다.");
   }
+  // 신고 항목 4 — truthy 체크만으로는 임의 문자열("SAMSUNG" 대소문자 오탈자 등)이 조용히 통과해
+  // Firestore에 잘못된 값으로 저장될 수 있었다. enum 값인지 실제로 검증한다.
+  const messengerSkin = readMessengerSkin(request.data.messengerSkin);
+  const skinSource = readSkinSource(request.data.skinSource);
 
   const db = getFirestore();
   const sessionRef = db.collection("sessions").doc(sessionId);

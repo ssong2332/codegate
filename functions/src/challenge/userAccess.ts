@@ -20,7 +20,12 @@ import { generateOpeningLine } from "../roleplay";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { GEMINI_KEY_SECRETS } from "../shared/config";
-import { GENERIC_VOICE_ID, MAX_SESSION_MS, MAX_USER_TURNS } from "../shared/constants";
+import {
+  CHALLENGE_REPORT_NOTE_MAX_LENGTH,
+  GENERIC_VOICE_ID,
+  MAX_SESSION_MS,
+  MAX_USER_TURNS,
+} from "../shared/constants";
 import { getVoiceProvider } from "../voice/provider";
 import { hashToken } from "./token";
 import { markChallengeConsumed, resolveChallengeByTokenHash } from "./index";
@@ -117,6 +122,30 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
       scenarioChannel === "messenger" ? PUBLIC_SCENARIOS[scenarioId]?.surface : undefined;
 
     const callerUid = request.auth.uid;
+
+    // §66.5 — 형제 슬롯 사전 게이트(OQ-A81, User 승인). ⛔ 이 블록은 권위자가 아니다 — 아래
+    // 트랜잭션이 최종 판정을 그대로 다시 한다. 여기서 하는 일은 "어차피 create가 아닌 호출"에서
+    // LLM 1회(generateOpeningLine)를 **태우지 않는 것**뿐이다. 판정 로직은 새로 만들지 않고
+    // decideConsentGate(순수 함수)·findExperienceSession을 그대로 재사용한다.
+    const preChallengeSnap = await db.collection("challenges").doc(resolved.challengeId).get();
+    const preChallenge = preChallengeSnap.data() as ChallengeDoc | undefined;
+    if (preChallenge) {
+      const preSession = await findExperienceSession(db, resolved.challengeId);
+      const pre = decideConsentGate({
+        linkExpired: preChallenge.linkExpiresAt.toMillis() <= Date.now(),
+        retentionExpired: preChallenge.retentionDeleteAt.toMillis() <= Date.now(),
+        status: preChallenge.status,
+        existingSessionUid: preSession?.uid ?? null,
+        callerUid,
+      });
+      if (pre.action === "reject") {
+        throw new HttpsError("failed-precondition", pre.message);
+      }
+      if (pre.action === "resume") {
+        return { sessionId: (preSession as SessionDoc).sessionId };
+      }
+    }
+
     // reviewer 리뷰 Major(2026-07-24): 동시에 같은 아직-pending 링크를 두 명의 익명 uid가 호출하면
     // (읽기→판정→쓰기가 트랜잭션 밖이었을 때) 둘 다 "create"로 판정돼 서로 다른 두 체험 세션이
     // 만들어질 수 있었다 — "누가 이 딥보이스 체험을 받는가"라는 이 기능의 핵심 안전 게이트라 T36의
@@ -273,6 +302,15 @@ export const reportChallenge = onCall<ReportChallengeRequest, Promise<ReportChal
     const { token, reason, note } = request.data ?? {};
     if (!token || !reason || !REPORT_REASONS.has(reason)) {
       throw new HttpsError("invalid-argument", "token과 유효한 reason이 필요합니다.");
+    }
+    // 자체 감사 결함 5 — note는 자유서술 신고 사유라 rewind/judge.ts REWIND_ANSWER_MAX_LENGTH(500)와
+    // 같은 상한을 둔다(조용히 자르지 않고 거절 — AC-039와 동일 원칙). 무인증 콜러블이라 남용
+    // 방지 필요성이 더 크다.
+    if (note && note.length > CHALLENGE_REPORT_NOTE_MAX_LENGTH) {
+      throw new HttpsError(
+        "invalid-argument",
+        `note는 ${CHALLENGE_REPORT_NOTE_MAX_LENGTH}자까지 입력할 수 있습니다.`,
+      );
     }
 
     const resolved = await resolveChallengeByTokenHash(hashToken(token));
