@@ -20,7 +20,12 @@ import { generateOpeningLine } from "../roleplay";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { GEMINI_KEY_SECRETS } from "../shared/config";
-import { GENERIC_VOICE_ID, MAX_SESSION_MS, MAX_USER_TURNS } from "../shared/constants";
+import {
+  CHALLENGE_REPORT_NOTE_MAX_LENGTH,
+  GENERIC_VOICE_ID,
+  MAX_SESSION_MS,
+  MAX_USER_TURNS,
+} from "../shared/constants";
 import { getVoiceProvider } from "../voice/provider";
 import { hashToken } from "./token";
 import { markChallengeConsumed, resolveChallengeByTokenHash } from "./index";
@@ -297,6 +302,15 @@ export const reportChallenge = onCall<ReportChallengeRequest, Promise<ReportChal
     const { token, reason, note } = request.data ?? {};
     if (!token || !reason || !REPORT_REASONS.has(reason)) {
       throw new HttpsError("invalid-argument", "token과 유효한 reason이 필요합니다.");
+    }
+    // 자체 감사 결함 5 — note는 자유서술 신고 사유라 rewind/judge.ts REWIND_ANSWER_MAX_LENGTH(500)와
+    // 같은 상한을 둔다(조용히 자르지 않고 거절 — AC-039와 동일 원칙). 무인증 콜러블이라 남용
+    // 방지 필요성이 더 크다.
+    if (note && note.length > CHALLENGE_REPORT_NOTE_MAX_LENGTH) {
+      throw new HttpsError(
+        "invalid-argument",
+        `note는 ${CHALLENGE_REPORT_NOTE_MAX_LENGTH}자까지 입력할 수 있습니다.`,
+      );
     }
 
     const resolved = await resolveChallengeByTokenHash(hashToken(token));
