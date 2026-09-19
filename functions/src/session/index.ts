@@ -14,10 +14,12 @@ import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import {
+  CREATE_SESSION_WINDOW_MAX,
   MAX_SESSION_MS,
   MAX_USER_TURNS,
   MESSENGER_ESCALATION_MAX_USER_TURNS,
 } from "../shared/constants";
+import { isCreateSessionRateLimited } from "./rateLimit";
 import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, GEMINI_KEY_SECRETS } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
@@ -115,6 +117,33 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       .get();
     if (consentSnap.empty) {
       throw new HttpsError("failed-precondition", "훈련 참여 동의가 필요합니다.");
+    }
+
+    // §66.3 — createSession 롤링 윈도우(폭주 백스톱, G180 승계). ⛔ 위치가 설계다: 동의 게이트
+    // 뒤(동의 오류가 먼저 나와야 한다) · generateOpeningLine 앞(이 게이트의 존재 이유가 그 LLM
+    // 호출을 막는 것이다, challenge/index.ts:108-110과 동일 원칙) · 세션 문서 write 앞(거절된
+    // 시도가 창을 더럽히지 않는다).
+    const recentSnap = await db
+      .collection("sessions")
+      .where("uid", "==", request.auth.uid)
+      .orderBy("createdAt", "desc")
+      .limit(CREATE_SESSION_WINDOW_MAX + 1)
+      .get();
+    const nowMs = Date.now();
+    if (
+      isCreateSessionRateLimited({
+        // ⛔ createdAt 부재 문서는 세지 않는다 — "값이 없으니 기본이겠지"를 판정 근거로 삼지 않는다
+        // (§15.0-4 승계, §66.3).
+        recentCreatedAtMs: recentSnap.docs
+          .map((d) => (d.get("createdAt") as FirebaseFirestore.Timestamp | undefined)?.toMillis())
+          .filter((t): t is number => typeof t === "number"),
+        nowMs,
+      })
+    ) {
+      throw new HttpsError(
+        "resource-exhausted",
+        "짧은 시간에 너무 많이 시작했습니다. 잠시 후 다시 시도해 주세요.",
+      );
     }
 
     // roleplay 모듈(트랙 A 내부 계약, Architecture.md §4)에 오프닝 사기범 대사 생성을 위임한다.

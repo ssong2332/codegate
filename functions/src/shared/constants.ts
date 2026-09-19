@@ -15,6 +15,13 @@
 export const MAX_USER_TURNS = 100;
 export const MAX_SESSION_MS = 60 * 60 * 1000; // 60분
 
+/** §66.2 — sendMessage `userText` 1턴 상한. 거절(절단 아님, AC-039). rewind 500 < 이 값 < 전사 2000. */
+export const SEND_MESSAGE_MAX_LENGTH = 1000;
+
+/** §66.3 — createSession 롤링 윈도우. ⛔ 쿼터 보호가 아니라 폭주 백스톱이다(G180 승계). */
+export const CREATE_SESSION_WINDOW_MS = 10 * 60 * 1000; // 10분
+export const CREATE_SESSION_WINDOW_MAX = 6;
+
 // 합성 표식(AC-022, DECISIONS #7).
 export const SYNTHETIC_LABEL = "AI 훈련용 합성" as const;
 
