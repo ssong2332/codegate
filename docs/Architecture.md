@@ -15053,3 +15053,371 @@ try {
 > ⚠️ **버전 갭**: 헤더 **PRD v1.7.1 · UX 1.13**(`Architecture.md:5`) ↔ 현행 **PRD v1.14**(`docs/PRD.md:4`) **· UX 1.26**(`docs/UX.md:10`) ⇒ **PRD 7건 · UX 13건**(§64 시점과 **동일 — 그 사이 벌어지지 않았다**). ⛔ 헤더 무전진(T131 계열 별건) — 이 절의 판정은 **소스 직접 열람**이라 갭이 오염시키지 않는다.
 > **UX 추적성**: 신규 Screen ID·Flow ID·라우트·컴포넌트 **0건**. 닿는 기존 항목은 **UX-031/UF-011**(확인 시도 무력화 — 이 지표가 세는 것은 그 플로우의 *"빈 약속"* 종결 상태다) · **UX-008**(리포트 — ⛔ **화면에 아무것도 추가하지 않는다**, 산출물은 서버 로그뿐)이며 **신규 매핑 0건**이다.
 > `docs/UpdateRequests.md` `open` 행 중 **architect 소관 0건**(직접 열람 재확인 — `open`은 #1 `{{planner}}` 템플릿 · #11·#12 `planner` · #14 `User`).
+
+## 66. (보안 검토 1건 + 자체 감사 1건) ⓐ `sendMessage`/`createSession` **남용 상한 부재**(High) / ⓑ D-6 빈 약속 지표가 **"거절"을 "약속"으로 셀 수 있다**(중간) — ⭐⭐ **ⓑ의 처방은 lookbehind가 아니다: 한국어 부정은 매치 *뒤*에 오고, 신고된 사례 4형태 중 lookbehind가 막는 것은 0건이다** / ⭐⭐ **ⓐ의 상한은 쿼터를 지키지 못한다 — 1인 1세션도 일일 캡의 큰 비중이라, 이 게이트가 막는 것은 *연타·다중 탭·루프*뿐이다(G180 승계)** / ⭐⭐ **`createSession`에만 걸면 형제 슬롯이 남는다 — `consentChallenge`는 *거절·재개 경로에서도* 오프닝 LLM을 태운다** — architect 판정
+
+### 66.0 판정 요지 (⛔ 금지 먼저 — 다른 모든 판단보다 우선)
+
+1. ⛔ **이 절은 소스를 0줄 고쳤다.** 설계·값·정본 확정뿐이고 **구현은 implementer 후속**이다(§66.10). `functions/**`·`src/**` 전건 **읽기만** 했다.
+2. ⛔ **§0~§65 원문은 한 글자도 고치지 않았다** — 이 절은 **위에 얹는다**. §65.3의 패턴 정본과 §65.5의 로그 페이로드 표는 **폐기가 아니라 각각 "부정 필터 1층 추가"·"필드 1건 추가"로 갱신**된다(§66.8). §65.0의 금지 6항(런타임 차단 금지 · 전사 경로 선취 금지 · Firestore 필드 0건 · 빈도 주장 금지)은 **전건 그대로 승계**된다.
+3. ⛔ **ⓐ는 쿼터 문제의 해결이 아니다**(**G180 승계** — §37.9 (a)). 일일 캡 20 · 1회차 = 1 + N호출(§33 실측, `README.md:181-182`·`:200-201`)이라 **정상 사용자 몇 명이면 그날 캡이 찬다.** 이 게이트가 실제로 막는 것은 **한 사람의 초 단위 폭주**(연타·다중 탭·클라 루프)뿐이다. ⛔ *"쿼터 소진을 막았다"* 로 보고하지 말 것.
+4. ⛔ **uid 키는 의도적 공격을 막지 못한다.** 메인 흐름은 Google 계정(`src/app/(auth)/login/page.tsx:52`)이라 재인증 비용이 있지만, **익명 경로가 둘 존재한다**(`src/app/challenge/join/page.tsx:118` · `src/lib/auth/devSignIn.ts:45`) ⇒ 익명 uid는 1초에 새로 딸 수 있다. **App Check는 이 저장소에 없다**(§44.2 3 실측 — 전수 grep 0건). ⇒ 이 상한은 **실수·폭주 방어**이고 **공격 방어가 아니다.**
+5. ⛔ **ⓑ는 새 배포로 나가는 패치다**(§66.9). 스키마·응답 계약·화면 **0건 변경**(로그 전용). ⛔ 그러나 **같은 이름의 필드가 패치 전/후로 다른 규칙으로 계산된다** ⇒ 집계 시 반드시 갈라야 하며, **가르는 판별자를 추측에 맡기지 않는다**(§66.8 (3) — 새 필드의 존재 자체가 시기 표식이다).
+6. ⛔ **ⓑ의 오차 방향이 바뀐다.** §65.3은 *"이 지표의 오차는 과소 계상 방향"* 이라고 적었는데, ⓑ는 **과다 계상 통로**가 하나 있었다는 신고다. 이번 필터는 그것을 닫으면서 **과소 계상을 새로 3형태 만든다**(§66.7 (4)) — ⛔ 그 사실을 `negatedPromiseTurns`로 **관측 가능하게 만든 것**이 이 설계의 값이지, *"이제 정확하다"* 가 아니다.
+7. ⚠️ **실측 0건인 것을 구분해 둔다**: ⓑ는 **정규식 구조상의 이론적 위험**이고 **라이브 오탐 관측 0건**이다(인계 고지와 동일). ⓐ의 폭주도 **관측 0건**이다 — 근거는 *"상한이 없다"* 는 구조 사실뿐이다.
+
+### 66.1 착수 시 실측 (⛔ 지우지 말 것 — 인계 정정 3건 포함)
+
+| # | 항목 | 실측 | 판정 |
+|---|---|---|---|
+| **1** | 인계가 지목한 줄번호 | ⭕ **전건 일치**: `roleplay/index.ts:57-60`(`userText` 빈 값 검사만) · `session/index.ts:55-77`(콜러블 머리~필수값 검증) · `report/emptyPromiseMetric.ts:14-19`(`CONNECT_PROMISE_PATTERNS`) | ⭐ 인계 정확 — 재확인 완료 |
+| **2** | ⭐⭐ **§65.1 2(*"D-1/D-2가 아직 트리에 없다"*)가 스테일이다** | ⛔ **둘 다 이제 트리에 있다**: `promptAssembly.ts:266`은 **새 D-1 문면**(*"도구 결과가 돌아오기 전에는 연결해 주겠다거나 확인해 주겠다는 말을 하지 않는다"*) · `scenarios/verifyIntercept.ts:219-220`은 **새 D-2 문면**(§64.5 정본, 바이트 게이트 `scenarios/__tests__/verifyIntercept.test.ts:1326-1341`이 고정) | ⭐⭐ **ⓑ의 위험이 커졌다** — 신고가 지목한 거절 문면이 **지금 실제로 모델에 실린다** |
+| **3** | ⭐⭐ **D-1 문면 자신도 P1에 걸린다**(신고가 지목하지 않은 두 번째 통로) | `VERIFY_OFFER_LINE_TOOL_DRIVEN`(`promptAssembly.ts:266`)의 **금지문**에 *"**연결해 주겠다**거나 **확인해 주겠다**는 말을 하지 않는다"* 가 있다 ⇒ `/연결\s*해?\s*(드리\|드릴\|주겠\|줄게)/`·`/확인\s*해?\s*(…\|주겠\|…)/` **양쪽 매치** | ⭐ **오탐 통로는 2개**(D-2 거절 지시 + D-1 금지문) — §66.7의 창 길이가 이 사실로 정해진다 |
+| **4** | 기존 남용 방지 선례 **3종** | ⓐ `REWIND_ANSWER_MAX_LENGTH=500` + `REWIND_ATTEMPT_LIMIT=50`(`rewind/judge.ts:19-21`, 집행 `rewind/index.ts:68-73`·`:96-100`) ⓑ `CHALLENGE_FREE_ACTIVE_CAP=3`(`shared/constants.ts:38`, 집행 `challenge/index.ts:108-126`) ⓒ ⭐ **실시간 전사 경로엔 이미 상한이 둘 있다** — `MAX_TURNS=200`·`MAX_TEXT_LEN=2000`(`realtime/submitTranscript.ts:49-51`, 집행 `:67-68`·`:109`) | ⭐⭐ **ⓒ가 값 판정을 지배한다** — *"발화 1건의 천장"* 을 이 저장소가 이미 **2000**으로 정해 두었다 |
+| **5** | `sessions` uid+createdAt 복합 인덱스 | ⭕ **실재한다** — `firestore.indexes.json:3-10`(`uid` ASC + `createdAt` DESC). 선례 쿼리도 있다(`challenge/index.ts:138-143`, 주석 `:135-137`이 *"신규 복합 인덱스를 추가하지 않기 위해"* 라고 적는다) | ⭐⭐ **§66.3 (a) 채택의 결정적 사유 — 인덱스 델타 0건** |
+| **6** | `sessions` uid+status 인덱스 | ⛔ **없다**(`firestore.indexes.json` 전문 열람 — `sessions` 항목은 1건뿐) | ⛔ **"동시 활성 세션 수 상한" 후보의 비용 1** |
+| **7** | ⭐ **세션은 신뢰성 있게 닫히지 않는다** | `status:"active"`는 `endSession`이 불려야 `"ended"`가 된다(`session/index.ts:277-281`). §65.8 4 ⓑ가 이미 *"탭을 닫아 `endSession`이 안 불린 경우"* 를 명시 | ⛔⛔ **"동시 활성 세션 수 상한" 후보의 비용 2 — 도달 불가 상태로 사용자를 *영구* 잠근다** ⇒ 기각 사유 |
+| **8** | LLM을 태우는 콜러블 **5곳** | `sendMessage` · `createSession` · `consentChallenge` · `judgeRewindAnswer` · `createRealtimeCall`(§44.3 1행). 이 중 **상한이 이미 있는 것은 `judgeRewindAnswer` 1곳뿐**(50/리포트) | ⭐ **형제 슬롯 전수** — §66.5가 `consentChallenge`를 다룬다 |
+| **9** | ⭐⭐ **`consentChallenge`는 거절·재개 경로에서도 오프닝을 태운다** | `generateOpeningLine`이 **트랜잭션 밖 · 판정 전**에 있다(`challenge/userAccess.ts:134-137`) — 그 뒤 `decideConsentGate`가 `reject`면 throw(`:160-162`), `resume`이면 **생성한 오프닝을 버리고** `{sessionId}`만 반환한다(`:213-215`) | ⭐⭐ **신고 범위 밖의 남용면 1건 — 같은 토큰 N회 호출 = LLM N회.** §66.5 |
+| **10** | 사전 세션 문서(`createVoiceClone`)도 `sessions`에 남는가 | ⭕ — `uid`·`createdAt`·`status:"created"`로 write(`voice/index.ts:73-88`) | ⭐ **창 계수 대상에 포함된다**(의도적 — 클론 1회도 자원을 태운다). `createSession`이 그 id를 채택하면 **문서는 1개**라 이중 계상 0 |
+| **11** | `docs/UpdateRequests.md` architect 소관 `open` | ⛔ **0건**(직접 열람 — `open`은 #1 템플릿 · #14 `User` · #18 `planner`) | — |
+| **12** | base | `.git/HEAD` = `ref: refs/heads/main` → `.git/refs/heads/main` = **`6589f60b2a7bedec8d578aec5c4a76952abdd6d3`**(세션 스냅샷 `6589f60`과 **일치** — T174 구현·배포 반영본) | ⭐ **§65의 base(`3b4ea10`)보다 4커밋 앞** — D-6 구현(`a13eaf4`)이 그 사이에 들어왔다 |
+
+### 66.2 ⓐ-1 ⭐⭐ `sendMessage` 길이 상한 — **`SEND_MESSAGE_MAX_LENGTH = 1000`** (지시받은 질문 1의 답)
+
+**판정표 (⛔ 이 표 밖의 케이스는 임의 판단하지 말 것)**
+
+| 축 | `judgeRewindAnswer` | ⭐ **`sendMessage`(신규)** | `submitRealtimeTranscript` |
+|---|---|---|---|
+| 입력 주체 | 사람이 타이핑 | **사람이 타이핑** | 기계(STT 전사) |
+| 1건의 성격 | 한 순간에 대한 **회고 1문장** | **역할극 발화 1턴** | 통화 전사 1조각 |
+| 초과 시 | **거절**(`invalid-argument`) | ⭐ **거절**(`invalid-argument`) | **절단**(`slice`) |
+| 상한 | **500**(`rewind/judge.ts:19`) | ⭐ **1000** | **2000**(`realtime/submitTranscript.ts:51`) |
+| 근거 | API.md 계약 | **아래 3줄** | 폭주 입력 방지(그 파일 주석 `:49`) |
+
+**값 1000의 근거 3줄 (⛔ 지어낸 값이 아니다)**
+
+| # | 근거 |
+|---|---|
+| **하한** | ⭐ **500은 낮다** — 인계가 적은 대로 역할극 대화는 rewind의 *"한 문장 회고"* 보다 길다. 참가자가 사기범에게 따지거나 상황을 설명하는 **여러 문장 1턴**이 정상이다 |
+| **상한** | ⭐⭐ **이 저장소는 *발화 1건의 천장*을 이미 2000으로 정해 두었다**(`submitTranscript.ts:51`) ⇒ **그 위로 가지 않는다**(같은 것에 더 큰 두 값을 두지 않는다) |
+| **그 사이에서 1000인 이유** | 한국어 1000자 ≈ **음성 3~4분 분량의 1턴**이다 ⇒ **정상 대화에서 도달하지 않는다**(`MAX_USER_TURNS=100`이 *"사실상 걸리지 않는 백스톱"* 인 것과 같은 성격 — `shared/constants.ts:10-16`). 동시에 **전사(기계 생성, 문장 경계 없이 뭉칠 수 있다)보다 낮은 천장**이 타이핑 입력에 맞다 |
+
+**⛔ 절단이 아니라 거절인 이유**: 타이핑 입력을 조용히 잘라 보내면 참가자는 **자기가 보낸 것과 다른 문장으로 훈련**하게 된다 — **AC-039 "조용한 실패 금지"** 위반이며, `rewind`가 같은 판단을 이미 내렸다(`rewind/index.ts:68-73`). 전사 경로의 `slice`는 **기계 입력이라 사용자가 인지할 주체가 없다**는 점에서 다르다.
+
+**정본 (⛔ implementer는 이 형태를 그대로 옮긴다 — 문면·에러코드 임의 변경 금지)**
+
+```ts
+// functions/src/shared/constants.ts — MAX_USER_TURNS 계열 아래에 추가
+/** §66.2 — sendMessage `userText` 1턴 상한. 거절(절단 아님, AC-039). rewind 500 < 이 값 < 전사 2000. */
+export const SEND_MESSAGE_MAX_LENGTH = 1000;
+
+// functions/src/roleplay/index.ts — 기존 `:58-60` 빈 값 검사 **바로 뒤**, `const db = getFirestore();`(`:62`) **앞**
+if (userText.length > SEND_MESSAGE_MAX_LENGTH) {
+  throw new HttpsError(
+    "invalid-argument",
+    `메시지는 ${SEND_MESSAGE_MAX_LENGTH}자까지 보낼 수 있습니다.`,
+  );
+}
+```
+
+⛔ **위치가 설계다.** 이 블록은 **반드시 `getFirestore()`·`sessionRef.get()` 앞**이다 — 뒤에 두면 *"거절되는 요청도 read를 태운다"* 가 되고, `rewind`가 같은 순서를 이미 쓴다(길이 검사 `:68-73` → Firestore `:75-77`). ⛔ **`userText.trim().length`가 아니라 `userText.length`** — `rewind:68`과 바이트 동형이며, 공백 패딩으로 상한을 넘겨 보내는 형태를 먼저 막는다.
+
+### 66.3 ⓐ-2 ⭐⭐ `createSession` 호출 빈도 — **건다. 방식은 "최근 10분 내 6회 초과 거부"** (지시받은 질문 2의 답)
+
+**후보 판정표**
+
+| 후보 | 판정 | 근거 |
+|---|---|---|
+| **(a) 롤링 윈도우 — 최근 N분 내 M회 초과 시 `resource-exhausted`** | ⭐⭐ **채택** | ⓐ **신규 인덱스 0건** — `sessions.where("uid","==",uid).orderBy("createdAt","desc")`가 이미 있는 인덱스에 그대로 얹힌다(`firestore.indexes.json:3-10`, 선례 `challenge/index.ts:138-143`) ⓑ **자기 치유** — 시간이 지나면 저절로 풀린다(운영 개입 0) ⓒ **Firestore 필드·컬렉션 0건 증가**(세는 대상이 이미 존재하는 세션 문서다) ⓓ read **7건**(= 상한+1)으로 상한이 잡힌다 |
+| (b) 동시 활성 세션 수 상한(`status=="active"` 카운트) | ⛔ **기각** | ⓐ⭐⭐ **도달 불가 상태로 사용자를 영구 잠근다** — 탭을 닫으면 `endSession`이 안 불려 세션이 `active`로 남는다(§66.1 7). 3번 그러면 그 계정은 **다시는 훈련을 시작할 수 없다** ⓑ `uid+status` **신규 복합 인덱스**가 필요하다(§66.1 6) ⓒ 만료 개념이 없어 청소 기계(`onSchedule`)를 부른다 — §44가 기각한 방향 |
+| (c) (a)+(b) 병행 | ⛔ **기각** | (b)의 치명적 비용이 그대로 딸려 온다. (a)가 **같은 목적을 0 인덱스·0 필드로 준다** ⇒ 대가 0인 후보가 있으면 대가 있는 후보는 자동 기각(§40 선례) |
+| (d) 걸지 않는다 | ⛔ **기각** | §44.2 2가 이미 *"인증된 1인이 태울 수 있는 양에 **구조적 상한이 없다**"* 고 적어 두었다(당시 *"범위 밖 — 참고"* 로 강등). 보안 검토가 같은 자리를 **High**로 다시 짚었다 ⇒ 강등 사유(*"유료 전환으로 해소"*)는 **일일 캡 20이 살아 있는 동안에는 성립하지 않는다** |
+
+**확정값과 그 근거 (⛔ 임의값 아님)**
+
+| 값 | 확정 | 근거 |
+|---|---|---|
+| 창 | **10분** | 폭주(연타·다중 탭·루프)는 **초~분 단위**로 일어난다. 10분이면 정상 사용자가 한 세션을 끝내고 다음을 고르는 시간과 같은 자릿수라 **정상 흐름과 폭주가 분리된다** |
+| 상한 | **6회** | ⭐ **정상 최대 추정의 위**: 시나리오 탐색·이탈 3~4회 + 난이도 바꿔 재시작 1~2회 = **최대 6** (§66.4 표). ⭐ **예산 경계와도 맞물린다**: 6세션 × 평균 2.9호출/회차(§33 실측 26호출/9회차) ≈ **17호출** ≒ **일일 캡 20** ⇒ *"10분 만에 하루치를 태우는 것"* 이 정확히 이 경계다 |
+| 에러 | **`resource-exhausted`** | `challenge/index.ts:122-125`·`rewind/index.ts:99`와 **같은 코드** — 이 저장소에서 자원 상한의 단일 표현이다 |
+
+**정본**
+
+```ts
+// functions/src/shared/constants.ts — CHALLENGE_FREE_ACTIVE_CAP 계열 아래에 추가
+/** §66.3 — createSession 롤링 윈도우. ⛔ 쿼터 보호가 아니라 폭주 백스톱이다(G180 승계). */
+export const CREATE_SESSION_WINDOW_MS = 10 * 60 * 1000; // 10분
+export const CREATE_SESSION_WINDOW_MAX = 6;
+
+// functions/src/session/rateLimit.ts (신규 · 순수 함수 — ⛔ firebase-admin/functions import 금지)
+export function isCreateSessionRateLimited(input: {
+  /** 이 uid의 최근 세션 문서 createdAt(ms). 순서 무관. 호출부가 Firestore에서 읽어 넘긴다. */
+  recentCreatedAtMs: readonly number[];
+  nowMs: number;
+}): boolean {
+  const cutoff = input.nowMs - CREATE_SESSION_WINDOW_MS;
+  const inWindow = input.recentCreatedAtMs.filter((t) => t > cutoff).length;
+  return inWindow >= CREATE_SESSION_WINDOW_MAX;
+}
+
+// functions/src/session/index.ts — 동의 게이트(`:109-118`) **뒤**, generateOpeningLine(`:127`) **앞**
+const recentSnap = await db
+  .collection("sessions")
+  .where("uid", "==", request.auth.uid)
+  .orderBy("createdAt", "desc")
+  .limit(CREATE_SESSION_WINDOW_MAX + 1)
+  .get();
+const nowMs = Date.now();
+if (
+  isCreateSessionRateLimited({
+    recentCreatedAtMs: recentSnap.docs
+      .map((d) => (d.get("createdAt") as FirebaseFirestore.Timestamp | undefined)?.toMillis())
+      .filter((t): t is number => typeof t === "number"),
+    nowMs,
+  })
+) {
+  throw new HttpsError(
+    "resource-exhausted",
+    "짧은 시간에 너무 많이 시작했습니다. 잠시 후 다시 시도해 주세요.",
+  );
+}
+```
+
+⛔ **위치가 설계다 — 세 가지가 이 순서를 정한다.** ① **동의 게이트 뒤**: 동의 미획득은 남용이 아니라 흐름 오류라 그 메시지가 먼저 나와야 한다. ② ⭐⭐ **`generateOpeningLine` 앞** — 이 게이트의 **존재 이유가 그 호출을 막는 것**이다. 뒤에 두면 거절되는 요청도 **LLM 1호출을 이미 태운 뒤**다(`challenge/index.ts:108-110`이 같은 원칙을 명문화: *"값비싼 클론 검증보다 먼저 막아 실패를 빠르게 반환한다"*). ③ **세션 문서 write 앞** — 거절된 시도가 창을 더럽히지 않는다.
+⛔ **`createdAt` 부재 문서는 세지 않는다**(위 `filter`) — *"값이 없으니 기본이겠지"* 를 판정 근거로 삼지 않는다(§15.0-4 승계).
+
+### 66.4 ⓐ-3 ⭐ 정상 흐름 무해성 — **전수 판정** (지시받은 질문 3의 답)
+
+| 정상 흐름 | 창 10분 안에 만드는 세션 문서 수 | 판정 |
+|---|---|---|
+| **여러 시나리오를 연달아 체험** | 1세션 = 대화 수 턴 + 리포트 열람 ⇒ **10분에 1~3회**가 현실적 상한 | ⭕ **무해**(상한 6의 절반) |
+| **시나리오를 골랐다가 되돌아 나오기(탐색)** | 이탈 1회당 문서 1개 ⇒ 3~4회 | ⭕ **무해**(경계까지 여유 2) |
+| **난이도를 바꿔 같은 시나리오 재시작** | +1~2회 | ⚠️ **탐색과 겹치면 6에 닿을 수 있다** — 닿으면 **10분 뒤 자동 해제**되고 메시지가 그 사실을 말한다(조용한 실패 0). ⛔ 이 경계가 좁다고 판단되면 값만 올리면 된다(코드 변경 0 — 상수 2개) |
+| **2인 챌린지 — 사용자1(발신)** | 챌린지 생성은 `createChallenge` 경로라 **`createSession`을 부르지 않는다**. 활성 3개 상한도 이미 있다(`challenge/index.ts:121`) | ⭕ **영향 0** |
+| **2인 챌린지 — 사용자2(수신·체험)** | 체험 세션은 **`consentChallenge`가 만든다**(`challenge/userAccess.ts:170`) — `createSession`을 **거치지 않는다** | ⭕ **영향 0**(⭐ 그래서 §66.5가 따로 필요하다) |
+| **본인 목소리 녹음 후 시작** | `createVoiceClone`이 만든 pending 문서를 `createSession`이 **채택**한다(`session/index.ts:137-157`) ⇒ **문서 1개** | ⭕ **이중 계상 0** |
+| **중도 이탈 후 복귀** | 챌린지 재개는 `resume`이라 새 문서 0개. 자기 훈련은 새 세션 1개 | ⭕ **무해** |
+| **실시간 통화 중 재연결** | `createRealtimeCall`은 세션을 만들지 않는다 | ⭕ **영향 0** |
+
+⛔ **막지 못하는 것(정직하게)**: 익명 재인증으로 uid를 갈아 끼우면 창이 초기화된다(§66.0 4). **이 게이트는 그 공격을 막으라고 만든 것이 아니다.**
+
+### 66.5 ⓐ-4 ⭐⭐ 형제 슬롯 — `consentChallenge`의 **버려지는 오프닝 호출** (신고 범위 밖 · architect 발견)
+
+**사실**: `generateOpeningLine`(`challenge/userAccess.ts:134-137`)이 `decideConsentGate` 판정(`:150-158`) **앞**에 있다 ⇒ **거절(`:160-162`)·재개(`:213-215`) 경로에서도 LLM 1호출이 이미 나갔고, 그 산출물은 버려진다.** 같은 토큰으로 N번 호출하면 **LLM N회**다(링크는 3일 유효이며 공유되는 값이다).
+
+**처방 판정표**
+
+| 후보 | 판정 | 근거 |
+|---|---|---|
+| **(A) 값싼 사전 게이트를 `generateOpeningLine` 앞에 둔다** | ⭐⭐ **채택** | ⓐ **판정 로직을 새로 만들지 않는다** — `decideConsentGate`(순수 함수)와 `findExperienceSession`(`:44-53`)을 **그대로 재사용**한다 ⓑ 트랜잭션은 **여전히 권위자**다(레이스 안전성 무변경) — 사전 게이트는 **단축만** 한다 ⓒ **응답 계약 0건 변경**: 거절 메시지는 같은 순수 함수가 만들고, 재개 응답은 오늘도 `{sessionId}` 하나뿐이다(`:213-215`) ⓓ 추가 read 2건(챌린지 문서 1 + 체험 세션 1) ≪ LLM 1호출 |
+| (B) `consentChallenge`에 uid 롤링 윈도우 | ⛔ **기각** | 이 경로의 uid는 **익명**이다(`challenge/join/page.tsx:118`) ⇒ **키가 무력하다**(재인증 1초). 막는 것 0건 + 정상 사용자만 걸린다 |
+| (C) 챌린지 문서에 소비 카운터 필드 | ⛔ **기각** | **Firestore 스키마 델타**가 붙고(`docs/Database.md` 갱신) 쓰기가 1건 늘어난다 — (A)가 **필드 0건으로 같은 것을 준다** |
+| (D) 그대로 둔다 | ⛔ **기각** | ⓐ에서 상한을 걸고 여기는 비워 두면 **남용면이 형제 슬롯으로 이동할 뿐**이다(G-형제슬롯 원칙) |
+
+**정본**
+
+```ts
+// functions/src/challenge/userAccess.ts — `resolved` 확보(`:103`) 뒤, generateOpeningLine(`:134`) **앞**
+// ⛔ 이 블록은 권위자가 아니다 — 아래 트랜잭션(`:142`)이 최종 판정을 그대로 다시 한다.
+//    여기서 하는 일은 "어차피 create가 아닌 호출"에서 LLM 1회를 **태우지 않는 것**뿐이다(§66.5).
+const preChallengeSnap = await db.collection("challenges").doc(resolved.challengeId).get();
+const preChallenge = preChallengeSnap.data() as ChallengeDoc | undefined;
+if (preChallenge) {
+  const preSession = await findExperienceSession(db, resolved.challengeId);
+  const pre = decideConsentGate({
+    linkExpired: preChallenge.linkExpiresAt.toMillis() <= Date.now(),
+    retentionExpired: preChallenge.retentionDeleteAt.toMillis() <= Date.now(),
+    status: preChallenge.status,
+    existingSessionUid: preSession?.uid ?? null,
+    callerUid,
+  });
+  if (pre.action === "reject") {
+    throw new HttpsError("failed-precondition", pre.message);
+  }
+  if (pre.action === "resume") {
+    return { sessionId: (preSession as SessionDoc).sessionId };
+  }
+}
+```
+
+⛔ **`preChallenge`가 없으면 아무것도 하지 않는다**(기존 경로로 떨어진다) — 사전 게이트가 **새로운 실패 사유를 만들지 않는다**는 것이 이 블록의 불변식이다.
+⚠️ **범위 고지**: 이 항은 **인계된 2건에 포함되지 않았다.** 오케스트레이터가 범위를 줄이려면 **§66.5만 떼어내면 된다**(§66.10 커밋 ②가 그것 하나다). ⇒ **OQ-A81**.
+
+### 66.6 ⓑ-1 ⭐⭐ 방식 판정 — **정규식 내부가 아니라 "매치 후 주변 창 검사"** (지시받은 질문 1의 답)
+
+| 후보 | 판정 | 근거 |
+|---|---|---|
+| (A) P1/P2에 **negative lookbehind** 삽입 | ⛔⛔ **기각 — 신고된 사례를 하나도 막지 못한다** | ⭐⭐ **한국어의 부정은 후치다.** 신고가 지목한 형태와 그 사촌 전부에서 부정어가 **매치 뒤**에 온다: *"연결해 드릴 **단계가 아니다**"* · *"연결해 드릴 **수 없습니다**"* · *"연결해 드리**지 않는다**"* · *"연결해 드리기 **어렵습니다**"*. lookbehind가 잡는 것은 *"**못** 연결해 드릴…"* 계열 하나뿐이다 |
+| (B) P1/P2에 **negative lookahead** 삽입 | ⛔ **기각** | 부정 어휘 목록을 **패턴 4벌 × 항목 N개**로 중복 삽입해야 한다 ⇒ 목록을 한 곳에서 관리할 수 없고, §65.3이 *"바이트 그대로 옮긴다"* 고 고정한 **패턴 정본의 가독성이 파괴**된다 |
+| **(C) 매치 후 주변 창을 보는 순수 헬퍼** | ⭐⭐ **채택** | ⓐ 부정 어휘 목록이 **한 곳**에 있고 **P1·P2에 같은 규칙**으로 걸린다 ⓑ ⭐ **§65.3의 패턴 정본을 한 글자도 고치지 않는다**(트립와이어로 그것을 고정한다 — G412) ⓒ §65.9 **순수성 유지**(신규 import 0건 — 같은 파일 안의 모듈 상수·헬퍼뿐) ⓓ 헬퍼 단독으로 **진리표 테스트**가 가능하다 |
+| (D) 서버 거절 문면 상수를 import해 비교 | ⛔ **기각** | `scenarios/verifyIntercept.ts` 전체(카탈로그)를 끌어와 **순수 모듈의 의존 표면이 커진다**. 게다가 §64.0 2가 *"이 문면이 또 지면 층을 내린다"* 고 적었으므로 **그 상수는 또 바뀐다** ⇒ 바이트 의존 판정은 조용히 무력화된다(§65.3이 이미 같은 이유로 기각한 형태) |
+
+### 66.7 ⓑ-2 ⭐⭐ 부정 표현 정본과 창 규칙 (지시받은 질문 2의 답 — **§65.3을 갱신한다**)
+
+**(1) 정본 — ⛔ implementer는 이 블록을 바이트 그대로 옮긴다**
+
+```ts
+/**
+ * §66.7 — 부정 문맥 배제. ⛔ **§65.3의 P1/P2 패턴은 한 글자도 고치지 않는다**(G412가 고정).
+ * 이 층은 매치 **주변**만 본다.
+ *
+ * ⛔ 왜 뒤를 보는가: 한국어의 부정은 후치다("…드릴 수 없다" · "…드릴 단계가 아니다").
+ * ⛔ 왜 "지 마세요" 류(금지)는 넣지 않는가: 그것은 **상대에게 하는 말**이라 약속과 공존한다
+ *    ("연결해 드릴게요 걱정하지 마세요"). 여기 목록은 **불가능·부인**만이다.
+ */
+const NEG_CLAUSE_BOUNDARY = /[.!?…。、,\n\r]/;
+const NEG_SUFFIX_WINDOW = 20;
+const NEG_PREFIX_WINDOW = 6;
+
+/** 후치 부정 — 매치 **뒤** 같은 절에서 찾는다. */
+const NEGATION_AFTER = /아니|아닙|아냐|없|어렵|어려워|어려우|못|않|곤란|불가|안\s*되|안\s*돼|안\s*됩/;
+
+/** 전치 부정(짧은 부정) — 매치 **바로 앞**에 토큰으로 붙어 있을 때만. ⛔ "안내"의 "안"에 걸리지
+ *  않도록 `\s*$` 앵커를 반드시 유지할 것. */
+const NEGATION_BEFORE = /(?:^|[\s,.!?"'([])(?:못|안)\s*$/;
+
+/** ⛔ export한다 — G411이 이 함수 단독으로 진리표를 친다. */
+export function isNegatedPromiseMatch(text: string, start: number, end: number): boolean {
+  const after = text.slice(end, end + NEG_SUFFIX_WINDOW).split(NEG_CLAUSE_BOUNDARY)[0];
+  const beforeParts = text.slice(Math.max(0, start - NEG_PREFIX_WINDOW), start).split(NEG_CLAUSE_BOUNDARY);
+  const before = beforeParts[beforeParts.length - 1];
+  return NEGATION_AFTER.test(after) || NEGATION_BEFORE.test(before);
+}
+```
+
+**(2) 스캔 루프의 교체 — ⛔ `.test()`로는 구현할 수 없다**
+
+`emptyPromiseMetric.ts:68-83`의 루프는 `p.test(turn.textMasked)`라 **매치 위치를 모른다.** 위치가 필요하므로 **모든 매치를 순회**해야 하고, 한 턴에 매치가 둘일 때 *"앞의 것은 거절, 뒤의 것은 약속"* 이 성립하므로 **하나라도 살아남으면 그 턴을 센다.**
+
+```ts
+/** 한 패턴의 **모든** 매치 중 부정 문맥이 아닌 것이 1건이라도 있으면 true. */
+function hasSurvivingMatch(patterns: readonly RegExp[], text: string): boolean {
+  for (const p of patterns) {
+    // ⛔ 정본 배열에 /g를 붙이지 말 것(lastIndex 상태 오염) — 여기서 복제본을 만든다.
+    for (const m of text.matchAll(new RegExp(p.source, "g"))) {
+      const start = m.index ?? 0;
+      if (!isNegatedPromiseMatch(text, start, start + m[0].length)) return true;
+    }
+  }
+  return false;
+}
+```
+
+**(3) 커버 대조 — ⛔ "될 것이다"가 아니라 오프셋을 세어 확인했다**
+
+| # | 발화 | 매치 | 부정어 위치(매치 끝 기준) | 판정 |
+|---|---|---|---|---|
+| 1 | *"아직 확인 부서로 연결해 **드릴** 단계가 아닙니다"*(D-2 패러프레이즈 — **신고된 형태**) | `연결해 드릴` | `아닙` @ **+5** | ⭕ 배제 |
+| 2 | *"연결해 **드릴** 단계는 아직 아니에요"* | `연결해 드릴` | `아니` @ **+8** | ⭕ 배제 |
+| 3 | *"연결해 **드릴** 수는 없습니다"* | `연결해 드릴` | `없` @ **+4** | ⭕ 배제 |
+| 4 | *"연결해 **드리**기 어렵습니다"* | `연결해 드리` | `어렵` @ **+2** | ⭕ 배제 |
+| 5 | *"연결해 **드리**지 못합니다"* | `연결해 드리` | `못` @ **+2** | ⭕ 배제 |
+| 6 | *"연결하겠다는 말씀은 드릴 수 없습니다"* | `연결하겠` | `없` @ **+12** | ⭕ 배제 |
+| 7 | *"연결해 **주겠**다는 말을 아직 하지 않았다면"*(D-2 지시문 누출) | `연결해 주겠` | `않` @ **+12** | ⭕ 배제 |
+| 8 | *"…연결해 **주겠**다거나 **확인해 주겠**다는 말을 하지 않는다"*(D-1 금지문 누출) | P1 `연결해 주겠` / P2 `확인해 주겠` | P1: `않` @ **+19** · P2: `않` @ **+9** | ⭕ 둘 다 배제(**창 20의 근거**) |
+| 9 | *"못 연결해 **드릴** 것 같습니다"* | `연결해 드릴` | `못` **앞 +3** | ⭕ 배제(전치) |
+| 10 | *"잠시만요, 확인 부서를 연결해 **드리**겠습니다"*(**G405 오염 샘플**) | `연결해 드리` | 없음 | ⭕ **계상 유지** |
+| 11 | *"바로 연결**하겠**습니다"*(라이브 L-2) | `연결하겠` | 없음 | ⭕ **계상 유지** |
+| 12 | *"제가 여신확인창구로 바로 **넘겨 드리**겠습니다"*(카탈로그) | `넘겨 드리` | 없음 | ⭕ **계상 유지** |
+| 13 | *"연결해 **드리**겠습니다, 문제 없습니다"* | `연결해 드리` | `없`이 **쉼표 뒤** | ⭕ **계상 유지**(절 경계가 지킨다 — 쉼표를 경계에 넣은 이유) |
+| 14 | *"연결해 **드릴**게요 걱정하지 마세요"* | `연결해 드릴` | `마세`는 목록에 **없다** | ⭕ **계상 유지**(금지형 제외 규칙) |
+
+⇒ ⭐⭐ **기존 게이트 G405·G406·G407은 하나도 깨지지 않는다**(#10~#12가 G405 ⓐⓒ의 입력 전건, #13·#14는 신규 역검증). ⛔ implementer는 **G405가 초록인 것을 이 패치의 완료 조건에 포함**할 것.
+
+**(4) ⛔ 이 필터가 새로 만드는 과소 계상 3형태 (지우지 말 것)**
+
+| # | 형태 | 예 |
+|---|---|---|
+| ⓐ | 약속 뒤 **같은 절 20자 안**에 무관한 부정어가 오는 경우 | *"연결해 드리겠습니다 조금만 기다리시면 문제없이 됩니다"*(`없` @ +19) |
+| ⓑ | 약속 앞에 `못`/`안`이 **다른 뜻으로** 붙는 경우 | (희귀 — 토큰 앵커가 대부분 막는다) |
+| ⓒ | 약속과 거절이 **한 절 안에서 동시에** 나오는 자기모순 발화 | *"연결해 드릴 수는 없지만 연결해 드릴게요"* ⇒ 뒤 매치가 살아 **계상된다**(⭐ 이 경우는 오히려 옳다) |
+
+⇒ ⛔ **그래서 `negatedPromiseTurns`를 로그에 싣는다**(§66.8). **필터가 얼마나 먹었는지를 보지 않으면 과소 계상이 조용해진다.**
+
+### 66.8 ⓑ-3 ⭐ §65.3 / §65.5 갱신 (⛔ 원문 무수정 — **위에 얹는다**)
+
+| 대상 | 종전(§65) | ⭐ 이 절의 갱신 |
+|---|---|---|
+| **§65.3 패턴 정본** | P1 4개 · P2 1개 — *"어미 축 하나만 넓혔다"* | ⛔ **그대로 둔다(바이트 무변경).** 대신 **매치 후 부정 필터 1층**이 위에 붙는다(§66.7). ⛔ §65.3의 경고(*"패턴을 사후에 조용히 늘리지 말 것 — 늘리면 전후 수치가 비교 불가"*)는 **좁히는 방향에도 그대로 적용**되므로, 이 절이 **시점과 판별자를 남긴다**(아래 (3)) |
+| **§65.5 로그 페이로드** | 필드 10개 | ⭐ **`negatedPromiseTurns`(number) 1개 추가** — 매치가 1건 이상 있었으나 **전부 부정 문맥으로 배제된 턴 수**. ⛔ 헤드라인 아님. ⛔ **`emptyPromise`와 함께 읽지 않으면 의미 없다**(`emptyPromiseWide`와 같은 취급 — §65.2 부수 판정) |
+| **§65.8 해석 규칙** | 과소 3 · 과다 2 | ⭐ **과다 계상 방향에서 "거절 발화 오탐"이 빠지고**, **과소 계상 방향에 §66.7 (4) 3형태가 추가**된다 |
+
+**(3) ⭐⭐ 패치 전/후를 가르는 판별자 — 배포 시각을 추측하지 않는다**
+
+§65.8 2는 D-1 전/후를 *"로그 타임스탬프 vs 배포 시각"* 으로 갈랐고, ⛔ *"배포 시각을 모르면 구분하지 말 것"* 이라고 적었다. **이번에는 그럴 필요가 없다** — **`negatedPromiseTurns` 필드의 존재 자체가 시기 표식**이다.
+
+| 라인 | 뜻 |
+|---|---|
+| `negatedPromiseTurns` **부재** | **T174 원본 규칙**(부정 필터 없음) — 거절 오탐이 섞여 있을 수 있다 |
+| `negatedPromiseTurns` **존재** | **§66 패치 후 규칙** |
+
+⛔ **두 시기의 `emptyPromise` 수치를 하나로 합산하지 말 것.**
+
+### 66.9 ⓑ-4 ⭐ 배포 성격 (지시받은 질문 3의 답)
+
+| 축 | 값 | 근거 |
+|---|---|---|
+| 성격 | ⭐ **새 배포로 나가는 패치**(T174 = `a13eaf4` 배포분의 후속) | 라이브에 이미 나간 코드의 **판정 규칙만** 바꾼다 |
+| Firestore 스키마 | **0건** | 지표는 어디에도 저장되지 않는다(§65.4 (a)) |
+| 응답 계약(`docs/API.md`) | **0건** | 산출물은 `logger.info` 1줄뿐 |
+| `firestore.rules` | **0줄** | — |
+| 클라(`src/**`) | **0줄** | — |
+| 화면 | **0건** | UX-008에 아무것도 추가하지 않는다(§65.13 승계) |
+| 되돌리는 비용 | 헬퍼·상수 삭제 + 루프를 `.test()`로 원복 | **백필 0 · 마이그레이션 0 · 남는 데이터 0** |
+
+⛔ **ⓐ와 ⓑ를 같은 커밋에 넣지 말 것** — ⓐ는 **콜러블 계약을 넓히는 변경**(새 에러)이고 ⓑ는 **로그 전용 패치**다. 되돌리는 단위가 다르다.
+
+### 66.10 ⛔ implementer 인계 (**커밋 3개** — ⛔ 순서 고정)
+
+⛔ **무접촉 전건**: `functions/src/realtime/submitTranscript.ts` · `functions/src/guardrails/**` · `functions/src/roleplay/promptAssembly.ts` · `functions/src/scenarios/**` · `functions/src/report/generateReportCore.ts`(⭐ **ⓑ는 순수 모듈 안에서 끝난다 — 호출부 무변경**) · `firestore.rules` · `firestore.indexes.json` · `docs/**`.
+
+| 커밋 | 내용 | 파일 | 게이트 |
+|---|---|---|---|
+| **①** | **ⓐ-1 + ⓐ-2** — `SEND_MESSAGE_MAX_LENGTH`·`CREATE_SESSION_WINDOW_*` 추가(`shared/constants.ts`) · 신규 `session/rateLimit.ts`(순수) · `roleplay/index.ts` **1블록**(`:60` 뒤) · `session/index.ts` **1블록**(`:118` 뒤) | 수정 3 · 신규 1(+테스트 2) | **G408 · G409 · G410** |
+| **②** | **ⓐ-4 형제 슬롯**(⚠️ **OQ-A81 — 범위 확대 승인 대상. 미승인이면 이 커밋만 빼면 된다**) — `challenge/userAccess.ts` `:134` 앞 1블록 | 수정 1(+테스트 1) | **G414** |
+| **③** | **ⓑ 부정 필터** — `report/emptyPromiseMetric.ts` 안에서: 상수 4개 + `isNegatedPromiseMatch` + `hasSurvivingMatch` 추가, `:68-83` 루프 교체, `EmptyPromiseMetric`에 `negatedPromiseTurns` 추가 | 수정 1(+테스트 1) | **G411 · G412 · G413** |
+
+⛔ **`emptyPromiseMetric.ts`의 `CONNECT_PROMISE_PATTERNS`·`VERIFY_PROMISE_PATTERNS` 리터럴(`:14-19`·`:25-27`)은 한 글자도 고치지 않는다** — G412가 그것을 바이트로 고정한다.
+⛔ **`computeEmptyPromiseMetric`의 시그니처는 바뀌지 않는다**(입력 3필드 동일) — 반환 타입에 필드 1개가 **추가**될 뿐이라 호출부(`generateReportCore.ts`의 `...emptyPromise` 스프레드)가 **자동으로 새 필드를 싣는다** ⇒ **호출부 0줄**.
+
+### 66.11 신규 게이트 (**G408 ~ G414**)
+
+| 게이트 | 내용 | 어디에 |
+|---|---|---|
+| **G408** | ⭐ **길이 상한 + 순서.** ⓐ 1001자 `userText` ⇒ `invalid-argument` ⓑ 1000자 ⇒ 통과 ⓒ ⭐ **소스 텍스트 검사**: `roleplay/index.ts`에서 `SEND_MESSAGE_MAX_LENGTH` 비교가 `getFirestore()`보다 **앞에 있다**(거절되는 요청이 read·LLM을 태우지 않는다는 것을 문자열 위치로 고정) | `roleplay/__tests__/` |
+| **G409** | ⭐⭐ **롤링 윈도우 진리표(순수 함수 단독).** ⓐ 창 안 6건 ⇒ `true` ⓑ 창 안 5건 + **창 밖 10건** ⇒ `false`(⭐ **역검증 — 오래된 문서가 사람을 가두지 않는다**) ⓒ 정확히 `nowMs - WINDOW`인 문서는 **세지 않는다**(`>` 경계) ⓓ 빈 배열 ⇒ `false` | `session/__tests__/rateLimit.test.ts` |
+| **G410** | ⭐⭐ **호출 순서.** 소스 텍스트 검사 — `session/index.ts`에서 `isCreateSessionRateLimited` 호출이 **`generateOpeningLine`보다 앞**이다. ⛔ 실패 메시지에 처방을 담을 것: *"뒤에 두면 거절되는 요청이 LLM 1호출을 이미 태운다(§66.3)"* | `session/__tests__/` |
+| **G411** | ⭐⭐ **부정 필터 진리표.** §66.7 (3) 표의 **14행을 그대로** 단언한다 — #1~#9는 **미계상**, #10~#14는 **계상**. ⛔ #10(G405 오염 샘플)·#11·#12가 **여전히 `emptyPromise === true`** 인 것을 같은 파일에서 확인할 것(기존 게이트 무회귀) | `report/__tests__/emptyPromiseMetric.test.ts` |
+| **G412** | ⭐ **정본 트립와이어.** `CONNECT_PROMISE_PATTERNS.map(p => p.source)`가 §65.3 정본 4개와 **바이트 일치**, `VERIFY_PROMISE_PATTERNS`도 동일. 추가로 **모든 패턴의 `flags`가 빈 문자열**이다(⛔ `/g`가 붙으면 `lastIndex` 오염으로 **턴마다 다른 답**이 나온다). 실패 메시지: *"§65.3 정본은 §66이 고치지 않았다 — 패턴을 바꾸려면 새 절을 얹어라"* | 동상 |
+| **G413** | ⭐ **필드 + 순수성.** ⓐ 반환 객체에 `negatedPromiseTurns`가 있고, 전부 배제된 턴이 1건이면 **`1`**이다 ⓑ 같은 입력에서 `connectPromiseTurns === 0`이다 ⓒ **모듈이 `firebase-admin`·`firebase-functions`를 import하지 않는다**(§65.10 G407 ⓓ와 같은 형태로 재확인) | 동상 |
+| **G414** | ⭐ **버려지는 오프닝 0회**(커밋 ② 동반). `reject`·`resume` 입력에서 `generateOpeningLine` 스텁이 **0회** 호출된다. ⓑ `resume` 응답이 종전과 **바이트 동일**(`{ sessionId }`) | `challenge/__tests__/` |
+
+### 66.12 ⛔ 닫지 못한 것 (자기 고지 — 지우지 말 것)
+
+1. ⛔ **architect는 라이브·셸·테스트·빌드·로그 조회를 0회 했다.** 이 절의 모든 판정은 **소스·설정 파일 직접 열람 + `.git` 판독**이다. ⚠️ **ⓑ의 오탐은 여전히 관측 0건**(이론적 위험) — 이번 패치는 *"오탐이 일어났다"* 가 아니라 *"일어날 수 있는 구조였다"* 에 대한 것이다.
+2. ⛔ **ⓐ는 쿼터를 지키지 못한다**(§66.0 3, **G180**). 또한 **익명 재인증 우회를 막지 못한다**(§66.0 4). 그 문을 닫으려면 **App Check**가 필요하고 그것은 이 저장소에 **존재하지 않는다**(§44.2 3) ⇒ **이번 범위 밖.**
+3. ⚠️ **턴당 1000자 × 최대 100턴 = 이력 10만 자**가 매 턴 프롬프트에 실린다(`roleplay/index.ts:141` — 이력 전량 재전송). ⛔ **이 곱은 이번 패스가 닫지 않는다** ⇒ **OQ-A80**.
+4. ⚠️ **클라(`src/**`) 사전 차단 0줄.** `rewind`는 *"클라도 같은 값으로 사전 차단한다(P-5)"* 인데 `sendMessage`는 이번에 **서버만** 막는다 ⇒ 1000자를 넘기면 **전송 후 에러**로 알게 된다. 입력창 문면은 **ux-design 소관** ⇒ **OQ-A79**.
+5. ⚠️ **`submitRealtimeTranscript`의 상한 적정성은 재판정하지 않았다**(`MAX_TURNS=200`·`MAX_TEXT_LEN=2000`) — 그 파일은 **§60/OQ-A74 소유**라 선취 금지(§65.0 2 승계).
+6. ⚠️ **부정 어휘 목록의 완전성 미보증** — 모델 자유 발화의 어휘 공간은 전수로 덮을 수 없다(§65.3의 같은 고지가 이 층에도 성립). ⛔ **사후에 조용히 늘리지 말 것** — 늘리면 §66.8 (3)처럼 **시기 판별자를 함께 남겨야** 한다.
+7. ⚠️ **`docs/API.md` 델타 2건이 미수행이다**(User 지시로 무편집): ⓐ `sendMessage` **Request**에 `userText ≤1000자` · **Errors**에 `invalid-argument` 추가(현재 `:72`는 `failed-precondition`·`deadline-exceeded`·`resource-exhausted`·`internal`만 적는다) ⓑ `createSession` **Errors**에 `resource-exhausted` 추가. ⛔ **커밋 ① 병합 시점부터 API.md가 거짓이 된다** ⇒ 문서 부채 **2건**(§64.9 5의 `docs/API.md:431` 건과 **별건**).
+8. ⚠️ **`docs/Tasks.md` 담당 행 미신설**(planner 소관) — `docs/UpdateRequests.md` #18이 이미 §61~§65 담당 행 부재를 `open`으로 걸어 두었고, **이 절(§66)도 같은 상태**로 태어난다.
+9. ⚠️ **§65.1 2가 스테일임을 §66.1 2가 정정했으나, §65 원문은 고치지 않았다**(원문 보존 관례) — 독자는 **§66.1 2를 먼저 읽어야** 한다.
+10. ⚠️ **버전 갭**: 헤더 **PRD v1.7.1 · UX 1.13**(`Architecture.md:5`) ↔ 현행 **PRD v1.14**(`docs/PRD.md:4`) ⇒ **§65 시점과 동일 — 그 사이 벌어지지 않았다.** ⛔ 헤더 무전진(T131 계열 별건). 이 절의 판정은 **소스 직접 열람**이라 갭이 오염시키지 않는다.
+
+### 66.13 신규 OQ
+
+| OQ | 질문 | 소유 | 선행 조건 |
+|---|---|---|---|
+| **OQ-A79** | `sendMessage` 1000자 상한을 **입력창에서 미리 막을 것인가**, 막는다면 문면은 무엇인가(글자 수 카운터 / 초과 시 전송 비활성). ⛔ **값은 서버가 정본**이고(§66.2) 이 OQ는 **표현 층뿐**이다 | **ux-design** | 커밋 ① 병합 |
+| **OQ-A80** | **이력 누적 상한** — 턴당 1000자 × 최대 100턴이 매 턴 프롬프트에 전량 실린다(`roleplay/index.ts:141`). 이력 윈도잉(최근 N턴만 전송)을 도입할 것인가. ⛔ **architect 권고 = 지금 정하지 않는다** — 평균 턴 수·토큰 실측이 0건이고, 윈도잉은 **인격 유지·수법 진행에 직접 영향**을 준다(§17 난이도 조립과 얽힌다) ⇒ **실측 후 별건** | **architect / User** | 실사용 세션의 턴 수 분포 |
+| **OQ-A81** | **§66.5(형제 슬롯 `consentChallenge`)를 이번 작업 범위에 포함할 것인가.** ⛔ **인계된 2건에 포함되지 않았다** — architect가 형제 슬롯 대조에서 발견했다. ⭐ **권고 = 포함**(커밋 ②는 독립이라 빼기도 쉽다). 근거: ⓐ에서만 막으면 **남용면이 그대로 옆으로 이동**한다 | **User / 오케스트레이터** | 없음 |
+
+### 66.14 이 패스의 편집 범위 (⛔ 정본)
+
+**편집 파일 2개뿐**: `docs/Architecture.md`(**이 §66 신설 — §0~§65 한 줄도 수정하지 않았다**) · `docs/DECISIONS.md`(**#105 1행 추가**).
+⛔ **`src/**`·`functions/**` 0줄**(전부 **읽기만** 했다 — `functions/src/roleplay/index.ts` · `functions/src/session/index.ts` · `functions/src/rewind/index.ts` · `functions/src/rewind/judge.ts` · `functions/src/report/emptyPromiseMetric.ts` · `functions/src/scenarios/verifyIntercept.ts` · `functions/src/roleplay/promptAssembly.ts` · `functions/src/challenge/index.ts` · `functions/src/challenge/userAccess.ts` · `functions/src/realtime/submitTranscript.ts` · `functions/src/shared/constants.ts` · `functions/src/voice/index.ts` · `firestore.rules` · `firestore.indexes.json` · `src/lib/api/sendMessage.ts`) · ⛔ `docs/PRD.md`·`docs/UX.md`·`docs/API.md`·`docs/Database.md`·`docs/Tasks.md`·`docs/CHANGELOG.md`·`docs/UpdateRequests.md`·`README.md`·`CLAUDE.md` **무편집** · ⛔ **ADR 0건 · 게이트 7건 신설(G408~G414) · OQ 3건 신설(OQ-A79~A81)** · ⛔ **브랜치·커밋·push 0건**(오케스트레이터 소관).
+> **번호 실측(착수 시점, `docs/**` 전수 grep)**: `^## ` 최대 **65**(`^## 6[6-9]\.`·`^## 7[0-9]\.` **0히트**) · 게이트 최대 **G407**(`G4(0[89]|[1-9][0-9])` **0히트**) · OQ 최대 **OQ-A78**(`OQ-A(79|[89][0-9])` **0히트**) · DECISIONS 최대 **#104**(`DECISIONS.md:114`) · `docs/adr/` 최대 **0015** ⇒ **§66 · G408~G414 · OQ-A79~A81 · #105**. ⛔ 예약 0건 — 동시 패스가 있으면 **병합 순서로 확정**된다(치환 스코프: `## 66.` 헤딩 이후 + `docs/DECISIONS.md` #105 행뿐. ⛔ **전역 치환 금지**).
+> **base**: `.git/HEAD` = `ref: refs/heads/main` → `.git/refs/heads/main` = **`6589f60b2a7bedec8d578aec5c4a76952abdd6d3`**(세션 스냅샷 `6589f60`과 **일치** — T174 구현·배포 반영본 `a13eaf4` 이후).
+> **UX 추적성**: 신규 Screen ID·Flow ID·라우트·컴포넌트 **0건**. 닿는 기존 항목 — **UX-006**(통화/대화 입력: 길이 상한의 표현 층은 **OQ-A79로 ux-design 인계**, 이 절은 화면을 만들지 않는다) · **UX-005/UF-001**(시나리오 선택→세션 시작: 빈도 상한 거절 메시지가 이 경로에서 보인다) · **UX-021/UF-004**(2인 챌린지 동의: §66.5는 **응답 계약·문면을 바꾸지 않는다**) · **UX-031/UF-011**(확인 시도 무력화: ⓑ가 세는 대상, §65.13 승계) · **UX-008**(리포트: ⛔ **화면 변경 0건**).
