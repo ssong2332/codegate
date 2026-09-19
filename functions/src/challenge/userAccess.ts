@@ -117,6 +117,30 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
       scenarioChannel === "messenger" ? PUBLIC_SCENARIOS[scenarioId]?.surface : undefined;
 
     const callerUid = request.auth.uid;
+
+    // §66.5 — 형제 슬롯 사전 게이트(OQ-A81, User 승인). ⛔ 이 블록은 권위자가 아니다 — 아래
+    // 트랜잭션이 최종 판정을 그대로 다시 한다. 여기서 하는 일은 "어차피 create가 아닌 호출"에서
+    // LLM 1회(generateOpeningLine)를 **태우지 않는 것**뿐이다. 판정 로직은 새로 만들지 않고
+    // decideConsentGate(순수 함수)·findExperienceSession을 그대로 재사용한다.
+    const preChallengeSnap = await db.collection("challenges").doc(resolved.challengeId).get();
+    const preChallenge = preChallengeSnap.data() as ChallengeDoc | undefined;
+    if (preChallenge) {
+      const preSession = await findExperienceSession(db, resolved.challengeId);
+      const pre = decideConsentGate({
+        linkExpired: preChallenge.linkExpiresAt.toMillis() <= Date.now(),
+        retentionExpired: preChallenge.retentionDeleteAt.toMillis() <= Date.now(),
+        status: preChallenge.status,
+        existingSessionUid: preSession?.uid ?? null,
+        callerUid,
+      });
+      if (pre.action === "reject") {
+        throw new HttpsError("failed-precondition", pre.message);
+      }
+      if (pre.action === "resume") {
+        return { sessionId: (preSession as SessionDoc).sessionId };
+      }
+    }
+
     // reviewer 리뷰 Major(2026-07-24): 동시에 같은 아직-pending 링크를 두 명의 익명 uid가 호출하면
     // (읽기→판정→쓰기가 트랜잭션 밖이었을 때) 둘 다 "create"로 판정돼 서로 다른 두 체험 세션이
     // 만들어질 수 있었다 — "누가 이 딥보이스 체험을 받는가"라는 이 기능의 핵심 안전 게이트라 T36의
