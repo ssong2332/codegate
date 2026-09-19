@@ -24,7 +24,7 @@ import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, GEMINI_KEY_SECRETS } 
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "./channelTransition";
-import type { MessageDoc, SessionDoc } from "../shared/types";
+import type { MessageDoc, MessengerSkin, MessengerSkinSource, SessionDoc } from "../shared/types";
 import type {
   CreateSessionRequest,
   CreateSessionResponse,
@@ -50,6 +50,22 @@ function readOptionalConfigString(param: { value: () => string }): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * 신고 항목 4 — `updateMessengerSkin`의 enum 런타임 검증(§60의 `turn.role` 신뢰 경계 판정과 동일
+ * 함정: 클라 TS 타입은 컴파일 시점 계약일 뿐, 실제로는 JSON 페이로드가 임의 문자열을 실어 나를 수
+ * 있다). 알 수 없는 값을 조용히 통과시키지 않는다 — verifyIntercept/index.ts의
+ * `readOfferStage`/`readTrigger`와 동일한 패턴(선례 재사용, architect 설계 불요).
+ */
+function readMessengerSkin(value: unknown): MessengerSkin {
+  if (value === "ios" || value === "samsung" || value === "default") return value;
+  throw new HttpsError("invalid-argument", "messengerSkin은 ios·samsung·default 중 하나여야 합니다.");
+}
+
+function readSkinSource(value: unknown): MessengerSkinSource {
+  if (value === "auto" || value === "manual" || value === "fallback") return value;
+  throw new HttpsError("invalid-argument", "skinSource는 auto·manual·fallback 중 하나여야 합니다.");
 }
 
 // GEMINI_API_KEY 선언(2026-07-24) — generateOpeningLine()이 getLlmClient()를 통해 실 Gemini로
@@ -331,10 +347,14 @@ export const updateMessengerSkin = onCall<
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
-  const { sessionId, messengerSkin, skinSource } = request.data ?? {};
-  if (!sessionId || !messengerSkin || !skinSource) {
+  const { sessionId } = request.data ?? {};
+  if (!sessionId || !request.data?.messengerSkin || !request.data?.skinSource) {
     throw new HttpsError("invalid-argument", "sessionId·messengerSkin·skinSource가 필요합니다.");
   }
+  // 신고 항목 4 — truthy 체크만으로는 임의 문자열("SAMSUNG" 대소문자 오탈자 등)이 조용히 통과해
+  // Firestore에 잘못된 값으로 저장될 수 있었다. enum 값인지 실제로 검증한다.
+  const messengerSkin = readMessengerSkin(request.data.messengerSkin);
+  const skinSource = readSkinSource(request.data.skinSource);
 
   const db = getFirestore();
   const sessionRef = db.collection("sessions").doc(sessionId);
