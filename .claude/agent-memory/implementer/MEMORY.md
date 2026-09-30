@@ -91,3 +91,4 @@
 - [§64 D-1/D-2 정본 문면 교체(순수 구현)](project_codegate_s64_d1_d2_verify_wording.md) — ⭐ "순수 구현"에서도 게이트 설계는 implementer 몫(G403/G404), 상수별 분리 포인터 갱신, 역검증으로 "죽은 게이트" 배제.
 - [T174 §65 D-6 빈 약속 지표](project_codegate_t174_empty_promise_metric.md) — ⭐ 금지어 grep이 자기 설명 주석에 걸리는 함정 재발(소스 주석까지 리터럴 회피), 관측 불가 호출부를 스텁+소스스캔 이중 증거로 닫음, "순수 구현"도 게이트 코드 자체는 implementer 몫.
 - [§66 남용상한 5건 결함](project_codegate_s66_abuse_hardening.md) — ⭐ 함수명 grep이 순서 판정용 소스스캔에서 시크릿선언 주석에 먼저 걸리는 새 변형(`await xxx(`로 좁혀야 함), architect 정본 코드블록 바이트 그대로 이식, PR #247(5커밋 1PR, 미등재 태스크).
+- [T147 Node 22 engines bump](project_codegate_t147_node22_runtime.md) — worktree dry-run needs 4-key placeholder functions/.env, 10s discovery timeout is intermittent (count consecutive), emulator mismatch text.

@@ -39,7 +39,7 @@ Cloud Functions 2nd gen / Firestore / Storage) + ElevenLabs + LLM(Claude|Gemini 
 > "배포"(5단계)는 **실제 배포/데모 준비 시점에만** 필요하다.
 
 ### 1. 사전 준비
-- Node.js 20+ (권장, `functions/package.json`의 `engines.node` 기준)
+- Node.js 22 — `functions/package.json`의 `engines.node`(배포 런타임)와 같은 메이저. 로컬 테스트는 루트 22.6+·functions 21+ 필요
 - `npm install -g firebase-tools` (또는 `npx firebase-tools` 사용) — 에뮬레이터 실행에 필요
 - Java(OpenJDK 11+) — Firestore/Storage 에뮬레이터 구동에 필요
 - Firebase 프로젝트는 **로컬 개발 단계에서는 불필요**(3단계 참조). 실 프로젝트는 배포/데모

@@ -19,7 +19,7 @@
     "postinstall": "node ../scripts/local-dep-guard.mjs --worktree || exit 0"
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "lib/index.js",
   "dependencies": {
@@ -28,6 +28,7 @@
     "firebase-functions": "^7.3.0"
   },
   "devDependencies": {
+    "@types/node": "^22",
     "eslint": "^9",
     "typescript": "^5",
     "typescript-eslint": "^8"
