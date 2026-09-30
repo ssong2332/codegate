@@ -10,6 +10,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { SMS_DECLINE_ALREADY, SMS_DECLINE_TOO_EARLY, findInCallSmsItem } from "../scenarios/inCallSms";
 import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import type { SessionDoc } from "../shared/types";
@@ -114,6 +115,7 @@ export const deliverInCallSms = onCall<
   const trigger = readTrigger(request.data?.trigger);
 
   const session = await loadOwnedSession(sessionId, request.auth.uid);
+  assertAnonymousChallengeScope(request.auth, session);
   if (session.status !== "active") {
     throw new HttpsError("failed-precondition", "이미 종료되었거나 활성 상태가 아닌 세션입니다.");
   }
@@ -197,6 +199,7 @@ export const recordInCallSmsEvent = onCall<
   }
 
   const session = await loadOwnedSession(sessionId, request.auth.uid);
+  assertAnonymousChallengeScope(request.auth, session);
   // §15.6 G20 — 종료된 세션의 기록은 애초에 받지 않는다. 리포트는 멱등 early-return이라
   // (`report/generateReportCore.ts`) 생성 **이후**에 성공한 write는 smsTimeline 스냅샷에 영영
   // 반영되지 않는다 — 조용히 성공을 돌려주면 "기록됐는데 어디에도 안 보이는" 상태가 남는다.

@@ -12,6 +12,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { findMockScreenItem } from "../scenarios/mockScreens";
 import type { MockScreenDoc, SessionDoc } from "../shared/types";
 import type { RecordMockScreenEventRequest, RecordMockScreenEventResponse } from "./types";
@@ -61,6 +62,7 @@ export const recordMockScreenEvent = onCall<
   }
 
   const session = await loadOwnedSession(sessionId, request.auth.uid);
+  assertAnonymousChallengeScope(request.auth, session);
   if (session.status !== "active") {
     logger.warn("종료된 세션의 모의 화면 이벤트 기록 거부(§15.6 G20 — 리포트 스냅샷 이후 write 방지)", {
       sessionId,

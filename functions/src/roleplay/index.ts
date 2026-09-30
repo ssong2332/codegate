@@ -8,6 +8,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { maskPII } from "../guardrails";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { triggerReportGeneration } from "../report";
@@ -77,6 +78,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     if (session.uid !== request.auth.uid) {
       throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
     }
+    assertAnonymousChallengeScope(request.auth, session);
     if (session.status !== "active") {
       throw new HttpsError("failed-precondition", "이미 종료되었거나 활성 상태가 아닌 세션입니다.");
     }

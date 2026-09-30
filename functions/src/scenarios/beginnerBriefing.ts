@@ -16,6 +16,7 @@
 // 실시간으로 "지금 이것이 사기 신호입니다"를 표시하는 경로는 만들지 않는다(D-6 유지) — 실시간 판정
 // 파이프라인 자체가 신설되지 않았다.
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { denyAnonymous } from "../shared/anonymousGate";
 import { SCENARIO_PROMPTS } from "./index";
 import { extractTacticLabel } from "./tacticFlavor";
 import type {
@@ -47,6 +48,7 @@ export const getBeginnerBriefing = onCall<
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
+  denyAnonymous(request.auth);
   const { scenarioId } = request.data ?? {};
   if (!scenarioId) {
     throw new HttpsError("invalid-argument", "scenarioId가 필요합니다.");

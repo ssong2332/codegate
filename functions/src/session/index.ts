@@ -9,6 +9,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { assertAnonymousChallengeScope, denyAnonymous } from "../shared/anonymousGate";
 import { generateOpeningLine } from "../roleplay";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
@@ -76,6 +77,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     }
+    denyAnonymous(request.auth);
     const {
       scenarioId,
       voiceId,
@@ -309,6 +311,7 @@ export const endSession = onCall<EndSessionRequest, Promise<EndSessionResponse>>
     if (session.uid !== request.auth.uid) {
       throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
     }
+    assertAnonymousChallengeScope(request.auth, session);
 
     // 멱등 처리(API.md endSession Errors 절: "이미 ended면 멱등 처리") — 이미 종료된 세션이면
     // status/endReason/endedAt을 재작성하지 않고 동일 응답만 반환한다. sendMessage의 한도 도달
@@ -366,6 +369,7 @@ export const updateMessengerSkin = onCall<
   if (session.uid !== request.auth.uid) {
     throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
   }
+  assertAnonymousChallengeScope(request.auth, session);
 
   await sessionRef.update({ messengerSkin, skinSource } satisfies Partial<SessionDoc>);
   return { messengerSkin, skinSource };
@@ -397,6 +401,7 @@ export const requestEscalation = onCall<
   if (session.uid !== request.auth.uid) {
     throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
   }
+  assertAnonymousChallengeScope(request.auth, session);
   if (session.status !== "active") {
     throw new HttpsError("failed-precondition", "이미 종료되었거나 활성 상태가 아닌 세션입니다.");
   }
@@ -449,6 +454,7 @@ export const requestReverseEscalation = onCall<
   if (session.uid !== request.auth.uid) {
     throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
   }
+  assertAnonymousChallengeScope(request.auth, session);
   if (session.status !== "active") {
     throw new HttpsError("failed-precondition", "이미 종료되었거나 활성 상태가 아닌 세션입니다.");
   }
