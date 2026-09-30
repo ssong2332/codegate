@@ -15421,3 +15421,182 @@ function hasSurvivingMatch(patterns: readonly RegExp[], text: string): boolean {
 > **번호 실측(착수 시점, `docs/**` 전수 grep)**: `^## ` 최대 **65**(`^## 6[6-9]\.`·`^## 7[0-9]\.` **0히트**) · 게이트 최대 **G407**(`G4(0[89]|[1-9][0-9])` **0히트**) · OQ 최대 **OQ-A78**(`OQ-A(79|[89][0-9])` **0히트**) · DECISIONS 최대 **#104**(`DECISIONS.md:114`) · `docs/adr/` 최대 **0015** ⇒ **§66 · G408~G414 · OQ-A79~A81 · #105**. ⛔ 예약 0건 — 동시 패스가 있으면 **병합 순서로 확정**된다(치환 스코프: `## 66.` 헤딩 이후 + `docs/DECISIONS.md` #105 행뿐. ⛔ **전역 치환 금지**).
 > **base**: `.git/HEAD` = `ref: refs/heads/main` → `.git/refs/heads/main` = **`6589f60b2a7bedec8d578aec5c4a76952abdd6d3`**(세션 스냅샷 `6589f60`과 **일치** — T174 구현·배포 반영본 `a13eaf4` 이후).
 > **UX 추적성**: 신규 Screen ID·Flow ID·라우트·컴포넌트 **0건**. 닿는 기존 항목 — **UX-006**(통화/대화 입력: 길이 상한의 표현 층은 **OQ-A79로 ux-design 인계**, 이 절은 화면을 만들지 않는다) · **UX-005/UF-001**(시나리오 선택→세션 시작: 빈도 상한 거절 메시지가 이 경로에서 보인다) · **UX-021/UF-004**(2인 챌린지 동의: §66.5는 **응답 계약·문면을 바꾸지 않는다**) · **UX-031/UF-011**(확인 시도 무력화: ⓑ가 세는 대상, §65.13 승계) · **UX-008**(리포트: ⛔ **화면 변경 0건**).
+
+## 67. (T147 — **Node.js 20 런타임 폐기 대응** · User가 2026-09-30에 **P0 승격**) 상향 목표 · 파급 범위 · T148 순서 · 배포 계획 — ⭐⭐ **목표는 Node 22다. 24가 1년 더 길지만, *로컬 테스트가 배포 런타임을 검증한다*는 성질을 환경 변경 없이 성립시키는 것은 22뿐이다** / ⭐⭐ **라이브는 기한 전인 지금도 이미 지원 범위 밖이다 — `firebase-admin` 14.x는 Node 20을 공식 제외했다(14.0.0)** / ⭐⭐ **로컬 테스트 수는 이 변경을 판별하지 못한다 — 테스트는 이미 Node 22.14에서 돌고 있었다. 판별 증거는 배포 후에만 나온다** / ⭐ **dry-run 1회차의 10초 타임아웃은 런타임 상향과 무관하다(로컬 discovery 단계)** — architect 판정
+
+### 67.0 판정 요지 (⛔ 금지 먼저 — 다른 모든 판단보다 우선)
+
+1. ⛔ **이 절은 소스·`package.json`·락파일을 0줄 고쳤다.** 설계·판정·계획뿐이며 **구현은 implementer 후속**(§67.7)이다.
+2. ⛔ **§0~§66 원문은 한 글자도 고치지 않았다** — 스테일 줄번호 인용 2곳(§67.1 12행)도 **원문 보존**, 정정은 이 절에만 적는다.
+3. ⛔ **`engines.node` 값은 반드시 맨 숫자 문자열 `"22"`다.** `">=22"`·`"^22"`·`"22.x"` 금지 — Firebase CLI는 `nodejs${engines.node}` 를 그대로 런타임 ID로 만들고 지원 목록에 없으면 **배포를 거부**한다(§67.1 7행).
+4. ⛔ **T147과 T148을 한 커밋·한 PR·한 배포로 묶지 않는다**(§67.6). **T147이 먼저**다.
+5. ⛔ **`functions/tsconfig.json`의 `target`(`es2020`)을 올리지 않는다.** `ES2022` 이상이면 `useDefineForClassFields` 기본값이 `true`로 바뀌어 **클래스 필드 초기화 의미가 달라진다** — 런타임 상향이 아니라 **출력 코드 변경**이고, 이 행의 "제품 동작 델타 0" 전제를 깬다.
+6. ⛔ **로컬 테스트 수 전/후 동일을 "런타임 상향이 검증됐다"로 보고하지 않는다**(§67.4 ⓐ). 그것은 **무회귀 확인**일 뿐이다. 상향의 증거는 **dry-run 경고 소멸 + 배포 후 `functions:list` + 라이브 스모크**(§67.8 E-2·E-6·E-7)뿐이다.
+7. ⛔ **dry-run이 10초 타임아웃으로 다시 실패해도 `FUNCTIONS_DISCOVERY_TIMEOUT`을 조용히 설정하지 않는다** — 우회이므로 **OQ-A83** 승인 대상이다. 같은 명령 **2회 실패 시 멈추고 보고**한다(전역 규칙 5).
+8. ⛔ **`firebase-admin` 상향(14.2.0 → 14.5.0)은 이 행 범위 밖이다**(T148 F항과 동일 — 런타임 22에서 14.2.0은 지원 범위 **안**이 된다).
+9. ⚠️ **architect는 셸·라이브·배포·테스트를 0회 실행했다.** 라이브·로컬 실행값은 전부 **오케스트레이터 실측 인용값**(2026-09-30, main `e71f114`)이다. 웹 문서는 WebFetch로 **직접** 확인했다(URL 병기).
+
+### 67.1 착수 시 실측 (⛔ 지우지 말 것)
+
+| # | 항목 | 값 | 출처 |
+|---|---|---|---|
+| **1** | Node 런타임 수명표 (Cloud Run functions) | **nodejs20**: 폐기 예고 **2026-04-30** · 폐기(decommission) **2026-10-30** · **nodejs22**: **2027-04-30** / **2027-10-31** (1st gen · Run functions 둘 다) · **nodejs24**: **2028-04-30** / **2028-10-31** (**Run functions만** — 1st gen 없음) · nodejs26: Preview, 날짜 없음. 페이지 *Last Updated 2026-09-24 UTC* | **직접 확인** — https://docs.cloud.google.com/functions/docs/runtime-support (구 URL `cloud.google.com/...`는 301로 이 주소로 간다) |
+| **2** | 폐기 전/후 의미 | 예고 기간: *"you can generally continue to create new workloads and update existing workloads"* · 폐기 후: *"you can no longer create new workloads or update existing workloads using the runtime... Workloads that continue to use a decommissioned runtime **may be disabled**."* ⇒ ⭐ **배포 불가만이 아니다 — 기존 함수가 비활성화될 수 있다** | 동상 |
+| **3** | Firebase 문서의 지원 목록 | *Node.js 22 · Node.js 20 · Node.js 18 (deprecated)* — **24는 이 페이지에 없다**. 설정: `package.json` `engines` 또는 `firebase.json` `"runtime"`(후자 우선). 상향 절차: *"Redeploy all functions"* | **직접 확인** — https://firebase.google.com/docs/functions/manage-functions |
+| **4** | Firebase CLI의 런타임 표 (`firebase-tools` main) | `nodejs20` GA 2026-04-30/2026-10-30 · `nodejs22` GA 2027-04-30/**2028-10-31** · `nodejs24` GA 2028-04-30/2028-10-31 ⇒ ⚠️ **nodejs22 폐기일이 GCP 표(2027-10-31)와 1년 어긋난다** — **정본은 GCP 표**다. ⇒ CLI 경고 시점을 다음 상향의 트리거로 믿지 말 것 | **직접 확인** — https://raw.githubusercontent.com/firebase/firebase-tools/main/src/deploy/functions/runtimes/supported/types.ts |
+| **5** | nodejs24 CLI 지원 도입 | PR #9475 *"feat: add node.js 24 runtime support with beta status"* — 2025-11-19 병합(이후 main에서 GA). ⚠️ **로컬 CLI 15.24.0에 GA로 들어 있는지는 미확인**(릴리스 번호가 PR에 없다) | **직접 확인** — https://github.com/firebase/firebase-tools/pull/9475 |
+| **6** | `firebase-admin` 14.0.0 (2026-06-08) | *"**Dropped support for Node.js 18 and 20.** You should use Node.js 22 or higher"* — 14.1.0(06-24)·14.2.0(07-16)·14.3.0(08-19)·14.4.0(09-10)·14.5.0(09-23). 24 언급 0건 | **직접 확인** — https://firebase.google.com/support/release-notes/admin/node |
+| **7** | CLI의 `engines` 해석 | `const runtime = \`nodejs${engines.node}\`; if (!supported.isRuntime(runtime)) throw ...` · `firebase.json` 런타임이 있으면 그것이 우선(`runtimeFromConfig \|\| getRuntimeChoiceFromPackageJson`) | **직접 확인** — `firebase-tools` main `src/deploy/functions/runtimes/node/parseRuntimeAndValidateSDK.ts` |
+| **8** | 런타임 결정 지점 | `functions/package.json:21-23` = `"engines": { "node": "20" }` **1곳** + ⭐ **`functions/package-lock.json:19-21`에 같은 값이 미러돼 있다**(락파일 v3 루트 `packages[""]` — 인계에 없던 **두 번째 편집 지점**). `firebase.json:14-21` functions 블록에 `runtime` 없음 | 직접 열람 |
+| **9** | 설치본 engines (락파일) | `firebase-admin` 14.2.0 = **`>=22`**(`package-lock.json:2252-2254`) · `firebase-functions` 7.3.0 = `>=18.0.0`(`:2275-2277`), peer `firebase-admin ^11‖^12‖^13‖^14`(`:2281`) · `@google/genai` 2.13.0 = `>=20.0.0`(`:409-411`) · `jwks-rsa` 4.1.0 = `^20.19.0‖^22.12.0‖>=23`(`:3188-3189`) · `typescript` 5.9.3 = `>=14.17`(`:4437-4439`). ⇒ **Node 22·24 모두 전건 만족**, Node 20은 **admin 1건 위반** | 직접 열람 |
+| **10** | `@types/node` | **직접 의존성 아님** — 설치본 **26.1.1**(`package-lock.json:750-758`). 끌어오는 쪽은 전부 `"*"` 또는 `">=13.7.0"`(`:656`·`:672`·`:681`·`:709`·`:735`·`:779`·`:796`·`:806`·`:817`·`:3753`) ⇒ ⚠️ **타입 검사는 오늘 Node 26 API 기준**이다(런타임 20과 6 메이저 차이) | 직접 열람 |
+| **11** | 로컬 Node | **v22.14.0**(오케스트레이터 실측) — 저장소 안 독립 증거: `scripts/local-dep-guard.mjs:37`(*"T130 실측(2026-07-28, npm 10.9.2 / node 22.14.0)"*) | 인용 + 직접 열람 |
+| **12** | ⚠️ 인계·원문 줄번호 정정 | `docs/Tasks.md` T147 B항의 `firebase.json` functions 블록 **`:12-19` → 현행 `:14-21`** · T148 C/D항의 `docs/Architecture.md` **`:8174`→`:8177` · `:8243`→`:8246` · `:8253-8254`→`:8256-8257` · `:8292`→`:8295`**(+3 이동, 4곳 열람 확인) · 원문 `docs/Architecture.md:2819`(*"`functions/package.json:19` engines"*)·`:3490`(*"`:19-21`"*) → 현행 **`:21-23`** | 직접 열람 — ⛔ 원문 무수정 |
+| **13** | 함수 수 · 이름 대조 | 소스 export **26개**(`functions/src/index.ts:8-54` — 콜러블 24 + 트리거 1 + 스케줄 1) · 원문 §44도 *"함수 26개 배포 성공"*(`Architecture.md:8978`, 오케스트레이터 인용) ↔ **라이브 26개 — 이름 대조 26/26 일치**(소스에만 0건 · 라이브에만 0건, 전부 `nodejs20` — **오케스트레이터 재실측 2026-09-30** `firebase functions:list`). ⚠️ **인계 정정**: 최초 인계값 *"라이브 25개"* 는 **오케스트레이터 계수 오류**였다(오케스트레이터 자기 정정) | ⭐ **불일치 없음** — §67.9 D-0은 **완료 상태**이며 배포 직전 **재대조만** 남는다 |
+| **14** | 1st gen 함수 | **0개** — `firebase-functions/v1` import **0건**, 전부 `firebase-functions/v2/*`(`functions/src/**` grep) ⇒ nodejs24("Run functions만")도 **자격상 가능** | 직접 grep |
+| **15** | 소스의 Node 버전 의존 API | 비테스트 소스에서 `navigator`·`new WebSocket`·`process.version`·`url.parse`·`new Buffer(` **0건**(`scenarios/mockScreens.ts:14`의 `navigator`는 **주석**). `globalThis.fetch` 치환은 **테스트 파일에만** 있다 | 직접 grep |
+| **16** | CI | `.github/**` **없음**, `.nvmrc`·`.node-version`·`.tool-versions` **없음** | Glob |
+| **17** | base | `.git/refs/heads/main` = **`e71f114e1888b062d8f77b317b571cf1f7f1aaf1`**(세션 스냅샷 `e71f114`과 일치) · 이 워크트리 HEAD = `refs/heads/worktree-agent-afc1c494a620aca40`(같은 커밋) · ⛔ **`docs/T147-node-runtime-upgrade` 브랜치는 실재하지 않는다**(`.git/refs/heads/docs/`에는 `T147-p0-promotion`만) | `.git` 직접 판독 |
+| **18** | 헤더 버전 갭 | `Architecture.md:5` **PRD v1.7.1 · UX 1.13** ↔ `docs/PRD.md:4` **v1.14** — §66과 동일(벌어지지 않음). T147은 **AC 신설 0건**(`docs/Tasks.md:557`)이라 이 절의 판정을 오염시키지 않는다 | 직접 열람 |
+
+### 67.2 ⭐⭐ 상향 목표 — **Node 22** (T147 C항 1의 답)
+
+| 기준 | Node 22 | Node 24 | 가중 |
+|---|---|---|---|
+| 폐기일(GCP 정본) | 2027-10-31 (**+13개월**) · 예고 2027-04-30 | 2028-10-31 (**+25개월**) | 24 우세 |
+| **로컬 = 배포 일치** | ⭐ **이미 성립** — 로컬 v22.14.0(§67.1 11) | ⛔ **깨진다** — 모든 개발자·에이전트 워크트리를 24로 올려야 성립. 그 순간 **루트(`npm test`·`npm run build`)도 24로 돈다** = T147 F항 범위 밖(프런트 런타임 정책) | ⭐⭐ **지배항** |
+| 테스트가 검증하는 런타임 | 배포 런타임과 **같은 메이저** | 로컬 22 유지 시 **다른 메이저**(검증 공백) | 22 |
+| 의존성 engines | 전건 만족(§67.1 9) | 전건 만족 | 동률 |
+| 문서 정합 | Firebase 문서·CLI·GCP **3곳 모두 명시** | Firebase 문서 **미기재**(§67.1 3) · CLI 15.24.0 포함 여부 **미확인**(§67.1 5) | 22 |
+| 1st gen 호환 | 가능 | 불가(오늘 1st gen 0개라 **현재 비용 0**) | 약함 |
+| 기한까지 여유 | 30일 — **검증 표면이 가장 작은 쪽**이 맞다 | 24 고유 동작 변화는 **이 패스가 조사하지 않았다**(⛔ 채택 시 architect 재판정 필요) | 22 |
+
+**판정: Node 22.** ⭐ 결정적 사유는 한 줄이다 — **"로컬에서 통과한 것이 배포에서도 통과한다"는 이 저장소 전 검증 체계의 전제(Verified Commands 표)가, 22에서는 환경 변경 없이 성립하고 24에서는 성립하지 않는다.** 30일 기한의 P0에 검증 공백을 새로 여는 선택은 하지 않는다.
+**대가(명시)**: **2027-04-30부터 dry-run에 폐기 예고 경고가 다시 뜨고, 2027-10-31이 다음 하드 기한**이다 ⇒ **22→24 후속 상향 행 등재를 planner에 인계**한다(§67.12). ⛔ 그 기한을 CLI 경고로 감지하려 하지 말 것 — CLI 표의 nodejs22 폐기일이 GCP보다 **1년 늦게** 적혀 있다(§67.1 4).
+⇒ **User 확인 대상: OQ-A82**(권고 22). 24를 택하면 §67.4·§67.7을 **architect가 다시 판정**한다(로컬 Node 고정·루트 파급이 새로 열린다).
+
+### 67.3 ⭐⭐ `firebase-admin` 14.2.0이 Node 20에서 돌고 있다는 것의 의미 (지시 5의 답)
+
+1. **사실**: 설치본 admin 14.2.0의 engines는 `>=22`(`package-lock.json:2252-2254`)이고, 14.0.0 릴리스 노트가 *"Dropped support for Node.js 18 and 20"* 을 **breaking change**로 선언했다(§67.1 6). 라이브 26개 함수는 전부 `nodejs20`(오케스트레이터 재실측 2026-09-30) ⇒ **라이브는 SDK 제작자가 지원하지 않는 조합에서 돌고 있다.**
+2. **위험의 모양(추정)**: 오늘 라이브가 동작한다는 것은 **실제로 탄 코드 경로가 Node 20에 없는 API를 부르지 않았다**는 뜻일 뿐이다. 안 탄 경로(예: 오류 처리 분기 — 14.0.0은 *"SDK-wide error handling"* 을 새로 짰다)에 22+ 전용 API가 있으면 **그 분기에 처음 도달하는 순간 라이브에서만 터진다.** 로컬 테스트는 22.14에서 돌기 때문에 **이 결함을 원리적으로 못 잡는다.** ⚠️ **실제로 그런 호출이 있는지는 확인하지 않았다** — 확인 방법: Cloud Build 배포 로그의 `npm` `EBADENGINE` 경고 유무(존재 확인용일 뿐 결함 확인은 아니다), 또는 admin 14.2.0 소스에서 22+ 전용 API grep.
+3. **판정에 주는 결과 3가지**:
+   - ⭐ **T147은 기한 대응이면서 현존 비지원 상태의 해소다** ⇒ **Node 22가 하한**이다(admin이 22 미만을 거부하므로 "20 유지"나 "18" 같은 선택지는 원래 없다).
+   - ⭐ **T147을 T148 뒤에 줄 세우지 않는다** — T148 판정(P-1 게이트)을 기다리는 동안 비지원 상태가 연장된다(§67.6).
+   - ⚠️ **롤백(22→20)은 "작동하던 상태로 복귀"이지 "안전한 상태로 복귀"가 아니다** — 비지원 조합으로 돌아간다(§67.9 R).
+
+### 67.4 파급 범위 전수표 (T147 C항 2의 답 — ⭐ **동작이 바뀌는 지점: 소스 0건**)
+
+⭐ **지배 사실 ⓐ**: 로컬 Node는 이미 v22.14.0이다 ⇒ `build`·`test`·`lint`·에뮬레이터는 **상향 전에도 Node 22에서 돌고 있었다.** 이 커밋이 바꾸는 것은 **Cloud Build·Cloud Run이 쓰는 런타임 한 가지뿐**이다.
+
+| 대상 | 근거 | 22로 바꾸면 | 처분 |
+|---|---|---|---|
+| `engines.node` | `functions/package.json:21-23` | 배포 런타임 `nodejs20`→`nodejs22` | ⭐ **변경**(`"22"` — §67.0 3) |
+| 락파일 루트 engines | `functions/package-lock.json:19-21` | `package.json`과 미러 — 안 고치면 **두 파일이 서로 다른 런타임을 말한다** | ⭐ **변경**(§67.7 C1 방법) |
+| tsconfig `target`/`lib` | `functions/tsconfig.json:10`(`es2020`) · `lib` 미지정(= target 기본) | 없음 — ES2020 출력은 22에서 그대로 돈다 | ⛔ **무변경**(§67.0 5) |
+| `module`/`moduleResolution` | `tsconfig.json:3`·`:14`(`commonjs`/`node`) | 없음 — 22.12+의 `require(esm)` 기본 활성은 **로컬 22.14가 이미 겪고 있다** | 무변경 |
+| `@types/node` | 직접 의존성 부재, 설치본 26.1.1(§67.1 10) | 런타임 영향 0. ⚠️ 단 **타입이 런타임보다 4메이저 앞서** Node 23~26 전용 API를 써도 컴파일이 통과한다(오늘은 6메이저) | ⭐ **권고 — 별 커밋 C2로 `"@types/node": "^22"` devDependency 추가**. 실패해도 C1은 단독 출하 가능 |
+| `node --test` 러너 | `functions/package.json:15`(`node --test lib/**/__tests__/*.test.js`) | 없음. ⚠️ 참고: `--test`의 **glob 해석은 Node 21.0.0에 semver-major로 들어왔다**(nodejs.org v21 release announce) — Windows `cmd.exe`는 `**`를 펼치지 않으므로 **이 스크립트는 로컬이 21+ 라는 전제 위에 서 있었다**(추정 — 확인: Node 20으로 같은 스크립트 실행 시 파일 미발견) | 무변경 |
+| 루트 러너 | `package.json:11`(`--experimental-strip-types`) — 22.6+ 전제(원문 `Architecture.md:3490`) | **범위 밖**(T147 F) — 로컬 Node를 안 바꾸므로 **영향 0** | 무변경 |
+| `functions/scripts/clean-lib.mjs` | `:25-27`(`node:fs`·`node:path`·`node:url`), `:41` `rmSync(recursive, force)` | 없음 — 로컬 Node에서만 돌고 로컬 Node 불변 | 무변경 |
+| `scripts/local-dep-guard.mjs` | `:44-47`(`execFileSync`·`readdirSync(withFileTypes)`) · 호출 `functions/package.json:19` postinstall · `.githooks/pre-commit:38-39` | 없음 — 동상. ⚠️ **C1이 락파일을 건드리므로 pre-commit 훅이 실제로 이 파일을 검사한다** — 오염(`file:..`) 0건이어야 통과 | 무변경(훅 통과가 C1 게이트) |
+| 에뮬레이터 | `functions/package.json:9`(`serve`) · `firebase.json:29-37` | 에뮬레이터는 **호스트 Node**로 함수를 돌린다 ⇒ 오늘은 engines 20 ↔ 호스트 22 **불일치 경고**(추정 — 문구는 착수 시 캡처), 상향 후 **일치** | 무변경(경고 소멸이 E-4 증거) |
+| 소스의 Node 버전 의존 | §67.1 15 — 0건 | 없음 | 무변경 |
+| 라이브러리 내부 동작(20→22) | `@google/genai`·`firebase-admin`·`firebase-functions`가 Node 21+의 `navigator` 전역 등으로 환경을 다르게 감지할 가능성 | ⚠️ **추정 — 로컬 22.14 테스트가 이미 이 조합을 탄다**. 테스트가 못 덮는 **라이브 LLM·Firestore 경로**는 §67.9 스모크로 덮는다 | 관측 |
+| 로컬 Node 고정(`.nvmrc` 등) | §67.1 16 — 없음 | — | ⛔ **추가하지 않는다** — ① 로컬이 이미 22라 고정할 대상이 현상 유지뿐 ② 개발 환경이 Windows이고 nvm-windows의 `.nvmrc` 지원은 **미확인**(추정: 미지원 — 확인: 사용 중인 Node 관리자 문서) ③ 저장소 루트에 두면 **루트 런타임 정책(F항 범위 밖)** 을 함께 정한다. ⇒ **대신 `README.md:42` 1줄을 사실로 고친다**(C1 동반) |
+| `README.md:42` | *"Node.js 20+ (권장, `functions/package.json`의 `engines.node` 기준)"* | ⛔ **상향 후 거짓** — 게다가 **오늘도 이미 부정확**(functions 테스트는 21+, 루트 테스트는 22.6+ 필요) | ⭐ **변경**(Documentation Maintenance 규칙) |
+| `firestore.indexes.json`·`firestore.rules`·`storage.rules` | — | **없음** | ⛔ **인덱스 영향 없음** |
+
+### 67.5 dry-run 10초 타임아웃 — 런타임 상향이 영향을 주는가 (지시 1 ⚠️의 답)
+
+1. **기전(직접 확인)**: 이 문구는 Firebase CLI의 **discovery 단계**에서 나온다 — `firebase-tools` `src/deploy/functions/runtimes/discovery/index.ts`: 기본 `timeout = 10_000 /* 10s to boot up */`, 환경변수 `FUNCTIONS_DISCOVERY_TIMEOUT`(초)로 덮어쓴다. Firebase 문서(https://firebase.google.com/docs/functions/tips — *Avoid deployment timeouts during initialization*)는 원인을 *"your function's global scope code is taking too long to execute during the deployment process"* 로 적고, 이 시간 창을 *"local deployment preparation"* 으로 부른다.
+2. ⭐ **판정: T147(런타임 상향)은 이 타임아웃에 영향을 주지 않는다.** discovery는 **배포자 PC에서** 사용자 코드를 적재해 매니페스트를 뽑는 단계이고, `engines.node`는 **Cloud Build에 넘기는 문자열**이다. discovery를 도는 Node는 로컬 v22.14.0이고 T147은 그것을 바꾸지 않는다. ⚠️ *"discovery가 PATH의 로컬 `node`로 돈다"* 는 **추정(강함)** — 확인: `firebase deploy --only functions --dry-run --debug` 출력의 spawn 줄.
+3. ⚠️ **T148(SDK 7.3.0→7.4.0)은 영향을 줄 수 있다** — 7.4.0 릴리스 노트에 *"Unify global manifest on globalThis for forward-compatible manifest extraction"* 이 있다(https://github.com/firebase/firebase-functions/releases). **매니페스트 추출 = 바로 이 discovery 단계**다 ⇒ T148의 완료 증거에 **dry-run 성공 + 소요 시간**을 넣으라고 인계한다(§67.12).
+4. **1회차 실패 원인**: ⚠️ **추정** — 첫 실행의 콜드 파일 캐시(Windows 실시간 검사가 `node_modules` 수천 파일을 처음 읽는 비용 등). 근거는 *"같은 명령 2회차 성공"* 하나뿐이고 소요 1분 14초에는 predeploy 빌드가 포함돼 적재 시간만 따로 알 수 없다. **확인 방법**: ⓐ `--debug`로 discovery 구간 시각 기록 ⓑ 빌드 직후 `functions/lib/index.js` 적재 시간 단독 측정. ⛔ **어느 쪽도 이 패스는 수행하지 않았다.**
+5. ⭐ **배포 안전성에 주는 결과**: discovery 실패는 **어떤 리소스도 바꾸기 전에** 난다 ⇒ **같은 명령 재시도는 안전**하다(부분 배포 상태를 만들지 않는다). ⛔ 단 **2회 연속 실패 시 멈추고 보고**, `FUNCTIONS_DISCOVERY_TIMEOUT` 설정은 **OQ-A83** 승인 후에만.
+
+### 67.6 ⭐⭐ T148(SDK 상향)과의 순서 (T147 D④의 답)
+
+**판정: 분리한다. T147 먼저 → 배포·관측 → T148 별 PR.**
+
+| 사유 | 내용 |
+|---|---|
+| ① **회귀 귀속**(D④) | 두 변경은 **검증 수단이 겹치지 않는다** — T147의 효과는 **배포 후에만** 보이고(§67.4 ⓐ), T148의 위험(`__endpoint` `@alpha` — `Architecture.md:8177`·`:8295`)은 **로컬 게이트(P-1, `:8246`)** 에서 보인다. 한 배포에 묶으면 **배포 후 라이브 이상이 런타임 탓인지 SDK 탓인지 가를 수단이 없다.** ⇒ 커밋 분리로는 부족하고 **배포도 분리**한다 |
+| ② **기한 격리** | T147은 **외부 하드 기한(2026-10-30)** 이 있는 P0, T148은 P1이고 **강등표 1~2행(`:8256-8257`)으로 갈 수 있는 판정 분기**를 안고 있다. 묶으면 **P0가 P1 게이트 판정의 인질**이 된다 |
+| ③ **순서 방향** | T148을 먼저 하면 **폐기 예정 런타임(20) 위에서** SDK를 검증하게 된다 — 30일 뒤 버릴 조합의 검증이다. 또 §67.3상 T147은 **현존 비지원 해소**라 늦출 이유가 없다 |
+| ④ **예측 가능성** | T147 C1의 로컬 테스트 델타 예측값은 **정확히 0**이다(로컬 Node 불변 · engines를 읽는 테스트 0건 — `functions/src/**`에 `engines` grep **0히트**). 0이 아니면 그 차이는 **런타임 탓이 아니라 측정 환경 탓**(T149 계열)이다 ⇒ **T148보다 먼저 두면 T148의 기준선이 깨끗해진다** |
+
+⚠️ **T147 배포 후에도 dry-run의 SDK 경고(*"package.json indicates an outdated version of firebase-functions"*)는 남는다 — 그것은 T147의 실패가 아니라 T148의 몫이다.** E-2 판정 시 **경고 2줄 중 1줄(Node 20)만** 사라져야 한다.
+
+### 67.7 ⛔ implementer 인계 — 커밋 계획 (T147 전용 · T148 무접촉)
+
+⛔ **무접촉 전건**: `functions/src/**` · `functions/tsconfig.json` · `firebase.json` · `firestore.*` · `storage.rules` · 루트 `package.json`·`package-lock.json` · `functions/package.json`의 **`dependencies`**(firebase-functions·firebase-admin·@google/genai 버전) · `docs/Architecture.md`·`docs/Tasks.md`.
+⛔ **`npm --prefix functions install` 금지**(`CLAUDE.md` Verified Commands 경고 — 락파일 오염 3/3). 설치가 필요하면 **`cd functions && npm install`** 형태만.
+⛔ **검증 명령은 전부 순차 실행**(동시 실행 시 허위 수치 — `CLAUDE.md`) · 루트 `npm run build`는 **`.env`가 있는 트리에서만** 통과한다(격리 워크트리면 `.env` 부재 실패가 **결함이 아님**을 base 대조로 밝힐 것).
+
+| 단계 | 내용 | 변경 파일 | 검증(⛔ `CLAUDE.md` 원문 그대로) |
+|---|---|---|---|
+| **C0**(커밋 없음) | **기준선 측정** — base main에서 `node -v` 기록 후 6개 명령을 순차 실행해 **수치 원문 보존** + dry-run 1회(경고 2줄 원문 캡처) + `firebase functions:list`(런타임 열·함수 이름 전부) + 에뮬레이터 기동 로그 첫 화면 캡처 | 없음 | `npm --prefix functions run clean` → `npm --prefix functions run build` → `npm --prefix functions run lint` → `npm --prefix functions test` → `npm test` → `npm run build` |
+| **C1** | ⭐ **런타임 상향**: `functions/package.json:22` `"20"`→`"22"` · `functions/package-lock.json:20` `"20"`→`"22"` · `README.md:42` 사실 정정(권고 문면: *"Node.js 22 — `functions/package.json`의 `engines.node`(배포 런타임)와 같은 메이저. 로컬 테스트는 루트 22.6+·functions 21+ 필요"*). ⭐ **락파일 방법**: 손 편집 1줄 후 **`git diff --stat`로 `functions/package-lock.json` 변경이 정확히 1줄인지 확인**. ⛔ `npm install`로 재생성해 **1줄을 넘는 diff가 나오면 되돌리고 손 편집**으로 간다(그 초과분은 T147이 아닌 의존성 변동이다) | `functions/package.json` · `functions/package-lock.json` · `README.md` — **3파일 3줄** | C0와 **같은 6개 명령, 같은 순서** → 결과를 C0 옆에 나란히. **기대값: 수치 델타 0 · fail 0**(§67.6 ④). pre-commit 훅(`local-dep-guard --staged`) 통과 |
+| **C2**(권고 · 독립) | `@types/node` 고정: `functions/package.json` `devDependencies`에 `"@types/node": "^22"` 추가 → **`cd functions && npm install`** 로 락파일 갱신 | `functions/package.json` · `functions/package-lock.json` | `npm --prefix functions run build` → `npm --prefix functions run lint` → `npm --prefix functions test` · ⛔ **`tsc`가 실패하면 소스를 고치지 말고 오류 원문만 보고**하라 — 그것은 **Node 22 런타임에 없는 API를 쓰는 잠복 결함**의 목록이다(architect 재판정). ⛔ C2 실패는 **C1 출하를 막지 않는다**(PR에서 C2만 빼면 된다) |
+
+⭐ **PR은 1개(C1 + 선택적 C2)**, T148은 **별 PR**. 커밋 메시지 트레일러 `Refs: T147`.
+⭐ **게이트(G-번호) 신설 0건** — 판별 증거가 테스트 층이 아니라 **배포 층**에 있기 때문이다(§67.0 6). *"engines ≥ 의존성 engines 하한"* 을 기계로 막는 트립와이어는 **이번 범위 밖**(§67.10 4).
+
+### 67.8 완료 증거 체크리스트 (T147 E항 구체화 — ⛔ 하나라도 비면 완료 보고 금지)
+
+| # | 증거 | 통과 조건 | 판별력 |
+|---|---|---|---|
+| **E-1** | `engines.node` diff | `functions/package.json`·`functions/package-lock.json` 각 **`-"node": "20"` / `+"node": "22"` 1줄** | 형식 |
+| **E-2** | ⭐ dry-run 출력 **원문 전/후** | 후: *"Runtime Node.js 20 was deprecated…"* 줄 **0건** + *"Dry run complete!"* · SDK outdated 줄은 **남아 있어야 정상**(T148 몫). 새로운 런타임 경고(예: nodejs22 관련)가 뜨면 **원문 첨부 후 보고**(추정: 2027-04-30 전에는 안 뜬다) | ⭐ **배포 경로** |
+| **E-3** | 테스트 수 **전/후 나란히** | functions·루트 둘 다 **pass 수 동일 · fail 0** — ⛔ 기준은 C0 **재측정값**(`CLAUDE.md`의 616/278은 2026-07-29 값이라 인용 금지) | 무회귀만(§67.0 6) |
+| **E-4** | 에뮬레이터 기동 | `npm --prefix functions run serve`(⚠️ **Verified Commands 표에 없는 명령** — 첫 성공 시 `CLAUDE.md`에 기록 대상) 기동 로그에서 **함수 로드 완료** + **Node 버전 불일치 경고가 C0에는 있고 C1에는 없음**(문구는 C0 캡처가 정본) | 로컬 정합 |
+| **E-5** | 동작 변화 지점 | **"없다"** 를 명시 — 근거 §67.4(소스 0건). C2에서 `tsc` 오류가 나오면 **그 목록이 곧 E-5**다 | 선언 |
+| **E-6** | ⭐ 배포 후 `firebase functions:list` | **전 함수 Runtime = `nodejs22`**, 함수 **이름 집합이 D-0 대조 결과(26/26)와 일치** — 26개 전부가 목록에 있어야 한다 | ⭐⭐ **유일한 직접 증거** |
+| **E-7** | ⭐ 배포 후 라이브 스모크 | §67.9 S-1~S-4 전건 + 배포 후 `firebase functions:log`에 **새 오류 0건**(C0 시점 로그와 비교) | ⭐ 동작 |
+
+### 67.9 배포 체크리스트 (⛔ 배포 수행 여부는 User·오케스트레이터 — OQ-A29)
+
+| 단계 | 내용 | 근거 / 정지 조건 |
+|---|---|---|
+| **D-0** ✅ 완료 · 재대조 | ⭐ **이름 대조 완료 — 26/26 일치(오케스트레이터 실측 2026-09-30)**: 소스에만 있는 것 0건 · 라이브에만 있는 것 0건. ⚠️ **배포 직전 재대조만 남긴다**(C1 이후 새 export가 끼어들지 않았는지) — `functions/src/index.ts:8-54`의 **26개 이름**(`createVoiceClone` · `createSession` · `endSession` · `updateMessengerSkin` · `requestEscalation` · `requestReverseEscalation` · `sendMessage` · `createRealtimeCall` · `submitRealtimeTranscript` · `generateReport` · `judgeRewindAnswer` · `deliverInCallSms` · `recordInCallSmsEvent` · `deliverVerifyOffer` · `deliverVerifyReconnect` · `recordMockScreenEvent` · `getBeginnerBriefing` · `createChallenge` · `deleteChallenge` · `listMyChallenges` · `getChallengeLanding` · `consentChallenge` · `reportChallenge` · `setChallengeResultSharing` · `onSessionEnded` · `purgeExpiredChallenges`)과 `firebase functions:list` 출력 이름을 대조 | 재대조에서 ⛔ **라이브에 없는 함수가 생겼으면 전체 배포가 그것을 *새로 만든다*** — 그것은 런타임 상향이 아니라 **기능 배포**다 ⇒ **멈추고 User 확인**. 26/26 유지면 D-1로 진행 |
+| **D-1** | 인덱스 | **T147 diff의 `firestore.indexes.json` 변경 0줄 ⇒ 인덱스 영향 없음.** `--only functions`는 인덱스·규칙을 배포하지 않는다. ⚠️ 직전 장애(인덱스 누락)의 재발 방지는 **이 변경의 책임이 아니다** — 다만 main에 **미배포 인덱스가 남아 있지 않은지**는 배포 전 1회 대조를 권고(범위 밖 · 확인만) | 없음 |
+| **D-2** | dry-run | `firebase deploy --only functions --dry-run --project voicefishing-ff47f`(오케스트레이터 사용 원문 — ⚠️ Verified Commands 표 **미기재**) → E-2 | 2회 연속 실패 시 정지(§67.5 5) |
+| **D-3** | ⭐ **카나리 1개** | `firebase deploy --only functions:getBeginnerBriefing --project voicefishing-ff47f` — **선정 사유**: 인증 필수 콜러블이지만 **Firestore·시크릿·LLM·쓰기 0건**(`functions/src/scenarios/beginnerBriefing.ts:43-59`) ⇒ 실패해도 사용자 데이터·쿼터 영향 0 · 런타임 기동과 콜러블 인증 경로(추정: 토큰 검증이 `firebase-admin`을 탄다)만 본다 → `functions:list`에서 이 함수만 `nodejs22` 확인 → 앱에서 초급 브리핑 화면 1회 | 실패 시 **여기서 정지** — 나머지 25개(26 − 카나리 1)는 여전히 20에서 정상 |
+| **D-4** | **전체** | `firebase deploy --only functions --project voicefishing-ff47f` — ⭐ **전 함수 재배포가 필요하다**: 런타임은 **함수별로** 배포 시점에 적용되고, 20에 남은 함수는 2026-10-30 이후 **갱신 불가·비활성화 가능**(§67.1 2). Firebase 문서도 *"Redeploy all functions"*(§67.1 3) | 부분 실패 시 실패 함수 이름만 `--only functions:<이름>`으로 재시도(1회) |
+| **D-5** | `functions:list` | E-6 | — |
+| **S-1~S-4** | ⭐ **라이브 스모크**(사람 1회차로 한 번에 덮는다) | **S-1** 로그인 → 초급 브리핑(카나리 재확인) · **S-2** 세션 시작·메시지 몇 턴(`createSession`·`sendMessage` — `@google/genai` + Firestore 쓰기) · **S-3** 실시간 통화 자격증명 1회(`createRealtimeCall` — 시크릿 3종) · **S-4** 세션 종료 → 리포트(`endSession` → **`onSessionEnded` 트리거, asia-northeast3** · `generateReport`). `purgeExpiredChallenges`(스케줄)는 **강제 실행하지 말고** 다음 정기 실행 로그로 확인 | ⚠️ S-2·S-4는 **Gemini 일일 캡을 소모**한다(G180) — 예약 작업이 예산을 쓰는 시간대를 피할 것 |
+| **R** | **롤백 경로** | `git revert <C1>` → D-4 명령 재실행(= engines `"20"` 재배포). ⛔ **2026-10-29까지만 가능** — 10-30 이후 20으로의 배포는 거부된다(§67.1 2). ⚠️ 롤백 도착점은 **admin 비지원 조합**이다(§67.3 3) ⇒ 롤백은 **임시 조치**이고 원인 수정 후 22 재배포가 유일한 종착점. ⭐ **권고: 2026-10-16 이전 D-4 완료** — 롤백·재시도·원인 수정에 2주를 남긴다 | — |
+
+### 67.10 ⛔ 닫지 못한 것 (자기 고지 — 지우지 말 것)
+
+1. ⛔ **architect는 셸·배포·라이브·테스트를 0회 실행했다.** §67.1 11·13·17의 라이브·로컬 값과 dry-run 원문은 **오케스트레이터 실측 인용값**이다. 웹 문서 5건은 직접 확인했으나 **요약 모델을 거친 인용**이다 — 날짜는 원문 표 값으로 교차 확인했다(§67.1 1·4).
+2. ✅ **(정정) 함수 수 불일치는 없었다** — 최초 인계의 *"라이브 25개"* 는 오케스트레이터 계수 오류였고, 재실측(2026-09-30)에서 **26/26 이름 일치**가 확인됐다(§67.1 13 · D-0 완료). 남는 것은 배포 직전 재대조뿐이다.
+3. ⚠️ **admin 14.2.0이 Node 20에서 실제로 깨지는 경로가 있는지 확인하지 않았다**(§67.3 2) — T147이 그 질문 자체를 없애므로 **추가 조사하지 않는다**.
+4. ⚠️ **"`engines.node` ≥ 의존성 engines 하한"을 기계로 막는 장치가 없다** — 오늘의 비지원 상태(§67.3)가 **아무 경고 없이** 생긴 이유다(`npm`의 `EBADENGINE`은 경고일 뿐이고 Cloud Build 로그 안에 묻힌다). 트립와이어로 막을지는 **이번 범위 밖**(P0 최소 변경) ⇒ planner 인계 후보(§67.12).
+5. ⚠️ **Node 24 고유 동작 변화는 조사하지 않았다**(22 권고라서) — OQ-A82에서 24가 택해지면 **재판정 필수**.
+6. ⚠️ **firebase-tools 15.24.0 → 15.32.0 CLI 상향은 판정하지 않았다** — 22는 두 버전 모두에서 지원된다(Firebase 문서 기재). 필요성 0.
+7. ⚠️ **에뮬레이터 불일치 경고의 정확한 문구는 추정**이다 — C0 캡처가 정본.
+
+### 67.11 신규 OQ
+
+| OQ | 질문 | 소유 | 선행 조건 |
+|---|---|---|---|
+| **OQ-A82** | **상향 목표를 Node 22로 확정하는가**(권고) — 대가: **2027-04-30 예고 · 2027-10-31 폐기**로 13개월 뒤 다음 상향이 필요하다. 24를 택하면 25개월로 늘지만 **로컬·에이전트 환경 전체를 24로 올려야** 하고(루트 포함 — T147 F항 범위 밖) architect 재판정이 선행된다(§67.2) | **User** | 없음 — ⛔ **C1 착수 게이트** |
+| **OQ-A83** | dry-run/배포가 discovery 10초 타임아웃으로 **2회 연속** 실패할 경우 **`FUNCTIONS_DISCOVERY_TIMEOUT=30`** 설정을 허용하는가(Firebase 문서 공식 수단 — §67.5 1). ⛔ **미승인이면 정지·보고**(우회 금지). 근본 처방(`onInit()`으로 전역 초기화 이연)은 **소스 변경이라 별건** | **User / 오케스트레이터** | 2회 연속 실패가 **실제로 관측**됐을 때만 |
+
+### 67.12 인계 (⛔ 이 절은 아래 문서를 편집하지 않았다)
+
+| 대상 | 내용 |
+|---|---|
+| **planner** (`docs/Tasks.md`) | ① T147 우선순위 칸이 여전히 **`P1(인프라·프로세스)`**(`:577`) — 승격 기록은 `:594`에만 있다(행 원문 무수정 관례로 보이나 **읽는 사람이 P1로 오독할 수 있다**) ② T147 착수 조건 D①이 **§67로 충족**됨 · 담당 경로에 **OQ-A82 게이트** 추가 ③ T147 B항 `firebase.json` `:12-19` → **`:14-21`**, 편집 지점에 **`functions/package-lock.json:19-21`** 추가 ④ T148 C/D항 줄번호 **+3 정정**(§67.1 12) · T148 E항에 **dry-run 성공 + discovery 소요 시간** 추가(§67.5 3) · T148 선행에 **"T147 배포·스모크 완료"** 추가(§67.6) ⑤ 신규 행 후보 2건: **Node 22→24 상향**(기한 2027-10-31, 예고 2027-04-30) · **engines ≥ 의존성 하한 트립와이어**(§67.10 4) |
+| **implementer** | §67.7 C0~C2 · §67.8 E-1~E-5 |
+| **오케스트레이터 / User** | §67.9 D-0~D-5·S-1~S-4·R · OQ-A82 · OQ-A83 · 성공한 dry-run·`serve`·`functions:list` 명령을 **`CLAUDE.md` Verified Commands에 기록**(현재 미기재 3건) |
+| **docs** | `README.md:42`는 C1이 고친다(implementer) — docs 에이전트는 CHANGELOG 반영만 |
+
+### 67.13 이 패스의 편집 범위 (⛔ 정본)
+
+**편집 파일 2개뿐**: `docs/Architecture.md`(**이 §67 신설 — §0~§66 한 줄도 수정하지 않았다**) · `docs/DECISIONS.md`(**#106 1행 추가**).
+⛔ **`functions/**`·`src/**`·`package.json`·락파일·`README.md`·`CLAUDE.md`·`firebase.json` 0줄**(읽기만: `functions/package.json` · `functions/package-lock.json` · `functions/tsconfig.json` · `functions/scripts/clean-lib.mjs` · `functions/src/index.ts` · `functions/src/scenarios/beginnerBriefing.ts` · `scripts/local-dep-guard.mjs` · `firebase.json` · `.firebaserc` · 루트 `package.json` · `README.md` · `.githooks/pre-commit`) · ⛔ `docs/Tasks.md`·`docs/PRD.md`·`docs/UX.md`·`docs/API.md`·`docs/Database.md`·`docs/UpdateRequests.md` **무편집** · ⛔ **ADR 0건**(런타임 메이저 선택은 운영 결정이며 모듈 경계·데이터 모델·계약을 바꾸지 않는다 — DECISIONS 1행으로 충분) · ⛔ **게이트 0건 · OQ 2건(OQ-A82·A83)**.
+> **번호 실측(착수 시점, `docs/**` grep)**: `^## ` 최대 **66**(`^## 6[7-9]\.` **0히트**) · 게이트 최대 **G414**(`G41[5-9]|G4[2-9]\d` **0히트** — 이번엔 신설 없음) · OQ 최대 **OQ-A81**(`OQ-A8[2-9]` **0히트**) · DECISIONS 최대 **#105**(`DECISIONS.md:115`) · `docs/adr/` 최대 **0015** ⇒ **§67 · OQ-A82~A83 · #106**. ⛔ 예약 0건 — 동시 패스가 있으면 **병합 순서로 확정**(치환 스코프: `## 67.` 헤딩 이후 + DECISIONS #106 행뿐, ⛔ 전역 치환 금지).
+> **base**: `.git/refs/heads/main` = **`e71f114e1888b062d8f77b317b571cf1f7f1aaf1`**.
+> **UX 추적성**: 신규 Screen ID·Flow ID·라우트·컴포넌트 **0건** · 화면 변경 **0건**. 스모크(§67.9 S-1~S-4)가 **지나가는** 기존 흐름: UX-029(초급 브리핑) · UX-005/UF-001(세션 시작) · UX-006(대화) · UX-008(리포트) — ⛔ 어느 것의 계약도 바꾸지 않는다.
