@@ -15601,3 +15601,285 @@ function hasSurvivingMatch(patterns: readonly RegExp[], text: string): boolean {
 > **번호 실측(착수 시점, `docs/**` grep)**: `^## ` 최대 **66**(`^## 6[7-9]\.` **0히트**) · 게이트 최대 **G414**(`G41[5-9]|G4[2-9]\d` **0히트** — 이번엔 신설 없음) · OQ 최대 **OQ-A81**(`OQ-A8[2-9]` **0히트**) · DECISIONS 최대 **#105**(`DECISIONS.md:115`) · `docs/adr/` 최대 **0015** ⇒ **§67 · OQ-A82~A83 · #106**. ⛔ 예약 0건 — 동시 패스가 있으면 **병합 순서로 확정**(치환 스코프: `## 67.` 헤딩 이후 + DECISIONS #106 행뿐, ⛔ 전역 치환 금지).
 > **base**: `.git/refs/heads/main` = **`e71f114e1888b062d8f77b317b571cf1f7f1aaf1`**.
 > **UX 추적성**: 신규 Screen ID·Flow ID·라우트·컴포넌트 **0건** · 화면 변경 **0건**. 스모크(§67.9 S-1~S-4)가 **지나가는** 기존 흐름: UX-029(초급 브리핑) · UX-005/UF-001(세션 시작) · UX-006(대화) · UX-008(리포트) — ⛔ 어느 것의 계약도 바꾸지 않는다.
+
+## 68. (User 결정 **C** 집행 — 2026-09-30) **익명 uid를 챌린지 수신 경로로만 제한하는 서버 게이트** — 판별·콜러블 26개 전수 분류·허용 조건·구현 형태·규칙·잔여 위험·테스트·배포 순서 — ⭐⭐ **익명 판별 키는 `request.auth.token.firebase.sign_in_provider === "anonymous"` 하나다. 프로덕션에서는 서명 검증을 거친 값이고, 에뮬레이터도 같은 클레임을 싣는다(SDK·CLI 소스 직접 확인)** / ⭐⭐ **에뮬레이터 예외는 서버에 두지 않는다 — 두면 라이브 전에 이 게이트를 실제로 돌려 볼 유일한 장소가 사라진다. 대신 개발용 로그인을 익명에서 에뮬레이터 이메일 계정으로 바꾼다** / ⭐⭐ **루프를 닫는 행은 `createSession`이 아니라 `createChallenge`다 — 메신저·generic 챌린지는 클론 없이 토큰을 발급하므로, 익명이 챌린지를 만들 수 있으면 "익명이 만들고 익명이 동의"로 LLM 세션이 무한히 나온다** / ⭐ **Firestore·Storage 규칙은 바꿀 필요가 없다 — 익명이 새로 여는 쓰기 표면은 0이다(uid 1개로도 이미 개수 무제한)** — architect 판정
+
+> 담당 태스크: **planner 등재 중**(번호 미정 — ⛔ 이 절은 번호를 짓지 않는다).
+
+### 68.0 판정 요지 (⛔ 금지 먼저 — 다른 모든 판단보다 우선)
+
+1. ⛔ **이 절은 소스를 0줄 고쳤다.** 설계·판정·계획뿐이며 **구현은 implementer 후속**(§68.13 C1~C3)이다.
+2. ⛔ **§0~§67·ADR-0001~0015 원문은 한 글자도 고치지 않았다.** ADR-0006의 *"기존 콜러블 전부 무개정 재사용"*(`docs/adr/0006-user2-anonymous-auth-access.md:23`)을 좁히는 후속은 **ADR-0016 신설**로 적었다(ADR 본문 불변 원칙).
+3. ⛔ **익명 활성화(User 콘솔)는 §68.10 D-4(전체 배포) + S-G(익명이 꺼진 상태의 Google 회귀 스모크)를 마친 뒤에만 한다.** 롤백할 때는 **익명을 먼저 끄고, 코드 revert는 그 뒤에** 한다(G422).
+4. ⛔ **거부 코드는 `permission-denied`다. `unauthenticated`는 금지한다** — 클라 단일 래퍼는 **그 코드 하나만 보고** 인증 무효화 배너를 띄우고 이후 콜러블을 전부 잠근다(`src/lib/api/callable.ts:29-31`·`:38-40`, G156) (G417).
+5. ⛔ **서버 게이트에 환경 분기(`FUNCTIONS_EMULATOR` 등)를 두지 않는다**(§68.2 E1 기각, G416).
+6. ⛔ **`consentChallenge`·`setChallengeResultSharing`·`getChallengeLanding`·`reportChallenge`에는 거부 호출을 넣지 않는다** — 넣으면 수신 흐름이 입구에서 끊긴다(G418).
+7. ⛔ **Google(비익명) 호출자의 동작은 바이트 단위로 무변경이다** — 게이트는 비익명 호출자에 대해 **I/O 0회·throw 0회로 반환**한다. 기존 검사 순서·응답·쓰기는 그대로이고, 추가 Firestore read도 0회다(§68.6 (4) 진리표).
+8. ⛔ **`firestore:rules`·`firestore:indexes`·`storage` 배포는 이 변경에 포함하지 않는다**(§68.7 · §68.10 D-1/D-2).
+9. ⚠️ **architect는 셸·에뮬레이터·배포·테스트를 한 번도 실행하지 않았다.** *"라이브 `signInAnonymously` = HTTP 400 `ADMIN_ONLY_OPERATION`"* 과 *"콘솔 로그인 제공업체 = Google뿐"* 은 **오케스트레이터 실측 인용값**이다. Firebase 문서는 WebFetch로, SDK·CLI 동작은 **설치본 소스를 열어** 직접 확인했다(§68.2).
+
+### 68.1 착수 시 실측 (⛔ 지우지 말 것)
+
+| # | 항목 | 값 | 출처 |
+|---|---|---|---|
+| **1** | 서버 진입점 | export **26개** = 콜러블 24 + Firestore 트리거 1 + 스케줄 1 | `functions/src/index.ts:8-54` |
+| **2** | 클라 호출 지점 | 래퍼 24개가 **단일 지점** `callCallable`을 거친다. `@/lib/api` 동적 import·`require` **0건**, `functionsClient` 사용은 `callable.ts:33` 1곳뿐 | `src/lib/api/callable.ts:28-43` · grep |
+| **3** | 서버의 익명 검사 | `functions/src` 비테스트에서 `isAnonymous`·`sign_in_provider` **0히트**(`personaAuthority.ts`의 `"anonymous"`는 페르소나 라벨이라 무관) | 직접 grep |
+| **4** | 익명 사인인 호출 지점 | 프로덕션 **1곳** `src/app/challenge/join/page.tsx:118` · 개발용 **1곳** `src/lib/auth/devSignIn.ts:45`(`DEV_AUTH_ENABLED && useEmulator` 가드 `:41-43`) · 에뮬레이터 스크립트 **1곳** `scripts/t128-auth-invalidation-probe.mjs:118`·`:183` | 직접 grep |
+| **5** | `sessions.challengeId`를 쓰는 곳 | **1곳** — `consentChallenge` 트랜잭션 `functions/src/challenge/userAccess.ts:219`. 클라의 `sessions` 쓰기는 전면 거부(`firestore.rules:35`) | 전수 grep |
+| **6** | `reports.challengeId` | 서버가 세션에서 복사해 쓴다(`functions/src/report/generateReportCore.ts:287`), 타입 `functions/src/shared/types.ts:447` | 직접 열람 |
+| **7** | 기존 인증 검사 패턴 | 각 콜러블 본문에 `if (!request.auth)`를 **인라인**으로 둔다(**22곳**, 무인증 2개 제외). 소유권은 `session.uid !== request.auth.uid` 인라인 또는 모듈 지역 헬퍼(`inCallSms/index.ts:79-90`·`verifyIntercept/index.ts:59-73`·`mockScreens/index.ts:24-35`)로 확인한다 | 직접 grep |
+| **8** | 라이브 상태 | `signInAnonymously` → 400 `ADMIN_ONLY_OPERATION` · 콘솔 제공업체 = Google뿐 ⇒ 수신 흐름 **0% 동작** | ⚠️ **오케스트레이터 인용값**. 구조적 교차 확인: 에뮬레이터 CLI는 `enableAnonymousUser`가 거짓일 때 **같은 에러 문자열**을 낸다(`firebase-tools` 15.24.0 `lib/emulator/auth/operations.js:153-155`) |
+| **9** | App Check | 저장소에 **없다** | §44.2 3(`docs/Architecture.md:8851`) · §66.0 4(`:15064`) |
+| **10** | 설치본 버전 | `firebase-admin` **14.2.0** · `firebase-functions` **7.3.0**(⚠️ 메인 체크아웃 `C:\codegate\functions\node_modules` — 워크트리에는 node_modules가 없다, `functions/package.json:27-28` 범위와 일치) · `firebase-tools` **15.24.0**(전역) | 설치본 `package.json` |
+| **11** | base | 이 워크트리 = **`origin/main` `ec4bc2f`**(`.git/refs/remotes/origin/main`, 워크트리 reflog *"Created from origin/main"*) · 로컬 `main` = `d96c0e4` | `.git` 직접 판독 |
+| **12** | 헤더 버전 갭 | `Architecture.md:5` **PRD v1.7.1 · UX 1.13** ↔ `docs/PRD.md:4` **v1.14** · `docs/UX.md:10` **1.26**. 이 절은 **AC 신설 0건 · 화면 신설 0건**이라 판정이 오염되지 않는다. ⛔ 헤더는 전진시키지 않았다(T131 계열 별건) | 직접 열람 |
+| **13** | `UpdateRequests` | `open` 행은 #1(템플릿) · #14(User) · #18(planner)뿐 ⇒ **architect 소관 0건** | 직접 열람 |
+
+### 68.2 (Q1) 익명 판별 방법 — ⭐⭐ **`firebase.sign_in_provider === "anonymous"`**, 그리고 **에뮬레이터 예외는 서버에 두지 않는다**
+
+**판별식(정본)**: `request.auth?.token?.firebase?.sign_in_provider === "anonymous"`
+
+| 근거 | 내용 | 출처 |
+|---|---|---|
+| Firebase 문서 | `auth.token.firebase.sign_in_provider`의 값 목록 *"`custom`, `password`, `phone`, `anonymous`, `google.com`, …"* | **WebFetch 직접** — https://firebase.google.com/docs/rules/rules-and-auth |
+| Admin SDK 타입 | `DecodedIdToken.firebase.sign_in_provider: string` — 문서 주석 *"One of `"anonymous"`, `"password"`, … `"google.com"` …"*, **옵션 필드가 아니다** | 설치본 `firebase-admin/lib/auth/token-verifier.d.ts:69-88` (⚠️ 레퍼런스 웹 페이지는 WebFetch가 본문을 못 가져와 설치본으로 대체 확인) |
+| 콜러블이 그 토큰을 그대로 넘긴다 | `ctx.auth = { uid: authToken.uid, token: authToken, rawToken }` · **프로덕션은 `verifyIdToken`**(서명 검증 → 클라가 위조할 수 없다) | 설치본 `firebase-functions/lib/common/providers/https.js:322-331` · 타입 `https.d.ts:39-46` |
+| **에뮬레이터도 같은 클레임을 싣는다** | 익명 가입은 `provider = PROVIDER_ANONYMOUS`(`operations.js:153-155`), 그 값은 `"anonymous"`(`state.js:11`)이고, JWT 페이로드에 `firebase: { identities, sign_in_provider }`로 들어간다(`operations.js:1760-1762`). ⚠️ 에뮬레이터는 서명 검증을 건너뛴다(`functionsEmulator.js:987-993` `skipTokenVerification` → `https.js:322-323` `unsafeDecodeIdToken`) — 로컬에서만 그렇고 판별과는 무관하다 | `firebase-tools` 15.24.0 설치본 직접 열람 |
+
+**기각한 판별식**: ⓐ `isAnonymous` — 클라 `User` 객체의 속성이고 서버 토큰에는 없다. ⓑ email 부재 — 판별력이 없다. ⓒ uid 형태 — 불투명한 값이다. ⓓ 최상위 `provider_id` 클레임 — 에뮬레이터(`operations.js:1757`)에서만 봤고 **프로덕션 문서로 확인하지 못했다** ⇒ 확인되지 않은 키는 쓰지 않는다(G415).
+
+**방향 = 거부목록(`anonymous`와 일치하면 거부)이다. 허용목록(`google.com`만 허용)은 쓰지 않는다.** 근거: ① User 결정 C가 대상으로 지목한 것이 "익명"이다. ② 프로덕션 콘솔 제공업체가 Google(+곧 익명)뿐이라(인용값) **실효 집합이 같다.** ③ 허용목록은 에뮬레이터 스크립트의 custom 토큰(⚠️ implementer 메모리 `project_codegate_t33_replay.md:37` 인용 — `createCustomToken`)과 아래 E2의 `password` 계정을 깨뜨린다. **대가**: 클레임이 없는 토큰은 "비익명"으로 통과한다(fail-open). 그러나 그 필드는 SDK 타입상 필수라 **도달할 수 없는 상태로 판정**한다. 반대로 fail-closed(부재 = 익명 취급)로 하면 *"Google 무변경"* 이 SDK 필드 하나에 매달리게 된다. 라이브 관측은 §68.10 A-2가 처음으로 한다.
+
+**에뮬레이터 예외 판정** (`src/lib/auth/devSignIn.ts` — 에뮬레이터 전용 익명 개발 로그인):
+
+| 후보 | 판정 | 이유 |
+|---|---|---|
+| **E1** 서버에서 `process.env.FUNCTIONS_EMULATOR === "true"`이면 게이트를 건너뜀(에뮬레이터는 이 값을 설정한다 — `functionsEmulator.js:987`) | ⛔ **기각**(G416) | ⭐ **라이브 전에 게이트를 실제로 돌려 볼 유일한 장소(에뮬레이터)에서 게이트가 꺼진다** ⇒ 익명을 켜기 전 검증이 0회가 된다. 보안 게이트에 환경변수 분기를 두는 것은 백도어 형태다. ⚠️ 배포 환경에 그 변수를 주입할 수 없는지는 **미확인**이다(추정: 예약 키 — 확인 방법: Firebase 문서 *"Reserved environment variables"*). 이것은 보조 근거일 뿐이다 |
+| **E2** `devSignIn`을 **에뮬레이터 이메일/비밀번호 계정**으로 바꿈 | ✅ **채택** | 에뮬레이터 Auth는 비밀번호 가입을 **항상** 허용한다(`state.js:461-463` `allowPasswordSignup` → `true`). 개발용 로그인 사용자가 `password` 제공자가 되므로 **Google과 같은 쪽**으로 게이트를 통과한다 ⇒ 자가 훈련 흐름의 에뮬레이터 검증이 유지되고, 챌린지 수신(익명)은 **실제 게이트를 탄다** ⇒ ⭐ 에뮬레이터가 게이트를 **양방향으로** 검증하는 장소가 된다. 프로덕션 영향은 0이다(2단 가드 `devSignIn.ts:41-43`·`login/page.tsx:161` 유지) |
+| **E3** 아무것도 하지 않음 | 기각 | 에뮬레이터에서 개발용 로그인 사용자의 거부 클래스 6개가 전부 `permission-denied`가 된다 ⇒ `devSignIn.ts:3-5`가 이 모듈을 만든 이유인 *"로그인 이후 화면 자동 검증 사각지대"* 가 되살아난다 |
+
+**E2 명세(판단 여지 없음)**: `signInAnonymously(auth)` → `createUserWithEmailAndPassword(auth, \`dev-${crypto.randomUUID()}@example.com\`, crypto.randomUUID())`. 클릭할 때마다 새 계정이 생기는데, 이는 오늘의 익명 로그인과 같은 수명 모델이며 **비밀번호 하드코딩은 0건**이다. `ensureUserProfile` 호출과 가드 문자열 `!DEV_AUTH_ENABLED || !useEmulator`(정규식 단언 `src/lib/auth/devSignIn.guard.test.ts:38`)는 유지한다. 버튼 문구 *"익명 계정으로 빠른 로그인"*(`src/app/(auth)/login/page.tsx:182`)은 사실과 달라지므로 교체한다. ⛔ **교체하는 커밋에서** `scripts/verify-no-dev-auth-in-build.mjs:23-30`의 `FORBIDDEN`에 **새 문구를 추가한다**(기존 문구는 남긴다 — 빌드 산출물 누출 센티널이 조용히 사라지지 않게).
+
+### 68.3 (Q2) ⭐⭐ 콜러블 전수 분류표 — **허용 16 / 거부 6 / 무인증·해당 없음 4** (= 26)
+
+**클래스**: **D** = 거부(`denyAnonymous`) · **S** = 허용, 대상 **세션**이 챌린지 세션일 때만(`assertAnonymousChallengeScope(auth, session)`) · **R** = 허용, 대상 **리포트**가 챌린지 리포트일 때만(`assertAnonymousChallengeScope(auth, report)`) · **E** = 허용, 토큰 매개 입구(호출 없음) · **N** = 무인증(해당 없음) · **X** = 클라 호출 불가(해당 없음).
+**"삽입" 열이 구현 위치의 정본이다**(파일:줄 **바로 뒤**에 한 줄).
+
+| # | export | 클래스 | 근거 (파일:줄) | 삽입 | 수신 흐름 도달 |
+|---|---|---|---|---|---|
+| 1 | `createVoiceClone` | **D** | 자가 녹음 온보딩(UX-002) 전용 · ElevenLabs 클론 비용 — `functions/src/voice/index.ts:34-38` | `voice/index.ts:38` | 0 |
+| 2 | `createSession` | **D** | 오프닝 LLM `session/index.ts:172`. ⚠️ 동의 게이트 `:127-136`은 **익명을 막지 못한다** — 익명도 `users/{uid}/consents`를 스스로 쓸 수 있다(`firestore.rules:15-17`) | `session/index.ts:78` — ⭐ 인자 검증(`:90`)·동의 read·§66 창 쿼리(`:142`)·LLM **전** | 0 |
+| 3 | `endSession` | S | 소유 `session/index.ts:309-311` | `:311` | ✅ UX-007 `src/app/session/end/page.tsx:18` |
+| 4 | `updateMessengerSkin` | S | 소유 `:366-368` | `:368` | ✅ UX-022 `src/app/session/messenger/page.tsx:27` |
+| 5 | `requestEscalation` | S | 소유 `:397-399` | `:399` | 0 — 메신저 챌린지는 전이 가능 시나리오로 **만들 수 없다**(`challenge/index.ts:101-107`). 그래도 대상이 챌린지 세션이면 허용한다(결정 C *"그로 생성된 체험 세션"*) |
+| 6 | `requestReverseEscalation` | S | 소유 `:449-451` | `:451` | 0 — 전제 조건 `:456-461`(보이스 채널 + 시나리오 channel = messenger)이 챌린지 세션에서는 성립하지 않는다(보이스 챌린지는 channel = voice `challenge/index.ts:88`, 메신저 챌린지는 전이 불가 `:101-107`) |
+| 7 | `sendMessage` | S | 소유 `functions/src/roleplay/index.ts:77-79` → LLM | `roleplay/index.ts:79` | ✅ UX-014 폴백·UX-022 (`play/page.tsx:38`·`messenger/page.tsx:26`) |
+| 8 | `createRealtimeCall` | S | 소유 `functions/src/realtime/index.ts:95-97` | `realtime/index.ts:97`(챌린지 재검증 `:116-126` **전**) | ✅ `src/lib/realtime/useRealtimeCall.ts:14` |
+| 9 | `submitRealtimeTranscript` | S | 소유 `functions/src/realtime/submitTranscript.ts:83-85`(트랜잭션 안 — 기존 throw 패턴과 같다) | `submitTranscript.ts:85` | ✅ `play/page.tsx:39` |
+| 10 | `generateReport` | S | 소유 `functions/src/report/index.ts:40-42` | `report/index.ts:42` | ✅ UX-008 `src/app/report/page.tsx:16` |
+| 11 | `judgeRewindAnswer` | **R** | 소유 `functions/src/rewind/index.ts:84-86` → LLM `:108` | `rewind/index.ts:86` — `report`를 넘긴다(§68.5) | ✅ UX-028 `src/app/report/rewind/page.tsx:17`(강제 해설 뒤에만 노출, `src/lib/rewind/rewindEntry.ts:29`) |
+| 12 | `deliverInCallSms` | S | 소유 `functions/src/inCallSms/index.ts:116`(`loadOwnedSession :79-90`) | `inCallSms/index.ts:116` | ✅ `play/page.tsx:33` · `src/lib/realtime/GeminiVoiceSession.tsx:26` |
+| 13 | `recordInCallSmsEvent` | S | 소유 `inCallSms/index.ts:199` | `:199` | ✅ `play/page.tsx:36` |
+| 14 | `deliverVerifyOffer` | S | 소유 `functions/src/verifyIntercept/index.ts:186`(`loadOwnedActiveSession :59-73`) | `verifyIntercept/index.ts:186` | ✅ `play/page.tsx:34` · `GeminiVoiceSession.tsx:26` |
+| 15 | `deliverVerifyReconnect` | S | 소유 `verifyIntercept/index.ts:297` | `:297` | ✅ `play/page.tsx:35` |
+| 16 | `recordMockScreenEvent` | S | 소유 `functions/src/mockScreens/index.ts:63` | `mockScreens/index.ts:63` | ✅ `messenger/page.tsx:24` |
+| 17 | `getBeginnerBriefing` | **D** | 초급 사전 브리핑(UX-029) 전용 — `functions/src/scenarios/beginnerBriefing.ts:43-49` | `beginnerBriefing.ts:49` | 0 |
+| 18 | `createChallenge` | **D** ⭐ | ⭐⭐ **루프를 닫는 행.** 메신저·generic 챌린지는 클론·Storage 검증 **없이** 토큰을 발급한다(클론 분기 `challenge/index.ts:141` 밖 → 토큰 `:198`). 동의 확인도 없다. 익명에게 열리면 "익명 A가 만들고 익명 B가 동의"로 uid당 3개 상한(`:122-136`)이 무력해진다 | `challenge/index.ts:68` | 0 (UX-019) |
+| 19 | `deleteChallenge` | **D** | 생성자 전용 `:238-242` · 익명은 챌린지를 가질 수 없다(#18) | `:242` | 0 (UX-020) |
+| 20 | `listMyChallenges` | **D** | 생성자 전용 `:276-282` | `:282` | 0 (UX-020) |
+| 21 | `getChallengeLanding` | N | `request.auth`를 보지 않는다 — `functions/src/challenge/userAccess.ts:65-89` | ⛔ 없음 | ✅ UX-021 `src/app/challenge/join/page.tsx:70` |
+| 22 | `consentChallenge` | **E** | **입구** — 익명 인증을 명시적으로 요구한다 `userAccess.ts:97-101`, 토큰 필수 `:102-111` | ⛔ **없음 (G418)** | ✅ `join/page.tsx:119` |
+| 23 | `reportChallenge` | N | 무인증 토큰 `userAccess.ts:297-302` | ⛔ 없음 | ✅ `join/page.tsx:138` |
+| 24 | `setChallengeResultSharing` | **E** | 세션을 **challengeId로** 찾는다(`:391` → `findExperienceSession :51-58`) ⇒ 대상이 구성상 챌린지 세션이다. 소유 검사는 `:396-398` | ⛔ 없음 | ✅ UX-018 `src/app/report/replay/page.tsx:200` |
+| 25 | `onSessionEnded` | X | Firestore 트리거 `functions/src/index.ts:51` | — | (서버 내부) |
+| 26 | `purgeExpiredChallenges` | X | 스케줄 `index.ts:54` | — | — |
+
+**변경 대상 함수 = 20개**(D 6 + S 13 + R 1). E·N·X 6개는 **0줄**이다.
+
+### 68.4 (Q2 검증) 수신자 흐름을 코드로 따라간 결과 — ⭐ **흐름이 쓰는 콜러블 18개 = 허용 16 + 무인증 2 = 정확히 거부 6개의 여집합**
+
+| 화면 (Screen ID) | 호출 콜러블 | 근거 |
+|---|---|---|
+| UX-021 동의 랜딩(UF-005 입구) | `getChallengeLanding` · `signInAnonymously` → `consentChallenge` · `reportChallenge` → 채널에 따라 `/session/messenger` 또는 `/session/play`로 이동 | `src/app/challenge/join/page.tsx:26`·`:70`·`:118-119`·`:127`·`:138` |
+| UX-014 통화 | `deliverInCallSms` · `deliverVerifyOffer` · `deliverVerifyReconnect` · `recordInCallSmsEvent` · `requestReverseEscalation` · `sendMessage` · `submitRealtimeTranscript` + `createRealtimeCall`(훅) + Gemini 세션의 `deliverInCallSms`·`deliverVerifyOffer` | `src/app/session/play/page.tsx:32-40` · `useRealtimeCall.ts:14` · `GeminiVoiceSession.tsx:26` (`RealtimeVoiceSession.tsx:19`는 **타입만** import한다) |
+| UX-022 메신저 | `recordMockScreenEvent` · `requestEscalation` · `sendMessage` · `updateMessengerSkin` | `src/app/session/messenger/page.tsx:23-31` |
+| UX-007 종료 | `endSession` | `src/app/session/end/page.tsx:18` |
+| UX-008 리포트 | `generateReport` | `src/app/report/page.tsx:16` |
+| UX-018 리플레이 | `setChallengeResultSharing` | `src/app/report/replay/page.tsx:20`·`:200` |
+| UX-028 되감기 | `judgeRewindAnswer` | `src/app/report/rewind/page.tsx:17` |
+
+**방법**: `src/**` 비테스트 파일에서 `from "@/lib/api"` 정적 import를 **전수 grep**하고, 동적 import가 0건임을 확인했다(§68.1 2). ⭐ **대조 결과: 흐름에 나오는 18개 ∪ 거부 6개 = 래퍼 24개, 교집합은 0.** 거부 6개를 부르는 화면은 전부 자가 훈련·발신자 화면이다 — `onboarding/record/page.tsx:13`(UX-002) · `scenarios/difficulty/page.tsx:24`(UX-029, `createSession`·`getBeginnerBriefing`) · `clone/wait/page.tsx:26` · `scenarios/messenger/voice-select/page.tsx:20` · `challenge/create/page.tsx:29`(UX-019) · `challenge/results/page.tsx:13`·`src/lib/challenge/fetchChallenges.ts:8`(UX-020).
+
+### 68.5 (Q3) 허용 조건의 정확한 형태
+
+**규칙**: 익명 호출자는 **"대상 문서(세션 또는 리포트)의 소유 uid = 호출자 uid"** 이고 **"그 문서의 `challengeId`가 빈 문자열이 아닌 문자열"** 일 때만 통과한다.
+
+| 항목 | 판정 | 근거 |
+|---|---|---|
+| 필드명 | `SessionDoc.uid`·`SessionDoc.challengeId?: string` / `ReportDoc.uid`·`ReportDoc.challengeId?: string` | `functions/src/shared/types.ts:80`·`:113` / `:427`·`:447` |
+| 소유 uid 비교 | **새로 쓰지 않는다** — 각 콜러블의 기존 소유권 검사를 그대로 쓰고, 게이트는 **그 바로 뒤에서 `challengeId`만** 본다 | §68.3 "삽입" 열 |
+| ⭐ `challengeId`만으로 충분한 이유(위조 불가 3단) | ① 클라는 `sessions`에 쓸 수 없다(`firestore.rules:35`, 하위 컬렉션 `:42` 등) ② 서버에서 `challengeId`를 쓰는 곳은 **`consentChallenge` 트랜잭션 1곳**이다(`userAccess.ts:219` — 전수 grep) ③ `createSession`의 sessionId 채택 merge(`session/index.ts:240`)는 **익명에게 도달하지 않는다**(D — 입구에서 거부). 비익명이 남의 챌린지 세션을 채택하는 것은 소유 검사 `:187`과 상태 검사 `:194`가 막는다 | 직접 열람 |
+| 챌린지 상태(신고·만료) 재검증 | **이 게이트가 할 일이 아니다.** `createRealtimeCall`은 이미 재검증한다(`realtime/index.ts:116-126`). 나머지 콜러블은 오늘 비익명·익명 모두 같은 동작이며, 게이트는 **익명 여부 한 축만** 더한다 | 범위 경계 |
+| 세션 ID를 받지 않는 함수 | 전부 **D**(입구에서 거부): `createSession`(sessionId가 선택 인자라 D로 처리) · `getBeginnerBriefing` · `createChallenge` · `deleteChallenge`(challengeId를 받음) · `listMyChallenges`. **토큰 매개** 4개는 **E/N**으로 게이트를 두지 않는다. **reportId**를 받는 `judgeRewindAnswer`만 **R** | §68.3 |
+| `judgeRewindAnswer`의 판정 재료 | **`report.challengeId`** — 서버가 역정규화한 값이다(`generateReportCore.ts:287`). 이미 읽은 문서라 **추가 read 0회**다. **값이 없으면 거부한다(fail-closed)**(G423). ⚠️ T74 이전 리포트는 이 필드가 없을 수 있다. 그 시기의 **익명 리포트가 프로덕션에 존재하는지는 미확인**이다 — 라이브 익명이 꺼져 있었다는 인용값과 합치면 **0건으로 추정**한다(확인 방법: 콘솔에서 `reports` 중 익명 uid 소유 문서 조회). 세션 문서를 추가로 읽는 대안은 영향(≤ 추정 0건)에 비해 경로가 복잡해져 기각했다 | 직접 열람 |
+
+### 68.6 (Q4) 구현 형태 — ⭐ **판별식은 `shared/` 한 곳, 호출은 각 콜러블 본문에 한 줄씩 인라인**
+
+**(1) 위치.** 신규 파일 `functions/src/shared/anonymousGate.ts` 1개가 판별식의 **유일한 정본**이다. 각 콜러블은 §68.3 "삽입" 위치에 한 줄로 부른다. 근거: 기존 인증 검사는 **콜러블 본문에 인라인**으로 둔다(§68.1 7). 공유 판별 로직은 `shared/`에 두는 것이 관례다(`shared/difficulty.ts`의 `normalizeDifficultyLevel`을 `session/index.ts:24`가 import한다). ⚠️ `mockScreens/index.ts:21-23`의 *"두 모듈이 서로를 import하면 배포 그래프가 얽힌다"* 는 **기능 모듈끼리**의 관례다. `shared/`는 이미 모든 모듈이 import하는 **잎(leaf)** 이라 이 관례에 걸리지 않는다.
+
+**(2) 정본 시그니처** (implementer는 이대로 만든다):
+
+```ts
+// functions/src/shared/anonymousGate.ts — ⛔ import는 firebase-functions/v2/https(HttpsError) 1건뿐.
+type AuthLike = { token?: { firebase?: { sign_in_provider?: unknown } } } | undefined;
+export const ANONYMOUS_SIGN_IN_PROVIDER = "anonymous";
+export const ANONYMOUS_DENIED_MESSAGE = "이 기능은 로그인한 계정에서만 이용할 수 있습니다.";
+export function isAnonymousCaller(auth: AuthLike): boolean;          // === "anonymous"일 때만 true
+export function denyAnonymous(auth: AuthLike): void;                 // 익명이면 HttpsError("permission-denied")
+export function assertAnonymousChallengeScope(                       // 익명이고 challengeId가 비어 있지 않은
+  auth: AuthLike, owned: { challengeId?: unknown }): void;           // 문자열이 아니면 HttpsError("permission-denied")
+```
+
+⛔ **내부 모듈 import는 0건이어야 한다** — 20개 콜러블 전부가 이 파일을 import하므로, 여기서 `../llm` 등을 끌어오면 §41 시크릿 폐포 게이트(`functions/src/devtools/__tests__/secretDeclarationGate.test.ts`)의 판정이 전 함수에서 바뀐다(G212). ⛔ `functions/src/index.ts`에서 **재export하지 않는다**(배포 대상 목록과 T-2 정책표가 흔들린다).
+
+**(3) 삽입 규칙.** **D**: `if (!request.auth)` 블록 **바로 다음**, 인자 검증보다 **앞**에 둔다(G419). 이유는 둘이다. ① Firestore read·LLM 호출 0회로 거절된다. ② 빈 페이로드 프로브로 게이트 유무를 판별할 수 있다 — 게이트가 있으면 `permission-denied`, 없으면 `invalid-argument`(§68.10 A-2). **S/R**: 기존 소유권 검사 **바로 다음**, 상태 검사·쓰기·LLM·외부 호출 **앞**에 둔다(G420). 소유권 검사보다 앞에 두지 않는 이유: 남의 세션을 찌르는 익명 호출이 지금과 같은 *"본인 세션이 아닙니다"* 를 받게 해 응답 의미를 바꾸지 않기 위해서다.
+
+**(4) ⭐ Google 바이트 무변경 — 판별 진리표**
+
+| 호출자 토큰 | `isAnonymousCaller` | `denyAnonymous` | `assert…`(challengeId 있음) | `assert…`(없음·`""`·비문자열) |
+|---|---|---|---|---|
+| `google.com` | false | **반환(무동작)** | 반환 | **반환** |
+| 클레임 부재(도달 불가 판정 §68.2) | false | 반환 | 반환 | 반환 |
+| `anonymous` | true | **throw** | 반환 | **throw** |
+
+⇒ 비익명 행은 **전부 "반환"** 이다 — 추가 I/O 0회 · 검사 순서 무변경 · 응답 무변경. **판정 기준**: 기존 테스트(functions **843** / 루트 **418** — `CLAUDE.md` Verified Commands 인용값)가 **한 줄도 고치지 않고** 통과해야 한다. 고쳐야 한다면 그 자체가 무변경 위반 신호이므로 **정지하고 보고한다.**
+
+**(5) 거부 코드와 클라 영향**
+
+| 판정 | 이유 |
+|---|---|
+| ✅ **`permission-denied`** | 같은 함수들이 소유권 실패에 이미 이 코드를 쓴다(예: `session/index.ts:310` *"본인 세션이 아닙니다"*) |
+| ⛔ `unauthenticated` | `callable.ts:38-40`이 **이 코드 하나만 보고** 인증 무효화 배너를 띄우고 U1 잠금(`:29-31`)으로 **이후 콜러블을 전부 막는다**. 익명은 재인증이 불가능하므로(§34.5) 막다른 상태가 된다 |
+| ⛔ `failed-precondition` | "상태가 맞지 않으니 나중에 다시" 라는 뜻이라 의미가 틀리다 |
+
+**클라 영향**: 수신자 흐름에는 **0**이다(허용 16개 = 흐름이 쓰는 전부, §68.4). 클라 제품 코드 변경도 **0줄**이다(개발용 E2 제외). ⚠️ 익명 사용자가 **수신 흐름 밖**(시나리오 목록 → 난이도 → `createSession` 등)으로 나가면 각 화면의 기존 일반 오류 처리로 실패가 보인다. `RouteGuard`가 익명 `User`를 로그인 상태로 취급하므로(`src/lib/auth/RouteGuard.tsx:44-51`) **이 경로는 실제로 존재한다.** 안내 문구·유도 방식은 **OQ-A84**(비차단)로 넘긴다.
+
+### 68.7 (Q5) Firestore·Storage 규칙 — ⭐ **변경 불필요, `firestore:rules` 배포 없음**
+
+| 경로(규칙) | 익명이 할 수 있는 것 | 문제 여부 | 판정 |
+|---|---|---|---|
+| `users/{uid}` 읽기·쓰기(`firestore.rules:11-12`) | 자기 문서에 아무 필드나 쓴다(`ageVerified` 등) | 서버는 게이트 판단에 이 문서를 읽지 않는다. 쓰기 개수 상한은 **uid 1개로도 이미 없다** ⇒ 익명이 새로 여는 표면은 0이다 | 변경 불필요 |
+| `users/{uid}/consents`(`:15-17`) | **자기 동의 기록을 스스로 쓸 수 있다** → `createSession` 동의 게이트(`session/index.ts:127-136`)를 통과할 수 있었다 | ⭐ **D가 동의 read보다 앞에서 거부한다** ⇒ 위조한 동의가 쓸모없어진다 | 변경 불필요(게이트가 닫는다) |
+| `sessions/{sid}` 및 하위 5종 소유자 읽기(`:34`, `:39-83`) · 쓰기 거부 | 자기 챌린지 세션 읽기 | 수신 흐름에 **필수**다(통화·메신저 화면의 세션 read, 리플레이의 read 3건 — §14.7.4 `:598`). 익명이 가질 수 있는 세션은 챌린지 세션뿐이다(비챌린지 생성은 D) | ⛔ **변경 금지** |
+| `reports`·`rewindAttempts` 소유자 읽기(`:98-110`) | 자기 리포트 읽기 | 수신 흐름에 **필수** | ⛔ 변경 금지 |
+| `scenarios` 읽기(`:87-90`, `auth != null`) | 공개 메타 읽기 | 무해 | — |
+| Storage `users/{uid}/sessions/{sid}/**` 오디오 쓰기(3MB 미만, `storage.rules:9-15`) | 오디오 업로드 | `createVoiceClone`이 D라 클론으로 이어지지 않는다. 개수 상한은 uid 1개로도 없다 ⇒ 새 표면 0 | 변경 불필요 |
+
+⇒ **규칙 강화(익명 쓰기 전면 거부 `sign_in_provider != 'anonymous'`)는 방어 심층화로서만 의미가 있다.** 저장소에 규칙 테스트 하네스가 **0건**이라(`rules-unit-testing` grep 0건) 시험하지 않은 규칙을 배포하는 위험이 이득보다 크다 ⇒ **이번 범위 밖**(§68.13 후보).
+
+### 68.8 (Q6) 남는 위험 — 정직하게
+
+| # | 위험 | 판정 | 근거 |
+|---|---|---|---|
+| **R-1** | 익명 uid로 `consentChallenge` 반복 호출 | **제한적이다.** 토큰은 256비트라 추측이 불가능하다. 무효 토큰은 해시 조회 1회 뒤 not-found(LLM 0회). 유효한 pending 토큰은 세션 1개를 만들고 LLM을 1회(오프닝) 부른다 — **챌린지당 정확히 1회**다(pending → consented, `consentGate.ts:42-47`). 소진된 토큰은 §66.5 사전 게이트가 LLM 없이 재개하거나 거부한다 ⇒ **익명이 쓸 수 있는 LLM 예산의 상한 = "Google 계정이 만든 챌린지 수" × R-3.** 익명은 스스로 챌린지를 만들 수 없다(#18 D). 무효 토큰 스팸이 쓰는 Firestore read는 무인증 `getChallengeLanding`·`reportChallenge`로 **오늘도 가능**하므로 새 위험이 아니다 | `challenge/token.ts:11` · `userAccess.ts:108-111`·`:126-147` |
+| **R-2** | (기존 위험 · 이 게이트와 무관) Google 계정 1개가 *생성 → 동의 → 삭제 → 생성* 루프를 돌리면 챌린지 경로는 **§66 창을 거치지 않는다** | `createChallenge`에는 속도 제한이 없고(활성 3개 상한 `challenge/index.ts:122-136`은 `deleteChallenge`로 풀린다), `decideConsentGate`는 **생성자 본인의 동의도 막지 않는다**(`consentGate.ts:41-47`) ⇒ **익명을 켜지 않아도 오늘 Google uid만으로 성립한다.** 익명은 이 루프를 더 싸게 만들지 않는다(비용이 드는 쪽인 생성이 D) → **OQ-A85** | 직접 열람 |
+| **R-3** | 챌린지 세션 1개가 쓰는 LLM 상한 | `sendMessage` ≤ **100턴**(`shared/constants.ts:15`, 챌린지 세션에 복사 `userAccess.ts:211`) · 입력 **1,000자**(`:19`) · **60분**(`:16`, 기점은 answeredAt) → 넘으면 종료(`roleplay/index.ts:354-365`). 되감기 ≤ **리포트당 50회**(`rewind/judge.ts:21`, 적용 `rewind/index.ts:96-100`). ⚠️ **실시간 자격증명(`createRealtimeCall`)은 세션당 발급 횟수 상한이 없다** — 상한은 `status === "active"`(`realtime/index.ts:98`)와 챌린지 보존기간 30일 재검증(`:116-126`)뿐이다. **Google 세션도 같다**(비챌린지 세션에는 보존기간 검사조차 없다) ⇒ 새 위험이 아니며 **OQ-A85**에 포함한다 | 직접 열람 |
+| **R-4** | App Check 부재 | 게이트는 **"익명 uid로 할 수 있는 일"을 줄일 뿐, "누가 호출하는가"를 증명하지 않는다.** 그래도 ⭐ **유효한 토큰 없이 익명이 LLM을 태울 경로는 0이다** — 익명이 S/R을 부르려면 챌린지 세션이 있어야 하고, 그 세션은 Google이 만든 챌린지에 동의해야만 생긴다 | §68.3 · §44.2 3 |
+| **R-5** | (기존 위험) 같은 브라우저의 Google 세션이 바뀐다 | `join/page.tsx:118`은 로그인 여부와 **무관하게** `signInAnonymously`를 부른다 ⇒ Google 로그인 사용자가 링크를 열고 동의하면 **Google 세션이 익명으로 바뀐다**(오케스트레이터의 Playwright 경고와 같은 현상). 게이트 전후 동일하다. 다만 그 뒤 자가 훈련으로 가면 **D에 걸려 오류를 보는 것은 새로 체감되는 부분**이다 → **OQ-A84** | 직접 열람 |
+| **R-6** | fail-open 방향(클레임 부재 → 비익명) | SDK 필수 필드라 **도달 불가로 판정**한다(§68.2). 서버가 실제로 받는 페이로드는 관측하지 않았다 ⇒ **A-2가 익명 토큰에서 `permission-denied`를 관측하면 클레임 존재가 라이브로 확인된다** | `token-verifier.d.ts:88` |
+| **R-7** | 에뮬레이터 스크립트 1건의 대조군 변화 | `scripts/t128-auth-invalidation-probe.mjs:118-125`는 익명으로 `listMyChallenges`를 *"정상 대조군"* 으로 부른다 → 게이트 뒤에는 5회 모두 `permission-denied`(경고 로그)가 난다. 감지기는 `unauthenticated`만 세므로(`:89`) **배너 판정 결론은 바뀌지 않는다**(⚠️ 추정 — 확인 방법: 재실행). 재사용할 때는 로그인을 E2 방식으로 바꿀 것. **이번 필수 작업은 아니다** | 직접 열람 |
+
+### 68.9 (Q7) 테스트 계획
+
+**단위(`npm --prefix functions test`)**
+
+| ID | 대상 | 내용 |
+|---|---|---|
+| **T-1** | 순수 판별 | §68.6 (4) 진리표 전 칸 + `challengeId: ""` → 익명 throw · 비문자열(숫자) → throw. 던져진 오류의 `code === "permission-denied"`이고 ⛔ **`"unauthenticated"`가 아님을 명시적으로 단언**한다(G417) |
+| **T-2** | ⭐ **분류 완전성 트립와이어** | 테스트 파일 안의 정책표 `ANONYMOUS_POLICY: Record<string, "deny"\|"session"\|"report"\|"entry"\|"no_auth"\|"not_callable">`(26행 = §68.3)와 `import * as callables from "../../index"`(선례 `secretDeclarationGate.test.ts:13`)의 키 집합이 **양방향으로 일치**해야 한다. 실패 메시지에 처방을 담는다: *"새 export `X`의 익명 정책이 없다 — Architecture.md §68.3 기준으로 분류하고 해당 호출을 넣어라(G421)"* |
+| **T-3** | 배선 스캔 | `listEntryPoints()`(`functions/src/devtools/secretDeclarationScan.ts:154-157`)로 이름 → 파일을 얻고, `export const <name> =`부터 다음 최상위 `export ` 또는 EOF까지를 본문으로 잘라 검사한다. **deny** → `denyAnonymous(request.auth)`가 있고, 그 위치가 본문의 첫 `getFirestore(`·`generateOpeningLine(`·`getVoiceProvider(`·`getLlmClient(`보다 **앞**이어야 한다(G419). **session/report** → `assertAnonymousChallengeScope(`가 있어야 한다. **entry/no_auth** → 두 호출 모두 **0회**여야 한다(G418 — 수신 입구 보호). ⚠️ 이 스캔은 **"호출이 있다"만 보고 "소유권 검사 뒤에 있다"는 보지 않는다** ⇒ 계약이 아니라 **트립와이어**이고, 순서 확인은 reviewer 몫이다(§68.13) |
+| **T-4** | 역검증(오염 샘플) | 스캔 함수를 합성 본문 3종에 적용한다. ⓐ `createSession` 본문에서 deny 줄만 뺀 것 → **실패** ⓑ `consentChallenge` 본문에 deny를 넣은 것 → **실패** ⓒ deny를 `getFirestore(` 뒤로 옮긴 것 → **실패**. 각각 정상 본문은 **통과**해야 하고, 오염 전후로 **나머지 본문이 같다**는 입력 불변을 단언한다 |
+| **T-5** | E2 소스 가드(루트 `npm test`) | `devSignIn.guard.test.ts` 기존 2건이 **수정 없이** 통과 + (신규) `src/lib/auth/devSignIn.ts`에 `signInAnonymously`가 **0회**여야 한다 |
+
+**에뮬레이터(EM — 병합 전, 라이브 익명 활성화 전의 유일한 실행 검증)**
+
+| ID | 절차 | 기대 |
+|---|---|---|
+| EM-1 | E2 개발용 로그인 → 동의·연령 → 시나리오 → `createSession`·`sendMessage` 몇 턴 → 종료 → 리포트 | 전부 성공(비익명 경로 무변경) |
+| EM-2 | 같은 사용자로 **메신저 또는 generic 보이스** 챌린지 생성(클론 불필요, `challenge/index.ts:141`) | 토큰 링크 획득 |
+| EM-3 | ⛔ **격리된 브라우저 컨텍스트**에서 링크 → 동의(익명) → 흐름 끝까지(메신저: 메시지·모의 화면·스킨 / 보이스: 폴백 텍스트 + 문자·확인창구 이벤트가 발동하면 그것까지) → 종료 → 리플레이 → 결과 공유 → 되감기(속은 순간이 있으면) | 네트워크 탭에서 `permission-denied` **0건** |
+| EM-4 | EM-3의 익명 컨텍스트에서 D 6개를 **빈 페이로드**로 호출 | **6/6 `permission-denied`** |
+| EM-5 | 익명 컨텍스트에서 EM-1 사용자의 세션 ID로 `sendMessage` 호출 | `permission-denied` *"본인 세션이 아닙니다"* (기존 소유권 검사가 게이트보다 먼저 걸린다 — 응답 의미 무변경) |
+
+### 68.10 (Q8) 배포·검증 순서 (⛔ 순서가 설계다)
+
+| 단계 | 내용 | 정지 조건 |
+|---|---|---|
+| **P-1** | 병합 전 `npm --prefix functions test` · `npm test`(Verified Commands 원문) — 기존 843/418은 그대로, 신규만 늘어난다 | 기존 테스트를 고쳐야 하면 정지(§68.6 (4)) |
+| **P-2** | EM-1~EM-5 | 1건이라도 다르면 정지 |
+| **D-0** | export 이름 재대조 — ⛔ 신규 export 0개(`functions/src/index.ts` **무변경**) ⇒ 26/26 | 라이브에 없는 이름이 생기면 정지 |
+| **D-1** | **인덱스**: 게이트는 쿼리를 **0개** 추가한다(판별은 이미 읽은 문서와 토큰만 쓴다) ⇒ ⭐ **`firestore:indexes` 배포 불필요.** §66 사고(인덱스 누락 → `createSession` 전체 장애) 재발 방지 확인만 한다: `firebase firestore:indexes` 라이브 = 선언(2026-09-30 3 = 3, `CLAUDE.md` 인용값) | 불일치하면 이 배포와 **별개로** 보고 |
+| **D-2** | **규칙**: 변경 0건 ⇒ `firestore:rules`·`storage` 배포 없음. ⛔ `--only` 없는 `firebase deploy` **금지** | — |
+| **D-3** | `firebase deploy --only functions --dry-run`(Verified) | OQ-A83 규칙(2회 연속 실패 시에만 `FUNCTIONS_DISCOVERY_TIMEOUT=30`) |
+| **D-4** | ⭐ **전체** `firebase deploy --only functions`(Verified, 26개). **부분 배포 금지** — 변경된 20개 중 D 하나라도 빠지면 그 함수가 익명에게 열린 채로 익명이 켜진다(특히 #18 `createChallenge` = 루프). 전체 배포는 **구조적으로 누락이 불가능**하다 | 부분 실패 시 실패한 이름만 1회 재시도. ⛔ **26/26 성공 전에는 A-1 금지** |
+| **D-5** | `firebase functions:list` → 26개 · `nodejs22` | — |
+| **S-G** | ⭐ **Google 회귀 스모크(익명이 꺼진 상태)**: §67.9 S-1~S-4 + 챌린지 **생성·목록·삭제** 1회씩(D 클래스의 비익명 무변경 확인). ⚠️ Gemini 일일 캡을 소모한다(G180) | 하나라도 `permission-denied`면 정지 → revert 판단(익명이 꺼져 있어 노출은 없다) |
+| **A-1** | **User가 콘솔에서 Anonymous를 켠다** | — |
+| **A-2** ⭐ | **거부 프로브 — 권고: A-3보다 먼저.** 별도 브라우저 프로필 또는 공개 웹 설정만 쓰는 Node 스크립트로 `signInAnonymously` → D 6개를 **빈 페이로드 `{}`** 로 호출 → 기대값 **6/6 `permission-denied`**. ⭐ 빈 페이로드라 게이트가 없으면 `invalid-argument`(예: `session/index.ts:90-92`)나 빈 목록 성공(`listMyChallenges`)이 나올 뿐이다 — **LLM·쓰기 0회로 판별력이 있다.** 먼저 하는 이유: 게이트에 결함이 있으면 노출 창을 최소로 줄인다. ⚠️ **User가 지시한 순서(A-3 뒤)와 다르다** — 권고일 뿐이며 오케스트레이터가 판단한다 | 1건이라도 `permission-denied`가 아니면 **즉시 R ①** |
+| **A-3** | **Playwright 수신자 흐름** — ⛔ **반드시 별도 브라우저 프로필**(User 프로필에서 열면 `join/page.tsx:118`이 Google 세션을 익명으로 바꾼다). User(Google)가 자기 프로필에서 챌린지를 만들고, 링크는 격리 프로필에서 연다 → EM-3과 같은 항목 | 수신 흐름 중 `permission-denied` 1건이라도 나오면 정지 → 해당 행의 분류 재확인 |
+| **A-4** | A-3의 익명 uid(챌린지 세션을 **가진** 상태)로 `createSession` 직접 호출 → `permission-denied` | 아니면 **즉시 R ①** |
+| **R** | ⛔ **롤백 순서 고정**: ① User가 **익명을 끈다** ② 그 뒤에 `git revert` + D-4. 역순으로 하면 "게이트 없음 + 익명 켜짐" 창이 생긴다(G422). 게이트 결함(A-2/A-4 실패)은 **①만으로 노출이 닫힌다**(수신 흐름은 다시 0%가 된다) | — |
+| **DOC** | 성공한 명령은 `CLAUDE.md` Verified Commands에 기록한다(오케스트레이터) | — |
+
+### 68.11 (Q9) 신규 OQ — ⭐ **둘 다 비차단**(게이트 배포·익명 활성화의 선행 조건이 아니다)
+
+| OQ | 질문 | 소유 | 선행 조건 |
+|---|---|---|---|
+| **OQ-A84** | **익명 사용자가 수신 흐름 밖(자가 훈련 입구·챌린지 목록)에 도달했을 때 무엇을 보여주는가.** 오늘은 각 화면의 일반 오류다(§68.6 (5)). 후보: (a) 현행 유지 (b) 익명 상태로 자가 훈련 입구에 들어오면 *"Google로 로그인"* 안내 + 익명 로그아웃 (c) 동의 랜딩에서 이미 Google 로그인 상태면 `signInAnonymously`를 생략(R-5). ⚠️ G153(*"익명을 `/login`으로 보내지 말 것"*, §34)은 **훈련 중 무효화** 규칙이다 — 훈련 밖 진입 안내와의 관계는 UX 판정이 필요하다 | **User → ux-design** | 없음 |
+| **OQ-A85** | **챌린지 경로 남용 상한을 별건으로 다룰 것인가** — R-2(생성·동의·삭제 루프가 §66 창을 우회) · R-3(실시간 자격증명 발급 횟수 상한 없음). **기존 문제**이며 익명 활성화로 커지지 않는다(루프에서 비용이 드는 생성이 D) | **User** | 없음 |
+
+### 68.12 ⛔ 닫지 못한 것 (자기 고지 — 지우지 말 것)
+
+1. ⛔ **architect는 셸·에뮬레이터·배포·테스트를 한 번도 실행하지 않았다.** 라이브 400 `ADMIN_ONLY_OPERATION`과 콘솔 제공업체 목록은 **오케스트레이터 인용값**이다.
+2. ⚠️ 문서 확인은 WebFetch 1건(요약 모델 경유)이고, 나머지는 **SDK·CLI 설치본 소스 직접 열람**이다. Admin SDK 레퍼런스 페이지는 WebFetch가 본문을 가져오지 못해 설치본 `.d.ts`로 대체했다. 설치본은 **메인 체크아웃**의 `node_modules`이며 버전은 `package.json` 범위와 일치한다.
+3. ⚠️ **프로덕션 익명 토큰에 `firebase.sign_in_provider: "anonymous"`가 실제로 실리는지는 라이브에서 한 번도 관측하지 않았다** → A-2가 첫 관측이다.
+4. ⚠️ `FUNCTIONS_EMULATOR`를 배포 환경에 주입할 수 있는지는 미확인이다(E1 기각의 보조 근거일 뿐이고, 주 근거는 검증 장소 상실이다).
+5. ⚠️ 프로덕션 콘솔에서 **이메일 제공업체가 꺼져 있다**는 판단은 *"제공업체 = Google뿐"* 인용값에서 **추론**했다(E2가 프로덕션에 영향이 없다는 판정의 보조 근거).
+6. ⚠️ T74 이전 익명 리포트 존재 여부는 미확인이다(§68.5 — 0건 추정).
+7. ⚠️ R-7(t128 프로브 결론 불변)은 추정이다.
+8. ⚠️ `@example.com` 주소가 에뮬레이터 이메일 검증(`operations.js:159`)을 통과한다는 것은 형식상 **추정**이다 — EM-1이 확인한다.
+
+### 68.13 인계 (⛔ 이 절은 아래 문서를 편집하지 않았다)
+
+| 대상 | 내용 |
+|---|---|
+| **planner** (`docs/Tasks.md`) | 담당 행(등재 중)에 적을 것: 커밋 C1~C3 · 게이트 G415~G423 · §68.10 절차 · OQ-A84/A85는 **비차단**. ⚠️ 번호는 planner가 정한다 |
+| **implementer** | **C1** 게이트 — `functions/src/shared/anonymousGate.ts` + 삽입 20곳(§68.3) + T-1~T-4. **한 커밋**(20곳 중 일부만 들어간 상태가 main에 존재하면 안 된다). **C2** E2 — `devSignIn.ts` + 로그인 버튼 문구 + `FORBIDDEN` 추가 + T-5. **별도 커밋**(되돌리는 단위가 다르다). 단 EM-1이 C2에 의존하므로 **같은 PR**로 묶는다. **C3** `README.md:89-95`에 *"⛔ 서버 익명 게이트(§68) 배포 전에는 Anonymous 제공업체를 켜지 말 것"* 1문장(Documentation Maintenance 규칙) |
+| **reviewer** | §68.3 "삽입" 열과 실제 위치(**소유권 검사 뒤 · 쓰기/LLM 앞**) 20곳을 **수기로** 대조한다 — T-3은 순서를 보지 않는다. E·N 4개에 호출이 **없음**도 확인한다 |
+| **오케스트레이터 / User** | §68.10 D-0~R · **A-1은 User** · A-2 순서 권고 채택 여부 |
+| **architect 후속**(구현 병합 뒤) | `docs/API.md` 각 콜러블 Auth 열에 익명 정책과 `permission-denied`를 추가한다. ⛔ **이 패스는 API.md를 편집하지 않았다** — 구현 전에 계약을 먼저 적지 않는다. `docs/Database.md`는 무변경이다 |
+| **docs** | CHANGELOG 반영 · §34.1 표의 *"익명 — 개발 전용 1곳 `devSignIn`"* 행(`docs/Architecture.md:6369`)은 C2 병합 뒤 **과거 기록**이 된다 — ⛔ 원문은 보존하고, 정정은 이 절이 한다 |
+| **범위 밖 후보** | 규칙 강화(§68.7 — 규칙 테스트 하네스 선행) · 익명 계정 자동 정리 설정 확인(§34 `:6383`, 콘솔 소관) |
+
+**게이트(갭) 신설 — G415~G423**
+
+| ID | 규칙 |
+|---|---|
+| **G415** | 익명 판별은 `token.firebase.sign_in_provider === "anonymous"` **하나뿐**이다 — `isAnonymous`·email 부재·uid 형태·`provider_id`로 판정하지 말 것 |
+| **G416** | 서버 게이트에 **환경 분기 금지**(`FUNCTIONS_EMULATOR` 등) — 에뮬레이터 대응은 클라 개발용 로그인(E2)이 맡는다 |
+| **G417** | 거부 코드는 **`permission-denied`** — `unauthenticated`는 인증 무효화 배너와 U1 잠금을 오발화한다(`callable.ts:29-31`·`:38-40`) |
+| **G418** | `consentChallenge`·`setChallengeResultSharing`·`getChallengeLanding`·`reportChallenge`에는 **거부 호출 금지**(T-3이 0회를 단언) |
+| **G419** | D의 거부 호출은 `if (!request.auth)` **바로 다음** — 어떤 Firestore read·LLM·인자 검증보다도 앞 |
+| **G420** | S/R의 호출은 **기존 소유권 검사 바로 다음** — 추가 read 0회, 상태 검사·쓰기·LLM·외부 호출 앞 |
+| **G421** | 새 콜러블 export는 **익명 정책 분류 없이는 테스트가 실패**한다(T-2 트립와이어) |
+| **G422** | **익명 활성화는 D-4 + S-G 뒤에만.** 롤백은 **익명 끄기가 먼저**다 |
+| **G423** | `judgeRewindAnswer`는 **`report.challengeId`**(서버 역정규화 값)로 판정하고, 값이 없으면 거부한다(fail-closed) |
+
+### 68.14 이 패스의 편집 범위 (⛔ 정본)
+
+**편집 파일 3개뿐**: `docs/Architecture.md`(**이 §68 신설** — §0~§67은 한 줄도 수정하지 않았다) · `docs/DECISIONS.md`(**#108 1행 추가**) · `docs/adr/0016-anonymous-uid-challenge-scope.md`(**신설** — ADR-0006 A1의 *"무개정 재사용"* 을 좁히는 후속 결정. ADR-0006 본문은 불변).
+⛔ `functions/**`·`src/**`·`scripts/**`·`firestore.rules`·`storage.rules`·`firebase.json`·`README.md`·`CLAUDE.md` **0줄**. ⛔ `docs/Tasks.md`·`docs/PRD.md`·`docs/UX.md`·`docs/API.md`·`docs/Database.md`·`docs/UpdateRequests.md` **무편집**. 커밋·push **0건**(셸 없음).
+> **번호 실측(착수 시점, `docs/**` grep)**: `^## ` 최대 **67**(`^## 6[8-9]\.` **0히트**) · 게이트 최대 **G414**(`G41[5-9]|G4[2-9]\d` **0히트**) · OQ 최대 **OQ-A83**(`OQ-A8[4-9]|OQ-A9\d` **0히트**) · DECISIONS 최대 **#107**(`DECISIONS.md:117`) · `docs/adr/` 최대 **0015** ⇒ **§68 · G415~G423 · OQ-A84~A85 · #108 · ADR-0016**. ⛔ 예약하지 않는다 — 동시 패스가 있으면 **병합 순서로 확정**한다(치환 범위: `## 68.` 헤딩 이후 + DECISIONS #108 행 + ADR-0016 파일뿐, ⛔ 전역 치환 금지).
+> **base**: `origin/main` = **`ec4bc2fe60a83282bc00ef56f8e50bd3df927e57`**(이 워크트리의 생성 기준) · 로컬 `main` = `d96c0e4f35bcc3eceddd24680884bcd3832b5d21`.
+> **UX 추적성**: 신규 Screen ID·Flow ID·라우트·컴포넌트 **0건**. **허용 경로** = UX-021/UF-005 · UX-014 · UX-022 · UX-007 · UX-008 · UX-018 · UX-028(§68.4). **거부 경로** = UX-002 · UX-029 · UX-019 · UX-020 + `createSession` 호출 화면 3곳(§68.4). ⛔ 어느 화면의 계약도 바꾸지 않는다(오류 안내 문면은 OQ-A84).
