@@ -24,6 +24,9 @@ const FORBIDDEN = [
   "익명 계정으로 빠른 로그인",
   "개발 전용 · 배포 빌드에는",
   "signInAnonymously",
+  // T176(§68.2 E2) — 개발용 로그인이 에뮬레이터 이메일 계정 방식으로 바뀌며 버튼 문구가 교체됐다.
+  // 위 기존 문구는 **남긴다**(누출 센티널이 조용히 사라지지 않게).
+  "에뮬레이터 테스트 계정으로 빠른 로그인",
   // T116 층 2 — 렌더 하네스 격리(Architecture.md §39.4)
   "T116-RENDER-HARNESS-TEST-ONLY",
   "transpileModule",
