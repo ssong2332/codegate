@@ -15432,7 +15432,7 @@ function hasSurvivingMatch(patterns: readonly RegExp[], text: string): boolean {
 4. ⛔ **T147과 T148을 한 커밋·한 PR·한 배포로 묶지 않는다**(§67.6). **T147이 먼저**다.
 5. ⛔ **`functions/tsconfig.json`의 `target`(`es2020`)을 올리지 않는다.** `ES2022` 이상이면 `useDefineForClassFields` 기본값이 `true`로 바뀌어 **클래스 필드 초기화 의미가 달라진다** — 런타임 상향이 아니라 **출력 코드 변경**이고, 이 행의 "제품 동작 델타 0" 전제를 깬다.
 6. ⛔ **로컬 테스트 수 전/후 동일을 "런타임 상향이 검증됐다"로 보고하지 않는다**(§67.4 ⓐ). 그것은 **무회귀 확인**일 뿐이다. 상향의 증거는 **dry-run 경고 소멸 + 배포 후 `functions:list` + 라이브 스모크**(§67.8 E-2·E-6·E-7)뿐이다.
-7. ⛔ **dry-run이 10초 타임아웃으로 다시 실패해도 `FUNCTIONS_DISCOVERY_TIMEOUT`을 조용히 설정하지 않는다** — 우회이므로 **OQ-A83** 승인 대상이다. 같은 명령 **2회 실패 시 멈추고 보고**한다(전역 규칙 5).
+7. ⛔ **dry-run이 10초 타임아웃으로 다시 실패해도 `FUNCTIONS_DISCOVERY_TIMEOUT`을 조용히 설정하지 않는다** — 우회이므로 **OQ-A83** 승인 대상이다. 같은 명령 **2회 실패 시 멈추고 보고**한다(전역 규칙 5). ⭐ **(갱신 2026-09-30) OQ-A83 User 확정 = "허용"**(DECISIONS #107): **같은 명령 2회 연속 실패 후에만** `FUNCTIONS_DISCOVERY_TIMEOUT=30`으로 재시도할 수 있고, 설정 사실과 출력 원문을 보고에 적는다. 1회차부터 설정하거나 30을 넘기는 것은 여전히 금지다.
 8. ⛔ **`firebase-admin` 상향(14.2.0 → 14.5.0)은 이 행 범위 밖이다**(T148 F항과 동일 — 런타임 22에서 14.2.0은 지원 범위 **안**이 된다).
 9. ⚠️ **architect는 셸·라이브·배포·테스트를 0회 실행했다.** 라이브·로컬 실행값은 전부 **오케스트레이터 실측 인용값**(2026-09-30, main `e71f114`)이다. 웹 문서는 WebFetch로 **직접** 확인했다(URL 병기).
 
@@ -15474,6 +15474,7 @@ function hasSurvivingMatch(patterns: readonly RegExp[], text: string): boolean {
 **판정: Node 22.** ⭐ 결정적 사유는 한 줄이다 — **"로컬에서 통과한 것이 배포에서도 통과한다"는 이 저장소 전 검증 체계의 전제(Verified Commands 표)가, 22에서는 환경 변경 없이 성립하고 24에서는 성립하지 않는다.** 30일 기한의 P0에 검증 공백을 새로 여는 선택은 하지 않는다.
 **대가(명시)**: **2027-04-30부터 dry-run에 폐기 예고 경고가 다시 뜨고, 2027-10-31이 다음 하드 기한**이다 ⇒ **22→24 후속 상향 행 등재를 planner에 인계**한다(§67.12). ⛔ 그 기한을 CLI 경고로 감지하려 하지 말 것 — CLI 표의 nodejs22 폐기일이 GCP보다 **1년 늦게** 적혀 있다(§67.1 4).
 ⇒ **User 확인 대상: OQ-A82**(권고 22). 24를 택하면 §67.4·§67.7을 **architect가 다시 판정**한다(로컬 Node 고정·루트 파급이 새로 열린다).
+⇒ ⭐ **(갱신 2026-09-30) OQ-A82 User 확정 = *"Node 22 (Recommended)"***(DECISIONS #107) — **목표 Node 22 확정, C1 착수 게이트 해제.** 24 재판정 분기는 닫혔다.
 
 ### 67.3 ⭐⭐ `firebase-admin` 14.2.0이 Node 20에서 돌고 있다는 것의 의미 (지시 5의 답)
 
@@ -15512,7 +15513,7 @@ function hasSurvivingMatch(patterns: readonly RegExp[], text: string): boolean {
 2. ⭐ **판정: T147(런타임 상향)은 이 타임아웃에 영향을 주지 않는다.** discovery는 **배포자 PC에서** 사용자 코드를 적재해 매니페스트를 뽑는 단계이고, `engines.node`는 **Cloud Build에 넘기는 문자열**이다. discovery를 도는 Node는 로컬 v22.14.0이고 T147은 그것을 바꾸지 않는다. ⚠️ *"discovery가 PATH의 로컬 `node`로 돈다"* 는 **추정(강함)** — 확인: `firebase deploy --only functions --dry-run --debug` 출력의 spawn 줄.
 3. ⚠️ **T148(SDK 7.3.0→7.4.0)은 영향을 줄 수 있다** — 7.4.0 릴리스 노트에 *"Unify global manifest on globalThis for forward-compatible manifest extraction"* 이 있다(https://github.com/firebase/firebase-functions/releases). **매니페스트 추출 = 바로 이 discovery 단계**다 ⇒ T148의 완료 증거에 **dry-run 성공 + 소요 시간**을 넣으라고 인계한다(§67.12).
 4. **1회차 실패 원인**: ⚠️ **추정** — 첫 실행의 콜드 파일 캐시(Windows 실시간 검사가 `node_modules` 수천 파일을 처음 읽는 비용 등). 근거는 *"같은 명령 2회차 성공"* 하나뿐이고 소요 1분 14초에는 predeploy 빌드가 포함돼 적재 시간만 따로 알 수 없다. **확인 방법**: ⓐ `--debug`로 discovery 구간 시각 기록 ⓑ 빌드 직후 `functions/lib/index.js` 적재 시간 단독 측정. ⛔ **어느 쪽도 이 패스는 수행하지 않았다.**
-5. ⭐ **배포 안전성에 주는 결과**: discovery 실패는 **어떤 리소스도 바꾸기 전에** 난다 ⇒ **같은 명령 재시도는 안전**하다(부분 배포 상태를 만들지 않는다). ⛔ 단 **2회 연속 실패 시 멈추고 보고**, `FUNCTIONS_DISCOVERY_TIMEOUT` 설정은 **OQ-A83** 승인 후에만.
+5. ⭐ **배포 안전성에 주는 결과**: discovery 실패는 **어떤 리소스도 바꾸기 전에** 난다 ⇒ **같은 명령 재시도는 안전**하다(부분 배포 상태를 만들지 않는다). ⛔ 단 **2회 연속 실패 시 멈추고 보고**, `FUNCTIONS_DISCOVERY_TIMEOUT` 설정은 **OQ-A83** 승인 후에만. ⭐ **(갱신 2026-09-30) OQ-A83 승인됨**(DECISIONS #107) ⇒ 2회 연속 실패 시 절차는 **① 실패 2회 출력 원문 보존 → ② `FUNCTIONS_DISCOVERY_TIMEOUT=30` 설정 후 같은 명령 재시도 → ③ 설정 사실·결과를 보고에 명시**. 재시도도 실패하면 **멈추고 보고**한다(값을 더 올리지 않는다 — 근본 처방 `onInit()`은 별건).
 
 ### 67.6 ⭐⭐ T148(SDK 상향)과의 순서 (T147 D④의 답)
 
@@ -15573,7 +15574,7 @@ function hasSurvivingMatch(patterns: readonly RegExp[], text: string): boolean {
 2. ✅ **(정정) 함수 수 불일치는 없었다** — 최초 인계의 *"라이브 25개"* 는 오케스트레이터 계수 오류였고, 재실측(2026-09-30)에서 **26/26 이름 일치**가 확인됐다(§67.1 13 · D-0 완료). 남는 것은 배포 직전 재대조뿐이다.
 3. ⚠️ **admin 14.2.0이 Node 20에서 실제로 깨지는 경로가 있는지 확인하지 않았다**(§67.3 2) — T147이 그 질문 자체를 없애므로 **추가 조사하지 않는다**.
 4. ⚠️ **"`engines.node` ≥ 의존성 engines 하한"을 기계로 막는 장치가 없다** — 오늘의 비지원 상태(§67.3)가 **아무 경고 없이** 생긴 이유다(`npm`의 `EBADENGINE`은 경고일 뿐이고 Cloud Build 로그 안에 묻힌다). 트립와이어로 막을지는 **이번 범위 밖**(P0 최소 변경) ⇒ planner 인계 후보(§67.12).
-5. ⚠️ **Node 24 고유 동작 변화는 조사하지 않았다**(22 권고라서) — OQ-A82에서 24가 택해지면 **재판정 필수**.
+5. ⚠️ **Node 24 고유 동작 변화는 조사하지 않았다**(22 권고라서) — OQ-A82에서 24가 택해지면 **재판정 필수**. ⭐ **(갱신 2026-09-30) OQ-A82가 22로 확정돼 이 조건은 발동하지 않는다**(24 조사는 22→24 후속 상향 행의 몫).
 6. ⚠️ **firebase-tools 15.24.0 → 15.32.0 CLI 상향은 판정하지 않았다** — 22는 두 버전 모두에서 지원된다(Firebase 문서 기재). 필요성 0.
 7. ⚠️ **에뮬레이터 불일치 경고의 정확한 문구는 추정**이다 — C0 캡처가 정본.
 
@@ -15581,21 +15582,21 @@ function hasSurvivingMatch(patterns: readonly RegExp[], text: string): boolean {
 
 | OQ | 질문 | 소유 | 선행 조건 |
 |---|---|---|---|
-| **OQ-A82** | **상향 목표를 Node 22로 확정하는가**(권고) — 대가: **2027-04-30 예고 · 2027-10-31 폐기**로 13개월 뒤 다음 상향이 필요하다. 24를 택하면 25개월로 늘지만 **로컬·에이전트 환경 전체를 24로 올려야** 하고(루트 포함 — T147 F항 범위 밖) architect 재판정이 선행된다(§67.2) | **User** | 없음 — ⛔ **C1 착수 게이트** |
-| **OQ-A83** | dry-run/배포가 discovery 10초 타임아웃으로 **2회 연속** 실패할 경우 **`FUNCTIONS_DISCOVERY_TIMEOUT=30`** 설정을 허용하는가(Firebase 문서 공식 수단 — §67.5 1). ⛔ **미승인이면 정지·보고**(우회 금지). 근본 처방(`onInit()`으로 전역 초기화 이연)은 **소스 변경이라 별건** | **User / 오케스트레이터** | 2회 연속 실패가 **실제로 관측**됐을 때만 |
+| **OQ-A82** | **상향 목표를 Node 22로 확정하는가**(권고) — 대가: **2027-04-30 예고 · 2027-10-31 폐기**로 13개월 뒤 다음 상향이 필요하다. 24를 택하면 25개월로 늘지만 **로컬·에이전트 환경 전체를 24로 올려야** 하고(루트 포함 — T147 F항 범위 밖) architect 재판정이 선행된다(§67.2) | **User** | 없음 — ⛔ **C1 착수 게이트** ⇒ ✅ **resolved 2026-09-30 — User 원문 *"Node 22 (Recommended)"*(오케스트레이터 전달) · DECISIONS #107 · C1 착수 게이트 해제** |
+| **OQ-A83** | dry-run/배포가 discovery 10초 타임아웃으로 **2회 연속** 실패할 경우 **`FUNCTIONS_DISCOVERY_TIMEOUT=30`** 설정을 허용하는가(Firebase 문서 공식 수단 — §67.5 1). ⛔ **미승인이면 정지·보고**(우회 금지). 근본 처방(`onInit()`으로 전역 초기화 이연)은 **소스 변경이라 별건** | **User / 오케스트레이터** | 2회 연속 실패가 **실제로 관측**됐을 때만 ⇒ ✅ **resolved 2026-09-30 — User 원문 *"허용"*(오케스트레이터 전달: 2회 연속 실패 시 `FUNCTIONS_DISCOVERY_TIMEOUT=30`으로 재시도) · DECISIONS #107 · 절차 §67.5 5** |
 
 ### 67.12 인계 (⛔ 이 절은 아래 문서를 편집하지 않았다)
 
 | 대상 | 내용 |
 |---|---|
-| **planner** (`docs/Tasks.md`) | ① T147 우선순위 칸이 여전히 **`P1(인프라·프로세스)`**(`:577`) — 승격 기록은 `:594`에만 있다(행 원문 무수정 관례로 보이나 **읽는 사람이 P1로 오독할 수 있다**) ② T147 착수 조건 D①이 **§67로 충족**됨 · 담당 경로에 **OQ-A82 게이트** 추가 ③ T147 B항 `firebase.json` `:12-19` → **`:14-21`**, 편집 지점에 **`functions/package-lock.json:19-21`** 추가 ④ T148 C/D항 줄번호 **+3 정정**(§67.1 12) · T148 E항에 **dry-run 성공 + discovery 소요 시간** 추가(§67.5 3) · T148 선행에 **"T147 배포·스모크 완료"** 추가(§67.6) ⑤ 신규 행 후보 2건: **Node 22→24 상향**(기한 2027-10-31, 예고 2027-04-30) · **engines ≥ 의존성 하한 트립와이어**(§67.10 4) |
+| **planner** (`docs/Tasks.md`) | ① T147 우선순위 칸이 여전히 **`P1(인프라·프로세스)`**(`:577`) — 승격 기록은 `:594`에만 있다(행 원문 무수정 관례로 보이나 **읽는 사람이 P1로 오독할 수 있다**) ② T147 착수 조건 D①이 **§67로 충족**됨 · 담당 경로에 **OQ-A82 게이트** 추가(⭐ **2026-09-30 User 확정으로 해제됨 — DECISIONS #107**, 상태 칸에 해제 사실만 적으면 된다) ③ T147 B항 `firebase.json` `:12-19` → **`:14-21`**, 편집 지점에 **`functions/package-lock.json:19-21`** 추가 ④ T148 C/D항 줄번호 **+3 정정**(§67.1 12) · T148 E항에 **dry-run 성공 + discovery 소요 시간** 추가(§67.5 3) · T148 선행에 **"T147 배포·스모크 완료"** 추가(§67.6) ⑤ 신규 행 후보 2건: **Node 22→24 상향**(기한 2027-10-31, 예고 2027-04-30) · **engines ≥ 의존성 하한 트립와이어**(§67.10 4) |
 | **implementer** | §67.7 C0~C2 · §67.8 E-1~E-5 |
-| **오케스트레이터 / User** | §67.9 D-0~D-5·S-1~S-4·R · OQ-A82 · OQ-A83 · 성공한 dry-run·`serve`·`functions:list` 명령을 **`CLAUDE.md` Verified Commands에 기록**(현재 미기재 3건) |
+| **오케스트레이터 / User** | §67.9 D-0~D-5·S-1~S-4·R · OQ-A82 · OQ-A83(⭐ **둘 다 2026-09-30 User 확정 — DECISIONS #107**) · 성공한 dry-run·`serve`·`functions:list` 명령을 **`CLAUDE.md` Verified Commands에 기록**(현재 미기재 3건) |
 | **docs** | `README.md:42`는 C1이 고친다(implementer) — docs 에이전트는 CHANGELOG 반영만 |
 
 ### 67.13 이 패스의 편집 범위 (⛔ 정본)
 
-**편집 파일 2개뿐**: `docs/Architecture.md`(**이 §67 신설 — §0~§66 한 줄도 수정하지 않았다**) · `docs/DECISIONS.md`(**#106 1행 추가**).
+**편집 파일 2개뿐**: `docs/Architecture.md`(**이 §67 신설 — §0~§66 한 줄도 수정하지 않았다**) · `docs/DECISIONS.md`(**#106 1행 추가** · ⭐ **후속 갱신 2026-09-30: #107 1행 추가 — OQ-A82·A83 User 확정 기록**, §67.0 7 · §67.2 · §67.5 5 · §67.10 5 · §67.11 · §67.12에 확정 표기만 덧붙였다. 판정 무변경).
 ⛔ **`functions/**`·`src/**`·`package.json`·락파일·`README.md`·`CLAUDE.md`·`firebase.json` 0줄**(읽기만: `functions/package.json` · `functions/package-lock.json` · `functions/tsconfig.json` · `functions/scripts/clean-lib.mjs` · `functions/src/index.ts` · `functions/src/scenarios/beginnerBriefing.ts` · `scripts/local-dep-guard.mjs` · `firebase.json` · `.firebaserc` · 루트 `package.json` · `README.md` · `.githooks/pre-commit`) · ⛔ `docs/Tasks.md`·`docs/PRD.md`·`docs/UX.md`·`docs/API.md`·`docs/Database.md`·`docs/UpdateRequests.md` **무편집** · ⛔ **ADR 0건**(런타임 메이저 선택은 운영 결정이며 모듈 경계·데이터 모델·계약을 바꾸지 않는다 — DECISIONS 1행으로 충분) · ⛔ **게이트 0건 · OQ 2건(OQ-A82·A83)**.
 > **번호 실측(착수 시점, `docs/**` grep)**: `^## ` 최대 **66**(`^## 6[7-9]\.` **0히트**) · 게이트 최대 **G414**(`G41[5-9]|G4[2-9]\d` **0히트** — 이번엔 신설 없음) · OQ 최대 **OQ-A81**(`OQ-A8[2-9]` **0히트**) · DECISIONS 최대 **#105**(`DECISIONS.md:115`) · `docs/adr/` 최대 **0015** ⇒ **§67 · OQ-A82~A83 · #106**. ⛔ 예약 0건 — 동시 패스가 있으면 **병합 순서로 확정**(치환 스코프: `## 67.` 헤딩 이후 + DECISIONS #106 행뿐, ⛔ 전역 치환 금지).
 > **base**: `.git/refs/heads/main` = **`e71f114e1888b062d8f77b317b571cf1f7f1aaf1`**.
