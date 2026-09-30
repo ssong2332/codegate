@@ -19,7 +19,7 @@
     "postinstall": "node ../scripts/local-dep-guard.mjs --worktree || exit 0"
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "lib/index.js",
   "dependencies": {
