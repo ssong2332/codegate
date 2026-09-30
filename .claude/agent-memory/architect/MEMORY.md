@@ -69,3 +69,5 @@
 - [부정 배제는 어순이 방식을 정한다](feedback_negation_follows_word_order.md) — 한국어 부정은 후치라 lookbehind는 0건을 막는다; 사례별 오프셋을 세면 창 길이가 나온다
 - [규칙 변경엔 시기 표식을 같이 넣는다](feedback_rule_change_needs_an_epoch_marker.md) — 배포 시각 추정 말고 새 필드의 존재가 판별자; 좁히는 필터는 과소 계상을 조용하게 만든다
 - ["범위 밖" 강등은 사유가 죽으면 같이 죽는다](feedback_out_of_scope_downgrade_expires.md) — 재신고 시 항목 말고 강등 사유 문장을 코드로 재판정; 그 표에 실측이 이미 있다
+- [로컬이 이미 목표 버전이면 테스트는 판별 못 한다](feedback_local_already_on_target_means_tests_dont_discriminate.md) — 전/후 동일은 무회귀일 뿐; 증거는 배포 층, 검증 층이 다르면 배포도 분리
+- [Cloud Functions 런타임 수명·CLI 규칙](reference_cloud_functions_runtime_lifecycle.md) — GCP 표가 정본(CLI는 nodejs22 폐기 1년 늦게), engines는 맨 숫자, 락파일 미러, discovery 10초
