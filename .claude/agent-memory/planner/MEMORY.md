@@ -9,7 +9,7 @@
 - [셸 없이 실측하는 법](project_no_shell_measurement.md) — base·커밋메시지는 `.git`·COMMIT_EDITMSG 직접 판독, ff 구간 해시 부재 ≠ 미병합, Glob 타임아웃 지도
 - [점유된 행은 통째로 회피](feedback_row_ownership_conflict.md) — 브랜치명에 걸린 행·merged 행은 포인터 한 줄도 금지, todo 행만 append, 편집 후 열 수 8 재검증
 - [지시문 전제 반증](project_premise_falsification.md) — "구조적으로 불가능"도 grep해 보라, "없다"가 아니라 "약하다"면 해결 방향이 통째로 바뀐다
-- [워크트리 편집 격리](project_worktree_edit_isolation.md) — main 체크아웃은 읽기만 되고 편집은 거부된다, 워크트리 사본의 base 동일성을 먼저 증명하라
+- [워크트리 편집 격리](project_worktree_edit_isolation.md) — main 체크아웃은 읽기만 되고 편집은 거부된다, 워크트리 사본의 base 동일성을 먼저 증명하라 · base는 origin/main일 수 있다
 - [리뷰 판정 기록처](reference_codereview_log.md) — docs/CodeReview.md가 유일한 reviewer·QA 기록이나 항상 뒤처진다, PR 번호는 검증 불가
 - [선례 인용은 라벨로 재grep](project_precedent_citation_drift.md) — "T116의 P1" 인용이 실제로는 T115였다, 한 칸 어긋난 선례가 근거를 통째로 무효화한다
 - [판정표 확장 절차](project_rule_table_extension.md) — 적용 결과를 닫아 서술한 표엔 섞지 말고 분리, 강등 선례 보존용 방어 행 필수
