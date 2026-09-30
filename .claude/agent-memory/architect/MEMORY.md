@@ -71,3 +71,5 @@
 - ["범위 밖" 강등은 사유가 죽으면 같이 죽는다](feedback_out_of_scope_downgrade_expires.md) — 재신고 시 항목 말고 강등 사유 문장을 코드로 재판정; 그 표에 실측이 이미 있다
 - [로컬이 이미 목표 버전이면 테스트는 판별 못 한다](feedback_local_already_on_target_means_tests_dont_discriminate.md) — 전/후 동일은 무회귀일 뿐; 증거는 배포 층, 검증 층이 다르면 배포도 분리
 - [Cloud Functions 런타임 수명·CLI 규칙](reference_cloud_functions_runtime_lifecycle.md) — GCP 표가 정본(CLI는 nodejs22 폐기 1년 늦게), engines는 맨 숫자, 락파일 미러, discovery 10초
+- [Firebase 익명 판별 클레임·에뮬레이터 동작](reference_firebase_anonymous_auth_claims.md) — `firebase.sign_in_provider`(필수 필드), 에뮬레이터도 같은 클레임·서명 미검증, SDK 소스 위치
+- [보안 게이트에 환경 예외를 두지 마라](feedback_security_gate_no_env_exception.md) — 예외는 개발 도구 층으로; 분류는 비용 행보다 "입장권 발급 행"부터; 켜기/롤백 순서 비대칭
