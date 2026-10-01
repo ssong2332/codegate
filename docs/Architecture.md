@@ -15676,7 +15676,7 @@ function hasSurvivingMatch(patterns: readonly RegExp[], text: string): boolean {
 | 6 | `requestReverseEscalation` | S | 소유 `:449-451` | `:451` | 0 — 전제 조건 `:456-461`(보이스 채널 + 시나리오 channel = messenger)이 챌린지 세션에서는 성립하지 않는다(보이스 챌린지는 channel = voice `challenge/index.ts:88`, 메신저 챌린지는 전이 불가 `:101-107`) |
 | 7 | `sendMessage` | S | 소유 `functions/src/roleplay/index.ts:77-79` → LLM | `roleplay/index.ts:79` | ✅ UX-014 폴백·UX-022 (`play/page.tsx:38`·`messenger/page.tsx:26`) |
 | 8 | `createRealtimeCall` | S | 소유 `functions/src/realtime/index.ts:95-97` | `realtime/index.ts:97`(챌린지 재검증 `:116-126` **전**) | ✅ `src/lib/realtime/useRealtimeCall.ts:14` |
-| 9 | `submitRealtimeTranscript` | S | 소유 `functions/src/realtime/submitTranscript.ts:83-85`(트랜잭션 안 — 기존 throw 패턴과 같다) | `submitTranscript.ts:85` | ✅ `play/page.tsx:39` |
+| 9 | `submitRealtimeTranscript` | S | 소유 `functions/src/realtime/submitTranscript.ts:83-85`(트랜잭션 안 — 기존 throw 패턴과 같다) ⚠️ **예외 2(2026-10-02 덧붙임 · User 결정 *"문서에 예외로 적기"* · DECISIONS #111 — 코드 무변경)**: `turns`가 빈 배열이면 세션 read·소유·게이트 **전에** `{ written: 0 }`을 반환한다(현행 `:65-67`) ⇒ 익명이 어떤 세션 ID로 불러도 그 경우에는 성공 응답이다(read·쓰기·LLM 0회 · 대상과 무관한 상수). 앱은 빈 `turns`로 호출하지 않는다 — §68.15 (8) | `submitTranscript.ts:85` | ✅ `play/page.tsx:39` |
 | 10 | `generateReport` | S | 소유 `functions/src/report/index.ts:40-42` | `report/index.ts:42` | ✅ UX-008 `src/app/report/page.tsx:16` |
 | 11 | `judgeRewindAnswer` | **R** | 소유 `functions/src/rewind/index.ts:84-86` → LLM `:108` | `rewind/index.ts:86` — `report`를 넘긴다(§68.5) | ✅ UX-028 `src/app/report/rewind/page.tsx:17`(강제 해설 뒤에만 노출, `src/lib/rewind/rewindEntry.ts:29`) |
 | 12 | `deliverInCallSms` | S | 소유 `functions/src/inCallSms/index.ts:116`(`loadOwnedSession :79-90`) | `inCallSms/index.ts:116` | ✅ `play/page.tsx:33` · `src/lib/realtime/GeminiVoiceSession.tsx:26` |
@@ -15743,7 +15743,7 @@ export function assertAnonymousChallengeScope(                       // 익명�
 
 ⛔ **내부 모듈 import는 0건이어야 한다** — 20개 콜러블 전부가 이 파일을 import하므로, 여기서 `../llm` 등을 끌어오면 §41 시크릿 폐포 게이트(`functions/src/devtools/__tests__/secretDeclarationGate.test.ts`)의 판정이 전 함수에서 바뀐다(G212). ⛔ `functions/src/index.ts`에서 **재export하지 않는다**(배포 대상 목록과 T-2 정책표가 흔들린다).
 
-**(3) 삽입 규칙.** **D**: `if (!request.auth)` 블록 **바로 다음**, 인자 검증보다 **앞**에 둔다(G419). 이유는 둘이다. ① Firestore read·LLM 호출 0회로 거절된다. ② 빈 페이로드 프로브로 게이트 유무를 판별할 수 있다 — 게이트가 있으면 `permission-denied`, 없으면 `invalid-argument`(§68.10 A-2). **S/R**: 기존 소유권 검사 **바로 다음**, 상태 검사·쓰기·LLM·외부 호출 **앞**에 둔다(G420). 소유권 검사보다 앞에 두지 않는 이유: 남의 세션을 찌르는 익명 호출이 지금과 같은 *"본인 세션이 아닙니다"* 를 받게 해 응답 의미를 바꾸지 않기 위해서다. ⚠️ (2026-10-01 덧붙임 — 위 원문 보존) **S/R "상태 검사 앞"에는 예외 M-1이 있다**(`verifyIntercept` 2곳 — §68.15 (1)). **D의 ② "없으면 `invalid-argument`"에는 예외가 1건 있다** — `listMyChallenges`는 인자 검증이 없어 게이트를 통과하면 곧바로 Firestore 조회로 간다(§68.15 (3)).
+**(3) 삽입 규칙.** **D**: `if (!request.auth)` 블록 **바로 다음**, 인자 검증보다 **앞**에 둔다(G419). 이유는 둘이다. ① Firestore read·LLM 호출 0회로 거절된다. ② 빈 페이로드 프로브로 게이트 유무를 판별할 수 있다 — 게이트가 있으면 `permission-denied`, 없으면 `invalid-argument`(§68.10 A-2). **S/R**: 기존 소유권 검사 **바로 다음**, 상태 검사·쓰기·LLM·외부 호출 **앞**에 둔다(G420). 소유권 검사보다 앞에 두지 않는 이유: 남의 세션을 찌르는 익명 호출이 지금과 같은 *"본인 세션이 아닙니다"* 를 받게 해 응답 의미를 바꾸지 않기 위해서다. ⚠️ (2026-10-01 덧붙임 — 위 원문 보존) **S/R "상태 검사 앞"에는 예외 M-1이 있다**(`verifyIntercept` 2곳 — §68.15 (1)). **D의 ② "없으면 `invalid-argument`"에는 예외가 1건 있다** — `listMyChallenges`는 인자 검증이 없어 게이트를 통과하면 곧바로 Firestore 조회로 간다(§68.15 (3)). ⚠️ (2026-10-02 덧붙임 — 위 원문 보존) **S/R에는 게이트 *앞* 조기 반환 예외도 1건 있다** — 예외 2(`submitRealtimeTranscript`의 빈 `turns` → `{ written: 0 }`, DECISIONS #111 · §68.15 (8)). 게이트 위치 자체는 이 규칙대로다.
 
 **(4) ⭐ Google 바이트 무변경 — 판별 진리표**
 
@@ -15787,7 +15787,7 @@ export function assertAnonymousChallengeScope(                       // 익명�
 | **R-3** | 챌린지 세션 1개가 쓰는 LLM 상한 | `sendMessage` ≤ **100턴**(`shared/constants.ts:15`, 챌린지 세션에 복사 `userAccess.ts:211`) · 입력 **1,000자**(`:19`) · **60분**(`:16`, 기점은 answeredAt) → 넘으면 종료(`roleplay/index.ts:354-365`). 되감기 ≤ **리포트당 50회**(`rewind/judge.ts:21`, 적용 `rewind/index.ts:96-100`). ⚠️ **실시간 자격증명(`createRealtimeCall`)은 세션당 발급 횟수 상한이 없다** — 상한은 `status === "active"`(`realtime/index.ts:98`)와 챌린지 보존기간 30일 재검증(`:116-126`)뿐이다. **Google 세션도 같다**(비챌린지 세션에는 보존기간 검사조차 없다) ⇒ 새 위험이 아니며 **OQ-A85**에 포함한다 | 직접 열람 |
 | **R-4** | App Check 부재 | 게이트는 **"익명 uid로 할 수 있는 일"을 줄일 뿐, "누가 호출하는가"를 증명하지 않는다.** 그래도 ⭐ **유효한 토큰 없이 익명이 LLM을 태울 경로는 0이다** — 익명이 S/R을 부르려면 챌린지 세션이 있어야 하고, 그 세션은 Google이 만든 챌린지에 동의해야만 생긴다 | §68.3 · §44.2 3 |
 | **R-5** | (기존 위험) 같은 브라우저의 Google 세션이 바뀐다 | `join/page.tsx:118`은 로그인 여부와 **무관하게** `signInAnonymously`를 부른다 ⇒ Google 로그인 사용자가 링크를 열고 동의하면 **Google 세션이 익명으로 바뀐다**(오케스트레이터의 Playwright 경고와 같은 현상). 게이트 전후 동일하다. 다만 그 뒤 자가 훈련으로 가면 **D에 걸려 오류를 보는 것은 새로 체감되는 부분**이다 → **OQ-A84** | 직접 열람 |
-| **R-6** | fail-open 방향(클레임 부재 → 비익명) | SDK 필수 필드라 **도달 불가로 판정**한다(§68.2). 서버가 실제로 받는 페이로드는 관측하지 않았다 ⇒ **A-2가 익명 토큰에서 `permission-denied`를 관측하면 클레임 존재가 라이브로 확인된다** | `token-verifier.d.ts:88` |
+| **R-6** | fail-open 방향(클레임 부재 → 비익명) | SDK 필수 필드라 **도달 불가로 판정**한다(§68.2). 서버가 실제로 받는 페이로드는 관측하지 않았다 ⇒ **A-2가 익명 토큰에서 `permission-denied`를 관측하면 클레임 존재가 라이브로 확인된다** ⭐ (2026-10-02 덧붙임 — 위 원문 보존) **라이브로 닫혔다** — A-2 거부 6/6 `permission-denied`(오케스트레이터 실측 2026-10-01 · 인용값). 판별식이 그 클레임 하나뿐이므로(G415) 6/6 거부는 클레임 존재를 뜻한다 — §68.15 (9) | `token-verifier.d.ts:88` |
 | **R-7** | 에뮬레이터 스크립트 1건의 대조군 변화 | `scripts/t128-auth-invalidation-probe.mjs:118-125`는 익명으로 `listMyChallenges`를 *"정상 대조군"* 으로 부른다 → 게이트 뒤에는 5회 모두 `permission-denied`(경고 로그)가 난다. 감지기는 `unauthenticated`만 세므로(`:89`) **배너 판정 결론은 바뀌지 않는다**(⚠️ 추정 — 확인 방법: 재실행). 재사용할 때는 로그인을 E2 방식으로 바꿀 것. **이번 필수 작업은 아니다** | 직접 열람 |
 
 ### 68.9 (Q7) 테스트 계획
@@ -15843,7 +15843,7 @@ export function assertAnonymousChallengeScope(                       // 익명�
 
 1. ⛔ **architect는 셸·에뮬레이터·배포·테스트를 한 번도 실행하지 않았다.** 라이브 400 `ADMIN_ONLY_OPERATION`과 콘솔 제공업체 목록은 **오케스트레이터 인용값**이다.
 2. ⚠️ 문서 확인은 WebFetch 1건(요약 모델 경유)이고, 나머지는 **SDK·CLI 설치본 소스 직접 열람**이다. Admin SDK 레퍼런스 페이지는 WebFetch가 본문을 가져오지 못해 설치본 `.d.ts`로 대체했다. 설치본은 **메인 체크아웃**의 `node_modules`이며 버전은 `package.json` 범위와 일치한다.
-3. ⚠️ **프로덕션 익명 토큰에 `firebase.sign_in_provider: "anonymous"`가 실제로 실리는지는 라이브에서 한 번도 관측하지 않았다** → A-2가 첫 관측이다.
+3. ⚠️ **프로덕션 익명 토큰에 `firebase.sign_in_provider: "anonymous"`가 실제로 실리는지는 라이브에서 한 번도 관측하지 않았다** → A-2가 첫 관측이다. ⭐ (2026-10-02 덧붙임 — 위 원문 보존) **관측됐다** — 익명 토큰의 `sign_in_provider=anonymous` + A-2 거부 6/6 `permission-denied`(오케스트레이터 실측 2026-10-01 · 인용값) — §68.15 (9).
 4. ⚠️ `FUNCTIONS_EMULATOR`를 배포 환경에 주입할 수 있는지는 미확인이다(E1 기각의 보조 근거일 뿐이고, 주 근거는 검증 장소 상실이다).
 5. ⚠️ 프로덕션 콘솔에서 **이메일 제공업체가 꺼져 있다**는 판단은 *"제공업체 = Google뿐"* 인용값에서 **추론**했다(E2가 프로덕션에 영향이 없다는 판정의 보조 근거).
 6. ⚠️ T74 이전 익명 리포트 존재 여부는 미확인이다(§68.5 — 0건 추정).
@@ -15858,7 +15858,7 @@ export function assertAnonymousChallengeScope(                       // 익명�
 | **implementer** | **C1** 게이트 — `functions/src/shared/anonymousGate.ts` + 삽입 20곳(§68.3) + T-1~T-4. **한 커밋**(20곳 중 일부만 들어간 상태가 main에 존재하면 안 된다). **C2** E2 — `devSignIn.ts` + 로그인 버튼 문구 + `FORBIDDEN` 추가 + T-5. **별도 커밋**(되돌리는 단위가 다르다). 단 EM-1이 C2에 의존하므로 **같은 PR**로 묶는다. **C3** `README.md:89-95`에 *"⛔ 서버 익명 게이트(§68) 배포 전에는 Anonymous 제공업체를 켜지 말 것"* 1문장(Documentation Maintenance 규칙) |
 | **reviewer** | §68.3 "삽입" 열과 실제 위치(**소유권 검사 뒤 · 쓰기/LLM 앞**) 20곳을 **수기로** 대조한다 — T-3은 순서를 보지 않는다. E·N 4개에 호출이 **없음**도 확인한다 |
 | **오케스트레이터 / User** | §68.10 D-0~R · **A-1은 User** · A-2 순서 권고 채택 여부 |
-| **architect 후속**(구현 병합 뒤) | `docs/API.md` 각 콜러블 Auth 열에 익명 정책과 `permission-denied`를 추가한다. ⛔ **이 패스는 API.md를 편집하지 않았다** — 구현 전에 계약을 먼저 적지 않는다. `docs/Database.md`는 무변경이다. ⭐ **(2026-10-02 덧붙임 — 위 원문 보존) API.md 반영 완료** — main `d856e1d`(T176 병합본 · 2026-10-01 배포는 오케스트레이터 인용값)의 소스를 직접 열람해 `docs/API.md`의 Conventions 3줄(Auth·인가·표준 에러 코드) · 기존 절 Auth 행 19곳 · 부록 A `recordMockScreenEvent` 검증 행 · 사용자2 접근 블록에 익명 정책(클래스 · `permission-denied` 문구 · M-1)을 덧붙였고, **부록 D**(§68.3 26행 사본 + 현행 게이트 줄번호 · M-1 진리표 · 라이브 관측 인용 4건)와 **부록 E**(§66.12 7의 델타 2건 + T178 C의 `API.md:142` + 같은 PR 구현분 2건 = 입력·빈도 상한 5건)를 신설했다. ⛔ Request·Response 계약·`docs/Database.md` 무변경. ⚠️ 반영 중 미판정 관측 1건 — `submitRealtimeTranscript`가 빈 `turns`에서 게이트 **앞**에 조기 반환한다(`functions/src/realtime/submitTranscript.ts:65-67`, 쓰기·LLM 0회) — 예외로 등재하지 않았다(G420 · User 판정 대상) |
+| **architect 후속**(구현 병합 뒤) | `docs/API.md` 각 콜러블 Auth 열에 익명 정책과 `permission-denied`를 추가한다. ⛔ **이 패스는 API.md를 편집하지 않았다** — 구현 전에 계약을 먼저 적지 않는다. `docs/Database.md`는 무변경이다. ⭐ **(2026-10-02 덧붙임 — 위 원문 보존) API.md 반영 완료** — main `d856e1d`(T176 병합본 · 2026-10-01 배포는 오케스트레이터 인용값)의 소스를 직접 열람해 `docs/API.md`의 Conventions 3줄(Auth·인가·표준 에러 코드) · 기존 절 Auth 행 19곳 · 부록 A `recordMockScreenEvent` 검증 행 · 사용자2 접근 블록에 익명 정책(클래스 · `permission-denied` 문구 · M-1)을 덧붙였고, **부록 D**(§68.3 26행 사본 + 현행 게이트 줄번호 · M-1 진리표 · 라이브 관측 인용 4건)와 **부록 E**(§66.12 7의 델타 2건 + T178 C의 `API.md:142` + 같은 PR 구현분 2건 = 입력·빈도 상한 5건)를 신설했다. ⛔ Request·Response 계약·`docs/Database.md` 무변경. ⚠️ 반영 중 미판정 관측 1건 — `submitRealtimeTranscript`가 빈 `turns`에서 게이트 **앞**에 조기 반환한다(`functions/src/realtime/submitTranscript.ts:65-67`, 쓰기·LLM 0회) — 예외로 등재하지 않았다(G420 · User 판정 대상). ⭐ (2026-10-02 갱신) **User 판정: 예외 2로 등재**(DECISIONS #111 · §68.15 (8)) |
 | **docs** | CHANGELOG 반영 · §34.1 표의 *"익명 — 개발 전용 1곳 `devSignIn`"* 행(`docs/Architecture.md:6369`)은 C2 병합 뒤 **과거 기록**이 된다 — ⛔ 원문은 보존하고, 정정은 이 절이 한다 |
 | **범위 밖 후보** | 규칙 강화(§68.7 — 규칙 테스트 하네스 선행) · 익명 계정 자동 정리 설정 확인(§34 `:6383`, 콘솔 소관) |
 
@@ -15871,7 +15871,7 @@ export function assertAnonymousChallengeScope(                       // 익명�
 | **G417** | 거부 코드는 **`permission-denied`** — `unauthenticated`는 인증 무효화 배너와 U1 잠금을 오발화한다(`callable.ts:29-31`·`:38-40`) |
 | **G418** | `consentChallenge`·`setChallengeResultSharing`·`getChallengeLanding`·`reportChallenge`에는 **거부 호출 금지**(T-3이 0회를 단언) |
 | **G419** | D의 거부 호출은 `if (!request.auth)` **바로 다음** — 어떤 Firestore read·LLM·인자 검증보다도 앞 |
-| **G420** | S/R의 호출은 **기존 소유권 검사 바로 다음** — 추가 read 0회, 상태 검사·쓰기·LLM·외부 호출 앞. ⚠️ **예외 M-1(2026-10-01 · User 결정 *"문서에 예외 명시"* · DECISIONS #109)**: `deliverVerifyOffer`·`deliverVerifyReconnect`는 소유권·상태 검사가 한 헬퍼(`loadOwnedActiveSession`)에 묶여 있어 **"상태 검사 앞"을 지키지 않는다** — 게이트는 헬퍼 반환 직후다. **"쓰기·LLM·외부 호출 앞"과 "추가 read 0회"는 지킨다.** S/R 14곳(S 13 + R 1) 중 이 2곳 외의 **12곳은 예외가 아니다**(§68.15 (1) 형제 대조). ⛔ 새 예외를 이 행에 덧붙이려면 User 결정이 먼저다 |
+| **G420** | S/R의 호출은 **기존 소유권 검사 바로 다음** — 추가 read 0회, 상태 검사·쓰기·LLM·외부 호출 앞. ⚠️ **예외 M-1(2026-10-01 · User 결정 *"문서에 예외 명시"* · DECISIONS #109)**: `deliverVerifyOffer`·`deliverVerifyReconnect`는 소유권·상태 검사가 한 헬퍼(`loadOwnedActiveSession`)에 묶여 있어 **"상태 검사 앞"을 지키지 않는다** — 게이트는 헬퍼 반환 직후다. **"쓰기·LLM·외부 호출 앞"과 "추가 read 0회"는 지킨다.** S/R 14곳(S 13 + R 1) 중 이 2곳 외의 **12곳은 예외가 아니다**(§68.15 (1) 형제 대조). ⛔ 새 예외를 이 행에 덧붙이려면 User 결정이 먼저다. ⚠️ **예외 2(2026-10-02 덧붙임 · User 결정 *"문서에 예외로 적기"* · DECISIONS #111)**: 위 *"12곳은 예외가 아니다"* 는 **게이트 위치** 기준이다. 그중 `submitRealtimeTranscript`는 게이트 위치는 이 규칙대로지만, **게이트 앞에서 빈 `turns`를 `{ written: 0 }`으로 조기 반환**한다(read·쓰기·LLM 0회) ⇒ **S/R 14곳 = 예외 없음 11 · M-1 2 · 예외 2 1**(§68.15 (8) 전수 대조). ⛔ 새 예외(게이트 위치든 조기 반환이든)를 덧붙이려면 User 결정이 먼저다 |
 | **G421** | 새 콜러블 export는 **익명 정책 분류 없이는 테스트가 실패**한다(T-2 트립와이어) |
 | **G422** | **익명 활성화는 D-4 + S-G 뒤에만.** 롤백은 **익명 끄기가 먼저**다 |
 | **G423** | `judgeRewindAnswer`는 **`report.challengeId`**(서버 역정규화 값)로 판정하고, 값이 없으면 거부한다(fail-closed) |
@@ -15885,6 +15885,8 @@ export function assertAnonymousChallengeScope(                       // 익명�
 > **UX 추적성**: 신규 Screen ID·Flow ID·라우트·컴포넌트 **0건**. **허용 경로** = UX-021/UF-005 · UX-014 · UX-022 · UX-007 · UX-008 · UX-018 · UX-028(§68.4). **거부 경로** = UX-002 · UX-029 · UX-019 · UX-020 + `createSession` 호출 화면 3곳(§68.4). ⛔ 어느 화면의 계약도 바꾸지 않는다(오류 안내 문면은 OQ-A84).
 
 ### 68.15 (2026-10-01 후속 정리 — 문서만) M-1 예외 · 에뮬레이터 → 라이브 대체 · EM-4 대조군 예외 · T-4 ↔ AC-085 (e) 대응
+
+> ⚠️ (2026-10-02 덧붙임) 이 절 끝에 **(8) 예외 2**(`submitRealtimeTranscript`의 빈 `turns` 조기 반환 · DECISIONS #111) · **(9) 라이브 실측 반영 · 열린 항목** · **(10) 그 패스의 편집 범위**가 이어진다. 아래 (1)~(7)의 원문은 2026-10-01 시점의 기록이다.
 
 **⛔ 금지 먼저**
 1. ⛔ **소스 0줄.** M-1은 **코드를 바꾸지 않는다**(User 결정 1). 이 절은 예외를 **문서에 등재**할 뿐이다.
@@ -15938,7 +15940,7 @@ export function assertAnonymousChallengeScope(                       // 익명�
 | `deliverVerifyOffer` | `loadOwnedActiveSession :67-69` | `:188` | **`:70-72`(게이트 앞)** | ⚠️ **M-1** |
 | `deliverVerifyReconnect` | 같은 헬퍼 | `:300` | **`:70-72`(게이트 앞)** | ⚠️ **M-1** |
 
-⇒ **예외는 14곳 중 2곳뿐이며, 둘 다 같은 헬퍼 1개가 원인이다.** 소유권 throw는 **14곳 전부** 게이트보다 앞이다(AC-085 (b) 둘째 문장의 구조적 근거).
+⇒ **예외는 14곳 중 2곳뿐이며, 둘 다 같은 헬퍼 1개가 원인이다.** 소유권 throw는 **14곳 전부** 게이트보다 앞이다(AC-085 (b) 둘째 문장의 구조적 근거). ⚠️ (2026-10-02 덧붙임 — 위 원문 보존) **이 표는 throw 위치만 비교해서 게이트 *앞*의 성공 조기 반환을 보지 못했다** — `submitRealtimeTranscript`의 빈 `turns`(`:65-67`)가 그것이며, **예외 2**로 등재됐다(DECISIONS #111). 위 *"2곳뿐"* 은 **게이트 위치** 예외 기준이다. *"게이트 앞 `return`"* 열을 더한 전수표와 교훈은 §68.15 (8)에 있다.
 
 #### (2) P-2 갱신 — EM-1/2/3/5 → 라이브 대체 대응표 (User 결정 2)
 
@@ -15948,9 +15950,9 @@ export function assertAnonymousChallengeScope(                       // 익명�
 |---|---|---|---|---|
 | **EM-1** | E2 개발용 로그인(`password`) → 자가 훈련 끝까지 성공 = 비익명 경로 무변경 | **S-G**(익명이 꺼진 상태, Google — §67.9 S-1~S-4) · AC-085 (d) ② | 비익명 무변경 → **라이브 Google로 대체**(에뮬레이터보다 강한 증거) | ① **E2 자체**(`devSignIn`이 에뮬레이터에서 이메일 계정으로 로그인되는가)는 라이브로 대체할 수 없다 — 프로덕션 빌드에는 `devSignIn`이 없다(2단 가드 `devSignIn.ts:41-43`). 남는 증거는 **T-5 소스 가드(정적)** 뿐이다. ② §68.12 8(`@example.com`이 에뮬레이터 이메일 검증 통과)은 **미확인으로 남는다**. ⇒ E2는 **실행 검증 0회**로 병합된다 |
 | **EM-2** | 비익명이 메신저/generic 챌린지 생성 → 링크 획득 | **S-G**의 챌린지 생성·목록·삭제 + **A-3** 준비(User가 Google로 챌린지 생성) | 완전 대체 | 없음 |
-| **EM-3** | 격리 익명 컨텍스트에서 수신 흐름 끝까지, `permission-denied` 0건 | **A-3**(= AC-085 (f) ②, 보이스·메신저 각 1건) | 항목 동일 | ⚠️ **시점이 바뀐다** — 허용 경로의 **첫 실행이 익명 활성화 뒤 라이브**다. 과차단 결함이 있으면 A-3에서 처음 드러난다. 그 경우 라이브 수신 흐름은 **오늘과 같은 0% 상태**일 뿐 새 노출은 없다 → A-3 정지 조건(분류 재확인), 필요하면 R ① |
+| **EM-3** | 격리 익명 컨텍스트에서 수신 흐름 끝까지, `permission-denied` 0건 | **A-3**(= AC-085 (f) ②, 보이스·메신저 각 1건) | 항목 동일 | ⚠️ **시점이 바뀐다** — 허용 경로의 **첫 실행이 익명 활성화 뒤 라이브**다. 과차단 결함이 있으면 A-3에서 처음 드러난다. 그 경우 라이브 수신 흐름은 **오늘과 같은 0% 상태**일 뿐 새 노출은 없다 → A-3 정지 조건(분류 재확인), 필요하면 R ①. ⭐ (2026-10-02 덧붙임) **실행됐다** — 음성·메신저 수신자 흐름 4xx 0건(오케스트레이터 실측 2026-10-01 · 인용값). ⚠️ 되감기(R 클래스)는 속은 순간이 없어 미관측이다 — §68.15 (9) |
 | **EM-4** | 익명 + D 6개 빈 요청 → 6/6 `permission-denied` | (대체 아님 — **실행 완료**) | implementer·QA 각 1회 독립 실행 6/6(인용값). 라이브 재확인은 **A-2** | 없음. ⭐ (3)의 대조군과 합치면 **G419 순서의 실행 증거**도 된다 |
-| **EM-5** | 익명이 남의 세션에 `sendMessage` → *"본인 세션이 아닙니다"*(소유 검사가 게이트보다 먼저 — AC-085 (b) 둘째 문장) | ⚠️ **직접 대체 단계 없음** — A-2(빈 요청 D)·A-3(자기 세션)·A-4(`createSession`) 어느 것도 *"남의 세션"* 을 찌르지 않는다 | 구조 증거만: 위 (1) 형제 대조(소유 throw 14/14가 게이트 앞) + reviewer 수기 순서 대조(§68.13 — T-3은 순서를 보지 않는다) | ⚠️ **실행 증거 0.** **제안(채택은 오케스트레이터/User — 채택 전에는 T177 순서에 넣지 않는다)**: A-4 뒤 같은 익명 신원으로 S-G에서 만든 **Google 세션 ID**에 `sendMessage` 1회 → 기대 `permission-denied` *"본인 세션이 아닙니다"*. 소유 throw가 LLM보다 앞이라(§68.3 #7) 쓰기·LLM 0회 |
+| **EM-5** | 익명이 남의 세션에 `sendMessage` → *"본인 세션이 아닙니다"*(소유 검사가 게이트보다 먼저 — AC-085 (b) 둘째 문장) | ⚠️ **직접 대체 단계 없음** — A-2(빈 요청 D)·A-3(자기 세션)·A-4(`createSession`) 어느 것도 *"남의 세션"* 을 찌르지 않는다 | 구조 증거만: 위 (1) 형제 대조(소유 throw 14/14가 게이트 앞) + reviewer 수기 순서 대조(§68.13 — T-3은 순서를 보지 않는다) | ⚠️ **실행 증거 0.** **제안(채택은 오케스트레이터/User — 채택 전에는 T177 순서에 넣지 않는다)**: A-4 뒤 같은 익명 신원으로 S-G에서 만든 **Google 세션 ID**에 `sendMessage` 1회 → 기대 `permission-denied` *"본인 세션이 아닙니다"*. 소유 throw가 LLM보다 앞이라(§68.3 #7) 쓰기·LLM 0회. ⭐ (2026-10-02 덧붙임) **위 제안이 실행됐다** — 익명 → Google 세션 `sendMessage` → 403 *"본인 세션이 아닙니다."*(오케스트레이터 실측 2026-10-01 · 인용값) ⇒ *"실행 증거 0"* 이 닫혔다 — §68.15 (9) |
 
 **P-2 정지 조건(갱신)**: EM-4가 6/6이 아니면 정지(충족됨). EM-1/2/3/5의 정지 조건은 대체 단계의 정지 조건으로 **옮겨 간다** — S-G(`permission-denied` 1건이면 정지) · A-3(수신 흐름 중 1건이면 정지) · A-2/A-4(아니면 즉시 R ①). ⛔ 이 대체로 **AC-085 (f) 문면은 바뀌지 않는다** — (f)는 처음부터 라이브 판정이다.
 
@@ -15990,7 +15992,7 @@ export function assertAnonymousChallengeScope(                       // 익명�
 |---|---|
 | **planner** (`docs/PRD.md`) | ① **AC-085 (b)** *"…아니면 `permission-denied`로 거부된다"* 는 M-1 상태(자기·비챌린지·비active)에서 `failed-precondition`이 나와 **모든 상태에서 참은 아니다.** 라이브 도달 불가(위 (1) 근거 1·2)라 판정은 오염되지 않는다. architect 권고 = **AC 문면 무변경**(관측 가능한 상태에서는 참). 각주 여부는 planner가 판단한다 |
 | **planner** (`docs/Tasks.md`) | ② T176 G항 **④ "에뮬레이터 E2E(동의 → 세션 진입)"** 와 갱신 고지의 *"④ 에뮬레이터 E2E → (c)(에뮬레이터 층)"*, T177 E항 ① *"P-2 에뮬레이터 EM-1~EM-5"* 는 User 결정 2로 **실행할 수 없다** → 위 (2) 대응표로 갱신 필요. ③ T176 완료 증거에 AC-085 (e) **AC 기호 기준** 3종(위 (4))을 명시할지 |
-| **reviewer** | M-1 2곳(`verifyIntercept :188`·`:300`)은 **예외로 등재됐다** — G420 위반으로 재지적하지 않는다. 나머지 12곳은 §68.13대로 수기 대조. ⛔ 새 예외를 발견하면 등재하지 말고 보고한다(G420 행) |
+| **reviewer** | M-1 2곳(`verifyIntercept :188`·`:300`)은 **예외로 등재됐다** — G420 위반으로 재지적하지 않는다. 나머지 12곳은 §68.13대로 수기 대조. ⛔ 새 예외를 발견하면 등재하지 말고 보고한다(G420 행). ⭐ (2026-10-02 덧붙임) **예외 2**(`submitRealtimeTranscript`의 빈 `turns` 조기 반환 · DECISIONS #111)도 등재됐다 — 재지적하지 않는다. 수기 대조는 게이트 위치와 함께 **게이트 앞 `return`** 도 본다(§68.15 (8)) |
 | **QA** | EM-4 대조군 기대값 = 위 (3) 표 · T-4 보고 = 위 (4)의 AC 기호 |
 | **오케스트레이터 / User** | (2) EM-5 라이브 제안 채택 여부 · Java 복구 시 EM-1/2/3/5를 다시 돌릴지(이번 결정은 대체이지 폐기가 아니다 — 원문 EM 표는 보존했다) |
 
@@ -15999,7 +16001,7 @@ export function assertAnonymousChallengeScope(                       // 익명�
 2. ⚠️ Java 실패 원인(비ASCII 경로)은 **추정**이다.
 3. ⚠️ (4)의 테스트 이름·줄번호는 **다른 에이전트의 작업 트리 관측값**이다 — implementer가 지금 AC ⓐ 테스트를 추가하는 중이라 바뀔 수 있다.
 4. ⚠️ E2(`devSignIn` 이메일 계정)는 실행 검증 0회로 병합된다(위 (2) EM-1 행).
-5. ⚠️ EM-5(남의 세션 → 소유권 응답)는 실행 증거 0이다(위 (2) EM-5 행).
+5. ⚠️ EM-5(남의 세션 → 소유권 응답)는 실행 증거 0이다(위 (2) EM-5 행). ⭐ (2026-10-02 덧붙임 — 위 원문 보존) **라이브로 닫혔다** — 익명 → Google 세션 `sendMessage` → 403 *"본인 세션이 아닙니다."*(오케스트레이터 실측 2026-10-01 · 인용값) — §68.15 (9).
 6. ⚠️ 헤더 버전 갭은 그대로다: `Architecture.md:5` **PRD v1.7.1 · UX 1.13** ↔ `docs/PRD.md:4` **v1.15** · `docs/UX.md:10` **1.26**. 이 절은 AC·화면 신설 0건이라 판정이 오염되지 않으며, ⛔ 헤더는 전진시키지 않았다(T131 계열 별건).
 
 #### (7) 이 패스의 편집 범위 (⛔ 정본 — 중단 시 복구 체크리스트)
@@ -16009,3 +16011,87 @@ export function assertAnonymousChallengeScope(                       // 익명�
 > **번호 실측(착수 시점)**: DECISIONS 최대 **#108**(`DECISIONS.md:118`), `^\| 109 \|` 는 이 트리와 T176 트리 모두 **0히트** ⇒ **#109·#110**. 신규 게이트 **0** · 신규 OQ **0** · 신규 ADR **0**(예외 등재는 모듈 경계·계약을 바꾸지 않는다 — DECISIONS 행으로 충분). `^### 68\.1[5-9]` 는 이 트리·T176 트리 **0히트** ⇒ **§68.15**. ⛔ 예약하지 않는다 — 동시 패스가 있으면 병합 순서로 확정(치환 범위: `### 68.15` 이후 + DECISIONS #109·#110 행뿐, ⛔ 전역 치환 금지).
 > **base**: `origin/main` = **`e9f6b9bdad05ff7c9120ce83a61543a41396335b`**(= 이 워크트리 브랜치 `worktree-agent-a0c6a035a4cc95d7c` 헤드, `.git` 직접 판독).
 > **UX 추적성**: 신규 Screen ID·Flow ID·라우트 **0건**. M-1이 걸치는 화면 = UX-014(`play/page.tsx:34`·`:35`, §68.3 #14·#15) — 화면 계약 무변경.
+
+#### (8) (2026-10-02 덧붙임) **예외 2** — `submitRealtimeTranscript`의 **빈 `turns` 조기 반환**은 게이트 **앞**에 있다 (예외 등재 · User 결정 · `docs/DECISIONS.md` **#111** · 코드 무변경)
+
+**User 결정 원문(2026-10-02, AskUserQuestion — 오케스트레이터 전달 인용값)**: *"문서에 예외로 적기 (Recommended)"*. ⚠️ **경위(지우지 말 것)**: 같은 질문의 **첫 응답은 *"코드를 AC에 맞춤"*** 이었으나, User가 직후 *"두번째 질문 다시해"* 라고 해 **무효 처리**됐다. 질문을 풀어 쓴 **재질문**에서 위 응답을 받았다 ⇒ 유효한 결정은 재질문의 응답 1건뿐이다.
+
+**발견 경위**: API.md 반영 패스(2026-10-02 · PR #259 — 병합은 오케스트레이터 인용값)가 `docs/API.md` 부록 D를 쓰면서 S/R 14곳의 핸들러를 다시 열다가 찾았다. G420(*"새 예외는 User 결정이 먼저"*)에 따라 **예외로 등재하지 않고 "미판정 관측"으로 보고**했고, 위 결정에 따라 이 소절이 등재한다.
+
+**구조**(아래 (10)의 base — `functions/**`는 `d856e1d`와 같다): `functions/src/realtime/submitTranscript.ts`는 인증(`:58-60`) → 인자(`:62-64`) → ⚠️ **`if (turns.length === 0) return { written: 0 };`(`:65-67`)** → 턴 수 상한(`:68-70`, `MAX_TURNS = 200` `:51`) → 트랜잭션 안 세션 read(`:79`) → 존재(`:80-82`) → 소유(`:84-86`) → 게이트(`:87`) 순서다. ⇒ **게이트 위치는 G420 그대로**(소유 검사 바로 뒤)지만, 빈 `turns`는 **read·소유·게이트를 모두 건너뛴다.**
+
+**익명 호출자 진리표**
+
+| 요청 `turns` | 대상 세션 | 응답 | read·쓰기·LLM | AC-085 대조 |
+|---|---|---|---|---|
+| 배열 아님 / `sessionId` 없음 | (무관) | `invalid-argument` *"sessionId와 turns가 필요합니다."*(`:62-64`) | 0 | 인자 오류 — 비익명과 같다 |
+| ⚠️ **`[]`(빈 배열)** | **무관** — 존재하지 않음 · 남의 세션 · 자기 비챌린지 · 자기 챌린지 **전부 같다** | ⚠️ **`{ written: 0 }`(성공)**(`:65-67`) | **read 0 · 쓰기 0 · LLM 0** | ⚠️ **(b) 문면 *"`permission-denied`로 거부된다"* 와 다르다 = 예외 2** |
+| 201개 이상 | (무관) | `invalid-argument` *"제출 가능한 턴 수를 초과했습니다."*(`:68-70`) | 0 | 인자 오류 |
+| 1~200개 | 존재하지 않음 | `failed-precondition` *"존재하지 않는 세션입니다."*(`:80-82`) | read 1 | 비익명과 같다 — 예외 아님 |
+| 1~200개 | 남의 세션 | `permission-denied` *"본인 세션이 아닙니다."*(`:84-86`) | read 1 | (b) 둘째 문장 충족 |
+| 1~200개 | 자기 · **비챌린지** | `permission-denied` + 게이트 문구(`:87`) | read 1 · 쓰기 0 | (b) 충족 |
+| 1~200개 | 자기 · 챌린지 | 통과(기존 동작 — 마스킹 후 append) | 기존대로 | (c) |
+
+⇒ ⭐ **비익명 호출자도 빈 `turns`에서 같은 `{ written: 0 }`을 받는다** — T176이 만든 경로가 아니다. 이 콜러블이 처음 생겼을 때부터 있던 동작이다.
+
+**왜 받아들이는가(User 결정의 근거 — architect 확인)**
+
+| # | 근거 | 출처 |
+|---|---|---|
+| 1 | **새로 열리는 것이 없다.** read·쓰기·LLM·외부 호출이 0회이고, 응답은 **대상과 무관한 상수**라 세션의 존재·소유·챌린지 여부를 알려 주지 않는다(오라클이 아니다). M-1의 응답이 알려 주는 *"내 세션이 비활성"* 보다도 정보가 적다 | `:65-67` |
+| 2 | **앱 경로에서는 도달하지 않는다.** 앱의 유일한 호출 지점(`src/app/session/play/page.tsx:338`)은 빈 `turns`면 호출 전에 먼저 반환한다(`:331`). 도달하는 방법은 공개 웹 설정으로 **직접 호출**하는 것뿐이다. ⚠️ **M-1과 다르다**: M-1은 *라이브 도달 불가*(익명은 비챌린지 세션을 가질 수 없다)이고, 예외 2는 **도달할 수 있지만 무해**하다 | 직접 열람 |
+| 3 | **T176이 만든 경로가 아니다.** 비익명도 같은 응답을 받는다. 게이트 자체의 위치(소유 검사 바로 뒤)는 G420과 일치한다 | `:84-87` |
+| 4 | **클라 영향 0** — 앱이 보내지 않는 요청이다(2와 같은 근거) | — |
+| 5 | **코드로 고치는 형태는 셋이고 각각 대가가 있다**: ① 조기 반환을 소유·게이트 **뒤로** 옮김 → 비익명의 응답이 바뀐다(존재하지 않는/남의 세션 + 빈 `turns`: 성공 → 오류) + read 1회 추가 ⇒ **AC-085 (d) "Google 무변경" 위반** ② **익명 전용 분기**에서 세션을 읽어 판정 → Google은 무변경이지만 익명에 read 1회와 분기 신설이 붙는다 ③ **익명 + 빈 `turns`를 read 없이 거부** → Google 무변경·read 0이지만, 자기 챌린지 세션의 빈 제출까지 거부한다(앱이 빈 제출을 보내지 않으므로 실사용 영향은 0). ⇒ User는 **코드 무변경**을 택했다(위 결정 원문) | architect 분석 |
+
+⛔ **이 예외의 경계(이 밖으로 넓히지 않는다)**: ① 대상은 **`submitRealtimeTranscript`의 `turns.length === 0` 한 경로뿐**이다. ② `turns`가 1개 이상이면 (b) 원문대로다(위 진리표). ③ 다른 콜러블에서 **게이트 앞 조기 반환**이 새로 생기면 이 예외로 덮지 말고 **User 판정으로 올린다**(G420). ⛔ 판정 기준도 약화하지 않는다 — 이 예외 응답은 **read·쓰기·LLM 0회**여야 한다. 조기 반환 앞에 I/O가 하나라도 생기면 예외가 아니라 결함이다.
+
+**형제 대조 — "게이트 앞 `return`" 열을 더해 S/R 14곳 전수 확인**(같은 base에서 핸들러 머리부터 게이트 줄까지 직접 열람):
+
+| 콜러블 | 머리 → 게이트 구간 | 게이트 앞 `return` | 판정 |
+|---|---|---|---|
+| `endSession` | `functions/src/session/index.ts:295-314` | 0 (멱등 `return` `:321-323`은 게이트 **뒤**) | 예외 아님 |
+| `updateMessengerSkin` | `session/index.ts:349-372` | 0 | 예외 아님 |
+| `requestEscalation` | `session/index.ts:385-404` | 0 | 예외 아님 |
+| `requestReverseEscalation` | `session/index.ts:438-457` | 0 | 예외 아님 |
+| `sendMessage` | `functions/src/roleplay/index.ts:54-81` | 0 | 예외 아님 |
+| `createRealtimeCall` | `functions/src/realtime/index.ts:81-99` | 0 | 예외 아님 |
+| `submitRealtimeTranscript` | `functions/src/realtime/submitTranscript.ts:57-87` | ⚠️ **1** — `:65-67` | ⚠️ **예외 2** |
+| `generateReport` | `functions/src/report/index.ts:24-44` | 0 | 예외 아님 |
+| `judgeRewindAnswer`(R) | `functions/src/rewind/index.ts:58-88` | 0 | 예외 아님 |
+| `deliverInCallSms` | `functions/src/inCallSms/index.ts:107-118` | 0 | 예외 아님 |
+| `recordInCallSmsEvent` | `inCallSms/index.ts:187-202` | 0 | 예외 아님 |
+| `deliverVerifyOffer` | `functions/src/verifyIntercept/index.ts:175-188` | 0 | M-1(게이트 위치) — 조기 반환은 없다 |
+| `deliverVerifyReconnect` | `verifyIntercept/index.ts:289-300` | 0 | M-1(게이트 위치) — 조기 반환은 없다 |
+| `recordMockScreenEvent` | `functions/src/mockScreens/index.ts:51-65` | 0 | 예외 아님 |
+
+⇒ **게이트 앞 조기 반환은 14곳 중 1곳**(예외 2)뿐이다. 헬퍼(`loadOwnedSession`·`loadOwnedActiveSession`)와 입력 판독 함수(`readCallMode`·`readTrigger` 등)는 값을 돌려주거나 throw할 뿐 핸들러를 끝내지 않는다. **D 6곳**은 게이트가 인증 검사 바로 다음에 있어서 그 사이에 `return`이 들어갈 자리가 없다(§68.3 "삽입" 열 · `docs/API.md` 부록 D.2).
+⇒ ⭐ **S/R 14곳의 예외 집계(정본)**: 예외 없음 **11** · M-1(게이트가 상태 검사 뒤) **2** · 예외 2(게이트 앞 조기 반환) **1**.
+
+**⭐ 교훈(지우지 말 것) — 순서 대조표가 throw 위치만 보면 조기 반환을 놓친다**: §68.15 (1) 형제 대조표는 *"소유 throw · 게이트 · 상태 검사"* 세 열의 **throw 위치**만 비교했다. 게이트보다 먼저 나오는 **성공 `return`** 은 그 표의 어느 열에도 들어갈 자리가 없었다. 그래서 같은 날 같은 파일 묶음을 전수 열람했는데도 빠졌다 — M-1을 찾은 바로 그 표가 예외 2를 못 본 이유다. ⇒ 순서 대조는 **핸들러 머리부터 게이트 줄까지의 모든 종료 지점(throw·return)** 을 센다(위 표의 *"게이트 앞 `return`"* 열이 그 형식이다). AC가 *"거부된다"* 를 요구하면 쓰기 0회의 성공 응답도 문면 위반이므로, 이 열은 생략할 수 없다.
+
+#### (9) (2026-10-02 덧붙임) 라이브 실측으로 닫히는 항목 · 열린 항목
+
+**출처**: ⚠️ **오케스트레이터 실측 2026-10-01 — 전부 인용값**(architect는 실행하지 않았다). 각 원문 자리에는 *"(2026-10-02 덧붙임)"* 으로 이 표를 가리키는 고지를 붙였고, 원문은 지우지 않았다.
+
+| 원문 자리 | 무엇이 미관측이었나 | 라이브 실측(인용값) | 판정 |
+|---|---|---|---|
+| **§68.12 3** | 프로덕션 익명 토큰에 `firebase.sign_in_provider: "anonymous"`가 실리는가 | 익명 토큰의 `sign_in_provider=anonymous` 관측 + A-2 거부 **6/6 `permission-denied`** | ⭐ **닫힘** |
+| **§68.8 R-6** | fail-open 방향(클레임 부재 → 비익명) — *"A-2가 `permission-denied`를 관측하면 클레임 존재가 라이브로 확인된다"* | 같은 A-2 **6/6** | ⭐ **닫힘** — 판별식이 그 클레임 하나뿐이므로(G415) 6/6 거부는 클레임이 실렸다는 뜻이다 |
+| **§68.15 (6) 5** · (2) EM-5 행 | 남의 세션 → 소유권 응답의 **실행 증거 0** | 익명 → **Google 세션**으로 `sendMessage` → **403 *"본인 세션이 아닙니다."*** | ⭐ **닫힘** — 소유 검사가 게이트보다 먼저 난다는 실행 증거다(AC-085 (b) 마지막 문장). (2) EM-5 행의 *"제안"* 이 실행된 것이다 |
+| **§68.15 (2) EM-3 행** | 허용 경로의 첫 실행이 라이브다(과차단이면 A-3에서 처음 드러난다) | 음성·메신저 수신자 흐름 **4xx 0건** | ⭐ **닫힘 — 단 되감기(R 클래스)는 제외**(아래 열린 항목 1) |
+| §68.10 A-4 · AC-085 (f) ③ | 챌린지 세션을 **가진** 익명의 자가 훈련 시작 | `createSession` → **403**, D 거부 문구와 같다 | 관측됨(제출·충족 판정은 T177 — planner/QA 소관) |
+
+**⛔ 열린 항목(지우지 말 것)**
+1. ⛔ **`judgeRewindAnswer`(§68.3 #11 · 유일한 R 클래스 · UX-028 되감기)는 라이브 미관측이다.** 두 채널 모두 수신자 세션의 속은 순간이 **0건이거나 미상**이라 되감기를 한 번도 거치지 않았다(되감기는 속은 순간이 있을 때의 단계다 — AC-085 (c) *"속은 순간이 있을 때"*). ⇒ *"리포트 범위 검사(`report.challengeId`, G423)가 챌린지 리포트를 통과시킨다"* 의 **실행 증거는 0**이다(정적·단위 증거만 있다 — T-1 진리표 · T-3 배선 스캔). **관측 조건**: 수신자에게 속은 순간이 1건 이상 생긴 챌린지 세션에서 되감기 1회 → `permission-denied` 0건. (c)가 되감기를 조건부로 적으므로 이 공백이 (c) 판정을 바로 깨지는 않는다. 그러나 **R 클래스 전체가 라이브 미검증**이라는 사실은 남는다.
+2. §68.12의 1·2·4·5·6·7·8과 §68.15 (6)의 1·2·3·4·6은 **이번 실측으로 바뀌지 않는다**(셸 부재 · E2 실행 0회 · T74 이전 익명 리포트 추정 · 헤더 버전 갭 등).
+
+#### (10) 이 패스(2026-10-02)의 편집 범위 (⛔ 정본 — 중단 시 복구 체크리스트)
+- `docs/Architecture.md` — **§68 안에서만** 편집했다. 아래 자리마다 *"(2026-10-02 덧붙임)"* 을 붙이고 원문은 보존했다: §68.3 #9 근거 열 · §68.6 (3) · §68.8 R-6 · §68.12 3 · §68.13 G420 행 · §68.13 "architect 후속" 행 · §68.15 머리 고지 · §68.15 (1) 형제 대조 결론 줄 · §68.15 (2) EM-3·EM-5 행 · §68.15 (5) reviewer 행 · §68.15 (6) 5. 그리고 **§68.15 (8)~(10)을 신설**했다. §0~§67 **0줄**.
+- `docs/DECISIONS.md` — **#111** 1행 append.
+- `docs/API.md` — `:13`(인가 줄) · 부록 D.2 #9(`:469`) · D.3 끝 문단(`:504`).
+- ⛔ `functions/**`·`src/**`·`docs/PRD.md`·`docs/Tasks.md`·`docs/UX.md`·`docs/Database.md`·`docs/adr/**`·`README.md`·`CLAUDE.md` **0줄**. 커밋·push **0건**(셸 없음).
+> **번호 실측(착수 시점)**: DECISIONS 최대 **#110**(`DECISIONS.md:120`) ⇒ **#111**. `^#### \(8\)` 은 §68.15 안 **0히트** ⇒ **(8)~(10)**. 신규 게이트 **0** · 신규 OQ **0** · 신규 ADR **0**(예외 등재는 계약·모듈 경계를 바꾸지 않는다 — M-1·#109와 같은 처리). ⛔ 번호는 예약하지 않는다 — 동시 패스가 있으면 병합 순서로 확정한다(치환 범위: §68.15 (8)~(10) + DECISIONS #111 행 + 이 패스가 붙인 *"2026-10-02 덧붙임"* 고지뿐, ⛔ 전역 치환 금지).
+> **base**: 이 워크트리 = 브랜치 `docs/T176-api-auth` **`1441059c1a794e0035024c37482dde1d53959bec`**(`.git/worktrees/agent-adcddde6904888552/HEAD` → `.git/refs/heads/docs/T176-api-auth` 직접 판독). PR #259로 병합됐다는 것은 오케스트레이터 인용값이다. 로컬 `origin/main`은 `a329d76`이고, 오케스트레이터가 알린 최신 main `5758556`은 **로컬 refs에 없다**(인용값 — 그 사이 변경이 CHANGELOG·CLAUDE.md뿐이라는 것도 인용값). `functions/**`는 `d856e1d`와 같다고 본다(`1441059`까지의 두 커밋은 **커밋 메시지상** 문서·메모리뿐이다 — 워크트리 reflog `logs/HEAD:4-5`. ⚠️ diff는 셸 없이 확인할 수 없다).
+> **UX 추적성**: 신규 Screen ID·Flow ID·라우트 **0건**. 예외 2가 걸치는 화면은 UX-014(`src/app/session/play/page.tsx`)인데, 이 화면은 빈 `turns`로 호출하지 않는다(`:331`). 화면 계약은 바뀌지 않았다.
+> **PRD**: AC-085 (b)의 같은 예외는 **planner가 v1.17에서 병행 추가**한다(인용값 — 이 패스 시점 `docs/PRD.md:4` = v1.16, 대조하지 않았다). ⛔ PRD·Tasks는 편집하지 않았다.
