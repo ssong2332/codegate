@@ -11,6 +11,6 @@ metadata:
 
 **How to apply:**
 - 순서 대조표에 **"게이트 앞 return" 열**을 추가한다. 각 핸들러를 머리부터 게이트 줄까지 읽고 `return`·빈 배열 단축·멱등 분기를 센다.
-- 발견하면 ⛔ 예외로 등재하지 말고(G420류 *"새 예외는 User 결정이 먼저"*) **"미판정 관측"** 으로 문서에 적고 보고한다.
+- 발견하면 ⛔ 예외로 등재하지 말고(G420류 *"새 예외는 User 결정이 먼저"*) **"미판정 관측"** 으로 문서에 적고 보고한다. ⭐ 이 경로는 검증됐다 — 2026-10-02 User가 *"문서에 예외로 적기"* 로 판정했고, M-1과 같은 형식(진리표·근거·경계·"게이트 앞 return" 열을 더한 형제 대조)으로 **예외 2**(DECISIONS #111 · Architecture §68.15 (8))로 등재했다. 판정을 올릴 땐 **코드로 닫는 형태별 대가**(비익명 응답 변화·추가 I/O)를 같이 적는다 — 그 표가 판정 재료다.
 - 문서 동기화 지시의 대상 집합은 **코드의 export 목록**(`functions/src/index.ts`)으로 잡고, 문서 절과 1:1 대조표를 먼저 만든다 — 절 없는 export는 부록 표로 덮는다(절 신설은 범위 밖).
 - 관련: [[guard-exists-check-sibling-slots]] · [[stated-absence-check-the-scan-set]] · [[env-failure-control-is-order-evidence]] · [[same-symbols-different-subjects]]
