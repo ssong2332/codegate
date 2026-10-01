@@ -75,3 +75,4 @@
 - [보안 게이트에 환경 예외를 두지 마라](feedback_security_gate_no_env_exception.md) — 예외는 개발 도구 층으로; 분류는 비용 행보다 "입장권 발급 행"부터; 켜기/롤백 순서 비대칭
 - [대조군의 환경 오류는 순서 증거다](feedback_env_failure_control_is_order_evidence.md) — 통과군 INTERNAL·처치군 게이트 코드면 "게이트가 I/O 앞"; 대조군 기대값은 핸들러별 표로
 - [같은 기호, 다른 대상](feedback_same_symbols_different_subjects.md) — 설계 ⓐⓑⓒ ≠ 나중 AC ⓐⓑⓒ면 AC 항목 하나가 조용히 빠진다; 기호 대응표·AC 기호로 보고
+- [순서 대조표는 게이트 앞 return을 못 본다](feedback_order_audit_misses_early_return.md) — throw 줄번호만 비교하면 성공 조기 반환이 빠진다; 문서 동기화 범위는 export 목록으로

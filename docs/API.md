@@ -9,10 +9,10 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.6
 
 ## Conventions
 - 호출 방식: Firebase **Callable Functions**(`httpsCallable(functions, name)`). 트리거 함수는 클라가 직접 호출하지 않음.
-- Auth: 모든 callable은 `context.auth` 필수. 없으면 `unauthenticated`로 거부(AC-027 게이팅). 모든 데이터는 `context.auth.uid` 귀속.
-- 인가: 함수는 대상 리소스의 소유 uid == `context.auth.uid`를 검증. 불일치 시 `permission-denied`.
+- Auth: 모든 callable은 `context.auth` 필수. 없으면 `unauthenticated`로 거부(AC-027 게이팅). 모든 데이터는 `context.auth.uid` 귀속. ⭐ **익명 호출자(T176 · `docs/Architecture.md` §68 · AC-085 — 2026-10-02 반영, 위 원문 보존)**: `context.auth`가 있어도 **익명 인증**(`context.auth.token.firebase.sign_in_provider === "anonymous"`)이면 콜러블마다 정해진 범위에서만 통과한다 — **D 거부 6 · S/R 챌린지 범위 14 · E 입구 2 · N 무인증 2 · X 클라 호출 불가 2**(= export 26). 콜러블별 결과는 각 절 Auth 행의 *"⭐ 익명(T176 …)"* 과 **부록 D**. ⚠️ N 2개(`getChallengeLanding`·`reportChallenge`)는 이 줄의 *"모든 callable은 `context.auth` 필수"* 의 예외다(각 절 Auth 행 *"불필요"*).
+- 인가: 함수는 대상 리소스의 소유 uid == `context.auth.uid`를 검증. 불일치 시 `permission-denied`. ⭐ **T176**: 익명 호출자에게는 이 소유 검증 **바로 뒤**에 *"대상 세션·리포트의 `challengeId`가 비어 있지 않은 문자열인가"* 검사가 하나 더 붙는다(클래스 S/R — 이미 읽은 문서만 보므로 추가 read 0회). 남의 리소스는 종전대로 소유 검증이 먼저 거부한다(응답 의미 무변경). 상태 검사보다 뒤에 오는 예외 2곳(M-1)은 **부록 D.3**.
 - 에러 포맷: Firebase `HttpsError` 표준 — `{ code, message, details? }`. `code`는 아래 표의 값 사용.
-- 표준 에러 코드: `unauthenticated`(미로그인), `permission-denied`(타인 리소스), `invalid-argument`(입력 오류), `failed-precondition`(선행 상태 미충족, 예: 동의 없음/클론 없음), `deadline-exceeded`(외부 API 타임아웃), `resource-exhausted`(rate/credit 초과), `internal`(외부 API·기타 실패).
+- 표준 에러 코드: `unauthenticated`(미로그인), `permission-denied`(타인 리소스 · ⭐ **익명 범위 밖** — T176: 익명 호출자가 클래스 D를 부르거나 S/R의 대상이 챌린지 세션·리포트가 아닐 때. 문구 *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."* — 부록 D.1), `invalid-argument`(입력 오류 · ⭐ §66 길이·enum 상한 포함 — 부록 E), `failed-precondition`(선행 상태 미충족, 예: 동의 없음/클론 없음), `deadline-exceeded`(외부 API 타임아웃), `resource-exhausted`(rate/credit 초과 · ⭐ §66.3 `createSession` 호출 빈도 포함 — 부록 E), `internal`(외부 API·기타 실패). ⛔ **익명 범위 밖 거부에 `unauthenticated`를 쓰지 않는다**(G417) — 클라 단일 래퍼는 그 코드 하나만 보고 인증 무효화 배너를 띄우고(`src/lib/api/callable.ts:38-40`) 이후 콜러블을 전부 잠근다(`:29-31`). 익명은 재인증할 수 없어 막다른 상태가 된다.
 - PII: 대화·리포트 관련 함수는 Firestore 쓰기 **전** `guardrails/maskPII()` 통과(ADR-0004).
 - 시크릿(런타임 config, `.env`→Functions): `ELEVENLABS_API_KEY`, `LLM_API_KEY`, `LLM_PROVIDER`(claude|gemini), `FALLBACK_VOICE_ID`. `.env.example`에 placeholder만.
 
@@ -24,7 +24,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.6
 | Item | Value |
 |---|---|
 | Purpose | 업로드된 30초 녹음으로 ElevenLabs Instant Voice Clone 생성 → `voiceId` 반환. AC-018. |
-| Auth | required. `sid` 소유 uid == caller. |
+| Auth | required. `sid` 소유 uid == caller. ⭐ **익명(T176 · §68.3 #1 · 클래스 D — 거부)**: 익명 호출자는 요청 내용과 무관하게 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."* — 인자 검증·Firestore read·ElevenLabs 호출 **전**에 거부한다(`functions/src/voice/index.ts:40` — `if (!request.auth)` 바로 다음, G419). 비익명 무변경. |
 | Request | `{ sessionId: string }` — 녹음은 이미 `users/{uid}/sessions/{sid}/voice_input.*`에 업로드됨(클라 Storage SDK). |
 | Response | `{ voiceId: string, cloneStatus: "ready" }` (성공). 진행 상태는 `sessions/{sid}.cloneStatus` 구독으로도 반영. |
 | 처리 | ① Storage에서 녹음 read → ② ElevenLabs IVC 호출(soft 15s/hard 45s, DECISIONS #9) → ③ `sessions/{sid}` 에 `voiceId`·`cloneStatus` write. |
@@ -41,7 +41,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Item | Value |
 |---|---|
 | Purpose | 실시간 speech-to-speech 통화 자격증명 발급. 브라우저가 음성 AI와 직접 대화하되 API 키는 서버에만 남는다. |
-| Auth | required. `sid` 소유 + `status:"active"` 검증. |
+| Auth | required. `sid` 소유 + `status:"active"` 검증. ⭐ **익명(T176 · §68.3 #8 · 클래스 S — 챌린지 세션 범위)**: 소유 검증(`functions/src/realtime/index.ts:96-98`) **바로 뒤**(`:99`)에서 익명이면 대상 세션의 `challengeId`가 비어 있지 않은 문자열이어야 통과한다 — 아니면 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."*. active 검사(`:100`)·챌린지 재검증(`:118-128`)·자격증명 발급 **앞**. 남의 세션은 종전대로 *"본인 세션이 아닙니다."* |
 | Request | `{ sessionId: string }` |
 | Response | `{ provider: "elevenlabs"\|"gemini"\|"none", signedUrl, geminiToken, geminiModel, voiceId, language: "ko", isMock, difficultyApplied?: boolean, inCallSmsTriggers?: Array<{ smsId: string, afterScammerTurns: number }> }` |
 | **T57 증분**(§15.1.2·§15.3.3) | ① **`inCallSmsTriggers`** — 이 시나리오의 통화 중 문자 **트리거만**(`smsId` + 몇 번째 사기범 턴 이후) 내려준다. **본문·인증번호·발신번호는 포함하지 않는다**(도착 시점에 `deliverInCallSms`가 서버에서 렌더 — 사전 유출 방지). 카탈로그가 없는 시나리오는 필드 부재. ② **`difficultyApplied`** — 이 통화 경로에 난이도 모디파이어가 실제로 주입됐는지. Gemini Live는 `liveConnectConstraints.systemInstruction`에 조립해 넣으므로 `true`. **ElevenLabs 경로는 프롬프트가 에이전트 쪽에 저장돼 주입 지점이 없어 기본 `false`**(`agentMap.ts:3-11` — 클라 오버라이드로 프롬프트를 넘기는 것은 ADR-0004 위반이라 금지). 클라는 `false`면 난이도 배지를 표시하지 않는다(근거 없는 표기·조용한 미적용 금지). 난이도별 에이전트가 `ELEVENLABS_AGENT_IDS`에 매핑돼 있으면 `true`로 반환(§15.3.3 확장 경로). |
@@ -54,29 +54,29 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Item | Value |
 |---|---|
 | Purpose | 세션 문서 생성 + 사기범 오프닝 라인 반환. 턴/시간 한도 초기화. AC-003, AC-007. |
-| Auth | required. |
+| Auth | required. ⭐ **익명(T176 · §68.3 #2 · 클래스 D — 거부)**: 익명 호출자는 요청 내용과 무관하게 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."* — 인자 검증·동의 read·§66 창 쿼리·오프닝 LLM **전**에 거부한다(`functions/src/session/index.ts:80`, G419). ⭐ **챌린지 세션을 가진 익명도 같다**(라이브: 오케스트레이터 실측 2026-10-01 — 403 · 같은 문구, 인용값). ⚠️ 익명도 자기 `users/{uid}/consents`를 쓸 수 있지만(`firestore.rules:15-17`) 이 거부가 동의 read보다 앞이라 쓸모없다(§68.7). 비익명 무변경. |
 | Request | `{ scenarioId: string, voiceId: string }` |
 | Response | `{ sessionId: string, openingMessage: { role: "scammer", text: string }, maxUserTurns: 10, maxSessionMs: 360000 }` |
 | 처리 | `sessions/{sid}` 생성(status=active, turnCount=0, 한도값 DECISIONS #10) → roleplay 모듈 `generateOpeningLine(scenarioId)`(서버 조립 프롬프트, ADR-0004) 호출 → 오프닝 메시지를 `messages`에 마스킹 저장. |
-| Errors | `failed-precondition`(동의/클론 미완), `invalid-argument`(없는 scenarioId), `internal`(LLM 실패). |
+| Errors | `failed-precondition`(동의/클론 미완), `invalid-argument`(없는 scenarioId), `internal`(LLM 실패). ⭐ **§66.3(부록 E E-2 — 2026-10-02 반영)**: `resource-exhausted` *"짧은 시간에 너무 많이 시작했습니다. 잠시 후 다시 시도해 주세요."* — 같은 uid의 세션 문서 중 최근 **10분** 안의 것이 **6개 이상**이면 거절한다(`functions/src/session/index.ts:144-165`). 동의 게이트 뒤·오프닝 LLM 앞. ⛔ 쿼터 보호가 아니라 폭주 백스톱이다(G180). |
 | **T57 증분**(§15.3.2) | Request에 **`difficultyLevel?: "beginner"\|"intermediate"\|"advanced"`**(옵셔널) 추가. 서버가 enum 검증 후 `sessions.difficultyLevel`에 기록하며, **부재·enum 밖이면 조용히 임의값으로 진행하지 않고 `intermediate`로 확정**한다. 이 값은 `generateOpeningLine`에도 전달되어야 한다(오프닝 대사부터 난이도가 반영되도록 — §15.6 G5). 응답 계약 무변경. |
 
 ### `sendMessage` — (Track A · T7 · UX-006)
 | Item | Value |
 |---|---|
 | Purpose | 사용자 턴 처리 → 사기범 응답 생성. 인젝션 방어·PII 마스킹·한도 체크. AC-003~005, AC-013, AC-024, AC-007. |
-| Auth | required. `sid` 소유 검증. |
-| Request | `{ sessionId: string, userText: string }` — **시스템 프롬프트/페르소나는 클라가 보내지 않음**(서버 조립, ADR-0004). |
+| Auth | required. `sid` 소유 검증. ⭐ **익명(T176 · §68.3 #7 · 클래스 S — 챌린지 세션 범위)**: 소유 검증(`functions/src/roleplay/index.ts:78-80`) **바로 뒤**(`:81`)에서 익명이면 대상 세션의 `challengeId`가 있어야 한다 — 없으면 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."*. active 검사(`:82`)·메시지 write·LLM **앞**. ⭐ 남의 세션을 대상으로 한 익명 호출은 소유 검증이 먼저 걸려 **종전 응답**을 받는다(라이브: 오케스트레이터 실측 2026-10-01 — 403 *"본인 세션이 아닙니다."*, 인용값). |
+| Request | `{ sessionId: string, userText: string }` — **시스템 프롬프트/페르소나는 클라가 보내지 않음**(서버 조립, ADR-0004). ⭐ **§66.2(부록 E E-1 — 2026-10-02 반영)**: `userText` **≤ 1000자**(`userText.length` — 초과는 절단 없이 거절). |
 | Response | `{ reply: { role: "scammer", text: string }, turnCount: number, ended: boolean, endReason?: "limit_reached" }` |
 | 처리 | ① `maskPII(userText)` → `messages` write ② 서버에서 `scenarioPrompts/{id}`(클라 read 거부) + 히스토리로 프롬프트 조립 → LLM(어댑터, DECISIONS #11) ③ 응답 마스킹 저장 ④ turnCount++·경과시간 체크 → 한도 도달 시 `ended:true`+자동 종료 트리거. |
-| Errors | `failed-precondition`(세션 미활성/종료됨), `deadline-exceeded`(LLM 지연, AC-004 목표 p95≤10s), `resource-exhausted`, `internal`. |
+| Errors | `failed-precondition`(세션 미활성/종료됨), `deadline-exceeded`(LLM 지연, AC-004 목표 p95≤10s), `resource-exhausted`, `internal`. ⭐ **§66.2(부록 E E-1 — 2026-10-02 반영)**: `invalid-argument` *"메시지는 1000자까지 보낼 수 있습니다."* — Firestore read·LLM **앞**에서 거절한다(`functions/src/roleplay/index.ts:64-69`). 같은 코드가 `sessionId`·`userText` 누락·공백에도 난다(`:59-61`). |
 | **T57 증분**(§15.1.2 폴백 경로) | 이 턴이 문자 카탈로그의 `afterScammerTurns`에 도달했으면 서버가 ① `sessions/{sid}/inCallSms/{smsId}` 문서를 write하고 ② 그 턴의 시스템 프롬프트에 `turnInstruction`(문자를 보냈다고 알리라는 1줄)을 **`guardrailPreamble` 앞에** 주입한다(§15.5). 응답에 `sms?: { smsId }`를 실어 클라가 즉시 배너를 띄울 수 있게 하되, **렌더링의 단일 소스는 `inCallSms` 구독**이다(실시간 경로와 동일 — 두 경로가 같은 컬렉션을 본다). 난이도 블록도 `session.difficultyLevel`로 이 조립에 포함된다(§15.3.3). |
 
 ### `endSession` — (Track B · T8 · UX-007)
 | Item | Value |
 |---|---|
 | Purpose | 세션을 정확히 마감(status=ended, endReason). 폐기 트리거·리포트 생성 개시. AC-006, AC-007, AC-021. |
-| Auth | required. `sid` 소유 검증. |
+| Auth | required. `sid` 소유 검증. ⭐ **익명(T176 · §68.3 #3 · 클래스 S)**: 소유 검증(`functions/src/session/index.ts:311-313`) **바로 뒤**(`:314`)에서 익명이면 세션 `challengeId`가 있어야 한다 — 없으면 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."*. 멱등 분기·종료 write·리포트 개시 **앞**. |
 | Request | `{ sessionId: string, endReason: "user_ended" \| "completed" \| "deceived" \| "limit_reached" }` |
 | Response | `{ status: "ended", reportPending: true }` |
 | 처리 | `sessions/{sid}.status=ended`·`endReason`·`endedAt` write. 이 write가 ① `onSessionEnded`(폐기 트리거) ② `generateReport` 개시를 유발. 클라는 `reports/{sid}`·`deletionLogs` 구독으로 완료 반영. |
@@ -86,7 +86,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Item | Value |
 |---|---|
 | Purpose | 마스킹 대화 로그로 취약점 리포트 생성. 속은 시점 타임라인·수법·대처법. AC-008, AC-009, AC-026. |
-| Auth | required(또는 `endSession` 후 서버 내부 호출). `sid` 소유 검증. |
+| Auth | required(또는 `endSession` 후 서버 내부 호출). `sid` 소유 검증. ⭐ **익명(T176 · §68.3 #10 · 클래스 S)**: 콜러블 경로 — 소유 검증(`functions/src/report/index.ts:41-43`) **바로 뒤**(`:44`)에서 익명이면 세션 `challengeId`가 있어야 한다 — 없으면 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."*. 서버 내부 호출(`triggerReportGeneration` — `endSession` `functions/src/session/index.ts:337` · `sendMessage` 한도 종료 `functions/src/roleplay/index.ts:411`)에는 게이트가 없다 — 두 호출자가 이미 같은 게이트(`session/index.ts:314` · `roleplay/index.ts:81`)를 지난 뒤다. |
 | Request | `{ sessionId: string }` |
 | Response | `{ reportId: string }` — 내용은 `reports/{id}` 구독으로 표시. |
 | 처리 | **마스킹된 `messages`만 입력**(원문·실제 운영정보 배제, AC-005/013). `deceivedMoments[]`·`tacticsUsed[]`·`preventionAdvice[]`·`wasDeceived` 산출 → `reports/{id}` write. `reportId = sessionId`이며 이미 존재하면 재계산 없이 반환한다(**AC-007 "세션당 정확히 1리포트" 멱등 키** — `generateReportCore.ts:28-35`). ※ **정정(2026-07-25 실측):** 이 산출은 LLM이 아니라 **규칙 기반 순수 함수**다(`functions/src/report/analyzeConversation.ts` — `getLlmClient()`를 호출하지 않음. 기존 "LLM으로 산출" 서술은 코드와 불일치했다). |
@@ -112,7 +112,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 ## Callable/Trigger Functions — 메신저 확장·2인 소셜 (T26·T35)
 > 신규 함수. 시그니처는 기존과 동일하게 `src/lib/api/*`·`functions/src/shared`에서 단일 정의(ADR-0001). 시크릿 추가: `FALLBACK_VOICE_MALE_ID`, `FALLBACK_VOICE_FEMALE_ID`(gendered 폴백, AC-046) — `.env.example`에 placeholder.
 >
-> **사용자2 접근 메커니즘(T37, §14.7/ADR-0006 확정):** 사용자2는 **익명 인증**으로 임시 uid를 얻어 체험 세션을 소유한다 — landing/report는 세션 이전이라 **무인증(토큰만)**, consent부터는 **익명 사인인 후**(uid로 세션 소유). 이로써 `createRealtimeCall`·`submitRealtimeTranscript`·`endSession`·`generateReport`가 소유권 검증째 무개정 재사용된다. 아래 `consentChallenge`·`createRealtimeCall` challenge 분기 참고.
+> **사용자2 접근 메커니즘(T37, §14.7/ADR-0006 확정):** 사용자2는 **익명 인증**으로 임시 uid를 얻어 체험 세션을 소유한다 — landing/report는 세션 이전이라 **무인증(토큰만)**, consent부터는 **익명 사인인 후**(uid로 세션 소유). 이로써 `createRealtimeCall`·`submitRealtimeTranscript`·`endSession`·`generateReport`가 소유권 검증째 무개정 재사용된다. 아래 `consentChallenge`·`createRealtimeCall` challenge 분기 참고. ⭐ **T176 갱신(2026-10-02 반영 — 위 원문 보존)**: ADR-0016이 ADR-0006의 *"무개정 재사용"* 을 *"스코프 검사 1줄 추가 후 재사용"* 으로 좁혔다 — 위 네 콜러블을 포함한 세션·리포트 콜러블 **14개**는 소유권 검증 **바로 뒤**에 *"익명이면 대상의 `challengeId`가 있어야 한다"* 검사가 붙었고(비익명 무변경), 익명은 자가 훈련 시작·클론·초급 브리핑·챌린지 생성/목록/삭제 **6개에서 거부**된다. 전체 범위는 **부록 D**.
 
 ### `sendMessage` **확장** — 메신저 단계 + 에스컬레이션 신호 (T26 · AC-034/035)
 | Item | Value |
@@ -125,7 +125,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Item | Value |
 |---|---|
 | Purpose | 세션의 `channel`을 바꾸고 `channelHistory` 기록. `to==="voice"`면 통화 진입 준비. **MVP는 messenger→voice만 허용**, 그 외 조합은 `failed-precondition`(unimplemented, AC-039). |
-| Auth | required. `sid` 소유 + active 검증. |
+| Auth | required. `sid` 소유 + active 검증. ⭐ **익명(T176 — 대조 고지, 2026-10-02)**: 이 이름의 **콜러블 export는 없다**(`functions/src/index.ts:8-54` — `transitionChannel`은 서버 내부 함수 `functions/src/session/channelTransition.ts`다). 클라가 부르는 전이 콜러블은 **`requestEscalation`**(메신저→보이스, §68.3 #5)·**`requestReverseEscalation`**(보이스→메신저, #6)이며 둘 다 **클래스 S**다 — 소유 검증 **바로 뒤**(`functions/src/session/index.ts:404`·`:457`)에서 익명이면 세션 `challengeId`가 있어야 하고, 없으면 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."*. active 검사(`:405`·`:458`) **앞**. 이 절의 원문(설계 시점 이름)은 고치지 않았다 — 부록 D #5·#6. |
 | Request | `{ sessionId: string, from: "messenger"\|"voice", to: "messenger"\|"voice", trigger: "structured_signal"\|"maxturn_fallback"\|"manual_button" }` |
 | Response | `{ channel: "voice", ready: true }` — 이후 클라가 `createRealtimeCall`(기존 재사용)로 통화 자격증명 획득. |
 | 처리 | ① channel 갱신 ② channelHistory append ③ 단일 세션·연속 turnIndex 유지(AC-035). 통화 음성은 `session.voiceId`(조건부 clone/gendered, §13.6). |
@@ -135,17 +135,17 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Item | Value |
 |---|---|
 | Purpose | 챌린지 레코드 생성 + 공유 링크 토큰 발급. |
-| Auth | required(사용자1). 클론 보유 전제. |
+| Auth | required(사용자1). 클론 보유 전제. ⭐ **익명(T176 · §68.3 #18 · 클래스 D — 거부)**: 익명 호출자는 요청 내용과 무관하게 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."* — 인자 검증·Firestore read·클론 **전**에 거부한다(`functions/src/challenge/index.ts:70`, G419). ⭐ 이 행이 *"익명이 만들고 익명이 동의"* 루프를 닫는다 — 메신저·generic 챌린지는 클론 없이 토큰을 발급하기 때문이다(§68.3 #18). |
 | Request | `{ scenarioId: string, voiceId: string, displayName: string, retentionDays?: number(7~90, 기본 30) }` |
 | Response | `{ challengeId: string, linkToken: string }` — **평문 토큰은 이 응답에서 1회만 반환**(공유용), 서버는 해시만 저장(§14.4). |
 | 처리 | ① `creatorUid` 활성 챌린지 개수 상한(무료 3/유료 10) 검증 → 초과 시 거부 ② `randomBytes(32)`→base64url 토큰, `linkTokenHash=SHA-256` 저장 ③ `linkExpiresAt=생성+3일`(무료), `retentionDeleteAt=생성+보존기간` ④ voiceId 챌린지 스코프 고정(ADR-0005). |
-| Errors | `resource-exhausted`(개수 상한, AC-049), `failed-precondition`(클론 없음), `invalid-argument`(표시이름 없음). |
+| Errors | `resource-exhausted`(개수 상한, AC-049), `failed-precondition`(클론 없음), `invalid-argument`(표시이름 없음). ⭐ **§66(부록 E E-3 — 2026-10-02 반영)**: `displayName` **50자 초과**도 `invalid-argument` *"displayName은 50자까지 입력할 수 있습니다."* — 절단 없이 거절한다(`functions/src/challenge/index.ts:78-83`). ⚠️ 같은 코드를 빈 값·미지의 scenarioId와 공유한다(`docs/Tasks.md` T178 B). |
 
 ### `getChallengeLanding` — 사용자2 진입(무로그인·토큰) (T35 · UX-021 · AC-040/048)
 | Item | Value |
 |---|---|
 | Purpose | 토큰으로 챌린지 랜딩 메타 조회(동의 전). **복제 음성은 반환하지 않음.** |
-| Auth | **불필요**(무로그인, 토큰이 자격). |
+| Auth | **불필요**(무로그인, 토큰이 자격). ⭐ **익명(T176 · §68.3 #21 · 클래스 N — 무인증)**: `request.auth`를 보지 않으므로 익명·Google·미로그인이 같은 결과를 받는다 — 게이트 호출 **0회**(G418 · `functions/src/challenge/userAccess.ts:65-89`). |
 | Request | `{ token: string }` |
 | Response | `{ displayName: string, status, expired: boolean }` — 만료/소진이면 `expired:true`(진입 차단). 음성·voiceId·scenario 상세 미노출. |
 | 처리 | `SHA-256(token)`으로 `linkTokenHash` 조회 → 만료·소진 검증. **소모는 여기서 하지 않음**(동의 시 소모, §14.4 — 크롤러 선fetch 방지). |
@@ -155,7 +155,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Item | Value |
 |---|---|
 | Purpose | 명시적 동의 기록 + 링크 **1회성 소모** + 체험 세션 생성. **이 함수 성공 전에는 어떤 복제 음성 자격증명도 발급되지 않는다**(AC-040). |
-| Auth | **익명 사인인 후 호출**(§14.7/ADR-0006) — 클라가 동의 탭 시 `signInAnonymously`(로그인 UI 없음)로 임시 uid를 얻은 뒤 호출. 토큰이 진입 자격, 익명 uid가 생성될 세션의 소유자. |
+| Auth | **익명 사인인 후 호출**(§14.7/ADR-0006) — 클라가 동의 탭 시 `signInAnonymously`(로그인 UI 없음)로 임시 uid를 얻은 뒤 호출. 토큰이 진입 자격, 익명 uid가 생성될 세션의 소유자. ⭐ **익명(T176 · §68.3 #22 · 클래스 E — 입구)**: 익명 게이트 호출 **0회**(G418 — 넣으면 수신 흐름이 입구에서 끊긴다). 인증만 요구한다(`functions/src/challenge/userAccess.ts:99-101` `unauthenticated`). 세션의 `challengeId`를 쓰는 서버 지점은 **이 함수의 트랜잭션 1곳뿐**이다(`:219`) ⇒ 익명이 S/R 콜러블을 쓸 수 있는 **유일한 경로**가 이 함수다(§68.5). |
 | Request | `{ token: string }` |
 | Response | `{ sessionId: string }` — 이후 통화 자격증명은 `createRealtimeCall`(challengeId 바운드 세션) 재사용. |
 | 처리 | ① 토큰 유효·미만료·미소진 검증 ② `markChallengeConsumed`(linkConsumedAt 세팅+`status="consented"`, T36 primitive 재사용) ③ **익명 uid 소유** `sessions/{}` 생성 — `challengeId` 세팅, **`voiceId`는 미저장**(A1, `createRealtimeCall`이 challenge에서 해석), `scenarioId`·`channel="voice"`·한도·오프닝 라인 ④ `status="in_progress"`. `createSession`(사용자1 경로)은 무개정. | 
@@ -165,17 +165,17 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Item | Value |
 |---|---|
 | Purpose | "원치 않는 챌린지" 신고 → 데이터 축적 + **즉시 비활성화**(재생 차단). 관리자 검토·자동 조치 없음(MVP). |
-| Auth | 불필요(토큰). |
+| Auth | 불필요(토큰). ⭐ **익명(T176 · §68.3 #23 · 클래스 N — 무인증)**: `getChallengeLanding`과 같다 — 게이트 호출 **0회**(G418 · `functions/src/challenge/userAccess.ts:297-337`). |
 | Request | `{ token: string, reason: "unwanted"\|"harassment"\|"impersonation_concern"\|"other", note?: string }` |
 | Response | `{ status: "reported" }` |
 | 처리 | 챌린지 문서에 `reportedAt`·`reportReason`·`reportNote`(마스킹) 임베드 + `status="reported"`(재진입/재생 차단). |
-| Errors | `not-found`, `failed-precondition`(만료). |
+| Errors | `not-found`, `failed-precondition`(만료). ⭐ **§66(부록 E E-4 — 2026-10-02 반영)**: `invalid-argument` — `note` **500자 초과**(*"note는 500자까지 입력할 수 있습니다."*, 절단 없이 거절 `functions/src/challenge/userAccess.ts:309-314`) · `token`·`reason` 누락/무효(`:303-305`). |
 
 ### `setChallengeResultSharing` — 사용자2 결과 공유 동의(AC-043 게이트) (T35 · UX-018)
 | Item | Value |
 |---|---|
 | Purpose | 사용자2가 결과(완료/의심 시점) 공유에 동의하면 사용자1이 볼 `resultSummary`를 채운다. **미동의 시 사용자1은 상세 미열람.** |
-| Auth | 익명(세션 소유 확인 권장). |
+| Auth | 익명(세션 소유 확인 권장). ⭐ **익명(T176 · §68.3 #24 · 클래스 E — 토큰 매개)**: 익명 게이트 호출 **0회**(G418). 대상 세션을 토큰의 `challengeId`로 찾으므로(`functions/src/challenge/userAccess.ts:391`) **구성상 챌린지 세션**이다. 인증은 필수(`:377-379` `unauthenticated`)이고 소유는 **강제**다(`:396-398` `permission-denied` *"본인이 체험한 챌린지가 아닙니다."* — 위 *"권장"* 보다 강하다). |
 | Request | `{ token: string, share: boolean }` |
 | Response | `{ shared: boolean }` |
 | 처리 | `share=true`면 그 챌린지의 체험 세션 리포트를 **서버측(admin) read**해(T9 산출물 재사용, 독립 분석 없음) `resultSummary={completed, suspicionTimeLabel?, suspicionTurnIndex?}` 파생·write + `resultSharingConsented=true`(대화 전문·상대 발화 원문 없음, AC-043, §14.7.3). |
@@ -184,7 +184,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Item | Value |
 |---|---|
 | Purpose | 챌린지·복제 음성 즉시 폐기(기간제 이전에도 수동). |
-| Auth | required. `creatorUid==caller`. |
+| Auth | required. `creatorUid==caller`. ⭐ **익명(T176 · §68.3 #19 · 클래스 D — 거부)**: 익명 호출자는 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."* — 인자 검증·챌린지 read **전**(`functions/src/challenge/index.ts:245`, G419). 같은 화면(UX-020)의 목록 조회 `listMyChallenges`도 **D**다(이 문서에 절 없음 — 부록 D #20). |
 | Request | `{ challengeId: string }` |
 | 처리 | ADR-0003 폐기 기계 재사용(ElevenLabs voice DELETE + Storage 삭제 + `deletionLogs`(옵셔널 challengeId)) → `status="deleted"`. |
 
@@ -205,7 +205,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Item | Value |
 |---|---|
 | Purpose | 실시간 통화 중 문자 1건을 **서버 카탈로그에서 렌더해 도착시킨다**. 사기범이 그 사실을 알리도록 하는 지시문도 함께 반환. |
-| Auth | required. `session.uid === request.auth.uid` + `status:"active"` 검증(익명 uid=사용자2도 동일하게 성립). |
+| Auth | required. `session.uid === request.auth.uid` + `status:"active"` 검증(익명 uid=사용자2도 동일하게 성립). ⭐ **익명(T176 · §68.3 #12 · 클래스 S)**: 위 괄호의 *"익명도 동일하게 성립"* 은 **대상이 챌린지 세션일 때만** 참이다 — 소유 헬퍼(`loadOwnedSession` `functions/src/inCallSms/index.ts:80-91`) **바로 뒤**(`:118`)에서 `challengeId`가 없으면 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."*. active 검사(`:119`)·카탈로그 재검증·write **앞**. |
 | Request | `{ sessionId: string, smsId: string }` |
 | Response | `{ smsId: string, announceInstruction: string }` |
 | 처리 | ① **`smsId`가 `IN_CALL_SMS[session.scenarioId]` 소속인지 재검증**(⚠️ 이걸 빼면 임의 문자 주입 경로가 된다 — §15.6 G12) ② `sessions/{sid}/inCallSms/{smsId}` 문서 write(멱등 — 이미 있으면 재기록하지 않음) ③ 그 문자에 맞는 `announceInstruction` 반환. 클라는 이 문자열을 **같은 Live 세션에 텍스트 턴으로 주입**해 캐릭터가 문자 발송을 알리게 한다(`GeminiVoiceSession.textMessage` → `sendClientContent` 재사용, 선례 `OPENING_TRIGGER_TURN`). |
@@ -217,7 +217,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Item | Value |
 |---|---|
 | Purpose | 오버레이에서 문자를 열었는지·링크 칩을 탭했는지를 세션 타임라인에 남긴다(UX-027 Data Operations "Update"). |
-| Auth | required. 세션 소유 검증. |
+| Auth | required. 세션 소유 검증. ⭐ **익명(T176 · §68.3 #13 · 클래스 S)**: 같은 소유 헬퍼 **바로 뒤**(`functions/src/inCallSms/index.ts:202`)에서 `challengeId`가 없으면 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."*. active 검사(`:209`)·write **앞**. |
 | Request | `{ sessionId: string, smsId: string, event: "opened" \| "link_tapped" }` |
 | Response | `{ recorded: true }` |
 | 처리 | `sessions/{sid}/inCallSms/{smsId}`의 `openedAt`/`linkTappedAt`을 최초 1회만 세팅. |
@@ -230,7 +230,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Item | Value |
 |---|---|
 | Purpose | 속은 순간에 대해 사용자가 다시 답한 문장을 3단계로 판정하고 모범 대처를 함께 돌려준다. **새 사기 대사를 생성하지 않는다**(한 턴 드릴). |
-| Auth | required. `report.uid === request.auth.uid`(익명 uid=사용자2도 자기 리포트에 한해 성립, §14.7). |
+| Auth | required. `report.uid === request.auth.uid`(익명 uid=사용자2도 자기 리포트에 한해 성립, §14.7). ⭐ **익명(T176 · §68.3 #11 · 클래스 R — 챌린지 리포트 범위)**: 위 괄호는 **챌린지 리포트일 때만** 참이다 — 소유 검증(`functions/src/rewind/index.ts:85-87`) **바로 뒤**(`:88`)에서 **`report.challengeId`**(리포트 생성 시 서버가 세션에서 복사한 값 — `functions/src/report/generateReportCore.ts:287`)를 보고, **없거나 비어 있으면 거부**한다(fail-closed · G423) → `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."*. 순간 조회·시도 상한 read·LLM **앞**. 남의 리포트는 종전대로 *"본인 리포트가 아닙니다."* |
 | Request | `{ reportId: string, momentIndex: number, answerText: string }` — `answerText` **≤500자**, 빈 문자열 거부. |
 | Response | `{ verdict: "good" \| "risky" \| "unclear", reason: string, correctAction: string, judgedBy: "llm" \| "rule" }` |
 | 처리 | ① `maskPII(answerText)` ② 판정 프롬프트는 **전용 빌더**로 조립하며 **페르소나·`weakenedTactics` 원문을 포함하지 않는다**(역할극 재개가 아니라 평가 — AC-005/013). 사용자 답변은 `wrapUserInputAsData`로 감싼다(AC-024) ③ LLM 실패·Mock이면 **규칙 폴백**: `analyzeConversation`의 `RESISTANCE_PATTERN`/`COMPLIANCE_PATTERN`을 **export해 공유**(복제 금지, §15.6 G7) — 저항→`good`, 순응→`risky`, 둘 다 아님→`unclear` ④ `reports/{rid}/rewindAttempts/{auto}`에 append. |
@@ -241,7 +241,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Item | Value |
 |---|---|
 | Purpose | 초급 난이도 선택 시 "이 대화에서 나올 수 있는 신호"를 세션 **시작 전에** 보여주기 위한 수법 라벨 목록. |
-| Auth | required. |
+| Auth | required. ⭐ **익명(T176 · §68.3 #17 · 클래스 D — 거부)**: 익명 호출자는 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."* — 인자 검증 **전**(`functions/src/scenarios/beginnerBriefing.ts:51`, G419). |
 | Request | `{ scenarioId: string }` |
 | Response | `{ signals: string[] }` — 예: `["긴급성 조성","확인 절차 차단","개인정보 직접 요구"]` |
 | 처리 | `SCENARIO_PROMPTS[scenarioId].weakenedTactics`를 `extractTacticLabel`로 **라벨만** 추출해 반환. |
@@ -260,7 +260,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Item | Value |
 |---|---|
 | Purpose | 사기범이 "직접 확인해 보시라"며 **모의 창구**를 안내한 사실을 서버 카탈로그에서 도착시키고, 캐릭터가 그것을 말하도록 하는 지시문을 반환한다. ⭐ **T110 갱신(§22.3, `Architecture.md:3105-3125`가 예약한 델타 — 2026-07-28 반영)**: 호 전환(넘겨주기) 모델에는 **참가자가 걸 안내 번호가 없다.** `displayNumber`는 **카탈로그 타입 `VerifyInterceptItem`에서 제거**됐고(`functions/src/scenarios/verifyIntercept.ts` — `deskLabel`·`reconnectedCallerLabel`만 남는다. `harmlessnessGate.test.ts:62-77`의 `Record<keyof VerifyInterceptItem, …>` 타입 게이트가 그 소멸을 강제한다) **신규 문서·신규 리포트 스냅샷에는 기록되지 않는다.** 문서·스냅샷 타입에서는 **옵셔널로 낮춰** 과거 리포트를 무백필로 살린다(백필 0건 · 마이그레이션 0건). |
-| Auth | required. `session.uid === request.auth.uid` + `status:"active"`. |
+| Auth | required. `session.uid === request.auth.uid` + `status:"active"`. ⭐ **익명(T176 · §68.3 #14 · 클래스 S)**: 소유·active 헬퍼(`loadOwnedActiveSession` `functions/src/verifyIntercept/index.ts:60-74`) **바로 뒤**(`:188`)에서 `challengeId`가 없으면 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."*. 나머지 재검증(`assertVerifyEligible` `:189`)·write **앞**. ⚠️ **예외 M-1**(`docs/DECISIONS.md` **#109** · `docs/Architecture.md` §68.15 (1) · AC-085 (b) 갱신 고지): 그 헬퍼가 소유와 **active를 함께** 보므로 게이트가 상태 검사 **뒤**다 ⇒ 익명이 **자기 소유·비챌린지·비active** 세션을 부르면 `permission-denied`가 아니라 `failed-precondition` *"이미 종료되었거나 활성 상태가 아닌 세션입니다."*(`:70-72`)를 받는다 — 쓰기·LLM **0회**. 자기 소유·비챌린지·**active**면 `permission-denied`(게이트). 라이브 도달 불가로 판정한다(익명은 비챌린지 세션을 만들 수 없다 — `createSession`이 D). 진리표는 부록 D.3. |
 | Request | `{ sessionId: string, callMode: "realtime" \| "fallback", scammerTurns?: number }` — `scammerTurns`는 `callMode==="realtime"`일 때 **필수**(없으면 `invalid-argument`). **부재를 판별자로 오버로드하지 않는다**(§14.9.1) — 그래서 `callMode`를 명시로 받는다. |
 | Response | `{ offerId: string, announceInstruction?: string }` — ⭐ **T118/R-1(§25.5 (4))로 `announceInstruction`이 옵셔널로 낮아졌다**: 오퍼 문서에 **`placedAt`이 이미 있으면**(=호 전환이 끝난 뒤면) **생략한다.** 값이 없으면 클라는 **주입하지 않는다.** 전환이 끝난 뒤의 확인 권유는 참가자가 겪은 사실과 모순이고, 그 재주입 경로가 열려 있는 것이 증상 ①(전환 후 같은 오퍼 재발화)의 (가) 갈래였다. 계약 원천은 `functions/src/verifyIntercept/types.ts:19-29` ↔ `src/lib/api/types.ts`(ADR-0001 "계약 원천 2곳"). |
 | 처리 | ① **재검증 5종(G24 — 하나라도 빠지면 위조 호출로 "일어나지 않은 확인 권유"가 리포트에 남는다)**: 세션 소유 · `status:"active"` · `hasVerifyIntercept(session.scenarioId)` · `normalizeDifficultyLevel(session.difficultyLevel)==="advanced"` · **해석된 프로바이더가 `elevenlabs`가 아님**. ② `sessions/{sid}/verifyIntercept/{offerId}` write(**멱등** — 이미 있으면 재기록 없이 같은 값 반환). 앵커는 서버 계산(`realtime=scammerTurns+1` / `fallback=서버가 센 scammer 문서 수`, `functions/src/verifyIntercept/buildDoc.ts` 단일 지점). ③ `announceInstruction` 반환 — **실시간**: 클라가 `GeminiVoiceSession.instructionTurn`으로 같은 Live 세션에 주입(선례 `OPENING_TRIGGER_TURN`). **폴백**: 클라는 쓰지 않고, 다음 `sendMessage` 턴이 미announce 오퍼를 읽어 `turnInstruction`으로 주입한 뒤 `announcedAt`을 마크한다. |
@@ -272,7 +272,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Item | Value |
 |---|---|
 | Purpose | 참가자가 UX-031에서 "확인 전화 걸기"를 누른 사실을 기록하고, **같은 세션 위에서** 상대 표면이 바뀌도록 하는 지시문을 반환한다. **새 세션을 만들지 않는다**(AC-007/AC-035). |
-| Auth | required. 세션 소유 + `status:"active"`. |
+| Auth | required. 세션 소유 + `status:"active"`. ⭐ **익명(T176 · §68.3 #15 · 클래스 S)**: `deliverVerifyOffer`와 **같은 헬퍼·같은 순서**(게이트 `functions/src/verifyIntercept/index.ts:300`, 나머지 재검증 `:301` 앞) — ⚠️ **예외 M-1도 같다**(위 `deliverVerifyOffer` Auth 행 · DECISIONS #109 · 부록 D.3). |
 | Request | `{ sessionId: string, offerId: string, callMode: "realtime" \| "fallback", scammerTurns?: number }` |
 | Response | `{ reconnectInstruction: string, transferStateLine: string }` — ⭐ **T118/A5(§25.3)로 `transferStateLine` 1필드가 추가됐다**(둘 다 **필수**). 전환 이후 사기범 턴 경계마다 클라가 **다시 넣는** 전환 상태 단언 1줄이며, 클라가 반복 주입하려면 손에 쥐고 있어야 하므로 응답으로 내려보낸다(**신규 콜러블 0건**). 계약 원천은 `functions/src/verifyIntercept/types.ts:37-46` ↔ `src/lib/api/types.ts`. |
 | 처리 | ① 오퍼 문서 존재 확인(없으면 `failed-precondition` — 오퍼 없이 재연결이 성립하지 않는다) ② `placedAt`·`reconnectAnchorScammerTurn`·`reconnectedCallerLabel` 기록(**멱등** — `placedAt`이 이미 있으면 밀지 않는다) ③ `reconnectInstruction` + **`transferStateLine`** 반환(주입 경로는 `deliverVerifyOffer`와 동일). ⚠️ **`transferStateLine`은 Firestore 문서에 쓰지 않는다**(A5-4 — 모델 지시는 문서에 기록하지 않는다, AC-024) ⇒ **`Database.md` 무변경 · 스키마 증분 0건.** 구현 지점 `functions/src/verifyIntercept/index.ts:192-196`. |
@@ -319,7 +319,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | 호출 주체 | **페이지**(`src/app/session/messenger/page.tsx`). ⚠️ `MessengerFakeLanding` 컴포넌트는 콜백만 위로 올리고 **네트워크 호출을 하지 않는다** — 그 파일의 "전송 경로 부재" 불변식(AC-045)을 kind 추가 후에도 유지하기 위해서다 |
 | Request | `{ sessionId: string, landingId: string, event: "shown" \| "consented" }` |
 | Response | `{ ok: true }` |
-| 서버 검증(순서 고정) | ① 인증 + 세션 소유권 → `permission-denied` ② `session.status === "active"` → `failed-precondition`(§15.6 G20 재발 방지) ③ `MOCK_SCREENS[session.scenarioId]`에 `landingId`가 **소속**되는지 → `failed-precondition`(§15.6 G12 동형 — 임의 landingId로 가짜 "속은 순간"을 만들 수 없다) ④ `event==="consented"`는 `kind==="app-install"`일 때만 → `invalid-argument` |
+| 서버 검증(순서 고정) | ① 인증 + 세션 소유권 → `permission-denied` ② `session.status === "active"` → `failed-precondition`(§15.6 G20 재발 방지) ③ `MOCK_SCREENS[session.scenarioId]`에 `landingId`가 **소속**되는지 → `failed-precondition`(§15.6 G12 동형 — 임의 landingId로 가짜 "속은 순간"을 만들 수 없다) ④ `event==="consented"`는 `kind==="app-install"`일 때만 → `invalid-argument` ⭐ **익명(T176 · §68.3 #16 · 클래스 S — 2026-10-02 반영)**: **①과 ② 사이**에 익명 범위 검사가 들어갔다 — 익명 호출자이고 세션의 `challengeId`가 비어 있으면 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."*(`functions/src/mockScreens/index.ts:65` — 소유 헬퍼 `:25-36` 바로 뒤, active 검사 `:66` 앞). 비익명은 ①→② 그대로. |
 | 쓰기 | `sessions/{sessionId}/mockScreens/{landingId}` — `shownAt`/`consentedAt`을 **최초 1회만** 세팅(기존 `recordInCallSmsEvent` 관례) |
 | 실패 처리 | 클라는 **핵심 루프를 막지 않는다**(오버레이는 정상 닫히고 대화 지속). 단 **조용히 삼키지 않고** 1회 재시도 + 실패 로그(§15.6 G56) |
 | 안전 | 참가자 입력값을 **받지 않는다** — 인자는 세션 id·랜딩 id·고정 enum뿐이다(AC-045 "입력값 서버 미전송" 유지). 실 URL·앱명·권한 필드는 요청·응답·스키마 어디에도 없다(AC-072) |
@@ -433,3 +433,114 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | UX 추적성 | 값을 **만드는** 화면 = **UX-014**(통화 셸 — `play/page.tsx`), 값을 **읽는** 화면 = **UX-008 · UF-012**(리포트·리플레이 타임라인). **신규 Screen ID·Flow ID·라우트 0건.** |
 | **⭐⭐ 부착 조건 갱신(2026-09-07 — `docs/Architecture.md` **§61** · **OQ-A73 User 확정** · `docs/DECISIONS.md` **#100**)** | **`offer_verification_desk`의 선언·`liveTools.offerVerificationDesk`·`verifyAlreadyAnnouncedInstruction` 부착 조건에서 계열 절이 빠진다**: `hasVerifyIntercept && difficultyLevel==="advanced" && verifySeriesFor()==="A"` → **`hasVerifyIntercept && difficultyLevel==="advanced"`**(= 확인 무력화 카탈로그 **6종 전부** · 계열 B 5종 포함). ⛔ **위 `:401`·`:406` 행의 원문은 수정하지 않는다** — 이 행이 그 시점 이후의 정본이다. ⭐ **술어는 1개**: `functions/src/realtime/liveTools.ts`의 **`declaresOfferVerificationDesk(scenarioId, difficultyLevel)`** 이며 선언·이름 하향·프롬프트 문면(`promptAssembly`의 **`offerToolDeclared`**, 옛 `verifyOfferSeries` 옵션을 대체) 세 자리가 전부 이것을 부른다(**G400**). **Request·Response 필드 0건 증가**(조건만 달라진다). ⛔ **`verifySeriesFor()`는 그대로 남고 값도 그대로다**(계열 분류 · **G399** — 클라 `src/lib/verifyintercept/verifyIntercept.ts`의 동명 함수는 참가자 의사 게이트를 계속 진다). |
 | **⛔ 이 확대가 바꾸지 않는 것**(§61.2) | **앱 백스톱(천장)은 계열 B에 여전히 없다** — 클라 `shouldAnnounceVerifyOffer`가 계열 B에서 `intentExpressed:false`로 막으므로, 계열 B에서 오퍼가 열리는 유일한 경로는 **모델의 `trigger:"model_tool"` 호출**이다(그 뒤 `stage:"commit"`은 앱이 이어 보낸다). 폴백(텍스트) 경로 **0줄**(**G393** 비대칭 유지). 하한 재검증·2단계(**G391**)·`too_early` write 0회 등 이 부록의 다른 행은 **전건 무변경**. |
+
+## 부록 D — 익명 호출자의 서버 권한 범위 (T176 · `docs/Architecture.md` **§68** · **AC-085** · ADR-0016 · `docs/DECISIONS.md` **#108~#110**)
+
+> ⭐ **사후 문서화다 — 계약은 이미 main에 병합·배포돼 있다**(main `d856e1d` — `.git/refs/heads/main` 직접 판독 · 2026-10-01 배포, 함수 26개 전부 `nodejs22` — 오케스트레이터 인용값). 아래 줄번호는 **그 트리의 소스를 직접 열람**한 값이며, 새 요구·새 필드를 만들지 않는다. 분류의 정본은 **§68.3**이고 기계 사본은 `functions/src/shared/__tests__/anonymousGate.test.ts:127-154`(T-2 정책표)다 — 이 부록과 어긋나면 **§68.3과 코드가 이긴다.**
+> ⛔ **Request·Response 필드 증분 0건 · 새 에러 코드 0건 · Firestore 스키마 0건(`docs/Database.md` 무변경) · 규칙 무변경(§68.7).** 바뀐 것은 **익명 호출자가 `permission-denied`를 받는 경우**뿐이고, **비익명(Google 등) 호출자의 응답·검사 순서·쓰기·조회는 무변경**이다(§68.6 (4) — 게이트는 비익명에 대해 I/O 0회·throw 0회로 반환).
+> **UX 추적성**(§68.4 · §68.14 — 신규 Screen ID·Flow ID 0건): 허용 경로 = UX-021/UF-005 · UX-014 · UX-022 · UX-007 · UX-008 · UX-018 · UX-028 / 거부 경로 = UX-002 · UX-029 · UX-019 · UX-020.
+
+### D.1 판별·거부 정본
+
+| 항목 | 값 | 근거 |
+|---|---|---|
+| 익명 판별 | `request.auth.token.firebase.sign_in_provider === "anonymous"` **하나뿐**(G415 — `isAnonymous`·email 부재·uid 형태로 판정하지 않는다). 방향 = 거부목록(일치할 때만 제한) | `functions/src/shared/anonymousGate.ts:22`·`:26-28` |
+| 거부 코드·문구 | **`permission-denied`**(HTTP 403) · *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."* | `anonymousGate.ts:23`(`ANONYMOUS_DENIED_MESSAGE`) · `:36` · `:53` |
+| ⛔ 쓰지 않는 코드 | `unauthenticated` — 클라 단일 래퍼가 그 코드 하나로 인증 무효화 배너(`src/lib/api/callable.ts:38-40`)와 이후 콜러블 전면 잠금(`:29-31`)을 연다(G417) | §68.6 (5) |
+| *거부*(클래스 D) | `if (!request.auth)` **바로 다음** — 인자 검증·Firestore read·LLM·외부 호출 **0회**로 거부한다(G419) | §68.6 (3) |
+| *범위 검사*(클래스 S/R) | 익명일 때만, 기존 소유권 검사를 **통과한 뒤** 대상 문서(세션 또는 리포트)의 `challengeId`가 비어 있지 않은 문자열이면 진행하고 아니면 *거부*한다. 이미 읽은 문서만 보므로 **추가 read 0회**(G420) ⇒ 남의 문서는 종전 소유권 응답이 먼저 난다. ⚠️ 인자 검증은 그보다 **앞**이라 잘못된 인자는 익명이어도 `invalid-argument`가 먼저 난다(I/O 0회 단계) | `anonymousGate.ts:46-54` · §68.5 |
+| 환경 분기 | **없다** — 에뮬레이터에서도 같은 판정(G416) | `anonymousGate.ts:6-8` |
+| 분류 강제 | 새 export가 정책 분류 없이 추가되면 테스트가 실패한다 — 정책표 ↔ `functions/src/index.ts` export 양방향 일치(G421 · AC-085 (e)) | `anonymousGate.test.ts:127-154`·`:200-201` |
+
+### D.2 export 26개 (⭐ 정본 = §68.3 — 이 표는 그 사본 + 현행 줄번호 + 이 문서의 서술 위치)
+
+**수신 흐름** 열: ✅ = 수신자(사용자2) 흐름이 실제로 부른다 · 0 = 부르지 않는다(§68.3 마지막 열 · §68.4).
+
+| # | export | 클래스 | 익명 호출자 결과 | 게이트(현행) | 수신 흐름 | 이 문서의 서술 위치 |
+|---|---|---|---|---|---|---|
+| 1 | `createVoiceClone` | **D** | *거부* | `functions/src/voice/index.ts:40` | 0 | `createVoiceClone` Auth 행 |
+| 2 | `createSession` | **D** | *거부* — 챌린지 세션을 가진 익명도 같다 | `functions/src/session/index.ts:80` | 0 | `createSession` Auth 행 |
+| 3 | `endSession` | S | *범위 검사* | `functions/src/session/index.ts:314`(소유 `:311-313` 뒤) | ✅ | `endSession` Auth 행 |
+| 4 | `updateMessengerSkin` | S | *범위 검사* | `functions/src/session/index.ts:372`(소유 `:369-371` 뒤) | ✅ | ⚠️ **절 없음** — 이 행 + 부록 E E-5 |
+| 5 | `requestEscalation` | S | *범위 검사* | `functions/src/session/index.ts:404`(소유 `:401-403` 뒤 · active `:405` 앞) | 0 | ⚠️ **절 없음** — 설계명 `transitionChannel` 절 Auth 행이 가리킨다 |
+| 6 | `requestReverseEscalation` | S | *범위 검사* | `functions/src/session/index.ts:457`(소유 `:454-456` 뒤 · active `:458` 앞) | 0 | ⚠️ **절 없음** — 위와 같다 |
+| 7 | `sendMessage` | S | *범위 검사* | `functions/src/roleplay/index.ts:81`(소유 `:78-80` 뒤 · active `:82` 앞) | ✅ | `sendMessage` Auth 행 |
+| 8 | `createRealtimeCall` | S | *범위 검사* | `functions/src/realtime/index.ts:99`(소유 `:96-98` 뒤 · active `:100` 앞) | ✅ | `createRealtimeCall` Auth 행 |
+| 9 | `submitRealtimeTranscript` | S | *범위 검사*(트랜잭션 안 — 기존 throw 패턴과 같다). ⚠️ **관측(2026-10-02 · 미판정)**: `turns`가 빈 배열이면 세션 read·소유·게이트 **전에** `{ written: 0 }`을 반환한다(`:65-67` — T176 이전부터의 동작, 쓰기·LLM 0회) ⇒ 익명이 비챌린지 세션 ID로 불러도 이 경우엔 **성공 응답**이 나와 AC-085 (b) 문면과 어긋난다. ⛔ **예외로 등재하지 않았다**(G420 — 새 예외는 User 결정이 먼저다. 이 행은 보고만 한다) | `functions/src/realtime/submitTranscript.ts:87`(소유 `:84-86` 뒤) | ✅ | ⚠️ **기본 절 없음** — 이 행(증분 절은 부록 B) |
+| 10 | `generateReport` | S | *범위 검사* | `functions/src/report/index.ts:44`(소유 `:41-43` 뒤) | ✅ | `generateReport` Auth 행 |
+| 11 | `judgeRewindAnswer` | **R** | *범위 검사* — 재료는 `report.challengeId`(`functions/src/report/generateReportCore.ts:287`이 세션에서 복사), 없으면 거부(fail-closed · G423) | `functions/src/rewind/index.ts:88`(소유 `:85-87` 뒤) | ✅ | `judgeRewindAnswer` Auth 행 |
+| 12 | `deliverInCallSms` | S | *범위 검사* | `functions/src/inCallSms/index.ts:118`(헬퍼 `:80-91` 뒤 · active `:119` 앞) | ✅ | `deliverInCallSms` Auth 행 |
+| 13 | `recordInCallSmsEvent` | S | *범위 검사* | `functions/src/inCallSms/index.ts:202`(같은 헬퍼 뒤 · active `:209` 앞) | ✅ | `recordInCallSmsEvent` Auth 행 |
+| 14 | `deliverVerifyOffer` | S ⚠️ **M-1** | *범위 검사* — 단 active 검사 **뒤**(D.3) | `functions/src/verifyIntercept/index.ts:188`(헬퍼 `:60-74` 뒤) | ✅ | `deliverVerifyOffer` Auth 행 |
+| 15 | `deliverVerifyReconnect` | S ⚠️ **M-1** | #14와 같다 | `functions/src/verifyIntercept/index.ts:300`(같은 헬퍼 뒤) | ✅ | `deliverVerifyReconnect` Auth 행 |
+| 16 | `recordMockScreenEvent` | S | *범위 검사* | `functions/src/mockScreens/index.ts:65`(헬퍼 `:25-36` 뒤 · active `:66` 앞) | ✅ | 부록 A `recordMockScreenEvent` "서버 검증" 행 |
+| 17 | `getBeginnerBriefing` | **D** | *거부* | `functions/src/scenarios/beginnerBriefing.ts:51` | 0 | `getBeginnerBriefing` Auth 행 |
+| 18 | `createChallenge` | **D** ⭐ | *거부* — ⭐ *"익명이 만들고 익명이 동의"* 루프를 닫는 행 | `functions/src/challenge/index.ts:70` | 0 | `createChallenge` Auth 행 |
+| 19 | `deleteChallenge` | **D** | *거부* | `functions/src/challenge/index.ts:245` | 0 | `deleteChallenge` Auth 행 |
+| 20 | `listMyChallenges` | **D** | *거부* — 이 콜러블은 인자 검증이 없어 게이트 바로 뒤가 Firestore 조회다(`:287-288`) | `functions/src/challenge/index.ts:286` | 0 | ⚠️ **절 없음** — 이 행 |
+| 21 | `getChallengeLanding` | N | 무인증 — `request.auth`를 보지 않는다 | 없음(G418 · `functions/src/challenge/userAccess.ts:65-89`) | ✅ | `getChallengeLanding` Auth 행 |
+| 22 | `consentChallenge` | **E** | 입구 — 인증만 요구한다(`:99-101`). 세션 `challengeId`를 쓰는 유일한 서버 지점(`:219`) | 없음(G418 · `userAccess.ts:94-294`) | ✅ | `consentChallenge` Auth 행 |
+| 23 | `reportChallenge` | N | 무인증(토큰) | 없음(G418 · `userAccess.ts:297-337`) | ✅ | `reportChallenge` Auth 행 |
+| 24 | `setChallengeResultSharing` | **E** | 토큰 매개 — 세션을 `challengeId`로 찾고(`:391`) 소유를 강제한다(`:396-398`) | 없음(G418 · `userAccess.ts:370-423`) | ✅ | `setChallengeResultSharing` Auth 행 |
+| 25 | `onSessionEnded` | X | 해당 없음(Firestore 트리거 — 클라 호출 불가) | —(`functions/src/guardrails/index.ts:123`) | (서버 내부) | `onSessionEnded` 절 |
+| 26 | `purgeExpiredChallenges` | X | 해당 없음(스케줄) | —(`functions/src/challenge/index.ts:349`) | — | 설계명 `onChallengeRetentionExpiry` 절 |
+
+**집계**: D **6** · S **13** + R **1** = 챌린지 범위 **14** · E **2** · N **2** · X **2** = **26**. 게이트 호출 = **20곳**(`denyAnonymous(` 6 + `assertAnonymousChallengeScope(` 14 — `functions/src` 비테스트 grep, 정의부 제외) · E·N·X **0곳**.
+⚠️ **이 문서에 절이 없는 export가 4개다**(`updateMessengerSkin`·`requestEscalation`·`requestReverseEscalation`·`listMyChallenges`) + 기본 절이 없는 `submitRealtimeTranscript`. ⛔ 이번 반영은 **절을 새로 만들지 않았다** — 익명 정책은 이 표가, `updateMessengerSkin`의 입력 검증은 부록 E가 갖는다.
+
+### D.3 ⚠️ 예외 M-1 — `deliverVerifyOffer`·`deliverVerifyReconnect` (`docs/DECISIONS.md` **#109** · §68.15 (1) · AC-085 (b) 갱신 고지 — 코드 무변경)
+
+소유와 active를 한 헬퍼(`loadOwnedActiveSession` `functions/src/verifyIntercept/index.ts:60-74`)가 함께 보므로 게이트(`:188`·`:300`)가 **상태 검사 뒤**에 온다. 익명 호출자 응답(두 콜러블 공통):
+
+| 대상 세션 | 응답 | 쓰기·LLM |
+|---|---|---|
+| 없음 | `failed-precondition` *"존재하지 않는 세션입니다."*(`:63-65`) | 0 |
+| 남의 세션 | `permission-denied` *"본인 세션이 아닙니다."*(`:67-69`) | 0 |
+| 자기 · 챌린지 · active | 통과(기존 동작) | 기존대로 |
+| 자기 · 챌린지 · 비active | `failed-precondition` *"이미 종료되었거나 활성 상태가 아닌 세션입니다."*(`:70-72`) | 0 |
+| 자기 · 비챌린지 · active | `permission-denied` + D.1 문구(게이트) | 0 |
+| ⚠️ 자기 · 비챌린지 · **비active** | **`failed-precondition`**(`:70-72`) — `permission-denied`가 아니다 = **M-1** | **0** |
+
+⇒ **라이브 도달 불가로 판정한다** — 익명이 비챌린지 세션을 가지려면 `createSession`(D)을 거쳐야 하고, 세션 `challengeId`는 `consentChallenge` 트랜잭션만 쓴다. ⛔ **등재된** 예외는 **이 2곳뿐**이다(나머지 S/R 12곳은 게이트가 소유 검사 바로 뒤 — §68.15 (1) 형제 대조). 새 예외를 덧붙이려면 **User 결정이 먼저**다(G420). ⚠️ 이번 반영 중 **다른 양상의 미판정 관측 1건**이 있다 — 게이트 위치가 아니라 **게이트 앞 조기 반환**(`submitRealtimeTranscript` 빈 `turns` → D.2 #9). 예외로 등재하지 않았다.
+
+### D.4 라이브 관측 (⚠️ 오케스트레이터 실측 2026-10-01 — 인용값 · architect는 실행하지 않았다)
+
+| 관측 | 결과 | 대응 단계 |
+|---|---|---|
+| 익명 신원으로 D 6개 호출 | **6/6 `permission-denied`** | §68.10 A-2 · AC-085 (f) ① |
+| 챌린지 세션을 **가진** 익명이 `createSession` 호출 | **403** · D.1과 같은 문구 | A-4 · (f) ③ |
+| 익명이 **남의 세션**으로 `sendMessage` 호출 | **403** *"본인 세션이 아닙니다."* — 소유 검사가 게이트보다 먼저(응답 의미 무변경) | §68.15 (2) EM-5 대체 제안 · AC-085 (b) 마지막 문장 |
+| 수신자 흐름(메신저·음성) | 4xx **0건** | A-3 · (f) ② |
+
+### D.5 ⛔ 이 부록·이번 반영이 다루지 않는 것
+- **안내 문면** — 익명 사용자가 수신 흐름 밖(자가 훈련 입구·챌린지 목록)에 닿았을 때 무엇을 보여줄지는 정하지 않는다(OQ-A84 — 오늘은 각 화면의 기존 일반 오류 처리).
+- **챌린지 경로 자체의 남용 상한**(생성·삭제 루프 · 실시간 자격증명 발급 횟수 — OQ-A85) · App Check · 규칙 강화.
+- 각 절의 원문 — Auth 행에는 끝에 *"⭐ 익명(T176 …)"* 을 **덧붙였을 뿐** 지우지 않았다.
+
+## 부록 E — 입력 길이·호출 빈도 상한 에러 (§66 · PR #247 — 2026-10-02 사후 문서화)
+
+> ⭐ **사후 문서화다 — 5건 전부 이미 main에 병합·배포된 동작이다**(main `d856e1d` 소스 직접 열람). 새 요구·새 필드 0건 · `docs/Database.md` 무변경. 해당 절의 Request/Errors 행 끝에 *"⭐ §66(부록 E …)"* 로 덧붙였고 원문은 지우지 않았다.
+> **출처**: E-1·E-2는 `docs/Architecture.md` **§66.2·§66.3**(architect 설계)이고, 그 절이 이 문서의 델타 미수행을 자기 고지했다(**§66.12 7**). E-3~E-5는 같은 PR #247의 구현 추가분(커밋 ④·⑤ — 소스 주석 *"자체 감사 결함 5"*·*"신고 항목 4"* · implementer 메모리 `project_codegate_s66_abuse_hardening.md:14-15`, 인용값)이라 **architect 설계 절이 없다 — 값·문구의 정본은 소스**다.
+
+**문서 부채 대조**(편집 전 이 파일 전수 열람 + `1000`·`50자`·`500자`·`롤링`·`updateMessengerSkin` grep)
+
+| 부채 | 출처 | 편집 전 | 처리 |
+|---|---|---|---|
+| `sendMessage` `userText` 1000자 · `invalid-argument` | §66.12 7 ⓐ | ⛔ 없음(Request·Errors 둘 다) | **새로 반영** — E-1 |
+| `createSession` 롤링 윈도우 · `resource-exhausted` | §66.12 7 ⓑ | ⛔ 없음 | **새로 반영** — E-2 |
+| `createChallenge.displayName` 50자 | `docs/Tasks.md` **T178 C**(*"`docs/API.md:142` Errors가 … 길이 상한이 없다"*) | ⛔ 없음 | **새로 반영** — E-3 |
+| `reportChallenge.note` 500자 | T178 D(형제 슬롯) | ⛔ 없음 | **새로 반영** — E-4 |
+| `updateMessengerSkin` enum | 소스 주석 *"신고 항목 4"*(`functions/src/session/index.ts:57`·`:357`) | ⛔ 없음(**콜러블 절 자체가 없다**) | **새로 반영** — E-5(이 부록이 유일한 서술) |
+| (참고) §64 D-2 거절 문면 | §64.7 ⚠️ · §64.9 5(*"`docs/API.md:431` 정정 미수행"*) | ⭕ **이미 반영돼 있다** — `:431`의 `VERIFY_DECLINE_TOO_EARLY`·`VERIFY_DECLINE_ALREADY` 문면이 `functions/src/scenarios/verifyIntercept.ts:219-222`와 일치 | 편집 0건. ⚠️ 같은 행의 `functions/src/verifyIntercept/index.ts:249` 인용은 T176의 줄 추가로 현행 `:251`이다(내용 무관 · 미정정) |
+
+| # | 콜러블 · 필드 | 규칙 | 위반 시 | 문구(소스 원문) | 순서 | 근거 |
+|---|---|---|---|---|---|---|
+| **E-1** | `sendMessage` · `userText` | **≤ 1000자**(`userText.length` — trim 전 길이) | `invalid-argument` — 절단하지 않고 거절(AC-039) | *"메시지는 1000자까지 보낼 수 있습니다."* | 빈 값 검사(`:59-61`) 뒤 · Firestore(`:71-73`)·LLM **앞** | `functions/src/roleplay/index.ts:64-69` · 상수 `functions/src/shared/constants.ts:19` · §66.2 |
+| **E-2** | `createSession` · 호출 빈도 | 같은 uid의 세션 문서 중 `createdAt`이 최근 **10분** 안인 것이 **6개 이상**이면 거절(`createdAt` 부재 문서는 세지 않는다 · `createVoiceClone`의 사전 세션 문서도 센다 — §66.1 10) | `resource-exhausted` | *"짧은 시간에 너무 많이 시작했습니다. 잠시 후 다시 시도해 주세요."* | 동의 게이트(`:129-138`) 뒤 · 오프닝 LLM(`:174`)·세션 write **앞** | `functions/src/session/index.ts:144-165` · 판정 `functions/src/session/rateLimit.ts:14-22` · 상수 `constants.ts:22-23` · §66.3 |
+| **E-3** | `createChallenge` · `displayName` | **≤ 50자**(`displayName.length` — trim 전 길이) | `invalid-argument` — 절단하지 않고 거절 | *"displayName은 50자까지 입력할 수 있습니다."* | 빈 값 검사(`:72-74`) 뒤 · scenarioId 검사(`:84-87`)·Firestore **앞** | `functions/src/challenge/index.ts:78-83` · 상수 `constants.ts:53` |
+| **E-4** | `reportChallenge` · `note` | **≤ 500자**(값이 있을 때만 · trim 전 길이) | `invalid-argument` — 절단하지 않고 거절 | *"note는 500자까지 입력할 수 있습니다."* | token·reason 검사(`:303-305`) 뒤 · 토큰 조회(`:316`) **앞** | `functions/src/challenge/userAccess.ts:309-314` · 상수 `constants.ts:54` |
+| **E-5** | `updateMessengerSkin` · `messengerSkin`·`skinSource` | enum만 허용 — `messengerSkin ∈ {ios, samsung, default}` · `skinSource ∈ {auto, manual, fallback}`(타입 원천 `functions/src/shared/types.ts:53-54`) | `invalid-argument` | *"messengerSkin은 ios·samsung·default 중 하나여야 합니다."* / *"skinSource는 auto·manual·fallback 중 하나여야 합니다."* | 필수값 검사(`:354-356`) 뒤 · 세션 read(`:362-364`) **앞** | `functions/src/session/index.ts:62-70`(판정) · `:359-360`(호출) |
+
+- ⚠️ **E-2는 쿼터 보호가 아니다** — 한 사람의 초 단위 폭주(연타·다중 탭·루프)만 막는 백스톱이다(G180 승계 · §66.0 3). 익명은 이 창에 닿지 않는다(`createSession`이 클래스 D — 부록 D).
+- ⚠️ **E-3·E-4의 `invalid-argument`는 다른 원인과 코드를 공유한다**(E-3: 빈 값·미지의 scenarioId / E-4: token·reason 누락·무효) ⇒ **오류 코드만으로는 길이 초과를 구별할 수 없다**(T178 B). 표현 층 해소는 T178(ux-design → implementer) 소관이고, 원인 구별 필드 같은 **응답 계약 델타가 필요해지면 architect를 거친다.**
+- `updateMessengerSkin`은 이 문서에 절이 없다 — 계약 원천은 `functions/src/session/types.ts:76-84`(Request `{ sessionId, messengerSkin, skinSource }` → Response `{ messengerSkin, skinSource }`). 인증·소유·익명 범위는 **부록 D #4**. ⛔ 이번 반영은 절을 새로 만들지 않았다.
