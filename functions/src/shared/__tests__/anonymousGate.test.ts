@@ -153,11 +153,31 @@ const ANONYMOUS_POLICY: Record<string, AnonymousPolicy> = {
   purgeExpiredChallenges: "not_callable",
 };
 
-test("[T176 T-2] index.ts export 집합과 §68.3 정책표가 양방향으로 일치한다(G421)", () => {
-  const exported = Object.keys(callables).sort();
-  const classified = Object.keys(ANONYMOUS_POLICY).sort();
-  const unclassified = exported.filter((name) => !(name in ANONYMOUS_POLICY));
-  const stale = classified.filter((name) => !exported.includes(name));
+type ClassificationGaps = { unclassified: string[]; stale: string[] };
+
+/**
+ * export 집합과 정책표의 양방향 차집합(순수 함수 — 오염 샘플을 넣어 역검증할 수 있게 분리, AC-085 (e) ⓐ).
+ *   unclassified = export에는 있는데 정책표에 없는 이름(새 콜러블이 분류 없이 추가된 경우)
+ *   stale        = 정책표에는 있는데 export에 없는 이름(삭제·개명된 콜러블의 잔존 행)
+ */
+function findClassificationGaps(
+  exportedNames: readonly string[],
+  policyTable: Readonly<Record<string, AnonymousPolicy>>,
+): ClassificationGaps {
+  const exported = [...exportedNames].sort();
+  const classified = Object.keys(policyTable).sort();
+  return {
+    unclassified: exported.filter((name) => !Object.prototype.hasOwnProperty.call(policyTable, name)),
+    stale: classified.filter((name) => !exported.includes(name)),
+  };
+}
+
+/** T-2 양방향 단언 — 실제 입력과 오염 샘플에 **같은 단언**을 적용한다. */
+function assertNoClassificationGaps(
+  exportedNames: readonly string[],
+  policyTable: Readonly<Record<string, AnonymousPolicy>>,
+): void {
+  const { unclassified, stale } = findClassificationGaps(exportedNames, policyTable);
   assert.deepEqual(
     unclassified,
     [],
@@ -173,7 +193,13 @@ test("[T176 T-2] index.ts export 집합과 §68.3 정책표가 양방향으로 �
     [],
     `정책표에 있지만 index.ts가 export하지 않는 이름: ${stale.join(", ")} — 정책표에서 지우거나 export를 복원하라`,
   );
-  assert.equal(exported.length, 26, "§68.1 1 — 서버 진입점은 26개(콜러블 24 + 트리거 1 + 스케줄 1)");
+}
+
+const EXPORTED_NAMES: readonly string[] = Object.keys(callables);
+
+test("[T176 T-2] index.ts export 집합과 §68.3 정책표가 양방향으로 일치한다(G421)", () => {
+  assertNoClassificationGaps(EXPORTED_NAMES, ANONYMOUS_POLICY);
+  assert.equal(EXPORTED_NAMES.length, 26, "§68.1 1 — 서버 진입점은 26개(콜러블 24 + 트리거 1 + 스케줄 1)");
 });
 
 test("[T176 T-2] 정책표 클래스별 개수 = §68.3(D 6 · S 13 · R 1 · E 2 · N 2 · X 2 — 변경 대상 20)", () => {
@@ -343,4 +369,76 @@ test("[T176 T-4 ⓓ] sendMessage 본문에서 scope 줄만 빼면 스캔이 실�
   assert.notEqual(contaminated, original, "오염이 실제로 적용되지 않았다(거짓 음성 방지)");
   assert.equal(withoutGateLines(contaminated), withoutGateLines(original), "입력 불변 — 나머지 본문이 같아야 한다");
   assert.ok(findGateViolations("session", contaminated).length > 0, "scope 줄이 빠졌는데 스캔이 통과했다");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T-4 ⓔ — AC-085 (e) ⓐ "분류 없는 export" 역검증. T-2와 **같은 단언 함수**
+// (`assertNoClassificationGaps`)에 정상 샘플과 오염 샘플을 나란히 넣는다. 오염은 테스트 코드
+// 안의 사본에만 적용한다(실제 정책표·export는 건드리지 않는다).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 단언이 던진 실패 메시지(없으면 null) — 실행 출력에 증거로 남긴다. */
+function gapFailureOf(
+  exportedNames: readonly string[],
+  policyTable: Readonly<Record<string, AnonymousPolicy>>,
+): string | null {
+  try {
+    assertNoClassificationGaps(exportedNames, policyTable);
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message.split("\n")[0]! : String(err);
+  }
+}
+
+test("[T176 T-4 ⓔ-1 / AC-085 (e) ⓐ] 정책표에서 한 이름을 빼면(분류 없는 export) 실패하고 정상 샘플은 통과한다", (t) => {
+  const removed = "createSession";
+  const contaminated: Record<string, AnonymousPolicy> = { ...ANONYMOUS_POLICY };
+  delete contaminated[removed];
+
+  assert.equal(Object.keys(contaminated).length, Object.keys(ANONYMOUS_POLICY).length - 1, "오염이 실제로 적용되지 않았다");
+  assert.deepEqual({ ...contaminated, [removed]: ANONYMOUS_POLICY[removed]! }, ANONYMOUS_POLICY, "입력 불변 — 뺀 행 외에는 같아야 한다");
+
+  const normal = gapFailureOf(EXPORTED_NAMES, ANONYMOUS_POLICY);
+  const polluted = gapFailureOf(EXPORTED_NAMES, contaminated);
+  t.diagnostic(`정상 샘플: ${normal === null ? "통과" : "실패 — " + normal}`);
+  t.diagnostic(`오염 샘플(정책표에서 ${removed} 제거): ${polluted === null ? "통과(!)" : "실패 — " + polluted}`);
+  assert.equal(normal, null, "정상 샘플은 통과해야 한다");
+  assert.deepEqual(findClassificationGaps(EXPORTED_NAMES, contaminated), { unclassified: [removed], stale: [] });
+  assert.ok(polluted?.includes(`새 export \`${removed}\`의 익명 정책이 없다`), "분류 없는 export인데 단언이 실패하지 않았다");
+});
+
+test("[T176 T-4 ⓔ-2 / AC-085 (e) ⓐ] export에 분류 없는 새 이름이 생기면 실패하고 정상 샘플은 통과한다", (t) => {
+  const added = "newUnclassifiedCallable";
+  assert.ok(!(added in ANONYMOUS_POLICY) && !EXPORTED_NAMES.includes(added), "샘플 이름이 이미 존재한다 — 역검증 전제가 깨졌다");
+  const contaminated = [...EXPORTED_NAMES, added];
+
+  assert.equal(contaminated.length, EXPORTED_NAMES.length + 1, "오염이 실제로 적용되지 않았다");
+  assert.deepEqual(contaminated.filter((name) => name !== added), [...EXPORTED_NAMES], "입력 불변 — 추가한 이름 외에는 같아야 한다");
+
+  const normal = gapFailureOf(EXPORTED_NAMES, ANONYMOUS_POLICY);
+  const polluted = gapFailureOf(contaminated, ANONYMOUS_POLICY);
+  t.diagnostic(`정상 샘플: ${normal === null ? "통과" : "실패 — " + normal}`);
+  t.diagnostic(`오염 샘플(export에 ${added} 추가): ${polluted === null ? "통과(!)" : "실패 — " + polluted}`);
+  assert.equal(normal, null, "정상 샘플은 통과해야 한다");
+  assert.deepEqual(findClassificationGaps(contaminated, ANONYMOUS_POLICY), { unclassified: [added], stale: [] });
+  assert.ok(polluted?.includes(`새 export \`${added}\`의 익명 정책이 없다`), "분류 없는 export인데 단언이 실패하지 않았다");
+});
+
+test("[T176 T-4 ⓔ-3 / 역방향] export에 없는 정책 행이 있으면 실패하고 정상 샘플은 통과한다", (t) => {
+  const ghost = "removedCallable";
+  assert.ok(!(ghost in ANONYMOUS_POLICY) && !EXPORTED_NAMES.includes(ghost), "샘플 이름이 이미 존재한다 — 역검증 전제가 깨졌다");
+  const contaminated: Record<string, AnonymousPolicy> = { ...ANONYMOUS_POLICY, [ghost]: "deny" };
+
+  assert.equal(Object.keys(contaminated).length, Object.keys(ANONYMOUS_POLICY).length + 1, "오염이 실제로 적용되지 않았다");
+  const restored = { ...contaminated };
+  delete restored[ghost];
+  assert.deepEqual(restored, ANONYMOUS_POLICY, "입력 불변 — 추가한 행 외에는 같아야 한다");
+
+  const normal = gapFailureOf(EXPORTED_NAMES, ANONYMOUS_POLICY);
+  const polluted = gapFailureOf(EXPORTED_NAMES, contaminated);
+  t.diagnostic(`정상 샘플: ${normal === null ? "통과" : "실패 — " + normal}`);
+  t.diagnostic(`오염 샘플(정책표에 ${ghost} 추가): ${polluted === null ? "통과(!)" : "실패 — " + polluted}`);
+  assert.equal(normal, null, "정상 샘플은 통과해야 한다");
+  assert.deepEqual(findClassificationGaps(EXPORTED_NAMES, contaminated), { unclassified: [], stale: [ghost] });
+  assert.ok(polluted?.includes(`정책표에 있지만 index.ts가 export하지 않는 이름: ${ghost}`), "잔존 정책 행인데 단언이 실패하지 않았다");
 });
