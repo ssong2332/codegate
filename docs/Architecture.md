@@ -15604,7 +15604,7 @@ function hasSurvivingMatch(patterns: readonly RegExp[], text: string): boolean {
 
 ## 68. (User 결정 **C** 집행 — 2026-09-30) **익명 uid를 챌린지 수신 경로로만 제한하는 서버 게이트** — 판별·콜러블 26개 전수 분류·허용 조건·구현 형태·규칙·잔여 위험·테스트·배포 순서 — ⭐⭐ **익명 판별 키는 `request.auth.token.firebase.sign_in_provider === "anonymous"` 하나다. 프로덕션에서는 서명 검증을 거친 값이고, 에뮬레이터도 같은 클레임을 싣는다(SDK·CLI 소스 직접 확인)** / ⭐⭐ **에뮬레이터 예외는 서버에 두지 않는다 — 두면 라이브 전에 이 게이트를 실제로 돌려 볼 유일한 장소가 사라진다. 대신 개발용 로그인을 익명에서 에뮬레이터 이메일 계정으로 바꾼다** / ⭐⭐ **루프를 닫는 행은 `createSession`이 아니라 `createChallenge`다 — 메신저·generic 챌린지는 클론 없이 토큰을 발급하므로, 익명이 챌린지를 만들 수 있으면 "익명이 만들고 익명이 동의"로 LLM 세션이 무한히 나온다** / ⭐ **Firestore·Storage 규칙은 바꿀 필요가 없다 — 익명이 새로 여는 쓰기 표면은 0이다(uid 1개로도 이미 개수 무제한)** — architect 판정
 
-> 담당 태스크: **planner 등재 중**(번호 미정 — ⛔ 이 절은 번호를 짓지 않는다).
+> 담당 태스크: **T176**(서버 게이트 구현 — implementer → reviewer → QA) · **T177**(배포 → 익명 활성화 → 라이브 판정 — User · 오케스트레이터)(`docs/Tasks.md:689`·`:690`) · 수용 기준: **AC-085**(`docs/PRD.md:711` — 익명 호출자의 서버 권한 범위, 조건 (a)~(g)). ⚠️ 2026-10-01 갱신 — 이전 표기는 *"planner 등재 중(번호 미정)"* 이었다. 번호는 planner가 정했고 이 절은 인용만 한다. 후속 정리(M-1 예외 · 에뮬레이터 대체 · AC-085 (e) 대응)는 **§68.15**에 있다.
 
 ### 68.0 판정 요지 (⛔ 금지 먼저 — 다른 모든 판단보다 우선)
 
@@ -15681,8 +15681,8 @@ function hasSurvivingMatch(patterns: readonly RegExp[], text: string): boolean {
 | 11 | `judgeRewindAnswer` | **R** | 소유 `functions/src/rewind/index.ts:84-86` → LLM `:108` | `rewind/index.ts:86` — `report`를 넘긴다(§68.5) | ✅ UX-028 `src/app/report/rewind/page.tsx:17`(강제 해설 뒤에만 노출, `src/lib/rewind/rewindEntry.ts:29`) |
 | 12 | `deliverInCallSms` | S | 소유 `functions/src/inCallSms/index.ts:116`(`loadOwnedSession :79-90`) | `inCallSms/index.ts:116` | ✅ `play/page.tsx:33` · `src/lib/realtime/GeminiVoiceSession.tsx:26` |
 | 13 | `recordInCallSmsEvent` | S | 소유 `inCallSms/index.ts:199` | `:199` | ✅ `play/page.tsx:36` |
-| 14 | `deliverVerifyOffer` | S | 소유 `functions/src/verifyIntercept/index.ts:186`(`loadOwnedActiveSession :59-73`) | `verifyIntercept/index.ts:186` | ✅ `play/page.tsx:34` · `GeminiVoiceSession.tsx:26` |
-| 15 | `deliverVerifyReconnect` | S | 소유 `verifyIntercept/index.ts:297` | `:297` | ✅ `play/page.tsx:35` |
+| 14 | `deliverVerifyOffer` | S | 소유 `functions/src/verifyIntercept/index.ts:186`(`loadOwnedActiveSession :59-73`) ⚠️ **M-1 예외(2026-10-01 · User 결정 — 코드 무변경)**: 이 헬퍼는 소유권 검사와 **active 상태 검사를 함께** 한다 ⇒ 게이트가 상태 검사 **뒤**에 온다(G420 문면과 어긋남). 익명이 자기 소유의 **비활성 비챌린지** 세션을 부르면 `permission-denied`가 아니라 `failed-precondition`을 받는다(쓰기·LLM 0회). 라이브 도달 불가 — §68.15 (1) | `verifyIntercept/index.ts:186` | ✅ `play/page.tsx:34` · `GeminiVoiceSession.tsx:26` |
+| 15 | `deliverVerifyReconnect` | S | 소유 `verifyIntercept/index.ts:297` ⚠️ **M-1 예외** — #14와 같은 헬퍼, 같은 순서·같은 응답(§68.15 (1)) | `:297` | ✅ `play/page.tsx:35` |
 | 16 | `recordMockScreenEvent` | S | 소유 `functions/src/mockScreens/index.ts:63` | `mockScreens/index.ts:63` | ✅ `messenger/page.tsx:24` |
 | 17 | `getBeginnerBriefing` | **D** | 초급 사전 브리핑(UX-029) 전용 — `functions/src/scenarios/beginnerBriefing.ts:43-49` | `beginnerBriefing.ts:49` | 0 |
 | 18 | `createChallenge` | **D** ⭐ | ⭐⭐ **루프를 닫는 행.** 메신저·generic 챌린지는 클론·Storage 검증 **없이** 토큰을 발급한다(클론 분기 `challenge/index.ts:141` 밖 → 토큰 `:198`). 동의 확인도 없다. 익명에게 열리면 "익명 A가 만들고 익명 B가 동의"로 uid당 3개 상한(`:122-136`)이 무력해진다 | `challenge/index.ts:68` | 0 (UX-019) |
@@ -15743,7 +15743,7 @@ export function assertAnonymousChallengeScope(                       // 익명�
 
 ⛔ **내부 모듈 import는 0건이어야 한다** — 20개 콜러블 전부가 이 파일을 import하므로, 여기서 `../llm` 등을 끌어오면 §41 시크릿 폐포 게이트(`functions/src/devtools/__tests__/secretDeclarationGate.test.ts`)의 판정이 전 함수에서 바뀐다(G212). ⛔ `functions/src/index.ts`에서 **재export하지 않는다**(배포 대상 목록과 T-2 정책표가 흔들린다).
 
-**(3) 삽입 규칙.** **D**: `if (!request.auth)` 블록 **바로 다음**, 인자 검증보다 **앞**에 둔다(G419). 이유는 둘이다. ① Firestore read·LLM 호출 0회로 거절된다. ② 빈 페이로드 프로브로 게이트 유무를 판별할 수 있다 — 게이트가 있으면 `permission-denied`, 없으면 `invalid-argument`(§68.10 A-2). **S/R**: 기존 소유권 검사 **바로 다음**, 상태 검사·쓰기·LLM·외부 호출 **앞**에 둔다(G420). 소유권 검사보다 앞에 두지 않는 이유: 남의 세션을 찌르는 익명 호출이 지금과 같은 *"본인 세션이 아닙니다"* 를 받게 해 응답 의미를 바꾸지 않기 위해서다.
+**(3) 삽입 규칙.** **D**: `if (!request.auth)` 블록 **바로 다음**, 인자 검증보다 **앞**에 둔다(G419). 이유는 둘이다. ① Firestore read·LLM 호출 0회로 거절된다. ② 빈 페이로드 프로브로 게이트 유무를 판별할 수 있다 — 게이트가 있으면 `permission-denied`, 없으면 `invalid-argument`(§68.10 A-2). **S/R**: 기존 소유권 검사 **바로 다음**, 상태 검사·쓰기·LLM·외부 호출 **앞**에 둔다(G420). 소유권 검사보다 앞에 두지 않는 이유: 남의 세션을 찌르는 익명 호출이 지금과 같은 *"본인 세션이 아닙니다"* 를 받게 해 응답 의미를 바꾸지 않기 위해서다. ⚠️ (2026-10-01 덧붙임 — 위 원문 보존) **S/R "상태 검사 앞"에는 예외 M-1이 있다**(`verifyIntercept` 2곳 — §68.15 (1)). **D의 ② "없으면 `invalid-argument`"에는 예외가 1건 있다** — `listMyChallenges`는 인자 검증이 없어 게이트를 통과하면 곧바로 Firestore 조회로 간다(§68.15 (3)).
 
 **(4) ⭐ Google 바이트 무변경 — 판별 진리표**
 
@@ -15799,7 +15799,7 @@ export function assertAnonymousChallengeScope(                       // 익명�
 | **T-1** | 순수 판별 | §68.6 (4) 진리표 전 칸 + `challengeId: ""` → 익명 throw · 비문자열(숫자) → throw. 던져진 오류의 `code === "permission-denied"`이고 ⛔ **`"unauthenticated"`가 아님을 명시적으로 단언**한다(G417) |
 | **T-2** | ⭐ **분류 완전성 트립와이어** | 테스트 파일 안의 정책표 `ANONYMOUS_POLICY: Record<string, "deny"\|"session"\|"report"\|"entry"\|"no_auth"\|"not_callable">`(26행 = §68.3)와 `import * as callables from "../../index"`(선례 `secretDeclarationGate.test.ts:13`)의 키 집합이 **양방향으로 일치**해야 한다. 실패 메시지에 처방을 담는다: *"새 export `X`의 익명 정책이 없다 — Architecture.md §68.3 기준으로 분류하고 해당 호출을 넣어라(G421)"* |
 | **T-3** | 배선 스캔 | `listEntryPoints()`(`functions/src/devtools/secretDeclarationScan.ts:154-157`)로 이름 → 파일을 얻고, `export const <name> =`부터 다음 최상위 `export ` 또는 EOF까지를 본문으로 잘라 검사한다. **deny** → `denyAnonymous(request.auth)`가 있고, 그 위치가 본문의 첫 `getFirestore(`·`generateOpeningLine(`·`getVoiceProvider(`·`getLlmClient(`보다 **앞**이어야 한다(G419). **session/report** → `assertAnonymousChallengeScope(`가 있어야 한다. **entry/no_auth** → 두 호출 모두 **0회**여야 한다(G418 — 수신 입구 보호). ⚠️ 이 스캔은 **"호출이 있다"만 보고 "소유권 검사 뒤에 있다"는 보지 않는다** ⇒ 계약이 아니라 **트립와이어**이고, 순서 확인은 reviewer 몫이다(§68.13) |
-| **T-4** | 역검증(오염 샘플) | 스캔 함수를 합성 본문 3종에 적용한다. ⓐ `createSession` 본문에서 deny 줄만 뺀 것 → **실패** ⓑ `consentChallenge` 본문에 deny를 넣은 것 → **실패** ⓒ deny를 `getFirestore(` 뒤로 옮긴 것 → **실패**. 각각 정상 본문은 **통과**해야 하고, 오염 전후로 **나머지 본문이 같다**는 입력 불변을 단언한다 |
+| **T-4** | 역검증(오염 샘플) | 스캔 함수를 합성 본문 3종에 적용한다. ⓐ `createSession` 본문에서 deny 줄만 뺀 것 → **실패** ⓑ `consentChallenge` 본문에 deny를 넣은 것 → **실패** ⓒ deny를 `getFirestore(` 뒤로 옮긴 것 → **실패**. 각각 정상 본문은 **통과**해야 하고, 오염 전후로 **나머지 본문이 같다**는 입력 불변을 단언한다. ⚠️ (2026-10-01 덧붙임 — 위 원문 보존) **이 행의 ⓐⓑⓒ는 PRD AC-085 (e)의 ⓐⓑⓒ와 내용이 다르다**(같은 기호, 다른 대상). **정본은 AC-085 (e)** — 필수 3종 = AC ⓐ 분류 없는 export · ⓑ 거부 누락 · ⓒ 입구에 거부. 이 행의 ⓐ = AC ⓑ, ⓑ = AC ⓒ, ⓒ(deny 이동)는 AC에 없는 **추가분**이고, **AC ⓐ는 이 행에 빠져 있었다.** 대응표는 §68.15 (4) |
 | **T-5** | E2 소스 가드(루트 `npm test`) | `devSignIn.guard.test.ts` 기존 2건이 **수정 없이** 통과 + (신규) `src/lib/auth/devSignIn.ts`에 `signInAnonymously`가 **0회**여야 한다 |
 
 **에뮬레이터(EM — 병합 전, 라이브 익명 활성화 전의 유일한 실행 검증)**
@@ -15809,7 +15809,7 @@ export function assertAnonymousChallengeScope(                       // 익명�
 | EM-1 | E2 개발용 로그인 → 동의·연령 → 시나리오 → `createSession`·`sendMessage` 몇 턴 → 종료 → 리포트 | 전부 성공(비익명 경로 무변경) |
 | EM-2 | 같은 사용자로 **메신저 또는 generic 보이스** 챌린지 생성(클론 불필요, `challenge/index.ts:141`) | 토큰 링크 획득 |
 | EM-3 | ⛔ **격리된 브라우저 컨텍스트**에서 링크 → 동의(익명) → 흐름 끝까지(메신저: 메시지·모의 화면·스킨 / 보이스: 폴백 텍스트 + 문자·확인창구 이벤트가 발동하면 그것까지) → 종료 → 리플레이 → 결과 공유 → 되감기(속은 순간이 있으면) | 네트워크 탭에서 `permission-denied` **0건** |
-| EM-4 | EM-3의 익명 컨텍스트에서 D 6개를 **빈 페이로드**로 호출 | **6/6 `permission-denied`** |
+| EM-4 | EM-3의 익명 컨텍스트에서 D 6개를 **빈 페이로드**로 호출 | **6/6 `permission-denied`**. ⚠️ (2026-10-01 덧붙임) **실행 완료** — implementer·QA가 각각 독립 실행해 6/6(인용값). 비익명 대조군의 기대값은 5개가 `invalid-argument`이고 **`listMyChallenges`만 예외**다(Firestore 에뮬레이터가 없으면 `INTERNAL`) — §68.15 (3) |
 | EM-5 | 익명 컨텍스트에서 EM-1 사용자의 세션 ID로 `sendMessage` 호출 | `permission-denied` *"본인 세션이 아닙니다"* (기존 소유권 검사가 게이트보다 먼저 걸린다 — 응답 의미 무변경) |
 
 ### 68.10 (Q8) 배포·검증 순서 (⛔ 순서가 설계다)
@@ -15817,7 +15817,7 @@ export function assertAnonymousChallengeScope(                       // 익명�
 | 단계 | 내용 | 정지 조건 |
 |---|---|---|
 | **P-1** | 병합 전 `npm --prefix functions test` · `npm test`(Verified Commands 원문) — 기존 843/418은 그대로, 신규만 늘어난다 | 기존 테스트를 고쳐야 하면 정지(§68.6 (4)) |
-| **P-2** | EM-1~EM-5 | 1건이라도 다르면 정지 |
+| **P-2** | EM-1~EM-5 | 1건이라도 다르면 정지 ⚠️ **갱신 고지(2026-10-01 · User 결정 *"라이브 확인으로 대체"* · DECISIONS #110 — 위 원문 보존, 아래가 우선한다)**: 이 PC에서 Java가 뜨지 않아 Firestore 에뮬레이터를 쓰는 **EM-1/2/3/5는 실행하지 않는다.** P-2 = **EM-4만**(실행 완료 — 6/6 `permission-denied`, implementer·QA 각 1회). EM-1/2/3/5는 **S-G · A-2 · A-3 · A-4**가 대신하며, 무엇이 대체되고 무엇이 비는지는 §68.15 (2) 대응표가 정본이다. ⇒ **수신자 허용 경로의 첫 실행은 라이브(A-3, 익명 활성화 뒤)다** |
 | **D-0** | export 이름 재대조 — ⛔ 신규 export 0개(`functions/src/index.ts` **무변경**) ⇒ 26/26 | 라이브에 없는 이름이 생기면 정지 |
 | **D-1** | **인덱스**: 게이트는 쿼리를 **0개** 추가한다(판별은 이미 읽은 문서와 토큰만 쓴다) ⇒ ⭐ **`firestore:indexes` 배포 불필요.** §66 사고(인덱스 누락 → `createSession` 전체 장애) 재발 방지 확인만 한다: `firebase firestore:indexes` 라이브 = 선언(2026-09-30 3 = 3, `CLAUDE.md` 인용값) | 불일치하면 이 배포와 **별개로** 보고 |
 | **D-2** | **규칙**: 변경 0건 ⇒ `firestore:rules`·`storage` 배포 없음. ⛔ `--only` 없는 `firebase deploy` **금지** | — |
@@ -15871,7 +15871,7 @@ export function assertAnonymousChallengeScope(                       // 익명�
 | **G417** | 거부 코드는 **`permission-denied`** — `unauthenticated`는 인증 무효화 배너와 U1 잠금을 오발화한다(`callable.ts:29-31`·`:38-40`) |
 | **G418** | `consentChallenge`·`setChallengeResultSharing`·`getChallengeLanding`·`reportChallenge`에는 **거부 호출 금지**(T-3이 0회를 단언) |
 | **G419** | D의 거부 호출은 `if (!request.auth)` **바로 다음** — 어떤 Firestore read·LLM·인자 검증보다도 앞 |
-| **G420** | S/R의 호출은 **기존 소유권 검사 바로 다음** — 추가 read 0회, 상태 검사·쓰기·LLM·외부 호출 앞 |
+| **G420** | S/R의 호출은 **기존 소유권 검사 바로 다음** — 추가 read 0회, 상태 검사·쓰기·LLM·외부 호출 앞. ⚠️ **예외 M-1(2026-10-01 · User 결정 *"문서에 예외 명시"* · DECISIONS #109)**: `deliverVerifyOffer`·`deliverVerifyReconnect`는 소유권·상태 검사가 한 헬퍼(`loadOwnedActiveSession`)에 묶여 있어 **"상태 검사 앞"을 지키지 않는다** — 게이트는 헬퍼 반환 직후다. **"쓰기·LLM·외부 호출 앞"과 "추가 read 0회"는 지킨다.** S/R 14곳(S 13 + R 1) 중 이 2곳 외의 **12곳은 예외가 아니다**(§68.15 (1) 형제 대조). ⛔ 새 예외를 이 행에 덧붙이려면 User 결정이 먼저다 |
 | **G421** | 새 콜러블 export는 **익명 정책 분류 없이는 테스트가 실패**한다(T-2 트립와이어) |
 | **G422** | **익명 활성화는 D-4 + S-G 뒤에만.** 롤백은 **익명 끄기가 먼저**다 |
 | **G423** | `judgeRewindAnswer`는 **`report.challengeId`**(서버 역정규화 값)로 판정하고, 값이 없으면 거부한다(fail-closed) |
@@ -15883,3 +15883,129 @@ export function assertAnonymousChallengeScope(                       // 익명�
 > **번호 실측(착수 시점, `docs/**` grep)**: `^## ` 최대 **67**(`^## 6[8-9]\.` **0히트**) · 게이트 최대 **G414**(`G41[5-9]|G4[2-9]\d` **0히트**) · OQ 최대 **OQ-A83**(`OQ-A8[4-9]|OQ-A9\d` **0히트**) · DECISIONS 최대 **#107**(`DECISIONS.md:117`) · `docs/adr/` 최대 **0015** ⇒ **§68 · G415~G423 · OQ-A84~A85 · #108 · ADR-0016**. ⛔ 예약하지 않는다 — 동시 패스가 있으면 **병합 순서로 확정**한다(치환 범위: `## 68.` 헤딩 이후 + DECISIONS #108 행 + ADR-0016 파일뿐, ⛔ 전역 치환 금지).
 > **base**: `origin/main` = **`ec4bc2fe60a83282bc00ef56f8e50bd3df927e57`**(이 워크트리의 생성 기준) · 로컬 `main` = `d96c0e4f35bcc3eceddd24680884bcd3832b5d21`.
 > **UX 추적성**: 신규 Screen ID·Flow ID·라우트·컴포넌트 **0건**. **허용 경로** = UX-021/UF-005 · UX-014 · UX-022 · UX-007 · UX-008 · UX-018 · UX-028(§68.4). **거부 경로** = UX-002 · UX-029 · UX-019 · UX-020 + `createSession` 호출 화면 3곳(§68.4). ⛔ 어느 화면의 계약도 바꾸지 않는다(오류 안내 문면은 OQ-A84).
+
+### 68.15 (2026-10-01 후속 정리 — 문서만) M-1 예외 · 에뮬레이터 → 라이브 대체 · EM-4 대조군 예외 · T-4 ↔ AC-085 (e) 대응
+
+**⛔ 금지 먼저**
+1. ⛔ **소스 0줄.** M-1은 **코드를 바꾸지 않는다**(User 결정 1). 이 절은 예외를 **문서에 등재**할 뿐이다.
+2. ⛔ §0~§67 · ADR 원문 무수정. §68.0~§68.14 원문도 지우지 않았다 — 해당 자리에 **"2026-10-01 덧붙임"** 으로 이 절을 가리키는 고지만 붙였다.
+3. ⛔ `docs/Tasks.md` · `docs/PRD.md` 무편집(planner 소관) — 필요한 델타는 (5) 인계에 적었다.
+4. ⚠️ architect는 셸이 없다. 아래 실행 결과(EM-4 6/6 · `INTERNAL` · `java -version` 출력)는 전부 **오케스트레이터 전달 인용값**이다. 구현 줄번호는 T176 구현 작업 트리 `C:\codegate\.claude\worktrees\agent-a9ae9c7920a1cfcba`(브랜치 `feat/T176-anon-challenge-gate`, ref `d49d366`)를 **직접 열람**한 값이다. 이 절의 base(`origin/main` `e9f6b9b`)에는 `functions/src/shared/anonymousGate.ts`가 **아직 없다**(Glob 0건).
+
+**User 결정 원문(2026-10-01, AskUserQuestion 응답 — 오케스트레이터 전달)**: ① reviewer M-1 → *"문서에 예외 명시 (Recommended)"* ② 에뮬레이터 확인 EM-1/2/3/5 → *"라이브 확인으로 대체 (Recommended)"*. ⇒ DECISIONS **#109**(①) · **#110**(②).
+
+#### (1) M-1 — `verifyIntercept` 2곳의 게이트는 상태 검사 **뒤**에 있다 (예외 등재)
+
+**구조**(T176 트리): `loadOwnedActiveSession`(`functions/src/verifyIntercept/index.ts:60-74`)이 ① 존재 `:63-65` → `failed-precondition` ② 소유 `:67-69` → `permission-denied` ③ **active** `:70-72` → `failed-precondition`을 한 번에 검사한다. 게이트는 헬퍼가 반환한 **뒤** `:188`(`deliverVerifyOffer`)·`:300`(`deliverVerifyReconnect`)에 있다 ⇒ G420의 *"상태 검사 앞"* 을 지키지 않는다.
+
+**익명 호출자 진리표(두 콜러블 공통)**
+
+| 대상 세션 | 응답 | 쓰기·LLM | AC-085 대조 |
+|---|---|---|---|
+| 존재하지 않음 | `failed-precondition` *"존재하지 않는 세션입니다."* | 0 | 비익명과 같다 — 예외 아님 |
+| 남의 세션 | `permission-denied` *"본인 세션이 아닙니다."* | 0 | (b) 둘째 문장(소유권 응답 무변경) 충족 |
+| 자기 · 챌린지 · active | 통과(기존 동작) | 기존대로 | (c) |
+| 자기 · 챌린지 · 비active | `failed-precondition` | 0 | 허용 대상의 상태 오류 — 게이트 전과 같다 |
+| 자기 · **비챌린지** · active | `permission-denied`(게이트) | 0 | (b) 충족 |
+| 자기 · **비챌린지** · **비active** | ⚠️ **`failed-precondition`** *"이미 종료되었거나 활성 상태가 아닌 세션입니다."* | **0** | ⚠️ **(b) 문면 *"`permission-denied`로 거부된다"* 와 다르다 = M-1** |
+
+**왜 받아들이는가(User 결정 1의 근거 — 인용 + architect 확인)**
+
+| # | 근거 | 출처 |
+|---|---|---|
+| 1 | **라이브에서 도달할 수 없다.** 익명 uid가 비챌린지 세션을 가지려면 `createSession`을 불러야 하는데 그것이 **D**다(게이트가 인자 검증·read보다 앞). 세션의 `challengeId`를 쓰는 곳은 `consentChallenge` 1곳뿐이고 클라는 `sessions`에 쓸 수 없다(§68.5 위조 불가 3단) | §68.3 #2 · §68.5 |
+| 2 | 게이트 **이전**에 생긴 익명 소유 비챌린지 세션도 라이브에는 **0건으로 추정**한다 — 라이브 익명은 `ADMIN_ONLY_OPERATION`으로 꺼져 있었다(인용값, §68.1 8). ⚠️ 추정 — 확인 방법: 콘솔에서 `sessions` 중 익명 uid 소유이며 `challengeId`가 없는 문서 조회. ⚠️ **에뮬레이터**에는 E2 이전 `devSignIn`(익명)으로 만든 세션이 영속 데이터에 남아 있을 수 있다(추정 — 에뮬레이터 데이터 import/export 사용 여부 미확인). M-1이 관측될 수 있는 곳은 그곳뿐이다 | 인용값 · 추정 |
+| 3 | **새로 열리는 것이 없다.** 쓰기·LLM·외부 호출 0회이고, 응답이 알려 주는 정보(*"내 세션이 비활성"*)는 호출자가 **자기 세션 문서를 이미 읽을 수 있다**(`firestore.rules:34` 소유자 읽기, §68.7) | §68.7 |
+| 4 | 클라 영향 0 — 클라 래퍼는 `unauthenticated`만 특별 취급한다(`src/lib/api/callable.ts:38-40`). `failed-precondition`은 배너·U1 잠금을 열지 않는다 | §68.6 (5) |
+| 5 | 고치려면 헬퍼를 쪼개야 하는데, 이 헬퍼는 §38.4 후보 E의 재검증 체인 기점이다(T176 트리 `verifyIntercept/index.ts:255` 주석 *"재검증 5종(위 `loadOwnedActiveSession` + …)"*). User가 코드 무변경을 택했다 | 직접 열람 · User 결정 |
+
+**형제 대조(같은 함정이 다른 S/R 슬롯에도 있는가)** — T176 트리 전수 grep(`assertAnonymousChallengeScope(` · `status !== "active"` · `본인 세션이 아닙니다`):
+
+| 콜러블 | 소유 throw | 게이트 | 상태 검사 | 판정 |
+|---|---|---|---|---|
+| `endSession` | `session/index.ts:311-313` | `:314` | (멱등 분기, 게이트 뒤) | 예외 아님 |
+| `updateMessengerSkin` | `:369-371` | `:372` | 없음 | 예외 아님 |
+| `requestEscalation` | `:402` | `:404` | `:405` | 예외 아님 |
+| `requestReverseEscalation` | `:455` | `:457` | `:458` | 예외 아님 |
+| `sendMessage` | `roleplay/index.ts:79` | `:81` | `:82` | 예외 아님 |
+| `createRealtimeCall` | `realtime/index.ts:97` | `:99` | `:100` | 예외 아님 |
+| `submitRealtimeTranscript` | `realtime/submitTranscript.ts:84-86` | `:87` | 없음 | 예외 아님 |
+| `generateReport` | `report/index.ts:41-43` | `:44` | (위임 함수 안, 게이트 뒤) | 예외 아님 |
+| `deliverInCallSms` | `loadOwnedSession` `inCallSms/index.ts:80-91`(상태 검사 **없음**) | `:118` | `:119` | 예외 아님 |
+| `recordInCallSmsEvent` | 같은 헬퍼 | `:202` | `:209` | 예외 아님 |
+| `recordMockScreenEvent` | `loadOwnedSession` `mockScreens/index.ts:25-36`(상태 검사 **없음**) | `:65` | `:66` | 예외 아님 |
+| `judgeRewindAnswer`(R) | `rewind/index.ts:85-87` | `:88` | 없음 | 예외 아님 |
+| `deliverVerifyOffer` | `loadOwnedActiveSession :67-69` | `:188` | **`:70-72`(게이트 앞)** | ⚠️ **M-1** |
+| `deliverVerifyReconnect` | 같은 헬퍼 | `:300` | **`:70-72`(게이트 앞)** | ⚠️ **M-1** |
+
+⇒ **예외는 14곳 중 2곳뿐이며, 둘 다 같은 헬퍼 1개가 원인이다.** 소유권 throw는 **14곳 전부** 게이트보다 앞이다(AC-085 (b) 둘째 문장의 구조적 근거).
+
+#### (2) P-2 갱신 — EM-1/2/3/5 → 라이브 대체 대응표 (User 결정 2)
+
+**사유(인용값)**: 이 PC에서 `java -version` → `could not find java.dll`(원인 추정: JDK가 비ASCII 경로 `C:\Users\박수홍\...` 아래에 있음 — ⚠️ 추정, 확인 방법: ASCII 경로에 JDK를 설치하고 `JAVA_HOME`을 바꿔 재실행). Firestore 에뮬레이터는 Java가 필요하다 ⇒ EM-1/2/3/5는 실행할 수 없다. EM-4는 Auth+Functions 에뮬레이터만 써서 실행됐다.
+
+| EM | 원래 확인하던 것 | 대체 단계(§68.10) | 대체 범위 | ⚠️ 비는 것(잔여 — 지우지 말 것) |
+|---|---|---|---|---|
+| **EM-1** | E2 개발용 로그인(`password`) → 자가 훈련 끝까지 성공 = 비익명 경로 무변경 | **S-G**(익명이 꺼진 상태, Google — §67.9 S-1~S-4) · AC-085 (d) ② | 비익명 무변경 → **라이브 Google로 대체**(에뮬레이터보다 강한 증거) | ① **E2 자체**(`devSignIn`이 에뮬레이터에서 이메일 계정으로 로그인되는가)는 라이브로 대체할 수 없다 — 프로덕션 빌드에는 `devSignIn`이 없다(2단 가드 `devSignIn.ts:41-43`). 남는 증거는 **T-5 소스 가드(정적)** 뿐이다. ② §68.12 8(`@example.com`이 에뮬레이터 이메일 검증 통과)은 **미확인으로 남는다**. ⇒ E2는 **실행 검증 0회**로 병합된다 |
+| **EM-2** | 비익명이 메신저/generic 챌린지 생성 → 링크 획득 | **S-G**의 챌린지 생성·목록·삭제 + **A-3** 준비(User가 Google로 챌린지 생성) | 완전 대체 | 없음 |
+| **EM-3** | 격리 익명 컨텍스트에서 수신 흐름 끝까지, `permission-denied` 0건 | **A-3**(= AC-085 (f) ②, 보이스·메신저 각 1건) | 항목 동일 | ⚠️ **시점이 바뀐다** — 허용 경로의 **첫 실행이 익명 활성화 뒤 라이브**다. 과차단 결함이 있으면 A-3에서 처음 드러난다. 그 경우 라이브 수신 흐름은 **오늘과 같은 0% 상태**일 뿐 새 노출은 없다 → A-3 정지 조건(분류 재확인), 필요하면 R ① |
+| **EM-4** | 익명 + D 6개 빈 요청 → 6/6 `permission-denied` | (대체 아님 — **실행 완료**) | implementer·QA 각 1회 독립 실행 6/6(인용값). 라이브 재확인은 **A-2** | 없음. ⭐ (3)의 대조군과 합치면 **G419 순서의 실행 증거**도 된다 |
+| **EM-5** | 익명이 남의 세션에 `sendMessage` → *"본인 세션이 아닙니다"*(소유 검사가 게이트보다 먼저 — AC-085 (b) 둘째 문장) | ⚠️ **직접 대체 단계 없음** — A-2(빈 요청 D)·A-3(자기 세션)·A-4(`createSession`) 어느 것도 *"남의 세션"* 을 찌르지 않는다 | 구조 증거만: 위 (1) 형제 대조(소유 throw 14/14가 게이트 앞) + reviewer 수기 순서 대조(§68.13 — T-3은 순서를 보지 않는다) | ⚠️ **실행 증거 0.** **제안(채택은 오케스트레이터/User — 채택 전에는 T177 순서에 넣지 않는다)**: A-4 뒤 같은 익명 신원으로 S-G에서 만든 **Google 세션 ID**에 `sendMessage` 1회 → 기대 `permission-denied` *"본인 세션이 아닙니다"*. 소유 throw가 LLM보다 앞이라(§68.3 #7) 쓰기·LLM 0회 |
+
+**P-2 정지 조건(갱신)**: EM-4가 6/6이 아니면 정지(충족됨). EM-1/2/3/5의 정지 조건은 대체 단계의 정지 조건으로 **옮겨 간다** — S-G(`permission-denied` 1건이면 정지) · A-3(수신 흐름 중 1건이면 정지) · A-2/A-4(아니면 즉시 R ①). ⛔ 이 대체로 **AC-085 (f) 문면은 바뀌지 않는다** — (f)는 처음부터 라이브 판정이다.
+
+#### (3) EM-4 비익명 대조군 — *"비익명 = `invalid-argument`"* 는 **5/6**이다 (QA 관찰 반영)
+
+| D export | 비익명 + 빈 요청 `{}` | 근거(T176 트리) |
+|---|---|---|
+| `createSession` | `invalid-argument` | `session/index.ts:92-94` |
+| `createVoiceClone` | `invalid-argument` | `voice/index.ts:42-44` |
+| `getBeginnerBriefing` | `invalid-argument` | `scenarios/beginnerBriefing.ts:53-55` |
+| `createChallenge` | `invalid-argument` | `challenge/index.ts:72-74` |
+| `deleteChallenge` | `invalid-argument` | `challenge/index.ts:247-249` |
+| `listMyChallenges` | ⚠️ **인자 검증이 없다** — 게이트(`:286`) 바로 뒤 Firestore 쿼리(`:287-288`). **Firestore 에뮬레이터 없음 → `INTERNAL`**(QA 관찰 인용값) · Firestore 있음/라이브 → **성공**(본인 챌린지 목록 — 없으면 빈 배열, §68.10 A-2가 이미 *"빈 목록 성공"* 으로 적었다) | `challenge/index.ts:279-288` |
+
+⇒ §68.6 (3) ②의 *"게이트가 없으면 `invalid-argument`"* 는 `listMyChallenges`를 뺀 **5개**에 대해서만 참이다. ⭐ **판별력은 유지된다** — 익명 `permission-denied` vs 비익명 `INTERNAL`/성공은 서로 구별된다. ⭐ 오히려 **Firestore 에뮬레이터가 없는 환경에서 익명이 `INTERNAL`이 아니라 `permission-denied`를 받았다는 것 자체가 *"거부가 Firestore read보다 앞"*(G419)의 실행 증거**다. 나머지 5개는 비익명 `invalid-argument`가 *"거부가 인자 검증보다 앞"* 을 보인다. ⛔ `INTERNAL`은 환경 탓이며 제품 결함이 아니다.
+
+#### (4) §68.9 T-4 ↔ PRD AC-085 (e) 기호 대응 — ⭐ **정본은 AC-085 (e)**
+
+**원인**: T-4는 AC-085(2026-10-01 신설)보다 먼저 쓰였고, 같은 ⓐⓑⓒ 기호를 **다른 대상**에 붙였다. 또 AC ⓐ(분류 없는 export)는 T-2의 정상 경로만 설계하고 **역검증을 빠뜨렸다**.
+
+| AC-085 (e) | 오염 내용 | §68.9 T-4 원 기호 | implementer 테스트(T176 트리 `functions/src/shared/__tests__/anonymousGate.test.ts` — 2026-10-01 관측, ⚠️ 작업 중이라 줄번호·커밋 여부는 병합본에서 재확인) | 필수 여부 |
+|---|---|---|---|---|
+| **ⓐ** | 분류 없는 export | **없음**(누락) | `[T176 T-4 ⓔ-1 / AC-085 (e) ⓐ]` `:393`(정책표에서 1행 제거) · `ⓔ-2` `:410`(export에 새 이름 추가) · (역방향) `ⓔ-3` `:427`(정책표에 유령 행) | ✅ 필수 |
+| **ⓑ** | 거부 대상 본문에서 거부를 뺀 것 | **T-4 ⓐ** | `[T176 T-4 ⓐ]` `:329` | ✅ 필수 |
+| **ⓒ** | 입구 본문에 거부를 넣은 것 | **T-4 ⓑ** | `[T176 T-4 ⓑ]` `:338` | ✅ 필수 |
+| (AC 밖) | deny를 `getFirestore(` 뒤로 이동(G419 순서) | **T-4 ⓒ** | `[T176 T-4 ⓒ]` `:350` | 추가분 — ⛔ 지우지 말 것(T-3 순서 검사의 유일한 역검증) |
+| (AC 밖) | session 스코프 줄 제거 | 없음 | `[T176 T-4 ⓓ]` `:365` | 추가분 — ⛔ 지우지 말 것(session 분기의 유일한 역검증) |
+
+**판정 규칙**
+- 충족 판정은 **AC 기호**로 한다: 필수 = AC ⓐⓑⓒ 3종이 **실패**하고 정상 샘플이 **통과**하는 것이 **같은 실행 출력에 나란히** 나와야 한다(AC-085 (e)).
+- reviewer·QA 보고는 **AC 기호로** 적는다. 테스트 이름의 *"T-4 ⓐ/ⓑ"* 를 AC ⓐ/ⓑ로 읽으면 **AC ⓐ가 빠진 것을 놓친다** — 이것이 이 표가 막는 오독이다.
+- 권고(필수 아님): 테스트 이름에 `ⓔ-1`처럼 `/ AC-085 (e) ⓑ`·`/ AC-085 (e) ⓒ` 꼬리표를 붙인다.
+
+#### (5) 인계 (⛔ 이 절은 아래 문서를 편집하지 않았다)
+
+| 대상 | 내용 |
+|---|---|
+| **planner** (`docs/PRD.md`) | ① **AC-085 (b)** *"…아니면 `permission-denied`로 거부된다"* 는 M-1 상태(자기·비챌린지·비active)에서 `failed-precondition`이 나와 **모든 상태에서 참은 아니다.** 라이브 도달 불가(위 (1) 근거 1·2)라 판정은 오염되지 않는다. architect 권고 = **AC 문면 무변경**(관측 가능한 상태에서는 참). 각주 여부는 planner가 판단한다 |
+| **planner** (`docs/Tasks.md`) | ② T176 G항 **④ "에뮬레이터 E2E(동의 → 세션 진입)"** 와 갱신 고지의 *"④ 에뮬레이터 E2E → (c)(에뮬레이터 층)"*, T177 E항 ① *"P-2 에뮬레이터 EM-1~EM-5"* 는 User 결정 2로 **실행할 수 없다** → 위 (2) 대응표로 갱신 필요. ③ T176 완료 증거에 AC-085 (e) **AC 기호 기준** 3종(위 (4))을 명시할지 |
+| **reviewer** | M-1 2곳(`verifyIntercept :188`·`:300`)은 **예외로 등재됐다** — G420 위반으로 재지적하지 않는다. 나머지 12곳은 §68.13대로 수기 대조. ⛔ 새 예외를 발견하면 등재하지 말고 보고한다(G420 행) |
+| **QA** | EM-4 대조군 기대값 = 위 (3) 표 · T-4 보고 = 위 (4)의 AC 기호 |
+| **오케스트레이터 / User** | (2) EM-5 라이브 제안 채택 여부 · Java 복구 시 EM-1/2/3/5를 다시 돌릴지(이번 결정은 대체이지 폐기가 아니다 — 원문 EM 표는 보존했다) |
+
+#### (6) ⛔ 닫지 못한 것 (자기 고지 — 지우지 말 것)
+1. ⚠️ EM-4 6/6(implementer·QA) · `listMyChallenges` `INTERNAL`(QA) · `java.dll` 출력은 **인용값**이다. architect는 실행하지 않았다.
+2. ⚠️ Java 실패 원인(비ASCII 경로)은 **추정**이다.
+3. ⚠️ (4)의 테스트 이름·줄번호는 **다른 에이전트의 작업 트리 관측값**이다 — implementer가 지금 AC ⓐ 테스트를 추가하는 중이라 바뀔 수 있다.
+4. ⚠️ E2(`devSignIn` 이메일 계정)는 실행 검증 0회로 병합된다(위 (2) EM-1 행).
+5. ⚠️ EM-5(남의 세션 → 소유권 응답)는 실행 증거 0이다(위 (2) EM-5 행).
+6. ⚠️ 헤더 버전 갭은 그대로다: `Architecture.md:5` **PRD v1.7.1 · UX 1.13** ↔ `docs/PRD.md:4` **v1.15** · `docs/UX.md:10` **1.26**. 이 절은 AC·화면 신설 0건이라 판정이 오염되지 않으며, ⛔ 헤더는 전진시키지 않았다(T131 계열 별건).
+
+#### (7) 이 패스의 편집 범위 (⛔ 정본 — 중단 시 복구 체크리스트)
+- `docs/Architecture.md` — **§68 안에서만**: 서두 *"담당 태스크"* 줄 교체(T176·T177 · AC-085) · §68.3 #14·#15 근거 열 덧붙임 · §68.6 (3) 덧붙임 · §68.9 T-4 행·EM-4 행 덧붙임 · §68.10 P-2 행 덧붙임 · §68.13 G420 행 덧붙임 · **§68.15 신설**. §0~§67 **0줄**.
+- `docs/DECISIONS.md` — **#109 · #110** 2행 append.
+- ⛔ `functions/**`·`src/**`·`scripts/**`·`docs/Tasks.md`·`docs/PRD.md`·`docs/UX.md`·`docs/API.md`·`docs/Database.md`·`docs/adr/**`·`README.md`·`CLAUDE.md` **0줄**. 커밋·push **0건**(셸 없음).
+> **번호 실측(착수 시점)**: DECISIONS 최대 **#108**(`DECISIONS.md:118`), `^\| 109 \|` 는 이 트리와 T176 트리 모두 **0히트** ⇒ **#109·#110**. 신규 게이트 **0** · 신규 OQ **0** · 신규 ADR **0**(예외 등재는 모듈 경계·계약을 바꾸지 않는다 — DECISIONS 행으로 충분). `^### 68\.1[5-9]` 는 이 트리·T176 트리 **0히트** ⇒ **§68.15**. ⛔ 예약하지 않는다 — 동시 패스가 있으면 병합 순서로 확정(치환 범위: `### 68.15` 이후 + DECISIONS #109·#110 행뿐, ⛔ 전역 치환 금지).
+> **base**: `origin/main` = **`e9f6b9bdad05ff7c9120ce83a61543a41396335b`**(= 이 워크트리 브랜치 `worktree-agent-a0c6a035a4cc95d7c` 헤드, `.git` 직접 판독).
+> **UX 추적성**: 신규 Screen ID·Flow ID·라우트 **0건**. M-1이 걸치는 화면 = UX-014(`play/page.tsx:34`·`:35`, §68.3 #14·#15) — 화면 계약 무변경.
