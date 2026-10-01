@@ -15,3 +15,5 @@
 - [판정표 확장 절차](project_rule_table_extension.md) — 적용 결과를 닫아 서술한 표엔 섞지 말고 분리, 강등 선례 보존용 방어 행 필수
 - [커밋 제목·PR 번호는 주장이다](project_commit_metadata_unreliable.md) — 정본 절의 "편집 범위" 블록과 base 체인으로 반증, 제목 오류·PR 역순 병합 실측
 - [수치 정정 규칙](project_baseline_correction.md) — 현재형 기준선만 고치고 과거 기록은 보존, 정정 전 전수 grep(부분 정정이 반복 실패 양식)
+- [done 집행 전 3곳 대조](project_done_promotion_audit.md) — 행 문면·절차의 번호범위 인용·AC 조건부 항목 · 해당 여부 미확인은 "해당 없음"이 아니다 → review
+- ["N회 호출" 관찰](project_call_count_observation.md) — 판정 전 호출 지점 지도부터 · 조작 수 비례면 재등재 조건에 조작 수 기록 · ref를 await 뒤에 세우면 중복 경로
