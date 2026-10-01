@@ -16095,3 +16095,366 @@ export function assertAnonymousChallengeScope(                       // 익명�
 > **base**: 이 워크트리 = 브랜치 `docs/T176-api-auth` **`1441059c1a794e0035024c37482dde1d53959bec`**(`.git/worktrees/agent-adcddde6904888552/HEAD` → `.git/refs/heads/docs/T176-api-auth` 직접 판독). PR #259로 병합됐다는 것은 오케스트레이터 인용값이다. 로컬 `origin/main`은 `a329d76`이고, 오케스트레이터가 알린 최신 main `5758556`은 **로컬 refs에 없다**(인용값 — 그 사이 변경이 CHANGELOG·CLAUDE.md뿐이라는 것도 인용값). `functions/**`는 `d856e1d`와 같다고 본다(`1441059`까지의 두 커밋은 **커밋 메시지상** 문서·메모리뿐이다 — 워크트리 reflog `logs/HEAD:4-5`. ⚠️ diff는 셸 없이 확인할 수 없다).
 > **UX 추적성**: 신규 Screen ID·Flow ID·라우트 **0건**. 예외 2가 걸치는 화면은 UX-014(`src/app/session/play/page.tsx`)인데, 이 화면은 빈 `turns`로 호출하지 않는다(`:331`). 화면 계약은 바뀌지 않았다.
 > **PRD**: AC-085 (b)의 같은 예외는 **planner가 v1.17에서 병행 추가**한다(인용값 — 이 패스 시점 `docs/PRD.md:4` = v1.16, 대조하지 않았다). ⛔ PRD·Tasks는 편집하지 않았다.
+
+## 69. (T181 — P0) 작성자 결과 화면이 체험을 마친 챌린지도 영원히 "대기"로 보인다 + **C**(익명 + 빈 `turns` 전사 제출 즉시 거부) — 전이 위치 · 동의 게이트 상호작용 · 활성 상한 · 기존 데이터 · C 형태 · 테스트 · 배포 — ⭐⭐ **원인은 구현 누락 이전에 *설계 공백*이다: `completed`의 결과(재개 차단 §14.4 · 슬롯 회수 §14.5 · 완료 문구 UX-020)는 전부 정의됐는데, *누가 언제 쓰는가*는 §14 · API.md · Database.md 어디에도 없다** / ⭐⭐ **전이 지점은 `onSessionEnded` 트리거 1곳이다 — 서버가 세션을 `ended`로 쓰는 2곳을 둘 다 받는 유일한 지점이고, 콜러블에 두면 한도 종료 경로 · 리포트 실패 · 결과 공유 전 이탈 중 하나가 반드시 샌다** / ⭐⭐ **동의 게이트는 고치지 않는다 — 완료 후 재진입이 '재개'에서 '차단'으로 바뀌는 것은 회귀가 아니라 §14.4 설계의 복구다. 오늘의 '완료 후 재개'는 전이 누락의 부산물이다** / ⭐ **C는 `denyAnonymous`를 빈 `turns` 분기 *안*에 넣는 한 줄이다 — 분기 밖에 두면 모든 익명 전사가 거부되고 그 실패는 빈 catch에 삼켜진다** — architect 판정
+
+> 담당 태스크: **T181**(P0 · architect → implementer → reviewer → QA → 배포(User)) — 행 원문은 planner 워크트리 사본을 열람했다(69.1 #1). 수용 기준: **AC-043 · AC-055**(작성자 결과 열람 — 회귀 판정 대상) · AC-049(활성 상한) · **AC-085 (b) 예외 2**(C 배포 시 소멸) · AC-085 (c)(d)(C의 역방향). UX 추적: **UX-020**(작성자 결과 — States (a)(b)(c) `docs/UX.md:1240`) · **UX-021**(수신자 랜딩 — 완료 후 재진입 `docs/UX.md:1273`) · UX-007 · UX-014 · UX-022(종료 경로) · UX-018(결과 공유 — 무영향). 흐름: UF-004(작성자) · UF-005(수신자).
+
+### 69.0 판정 요지 (⛔ 금지 먼저 — 다른 모든 판단보다 우선)
+
+1. ⛔ **이 절은 소스를 0줄 고쳤다.** 설계·판정·계획뿐이며 구현은 implementer 후속이다(69.13).
+2. ⛔ **§0~§68 원문은 한 글자도 고치지 않았다.** C 배포로 소멸하는 §68의 예외 2 서술(§68.3 #9 · §68.6 (3) · §68.13 G420 · §68.15 (8))은 **이 절이 소멸을 예고만** 하고, 소멸 기록은 배포 뒤 후속 패스가 덧붙인다(69.7 (4)).
+3. ⛔ **완료 전이를 콜러블에 두지 않는다**(`endSession` · `sendMessage` · `generateReportCore` · `setChallengeResultSharing`) — 단일 지점은 `onSessionEnded`다(G424).
+4. ⛔ **전이는 조건부다** — `consented` · `in_progress`만 `completed`로 간다. `reported` · `deleted` · `completed` · `pending` · `expired`는 덮어쓰지 않는다. **`endReason`으로 판정하지 않는다** — 클라 주장값이고 서버는 존재만 검사한다(`functions/src/session/index.ts:299-301`)(G425).
+5. ⛔ **트리거 파일은 `../challenge` · `../challenge/userAccess`를 import하지 않는다** — 로직은 잎 모듈 `functions/src/shared/challengeCompletion.ts`에 둔다(G426).
+6. ⛔ **C의 거부는 빈 `turns` 분기 *안*, `getFirestore()` *앞*이다** — 분기 밖이면 모든 익명 전사 제출이 거부되고(수신자 음성 리포트가 빈다) 그 실패는 `src/app/session/play/page.tsx:344-346`의 빈 catch에 삼켜진다(G427).
+7. ⛔ **클라에서 `in_progress`를 완료로 취급하는 해소 금지**(T181 H 재확인 — 동의 직후 `functions/src/challenge/userAccess.ts:283`에서 이미 `in_progress`가 되므로 체험 전·중도 이탈이 완료로 보인다). 클라 판정 재료는 `status` 그대로이고 **클라 제품 코드는 0줄**이다(69.3 (6)). 기존 `completed` fixture 6곳도 고치지 않는다.
+8. ⛔ **프로덕션 데이터 쓰기는 이 설계에 없다** — 기존 문서 처리는 OQ-A87(User).
+9. ⚠️ **architect는 셸·테스트·배포·라이브를 한 번도 실행하지 않았다.** 라이브 관측은 전부 **오케스트레이터 인용값**이다.
+
+### 69.1 착수 시 실측 (⛔ 지우지 말 것)
+
+| # | 항목 | 값 | 출처 |
+|---|---|---|---|
+| **1** | base | 이 워크트리 = 로컬 `origin/main` **`a591ec7`**(`.git/refs/remotes/origin/main` = 워크트리 브랜치 `worktree-agent-a267caa4ffe385955` 헤드). 지시된 `c16a5d6` · 이후 `91579a6`(T177 `done` · PR #263)은 **로컬 refs에 없다**(인용값). ⇒ **T181 행과 PRD v1.17은 이 트리에 없다**(`docs/Tasks.md`의 `T181` grep 0 · `docs/PRD.md:4` = v1.16). 원문은 planner 워크트리 `C:\codegate\.claude\worktrees\agent-aa259051f834969b2`(HEAD → `refs/heads/docs/T177-T181-closure` = `c810b4c`) 사본을 열람했다 — `docs/Tasks.md:716`(T181) · `docs/PRD.md:4`(v1.17) · `:728`(AC-085). ⚠️ 그 사본과 `c16a5d6`의 동일성은 미대조(셸 없음). 오케스트레이터 인용: 그 뒤 바뀐 것은 `Tasks.md`뿐 ⇒ 이 절의 `functions/**` · `src/**` 줄번호는 유효하다고 **추정**한다(확인: 구현 착수 시 각 줄 재grep) | `.git` 직접 판독 |
+| **2** | 서버의 챌린지 `status` 쓰기 | `pending` `functions/src/challenge/index.ts:216` · `consented` `:442`(동의 트랜잭션 안) · `in_progress` `userAccess.ts:283`(**트랜잭션 밖 무조건** `update`) · `reported` `:328`(무조건) · `deleted` `challenge/index.ts:338`(무조건) — **`completed` 쓰기 0건**(타입에만 `functions/src/shared/types.ts:516`) | 전수 grep `collection("challenges")` 13히트 |
+| **3** | 세션을 `ended`로 쓰는 서버 지점 | **2곳** — `endSession` `session/index.ts:325-329` · `sendMessage` 한도 종료 `functions/src/roleplay/index.ts:385-388`(트랜잭션 안 `stillActive` 확인). 둘 다 리포트 생성을 개시한다(`session/index.ts:337` · `roleplay/index.ts:410-412`) | grep `"ended"` |
+| **4** | 트리거 | `onSessionEnded` — `status`가 `ended`로 **바뀐** 업데이트만 처리(`functions/src/guardrails/index.ts:126`), 폐기 예외는 흡수(`:137-144`), 재시도 옵션 없음(`:123`) | 직접 열람 |
+| **5** | 클라 완료 판정 | `COMPLETION_STATUSES = {completed, reported}`(`src/lib/challenge/mapChallengeItems.ts:37`) — 그 밖이면 (a)(`:54-56`) → "대기" 배지(`src/app/challenge/results/page.tsx:25-32`) | 직접 열람 |
+| **6** | `status` 통과 | 서버 `status: data.status`(`challenge/index.ts:301`) · 클라 `status: item.status as …`(`src/lib/challenge/fetchChallenges.ts:16`) — 양쪽 다 값을 바꾸지 않는다 | 직접 열람 |
+| **7** | 설계 문서의 `completed` | 열거만 있다 — §14.1 `:497` · `docs/Database.md:285`(*"상태 머신"* — 전이표 없음). 결과만 있다 — §14.4 `:535`(*"재진입은 in_progress … 에서만 재개"*) · §14.5 `:539`(*"완료 … 된 챌린지는 활성에서 빠져 슬롯 회수"*). **전이 주체 0건** — §14.7.5 `consentChallenge` 처리(`:606`) · `docs/API.md:161`이 *"④ status=in_progress"* 에서 끝난다 | docs 전수 grep `completed` |
+| **8** | 인덱스 | 선언 3개(챌린지 `creatorUid+status` 포함 `firestore.indexes.json:19-26`) · `fieldOverrides: []`(`:28`) ⇒ 단일 필드 인덱스는 기본값 | 직접 열람 |
+| **9** | 상수 | 활성 상한 **3**(`functions/src/shared/constants.ts:45`) · 링크 **3일**(`:46`) · 보존 **30일**(`:47`) | 직접 열람 |
+| **10** | 테스트 기준선 | functions **858/0** · 루트 **419/0**(`CLAUDE.md` Verified Commands — 2026-10-01 `e938d63`, 소스 = `d856e1d`) — ⚠️ 인용값. **착수 시 재측정 필수**(T181 I⑤) | `CLAUDE.md` |
+| **11** | 라이브 데이터 | T181 행 A의 2건("S66검증" · "T177음성확인")과 "T177되감기"는 **User가 2026-10-01 22:27 UTC에 전부 삭제**했다(`deleteChallenge` 200 ×3 · `/challenge/results` = Empty · 활성 상한 3칸 빔) — 오케스트레이터 인용값 | 인용값 |
+| **12** | 번호 | `^## 69` · `^\| 112 \|` · `OQ-A8[6-9]` · `G42[4-9]` — 이 트리 · 메인 체크아웃 · 다른 워크트리 전부 **0히트** ⇒ **§69 · #112 · OQ-A86~A88 · G424~G428**. ⛔ 예약 아님 | grep |
+| **13** | `UpdateRequests` | `open` 행 중 architect 소관 **0건** | grep |
+
+### 69.2 근본 원인 — ⭐⭐ 설계 공백이 구현 공백으로 그대로 내려갔다
+
+| 층 | `completed`를 전제한 것 | 전이를 쓰는 것 |
+|---|---|---|
+| 설계(§14) | 상태 열거 §14.1 `:497` · 재개 제한 §14.4 `:535` · 슬롯 회수 §14.5 `:539` · 종료 파이프라인 §14.7.3 `:592`(*"endSession→onSessionEnded→generateReport"* — 챌린지 단계 없음) | **없음** — §14.7.5 표의 `consentChallenge`가 ④ `in_progress`로 끝나고 다음 단계가 없다 |
+| 계약(API.md · Database.md) | `docs/Database.md:285` *"상태 머신"* | **없음** |
+| 서버 코드 | 동의 게이트 거절(`functions/src/challenge/consentGate.ts:57-58`) · 상한 제외(`ACTIVE_STATUSES` `challenge/index.ts:63`) | **없음**(69.1 #2) |
+| 클라 코드 | 완료 문구(`mapChallengeItems.ts:37`) | — |
+| 테스트 | `src/lib/challenge/mapChallengeItems.test.ts`의 `status: "completed"` fixture 6곳(T181 C — 서버가 만들지 않는 값) | — |
+
+⇒ 상태의 **결과**는 다섯 층에 다 있고 **원인(전이)** 은 어느 층에도 없다. 테스트는 결과 층만 검증했으므로 초록이었다. 이 절이 전이 주체를 정하고(69.3), 클라 테스트가 **서버가 실제로 쓰는 값**을 입력으로 받게 한다(69.8 C-1).
+
+### 69.3 (Q1) 완료 전이 위치 — ⭐⭐ `onSessionEnded` 트리거 1곳
+
+**(1) 종료 경로 전수(코드 — 음성·메신저 모두).** 수신자 체험이 끝나는 경로는 전부 위 2개 서버 쓰기 지점 중 하나로 모인다.
+
+| 채널 · 경로 | 클라 | 서버 쓰기 |
+|---|---|---|
+| 음성 · "훈련 종료" | `src/app/session/play/page.tsx:1133-1144`(`flushTranscript` → `/session/end`) | `endSession` `session/index.ts:325-329`(UX-007 `src/app/session/end/page.tsx:68`·`:75`) |
+| 음성 · 실시간 시간 한도(클라 타이머) | `play/page.tsx:852-872` → `/session/end` | 같은 곳 |
+| 음성 · 수신 거절(받기 전) | `play/page.tsx:997-999`(버튼 `:1552`) → `/session/end` | 같은 곳 |
+| 음성 폴백 텍스트 · 턴/시간 한도 | `sendMessage` 응답 `ended`(`play/page.tsx:1208-1210`) | `roleplay/index.ts:385-388` |
+| 메신저 · "훈련 종료" | `src/app/session/messenger/page.tsx:266-268` → `/session/end` | `endSession` |
+| 메신저 · 턴/시간 한도 | *"대화가 종료되었습니다"* + 버튼(`messenger/page.tsx:493-500`) — **버튼을 안 누르면 `endSession`은 영영 불리지 않고**, 눌러도 `session/index.ts:321-323`에서 조기 반환한다 | `roleplay/index.ts:385-388` |
+
+⇒ 두 서버 쓰기 모두 `status: "ended"`를 쓰고 `onSessionEnded`(`guardrails/index.ts:126`)가 둘 다 받는다. 중도 이탈(종료 없이 탭 닫기)은 세션이 `active`로 남는다 ⇒ 완료가 **아니다**(UX-020 (a) 미완료 — 보존기간 안에서 재개 가능, §14.4).
+
+**(2) 후보 판정표** — 기준: Ⓐ 결과 공유 화면 전에 이탈해도 완료되는가 · Ⓑ 리포트 생성이 실패하면 · Ⓒ 재호출·재시도에 안전한가 · Ⓓ 종료 경로 커버
+
+| 후보 | Ⓐ | Ⓑ | Ⓒ | Ⓓ | 판정 |
+|---|---|---|---|---|---|
+| `endSession` | ✅ | ✅ 독립 | 조건부 트랜잭션이면 ✅ | ❌ **1/2** — 한도 종료가 빠진다(위 (1) 메신저 한도 행). 넣으려면 `roleplay/index.ts` 한도 분기와 `:321-323` 조기 반환 분기에 복제해야 한다 = 한도 경로가 리포트 트리거를 빠뜨렸던 기존 갭과 같은 모양(`roleplay/index.ts:402-409`) | 기각 |
+| **`onSessionEnded`** | ✅ | ✅ **독립**(폐기와도 리포트와도) | ✅ 트리거의 중복 전달(최소 1회 전달)도 조건부 트랜잭션이 흡수 | ✅ **2/2 + 앞으로 생길 종료 경로도 구조적으로 포함**(`ended`를 쓰기만 하면 받는다) | ✅ **채택** |
+| `generateReportCore` | ✅(내부 트리거 경로) | ❌ 실패하면 **영구 미완료** — `triggerReportGeneration`이 예외를 흡수하고(`functions/src/report/index.ts:75-77`) 수신자는 `/report`(`generateReport` 재호출)로 가지 않는다(`session/end/page.tsx:161-169`). 멱등 조기 반환(`generateReportCore.ts:57-61`) 앞에 두지 않으면 재시도가 전이를 건너뛴다 | ✅ | ✅ 2/2 | 기각 |
+| `setChallengeResultSharing` | ❌ **영구 미완료** — 결과 공유 화면(UX-018) 전에 떠난 수신자는 완료되지 않는다 ⇒ UX-020 (b)가 계속 도달 불가 | `share=true`는 리포트가 있어야 한다(`userAccess.ts:410-413`) | ✅ | ❌ | 기각 |
+| (별도 트리거 export 신설) | ✅ | ✅ | ✅ | ✅ | 기각 — **모든 세션 업데이트마다 트리거 호출이 2배**(턴마다 세션 문서가 갱신된다)이고, export 26 불변식 · T-2 정책표(`functions/src/shared/__tests__/anonymousGate.test.ts:124-151`) · §68.10 D-0이 흔들린다. 같은 필터를 이미 가진 트리거에 얹으면 추가 호출 0이다 |
+
+**완료의 정의(정본)**: *"그 챌린지의 체험 세션이 `ended`가 됐다"* — 종료 사유 무관(받기 전 거절 포함). 리포트 존재 · 결과 공유 여부와 무관하다.
+
+**(3) 구현 명세(판단 여지 없음)**
+
+```ts
+// functions/src/shared/challengeCompletion.ts — 신규. ⛔ 런타임 내부 import 0건(type import만: ./types · firebase-admin/firestore).
+export const CHALLENGE_STATUS_ON_EXPERIENCE_END = "completed" satisfies ChallengeStatus; // ⭐ 루트 테스트가 이 줄의 리터럴을 소스에서 읽는다(69.8 C-1)
+export function nextChallengeStatusOnExperienceEnd(status: ChallengeStatus): "completed" | null;
+  // consented · in_progress → "completed" / pending · completed · expired · reported · deleted → null
+export function challengeIdToCompleteOnSessionUpdate(
+  before: { status?: unknown } | undefined,
+  after: { status?: unknown; challengeId?: unknown } | undefined,
+): string | null;
+  // 기존 필터와 같은 조건(after 존재 · before.status !== after.status · after.status === "ended")
+  // + challengeId가 비어 있지 않은 문자열일 때만 그 값
+export async function completeChallengeOnExperienceEnd(db: Firestore, challengeId: string): Promise<
+  | { outcome: "completed"; from: ChallengeStatus }
+  | { outcome: "unchanged"; status: ChallengeStatus }
+  | { outcome: "missing" }
+>;
+  // 트랜잭션 1회: challenges/{challengeId} read 1 → nextChallengeStatusOnExperienceEnd가 값을 줄 때만
+  // tx.update(ref, { status: CHALLENGE_STATUS_ON_EXPERIENCE_END }). db는 인자 — 메모리 가짜로 테스트 가능해야 한다.
+```
+
+- **쓰는 필드는 `status` 하나**다(`completedAt` 등 신규 필드 0 — 스키마 델타 0, `docs/Database.md:285` 열거에 이미 있다). ⛔ `voiceId` · `retentionDeleteAt` · `resultSummary` · 폐기 함수는 무접촉 — ADR-0006 `:28`의 폐기 격리(*"사용자2 첫 체험 종료 시 사용자1 챌린지 clone이 삭제"* 되는 사고)를 트리거가 다시 열지 않는다.
+- **배선**(`functions/src/guardrails/index.ts`): 기존 필터(`:126`)와 폐기 블록(`:129-144`)은 **한 글자도 바꾸지 않는다.** 그 **뒤에** 별도 블록을 붙인다 — `challengeIdToCompleteOnSessionUpdate(before, after)`가 값을 주면 `completeChallengeOnExperienceEnd(getFirestore(), id)`를 **자기 try/catch** 안에서 부르고, 성공·실패 모두 구조화 로그 1줄(`sessionId` · `challengeId` · `outcome` · `from`)을 남긴다. ⛔ 다시 throw하지 않는다(기존 흡수 원칙 `:138-143`). ⇒ 폐기 실패가 전이를 막지 않고, 전이 실패가 폐기를 막지 않는다.
+- **비용**: 비챌린지 세션 = 추가 I/O **0**(이미 받은 `after`의 필드만 본다). 챌린지 체험 종료 1회 = 트랜잭션 1회(read 1 · write ≤1).
+- **⭐ 잎 모듈인 이유**: ① `challenge/userAccess.ts:18`이 이미 `../guardrails`(maskPII)를 import한다 — 트리거가 `../challenge`를 끌어오면 두 기능 모듈이 서로를 import한다(`functions/src/mockScreens/index.ts:22-24` 관례 위반). ② §41 시크릿 폐포 스캐너는 트리거도 대상으로 하고 상대 import를 재귀로 따라간다(`functions/src/devtools/secretDeclarationScan.ts:10-14`·`:41-42`) — `../challenge`(index)는 `../voice` · `../scenarios/publicMeta` 등을 끌어와 `onSessionEnded`의 판정을 바꿀 수 있다(G212). 잎 모듈은 폐포에 시크릿 참조를 하나도 더하지 않는다. 선례: 같은 이유로 `shared/anonymousGate.ts`가 잎이다(§68.6 (1)).
+
+**(4) 멱등성 · 재시도**
+
+| 상황 | 결과 |
+|---|---|
+| 트리거 중복 전달 | 두 번째 트랜잭션은 `completed`를 읽고 쓰기 0 |
+| `endSession` 재호출 | `session/index.ts:321-323` 조기 반환 — 상태 쓰기 0 ⇒ 트리거 미발화 |
+| `sendMessage` 한도 종료와 `endSession`이 겹침 | 늦은 쓰기는 `ended → ended`라 필터(`guardrails/index.ts:126`)에서 끝난다 |
+| 폐기의 `voiceId` 삭제 업데이트(`guardrails/index.ts:113`) | `ended → ended` — 필터에서 끝난다 |
+| 전이 트랜잭션 실패(일시 장애) | 실패 로그 1줄 + 그 챌린지만 `in_progress` 유지(오늘 증상 1건). 트리거 재시도는 켜지 않는다 — 폐기 부수효과(`deletionLogs` add)가 같이 재실행된다 ⇒ 잔여 R-2(69.12) · 복구 수단은 OQ-A87 (b)의 스크립트(같은 함수 — 멱등) |
+| 리포트 생성 실패 | 전이는 독립이라 `completed`. 작성자는 (b)를 본다 — 수신자가 `share=true`를 할 수 없으므로(`userAccess.ts:410-413`) (b) *"…동의하지 않았습니다"* 가 사실과 맞다 |
+
+**(5) 기존 쓰기 지점과의 경쟁** — 판정은 동시성 제어 방식(잠금/재시도)과 무관하게 성립한다: 전이 트랜잭션이 먼저 커밋되면 뒤의 무조건 쓰기가 덮고, 뒤의 쓰기가 먼저면 트랜잭션은 그 값을 읽는다.
+
+| 쓰기 지점 | 값 | 전이와의 순서 | 판정 |
+|---|---|---|---|
+| `challenge/index.ts:216` 생성 | `pending` | 항상 앞(세션 이전) | 경쟁 없음 |
+| `challenge/index.ts:442` 소모(동의 트랜잭션 안) | `consented` | 세션 생성과 같은 트랜잭션 ⇒ 항상 앞 | 경쟁 없음 |
+| `userAccess.ts:328` 신고 | `reported`(무조건) | 앞이면 전이가 무동작, 뒤면 `reported`가 덮는다 ⇒ **최종 `reported`** | 경쟁 없음(신고가 이긴다 — 의도) |
+| `challenge/index.ts:338` 폐기(수동·자동) | `deleted`(무조건) | 같은 논리 ⇒ **최종 `deleted`**. 전이가 `deleted`를 되살리면 `selectChallengesToPurge`(`challenge/purge.ts:53`)가 또 폐기하고 목록에 다시 나타난다 — 그래서 G425가 막는다 | 경쟁 없음 |
+| `userAccess.ts:404` · `:417-420` 결과 공유 | 다른 필드 | — | 경쟁 없음 — 결과 공유는 챌린지 `status`를 보지 않는다(`src/app/report/replay/page.tsx:200` · `userAccess.ts:385-398`) ⇒ 전이 직후에도 수신자는 리플레이에서 공유할 수 있다 |
+| ⚠️ **`userAccess.ts:283` 동의 끝** | `in_progress`(**트랜잭션 밖 무조건**) | 보통 앞. **역전 조건** = 같은 uid의 동시 재호출(재개 경로가 즉시 `sessionId`를 준다 `:144-146`)로 세션에 들어가 **음성 오프닝 합성(`:256-281`)이 끝나기 전에** 종료 → 전이 → 그 뒤 `:283`이 `completed`를 덮는다 | ⚠️ **잔여 R-1** — 실사용 도달은 사실상 불가로 **추정**(동의 버튼은 진행 중 비활성 `src/app/challenge/join/page.tsx:112`·`:286` ⇒ 두 번째 탭/기기 필요 + 합성 수 초 안에 세션 종료). 결과는 그 챌린지 1건에 오늘 증상 재현. 검출: OQ-A87 (a) 질의가 그대로 잡는다. 해소: OQ-A88 |
+
+⭐ **같은 줄의 기존 경쟁(이 태스크가 만든 것이 아니다 — 지우지 말 것)**: `reportChallenge`는 상태를 보지 않으므로(`userAccess.ts:316-333`) 동의 트랜잭션 커밋과 `:283` 사이(음성 오프닝 합성 시간)에 신고가 들어오면 `reported`가 `in_progress`로 덮이고, `createRealtimeCall`의 재검증(`functions/src/realtime/index.ts:121`)을 통과해 **신고 뒤에도 클론 음성이 재생될 수 있다**(§14.5 `:541` *"신고 → 재생 즉시 차단"* 위반). 도달 조건: 동의 직후 수 초 안에 같은 화면의 신고 양식 제출(동의 진행 중에도 신고 양식은 열린다 `join/page.tsx:303-368`) 또는 링크를 가진 다른 사람의 신고. 빈도는 낮다고 **추정**한다(확인 방법: `challenges` 중 `reportedAt`이 있는데 `status`가 `reported`가 아닌 문서 조회). `:283`을 *"`consented`일 때만 `in_progress`"* 조건부 트랜잭션으로 바꾸면 **R-1과 이 경쟁이 함께 닫힌다** ⇒ 범위 결정은 **OQ-A88**.
+
+**(6) 클라 판정 재료는 `status` 그대로다**(T181 G⑤). 결함은 입력 선택이 아니라 쓰는 쪽 부재였다. 대안 기각: `resultSummary.completed`는 `share=true`일 때만 쓰여(`userAccess.ts:417-420`) (b)를 표현할 수 없다 · 작성자가 세션을 직접 읽는 것은 권한 밖이다(§14.7.2). ⇒ **클라 제품 코드 0줄** — 서버가 `completed`를 쓰는 순간 (b)·(c)가 기존 매핑으로 나온다(`mapChallengeItems.ts:53-75`).
+
+### 69.4 (Q2) ⭐ 동의 게이트 상호작용 — **고치지 않는다. 바뀌는 것은 '결함 덕에 열려 있던 재진입'이 닫히는 것이다**
+
+**같은 브라우저(같은 익명 uid)로 링크를 다시 열 때**
+
+| 상황 | 오늘(결함) | T181 후 | 근거 |
+|---|---|---|---|
+| 체험 **중** 이탈 후 재진입(세션 `active`) | 랜딩 → 동의 → 재개 | **무변경** | `join/page.tsx:74` · `consentGate.ts:48-53` |
+| 체험 **종료** 후 재진입 | 랜딩이 `in_progress`라 동의 화면 → 재개 → *"통화가/대화가 종료되었습니다"*(`play/page.tsx:389-390` · `messenger/page.tsx:140-142`) → `/session/end` → 리플레이 · 결과 공유 · 되감기 | 랜딩이 **차단**: *"이 챌린지는 더 이상 이용할 수 없습니다."*(`join/page.tsx:74-80` — 동의 버튼 · 신고 버튼 없음). 동의 콜러블은 불리지 않는다. 직접 호출하면 *"더 이상 진행할 수 없는 챌린지입니다."*(`consentGate.ts:57-58`) — LLM 0회(§66.5 사전 게이트 `userAccess.ts:141-143`, G414 유지) | 코드 무변경 |
+| 다른 사람이 종료 후 링크 열기 | 동의 화면 → 동의 실패(일반 문구 `join/page.tsx:129`) | 랜딩 차단(위와 같은 문구) | 코드 무변경 |
+
+**판정**: ⭐ **의도된 동작이다 — 설계 복구.** §14.4 `:535`는 *"소모 후 재진입은 `status==="in_progress"` + 보존기간 내에서만 재개 허용(중도 이탈 복귀)"* 이고, 그 규칙이 **서버(`consentGate.ts:57` *"completed … — 더 이상 진행 불가"*)와 랜딩(`join/page.tsx:71-80` *"§14.4 중도 이탈 복귀"*) 두 층에 이미 구현돼 있다.** 오늘의 *"완료 후 재개"* 는 전이 누락의 부산물이며 어느 문서에도 설계된 적이 없다. 랜딩의 차단 상태는 UX-021 Error (a) *"만료·소진된 링크 → 진입 차단"*(`docs/UX.md:1273`) 안에 있다 ⇒ **코드 0줄 · 신규 화면 0.**
+
+**그러나 사라지는 것이 있다(정직하게)**: 완료한 수신자는 링크로 **리플레이(UX-018) · 결과 공유 재결정 · 되감기 · 신고**에 다시 닿을 수 없게 된다. 오늘은 결함 덕에 닿는다. 어느 AC도 재방문을 요구하지 않는다(AC-042 · AC-038은 종료 직후 강제 단계로 충족, AC-043 공유 동의는 그 자리에서 받는다) — 그래서 이것은 결함이 아니라 **제품 결정**이다 ⇒ **OQ-A86**(User → ux-design · 비차단 · 기본값 = 위 차단). 부수 관측: 랜딩 문구 *"이 챌린지는 더 이상 이용할 수 없습니다."* 는 UX-021 Error (a)의 문구 *"이 링크는 만료되었습니다"* 와 이미 다르다(신고 · 삭제 상태에서도 같은 차이 — 기존).
+
+**검증 절차 영향(지우지 말 것)**: T177 ⑧의 §66.5 재개 경로 라이브 확인(메신저 재동의 14:05:52 · 재개 · LLM 0회 — 인용값)은 **체험 완료 뒤에** 재동의해서 얻은 것이다. T181 뒤에는 같은 절차가 *"차단"* 을 관측한다 ⇒ 재개 경로를 다시 확인하려면 **세션이 `active`인 동안**(종료 전) 링크를 다시 열어야 한다. T177은 `done`이라(인용값) 이미 낸 제출 증거는 무효가 되지 않는다.
+
+**노출 변화(설계 범위 안 — 지우지 말 것)**: 전이 뒤에는 수신자가 결과 공유에 동의하지 않아도 작성자가 **"상대가 완료했다"는 사실**을 본다(UX-020 (b)). 이는 UX-020 States(`docs/UX.md:1240`)와 AC-055(*"'완료 여부'만 제한되어 제공"*)가 정한 노출이고 상세(의심 시점 · 대화)는 여전히 0이다. 결함 기간에는 이 노출조차 0이었다 — **T181은 설계된 노출을 복구할 뿐 넓히지 않는다**(`listMyChallenges` 응답 필드 무변경 `challenge/index.ts:298-307`).
+
+### 69.5 (Q3) 활성 상한 — **무변경 · 의도대로**
+
+- `ACTIVE_STATUSES = [pending, consented, in_progress]`(`challenge/index.ts:63`)와 쿼리(`:124-132`)를 **바꾸지 않는다.** 전이가 생기면 완료된 챌린지는 쿼리 결과에서 빠져 **슬롯이 돌아온다** — §14.5 `:539` *"만료·완료·삭제·신고된 챌린지는 활성에서 빠져 슬롯 회수"* 그대로이고, 상한 문구 *"기존 챌린지가 끝나거나 만료되면"*(`:136`)의 *"끝나면"* 이 처음으로 참이 된다. AC-049 *"동시 3개"* 의 *"동시"* 는 진행 중인 것을 센다.
+- 쿼리 무변경 ⇒ **인덱스 무변경**(복합 인덱스 `creatorUid+status` `firestore.indexes.json:19-26`을 그대로 쓴다).
+- 남용 관점(OQ-A85와의 관계): 완료로 슬롯을 비우려면 수신자 체험이 끝까지 가야 한다(동의 시 오프닝 LLM 1회 이상). 슬롯을 즉시 비우는 경로는 오늘도 `deleteChallenge`가 있다(§68.8 R-2) ⇒ **더 싼 루프를 만들지 않는다.**
+- 결함의 실제 상한 영향은 작았다: 상한은 링크 미만료(생성+3일)만 센다(`:129-132`) ⇒ 결함 기간에도 완료된 챌린지가 슬롯을 잡은 기간은 최대 3일이었다.
+
+### 69.6 (Q4) 기존 데이터 — **배포 코드에 백필 로직을 넣지 않는다 · 처리는 OQ-A87**
+
+| 후보 | 판정 | 이유 |
+|---|---|---|
+| (a) 콘솔 **읽기 전용** 확인 → 0건이면 종결 | ✅ **권고(기본값)** | 대상 모집단이 작다고 **추정**한다: 2026-10-01 익명 활성화(T177 A-1) 전에는 `signInAnonymously`가 400이라(§68.1 #8 인용값) 프로덕션에서 동의 자체가 불가능했다 ⇒ `in_progress` · `consented` 문서는 **그 이후 동의분**뿐이고, 알려진 3건은 삭제됐다(69.1 #11). 확인 방법: Firestore 콘솔 `challenges` 필터 `status in [consented, in_progress]` → 각 문서의 `linkConsumedAt`이 전부 2026-10-01 이후인지(추정 검증) + 체험 세션(`sessions` 필터 `challengeId == <id>`)의 `status`. ⛔ 쓰기 0 |
+| (b) 일회성 스크립트(dry-run → User 승인 → 적용) | 조건부 — (a)에서 1건 이상일 때 | 대상 = `status ∈ {consented, in_progress}` **且** 체험 세션 `status === "ended"`. 적용은 **69.3 (3)의 `completeChallengeOnExperienceEnd`를 그대로** 쓴다(조건부 · 멱등 — 재실행 안전). 기본은 dry-run(ID · 상태 · `endedAt`만 출력 — 사람 이름일 수 있는 `displayName`은 출력 금지), `--apply`가 있어야 쓴다. 쿼리 2종은 단일 필드(`status in` · `challengeId ==` — 후자는 프로덕션에서 이미 쓰는 모양 `userAccess.ts:55`) ⇒ 복합 인덱스 불필요. 같은 스크립트가 R-1 · R-2 잔여의 **복구 수단**도 된다 |
+| (c) 무조치 | 허용 | 자연 소멸 상한이 있다: 보존기간이 끝나면 `purgeExpiredChallenges`가 `deleted`로 바꾸고(`challenge/index.ts:349-376` · 생성+30일) 클라는 `deleted`를 목록에서 뺀다(`mapChallengeItems.ts:44`) ⇒ 잘못된 "대기"는 **각 챌린지 생성 후 최대 30일(+스케줄 24시간)** 뒤 사라진다. 그동안 같은 uid의 재진입은 결함 시절처럼 재개된다 |
+| 지연 전이(목록 조회 때 세션을 읽어 고쳐 씀) | ⛔ 기각 | 1회성 문제에 **영구 비용**(조회마다 챌린지 수만큼 read + 읽기 경로의 쓰기) |
+| 조회 시 계산(쓰지 않고 표시만) | ⛔ 기각 | 표시만 고친다 — 저장된 `status`를 읽는 상한(`:124-132`)과 동의 게이트(`userAccess.ts:130-147`)는 계속 틀린다 + 영구 read 비용 |
+
+⛔ **순서**: 백필을 하더라도 **배포 뒤**다 — 배포 전에 하면 배포 전까지 새로 끝나는 체험이 또 `in_progress`로 남는다. ⛔ 테스트 데이터가 삭제됐으므로 **백필은 라이브 확인 절차(69.9 (4))로 검증하지 않는다.**
+
+### 69.7 (Q5) C — 익명 + 빈 `turns` 즉시 거부
+
+**(1) 형태(정본 — 판단 여지 없음)** — `functions/src/realtime/submitTranscript.ts:65-67`을 다음으로 바꾼다.
+
+```ts
+  if (turns.length === 0) {
+    denyAnonymous(request.auth); // T181 C(§69.7) — 익명 + 빈 turns는 read 0회로 거부(AC-085 (b) 예외 2 소멸). 비익명은 아래 그대로.
+    return { written: 0 };
+  }
+```
+
+그리고 `:15` import를 `import { assertAnonymousChallengeScope, denyAnonymous } from "../shared/anonymousGate";`로. **이것뿐이다.**
+
+| 결정 | 근거 |
+|---|---|
+| 판별식 = `denyAnonymous` 재사용 | 판별식 정본은 `anonymousGate.ts` 1곳(G415 · `functions/src/shared/anonymousGate.ts:26-28`). 새 export 0 ⇒ `anonymousGate.ts` 무변경 |
+| 응답 = `permission-denied` + `ANONYMOUS_DENIED_MESSAGE` | S 게이트(`assertAnonymousChallengeScope` `:53`)와 **같은 코드 · 같은 문구**다 ⇒ 익명 호출자는 *"빈 제출이라 거부"* 와 *"비챌린지 세션이라 거부"* 를 구별할 수 없다 — 거부가 대상 세션에 대해 아무것도 알려 주지 않는다(§68.15 (8) 근거 1의 *"오라클이 아니다"* 성질 유지). `unauthenticated` 금지(G417) |
+| 위치 = 빈 분기 **안**, `return` 앞 | ① 인자 오류(`:62-64`)는 지금처럼 먼저 난다(배열 아님 → `invalid-argument`, 익명·비익명 동일) ② `getFirestore()`(`:72`)보다 앞 ⇒ **read 0** ③ ⛔ 분기 **밖**(예: `:61` 직후)에 두면 **모든 익명 전사 제출이 거부된다** — 수신자 음성 리포트가 비고(AC-008 계열), 그 실패는 `play/page.tsx:344-346` 빈 catch에 삼켜져 화면에 아무것도 안 보인다(라이브에서는 네트워크 403으로만 보인다) ⇒ G427 |
+| `assertAnonymousChallengeScope`를 쓰지 않는 이유 | 세션 문서가 필요하다(read 1) — C의 성질(read 0)을 깬다 |
+| 대가 | 익명의 **자기 챌린지 세션** 빈 제출도 거부된다. 앱은 빈 `turns`로 호출하지 않는다(유일한 호출 지점 `play/page.tsx:338` 앞 `:331` 조기 반환) ⇒ 실사용 영향 0 |
+
+**(2) C 후 진리표**
+
+| 호출자 | `turns` | 대상 | 응답 | read |
+|---|---|---|---|---|
+| 익명 | `[]` | **무관**(없는 ID · 남의 세션 · 자기 비챌린지 · 자기 챌린지) | `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."* | **0** |
+| 익명 | 배열 아님 · `sessionId` 없음 | 무관 | `invalid-argument`(무변경) | 0 |
+| 익명 | 201개 이상 | 무관 | `invalid-argument`(무변경 `:68-70`) | 0 |
+| 익명 | 1~200 | 없음 · 남의 세션 · 자기 비챌린지 · 자기 챌린지 | §68.15 (8) 진리표 그대로(`failed-precondition` · *"본인 세션이 아닙니다."* · 게이트 거부 · 통과) | 1 |
+| **비익명** | **`[]`** | 무관 | **`{ written: 0 }` — 바이트 무변경**(AC-085 (d)) | 0 |
+| 비익명 | 그 밖 | — | 무변경 | — |
+
+⇒ AC-085 (b): 익명 + 빈 `turns`의 성공 응답이 사라지므로 **예외 2는 배포 시점에 소멸**한다. (c): 앱은 빈 제출을 보내지 않으므로 수신 흐름 무영향. (d): 비익명 행 전부 무변경.
+
+**(3) 분류표 · 트립와이어 영향**
+
+| 대상 | 영향 | 근거 |
+|---|---|---|
+| §68.3 분류표 | `submitRealtimeTranscript`는 **S 그대로**. "삽입" 열에 위치 1곳 추가(빈 분기) — 기록은 배포 뒤(69.7 (4)) | — |
+| T-2 정책표(26행) | **무변경** — 새 export 0, 정책 `"session"` 그대로 | `anonymousGate.test.ts:136` |
+| T-3 배선 스캔 | **깨지지 않는다** — session 분기는 `assertAnonymousChallengeScope(`의 **존재만** 보고(`:276-281`), session 본문에 `denyAnonymous(`가 있는 것을 금지하지 않는다(금지는 entry · no_auth 분기 `:282-287`뿐) | 직접 열람 — planner 판독(T181 F)과 일치 |
+| T-3의 한계 | session 분기는 **순서를 보지 않는다** ⇒ C의 *"분기 안 · read 앞"* 은 T-3이 지키지 못한다 ⇒ **전용 트립와이어 C-2**(69.8) + G427 | — |
+| AC-085 (e) | 무영향(분류 · export 무변경) | — |
+| G420 집계(S/R 14곳) | 지금 *"예외 없음 11 · M-1 2 · 예외 2 1"* → 배포 후 **"예외 없음 12 · M-1 2 · 예외 2 0"**. ⚠️ `submitRealtimeTranscript`의 *"게이트 앞 조기 반환"* 은 **비익명 전용**으로 남는다 — AC-085 (d)가 요구하는 것이며 (b)의 대상(익명)이 아니다 | §68.15 (8) |
+| M-1(`verifyIntercept` 2곳) | 무관 — 그대로 예외(DECISIONS #109) | — |
+
+**(4) ⭐ C 배포 뒤 문서 후속(⛔ 이 패스는 아래를 편집하지 않았다 — 소멸은 배포 뒤 기록한다)**
+
+| 담당 | 문서 | 할 일 |
+|---|---|---|
+| planner | `docs/PRD.md` AC-085 (b) | **갱신 고지 3** — 예외 2 소멸(원문 · 예외 1 · 고지 2 보존) + 변경 요약 + 소급 영향 판정 |
+| planner | `docs/Tasks.md` T181 | 상태 · 완료 증거 · OQ-A86~A88 결과 반영 · 69.12 R-5 관측 판정 |
+| architect | `docs/Architecture.md` §68 | §68.3 #9 근거 · 삽입 열 · §68.6 (3) · §68.13 G420 행(집계 갱신) · §68.15 (8) 머리에 *"(배포일) 덧붙임 — C 배포로 소멸 · §69.7"* 고지(원문 보존) |
+| architect | `docs/DECISIONS.md` | 새 행 — *"#111 예외 2 소멸(C 배포 커밋)"*(#111을 대체하는 append — 규칙 `DECISIONS.md:6`) |
+| architect | `docs/API.md` | `:13`(인가 줄) · `submitRealtimeTranscript` 절(`:361`·`:370`) Errors에 *"익명 + 빈 `turns` → `permission-denied`"* · 부록 D.2 #9(`:469`) · D.3 끝 문단(`:504`) · **`onSessionEnded` 절(`:101-108`) 처리에 ⑤ 챌린지 완료 전이** · `consentChallenge` 처리(`:161`)에 *"완료 전이는 서버 트리거"* 한 줄 |
+| architect | `docs/Database.md` `:285` | `status` *"상태 머신"* 에 전이표(누가 언제 무엇을 쓰는가 — 69.1 #2 + 69.3의 정본화) |
+| docs | `docs/CHANGELOG.md` | T181 항목 |
+| (조건부) ux-design | `docs/UX.md` UX-021 | OQ-A86이 (b)·(c)로 결정되면 |
+
+⛔ API.md · Database.md를 지금 쓰지 않는 이유: 구현 전에 계약을 먼저 적지 않는다(§68.13 *"architect 후속"* 행과 같은 원칙).
+
+### 69.8 (Q6) 테스트 계획 — ⭐ **클라 테스트가 서버가 실제로 쓰는 값을 입력으로 받게 한다**
+
+**원칙**: 이번 결함은 *"클라 테스트가 서버가 만들지 않는 값(`completed` fixture 6곳)을 입력으로 썼다"* 에서 숨었다 ⇒ 연결 증거는 **서버 소스를 정본으로 읽는다**(루트 테스트가 `functions/src`를 읽는 선례: `src/components/mockScreenCopy.test.ts:22` · `src/lib/mockscreenrender/renderGate.test.ts:33`). 콜러블 · 트리거 핸들러는 유닛에서 직접 돌리지 않는다는 저장소 관례(`functions/src/challenge/__tests__/consentChallengePreGate.test.ts:4-8`)를 따라 **순수 함수 + 소스 스캔 + 호출부 동형 스텁**으로 짠다.
+
+**functions(`npm --prefix functions test`)** — 러너가 `lib/**/__tests__/*.test.js`를 글롭하므로 등록 불요
+
+| ID | 위치 | 내용 |
+|---|---|---|
+| **S-1** | 신규 `functions/src/shared/__tests__/challengeCompletion.test.ts` | `nextChallengeStatusOnExperienceEnd` — 7개 상태 전수 진리표(`consented` · `in_progress` → `"completed"` / 나머지 5개 → `null`) |
+| **S-2** | 같은 파일 | `challengeIdToCompleteOnSessionUpdate` — `active→ended` + `"c1"` → `"c1"` · `challengeId` 없음 · `""` · 숫자 → `null` · `ended→ended`(폐기의 `voiceId` 삭제 업데이트) → `null` · `active→active` → `null` · `after` 없음 → `null` |
+| **S-3** | 같은 파일 | `completeChallengeOnExperienceEnd` + 메모리 가짜 db(`collection().doc()` · `runTransaction(fn)` · `tx.get` · `tx.update`): `in_progress` → `completed`(쓰기 1 — **쓴 객체가 정확히 `{ status: CHALLENGE_STATUS_ON_EXPERIENCE_END }`**, 다른 필드 0) · `consented` → `completed` · `reported` · `deleted` · `completed` · `pending` · `expired` → 쓰기 0 · 문서 없음 → `missing` · 쓰기 0 · throw 0 · **같은 id로 2회 → 두 번째 쓰기 0**(멱등) |
+| **S-4** | 같은 파일(소스 스캔 `functions/src/guardrails/index.ts`) | ① `completeChallengeOnExperienceEnd(` 위치가 기존 필터 `after.status !== "ended"` **뒤**이고 기존 폐기 catch(`"onSessionEnded: 폐기 트리거 처리 중 예외"`) **뒤** ② 그 호출이 자기 `try { … } catch`로 감싸여 있고 그 catch 블록에 `throw`가 없다 ③ 파일 import에 `"../challenge"` · `"../challenge/index"` · `"../challenge/userAccess"` **0건**(G426) |
+| **S-5** | 같은 파일(소스 스캔) | 서버 통과 고리 — `listMyChallenges` 항목에 `status: data.status,`(값 변환 0, `challenge/index.ts:301`) |
+| **S-6** | 기존 `functions/src/challenge/__tests__/consentGate.test.ts`에 추가 | ⭐ `status: "completed"` + `existingSessionUid === callerUid` + 보존기간 내 → **`reject` *"더 이상 진행할 수 없는 챌린지입니다."*** — T181이 *재개 → 거절*로 바꾸는 바로 그 칸(기존 `:99-113`은 `existingSessionUid: null`만 넣는다). 대조: 같은 입력에서 `in_progress` → `resume`(무변경) |
+| **S-7** | `challengeCompletion.test.ts`(소스 스캔) | 상한 판정(G③): `challenge/index.ts`의 `ACTIVE_STATUSES` 배열에 `CHALLENGE_STATUS_ON_EXPERIENCE_END`의 값이 **없다**(완료가 슬롯을 돌려준다는 출력) |
+| **C-2** | 기존 `functions/src/shared/__tests__/anonymousGate.test.ts`에 추가 — `stripComments`(`:230-236`) · `extractBody`(`:239-251`) · `bodyOf`(`:296-300`) 재사용 | C 위치(G427): `submitRealtimeTranscript` 본문에서 ① `if (turns.length === 0) {` 다음 첫 문장이 `denyAnonymous(request.auth);`, 그다음이 `return { written: 0 };` ② `denyAnonymous(` 위치 < 첫 `getFirestore(` 위치. **역검증(같은 실행 출력에 나란히)**: 테스트 안에서 만든 오염 본문 3종 — ⓐ deny를 분기 **밖**(`if` 앞)으로 이동 ⓑ deny를 `getFirestore(` 뒤로 이동 ⓒ deny 삭제 — 각각 **실패**, 정상 본문 **통과**, 오염 전후 나머지 본문 동일(입력 불변 — §68.9 T-4 관례). ⭐ ⓐ가 가장 위험한 변형이다(모든 익명 전사 거부) |
+| **C-3** | 신규 `functions/src/realtime/__tests__/submitTranscriptAnonymousEmpty.test.ts` | 호출부 동형 스텁(`consentChallengePreGate.test.ts` 관례): 핸들러 머리(인증 → 인자 → 빈 분기의 `denyAnonymous` → 턴 수 상한 → *Firestore 단계*)를 **실제 `denyAnonymous`** 로 재현하고 Firestore 단계에 카운터 스텁 — 익명 + `[]` → `permission-denied` · 카운터 0 / Google + `[]` → `{ written: 0 }` · 0 / 익명 + 1턴 → Firestore 단계 도달(카운터 1 — C가 비어 있지 않은 익명 제출을 막지 않는다) / 익명 + 배열 아님 → `invalid-argument` · 0 / 익명 + 201턴 → `invalid-argument` · 0. 실제 소스가 이 모양이라는 것은 C-2가 고정한다 |
+| (기존) | T-2 · T-3 · T-4 · §41 시크릿 게이트 | **수정 없이 통과**해야 한다. 고쳐야 하면 정지하고 보고한다(§68.6 (4) 원칙) |
+
+**루트(`npm test`)** — ⭐ **기존 `src/lib/challenge/mapChallengeItems.test.ts`에 추가**한다(새 파일이면 `package.json:11` 등록 필수 — N-3 `src/lib/testRegistration.test.ts:40`)
+
+| ID | 내용 |
+|---|---|
+| **C-1** ⭐ 서버→클라 연결 | `readFileSync("functions/src/shared/challengeCompletion.ts")`에서 `export const CHALLENGE_STATUS_ON_EXPERIENCE_END = "…"`의 리터럴을 **정규식으로 추출**(못 찾으면 실패 — 조용한 건너뜀 금지) → 그 값을 `status`로 `mapChallengesToListItems`에 넣는다: `resultSharingConsented: false` → **(b)** *"상대가 완료했지만 결과 공유에 동의하지 않았습니다"* · `true` + 메신저 → **(c)** *"완료 · 상대가 체험을 마침"* · `true` + generic → (c) 같은 문구 · `true` + clone + `suspicionTimeLabel: null` → *"완료"*. ⛔ 이 테스트 안에서 `"completed"`를 손으로 쓰지 않는다 |
+| **C-1b** | 클라 통과 고리 — `readFileSync("src/lib/challenge/fetchChallenges.ts")`에 `status: item.status`(값 변환 0) |
+| **C-1c** | 역방향(T181 I②) — `consented` · `in_progress` → (a) *"상대가 아직 해보지 않았습니다"*(기존 `:8` 테스트는 `pending`만 넣는다) · 메신저 · generic 완료+동의에 `suspicionTimeLabel: "40초"`를 넣어도 *"의심 시점"* 문자열 0건 |
+
+⇒ **사슬**: 서버가 쓰는 리터럴(S-3이 *"정확히 그 값을 쓴다"* 를 고정) → 저장 → `listMyChallenges` 통과(S-5) → `fetchMyChallenges` 통과(C-1b) → 매퍼(C-1이 서버 소스의 그 리터럴로 검증). 어느 고리가 바뀌어도 테스트 하나가 빨개진다. 유닛으로 닿지 않는 것(트리거 실제 발화 · 트랜잭션 실제 동작 · 콜러블 직렬화)은 **라이브 L-1이 정본**이다.
+
+**T181 I(완료 판정 필수 증거) ↔ 이 절 ID 대응**(같은 기호 혼동 방지 — 보고는 **T181 I 기호**로 한다)
+
+| T181 I | 이 절 |
+|---|---|
+| ① 서버→클라 연결 | C-1 · S-3 · S-5 · C-1b + L-1 |
+| ② 역방향(종료 전 (a) · 메신저·generic 의심 시점 0) | C-1c + L-1 종료 전 관측 |
+| ③ G② · G③ 판정대로의 출력 | G② = S-6 + L-5 · G③ = S-7 |
+| ④ C 출력(정방향 + 역방향) | C-2 · C-3 + L-6 |
+| ⑤ before/after | 69.9 (3) P-1 |
+| ⑥ 라이브 | ① = L-1 · ② = L-6 |
+
+**before/after**: 착수 시 재측정 → 병합 전 재측정을 나란히 보고한다(T181 I⑤ — 인용값 금지 · 같은 체크아웃 동시 실행 금지 `CLAUDE.md`). 기존 테스트 수정 0.
+
+### 69.9 (Q7) 배포 · 라이브 확인
+
+**(1) 무엇이 바뀌는가**
+
+| 항목 | 값 |
+|---|---|
+| 행동이 바뀌는 export | **2개** — `onSessionEnded`(트리거) · `submitRealtimeTranscript`. (OQ-A88 (a) 채택 시 + `consentChallenge`) |
+| 새 export | **0** — `functions/src/index.ts` 무변경 ⇒ 26/26 |
+| 새 Firestore 쿼리(배포 코드) | **0** — 전이는 문서 ID 직접 읽기(`challenges/{id}`), C는 I/O 0 |
+| 인덱스 | ⇒ **`firestore:indexes` 배포 불필요.** ⛔ 다만 §66 재발 방지 대조는 한다: `firebase firestore:indexes` 라이브 = 선언(2026-09-30 3 = 3 인용값). OQ-A87 (b) 스크립트의 쿼리 2종도 단일 필드라 복합 인덱스가 필요 없다. ⚠️ **구현이 이 설계와 달리 `where`/`orderBy` 조합을 하나라도 새로 쓰면** 그 커밋에 `firestore.indexes.json` 선언을 넣고 **`firebase deploy --only firestore:indexes`를 함수 배포보다 먼저** 실행한다(§66 배포 직후 `createSession` 전체 장애의 원인) |
+| 규칙 | 무변경 ⇒ `firestore:rules` · `storage` 배포 없음. ⛔ `--only` 없는 `firebase deploy` 금지 |
+| 시크릿 선언 | 무변경(잎 모듈은 폐포에 시크릿 참조를 더하지 않는다 — §41 게이트가 기계 판정) |
+
+**(2) 부분 배포 판정 — ⭐ 안전하다. 그래도 권고는 전체 배포다.**
+- **안전한 이유**: 두 변경은 서로 독립이고 **어느 한쪽만 배포돼도 깨지는 불변식이 없다.** 새 트리거가 `completed`를 써도 구 코드가 그 값을 이미 올바르게 읽는다(동의 게이트 거절 `consentGate.ts:57-58` · 상한 제외 `challenge/index.ts:63` · 클라 완료 문구 `mapChallengeItems.ts:37`). §68.10 D-4가 부분 배포를 금지한 이유(D 하나라도 빠지면 그 함수가 익명에게 열린 채 익명이 켜진다)는 여기 없다.
+- **그래도 전체를 권고하는 이유**: 부분 배포는 *"행동이 바뀐 export 목록"* 을 diff에서 손으로 뽑는 단계를 요구한다. 전체 배포는 그 단계 없이 구조적으로 누락이 불가능하고 Verified 이력이 2회다(T147 · T176). 부분 배포를 고르면 목록은 reviewer가 최종 diff로 확정한다.
+
+**(3) 순서**
+
+| 단계 | 내용 | 정지 조건 |
+|---|---|---|
+| **P-1** | `npm --prefix functions test` · `npm test`(Verified 원문 · 단독 실행) — before/after 나란히 | 기존 테스트 수정 필요 → 정지 |
+| **D-0** | export 재대조 26/26 | 다르면 정지 |
+| **D-1** | `firebase firestore:indexes` 라이브 = 선언 대조 | 불일치 → 이 배포와 별개로 보고 |
+| **D-2** | `firebase deploy --only functions --dry-run`(OQ-A83 재시도 규칙) | — |
+| **D-3** | `firebase deploy --only functions`(권고) 또는 `firebase deploy --only functions:onSessionEnded,functions:submitRealtimeTranscript` | 부분 실패 → 실패한 이름만 1회 재시도 |
+| **D-4** | `firebase functions:list` → 26 · `nodejs22` | — |
+| **L-1~L-7** | 아래 (4) | 각 행 |
+| (OQ-A87) | 기존 데이터 판단 — **반드시 배포 뒤** | — |
+
+**(4) 라이브 확인 — 기본 절차 = "수정 배포 → 새 챌린지 생성 → 수신자 체험 완료 → 작성자 화면이 '완료 · …'로 바뀌는지"**(오케스트레이터 지시 · 활성 상한 3칸이 비어 있다 — 인용값)
+
+| ID | 절차 | 기대 | 필수 |
+|---|---|---|---|
+| **L-1** ⭐ 메신저(정방향 + 역방향을 한 챌린지로) | User(Google)가 **메신저** 챌린지 생성 → ⛔ **격리 브라우저 프로필**(§68.10 A-3과 같은 이유 — `join/page.tsx:118`이 Google 세션을 익명으로 바꾼다)에서 링크 → 동의 → 메시지 1~2개 → **이 시점에 작성자 `/challenge/results` 새로고침** → 수신자 "훈련 종료" → 종료 화면 → 리플레이에서 *"공유하지 않음"* 또는 공유 화면 전에 이탈 → **작성자 화면 새로고침**(트리거 지연 — 10~30초 뒤 재시도) | 종료 전: **"상대가 아직 해보지 않았습니다" + 대기**(역방향 · T181 I②) → 종료 후: **(b) "상대가 완료했지만 결과 공유에 동의하지 않았습니다" + 완료** | ✅ |
+| **L-2** (c) | L-1과 같은 방식으로 1건 더 — 리플레이에서 *"공유함"* | **(c) "완료 · 상대가 체험을 마침"** | 권고 |
+| **L-3** 음성 경로 | **generic 음성** 챌린지 → 격리 프로필 동의 → 수신 화면에서 **"거절"**(`play/page.tsx:1552` — 대화 0, LLM은 동의 오프닝 1회뿐) → 작성자 화면 | (b) + 완료 | 권고 — 종료 경로 공통성의 라이브 증거(코드상 같은 `endSession`) |
+| **L-4** 로그 | Cloud Functions 로그에서 `onSessionEnded`의 완료 전이 구조화 로그(`outcome: "completed"` · `from: "in_progress"`) | L-1(·L-2·L-3)의 `challengeId`마다 1줄 | ✅ |
+| **L-5** 재진입 | L-1 수신자 프로필에서 같은 링크 다시 열기 | 랜딩 *"이 챌린지는 더 이상 이용할 수 없습니다."*(OQ-A86 기본값 — 다른 결정이 나면 그 결과) | ✅ |
+| **L-6** ⭐ C | 공개 웹 설정만 쓰는 Node 스크립트(§68.10 A-2와 같은 방식)로 `signInAnonymously` → `submitRealtimeTranscript({ sessionId: "nonexistent", turns: [] })` · 같은 호출을 Google 신원으로 1회 | 익명 **`permission-denied`**(LLM · 쓰기 0) · Google **`{ written: 0 }`**(무변경) — **두 출력을 나란히** | ✅ |
+| **L-7** C 역방향(비어 있지 않은 익명 제출) | 격리 프로필 수신자가 **실시간 음성**으로 1턴 이상 대화한 뒤 종료 | 네트워크의 `submitRealtimeTranscript` 200 · 리플레이에 대사 존재 | 권고 — 유닛 C-3이 덮는다. Gemini Live 예산을 쓴다(G180) |
+
+⛔ **재현하지 못한 쪽은 *"재현하지 못했다"* 로 명시한다**(AC-085 (f) 관례). L-1 하나만으로 *"전이가 동작한다"* 고 보고할 수 있지만, L-6 없이 C를 *"완료"* 로 보고하지 않는다.
+
+**(5) 롤백**: `git revert` + 같은 배포 명령. **순서 제약이 없다**(§68 G422와 다르다). 이미 `completed`가 된 문서는 구 코드도 올바르게 읽는다(위 (2)) ⇒ 데이터 되돌림 0. C를 되돌리면 예외 2가 되살아난다 — 그 상태의 문서는 #111이 그대로 맞다.
+
+### 69.10 (Q8) Open Questions — ⭐ **셋 다 비차단**(T181 구현·배포의 선행 조건이 아니다)
+
+| OQ | 질문 | 선택지(권고 굵게) | 소유 | 기본값(무응답 시) |
+|---|---|---|---|---|
+| **OQ-A86** | **완료한 수신자가 링크를 다시 열면 무엇을 보여 주는가** — 오늘은 결함 덕에 리플레이 · 결과 공유 · 신고에 다시 닿는다(69.4) | **(a) 현행 설계 유지 — 랜딩 차단 *"이 챌린지는 더 이상 이용할 수 없습니다."*(코드 0줄)** · (b) 같은 uid면 *"이미 체험을 마쳤어요 — 다시 보기"* 로 리플레이(UX-018)에 안내(`decideConsentGate`에 *같은 uid + `completed`* 행동 신설 · 랜딩 분기 · UX-021 상태 신설 — ux · architect 재판정 필요) · (c) 차단은 유지하고 문구만 UX-021 Error (a)와 맞춤 | **User → ux-design** | (a) |
+| **OQ-A87** | **이미 `in_progress`로 굳은 프로덕션 문서를 어떻게 하는가**(69.6) | **(a) 콘솔 읽기 전용 확인 → 0건이면 종결** · (b) 1건 이상이면 일회성 스크립트(dry-run → 승인 → 적용) · (c) 무조치(생성 후 ≤30일 자연 소멸) | **User**(프로덕션 쓰기 승인) | (a) |
+| **OQ-A88** | **`userAccess.ts:283`의 무조건 `in_progress` 쓰기를 조건부(`consented`일 때만)로 바꿀 것인가** — T181 잔여 R-1과 **기존 신고 덮어쓰기 경쟁**(69.3 (5) — §14.5 *"신고 → 재생 즉시 차단"*)을 함께 닫는다 | **(a) T181에 묶음**(변경 1곳 · 수신 입구라 L-1이 그대로 회귀를 본다 · 배포 export +1 · 동형 스텁 테스트 1건 추가) · (b) 별건 태스크 · (c) 하지 않음(두 경쟁 잔여) | **User**(범위) | (c) — T181은 이것 없이 성립한다 |
+
+### 69.11 게이트(갭) 신설 — G424~G428
+
+| ID | 규칙 |
+|---|---|
+| **G424** | 챌린지 완료 전이는 **`onSessionEnded` 1곳**에서만 한다 — `endSession` · `sendMessage` · `generateReportCore` · `setChallengeResultSharing`에 복제하지 않는다(복제하면 경로 하나가 반드시 샌다 — 69.3 (2)) |
+| **G425** | 전이는 **조건부 · 트랜잭션 · 멱등**: `consented` · `in_progress` → `completed`만, 쓰는 필드는 `status` 1개. `reported` · `deleted` · `completed` · `pending` · `expired` 무접촉. **`endReason`으로 분기하지 않는다**(클라 주장값). `voiceId` · `retentionDeleteAt` · 폐기 함수 무접촉(ADR-0006 `:28`) |
+| **G426** | 완료 로직은 잎 모듈 `functions/src/shared/challengeCompletion.ts`(런타임 내부 import 0)에 둔다. 트리거 파일은 `../challenge` · `../challenge/index` · `../challenge/userAccess`를 import하지 않는다(모듈 상호 import · §41 폐포 — S-4가 기계 판정) |
+| **G427** | C의 `denyAnonymous(request.auth)`는 **빈 `turns` 분기 안 · `return` 앞 · 첫 `getFirestore(` 앞**에만 둔다. 분기 밖이면 모든 익명 전사 제출이 조용히 거부된다(C-2가 기계 판정 · 역검증 ⓐ) |
+| **G428** | 챌린지 상태 변경의 서버→클라 연결 증거는 **서버 소스의 리터럴을 읽는 테스트**와 라이브로 낸다 — 클라 테스트에 손으로 쓴 `status` 값만으로는 미충족(T181 I① · C-1) |
+
+### 69.12 ⛔ 남는 위험 · 닫지 못한 것 (자기 고지 — 지우지 말 것)
+
+| # | 내용 | 판정 |
+|---|---|---|
+| **R-1** | `:283` 늦은 도착이 `completed`를 덮는다(69.3 (5)) | 잔여 — 도달 사실상 불가(추정). 검출 OQ-A87 (a) · 해소 OQ-A88 |
+| **R-2** | 전이 트랜잭션 1회 실패 = 그 챌린지만 `in_progress` 유지(트리거 재시도 끔) | 잔여 — 검출: L-4의 실패 로그 · 복구: OQ-A87 (b) 스크립트(같은 함수) |
+| **R-3** | 트리거 지연(초 단위) 동안 작성자는 "대기"를 본다 | 수용 — 최종 일관 |
+| **R-4** | 중도 이탈(종료 없이 탭 닫기)은 영원히 (a)다 — 서버에 방치 세션 종료기가 없다 | 설계대로 — 완료가 아니다(보존기간 내 재개 가능 §14.4). (a)의 문면 *"아직 해보지 않았습니다"* 가 *"시작했지만 끝내지 않음"* 까지 덮는 것은 UX-020 (a)의 기존 문면이다 |
+| **R-5** | **동의 전에 신고된** 챌린지가 작성자 화면에서 **(b) "상대가 완료했지만…"** 으로 보인다 — 클라가 `reported`를 완료 계열로 묶기 때문이고(`mapChallengeItems.ts:37`) UX-020 States에 신고 상태가 없다 | ⚠️ **범위 밖 관측 · T181과 무관한 기존 결함 후보**(사실과 다른 문구라 같은 부류다). planner 인계(R1~R3 판정 대상) — 이 절은 아무것도 바꾸지 않는다 |
+| 6 | 69.6 (a)의 *"2026-10-01 전에는 동의 불가"* 는 §68.1 #8 인용값에서의 추론이다 — 과거에 익명이 켜졌다 꺼진 적이 있으면 틀린다 | 추정 — `linkConsumedAt` 분포로 확인 |
+| 7 | T181 행 · PRD v1.17은 **다른 워크트리 사본**이다(69.1 #1). architect는 셸 · 테스트 · 배포 · 라이브 0회 | — |
+
+⭐ **§68.15 (9) 열린 항목 1(되감기 R 클래스 라이브 미관측)은 닫혔다** — T177 마감 중 `judgeRewindAnswer` 라이브 200 관측(오케스트레이터 인용값 · T177 `done` · PR #263 `91579a6`). §68 원문은 고치지 않았고 이 줄이 기록이다.
+
+### 69.13 인계 (⛔ 이 절은 아래 문서를 편집하지 않았다)
+
+| 대상 | 내용 |
+|---|---|
+| **implementer** | **C1** 완료 전이 — `functions/src/shared/challengeCompletion.ts` 신설 + `guardrails/index.ts` 배선(69.3 (3)) + S-1~S-7. **C2** C — `submitTranscript.ts:65-67` + `:15` import(69.7 (1)) + C-2 · C-3. **C3** 루트 C-1 · C-1b · C-1c(기존 `mapChallengeItems.test.ts`에). C1 · C2는 되돌리는 단위가 달라 **별도 커밋**, 배포가 하나라 **같은 PR**. (OQ-A88 (a)면 C4.) ⛔ 기존 테스트를 고쳐야 하면 정지하고 보고 |
+| **reviewer** | ① G424~G427 수기 대조(특히 G427 — 분기 안) ② `guardrails/index.ts` 기존 폐기 블록 diff **0줄** ③ `onSessionEnded` 파일 import에 `../challenge` 0건 ④ 부분 배포를 고르면 행동 변경 export 목록을 최종 diff로 확정 |
+| **QA** | 69.8 전체 + before/after · L-1 · L-4 · L-5 · L-6 필수 출력 · 보고는 **T181 I 기호**로(69.8 대응표) |
+| **오케스트레이터 / User** | 69.9 순서 · OQ-A86~A88 |
+| **planner** | 69.7 (4) planner 행 · R-5 관측 판정 · T181 H의 *"architect 판정 없이 동의 게이트 의미 변경 금지"* 는 지켜졌다(동의 게이트 코드 0줄 — 69.4) |
+| **architect 후속(배포 뒤)** | 69.7 (4) architect 행 |
+
+### 69.14 이 패스의 편집 범위 (⛔ 정본 — 중단 시 복구 체크리스트)
+- `docs/Architecture.md` — **§69 신설**(파일 끝 append). §0~§68 **0줄**.
+- `docs/DECISIONS.md` — **#112** 1행 append.
+- ⛔ `functions/**` · `src/**` · `scripts/**` · `firestore.*` · `firebase.json` · `docs/Tasks.md` · `docs/PRD.md` · `docs/UX.md` · `docs/API.md` · `docs/Database.md` · `docs/adr/**` · `README.md` · `CLAUDE.md` **0줄**. ADR 신설 **0** — 모듈 경계 · 계약을 새로 만들지 않고 ADR-0003 · 0005 · 0006의 불변식을 하나도 좁히지 않는다(트리거가 쓰는 것은 챌린지 `status` 1필드, 폐기 · 클론 수명 무접촉). 커밋 · push **0건**(셸 없음).
+> **번호 실측**: 69.1 #12. ⛔ 예약하지 않는다 — 동시 패스가 있으면 병합 순서로 확정한다(치환 범위: `## 69.` 이후 + DECISIONS #112 행뿐, ⛔ 전역 치환 금지).
+> **base**: 69.1 #1. **UX 추적성**: 신규 Screen ID · Flow ID · 라우트 **0건** — 관련 화면 UX-020 · UX-021 · UX-007 · UX-014 · UX-022 · UX-018(무영향). 화면 계약 무변경(재진입 문면은 OQ-A86).
+> **헤더 버전 갭**: `Architecture.md:5` = **PRD v1.7.1 · UX 1.13** ↔ 현행 **PRD v1.17**(planner 사본 `docs/PRD.md:4` — 이 트리는 v1.16) · **UX 1.26**(`docs/UX.md:10`). ⛔ 헤더는 전진시키지 않았다(T131 계열 별건 — §68.15 (6) 6과 같다). 이 절이 기대는 AC(AC-043 · AC-049 · AC-055 · AC-085)와 화면(UX-020 `:1240` · UX-021 `:1273`)은 **현행본을 직접 열람**했고 AC · 화면 신설은 0건이라 판정이 오염되지 않는다.
