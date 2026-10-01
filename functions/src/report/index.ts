@@ -13,6 +13,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import type { SessionDoc } from "../shared/types";
 import { generateReportForSession } from "./generateReportCore";
 import type { GenerateReportRequest, GenerateReportResponse } from "./types";
@@ -40,6 +41,7 @@ export const generateReport = onCall<GenerateReportRequest, Promise<GenerateRepo
     if (session.uid !== request.auth.uid) {
       throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
     }
+    assertAnonymousChallengeScope(request.auth, session);
 
     return generateReportForSession(sessionId);
   },

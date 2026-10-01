@@ -2,7 +2,14 @@
 //
 // 목적: Google OAuth 팝업은 별도 창이라 자동화 도구·에뮬레이터 환경에서 끝까지 클릭할 수 없다.
 // 그래서 로그인 이후의 모든 화면(온보딩·시나리오·통화·리포트)이 자동 검증 사각지대로 남아 있었다.
-// 이 모듈은 **인증 단계만** 익명 사인인으로 대체해 그 사각지대를 없앤다.
+// 이 모듈은 **인증 단계만** 에뮬레이터 이메일/비밀번호 계정으로 대체해 그 사각지대를 없앤다.
+//
+// T176(Architecture.md §68.2 E2, 2026-10-01) — 처음엔 익명 사인인이었다. 서버 익명 게이트(§68)가
+// 익명 uid를 챌린지 수신 경로로만 제한하므로, 익명으로 들어오면 자가 훈련 흐름(createSession 등)이
+// 전부 permission-denied가 되어 이 모듈을 만든 이유가 사라진다. 게이트에 에뮬레이터 예외를 두지
+// 않는 대신(G416) 개발용 로그인을 `password` 제공자로 바꿔 Google과 같은 쪽으로 게이트를 통과시킨다.
+// 에뮬레이터 Auth는 비밀번호 가입을 항상 허용한다. 클릭할 때마다 새 계정이 생기며(익명 때와 같은
+// 수명 모델) 비밀번호는 매번 무작위라 하드코딩된 자격증명이 0건이다.
 //
 // ⚠️ 의도적으로 인증만 우회한다 — 동의(UX-001/AC-012/017)·연령 확인(UX-011/AC-014) 화면은 그대로
 // 거친다. 그 화면들은 일반 DOM(체크박스+버튼)이라 자동화로 정상 조작할 수 있어 우회할 이유가 없고,
@@ -16,7 +23,7 @@
 //      검사한다 — 이건 Next가 빌드 시 리터럴로 치환하므로 `false && (...)`가 되어 JSX가 실제로
 //      제거된다(빌드 후 grep으로 재확인).
 //   2. 아래 런타임 가드 — 혹시 코드가 남더라도 프로덕션에서는 무조건 거부한다.
-import { signInAnonymously } from "firebase/auth";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useEmulator } from "@/lib/firebase/emulator";
 import { ensureUserProfile } from "./userProfile";
@@ -27,9 +34,8 @@ export const DEV_AUTH_ENABLED = process.env.NODE_ENV !== "production";
 export type DevSignInOutcome = { status: "success" } | { status: "error"; message: string };
 
 /**
- * 익명 사용자로 즉시 로그인한다(개발 전용). Auth 에뮬레이터는 프로바이더 활성화 없이도 익명
- * 사인인을 지원하며, RouteGuard·Firestore 규칙은 익명 사용자도 정상 `request.auth`로 취급한다
- * (2인 챌린지 수신자 경로가 이미 같은 메커니즘을 쓴다 — §14.7/ADR-0006).
+ * 새 에뮬레이터 이메일/비밀번호 계정으로 즉시 로그인한다(개발 전용, §68.2 E2). 토큰의
+ * `firebase.sign_in_provider`가 `password`라 서버 익명 게이트를 비익명으로 통과한다.
  */
 export async function devSignIn(): Promise<DevSignInOutcome> {
   // reviewer Major #2(2026-07-25) — 예전엔 `DEV_AUTH_ENABLED`만 확인했다. 그런데 그 값과
@@ -42,7 +48,11 @@ export async function devSignIn(): Promise<DevSignInOutcome> {
     return { status: "error", message: "개발용 로그인은 프로덕션에서 사용할 수 없습니다." };
   }
   try {
-    const result = await signInAnonymously(auth);
+    const result = await createUserWithEmailAndPassword(
+      auth,
+      `dev-${crypto.randomUUID()}@example.com`,
+      crypto.randomUUID(),
+    );
     await ensureUserProfile(result.user);
     return { status: "success" };
   } catch {

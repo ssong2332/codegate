@@ -12,6 +12,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { ELEVENLABS_API_KEY, GEMINI_KEY_SECRETS } from "../shared/config";
 import {
   VERIFY_DECLINE_ALREADY,
@@ -184,6 +185,7 @@ export const deliverVerifyOffer = onCall<
   const trigger = readTrigger(request.data?.trigger);
 
   const session = await loadOwnedActiveSession(sessionId, request.auth.uid);
+  assertAnonymousChallengeScope(request.auth, session);
   const item = assertVerifyEligible(session);
 
   const db = getFirestore();
@@ -295,6 +297,7 @@ export const deliverVerifyReconnect = onCall<
   const callMode = readCallMode(request.data?.callMode);
 
   const session = await loadOwnedActiveSession(sessionId, request.auth.uid);
+  assertAnonymousChallengeScope(request.auth, session);
   const item = assertVerifyEligible(session, offerId);
 
   const db = getFirestore();

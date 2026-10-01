@@ -12,6 +12,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { maskPII } from "../guardrails";
 import { findOpeningToMarkNotSpoken } from "./openingMark";
 import { resolveTurnCreatedAtMs } from "./transcriptTiming";
@@ -83,6 +84,7 @@ export const submitRealtimeTranscript = onCall<
     if (session.uid !== request.auth!.uid) {
       throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
     }
+    assertAnonymousChallengeScope(request.auth, session);
 
     const historySnap = await tx.get(messagesRef.orderBy("turnIndex", "asc"));
     // ⛔ **G350** — 이어 붙일 인덱스는 `historySnap.size`(문서 수) 그대로다. 아래 `notSpoken`

@@ -40,3 +40,17 @@ test("devSignIn은 DEV_AUTH_ENABLED와 useEmulator를 모두 확인해야 한다
       `확인해야 한다 — "개발 빌드"만으로는 "로컬 에뮬레이터를 보고 있다"가 보장되지 않는다.`,
   );
 });
+
+test("[T176 T-5] devSignIn은 익명 사인인을 쓰지 않는다(§68.2 E2 — 에뮬레이터 이메일 계정 방식)", () => {
+  const source = readFileSync(DEV_SIGN_IN, "utf8");
+
+  // 서버 익명 게이트(§68)는 익명 uid를 챌린지 수신 경로로만 제한한다. 개발용 로그인이 익명으로
+  // 되돌아가면 에뮬레이터에서 자가 훈련 흐름이 전부 permission-denied가 된다(E3 기각 사유).
+  const hits = source.split("signInAnonymously").length - 1;
+  assert.equal(
+    hits,
+    0,
+    `${DEV_SIGN_IN}: signInAnonymously가 ${hits}회 나온다 — 개발용 로그인은 에뮬레이터 이메일/비밀번호 ` +
+      `계정(createUserWithEmailAndPassword)을 써야 한다(Architecture.md §68.2 E2).`,
+  );
+});

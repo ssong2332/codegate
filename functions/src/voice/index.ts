@@ -20,6 +20,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { denyAnonymous } from "../shared/anonymousGate";
 import { getVoiceProvider } from "./provider";
 import type { CreateVoiceCloneRequest, CreateVoiceCloneResponse } from "./types";
 
@@ -36,6 +37,7 @@ export const createVoiceClone = onCall<CreateVoiceCloneRequest, Promise<CreateVo
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     }
+    denyAnonymous(request.auth);
     const { sessionId } = request.data ?? {};
     if (!sessionId) {
       throw new HttpsError("invalid-argument", "sessionId가 필요합니다.");

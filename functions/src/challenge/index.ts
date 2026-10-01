@@ -31,6 +31,7 @@ import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { denyAnonymous } from "../shared/anonymousGate";
 import { voiceInputStoragePath } from "../voice";
 import { getVoiceProvider } from "../voice/provider";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
@@ -66,6 +67,7 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     }
+    denyAnonymous(request.auth);
     const { scenarioId, displayName, difficultyLevel } = request.data ?? {};
     if (!scenarioId || !displayName || !displayName.trim()) {
       throw new HttpsError("invalid-argument", "scenarioId와 displayName이 필요합니다.");
@@ -240,6 +242,7 @@ export const deleteChallenge = onCall<DeleteChallengeRequest, Promise<DeleteChal
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     }
+    denyAnonymous(request.auth);
     const { challengeId } = request.data ?? {};
     if (!challengeId) {
       throw new HttpsError("invalid-argument", "challengeId가 필요합니다.");
@@ -280,6 +283,7 @@ export const listMyChallenges = onCall<
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
+  denyAnonymous(request.auth);
   const db = getFirestore();
   const snap = await db.collection("challenges").where("creatorUid", "==", request.auth.uid).get();
 

@@ -12,6 +12,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { maskPII } from "../guardrails";
 import { getLlmClient } from "../llm";
 import { GEMINI_KEY_SECRETS } from "../shared/config";
@@ -84,6 +85,7 @@ export const judgeRewindAnswer = onCall<
   if (report.uid !== request.auth.uid) {
     throw new HttpsError("permission-denied", "본인 리포트가 아닙니다.");
   }
+  assertAnonymousChallengeScope(request.auth, report);
 
   const moments = Array.isArray(report.deceivedMoments) ? report.deceivedMoments : [];
   const moment = moments[momentIndex];

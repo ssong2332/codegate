@@ -68,8 +68,8 @@ export default function LoginPage() {
   };
 
   // 개발 전용 빠른 로그인(아이디어 #1) — Google OAuth 팝업은 별도 창이라 자동화로 끝까지 클릭할
-  // 수 없어 로그인 이후 화면 전체가 검증 사각지대였다. 인증만 익명 사인인으로 대체하고 동의·연령
-  // 확인 화면은 그대로 거친다. 프로덕션 빌드에서는 DEV_AUTH_ENABLED가 false라 통째로 제거된다.
+  // 수 없어 로그인 이후 화면 전체가 검증 사각지대였다. 인증만 에뮬레이터 이메일 계정 사인인으로
+  // 대체하고(T176 §68.2 E2 — 이전엔 익명) 동의·연령 확인 화면은 그대로 거친다. 프로덕션 빌드에서는 DEV_AUTH_ENABLED가 false라 통째로 제거된다.
   const handleDevSignIn = async () => {
     setViewState("loading");
     setErrorMessage(null);
@@ -179,7 +179,7 @@ export default function LoginPage() {
                 className="h-4 w-4 animate-spin rounded-full border-2 border-white/50 border-t-white"
               />
             )}
-            {isLoading ? "로그인 처리 중..." : "익명 계정으로 빠른 로그인"}
+            {isLoading ? "로그인 처리 중..." : "에뮬레이터 테스트 계정으로 빠른 로그인"}
           </button>
         </div>
       )}
