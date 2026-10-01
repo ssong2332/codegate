@@ -76,3 +76,5 @@
 - [대조군의 환경 오류는 순서 증거다](feedback_env_failure_control_is_order_evidence.md) — 통과군 INTERNAL·처치군 게이트 코드면 "게이트가 I/O 앞"; 대조군 기대값은 핸들러별 표로
 - [같은 기호, 다른 대상](feedback_same_symbols_different_subjects.md) — 설계 ⓐⓑⓒ ≠ 나중 AC ⓐⓑⓒ면 AC 항목 하나가 조용히 빠진다; 기호 대응표·AC 기호로 보고
 - [순서 대조표는 게이트 앞 return을 못 본다](feedback_order_audit_misses_early_return.md) — throw 줄번호만 비교하면 성공 조기 반환이 빠진다; 문서 동기화 범위는 export 목록으로
+- [읽는 곳만 있고 쓰는 곳이 없는 상태값](feedback_state_consumers_without_writer.md) — 쓰기 grep 0이면 설계 공백; 전이는 경로가 모이는 트리거에, 연결 테스트는 생산자 리터럴을 소스에서 읽는다
+- [수정이 결함 덕에 열린 경로를 닫을 때](feedback_fix_closes_accidental_path.md) — 회귀/설계 복구는 원 설계 주석으로 판정; 사라지는 것·그 경로를 밟던 검증 절차를 적고 OQ
