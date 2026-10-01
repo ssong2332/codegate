@@ -73,3 +73,5 @@
 - [Cloud Functions 런타임 수명·CLI 규칙](reference_cloud_functions_runtime_lifecycle.md) — GCP 표가 정본(CLI는 nodejs22 폐기 1년 늦게), engines는 맨 숫자, 락파일 미러, discovery 10초
 - [Firebase 익명 판별 클레임·에뮬레이터 동작](reference_firebase_anonymous_auth_claims.md) — `firebase.sign_in_provider`(필수 필드), 에뮬레이터도 같은 클레임·서명 미검증, SDK 소스 위치
 - [보안 게이트에 환경 예외를 두지 마라](feedback_security_gate_no_env_exception.md) — 예외는 개발 도구 층으로; 분류는 비용 행보다 "입장권 발급 행"부터; 켜기/롤백 순서 비대칭
+- [대조군의 환경 오류는 순서 증거다](feedback_env_failure_control_is_order_evidence.md) — 통과군 INTERNAL·처치군 게이트 코드면 "게이트가 I/O 앞"; 대조군 기대값은 핸들러별 표로
+- [같은 기호, 다른 대상](feedback_same_symbols_different_subjects.md) — 설계 ⓐⓑⓒ ≠ 나중 AC ⓐⓑⓒ면 AC 항목 하나가 조용히 빠진다; 기호 대응표·AC 기호로 보고
