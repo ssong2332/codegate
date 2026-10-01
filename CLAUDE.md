@@ -87,14 +87,14 @@ Record commands verbatim after the first success. Reuse without modification; if
 | Purpose | Command | Verified on |
 |---|---|---|
 | Build (functions) | `npm --prefix functions run build` | 2026-07-27 |
-| Test (functions) | `npm --prefix functions test` | 2026-09-30 — **843 pass / 0 fail** (T147 QA 실측, 소스 = main `d96c0e4`와 동일. 이전 기준 2026-07-29 616/0) |
-| Test (root) | `npm test` | 2026-09-30 — **418 pass / 0 fail** (T147 QA 실측, 소스 = main `d96c0e4`와 동일. 이전 기준 2026-07-29 278/0) |
+| Test (functions) | `npm --prefix functions test` | 2026-10-01 — **858 pass / 0 fail** (T176 QA 재판정 실측, `e938d63` — 소스 = main `d856e1d`와 동일. 이전 기준 2026-09-30 843/0 · 2026-07-29 616/0) |
+| Test (root) | `npm test` | 2026-10-01 — **419 pass / 0 fail** (T176 QA 재판정 실측, `e938d63` — 소스 = main `d856e1d`와 동일. 이전 기준 2026-09-30 418/0 · 2026-07-29 278/0) |
 | Build (root) | `npm run build` | 2026-07-27 — 통과 (main `1157d7d`). ⚠️ **`.env`가 있는 트리에서만 통과한다** — 격리 워크트리처럼 `.env`가 없으면 TS 컴파일은 성공한 뒤 정적 생성 단계에서 `auth/invalid-api-key`로 실패한다. 이것은 코드 결함이 아니다(T108에서 base main 대조로 실측 확인) |
 | Lint (functions) | `npm --prefix functions run lint` | 2026-07-27 |
 | Clean (functions) | `npm --prefix functions run clean` | 2026-07-27 — 멱등 |
 | Deploy dry-run (functions) | `firebase deploy --only functions --dry-run` | 2026-09-30 — `Dry run complete!` (main `d96c0e4`). ⚠️ **`functions/.env`가 있는 트리에서만 통과한다**(없으면 defineString 파라미터 누락으로 실패). ⚠️ 새 빌드 직후 첫 실행이 `User code failed to load ... Timeout after 10000`(discovery 10초)으로 자주 실패하고 같은 명령 재시도로 통과한다 — **2회 연속** 실패할 때만 `FUNCTIONS_DISCOVERY_TIMEOUT=30` 설정(OQ-A83, DECISIONS #107) |
 | Deploy (functions, 일부) | `firebase deploy --only functions:<이름1>,functions:<이름2>` | 2026-09-30 — `functions:getBeginnerBriefing` 카나리 성공(T147). discovery 타임아웃 주의는 위와 같다 |
-| Deploy (functions, 전체) | `firebase deploy --only functions` | 2026-09-30 — 26개 성공, 전부 `nodejs22`(T147). ⛔ **Firestore 쿼리(`where`/`orderBy` 조합)가 바뀐 배포는 아래 인덱스 배포를 별도로 반드시 실행할 것**(§66 배포 직후 `createSession` 전체 장애의 원인) |
+| Deploy (functions, 전체) | `firebase deploy --only functions` | 2026-09-30 — 26개 성공, 전부 `nodejs22`(T147). 2026-10-01 — 26/26 업데이트 재확인(T176, 1회차 discovery 타임아웃 → 재실행 성공). ⛔ 익명 게이트(T176)처럼 **여러 함수가 함께 바뀌어야 안전한 변경은 일부 배포 금지**(§68.10). ⛔ **Firestore 쿼리(`where`/`orderBy` 조합)가 바뀐 배포는 아래 인덱스 배포를 별도로 반드시 실행할 것**(§66 배포 직후 `createSession` 전체 장애의 원인) |
 | Deploy (Firestore indexes) | `firebase deploy --only firestore:indexes` | §66 긴급 복구 때 성공(인수인계 기록). 라이브 인덱스 확인은 `firebase firestore:indexes` — 2026-09-30 선언 3 = 라이브 3 |
 | Runtime check (live) | `firebase functions:list` | 2026-09-30 — 26개, Runtime 열로 `nodejs22` 확인 |
 
