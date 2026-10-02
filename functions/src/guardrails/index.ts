@@ -61,6 +61,10 @@ import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { getVoiceProvider } from "../voice/provider";
+import {
+  challengeIdToCompleteOnSessionUpdate,
+  completeChallengeOnExperienceEnd,
+} from "../shared/challengeCompletion";
 import type { DeletionLogDoc, SessionDoc } from "../shared/types";
 import { purgeSessionArtifacts, type PurgeDeps } from "./purge";
 
@@ -141,5 +145,24 @@ export const onSessionEnded = onDocumentUpdated("sessions/{sessionId}", async (e
     // 무관하게 노이즈를 만들 수 있어(triggerReportGeneration, report/index.ts와 동일 원칙) 흡수만
     // 하고 로그를 남긴다.
     logger.error("onSessionEnded: 폐기 트리거 처리 중 예외", { sessionId, err });
+  }
+
+  // T181 C1(Architecture.md §69.3 (3) · G424~G426) — 챌린지 체험 세션이 끝나면 그 챌린지를
+  // completed로 옮긴다. 위 폐기 블록과 **독립**이다(자기 try/catch) — 폐기 실패가 전이를 막지 않고,
+  // 전이 실패가 폐기를 막지 않는다. ⛔ 다시 throw하지 않는다(위 흡수 원칙과 같다 — 트리거 재시도는
+  // 폐기 부수효과까지 다시 돌린다). 비챌린지 세션은 challengeId가 없어 추가 I/O 0이다.
+  const challengeId = challengeIdToCompleteOnSessionUpdate(before, after);
+  if (challengeId) {
+    try {
+      const transition = await completeChallengeOnExperienceEnd(getFirestore(), challengeId);
+      logger.info("onSessionEnded: 챌린지 완료 전이", { sessionId, challengeId, ...transition });
+    } catch (err) {
+      logger.error("onSessionEnded: 챌린지 완료 전이 중 예외", {
+        sessionId,
+        challengeId,
+        outcome: "error",
+        err,
+      });
+    }
   }
 });
