@@ -78,3 +78,4 @@
 - [순서 대조표는 게이트 앞 return을 못 본다](feedback_order_audit_misses_early_return.md) — throw 줄번호만 비교하면 성공 조기 반환이 빠진다; 문서 동기화 범위는 export 목록으로
 - [읽는 곳만 있고 쓰는 곳이 없는 상태값](feedback_state_consumers_without_writer.md) — 쓰기 grep 0이면 설계 공백; 전이는 경로가 모이는 트리거에, 연결 테스트는 생산자 리터럴을 소스에서 읽는다
 - [수정이 결함 덕에 열린 경로를 닫을 때](feedback_fix_closes_accidental_path.md) — 회귀/설계 복구는 원 설계 주석으로 판정; 사라지는 것·그 경로를 밟던 검증 절차를 적고 OQ
+- [상태 쓰기 조건화는 내려간 값을 회수 못 한다](feedback_state_write_fix_cannot_recall_delivered_values.md) — "경쟁이 함께 닫힌다"는 재읽기 경로뿐; 경쟁 쓰기 전수 표 · 버려지는 서버 문면은 편집 지점 아님
