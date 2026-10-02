@@ -12,6 +12,7 @@ import {
   COMPLETED_LANDING_BODY,
   COMPLETED_LANDING_TITLE,
   resolveChallengeLandingView,
+  resolveConsentFailureView,
 } from "./landingView.ts";
 import type { ChallengeLandingView } from "./landingView.ts";
 
@@ -108,14 +109,20 @@ function codeOnly(source: string): string {
 
 const pageCode = codeOnly(readFileSync(PAGE_PATH, "utf8"));
 
+/** `import { ... } from "<from>"` / `export { ... } from "<from>"` 블록의 이름 목록(없으면 []). */
+function namesIn(source: string, keyword: "import" | "export", from: string): string[] {
+  const escaped = from.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  const match = new RegExp(`${keyword} \\{([^}]*)\\} from "${escaped}";`).exec(source);
+  return match ? match[1].split(",").map((name) => name.trim()).filter((name) => name !== "") : [];
+}
+
 test("[T181 C5 배선] 랜딩 판정은 resolveChallengeLandingView 1곳 — 페이지에 status 직접 비교가 없고, 완료 분기가 차단 문구보다 앞이다", () => {
-  assert.match(
-    pageCode,
-    /import \{\s*COMPLETED_LANDING_BODY,\s*COMPLETED_LANDING_TITLE,\s*resolveChallengeLandingView,\s*\} from "@\/lib\/challenge";/,
-    "판정 함수 · 정본 문구를 @/lib/challenge(landingView.ts)에서 가져와야 한다",
-  );
-  const barrel = readFileSync("src/lib/challenge/index.ts", "utf8");
-  assert.match(barrel, /resolveChallengeLandingView,\s*\} from "\.\/landingView";/, "배럴이 landingView.ts를 다시 내보내야 한다");
+  const pageImports = namesIn(pageCode, "import", "@/lib/challenge");
+  for (const name of ["COMPLETED_LANDING_BODY", "COMPLETED_LANDING_TITLE", "resolveChallengeLandingView"]) {
+    assert.ok(pageImports.includes(name), `페이지가 ${name}를 @/lib/challenge(landingView.ts)에서 가져와야 한다`);
+  }
+  const barrelExports = namesIn(readFileSync("src/lib/challenge/index.ts", "utf8"), "export", "./landingView");
+  assert.ok(barrelExports.includes("resolveChallengeLandingView"), "배럴이 landingView.ts의 판정 함수를 다시 내보내야 한다");
 
   assert.doesNotMatch(pageCode, /\.status\s*===/, "페이지가 status를 직접 비교한다 — 판정이 두 곳으로 갈라진다");
   const loadAt = pageCode.indexOf("const loadLanding = async");
@@ -159,4 +166,58 @@ test("[T181 C5 화면] Error (c) 렌더 분기 — 체크 표식(장식) · 제�
     /if \(state === "completed"\) completedHeadingRef\.current\?\.focus\(\);/,
     "Error (c) 진입 시 제목 포커스가 빠졌다(UX v1.27 노트 (8))",
   );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T181 C6 · W-2T(§69.15.2 (4) W-2 · OQ-U52) — 동의 실패(경합) 경로도 같은 Error (c) 화면.
+// 판정을 순수 함수(resolveConsentFailureView — 재조회는 주입)로 내려 동작을 직접 단언하고, 페이지 catch의
+// 배선은 소스 스캔으로 고정한다(선례 src/lib/auth/devSignIn.guard.test.ts).
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("[T181 C6] resolveConsentFailureView — 재조회 결과가 완료면 completed, 나머지 13칸 · 재조회 실패는 consent-error(1회만 조회 · throw 0)", async () => {
+  for (const [row, status, expired, landingView] of TRUTH_TABLE) {
+    let calls = 0;
+    const view = await resolveConsentFailureView(async () => {
+      calls += 1;
+      return { status, expired };
+    });
+    assert.equal(view, landingView === "completed" ? "completed" : "consent-error", `행 ${row}: status=${status} · expired=${expired}`);
+    assert.equal(calls, 1, `행 ${row}: 랜딩 재조회는 정확히 1회여야 한다`);
+  }
+  let rejectedCalls = 0;
+  const onRefetchFailure = await resolveConsentFailureView(async () => {
+    rejectedCalls += 1;
+    throw new Error("network");
+  });
+  assert.equal(onRefetchFailure, "consent-error", "재조회 실패는 기존 실패 문구로 떨어져야 한다(던지면 동의 버튼이 잠긴다)");
+  assert.equal(rejectedCalls, 1);
+});
+
+test("[T181 C6 W-2T] 동의 실패 catch — 랜딩 재조회(getChallengeLanding)가 일반 실패 문구보다 앞이고, 완료면 같은 Error (c) 상태로 간다", () => {
+  const start = pageCode.indexOf("const handleConsent = async");
+  const end = pageCode.indexOf("const handleSubmitReport", start);
+  assert.ok(start >= 0 && end > start, "handleConsent를 찾지 못했다");
+  const handler = pageCode.slice(start, end);
+  const catchAt = handler.indexOf("} catch {");
+  assert.ok(catchAt >= 0, "handleConsent의 catch를 찾지 못했다");
+  const catchBody = handler.slice(catchAt);
+
+  const failureViewAt = catchBody.indexOf("resolveConsentFailureView(");
+  const refetchAt = catchBody.indexOf("getChallengeLanding({ token })");
+  const completedAt = catchBody.indexOf('setState("completed")');
+  const genericAt = catchBody.indexOf('setConsentError("동의 처리에 실패했습니다. 다시 시도해 주세요.")');
+  assert.ok(failureViewAt >= 0, "catch가 resolveConsentFailureView(W-1T와 같은 판정 함수를 쓴다)를 부르지 않는다");
+  assert.ok(refetchAt > failureViewAt, "랜딩 재조회(getChallengeLanding)가 실패 판정에 주입되지 않는다");
+  assert.ok(completedAt > refetchAt, "완료면 같은 Error (c) 상태(setState(\"completed\"))로 가야 한다");
+  assert.ok(genericAt > completedAt, "일반 실패 문구가 재조회 · 완료 분기보다 앞에 있다 — 경합 경로가 재시도 유도 문구를 본다");
+  // ⛔ 서버 거절 메시지 · 오류 코드로 판정하지 않는다 — catch가 오류 객체를 아예 받지 않는다.
+  assert.doesNotMatch(handler, /catch\s*\(/, "handleConsent가 오류 객체를 받는다 — 서버 메시지 · 코드 판정 금지(4상태 공용 · 계약 아님)");
+
+  const pageImports = namesIn(pageCode, "import", "@/lib/challenge");
+  assert.ok(pageImports.includes("resolveConsentFailureView"), "페이지가 resolveConsentFailureView를 @/lib/challenge에서 가져와야 한다");
+  const barrelExports = namesIn(readFileSync("src/lib/challenge/index.ts", "utf8"), "export", "./landingView");
+  assert.ok(barrelExports.includes("resolveConsentFailureView"), "배럴이 landingView.ts의 resolveConsentFailureView를 다시 내보내야 한다");
+  const libCode = codeOnly(readFileSync("src/lib/challenge/landingView.ts", "utf8"));
+  const helper = libCode.slice(libCode.indexOf("export async function resolveConsentFailureView"));
+  assert.ok(helper.includes("resolveChallengeLandingView("), "실패 판정이 W-1T와 같은 함수(resolveChallengeLandingView)를 쓰지 않는다");
 });

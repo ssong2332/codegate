@@ -36,6 +36,7 @@ import {
   COMPLETED_LANDING_BODY,
   COMPLETED_LANDING_TITLE,
   resolveChallengeLandingView,
+  resolveConsentFailureView,
 } from "@/lib/challenge";
 import { Banner, Button } from "@/components/ui";
 
@@ -146,6 +147,13 @@ export default function ChallengeJoinPage() {
       // T49(#20, D-28) — 메신저 챌린지는 UX-022(채팅 셸)로, 보이스 챌린지는 기존대로 UX-014로.
       router.push(channel === "messenger" ? "/session/messenger" : "/session/play");
     } catch {
+      // T181 C6(§69.15.2 (4) W-2 · OQ-U52) — 동의 화면을 띄워 둔 사이 체험이 끝났으면 재시도는 성공할 수
+      // 없다 ⇒ 랜딩을 1회 다시 조회해 완료면 랜딩 로드와 같은 Error (c) 화면으로 바꾼다. 서버 거절
+      // 메시지 · 오류 코드는 보지 않는다. 그 밖의 상태 · 재조회 실패는 아래 기존 문구 그대로다.
+      if ((await resolveConsentFailureView(() => getChallengeLanding({ token }))) === "completed") {
+        setState("completed");
+        return;
+      }
       setConsentError("동의 처리에 실패했습니다. 다시 시도해 주세요.");
       setConsenting(false);
     }

@@ -7,5 +7,6 @@ export {
   COMPLETED_LANDING_BODY,
   COMPLETED_LANDING_TITLE,
   resolveChallengeLandingView,
+  resolveConsentFailureView,
 } from "./landingView";
 export type { ChallengeLandingView } from "./landingView";

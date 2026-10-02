@@ -37,6 +37,25 @@ export function resolveChallengeLandingView(landing: { status: string; expired: 
   return resumable ? "consent" : "unavailable";
 }
 
+/**
+ * T181 C6(§69.15.2 (4) W-2 · OQ-U52 · UX v1.27 노트 (4)) — 동의가 실패했을 때 보일 화면. 동의 화면을 띄워
+ * 둔 사이 체험이 끝나면 동의는 서버에서 거절되고 재시도는 성공할 수 없다 ⇒ 랜딩을 1회 다시 조회해
+ * 완료면 "completed"(Error (c) — 랜딩 로드와 같은 화면), 그 밖의 상태(신고 · 삭제 · 링크 만료 · 진행
+ * 중)와 재조회 실패는 "consent-error"(기존 "동의 처리에 실패했습니다…" 그대로).
+ * ⛔ 서버 거절 메시지 · 오류 코드는 받지도 않는다(4상태 공용 · 계약 아님 — 판정은 위 함수 1곳).
+ * ⛔ 재조회 실패를 삼키는 것이 계약이다 — 던지면 호출부가 실패 문구를 못 세우고 동의 버튼이 잠긴 채 남는다.
+ */
+export async function resolveConsentFailureView(
+  refetchLanding: () => Promise<{ status: string; expired: boolean }>,
+): Promise<"completed" | "consent-error"> {
+  try {
+    const latest = await refetchLanding();
+    return resolveChallengeLandingView(latest) === "completed" ? "completed" : "consent-error";
+  } catch {
+    return "consent-error";
+  }
+}
+
 // UX-021 Error (c) 정본 문구 — docs/UX.md v1.27 UX-021 노트 (1)에서 **글자 단위로 복사**했다(⛔ 의역 금지 ·
 // 정본이 바뀌면 여기와 landingView.test.ts를 함께 고친다).
 export const COMPLETED_LANDING_TITLE = "이미 끝난 훈련입니다";
