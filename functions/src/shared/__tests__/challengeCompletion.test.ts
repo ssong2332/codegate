@@ -11,9 +11,12 @@ import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import type { Firestore } from "firebase-admin/firestore";
 import {
+  CHALLENGE_STATUS_ON_CONSENT_END,
   CHALLENGE_STATUS_ON_EXPERIENCE_END,
   challengeIdToCompleteOnSessionUpdate,
   completeChallengeOnExperienceEnd,
+  markChallengeInProgressIfConsented,
+  nextChallengeStatusOnConsentEnd,
   nextChallengeStatusOnExperienceEnd,
 } from "../challengeCompletion";
 import type { ChallengeStatus } from "../types";
@@ -80,6 +83,15 @@ class FakeFirestore {
 
   asFirestore(): Firestore {
     return this as unknown as Firestore;
+  }
+
+  /**
+   * 헬퍼가 아닌 **다른 쓰기 지점의 무조건 쓰기 커밋**을 모사한다(S-10 · S-11) — 신고(userAccess.ts
+   * reportChallenge) · 폐기(challenge/index.ts purgeChallenge) · 예전 동의 끝 무조건 in_progress 쓰기.
+   * 헬퍼 경로가 아니므로 txWrites에 남기지 않는다.
+   */
+  commitUnconditional(docPath: string, data: DocData): void {
+    this.store.set(docPath, { ...(this.store.get(docPath) ?? {}), ...data });
   }
 }
 
@@ -317,4 +329,241 @@ test("[T181 S-7] ACTIVE_STATUSES에 CHALLENGE_STATUS_ON_EXPERIENCE_END의 값이
   assert.ok(members.length > 0, "ACTIVE_STATUSES 원소를 하나도 읽지 못했다(조용한 통과 방지)");
   assert.deepEqual(members, ["pending", "consented", "in_progress"], "§69.5 — 상한 집합은 무변경이어야 한다");
   assert.ok(!members.includes(CHALLENGE_STATUS_ON_EXPERIENCE_END), "완료 값이 활성 집합에 있다 — 슬롯이 돌아오지 않는다");
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// T181 C4(§69.15.4 · OQ-A88 (a) · G429) — 동의 끝 consented → in_progress 조건부 전이. S-8~S-12.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** 예전 userAccess.ts 동의 끝 쓰기(트랜잭션 밖 무조건 in_progress)의 모사 — S-10 · S-11 대조군 전용. */
+function legacyUnconditionalConsentEnd(fake: FakeFirestore, id: string): void {
+  fake.commitUnconditional(`challenges/${id}`, { status: "in_progress" });
+}
+
+test("[T181 S-9 전제] 가짜 db의 ref.update · ref.set(트랜잭션 밖 쓰기)은 실제로 throw한다 — 아래 '쓰기 0' 단언이 공회전이 아니다", () => {
+  const fake = new FakeFirestore();
+  seedChallenge(fake, "c1", "consented");
+  const ref = fake.collection("challenges").doc("c1");
+  assert.throws(() => ref.update(), /트랜잭션 밖 쓰기/);
+  assert.throws(() => ref.set(), /트랜잭션 밖 쓰기/);
+});
+
+test("[T181 S-8] nextChallengeStatusOnConsentEnd: consented → in_progress / 나머지 6개 → null(G429)", () => {
+  const expected: Record<ChallengeStatus, "in_progress" | null> = {
+    pending: null,
+    consented: "in_progress",
+    in_progress: null,
+    completed: null,
+    expired: null,
+    reported: null,
+    deleted: null,
+  };
+  for (const status of ALL_STATUSES) {
+    assert.equal(nextChallengeStatusOnConsentEnd(status), expected[status], `status=${status}`);
+  }
+  assert.equal(Object.keys(expected).length, 7, "진리표가 7개 상태를 전부 덮어야 한다");
+  assert.equal(CHALLENGE_STATUS_ON_CONSENT_END, "in_progress");
+});
+
+test("[T181 S-9] consented → in_progress: 쓰기 1건이고 쓴 객체가 정확히 { status: CHALLENGE_STATUS_ON_CONSENT_END }", async () => {
+  const fake = new FakeFirestore();
+  const before = seedChallenge(fake, "c1", "consented");
+
+  const result = await markChallengeInProgressIfConsented(fake.asFirestore(), "c1");
+
+  assert.deepEqual(result, { outcome: "in_progress" });
+  assert.deepEqual(fake.txWrites, [{ path: "challenges/c1", data: { status: CHALLENGE_STATUS_ON_CONSENT_END } }]);
+  assert.deepEqual(fake.store.get("challenges/c1"), { ...before, status: CHALLENGE_STATUS_ON_CONSENT_END });
+});
+
+for (const status of ["pending", "in_progress", "completed", "expired", "reported", "deleted"] as const) {
+  test(`[T181 S-9] status=${status} → 쓰기 0 · { outcome: "unchanged", status } (덮어쓰지 않는다 — G429)`, async () => {
+    const fake = new FakeFirestore();
+    const before = seedChallenge(fake, "c1", status);
+
+    const result = await markChallengeInProgressIfConsented(fake.asFirestore(), "c1");
+
+    assert.deepEqual(result, { outcome: "unchanged", status });
+    assert.deepEqual(fake.txWrites, []);
+    assert.deepEqual(fake.store.get("challenges/c1"), before);
+  });
+}
+
+test("[T181 S-9] 문서 없음 → { outcome: \"missing\" } · 쓰기 0 · throw 0 / 같은 id로 2회 → 두 번째 쓰기 0", async () => {
+  const missing = new FakeFirestore();
+  let result: unknown;
+  await assert.doesNotReject(async () => {
+    result = await markChallengeInProgressIfConsented(missing.asFirestore(), "nonexistent");
+  });
+  assert.deepEqual(result, { outcome: "missing" });
+  assert.deepEqual(missing.txWrites, []);
+  assert.equal(missing.store.size, 0, "없는 문서를 만들어서는 안 된다");
+
+  const twice = new FakeFirestore();
+  seedChallenge(twice, "c1", "consented");
+  const first = await markChallengeInProgressIfConsented(twice.asFirestore(), "c1");
+  const second = await markChallengeInProgressIfConsented(twice.asFirestore(), "c1");
+  assert.deepEqual(first, { outcome: "in_progress" });
+  assert.deepEqual(second, { outcome: "unchanged", status: CHALLENGE_STATUS_ON_CONSENT_END });
+  assert.equal(twice.txWrites.length, 1, "두 번째 호출이 다시 썼다");
+});
+
+test("[T181 S-10] 신고·폐기가 먼저 커밋되면 C4는 덮지 않는다 — 옛 무조건 쓰기 대조군은 덮는다(판별력)", async (t) => {
+  // ① 신고가 먼저(reportChallenge의 무조건 쓰기 모사 — status + reportedAt).
+  const reportFirst = new FakeFirestore();
+  seedChallenge(reportFirst, "c1", "consented");
+  reportFirst.commitUnconditional("challenges/c1", { status: "reported", reportedAt: "reported-at-marker" });
+  const afterReport = await markChallengeInProgressIfConsented(reportFirst.asFirestore(), "c1");
+  assert.deepEqual(afterReport, { outcome: "unchanged", status: "reported" });
+  assert.deepEqual(reportFirst.txWrites, []);
+  assert.equal(reportFirst.store.get("challenges/c1")!.status, "reported");
+  assert.equal(reportFirst.store.get("challenges/c1")!.reportedAt, "reported-at-marker", "신고 시각이 보존돼야 한다");
+
+  // ② 폐기가 먼저(purgeChallenge의 무조건 deleted 모사).
+  const deleteFirst = new FakeFirestore();
+  seedChallenge(deleteFirst, "c1", "consented");
+  deleteFirst.commitUnconditional("challenges/c1", { status: "deleted" });
+  const afterDelete = await markChallengeInProgressIfConsented(deleteFirst.asFirestore(), "c1");
+  assert.deepEqual(afterDelete, { outcome: "unchanged", status: "deleted" });
+  assert.deepEqual(deleteFirst.txWrites, []);
+  assert.equal(deleteFirst.store.get("challenges/c1")!.status, "deleted");
+
+  // ③ 대조군 — 같은 순서에 옛 무조건 쓰기를 넣으면 둘 다 in_progress로 덮인다(시나리오에 판별력이 있다).
+  const legacyReport = new FakeFirestore();
+  seedChallenge(legacyReport, "c1", "consented");
+  legacyReport.commitUnconditional("challenges/c1", { status: "reported", reportedAt: "reported-at-marker" });
+  legacyUnconditionalConsentEnd(legacyReport, "c1");
+  const legacyDelete = new FakeFirestore();
+  seedChallenge(legacyDelete, "c1", "consented");
+  legacyDelete.commitUnconditional("challenges/c1", { status: "deleted" });
+  legacyUnconditionalConsentEnd(legacyDelete, "c1");
+  t.diagnostic(
+    `신고 먼저 → C4: ${reportFirst.store.get("challenges/c1")!.status} · 옛 무조건 쓰기: ${legacyReport.store.get("challenges/c1")!.status}`,
+  );
+  t.diagnostic(
+    `폐기 먼저 → C4: ${deleteFirst.store.get("challenges/c1")!.status} · 옛 무조건 쓰기: ${legacyDelete.store.get("challenges/c1")!.status}`,
+  );
+  assert.equal(legacyReport.store.get("challenges/c1")!.status, "in_progress", "대조군이 신고를 덮지 않았다 — 시나리오가 판별력이 없다");
+  assert.equal(legacyDelete.store.get("challenges/c1")!.status, "in_progress", "대조군이 폐기를 덮지 않았다 — 시나리오가 판별력이 없다");
+
+  // ④ 반대 순서(C4 먼저 → 신고) — 신고가 이긴다(§14.5 의도 유지).
+  const c4First = new FakeFirestore();
+  seedChallenge(c4First, "c1", "consented");
+  assert.deepEqual(await markChallengeInProgressIfConsented(c4First.asFirestore(), "c1"), { outcome: "in_progress" });
+  c4First.commitUnconditional("challenges/c1", { status: "reported", reportedAt: "reported-at-marker" });
+  assert.equal(c4First.store.get("challenges/c1")!.status, "reported");
+});
+
+test("[T181 S-11] 완료가 먼저 커밋되면 C4는 덮지 않는다(R-1 해소) + 교차 불변식 — 옛 무조건 쓰기 대조군은 R-1을 재현한다", async (t) => {
+  // ① 완료가 먼저 — 실제 완료 전이 → C4.
+  const completionFirst = new FakeFirestore();
+  seedChallenge(completionFirst, "c1", "consented");
+  const completion = await completeChallengeOnExperienceEnd(completionFirst.asFirestore(), "c1");
+  assert.deepEqual(completion, { outcome: "completed", from: "consented" });
+  const consentEnd = await markChallengeInProgressIfConsented(completionFirst.asFirestore(), "c1");
+  assert.deepEqual(consentEnd, { outcome: "unchanged", status: CHALLENGE_STATUS_ON_EXPERIENCE_END });
+  assert.equal(completionFirst.txWrites.length, 1, "C4가 완료 뒤에 다시 썼다");
+  assert.equal(completionFirst.store.get("challenges/c1")!.status, CHALLENGE_STATUS_ON_EXPERIENCE_END);
+
+  // ② 정상 순서 — C4 → in_progress(쓰기 1) → 완료 → from: in_progress.
+  const normal = new FakeFirestore();
+  seedChallenge(normal, "c1", "consented");
+  assert.deepEqual(await markChallengeInProgressIfConsented(normal.asFirestore(), "c1"), { outcome: "in_progress" });
+  assert.deepEqual(await completeChallengeOnExperienceEnd(normal.asFirestore(), "c1"), {
+    outcome: "completed",
+    from: CHALLENGE_STATUS_ON_CONSENT_END,
+  });
+  assert.equal(normal.txWrites.length, 2);
+  assert.equal(normal.store.get("challenges/c1")!.status, CHALLENGE_STATUS_ON_EXPERIENCE_END);
+
+  // ③ 교차 불변식 — C4의 출력은 완료 전이의 입력이고, 완료 전이의 출력은 C4의 입력이 아니다.
+  assert.equal(nextChallengeStatusOnConsentEnd(CHALLENGE_STATUS_ON_EXPERIENCE_END), null);
+  assert.equal(nextChallengeStatusOnExperienceEnd(CHALLENGE_STATUS_ON_CONSENT_END), CHALLENGE_STATUS_ON_EXPERIENCE_END);
+
+  // ④ 대조군 — ①의 순서에 옛 무조건 쓰기를 넣으면 최종 in_progress(R-1 재현 — 그 챌린지 영구 "대기").
+  const legacy = new FakeFirestore();
+  seedChallenge(legacy, "c1", "consented");
+  await completeChallengeOnExperienceEnd(legacy.asFirestore(), "c1");
+  legacyUnconditionalConsentEnd(legacy, "c1");
+  t.diagnostic(
+    `완료 먼저 → C4: ${completionFirst.store.get("challenges/c1")!.status} · 옛 무조건 쓰기: ${legacy.store.get("challenges/c1")!.status}`,
+  );
+  assert.equal(legacy.store.get("challenges/c1")!.status, "in_progress", "대조군이 R-1을 재현하지 않았다 — 시나리오가 판별력이 없다");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S-12 — userAccess.ts 소스 스캔(G429): "in_progress" 리터럴 0 · 헬퍼 호출 정확히 1 · 위치
+// ─────────────────────────────────────────────────────────────────────────────
+
+const USER_ACCESS_SRC = path.join(SRC_DIR, "challenge/userAccess.ts");
+const CONSENT_END_CALL = "markChallengeInProgressIfConsented(";
+const LEGACY_CONSENT_END_LINE = '    await challengeRef.update({ status: "in_progress" });';
+
+/** G429 위반 목록(빈 배열 = 통과). 입력은 파일 전체 소스다. */
+function findConsentEndViolations(fileSource: string): string[] {
+  const code = stripComments(fileSource);
+  const violations: string[] = [];
+  const literalHits = code.split('"in_progress"').length - 1;
+  if (literalHits > 0) {
+    violations.push(`userAccess.ts에 "in_progress" 리터럴이 ${literalHits}건 있다 — 조건부 헬퍼를 거치지 않는 쓰기(G429)`);
+  }
+  const body = extractExportBody(code, "consentChallenge");
+  const callHits = body.split(CONSENT_END_CALL).length - 1;
+  if (callHits !== 1) {
+    violations.push(`consentChallenge 본문의 ${CONSENT_END_CALL} 호출이 ${callHits}건이다(정확히 1건이어야 한다)`);
+  }
+  const callAt = body.indexOf(CONSENT_END_CALL);
+  const resumeAt = body.indexOf('if (claim.action === "resume")');
+  const responseAt = body.indexOf("openingMessageText: openingMessage.text");
+  if (resumeAt < 0 || responseAt < 0) {
+    violations.push("resume 반환 또는 최종 응답(openingMessageText)을 찾지 못했다 — 스캔 전제가 깨졌다");
+  } else if (callAt >= 0 && !(resumeAt < callAt && callAt < responseAt)) {
+    violations.push("헬퍼 호출이 resume 반환 뒤 · 최종 응답 앞이 아니다(§69.15.4 (2) 위치)");
+  }
+  return violations;
+}
+
+/** 헬퍼 호출 줄과 옛 무조건 쓰기 줄을 뺀 나머지 — 오염 전후 "나머지가 같다"는 입력 불변 비교용. */
+function withoutConsentEndLines(fileSource: string): string {
+  return fileSource
+    .split("\n")
+    .filter((line) => !line.includes(CONSENT_END_CALL) && !line.includes('status: "in_progress"'))
+    .join("\n");
+}
+
+test("[T181 S-12] userAccess.ts — \"in_progress\" 리터럴 0건 · consentChallenge의 헬퍼 호출 정확히 1건 · resume 뒤 · 최종 응답 앞(G429)", () => {
+  const violations = findConsentEndViolations(readFileSync(USER_ACCESS_SRC, "utf-8"));
+  assert.deepEqual(violations, [], violations.join("\n"));
+});
+
+test("[T181 S-12 역검증] 오염 3종(ⓐ 옛 무조건 쓰기 삽입 ⓑ 헬퍼 호출 삭제 ⓒ 헬퍼를 동의 트랜잭션 앞으로)은 실패하고 정상은 통과한다 — 입력 불변", (t) => {
+  const original = readFileSync(USER_ACCESS_SRC, "utf-8").replace(/\r\n/g, "\n");
+  const lines = original.split("\n");
+  const callLine = lines.findIndex((line) => line.includes(CONSENT_END_CALL));
+  const txLine = lines.findIndex((line) => line.includes("const claim = await db.runTransaction("));
+  assert.ok(callLine >= 0 && txLine >= 0 && txLine < callLine, "역검증 전제가 깨졌다 — 헬퍼 호출 또는 동의 트랜잭션 줄을 찾지 못했다");
+
+  const inserted = [...lines];
+  inserted.splice(callLine, 0, LEGACY_CONSENT_END_LINE);
+  const removed = lines.filter((_, i) => i !== callLine);
+  const movedBeforeTx = lines.filter((_, i) => i !== callLine);
+  movedBeforeTx.splice(txLine, 0, lines[callLine]!);
+
+  const samples: ReadonlyArray<readonly [string, string]> = [
+    ["ⓐ 옛 줄 `await challengeRef.update({ status: \"in_progress\" });` 삽입", inserted.join("\n")],
+    ["ⓑ 헬퍼 호출 삭제", removed.join("\n")],
+    ["ⓒ 헬퍼 호출을 `const claim = await db.runTransaction(` 앞으로 이동", movedBeforeTx.join("\n")],
+  ];
+
+  const normal = findConsentEndViolations(original);
+  t.diagnostic(`정상 소스: ${normal.length === 0 ? "통과" : "실패 — " + normal.join(" / ")}`);
+  assert.deepEqual(normal, [], "정상 소스는 통과해야 한다");
+
+  for (const [label, contaminated] of samples) {
+    const violations = findConsentEndViolations(contaminated);
+    t.diagnostic(`${label}: ${violations.length === 0 ? "통과(!)" : "실패 — " + violations.join(" / ")}`);
+    assert.notEqual(contaminated, original, `${label}: 오염이 실제로 적용되지 않았다(거짓 음성 방지)`);
+    assert.equal(withoutConsentEndLines(contaminated), withoutConsentEndLines(original), `${label}: 입력 불변 — 나머지 소스가 같아야 한다`);
+    assert.ok(violations.length > 0, `${label}: 오염 소스인데 검사가 통과했다`);
+  }
 });

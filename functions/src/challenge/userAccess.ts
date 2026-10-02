@@ -13,12 +13,14 @@
 // 지점(consentChallenge의 오프닝 합성)에서도 challenges/{challengeId}에서 in-memory로만 읽어
 // VoiceProvider.synthesize에 바로 넘기고, 그 값을 SessionDoc 어디에도 assign하지 않는다.
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { maskPII } from "../guardrails";
 import { generateOpeningLine } from "../roleplay";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import { markChallengeInProgressIfConsented } from "../shared/challengeCompletion";
 import { GEMINI_KEY_SECRETS } from "../shared/config";
 import {
   CHALLENGE_REPORT_NOTE_MAX_LENGTH,
@@ -280,7 +282,14 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
       }
     }
 
-    await challengeRef.update({ status: "in_progress" });
+    // T181 C4(§69.15.4 · OQ-A88 · G429) — 지금 consented일 때만 in_progress. 오프닝 합성 동안 커밋된
+    // 신고(reported)·폐기(deleted)·완료(completed)를 덮지 않는다.
+    const consentEnd = await markChallengeInProgressIfConsented(db, resolved.challengeId);
+    logger.info("consentChallenge: 동의 후 상태 전이", {
+      sessionId: claim.sessionId,
+      challengeId: resolved.challengeId,
+      ...consentEnd,
+    });
 
     // 사용자 신고(2026-07-24) — 실시간 통화에서 사용자가 먼저 말해야 하던 문제. 이미 생성한
     // openingMessage.text를 함께 반환해 클라가 ElevenLabs 세션의 firstMessage로 쓴다
