@@ -12,7 +12,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
-import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
+import { assertAnonymousChallengeScope, denyAnonymous } from "../shared/anonymousGate";
 import { maskPII } from "../guardrails";
 import { findOpeningToMarkNotSpoken } from "./openingMark";
 import { resolveTurnCreatedAtMs } from "./transcriptTiming";
@@ -63,6 +63,7 @@ export const submitRealtimeTranscript = onCall<
     throw new HttpsError("invalid-argument", "sessionId와 turns가 필요합니다.");
   }
   if (turns.length === 0) {
+    denyAnonymous(request.auth); // T181 C(§69.7) — 익명 + 빈 turns는 read 0회로 거부(AC-085 (b) 예외 2 소멸). 비익명은 아래 그대로.
     return { written: 0 };
   }
   if (turns.length > MAX_TURNS) {

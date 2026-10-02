@@ -19,7 +19,7 @@
 // "복제 음성" 표현을 빼고 "메시지(카톡/문자)"로 바꾸고(음성 없는 챌린지엔 재생할 복제 음성이
 // 없음), (2) 동의 성공 후 `/session/play`(UX-014) 대신 `/session/messenger`(UX-022)로 이동한다.
 // 동의 게이트(AC-040)·무동의 차단·신고(AC-049)·만료 처리는 채널 무관으로 완전히 동일하다.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -32,9 +32,16 @@ import {
   setChallengeToken,
 } from "@/lib/recording";
 import { DIFFICULTY_LABEL, type DifficultyLevel } from "@/lib/difficulty";
+import {
+  COMPLETED_LANDING_BODY,
+  COMPLETED_LANDING_TITLE,
+  resolveChallengeLandingView,
+  resolveConsentFailureView,
+} from "@/lib/challenge";
 import { Banner, Button } from "@/components/ui";
 
-type PageState = "no-token" | "loading" | "blocked" | "load-error" | "ready";
+// T181 C5(UX v1.27 D-75) — "completed" = UX-021 Error (c) 완료 안내(체험이 끝난 훈련의 링크 재진입).
+type PageState = "no-token" | "loading" | "blocked" | "load-error" | "ready" | "completed";
 
 const REPORT_REASON_LABELS: { value: ChallengeReportReason; label: string }[] = [
   { value: "unwanted", label: "원치 않는 체험이에요" },
@@ -65,16 +72,25 @@ export default function ChallengeJoinPage() {
   const [reportState, setReportState] = useState<"idle" | "submitting" | "submitted" | "error">(
     "idle",
   );
+  // T181 C5(UX-021 v1.27 노트 (8)) — 완료 안내로 바뀌면 제목에 포커스한다(UX-007 종료 고지와 같은 관례).
+  const completedHeadingRef = useRef<HTMLHeadingElement>(null);
 
   const loadLanding = async (t: string) => {
     const result = await getChallengeLanding({ token: t });
     // AC-048/§14.4 — 만료됐거나(expired) 더 이상 진행 불가능한 status면 진입을 차단한다. status가
     // pending/consented/in_progress면(§14.4 "중도 이탈 복귀") 동의 화면을 그대로 보여준다 — 실제
     // "이미 다른 사람이 동의함" 판정은 consentChallenge가 서버에서 최종 검증한다(AC-040 재확인).
-    const resumable = result.status === "pending" || result.status === "consented" || result.status === "in_progress";
-    if (result.expired || !resumable) {
+    // T181 C5(§69.15.2 · UX v1.27 D-75) — 판정은 resolveChallengeLandingView 1곳에 둔다(14칸 진리표
+    // W-1T). 체험이 끝난 챌린지(completed)는 링크 만료와 무관하게 Error (c) 완료 안내다(차단 유지). 그
+    // 밖의 판정 · 문구는 T181 전과 같다.
+    const view = resolveChallengeLandingView(result);
+    if (view === "completed") {
+      setState("completed");
+      return;
+    }
+    if (view !== "consent") {
       setBlockedMessage(
-        result.expired ? "이 링크는 만료되었습니다." : "이 챌린지는 더 이상 이용할 수 없습니다.",
+        view === "expired" ? "이 링크는 만료되었습니다." : "이 챌린지는 더 이상 이용할 수 없습니다.",
       );
       setState("blocked");
       return;
@@ -102,6 +118,11 @@ export default function ChallengeJoinPage() {
     };
   }, [token]);
 
+  // T181 C5 — Error (c) 진입 시 1회 제목으로 포커스(경고 알림 대신 제목 → 본문 순으로 읽힌다).
+  useEffect(() => {
+    if (state === "completed") completedHeadingRef.current?.focus();
+  }, [state]);
+
   const handleRetryLoad = () => {
     if (!token) return;
     setState("loading");
@@ -126,6 +147,13 @@ export default function ChallengeJoinPage() {
       // T49(#20, D-28) — 메신저 챌린지는 UX-022(채팅 셸)로, 보이스 챌린지는 기존대로 UX-014로.
       router.push(channel === "messenger" ? "/session/messenger" : "/session/play");
     } catch {
+      // T181 C6(§69.15.2 (4) W-2 · OQ-U52) — 동의 화면을 띄워 둔 사이 체험이 끝났으면 재시도는 성공할 수
+      // 없다 ⇒ 랜딩을 1회 다시 조회해 완료면 랜딩 로드와 같은 Error (c) 화면으로 바꾼다. 서버 거절
+      // 메시지 · 오류 코드는 보지 않는다. 그 밖의 상태 · 재조회 실패는 아래 기존 문구 그대로다.
+      if ((await resolveConsentFailureView(() => getChallengeLanding({ token }))) === "completed") {
+        setState("completed");
+        return;
+      }
       setConsentError("동의 처리에 실패했습니다. 다시 시도해 주세요.");
       setConsenting(false);
     }
@@ -178,6 +206,46 @@ export default function ChallengeJoinPage() {
           <span aria-hidden="true">⚠</span>
           <span>{blockedMessage}</span>
         </p>
+      </main>
+    );
+  }
+
+  // T181 C5 — UX-021 Error (c) "이미 끝난 훈련"(UX v1.27 D-75 · 노트 (1)(2)(8)). 차단은 그대로다 —
+  // 동의 · 신고 · 다시 시도 · 처음으로 버튼이 하나도 없다. 경고가 아니라 완료 안내라 ⚠ · 경고색 ·
+  // role="alert"를 쓰지 않고, UX-007 종료 고지(src/app/session/end/page.tsx)의 체크 표식 + 제목 → 본문
+  // 위계를 잇는다. 상시 배너 · 난이도 · 표시 이름은 동의 화면의 요소라 두지 않는다. 배치는 위 차단
+  // 화면과 같은 가운데 정렬 단일 컬럼이다.
+  if (state === "completed") {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
+        <div
+          aria-hidden="true"
+          className="flex h-[88px] w-[88px] items-center justify-center rounded-full bg-[#E4F0EC]"
+        >
+          <svg width="40" height="40" viewBox="0 0 13 13" fill="none">
+            <path
+              d="M2.5 7L5.2 9.7L10.5 3.5"
+              stroke="#0E6B62"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+        <h1
+          ref={completedHeadingRef}
+          tabIndex={-1}
+          className="text-[26px] font-bold leading-[1.35] text-[#22303A] outline-none"
+        >
+          {COMPLETED_LANDING_TITLE}
+        </h1>
+        <div className="flex flex-col gap-1">
+          {COMPLETED_LANDING_BODY.map((sentence) => (
+            <p key={sentence} className="text-base leading-[1.7] text-[#6B655C]">
+              {sentence}
+            </p>
+          ))}
+        </div>
       </main>
     );
   }
