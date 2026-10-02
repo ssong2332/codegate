@@ -442,3 +442,81 @@ test("[T176 T-4 ⓔ-3 / 역방향] export에 없는 정책 행이 있으면 실�
   assert.deepEqual(findClassificationGaps(EXPORTED_NAMES, contaminated), { unclassified: [], stale: [ghost] });
   assert.ok(polluted?.includes(`정책표에 있지만 index.ts가 export하지 않는 이름: ${ghost}`), "잔존 정책 행인데 단언이 실패하지 않았다");
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T181 C-2 — C(익명 + 빈 turns 즉시 거부)의 위치 트립와이어(G427 · docs/Architecture.md §69.7 · §69.8).
+// T-3의 session 분기는 assertAnonymousChallengeScope( 의 **존재**만 보고 순서를 보지 않는다(§69.7 (3))
+// ⇒ C의 "빈 분기 **안** · 첫 getFirestore( **앞**"은 이 검사가 따로 고정한다. 분기 밖에 두면 모든
+// 익명 전사 제출이 거부되고 그 실패는 클라의 빈 catch에 삼켜진다(src/app/session/play/page.tsx).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EMPTY_TURNS_BRANCH = "if (turns.length === 0) {";
+const EMPTY_TURNS_DENY = "denyAnonymous(request.auth);";
+const EMPTY_TURNS_RETURN = "return { written: 0 };";
+
+/** C 위치 위반 목록(빈 배열 = 통과). 판정 재료는 주석을 걷어낸 본문의 문장 순서뿐이다. */
+function findEmptyTurnsDenyViolations(rawBody: string): string[] {
+  const body = stripComments(rawBody);
+  const statements = body
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  const branchAt = statements.indexOf(EMPTY_TURNS_BRANCH);
+  if (branchAt < 0) return [`빈 turns 분기 \`${EMPTY_TURNS_BRANCH}\`를 찾지 못했다 — 스캔 전제가 깨졌다`];
+  const violations: string[] = [];
+  if (statements[branchAt + 1] !== EMPTY_TURNS_DENY) {
+    violations.push(`빈 분기의 첫 문장이 \`${EMPTY_TURNS_DENY}\`가 아니다(실제: \`${statements[branchAt + 1]}\`) — G427`);
+  }
+  if (statements[branchAt + 2] !== EMPTY_TURNS_RETURN) {
+    violations.push(`빈 분기의 둘째 문장이 \`${EMPTY_TURNS_RETURN}\`가 아니다(실제: \`${statements[branchAt + 2]}\`)`);
+  }
+  const denyAt = body.indexOf(DENY_CALL);
+  const firestoreAt = body.indexOf("getFirestore(");
+  if (firestoreAt < 0) {
+    violations.push("getFirestore( 를 찾지 못했다 — 스캔 전제가 깨졌다");
+  } else if (denyAt < 0) {
+    violations.push("denyAnonymous( 호출이 없다 — 익명 + 빈 turns가 다시 성공한다(AC-085 (b))");
+  } else if (firestoreAt < denyAt) {
+    violations.push("denyAnonymous가 첫 getFirestore( 뒤에 있다 — read 0 성질이 깨진다(G427)");
+  }
+  return violations;
+}
+
+/** 오염 샘플 제작 — deny 줄을 빼서 `insertAt(남은 줄들)`이 돌려준 위치에 다시 넣는다(-1이면 삭제만). */
+function relocateDenyLine(body: string, insertAt: (lines: string[]) => number): string {
+  const lines = body.split("\n");
+  const denyLine = lines.findIndex((line) => line.includes(DENY_CALL));
+  assert.ok(denyLine >= 0, "submitRealtimeTranscript 본문에 deny 줄이 없다 — 역검증 전제가 깨졌다");
+  const [moved] = lines.splice(denyLine, 1);
+  const at = insertAt(lines);
+  if (at >= 0) lines.splice(at, 0, moved!);
+  return lines.join("\n");
+}
+
+test("[T181 C-2] submitRealtimeTranscript — denyAnonymous가 빈 turns 분기 안 첫 문장이고 첫 getFirestore( 앞이다(G427)", () => {
+  const violations = findEmptyTurnsDenyViolations(bodyOf("submitRealtimeTranscript"));
+  assert.deepEqual(violations, [], violations.join("\n"));
+});
+
+test("[T181 C-2 역검증] 오염 3종(ⓐ 분기 밖 ⓑ getFirestore( 뒤 ⓒ 삭제)은 실패하고 정상 본문은 통과한다 — 입력 불변", (t) => {
+  const original = bodyOf("submitRealtimeTranscript");
+  const branchLineOf = (lines: string[]) => lines.findIndex((line) => line.includes(EMPTY_TURNS_BRANCH));
+  const firestoreLineOf = (lines: string[]) => lines.findIndex((line) => line.includes("getFirestore("));
+  const samples: ReadonlyArray<readonly [string, string]> = [
+    ["ⓐ deny를 분기 밖(if 바로 앞)으로 이동 — 모든 익명 전사가 거부되는 가장 위험한 변형", relocateDenyLine(original, branchLineOf)],
+    ["ⓑ deny를 첫 getFirestore( 줄 뒤로 이동", relocateDenyLine(original, (lines) => firestoreLineOf(lines) + 1)],
+    ["ⓒ deny 줄 삭제", relocateDenyLine(original, () => -1)],
+  ];
+
+  const normal = findEmptyTurnsDenyViolations(original);
+  t.diagnostic(`정상 본문: ${normal.length === 0 ? "통과" : "실패 — " + normal.join(" / ")}`);
+  assert.deepEqual(normal, [], "정상 본문은 통과해야 한다");
+
+  for (const [label, contaminated] of samples) {
+    const violations = findEmptyTurnsDenyViolations(contaminated);
+    t.diagnostic(`${label}: ${violations.length === 0 ? "통과(!)" : "실패 — " + violations.join(" / ")}`);
+    assert.notEqual(contaminated, original, `${label}: 오염이 실제로 적용되지 않았다(거짓 음성 방지)`);
+    assert.equal(withoutGateLines(contaminated), withoutGateLines(original), `${label}: 입력 불변 — 나머지 본문이 같아야 한다`);
+    assert.ok(violations.length > 0, `${label}: 오염 본문인데 검사가 통과했다`);
+  }
+});
