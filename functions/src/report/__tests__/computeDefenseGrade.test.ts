@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computeDefenseGrade } from "../computeDefenseGrade";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { computeDefenseGrade, selectGradeReports } from "../computeDefenseGrade";
 
 // T13, AC-010/AC-011. OQ-5 미확정 임시 산정식(v1)의 계약만 검증한다 — 정확한 임계값은
 // 최종안이 아니므로, 여기서는 "sessionCount가 누적 개수와 정확히 일치한다"/"등급명에 항상
@@ -48,4 +50,36 @@ test("computeDefenseGrade(): 모든 등급명에 임시값 표기 '(v1)'이 붙�
     const result = computeDefenseGrade(reports);
     assert.match(result.defenseGrade, /\(v1\)$/);
   }
+});
+
+// T186(R-5 · User 결정 2026-10-17) — Google 계정으로 동의한 2인 챌린지 체험 리포트는 등급 · sessionCount에서 빠진다.
+test("[T186 R-5] selectGradeReports(): challengeId가 있는 리포트를 빼고, 나머지는 순서 그대로 남긴다", () => {
+  const reports = [
+    { id: "own-1", wasDeceived: false },
+    { id: "challenge", wasDeceived: true, challengeId: "ch1" },
+    { id: "own-2", wasDeceived: true },
+  ];
+  assert.deepEqual(
+    selectGradeReports(reports).map((r) => r.id),
+    ["own-1", "own-2"],
+  );
+  assert.deepEqual(selectGradeReports([{ wasDeceived: true, challengeId: "ch1" }]), []);
+});
+
+test("[T186 R-5] 체험 리포트가 섞여도 등급 · sessionCount는 자기 훈련 리포트만으로 산정된다(AC-011)", () => {
+  const own = [{ wasDeceived: false }, { wasDeceived: false }];
+  const withChallenge: { wasDeceived: boolean; challengeId?: string }[] = [...own, { wasDeceived: true, challengeId: "ch1" }];
+  assert.deepEqual(computeDefenseGrade(selectGradeReports(withChallenge)), computeDefenseGrade(own));
+  assert.equal(computeDefenseGrade(selectGradeReports(withChallenge)).sessionCount, 2);
+});
+
+test("[T186 R-5 배선] updateDefenseGrade가 selectGradeReports를 거친 리포트로 computeDefenseGrade를 부른다", () => {
+  const source = readFileSync(path.join(__dirname, "../../../src/report/generateReportCore.ts"), "utf8");
+  const start = source.indexOf("async function updateDefenseGrade");
+  assert.ok(start >= 0, "updateDefenseGrade를 찾지 못했다");
+  const body = source.slice(start, source.indexOf("\n}\n", start));
+  const selectAt = body.indexOf("selectGradeReports(");
+  const computeAt = body.indexOf("computeDefenseGrade(results)");
+  assert.ok(selectAt >= 0, "updateDefenseGrade가 selectGradeReports를 거치지 않는다 — 체험 리포트가 등급에 섞인다");
+  assert.ok(computeAt > selectAt, "computeDefenseGrade가 거르기 전에 불린다");
 });

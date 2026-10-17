@@ -6,6 +6,7 @@ export type { ChallengeListItem, ChallengeSource, ChallengeStatus } from "./mapC
 export {
   COMPLETED_LANDING_BODY,
   COMPLETED_LANDING_TITLE,
+  needsAnonymousSignInForConsent,
   resolveChallengeLandingView,
   resolveConsentFailureView,
 } from "./landingView";
