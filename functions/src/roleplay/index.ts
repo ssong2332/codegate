@@ -6,10 +6,12 @@
 // 항상 구분된다(SendMessageResponse.isMock). 이 파일이 보장하는 구조는 그대로다: (1) 프롬프트
 // 서버 조립, (2) 사용자입력/시스템프롬프트 role+구분자 분리, (3) 턴/시간 한도 계산·자동 종료 로직.
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { maskPII } from "../guardrails";
+import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
@@ -36,6 +38,7 @@ import { extractLinkMarker } from "./linkMarker";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
+import { limitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { speakerGenderFor } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
@@ -341,9 +344,35 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const { text: signalFreeReplyText, escalate: signalEscalate } = extractEscalationSignal(
       linkFreeReplyText,
     );
+    // ③-c 사기범 대사 손질(2026-10-17 라이브 신고 — 실존 은행명 + 5~7문장 대사). 링크·신호 마커가 다
+    // 빠진 텍스트에만 적용한다. (1) 실존 은행·카드사 이름 → OO은행/OO카드(숫자는 그대로 —
+    // guardrails/realFinancialNames.ts 헤더). (2) 문장 수 상한(replyLength.ts) — ⛔ 이번 턴에
+    // `turnInstruction`이 주입됐으면 **적용하지 않는다**: 예고 문장이 잘려도 위 ②-e가 (실 LLM 턴이면) "예고
+    // 완료"로 마킹했으므로 "말하지 않은 예고" 결함(G343)이 재발한다.
+    const { text: realNameFreeReplyText, replacedCount: realNameReplacedCount } =
+      replaceRealFinancialNames(signalFreeReplyText);
+    const lengthLimited =
+      turnInstruction === undefined ? limitReplySentences(realNameFreeReplyText) : undefined;
+    const shapedReplyText = lengthLimited ? lengthLimited.text : realNameFreeReplyText;
+    // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).
+    if (realNameReplacedCount > 0) {
+      logger.info("사기범 대사 실존 금융회사명 치환", {
+        path: "sendMessage",
+        scenarioId: session.scenarioId,
+        replacedCount: realNameReplacedCount,
+      });
+    }
+    if (lengthLimited?.trimmed) {
+      logger.info("사기범 대사 문장 상한 적용", {
+        path: "sendMessage",
+        scenarioId: session.scenarioId,
+        originalSentences: lengthLimited.originalSentences,
+        keptSentences: lengthLimited.keptSentences,
+      });
+    }
     // 2026-09-06 버그수정 — 사기범(LLM) 응답에는 maskPII를 적용하지 않는다(scammerReplyMasking.ts
     // 헤더 주석 참고 — 라이브 신고 "[계좌]" 리터럴 노출, 시나리오·난이도 무관 공통 재현).
-    const finalReplyText = finalizeScammerReplyText(signalFreeReplyText);
+    const finalReplyText = finalizeScammerReplyText(shapedReplyText);
     await messagesRef.add({
       role: "scammer",
       textMasked: finalReplyText,

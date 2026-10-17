@@ -4,6 +4,8 @@
 // 초기화가 전혀 필요 없는 순수 조합(LLM 어댑터 호출)이라 node:test에서 admin 앱 부트스트랩 없이도
 // 바로 단위 테스트할 수 있다.
 import { HttpsError } from "firebase-functions/v2/https";
+import { logger } from "firebase-functions";
+import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { hasInCallSms } from "../scenarios/inCallSms";
@@ -11,6 +13,7 @@ import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt } from "./promptAssembly";
+import { limitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { speakerGenderFor } from "../realtime/scenarioVoice";
 import type { DifficultyLevel } from "../shared/difficulty";
@@ -103,12 +106,29 @@ export async function generateOpeningLine(
   // T84(§15.9.1 R4) — 오프닝 대사에 실린 링크에도 같은 규칙으로 `landingKind`가 붙는다(호출부가
   // 갈라지면 "오프닝 링크만 kind가 없는" 비대칭이 생긴다 — §15.6 G5와 같은 이유).
   const { text: linkFreeText, attachments } = extractLinkMarker(completion.text, scenarioId);
+  // 2026-10-17 라이브 신고(실존 은행명 + 5~7문장 대사) — sendMessage와 같은 순서로 손질한다:
+  // (1) 실존 은행·카드사 이름 → OO은행/OO카드(숫자는 그대로), (2) 문장 수 상한은 **항상** 적용한다
+  // — 오프닝 지시(OPENING_TURN_INSTRUCTION)는 예고 계열이 아니고 "예고 완료" 마킹도 없다.
+  const { text: realNameFreeText, replacedCount } = replaceRealFinancialNames(linkFreeText);
+  const lengthLimited = limitReplySentences(realNameFreeText);
+  // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).
+  if (replacedCount > 0) {
+    logger.info("사기범 대사 실존 금융회사명 치환", { path: "openingLine", scenarioId, replacedCount });
+  }
+  if (lengthLimited.trimmed) {
+    logger.info("사기범 대사 문장 상한 적용", {
+      path: "openingLine",
+      scenarioId,
+      originalSentences: lengthLimited.originalSentences,
+      keptSentences: lengthLimited.keptSentences,
+    });
+  }
   // 2026-09-06 버그수정 — 사기범(LLM) 응답에는 maskPII를 적용하지 않는다(scammerReplyMasking.ts
   // 헤더 주석 참고 — 라이브 신고 "[계좌]" 리터럴 노출, 시나리오·난이도 무관 공통 재현).
   return {
     message: {
       role: "scammer",
-      text: finalizeScammerReplyText(linkFreeText),
+      text: finalizeScammerReplyText(lengthLimited.text),
       ...(attachments ? { attachments } : {}),
     },
     isMock: completion.isMock,
