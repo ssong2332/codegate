@@ -1,4 +1,4 @@
-// 클라 → Live 세션 `turnComplete:true` 텍스트 턴 보류 큐(docs/Architecture.md §70.5 · G431 · ADR-0017).
+// 클라 → Live 세션 `turnComplete:true` 텍스트 턴 보류 큐(docs/Architecture.md §71.5 · G431 · ADR-0017).
 //
 // ⭐ 왜 필요한가(2026-10-17 라이브 프로브 실측): `gemini-3.8-live`는 모델 턴이 진행 중일 때
 // `turnComplete:true` 클라 콘텐츠를 받으면 **그 자리에서 생성을 끊는다**(77ms 뒤 `interrupted` + `turnComplete`).
@@ -22,7 +22,7 @@ export type ClientTurnQueueState = {
   pending: ClientTurn[];
   /**
    * reviewer M1 / QA F1 — `interrupted` 뒤 아직 모델 오디오가 오지 않았다. 3.8은 끊긴 턴에 `interrupted` 직후
-   * 오디오 없는 `turnComplete`를 보낸다(§70.2) — 그것은 참가자 발화에 대한 응답의 끝이 아니므로 보류분을 풀지 않는다.
+   * 오디오 없는 `turnComplete`를 보낸다(§71.2) — 그것은 참가자 발화에 대한 응답의 끝이 아니므로 보류분을 풀지 않는다.
    */
   afterInterrupt: boolean;
   /**

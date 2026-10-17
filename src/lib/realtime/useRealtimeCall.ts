@@ -187,7 +187,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
 
     setStatus("connecting");
     setErrorMessage(null);
-    // §70.6 P-0 — 통화 1건의 준비 구간 표시를 받기 시점부터 새로 찍는다(나머지는 GeminiVoiceSession).
+    // §71.6 P-0 — 통화 1건의 준비 구간 표시를 받기 시점부터 새로 찍는다(나머지는 GeminiVoiceSession).
     resetCallSetupMarks();
     markCallSetup("accept", performance.now());
 

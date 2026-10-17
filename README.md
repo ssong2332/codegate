@@ -159,7 +159,7 @@ cp functions/.env.example functions/.env
 
 Gemini Live 경로의 모델은 `gemini-3.8-live`다(`functions/src/realtime/geminiProvider.ts`의 `GEMINI_LIVE_MODEL`,
 2026-10-17 전환 — 이전 `gemini-2.5-flash-native-audio-preview-12-2025`는 2026-11-17 종료 예정). 근거와 주의점은
-`docs/Architecture.md` §70 · ADR-0017에 있다. ⚠️ 이 상수만 바꾸지 말 것 — 도구 선언의 `behavior: BLOCKING`과
+`docs/Architecture.md` §71 · ADR-0017에 있다. ⚠️ 이 상수만 바꾸지 말 것 — 도구 선언의 `behavior: BLOCKING`과
 클라 보류 큐(`src/lib/realtime/clientTurnQueue.ts`)가 함께 있어야 한다. 배포는 Hosting → Functions 순서다.
 
 - **지연 로그**: 실시간 통화 중 브라우저 콘솔에 `[gemini-latency]` 줄이 남는다(production 포함). 모델 턴마다

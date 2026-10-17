@@ -1,4 +1,4 @@
-// AI 음성 재생 기본 음량(docs/Architecture.md §70.7 · G433).
+// AI 음성 재생 기본 음량(docs/Architecture.md §71.7 · G433).
 //
 // 사용자 신고(2026-10-17, "기본 음량이 좀 큼") — 예전에는 받은 오디오 소스를 `outputContext.destination`에
 // 바로 연결해 게인 1.0(최대)으로 재생했다. 이제 GainNode 하나를 거쳐 이 값으로 줄인다.

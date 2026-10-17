@@ -1,4 +1,4 @@
-// Gemini Live 통화 지연 계측(docs/Architecture.md §70.6 · §50.10 P-0 · G432).
+// Gemini Live 통화 지연 계측(docs/Architecture.md §71.6 · §50.10 P-0 · G432).
 //
 // 사용자 지적(2026-10-17, "말하고 나서 인식하고 AI가 음성을 내는 딜레이") — §50.8.4는 *"어느 구간이 실제로
 // 몇 ms인지 아무도 잰 적이 없다"* 고 적었다. 그 공백을 메우는 계측이다. `GeminiVoiceSession`이 이벤트를

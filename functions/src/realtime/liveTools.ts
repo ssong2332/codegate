@@ -67,11 +67,11 @@ export function declaresOfferVerificationDesk(
 const NO_ARGS_PARAMETERS = { type: Type.OBJECT, properties: {} };
 
 /**
- * ⭐ §70.4 D2(G430 · ADR-0017) — 두 도구 모두 **동기(BLOCKING)를 명시한다.** `gemini-3.8-live`는 기본값이
+ * ⭐ §71.4 D2(G430 · ADR-0017) — 두 도구 모두 **동기(BLOCKING)를 명시한다.** `gemini-3.8-live`는 기본값이
  * `NON_BLOCKING`이라, 생략하면 모델이 도구를 부르는 순간 턴을 끝내 버린다(2026-10-17 프로브: `toolCall`과 같은
  * 시각 `generationComplete` + `turnComplete`). 그러면 클라가 그 `turnComplete`를 사기범 턴 경계로 한 번 더 세고,
  * §59의 "결과(`guidance`)를 받은 뒤 이어 말한다"가 성립하지 않는다. 2.5는 기본이 BLOCKING이었고 명시도 받는다.
- * ⛔ `NON_BLOCKING`으로 바꾸려면 §59 응답 문면 계약부터 다시 설계한다(§70.0 #4).
+ * ⛔ `NON_BLOCKING`으로 바꾸려면 §59 응답 문면 계약부터 다시 설계한다(§71.0 #4).
  */
 const TOOL_BEHAVIOR = Behavior.BLOCKING;
 

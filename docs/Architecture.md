@@ -4,6 +4,9 @@ Owner: architect (see AGENTS.md). Others read-only.
 Major decisions are logged in DECISIONS.md; details in adr/.
 Based on PRD Version: v1.7.1 · Based on UX Version: 1.13 · Last Updated: 2026-07-27
 
+> **갱신 고지(2026-10-17, T188 반영 — `docs/UpdateRequests.md` #29 · 리포트 판정·수법 추정 규칙 변경의 문서 정합):** 범위는 **신규 §70 + 기존 절 덧붙임 6곳**(§15.1.5 · §15.2.3 · §15.6 G7 · §42.1 · §42.3 g · §42.9 (5) — **원문 삭제 0**). ⭐ **설계 계약 변경 0건**(저항 우선 · DECISIONS #29 · G3/G7/G22/G215/G216 전부 무변경 — §70.1). 바뀐 것은 `functions/src/report/analyzeConversation.ts`의 **규칙 내용**이다: 순응 갈래 (D1)~(D5) + (D6) 거절 동반 시 새 갈래만 끔 · 수법 추정 *"앞 8자"* 폐기 → 문구 단위 앞 5자 키 · 대처법/조언 채널 분기(§70.2). ⚠️ 판정 2건: **§15.1.5 *"AC-061 이미 충족"* 은 과다 서술이었다**(§70.3 (1)) · **되감기 규칙 폴백도 공유 상수를 통해 함께 넓어졌다**(§70.3 (2)). 이 문서의 `analyzeConversation.ts:NNN` 인용 **40건은 스테일** — 심볼 대응표 §70.4. DECISIONS 신규 행 **불필요로 판정**(§70.3 (7)). ⚠️ 버전 갭: 헤더 PRD v1.7.1 · UX 1.13 ↔ 현행 **PRD v1.17 · UX 1.28** — 헤더 미전진(§70.5 (4)). architect 셸 없음 — 실행 0건, 테스트 수는 인용값.
+>
+
 > **갱신 고지(2026-07-29, "완전 무료 운영" 재설계 — ⭐ 패스 도중 범위가 *배포·인프라 비용*으로 좁혀졌다):** 이번 패스의 범위는 **한 건뿐**이다 — **신규 §44**(⛔ **소스 0줄 · AC 0건 · ADR 0건 · 스택 이전 0건**). ① **선행 판정 확인 = 없다**: `docs/Architecture.md`의 `^## ` 헤딩 **44건 전수 열람** + `비용`·`무료 티어`·`Blaze`·`리전`·`Artifact Registry`·`Cloud Scheduler`·`minInstances` 전수 grep ⇒ **배포·인프라 비용을 다룬 절 0건**(기존 히트는 전부 **Gemini 20건/일이라는 라이브 예산 제약**을 적은 것이지 인프라 지출이 아니다 — `:3922`·`:4189`) ⇒ **§44을 신설**한다. `docs/UpdateRequests.md`의 `open` 행은 **#14 하나뿐이고 Owning Agent가 User**다(architect 소관 `open` 0건). ② ⭐⭐ **"무료"의 정의를 셋으로 갈랐고 사용자 정정이 하나를 골랐다**(§44.1): **ⓐ 실제 청구 0원 = 인프라 축에 한해 채택** · **ⓑ 청구 가능성 0 = 기각**(사용자가 *"사용량이 많아지면 유료로"* 로 초과를 수용) · **ⓒ 사용량 제약 없음 = 범위 밖**. ⇒ **목표는 정확히 하나 — "사용자가 0명이어도 매달 나가는 돈"을 0에 붙인다.** 상류가 지시했던 판정 **2·3·4·5(남용 노출면·접근 제한·하드 상한·사용량 상한)는 사용자 정정으로 범위 밖**이 됐고, ⛔ **지우지 않고 §44.2에 "범위 밖 — 참고"로 강등해 보존**했다(유료 전환 시 다시 읽는다). ③ ⭐⭐ **가장 무거운 산출물은 상류 가설의 기각이다 — 7건 중 2건이 설정 파일 실측으로 무너졌다**(§44.5): **(가) *"Cloud Scheduler 잡이 5개라 무료 3개를 초과한다"* = 거짓 — `onSchedule` 선언은 저장소 전체에 1건뿐이다**(`challenge/index.ts:335`, 그 파일 자신이 *"이 코드베이스 **첫** onSchedule"* 이라고 적었다 — `index.ts:52`). 지목된 나머지 4건은 **순수 함수 모듈·재export 1줄·import 1줄·주석 1줄**이었다 ⇒ **합칠 대상이 없고 절감 0원.** **(다) *"리전이 코드에서 둘로 갈렸다"* = 원인이 다르다 — `region` 지정이 `functions/**`·`*.json` 어디에도 0건이다** ⇒ 코드가 가른 것이 아니며, **가장 그럴듯한 원인은 Firestore 트리거가 DB 위치에 배치되는 것**(⚠️ 추정 — `onSessionEnded`가 유일한 `onDocumentUpdated`라는 사실과 정확히 일치한다) ⇒ ⛔ ***"코드에 리전을 박아 모은다"* 는 처방은 성립하지 않을 수 있다.** ④ ⭐⭐ **판정: 트래픽 0일 때 상시 과금 요인은 코드·설정상 0건이다**(§44.4) — **`minInstances`·`setGlobalOptions`·`memory:`·`cpu:`·`concurrency` 전수 grep 0히트** ⇒ **26/26 함수가 min 0**(가설 바 = 참) · **Hosting은 정적 export라 SSR·Cloud Run 비용이 아예 없다**(`next.config.ts:9`) · **Firestore/Storage는 삭제 기계가 이미 2개**(ADR-0003 `onSessionEnded` + `purgeExpiredChallenges`). ⇒ ⭐ **남는 것은 "누적되는 저장 비용" 하나이고, 무료 한도를 넘길 실질 후보는 Artifact Registry 1건뿐**이다. ⑤ **절감 후보 전수 판정표 11행**(§44.6): ⭐ **채택 3건**(**① `asia-northeast3`에 정리 정책 — 대가 0 · 오늘 바로 가능 · 1순위** · ② 배포 묶기 · ⑨ 잔여물 정리) · **기각 8건**. ⛔ **함수 26개 통합은 기각(G240)** — *"이미지가 준다"* 는 참이지만 **§41/T133이 방금 세운 시크릿 최소권한 경계가 무너진다**(`secrets:` 선언이 **5곳뿐**인데 합치면 모든 엔드포인트가 키를 갖는다) + 콜드스타트가 전 경로로 전파된다. ⛔ **Spark 요금제 복귀도 기각** — ⓑ를 사려다 **서비스를 판다**(gen2 배포 불가). ⑥ ⭐ **판정 6(강등 경로) = 텍스트 경로는 화면에서 침묵한다**(§44.8): 서버는 `logger.warn`을 남기고 계약에 **`isMock:true`·`llmProvider:"mock"`** 까지 실어 보내는데(`roleplay/index.ts:420`·`:332`), ⭐⭐ **`src/app/**` 전체에서 `isMock` 전수 grep이 0건**이다(`llmProvider`도 `src/**` 0건) ⇒ **참가자는 자기 훈련이 간이 모드였다는 사실을 모른 채 리포트를 받는다.** 실시간 통화 경로는 반대로 **정직하다**(`useRealtimeCall.ts`가 읽어 폴백 UI로 전환). ⭐ **이것은 §42.5가 패턴으로 못 박은 계열(모르는 것 ≠ 없는 것)의 네 번째 사례**이며, ⓒ가 범위 밖으로 확정되면서 **쿼터 소진 → Mock이 예외가 아니라 일상**이 되므로 지금 중요해졌다. ⛔ **문면은 선취하지 않는다** — **OQ-A34**(ux-design 소유). ⑦ **무약화 전수 8행**(§44.9 — §41 시크릿 게이트 · AC-005/019/024 · G23 · ADR-0003/0005 · AC-007 · rules · §20.7 전건 **무변경**. ⭐ 채택안 3건이 **전부 소스 0줄**이다). ⑧ ⛔ **자기 고지 8항**(§44.10) — ⭐⭐ ***"architect는 청구서를 본 적이 없고 실제 사용량 관측이 0건이며 GCP 콘솔을 볼 수 없다"*** 를 지우지 말 것(**G241**). 콘솔 관련 사실(정리 정책 편차·Blaze 전환·함수 26개·Secret 3건)은 **전부 오케스트레이터 인용값**이고, architect가 **독립 확인한 것은 저장소 안의 것뿐**이다(export **26건** · `onSchedule` **1건** · `region` **0건** · `minInstances` **0건** · App Check **0건**). ⚠️ **§44.4 (3)의 배포 비용 산술은 *"함수 1개 = 이미지 1개"* 라는 단위 가정 위에 있다** — 검산 지점을 §44.7 순서 3에 인계했다. ⑨ 갭 **G237~G243** · 신규 **OQ-A34 1건**. **DECISIONS #79.** ⚠️⚠️ **base가 작성 중에 전진했다(정정)**: 착수 시 `C:\codegate\.git\refs\heads\main` = **`2f17b08c4bc6e2781c0b702f7fd31c97430f2efc`**(`.git` 직접 판독, 이 워크트리 ref와 동일 해시)였으나, **작성 중 동시 패스 산출물이 병합돼 현재 `main` = `cc1b5d2491881876289c3e27c2c0a8346cd91016`**(오케스트레이터 실측 · architect 재판독 `.git/refs/heads/main`으로 **확인**). ⇒ ⭐ **이 절의 판정 근거는 전부 `2f17b08` 트리의 파일 열람이다**(워크트리가 그 커밋에 고정돼 있다). **`2f17b08`→`cc1b5d2` 사이의 병합분(난이도 L4 판정 §43 등)은 architect가 열람하지 못했다** — ⛔ 그 구간이 §44의 실측(함수 26개 · `onSchedule` 1건 · `region` 0건 · `minInstances` 0건 · `isMock` 화면 0건)을 바꿨는지는 **미확인**이며, 병합 전 재확인 대상이다(§44.10 (9)). ⚠️ **architect는 셸이 없다** — 이 패스에서 **`gcloud`·`firebase`·테스트·빌드·`git log` 실행 0건.** ⚠️ **버전 갭**: 헤더 **PRD v1.7.1 · UX 1.13** ↔ 현행 **PRD v1.13 · UX 1.17** ⇒ **PRD 6건 · UX 4건** 뒤처졌다(§42 시점과 동일 — **더 벌어지지 않았다**). ⛔ **헤더는 전진시키지 않았다**(T131 계열 별건). **UX Screen ID 매핑 0건** — 화면·라우트·컴포넌트를 **만들지 않는다**(§44.8이 지목한 표시 층은 **OQ-A34로 ux-design에 인계**). ⚠️⚠️ **절·번호 고지 — 충돌이 실제로 나서 재번호했다.** 착수 시(`2f17b08`) 실측 최대는 **§42 · G221 · OQ-A30 · #74**라 처음엔 **§43 · G222~G228 · OQ-A31 · #75**로 썼는데, **동시 패스 병합으로 그 번호가 전부 선점됐다**(오케스트레이터 실측, `main` = `cc1b5d2`: 절 최대 **43** = 난이도 L4 판정 · 갭 **G236** · **OQ-A33** · DECISIONS **78행**). ⇒ **§44 · G237~G243 · OQ-A34 · #79**로 옮겼다. ⛔ **기계적 전역 치환은 하지 않았다** — `43\.` 전수 grep 41히트를 **자기 절 / 타 인용**으로 갈라, `docs/Architecture.md:1024`의 **`D-43.`**(UX Decision ID)과 `docs/DECISIONS.md:43`의 무관한 `43.`은 **보존**했다. 검산: 자기 절 안 `§43`·`## 43.`·`G22[2-8]`·`OQ-A31`·`#75` **0건**. ⭐ **교훈**: *"착수 시점 grep 최대값의 다음 값"* 은 동시 패스가 있으면 **충분하지 않다**(번호는 **병합 순서**로 확정된다) — architect가 할 수 있는 것은 예약이 아니라 **쓴 번호를 보고에 명시해 조정 가능하게 두는 것**뿐이며, 이번에 그 고지가 실제로 조정을 가능하게 했다. ⛔ **§0~§43·ADR-0001~0013 원문 무삭제 · `docs/PRD.md`·`docs/UX.md`·`docs/Tasks.md`·`CLAUDE.md`·`docs/API.md`·`docs/Database.md`·`functions/**` 무편집 · 번호 예약 0건 · 커밋·push 0건.**
 >
 
@@ -848,6 +851,8 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 > **왜 이 절이 생겼나(정직하게):** T68(`feat/T68-in-call-sms`, `012a5bc`)이 reviewer에게 REJECTED됐고, 사유는 **구현 결함이 아니라 이 절의 부재**다. §15.1.1~15.1.4와 §15.6 G1~G14 어디에도 "문자 이벤트가 리포트·리플레이 타임라인에 어떻게 올라오는가"가 설계돼 있지 않았고, Tasks.md T68의 "완료 판정 필수 증거" 목록에도 그 항목이 없었다. 그래서 구현은 `openedAt`/`linkTappedAt`을 `sessions/{sid}/inCallSms`에만 기록하고 끝났다 — **리포트도 리플레이도 이 서브컬렉션을 읽지 않는다**(실측: `src/app/report/replay/page.tsx`는 `sessions/{sid}/messages`만 조회, `functions/src/report/*`는 T68에서 diff 0). 그 결과 **AC-059의 "문자 확인·링크 탭·인증번호 노출은 하나의 세션 타임라인에 기록되어 리포트(AC-026)·리플레이 해설(AC-038)에서 함께 다뤄진다"** 조항이 문자 그대로 미충족이다.
 >
 > **범위 확정(먼저 못 박는다):** 남은 갭은 **"오버레이 상호작용 이벤트의 타임라인 노출" 한 가지뿐**이다. AC-061의 *"사용자가 인증번호를 통화로 불러준 사실이 리포트에서 속은 시점으로 교육 포인트화된다"* 는 **이미 충족돼 있다** — `COMPLIANCE_PATTERN`의 숫자 전용 답변 앵커 `^\s*[\d\s-]{4,}\s*$`(`functions/src/report/analyzeConversation.ts:115`, T68 이전부터 존재)가 전사에서 이를 잡는다. **이미 되는 것을 다시 만들지 마라.**
+>
+> ⚠️ **(2026-10-17 정정 덧붙임 — T188 · 위 원문 보존 · 상세 §70.3 (1))** 위 *"이미 충족돼 있다"* 는 **과다 서술이었다.** 그 앵커는 **답변 전체가 숫자·공백·하이픈일 때만** 맞아 *"048231 이요"* 처럼 어미가 붙은 답을 놓쳤다(2026-10-17 라이브 신고 — T188 A). T188이 `COMPLIANCE_PATTERN`에 **(D3) 숫자열+허용 어미 · (D4) 한글 숫자 읽기 3형태**를 더해 그 범위를 넓혔다(심볼 `CODE_DIGITS_WITH_ENDING` · `CODE_HANGUL_DIGITS` — `functions/src/report/analyzeConversation.ts`). 인용 줄 `:115`는 현행 파일에서 **(A) 주석 줄**이다 — 앵커는 지금 `BASE_COMPLIANCE_PATTERN` 끝에 있다. ⛔ *"새로 만들지 마라"* 의 결론(문자 이벤트를 판정 입력으로 만들지 않는다 — G22)은 **무변경**이다.
 
 **결정 요지(다른 판단보다 우선):**
 1. **설계한다(유예 아님).** UX-027 Priority가 Critical이고 AC-059가 명문 요구이며, 설계 비용이 "리포트 생성 시 서브컬렉션 read 1회 + 리포트 문서에 표시 전용 배열 1개 + 화면 병합"으로 닫힌다. 유예하려면 PRD AC-059 문면 수정이 필요한데 그건 planner 소관이라 오히려 더 무거운 경로다.
@@ -1009,6 +1014,7 @@ SmsTimelineEvent = { event: "sms_received" | "sms_opened" | "sms_otp_shown" | "s
 - **판정 계약:** `judgeRewindAnswer({ reportId, momentIndex, answerText }) → { verdict: "good"|"risky"|"unclear", reason, correctAction, judgedBy: "llm"|"rule" }`
   - 1차: LLM 판정. 프롬프트는 **전용 빌더**(`functions/src/rewind/judgePrompt.ts`)로 조립하며 **페르소나·`weakenedTactics` 원문을 넣지 않는다**(역할극 재개가 아니라 평가이므로 — AC-005/013). 입력은 `moment.tactic`·`moment.correctAction`·그 순간의 마스킹된 사기범 대사 + `wrapUserInputAsData(answerText)`(AC-024 인젝션 방어 계승).
   - 2차(폴백): LLM이 Mock이거나(키 미설정 — `functions/src/llm/index.ts`) 실패·타임아웃이면 **규칙 판정**. `analyzeConversation.ts`의 `RESISTANCE_PATTERN`/`COMPLIANCE_PATTERN`을 export해 재사용한다: 저항 매치→`good`, 순응 매치→`risky`, 둘 다 아님→`unclear`. (저항 우선순위는 원본과 동일하게 유지 — 두 곳에서 규칙이 갈라지지 않게 **패턴 상수를 복제하지 말고 export**할 것.)
+    - ⚠️ **(2026-10-17 덧붙임 — T188 · 위 원문 보존 · 상세 §70.3 (2))** 공유는 설계대로 작동한다 ⇒ **T188이 리포트 쪽 `COMPLIANCE_PATTERN`에 더한 (D1)~(D5)·(D6)가 이 폴백에도 그대로 적용된다**(`functions/src/rewind/judge.ts`가 같은 상수를 import — 복제 0). 효과: 종전 `unclear`였던 답 일부(*"어떻게 옮기면 돼요"* · *"048231 이요"* · 잔액 고지 등)가 **`risky`** 로 바뀐다. 저항 우선(`good` 먼저)·3값 계약·LLM 1차는 **무변경**이다. 위 (ii)의 *"2치"* 는 `analyzeConversation`의 산출 형태를 말한 것이라 **참 그대로**다.
   - **판정 불가여도 `correctAction`은 항상 반환한다**(UX Judge-failed 상태의 학습 최소 보장). `unclear`는 오류가 아니라 정상 결과값이다.
 - **`verdict` 3값의 UI 라벨 매핑(고정):** `good`="잘 대응했습니다" / `risky`="아직 위험합니다" / `unclear`="판단하기 어렵습니다". 값 자체는 색이 아닌 텍스트로 표기(UX Accessibility).
 - **입력 상한(UX Validation "구체 수치는 architect"):** `answerText` **500자**(초과 시 `invalid-argument`; 클라는 입력 단계에서 사전 차단 — P-5). 빈 문자열 거부.
@@ -1142,7 +1148,7 @@ SmsTimelineEvent = { event: "sms_received" | "sms_opened" | "sms_otp_shown" | "s
 | G4 | **실시간 경로엔 사기범 텍스트를 서버가 보는 지점이 없다** | `geminiProvider.ts:76`, `GeminiVoiceSession.tsx:279-321`, `submitTranscript.ts` | `[[SMS:…]]` 마커를 넣으면 **모델이 소리 내어 읽는다**(§15.1.2) |
 | G5 | **`buildSystemPrompt` 호출부가 3곳** | `roleplay/index.ts:134`·`openingLine.ts:56`·`geminiProvider.ts:61` | 한 곳만 고치면 "텍스트는 난이도가 먹는데 통화는 안 먹는" 비대칭이 생긴다(§15.3.3) |
 | G6 | **ElevenLabs 경로엔 프롬프트 주입 지점이 없다** | `agentMap.ts:3-11`, `realtime/types.ts:15-19` | 난이도 배지를 표시하면서 실제로는 적용 안 되는 "근거 없는 표기" — `difficultyApplied:false`로 명시할 것(§15.3.3) |
-| G7 | **`RESISTANCE_PATTERN`/`COMPLIANCE_PATTERN`이 모듈 private** | `analyzeConversation.ts:69,105` | 되감기 폴백 판정이 패턴을 복제하면 두 곳이 갈라진다 — **export해서 공유**할 것(§15.2.3) |
+| G7 | **`RESISTANCE_PATTERN`/`COMPLIANCE_PATTERN`이 모듈 private** | `analyzeConversation.ts:69,105` | 되감기 폴백 판정이 패턴을 복제하면 두 곳이 갈라진다 — **export해서 공유**할 것(§15.2.3) ⚠️ (2026-10-17 덧붙임 — 위 원문 보존) **집행 완료 · 줄 인용은 스테일**: 두 상수는 export돼 있고(T70) 위치는 심볼로 찾는다 — `RESISTANCE_PATTERN`(정규식 리터럴) · `COMPLIANCE_PATTERN`(T188부터 `BASE_COMPLIANCE_PATTERN` + (D1)~(D6) 조립 `new RegExp`). 되감기는 공유 덕에 T188의 확장을 함께 받는다(§70.3 (2)) |
 | G8 | **`reports`에 `scenarioId`/`channel`이 없다** | `functions/src/shared/types.ts:197-206` | 아카이브 카드가 항목마다 세션을 추가 read(N+1)하거나 채널·난이도를 못 그린다(§15.4.1) |
 | G9 | **`challenges.difficultyLevel`을 `consentChallenge`가 세션에 복사하지 않으면 소실** | 프롬프트는 세션 단위 조립(§15.3.3) | 발신자가 고른 고급이 수신자 통화에 전혀 반영되지 않는다(§15.3.2) |
 | G10 | **오버레이를 early-return으로 렌더하면 통화가 끊긴다** | `page.tsx:475-501` 형제 렌더 구조, `GeminiVoiceSession.tsx:145,439-442` cleanup | D-35(이 기능의 전부)가 깨진다(§15.1.1) |
@@ -8345,7 +8351,7 @@ AC-081의 대상 정의는 ***"자격증명 판독 결과로 프로바이더·�
 | # | 표면 | 값 | 출처 경로(직접 열람, base `3f7b90c`) |
 |---|---|---|---|
 | 1 | **속은 시점 카드**의 수법 이름 | *"배송 보류를 빌미로 한 개인정보 입력 유도"* | `scenarios/mockScreens.ts:162`(`momentTactic` — 저장소 전수 grep **1히트**) → `report/mockScreenTimeline.ts:111-125` `buildLandingSubmitMoment`(**`:122` `tactic: item.momentTactic`**) → `:191-193` `promoted.push` → `:200` 병합·재정렬 → `report/generateReportCore.ts:204-212` → `ReportDoc.deceivedMoments` |
-| 2 | **아코디언**의 *"N가지"* | **0** | `report/analyzeConversation.ts:120-125` `findMatchedTactic`(**사기범 발화 텍스트에 flavor 앞 8자가 부분 일치할 때만**) → `:140-143` `tacticLabelsUsed.add` → `:169` `tacticsUsed` → `generateReportCore.ts:253` 그대로 저장 → `src/app/report/page.tsx:520` `시도된 수법 {report.tacticsUsed.length}가지` |
+| 2 | **아코디언**의 *"N가지"* | **0** | `report/analyzeConversation.ts:120-125` `findMatchedTactic`(**사기범 발화 텍스트에 flavor 앞 8자가 부분 일치할 때만**) → `:140-143` `tacticLabelsUsed.add` → `:169` `tacticsUsed` → `generateReportCore.ts:253` 그대로 저장 → `src/app/report/page.tsx:520` `시도된 수법 {report.tacticsUsed.length}가지` ⚠️ (2026-10-17 덧붙임 — T188 · 위 원문 보존 · §70.2) **"앞 8자 부분 일치"는 폐기됐다** — 현행은 `buildTacticMatchers`(flavor를 문구 단위로 나눠 띄어쓰기·문장부호를 지운 **앞 5자 키**, 시나리오 안 접두 충돌 시 연장/제거) → `findMatchedTactics`(한 대사의 **여러 수법 모두** 등재). **이 행의 결론(출처가 다르고 교차 경로 0건)은 무변경**이다 — 승격분은 T136 `mergePromotedTactics`가 리포트 필드에서 합집합한다 |
 | ⇒ | — | — | ⭐ **두 값은 같은 소스를 보지 않는다.** 1은 **서버 카탈로그가 저작한 상수**, 2는 **대화 텍스트에 대한 추정**이다. **승격된 순간의 수법이 `tacticsUsed`로 흘러드는 코드는 0건**(`tacticsUsed` 전수 grep — 쓰기 지점은 `analyzeConversation.ts:169` 하나뿐) ⇒ **planner B항은 참이다.** |
 
 **파급 1건(planner 지목 재확인)**: `generateReportCore.ts:236` `buildPreventionAdvice(analysis.tacticsUsed, …)` 도 같은 빈 배열을 받는다. **순간별 `correctAction`은 그대로 표시된다**(카드는 카탈로그 문구를 그대로 싣는다 — `mockScreenTimeline.ts:105-108`).
@@ -8373,7 +8379,7 @@ AC-081의 대상 정의는 ***"자격증명 판독 결과로 프로바이더·�
 | d | **Mock 경로에서 그 마커의 유일한 출처는 `weakenedTactics[2]`** 이고, `extractTacticFlavor`는 **인용구 + 마커를 함께** 싣는다 | `scenarios/messengerParcelSmishingSms.prompt.ts:37`(*"링크 클릭 유도 — '여기서 주소 확인해 주세요' … `[[LINK:parcel-redelivery]]` …"*) · `scenarios/tacticFlavor.ts:44-51` · Mock에 hints를 넘기는 지점 `roleplay/index.ts:273`·`openingLine.ts:90` |
 | e | ⇒ 그 메시지 본문은 **반드시 *'여기서 주소 확인해 주세요'* 를 포함**한다(Mock 대사 = `` `${filler} ${flavor}.` ``) | `llm/mockClient.ts:85-92`(에스컬레이션) · `:74-80`(오프닝) |
 | f | **마스킹은 이 문자열을 건드리지 않는다** | `guardrails/index.ts:37-49` — 이메일·주민번호·전화·**8자리 이상 연속 숫자**만 치환한다 |
-| g | ⇒ `findMatchedTactic`이 **앞 8자(*"여기서 주소 확"*)로 검색**하므로 **필연적으로 매치**한다 | `analyzeConversation.ts:120-125` · 같은 성질을 고정한 회귀 테스트 `report/__tests__/analyzeConversation.test.ts:281-311`(**Mock이 실제로 만든 대사에서 `tacticsUsed`가 채워진다**) |
+| g | ⇒ `findMatchedTactic`이 **앞 8자(*"여기서 주소 확"*)로 검색**하므로 **필연적으로 매치**한다 | `analyzeConversation.ts:120-125` · 같은 성질을 고정한 회귀 테스트 `report/__tests__/analyzeConversation.test.ts:281-311`(**Mock이 실제로 만든 대사에서 `tacticsUsed`가 채워진다**) ⚠️ (2026-10-17 덧붙임 — T188 · 위 원문 보존 · §70.3 (3)) 현행 규칙에서 이 수법의 키는 **`여기서주소`**(문구 *'여기서 주소 확인해 주세요'* 를 정규화한 앞 5자 — 같은 시나리오 다른 4개 수법의 인용구 중 이 말로 시작하는 문구 0건, `messengerParcelSmishingSms.prompt.ts:35-39` 직접 대조) ⇒ **"필연적으로 매치한다"는 결론은 규칙이 바뀐 뒤에도 참**이다. 근거 줄 `:120-125`는 스테일 — 심볼 `buildTacticMatchers` · `findMatchedTactics` |
 | ⇒ | ⭐ **전 구간이 진짜 Mock이었다면 `tacticsUsed.length ≥ 1`이고 "0가지"는 나올 수 없다.** | — |
 
 **⇒ 갈림길의 판정**
@@ -8484,7 +8490,7 @@ AC-081의 대상 정의는 ***"자격증명 판독 결과로 프로바이더·�
 2. ⛔ **저장값을 읽지 못했다** — `reports/{sid}.tacticsUsed`·`deceivedMoments[].tactic`·`messages[].textMasked`의 **실제 값 0건 확인**. §42.3의 연쇄는 **코드 연역**이지 그 세션의 관측이 아니다.
 3. ⛔ **(ㄴ)은 기각이 아니라 "가능성 낮음"** 이다. `isMock` 관측의 출처가 확인되기 전까지 **P-1이 유일한 판별자**다.
 4. ⭐ **B를 채택해도 부분 해소다** — **승격과 무관한 수법의 누락은 남는다**(실 LLM 세션에서 `tacticsUsed`가 계속 얇을 수 있다). ⛔ *"수법 집계를 고쳤다"* 로 보고하지 말 것 — 고친 것은 **한 리포트 안의 두 서술이 어긋나는 것**이다.
-5. **실 LLM 세션의 `tacticsUsed` 실측이 이 저장소에 0건**이다. `tacticFlavor.ts:30`·`analyzeConversation.ts:8-11`의 *"거의 잡히지 않는다"* 는 **저장소의 자기 서술**이지 이번 패스의 실측이 아니다.
+5. **실 LLM 세션의 `tacticsUsed` 실측이 이 저장소에 0건**이다. `tacticFlavor.ts:30`·`analyzeConversation.ts:8-11`의 *"거의 잡히지 않는다"* 는 **저장소의 자기 서술**이지 이번 패스의 실측이 아니다. ⚠️ (2026-10-17 덧붙임 — 위 원문 보존 · §70.3 (4)) T188이 라이브 1건(기관 사칭 · 중급 · *"시도된 수법 0가지"*)을 근거로 추정 규칙을 넓혔다 — 그 관측은 **오케스트레이터·사용자 인용값**이고 architect는 그 세션 저장값을 읽지 않았다. ⇒ 이 항의 *"실측 0건"* 은 **architect 기준으로는 그대로**이며, **(ㄷ) 후보를 지지하는 인용 사례가 1건 생겼다**는 것만 더한다. 이 절의 **표시층 잔여(A, AC-083 (b))는 T188이 닫지 않았다** — T189.
 6. **AC 신설·P0/P1 승격을 정하지 않았다**(사용자·planner 소관 — T136 행이 이미 두 방향의 근거를 적어 두었다). **OQ-A30**.
 7. **아코디언의 최종 문면(A)을 정하지 않았다** — ux-design 소유이며, T137과 **같은 세션의 별건**이다.
 8. **테스트 수 before/after 없음** — architect는 실행하지 않았다. `CLAUDE.md`의 **functions 589 / 루트 255**는 **인용값**이며 **착수 시 재측정**한다(⛔ `npx tsc` 직접 실행 금지 · ⛔ `npm --prefix <dir> install` 금지).
@@ -16735,23 +16741,110 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 - ⛔ §0~§68 · `functions/**` · `src/**` · `firestore.*` · `firebase.json` · `docs/Tasks.md` · `docs/PRD.md` · `docs/UX.md` · `docs/API.md` · `docs/Database.md` · `docs/adr/**` · `README.md` · `CLAUDE.md` **0줄**. ADR 신설 0 — 모듈 경계 · 계약 신설 0(C4는 기존 잎 모듈에 같은 모양의 전이 하나를 더할 뿐이고 응답 계약은 무변경). 커밋 · push 0건(셸 없음).
 > **번호**: 69.15.1 #5. 재번호가 필요하면 치환 범위는 `### 69.15` 이후 + 위 덧붙임 + DECISIONS #113 행뿐(⛔ 전역 치환 금지).
 
+## 70. (T188 반영 — `docs/UpdateRequests.md` #29) 리포트 **판정·수법 추정 규칙 변경**의 문서 정합 — ⭐ **설계 계약은 하나도 바뀌지 않았다. 바뀐 것은 규칙 *내용*이고, 낡은 것은 이 문서의 *서술*과 *줄 인용*이다** — architect 정합 패스
+
+> **소관**: T188(PR #275 병합 — origin/main `dcd2726`, 오케스트레이터 인용값) · AC-008 / AC-009 / AC-026 / AC-061 · UX-008(리포트) · UX-028(되감기 — 규칙 폴백 경유) / **선행 절**: §15.1.5 · §15.2.3 · §15.6 G3/G7/G22 · §42 · §16.4(G27)
+> **범위 밖**: ⛔ 표시층 AC-083 (b)(*"시도된 수법 0가지"* 등 문면 — **T189**, ux-design) · LLM 판정 도입(DECISIONS #29 무변경) · 소스 편집(이 패스 **0줄** — `functions/src/scenarios/tacticFlavor.ts` 주석은 오케스트레이터가 별도로 고쳤다)
+> **정본 원칙**: 사실의 위치는 **심볼**로 적는다. 아래 줄 번호는 이 패스가 `functions/src/report/analyzeConversation.ts`를 **직접 열람한 시점의 값**이며 다시 밀릴 수 있다 — 심볼이 우선이다.
+
+### 70.0 요지 (⛔ 금지 먼저)
+
+1. ⛔ **이 절 이전의 `analyzeConversation.ts:NNN` 줄 인용을 그대로 믿고 편집 지점을 잡지 말 것.** 전수 40건(아래 70.4)이 **T188 이전 트리**(일부는 그보다 더 이전) 기준이다. 심볼로 다시 찾는다.
+2. ⛔ ***"수법 추정 = flavor 앞 8자 부분 일치"* 로 설계·테스트를 짜지 말 것** — 폐기됐다(70.2).
+3. ⛔ **T188을 "판정 계약 변경"으로 읽지 말 것** — 저항 우선 · 규칙 기반(DECISIONS #29) · 문자 이벤트 비판정(G22) · 짝짓기 루프(G3/G216) · 패턴 공유(G7) · 조언 수법 입력(G215)은 **전부 무변경**이다(70.1 표).
+4. ⭐ **되감기 규칙 폴백의 판정도 함께 넓어졌다** — 의도된 공유의 결과이며 결함이 아니다(70.3 (2)).
+
+### 70.1 무변경 계약 대조 (코드 직접 열람)
+
+| 계약 | 상태 | 근거(심볼) |
+|---|---|---|
+| 저항 우선(`resisted \|\| !complied`) | **무변경** | `analyzeConversation` 루프의 `resisted`/`complied` 판정 줄(현행 `:318-320`) |
+| `RESISTANCE_PATTERN` | **무변경** | 정규식 리터럴(현행 `:96-97`). (D6)은 이 상수를 **넓히지 않고** 새 갈래 안에서만 작동한다(주석 `:164-165`) |
+| 규칙 기반 판정(DECISIONS #29) | **무변경** | 파일 머리 투명 고지 + `:23` *"LLM 판정 도입 아님"* |
+| 문자 이벤트는 판정 입력이 아니다(G22) | **무변경** | 주석 `:169-170` — 참가자 **발화**로만 판정 |
+| scammer(i) ↔ user(i+1) 짝짓기 · 시그니처(G3/G216) | **무변경** | `analyzeConversation(messages, sessionCreatedAtMs, weakenedTactics)` · `sorted[i + 1]` |
+| 패턴 공유(G7) | **무변경 — 그래서 확장이 전파된다** | `functions/src/rewind/judge.ts`가 두 상수를 import(복제 0) |
+| 조언의 수법 입력 = `analysis.tacticsUsed`(G215) | **무변경** | `generateReportCore.ts` `buildPreventionAdvice(analysis.tacticsUsed, wasDeceived, adviceChannel)`. 게이트 `functions/src/report/__tests__/promotedTactics.test.ts` `[T136/G215]`가 앞 두 인자를 고정하고 **세 번째(채널) 인자를 허용**하는 정규식으로 바뀌었다(`ADVICE_INPUT_IS_ANALYSIS`) — 지키는 대상(수법 입력)은 같다 |
+| 속은 순간 라벨 = 목록상 **첫** 수법 | **무변경** | `matchedTactics[0]` — 라벨 규칙을 바꾸면 아카이브 묶기 키(T74)가 흔들린다(주석 `:307-308`) |
+| 통화(voice) 조언 문구 | **무변경(바이트 동일)** | `pickCorrectAction`·`buildPreventionAdvice`의 `channel` 기본값 `"voice"` |
+
+### 70.2 바뀐 것 — 사실표 (코드가 정본)
+
+| # | 영역 | 종전 서술(이 문서) | 현행(T188) | 심볼 |
+|---|---|---|---|---|
+| 1 | 순응 판정 | `COMPLIANCE_PATTERN` = (A)~(C) 한 정규식, 숫자는 **전체가 숫자일 때만**(§15.1.5) | `BASE_COMPLIANCE_PATTERN`((A)~(C) 그대로) **OR** *(답변 안에 거절·의심·되묻기 어휘가 없을 때만)* **(D1)~(D5)** | `COMPLIANCE_PATTERN`(조립 `new RegExp`) |
+| 1-a | (D1) | — | 지시 방법 문의의 어미 변형(*되죠·되나요·될까요·해야 하나요*). 반어·확인 질문·내포절(`-는지`·`-ㄹ지`) 제외 | `ASKS_HOW_TO_COMPLY` |
+| 1-b | (D2) | — | 행동 + *면 되나요*(앞에 `안/못`이면 제외 · "확인하면"은 행동 목록에 없음) | `ACTION_THEN_OK` |
+| 1-c | (D3) | — | 4자리+ 숫자열 + 끝/문장부호/허용 어미(단위·조사가 오면 제외) | `CODE_DIGITS_WITH_ENDING` |
+| 1-d | (D4) | — | 한글 숫자 읽기 3형태(붙여·한 자씩·3자+ 묶음), 공·영·육·칠·팔·구 1자 이상 필수 | `CODE_HANGUL_DIGITS` |
+| 1-e | (D5) | — | 생년월일(`…생` · `생년월일은+숫자`) · 잔액 고지(`있`의 서술형만) | `BIRTH_DATE` · `BALANCE_DISCLOSURE` |
+| 1-f | (D6) | — | 같은 답변 안 거절·의심·되묻기 어휘가 있으면 **(D1)~(D5)만** 끈다 — (A)~(C)·저항은 건드리지 않음 | `REFUSAL_IN_ANSWER`(부정 전방탐색으로 조립) |
+| 2 | 수법 추정 | 인용구를 이어 붙인 문자열의 **앞 8자** 부분 일치, 대사당 **첫 수법 1개**(`findMatchedTactic`) | flavor를 `,` `.` `?` `!` `…`로 **문구 단위**로 나눠 띄어쓰기·문장부호 제거 → 문구마다 **앞 5자 키**(3자 미만 문구 버림) · 같은 시나리오 다른 수법과 접두가 겹치면 **키 연장**, 다른 수법 문구와 같거나 그 앞부분이면 **키 제거** · 5자 미만 한 단어 종결어미 대꾸 제외 · 한 대사의 **여러 수법 모두** `tacticsUsed`에 등재 | `buildTacticMatchers` · `findMatchedTactics` · `splitFlavorPhrases` · `isGenericInterjection` · `normalizeForTacticMatch` · 상수 `PHRASE_KEY_LENGTH`(5) · `PHRASE_MIN_LENGTH`(3) |
+| 3 | 대처법·조언 문구 | 채널 무관 단일 문구 | `pickCorrectAction(label, channel)` · `buildPreventionAdvice(tactics, wasDeceived, channel)` — 기본 `"voice"`. 속은 순간의 `correctAction`은 **그 답변 메시지의 `channel`**(`AnalysisMessage.channel` ← `generateReportCore`가 `MessageDoc.channel`을 실어 줌, 부재 = voice), 예방 조언은 **`session.channel === "messenger"`일 때만** 메신저 문구 | `AdviceChannel` · `adviceChannel`(generateReportCore) |
+
+⚠️ **3의 두 채널 기준이 다르다**(순간 = 메시지 채널, 조언 = 세션 최종 채널) — 코드 주석이 근거를 적었다(메신저→통화 전이 세션은 `session.channel`이 `"voice"`가 되므로 통화 문구가 맞다). 이 절은 **판정하지 않고 기록만** 한다 — 한 리포트에 메신저 순간 문구와 통화 조언이 공존할 수 있으며, 그것이 표시 정합 문제인지는 AC-083 (e) 축이라 T189(ux-design) 판단 몫이다.
+
+### 70.3 이 문서의 서술에 대한 판정
+
+| # | 대상 | 판정 | 처리 |
+|---|---|---|---|
+| (1) | §15.1.5 *"AC-061은 이미 충족돼 있다 — 숫자 전용 앵커가 잡는다"* | ⭐ **과다 서술이었다**(어미 붙은 답을 놓쳤다 — T188 A의 신고가 정확히 그 형태). T188로 범위가 넓어졌지만 **여전히 전부는 아니다**: 단위·조사가 붙은 숫자, 바꿔 말한 표현은 잡지 않는다(과소판정 우선 — 코드 주석) | 원문 보존 + 정정 덧붙임(§15.1.5) |
+| (2) | §15.2.3 규칙 폴백 · §15.6 G7 | 공유 계약대로 **확장이 전파됐다** — `unclear` → `risky` 이동만 생기고, `good`(저항) 쪽은 **이동 0**(저항 패턴 무변경). ⚠️ (D6)은 *"새 갈래만 끈다"* 이므로 거절 어휘가 있어도 `RESISTANCE_PATTERN`에 안 걸리면 `good`이 아니라 (A)~(C) 매치 여부로 `risky`/`unclear`가 갈린다 — **종전과 같은 동작**이다 | 원문 보존 + 덧붙임(§15.2.3 · G7 행) |
+| (3) | §42.3 g *"앞 8자로 검색하므로 필연적으로 매치"* | **근거 문장은 스테일, 결론은 참** — 새 키 `여기서주소`가 Mock 대사에 반드시 실린다(같은 시나리오 접두 충돌 0건 직접 대조) ⇒ **§42.3의 연쇄와 G217(Mock으로 재현 금지)은 유효** | 덧붙임(§42.1 표 2행 · §42.3 g행) |
+| (4) | §42.3 (ㄷ) · §42.9 (5) *"실 LLM에서는 부분 일치가 성립하지 않는다"* | T188 코드 주석이 같은 진단(*"실 LLM 대사는 인용구를 문장 단위로 섞어 쓰고 띄어쓰기도 바꾼다"*)으로 규칙을 바꿨다 — **(ㄷ)을 지지하는 인용 사례 1건**. 새 규칙도 **바꿔 말하면 못 찾는다**(코드 투명 고지) ⇒ §42.9 (4) *"부분 해소"* 는 그대로 | 덧붙임(§42.9 (5)) |
+| (5) | §18 G71 · §18 저작 규칙 표(`findMatchedTactic` 매칭) | **규칙(인용구 필수)은 오히려 더 중요해졌다** — 인용구가 없으면 설명부 전체로 폴백되고(`extractTacticFlavor`), 새 규칙은 그 설명부를 문구로 쪼개 키를 만들므로 **3인칭 설명문이 수법 키가 된다**(⚠️ 추정 — 인용구 없는 현행 수법 0건 여부는 이 패스에서 전수 대조하지 않았다; 확인 = `extractTacticFlavor`가 폴백 갈래로 가는 `weakenedTactics` 항목 grep). 심볼명만 `findMatchedTactic` → `findMatchedTactics` | 이 표로 갈음(원문 무편집) |
+| (6) | `functions/src/scenarios/tacticFlavor.ts` 주석(#29 ③ — architect 판정 대상) | 오케스트레이터 수정본 `:27-30`(새 규칙 서술)은 **현행 코드와 일치**한다. `:7` *"설명부 전체 앞 8자"* 는 **2026-07-24 버그의 역사 서술**이라 참이다. ⚠️ **잔여 1건**: `:30-32` *"그 참가자 대사가 리포트 수법 키가 돼 **사기범이 그 말을 할 때만** 수법이 잡힌다"* 는 새 규칙에서 **과다 서술**이다 — 키가 문구마다 하나씩 생기므로 두 누수 항목(`loanScam` *"부인 시 이익 전환"* · `bankSecurityVerifyScam` *"부인 시 명의 도용 암시"*)은 **같은 항목의 사기범 인용구**(*'아 그러면 더 좋으세요, …'* · *'그래서 더 위험한 겁니다, …'*)로도 잡힌다(⚠️ 추정 — 같은 시나리오 다른 수법과의 접두 충돌로 그 키가 제거되는지는 대조하지 않았다; 확인 = 두 시나리오의 `weakenedTactics`로 `buildTacticMatchers` 산출을 테스트에서 출력). 누수 자체(참가자 대사가 Mock 대사 맨 앞에 박힌다)는 **여전히 참** | ⛔ 소스 무편집 — **implementer 인계**(주석 1문장, 위 확인 후) |
+| (7) | DECISIONS 신규 행 필요 여부 | **불필요로 판정.** 근거: ① 바뀐 것은 DECISIONS #29(규칙 기반)·ADR-0008(패턴 export 공유)의 **안에서** 규칙 내용뿐이다 ② 모듈 경계·계약·데이터 모델 변경 0(70.1) ③ 기각된 대안(LLM 판정 · 범주 키워드 사전)의 사유는 코드 주석이 이미 보존한다. ⚠️ 덧붙여 `docs/UpdateRequests.md` #26이 다음 번호 **#115**를 R-5 결정 초안에 지목해 두었다 — 여기서 행을 추가하면 번호가 충돌한다 | 행 추가 0 |
+
+### 70.4 스테일 줄 인용 → 심볼 대응표 (`analyzeConversation.ts`, 이 문서 전수)
+
+> 전수 grep `analyzeConversation\.ts:[0-9]` = **40히트**(이 패스 착수 시). ⛔ **원문은 고치지 않는다**(각 인용은 그 절의 base 시점 근거다). 편집 지점을 찾을 때 이 표로 심볼을 얻는다.
+
+| 인용(이 문서) | 가리키던 것 | 현행 심볼 · 줄(열람 시점) |
+|---|---|---|
+| `:4-12` · `:5` · `:8-11` | 파일 머리 투명 고지(규칙 기반 · LLM 미호출 · 실 LLM 한계) | 같은 고지 `:4-12` — **유효** |
+| `:23-` · `:30-38` | `AnalysisMessage` · 순간 타입 | `AnalysisMessage` `:35-47`(T188이 `channel?` 추가 — **판정에 안 쓰임**) · `DeceivedMomentResult` `:49-57`(필드 5개 **무변경** — §35 표의 *"5개뿐"* 은 참) |
+| `:69,105` · `:115` | 두 패턴 · 숫자 앵커 | `RESISTANCE_PATTERN` `:96-97` · `BASE_COMPLIANCE_PATTERN` `:132-133`(앵커는 그 끝) · `COMPLIANCE_PATTERN` `:212-214` |
+| `:117-124` · `:120-125` | `findMatchedTactic`(앞 8자) | **폐기** → `buildTacticMatchers` `:264-276` · `findMatchedTactics` `:279-284` |
+| `:118-161` · `:127-154` · `:136-164` · `:145-150` · `:149` | 짝짓기 루프 · 판정 | `analyzeConversation` `:286-341`(루프 `:303-334`, `sorted[i + 1]` `:315`, 판정 `:318-320`) |
+| `:133` · `:140-143` · `:142` · `:143` · `:136-143` | `extractTacticLabel` · `tacticLabelsUsed.add` | `:310-312`(전 수법 등재) · `:322`(순간 라벨) |
+| `:157-158` · `:158` | `turnIndex: userReply.turnIndex` | `:328` |
+| `:165` | `timeLabel` 경과 초 | `:326-329` |
+| `:169` | `tacticsUsed` 반환(쓰기 지점 단일) | `:339` — **단일 쓰기 지점은 무변경**(§42.1 ⇒행 결론 유효) |
+| `:166-183` · `:176-179` · `:176-193` · `:198-209` | `pickCorrectAction`(첫 규칙 `/확인\|전화/`) · `buildPreventionAdvice` | `pickCorrectAction` `:350-376`(첫 규칙 `:352-353` — **채널 무관 문구라 G27 판단 무변경**) · `buildPreventionAdvice` `:381-398` |
+
+⚠️ 같은 계열로 `generateReportCore.ts`의 줄 인용(`:236` · `:253` 등 — §42)도 밀렸다: 조언 호출은 현행 `adviceChannel` 다음 줄(`:255-256`). **심볼 `buildPreventionAdvice(analysis.tacticsUsed` 로 찾는다.**
+
+### 70.5 닫지 못하는 것 (⛔ 지우지 말 것)
+
+1. ⛔ **architect 실행 0건** — 셸이 없다. 테스트 수(functions **898 → 913** · 루트 **446**)·reviewer APPROVED·QA GO·PR #275 병합은 전부 **인용값**(`docs/Tasks.md` T188 행 · 오케스트레이터 지시).
+2. ⛔ **되감기 쪽 회귀 확인 여부 미확인** — T188 행 D가 *"reviewer · QA가 이 경로를 따로 봤는지 미기록"* 이라고 적었다. `functions/src/rewind/__tests__/judge.test.ts`가 공유 상수를 import하므로 같은 실행에 포함됐을 것으로 **추정**한다(확인 = 그 파일의 테스트가 T188 QA 실행 출력에 있는가).
+3. 70.3 (5)·(6)의 **추정 2건**(인용구 없는 수법 0건 여부 · 누수 항목 키 충돌) — 확인 방법은 각 행에 적었다.
+4. **헤더 버전 갭**: `Based on PRD Version: v1.7.1 · UX 1.13` ↔ 현행 **PRD v1.17**(`docs/PRD.md:4`) · **UX 1.28**(`docs/UX.md:10`). ⛔ 이 패스는 헤더를 전진시키지 않았다(PRD·UX 재검증 패스가 아니다 — T131 계열 별건).
+
+### 70.6 이 패스의 편집 범위 (⛔ 정본 — 중단 시 복구 체크리스트)
+- `docs/Architecture.md` — **덧붙임만**(원문 삭제 0): 머리 갱신 고지 1문단 · §15.1.5 범위 확정 인용문 뒤 1문단 · §15.2.3 2차(폴백) 항목 아래 1항목 · §15.6 G7 행 끝 · §42.1 표 2행 끝 · §42.3 g행 끝 · §42.9 (5) 끝 · **§70 신설**.
+- `docs/UpdateRequests.md` — #29 **Status 칸만** `open` → `resolved`.
+- ⛔ `functions/**` · `src/**` · `docs/DECISIONS.md`(70.3 (7)) · `docs/Tasks.md` · `docs/PRD.md` · `docs/UX.md` · `docs/API.md` · `docs/Database.md` · `docs/adr/**` · `CLAUDE.md` **0줄**. 갭·OQ 번호 신설 0. 커밋·push 0건.
+> **번호**: §70 = 착수 시 `^## ` 실측 최대 **§69**(`## 69.`) 다음. 재번호가 필요하면 치환 범위는 `## 70.` 이후 + 위 덧붙임 7곳의 `§70` 참조뿐(⛔ 전역 치환 금지).
+
 ---
 
-## 70. (미등재 — planner 인계 · P3 · 기한 2026-11-17) Gemini Live 모델 전환 `gemini-2.5-flash-native-audio-preview-12-2025` → `gemini-3.8-live` + 지연 계측 + 출력 음량 — ⭐⭐ **3.8은 같은 설정을 그대로 받지만 기본 동작 두 가지가 다르다: 도구 호출이 턴을 끝내고(`NON_BLOCKING` 기본), `turnComplete:true`가 사기범 말을 끊는다 — 둘 다 명시적으로 2.5 의미로 고정한다** / ⭐ **첫 마디 지연의 지배항은 2.5의 thought 단계(5~7초)였다 — 3.8은 thought 파트를 보내지 않는다** — architect 판정 (ADR-0017)
+## 71. (미등재 — planner 인계 · P3 · 기한 2026-11-17) Gemini Live 모델 전환 `gemini-2.5-flash-native-audio-preview-12-2025` → `gemini-3.8-live` + 지연 계측 + 출력 음량 — ⭐⭐ **3.8은 같은 설정을 그대로 받지만 기본 동작 두 가지가 다르다: 도구 호출이 턴을 끝내고(`NON_BLOCKING` 기본), `turnComplete:true`가 사기범 말을 끊는다 — 둘 다 명시적으로 2.5 의미로 고정한다** / ⭐ **첫 마디 지연의 지배항은 2.5의 thought 단계(5~7초)였다 — 3.8은 thought 파트를 보내지 않는다** — architect 판정 (ADR-0017)
 
 > 담당 태스크: **미등재** — `docs/Tasks.md` 행 없음(planner 인계, `Refs: (미등재 — planner 인계)`). 범위: `functions/src/realtime/**` · `src/lib/realtime/**` · 해당 테스트 · 루트 `package.json` 테스트 등록. 다른 세션 소관(`functions/src/roleplay/**` · `functions/src/report/**` · 익명 로그인 관련)은 0줄.
 
-### 70.0 판정 요지 (⛔ 금지 먼저)
+### 71.0 판정 요지 (⛔ 금지 먼저)
 
-1. ⛔ **이 절은 소스를 0줄 고쳤다.** 구현은 User 설계 승인 뒤 implementer(70.8).
-2. ⛔ **모델 상수만 바꾸는 배포 금지** — 도구 `behavior: BLOCKING`(G430)과 클라 보류 큐(G431) 없이 3.8을 켜면 가짜 턴 경계와 말 끊김이 생긴다(70.2 실측).
+1. ⛔ **이 절은 소스를 0줄 고쳤다.** 구현은 User 설계 승인 뒤 implementer(71.8).
+2. ⛔ **모델 상수만 바꾸는 배포 금지** — 도구 `behavior: BLOCKING`(G430)과 클라 보류 큐(G431) 없이 3.8을 켜면 가짜 턴 경계와 말 끊김이 생긴다(71.2 실측).
 3. ⛔ **배포 순서 고정: Hosting(클라) → Functions(3.8)**(G434). 클라 변경은 2.5에서도 무해하다.
 4. ⛔ **`NON_BLOCKING` · `scheduling` 채택은 이번 범위가 아니다** — ADR-0015 "결과를 받고 이어 말한다"를 바꾸는 별도 설계다.
 5. ⛔ **`languageCode: "ko-KR"`를 지우지 않는다**(G435) — 3.8이 수용함을 실측했다. 문서상 native audio는 언어 코드를 쓰지 않으므로 효과는 0일 수 있다.
 6. ⛔ **Live 출력 길이 상한(`maxOutputTokens`)을 넣지 않는다** — 문장 중간 절단이 긴 턴보다 나쁘다. 길이는 프롬프트 소관(`roleplay/**`).
-7. ⚠️ 70.2의 수치는 **로컬 Node 프로브, 모델당 2~3통화의 소표본**이다. 브라우저 · 실기기 · 모바일 네트워크 지연은 포함되지 않는다.
+7. ⚠️ 71.2의 수치는 **로컬 Node 프로브, 모델당 2~3통화의 소표본**이다. 브라우저 · 실기기 · 모바일 네트워크 지연은 포함되지 않는다.
 
-### 70.1 착수 시 실측
+### 71.1 착수 시 실측
 
 | # | 항목 | 값 | 출처 |
 |---|---|---|---|
@@ -16762,10 +16855,10 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | 5 | 단기 토큰 | 문서는 v1beta를 적지만 SDK 2.13.0은 `auth_tokens/` 키에 *"ephemeral token support is in v1alpha only"* 경고를 낸다(`functions/node_modules/@google/genai/dist/node/index.cjs:14785`) ⇒ 현행 v1alpha 유지 | 문서 + SDK 판독 |
 | 6 | SDK | `FunctionDeclaration.behavior?: Behavior`(`genai.d.ts:4730`) · `Behavior.BLOCKING`(`:1209`) · 토큰 변환이 선언을 그대로 통과(`index.cjs:17362` 이하 `item => item`) · `LiveServerMessage.data`는 파트별로 디코딩해 이어 붙인다(`index.cjs:3140-3158`) | SDK 판독 |
 | 7 | 무료 티어 | 3.8 Live · 2.5 native audio 둘 다 입출력 *"Free of charge"*. 무료 RPD · 동시 세션 수치는 문서에 없음(AI Studio 대시보드) | pricing (2026-10-16) · rate-limits |
-| 8 | 음성 | native audio는 TTS 음성 전부 지원(Puck/Aoede 포함) — 3.8 프로브에서 `Aoede` 수용 확인(청감은 미확인) | live-guide + 70.2 |
+| 8 | 음성 | native audio는 TTS 음성 전부 지원(Puck/Aoede 포함) — 3.8 프로브에서 `Aoede` 수용 확인(청감은 미확인) | live-guide + 71.2 |
 | 9 | 번호 | `^## 70\.` · DECISIONS `#115` · `G430~G435` · `OQ-A89~A90` · ADR-0017 — origin/main 0히트(#114는 T185가 사용) | grep |
 
-### 70.2 라이브 프로브 실측 (2026-10-17 · `tax-refund-scam` advanced · 같은 TTS 대본 5발화 · 콜러블 2초 모사)
+### 71.2 라이브 프로브 실측 (2026-10-17 · `tax-refund-scam` advanced · 같은 TTS 대본 5발화 · 콜러블 2초 모사)
 
 | 항목 | 2.5 (현행) | 3.8 |
 |---|---|---|
@@ -16781,7 +16874,7 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | 출력 포맷 | `audio/pcm;rate=24000` | 동일 |
 | 출력 전사의 비한국어 | 0 | **1건** *"취소될 수があります"*(2통화 중 1) |
 
-### 70.3 호환성 표
+### 71.3 호환성 표
 
 | 영역 | 3.8 판정 | 조치 |
 |---|---|---|
@@ -16790,26 +16883,26 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | 단기 토큰(`liveConnectConstraints` · v1alpha · uses 2) | 수용 | 없음 |
 | 음성 Puck/Aoede | 수용(청감은 User 확인) | 없음 |
 | `languageCode: "ko-KR"` | 수용 · 효과 미상 | 유지(G435). 비한국어 혼입은 OQ-A90 |
-| VAD 4개 손잡이 | 수용 · 발화 끝 187ms 응답 사례(400ms 침묵 기준보다 빠름) | 없음 — 70.9 라이브 확인 |
+| VAD 4개 손잡이 | 수용 · 발화 끝 187ms 응답 사례(400ms 침묵 기준보다 빠름) | 없음 — 71.9 라이브 확인 |
 | `turnComplete:true` 클라 콘텐츠 | 진행 중 턴을 끊음 | **D3** 클라 보류 큐 |
 | `turnComplete:false` | 응답 유발 안 함 | 없음(큐 밖 유지) |
 | proactive audio 상시 · affective dialog 제거 · thinking 미지원 | 이 앱은 셋 다 설정하지 않음(grep 0) | 없음 |
 | 출력 오디오 24kHz | 동일 | 없음 |
 | 무료 쿼터 | 무료 표기 · 한도 수치 미공개 | User가 AI Studio에서 확인 |
 
-### 70.4 결정
+### 71.4 결정
 
 | # | 결정 | 근거 |
 |---|---|---|
-| **D1** | `GEMINI_LIVE_MODEL = "gemini-3.8-live"`(`geminiProvider.ts:26`). `-extended-thinking` 아님 | 70.1 #2 · extended는 비동기 전용이라 D2 불가 |
-| **D2** | `liveTools.ts:69-81` 두 선언에 `behavior: Behavior.BLOCKING` | 70.2 `behavior` 생략 행 · ADR-0015 전제 보존 · 2.5도 수용(롤백 호환) |
-| **D3** | `GeminiVoiceSession.tsx`의 `turnComplete:true` 전송 3곳(오프닝 `:749` · 타이핑 `:868` · 지시 `:885`)을 **보류 큐 1곳**으로 모은다(70.5) | 70.2 텍스트 행 — 2.5의 서버 보류를 클라에서 재현 |
-| **D4** | `languageCode` 유지 · VAD 무변경 · v1alpha 유지 | 70.1 #4 · #5 · 70.2 |
+| **D1** | `GEMINI_LIVE_MODEL = "gemini-3.8-live"`(`geminiProvider.ts:26`). `-extended-thinking` 아님 | 71.1 #2 · extended는 비동기 전용이라 D2 불가 |
+| **D2** | `liveTools.ts:69-81` 두 선언에 `behavior: Behavior.BLOCKING` | 71.2 `behavior` 생략 행 · ADR-0015 전제 보존 · 2.5도 수용(롤백 호환) |
+| **D3** | `GeminiVoiceSession.tsx`의 `turnComplete:true` 전송 3곳(오프닝 `:749` · 타이핑 `:868` · 지시 `:885`)을 **보류 큐 1곳**으로 모은다(71.5) | 71.2 텍스트 행 — 2.5의 서버 보류를 클라에서 재현 |
+| **D4** | `languageCode` 유지 · VAD 무변경 · v1alpha 유지 | 71.1 #4 · #5 · 71.2 |
 | **D5** | AI 음성에 GainNode — 기본 **0.6**(판단값) · 최종값은 실기기(OQ-A89) | 소스가 `destination`에 직결(`:681`) |
-| **D6** | 지연 계측: 순수 모듈 + production `console.info` 턴당 1줄(70.6) | §50.8.4 *"어느 구간이 실제로 몇 ms인지 아무도 잰 적이 없다"* · `log()`는 production에서 꺼짐(`:178-180`) |
-| **D7** | 출력 길이 상한 미도입 | 70.0 #6 · 3.8 턴 오디오 6.4~13.6초 = 2.5(8.9~14.4초)와 같은 범위 |
+| **D6** | 지연 계측: 순수 모듈 + production `console.info` 턴당 1줄(71.6) | §50.8.4 *"어느 구간이 실제로 몇 ms인지 아무도 잰 적이 없다"* · `log()`는 production에서 꺼짐(`:178-180`) |
+| **D7** | 출력 길이 상한 미도입 | 71.0 #6 · 3.8 턴 오디오 6.4~13.6초 = 2.5(8.9~14.4초)와 같은 범위 |
 
-### 70.5 D3 클라 보류 큐 명세
+### 71.5 D3 클라 보류 큐 명세
 
 순수 모듈 `src/lib/realtime/clientTurnQueue.ts`(React · DOM import 0). 상태 `{ modelTurnActive, awaitingSince, pending[] }`.
 
@@ -16828,7 +16921,7 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 - `personaStateTurn`(`turnComplete:false`, `:904`)은 큐 밖 그대로.
 - 잔여 위험: 사용자 음성 끝 → 첫 오디오 사이(3.8 실측 ~1초)에는 클라가 모델 턴 시작을 모른다 — 그 창에 들어온 지시는 막 시작된 생성을 끊을 수 있다(2.5에서는 서버가 보류했다).
 
-### 70.6 D6 지연 계측 명세
+### 71.6 D6 지연 계측 명세
 
 순수 모듈 `src/lib/realtime/liveLatency.ts` + `GeminiVoiceSession.tsx` · `useRealtimeCall.ts` 배선.
 
@@ -16842,46 +16935,46 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 - 출력: `console.info("[gemini-latency]", JSON.stringify({ v: 1, model, ... }))` — **숫자 · 종류 · 모델명만**(G432: 전사 텍스트 · sessionId · PII 0).
 - 전환 전후 비교 절차: Hosting 먼저 배포(G434) → 2.5로 같은 대본 통화 → Functions(3.8) 배포 → 같은 대본 통화 → 두 로그 비교. 실기기는 원격 디버깅(Android `chrome://inspect` · iOS Safari)으로 읽는다.
 
-### 70.7 D5 출력 게인 명세
+### 71.7 D5 출력 게인 명세
 
 - `src/lib/realtime/outputGain.ts` — `export const GEMINI_OUTPUT_GAIN = 0.6;`(0.5~0.7 범위의 판단값, G433).
 - `outputContext` 생성 직후(`:574`) `createGain()` 1개 → `destination` 연결. 각 소스는 `destination` 대신 게인 노드에 연결한다(`:681`).
 - 음량 UI 없음(UX 경로 필요 — 범위 밖). ElevenLabs 경로(`RealtimeVoiceSession.tsx`)는 SDK가 재생하므로 범위 밖.
 
-### 70.8 구현 · 테스트 명세 (implementer — User 승인 뒤)
+### 71.8 구현 · 테스트 명세 (implementer — User 승인 뒤)
 
 | 커밋 | 내용 | 테스트 |
 |---|---|---|
 | C1 | `outputGain.ts` + 게인 배선 | 상수 범위 [0.5, 0.7] 단언 · 소스 스캔: `source.connect(outputContext.destination)` 0건 |
-| C2 | `clientTurnQueue.ts` + 배선(70.5) | 전이표 각 행 단위 테스트 · 소스 스캔: `turnComplete: true` 직접 전송이 큐 전송 함수 1곳뿐 |
-| C3 | `liveLatency.ts` + 배선(70.6) | 앵커 선택 · 도구 대기 합 · 요약 · 레코드의 문자열 필드가 `kind` / `anchor` / `model` / `endedBy`뿐 |
+| C2 | `clientTurnQueue.ts` + 배선(71.5) | 전이표 각 행 단위 테스트 · 소스 스캔: `turnComplete: true` 직접 전송이 큐 전송 함수 1곳뿐 |
+| C3 | `liveLatency.ts` + 배선(71.6) | 앵커 선택 · 도구 대기 합 · 요약 · 레코드의 문자열 필드가 `kind` / `anchor` / `model` / `endedBy`뿐 |
 | C4 | D1 + D2(Functions) | 모델 리터럴 고정 단언 · 모든 선언 `behavior === "BLOCKING"`(순수 함수 + 토큰 본문 fetch 캡처) · 기존 `languageCode` 단언 유지 |
 
 - 루트 신규 테스트 파일은 `package.json` `test`에 등록한다(`src/lib/testRegistration.test.ts`).
 - 테스트는 Verified Commands 그대로, 동시 실행 금지. 기준 898/0 · 446/0.
 
-### 70.9 배포 · 롤백 · 라이브 확인 (User)
+### 71.9 배포 · 롤백 · 라이브 확인 (User)
 
 | 단계 | 내용 |
 |---|---|
 | 1 | Hosting 배포(C1~C3) — 2.5에서 무해. (선택) 같은 대본으로 2.5의 `[gemini-latency]` 수집 |
 | 2 | Functions 배포(C4) — `firebase deploy --only functions` |
-| 롤백 | 2026-11-17 전: C4의 모델 상수만 되돌려 Functions 재배포(2.5가 BLOCKING 수용 — 70.2). 그 뒤: 2.5 없음 — Mock 강등뿐 |
+| 롤백 | 2026-11-17 전: C4의 모델 상수만 되돌려 Functions 재배포(2.5가 BLOCKING 수용 — 71.2). 그 뒤: 2.5 없음 — Mock 강등뿐 |
 
-라이브 확인 목록: ① 문자 도구 흐름(도구 호출 → 문자 도착 → 그 뒤 발화) ② 확인창구(오퍼 announce · commit) ③ 첫 마디 ④ 끼어들기 — 말을 잠깐 멈췄을 때 잘리는가(3.8 187ms 응답) · 타이핑이 사기범 말을 끊지 않는가 ⑤ 음량(0.5~0.7) ⑥ Android 통화 중 볼륨 키가 "통화"와 "미디어" 중 어느 슬라이더를 띄우는가(추정: echoCancellation으로 통화 모드) ⑦ 일본어 등 비한국어 혼입 ⑧ AI Studio의 3.8 무료 한도 ⑨ 통화 도중 끊김(서버 close 1011 — 70.13 #5).
+라이브 확인 목록: ① 문자 도구 흐름(도구 호출 → 문자 도착 → 그 뒤 발화) ② 확인창구(오퍼 announce · commit) ③ 첫 마디 ④ 끼어들기 — 말을 잠깐 멈췄을 때 잘리는가(3.8 187ms 응답) · 타이핑이 사기범 말을 끊지 않는가 ⑤ 음량(0.5~0.7) ⑥ Android 통화 중 볼륨 키가 "통화"와 "미디어" 중 어느 슬라이더를 띄우는가(추정: echoCancellation으로 통화 모드) ⑦ 일본어 등 비한국어 혼입 ⑧ AI Studio의 3.8 무료 한도 ⑨ 통화 도중 끊김(서버 close 1011 — 71.13 #5).
 
-### 70.10 if/then 강등표 (⛔ 표에 없는 케이스는 행 추가를 물을 것)
+### 71.10 if/then 강등표 (⛔ 표에 없는 케이스는 행 추가를 물을 것)
 
 | # | If | Then |
 |---|---|---|
 | 1 | 배포 후 3.8 연결이 실패한다(setup 오류) | Functions의 모델 상수를 2.5로 되돌린다(11-17 전에만). 클라는 그대로 둔다 |
-| 2 | 도구 호출 뒤 모델이 말하지 않고 멈춘다 | BLOCKING 응답 누락이다 — `collectToolResponses` 경로부터 본다. `NON_BLOCKING`으로 바꾸지 않는다(70.0 #4) |
+| 2 | 도구 호출 뒤 모델이 말하지 않고 멈춘다 | BLOCKING 응답 누락이다 — `collectToolResponses` 경로부터 본다. `NON_BLOCKING`으로 바꾸지 않는다(71.0 #4) |
 | 3 | 타이핑 · 지시가 여전히 사기범 말을 끊는다 | 큐를 우회한 전송이 있다 — C2 소스 스캔 테스트를 먼저 본다 |
 | 4 | 보류된 지시가 한 턴 넘게 안 나간다 | `tick` 타임아웃 · `stall` 배선을 본다. 타임아웃 값을 바꾸기 전에 `[gemini-latency]`의 응답 지연 분포를 본다 |
 | 5 | 비한국어 혼입이 반복된다 | OQ-A90 — `roleplay` 소관 시스템 프롬프트 1줄. 이 절의 범위에서 프롬프트를 고치지 않는다 |
 | 6 | 말을 멈춘 참가자가 반복해서 잘린다 | VAD `silenceDurationMs` · `startOfSpeechSensitivity`가 3.8에서 먹는지 먼저 프로브로 본다(3.8은 침묵 기준 전에 답했다) |
 
-### 70.11 가드 · 열린 질문
+### 71.11 가드 · 열린 질문
 
 | ID | 내용 |
 |---|---|
@@ -16894,21 +16987,21 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | **OQ-A89** | 출력 게인 최종값(0.5~0.7) — 실기기 청취 후 **User** · 기본 0.6 |
 | **OQ-A90** | 3.8 비한국어 혼입 대응으로 시스템 프롬프트에 "한국어로만 말한다" 1줄을 넣을 것인가 — **User · roleplay 소관** · 기본 = 라이브에서 재현되면 착수 |
 
-### 70.12 이 패스의 편집 범위
+### 71.12 이 패스의 편집 범위
 
-- `docs/Architecture.md` §70 신설(덧붙임만) · `docs/DECISIONS.md` #115 1행 · `docs/adr/0017-gemini-live-3-8-migration.md` 신설(`68a844e`).
+- `docs/Architecture.md` §71 신설(덧붙임만) · `docs/DECISIONS.md` #115 1행 · `docs/adr/0017-gemini-live-3-8-migration.md` 신설(`68a844e`).
 - ⛔ §0~§69 · `functions/**` · `src/**` · `docs/Tasks.md` · `docs/API.md` · `README.md` · `CLAUDE.md` 0줄. API 계약 무변경 — `geminiModel` 값만 바뀐다(`docs/API.md:46`은 값을 적지 않는다).
 
-### 70.13 승인 · 구현 패스 기록 (2026-10-17 · 덧붙임 — 위 원문 무변경)
+### 71.13 승인 · 구현 패스 기록 (2026-10-17 · 덧붙임 — 위 원문 무변경)
 
 | # | 항목 | 값 |
 |---|---|---|
 | 1 | 승인 | User 채팅 원문 *"구현 시작해"*(2026-10-17) — DECISIONS **#116** · ADR-0017 `accepted` |
 | 2 | 구현 커밋 | `4a2010b`(클라 C1~C3) · `8d10bc3`(Functions C4) |
-| 3 | 테스트 | functions **898 → 901**(+3: §70 D1 · D2/G430 ×2) · 루트 **446 → 475**(+29) · lint 2종 통과 · `npm run build` 통과(임시 placeholder `.env`, 빌드 뒤 삭제) |
+| 3 | 테스트 | functions **898 → 901**(+3: §71 D1 · D2/G430 ×2) · 루트 **446 → 475**(+29) · lint 2종 통과 · `npm run build` 통과(임시 placeholder `.env`, 빌드 뒤 삭제) |
 | 4 | 실제 코드 경로 프로브 | 새 `functions/lib`의 `GeminiRealtimeProvider.createCallCredentials`로 3.8 토큰 발급 → 연결 2통화: 첫 마디 1,343 / 949ms · 도구 2종 모두 BLOCKING으로 호출(대기 중 오디오 0) · 비한국어 0건 |
 | 5 | ⚠️ 새 관측 | 3.8 세션 4건 중 1건이 대화 도중 서버 close **1011 "Internal error encountered."**(마지막 발화 직후, 도구 2회 뒤). 같은 설정 재실행은 정상 종료 ⇒ 일시 오류로 보되 **라이브 확인 ⑨**로 추가한다. 클라는 기존대로 `onclose` → 통화 종료 처리 — 2.5 프로브 4건에서는 0건 |
-| 6 | 구현이 명세와 다른 점 | `interrupted`는 응답 대기(`awaitingSince = now`)로 둔다 — 70.5 표의 "보내지 않는다"를 지키면서 그 뒤 응답이 안 오면 `tick` 타임아웃으로 풀리게 하려는 것(전이 테스트 `clientTurnQueue.test.ts`). §57.4 D3의 `appendUserTranscriptRef` 브리지는 큐가 전송 시점에 적립하면서 쓰임이 없어져 제거했다 |
+| 6 | 구현이 명세와 다른 점 | `interrupted`는 응답 대기(`awaitingSince = now`)로 둔다 — 71.5 표의 "보내지 않는다"를 지키면서 그 뒤 응답이 안 오면 `tick` 타임아웃으로 풀리게 하려는 것(전이 테스트 `clientTurnQueue.test.ts`). §57.4 D3의 `appendUserTranscriptRef` 브리지는 큐가 전송 시점에 적립하면서 쓰임이 없어져 제거했다 |
 | 7 | reviewer · QA | reviewer **APPROVED**(Critical 0 · Major 2 권고) · QA **GO(조건부)** — 재측정 functions 901/0 · 루트 475/0 일치 |
 | 8 | 리뷰 반영 | M1/F1 — 3.8의 `interrupted` 직후 오디오 없는 `turnComplete`로는 보류분을 풀지 않는다(`afterInterrupt`). M2/F2 — `toolCall` ~ `toolResponse` 사이는 보류하고 stall로도 풀지 않는다(`toolPending`). 커밋 `26c7f2f` · 루트 475 → **479** · `npm run build` 재통과 |
 | 9 | 남긴 한계(동작 무영향 · 계측 정확도) | F3 — 오프닝 전송 뒤 첫 오디오 전에 마이크 RMS가 문턱을 넘으면 앵커가 `voice`로 잡힌다(오프닝 지연 과소 보고). F4 — `turnComplete` 뒤 늦게 온 청크는 `anchor:"none"` 레코드 1개를 만든다. 라이브 로그를 읽을 때 이 두 경우를 걸러 본다 |

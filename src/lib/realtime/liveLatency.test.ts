@@ -17,7 +17,7 @@ import {
   type LiveLatencyTurnRecord,
 } from "./liveLatency.ts";
 
-test("[§70.6] 오프닝: 보낸 시각 → 첫 오디오 도착이 firstAudioMs다", () => {
+test("[§71.6] 오프닝: 보낸 시각 → 첫 오디오 도착이 firstAudioMs다", () => {
   let s = noteSentTurn(INITIAL_LIVE_LATENCY_STATE, "opening", 1000);
   s = noteModelAudio(s, { nowMs: 1900, audioMs: 300, lastLoudAt: null });
   s = noteModelAudio(s, { nowMs: 1950, audioMs: 400, lastLoudAt: null });
@@ -34,7 +34,7 @@ test("[§70.6] 오프닝: 보낸 시각 → 첫 오디오 도착이 firstAudioMs
   });
 });
 
-test("[§70.6] 음성 턴: 앵커는 직전 턴 끝 이후의 로컬 RMS 마지막 문턱 초과 시각이다", () => {
+test("[§71.6] 음성 턴: 앵커는 직전 턴 끝 이후의 로컬 RMS 마지막 문턱 초과 시각이다", () => {
   let s = noteSentTurn(INITIAL_LIVE_LATENCY_STATE, "opening", 0);
   s = noteModelAudio(s, { nowMs: 900, audioMs: 1000, lastLoudAt: null });
   s = noteTurnEnd(s, { nowMs: 5000, endedBy: "turnComplete" }).state;
@@ -45,7 +45,7 @@ test("[§70.6] 음성 턴: 앵커는 직전 턴 끝 이후의 로컬 RMS 마지�
   assert.equal(record?.seq, 2);
 });
 
-test("[§70.6] 직전 턴 끝보다 이른 RMS 값은 앵커가 아니다(이전 발화가 다음 턴에 묻어오지 않게)", () => {
+test("[§71.6] 직전 턴 끝보다 이른 RMS 값은 앵커가 아니다(이전 발화가 다음 턴에 묻어오지 않게)", () => {
   let s = noteTurnEnd(noteModelAudio(INITIAL_LIVE_LATENCY_STATE, { nowMs: 100, audioMs: 1, lastLoudAt: null }), {
     nowMs: 5000,
     endedBy: "turnComplete",
@@ -56,7 +56,7 @@ test("[§70.6] 직전 턴 끝보다 이른 RMS 값은 앵커가 아니다(이전
   assert.equal(record?.firstAudioMs, null);
 });
 
-test("[§70.6] 보낸 텍스트와 음성이 둘 다 있으면 늦은 쪽이 앵커다", () => {
+test("[§71.6] 보낸 텍스트와 음성이 둘 다 있으면 늦은 쪽이 앵커다", () => {
   let s = noteSentTurn(INITIAL_LIVE_LATENCY_STATE, "text", 3000);
   s = noteModelAudio(s, { nowMs: 4000, audioMs: 10, lastLoudAt: 2000 });
   assert.equal(noteTurnEnd(s, { nowMs: 5000, endedBy: "turnComplete" }).record?.anchor, "text");
@@ -65,7 +65,7 @@ test("[§70.6] 보낸 텍스트와 음성이 둘 다 있으면 늦은 쪽이 앵
   assert.equal(noteTurnEnd(v, { nowMs: 5000, endedBy: "turnComplete" }).record?.anchor, "voice");
 });
 
-test("[§70.6] 도구 턴: 도구 대기(toolCall → toolResponse)를 따로 합산하고 firstAudioMs에는 포함된다", () => {
+test("[§71.6] 도구 턴: 도구 대기(toolCall → toolResponse)를 따로 합산하고 firstAudioMs에는 포함된다", () => {
   let s = noteToolCall(INITIAL_LIVE_LATENCY_STATE, { nowMs: 1900, lastLoudAt: 1000 });
   s = noteToolResponseSent(s, 3900);
   s = noteModelAudio(s, { nowMs: 4500, audioMs: 2000, lastLoudAt: 1000 });
@@ -76,14 +76,14 @@ test("[§70.6] 도구 턴: 도구 대기(toolCall → toolResponse)를 따로 �
   assert.equal(record?.firstAudioMs, 3500);
 });
 
-test("[§70.6] 오디오도 도구도 없던 턴(끊긴 직후의 빈 turnComplete)은 레코드를 내지 않는다", () => {
+test("[§71.6] 오디오도 도구도 없던 턴(끊긴 직후의 빈 turnComplete)은 레코드를 내지 않는다", () => {
   const out = noteTurnEnd(noteSentTurn(INITIAL_LIVE_LATENCY_STATE, "text", 10), { nowMs: 20, endedBy: "turnComplete" });
   assert.equal(out.record, null);
   assert.equal(out.state.seq, 0);
   assert.equal(out.state.lastSend, null);
 });
 
-test("[§70.6] 요약: 앵커별 n · 중앙값 · 최댓값, firstAudioMs가 없는 턴은 집계에서 뺀다", () => {
+test("[§71.6] 요약: 앵커별 n · 중앙값 · 최댓값, firstAudioMs가 없는 턴은 집계에서 뺀다", () => {
   const rec = (anchor: LiveLatencyTurnRecord["anchor"], firstAudioMs: number | null): LiveLatencyTurnRecord => ({
     type: "turn",
     seq: 1,
@@ -102,7 +102,7 @@ test("[§70.6] 요약: 앵커별 n · 중앙값 · 최댓값, firstAudioMs가 �
   });
 });
 
-test("[§70.6 P-0] 준비 구간 레코드: 표시 순서대로 차이를 계산하고 빠진 표시는 null이다", () => {
+test("[§71.6 P-0] 준비 구간 레코드: 표시 순서대로 차이를 계산하고 빠진 표시는 null이다", () => {
   resetCallSetupMarks();
   markCallSetup("accept", 0);
   markCredentialsPrefetched(true);
@@ -131,7 +131,7 @@ test("[§70.6 P-0] 준비 구간 레코드: 표시 순서대로 차이를 계산
   assert.deepEqual(readCallSetupMarks(), {});
 });
 
-test("[§70.6 G432] 로그 줄에 실리는 문자열 값은 모델명 · 종류 · 앵커 · 종료 사유뿐이다(전사 · 식별자 0)", () => {
+test("[§71.6 G432] 로그 줄에 실리는 문자열 값은 모델명 · 종류 · 앵커 · 종료 사유뿐이다(전사 · 식별자 0)", () => {
   let s = noteSentTurn(INITIAL_LIVE_LATENCY_STATE, "text", 0);
   s = noteModelAudio(s, { nowMs: 10, audioMs: 10, lastLoudAt: null });
   const { record } = noteTurnEnd(s, { nowMs: 20, endedBy: "interrupted" });

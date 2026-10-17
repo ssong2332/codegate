@@ -203,7 +203,7 @@ const log = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") console.info("[gemini]", ...args);
 };
 
-// §70.6(G432) — 지연 계측 1줄. 위 `log()`와 달리 **production에서도 남긴다**(실기기 원격 디버깅으로 읽는다).
+// §71.6(G432) — 지연 계측 1줄. 위 `log()`와 달리 **production에서도 남긴다**(실기기 원격 디버깅으로 읽는다).
 // 숫자 · 종류 · 모델명만 싣는다 — 전사 텍스트 · 식별자는 이 줄에 들어가지 않는다(`liveLatency.test.ts`).
 const logLatency = (line: string) => {
   console.info(LIVE_LATENCY_LOG_PREFIX, line);
@@ -252,7 +252,7 @@ export default function GeminiVoiceSession({
   // 전환 상태 단언(`personaStateTurn`, turnComplete:false)을 같은 Live 세션에 넣기 위한 참조. 메인
   // effect의 지역 변수 `session`은 밖에서 볼 수 없으므로 연결 직후 여기에 같이 담아 둔다.
   const liveSessionRef = useRef<GeminiLiveSession | null>(null);
-  // ⭐ §70.5(G431) — `turnComplete:true` 텍스트 턴(타이핑 · 지시)을 메인 effect의 보류 큐에 넣는 브리지.
+  // ⭐ §71.5(G431) — `turnComplete:true` 텍스트 턴(타이핑 · 지시)을 메인 effect의 보류 큐에 넣는 브리지.
   // 3.8은 모델 턴 진행 중에 이 형태를 받으면 생성을 끊으므로, 아래 effect들은 세션에 직접 보내지 않는다.
   // §57.4 D3(G369)의 "타이핑 전사를 음성과 같은 flush 큐(`userBuffer`)에 넣는다"는 이제 큐가 실제로 보낼 때
   // (`sendClientTurn`) 지킨다 — 예전 `appendUserTranscriptRef` 브리지는 그래서 없앴다.
@@ -303,7 +303,7 @@ export default function GeminiVoiceSession({
     let stream: MediaStream | null = null;
     let inputContext: AudioContext | null = null;
     let outputContext: AudioContext | null = null;
-    // §70.7(G433) — AI 음성은 이 게인 노드를 거쳐 스피커로 나간다(예전엔 destination 직결 = 최대 음량).
+    // §71.7(G433) — AI 음성은 이 게인 노드를 거쳐 스피커로 나간다(예전엔 destination 직결 = 최대 음량).
     let outputGain: GainNode | null = null;
     let processor: ScriptProcessorNode | null = null;
     let session: GeminiLiveSession | null = null;
@@ -469,7 +469,7 @@ export default function GeminiVoiceSession({
       }
     };
 
-    // §57.4 D3 — 음성 입력(`inputTranscription`)과 타이핑 입력(§70.5 보류 큐의 `sendClientTurn`이
+    // §57.4 D3 — 음성 입력(`inputTranscription`)과 타이핑 입력(§71.5 보류 큐의 `sendClientTurn`이
     // 실제로 보낼 때)이 **같은 자리**에 적립되도록 모은 함수. 기존 `userBuffer +=`
     // 자리도 이 함수를 거치게 해 적립 규칙을 한 곳에 둔다.
     const appendUserBuffer = (text: string) => {
@@ -502,7 +502,7 @@ export default function GeminiVoiceSession({
       scammerBuffer = "";
     };
 
-    // ⭐ §70.6 — 지연 계측 상태(순수 함수 `liveLatency.ts`가 전이를 소유한다). 모델 턴이 닫힐 때마다
+    // ⭐ §71.6 — 지연 계측 상태(순수 함수 `liveLatency.ts`가 전이를 소유한다). 모델 턴이 닫힐 때마다
     // 레코드 1개를 받아 한 줄 남기고, 통화가 끝나면 요약 1줄을 남긴다.
     let latencyState = INITIAL_LIVE_LATENCY_STATE;
     const latencyRecords: LiveLatencyTurnRecord[] = [];
@@ -529,7 +529,7 @@ export default function GeminiVoiceSession({
       logLatency(formatLatencyLine(credentials.geminiModel, summarizeLatency(latencyRecords)));
     };
 
-    // ⭐⭐ §70.5(G431) — `turnComplete:true` 텍스트 턴 보류 큐. 3.8은 모델 턴 진행 중 이 형태를 받으면
+    // ⭐⭐ §71.5(G431) — `turnComplete:true` 텍스트 턴 보류 큐. 3.8은 모델 턴 진행 중 이 형태를 받으면
     // 생성을 끊는다(2026-10-17 프로브: 77ms 뒤 interrupted). 2.5가 서버에서 하던 "턴 끝까지 보류"를 여기서
     // 재현한다. ⛔ 이 파일에서 `turnComplete: true` 전송은 아래 `sendClientTurn` **한 곳뿐**이어야 한다
     // (`clientTurnQueueWiring.test.ts`가 소스로 고정한다).
@@ -544,7 +544,7 @@ export default function GeminiVoiceSession({
         latencyState = noteSentTurn(latencyState, turn.kind, nowMs);
         if (turn.kind === "opening") markCallSetup("openingSent", nowMs);
         // §57.4 D3 — 타이핑 전사는 **실제로 보낸 시점에** 적립한다. 보류 중에 적립하면 그 턴의 flush에서
-        // 사용자 문장이 아직 말하던 사기범 문장보다 먼저 기록된다(§70.5).
+        // 사용자 문장이 아직 말하던 사기범 문장보다 먼저 기록된다(§71.5).
         if (turn.kind === "text") appendUserBuffer(turn.text.trim());
       } catch {
         // 전송 실패는 무시 — 통화는 계속된다(P-4 비차단). 오프닝이면 사용자가 먼저 말하면 이어진다.
@@ -608,7 +608,7 @@ export default function GeminiVoiceSession({
         turnInProgress: turnInProgressForDelay,
       });
       speakingTimer = setTimeout(() => {
-        // §70.5 — 턴이 아직 진행 중인데 게이트가 닫혔다 = 서버가 turnComplete 없이 멈췄다(stall). 보류
+        // §71.5 — 턴이 아직 진행 중인데 게이트가 닫혔다 = 서버가 turnComplete 없이 멈췄다(stall). 보류
         // 큐와 지연 계측도 이 턴을 끝난 것으로 본다(안 그러면 보류분이 다음 turnComplete까지 갇힌다).
         const stalled = turnInProgress;
         agentSpeaking = false;
@@ -656,7 +656,7 @@ export default function GeminiVoiceSession({
 
     (async () => {
       try {
-        // §70.6 P-0 — 준비 구간 표시(받기 · 자격증명 준비는 `useRealtimeCall`이 이미 찍었다).
+        // §71.6 P-0 — 준비 구간 표시(받기 · 자격증명 준비는 `useRealtimeCall`이 이미 찍었다).
         markCallSetup("mount", performance.now());
         log("getUserMedia…");
         // 에코 제거/잡음 억제/자동 게인을 명시적으로 켠다(2026-07-23). 노트북 스피커로 나온 AI
@@ -680,7 +680,7 @@ export default function GeminiVoiceSession({
         // 비동기 effect에서 만든 컨텍스트는 suspended로 시작할 수 있다 — 명시적으로 깨운다.
         await outputContext.resume().catch(() => {});
         await inputContext.resume().catch(() => {});
-        // §70.7(G433) — 기본 음량은 `GEMINI_OUTPUT_GAIN`(판단값 · OQ-A89). 받은 오디오 소스는 전부 이
+        // §71.7(G433) — 기본 음량은 `GEMINI_OUTPUT_GAIN`(판단값 · OQ-A89). 받은 오디오 소스는 전부 이
         // 노드에 연결한다(아래 onmessage).
         outputGain = outputContext.createGain();
         outputGain.gain.value = GEMINI_OUTPUT_GAIN;
@@ -738,7 +738,7 @@ export default function GeminiVoiceSession({
                 const calls = message.toolCall.functionCalls ?? [];
                 const activeSession = session;
                 if (calls.length > 0 && activeSession) {
-                  // §70.6 — 도구 대기(콜러블 왕복)를 턴 지연과 따로 잰다.
+                  // §71.6 — 도구 대기(콜러블 왕복)를 턴 지연과 따로 잰다.
                   latencyState = noteToolCall(latencyState, {
                     nowMs: performance.now(),
                     lastLoudAt: userSpeechDebounceState.lastLoudAt,
@@ -808,7 +808,7 @@ export default function GeminiVoiceSession({
                 scheduledSources.add(source);
                 source.onended = () => scheduledSources.delete(source);
                 markSpeaking();
-                // §70.6 — 첫 청크 도착 시각(앵커 → 첫 오디오). 반이중 억제 때문에 이 시점의 `lastLoudAt`은
+                // §71.6 — 첫 청크 도착 시각(앵커 → 첫 오디오). 반이중 억제 때문에 이 시점의 `lastLoudAt`은
                 // 응답 직전 참가자 발화 끝이다.
                 const nowMs = performance.now();
                 if (markOpeningFirstAudio(nowMs)) {
@@ -855,7 +855,7 @@ export default function GeminiVoiceSession({
                 // 직후**라는 원래 순서를 그대로 유지한다 — 문자 도착 판단이 전사보다 앞서면
                 // 앵커 턴 계산(§15.1.5 G21)이 한 턴 어긋난다.
                 handlersRef.current.onScammerTurnComplete?.();
-                // §70.6 — 이 모델 턴의 지연 레코드를 닫는다. §70.5 — 턴이 끝났으니 보류분 1건을 보낸다
+                // §71.6 — 이 모델 턴의 지연 레코드를 닫는다. §71.5 — 턴이 끝났으니 보류분 1건을 보낸다
                 // (2.5가 서버에서 하던 순서와 같다). 전사 flush · 부모 경계 콜백 **뒤**에 둔다 — 보류됐던
                 // 타이핑은 여기서야 userBuffer에 적립돼 다음 턴의 사용자 발화로 기록된다.
                 closeLatencyTurn("turnComplete");
@@ -885,7 +885,7 @@ export default function GeminiVoiceSession({
         markCallSetup("connectResolved", performance.now());
         // 타이핑 입력(textMessage effect)이 이 세션에 닿을 수 있도록 노출한다.
         liveSessionRef.current = session;
-        // §70.5(G431) — 타이핑 · 지시 effect는 이 함수로만 텍스트 턴을 넣는다(보류 큐 경유).
+        // §71.5(G431) — 타이핑 · 지시 effect는 이 함수로만 텍스트 턴을 넣는다(보류 큐 경유).
         requestClientTurnRef.current = (turn: ClientTurn) =>
           dispatchClientTurn({ type: "request", turn, nowMs: performance.now() });
 
@@ -893,7 +893,7 @@ export default function GeminiVoiceSession({
         // 콜백(위)이 아니라 connect()가 실제로 resolve된 직후에 보내는 이유: onopen은 소켓 이벤트라
         // connect()의 반환 Promise가 아직 resolve되기 전에 먼저 발화할 수 있어(session 변수가 아직
         // 할당되기 전), 여기서 보내는 것이 session이 확실히 non-null임을 보장하는 가장 이른 지점이다.
-        // §70.5 — 오프닝도 보류 큐로 보낸다(이 시점엔 큐가 비어 즉시 나간다). 그래야 첫 응답이 오기 전에
+        // §71.5 — 오프닝도 보류 큐로 보낸다(이 시점엔 큐가 비어 즉시 나간다). 그래야 첫 응답이 오기 전에
         // 들어온 타이핑이 오프닝을 끊지 않는다. 전송 실패는 `sendClientTurn`이 삼킨다(P-4 — 사용자가 먼저
         // 말을 걸면 대화는 정상적으로 이어진다).
         dispatchClientTurn({
@@ -1010,7 +1010,7 @@ export default function GeminiVoiceSession({
   // 이제 음성 입력과 같은 자리(`userBuffer`)에 넣어 다음 `flushTranscript()`(turnComplete 또는 onclose)에서
   // 함께 내보낸다 — 유실 없음.
   //
-  // ⭐ §70.5(G431) — 이제 세션에 직접 보내지 않고 보류 큐에 넣는다. 사기범이 말하는 중이면 그 턴이 끝난
+  // ⭐ §71.5(G431) — 이제 세션에 직접 보내지 않고 보류 큐에 넣는다. 사기범이 말하는 중이면 그 턴이 끝난
   // 뒤에 나간다(3.8은 즉시 보내면 사기범 말을 끊는다). 전사 적립도 큐가 **실제로 보낼 때** 한다.
   useEffect(() => {
     if (!textMessage || !textMessage.text.trim()) return;
@@ -1022,7 +1022,7 @@ export default function GeminiVoiceSession({
   // T68 — 문자 도착 announce 지시 주입(UX-027/UF-008). textMessage와 같은 경로지만 **전사에
   // 기록하지 않는다**(사용자 발화가 아니라 오케스트레이션 신호 — OPENING_TRIGGER_TURN과 동일 취지).
   // 실패해도 문자는 이미 도착해 있으므로 학습 가치는 보존된다(배너·문자함은 대사와 무관, P-4).
-  // §70.5(G431) — 지시도 보류 큐로 넣는다(사기범 발화 도중이면 그 턴이 끝난 뒤에 나간다).
+  // §71.5(G431) — 지시도 보류 큐로 넣는다(사기범 발화 도중이면 그 턴이 끝난 뒤에 나간다).
   useEffect(() => {
     if (!instructionTurn || !instructionTurn.text.trim()) return;
     requestClientTurnRef.current?.({ kind: "instruction", text: instructionTurn.text });

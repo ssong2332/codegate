@@ -24,13 +24,13 @@ function run(events: ClientTurnEvent[], start: ClientTurnQueueState = INITIAL_CL
   return { state, sent };
 }
 
-test("[§70.5 G431] 유휴 상태의 요청은 그 자리에서 보내고 응답 대기로 들어간다", () => {
+test("[§71.5 G431] 유휴 상태의 요청은 그 자리에서 보내고 응답 대기로 들어간다", () => {
   const { state, sent } = run([{ type: "request", turn: opening, nowMs: 10 }]);
   assert.deepEqual(sent, [{ at: 10, turn: opening }]);
   assert.equal(state.awaitingSince, 10);
 });
 
-test("[§70.5 G431] 모델 턴 진행 중(오디오 수신 후) 요청은 보류했다가 turnComplete에서 보낸다(2.5 서버 보류 재현)", () => {
+test("[§71.5 G431] 모델 턴 진행 중(오디오 수신 후) 요청은 보류했다가 turnComplete에서 보낸다(2.5 서버 보류 재현)", () => {
   const { state, sent } = run([
     { type: "modelAudio", nowMs: 100 },
     { type: "request", turn: typed, nowMs: 200 },
@@ -42,7 +42,7 @@ test("[§70.5 G431] 모델 턴 진행 중(오디오 수신 후) 요청은 보류
   assert.equal(state.modelTurnActive, false);
 });
 
-test("[§70.5] 우리가 보낸 턴의 응답을 기다리는 중(첫 오디오 전)의 요청도 보류한다 — 연속 전송이 막 시작한 생성을 끊지 않게", () => {
+test("[§71.5] 우리가 보낸 턴의 응답을 기다리는 중(첫 오디오 전)의 요청도 보류한다 — 연속 전송이 막 시작한 생성을 끊지 않게", () => {
   const { sent } = run([
     { type: "request", turn: opening, nowMs: 0 },
     { type: "request", turn: typed, nowMs: 50 },
@@ -50,7 +50,7 @@ test("[§70.5] 우리가 보낸 턴의 응답을 기다리는 중(첫 오디오 
   assert.deepEqual(sent, [{ at: 0, turn: opening }]);
 });
 
-test("[§70.5] 보류분은 한 번에 1건씩, 앞 건의 응답이 끝난 turnComplete마다 나간다(FIFO)", () => {
+test("[§71.5] 보류분은 한 번에 1건씩, 앞 건의 응답이 끝난 turnComplete마다 나간다(FIFO)", () => {
   const { sent, state } = run([
     { type: "modelAudio", nowMs: 0 },
     { type: "request", turn: typed, nowMs: 10 },
@@ -69,7 +69,7 @@ test("[§70.5] 보류분은 한 번에 1건씩, 앞 건의 응답이 끝난 turn
   assert.equal(state.pending.length, 0);
 });
 
-test("[§70.5] interrupted에서는 보내지 않는다 — 참가자 발화 응답의 turnComplete에서 보낸다", () => {
+test("[§71.5] interrupted에서는 보내지 않는다 — 참가자 발화 응답의 turnComplete에서 보낸다", () => {
   const { sent } = run([
     { type: "modelAudio", nowMs: 0 },
     { type: "request", turn: instr, nowMs: 10 },
@@ -81,7 +81,7 @@ test("[§70.5] interrupted에서는 보내지 않는다 — 참가자 발화 응
   assert.deepEqual(sent, [{ at: 3000, turn: instr }]);
 });
 
-test("[§70.5] stall(서버가 turnComplete를 안 보냄)도 턴 끝으로 보고 보류분을 내보낸다", () => {
+test("[§71.5] stall(서버가 turnComplete를 안 보냄)도 턴 끝으로 보고 보류분을 내보낸다", () => {
   const { sent } = run([
     { type: "modelAudio", nowMs: 0 },
     { type: "request", turn: typed, nowMs: 10 },
@@ -90,7 +90,7 @@ test("[§70.5] stall(서버가 turnComplete를 안 보냄)도 턴 끝으로 보�
   assert.deepEqual(sent, [{ at: 4500, turn: typed }]);
 });
 
-test("[§70.5] 응답이 끝내 안 오면 AWAIT_RESPONSE_TIMEOUT_MS 뒤 tick에서 풀려 다음 보류분이 나간다", () => {
+test("[§71.5] 응답이 끝내 안 오면 AWAIT_RESPONSE_TIMEOUT_MS 뒤 tick에서 풀려 다음 보류분이 나간다", () => {
   const { sent } = run([
     { type: "request", turn: instr, nowMs: 0 },
     { type: "request", turn: typed, nowMs: 100 },
@@ -106,7 +106,7 @@ test("[§70.5] 응답이 끝내 안 오면 AWAIT_RESPONSE_TIMEOUT_MS 뒤 tick에
   );
 });
 
-test("[§70.5] 모델 턴 진행 중에는 타임아웃이 지나도 tick이 보내지 않는다", () => {
+test("[§71.5] 모델 턴 진행 중에는 타임아웃이 지나도 tick이 보내지 않는다", () => {
   const { sent } = run([
     { type: "modelAudio", nowMs: 0 },
     { type: "request", turn: typed, nowMs: 10 },
@@ -115,7 +115,7 @@ test("[§70.5] 모델 턴 진행 중에는 타임아웃이 지나도 tick이 보
   assert.deepEqual(sent, []);
 });
 
-test("[§70.5] 첫 오디오가 오면 응답 대기가 풀리고 모델 턴 진행 중으로 바뀐다", () => {
+test("[§71.5] 첫 오디오가 오면 응답 대기가 풀리고 모델 턴 진행 중으로 바뀐다", () => {
   const { state } = run([
     { type: "request", turn: opening, nowMs: 0 },
     { type: "modelAudio", nowMs: 900 },
@@ -124,7 +124,7 @@ test("[§70.5] 첫 오디오가 오면 응답 대기가 풀리고 모델 턴 진
   assert.equal(state.modelTurnActive, true);
 });
 
-test("[§70.5] 입력 상태를 변경하지 않는다(순수 함수)", () => {
+test("[§71.5] 입력 상태를 변경하지 않는다(순수 함수)", () => {
   const before: ClientTurnQueueState = {
     modelTurnActive: true,
     awaitingSince: null,
@@ -138,7 +138,7 @@ test("[§70.5] 입력 상태를 변경하지 않는다(순수 함수)", () => {
   assert.equal(JSON.stringify(before), snapshot);
 });
 
-test("[§70.5 reviewer M1] interrupted 직후 오디오 없는 turnComplete(3.8의 끊긴 턴 마감)로는 보류분을 풀지 않는다", () => {
+test("[§71.5 reviewer M1] interrupted 직후 오디오 없는 turnComplete(3.8의 끊긴 턴 마감)로는 보류분을 풀지 않는다", () => {
   const { sent, state } = run([
     { type: "modelAudio", nowMs: 0 },
     { type: "request", turn: instr, nowMs: 10 },
@@ -157,7 +157,7 @@ test("[§70.5 reviewer M1] interrupted 직후 오디오 없는 turnComplete(3.8�
   assert.deepEqual(after.sent, [{ at: 6000, turn: instr }]);
 });
 
-test("[§70.5 reviewer M1] 끊긴 뒤 응답이 끝내 없으면 tick 타임아웃으로 풀린다", () => {
+test("[§71.5 reviewer M1] 끊긴 뒤 응답이 끝내 없으면 tick 타임아웃으로 풀린다", () => {
   const { sent } = run([
     { type: "modelAudio", nowMs: 0 },
     { type: "request", turn: instr, nowMs: 10 },
@@ -168,7 +168,7 @@ test("[§70.5 reviewer M1] 끊긴 뒤 응답이 끝내 없으면 tick 타임아�
   assert.deepEqual(sent, [{ at: 2077 + AWAIT_RESPONSE_TIMEOUT_MS, turn: instr }]);
 });
 
-test("[§70.5 reviewer M2] BLOCKING 도구 대기 중(toolCall → toolResponse)에는 요청을 보류하고 stall로도 풀지 않는다", () => {
+test("[§71.5 reviewer M2] BLOCKING 도구 대기 중(toolCall → toolResponse)에는 요청을 보류하고 stall로도 풀지 않는다", () => {
   const { sent } = run([
     { type: "toolCall", nowMs: 0 },
     { type: "request", turn: typed, nowMs: 100 },
@@ -181,7 +181,7 @@ test("[§70.5 reviewer M2] BLOCKING 도구 대기 중(toolCall → toolResponse)
   assert.deepEqual(sent, [{ at: 9000, turn: typed }]);
 });
 
-test("[§70.5 reviewer M2] 도구 결과를 보낸 뒤의 stall은 다시 턴 끝으로 본다", () => {
+test("[§71.5 reviewer M2] 도구 결과를 보낸 뒤의 stall은 다시 턴 끝으로 본다", () => {
   const { sent } = run([
     { type: "toolCall", nowMs: 0 },
     { type: "request", turn: typed, nowMs: 100 },

@@ -25,7 +25,7 @@ import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider 
 /**
  * 무료 티어에서 쓸 수 있는 실시간 음성 모델.
  *
- * ⭐ 2026-10-17 전환(docs/Architecture.md §70 · ADR-0017): 직전 값 `gemini-2.5-flash-native-audio-preview-12-2025`는
+ * ⭐ 2026-10-17 전환(docs/Architecture.md §71 · ADR-0017): 직전 값 `gemini-2.5-flash-native-audio-preview-12-2025`는
  * Google 폐기 페이지(2026-10-12 갱신)에 종료일 2026-11-17("earliest possible date")로 올라 있고 권장 대체가
  * 이 모델이다. 가격 페이지(2026-10-16)는 둘 다 무료 티어 "Free of charge"로 적는다.
  * ⛔ 이 상수만 바꾸면 안 된다 — 3.8은 도구 호출 기본값이 `NON_BLOCKING`이라 `liveTools.ts`의 `behavior: BLOCKING`

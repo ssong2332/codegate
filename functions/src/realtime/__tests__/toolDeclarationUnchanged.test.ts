@@ -333,9 +333,9 @@ test("[§59.6 liveTools 배선] realtime/index.ts의 두 반환 경로 모두 cr
   assert.match(src, /const withVerifyOffer = <T extends \{ provider: RealtimeProviderName \}>\(credentials: T\): T =>/);
 });
 
-// ⭐ §70 D2(G430) — 3.8은 behavior를 생략하면 NON_BLOCKING이라 도구 호출과 함께 턴을 끝낸다(2026-10-17 프로브).
+// ⭐ §71 D2(G430) — 3.8은 behavior를 생략하면 NON_BLOCKING이라 도구 호출과 함께 턴을 끝낸다(2026-10-17 프로브).
 // 전 시나리오 × 전 난이도에서 선언된 모든 함수가 BLOCKING을 명시하는지 고정한다.
-test("[§70 G430] 선언된 모든 함수는 behavior: BLOCKING을 명시한다", () => {
+test("[§71 G430] 선언된 모든 함수는 behavior: BLOCKING을 명시한다", () => {
   let checked = 0;
   for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
     for (const difficultyLevel of [undefined, "beginner", "intermediate", "advanced"] as const) {
