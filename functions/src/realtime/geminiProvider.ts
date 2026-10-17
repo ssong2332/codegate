@@ -22,8 +22,18 @@ import { buildLiveToolDeclarations, buildLiveToolNames, declaresOfferVerificatio
 import { SCENARIO_SPEAKER_GENDER, speakerGenderFor } from "./scenarioVoice";
 import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider } from "./types";
 
-/** 무료 티어에서 쓸 수 있는 네이티브 오디오 모델(공식 가격 페이지 기준, 2026-07 확인). */
-export const GEMINI_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
+/**
+ * 무료 티어에서 쓸 수 있는 실시간 음성 모델.
+ *
+ * ⭐ 2026-10-17 전환(docs/Architecture.md §71 · ADR-0017): 직전 값 `gemini-2.5-flash-native-audio-preview-12-2025`는
+ * Google 폐기 페이지(2026-10-12 갱신)에 종료일 2026-11-17("earliest possible date")로 올라 있고 권장 대체가
+ * 이 모델이다. 가격 페이지(2026-10-16)는 둘 다 무료 티어 "Free of charge"로 적는다.
+ * ⛔ 이 상수만 바꾸면 안 된다 — 3.8은 도구 호출 기본값이 `NON_BLOCKING`이라 `liveTools.ts`의 `behavior: BLOCKING`
+ * 명시(G430)와, `turnComplete:true`가 생성을 끊어서 클라 보류 큐(`src/lib/realtime/clientTurnQueue.ts`, G431)가
+ * 함께 있어야 2.5와 같은 의미가 된다. 배포는 Hosting(클라) → Functions 순서다(G434).
+ * 롤백: 2026-11-17 전에는 이 값만 2.5로 되돌려도 된다(2.5가 `BLOCKING` 명시를 받는 것을 프로브로 확인).
+ */
+export const GEMINI_LIVE_MODEL = "gemini-3.8-live";
 
 // 한국어 프리셋 음성 풀 — 성별 다양화(2026-07-25, 사용자 신고: generic 보이스피싱이 항상 여성
 // 음성으로만 나옴). Live API는 TTS 모델과 동일한 프리셋 음성을 그대로 쓸 수 있다(ai.google.dev/

@@ -482,3 +482,40 @@ test("GeminiRealtimeProvider: 존재하지 않는 시나리오는 명시적으�
     /시나리오 프롬프트가 없습니다/,
   );
 });
+
+// ⭐ §71(ADR-0017) — 실시간 모델 전환 트립와이어. 직전 값 gemini-2.5-flash-native-audio-preview-12-2025는
+// 2026-11-17 종료 예정이다. 다른 값으로 바꾸려면 §71.3 호환성 표(도구 기본 동작 · turnComplete 끊김)를 다시 본다.
+test("[§71 D1] 실시간 모델은 gemini-3.8-live이고 토큰과 자격증명에 같은 값이 실린다", async () => {
+  assert.equal(GEMINI_LIVE_MODEL, "gemini-3.8-live");
+  const capture = captureTokenRequest();
+  try {
+    const provider = new GeminiRealtimeProvider("test-key");
+    const creds = await provider.createCallCredentials({ sessionId: "sess", scenarioId: "tax-refund-scam", voiceId: "" });
+    const setup = (capture.bodies()[0] as { bidiGenerateContentSetup?: { model?: string } }).bidiGenerateContentSetup;
+    assert.equal(setup?.model, "models/gemini-3.8-live");
+    assert.equal(creds.geminiModel, "gemini-3.8-live");
+  } finally {
+    capture.restore();
+  }
+});
+
+test("[§71 D2/G430] 토큰에 잠기는 모든 도구 선언은 behavior: BLOCKING이다(3.8 기본 NON_BLOCKING 차단)", async () => {
+  const capture = captureTokenRequest();
+  try {
+    const provider = new GeminiRealtimeProvider("test-key");
+    await provider.createCallCredentials({
+      sessionId: "sess",
+      scenarioId: "loan-refinance-scam",
+      voiceId: "",
+      difficultyLevel: "advanced",
+    });
+    const setup = (capture.bodies()[0] as {
+      bidiGenerateContentSetup?: { tools?: { functionDeclarations?: { name?: string; behavior?: string }[] }[] };
+    }).bidiGenerateContentSetup;
+    const decls = (setup?.tools ?? []).flatMap((t) => t.functionDeclarations ?? []);
+    assert.equal(decls.length, 2);
+    for (const d of decls) assert.equal(d.behavior, "BLOCKING", `${d.name}의 behavior`);
+  } finally {
+    capture.restore();
+  }
+});
