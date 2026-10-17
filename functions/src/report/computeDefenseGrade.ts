@@ -9,6 +9,17 @@
 // "(v1)"을 붙여 화면에서도 임시값임을 드러낸다(UI 표기는 grade/page.tsx 참고).
 export type DefenseGradeReportInput = { wasDeceived: boolean };
 
+/**
+ * T186(R-5 · User 결정 2026-10-17) — 등급 산정 대상 리포트만 고른다: 2인 챌린지 체험 리포트(`challengeId`
+ * 있음)는 뺀다. 이미 Google로 로그인한 사람이 링크로 동의하면 그 체험 리포트가 본인 uid로 생기는데
+ * (src/app/challenge/join/page.tsx), 그 결과가 자기 훈련 등급 · sessionCount에 섞이지 않게 한다 —
+ * 클라 /history(src/lib/history/mapHistoryItems.ts) · 실패 아카이브(AC-069)와 같은 규칙이다.
+ * ⛔ computeDefenseGrade의 시그니처는 무변경이다(generateReportCore.ts T72 주석) — 거르기는 여기서만 한다.
+ */
+export function selectGradeReports<T extends { challengeId?: string }>(reports: readonly T[]): T[] {
+  return reports.filter((report) => !report.challengeId);
+}
+
 export type DefenseGradeResult = {
   defenseGrade: string;
   sessionCount: number;

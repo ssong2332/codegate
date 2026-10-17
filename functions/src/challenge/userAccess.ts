@@ -98,6 +98,8 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
   async (request) => {
     // §14.7/ADR-0006 A1 — 로그인 UI는 없지만 클라가 동의 탭 시점에 signInAnonymously로 이미
     // 익명 uid를 확보한 뒤 호출한다. 그 uid가 곧 생성될 체험 세션의 소유자가 된다.
+    // T186(R-5) — 이미 Google 등으로 로그인한 브라우저는 익명 로그인을 건너뛰고 그 uid로 호출한다.
+    // 여기는 익명 여부를 보지 않는다(인증 존재만 요구 — 무변경).
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "동의 처리에는 임시 인증(익명 로그인)이 필요합니다.");
     }
