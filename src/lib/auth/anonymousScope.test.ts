@@ -129,7 +129,8 @@ test("RouteGuard 배선 — 익명 판정으로 /login 리다이렉트·언마�
 test("로그인 화면은 익명 세션일 때 User 확정 안내 문구를 띄운다", () => {
   assert.equal(
     ANONYMOUS_LOGIN_NOTICE,
-    "지금은 친구가 보낸 체험용 임시 접속 상태입니다. 내 훈련을 하려면 Google로 로그인해 주세요.",
+    "지금은 친구가 보낸 체험용 임시 접속 상태입니다. 내 훈련을 하려면 Google로 로그인해 주세요. 로그인하면 방금 본 체험 리포트는 다시 열 수 없습니다.",
+    "OQ-U53 ⓑ — 셋째 문장(로그인하면 방금 본 체험 리포트는 다시 열 수 없다)이 빠졌다",
   );
   const login = readFileSync(LOGIN_PAGE, "utf8");
   assert.match(login, /isAnonymousSession && \(/, "안내가 익명 여부로 갈리지 않는다");
