@@ -10,6 +10,8 @@
 // uid 확보) → `consentChallenge({token})`(체험 세션 생성) → 그 sessionId를 세션 화면(UX-014,
 // session/play)이 읽는 방식(getPendingSessionId, query param 아님)에 맞춰 `setPendingSessionId`로
 // 채택한 뒤 `/session/play`로 이동한다(record/clone/wait 화면의 기존 관례와 동일).
+// T186(R-5) — 이미 비익명(Google)으로 로그인한 브라우저는 `signInAnonymously`를 건너뛰고 그 계정으로
+// 동의한다(needsAnonymousSignInForConsent). 그 체험 리포트는 /history · 방어 등급에서 빠진다(UX-012).
 //
 // **무동의 경로 없음(AC-040)**: 이 화면에는 "동의하고 시작" 외에 체험(통화)로 진입하는 버튼/링크가
 // 존재하지 않는다 — 동의 전에는 어떤 복제 음성도 재생되지 않는다.
@@ -35,6 +37,7 @@ import { DIFFICULTY_LABEL, type DifficultyLevel } from "@/lib/difficulty";
 import {
   COMPLETED_LANDING_BODY,
   COMPLETED_LANDING_TITLE,
+  needsAnonymousSignInForConsent,
   resolveChallengeLandingView,
   resolveConsentFailureView,
 } from "@/lib/challenge";
@@ -136,7 +139,12 @@ export default function ChallengeJoinPage() {
     try {
       // §14.7/ADR-0006 A1 — 로그인 UI 없이 익명 uid만 확보한다. 이미 같은 브라우저에 익명 세션이
       // 있으면(로컬 persistence) 같은 uid가 그대로 재사용된다(중도 이탈 복귀와 자연히 정합).
-      await signInAnonymously(auth);
+      // T186(R-5) — 이미 Google 등으로 로그인돼 있으면 익명 로그인을 건너뛰고 그 계정으로 동의한다
+      // (부르면 SDK가 Google 세션을 익명으로 교체한다). 저장된 로그인 복원이 끝난 뒤에 판정한다.
+      await auth.authStateReady();
+      if (needsAnonymousSignInForConsent(auth.currentUser)) {
+        await signInAnonymously(auth);
+      }
       const result = await consentChallenge({ token });
       setPendingSessionId(result.sessionId);
       setChallengeToken(token);

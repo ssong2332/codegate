@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import {
   COMPLETED_LANDING_BODY,
   COMPLETED_LANDING_TITLE,
+  needsAnonymousSignInForConsent,
   resolveChallengeLandingView,
   resolveConsentFailureView,
 } from "./landingView.ts";
@@ -220,4 +221,45 @@ test("[T181 C6 W-2T] 동의 실패 catch — 랜딩 재조회(getChallengeLandin
   const libCode = codeOnly(readFileSync("src/lib/challenge/landingView.ts", "utf8"));
   const helper = libCode.slice(libCode.indexOf("export async function resolveConsentFailureView"));
   assert.ok(helper.includes("resolveChallengeLandingView("), "실패 판정이 W-1T와 같은 함수(resolveChallengeLandingView)를 쓰지 않는다");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T186(R-5 · OQ-A84 후보 (c) · User 결정 2026-10-17) — 이미 Google 등으로 로그인한 브라우저에서 동의해도
+// Google 세션이 익명으로 바뀌지 않는다. @firebase/auth 1.13.3 `signInAnonymously`는 비익명 현재 사용자를
+// 새 익명 사용자로 교체하므로(에뮬레이터 재현 2026-10-17: 이메일 사용자 → 새 uid · isAnonymous=true),
+// 비익명이면 호출 자체를 하지 않는 것이 이 수정이다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("[T186 R-5] needsAnonymousSignInForConsent — 로그인 전 · 익명은 true, 비익명(Google 등)은 false", () => {
+  assert.equal(needsAnonymousSignInForConsent(null), true, "로그인 전에는 익명 uid를 확보해야 한다(AC-048)");
+  assert.equal(needsAnonymousSignInForConsent({ isAnonymous: true }), true, "익명은 SDK가 같은 uid를 돌려준다(중도 이탈 복귀)");
+  assert.equal(
+    needsAnonymousSignInForConsent({ isAnonymous: false }),
+    false,
+    "비익명 사용자에게 signInAnonymously를 부르면 Google 세션이 익명으로 교체된다(R-5)",
+  );
+});
+
+test("[T186 R-5 배선] handleConsent — 로그인 복원 대기 → 판정 함수 → 그 안에서만 signInAnonymously → consentChallenge 순서", () => {
+  const start = pageCode.indexOf("const handleConsent = async");
+  const end = pageCode.indexOf("const handleSubmitReport", start);
+  assert.ok(start >= 0 && end > start, "handleConsent를 찾지 못했다");
+  const handler = pageCode.slice(start, end);
+
+  const readyAt = handler.indexOf("await auth.authStateReady();");
+  const guardAt = handler.indexOf("if (needsAnonymousSignInForConsent(auth.currentUser)) {");
+  const signInAt = handler.indexOf("await signInAnonymously(auth);");
+  const consentAt = handler.indexOf("await consentChallenge({ token });");
+  assert.ok(readyAt >= 0, "저장된 로그인 복원(authStateReady)을 기다리지 않는다 — 복원 전 currentUser=null이면 Google 세션이 교체된다");
+  assert.ok(guardAt > readyAt, "판정(needsAnonymousSignInForConsent)이 로그인 복원 대기보다 뒤여야 한다");
+  assert.ok(signInAt > guardAt, "signInAnonymously가 판정 블록 안에 있어야 한다");
+  assert.ok(consentAt > signInAt, "consentChallenge는 익명 로그인 판정 뒤에 불려야 한다");
+  const guardBlock = handler.slice(guardAt, handler.indexOf("}", guardAt) + 1);
+  assert.ok(guardBlock.includes("await signInAnonymously(auth);"), "signInAnonymously가 판정 블록 밖에 있다 — 비익명 사용자도 교체된다");
+  assert.equal(pageCode.split("signInAnonymously(auth)").length - 1, 1, "signInAnonymously 호출은 판정 블록 안의 1곳뿐이어야 한다");
+
+  const pageImports = namesIn(pageCode, "import", "@/lib/challenge");
+  assert.ok(pageImports.includes("needsAnonymousSignInForConsent"), "페이지가 needsAnonymousSignInForConsent를 @/lib/challenge에서 가져와야 한다");
+  const barrelExports = namesIn(readFileSync("src/lib/challenge/index.ts", "utf8"), "export", "./landingView");
+  assert.ok(barrelExports.includes("needsAnonymousSignInForConsent"), "배럴이 needsAnonymousSignInForConsent를 다시 내보내야 한다");
 });

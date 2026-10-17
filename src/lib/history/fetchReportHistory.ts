@@ -29,6 +29,8 @@ export async function fetchReportHistory(uid: string): Promise<ReportHistorySour
       sessionId: data.sessionId as string,
       wasDeceived: Boolean(data.wasDeceived),
       createdAt,
+      // T186 — 챌린지 체험 리포트 제외는 mapReportsToHistoryItems가 한다(fetchArchivePage.ts와 같은 형태).
+      challengeId: (data.challengeId as string | undefined) ?? null,
     };
   });
 }

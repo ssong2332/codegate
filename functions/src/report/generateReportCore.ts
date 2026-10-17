@@ -26,7 +26,7 @@ import {
   type AdviceChannel,
   type AnalysisMessage,
 } from "./analyzeConversation";
-import { computeDefenseGrade } from "./computeDefenseGrade";
+import { computeDefenseGrade, selectGradeReports } from "./computeDefenseGrade";
 import {
   buildSmsTimeline,
   promoteSmsLandingSubmits,
@@ -360,10 +360,13 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
 }
 
 /** uid의 누적 reports를 다시 읽어 등급을 재계산하고 users/{uid}에 merge write한다. `reports`는
- * uid 단일 필드 동등 조건 쿼리라 Firestore 자동 인덱스로 충분하다(Database.md 인덱스 표 변경 불요). */
+ * uid 단일 필드 동등 조건 쿼리라 Firestore 자동 인덱스로 충분하다(Database.md 인덱스 표 변경 불요).
+ * T186 — 2인 챌린지 체험 리포트는 산정에서 뺀다(selectGradeReports). 쿼리는 그대로다(인덱스 무변경). */
 async function updateDefenseGrade(db: FirebaseFirestore.Firestore, uid: string): Promise<void> {
   const reportsSnap = await db.collection("reports").where("uid", "==", uid).get();
-  const results = reportsSnap.docs.map((doc) => ({ wasDeceived: Boolean((doc.data() as ReportDoc).wasDeceived) }));
+  const results = selectGradeReports(reportsSnap.docs.map((doc) => doc.data() as ReportDoc)).map((report) => ({
+    wasDeceived: Boolean(report.wasDeceived),
+  }));
   const { defenseGrade, sessionCount } = computeDefenseGrade(results);
   await db.collection("users").doc(uid).set({ defenseGrade, sessionCount }, { merge: true });
 }
