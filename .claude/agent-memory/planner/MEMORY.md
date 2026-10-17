@@ -3,13 +3,13 @@
 - [AC 번호 예약 금지](project_ac_number_reservation.md) — 예약 번호는 반드시 소진된다(5회) · 소진 경로는 행·브랜치명·커밋 트레일러 3종
 - [AC·완료 증거 작성 형식](project_ac_verifiability.md) — 판정 불가 문장 금지, 역방향 확인·before/after 수치 필수, 추적성 갭 처리 절차
 - [편집만 하고 커밋 금지](feedback_edit_only_handoff.md) — 브랜치·커밋은 오케스트레이터 몫, 신규 행은 append만, 집행 패스는 재검토 금지 · 결정 전달문은 정본과 대조
-- [AC 문면 수정의 소급 영향](project_ac_amendment_retroactivity.md) — 실질 판정은 안 뒤집혀도 제출된 증거가 무효가 된다, 그래서 신설이 기본 · User 확정 예외·검증층 대체의 형식
+- [AC 문면 수정의 소급 영향](project_ac_amendment_retroactivity.md) — 실질 판정은 안 뒤집혀도 제출된 증거가 무효가 된다, 그래서 신설이 기본 · User 확정 예외·요구 삭제(갱신/읽기 고지)의 형식
 - [후속 결함과 게이트 fixture 충돌](project_followup_fixture_collision.md) — 신고 발화가 선행 게이트의 "정상 샘플"인지 grep · 하위 경우 판별 · 설계의 예정 진리표도 fixture
 - [사용자의 범위 좁히기 정정](feedback_user_scope_narrowing.md) — "그건 A에서 말한 거고 B는 아니야"는 새 요구가 아니라 범위 정정, 제외 범위와 담당 태스크를 명시
 - [셸 없이 실측하는 법](project_no_shell_measurement.md) — base·커밋메시지는 `.git`·COMMIT_EDITMSG 직접 판독, ff 구간 해시 부재 ≠ 미병합, Glob 타임아웃 지도
 - [점유된 행은 통째로 회피](feedback_row_ownership_conflict.md) — 브랜치명에 걸린 행·merged 행은 포인터 한 줄도 금지, todo 행만 append, 편집 후 열 수 8 재검증
-- [지시문 전제 반증](project_premise_falsification.md) — "불가능"도 grep하라 · 경로가 참이어도 적재물(Mock 무음)을 따로 확인 · 정책 vs 결함은 선행 Major grep
-- [워크트리 편집 격리](project_worktree_edit_isolation.md) — main 체크아웃은 읽기만 되고 편집은 거부된다, 워크트리 사본의 base 동일성을 먼저 증명하라 · base는 origin/main일 수 있다
+- [지시문 전제 반증](project_premise_falsification.md) — "불가능"도 grep하라 · 적재물(Mock 무음) 따로 확인 · 정책 vs 결함은 선행 Major grep · 개정 대상 목록은 전수가 아니다
+- [워크트리 편집 격리](project_worktree_edit_isolation.md) — main 체크아웃은 읽기만 되고 편집은 거부된다, 워크트리 사본의 base 동일성을 먼저 증명하라 · base는 origin/main일 수 있다 · 중단 뒤 재개 시 base 재확인
 - [리뷰 판정 기록처](reference_codereview_log.md) — docs/CodeReview.md가 유일한 reviewer·QA 기록이나 항상 뒤처진다, PR 번호는 검증 불가
 - [선례 인용은 라벨로 재grep](project_precedent_citation_drift.md) — "T116의 P1" 인용이 실제로는 T115였다, 한 칸 어긋난 선례가 근거를 통째로 무효화한다
 - [판정표 확장 절차](project_rule_table_extension.md) — 닫힌 표엔 섞지 말고 분리·방어 행 필수 · 기존 표 ✗ 대조를 먼저 보이고 "먼저인가"도 선후 표로
