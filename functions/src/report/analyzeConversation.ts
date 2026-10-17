@@ -26,10 +26,11 @@ import {
   extractTacticLabel,
   STRUCTURED_MARKER_PATTERN,
 } from "../scenarios/tacticFlavor";
+import type { MessengerChannel } from "../shared/types";
 import { resolveTacticCategory, type TacticCategory } from "./tacticCategory";
 
 /** 대처법·예방 조언 문구를 고르는 채널. 부재는 "voice"다(`MessageDoc.channel` 하위호환 규칙과 같다). */
-export type AdviceChannel = "voice" | "messenger";
+export type AdviceChannel = MessengerChannel;
 
 export type AnalysisMessage = {
   role: "scammer" | "user";
@@ -145,7 +146,8 @@ const BASE_COMPLIANCE_PATTERN =
 //   (D3) 숫자열 + 짧은 어미 — (C)는 **답변 전체가 숫자**일 때만 맞아 "048231 이요"를 놓쳤다. 4자리
 //        이상 숫자열 **뒤가 끝·문장부호·허용 어미일 때만** 연다. 단위(원·만·년·호·시)나 조사(로·에)가
 //        오면 코드가 아니다 — "1332로 전화해 볼게요"(대표번호로 확인하겠다는 답)를 순응으로 몰지 않는다.
-//        8자리 이상은 maskPII가 이미 `[계좌]`로 바꾸므로 (A)가 잡는다.
+//        8자리 이상은 maskPII가 이미 `[계좌]`로 바꾸므로 (A)가 잡는다. ⚠️ 알려진 한계: 숫자 뒤 `요/맞`을
+//        허용해 "1234요?"·"1588 맞아요?" 같은 되묻기도 잡는다(번호를 불러 준 경우가 대부분이라 유지).
 //   (D4) 한글 숫자(음성 전사) — "공사팔이삼일". 읽는 형태 세 가지만 연다: 붙여 읽기(4음절 이상)·한 자씩
 //        띄어 읽기("공 사 팔 …")·세 자 이상 묶음("공사팔 이삼일"). 공·영·육·칠·팔·구 중 하나 이상을
 //        요구하고 단어 앞이 비어 있을 때만 잡아 "사이사이"·"이삼일"·"구사일생"·"공사 일이 이삼일 걸려요"
@@ -153,6 +155,13 @@ const BASE_COMPLIANCE_PATTERN =
 //   (D5) 정보 제공 — 생년월일("80년 1월 1일생", "80년생", "생년월일은 800101")과 잔액 고지("300만원
 //        정도 있어요"). maskPII는 두 형태를 토큰으로 바꾸지 않아 (A)로는 잡히지 않는다. 잔액은 `있`의
 //        **서술형**이 올 때만이다("300만원밖에 없어요"·"있었는데"·"있어도 안 보내요"·"남아 있지 않아요" 제외).
+//        생년월일은 `생`이 붙은 형태("80년생", "N년 N월 N일생")와 "생년월일은+숫자"만 잡는다. `생` 뒤가
+//        어미일 때만이라 "20년 생활했어요"·"15년 생각해 봤어요"는 제외되고, 연도 붙은 날짜만의 답
+//        ("2024년 3월 5일이요")은 생년월일인지 알 수 없어 잡지 않는다(reviewer M1).
+//   (D6) 같은 답변 안의 거절·의심·되묻기 — (D1)~(D5)는 문맥 없이 맞으므로, 답변에 `못/안 드려`·`싫`·
+//        `사기`·`이상하`·`왜 … 물어/알려/불러`가 있으면 **새 갈래만** 꺼진다("300만원 있어요. 근데 못
+//        드려요", "048231 이요? 그걸 왜 불러줘야 하는데요" — reviewer M2). ⛔ RESISTANCE_PATTERN과
+//        (A)~(C)는 건드리지 않는다 — 되감기와 공유하는 저항 어휘를 넓히면 판정이 이 수정 범위 밖까지 바뀐다.
 // 설계 원칙은 (A)~(C)와 같다 — 전부 **순응 쪽**이고 저항 우선(`resisted || !complied`)은 무변경이며,
 // 범용 어미 단독 항목은 넣지 않았다(T52 블랭킷 오버라이드 재발 방지). 문맥 없이는 모호한 답("문자로
 // 보내주실 수 있나요?")은 잡지 않는다 — 과소판정이 오판보다 낫다는 위 원칙 그대로다.
@@ -180,24 +189,27 @@ const CODE_HANGUL_DIGITS = new RegExp(
   ].join("|"),
 );
 const BIRTH_DATE =
-  /\d{2,4}\s*년\s*(?:\d{1,2}\s*월\s*\d{1,2}\s*일\s*)?생|\d{2,4}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일(?=\s*(?:$|[.!?~,…]|이요|요|입니다|이에요|예요|이고|이구))|생년월일[은는이]?\s*\d/;
+  /\d{2,4}\s*년\s*(?:\d{1,2}\s*월\s*\d{1,2}\s*일\s*)?생(?=$|[\s.!?~,…]|이|인|입|예요|요)|생년월일[은는이]?\s*\d/;
 const BALANCE_DISCLOSURE =
   /(?:\d[\d,]*\s*(?:억|천만|백만|만|천)\s*원?|\d[\d,]*\s*원|[일이삼사오육칠팔구십백천]+\s*(?:억|만)\s*원?)\s*(?:정도|쯤|가량|조금|좀)?\s*(?:은|는|이|가)?\s*(?:들어\s*|남아\s*)?(?:있어(?!도|야)|있습니다|있는데|있고|있죠|있네)/;
 
 // ⚠️ export 이유는 RESISTANCE_PATTERN과 동일(T70, §15.6 G7 — 되감기 규칙 폴백이 재사용).
 // ⛔ `g` 플래그를 붙이지 말 것 — `.test()`가 lastIndex를 이어 써서 같은 답변이 번갈아 다르게 판정된다.
+// (D6) 답변 어디에든 거절·의심·되묻기 어휘가 있으면 (D1)~(D5)만 끈다 — 답변 맨 앞에서 끝까지 내다본다.
+const REFUSAL_IN_ANSWER =
+  /못\s*드려|안\s*드려|안\s*드릴|싫|사기|이상하|이상해|이상한|왜[^.?!]{0,12}(물어|알려|불러)/;
+const CONTEXT_FREE_COMPLIANCE = [
+  ASKS_HOW_TO_COMPLY,
+  ACTION_THEN_OK,
+  CODE_DIGITS_WITH_ENDING,
+  CODE_HANGUL_DIGITS,
+  BIRTH_DATE,
+  BALANCE_DISCLOSURE,
+]
+  .map((pattern) => pattern.source)
+  .join("|");
 export const COMPLIANCE_PATTERN = new RegExp(
-  [
-    BASE_COMPLIANCE_PATTERN,
-    ASKS_HOW_TO_COMPLY,
-    ACTION_THEN_OK,
-    CODE_DIGITS_WITH_ENDING,
-    CODE_HANGUL_DIGITS,
-    BIRTH_DATE,
-    BALANCE_DISCLOSURE,
-  ]
-    .map((pattern) => pattern.source)
-    .join("|"),
+  `${BASE_COMPLIANCE_PATTERN.source}|^(?![\\s\\S]*(?:${REFUSAL_IN_ANSWER.source}))[\\s\\S]*?(?:${CONTEXT_FREE_COMPLIANCE})`,
 );
 
 /**
