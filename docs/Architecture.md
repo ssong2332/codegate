@@ -16909,3 +16909,7 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | 4 | 실제 코드 경로 프로브 | 새 `functions/lib`의 `GeminiRealtimeProvider.createCallCredentials`로 3.8 토큰 발급 → 연결 2통화: 첫 마디 1,343 / 949ms · 도구 2종 모두 BLOCKING으로 호출(대기 중 오디오 0) · 비한국어 0건 |
 | 5 | ⚠️ 새 관측 | 3.8 세션 4건 중 1건이 대화 도중 서버 close **1011 "Internal error encountered."**(마지막 발화 직후, 도구 2회 뒤). 같은 설정 재실행은 정상 종료 ⇒ 일시 오류로 보되 **라이브 확인 ⑨**로 추가한다. 클라는 기존대로 `onclose` → 통화 종료 처리 — 2.5 프로브 4건에서는 0건 |
 | 6 | 구현이 명세와 다른 점 | `interrupted`는 응답 대기(`awaitingSince = now`)로 둔다 — 70.5 표의 "보내지 않는다"를 지키면서 그 뒤 응답이 안 오면 `tick` 타임아웃으로 풀리게 하려는 것(전이 테스트 `clientTurnQueue.test.ts`). §57.4 D3의 `appendUserTranscriptRef` 브리지는 큐가 전송 시점에 적립하면서 쓰임이 없어져 제거했다 |
+| 7 | reviewer · QA | reviewer **APPROVED**(Critical 0 · Major 2 권고) · QA **GO(조건부)** — 재측정 functions 901/0 · 루트 475/0 일치 |
+| 8 | 리뷰 반영 | M1/F1 — 3.8의 `interrupted` 직후 오디오 없는 `turnComplete`로는 보류분을 풀지 않는다(`afterInterrupt`). M2/F2 — `toolCall` ~ `toolResponse` 사이는 보류하고 stall로도 풀지 않는다(`toolPending`). 커밋 `26c7f2f` · 루트 475 → **479** · `npm run build` 재통과 |
+| 9 | 남긴 한계(동작 무영향 · 계측 정확도) | F3 — 오프닝 전송 뒤 첫 오디오 전에 마이크 RMS가 문턱을 넘으면 앵커가 `voice`로 잡힌다(오프닝 지연 과소 보고). F4 — `turnComplete` 뒤 늦게 온 청크는 `anchor:"none"` 레코드 1개를 만든다. 라이브 로그를 읽을 때 이 두 경우를 걸러 본다 |
+| 10 | 라이브 확인 추가 | ④에 "참가자 끼어들기 직후 지시가 겹치는가", ①에 "도구 결과 대기 중 타이핑" 케이스를 더한다 |

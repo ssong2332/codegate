@@ -157,6 +157,16 @@ cp functions/.env.example functions/.env
 | **Gemini Live** | 무료 티어 가능 | ❌ 고정 프리셋 음성만 | generic 3종(기관사칭·대출·환급금) |
 | **ElevenLabs Agents** | 유료 | ✅ 가능 | 전체(clone 2종은 이 경로에서만 성립) |
 
+Gemini Live 경로의 모델은 `gemini-3.8-live`다(`functions/src/realtime/geminiProvider.ts`의 `GEMINI_LIVE_MODEL`,
+2026-10-17 전환 — 이전 `gemini-2.5-flash-native-audio-preview-12-2025`는 2026-11-17 종료 예정). 근거와 주의점은
+`docs/Architecture.md` §70 · ADR-0017에 있다. ⚠️ 이 상수만 바꾸지 말 것 — 도구 선언의 `behavior: BLOCKING`과
+클라 보류 큐(`src/lib/realtime/clientTurnQueue.ts`)가 함께 있어야 한다. 배포는 Hosting → Functions 순서다.
+
+- **지연 로그**: 실시간 통화 중 브라우저 콘솔에 `[gemini-latency]` 줄이 남는다(production 포함). 모델 턴마다
+  "앵커(발화 끝·보낸 텍스트) → 첫 오디오" ms와 도구 대기 ms를 숫자로만 적고, 통화 시작 때 준비 구간(setup) 1줄,
+  끝날 때 요약 1줄을 남긴다. 실기기는 원격 디버깅(Android `chrome://inspect` · iOS Safari)으로 읽는다.
+- **기본 음량**: AI 음성은 게인 0.6으로 재생된다(`src/lib/realtime/outputGain.ts` — 실기기 확인 전 잠정값).
+
 둘 다 없으면 텍스트 폴백으로 자동 강등되고 그 사실이 화면에 표시된다. 즉 키 없이도 전체 흐름을
 개발·시연할 수 있다.
 
