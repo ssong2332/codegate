@@ -1,6 +1,6 @@
 # ADR-0017: Gemini Live 모델을 `gemini-3.8-live`로 바꾸되 2.5의 턴·도구 의미를 보존한다 — 도구 `BLOCKING` 명시 + 클라 턴 보류 큐
 
-- Status: proposed
+- Status: proposed (User 승인 대기 — Architecture.md §70)
 - Date: 2026-10-17
 - Owner: architect
 - DECISIONS.md entry: #115

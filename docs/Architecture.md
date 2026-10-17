@@ -16734,3 +16734,167 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 - `docs/DECISIONS.md` — **#113** 1행 append.
 - ⛔ §0~§68 · `functions/**` · `src/**` · `firestore.*` · `firebase.json` · `docs/Tasks.md` · `docs/PRD.md` · `docs/UX.md` · `docs/API.md` · `docs/Database.md` · `docs/adr/**` · `README.md` · `CLAUDE.md` **0줄**. ADR 신설 0 — 모듈 경계 · 계약 신설 0(C4는 기존 잎 모듈에 같은 모양의 전이 하나를 더할 뿐이고 응답 계약은 무변경). 커밋 · push 0건(셸 없음).
 > **번호**: 69.15.1 #5. 재번호가 필요하면 치환 범위는 `### 69.15` 이후 + 위 덧붙임 + DECISIONS #113 행뿐(⛔ 전역 치환 금지).
+
+---
+
+## 70. (미등재 — planner 인계 · P3 · 기한 2026-11-17) Gemini Live 모델 전환 `gemini-2.5-flash-native-audio-preview-12-2025` → `gemini-3.8-live` + 지연 계측 + 출력 음량 — ⭐⭐ **3.8은 같은 설정을 그대로 받지만 기본 동작 두 가지가 다르다: 도구 호출이 턴을 끝내고(`NON_BLOCKING` 기본), `turnComplete:true`가 사기범 말을 끊는다 — 둘 다 명시적으로 2.5 의미로 고정한다** / ⭐ **첫 마디 지연의 지배항은 2.5의 thought 단계(5~7초)였다 — 3.8은 thought 파트를 보내지 않는다** — architect 판정 (ADR-0017)
+
+> 담당 태스크: **미등재** — `docs/Tasks.md` 행 없음(planner 인계, `Refs: (미등재 — planner 인계)`). 범위: `functions/src/realtime/**` · `src/lib/realtime/**` · 해당 테스트 · 루트 `package.json` 테스트 등록. 다른 세션 소관(`functions/src/roleplay/**` · `functions/src/report/**` · 익명 로그인 관련)은 0줄.
+
+### 70.0 판정 요지 (⛔ 금지 먼저)
+
+1. ⛔ **이 절은 소스를 0줄 고쳤다.** 구현은 User 설계 승인 뒤 implementer(70.8).
+2. ⛔ **모델 상수만 바꾸는 배포 금지** — 도구 `behavior: BLOCKING`(G430)과 클라 보류 큐(G431) 없이 3.8을 켜면 가짜 턴 경계와 말 끊김이 생긴다(70.2 실측).
+3. ⛔ **배포 순서 고정: Hosting(클라) → Functions(3.8)**(G434). 클라 변경은 2.5에서도 무해하다.
+4. ⛔ **`NON_BLOCKING` · `scheduling` 채택은 이번 범위가 아니다** — ADR-0015 "결과를 받고 이어 말한다"를 바꾸는 별도 설계다.
+5. ⛔ **`languageCode: "ko-KR"`를 지우지 않는다**(G435) — 3.8이 수용함을 실측했다. 문서상 native audio는 언어 코드를 쓰지 않으므로 효과는 0일 수 있다.
+6. ⛔ **Live 출력 길이 상한(`maxOutputTokens`)을 넣지 않는다** — 문장 중간 절단이 긴 턴보다 나쁘다. 길이는 프롬프트 소관(`roleplay/**`).
+7. ⚠️ 70.2의 수치는 **로컬 Node 프로브, 모델당 2~3통화의 소표본**이다. 브라우저 · 실기기 · 모바일 네트워크 지연은 포함되지 않는다.
+
+### 70.1 착수 시 실측
+
+| # | 항목 | 값 | 출처 |
+|---|---|---|---|
+| 1 | base | origin/main `a9cca63` · 테스트 functions **898/0** · 루트 **446/0** | 이 워크트리 실행 출력(2026-10-17) |
+| 2 | 종료일 | `gemini-2.5-flash-native-audio-preview-12-2025` **November 17, 2026**("earliest possible dates") · 대체 `gemini-3.8-live` · 같은 날 `gemini-3.1-flash-live-preview`도 종료 | ai.google.dev/gemini-api/docs/deprecations (Last updated 2026-10-12, 2026-10-17 열람) |
+| 3 | 3.8 변화 | 비동기 함수 호출이 기본(`BLOCKING`은 하위호환으로 명시 가능) · `turn_complete=true`가 진행 중 생성을 무조건 끊음 · affective dialog 제거 · proactive audio 상시(`false`면 오류) · `thinkingLevel` 미지원 · 한 이벤트에 여러 파트 | ai.google.dev/gemini-api/docs/models/gemini-3.8-live (2026-09-15) · live-api/capabilities (2026-09-18) |
+| 4 | 언어 코드 | *"Native audio output models automatically choose the appropriate language and don't support explicitly setting the language code"* — 오류인지 무시인지는 문서에 없다 | live-guide (2026-09-18) |
+| 5 | 단기 토큰 | 문서는 v1beta를 적지만 SDK 2.13.0은 `auth_tokens/` 키에 *"ephemeral token support is in v1alpha only"* 경고를 낸다(`functions/node_modules/@google/genai/dist/node/index.cjs:14785`) ⇒ 현행 v1alpha 유지 | 문서 + SDK 판독 |
+| 6 | SDK | `FunctionDeclaration.behavior?: Behavior`(`genai.d.ts:4730`) · `Behavior.BLOCKING`(`:1209`) · 토큰 변환이 선언을 그대로 통과(`index.cjs:17362` 이하 `item => item`) · `LiveServerMessage.data`는 파트별로 디코딩해 이어 붙인다(`index.cjs:3140-3158`) | SDK 판독 |
+| 7 | 무료 티어 | 3.8 Live · 2.5 native audio 둘 다 입출력 *"Free of charge"*. 무료 RPD · 동시 세션 수치는 문서에 없음(AI Studio 대시보드) | pricing (2026-10-16) · rate-limits |
+| 8 | 음성 | native audio는 TTS 음성 전부 지원(Puck/Aoede 포함) — 3.8 프로브에서 `Aoede` 수용 확인(청감은 미확인) | live-guide + 70.2 |
+| 9 | 번호 | `^## 70\.` · DECISIONS `#115` · `G430~G435` · `OQ-A89~A90` · ADR-0017 — origin/main 0히트(#114는 T185가 사용) | grep |
+
+### 70.2 라이브 프로브 실측 (2026-10-17 · `tax-refund-scam` advanced · 같은 TTS 대본 5발화 · 콜러블 2초 모사)
+
+| 항목 | 2.5 (현행) | 3.8 |
+|---|---|---|
+| 현행 토큰 제약(ko-KR · VAD 4개 · 전사 2개 · 도구 · v1alpha) | 수용 | **수용**(오류 0) |
+| 첫 마디(트리거 → 첫 오디오) | 7,878 / 4,893 / 4,949ms — 오디오 앞에 `text+thought` 파트 5~7초 | **951 / 878ms** — thought 파트 0 |
+| 발화 끝 → 첫 오디오(도구 없음) | 2,085 · 2,223 · 3,820 · 2,038 · 2,214ms | **1,025 · 1,041 · 1,240 · 978 · 1,360 · 962 · 187 · 1,097ms** |
+| 도구 턴 | 3,281ms — *"문자 한 통 보내드렸습니다"*를 **말한 뒤** `send_prepared_sms` 호출 | 3,618 / 3,671ms(2초 대기 포함) — **먼저 호출**, 결과 뒤 *"안내 문자를 발송해 드렸습니다"* |
+| 사기범 발화 중 `turnComplete:true` 텍스트 | **보류** — 그 턴의 `turnComplete` 뒤에 응답(`interrupted` 0) | **77ms 뒤 `interrupted`, 이어 `turnComplete`**(2회 중 2회) |
+| `turnComplete:false` 주입(A5-α) | 1.5초 내 응답 0 · 다음 음성 턴 정상 | 동일 |
+| `behavior` 생략 | (2.5 기본 = BLOCKING) | `toolCall`과 같은 시각 `generationComplete` + `turnComplete` — 턴이 끝난다 |
+| `behavior: BLOCKING` | **수용**(롤백 호환) | 결과 전 `turnComplete` 없음 |
+| `turnComplete` 시각 | 오디오 실시간 재생 끝 무렵 | 동일 |
+| 출력 포맷 | `audio/pcm;rate=24000` | 동일 |
+| 출력 전사의 비한국어 | 0 | **1건** *"취소될 수があります"*(2통화 중 1) |
+
+### 70.3 호환성 표
+
+| 영역 | 3.8 판정 | 조치 |
+|---|---|---|
+| 도구(`send_prepared_sms` · `offer_verification_desk`) | 기본 `NON_BLOCKING` → 호출 즉시 턴 종료 · 결과는 유휴 시 반영 | **D2** `behavior: BLOCKING` 명시 |
+| 전사(입력 · 출력) | 수용 · 오디오와 같은 이벤트에 실림(클라는 한 핸들러에서 둘 다 읽어 무영향) | 없음 |
+| 단기 토큰(`liveConnectConstraints` · v1alpha · uses 2) | 수용 | 없음 |
+| 음성 Puck/Aoede | 수용(청감은 User 확인) | 없음 |
+| `languageCode: "ko-KR"` | 수용 · 효과 미상 | 유지(G435). 비한국어 혼입은 OQ-A90 |
+| VAD 4개 손잡이 | 수용 · 발화 끝 187ms 응답 사례(400ms 침묵 기준보다 빠름) | 없음 — 70.9 라이브 확인 |
+| `turnComplete:true` 클라 콘텐츠 | 진행 중 턴을 끊음 | **D3** 클라 보류 큐 |
+| `turnComplete:false` | 응답 유발 안 함 | 없음(큐 밖 유지) |
+| proactive audio 상시 · affective dialog 제거 · thinking 미지원 | 이 앱은 셋 다 설정하지 않음(grep 0) | 없음 |
+| 출력 오디오 24kHz | 동일 | 없음 |
+| 무료 쿼터 | 무료 표기 · 한도 수치 미공개 | User가 AI Studio에서 확인 |
+
+### 70.4 결정
+
+| # | 결정 | 근거 |
+|---|---|---|
+| **D1** | `GEMINI_LIVE_MODEL = "gemini-3.8-live"`(`geminiProvider.ts:26`). `-extended-thinking` 아님 | 70.1 #2 · extended는 비동기 전용이라 D2 불가 |
+| **D2** | `liveTools.ts:69-81` 두 선언에 `behavior: Behavior.BLOCKING` | 70.2 `behavior` 생략 행 · ADR-0015 전제 보존 · 2.5도 수용(롤백 호환) |
+| **D3** | `GeminiVoiceSession.tsx`의 `turnComplete:true` 전송 3곳(오프닝 `:749` · 타이핑 `:868` · 지시 `:885`)을 **보류 큐 1곳**으로 모은다(70.5) | 70.2 텍스트 행 — 2.5의 서버 보류를 클라에서 재현 |
+| **D4** | `languageCode` 유지 · VAD 무변경 · v1alpha 유지 | 70.1 #4 · #5 · 70.2 |
+| **D5** | AI 음성에 GainNode — 기본 **0.6**(판단값) · 최종값은 실기기(OQ-A89) | 소스가 `destination`에 직결(`:681`) |
+| **D6** | 지연 계측: 순수 모듈 + production `console.info` 턴당 1줄(70.6) | §50.8.4 *"어느 구간이 실제로 몇 ms인지 아무도 잰 적이 없다"* · `log()`는 production에서 꺼짐(`:178-180`) |
+| **D7** | 출력 길이 상한 미도입 | 70.0 #6 · 3.8 턴 오디오 6.4~13.6초 = 2.5(8.9~14.4초)와 같은 범위 |
+
+### 70.5 D3 클라 보류 큐 명세
+
+순수 모듈 `src/lib/realtime/clientTurnQueue.ts`(React · DOM import 0). 상태 `{ modelTurnActive, awaitingSince, pending[] }`.
+
+| 이벤트 | 전이 | 전송 |
+|---|---|---|
+| `request(turn)` | 유휴(`!modelTurnActive && awaitingSince === null && pending` 비어 있음)면 `awaitingSince = now` | 그 자리에서 1건 |
+| | 유휴가 아니면 `pending` 뒤에 붙인다 | 없음 |
+| `modelAudio` | `modelTurnActive = true` · `awaitingSince = null` | 없음 |
+| `turnComplete` | `modelTurnActive = false` · `awaitingSince = null` → `pending`이 있으면 앞 1건을 꺼내 `awaitingSince = now` | 최대 1건 |
+| `interrupted` | `modelTurnActive = false` — **보내지 않는다**(참가자가 말하는 중) | 없음 |
+| `stall`(게이트 타이머가 진행 중 턴을 닫음, `agentSpeechGate`) | `turnComplete`와 같다 | 최대 1건 |
+| `tick` | `awaitingSince`가 `AWAIT_RESPONSE_TIMEOUT_MS`(**8,000ms**, 판단값 — 2.5 thought 포함 최장 실측 7.9초)를 넘고 `modelTurnActive = false`면 `turnComplete`와 같다 | 최대 1건 |
+
+- 종류 `opening | text | instruction`. 오프닝도 큐로 보낸다 — 첫 응답 전에 들어온 타이핑이 오프닝을 끊지 않게.
+- ⭐ 타이핑 전사(§57.4 D3 `appendUserTranscriptRef`)는 **실제 전송 시점**에 적립한다 — 보류 중에 적립하면 그 턴 flush에서 사용자 문장이 사기범 문장보다 먼저 기록된다.
+- `personaStateTurn`(`turnComplete:false`, `:904`)은 큐 밖 그대로.
+- 잔여 위험: 사용자 음성 끝 → 첫 오디오 사이(3.8 실측 ~1초)에는 클라가 모델 턴 시작을 모른다 — 그 창에 들어온 지시는 막 시작된 생성을 끊을 수 있다(2.5에서는 서버가 보류했다).
+
+### 70.6 D6 지연 계측 명세
+
+순수 모듈 `src/lib/realtime/liveLatency.ts` + `GeminiVoiceSession.tsx` · `useRealtimeCall.ts` 배선.
+
+| 기록 | 앵커 → 끝 | 배선 위치 |
+|---|---|---|
+| `setup`(통화당 1줄 — §50.10 P-0) | 받기(`start()`) → 자격증명 준비(프리페치 여부) → 마운트 → 마이크 → `connect` resolve → 오프닝 전송 → 첫 오디오 · `outputContext.baseLatency` / `outputLatency` | `useRealtimeCall.ts` `start` · `GeminiVoiceSession.tsx` |
+| `turn`(모델 턴당 1줄) | 앵커 → 첫 오디오 청크. 앵커 = 그 턴 직전의 **우리 전송**(opening/text/instruction) 또는 **로컬 RMS 마지막 문턱 초과 시각**(`userSpeechDebounceState.lastLoudAt` — AI 발화 중엔 억제되므로 = 참가자 발화 끝) 중 늦은 쪽. 둘 다 없으면 `anchor: "none"` | `:776-797` · `:670-672` |
+| | `toolWaitMs`(toolCall 수신 → toolResponse 전송의 합) · `toolCalls` · `audioMs` · `endedBy` | `:627-643` |
+| `summary`(종료 시 1줄) | 앵커 종류별 n · 중앙값 · 최댓값 | `onclose` / cleanup |
+
+- 출력: `console.info("[gemini-latency]", JSON.stringify({ v: 1, model, ... }))` — **숫자 · 종류 · 모델명만**(G432: 전사 텍스트 · sessionId · PII 0).
+- 전환 전후 비교 절차: Hosting 먼저 배포(G434) → 2.5로 같은 대본 통화 → Functions(3.8) 배포 → 같은 대본 통화 → 두 로그 비교. 실기기는 원격 디버깅(Android `chrome://inspect` · iOS Safari)으로 읽는다.
+
+### 70.7 D5 출력 게인 명세
+
+- `src/lib/realtime/outputGain.ts` — `export const GEMINI_OUTPUT_GAIN = 0.6;`(0.5~0.7 범위의 판단값, G433).
+- `outputContext` 생성 직후(`:574`) `createGain()` 1개 → `destination` 연결. 각 소스는 `destination` 대신 게인 노드에 연결한다(`:681`).
+- 음량 UI 없음(UX 경로 필요 — 범위 밖). ElevenLabs 경로(`RealtimeVoiceSession.tsx`)는 SDK가 재생하므로 범위 밖.
+
+### 70.8 구현 · 테스트 명세 (implementer — User 승인 뒤)
+
+| 커밋 | 내용 | 테스트 |
+|---|---|---|
+| C1 | `outputGain.ts` + 게인 배선 | 상수 범위 [0.5, 0.7] 단언 · 소스 스캔: `source.connect(outputContext.destination)` 0건 |
+| C2 | `clientTurnQueue.ts` + 배선(70.5) | 전이표 각 행 단위 테스트 · 소스 스캔: `turnComplete: true` 직접 전송이 큐 전송 함수 1곳뿐 |
+| C3 | `liveLatency.ts` + 배선(70.6) | 앵커 선택 · 도구 대기 합 · 요약 · 레코드의 문자열 필드가 `kind` / `anchor` / `model` / `endedBy`뿐 |
+| C4 | D1 + D2(Functions) | 모델 리터럴 고정 단언 · 모든 선언 `behavior === "BLOCKING"`(순수 함수 + 토큰 본문 fetch 캡처) · 기존 `languageCode` 단언 유지 |
+
+- 루트 신규 테스트 파일은 `package.json` `test`에 등록한다(`src/lib/testRegistration.test.ts`).
+- 테스트는 Verified Commands 그대로, 동시 실행 금지. 기준 898/0 · 446/0.
+
+### 70.9 배포 · 롤백 · 라이브 확인 (User)
+
+| 단계 | 내용 |
+|---|---|
+| 1 | Hosting 배포(C1~C3) — 2.5에서 무해. (선택) 같은 대본으로 2.5의 `[gemini-latency]` 수집 |
+| 2 | Functions 배포(C4) — `firebase deploy --only functions` |
+| 롤백 | 2026-11-17 전: C4의 모델 상수만 되돌려 Functions 재배포(2.5가 BLOCKING 수용 — 70.2). 그 뒤: 2.5 없음 — Mock 강등뿐 |
+
+라이브 확인 목록: ① 문자 도구 흐름(도구 호출 → 문자 도착 → 그 뒤 발화) ② 확인창구(오퍼 announce · commit) ③ 첫 마디 ④ 끼어들기 — 말을 잠깐 멈췄을 때 잘리는가(3.8 187ms 응답) · 타이핑이 사기범 말을 끊지 않는가 ⑤ 음량(0.5~0.7) ⑥ Android 통화 중 볼륨 키가 "통화"와 "미디어" 중 어느 슬라이더를 띄우는가(추정: echoCancellation으로 통화 모드) ⑦ 일본어 등 비한국어 혼입 ⑧ AI Studio의 3.8 무료 한도.
+
+### 70.10 if/then 강등표 (⛔ 표에 없는 케이스는 행 추가를 물을 것)
+
+| # | If | Then |
+|---|---|---|
+| 1 | 배포 후 3.8 연결이 실패한다(setup 오류) | Functions의 모델 상수를 2.5로 되돌린다(11-17 전에만). 클라는 그대로 둔다 |
+| 2 | 도구 호출 뒤 모델이 말하지 않고 멈춘다 | BLOCKING 응답 누락이다 — `collectToolResponses` 경로부터 본다. `NON_BLOCKING`으로 바꾸지 않는다(70.0 #4) |
+| 3 | 타이핑 · 지시가 여전히 사기범 말을 끊는다 | 큐를 우회한 전송이 있다 — C2 소스 스캔 테스트를 먼저 본다 |
+| 4 | 보류된 지시가 한 턴 넘게 안 나간다 | `tick` 타임아웃 · `stall` 배선을 본다. 타임아웃 값을 바꾸기 전에 `[gemini-latency]`의 응답 지연 분포를 본다 |
+| 5 | 비한국어 혼입이 반복된다 | OQ-A90 — `roleplay` 소관 시스템 프롬프트 1줄. 이 절의 범위에서 프롬프트를 고치지 않는다 |
+| 6 | 말을 멈춘 참가자가 반복해서 잘린다 | VAD `silenceDurationMs` · `startOfSpeechSensitivity`가 3.8에서 먹는지 먼저 프로브로 본다(3.8은 침묵 기준 전에 답했다) |
+
+### 70.11 가드 · 열린 질문
+
+| ID | 내용 |
+|---|---|
+| **G430** | Live 도구 선언은 `behavior: BLOCKING`을 명시한다 |
+| **G431** | `turnComplete:true` 클라 콘텐츠는 보류 큐 1곳에서만 보낸다 — 모델 턴 진행 중 전송 금지 |
+| **G432** | 지연 로그는 숫자 · 종류 · 모델명만 — 전사 · 식별자 0 |
+| **G433** | 출력 게인은 상수 1곳 · 판단값 표기 |
+| **G434** | 배포 순서 Hosting → Functions |
+| **G435** | `languageCode: "ko-KR"` 유지 |
+| **OQ-A89** | 출력 게인 최종값(0.5~0.7) — 실기기 청취 후 **User** · 기본 0.6 |
+| **OQ-A90** | 3.8 비한국어 혼입 대응으로 시스템 프롬프트에 "한국어로만 말한다" 1줄을 넣을 것인가 — **User · roleplay 소관** · 기본 = 라이브에서 재현되면 착수 |
+
+### 70.12 이 패스의 편집 범위
+
+- `docs/Architecture.md` §70 신설(덧붙임만) · `docs/DECISIONS.md` #115 1행 · `docs/adr/0017-gemini-live-3-8-migration.md` 신설(`68a844e`).
+- ⛔ §0~§69 · `functions/**` · `src/**` · `docs/Tasks.md` · `docs/API.md` · `README.md` · `CLAUDE.md` 0줄. API 계약 무변경 — `geminiModel` 값만 바뀐다(`docs/API.md:46`은 값을 적지 않는다).
