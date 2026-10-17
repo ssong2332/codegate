@@ -7,7 +7,14 @@
 import { useEffect, useRef, useState } from "react";
 import { getRedirectResult } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { DEV_AUTH_ENABLED, devSignIn, ensureUserProfile, signInWithGoogle } from "@/lib/auth";
+import {
+  DEV_AUTH_ENABLED,
+  devSignIn,
+  ensureUserProfile,
+  signInWithGoogle,
+  useCurrentUser,
+} from "@/lib/auth";
+import { ANONYMOUS_LOGIN_NOTICE } from "@/lib/auth/anonymousScope";
 
 type ViewState = "idle" | "loading" | "error";
 
@@ -15,6 +22,10 @@ export default function LoginPage() {
   const [viewState, setViewState] = useState<ViewState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
+  // OQ-A84 — 챌린지 체험(익명) 세션이 남은 채 본인 훈련 경로에 오면 RouteGuard가 여기로 보낸다.
+  // 익명 사용자는 이 화면에 머물 수 있고, Google 로그인이 성공하면 SDK가 익명 사용자를 교체한다.
+  const { user } = useCurrentUser();
+  const isAnonymousSession = user?.isAnonymous === true;
 
   // UX.md Accessibility "Focus Order: 오류 발생 시 포커스를 오류 메시지로." 오류 상태 진입 시
   // 포커스를 오류 메시지로 옮겨 스크린리더/키보드 사용자가 즉시 인지하게 한다.
@@ -113,6 +124,11 @@ export default function LoginPage() {
         <p className="mt-4 max-w-sm text-[16px] leading-[1.65] text-[#6B655C]">
           Google 계정으로 로그인하면 훈련 기록이 내 계정에 안전하게 저장됩니다.
         </p>
+        {isAnonymousSession && (
+          <p role="status" className="mt-5 max-w-sm rounded-[12px] bg-[#E4F0EC] px-4 py-3 text-[15px] leading-[1.6] text-[#22303A]">
+            {ANONYMOUS_LOGIN_NOTICE}
+          </p>
+        )}
         <div aria-hidden="true" className="flex-1" />
       </div>
 
