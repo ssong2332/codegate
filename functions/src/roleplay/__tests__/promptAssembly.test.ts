@@ -1583,3 +1583,87 @@ test("[§64.8 G403 역검증] 옛 TOOL_DRIVEN 이행 약속 문구를 끼운 사
     "역검증 실패 — 옛 이행 약속 문구를 끼워도 G403이 못 잡는다면 죽은 게이트다",
   );
 });
+
+// ── 2026-10-17 라이브 신고 — 실존 은행명("농협은행 352-0812-…") + 음성 계좌 ≠ 문자 계좌 ──────────
+// ⚠️ 증분이다. 위 테스트·NON_NEGOTIABLE_SENTENCES는 고치지 않는다.
+
+const FICTIONAL_BANK_VERBATIM = `은행 이름은 "OO은행"이라고 그대로 말한다`;
+const NO_REAL_FINANCIAL_NAMES = "실제로 있는 은행·카드사 이름은 어떤 경우에도 쓰지 않는다";
+/** 농협 신계좌 형식(3-4-4-2)이면서 앞 3자리가 3XX인 번호 — 실존 은행을 연상시키는 예시 번호. */
+const NONGHYUP_LIKE_NUMBER = /(?<!\d)3\d{2}-\d{4}-\d{4}-\d{2}(?!\d)/g;
+
+test("[2026-10-17 가상 은행명] 전 시나리오 × 3난이도 × 실옵션 × toolDrivenTiming 부재/true — 'OO은행 그대로' 명문이 있고 3XX 예시 번호가 없다", () => {
+  const ids = Object.keys(SCENARIO_PROMPTS);
+  assert.ok(ids.length >= 14, `시나리오가 14종 이상이어야 한다(현재 ${ids.length}종)`);
+  let combos = 0;
+  const scanned = new Set<string>();
+  for (const id of ids) {
+    const prompt = SCENARIO_PROMPTS[id];
+    for (const difficultyLevel of LEVELS) {
+      for (const toolDriven of [undefined, true] as const) {
+        const assembled = buildSystemPrompt(prompt, {
+          ...realOptionsFor(id),
+          difficultyLevel,
+          ...(toolDriven ? { toolDrivenTiming: true } : {}),
+        });
+        combos += 1;
+        const where = `${id}/${difficultyLevel}/toolDriven=${Boolean(toolDriven)}`;
+        assert.ok(assembled.includes(FICTIONAL_BANK_VERBATIM), `'OO은행 그대로' 명문 유실 — ${where}`);
+        assert.ok(assembled.includes(NO_REAL_FINANCIAL_NAMES), `실존 은행·카드사명 금지 명문 유실 — ${where}`);
+        assert.deepEqual(
+          assembled.match(NONGHYUP_LIKE_NUMBER) ?? [],
+          [],
+          `3XX 형식 예시 번호가 조립 산출물에 남아 있다 — ${where}`,
+        );
+        scanned.add(assembled);
+      }
+    }
+  }
+  assert.equal(combos, ids.length * 3 * 2);
+  for (const assembled of scanned) {
+    assert.deepEqual(
+      scanText(assembled, "assembledPrompt").map((v) => `${v.family}: ${v.label} :: ${v.excerpt}`),
+      [],
+      "조립된 시스템 프롬프트에 금지 패턴이 있다 — 블록 문구를 고쳐라(검사를 완화하지 마라)",
+    );
+  }
+});
+
+/** 계좌형 문자가 있는 시나리오의 수법 배열 판정 — 음성 계좌 절이 없고 문자 확인 절이 있다. */
+function accountTacticsViolations(tactics: readonly string[]): string[] {
+  const problems: string[] = [];
+  const voiced = tactics.filter((t) => t.includes("계좌는 'OO은행"));
+  if (voiced.length > 0) problems.push(`음성 계좌 절 ${voiced.length}건`);
+  if (!tactics.some((t) => t.includes("문자로 보낸 것을 확인하게"))) problems.push("문자 확인 절 0건");
+  return problems;
+}
+
+test("[2026-10-17 계좌 문자] 계좌형 문자가 있는 시나리오 전수(카탈로그 파생)는 계좌를 음성으로 부르지 않고 문자로 확인하게 한다", () => {
+  const accountScenarioIds = Object.entries(IN_CALL_SMS)
+    .filter(([, items]) => items.some((item) => item.kind === "account"))
+    .map(([id]) => id)
+    .sort();
+  assert.ok(
+    accountScenarioIds.length >= 6,
+    `계좌형 문자 시나리오가 6종 이상이어야 한다(현재 ${accountScenarioIds.length}종: ${accountScenarioIds.join(", ")})`,
+  );
+  for (const id of accountScenarioIds) {
+    const prompt = SCENARIO_PROMPTS[id];
+    assert.ok(prompt, `${id}: IN_CALL_SMS에는 있는데 SCENARIO_PROMPTS에 없다`);
+    assert.deepEqual(accountTacticsViolations(prompt.weakenedTactics), [], `${id}: 음성 계좌 ≠ 문자 계좌 위험`);
+  }
+});
+
+test("[2026-10-17 계좌 문자 역검증] 옛 institutional 수법 문구를 끼운 오염본은 같은 판정식이 실패시킨다", () => {
+  const id = "institutional-impersonation";
+  const oldClause =
+    "안전계좌 이체 요구 — '잔액 얼마 있으신지 확인해서 전액 이체해 주십시오' 처럼 금액과 이체를 구체적으로 요구한다. " +
+    "계좌는 'OO은행 352-0812-4471-63' 같은 가상값으로만 부르고 실존 기관명·실제 계좌는 쓰지 않는다.";
+  const poisoned = [...SCENARIO_PROMPTS[id].weakenedTactics, oldClause];
+  assert.notDeepEqual(accountTacticsViolations(poisoned), [], "오염본을 통과시키면 게이트가 공회전이다");
+
+  const noSmsClause = SCENARIO_PROMPTS[id].weakenedTactics.filter((t) => !t.includes("문자로 보낸 것을 확인하게"));
+  assert.notDeepEqual(accountTacticsViolations(noSmsClause), [], "문자 확인 절을 뺀 오염본도 잡혀야 한다");
+
+  assert.deepEqual(accountTacticsViolations(SCENARIO_PROMPTS[id].weakenedTactics), [], "정본은 통과한다");
+});
