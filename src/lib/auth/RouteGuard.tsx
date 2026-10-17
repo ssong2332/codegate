@@ -15,6 +15,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCurrentUser } from "./useCurrentUser";
+import { isAnonymousOutsideRecipientFlow } from "./anonymousScope";
 import { useAuthInvalidation } from "@/lib/authinvalidation";
 import AuthInvalidationBanner from "@/components/AuthInvalidationBanner";
 
@@ -24,6 +25,9 @@ import AuthInvalidationBanner from "@/components/AuthInvalidationBanner";
 // 진입하는 화면(session/play·session/end·report/replay)은 익명 인증으로 얻은 request.auth가 있어
 // (§14.7/ADR-0006 A1) 별도 등록 없이도 이 가드를 통과한다 — onAuthStateChanged가 익명 사용자도
 // 정상 User로 넘겨주기 때문(useCurrentUser.ts).
+// ⚠️ OQ-A84(2026-10-17) — 단, 익명 User는 **수신 흐름 안에서만** 통과한다. 그 밖(본인 훈련·발신자
+// 화면)에서는 /login으로 보낸다 — 서버가 익명을 거부하므로(T176) 그대로 두면 막다른 일반 오류가 된다.
+// 경로 목록·판정은 `anonymousScope.ts`에 있다.
 const PUBLIC_PATHS = ["/login", "/challenge/join"];
 // 재로그인(유효 세션 보유) 시 UX-013을 건너뛰고 다음 화면으로 직행(UX.md UX-013 Alternative Flow (a)).
 const POST_LOGIN_PATH = "/onboarding/consent";
@@ -37,6 +41,8 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
   // 배너가 떠 있는 동안에만 "지금 열려 있는 그 화면"을 붙잡는다. 라우트가 바뀌면 mode가 그 즉시
   // "none"으로 돌아가 현행 규칙이 복귀한다(§34.4 U3 — 예외는 이동에는 붙지 않는다).
   const holdCurrentScreen = invalidation.mode !== "none";
+  const anonymousOutOfScope =
+    user !== null && isAnonymousOutsideRecipientFlow(user.isAnonymous, pathname);
 
   useEffect(() => {
     if (loading) return;
@@ -46,16 +52,23 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
       return;
     }
 
-    if (user && pathname === "/login") {
+    if (anonymousOutOfScope && !holdCurrentScreen) {
+      router.replace("/login");
+      return;
+    }
+
+    // 익명 User는 /login에 머문다(Google 로그인이 성공하면 SDK가 익명 사용자를 교체한다).
+    if (user && !user.isAnonymous && pathname === "/login") {
       router.replace(POST_LOGIN_PATH);
     }
-  }, [loading, user, pathname, isPublicPath, holdCurrentScreen, router]);
+  }, [loading, user, pathname, isPublicPath, anonymousOutOfScope, holdCurrentScreen, router]);
 
   // 인증 판정 전이거나 리다이렉트 대상인 화면은 아무것도 렌더링하지 않아
   // 보호된 콘텐츠가 잠깐이라도 노출되는 것을 막는다.
   if (loading) return null;
   if (!user && !isPublicPath && !holdCurrentScreen) return null;
-  if (user && pathname === "/login") return null;
+  if (anonymousOutOfScope && !holdCurrentScreen) return null;
+  if (user && !user.isAnonymous && pathname === "/login") return null;
 
   // ⛔ 배너는 **형제 노드**다(G151). `{children}`을 감싸지 않고, 슬롯 개수도 항상 2로 고정이라
   // (배너는 mode==="none"이면 스스로 null을 반환한다) 아래 트리가 다시 마운트되지 않는다.

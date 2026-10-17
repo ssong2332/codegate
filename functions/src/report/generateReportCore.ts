@@ -20,8 +20,13 @@ import type {
   SessionDoc,
   VerifyInterceptDoc,
 } from "../shared/types";
-import { analyzeConversation, buildPreventionAdvice, type AnalysisMessage } from "./analyzeConversation";
-import { computeDefenseGrade } from "./computeDefenseGrade";
+import {
+  analyzeConversation,
+  buildPreventionAdvice,
+  type AdviceChannel,
+  type AnalysisMessage,
+} from "./analyzeConversation";
+import { computeDefenseGrade, selectGradeReports } from "./computeDefenseGrade";
 import {
   buildSmsTimeline,
   promoteSmsLandingSubmits,
@@ -73,6 +78,9 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       createdAtMs: data.createdAt.toMillis(),
       // §55 D3 — 낭독되지 않은 문서 표시를 그대로 실어 준다(부재 = 도달함, 무백필).
       ...(data.notSpoken === true ? { notSpoken: true as const } : {}),
+      // 2026-10-17 — 속은 순간의 대처법 문구를 그 답변이 오간 채널에 맞춘다(부재 = "voice", 무백필).
+      // ⚠️ 판정 입력이 아니다 — `wasDeceived`·속은 순간의 개수·turnIndex는 이 값과 무관하다.
+      ...(data.channel ? { channel: data.channel } : {}),
     };
   });
   // T84(§15.9.5 e-2) — 설치 순간의 앵커는 "N번째 사기범 턴"이 아니라 **그 링크를 실은 사기범
@@ -236,11 +244,16 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   // `wasDeceived`는 **병합 후 배열 기준으로 재계산**한다(§15.9.5 e-4). 모의 화면 문서가 0건이면
   // `mock.deceivedMoments === verify.deceivedMoments`이므로 값이 도입 전과 완전히 동일하다(회귀 0).
   const wasDeceived = mock.deceivedMoments.length > 0;
-  // ⚠️ `buildPreventionAdvice`·`pickCorrectAction`은 **무변경**이다(§15.9.5 e-1 — `/설치|앱/`
+  // ⚠️ `buildPreventionAdvice`·`pickCorrectAction`의 **수법 분기**는 무변경이다(§15.9.5 e-1 — `/설치|앱/`
   // 분기를 넣으면 다른 시나리오의 조언까지 바뀐다). 여기서는 호출 **시점**만 병합 뒤로 옮겼다:
   // 앞에서 부르면 승격이 일어난 세션에서 "속았습니다"(wasDeceived)와 "응하지 않았습니다"(조언
   // 마무리 문장)가 같은 리포트에 함께 실린다. 문서가 0건이면 인자가 이전과 동일하다.
-  const preventionAdvice = buildPreventionAdvice(analysis.tacticsUsed, wasDeceived);
+  // 2026-10-17 — 채널 인자만 늘었다: 메신저에만 머문 세션은 통화 전용 문구("전화를 끊고") 대신
+  // 메신저 문구를 쓴다. 메신저로 시작해 통화로 넘어간 세션은 `session.channel`이 "voice"로 바뀌므로
+  // (session/channelTransition.ts) 통화 문구가 그대로 맞다. "voice" 문구는 이 변경 전과 한 글자도
+  // 다르지 않다. ⛔ 조언의 **수법 입력**은 여전히 `analysis.tacticsUsed`다(G215 — 아래 ②-e 참고).
+  const adviceChannel: AdviceChannel = session.channel === "messenger" ? "messenger" : "voice";
+  const preventionAdvice = buildPreventionAdvice(analysis.tacticsUsed, wasDeceived, adviceChannel);
 
   // ②-e ⭐ **승격 순간의 수법 합집합**(T136, §42.6 B, AC-008/AC-009) — 카드가 이름으로 부르는
   // 수법이 아코디언 목록에서 빠져 **같은 리포트가 자기 안에서 어긋나던 것**을 닫는다.
@@ -347,10 +360,13 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
 }
 
 /** uid의 누적 reports를 다시 읽어 등급을 재계산하고 users/{uid}에 merge write한다. `reports`는
- * uid 단일 필드 동등 조건 쿼리라 Firestore 자동 인덱스로 충분하다(Database.md 인덱스 표 변경 불요). */
+ * uid 단일 필드 동등 조건 쿼리라 Firestore 자동 인덱스로 충분하다(Database.md 인덱스 표 변경 불요).
+ * T186 — 2인 챌린지 체험 리포트는 산정에서 뺀다(selectGradeReports). 쿼리는 그대로다(인덱스 무변경). */
 async function updateDefenseGrade(db: FirebaseFirestore.Firestore, uid: string): Promise<void> {
   const reportsSnap = await db.collection("reports").where("uid", "==", uid).get();
-  const results = reportsSnap.docs.map((doc) => ({ wasDeceived: Boolean((doc.data() as ReportDoc).wasDeceived) }));
+  const results = selectGradeReports(reportsSnap.docs.map((doc) => doc.data() as ReportDoc)).map((report) => ({
+    wasDeceived: Boolean(report.wasDeceived),
+  }));
   const { defenseGrade, sessionCount } = computeDefenseGrade(results);
   await db.collection("users").doc(uid).set({ defenseGrade, sessionCount }, { merge: true });
 }

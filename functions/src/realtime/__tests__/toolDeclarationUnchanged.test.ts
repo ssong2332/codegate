@@ -23,6 +23,8 @@ import {
   declaresOfferVerificationDesk,
 } from "../liveTools";
 import { VERIFY_DECLINE_ALREADY } from "../../scenarios/verifyIntercept";
+import { Behavior } from "@google/genai";
+import { SCENARIO_PROMPTS } from "../../scenarios";
 
 const ALLOWED_NAMES = new Set([LIVE_TOOL_SEND_PREPARED_SMS, LIVE_TOOL_OFFER_VERIFICATION_DESK]);
 
@@ -329,4 +331,21 @@ test("[§59.6 liveTools 배선] realtime/index.ts의 두 반환 경로 모두 cr
   // 래퍼여야 한다(필드를 나열해 재구성하면 같은 위험이 생긴다).
   assert.match(src, /const withSmsTriggers = <T extends object>\(credentials: T\): T =>/);
   assert.match(src, /const withVerifyOffer = <T extends \{ provider: RealtimeProviderName \}>\(credentials: T\): T =>/);
+});
+
+// ⭐ §71 D2(G430) — 3.8은 behavior를 생략하면 NON_BLOCKING이라 도구 호출과 함께 턴을 끝낸다(2026-10-17 프로브).
+// 전 시나리오 × 전 난이도에서 선언된 모든 함수가 BLOCKING을 명시하는지 고정한다.
+test("[§71 G430] 선언된 모든 함수는 behavior: BLOCKING을 명시한다", () => {
+  let checked = 0;
+  for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
+    for (const difficultyLevel of [undefined, "beginner", "intermediate", "advanced"] as const) {
+      for (const tool of buildLiveToolDeclarations(scenarioId, difficultyLevel)) {
+        for (const decl of tool.functionDeclarations ?? []) {
+          assert.equal(decl.behavior, Behavior.BLOCKING, `${scenarioId}/${difficultyLevel}/${decl.name}`);
+          checked += 1;
+        }
+      }
+    }
+  }
+  assert.ok(checked > 0, "검사한 선언이 0개다 — 시나리오 목록이 비었다");
 });

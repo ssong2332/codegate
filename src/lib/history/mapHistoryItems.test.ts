@@ -40,3 +40,26 @@ test("createdAt이 없으면(방어적 처리) 날짜 미상으로 표시한다"
   ]);
   assert.equal(items[0].dateLabel, "날짜 미상");
 });
+
+test("[T186 R-5] 2인 챌린지 체험 리포트(challengeId 있음)는 목록에서 빠지고, 나머지는 순서 그대로 남는다(UX-012)", () => {
+  const items = mapReportsToHistoryItems([
+    { reportId: "r3", sessionId: "s3", wasDeceived: false, createdAt: null, challengeId: null },
+    { reportId: "r2", sessionId: "s2", wasDeceived: true, createdAt: null, challengeId: "ch1" },
+    { reportId: "r1", sessionId: "s1", wasDeceived: true, createdAt: null },
+  ]);
+  assert.deepEqual(
+    items.map((item) => item.reportId),
+    ["r3", "r1"],
+    "Google 계정으로 동의한 체험 리포트가 /history에 나타났다",
+  );
+});
+
+test("[T186 R-5 배선] fetchReportHistory가 리포트 문서의 challengeId를 매핑 입력으로 넘긴다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync("src/lib/history/fetchReportHistory.ts", "utf8");
+  assert.match(
+    source,
+    /challengeId: \(data\.challengeId as string \| undefined\) \?\? null,/,
+    "challengeId를 넘기지 않으면 제외 필터가 공회전한다(모든 항목이 비챌린지로 보인다)",
+  );
+});

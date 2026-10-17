@@ -56,6 +56,19 @@ export async function resolveConsentFailureView(
   }
 }
 
+/**
+ * T186(R-5 · OQ-A84 후보 (c) · User 결정 2026-10-17) — "동의하고 시작" 직전에 익명 로그인이 필요한가.
+ * 로그인 전(null) · 익명이면 true다(익명이면 SDK가 같은 uid를 그대로 돌려준다 — 중도 이탈 복귀).
+ * 이미 비익명(Google 등)으로 로그인돼 있으면 false — 그 계정 그대로 동의한다.
+ * ⛔ false인데 `signInAnonymously`를 부르지 말 것 — @firebase/auth 1.13.3은 비익명 현재 사용자를 새 익명
+ *    사용자로 **교체**한다(Google 세션이 사라진다). 서버 `consentChallenge`는 `request.auth`만 요구하고
+ *    익명 여부를 보지 않는다(functions/src/challenge/userAccess.ts).
+ * ⛔ 익명 판별은 `isAnonymous` 하나다(§34.5 4 · src/lib/auth/RouteGuard.tsx와 같은 값).
+ */
+export function needsAnonymousSignInForConsent(currentUser: { isAnonymous: boolean } | null): boolean {
+  return currentUser === null || currentUser.isAnonymous;
+}
+
 // UX-021 Error (c) 정본 문구 — docs/UX.md v1.27 UX-021 노트 (1)에서 **글자 단위로 복사**했다(⛔ 의역 금지 ·
 // 정본이 바뀌면 여기와 landingView.test.ts를 함께 고친다).
 export const COMPLETED_LANDING_TITLE = "이미 끝난 훈련입니다";
