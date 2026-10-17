@@ -16868,7 +16868,7 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | 2 | Functions 배포(C4) — `firebase deploy --only functions` |
 | 롤백 | 2026-11-17 전: C4의 모델 상수만 되돌려 Functions 재배포(2.5가 BLOCKING 수용 — 70.2). 그 뒤: 2.5 없음 — Mock 강등뿐 |
 
-라이브 확인 목록: ① 문자 도구 흐름(도구 호출 → 문자 도착 → 그 뒤 발화) ② 확인창구(오퍼 announce · commit) ③ 첫 마디 ④ 끼어들기 — 말을 잠깐 멈췄을 때 잘리는가(3.8 187ms 응답) · 타이핑이 사기범 말을 끊지 않는가 ⑤ 음량(0.5~0.7) ⑥ Android 통화 중 볼륨 키가 "통화"와 "미디어" 중 어느 슬라이더를 띄우는가(추정: echoCancellation으로 통화 모드) ⑦ 일본어 등 비한국어 혼입 ⑧ AI Studio의 3.8 무료 한도.
+라이브 확인 목록: ① 문자 도구 흐름(도구 호출 → 문자 도착 → 그 뒤 발화) ② 확인창구(오퍼 announce · commit) ③ 첫 마디 ④ 끼어들기 — 말을 잠깐 멈췄을 때 잘리는가(3.8 187ms 응답) · 타이핑이 사기범 말을 끊지 않는가 ⑤ 음량(0.5~0.7) ⑥ Android 통화 중 볼륨 키가 "통화"와 "미디어" 중 어느 슬라이더를 띄우는가(추정: echoCancellation으로 통화 모드) ⑦ 일본어 등 비한국어 혼입 ⑧ AI Studio의 3.8 무료 한도 ⑨ 통화 도중 끊김(서버 close 1011 — 70.13 #5).
 
 ### 70.10 if/then 강등표 (⛔ 표에 없는 케이스는 행 추가를 물을 것)
 
@@ -16898,3 +16898,14 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 
 - `docs/Architecture.md` §70 신설(덧붙임만) · `docs/DECISIONS.md` #115 1행 · `docs/adr/0017-gemini-live-3-8-migration.md` 신설(`68a844e`).
 - ⛔ §0~§69 · `functions/**` · `src/**` · `docs/Tasks.md` · `docs/API.md` · `README.md` · `CLAUDE.md` 0줄. API 계약 무변경 — `geminiModel` 값만 바뀐다(`docs/API.md:46`은 값을 적지 않는다).
+
+### 70.13 승인 · 구현 패스 기록 (2026-10-17 · 덧붙임 — 위 원문 무변경)
+
+| # | 항목 | 값 |
+|---|---|---|
+| 1 | 승인 | User 채팅 원문 *"구현 시작해"*(2026-10-17) — DECISIONS **#116** · ADR-0017 `accepted` |
+| 2 | 구현 커밋 | `4a2010b`(클라 C1~C3) · `8d10bc3`(Functions C4) |
+| 3 | 테스트 | functions **898 → 901**(+3: §70 D1 · D2/G430 ×2) · 루트 **446 → 475**(+29) · lint 2종 통과 · `npm run build` 통과(임시 placeholder `.env`, 빌드 뒤 삭제) |
+| 4 | 실제 코드 경로 프로브 | 새 `functions/lib`의 `GeminiRealtimeProvider.createCallCredentials`로 3.8 토큰 발급 → 연결 2통화: 첫 마디 1,343 / 949ms · 도구 2종 모두 BLOCKING으로 호출(대기 중 오디오 0) · 비한국어 0건 |
+| 5 | ⚠️ 새 관측 | 3.8 세션 4건 중 1건이 대화 도중 서버 close **1011 "Internal error encountered."**(마지막 발화 직후, 도구 2회 뒤). 같은 설정 재실행은 정상 종료 ⇒ 일시 오류로 보되 **라이브 확인 ⑨**로 추가한다. 클라는 기존대로 `onclose` → 통화 종료 처리 — 2.5 프로브 4건에서는 0건 |
+| 6 | 구현이 명세와 다른 점 | `interrupted`는 응답 대기(`awaitingSince = now`)로 둔다 — 70.5 표의 "보내지 않는다"를 지키면서 그 뒤 응답이 안 오면 `tick` 타임아웃으로 풀리게 하려는 것(전이 테스트 `clientTurnQueue.test.ts`). §57.4 D3의 `appendUserTranscriptRef` 브리지는 큐가 전송 시점에 적립하면서 쓰임이 없어져 제거했다 |
