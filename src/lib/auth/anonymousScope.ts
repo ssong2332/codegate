@@ -26,9 +26,13 @@ export const ANONYMOUS_RECIPIENT_PATHS = [
   "/report/rewind",
 ] as const;
 
-/** 익명 사용자가 /login에 왔을 때 보이는 안내(User 확정 문구 2026-10-17). */
+/**
+ * 익명 사용자가 /login에 왔을 때 보이는 안내(User 확정 문구 2026-10-17).
+ * OQ-U53(User 결정 ⓑ, 2026-10-17) — 셋째 문장을 덧붙였다. Google 로그인은 익명 uid를 교체하므로
+ * 방금 본 챌린지 리포트·리플레이·되감기에 다시 닿을 수 없다는 것을 로그인 **전에** 알린다.
+ */
 export const ANONYMOUS_LOGIN_NOTICE =
-  "지금은 친구가 보낸 체험용 임시 접속 상태입니다. 내 훈련을 하려면 Google로 로그인해 주세요.";
+  "지금은 친구가 보낸 체험용 임시 접속 상태입니다. 내 훈련을 하려면 Google로 로그인해 주세요. 로그인하면 방금 본 체험 리포트는 다시 열 수 없습니다.";
 
 /**
  * 익명 사용자가 수신 흐름 밖에 있으면 true(→ RouteGuard가 /login으로 보낸다).
