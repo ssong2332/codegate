@@ -17,8 +17,19 @@
 // 대사에서조차 한 번도 매치하지 못하고 있었다(라이브 에뮬레이터로 tacticsUsed가 항상 빈 배열로
 // 나오는 것을 확인). 이제 대사를 만드는 쪽(mockClient.ts)과 찾는 쪽(여기)이 scenarios/
 // tacticFlavor.ts 공용 함수 하나만 참조해 같은 텍스트를 기준으로 삼는다.
-import { extractTacticFlavor, extractTacticLabel } from "../scenarios/tacticFlavor";
+//
+// ⚠️ 정확도 버그 수정(2026-10-17, 라이브 실측 — 인증번호를 불러 준 세션이 "속지 않았습니다 · 시도된
+// 수법 0가지"로 나왔다). 판정 쪽은 아래 `COMPLIANCE_PATTERN` (D), 수법 추정 쪽은 `buildTacticMatchers`
+// 주석에 근거를 적었다. 판정은 여전히 규칙 기반이다(DECISIONS #29 무변경 — LLM 판정 도입 아님).
+import {
+  extractTacticFlavor,
+  extractTacticLabel,
+  STRUCTURED_MARKER_PATTERN,
+} from "../scenarios/tacticFlavor";
 import { resolveTacticCategory, type TacticCategory } from "./tacticCategory";
+
+/** 대처법·예방 조언 문구를 고르는 채널. 부재는 "voice"다(`MessageDoc.channel` 하위호환 규칙과 같다). */
+export type AdviceChannel = "voice" | "messenger";
 
 export type AnalysisMessage = {
   role: "scammer" | "user";
@@ -27,6 +38,11 @@ export type AnalysisMessage = {
   createdAtMs: number;
   /** §55 D3 — 참가자에게 도달하지 않은 문서(부재 = 도달함). 분석 입력에서 제외한다. */
   notSpoken?: true;
+  /**
+   * T30 채널 표기(부재 = "voice"). ⚠️ **판정에는 쓰지 않는다** — 속은 순간의 `correctAction` 문구를
+   * 그 답변이 오간 채널에 맞추는 데만 쓴다(2026-10-17 — 메신저 세션에도 "전화를 끊고"가 나왔다).
+   */
+  channel?: AdviceChannel;
 };
 
 export type DeceivedMomentResult = {
@@ -112,18 +128,146 @@ export const RESISTANCE_PATTERN =
 // 이긴다. 또한 "할게"·"네" 같은 범용 어미를 단독으로 넣지 않고 반드시 행동 동사와 결합해
 // (`진행/신청/설치/받을게` 등) 오탐 범위를 좁혔다 — 단독 완곡표현을 독립 항목으로 넣었다가
 // 블랭킷 오버라이드 버그를 만든 T52의 실패를 반복하지 않기 위해서다.
-// ⚠️ export 이유는 RESISTANCE_PATTERN과 동일(T70, §15.6 G7 — 되감기 규칙 폴백이 재사용).
-export const COMPLIANCE_PATTERN =
+const BASE_COMPLIANCE_PATTERN =
   /알겠어|알았어|보내줄게|보낼게|보내드릴게|보내드리겠|보내겠|계좌\s*(번호)?|얼마(면|야)?|송금|이체|카드\s*번호|비밀번호|어디로\s*(보내|가면)|지금\s*갈게|바로\s*갈게|믿을게|그래[,.]?\s*알았|어떻게\s*하면\s*돼|말씀하신\s*대로|시키는\s*대로|하라는\s*대로|알려주신\s*대로|\[주민번호\]|\[전화\]|\[이메일\]|\[계좌\]|진행\s*(해|할게|하겠|해주|시켜)|신청\s*(할게|하겠|해주|합니다|했)|설치\s*(할게|하겠|해주|했|합니다)|(대출|입금|출금|이체|송금|결제)\s*(받을게|받겠|받을래|할게|하겠|해주|했)|(그렇게|그럼|그러면)\s*\s*(할게|하겠|해주|해 주)|불러\s*드릴게|알려\s*드릴게|알려\s*줄게|말씀\s*드릴게|^\s*[\d\s-]{4,}\s*$/;
 
-/** 사기범 발화 텍스트에 어떤 weakenedTactics의 flavor 문구가 섞여 있는지 부분 일치로 추정한다.
- * flavor는 설명문이라 문장 전체 일치를 기대하기 어려우므로 앞부분(최대 8자)만 비교한다 — 과도한
- * 정밀 매칭은 Mock 대사 표현 편차(어미 변형 등)에 약하다. */
-function findMatchedTactic(scammerText: string, weakenedTactics: string[]): string | undefined {
-  return weakenedTactics.find((tactic) => {
-    const flavor = extractTacticFlavor(tactic);
-    return flavor.length > 0 && scammerText.includes(flavor.slice(0, Math.min(8, flavor.length)));
+// ⚠️ 정확도 버그 수정 3차(2026-10-17, 라이브 실측 — 기관 사칭 · 중급 · 통화 텍스트 폴백 경로).
+// 참가자가 "048231 이요"(화면의 모의 인증번호를 불러 줌), "300만원 정도 있어요. 어떻게 옮기면
+// 돼요?"까지 답했는데 리포트가 "속지 않았습니다"였다. 위 패턴을 그대로 실행해 확인한 누락을 아래
+// (D1)~(D5)로 보강한다(회귀 테스트 `__tests__/verdictRegression.test.ts` — 수정 전 패턴의 동결 사본과
+// **같은 실행에서 나란히** 비교한다):
+//   (D1) 지시 방법 문의의 어미 변형 — `어떻게\s*하면\s*돼`는 "되죠/되나요/될까요/해야 하나요"를
+//        놓쳤다. ⛔ "그걸 어떻게 해요?"(반어 거절)·"어떻게 확인하면 돼요?"(확인 질문)·"어떻게 해야
+//        할지/하면 될지/하면 되는지 모르겠어요"(묻지 않는 내포절)는 잡지 않는다 — `하면/해야`가
+//        `어떻게`에 **바로** 붙고 **묻는 어미**가 올 때만이다(`-는지`·`-ㄹ지`는 T112에서 확인된 오탐 어형).
+//   (D2) "행동 + 면 되나요" — "어떻게 옮기면 돼요", "링크 누르면 되나요". 앞에 `안/못`이 붙으면
+//        ("안 보내면 돼요?") 제외한다. "확인하면"은 행동 목록에 없다(확인은 저항 쪽 행동이다).
+//   (D3) 숫자열 + 짧은 어미 — (C)는 **답변 전체가 숫자**일 때만 맞아 "048231 이요"를 놓쳤다. 4자리
+//        이상 숫자열 **뒤가 끝·문장부호·허용 어미일 때만** 연다. 단위(원·만·년·호·시)나 조사(로·에)가
+//        오면 코드가 아니다 — "1332로 전화해 볼게요"(대표번호로 확인하겠다는 답)를 순응으로 몰지 않는다.
+//        8자리 이상은 maskPII가 이미 `[계좌]`로 바꾸므로 (A)가 잡는다.
+//   (D4) 한글 숫자(음성 전사) — "공사팔이삼일". 읽는 형태 세 가지만 연다: 붙여 읽기(4음절 이상)·한 자씩
+//        띄어 읽기("공 사 팔 …")·세 자 이상 묶음("공사팔 이삼일"). 공·영·육·칠·팔·구 중 하나 이상을
+//        요구하고 단어 앞이 비어 있을 때만 잡아 "사이사이"·"이삼일"·"구사일생"·"공사 일이 이삼일 걸려요"
+//        같은 일반 문장을 피한다.
+//   (D5) 정보 제공 — 생년월일("80년 1월 1일생", "80년생", "생년월일은 800101")과 잔액 고지("300만원
+//        정도 있어요"). maskPII는 두 형태를 토큰으로 바꾸지 않아 (A)로는 잡히지 않는다. 잔액은 `있`의
+//        **서술형**이 올 때만이다("300만원밖에 없어요"·"있었는데"·"있어도 안 보내요"·"남아 있지 않아요" 제외).
+// 설계 원칙은 (A)~(C)와 같다 — 전부 **순응 쪽**이고 저항 우선(`resisted || !complied`)은 무변경이며,
+// 범용 어미 단독 항목은 넣지 않았다(T52 블랭킷 오버라이드 재발 방지). 문맥 없이는 모호한 답("문자로
+// 보내주실 수 있나요?")은 잡지 않는다 — 과소판정이 오판보다 낫다는 위 원칙 그대로다.
+// ⛔ 통화 중 문자 이벤트(인증번호 표시·링크 탭)는 여전히 **판정 입력이 아니다**(§15.6 G22). "인증번호를
+// 불러 줬다"는 **참가자 발화**로만 판정한다 — 같은 번호인지 문자 문서와 대조하지 않는다.
+const ASKS_HOW_TO_COMPLY =
+  /(어떻게|뭘|뭐|무엇을)\s*(해야|하면)\s*(돼|되(?!는지)|될까|됩|하나|합니|할까)/;
+const ACTION_THEN_OK =
+  /(?<!(안|못)\s?)(보내|옮기|이체하|송금하|입금하|인출하|넣으|뽑으|맡기|불러\s*드리|알려\s*드리|말씀\s*드리|누르|설치하|입력하)면\s*(돼|되(?!는지)|될까|됩)/;
+const CODE_DIGITS_WITH_ENDING =
+  /(?<!\d)\d(?:[\s-]?\d){3,}(?=\s*(?:$|[.!?~,…]|이요|요|입니다|이에요|예요|이고|이구|번이요|번입니다|맞|이죠|이지요|인데요|이거든|이라고|라고))/;
+// (D4)는 세 형태를 이어 붙인다 — 한 정규식 리터럴로 쓰면 세 갈래가 한 줄에 섞여 검토가 어렵다.
+const HANGUL_DIGIT = "[공영일이삼사오육륙칠팔구]";
+const HANGUL_COMMON_DIGIT = "[일이삼사오]"; // 일반 단어에도 흔한 숫자 음절
+const HANGUL_RARE_DIGIT = "[공영육륙칠팔구]"; // 하나 이상 있어야 숫자 읽기로 본다
+const HANGUL_CODE_END = "(?=$|[\\s.!?~,…]|요|입니다|에요|예요|고요|구요|번|맞)";
+const CODE_HANGUL_DIGITS = new RegExp(
+  [
+    // 붙여 읽기 — "공사팔이삼일(이요)"
+    `(?<![가-힣])(?=${HANGUL_COMMON_DIGIT}*${HANGUL_RARE_DIGIT})${HANGUL_DIGIT}{4,}${HANGUL_CODE_END}`,
+    // 한 자씩 띄어 읽기 — "공 사 팔 이 삼 일"
+    `(?<![가-힣])(?=(?:${HANGUL_COMMON_DIGIT}\\s)*${HANGUL_RARE_DIGIT})${HANGUL_DIGIT}(?:\\s${HANGUL_DIGIT}){3,}${HANGUL_CODE_END}`,
+    // 세 자 이상씩 묶어 읽기 — "공사팔 이삼일"
+    `(?<![가-힣])(?=(?:${HANGUL_COMMON_DIGIT}|\\s)*${HANGUL_RARE_DIGIT})${HANGUL_DIGIT}{3,}(?:\\s${HANGUL_DIGIT}{3,})+${HANGUL_CODE_END}`,
+  ].join("|"),
+);
+const BIRTH_DATE =
+  /\d{2,4}\s*년\s*(?:\d{1,2}\s*월\s*\d{1,2}\s*일\s*)?생|\d{2,4}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일(?=\s*(?:$|[.!?~,…]|이요|요|입니다|이에요|예요|이고|이구))|생년월일[은는이]?\s*\d/;
+const BALANCE_DISCLOSURE =
+  /(?:\d[\d,]*\s*(?:억|천만|백만|만|천)\s*원?|\d[\d,]*\s*원|[일이삼사오육칠팔구십백천]+\s*(?:억|만)\s*원?)\s*(?:정도|쯤|가량|조금|좀)?\s*(?:은|는|이|가)?\s*(?:들어\s*|남아\s*)?(?:있어(?!도|야)|있습니다|있는데|있고|있죠|있네)/;
+
+// ⚠️ export 이유는 RESISTANCE_PATTERN과 동일(T70, §15.6 G7 — 되감기 규칙 폴백이 재사용).
+// ⛔ `g` 플래그를 붙이지 말 것 — `.test()`가 lastIndex를 이어 써서 같은 답변이 번갈아 다르게 판정된다.
+export const COMPLIANCE_PATTERN = new RegExp(
+  [
+    BASE_COMPLIANCE_PATTERN,
+    ASKS_HOW_TO_COMPLY,
+    ACTION_THEN_OK,
+    CODE_DIGITS_WITH_ENDING,
+    CODE_HANGUL_DIGITS,
+    BIRTH_DATE,
+    BALANCE_DISCLOSURE,
+  ]
+    .map((pattern) => pattern.source)
+    .join("|"),
+);
+
+/**
+ * 사기범 발화 텍스트에 어떤 weakenedTactics의 저작 문구(flavor 인용구)가 남아 있는지 추정하기 위한
+ * 수법별 키 묶음. 비교는 대사를 만드는 쪽(MockLlmClient)과 같은 `extractTacticFlavor` 산출을 기준으로 한다.
+ *
+ * | 규칙 | 내용 |
+ * |---|---|
+ * | 문구 단위 | flavor를 `,`·`.`·`?`·`!`·`…`로 문구 단위로 나누고, 띄어쓰기·문장부호를 지운 뒤 문구마다 **앞 5자**(문구가 더 짧으면 전체, 3자 미만 문구는 버림)를 키로 쓴다 |
+ * | 대꾸 제외 | 5자 미만 **한 단어** 문구가 종결어미로 끝나면("아니에요"·"잠깐만요"·"진짜야") 어느 대화에나 나오는 대꾸라 버린다. 명사("수사관")·두 단어("지금 즉시")는 남긴다 |
+ * | 시나리오 안 구별 | 같은 시나리오의 **다른 수법** 문구가 같은 말로 시작하면 갈라지는 지점까지 키를 늘린다. 다른 수법 문구와 **같거나 그 앞부분**인 문구는 어느 수법인지 가릴 수 없어 키로 쓰지 않는다 |
+ *
+ * ⚠️ 왜 바꿨나(2026-10-17): 종전 규칙은 인용구를 이어 붙인 문자열의 **앞 8자**가 대사에 그대로 있어야
+ * 했다(예: 기관 사칭 "권위 암시"는 `수사관, 금융감` 여덟 글자). 실 LLM 대사는 인용구를 문장 단위로
+ * 섞어 쓰고 띄어쓰기도 바꾸므로 거의 항상 "시도된 수법 0가지"가 됐다. Mock 대사는 flavor 전체를
+ * 싣기 때문에 문구 키가 종전 키가 잡던 것을 그대로 잡는다(종전 키는 시나리오 안 구별이 안 돼 버렸다).
+ * ⚠️ 한계(투명 고지): 문구를 **바꿔 말하면** 여전히 못 찾는다 — 그 경우는 "모르는 것"이지 "없는 것"이
+ * 아니다(표시 문면은 AC-083 (b) 소관). 정상 대사를 수법으로 잘못 잡지 않도록 범주 키워드 사전은
+ * 넣지 않았다(회귀 테스트가 중립 대사 × 전 시나리오 0건을 고정한다).
+ */
+type TacticMatcher = { tactic: string; phraseKeys: string[] };
+
+const PHRASE_KEY_LENGTH = 5;
+const PHRASE_MIN_LENGTH = 3;
+
+/** 비교 전용 정규화 — 띄어쓰기·문장부호(전사·LLM 표기 차이)를 지운다. 판정·표시에는 쓰지 않는다. */
+function normalizeForTacticMatch(text: string): string {
+  return text.toLowerCase().replace(/[\s.,!?~…·'"“”‘’()[\]{}<>_/:;-]/g, "");
+}
+
+/** 5자 미만 한 단어 + 종결어미 = 어느 대화에나 나오는 대꾸("아니에요", "잠깐만요", "진짜야"). */
+function isGenericInterjection(rawPhrase: string, normalized: string): boolean {
+  return (
+    normalized.length < PHRASE_KEY_LENGTH &&
+    !/\s/.test(rawPhrase.trim()) &&
+    /[요야다네까지죠어아]$/.test(normalized)
+  );
+}
+
+function splitFlavorPhrases(tactic: string): string[] {
+  return extractTacticFlavor(tactic)
+    .replace(STRUCTURED_MARKER_PATTERN, "")
+    .split(/[,.?!…]/)
+    .flatMap((rawPhrase) => {
+      const normalized = normalizeForTacticMatch(rawPhrase);
+      if (normalized.length < PHRASE_MIN_LENGTH) return [];
+      return isGenericInterjection(rawPhrase, normalized) ? [] : [normalized];
+    });
+}
+
+function buildTacticMatchers(weakenedTactics: readonly string[]): TacticMatcher[] {
+  const phrasesByTactic = weakenedTactics.map(splitFlavorPhrases);
+  return weakenedTactics.map((tactic, index) => {
+    const otherPhrases = phrasesByTactic.filter((_, other) => other !== index).flat();
+    const phraseKeys = phrasesByTactic[index].flatMap((phrase) => {
+      if (otherPhrases.some((other) => other.startsWith(phrase))) return [];
+      let length = Math.min(PHRASE_KEY_LENGTH, phrase.length);
+      while (otherPhrases.some((other) => other.startsWith(phrase.slice(0, length)))) length += 1;
+      return [phrase.slice(0, length)];
+    });
+    return { tactic, phraseKeys };
   });
+}
+
+/** 발화에서 찾은 수법을 **weakenedTactics 순서대로** 모두 돌려준다(없으면 빈 배열). */
+function findMatchedTactics(scammerText: string, matchers: readonly TacticMatcher[]): string[] {
+  const normalized = normalizeForTacticMatch(scammerText);
+  return matchers
+    .filter((matcher) => matcher.phraseKeys.some((key) => normalized.includes(key)))
+    .map((matcher) => matcher.tactic);
 }
 
 export function analyzeConversation(
@@ -141,15 +285,19 @@ export function analyzeConversation(
     .sort((a, b) => a.turnIndex - b.turnIndex);
   const deceivedMoments: DeceivedMomentResult[] = [];
   const tacticLabelsUsed = new Set<string>();
+  const tacticMatchers = buildTacticMatchers(weakenedTactics);
 
   for (let i = 0; i < sorted.length; i += 1) {
     const msg = sorted[i];
     if (msg.role !== "scammer") continue;
 
-    const matchedTactic = findMatchedTactic(msg.textMasked, weakenedTactics);
-    if (matchedTactic) {
-      tacticLabelsUsed.add(extractTacticLabel(matchedTactic));
+    // 한 대사에 수법이 여럿이면 모두 "시도된 수법"에 올린다(2026-10-17). 속은 순간의 라벨은 종전처럼
+    // 목록 순서상 **첫** 수법이다 — 라벨 규칙을 바꾸면 아카이브 묶기 키(T74)가 함께 흔들린다.
+    const matchedTactics = findMatchedTactics(msg.textMasked, tacticMatchers);
+    for (const matched of matchedTactics) {
+      tacticLabelsUsed.add(extractTacticLabel(matched));
     }
+    const matchedTactic = matchedTactics[0];
 
     const userReply = sorted[i + 1];
     if (!userReply || userReply.role !== "user") continue;
@@ -167,7 +315,7 @@ export function analyzeConversation(
       turnIndex: userReply.turnIndex,
       timeLabel: `${elapsedSec}초 시점`,
       tactic,
-      correctAction: pickCorrectAction(tactic),
+      correctAction: pickCorrectAction(tactic, userReply.channel ?? "voice"),
       tacticCategory: resolveTacticCategory(tactic),
     });
   }
@@ -181,37 +329,56 @@ export function analyzeConversation(
 
 /** 수법 라벨 키워드로 올바른 대처법을 고른다(AC-026 "그 순간 취했어야 할 올바른 대처"). 특정
  * 시나리오의 정확한 라벨 문자열에 하드코딩하지 않고 키워드 부분 일치로 판정해, 향후 다른 시나리오
- * (T6 "기관사칭" 등)가 추가돼도 이 모듈을 고치지 않고 재사용 가능하게 한다. */
-export function pickCorrectAction(tacticLabel: string): string {
+ * (T6 "기관사칭" 등)가 추가돼도 이 모듈을 고치지 않고 재사용 가능하게 한다.
+ *
+ * `channel`(2026-10-17): 메신저 세션에는 통화 전용 행동("전화를 끊고")을 권하지 않는다. 기본값
+ * "voice"의 문구는 이 변경 전과 **한 글자도 다르지 않다**(회귀 테스트가 동결 사본과 비교한다). 두
+ * 채널에 모두 맞는 문구(확인 전화·영상통화로 직접 확인)는 채널과 무관하게 그대로다. */
+export function pickCorrectAction(tacticLabel: string, channel: AdviceChannel = "voice"): string {
+  const messenger = channel === "messenger";
   if (/확인|전화/.test(tacticLabel)) {
     return "상대가 확인 전화를 막으려 해도 반드시 알고 있는 번호로 직접 전화해 사실을 확인하세요.";
   }
   if (/송금|계좌/.test(tacticLabel)) {
-    return "계좌번호나 송금을 요구받으면 절대 응하지 말고, 전화를 끊은 뒤 112(경찰)나 가족에게 직접 확인하세요.";
+    return messenger
+      ? "계좌번호나 송금을 요구받으면 절대 응하지 말고, 대화를 멈춘 뒤 112(경찰)나 가족에게 직접 확인하세요."
+      : "계좌번호나 송금을 요구받으면 절대 응하지 말고, 전화를 끊은 뒤 112(경찰)나 가족에게 직접 확인하세요.";
   }
   if (/다급|긴급|시간/.test(tacticLabel)) {
-    return "아무리 다급해 보여도 그 자리에서 결정하지 말고, 일단 전화를 끊고 잠시 시간을 두어 사실관계를 확인하세요.";
+    return messenger
+      ? "아무리 다급해 보여도 그 자리에서 결정하지 말고, 일단 대화를 멈추고 잠시 시간을 두어 사실관계를 확인하세요."
+      : "아무리 다급해 보여도 그 자리에서 결정하지 말고, 일단 전화를 끊고 잠시 시간을 두어 사실관계를 확인하세요.";
   }
   if (/가족|죄책감|애정/.test(tacticLabel)) {
     return "감정이 흔들리더라도 실제 그 사람이 맞는지부터 다른 방법(직접 전화·영상통화)으로 확인하세요.";
   }
   if (/권위|기관|경찰|공공/.test(tacticLabel)) {
-    return "전화로 신원(경찰·기관 등)을 주장해도 그 자리에서 믿지 말고, 공식 대표번호로 직접 걸어 확인하세요.";
+    return messenger
+      ? "메시지로 신원(경찰·기관 등)을 주장해도 그 자리에서 믿지 말고, 공식 대표번호로 직접 걸어 확인하세요."
+      : "전화로 신원(경찰·기관 등)을 주장해도 그 자리에서 믿지 말고, 공식 대표번호로 직접 걸어 확인하세요.";
   }
-  return "전화를 끊고 알고 있는 번호로 직접 다시 연락해 사실을 확인하세요.";
+  return messenger
+    ? "대화를 멈추고 알고 있는 번호로 직접 연락해 사실을 확인하세요."
+    : "전화를 끊고 알고 있는 번호로 직접 다시 연락해 사실을 확인하세요.";
 }
 
 /** 예방 조언(AC-008 "예방 조언 1개 이상"). 감지된 수법별 대처법 + 마무리 조언 1개를 합친다.
  * "면역됨"류 과신 표현은 쓰지 않는다(PRD Risks, UX.md Accessibility) — 속았든 안 속았든 "개선
- * 영역/계속 유지해야 할 습관" 프레임을 쓴다. */
-export function buildPreventionAdvice(tacticsUsed: string[], wasDeceived: boolean): string[] {
-  const perTacticAdvice = tacticsUsed.map((tactic) => pickCorrectAction(tactic));
+ * 영역/계속 유지해야 할 습관" 프레임을 쓴다. `channel`은 `pickCorrectAction`과 같은 규칙이다. */
+export function buildPreventionAdvice(
+  tacticsUsed: string[],
+  wasDeceived: boolean,
+  channel: AdviceChannel = "voice",
+): string[] {
+  const perTacticAdvice = tacticsUsed.map((tactic) => pickCorrectAction(tactic, channel));
   const advice = Array.from(new Set(perTacticAdvice));
 
   advice.push(
     wasDeceived
       ? "오늘 놓쳤던 순간을 기억해 두면 다음엔 더 빨리 알아챌 수 있습니다. 이건 한 번에 사라지는 게 아니라 계속 연습해야 하는 개선 영역입니다."
-      : "이번엔 상대의 요구에 응하지 않았습니다. 다만 사기 수법은 계속 진화하므로, 오늘처럼 전화를 끊고 직접 확인하는 습관을 계속 유지하는 것이 중요합니다.",
+      : channel === "messenger"
+        ? "이번엔 상대의 요구에 응하지 않았습니다. 다만 사기 수법은 계속 진화하므로, 오늘처럼 대화를 멈추고 직접 확인하는 습관을 계속 유지하는 것이 중요합니다."
+        : "이번엔 상대의 요구에 응하지 않았습니다. 다만 사기 수법은 계속 진화하므로, 오늘처럼 전화를 끊고 직접 확인하는 습관을 계속 유지하는 것이 중요합니다.",
   );
 
   return advice;
