@@ -10,7 +10,7 @@
 // 즉시 unsupported로 답한다"만 구현했고, "존재할 때" 분기(실제 dispatch)는 어느 커밋 표에도 명문으로
 // 배정돼 있지 않다(§59.10 A 행 vs 커밋 D "toolCallFailed 배선" 사이의 공백). 이 패스는 그 실제
 // dispatch를 **추측으로 채우지 않는다** — architect 재확인이 필요한 인계 사항이다(구현 보고서 참고).
-import { Type } from "@google/genai";
+import { Behavior, Type } from "@google/genai";
 import type { FunctionDeclaration, Tool } from "@google/genai";
 import type { DifficultyLevel } from "../shared/difficulty";
 import { hasInCallSms } from "../scenarios/inCallSms";
@@ -66,11 +66,21 @@ export function declaresOfferVerificationDesk(
 /** §59.5 — 두 도구 모두 인자 없음(G384). `parameters.properties`가 빈 객체임을 R1 ④가 기계로 단언한다. */
 const NO_ARGS_PARAMETERS = { type: Type.OBJECT, properties: {} };
 
+/**
+ * ⭐ §70.4 D2(G430 · ADR-0017) — 두 도구 모두 **동기(BLOCKING)를 명시한다.** `gemini-3.8-live`는 기본값이
+ * `NON_BLOCKING`이라, 생략하면 모델이 도구를 부르는 순간 턴을 끝내 버린다(2026-10-17 프로브: `toolCall`과 같은
+ * 시각 `generationComplete` + `turnComplete`). 그러면 클라가 그 `turnComplete`를 사기범 턴 경계로 한 번 더 세고,
+ * §59의 "결과(`guidance`)를 받은 뒤 이어 말한다"가 성립하지 않는다. 2.5는 기본이 BLOCKING이었고 명시도 받는다.
+ * ⛔ `NON_BLOCKING`으로 바꾸려면 §59 응답 문면 계약부터 다시 설계한다(§70.0 #4).
+ */
+const TOOL_BEHAVIOR = Behavior.BLOCKING;
+
 const SEND_PREPARED_SMS_DECLARATION: FunctionDeclaration = {
   name: LIVE_TOOL_SEND_PREPARED_SMS,
   description:
     "지금 이 순간 상대의 휴대전화로 미리 준비된 안내 문자 한 통을 실제로 보낸다. 계좌 안내·링크·인증번호 중 무엇이 나갈지는 시스템이 정하며 너는 고르지 않는다. 지금이 문자를 보낼 적절한 때라고 판단될 때 부른다. 아직 이를 때는 거절될 수 있고, 그때는 그냥 대화를 이어가면 된다.",
   parameters: NO_ARGS_PARAMETERS,
+  behavior: TOOL_BEHAVIOR,
 };
 
 const OFFER_VERIFICATION_DESK_DECLARATION: FunctionDeclaration = {
@@ -78,6 +88,7 @@ const OFFER_VERIFICATION_DESK_DECLARATION: FunctionDeclaration = {
   description:
     "상대가 직접 확인해 보고 싶어 한다고 판단될 때 부른다. 확인 부서로 호를 넘겨 주겠다는 안내를 시작할 수 있게 된다. 아직 이를 때는 거절될 수 있고, 그때는 그냥 대화를 이어가면 된다.",
   parameters: NO_ARGS_PARAMETERS,
+  behavior: TOOL_BEHAVIOR,
 };
 
 /**
