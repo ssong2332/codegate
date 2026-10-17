@@ -4,6 +4,15 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+### Changed (2026-10-17 · 브랜치 `claude/practical-moore-d1dd1e` · 미배포)
+- **실시간 통화(Gemini Live) 모델을 `gemini-3.8-live`로 전환** — 기존 `gemini-2.5-flash-native-audio-preview-12-2025`가 2026-11-17 종료 예정이다(Google 폐기 페이지, 2026-10-12 갱신). 설계 `docs/Architecture.md` §71 · ADR-0017 · DECISIONS #115 · #116(User 승인).
+  - 3.8의 다른 기본 동작 두 가지를 2.5 의미로 고정했다: 두 Live 도구에 `behavior: BLOCKING` 명시(생략하면 도구 호출과 함께 턴이 끝난다) · 사기범이 말하는 중에 들어온 타이핑·지시는 그 턴이 끝난 뒤 1건씩 보낸다(3.8은 즉시 받으면 말을 끊는다). 끼어들기 직후와 도구 결과 대기 중에도 보류한다.
+  - 로컬 라이브 프로브(같은 대본, 소표본): 첫 마디 2.5 4.9~7.9초 → 3.8 0.9~1.3초 · 발화 끝 → 첫 음성 2.0~3.8초 → 0.2~2.6초.
+- **실시간 통화 지연 로그 추가** — 브라우저 콘솔 `[gemini-latency]`(production 포함, 숫자만 — 전사·식별자 없음).
+- **AI 음성 기본 음량을 낮춤** — 최대(1.0) → 0.6. 최종값은 실기기 청취 뒤 정한다(OQ-A89).
+- 테스트: functions 898 → 901 · 루트 446 → 479(신규 4파일).
+- ⚠️ 미확인: 브라우저·실기기 통화. 배포 뒤 확인 목록은 §71.9(문자 도구 흐름 · 확인창구 · 첫 마디 · 끼어들기 · 음량 · Android 볼륨 슬라이더 · 비한국어 혼입 · 무료 한도 · 통화 중 끊김).
+
 > ⚠️ **이 블록(2026-09-19~10-01 추가분, PR #246·#247·#249~#258)**: docs가 실행 수단(셸·`gh`) 없이 작성했다 — **`git log --oneline`은 실행하지 못했다.** PR 번호·제목·병합 일시·병합 SHA는 GitHub REST API(공개 저장소 `ssong2332/codegate`, 웹 조회 도구의 요약 경유)로 조회한 뒤 로컬 `.git/logs`(`main`·`origin/main`·브랜치 reflog)의 head·병합 SHA와 대조해 확정했다. 병합 커밋 *제목*을 직접 본 것은 세션 스냅샷 `git log`의 **#256(`d856e1d`)·#258(`c65d43d`) 둘뿐**이다. 코드 PR 3건(#247·#251·#256)은 GitHub의 PR 커밋 목록과 브랜치 reflog가 일치했다. **"인용값" = docs가 재현·재측정하지 않은 값**(오케스트레이터 인수인계, implementer·reviewer·QA 보고, `docs/Tasks.md`·`CLAUDE.md` 인용) — 배포 사실·라이브 관측·테스트 수가 여기에 해당한다. 아래 `파일:줄` 인용은 base origin/main `d856e1d` 기준이다(같은 시점에 `docs/Tasks.md`·`docs/API.md`·`docs/Architecture.md`·`docs/PRD.md`가 별도로 갱신돼 줄 번호가 이동했을 수 있다). PR #248은 implementer 메모리만 바꾼 chore라 항목으로 적지 않았다.
 
 ### Added
