@@ -238,8 +238,14 @@ test("[T136 배선] generateReportCore가 리포트 `tacticsUsed`를 **합집합
 
 test("[T136/G215] `buildPreventionAdvice`의 인자는 여전히 `analysis.tacticsUsed`다(합집합을 넘기지 않는다)", () => {
   const code = codeOnly(REPORT_CORE);
+  // 2026-10-17 — 세 번째 인자(조언 문구의 채널)가 생겼다. 이 게이트가 지키는 것은 **수법 입력**(첫 인자)
+  // 이므로 앞 두 인자만 고정하고 뒤에 채널 인자가 오는 것은 허용한다(문자열 포함 검사는 그 자리를 막았다).
+  const ADVICE_INPUT_IS_ANALYSIS = /buildPreventionAdvice\(\s*analysis\.tacticsUsed,\s*wasDeceived\s*[,)]/;
+  // 역검증 — 채널 인자를 허용한 것이 구멍이 되지 않았다: 합집합(`tacticsUsed`)을 넘기는 형태는 여전히 잡는다.
+  assert.ok(!ADVICE_INPUT_IS_ANALYSIS.test("buildPreventionAdvice(tacticsUsed, wasDeceived, adviceChannel)"));
+  assert.ok(ADVICE_INPUT_IS_ANALYSIS.test("buildPreventionAdvice(analysis.tacticsUsed, wasDeceived)"));
   assert.ok(
-    code.includes("buildPreventionAdvice(analysis.tacticsUsed, wasDeceived)"),
+    ADVICE_INPUT_IS_ANALYSIS.test(code),
     `${REPORT_CORE}: 조언 입력을 늘리면 승격 순간의 correctAction과 중복된다(§42.6 B-2 · §15.9.5 e-1).`,
   );
 });
