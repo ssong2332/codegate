@@ -125,9 +125,68 @@ test("[§70.5] 첫 오디오가 오면 응답 대기가 풀리고 모델 턴 진
 });
 
 test("[§70.5] 입력 상태를 변경하지 않는다(순수 함수)", () => {
-  const before: ClientTurnQueueState = { modelTurnActive: true, awaitingSince: null, pending: [typed] };
+  const before: ClientTurnQueueState = {
+    modelTurnActive: true,
+    awaitingSince: null,
+    pending: [typed],
+    afterInterrupt: false,
+    toolPending: false,
+  };
   const snapshot = JSON.stringify(before);
   stepClientTurnQueue(before, { type: "turnComplete", nowMs: 1 });
   stepClientTurnQueue(before, { type: "request", turn: instr, nowMs: 2 });
   assert.equal(JSON.stringify(before), snapshot);
+});
+
+test("[§70.5 reviewer M1] interrupted 직후 오디오 없는 turnComplete(3.8의 끊긴 턴 마감)로는 보류분을 풀지 않는다", () => {
+  const { sent, state } = run([
+    { type: "modelAudio", nowMs: 0 },
+    { type: "request", turn: instr, nowMs: 10 },
+    { type: "interrupted", nowMs: 2000 },
+    { type: "turnComplete", nowMs: 2077 },
+  ]);
+  assert.deepEqual(sent, []);
+  assert.equal(state.awaitingSince, 2077, "참가자 발화 응답을 계속 기다린다");
+  const after = run(
+    [
+      { type: "modelAudio", nowMs: 3000 },
+      { type: "turnComplete", nowMs: 6000 },
+    ],
+    state,
+  );
+  assert.deepEqual(after.sent, [{ at: 6000, turn: instr }]);
+});
+
+test("[§70.5 reviewer M1] 끊긴 뒤 응답이 끝내 없으면 tick 타임아웃으로 풀린다", () => {
+  const { sent } = run([
+    { type: "modelAudio", nowMs: 0 },
+    { type: "request", turn: instr, nowMs: 10 },
+    { type: "interrupted", nowMs: 2000 },
+    { type: "turnComplete", nowMs: 2077 },
+    { type: "tick", nowMs: 2077 + AWAIT_RESPONSE_TIMEOUT_MS },
+  ]);
+  assert.deepEqual(sent, [{ at: 2077 + AWAIT_RESPONSE_TIMEOUT_MS, turn: instr }]);
+});
+
+test("[§70.5 reviewer M2] BLOCKING 도구 대기 중(toolCall → toolResponse)에는 요청을 보류하고 stall로도 풀지 않는다", () => {
+  const { sent } = run([
+    { type: "toolCall", nowMs: 0 },
+    { type: "request", turn: typed, nowMs: 100 },
+    { type: "stall", nowMs: 4500 },
+    { type: "tick", nowMs: AWAIT_RESPONSE_TIMEOUT_MS * 2 },
+    { type: "toolResponseSent", nowMs: 5000 },
+    { type: "modelAudio", nowMs: 5600 },
+    { type: "turnComplete", nowMs: 9000 },
+  ]);
+  assert.deepEqual(sent, [{ at: 9000, turn: typed }]);
+});
+
+test("[§70.5 reviewer M2] 도구 결과를 보낸 뒤의 stall은 다시 턴 끝으로 본다", () => {
+  const { sent } = run([
+    { type: "toolCall", nowMs: 0 },
+    { type: "request", turn: typed, nowMs: 100 },
+    { type: "toolResponseSent", nowMs: 2000 },
+    { type: "stall", nowMs: 6500 },
+  ]);
+  assert.deepEqual(sent, [{ at: 6500, turn: typed }]);
 });

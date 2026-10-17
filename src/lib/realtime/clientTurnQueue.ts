@@ -20,6 +20,16 @@ export type ClientTurnQueueState = {
   /** 우리가 보낸 턴의 응답을 기다리는 중이면 보낸 시각(ms), 아니면 null. */
   awaitingSince: number | null;
   pending: ClientTurn[];
+  /**
+   * reviewer M1 / QA F1 — `interrupted` 뒤 아직 모델 오디오가 오지 않았다. 3.8은 끊긴 턴에 `interrupted` 직후
+   * 오디오 없는 `turnComplete`를 보낸다(§70.2) — 그것은 참가자 발화에 대한 응답의 끝이 아니므로 보류분을 풀지 않는다.
+   */
+  afterInterrupt: boolean;
+  /**
+   * reviewer M2 / QA F2 — BLOCKING 도구 호출(`toolCall`)을 받고 아직 `toolResponse`를 보내지 않았다. 모델은 결과를
+   * 기다리며 멈춰 있지만 그 턴은 진행 중이다 — 이때 텍스트 턴을 보내면 도구 흐름 위에 끼어든다. stall로도 풀지 않는다.
+   */
+  toolPending: boolean;
 };
 
 export type ClientTurnEvent =
@@ -27,6 +37,10 @@ export type ClientTurnEvent =
   | { type: "modelAudio"; nowMs: number }
   | { type: "turnComplete"; nowMs: number }
   | { type: "interrupted"; nowMs: number }
+  /** BLOCKING 도구 호출 수신 — 이 턴은 도구 결과 뒤에 이어진다. */
+  | { type: "toolCall"; nowMs: number }
+  /** 도구 결과 전송(성공 · 실패 무관) — 턴은 계속 진행 중이고 turnComplete에서 끝난다. */
+  | { type: "toolResponseSent"; nowMs: number }
   /** 반이중 게이트 타이머가 진행 중 턴을 닫았다(서버가 turnComplete를 안 보냄 — `agentSpeechGate` stall). */
   | { type: "stall"; nowMs: number }
   /** 응답 대기 타임아웃 점검. */
@@ -45,6 +59,8 @@ export const INITIAL_CLIENT_TURN_QUEUE_STATE: ClientTurnQueueState = {
   modelTurnActive: false,
   awaitingSince: null,
   pending: [],
+  afterInterrupt: false,
+  toolPending: false,
 };
 
 function isIdle(state: ClientTurnQueueState): boolean {
@@ -55,7 +71,10 @@ function isIdle(state: ClientTurnQueueState): boolean {
 function releaseNext(state: ClientTurnQueueState, nowMs: number): ClientTurnStep {
   if (state.pending.length === 0) return { state, send: null };
   const [next, ...rest] = state.pending;
-  return { state: { modelTurnActive: false, awaitingSince: nowMs, pending: rest }, send: next };
+  return {
+    state: { modelTurnActive: false, awaitingSince: nowMs, pending: rest, afterInterrupt: false, toolPending: false },
+    send: next,
+  };
 }
 
 export function stepClientTurnQueue(
@@ -70,14 +89,31 @@ export function stepClientTurnQueue(
       }
       return { state: { ...state, pending: [...state.pending, event.turn] }, send: null };
     case "modelAudio":
-      return { state: { ...state, modelTurnActive: true, awaitingSince: null }, send: null };
+      return { state: { ...state, modelTurnActive: true, awaitingSince: null, afterInterrupt: false }, send: null };
+    case "toolCall":
+      return { state: { ...state, modelTurnActive: true, awaitingSince: null, toolPending: true }, send: null };
+    case "toolResponseSent":
+      return { state: { ...state, toolPending: false }, send: null };
     case "turnComplete":
+      if (state.afterInterrupt) {
+        // 끊긴 턴의 빈 마감 — 참가자 발화에 대한 응답을 계속 기다린다(tick 타임아웃은 그대로 산다).
+        return {
+          state: { ...state, modelTurnActive: false, awaitingSince: event.nowMs, afterInterrupt: false, toolPending: false },
+          send: null,
+        };
+      }
+      return releaseNext({ ...state, modelTurnActive: false, awaitingSince: null, toolPending: false }, event.nowMs);
     case "stall":
+      // 도구 결과를 기다리는 침묵은 stall이 아니다(콜러블 왕복 · 콜드스타트가 4초를 넘을 수 있다).
+      if (state.toolPending) return { state, send: null };
       return releaseNext({ ...state, modelTurnActive: false, awaitingSince: null }, event.nowMs);
     case "interrupted":
       // 참가자가 말을 시작해 모델이 멈췄다 — 지금 보내면 참가자 발화 위에 지시가 겹친다. 그 발화에 대한
       // 응답을 기다리는 것으로 보고(awaitingSince), 그 응답의 turnComplete(또는 tick 타임아웃)에서 내보낸다.
-      return { state: { ...state, modelTurnActive: false, awaitingSince: event.nowMs }, send: null };
+      return {
+        state: { ...state, modelTurnActive: false, awaitingSince: event.nowMs, afterInterrupt: true, toolPending: false },
+        send: null,
+      };
     case "tick":
       if (
         !state.modelTurnActive &&

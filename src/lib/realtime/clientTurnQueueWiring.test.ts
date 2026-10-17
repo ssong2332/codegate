@@ -27,8 +27,8 @@ test("[§70.5] 오프닝 트리거도 큐로 보낸다", () => {
   assert.ok(/turn: \{ kind: "opening", text: OPENING_TRIGGER_TURN \}/.test(code));
 });
 
-test("[§70.5] 큐에 모델 이벤트 4종(오디오 · turnComplete · interrupted · stall)이 모두 들어간다", () => {
-  for (const type of ["modelAudio", "turnComplete", "interrupted", "stall"]) {
+test("[§70.5] 큐에 모델 이벤트 6종(오디오 · turnComplete · interrupted · stall · 도구 호출 · 도구 응답)이 모두 들어간다", () => {
+  for (const type of ["modelAudio", "turnComplete", "interrupted", "stall", "toolCall", "toolResponseSent"]) {
     assert.ok(code.includes(`dispatchClientTurn({ type: "${type}"`), `${type} 배선이 없다`);
   }
 });

@@ -743,6 +743,8 @@ export default function GeminiVoiceSession({
                     nowMs: performance.now(),
                     lastLoudAt: userSpeechDebounceState.lastLoudAt,
                   });
+                  // reviewer M2 — 도구 결과를 기다리는 동안 보류 큐가 텍스트 턴을 내보내지 않게 한다.
+                  dispatchClientTurn({ type: "toolCall", nowMs: performance.now() });
                   void (async () => {
                     const responses = await collectToolResponses(calls, dispatchToolCall);
                     // 대기 중 언마운트되거나 세션이 교체됐으면 죽은 소켓에 쓰지 않는다.
@@ -754,6 +756,8 @@ export default function GeminiVoiceSession({
                       // G390 — 전송 실패도 통화를 막지 않는다(P-4 비차단). 무응답만은 피하는 것이
                       // 이 배선의 목적이지만, 소켓 자체가 끊긴 경우까지 되살릴 수는 없다.
                     }
+                    // 성공 · 실패 무관 — 큐의 도구 대기를 푼다(턴 자체는 turnComplete에서 끝난다).
+                    dispatchClientTurn({ type: "toolResponseSent", nowMs: performance.now() });
                   })();
                 }
                 return;
