@@ -198,6 +198,48 @@ export const COMPLIANCE_PATTERN = new RegExp(
   `${BASE_COMPLIANCE_PATTERN.source}|^(?![\\s\\S]*(?:${REFUSAL_IN_ANSWER.source}))[\\s\\S]*?(?:${CONTEXT_FREE_COMPLIANCE})`,
 );
 
+// ⭐ T191 J-2(2026-10-19 · DECISIONS #143 · PRD AC-097 갱신 고지 ③) — 대면 편취(E4)의 속은 시점 =
+// **"인출 · 전달 약속에 동의한 순간"**. 위 `COMPLIANCE_PATTERN`은 "인출하면 돼요"형과 범용 "알겠어"류만
+// 잡아 "수표로 찾아 둘게요" · "인출해서 맡길게요" · "직원분께 드릴게요"를 놓쳤다(실측 before: 동의 22개 중
+// 3개). 셀프 감금(E5)의 "코인으로 바꿔 둘게요" · "옮길게요"도 같다(6개 중 1개).
+//
+// | 규칙 | 내용 |
+// |---|---|
+// | 문맥 조건 | **바로 앞 사기범 발화**(analyzeConversation의 scammer(i) ↔ user(i+1) 짝)가 인출 · 전달 · 보관 ·
+// |  | 코인 요구 어휘(`HANDOFF_DEMAND`)를 담을 때만 연다. 그 밖의 대화에서는 판정이 base와 한 글자도 같다 |
+// | 약속 어형 | 인출 · 출금 · 구매 · 전달 + 의지 어미 / 찾아 · 뽑아 · 바꿔 · 옮겨 + 두다 · 놓다 · 오다 의지 어미 /
+// |  | 드릴게 · 드리겠(연락 · 전화 · 말씀 · 답 · 문자 뒤 제외) / 맡길게 · 옮길게 / 드리면 · 넘기면 되나요 / 다녀올게 |
+// | 거절 · 유보 우선 | 답변 어디에든 부정(안 · 못 · 않 · 없) · 싫 · 상의 · 고민 · 생각해 보 · 나중에 · 물어 · 확인 · 왜 ·
+// |  | 이상 · 사기 · 수상 · 신고 · 경찰 · 모르 · 말게가 있으면 이 갈래만 끈다(`REFUSAL_IN_ANSWER`도 그대로 적용) |
+// | 저항 우선 | 무변경 — `RESISTANCE_PATTERN`이 맞으면 이 갈래와 관계없이 속지 않음이다 |
+//
+// ⛔ 주소 · 장소 발화는 판정 조건이 아니다(DECISIONS #143 — PII · AC-024). 어휘 목록에 장소 명사를 넣지 않는다.
+// ⛔ `COMPLIANCE_PATTERN`·`RESISTANCE_PATTERN`·`REFUSAL_IN_ANSWER`는 **무변경**이다 — 되감기 규칙 폴백
+// (`rewind/judge.ts`)이 문맥 없이 답변만으로 같은 패턴을 쓰므로, 이 갈래를 패턴에 섞으면 사기범 요구가 없는
+// 되감기 질문에서도 "드릴게요"가 위험으로 잡힌다. ⚠️ 한계(투명 고지): 그래서 되감기 규칙 폴백은 이 갈래를
+// 쓰지 않는다 — 같은 "수표로 찾아 둘게요"가 리포트에서는 속은 순간, 되감기 규칙 폴백에서는 중립일 수 있다.
+// ⚠️ 시나리오 · 흐름 변형(`flowVariantId` · `decisionMoment`)을 입력으로 받지 않는다 — 시그니처 무변경(T72)이고,
+// 변형이 없는 과거 세션 · ElevenLabs 경로에서도 사기범이 실제로 인출 · 전달을 요구한 턴이면 똑같이 잡힌다.
+// 문맥 어휘는 **요구**만 연다 — "출금이 진행 중이라"(은행 보안 사칭의 상황 설명) · "현금지급기로 가세요"(환급
+// 사칭의 ATM 유도)는 인출 · 전달 요구가 아니라 열지 않는다(저작 대사 전수 대조 — 이 갈래가 열리는 대사는
+// 기관 사칭 고급 변형 · 대면 편취 · 셀프 감금의 인출 · 보관 · 코인 대사뿐이다).
+const HANDOFF_DEMAND =
+  /인출|출금\s*(?:해|하)|현금(?!\s*지급기)|수표|보관|맡기|맡겨|맡아|받으러|전달|건네|코인|가상\s*(?:자산|화폐)|찾아\s*(?:두|놓|오|서|주)/;
+const HANDOFF_PROMISE =
+  /(?:인출|출금|구매|전달)\s*(?:해\s*(?:서|둘|놓|드릴)|할게|할께|하겠)|(?:찾아|뽑아|바꿔|(?<![가-힣])사|옮겨|준비해)\s*(?:둘게|둘께|두겠|놓을게|놓을께|놓겠|올게|올께|오겠)|(?<!(?:연락|전화|말씀|답|답변|문자)\s?)(?:드릴게|드릴께|드리겠)|(?:맡길|옮길)(?:게|께)|맡기겠|(?:드리|넘기)면\s*(?:돼|되(?!는지)|될까|됩)|다녀\s*(?:올게|올께|오겠)/;
+const HANDOFF_HOLD =
+  /(?:안|못)\s|(?:안|못)(?:맡|찾|드리|드릴|인출|출금|사|살|바꾸|바꿀|보내|보낼|옮|넘|건네|구매|할|하겠|해)|않|없어|없습|없다|없는|싫|말게|말래|말까|상의|고민|생각해\s*보|생각\s*좀|나중에|물어|확인|왜|이상|사기|수상|신고|경찰|모르/;
+
+/** 사기범이 인출 · 전달 · 코인을 요구한 바로 다음 답변이 그 약속에 동의하는가(T191 J-2 — 위 표). */
+function isHandoffPromiseReply(scammerText: string, replyText: string): boolean {
+  return (
+    HANDOFF_DEMAND.test(scammerText) &&
+    !HANDOFF_HOLD.test(replyText) &&
+    !REFUSAL_IN_ANSWER.test(replyText) &&
+    HANDOFF_PROMISE.test(replyText)
+  );
+}
+
 /**
  * 사기범 발화 텍스트에 어떤 weakenedTactics의 저작 문구(flavor 인용구)가 남아 있는지 추정하기 위한
  * 수법별 키 묶음. 비교는 대사를 만드는 쪽(MockLlmClient)과 같은 `extractTacticFlavor` 산출을 기준으로 한다.
@@ -301,7 +343,9 @@ export function analyzeConversation(
     if (!userReply || userReply.role !== "user") continue;
 
     const resisted = RESISTANCE_PATTERN.test(userReply.textMasked);
-    const complied = COMPLIANCE_PATTERN.test(userReply.textMasked);
+    const complied =
+      COMPLIANCE_PATTERN.test(userReply.textMasked) ||
+      isHandoffPromiseReply(msg.textMasked, userReply.textMasked);
     if (resisted || !complied) continue;
 
     const tactic = matchedTactic ? extractTacticLabel(matchedTactic) : "약화된 사기 수법";
