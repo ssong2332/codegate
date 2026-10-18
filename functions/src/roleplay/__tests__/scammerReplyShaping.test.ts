@@ -5,7 +5,8 @@
 // 함수 테스트로 고정하고, 여기서는 **호출부가 그 함수들을 올바른 순서·조건으로 부르는지**를 주석을
 // 걷어낸 실행 코드에서 확인한다.
 //   - sendMessage: extractEscalationSignal → replaceRealFinancialNames → limitReplySentences →
-//     finalizeScammerReplyText, 그리고 상한은 `turnInstruction === undefined`일 때만(G343).
+//     finalizeScammerReplyText, 그리고 상한은 `shouldLimitReplySentences(turnChoice)`가 참일 때만
+//     (마킹하는 지시 2종 면제 — G343 · 판정표 전수는 replyLengthPolite.test.ts가 고정).
 //   - 오프닝: extractLinkMarker → replaceRealFinancialNames → limitReplySentences →
 //     finalizeScammerReplyText(상한은 항상).
 // ⭐ 역검증 — 순서를 뒤집거나 조건을 뺀 오염본을 같은 판정식이 실제로 빨간불로 잡는다.
@@ -41,11 +42,12 @@ function callsInOrder(source: string, calls: readonly string[]): boolean {
   return true;
 }
 
-/** 상한 호출이 `turnInstruction === undefined` 조건 바로 아래(삼항 참 분기 또는 if 블록)에 있는가. */
-function limitIsGuardedByNoTurnInstruction(source: string): boolean {
+/** 상한 호출이 `shouldLimitReplySentences(turnChoice)` 조건 바로 아래(삼항 참 분기 또는 if 블록)에 있는가. */
+function limitIsGuardedByTurnChoice(source: string): boolean {
   const code = codeOnly(source);
-  const ternary = /turnInstruction\s*===\s*undefined\s*\?\s*limitReplySentences\(/;
-  const ifBlock = /if\s*\(\s*turnInstruction\s*===\s*undefined\s*\)\s*\{[^}]*limitReplySentences\(/;
+  const ternary = /(?<!!\s*)shouldLimitReplySentences\(\s*turnChoice\s*\)\s*\?\s*limitReplySentences\(/;
+  const ifBlock =
+    /if\s*\(\s*shouldLimitReplySentences\(\s*turnChoice\s*\)\s*\)\s*\{[^}]*limitReplySentences\(/;
   return ternary.test(code) || ifBlock.test(code);
 }
 
@@ -67,8 +69,8 @@ test("[배선] sendMessage — 신호 추출 → 실존명 치환 → 문장 상
   assert.equal(callsInOrder(ROLEPLAY_SRC, SEND_MESSAGE_ORDER), true);
 });
 
-test("[배선 G343] sendMessage — 문장 상한은 turnInstruction이 주입되지 않은 턴에만 적용된다", () => {
-  assert.equal(limitIsGuardedByNoTurnInstruction(ROLEPLAY_SRC), true);
+test("[배선 G343] sendMessage — 문장 상한은 shouldLimitReplySentences(turnChoice)가 참인 턴에만 적용된다", () => {
+  assert.equal(limitIsGuardedByTurnChoice(ROLEPLAY_SRC), true);
 });
 
 test("[배선] 오프닝 — 링크 추출 → 실존명 치환 → 문장 상한 → finalize 순서(상한은 항상)", () => {
@@ -124,16 +126,20 @@ test("[역검증 G343] 조건을 뺀 오염본(상한을 무조건 적용)은 �
     "const { text: realNameFreeReplyText } = replaceRealFinancialNames(signalFreeReplyText);",
     "const lengthLimited = limitReplySentences(realNameFreeReplyText);",
   ].join("\n");
-  assert.equal(limitIsGuardedByNoTurnInstruction(unconditional), false);
+  assert.equal(limitIsGuardedByTurnChoice(unconditional), false);
 
-  const inverted = "const lengthLimited = turnInstruction !== undefined ? limitReplySentences(t) : undefined;";
-  assert.equal(limitIsGuardedByNoTurnInstruction(inverted), false);
+  const inverted = "const lengthLimited = !shouldLimitReplySentences(turnChoice) ? limitReplySentences(t) : undefined;";
+  assert.equal(limitIsGuardedByTurnChoice(inverted), false);
 
   const commentedGuard = [
-    "// turnInstruction === undefined ? limitReplySentences(t) : undefined",
+    "// shouldLimitReplySentences(turnChoice) ? limitReplySentences(t) : undefined",
     "const lengthLimited = limitReplySentences(t);",
   ].join("\n");
-  assert.equal(limitIsGuardedByNoTurnInstruction(commentedGuard), false);
+  assert.equal(limitIsGuardedByTurnChoice(commentedGuard), false);
 
-  assert.equal(limitIsGuardedByNoTurnInstruction(ROLEPLAY_SRC), true, "정본은 같은 판정식을 통과한다");
+  // 이전 조건(지시 4종 전부 면제)으로 되돌린 오염본도 실패한다 — 문자 도착 턴 5문장 재발 방지.
+  const oldGuard = "const lengthLimited = turnInstruction === undefined ? limitReplySentences(t) : undefined;";
+  assert.equal(limitIsGuardedByTurnChoice(oldGuard), false);
+
+  assert.equal(limitIsGuardedByTurnChoice(ROLEPLAY_SRC), true, "정본은 같은 판정식을 통과한다");
 });

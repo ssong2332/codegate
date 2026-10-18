@@ -12,15 +12,16 @@ const SEVEN =
   "협조하지 않으시면 불이익이 있을 수 있습니다. 이 통화는 녹음되고 있습니다. 끊지 마십시오.";
 
 test("[상한] 7문장 입력 → 앞 3문장만 남는다", () => {
+  // 2026-10-18 규칙 A(공손 어미+쉼표 경계) 반영 — `안녕하십니까,`가 경계가 되어 8문장으로 센다.
   const result = limitReplySentences(SEVEN);
   assert.equal(
     result.text,
-    "안녕하십니까, 서울중앙지검 수사관입니다. 고객님 명의 계좌가 범죄에 연루됐습니다. 지금 바로 조치하셔야 합니다!",
+    "안녕하십니까, 서울중앙지검 수사관입니다. 고객님 명의 계좌가 범죄에 연루됐습니다.",
   );
-  assert.equal(result.originalSentences, 7);
+  assert.equal(result.originalSentences, 8);
   assert.equal(result.keptSentences, 3);
   assert.equal(result.trimmed, true);
-  assert.equal(countSentences(SEVEN), 7);
+  assert.equal(countSentences(SEVEN), 8);
 });
 
 test("[무변경] 3문장 이하는 입력 문자열 그대로(===), trimmed false", () => {

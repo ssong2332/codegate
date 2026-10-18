@@ -38,7 +38,7 @@ import { extractLinkMarker } from "./linkMarker";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
-import { limitReplySentences } from "./replyLength";
+import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { speakerGenderFor } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
@@ -346,13 +346,16 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     );
     // ③-c 사기범 대사 손질(2026-10-17 라이브 신고 — 실존 은행명 + 5~7문장 대사). 링크·신호 마커가 다
     // 빠진 텍스트에만 적용한다. (1) 실존 은행·카드사 이름 → OO은행/OO카드(숫자는 그대로 —
-    // guardrails/realFinancialNames.ts 헤더). (2) 문장 수 상한(replyLength.ts) — ⛔ 이번 턴에
-    // `turnInstruction`이 주입됐으면 **적용하지 않는다**: 예고 문장이 잘려도 위 ②-e가 (실 LLM 턴이면) "예고
-    // 완료"로 마킹했으므로 "말하지 않은 예고" 결함(G343)이 재발한다.
+    // guardrails/realFinancialNames.ts 헤더). (2) 문장 수 상한(replyLength.ts) — ⛔ "예고 완료"를
+    // 마킹하는 지시 2종(`verify_announce`·`install_consent`) 턴에는 **적용하지 않는다**: 예고 문장이
+    // 잘려도 위 ②-e가 (실 LLM 턴이면) 마킹했으므로 "말하지 않은 예고" 결함(G343)이 재발한다.
+    // 마킹이 없는 `sms_announce`·`verify_reconnect`는 잘려도 상태 기록이 틀어지지 않아 적용한다
+    // (2026-10-18 문자 도착 턴 5문장 신고 · 한계는 `shouldLimitReplySentences` 주석).
     const { text: realNameFreeReplyText, replacedCount: realNameReplacedCount } =
       replaceRealFinancialNames(signalFreeReplyText);
-    const lengthLimited =
-      turnInstruction === undefined ? limitReplySentences(realNameFreeReplyText) : undefined;
+    const lengthLimited = shouldLimitReplySentences(turnChoice)
+      ? limitReplySentences(realNameFreeReplyText)
+      : undefined;
     const shapedReplyText = lengthLimited ? lengthLimited.text : realNameFreeReplyText;
     // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).
     if (realNameReplacedCount > 0) {
