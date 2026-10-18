@@ -29,6 +29,13 @@ export type ScenarioMeta = {
   channel?: Channel;
   surface?: MessengerSurface;
   escalation?: EscalationConfig;
+  // T191 S5(고급 전용 3종 — PRD AC-097 (b) · UX 계약 C-1) — 이 시나리오는 고급으로만 만들 수 있다.
+  // **화면 표시값**(UX-017 "고급 전용" 묶음 · UX-029 고급 1장)일 뿐 수법·흐름 정보가 아니다(C-4).
+  // 강제는 서버(`createSession` · `createChallenge`의 `assertDifficultyAllowed`)가 한다 — 클라
+  // 가드는 충족 수단이 아니다(AC-097 (b)). 부재 = 세 난이도 모두 허용(AC-064 원문).
+  advancedOnly?: true;
+  // T191 S5(UX 계약 C-9 · D-106) — 세션 전 부담 고지 대상(셀프 감금 1종). 부재 = 고지 없음.
+  preSessionBurdenNotice?: true;
 };
 
 export const FAMILY_ACCIDENT_SCENARIO_ID = "family-accident-deepvoice";
@@ -257,6 +264,55 @@ export const bankSecurityVerifyScamScenario: ScenarioMeta = {
   callerLabel: "070-4133-2085",
 };
 
+// ── T191 S5 — 고급 전용 3종(PRD AC-097 (a) · D2) ─────────────────────────────
+// 원본은 src/content/scenarios/{cardDeliveryCall,assetProtectionNoticeCall,prosecutionCooperationCall}.ts
+// 이며 **callerLabel까지 글자 그대로 같다**(T95 G38 관례 — scenarios.test.ts가 전 필드를 대조한다).
+// ⚠️ 카드 문면 규칙(UX D-104 (4)): 제목·유형·성향 문자열은 사칭 주체와 첫 상황까지만 쓴다 — 흐름·
+// 수법 이름 0(flowVariants.test.ts의 D-104 금지 낱말 게이트).
+export const CARD_DELIVERY_CALL_SCENARIO_ID = "card-delivery-call";
+export const ASSET_PROTECTION_NOTICE_CALL_SCENARIO_ID = "asset-protection-notice-call";
+export const PROSECUTION_COOPERATION_CALL_SCENARIO_ID = "prosecution-cooperation-call";
+
+export const cardDeliveryCallScenario: ScenarioMeta = {
+  title: "카드 배송 안내 전화",
+  fraudType: "카드 배송 사칭",
+  estimatedDuration: "약 5~8분",
+  difficulty: "높음 — 친절한 안내처럼 시작해서 의심이 풀리기 쉽습니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "안녕하세요, 고객님. 카드 배송 안내 드리려고 연락드렸습니다. 오늘 받으실 수 있으세요?" },
+  ],
+  voiceMode: "generic",
+  callerLabel: "070-5217-3364",
+  advancedOnly: true,
+};
+
+export const assetProtectionNoticeCallScenario: ScenarioMeta = {
+  title: "금융감독원 자산 보호 안내",
+  fraudType: "금융감독기관 사칭(자산 보호 명목)",
+  estimatedDuration: "약 5~8분",
+  difficulty: "높음 — 도와주겠다는 말로 신뢰를 얻어 의심이 풀리기 쉽습니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "안녕하십니까, 금융감독원입니다. 고객님 명의 계좌 관련해서 안내드릴 사항이 있어 연락드렸습니다." },
+  ],
+  voiceMode: "generic",
+  callerLabel: "070-8842-1907",
+  advancedOnly: true,
+};
+
+export const prosecutionCooperationCallScenario: ScenarioMeta = {
+  title: "검찰 수사 협조 요청",
+  fraudType: "수사기관 사칭(수사 협조 명목)",
+  estimatedDuration: "약 5~8분",
+  difficulty: "높음 — 처벌을 앞세운 압박이 이어져 심리적 부담이 큰 편입니다",
+  deepvoiceLines: [
+    { lineId: "line-1", text: "검찰 수사관입니다. 본인 명의 계좌 관련 사건으로 확인할 것이 있어 연락드렸습니다." },
+  ],
+  voiceMode: "generic",
+  callerLabel: "070-3359-6610",
+  advancedOnly: true,
+  preSessionBurdenNotice: true,
+};
+
 export const PUBLIC_SCENARIOS: Record<string, ScenarioMeta> = {
   [FAMILY_ACCIDENT_SCENARIO_ID]: familyAccidentDeepvoiceScenario,
   [INSTITUTIONAL_IMPERSONATION_SCENARIO_ID]: institutionalImpersonationScenario,
@@ -272,4 +328,15 @@ export const PUBLIC_SCENARIOS: Record<string, ScenarioMeta> = {
   [MESSENGER_PARCEL_SMISHING_SMS_SCENARIO_ID]: messengerParcelSmishingSmsScenario,
   [MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID]: messengerSubsidySmishingSmsScenario,
   [BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID]: bankSecurityVerifyScamScenario,
+  [CARD_DELIVERY_CALL_SCENARIO_ID]: cardDeliveryCallScenario,
+  [ASSET_PROTECTION_NOTICE_CALL_SCENARIO_ID]: assetProtectionNoticeCallScenario,
+  [PROSECUTION_COOPERATION_CALL_SCENARIO_ID]: prosecutionCooperationCallScenario,
 };
+
+// T191 S5 — 고급 전용 시나리오인가(PRD AC-097 (b) · UX 계약 C-1/C-2). 서버 거부 술어
+// (`session/difficultyAllowance.ts`)와 챌린지 생성 거부가 이 함수 하나를 쓴다.
+// ⚠️ 이 파일에는 블록 주석을 쓰지 않는다 — 위쪽 기존 주석의 `src/content/scenarios/*.ts` 표기가 블록 주석
+// 시작(`/` + `*`)으로 읽혀, 루트 소스 스캔(startNoticeGate.test.ts의 codeOnly)이 그 사이 코드를 통째로 지운다.
+export function isAdvancedOnlyScenario(scenarioId: string): boolean {
+  return PUBLIC_SCENARIOS[scenarioId]?.advancedOnly === true;
+}

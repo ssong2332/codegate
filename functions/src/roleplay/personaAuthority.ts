@@ -32,6 +32,10 @@ export const PERSONA_AUTHORITY: Record<string, PersonaAuthority> = {
   "bank-security-verify-scam": "institution",
   "messenger-parcel-smishing-sms": "institution",
   "messenger-subsidy-smishing-sms": "institution",
+  // T191 S5 — 고급 전용 3종 전부 기관·카드사 직원 사칭(본인확인 요구가 캐릭터와 맞는다).
+  "card-delivery-call": "institution",
+  "asset-protection-notice-call": "institution",
+  "prosecution-cooperation-call": "institution",
   // ── acquaintance 4종 — 가족·지인 사칭(이름을 이미 아는 사이라 본인확인 자체가 성립하지 않는다) ──
   "family-accident-deepvoice": "acquaintance",
   "grandchild-impersonation": "acquaintance",

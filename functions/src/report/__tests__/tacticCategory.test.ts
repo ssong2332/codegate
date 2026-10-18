@@ -21,7 +21,8 @@ test("전 시나리오의 모든 weakenedTactics 라벨이 other로 떨어지지
     }
   }
   // T95(2026-07-26) — 확인 무력화 전용 시나리오 1종 추가로 14종이다(추가만, 삭제·통합 0건).
-  assert.equal(Object.keys(SCENARIO_PROMPTS).length, 14, "시나리오 14종 전수 검사 전제");
+  // T191 S5(2026-10-18) — 고급 전용 3종 추가로 17종이다(추가만).
+  assert.equal(Object.keys(SCENARIO_PROMPTS).length, 17, "시나리오 17종 전수 검사 전제");
   assert.ok(labelCount > 0, "라벨을 하나도 읽지 못했다면 테스트 자체가 무의미하다");
   assert.deepEqual(unmapped, [], `카테고리 미매핑 라벨(규칙표 갱신 필요): ${unmapped.join(" / ")}`);
 });

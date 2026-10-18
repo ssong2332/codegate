@@ -58,19 +58,21 @@ test("확인 무력화 메커닉을 가진 시나리오는 전부 procedural이�
 //
 // 누가 한 행을 `reduced`로 바꾸면 **이 테스트가 먼저 깨진다** — 고급이 조용히 무력해지는 것을 막는
 // 장치이며, 통과시키려고 기대값을 내리기 전에 그 행이 왜 reduced가 됐는지부터 확인해야 한다.
-test("L3 깊이 분포가 6/4/4다(§17.5의 13종 5/4/4 + T95 신규 1종 → d3_and_d4)", () => {
+// T191 S5 — 고급 전용 3종이 전부 procedural로 들어왔다(Architecture T191 절 "L3 표 3행"). 그중
+// card-delivery-call은 확인 무력화 카탈로그를 가져 d3_and_d4(+1), 나머지 2종은 d4_only(+2)다 → 7/6/4.
+test("L3 깊이 분포가 7/6/4다(§17.5의 13종 5/4/4 + T95 1종 → d3_and_d4 + T191 S5 3종)", () => {
   const counts = { d3_and_d4: 0, d4_only: 0, reduced: 0 };
   for (const id of Object.keys(PUBLIC_SCENARIOS)) counts[l3DepthMode(id)] += 1;
 
-  assert.deepEqual(counts, { d3_and_d4: 6, d4_only: 4, reduced: 4 });
+  assert.deepEqual(counts, { d3_and_d4: 7, d4_only: 6, reduced: 4 });
   assert.equal(
     counts.d3_and_d4 + counts.d4_only + counts.reduced,
     Object.keys(PUBLIC_SCENARIOS).length,
     "모든 시나리오가 정확히 한 모드에 속해야 한다",
   );
-  // 고급에서 L3가 실제로 적용되는 시나리오 = 10/14(설계의 9/13에 T95 1종이 더해진 값).
+  // 고급에서 L3가 실제로 적용되는 시나리오 = 13/17(설계의 9/13에 T95 1종 + T191 S5 3종이 더해진 값).
   const applied = Object.keys(PUBLIC_SCENARIOS).filter((id) => isL3Applied(id, "advanced"));
-  assert.equal(applied.length, 10);
+  assert.equal(applied.length, 13);
 });
 
 test("reduced 4종은 가족·지인 사칭이다 — 아들·손주·친구가 접수번호를 부르면 페르소나가 무너진다", () => {

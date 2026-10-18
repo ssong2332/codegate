@@ -34,7 +34,8 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { denyAnonymous } from "../shared/anonymousGate";
 import { voiceInputStoragePath } from "../voice";
 import { getVoiceProvider } from "../voice/provider";
-import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import { PUBLIC_SCENARIOS, isAdvancedOnlyScenario } from "../scenarios/publicMeta";
+import { assertDifficultyAllowed } from "../session/difficultyAllowance";
 import type { VoiceMode } from "../scenarios/publicMeta";
 import {
   CHALLENGE_DEFAULT_RETENTION_MS,
@@ -84,6 +85,15 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
     const scenario = PUBLIC_SCENARIOS[scenarioId];
     if (!scenario) {
       throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
+    }
+    // T191 S5(PRD AC-097 (b)(g) · UX 계약 C-2 · D-107) — 고급 전용 시나리오는 ① 비고급 · 난이도 미전달이면
+    // createSession과 **같은 술어**로 `difficulty-not-allowed` ② 고급이어도 챌린지로 보낼 수 없다(AC-097 (g)
+    // 확정 전 기본값 — 선택 목록에 없음). ⛔ 위치가 설계다: 어떤 Firestore 읽기 · 쓰기 · 음성 호출보다 앞.
+    assertDifficultyAllowed(scenarioId, difficultyLevel);
+    if (isAdvancedOnlyScenario(scenarioId)) {
+      throw new HttpsError("failed-precondition", "이 시나리오는 지인에게 보내는 챌린지를 지원하지 않습니다.", {
+        reason: "advanced-only-not-challengeable",
+      });
     }
 
     // T47(#20, §14.8.1) — 명시 channel 판별자. 부재→"voice"(하위호환, 무백필).

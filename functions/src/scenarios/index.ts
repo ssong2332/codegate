@@ -49,6 +49,16 @@ import {
   BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID,
   bankSecurityVerifyScamPrompt,
 } from "./bankSecurityVerifyScam.prompt";
+// T191 S5 — 고급 전용 3종(PRD AC-097). 고급 강제는 서버(`session/difficultyAllowance.ts`)가 한다.
+import { CARD_DELIVERY_CALL_SCENARIO_ID, cardDeliveryCallPrompt } from "./cardDeliveryCall.prompt";
+import {
+  ASSET_PROTECTION_NOTICE_CALL_SCENARIO_ID,
+  assetProtectionNoticeCallPrompt,
+} from "./assetProtectionNoticeCall.prompt";
+import {
+  PROSECUTION_COOPERATION_CALL_SCENARIO_ID,
+  prosecutionCooperationCallPrompt,
+} from "./prosecutionCooperationCall.prompt";
 
 export { FAMILY_ACCIDENT_SCENARIO_ID, familyAccidentDeepvoicePrompt };
 export { INSTITUTIONAL_IMPERSONATION_SCENARIO_ID, institutionalImpersonationPrompt };
@@ -67,6 +77,9 @@ export { MESSENGER_FRIEND_LOAN_KAKAO_SCENARIO_ID, messengerFriendLoanKakaoPrompt
 export { MESSENGER_PARCEL_SMISHING_SMS_SCENARIO_ID, messengerParcelSmishingSmsPrompt };
 export { MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID, messengerSubsidySmishingSmsPrompt };
 export { BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID, bankSecurityVerifyScamPrompt };
+export { CARD_DELIVERY_CALL_SCENARIO_ID, cardDeliveryCallPrompt };
+export { ASSET_PROTECTION_NOTICE_CALL_SCENARIO_ID, assetProtectionNoticeCallPrompt };
+export { PROSECUTION_COOPERATION_CALL_SCENARIO_ID, prosecutionCooperationCallPrompt };
 
 export const SCENARIO_PROMPTS: Record<string, ScenarioPromptDoc> = {
   [FAMILY_ACCIDENT_SCENARIO_ID]: familyAccidentDeepvoicePrompt,
@@ -83,4 +96,7 @@ export const SCENARIO_PROMPTS: Record<string, ScenarioPromptDoc> = {
   [MESSENGER_PARCEL_SMISHING_SMS_SCENARIO_ID]: messengerParcelSmishingSmsPrompt,
   [MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID]: messengerSubsidySmishingSmsPrompt,
   [BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID]: bankSecurityVerifyScamPrompt,
+  [CARD_DELIVERY_CALL_SCENARIO_ID]: cardDeliveryCallPrompt,
+  [ASSET_PROTECTION_NOTICE_CALL_SCENARIO_ID]: assetProtectionNoticeCallPrompt,
+  [PROSECUTION_COOPERATION_CALL_SCENARIO_ID]: prosecutionCooperationCallPrompt,
 };

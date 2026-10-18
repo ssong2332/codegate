@@ -19,7 +19,8 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { maskPII } from "../guardrails";
 import { generateOpeningLine } from "../roleplay";
 import { SCENARIO_PROMPTS } from "../scenarios";
-import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import { assignFlowVariantForChallenge } from "../session/variantAssignment";
+import { PUBLIC_SCENARIOS, isAdvancedOnlyScenario } from "../scenarios/publicMeta";
 import { markChallengeInProgressIfConsented } from "../shared/challengeCompletion";
 import { LLM_TEXT_SECRETS } from "../shared/config";
 import {
@@ -118,6 +119,14 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
     if (!SCENARIO_PROMPTS[scenarioId]) {
       throw new HttpsError("failed-precondition", "존재하지 않는 시나리오입니다.");
     }
+    // T191 S5(D-107 · AC-097 (g)) — 2차 방어선. 고급 전용 시나리오는 createChallenge가 이미 거부하지만, 그 전에
+    // 만들어진 문서 · 데이터 변경으로 이 경로에 도달해도 체험 세션을 만들지 않는다. ⛔ 위치가 설계다: 첫 쓰기 ·
+    // LLM(generateOpeningLine) · 트랜잭션보다 앞.
+    if (isAdvancedOnlyScenario(scenarioId)) {
+      throw new HttpsError("failed-precondition", "이 시나리오는 지인에게 보내는 챌린지를 지원하지 않습니다.", {
+        reason: "advanced-only-not-challengeable",
+      });
+    }
     // T47(#20, §14.8.2) — 채널은 챌린지 문서에 이미 역정규화돼 있다(생성 시점 확정, OQ-29라
     // scenarioId 재조회 불요). surface만 스킨 렌더용으로 PUBLIC_SCENARIOS에서 가볍게 조회한다
     // (정적 맵, Firestore 쿼리 아님 — 메신저 챌린지에서만 쓰인다).
@@ -164,9 +173,17 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
     // T72(§15.3.2/§15.6 G9) — 발신자가 챌린지에 실어 보낸 난이도를 오프닝 조립에 그대로 쓰고,
     // 아래에서 사용자2 체험 세션 문서에도 **복사**한다(프롬프트는 세션 단위로 조립되므로 복사하지
     // 않으면 이후 턴(sendMessage)·통화(createRealtimeCall)에서 발신자 선택이 소실된다).
+    // T191 S5(AC-096 (e) · 설계 "2인 챌린지 수신자") — 수신자는 익명 · 이력 없음이라 회전 문서를 쓰지
+    // 않고 `hash(challengeId) mod n`으로 결정론 배정한다(같은 링크의 재시도 · 재개가 같은 변형).
+    const flowVariantId = assignFlowVariantForChallenge(
+      scenarioId,
+      resolved.difficultyLevel,
+      resolved.challengeId,
+    );
     const { message: openingMessage, isMock } = await generateOpeningLine(
       scenarioId,
       resolved.difficultyLevel,
+      flowVariantId,
     );
 
     const challengeRef = db.collection("challenges").doc(resolved.challengeId);
@@ -225,6 +242,8 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
         // T72(§15.6 G9) — 챌린지의 난이도를 체험 세션으로 복사한다. 이 복사가 빠지면 sendMessage·
         // createRealtimeCall이 세션에서 난이도를 읽지 못해 항상 중급으로 진행된다.
         difficultyLevel: resolved.difficultyLevel,
+        // T191 S5 — 배정된 흐름 변형의 불투명 ID(일반 세션과 같은 필드 · 같은 해석 경로).
+        flowVariantId,
         ...(isMock ? { llmProvider: "mock" as const } : {}),
       };
       // T36 primitive 재사용(파일 상단 지시) — tx를 넘기면 즉시 write하지 않고 이 트랜잭션에

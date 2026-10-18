@@ -121,6 +121,10 @@ export type SessionDoc = {
   // 블록을 내보내지 않아 프롬프트가 도입 전과 완전히 동일하다). 시나리오 메타의 산문 `difficulty`
   // (ScenarioDoc)와는 이름·의미가 다른 별개 필드다(오버로드 금지, §15.3.2).
   difficultyLevel?: DifficultyLevel;
+  // T191 S5 추가(옵셔널, 하위호환 · 무백필 — PRD AC-096 (e)(f)) — 세션 생성 시 서버가 배정한 흐름 변형의
+  // **불투명 ID**(`fv-xxxx`). 수법 · 단계 · 인원은 `functions/src/scenarios/flowVariants.ts`(서버 전용)에만
+  // 있다(D-46 · ADR-0004). 부재 = 변형 도입 이전 세션 → 원본 시나리오 프롬프트로 해석(무소급).
+  flowVariantId?: string;
 };
 
 // --- users/{uid}/voices/{voiceId} (P-8·AC-046, ADR-0005·Database.md 1:1) ---
@@ -436,6 +440,10 @@ export type ReportDoc = {
   // **난이도는 리포트 판정에 어떤 영향도 주지 않는다**(§15.3.5 — analyzeConversation/
   // buildPreventionAdvice/computeDefenseGrade 시그니처 무변경). 표기 전용이다(P-22).
   difficultyLevel?: DifficultyLevel;
+  // T191 S5 추가(옵셔널, 하위호환 · 무백필 — PRD AC-096 (f) · 설계 "reports flowVariantId 스냅샷") — 리포트를
+  // 만든 세션의 흐름 변형 **불투명 ID**. 리플레이 · 되감기 · 실패 아카이브가 같은 변형으로 해석한다.
+  // 부재 = 변형 도입 이전 리포트(기존 방식 그대로 표시 — AC-077).
+  flowVariantId?: string;
   createdAt: FirebaseFirestore.Timestamp;
   // T74 추가(전부 옵셔널, 하위호환 — §15.4.1 "아카이브 카드가 필요로 하는 세션 메타를 리포트에
   // 역정규화"). 없으면 아카이브가 카드 1장마다 세션 문서를 추가 read해야 한다(N+1, §15.6 G8).
