@@ -3,6 +3,17 @@ import assert from "node:assert/strict";
 import { logger } from "firebase-functions";
 import { GeminiLlmClient, GEMINI_TEXT_MODEL } from "../geminiClient";
 
+/** H2(2026-10-18) — GeminiLlmClient가 `generateContentStream`(SSE, `:streamGenerateContent?alt=sse`)을
+ * 쓰므로 목 응답도 SSE 형태(`data: {json}
+
+` 이벤트 나열)여야 한다. 각 페이로드가 청크 1개다. */
+function sseResponse(payloads: unknown[]): Response {
+  const body = payloads.map((payload) => `data: ${JSON.stringify(payload)}
+
+`).join("");
+  return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+}
+
 /** realtime/__tests__/geminiProvider.test.ts와 동일한 방식 — SDK 내부를 가로챌 수 없으므로
  * fetch 계층에서 요청 본문을 캡처하고 실제 API 응답 형태를 흉내낸 응답을 돌려준다. */
 function captureGenerateContentRequest(replyText: string): {
@@ -22,12 +33,7 @@ function captureGenerateContentRequest(replyText: string): {
         bodies.push(init.body);
       }
     }
-    return new Response(
-      JSON.stringify({
-        candidates: [{ content: { role: "model", parts: [{ text: replyText }] } }],
-      }),
-      { status: 200, headers: { "content-type": "application/json" } },
-    );
+    return sseResponse([{ candidates: [{ content: { role: "model", parts: [{ text: replyText }] } }] }]);
   }) as unknown as typeof globalThis.fetch;
   return {
     restore: () => {
@@ -84,11 +90,7 @@ test("GeminiLlmClient: 대화 이력이 비어 있으면(오프닝 대사) 화�
 
 test("GeminiLlmClient: 응답에 텍스트 파트가 없으면(candidates 비어있음/안전차단 등) 조용히 넘어가지 않고 명시적으로 실패한다", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response(JSON.stringify({ candidates: [] }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    })) as unknown as typeof globalThis.fetch;
+  globalThis.fetch = (async () => sseResponse([{ candidates: [] }])) as unknown as typeof globalThis.fetch;
   try {
     const client = new GeminiLlmClient("test-key");
     await assert.rejects(() => client.complete({ systemPrompt: "(system)", messages: [] }));
@@ -237,10 +239,7 @@ function stubFetch(payload: unknown, delayMs = 0): () => void {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async () => {
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
-    return new Response(JSON.stringify(payload), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
+    return sseResponse([payload]);
   }) as unknown as typeof globalThis.fetch;
   return () => {
     globalThis.fetch = originalFetch;
@@ -317,4 +316,163 @@ test("GeminiLlmClient: usageMetadata가 없으면 토큰 필드를 0으로 채�
   assert.ok(!("thoughtsTokenCount" in data), "필드를 0으로 채우면 §56.5와 같은 종류의 구분 불가 상태를 하나 더 만든다");
   assert.ok(!("totalTokenCount" in data), "같은 이유");
   assert.equal(typeof data.elapsedMs, "number", "토큰 정보가 없어도 소요 ms는 항상 남아야 한다");
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// H2(2026-10-18) — 스트림 수신 + 첫 바이트까지 시간(ttfbMs) 로그
+// 첫 sendMessage 10초 타임아웃의 원인이 "Gemini가 늦게 시작함"인지 "생성·전송/함수 쪽이 늦음"인지
+// 가르려면 전체 시간(elapsedMs)만으로는 부족하다 — 첫 청크 도착 시각을 따로 남긴다.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** 청크마다 지연을 줄 수 있는 SSE 스텁 — 첫 청크 도착 시각과 전체 시간이 실제로 갈리는지 본다. */
+function stubFetchChunks(chunks: { payload: unknown; delayMs: number }[]): { restore: () => void; calls: () => number } {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        for (const chunk of chunks) {
+          if (chunk.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, chunk.delayMs));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk.payload)}\n\n`));
+        }
+        controller.close();
+      },
+    });
+    return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+  }) as unknown as typeof globalThis.fetch;
+  return {
+    restore: () => {
+      globalThis.fetch = originalFetch;
+    },
+    calls: () => calls,
+  };
+}
+
+test("[H2] GeminiLlmClient: 스트림 청크 텍스트를 순서대로 모두 이어 붙여 하나의 응답으로 돌려준다(요청 1회)", async () => {
+  const stub = stubFetchChunks([
+    { payload: { candidates: [{ content: { role: "model", parts: [{ text: "안녕하십니까. " }] } }] }, delayMs: 0 },
+    { payload: { candidates: [{ content: { role: "model", parts: [{ text: "서울중앙지검 " }] } }] }, delayMs: 0 },
+    {
+      payload: {
+        candidates: [{ content: { role: "model", parts: [{ text: "수사관입니다." }] } }],
+        usageMetadata: { totalTokenCount: 321, thoughtsTokenCount: 0 },
+      },
+      delayMs: 0,
+    },
+  ]);
+  const captured = captureLogger();
+  try {
+    const result = await new GeminiLlmClient("test-key").complete({ systemPrompt: "(system)", messages: [] });
+    assert.equal(result.text, "안녕하십니까. 서울중앙지검 수사관입니다.");
+    assert.equal(result.isMock, false);
+    assert.equal(stub.calls(), 1, "스트림으로 바꿔도 요청은 1회여야 한다");
+  } finally {
+    captured.restore();
+    stub.restore();
+  }
+  const data = captured.payloads().find((p) => String(p.message).includes("Gemini 텍스트 생성 성공"))?.data as Record<
+    string,
+    unknown
+  >;
+  assert.equal(data.totalTokenCount, 321, "usage는 마지막 청크에서 가져온다");
+  assert.equal(data.thoughtsTokenCount, 0);
+});
+
+test("[H2] GeminiLlmClient: 성공 로그에 ttfbMs(첫 청크까지)와 elapsedMs(전체)를 실측값으로 남긴다", async () => {
+  const stub = stubFetchChunks([
+    { payload: { candidates: [{ content: { role: "model", parts: [{ text: "네, " }] } }] }, delayMs: 0 },
+    {
+      payload: {
+        candidates: [{ content: { role: "model", parts: [{ text: "맞습니다." }] } }],
+        usageMetadata: { totalTokenCount: 10 },
+      },
+      delayMs: 120,
+    },
+  ]);
+  const captured = captureLogger();
+  try {
+    await new GeminiLlmClient("test-key").complete({ systemPrompt: "(system)", messages: [] });
+  } finally {
+    captured.restore();
+    stub.restore();
+  }
+  const success = captured.payloads().filter((p) => String(p.message).includes("Gemini 텍스트 생성 성공"));
+  assert.equal(success.length, 1);
+  const data = success[0].data as Record<string, unknown>;
+  assert.equal(data.model, GEMINI_TEXT_MODEL);
+  assert.equal(typeof data.ttfbMs, "number", "ttfbMs 필드가 있어야 한다");
+  assert.equal(typeof data.elapsedMs, "number", "elapsedMs 필드가 있어야 한다");
+  assert.ok(
+    (data.elapsedMs as number) >= 100,
+    `둘째 청크가 120ms 뒤에 오므로 전체 시간은 그 이상이어야 한다(관측값: ${String(data.elapsedMs)})`,
+  );
+  assert.ok(
+    (data.elapsedMs as number) - (data.ttfbMs as number) >= 100,
+    `ttfbMs는 첫 청크 시각이라 전체보다 약 120ms 작아야 한다 — 마지막 청크 시각이면 판별 수단이 안 된다(ttfbMs=${String(data.ttfbMs)}, elapsedMs=${String(data.elapsedMs)})`,
+  );
+});
+
+test("[H2] GeminiLlmClient: 여러 청크로 와도 로그에 프롬프트·응답 본문·API 키가 없다(G170)", async () => {
+  const SENTINEL_PROMPT = "SENTINEL_H2_PROMPT";
+  const SENTINEL_USER = "SENTINEL_H2_USER_010-9876-5432";
+  const SENTINEL_KEY = "SENTINEL_H2_KEY";
+  const stub = stubFetchChunks([
+    { payload: { candidates: [{ content: { role: "model", parts: [{ text: "SENTINEL_H2_REPLY_A" }] } }] }, delayMs: 0 },
+    {
+      payload: {
+        candidates: [{ content: { role: "model", parts: [{ text: "SENTINEL_H2_REPLY_B" }] } }],
+        usageMetadata: { totalTokenCount: 5 },
+      },
+      delayMs: 0,
+    },
+  ]);
+  const captured = captureLogger();
+  try {
+    await new GeminiLlmClient(SENTINEL_KEY).complete({
+      systemPrompt: SENTINEL_PROMPT,
+      messages: [{ role: "user", content: SENTINEL_USER }],
+    });
+  } finally {
+    captured.restore();
+    stub.restore();
+  }
+  const serialized = JSON.stringify(captured.payloads());
+  for (const sentinel of [SENTINEL_PROMPT, SENTINEL_USER, SENTINEL_KEY, "SENTINEL_H2_REPLY_A", "SENTINEL_H2_REPLY_B"]) {
+    assert.ok(!serialized.includes(sentinel), `로그에 '${sentinel}'가 새면 안 된다`);
+  }
+});
+
+test("[H2] GeminiLlmClient: 청크가 하나도 없는 빈 스트림이면 기존과 같은 에러를 던지고 ttfbMs를 지어내지 않는다", async () => {
+  const stub = stubFetchChunks([]);
+  const captured = captureLogger();
+  try {
+    await assert.rejects(
+      () => new GeminiLlmClient("test-key").complete({ systemPrompt: "(system)", messages: [] }),
+      /Gemini 텍스트 응답이 비어 있습니다/,
+    );
+  } finally {
+    captured.restore();
+    stub.restore();
+  }
+  const data = captured.payloads().find((p) => String(p.message).includes("Gemini 텍스트 생성 성공"))?.data as
+    | Record<string, unknown>
+    | undefined;
+  assert.ok(data, "elapsedMs 관측 로그는 빈 응답에도 남는다(기존 동작과 같다)");
+  assert.ok(!("ttfbMs" in data), "첫 청크가 없으면 ttfbMs를 생략한다");
+});
+
+test("[H2] GeminiLlmClient: 텍스트 파트가 없는 청크만 오면(안전 차단 등) 기존과 같은 에러를 던진다", async () => {
+  const stub = stubFetchChunks([{ payload: { candidates: [{ finishReason: "SAFETY" }] }, delayMs: 0 }]);
+  const captured = captureLogger();
+  try {
+    await assert.rejects(
+      () => new GeminiLlmClient("test-key").complete({ systemPrompt: "(system)", messages: [] }),
+      /Gemini 텍스트 응답이 비어 있습니다/,
+    );
+  } finally {
+    captured.restore();
+    stub.restore();
+  }
 });

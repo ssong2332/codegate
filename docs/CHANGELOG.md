@@ -4,6 +4,17 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-18 추가분, 브랜치 `fix/llm-hedge-revert-latency-log`, 커밋 `1c68bc4`, base `25c28cb`)**: 아직 main에 병합되지 않았고 라이브 스트림 미검증이다. 테스트 수치는 QA 보고 인용값이다(docs 미재현).
+
+### Fixed
+- **텍스트 LLM 예비 요청(hedge) 되돌림 + 세션 첫 사용자 턴만 LLM 시간 제한 20초 + 첫 바이트 지연(`ttfbMs`) 로그(2026-10-18)**: 아래 PR #289 항목(커밋 `77a89fe`)의 "예비 요청(hedge)"은 **이 항목으로 되돌려졌다**. 같은 항목의 3문장 상한 보강(문장 경계 확장·면제 축소)은 유지된다.
+  - **되돌린 이유(배포 후 실측 2026-10-18 03:06Z)**: 예비 요청이 이긴 경우 0/2 · 4초 초과 3/3(호출만 2배) · 첫 턴이 1·2차 요청 모두 10초 초과 — 지연이 요청 간 상관돼 같은 요청을 한 번 더 보내도 소용이 없었다. `withHedge`(`functions/src/llm/hedgedClient.ts` 사용처)는 `getLlmClient()`에서 빠졌고 `withTimeout(…, 10초)`만 남는다.
+  - **첫 턴 20초(User 결정 C)**: `sendMessage`의 **세션 첫 사용자 턴만** LLM 시간 제한이 20초(`LLM_FIRST_TURN_TIMEOUT_MS`)다. 이후 턴·오프닝·되감기 판정은 10초(`LLM_TIMEOUT_MS`) 그대로. AC-004(95% ≤10초)의 **의도적 예외**이며 OQ-A62 해당분을 User가 확정했다. 새 환경 변수는 없다.
+  - **측정**: `GeminiLlmClient`가 `generateContentStream`으로 응답을 받아 성공 로그에 `ttfbMs`(첫 바이트까지 ms)를 남긴다(숫자·모델명만, 대사 본문 없음).
+  - **원인 조사(H1 프로브, 2026-10-18 03:12~03:28Z, 로컬·실제 키·`gemini-3.1-flash-lite`·20회)**: 503 "high demand" 11 · 연결 실패 1 · 성공 8. 성공 지연은 첫 턴형 1.5/2.5/3.4초, 오프닝형 13.3~111.4초. 지연·실패의 주원인은 Gemini 모델 측 수요 과부하로 **추정**한다(표본 소 — 확인 방법: 배포 뒤 `ttfbMs` 분포와 Mock 강등 건수).
+  - **한계**: 라이브 스트림 미검증 · 첫 턴이 20초까지 기다릴 수 있다(체감 대기 증가) · 모델 과부하 자체는 해결하지 않는다.
+  - **검증(인용값 — QA 보고)**: reviewer APPROVED · QA GO · functions 963→965 pass / 0 fail · 루트 492→492 / 0. `docs/Tasks.md`에 이 작업의 행이 없다(커밋 `Refs: (미등재 — planner 인계)`).
+
 > ⚠️ **이 블록(2026-10-18 추가분, 브랜치 `fix/scammer-reply-length-llm-hedge`, 커밋 `77a89fe`, base `0225f08`)**: 아직 main에 병합되지 않았고 라이브 미검증이다. 테스트 수치는 QA 보고 인용값이다(docs 미재현).
 
 ### Fixed
