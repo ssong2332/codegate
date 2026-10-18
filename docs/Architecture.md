@@ -17611,7 +17611,9 @@ completeWithFallback(                                   ← 실패 시 Mock 강�
 - ⛔ **선율 비복제**: 패턴 값은 *"OS 기본 벨소리의 음색(마림바/벨 계열)·주기·박자감"* 만 닮게 자체 설계한다 — 원곡의 음 높이 순서를 받아 적지 않는다(74.0 #3). 리뷰어 확인 항목(자동 검사 불가 — 정직 고지).
 - **진동**: `VIBRATION_PATTERNS = { ios: null, samsung: [...], default: [...] }`(D-97 — iOS형 진동 없음) · 벨 주기마다 `navigator.vibrate(pattern)` · 정지 `navigator.vibrate(0)` · `"vibrate" in navigator`가 거짓이면 0회.
 - **시작·정지 배선**(`play/page.tsx`): effect 1개 — `pageState === "ready" && phase === "incoming"`일 때 `startIncomingAlert(skin)` → cleanup에서 `stop()`. ⇒ 받기(`connecting`으로 전이)·거절(라우팅 언마운트)·종료·페이지 이탈이 전부 cleanup 하나로 모인다. 추가로 `pagehide`에서 `stop()`. `handleAnswer` 첫 줄에서도 `stop()`(전이 렌더 전 즉시 정지 — 실시간 오디오와 겹침 0).
+  - **(개정 2026-10-18 · 74.23 (2))** `handleAnswer`의 첫 동작은 이제 `stop()`이 아니다 — `readAudioFlags`(`src/app/session/play/page.tsx:1262`) → 기본 경로 `holdOpen()`(`:1267` — 소리·진동 즉시 0, 컨텍스트는 열어 둠) → `stop()`(`:1271` — `holdOpen` 뒤에는 무동작 `src/lib/phone/ringtonePlayer.ts:164-165`). **"전이 렌더 전 즉시 정지 · 겹침 0"은 소리 기준으로 그대로 성립한다.** `?ringclose=immediate`면 `holdOpen`을 건너뛰어 `:1271`이 종전대로 즉시 close한다. effect cleanup·`pagehide` 배선(`:1146-1160`)은 무변경.
 - **실패 처리**: `AudioContext` 생성 후 `resume()` 시도 → `state !== "running"`이면 **무음으로 끝낸다**(오류 문구 0 — D-97). 60초 뒤 소리만 멈추고 화면 연출은 계속(UX (10) ②). `stop()`은 멱등이며 `AudioContext.close()`까지 한다(통화 오디오 컨텍스트와 공존 시간 0).
+  - **(개정 2026-10-18 · 74.23 (2))** 위 괄호의 "공존 시간 0"은 **소리 공존 0 · 컨텍스트 close는 지연**으로 바뀌었다. 받기 경로에서만: `holdOpen()`(`ringtonePlayer.ts:169-185`)이 타이머 정지 · 예약 음 `osc.stop()` · 엔벨로프 `disconnect()` · `vibrate(0)`으로 **소리를 즉시 0**으로 만들고, `close()`는 `scheduleDeferredRingClose`(`src/lib/realtime/callAudio.ts:157-193`)가 **통화 출력이 `running`이 된 뒤**(200ms 간격 재확인 `:142`) · **상한 8초**(`RING_CLOSE_DEFER_CAP_MS` `:140`) · **화면 언마운트**(`page.tsx:1242-1247`) 중 먼저 오는 때에 한다. ⇒ 벨 컨텍스트와 통화 컨텍스트는 **최대 8초 동안 열린 채 공존**한다(소리 0). 거절·종료·이탈·60초 상한 경로의 `stop()`은 무변경(즉시 close). `?ringclose=immediate`면 받기도 종전(즉시 close).
 - **D-102 대비 구멍**: `startIncomingAlert(skin, { primedContext? })` — 나중에 `준비됐어요` 탭 핸들러 안에서 만든 컨텍스트를 넘길 수 있게 인자를 미리 둔다(지금은 미사용 — 74.12).
 - ⚠️ incoming 상태에 시간 한도가 없다는 UX 추정: 타이머 effect가 incoming에서 돌지 않고(`S:play/page.tsx:826-833`) 자동 종료 effect가 `phase !== "live"`면 빠지는 것(`:855`)까지 확인 — incoming 전체 effect 전수 열람은 하지 않았다(**부분 확인**).
 
@@ -17875,7 +17877,7 @@ completeWithFallback(                                   ← 실패 시 Mock 강�
 | 2 | 초기 phase 분기 | 같은 파일 `:388-401` | (3) 함수로 이전 | 8b |
 | 3 | 대화 구독 가드 | 같은 파일 `:415`(+ 같은 형태 `:440` · `:474`) | `phase === "pre-call-notice" \|\|` 추가 · `:415` 문자열은 `startNoticeGate.test.ts:105`가 그대로 단언 → 같은 커밋 갱신 | 8b |
 | 4 | 경과 타이머 가드 | 같은 파일 `:827` | `pre-call-notice`에서도 안 돈다(타이머 = 받기 기점 · OQ-U8) | 8b |
-| 5 | 자격증명 프리페치 | 같은 파일 `:980`(`phase !== "incoming"`) | **무변경**(Gemini 토큰 2분 유효 — `useRealtimeCall.ts:80-81` 주석 · 고지 화면 체류가 길면 낭비) | — |
+| 5 | 자격증명 프리페치 | 같은 파일 `:980`(`phase !== "incoming"`) | **무변경**(Gemini 토큰 2분 유효 — `useRealtimeCall.ts:80-81` 주석 · 고지 화면 체류가 길면 낭비) → **(개정 2026-10-18 · 74.23 (3))** 라이브 회귀(이중 발급 · 받기→자격증명 7456ms)로 `pre-call-notice`부터 시작하도록 **바뀌었다**(`page.tsx:1136`). "낭비" 우려의 실제 크기는 74.23 (3) 판정표 | — |
 | 6 | 프리롤 렌더 | 같은 파일 `:1491-1495` · import `:76` | 삭제 · 신규 `src/components/CallStartNotice.tsx`로(early return `if (phase === "pre-call-notice")` — 기존 early return `:1232-1268` 뒤) · play의 `preSessionCopy` import 0 | 8b |
 | 7 | G438 | `src/lib/sessionboundary/inSessionMarkers.test.ts:245-258` · `:262-285`(재사용 함수) · `:294-307` · 역검증 `:309-323` | (1) ⓓ 단언 4개 + 역검증 교체 | 8b |
 | 8 | 수신 상태 문구 | `play/page.tsx:1454-1461` | UX-014 v1.33 (3) | 3 |
@@ -17903,6 +17905,119 @@ completeWithFallback(                                   ← 실패 시 Mock 강�
 **(5) 신규 가드 추가분**: **G462**((2)) · **G463**((3)). 74.14 표의 G451~G461과 합쳐 이 절의 가드는 **G451~G463**.
 
 **(6) 최종 구현 단계** = 74.16 표(T190-1 → 2 → 3 → 4 → 5 → 6 → 6b → 8a → 8b, T190-7은 User 실기 — P-1은 3 이전 가능). ~~남은 선행은 ux-design의 에스컬레이션용 시작 전 고지 정본 문면 1건(8a)뿐이다.~~ → **문면 정본 확정(UX-014 v1.33 (11) · UX-022 v1.33 (7)) ⇒ 문서상 선행 0** — 단계 간 순서(8a → 8b)만 남는다. 범위 밖으로 남는 것: 표 S S-3(iOS 실제 출력 전환 — P-1 결과 뒤 별 커밋) · 실기 항목.
+
+### 74.23 (후속 2026-10-18 · 브랜치 `claude/fix-realtime-prefetch-race` · 커밋 `a03b1fb` · `0ad1438`) 라이브 #290 Android 웨일 AI 음성 무음 — 수정 기록 · 가설 · 실기 판정법
+
+**(0) 금지 먼저**
+- ⛔ 이 수정이 **무음을 고쳤다고 적지 않는다** — 실기 재현·재확인 0회(데스크톱 Chromium 미재현). 원인은 **가설 3개 중 미확정**이다((2)).
+- ⛔ 진단 패널·setup 로그에 비밀값 · 토큰 · 세션 id · uid · 전사 · URL을 싣지 않는다((5)).
+- ⛔ `primeCallAudio`는 받기 탭 핸들러 **안에서 동기로만** 부른다 — 그 앞에 `await` 금지(`src/lib/realtime/callAudio.ts:44-47` · `src/app/session/play/page.tsx:1278-1287`).
+- ⛔ `GeminiVoiceSession`은 빌린 컨텍스트를 **닫지 않는다**(`src/lib/realtime/GeminiVoiceSession.tsx:682-694`). 소유권 = 통화 화면 1곳.
+- 이 소절은 실행 0 · 소스 0줄 — 아래 수치 중 실측은 전부 **상위 세션 인용값**이다.
+
+**(1) 사실 — 확정 / 인용 / 미확정 구분**
+
+| # | 항목 | 상태 | 근거 |
+|---|---|---|---|
+| F-1 | 라이브 `d13e718`(#290) · 갤럭시 S25 · 네이버 웨일에서 AI 음성 무음 | 확정(인용값 — User 실기) | 상위 세션 보고 |
+| F-2 | 같은 기기 · 같은 서버에서 이전 Hosting `432fc87`은 정상 ⇒ **#290 클라이언트 회귀** | 확정(인용값) | 상위 세션 보고. 라이브 Hosting은 현재 `432fc87`로 롤백(인용값) |
+| F-3 | 데스크톱 Chromium(실제 Gemini Live · Android 자동재생 정책 강제 포함)에서는 미재현 | 확정(인용값) | 상위 세션 보고 |
+| F-4 | **이중 발급 경합**: T190-8b가 벨 앞에 `pre-call-notice` + "준비됐어요" 뒤 정적 `PRE_CALL_GAP_MS`=800(`page.tsx:171`)을 넣어 `incoming`(= 옛 미리 받기 시작점 — 74.22 (4) #5 `phase !== "incoming"`)이 늦어졌다. 받기를 빨리 누르면 미리 받기 응답 전에 `start()`가 불리고, 옛 `start()`는 **완료된** 결과만 봐서 같은 세션 자격증명을 한 번 더 발급했다 | **코드로 확정** | 메커니즘 서술 `src/lib/realtime/prefetchFreshness.ts:24-28` · 옛 판단을 재현한 역검증 `prefetchFreshness.test.ts:120`(같은 시나리오 발급 2회) |
+| F-5 | 받기→자격증명 `acceptToCredentialsMs` = **7456ms**(`d13e718`) vs **124ms**(`432fc87`) | 인용값(상위 세션 실측) | 이 패스 재측정 0 |
+| F-6 | 옛 경로의 통화 출력 컨텍스트는 받기 뒤 **비동기 사슬 끝**에서 생성됐다: `start()`의 `getUserMedia` 확인(`src/lib/realtime/useRealtimeCall.ts:196`) → 자격증명 확보(`:213` · 새 발급 `:223`) → 자격증명이 생겨야 마운트(`page.tsx:1707`) → 세션 effect 안 `await getUserMedia`(`GeminiVoiceSession.tsx:716`) → `new AudioContext`(`:733-735` — 현재 트리에서 빌릴 것이 없을 때의 종전 분기) | **코드로 확정**(현재 트리의 종전 분기로 확인 — 기준 트리 `d13e718` 원문은 열람 0) | 위 file:line |
+| F-7 | F-4가 F-6의 간격을 7초대로 늘렸다는 것 | **추정**(F-5 수치와 정합) | 확인: 패널 `acceptToCredMs` · `out.createdMs`((5)) |
+| F-8 | 무음이 "컨텍스트가 `suspended`로 남음"인지 "`running`인데 소리가 안 나감"인지 "청크가 안 옴"인지 | **미확정** | (4) 판정표로 가른다 |
+
+**(2) 가설 3개 (⛔ 전부 미확정 — 이 수정은 셋을 한꺼번에 피해 가도록 짰다)**
+
+| 가설 | 기전(추정) | 이 수정의 대응 | 근거 / 약점 |
+|---|---|---|---|
+| H1 활성화 만료 → `suspended` | 탭 뒤 수 초가 지나 만든 `AudioContext`를 일부 Android 브라우저(웨일)가 사용자 활성화 밖으로 보고 `suspended`로 둔다 | 받기 탭 안에서 출력(24kHz)·입력 컨텍스트를 **동기 생성 + `resume()` 요청**(`callAudio.ts:48-56` · 호출 `page.tsx:1284`) + **다음 탭 `resume()` 안전망**(`callAudio.ts:101-117` · 배선 `page.tsx:1202-1216`) | 주석 `callAudio.ts:3-6`이 "가설 — 실기 확인 전"으로 명시. ⚠️ 약점(추정): 데스크톱 Chromium의 자동재생 허용은 sticky activation 기준으로 알려져 있어 F-3과 정합하지만, 웨일이 다른 정책을 쓰는지는 근거 0 — 패널 `act.hasBeenActive` · `out.state`로 확인 |
+| H2 벨 close 직후 생성 | 벨 컨텍스트 `close()` 직후 새 컨텍스트를 만드는 순서가 Android 오디오 출력 경로를 끊는다 | 받기 때 벨은 소리만 즉시 0, close는 통화 출력 `running` 뒤 · 상한 8초(74.7 개정 · `callAudio.ts:139-193` · `ringtonePlayer.ts:169-185`) | `ringtonePlayer.ts:14-18` 주석이 "원인 후보"로 명시. 근거는 순서 정황뿐. 정상 트리 `432fc87`에 벨 재생이 있었는지는 **미확인** — 없었다면 회귀 범위와 겹친다(확인: `432fc87`의 `src/lib/phone/ringtonePlayer.ts` 존재 여부 · `play/page.tsx`의 `startIncomingAlert` 호출 여부) |
+| H3 생성 ↔ `getUserMedia` 순서 | 마이크 획득(통화 모드 전환 · 에코 제거) **뒤에** 만든 출력 컨텍스트와 **앞에** 만든 것의 출력 경로가 다르다 | 사전 생성이 `start()`의 `getUserMedia`(`useRealtimeCall.ts:196`)보다 **앞**이다(`page.tsx:1284` → `:1292`) — H1 대응의 부수 효과로 순서가 뒤집혔다 | 근거 0(가능성 열거). ⚠️ H1과 H3은 같은 플래그(`audioprime`) 하나로 움직여 **기본 경로만으로는 구분 불가** — (4)의 지연 열로만 갈린다 |
+
+- 함께 바뀐 것(가설 아님 · 확정 결함 수정): F-4 이중 발급 — (3).
+- ⇒ 기본 경로에서 소리가 나도 **어느 가설이 맞았는지는 모른다** — (4) A/B 없이는 원인 확정 보고 금지.
+
+**(3) 변경 1~5 기록**
+
+| # | 변경 | 위치 | 소유·규칙 | 테스트 |
+|---|---|---|---|---|
+| 1 | 받기 탭 안에서 통화 출력(`GEMINI_OUTPUT_SAMPLE_RATE`)·입력 `AudioContext` 동기 생성 · `resume()` | `callAudio.ts:48-56` · `page.tsx:1278-1287`(재진입 가드 `:1282-1283` · `audioprime=0`이면 생성 0) | 소유 = 통화 화면. 세션은 `isUsableContext`(`callAudio.ts:59-61`)면 빌리고 아니면 종전대로 만든다(`GeminiVoiceSession.tsx:728-735`). 해제 = `shouldReleasePrimedCallAudio`(`callAudio.ts:72-87` — 종료 · 폴백 · ElevenLabs · 마운트 전 오류) + 언마운트(`page.tsx:1180-1197`). 안전망 = `RESUME_GESTURE_EVENTS` capture·passive(`page.tsx:1202-1216` — 통화 phase 한정 · 전파 무변경) | `callAudio.test.ts:52` · `:81` · `:103` · `:116` · `:192-204`(역검증 `:204`) · `:249-253` |
+| 2 | 벨: 받기 때 `holdOpen()` → 소리만 즉시 0 · close 지연 | `ringtonePlayer.ts:169-185` · `page.tsx:1263-1271` · `:1302-1319` · 언마운트 `:1242-1247` | 74.7 개정 2줄. 상한 8초 · 재확인 200ms(둘 다 판단값 `callAudio.ts:139-142`). 새 `setInterval` 0(`setTimeout` 사슬 `:153-156`) | `callAudio.test.ts:286` · `:324` · `:340` · `:388-396`(역검증 `:396`) |
+| 3 | 미리 받기를 `pre-call-notice`부터 시작 · `start()`/폴백 보관이 **진행 중 요청을 이어받음** | effect `page.tsx:1134-1139` · 슬롯 `prefetchFreshness.ts:67-126` · 훅 `useRealtimeCall.ts:107-118` · `:149-157` · `:169` · `:213-215` | 판단 순서 = 신선한 완료(`settled`) > 같은 세션 진행 중(`inflight` — 기다림) > 새 발급(`mint`)(`prefetchFreshness.ts:41-51`). 꺼낸 결과는 소모(`:118`). 고지 체류로 상했으면 벨에서 1회 더(`:53-65`) | `prefetchFreshness.test.ts:28` · `:37` · `:62` · `:83` · `:96` · `:120`(역검증) · `:149` |
+| 4 | 진단 패널(`?audiodebug=1`) + A/B 플래그 2개 | `src/components/AudioDebugPanel.tsx` · 저장소 `src/lib/realtime/audioDiagnostics.ts` · 플래그 `callAudio.ts:119-137` · 마운트 `page.tsx:1684-1689`(1곳) | (5) | `audioDiagnostics.test.ts:25-167` · `callAudio.test.ts:275` · `:416` |
+| 5 | setup 지연 로그에 `credentialSource` | `src/lib/realtime/liveLatency.ts:187-193` · `:205-210` · `:220` · `:253` | 종류 문자열 3값만(식별자 아님). `inflight`일 때 `acceptToCredentialsMs`는 0이 아닐 수 있다(`:221-226`) | `liveLatency.test.ts:144` · `:158`(역검증) |
+
+**(3-a) 고지 화면 미리 받기의 서버 부작용 판정**
+
+| 질문 | 판정 | 근거 |
+|---|---|---|
+| Firestore 쓰기가 있는가 | **없다** | `functions/src/realtime/index.ts:78-220` — `sessions` 읽기 `:91` · `challenges` 읽기 `:119`뿐. 쓰기·트랜잭션 패턴 grep(`\.(set\|update\|add\|create\|delete)\(` · `runTransaction` · `increment`)은 `index.ts` · `geminiProvider.ts`에서 `client.authTokens.create`(`geminiProvider.ts:132` — 외부 API, Firestore 아님) 1건뿐 |
+| 남용 상한·카운터를 소모하는가 | **없다** | `index.ts`의 게이트 호출은 익명 범위 검사 `assertAnonymousChallengeScope`(`:10` · `:99`) 1개뿐 — §66 상한은 `sendMessage`/`createSession` 소관 |
+| 상태·세션 진행을 바꾸는가 | **없다** | 훅 `prefetch`는 `status`를 바꾸지 않고 마이크에 닿지 않는다(`useRealtimeCall.ts:76-79` · `:149-157`) — "받기 전엔 아무 것도 새지 않는다" 유지 |
+| 외부 발급이 생기는가 | **생긴다** — Gemini 경로 1회 = 단명 토큰 1개(`uses: 2` · 새 세션 시작 2분 · 토큰 30분 `geminiProvider.ts:76-77` · `:137-139`) | 비용·쿼터 계상 여부는 **미확인**(추정: 토큰 발급은 생성 호출이 아니라 계상이 작다 — 확인: Gemini 콘솔 요청 수). ElevenLabs 경로의 서명 URL 발급 비용도 미확인 |
+| 고지 화면에서 이탈하면 | 미사용 토큰 **1개**가 서버 측에 남고 새 세션 시작 창 2분 뒤 쓸 수 없다. 클라 쪽 결과는 언마운트 뒤 보관 0(`prefetchFreshness.ts:102`) | 위 |
+| 통화 1건당 발급 상한 | 고지 1 + 벨 1(고지 체류 > `PREFETCH_STALE_MS`=90초일 때만 `useRealtimeCall.ts:84`) + 받기 1(받기 시점에 상했을 때만) = **최대 3**. 종전(벨 1 + 받기 1 = 최대 2, 경합 시 실제 2) 대비 +1은 고지 체류 90초 초과일 때만 | `prefetchFreshness.ts:53-65` · `:114-123` |
+| 세션이 `active`가 아니면 | 서버가 `failed-precondition`(`index.ts:100-102`) → 미리 받기는 조용히 삼킴(`prefetchFreshness.ts:106-107`) · 받기 때 새 발급 | 종전과 같다 |
+
+⇒ **판정: 서버 상태 부작용 0 · 외부 단명 토큰 최대 +1(이탈 또는 90초 초과 체류 시 미사용)** — 74.22 (4) #5의 "낭비" 우려는 이 크기로 수용 가능(판단). ⏳ 쿼터 계상 확인은 OQ-A103 ③.
+
+**(4) 실기 A/B 판정법 (⛔ 이 표대로만 판정 — 표에 없는 조합은 행 추가를 먼저 묻는다)**
+
+조건: 같은 기기(S25) · 같은 브라우저(웨일) · 같은 시나리오, 각 칸 **3회 이상**. 주소에 `audiodebug=1`을 항상 붙이고 **AI 첫 마디 직후** 패널을 캡처한다. 플래그 기본값 = 수정안(`callAudio.ts:126-137`).
+
+| 칸 | 쿼리 | 출력 생성 시점 · 벨 close | 무엇을 가르나 |
+|---|---|---|---|
+| A | `audiodebug=1` | 탭 안 · 지연 | 수정안 전체 — 소리가 나는가 |
+| B | `audiodebug=1&audioprime=0` | 마이크 뒤 비동기(종전) · 지연 | H1/H3 — 벨 순서(H2)는 고정한 채 생성 시점만 종전으로 |
+| C | `audiodebug=1&ringclose=immediate` | 탭 안 · 즉시 | H2 — 생성 시점은 고정한 채 벨 순서만 종전으로 |
+| D | `audiodebug=1&audioprime=0&ringclose=immediate` | 종전 · 즉시 | 대조군 — 이중 발급 수정만 남은 상태. ⚠️ `d13e718`과 같지 않다(지연이 짧아졌다) |
+
+| 관측 | 판정 |
+|---|---|
+| A 소리 0 | 가설 3개 전부로 설명 안 됨 → 패널 `out.state` · `chunks.rx` 보고 후 정지(새 가설 필요) |
+| B 소리 0 · C 소리 정상 | **H1 또는 H3**(H2 기각). 이어서 B의 `acceptToCredMs`로 가른다 ↓ |
+| B 소리 0 · `cred.source=settled` · `acceptToCredMs` 수백 ms 이하 | 지연이 짧은데도 무음 ⇒ **H3 우세**(H1 약화) |
+| B 소리 정상(짧은 지연) · 긴 지연(`mint`·수 초)에서만 소리 0 | **H1 우세**(H3 기각) |
+| C 소리 0 · B 소리 정상 | **H2 확정 후보**(H1·H3 기각) |
+| B · C 둘 다 소리 0 | 두 요인 이상 결합 — 단일 원인 보고 금지 |
+| D 소리 정상 | 이중 발급 수정(지연 단축)만으로 충분했을 가능성 ⇒ H1 정합 · 1 · 2는 보험 |
+| 어느 칸이든 `out.state=suspended` | 활성화 계열(H1) 증거. `resume.retry` > 0 뒤 `running`이면 안전망이 살렸다 |
+| `out.state=running` · `chunks.sched` 증가 · 소리 0 | 생성은 정상 · **출력 경로** 문제(H2/H3 계열) |
+| `chunks.rx=0` | 오디오 층이 아니다 — 서버/연결 층(F-2와 모순 → 재확인) |
+
+- ⚠️ H1을 긴 지연으로 강제하는 플래그는 **없다** — 긴 지연 표본은 콜드 스타트 `mint`가 자연히 날 때만 얻는다(`cred.source` · `acceptToCredMs`로 표본을 분류). 플래그 추가 여부는 OQ-A103 ①(새 기능 아님 — 진단 수단).
+- 판정 결과는 이 표의 행 번호로 보고하고, 확정된 가설만 (2) 표에서 "확정"으로 바꾼다(원문 보존 · 시점 표기).
+
+**(5) 진단 쿼리와 표시 항목 · 비밀·개인정보 미표시 원칙**
+
+- 켜는 조건: 주소 쿼리 `audiodebug=1` **정확히**(`audioDiagnostics.ts:150-157`). 없으면 DOM 0(`AudioDebugPanel.tsx:47`). 운영 빌드도 같은 규칙. 그리는 곳 = 통화 셸 마지막 return 1곳(`page.tsx:1684`) — `pre-call-notice` early return(`:1598`) 안에는 없다(고지 단계 미리 받기는 받기 뒤 `cred.source`로만 보인다).
+- 관찰 전용: 제품 코드는 저장소에 값만 대입(`audioDiagnostics.ts:3-5`), 패널은 읽기만(`AudioDebugPanel.tsx:6`) · `aria-hidden` · `pointer-events-none`(`:72-74` — 종료 버튼 도달성 AC-006 영향 0) · 500ms 재그리기(`:26`).
+- 행 키 = `AUDIO_DIAG_KEYS` 29개 고정(`audioDiagnostics.ts:203-233`), 목록 밖 키는 그리지 않는다:
+
+| 묶음 | 키 | 읽는 법 |
+|---|---|---|
+| 플래그 | `flag.audioprime` · `flag.ringclose` | 현재 A/B 칸 확인(on/off · immediate/deferred) |
+| 경로 | `callMode` · `rt.status` · `provider` | realtime/fallback · 훅 상태 · gemini/elevenlabs/mock |
+| 자격증명 | `cred.prefetched` · `cred.source` · `acceptToCredMs` | (4)의 지연 분류 |
+| 출력 | `out.state` · `out.rate` · `out.origin` · `out.createdMs` · `out.gain` · `route` | suspended/running · 24000 · primed/session · 받기 기준 생성 ms · 음량 · 통화/스피커 |
+| 수신 오디오 | `chunks.rx` · `chunks.sched` · `chunk.lastMs` | 서버 도착 수 · 재생 예약 수 · 마지막 예약(받기 기준 ms) |
+| 입력 | `in.state` · `in.rate` | 마이크 컨텍스트 |
+| 벨 | `ring.state` · `ring.closedMs` | 벨 컨텍스트 상태 · 실제 close 시각(받기 기준 ms — H2 순서 판정) |
+| 폴백 | `fb.volume` · `fb.paused` · `fb.play` | 폴백 `<audio>` · 재생 결과(`ok` 또는 거부 이름) |
+| 활성화 | `act.hasBeenActive` · `act.isActive` | `navigator.userActivation`(없으면 `-`) |
+| 기타 | `resume.retry` · `err.last` · `browser` | 안전망 요청 수 · 마지막 오류 **이름** · 브라우저 요약 |
+
+- ⛔ **미표시 원칙**(정본 = 아래 단언): 비밀값 · 토큰 · 세션 id · uid · 전사 텍스트 · URL 0(`audioDiagnostics.ts:7-8` · `AudioDebugPanel.tsx:7`). 오류는 `err.name`만(`callAudio.ts:109-111` · `GeminiVoiceSession.tsx:743-744`). 브라우저 = 계열 + 주 버전 + OS 계열만(모델명 · 빌드 번호 · 기기 이름 0 — `audioDiagnostics.ts:159-200`). 단언: 금지 키 0 `audioDiagnostics.test.ts:41` · 역검증 `:45` · 패널 금지 필드·탭 가로채기 0 `:149` · 역검증 `:153` · 화면이 세션 식별자를 넘기지 않음 `:167` · 브라우저 요약 `:107`. setup 로그: 문자열 필드 = 출처 · 모델 · 종류뿐 `liveLatency.test.ts:144` · 역검증 `:158` · `:166`.
+- ⚠️ 운영에서 누구나 쿼리로 켤 수 있다 — 표시값이 위 원칙상 비밀이 아니라 수용(판단). 새 키를 추가할 때는 `AUDIO_DIAG_KEYS`와 금지 키 단언을 **같은 커밋**에 갱신한다.
+
+**(6) 열린 질문**
+
+- **OQ-A103** ① H1 표본용 인위 지연 플래그를 둘 것인가(기본: 두지 않는다 — 자연 표본으로 시작) ② (4) 판정 뒤 확정되지 않은 쪽의 수정(1 또는 2)을 남길 것인가 걷어낼 것인가(기본: 남긴다 — 비용은 컨텍스트 최대 8초 공존 · 미사용 컨텍스트 해제 경로뿐) ③ 고지 단계 미리 받기의 Gemini 토큰 발급이 쿼터·과금에 계상되는가(확인: 콘솔 요청 수).
+- ⏳ 남은 위험(추정): `handleAnswer`가 `holdOpen()` 뒤 `!sessionId`로 일찍 돌아오면(`page.tsx:1268` · `:1272`) 벨 컨텍스트는 언마운트 때까지 열린 채 남는다(소리 0) — 도달 가능성 미확인.
+
+**(7) 이 소절의 편집 범위**: §74.7 두 항목에 개정 하위 줄 2개(원문 보존) · 74.22 (4) #5 칸 덧붙임 · 이 74.23 신설 · `docs/DECISIONS.md` #126. 소스 · 테스트 · PRD · UX · CHANGELOG · Tasks · CLAUDE.md 0줄 · 실행 0 · 커밋 0. G 번호 신규 0(단언은 위 테스트 file:line으로 지목).
 
 ## 75. (Architecture change — 2026-10-18 · 브랜치 `claude/llm-groq-fallback-cb0815`) **텍스트 대사 생성 3차 예비 공급자 Groq** — ⭐⭐ **1차 `gemini-3.1-flash-lite` → 2차 `gemini-3.5-flash-lite`(§73, 503일 때) → 3차 Groq `openai/gpt-oss-120b`(429·5xx·Gemini 단계 시간 초과일 때)** / ⭐⭐ **총 시간 상한은 그대로다 — Groq가 있으면 Gemini 단계가 3초를 남기고 끝나야 하고, 넘기면 요청을 취소하고 넘어온다** / ⭐ **Groq로 보내는 대화는 이름·생년월일을 가명 처리한다(Gemini 경로 확대 여부는 정책 결정 — 75.9)** — architect 기록
 
