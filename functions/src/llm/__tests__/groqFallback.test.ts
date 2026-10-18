@@ -369,7 +369,12 @@ test("⑨-e 가명 처리: 이름·생년월일은 Groq로 가지 않고, 응답
 const INDEX_SRC = path.resolve(__dirname, "../../../src/llm/index.ts");
 
 function getLlmClientCode(src: string): string {
-  const body = src.slice(src.indexOf("export function getLlmClient("), src.indexOf("export async function completeWithFallback("));
+  // Windows `core.autocrlf=true` 체크아웃은 CRLF다 — 오염본 치환이 LF를 전제하므로 먼저 정규화한다(QA 지적).
+  const normalized = src.replace(/\r\n/g, "\n");
+  const body = normalized.slice(
+    normalized.indexOf("export function getLlmClient("),
+    normalized.indexOf("export async function completeWithFallback("),
+  );
   return body
     .split("\n")
     .filter((line) => !line.trim().startsWith("//"))
