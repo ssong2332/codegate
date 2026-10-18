@@ -18420,6 +18420,7 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 | 23 | **(2026-10-19 추가)** 좌표 재측정(main `f1a7ba2`) | `dispatchToolCall` 정의 **`GeminiVoiceSession.tsx:428`**(79.1 #6 · 79.8 R1의 `:397-503`은 낡음) · `extractEscalationSignal` 호출 **`roleplay/index.ts:387`**(정의 `escalationSignal.ts:15` · 79.7 3의 `:370`은 낡음) · 이체 랜딩 3종 문구 객체 **`MessengerFakeLanding.tsx:377-425`**(내용 `:378-424` · 인계값 `:378-423` — 끝 줄이 `mockHost` 1줄 차) · 미리 채울 칸 = `:384` · `:401` · `:418`. ⛔ 79.1~79.15의 다른 줄 인용은 `9971f89` 값 그대로다(원문 무편집) — 착수 시 **심볼로** 다시 찾는다 | grep 실측(이 패스) |
 | 24 | **(2026-10-19 추가)** D-115 칸 모양 | **읽기 전용**(연회색 · 커서 0 · 자판 0 · `readonly` · Tab 도달 · 지우기 0) — 79.15 (2)의 *"칸은 그대로 수정 가능"* 은 **D-115와 반대**다 ⇒ 79.15 (6)이 정정 | `docs/UX.md:1927` · `:4271-4279` |
 | 25 | **(2026-10-19 추가)** G513 2층 | 79.15 (6)이 G513을 **서버 문서 층 + 클라 화면 층** 2층으로 재정의(새 필드 `transferAccount` 철회 · #311 `bankName` + `accountNumber` 재사용). #311의 문서 전 문자열 필드 검사(`fictionalBank.test.ts:163-174` — *"D-115는 bankName·accountNumber를 그대로 쓴다"* 주석)가 1층의 일부를 이미 덮는다 | #311 워크트리 `functions/src/shared/__tests__/fictionalBank.test.ts:163-174` · `:219-231` |
+| 26 | **(2026-10-19 추가 — S5b 병합 뒤)** 좌표 재측정(main `9c760eb`) | **79.19 (1)이 정본** — 위 #6~#16 · #23 · 79.7 · 79.8의 줄 인용은 그 표로 대체된다(원문 무편집). ⭐ #2 *"14/14"* 는 **17벌**로 늘었다(79.19 (7) C2-4) | 79.19 (1) |
 
 ### 79.2 끊기 승인 판정표 — 순수 함수 `decideScammerHangup` (⛔ 표에 없는 경우는 행 추가를 묻는다)
 
@@ -18443,6 +18444,7 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 - 서버가 아는 목적 달성 사실 `landing_submitted`(`functions/src/inCallSms/index.ts:228-236` — planner 인용 좌표)는 **판정 입력으로 쓰지 않는다**: 끊는 판단은 모델이 한다(AC-103 (a))이고, 서버 하한은 *막는* 쪽만 맡는다. 그 사실은 모델이 대화 맥락으로 이미 안다(문자 도착 지시 · 참가자 발화).
 - **(2026-10-19 추가 — 행 2-b · 원문 위 3줄 무수정)** 입력에 **`relay?: HangupRelayContext`**(`{ legIndex: number; legCount: number }`)를 더한다. ⭐ **이 값은 클라 주장값이 아니다** — 서버가 세션 문서에서 읽는다: `legIndex` = `session.relay?.legIndex ?? 0`(S7 `startRelayLeg`만 쓰는 서버 필드 — scenario-review §78.6.2 트랜잭션) · `legCount` = `findFlowVariant(session.flowVariantId)?.legs.length`(서버 카탈로그). 해석은 **단일 지점** `resolveHangupRelay(session)`(신설 `functions/src/scammerHangup/relayContext.ts` — `flowVariants.ts`를 import하므로 잎 모듈 `decide.ts` 밖에 둔다)이 하고, 폴백 `sendMessage` · `requestScammerHangup` · 토큰 발급(`declaresEndCall` — 79.18 (1))이 같은 함수를 부른다. ⛔ **`RELAY_RUNTIME_AVAILABLE === false`이거나 변형이 없거나 `legs.length < 2`이면 `undefined`를 돌려준다** — 오늘 legs ≥ 2 변형 3종은 한 화자가 전체를 진행하므로 그 화자가 곧 마지막 화자다(79.1 #22 · G526). 범위 밖 `legIndex ≥ legCount`는 마지막으로 본다(S7 검증 *"변형에 leg 존재"* 가 막는 값 — 이 함수는 보정하지 않는다).
 - **(2026-10-19 추가)** 행 2-b의 위치: 구조 사실(세션 · 채널 · leg)이 턴 사실(Mock · 전환 · 하한 · 문자 대기)보다 먼저다. 79.6 SIGNAL 사전 판정 목록 *"#1·#2·#4·#5·#6"* 은 **#1·#2·#2-b·#4·#5·#6**으로 읽는다(LLM 호출 전에 아는 값이다). `not_last_leg`의 모델용 문면 = 79.5 **거절(공통)** 그대로(⛔ 새 문면 0 — *"거절 사유를 모델에게 설명하지 않는다"* 79.5 끝). 이 행은 79.18 (1) *"`end_call`은 마지막 leg에만 선언"* 과 **이중 방어**다 — 도구가 선언되지 않은 토큰에서도 서버가 거절한다.
+- **(2026-10-19 S5b 병합 뒤 정정 — 79.19 (2)~(4) · 위 표 · 글머리 원문 무수정 · 이 줄이 우선)** ① **5행 하한의 단위 = 사용자 발화**: 입력 `scammerTurns` → **`userTurns`**(폴백 = `userTurnsNow` · 실시간 = S5b와 같은 클라 식) · 상수 → **`SCAMMER_HANGUP_MIN_USER_TURNS = 3`**(폴백 옛 값과 동치 — 옛 *"사기범 4턴"* 은 실시간에서 한 발화 늦게 열려 AC-103 (f)를 어겼다). ② **6행 = `pendingInstruction`(실시간 클라 항 — 지시 큐 ∨ busy ∨ 교대 대기 ∨ 같은 배치의 다른 도구 · ⛔ 컴포넌트 `toolPending` 제외) ∨ `smsAwaitingUser`(서버 도착 기록 — 문자가 보인 뒤 참가자가 아직 말하지 않았다)** — 폴백의 *"이 턴에 문자 도착"* 은 서버 항이 대신한다. ③ **8행을 2-b 바로 뒤로**(순서 `1 · 2 · 2-b · 8 · 3 · 4 · 5 · 6 · 7 · 9` — C1 Minor-1). ④ OQ-A120은 해소가 아니라 *"S5b와 같은 등급"* 으로 남는다.
 
 ### 79.3 끊는 수단 판정 — ⭐ **BLOCKING 도구 채택**
 
@@ -18492,6 +18494,7 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 - 거절(`blocked_transfer`): `(확인 부서로 통화를 넘기기 전에는 끝낼 수 없다. 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어가라.)`
 - 실패(콜러블 미도달): `(지금은 통화를 끝낼 수 없다. 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어가라.)`
 - ⛔ 횟수 · 턴 번호 0(F11/G130). 거절 사유를 모델에게 설명하지 않는다(*"4턴이 안 됐다"* 류 0 — 모델은 그것을 셀 수 없다).
+- **(2026-10-19 S5b 병합 뒤 정정 — 79.19 (2) · (5) · (6) · 위 표 원문 무수정 · 이 줄이 우선)** `requestScammerHangup` 요청 = **`{ sessionId, userTurns, pendingInstruction, kind }`**(`scammerTurns` 폐지 — 화면 호출 0이라 무비용) · 판독은 순수 모듈 `readScammerHangupRequest`(`sessionId` 문자열 · `userTurns` 정수 0~`MAX_CLAIMED_TURNS` — S5b 규칙) · 서버가 `sessionDeclaresInCallSms`일 때 도착 기록을 읽어 6행 서버 항을 계산 · 로그 필드 `scammerTurns` → `userTurns`. `sendMessage` 응답 `endReason?: "limit_reached" \| "scammer_ended"`(서버 `roleplay/types.ts:18` · 클라 `src/lib/api/types.ts:90`) · `EndSessionReason`(요청 타입) = 허용목록 3값 · `createRealtimeCall.liveTools`에 `endCall` ⇔ `endCallFailureInstruction` 쌍(`failureInstruction` 필수 그대로). API.md 반영은 하류.
 
 ### 79.6 프롬프트 개정 정본 (UpdateRequests #55 — ⛔ 공통 블록과 14벌을 **한 커밋**에)
 
@@ -18522,6 +18525,7 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 - ⭐ 이 한 문장이 **세 변형 모두에서 참**이다(NONE은 허락하는 경우가 없다) ⇒ 시나리오 파일은 경로를 몰라도 된다(§17.3 *"`promptAssembly.ts`가 카탈로그를 읽지 않는다"* 의 거울).
 - ⚠️ clone 2종(`familyAccidentDeepvoice` · `grandchildImpersonation`)은 ElevenLabs 에이전트 프롬프트가 따로 저장돼 있다 — 머리 주석 대조값 갱신 + **에이전트 재생성 대기열**(OQ-A103과 같은 대기열 · ElevenLabs 끊기 미지원이라 기능 영향 0 — NONE과 같은 뜻).
 - `messengerFriendLoanKakao.prompt.ts:20`(*"채팅으로만 진행되고 마무리된다"* · G307 정정분)은 무변경 — 메신저 채널은 NONE.
+- **(2026-10-19 S5b 병합 뒤 정정 — 79.19 (7) C2-4 · 위 원문 무수정)** 대상은 **17벌**이다(main `9c760eb` grep 17건 — 그 뒤 추가된 `assetProtectionNoticeCall` · `cardDeliveryCall` · `prosecutionCooperationCall` 포함). G506의 기대 수는 상수가 아니라 `assembledPrompts()` 순회 수로 둔다. ⇒ 이 절 · 79.13 · 79.16의 *"14벌"* 은 **17벌**로 읽는다.
 
 **(3) 기존 결정과의 정합**
 
@@ -18548,6 +18552,7 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 - ⭐ 사용자 입력 흉내(AC-024 · AC-103 (g)(h)): `[[SIGNAL:END_CALL_GOAL]]`을 입력해도 `escapeSentinelLookalikes`(`promptAssembly.ts:728-732`)가 LLM 전달 전에 전각 치환하고, 추출은 **LLM 완성 텍스트에만** 돈다(`escalationSignal.ts:4-6`) ⇒ 새 코드 0줄로 성립 — G507이 같은 실행 출력에서 보인다.
 - 대사 손질(`:380-385` 실존 은행명 · 문장 상한)은 신호 추출 **뒤**라 신호를 자르지 않는다(현행 순서 유지).
 - **(2026-10-19 추가)** 1의 `preDecision` 입력에 `relay: resolveHangupRelay(session)`(79.2 끝)을 더한다 — 오늘 `undefined`. 좌표는 79.1 #23(`extractEscalationSignal` 호출 = main `f1a7ba2` `:387`)으로 다시 찾는다. S7 폴백 교대 마커 `[[TRANSFER]]`(scenario-review §78.6.2)와 `END_CALL_*`가 한 응답에 함께 나오는 경우는 79.18 (3) ⑩.
+- **(2026-10-19 S5b 병합 뒤 정정 — 위 1~6 원문 무수정 · 이 줄이 우선)** 좌표 · 입력은 **79.19 (5) 10 · 11**이 대체한다: 사전 판정 = `verifyState` 뒤 · 문자 제시 앞 · 입력 `userTurnsNow` · `smsAwaitingUser` · **실제 `limitReached`**(1의 *"`limitReached:false`"* 정정 — LLM 전에 계산 가능) / 사후 판정 = 마커 발송 뒤 · 재확인 트랜잭션 앞 / 한 응답에 문자 마커 + 끊기 신호 = 문자가 이긴다(OQ-A131).
 
 ### 79.8 실시간 흐름 (`src/lib/realtime/GeminiVoiceSession.tsx`)
 
@@ -18563,6 +18568,7 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 - 작별이 호출 **앞**에 온 경우(H1 위반)에도 R4가 오디오 0인 `turnComplete`를 받고 R5가 이미 예약된 재생을 기다린다 ⇒ 두 순서 모두 **재생 도중 절단 0**(AC-103 (c)).
 - 클라 주장 `pendingInstruction` = 부모의 지시 큐(`instructionQueueRef`)가 비어 있지 않거나 `toolPending`. 부모가 prop 함수로 넘긴다(동기 읽기 — `claimVerifyAnnounceSlot`과 같은 형태 `:465`).
 - **(2026-10-19 추가 — 79.18 (2) · 원문 위 표 무수정)** R1의 `scammerTurns: modelToolScammerTurns`(컴포넌트 지역값)는 **부모 getter `getSessionScammerTurns()`** 로 읽는다 · R2의 `hangupPending`은 컴포넌트 지역 상태가 아니라 **부모 `callEnding.ts` 래치**이고 컴포넌트는 `isHangupLatched()`로 읽는다(leg 재마운트에도 살아남게 — C5 선반영). 오늘(릴레이 0)은 두 값이 지역값과 같다 — **동작 변화 0**(⚠️ 추정 — 부모 카운터의 증가 지점이 `modelToolScammerTurns`의 증가 지점과 같은 `turnComplete`인지 C5 착수 시 확인. 다르면 79.18 (2) G528이 잡는다). `dispatchToolCall` 좌표 = 79.1 #23(`:428`).
+- **(2026-10-19 S5b 병합 뒤 정정 — 위 표 · 두 글머리 원문 무수정 · 이 줄이 우선)** ① R1의 `scammerTurns`는 **`userTurns: claimedUserTurns()`**(= `getSessionUserTurns()` + 응답 중 발화 1 — S5b `send_prepared_sms` 분기 `GeminiVoiceSession.tsx:436`과 **같은 함수**) ② ⛔ 위 글머리 *"`pendingInstruction` = … 비어 있지 않거나 `toolPending`"* 은 **결함**이다 — `end_call` 분기 시점에 `toolPending`은 자기 자신 때문에 항상 참(`:906` → `:908` · `clientTurnQueue.ts:97`)이라 모든 `end_call`이 `blocked_pending`이 된다. 정의 = 부모 `getPendingInstruction()` ∨ **같은 `toolCall` 배치에 다른 호출**(79.19 (3) · G533) ③ 위 *"⚠️ 추정 — 증가 지점"* 은 확인됐다: 부모와 컴포넌트 카운터는 같은 flush에서 오른다(79.18 끝 확인 줄) ④ `dispatchToolCall` 좌표 = **`:409`**(79.19 (1)).
 
 ### 79.9 공통 종료 순서 — 함수 하나 (`play/page.tsx`) + 순수 모듈 `src/lib/session/callEnding.ts`
 
@@ -18657,6 +18663,7 @@ AC-089 (b) *"사용자 완료/속아 넘어감"* 행 → 구현 뒤 = **사기�
 - **(2026-10-19 추가 — 병합 순서 확정 · 메인 세션)** **#311 → T192(C1~C5) → D-115 → S7.** T192는 S7을 기다리지 않고 C5까지 간다 · S7이 T192 위에 맞춘다. 위 표 S7 행의 *"S7 설계 확정 뒤 1행 확인"* 은 **79.18이 대체한다**(C5가 고정하는 인터페이스 + S7 착수 조건). C1 · C3 · C5에 더해지는 것: C1 = 행 2-b · `HangupRelayContext` · `resolveHangupRelay`(G526) / C3 = `declaresEndCall` 세 번째 인자(G527) / C5 = 79.18 (2) 인터페이스(G528). D-115는 79.15 (6).
 - **(2026-10-19 정정 — 병합 순서 갱신 · 메인 세션 최신 확정 · 위 줄 원문 보존)** **#311 → S5b → T192 → D-115 → S7.** 위 줄의 *"#311 → T192(C1~C5) → D-115 → S7"* 은 이 순서로 대체된다(S5b가 #311과 T192 사이에 들어온다 · T192가 S7을 기다리지 않는다는 판정은 그대로). C1은 S5b 전에 완료됐고(아래 줄) **C2~C5는 S5b 병합 뒤 그 main 위에서** 한다. ⚠️ C3 · C5 착수 시 확인 항목(미판정): S5b의 *"사용자 발화 기준 계수"* 와 백스톱 구조를 끊기 판정 입력(`scammerTurns` — 79.2 #5 · OQ-A120)과 래치(79.18 (2) `getSessionScammerTurns()` · G528 ⓐ)에 **그대로 쓸 수 있는가**. 쓸 수 없으면 그 차이를 보고하고 architect 재소집(새 계수기를 만들지 않는다). 위 표 C3 행의 S5b 겹침(`liveTools.ts` · `roleplay/index.ts`)은 S5b가 먼저 들어오므로 **C3이 S5b 위에 얹는 쪽**이 된다.
 - **(2026-10-19 C1 완료 시점 부착)** C1 = 커밋 `5fbe4d0`(브랜치 `claude/t192-c1-hangup-decision` — 해시는 커밋 로그 인용값) · 구현 위치: 판정 `functions/src/scammerHangup/decide.ts:71-109`(10행 표 `:71-99` · 2-b `:74-80`) · 릴레이 해석 `relayContext.ts:15-28`(`RELAY_RUNTIME_AVAILABLE === false`면 항상 `undefined`) · 트랜잭션 `commit.ts:38-90` · 문면 `guidance.ts:7-27` · 콜러블 `index.ts:54-100`(export `functions/src/index.ts:37` · 익명 S — §68.3 #27) · 사유 허용목록 `functions/src/session/endReason.ts:13-31`(호출 `session/index.ts:340-346` · `:371`) · 타입 `functions/src/shared/types.ts:30-46` · `:149` · 클라 `src/lib/api/requestScammerHangup.ts` · `src/lib/api/types.ts:304-340`. 79.16 가드 중 C1 몫 단언: **G501** `scammerHangup/__tests__/decide.test.ts` · **G508** `session/__tests__/endReason.test.ts` · **G511** `report/__tests__/endReasonIndependence.test.ts` · **G516** `scammerHangup/__tests__/guidance.test.ts` · **G526** `decide.test.ts` · `relayContext.test.ts`(태그 grep 확인 — 이 패스는 테스트를 실행하지 않았다, 통과 수치는 C1 QA 보고 인용). API.md(부록 F) · Database.md(`sessions.scammerHangup` · `endReason`) 반영 = 이 시점 부착과 같은 패스.
+- **(2026-10-19 S5b 병합 뒤 · main `9c760eb` — 위 표 · 줄 원문 무수정)** 착수 체크리스트 정본 = **79.19 (7)**. 묶음: **PR A = C2 + C3 + C4 + C1 잔여 Minor**(79.19 (6) — ① ② ③ ⑥ ⑦ ⑧은 C3 · ④ ⑤는 C4) · **PR B = C5 + P-H 프로브 + 에뮬레이터 통합**. C3은 S5b 위에 얹는다(위 정정 줄의 미판정 항목 *"S5b 계수를 그대로 쓸 수 있는가"* = **쓸 수 있다** — 79.19 (2)). 배포는 PR A도 Hosting → Functions(C4가 클라를 바꾼다 · 79.0 8).
 
 ### 79.14 if/then 강등표 (⛔ 표에 없는 경우는 행 추가를 물을 것)
 
@@ -18783,6 +18790,7 @@ AC-089 (b) *"사용자 완료/속아 넘어감"* 행 → 구현 뒤 = **사기�
 | **G528** (2026-10-19) | 79.18 (2) 인터페이스: ⓐ `end_call` 요청의 `scammerTurns`는 `getSessionScammerTurns()`에서만(컴포넌트 지역 카운터를 `requestScammerHangup`에 넘기는 경로 0 — 소스 스캔) ⓑ 승인 · 종료 래치는 `callEnding.ts` 순수 상태에만(컴포넌트의 지역 `hangupPending` 0) ⓒ `shouldAcceptRelaySwitch` 진리표(래치 idle만 `true`) ⓓ `getPendingInstruction()`은 지시 큐 ∨ `toolPending` ∨ `isRelaySwitchPending()`(오늘 상수 `false`) | `callEnding.test.ts` · `GeminiVoiceSession` 소스 스캔 — C5 |
 | **G529** (2026-10-19) | S7 착수 조건(79.18 (3) ①④⑥⑦⑧⑩)의 단언 — ⓐ `startRelayLeg`가 `scammerHangup` 표식 있는 세션을 거부 ⓑ 발급 옵션이 `createRealtimeCall`과 같은 빌더(`declaresEndCall` · `hangupMode` · `fictionalBankName`) ⓒ 교대 close가 `endCall(trigger)` · `callEndedBy="remote"`를 타지 않는다 ⓓ 래치 중 받은 leg 토큰 폐기. ⛔ **번호만 예약 — 단언 자리 · 실행은 S7 owner**(T192 C1~C5의 완료 조건이 아니다 — 앞 커밋에 못 박지 않는다) | S7 테스트 |
 | **OQ-A130** (2026-10-19) | AC-101 (a)(릴레이 순서)에 *"중간 화자는 먼저 끊지 않는다"* 규칙이 PRD 문면에 없다(공유 노트 K11) — User 결정(DECISIONS #146)은 났으나 PRD 반영은 planner 소관 | planner — UpdateRequests 등재 제안(79.18 (6)) |
+| ↳ G528 · G501 (2026-10-19 S5b 뒤) | G528 ⓐ의 getter는 **`getSessionUserTurns()`**(요청 필드 `userTurns`) · ⓓ의 *"∨ toolPending"* 은 **G533 정의로 대체**(자기참조 결함 — 79.19 (3)). G501 *"순서"* 는 8행이 2-b 뒤로 옮긴 순서(G531). 신규 G530~G536 · OQ-A131~A132 = **79.19 (8)** | 79.19 (8) |
 
 ### 79.17 이 패스의 편집 범위 · 닫지 못한 것
 
@@ -18790,6 +18798,7 @@ AC-089 (b) *"사용자 완료/속아 넘어감"* 행 → 구현 뒤 = **사기�
 - 하류(⛔ 이 패스 미편집): `docs/API.md`(`endSession` · `sendMessage` 응답 · `requestScammerHangup` · `createRealtimeCall.liveTools`) · `docs/Database.md`(`sessions.endReason` 열거 · `sessions.scammerHangup` · `inCallSms.transferAccount`) — 79.5 · 79.15 표가 정본. UpdateRequests #52(Database.md `linkAddress` · `mockHost`)와 함께 처리 권고.
 - ⛔ 닫지 못한 것: 프로브 0회(79.4) · 3.8 `end_call` 동작은 SMS 도구 실측(§71.2)에서 **유추**했다 · 라이브 모델값 미확인 · `play/page.tsx` 폴백 `ended` 뒤 `<audio>` 지속 재생 여부 미검증 · 렌더 하네스의 입력값 추출 규칙 미확인 · 메인 체크아웃 작업 트리 = `9971f89` 동일성 미검증.
 - **(2026-10-19 보강 패스 — 브랜치 `claude/t192-c1-hangup-decision` = main `f1a7ba2`)** 편집: 79.1 #21~#25 · 79.2 행 2-b + 입력 글머리 2 · 79.3 · 79.6 · 79.7 · 79.8 · 79.13 시점 부착 각 1 · 79.9 기호 고지(S→E 대응표) · 79.15 (6) · 79.16 행 7 · 이 줄 · 79.18 신설 · `docs/DECISIONS.md` #146. 원문 삭제 · 수정 0(전부 덧붙임 · 표에는 행 삽입). 번호(grep): main `f1a7ba2` = G520 · OQ-A126 · DECISIONS #141 / #311 워크트리 = G525 · OQ-A129 · #142 / scenario-review 워크트리 = G500 · OQ-A116 · **#145**(⚠️ 같은 User 결정을 그 트리 #145가 이미 적었다 — 79.18 (6)) ⇒ **G526~G529 · OQ-A130 · #146**. ⛔ 예약 아님 — 병합 순서로 확정.
+- **(2026-10-19 S5b 병합 뒤 재판정 패스 — 브랜치 `claude/t192-c2-c4-hangup-server` = main `9c760eb`)** 편집 범위 = 79.19 (10). 번호 G530~G536 · OQ-A131~A132 · DECISIONS #148(scenario-review 워크트리 #147).
 
 ### 79.18 (2026-10-19 신설) 릴레이(S7)와의 계약 — ⭐⭐ **C5가 인터페이스를 고정하고 S7이 그 위에 맞춘다** / ⭐ **마지막 화자만 끊는다는 결정은 두 층(선언 · 서버 판정)에서 집행된다**
 
@@ -18837,6 +18846,7 @@ export function resolveHangupRelay(session: { flowVariantId?: string; relay?: { 
 ```
 - 신뢰: `legIndex`는 서버 필드(S7 `startRelayLeg` 트랜잭션만 씀) · `legCount`는 서버 카탈로그 · `RELAY_RUNTIME_AVAILABLE`은 서버 상수 ⇒ **실시간 콜러블도 이 값을 클라에서 받지 않는다**(`requestScammerHangup` 요청 `{ sessionId, scammerTurns, pendingInstruction, kind }` 무변경 — 79.5).
 - 모델용 문면: `not_last_leg` = 79.5 **거절(공통)**. 새 문면 0 · 끊기 프롬프트(TOOL · SIGNAL)에 중간 화자 금지 문장 0(79.6 끝 판정).
+- **(2026-10-19 S5b 병합 뒤 정정 — 위 표 · 코드 블록 원문 무수정 · 이 줄이 우선)** 순서 = **1 · 2 · 2-b · #8 · #3 · #4 · #5 · #6 · #7 · #9**(C1 Minor-1 — 79.19 (3)) · 입력 `scammerTurns` → **`userTurns`** · 필수 키 **`smsAwaitingUser: boolean`** 추가 · #5 = `userTurns < SCAMMER_HANGUP_MIN_USER_TURNS`(3) · #6 = `pendingInstruction \|\| smsAwaitingUser`. 아래 *"요청 `{ sessionId, scammerTurns, … }` 무변경"* 은 **`userTurns`로 읽는다**(릴레이 값을 클라에서 받지 않는다는 규칙은 그대로).
 
 **(2) ⭐ C5가 고정하는 인터페이스(메인 세션 확정 4항 — S7은 이것에 맞춘다)**
 
@@ -18844,6 +18854,7 @@ export function resolveHangupRelay(session: { flowVariantId?: string; relay?: { 
 |---|---|---|---|---|
 | I-1 | `end_call`은 **마지막 leg만** 선언(중간 leg 토큰 = 선언 0 · TOOL 문면 0) — User 결정과 같은 뜻 · 행 2-b와 **이중 방어** | C3(`declaresEndCall` 세 번째 인자) · 발급 호출은 S7(①) | 무변화(`relay` 항상 부재) | G527 |
 | I-2 | 누적 사기범 턴 카운터 · 끊기 래치(승인 · 종료)는 **부모(통화 화면 · `callEnding.ts`)** 가 소유 · 세션 컴포넌트는 getter로 읽는다 | **C5 선반영(확정)** | 무변화(단일 마운트라 지역값 = 누적값 — ⚠️ 추정, 79.8 끝) | G528 ⓐⓑ |
+| ↳ I-2 (2026-10-19 S5b 뒤) | 카운터는 **누적 사용자 발화 수**(부모 `turnCountersRef.current.userTurns` — `play/page.tsx:317` · 갱신 `:426` 한 곳)이고 getter 이름은 **`getSessionUserTurns()`**. 컴포넌트는 `claimedUserTurns()`(+ 응답 중 발화 1) 하나로 `send_prepared_sms` · `end_call` 두 분기에 같은 값을 보낸다. 오늘 무변화는 **코드로 확인**(같은 flush — 위 추정 해소) | C5 | 확인(79.18 끝 줄) | G528 ⓐ · G530 ⓒ |
 | I-3 | 래치가 걸린 동안의 교대는 무시하고 받은 leg 토큰은 폐기 | C5 = `shouldAcceptRelaySwitch` 노출 · 호출과 폐기는 S7(④) | 호출부 0 | G528 ⓒ · G529 ⓓ |
 | I-4 | 서버 `startRelayLeg`는 `scammerHangup` 표식이 있으면 거부 | S7(④) | 콜러블 없음 | G529 ⓐ |
 
@@ -18874,6 +18885,7 @@ scammerTurnsRef: MutableRefObject<number>;          // 사기범 turnComplete마
 callEndingRef: MutableRefObject<CallEndingState>;
 isRelaySwitchPending: () => boolean;                // ⛔ C5에서는 `() => false` 고정 · S7이 relayTransitionRef 읽기로 교체(⑤)
 ```
+- **(2026-10-19 S5b 병합 뒤 정정 — 위 코드 블록 원문 무수정 · 이 줄이 우선)** `getSessionScammerTurns` → **`getSessionUserTurns: () => number`**(부모 `turnCountersRef.current.userTurns`) · 부모 `scammerTurnsRef`는 이 인터페이스에서 빠진다(끊기 판정이 읽지 않는다 — 기존 확인 오퍼 · 앵커 용도는 그대로) · `getPendingInstruction` 주석의 *"컴포넌트가 자기 toolPending과 OR"* 은 **철회** — OR 항은 *"같은 `toolCall` 배치에 `end_call` 아닌 호출"*(순수 `endCallBatchHasOtherCalls`)이다(79.19 (3) · G533). 부모 쪽 정의 = 지시 큐 비어 있지 않음 ∨ `instructionBusyRef` ∨ `isRelaySwitchPending()`.
 
 **(3) 계약 ①~⑩ — 무엇이 언제 들어가는가**
 
@@ -18881,9 +18893,11 @@ isRelaySwitchPending: () => boolean;                // ⛔ C5에서는 `() => fa
 |---|---|---|---|---|
 | ① | `startRelayLeg` 토큰 발급도 `declaresEndCall(scenarioId, channel, { legIndex: toLegIndex, legCount })` · `hangupMode` · `fictionalBankName`(#311)을 쓴다 — ⛔ `createRealtimeCall`과 **같은 발급 옵션 빌더**를 부른다(따로 조립하면 새 leg에서 선언 · 은행명이 빠진다 — 노트 K1) | **S7 착수 조건** | §78.6.2 *"발급"* 행(*"기존과 같은 authTokens.create · leg별 도구 선언"*) | G529 ⓑ |
 | ② | `end_call`의 `scammerTurns` = 세션 누적값(부모 getter `getSessionScammerTurns`) — 새 leg 첫 4턴이 `too_early`가 되지 않게(노트 K2) | **C5 선반영(확정)** | 79.8 끝 | G528 ⓐ |
+| ↳ ② (2026-10-19 S5b 뒤) | 값 = **세션 누적 사용자 발화 수**(`getSessionUserTurns()` + 응답 중 발화 1) · 하한 3(79.19 (2)). 같은 이유로 ⭐ **S5b `send_prepared_sms` 분기도 지역 카운터 `modelToolUserTurns`(`GeminiVoiceSession.tsx:397`) 대신 같은 getter를 읽는다**(C5 — 오늘 동작 변화 0). ⚠️ S7 인계: 확인 오퍼(`:480`) · 문자 앵커(`:437`)가 쓰는 지역 `modelToolScammerTurns`(`:393`)도 leg 재마운트에 0으로 돌아간다 — **S7 착수 조건에 더한다**(끊기 판정과는 무관 · 79.19 (7) 끝) | C5(끊기 · 문자 판정 수) · S7(사기범 턴 앵커) | 79.19 (2) | G528 ⓐ · G530 ⓒ |
 | ③ | 승인 · 종료 래치는 부모 `callEnding.ts`가 소유(노트 K3 — 컴포넌트 안 래치는 재마운트로 소실) | **C5 선반영(확정)** | 79.9 · (2) | G528 ⓑ |
 | ④ | 래치 중에는 교대를 무시하고(`shouldAcceptRelaySwitch` = false면 교대 시작 0) **도착한 leg 토큰을 버린다**(재마운트 0) · 서버 `startRelayLeg`는 `scammerHangup`이 있으면 거부(`failed-precondition` — 메시지 키는 S7) — 실제 경합 경로 = 교대 연출 중 참가자 *"훈련 종료"* · 한도 도달(래치 `ending`) | **S7 착수 조건**(C5는 `shouldAcceptRelaySwitch`만) | 메인 세션 4항 3 · 4 | G529 ⓐⓓ |
 | ⑤ | 교대 대기(교대 확정 ~ 새 leg 연결)면 `pendingInstruction = true` → `blocked_pending` | **C5 선반영(확정)** — `isRelaySwitchPending`을 OR 항으로 두고 `() => false` · S7이 구현을 바꾼다 | 79.2 #6 | G528 ⓓ |
+| ↳ ⑤ (2026-10-19 S5b 뒤) | 6행은 이제 **클라 항 ∨ 서버 문자 항**(`smsAwaitingUser` — 도착 기록)이다. 교대 대기는 클라 항 그대로 · OR 항에서 `toolPending` 제외(자기참조 결함) | C5 | 79.19 (3)(4) | G533 · G532 |
 | ⑥ | 전사 제출 순서: 교대 때 `startRelayLeg` 델타 append(서버 · 순차 — §78.6.3 #4) → 종료 E5 `flushTranscript()` → `endSession`. E5는 **진행 중인 `startRelayLeg`를 기다린 뒤** 마지막 델타 커서 이후만 올린다(중복 · 순서 역전 0) | **S7 착수 조건** | 79.9 E5 · §78.6.2 트랜잭션 | S7 테스트 |
 | ⑦ | 교대용 이전 leg 닫기는 **별도 신호**(예: `closeLegForRelay`) — `endCall(trigger)` · E4 `realtime.stop()` · `onScammerHangupReady` · 끊기 대기(R4~R5)를 타지 않고 래치를 바꾸지 않는다 | **S7 착수 조건** | §78.6.3 #3(`stopSignal`) · 79.13 S7 행 | G529 ⓒ |
 | ⑧ | 교대 중 소켓 close는 **`remote`가 아니다** — `callEndedBy = "remote"` · `beginCallEnding("remote")` 0(§78.6.3 #8 `handleEnded` 무시와 같은 창). AC-006 상시 종료는 그 창에서도 즉시 통한다 | **S7 착수 조건** | 79.9 셸 `ended` 구분 · 79.11 3행 | G529 ⓒ |
@@ -18917,6 +18931,185 @@ isRelaySwitchPending: () => boolean;                // ⛔ C5에서는 `() => fa
 - **#311 owner**: G525를 `buildInCallSmsDoc` 출력 문자열 필드 전수형으로(공유 노트 B4) · §81.3 D-115 행 — 79.15 (6)으로 **`bankName`에 소비처가 생긴다**(D-115가 `bankName` + `accountNumber`를 읽는다) ⇒ 노트의 *"bankName 소비처 0 — 유지/삭제 OQ"* 는 **유지**로 닫힌다.
 - **docs(하류)**: 79.17 하류 목록의 `docs/Database.md` *"`inCallSms.transferAccount`"* 는 **철회**(79.15 (6) 1) — `bankName` · `accountNumber`는 #311이 Database.md에 올린다. `docs/API.md` 무변경(`requestScammerHangup` 요청 · 응답 무변경 — 상태값 `not_last_leg` 1개 추가만).
 - ⚠️ 미확인: `docs/adr/0021-scammer-initiated-hangup.md` · `docs/Tasks.md` T192의 S1~S7 표기(79.9 고지 범위 밖) · 공유 노트 K1~K11 본문(요약만 봄) · 부모 사기범 턴 카운터의 존재와 증가 지점.
+- **(2026-10-19 확인 — 79.19 (1) · 위 줄 원문 보존)** 부모 카운터는 **있다**: `play/page.tsx:317` `turnCountersRef`(`userTurns` · `scammerTranscriptTurns`) · 갱신 지점 = `handleTranscriptTurn` `:426` **한 곳**(`countTranscriptFlush`) · 컴포넌트 사본 `modelToolUserTurns`/`modelToolScammerTurns`는 같은 flush(`GeminiVoiceSession.tsx:524` · `:529`)에서 오르고 곧바로 부모 콜백(`:525` · `:530`)을 부른다 ⇒ 단일 마운트에서 두 값은 같다(코드 판독 · 실행 0).
+
+### 79.19 (2026-10-19 신설) S5b 병합 뒤 재판정 — C2~C4 착수 정본 (PR A) — ⭐⭐ **끊기 하한은 S5b의 사용자 발화 계수로 바꾼다 — 신뢰 등급은 그대로지만, 옛 "사기범 턴" 하한은 두 경로에서 한 턴 어긋나 있었다(AC-103 (f) 위반)** / ⭐⭐ **C1 Minor-1(승인 뒤 재호출 시 판정 뒤집힘)은 계수를 바꿔도 닫히지 않는다 — 닫는 것은 행 순서다(8행을 2-b 바로 뒤로)** / ⭐ **79.8 · 79.18 (2)의 `pendingInstruction ∨ toolPending`은 모든 `end_call`을 `blocked_pending`으로 만든다 — 자기 자신이 도구 대기다**
+
+> **기준선**: 브랜치 `claude/t192-c2-c4-hangup-server` = main `9c760eb`(PR #316 S5b · #315 · #314 C1 · #311 병합 — gitStatus 인용값). 아래 좌표는 **전부 이 워크트리 열람값**(실행 0 · 테스트 0 · 셸 없음). S5b 설계 원문 = scenario-review 워크트리 `agitated-zhukovsky-f406bb` `docs/Architecture.md` §78.3(이 트리에는 미병합 — 이 절은 **코드**를 정본으로 읽었다).
+> **번호(grep)**: 이 트리 G 최대 G529 · OQ-A130 · DECISIONS #146 / scenario-review 워크트리 DECISIONS **#147** · G5xx 0 · 메인 체크아웃 #146 ⇒ **G530~G536 · OQ-A131~A132 · DECISIONS #148**. ⛔ 예약 아님 — 병합 순서로 확정.
+> **⚠️ 버전 갭**: 이 문서 헤더(`:5`) PRD v1.7.1 · UX 1.13 ↔ 현행 PRD AC-103 갱신 고지 v1.23(`docs/PRD.md:968`). 헤더는 전진시키지 않았다(UpdateRequests #45 소관 · open).
+
+**(0) 금지 먼저**
+
+1. ⛔ **새 계수기를 만들지 않는다.** 하한 · 문자 대기 판정이 읽는 수는 S5b가 이미 쓰는 사용자 발화 수 하나다(서버 = `messages` 계수 + `effectiveTextPathUserTurns` · 클라 = `turnCountersRef.userTurns` + 응답 중 발화 1).
+2. ⛔ **실시간 `pendingInstruction`에 컴포넌트 `toolPending`을 넣지 않는다**(3) — `end_call` 자신이 도구 대기라 항상 참이 된다.
+3. ⛔ **79.2 표의 행 순서를 (3) 밖에서 바꾸지 않는다.** 8행 이동 외의 순서 변경은 행 추가처럼 architect에 묻는다(G501 · G531).
+4. ⛔ C1이 만든 콜러블 계약(`requestScammerHangup`)의 필드 이름 변경은 **화면 호출 0인 지금만** 무비용이다(`src/lib/api/requestScammerHangup.ts` 호출부 grep 0 — `src/lib/api/index.ts:18` re-export뿐). PR A에서 바꾸고, PR B(C5)는 바뀐 이름으로만 부른다.
+
+**(1) 좌표 재측정 — main `9c760eb` (79.1 #6~#16 · #23 · 79.7 · 79.8의 `9971f89` / `f1a7ba2` 좌표를 대체 · 원문 무편집)**
+
+| 대상 | 79.1/79.7/79.8 인용 | **현행(9c760eb)** | 비고 |
+|---|---|---|---|
+| 충돌 규칙 줄(C2 슬롯) | `promptAssembly.ts:160` | **`:161`** (템플릿 `:153-162`) | 1줄 밀림(S4 `:173-175` 본인확인 정정 등) |
+| `buildScenarioProgression` | `:180-196` | **`:186-202`** · 호출 `:718-722` | |
+| `BuildSystemPromptOptions` 끝 · `buildSystemPrompt` | — | 타입 끝 **`:664`** · 함수 **`:683-736`** | |
+| 진행 강제 *"2~3턴 안"* (OQ-A118 근거) | `:153` | **`:154`** | |
+| 초급 *"붙잡지 않는다"* | `:374` | **`:385`** | |
+| `escapeSentinelLookalikes` | `:728-732` | **`:759-761`** — `[[SIGNAL:`은 **정확 일치**(대소문자 · 공백 무허용) · `[[SMS:`만 관대 | 추출 `SIGNAL_MARKER_PATTERN`(`escalationSignal.ts:7`)도 정확 일치 ⇒ **둘의 폭이 같다**. ⛔ C3에서 SIGNAL 추출 정규식을 넓히면 이 escape도 같은 폭으로(S5b `smsMarker.ts:9` 선례) |
+| 주석 *"이 규칙은 모델의 발화만 · 종료 경로 무접촉"* | — | **`promptAssembly.ts:142-143`** | C3 뒤 **거짓**(폴백 서버가 `scammer_ended`로 끝낸다) ⇒ C2에서 정정(G309 재지정과 같은 이유) |
+| 끝 문장 *"네 쪽에서 대화를 마무리하지는 않는다"* | 14벌 | ⭐ **17벌** — 아래 (7) C2-4 목록 | 79.1 #2 *"14/14"* 는 **과소**(그 뒤 3종 추가: `assetProtectionNoticeCall:35` · `cardDeliveryCall:42` · `prosecutionCooperationCall:38`) |
+| `extractEscalationSignal` 호출 | `roleplay/index.ts:370` → `:387` | **`:478-480`**(정의 `escalationSignal.ts:15`) | 79.1 #23도 낡음 |
+| 폴백 턴 확보 트랜잭션 · 사용자 발화 수 | `:114-149` · `:172` | 트랜잭션 **`:149-184`** · `scammerTurnNumber` **`:211`** · `serverUserTurns` **`:214`** · `userTurnsNow` **`:215` · `:235`** | |
+| 폴백 백스톱 문자 · 확인 상태 | `:210-227` | 백스톱 **`:231-259`**(도착 `:247-251`) · `verifyState` **`:274-291`** | |
+| 폴백 프롬프트 조립 · LLM | `:298-306` | 문자 제시 **`:368-383`** · `buildSystemPrompt` **`:400-411`** · 완성 `:393-414` | |
+| 폴백 마커 추출 · 문자 마커 발송 | — | SMS 마커 **`:471-472`** · 신호 **`:478`** · 응답 write **`:515-522`** · 마커 발송 **`:525-539`** | |
+| 폴백 한도 · 재확인 트랜잭션 · 리포트 · 응답 | `:435-470` · `:524-533` | `limitReached` **`:547-552`** · 재확인 **`:562-585`** · 리포트 **`:595-597`** · 응답 **`:651-660`** | |
+| `dispatchToolCall` | `:397-503` → `:428` | 정의 **`GeminiVoiceSession.tsx:409`** · SMS 분기 **`:426-455`**(`userTurns` 식 **`:436`**) · 확인 분기 `:467-509` | 79.1 #23도 낡음 |
+| 도구 왕복 | `:803-830` | `toolCall` 이벤트 **`:906`**(⭐ 큐 `toolPending=true` — `clientTurnQueue.ts:97`) · `collectToolResponses` **`:908`**(⭐ **`Promise.all` 병렬** — `liveToolResponse.ts:71`) · `sendToolResponse` `:912` · `toolResponseSent` `:919` | (3) 결함의 근거 |
+| `resolveToolCallKind` · 인자 판독 | `liveToolResponse.ts:94-96` | **`:88-96`** · `readSmsPurposeArg` **`:104-108`** | |
+| 전사 flush · 카운터 사본 | — | `flushTranscript` **`:520-535`** · 끊긴 조각 `:548-556` · 카운터 선언 `:393` · `:397` | |
+| `turnComplete` 처리 · `onclose` | `:901-931` · `:937-943` | **`:1002-1033`** · `onclose` **`:1039-1046`** | |
+| cleanup · 재생 큐 | `:675-704` · `:349-363` | cleanup **`:765-797`**(요약 `:769` · `stopAllPlayback` `:775`) · `nextPlayTime` `:357` · 예약 `:973-977` | |
+| 마이크 프레임 · 클라 턴 브리지 · 침묵 넛지 | `:1019` · `:957` | `onaudioprocess` **`:1125`** · `requestClientTurnRef` `:290`(대입 `:1059`) · 넛지 `:640-671` · 맥락 주입 `:672-693` | S3 병합 확인(넛지 · `contextInjection.ts` 존재) |
+| Live 도구 선언 | `liveTools.ts:94-109` · `:76` | `TOOL_BEHAVIOR` **`:98`** · `purpose` 인자 **`:77-89`** · 선언 빌더 **`:120-133`**(주석 *"[] 이면 오늘과 동일"* **`:116-119`**) · 실패 문면 `:136-137` · 이름 빌더 **`:156-174`** | S5b가 세 번째 인자 `flowVariantId` 추가 |
+| 선언 술어 · 호출부 | — | `sessionDeclaresInCallSms`(`inCallSms/smsGate.ts:173-176`) · `geminiProvider.ts:114`(선언) · `:118`(프롬프트) · `:240`(이름) · `realtime/index.ts:145`(백스톱 표시) | |
+| `RealtimeCallInput` | — | `realtime/types.ts:20-52`(`flowVariantId` `:51`) · 발급 호출 `realtime/index.ts:169-180` | `channel` · 릴레이 인자 **없음** ⇒ C3이 더한다 |
+| G388(백스톱 지연 창) 키 | `play/page.tsx:705` · `:811` | **`:868` · `:946`**(`offerVerificationDesk`만 — SMS는 S5b 뒤 `inCallSmsBackstop` 표시로 바뀜) · 테스트 `toolWindowWiring.test.ts:48-50` | `end_call` 추가 무영향 그대로 |
+| 폴백 `ended` 처리 · `<audio>` | `:1537-1544` · `:1932-1940` | **`play/page.tsx:1584-1591`** · `<audio onEnded={handlePlaybackEnded}>` **`:1979-1982`** | G515 대상 |
+| 종료 3경로 | `:1468-1479` · `:978-999` · `:1484-1503` | 상시 **`:1515-1526`** · 실시간 한도 **`:1024-1045`**(`autoEndedRef` `:1024`) · 역방향 **`:1531-1549`** | |
+| 지시 큐 · 드레인 · 백스톱 효과 | `:629-` | 큐 `:287` · 드레인 **`:676-729`**(`instructionBusyRef=true` `:702` · 해제 `:958`) · 넣기 `:731-746` · 문자 백스톱 효과 **`:756-805`** | |
+| 종료 화면 사유 | `end/page.tsx:61-69` | **`:69`** 그대로 · 주석 `:61-64` *"endSession 서버는 이미 어떤 endReason이든 멱등하게 처리한다"* 는 C1(허용목록) 뒤 **거짓** ⇒ C4에서 정정 | |
+| `EndSessionReason` | `functions/src/session/types.ts:69` 계열 · `src/lib/api/types.ts:304-308` | 서버 **`session/types.ts:62-68`** · 클라 **`src/lib/api/types.ts:317-323`**(5값 — `completed` · `deceived` 포함) · 허용목록 `session/endReason.ts:13` | Minor 3 |
+| `ScammerHangupStatus` · 요청 타입 | — | 서버 `scammerHangup/decide.ts:16-26` · `types.ts:4-12` / 클라 `src/lib/api/types.ts:333-343` · `:344-349` | Minor 4 |
+| `sendMessage` 응답 `endReason` | `roleplay/types.ts:18` · `src/lib/api/types.ts:90` | **같은 줄**(둘 다 `"limit_reached"` 단일) | C3 Minor |
+| clone 2종 최신 대조값 | — | `familyAccidentDeepvoice.prompt.ts:72-74`(base `d2cfb37`) · `grandchildImpersonation.prompt.ts:75-78`(base `e9a4967`) | ⚠️ 이 값이 `9c760eb` 조립과 같은지 **미검증**(셸 없음 — 재측정은 (7) C2-6) |
+
+**(2) 판정 ① — S5b 계수 재사용 (⛔ 표에 없는 경우는 행 추가를 묻는다)**
+
+| # | 판정 축 | 사실(코드) | 결론 |
+|---|---|---|---|
+| 1 | S5b가 세는 것 | **비어 있지 않은 사용자 전사 flush 수**(`contextInjection.ts:135` · `:152`). 폴백 = 서버 `messages` user 수 **+1(이번 발화 포함)**(`roleplay/index.ts:214`) → 실시간 강등 보정 `max(서버, 마지막 도착 문서 userTurnsAtArrival)`(`smsGate.ts:185-190` · 호출 `index.ts:235`). 실시간 도구 = 클라 flush 수 **+ 응답 중 발화 1**(`GeminiVoiceSession.tsx:436` — 리뷰 ⑥ *"3경로 동일"*). 실시간 백스톱 = 부모 flush 수(`play/page.tsx:777`) | 계수기 **하나**를 이미 두 경로에 정렬해 두었다 |
+| 2 | 누가 주장하는가 | 실시간 `userTurns`는 **클라 주장값** — 서버는 정수 · 0~200 범위만 본다(`inCallSms/index.ts:110-115` · `smsGate.ts:39`). 서버 문서에 남는 것은 도착 시점 값 `userTurnsAtArrival`(`smsDelivery.ts:72`)뿐이고 그것도 클라 주장의 사본이다 | **OQ-A120은 해소되지 않는다.** 위상은 S5b와 **같아진다**(같은 수를 같은 판독 규칙으로 받는다) — 서버가 실시간 발화를 보는 것은 통화 종료 뒤 `submitRealtimeTranscript`뿐이라 상한 대조가 구조상 불가 |
+| 3 | ⭐ 옛 하한이 두 경로에서 같은 조건이었나 | 폴백 `scammerTurnNumber` = 저장된 사기범 메시지 + 1 = **지금 생성 중인 턴 포함**(`roleplay/index.ts:211` · 오프닝 `turnIndex:0` 포함). 실시간 `modelToolScammerTurns` = **이미 flush된** 사기범 전사 수(`GeminiVoiceSession.tsx:529`) — BLOCKING `end_call`은 그 턴의 말보다 **먼저** 오므로 현재 턴이 빠진다. 사용자 k번째 발화에 답하는 턴에서 폴백 = k+1 · 실시간 = k ⇒ 하한 4가 폴백은 **k ≥ 3**, 실시간은 **k ≥ 4** | ⭐⭐ **옛 설계는 AC-103 (f) *"같은 조건"* 을 한 턴 어긴다**(79.2 #5 · 79.8 R1 원문의 결함 — 실행 0 · 코드 판독) |
+| 4 | 새 하한의 두 경로 값 | 사용자 k번째 발화에 답하는 턴: 폴백 `userTurnsNow` = k · 실시간 flush(k−1) + 응답 중 1 = k ⇒ **같다** | ✅ 사용자 발화 기준이 (f)를 만족한다 |
+| 5 | 하한 의미(AC-103 (a)) | (a) *"그 밖의 이유(침묵 · 소강 · 시간이 오래 걸림)로는 끊지 않는다"* · *"하한의 형태와 값은 architect 소관이며 본 AC는 규정하지 않는다"*(`docs/PRD.md:968`). 실시간 사기범 턴은 **참가자가 말하지 않아도 는다**(S3 침묵 넛지 `GeminiVoiceSession.tsx:663` · 3.8 proactive audio — §71.1 #3) · 사용자 발화는 늘지 않는다 | ✅ 사용자 발화 하한이 (a)의 금지 이유(침묵)와 **같은 방향**이다 — 사기범 턴 하한은 침묵 중에 통과된다. **PRD 문면 충돌 0**(단위는 architect 소관) |
+| 6 | 값 | 폴백은 매 요청이 사용자 1 + 사기범 1을 쓴다(교대 엄격) ⇒ 옛 `scammerTurnNumber ≥ 4` ⇔ **`userTurns ≥ 3`**(k = 0~∞ 동치 — G530이 표로 고정) | **`SCAMMER_HANGUP_MIN_USER_TURNS = 3`**(판단값 · OQ-A118 그대로 — 근거 *"2~3턴 안에 요구 + 1회 대처"* 를 사용자 발화로 옮긴 같은 뜻). 폴백 동작 변화 0 · 실시간은 한 발화 **이르게** 열린다(= 폴백과 같아진다) |
+| 7 | C1 Minor-1(승인 뒤 재호출 시 주장값 변화) | 표식은 5 · 6행보다 **뒤**(8행 — `decide.ts:97`) ⇒ 승인 뒤 재호출에서 `pendingInstruction`이 참이 되면(승인 직후 지시 큐 도착 · 같은 배치) **`blocked_pending` + "이어가라" 문면**이 나간다 — 클라는 이미 끊는 중이다(H4 · 79.11 *"둘째 = already_accepted"* 와 모순). 사용자 발화 수는 단조 증가라 5행은 뒤집히지 않지만 **6행은 뒤집힌다** | **계수 교체로는 닫히지 않는다** ⇒ (3)의 행 순서로 닫는다 |
+| 8 | `end_call` 인자 `scammerTurns` | 79.5 요청 · 79.8 R1 · 79.18 (2) getter가 사기범 턴을 보낸다 | **`userTurns`로 바꾼다**(아래 (5)) — 사기범 턴 수는 끊기 판정 입력에서 **사라진다**(로그 관측용으로도 보내지 않는다 — 판정에 안 쓰는 클라 값을 받지 않는다) |
+
+⇒ **판정: 재사용한다(가).** 바꾸는 이름: 입력 `ScammerHangupInput.scammerTurns` → **`userTurns`** · 상수 `SCAMMER_HANGUP_MIN_SCAMMER_TURNS = 4` → **`SCAMMER_HANGUP_MIN_USER_TURNS = 3`** · 요청 `scammerTurns` → **`userTurns`** · 79.18 (2) getter `getSessionScammerTurns()` → **`getSessionUserTurns()`**. ⚠️ OQ-A120은 **"수용 — S5b와 같은 등급"** 으로 남는다(해소 아님). PRD 충돌 0 ⇒ planner 보고 대상 없음(단, (6) 끝 참고).
+
+**(3) 판정 ② — 행 순서 정정(C1 Minor-1) + 실시간 클라 주장의 자기참조 결함**
+
+- **새 순서**: `1 → 2 → 2-b → **8** → 3 → 4 → 5 → 6 → 7 → 9`(행 번호 이름은 그대로 · 배열 위치만). 근거 — 표식이 생긴 뒤 3~7행 입력은 **바뀔 수 없거나 바뀌어도 판정에 무의미**하다: 3행(Mock)은 실시간 항상 거짓 · 폴백은 승인과 같은 트랜잭션에서 세션을 끝내므로 이후 1행 · 4행(`placedAt`)은 지워지지 않는다(단조) · 5행 사용자 발화 수는 단조 증가 · 6행은 승인 뒤 상태(이미 끊는 중) · 7행은 폴백만이고 폴백 승인 = 종료. 1 · 2 · 2-b를 앞에 두는 이유 — 세션이 끝났거나(1) 역방향 전환으로 메신저 단계(2)거나 다른 leg(2-b — S7 `startRelayLeg`는 표식 세션을 거부: 79.18 I-4)면 **승인 유지가 틀린 답**이다.
+- ⭐ **자기참조 결함(79.8 끝 · 79.18 (2) `getPendingInstruction` 주석 · G528 ⓓ의 *"∨ toolPending"*)**: `toolCall`이 오면 큐가 `toolPending = true`로 바뀐 **뒤에** 도구를 분기한다(`GeminiVoiceSession.tsx:906` → `:908` · `clientTurnQueue.ts:97`). `end_call` 분기에서 `toolPending`을 읽으면 **자기 자신 때문에 항상 참** ⇒ 모든 `end_call`이 `blocked_pending` ⇒ 실시간 끊기 0(조용한 기능 정지 — 오류 · 로그 이상 없음). ⇒ **정정**: 실시간 클라 주장 = `getPendingInstruction()`(부모: 지시 큐 비어 있지 않음 ∨ `instructionBusyRef` ∨ `isRelaySwitchPending()`) **∨ 같은 `toolCall` 배치에 `end_call` 아닌 호출이 있음**(병렬 `Promise.all` — 같은 배치의 `send_prepared_sms`와 경합). 배치 판정은 순수 함수 `endCallBatchHasOtherCalls(calls, liveTools)`(`liveToolResponse.ts`)로 두고 `collectToolResponses` 호출부가 클로저로 넘긴다(G533 — C5).
+- ⚠️ `instructionBusyRef`의 해제(`play/page.tsx:958` — 다음 사기범 턴 경계)가 맥락 주입 안내가 실제로 발화되는 응답과 정확히 맞는지는 **미확인**(추정 — S3 맥락 주입은 *다음* 응답에 실린다). 문자의 경우는 아래 (4)의 **서버 항**이 도착 기록으로 덮으므로 이 불확실성은 확인 권유 · 넛지 안내에만 남는다.
+
+**(4) 판정 ③ — 6행 "문자 대기" 재정의 (S5b 목적 기반 발송 · 백스톱과의 대응)**
+
+| 문자가 오는 길(S5b) | 도착 기록 `userTurnsAtArrival` | 참가자에게 보이는 때 | 같은 응답에서 끊으면 |
+|---|---|---|---|
+| 폴백 백스톱(LLM 전 · `roleplay/index.ts:237-251`) | 이번 발화 k | 이번 응답과 함께 | 문자를 못 본다 ⇒ 막는다 |
+| 폴백 모델 마커(LLM 뒤 · `:525-539`) | 이번 발화 k | 이번 응답과 함께 | 막는다(사후) |
+| 실시간 모델 도구(`dispatchToolCall` `:426-455`) | 응답 중 발화 k(+1 포함) | 이번 응답 도중 | 막는다 |
+| 실시간 백스톱(`play/page.tsx:756-805`) | flush된 발화 k(응답 **뒤**에 묻는다) | 그 즉시(구독 — 응답 k 뒤) · 안내는 **응답 k+1**(맥락 주입) | 응답 k+1에서 끊어도 문자는 이미 보였다 · 안내 미발화는 클라 항(지시 큐 · busy)이 막는다 |
+
+- **'대기 중'의 정의(서버가 안다)**: **"문자가 참가자에게 보인 뒤 참가자가 아직 한 번도 말하지 않았다"** = `last = lastArrivalUserTurns(delivered)`(`smsGate.ts:74-77`)가 있고 **`userTurns ≤ last`**. 네 길 모두에서 위 표 마지막 열과 일치한다. ⭐ 이 항은 **서버 도착 기록**에서 나오므로 실시간도 클라 주장이 아니다(입력 `userTurns`만 주장값).
+- 판정 입력: `ScammerHangupInput`에 **필수 키 `smsAwaitingUser: boolean`** 을 더하고 6행 조건 = **`pendingInstruction || smsAwaitingUser`**(같은 `blocked_pending` · 로그 `row` 6). 계산은 단일 함수 **`isSmsAwaitingUser(delivered, userTurns)`**(신설 `functions/src/scammerHangup/smsWait.ts` — `smsGate.ts`의 `lastArrivalUserTurns`를 값 import하므로 잎 모듈 `decide.ts` 밖) — 폴백 사전 · 사후 판정과 콜러블이 **이 함수 하나**를 부른다(G532).
+- **폴백 `pendingInstruction`** = `false`(클라 큐가 없다) — 옛 `Boolean(deliveredSmsId)`(79.7 1)는 `smsAwaitingUser`가 대신한다(백스톱 도착 시 `smsDelivered`에 이번 발화 값으로 이미 추가된다 — `:250`). 사후 판정은 마커 도착 1건을 같은 값으로 더한 목록으로 다시 계산한다(`:535` 직후 지역 플래그).
+- **읽기 실패**: 폴백은 문자를 선언한 세션에서 도착 기록을 못 읽었으면(`smsDeliveredLoaded === false` — `:227` · `:255-258`) **대기 중으로 본다**(fail-closed · 그 턴만 끊기 0). 실시간 콜러블은 `sessionDeclaresInCallSms(scenarioId, flowVariantId)`가 참일 때만 `readDeliveredSms(sessionRef)`(`smsDelivery.ts:101`)를 트랜잭션 **밖**에서 읽고, 실패하면 throw → 클라 `endCallFailureInstruction`(끊기 0). 트랜잭션 밖 읽기의 경합은 같은 배치의 문자 호출뿐이고 (3)의 배치 항이 막는다.
+- ⚠️ **알려진 보수 지연**: 실시간 → 폴백 강등 직후에는 `effectiveTextPathUserTurns`가 마지막 도착값에 묶여(`smsGate.ts:189`) 서버 계수가 따라잡을 때까지 6행이 막는다(S5b 리뷰 M1과 같은 방향 · 같은 원인). 수용 — 빈도는 로그 `row` 6 · `path: "fallback"`으로 관측.
+- 무엇을 '대기'로 **보지 않는가**: ⓐ 아직 안 보낸 **필수** 문자(백스톱 `nudge`/`wait`) — 포기(`give_up`)는 문자 없이 성립하고, 목적 달성은 문자와 무관하게 성립할 수 있다(AC-103 (a) — *막는 쪽*만 서버 몫) ⓑ 넛지 안내 1줄(폴백 `smsNudgeInstruction` `:253`) — 문자가 아니다 ⓒ 선택 문자의 게이트가 열려 있음.
+
+**(5) C3 설계 갱신 — `end_call` 선언과 S5b 도구 구조**
+
+| # | 결정 | 근거 |
+|---|---|---|
+| 1 | 선언 술어는 **독립**: `declaresEndCall(scenarioId, channel, relay)`(79.3 · G527) ↔ `sessionDeclaresInCallSms`(S5b) ↔ `declaresOfferVerificationDesk`. 서로를 조건으로 쓰지 않는다 | 문자 0 변형(선언 0)에도 끊기는 성립한다. 셋을 묶으면 *"문자 없는 세션 = 끊기 0"* 이 조용히 생긴다 |
+| 2 | 빌더 시그니처: `buildLiveToolDeclarations(scenarioId, difficultyLevel, flowVariantId, endCallScope)` · `buildLiveToolNames(…같은 4개)` — **`endCallScope: { channel: MessengerChannel \| undefined; relay: HangupRelayContext \| undefined }` 필수**(앞 두 옵셔널은 `T \| undefined`로 바꾼다 — TS는 옵셔널 뒤 필수 인자를 허용하지 않는다). 빌더 안에서 `declaresEndCall`을 부른다(S5b `sessionDeclaresInCallSms` · §61 `declaresOfferVerificationDesk`와 같은 형태) | 79.18 (1)과 같은 이유(빠뜨리면 컴파일 오류 — *"말없이 미선언"* 방지 · `feedback` 기록 *"T \| undefined 필수"*) |
+| 3 | 선언 순서: 기존 두 선언 **뒤에** `end_call`을 붙인다 · `end_call`이 거짓이면 배열은 S5b 그대로(**바이트 동일**) | 문자 · 확인 도구 세션의 회귀 0을 바이트로 단언할 수 있게(G534) |
+| 4 | `end_call` 인자: `reason` — `Type.STRING` · `format: "enum"` · `enum: ["goal", "give_up"]` · **`required: ["reason"]`**(S5b `purpose` 선례 `liveTools.ts:77-89`) · `behavior: TOOL_BEHAVIOR`(`:98` — G503). 서버는 여전히 누락 · 오기입을 `unspecified`로 받는다(`decide.ts:115-118` 무변경) | 필수로 두면 모델이 채운다 · 서버 관용은 ⑪ 재발 방지(79.2) 그대로 |
+| 5 | `end_call` 설명 문면(서버 소유 · ⛔ 숫자 · 횟수 0 — G130): `네 쪽에서 통화를 먼저 끝내기로 했을 때, 작별 인사를 하기 전에 먼저 부른다. reason은 goal(원하던 것을 얻었다) 또는 give_up(상대가 거절이나 의심을 되풀이해 더 진행할 수 없다) 중 하나다. 결과가 허락하지 않으면 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어간다.` | 79.6 ① TOOL 문면과 같은 두 경우 · 같은 순서 지시 |
+| 6 | 이름 하향: `LiveToolNames`에 `endCall?: "end_call"` + **`endCallFailureInstruction?`(쌍 — 둘 다 있거나 둘 다 없다)**. `failureInstruction`(문자 전용 문면 `:136-137`)은 **필수 그대로**이고, `end_call`만 선언된 세션에서도 실린다(클라 타입 `src/lib/api/types.ts:163-169`이 필수라서 — 무해: 그 문면을 쓰는 분기가 그 세션에 없다). 클라 `LiveTools`에 같은 두 필드 · `ResolvedToolCallKind`에 `"end_call"`(C5) | 79.5 표 `createRealtimeCall` 행 |
+| 7 | 주석 정정(같은 커밋): `liveTools.ts:116-119`(*"둘 다 걸리지 않으면 [] … 오늘과 동일 … G388이 이 사실에 기대는 유일한 레버"*) · `:151-155`(부착 조건) · `geminiProvider.ts:111-113` · `:217-220` · `realtime/types.ts:91-96` | 79.3 ⚠️ 원문의 *"`:94-96` 주석"* 이 이 좌표로 옮겨졌다 |
+| 8 | 발급 입력: `RealtimeCallInput`(`realtime/types.ts`)에 **`channel` · `hangupRelay`(이미 해석된 값)** 필수 키 추가 — `realtime/index.ts:169-180`이 `session.channel` · `resolveHangupRelay(session)`을 넘긴다. 프로바이더 안에서 `resolveHangupRelay`를 다시 부르지 않는다(G527 *"`relay` 인자를 받는 호출부가 `resolveHangupRelay` 하나뿐"*) | ElevenLabs · Mock 프로바이더는 받기만 하고 무시(오늘 `flowVariantId`와 같은 처리) |
+| 9 | 프롬프트: `geminiProvider.ts:115-135` `buildSystemPrompt`에 `hangupMode: declaresEndCall(…) ? "tool" : "none"`(같은 술어 3번째 호출부) · 확인 무력화 1문장은 `verifyInterceptEnabled`(`:119-120`)로 조립 함수가 붙인다 | G502 · 79.6 ① |
+| 10 | 폴백 신호 처리 위치(현행 좌표): **사전 판정** = `verifyState` 뒤(`:291`) · 문자 제시 앞(`:368`) — 입력 `userTurns: userTurnsNow` · `smsAwaitingUser`(위 (4)) · `transferPlaced: verifyState?.placed === true` · `verifyEnabled`(`:270`) · `limitReached`(⭐ 79.7 1의 *"`limitReached:false`"* 정정 — `:547-552`의 입력은 전부 턴 확보 트랜잭션 값이라 **LLM 전에 계산 가능** ⇒ 그 계산을 사전 판정 앞으로 옮기고 같은 값을 재사용) · `relay: resolveHangupRelay(session)` · `alreadyAccepted: Boolean(session.scammerHangup)`. `hangupMode = 사전.status === "accepted" ? "signal" : "none"` → `:400-411`. **추출** = `:478`의 함수를 일반화(반환 `endCall?: "goal" \| "give_up"` — 정규식 · 자리 · 정리 무변경). **사후 판정** = 마커 발송(`:525-539`) **뒤** · 재확인 트랜잭션(`:562`) **앞** — `isMockTurn: completion.isMock` · 마커 도착을 더한 `smsAwaitingUser`. 효과 = `endCall && hangupMode === "signal" && 사후.status === "accepted"` · 그 밖 신호는 지우고 `logger.info("끊기 신호 무시", { sessionId, row, status })`(G170). **재확인 트랜잭션**(`:562-585`)에서 `stillActive && !limitReached`일 때 `status:"ended"` · `endReason:"scammer_ended"` · `endedAt` · `scammerHangup:{ acceptedAt, kind, path:"fallback" }` · 리포트 트리거 조건(`:595`)을 *한도 ∨ 끊기* 로 · 응답(`:651-660`) `ended` · `endReason` 확장 | 79.7 1~6을 이 좌표로 대체(원문 무편집) |
+| 11 | 한 응답에 문자 마커 + 끊기 신호 | **문자가 이긴다**(사후 6행 → 신호 무시 · 문자 도착 유지). 새 문면 0(SIGNAL에 *"함께 붙이지 마라"* 를 넣으면 문자 제시가 없는 SIGNAL 턴에 없는 기능을 말한다 — G382 방향). 라이브 빈도는 OQ-A131 | 79.14 #6과 같은 층(무해 · 관측) |
+
+**(6) C1 잔여 Minor — 처리 위치 확정 (전부 PR A)**
+
+| Minor | 처리 | 커밋 | 단언 |
+|---|---|---|---|
+| ① 재호출 시 판정 뒤집힘(Minor-1) | (3) 행 순서 · `SCAMMER_HANGUP_RULES` 배열(`decide.ts:71-99`)에서 8행을 2-b 뒤로 · `decide.test.ts:34` `EXPECTED_TABLE` · `:151` `legacyNineRowStatus`(옛 순서 재현 함수 — G526 ⓐ는 **옛 9행 대비가 아니라 새 순서 9행 대비**로 고친다) | C3(판정 입력 변경과 같은 커밋) | **G531** |
+| ② `requestScammerHangup` `sessionId` 타입 검사 | `index.ts:61-64` `!sessionId` → **`typeof sessionId !== "string" \|\| sessionId === ""`** ⇒ `invalid-argument`. (참고 — 형제 슬롯 `inCallSms/index.ts:131-134`도 같은 형태지만 **이 패스 범위 밖** · 고치지 않는다) | C3 | G536 |
+| ③ 입력 판독 단위 테스트 | 판독을 순수 모듈 **`functions/src/scammerHangup/readRequest.ts`** `readScammerHangupRequest(data): { sessionId; userTurns; pendingInstruction; kind }`로 내린다(`HttpsError` throw · Firestore import 0). `userTurns` 판독은 S5b와 같은 규칙(정수 · 0~`MAX_CLAIMED_TURNS` — `smsGate.ts:39` 값 import) — 옛 `readScammerTurns`(`index.ts:39-44` *"유한한 0 이상"*)보다 좁다. 핸들러는 세션 read **앞에서** 이 함수 하나를 부른다 | C3 | **G536**(필드별 무효값 표 · 순서 소스 스캔 · 역검증) |
+| ④ `EndSessionReason` 3값 | 서버 `session/types.ts:62-68` → `export type EndSessionReason = AllowedEndSessionReason`(`./endReason` 타입 import) · 클라 `src/lib/api/types.ts:317-323` → `"user_ended" \| "limit_reached" \| "scammer_ended"`. 저장값 `SessionEndReason`(`shared/types.ts:30-`)은 **무변경**(옛 문서 · 리포트 읽기 호환 — 79.5) | C4(클라 사유 힌트와 같은 커밋) | **G535** |
+| ⑤ 서버 · 클라 `ScammerHangupStatus` 리터럴 대조 | 신설 `src/lib/api/scammerHangupContract.test.ts` — 서버 소스(`decide.ts` · `scammerHangup/types.ts` · `session/endReason.ts` · `roleplay/types.ts`)를 읽어(선례 `src/lib/difficulty/difficulty.test.ts:108`) ⓐ `ScammerHangupStatus` 집합 ⓑ `EndSessionReason` = `END_SESSION_ALLOWED_REASONS` ⓒ `RequestScammerHangupRequest` 키 집합 ⓓ `SendMessageResponse.endReason` 집합을 클라 `src/lib/api/types.ts`와 **양방향** 대조 · 역검증(한 리터럴을 뺀 사본 실패) | C4 | **G535** |
+| ⑥ 배선 테스트 제목 · 범위 | `decide.test.ts:236` 제목 *"… · 다른 판정 경로 0"* 은 본문(`index.ts`의 status 리터럴 3개만 검사)보다 넓다 ⇒ **제목을 본문 범위로** 줄이고(예: *"실시간 콜러블은 commit.ts 경유로 판정한다 · 콜러블이 판정 status 리터럴을 직접 만들지 않는다"*) 폴백(`roleplay/index.ts`)이 같은 판정 함수 · `isSmsAwaitingUser` · `resolveHangupRelay`를 부르는 단언을 **같은 테스트군에** 더한다(`:245` · `relayContext.test.ts:63`의 *"C3 배선 뒤에 더한다"* 인계 이행) | C3 | G501 · G526 ⓓ · G532 |
+| ⑦ (C1 리뷰) 폴백 쪽 `decideScammerHangup` · `resolveHangupRelay` 사용 단언 | ⑥과 같은 자리 | C3 | 위 |
+| ⑧ (C1 리뷰) `sendMessage` 응답 `endReason` 타입 확장 | 서버 `roleplay/types.ts:18` · 클라 `src/lib/api/types.ts:90` → `"limit_reached" \| "scammer_ended"` | C3(서버) · 클라 타입도 같은 커밋(컴파일 정합) | G535 ⓓ |
+
+**(7) 착수 체크리스트 (⛔ 각 항목은 착수 시 심볼로 다시 찾는다 — 줄은 `9c760eb` 값)**
+
+*C2 — 프롬프트(⛔ 한 커밋)*
+- C2-1 `promptAssembly.ts:161`을 `{{HANGUP_RULE}}`로 · NONE = **`:161` 원문 바이트 동일**(테스트에 원문 리터럴 사본 — 지금 이 줄을 단언하는 테스트는 0건: `functions/src` grep *"끝내는 것은 상대다"* = 소스 1건뿐).
+- C2-2 `buildScenarioProgression`(`:186-202`)에 `hangupMode` · `verifyInterceptEnabled` 인자 · 호출 `:718-722` · 옵션 `hangupMode?: "none" \| "tool" \| "signal"`(타입 `:664` 앞).
+- C2-3 TOOL · SIGNAL 문면 = 79.6 ① ② 정본(② 괄호 *"(① TOOL과 같은 두 경우 · 같은 제외 문장)"* 은 ①의 해당 문장을 그대로 펼친다).
+- C2-4 끝 문장 교체 **17벌**: `assetProtectionNoticeCall.prompt.ts:35` · `bankSecurityVerifyScam:51` · `cardCompanyImpersonation:42` · `cardDeliveryCall:42` · `courierCustomsScam:36` · `familyAccidentDeepvoice:105` · `grandchildImpersonation:100` · `institutionalImpersonation:43` · `kidnappingThreat:36` · `loanScam:37` · `messengerChildImpersonationKakao:43` · `messengerFriendLoanKakao:30` · `messengerParcelSmishingSms:32` · `messengerSubsidySmishingSms:59` · `prosecutionCooperationCall:38` · `reputationBlackmailScam:30` · `taxRefundScam:38`(grep 17건 — 메신저 4벌 포함: 새 문장은 NONE에서도 참이라 경로 구분 불요).
+- C2-5 G506: *"14/14"* 상수를 쓰지 않는다 — 기대 수 = `assembledPrompts()`가 순회하는 시나리오 수(공허 통과 방지: 0이면 실패). G308 옆(`scenarios.test.ts:1534`).
+- C2-6 clone 2종 대조값: `functions/lib`에서 `buildSystemPrompt(SCENARIO_PROMPTS[id], { difficultyLevel })` sha256 앞 16자 · 3난이도 — **C2 전(base `9c760eb`) · 후** 둘 다 재서 각 파일 머리 주석에 1줄(최신 기록 `familyAccidentDeepvoice.prompt.ts:72-74` · `grandchildImpersonation.prompt.ts:75-78`은 다른 base 값 — 직전 값으로 쓰지 않는다) · 재생성 대기열 등재(ElevenLabs = NONE이라 기능 영향 0).
+- C2-7 주석 `promptAssembly.ts:137-143`(*"종료 경로 무접촉"*) 정정 · G309 재지정은 문서 단언(G509 — C5)이고 코드 단언 0건(grep)임을 주석에 남긴다.
+
+*C3 — 서버 판정 배선 · 선언 · C1 Minor*
+- C3-1 `decide.ts`: 입력 `userTurns` · `smsAwaitingUser` 필수 키 · 상수 `SCAMMER_HANGUP_MIN_USER_TURNS = 3` · 6행 `pendingInstruction \|\| smsAwaitingUser` · 8행 위치 이동((3)).
+- C3-2 신설 `scammerHangup/smsWait.ts` `isSmsAwaitingUser` · 신설 `readRequest.ts`.
+- C3-3 `commit.ts` `RealtimeHangupClaims` = `{ userTurns, pendingInstruction, kind }` + 서버 입력 `delivered: DeliveredSmsRecord[]` · `index.ts` 판독 교체 · 도착 기록 읽기 · 로그 `{ sessionId, path, status, row, kind, userTurns }`(`:90-97`).
+- C3-4 `types.ts`(서버 `scammerHangup/types.ts:4-12` · 클라 `src/lib/api/types.ts:344-349`) 요청 `scammerTurns` → `userTurns`.
+- C3-5 `roleplay/index.ts` (5) 10 · 11.
+- C3-6 `escalationSignal.ts` 일반화(`END_CALL_GOAL` · `END_CALL_GIVEUP`) — 정규식 무변경.
+- C3-7 `liveTools.ts` (5) 2~7 · `geminiProvider.ts` (5) 9 · `realtime/types.ts` · `realtime/index.ts` (5) 8.
+- C3-8 C1 Minor ① ② ③ ⑥ ⑦ ⑧.
+- C3-9 테스트 수 before/after는 착수 시 재측정(⛔ 인용값 금지 · 동시 실행 금지 — CLAUDE.md).
+
+*C4 — 종료 사유 전달(클라)*
+- C4-1 `src/lib/recording/pendingSession.ts`에 `setPendingEndReason` · `consumePendingEndReason`(세션 저장소 · `getPendingSessionId` `:45` 옆).
+- C4-2 `end/page.tsx:69` 힌트 → 허용목록(`EndSessionReason` 3값) 밖이면 `user_ended` · 주석 `:61-64` 정정.
+- C4-3 실시간 한도 effect(`play/page.tsx:1024-1045`)에 힌트 `limit_reached` 1곳(79.10). 폴백 끊기 응답(`:1584-1591`)의 힌트 · 재생 대기는 **C5**(G515 — 공통 종료 함수 소관).
+- C4-4 C1 Minor ④ ⑤.
+
+*PR B(C5)로 넘기는 것 — 이 절이 바꾼 인터페이스*
+- `getSessionUserTurns()`(= 부모 `turnCountersRef.current.userTurns`) · 컴포넌트 지역 함수 `claimedUserTurns() = getSessionUserTurns() + (userBuffer.trim() ? 1 : 0)` — **`send_prepared_sms` 분기(`:436`)와 `end_call` 분기가 이 함수 하나를 쓴다**(오늘 동작 변화 0 — 위 79.18 끝 확인 줄). `getPendingInstruction()`에서 `toolPending` 제거 + 배치 항((3)).
+- S7 인계(⛔ T192 완료 조건 아님): 지역 `modelToolScammerTurns`(`GeminiVoiceSession.tsx:393` — 문자 앵커 `:437` · 확인 오퍼 `:480`)는 leg 재마운트에 0으로 돌아간다 ⇒ S7 착수 조건에 *"사기범 턴 앵커도 부모 누적값"* 을 더한다(79.18 (3) ↳ ②).
+
+**(8) 가드 · 열린 질문 (79.16에 이어 읽는다)**
+
+| ID | 내용 | 단언 자리 |
+|---|---|---|
+| **G530** | 하한 = 사용자 발화: ⓐ 경계 `userTurns` 2 → `too_early` · 3 → 다음 행 ⓑ 폴백 교대 엄격 표(k = 0~10)에서 옛 `scammerTurnNumber ≥ 4` ⇔ 새 `userTurns ≥ 3` 동치 ⓒ 폴백 입력 = `userTurnsNow`(S5b와 같은 변수) · 실시간 = `claimedUserTurns()`(S5b `send_prepared_sms`와 같은 함수 — C5) ⓓ `functions/src/scammerHangup/**` · 두 요청 타입에 `scammerTurns` 식별자 0(소스 스캔 · 역검증) | `decide.test.ts` · `roleplay` 테스트 — C3 / `GeminiVoiceSession` 소스 스캔 — C5 |
+| **G531** | 8행 위치: 표식 있는 입력은 3 · 4 · 5 · 6 · 7행 조건을 무엇을 켜도 `already_accepted` · 1 · 2 · 2-b는 여전히 이긴다 · 역검증(표식만 지운 사본은 그 행으로) | `decide.test.ts` — C3 |
+| **G532** | `isSmsAwaitingUser` 진리표(도착 0 → 거짓 · `userTurns ≤ last` → 참 · `>` → 거짓 · `userTurnsAtArrival` 부재 문서 = 0) · 폴백 사전 · 사후 · 콜러블이 이 함수 하나(소스 스캔) · 폴백 한 응답에 `[[SMS:…]]` 도착 + `END_CALL_*` → 종료 0 · 문자 1(G507 ② 확장) · 폴백 기록 읽기 실패 → 대기 | `scammerHangup` · `roleplay` 테스트 — C3 |
+| **G533** | 실시간 `pendingInstruction`: ⓐ 컴포넌트 `toolPending`을 읽지 않는다(소스 스캔) ⓑ `endCallBatchHasOtherCalls` 진리표(단독 → 거짓 · `send_prepared_sms` 동반 → 참 · `end_call` 2개 → 거짓) ⓒ 역검증 — `toolPending`을 OR한 사본은 단독 `end_call`에서 참(= 끊기 0)이 됨을 같은 출력에 | `liveToolResponse.test.ts` · 소스 스캔 — C5. G528 ⓓ의 *"∨ toolPending"* 은 **이 정의로 대체** |
+| **G534** | 선언 회귀: `end_call` 거짓 입력(메신저 · 중간 leg)에서 `buildLiveToolDeclarations` · `buildLiveToolNames` 출력이 S5b 판정과 **바이트 동일** · 참이면 기존 선언 뒤에 1개 · `reason` enum · `required` · BLOCKING · 이름 쌍(`endCall` ⇔ `endCallFailureInstruction`) | `liveTools.test.ts` 계열 — C3 |
+| **G535** | 서버 · 클라 계약 리터럴 양방향 대조((6) ⑤ ⓐ~ⓓ) + 역검증 | `src/lib/api/scammerHangupContract.test.ts` — C4 |
+| **G536** | `readScammerHangupRequest` 무효값 표(`sessionId` 비문자열 · 빈 문자열 / `userTurns` 비정수 · 음수 · 201 / `pendingInstruction` 비불리언 → `invalid-argument` · `kind` 정규화) · 핸들러에서 판독이 세션 read보다 앞(소스 순서) | `scammerHangup/__tests__/readRequest.test.ts` — C3 |
+| ↳ OQ-A118 (2026-10-19) | 하한 값이 **`SCAMMER_HANGUP_MIN_USER_TURNS = 3`**(사용자 발화)으로 옮겨졌다 — 같은 뜻의 단위 변환((2) 6) · 판단값 · 라이브 관측 뒤 User | User |
+| ↳ OQ-A120 (2026-10-19) | 실시간 `userTurns` · `pendingInstruction`(클라 항) = 클라 주장값 — **S5b `deliverInCallSms`와 같은 등급 · 같은 판독 규칙**으로 수용. 6행의 문자 항은 서버 도착 기록으로 옮겨져 그 부분은 주장값이 아니다 | 기록 |
+| **OQ-A131** | 폴백 한 응답에 문자 마커와 끊기 신호가 함께 나오면 문자가 이기고 끊기는 무시된다((5) 11) — 그 응답에 작별이 섞이면 ⑪ 재발. 라이브 빈도 ≥ 1이면 SIGNAL 조건부 1문장(문자 제시가 있는 턴에만)을 architect가 저작 | 라이브 관측 → architect |
+| **OQ-A132** | 실시간 → 폴백 강등 직후 6행 보수 지연((4) ⚠️) — 수용 기본 | 기록 |
+
+**(9) 강등표 추가 행 (79.14에 이어 읽는다 — ⛔ 표에 없으면 행 추가를 묻는다)**
+
+| # | If | Then |
+|---|---|---|
+| 8 | 라이브 로그 `사기범 끊기 판정`에서 실시간 `row` 6 비율이 승인보다 높다 | 클라 항 · 서버 항 중 어느 쪽인지 로그를 가른다(G170 범위의 `pendingSource: "client" \| "sms"` 1필드 추가 — 판단값) · 클라 항이면 `instructionBusyRef` 해제 시점을 재판정((3) ⚠️) |
+| 9 | 폴백 `끊기 신호 무시` 로그의 `row` 6이 같은 응답 문자 마커 때문이다 | OQ-A131 |
+
+**(10) 이 패스의 편집 범위 · 닫지 못한 것**
+
+- 편집: 이 79.19 신설 · 시점 부착(79.1 #26 · 79.2 · 79.5 · 79.6 (2) · 79.7 · 79.8 · 79.13 · 79.16 ↳ G528 · 79.17 · 79.18 (1)(2)(3) · 이 절 바로 위 확인 줄) · `docs/DECISIONS.md` #148. 원문 삭제 · 수정 0.
+- 하류(⛔ 미편집): `docs/API.md` 부록 F `requestScammerHangup` 요청(`scammerTurns` → `userTurns` · 판독 규칙) · `createRealtimeCall.liveTools`(`endCall` · `endCallFailureInstruction`) · `sendMessage` 응답 `endReason` / `docs/Database.md`(변경 0 — `scammerHangup` 필드 무변경) — 구현 뒤 docs.
+- ⛔ 닫지 못한 것: 실행 0(테스트 · 프로브 · 해시) · clone 대조값 미측정 · `instructionBusyRef` 해제 시점과 맥락 주입 발화의 대응 미확인 · S5b 설계 원문(§78.3)은 미병합 워크트리라 코드만 정본으로 읽었다 · 3.8이 한 `toolCall`에 `end_call`과 다른 호출을 실제로 함께 내는지는 미관측(배치 항은 방어).
 
 ## 80. (Bug fix — 2026-10-18 · 브랜치 `fix/otp-compare-live-miss`) **라이브에서 틀린 인증번호를 "확인되었습니다"로 넘긴 문제** — ⭐⭐ **판정은 정상(mismatch)이었고 지시도 실렸다. Gemini가 §78의 "(참고 — …)" 1줄을 무시했다(같은 조건 실호출 3/3)** ⇒ 결과 지시 문면 강화 + 판정 결과 로그 — implementer 기록
 
