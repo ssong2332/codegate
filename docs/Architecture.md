@@ -18057,3 +18057,53 @@ completeWithFallback(                                         ← 실패 시 Moc
 - 테스트: 신규 2파일 · `overloadRetry.test.ts`·`overloadFallback.test.ts` 배선 정규식 갱신(G451 형태 변경).
 - 문서: 이 절 · DECISIONS #125 · README · `functions/.env.example` · CHANGELOG.
 > **번호**: §75 · G464~G470 · OQ-A100~A102 · #125 — main `d13e718`(#290 병합분: §74 · G451~G463 · OQ-A97~A99 · #122~#124)과 겹쳐 병합 시 재번호(이전 §74 · G456~G462 · OQ-A97~A99 · #122). ⛔ 예약 아님.
+
+## 76. (Bug fix — 2026-10-18 · 브랜치 `fix/live-korean-only`) **사기범 발화 언어를 한국어로 고정** — ⭐⭐ **Live 네이티브 오디오 모델은 언어 코드 지정을 지원하지 않는다 → `speechConfig.languageCode: "ko-KR"`만으로는 출력이 한국어로 고정되지 않는다 → 문서가 제시하는 손잡이는 시스템 지시다** / ⭐ **실측: "그래요?"가 "creo?"(스페인어)로 전사되고 모델이 스페인어로 답했다** — architect·implementer 기록
+
+### 76.0 금지 먼저
+
+1. ⛔ **`LANGUAGE_RULE`을 조건부로 만들지 말 것** — 시나리오·난이도·경로와 무관하게 항상 붙는다(테스트가 전 시나리오 × 전 난이도 × Live/텍스트 옵션을 고정).
+2. ⛔ **가드레일(`guardrailPreamble`)보다 뒤에 두지 말 것** — 가드레일 최후미 불변식(기존 테스트) 유지.
+3. ⛔ **`languageCode: "ko-KR"`을 지우지 말 것** — 이 PR은 그 설정을 바꾸지 않는다(문서상 네이티브 오디오에서 효과가 없더라도 제거는 별건 판단).
+
+### 76.1 근거 (공식 문서 · 2026-10-18)
+
+| 확인 | 결과 | 출처 |
+|---|---|---|
+| 네이티브 오디오 Live 모델의 언어 코드 | *"don't support explicitly setting the language code"* — 언어를 스스로 고르고 대화 중 자연스럽게 바꿀 수 있다 | https://ai.google.dev/gemini-api/docs/live-api/capabilities (모델 `gemini-3.8-live` 기준 페이지) |
+| 말하는 언어를 제한하는 방법 | *"You can also restrict the languages it speaks in by specifying it in the system instructions"* — 문서가 제시하는 방법(유일하다고 단정하지는 않는다) | 같은 페이지 |
+| 입력 전사 언어 힌트 | ⚠️ **문서끼리 다르다** — capabilities 페이지는 `input_audio_transcription: {}`만 보이고 언어 설정을 다루지 않는다. API 레퍼런스(https://ai.google.dev/api/live)의 `AudioTranscriptionConfig.languageCodes[]`는 *"hints about the languages present in the audio"* 이고, 예시는 전사 전용 모델(`gemini-3.5-transcribe-live`, https://ai.google.dev/gemini-api/docs/live-api/live-transcribe) 기준이다. 반면 이 저장소의 SDK `@google/genai` 2.13.0은 Developer API 모드에서 `languageCodes`를 **예외로 거부**하고(*"only supported in Gemini Enterprise Agent Platform mode"*), 레퍼런스에 없는 `languageHints.languageCodes`만 보낸다. ⇒ `gemini-3.8-live`에서 받아들여지는지 **미확인** — 틀리면 토큰 발급이나 연결이 실패해 **통화 전체가 죽는다**. 이 PR에는 넣지 않았다(OQ-A105) | API 레퍼런스 · `functions/node_modules/@google/genai/dist/genai.d.ts` `AudioTranscriptionConfig` |
+| 이 저장소 | 프롬프트에 "한국어로만" 지시 0건(수정 전 grep) · `geminiProvider.ts`는 `languageCode: "ko-KR"`만 | `functions/src/realtime/geminiProvider.ts` |
+
+- 원인(**사용자 실측으로 확인**, 2026-10-18): 참가자가 "그래요?"라고 말했는데 입력 전사가 **"creo?"(스페인어)** 로 인식됐고, 모델이 **스페인어로 답했다** ⇒ 짧은 되물음이 외국어로 오인식되면 모델이 그 언어를 따라간다. 그래서 규칙은 출력 고정에 더해 *"외국어·뜻 없는 소리로 들리면 한국어 짧은 되물음으로 간주하라"* 를 지시한다.
+
+### 76.2 변경
+
+| 항목 | 내용 | 파일 |
+|---|---|---|
+| 규칙 | `LANGUAGE_RULE` 3줄 — ① 항상 한국어로만 말한다(다른 언어로 들리거나·알아듣기 어렵거나·상대가 다른 언어로 말해도) ② 상대는 한국어로 말하고 있다 — 외국어 단어·뜻 없는 소리는 "그래요?"·"네?"·"뭐라고요?" 같은 짧은 되물음의 오인식으로 보고 그 언어를 따라가지 않는다 ③ 못 알아들었으면 한국어로 되묻는다 | `functions/src/roleplay/promptAssembly.ts` |
+| 배치 | `buildSystemPrompt`의 `CONVERSATION_STYLE` 바로 뒤, 무조건부 | 같은 파일 |
+| 적용 경로 | `buildSystemPrompt` 한 곳이라 **Live 통화 토큰(Gemini) · sendMessage · 오프닝 · Groq 3차 예비** 모두 같은 문면 | `realtime/geminiProvider.ts` · `roleplay/index.ts` · `roleplay/openingLine.ts` |
+| 입력 전사 언어 힌트 | **넣지 않음** — 76.1 표 3행(문서·SDK 불일치, 실패 시 통화 전체 장애) · OQ-A105 | — |
+| 프롬프트 길이 | 조립 결과가 늘어난다 — 정확한 값은 clone 2종 `.prompt.ts` 대조값 주석 | 같은 주석 |
+
+### 76.3 게이트
+
+| G | 고정하는 것 | 테스트 |
+|---|---|---|
+| **G471** | 규칙 문면(한국어로만 · 다른 언어로 들려도 · 한국어로 되묻기) + 실측 사례("그래요?"→"creo?") 문면 — 외국어·뜻 없는 소리를 한국어 짧은 되물음으로 간주 | `functions/src/roleplay/__tests__/languageRule.test.ts` |
+| **G472** | 전 시나리오 × 난이도 4종(미지정 포함) × toolDrivenTiming 2종에서 정확히 1회 · 가드레일 앞 · 가드레일 최후미 불변 | 같은 파일 |
+| **G473** | 시스템 프롬프트 호출부 3곳이 모두 `buildSystemPrompt`(우회 0) · Groq system 메시지에 포함 | 같은 파일 |
+| **G474** | Live 토큰 발급 요청 본문의 `systemInstruction`에 전 시나리오 포함(행동 증거) | `functions/src/realtime/__tests__/geminiProvider.test.ts` |
+
+### 76.4 남은 위험 · OQ
+
+| # | 항목 | 상태 | 확인 방법 |
+|---|---|---|---|
+| **OQ-A103** | **ElevenLabs clone 2종(family-accident-deepvoice · grandchild-impersonation)은 프롬프트가 ElevenLabs 에이전트에 따로 저장돼 있어 재생성 전까지 이 규칙이 없다** — 기존 재생성 대기 항목에 합류 | User 운영 조치 | 각 `.prompt.ts` 머리 주석의 대조값(len·sha)으로 재생성 후 대조 |
+| **OQ-A104** | 시스템 지시는 **강제가 아니라 지시**다 — 문서도 "제한할 수 있다"고만 한다. 재발률은 배포 후에만 알 수 있다 | 기록 | 배포 후 Live 출력 전사(`outputAudioTranscription`)에서 한글 아닌 문자 비율 관측 |
+| **OQ-A105** | **입력 전사 언어 힌트(ko-KR)** — 실제 원인(입력 오인식)을 직접 겨누는 손잡이지만 문서·SDK가 엇갈린다(76.1) | 라이브 검증 필요 | 실제 Gemini 키로 `gemini-3.8-live` 세션에 `inputAudioTranscription.languageHints.languageCodes:["ko-KR"]`(SDK 형태)를 걸어 연결·전사가 되는지 1회 확인(User 승인) → 되면 별도 PR |
+| ⚠️ | **리포트·다시보기 영향(보고만, 수정 안 함)** — 전사가 "creo?"처럼 외국어로 저장되면 ① `report/analyzeConversation.ts`의 저항·순응 정규식(한국어 패턴)이 그 사용자 턴을 어느 쪽으로도 잡지 못해 중립 처리되고, 외국어 사기범 응답은 수법 매칭(`findMatchedTactics`)에서 빠진다 ② 대화 다시보기에는 외국어 문장이 그대로 보인다 ③ LLM 리포트 생성에도 그 문장이 입력된다. 이 PR의 프롬프트 규칙이 **사기범 쪽** 외국어 응답은 줄이지만 **입력 전사** 자체는 바꾸지 못한다(OQ-A105) | 기록 | 배포 후 다시보기에서 외국어 전사 빈도 관측 |
+| ⚠️ | 운영 Firestore 전사에서 사례를 **직접 조회하지는 않았다** — 이 환경에 gcloud·관리자 자격증명이 없고 CLI 저장 토큰을 꺼내 쓰는 우회는 하지 않았다. 사례는 사용자 확인("creo?")으로 대신한다 | 기록 | 콘솔에서 신고 세션 `sessions/{sid}/messages` 열람(언어·턴 위치만) |
+
+> **번호**: §76 · G471~G474 · OQ-A103~A105 · #126(이 트리 최대 §75 · G470 · OQ-A102 · #125). ⛔ 예약 아님 — 병합 순서로 확정.
