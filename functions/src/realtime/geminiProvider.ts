@@ -89,7 +89,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
 
   /**
    * `endCallLiveAvailable` — T192 PR A 리뷰 M1의 런타임 스위치. 운영 생성자(`provider.ts`)는 인자를 넘기지 않아 항상
-   * `END_CALL_LIVE_AVAILABLE`(오늘 `false`)이다. 판정 로직 테스트만 `true`를 넘긴다(켬 입력).
+   * `END_CALL_LIVE_AVAILABLE`(C5에서 `true` — 롤백 시 `false`)이다. 판정 로직 테스트만 `true`를 넘긴다(켬 입력).
    */
   constructor(
     private readonly apiKey: string,
