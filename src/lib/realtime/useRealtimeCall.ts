@@ -15,6 +15,7 @@ import { createRealtimeCall } from "@/lib/api";
 import type { CreateRealtimeCallResponse } from "@/lib/api";
 import { isPrefetchFresh as isPrefetchTimestampFresh } from "./prefetchFreshness";
 import { toFallbackCredentials } from "./fallbackCredentials";
+import { markCallSetup, markCredentialsPrefetched, resetCallSetupMarks } from "./liveLatency";
 
 export type RealtimeCallStatus =
   | "idle"
@@ -186,6 +187,9 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
 
     setStatus("connecting");
     setErrorMessage(null);
+    // §71.6 P-0 — 통화 1건의 준비 구간 표시를 받기 시점부터 새로 찍는다(나머지는 GeminiVoiceSession).
+    resetCallSetupMarks();
+    markCallSetup("accept", performance.now());
 
     // ① 마이크 권한 — 실패하면 실시간 대화가 불가능하므로 즉시 폴백 안내로 전환한다.
     try {
@@ -208,7 +212,9 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     prefetchRef.current = null; // 어느 쪽이든 소모 — 재사용하지 않는다.
 
     let issued: CreateRealtimeCallResponse;
-    if (isFreshPrefetch(prefetched, sessionId, Date.now(), PREFETCH_STALE_MS)) {
+    const usePrefetched = isFreshPrefetch(prefetched, sessionId, Date.now(), PREFETCH_STALE_MS);
+    markCredentialsPrefetched(usePrefetched);
+    if (usePrefetched) {
       issued = prefetched.issued;
     } else {
       try {
@@ -221,6 +227,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
       }
     }
     if (!mountedRef.current) return;
+    markCallSetup("credentialsReady", performance.now());
 
     // ③ 실시간 대화 불가(키·설정 미비) → 텍스트 폴백. 조용히 넘어가지 않고 상태로 알린다.
     const hasUsableCredentials =

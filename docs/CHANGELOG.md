@@ -4,6 +4,26 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-17 추가분, 브랜치 `claude/fix-scammer-speech-safety-b125cf`, 커밋 `74470d3`)**: 아직 main에 병합되지 않았다. docs는 실행 수단(셸·`git`) 없이 소스를 직접 열람해 작성했다 — `git diff 086287a..HEAD`는 실행하지 못했고, 변경 범위는 조정 세션의 구현 요약과 소스 열람(`functions/src/roleplay/index.ts`·`openingLine.ts`·`promptAssembly.ts`·신규 두 모듈)으로 확인했다. 테스트 수치는 QA 보고 인용값이다(docs 미재현).
+
+### Fixed
+- **사기범 대사에 실존 은행·카드사 이름이 나오고, 문자로 계좌가 오는 시나리오에서도 음성으로 다른 계좌를 부르던 문제 수정 + 텍스트 대화에서 사기범 한 턴을 최대 3문장으로 제한(2026-10-17 라이브 신고 — `institutional-impersonation`·중급·텍스트 폴백)**: 사기범이 "계좌번호는 '농협은행 352-0812-…', 예금주는 '국가안전관리처'입니다"처럼 실제 은행 이름을 붙여 불렀고, 5턴이 전부 5~7문장이었다(규칙은 "한 번에 1~3문장"). 프롬프트에는 이미 "실존하지 않는 기관명(예: OO은행)"이 있었으나 모델이 "OO"을 실제 은행 이름을 채울 빈칸으로 읽은 것으로 추정한다(추정 — 확인 방법: 수정 후 같은 시나리오 재현).
+  - **프롬프트(1차 방어)**: 공통 "페이로드는 가상값만" 줄에 "은행 이름은 'OO은행'이라고 그대로 말한다 · 실존 은행·카드사 이름은 어떤 경우에도 쓰지 않는다"를 명문화했다(`functions/src/roleplay/promptAssembly.ts:141`). 예시 번호는 농협 신계좌 형식이던 `352-0812-4471-63`을 `948-2716-5093-27`로 바꿨다(앞 3자리가 지역농협 과목코드 대역과 겹쳐 특정 은행을 연상시켰을 가능성 — 비공식 자료 기준 추정, 소스 주석 `promptAssembly.ts:127-129`). 계좌형 문자 시나리오(`institutionalImpersonation`·`courierCustomsScam`·`loanScam` 2개 수법)의 수법 문구는 "계좌는 네가 불러 주지 말고 문자로 보낸 것을 확인하게 한다"로 바꿔, 음성으로 불러 준 계좌와 문자 계좌가 어긋나지 않게 했다. 나머지 시나리오 6종은 예시 번호만 교체했다.
+  - **출력 후처리(2차 방어, 텍스트 경로만)**: 문면은 확률적 지시라 보증이 없어 결정적 후처리를 두 단계 더했다. (1) `functions/src/guardrails/realFinancialNames.ts` — 실존 은행·카드사 이름을 `OO은행`/`OO카드`로 바꾼다(숫자는 건드리지 않는다. 사기범 응답에 마스킹을 적용하지 않는 기존 결정 유지). 금융감독원·검찰 등 **사칭 대상 기관**, 가상 기관명, 우체국, `우리`·`하나`·`국민` 같은 일반어는 치환하지 않는다. (2) `functions/src/roleplay/replyLength.ts` — 문장 경계에서만 자르는 3문장 상한(`MAX_SCAMMER_REPLY_SENTENCES = 3`, 말줄임표는 경계가 아니다. 토큰 상한은 문장·링크 마커 중간을 자르고 빈 응답→Mock 강등 위험이 있어 쓰지 않았다).
+  - **적용 위치**: `sendMessage`(`functions/src/roleplay/index.ts:347-375`)와 오프닝 대사(`functions/src/roleplay/openingLine.ts:109-131`) — 링크·신호 마커 추출 뒤, 저장 전(`finalizeScammerReplyText` 앞). 치환·상한이 일어나면 서버 로그에 건수만 남긴다(대사 본문은 싣지 않는다).
+  - **적용하지 않는 곳(한계)**: (a) `sendMessage`에서 이번 턴에 문자·확인창구·재연결·설치 응낙 등 `turnInstruction`이 주입된 턴은 **문장 상한을 적용하지 않는다** — 예고 문장이 잘려도 "예고 완료"로 기록돼 "말하지 않은 예고" 결함(G343)이 재발하기 때문이다(이름 치환은 이런 턴에도 적용). (b) **실시간 음성 경로(`functions/src/realtime/**`, Gemini Live·ElevenLabs clone)는 오디오라 후처리를 적용할 수 없다** — 그쪽은 프롬프트 문면이 유일한 방어다. (c) `CONVERSATION_STYLE`의 "한 번에 1~3문장" 문면은 T167(OQ-A70/A71, 사용자 결정 대기) 때문에 바꾸지 않았다.
+  - **알려진 잔여(미수정)**: 상한으로 4번째 이후 문장에 있던 요구가 잘릴 수 있다(로그의 `originalSentences`/`keptSentences`로 관측 가능) · 계좌형 문자 시나리오에도 공통 줄의 예시 번호는 남아 있다 · 문자 본문 데이터 2건(`functions/src/scenarios/inCallSms.ts:51`·`:152`)은 여전히 `OO은행 352-0812-4471-63`을 쓴다(이번 범위 밖) · 이름 표기 잔재 가능성(reviewer Minor — 예: "지역농협은행"→"OO은행은행", "KEB하나카드"→"KEBOO카드", 라틴 `K뱅크` 경계) · clone 2종 재생성이 대기 중이다(구현 기록 인용 — 대상은 docs가 확인하지 못했다).
+  - **검증(인용값 — QA 보고)**: reviewer APPROVED(Critical 0·Major 0·Minor 7) · QA GO · functions 895→923 pass / 0 fail · 루트 432→432 / 0 · 빌드·린트 통과. `docs/Tasks.md`에 이 작업의 행이 없다(커밋 `Refs: (미등재 — planner 인계)`).
+
+### Changed (2026-10-17 · 브랜치 `claude/practical-moore-d1dd1e` · 미배포)
+- **실시간 통화(Gemini Live) 모델을 `gemini-3.8-live`로 전환** — 기존 `gemini-2.5-flash-native-audio-preview-12-2025`가 2026-11-17 종료 예정이다(Google 폐기 페이지, 2026-10-12 갱신). 설계 `docs/Architecture.md` §71 · ADR-0017 · DECISIONS #115 · #116(User 승인).
+  - 3.8의 다른 기본 동작 두 가지를 2.5 의미로 고정했다: 두 Live 도구에 `behavior: BLOCKING` 명시(생략하면 도구 호출과 함께 턴이 끝난다) · 사기범이 말하는 중에 들어온 타이핑·지시는 그 턴이 끝난 뒤 1건씩 보낸다(3.8은 즉시 받으면 말을 끊는다). 끼어들기 직후와 도구 결과 대기 중에도 보류한다.
+  - 로컬 라이브 프로브(같은 대본, 소표본): 첫 마디 2.5 4.9~7.9초 → 3.8 0.9~1.3초 · 발화 끝 → 첫 음성 2.0~3.8초 → 0.2~2.6초.
+- **실시간 통화 지연 로그 추가** — 브라우저 콘솔 `[gemini-latency]`(production 포함, 숫자만 — 전사·식별자 없음).
+- **AI 음성 기본 음량을 낮춤** — 최대(1.0) → 0.6. 최종값은 실기기 청취 뒤 정한다(OQ-A89).
+- 테스트: functions 898 → 901 · 루트 446 → 479(신규 4파일).
+- ⚠️ 미확인: 브라우저·실기기 통화. 배포 뒤 확인 목록은 §71.9(문자 도구 흐름 · 확인창구 · 첫 마디 · 끼어들기 · 음량 · Android 볼륨 슬라이더 · 비한국어 혼입 · 무료 한도 · 통화 중 끊김).
+
 > ⚠️ **이 블록(2026-09-19~10-01 추가분, PR #246·#247·#249~#258)**: docs가 실행 수단(셸·`gh`) 없이 작성했다 — **`git log --oneline`은 실행하지 못했다.** PR 번호·제목·병합 일시·병합 SHA는 GitHub REST API(공개 저장소 `ssong2332/codegate`, 웹 조회 도구의 요약 경유)로 조회한 뒤 로컬 `.git/logs`(`main`·`origin/main`·브랜치 reflog)의 head·병합 SHA와 대조해 확정했다. 병합 커밋 *제목*을 직접 본 것은 세션 스냅샷 `git log`의 **#256(`d856e1d`)·#258(`c65d43d`) 둘뿐**이다. 코드 PR 3건(#247·#251·#256)은 GitHub의 PR 커밋 목록과 브랜치 reflog가 일치했다. **"인용값" = docs가 재현·재측정하지 않은 값**(오케스트레이터 인수인계, implementer·reviewer·QA 보고, `docs/Tasks.md`·`CLAUDE.md` 인용) — 배포 사실·라이브 관측·테스트 수가 여기에 해당한다. 아래 `파일:줄` 인용은 base origin/main `d856e1d` 기준이다(같은 시점에 `docs/Tasks.md`·`docs/API.md`·`docs/Architecture.md`·`docs/PRD.md`가 별도로 갱신돼 줄 번호가 이동했을 수 있다). PR #248은 implementer 메모리만 바꾼 chore라 항목으로 적지 않았다.
 
 ### Added

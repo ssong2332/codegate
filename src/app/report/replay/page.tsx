@@ -210,7 +210,7 @@ export default function ReplayPage() {
   };
 
   const annotatedTurnIndexes = getAnnotatedTurnIndexes(timeline);
-  // T189(UX-008 v1.30 (2)) — 타임라인이 말풍선 주석 밖에 그리는 "여기가 신호였어요" 카드 수.
+  // T189(UX-008 v1.31 (2)) — 타임라인이 말풍선 주석 밖에 그리는 "여기가 신호였어요" 카드 수.
   // 모의 화면 판정은 렌더(ReplayMockScreenItem)와 같은 함수·같은 deceivedMoments로 한다.
   const signalCardCount = countReplaySignalCards(timeline, (mockScreen) =>
     resolveMockScreenCopy(mockScreen, deceivedMoments, "replay"),
@@ -387,7 +387,7 @@ export default function ReplayPage() {
               ))}
             </div>
           ) : (
-            // TB-7(UX-008 v1.30) — 리포트 TB-4와 같은 문장. role 없음(상자 첫 줄이 이미 status).
+            // TB-7(UX-008 v1.31) — 리포트 TB-4와 같은 문장. role 없음(상자 첫 줄이 이미 status).
             <p className="mt-1.5 text-base leading-relaxed text-[#6B655C]">{TACTICS_NOT_FOUND_TEXT}</p>
           )}
         </div>
@@ -419,7 +419,7 @@ export default function ReplayPage() {
           </>
         ) : (
           // Failure(UX-018): 이동할 속은 순간이 없으면 침묵하지 않고 명시한다 — 문면은 TB-9a~d
-          // (UX-008 v1.30). 한 문단 두 문장, role="status" 유지.
+          // (UX-008 v1.31). 한 문단 두 문장, role="status" 유지.
           <p className="text-base text-[#6B655C]" role="status">
             {replayNavEmptyText(report.wasDeceived, signalCardCount)}
           </p>

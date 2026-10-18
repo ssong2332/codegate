@@ -1,4 +1,4 @@
-// T189 · D-78 · AC-083 (b)·(e) — docs/UX.md UX-008 v1.30 노트 (6) 완료 판정 증거.
+// T189 · D-78 · AC-083 (b)·(e) — docs/UX.md UX-008 v1.31 노트 (6) 완료 판정 증거.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -16,7 +16,7 @@ import type {
   ReplayTimelineItem,
 } from "../replay/buildReplayTimeline.ts";
 
-// UX-008 v1.30 (3) 금지 문면. "신호가 없"은 "(위험) 신호가 없"로 읽히는 서술 전반을 잡는다.
+// UX-008 v1.31 (3) 금지 문면. "신호가 없"은 "(위험) 신호가 없"로 읽히는 서술 전반을 잡는다.
 const FORBIDDEN = ["0가지", "식별된 수법이 없습니다", "뚜렷한 위험 신호가 없었습니다", "신호가 없"];
 
 function assertNoForbidden(text: string): void {
@@ -25,7 +25,7 @@ function assertNoForbidden(text: string): void {
   }
 }
 
-// ── 글자 단위 정본(UX-008 v1.30 (1)) ───────────────────────────────────────
+// ── 글자 단위 정본(UX-008 v1.31 (1)) ───────────────────────────────────────
 const TB3 = "시도된 수법 · 이름을 찾지 못함";
 const TB4 = "이번 대화에서 시도된 수법을 이름으로 찾아내지 못했습니다. 수법이 없었다는 뜻은 아닙니다.";
 const TB9a = "속은 순간이 없어 바로 이동할 지점이 없습니다. 아래 대화를 처음부터 읽어 보세요.";
@@ -58,7 +58,7 @@ test("TB-9a~d: 속음 여부 × 신호카드수 4칸 글자 일치 + 금지 문�
   for (const text of [TB9a, TB9b, TB9c, TB9d]) assertNoForbidden(text);
 });
 
-// ── 신호카드수(UX-008 v1.30 (2)) ─────────────────────────────────────────────
+// ── 신호카드수(UX-008 v1.31 (2)) ─────────────────────────────────────────────
 function sms(id: string, eventCount: number): ReplayTimelineItem {
   return {
     kind: "sms",

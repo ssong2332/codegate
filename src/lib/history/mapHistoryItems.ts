@@ -5,7 +5,7 @@
 // 입력을 화면 표시용 라벨로 변환만 한다.
 //
 // T186(R-5 · User 결정 2026-10-17) — 2인 챌린지 체험 리포트(`challengeId` 있음)는 **목록에서 뺀다**
-// (UX-012 Actor: "2인 챌린지의 사용자2는 대상이 아니다"). 이미 Google로 로그인한 사람이 링크로 동의하면
+// (UX.md UF-010 Actor: "2인 챌린지의 사용자2는 대상이 아니다"). 이미 Google로 로그인한 사람이 링크로 동의하면
 // 그 체험 리포트가 본인 uid로 생기므로(src/app/challenge/join/page.tsx) 쿼리(uid 동등)만으로는 걸러지지
 // 않는다. 실패 아카이브(src/lib/archive/buildArchiveItems.ts · AC-069)와 같은 규칙이다.
 

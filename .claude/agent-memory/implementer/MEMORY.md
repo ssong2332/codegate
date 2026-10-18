@@ -93,3 +93,4 @@
 - [§66 남용상한 5건 결함](project_codegate_s66_abuse_hardening.md) — ⭐ 함수명 grep이 순서 판정용 소스스캔에서 시크릿선언 주석에 먼저 걸리는 새 변형(`await xxx(`로 좁혀야 함), architect 정본 코드블록 바이트 그대로 이식, PR #247(5커밋 1PR, 미등재 태스크).
 - [T147 Node 22 engines bump](project_codegate_t147_node22_runtime.md) — worktree dry-run needs 4-key placeholder functions/.env, 10s discovery timeout is intermittent (count consecutive), emulator mismatch text.
 - [T181 챌린지 완료 전이 C1~C6](project_codegate_t181_challenge_completion.md) — ⭐ 서버 리터럴을 루트 테스트가 소스에서 읽는 연결 증거, 트랜잭션 전용 가짜 Firestore+무조건 쓰기 대조군, 내 스캔이 다음 커밋에 깨진 함정, verify:build 위험 실측 해소.
+- [사기범 대사 실존 은행명·문장 상한(2026-10-17)](project_codegate_scammer_speech_safety.md) — ⭐ `신한`이 "당신한테"에 걸린다(한글 앞 경계), 정식 명칭 수식어 겹침, Git Bash `sed -i`가 CRLF를 지운다.

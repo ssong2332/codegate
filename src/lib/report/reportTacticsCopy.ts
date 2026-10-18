@@ -1,6 +1,6 @@
 // 리포트·리플레이 "수법을 찾지 못함" 표시 문면 판정 — 순수 함수 (T189 · D-78 · AC-083 (b)·(e)).
 //
-// 정본: docs/UX.md UX-008 v1.30 노트 (1) 판정표 TB-1~TB-10 · (2) 용어 정의 · (3) 금지 문면.
+// 정본: docs/UX.md UX-008 v1.31 노트 (1) 판정표 TB-1~TB-10 · (2) 용어 정의 · (3) 금지 문면.
 // 수법 추정기가 **찾지 못한** 상태(`tacticsUsed` 빈 배열)를 "0가지"·"없습니다"로 말하지 않는다.
 // 수법이 1개 이상이면 기존 문면·목록·숫자는 무변경이다(AC-083 (c)).
 //
@@ -13,7 +13,7 @@ import type { ReplayTimelineItem } from "../replay/buildReplayTimeline";
 export const TACTICS_NOT_FOUND_TEXT =
   "이번 대화에서 시도된 수법을 이름으로 찾아내지 못했습니다. 수법이 없었다는 뜻은 아닙니다.";
 
-/** 리플레이 타임라인의 "신호 카드" 소제목 — 렌더 코드와 같은 문자열(UX-008 v1.30 (2)). */
+/** 리플레이 타임라인의 "신호 카드" 소제목 — 렌더 코드와 같은 문자열(UX-008 v1.31 (2)). */
 export const SIGNAL_CARD_HEADING = "⚠️ 여기가 신호였어요";
 
 /**
@@ -28,7 +28,7 @@ export function tacticsAccordionLabel(tacticCount: number): string {
 
 /**
  * 리플레이 타임라인에서 **말풍선 주석 밖**에 그려지는 "⚠️ 여기가 신호였어요" 카드 수
- * (UX-008 v1.30 (2) `신호카드수`). 렌더와 **같은 배열**에서 센다:
+ * (UX-008 v1.31 (2) `신호카드수`). 렌더와 **같은 배열**에서 센다:
  * - `sms` 항목: `sms.events` 1건당 카드 1장(`ReplaySmsItem`이 events 전부를 카드로 그린다)
  * - `verify` 항목: `verify.events` 1건당 카드 1장(`ReplayVerifyItem` 동일)
  * - `mockScreen` 항목: 렌더가 쓰는 문구 판정 결과의 `heading`이 신호 카드 소제목일 때만 1장
