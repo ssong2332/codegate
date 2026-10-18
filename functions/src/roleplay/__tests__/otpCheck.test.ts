@@ -16,6 +16,8 @@ import { extractSpokenCodes } from "../../shared/spokenDigits";
 import { resolveOtpCheckInstruction } from "../otpCheck";
 
 const SCENARIO = "institutional-impersonation";
+/** 대조는 직전 사기범 발화가 인증번호를 물었을 때만 한다(QA M2) — 판정표 테스트의 기본 직전 발화. */
+const ASK_OTP = "방금 문자로 인증번호 갔죠? 화면에 뜬 여섯 자리 그대로 불러 주세요.";
 const OTP = findInCallSmsItem(SCENARIO, "institution-otp")!;
 const ACCOUNT = findInCallSmsItem(SCENARIO, "institution-safe-account")!;
 const ALL_OTP_CODES = Object.values(IN_CALL_SMS)
@@ -80,7 +82,7 @@ test("[OTP] 맞는 번호를 부른 턴 → '일치' 1줄, 틀린 번호 → '�
     ["04823 1 이요", "match"],
   ] as const) {
     const s = store([OTP.smsId]);
-    const got = await resolveOtpCheckInstruction({ scenarioId: SCENARIO, userText, scammerTurnNumber: OTP.afterScammerTurns + 1, isDelivered: s.isDelivered });
+    const got = await resolveOtpCheckInstruction({ lastScammerText: ASK_OTP, scenarioId: SCENARIO, userText, scammerTurnNumber: OTP.afterScammerTurns + 1, isDelivered: s.isDelivered });
     assert.equal(got, buildOtpCompareInstruction(result), userText);
   }
 });
@@ -89,7 +91,7 @@ test("[OTP] 숫자를 부르지 않은 턴에는 지시가 없고 Firestore 읽�
   const s = store([OTP.smsId]);
   for (const userText of ["네 누구세요?", "인증번호요? 왜 필요하죠?", "인증번호는 못 알려 드려요", "번호는 안 불러요. 다른 방법 없어요?", "계좌요? 어디로요?"]) {
     assert.equal(
-      await resolveOtpCheckInstruction({ scenarioId: SCENARIO, userText, scammerTurnNumber: 5, isDelivered: s.isDelivered }),
+      await resolveOtpCheckInstruction({ lastScammerText: ASK_OTP, scenarioId: SCENARIO, userText, scammerTurnNumber: 5, isDelivered: s.isDelivered }),
       undefined,
       userText,
     );
@@ -102,7 +104,7 @@ test("[OTP] ⭐ 계좌 문자가 도착한 뒤에는 번호를 불러도 대조 
   const s1 = store([OTP.smsId, ACCOUNT.smsId]);
   for (let turn = ACCOUNT.afterScammerTurns; turn <= 9; turn += 1) {
     assert.equal(
-      await resolveOtpCheckInstruction({ scenarioId: SCENARIO, userText: "048231이요", scammerTurnNumber: turn, isDelivered: s1.isDelivered }),
+      await resolveOtpCheckInstruction({ lastScammerText: ASK_OTP, scenarioId: SCENARIO, userText: "048231이요", scammerTurnNumber: turn, isDelivered: s1.isDelivered }),
       undefined,
       `turn ${turn}`,
     );
@@ -110,7 +112,7 @@ test("[OTP] ⭐ 계좌 문자가 도착한 뒤에는 번호를 불러도 대조 
   // 계좌 문자가 바로 이번 턴에 도착
   const s2 = store([OTP.smsId]);
   assert.equal(
-    await resolveOtpCheckInstruction({
+    await resolveOtpCheckInstruction({ lastScammerText: ASK_OTP,
       scenarioId: SCENARIO,
       userText: "123456이요",
       scammerTurnNumber: ACCOUNT.afterScammerTurns,
@@ -124,7 +126,7 @@ test("[OTP] ⭐ 계좌 문자가 도착한 뒤에는 번호를 불러도 대조 
 test("[OTP] 도착 전·미도착·호 전환 뒤·조회 실패·비해당 시나리오는 지시 없음", async () => {
   const none = async (args: Partial<Parameters<typeof resolveOtpCheckInstruction>[0]>) =>
     quietLogs(() =>
-      resolveOtpCheckInstruction({
+      resolveOtpCheckInstruction({ lastScammerText: ASK_OTP,
         scenarioId: SCENARIO,
         userText: "123456이요",
         scammerTurnNumber: 5,
@@ -150,7 +152,7 @@ test("[OTP] 도착 전·미도착·호 전환 뒤·조회 실패·비해당 시�
 test("[OTP] 인증번호 문자가 **이번 턴에** 막 도착했으면 대조하지 않는다 — 참가자가 아직 문자를 못 봤다(리뷰 #1)", async () => {
   const s = store([]);
   assert.equal(
-    await resolveOtpCheckInstruction({
+    await resolveOtpCheckInstruction({ lastScammerText: ASK_OTP,
       scenarioId: SCENARIO,
       userText: "123456이요",
       scammerTurnNumber: OTP.afterScammerTurns,
@@ -165,7 +167,7 @@ test("[OTP] 정답과 자릿수가 다른 숫자(전화·금액·4자리·계좌
   for (const userText of ["010 1234 5678이요", "3000이요", "1234요", "110-123-456789이요", "35 048231이요"]) {
     const s = store([OTP.smsId]);
     assert.equal(
-      await resolveOtpCheckInstruction({ scenarioId: SCENARIO, userText, scammerTurnNumber: OTP.afterScammerTurns + 1, isDelivered: s.isDelivered }),
+      await resolveOtpCheckInstruction({ lastScammerText: ASK_OTP, scenarioId: SCENARIO, userText, scammerTurnNumber: OTP.afterScammerTurns + 1, isDelivered: s.isDelivered }),
       undefined,
       userText,
     );
@@ -196,6 +198,21 @@ test("[OTP] 정적 스캔 — 프롬프트·LLM·실시간 소스는 otpCode를 
   assert.deepEqual(offenders, [], "모델 입력을 만드는 소스가 인증번호를 읽으면 유출 경로가 된다");
 });
 
+test("[OTP] QA M2 — 직전 사기범 발화가 인증번호를 묻지 않았거나(생년월일 6자리 요구 등) 발화가 생년월일이면 대조하지 않는다", async () => {
+  const base = { scenarioId: SCENARIO, scammerTurnNumber: OTP.afterScammerTurns + 1, isDelivered: async (id: string) => id === OTP.smsId };
+  // 사기범이 생년월일 6자리를 물었고 참가자가 6자리로 답함 → 대조 없음(옛 동작은 "번호가 다르다")
+  assert.equal(await resolveOtpCheckInstruction({ ...base, lastScammerText: "본인 확인 위해 성함과 생년월일 6자리 말씀해 주세요.", userText: "900101이요" }), undefined);
+  // 직전 사기범 발화 없음 → 대조 없음
+  assert.equal(await resolveOtpCheckInstruction({ ...base, userText: "123456이요" }), undefined);
+  // 인증번호를 물었어도 답에 생년월일 단서가 있으면 대조 없음
+  assert.equal(await resolveOtpCheckInstruction({ ...base, lastScammerText: ASK_OTP, userText: "생년월일은 900101이요" }), undefined);
+  // 인증번호를 물은 직후 6자리 → 대조함("인증 번호" 띄어쓰기도)
+  assert.equal(
+    await resolveOtpCheckInstruction({ ...base, lastScammerText: "문자로 간 인증 번호 불러 주세요.", userText: "123456이요" }),
+    buildOtpCompareInstruction("mismatch"),
+  );
+});
+
 // ── ⭐ 번호(정답)가 모델 입력에 0회 ─────────────────────────────────────────────────
 test("[OTP] ⭐ 번호 미노출 — 대조 결과 지시 2종·도착 응답(실시간)·카탈로그 도착 지시·조립 프롬프트 어디에도 인증번호가 없다(R8 회귀 ②)", async () => {
   assert.ok(ALL_OTP_CODES.length >= 2, "인증번호 카탈로그 수집 실패(거짓 초록 방지)");
@@ -212,7 +229,7 @@ test("[OTP] ⭐ 번호 미노출 — 대조 결과 지시 2종·도착 응답(�
   ] as const) {
     const item = findInCallSmsItem(scenarioId, smsId)!;
     for (const userText of [`${item.otpCode}이요`, "123456이요"]) {
-      const check = await resolveOtpCheckInstruction({
+      const check = await resolveOtpCheckInstruction({ lastScammerText: ASK_OTP,
         scenarioId,
         userText,
         scammerTurnNumber: item.afterScammerTurns + 1,

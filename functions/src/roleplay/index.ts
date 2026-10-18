@@ -277,6 +277,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const otpCheckInstruction = await resolveOtpCheckInstruction({
       scenarioId: session.scenarioId,
       userText,
+      lastScammerText: [...storedHistory].reverse().find((m) => m.role === "scammer")?.textMasked,
       scammerTurnNumber,
       ...(deliveredSmsId ? { deliveredThisTurn: deliveredSmsId } : {}),
       isDelivered: async (smsId) => (await sessionRef.collection("inCallSms").doc(smsId).get()).exists,
