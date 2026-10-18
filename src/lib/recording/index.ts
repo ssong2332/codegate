@@ -13,6 +13,9 @@ export {
   getOrCreatePendingSessionId,
   getPendingSessionId,
   setPendingSessionId,
+  // T192 C4(§79.9 E6) — 종료 사유 힌트(통화 화면 → 종료 화면 1회성).
+  setPendingEndReason,
+  consumePendingEndReason,
   setIdentityConfirmed,
   getIdentityConfirmed,
   setOpeningAudioUrl,

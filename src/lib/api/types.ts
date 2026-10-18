@@ -315,13 +315,9 @@ export type SubmitRealtimeTranscriptRequest = {
 export type SubmitRealtimeTranscriptResponse = { written: number };
 
 // --- endSession (Track B · T8 · UX-007 · AC-006/AC-007/AC-021) ---
-export type EndSessionReason =
-  | "user_ended"
-  | "completed"
-  | "deceived"
-  | "limit_reached"
-  // T192 C1(Architecture.md §79.5) — 서버 승인 표식이 없으면 서버가 `user_ended`로 기록한다.
-  | "scammer_ended";
+// T192 C4(Architecture.md §79.19 (6) ④ · G535) — 서버 허용목록 `END_SESSION_ALLOWED_REASONS`와 같은 3값(옛 `completed` ·
+// `deceived`는 사용처 0 · 서버가 거절). `scammer_ended`는 서버 승인 표식이 없으면 서버가 `user_ended`로 기록한다.
+export type EndSessionReason = "user_ended" | "limit_reached" | "scammer_ended";
 export type EndSessionRequest = {
   sessionId: string;
   endReason: EndSessionReason;
