@@ -22,8 +22,13 @@ import { logger } from "firebase-functions";
 import { buildOtpCompareInstruction, IN_CALL_SMS, listOtpItems } from "../scenarios/inCallSms";
 import { extractSpokenCodes } from "../shared/spokenDigits";
 
-/** 직전 사기범 발화가 인증번호를 물었는가 — "인증번호", "인증 번호", "인증코드". */
-const ASKED_FOR_OTP = /인증\s*(?:번호|코드)/;
+/**
+ * 직전 사기범 발화가 인증번호를 물었는가 — "인증번호"·"인증 번호"·"인증코드", 그리고 **틀린 번호에 되물은 말**
+ * ("번호가 안 맞…"·"번호가 맞지 않…"·"번호가 일치하지 않…"·"번호가 틀…"·"문자 … 다시 확인해서 불러…").
+ * 뒤쪽은 §80 리뷰 #1 — 되묻기 대사에 "인증번호"가 없으면 두 번째 시도가 `not-asked`로 빠져 틀린 번호가 다시 통과했다.
+ */
+const ASKED_FOR_OTP =
+  /인증\s*(?:번호|코드)|번호가[^.?!]{0,24}(?:안\s*맞|맞지\s*않|일치하지\s*않|틀)|문자[^.?!]{0,20}다시[^.?!]{0,20}불러/;
 /** 이번 참가자 발화가 생년월일·생일 답인가. */
 const BIRTHDATE_CUE = /생년월일|생일|년생|\d{2,4}\s*년\s*\d{1,2}\s*월/;
 

@@ -289,6 +289,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // ⛔ G170 — 번호·대사·사용자 발화는 싣지 않는다(코드값·ID·턴 번호만).
     if (otpCheck.reason !== "no-digits" && otpCheck.reason !== "no-otp-scenario") {
       logger.info("인증번호 대조 판정", {
+        sessionId,
         scenarioId: session.scenarioId,
         scammerTurnNumber,
         outcome: otpCheck.outcome,
