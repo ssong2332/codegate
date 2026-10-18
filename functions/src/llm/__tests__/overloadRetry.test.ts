@@ -318,7 +318,8 @@ test("⑨ providerName을 그대로 위임한다(G176) — withTimeout으로 감
 // ── ⑩ getLlmClient 배선 소스 스캔 ─────────────────────────────────────────────────
 // 단위 테스트에서는 defineSecret이 바인딩되지 않아 키가 0개라 실 Gemini 분기를 동적으로 못 탄다
 // ⇒ 소스 스캔으로 배선을 못박고, 오염본으로 스캔이 실제로 가르는지 역검증한다.
-// 형태: `client = keys.length > 0 ? withOverloadRetry(createRotatingGeminiClient(keys), {…budgetMs: timeoutMs…}) : new MockLlmClient();`
+// 형태: `primary = keys.length > 0 ? withOverloadRetry(tagServedBy(createRotatingGeminiClient(keys), "gemini-primary"), {…budgetMs: geminiBudgetMs…}) : new MockLlmClient();`
+//       (2026-10-18 §75 — Groq 3차 예비로 예산이 `geminiBudgetMs = groqKey ? timeoutMs - GROQ_RESERVE_MS : timeoutMs`가 됐다)
 //       `return withTimeout(client, timeoutMs);` — withTimeout이 가장 바깥(firstTurnTimeout.test.ts의 기존 단언과 공존).
 const INDEX_SRC = path.resolve(__dirname, "../../../src/llm/index.ts");
 
@@ -339,15 +340,17 @@ function codeOnly(body: string): string {
 function wiringViolations(body: string): string[] {
   const code = codeOnly(body);
   const violations: string[] = [];
-  const geminiBranch = /keys\.length > 0\s*\?\s*withOverloadRetry\(createRotatingGeminiClient\(keys\), \{([\s\S]*?)\}\)\s*:\s*new MockLlmClient\(\);/.exec(code);
+  const geminiBranch = /keys\.length > 0\s*\?\s*withOverloadRetry\(tagServedBy\(createRotatingGeminiClient\(keys\), "gemini-primary"\), \{([\s\S]*?)\}\)\s*:\s*new MockLlmClient\(\);/.exec(code);
   if (!geminiBranch) {
     violations.push("실 Gemini 분기가 withOverloadRetry(createRotatingGeminiClient(keys), {…})이고 Mock 분기가 맨 MockLlmClient여야 한다");
   } else {
     const opts = geminiBranch[1];
-    if (!/budgetMs: timeoutMs\b/.test(opts)) violations.push("budgetMs가 인자 timeoutMs여야 한다");
+    if (!/budgetMs: geminiBudgetMs\b/.test(opts)) violations.push("budgetMs가 Gemini 체인 예산 geminiBudgetMs여야 한다");
     if (!/delaysMs: LLM_OVERLOAD_RETRY_DELAYS_MS\b/.test(opts)) violations.push("delaysMs가 LLM_OVERLOAD_RETRY_DELAYS_MS여야 한다");
     if (!/minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS\b/.test(opts)) violations.push("minAttemptMs가 LLM_OVERLOAD_MIN_ATTEMPT_MS여야 한다");
   }
+  // 2026-10-18 Groq 3차 예비(Architecture.md §75) — Gemini 체인 예산은 인자 timeoutMs에서 파생한다(Groq 없으면 timeoutMs 그대로).
+  if (!/const geminiBudgetMs = groqKey \? timeoutMs - GROQ_RESERVE_MS : timeoutMs;/.test(code)) violations.push("geminiBudgetMs가 timeoutMs에서 파생돼야 한다(상수화 금지)");
   if (!/return withTimeout\(client, timeoutMs\);/.test(code)) violations.push("withTimeout(client, timeoutMs)가 가장 바깥이어야 한다");
   if ((code.match(/withTimeout\(/g) ?? []).length !== 1) violations.push("withTimeout은 정확히 1번(가장 바깥)만 감싸야 한다");
   if ((code.match(/withOverloadRetry\(/g) ?? []).length !== 1) violations.push("withOverloadRetry는 정확히 1곳(실 Gemini)만 감싸야 한다");
@@ -362,7 +365,7 @@ test("⑩ getLlmClient 배선: 실 Gemini만 withTimeout(withOverloadRetry(rotat
 
 test("⑩-역검증: 오염본(순서 뒤집기·Mock에 부착·재시도 누락·예산 상수화)은 전부 위반으로 잡힌다", () => {
   const body = getLlmClientBody(readFileSync(INDEX_SRC, "utf8"));
-  const retryCall = /withOverloadRetry\(createRotatingGeminiClient\(keys\), \{[\s\S]*?\}\)/.exec(body);
+  const retryCall = /withOverloadRetry\(tagServedBy\(createRotatingGeminiClient\(keys\), "gemini-primary"\), \{[\s\S]*?\}\)/.exec(body);
   assert.ok(retryCall, "역검증 기준 문자열을 찾지 못했다(소스 형태가 바뀌었다)");
   const opts = retryCall[0].slice(retryCall[0].indexOf("{"));
   const contaminated: Record<string, string> = {
@@ -371,7 +374,8 @@ test("⑩-역검증: 오염본(순서 뒤집기·Mock에 부착·재시도 누�
       .replace("return withTimeout(client, timeoutMs);", `return withOverloadRetry(client, ${opts});`),
     "Mock에 부착": body.replace(": new MockLlmClient();", `: withOverloadRetry(new MockLlmClient(), ${opts});`),
     "재시도 누락": body.replace(retryCall[0], "createRotatingGeminiClient(keys)"),
-    "예산 상수화": body.replace("budgetMs: timeoutMs", "budgetMs: LLM_TIMEOUT_MS"),
+    "예산 상수화": body.replace("budgetMs: geminiBudgetMs", "budgetMs: LLM_TIMEOUT_MS"),
+    "Gemini 예산 상수화": body.replace("groqKey ? timeoutMs - GROQ_RESERVE_MS : timeoutMs", "groqKey ? LLM_TIMEOUT_MS - GROQ_RESERVE_MS : LLM_TIMEOUT_MS"),
   };
   for (const [label, src] of Object.entries(contaminated)) {
     assert.notEqual(src, body, `${label}: 오염이 적용되지 않았다(거짓 OK 방지)`);

@@ -317,7 +317,8 @@ test("⑨ GeminiLlmClient: model 인자를 실제 요청과 성공 로그에 쓴
 // 단위 테스트에서는 defineSecret이 바인딩되지 않아 키가 0개라 실 Gemini 분기를 동적으로 못 탄다
 // ⇒ 소스 스캔으로 배선을 못박고, 오염본으로 스캔이 실제로 가르는지 역검증한다.
 // 형태: `primary = keys.length > 0 ? withOverloadRetry(rotating(keys), {…}) : new MockLlmClient();`
-//       `client = keys.length > 0 ? withOverloadFallback(primary, rotating(keys, 대체 모델), {budgetMs: timeoutMs…}) : primary;`
+//       `gemini = keys.length > 0 ? withOverloadFallback(primary, tagServedBy(rotating(keys, 대체 모델), "gemini-fallback"), {budgetMs: geminiBudgetMs…}) : primary;`
+//       (2026-10-18 §75 — 변수명이 client → gemini로 바뀌고 Groq 3차 예비가 그 바깥 `client`가 됐다)
 //       `return withTimeout(client, timeoutMs);` — overloadRetry.test.ts ⑩·firstTurnTimeout.test.ts의 기존 단언과 공존.
 const INDEX_SRC = path.resolve(__dirname, "../../../src/llm/index.ts");
 
@@ -335,9 +336,11 @@ function codeOnly(body: string): string {
     .join("\n");
 }
 
-const PRIMARY_RE = /const primary =\s*keys\.length > 0\s*\?\s*withOverloadRetry\(createRotatingGeminiClient\(keys\), \{[\s\S]*?\}\)\s*:\s*new MockLlmClient\(\);/;
-const CLIENT_RE = /const client =\s*keys\.length > 0\s*\?\s*withOverloadFallback\(\s*primary,\s*createRotatingGeminiClient\(keys, \(apiKey\) => new GeminiLlmClient\(apiKey, GEMINI_FALLBACK_TEXT_MODEL\)\),\s*\{([^}]*)\},?\s*\)\s*:\s*primary;/;
+const PRIMARY_RE = /const primary =\s*keys\.length > 0\s*\?\s*withOverloadRetry\(tagServedBy\(createRotatingGeminiClient\(keys\), "gemini-primary"\), \{[\s\S]*?\}\)\s*:\s*new MockLlmClient\(\);/;
+const CLIENT_RE = /const gemini =\s*keys\.length > 0\s*\?\s*withOverloadFallback\(\s*primary,\s*tagServedBy\(\s*createRotatingGeminiClient\(keys, \(apiKey\) => new GeminiLlmClient\(apiKey, GEMINI_FALLBACK_TEXT_MODEL\)\),\s*"gemini-fallback",?\s*\),\s*\{([^}]*)\},?\s*\)\s*:\s*primary;/;
 
+// ⚠️ 이 스캔은 `budgetMs: geminiBudgetMs`라는 **이름**만 본다 — 그 값이 인자 timeoutMs에서 파생되는지는
+// overloadRetry.test.ts ⑩이 `const geminiBudgetMs = groqKey ? timeoutMs - GROQ_RESERVE_MS : timeoutMs` 정규식으로 고정한다(두 파일이 짝).
 function wiringViolations(body: string): string[] {
   const code = codeOnly(body);
   const violations: string[] = [];
@@ -346,7 +349,7 @@ function wiringViolations(body: string): string[] {
   if (!clientBranch) {
     violations.push("client가 withOverloadFallback(primary, rotating(keys, 대체 모델), {…}) / Mock 분기가 primary 그대로여야 한다");
   } else {
-    if (!/budgetMs: timeoutMs\b/.test(clientBranch[1])) violations.push("대체의 budgetMs가 인자 timeoutMs여야 한다");
+    if (!/budgetMs: geminiBudgetMs\b/.test(clientBranch[1])) violations.push("대체의 budgetMs가 Gemini 체인 예산 geminiBudgetMs여야 한다");
     if (!/minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS\b/.test(clientBranch[1])) violations.push("대체의 minAttemptMs가 LLM_OVERLOAD_MIN_ATTEMPT_MS여야 한다");
   }
   if (!/return withTimeout\(client, timeoutMs\);/.test(code)) violations.push("withTimeout(client, timeoutMs)가 가장 바깥이어야 한다");
@@ -364,21 +367,21 @@ test("⑩ getLlmClient 배선: withTimeout(withOverloadFallback(withOverloadRetr
 
 test("⑩-역검증: 오염본(대체를 재시도 안쪽·Mock에 부착·대체 누락·대체 모델 누락·예산 상수화)은 전부 위반으로 잡힌다", () => {
   const body = getLlmClientBody(readFileSync(INDEX_SRC, "utf8"));
-  const clientDecl = /const client =\s*keys\.length > 0\s*\?\s*withOverloadFallback\([\s\S]*?\)\s*:\s*primary;/.exec(body);
+  const clientDecl = /const gemini =\s*keys\.length > 0\s*\?\s*withOverloadFallback\([\s\S]*?\)\s*:\s*primary;/.exec(body);
   assert.ok(clientDecl, "역검증 기준 문자열을 찾지 못했다(소스 형태가 바뀌었다)");
   const fallbackCall = /withOverloadFallback\([\s\S]*?\{[^}]*\},?\s*\)/.exec(clientDecl[0]);
   assert.ok(fallbackCall, "역검증 기준 문자열(withOverloadFallback 호출)을 찾지 못했다");
   const contaminated: Record<string, string> = {
     "대체를 재시도 안쪽에 둠": body
-      .replace(clientDecl[0], "const client = primary;")
+      .replace(clientDecl[0], "const gemini = primary;")
       .replace(
-        "withOverloadRetry(createRotatingGeminiClient(keys), {",
+        'withOverloadRetry(tagServedBy(createRotatingGeminiClient(keys), "gemini-primary"), {',
         "withOverloadRetry(withOverloadFallback(createRotatingGeminiClient(keys), createRotatingGeminiClient(keys, (apiKey) => new GeminiLlmClient(apiKey, GEMINI_FALLBACK_TEXT_MODEL)), { budgetMs: timeoutMs, minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS }), {",
       ),
     "Mock에 부착": body.replace(": primary;", `: ${fallbackCall[0].replace(/primary,/, "new MockLlmClient(),")};`),
-    "대체 누락": body.replace(clientDecl[0], "const client = primary;"),
+    "대체 누락": body.replace(clientDecl[0], "const gemini = primary;"),
     "대체 모델 누락(기본 모델로 대체)": body.replace("new GeminiLlmClient(apiKey, GEMINI_FALLBACK_TEXT_MODEL)", "new GeminiLlmClient(apiKey)"),
-    "예산 상수화": body.replace(/(withOverloadFallback\([\s\S]*?)budgetMs: timeoutMs/, "$1budgetMs: LLM_TIMEOUT_MS"),
+    "예산 상수화": body.replace(/(withOverloadFallback\([\s\S]*?)budgetMs: geminiBudgetMs/, "$1budgetMs: LLM_TIMEOUT_MS"),
   };
   for (const [label, src] of Object.entries(contaminated)) {
     assert.notEqual(src, body, `${label}: 오염이 적용되지 않았다(거짓 OK 방지)`);

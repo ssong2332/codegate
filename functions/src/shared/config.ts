@@ -38,6 +38,26 @@ export const GEMINI_API_KEY2 = defineSecret("GEMINI_API_KEY2");
 export const GEMINI_KEY_SECRETS = [GEMINI_API_KEY, GEMINI_API_KEY2] as const;
 
 /**
+ * Groq API 키(2026-10-18, Architecture.md §75) — 텍스트 대사 생성의 **3차 예비** 공급자 전용.
+ * 키는 **하나만** 쓴다 — Groq 한도는 조직 단위라 키를 늘려도 한도가 늘지 않는다(⛔ 순환 구조 금지).
+ * 값이 없으면(미설정·`YOUR_` placeholder) 3차 단계만 조용히 꺼지고 로그 1줄이 남는다(llm/index.ts).
+ *
+ * ⚠️ 아래 `LLM_API_KEY` 제거 주석의 함정이 그대로 적용된다 — `defineSecret`은 선언만 있어도 배포
+ * 분석 단계가 값을 요구한다. 이 선언에는 실제 소비처(`llm/index.ts getGroqApiKey`)가 같은 커밋에
+ * 있으므로 "소비처 없는 선언"은 아니지만, **배포 전에 Secret Manager 등록
+ * (`firebase functions:secrets:set GROQ_API_KEY`)이 먼저 필요하다**. 로컬 에뮬레이터는 `functions/.secret.local`.
+ */
+export const GROQ_API_KEY = defineSecret("GROQ_API_KEY");
+
+/**
+ * ⭐ 텍스트 LLM 팩토리(`getLlmClient`)를 거치는 onCall이 선언하는 시크릿 묶음 — Gemini 키 슬롯 + Groq 키.
+ *
+ * ⛔ `GROQ_API_KEY`를 `GEMINI_KEY_SECRETS`에 섞지 말 것 — 그 배열은 `getGeminiApiKeys()`가 **Gemini 키
+ * 순환 순서**로 순회한다(Groq 키가 Gemini 키 슬롯으로 쓰인다). 선언 정합은 secretDeclarationGate 테스트가 대조한다.
+ */
+export const LLM_TEXT_SECRETS = [GEMINI_API_KEY, GEMINI_API_KEY2, GROQ_API_KEY] as const;
+
+/**
  * 실시간 음성 대화용 시나리오별 에이전트 매핑(2026-07-22) — `scenarioId:agentId` 쉼표 구분.
  * 페르소나 프롬프트는 이 에이전트들에 저장하고 클라로 내려보내지 않는다(ADR-0004,
  * functions/src/realtime/agentMap.ts 주석 참고).

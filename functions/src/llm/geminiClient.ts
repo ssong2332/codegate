@@ -73,7 +73,7 @@ export const GEMINI_FALLBACK_TEXT_MODEL = "gemini-3.5-flash-lite";
 // 만으로는 생성이 시작되지 않는 모델도 있어(빈 contents), 화면에 노출되지 않는 내부 트리거 turn을
 // 하나 합성해 넣는다(캐릭터 지시가 아니라 "지금 시작하라"는 오케스트레이션 신호일 뿐이라 role
 // 분리 원칙과 충돌하지 않는다 — systemPrompt가 인격/수법/가드레일을 이미 전부 고정한 뒤이므로).
-const OPENING_TRIGGER_TURN = "(통화/대화가 막 연결됐다. 방금 정의된 캐릭터로서 첫 마디를 자연스럽게 시작하라.)";
+export const OPENING_TRIGGER_TURN = "(통화/대화가 막 연결됐다. 방금 정의된 캐릭터로서 첫 마디를 자연스럽게 시작하라.)";
 
 function toGeminiContent(message: LlmMessage): Content {
   return {
@@ -132,6 +132,9 @@ export class GeminiLlmClient implements LlmClient {
   ) {}
 
   async complete(input: LlmCompletionInput): Promise<LlmCompletionResult> {
+    // 단계 시간 상한(§75)이 이미 끊은 신호면 새 요청을 시작하지 않는다 — SDK는 abort를 이벤트로만 연결해
+    // 이미 취소된 신호로는 요청을 멈추지 못한다(리뷰 m1). 신호가 없으면 기존과 같다.
+    if (input.signal?.aborted) throw new Error("Gemini 요청이 시작 전에 취소됐습니다(단계 시간 상한).");
     const client = new GoogleGenAI({ apiKey: this.apiKey });
     const contents: Content[] =
       input.messages.length > 0
@@ -145,7 +148,8 @@ export class GeminiLlmClient implements LlmClient {
     const stream = await client.models.generateContentStream({
       model: this.model,
       contents,
-      config: { systemInstruction: input.systemPrompt },
+      // 단계 시간 상한(Groq 3차 예비, §75)이 이 호출을 버릴 때 요청도 취소한다 — 신호가 없으면 기존과 같다.
+      config: { systemInstruction: input.systemPrompt, ...(input.signal ? { abortSignal: input.signal } : {}) },
     });
     let ttfbMs: number | undefined;
     let text = "";
