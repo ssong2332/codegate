@@ -4,6 +4,16 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-18 추가분, 브랜치 `fix/scammer-reply-length-llm-hedge`, 커밋 `77a89fe`, base `0225f08`)**: 아직 main에 병합되지 않았고 라이브 미검증이다. 테스트 수치는 QA 보고 인용값이다(docs 미재현).
+
+### Fixed
+- **사기범 대사가 3문장을 넘던 문제 보강 + Gemini 꼬리 지연으로 첫 `sendMessage`가 10초 타임아웃→Mock으로 강등되던 문제 완화(2026-10-17·18 라이브 관측)**: 아래 2026-10-17 문장 상한 수정 뒤에도 오프닝이 4문장, 문자 도착 턴이 5문장으로 실측됐다. 별개로 라이브 2026-10-17T07:58:14Z·2026-10-18T02:20:34Z에 첫 `sendMessage`가 10초에 타임아웃 나 Mock으로 강등됐고, 같은 호출이 응답 뒤 30.7초·63.8초에 끝났다(표본 26건 중 4초 초과 약 6건 — Gemini 꼬리 지연으로 추정, 확인 방법: 배포 뒤 4초 초과 비율과 Mock 강등 건수 비교).
+  - **문장 경계 확장**(`functions/src/roleplay/replyLength.ts`): 공손 종결어미 10종(니다·니까·세요·에요·예요·어요·아요·해요·지요·죠)+쉼표+공백도 문장 경계로 센다. 잘린 끝이 쉼표면 마침표로만 바꾼다.
+  - **상한 면제 축소**: `shouldLimitReplySentences(turnChoice)`가 3문장 상한 면제를 "예고 완료"를 마킹하는 `verify_announce`·`install_consent` 2종으로 줄였다. `sms_announce`·`verify_reconnect` 턴은 이제 상한을 적용한다(2026-10-17 항목의 한계 (a)가 이만큼 좁아진다).
+  - **예비 요청(hedge)**(신규 `functions/src/llm/hedgedClient.ts` `withHedge`): Gemini 응답이 4초(`LLM_HEDGE_DELAY_MS`) 안에 없으면 같은 요청을 1회 더 보내 먼저 성공한 쪽을 쓴다. 4초 안에 난 실패는 그대로 전파한다. `getLlmClient()`는 실 Gemini에만 `withTimeout(withHedge(...), 10초)`를 적용한다(`LLM_TIMEOUT_MS`·minInstances 무변경). 범위는 `sendMessage`·오프닝·되감기 판정(텍스트 LLM 경로 전반). 새 환경 변수·설정은 없다.
+  - **한계**: 라이브 미검증 · 진 쪽 요청을 취소하지 않아 4초 초과 호출마다 Gemini 호출이 +1(쿼터 증가) · 예비 요청도 API 키 1번부터 시작 · Live 음성 경로 미적용 · 쉼표 규칙이 과절단할 수 있음 · 예고 문장이 4번째 이후면 잘릴 수 있음.
+  - **검증(인용값 — QA 보고)**: reviewer APPROVED(Minor 4) · QA GO · functions 944→963 pass / 0 fail · 루트 479→479 / 0 · 첫 요청 12초·예비 1초 시나리오에서 5.0초 성공 실측. `docs/Tasks.md`에 이 작업의 행이 없다(커밋 `Refs: (미등재 — planner 인계)`).
+
 > ⚠️ **이 블록(2026-10-17 추가분, 브랜치 `claude/fix-scammer-speech-safety-b125cf`, 커밋 `74470d3`)**: 아직 main에 병합되지 않았다. docs는 실행 수단(셸·`git`) 없이 소스를 직접 열람해 작성했다 — `git diff 086287a..HEAD`는 실행하지 못했고, 변경 범위는 조정 세션의 구현 요약과 소스 열람(`functions/src/roleplay/index.ts`·`openingLine.ts`·`promptAssembly.ts`·신규 두 모듈)으로 확인했다. 테스트 수치는 QA 보고 인용값이다(docs 미재현).
 
 ### Fixed
