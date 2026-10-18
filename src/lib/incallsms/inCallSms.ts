@@ -3,9 +3,8 @@
 // 브라우저 API·React에 의존하지 않는 부분만 여기 모아 단위 테스트로 고정한다 — 화면 쪽(page.tsx)은
 // 이 함수들의 결과를 그리기만 한다.
 //
-// ⚠️ 이 파일은 **트리거(언제)만** 다룬다. 문자 **내용**은 어디에도 없다 — 본문·인증번호·발신번호는
-// 100% 서버 카탈로그가 원천이며 Firestore 구독으로만 화면에 들어온다(AC-060).
-import type { InCallSmsTrigger } from "@/lib/api";
+// ⚠️ 이 파일은 문자 **내용**을 다루지 않는다 — 본문·인증번호·발신번호는 100% 서버 카탈로그가 원천이며
+// Firestore 구독으로만 화면에 들어온다(AC-060).
 
 /** Firestore `sessions/{sid}/inCallSms/{smsId}` 문서의 클라 표현(읽기 전용). */
 export type InCallSmsView = {
@@ -27,24 +26,9 @@ export type InCallSmsView = {
   openedAtMs?: number;
 };
 
-/**
- * 지금 도착시켜야 할 문자 1건을 고른다.
- *
- * 규칙(결정론적): "아직 도착하지 않았고 `afterScammerTurns <= 완료된 사기범 턴 수`인 것 중 **가장
- * 이른 것**". 가장 이른 것을 고르는 이유는 턴 경계 이벤트를 한 번 놓쳐도(재연결·중복 이벤트) 문자가
- * 조용히 건너뛰어지지 않게 하기 위해서다 — 늦게라도 순서대로 전부 도착한다(P-4 조용한 실패 금지).
- */
-export function pickDueInCallSms(input: {
-  triggers: InCallSmsTrigger[];
-  scammerTurns: number;
-  deliveredSmsIds: readonly string[];
-}): string | null {
-  const delivered = new Set(input.deliveredSmsIds);
-  const due = input.triggers
-    .filter((t) => !delivered.has(t.smsId) && t.afterScammerTurns <= input.scammerTurns)
-    .sort((a, b) => a.afterScammerTurns - b.afterScammerTurns);
-  return due[0]?.smsId ?? null;
-}
+// ⛔ T191(문자 도달 조건 · PRD AC-099 (d)) — 예전 `pickDueInCallSms`(카탈로그 고정 턴 `afterScammerTurns <= 사기범 턴`
+// 이면 화면이 발송을 요청)는 폐기했다. 발송 판정은 전부 서버(`functions/src/inCallSms/smsGate.ts`)이고, 화면은 사용자
+// 발화 flush마다 백스톱을 물어볼 뿐이다(`src/lib/realtime/toolWindow.ts` `shouldRequestSmsBackstop`).
 
 /**
  * 인증번호를 스크린리더가 한 자씩 읽도록 띄어 쓴다(UX-027 Accessibility — "인증번호 4 8 2 9 1 7").

@@ -381,3 +381,79 @@ test("[OTP] §80 재시도 문면 — '이번에도 다르다 · 새로 불렀�
   assert.equal(first.repeat, undefined);
   assert.equal(first.instruction, buildOtpCompareInstruction("mismatch"));
 });
+
+// ── T191 리뷰 M3 — "다음 문자 도착"을 카탈로그 턴이 아니라 도착 기록(문서 존재 · userTurnsAtArrival 순서)으로 ─────────
+const CARD = "card-company-impersonation";
+const CARD_OTP = findInCallSmsItem(CARD, "card-otp")!;
+const CARD_ACCOUNT = findInCallSmsItem(CARD, "card-relief-account")!;
+const askOtp = "인증번호 6자리 불러 주세요";
+
+test("[M3] OTP 먼저(발화 2) → 이체가 카탈로그 턴(5)보다 일찍(발화 4) 도착: 기록 판정은 later-sms-arrived, 종전 판정은 대조해 버린다", async () => {
+  const base = {
+    scenarioId: CARD,
+    userText: "123456이요",
+    lastScammerText: askOtp,
+    scammerTurnNumber: CARD_ACCOUNT.afterScammerTurns - 1, // 4 — 카탈로그상 이체 문자는 아직 "안 온" 턴
+    isDelivered: async (smsId: string) => smsId === CARD_OTP.smsId || smsId === CARD_ACCOUNT.smsId,
+  };
+  const legacy = await evaluateOtpCheck(base);
+  const byRecords = await evaluateOtpCheck({
+    ...base,
+    deliveredRecords: [
+      { smsId: CARD_OTP.smsId, userTurnsAtArrival: 2 },
+      { smsId: CARD_ACCOUNT.smsId, userTurnsAtArrival: 4 },
+    ],
+  });
+  assert.deepEqual(
+    { legacy: legacy.reason, byRecords: byRecords.reason },
+    { legacy: "compared", byRecords: "later-sms-arrived" },
+  );
+  assert.equal(byRecords.instruction, undefined, "이체 단계로 넘어간 뒤 인증번호로 되돌아가지 않는다(R8 회귀 ①)");
+});
+
+test("[M3] 순서가 바뀐 대화(이체 먼저 → OTP 나중): 기록 판정은 OTP를 대조하고, 종전 판정은 카탈로그 순서 때문에 막는다", async () => {
+  const base = {
+    scenarioId: CARD,
+    userText: "739104요",
+    lastScammerText: askOtp,
+    scammerTurnNumber: 8,
+    isDelivered: async () => true,
+  };
+  const legacy = await evaluateOtpCheck(base);
+  const byRecords = await evaluateOtpCheck({
+    ...base,
+    deliveredRecords: [
+      { smsId: CARD_ACCOUNT.smsId, userTurnsAtArrival: 3 },
+      { smsId: CARD_OTP.smsId, userTurnsAtArrival: 5 },
+    ],
+  });
+  assert.deepEqual({ legacy: legacy.reason, byRecords: byRecords.reason }, { legacy: "later-sms-arrived", byRecords: "compared" });
+  assert.equal(byRecords.outcome, "match");
+  assert.equal(byRecords.instruction, buildOtpCompareInstruction("match"));
+});
+
+test("[M3] 기록 판정 — 미도착 · 이번 턴 도착 · 이번 턴 다른 문자 도착 · 번호 비노출 유지", async () => {
+  const base = { scenarioId: CARD, userText: "123456이요", lastScammerText: askOtp, scammerTurnNumber: 6, isDelivered: async () => true };
+  assert.equal((await evaluateOtpCheck({ ...base, deliveredRecords: [] })).reason, "not-delivered");
+  assert.equal(
+    (await evaluateOtpCheck({ ...base, deliveredThisTurn: CARD_OTP.smsId, deliveredRecords: [{ smsId: CARD_OTP.smsId, userTurnsAtArrival: 6 }] })).reason,
+    "arrived-this-turn",
+  );
+  assert.equal(
+    (await evaluateOtpCheck({
+      ...base,
+      deliveredThisTurn: CARD_ACCOUNT.smsId,
+      deliveredRecords: [{ smsId: CARD_OTP.smsId, userTurnsAtArrival: 2 }, { smsId: CARD_ACCOUNT.smsId, userTurnsAtArrival: 6 }],
+    })).reason,
+    "later-sms-arrived",
+  );
+  const mismatch = await evaluateOtpCheck({ ...base, deliveredRecords: [{ smsId: CARD_OTP.smsId, userTurnsAtArrival: 2 }] });
+  assert.equal(mismatch.reason, "compared");
+  assert.equal(mismatch.instruction?.includes(CARD_OTP.otpCode!), false, "정답 번호는 지시에 없다(#306·#312)");
+  assert.equal(mismatch.instruction?.includes("123456"), false, "참가자가 부른 숫자도 없다");
+});
+
+test("[M3 배선] sendMessage는 도착 기록을 읽었을 때만 deliveredRecords를 넘긴다(소스 스캔)", () => {
+  const src = readFileSync(path.resolve(__dirname, "../../../src/roleplay/index.ts"), "utf8");
+  assert.match(src, /\.\.\.\(smsDeliveredLoaded \? \{ deliveredRecords: smsDelivered \} : \{\}\),/);
+});

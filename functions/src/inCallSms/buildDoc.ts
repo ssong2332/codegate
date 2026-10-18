@@ -56,37 +56,27 @@ export function buildInCallSmsDoc(
   };
 }
 
-// ── 앵커 값(§15.1.5 (4) / §15.6 G21) ──────────────────────────────────────────────
-// 두 경로에서 **의미는 하나**다 — "이 문자가 도착한 시점까지 `messages`에 존재하는
-// `role==="scammer"` 문서 수". 경로마다 카탈로그 값(`afterScammerTurns`)의 기준점이 달라 값만
-// 갈라지므로, 그 ±보정을 아래 두 헬퍼에 **가둬 둔다**(리졸버는 단 하나로 유지 — §15.1.5 (6)).
+// ── 앵커 값(§15.1.5 (4) / §15.6 G21 · T191 문자 도달 조건 설계 "계수 규칙") ─────────────────────────
+// 의미는 하나다 — "이 문자가 도착한 시점까지 `messages`에 존재하는 `role==="scammer"` 문서 수". T191부터 도착
+// 시점이 카탈로그 고정 턴이 아니라 게이트 통과 순간이라, 앵커도 카탈로그 값이 아니라 **관측값**으로 계산한다.
 
 /**
- * 실시간(Gemini Live) 경로의 앵커 = `afterScammerTurns + 1`.
- *
- * ⚠️ **+1의 실측 근거(G21이 "실측하고 어긋나면 write 지점 값을 ±1 하라"고 지목한 지점)**:
- * 클라의 `scammerTurns`는 **Live 세션의 `turnComplete`만** 센다
- * (`src/lib/realtime/GeminiVoiceSession.tsx` `onScammerTurnComplete`). 그런데 `messages`에는
- * 그보다 **먼저** `createSession`이 쓴 오프닝 사기범 행이 turnIndex 0으로 이미 존재하고
- * (`functions/src/session/index.ts` `sessionRef.collection("messages").add({role:"scammer",…,turnIndex:0})`),
- * 실시간 전사는 그 **뒤에** append된다(`realtime/submitTranscript.ts` `nextIndex = historySnap.size`).
- * 즉 Live 턴 N개가 끝난 시점의 사기범 문서 수는 N이 아니라 **1 + N**이다. 보정하지 않으면 앵커가
- * 한 턴 앞으로 밀려 문자가 announce 대사보다 두 턴 앞에 놓인다.
+ * 실시간(Gemini Live) 경로의 앵커 = `1 + scammerTranscriptTurns`.
+ * 1 = `createSession`이 쓴 오프닝 사기범 문서(turnIndex 0 — 실시간 전사는 그 **뒤에** append된다,
+ * `realtime/submitTranscript.ts`). `scammerTranscriptTurns`는 클라의 **비어 있지 않은 사기범 전사 flush 수**라
+ * 빈 `turnComplete`·지시 턴을 세지 않으므로 제출될 전사 문서 수와 1:1이다.
  */
-export function realtimeAnchorScammerTurn(item: InCallSmsItem): number {
-  return item.afterScammerTurns + 1;
+export function realtimeAnchorScammerTurn(scammerTranscriptTurns: number): number {
+  return 1 + scammerTranscriptTurns;
 }
 
 /**
- * 폴백(텍스트) 경로의 앵커 = `afterScammerTurns - 1`.
- *
- * 이 경로는 **N번째 사기범 응답을 만들기 직전**에 write한다
- * (`functions/src/roleplay/index.ts` `scammerTurnNumber = storedHistory.filter(scammer).length + 1`
- * 가 카탈로그의 `afterScammerTurns`와 같을 때 도착) → 그 순간 완료된 사기범 발화는 N-1개다.
- * 여기서는 `createSession` 오프닝 행이 이미 `storedHistory`에 포함돼 세어지므로 추가 보정이 없다.
+ * 텍스트 폴백 경로의 앵커 = 쓰는 순간 `messages`에 있는 사기범 문서 수 그대로(오프닝 포함 — 서버가 직접 센다).
+ * 마커 경로는 응답을 저장한 **뒤**에 쓰므로 그 응답이 포함되고, 백스톱은 응답 **전**에 쓰므로 포함되지 않는다.
+ * (옛 `fallbackAnchorScammerTurn` = `afterScammerTurns - 1`은 카탈로그 고정 턴 전제라 폐기했다.)
  */
-export function fallbackAnchorScammerTurn(item: InCallSmsItem): number {
-  return item.afterScammerTurns - 1;
+export function textPathAnchorScammerTurn(scammerDocsAtWrite: number): number {
+  return scammerDocsAtWrite;
 }
 
 // ── §53.6 (3) — 전환(호 전환) 이후에는 announceInstruction을 싣지 않는다 ─────────────────────
@@ -126,24 +116,4 @@ export function buildInCallSmsResponse(
     ? applyFictionalBank(item.announceInstruction, input.fictionalBankName)
     : item.announceInstruction;
   return { smsId: item.smsId, announceInstruction };
-}
-
-// ── §59.7/§59.10 커밋 B — 모델 도구 경로의 하한 재검증(순수 판정, G387) ─────────────────
-// `docs/API.md` 부록 C `deliverInCallSms` 증분 — `trigger:"model_tool"`일 때만 재검증한다.
-// ⚠️ 비교는 `>=`다(§59.7 ⚠️) — 폴백 경로의 `findDueInCallSms`가 쓰는 `===`(`scenarios/inCallSms.ts`
-// `findDueInCallSms`)를 베끼면 모델이 한 턴 늦게 부른 순간 영영 거절된다.
-// ⛔ `alreadyDelivered`가 `scammerTurns` 비교보다 **우선한다** — 이미 도착한 항목은 턴 수와 무관하게
-// "already_delivered"다(재전달 요청이 아니라 상태 질의에 가깝다).
-export type InCallSmsModelToolGate =
-  | { allowed: true }
-  | { allowed: false; status: "already_delivered" | "too_early" };
-
-export function resolveModelToolSmsGate(input: {
-  alreadyDelivered: boolean;
-  scammerTurns: number;
-  afterScammerTurns: number;
-}): InCallSmsModelToolGate {
-  if (input.alreadyDelivered) return { allowed: false, status: "already_delivered" };
-  if (input.scammerTurns < input.afterScammerTurns) return { allowed: false, status: "too_early" };
-  return { allowed: true };
 }

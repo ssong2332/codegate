@@ -44,7 +44,6 @@ import type { InCallSmsEvent, TranscriptTurn } from "@/lib/api";
 import {
   countUnread,
   latestSmsId,
-  pickDueInCallSms,
   sortByArrival,
   type InCallSmsView,
 } from "@/lib/incallsms";
@@ -123,7 +122,7 @@ import {
   type VerifyInterceptView,
   type VerifyOfferPhase,
 } from "@/lib/verifyintercept";
-import { shouldFireBackstop } from "@/lib/realtime/toolWindow";
+import { shouldFireBackstop, shouldRequestSmsBackstop } from "@/lib/realtime/toolWindow";
 import {
   countTranscriptFlush,
   deliveryForInstruction,
@@ -304,6 +303,9 @@ export default function SessionCallPage() {
   const instructionCapReachedAtSecRef = useRef<number | null>(null);
   // 사기범 발화 턴 수(실시간 경로) — GeminiVoiceSession의 turnComplete 경계만 센다.
   const [scammerTurns, setScammerTurns] = useState(0);
+  // ⭐ T191(문자 도달 조건) — 비어 있지 않은 사용자 전사 flush 수의 state 사본(문자 백스톱 효과의 트리거). 값의 원천은
+  // `turnCountersRef.current.userTurns`이고 갱신 지점은 `handleTranscriptTurn` **한 곳**뿐이다.
+  const [userTurnCount, setUserTurnCount] = useState(0);
   // ⭐ **§45.7 V2** — 같은 값의 ref 사본. `drainInstructionQueue`는 턴 완료 콜백 **안에서** 불리는데
   // 그 시점의 `scammerTurns` state는 아직 리렌더 전이라 **한 턴 낡은 값**이다. 큐를 떠난 시점을
   // 재려면 그 순간의 값이 필요하므로 ref로 함께 센다(⛔ 갱신 지점은 아래 handleScammerTurnComplete
@@ -318,15 +320,10 @@ export default function SessionCallPage() {
   const pendingVerifyAnnounceUserTurnsRef = useRef<number | null>(null);
   // ⭐ 리뷰 M2 — `GeminiVoiceSession`이 갱신하는 현재 턴 위상(모델 응답 중 · 사용자 버퍼). 드레인이 읽는다.
   const liveTurnPhaseRef = useRef<LiveTurnPhase>(IDLE_LIVE_TURN_PHASE);
-  // 이미 서버에 전달을 요청한 smsId(중복 호출 방지). 렌더와 무관해 ref에 둔다. §59.10 커밋 D부터는
-  // 앱이 직접 요청한 것뿐 아니라 모델이 도구로 **성공시킨** smsId도 여기 더해진다
-  // (handleModelToolSmsDelivered) — `pickDueInCallSms`가 그 값을 "이미 처리됨"으로 걸러내
-  // 백스톱이 같은 문자를 중복으로 다시 요청하지 않는다.
-  const requestedSmsRef = useRef<Set<string>>(new Set());
-  // §59.10 커밋 D(G390) — 모델의 도구 경로가 **실패**했다고 알려온 마지막 smsId. 문자는 한 번에
-  // 하나만 "due" 상태가 되므로(카탈로그 순서상 가장 이른 미도착 항목, pickDueInCallSms) 슬롯 하나로
-  // 충분하다 — 다음 문자가 due가 되면 이 값은 그 문자의 smsId와 더 이상 일치하지 않아 자연히 무시된다.
-  const smsToolCallFailedIdRef = useRef<string | null>(null);
+  // ⭐ T191(문자 도달 조건 · AC-099 (e)) — 문자 백스톱 질의 상태. 예전 `requestedSmsRef`(요청한 smsId 집합) ·
+  // `smsToolCallFailedIdRef`(모델 도구 실패 smsId)는 화면이 고정 턴으로 smsId를 고를 때만 필요했다 — 폐기.
+  // 지금은 사용자 발화 flush마다 서버에 한 번 묻고(`shouldRequestSmsBackstop`), 무엇을 할지는 서버가 정한다.
+  const smsBackstopRef = useRef({ lastRequestedUserTurns: -1, nonePending: false, inFlight: false });
   // §59.10 커밋 D(G390) — 확인 오퍼(offer_verification_desk) 도구 경로 실패 신호. 세션당 오퍼가
   // 하나뿐이라(카탈로그 보유 && advanced 세션에만 도구가 선언된다, §61) id 없이 boolean 하나로
   // 충분하다.
@@ -433,6 +430,7 @@ export default function SessionCallPage() {
     }
     // T118(§25.3 (3)) — A5 재주입 조건의 관측 지점. 참가자가 한 번이라도 말한 뒤에만 다시 넣는다.
     if (role === "user") {
+      setUserTurnCount(turnCountersRef.current.userTurns);
       // ⭐ §78.4(T1) — 맥락 주입된 확인 권유는 이 사용자 발화에 대한 응답에 실린다. 그 응답(사기범 전사)이
       // 세어지기 **직전**인 지금 예고 시점을 기록한다 — 기록 함수는 §45.7 V2 그대로다.
       if (
@@ -731,79 +729,78 @@ export default function SessionCallPage() {
   }, []);
 
   const enqueueTurnInstruction = useCallback(
-    (text: string, priority: PendingInstruction["priority"], options?: { speakerSwitch?: boolean }) => {
+    (
+      text: string,
+      priority: PendingInstruction["priority"],
+      options?: { speakerSwitch?: boolean; smsNudge?: boolean },
+    ) => {
       instructionQueueRef.current = enqueueInstruction(instructionQueueRef.current, {
         text,
         priority,
         ...(options?.speakerSwitch ? { speakerSwitch: true } : {}),
+        ...(options?.smsNudge ? { smsNudge: true } : {}),
       });
       drainInstructionQueue();
     },
     [drainInstructionQueue],
   );
 
-  // T68 — 사기범 턴 경계에 도달하면 문자를 도착시킨다(실시간 경로, §15.1.2 앱 오케스트레이션).
-  // 서버가 문서를 쓰고 announce 지시를 돌려주면 그것을 **같은 Live 세션에 텍스트 턴으로** 넣어
-  // 캐릭터가 "문자 보냈어요"라고 말하게 한다. 실패해도 통화는 계속된다(P-4 — 인라인 안내만).
-  //
-  // ⭐⭐ **§59.10 커밋 D — 지연 발동(백스톱).** 이 문자에 Live 도구(`send_prepared_sms`)가 선언된
-  // 세션에서는 하한 도달 즉시 앱이 보내지 않는다 — 모델이 스스로 도구를 부를 창을 먼저 준다
-  // (`shouldFireBackstop`, §59.8). 도구가 선언되지 않은 세션은 **지연 0**(오늘과 바이트 단위로
-  // 같은 타이밍, G388). `trigger:"backstop"`을 명시해 서버 로그(§59.11)가 이 발동을 `model_tool`과
-  // 구분할 수 있게 한다(서버 로직 자체는 부재·"backstop" 둘 다 동일하게 처리한다).
+  // T68 → ⭐ T191 문자 도달 조건(PRD AC-099 · 설계 "백스톱 — 필수 목적만 강제 · 선택 목적은 건너뛰기").
+  // 예전에는 카탈로그 고정 턴(`afterScammerTurns`)에 도달하면 화면이 smsId를 골라 발송을 요청했다(AC-099 (d)가 폐지한
+  // 경로). 이제 화면은 **사용자 발화 flush마다 한 번** 서버에 묻기만 한다(`trigger:"backstop"`, 목적 없음) — 무엇을
+  // 넛지/발송할지는 서버 `planSmsBackstop`이 그 세션 흐름 변형의 필수 목적 · 도착 기록 · 사용자 발화 수로 정하고,
+  // 발송도 모델 도구 경로와 같은 `resolveSmsGate`를 지난다(X4). 선택 목적은 백스톱이 건드리지 않는다(모델이 부를 때만).
+  //   - `delivered` → 서버 announce를 맥락 주입(G31 큐, `sms`) · `nudge` → 넛지 1줄 맥락 주입(침묵 넛지 대상 아님)
+  //   - `none_pending` → 남은 필수 문자 없음 → 더 묻지 않는다 · 그 외(`waiting`·거부) → 아무것도 하지 않는다
+  // 실패해도 통화는 계속된다(P-4 — 인라인 안내만). 배너는 서버가 문서를 만든 순간 구독으로 뜬다(D-109).
   useEffect(() => {
     if (!sessionId || callMode !== "realtime" || phase !== "live") return;
-    const triggers = realtime.credentials?.inCallSmsTriggers ?? [];
-    if (triggers.length === 0) return;
-    const dueSmsId = pickDueInCallSms({
-      triggers,
-      scammerTurns,
-      deliveredSmsIds: [...requestedSmsRef.current],
-    });
-    if (!dueSmsId) return;
-    const dueTrigger = triggers.find((t) => t.smsId === dueSmsId);
-    const toolAvailable = Boolean(realtime.credentials?.liveTools?.sendPreparedSms);
-    const fire = shouldFireBackstop({
-      toolAvailable,
-      boundariesSinceDue: dueTrigger ? Math.max(0, scammerTurns - dueTrigger.afterScammerTurns) : 0,
-      secondsSinceLastBoundary: Math.max(0, elapsedSec - lastScammerBoundaryAtSecRef.current),
-      toolCallFailed: smsToolCallFailedIdRef.current === dueSmsId,
-    });
-    if (!fire) return;
-    requestedSmsRef.current.add(dueSmsId);
+    const state = smsBackstopRef.current;
+    if (
+      !shouldRequestSmsBackstop({
+        enabled: realtime.credentials?.inCallSmsBackstop === true,
+        userTurns: userTurnCount,
+        lastRequestedUserTurns: state.lastRequestedUserTurns,
+        nonePending: state.nonePending,
+        inFlight: state.inFlight,
+      })
+    ) {
+      return;
+    }
+    state.lastRequestedUserTurns = userTurnCount;
+    state.inFlight = true;
+    const counters = turnCountersRef.current;
     (async () => {
       try {
-        const result = await deliverInCallSms({ sessionId, smsId: dueSmsId, trigger: "backstop" });
+        const result = await deliverInCallSms({
+          sessionId,
+          userTurns: counters.userTurns,
+          scammerTranscriptTurns: counters.scammerTranscriptTurns,
+          trigger: "backstop",
+        });
         setSmsError(null);
-        // T190-3(§74.6 (6)) — 배너를 되살리는 쓰기가 필요 없다: 새 문자는 id가 새로워 자동으로 "미확인"이다.
-        // T83 — 직접 세팅하지 않고 큐를 통한다(같은 턴에 확인 지시와 겹쳐도 유실되지 않게, G31).
-        // §53.6 (3) — 전환이 끝난 오퍼가 연 문자에는 값이 없다(서버가 생략). 값이 없으면
-        // 주입하지 않는다 — 문서 자체(계좌·링크)는 그대로 도착했으니 배너·문자함은 정상 표시된다.
-        // ⭐ §59.10 커밋 D — `status`도 함께 본다. 서버는 `alreadyDelivered`(모델이 먼저 도구로
-        // 이미 전달한 경우 포함)에서도 `announceInstruction`을 생략하지 않으므로(응답 조립 자체는
-        // §59 범위 밖 무변경), 여기서 `"delivered"`일 때만 주입해 이미 도착한 문자를 캐릭터가
-        // 두 번 말하지 않게 한다(중복 발동 방지의 마지막 안전망 — 1차 방어는 위 `requestedSmsRef`
-        // 에 모델 성공을 미리 반영하는 `handleModelToolSmsDelivered`).
+        if (result.status === "none_pending") state.nonePending = true;
+        // §53.6 (3) — 전환이 끝난 오퍼가 연 문자에는 announce 값이 없다(서버가 생략) — 그때는 주입하지 않는다.
         if (result.status === "delivered" && result.announceInstruction) {
           enqueueTurnInstruction(result.announceInstruction, "sms");
         }
+        if (result.status === "nudge" && result.nudgeInstruction) {
+          enqueueTurnInstruction(result.nudgeInstruction, "sms", { smsNudge: true });
+        }
       } catch {
-        // 다음 턴 경계에서 다시 시도할 수 있게 요청 기록을 되돌린다.
-        requestedSmsRef.current.delete(dueSmsId);
+        // 같은 발화 수로는 다시 묻지 않는다 — 다음 사용자 발화에서 최신 값으로 다시 묻는다(발송 단계는 `>=`라 놓치지 않는다).
         setSmsError("문자를 받지 못했습니다. 통화는 계속됩니다.");
+      } finally {
+        state.inFlight = false;
       }
     })();
-    // enqueueTurnInstruction은 안정 참조(useCallback, 의존성 없음)라 이 목록에 넣어도 effect가
-    // 추가로 재실행되지 않는다 — 기존 트리거 조건은 그대로다. `elapsedSec`은 §59.8의 정지(stall)
-    // 시계를 재판정하기 위한 것 — 새 타이머가 아니라 이미 떠 있는 통화 경과 타이머에 올라탄다.
+    // enqueueTurnInstruction은 안정 참조(useCallback, 의존성 없음)라 이 목록에 넣어도 effect가 추가로 재실행되지 않는다.
   }, [
     sessionId,
     callMode,
     phase,
-    scammerTurns,
-    elapsedSec,
-    realtime.credentials?.inCallSmsTriggers,
-    realtime.credentials?.liveTools?.sendPreparedSms,
+    userTurnCount,
+    realtime.credentials?.inCallSmsBackstop,
     enqueueTurnInstruction,
   ]);
 
@@ -975,19 +972,6 @@ export default function SessionCallPage() {
       setPersonaStateTurn((prev) => ({ text: line, seq: (prev?.seq ?? 0) + 1 }));
     }
   }, [drainInstructionQueue]);
-
-  // §59.10 커밋 D — 모델이 Live 도구로 직접 문자를 도착시켰다(또는 이미 도착해 있었다). 앱의 지연
-  // 발동(백스톱) 효과가 같은 smsId를 다시 요청하지 않도록 요청-완료 집합에 더한다(`pickDueInCallSms`
-  // 재사용, 새 판정 로직 불필요).
-  const handleModelToolSmsDelivered = useCallback((smsId: string) => {
-    requestedSmsRef.current.add(smsId);
-  }, []);
-
-  // §59.10 커밋 D(G390) — 모델의 도구 경로가 이 smsId에 대해 실패했다. 다음 렌더의 백스톱 판정이
-  // `toolCallFailed: true`를 보고 창을 즉시 닫도록 기록만 한다(판정 자체는 SMS 효과가 한다).
-  const handleModelToolSmsFailed = useCallback((smsId: string) => {
-    smsToolCallFailedIdRef.current = smsId;
-  }, []);
 
   // §59.10 커밋 D — 모델이 확인 오퍼 예고를 도구로 직접 성공시켰다. 앱의 `verifyOfferPhaseRef`를
   // 전진시켜야 (1) 백스톱이 같은 예고를 중복으로 다시 보내지 않고 (2) commit 단계(문서 실제 생성)가
@@ -1795,8 +1779,6 @@ export default function SessionCallPage() {
             onTranscriptTurn={handleTranscriptTurn}
             textMessage={textMessage}
             onScammerTurnComplete={handleScammerTurnComplete}
-            onModelToolSmsDelivered={handleModelToolSmsDelivered}
-            onModelToolSmsFailed={handleModelToolSmsFailed}
             onModelToolVerifyAnnounced={handleModelToolVerifyAnnounced}
             onModelToolVerifyFailed={handleModelToolVerifyFailed}
             claimVerifyAnnounceSlot={claimVerifyAnnounceSlot}
