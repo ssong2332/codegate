@@ -29,6 +29,7 @@ import type { FlowVariant, FlowVariantSms } from "../../scenarios/flowVariants";
 import { IN_CALL_SMS } from "../../scenarios/inCallSms";
 import type { InCallSmsDoc } from "../../shared/types";
 import { extractSmsMarker } from "../../roleplay/smsMarker";
+import { BANK_PLACEHOLDER, FICTIONAL_BANK_NAMES, extractAccountNumber } from "../../shared/fictionalBank";
 import { buildSystemPrompt, wrapUserInputAsData } from "../../roleplay/promptAssembly";
 import { buildLiveToolDeclarations, LIVE_TOOL_SEND_PREPARED_SMS } from "../../realtime/liveTools";
 import { SCENARIO_PROMPTS } from "../../scenarios";
@@ -385,34 +386,32 @@ test("[M1] 강등 샘플 — 실시간에서 사용자 발화 6에 문자가 왔
   assert.equal(effectiveTextPathUserTurns(3, []), 3, "도착 문서가 없으면 서버 계수 그대로");
 });
 
-test("[M1 역검증] 보정 없는 오염본은 강등 직후 identity를 '간격 충족'으로 오판하지 않지만 음수 간격을 만든다 — 정본은 too_soon", () => {
-  const delivered = [at(TR.smsId, 6)];
-  const serverCount = 3; // 강등 직후 폴백 첫 턴(실시간 구간 전사 미반영)
-  const poisoned = resolveSmsGate({ purpose: "identity", declared: BOTH, delivered, userTurns: serverCount }).status;
-  const canonical = resolveSmsGate({
-    purpose: "identity",
-    declared: BOTH,
-    delivered,
-    userTurns: effectiveTextPathUserTurns(serverCount, delivered),
-  }).status;
-  // 오염본: 3 − 6 = −3 < 2 라 우연히 too_soon이지만, 마지막 도착이 userTurnsAtArrival 없는 이전 문서(0)와 섞이면
-  // 아래처럼 하한만 보고 통과한다 — 단위가 섞인 계수로는 판정을 신뢰할 수 없다.
-  assert.equal(poisoned, "too_soon");
-  assert.equal(canonical, "too_soon");
-  const mixed = [{ smsId: TR.smsId }, at("other", 6)];
-  assert.deepEqual(
-    {
-      poisoned: resolveSmsGate({ purpose: "identity", declared: BOTH, delivered: [{ smsId: TR.smsId }], userTurns: 3 }).status,
-      canonical: resolveSmsGate({
-        purpose: "identity",
-        declared: BOTH,
-        delivered: [{ smsId: TR.smsId }],
-        userTurns: effectiveTextPathUserTurns(3, mixed),
-      }).status,
-    },
-    { poisoned: "allowed", canonical: "allowed" },
-    "보정은 하한·간격을 늦추는 쪽으로만 움직인다(더 이르게 만들지 않는다)",
+test("[M1 역검증] 강등 직후 폴백 — 보정 없는 오염본과 정본의 판정이 갈린다(같은 실행에 나란히)", () => {
+  // 실시간 구간: 사용자 발화 6(클라 단위)에 identity 문자 도착. 강등 뒤 폴백의 서버 계수는 1부터 다시 올라간다.
+  const delivered = [at(ID.smsId, 6)];
+  const serverCounts = [1, 2, 3, 6, 7, 8];
+  const poisoned = serverCounts.map(
+    (n) => resolveSmsGate({ purpose: "transfer", declared: BOTH, delivered, userTurns: n }).status, // 오염: 보정 없음
   );
+  const canonical = serverCounts.map(
+    (n) =>
+      resolveSmsGate({
+        purpose: "transfer",
+        declared: BOTH,
+        delivered,
+        userTurns: effectiveTextPathUserTurns(n, delivered),
+      }).status,
+  );
+  assert.deepEqual(
+    { poisoned, canonical },
+    {
+      // 오염본: 서버 1·2를 "아직 이체 단계 전(too_early)"으로 오판 — 실제로는 참가자가 이미 6번 말했고 직전 문자 직후라
+      // 간격 부족(too_soon)이 맞는 사유다. 단위가 섞이면 하한 판정(행 3)이 엉뚱한 발화 수로 돈다.
+      poisoned: ["too_early", "too_early", "too_soon", "too_soon", "too_soon", "allowed"],
+      canonical: ["too_soon", "too_soon", "too_soon", "too_soon", "too_soon", "allowed"],
+    },
+  );
+  assert.notDeepEqual(poisoned, canonical, "오염본과 정본이 같으면 이 검사는 변별력이 없다");
 });
 
 test("[M1 배선] sendMessage는 도착 기록을 읽은 뒤 effectiveTextPathUserTurns로 계수를 보정한다(소스 스캔)", () => {
@@ -472,4 +471,39 @@ test("[Minor ③] 넛지 계획은 개방 시점(openAt)을 싣고, 이미 넛�
   assert.equal(alreadyNudged(undefined, 3), false);
   assert.equal(alreadyNudged([3], 3), true);
   assert.equal(alreadyNudged([3], 6), false, "다른 개방 시점(다음 필수 문자)은 다시 넛지할 수 있다");
+});
+
+// ── 10. 재리뷰 — #311(가상 은행명 · 세션 계좌)이 단일 통로로 만든 문서에도 실린다 ───────────────────────────
+test("[#311 통합] deliverSmsThroughGate로 만든 계좌 문자 — 본문의 OO은행이 세션 은행명으로 · bankName · accountNumber 필드", async () => {
+  const store = memoryStore();
+  const bank = FICTIONAL_BANK_NAMES[0];
+  const item = IN_CALL_SMS["institutional-impersonation"].find((i) => i.smsId === TR.smsId)!;
+  assert.ok(item.body.includes(BANK_PLACEHOLDER), "전제: 카탈로그 본문에 자리표시자가 있다");
+  const result = await deliverSmsThroughGate(store, {
+    scenarioId: "institutional-impersonation",
+    declared: BOTH,
+    purpose: "transfer",
+    userTurns: 3,
+    anchorScammerTurn: 4,
+    trigger: "model_tool",
+    fictionalBankName: bank,
+    now: () => FAKE_TS,
+  });
+  assert.equal(result.status, "delivered");
+  const doc = store.docs.get(TR.smsId)!;
+  assert.equal(doc.body.includes(BANK_PLACEHOLDER), false, "자리표시자가 남지 않는다");
+  assert.ok(doc.body.includes(bank), "본문에 세션 은행명");
+  assert.equal(doc.bankName, bank);
+  assert.equal(doc.accountNumber, extractAccountNumber(item.body));
+  assert.ok(doc.accountNumber, "계좌번호 필드가 실린다");
+  // 대조 — 은행명을 넘기지 않으면 종전(카탈로그 원문 · 두 필드 부재)이다(#311의 부재 규칙).
+  const plain = memoryStore();
+  await deliverSmsThroughGate(plain, {
+    scenarioId: "institutional-impersonation", declared: BOTH, purpose: "transfer", userTurns: 3,
+    anchorScammerTurn: 4, trigger: "model_tool", now: () => FAKE_TS,
+  });
+  const plainDoc = plain.docs.get(TR.smsId)!;
+  assert.equal(plainDoc.body, item.body);
+  assert.equal("bankName" in plainDoc, false);
+  assert.equal("accountNumber" in plainDoc, false);
 });
