@@ -90,14 +90,17 @@ export default function MessengerFakeLanding({
         <EndTrainingButton onClick={onEndTraining} />
       </div>
 
-      {/* 메신저 플로우.dc.html "가짜 브라우저 주소창" 재현 — 링크의 displayText(=이미 채팅에
-          표시된 모의 URL)를 그대로 다시 보여줄 뿐, 새 state·네트워크 호출은 없다(AC-045 무변경). */}
+      {/* 메신저 플로우.dc.html "가짜 브라우저 주소창" 재현 — 새 state·네트워크 호출은 없다(AC-045 무변경).
+          ⭐ T190-2(docs/Architecture.md §73.9 · UX D-101 · AC-094 (a)) — 주소창 글자는 링크 표시 텍스트가 아니라
+          그 랜딩의 **가짜 호스트**(`.invalid` — 호스트만, 스킴 0)다. 눌러도 아무 데도 가지 않는다(텍스트일 뿐).
+          `title`은 대화상자 이름(A5 — aria-label)으로 계속 쓴다. 주소창의 나머지 모양(⚠·모노 글꼴 제거 · 지구본)은
+          T190-5(§73.8)가 바꾼다. */}
       <div className="flex items-center gap-2 border-b border-[#E2DDD3] bg-[#F2EFE9] px-4 py-2.5">
         <div className="flex h-9 flex-1 items-center gap-2 rounded-full border border-[#E2DDD3] bg-white px-3.5">
           <span aria-hidden="true" className="text-xs text-[#C6392F]">
             ⚠
           </span>
-          <p className="truncate font-mono text-xs text-[#6B655C]">{title}</p>
+          <p className="truncate font-mono text-xs text-[#6B655C]">{landingHostFor(landingKind, landingId)}</p>
         </div>
       </div>
 
@@ -132,6 +135,8 @@ type CredentialCopy = {
   submitLabel: string;
   successHeadline: string;
   issuerLabel: string;
+  /** T190-2(§73.9) — 가짜 주소창 호스트(`.invalid`). 서버 카탈로그 `mockHost`와 글자 단위로 같다(G76). */
+  mockHost: string;
 };
 
 /** 콘텐츠가 없는 landingId의 폴백(§15.9.1 R5 · AC-078 (d)) — **범용 화면**이다.
@@ -147,6 +152,8 @@ const GENERIC_CREDENTIAL_COPY: CredentialCopy = {
   submitLabel: "확인",
   successHeadline: "입력되었습니다.",
   issuerLabel: "ⓒ 본인확인센터",
+  // T190-2(§73.9) — 서버 카탈로그에 없는 **클라 범용 폴백 호스트**(같은 D-101 규칙 — `mockScreenCopy.test.ts` G453).
+  mockHost: "id-verify-center.invalid",
 };
 
 /** landingId → 상황별 문구. **정확 일치 조회만 한다**(R8). */
@@ -165,6 +172,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     submitLabel: "재배송 신청하기",
     successHeadline: "재배송이 접수되었습니다.",
     issuerLabel: "ⓒ 종합물류 재배송 접수처",
+    mockHost: "parcel-resend-desk.invalid",
   },
   "loan-refinance-apply": {
     headline: "전환 신청서 본인확인이 필요합니다",
@@ -180,6 +188,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     submitLabel: "본인확인 완료하기",
     successHeadline: "본인확인이 완료되었습니다.",
     issuerLabel: "ⓒ ○○캐피탈 전환심사팀",
+    mockHost: "loan-switch-center.invalid",
   },
   "tax-refund-claim": {
     headline: "환급금 받으실 계좌를 등록해 주세요",
@@ -195,6 +204,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     submitLabel: "계좌 등록하기",
     successHeadline: "계좌가 등록되었습니다.",
     issuerLabel: "ⓒ 환급금 지급 안내센터",
+    mockHost: "refund-pay-center.invalid",
   },
   "courier-customs-check": {
     headline: "수취인 정보가 일치하지 않아 통관이 보류되었습니다",
@@ -210,6 +220,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     submitLabel: "수취인 정보 확인하기",
     successHeadline: "수취인 정보가 확인되었습니다.",
     issuerLabel: "ⓒ 국제통관지원센터",
+    mockHost: "customs-check-desk.invalid",
   },
   // §51 — 이체형 가짜 랜딩(§45 ⓐ 집행, UX-023 v1.25 (2)/(17-a) 정본 — bodyLines 둘째 줄은
   // T116 G194(라벨 중복 등장) 정정 후 문면, 서버 카탈로그(mockScreens.ts)와 글자 단위로 동일).
@@ -226,6 +237,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     submitLabel: "안전계좌로 이체하기",
     successHeadline: "안전계좌로 이체가 완료되었습니다.",
     issuerLabel: "ⓒ 자산보호 이체 안내센터",
+    mockHost: "jasan-boho-center.invalid",
   },
   // §51 — 이체형 가짜 랜딩(§45 ⓐ 집행, UX-023 v1.25 (2)/(17-a) 정본 — bodyLines 둘째 줄은
   // T116 G194 정정 후 문면, 서버 카탈로그(mockScreens.ts)와 글자 단위로 동일).
@@ -242,6 +254,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     submitLabel: "피해금 이관하기",
     successHeadline: "피해금 이관이 접수되었습니다.",
     issuerLabel: "ⓒ 카드 피해금 이관 지원센터",
+    mockHost: "card-relief-desk.invalid",
   },
   // §53(§51 커밋 D) — 이체형 가짜 랜딩(UX-023 v1.25 (2)/(17-a) 정본 — bodyLines 둘째 줄은
   // T116 G194 정정 후 문면, 서버 카탈로그(mockScreens.ts)와 글자 단위로 동일).
@@ -258,8 +271,19 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     submitLabel: "보호계좌로 옮기기",
     successHeadline: "보호계좌로 옮기기가 처리되었습니다.",
     issuerLabel: "ⓒ 금융사고대응 보호계좌센터",
+    mockHost: "acct-protect-desk.invalid",
   },
 };
+
+/**
+ * 가짜 주소창에 보일 호스트(T190-2 · §73.9). ⚠️ kind가 **먼저** 갈린다(§19.4 R7) — `app-install`은 credential
+ * 콘텐츠 표를 보지 않고 자기 상수만 쓴다(R5 폴백 금지 우회 경로 0). credential 쪽은 정확 일치 조회(R8) +
+ * 범용 폴백이다(`CredentialFormMockup`과 같은 규칙).
+ */
+function landingHostFor(kind: MessengerFakeLandingKind, landingId?: string): string {
+  if (kind === "app-install") return INSTALL_MOCK_HOST;
+  return ((landingId ? CREDENTIAL_LANDING_COPY[landingId] : undefined) ?? GENERIC_CREDENTIAL_COPY).mockHost;
+}
 
 /**
  * kind=`credential-form` — 가짜 로그인/정보입력 랜딩.
@@ -373,6 +397,8 @@ const INSTALL_BODY_LINES = [
 ];
 const INSTALL_CONSENT_LABEL = "권한 허용하고 계속하기";
 const INSTALL_ISSUER_LABEL = "ⓒ 업무처리 확인센터";
+/** T190-2(§73.9) — 설치 화면 가짜 주소창 호스트(서버 `subsidy-install.mockHost`와 같은 글자 — G76). */
+const INSTALL_MOCK_HOST = "support-app-center.invalid";
 
 /** 가짜 설치 진행 표시의 단계(UX-023 v1.12 ①→②→③→④). 전부 **로컬 state**이며 시간 경과 외에
  *  아무 부수효과가 없다 — 타이머는 진행률 숫자만 올린다. */

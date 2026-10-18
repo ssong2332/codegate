@@ -48,7 +48,8 @@ function codeOnly(source: string): string {
 // `phase === "permission"`에서만 렌더되므로 초기 렌더에서 찾으면 정상인데 빨간불이 난다.
 
 /** 초기 렌더에서 **실제로 그려져야 하는** 필드. */
-const RENDER_TARGET_FIELDS = ["headline", "bodyLines", "issuerLabel", "fields", "submitLabel"];
+// ⭐ T190-2(docs/Architecture.md §73.9 ④ · §73.13 T116 행) — `mockHost`(가짜 주소창 호스트)가 초기 렌더 대상에 들어왔다.
+const RENDER_TARGET_FIELDS = ["headline", "bodyLines", "issuerLabel", "mockHost", "fields", "submitLabel"];
 
 /**
  * ⭐ **R-E — 비대상은 "없어도 된다"가 아니라 "이 검사가 보지 않는다"이다.**
@@ -120,14 +121,22 @@ function parseCatalogItems(): CatalogItem[] {
 
 const catalogItems = parseCatalogItems();
 
-/** ⚠️ **센티널** — `title`은 가짜 주소창과 `aria-label` **두 곳**에 흐른다(§39.5 (4) G194 부수 규칙).
- *  카탈로그 문구와 겹치지 않는 값을 넣어야 순서·중복 판정이 오염되지 않는다. */
+/** ⚠️ **센티널** — `title`은 대화상자 `aria-label`(A5)에 흐른다(§39.5 (4) G194 부수 규칙). 카탈로그 문구와
+ *  겹치지 않는 값을 넣어야 순서·중복 판정이 오염되지 않는다.
+ *  ⭐ T190-2(§73.9 ④) — 가짜 주소창이 `title` 대신 그 랜딩의 `mockHost`를 그리게 되어 `title`은 **텍스트에서
+ *  사라졌다**(속성에만 남는다). 그래서 생존 신호를 아래처럼 재지정했다(같은 커밋). */
 const TITLE_SENTINEL = "ZZ-TITLE-SENTINEL-ZZ";
 const DIFFICULTY_SENTINEL = "ZZ-DIFF-SENTINEL-ZZ";
 
-/** G447 생존 신호 — 본 게이트와 역검증이 같은 함수를 쓴다. */
-function isRenderAlive(text: string): boolean {
-  return text.includes("훈련 종료") && text.includes(TITLE_SENTINEL);
+/**
+ * G447 생존 신호 — 본 게이트와 역검증이 같은 함수를 쓴다.
+ * ⭐ T190-2 재지정(§73.9 ④): "훈련 종료"(자식 모듈 `EndTrainingButton` 렌더 증명) ∧ **그 항목의 `mockHost`**
+ * (카탈로그 값이 kind 분기·정확 일치 조회를 거쳐 주소창까지 흘렀다는 증명 — 옛 `title` 센티널의 prop 흐름
+ * 증명을 대신한다).
+ */
+function isRenderAlive(text: string, item: CatalogItem): boolean {
+  const host = item.fields.get("mockHost")?.[0];
+  return text.includes("훈련 종료") && host !== undefined && text.includes(host);
 }
 
 function propsFor(item: CatalogItem): Record<string, unknown> {
@@ -168,10 +177,13 @@ test("[T116/렌더-존재] 카탈로그 **도달 가능 전수**의 초기 렌�
     // ⭐ T187(PRD v1.18 AC-086 · T187 · docs/Architecture.md §72.7 G447) — 생존 신호 **이동**(G140 유지).
     // 옛 신호(공유 헤더의 모의 표식)는 세션 중 표식 폐지로 사라졌다. 새 신호 = 자식 모듈
     // `EndTrainingButton`이 그린 "훈련 종료"(자식 모듈 렌더 증명) ∧ title 센티널(prop 흐름 증명).
+    // ⭐ T190-2(§73.9 ④) — title 센티널 → 그 항목의 mockHost로 재지정(주소창이 title을 더 그리지 않는다).
     assert.ok(
-      isRenderAlive(text),
-      "생존 신호('훈련 종료' + title 센티널)가 마크업에 없다 — 렌더가 통째로 실패했을 수 있다",
+      isRenderAlive(text, item),
+      "생존 신호('훈련 종료' + 그 랜딩의 mockHost)가 마크업에 없다 — 렌더가 통째로 실패했을 수 있다",
     );
+    // 주소창은 링크 표시 텍스트(title)를 **다시 그리지 않는다**(호스트만 — AC-094 (a)).
+    assert.equal(text.includes(TITLE_SENTINEL), false, "주소창에 title이 남아 있다 — 호스트만 그려야 한다");
     // prop을 넘겨도 세션 중 난이도 배지가 그려지지 않는다(M-13 · 앵커 1종 — UX D-84).
     assert.equal(text.includes(DIFFICULTY_SENTINEL), false, "난이도 라벨이 렌더됐다 — 세션 중 배지가 되살아났다");
 
@@ -329,10 +341,39 @@ test("[T187/G447 역검증] `EndTrainingButton` 렌더 지점을 끊으면 생�
   const item = catalogItems.find((entry) => entry.kind === "app-install") ?? catalogItems[0];
   const clean = renderLandingScreen(propsFor(item));
   const dirty = renderLandingScreen(propsFor(item), overrides);
-  assert.equal(isRenderAlive(clean.text), true, "정상 경로의 생존 신호가 살아 있어야 한다");
-  assert.equal(isRenderAlive(dirty.text), false, "자식 모듈 렌더를 끊었는데 생존 신호가 살아 있다 — 신호가 공회전한다");
+  assert.equal(isRenderAlive(clean.text, item), true, "정상 경로의 생존 신호가 살아 있어야 한다");
+  assert.equal(isRenderAlive(dirty.text, item), false, "자식 모듈 렌더를 끊었는데 생존 신호가 살아 있다 — 신호가 공회전한다");
   const [g76Caught, catalogDelta] = assertExistingGateInputsUnchanged(original, poisoned);
   t.diagnostic(`[G447 역검증] 생존 신호 정상 true / 오염 false / G76 리터럴 검출 ${g76Caught}건 / 카탈로그 변경 ${catalogDelta}바이트`);
+});
+
+test("[T190-2/G447 역검증] 주소창 호스트 렌더 지점을 끊으면 생존 신호·mockHost 존재 대조가 함께 실패하고 G76·AC-079 입력은 불변이다", (t) => {
+  const { original, poisoned, overrides } = poisonedComponentSource(
+    "{landingHostFor(landingKind, landingId)}",
+    '{""}',
+  );
+  assert.notEqual(poisoned, original, "오염 샘플이 실제로 만들어져야 한다 — 주소창 렌더 식이 바뀌었으면 여기서 걸린다");
+  const results = catalogItems.map((item) => {
+    const clean = renderLandingScreen(propsFor(item));
+    const dirty = renderLandingScreen(propsFor(item), overrides);
+    const host = item.fields.get("mockHost")?.[0] ?? "";
+    return {
+      landingId: item.landingId,
+      cleanAlive: isRenderAlive(clean.text, item),
+      dirtyAlive: isRenderAlive(dirty.text, item),
+      dirtyHasHost: dirty.text.includes(host),
+    };
+  });
+  assert.ok(results.every((r) => r.cleanAlive), "정상 경로(8종 전부)의 생존 신호가 살아 있어야 한다");
+  assert.deepEqual(
+    results.filter((r) => r.dirtyAlive || r.dirtyHasHost).map((r) => r.landingId),
+    [],
+    "주소창 렌더를 끊었는데 호스트가 보인다 — 신호가 다른 경로로 새고 있다",
+  );
+  const [g76Caught, catalogDelta] = assertExistingGateInputsUnchanged(original, poisoned);
+  t.diagnostic(
+    `[T190-2 역검증] 8종 정상 생존 ${results.filter((r) => r.cleanAlive).length} / 오염 생존 ${results.filter((r) => r.dirtyAlive).length} / G76 리터럴 검출 ${g76Caught}건 / 카탈로그 변경 ${catalogDelta}바이트`,
+  );
 });
 
 test("[T116/역검증 ①] **필드 누락**(issuerLabel 렌더 지점 차단) — 새 검사는 실패하고 G76·AC-079는 통과한다", (t) => {

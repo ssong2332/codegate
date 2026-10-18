@@ -54,6 +54,7 @@ const SESSION_SURFACE_REGISTRY: Record<string, SurfaceRole> = {
   "src/components/InCallSmsOverlay.tsx": "in-session", // UX-027 통화 중 문자함
   "src/components/MessengerFakeLanding.tsx": "in-session", // UX-023 가짜 랜딩
   "src/components/MessengerStartNotice.tsx": "pre-session", // UX-022 start-notice(T187)
+  "src/components/PhoneIcon.tsx": "in-session", // T190-1 기기 재현 단색 아이콘(통화 셸 그리드 · 텍스트 노드 0)
   "src/components/SpoofImage.tsx": "not-in-session", // 렌더 사용처 0(M-12)
   "src/components/SyntheticLabel.tsx": "not-in-session", // 세션 중 사용처 0 — SpoofImage만 쓴다(M-12)
   "src/components/VerifyCallOverlay.tsx": "in-session", // UX-031 전환 시트
@@ -82,7 +83,29 @@ function registryMismatch(registry: Record<string, SurfaceRole>): { missing: str
 
 test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/session/*/page.tsx (등록 없이 우회 불가)", () => {
   assert.deepEqual(registryMismatch(SESSION_SURFACE_REGISTRY), { missing: [], stale: [] });
-  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 15);
+  // T190-1(docs/Architecture.md §73.22 (4) #21 단계별 누적) — 15 → 16(+PhoneIcon). T190-6 +DeviceSkinPicker(17) →
+  // T190-8b +CallStartNotice(18)이 같은 형식으로 늘린다.
+  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 16);
+});
+
+// ── G451 — 등록부 2벌(G436 · T86)이 최상위 `src/components/*.tsx`만 훑으므로, 하위 디렉터리에 컴포넌트를 두면
+// **등록 없이 빠진다**(docs/Architecture.md §73.0 #6 · §73.14 G451). `ui/`만 허용한다.
+function nestedComponentViolations(paths: readonly string[]): string[] {
+  return paths
+    .map((p) => p.split("\\").join("/"))
+    .filter((p) => /^src\/components\/[^/]+\/.+\.tsx$/.test(p))
+    .filter((p) => !p.startsWith("src/components/ui/"));
+}
+
+test("[T190/G451] src/components 하위 디렉터리의 .tsx는 ui/ 안에만 있다(등록부 우회 금지)", () => {
+  const found = globSync("src/components/**/*.tsx");
+  assert.ok(found.length >= 15, `컴포넌트 탐색이 죽었다(${found.length}개)`);
+  assert.deepEqual(nestedComponentViolations(found), []);
+});
+
+test("[T190/G451 역검증] 가상 경로 src/components/phone/X.tsx를 넣은 목록은 실패한다", () => {
+  const found = globSync("src/components/**/*.tsx");
+  assert.deepEqual(nestedComponentViolations([...found, "src/components/phone/X.tsx"]), ["src/components/phone/X.tsx"]);
 });
 
 test("[T187/G436 역검증] 등록부에서 1개를 뺀 사본은 불일치로 걸린다", () => {
@@ -173,7 +196,7 @@ function allInSessionViolations(file: string, code: string): string[] {
 // ── G437 · G439 · G440 본 게이트 ───────────────────────────────────────────────────────────
 test("[T187/G437] 세션 중 파일·문면 모듈의 렌더 가능 텍스트에 표식 낱말 0 · 표식 컴포넌트 import 0", () => {
   const files = scopeFiles();
-  assert.equal(files.length, 12, "범위 = in-session 6 + mixed 2 + 문면 모듈 4");
+  assert.equal(files.length, 13, "범위 = in-session 7(T190-1 +PhoneIcon) + mixed 2 + 문면 모듈 4");
   assert.deepEqual(files.flatMap((f) => markerViolations(f, read(f))), []);
 });
 

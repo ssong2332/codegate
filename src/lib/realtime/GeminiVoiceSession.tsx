@@ -91,6 +91,12 @@ export type GeminiVoiceSessionProps = {
   onTranscriptTurn: (role: "user" | "scammer", text: string) => void;
   stopSignal: number;
   muted: boolean;
+  /**
+   * ⭐ T190-3(docs/Architecture.md §73.3 표 S · §73.6 (4) · G455) — 스피커 버튼의 음량 모드 값(통화 0.6 / 스피커 1.0,
+   * `gainFor(audioRoute)`). 연결 중·통화 중 언제 바뀌어도 아래 게인 노드에 곧바로 반영된다(ref 경유). 부재 =
+   * 기본 음량(`GEMINI_OUTPUT_GAIN`). 웹은 Android에서 수화부↔스피커 실제 전환을 할 수 없어 음량으로 대체한다.
+   */
+  outputVolume?: number;
   /** 사용자 신고(2026-07-25) — "키패드가 실제로 작동하지 않는다 + 타이핑으로도 통화할 수 있게 해서
    * 스스로 검증할 수 있게 해봐". 실시간 통화 중 타이핑한 문장을 **같은 Live 세션 안으로** 넣는다
    * (`sendClientContent`). 예전엔 실시간 모드에서 텍스트 입력 자체를 숨겼는데, 그 이유는 텍스트를
@@ -220,6 +226,7 @@ export default function GeminiVoiceSession({
   onTranscriptTurn,
   stopSignal,
   muted,
+  outputVolume,
   textMessage,
   onScammerTurnComplete,
   onModelToolSmsDelivered,
@@ -293,6 +300,17 @@ export default function GeminiVoiceSession({
   useEffect(() => {
     mutedRef.current = muted;
   }, [muted]);
+
+  // ⭐ T190-3(G455) — 음량 모드 브리지. 메인 effect의 지역 게인 노드를 밖에서 볼 수 있게 ref로 올려 두고(연결 직후
+  // 담는다), prop이 바뀌면 그 노드의 게인을 바꾼다. 초기화 줄(`outputGain.gain.value = GEMINI_OUTPUT_GAIN;` — G433)은
+  // 그대로 두고, 연결 시점에 이미 다른 모드가 골라져 있으면 그 직후 이 ref 값으로 맞춘다.
+  const outputVolumeRef = useRef(outputVolume ?? GEMINI_OUTPUT_GAIN);
+  const outputGainNodeRef = useRef<GainNode | null>(null);
+  useEffect(() => {
+    outputVolumeRef.current = outputVolume ?? GEMINI_OUTPUT_GAIN;
+    const node = outputGainNodeRef.current;
+    if (node) node.gain.setTargetAtTime(outputVolumeRef.current, node.context.currentTime, 0.03);
+  }, [outputVolume]);
 
   // startedRef로 재실행을 막지 않는다(2026-07-23) — React Strict Mode(dev)는 mount→cleanup→mount를
   // 하는데, startedRef가 있으면 재mount 때 연결을 건너뛰어 "연결하는 중"에 갇힌다. 대신 각 실행이
@@ -651,6 +669,7 @@ export default function GeminiVoiceSession({
       session = null;
       liveSessionRef.current = null;
       requestClientTurnRef.current = null;
+      outputGainNodeRef.current = null;
     };
     cleanupRef.current = cleanup;
 
@@ -685,6 +704,9 @@ export default function GeminiVoiceSession({
         outputGain = outputContext.createGain();
         outputGain.gain.value = GEMINI_OUTPUT_GAIN;
         outputGain.connect(outputContext.destination);
+        // T190-3(G455) — 스피커 버튼 음량 모드 반영(위 초기값 = 통화 모드 = 같은 값. 연결 전에 바뀌었으면 여기서 맞춘다).
+        if (outputVolumeRef.current !== GEMINI_OUTPUT_GAIN) outputGain.gain.value = outputVolumeRef.current;
+        outputGainNodeRef.current = outputGain;
         markCallSetup("micReady", performance.now());
         log("audio contexts ready; connecting… model=", credentials.geminiModel);
 

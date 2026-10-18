@@ -74,12 +74,56 @@ test("[AC-059] 문자 오버레이는 라우트가 아니다 — 신규 라우�
   assert.ok(!openHandler.includes("router.push("), "열기/닫기는 상태만 바꾼다");
 });
 
-test("[AC-059/§15.1.3] 오버레이 상태는 마이크 게이팅에만 들어가고 타이머·한도 종료에는 들어가지 않는다", () => {
-  // 마이크 입력만 정지 — 두 세션 컴포넌트 모두에 오버레이 상태가 muted와 함께 전달돼야 한다.
-  // ⚠️ T83(§16.2)에서 확인 오버레이가 **같은 규칙**으로 추가됐다: `muted || smsOverlayOpen ||
-  // verifyOverlayOpen`. 검사를 느슨하게 푼 것이 아니라 **두 오버레이 모두**를 요구하도록 좁혔다.
-  const mutedProps = page.match(/muted=\{muted \|\| smsOverlayOpen \|\| verifyOverlayOpen\}/g) ?? [];
-  assert.equal(mutedProps.length, 2, "실시간 두 경로 모두 마이크만 게이팅해야 한다");
+// ⭐ T190-3(UX D-99 · PRD AC-093 (d) · docs/Architecture.md §73.6 ⑥ · §73.13 "§15.1.3 마이크 게이팅" 행 · G452) —
+// 이 단언을 **반전**했다(같은 커밋). 문자함이 열려도 마이크를 음소거하지 않는다 — 실시간·폴백 두 경로 모두.
+// 확인 오버레이(UX-031)의 게이팅은 D-99 대상이 아니라 **유지**를 단언한다. 판정은 아래 함수 하나이고 본 단언과
+// 역검증(옛 식을 되살린 사본)이 같은 함수를 쓴다. 타이머·한도 단언(아래)은 무변경이다.
+function micGatingViolations(source: string): string[] {
+  const code = codeOnly(source);
+  const out: string[] = [];
+  const allMuted = code.match(/muted=\{[^}]*\}/g) ?? [];
+  const expected = allMuted.filter((m) => m === "muted={muted || verifyOverlayOpen}");
+  if (expected.length !== 2) out.push(`muted={muted || verifyOverlayOpen}가 ${expected.length}회다(정확히 2회 — 실시간 두 경로)`);
+  if (allMuted.some((m) => m.includes("smsOverlayOpen"))) out.push("muted= 식에 smsOverlayOpen이 있다(D-99 위반)");
+  // 폴백 자동청취 effect의 조건·의존성에 문자함 상태가 없다(확인 오버레이는 있다).
+  const autoStart = code.indexOf("useEffect(() => {\n    if (callMode !== \"fallback\" || phase !== \"live\"");
+  const autoBlock = autoStart >= 0 ? code.slice(autoStart, code.indexOf("]);", autoStart) + 3) : "";
+  if (!autoBlock) out.push("폴백 자동청취 effect를 찾지 못했다");
+  else {
+    if (autoBlock.includes("smsOverlayOpen")) out.push("자동청취 effect가 smsOverlayOpen으로 게이팅한다(D-99 위반)");
+    if (!autoBlock.includes("verifyOverlayOpen")) out.push("자동청취 effect의 확인 오버레이 게이팅이 사라졌다(유지 대상)");
+  }
+  // 문자함을 여는 핸들러 안에서 STT를 멈추지 않는다.
+  const openSms = code.slice(code.indexOf("const handleOpenSmsOverlay"), code.indexOf("const handleCloseSmsOverlay"));
+  if (openSms.includes("speech.stop(")) out.push("handleOpenSmsOverlay가 speech.stop()을 부른다(D-99 위반)");
+  // 확인 오버레이를 여는 핸들러의 STT 정지는 유지된다.
+  const openVerify = code.slice(code.indexOf("const handleOpenVerifyOverlay"), code.indexOf("const handleCloseVerifyOverlay"));
+  if (!openVerify.includes("speech.stop(")) out.push("확인 오버레이의 STT 정지가 사라졌다(유지 대상)");
+  return out;
+}
+
+test("[T190/G452 · AC-093 (d)] 문자함 열림은 마이크를 게이팅하지 않는다 — 확인 오버레이 게이팅은 유지", () => {
+  assert.deepEqual(micGatingViolations(page), []);
+});
+
+test("[T190/G452 역검증 — AC-093 (g)ⓐ] 옛 식 `muted || smsOverlayOpen || verifyOverlayOpen`을 되살린 사본은 실패한다", (t) => {
+  const poisoned = page.split("muted={muted || verifyOverlayOpen}").join("muted={muted || smsOverlayOpen || verifyOverlayOpen}");
+  assert.notEqual(poisoned, page, "오염 지점을 찾지 못했다");
+  const poisonedStt = page.replace(
+    "    smsTriggerRef.current = trigger;\n",
+    '    smsTriggerRef.current = trigger;\n    if (callMode === "fallback") speech.stop();\n',
+  );
+  assert.notEqual(poisonedStt, page, "오염 지점(handleOpenSmsOverlay)을 찾지 못했다");
+  const normal = micGatingViolations(page);
+  const a = micGatingViolations(poisoned);
+  const b = micGatingViolations(poisonedStt);
+  t.diagnostic(`[G452] 정상 ${normal.length}건 / 옛 muted 식 ${a.length}건 / 문자함 열 때 STT 정지 ${b.length}건`);
+  assert.deepEqual(normal, []);
+  assert.ok(a.length >= 1);
+  assert.ok(b.length >= 1);
+});
+
+test("[AC-059/§15.1.3] 오버레이 상태는 타이머·한도 종료에 들어가지 않는다(마이크 게이팅은 위 G452가 본다)", () => {
 
   // 경과 타이머 effect의 의존성에 오버레이 상태가 들어가면 통화 타이머가 멈춘다.
   const timerStart = page.indexOf("// 통화 경과 타이머");

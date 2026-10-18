@@ -34,6 +34,14 @@ export type InCallSmsItem = {
    * 가짜 랜딩(UX-023)의 제목으로 그대로 쓰인다. `fakeLandingId`와 항상 짝으로 존재하거나 함께
    * 부재한다(R11/G111 — `inCallSms.test.ts`의 `[G111]` 테스트가 전수로 고정한다). */
   linkDisplayText?: string;
+  /**
+   * T190-2(docs/Architecture.md §73.9 · UX D-101 · PRD AC-094) — 문자 말풍선 링크 줄에 보일 **가짜 주소**
+   * (`{그 랜딩의 mockHost}{경로}` — 스킴 0 · `www.` 0 · 연속 숫자 3자리 이하). `linkDisplayText`·`fakeLandingId`와
+   * **3자 쌍**으로만 존재/부재한다(G111 확장). 반드시 그 `fakeLandingId` 랜딩의 `mockHost + "/"`로 시작한다
+   * (G453 — `__tests__/mockAddress.test.ts`). ⛔ 실 URL 필드가 아니다 — 탭해도 인앱 랜딩만 열린다(AC-060 읽기 고지).
+   * `linkDisplayText`는 지우지 않는다(리포트·리플레이·랜딩 aria 이름이 계속 쓴다 — §73.9 ①).
+   */
+  linkAddress?: string;
   /** `kind==="link"|"account"`일 때 병기 가능(§51.6 R10 — `"otp"`에는 금지). 기존 인앱 가짜 랜딩
    * 참조(실 URL 필드는 존재하지 않는다). */
   fakeLandingId?: string;
@@ -60,6 +68,7 @@ const LOAN_SCAM: InCallSmsItem[] = [
     body: "[○○캐피탈] 전환 신청서 서명이 남아 있습니다.\n아래에서 본인확인 후 신청을 완료해 주세요.",
     linkDisplayText: "대환대출 전환 신청하기",
     fakeLandingId: "loan-refinance-apply",
+    linkAddress: "loan-switch-center.invalid/apply/Lm2w",
     afterScammerTurns: 5,
     announceInstruction:
       "(참가자 휴대전화로 방금 신청서 링크 문자가 실제로 도착했다. 지금 캐릭터로서 한두 문장으로 그 링크를 눌러 본인확인을 마쳐 달라고 요구하라 — 예: \"문자로 신청서 링크 보내드렸어요, 눌러서 본인확인만 해주시면 됩니다.\" 실제 주소를 읽어 주지는 말고, 문자 속 링크를 누르라고만 하라.)",
@@ -89,6 +98,7 @@ const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [
     // 그대로 6 유지).
     linkDisplayText: "안전계좌 이체 진행하기",
     fakeLandingId: "safe-account-transfer",
+    linkAddress: "jasan-boho-center.invalid/transfer/a7Kq",
     afterScammerTurns: 6,
     announceInstruction:
       '(참가자 휴대전화로 방금 안전계좌 안내 문자가 실제로 도착했다. 지금 캐릭터로서 한두 문장으로 그 사실을 알리고 문자 속 링크를 눌러 이체를 진행해 달라고 재촉하라 — 예: "안전계좌는 문자로 보내드렸습니다, 문자에 있는 링크 눌러서 그대로 진행해 주세요." 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)',
@@ -117,6 +127,7 @@ const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
     body: "[승인취소 지원] 피해금 이관 전용 계좌 안내\n예금주: 카드피해대응지원센터\nOO은행 417-0625-3082-19\n금액: 2,340,000원\n아래에서 피해금 이관을 진행해 주세요.",
     linkDisplayText: "피해금 이관 진행하기",
     fakeLandingId: "card-relief-transfer",
+    linkAddress: "card-relief-desk.invalid/move/R3xp",
     afterScammerTurns: 5,
     announceInstruction:
       '(참가자 휴대전화로 방금 피해금 이관 계좌 안내 문자가 실제로 도착했다. 지금 캐릭터로서 한두 문장으로 그 사실을 다급하게 알리고 문자 속 링크를 눌러 이관을 마쳐 달라고 요구하라 — 예: "이관 전용 계좌는 방금 문자로 보내드렸어요, 문자에 있는 링크 눌러서 바로 진행해 주세요." 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)',
@@ -131,6 +142,7 @@ const TAX_REFUND_SCAM: InCallSmsItem[] = [
     body: "[환급안내] 미수령 환급금 조회 결과가 있습니다.\n아래에서 계좌를 등록하시면 당일 지급됩니다.",
     linkDisplayText: "환급금 수령 계좌 등록하기",
     fakeLandingId: "tax-refund-claim",
+    linkAddress: "refund-pay-center.invalid/claim/Tq8n",
     afterScammerTurns: 3,
     announceInstruction:
       "(참가자 휴대전화로 방금 환급금 조회 링크 문자가 실제로 도착했다. 지금 캐릭터로서 한두 문장으로 그 링크를 눌러 계좌를 등록해 달라고 안내하라 — 예: \"문자로 조회 링크 보내드렸어요, 눌러서 계좌만 등록하시면 오늘 바로 들어갑니다.\" 실제 주소를 읽어 주지 말고 문자 속 링크를 누르라고만 하라.)",
@@ -173,6 +185,7 @@ const BANK_SECURITY_VERIFY_SCAM: InCallSmsItem[] = [
     body: "[금융사고대응] 보호계좌 이체 안내\n예금주: 계좌보호대응센터\nOO은행 100-2043-7788-21\n금액: 4,120,000원\n아래에서 보호계좌로 옮기기를 진행해 주세요.",
     linkDisplayText: "보호계좌 이체 진행하기",
     fakeLandingId: "protect-account-transfer",
+    linkAddress: "acct-protect-desk.invalid/shield/Bq4t",
     afterScammerTurns: 3,
     announceInstruction:
       '(참가자 휴대전화로 방금 보호계좌 안내 문자가 실제로 도착했다. 지금 캐릭터로서 한두 문장으로 침착하게 그 사실을 알리고 문자 속 링크를 눌러 옮기기를 마쳐 달라고 안내하라 — 예: "보호계좌는 방금 문자로 보내드렸습니다, 문자에 있는 링크 눌러서 그대로 진행하시면 됩니다." 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)',
@@ -187,6 +200,7 @@ const COURIER_CUSTOMS_SCAM: InCallSmsItem[] = [
     body: "[통관보류] 수취인 정보 불일치로 통관이 보류되었습니다.\n아래에서 정보를 확인해 주세요.",
     linkDisplayText: "통관 정보 확인하기",
     fakeLandingId: "courier-customs-check",
+    linkAddress: "customs-check-desk.invalid/check/Hv5r",
     afterScammerTurns: 2,
     announceInstruction:
       "(참가자 휴대전화로 방금 통관 확인 링크 문자가 실제로 도착했다. 지금 캐릭터로서 한두 문장으로 그 링크를 눌러 수취인 정보를 확인해 달라고 요구하라 — 예: \"방금 문자 보내드렸어요, 링크 눌러서 정보만 확인해 주세요.\" 실제 주소를 읽어 주지 말고 문자 속 링크를 누르라고만 하라.)",

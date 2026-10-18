@@ -35,6 +35,9 @@ export function buildInCallSmsDoc(
     // 있다). kind로 링크 부착 여부를 추론하는 코드를 두지 않는다(R10 양방향 금지).
     ...(item.linkDisplayText ? { linkDisplayText: item.linkDisplayText } : {}),
     ...(item.fakeLandingId ? { fakeLandingId: item.fakeLandingId } : {}),
+    // T190-2(docs/Architecture.md §73.9) — 말풍선 링크 줄의 가짜 주소(`.invalid` 호스트 + 경로). 위 두 필드와
+    // 3자 쌍으로만 존재한다(G111). 부재면 키를 만들지 않는다 — 옛 문서와 같은 모양(클라는 `?? linkDisplayText`).
+    ...(item.linkAddress ? { linkAddress: item.linkAddress } : {}),
     // 기본값이면 **키 자체를 만들지 않는다** — `extractLinkMarker`의 생략 규칙과 동일하며,
     // 같은 개념에 생략 규칙이 두 벌이면 그게 드리프트다(§19.4 #3).
     ...(landingKind === DEFAULT_MOCK_SCREEN_KIND ? {} : { landingKind }),
