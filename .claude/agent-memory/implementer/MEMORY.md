@@ -94,3 +94,4 @@
 - [T147 Node 22 engines bump](project_codegate_t147_node22_runtime.md) — worktree dry-run needs 4-key placeholder functions/.env, 10s discovery timeout is intermittent (count consecutive), emulator mismatch text.
 - [T181 챌린지 완료 전이 C1~C6](project_codegate_t181_challenge_completion.md) — ⭐ 서버 리터럴을 루트 테스트가 소스에서 읽는 연결 증거, 트랜잭션 전용 가짜 Firestore+무조건 쓰기 대조군, 내 스캔이 다음 커밋에 깨진 함정, verify:build 위험 실측 해소.
 - [사기범 대사 실존 은행명·문장 상한(2026-10-17)](project_codegate_scammer_speech_safety.md) — ⭐ `신한`이 "당신한테"에 걸린다(한글 앞 경계), 정식 명칭 수식어 겹침, Git Bash `sed -i`가 CRLF를 지운다.
+- [T187 세션 중 표식 제거](project_codegate_t187_session_markers.md) — ⭐ 셸 없는 설계의 "0건"이 놓친 3곳(콘솔 리터럴·따옴표 자기 인용·"가상 은행"), sed -i CRLF·python heredoc 한글 깨짐.
