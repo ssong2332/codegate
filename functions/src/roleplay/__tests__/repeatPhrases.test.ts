@@ -29,7 +29,7 @@ import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_SCREENS } from "../../scenarios/
 
 /**
  * 반복을 유도하는 금지 문구(AC-100 (a) "금지 문구 목록은 테스트 상수에 명시한다").
- * 앞 5개 = 오케스트레이터 지정 목록, 뒤 2개 = 이번에 함께 제거한 같은 원인의 문구.
+ * 앞 5개 = 오케스트레이터 지정 목록, 뒤 5개 = 이번에 함께 제거한 같은 원인의 문구(뒤 3개는 리뷰 M2로 추가).
  */
 const REPEAT_INDUCING_PHRASES = [
   "다시 불러 달라", // R1 — 받은 값을 "조회가 안 된다며" 재요구(IDENTITY_CHECK_HANDLING_TRUE)
@@ -39,6 +39,9 @@ const REPEAT_INDUCING_PHRASES = [
   "재촉하라", // R4 — 문자 도착 안내의 재촉 지시
   "이미 보낸 문자를 확인해 달라", // R4 — SMS_DECLINE_ALREADY 옛 문면(AC-100 (a)③)
   "같은 말을 반복해", // R2 — familyAccidentDeepvoice의 반복 몰아붙이기 지시
+  "한 번으로 끝내지 않고", // R2 — courier·loan·taxRefund [말투/톤] 지속 압박(리뷰 M2)
+  "표현을 바꿔가며 계속", // R2 — 같은 취지 반복 허용 문면(리뷰 M2)
+  "물러서지 않고 강도를 높인다", // R2 — [말투/톤] 머리말(리뷰 M2)
 ] as const;
 
 function findRepeatInducingPhrases(text: string): string[] {
@@ -162,6 +165,11 @@ const D4_SCENARIOS = [
   "card-company-impersonation",
   "family-accident-deepvoice",
   "kidnapping-threat",
+  // 리뷰 M2 — "밀어붙" 표기가 아니라 planner grep에 안 잡혔던 같은 지속 압박 문면 4종
+  "courier-customs-scam",
+  "loan-refinance-scam",
+  "tax-refund-scam",
+  "grandchild-impersonation",
 ] as const;
 
 test("[T191/S4 · A2/D4 · AC-096 (d) · AC-100 (b)] 압박 지속성은 난이도 블록이 정한다 — 페르소나는 중급 L2, 초급은 물러서고 고급은 다른 근거로", (t) => {
@@ -178,13 +186,23 @@ test("[T191/S4 · A2/D4 · AC-096 (d) · AC-100 (b)] 압박 지속성은 난이�
     const advanced = buildSystemPrompt(prompt, { difficultyLevel: "advanced" });
     assert.equal(intermediate, buildSystemPrompt(prompt), `${id}: 중급 = 옵션 미전달 출력이어야 한다`);
     assert.ok(beginner.includes("상대가 불안해하면 한 발 물러선다"), `${id}: 초급 물러섬 지시`);
+    // 리뷰 M1 — 페르소나의 중급 L2(재설득)와 초급 물러섬이 같은 산출물에 공존하므로 우선순위를 명문으로 고정한다.
+    assert.ok(
+      beginner.includes("위 [말투/톤]의 재설득·재압박 지시는 이 난이도에서 적용하지 않는다."),
+      `${id}: 초급 블록이 재설득·재압박 비적용을 선언해야 한다`,
+    );
+    for (const other of [intermediate, advanced]) {
+      assert.ok(!other.includes("재설득·재압박 지시는 이 난이도에서 적용하지 않는다"), `${id}: 비적용 선언은 초급에만`);
+    }
     assert.ok(advanced.includes("물러서지 않되 매번 다른 근거를 낸다"), `${id}: 고급 다른 근거 재대응 지시`);
     for (const assembled of [beginner, intermediate, advanced]) {
       assert.ok(assembled.includes("같은 취지의 말을 두 번 연속 하지 않는다"));
       assert.ok(!assembled.includes("계속 밀어붙"));
     }
   }
-  for (const id of D4_SCENARIOS.filter((x) => x !== "kidnapping-threat")) {
+  // kidnapping-threat은 의도적으로 제외 — 협박범 페르소나는 "설득"이 아니라 경고형이라 중급 L2 문장을 두지 않았다
+  // ("밀어붙이되" → "하되"만 바꿈). grandchild는 "한 번 더 다른 말로 매달린다"로 같은 L2를 표현한다.
+  for (const id of D4_SCENARIOS.filter((x) => x !== "kidnapping-threat" && x !== "grandchild-impersonation")) {
     assert.ok(
       SCENARIO_PROMPTS[id].personaPrompt.includes("한 번 더 다른 근거로"),
       `${id}: 페르소나에 중급 L2("한 번 더 다른 근거로") 문장이 있어야 한다`,
@@ -218,7 +236,7 @@ test("[T191/S4 · A3] 부인·확인 뒤 같은 요구를 다시 꺼내는 수�
 test("[T191/S4 · A4] 이미 보낸 문자는 다시 언급하지 않고, 도착 안내는 사실만 알린 뒤 상대 반응을 기다린다", () => {
   assert.equal(
     SMS_DECLINE_ALREADY,
-    "(그 안내는 이미 보냈다. 새로 보냈다고 말하지 말고, 이미 보낸 문자를 다시 언급하지도 말고 다른 이야기로 이어가라.)",
+    "(그 안내는 이미 보냈다. 새로 보냈다고 말하지 말고, 이미 보낸 문자를 다시 언급하지도 말고 하던 요구 흐름을 이어가라.)",
   );
   const changed = [
     ["loan-refinance-scam", "loan-account"],
@@ -226,6 +244,11 @@ test("[T191/S4 · A4] 이미 보낸 문자는 다시 언급하지 않고, 도착
     ["card-company-impersonation", "card-relief-account"],
     ["reputation-blackmail-scam", "blackmail-hush-account"],
     ["courier-customs-scam", "courier-customs-fee"],
+    // 리뷰 m2 — 링크·계좌 안내 4건도 같은 규칙(AC-099 (g) "사실 1문장 + 반응 대기")
+    ["loan-refinance-scam", "loan-apply-link"],
+    ["tax-refund-scam", "tax-refund-link"],
+    ["bank-security-verify-scam", "bank-protect-account"],
+    ["courier-customs-scam", "courier-customs-link"],
   ] as const;
   for (const [scenarioId, smsId] of changed) {
     const item = IN_CALL_SMS[scenarioId]?.find((x) => x.smsId === smsId);
@@ -236,6 +259,9 @@ test("[T191/S4 · A4] 이미 보낸 문자는 다시 언급하지 않고, 도착
   for (const [scenarioId, items] of Object.entries(IN_CALL_SMS)) {
     for (const item of items) {
       assert.ok(!/재촉|다급/.test(item.announceInstruction), `${scenarioId}/${item.smsId}: 재촉·다급 지시가 남아 있다`);
+      if (item.kind !== "otp") {
+        assert.ok(item.announceInstruction.includes("상대의 반응을 기다려라"), `${scenarioId}/${item.smsId}: 반응 대기 지시`);
+      }
     }
   }
 });

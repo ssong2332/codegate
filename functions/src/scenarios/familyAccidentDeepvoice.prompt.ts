@@ -30,10 +30,6 @@
 //  진행 기준 = 상대 반응 서술로 치환. **재생성 대기 중** — 실시간 통화(ElevenLabs clone)에는
 //  아직 반영되지 않았다. 다음에 이 파일이나 공통 조립부를 고치는 사람은 이 줄을 되돌리지 말고
 //  재생성 완료 후에만 "재생성 완료"로 갱신할 것. Architecture.md §58.9/G379.)
-// (T191 S4 2026-10-18: 공통 조립부 [진행 강제]의 본인확인 처리 항목(재요구 선택지 제거)과 이 파일의 패닉 격화 수법
-//  문면을 바꿨다 → **조립 산출물이 바뀌었다 — 재생성 대기 중.** 대조값(buildSystemPrompt, 난이도별 sha256 앞 16자):
-//  변경 전 b/i/a = 2d9b470954d60e29 / 298ce096e3f9d72f / 75c3eeb15a858ef7 →
-//  변경 후 b/i/a = faa3de1be9d51dd9 / 8084f07a034031f6 / 953c26de3696f988. 재생성 완료 후에만 "재생성 완료"로 갱신할 것.)
 // (T110 2026-07-27: 공통 조립부를 고쳤지만 **이 시나리오의 조립 산출물은 한 바이트도 바뀌지 않았다
 //  — 재생성 불요.** T110이 손댄 `VERIFY_INTERCEPT_RULE`은 **조건형 블록**이라
 //  `verifyInterceptEnabled === true`일 때만 삽입되는데, clone 2종은 확인 무력화 카탈로그에 없어
@@ -65,6 +61,12 @@
 //  beginner len=6615 sha=2d9b470954d60e29 (직전 6186 · 33a0ef828e631e4c) ·
 //  intermediate len=5875 sha=298ce096e3f9d72f (직전 5446 · 2d40298b9a2c3951) ·
 //  advanced len=6997 sha=75c3eeb15a858ef7 (직전 6568 · 0f52f9fce8b897d4).)
+// (T191 S4 2026-10-18 · 브랜치 `claude/t191-s4-repeat-prompts`: 공통 조립부의 본인확인 처리 항목(재요구 선택지 제거)·초급 블록
+//  (재설득·재압박 비적용 1줄)과 이 파일의 패닉 격화 수법 문면을 바꿨다 → **조립 산출물이 바뀌었다 — 재생성 대기 중.**
+//  대조값 = `buildSystemPrompt(SCENARIO_PROMPTS[id], { difficultyLevel })`의 sha256 앞 16자(직전 값은 base main `d2cfb37`):
+//  beginner len=6647 sha=01d9c35dad055d9c (직전 6615 · 2d9b470954d60e29) · intermediate len=5826 sha=8084f07a034031f6
+//  (직전 5875 · 298ce096e3f9d72f) · advanced len=6948 sha=953c26de3696f988 (직전 6997 · 75c3eeb15a858ef7).
+//  재생성 완료 후에만 "재생성 완료"로 갱신할 것.)
 import type { ScenarioPromptDoc } from "../shared/types";
 
 // src/content/scenarios/familyAccidentDeepvoice.ts의 FAMILY_ACCIDENT_SCENARIO_ID와 동일한 문자열
