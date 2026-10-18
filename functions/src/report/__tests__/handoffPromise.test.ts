@@ -13,6 +13,7 @@
 // | (8) reviewer M2 — 5개 시나리오 계열의 수동 작성 상황 설명형 · 요구형 대사 × 유보 · 공손 답변에서 새 오탐 0 | 오탐 범위 |
 // | (9) 요구 어형 축소 뒤에도 수동 작성 인출 · 전달 · 코인 요구 대사에서 갈래가 열리는지(재현율 — 한계 고정) | 투명 고지 |
 // | (10) QA FAIL 재현 14쌍 + 범용 공손형 12개 — 허용 목록 전환 뒤 base와 동일(범용 "드릴게요"는 이 갈래로 안 열림) | 음성 표본 |
+// | (11) 재QA 경계 표본 13개 × 사기범 2발화 — 돈 목적어 · 행위 뒤 갈래의 창 축소 뒤 base와 동일, 지시어 "그거"는 다른 갈래로만 | 음성 · 동일 표본 |
 //
 // ⚠️ 사기범 대사는 저작 문구(`extractTacticFlavor`)이고 참가자 답변은 **합성 픽스처**다(라이브 전사 아님).
 import { test } from "node:test";
@@ -400,4 +401,40 @@ test("[T191 J-2 · QA 독립 동의 표본] '네 수표로 바꿔서 챙겨 둘�
   assert.equal(nowDeceived(E4_DEMAND, "네 수표로 바꿔서 챙겨 둘게요"), true);
   // 단독 "챙겨 둘게요"는 허용 목록 밖이다(돈 목적어 · 행위 없음).
   assert.equal(nowDeceived(E4_DEMAND, "서류 챙겨 둘게요"), baseDeceived("서류 챙겨 둘게요"));
+});
+
+// ── (11) 재QA(2026-10-19) 경계 표본 — 돈 목적어 · 행위 뒤 갈래의 창 축소 ───────────────────────────
+// 3차까지는 돈 목적어 · 행위 뒤 12자 창에 다른 명사가 끼어도 열렸다("코인 사진은 찍어서 보내 드릴게요").
+// 이제 돈 목적어 + 조사? + 부사? (+ 받는 사람?) **바로 뒤**의 동사만 연다. 지시어 "그거 · 그걸"은 돈 목적어에서 뺐다.
+
+const BOUNDARY_SCAMMER_LINES = ["현금으로 인출해 주세요.", E4_DEMAND];
+const BOUNDARY_ANSWERS = [
+  "그거 말고 다른 걸로 설명드릴게요", "코인 사진은 찍어서 보내 드릴게요", // 재QA 오탐 재현 2종
+  "돈 얘기는 제가 정리해서 드릴게요", "현금영수증은 나중에 보내 드릴게요", "수표 얘기는 은행에 물어보고 다시 드릴게요",
+  "담당자님께 인사 드릴게요", "직원분께 인사드리겠습니다", "기사님께 길 설명 드리겠습니다", "그분께 연락처 드릴게요",
+  "돈 문제는 제가 알아서 처리해서 알려 드릴게요", "예금 통장 사본을 보낼게요", "수표 번호는 불러 드릴게요",
+  "전액 얼마인지 말씀드릴게요",
+];
+
+test("[T191 J-2 · 재QA 경계 표본] 13개 × 사기범 2발화 — 이 갈래가 바꾼 쌍 0(base에서 이미 속음인 답은 공유 패턴 몫)", (t) => {
+  const changed: string[] = [];
+  for (const line of BOUNDARY_SCAMMER_LINES) {
+    for (const answer of BOUNDARY_ANSWERS) {
+      if (nowDeceived(line, answer) !== baseDeceived(answer)) changed.push(`${line} | ${answer}`);
+    }
+  }
+  const baseTrue = BOUNDARY_ANSWERS.filter(baseDeceived);
+  t.diagnostic(`경계 ${BOUNDARY_SCAMMER_LINES.length * BOUNDARY_ANSWERS.length}쌍 · 바뀐 쌍 ${changed.length} · base에서 이미 속음 ${JSON.stringify(baseTrue)}`);
+  assert.deepEqual(changed, []);
+  // 재QA 오탐 2종은 이름으로 고정한다(base도 속지 않음).
+  for (const line of BOUNDARY_SCAMMER_LINES) {
+    assert.equal(nowDeceived(line, "그거 말고 다른 걸로 설명드릴게요"), false);
+    assert.equal(nowDeceived(line, "코인 사진은 찍어서 보내 드릴게요"), false);
+  }
+});
+
+test("[T191 J-2] 지시어 '그거 · 그걸'을 돈 목적어에서 뺀 뒤에도 행위 동사가 있으면 다른 갈래로 잡힌다", () => {
+  assert.equal(nowDeceived(E4_DEMAND, "그거 찾아 둘게요"), true); // 두다 · 놓다 · 오다 갈래
+  assert.equal(nowDeceived(E4_DEMAND, "그걸 맡길게요"), true); // 넘기는 동사 단독 갈래
+  assert.equal(nowDeceived(E4_DEMAND, "그거 드릴게요"), baseDeceived("그거 드릴게요")); // 지시어 + 범용 동사는 안 열린다
 });
