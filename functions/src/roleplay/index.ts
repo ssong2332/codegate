@@ -279,6 +279,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       scammerTurnNumber,
       ...(deliveredSmsId ? { deliveredThisTurn: deliveredSmsId } : {}),
       isDelivered: async (smsId) => (await sessionRef.collection("inCallSms").doc(smsId).get()).exists,
+      callTransferred: verifyState?.placed === true,
     });
     const promptTurnInstruction = [turnInstruction, otpCheckInstruction].filter(Boolean).join("\n") || undefined;
 

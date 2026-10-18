@@ -18087,9 +18087,9 @@ completeWithFallback(                                         ← 실패 시 Moc
 
 | 항목 | 내용 | 파일 |
 |---|---|---|
-| 대조 지시 | `buildOtpCheckInstruction(otpCode)` — 실제 번호 · *"먼저 말하거나 일부라도 알려 주지 마라"* · 한 자리씩 대조 · 다르면 다음 단계로 넘어가지 말고 *"번호가 안 맞는데요, 문자 다시 확인해서 불러 주세요."* · 같으면 진행 | `functions/src/scenarios/inCallSms.ts` |
+| 대조 지시 | `buildOtpCheckInstruction(otpCode)` — 실제 번호 · *"먼저 말하거나 일부라도 알려 주지 마라"* · 상대가 인증번호를 불러 줄 때만 한 자리씩 대조 · 다르면 다음 단계로 넘어가지 말고 *"번호가 안 맞는데요, 문자 다시 확인해서 불러 주세요."* · 같으면 진행 · **이미 확인했으면 다시 꺼내지 않고 다른 숫자·짧은 대답에 틀렸다고 하지 않는다**(텍스트 경로는 도착 이후 매 턴 반복되므로 — 리뷰 #2). "방금"은 쓰지 않는다 | `functions/src/scenarios/inCallSms.ts` |
 | 실시간 | `buildInCallSmsResponse` — `kind==="otp"`면 기존 지시 **뒤에** 대조 지시 1줄. 그 밖의 문자는 무변경. 호 전환 뒤(`placed`)는 기존대로 지시 없음 | `functions/src/inCallSms/buildDoc.ts` |
-| 텍스트 | `resolveOtpCheckInstruction` 판정표(도착 전 없음·읽기 0 / 이번 턴 도착은 읽기 없이 / 이후 턴은 문서 존재 확인 / 실패·미도착 없음) → `sendMessage`가 기존 턴 지시와 합쳐 `turnInstruction`으로 | `functions/src/roleplay/otpCheck.ts` · `roleplay/index.ts` |
+| 텍스트 | `resolveOtpCheckInstruction` 판정표(도착 전 없음·읽기 0 / **호 전환 뒤 없음·읽기 0**(실시간 `placed` 게이트와 같은 동작 — 리뷰 #1) / 이번 턴 도착은 읽기 없이 / 이후 턴은 문서 존재 확인 / 실패(경고 로그)·미도착 없음) → `sendMessage`가 기존 턴 지시와 합쳐 `turnInstruction`으로 | `functions/src/roleplay/otpCheck.ts` · `roleplay/index.ts` |
 | 의도적 테스트 변경 | `inCallSms/__tests__/buildDoc.test.ts` "[§53.6 (3) 역검증] placed:false 응답 = 카탈로그 원문" — 인증번호 2종만 예외(기대값 = 원문 + 대조 지시), 개수 2를 함께 단언 | 같은 파일 |
 
 ### 77.4 게이트
@@ -18103,7 +18103,7 @@ completeWithFallback(                                         ← 실패 시 Moc
 
 ### 77.5 ⚠️ 정책 결정 대기 — 리포트 판정 (⛔ 이 PR은 바꾸지 않았다)
 
-현행: `report/analyzeConversation.ts`의 `BASE_COMPLIANCE_PATTERN` 마지막 대안 `^\s*[\d\s-]{4,}\s*$`(숫자만 있는 답) 등으로 **번호를 부르면 맞든 틀리든 "순응"** 이다.
+현행: `report/analyzeConversation.ts`의 `BASE_COMPLIANCE_PATTERN` 마지막 대안(숫자만 있는 답)과 (D3) 패턴(`"048231 이요"`처럼 숫자 뒤 짧은 어미)으로 **번호를 부르면 맞든 틀리든 "순응"** 이다. 또 같은 파일의 G22 원칙(*"통화 중 문자 이벤트는 판정 입력이 아니다 · 문자 문서와 대조하지 않는다"*)이 있어 **(B)·(C)는 G22 개정이 먼저 필요하다**.
 
 | 선택지 | 판정 | 장점 | 단점 |
 |---|---|---|---|
@@ -18115,8 +18115,8 @@ completeWithFallback(                                         ← 실패 시 Moc
 
 | # | 항목 | 확인 방법 |
 |---|---|---|
-| **OQ-A106** | 지시는 강제가 아니다 — 모델이 대조를 놓치거나, 맞는 번호를 틀렸다고 할 수 있다(음성 인식 숫자 오차) | 배포 후 인증번호 턴 다음 사기범 발화 관찰 |
-| **OQ-A107** | ElevenLabs 경로는 `announceInstruction`을 쓰지 않으면 이 지시가 닿지 않는다 — 클라 처리 확인 필요(이 PR은 클라 미접촉) | `src/lib/realtime` ElevenLabs 세션의 문자 도착 처리 확인 |
+| **OQ-A106** | 지시는 강제가 아니다 — 모델이 대조를 놓치거나, 맞는 번호를 틀렸다고 할 수 있다(음성 인식 숫자 오차) · 도착 턴에 번호를 먼저 말해 버릴 위험은 문면으로만 막는다(테스트로 못 잡는다) | 배포 후 인증번호 도착 턴과 다음 사기범 발화 관찰(번호 섞임 · 반복 지적) |
+| **OQ-A107** | ElevenLabs 실시간 경로에는 문자 도착 지시가 **원래 닿지 않는다** — `instructionTurn`은 Gemini 세션에만 내려가고(`src/app/session/play/page.tsx:1591`), `RealtimeVoiceSession.tsx`에는 `instructionTurn`·`announceInstruction` 참조가 0건(grep) ⇒ 이 변경의 영향 0, 그 경로에서는 대조 불가(추정 — page.tsx 해당 부근 전체는 읽지 않음) | ElevenLabs 세션의 문자 도착 처리 설계(별건) |
 | 정책 | 77.5 리포트 판정 | User 결정 |
 
 > **번호**: §77 · G475~G478 · OQ-A106~A107 · #127 — 동시 진행 중인 `fix/live-korean-only`(§76 · G471~G474 · OQ-A103~A105 · #126)를 건너뛰었다. ⛔ 예약 아님 — 병합 순서로 확정.

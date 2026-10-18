@@ -21,6 +21,28 @@ test("[OTP] 대조 지시 문면: 실제 번호 · 먼저 말하지 말 것 · �
   assert.match(text, /번호가 안 맞는데요, 문자 다시 확인해서 불러 주세요/);
   assert.match(text, /다음 단계로 넘어가지 말고/);
   assert.match(text, /같으면 확인됐다고 하고 다음 단계로 진행/);
+  // 리뷰 #2 — 도착 이후 매 턴 반복되므로 "이미 확인했으면 다시 꺼내지 마라"가 있어야 무관한 숫자에 되풀이하지 않는다.
+  assert.match(text, /이미 맞는 번호를 확인했다면 이 대조를 다시 꺼내지 말고/);
+  assert.match(text, /인증번호를 불러 줄 때만/);
+  assert.doesNotMatch(text, /방금/, "도착 몇 턴 뒤에도 반복되는 문면이라 '방금'은 사실과 어긋난다");
+});
+
+test("[OTP] 텍스트 경로 — 호 전환(확인 데스크) 뒤에는 대조 지시도 읽기도 없다(실시간 placed 게이트와 같은 동작, 리뷰 #1)", async () => {
+  let reads = 0;
+  assert.equal(
+    await resolveOtpCheckInstruction({
+      scenarioId: "institutional-impersonation",
+      scammerTurnNumber: 9,
+      deliveredThisTurn: "institution-otp",
+      callTransferred: true,
+      isDelivered: async () => {
+        reads += 1;
+        return true;
+      },
+    }),
+    undefined,
+  );
+  assert.equal(reads, 0);
 });
 
 test("[OTP] 카탈로그: 인증번호 문자 2종이 listOtpItems로 잡힌다(거짓 초록 방지)", () => {
@@ -121,6 +143,7 @@ test("[OTP] 텍스트 경로 판정표 — 도착 전 없음(읽기 0) · 도착
 test("[OTP] 텍스트 경로 배선 — sendMessage가 대조 지시를 턴 지시와 합쳐 시스템 프롬프트에 넣는다(소스 스캔)", () => {
   const src = readFileSync(path.resolve(__dirname, "../../../src/roleplay/index.ts"), "utf8").replace(/\r\n/g, "\n");
   assert.match(src, /const otpCheckInstruction = await resolveOtpCheckInstruction\(\{/);
+  assert.match(src, /callTransferred: verifyState\?\.placed === true,/);
   assert.match(src, /\[turnInstruction, otpCheckInstruction\]\.filter\(Boolean\)\.join\("\\n"\)/);
   assert.match(src, /\.\.\.\(promptTurnInstruction \? \{ turnInstruction: promptTurnInstruction \} : \{\}\)/);
   assert.doesNotMatch(src, /\.\.\.\(turnInstruction \? \{ turnInstruction \} : \{\}\)/, "옛 배선이 남아 있으면 대조 지시가 빠진다");
