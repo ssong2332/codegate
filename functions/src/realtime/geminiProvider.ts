@@ -15,10 +15,11 @@ import { GoogleGenAI, Modality, EndSensitivity, StartSensitivity } from "@google
 import { asksIdentityCheck } from "../roleplay/personaAuthority";
 import { isL3Procedural } from "../roleplay/l3Depth";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
-import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
+import { findFlowVariant, isRelayVariant, resolveSessionScenarioPrompt, type FlowVariant } from "../scenarios/flowVariants";
 import { hasInCallSms } from "../scenarios/inCallSms";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { buildLiveToolDeclarations, buildLiveToolNames, declaresOfferVerificationDesk } from "./liveTools";
+import { relayLiveCeiling } from "./relayTransfer";
 import { SCENARIO_SPEAKER_GENDER, speakerGenderFor } from "./scenarioVoice";
 import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider } from "./types";
 
@@ -72,6 +73,69 @@ export function pickGeminiVoiceName(scenarioId: string, sessionId: string): stri
   return pool[Math.abs(hash) % pool.length];
 }
 
+// ── T191 릴레이 — leg마다 다른 음성(G494 · AC-101 (b)) ────────────────────────────────────
+//
+// ⚠️ **성별 라벨은 추정이다(OQ-A113)** — 위 풀과 같은 근거(공식 문서는 톤 특성만 적고 남/여를 명시하지 않는다 ·
+// 데모/튜토리얼 통용 청감 기준). 실제 청감은 라이브로 확인해야 하며, 틀리면 후보만 바꾸면 된다(호출부 무변경).
+// ⛔ 0번 leg는 위 `pickGeminiVoiceName`을 **그대로** 쓴다(릴레이 없는 세션 · leg 0 음성 바이트 동일 — 회귀 0).
+// 각 풀의 첫 후보는 위 1인 풀과 같은 값이다(풀 확장 — 성별당 3).
+/** 릴레이용 여성(추정) 후보 — OQ-A113. */
+export const RELAY_FEMALE_VOICES = ["Aoede", "Kore", "Leda"] as const;
+/** 릴레이용 남성(추정) 후보 — OQ-A113. */
+export const RELAY_MALE_VOICES = ["Puck", "Charon", "Orus"] as const;
+
+function hashString(text: string): number {
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = (hash * 31 + text.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * leg ≥ 1 음성 — 그 leg 성별 풀에서 **이전 leg들이 쓴 음성을 뺀** 후보 중 (sessionId, legIndex) 해시로 고른다.
+ * 성별 풀이 다 쓰였으면 전체 풀에서 남은 것(같은 음성 재사용 0이 우선 — AC-101 (j) ⓐ). 결정론적이라 재발급해도 같다.
+ */
+export function pickRelayVoiceName(
+  gender: "male" | "female",
+  sessionId: string,
+  legIndex: number,
+  usedVoices: readonly string[],
+): string {
+  const genderPool: readonly string[] = gender === "male" ? RELAY_MALE_VOICES : RELAY_FEMALE_VOICES;
+  const unused = genderPool.filter((v) => !usedVoices.includes(v));
+  const list =
+    unused.length > 0
+      ? unused
+      : [...RELAY_FEMALE_VOICES, ...RELAY_MALE_VOICES].filter((v) => !usedVoices.includes(v));
+  if (list.length === 0) return genderPool[0];
+  return list[hashString(`${sessionId}:${legIndex}`) % list.length];
+}
+
+/** 변형의 leg별 음성(0번 = 기존 선택 · 1번부터 이전 leg와 다른 음성). */
+export function relayLegVoiceNames(variant: FlowVariant, scenarioId: string, sessionId: string): string[] {
+  const names = [pickGeminiVoiceName(scenarioId, sessionId)];
+  for (let i = 1; i < variant.legs.length; i += 1) {
+    names.push(pickRelayVoiceName(variant.legs[i].speakerGender, sessionId, i, names));
+  }
+  return names;
+}
+
+/**
+ * T191 S7(DECISIONS #140 — 릴레이 흐름에서만 확인 창구를 다른 목소리로) — 창구 담당자 음성. 지금 leg와 **반대 성별**
+ * 풀에서(들어서 바로 다른 사람으로 들리게 — implementer 판단값), 변형의 leg 음성 전부를 뺀 후보 중 고른다.
+ */
+export function relayDeskVoice(
+  variant: FlowVariant,
+  scenarioId: string,
+  sessionId: string,
+  legIndex: number,
+): { voiceName: string; gender: "male" | "female" } {
+  const legVoices = relayLegVoiceNames(variant, scenarioId, sessionId);
+  const gender = variant.legs[legIndex]?.speakerGender === "male" ? "female" : "male";
+  return { voiceName: pickRelayVoiceName(gender, sessionId, 100 + legIndex, legVoices), gender };
+}
+
 /** 토큰 수명 — 통화 1건에만 쓰이므로 짧게 잡는다(유출 시 노출 창 최소화). */
 const TOKEN_EXPIRE_MINUTES = 30;
 const NEW_SESSION_EXPIRE_MINUTES = 2;
@@ -84,7 +148,26 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
   async createCallCredentials(input: RealtimeCallInput): Promise<RealtimeCallCredentials> {
     // T191 S5(AC-096 (e)) — 세션에 배정된 흐름 변형을 합성한 프롬프트(sendMessage · 오프닝과 같은 단일
     // 해석 지점). flowVariantId 부재 = 원본(무소급).
-    const scenarioPrompt = resolveSessionScenarioPrompt(input.scenarioId, input.flowVariantId);
+    // T191 S7 — 릴레이 변형이면 지금 leg의 페르소나 · 인계 블록(leg ≥ 1)으로 조립하고, 교대는 Live 도구로 한다.
+    const variant = findFlowVariant(input.flowVariantId);
+    const relayVariant = isRelayVariant(variant) && variant.scenarioId === input.scenarioId ? variant : undefined;
+    const legIndex = relayVariant
+      ? Math.min(Math.max(0, input.relayLeg?.legIndex ?? 0), relayVariant.legs.length - 1)
+      : 0;
+    const scenarioPrompt = resolveSessionScenarioPrompt(
+      input.scenarioId,
+      input.flowVariantId,
+      relayVariant
+        ? {
+            legIndex,
+            ...(input.relayLeg?.verifyDesk ? { noFurtherTransfer: true } : { transferVia: "tool" as const }),
+            ...((legIndex > 0 || input.relayLeg?.verifyDesk) && input.relayLeg?.handoff
+              ? { handoff: input.relayLeg.handoff }
+              : {}),
+            ...(input.relayLeg?.verifyDesk ? { handoffAlways: true } : {}),
+          }
+        : undefined,
+    );
     if (!scenarioPrompt) {
       throw new Error(`시나리오 프롬프트가 없습니다: ${input.scenarioId}`);
     }
@@ -110,7 +193,17 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // §59.5/§59.10 커밋 C — 이 세션에 실제로 선언할 Live 도구(조건은 buildLiveToolDeclarations
     // 자신이 진다 — hasInCallSms · declaresOfferVerificationDesk, §61). 프롬프트 조건부 치환
     // (toolDrivenTiming)과 **같은 트리거로 묶지 않는다** — 아래 buildSystemPrompt 호출부 주석 참고.
-    const liveToolDeclarations = buildLiveToolDeclarations(input.scenarioId, input.difficultyLevel);
+    // #140 — 확인 창구 새 연결은 교대 도구를 선언하지 않는다(창구 담당자가 마지막 화자 — relayTransfer "verify-placed").
+    const deskVoice =
+      relayVariant && input.relayLeg?.verifyDesk
+        ? relayDeskVoice(relayVariant, input.scenarioId, input.sessionId, legIndex)
+        : undefined;
+    const transferCeiling = relayVariant && !deskVoice ? relayLiveCeiling(relayVariant, legIndex) : undefined;
+    const liveToolDeclarations = buildLiveToolDeclarations(
+      input.scenarioId,
+      input.difficultyLevel,
+      transferCeiling !== undefined,
+    );
     const systemPrompt = buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: input.difficultyLevel,
       inCallSmsEnabled: hasInCallSms(input.scenarioId),
@@ -118,7 +211,12 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
         hasVerifyIntercept(input.scenarioId) && input.difficultyLevel === "advanced",
       l3Procedural: isL3Procedural(input.scenarioId),
       identityCheckAllowed: asksIdentityCheck(input.scenarioId),
-      speakerGender: speakerGenderFor(input.scenarioId),
+      // T191 S7 — 교대 뒤 leg는 그 leg 성별(층 1 음성과 같은 원천 — 아래 voiceName).
+      speakerGender: deskVoice
+        ? deskVoice.gender
+        : relayVariant && legIndex > 0
+          ? relayVariant.legs[legIndex].speakerGender
+          : speakerGenderFor(input.scenarioId),
       // §59.3 — 이 경로가 §59 커밋 C가 정한 **유일한 `true` 호출부**다(폴백 sendMessage·오프닝은
       // Live 세션이 없어 도구가 존재하지 않으므로 넘기지 않는다, G382).
       toolDrivenTiming: true,
@@ -148,7 +246,12 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
               languageCode: "ko-KR",
               voiceConfig: {
                 prebuiltVoiceConfig: {
-                  voiceName: pickGeminiVoiceName(input.scenarioId, input.sessionId),
+                  // T191 S7(G494) — 교대 뒤 leg는 이전 leg들과 다른 음성. 0번 leg · 릴레이 없는 세션은 종전과 같다.
+                  voiceName: deskVoice
+                    ? deskVoice.voiceName
+                    : relayVariant && legIndex > 0
+                      ? relayLegVoiceNames(relayVariant, input.scenarioId, input.sessionId)[legIndex]
+                      : pickGeminiVoiceName(input.scenarioId, input.sessionId),
                 },
               },
             },
@@ -232,7 +335,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     if (!tokenName) {
       throw new Error("Gemini 단기 토큰 발급 응답에 name이 없습니다.");
     }
-    const liveTools = buildLiveToolNames(input.scenarioId, input.difficultyLevel);
+    const liveTools = buildLiveToolNames(input.scenarioId, input.difficultyLevel, transferCeiling);
 
     return {
       provider: "gemini",

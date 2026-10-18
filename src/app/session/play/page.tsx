@@ -38,9 +38,28 @@ import {
   recordInCallSmsEvent,
   requestReverseEscalation,
   sendMessage,
+  startRelayLeg,
   submitRealtimeTranscript,
 } from "@/lib/api";
-import type { InCallSmsEvent, TranscriptTurn } from "@/lib/api";
+import type { CreateRealtimeCallResponse, InCallSmsEvent, SendMessageResponse, TranscriptTurn } from "@/lib/api";
+import {
+  captionWithSpeaker,
+  decideLiveRelayCeiling,
+  decideRelayResume,
+  formatRelayEvent,
+  isHeldForRelay,
+  relayFailureAction,
+  shouldIgnoreLiveEnded,
+  shouldStartRelayCut,
+  RELAY_CONNECT_TONE_CAPTION,
+  RELAY_CUT_MS,
+  RELAY_HOLD_MIN_MS,
+  RELAY_HOLD_MAX_MS,
+  RELAY_PLAYBACK_WAIT_CAP_MS,
+  relayGreetingDelayMs,
+  type RelayEventName,
+} from "@/lib/realtime/relayHandover";
+import { startRelayTones, type RelayToneHandle } from "@/lib/realtime/relayTones";
 import {
   countUnread,
   latestSmsId,
@@ -170,7 +189,13 @@ type ChatMessage = {
   role: "scammer" | "user";
   text: string;
   turnIndex: number;
+  /** T191 S7(C-8) — 교대 뒤 사기범 줄의 화자 표기(서버가 붙인 값). 부재 = 교대 전 · 참가자 줄. */
+  speakerLabel?: string;
 };
+
+/** T191 S7 — 릴레이 연출 단계(UF-013 · P-38). armed = 넘김 대사 재생 끝 대기 · cut = 끊김음 · hold = 연결음. */
+type RelayPhase = "idle" | "armed" | "cut" | "hold";
+const RELAY_LOG_PREFIX = "[relay]";
 
 // T187(docs/Architecture.md §72.5 D1) — 세션 전 고지 문면은 `src/lib/sessionboundary/preSessionCopy.ts`가 정본이다.
 // ⭐ T190-8b(§74.22 (1) ⓓ · D-102 · AC-091) — 그 고지의 자리가 벨 화면(`incoming`)에서 **벨 직전 고지**
@@ -277,6 +302,62 @@ export default function SessionCallPage() {
   // 한 번 받아 둔다(신규 데이터 경로·서버 변경 0건). ⛔ 갱신 단위는 **턴**이다(G78 — 청크마다
   // setState하면 통화당 수백 번 리렌더가 되고 그것이 OQ-U27 (c)가 우려한 프레임 부담이다).
   const [liveScammerCaption, setLiveScammerCaption] = useState<string | null>(null);
+  // ⭐⭐ T191 S7 — 릴레이 "돌려 주기"(UF-013 · D-105 · P-38 · Architecture T191 릴레이 설계 "클라 — 교대 순서").
+  // 판정은 순수 모듈 `relayHandover.ts`, 이 화면은 배선만 한다. 서버 정본은 `session.relay`(startRelayLeg · sendMessage).
+  const [relayPhase, setRelayPhase] = useState<RelayPhase>("idle");
+  const relayPhaseRef = useRef<RelayPhase>("idle");
+  const setRelayPhaseBoth = useCallback((next: RelayPhase) => {
+    relayPhaseRef.current = next;
+    setRelayPhase(next);
+  }, []);
+  // 새 leg 토큰(실시간) — 있으면 realtime.credentials 대신 이것으로 GeminiVoiceSession을 다시 마운트한다(key = leg).
+  const [relayLiveCredentials, setRelayLiveCredentials] = useState<CreateRealtimeCallResponse | null>(null);
+  const [relayLiveMounted, setRelayLiveMounted] = useState(true);
+  // 새 토큰으로 다시 마운트한 횟수(key) — 교대 · 확인 창구 새 연결(#140) 공통.
+  const [relayMountSeq, setRelayMountSeq] = useState(0);
+  // DECISIONS #140 — 릴레이 흐름의 확인 창구 새 연결 중(시트 "연결 중…" + 끊김음 · 연결음만 — UX-031 v1.34 확인 노트).
+  const [deskConnecting, setDeskConnecting] = useState(false);
+  const deskConnectingRef = useRef(false);
+  /** 이 통화가 릴레이 흐름인가(교대 도구를 받았거나 이미 교대했다) — #140 판별자. */
+  const relayFlowRef = useRef(false);
+  const [relayGreeting, setRelayGreeting] = useState<{ trigger: string; notBeforeMs: number } | null>(null);
+  // 폴백 — 연결음 동안 새 leg 줄(문서 turnIndex ≥ 이 값)을 화면에 그리지 않는다.
+  const [relayHoldFromTurnIndex, setRelayHoldFromTurnIndex] = useState<number | null>(null);
+  const relayLegIndexRef = useRef(0);
+  const relaySpeakerLabelRef = useRef<string | undefined>(undefined);
+  /** 연출 중 = 이전 소켓의 닫힘을 통화 종료로 보지 않는다(설계 "교대 순서" 8행). */
+  const relayTransitionRef = useRef(false);
+  const relayPathRef = useRef<"live" | "text">("live");
+  /** 도구 허락 · 천장 강제 — 다음 사기범 턴 끝에서 연출을 시작한다. */
+  const relayPendingTransferRef = useRef(false);
+  const relayNudgedRef = useRef(false);
+  const relayLegStartUserTurnsRef = useRef(0);
+  const relayArmedAtMsRef = useRef(0);
+  const relayCutStartedAtMsRef = useRef(0);
+  const relayHoldStartedAtMsRef = useRef(0);
+  const relayNewSpeakerReadyRef = useRef(false);
+  const relayDegradingRef = useRef(false);
+  /** 이번 교대가 넘겨받을 leg(실패 강등의 대상 — 토큰을 받기 전이든 뒤든 같은 값). */
+  const relayTargetLegRef = useRef(0);
+  const relayToneRef = useRef<RelayToneHandle | null>(null);
+  /** 연결음 동안 입력한 타이핑 — 재개 뒤 보낸다(OQ-U70 판정). */
+  const relayPendingTextsRef = useRef<string[]>([]);
+  /** 폴백 — 넘김 대사 오디오가 끝나면 시작할 교대. */
+  const pendingFallbackRelayRef = useRef<NonNullable<SendMessageResponse["relay"]> | null>(null);
+  // ⚠️ T192(사기범 먼저 끊기) 병합 뒤 **교체할** 자리 — §79.18 ④: `!shouldAcceptRelaySwitch(callEndingRef.current)`(C5 · 부모 소유)로
+  // 바꾼다. S7은 자기 래치를 만들지 않는다(§79.18 (5) 4행) — 이 ref는 그 판정이 들어올 **읽기 자리**일 뿐이며 아무도 true로 쓰지 않는다.
+  // 래치 중이면 교대를 시작하지 않고, 이미 받은 새 leg 토큰은 마운트하지 않고 버린다.
+  const hangupLatchedRef = useRef(false);
+  const liveCredentialsRef = useRef<CreateRealtimeCallResponse | null>(null);
+  /**
+   * 진행 중인 `startRelayLeg`(델타 append) — 종료 시 전사 제출이 이것을 **기다린 뒤** 남은 델타만 올린다(중복 · 순서 역전 0 —
+   * Architecture §79.18 ⑥). 교대가 델타를 보낸 뒤 버퍼에서 그만큼 빼므로 기다리면 겹치지 않는다.
+   */
+  const relayInFlightRef = useRef<Promise<unknown> | null>(null);
+  const trackRelayCall = <T,>(p: Promise<T>): Promise<T> => {
+    relayInFlightRef.current = p.catch(() => undefined);
+    return p;
+  };
   // 실시간 세션에 넣을 오케스트레이션 지시(카운터 패턴 — textMessage와 동일).
   // ⚠️ T83(§16.6 G31) — 문자 announce와 확인 지시가 **같은 슬롯**을 쓰므로 큐를 거쳐 한 턴에
   // 하나씩만 주입한다(아래 enqueueTurnInstruction 참고). 예전엔 이 상태를 문자 전용으로 직접
@@ -460,12 +541,31 @@ export default function SessionCallPage() {
     // T103 — 제출 경로(위 한 줄)는 손대지 않고, 통화 필 자막만 여기서 갈라 받는다.
     // ⛔ **사기범 턴만 그린다**(G79/G93). 참가자 턴을 그리면 참가자가 말한 계좌·생년월일이
     // 마스킹 없이 화면에 남는다 — 접근성 취향이 아니라 **안전 조건**이다(§19.6 (4)).
-    if (role === "scammer") setLiveScammerCaption(text);
+    // T191 S7(C-8) — 교대 뒤 줄은 화자 표기 접두(교대 전 줄은 그대로). 표기는 서버 startRelayLeg 응답값이다.
+    if (role === "scammer") setLiveScammerCaption(captionWithSpeaker(relaySpeakerLabelRef.current, text));
+    // T191 S7 — 실시간 천장(넛지 1회 · 천장 + 2면 다음 사기범 턴 끝에서 강제 교대). 프레젠테이션 층 — 실제 허락은 서버.
+    if (role === "user" && relayPhaseRef.current === "idle") {
+      const ceiling = liveCredentialsRef.current?.liveTools?.transferCeiling;
+      const decision = decideLiveRelayCeiling({
+        userTurnsInLeg: turnCountersRef.current.userTurns - relayLegStartUserTurnsRef.current,
+        ceiling,
+        nudged: relayNudgedRef.current,
+      });
+      if (decision === "nudge" && ceiling) {
+        relayNudgedRef.current = true;
+        // 맥락 주입(turnComplete:false — 응답 유발 0) 슬롯. 문면은 서버 소유(liveTools.transferCeiling.nudgeInstruction).
+        setPersonaStateTurn((prev) => ({ text: ceiling.nudgeInstruction, seq: (prev?.seq ?? 0) + 1 }));
+      } else if (decision === "force") {
+        relayPendingTransferRef.current = true;
+      }
+    }
   }, []);
 
   // 실시간 음성 통화 전사를 서버에 제출한다(finding #1). 종료 직전에 1회 호출. 실패해도 통화
   // 종료를 막지 않는다(리포트가 비는 건 통화를 못 끝내는 것보다 나은 실패) — 조용히 흡수.
   const flushTranscript = useCallback(async () => {
+    // T191 S7(§79.18 ⑥) — 진행 중인 교대의 델타 제출을 먼저 기다린다(그 델타는 교대가 버퍼에서 뺀다).
+    if (relayInFlightRef.current) await relayInFlightRef.current;
     const turns = transcriptRef.current;
     if (!sessionId || turns.length === 0) return;
     transcriptRef.current = [];
@@ -593,6 +693,7 @@ export default function SessionCallPage() {
             role: data.role as "scammer" | "user",
             text: data.textMasked as string,
             turnIndex: data.turnIndex as number,
+            ...(typeof data.speakerLabel === "string" ? { speakerLabel: data.speakerLabel } : {}),
           };
         }),
       );
@@ -952,6 +1053,12 @@ export default function SessionCallPage() {
   ]);
 
   const handleScammerTurnComplete = useCallback(() => {
+    // ⭐ T191 S7 — 교대가 허락(도구) · 강제(천장)된 뒤의 첫 사기범 턴 끝 = 넘김 대사 끝. 재생이 끝나면 끊김음으로 간다.
+    if (relayPendingTransferRef.current && relayPhaseRef.current === "idle" && !hangupLatchedRef.current) {
+      relayPendingTransferRef.current = false;
+      relayArmedAtMsRef.current = performance.now();
+      setRelayPhaseBoth("armed");
+    }
     // ⭐ §78.3.4(G488) — 사기범 턴 수는 여기서 올리지 않는다. 같은 `turnComplete`의 전사 flush(`handleTranscriptTurn`,
     // 이 콜백보다 **먼저** 불린다 — `GeminiVoiceSession`)가 이미 올렸다 ⇒ 아래 드레인이 읽는 ref는 최신이다(§45.7 V2 유지).
     // 빈 `turnComplete`(N1)에서는 이 콜백 자체가 불리지 않는다.
@@ -974,7 +1081,7 @@ export default function SessionCallPage() {
       userTurnsSinceInjectionRef.current = 0;
       setPersonaStateTurn((prev) => ({ text: line, seq: (prev?.seq ?? 0) + 1 }));
     }
-  }, [drainInstructionQueue]);
+  }, [drainInstructionQueue, setRelayPhaseBoth]);
 
   // §59.10 커밋 D — 모델이 Live 도구로 직접 문자를 도착시켰다(또는 이미 도착해 있었다). 앱의 지연
   // 발동(백스톱) 효과가 같은 smsId를 다시 요청하지 않도록 요청-완료 집합에 더한다(`pickDueInCallSms`
@@ -1007,6 +1114,343 @@ export default function SessionCallPage() {
   const handleModelToolVerifyFailed = useCallback(() => {
     verifyToolCallFailedRef.current = true;
   }, []);
+
+  // ═══ T191 S7 릴레이 ══════════════════════════════════════════════════════════════════════
+  const logRelay = (event: RelayEventName, fields: { latencyMs?: number; reason?: string } = {}) => {
+    console.info(
+      RELAY_LOG_PREFIX,
+      formatRelayEvent(event, { legIndex: relayLegIndexRef.current, path: relayPathRef.current, ...fields }),
+    );
+  };
+  const stopRelayTones = () => {
+    relayToneRef.current?.stop();
+    relayToneRef.current = null;
+  };
+  /** 끊김음 → 연결음 시작(공통). 대기 시작 시각 = 끊김음 끝. */
+  const beginRelayCut = (path: "live" | "text") => {
+    relayPathRef.current = path;
+    relayTransitionRef.current = true;
+    relayNewSpeakerReadyRef.current = false;
+    relayDegradingRef.current = false;
+    const now = performance.now();
+    relayCutStartedAtMsRef.current = now;
+    relayHoldStartedAtMsRef.current = now + RELAY_CUT_MS;
+    setRelayPhaseBoth("cut");
+    setLiveScammerCaption(RELAY_CONNECT_TONE_CAPTION);
+    stopRelayTones();
+    relayToneRef.current = startRelayTones(gainFor(audioRoute));
+    logRelay("relay_handover_started");
+    setTimeout(() => {
+      if (relayPhaseRef.current === "cut") setRelayPhaseBoth("hold");
+    }, RELAY_CUT_MS);
+  };
+  /** 연결음 판정 1회 — 재개 · 실패 · 대기(대기면 최소 대기 잔여만큼 뒤에 다시 본다). */
+  const checkRelayResume = () => {
+    if (relayPhaseRef.current !== "hold") return;
+    const nowMs = performance.now();
+    const decision = decideRelayResume({
+      holdStartedAtMs: relayHoldStartedAtMsRef.current,
+      nowMs,
+      newSpeakerReady: relayNewSpeakerReadyRef.current,
+    });
+    if (decision === "resume") {
+      finishRelay();
+    } else if (decision === "timeout") {
+      if (relayPathRef.current === "live" && !relayDegradingRef.current) {
+        void degradeRelayToText(relayTargetLegRef.current, [...transcriptRef.current], "hold-timeout");
+      } else {
+        finishRelay("hold-timeout");
+      }
+    } else if (relayNewSpeakerReadyRef.current) {
+      setTimeout(() => checkRelayResume(), relayGreetingDelayMs(relayHoldStartedAtMsRef.current, nowMs));
+    }
+  };
+  // 안정 콜백(첫 오디오)이 최신 렌더의 판정 함수를 부르도록 — 스테일 클로저 방지.
+  const checkRelayResumeRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    checkRelayResumeRef.current = checkRelayResume;
+  });
+  /** 재개(C-6 resume) — 연결음 정지 · 보류 타이핑 전송. */
+  const finishRelay = (failedReason?: string) => {
+    if (relayPhaseRef.current === "idle") return;
+    stopRelayTones();
+    relayTransitionRef.current = false;
+    setRelayPhaseBoth("idle");
+    setRelayHoldFromTurnIndex(null);
+    if (failedReason) logRelay("relay_handover_failed", { reason: failedReason });
+    else logRelay("relay_handover_completed", { latencyMs: performance.now() - relayCutStartedAtMsRef.current });
+    const pending = relayPendingTextsRef.current;
+    relayPendingTextsRef.current = [];
+    for (const text of pending) {
+      if (callMode === "realtime") setTextMessage((prev) => ({ text, seq: (prev?.seq ?? 0) + 1 }));
+      else void handleSend(text);
+    }
+  };
+  const adoptRelayLeg = (legIndex: number, callerLabel: string | undefined) => {
+    relayLegIndexRef.current = legIndex;
+    relaySpeakerLabelRef.current = callerLabel || undefined;
+    relayLegStartUserTurnsRef.current = turnCountersRef.current.userTurns;
+    relayNudgedRef.current = false;
+    if (legIndex > 0) relayFlowRef.current = true;
+  };
+  /** #140 — 확인 창구 새 연결을 끝낸다(첫 오디오 · 실패 공통). */
+  const endDeskConnecting = () => {
+    deskConnectingRef.current = false;
+    setDeskConnecting(false);
+    relayTransitionRef.current = false;
+    stopRelayTones();
+  };
+  /**
+   * DECISIONS #140(User) — 릴레이가 있는 흐름에서만 확인 창구 상대를 다른 목소리 새 연결로. 같은 소켓 재연결 지시 대신
+   * 서버가 창구 담당자 토큰(다른 음성 · 인계 · 첫마디 = 카탈로그 재연결 지시)을 준다. 실패하면 텍스트 폴백(기존 강등 경로 —
+   * 폴백은 서버가 창구 재연결 지시를 다음 턴에 싣는다).
+   */
+  const runVerifyDeskHandover = async () => {
+    if (!sessionId || hangupLatchedRef.current) return;
+    deskConnectingRef.current = true;
+    setDeskConnecting(true);
+    relayPathRef.current = "live";
+    relayTransitionRef.current = true;
+    stopRelayTones();
+    relayToneRef.current = startRelayTones(gainFor(audioRoute));
+    setRelayLiveMounted(false);
+    const turns = [...transcriptRef.current];
+    try {
+      const res = await trackRelayCall(startRelayLeg({
+        sessionId,
+        toLegIndex: relayLegIndexRef.current,
+        turns,
+        mode: "live",
+        purpose: "verifyDesk",
+        openingNotSpoken: openingNotSpokenRef.current,
+        ...(answeredAtMsRef.current !== null ? { answeredAtMs: answeredAtMsRef.current } : {}),
+      }));
+      transcriptRef.current = transcriptRef.current.slice(turns.length);
+      const base = liveCredentialsRef.current;
+      if (hangupLatchedRef.current || !base || !res.geminiToken) throw new Error("no-token");
+      setRelayGreeting(res.greetingTrigger ? { trigger: res.greetingTrigger, notBeforeMs: performance.now() } : null);
+      setRelayLiveCredentials({ ...base, geminiToken: res.geminiToken, geminiModel: res.geminiModel ?? base.geminiModel, liveTools: res.liveTools });
+      setRelayMountSeq((n) => n + 1);
+      setRelayLiveMounted(true);
+      setTimeout(() => {
+        if (deskConnectingRef.current) {
+          endDeskConnecting();
+          realtime.handleError();
+        }
+      }, RELAY_HOLD_MAX_MS);
+    } catch {
+      endDeskConnecting();
+      realtime.handleError();
+    }
+  };
+  /**
+   * 실패(C-7 · AC-101 (i)) — 텍스트 폴백으로 강등해 **새 화자로** 잇는다(서버가 leg를 올리고 첫마디를 쓴다).
+   * 그것도 안 되면 종료(UX-007). ⛔ 같은 목소리로 조용히 잇기 · 침묵 종료 0.
+   */
+  const degradeRelayToText = async (toLegIndex: number, turns: TranscriptTurn[], reason: string) => {
+    if (!sessionId || relayDegradingRef.current) return;
+    relayDegradingRef.current = true;
+    setRelayLiveMounted(false);
+    logRelay("relay_handover_failed", { reason });
+    try {
+      const res = await trackRelayCall(startRelayLeg({ sessionId, toLegIndex, turns, mode: "text" }));
+      transcriptRef.current = transcriptRef.current.slice(turns.length);
+      adoptRelayLeg(res.legIndex ?? toLegIndex, res.callerLabel);
+      relayPathRef.current = "text";
+      // 오프닝 오디오가 남아 있으면 버린다 — 강등 effect가 그것을 다시 틀면 첫 화자 대사가 되살아난다.
+      consumeOpeningAudioUrl();
+      realtime.handleError(); // 기존 강등 경로(AC-084 고지 1줄 · 텍스트 폴백)
+      relayNewSpeakerReadyRef.current = true;
+      checkRelayResume();
+    } catch {
+      const action = relayFailureAction({ liveFailures: 1, textFailed: true });
+      stopRelayTones();
+      relayTransitionRef.current = false;
+      setRelayPhaseBoth("idle");
+      logRelay("relay_handover_failed", { reason: `${reason}+text-failed` });
+      if (action === "end") await handleEndTraining();
+    }
+  };
+  /** 실시간 교대 실행 — 넘김 대사 재생이 끝난 뒤(armed → cut). */
+  const runLiveRelayHandover = async () => {
+    if (relayPhaseRef.current !== "armed" || !sessionId) return;
+    if (hangupLatchedRef.current) {
+      setRelayPhaseBoth("idle");
+      return;
+    }
+    const toLegIndex = relayLegIndexRef.current + 1;
+    relayTargetLegRef.current = toLegIndex;
+    beginRelayCut("live");
+    setRelayLiveMounted(false); // 이전 소켓 종료(닫힘은 relayTransitionRef 동안 종료로 보지 않는다)
+    const turns = [...transcriptRef.current];
+    let liveFailures = 0;
+    for (;;) {
+      try {
+        const res = await trackRelayCall(startRelayLeg({
+          sessionId,
+          toLegIndex,
+          turns,
+          mode: "live",
+          openingNotSpoken: openingNotSpokenRef.current,
+          ...(answeredAtMsRef.current !== null ? { answeredAtMs: answeredAtMsRef.current } : {}),
+        }));
+        transcriptRef.current = transcriptRef.current.slice(turns.length);
+        const base = liveCredentialsRef.current;
+        // T192 병합 뒤: 끊기 래치 중이면 받은 토큰을 마운트하지 않고 버린다. 통화가 이미 끝났어도 같다.
+        if (hangupLatchedRef.current || (relayPhaseRef.current as RelayPhase) === "idle" || !base || !res.geminiToken) {
+          if (!res.geminiToken) throw new Error("no-token");
+          return;
+        }
+        adoptRelayLeg(res.legIndex ?? toLegIndex, res.callerLabel);
+        setRelayGreeting(
+          res.greetingTrigger
+            ? { trigger: res.greetingTrigger, notBeforeMs: relayHoldStartedAtMsRef.current + RELAY_HOLD_MIN_MS }
+            : null,
+        );
+        setRelayLiveCredentials({
+          ...base,
+          geminiToken: res.geminiToken,
+          geminiModel: res.geminiModel ?? base.geminiModel,
+          liveTools: res.liveTools,
+        });
+        setRelayMountSeq((n) => n + 1);
+        setRelayLiveMounted(true);
+        return;
+      } catch {
+        const action = relayFailureAction({ liveFailures, textFailed: false });
+        liveFailures += 1;
+        if (action === "retry-live") continue;
+        await degradeRelayToText(toLegIndex, turns, "live-failed");
+        return;
+      }
+    }
+  };
+  /** 폴백 교대 — 넘김 대사(응답) 뒤. 서버는 이미 leg를 올렸다(sendMessage). 새 화자 첫마디는 startRelayLeg(text)가 쓴다. */
+  const runFallbackRelay = async (relay: NonNullable<SendMessageResponse["relay"]>) => {
+    if (!sessionId || hangupLatchedRef.current) return;
+    adoptRelayLeg(relay.legIndex, relay.callerLabel);
+    setRelayHoldFromTurnIndex(relay.fromTurnIndex);
+    beginRelayCut("text");
+    try {
+      await trackRelayCall(startRelayLeg({ sessionId, toLegIndex: relay.legIndex, mode: "text" }));
+    } catch {
+      // 첫마디 생성 실패 — 새 화자 표기로 계속 이어 간다(다음 참가자 발화에 새 화자가 답한다). 관측은 아래 로그.
+      logRelay("relay_handover_failed", { reason: "greeting-failed" });
+    }
+    relayNewSpeakerReadyRef.current = true;
+    checkRelayResume();
+  };
+  /** 실시간 도구 `transfer_call` — 서버 check(쓰기 0)로 하한을 확인하고 서버 문면을 모델에 돌려준다. */
+  const handleModelToolTransferCall = useCallback(async (): Promise<{ status: string; guidance: string }> => {
+    const declined = liveCredentialsRef.current?.liveTools?.transferDeclinedInstruction ?? "";
+    if (!sessionId || relayPhaseRef.current !== "idle" || hangupLatchedRef.current) {
+      return { status: "declined", guidance: declined };
+    }
+    const res = await trackRelayCall(startRelayLeg({
+      sessionId,
+      toLegIndex: relayLegIndexRef.current + 1,
+      turns: [...transcriptRef.current],
+      mode: "check",
+    }));
+    if (res.allowed) relayPendingTransferRef.current = true;
+    return { status: res.allowed ? "accepted" : "declined", guidance: res.guidance ?? declined };
+  }, [sessionId]);
+  /** 새 leg 첫 오디오 = 재개 신호(C-6). 최소 2초는 첫마디 트리거 지연이 이미 채웠다. */
+  const handleRelayFirstAudio = useCallback(() => {
+    if (deskConnectingRef.current) {
+      deskConnectingRef.current = false;
+      setDeskConnecting(false);
+      relayTransitionRef.current = false;
+      relayToneRef.current?.stop();
+      relayToneRef.current = null;
+      return;
+    }
+    if (relayPhaseRef.current === "idle") return;
+    relayNewSpeakerReadyRef.current = true;
+    checkRelayResumeRef.current();
+  }, []);
+  const handleLiveEnded = useCallback(() => {
+    if (shouldIgnoreLiveEnded(relayTransitionRef.current)) return;
+    realtime.handleEnded();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realtime.handleEnded]);
+  const handleLiveError = useCallback(() => {
+    if (deskConnectingRef.current) {
+      deskConnectingRef.current = false;
+      setDeskConnecting(false);
+      relayTransitionRef.current = false;
+      relayToneRef.current?.stop();
+      relayToneRef.current = null;
+      realtime.handleError();
+      return;
+    }
+    if (relayTransitionRef.current && relayPathRef.current === "live") {
+      // 새 leg 연결 실패 — 서버는 이미 leg를 올렸다(토큰 발급 뒤) → 같은 leg로 텍스트 강등(멱등 · 델타 0).
+      void degradeRelayToText(relayTargetLegRef.current, [], "connect-failed");
+      return;
+    }
+    realtime.handleError();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realtime.handleError, sessionId]);
+
+  // T191 S7 — 지금 마운트될 실시간 자격증명(새 leg 토큰 우선). 천장 · 도구 문면을 콜백 안에서 최신으로 읽는다.
+  useEffect(() => {
+    liveCredentialsRef.current = relayLiveCredentials ?? realtime.credentials ?? null;
+    if (liveCredentialsRef.current?.liveTools?.transferCall) relayFlowRef.current = true;
+  }, [relayLiveCredentials, realtime.credentials]);
+
+  // T191 S7 — 넘김 대사 재생이 끝나면(반이중 게이트가 풀리면) 끊김음으로 간다. 8초 넘게 안 끝나면 기다리지 않는다.
+  useEffect(() => {
+    if (relayPhase !== "armed") return;
+    const tryStart = () => {
+      if (
+        shouldStartRelayCut({
+          agentSpeaking: realtime.isAgentSpeaking,
+          armedAtMs: relayArmedAtMsRef.current,
+          nowMs: performance.now(),
+        })
+      ) {
+        (async () => {
+          await runLiveRelayHandover();
+        })();
+        return true;
+      }
+      return false;
+    };
+    if (tryStart()) return;
+    const timer = setTimeout(() => {
+      relayArmedAtMsRef.current -= RELAY_PLAYBACK_WAIT_CAP_MS; // 상한 도달 — 재생 종료를 더 기다리지 않는다
+      tryStart();
+    }, RELAY_PLAYBACK_WAIT_CAP_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [relayPhase, realtime.isAgentSpeaking]);
+
+  // T191 S7 — 연결음 감시(P-38 (1) · OQ-U70): 최소 2초 뒤 새 화자 준비 = 재개 · 15초 미준비 = 실패(강등 → 불가면 종료).
+  // ⛔ 새 setInterval 금지(기존 통화 경과 타이머 1개 — toolWindowWiring 게이트) — 신호(첫 오디오 · 첫마디 응답)와 단발
+  // setTimeout(최소 대기 잔여 · 최대 대기)으로만 판정한다.
+  useEffect(() => {
+    if (relayPhase !== "hold") return;
+    const remainingMax = Math.max(0, relayHoldStartedAtMsRef.current + RELAY_HOLD_MAX_MS - performance.now());
+    const timer = setTimeout(() => checkRelayResume(), remainingMax);
+    checkRelayResume();
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [relayPhase]);
+
+  // T191 S7 — 통화가 끝나면(종료 버튼 · 한도) 연결음을 멈춘다(AC-006 — 연출 중에도 즉시). 화면을 떠나도 같다.
+  useEffect(() => {
+    if (phase !== "ended") return;
+    relayToneRef.current?.stop();
+    relayToneRef.current = null;
+  }, [phase]);
+  useEffect(
+    () => () => {
+      relayToneRef.current?.stop();
+      relayToneRef.current = null;
+    },
+    [],
+  );
 
   // 통화 경과 타이머 — "받기"(answeredAt) 기점, ended면 정지.
   useEffect(() => {
@@ -1185,6 +1629,11 @@ export default function SessionCallPage() {
   const handlePlaybackEnded = () => {
     setPlaybackUrl(null);
     setPhase((p) => (p === "opening" ? "live" : p));
+    const pendingRelay = pendingFallbackRelayRef.current;
+    if (pendingRelay) {
+      pendingFallbackRelayRef.current = null;
+      void runFallbackRelay(pendingRelay);
+    }
     maybeStartListening();
   };
 
@@ -1481,7 +1930,13 @@ export default function SessionCallPage() {
       // 실시간 경로만 클라가 주입한다(폴백은 서버가 다음 턴 프롬프트에 싣는다 — §16.2).
       if (requestCallMode === "realtime") {
         // §78.4.2 — 재연결 지시는 화자 전환 첫 발화다(맥락 주입이 아니라 `relayGreeting` 텍스트 턴).
-        enqueueTurnInstruction(result.reconnectInstruction, "verify", { speakerSwitch: true });
+        // ⭐ T191 S7(DECISIONS #140) — 릴레이 흐름에서만 창구 상대를 **다른 목소리 새 연결**로(첫마디 = 같은 재연결 지시를
+        // 서버가 새 토큰과 함께 준다). 릴레이 없는 6종은 아래 같은 소켓 경로 그대로(현행).
+        if (relayFlowRef.current) {
+          void runVerifyDeskHandover();
+        } else {
+          enqueueTurnInstruction(result.reconnectInstruction, "verify", { speakerSwitch: true });
+        }
         // T118 / A5 — 이 시점부터 전환 상태 단언이 참이 된다(`placed`). 카운터를 0으로 두어
         // **참가자가 한 번 말한 뒤**부터 재주입되게 한다(G99 — 여기서 0으로 두지 않으면 다음
         // 사기범 턴 경계에서 곧바로 한 번 더 들어간다).
@@ -1580,6 +2035,12 @@ export default function SessionCallPage() {
     // 호출하지 않는다 — 그러면 실시간 음성 위에 다른 AI 목소리가 겹쳐 흐른다. 대신 **같은 Live
     // 세션 안으로** 텍스트 턴을 넣는다(GeminiVoiceSession.textMessage). 응답은 평소처럼 이 통화의
     // 목소리로 돌아오므로 겹침 문제가 원천적으로 없고, 마이크 없이도 훈련을 진행·검증할 수 있다.
+    // T191 S7(OQ-U70) — 연결음 동안 타이핑은 받아 두었다가 재개 뒤 보낸다(대기 중에는 아무에게도 가지 않는다).
+    if (relayPhaseRef.current !== "idle") {
+      if (text) relayPendingTextsRef.current.push(text);
+      setInput("");
+      return;
+    }
     if (callMode === "realtime") {
       if (!text || phase !== "live") return;
       setTextMessage((prev) => ({ text, seq: (prev?.seq ?? 0) + 1 }));
@@ -1604,6 +2065,10 @@ export default function SessionCallPage() {
       }
       if (result.ended) {
         setPhase("ended");
+      } else if (result.relay) {
+        // T191 S7 — 넘김 대사 오디오 재생이 끝난 뒤 끊김음(P-38 (1)). 오디오가 없으면 바로.
+        if (result.audioUrl) pendingFallbackRelayRef.current = result.relay;
+        else void runFallbackRelay(result.relay);
       }
     } catch {
       setSendError("메시지를 보내지 못했습니다. 다시 시도해 주세요.");
@@ -1706,10 +2171,16 @@ export default function SessionCallPage() {
   // T72(§15.6 G6) — 자격증명을 아직 못 받았으면(수신 대기 중) 기본은 true다. 실제로 난이도를
   // 반영하지 못하는 경로(ElevenLabs)만 서버가 false로 명시해 내려준다.
   const difficultyApplied = realtime.credentials?.difficultyApplied !== false;
-  const latestScammerLine =
-    [...messages].reverse().find((m) => m.role === "scammer")?.text ?? null;
+  // T191 S7 — 폴백 연결음 동안 새 leg 줄은 보류하고, 교대 뒤 줄은 화자 표기 접두(C-8).
+  const latestScammerMessage = [...messages]
+    .reverse()
+    .find((m) => m.role === "scammer" && !isHeldForRelay(m.turnIndex, relayHoldFromTurnIndex));
+  const latestScammerLine = latestScammerMessage
+    ? captionWithSpeaker(latestScammerMessage.speakerLabel, latestScammerMessage.text)
+    : null;
   // T103 — 통화 필 자막의 단일 소스: 실시간 턴 자막 우선, 없으면 폴백 경로의 마지막 사기범 대사.
-  const pillCaption = liveScammerCaption ?? latestScammerLine;
+  const pillCaption =
+    relayPhase === "cut" || relayPhase === "hold" ? RELAY_CONNECT_TONE_CAPTION : (liveScammerCaption ?? latestScammerLine);
   const isRinging = phase === "incoming";
   // T68 — 문자 도착 배너·"문자함"(N) 컨트롤(UX-014 v1.11 추가 state). 통화 phase 전이가 아니라
   // 셸 위에 얹히는 알림 레이어라 live/opening 어느 phase에서도 뜬다.
@@ -1780,16 +2251,25 @@ export default function SessionCallPage() {
         // 이 분기에 도달하는 시점에 `sessionId`가 이미 non-null이다(`handleAnswer`가 `!sessionId`면
         // `realtime.start`조차 부르지 않는다, 위 참고) — 여기 null 검사는 그 불변식을 TS 타입으로
         // 표현할 뿐, 런타임에서 이 분기가 실제로 스킵되는 경우는 없다.
-        sessionId && (
+        // ⭐ T191 S7 — 릴레이 새 leg는 새 토큰으로 **다시 마운트**한다(key = leg · 세션 effect는 마운트 1회 — §19.6 (3) ①).
+        // 연결음 동안은 마이크를 보내지 않는다(OQ-U70 — 대기 중 음성 미수신). 이전 소켓의 닫힘은 연출 중 무시한다.
+        sessionId && relayLiveMounted && (
           <GeminiVoiceSession
-            credentials={realtime.credentials}
+            key={`leg-${relayMountSeq}`}
+            credentials={relayLiveCredentials ?? realtime.credentials}
             sessionId={sessionId}
             stopSignal={realtime.stopSignal}
             muted={muted || verifyOverlayOpen}
+            micHeld={relayPhase !== "idle" || deskConnecting}
             outputVolume={gainFor(audioRoute)}
             onActive={realtime.handleActive}
-            onEnded={realtime.handleEnded}
-            onError={realtime.handleError}
+            onEnded={handleLiveEnded}
+            onError={handleLiveError}
+            relayGreetingTrigger={relayMountSeq > 0 ? relayGreeting?.trigger : undefined}
+            relayGreetingNotBeforeMs={relayMountSeq > 0 ? relayGreeting?.notBeforeMs : undefined}
+            initialScammerTurns={scammerTurns}
+            onFirstAudio={handleRelayFirstAudio}
+            onModelToolTransferCall={handleModelToolTransferCall}
             onSpeakingChange={realtime.handleSpeakingChange}
             onUserSpeakingChange={realtime.handleUserSpeakingChange}
             onTranscriptTurn={handleTranscriptTurn}

@@ -18,7 +18,7 @@ import { parseAgentMap } from "./agentMap";
 import { ElevenLabsRealtimeProvider } from "./elevenLabsProvider";
 import { GeminiRealtimeProvider } from "./geminiProvider";
 import { MockRealtimeProvider } from "./mockProvider";
-import type { RealtimeVoiceProvider } from "./types";
+import type { RealtimeProviderName, RealtimeVoiceProvider } from "./types";
 
 /**
  * 자격증명 판독 상태 3값(T133/AC-081 (c), Architecture.md §41.6 (나)).
@@ -96,24 +96,55 @@ function readSecret(param: SecretParamLike): string {
 export function getRealtimeProvider(
   scenarioId: string,
   effectiveVoiceMode?: VoiceMode,
+  options: { relayVariant?: boolean } = {},
 ): RealtimeVoiceProvider {
   const voiceMode = effectiveVoiceMode ?? PUBLIC_SCENARIOS[scenarioId]?.voiceMode;
 
-  // ① ElevenLabs — 클론 가능 경로 우선.
+  // ① ElevenLabs — 클론 가능 경로 우선. (판정 순서 · 조건은 아래 순수 함수 하나가 진다 — 종전과 같은 순서.)
   const elevenLabsKey = readSecret(ELEVENLABS_API_KEY);
-  if (elevenLabsKey) {
-    const agentMap = parseAgentMap(getElevenLabsAgentIds());
-    if (agentMap[scenarioId]) {
-      return new ElevenLabsRealtimeProvider(elevenLabsKey, agentMap);
-    }
-  }
-
+  const agentMap = elevenLabsKey ? parseAgentMap(getElevenLabsAgentIds()) : {};
   // ② Gemini Live — 무료 경로. 고정 음성만 되므로 generic 시나리오에만 붙인다.
   const geminiKey = readSecret(GEMINI_API_KEY);
-  if (geminiKey && voiceMode === "generic") {
-    return new GeminiRealtimeProvider(geminiKey);
-  }
-
+  const name = selectRealtimeProviderName({
+    elevenLabsReady: Boolean(elevenLabsKey) && Boolean(agentMap[scenarioId]),
+    geminiReady: Boolean(geminiKey),
+    voiceMode,
+    relayVariant: options.relayVariant === true,
+  });
+  if (name === "elevenlabs") return new ElevenLabsRealtimeProvider(elevenLabsKey, agentMap);
+  if (name === "gemini") return new GeminiRealtimeProvider(geminiKey);
   // ③ 텍스트 폴백.
   return new MockRealtimeProvider();
+}
+
+/**
+ * ⭐ T191 릴레이 라우팅 허용목록(G495 · DECISIONS #139 — User: 릴레이가 있는 흐름은 ElevenLabs로 보내지 않는다).
+ * ElevenLabs 경로에는 통화 중 서버 측 인계문 주입 통로가 없고, 클라 경유 동적 변수는 가드레일 우회 통로가 된다
+ * (T191 릴레이 설계 "ElevenLabs — 안전 조건 하 불가"). ⛔ **차단목록(`!== "elevenlabs"`)으로 쓰지 말 것** —
+ * 새 외부 에이전트 프로바이더가 기본 통과가 된다(G233 관례 — `TURN_INSTRUCTION_CAPABLE_PROVIDERS`와 같은 형태).
+ */
+export const RELAY_CAPABLE_PROVIDERS: readonly RealtimeProviderName[] = ["gemini", "none"];
+
+/** ⚠️ `allowlist`는 테스트 주입용(역검증이 이 함수 자신으로 서야 한다 — G234 관례). 호출부는 넘기지 않는다. */
+export function isRelayCapable(
+  provider: RealtimeProviderName,
+  allowlist: readonly RealtimeProviderName[] = RELAY_CAPABLE_PROVIDERS,
+): boolean {
+  return allowlist.includes(provider);
+}
+
+/**
+ * 프로바이더 선택(순수) — ① ElevenLabs(키 + 이 시나리오 에이전트) ② Gemini(키 + generic) ③ 텍스트 폴백.
+ * 릴레이 변형 세션은 허용목록 밖 프로바이더를 건너뛰고 다음 순위로 간다(조용한 미적용이 아니라 라우팅 —
+ * 클론 시나리오면 Gemini 조건(generic)이 안 맞아 텍스트 폴백이 된다).
+ */
+export function selectRealtimeProviderName(
+  input: { elevenLabsReady: boolean; geminiReady: boolean; voiceMode?: VoiceMode; relayVariant?: boolean },
+  relayAllowlist: readonly RealtimeProviderName[] = RELAY_CAPABLE_PROVIDERS,
+): RealtimeProviderName {
+  const allowed = (provider: RealtimeProviderName): boolean =>
+    !input.relayVariant || isRelayCapable(provider, relayAllowlist);
+  if (input.elevenLabsReady && allowed("elevenlabs")) return "elevenlabs";
+  if (input.geminiReady && input.voiceMode === "generic" && allowed("gemini")) return "gemini";
+  return "none";
 }

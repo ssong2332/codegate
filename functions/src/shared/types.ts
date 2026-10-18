@@ -125,6 +125,19 @@ export type SessionDoc = {
   // **불투명 ID**(`fv-xxxx`). 수법 · 단계 · 인원은 `functions/src/scenarios/flowVariants.ts`(서버 전용)에만
   // 있다(D-46 · ADR-0004). 부재 = 변형 도입 이전 세션 → 원본 시나리오 프롬프트로 해석(무소급).
   flowVariantId?: string;
+  // T191 S7 추가(옵셔널, 하위호환 · 무백필 — PRD AC-101 (e)(f) · 설계 "T191 릴레이 설계" 세션 문서 relay) — 화자 교대
+  // 상태. 서버(`startRelayLeg` · 폴백 `sendMessage`)만 쓴다. `legIndex` = 지금 말하는 leg(0-기반) ·
+  // `legStartTurnIndex[i]` = leg i가 시작한 메시지 turnIndex(0번은 항상 0 — 배열 인덱스 = leg 인덱스).
+  // 부재 = 교대 없음(leg 0). ⚠️ 숫자만 담는다 — 화자 표기 · 인원 구성 · 단계는 이 필드에 없다(설계 X1).
+  relay?: {
+    legIndex: number;
+    legStartTurnIndex: number[];
+    /**
+     * T191 S7(DECISIONS #140) — 릴레이 흐름에서 확인 창구를 **다른 목소리 새 연결**로 바꾼 경계(그 시점 messages 수).
+     * 멱등 표지(재요청 시 델타를 다시 쓰지 않는다). 부재 = 창구 새 연결 없음.
+     */
+    verifyDeskTurnIndex?: number;
+  };
 };
 
 // --- users/{uid}/voices/{voiceId} (P-8·AC-046, ADR-0005·Database.md 1:1) ---
@@ -180,6 +193,10 @@ export type MessageDoc = {
   // **부재 = 도달함**(무백필). ⛔ `false`를 쓰지 말 것 — 부재와 `false`가 같은 뜻이면 판별자가
   // 둘이 된다(§14.9.1 오버로드 금지). ⛔ 이 필드를 앵커·문서 수 계산에 반영하지 말 것(G350).
   notSpoken?: true;
+  // T191 S7 추가(옵셔널 · 무백필 — UX 계약 C-8) — 화자 교대 **뒤** 사기범 줄의 화자 표기(변형 leg의 `callerLabel`).
+  // 서버가 append 시점의 `session.relay.legIndex`로 붙인다(클라가 보낸 라벨은 받지 않는다). 교대 전 줄 ·
+  // 참가자 줄 · 교대 없는 세션은 부재. 자막 접두와 리플레이 줄 표기가 같은 값을 쓴다.
+  speakerLabel?: string;
 };
 
 // --- sessions/{sessionId}/artifacts/{artifactId} (AC-022, ADR-0003) ---

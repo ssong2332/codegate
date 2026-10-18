@@ -104,6 +104,11 @@ export type SendMessageResponse = {
    * 동일한 단일 소스). functions/src/roleplay/types.ts와 1:1.
    */
   sms?: { smsId: string };
+  /**
+   * T191 S7(옵셔널 — UX 계약 C-6) — 이번 응답(넘김 대사) 뒤 화자가 바뀌었다. 클라는 연결음 연출 뒤
+   * `startRelayLeg`(mode "text")로 새 화자 첫마디를 받는다. functions/src/roleplay/types.ts와 1:1.
+   */
+  relay?: { legIndex: number; callerLabel: string; fromTurnIndex: number };
 };
 
 // --- createRealtimeCall (UX-014 live phase · 2026-07-22 실시간 음성 대화 전환) ---
@@ -166,6 +171,12 @@ export type LiveTools = {
   offerVerificationDesk?: string;
   /** 클레임 실패 조기 응답 전용(§59.6 갱신 2) — 값은 서버 `VERIFY_DECLINE_ALREADY`의 사본이다. */
   verifyAlreadyAnnouncedInstruction?: string;
+  /** T191 S7 — 릴레이 교대 도구 이름(다음 leg가 있는 leg만). functions/src/realtime/liveTools.ts와 1:1. */
+  transferCall?: string;
+  /** T191 S7 — 실시간 천장(넛지 · 강제 교대 입력, 프레젠테이션 층 — 실제 허락은 startRelayLeg가 다시 판정). */
+  transferCeiling?: { nudgeAfterUserTurns: number; forceAfterUserTurns: number; nudgeInstruction: string };
+  /** T191 S7 — startRelayLeg(check)에 닿지 못했을 때 모델에 돌려줄 서버 소유 문면. */
+  transferDeclinedInstruction?: string;
   failureInstruction: string;
 };
 
@@ -299,6 +310,34 @@ export type SubmitRealtimeTranscriptRequest = {
   answeredAtMs?: number;
 };
 export type SubmitRealtimeTranscriptResponse = { written: number };
+
+// --- startRelayLeg (T191 S7 · UF-013 · AC-101) — functions/src/realtime/startRelayLeg.ts와 1:1. ---
+// ⛔ 응답에 인계문 · 프롬프트는 없다(서버가 토큰에 고정 — 설계 X2). 클라는 순번 · 화자 표기 · 토큰만 받는다.
+export type StartRelayLegMode = "check" | "live" | "text";
+export type StartRelayLegRequest = {
+  sessionId: string;
+  toLegIndex: number;
+  turns?: TranscriptTurn[];
+  answeredAtMs?: number;
+  openingNotSpoken?: boolean;
+  mode?: StartRelayLegMode;
+  /** T191 S7(DECISIONS #140) — "verifyDesk" = 릴레이 흐름의 확인 창구 다른 목소리 새 연결(leg 그대로). */
+  purpose?: "relay" | "verifyDesk";
+};
+export type StartRelayLegResponse = {
+  mode: StartRelayLegMode;
+  allowed?: boolean;
+  guidance?: string;
+  legIndex?: number;
+  callerLabel?: string;
+  geminiToken?: string;
+  geminiModel?: string;
+  liveTools?: LiveTools;
+  greetingTrigger?: string;
+  greeted?: boolean;
+  isMock?: boolean;
+  written?: number;
+};
 
 // --- endSession (Track B · T8 · UX-007 · AC-006/AC-007/AC-021) ---
 export type EndSessionReason =

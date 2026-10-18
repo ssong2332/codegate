@@ -14,7 +14,18 @@ import { maskPII } from "../guardrails";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from "../llm";
 import { triggerReportGeneration } from "../report";
-import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
+import {
+  findFlowVariant,
+  isRelayVariant,
+  relaySpeakerLabel,
+  resolveSessionScenarioPrompt,
+} from "../scenarios/flowVariants";
+import { buildRelayHandoff } from "../realtime/relayHandoff";
+import {
+  countLegUserTurns,
+  decideFallbackRelayTurn,
+  extractRelayTransferSignal,
+} from "../realtime/relayTransfer";
 import { findDueInCallSms, hasInCallSms } from "../scenarios/inCallSms";
 import {
   hasAppInstallMockScreen,
@@ -90,6 +101,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
 
     // T191 S5(AC-096 (e)(f)) — 세션에 배정된 흐름 변형을 합성한 프롬프트(부재 = 원본 · 무소급).
     const scenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId);
+    // T191 S7(릴레이 — 텍스트 폴백 경로) — 세션의 교대 상태(서버 정본 `session.relay`)로 지금 leg를 정한다. 실시간에서
+    // 강등돼 와도 같은 leg에서 잇는다(AC-101 (e)). 릴레이가 없는 세션은 아래 값이 전부 0 · undefined라 종전과 같다.
+    const flowVariant = findFlowVariant(session.flowVariantId);
+    const relayVariant =
+      isRelayVariant(flowVariant) && flowVariant.scenarioId === session.scenarioId ? flowVariant : undefined;
+    const relayLegIndex = relayVariant ? (session.relay?.legIndex ?? 0) : 0;
+    const relayLegStart = relayVariant ? (session.relay?.legStartTurnIndex?.[relayLegIndex] ?? 0) : 0;
     if (!scenarioPrompt) {
       throw new HttpsError(
         "internal",
@@ -154,7 +172,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
 
     // ② 서버에서 scenarioPrompts 기반으로 조립한 프롬프트 + 사용자 입력 구분자 감싸기(ADR-0004) →
     // LLM 어댑터(functions/src/llm) 호출.
-    const llmHistory = toLlmHistory(storedHistory);
+    // T191 S7 — 교대 뒤 leg는 **경계 이후 이력만** 모델에 준다(앞 leg 대화는 서버 인계 블록으로만 — 실시간 새 연결과
+    // 같은 인계 내용). 릴레이가 없으면 경계 = 0이라 이력 전체(종전과 같다).
+    const llmHistory = toLlmHistory(storedHistory.filter((m) => m.turnIndex >= relayLegStart));
     llmHistory.push({ role: "user", content: wrapUserInputAsData(maskedUserText) });
 
     // reviewer 리뷰 Major #1 수정(2026-07-24, 실 Gemini 활성화로 처음 실측 가능해진 결함) — 사용자
@@ -284,7 +304,44 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       isDelivered: async (smsId) => (await sessionRef.collection("inCallSms").doc(smsId).get()).exists,
       callTransferred: verifyState?.placed === true,
     });
+    // ②-g T191 S7 — 릴레이 교대 판정(실시간 `startRelayLeg`와 같은 함수 — 하한 · 확인 창구 · 천장). 넘겨도 되는 턴에만
+    // 신호 안내를 붙이고, 천장 + 2면 신호가 없어도 이 응답 뒤 교대한다(AC-101 (a) — 교대는 건너뛰지 않는다).
+    const relayTurn = relayVariant
+      ? decideFallbackRelayTurn({
+          variant: relayVariant,
+          legIndex: relayLegIndex,
+          userTurnsInLeg: countLegUserTurns(storedHistory, relayLegStart, 1),
+          ...(verifyState ? { verify: { announced: verifyState.announced, placed: verifyState.placed } } : {}),
+        })
+      : undefined;
     const promptTurnInstruction = [turnInstruction, otpCheckInstruction].filter(Boolean).join("\n") || undefined;
+    const turnInstructionWithRelay =
+      [promptTurnInstruction, relayTurn?.instruction].filter(Boolean).join("\n") || undefined;
+    // 교대 뒤 leg 프롬프트 — 그 leg 페르소나 + 서버 인계 블록(앞 leg 경계 이전 마스킹 저장본 · X2).
+    let turnScenarioPrompt = scenarioPrompt;
+    if (relayVariant) {
+      let relayHandoff: string | undefined;
+      if (relayLegIndex > 0) {
+        let deliveredSmsIds: string[] = [];
+        try {
+          deliveredSmsIds = (await sessionRef.collection("inCallSms").get()).docs.map((d) => d.id);
+        } catch {
+          // 조회 실패는 인계 블록의 문자 줄만 비운다(대화를 막지 않는다 — P-4).
+        }
+        relayHandoff = buildRelayHandoff({
+          variant: relayVariant,
+          fromLegIndex: relayLegIndex - 1,
+          maskedMessages: storedHistory.filter((m) => m.turnIndex < relayLegStart),
+          deliveredSmsIds,
+        });
+      }
+      turnScenarioPrompt =
+        resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId, {
+          legIndex: relayLegIndex,
+          transferVia: "marker",
+          ...(relayHandoff ? { handoff: relayHandoff } : {}),
+        }) ?? scenarioPrompt;
+    }
 
     // 첫 사용자 턴만 LLM 시간 제한 20초(2026-10-18, 사용자 결정 C — llm/index.ts LLM_FIRST_TURN_TIMEOUT_MS).
     // AC-004 목표(95% ≤10초)의 예외 1건 — 첫 턴은 Gemini 지연이 반복돼 10초에서 Mock으로 강등됐고,
@@ -298,17 +355,21 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       // §50.4.4/§50.3.3(G298 호출부 3곳 중 "텍스트 턴") — identityCheckAllowed·speakerGender도
       // 표에서 파생해 항상 넘긴다(기본값이 관대한 쪽/미출력이라 빠뜨려도 에러는 안 나지만 조용히
       // 축소되거나 목소리·말이 어긋난다).
-      systemPrompt: buildSystemPrompt(scenarioPrompt, {
+      systemPrompt: buildSystemPrompt(turnScenarioPrompt, {
         difficultyLevel,
         inCallSmsEnabled: hasInCallSms(session.scenarioId),
         verifyInterceptEnabled: verifyEnabled,
         l3Procedural: isL3Procedural(session.scenarioId),
         identityCheckAllowed: asksIdentityCheck(session.scenarioId),
-        speakerGender: speakerGenderFor(session.scenarioId),
-        ...(promptTurnInstruction ? { turnInstruction: promptTurnInstruction } : {}),
+        // T191 S7 — 교대 뒤 leg는 그 leg 성별(실시간 leg 토큰과 같은 원천).
+        speakerGender:
+          relayVariant && relayLegIndex > 0
+            ? relayVariant.legs[relayLegIndex].speakerGender
+            : speakerGenderFor(session.scenarioId),
+        ...(turnInstructionWithRelay ? { turnInstruction: turnInstructionWithRelay } : {}),
       }),
       messages: llmHistory,
-      mockTacticHints: scenarioPrompt.weakenedTactics,
+      mockTacticHints: turnScenarioPrompt.weakenedTactics,
     });
     // 몇 단계 공급자가 응답했는지(2026-10-18 Groq 3차 예비, Architecture.md §75.7) — 라이브 로그로
     // 1차 Gemini / 2차 Gemini 대체 / 3차 Groq / Mock 강등 비율을 읽는다. 숫자·ID·단계명만(G170).
@@ -361,6 +422,11 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 원칙을 대화 로그 전체에 일관 적용 — ADR-0004).
     // T84(§15.9.1 R4) — 시나리오를 함께 넘겨 attachment에 `landingKind`가 실린다(서버 카탈로그가
     // 진실 원천, 클라 분류 금지). 카탈로그가 없는 시나리오는 키 자체가 붙지 않아 무변경이다.
+    // ③-0 T191 S7 — 릴레이 교대 신호 **판독만** 여기서 한다(원문 제거는 아래 ③-b `extractEscalationSignal`이
+    // `[[SIGNAL:*]]`를 전부 걷어 내므로 그대로 맡긴다 — 손질은 completion.text 하나에 건다). 받아들이는지는 위 판정이
+    // 정한다(하한 미달 턴의 신호는 버린다 · 천장 + 2는 신호 없이도 교대).
+    const relaySignal = extractRelayTransferSignal(completion.text).transfer;
+    const relayTransfer = Boolean(relayTurn && (relayTurn.force || (relayTurn.acceptSignal && relaySignal)));
     const { text: linkFreeReplyText, attachments: replyAttachments } = extractLinkMarker(
       completion.text,
       session.scenarioId,
@@ -405,6 +471,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 2026-09-06 버그수정 — 사기범(LLM) 응답에는 maskPII를 적용하지 않는다(scammerReplyMasking.ts
     // 헤더 주석 참고 — 라이브 신고 "[계좌]" 리터럴 노출, 시나리오·난이도 무관 공통 재현).
     const finalReplyText = finalizeScammerReplyText(shapedReplyText);
+    const replySpeakerLabel = relaySpeakerLabel(relayVariant, relayLegIndex);
     await messagesRef.add({
       role: "scammer",
       textMasked: finalReplyText,
@@ -412,6 +479,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       createdAt: Timestamp.now(),
       ...(replyAttachments ? { attachments: replyAttachments } : {}),
       ...(session.channel ? { channel: session.channel } : {}),
+      // T191 S7(C-8) — 교대 뒤 leg의 사기범 줄만 화자 표기(넘김 대사도 말한 leg의 것).
+      ...(replySpeakerLabel ? { speakerLabel: replySpeakerLabel } : {}),
     } satisfies MessageDoc);
 
     // ④ 한도 체크 → 도달 시 ended:true + status=ended(→onSessionEnded 트리거, AC-007).
@@ -454,10 +523,23 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       // (isMock이 언제나 true였던 Mock 전용 시절엔 update에 최소 llmProvider 필드가 항상 있었음).
       // Firestore Transaction.update()는 빈 객체를 거부한다("At least one field must be updated")
       // — 반영할 게 없으면 write 자체를 건너뛴다(멱등, 트랜잭션 실패로 사용자 응답을 막지 않음).
+      // T191 S7 — 교대 확정(같은 leg에서 아직 안 올렸을 때만 — 동시 `startRelayLeg`와 이중 진행 0). 새 leg는
+      // 이 응답 다음 문서부터다. 한도로 종료되는 턴은 교대하지 않는다(종료가 우선).
+      let relayAdvanced = false;
+      if (relayTransfer && stillActive && !limitReached && (fresh?.relay?.legIndex ?? 0) === relayLegIndex) {
+        update.relay = {
+          legIndex: relayLegIndex + 1,
+          legStartTurnIndex: [
+            ...(fresh?.relay?.legStartTurnIndex ?? [0]).slice(0, relayLegIndex + 1),
+            nextIndex + 2,
+          ],
+        };
+        relayAdvanced = true;
+      }
       if (Object.keys(update).length > 0) {
         tx.update(sessionRef, update);
       }
-      return { stillActive };
+      return { stillActive, relayAdvanced };
     });
 
     // T8 배선: 한도 도달로 이 턴이 세션을 자동 종료시켰다면(status=ended, endReason=limit_reached),
@@ -533,6 +615,17 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       ...(audioUrl ? { audioUrl } : {}),
       ...(escalationTrigger ? { escalation: { toChannel: "voice" as const } } : {}),
       ...(deliveredSmsId ? { sms: { smsId: deliveredSmsId } } : {}),
+      // T191 S7 — 이 응답 뒤 화자가 바뀐다(UX 계약 C-6 신호). 클라는 연결음 연출 뒤 `startRelayLeg`(text)로 새 화자
+      // 첫마디를 받는다. ⛔ 인계 내용 · 인원 구성은 싣지 않는다(X2 · X1) — 순번 · 표기 · 경계 문서 번호뿐.
+      ...(finalize.relayAdvanced && relayVariant
+        ? {
+            relay: {
+              legIndex: relayLegIndex + 1,
+              callerLabel: relayVariant.legs[relayLegIndex + 1]?.callerLabel ?? "",
+              fromTurnIndex: nextIndex + 2,
+            },
+          }
+        : {}),
     };
   },
 );

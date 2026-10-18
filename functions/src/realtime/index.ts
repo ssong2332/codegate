@@ -10,6 +10,7 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { ELEVENLABS_API_KEY, GEMINI_KEY_SECRETS } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
+import { findFlowVariant, isRelayVariant } from "../scenarios/flowVariants";
 import { listInCallSmsTriggers } from "../scenarios/inCallSms";
 import { getVerifyOfferTrigger } from "../scenarios/verifyIntercept";
 import type { VoiceMode } from "../scenarios/publicMeta";
@@ -135,7 +136,10 @@ export const createRealtimeCall = onCall<
   }
 
   const effectiveVoiceMode = resolveEffectiveVoiceMode(session.voiceSelectionSource);
-  const provider = getRealtimeProvider(session.scenarioId, effectiveVoiceMode);
+  // ⭐ T191 S7(G495 · DECISIONS #139) — 릴레이(화자 교대)가 있는 변형 세션은 ElevenLabs로 보내지 않는다
+  // (허용목록 `RELAY_CAPABLE_PROVIDERS` — provider.ts). 릴레이 없는 세션은 종전 선택 그대로다.
+  const relayVariant = isRelayVariant(findFlowVariant(session.flowVariantId));
+  const provider = getRealtimeProvider(session.scenarioId, effectiveVoiceMode, { relayVariant });
   // T68(§15.1.2) — 통화 중 문자 **트리거만** 내려준다(본문·인증번호는 도착 시점에 deliverInCallSms가
   // 서버에서 렌더). 카탈로그가 없는 시나리오면 빈 배열 → 필드 자체를 붙이지 않는다(API.md).
   const inCallSmsTriggers = listInCallSmsTriggers(session.scenarioId);

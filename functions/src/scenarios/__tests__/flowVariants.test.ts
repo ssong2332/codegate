@@ -328,6 +328,16 @@ function newVariantTexts(): { where: string; text: string }[] {
     const composed = resolveVariantPrompt(SCENARIO_PROMPTS[v.scenarioId], v).personaPrompt;
     const block = composed.slice(SCENARIO_PROMPTS[v.scenarioId].personaPrompt.length);
     if (block) out.push({ where: `${v.variantId} flowBlock`, text: block });
+    // T191 S7 — 교대 뒤 leg가 받는 블록(역할 · 단계 · 교대 규칙)도 같은 검사 대상이다(인계 블록은 런타임 데이터라 relay 테스트가 본다).
+    for (let leg = 1; leg < v.legs.length; leg += 1) {
+      for (const transferVia of ["tool", "marker"] as const) {
+        const legComposed = resolveVariantPrompt(SCENARIO_PROMPTS[v.scenarioId], v, leg, { transferVia }).personaPrompt;
+        out.push({
+          where: `${v.variantId} leg${leg} ${transferVia} block`,
+          text: legComposed.slice(SCENARIO_PROMPTS[v.scenarioId].personaPrompt.length),
+        });
+      }
+    }
     v.legs.forEach((leg, i) => out.push({ where: `${v.variantId} leg${i}`, text: `${leg.callerLabel} ${leg.personaPrompt ?? ""}` }));
     if (v.decisionMoment) out.push({ where: `${v.variantId} decisionMoment`, text: v.decisionMoment });
   }
@@ -481,11 +491,32 @@ test("[T191 S5 프롬프트 합성] 가드레일 원문 불변 · 최후미 · '
   assert.deepEqual(v.tactics, SCENARIO_PROMPTS["tax-refund-scam"].weakenedTactics, "라벨 제외 0인 '현행' = 원본 수법 그대로");
 });
 
-test("[T191 S5 릴레이 S7 이전] 인원 ≥ 2 변형은 한 화자 규칙을 갖고(넘김 대사 금지) · 1인 변형은 갖지 않는다", () => {
-  assert.equal(RELAY_RUNTIME_AVAILABLE, false, "S7 구현 전 전제 — S7이 이 값을 바꾸면 이 테스트를 갱신한다");
+// ⚠️ 테스트 변경 사유(T191 S7): S5의 "[T191 S5 릴레이 S7 이전]"(RELAY_RUNTIME_AVAILABLE === false · 한 화자 규칙)은
+// S7이 갱신하도록 예고된 전제였다. S7은 값을 true로 바꾸고 한 화자 규칙을 실제 교대 규칙으로 대체했다.
+test("[T191 S7 릴레이] 인원 ≥ 2 변형은 leg 0에 교대 규칙([교대])을 갖고 한 화자 규칙은 0 · 1인 변형은 둘 다 0", () => {
+  assert.equal(RELAY_RUNTIME_AVAILABLE, true, "S7 — 릴레이 런타임이 켜져 있다(false = 롤백 손잡이)");
   for (const v of FLOW_VARIANTS.filter((x) => x.stages.length > 0)) {
     const persona = resolveVariantPrompt(SCENARIO_PROMPTS[v.scenarioId], v).personaPrompt;
-    assert.equal(persona.includes("처음부터 끝까지 너 혼자 맡는다"), v.legs.length > 1, `${v.variantId}`);
+    assert.equal(persona.includes("처음부터 끝까지 너 혼자 맡는다"), false, `${v.variantId}: 한 화자 규칙이 남았다`);
+    assert.equal(persona.includes("[교대]"), v.legs.length > 1, `${v.variantId}: 교대 규칙 유무`);
+  }
+});
+
+test("[T191 S7 릴레이 데이터] 교대 뒤 leg는 페르소나 필수 · stageUntil은 다음 leg가 있는 leg에만 · 단조 증가 · 마지막 단계 전", () => {
+  const relay = FLOW_VARIANTS.filter((v) => v.legs.length > 1);
+  assert.ok(relay.length >= 3, "릴레이 변형 3종(기관 고급 · 카드사 고급 · 카드 배송)이 있어야 한다");
+  for (const v of relay) {
+    let prev = 0;
+    v.legs.forEach((leg, i) => {
+      if (i > 0) assert.ok((leg.personaPrompt ?? "").length > 20, `${v.variantId} leg${i}: 페르소나 미저작`);
+      if (i < v.legs.length - 1) {
+        assert.ok(typeof leg.stageUntil === "number", `${v.variantId} leg${i}: stageUntil 누락`);
+        assert.ok(leg.stageUntil! > prev && leg.stageUntil! < v.stages.length, `${v.variantId} leg${i}: stageUntil 범위`);
+        prev = leg.stageUntil!;
+      } else {
+        assert.equal(leg.stageUntil, undefined, `${v.variantId}: 마지막 leg는 남은 단계 전부`);
+      }
+    });
   }
 });
 

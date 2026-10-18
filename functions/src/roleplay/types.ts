@@ -44,4 +44,10 @@ export type SendMessageResponse = {
    * (실시간 경로와 동일한 단일 소스). 클라가 즉시 반응할 수 있게 하는 힌트일 뿐이다.
    */
   sms?: { smsId: string };
+  /**
+   * T191 S7 추가(옵셔널, 하위호환 — UX 계약 C-6) — 이번 응답(넘김 대사) 뒤 화자가 바뀌었다는 뜻. `legIndex` = 새 leg ·
+   * `callerLabel` = 새 화자 표기(speakerLabel) · `fromTurnIndex` = 새 leg 첫 메시지 문서 번호(연결음 동안 화면이 그 뒤를
+   * 보류한다). 클라는 연결음 연출 뒤 `startRelayLeg`(mode "text")로 새 화자 첫마디를 받는다.
+   */
+  relay?: { legIndex: number; callerLabel: string; fromTurnIndex: number };
 };

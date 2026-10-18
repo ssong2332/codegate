@@ -28,9 +28,11 @@
 // S5b 전까지는 카탈로그(`inCallSms.ts`)가 오늘처럼 보낸다(이 파일은 그 파일을 import하지 않는다:
 // 다른 세션 편집 중 · 순환 회피). 선언과 카탈로그의 정합(smsId 존재)은 테스트가 고정한다.
 //
-// ⚠️ **릴레이(인원 ≥ 2)는 S7 전까지 한 화자로 진행한다.** `legs`는 S7(`startRelayLeg`)이 쓸 데이터이고,
-// 지금은 `resolveVariantPrompt`가 0번 leg 하나로 전체 단계를 진행하게 하며 *"다른 담당자에게 넘긴다"*
-// 는 말을 하지 않게 한다(`RELAY_RUNTIME_AVAILABLE = false`).
+// ⚠️ **릴레이(인원 ≥ 2) — T191 S7부터 실제로 다른 목소리로 넘긴다**(`RELAY_RUNTIME_AVAILABLE = true`).
+// leg마다 맡는 단계(`stageUntil`) · 다음 화자 페르소나(`personaPrompt`)를 여기서 저작하고, 교대 실행은
+// `realtime/startRelayLeg.ts`(실시간) · `roleplay/index.ts`(텍스트 폴백)가 한다. 인계문은 서버가 마스킹
+// 저장본으로만 만든다(`realtime/relayHandoff.ts` — 설계 금지 X2). ElevenLabs 경로는 릴레이 변형을 받지 않는다
+// (DECISIONS #139 · `realtime/provider.ts` 허용목록).
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { ScenarioPromptDoc } from "../shared/types";
 import type { AxisExitBlock } from "./axes";
@@ -53,8 +55,16 @@ export type FlowVariantSms = {
 export type FlowVariantLeg = {
   /** 화면 표시값(S7 화자 표기 · UX 계약 C-6/C-8) — 실제 부서명 · 이름 0(AC-102 (c)). */
   callerLabel: string;
-  /** 0번 leg는 시나리오 persona를 재사용한다(부재). 다음 leg persona는 S7에서 저작한다. */
+  /**
+   * 0번 leg는 시나리오 persona를 재사용한다(부재). 1번 이상 leg는 **필수**(T191 S7 저작) — 시나리오 persona
+   * 뒤에 "이번 통화에서 네 역할" 블록으로 붙어 [캐릭터]를 이 사람으로 바꾼다(안전 · 말투 규칙은 원본 그대로 산다).
+   */
   personaPrompt?: string;
+  /**
+   * T191 S7 — 이 leg가 맡는 마지막 단계 번호(1-기반, `stages` 기준). 다음 leg가 있는 leg만 필수 — 다음 leg는
+   * 그다음 단계부터 이어 간다. 마지막 leg는 부재(남은 단계 전부).
+   */
+  stageUntil?: number;
   speakerGender: "male" | "female";
   /** S7 교대 하한 · 천장(판단값). */
   minUserTurns: number;
@@ -87,8 +97,12 @@ export type FlowVariant = {
   sources?: string[];
 };
 
-/** S7(릴레이 재연결) 구현 전에는 false — legs ≥ 2 변형도 한 화자로 진행한다. */
-export const RELAY_RUNTIME_AVAILABLE = false;
+/**
+ * T191 S7(릴레이 재연결) 구현 완료 — legs ≥ 2 변형은 leg마다 다른 목소리 · 다른 페르소나로 넘긴다.
+ * `false`로 되돌리면 S5의 "한 화자" 규칙으로 돌아간다(롤백 손잡이 — 프롬프트만 바뀌고 교대 실행 경로는
+ * `isRelayVariant`가 이 값을 함께 보므로 같이 꺼진다).
+ */
+export const RELAY_RUNTIME_AVAILABLE = true;
 
 // ── 저작 입력(내부) ───────────────────────────────────────────────────────────
 
@@ -220,8 +234,15 @@ const SPECS: VariantSpec[] = [
     exitBlock: ["D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
     sms: [],
     legs: [
-      { callerLabel: "검사", speakerGender: "male", minUserTurns: 3, maxUserTurns: 8 },
-      { callerLabel: "금융감독원 직원", speakerGender: "female", minUserTurns: 2, maxUserTurns: 10 },
+      { callerLabel: "검사", speakerGender: "male", minUserTurns: 3, maxUserTurns: 8, stageUntil: 2 },
+      {
+        callerLabel: "금융감독원 직원",
+        speakerGender: "female",
+        minUserTurns: 2,
+        maxUserTurns: 10,
+        personaPrompt:
+          "너는 앞 담당자(검사를 사칭한 사람)에게서 통화를 넘겨받은 금융감독기관 직원을 사칭한다. 침착하고 정중한 사무적 존대를 쓰고, 검사 쪽 연락을 받고 자산 보호를 돕는 사람처럼 군다. 앞 담당자의 위협을 되풀이하지 말고 도와드리는 쪽이라는 태도로 신뢰를 얻는다. 실제 부서명 · 이름 · 전화번호는 말하지 않는다.",
+      },
     ],
     ...ADVANCED,
     channels: ["voice"],
@@ -303,8 +324,15 @@ const SPECS: VariantSpec[] = [
     exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],
     sms: [],
     legs: [
-      { callerLabel: "카드사 상담원", speakerGender: "female", minUserTurns: 3, maxUserTurns: 8 },
-      { callerLabel: "금융감독원 직원", speakerGender: "male", minUserTurns: 2, maxUserTurns: 10 },
+      { callerLabel: "카드사 상담원", speakerGender: "female", minUserTurns: 3, maxUserTurns: 8, stageUntil: 2 },
+      {
+        callerLabel: "금융감독원 직원",
+        speakerGender: "male",
+        minUserTurns: 2,
+        maxUserTurns: 10,
+        personaPrompt:
+          "너는 앞 담당자(카드사 상담원을 사칭한 사람)에게서 통화를 넘겨받은 금융감독기관 조사 담당자를 사칭한다. 딱딱하고 단호한 사무적 존대를 쓰고, 명의 도용 건 조사를 맡았다는 사람처럼 군다. 앞 담당자가 이미 받은 답은 다시 묻지 않는다. 실제 부서명 · 이름 · 전화번호는 말하지 않는다.",
+      },
     ],
     ...ADVANCED,
     channels: ["voice"],
@@ -875,8 +903,15 @@ const SPECS: VariantSpec[] = [
     exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],
     sms: [],
     legs: [
-      { callerLabel: "카드 배송 안내", speakerGender: "female", minUserTurns: 3, maxUserTurns: 8 },
-      { callerLabel: "금융감독원 직원", speakerGender: "male", minUserTurns: 2, maxUserTurns: 10 },
+      { callerLabel: "카드 배송 안내", speakerGender: "female", minUserTurns: 3, maxUserTurns: 8, stageUntil: 3 },
+      {
+        callerLabel: "금융감독원 직원",
+        speakerGender: "male",
+        minUserTurns: 2,
+        maxUserTurns: 10,
+        personaPrompt:
+          "너는 앞 담당자(카드 배송 · 사고 접수 상담원을 사칭한 사람)에게서 통화를 넘겨받은 금융감독기관 조사 담당자를 사칭한다. 딱딱하고 단호한 사무적 존대를 쓰고, 명의 도용 사고 조사를 맡았다는 사람처럼 군다. 앞 담당자가 이미 받은 답은 다시 묻지 않는다. 실제 부서명 · 이름 · 전화번호는 말하지 않는다.",
+      },
     ],
     ...ADVANCED,
     channels: ["voice"],
@@ -953,23 +988,74 @@ const SINGLE_SPEAKER_RULE =
   "이 흐름에 다른 기관 사람이 등장하더라도 통화는 처음부터 끝까지 너 혼자 맡는다. 다른 담당자에게 넘기겠다거나 바꿔 드리겠다는 말은 하지 않고, 그 기관의 판단은 네가 전해 들은 것처럼 말한다.";
 const SINGLE_SPEAKER_VERIFY_EXCEPTION = "확인 창구 안내 지시가 따로 들어온 턴에는 그 지시를 따른다.";
 
+/** T191 S7 — 다음 leg 화자 페르소나 블록 머리(시나리오 persona의 [캐릭터]를 이 사람으로 바꾼다). */
+export const RELAY_LEG_ROLE_HEADER = "[이번 통화에서 네 역할 — 위 [캐릭터]보다 우선한다]";
+
+/**
+ * 교대 방법(경로별). 실시간 = Live 도구 `transfer_call` · 텍스트 폴백 = 서버가 턴마다 허락을 알려 주고 응답 끝 신호.
+ * 부재(리포트 · 오프닝처럼 교대가 일어나지 않는 호출부) = 방법 문장 없이 순서만.
+ */
+export type RelayTransferVia = "tool" | "marker";
+
+export type ResolveRelayOptions = {
+  /** 지금 말하는 leg(0-기반). 부재 = 0. */
+  legIndex?: number;
+  /** 서버가 마스킹 저장본으로 만든 인계 블록(`realtime/relayHandoff.ts`). leg ≥ 1에서만 붙는다. */
+  handoff?: string;
+  transferVia?: RelayTransferVia;
+  /** T191 S7(#140) — 확인 창구 새 연결은 leg 0에서도 인계 블록을 붙인다(새 사람이 앞 대화를 이어받는다). */
+  handoffAlways?: boolean;
+  /** T191 S7(#140) — 확인 창구 새 연결: 이 화자 뒤로는 교대하지 않는다(다음 leg 규칙 · 도구 안내 0). */
+  noFurtherTransfer?: boolean;
+};
+
+/** 변형에 실행 가능한 화자 교대가 있는가(S7 롤백 손잡이 `RELAY_RUNTIME_AVAILABLE`과 함께 본다). */
+export function isRelayVariant(variant: FlowVariant | undefined): variant is FlowVariant {
+  return Boolean(variant) && RELAY_RUNTIME_AVAILABLE && (variant as FlowVariant).legs.length > 1;
+}
+
+/** leg i가 맡는 단계 범위(1-기반, 양 끝 포함). 데이터 게이트가 `stageUntil` 단조 증가를 고정한다. */
+export function legStageRange(variant: FlowVariant, legIndex: number): { from: number; to: number } {
+  const from = legIndex === 0 ? 1 : (variant.legs[legIndex - 1]?.stageUntil ?? 0) + 1;
+  const to = variant.legs[legIndex]?.stageUntil ?? variant.stages.length;
+  return { from, to };
+}
+
+/**
+ * 메시지 문서 `speakerLabel`(UX 계약 C-8) — **교대 뒤** leg의 화자 표기. leg 0 · 교대 없는 변형 · 범위 밖이면
+ * 부재(교대 전 줄은 표기하지 않는다 — D-105 (3)).
+ */
+export function relaySpeakerLabel(variant: FlowVariant | undefined, legIndex: number | undefined): string | undefined {
+  if (!isRelayVariant(variant) || !legIndex || legIndex < 1) return undefined;
+  return variant.legs[legIndex]?.callerLabel;
+}
+
 /**
  * 변형을 합성한 시나리오 프롬프트(`personaPrompt` · `weakenedTactics` · `guardrailPreamble`).
  * - `current` 변형: 페르소나 무변경 · 수법만 변형 목록(대부분 원본과 같다).
  * - `authored` 변형: 페르소나 끝에 [이번 통화의 흐름] 블록 · 수법은 변형 목록.
- * - 가드레일 원문은 그대로 넘긴다 — 조립 순서(가드레일 최후미)는 `buildSystemPrompt`가 강제한다.
- * ⚠️ `legIndex`는 S7 전까지 0만 쓴다(`RELAY_RUNTIME_AVAILABLE`).
+ * - 릴레이 변형(T191 S7): leg 0은 자기 단계 뒤 다음 화자에게 넘기는 규칙, leg ≥ 1은 [이번 통화에서 네 역할]
+ *   블록(그 leg 페르소나) + 자기 단계 + 서버 인계 블록. ⛔ 인계 블록은 호출부가 서버 마스킹본으로 만든 것만
+ *   받는다(설계 X2 — 클라 요약 금지).
+ * - 가드레일 원문은 그대로 넘긴다 — 조립 순서(가드레일 최후미)는 `buildSystemPrompt`가 강제한다. 인계 블록은
+ *   persona 안이라 난이도 블록보다 **앞**이다(T191 릴레이 설계 "블록 위치").
  */
 export function resolveVariantPrompt(
   base: ScenarioPromptDoc,
   variant: FlowVariant,
   legIndex = 0,
+  relay: Omit<ResolveRelayOptions, "legIndex"> = {},
 ): ScenarioPromptDoc {
-  void legIndex;
+  const relaying = isRelayVariant(variant);
+  const leg = relaying ? Math.min(Math.max(0, Math.trunc(legIndex)), variant.legs.length - 1) : 0;
+  const blocks: string[] = [];
+  if (leg > 0) {
+    blocks.push(`${RELAY_LEG_ROLE_HEADER}\n${variant.legs[leg]?.personaPrompt ?? ""}`);
+  }
+  if (variant.stages.length > 0) blocks.push(buildFlowBlock(variant, leg, relay.transferVia, relay.noFurtherTransfer));
+  if ((leg > 0 || relay.handoffAlways) && relay.handoff) blocks.push(relay.handoff);
   const personaPrompt =
-    variant.stages.length === 0
-      ? base.personaPrompt
-      : `${base.personaPrompt}\n\n${buildFlowBlock(variant)}`;
+    blocks.length === 0 ? base.personaPrompt : `${base.personaPrompt}\n\n${blocks.join("\n\n")}`;
   return {
     ...base,
     personaPrompt,
@@ -977,7 +1063,12 @@ export function resolveVariantPrompt(
   };
 }
 
-function buildFlowBlock(variant: FlowVariant): string {
+function buildFlowBlock(
+  variant: FlowVariant,
+  legIndex: number,
+  transferVia?: RelayTransferVia,
+  noFurtherTransfer = false,
+): string {
   const lines = [FLOW_BLOCK_HEADER, FLOW_BLOCK_LEAD];
   variant.stages.forEach((stage, i) => lines.push(`${i + 1}. ${stage.summary}`));
   if (variant.legs.length > 1 && !RELAY_RUNTIME_AVAILABLE) {
@@ -986,19 +1077,53 @@ function buildFlowBlock(variant: FlowVariant): string {
         ? `${SINGLE_SPEAKER_RULE} ${SINGLE_SPEAKER_VERIFY_EXCEPTION}`
         : SINGLE_SPEAKER_RULE,
     );
+  } else if (isRelayVariant(variant)) {
+    lines.push(...buildRelayRules(variant, legIndex, transferVia, noFurtherTransfer));
   }
   return lines.join("\n");
 }
 
+function buildRelayRules(
+  variant: FlowVariant,
+  legIndex: number,
+  transferVia?: RelayTransferVia,
+  noFurtherTransfer = false,
+): string[] {
+  const { from, to } = legStageRange(variant, legIndex);
+  const next = noFurtherTransfer ? undefined : variant.legs[legIndex + 1];
+  const rules: string[] = [];
+  if (legIndex > 0) {
+    rules.push(
+      `앞 담당자가 1~${from - 1}단계를 이미 진행했다. 너는 ${from}단계부터 이어서 진행하고, 앞 담당자가 한 말을 처음부터 되풀이하지 않는다.`,
+    );
+  }
+  if (next) {
+    rules.push(
+      `[교대] 너는 ${from}~${to}단계까지만 맡고, 그다음은 '${next.callerLabel}'에게 통화를 넘긴다. 그 뒤 단계를 네가 직접 진행하지 않는다. 넘기는 것은 허락을 받은 때에만 하고, 넘길 때는 그 담당자에게 연결해 주겠다는 한 문장만 말하며 새 요구를 붙이지 않는다.`,
+    );
+    if (transferVia === "tool") {
+      rules.push("넘길 때가 되었다고 판단되면 transfer_call 도구를 불러 허락을 받고, 돌아온 안내를 따른다.");
+    } else if (transferVia === "marker") {
+      rules.push("넘겨도 되는 턴에는 그 사실이 따로 안내된다. 안내가 없는 턴에는 넘긴다는 말을 하지 않는다.");
+    }
+  } else if (legIndex > 0 || noFurtherTransfer) {
+    rules.push("이 통화를 다른 사람에게 다시 넘기지 않는다. 남은 단계는 네가 끝까지 맡는다.");
+  }
+  if (hasVerifyIntercept(variant.scenarioId)) rules.push(SINGLE_SPEAKER_VERIFY_EXCEPTION);
+  return rules;
+}
+
 /**
  * 세션(또는 리포트)의 시나리오 프롬프트를 해석하는 **단일 지점**(호출부: sendMessage · 오프닝 ·
- * Gemini Live 토큰 · 리포트). `flowVariantId` 부재 = 과거 세션 → 원본 그대로(무소급 — AC-096 (f)).
+ * Gemini Live 토큰 · 리포트 · 릴레이 leg 토큰). `flowVariantId` 부재 = 과거 세션 → 원본 그대로(무소급 — AC-096 (f)).
  * ID가 있는데 데이터에 없거나 다른 시나리오 것이면 원본으로 강등하고 경고 1줄(관측 가능 — 조용한 임의
  * 변형 0). 시나리오 자체가 없으면 undefined(호출부가 기존처럼 오류 처리한다).
+ * `relay` 부재 = leg 0 · 교대 방법 문장 없음(S5와 같은 호출 형태).
  */
 export function resolveSessionScenarioPrompt(
   scenarioId: string,
   flowVariantId?: string,
+  relay?: ResolveRelayOptions,
 ): ScenarioPromptDoc | undefined {
   const base = SCENARIO_PROMPTS[scenarioId];
   if (!base) return undefined;
@@ -1010,7 +1135,12 @@ export function resolveSessionScenarioPrompt(
     );
     return base;
   }
-  return resolveVariantPrompt(base, variant);
+  return resolveVariantPrompt(base, variant, relay?.legIndex ?? 0, {
+    ...(relay?.handoff ? { handoff: relay.handoff } : {}),
+    ...(relay?.transferVia ? { transferVia: relay.transferVia } : {}),
+    ...(relay?.handoffAlways ? { handoffAlways: true } : {}),
+    ...(relay?.noFurtherTransfer ? { noFurtherTransfer: true } : {}),
+  });
 }
 
 /**

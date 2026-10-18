@@ -79,7 +79,7 @@ export async function collectToolResponses(
 // ══════════════════════════════════════════════════════════════════════════════════════════
 // §59.6 ②~⑥ — 실제 라우팅(판정만, 부수효과 0)
 
-export type ResolvedToolCallKind = "send_prepared_sms" | "offer_verification_desk" | "unsupported";
+export type ResolvedToolCallKind = "send_prepared_sms" | "offer_verification_desk" | "transfer_call" | "unsupported";
 
 /**
  * §59.6 ②(G385) — `toolCall`이 부른 함수 이름을 **하드코딩된 문자열이 아니라
@@ -94,6 +94,8 @@ export function resolveToolCallKind(
   if (!liveTools || !name) return "unsupported";
   if (name === liveTools.sendPreparedSms) return "send_prepared_sms";
   if (name === liveTools.offerVerificationDesk) return "offer_verification_desk";
+  // T191 S7 — 릴레이 교대 도구(다음 leg가 있는 leg의 토큰에만 선언 · 이름은 서버가 내려준다 — 하드코딩 0).
+  if (liveTools.transferCall && name === liveTools.transferCall) return "transfer_call";
   return "unsupported";
 }
 

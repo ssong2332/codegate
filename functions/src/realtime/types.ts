@@ -47,6 +47,16 @@ export type RealtimeCallInput = {
    * 부재 = 원본 시나리오 프롬프트.
    */
   flowVariantId?: string;
+  /**
+   * T191 S7 — 릴레이 leg 토큰(`startRelayLeg`). `legIndex` = 이 토큰이 말할 leg · `handoff` = 서버가 마스킹
+   * 저장본으로 만든 인계 블록(leg ≥ 1). 부재 = leg 0(`createRealtimeCall` — 종전과 같다). ⛔ 클라 입력을 넣지 않는다(X2).
+   */
+  relayLeg?: {
+    legIndex: number;
+    handoff?: string;
+    /** T191 S7(DECISIONS #140) — 릴레이 흐름의 확인 창구 새 연결: leg 음성 전부와 다른 음성 · 교대 도구 없음. */
+    verifyDesk?: boolean;
+  };
 };
 
 /**

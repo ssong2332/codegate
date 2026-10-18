@@ -15,6 +15,7 @@ import type { FunctionDeclaration, Tool } from "@google/genai";
 import type { DifficultyLevel } from "../shared/difficulty";
 import { hasInCallSms } from "../scenarios/inCallSms";
 import { hasVerifyIntercept, VERIFY_DECLINE_ALREADY } from "../scenarios/verifyIntercept";
+import { RELAY_TOOL_NOT_YET_GUIDANCE } from "./relayTransfer";
 
 /** §59.5 T1 — 인자 없음(G384). 클라가 하드코딩하지 않도록 이름은 `createRealtimeCall` 응답으로도 내려간다(G385). */
 export const LIVE_TOOL_SEND_PREPARED_SMS = "send_prepared_sms";
@@ -23,6 +24,11 @@ export const LIVE_TOOL_SEND_PREPARED_SMS = "send_prepared_sms";
  * 선언된다. 계열 A/B 구분은 선언 조건이 아니다(`declaresOfferVerificationDesk` 참고).
  */
 export const LIVE_TOOL_OFFER_VERIFICATION_DESK = "offer_verification_desk";
+/**
+ * T191 릴레이 설계("startRelayLeg" 발급 행 · "클라 — 교대 순서" 1행) — 다음 화자에게 통화를 넘길 때 모델이 부른다.
+ * 인자 없음 · BLOCKING(다른 도구와 같다). **다음 leg가 있는 leg의 토큰에만** 선언된다(`relayTransfer` 인자).
+ */
+export const LIVE_TOOL_TRANSFER_CALL = "transfer_call";
 
 /**
  * §61.1(OQ-A73 정정본) — 확인 무력화 카탈로그(`VERIFY_INTERCEPT`) 6종 중 **이 훈련을 위해 저작된
@@ -91,19 +97,30 @@ const OFFER_VERIFICATION_DESK_DECLARATION: FunctionDeclaration = {
   behavior: TOOL_BEHAVIOR,
 };
 
+const TRANSFER_CALL_DECLARATION: FunctionDeclaration = {
+  name: LIVE_TOOL_TRANSFER_CALL,
+  description:
+    "네가 맡은 단계를 마치고 이 통화를 다음 담당자에게 넘길 때가 되었다고 판단될 때 부른다. 허락되면 넘기겠다는 한 문장만 말하고 말을 마치면 된다. 아직 이를 때는 거절될 수 있고, 그때는 그냥 대화를 이어가면 된다.",
+  parameters: NO_ARGS_PARAMETERS,
+  behavior: TOOL_BEHAVIOR,
+};
+
 /**
  * §59.5 선언 조건(정본 표) — 둘 다 걸리지 않으면 `[]`를 그대로 반환한다 ⇒ 그 세션의 토큰 요청
  * 바이트가 오늘과 동일하다(회귀 0, G388이 이 사실에 기대는 유일한 레버).
+ * T191 S7 — `relayTransfer`(지금 leg 뒤에 다음 leg가 있다)일 때만 `transfer_call`을 **뒤에** 더한다. 부재 = 종전과 동일.
  */
 export function buildLiveToolDeclarations(
   scenarioId: string,
   difficultyLevel?: DifficultyLevel,
+  relayTransfer = false,
 ): Tool[] {
   const declarations: FunctionDeclaration[] = [];
   if (hasInCallSms(scenarioId)) declarations.push(SEND_PREPARED_SMS_DECLARATION);
   if (declaresOfferVerificationDesk(scenarioId, difficultyLevel)) {
     declarations.push(OFFER_VERIFICATION_DESK_DECLARATION);
   }
+  if (relayTransfer) declarations.push(TRANSFER_CALL_DECLARATION);
   if (declarations.length === 0) return [];
   return [{ functionDeclarations: declarations }];
 }
@@ -121,6 +138,15 @@ export type LiveToolNames = {
    * 값은 `VERIFY_DECLINE_ALREADY`의 사본이다 — 새 문면 저작 0건(리터럴 복사 금지, import 재사용).
    */
   verifyAlreadyAnnouncedInstruction?: string;
+  /** T191 S7 — `transfer_call` 이름(다음 leg가 있을 때만). 결과 문면은 `startRelayLeg`(check)가 서버에서 돌려준다. */
+  transferCall?: string;
+  /**
+   * T191 S7 — 실시간 천장(클라 넛지 · 강제 교대 입력, `relayTransfer.relayLiveCeiling`). `transferCall`과 1:1.
+   * ⚠️ 프레젠테이션 층 — 실제 교대 허락은 `startRelayLeg`가 서버에서 다시 판정한다.
+   */
+  transferCeiling?: { nudgeAfterUserTurns: number; forceAfterUserTurns: number; nudgeInstruction: string };
+  /** T191 S7 — `startRelayLeg`(check)에 닿지 못했을 때 모델에 돌려줄 서버 소유 문면(= 거절 문면 사본). `transferCall`과 1:1. */
+  transferDeclinedInstruction?: string;
   failureInstruction: string;
 };
 
@@ -132,10 +158,11 @@ export type LiveToolNames = {
 export function buildLiveToolNames(
   scenarioId: string,
   difficultyLevel?: DifficultyLevel,
+  transferCeiling?: LiveToolNames["transferCeiling"],
 ): LiveToolNames | undefined {
   const smsDeclared = hasInCallSms(scenarioId);
   const offerDeclared = declaresOfferVerificationDesk(scenarioId, difficultyLevel);
-  if (!smsDeclared && !offerDeclared) return undefined;
+  if (!smsDeclared && !offerDeclared && !transferCeiling) return undefined;
   return {
     ...(smsDeclared ? { sendPreparedSms: LIVE_TOOL_SEND_PREPARED_SMS } : {}),
     ...(offerDeclared
@@ -143,6 +170,9 @@ export function buildLiveToolNames(
           offerVerificationDesk: LIVE_TOOL_OFFER_VERIFICATION_DESK,
           verifyAlreadyAnnouncedInstruction: VERIFY_DECLINE_ALREADY,
         }
+      : {}),
+    ...(transferCeiling
+      ? { transferCall: LIVE_TOOL_TRANSFER_CALL, transferCeiling, transferDeclinedInstruction: RELAY_TOOL_NOT_YET_GUIDANCE }
       : {}),
     failureInstruction: LIVE_TOOL_FAILURE_INSTRUCTION,
   };

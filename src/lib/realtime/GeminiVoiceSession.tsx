@@ -199,6 +199,30 @@ export type GeminiVoiceSessionProps = {
    * 화면의 G31 드레인이 확인 권유 예고 기록 시점을 정할 때 읽는다(`deferredAnnouncePendingOnDispatch`). 부재 = 미보고.
    */
   turnPhaseRef?: { current: LiveTurnPhase };
+  /**
+   * ⭐ T191 S7(릴레이 — UF-013 · AC-098 갱신 고지 1) — 새 leg 연결이면 오프닝 트리거 대신 이 첫마디 트리거(서버
+   * `startRelayLeg` 응답 `greetingTrigger` — 서버 소유 문면)를 `relayGreeting` 큐 턴으로 1회 보낸다. 부재 = 종전 오프닝.
+   */
+  relayGreetingTrigger?: string;
+  /** T191 S7 — 첫마디 트리거를 이 시각(performance.now 기준) 전에는 보내지 않는다(연결음 최소 2초 — P-38 (1)). */
+  relayGreetingNotBeforeMs?: number;
+  /**
+   * T191 S7 — 도구 경로의 사기범 턴 카운터 시작값. **부모(page.tsx) 소유 누적 카운터**에서 받는다 — leg마다 재마운트돼도
+   * 0으로 리셋되지 않게(서버 `too_early` 판정이 통화 전체 기준이라). 부재 = 0(종전).
+   */
+  initialScammerTurns?: number;
+  /** T191 S7 — 이 연결의 첫 오디오 청크(1회). 부모가 연결음 정지 · 재개(C-6 resume) 판정에 쓴다. */
+  onFirstAudio?: () => void;
+  /**
+   * T191 S7 — 모델이 `transfer_call`을 불렀다. 부모가 서버 `startRelayLeg`(check)로 하한을 확인하고 모델에 돌려줄
+   * `{status, guidance}`(서버 소유 문면)를 준다. 부재 = unsupported 응답(종전).
+   */
+  onModelToolTransferCall?: () => Promise<{ status: string; guidance: string }>;
+  /**
+   * T191 S7(OQ-U70 — 대기 중 음성 미수신) — 연결음 동안 마이크 프레임을 보내지 않는다. `muted`(참가자 의도 · 오버레이
+   * 게이팅)와 **별개의 입력**이다 — 음소거 버튼 표시 · 문자함 규칙(G452)은 `muted`만 본다. 부재 = false(종전).
+   */
+  micHeld?: boolean;
 };
 
 // 마이크 캡처 버퍼 크기 — 작을수록 지연이 낮지만 콜백이 잦다. 사용자 신고(2026-07-25, "내가 말하고
@@ -275,6 +299,12 @@ export default function GeminiVoiceSession({
   personaStateTurn,
   primedAudio,
   turnPhaseRef,
+  relayGreetingTrigger,
+  relayGreetingNotBeforeMs,
+  initialScammerTurns,
+  onFirstAudio,
+  onModelToolTransferCall,
+  micHeld,
 }: GeminiVoiceSessionProps) {
   const handlersRef = useRef({
     onActive,
@@ -290,8 +320,10 @@ export default function GeminiVoiceSession({
     onModelToolVerifyFailed,
     claimVerifyAnnounceSlot,
     releaseVerifyAnnounceSlot,
+    onFirstAudio,
+    onModelToolTransferCall,
   });
-  const mutedRef = useRef(muted);
+  const mutedRef = useRef(muted || Boolean(micHeld));
   // 정리 대상들 — 언마운트 시 전부 닫지 않으면 마이크가 계속 열려 있다.
   const cleanupRef = useRef<(() => void) | null>(null);
   // 전환 상태 단언(`personaStateTurn`, turnComplete:false)을 같은 Live 세션에 넣기 위한 참조. 메인
@@ -321,6 +353,8 @@ export default function GeminiVoiceSession({
       onModelToolVerifyFailed,
       claimVerifyAnnounceSlot,
       releaseVerifyAnnounceSlot,
+      onFirstAudio,
+      onModelToolTransferCall,
     };
   }, [
     onActive,
@@ -336,11 +370,14 @@ export default function GeminiVoiceSession({
     onModelToolVerifyFailed,
     claimVerifyAnnounceSlot,
     releaseVerifyAnnounceSlot,
+    onFirstAudio,
+    onModelToolTransferCall,
   ]);
 
   useEffect(() => {
-    mutedRef.current = muted;
-  }, [muted]);
+    // T191 S7 — 마이크 게이트는 참가자 음소거 또는 릴레이 연결음 대기(micHeld) 중 하나면 닫힌다.
+    mutedRef.current = muted || Boolean(micHeld);
+  }, [muted, micHeld]);
 
   // ⭐ T190-3(G455) — 음량 모드 브리지. 메인 effect의 지역 게인 노드를 밖에서 볼 수 있게 ref로 올려 두고(연결 직후
   // 담는다), prop이 바뀌면 그 노드의 게인을 바꾼다. 초기화 줄(`outputGain.gain.value = GEMINI_OUTPUT_GAIN;` — G433)은
@@ -412,7 +449,8 @@ export default function GeminiVoiceSession({
     // (백스톱) 경로가 같은 문자를 먼저 보냈어도 이 Set은 그 사실을 모를 수 있지만, 그래도 안전하다:
     // 서버가 같은 smsId로 다시 호출되면 멱등하게 `already_delivered`로만 응답할 뿐 중복 write가
     // 없다(§59.6 status 표, G387).
-    let modelToolScammerTurns = 0;
+    // T191 S7 — 부모 소유 누적 카운터에서 시작한다(릴레이 leg 재마운트에도 통화 전체 기준 유지).
+    let modelToolScammerTurns = initialScammerTurns ?? 0;
     // ⭐ §78.3.4 N1(G488) — 직전 사기범 턴 경계 이후 모델 오디오 · 사기범 전사가 있었는가. 둘 다 없는
     // `turnComplete`(끼어들기 직후의 빈 마감 — S1 3/3)는 경계가 아니다. 끼어들기에서는 지우지 않는다 —
     // 끊긴 턴의 내용은 그 뒤 마감에 귀속된다.
@@ -441,6 +479,22 @@ export default function GeminiVoiceSession({
         name: call.name ?? "unknown",
         response: { status: "unavailable", guidance: liveTools.failureInstruction },
       });
+
+      // T191 S7 — 릴레이 교대 요청. 하한 판정 · 문면은 서버(부모가 startRelayLeg check를 부른다). 실패해도 응답은 반드시 보낸다(G390).
+      if (kind === "transfer_call") {
+        const handler = handlersRef.current.onModelToolTransferCall;
+        if (!handler) return buildUnsupportedToolResponses([call])[0];
+        try {
+          const result = await handler();
+          return { id: call.id, name: call.name ?? "unknown", response: result };
+        } catch {
+          return {
+            id: call.id,
+            name: call.name ?? "unknown",
+            response: { status: "unavailable", guidance: liveTools.transferDeclinedInstruction ?? liveTools.failureInstruction },
+          };
+        }
+      }
 
       if (kind === "send_prepared_sms") {
         const smsId = pickModelToolSmsId(
@@ -1007,6 +1061,8 @@ export default function GeminiVoiceSession({
                 // 응답 직전 참가자 발화 끝이다.
                 const nowMs = performance.now();
                 if (markOpeningFirstAudio(nowMs)) {
+                  // T191 S7 — 부모의 연결음 정지 · 재개 판정(C-6 resume = 새 화자 첫 오디오).
+                  handlersRef.current.onFirstAudio?.();
                   logLatency(
                     formatLatencyLine(
                       credentials.geminiModel,
@@ -1094,11 +1150,27 @@ export default function GeminiVoiceSession({
         // §71.5 — 오프닝도 보류 큐로 보낸다(이 시점엔 큐가 비어 즉시 나간다). 그래야 첫 응답이 오기 전에
         // 들어온 타이핑이 오프닝을 끊지 않는다. 전송 실패는 `sendClientTurn`이 삼킨다(P-4 — 사용자가 먼저
         // 말을 걸면 대화는 정상적으로 이어진다).
-        dispatchClientTurn({
-          type: "request",
-          turn: { kind: "opening", text: OPENING_TRIGGER_TURN },
-          nowMs: performance.now(),
-        });
+        // ⭐ T191 S7 — 릴레이 새 leg는 오프닝 대신 서버 소유 첫마디 트리거(`relayGreeting` — 새 화자 첫마디 1회 예외,
+        // AC-098 갱신 고지 1)를, 연결음 최소 2초가 지난 뒤 보낸다.
+        if (relayGreetingTrigger) {
+          const sendGreeting = () => {
+            if (cancelled) return;
+            dispatchClientTurn({
+              type: "request",
+              turn: { kind: "relayGreeting", text: relayGreetingTrigger },
+              nowMs: performance.now(),
+            });
+          };
+          const waitMs = Math.max(0, (relayGreetingNotBeforeMs ?? 0) - performance.now());
+          if (waitMs > 0) setTimeout(sendGreeting, waitMs);
+          else sendGreeting();
+        } else {
+          dispatchClientTurn({
+            type: "request",
+            turn: { kind: "opening", text: OPENING_TRIGGER_TURN },
+            nowMs: performance.now(),
+          });
+        }
 
         // 마이크 → PCM16 16kHz → 전송. ScriptProcessor는 구식이지만 AudioWorklet과 달리 별도
         // 워커 파일 없이 동작해, 정적 export 구성(next.config.ts)에서 추가 배포 산출물이 없다.

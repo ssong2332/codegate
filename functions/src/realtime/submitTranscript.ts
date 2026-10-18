@@ -10,21 +10,17 @@
 // 그대로 분석할 수 있다. 클라가 messages를 직접 write하지 못하게 막은 규칙(ADR-0004)을 우회하지
 // 않으면서(서버 admin write + 마스킹 강제) 실시간 경로에 리포트를 붙이는 최소 침습 방식이다.
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getFirestore } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope, denyAnonymous } from "../shared/anonymousGate";
-import { maskPII } from "../guardrails";
-import { findOpeningToMarkNotSpoken } from "./openingMark";
-import { resolveTurnCreatedAtMs } from "./transcriptTiming";
-import type { MessageDoc, SessionDoc } from "../shared/types";
+import { findFlowVariant, relaySpeakerLabel } from "../scenarios/flowVariants";
+import { appendMaskedTranscriptTurns, type TranscriptTurn } from "./transcriptAppend";
+import type { SessionDoc } from "../shared/types";
 
 ensureFirebaseAdminApp();
 
-/**
- * §57.2 (6) 처방 D1 — `atMs`: 참가자 시계 기준 상대 ms(`answeredAtMs` 대비). 부재 = 현행 합성
- * 로직 그대로(무백필 · 과거 클라이언트 무영향). 계산·클램프 규칙은 `transcriptTiming.ts` 참고.
- */
-export type TranscriptTurn = { role: "user" | "scammer"; text: string; atMs?: number };
+// T191 S7 — 턴 타입 · 마스킹 append 본문은 `transcriptAppend.ts`(교대 콜러블 `startRelayLeg`와 공용 코어)로 옮겼다.
+export type { TranscriptTurn } from "./transcriptAppend";
 /**
  * §55 D3 — `openingNotSpoken`: 오프닝(`turnIndex:0`) 대사가 참가자에게 **낭독되지 않았는가**를
  * 클라가 알려준다(부재 = `false` = 종전 동작).
@@ -47,9 +43,10 @@ export type SubmitRealtimeTranscriptRequest = {
 };
 export type SubmitRealtimeTranscriptResponse = { written: number };
 
-/** 한 번에 제출 가능한 턴 수 상한 — 악의적/폭주 입력 방지(정상 통화는 수십 턴 이내). */
+/** 한 번에 제출 가능한 턴 수 상한 — 악의적/폭주 입력 방지(정상 통화는 수십 턴 이내).
+ * (텍스트 길이 상한은 코어 `transcriptAppend.ts`로 옮겼다. 교대 콜러블은 `MAX_TRANSCRIPT_TURNS` — 같은 값을 테스트가 고정한다.) */
 const MAX_TURNS = 200;
-const MAX_TEXT_LEN = 2000;
+
 
 export const submitRealtimeTranscript = onCall<
   SubmitRealtimeTranscriptRequest,
@@ -88,61 +85,23 @@ export const submitRealtimeTranscript = onCall<
     assertAnonymousChallengeScope(request.auth, session);
 
     const historySnap = await tx.get(messagesRef.orderBy("turnIndex", "asc"));
-    // ⛔ **G350** — 이어 붙일 인덱스는 `historySnap.size`(문서 수) 그대로다. 아래 `notSpoken`
-    // 마크는 이 값에 **절대 반영하지 않는다**(반영하면 실시간 앵커 `+1`이 무너진다, G348).
-    let nextIndex = historySnap.size;
-
-    // §55 D3 — 클라가 "오프닝이 낭독되지 않았다"고 알려준 세션에서만, 이미 읽어 둔 `historySnap`
-    // 안의 오프닝 문서에 마크를 붙인다(**추가 read 0회**, 같은 트랜잭션, 멱등).
-    // ⛔ `turnIndex`·`createdAt`·기존 필드는 한 줄도 고치지 않는다(문서를 지우거나 옮기지도 않는다).
-    const openingPos = findOpeningToMarkNotSpoken(
-      historySnap.docs.map((doc) => doc.data() as MessageDoc),
-      openingNotSpoken,
+    // ⛔ **G350** — 이어 붙일 인덱스는 `historySnap.size`(문서 수) 그대로다(코어 함수 안 — 위 주석과 같은 규칙).
+    // T191 S7(C-8) — 통화 종료 시 남은 델타는 **지금 leg**의 발화다 → 교대 뒤 leg면 사기범 줄에 그 화자 표기.
+    const scammerSpeakerLabel = relaySpeakerLabel(
+      findFlowVariant(session.flowVariantId),
+      session.relay?.legIndex,
     );
-    if (openingPos >= 0) {
-      tx.update(historySnap.docs[openingPos].ref, { notSpoken: true });
-    }
-    const baseTime = Date.now();
-    // §57.2 (6) 처방 D1 — 클램프 하한이자 `answeredAtMs` 부재 시 기준점 폴백.
-    const sessionCreatedAtMs = session.createdAt.toMillis();
-    let count = 0;
-
-    turns.forEach((turn, i) => {
-      const role = turn.role === "user" ? "user" : "scammer";
-      const raw = typeof turn.text === "string" ? turn.text.slice(0, MAX_TEXT_LEN) : "";
-      const masked = maskPII(raw).trim();
-      if (!masked) return;
-      // 전사에는 정확한 write 시각이 없으므로 제출 시각 기준으로 턴 간격을 근사한다(리포트
-      // 타임라인 "N초 시점"용 — 실시간 통화는 정밀 턴 타이밍이 없어 근사가 불가피하다). D1 —
-      // 클라가 `answeredAtMs`·`turn.atMs`를 실어 보낸 경우 그 값을 우선하고, 부재 시(과거
-      // 클라이언트·과거 세션 포함)에는 위 합성 로직과 100% 동일하게 남는다(`transcriptTiming.ts`).
-      tx.create(messagesRef.doc(), {
-        role,
-        textMasked: masked,
-        turnIndex: nextIndex,
-        createdAt: Timestamp.fromMillis(
-          resolveTurnCreatedAtMs({
-            index: i,
-            atMs: typeof turn.atMs === "number" ? turn.atMs : undefined,
-            answeredAtMs: typeof answeredAtMs === "number" ? answeredAtMs : undefined,
-            sessionCreatedAtMs,
-            baseTimeMs: baseTime,
-            nowMs: baseTime,
-          }),
-        ),
-        // T30 추가(§13.1) — 교차채널 타임라인(AC-037)용 채널 표기. 실시간 통화 전사는 항상
-        // channel="voice" 단계에서 발생한다(에스컬레이션 세션이든 순수 보이스 세션이든 동일).
-        channel: "voice",
-      } satisfies MessageDoc);
-      nextIndex += 1;
-      count += 1;
+    const { count } = appendMaskedTranscriptTurns(tx, {
+      sessionRef,
+      messagesRef,
+      historyDocs: historySnap.docs,
+      session,
+      turns,
+      ...(openingNotSpoken !== undefined ? { openingNotSpoken } : {}),
+      ...(typeof answeredAtMs === "number" ? { answeredAtMs } : {}),
+      ...(scammerSpeakerLabel ? { scammerSpeakerLabel } : {}),
+      nowMs: Date.now(),
     });
-
-    // answeredAt이 없으면(실시간 경로는 sendMessage를 안 타 미설정) 첫 턴 기준으로 채워, 리포트
-    // 타임라인 기점과 세션 시간축이 정합하도록 한다.
-    if (!session.answeredAt) {
-      tx.update(sessionRef, { answeredAt: Timestamp.fromMillis(baseTime) });
-    }
 
     return count;
   });

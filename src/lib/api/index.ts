@@ -4,6 +4,7 @@ export { createSession } from "./createSession";
 export { sendMessage } from "./sendMessage";
 export { createRealtimeCall } from "./createRealtimeCall";
 export { submitRealtimeTranscript } from "./submitRealtimeTranscript";
+export { startRelayLeg } from "./startRelayLeg";
 export { endSession } from "./endSession";
 export { updateMessengerSkin } from "./updateMessengerSkin";
 export { requestEscalation } from "./requestEscalation";

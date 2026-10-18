@@ -16,6 +16,7 @@ export { sendMessage } from "./roleplay";
 export { createRealtimeCall } from "./realtime";
 // 실시간 통화 전사 제출(finding #1) — 음성 대화도 리포트가 분석하도록 종료 직전 클라가 제출한다.
 export { submitRealtimeTranscript } from "./realtime/submitTranscript";
+export { startRelayLeg } from "./realtime/startRelayLeg";
 export { generateReport } from "./report";
 // 즉시 되감기 판정(T70, UX-028/UF-009, AC-062/063) — 원 리포트를 읽기 전용으로만 참조하고
 // reports/{rid}/rewindAttempts에만 append한다(ADR-0008, AC-007 불변식 보호).

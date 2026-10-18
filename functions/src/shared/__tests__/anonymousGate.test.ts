@@ -123,7 +123,10 @@ test("[T176 T-1] 비익명 호출자에 대해 assertAnonymousChallengeScope는 
 
 type AnonymousPolicy = "deny" | "session" | "report" | "entry" | "no_auth" | "not_callable";
 
-/** Architecture.md §68.3 — 26행. 새 export를 추가하면 여기에 분류를 추가해야 테스트가 통과한다. */
+/**
+ * Architecture.md §68.3 — 26행 + T191 S7 `startRelayLeg`(session — 세션 콜러블과 같은 소유 · 익명 범위 검사) = 27행.
+ * 새 export를 추가하면 여기에 분류를 추가해야 테스트가 통과한다. (⚠️ §68.3 문서 표 갱신은 docs 패스 몫 — 구현 보고 참조.)
+ */
 const ANONYMOUS_POLICY: Record<string, AnonymousPolicy> = {
   createVoiceClone: "deny",
   createSession: "deny",
@@ -134,6 +137,7 @@ const ANONYMOUS_POLICY: Record<string, AnonymousPolicy> = {
   sendMessage: "session",
   createRealtimeCall: "session",
   submitRealtimeTranscript: "session",
+  startRelayLeg: "session",
   generateReport: "session",
   judgeRewindAnswer: "report",
   deliverInCallSms: "session",
@@ -199,19 +203,19 @@ const EXPORTED_NAMES: readonly string[] = Object.keys(callables);
 
 test("[T176 T-2] index.ts export 집합과 §68.3 정책표가 양방향으로 일치한다(G421)", () => {
   assertNoClassificationGaps(EXPORTED_NAMES, ANONYMOUS_POLICY);
-  assert.equal(EXPORTED_NAMES.length, 26, "§68.1 1 — 서버 진입점은 26개(콜러블 24 + 트리거 1 + 스케줄 1)");
+  assert.equal(EXPORTED_NAMES.length, 27, "§68.1 1 — 서버 진입점은 27개(콜러블 25 — T191 S7 startRelayLeg 포함 + 트리거 1 + 스케줄 1)");
 });
 
-test("[T176 T-2] 정책표 클래스별 개수 = §68.3(D 6 · S 13 · R 1 · E 2 · N 2 · X 2 — 변경 대상 20)", () => {
+test("[T176 T-2] 정책표 클래스별 개수 = §68.3(D 6 · S 14 — T191 S7 +1 · R 1 · E 2 · N 2 · X 2 — 변경 대상 21)", () => {
   const count = (policy: AnonymousPolicy) =>
     Object.values(ANONYMOUS_POLICY).filter((p) => p === policy).length;
   assert.equal(count("deny"), 6);
-  assert.equal(count("session"), 13);
+  assert.equal(count("session"), 14);
   assert.equal(count("report"), 1);
   assert.equal(count("entry"), 2);
   assert.equal(count("no_auth"), 2);
   assert.equal(count("not_callable"), 2);
-  assert.equal(count("deny") + count("session") + count("report"), 20);
+  assert.equal(count("deny") + count("session") + count("report"), 21);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
