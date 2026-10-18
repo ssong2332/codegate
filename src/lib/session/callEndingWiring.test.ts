@@ -127,7 +127,7 @@ test("[§79.9 E1~E7] 공통 종료 함수 순서 — 래치 → 오버레이 →
   assert.equal(notStarted.includes("router.push"), false, "두 번째 트리거가 이동한다(이중 이동 — D-114)");
   assert.ok(notStarted.includes("skipEndWaitRef.current?.();"));
   // 끊김 표시 시간 = UX 정본 상수.
-  assert.match(body, /window\.setTimeout\(finish, HANGUP_NOTICE_MS\)/);
+  assert.match(body, /endTimeout\(finish, HANGUP_NOTICE_MS\)/);
 });
 
 test("[§79.9 · §79.11] 모든 종료 트리거가 공통 함수 하나 — 상시 · 한도 · 실시간 끊기 · 서버 close · 폴백 끊기", () => {
@@ -151,7 +151,7 @@ test("[G515] 폴백 끊기 응답 — 마지막 대사 재생 완료(onEnded) �
   // onEnded가 E3 대기를 푼다 · 재생 거부는 읽을 틈(1500ms)으로 푼다.
   assert.ok(slice(pageCode, "const handlePlaybackEnded = () => {", "};").includes("fallbackLastLineDoneRef.current?.();"));
   assert.ok(pageCode.includes("fallbackLastLineRejectedRef.current?.();"));
-  assert.match(body, /fallbackLastLineRejectedRef\.current = \(\) => window\.setTimeout\(finish, HANGUP_NO_AUDIO_READ_MS\);/);
+  assert.match(body, /fallbackLastLineRejectedRef\.current = \(\) => endTimeout\(finish, HANGUP_NO_AUDIO_READ_MS\);/);
   // 사유 = 래치 사유(폴백 끊기 = scammer → scammer_ended — reasonForEndedBy).
   assert.ok(body.includes("setPendingEndReason(sessionId, ending.reason)"));
 });
@@ -187,4 +187,83 @@ test("[UX-014 v1.35 (1)(3)(6) · D-110] remote-hangup — 정본 문구는 상�
   // 통화 종료 버튼은 흐린 영역 밖(형제)이고 상시 종료를 그대로 부른다.
   const dim = slice(pageCode, "ref={hangupDimRef}", "ref={endCallButtonRef}");
   assert.equal(dim.includes('aria-label="통화 종료 — 훈련 종료"'), false, "통화 종료가 흐린 영역 안에 있다(AC-006)");
+});
+
+// ── T192 C5 리뷰 반영(M1 · M2 · M3 · m1 · m2 · m3) ─────────────────────────────────────────────────────────
+
+/** 문자함 · 확인 시트 여는 핸들러 각각의 첫 실행 줄이 래치 가드인가. 역검증과 같은 판정식. */
+function openHandlersGuarded(code: string): string[] {
+  const missing: string[] = [];
+  for (const [label, head] of [
+    ["문자함", "const handleOpenSmsOverlay = (trigger: HTMLButtonElement | null) => {"],
+    ["확인 시트", "const handleOpenVerifyOverlay = () => {"],
+  ] as const) {
+    const start = code.indexOf(head);
+    if (start < 0) {
+      missing.push(`${label}: 핸들러 없음`);
+      continue;
+    }
+    const firstStatement = code.slice(start + head.length).trim().split("\n")[0]!.trim();
+    if (firstStatement !== "if (isEndLatched(callEndingRef.current)) return;") missing.push(`${label}: 첫 줄이 래치 가드가 아니다`);
+  }
+  return missing;
+}
+
+test("[C5 리뷰 M1] 문자함 · 확인 시트를 여는 핸들러의 첫 줄 = 래치 가드(E2가 닫은 뒤 다시 열리지 않는다 — D-113)", () => {
+  assert.deepEqual(openHandlersGuarded(pageCode), []);
+  // remote-hangup(phase ended)에서 문자 배너는 그려지지 않는다(`visibleBannerSmsId`의 ended 조건) — 배너 탭 경로도 위 가드를 탄다.
+  assert.match(pageCode, /ended: phase === "ended",/);
+});
+
+test("[C5 리뷰 M1 역검증] 두 가드 중 하나를 지운 사본은 같은 판정식에 걸린다", () => {
+  for (const head of [
+    "const handleOpenSmsOverlay = (trigger: HTMLButtonElement | null) => {",
+    "const handleOpenVerifyOverlay = () => {",
+  ]) {
+    const start = pageCode.indexOf(head);
+    const guardAt = pageCode.indexOf("if (isEndLatched(callEndingRef.current)) return;", start);
+    const poisoned = pageCode.slice(0, guardAt) + pageCode.slice(guardAt + "if (isEndLatched(callEndingRef.current)) return;".length);
+    assert.equal(openHandlersGuarded(poisoned).length, 1, head);
+  }
+});
+
+test("[C5 리뷰 M2 · UX D-112] 폴백 <audio> 재생 오류 = 거부와 같은 처리(1500ms 뒤 대기 종료)", () => {
+  const audio = slice(pageCode, "<audio", "/>");
+  assert.match(audio, /onEnded=\{handlePlaybackEnded\}/);
+  assert.match(audio, /onError=\{\(\) => fallbackLastLineRejectedRef\.current\?\.\(\)\}/);
+  // 거부 처리 자체가 1500ms 타이머다(같은 함수 — 자동재생 거부 · 재생 오류 두 입구).
+  assert.match(endCallBody(), /fallbackLastLineRejectedRef\.current = \(\) => endTimeout\(finish, HANGUP_NO_AUDIO_READ_MS\);/);
+});
+
+test("[C5 리뷰 M3] 정지된 통화 시간 — <p aria-label> 0 · 시각 숫자는 aria-hidden · 읽을 문장은 sr-only", () => {
+  const block = slice(pageCode, 'remoteHangup && deviceSkin.skin !== "ios" && (', "</p>");
+  assert.equal(/<p[^>]*aria-label=/.test(block), false, "일반 <p>에 aria-label이 있다");
+  assert.match(block, /<span aria-hidden="true">\{formatCallElapsed\(elapsedSec\)\}<\/span>/);
+  assert.match(block, /<span className="sr-only">\{`통화 시간 \$\{Math\.floor\(elapsedSec \/ 60\)\}분 \$\{elapsedSec % 60\}초`\}<\/span>/);
+});
+
+test("[C5 리뷰 m1] remote-hangup 포커스 이동은 레이아웃 effect", () => {
+  assert.match(pageCode, /useLayoutEffect\(\(\) => \{\s*if \(!remoteHangup\) return;/);
+});
+
+test("[C5 리뷰 m2 · m3] endCall — 타이머는 endTimeout 하나(언마운트 일괄 정리) · 언마운트 뒤 이동 0 · flush~이동 try/finally", () => {
+  const body = endCallBody();
+  assert.equal(body.includes("window.setTimeout("), false, "공통 종료 함수가 정리되지 않는 타이머를 직접 건다");
+  const unmount = slice(pageCode, "const endCallMountedRef = useRef(true);", "const endTimeout = ");
+  assert.match(unmount, /endCallMountedRef\.current = false;/);
+  assert.match(unmount, /timers\.forEach\(\(id\) => window\.clearTimeout\(id\)\);/);
+  assert.match(unmount, /skipEndWaitRef\.current\?\.\(\);/);
+  // 이동은 finally 안 · 마운트 가드 뒤 1곳.
+  assert.equal((body.match(/router\.push\(/g) ?? []).length, 1);
+  assert.match(body, /\} finally \{\s*if \(endCallMountedRef\.current\) router\.push\("\/session\/end"\);\s*\}/);
+  const tryAt = body.indexOf("try {");
+  assert.ok(tryAt >= 0 && tryAt < body.indexOf("await flushTranscript();"), "flush가 try 밖이다");
+  // E3 대기 뒤 · E4 앞의 마운트 가드(대기 중 화면이 사라지면 아무것도 안 한다).
+  const guardAt = body.indexOf("if (!endCallMountedRef.current) return;");
+  assert.ok(guardAt > body.indexOf("await waitForEndStep(") && guardAt < body.indexOf("realtime.stop();"));
+});
+
+test("[C5 리뷰 m2 역검증] 마운트 가드를 지운 사본은 같은 검사식에 걸린다", () => {
+  const poisoned = endCallBody().replace("if (endCallMountedRef.current) router.push", "router.push");
+  assert.equal(/\} finally \{\s*if \(endCallMountedRef\.current\) router\.push\("\/session\/end"\);\s*\}/.test(poisoned), false);
 });
