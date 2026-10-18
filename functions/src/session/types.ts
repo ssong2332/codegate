@@ -63,7 +63,9 @@ export type EndSessionReason =
   | "user_ended"
   | "completed"
   | "deceived"
-  | "limit_reached";
+  | "limit_reached"
+  // T192 C1(§79.5) — 서버 표식이 없으면 `user_ended`로 기록된다(`session/endReason.ts`).
+  | "scammer_ended";
 export type EndSessionRequest = {
   sessionId: string;
   endReason: EndSessionReason;

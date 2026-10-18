@@ -305,12 +305,39 @@ export type EndSessionReason =
   | "user_ended"
   | "completed"
   | "deceived"
-  | "limit_reached";
+  | "limit_reached"
+  // T192 C1(Architecture.md §79.5) — 서버 승인 표식이 없으면 서버가 `user_ended`로 기록한다.
+  | "scammer_ended";
 export type EndSessionRequest = {
   sessionId: string;
   endReason: EndSessionReason;
 };
 export type EndSessionResponse = { status: "ended"; reportPending: true };
+
+// --- requestScammerHangup (T192 C1 · Architecture.md §79.5 · AC-103) ---
+// 실시간 `end_call` 도구 호출의 서버 판정(functions/src/scammerHangup/types.ts와 1:1). 세션을 끝내지 않는다.
+// `guidance`는 서버 소유 문면이다 — 클라는 그대로 도구 응답에 싣고 한국어를 저작하지 않는다(G386 · G516).
+export type ScammerHangupStatus =
+  | "not_active"
+  | "wrong_channel"
+  | "not_last_leg"
+  | "mock_turn"
+  | "blocked_transfer"
+  | "too_early"
+  | "blocked_pending"
+  | "limit_reached"
+  | "already_accepted"
+  | "accepted";
+export type RequestScammerHangupRequest = {
+  sessionId: string;
+  scammerTurns: number;
+  pendingInstruction: boolean;
+  kind?: string;
+};
+export type RequestScammerHangupResponse = {
+  status: ScammerHangupStatus;
+  guidance: string;
+};
 
 // --- updateMessengerSkin (T29 · UX-022 · AC-031/P-16) ---
 // 메신저 채팅(UX-022)의 UA 자동 감지·수동 전환 결과를 세션 문서에 지속한다(리포트·새로고침·

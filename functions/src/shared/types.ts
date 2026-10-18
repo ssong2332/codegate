@@ -31,7 +31,19 @@ export type SessionEndReason =
   | "user_ended"
   | "completed"
   | "deceived"
-  | "limit_reached";
+  | "limit_reached"
+  // T192 C1(Architecture.md §79.5 · AC-103 (e)) — 사기범의 먼저 끊기. ⛔ 서버 승인 표식(`scammerHangup`)이
+  // 있을 때만 기록된다(`session/endReason.ts`). 리포트는 이 값을 읽지 않는다(G511).
+  | "scammer_ended";
+// T192 C1(§79.5) — 끊기 승인 표식. `requestScammerHangup`(실시간) · `sendMessage`(폴백 — C3)만 쓴다.
+// `kind`는 모델 판단의 기록일 뿐 판정에 쓰지 않는다(§79.2).
+export type ScammerHangupKind = "goal" | "give_up" | "unspecified";
+export type ScammerHangupPath = "realtime" | "fallback";
+export type ScammerHangupMarker = {
+  acceptedAt: FirebaseFirestore.Timestamp;
+  kind: ScammerHangupKind;
+  path: ScammerHangupPath;
+};
 export type CloneStatus = "pending" | "ready" | "failed" | "fallback";
 
 // T19 추가(옵셔널, 하위호환 — Migration Policy): 어떤 VoiceProvider가 클론을 만들었는지 감사용
@@ -131,6 +143,10 @@ export type SessionDoc = {
   // **불투명 ID**(`fv-xxxx`). 수법 · 단계 · 인원은 `functions/src/scenarios/flowVariants.ts`(서버 전용)에만
   // 있다(D-46 · ADR-0004). 부재 = 변형 도입 이전 세션 → 원본 시나리오 프롬프트로 해석(무소급).
   flowVariantId?: string;
+  // T192 C1 추가(옵셔널, 하위호환 · 무백필 — Architecture.md §79.5) — 사기범 끊기 승인 표식. 서버만 쓴다
+  // (클라 write는 firestore.rules가 전부 거부). `endReason: "scammer_ended"`의 **서버측 근거**다 —
+  // 이것 없이 온 `scammer_ended`는 `user_ended`로 기록된다(`session/endReason.ts`).
+  scammerHangup?: ScammerHangupMarker;
 };
 
 // --- users/{uid}/voices/{voiceId} (P-8·AC-046, ADR-0005·Database.md 1:1) ---
