@@ -44,6 +44,7 @@ import type {
   SetChallengeResultSharingRequest,
   SetChallengeResultSharingResponse,
 } from "./types";
+import { pickFictionalBankName } from "../shared/fictionalBank";
 
 ensureFirebaseAdminApp();
 
@@ -173,6 +174,8 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
     // T72(§15.3.2/§15.6 G9) — 발신자가 챌린지에 실어 보낸 난이도를 오프닝 조립에 그대로 쓰고,
     // 아래에서 사용자2 체험 세션 문서에도 **복사**한다(프롬프트는 세션 단위로 조립되므로 복사하지
     // 않으면 이후 턴(sendMessage)·통화(createRealtimeCall)에서 발신자 선택이 소실된다).
+    // §81 — 세션 가상 은행명을 오프닝 전에 고른다(오프닝 대사와 세션 문서가 같은 이름을 쓴다).
+    const fictionalBankName = pickFictionalBankName();
     // T191 S5(AC-096 (e) · 설계 "2인 챌린지 수신자") — 수신자는 익명 · 이력 없음이라 회전 문서를 쓰지
     // 않고 `hash(challengeId) mod n`으로 결정론 배정한다(같은 링크의 재시도 · 재개가 같은 변형).
     const flowVariantId = assignFlowVariantForChallenge(
@@ -184,6 +187,7 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
       scenarioId,
       resolved.difficultyLevel,
       flowVariantId,
+      fictionalBankName,
     );
 
     const challengeRef = db.collection("challenges").doc(resolved.challengeId);
@@ -242,6 +246,7 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
         // T72(§15.6 G9) — 챌린지의 난이도를 체험 세션으로 복사한다. 이 복사가 빠지면 sendMessage·
         // createRealtimeCall이 세션에서 난이도를 읽지 못해 항상 중급으로 진행된다.
         difficultyLevel: resolved.difficultyLevel,
+        fictionalBankName,
         // T191 S5 — 배정된 흐름 변형의 불투명 ID(일반 세션과 같은 필드 · 같은 해석 경로).
         flowVariantId,
         ...(isMock ? { llmProvider: "mock" as const } : {}),
