@@ -24,6 +24,8 @@ type DiagState = {
   fallbackPlay: string | null;
   lastAudioError: string | null;
   resumeRetries: number;
+  /** 벨 컨텍스트를 실제로 닫은 시각(`performance.now()`) — 받기 기준 상대 ms로 보인다(M3 순서 판정용). */
+  ringClosedAtMs: number | null;
 };
 
 const INITIAL: DiagState = {
@@ -37,6 +39,7 @@ const INITIAL: DiagState = {
   fallbackPlay: null,
   lastAudioError: null,
   resumeRetries: 0,
+  ringClosedAtMs: null,
 };
 
 let state: DiagState = { ...INITIAL };
@@ -98,6 +101,10 @@ export function noteFallbackPlay(result: string): void {
 
 export function noteAudioError(name: string): void {
   state = { ...state, lastAudioError: name };
+}
+
+export function noteRingClosed(nowMs: number): void {
+  state = { ...state, ringClosedAtMs: nowMs };
 }
 
 export function noteResumeRetry(count: number): void {
@@ -194,6 +201,8 @@ export function summarizeBrowser(input: {
 
 /** 패널 행 키 — 이 목록 밖의 키는 그리지 않는다(테스트가 금지 키를 막는다). */
 export const AUDIO_DIAG_KEYS = [
+  "flag.audioprime",
+  "flag.ringclose",
   "callMode",
   "rt.status",
   "provider",
@@ -212,6 +221,7 @@ export const AUDIO_DIAG_KEYS = [
   "in.state",
   "in.rate",
   "ring.state",
+  "ring.closedMs",
   "fb.volume",
   "fb.paused",
   "fb.play",
@@ -238,9 +248,13 @@ export function buildAudioDiagRows(input: {
   acceptToCredentialsMs: number | null;
   userActivation: { hasBeenActive: boolean; isActive: boolean } | null;
   browser: string;
+  /** 실기 A/B 플래그(`callAudio.ts` `readAudioFlags`) — 주소 쿼리에서 읽은 현재 값. */
+  flags: { audioPrime: boolean; ringCloseImmediate: boolean };
 }): Array<[AudioDiagKey, string]> {
   const s = input.snapshot;
   const values: Record<AudioDiagKey, string> = {
+    "flag.audioprime": input.flags.audioPrime ? "on" : "off",
+    "flag.ringclose": input.flags.ringCloseImmediate ? "immediate" : "deferred",
     callMode: input.callMode,
     "rt.status": input.status,
     provider: input.provider,
@@ -259,6 +273,7 @@ export function buildAudioDiagRows(input: {
     "in.state": show(s.input?.state),
     "in.rate": show(s.input?.sampleRate),
     "ring.state": show(s.ring?.state),
+    "ring.closedMs": rel(s.ringClosedAtMs, s.acceptAtMs),
     "fb.volume": s.fallback ? s.fallback.volume.toFixed(2) : "-",
     "fb.paused": s.fallback ? String(s.fallback.paused) : "-",
     "fb.play": show(s.fallbackPlay),

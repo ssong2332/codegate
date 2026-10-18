@@ -73,8 +73,11 @@ export function shouldReleasePrimedCallAudio(input: {
   status: string;
   provider: string | null | undefined;
   ended: boolean;
+  /** reviewer m1 — 화면이 텍스트 폴백으로 내려갔으면(Gemini 오류 뒤 포함) 더는 실시간 오디오를 쓰지 않는다. */
+  callMode: string;
 }): boolean {
   if (input.ended) return true;
+  if (input.callMode === "fallback") return true;
   if (input.provider === "elevenlabs") return true;
   if (input.status === "fallback" || input.status === "unsupported" || input.status === "permission-denied") {
     return true;
@@ -112,3 +115,79 @@ export function resumeSuspendedContexts(
 
 /** 안전망이 듣는 이벤트 — 사용자 활성화를 일으키는 입력들(터치는 pointerdown이 아니라 pointerup·touchend가 활성화다). */
 export const RESUME_GESTURE_EVENTS = ["pointerup", "touchend", "mousedown", "keydown"] as const;
+
+// ── 실기 A/B 플래그(reviewer M2 · M3) ────────────────────────────────────────────────────────
+// 원인을 가르기 위한 **동작 선택 전용** 플래그다(화면 문구 0). 쿼리가 없으면 기본 = 이번 수정안.
+//   - `audioprime=0`      → 수정안 A의 받기 탭 사전 생성을 끈다(종전 경로: 세션 컴포넌트가 getUserMedia 뒤에 직접 만든다).
+//   - `ringclose=immediate` → 받기 때 벨 컨텍스트를 종전대로 **즉시** 닫는다(기본은 소리만 즉시 멈추고 close는 미룬다).
+
+export type AudioFlags = { audioPrime: boolean; ringCloseImmediate: boolean };
+
+export function readAudioFlags(search: string): AudioFlags {
+  let params: URLSearchParams;
+  try {
+    params = new URLSearchParams(search);
+  } catch {
+    return { audioPrime: true, ringCloseImmediate: false };
+  }
+  return {
+    audioPrime: params.get("audioprime") !== "0",
+    ringCloseImmediate: params.get("ringclose") === "immediate",
+  };
+}
+
+/** 미룬 벨 close의 상한 — 통화 오디오가 끝내 running이 되지 않아도(ElevenLabs·폴백·무음 결함) 이 뒤엔 닫는다(판단값). */
+export const RING_CLOSE_DEFER_CAP_MS = 8000;
+/** 통화 출력 상태를 다시 보는 간격(판단값). */
+export const RING_CLOSE_POLL_MS = 200;
+
+/** 미룬 벨 컨텍스트를 지금 닫아도 되는가 — 통화 출력이 running이거나 · 상한이 지났거나 · 통화가 끝났다. */
+export function shouldCloseDeferredRing(input: {
+  callOutputState: string | null | undefined;
+  elapsedMs: number;
+  ended: boolean;
+}): boolean {
+  return input.ended || input.callOutputState === "running" || input.elapsedMs >= RING_CLOSE_DEFER_CAP_MS;
+}
+
+/**
+ * 벨 컨텍스트 close를 통화 출력이 running이 될 때까지 미룬다(setTimeout 사슬 — 새 setInterval 0).
+ * 반환값 = **즉시 닫기**(취소 겸용 · 멱등) — 화면 언마운트 cleanup이 부른다(누수 0).
+ */
+export function scheduleDeferredRingClose(
+  release: () => void,
+  readCallOutputState: () => string | null | undefined,
+  deps: {
+    now: () => number;
+    setTimer: (fn: () => void, ms: number) => unknown;
+    clearTimer: (handle: unknown) => void;
+  },
+): () => void {
+  const startedAt = deps.now();
+  let done = false;
+  let handle: unknown = null;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    if (handle !== null) deps.clearTimer(handle);
+    handle = null;
+    release();
+  };
+  const check = () => {
+    handle = null;
+    if (done) return;
+    if (
+      shouldCloseDeferredRing({
+        callOutputState: readCallOutputState(),
+        elapsedMs: deps.now() - startedAt,
+        ended: false,
+      })
+    ) {
+      finish();
+      return;
+    }
+    handle = deps.setTimer(check, RING_CLOSE_POLL_MS);
+  };
+  check();
+  return finish;
+}

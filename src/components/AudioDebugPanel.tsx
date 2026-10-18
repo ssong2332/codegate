@@ -14,6 +14,7 @@ import {
   summarizeBrowser,
 } from "@/lib/realtime/audioDiagnostics";
 import { buildCallSetupRecord, readCallSetupMarks } from "@/lib/realtime/liveLatency";
+import { readAudioFlags } from "@/lib/realtime/callAudio";
 
 export type AudioDebugPanelProps = {
   callMode: string;
@@ -63,6 +64,7 @@ export default function AudioDebugPanel(props: AudioDebugPanelProps) {
       platform: nav.userAgentData?.platform ?? null,
       userAgent: nav.userAgent,
     }),
+    flags: readAudioFlags(window.location.search),
   });
 
   return (

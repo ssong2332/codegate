@@ -212,7 +212,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     // 일어나지 않았다는 뜻). 기다린 시간은 `acceptToCredentialsMs`에 그대로 남고, 어느 경로였는지는 진단 패널이 보인다.
     const taken = await getPrefetchSlot().take(sessionId);
     noteCredentialSource(taken.source);
-    markCredentialsPrefetched(taken.issued !== null);
+    markCredentialsPrefetched(taken.issued !== null, taken.source);
     if (!mountedRef.current) return;
 
     let issued: CreateRealtimeCallResponse;

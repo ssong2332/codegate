@@ -91,7 +91,9 @@ function hookViolations(code: string): string[] {
   if (!prefetch.includes("getPrefetchSlot().prefetch(sessionId)")) out.push("prefetch가 슬롯을 거치지 않는다");
   if (prefetch.includes("createRealtimeCall(")) out.push("prefetch가 슬롯 밖에서 직접 발급한다");
   // 계측 — 재사용(진행 중 대기 포함)이면 true.
-  if (!start.includes("markCredentialsPrefetched(taken.issued !== null);")) out.push("계측이 재사용 여부를 기록하지 않는다");
+  if (!start.includes("markCredentialsPrefetched(taken.issued !== null, taken.source);")) {
+    out.push("계측이 재사용 여부·출처를 기록하지 않는다");
+  }
   return out;
 }
 

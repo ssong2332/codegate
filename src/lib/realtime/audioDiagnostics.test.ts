@@ -65,6 +65,7 @@ test("[diag] 행은 고정 키 목록 그대로 · 저장소 값을 읽어 만�
     acceptToCredentialsMs: 124,
     userActivation: { hasBeenActive: true, isActive: false },
     browser: "Whale 4 · Android",
+    flags: { audioPrime: false, ringCloseImmediate: true },
   });
   assert.deepEqual(rows.map(([k]) => k), [...AUDIO_DIAG_KEYS]);
   const v = Object.fromEntries(rows);
@@ -78,6 +79,10 @@ test("[diag] 행은 고정 키 목록 그대로 · 저장소 값을 읽어 만�
   assert.equal(v["cred.source"], "inflight");
   assert.equal(v["cred.prefetched"], "true");
   assert.equal(v["provider"], "gemini");
+  // reviewer M2 — 현재 적용 중인 실기 A/B 플래그가 보인다.
+  assert.equal(v["flag.audioprime"], "off");
+  assert.equal(v["flag.ringclose"], "immediate");
+  assert.equal(v["ring.closedMs"], "-");
   // 살아 있는 객체를 다시 읽는다 — 상태가 바뀌면 다음 읽기에 반영된다(실시간 갱신).
   ctx.state = "running";
   assert.equal(Object.fromEntries(buildAudioDiagRows({ ...dummyInput(), snapshot: readAudioDiag() }))["out.state"], "running");
@@ -95,6 +100,7 @@ function dummyInput() {
     acceptToCredentialsMs: null,
     userActivation: null,
     browser: "-",
+    flags: { audioPrime: true, ringCloseImmediate: false },
   };
 }
 
@@ -128,6 +134,7 @@ function panelViolations(code: string): string[] {
   else if (firstJsx >= 0 && firstJsx < gate) out.push("null 분기보다 먼저 JSX를 돌려준다");
   if (!code.includes("isAudioDebugEnabled(window.location.search)")) out.push("쿼리로 켜지 않는다");
   if (!code.includes("pointer-events-none")) out.push("패널이 탭을 가로챈다(AC-006)");
+  if (!code.includes("flags: readAudioFlags(window.location.search)")) out.push("패널이 적용 중인 플래그를 보이지 않는다");
   // 관찰 전용 — 저장소에 적는 함수(note*/register*) · 제품 상태 변경 호출 0.
   if (/\b(note[A-Z]\w*|register[A-Z]\w*|reset[A-Z]\w*)\(/.test(code)) out.push("패널이 진단 저장소에 적는다(읽기 전용이어야 한다)");
   if (/\.(resume|close|play|pause)\(/.test(code)) out.push("패널이 오디오를 조작한다(관찰 전용이어야 한다)");
