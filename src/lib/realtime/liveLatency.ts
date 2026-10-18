@@ -15,7 +15,8 @@
 // ⚠️ 클라 시각이다 — 서버 VAD 판정 시각이 아니고, 첫 청크 **도착** 시각이지 스피커 가청 시각이 아니다
 // (출력 지연은 setup 레코드의 `outputLatencyMs`로 따로 남긴다).
 
-export type SentTurnKind = "opening" | "text" | "instruction";
+// §78.4.2 — `silence`·`relayGreeting`은 `ClientTurnKind`의 새 종류. `instruction`은 S3 이전 기록과의 비교용 라벨로 남긴다.
+export type SentTurnKind = "opening" | "text" | "instruction" | "silence" | "relayGreeting";
 export type LatencyAnchor = SentTurnKind | "voice" | "none";
 export type TurnEndReason = "turnComplete" | "interrupted" | "stall";
 

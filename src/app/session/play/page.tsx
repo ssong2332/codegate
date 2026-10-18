@@ -101,24 +101,35 @@ import PhoneIcon from "@/components/PhoneIcon";
 import EndTrainingButton from "@/components/EndTrainingButton";
 import {
   announceTurnsOnInstructionDispatch,
+  deferredAnnouncePendingOnDispatch,
   enqueueInstruction,
+  IDLE_LIVE_TURN_PHASE,
   INSTRUCTION_DRAIN_BACKSTOP_SEC,
   INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES,
+  isResponseInProgress,
   nextVerifyOfferStage,
   rollbackVerifyOfferPhase,
   shouldAnnounceVerifyOffer,
   shouldDrainInstructionQueue,
   shouldOfferVerify,
+  shouldRecordDeferredAnnounce,
   shouldReinjectTransferState,
   shouldRetryVerifyOffer,
   shouldRevealVerifyOffer,
   takeNextInstruction,
   verifySeriesFor,
+  type LiveTurnPhase,
   type PendingInstruction,
   type VerifyInterceptView,
   type VerifyOfferPhase,
 } from "@/lib/verifyintercept";
 import { shouldFireBackstop } from "@/lib/realtime/toolWindow";
+import {
+  countTranscriptFlush,
+  deliveryForInstruction,
+  INITIAL_TURN_COUNTERS,
+  type InstructionDelivery,
+} from "@/lib/realtime/contextInjection";
 import {
   claimAnnounceSlot,
   releaseAnnounceSlot,
@@ -270,7 +281,10 @@ export default function SessionCallPage() {
   // ⚠️ T83(§16.6 G31) — 문자 announce와 확인 지시가 **같은 슬롯**을 쓰므로 큐를 거쳐 한 턴에
   // 하나씩만 주입한다(아래 enqueueTurnInstruction 참고). 예전엔 이 상태를 문자 전용으로 직접
   // 세팅했는데, 그러면 같은 턴 경계에 둘이 겹칠 때 나중 것이 앞것을 조용히 덮어쓴다.
-  const [instructionTurn, setInstructionTurn] = useState<{ text: string; seq: number } | null>(null);
+  // ⭐ §78.4(T1) — `delivery`가 전송 형태를 정한다(문자 · 확인 권유 = 맥락 주입 · 재연결 = 화자 전환 첫 발화).
+  const [instructionTurn, setInstructionTurn] = useState<
+    { text: string; seq: number; delivery: InstructionDelivery } | null
+  >(null);
   const instructionQueueRef = useRef<PendingInstruction[]>([]);
   // 이번 사기범 턴에 이미 지시를 하나 넣었는가(다음 turnComplete까지 추가 주입을 보류한다).
   const instructionBusyRef = useRef(false);
@@ -295,6 +309,15 @@ export default function SessionCallPage() {
   // 재려면 그 순간의 값이 필요하므로 ref로 함께 센다(⛔ 갱신 지점은 아래 handleScammerTurnComplete
   // **한 곳**뿐이다 — 두 곳이 되면 state와 조용히 어긋난다).
   const scammerTurnsRef = useRef(0);
+  // ⭐ §78.3.4(G488) — 실시간 경로 카운터(순수 함수 `countTranscriptFlush`). `scammerTurnsRef`/`scammerTurns`는
+  // 이제 **비어 있지 않은 사기범 전사 flush 수**(`scammerTranscriptTurns`)다 — 지시 턴 · 빈 `turnComplete`(N1)를
+  // 세지 않는다. ⛔ 갱신 지점은 `handleTranscriptTurn` **한 곳**뿐이다(전에는 `handleScammerTurnComplete`).
+  const turnCountersRef = useRef(INITIAL_TURN_COUNTERS);
+  // ⭐ §78.4(T1) — 맥락 주입된 확인 권유의 예고 기록 대기(큐 이탈 시점의 사용자 발화 수). `null` = 대기 없음.
+  // 다음 사용자 발화 flush에서 `verifyAnnounceTurnsRef`를 기록한다(`deferredAnnouncePendingOnDispatch` 주석).
+  const pendingVerifyAnnounceUserTurnsRef = useRef<number | null>(null);
+  // ⭐ 리뷰 M2 — `GeminiVoiceSession`이 갱신하는 현재 턴 위상(모델 응답 중 · 사용자 버퍼). 드레인이 읽는다.
+  const liveTurnPhaseRef = useRef<LiveTurnPhase>(IDLE_LIVE_TURN_PHASE);
   // 이미 서버에 전달을 요청한 smsId(중복 호출 방지). 렌더와 무관해 ref에 둔다. §59.10 커밋 D부터는
   // 앱이 직접 요청한 것뿐 아니라 모델이 도구로 **성공시킨** smsId도 여기 더해진다
   // (handleModelToolSmsDelivered) — `pickDueInCallSms`가 그 값을 "이미 처리됨"으로 걸러내
@@ -402,8 +425,30 @@ export default function SessionCallPage() {
     const atMs =
       answeredAtMsRef.current !== null ? Date.now() - answeredAtMsRef.current : undefined;
     transcriptRef.current.push({ role, text, atMs });
+    // ⭐ §78.3.4(G488) — 계수는 비어 있지 않은 전사 flush 기준(빈 `turnComplete`는 여기까지 오지 않는다).
+    turnCountersRef.current = countTranscriptFlush(turnCountersRef.current, role, text);
+    if (role === "scammer") {
+      scammerTurnsRef.current = turnCountersRef.current.scammerTranscriptTurns;
+      setScammerTurns(scammerTurnsRef.current);
+    }
     // T118(§25.3 (3)) — A5 재주입 조건의 관측 지점. 참가자가 한 번이라도 말한 뒤에만 다시 넣는다.
     if (role === "user") {
+      // ⭐ §78.4(T1) — 맥락 주입된 확인 권유는 이 사용자 발화에 대한 응답에 실린다. 그 응답(사기범 전사)이
+      // 세어지기 **직전**인 지금 예고 시점을 기록한다 — 기록 함수는 §45.7 V2 그대로다.
+      if (
+        shouldRecordDeferredAnnounce({
+          pendingAtUserTurns: pendingVerifyAnnounceUserTurnsRef.current,
+          userTurns: turnCountersRef.current.userTurns,
+        })
+      ) {
+        verifyAnnounceTurnsRef.current = announceTurnsOnInstructionDispatch({
+          priority: "verify",
+          phase: verifyOfferPhaseRef.current,
+          completedScammerTurns: scammerTurnsRef.current,
+          current: verifyAnnounceTurnsRef.current,
+        });
+        pendingVerifyAnnounceUserTurnsRef.current = null;
+      }
       userTurnsSinceInjectionRef.current += 1;
       // §52.7 (5) 가·나 — 참가자가 말했으니 G31 큐 드레인 게이트를 다시 연다(억제 스트릭도
       // 초기화). ⭐ §57.4 D3 이후로는 이 콜백이 타이핑·음성 모두 **턴 완료(flush) 시각**에만
@@ -662,20 +707,35 @@ export default function SessionCallPage() {
     instructionCapReachedAtSecRef.current = null;
     // ⭐⭐ **§45.7 V2 — 예고 시점은 *여기서* 잰다.** 요청을 보낸 자리가 아니라 지시가 **실제로 큐를
     // 떠나 `instructionTurn`에 실리는** 이 자리다(§45.6 (3) F2-a c·d). 판정은 순수 함수가 소유한다.
-    verifyAnnounceTurnsRef.current = announceTurnsOnInstructionDispatch({
-      priority: item.priority,
-      phase: verifyOfferPhaseRef.current,
-      completedScammerTurns: scammerTurnsRef.current,
-      current: verifyAnnounceTurnsRef.current,
-    });
-    setInstructionTurn((prev) => ({ text: item.text, seq: (prev?.seq ?? 0) + 1 }));
+    // ⭐ §78.4(T1) — 맥락 주입된 확인 권유는 큐 이탈 시점이 아니라 **다음 사용자 발화 flush**에서 기록한다
+    // (응답을 유발하지 않으므로 지금 진행 중인 턴은 예고가 아니다). 그 외 항목은 종전 그대로다.
+    const delivery = deliveryForInstruction(item);
+    if (delivery === "verifyAnnounce") {
+      pendingVerifyAnnounceUserTurnsRef.current = deferredAnnouncePendingOnDispatch({
+        priority: item.priority,
+        speakerSwitch: item.speakerSwitch,
+        phase: verifyOfferPhaseRef.current,
+        userTurns: turnCountersRef.current.userTurns,
+        responseInProgress: isResponseInProgress(liveTurnPhaseRef.current),
+        current: pendingVerifyAnnounceUserTurnsRef.current,
+      });
+    } else {
+      verifyAnnounceTurnsRef.current = announceTurnsOnInstructionDispatch({
+        priority: item.priority,
+        phase: verifyOfferPhaseRef.current,
+        completedScammerTurns: scammerTurnsRef.current,
+        current: verifyAnnounceTurnsRef.current,
+      });
+    }
+    setInstructionTurn((prev) => ({ text: item.text, seq: (prev?.seq ?? 0) + 1, delivery }));
   }, []);
 
   const enqueueTurnInstruction = useCallback(
-    (text: string, priority: PendingInstruction["priority"]) => {
+    (text: string, priority: PendingInstruction["priority"], options?: { speakerSwitch?: boolean }) => {
       instructionQueueRef.current = enqueueInstruction(instructionQueueRef.current, {
         text,
         priority,
+        ...(options?.speakerSwitch ? { speakerSwitch: true } : {}),
       });
       drainInstructionQueue();
     },
@@ -864,7 +924,10 @@ export default function SessionCallPage() {
           retryable: shouldRetryVerifyOffer(error),
         });
         // 되돌린 단계가 1단계면 주입 시점 기록도 함께 지운다(다음 시도에서 다시 잰다).
-        if (verifyOfferPhaseRef.current === "idle") verifyAnnounceTurnsRef.current = null;
+        if (verifyOfferPhaseRef.current === "idle") {
+          verifyAnnounceTurnsRef.current = null;
+          pendingVerifyAnnounceUserTurnsRef.current = null;
+        }
       } finally {
         // ⭐ §59 Critical 수정 — 위에서 클레임한 슬롯을 성공·실패 무관하게 되돌린다(다음 재시도가
         // 영영 막히지 않게). 클레임은 `stage === "announce" && callMode === "realtime"`일 때만
@@ -889,10 +952,9 @@ export default function SessionCallPage() {
   ]);
 
   const handleScammerTurnComplete = useCallback(() => {
-    // ⭐ **§45.7 V2** — ref를 **먼저** 올린다. 아래 드레인이 이 값으로 예고 시점을 재기 때문에,
-    // state 갱신만 하면(리렌더 전이라) 한 턴 낡은 값이 기록된다.
-    scammerTurnsRef.current += 1;
-    setScammerTurns(scammerTurnsRef.current);
+    // ⭐ §78.3.4(G488) — 사기범 턴 수는 여기서 올리지 않는다. 같은 `turnComplete`의 전사 flush(`handleTranscriptTurn`,
+    // 이 콜백보다 **먼저** 불린다 — `GeminiVoiceSession`)가 이미 올렸다 ⇒ 아래 드레인이 읽는 ref는 최신이다(§45.7 V2 유지).
+    // 빈 `turnComplete`(N1)에서는 이 콜백 자체가 불리지 않는다.
     // §59.8 — 이 경계가 곧 "마지막 사기범 턴 경계"다. 백스톱의 정지(stall) 시계를 여기서 리셋한다.
     lastScammerBoundaryAtSecRef.current = elapsedSecRef.current;
     // 턴이 끝났으니 보류분을 하나 더 내보낸다(위 계약 (2)).
@@ -1418,7 +1480,8 @@ export default function SessionCallPage() {
       ]);
       // 실시간 경로만 클라가 주입한다(폴백은 서버가 다음 턴 프롬프트에 싣는다 — §16.2).
       if (requestCallMode === "realtime") {
-        enqueueTurnInstruction(result.reconnectInstruction, "verify");
+        // §78.4.2 — 재연결 지시는 화자 전환 첫 발화다(맥락 주입이 아니라 `relayGreeting` 텍스트 턴).
+        enqueueTurnInstruction(result.reconnectInstruction, "verify", { speakerSwitch: true });
         // T118 / A5 — 이 시점부터 전환 상태 단언이 참이 된다(`placed`). 카운터를 0으로 두어
         // **참가자가 한 번 말한 뒤**부터 재주입되게 한다(G99 — 여기서 0으로 두지 않으면 다음
         // 사기범 턴 경계에서 곧바로 한 번 더 들어간다).
@@ -1740,6 +1803,7 @@ export default function SessionCallPage() {
             releaseVerifyAnnounceSlot={releaseVerifyAnnounceSlot}
             instructionTurn={instructionTurn}
             personaStateTurn={personaStateTurn}
+            turnPhaseRef={liveTurnPhaseRef}
             primedAudio={primedCallAudio}
           />
         )

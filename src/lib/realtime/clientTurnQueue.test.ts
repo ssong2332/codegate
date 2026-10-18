@@ -11,7 +11,9 @@ import {
 
 const opening: ClientTurn = { kind: "opening", text: "(오프닝)" };
 const typed: ClientTurn = { kind: "text", text: "잠깐만요" };
-const instr: ClientTurn = { kind: "instruction", text: "(문자 도착)" };
+// §78.4.2(G491) — 문자 안내는 이제 이 큐를 타지 않는다(맥락 주입). 큐 전이는 종류와 무관하므로 남은
+// `turnComplete:true` 종류 중 하나(침묵 넛지)로 같은 시나리오를 그대로 검사한다(단언 무변경).
+const instr: ClientTurn = { kind: "silence", text: "(침묵 넛지)" };
 
 function run(events: ClientTurnEvent[], start: ClientTurnQueueState = INITIAL_CLIENT_TURN_QUEUE_STATE) {
   let state = start;
@@ -63,7 +65,7 @@ test("[§71.5] 보류분은 한 번에 1건씩, 앞 건의 응답이 끝난 turn
     sent.map((s) => [s.at, s.turn.kind]),
     [
       [100, "text"],
-      [400, "instruction"],
+      [400, "silence"],
     ],
   );
   assert.equal(state.pending.length, 0);
@@ -100,7 +102,7 @@ test("[§71.5] 응답이 끝내 안 오면 AWAIT_RESPONSE_TIMEOUT_MS 뒤 tick에
   assert.deepEqual(
     sent.map((s) => [s.at, s.turn.kind]),
     [
-      [0, "instruction"],
+      [0, "silence"],
       [AWAIT_RESPONSE_TIMEOUT_MS, "text"],
     ],
   );
