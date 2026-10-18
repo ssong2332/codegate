@@ -13,8 +13,6 @@
 
 /** 카탈로그·프롬프트에 쓰는 가상 은행 자리표시자(템플릿 토큰). 실제 출력 전에 세션 은행명으로 바뀐다. */
 export const BANK_PLACEHOLDER = "OO은행";
-/** 일부 클라 콘텐츠가 쓰는 같은 의미의 표기. */
-const BANK_PLACEHOLDER_ALT = "○○은행";
 
 /** 대조를 통과한 가상 은행명(§79.1). 순서가 곧 배정 순서다 — 바꾸면 기존 세션의 해시 폴백 배정이 달라진다. */
 export const FICTIONAL_BANK_NAMES: readonly string[] = [
@@ -54,8 +52,15 @@ export function resolveFictionalBankName(session: { sessionId?: string; fictiona
   return FICTIONAL_BANK_NAMES[hash(session.sessionId ?? "") % FICTIONAL_BANK_NAMES.length]!;
 }
 
-/** 텍스트의 자리표시자("OO은행"·"○○은행")를 세션 은행명으로 바꾼다. 자리표시자가 없으면 입력을 그대로 돌려준다. */
+/**
+ * 자리표시자 표기 변형까지 잡는다(리뷰 #4 — 모델이 "OO 은행"·"oo은행"·전각 "ＯＯ은행"으로 쓸 수 있다).
+ * ⚠️ 한계: 한글로 읽은 "오오은행"·"OO뱅크"·"OO카드"는 대상이 아니다(§79.5).
+ */
+const PLACEHOLDER_PATTERN = /[Oo○Ｏｏ]{2}\s?은행/g;
+
+/** 텍스트의 자리표시자("OO은행"·"○○은행" 및 표기 변형)를 세션 은행명으로 바꾼다. 자리표시자가 없으면 입력을 그대로 돌려준다. */
 export function applyFictionalBank(text: string, bankName: string): string {
-  if (!text.includes(BANK_PLACEHOLDER) && !text.includes(BANK_PLACEHOLDER_ALT)) return text;
-  return text.split(BANK_PLACEHOLDER).join(bankName).split(BANK_PLACEHOLDER_ALT).join(bankName);
+  PLACEHOLDER_PATTERN.lastIndex = 0;
+  if (!PLACEHOLDER_PATTERN.test(text)) return text;
+  return text.replace(PLACEHOLDER_PATTERN, bankName);
 }

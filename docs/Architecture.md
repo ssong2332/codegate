@@ -18379,6 +18379,7 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 | 상호금융·우체국 | 신협·새마을금고·지역농협·수협·산림조합·우정사업본부(위키백과 "대한민국의 은행 목록" 교차 확인 https://ko.wikipedia.org/wiki/대한민국의_은행_목록 — 공식 단일 목록 미확보) | 겹침 0 |
 | 과거 퇴출·합병 은행 | 1998년 퇴출 5행(대동·동남·동화·경기·충청 — KDI 경제정보센터 https://eiec.kdi.re.kr/epic_txt/2002/D0205043.HWP 인용 보도) · 합병 소멸(상업·한일→한빛, 조흥·서울·제일·외환·보람·장기신용·평화·충북·강원·주택·한미 등) | 겹침 0 · ⚠️ 과거 은행 전수의 **공식 단일 목록은 확보하지 못했다**(보도·백과 교차) |
 | 카드사 | 신한·삼성·현대·롯데·BC·하나·우리·KB국민·NH농협 | 겹침 0 |
+| ⚠️ 미대조 범주(리뷰 #5) | 증권사·보험사·캐피탈·대부업·간편결제 핀테크 — 이번 패스는 공식 목록 대조를 하지 못했다. 웹 정확 일치 검색에서 8개 이름의 금융회사 결과는 0건이었지만 **증거 부재이지 부존재 증명이 아니다** | 금감원 파인(fine.fss.or.kr) 금융회사 조회로 재대조(OQ-A116) |
 | 웹 검색 | "한결은행"·"다온은행"·"새솔은행"·"늘봄은행"·"해담은행"·"가온은행"·"미르은행"·"보담은행" 정확 일치 검색 — 금융기관 결과 0 | 겹침 0 · 제4인터넷은행 후보(한국소호은행 등)와도 다름 |
 | 실존명 치환 규칙 | `replaceRealFinancialNames`가 8개 이름을 하나도 바꾸지 않는다(테스트) | 통과 |
 
@@ -18392,13 +18393,14 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 | `scenarios/*.prompt.ts` 6곳(수법 예시) | 사기범 프롬프트 | 같은 조립 치환(파일 무변경) |
 | `scenarios/inCallSms.ts` 계좌 문자 6건 본문 · 도착 지시 | 문자 본문 · 모델 지시 | **파일 무변경** — `inCallSms/buildDoc.ts` `buildInCallSmsDoc`이 저장 시 본문 치환 + `bankName` 필드 · `buildInCallSmsResponse`가 도착 지시 치환 |
 | 텍스트 폴백 턴 지시(문자 도착 지시 등) | 모델 지시 | 조립 치환에 포함 |
+| `scenarios/verifyIntercept.ts` `bank-security-verify-scam` 확인 창구(`deskLabel`·`reconnectedCallerLabel`·`announceInstruction`·`reconnectInstruction`·`transferStateLine` — "○○은행 금융사고대응 확인창구") | 창구 이름(화면·다시보기) · Live 주입 지시 | **파일 무변경** — `verifyIntercept/buildDoc.ts`가 문서 저장(`deskLabel`)·오퍼 응답·재연결 응답(`buildVerifyReconnectParts`)에서 치환(리뷰 #1 — 종전 초안은 이 경로를 빠뜨려 Live에서 은행명이 둘로 갈렸다) |
 | `guardrails/realFinancialNames.ts` | 실존명 → "OO은행" | 유지 · 호출부(sendMessage·오프닝)가 결과를 `applyFictionalBank`로 세션명에 맞춤 |
 | 사기범 대사(모델이 "OO은행"을 그대로 말한 경우) | 출력 | 같은 `applyFictionalBank` |
 | Live(Gemini) 토큰 시스템 프롬프트 | 프롬프트 | `createRealtimeCall` → `geminiProvider`에 `fictionalBankName` 전달 |
 | ElevenLabs clone 에이전트 프롬프트 | 외부 저장 | ⚠️ 세션별 치환 불가(에이전트 고정 프롬프트) — "OO은행" 그대로(OQ-A114) |
 | 리포트·다시보기 | 저장 문서 표시 | 저장된 문자 본문·사기범 메시지가 이미 치환돼 있어 자동 일치 |
 | 가짜 랜딩(`mockScreens.ts` 필드 라벨 "은행") · `src/components/MessengerFakeLanding.tsx` placeholder | 클라 | 이번 변경 없음 — D-115(랜딩 안전계좌 미리 채움)는 문자 문서의 `bankName`(또는 세션 `fictionalBankName`)을 읽도록 설계(79.3) |
-| `src/content/scenarios/bankSecurityVerifyScam.ts` 미리보기 대사 "○○은행" · `src/components/SpoofImage.tsx` "OO뱅크 (가상 은행 · 실제 존재하지 않음)" | 클라 정적 콘텐츠(세션 밖) | 이번 변경 없음(클라 파일 · 세션 무관 화면) — OQ-A115 |
+| `src/content/scenarios/bankSecurityVerifyScam.ts`·`functions/src/scenarios/publicMeta.ts:252` 미리보기 대사 "○○은행" · `axes.ts:356` 주석 · `src/components/SpoofImage.tsx` "OO뱅크 (가상 은행 · 실제 존재하지 않음)" | **세션 이전/밖 화면** 정적 콘텐츠(시나리오 소개 등 — 세션 은행명이 아직 없다) | **비대상**(리뷰 #7) — OQ-A115 |
 
 ### 79.3 원천과 일관성 (D-115 포함)
 
@@ -18416,16 +18418,19 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 | **G484** | 목록 형식(6~10 · "…은행" · 중복·"뱅크" 없음) · §79.1 대조표 겹침 0 · 실존명 치환에 안 걸림 | `functions/src/shared/__tests__/fictionalBank.test.ts` |
 | **G485** | 배정(저장값 원천 · 목록 밖 저장값 무시 · 옛 세션 결정적 · 분포) · 치환(두 표기 · 멱등) | 같은 파일 |
 | **G486** | 전 시나리오 조립 결과 자리표시자 0 · 은행명 없으면 종전 문면 · 문자 본문/도착 지시 치환 · `bankName` 필드 조건 | 같은 파일 |
-| **G487** | 배선(세션 생성 2곳 저장·오프닝 전달 · sendMessage·문자·Live가 같은 원천) | 같은 파일 |
+| **G487** | 배선(세션 생성 2곳 저장 — 세션 문서 리터럴 위치로 단언 · 오프닝 전달 · sendMessage·문자·확인 창구·Live가 같은 원천) | 같은 파일 |
+| **G488** | ⭐ 서버가 클라·모델에 내보내는 문자열 전수(문자 본문·도착 지시·창구 이름·오퍼/재연결 지시·전환 상태 줄) — 은행명을 주면 자리표시자(표기 변형 포함) 0 · 없으면 원문 | 같은 파일 |
 | — | T113 조립 스캔에 `fictionalBankName` 축 추가(턴 지시 조합에서 목록 순회) — 치환된 조립본도 무해화 스캔 | `scenarios/__tests__/scenarios.test.ts` |
 
 ### 79.5 남은 것
 
 | # | 항목 | 확인 방법 |
 |---|---|---|
-| **OQ-A114** | ElevenLabs clone 에이전트 프롬프트는 "OO은행" 그대로(세션별 치환 불가) — clone 2종 실시간 통화에서만 남는다 | 에이전트 재생성 때 고정 가상명 1개를 쓸지 결정 |
+| **OQ-A114** | ⚠️ **ElevenLabs 경로 불일치(리뷰 #3)** — clone 2종 실시간 통화에서는 사기범이 "OO은행"(에이전트 고정 프롬프트)이라 말하는데 **문자 본문은 세션 가상명**이 된다. 공통 문구 변경으로 기존 에이전트 프롬프트도 낡았다(clone `.prompt.ts` 대조값 주석 갱신). 운영 사용 빈도 미확인 | 선택지: (a) 재생성 시 에이전트별 고정 가상명 1개 + 그 세션의 `fictionalBankName`도 그 값으로 고정 (b) ElevenLabs 동적 변수로 세션명 전달(ADR-0004 — 프롬프트를 클라가 넘기지 않는 범위인지 검토 필요) (c) 그대로 — User 판단 |
 | **OQ-A115** | 클라 정적 문구("○○은행" 미리보기 대사 · SpoofImage "OO뱅크") — 세션 밖 화면 | UX 판단 |
-| **OQ-A116** | 과거 은행 전수의 공식 단일 목록 미확보(보도·백과 교차) | 금융위·한국은행 은행 연혁 자료로 재대조 |
+| **OQ-A116** | 과거 은행 전수의 공식 단일 목록 미확보(보도·백과 교차) · 증권·보험·캐피탈·대부·핀테크 미대조 | 금감원 파인·금융위·한국은행 연혁 자료로 재대조 |
+| 한계 | 자리표시자 표기 변형 중 "OO 은행"·"oo은행"·전각은 치환하지만, 한글로 읽은 "오오은행"·"OO뱅크"·"OO카드"는 대상이 아니다(리뷰 #4) | 배포 후 사기범 대사 관찰 |
+| 배포 노트 | 배포 시점에 진행 중인 세션(`fictionalBankName` 없음)은 이후 턴부터 sessionId 해시 이름이 나온다 — 이미 저장된 오프닝·대사는 "OO은행"(리뷰 #8) · 목록 순서를 바꾸면 해시 폴백 배정이 달라진다 | 수용 |
 | 예시 계좌 | §78.5의 예시 계좌 `948-2716-5093-27` 문제는 그대로(은행명만 바뀜) | §78.5 결정 |
 
-> **번호**: §79 · G484~G487 · OQ-A114~A116 · #130(main `733b9da` 최대 §78 · G483 · OQ-A113 · #129). ⛔ 예약 아님.
+> **번호**: §79 · G484~G488 · OQ-A114~A116 · #130(main `733b9da` 최대 §78 · G483 · OQ-A113 · #129). ⛔ 예약 아님.

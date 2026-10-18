@@ -15,6 +15,8 @@ import { buildSystemPrompt } from "../../roleplay/promptAssembly";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { IN_CALL_SMS } from "../../scenarios/inCallSms";
 import { buildInCallSmsDoc, buildInCallSmsResponse } from "../../inCallSms/buildDoc";
+import { VERIFY_INTERCEPT } from "../../scenarios/verifyIntercept";
+import { buildVerifyInterceptDoc, buildVerifyOfferResponse, buildVerifyReconnectParts } from "../../verifyIntercept/buildDoc";
 
 /**
  * §79.1 대조표의 실존·과거 기관명(2026-10-18 조회). 가상명이 이 이름들과 **같거나 그 이름을 포함하거나
@@ -82,8 +84,10 @@ test("[은행명] 배정 — 새 세션은 목록 안에서 고르고, 저장값
   assert.equal(spread.size, FICTIONAL_BANK_NAMES.length, "해시 폴백이 목록 전체에 퍼진다");
 });
 
-test("[은행명] 자리표시자 치환 — 'OO은행'·'○○은행' 모두, 없으면 입력 그대로, 멱등", () => {
+test("[은행명] 자리표시자 치환 — 'OO은행'·'○○은행'·표기 변형(띄어쓰기·소문자·전각) 모두, 없으면 입력 그대로, 멱등", () => {
   assert.equal(applyFictionalBank("OO은행 948-2716 / ○○은행 금융사고대응팀", "한결은행"), "한결은행 948-2716 / 한결은행 금융사고대응팀");
+  assert.equal(applyFictionalBank("OO 은행 · oo은행 · ＯＯ은행", "한결은행"), "한결은행 · 한결은행 · 한결은행");
+  assert.equal(applyFictionalBank("OO카드 · 오오은행", "한결은행"), "OO카드 · 오오은행", "범위 밖 표기는 그대로(§79.5)");
   const plain = "자리표시자 없음";
   assert.equal(applyFictionalBank(plain, "한결은행"), plain);
   const once = applyFictionalBank("OO은행", "한결은행");
@@ -130,12 +134,49 @@ test("[은행명] 배선 — 세션 생성 2곳이 저장·오프닝에 전달, 
     const s = src(file);
     assert.match(s, /const fictionalBankName = pickFictionalBankName\(\);/, file);
     assert.match(s, /generateOpeningLine\(\n\s*scenarioId,\n\s*[\w.]+,\n\s*fictionalBankName,\n\s*\)/, file);
-    assert.match(s, /\n\s*fictionalBankName,\n/, `${file}: 세션 문서에 저장`);
+    // 세션 문서 객체 리터럴 안(difficultyLevel 바로 다음 줄)에 저장하는지 — 오프닝 호출 인자와 구별한다(리뷰 #2).
+    assert.match(s, /difficultyLevel: [\w.]+,\n\s*fictionalBankName,\n/, `${file}: 세션 문서에 저장`);
   }
   const send = src("roleplay/index.ts");
   assert.match(send, /const fictionalBankName = resolveFictionalBankName\(\{ sessionId, fictionalBankName: session\.fictionalBankName \}\);/);
   assert.match(send, /applyFictionalBank\(realNameReplacedText, fictionalBankName\)/);
   assert.match(src("inCallSms/index.ts"), /buildInCallSmsResponse\(item, \{ placed, fictionalBankName \}\)/);
   assert.match(src("realtime/index.ts"), /fictionalBankName: resolveFictionalBankName\(/);
+  const verify = src("verifyIntercept/index.ts");
+  assert.match(verify, /buildVerifyInterceptDoc\(item, Timestamp\.now\(\), anchor, fictionalBankName\)/);
+  assert.match(verify, /buildVerifyOfferResponse\(item, \{ placed, \.\.\.\(stage \? \{ stage \} : \{\}\), fictionalBankName \}\)/);
+  assert.match(verify, /reconnectInstruction: reconnectParts\.reconnectInstruction,/);
+  assert.match(verify, /reconnectedCallerLabel: reconnectParts\.reconnectedCallerLabel,/);
   assert.match(src("roleplay/openingLine.ts"), /applyFictionalBank\(realNameReplacedText, fictionalBankName\)/);
+});
+
+test("[은행명] ⭐ 서버가 클라·모델에 내보내는 문자열 전수 — 은행명을 주면 자리표시자 0(문자·확인 창구·재연결, 리뷰 #1·#2)", () => {
+  const ts = { toMillis: () => 0 } as unknown as FirebaseFirestore.Timestamp;
+  const bank = "보담은행";
+  const outputs: Array<[string, string]> = [];
+  for (const [scenarioId, items] of Object.entries(IN_CALL_SMS)) {
+    for (const item of items) {
+      outputs.push([`${item.smsId}.body`, buildInCallSmsDoc(item, ts, 1, scenarioId, bank).body]);
+      outputs.push([`${item.smsId}.announce`, buildInCallSmsResponse(item, { placed: false, fictionalBankName: bank }).announceInstruction ?? ""]);
+    }
+  }
+  let verifyWithPlaceholder = 0;
+  for (const item of Object.values(VERIFY_INTERCEPT)) {
+    if (/[Oo○]{2}\s?은행/.test(item.deskLabel + item.announceInstruction + item.reconnectInstruction + item.transferStateLine)) verifyWithPlaceholder += 1;
+    outputs.push([`${item.offerId}.deskLabel`, buildVerifyInterceptDoc(item, ts, 1, bank).deskLabel]);
+    outputs.push([`${item.offerId}.announce`, buildVerifyOfferResponse(item, { placed: false, fictionalBankName: bank }).announceInstruction ?? ""]);
+    const parts = buildVerifyReconnectParts(item, bank);
+    outputs.push([`${item.offerId}.callerLabel`, parts.reconnectedCallerLabel]);
+    outputs.push([`${item.offerId}.reconnect`, parts.reconnectInstruction]);
+    outputs.push([`${item.offerId}.stateLine`, parts.transferStateLine]);
+  }
+  assert.ok(verifyWithPlaceholder >= 1, "확인 창구 카탈로그에 자리표시자가 있어야 이 검사가 의미 있다(bank-security-verify-scam)");
+  for (const [label, text] of outputs) {
+    assert.doesNotMatch(text, /[Oo○Ｏｏ]{2}\s?은행/, `${label}에 자리표시자가 남았다`);
+  }
+  // 은행명이 없으면 카탈로그 원문 그대로(종전)
+  const bankVerify = Object.values(VERIFY_INTERCEPT).find((item) => item.deskLabel.includes("○○은행"))!;
+  assert.equal(buildVerifyInterceptDoc(bankVerify, ts, 1).deskLabel, bankVerify.deskLabel);
+  assert.equal(buildVerifyReconnectParts(bankVerify).reconnectInstruction, bankVerify.reconnectInstruction);
+  assert.ok(buildVerifyReconnectParts(bankVerify, bank).reconnectedCallerLabel.startsWith(bank));
 });
