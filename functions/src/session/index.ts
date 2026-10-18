@@ -7,6 +7,7 @@
 // 만들 필요 없이 세션 라이프사이클의 나머지 부분(endSession 본문, AC-006/015/023 — 상시 종료·
 // 디스컬레이션·"훈련이었습니다" 고지)에 집중하면 된다(구현 보고서에 크로스트랙 노트로 남김).
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope, denyAnonymous } from "../shared/anonymousGate";
@@ -25,6 +26,7 @@ import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, LLM_TEXT_SECRETS } fr
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "./channelTransition";
+import { readEndSessionReason, resolveRecordedEndReason } from "./endReason";
 import { assertDifficultyAllowed } from "./difficultyAllowance";
 import { assignFlowVariantForSession, commitSessionWithVariant } from "./variantAssignment";
 import type { MessageDoc, MessengerSkin, MessengerSkinSource, SessionDoc } from "../shared/types";
@@ -329,6 +331,14 @@ export const endSession = onCall<EndSessionRequest, Promise<EndSessionResponse>>
     if (!sessionId || !endReason) {
       throw new HttpsError("invalid-argument", "sessionId와 endReason이 필요합니다.");
     }
+    // T192 C1(§79.5 ① · G508) — 사유 허용목록. 그 밖의 문자열은 기록하지 않는다.
+    const requestedReason = readEndSessionReason(endReason);
+    if (!requestedReason) {
+      throw new HttpsError(
+        "invalid-argument",
+        "endReason은 user_ended · limit_reached · scammer_ended 중 하나여야 합니다.",
+      );
+    }
 
     const db = getFirestore();
     const sessionRef = db.collection("sessions").doc(sessionId);
@@ -351,9 +361,19 @@ export const endSession = onCall<EndSessionRequest, Promise<EndSessionResponse>>
       return { status: "ended", reportPending: true };
     }
 
+    // T192 C1(§79.5 ② · G508) — 서버 승인 표식 없는 `scammer_ended`는 `user_ended`로 기록한다(거절 0 —
+    // AC-006 "종료는 항상 성공"). 멱등 반환(위)보다 **뒤**라 먼저 쓴 사유는 그대로 남는다.
+    const recordedReason = resolveRecordedEndReason(requestedReason, session);
+    if (recordedReason !== requestedReason) {
+      logger.info("endSession 사유 강등 — 끊기 승인 표식 없음", {
+        requested: requestedReason,
+        recorded: recordedReason,
+      });
+    }
+
     await sessionRef.update({
       status: "ended",
-      endReason,
+      endReason: recordedReason,
       endedAt: Timestamp.now(),
     } satisfies Partial<SessionDoc>);
 

@@ -97,3 +97,4 @@
 - [T187 세션 중 표식 제거](project_codegate_t187_session_markers.md) — ⭐ 셸 없는 설계의 "0건"이 놓친 3곳(콘솔 리터럴·따옴표 자기 인용·"가상 은행"), sed -i CRLF·python heredoc 한글 깨짐.
 - [T190-1~4 실폰형 통화 셸](project_codegate_t190_real_phone_1to4.md) — ⭐ 루트 lib는 잎 모듈만(확장자 없는 상대 import 실패), Navigator 약한 타입 TS2559, heredoc python `\b`→0x08 오염, 렌더 게이트 생존 신호 재지정.
 - [미리 받기 경합 + 수정안 A + audiodebug 패널](project_codegate_prefetch_race_audio_prime.md) — ⭐ createPrefetchSlot 실행 테스트, ctx 소유권=화면(Strict Mode 근거), 새 컴포넌트 시 게이트 3곳, python heredoc `\n` 개행 박힘.
+- [T192 C1 끊기 판정·endSession 허용목록](project_codegate_t192_c1_hangup_decision.md) — ⭐ 새 콜러블=anonymousGate 카운트 갱신, Transaction 제네릭 명시(TS2345), 작업 중 정본 확정 대응.
