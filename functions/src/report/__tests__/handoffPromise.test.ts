@@ -12,6 +12,7 @@
 // | (7) 보류 표본(설계에 쓰지 않은 15+19) — 잡는 수 · 놓치는 답을 **한계로** 고정 | 투명 고지 |
 // | (8) reviewer M2 — 5개 시나리오 계열의 수동 작성 상황 설명형 · 요구형 대사 × 유보 · 공손 답변에서 새 오탐 0 | 오탐 범위 |
 // | (9) 요구 어형 축소 뒤에도 수동 작성 인출 · 전달 · 코인 요구 대사에서 갈래가 열리는지(재현율 — 한계 고정) | 투명 고지 |
+// | (10) QA FAIL 재현 14쌍 + 범용 공손형 12개 — 허용 목록 전환 뒤 base와 동일(범용 "드릴게요"는 이 갈래로 안 열림) | 음성 표본 |
 //
 // ⚠️ 사기범 대사는 저작 문구(`extractTacticFlavor`)이고 참가자 답변은 **합성 픽스처**다(라이브 전사 아님).
 import { test } from "node:test";
@@ -362,4 +363,41 @@ test("[T191 J-2 · 한계] 수동 작성 인출·전달·코인 요구 대사에
   const closed = demands.filter((line) => !nowDeceived(line, "직원분께 드릴게요"));
   t.diagnostic(`요구형 대사 열림 ${demands.length - closed.length}/${demands.length} · 닫힘 ${JSON.stringify(closed)}`);
   assert.deepEqual(closed, ["은행에서 돈을 뽑아 오셔야 합니다."]);
+});
+
+// ── (10) QA FAIL(2026-10-19) 음성 표본 — 허용 목록 전환 ─────────────────────────────────────────
+// 1 · 2차는 범용 "드릴게 · 드리겠"을 받고 앞말 제외 목록으로 막아 아래 답변이 샜다. 이제 약속 어형은 허용 목록이라
+// 인출 · 보관 · 전달 · 코인 동사 · 돈 목적어 · 받는 사람이 없으면 열리지 않는다.
+
+const QA_FAIL_SCAMMER_LINES = [
+  "오늘 안에 보관 조치가 안 되면 계좌가 동결될 수 있습니다.", // asset-protection 저작 대사(상황 설명 — 게이트도 닫혀야 한다)
+  "현금으로 인출해 주세요.", // 요구형(게이트는 열린다 — 답변 쪽 허용 목록이 막아야 한다)
+];
+const QA_FAIL_ANSWERS = ["제가 설명드리겠습니다", "안내드릴게요", "도와드릴게요", "대답해 드릴게요", "설명해 드릴게요", "연결해 드릴게요", "3분 드릴게요"];
+const GENERIC_POLITE_ANSWERS = [
+  "말씀 잘 들었습니다, 제가 정리해 드릴게요", "자료 보내 드리겠습니다", "제가 알려 드릴게요", "시간 좀 드릴게요",
+  "연락처 남겨 드릴게요", "제가 해 드릴게요", "잠시만 기다려 드릴게요", "답장 드리겠습니다", "그럼 제가 할게요",
+  "네 드릴게요", "네 드리겠습니다", "정리해서 말씀드리겠습니다",
+];
+
+test("[T191 J-2 · QA FAIL 음성 표본] 재현 14쌍 + 범용 공손형 12개 × 사기범 2발화 — 판정이 base와 같다", (t) => {
+  const changed: string[] = [];
+  for (const line of QA_FAIL_SCAMMER_LINES) {
+    for (const answer of [...QA_FAIL_ANSWERS, ...GENERIC_POLITE_ANSWERS]) {
+      if (nowDeceived(line, answer) !== baseDeceived(answer)) changed.push(`${line} | ${answer}`);
+    }
+  }
+  const pairs = QA_FAIL_SCAMMER_LINES.length * (QA_FAIL_ANSWERS.length + GENERIC_POLITE_ANSWERS.length);
+  t.diagnostic(`QA 재현 ${QA_FAIL_SCAMMER_LINES.length * QA_FAIL_ANSWERS.length}쌍 + 범용 ${QA_FAIL_SCAMMER_LINES.length * GENERIC_POLITE_ANSWERS.length}쌍 = ${pairs}쌍 · 바뀐 쌍 ${changed.length}`);
+  assert.deepEqual(changed, []);
+  // QA 재현 7개는 base에서도 속지 않음 — 즉 after도 전부 속지 않음.
+  for (const line of QA_FAIL_SCAMMER_LINES) {
+    for (const answer of QA_FAIL_ANSWERS) assert.equal(nowDeceived(line, answer), false, `${line} | ${answer}`);
+  }
+});
+
+test("[T191 J-2 · QA 독립 동의 표본] '네 수표로 바꿔서 챙겨 둘게요'는 잡힌다 — ⚠️ '챙겨 둘게'는 이 표본을 본 뒤 돈 목적어 · 행위 뒤 갈래에만 넣었다(과적합 고지)", () => {
+  assert.equal(nowDeceived(E4_DEMAND, "네 수표로 바꿔서 챙겨 둘게요"), true);
+  // 단독 "챙겨 둘게요"는 허용 목록 밖이다(돈 목적어 · 행위 없음).
+  assert.equal(nowDeceived(E4_DEMAND, "서류 챙겨 둘게요"), baseDeceived("서류 챙겨 둘게요"));
 });
