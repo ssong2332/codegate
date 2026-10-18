@@ -31,7 +31,7 @@ test("[AC-060] 카탈로그 어디에도 실 URL(스킴/도메인) 필드·문�
   for (const item of allItems) {
     // 타입에 url 필드가 없다는 것(컴파일 타임)에 더해, 본문·표시 텍스트에 실제로 눌러 이동할 수
     // 있는 주소 형태가 섞여 들어오는 것도 막는다.
-    // T190-2(§73.9) — 가짜 주소(`.invalid` 호스트 + 경로)도 같은 두 검사를 탄다(`.invalid`는 아래 TLD 목록 밖이다).
+    // T190-2(§74.9) — 가짜 주소(`.invalid` 호스트 + 경로)도 같은 두 검사를 탄다(`.invalid`는 아래 TLD 목록 밖이다).
     const surfaces = [item.body, item.linkDisplayText ?? "", item.linkAddress ?? "", item.senderLabel];
     for (const text of surfaces) {
       assert.ok(
@@ -83,7 +83,7 @@ test("[AC-060] kind별 필수 필드 계약 — link는 표시텍스트+가짜�
 // §51.6 R11/G111 — 링크 부착(linkDisplayText+fakeLandingId)은 항상 짝으로 존재하거나 함께
 // 부재한다. 한쪽만 있는 상태를 타입으로는 표현할 수 있지만 이 게이트가 금지한다
 // (docs/Architecture.md §27.1 (2)).
-// ⭐ T190-2(docs/Architecture.md §73.9 · §73.13 G111 행) — 짝을 **3자 쌍**으로 넓혔다: `linkAddress`(가짜 주소)도
+// ⭐ T190-2(docs/Architecture.md §74.9 · §74.13 G111 행) — 짝을 **3자 쌍**으로 넓혔다: `linkAddress`(가짜 주소)도
 // 링크 부착과 함께만 존재/부재한다. 판정은 아래 함수 하나이고 본 단언·역검증이 같이 쓴다.
 type LinkTriple = { smsId: string; linkDisplayText?: string; fakeLandingId?: string; linkAddress?: string };
 function linkTripleViolations(items: readonly LinkTriple[]): string[] {
@@ -93,7 +93,7 @@ function linkTripleViolations(items: readonly LinkTriple[]): string[] {
     if (present.some((p) => p !== present[0])) {
       out.push(
         `${item.smsId}: linkDisplayText·fakeLandingId·linkAddress 중 일부만 있다(${present.join("/")}) — ` +
-          "칩은 떴는데 열 랜딩이 없거나, 주소 없는 링크 줄이 생긴다(R11 · §73.9).",
+          "칩은 떴는데 열 랜딩이 없거나, 주소 없는 링크 줄이 생긴다(R11 · §74.9).",
       );
     }
   }
@@ -225,7 +225,7 @@ test("buildInCallSmsDoc은 announceInstruction(모델용 지시)을 문서에 �
     else assert.equal(doc.linkDisplayText, undefined);
     if (item.fakeLandingId) assert.equal(doc.fakeLandingId, item.fakeLandingId);
     else assert.equal(doc.fakeLandingId, undefined);
-    // T190-2(§73.9 · §73.13 buildDoc 행) — 가짜 주소도 그대로 복사한다(부재면 키를 만들지 않는다).
+    // T190-2(§74.9 · §74.13 buildDoc 행) — 가짜 주소도 그대로 복사한다(부재면 키를 만들지 않는다).
     if (item.linkAddress) assert.equal(doc.linkAddress, item.linkAddress);
     else assert.equal("linkAddress" in doc, false);
   }

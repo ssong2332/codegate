@@ -86,7 +86,7 @@ function lastReturnText(source: string): string {
 
 function chatReturnResidue(source: string): string[] {
   const chat = lastReturnText(source);
-  // T190-8a(§73.22 (2) G462 ⚠️) — 변형 객체 값도 **명시적으로** 더한다(안 더하면 새 문면이 채팅 return 안으로 새도 잡히지 않는다).
+  // T190-8a(§74.22 (2) G462 ⚠️) — 변형 객체 값도 **명시적으로** 더한다(안 더하면 새 문면이 채팅 return 안으로 새도 잡히지 않는다).
   return [
     "MESSENGER_START_NOTICE",
     "MessengerStartNotice",
@@ -116,7 +116,7 @@ test("[T187/G444 ②③ 역검증 — AC-088 (f)] ⓐ 가드 없는 구독 사�
 
 // ── G444 ④ 통화 구독 가드 · ⑤ 정본 문면 · ⑥ 컴포넌트 · ⑦ 난이도 화면 ─────────────────────
 test("[T187/G444 ④ · T190-8b] 통화 화면은 \"받기\" 전(pre-call-notice·incoming·connecting)에 대화를 구독하지 않는다", () => {
-  // T190-8b(§73.22 (4) #3) — 벨 직전 고지 상태가 더해져 가드 문자열을 같은 커밋에 갱신했다(구독 effect 3곳 모두).
+  // T190-8b(§74.22 (4) #3) — 벨 직전 고지 상태가 더해져 가드 문자열을 같은 커밋에 갱신했다(구독 effect 3곳 모두).
   const guard = 'if (!sessionId || phase === "pre-call-notice" || phase === "incoming" || phase === "connecting") return;';
   assert.equal(read(PLAY).split(guard).length - 1, 3, "대화·문자·확인 오퍼 구독 3곳 모두 같은 가드여야 한다");
 });
@@ -235,7 +235,7 @@ test("[T187/G450 역검증] messenger에 markSessionAnswered(sessionId)를 넣�
   ]);
 });
 
-// ── G462 — 에스컬레이션 시나리오의 시작 전 고지 확장(docs/Architecture.md §73.22 (2) · OQ-52 (ㄴ) · PRD AC-091 (g)) ──────────
+// ── G462 — 에스컬레이션 시나리오의 시작 전 고지 확장(docs/Architecture.md §74.22 (2) · OQ-52 (ㄴ) · PRD AC-091 (g)) ──────────
 
 /** ① 변형 세 필드가 컴포넌트에서 각각 정확히 1회 · 제목·고지 ①은 `includesCall ?` 삼항 · 고지 ①-2는 `includesCall &&`. */
 function withCallComponentViolations(source: string): string[] {
@@ -304,10 +304,10 @@ test("[T190-8a/G462 ⑤] 에스컬레이션 집합 = 서버 두 전이 경로의
   assert.equal(clientCount, serverCount, "클라 escalation 보유 수와 서버 PUBLIC_SCENARIOS 보유 수가 다르다 — 고지 문면이 갈라진다");
 });
 
-// ── G463 — 통화 초기 phase 진리표(docs/Architecture.md §73.22 (3) · PRD AC-091 (b)(f)ⓑ · (g)) ──────────────────────────
+// ── G463 — 통화 초기 phase 진리표(docs/Architecture.md §74.22 (3) · PRD AC-091 (b)(f)ⓑ · (g)) ──────────────────────────
 type DecidePhase = (input: InitialCallPhaseInput) => string;
 
-/** §73.22 (3) 표를 그대로 옮긴 기대값(위에서부터 첫 매치). */
+/** §74.22 (3) 표를 그대로 옮긴 기대값(위에서부터 첫 매치). */
 function expectedPhase(input: InitialCallPhaseInput): string {
   if (input.status === "ended") return "ended";
   if (input.status === "active" && input.answered) return "live";

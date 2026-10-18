@@ -1,5 +1,5 @@
 // T190-5/6/6b — 한 세션 = 한 스킨 · 세션 전 화면 모양 줄 · 세션 중 전환 컨트롤 0
-// (docs/Architecture.md §73.5 (2) · §73.10 (2)(3) · UX D-88 · D-100 · PRD AC-092 (b)(d)(e)(g)ⓐⓑ · AC-031 읽기 고지).
+// (docs/Architecture.md §74.5 (2) · §74.10 (2)(3) · UX D-88 · D-100 · PRD AC-092 (b)(d)(e)(g)ⓐⓑ · AC-031 읽기 고지).
 //
 // ⚠️ 렌더러 테스트 러너가 없어 소스 구조로 고정한다(다른 세션 경계 게이트와 같은 관례 — 실제 화면은 실기 P-3/P-5).
 import { test } from "node:test";
@@ -83,7 +83,7 @@ function sameSkinViolations(play: string): string[] {
   if (!code.includes("callTokensFor(deviceSkin.skin)")) out.push("통화 셸이 deviceSkin.skin을 쓰지 않는다");
   if (!code.includes("bannerTokensFor(deviceSkin.skin)")) out.push("배너가 deviceSkin.skin을 쓰지 않는다");
   if (!/<InCallSmsOverlay[\s\S]*?skin=\{deviceSkin\.skin\}/.test(code)) out.push("문자함이 통화 셸과 같은 스킨을 받지 않는다");
-  // T190-8b(§73.12 (3) ⑥) — 정하는 지점 = 세션 로드 1곳 + 벨 직전 고지(세션 전)의 화면 모양 선택 1곳. 둘 외의 지점이
+  // T190-8b(§74.12 (3) ⑥) — 정하는 지점 = 세션 로드 1곳 + 벨 직전 고지(세션 전)의 화면 모양 선택 1곳. 둘 외의 지점이
   // 생기면 세션 중(벨 이후)에 스킨이 바뀔 수 있다.
   if ((code.match(/setDeviceSkin\(/g) ?? []).length !== 2) out.push("스킨을 정하는 지점이 2곳(로드·세션 전 선택)이 아니다");
   const chooser = code.slice(code.indexOf("const handleChooseCallSkin"), code.indexOf("const handleAnswer"));
@@ -125,7 +125,7 @@ function pickerPlacementViolations(notice: string): string[] {
   return /^surface === "sms" && skinPicker/.test(condition) ? [] : [`화면 모양 줄 조건이 문자형 한정이 아니다: ${condition.slice(0, 40)}`];
 }
 
-test("[T190-6/§73.10 (2)] 화면 모양 줄 = 시작 전 고지 안 · 문자형 표면에서만 · 메신저는 기기 저장(fv.deviceSkin.v1)도 쓴다", () => {
+test("[T190-6/§74.10 (2)] 화면 모양 줄 = 시작 전 고지 안 · 문자형 표면에서만 · 메신저는 기기 저장(fv.deviceSkin.v1)도 쓴다", () => {
   assert.deepEqual(pickerPlacementViolations(read(NOTICE)), []);
   const messenger = codeOnly(read(MESSENGER));
   assert.ok(messenger.includes("skinPicker={{ value: messengerSkin, source: skinSource, onChange: handleChooseSkin }}"));

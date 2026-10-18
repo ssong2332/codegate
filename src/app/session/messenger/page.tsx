@@ -36,7 +36,7 @@ import {
 } from "@/lib/api";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import { detectDeviceSkin, type MessengerSkin } from "@/lib/messenger/detectSkin";
-// T190-6(docs/Architecture.md §73.5 · 표 K · UX-022 v1.33) — 통화·문자함과 **같은 해석 함수**(한 세션 = 한 스킨).
+// T190-6(docs/Architecture.md §74.5 · 표 K · UX-022 v1.33) — 통화·문자함과 **같은 해석 함수**(한 세션 = 한 스킨).
 import {
   DEVICE_SKIN_STORAGE_KEY,
   parseSessionSkin,
@@ -176,7 +176,7 @@ export default function MessengerSessionPage() {
         }
 
         if (found.surface === "sms") {
-          // T190-6(§73.3 표 K · §73.5) — 세션 문서(새로고침 복원·이전 선택) > 이 기기의 수동 선택 > 감지 규칙표 v2.
+          // T190-6(§74.3 표 K · §74.5) — 세션 문서(새로고침 복원·이전 선택) > 이 기기의 수동 선택 > 감지 규칙표 v2.
           const sessionSkin = parseSessionSkin(data.messengerSkin, data.skinSource);
           if (sessionSkin) {
             // 이미 결정된 스킨이 있다(새로고침 복원 또는 이전 선택, P-16) — 재감지하지 않는다.
@@ -187,7 +187,7 @@ export default function MessengerSessionPage() {
             try {
               storedSkin = parseStoredDeviceSkin(window.localStorage.getItem(DEVICE_SKIN_STORAGE_KEY));
             } catch {
-              storedSkin = null; // 저장소 접근 불가 = "선택 없음"(§73.5 (3))
+              storedSkin = null; // 저장소 접근 불가 = "선택 없음"(§74.5 (3))
             }
             const uaModel = await readUaModelHint(typeof navigator === "undefined" ? undefined : navigator);
             if (cancelled) return;
@@ -203,7 +203,7 @@ export default function MessengerSessionPage() {
             setMessengerSkin(resolved.skin);
             setSkinSource(resolved.source);
             // 세션 문서에 지속(P-16 · 이어지는 통화가 같은 값을 쓴다 — AC-092 (b)) — 실패해도 화면 표시는 이미
-            // 로컬 state로 끝났다(비차단). 기존 콜러블 계약 그대로(§73.5 (2)).
+            // 로컬 state로 끝났다(비차단). 기존 콜러블 계약 그대로(§74.5 (2)).
             updateMessengerSkin({
               sessionId,
               messengerSkin: resolved.skin,
@@ -311,8 +311,8 @@ export default function MessengerSessionPage() {
     return () => clearTimeout(timer);
   }, [escalating, router]);
 
-  // T190-6(§73.10 (2) · D-100) — 세션 전 화면 모양 줄에서 고른 값. ① 화면 상태 ② 기존 `updateMessengerSkin(manual)`
-  // ③ 기기 저장(`fv.deviceSkin.v1` — 다음 세션·통화의 표 K K-2). 쓰는 곳은 이 1곳뿐이다(§73.5 (3)).
+  // T190-6(§74.10 (2) · D-100) — 세션 전 화면 모양 줄에서 고른 값. ① 화면 상태 ② 기존 `updateMessengerSkin(manual)`
+  // ③ 기기 저장(`fv.deviceSkin.v1` — 다음 세션·통화의 표 K K-2). 쓰는 곳은 이 1곳뿐이다(§74.5 (3)).
   const handleChooseSkin = (next: "ios" | "samsung") => {
     setMessengerSkin(next);
     setSkinSource("manual");
@@ -413,7 +413,7 @@ export default function MessengerSessionPage() {
     return (
       <MessengerStartNotice
         surface={surface}
-        // T190-8a(§73.22 (2) · OQ-52 (ㄴ)) — "전화로 확인" 버튼과 같은 술어(에스컬레이션 가능 시나리오).
+        // T190-8a(§74.22 (2) · OQ-52 (ㄴ)) — "전화로 확인" 버튼과 같은 술어(에스컬레이션 가능 시나리오).
         includesCall={Boolean(scenario.escalation)}
         onConfirm={handleConfirmStartNotice}
         onEndTraining={handleEndTraining}

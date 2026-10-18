@@ -48,7 +48,7 @@ function codeOnly(source: string): string {
 // `phase === "permission"`에서만 렌더되므로 초기 렌더에서 찾으면 정상인데 빨간불이 난다.
 
 /** 초기 렌더에서 **실제로 그려져야 하는** 필드. */
-// ⭐ T190-2(docs/Architecture.md §73.9 ④ · §73.13 T116 행) — `mockHost`(가짜 주소창 호스트)가 초기 렌더 대상에 들어왔다.
+// ⭐ T190-2(docs/Architecture.md §74.9 ④ · §74.13 T116 행) — `mockHost`(가짜 주소창 호스트)가 초기 렌더 대상에 들어왔다.
 const RENDER_TARGET_FIELDS = ["headline", "bodyLines", "issuerLabel", "mockHost", "fields", "submitLabel"];
 
 /**
@@ -123,14 +123,14 @@ const catalogItems = parseCatalogItems();
 
 /** ⚠️ **센티널** — `title`은 대화상자 `aria-label`(A5)에 흐른다(§39.5 (4) G194 부수 규칙). 카탈로그 문구와
  *  겹치지 않는 값을 넣어야 순서·중복 판정이 오염되지 않는다.
- *  ⭐ T190-2(§73.9 ④) — 가짜 주소창이 `title` 대신 그 랜딩의 `mockHost`를 그리게 되어 `title`은 **텍스트에서
+ *  ⭐ T190-2(§74.9 ④) — 가짜 주소창이 `title` 대신 그 랜딩의 `mockHost`를 그리게 되어 `title`은 **텍스트에서
  *  사라졌다**(속성에만 남는다). 그래서 생존 신호를 아래처럼 재지정했다(같은 커밋). */
 const TITLE_SENTINEL = "ZZ-TITLE-SENTINEL-ZZ";
 const DIFFICULTY_SENTINEL = "ZZ-DIFF-SENTINEL-ZZ";
 
 /**
  * G447 생존 신호 — 본 게이트와 역검증이 같은 함수를 쓴다.
- * ⭐ T190-2 재지정(§73.9 ④): "훈련 종료"(자식 모듈 `EndTrainingButton` 렌더 증명) ∧ **그 항목의 `mockHost`**
+ * ⭐ T190-2 재지정(§74.9 ④): "훈련 종료"(자식 모듈 `EndTrainingButton` 렌더 증명) ∧ **그 항목의 `mockHost`**
  * (카탈로그 값이 kind 분기·정확 일치 조회를 거쳐 주소창까지 흘렀다는 증명 — 옛 `title` 센티널의 prop 흐름
  * 증명을 대신한다).
  */
@@ -177,7 +177,7 @@ test("[T116/렌더-존재] 카탈로그 **도달 가능 전수**의 초기 렌�
     // ⭐ T187(PRD v1.18 AC-086 · T187 · docs/Architecture.md §72.7 G447) — 생존 신호 **이동**(G140 유지).
     // 옛 신호(공유 헤더의 모의 표식)는 세션 중 표식 폐지로 사라졌다. 새 신호 = 자식 모듈
     // `EndTrainingButton`이 그린 "훈련 종료"(자식 모듈 렌더 증명) ∧ title 센티널(prop 흐름 증명).
-    // ⭐ T190-2(§73.9 ④) — title 센티널 → 그 항목의 mockHost로 재지정(주소창이 title을 더 그리지 않는다).
+    // ⭐ T190-2(§74.9 ④) — title 센티널 → 그 항목의 mockHost로 재지정(주소창이 title을 더 그리지 않는다).
     assert.ok(
       isRenderAlive(text, item),
       "생존 신호('훈련 종료' + 그 랜딩의 mockHost)가 마크업에 없다 — 렌더가 통째로 실패했을 수 있다",
@@ -481,7 +481,7 @@ test("[T116/G193] 태그 경계에서 인접 텍스트가 **붙지 않는다**",
   assert.equal(extractText("<p>A&amp;B</p>"), "A&B", "엔티티를 디코드해야 원문과 대조된다");
 });
 
-// ── T190-5 — 두 진입 표면 각각 렌더(docs/Architecture.md §73.13 T116 행 · §73.14 G460 · UX D-93/D-94) ──────────
+// ── T190-5 — 두 진입 표면 각각 렌더(docs/Architecture.md §74.13 T116 행 · §74.14 G460 · UX D-93/D-94) ──────────
 
 /** G460 판정 — 같은 함수를 본 게이트와 역검증이 쓴다. 임베디드(문자함 안) 렌더에 대화상자 역할·aria-modal이 없어야 한다. */
 function embeddedDialogViolations(markup: string): string[] {

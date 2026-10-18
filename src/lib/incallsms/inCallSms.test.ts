@@ -131,7 +131,7 @@ test("[T103/AC-026] id를 못 읽은 항목은 조용히 건너뛴다(잘못된 
   assert.deepEqual(takeNewlyVisibleSmsIds([{ isIntersecting: true, smsId: undefined }], new Set()), []);
 });
 
-// ── T190-1 — G459(함수) · 문자함 헤더 라벨 (docs/Architecture.md §73.4 · §73.14 G459 · UX D-89/D-90 · AC-061) ──
+// ── T190-1 — G459(함수) · 문자함 헤더 라벨 (docs/Architecture.md §74.4 · §74.14 G459 · UX D-89/D-90 · AC-061) ──
 // ⚠️ 문자함의 박스 분기 배선(`splitBodyAtOtp`가 null일 때만 박스)은 T190-5(문자함 개편)가 같은 G459로 더한다.
 test("[T190/G459] splitBodyAtOtp — 정확 일치 **첫 1회**로 가르고, 없으면 null(→ 박스 폴백)", () => {
   assert.deepEqual(splitBodyAtOtp("[본인확인] 인증번호 [048231]\n타인에게", "048231"), {

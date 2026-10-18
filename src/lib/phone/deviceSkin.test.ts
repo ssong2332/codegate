@@ -1,4 +1,4 @@
-// T190-1 — 감지 규칙표 v2(G461) · 표 K 해석 · 기기 저장값 파싱 (docs/Architecture.md §73.3 표 K · §73.5 · §73.14 G461 ·
+// T190-1 — 감지 규칙표 v2(G461) · 표 K 해석 · 기기 저장값 파싱 (docs/Architecture.md §74.3 표 K · §74.5 · §74.14 G461 ·
 // PRD v1.20 AC-092 (b)(c)(g)ⓒ).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -19,7 +19,7 @@ import {
   serializeStoredDeviceSkin,
 } from "./deviceSkin.ts";
 
-/** Chrome 110+ 축소 UA(§73.2 ④ — 모델명 `SM-…`이 사라진다). */
+/** Chrome 110+ 축소 UA(§74.2 ④ — 모델명 `SM-…`이 사라진다). */
 const REDUCED_ANDROID_UA =
   "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36";
 /** iPadOS 13+ Safari의 데스크톱 UA(Mac UA를 보낸다). */
@@ -36,7 +36,7 @@ const ANDROID_PIXEL_UA =
 const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
-/** G461 케이스표 — §73.14 G461 행 그대로 + 기존 v1 케이스 전부(같은 기대값). */
+/** G461 케이스표 — §74.14 G461 행 그대로 + 기존 v1 케이스 전부(같은 기대값). */
 const G461_CASES: Array<{ label: string; signals: DeviceSkinSignals; expected: { skin: string; source: string } }> = [
   {
     label: "축소 UA + uaModel SM-S918N → samsung/auto(규칙 4)",
@@ -75,7 +75,7 @@ test("[T190/G461] 감지 규칙표 v2 — 신설 행 4건 · 기존 v1 케이스
   assert.deepEqual(
     DEVICE_SKIN_RULES_V2.map((rule) => rule.id),
     [1, 2, 3, 4, 5],
-    "§73.5 (1) 표 순서(첫 매치)와 행 번호가 어긋났다 — 6번(그 밖)은 함수의 마지막 줄이다",
+    "§74.5 (1) 표 순서(첫 매치)와 행 번호가 어긋났다 — 6번(그 밖)은 함수의 마지막 줄이다",
   );
   for (const { label, signals, expected } of G461_CASES) {
     assert.deepEqual(detectDeviceSkin(signals), expected, label);
@@ -130,7 +130,7 @@ test("[T190/표 K-1] 세션 문서 값은 두 필드가 **둘 다** enum 안일 
   assert.equal(parseSessionSkin("ios", "guess"), null);
 });
 
-test("[T190/§73.5 (3)] 기기 저장값 — 잘못된 값·default·파싱 실패는 '선택 없음'", () => {
+test("[T190/§74.5 (3)] 기기 저장값 — 잘못된 값·default·파싱 실패는 '선택 없음'", () => {
   assert.equal(DEVICE_SKIN_STORAGE_KEY, "fv.deviceSkin.v1");
   assert.equal(parseStoredDeviceSkin(serializeStoredDeviceSkin("ios", 1)), "ios");
   assert.equal(parseStoredDeviceSkin(serializeStoredDeviceSkin("samsung", 2)), "samsung");
@@ -143,7 +143,7 @@ test("[T190/OQ-U67] 선택지 라벨은 두 낱말뿐이다 — default는 선�
   assert.deepEqual(DEVICE_SKIN_CHOICE_LABELS, { ios: "iOS형", samsung: "One UI형" });
 });
 
-test("[T190/§73.4] UA-CH model 보강 — 미지원·실패·상한 초과는 undefined(던지지 않는다)", async () => {
+test("[T190/§74.4] UA-CH model 보강 — 미지원·실패·상한 초과는 undefined(던지지 않는다)", async () => {
   assert.equal(await readUaModelHint(undefined), undefined);
   assert.equal(await readUaModelHint({}), undefined);
   assert.equal(

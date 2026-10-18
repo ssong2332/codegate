@@ -33,7 +33,7 @@ const allText = allItems
   .flatMap((item) => [
     item.headline,
     item.issuerLabel,
-    // T190-2(§73.9) — 가짜 주소창 호스트도 같은 금지 패턴(URL·스토어·패키지명·실존 앱명)을 탄다.
+    // T190-2(§74.9) — 가짜 주소창 호스트도 같은 금지 패턴(URL·스토어·패키지명·실존 앱명)을 탄다.
     item.mockHost,
     item.submitLabel,
     item.successHeadline,

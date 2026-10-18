@@ -1,7 +1,7 @@
-// T190-1 — 기기 재현 표면용 단색 라인 아이콘 (docs/Architecture.md §73.4 · §73.3 표 A A-2/A-5 · AC-095 (a)).
+// T190-1 — 기기 재현 표면용 단색 라인 아이콘 (docs/Architecture.md §74.4 · §74.3 표 A A-2/A-5 · AC-095 (a)).
 //
 // ⛔ **OS 아이콘(SF Symbols · One UI 아이콘)·오픈 라이선스 세트를 쓰지 않는다** — 전부 이 파일에서 자체 제작한
-// 인라인 SVG다(획 2px · `currentColor`). 의존성·라이선스 고지 의무 0(§73.3 A-7 — 바꾸려면 README 고지가 같은
+// 인라인 SVG다(획 2px · `currentColor`). 의존성·라이선스 고지 의무 0(§74.3 A-7 — 바꾸려면 README 고지가 같은
 // 커밋에 필요하다).
 // ⛔ **텍스트 노드 0 · 전부 `aria-hidden`**(장식) — 이름은 아이콘을 감싼 버튼이 가진다. 세션 중 표면이라
 // 등록부 2벌(G436 `in-session` · T86 `false`)에 등록돼 있다. ⛔ 이 파일을 `src/components/` 하위 디렉터리로

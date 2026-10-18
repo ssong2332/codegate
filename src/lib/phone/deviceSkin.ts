@@ -1,4 +1,4 @@
-// T190-1 — 기기 스킨 해석(표 K)·기기 저장값 파싱·UA-CH 보강 (docs/Architecture.md §73.3 표 K · §73.5).
+// T190-1 — 기기 스킨 해석(표 K)·기기 저장값 파싱·UA-CH 보강 (docs/Architecture.md §74.3 표 K · §74.5).
 //
 // ⭐ 모든 기기 재현 표면(통화 · 문자함 · 랜딩 브라우저 바 · 메신저 문자형)이 **이 해석 함수 하나**를
 // 쓴다(D-88 *"같은 기기에서 통화·문자·메신저가 같은 스킨"* · AC-092 (b)).
@@ -13,7 +13,7 @@ export type DeviceSkin = MessengerSkin;
 export type DeviceSkinSource = "auto" | "fallback" | "manual";
 export type ResolvedDeviceSkin = { skin: DeviceSkin; source: DeviceSkinSource };
 
-/** §73.5 (3) — 기기 저장 키. 값 = `{"skin":"ios"|"samsung","at":<ms>}`(PII 0 · 프레젠테이션 선호값). */
+/** §74.5 (3) — 기기 저장 키. 값 = `{"skin":"ios"|"samsung","at":<ms>}`(PII 0 · 프레젠테이션 선호값). */
 export const DEVICE_SKIN_STORAGE_KEY = "fv.deviceSkin.v1";
 
 /**
@@ -22,7 +22,7 @@ export const DEVICE_SKIN_STORAGE_KEY = "fv.deviceSkin.v1";
  */
 export const DEVICE_SKIN_CHOICE_LABELS = { ios: "iOS형", samsung: "One UI형" } as const;
 
-/** §73.4 — UA-CH `model` 대기 상한(판단값). 늦게 오면 버린다(화면 모양이 세션 중 바뀌지 않게 — D-100 (4)). */
+/** §74.4 — UA-CH `model` 대기 상한(판단값). 늦게 오면 버린다(화면 모양이 세션 중 바뀌지 않게 — D-100 (4)). */
 export const UA_MODEL_HINT_TIMEOUT_MS = 300;
 
 const SKINS: readonly DeviceSkin[] = ["ios", "samsung", "default"];
@@ -38,7 +38,7 @@ export function parseSessionSkin(messengerSkin: unknown, skinSource: unknown): R
 }
 
 /**
- * 기기 저장값 파싱(§73.5 (3)). 읽기 실패·파싱 실패·enum 밖 = **"선택 없음"(null)** — 조용한 폴백이 아니라
+ * 기기 저장값 파싱(§74.5 (3)). 읽기 실패·파싱 실패·enum 밖 = **"선택 없음"(null)** — 조용한 폴백이 아니라
  * 정의된 값이다. `default`는 저장 대상이 아니므로 저장돼 있어도 무시한다.
  */
 export function parseStoredDeviceSkin(raw: string | null | undefined): DeviceSkin | null {
@@ -52,13 +52,13 @@ export function parseStoredDeviceSkin(raw: string | null | undefined): DeviceSki
   }
 }
 
-/** 저장값 직렬화 — 쓰는 곳은 수동 선택 1곳뿐이다(§73.5 (3) · T190-6 `DeviceSkinPicker`). */
+/** 저장값 직렬화 — 쓰는 곳은 수동 선택 1곳뿐이다(§74.5 (3) · T190-6 `DeviceSkinPicker`). */
 export function serializeStoredDeviceSkin(skin: "ios" | "samsung", atMs: number): string {
   return JSON.stringify({ skin, at: atMs });
 }
 
 /**
- * 표 K(§73.3) — 스킨 해석 우선순위. ⛔ 이 표대로만 적용한다.
+ * 표 K(§74.3) — 스킨 해석 우선순위. ⛔ 이 표대로만 적용한다.
  * - K-1 세션 문서에 `messengerSkin`·`skinSource`가 둘 다 있다 → 그 값
  * - K-2 기기에 저장된 수동 선택이 있다 → 그 값(`manual`)
  * - K-3 그 밖 → 감지 규칙표 v2의 결과
@@ -79,7 +79,7 @@ export type UaHintNavigator = {
 };
 
 /**
- * UA-CH `model` 보강값(§73.4 — 규칙 4 입력). 미지원(Safari·Firefox·인앱 브라우저)·실패·상한 초과 =
+ * UA-CH `model` 보강값(§74.4 — 규칙 4 입력). 미지원(Safari·Firefox·인앱 브라우저)·실패·상한 초과 =
  * `undefined`(규칙 4가 성립하지 않을 뿐 — 기존 규칙 그대로). 거부(reject)를 밖으로 던지지 않는다.
  */
 export async function readUaModelHint(

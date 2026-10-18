@@ -37,7 +37,7 @@ import type { MessengerSkin } from "../lib/messenger/detectSkin";
 export type MessengerFakeLandingKind = "credential-form" | "app-install";
 
 /**
- * T190-5(docs/Architecture.md §73.8 · UX D-93 · D-94) — 이 랜딩을 연 표면. ⛔ **표현만** 가른다(kind 분기·제출
+ * T190-5(docs/Architecture.md §74.8 · UX D-93 · D-94) — 이 랜딩을 연 표면. ⛔ **표현만** 가른다(kind 분기·제출
  * 무인자·네트워크 0은 그대로 — §15.9.4 파일 단위 계약):
  * - `"messenger"`(기본 · UX-022에서 연 경우) — 지금처럼 화면 전체를 덮는 대화상자. 완료 버튼 "채팅으로 돌아가기".
  * - `"in-call-sms"`(UX-027 문자함 안의 두 번째 보기) — 대화상자 역할·`aria-modal`·`fixed`가 **없는** 영역
@@ -111,7 +111,7 @@ export default function MessengerFakeLanding({
           ⚠️ T84: 이 바는 **두 kind가 공유**한다 — 상시 종료가 kind와 무관하게 성립해야 하고, 그것이 파일 분리를
           금지하는 두 번째 이유다(§15.9.4 표 #2). T187(§72 · AC-086 · D-82·D-84) — 세션 중 표식·난이도 배지는 없다.
           종료 버튼이 오른쪽 끝에 남도록 justify-end(G449).
-          ⭐ T190-2/T190-5(§73.9 · D-101 · D-92) — 주소 = 그 랜딩의 **가짜 호스트**(`.invalid` · 호스트만 · 스킴 0 ·
+          ⭐ T190-2/T190-5(§74.9 · D-101 · D-92) — 주소 = 그 랜딩의 **가짜 호스트**(`.invalid` · 호스트만 · 스킴 0 ·
           누를 수 없는 텍스트). 빨간 ⚠(사이트 위험 판정 힌트 — D-6 위반)·모노 글꼴·자물쇠("안전한 연결"이라는 새
           주장)를 그리지 않는다. 글꼴은 system-ui. `title`은 대화상자 이름(A5)으로만 쓴다. */}
       <div
@@ -162,7 +162,7 @@ export default function MessengerFakeLanding({
     </>
   );
 
-  // ⭐ T190-5(§73.8 · G460) — 문자함 안에서 열리면 대화상자가 아니라 **영역**이다(문자함 대화상자 하나 안의 두 번째
+  // ⭐ T190-5(§74.8 · G460) — 문자함 안에서 열리면 대화상자가 아니라 **영역**이다(문자함 대화상자 하나 안의 두 번째
   // 보기). `aria-label`은 두 경우 모두 같은 형태다(A5 — 꼬리 " 화면" 유지).
   if (entrySurface === "in-call-sms") {
     return (
@@ -198,7 +198,7 @@ type CredentialFieldCopy = {
   placeholder: string;
   /**
    * T190-5(UX-023 v1.33 (4) · D-93) — **클라 전용 자판 힌트**(`placeholder`와 같은 층 · 서버 카탈로그 필드 아님 —
-   * 드리프트 대조 밖). 계좌번호·금액 칸에만 **필드별로 명시**한다(라벨로 추론하지 않는다 — §73.8).
+   * 드리프트 대조 밖). 계좌번호·금액 칸에만 **필드별로 명시**한다(라벨로 추론하지 않는다 — §74.8).
    * ⛔ 검증이 아니다 — `type="text"` 유지 · maxlength·pattern·자동 서식·오류 문구 0.
    */
   inputMode?: "numeric";
@@ -210,7 +210,7 @@ type CredentialCopy = {
   submitLabel: string;
   successHeadline: string;
   issuerLabel: string;
-  /** T190-2(§73.9) — 가짜 주소창 호스트(`.invalid`). 서버 카탈로그 `mockHost`와 글자 단위로 같다(G76). */
+  /** T190-2(§74.9) — 가짜 주소창 호스트(`.invalid`). 서버 카탈로그 `mockHost`와 글자 단위로 같다(G76). */
   mockHost: string;
 };
 
@@ -227,7 +227,7 @@ const GENERIC_CREDENTIAL_COPY: CredentialCopy = {
   submitLabel: "확인",
   successHeadline: "입력되었습니다.",
   issuerLabel: "ⓒ 본인확인센터",
-  // T190-2(§73.9) — 서버 카탈로그에 없는 **클라 범용 폴백 호스트**(같은 D-101 규칙 — `mockScreenCopy.test.ts` G453).
+  // T190-2(§74.9) — 서버 카탈로그에 없는 **클라 범용 폴백 호스트**(같은 D-101 규칙 — `mockScreenCopy.test.ts` G453).
   mockHost: "id-verify-center.invalid",
 };
 
@@ -351,7 +351,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
 };
 
 /**
- * 가짜 주소창에 보일 호스트(T190-2 · §73.9). ⚠️ kind가 **먼저** 갈린다(§19.4 R7) — `app-install`은 credential
+ * 가짜 주소창에 보일 호스트(T190-2 · §74.9). ⚠️ kind가 **먼저** 갈린다(§19.4 R7) — `app-install`은 credential
  * 콘텐츠 표를 보지 않고 자기 상수만 쓴다(R5 폴백 금지 우회 경로 0). credential 쪽은 정확 일치 조회(R8) +
  * 범용 폴백이다(`CredentialFormMockup`과 같은 규칙).
  */
@@ -509,7 +509,7 @@ const INSTALL_BODY_LINES = [
 ];
 const INSTALL_CONSENT_LABEL = "권한 허용하고 계속하기";
 const INSTALL_ISSUER_LABEL = "ⓒ 업무처리 확인센터";
-/** T190-2(§73.9) — 설치 화면 가짜 주소창 호스트(서버 `subsidy-install.mockHost`와 같은 글자 — G76). */
+/** T190-2(§74.9) — 설치 화면 가짜 주소창 호스트(서버 `subsidy-install.mockHost`와 같은 글자 — G76). */
 const INSTALL_MOCK_HOST = "support-app-center.invalid";
 
 /** 가짜 설치 진행 표시의 단계(UX-023 v1.12 ①→②→③→④). 전부 **로컬 state**이며 시간 경과 외에

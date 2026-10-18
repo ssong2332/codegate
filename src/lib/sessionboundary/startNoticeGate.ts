@@ -27,7 +27,7 @@ export function decideMessengerStartNotice(
   return "show";
 }
 
-// ── T190-8b — 통화 화면 초기 phase(docs/Architecture.md §73.22 (3) · G463 · UX-014 v1.33 (11) · PRD AC-091 (b)(g)) ──
+// ── T190-8b — 통화 화면 초기 phase(docs/Architecture.md §74.22 (3) · G463 · UX-014 v1.33 (11) · PRD AC-091 (b)(g)) ──
 //
 // 진리표(위에서부터 첫 매치 — ⛔ 표 밖 분기를 더하지 않는다):
 //   ① status === "ended"                        → "ended"

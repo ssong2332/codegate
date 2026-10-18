@@ -1,6 +1,6 @@
 "use client";
 
-// UX-014 `pre-call-notice` — 통화 벨 직전 고지 (T190-8b · docs/Architecture.md §73.22 (1) ⓓ · §73.12 (3) ·
+// UX-014 `pre-call-notice` — 통화 벨 직전 고지 (T190-8b · docs/Architecture.md §74.22 (1) ⓓ · §74.12 (3) ·
 // UX-014 v1.33 (11) ① 정본 · D-102 · PRD AC-091 (b)(d)(e) · AC-087).
 //
 // ⭐ **세션 전** 화면이다 — 통화 진입 경로 ① 자가 통화 · ③ 수신자 통화가 반드시 지나고, "준비됐어요"를 누른 뒤에야

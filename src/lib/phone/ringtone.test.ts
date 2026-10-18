@@ -1,4 +1,4 @@
-// T190-1/T190-4 — G454 벨·진동 (docs/Architecture.md §73.7 · §73.14 G454 · UX D-97 · PRD AC-093 (a)(b)(g)ⓑ · AC-095 (a)).
+// T190-1/T190-4 — G454 벨·진동 (docs/Architecture.md §74.7 · §74.14 G454 · UX D-97 · PRD AC-093 (a)(b)(g)ⓑ · AC-095 (a)).
 //
 // `ringtonePlayer.ts`는 Web Audio·`navigator.vibrate`에 강결합돼 이 러너로 실행할 수 없다(R-2 — `outputGain.test.ts`와
 // 같은 관례). 순수 부분(패턴 표)은 직접, 배선(`play/page.tsx`)은 소스 스캔으로 고정한다.
@@ -127,7 +127,7 @@ test("[T190/G454 역검증 — AC-093 (g)ⓑ] cleanup에서 stop을 지운 사�
   assert.deepEqual(b, ["handleAnswer가 벨을 즉시 멈추지 않는다"]);
 });
 
-test("[T190/G454] 플레이어는 음원 파일·전역 오디오 세션 설정을 쓰지 않는다(OS 벨소리 0 — §73.3 A-3/A-6 · §73.2 ③-c)", () => {
+test("[T190/G454] 플레이어는 음원 파일·전역 오디오 세션 설정을 쓰지 않는다(OS 벨소리 0 — §74.3 A-3/A-6 · §74.2 ③-c)", () => {
   const player = readFileSync("src/lib/phone/ringtonePlayer.ts", "utf8");
   const code = player.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   for (const forbidden of [/\.(mp3|m4a|ogg|wav|aac|caf)\b/i, /new Audio\(/, /decodeAudioData/, /audioSession/, /fetch\(/]) {
@@ -135,5 +135,5 @@ test("[T190/G454] 플레이어는 음원 파일·전역 오디오 세션 설정�
   }
   assert.ok(code.includes("createOscillator"), "합성(OscillatorNode)으로 소리를 만들어야 한다");
   assert.ok(code.includes('state !== "running"'), "자동재생이 막히면 무음으로 끝내는 분기가 있어야 한다(D-97)");
-  assert.ok(code.includes(".close()"), "stop은 AudioContext.close()까지 해야 한다(§73.7)");
+  assert.ok(code.includes(".close()"), "stop은 AudioContext.close()까지 해야 한다(§74.7)");
 });

@@ -3,7 +3,7 @@
 
 /* 디자인 파운데이션 — "경고하되 돕는다" (claude.ai/design 옵션 탐색, 1x 파운데이션 확정).
    라이트 테마 고정(어르신 접근성 우선, OS 다크모드 자동전환 없음). Pretendard 단일 서체. */
-/* T190-1(docs/Architecture.md §73.11 · G458) — 강제 다크 방지 두 번째 겹(layout.tsx `viewport.colorScheme`과 짝). */
+/* T190-1(docs/Architecture.md §74.11 · G458) — 강제 다크 방지 두 번째 겹(layout.tsx `viewport.colorScheme`과 짝). */
 :root {
   color-scheme: only light;
   --background: #faf8f5; /* 웜 화이트 — 차갑지 않게 */
@@ -77,7 +77,7 @@ body {
   transform-origin: center;
 }
 
-/* T190-3(UX-014 v1.33 (5) 울림 연출 · docs/Architecture.md §73.6 (2)) — iOS형 수신 = 받기 버튼만 은은한 맥동
+/* T190-3(UX-014 v1.33 (5) 울림 연출 · docs/Architecture.md §74.6 (2)) — iOS형 수신 = 받기 버튼만 은은한 맥동
    (번호 아래 파동 없음). One UI형·기본은 위 `call-ring-pulse`(아바타 둘레 파동)를 재사용한다.
    ⛔ reduced-motion이면 0 모션(아래 블록 — G457이 전역으로 단언한다). 값은 근사(실기 측정 전 — D-96 (2)). */
 @keyframes call-accept-pulse {

@@ -131,7 +131,7 @@ export function clearPendingSession(): void {
   window.sessionStorage.removeItem(ANSWERED_SESSION_KEY);
   // T187(§72 D2 · G450) — 메신저 시작 고지 확인 기록도 같은 세션 단위로 비운다.
   window.sessionStorage.removeItem(START_NOTICE_ACK_SESSION_KEY);
-  // T190-8b(§73.22 (3)) — 통화 벨 직전 고지 확인 기록도 같은 세션 단위로 비운다.
+  // T190-8b(§74.22 (3)) — 통화 벨 직전 고지 확인 기록도 같은 세션 단위로 비운다.
   window.sessionStorage.removeItem(PRE_CALL_NOTICE_SEEN_SESSION_KEY);
   window.sessionStorage.removeItem(SELECTED_TRAINING_TYPE_KEY);
   window.sessionStorage.removeItem(SELECTED_VOICE_MODE_CHOICE_KEY);
@@ -255,7 +255,7 @@ export function isStartNoticeAcknowledged(sessionId: string): boolean {
   return window.sessionStorage.getItem(START_NOTICE_ACK_SESSION_KEY) === sessionId;
 }
 
-// T190-8b(docs/Architecture.md §73.22 (3) · UX-014 v1.33 (11) ① · AC-087 (c) · AC-091 (b)) — 통화 벨 직전 고지
+// T190-8b(docs/Architecture.md §74.22 (3) · UX-014 v1.33 (11) ① · AC-087 (c) · AC-091 (b)) — 통화 벨 직전 고지
 // (`pre-call-notice`)를 이 탭에서 이 세션에 대해 이미 확인했는지. 위 두 키와 **같은 범위 · 다른 키**다(세 기록이 서로의
 // 뜻을 빌리지 않는다 — G450 같은 회귀 방지). 새로고침에서만 생략에 쓰인다. 서버 필드가 아니다(API/DB 델타 0).
 const PRE_CALL_NOTICE_SEEN_SESSION_KEY = "session.preCallNoticeSeenSessionId";

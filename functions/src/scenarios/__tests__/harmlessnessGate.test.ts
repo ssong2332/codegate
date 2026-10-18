@@ -88,7 +88,7 @@ const MOCK_SCREEN_FIELDS: Record<keyof MockScreenItem, FieldPolicy> = {
   // 들어 있고(`harmlessnessPatterns.ts` 판정표), 클라 쪽 스캔은 기관명을 의도적으로 제외한다
   // (`harmlessnessScreens.test.ts` — 사칭 대상 라벨은 서버 카탈로그에서 내려온다).
   issuerLabel: { profile: "mockSurface" },
-  // ⭐ T190-2(docs/Architecture.md §73.9 ③ · PRD AC-094 (d)) — 가짜 주소창 호스트도 **화면에 그려지는 문자열**이라
+  // ⭐ T190-2(docs/Architecture.md §74.9 ③ · PRD AC-094 (d)) — 가짜 주소창 호스트도 **화면에 그려지는 문자열**이라
   // 같은 프로파일이다(실존 기관명·실존 앱명이 호스트에 섞이면 여기서 걸린다). 형식(`.invalid`·스킴 0·연속 숫자)은
   // `mockAddress.test.ts`(G453)가 따로 본다.
   mockHost: { profile: "mockSurface" },
@@ -104,7 +104,7 @@ const IN_CALL_SMS_FIELDS: Record<keyof InCallSmsItem, FieldPolicy> = {
   senderLabel: { profile: "mockSurface" },
   body: { profile: "mockSurface" },
   linkDisplayText: { profile: "mockSurface" },
-  // T190-2(§73.9 ③) — 말풍선 링크 줄의 가짜 주소. 위 `mockHost`와 같은 이유로 같은 프로파일이다.
+  // T190-2(§74.9 ③) — 말풍선 링크 줄의 가짜 주소. 위 `mockHost`와 같은 이유로 같은 프로파일이다.
   linkAddress: { profile: "mockSurface" },
   otpCode: { profile: "mockSurface" },
   announceInstruction: { profile: "modelInstruction" },
@@ -240,7 +240,7 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
   const expectedVerify = Object.keys(VERIFY_INTERCEPT).length * 5;
   // T104 — kind별 옵셔널 필드가 생겨 항목마다 표면 수가 갈린다. 공통 4필드(headline·issuerLabel·
   // momentTactic·correctAction) + bodyLines + kind 전용 필드로 **다시 계산**한다.
-  // ⭐ T190-2(§73.9 ③ · AC-094 (d)) — 공통 필드가 **4 → 5**(`mockHost` 신설 · 8항목 전부 필수). 늘어난 것은
+  // ⭐ T190-2(§74.9 ③ · AC-094 (d)) — 공통 필드가 **4 → 5**(`mockHost` 신설 · 8항목 전부 필수). 늘어난 것은
   // 검사 대상이지 예외가 아니다.
   const expectedMock = Object.values(MOCK_SCREENS)
     .flat()
@@ -255,7 +255,7 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
         (i.successHeadline === undefined ? 0 : 1),
       0,
     );
-  // ⭐ T190-2(§73.9 ③ · AC-094 (d)) — 옵셔널 2 → 3(`linkAddress` — 링크 쌍과 함께만 존재, G111).
+  // ⭐ T190-2(§74.9 ③ · AC-094 (d)) — 옵셔널 2 → 3(`linkAddress` — 링크 쌍과 함께만 존재, G111).
   const expectedSms = Object.values(IN_CALL_SMS)
     .flat()
     .reduce(

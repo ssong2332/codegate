@@ -85,13 +85,13 @@ function registryMismatch(registry: Record<string, SurfaceRole>): { missing: str
 
 test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/session/*/page.tsx (등록 없이 우회 불가)", () => {
   assert.deepEqual(registryMismatch(SESSION_SURFACE_REGISTRY), { missing: [], stale: [] });
-  // T190-1(docs/Architecture.md §73.22 (4) #21 단계별 누적) — 15 → 16(+PhoneIcon) → T190-6 17(+DeviceSkinPicker) →
+  // T190-1(docs/Architecture.md §74.22 (4) #21 단계별 누적) — 15 → 16(+PhoneIcon) → T190-6 17(+DeviceSkinPicker) →
   // T190-8b 18(+CallStartNotice).
   assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 18);
 });
 
 // ── G451 — 등록부 2벌(G436 · T86)이 최상위 `src/components/*.tsx`만 훑으므로, 하위 디렉터리에 컴포넌트를 두면
-// **등록 없이 빠진다**(docs/Architecture.md §73.0 #6 · §73.14 G451). `ui/`만 허용한다.
+// **등록 없이 빠진다**(docs/Architecture.md §74.0 #6 · §74.14 G451). `ui/`만 허용한다.
 function nestedComponentViolations(paths: readonly string[]): string[] {
   return paths
     .map((p) => p.split("\\").join("/"))
@@ -267,7 +267,7 @@ function findAll(root: ts.Node, pred: (n: ts.Node) => boolean): ts.Node[] {
 }
 
 /**
- * ⭐ T190-8b(docs/Architecture.md §73.22 (1) ⓓ · G438 재지정 ④) — 대상 파일이 play에서 **세션 전 컴포넌트**
+ * ⭐ T190-8b(docs/Architecture.md §74.22 (1) ⓓ · G438 재지정 ④) — 대상 파일이 play에서 **세션 전 컴포넌트**
  * `CallStartNotice.tsx`로 옮겨 갔다. `{PREROLL_NOTICE}` JSX 식 정확히 1회 · **조건 없음**(그 화면 전체가 세션 전이다).
  * 옛 판정("play의 `phase === \"incoming\"` 아래 1회")은 벨 화면 프리롤을 허용 목록에 올리는 것이라 폐기했다(D-102 · AC-091 (c)).
  */
@@ -369,7 +369,7 @@ test("[T187/G438 → T190-8b 재지정 ⓓ] 세션 전 문면은 지정 사용�
 });
 
 test("[T190-8b/G438 역검증 — AC-091 (f)ⓐⓒ] play에 `<p>{PREROLL_NOTICE}</p>` 사본 · 마지막 return 안 CallStartNotice 사본 · 채팅 return 안 시작 고지 사본은 각각 실패한다", (t) => {
-  // ⚠️ 옛 앵커('{phase === "incoming" && (')는 사라졌다 — 남기면 notEqual이 "오염 지점을 찾지 못했다"로 실패한다(§73.22 (1)).
+  // ⚠️ 옛 앵커('{phase === "incoming" && (')는 사라졌다 — 남기면 notEqual이 "오염 지점을 찾지 못했다"로 실패한다(§74.22 (1)).
   const play = read("src/app/session/play/page.tsx");
   const ringAnchor = "{/* ⛔ T190-8b(D-102 · AC-091 (c) · G438 재지정)";
   assert.ok(play.includes(ringAnchor), "오염 지점(벨 화면 프리롤 자리)을 찾지 못했다");
@@ -403,7 +403,7 @@ test("[T190-8b/G438 역검증 — AC-091 (f)ⓐⓒ] play에 `<p>{PREROLL_NOTICE}
   assert.equal(prerollUsageViolations(conditional).length, 1);
 });
 
-// G449 — CallStartNotice 상단 바도 "훈련 종료"가 오른쪽 끝(MessengerStartNotice와 같은 형태 — §73.22 (1) 등록부 줄).
+// G449 — CallStartNotice 상단 바도 "훈련 종료"가 오른쪽 끝(MessengerStartNotice와 같은 형태 — §74.22 (1) 등록부 줄).
 test("[T190-8b/G449] CallStartNotice 상단 바 justify-end", () => {
   const [c] = endButtonContainers("src/components/CallStartNotice.tsx", read("src/components/CallStartNotice.tsx"));
   assert.ok(c && /\bjustify-end\b/.test(c.className), "CallStartNotice 상단 바가 justify-end가 아니다");
@@ -465,7 +465,7 @@ test("[T187/G441] 스크린리더 이름 A1~A5 정본 · 종료 이름 불변 3�
 test("[T187/G441 역검증] A3를 `${x}`(기능 설명 소실)로 바꾼 사본은 실패한다", () => {
   const sources = g441Sources();
   const file = "src/components/InCallSmsOverlay.tsx";
-  // T190-5(docs/Architecture.md §73.13 G441 A3 행) — 링크 표기식이 가짜 주소(`linkText = linkAddress ?? linkDisplayText`)로
+  // T190-5(docs/Architecture.md §74.13 G441 A3 행) — 링크 표기식이 가짜 주소(`linkText = linkAddress ?? linkDisplayText`)로
   // 바뀌어 오염 앵커를 같은 커밋에 갱신했다(옛 앵커를 남기면 notEqual이 "오염 지점을 찾지 못했다"로 실패한다).
   const poisoned = sources[file].replace("aria-label={`링크: ${linkText}`}", "aria-label={`${linkText}`}");
   assert.notEqual(poisoned, sources[file], "오염 지점을 찾지 못했다");

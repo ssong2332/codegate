@@ -51,7 +51,7 @@ export type MockScreenItem = {
    * 카탈로그로 올린 것). **실존 기관명 금지** — `mockSurface` 프로파일을 탄다. */
   issuerLabel: string;
   /**
-   * T190-2(docs/Architecture.md §73.9 · UX D-101 · PRD AC-094) — 가짜 브라우저 주소창에 보일 **가짜 호스트**
+   * T190-2(docs/Architecture.md §74.9 · UX D-101 · PRD AC-094) — 가짜 브라우저 주소창에 보일 **가짜 호스트**
    * (호스트만 — 경로·스킴 0). ⛔ 마지막 레이블은 반드시 `.invalid`(RFC 2606 예약 — 영구히 실존할 수 없는 이름)이고
    * `http(s)://`·`www.`·`href` 0 · 연속 숫자 3자리 이하 · 실존 기관 도메인 꼴·실존 브랜드 낱말 0
    * (`__tests__/mockAddress.test.ts` G453). 화면 렌더 정본은 클라 `MessengerFakeLanding.tsx`의 같은 글자이며

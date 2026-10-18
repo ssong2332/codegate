@@ -54,7 +54,7 @@ export type RealtimeVoiceSessionProps = {
   /** 통화 중 음소거 — 실제 마이크 입력을 끊는다. */
   muted: boolean;
   /**
-   * ⭐ T190-3(docs/Architecture.md §73.3 표 S · G455) — 스피커 버튼의 음량 모드 값(통화 0.6 / 스피커 1.0).
+   * ⭐ T190-3(docs/Architecture.md §74.3 표 S · G455) — 스피커 버튼의 음량 모드 값(통화 0.6 / 스피커 1.0).
    * SDK `useConversation`의 `volume` 옵션으로 넘긴다 — SDK가 값이 바뀔 때마다 `setVolume({ volume })`을 부른다
    * (`@elevenlabs/react` `useConversation.js` 판독 — 세션 시작 뒤에도 반영). 부재 = SDK 기본값.
    */

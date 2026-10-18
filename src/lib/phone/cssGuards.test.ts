@@ -1,4 +1,4 @@
-// T190-1 — G457(전역 reduced-motion) · G458(강제 다크 방지 두 겹) (docs/Architecture.md §73.11 · §73.14 G457/G458 ·
+// T190-1 — G457(전역 reduced-motion) · G458(강제 다크 방지 두 겹) (docs/Architecture.md §74.11 · §74.14 G457/G458 ·
 // UX P-12 · PRD AC-095 (f)).
 //
 // G457은 `callContinuity.test.ts`의 T103 A2(`sms-*` 전환 클래스 한정)를 **전역으로 일반화**한다 — 기존 검사는 그대로

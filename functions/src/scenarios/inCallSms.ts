@@ -35,11 +35,11 @@ export type InCallSmsItem = {
    * 부재한다(R11/G111 — `inCallSms.test.ts`의 `[G111]` 테스트가 전수로 고정한다). */
   linkDisplayText?: string;
   /**
-   * T190-2(docs/Architecture.md §73.9 · UX D-101 · PRD AC-094) — 문자 말풍선 링크 줄에 보일 **가짜 주소**
+   * T190-2(docs/Architecture.md §74.9 · UX D-101 · PRD AC-094) — 문자 말풍선 링크 줄에 보일 **가짜 주소**
    * (`{그 랜딩의 mockHost}{경로}` — 스킴 0 · `www.` 0 · 연속 숫자 3자리 이하). `linkDisplayText`·`fakeLandingId`와
    * **3자 쌍**으로만 존재/부재한다(G111 확장). 반드시 그 `fakeLandingId` 랜딩의 `mockHost + "/"`로 시작한다
    * (G453 — `__tests__/mockAddress.test.ts`). ⛔ 실 URL 필드가 아니다 — 탭해도 인앱 랜딩만 열린다(AC-060 읽기 고지).
-   * `linkDisplayText`는 지우지 않는다(리포트·리플레이·랜딩 aria 이름이 계속 쓴다 — §73.9 ①).
+   * `linkDisplayText`는 지우지 않는다(리포트·리플레이·랜딩 aria 이름이 계속 쓴다 — §74.9 ①).
    */
   linkAddress?: string;
   /** `kind==="link"|"account"`일 때 병기 가능(§51.6 R10 — `"otp"`에는 금지). 기존 인앱 가짜 랜딩

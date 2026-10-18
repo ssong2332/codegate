@@ -22,7 +22,7 @@ export const MESSENGER_START_NOTICE = {
 } as const;
 
 /**
- * T190-8a(docs/Architecture.md §73.22 (2) · UX-022 v1.33 (7) 정본 · PRD OQ-52 (ㄴ) · AC-091 (g)) — **에스컬레이션 가능
+ * T190-8a(docs/Architecture.md §74.22 (2) · UX-022 v1.33 (7) 정본 · PRD OQ-52 (ㄴ) · AC-091 (g)) — **에스컬레이션 가능
  * 시나리오**(`scenario.escalation` 보유)의 시작 전 고지 **변형 1벌**. 바뀌는 줄은 제목 · 고지 ① · 고지 ①-2(신설) 셋뿐이고
  * `kakaoDisclaimer` · `stopHint` · `confirmLabel`은 위 `MESSENGER_START_NOTICE` 값을 그대로 쓴다(같은 문장 사본 0).
  * ⛔ 비에스컬레이션 시나리오에는 쓰지 않는다 — 오지 않을 전화를 예고하면 거짓 약속이다(AC-087 (e) 취지).
@@ -50,7 +50,7 @@ export const DEVICE_SKIN_PICKER_COPY = {
 } as const;
 
 /**
- * T190-8b(docs/Architecture.md §73.22 (1) ⓓ · UX-014 v1.33 (11) ① 정본 · D-102 · PRD AC-091 (d)(e)) — 통화 벨 직전 고지
+ * T190-8b(docs/Architecture.md §74.22 (1) ⓓ · UX-014 v1.33 (11) ① 정본 · D-102 · PRD AC-091 (d)(e)) — 통화 벨 직전 고지
  * (`pre-call-notice` — 경로 ① 자가 통화 · ③ 수신자 통화). 고지 ① = 위 `PREROLL_NOTICE` 바이트 그대로(재사용 — 여기 사본 0).
  * 고지 ② = `MESSENGER_START_NOTICE.stopHint`와 같은 문장(UX 정본이 같은 문장을 지정했다).
  */

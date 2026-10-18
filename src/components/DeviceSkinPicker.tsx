@@ -1,6 +1,6 @@
 "use client";
 
-// T190-6 — 세션 전 "화면 모양" 줄 (docs/Architecture.md §73.4 · §73.10 (2) · UX-014 v1.33 (11) ② 정본 · D-100 ·
+// T190-6 — 세션 전 "화면 모양" 줄 (docs/Architecture.md §74.4 · §74.10 (2) · UX-014 v1.33 (11) ② 정본 · D-100 ·
 // PRD AC-092 (d)(e)).
 //
 // ⭐ **세션 전** 부품이다 — 메신저 `start-notice`(UX-022, 문자형 표면만)에 둔다(통화 경로 `pre-call-notice`는

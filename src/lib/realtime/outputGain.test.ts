@@ -33,7 +33,7 @@ test("[§71.7 G433] 게인 노드는 GEMINI_OUTPUT_GAIN 값으로 만들어 dest
   assert.equal(code.split("outputGain.connect(outputContext.destination)").length - 1, 1);
 });
 
-// ── T190-3 — G455 스피커 버튼 음량 모드(docs/Architecture.md §73.3 표 S · §73.14 G455 · UX D-98 · PRD AC-093 (c)(g)ⓒ) ──
+// ── T190-3 — G455 스피커 버튼 음량 모드(docs/Architecture.md §74.3 표 S · §74.14 G455 · UX D-98 · PRD AC-093 (c)(g)ⓒ) ──
 test("[T190/G455] 통화 모드 = 기본 음량(0.6) · 0 < 통화 < 스피커 ≤ 1.0 · User 확정값", () => {
   assert.equal(CALL_MODE_GAIN, GEMINI_OUTPUT_GAIN);
   assert.equal(CALL_MODE_GAIN, 0.6, "User 확정(2026-10-18 · OQ-A94) 통화 모드 0.6");

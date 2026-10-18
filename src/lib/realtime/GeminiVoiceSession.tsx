@@ -92,7 +92,7 @@ export type GeminiVoiceSessionProps = {
   stopSignal: number;
   muted: boolean;
   /**
-   * ⭐ T190-3(docs/Architecture.md §73.3 표 S · §73.6 (4) · G455) — 스피커 버튼의 음량 모드 값(통화 0.6 / 스피커 1.0,
+   * ⭐ T190-3(docs/Architecture.md §74.3 표 S · §74.6 (4) · G455) — 스피커 버튼의 음량 모드 값(통화 0.6 / 스피커 1.0,
    * `gainFor(audioRoute)`). 연결 중·통화 중 언제 바뀌어도 아래 게인 노드에 곧바로 반영된다(ref 경유). 부재 =
    * 기본 음량(`GEMINI_OUTPUT_GAIN`). 웹은 Android에서 수화부↔스피커 실제 전환을 할 수 없어 음량으로 대체한다.
    */

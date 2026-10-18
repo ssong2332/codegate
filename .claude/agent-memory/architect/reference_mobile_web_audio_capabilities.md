@@ -1,11 +1,11 @@
 ---
 name: reference-mobile-web-audio-capabilities
-description: 모바일 웹 출력 경로·음량·진동·자동재생·UA-CH·OS 자산 라이선스의 문서 근거 판정(2026-10-18, §73.2) — 실기 미확인 항목 구분
+description: 모바일 웹 출력 경로·음량·진동·자동재생·UA-CH·OS 자산 라이선스의 문서 근거 판정(2026-10-18, §74.2) — 실기 미확인 항목 구분
 metadata:
   type: reference
 ---
 
-2026-10-18 §73.2 판정 근거(재조사 전 출발점으로만 — 실기 확인 0회):
+2026-10-18 §74.2 판정 근거(재조사 전 출발점으로만 — 실기 확인 0회):
 - 수화부↔스피커: Android는 웹 API 없음(MDN BCD `HTMLMediaElement.setSinkId` chrome_android false, crbug 41276355 · Audio Session API chrome false). iOS는 setSinkId 18.4(신뢰성 낮다는 보고) · `navigator.audioSession.type` 16.4 — 수화부/스피커 구분 근거 0(WebKit 184141·216641 NEW).
 - 음량: Web Audio GainNode·ElevenLabs SDK `setVolume`은 가능, iOS `<audio>.volume`은 설정 불가(Apple 보관 문서).
 - 진동: iOS Safari 미지원(BCD false), Chrome 60+ 사용자 활성화 필요.

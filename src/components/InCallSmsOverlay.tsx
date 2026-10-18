@@ -70,7 +70,7 @@ type InCallSmsOverlayProps = {
    */
   onLandingSubmitted: (smsId: string) => void;
   /**
-   * T190-5(docs/Architecture.md §73.5 (2) · AC-092 (b)) — 통화 화면이 계산한 기기 스킨(한 세션 = 한 스킨).
+   * T190-5(docs/Architecture.md §74.5 (2) · AC-092 (b)) — 통화 화면이 계산한 기기 스킨(한 세션 = 한 스킨).
    * 문자함 헤더·스레드와 그 안에서 연 랜딩의 브라우저 바가 같은 값을 쓴다. 부재 = 기본.
    */
   skin?: MessengerSkin;
@@ -125,7 +125,7 @@ export default function InCallSmsOverlay({
   const [entryNotice, setEntryNotice] = useState("");
   // T104 — 상황별 랜딩을 열려면 `fakeLandingId`(조회 키)와 서버가 확정한 `landingKind`가 함께
   // 필요하다. 둘 다 문자 문서에서 온 값이며 **클라가 문자열로 분류하지 않는다**(§15.9.1 R3/R8).
-  // ⭐ T190-5(docs/Architecture.md §73.8 · UX D-94) — 랜딩은 이 대화상자 **안의 두 번째 보기**다(중첩 `aria-modal`
+  // ⭐ T190-5(docs/Architecture.md §74.8 · UX D-94) — 랜딩은 이 대화상자 **안의 두 번째 보기**다(중첩 `aria-modal`
   // 0 — G26/G460). `view`가 두 보기를 `hidden`으로 토글하고, 숨긴 랜딩은 마운트된 채 입력값을 자기 로컬 state에
   // 그대로 갖는다(G138 — 값을 이 파일로 끌어올리지 않는다). 같은 문자의 링크를 다시 누르면 같은 랜딩이 돌아오고,
   // 다른 문자면 `key`가 바뀌어 새로 마운트된다. 닫기·완료 복귀·문자함 닫기 → 언마운트(값 폐기 — UX-023 (1)).
@@ -234,7 +234,7 @@ export default function InCallSmsOverlay({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        // T190-5(§73.8) — 랜딩 보기에서는 Esc = 브라우저 뒤로("문자" — 숨김, 입력값 유지).
+        // T190-5(§74.8) — 랜딩 보기에서는 Esc = 브라우저 뒤로("문자" — 숨김, 입력값 유지).
         if (view === "landing") setView("thread");
         else requestClose();
         return;
@@ -315,7 +315,7 @@ export default function InCallSmsOverlay({
           </p>
 
           {/* ── ① 통화 표시줄(P-37 (4) · P-27 (2)(9) · UX-027 v1.33 (2)) — 스크롤과 무관하게 맨 위 고정이고, 문자함과
-              그 안의 랜딩 **두 보기가 함께 쓴다**(UX-023 (1) "UX-027에서 열렸을 때만" — 구조로 충족 · §73.8 ③).
+              그 안의 랜딩 **두 보기가 함께 쓴다**(UX-023 (1) "UX-027에서 열렸을 때만" — 구조로 충족 · §74.8 ③).
               5요소: ① 상대 표기 ② 초 단위 경과 시간 ③ "통화 중" **텍스트**(색·아이콘 단독 금지) ④ 최신 사기범 자막
               (aria-live · **최대 2줄 · 높이 상한 36px** — 옛 `line-clamp-2 block` 충돌 해결, 문제 2c) ⑤ 탭 = 통화 복귀.
               오른쪽 "통화로" 칩은 없앴다(표시줄 자체가 버튼이고 아래 큰 복귀 버튼이 있다).

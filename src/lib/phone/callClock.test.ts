@@ -1,4 +1,4 @@
-// T190-3 — 통화 경과 시간 표기 (UX-014 v1.33 (3) · D-86 · docs/Architecture.md §73.6 (3)).
+// T190-3 — 통화 경과 시간 표기 (UX-014 v1.33 (3) · D-86 · docs/Architecture.md §74.6 (3)).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { formatCallElapsed, spokenCallElapsed } from "./callClock.ts";

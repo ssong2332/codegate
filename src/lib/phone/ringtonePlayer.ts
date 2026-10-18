@@ -1,17 +1,17 @@
-// T190-4 — 수신 벨소리·진동 재생(DOM 부작용) (UX D-97 · docs/Architecture.md §73.7 · AC-093 (a)(b)(e)).
+// T190-4 — 수신 벨소리·진동 재생(DOM 부작용) (UX D-97 · docs/Architecture.md §74.7 · AC-093 (a)(b)(e)).
 //
 // ⚠️ 이 파일은 브라우저 API(`AudioContext` · `navigator.vibrate`)에 강결합돼 루트 테스트 러너로 실행할 수
 // 없다(R-2 — 테스트는 순수 부분 `ringtone.ts` · `vibration.ts`만). 배선은 `ringtone.test.ts`(G454)가
 // `play/page.tsx` 소스 스캔으로 고정한다.
 //
-// 규칙(§73.7):
-//   - 음원 파일 0 — `OscillatorNode` + `GainNode` 엔벨로프 합성(§73.3 A-3/A-6).
+// 규칙(§74.7):
+//   - 음원 파일 0 — `OscillatorNode` + `GainNode` 엔벨로프 합성(§74.3 A-3/A-6).
 //   - `resume()` 뒤에도 `state !== "running"`이면 **무음으로 끝낸다**(자동재생 거부 — 오류 문구 0 · D-97).
-//     ⏳ iOS는 그 화면에서의 탭 없이 소리를 낼 수 없을 것으로 **추정**(§73.2 ③-b) — `pre-call-notice`(T190-8b)의
+//     ⏳ iOS는 그 화면에서의 탭 없이 소리를 낼 수 없을 것으로 **추정**(§74.2 ③-b) — `pre-call-notice`(T190-8b)의
 //     "준비됐어요" 탭이 `primedContext`를 넘길 때까지 무음일 수 있다(User 결정 OQ-A95 ⓐ — 그대로 둔다).
 //   - 60초 뒤 소리·진동만 멈춘다(화면 연출은 계속 — UX-014 v1.33 (10) ②).
 //   - `stop()`은 멱등이며 `AudioContext.close()`까지 한다(통화 오디오 컨텍스트와 공존 시간 0).
-//   - ⛔ `navigator.audioSession.type`을 바꾸지 않는다(§73.2 ③-c — 페이지 전체 오디오에 걸리는 전역 설정).
+//   - ⛔ `navigator.audioSession.type`을 바꾸지 않는다(§74.2 ③-c — 페이지 전체 오디오에 걸리는 전역 설정).
 import type { MessengerSkin } from "../messenger/detectSkin";
 import { RING_MAX_MS, ringCycleCount, ringPatternFor, tonesWithinCap, type RingTone } from "./ringtone";
 import { canVibrate, vibrationPatternFor } from "./vibration";
@@ -51,7 +51,7 @@ function scheduleTone(ctx: AudioContext, tone: RingTone, cycleStartAt: number): 
 
 /**
  * `incoming` 동안 벨소리·진동을 반복한다. 반환값의 `stop()`을 받기·거절·종료·이탈 어디서든 부른다.
- * @param options.primedContext D-102 대비 구멍(§73.7) — 나중에 "준비됐어요" 탭 핸들러 안에서 만든
+ * @param options.primedContext D-102 대비 구멍(§74.7) — 나중에 "준비됐어요" 탭 핸들러 안에서 만든
  *   컨텍스트를 넘길 수 있게 인자만 미리 둔다(지금은 호출부가 넘기지 않는다).
  */
 export function startIncomingAlert(
@@ -141,9 +141,9 @@ export function startIncomingAlert(
 }
 
 /**
- * T190-8b(§73.7 "D-102 대비 구멍" · §73.12 (3) ⑤ · OQ-A95 ⓐ) — "준비됐어요" 탭 핸들러 **안**(사용자 제스처)에서
+ * T190-8b(§74.7 "D-102 대비 구멍" · §74.12 (3) ⑤ · OQ-A95 ⓐ) — "준비됐어요" 탭 핸들러 **안**(사용자 제스처)에서
  * 벨용 오디오 컨텍스트를 만들고 깨운다. iOS Safari는 그 화면에서의 탭 없이 소리를 낼 수 없을 것으로 **추정**되므로
- * (§73.2 ③-b) 여기서 만든 컨텍스트를 `startIncomingAlert(skin, { primedContext })`로 넘긴다. 실패 = `null`(무음 폴백 —
+ * (§74.2 ③-b) 여기서 만든 컨텍스트를 `startIncomingAlert(skin, { primedContext })`로 넘긴다. 실패 = `null`(무음 폴백 —
  * 오류 문구 0). ⚠️ 에스컬레이션 진입은 이 탭이 없어 iOS 벨이 여전히 무음일 수 있다(OQ-A95 ⓐ 범위 — 그대로 둔다).
  */
 export function primeIncomingAlertAudio(): AudioContext | null {

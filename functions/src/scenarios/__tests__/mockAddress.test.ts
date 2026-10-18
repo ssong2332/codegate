@@ -1,4 +1,4 @@
-// T190-2 — G453 가짜 주소 형식 게이트 (docs/Architecture.md §73.9 · §73.14 G453 · UX D-101 · PRD AC-094 (b)(g)).
+// T190-2 — G453 가짜 주소 형식 게이트 (docs/Architecture.md §74.9 · §74.14 G453 · UX D-101 · PRD AC-094 (b)(g)).
 //
 // 대상: 모든 `MOCK_SCREENS[*].mockHost` · 모든 `IN_CALL_SMS[*].linkAddress`. (클라 범용·설치 호스트는
 // 루트 `src/components/mockScreenCopy.test.ts`가 컴포넌트 소스에서 같은 함수를 다시 적용한다 — 두 패키지라
@@ -6,7 +6,7 @@
 //
 // 규칙(D-101 정본 — OQ-A96 판정 반영):
 //   ① 호스트 = 영문 소문자·숫자·하이픈 레이블 + **마지막 레이블 `.invalid`**(TLD는 `.invalid` 하나로 고정 —
-//      `.example`·`.test` 불허, §73.9)
+//      `.example`·`.test` 불허, §74.9)
 //   ② `http://`·`https://`·`www.`·`href` 0
 //   ③ 경로 = 구획 1~2개 · 각 `/` + 영문·숫자 2~12자 · 경로 전체 24자 이하
 //   ④ 연속 숫자 3자리 이하

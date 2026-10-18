@@ -15,7 +15,7 @@ export type InCallSmsView = {
   body: string;
   otpCode?: string;
   linkDisplayText?: string;
-  /** T190-2(§73.9 · D-101) — 말풍선 링크 줄에 보일 **가짜 주소**(`.invalid` 호스트 + 경로, 스킴 0). 서버가
+  /** T190-2(§74.9 · D-101) — 말풍선 링크 줄에 보일 **가짜 주소**(`.invalid` 호스트 + 경로, 스킴 0). 서버가
    *  `fakeLandingId`와 짝으로만 싣는다. 부재(옛 문서) → 화면은 `linkDisplayText`로 읽는다(`linkAddress ?? linkDisplayText`). */
   linkAddress?: string;
   fakeLandingId?: string;
@@ -108,7 +108,7 @@ export function takeNewlyVisibleSmsIds(
   return picked;
 }
 
-// ── T190-1(docs/Architecture.md §73.4 · G459 · UX D-89/D-90 · UX-027 v1.33 (3)(4)) ───────────────
+// ── T190-1(docs/Architecture.md §74.4 · G459 · UX D-89/D-90 · UX-027 v1.33 (3)(4)) ───────────────
 
 /**
  * 본문 안 인증번호를 **정확 일치 첫 1회**로 갈라낸다(D-90 — 본문 안에서 강조 표시하고 큰 박스를 따로 두지

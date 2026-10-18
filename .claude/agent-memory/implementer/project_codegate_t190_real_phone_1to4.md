@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-T190-1~4(§73 — 스킨 감지 v2·토큰·배너·벨·진동·음량 모드·mockHost/linkAddress·통화 셸 재배치)를 한 워크트리에서 구현했다(커밋은 오케스트레이터). 기준 functions 967→972 · 루트 531→574, 둘 다 0 fail.
+T190-1~4(§74 — 스킨 감지 v2·토큰·배너·벨·진동·음량 모드·mockHost/linkAddress·통화 셸 재배치)를 한 워크트리에서 구현했다(커밋은 오케스트레이터). 기준 functions 967→972 · 루트 531→574, 둘 다 0 fail.
 
 - ⭐ **루트 테스트 대상 lib 모듈은 값 import 없는 잎(leaf) 모듈이어야 한다.** `node --experimental-strip-types --test`는 확장자 없는 상대 import(`"./a"`)를 못 푼다(scratch 실측: fail). 앱 코드에 `.ts` 확장자 import 선례 0건. ⇒ 설계가 "detectSkin.ts가 deviceSkin.ts v2에 위임"을 지시했지만 v2 규칙표를 `detectSkin.ts`에 두고 `deviceSkin.ts`는 감지 결과를 **인자로** 받게 바꿨다(보고한 편차). 타입 import만은 strip돼서 괜찮다.
   **Why:** 다음 설계도 같은 위임 지시를 낼 수 있다. **How to apply:** 새 lib 모듈 간 런타임 의존이 필요하면 조합을 호출부(페이지)로 올리거나 같은 파일에 둔다.

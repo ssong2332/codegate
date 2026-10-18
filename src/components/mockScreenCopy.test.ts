@@ -292,7 +292,7 @@ const RENDERED_FIELDS = [
   "headline",
   "bodyLines",
   "issuerLabel",
-  // T190-2(docs/Architecture.md §73.9 · §73.13 G76 행) — 가짜 주소창 호스트. 미등록이면 위 파서의 미등록 필드
+  // T190-2(docs/Architecture.md §74.9 · §74.13 G76 행) — 가짜 주소창 호스트. 미등록이면 위 파서의 미등록 필드
   // 단언이 실패한다(트립와이어).
   "mockHost",
   "fields",
@@ -642,7 +642,7 @@ test("[T84 → T187 역검증] 배지를 되살린 사본은 반전 단언에 �
   assert.deepEqual(difficultyBadgeTraces(poisoned), ["difficultyLabel", "난이도 {"]);
 });
 
-// ── T190-2 — G453(클라 쪽) · 가짜 주소창 호스트 (docs/Architecture.md §73.9 · §73.14 G453 · PRD AC-094 (b)(g)) ──
+// ── T190-2 — G453(클라 쪽) · 가짜 주소창 호스트 (docs/Architecture.md §74.9 · §74.14 G453 · PRD AC-094 (b)(g)) ──
 //
 // 서버 카탈로그의 8개 호스트는 `functions/src/scenarios/__tests__/mockAddress.test.ts`가 보고, 위 G76이 그 글자가
 // 컴포넌트에 그대로 있음을 묶는다. 여기서는 **컴포넌트에만 있는 호스트**(범용 폴백 `GENERIC_CREDENTIAL_COPY` ·
@@ -688,7 +688,7 @@ test("[T190/G453 클라 역검증] .com 호스트를 넣은 사본 · https:// �
   assert.ok(componentHosts(schemed).flatMap(clientHostViolations).length >= 1);
 });
 
-// ── T190-5 — D-93 숫자 자판 힌트(UX-023 v1.33 (4) · docs/Architecture.md §73.8) ─────────────────────────────
+// ── T190-5 — D-93 숫자 자판 힌트(UX-023 v1.33 (4) · docs/Architecture.md §74.8) ─────────────────────────────
 // 클라 전용 표현 힌트(`placeholder`와 같은 층)라 서버 카탈로그 드리프트 대조 밖이다. 계좌번호·금액 칸에만 필드별로 명시한다.
 const NUMERIC_FIELD_LABELS = [
   "계좌번호",
