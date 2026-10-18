@@ -18107,3 +18107,66 @@ completeWithFallback(                                         ← 실패 시 Moc
 | ⚠️ | 운영 Firestore 전사에서 사례를 **직접 조회하지는 않았다** — 이 환경에 gcloud·관리자 자격증명이 없고 CLI 저장 토큰을 꺼내 쓰는 우회는 하지 않았다. 사례는 사용자 확인("creo?")으로 대신한다 | 기록 | 콘솔에서 신고 세션 `sessions/{sid}/messages` 열람(언어·턴 위치만) |
 
 > **번호**: §76 · G471~G474 · OQ-A103~A105 · #126(이 트리 최대 §75 · G470 · OQ-A102 · #125). ⛔ 예약 아님 — 병합 순서로 확정.
+
+## 77. (Bug fix — 2026-10-18 · 브랜치 `fix/otp-mismatch-check`) **인증번호 대조 — 틀린 번호를 부르면 사기범이 다시 불러 달라고 한다** — ⭐⭐ **원인: 모델이 받는 문자 도착 지시(`announceInstruction`)와 시스템 프롬프트 어디에도 실제로 보낸 번호가 없었다 ⇒ 대조 자체가 불가능했다** — architect·implementer 기록
+
+### 77.0 금지 먼저
+
+1. ⛔ **번호를 세션 시작 시스템 프롬프트(Live 토큰 `systemInstruction`)에 넣지 말 것** — 문자가 오기 전에 모델이 번호를 먼저 말해 버릴 수 있다(기존 지시 *"번호를 네가 지어내서 말하지 마라"* 와 같은 이유). 테스트가 `realtime/geminiProvider.ts`에 `otpCode` 참조가 없음을 고정한다.
+2. ⛔ **리포트 판정(`report/analyzeConversation.ts` `COMPLIANCE_PATTERN`)을 이 PR에서 바꾸지 말 것** — 틀린 번호를 부른 행동을 어떻게 볼지는 User 결정(77.5).
+3. ⛔ **클라이언트 파일(`src/app/session/play`, `src/lib/realtime`)을 건드리지 않는다** — 클라는 서버가 준 `announceInstruction` 문자열을 그대로 모델에 넘긴다(`src/lib/realtime/GeminiVoiceSession.tsx:420`) ⇒ 서버 변경만으로 실시간 경로가 바뀐다.
+
+### 77.1 원인 조사
+
+| 확인 | 결과 | 근거 |
+|---|---|---|
+| 문자 도착 지시에 번호가 있나 | **없다** — *"방금 6자리 인증번호 문자가 실제로 도착했다 … 번호를 네가 지어내서 말하지 마라"* 만 | `functions/src/scenarios/inCallSms.ts` `institution-otp`·`card-otp` `announceInstruction` |
+| Live 도구 응답 | `deliverInCallSms` 응답의 `announceInstruction`(= 위 문자열)을 클라가 그대로 모델에 넘긴다 — 번호 없음 | `functions/src/inCallSms/buildDoc.ts` `buildInCallSmsResponse` · `GeminiVoiceSession.tsx:420` |
+| 시스템 프롬프트 | 페이로드 가상값 규칙(`promptAssembly.ts` [진행 강제])은 사기범이 **부르는** 값의 규칙이고, 받은 번호의 대조는 다루지 않는다 | `functions/src/roleplay/promptAssembly.ts` |
+| 번호의 원천 | 카탈로그 리터럴 `otpCode`(`048231`·`739104`, 난수 아님) — Firestore 문서에 실려 참가자 화면에 보인다 | `scenarios/inCallSms.ts` · `inCallSms/buildDoc.ts` `buildInCallSmsDoc` |
+
+### 77.2 전달 위치 비교 (⭐ 채택: 도착 응답 + 도착 후 턴 지시)
+
+| 안 | 실시간(Live) | 텍스트 폴백 | 위험 | 판정 |
+|---|---|---|---|---|
+| **A. 도착 응답의 지시에 붙임** | 도착 순간 Live 세션에 들어가 이후 턴에도 문맥으로 남는다 | 지시가 그 턴에만 실려 **다음 턴(참가자가 번호를 부르는 턴)에 사라진다** | 번호가 응답에 실리지만 그 순간 이미 화면에 보이는 값 | **채택(실시간)** |
+| **B. 세션 시작 시스템 프롬프트** | 처음부터 안다 | 매 턴 안다 | ⛔ 문자 도착 전에 모델이 번호를 말할 수 있다 · 사전 유출(트리거만 내려보내는 설계 §15.1.2와 충돌) | 기각 |
+| **C. 도착 이후 매 턴 시스템 프롬프트(턴 지시)** | — (Live 프롬프트는 토큰 발급 시 고정) | 도착 이후 매 턴 번호를 안다 | 턴마다 Firestore 읽기 1회(인증번호 시나리오 2종 · 도착 턴 이후만) | **채택(텍스트)** |
+
+### 77.3 변경
+
+| 항목 | 내용 | 파일 |
+|---|---|---|
+| 대조 지시 | `buildOtpCheckInstruction(otpCode)` — 실제 번호 · *"먼저 말하거나 일부라도 알려 주지 마라"* · 상대가 인증번호를 불러 줄 때만 한 자리씩 대조 · 다르면 다음 단계로 넘어가지 말고 *"번호가 안 맞는데요, 문자 다시 확인해서 불러 주세요."* · 같으면 진행 · **이미 확인했으면 다시 꺼내지 않고 다른 숫자·짧은 대답에 틀렸다고 하지 않는다**(텍스트 경로는 도착 이후 매 턴 반복되므로 — 리뷰 #2). "방금"은 쓰지 않는다 | `functions/src/scenarios/inCallSms.ts` |
+| 실시간 | `buildInCallSmsResponse` — `kind==="otp"`면 기존 지시 **뒤에** 대조 지시 1줄. 그 밖의 문자는 무변경. 호 전환 뒤(`placed`)는 기존대로 지시 없음 | `functions/src/inCallSms/buildDoc.ts` |
+| 텍스트 | `resolveOtpCheckInstruction` 판정표(도착 전 없음·읽기 0 / **호 전환 뒤 없음·읽기 0**(실시간 `placed` 게이트와 같은 동작 — 리뷰 #1) / 이번 턴 도착은 읽기 없이 / 이후 턴은 문서 존재 확인 / 실패(경고 로그)·미도착 없음) → `sendMessage`가 기존 턴 지시와 합쳐 `turnInstruction`으로 | `functions/src/roleplay/otpCheck.ts` · `roleplay/index.ts` |
+| 의도적 테스트 변경 | `inCallSms/__tests__/buildDoc.test.ts` "[§53.6 (3) 역검증] placed:false 응답 = 카탈로그 원문" — 인증번호 2종만 예외(기대값 = 원문 + 대조 지시), 개수 2를 함께 단언 | 같은 파일 |
+
+### 77.4 게이트
+
+| G | 고정하는 것 | 테스트 |
+|---|---|---|
+| **G475** | 대조 지시 문면(번호 · 먼저 말하지 말 것 · 다르면 다시 불러 달라 · 같으면 진행) · 인증번호 항목 2종 | `functions/src/roleplay/__tests__/otpCheck.test.ts` |
+| **G476** | 실시간 도착 응답에 번호+대조 지시 · 비인증번호 문자 무변경 · 호 전환 뒤 지시 없음 | 같은 파일 · `inCallSms/__tests__/buildDoc.test.ts` |
+| **G477** | 텍스트 판정표 전수(도착 전 읽기 0 · 도착 턴 · 이후 턴 · 미도착 · 조회 실패 · 비해당 시나리오) + sendMessage 배선 | `otpCheck.test.ts` |
+| **G478** | 세션 시작 Live 프롬프트에 번호 없음 | `otpCheck.test.ts` |
+
+### 77.5 ⚠️ 정책 결정 대기 — 리포트 판정 (⛔ 이 PR은 바꾸지 않았다)
+
+현행: `report/analyzeConversation.ts`의 `BASE_COMPLIANCE_PATTERN` 마지막 대안(숫자만 있는 답)과 (D3) 패턴(`"048231 이요"`처럼 숫자 뒤 짧은 어미)으로 **번호를 부르면 맞든 틀리든 "순응"** 이다. 또 같은 파일의 G22 원칙(*"통화 중 문자 이벤트는 판정 입력이 아니다 · 문자 문서와 대조하지 않는다"*)이 있어 **(B)·(C)는 G22 개정이 먼저 필요하다**.
+
+| 선택지 | 판정 | 장점 | 단점 |
+|---|---|---|---|
+| **(A) 현행 유지** | 틀린 번호도 순응(속음) | "인증번호는 어떤 경우에도 부르지 않는다"는 훈련 원칙과 일치 · 변경 0 | 일부러 틀린 번호로 시간을 번 참가자도 "속았다"로 나온다 |
+| **(B) 틀린 번호 = 대응 성공** | 서버가 아는 `otpCode`와 비교해 다르면 저항 | 기지를 인정 | 실제 상황에서 틀린 번호를 부르는 습관을 권장할 수 있다 · 번호를 잘못 읽은 경우도 성공이 된다 |
+| **(C) 별도 분류(중립) + 코멘트** | 틀린 번호는 순응도 저항도 아님 · 리포트에 "틀린 번호도 부르지 않는 것이 원칙" 안내 | 행동을 정확히 기록 | 판정 체계·리포트 문구·테스트 변경 필요(별건 규모) |
+
+### 77.6 남은 위험
+
+| # | 항목 | 확인 방법 |
+|---|---|---|
+| **OQ-A106** | 지시는 강제가 아니다 — 모델이 대조를 놓치거나, 맞는 번호를 틀렸다고 할 수 있다(음성 인식 숫자 오차) · 도착 턴에 번호를 먼저 말해 버릴 위험은 문면으로만 막는다(테스트로 못 잡는다) | 배포 후 인증번호 도착 턴과 다음 사기범 발화 관찰(번호 섞임 · 반복 지적) |
+| **OQ-A107** | ElevenLabs 실시간 경로에는 문자 도착 지시가 **원래 닿지 않는다** — `instructionTurn`은 Gemini 세션에만 내려가고(`src/app/session/play/page.tsx:1591`), `RealtimeVoiceSession.tsx`에는 `instructionTurn`·`announceInstruction` 참조가 0건(grep) ⇒ 이 변경의 영향 0, 그 경로에서는 대조 불가(추정 — page.tsx 해당 부근 전체는 읽지 않음) | ElevenLabs 세션의 문자 도착 처리 설계(별건) |
+| 정책 | 77.5 리포트 판정 | User 결정 |
+
+> **번호**: §77 · G475~G478 · OQ-A106~A107 · #127 — main `21dc6e7`(#299 병합: §76 · G471~G474 · OQ-A103~A105 · #126) 다음 번호. ⛔ 예약 아님.

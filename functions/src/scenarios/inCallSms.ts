@@ -259,6 +259,31 @@ export function findInCallSmsItem(scenarioId: string, smsId: string): InCallSmsI
 }
 
 /**
+ * 인증번호 대조 지시(2026-10-18 사용자 신고 — 문자로 보낸 번호와 다른 번호를 불러도 사기범이 그냥 진행했다).
+ *
+ * 원인: 모델이 받는 문자 도착 지시(`announceInstruction`)와 시스템 프롬프트 어디에도 **실제로 보낸 번호가 없었다**
+ * ⇒ 대조 자체가 불가능했다. 실제 사기범은 번호가 틀리면 다시 불러 달라고 한다(훈련의 현실성).
+ *
+ * 전달 위치(Architecture §77.2 비교): 번호는 **문자가 도착한 뒤에만** 모델에 준다 — 실시간은 도착 응답의 지시
+ * (`buildInCallSmsResponse`, Live 세션 문맥에 남는다), 텍스트 폴백은 도착 이후 매 턴의 시스템 프롬프트
+ * (`roleplay/otpCheck.ts`). ⛔ 세션 시작 시스템 프롬프트에 넣지 않는다 — 문자가 오기 전에 모델이 번호를 먼저
+ * 말해 버릴 수 있다(`announceInstruction`의 "번호를 네가 지어내서 말하지 마라"와 같은 이유).
+ */
+export function buildOtpCheckInstruction(otpCode: string): string {
+  return (
+    `(참고 — 상대에게 보낸 인증번호 문자 속 번호는 ${otpCode}이다. **이 번호를 네가 먼저 말하거나 일부라도 알려 주지 마라.** ` +
+    "상대가 인증번호를 불러 줄 때만 이 값과 한 자리씩 대조하라. 다르면 다음 단계로 넘어가지 말고 " +
+    '"번호가 안 맞는데요, 문자 다시 확인해서 불러 주세요."처럼 다시 확인해 달라고 요구하라. 같으면 확인됐다고 하고 다음 단계로 진행한다. ' +
+    "이미 맞는 번호를 확인했다면 이 대조를 다시 꺼내지 말고 하던 이야기를 이어 간다 — 금액·시각 같은 다른 숫자나 짧은 대답에 번호가 틀렸다고 하지 않는다.)"
+  );
+}
+
+/** 이 시나리오의 인증번호 문자 항목(`kind==="otp"` · `otpCode` 있음). 없으면 빈 배열. */
+export function listOtpItems(scenarioId: string): InCallSmsItem[] {
+  return (IN_CALL_SMS[scenarioId] ?? []).filter((item) => item.kind === "otp" && Boolean(item.otpCode));
+}
+
+/**
  * 클라(실시간 경로)에 내려보내는 트리거 목록 — **본문·인증번호·발신번호는 포함하지 않는다**
  * (사전 유출 방지, API.md `createRealtimeCall` T57 증분). 클라는 턴만 세고 `deliverInCallSms`를
  * 부르며, 실제 렌더는 Firestore 구독이 담당한다.
