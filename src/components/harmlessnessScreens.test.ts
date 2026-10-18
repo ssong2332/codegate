@@ -101,6 +101,7 @@ const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   // 사기 표면이 아닌 공용 컨트롤·표식 — 문구 스캔 대상이 아니다(그래도 등록은 강제한다).
   "AgeGate.tsx": false, // 연령 확인 게이트
   "AuthInvalidationBanner.tsx": false, // 인증 무효화 안내 배너(T128) — 앱 자신의 고지이지 사기 표면이 아니다
+  "CallStartNotice.tsx": false, // T190-8b 통화 벨 직전 고지(UX-014 pre-call-notice) — 앱 자신의 세션 전 고지, 사기 표면 아님
   "CallWaveform.tsx": false, // 통화 파형 시각화
   "DeviceSkinPicker.tsx": false, // T190-6 세션 전 화면 모양 선택 줄 — 앱 자신의 설정 부품, 사기 표면 아님
   "DrilldownOptionCard.tsx": false, // 드릴다운 선택 카드

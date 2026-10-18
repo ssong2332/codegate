@@ -139,3 +139,21 @@ export function startIncomingAlert(
     },
   };
 }
+
+/**
+ * T190-8b(§73.7 "D-102 대비 구멍" · §73.12 (3) ⑤ · OQ-A95 ⓐ) — "준비됐어요" 탭 핸들러 **안**(사용자 제스처)에서
+ * 벨용 오디오 컨텍스트를 만들고 깨운다. iOS Safari는 그 화면에서의 탭 없이 소리를 낼 수 없을 것으로 **추정**되므로
+ * (§73.2 ③-b) 여기서 만든 컨텍스트를 `startIncomingAlert(skin, { primedContext })`로 넘긴다. 실패 = `null`(무음 폴백 —
+ * 오류 문구 0). ⚠️ 에스컬레이션 진입은 이 탭이 없어 iOS 벨이 여전히 무음일 수 있다(OQ-A95 ⓐ 범위 — 그대로 둔다).
+ */
+export function primeIncomingAlertAudio(): AudioContext | null {
+  try {
+    const Ctor = audioContextCtor();
+    if (!Ctor) return null;
+    const ctx = new Ctor();
+    void ctx.resume().catch(() => {});
+    return ctx;
+  } catch {
+    return null;
+  }
+}

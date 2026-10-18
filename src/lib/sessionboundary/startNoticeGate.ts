@@ -26,3 +26,37 @@ export function decideMessengerStartNotice(
   if (input.sessionEnded) return "ended-footer";
   return "show";
 }
+
+// ── T190-8b — 통화 화면 초기 phase(docs/Architecture.md §73.22 (3) · G463 · UX-014 v1.33 (11) · PRD AC-091 (b)(g)) ──
+//
+// 진리표(위에서부터 첫 매치 — ⛔ 표 밖 분기를 더하지 않는다):
+//   ① status === "ended"                        → "ended"
+//   ② status === "active" && answered           → "live"            (현행 새로고침 복원 그대로)
+//   ③ isEscalated                               → "incoming"        (OQ-52 (ㄴ) — 프리롤 없는 벨 · pre-call-notice 미경유)
+//   ④ preCallNoticeSeen                         → "incoming"        (새로고침 생략 — AC-087 (c))
+//   ⑤ 그 밖                                      → "pre-call-notice"
+// ⚠️ 표에 없는 조합 1건(구현 판단 — 보고 대상): answered가 참인데 status가 active가 아닌 경우. 예전 코드는 이때
+// 벨 화면(incoming)에 머물렀다 — 그 동작을 지킨다(이미 "받기"를 누른 세션이니 고지는 이미 지난 것이다).
+
+export type CallPhase = "pre-call-notice" | "incoming" | "connecting" | "opening" | "live" | "ended";
+
+export type InitialCallPhaseInput = {
+  /** 세션 문서 `status`. */
+  status: string | undefined;
+  /** 이 탭에서 "받기"를 했거나(비에스컬레이션은 turnCount ≥ 1 포함) — play의 기존 `answered` 계산 그대로. */
+  answered: boolean;
+  /** `entryChannel === "messenger"` — 메신저에서 시작해 통화로 넘어온 세션(에스컬레이션 · UF-012 포함). */
+  isEscalated: boolean;
+  /** 이 탭에서 이 세션의 벨 직전 고지를 이미 확인했다(`isPreCallNoticeSeen`). */
+  preCallNoticeSeen: boolean;
+};
+
+export function decideInitialCallPhase(
+  input: InitialCallPhaseInput,
+): Extract<CallPhase, "pre-call-notice" | "incoming" | "live" | "ended"> {
+  if (input.status === "ended") return "ended";
+  if (input.status === "active" && input.answered) return "live";
+  if (input.isEscalated) return "incoming";
+  if (input.preCallNoticeSeen || input.answered) return "incoming";
+  return "pre-call-notice";
+}

@@ -17,11 +17,16 @@ import { useEffect, useRef } from "react";
 import EndTrainingButton from "./EndTrainingButton";
 import DeviceSkinPicker from "./DeviceSkinPicker";
 import { Button } from "./ui";
-import { MESSENGER_START_NOTICE } from "@/lib/sessionboundary/preSessionCopy";
+import { MESSENGER_START_NOTICE, MESSENGER_START_NOTICE_WITH_CALL } from "@/lib/sessionboundary/preSessionCopy";
 import type { DeviceSkin, DeviceSkinSource } from "@/lib/phone/deviceSkin";
 
 type MessengerStartNoticeProps = {
   surface: "kakao" | "sms";
+  /**
+   * T190-8a(§73.22 (2) · OQ-52 (ㄴ)) — 이 시나리오가 전화로 이어질 수 있는가(`Boolean(scenario.escalation)` — 시나리오
+   * 성질이지 진입 채널이 아니다). 참이면 제목·고지 ①을 "메시지와 전화" 변형으로, 고지 ①-2(합성 음성)를 더한다.
+   */
+  includesCall: boolean;
   onConfirm: () => void;
   onEndTraining: () => void;
   /**
@@ -37,6 +42,7 @@ type MessengerStartNoticeProps = {
 
 export default function MessengerStartNotice({
   surface,
+  includesCall,
   onConfirm,
   onEndTraining,
   skinPicker,
@@ -65,9 +71,16 @@ export default function MessengerStartNotice({
           tabIndex={-1}
           className="text-[26px] font-bold leading-[1.35] text-[#22303A] outline-none"
         >
-          {MESSENGER_START_NOTICE.title}
+          {includesCall ? MESSENGER_START_NOTICE_WITH_CALL.title : MESSENGER_START_NOTICE.title}
         </h1>
-        <p className="text-base leading-[1.7] text-[#6B655C]">{MESSENGER_START_NOTICE.notice}</p>
+        <p className="text-base leading-[1.7] text-[#6B655C]">
+          {includesCall ? MESSENGER_START_NOTICE_WITH_CALL.notice : MESSENGER_START_NOTICE.notice}
+        </p>
+        {includesCall && (
+          <p className="text-base leading-[1.7] text-[#6B655C]">
+            {MESSENGER_START_NOTICE_WITH_CALL.callVoiceNotice}
+          </p>
+        )}
         {surface === "kakao" && (
           <p className="text-base leading-[1.7] text-[#6B655C]">
             {MESSENGER_START_NOTICE.kakaoDisclaimer}

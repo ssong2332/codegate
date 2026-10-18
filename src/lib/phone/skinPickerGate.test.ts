@@ -83,7 +83,14 @@ function sameSkinViolations(play: string): string[] {
   if (!code.includes("callTokensFor(deviceSkin.skin)")) out.push("통화 셸이 deviceSkin.skin을 쓰지 않는다");
   if (!code.includes("bannerTokensFor(deviceSkin.skin)")) out.push("배너가 deviceSkin.skin을 쓰지 않는다");
   if (!/<InCallSmsOverlay[\s\S]*?skin=\{deviceSkin\.skin\}/.test(code)) out.push("문자함이 통화 셸과 같은 스킨을 받지 않는다");
-  if ((code.match(/setDeviceSkin\(/g) ?? []).length !== 1) out.push("스킨을 정하는 지점이 1곳이 아니다(세션 중 바뀔 수 있다)");
+  // T190-8b(§73.12 (3) ⑥) — 정하는 지점 = 세션 로드 1곳 + 벨 직전 고지(세션 전)의 화면 모양 선택 1곳. 둘 외의 지점이
+  // 생기면 세션 중(벨 이후)에 스킨이 바뀔 수 있다.
+  if ((code.match(/setDeviceSkin\(/g) ?? []).length !== 2) out.push("스킨을 정하는 지점이 2곳(로드·세션 전 선택)이 아니다");
+  const chooser = code.slice(code.indexOf("const handleChooseCallSkin"), code.indexOf("const handleAnswer"));
+  if (!chooser.includes("setDeviceSkin({ skin: next, source: \"manual\" })")) out.push("세션 전 선택 지점이 handleChooseCallSkin 밖이다");
+  if ((code.match(/onChange: handleChooseCallSkin/g) ?? []).length !== 1 || !/<CallStartNotice[\s\S]*?onChange: handleChooseCallSkin/.test(code)) {
+    out.push("세션 전 선택 핸들러가 CallStartNotice 밖에서 쓰인다");
+  }
   return out;
 }
 

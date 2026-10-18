@@ -27,6 +27,9 @@ export {
   // T187(§72 D2) — 메신저 시작 전 고지 확인 기록(answered와 같은 범위 · 다른 키, G450).
   markStartNoticeAcknowledged,
   isStartNoticeAcknowledged,
+  // T190-8b(§73.22 (3)) — 통화 벨 직전 고지 확인 기록(같은 범위 · 다른 키).
+  markPreCallNoticeSeen,
+  isPreCallNoticeSeen,
   setSelectedTrainingType,
   getSelectedTrainingType,
   setSelectedVoiceModeChoice,

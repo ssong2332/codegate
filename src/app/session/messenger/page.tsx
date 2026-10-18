@@ -413,6 +413,8 @@ export default function MessengerSessionPage() {
     return (
       <MessengerStartNotice
         surface={surface}
+        // T190-8a(§73.22 (2) · OQ-52 (ㄴ)) — "전화로 확인" 버튼과 같은 술어(에스컬레이션 가능 시나리오).
+        includesCall={Boolean(scenario.escalation)}
         onConfirm={handleConfirmStartNotice}
         onEndTraining={handleEndTraining}
         skinPicker={{ value: messengerSkin, source: skinSource, onChange: handleChooseSkin }}

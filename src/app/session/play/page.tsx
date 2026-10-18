@@ -24,7 +24,9 @@ import {
   consumeOpeningAudioUrl,
   consumeOpeningMessageText,
   getPendingSessionId,
+  isPreCallNoticeSeen,
   isSessionAnswered,
+  markPreCallNoticeSeen,
   markSessionAnswered,
   useSpeechRecognition,
 } from "@/lib/recording";
@@ -54,6 +56,7 @@ import {
   parseStoredDeviceSkin,
   readUaModelHint,
   resolveDeviceSkin,
+  serializeStoredDeviceSkin,
   type DeviceSkin,
   type ResolvedDeviceSkin,
 } from "@/lib/phone/deviceSkin";
@@ -65,7 +68,11 @@ import {
   visibleBannerSmsId,
 } from "@/lib/phone/bannerState";
 import { formatCallElapsed, spokenCallElapsed } from "@/lib/phone/callClock";
-import { startIncomingAlert, type IncomingAlert } from "@/lib/phone/ringtonePlayer";
+import {
+  primeIncomingAlertAudio,
+  startIncomingAlert,
+  type IncomingAlert,
+} from "@/lib/phone/ringtonePlayer";
 import { gainFor, isVolumeApplied, type AudioRoute } from "@/lib/realtime/outputGain";
 import PhoneIcon from "@/components/PhoneIcon";
 import {
@@ -96,7 +103,10 @@ import {
 import { normalizeDifficultyLevel, type DifficultyLevel } from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import { foldDegraded, buildFallbackStatusLine } from "@/lib/report/degradedDisclosure";
-import { PREROLL_NOTICE } from "@/lib/sessionboundary/preSessionCopy";
+// ⭐ T190-8b(docs/Architecture.md §73.22 (1) ⓓ · G438 재지정) — 이 파일은 세션 전 문면 모듈을 import하지 **않는다**.
+// 벨 직전 고지(`pre-call-notice`)는 세션 전 컴포넌트 `CallStartNotice`가 그리고, 벨 화면(`incoming`)에는 문구가 0이다.
+import { decideInitialCallPhase, type CallPhase } from "@/lib/sessionboundary/startNoticeGate";
+import CallStartNotice from "@/components/CallStartNotice";
 import CallWaveform from "@/components/CallWaveform";
 import InCallSmsOverlay from "@/components/InCallSmsOverlay";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
@@ -115,7 +125,8 @@ const GeminiVoiceSession = dynamic(() => import("@/lib/realtime/GeminiVoiceSessi
 });
 
 type PageState = "checking" | "ready" | "no-session" | "scenario-not-found" | "load-error";
-type Phase = "incoming" | "connecting" | "opening" | "live" | "ended";
+// T190-8b(§73.22 (4) #1) — 벨 직전 고지 `pre-call-notice`가 맨 앞에 더해졌다(정의는 startNoticeGate.ts 한 곳).
+type Phase = CallPhase;
 /** realtime = speech-to-speech 실시간 통화, fallback = 기존 STT/텍스트 경로. */
 type CallMode = "undecided" | "realtime" | "fallback";
 
@@ -126,9 +137,14 @@ type ChatMessage = {
   turnIndex: number;
 };
 
-// T187(docs/Architecture.md §72.5 D1) — 벨 화면 세션 전 고지 `PREROLL_NOTICE`는 바이트 그대로
-// `src/lib/sessionboundary/preSessionCopy.ts`로 옮겼다(사용처는 아래 `phase === "incoming"` 1곳 —
-// G438). 이 파일에 표식 낱말 리터럴을 남기지 않기 위해서다(G437).
+// T187(docs/Architecture.md §72.5 D1) — 세션 전 고지 문면은 `src/lib/sessionboundary/preSessionCopy.ts`가 정본이다.
+// ⭐ T190-8b(§73.22 (1) ⓓ · D-102 · AC-091) — 그 고지의 자리가 벨 화면(`incoming`)에서 **벨 직전 고지**
+// (`pre-call-notice` — 세션 전 컴포넌트 `CallStartNotice`)로 옮겨 갔다. 이 파일에는 그 문면도, 그 모듈 import도 없다
+// (G438 — 벨 화면 프리롤 0이 import 0 한 줄로 증명된다). 표식 낱말 리터럴도 남기지 않는다(G437).
+
+// T190-8b(UX-014 v1.33 (11) ① "탭 뒤" · §73.22 (3)) — "준비됐어요" 뒤 벨이 울리기 전 짧은 정적(빈 통화 배경).
+// 0.6~1.2초 범위의 **설계 추정값**(실제 착신까지의 짧은 정적 — 확인: 실기 관찰).
+const PRE_CALL_GAP_MS = 800;
 
 // T83/UX-031 States — "연결 중…" 연출 길이. **고정값**이다(랜덤 없음 = 테스트 결정론, §16.2).
 // ⚠️ 이 구간은 화면 연출일 뿐 실제 발신이 아니다(AC-019). 이 동안에도 통화 축소 표시·"훈련 종료"가
@@ -148,7 +164,14 @@ export default function SessionCallPage() {
   // 마운트 시 한 번만 읽는다(재렌더마다 다시 읽어 소진되는 것을 방지).
   const [openingMessageText] = useState<string | null>(() => consumeOpeningMessageText());
   const [pageState, setPageState] = useState<PageState>(sessionId ? "checking" : "no-session");
-  const [phase, setPhase] = useState<Phase>("incoming");
+  // T190-8b — 세션 문서를 읽기 전 초기값은 "아무 일도 일어나지 않는" 벨 직전 고지다(벨·구독·연결 0). 실제 값은
+  // 아래 세션 로드에서 `decideInitialCallPhase`(G463)가 정한다.
+  const [phase, setPhase] = useState<Phase>("pre-call-notice");
+  // "준비됐어요"를 누른 뒤 벨까지의 짧은 정적 동안 true(빈 통화 배경만 그린다).
+  const [preCallLeaving, setPreCallLeaving] = useState(false);
+  const preCallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // "준비됐어요" 탭(사용자 제스처) 안에서 만든 벨 오디오 컨텍스트 — 벨 effect가 한 번 넘겨받는다(§73.7).
+  const primedAlertContextRef = useRef<AudioContext | null>(null);
   const [callMode, setCallMode] = useState<CallMode>("undecided");
   const [scenario, setScenario] = useState<ScenarioDoc | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -441,23 +464,30 @@ export default function SessionCallPage() {
         //
         // T30 수정(검증 중 발견): entryChannel==="messenger"(에스컬레이션 세션)는 메신저 단계에서
         // 이미 turnCount≥1이 쌓인 채로 이 화면에 처음 진입한다 — turnCount만으로 판단하면 P-18
-        // "수신(벨) 화면 인계"를 건너뛰고 곧장 통화 중으로 복원돼 사전 고지(PREROLL_NOTICE)·수신
-        // 연출이 통째로 스킵되는 회귀가 있었다(AC-036 "사전 고지 유지" 위반). 에스컬레이션 세션은
-        // isSessionAnswered 플래그(이 화면에서 실제로 "받기"를 눌렀는지)만으로 판단한다.
+        // "수신(벨) 화면 인계"를 건너뛰고 곧장 통화 중으로 복원돼 수신 연출이 통째로 스킵되는 회귀가
+        // 있었다. 에스컬레이션 세션은 isSessionAnswered 플래그(이 화면에서 실제로 "받기"를 눌렀는지)만으로 판단한다.
+        // ⭐ T190-8b(OQ-52 (ㄴ) · UX-014 v1.33 (11) ③ · §73.22 (3)) — 에스컬레이션 세션의 벨 화면에는 이제 프리롤이
+        // **없다**(예전 "사전 고지 유지" 근거는 뒤집혔다). 그 통화의 사전 고지는 메신저 시작 전 고지가 "메시지와 전화"로
+        // 맡는다(T190-8a). 에스컬레이션은 벨 직전 고지(`pre-call-notice`)도 거치지 않고 `incoming`으로 바로 간다.
         const isEscalated = data.entryChannel === "messenger";
         const answered =
           isSessionAnswered(sessionId) || (!isEscalated && (data.turnCount as number) >= 1);
-        if (data.status === "ended") {
-          setPhase("ended");
-        } else if (data.status === "active" && answered) {
+        // G463 — 초기 phase 진리표는 순수 함수 하나가 소유한다(이 자리에서 분기를 다시 짜지 않는다).
+        const initialPhase = decideInitialCallPhase({
+          status: data.status as string | undefined,
+          answered,
+          isEscalated,
+          preCallNoticeSeen: isPreCallNoticeSeen(sessionId),
+        });
+        if (initialPhase === "live") {
           const answeredAtMs =
             (data.answeredAt as { toMillis?: () => number } | undefined)?.toMillis?.() ?? null;
           if (answeredAtMs) {
             setElapsedSec(Math.max(0, Math.floor((Date.now() - answeredAtMs) / 1000)));
           }
           setCallMode("fallback");
-          setPhase("live");
         }
+        setPhase(initialPhase);
         setPageState("ready");
       } catch {
         if (!cancelled) setPageState("load-error");
@@ -471,7 +501,7 @@ export default function SessionCallPage() {
   // 대화 로그 구독 — 폴백 경로의 자막/이력용. 실시간 경로는 음성이 주채널이라 자막이 없을 수 있다.
   // "받기" 전에는 구독하지 않아 아직 공개되지 않은 오프닝 텍스트가 미리 새지 않는다.
   useEffect(() => {
-    if (!sessionId || phase === "incoming" || phase === "connecting") return;
+    if (!sessionId || phase === "pre-call-notice" || phase === "incoming" || phase === "connecting") return;
     const messagesQuery = query(
       collection(db, "sessions", sessionId, "messages"),
       orderBy("turnIndex", "asc"),
@@ -496,7 +526,7 @@ export default function SessionCallPage() {
   // 실시간은 deliverInCallSms가, 폴백 텍스트는 sendMessage가 같은 컬렉션에 쓰므로 화면 코드가
   // 갈라지지 않는다. 콜러블 응답은 렌더 소스가 아니다.
   useEffect(() => {
-    if (!sessionId || phase === "incoming" || phase === "connecting") return;
+    if (!sessionId || phase === "pre-call-notice" || phase === "incoming" || phase === "connecting") return;
     const smsQuery = query(
       collection(db, "sessions", sessionId, "inCallSms"),
       orderBy("arrivedAt", "asc"),
@@ -532,7 +562,7 @@ export default function SessionCallPage() {
   // 콜러블 응답에는 모델 지시만 실리고 창구명·번호는 이 구독으로만 화면에 들어온다(사전 유출 방지).
   // 문서를 소스로 삼기 때문에 **새로고침·재마운트 후에도 재연결 상태(발신자 라벨)가 유지**된다.
   useEffect(() => {
-    if (!sessionId || phase === "incoming" || phase === "connecting") return;
+    if (!sessionId || phase === "pre-call-notice" || phase === "incoming" || phase === "connecting") return;
     const verifyQuery = query(
       collection(db, "sessions", sessionId, "verifyIntercept"),
       orderBy("offeredAt", "asc"),
@@ -885,7 +915,8 @@ export default function SessionCallPage() {
 
   // 통화 경과 타이머 — "받기"(answeredAt) 기점, ended면 정지.
   useEffect(() => {
-    if (phase === "incoming" || phase === "ended") return;
+    // T190-8b(§73.22 (4) #4) — 벨 직전 고지에서도 돌지 않는다(타이머 = 받기 기점 · OQ-U8).
+    if (phase === "pre-call-notice" || phase === "incoming" || phase === "ended") return;
     const interval = setInterval(() => {
       elapsedSecRef.current += 1;
       setElapsedSec(elapsedSecRef.current);
@@ -1067,7 +1098,10 @@ export default function SessionCallPage() {
   // (`pre-call-notice` 탭 — T190-8b)까지 무음일 수 있다(User 결정 OQ-A95 ⓐ — 그대로 둔다).
   useEffect(() => {
     if (pageState !== "ready" || phase !== "incoming") return;
-    const alert = startIncomingAlert(deviceSkin.skin);
+    // T190-8b — "준비됐어요" 탭에서 미리 깨운 컨텍스트가 있으면 넘긴다(소유권 이전 — 알림이 stop에서 닫는다).
+    const primedContext = primedAlertContextRef.current ?? undefined;
+    primedAlertContextRef.current = null;
+    const alert = startIncomingAlert(deviceSkin.skin, { primedContext });
     incomingAlertRef.current = alert;
     const handlePageHide = () => alert.stop();
     window.addEventListener("pagehide", handlePageHide);
@@ -1093,6 +1127,39 @@ export default function SessionCallPage() {
     const timer = setTimeout(() => setBannerExpiredSmsId(bannerSmsId), BANNER_VISIBLE_MS);
     return () => clearTimeout(timer);
   }, [bannerSmsId, bannerPausedSmsId]);
+
+  // T190-8b(UX-014 v1.33 (11) ① · §73.22 (3) · AC-087 (c)) — "준비됐어요". ① 이 세션의 고지 확인 기록(새로고침 생략)
+  // ② **이 제스처 안에서** 벨 오디오를 준비(iOS 자동재생 — OQ-A95 ⓐ의 해제 지점) ③ 짧은 정적 뒤 벨(`incoming`).
+  const handleConfirmPreCallNotice = () => {
+    if (preCallLeaving) return;
+    if (sessionId) markPreCallNoticeSeen(sessionId);
+    primedAlertContextRef.current = primeIncomingAlertAudio();
+    setPreCallLeaving(true);
+    preCallTimerRef.current = setTimeout(() => {
+      preCallTimerRef.current = null;
+      setPhase("incoming");
+      setPreCallLeaving(false);
+    }, PRE_CALL_GAP_MS);
+  };
+
+  // 정적 중에 화면을 떠나면 타이머와 준비한 컨텍스트를 정리한다(벨이 울리지 않은 채 컨텍스트가 남지 않게).
+  useEffect(() => {
+    return () => {
+      if (preCallTimerRef.current) clearTimeout(preCallTimerRef.current);
+      void primedAlertContextRef.current?.close().catch(() => {});
+    };
+  }, []);
+
+  // T190-8b(§73.12 (3) ⑥ · D-100 (2)) — 통화 경로의 세션 전 화면 모양 선택. 서버 쓰기 0(§73.5 (2) — 같은 기기에서
+  // 표 K가 결정론적이다) · 기기 저장(`fv.deviceSkin.v1` — 새로고침·다음 세션의 K-2). ⛔ 세션 중(벨 이후)에는 부르는 곳 0.
+  const handleChooseCallSkin = (next: "ios" | "samsung") => {
+    setDeviceSkin({ skin: next, source: "manual" });
+    try {
+      window.localStorage.setItem(DEVICE_SKIN_STORAGE_KEY, serializeStoredDeviceSkin(next, Date.now()));
+    } catch {
+      // 저장소를 쓸 수 없으면 이번 세션 값만 남는다(비차단).
+    }
+  };
 
   const handleAnswer = () => {
     // T190-4(§73.7) — 전이 렌더 전에 **즉시** 벨을 멈춘다(실시간 오디오와 겹침 0). cleanup도 다시 부르지만 멱등이다.
@@ -1383,10 +1450,33 @@ export default function SessionCallPage() {
     );
   }
 
+  // ⭐ T190-8b(docs/Architecture.md §73.22 (1) ⓓ · G438 · D-102 · AC-091) — 벨 직전 고지. 세션 전 컴포넌트를 이
+  // early return 하나에서만 그린다(메신저 `if (startNotice === "show")`와 같은 형태). 이 시점엔 실시간 세션 컴포넌트가
+  // 아직 마운트되지 않았다(마운트 조건 = 받기 뒤 자격증명) — early return이 통화를 끊지 않는다.
+  if (phase === "pre-call-notice") {
+    // "준비됐어요" 뒤 짧은 정적 — 빈 통화 배경(UX-014 v1.33 (11) ① "탭 뒤"). 문구 0.
+    if (preCallLeaving) {
+      return (
+        <main
+          aria-busy="true"
+          className="min-h-screen"
+          style={{ backgroundColor: callTokensFor(deviceSkin.skin).bg }}
+        />
+      );
+    }
+    return (
+      <CallStartNotice
+        onConfirm={handleConfirmPreCallNotice}
+        onEndTraining={() => void handleEndTraining()}
+        skinPicker={{ value: deviceSkin.skin, source: deviceSkin.source, onChange: handleChooseCallSkin }}
+      />
+    );
+  }
+
   // T75(2026-07-25, 사용자 요청) — 발신자 표기에서 "(사칭)"을 제거하고 **번호만** 보여준다.
   // 실제 보이스피싱은 모르는 번호로 걸려오며, 화면에 "사칭"이라고 적혀 있으면 판단 훈련이
-  // 성립하지 않는다(정답을 미리 알려주는 셈). 시뮬레이션 고지는 수신 화면의 사전 고지
-  // (PREROLL_NOTICE)가 담당한다(AC-012 무변경 · T187 §72 — 세션 중 상시 표식은 폐지, AC-086).
+  // 성립하지 않는다(정답을 미리 알려주는 셈). 시뮬레이션 고지는 벨 직전 고지(`pre-call-notice` —
+  // T190-8b) · 에스컬레이션은 메신저 시작 전 고지가 담당한다(AC-012 무변경 · AC-086 · AC-091).
   // T83(§16.2 발신자 라벨 전환) — 모의 재연결 후에는 구독 중인 **문서의** `reconnectedCallerLabel`을
   // 우선 표시한다(UX-014 `verify-reconnected` state). 클라 상태가 아니라 문서를 소스로 삼는 이유:
   // 새로고침·재마운트 후에도 재연결 상태가 유지되고, 실시간·폴백 두 경로의 렌더 코드가 갈라지지
@@ -1655,13 +1745,9 @@ export default function SessionCallPage() {
           )}
         </div>
 
-        {/* ⚠️ T190-3은 이 블록의 자리·조건을 바꾸지 않는다 — 벨 화면 프리롤의 이동(`pre-call-notice`)은
-            T190-8b의 몫이다(§73.12 (1) · G438 무변경). */}
-        {phase === "incoming" && (
-          <p role="status" className="max-w-xs text-center text-sm leading-relaxed text-[#C9D4DB]">
-            {PREROLL_NOTICE}
-          </p>
-        )}
+        {/* ⛔ T190-8b(D-102 · AC-091 (c) · G438 재지정) — 벨 화면(`incoming`)의 세션 전 고지 문장을 지웠다. 같은 고지는
+            벨 직전 고지(`CallStartNotice` — 위 early return)로 옮겨 갔고, 에스컬레이션 벨은 메신저 시작 전 고지가 맡는다.
+            빈 자리를 채우지 않는다. */}
 
         {/* 통화 중 발화 인디케이터 — 실제 통화 화면에 있는 유일한 "상태" 표시다.
             자막·안내문·오류는 여기 두지 않는다(2026-07-22 사용자 피드백: 화면이 통화처럼 안 보임)
