@@ -14,7 +14,7 @@ import { maskPII } from "../guardrails";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from "../llm";
 import { triggerReportGeneration } from "../report";
-import { SCENARIO_PROMPTS } from "../scenarios";
+import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { findDueInCallSms, hasInCallSms } from "../scenarios/inCallSms";
 import {
   hasAppInstallMockScreen,
@@ -88,7 +88,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       throw new HttpsError("failed-precondition", "이미 종료되었거나 활성 상태가 아닌 세션입니다.");
     }
 
-    const scenarioPrompt = SCENARIO_PROMPTS[session.scenarioId];
+    // T191 S5(AC-096 (e)(f)) — 세션에 배정된 흐름 변형을 합성한 프롬프트(부재 = 원본 · 무소급).
+    const scenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId);
     if (!scenarioPrompt) {
       throw new HttpsError(
         "internal",

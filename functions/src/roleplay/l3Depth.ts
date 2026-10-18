@@ -60,6 +60,12 @@ export const L3_DEPTH_TABLE: Record<string, "procedural" | "reduced"> = {
   "grandchild-impersonation": "reduced",
   "messenger-child-impersonation-kakao": "reduced",
   "messenger-friend-loan-kakao": "reduced",
+  // T191 S5 — 고급 전용 3종(Architecture T191 절 "표 갱신(같은 커밋)" — 셋 다 procedural 후보 → 확정).
+  // 판정 질문(§17.5)에 대한 답: 셋 다 기관·카드사 직원 사칭이라 접수번호·처리 단계·기한을 말해도
+  // 캐릭터가 무너지지 않는다.
+  "card-delivery-call": "procedural", // 카드 사고 접수 상담원(+ 확인 무력화 카탈로그 → d3_and_d4)
+  "asset-protection-notice-call": "procedural", // 금융감독기관 직원: 보관 조치 접수 절차
+  "prosecution-cooperation-call": "procedural", // 검찰 수사관: 수사 절차·영장 언급
 };
 
 /**

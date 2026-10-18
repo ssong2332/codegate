@@ -38,10 +38,11 @@ function catalogTexts(): [string, string][] {
   return texts;
 }
 
-test("[T191/S3 · G490] 문자 안내 11건 + 확인 권유 6건 — 재촉·다급 0 · 인용 예시 0 · 대답 안에서 말하기 · 따로 말 꺼내기 금지", () => {
+// T191 S5 — 확인 권유는 card-delivery-call(고급 전용 ①, AC-071 메커닉 재사용) 1건이 늘어 7건이다.
+test("[T191/S3 · G490] 문자 안내 11건 + 확인 권유 7건 — 재촉·다급 0 · 인용 예시 0 · 대답 안에서 말하기 · 따로 말 꺼내기 금지", () => {
   const texts = catalogTexts();
   assert.equal(texts.filter(([w]) => w.startsWith("sms ")).length, 11, "문자 안내 건수(카탈로그가 바뀌면 이 숫자를 확인하고 갱신)");
-  assert.equal(texts.filter(([w]) => w.startsWith("verify ")).length, 6, "확인 권유 건수");
+  assert.equal(texts.filter(([w]) => w.startsWith("verify ")).length, 7, "확인 권유 건수");
   const violations = texts.flatMap(([where, text]) => g490Violations(where, text));
   assert.deepEqual(violations, []);
 });

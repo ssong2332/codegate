@@ -334,7 +334,7 @@ test("[AC-071] reconnectInstruction은 **다른 담당자**로 전환시키고 �
 // 행에 따라 **architect에 값을 먼저 물어야 한다**(임의 판단 금지).
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** §26.4 값 표의 기계 사본 — **offerId 6종 전수**. 이 표가 게이트 값의 정본이다. */
+/** §26.4 값 표의 기계 사본 — **offerId 7종 전수**(T191 S5 +1). 이 표가 게이트 값의 정본이다. */
 const EXPECTED_GATE_BY_OFFER_ID: Record<string, number> = {
   // ── 계열 B — 본론이 다른 수법(기관·금융 사칭 등)이고 확인 무력화는 **부가**다. 확정값 4.
   //    근거: 사기범 턴 1~3이 인사·사안 고지·본인 확인으로 소비되는 전형 구간이라, 원 권고의
@@ -344,6 +344,9 @@ const EXPECTED_GATE_BY_OFFER_ID: Record<string, number> = {
   "loan-verify-desk": 4,
   "tax-verify-desk": 4,
   "courier-verify-desk": 4,
+  // T191 S5 — 고급 전용 ① card-delivery-call(AC-097 (c) ① 메커닉 재사용). 본론이 배송 안내·명의 도용·
+  // 앱 설치 요구라 확인 무력화는 **부가**다 → 계열 B 값 4(verifyIntercept.ts 항목 주석).
+  "card-delivery-verify-desk": 4,
   // ── 계열 A — 시나리오 **자체가** 확인 무력화 체험을 위해 저작된 것. 확정값 2(**유지**).
   //    ⛔ 일관성을 이유로 4로 올리지 말 것(G108) — 확인 우회가 본론이라 참가자가 확인을 시도할
   //    시간을 넉넉히 줘야 하고, 그것이 T95가 이 시나리오를 만든 이유다(`verifyIntercept.ts:155-162`).
@@ -916,7 +919,7 @@ const EXIT_RULE_PARTS: readonly RegExp[] = [
   /번갈아\s*말하/, // 두 화자가 번갈아 말하는 형태 금지(신고된 증상)
 ];
 
-test("[T110/G82] 6종 × 고급 × 확인 무력화 — 조립 프롬프트의 **상시 블록**에 퇴장 규칙이 들어 있고 가드레일보다 앞이다", () => {
+test("[T110/G82] 7종 × 고급 × 확인 무력화 — 조립 프롬프트의 **상시 블록**에 퇴장 규칙이 들어 있고 가드레일보다 앞이다", () => {
   const seen: string[] = [];
   for (const scenarioId of Object.keys(VERIFY_INTERCEPT)) {
     const prompt = SCENARIO_PROMPTS[scenarioId];
@@ -944,7 +947,7 @@ test("[T110/G82] 6종 × 고급 × 확인 무력화 — 조립 프롬프트의 *
     );
     seen.push(scenarioId);
   }
-  assert.equal(seen.length, 6, "6종 전수여야 한다(부분 정정 차단)");
+  assert.equal(seen.length, 7, "7종 전수여야 한다(부분 정정 차단 — T191 S5 card-delivery-call +1)");
 });
 
 // ⚠️ **T110 / G73·G23 인접 사실 — clone 2종은 A1의 영향을 받지 않는다.**
@@ -1195,20 +1198,21 @@ test("[T110/G85 우회회귀 ⑦] 허용 구문과 금지를 한 절에 섞어�
 // 이 저장소의 반복 실패 양식은 *"1종만 고치고 끝내기"* 다(G84). 게이트가 `Object.values` 순회임을
 // 보이고, **6개 offerId를 나열하는 단언** 1건으로 그 범위를 못박는다.
 // ══════════════════════════════════════════════════════════════════════════════
-test("[T110/§22.6 7단계] 위 게이트의 순회 대상은 카탈로그 **6종 전부**다(부분 정정 차단)", () => {
+test("[T110/§22.6 7단계] 위 게이트의 순회 대상은 카탈로그 **7종 전부**다(부분 정정 차단 — T191 S5 +1)", () => {
   assert.deepEqual(
     Object.values(VERIFY_INTERCEPT).map((item) => item.offerId).sort(),
     [
       "bank-security-verify-desk",
+      "card-delivery-verify-desk",
       "card-verify-desk",
       "courier-verify-desk",
       "institution-verify-desk",
       "loan-verify-desk",
       "tax-verify-desk",
     ],
-    "6종 중 하나라도 빠지거나 늘면 전수 게이트의 범위가 달라진다 — 이 단언을 먼저 고칠 것",
+    "7종(T191 S5 card-delivery-call +1) 중 하나라도 빠지거나 늘면 전수 게이트의 범위가 달라진다 — 이 단언을 먼저 고칠 것",
   );
-  assert.equal(allItems.length, 6);
+  assert.equal(allItems.length, 7);
   // 순회 대상이 곧 `Object.values(VERIFY_INTERCEPT)`라는 사실을 같은 자리에서 고정한다.
   assert.deepEqual(allItems, Object.values(VERIFY_INTERCEPT));
 });
@@ -1225,13 +1229,14 @@ test("[T110/§22.6 7단계] 위 게이트의 순회 대상은 카탈로그 **6�
 // url/tel을 보고, 이쪽은 **"이 필드가 규칙을 복창하지 않는가"** 를 본다.
 // ══════════════════════════════════════════════════════════════════════════════
 
-test("[T118/§25.9 ②] `transferStateLine`이 6종 **전수**에 존재한다(부분 정정 차단)", () => {
+test("[T118/§25.9 ②] `transferStateLine`이 7종 **전수**에 존재한다(부분 정정 차단 — T191 S5 +1)", () => {
   const withLine = Object.values(VERIFY_INTERCEPT)
     .filter((item) => typeof item.transferStateLine === "string" && item.transferStateLine.trim())
     .map((item) => item.offerId)
     .sort();
   assert.deepEqual(withLine, [
     "bank-security-verify-desk",
+    "card-delivery-verify-desk",
     "card-verify-desk",
     "courier-verify-desk",
     "institution-verify-desk",
@@ -1285,7 +1290,7 @@ test("[T118/§25.9 ④-B 역검증] `transferStateLine`이 **빈 문자열**이�
     index === 3 ? { ...item, transferStateLine: "" } : item,
   );
   const withLine = tainted.filter((item) => item.transferStateLine.trim()).map((i) => i.offerId);
-  assert.equal(withLine.length, 5, "한 종만 비어도 6종 전수 단언이 깨져야 한다");
+  assert.equal(withLine.length, 6, "한 종만 비어도 7종 전수 단언이 깨져야 한다");
   assert.notDeepEqual(
     withLine.sort(),
     allItems.map((item) => item.offerId).sort(),

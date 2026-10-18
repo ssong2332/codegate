@@ -86,3 +86,58 @@ export function normalizeDifficultyLevel(value: unknown): DifficultyLevel {
 export function formatDifficultyLabel(level: DifficultyLevel): string {
   return `${DIFFICULTY_LABEL[level]} — ${DIFFICULTY_SUMMARY[level]}`;
 }
+
+// ── T191 S5 — 고급 전용 시나리오(PRD AC-097 · AC-064 갱신 고지 2 · UX D-104 · D-106 · D-107 · 계약 C-1/C-2/C-9) ──
+// ⚠️ 이 블록은 **화면 표시 규칙**만 담는다(수법 · 흐름 정보 0 — 계약 C-4). 강제는 서버가 한다(createSession ·
+// createChallenge가 `difficulty-not-allowed`로 거부). 클라 가드는 충족 수단이 아니다(AC-097 (b)).
+
+/** UX-017 본인 체험 목록의 묶음 제목(D-104 (1) — h2). */
+export const ADVANCED_ONLY_GROUP_TITLE = "고급에서만 할 수 있는 훈련";
+/** 카드 제목 옆 텍스트 태그(D-104 (1) — 색 단독 금지, P-22). */
+export const ADVANCED_ONLY_TAG = "고급 전용";
+/** UX-029 고급 1장 상태의 카드 위 1줄 · 서버 거부(C-2) 시 오류 자리 1줄(D-104 · UX-029 v1.34 (3)). */
+export const ADVANCED_ONLY_LINE = "이 시나리오는 고급으로만 훈련할 수 있습니다.";
+/** 셀프 감금 세션 전 부담 고지 — UX-029 v1.34 (5) D-106 정본(⛔ 그대로 복사 · 의역 금지). */
+export const PRE_SESSION_BURDEN_NOTICE =
+  "이 시나리오는 수사와 처벌을 앞세운 압박이 오래 이어져 다른 훈련보다 마음이 무거울 수 있습니다. 힘들면 언제든 '훈련 종료'로 바로 멈출 수 있고, 끝나면 무엇이 있었는지 모두 알려 드립니다.";
+/** 서버가 고급 전용을 비고급으로 만들려는 요청을 거부할 때 싣는 사유 코드(C-2 — functions/src/session/difficultyAllowance.ts와 같은 문자열). */
+export const DIFFICULTY_NOT_ALLOWED_REASON = "difficulty-not-allowed";
+
+/** 시나리오 메타 중 이 블록이 읽는 필드(구조 타입 — `@/content/scenarios`의 ScenarioDoc이 그대로 맞는다). */
+export type DifficultyAllowanceMeta = { advancedOnly?: true; preSessionBurdenNotice?: true };
+
+/** UX-029가 그릴 난이도 카드 — 고급 전용이면 고급 1장만(비활성 표시 0 — D-40 · D-54), 아니면 3단계 전부(AC-064). */
+export function selectableDifficultyLevels(meta: DifficultyAllowanceMeta): readonly DifficultyLevel[] {
+  return meta.advancedOnly === true ? ["advanced"] : DIFFICULTY_LEVELS;
+}
+
+/**
+ * UX-017 목록 분할 — 기존 카드(순서 무변경) + "고급 전용" 묶음. 지인에게 보내기(send) 목록에서는 고급 전용이
+ * **0건**이다(D-107 · AC-097 (g) — 묶음 제목도 없다).
+ */
+export function partitionScenarioList<T extends DifficultyAllowanceMeta>(
+  entries: readonly (readonly [string, T])[],
+  mode: "self" | "send",
+): { regular: [string, T][]; advancedOnly: [string, T][] } {
+  const regular = entries.filter(([, meta]) => meta.advancedOnly !== true).map(([id, meta]) => [id, meta] as [string, T]);
+  const advancedOnly =
+    mode === "send"
+      ? []
+      : entries.filter(([, meta]) => meta.advancedOnly === true).map(([id, meta]) => [id, meta] as [string, T]);
+  return { regular, advancedOnly };
+}
+
+/** Functions 콜러블 오류에서 `details.reason`을 읽는다(없으면 null) — C-2 거부를 일반 오류와 구분한다. */
+export function readFunctionsErrorReason(err: unknown): string | null {
+  if (!err || typeof err !== "object" || !("details" in err)) return null;
+  const details = (err as { details?: unknown }).details;
+  if (!details || typeof details !== "object" || !("reason" in details)) return null;
+  const reason = (details as { reason?: unknown }).reason;
+  return typeof reason === "string" ? reason : null;
+}
+
+/** 서버가 고급 전용 시나리오의 챌린지 생성을 거부할 때의 사유 코드(D-107 — functions/src/challenge/index.ts와 같은 문자열). */
+export const ADVANCED_ONLY_NOT_CHALLENGEABLE_REASON = "advanced-only-not-challengeable";
+/** UX-019 오류 1줄 — 서버 거부 문면과 같은 뜻(클론 미완료 안내로 잘못 보이지 않게 따로 분기한다). */
+export const ADVANCED_ONLY_NOT_CHALLENGEABLE_LINE =
+  "이 시나리오는 지인에게 보내는 챌린지를 지원하지 않습니다. 다른 시나리오를 선택해 주세요.";

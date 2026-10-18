@@ -15,7 +15,7 @@ import { GoogleGenAI, Modality, EndSensitivity, StartSensitivity } from "@google
 import { asksIdentityCheck } from "../roleplay/personaAuthority";
 import { isL3Procedural } from "../roleplay/l3Depth";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
-import { SCENARIO_PROMPTS } from "../scenarios";
+import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { hasInCallSms } from "../scenarios/inCallSms";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { buildLiveToolDeclarations, buildLiveToolNames, declaresOfferVerificationDesk } from "./liveTools";
@@ -82,7 +82,9 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
   constructor(private readonly apiKey: string) {}
 
   async createCallCredentials(input: RealtimeCallInput): Promise<RealtimeCallCredentials> {
-    const scenarioPrompt = SCENARIO_PROMPTS[input.scenarioId];
+    // T191 S5(AC-096 (e)) — 세션에 배정된 흐름 변형을 합성한 프롬프트(sendMessage · 오프닝과 같은 단일
+    // 해석 지점). flowVariantId 부재 = 원본(무소급).
+    const scenarioPrompt = resolveSessionScenarioPrompt(input.scenarioId, input.flowVariantId);
     if (!scenarioPrompt) {
       throw new Error(`시나리오 프롬프트가 없습니다: ${input.scenarioId}`);
     }

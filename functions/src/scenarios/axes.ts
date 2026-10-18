@@ -35,6 +35,9 @@ import {
   MESSENGER_PARCEL_SMISHING_SMS_SCENARIO_ID,
   MESSENGER_SUBSIDY_SMISHING_SMS_SCENARIO_ID,
   BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID,
+  CARD_DELIVERY_CALL_SCENARIO_ID,
+  ASSET_PROTECTION_NOTICE_CALL_SCENARIO_ID,
+  PROSECUTION_COOPERATION_CALL_SCENARIO_ID,
 } from "./publicMeta";
 
 // ── (a) 축 값의 고정 열거형 5벌 (§15.10.1) ───────────────────────────────────
@@ -374,5 +377,45 @@ export const SCENARIO_AXES: Record<string, ScenarioAxes> = {
     pressure: ["C1_fear_punishment", "C3_urgency_time"],
     exitBlock: ["D3_verification_hijack"],
     demand: ["E2_credential_demand", "E1_transfer_demand"],
+  },
+  // ── T191 S5 — 고급 전용 3종(PRD AC-097 (a) · (h)) ─────────────────────────────
+  //
+  // ⚠️ 이 3행도 PRD 표에서 옮긴 것이 아니라 **저작 시점 결정**이다(T95 행과 같은 처지 — PRD 축 표에
+  // 행 추가는 planner 소관). 근거 라벨은 각 `*.prompt.ts`의 `weakenedTactics`이며 D 좌표는
+  // `__tests__/exitBlockEvidence.test.ts`가 콘텐츠와 양방향 대조한다.
+  //
+  // ① 카드 배송 안내 전화 — A1 전화 수신 · B3 "카드 배송 안내"(배송원) B2 "카드 사고 접수"(카드사)
+  //   · C1 "명의 도용" 공포 C3 "오늘 안에 처리" · **D3 "확인 시도 무력화"**(verifyIntercept.ts
+  //   `card-delivery-verify-desk` 재사용 — AC-071) · E3 "보안 점검 앱 설치 요구"(말로만 — AC-097 (d))
+  //   E2 "본인확인 정보 직접 요구" E1 "자산 보호 이체 요구". 사례 C03 · C04(S4 · S22).
+  //   ⚠️ bank-security-verify-scam과 같은 이유로 D2·D5(확인을 *막는* 수법)는 넣지 않았다.
+  [CARD_DELIVERY_CALL_SCENARIO_ID]: {
+    access: ["A1_cold_call"],
+    impersonation: ["B3_service", "B2_financial"],
+    pressure: ["C1_fear_punishment", "C3_urgency_time"],
+    exitBlock: ["D3_verification_hijack"],
+    demand: ["E3_install_remote_demand", "E2_credential_demand", "E1_transfer_demand"],
+  },
+  // ② 금융감독원 자산 보호 안내(대면 편취) — A1 · B1 "금융감독원 직원" · C1 "범죄 연루" C6 권위
+  //   C3 "오늘 안에" · D2 "비밀 유지 요구"(은행 창구 코칭 포함) **D4 "절차·서류 정당화"**
+  //   · **E4 "인출·전달 요구"**(PRD AC-097 (h) — E4 공백 해소, OQ-39 재개 User 결정 D2) E2 "본인확인
+  //   정보 직접 요구". 사례 C10 · C11 · C02(S16 · S11).
+  [ASSET_PROTECTION_NOTICE_CALL_SCENARIO_ID]: {
+    access: ["A1_cold_call"],
+    impersonation: ["B1_authority"],
+    pressure: ["C1_fear_punishment", "C6_authority_obedience", "C3_urgency_time"],
+    exitBlock: ["D2_secrecy", "D4_procedural_legitimacy"],
+    demand: ["E4_in_person_cash_demand", "E2_credential_demand"],
+  },
+  // ③ 검찰 수사 협조 요청(셀프 감금) — A1 · B1 "검찰 수사관" · C1 "구속 수사 위협" C6 권위
+  //   · D2 "비밀 유지 요구" "고립 유도" D5 "전화 끊음 저지" · **E5 "코인 구매·송금 요구"**
+  //   (PRD AC-097 (h) — "③ 의 가상자산 요구를 E5로 태깅할지는 S5 산출" → 태깅한다: 최종 요구가
+  //   가상자산 그 자체다) E2 "본인확인 정보 직접 요구". 사례 C05~C08(S3 · S25 · S28).
+  [PROSECUTION_COOPERATION_CALL_SCENARIO_ID]: {
+    access: ["A1_cold_call"],
+    impersonation: ["B1_authority"],
+    pressure: ["C1_fear_punishment", "C6_authority_obedience"],
+    exitBlock: ["D2_secrecy", "D5_call_retention"],
+    demand: ["E5_giftcard_crypto_demand", "E2_credential_demand"],
   },
 };

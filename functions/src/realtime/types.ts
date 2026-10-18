@@ -40,6 +40,13 @@ export type RealtimeCallInput = {
    * 무시하며, 그 사실을 `RealtimeCallCredentials.difficultyApplied:false`로 명시한다.
    */
   difficultyLevel?: DifficultyLevel;
+  /**
+   * T191 S5 추가(PRD AC-096 (e)) — 세션에 배정된 흐름 변형의 불투명 ID. Gemini 경로는 이 변형을
+   * 합성한 시나리오 프롬프트(`resolveSessionScenarioPrompt`)를 토큰에 고정한다. ⚠️ ElevenLabs 경로는
+   * 난이도와 마찬가지로 반영 지점이 없어 **무시한다**(변형 미적용 = 현행 — 설계 OQ-A108 기본값).
+   * 부재 = 원본 시나리오 프롬프트.
+   */
+  flowVariantId?: string;
 };
 
 /**

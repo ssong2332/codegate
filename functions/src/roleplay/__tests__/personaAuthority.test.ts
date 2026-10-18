@@ -26,11 +26,12 @@ test("[역검증] 표에서 한 행을 빼면 위 게이트가 실제로 실패�
   );
 });
 
-// ── 강제 장치 ② 분포 고정 — institution 8 / acquaintance 4 / anonymous 2 ──────────
-test("분포가 §50.4.4 확정값과 같다(institution 8 · acquaintance 4 · anonymous 2)", () => {
+// ── 강제 장치 ② 분포 고정 — institution 11 / acquaintance 4 / anonymous 2 ─────────
+// T191 S5 — 고급 전용 3종이 전부 기관·카드사 직원 사칭이라 institution +3(§50.4.4의 8 → 11).
+test("분포가 §50.4.4 확정값 + T191 S5 3종과 같다(institution 11 · acquaintance 4 · anonymous 2)", () => {
   const counts = { institution: 0, acquaintance: 0, anonymous: 0 };
   for (const v of Object.values(PERSONA_AUTHORITY)) counts[v] += 1;
-  assert.deepEqual(counts, { institution: 8, acquaintance: 4, anonymous: 2 });
+  assert.deepEqual(counts, { institution: 11, acquaintance: 4, anonymous: 2 });
 });
 
 test("asksIdentityCheck: institution만 true다(나머지 6종은 false)", () => {
