@@ -17180,11 +17180,21 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | **G443** | M-9 유지분이 *"정리"* 되어 사라짐 | `DIALOGUE_DEGRADED_NOTICE` 값 무변경 · messenger·play가 계속 참조(`foldDegraded`·`buildFallbackStatusLine`) | 참조를 지운 사본 → 실패 | 〃 |
 | **G444** | AC-087/088 시작 고지 순서·잔존 | ① `decideMessengerStartNotice` 진리표 N-1~N-4(입력 8조합 전수) ② messenger 구독 effect 블록에서 `onSnapshot(` **앞**에 `startNotice !== "skip"` 가드 ③ 채팅 `return` 블록에 `MESSENGER_START_NOTICE`·`MessengerStartNotice` 0(잔존 0 · AC-088 (e)) ④ play 구독 가드 `phase === "incoming" \|\| phase === "connecting"`(`:413`) 존재 ⑤ `preSessionCopy` 값 = UX 정본(글자 단위) · `PREROLL_NOTICE` 무변경 ⑥ `MessengerStartNotice`가 `kakaoDisclaimer`를 `surface === "kakao"` 조건 아래에서만 · props에 난이도 0(AC-065) ⑦ difficulty 페이지에 `모의 표식` 0 · 새 넷째 항목 존재(AC-087 (e)) | AC-088 (f) ⓐ 가드 없는 구독 사본 · ⓑ 채팅 목록에 `{MESSENGER_START_NOTICE.notice}`를 넣은 사본 · 판정 함수가 항상 `"skip"`인 대역 → 각각 실패 | `src/lib/sessionboundary/startNoticeGate.test.ts`* |
 | **G445** | AC-089 (b)(c) 사후 공개 누락 · §46.3 규범 이탈 | end 페이지에서 `{POST_SESSION_FACT_DISCLOSURE}` JSX 식 정확히 1회 · 조상에 `ConditionalExpression` · `&&` · `body` 대입 0(최상위 `return` 안) · 값 = UX 정본 · `CLAIM_NEGATION_REGISTRY`(D4) 충족 · 제목·디스컬레이션 두 문단 원문 존재(AC-089 (a)) | `{state === "ended" && …}` 로 감싼 사본 · *"전화"* 를 뺀 상수 사본 · 레지스트리에 없는 kind를 더한 유니언 사본 → 각각 실패 | `src/lib/sessionboundary/postSessionDisclosure.test.ts`* |
-| **G446** | (e) 프롬프트 대사 층 낱말 | 전 시나리오 × 3난이도 × (`inCallSmsEnabled` true/false) × 시나리오별 실제 플래그(`hasVerifyIntercept && advanced` · `isL3Procedural` · `asksIdentityCheck` · `speakerGenderFor`)로 `buildSystemPrompt` 조립 + 턴 지시 문자열(`MOCK_INSTALL_CONSENT_INSTRUCTION` · 문자 `announceInstruction` · 확인 오퍼 `announceInstruction`/`reconnectInstruction`) → **T1**(P-1~P-3: 따옴표 구간 · `[…]` 제목 줄) 낱말 0 · 허용목록 없음 / **T2**(전문) 낱말 0 — 단 `PROMPT_META_ALLOWLIST`(닫힌 목록 · 항목마다 사유: `"가상값"` · `"가상으로 다룬다"` · `"이미 재현하는 것"` · `"네가 재현하는 것은"`)에 든 구간은 따옴표 밖일 때만 제외 · `"조회용 모의 앱 설치"` 0 | `"조회용 모의 앱 설치"` 복원 사본 → T2 검출 · `'가상값으로 보내드릴게요'` 사본 → T1 검출(허용목록 무효) · 메타 문장 사본 → 0 | `functions/src/roleplay/__tests__/promptMarkerWords.test.ts`* |
+| **G446** | (e) 프롬프트 대사 층 낱말 | 전 시나리오 × 3난이도 × (`inCallSmsEnabled` true/false) × 시나리오별 실제 플래그(`hasVerifyIntercept && advanced` · `isL3Procedural` · `asksIdentityCheck` · `speakerGenderFor`)로 `buildSystemPrompt` 조립 + 턴 지시 문자열(`MOCK_INSTALL_CONSENT_INSTRUCTION` · 문자 `announceInstruction` · 확인 오퍼 `announceInstruction`/`reconnectInstruction`) → **T1**(P-1~P-3: 따옴표 구간 · `[…]` 제목 줄) 낱말 0 · 허용목록 없음 / **T2**(전문) 낱말 0 — 단 `PROMPT_META_ALLOWLIST`(닫힌 목록 **5행**(T187 구현 보정 — 설계 4행 + 1) · 항목마다 사유: `"가상값"` · `"가상으로 다룬다"` · `"이미 재현하는 것"` · `"네가 재현하는 것은"` · **`"가상 은행"`**)에 든 구간은 **따옴표 밖 출현일 때만** 제외 · **자기 인용**(메타 규칙을 따옴표로 다시 인용 — 예 `"페이로드는 가상값만 쓴다"`)은 ① 따옴표 안 본문(`**` 제거·trim) **8자 이상** ∧ ② 따옴표 밖 본문에 **앞뒤가 문장 경계인 독립 구절**로 등장 — 둘 다일 때만 T1에서 빠지고, 그 낱말은 **원문(따옴표 밖) 자리**에서 T2로 판정 · `"조회용 모의 앱 설치"` 0 | `"조회용 모의 앱 설치"` 복원 사본 → T2 검출 · `'가상값으로 보내드릴게요'` 사본 → T1 검출(허용목록 무효) · **짧은 대사 사본 → T1 · 부분 겹침 인용 사본 → T1**(reviewer M1) · `[…]` 제목 사본 → T1 · 메타 문장·자기 인용 사본 → 0. 실측 출력: `복원 T2 1 · 대사 T1 1 · 짧은 대사 T1 1 · 부분 겹침 T1 1 · 제목 T1 1 · 메타 0` | `functions/src/roleplay/__tests__/promptMarkerWords.test.ts`* |
 | **G447** | 렌더 하네스 사망(G140) — 생존 신호 이동 | `renderGate.test.ts` 생존 신호 = `text.includes("훈련 종료")`(자식 모듈 `EndTrainingButton` 렌더 증명) ∧ `text.includes(TITLE_SENTINEL)` · 추가 단언 `!text.includes(DIFFICULTY_SENTINEL)`(prop 제거 후 렌더 0) | `poisonedComponentSource("<EndTrainingButton onClick={onEndTraining} />", "")` → 생존 신호 실패 · `assertExistingGateInputsUnchanged`로 G76·AC-079 입력 불변 | `src/lib/mockscreenrender/renderGate.test.ts` |
 | **G448** | G-D 대상 이동(공유 고지가 카탈로그로 이사) | `functions/src/scenarios/__tests__/mockScreens.test.ts` — `ACTIVE_SHARED_NOTICES` = [`POST_SESSION_FACT_DISCLOSURE` 값 · `"훈련 종료"` · `MESSENGER_START_NOTICE.notice` 값] + `RETIRED_IN_SESSION_NOTICES` = [옛 G-D 3종(`:390-392`) · `"실제 설치·권한 부여가 아닙니다"` · `"실제 로그인/전송이 아니며 돈도 오가지 않습니다"` · `"훈련용 모의 화면입니다. 이 화면에서만 재현되며 실제로 전화가 걸리지 않습니다."` · `"(실제로는 아무것도 설치되지 않았고 어떤 권한도 부여되지 않았습니다 — 훈련용 모의 화면입니다.)"`] — 둘 다 카탈로그 `allText`에 0. 루트 쪽 드리프트: `postSessionDisclosure.test.ts`*가 그 functions 테스트 파일 텍스트에 두 모듈 값이 **글자 그대로** 있음을 단언 | 목록마다 1건을 `allText`에 넣은 사본 → 각각 실패 | 기존 파일 + * |
 | **G449** | *"훈련 종료"* 위치 이동(레이아웃) | VerifyCallOverlay · InCallSmsOverlay 헤더 행(자식이 `EndTrainingButton` 하나인 `div`)에 `justify-end` · `justify-between` 0 / MessengerFakeLanding 헤더 `div`에 `justify-end` / messenger 헤더 행에 자식 `div` 2개(왼쪽 래퍼 존속) / MessengerStartNotice 상단 바 `justify-end` | `justify-end` → `justify-between` 사본 → 실패. ⚠️ **실제 배치는 정적 검사가 못 본다** — 브라우저 확인(UX P-36 (8) B-5) | `inSessionMarkers.test.ts`* |
 | **G450** | 확인 기록 키 공유(T30 회귀) | `START_NOTICE_ACK_SESSION_KEY !== ANSWERED_SESSION_KEY` · `clearPendingSession`이 둘 다 지운다 · messenger 페이지에 `markSessionAnswered(` 0 · play 페이지에 `StartNoticeAcknowledged(` 0 | messenger에 `markSessionAnswered(sessionId)`를 넣은 사본 → 실패 | `startNoticeGate.test.ts`* |
+
+**⭐ T187 구현 보정(2026-10-18 · 구현 `c123bf6` · `1afd136` · `a983bbd` · reviewer APPROVED · QA GO — 설계와 달라진 사실 3건, 정본은 아래 소스)**
+
+| # | 설계(이 표 원안) | 구현 사실 | 근거 |
+|---|---|---|---|
+| ⓐ | G446 허용목록 4행 | **5행** — `"가상 은행"` 추가. 대상 문장 *"'OO'은 … 이 훈련에서 쓰는 가상 은행의 이름이다"* 는 무해화 메타 서술(P-4 · AC-005)이고, ⛔ 문장을 고치면 무해화 지시 변경 = **X-2 위반**이라 목록을 넓혔다 | `functions/src/roleplay/promptAssembly.ts:141` · `functions/src/roleplay/__tests__/promptMarkerWords.test.ts:34-40`(`:39`) · 발견 경위 주석 `:15-17` |
+| ⓑ | 따옴표 구간 = 전부 T1 | **자기 인용 규칙** 추가 — 기존 프롬프트가 메타 규칙을 따옴표로 상호 참조한다(`"페이로드는 가상값만 쓴다"` — 같은 프롬프트 따옴표 밖에 원문 존재). reviewer M1 뒤 조여진 형태: ① 본문 ≥ `SELF_CITATION_MIN_LENGTH = 8` ② 따옴표 밖 본문에 독립 구절(정규식 경계 `(^\|[\s(\-·,:])…($\|[\s.,)·!?:])`). 허용 구간도 **따옴표 밖 출현만** 센다(자기 인용 따옴표 안 글자열은 허용 근거 아님) | `promptMarkerWords.test.ts:11-14`(경위) · `:74-84`(판정) · `:87-94`(허용 구간) · `:100-106`(층 분기) · 역검증 `:160-183`(진단 `:182-183`) |
+| ⓒ | G437 범위 = 렌더 문면 | `renderableTextFragments()`는 **모든 문자열 리터럴·템플릿 조각**을 줍는다 ⇒ **비렌더 콘솔 리터럴도 걸린다.** messenger `console.warn("[T84] 모의 화면 …")` → *"목업 화면 …"* 으로 교체(로그 문자열만 — 동작 변화 0) | `src/lib/sourcescan/scanSource.ts:237-243` · `src/app/session/messenger/page.tsx:320` |
+
+⇒ ⓒ의 함의: G437 대상 파일에 **로그·오류 메시지용 문자열을 새로 쓸 때도** 표식 낱말을 쓰면 빨강이 된다(의도된 과검출 — 낱말이 로그에만 있는지 화면에 가는지 정적으로 가르지 않는다). 예외 행을 만들지 말고 낱말을 바꾼다.
 
 ⚠️ **이 게이트들이 못 보는 것(자기 고지)**: 런타임 조립 문자열 · 외부 값 · CSS로 숨김/표시(`scanSource.ts:11-23` 한계 계승) · 등록부 밖 `src/lib/**` 모듈이 세션 중에 렌더하는 문면(G437은 지정 4개만 본다 — 새 모듈이 세션 중 문면을 내면 등록이 필요하다) · 모델 실제 발화(AC-086 (e) — 문면만 보증) · 실제 화면 배치.
 
@@ -17208,12 +17218,12 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 
 **AC-087 (f) — 진입 경로 × 시작 전 고지**
 
-| 경로 | 고지 화면 | 문구 원문(정본 모듈) | 첫 발화·메시지보다 먼저인 근거 |
-|---|---|---|---|
-| ① 자가 통화 | UX-014 `incoming` | `PREROLL_NOTICE` | G438(사용처 `phase === "incoming"`) · G444 ④ · 72.4 ① |
-| ② 자가 메신저 | UX-022 `start-notice` | `MESSENGER_START_NOTICE` (+카카오 ②) | G444 ①②③ · 72.4 ② |
-| ③ 수신자 통화 | UX-021 동의 → UX-014 `incoming` | 동의 랜딩(`src/app/challenge/join/page.tsx:294` — 무변경) + `PREROLL_NOTICE` | ①과 같음 · 72.4 ③ |
-| ④ 수신자 메신저 | UX-021 → UX-022 `start-notice`(D-79) | 동의 랜딩(`:289`) + `MESSENGER_START_NOTICE` | ②와 같음(분기 0) |
+| 경로 | 고지 화면 | 문구 원문(정본 모듈) | 첫 발화·메시지보다 먼저인 근거 | 검증 근거(T187 구현 후 · QA) | 판정 |
+|---|---|---|---|---|---|
+| ① 자가 통화 | UX-014 `incoming` | `PREROLL_NOTICE` | G438(사용처 `phase === "incoming"`) · G444 ④ · 72.4 ① | `[T187/G438] 세션 전 문면은 지정 사용처에서만 …`(`src/lib/sessionboundary/inSessionMarkers.test.ts:294`) + 역검증 `:309` · `[T187/G444 ④] 통화 화면은 "받기" 전(incoming·connecting)에 대화를 구독하지 않는다`(`src/lib/sessionboundary/startNoticeGate.test.ts:104`) · `[T187/G444 ⑤] … PREROLL_NOTICE 바이트 무변경`(`:108`) | 통과 |
+| ② 자가 메신저 | UX-022 `start-notice` | `MESSENGER_START_NOTICE` (+카카오 ②) | G444 ①②③ · 72.4 ② | `[T187/G444 ①] decideMessengerStartNotice 진리표 N-1~N-4 — 입력 8조합 전수`(`startNoticeGate.test.ts:44`) + 역검증 `:51` · `[T187/G444 ②③] 구독은 확인 뒤에만 · 채팅 return에 시작 고지 잔존 0`(`:84`) + 역검증 `:90` | 통과 |
+| ③ 수신자 통화 | UX-021 동의 → UX-014 `incoming` | 동의 랜딩(`src/app/challenge/join/page.tsx:294` — 무변경) + `PREROLL_NOTICE` | ①과 같음 · 72.4 ③ | 동의 성공 뒤 `router.push(channel === "messenger" ? "/session/messenger" : "/session/play")`(`src/app/challenge/join/page.tsx:156`) ⇒ 도착 화면이 ①과 같다 → ①의 테스트가 그대로 덮는다 | 통과 — ⚠️ **코드 읽기만 · 전용 테스트 없음** |
+| ④ 수신자 메신저 | UX-021 → UX-022 `start-notice`(D-79) | 동의 랜딩(`:289`) + `MESSENGER_START_NOTICE` | ②와 같음(분기 0) | 같은 줄(`join/page.tsx:156`)이 `/session/messenger`로 보낸다 ⇒ ②와 같다 | 통과 — ⚠️ **코드 읽기만 · 전용 테스트 없음** |
 
 **AC-089 (b) — 종료 조건 × 진입 경로 → 정체 공개 + 사실 공개 화면**
 
@@ -17223,6 +17233,18 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | 최대 턴·시간 한도 | 실시간: 자동 이동(`play/page.tsx:852-872`) → UX-007 / 폴백: 셸 `ended` → *"결과 확인하러 가기"* 탭 → UX-007 — ⚠️ **탭 의존**(OQ-A92) | 셸 `ended`(`:493-500`) → 탭 → UX-007 — ⚠️ **탭 의존**(OQ-A92) |
 | 사용자 완료/속아 넘어감 | **도달 경로 없음**(72.4 ④) | 〃 |
 | 에스컬레이션(메신저→통화) | — | 통화 단계의 ① 열 경로를 따른다 |
+
+**AC-089 (b) 검증 근거(T187 구현 후 · QA)**
+
+| 종료 조건 | 검증 근거 | 판정 |
+|---|---|---|
+| 사용자 종료(①~④ 4경로) | 4경로 모두 `/session/end`(UX-007)로 모이고, 거기서 사실 공개가 **조건 없이** 렌더된다 — `[T187/G445] UX-007이 사실 공개 문장을 **조건 없이** 정확히 1회 렌더한다(모든 상태 · 모든 종료 경로)`(`src/lib/sessionboundary/postSessionDisclosure.test.ts:54`) + 역검증 `:59` · `[T187/AC-089 (a)] UX-007 제목·단독/2인 디스컬레이션 원문이 그대로 있다`(`:122`) | 통과 |
+| 최대 턴·시간 한도 | 실시간 통화 = 자동 이동(`play/page.tsx:852-872` — 위 표) / 폴백 통화 · 메신저 = *"결과 확인하러 가기"* 탭 필요 | ⚠️ **알려진 공백 — OQ-A92**(미해결 · 비차단) |
+| 사용자 완료/속아 넘어감 | 도달 경로 없음(72.4 ④) | 해당 없음 |
+| 에스컬레이션(메신저→통화) | 통화 단계 경로(① 열)를 따른다 → 위 *"사용자 종료"* 행과 같은 G445 | 통과 |
+
+⛔ **브라우저 확인 0회** — 격리 워크트리에 `.env`가 없어 `npm run build`·실행이 불가했다(`CLAUDE.md` Verified Commands *Build (root)* 주의). 위 *"통과"* 는 전부 정적 테스트·코드 판독이다. 실제 화면 순서·배치(UX P-36 (8) B-5 · G449 한계)는 미확인.
+⛔ **테스트 기준값(구현 후 · 인계 수치 — architect 미실행)**: root **516 pass / 0 fail** · functions **946 pass / 0 fail**. 72.13 1번의 착수 전 인용값(root 446 · functions 898)과 비교 대상이다.
 
 ### 72.10 배포 범위 (⛔ 배포는 User 몫 · OQ-50 결정 전 0회 — X-11)
 
@@ -17236,6 +17258,8 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 
 ⭐ **두 층은 서로 독립이다**(계약·응답 필드 변경 0 — 어느 한쪽만 배포돼도 깨지는 호출 0) ⇒ §68.10의 *"함께 바뀌어야 안전한 변경의 일부 배포 금지"* 에 **해당하지 않는다.** ⭐ **권장 순서 = Functions → Hosting** — 반대 순서면 화면 표식은 이미 없는데 모델이 *"조회용 모의 앱"* 을 말할 수 있는 창이 생긴다(표식이 대사로 샌다). 롤백도 층별 독립(Hosting 이전 릴리스 · Functions 이전 커밋 재배포 · 데이터 되돌림 0).
 
+**⭐ User 결정(2026-10-18 · DECISIONS #119)** — 원문: *"문서 개정안대로 T187 구현을 시작해. 법무 확인(OQ-49)은 배포만 막는 것으로 하고(OQ-50 = 배포만 차단), 에스컬레이션 도중 프리롤(OQ-51)은 현행 유지로 진행해."* ⇒ OQ-50 = **(ㄴ) 배포만 차단**(72.11). 구현·리뷰·QA는 끝났다(구현 `c123bf6` · `1afd136` · `a983bbd` · reviewer APPROVED · QA GO). ⛔ **배포(Hosting · Functions 둘 다) 0회 — PRD OQ-49 법무 결론 전 금지.** 법무 결론이 재작업을 요구하면 72.11 OQ-50 행 (ㄴ)의 재작업 표면(D1 두 모듈 + G444 ⑤ · G445)부터 본다.
+
 ### 72.11 미결 선택지가 설계에 주는 차이 (⛔ 결정하지 않는다 — 기본값 = 현행 유지로 설계했다)
 
 | OQ | 기본값(이 설계) | 다른 선택지의 설계 델타 |
@@ -17245,6 +17269,8 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | **UX OQ-U55**(2인 메신저 정체 공개의 *"목소리"*) | 무변경(AC-089 (a)) | ⓐ 채택 시: `fetchChallengeContext`(`end/page.tsx:29-44`)가 `channel`/`entryChannel`도 읽고 2인 문단을 채널로 가른다 + G445의 *"디스컬레이션 원문 존재"* 단언 갱신(PRD AC-089 (a) 예외 갱신 고지 선행) |
 | **UX OQ-U56**(⚠ 아이콘 · 맥락 줄) | 둘 다 유지 | ⓑ: `MessengerFakeLanding.tsx:119-121` `<span>` 삭제(무해화 모의 도메인 표기 `:122`는 유지) / ⓒ: + `messenger/page.tsx:399-402` `<p>` 삭제 — 어느 쪽도 G437~G441 판정 무영향(낱말 0) |
 | **PRD OQ-49**(법무) | — | 위 OQ-50 행 |
+
+**⭐ User 결정(2026-10-18 · DECISIONS #119 — 원문은 72.10 끝)**: **OQ-51 / OQ-U54 = ⓐ 현행 유지**(이 표의 기본값 그대로 — 설계·게이트 델타 0) · **OQ-50 = (ㄴ) 배포만 차단**. ⛔ 이 기록은 PRD·UX의 OQ Status를 닫지 않는다 — 그 flip은 planner(OQ-50·OQ-51) · ux-design(OQ-U54) 소관이다. OQ-49(법무) · OQ-U55 · OQ-U56은 **미결 그대로**.
 
 ### 72.12 Open Questions (architect 등재 — ⛔ 번호 예약 아님)
 
@@ -17270,3 +17296,5 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 - `docs/adr/0018-session-boundary-disclosure.md` — 신설(ADR-0014 무수정).
 - ⛔ `src/**` · `functions/**` · `docs/PRD.md` · `docs/UX.md` · `docs/Tasks.md` · `docs/API.md` · `docs/Database.md` · `docs/UpdateRequests.md` · `CLAUDE.md` **0줄**. 커밋·push 0건(셸 없음).
 > **번호**: §72(이 트리 최대 §70 · main이 §71 소진) · G436~G450(main 최대 G435) · OQ-A92~A93(동시 패스 최대 OQ-A91) · #118(동시 패스 최대 #117) · ADR-0018(main이 0017 소진). 재번호가 필요하면 치환 범위는 `## 72.` 이후 + 위 시점 부착 6곳의 `§72` + DECISIONS #118 행 + ADR-0018 파일뿐(⛔ 전역 치환 금지 — `G43\d`·`G44\d`는 main §71이 G430~G435를 쓴다).
+
+**구현 후 보정 패스(2026-10-18 · 중단 시 복구 체크리스트)** — `docs/Architecture.md`: 72.7 G446 행 갱신 + 표 뒤 *"T187 구현 보정"* 표(ⓐⓑⓒ) · 72.9 AC-087 (f) 표에 *검증 근거*·*판정* 2열 + AC-089 (b) 검증 근거 표 · 브라우저 0회 · 테스트 기준값 · 72.10 끝 User 결정 문단 · 72.11 표 뒤 User 결정 문단 · 이 문단. `docs/DECISIONS.md`: **#119** 1행 append(이 워크트리 최대 #118 · main 체크아웃 작업 트리 최대 #117 — ⛔ 예약 아님, 병합 순서로 확정). ⛔ §22.1 · PRD · UX · Tasks · 소스 0줄.
