@@ -14,6 +14,9 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
   - **검토 중(미도입)**: 대체 모델 후보 프로브(2026-10-18)를 마쳤으나 도입은 User 결정 대기이며 코드에는 반영하지 않았다.
   - **검증(인용값 — QA 보고)**: reviewer APPROVED(Minor 5) · QA GO · functions 967→982 pass / 0 fail · 루트 529 / 0 · 실제 타이머 실측(503 1회 뒤 +0.5초·2회 뒤 +2초에 성공, 10초 예산에서 7.6초에 온 503은 재시도 생략, 2키 429 순환 유지). `docs/Tasks.md`에 이 작업의 행이 없다(커밋 `Refs: (미등재 — planner 인계)`).
 
+### Added (2026-10-18 · 브랜치 `test/AC-090-gaps` · PRD v1.19 AC-090 · 테스트만, 배포 불필요 · 미병합)
+- **AC-090(익명 세션이 수신 흐름 밖이면 `/login` 안내) 테스트 공백 2건 보강**: `src/lib/auth/anonymousScope.test.ts`에 (b) `/login` 익명 안내 블록이 `role="status"`로 렌더, (e) RouteGuard 비로그인 경로 불변 — 2건 추가. 변형 검증: `role="status"` 제거 → (b) 실패 · unauth 가드의 `!holdCurrentScreen` 제거 → (e) 실패. 오케스트레이터 실측 `npm --prefix functions test` 967/0 · `npm test` 531/0(docs 미재현). reviewer APPROVED(Minor 4: 정규식 취약성, 선택). (c) "Google 로그인 후 자가 훈련 성공"은 라이브 출력 증거로만 유지. 코드 동작 불변.
+
 > ⚠️ **이 블록(2026-10-18 · T187 · 브랜치 `claude/nervous-dubinsky-4e928f`, HEAD `a9364e0`)**: 배포 0회, 브라우저 확인 0회. 테스트 수치 중 구현 시점 값(479→516 · 944→946)은 오케스트레이터 전달값이고, 병합 후 값(root 529/0 · functions 965/0)도 docs가 재현하지 않았다.
 
 ### Changed (2026-10-18 · T187 · PRD v1.18 MVP #36 · AC-086~089 · 미배포)
