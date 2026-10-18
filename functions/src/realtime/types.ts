@@ -42,6 +42,13 @@ export type RealtimeCallInput = {
   difficultyLevel?: DifficultyLevel;
   /** 2026-10-18(§81) — 세션 가상 은행명. Gemini 경로는 시스템 프롬프트의 "OO은행"을 이 이름으로 바꾼다(ElevenLabs는 반영 지점 없음). */
   fictionalBankName?: string;
+  /**
+   * T191 S5 추가(PRD AC-096 (e)) — 세션에 배정된 흐름 변형의 불투명 ID. Gemini 경로는 이 변형을
+   * 합성한 시나리오 프롬프트(`resolveSessionScenarioPrompt`)를 토큰에 고정한다. ⚠️ ElevenLabs 경로는
+   * 난이도와 마찬가지로 반영 지점이 없어 **무시한다**(변형 미적용 = 현행 — 설계 OQ-A108 기본값).
+   * 부재 = 원본 시나리오 프롬프트.
+   */
+  flowVariantId?: string;
 };
 
 /**

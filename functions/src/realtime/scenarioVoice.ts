@@ -31,6 +31,10 @@ export const SCENARIO_SPEAKER_GENDER: Record<string, SpeakerGenderAssignment> = 
   "tax-refund-scam": "female", // 환급 담당 상담
   "courier-customs-scam": "female", // 택배 고객센터 상담
   "messenger-subsidy-smishing-sms": "female", // 안내센터 상담원 — 에스컬레이션 voiceMode:"generic"
+  // T191 S5 — 고급 전용 3종(Architecture T191 절 "표 갱신" — 성별 표)
+  "card-delivery-call": "female", // 카드 배송 안내·사고 접수 상담원 — 친절하고 사무적인
+  "asset-protection-notice-call": "male", // 금융감독기관 직원 — 침착하고 정중한
+  "prosecution-cooperation-call": "male", // 검찰 수사관 — 딱딱하고 단호한
   "family-accident-deepvoice": "notApplicable", // voiceMode:"clone" — 목소리는 참가자 본인의 것
   "grandchild-impersonation": "notApplicable", // voiceMode:"clone"
   "messenger-child-impersonation-kakao": "notApplicable", // 에스컬레이션 voiceMode:"clone"

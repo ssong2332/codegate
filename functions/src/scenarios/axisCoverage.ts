@@ -61,8 +61,10 @@ export const DECLARED_COVERAGE_GAPS: Partial<Record<AxisValue, string>> = {
   // *중급 기준선* 좌표표이고 커버리지는 콘텐츠 태깅을 센다(T83↔T95의 메커닉↔콘텐츠 분리와 동형).
   A4_account_takeover:
     "⚠️ PRD v1.6 '드러난 공백' 표에 등재되지 않은 0건(T78 발견, §15.10.9 G35). planner 확인 전까지 채택 계획 없음 — implementer가 임의로 A4 시나리오를 만들면 스코프 크립",
-  E4_in_person_cash_demand: "OQ-39 미채택 확정(2026-07-25) — 재구성 후에도 잔여 공백으로 유지",
-  E5_giftcard_crypto_demand: "MVP #32 P1 착수 보류(T88) — 잔여 공백",
+  // E4_in_person_cash_demand — **T191 S5에서 해소됨**(2026-10-18, PRD AC-097 (h) · User 결정 D2가
+  // OQ-39 "미채택"을 뒤집음). 고급 전용 `asset-protection-notice-call`의 "인출·전달 요구"(axes.ts).
+  // E5_giftcard_crypto_demand — **T191 S5에서 해소됨**(2026-10-18, AC-097 (h) "S5 산출"). 고급 전용
+  // `prosecution-cooperation-call`의 "코인 구매·송금 요구"(axes.ts).
 };
 
 /** sentinel — 0건이어도 "공백"이 아닌 값(§15.10.1). `D0_none`의 count가 0이 되는 것은 결핍이 아니라

@@ -172,6 +172,8 @@ export const createRealtimeCall = onCall<
       difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
       // §81 — 세션 가상 은행명(문자 본문과 같은 이름). 부재(옛 세션)는 sessionId 해시.
       fictionalBankName: resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName }),
+      // T191 S5(AC-096 (e)) — 배정된 흐름 변형. Gemini 경로만 반영한다(ElevenLabs는 무시 — 현행).
+      ...(session.flowVariantId ? { flowVariantId: session.flowVariantId } : {}),
     });
     // T38 QA NO-GO 수정, architect 판정(ADR-0006 Addendum A2, 2026-07-24) — §14.2 "추출 차단"은
     // raw voiceId를 응답에 실어 보내는 모든 경로를 무조건 막지 않는다(ElevenLabs 프로토콜상

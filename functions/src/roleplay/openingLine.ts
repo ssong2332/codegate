@@ -7,7 +7,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
-import { SCENARIO_PROMPTS } from "../scenarios";
+import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { hasInCallSms } from "../scenarios/inCallSms";
 import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
@@ -71,10 +71,13 @@ export async function generateOpeningLine(
   // (createSession/consentChallenge)가 요청값(이미 서버에서 enum 정규화된 값)을 그대로 넘긴다.
   // 부재면 buildSystemPrompt가 기준선(중급 = 모디파이어 없음)으로 조립한다.
   difficultyLevel?: DifficultyLevel,
+  // T191 S5(AC-096) — 호출부가 방금 배정한 흐름 변형 ID(세션 문서 write 전이라 세션에서 읽을 수 없다).
+  // 부재 = 원본 시나리오 프롬프트(하위호환).
+  flowVariantId?: string,
   // §81 — 이 세션의 가상 은행명(호출부가 세션 생성 전에 골라 세션 문서에도 같은 값을 쓴다). 부재면 종전("OO은행").
   fictionalBankName?: string,
 ): Promise<OpeningLineResult> {
-  const scenarioPrompt = SCENARIO_PROMPTS[scenarioId];
+  const scenarioPrompt = resolveSessionScenarioPrompt(scenarioId, flowVariantId);
   if (!scenarioPrompt) {
     throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
   }

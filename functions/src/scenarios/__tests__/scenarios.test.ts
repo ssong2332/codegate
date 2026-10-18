@@ -330,6 +330,13 @@ const UNCONDITIONAL_DEMAND_BY_SCENARIO: Record<string, string> = {
   // ("보호계좌 이체 요구")는 **잔액이라는 전제**에 묶여 있어 T91의 loanScam과 같은 교착을 만들 수
   // 있으므로 지명하지 않았다.
   "bank-security-verify-scam": "본인확인 정보 직접 요구",
+  // T191 S5 — 고급 전용 3종. 셋 다 bank-security-verify-scam과 같은 이유로 **본인 확인**(N2)을
+  // 지명한다: 카드 신청·계좌 사용·범죄 연루를 부인해도 "그러면 명의 도용 여부부터"로 그대로 이어진다
+  // (문구에 무조건성 명시구 "무엇을 부인하든"). 최종 요구(이체·인출·코인)는 잔액·자산이라는 전제에
+  // 묶여 있어 지명하지 않았다(T91 교착 구조).
+  "card-delivery-call": "본인확인 정보 직접 요구",
+  "asset-protection-notice-call": "본인확인 정보 직접 요구",
+  "prosecution-cooperation-call": "본인확인 정보 직접 요구",
 };
 
 test("SCENARIO_PROMPTS: 모든 시나리오가 선행 조건 없는 요구 수법을 1개 이상 갖는다(T91 교착 방지)", () => {
@@ -460,6 +467,11 @@ const DEMAND_PREMISE_BY_SCENARIO: Record<string, "P" | "N"> = {
   "messenger-child-impersonation-kakao": "N", // ⚠️ 동상(자녀 존재). OQ-A16 대상
   "messenger-parcel-smishing-sms": "N", // 배송 건 자체가 N1. 주문 부인은 "명의 도용 암시"가 받는다
   "messenger-subsidy-smishing-sms": "N", // 확인 앱 설치·접수는 사기범이 지금 만드는 절차(N3)
+  // ── T191 S5 고급 전용 3종 — bank-security-verify-scam과 같은 판정(P, 명시구 "무엇을 부인하든" 보유).
+  //    카드 신청·계좌 사용·범죄 연루라는 참가자 쪽 사실을 부인할 수 있으므로 P로 두고 명시구로 무력화한다.
+  "card-delivery-call": "P",
+  "asset-protection-notice-call": "P",
+  "prosecution-cooperation-call": "P",
 };
 
 /**
@@ -488,6 +500,10 @@ const DENIAL_PIVOT_BY_SCENARIO: Record<string, string | null> = {
   "messenger-parcel-smishing-sms": "명의 도용 암시", // 기존 — courier와 같은 패턴
   "messenger-subsidy-smishing-sms": null, // ⚠️ 부재 확인 — T92 범위 밖(OQ-A16)
   "bank-security-verify-scam": "부인 시 명의 도용 암시", // T95
+  // T191 S5 고급 전용 3종 — 셋 다 "부인 시 명의 도용 암시"(P1·P3 부인 → N1 명의 도용 → N2 본인 확인).
+  "card-delivery-call": "부인 시 명의 도용 암시",
+  "asset-protection-notice-call": "부인 시 명의 도용 암시",
+  "prosecution-cooperation-call": "부인 시 명의 도용 암시",
 };
 
 /** 지명된 요구 수법 문구를 돌려준다(없으면 undefined — 위 T91 테스트가 별도로 존재를 고정한다). */
@@ -1400,11 +1416,12 @@ test("[§50/신원확인 G301] anonymous·acquaintance 페르소나의 조립 �
   );
 });
 
-test("[§50/신원확인 G301 역방향] institution 8종에는 세 문자열이 그대로 남아 있다(축소 방지)", () => {
+// T191 S5 — 고급 전용 3종이 전부 institution이라 8 → 11종(personaAuthority.ts).
+test("[§50/신원확인 G301 역방향] institution 11종에는 세 문자열이 그대로 남아 있다(축소 방지)", () => {
   const institutionIds = Object.keys(PERSONA_AUTHORITY).filter(
     (id) => PERSONA_AUTHORITY[id] === "institution",
   );
-  assert.equal(institutionIds.length, 8);
+  assert.equal(institutionIds.length, 11);
 
   const byScenario = new Map<string, string[]>();
   for (const { label, text } of assembledPrompts()) {

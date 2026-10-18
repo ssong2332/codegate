@@ -31,6 +31,7 @@ import { PUBLIC_SCENARIOS, type ScenarioMeta } from "../publicMeta";
 import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_SCREENS, type MockScreenItem } from "../mockScreens";
 import { VERIFY_INTERCEPT, type VerifyInterceptItem } from "../verifyIntercept";
 import { IN_CALL_SMS, type InCallSmsItem } from "../inCallSms";
+import { FLOW_VARIANTS, resolveVariantPrompt, type FlowVariant } from "../flowVariants";
 import type { ScenarioPromptDoc } from "../../shared/types";
 
 // ── 필드 정책(타입 게이트 ①) ────────────────────────────────────────────────
@@ -57,6 +58,9 @@ const SCENARIO_META_FIELDS: Record<keyof ScenarioMeta, FieldPolicy> = {
   channel: { skip: "열거형 'voice'|'messenger'" },
   surface: { skip: "열거형 'kakao'|'sms'" },
   escalation: { skip: "열거형 조합 {toChannel,voiceMode} — 자유 문자열 없음" },
+  // T191 S5 — 리터럴 `true` 플래그 2종(UX 계약 C-1 · C-9). 자유 문자열이 아니다.
+  advancedOnly: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
+  preSessionBurdenNotice: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
 };
 
 const VERIFY_INTERCEPT_FIELDS: Record<keyof VerifyInterceptItem, FieldPolicy> = {
@@ -112,6 +116,26 @@ const IN_CALL_SMS_FIELDS: Record<keyof InCallSmsItem, FieldPolicy> = {
   kind: { skip: "열거형 InCallSmsKind" },
   fakeLandingId: { skip: "식별자 참조 — 실 URL 필드가 아니다(§15.1.2)" },
   afterScammerTurns: { skip: "숫자 트리거" },
+};
+
+// T191 S5 — 흐름 변형(PRD AC-102 (a) "신규 콘텐츠 전부가 금지 패턴 검증 대상" · 릴레이 leg 포함).
+// 사칭 대상 기관명이 곧 콘텐츠라 `scenarioContent` 프로파일이다(시나리오 프롬프트와 같은 층).
+const FLOW_VARIANT_FIELDS: Record<keyof FlowVariant, FieldPolicy> = {
+  tactics: { profile: "scenarioContent" },
+  decisionMoment: { profile: "scenarioContent" },
+  stages: { skip: "아래에서 stageId별 개별 표면 + 합성 페르소나로 등록" },
+  legs: { skip: "아래에서 leg별 callerLabel · personaPrompt 개별 표면으로 등록" },
+  variantId: { skip: "불투명 식별자" },
+  scenarioId: { skip: "식별자" },
+  level: { skip: "열거형 DifficultyLevel" },
+  authoring: { skip: "열거형 authored|current" },
+  exitBlock: { skip: "열거형 축 D 값" },
+  sms: { skip: "카탈로그 smsId 참조 · 열거형 목적 · 숫자 — 문구 없음(본문은 inCallSms 도메인이 스캔)" },
+  pressure: { skip: "열거형" },
+  signal: { skip: "열거형" },
+  channels: { skip: "채널 열거값 목록" },
+  demandStages: { skip: "숫자" },
+  sources: { skip: "사례 ID 목록(C·S 번호)" },
 };
 
 // ── 표면 수집 ────────────────────────────────────────────────────────────────
@@ -180,6 +204,37 @@ function collectAllSurfaces(): Surface[] {
       collectFields("inCallSms", `${scenarioId}/${item.smsId}`, item, IN_CALL_SMS_FIELDS, surfaces);
     }
   }
+  for (const variant of FLOW_VARIANTS) {
+    collectFields("flowVariant", variant.variantId, variant, FLOW_VARIANT_FIELDS, surfaces);
+    for (const stage of variant.stages) {
+      surfaces.push({
+        domain: "flowVariant",
+        itemId: variant.variantId,
+        field: `stages[${stage.stageId}]`,
+        text: stage.summary,
+        profile: "scenarioContent",
+      });
+    }
+    variant.legs.forEach((leg, i) => {
+      for (const [field, text] of [
+        ["callerLabel", leg.callerLabel],
+        ["personaPrompt", leg.personaPrompt],
+      ] as const) {
+        if (text === undefined) continue;
+        surfaces.push({ domain: "flowVariant", itemId: variant.variantId, field: `legs[${i}].${field}`, text, profile: "scenarioContent" });
+      }
+    });
+    // 합성 페르소나(원본 + [이번 통화의 흐름] 블록 + 한 화자 규칙) — 블록의 고정 문구까지 스캔된다.
+    if (variant.stages.length > 0) {
+      surfaces.push({
+        domain: "flowVariant",
+        itemId: variant.variantId,
+        field: "composedPersonaPrompt",
+        text: resolveVariantPrompt(SCENARIO_PROMPTS[variant.scenarioId], variant).personaPrompt,
+        profile: "scenarioContent",
+      });
+    }
+  }
   // 카탈로그 항목이 아닌 **모듈 상수** 모델 지시(§15.9.1 R3이 항목 밖에 둔 것) — 등록부에서 빠지기
   // 가장 쉬운 자리라 명시적으로 싣는다.
   surfaces.push({
@@ -219,7 +274,7 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
   }
   assert.deepEqual(
     [...byDomain.keys()].sort(),
-    ["inCallSms", "mockScreens", "moduleConstant", "publicMeta", "scenarioPrompt", "verifyIntercept"],
+    ["flowVariant", "inCallSms", "mockScreens", "moduleConstant", "publicMeta", "scenarioPrompt", "verifyIntercept"],
     "콘텐츠 도메인이 추가·삭제되면 이 목록을 갱신하고 표면 수집도 함께 넓혀야 한다",
   );
 
@@ -286,9 +341,22 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
   );
   assert.equal(byDomain.get("inCallSms"), expectedSms, "T68 통화 중 문자 항목당 3필드 + 옵셔널 3(T190-2 +linkAddress)");
   assert.equal(byDomain.get("moduleConstant"), 1, "MOCK_INSTALL_CONSENT_INSTRUCTION");
+  // T191 S5 — 흐름 변형: 수법 + 단계 요약 + leg 표기(+persona) + 결정 순간 + 합성 페르소나(단계가 있을 때).
+  const expectedFlow = FLOW_VARIANTS.reduce(
+    (n, v) =>
+      n +
+      v.tactics.length +
+      v.stages.length +
+      v.legs.reduce((m, leg) => m + 1 + (leg.personaPrompt === undefined ? 0 : 1), 0) +
+      (v.decisionMoment === undefined ? 0 : 1) +
+      (v.stages.length > 0 ? 1 : 0),
+    0,
+  );
+  assert.equal(byDomain.get("flowVariant"), expectedFlow, "T191 S5 흐름 변형 표면");
+  t.diagnostic(`[AC-102 (a)] 흐름 변형 표면 after=${expectedFlow} (before=0 — 도메인 신설)`);
   assert.equal(
     ALL_SURFACES.length,
-    expectedPrompt + expectedMeta + expectedVerify + expectedMock + expectedSms + 1,
+    expectedPrompt + expectedMeta + expectedVerify + expectedMock + expectedSms + 1 + expectedFlow,
   );
   assert.ok(ALL_SURFACES.length >= 300, `총 검사 표면 수가 줄었다(현재 ${ALL_SURFACES.length})`);
 });
@@ -422,6 +490,11 @@ test("[T86/(c)] 카탈로그 항목의 **모든 런타임 필드**가 정책표�
       items: Object.values(IN_CALL_SMS).flat(),
       policyKeys: Object.keys(IN_CALL_SMS_FIELDS),
     },
+    {
+      domain: "flowVariant",
+      items: [...FLOW_VARIANTS],
+      policyKeys: Object.keys(FLOW_VARIANT_FIELDS),
+    },
   ];
   for (const { domain, items, policyKeys } of checks) {
     assert.ok(items.length > 0, `${domain}: 카탈로그가 비어 있으면 이 게이트가 무의미하다`);
@@ -459,6 +532,11 @@ const SCENARIO_MODULE_INVENTORY: Record<string, string> = {
   "messengerSubsidySmishingSms.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
   "reputationBlackmailScam.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
   "taxRefundScam.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
+  "flowVariants.ts": "scanned (FLOW_VARIANTS — T191 S5 흐름 변형 수법 · 단계 · leg · 합성 페르소나)",
+  // T191 S5 — 고급 전용 3종(PRD AC-097 · AC-102 (a) "신규 콘텐츠 전부가 금지 패턴 검증 대상").
+  "cardDeliveryCall.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
+  "assetProtectionNoticeCall.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
+  "prosecutionCooperationCall.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
   // ↓ 콘텐츠 문자열을 스스로 갖지 않는 모듈(파생·좌표·도구).
   "axes.ts": "콘텐츠 아님 — 축 좌표(열거형)",
   "axisCoverage.ts": "콘텐츠 아님 — 커버리지 순수 함수",

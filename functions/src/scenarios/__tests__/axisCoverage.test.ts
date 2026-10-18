@@ -83,10 +83,11 @@ test("SCENARIO_AXES 키가 PUBLIC_SCENARIOS 키와 1:1이다(태깅 누락 강�
   // T95(2026-07-26) — 확인 무력화 전용 시나리오 1종이 **추가**되어 14종이다. 기존 13종은
   // 식별자·제목 무변경(AC-002/AC-077) — 아래 "AC-077: 기존 13종 scenarioId가 그대로다" 테스트가
   // 그 사실을 목록으로 고정한다.
-  assert.equal(scenarioIds.length, 14, "현재 시나리오는 14종이다(AC-077 — 삭제·통합 0건, T95에서 +1)");
+  // T191 S5(2026-10-18) — 고급 전용 3종(PRD AC-097)이 **추가**되어 17종이다(기존 14종 무변경).
+  assert.equal(scenarioIds.length, 17, "현재 시나리오는 17종이다(AC-077 — 삭제·통합 0건, T95 +1 · T191 S5 +3)");
 });
 
-test("14종 전부가 5개 축 각각에 최소 1개 값을 갖는다(AC-070)", () => {
+test("17종 전부가 5개 축 각각에 최소 1개 값을 갖는다(AC-070)", () => {
   for (const [scenarioId, axes] of Object.entries(SCENARIO_AXES)) {
     for (const axis of AXIS_KEYS) {
       const values = axes[axis] as readonly AxisValue[];
@@ -121,7 +122,7 @@ test("키 게이트가 실제로 실패한다 — 시나리오 1종의 축 태�
 
 test("커버리지는 열거형 전 도메인을 순회한다 — 0건 값도 행이 남는다(AC-076의 성립 조건, §15.10.3)", () => {
   const coverage = computeAxisCoverage();
-  assert.equal(coverage.totalScenarios, 14);
+  assert.equal(coverage.totalScenarios, 17);
   let rowCount = 0;
   for (const axis of AXIS_KEYS) {
     assert.equal(
@@ -140,32 +141,39 @@ test("커버리지는 열거형 전 도메인을 순회한다 — 0건 값도 �
   assert.equal(rowCount, totalValues, "축 값 전량이 커버리지에 나타나야 한다");
 });
 
-test("E4(대면 현금 전달)가 커버리지에 0건으로 드러난다(AC-076 명시 요건 — OQ-39 미채택 잔여 공백)", () => {
+// ⚠️ **T191 S5(2026-10-18) 갱신** — 이 테스트는 원래 *"E4가 0건으로 드러난다(OQ-39 미채택)"* 였다.
+// PRD v1.21 AC-097 (h)(User 결정 D2가 OQ-39를 뒤집음)로 고급 전용 `asset-protection-notice-call`이
+// E4를 채웠다. axisCoverage.ts 규약대로 DECLARED_COVERAGE_GAPS의 E4 행을 삭제했고(해소 기록), 이
+// 테스트는 **채워진 사실과 사유 제거**를 고정한다. AC-076 갱신 고지(E4 잔여 공백 → AC-097로 채움)와 같다.
+test("E4(대면 현금 전달)가 T191 S5 고급 전용 시나리오로 채워졌다(AC-076 갱신 고지 · AC-097 (h))", () => {
   const coverage = computeAxisCoverage();
   const row = findCoverageRow(coverage, "E4_in_person_cash_demand");
   assert.ok(row, "E4 행이 커버리지에 존재해야 한다 — 없으면 AC-076은 즉시 미충족이다.");
-  assert.equal(row.count, 0);
-  assert.deepEqual(row.scenarioIds, []);
-  assert.ok(
-    row.declaredGapReason && row.declaredGapReason.includes("OQ-39"),
-    "E4의 0건에는 사유(OQ-39 미채택)가 붙어 있어야 한다 — 조용한 누락 금지.",
+  assert.equal(row.count, 1);
+  assert.deepEqual(row.scenarioIds, ["asset-protection-notice-call"]);
+  assert.equal(
+    row.declaredGapReason,
+    undefined,
+    "채워진 값에 공백 사유가 남아 있으면 안 된다(DECLARED_COVERAGE_GAPS의 E4 행 삭제가 해소 기록)",
   );
 });
 
-test("데이터 순회로 계산하면 E4가 사라진다 — 그래서 도메인 순회여야 한다(G39 대조)", () => {
+// ⚠️ T191 S5 갱신 — 대조 대상을 E4에서 **A4**(남은 유일한 0건 값)로 옮겼다. E4는 이제 0건이 아니라
+// 데이터 순회에서도 키가 생기므로 G39 실패를 보여 주는 표본이 될 수 없다.
+test("데이터 순회로 계산하면 0건 값(A4)이 사라진다 — 그래서 도메인 순회여야 한다(G39 대조)", () => {
   // ⚠️ 이 블록은 **틀린 방식**을 일부러 재현한 것이다. 커버리지 구현을 이 방식으로 바꾸면
-  //    0건 값의 키 자체가 생기지 않아 E4가 결과에서 조용히 사라진다.
+  //    0건 값의 키 자체가 생기지 않아 공백이 결과에서 조용히 사라진다.
   const naive: Record<string, number> = {};
   for (const axes of Object.values(SCENARIO_AXES)) {
-    for (const value of axes.demand) naive[value] = (naive[value] ?? 0) + 1;
+    for (const value of axes.access) naive[value] = (naive[value] ?? 0) + 1;
   }
   assert.equal(
-    Object.prototype.hasOwnProperty.call(naive, "E4_in_person_cash_demand"),
+    Object.prototype.hasOwnProperty.call(naive, "A4_account_takeover"),
     false,
-    "데이터 순회 방식에서는 E4 키가 아예 생기지 않는다(이것이 G39가 경고한 실패다)",
+    "데이터 순회 방식에서는 A4 키가 아예 생기지 않는다(이것이 G39가 경고한 실패다)",
   );
   // 반면 구현(도메인 순회)에서는 남아 있다.
-  assert.ok(findCoverageRow(computeAxisCoverage(), "E4_in_person_cash_demand"));
+  assert.ok(findCoverageRow(computeAxisCoverage(), "A4_account_takeover"));
 });
 
 // ⚠️ **T85(2026-07-26) 갱신** — §15.10.7의 사전 계산값은 7개(A3·A4·D3·D4·E3·E4·E5)였고, T84가
@@ -174,13 +182,10 @@ test("데이터 순회로 계산하면 E4가 사라진다 — 그래서 도메�
 // `loan-refinance-scam`에 절차·서류 정당화를 저작해 D4를 채웠다**(§17.9 — PRD 근거 #5 지목) —
 // axisCoverage.ts의 규약("공백을 채우면 이 테스트가 먼저 깨진다 — 해당 행 삭제가 해소 기록")에
 // 따라 기대값을 3개로 내린다. 남은 A4·E4·E5는 잔여 공백이며 AC-076 필수 4값(A3·D3·D4·E3)은 전부 찼다.
-test("0건 축 값은 정확히 3개(A4·E4·E5)다 — T85가 D4를 해소(T95의 4개에서 갱신)", () => {
+// ⚠️ T191 S5 갱신 — 고급 전용 ②가 E4, ③이 E5를 채워(AC-097 (h)) 3개 → 1개(A4)가 됐다.
+test("0건 축 값은 정확히 1개(A4)다 — T191 S5가 E4·E5를 해소(T85의 3개에서 갱신)", () => {
   const coverage = computeAxisCoverage();
-  assert.deepEqual([...coverage.zeroCountValues].sort(), [
-    "A4_account_takeover",
-    "E4_in_person_cash_demand",
-    "E5_giftcard_crypto_demand",
-  ]);
+  assert.deepEqual([...coverage.zeroCountValues].sort(), ["A4_account_takeover"]);
 });
 
 // ── T85(MVP #31) D4 공백 해소 — AC-076 필수 4값의 마지막 하나 ────────────────
@@ -194,7 +199,8 @@ test("[AC-076] T85가 채운 D4는 loan-refinance-scam에서 0건이 아니다(P
   const row = findCoverageRow(coverage, "D4_procedural_legitimacy");
   assert.ok(row, "D4 행이 커버리지에 존재해야 한다");
   assert.ok(row.count >= 1, "D4: AC-076 필수 4값 중 하나 — 0건이면 미충족이다");
-  assert.deepEqual(row.scenarioIds, ["loan-refinance-scam"]);
+  // T191 S5 — 고급 전용 ②(asset-protection-notice-call)도 "절차·서류 정당화"를 콘텐츠로 갖는다.
+  assert.deepEqual([...row.scenarioIds].sort(), ["asset-protection-notice-call", "loan-refinance-scam"]);
   assert.equal(
     row.declaredGapReason,
     undefined,
@@ -243,7 +249,8 @@ test("[AC-076] T95가 채운 D3는 전용 시나리오에서 0건이 아니다(�
   const row = findCoverageRow(coverage, "D3_verification_hijack");
   assert.ok(row, "D3 행이 커버리지에 존재해야 한다");
   assert.ok(row.count >= 1, "D3: AC-076 필수 4값 중 하나 — 0건이면 미충족이다");
-  assert.deepEqual(row.scenarioIds, ["bank-security-verify-scam"]);
+  // T191 S5 — 고급 전용 ①(card-delivery-call)도 "확인 시도 무력화"를 콘텐츠로 갖는다(AC-097 (c) ①).
+  assert.deepEqual([...row.scenarioIds].sort(), ["bank-security-verify-scam", "card-delivery-call"]);
   assert.equal(
     row.declaredGapReason,
     undefined,
@@ -298,12 +305,15 @@ test("D0_none은 sentinel이라 공백 산정에서 제외된다(§15.10.1)", ()
   assert.deepEqual([...GAP_EXEMPT_VALUES], ["D0_none"]);
 });
 
-test("B1(기관 사칭)은 3건이다 — PRD 공백 표의 '2종'이 아니라 매핑 표가 정본이다(§15.10.9 G36)", () => {
+// T191 S5 — 고급 전용 ②·③이 B1(기관 사칭)이라 3건 → 5건.
+test("B1(기관 사칭)은 5건이다 — PRD 공백 표의 '2종'이 아니라 매핑 표가 정본이다(§15.10.9 G36 · T191 S5 +2)", () => {
   const row = findCoverageRow(computeAxisCoverage(), "B1_authority");
-  assert.equal(row?.count, 3);
+  assert.equal(row?.count, 5);
   assert.deepEqual([...(row?.scenarioIds ?? [])].sort(), [
+    "asset-protection-notice-call",
     "institutional-impersonation",
     "messenger-subsidy-smishing-sms",
+    "prosecution-cooperation-call",
     "tax-refund-scam",
   ]);
 });
@@ -325,9 +335,12 @@ test("커버리지 행의 count와 scenarioIds가 일치하고, 시나리오별 
 
 test("AC-077: 기존 13종 scenarioId가 그대로다(신규 시나리오는 **추가만**, 기존 식별자 변경 0건)", () => {
   assert.deepEqual(Object.keys(SCENARIO_AXES).sort(), [
-    // ↓ T95 신규(추가만 — 아래 13개는 한 글자도 바뀌지 않았다)
+    // ↓ T191 S5 신규 3종(추가만) — asset-protection-notice-call · card-delivery-call ·
+    //   prosecution-cooperation-call. T95 신규 bank-security-verify-scam. 나머지 13개는 한 글자도 안 바뀌었다.
+    "asset-protection-notice-call",
     "bank-security-verify-scam",
     "card-company-impersonation",
+    "card-delivery-call",
     "courier-customs-scam",
     "family-accident-deepvoice",
     "grandchild-impersonation",
@@ -338,6 +351,7 @@ test("AC-077: 기존 13종 scenarioId가 그대로다(신규 시나리오는 **�
     "messenger-friend-loan-kakao",
     "messenger-parcel-smishing-sms",
     "messenger-subsidy-smishing-sms",
+    "prosecution-cooperation-call",
     "reputation-blackmail-scam",
     "tax-refund-scam",
   ]);
