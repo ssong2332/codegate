@@ -21,6 +21,8 @@ export function buildInCallSmsDoc(
   // 다시보기가 같은 이름을 본다). 부재면 카탈로그 원문 그대로(종전).
   fictionalBankName?: string,
 ): InCallSmsDoc {
+  // §81.6 — 가상 은행 자리표시자 줄의 계좌번호(없으면 undefined). 아래 accountNumber 필드에서 한 번만 쓴다.
+  const accountNumber = extractAccountNumber(item.body);
   // T104(§19.4 #2) — 링크형 문자가 여는 랜딩의 **목업 종류를 서버가 확정해 실어 보낸다**
   // (§15.9.1 R3 — 클라가 `fakeLandingId` 문자열로 kind를 추론하지 않는다).
   const landingKind =
@@ -35,7 +37,7 @@ export function buildInCallSmsDoc(
     // §81 — 본문에 자리표시자가 있었던 문자만 은행명을 구조화 필드로도 싣는다(가짜 랜딩 미리 채움 D-115의 원천).
     ...(fictionalBankName && item.body !== applyFictionalBank(item.body, fictionalBankName) ? { bankName: fictionalBankName } : {}),
     // §81.6 — 같은 줄의 계좌번호도 구조화 필드로(D-115 랜딩 미리 채움 원천 — 은행명과 한 쌍).
-    ...(fictionalBankName && extractAccountNumber(item.body) ? { accountNumber: extractAccountNumber(item.body) } : {}),
+    ...(fictionalBankName && accountNumber ? { accountNumber } : {}),
     // 종류별 필드는 해당 kind일 때만 채운다(부재를 판별자로 오버로드하지 않되, 무의미한 빈 값도
     // 만들지 않는다 — kind가 유일한 판별자다, §14.9.1 원칙).
     ...(item.kind === "otp" && item.otpCode ? { otpCode: item.otpCode } : {}),
