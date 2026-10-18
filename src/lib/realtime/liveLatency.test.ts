@@ -117,6 +117,7 @@ test("[§71.6 P-0] 준비 구간 레코드: 표시 순서대로 차이를 계산
   assert.deepEqual(record, {
     type: "setup",
     credentialsPrefetched: true,
+    credentialSource: null, // 출처를 안 찍은 호출(1인자) — 종전 호출과 호환
     acceptToCredentialsMs: 120,
     credentialsToMountMs: 30,
     mountToMicMs: 250,
@@ -129,6 +130,37 @@ test("[§71.6 P-0] 준비 구간 레코드: 표시 순서대로 차이를 계산
   });
   resetCallSetupMarks();
   assert.deepEqual(readCallSetupMarks(), {});
+});
+
+/** setup 레코드 로그 줄의 문자열 필드 — 종류 문자열만 허용(식별자 · 전사 0). */
+function setupStringFields(record: Record<string, unknown>): string[] {
+  const parsed = JSON.parse(formatLatencyLine("gemini-3.8-live", record as never)) as Record<string, unknown>;
+  return Object.entries(parsed)
+    .filter(([, value]) => typeof value === "string")
+    .map(([key]) => key)
+    .sort();
+}
+
+test("[§71.6 G432 · reviewer m3] setup 레코드에 credentialSource(종류 문자열)가 실리고, 문자열 필드는 출처 · 모델 · 종류뿐이다", () => {
+  for (const source of ["settled", "inflight", "mint"] as const) {
+    resetCallSetupMarks();
+    markCallSetup("accept", 0);
+    markCredentialsPrefetched(source !== "mint", source);
+    markCallSetup("credentialsReady", 50);
+    const record = buildCallSetupRecord(readCallSetupMarks(), {});
+    assert.equal(record.credentialSource, source);
+    assert.equal(record.credentialsPrefetched, source !== "mint");
+    assert.deepEqual(setupStringFields(record), ["credentialSource", "model", "type"]);
+  }
+  resetCallSetupMarks();
+});
+
+test("[§71.6 G432 역검증] setup 레코드에 식별자 문자열을 섞은 사본은 문자열 필드 검사에서 걸린다", () => {
+  resetCallSetupMarks();
+  markCredentialsPrefetched(true, "inflight");
+  const record = { ...buildCallSetupRecord(readCallSetupMarks(), {}), sessionId: "s1" };
+  assert.deepEqual(setupStringFields(record), ["credentialSource", "model", "sessionId", "type"]);
+  resetCallSetupMarks();
 });
 
 test("[§71.6 G432] 로그 줄에 실리는 문자열 값은 모델명 · 종류 · 앵커 · 종료 사유뿐이다(전사 · 식별자 0)", () => {

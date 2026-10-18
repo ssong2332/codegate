@@ -184,7 +184,13 @@ export type CallSetupMark =
   | "openingSent"
   | "firstAudio";
 
-export type CallSetupMarks = Partial<Record<CallSetupMark, number>> & { credentialsPrefetched?: boolean };
+/** 받기 시점 자격증명의 출처(reviewer m3) — 완료된 미리 받기 · 진행 중 미리 받기를 기다림 · 받기 뒤 새 발급. */
+export type CredentialSourceTag = "settled" | "inflight" | "mint";
+
+export type CallSetupMarks = Partial<Record<CallSetupMark, number>> & {
+  credentialsPrefetched?: boolean;
+  credentialSource?: CredentialSourceTag;
+};
 
 let callSetupMarks: CallSetupMarks = {};
 
@@ -196,8 +202,11 @@ export function markCallSetup(name: CallSetupMark, nowMs: number): void {
   if (callSetupMarks[name] === undefined) callSetupMarks = { ...callSetupMarks, [name]: nowMs };
 }
 
-export function markCredentialsPrefetched(prefetched: boolean): void {
-  callSetupMarks = { ...callSetupMarks, credentialsPrefetched: prefetched };
+export function markCredentialsPrefetched(prefetched: boolean, source?: CredentialSourceTag): void {
+  callSetupMarks =
+    source === undefined
+      ? { ...callSetupMarks, credentialsPrefetched: prefetched }
+      : { ...callSetupMarks, credentialsPrefetched: prefetched, credentialSource: source };
 }
 
 export function readCallSetupMarks(): CallSetupMarks {
@@ -207,7 +216,14 @@ export function readCallSetupMarks(): CallSetupMarks {
 export type CallSetupRecord = {
   type: "setup";
   credentialsPrefetched: boolean | null;
-  /** 받기 → 자격증명 준비(마이크 권한 확인 + 발급 왕복, 프리페치면 대기 0에 가깝다). */
+  /** 자격증명 출처(종류 문자열 — 식별자 아님). `credentialsPrefetched`는 `settled`·`inflight`일 때 true다. */
+  credentialSource: CredentialSourceTag | null;
+  /**
+   * 받기 → 자격증명 준비(마이크 권한 확인 + 자격증명 확보).
+   * - `settled`: 마이크 확인만 — 발급 대기 0.
+   * - `inflight`: 마이크 확인 + **진행 중 미리 받기의 남은 시간**(0이 아닐 수 있다 — 2026-10-18 경합 수정 이후).
+   * - `mint`: 마이크 확인 + 발급 왕복 전체(콜드 스타트면 수 초).
+   */
   acceptToCredentialsMs: number | null;
   credentialsToMountMs: number | null;
   /** 마운트 → getUserMedia · AudioContext 준비. */
@@ -234,6 +250,7 @@ export function buildCallSetupRecord(
   return {
     type: "setup",
     credentialsPrefetched: marks.credentialsPrefetched ?? null,
+    credentialSource: marks.credentialSource ?? null,
     acceptToCredentialsMs: diff(marks.accept, marks.credentialsReady),
     credentialsToMountMs: diff(marks.credentialsReady, marks.mount),
     mountToMicMs: diff(marks.mount, marks.micReady),

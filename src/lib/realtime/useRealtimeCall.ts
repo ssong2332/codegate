@@ -13,9 +13,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRealtimeCall } from "@/lib/api";
 import type { CreateRealtimeCallResponse } from "@/lib/api";
-import { isPrefetchFresh as isPrefetchTimestampFresh } from "./prefetchFreshness";
+import { createPrefetchSlot, type PrefetchSlot } from "./prefetchFreshness";
 import { toFallbackCredentials } from "./fallbackCredentials";
 import { markCallSetup, markCredentialsPrefetched, resetCallSetupMarks } from "./liveLatency";
+import { noteAccept, noteCredentialSource } from "./audioDiagnostics";
 
 export type RealtimeCallStatus =
   | "idle"
@@ -72,7 +73,7 @@ function hasMicrophoneSupport(): boolean {
 
 // 사용자 신고(2026-07-25) — "전화가 연결되면 바로 말을 하는 걸로". 지연의 상당 부분은 "받기" 탭
 // 이후 시작되는 createRealtimeCall(자격증명 발급 Cloud Function) 왕복이다. 전화가 울리는 동안
-// (phase="incoming", 아직 마이크 접근·"받기" 소비 전) 미리 이 호출만 해 두면, 실제 "받기" 시점엔
+// (phase="pre-call-notice"·"incoming" — 2026-10-18부터 고지 화면에서 시작, 아직 마이크 접근·"받기" 소비 전) 미리 이 호출만 해 두면, 실제 "받기" 시점엔
 // 네트워크 왕복 없이 곧장 마이크 확인→연결로 넘어간다 — 마이크 권한 확인은 여전히 "받기" 이후에만
 // 하므로(start() 그대로) 사전 동의/수신 화면 관례(§UX-014 "받기 전엔 아무 것도 새지 않는다")는
 // 그대로 유지된다.
@@ -84,17 +85,9 @@ const PREFETCH_STALE_MS = 90_000;
 
 export type Prefetched = { sessionId: string; issued: CreateRealtimeCallResponse; mintedAt: number };
 
-/** 신선도 판정 자체(순수 로직)는 prefetchFreshness.ts에 있다(경로 별칭 임포트가 없어야 별도
- * node:test 프로세스에서 단위 테스트할 수 있다) — 여기서는 그 결과에 타입 서술어만 덧씌워 호출부가
- * `prefetched.issued`를 널 체크 없이 바로 쓸 수 있게 한다. */
-function isFreshPrefetch(
-  prefetched: Prefetched | null,
-  sessionId: string,
-  nowMs: number,
-  staleMs: number,
-): prefetched is Prefetched {
-  return isPrefetchTimestampFresh(prefetched, sessionId, nowMs, staleMs);
-}
+/** 신선도 판정 · 진행 중 요청 재사용(순수 로직)은 prefetchFreshness.ts의 `createPrefetchSlot`에 있다(경로 별칭
+ * 임포트가 없어야 별도 node:test 프로세스에서 단위 테스트할 수 있다) — 이 훅은 그 슬롯 하나를 ref에 담아 쓴다.
+ * 신선도 규칙(`isPrefetchFresh` + 아래 `PREFETCH_STALE_MS`)과 "한 번 쓰면 소모" 규칙은 슬롯 안에서 그대로다. */
 
 export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
   const [status, setStatus] = useState<RealtimeCallStatus>("idle");
@@ -107,9 +100,22 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
   const [isMock, setIsMock] = useState(false);
   // 언마운트 후 늦게 도착한 비동기 결과가 setState를 호출하지 않도록 가드한다.
   const mountedRef = useRef(true);
-  // 수신(전화 울림) 중 미리 받아 둔 자격증명 — start()가 "받기" 시점에 신선하면 그대로 쓰고,
-  // 없거나 상해 있으면 이 자리에서 새로 발급받는다. status를 바꾸지 않으므로 화면엔 영향 없다.
-  const prefetchRef = useRef<Prefetched | null>(null);
+  // 수신(전화 울림) 중 미리 받아 둔 자격증명 슬롯 — start()가 "받기" 시점에 신선하면 그대로 쓰고, 같은 세션 요청이
+  // **진행 중이면 그것을 기다려** 쓰고(2026-10-18, 라이브 d13e718 회귀 — 예전엔 진행 중 요청을 못 보고 두 번 발급했다),
+  // 없거나 실패·상했으면 이 자리에서 새로 발급받는다. status를 바꾸지 않으므로 화면엔 영향 없다.
+  // ⚠️ 렌더 중에는 만들지 않는다(react-hooks/refs) — 콜백 안에서 처음 쓸 때 만든다(`getPrefetchSlot`).
+  const prefetchSlotRef = useRef<PrefetchSlot<CreateRealtimeCallResponse> | null>(null);
+  const getPrefetchSlot = useCallback((): PrefetchSlot<CreateRealtimeCallResponse> => {
+    if (!prefetchSlotRef.current) {
+      prefetchSlotRef.current = createPrefetchSlot<CreateRealtimeCallResponse>({
+        mint: (sessionId) => createRealtimeCall({ sessionId }),
+        now: () => Date.now(),
+        staleMs: PREFETCH_STALE_MS,
+        isAlive: () => mountedRef.current,
+      });
+    }
+    return prefetchSlotRef.current;
+  }, []);
   // 안정적인 콜백(useCallback [])에서 현재 status를 읽기 위한 미러 — setState 업데이터 안에서
   // 다른 setState를 호출하는(순수하지 않은) 패턴을 피하려고 둔다. 렌더 중이 아니라 effect에서
   // 갱신한다(react-hooks/refs).
@@ -140,20 +146,15 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     return () => clearTimeout(timer);
   }, [credentials, status]);
 
-  const prefetch = useCallback((sessionId: string) => {
-    if (!hasMicrophoneSupport()) return; // 폴백으로 갈 브라우저는 미리 받아 둘 이유가 없다.
-    // 이미 같은 세션에 대해 프리페치를 걸어 뒀다면(전화벨 화면 리렌더 등) 중복 호출하지 않는다.
-    if (prefetchRef.current?.sessionId === sessionId) return;
-    (async () => {
-      try {
-        const issued = await createRealtimeCall({ sessionId });
-        if (!mountedRef.current) return;
-        prefetchRef.current = { sessionId, issued, mintedAt: Date.now() };
-      } catch {
-        // 프리페치 실패는 조용히 무시 — start()가 "받기" 시점에 정상적으로 재시도한다(P-4 비차단).
-      }
-    })();
-  }, []);
+  const prefetch = useCallback(
+    (sessionId: string) => {
+      if (!hasMicrophoneSupport()) return; // 폴백으로 갈 브라우저는 미리 받아 둘 이유가 없다.
+      // 같은 세션 요청이 진행 중이거나 신선한 결과가 이미 있으면(화면 리렌더 · 고지→벨 전이) 슬롯이 다시 걸지 않는다.
+      // 고지 화면에 오래 머물러 결과가 상했으면 한 번 더 받는다. 실패는 조용히 무시(P-4 — start()가 새로 발급한다).
+      getPrefetchSlot().prefetch(sessionId);
+    },
+    [getPrefetchSlot],
+  );
 
   // ⭐⭐ D2/F1(§54.9 (4) 2, G342) — **실시간이 불가능해도 자격증명은 받아 둔다.** 폴백 대화의 확인
   // 시도 무력화 게이트는 `credentials.verifyOffer`를 유일한 입력으로 쓰므로(§54.2 (1)), 이 값이
@@ -164,18 +165,16 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
   // 담으면 마이크가 없는데 실시간 세션 컴포넌트가 마운트된다.
   const retainFallbackCredentials = useCallback(async (sessionId: string) => {
     try {
-      const prefetched = prefetchRef.current;
-      prefetchRef.current = null; // 어느 쪽이든 소모 — 재사용하지 않는다(성공 경로와 같은 관례).
-      const issued = isFreshPrefetch(prefetched, sessionId, Date.now(), PREFETCH_STALE_MS)
-        ? prefetched.issued
-        : await createRealtimeCall({ sessionId });
+      // 진행 중 미리 받기도 같은 규칙으로 재사용한다(받기 경로와 같은 슬롯 — 발급 2회 0).
+      const taken = await getPrefetchSlot().take(sessionId);
+      const issued = taken.issued ?? (await createRealtimeCall({ sessionId }));
       if (!mountedRef.current) return;
       if (issued.isMock) setIsMock(true);
       setCredentials(toFallbackCredentials(issued));
     } catch {
       // 발급 실패는 폴백 진행을 막지 않는다 — 확인 오퍼만 열리지 않는다(종전 동작 그대로).
     }
-  }, []);
+  }, [getPrefetchSlot]);
 
   const start = useCallback(async (sessionId: string) => {
     if (!hasMicrophoneSupport()) {
@@ -189,6 +188,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     setErrorMessage(null);
     // §71.6 P-0 — 통화 1건의 준비 구간 표시를 받기 시점부터 새로 찍는다(나머지는 GeminiVoiceSession).
     resetCallSetupMarks();
+    noteAccept(performance.now()); // 진단 패널(`?audiodebug=1`)의 통화별 값도 받기 시점에 비운다(관찰 전용).
     markCallSetup("accept", performance.now());
 
     // ① 마이크 권한 — 실패하면 실시간 대화가 불가능하므로 즉시 폴백 안내로 전환한다.
@@ -206,16 +206,18 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
       return;
     }
 
-    // ② 서명 URL 발급(서버) — ElevenLabs API 키는 서버에만 남는다. 수신 중 미리 받아 둔 신선한
-    // 자격증명이 있으면 그대로 쓰고(지연 단축), 없거나 상했으면 지금 새로 받는다.
-    const prefetched = prefetchRef.current;
-    prefetchRef.current = null; // 어느 쪽이든 소모 — 재사용하지 않는다.
+    // ② 서명 URL 발급(서버) — ElevenLabs API 키는 서버에만 남는다. 미리 받아 둔 신선한 자격증명이 있거나
+    // 같은 세션 요청이 **진행 중이면 그것을 기다려** 쓰고(지연 단축 · 발급 1회), 없거나 실패·상했으면 지금 새로 받는다.
+    // ⭐ 계측: 진행 중 요청을 기다려 재사용한 경우도 `credentialsPrefetched: true`다(서버 발급이 받기 뒤에 새로
+    // 일어나지 않았다는 뜻). 기다린 시간은 `acceptToCredentialsMs`에 그대로 남고, 어느 경로였는지는 진단 패널이 보인다.
+    const taken = await getPrefetchSlot().take(sessionId);
+    noteCredentialSource(taken.source);
+    markCredentialsPrefetched(taken.issued !== null, taken.source);
+    if (!mountedRef.current) return;
 
     let issued: CreateRealtimeCallResponse;
-    const usePrefetched = isFreshPrefetch(prefetched, sessionId, Date.now(), PREFETCH_STALE_MS);
-    markCredentialsPrefetched(usePrefetched);
-    if (usePrefetched) {
-      issued = prefetched.issued;
+    if (taken.issued) {
+      issued = taken.issued;
     } else {
       try {
         issued = await createRealtimeCall({ sessionId });
@@ -248,7 +250,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     // ⛔ 이 줄은 D2에서 **한 글자도 바뀌지 않았다**(§54.9 (4) 6 역검증) — 실시간 경로는 종전 그대로
     // 발급 응답을 낮추지 않고 그대로 세팅한다.
     setCredentials(issued);
-  }, [retainFallbackCredentials]);
+  }, [retainFallbackCredentials, getPrefetchSlot]);
 
   const stop = useCallback(() => {
     setStopSignal((n) => n + 1);

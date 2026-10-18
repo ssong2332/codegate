@@ -4,6 +4,17 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-18, 브랜치 `claude/fix-realtime-prefetch-race`, base `b99f239`)**: 미병합 · 배포 0회 · **실기 미검증** — 웨일 무음이 고쳐졌는지는 갤럭시 S25 웨일 A/B 확인 전까지 판정하지 않는다(Architecture §74.23 (4)).
+
+### Fixed
+- **통화 AI 음성 무음(#290 클라이언트 회귀 · 갤럭시 S25 · 네이버 웨일) 대응**(Architecture §74.23 · DECISIONS #128): 받기 탭 안에서 통화 출력·입력 AudioContext를 동기 생성·resume하고(`src/lib/realtime/callAudio.ts`), 다음 탭에서 suspended면 다시 resume한다. 벨은 받기 때 소리만 즉시 0으로 하고 컨텍스트 close는 통화 출력이 running이 된 뒤(상한 8초)로 미룬다(§74.7 개정).
+- **실시간 자격증명 이중 발급·지연 회귀**: 미리 받기를 벨 직전 고지(`pre-call-notice`)부터 시작하고 `start()`가 진행 중 요청을 이어받는다(`prefetchFreshness.ts` `createPrefetchSlot`). 실측 회귀 받기→자격증명 7456ms(432fc87 124ms). 서버 쓰기·카운터 0 — 고지 화면 이탈 시 단명 토큰 최대 +1.
+- 받기 연타 재진입 가드, 폴백 전환 시 빌린 컨텍스트 해제, setup 지연 로그 `credentialSource`(settled/inflight/mint).
+
+### Added
+- **`?audiodebug=1` 진단 패널**(통화 화면 · 쿼리가 있을 때만 · 비밀값/세션 id/전사 미표시): 출력·입력 컨텍스트 상태, 게인, 수신·예약 오디오 조각 수, 공급자, 미리 받기 출처 등 29개 키. 실기 A/B 플래그 `audioprime=0`(사전 생성 끔) · `ringclose=immediate`(벨 즉시 close). ⚠️ 앱 내부 이동이 쿼리를 버리므로 **통화 화면(고지·벨)에 도착한 뒤** 주소에 붙여 새로고침한다.
+- 테스트: 루트 607 → 648 pass / 0 fail, functions 1033 / 0 fail(LF·CRLF 격리 워크트리 둘 다 · reviewer 승인 · QA 조건부 통과).
+
 > ⚠️ **이 블록(2026-10-18 추가분, 브랜치 `fix/otp-mismatch-check`, base `b99f239`)**: 아직 main에 병합되지 않았고 배포 0회, 라이브 미검증이다.
 
 ### Fixed

@@ -1,5 +1,6 @@
 - [예외는 승인 사건에 묶는다](feedback_exception_bound_to_observable_event.md) — 무조건 금지를 좁힐 땐 BLOCKING 도구 응답·허용 턴 문면 뒤에만 행동; NON_BLOCKING은 선언이 승인보다 앞선다
 - [모바일 웹 오디오·진동·UA·자산 능력표](reference_mobile_web_audio_capabilities.md) — Android 출력 전환 API 없음 · iOS 미검증 · OS 글꼴 웹 임베드 금지; BCD는 raw JSON으로 읽어라
+- [묶음 수정엔 가설별 플래그가 필요하다](feedback_bundled_fix_needs_per_hypothesis_flag.md) — 한 플래그에 가설 둘이 묶이면 보조 관측 열로 가른다; "전부 끈 칸 ≠ 회귀 트리"
 - [스키마 판정은 소비자가 가른다](feedback_schema_choice_decided_by_consumers.md) — 복사냐 참조냐는 읽는 화면의 read 형태(N+1·빈 catch)로 갈린다; 이유와 결론은 따로 판정
 - [인계된 원인이 수치를 설명하는가](feedback_cited_cause_must_explain_the_number.md) — 설명 못 하면 사실이 둘; 전제가 참이면 관측 불가라는 결론이 나오면 프로브 0단계는 전제 검증
 - [지시받은 판정이 이미 절로 있을 수 있다](feedback_judgment_may_already_be_a_section.md) — 착수 전 `^## ` 전수 grep + UpdateRequests `open`; 있으면 재작성 말고 "위에 얹는 절"
