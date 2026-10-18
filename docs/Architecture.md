@@ -18359,3 +18359,62 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 
 > **번호**: §78 · G479~G483 · OQ-A109~A111 · #129(main `9971f89` 최대 §77 · G478 · OQ-A108 · #128 — `7538049`(#303) 병합 후에도 겹침 없음). ⛔ 예약 아님.
 > **#303 공존**: `roleplay/__tests__/repeatPhrases.test.ts`가 §77 `buildOtpCheckInstruction`을 쓰던 2곳을 `buildOtpCompareInstruction`(일치·다름)으로 바꿨다 — 반복 유도 문구 0건 검사·"틀렸을 때 다시 확인 요구" 생존 검사는 그대로다.
+
+## 80. (Bug fix — 2026-10-18 · 브랜치 `fix/otp-compare-live-miss`) **라이브에서 틀린 인증번호를 "확인되었습니다"로 넘긴 문제** — ⭐⭐ **판정은 정상(mismatch)이었고 지시도 실렸다. Gemini가 §78의 "(참고 — …)" 1줄을 무시했다(같은 조건 실호출 3/3)** ⇒ 결과 지시 문면 강화 + 판정 결과 로그 — implementer 기록
+
+### 80.1 재현과 판정 행 특정
+
+| 항목 | 값 |
+|---|---|
+| 라이브 | Functions `733b9da`(#306 포함) · 2026-10-18T14:28:22Z~14:28:26Z · institutional-impersonation · 중급 · 통화 화면 "텍스트로 진행"(sendMessage, `servedBy gemini-primary`) |
+| 대화 | 오프닝(사기범 #1) → "creo?" → 사기범 #2 → "홍길동이고 80년 1월 1일생이에요…" → 사기범 #3(인증번호 문자 도착 — `afterScammerTurns 3`, 같은 요청에서 도착 처리) → **"123456이요"** → 사기범 #4 "인증번호 확인되었습니다…" |
+| 판정 재생 | 같은 이력을 `otpCheckInputsFromHistory` → `evaluateOtpCheck`로 재생: `scammerTurnNumber 4` · 직전 사기범 발화에 "인증번호" 있음 · 생년월일 단서 없음 · 호 전환 없음(중급 — 확인 무력화 비활성) · 다음 문자(계좌, `afterScammerTurns 6`) 미도착 · 인증번호 문자 도착(#3, 이번 턴 아님) · `extractSpokenCodes("123456이요")=["123456"]` 6자리 ⇒ **outcome `mismatch` · reason `compared`** — 지시가 **붙었다** |
+| 의심 지점 판정 | (a) 이번 턴 도착: 아니다(도착은 #3, 번호는 #4) · (b) 경계: `4 ≥ 3` 정상 · (c) `textMasked`에 "인증번호" 남음 · (d) 추출 정상 ⇒ **판정표는 원인이 아니다** |
+| 원인 | 시스템 프롬프트 끝 쪽 턴 지시 1줄("(참고 — … 다르다 … 한 번만 요구한다)")을 모델이 따르지 않았다. 같은 프롬프트의 [진행 강제] "상대가 응하면 실제로 진행시킨다"와 경쟁한 것으로 **추정** |
+| 관측 공백 | §78은 대조 결과를 로그에 남기지 않아 라이브에서 "붙었는가"를 알 수 없었다 ⇒ 80.3 로그 |
+
+### 80.2 실호출 비교 (같은 시스템 프롬프트 · 같은 이력 · `gemini-3.1-flash-lite` · 각 3회)
+
+| 지시 | 틀린 번호("123456이요") | 맞는 번호("048231이요") |
+|---|---|---|
+| §78 문면 "(참고 — …다르다…)" | **0/3 되물음** — 3/3 "인증번호 확인했습니다"/"번호 확인했습니다" 후 진행 | — |
+| **강화 문면(채택)** — "(⚠️ 서버 확인 결과 — … 다르다. 이번 답변에서 \"확인했습니다\"·\"확인됐습니다\"라고 말하지 마라. 첫 문장에서 번호가 맞지 않는다고 말하고 … 한 번만 요구한다 …)" | **3/3 되물음**("번호가 안 맞는데요. 문자를 다시 한번 정확히 확인해서 불러주십시오…") · 번호 유출 0 | **3/3 진행**("확인됐습니다…") · 번호 되읽기 0 |
+| 대안(기각) — 결과를 최신 사용자 턴 뒤에 붙임 | 3/3 되물음 | 미측정 |
+
+⇒ 메시지 형식을 바꾸지 않는 **문면 강화**를 채택한다(사용자 턴 뒤 첨부는 효과가 같지만 데이터 구분자 밖 사용자 역할 문자열이라 ADR-0004 구조를 흐린다). ⚠️ 표본 각 3회 — "n건 중 m건"으로만 읽는다.
+
+### 80.3 변경
+
+| 항목 | 내용 | 파일 |
+|---|---|---|
+| 결과 지시 문면 | mismatch: "서버 확인 결과" · "확인했습니다/확인됐습니다" 금지 · 첫 문장 지정 · 한 번만 요구 / match: "서버 확인 결과 — 일치" · 번호 되읽지 않음. 진행 차단 표현·번호 없음(§78.0 유지) | `functions/src/scenarios/inCallSms.ts` `buildOtpCompareInstruction` |
+| 판정 사유 | `evaluateOtpCheck` → `{instruction, outcome: match/mismatch/none, reason}` — reason은 판정표의 빠진 행(`no-otp-scenario`·`no-digits`·`not-asked`·`birthdate`·`transferred`·`before-arrival`·`later-sms-arrived`·`arrived-this-turn`·`not-delivered`·`no-same-length`·`compared`). `resolveOtpCheckInstruction`은 호환 래퍼 | `functions/src/roleplay/otpCheck.ts` |
+| 이력 입력 | `otpCheckInputsFromHistory(storedHistory)` — sendMessage와 회귀 테스트가 같은 함수로 `scammerTurnNumber`·`lastScammerText`를 뽑는다 | 같은 파일 · `roleplay/index.ts` |
+| 라이브 로그 | `인증번호 대조 판정` `{scenarioId, scammerTurnNumber, outcome, reason}` — 숫자를 부른 턴만(`no-digits`·`no-otp-scenario` 제외). ⛔ 번호·대사·사용자 발화 없음(G170) | `roleplay/index.ts` |
+
+### 80.4 게이트
+
+| G | 고정하는 것 | 테스트 |
+|---|---|---|
+| **G489** | 라이브 재현 대화 재생 — 틀린 번호 → `mismatch/compared`, 맞는 번호 → `match/compared`, 같은 턴 도착 → `none/arrived-this-turn` | `functions/src/roleplay/__tests__/otpCheck.test.ts` §80 |
+| **G490** | 판정 사유 전수(빠진 행마다 reason) | 같은 파일 |
+| **G491** | mismatch 문면(서버 확인 결과 · "확인했습니다" 금지 · 첫 문장 지정 · 진행 차단·번호 없음) · sendMessage 배선·로그(소스 스캔) | 같은 파일 |
+
+### 80.5 실시간(Live) 경로 대조 — 권장안 (⏸ 보고만 · 클라 파일 미접촉 · §78.4 갱신)
+
+| 안 | 방법 | 비용 | 충돌·위험 |
+|---|---|---|---|
+| L2 클라 전사 대조 | 클라가 `inputAudioTranscription` 최종 전사에서 숫자 추출 → 문자 문서 `otpCode`와 비교 → 결과 1줄을 텍스트 턴으로 주입 | 서버 0 · 클라 중(추출 규칙을 `src/`에 복제 + 동등성 테스트) | ⚠️ **타이밍** — Live 모델은 전사 최종본보다 먼저 답을 시작할 수 있어 결과가 늦게 도착("확인했습니다" 뒤에 정정) · 전사 오인식("그래요?"→"creo?" §76)으로 맞는 번호를 틀렸다고 할 위험 · 클라 파일(`page.tsx`·`GeminiVoiceSession.tsx`) 수정 = S3 영역 |
+| L3 콜러블 대조 | 클라가 전사 숫자만 서버 콜러블에 보내고 서버가 비교 → 결과 반환 → 주입 | 새 콜러블 1 · Firestore 읽기 1 · 클라 중 | L2의 타이밍·오인식 문제 그대로 + 왕복 지연(타이밍 악화) |
+| **L4 Live 도구(권장)** | Live 세션에 도구 `check_verification_code(code)`를 선언 — 모델이 참가자가 부른 번호를 **스스로 인자로 넘겨** 부르면 서버가 비교해 "일치/다름" 결과만 돌려준다(번호 미노출). 기존 `send_prepared_sms`와 같은 **BLOCKING** 동작이라 모델이 결과를 받은 뒤에 말한다 | 서버: 도구 선언(`realtime/liveTools.ts`) + 비교 콜러블 1(LLM 없음 — 시크릿 선언 게이트 영향 없음) · 클라: 도구 호출 라우팅 1곳(`src/lib/realtime/liveToolResponse.ts` 등) | **타이밍 문제 없음**(BLOCKING) · 오디오를 모델이 직접 들어 전사 오인식 영향 작음(추정) · 모델이 도구를 안 부를 수 있음(시스템 지시로 유도 — 측정 필요) · 클라 라우팅 수정은 S3 이후 순서 조율 |
+
+⇒ **권장 L4.** L2/L3은 "모델이 이미 답한 뒤 결과 도착"을 구조적으로 막지 못한다. L4는 기존 도구 인프라(§59·§71 BLOCKING)를 재사용하고 번호가 모델에 가지 않는 원칙(§78.0)을 지킨다. 착수는 User 승인 + S3 클라 작업 이후.
+
+### 80.6 남은 위험
+
+| # | 항목 | 확인 방법 |
+|---|---|---|
+| **OQ-A117** | 강화 문면도 지시일 뿐 — 실호출 3/3은 작은 표본, 다른 시나리오(card-company-impersonation)·난이도 미측정 | 배포 후 `인증번호 대조 판정 outcome=mismatch` 로그 다음 사기범 대사 관찰 |
+| **OQ-A118** | Live 대조 부재(80.5 L4 권장) | User 승인 |
+
+> **번호**: §80 · G489~G491 · OQ-A117~A118 · #131 — 미병합 `feat/fictional-bank-names`(§79 · G484~G488 · OQ-A114~A116 · #130)를 건너뛰었다(main `7582df1` 최대 §78 · G483 · OQ-A113 · #129). ⛔ 예약 아님.

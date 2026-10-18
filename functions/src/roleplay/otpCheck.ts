@@ -27,7 +27,44 @@ const ASKED_FOR_OTP = /인증\s*(?:번호|코드)/;
 /** 이번 참가자 발화가 생년월일·생일 답인가. */
 const BIRTHDATE_CUE = /생년월일|생일|년생|\d{2,4}\s*년\s*\d{1,2}\s*월/;
 
-export async function resolveOtpCheckInstruction(input: {
+/** 판정 결과 — 라이브 확인용 로그에 싣는다(G170: 번호·대사 없이 코드값만). */
+export type OtpCheckReason =
+  | "no-otp-scenario"
+  | "no-digits"
+  | "not-asked"
+  | "birthdate"
+  | "transferred"
+  | "before-arrival"
+  | "later-sms-arrived"
+  | "arrived-this-turn"
+  | "not-delivered"
+  | "no-same-length"
+  | "compared";
+export type OtpCheckResult = {
+  instruction?: string;
+  outcome: "match" | "mismatch" | "none";
+  reason: OtpCheckReason;
+};
+
+/**
+ * sendMessage가 저장 이력에서 대조 입력 두 개를 뽑는 규칙(§80 — 회귀 테스트가 같은 함수로 대화를 재생한다).
+ * 지금 만들어질 사기범 응답 번호 = 저장된 사기범 메시지 수 + 1 · 직전 사기범 발화 = 마지막 scammer 메시지의 textMasked.
+ */
+export function otpCheckInputsFromHistory(history: ReadonlyArray<{ role: string; textMasked: string }>): {
+  scammerTurnNumber: number;
+  lastScammerText?: string;
+} {
+  const scammer = history.filter((m) => m.role === "scammer");
+  const last = scammer[scammer.length - 1];
+  return { scammerTurnNumber: scammer.length + 1, ...(last ? { lastScammerText: last.textMasked } : {}) };
+}
+
+/** 호환 래퍼 — 지시 문자열만 필요할 때. 판정 사유까지 필요하면 `evaluateOtpCheck`. */
+export async function resolveOtpCheckInstruction(input: OtpCheckInput): Promise<string | undefined> {
+  return (await evaluateOtpCheck(input)).instruction;
+}
+
+type OtpCheckInput = {
   scenarioId: string;
   /** 이번 턴 참가자 발화(마스킹 전 원문 — 6자리는 maskPII가 바꾸지 않지만 원문에서 뽑는 편이 확실하다). */
   userText: string;
@@ -41,16 +78,20 @@ export async function resolveOtpCheckInstruction(input: {
   lastScammerText?: string;
   /** 호 전환(확인 데스크 `placedAt`)이 끝났는가 — 그 뒤 화자는 다른 담당자다(§53.6 (3)). */
   callTransferred?: boolean;
-}): Promise<string | undefined> {
+};
+
+/** 판정표(머리 주석)대로 평가하고, 빠진 행을 `reason`으로 돌려준다. */
+export async function evaluateOtpCheck(input: OtpCheckInput): Promise<OtpCheckResult> {
+  const none = (reason: OtpCheckReason): OtpCheckResult => ({ outcome: "none", reason });
   const otpItems = listOtpItems(input.scenarioId);
-  if (otpItems.length === 0) return undefined;
+  if (otpItems.length === 0) return none("no-otp-scenario");
   const spoken = extractSpokenCodes(input.userText);
-  if (spoken.length === 0) return undefined;
+  if (spoken.length === 0) return none("no-digits");
   // QA M2 — 이 시나리오의 사기범은 문자 도착 뒤에도 "성함과 생년월일 6자리"를 묻는다. 그 답(6자리)을 인증번호로 보면
   // "번호가 다르다"가 나간다 ⇒ 직전 사기범 발화가 **인증번호**를 물었을 때만, 그리고 이번 발화가 생년월일이 아닐 때만 대조한다.
-  if (!ASKED_FOR_OTP.test(input.lastScammerText ?? "")) return undefined;
-  if (BIRTHDATE_CUE.test(input.userText)) return undefined;
-  if (input.callTransferred) return undefined;
+  if (!ASKED_FOR_OTP.test(input.lastScammerText ?? "")) return none("not-asked");
+  if (BIRTHDATE_CUE.test(input.userText)) return none("birthdate");
+  if (input.callTransferred) return none("transferred");
 
   const delivered = async (smsId: string): Promise<boolean> => {
     if (smsId === input.deliveredThisTurn) return true;
@@ -63,22 +104,33 @@ export async function resolveOtpCheckInstruction(input: {
     }
   };
 
+  let reason: OtpCheckReason = "before-arrival";
   for (const item of otpItems) {
     if (!item.otpCode || input.scammerTurnNumber < item.afterScammerTurns) continue;
     const laterItems = (IN_CALL_SMS[input.scenarioId] ?? []).filter(
       (other) => other.smsId !== item.smsId && other.afterScammerTurns > item.afterScammerTurns,
     );
     for (const later of laterItems) {
-      if (input.scammerTurnNumber >= later.afterScammerTurns && (await delivered(later.smsId))) return undefined;
+      if (input.scammerTurnNumber >= later.afterScammerTurns && (await delivered(later.smsId))) return none("later-sms-arrived");
     }
     // 이번 턴에 막 도착한 문자는 참가자가 아직 보지 못했다 — 이 턴의 숫자는 그 번호에 대한 답이 아니다(리뷰 #1).
-    if (item.smsId === input.deliveredThisTurn) continue;
-    if (!(await delivered(item.smsId))) continue;
+    if (item.smsId === input.deliveredThisTurn) {
+      reason = "arrived-this-turn";
+      continue;
+    }
+    if (!(await delivered(item.smsId))) {
+      reason = "not-delivered";
+      continue;
+    }
     // 정답과 자릿수가 같은 숫자열만 인증번호 답으로 본다 — 전화번호·금액·계좌 등 다른 숫자에 "번호가 안 맞는다"를
     // 내지 않는다(리뷰 #2, #300 과발동 방향 회피). 8자리 이상은 저장 전 maskPII가 `[계좌]`로 바꾸는 값이라 자연히 빠진다.
     const candidates = spoken.filter((code) => code.length === item.otpCode!.length);
-    if (candidates.length === 0) continue;
-    return buildOtpCompareInstruction(candidates.includes(item.otpCode) ? "match" : "mismatch");
+    if (candidates.length === 0) {
+      reason = "no-same-length";
+      continue;
+    }
+    const outcome = candidates.includes(item.otpCode) ? "match" : "mismatch";
+    return { instruction: buildOtpCompareInstruction(outcome), outcome, reason: "compared" };
   }
-  return undefined;
+  return none(reason);
 }

@@ -13,7 +13,7 @@ import { buildInCallSmsResponse } from "../../inCallSms/buildDoc";
 import { buildSystemPrompt } from "../promptAssembly";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { extractSpokenCodes } from "../../shared/spokenDigits";
-import { resolveOtpCheckInstruction } from "../otpCheck";
+import { evaluateOtpCheck, otpCheckInputsFromHistory, resolveOtpCheckInstruction } from "../otpCheck";
 
 const SCENARIO = "institutional-impersonation";
 /** 대조는 직전 사기범 발화가 인증번호를 물었을 때만 한다(QA M2) — 판정표 테스트의 기본 직전 발화. */
@@ -265,7 +265,79 @@ test("[OTP] 실시간 도착 응답은 #300 이전과 같다 — 카탈로그 �
 
 test("[OTP] sendMessage 배선 — 원문 userText를 넘기고 턴 지시와 합친다(소스 스캔)", () => {
   const src = readFileSync(path.resolve(__dirname, "../../../src/roleplay/index.ts"), "utf8").replace(/\r\n/g, "\n");
-  assert.match(src, /const otpCheckInstruction = await resolveOtpCheckInstruction\(\{\n\s*scenarioId: session\.scenarioId,\n\s*userText,/);
+  assert.match(src, /const otpInputs = otpCheckInputsFromHistory\(storedHistory\);/);
+  assert.match(src, /const otpCheck = await evaluateOtpCheck\(\{\n\s*scenarioId: session\.scenarioId,\n\s*userText,/);
+  assert.match(src, /const otpCheckInstruction = otpCheck\.instruction;/);
+  assert.match(src, /logger\.info\("인증번호 대조 판정", \{\n\s*scenarioId: session\.scenarioId,\n\s*scammerTurnNumber,\n\s*outcome: otpCheck\.outcome,\n\s*reason: otpCheck\.reason,\n\s*\}\);/);
   assert.match(src, /callTransferred: verifyState\?\.placed === true,/);
   assert.match(src, /\[turnInstruction, otpCheckInstruction\]\.filter\(Boolean\)\.join\("\\n"\)/);
+});
+
+// ── §80 라이브 재현(2026-10-18T14:28Z, institutional-impersonation · 중급 · 통화 화면 "텍스트로 진행") ────────────
+// 판정은 정상(mismatch)이었고 지시도 실렸지만 Gemini가 옛 문면을 무시하고 "인증번호 확인되었습니다"로 넘어갔다(실호출 3/3).
+// 이 테스트는 그 대화를 sendMessage와 같은 함수(otpCheckInputsFromHistory → evaluateOtpCheck)로 재생해 **판정 행**을 고정한다.
+// 모델이 따르는지는 단위 테스트로 보증할 수 없다 — 문면 강화의 실측은 Architecture §80.2.
+const LIVE_HISTORY: Array<{ role: "user" | "scammer"; textMasked: string }> = [
+  { role: "scammer", textMasked: "안녕하십니까, 서울중앙지검 수사과입니다. 고객님 명의 계좌가 금융범죄에 연루돼 확인차 연락드렸습니다." },
+  { role: "user", textMasked: "creo?" },
+  { role: "scammer", textMasked: "네? 잘 안 들렸는데요. 본인 확인을 위해 성함과 생년월일을 말씀해 주시겠습니까?" },
+  { role: "user", textMasked: "홍길동이고 80년 1월 1일생이에요. 어떻게 하면 되죠?" },
+  // 이 사기범 턴(#3)에서 인증번호 문자가 도착했다(afterScammerTurns 3 — sendMessage가 같은 요청에서 도착 처리).
+  { role: "scammer", textMasked: "네, 홍길동 선생님 확인되셨습니다. 지금 휴대폰으로 인증번호 6자리가 담긴 문자를 하나 보내드렸습니다." },
+];
+
+test("[OTP] §80 라이브 재현 — 문자 도착 다음 턴에 틀린 번호 → mismatch(compared), 맞는 번호 → match", async () => {
+  const inputs = otpCheckInputsFromHistory(LIVE_HISTORY);
+  assert.equal(inputs.scammerTurnNumber, OTP.afterScammerTurns + 1, "번호를 부른 턴은 문자 도착 다음 사기범 턴(#4)");
+  assert.match(inputs.lastScammerText ?? "", /인증번호/);
+  const run = (userText: string) =>
+    evaluateOtpCheck({
+      scenarioId: SCENARIO,
+      userText,
+      ...inputs,
+      isDelivered: async (smsId) => smsId === OTP.smsId,
+    });
+  const wrong = await run("123456이요");
+  assert.deepEqual([wrong.outcome, wrong.reason], ["mismatch", "compared"]);
+  assert.equal(wrong.instruction, buildOtpCompareInstruction("mismatch"));
+  const right = await run("048231이요");
+  assert.deepEqual([right.outcome, right.reason], ["match", "compared"]);
+  // 같은 대화에서 문자가 "이번 턴 도착"으로 처리되는 턴(#3)의 숫자는 대조하지 않는다 — 사유가 남는다.
+  const sameTurn = await evaluateOtpCheck({
+    scenarioId: SCENARIO,
+    userText: "123456이요",
+    lastScammerText: "인증번호 불러 주세요",
+    scammerTurnNumber: OTP.afterScammerTurns,
+    deliveredThisTurn: OTP.smsId,
+    isDelivered: async () => true,
+  });
+  assert.deepEqual([sameTurn.outcome, sameTurn.reason], ["none", "arrived-this-turn"]);
+});
+
+test("[OTP] §80 판정 사유 — 빠진 행이 reason으로 남는다(라이브 로그 해석용)", async () => {
+  const base = { scenarioId: SCENARIO, lastScammerText: ASK_OTP, scammerTurnNumber: OTP.afterScammerTurns + 1, isDelivered: async (id: string) => id === OTP.smsId };
+  const cases: Array<[Partial<Parameters<typeof evaluateOtpCheck>[0]>, string]> = [
+    [{ scenarioId: "family-accident-deepvoice", userText: "123456이요" }, "no-otp-scenario"],
+    [{ userText: "네 알겠어요" }, "no-digits"],
+    [{ userText: "123456이요", lastScammerText: "성함이 어떻게 되세요?" }, "not-asked"],
+    [{ userText: "생년월일은 800101이요" }, "birthdate"],
+    [{ userText: "123456이요", callTransferred: true }, "transferred"],
+    [{ userText: "123456이요", scammerTurnNumber: OTP.afterScammerTurns - 1 }, "before-arrival"],
+    [{ userText: "123456이요", scammerTurnNumber: ACCOUNT.afterScammerTurns, isDelivered: async () => true }, "later-sms-arrived"],
+    [{ userText: "123456이요", isDelivered: async () => false }, "not-delivered"],
+    [{ userText: "1234요" }, "no-same-length"],
+  ];
+  for (const [override, reason] of cases) {
+    const got = await evaluateOtpCheck({ ...base, userText: "", ...override } as Parameters<typeof evaluateOtpCheck>[0]);
+    assert.deepEqual([got.outcome, got.reason], ["none", reason], reason);
+  }
+});
+
+test("[OTP] §80 문면 — 'mismatch'는 '확인했습니다' 금지·첫 문장 지정·서버 확인 결과 명시, 진행 차단 표현·번호 없음", () => {
+  const text = buildOtpCompareInstruction("mismatch");
+  assert.match(text, /서버 확인 결과/);
+  assert.match(text, /"확인했습니다"·"확인됐습니다"라고 말하지 마라/);
+  assert.match(text, /첫 문장에서 번호가 맞지 않는다고 말하고/);
+  assert.doesNotMatch(text, /넘어가지 말/);
+  for (const code of ALL_OTP_CODES) assert.ok(!text.includes(code));
 });
