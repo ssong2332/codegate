@@ -139,6 +139,11 @@ export type SessionDoc = {
    * 부재(옛 세션)면 `resolveFictionalBankName`이 sessionId 해시로 결정적으로 고른다.
    */
   fictionalBankName?: string;
+  /**
+   * T191 문자 도달 조건(리뷰 Minor ③) — 문자 백스톱이 이미 넛지한 게이트 개방 시점(사용자 발화 수) 목록. 넛지 1회 보장용
+   * (`inCallSms/smsGate.ts` `alreadyNudged`). 쓰는 곳은 `deliverInCallSms` 백스톱 넛지 분기 한 곳. 숫자만 — 목적 · smsId 0.
+   */
+  smsNudgedOpenAt?: number[];
   // T191 S5 추가(옵셔널, 하위호환 · 무백필 — PRD AC-096 (e)(f)) — 세션 생성 시 서버가 배정한 흐름 변형의
   // **불투명 ID**(`fv-xxxx`). 수법 · 단계 · 인원은 `functions/src/scenarios/flowVariants.ts`(서버 전용)에만
   // 있다(D-46 · ADR-0004). 부재 = 변형 도입 이전 세션 → 원본 시나리오 프롬프트로 해석(무소급).
@@ -265,7 +270,16 @@ export type InCallSmsDoc = {
   // Policy) — 신규 문서에는 항상 채워진다(buildDoc 단위 테스트가 고정). 부재 문서는 리포트
   // 스냅샷에서 앵커 미해결(anchorResolved:false)로 정직하게 표기된다.
   anchorScammerTurn?: number;
+  // T191 문자 도달 조건(PRD AC-099 (h)) — 도착 기록 3필드. 옵셔널인 이유는 위 앵커와 같다(이전 문서 무백필).
+  // 쓰는 곳은 `inCallSms/smsDelivery.ts` 한 곳뿐이다. `purpose`는 도착 뒤에만 생기는 값이며 `kind`와 같은 수준의
+  // 정보다(도착 전 응답 · 자격증명에는 목적이 실리지 않는다).
+  purpose?: "identity" | "transfer" | "link";
+  trigger?: InCallSmsTriggerKind;
+  userTurnsAtArrival?: number;
 };
+
+/** 도착 경로 — 실시간 모델 도구 · 텍스트 폴백 마커 · 백스톱(두 경로 공통). */
+export type InCallSmsTriggerKind = "model_tool" | "model_marker" | "backstop";
 
 // --- sessions/{sessionId}/verifyIntercept/{offerId} (T83, UX-031/UF-011, §16.3.1, AC-071/019) ---
 //

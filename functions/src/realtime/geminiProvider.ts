@@ -16,7 +16,7 @@ import { asksIdentityCheck } from "../roleplay/personaAuthority";
 import { isL3Procedural } from "../roleplay/l3Depth";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
-import { hasInCallSms } from "../scenarios/inCallSms";
+import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { buildLiveToolDeclarations, buildLiveToolNames, declaresOfferVerificationDesk } from "./liveTools";
 import { SCENARIO_SPEAKER_GENDER, speakerGenderFor } from "./scenarioVoice";
@@ -111,10 +111,11 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // §59.5/§59.10 커밋 C — 이 세션에 실제로 선언할 Live 도구(조건은 buildLiveToolDeclarations
     // 자신이 진다 — hasInCallSms · declaresOfferVerificationDesk, §61). 프롬프트 조건부 치환
     // (toolDrivenTiming)과 **같은 트리거로 묶지 않는다** — 아래 buildSystemPrompt 호출부 주석 참고.
-    const liveToolDeclarations = buildLiveToolDeclarations(input.scenarioId, input.difficultyLevel);
+    const liveToolDeclarations = buildLiveToolDeclarations(input.scenarioId, input.difficultyLevel, input.flowVariantId);
     const systemPrompt = buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: input.difficultyLevel,
-      inCallSmsEnabled: hasInCallSms(input.scenarioId),
+      // ⭐ 리뷰 M2 — 도구 선언과 같은 단일 술어(변형 기준 · 변형 부재 = 종전 `hasInCallSms`).
+      inCallSmsEnabled: sessionDeclaresInCallSms(input.scenarioId, input.flowVariantId),
       verifyInterceptEnabled:
         hasVerifyIntercept(input.scenarioId) && input.difficultyLevel === "advanced",
       l3Procedural: isL3Procedural(input.scenarioId),
@@ -236,7 +237,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     if (!tokenName) {
       throw new Error("Gemini 단기 토큰 발급 응답에 name이 없습니다.");
     }
-    const liveTools = buildLiveToolNames(input.scenarioId, input.difficultyLevel);
+    const liveTools = buildLiveToolNames(input.scenarioId, input.difficultyLevel, input.flowVariantId);
 
     return {
       provider: "gemini",

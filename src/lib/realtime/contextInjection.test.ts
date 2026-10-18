@@ -478,3 +478,19 @@ test("[§78.4 T1 배선] 드레인은 전달 방식을 실어 보내고 · 확�
   assert.ok(page.includes('enqueueTurnInstruction(result.announceInstruction, "sms");'), "문자 안내는 표시 없이(맥락 주입)");
   assert.ok(page.includes('enqueueTurnInstruction(result.announceInstruction, "verify");'), "확인 권유는 표시 없이(맥락 주입)");
 });
+
+// ⭐ T191(문자 도달 조건 · 설계 "백스톱" 표) — 문자 백스톱 넛지는 맥락 주입이되 침묵 넛지 대상이 아니다(문자가 아직 안 갔다).
+test("[T191 smsNudge] 넛지 항목은 smsNudge로 · 맥락 주입으로 나가고 침묵 넛지를 걸지 않는다", () => {
+  const delivery = deliveryForInstruction({ priority: "sms", smsNudge: true });
+  assert.equal(delivery, "smsNudge");
+  assert.equal(sendsAsContextInjection(delivery), true, "turnComplete:false(X5)");
+  const step = stepSilenceNudge(INITIAL_SILENCE_NUDGE_STATE, { type: "injected", delivery, nowMs: 1000 });
+  assert.equal(step.state.armedAt, null, "넛지는 '방금 보낸 문자' 침묵 넛지를 걸지 않는다");
+  // 대조 — 문자 도착 안내는 침묵 넛지를 건다.
+  const announce = stepSilenceNudge(INITIAL_SILENCE_NUDGE_STATE, {
+    type: "injected",
+    delivery: deliveryForInstruction({ priority: "sms" }),
+    nowMs: 1000,
+  });
+  assert.equal(announce.state.armedAt, 1000);
+});

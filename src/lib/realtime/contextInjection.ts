@@ -19,17 +19,20 @@
  * | `smsAnnounce` | 문자 도착 안내(`announceInstruction`) | 맥락 주입(`turnComplete:false`) + 침묵 넛지 대상 |
  * | `verifyAnnounce` | 확인 창구 권유(`verify` announce) | 맥락 주입(`turnComplete:false`) |
  * | `speakerSwitch` | 확인 창구 재연결 지시(`reconnectInstruction`) | 화자 전환 첫 발화 — `relayGreeting` 텍스트 턴(`turnComplete:true`, §71.5 큐 경유) |
+ * | `smsNudge` | 문자 백스톱 넛지(서버 `nudgeInstruction` — T191 문자 도달 조건 설계 "백스톱" 표가 정한 행) | 맥락 주입(`turnComplete:false`) · **침묵 넛지 대상 아님**(문자가 아직 안 갔다 — "방금 보낸 문자" 문면이 거짓이 된다) |
  *
  * ⛔ 표에 없는 지시가 생기면 행을 추가할지 먼저 묻는다(§78.4.2 머리말).
  */
-export type InstructionDelivery = "smsAnnounce" | "verifyAnnounce" | "speakerSwitch";
+export type InstructionDelivery = "smsAnnounce" | "verifyAnnounce" | "speakerSwitch" | "smsNudge";
 
 /** G31 큐(`@/lib/verifyintercept` `PendingInstruction`) 항목 → 전달 방식. */
 export function deliveryForInstruction(item: {
   priority: "sms" | "verify";
   speakerSwitch?: boolean;
+  smsNudge?: boolean;
 }): InstructionDelivery {
   if (item.speakerSwitch) return "speakerSwitch";
+  if (item.smsNudge) return "smsNudge";
   return item.priority === "sms" ? "smsAnnounce" : "verifyAnnounce";
 }
 

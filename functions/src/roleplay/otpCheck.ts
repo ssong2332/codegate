@@ -20,7 +20,11 @@
 // | 그 밖(같은 자릿수인데 다르다) | `buildOtpCompareInstruction("mismatch")` | 1 |
 import { logger } from "firebase-functions";
 import { buildOtpCompareInstruction, IN_CALL_SMS, listOtpItems } from "../scenarios/inCallSms";
+import type { InCallSmsItem } from "../scenarios/inCallSms";
 import { extractSpokenCodes } from "../shared/spokenDigits";
+
+/** 도착 기록 1건(`inCallSms/smsGate.ts` `DeliveredSmsRecord`와 같은 모양 — 순환 import를 피해 구조로만 받는다). */
+type OtpDeliveredRecord = { smsId: string; userTurnsAtArrival?: number };
 
 /**
  * 직전 사기범 발화가 인증번호를 물었는가 — "인증번호"·"인증 번호"·"인증코드", 그리고 **틀린 번호에 되물은 말**
@@ -87,6 +91,13 @@ type OtpCheckInput = {
   lastScammerText?: string;
   /** 호 전환(확인 데스크 `placedAt`)이 끝났는가 — 그 뒤 화자는 다른 담당자다(§53.6 (3)). */
   callTransferred?: boolean;
+  /**
+   * ⭐ T191 리뷰 M3 — 이 세션의 문자 도착 기록(이번 턴 백스톱 도착 포함). **있으면** 도착 여부 · "다음 문자 도착"을
+   * 카탈로그 고정 턴(`afterScammerTurns`)이 아니라 이 기록(문서 존재 · `userTurnsAtArrival` 순서)으로 판정한다 —
+   * T191부터 문자 순서 · 시점이 대화에 따라 달라지기 때문이다(AC-099 (d)). 결과 1줄 문면 · 번호 비노출은 그대로다.
+   * **없으면** 종전 판정(카탈로그 턴 + `isDelivered`) 그대로(변형 없는 세션 · 기록 조회 실패 — 무소급).
+   */
+  deliveredRecords?: readonly OtpDeliveredRecord[];
 };
 
 /** 판정표(머리 주석)대로 평가하고, 빠진 행을 `reason`으로 돌려준다. */
@@ -113,6 +124,8 @@ export async function evaluateOtpCheck(input: OtpCheckInput): Promise<OtpCheckRe
     }
   };
 
+  if (input.deliveredRecords) return evaluateByArrivalRecords(input, otpItems, spoken, input.deliveredRecords);
+
   let reason: OtpCheckReason = "before-arrival";
   for (const item of otpItems) {
     if (!item.otpCode || input.scammerTurnNumber < item.afterScammerTurns) continue;
@@ -133,6 +146,57 @@ export async function evaluateOtpCheck(input: OtpCheckInput): Promise<OtpCheckRe
     }
     // 정답과 자릿수가 같은 숫자열만 인증번호 답으로 본다 — 전화번호·금액·계좌 등 다른 숫자에 "번호가 안 맞는다"를
     // 내지 않는다(리뷰 #2, #300 과발동 방향 회피). 8자리 이상은 저장 전 maskPII가 `[계좌]`로 바꾸는 값이라 자연히 빠진다.
+    const candidates = spoken.filter((code) => code.length === item.otpCode!.length);
+    if (candidates.length === 0) {
+      reason = "no-same-length";
+      continue;
+    }
+    const outcome = candidates.includes(item.otpCode) ? "match" : "mismatch";
+    const repeat = REASKED_OTP.test(input.lastScammerText ?? "");
+    return { instruction: buildOtpCompareInstruction(outcome, { repeat }), outcome, reason: "compared", ...(repeat ? { repeat } : {}) };
+  }
+  return none(reason);
+}
+
+/**
+ * ⭐ T191 리뷰 M3 — 도착 기록 기반 판정(머리 주석 판정표의 "도착 전" · "다음 문자 도착" · "이번 턴 도착" · "미도착" 행을
+ * 기록으로 바꾼 것. 나머지 행 — 숫자 없음 · 묻지 않음 · 생년월일 · 전환 · 자릿수 — 은 위에서 이미 같은 순서로 걸렀다).
+ *
+ * | If (위에서부터) | Then |
+ * |---|---|
+ * | 인증번호 문자가 **이번 턴에** 도착(`deliveredThisTurn`) | 없음(`arrived-this-turn`) |
+ * | 인증번호 문자의 도착 기록이 없다 | 없음(`not-delivered`) |
+ * | 다른 문자 중 인증번호보다 **늦게**(더 큰 `userTurnsAtArrival`) 도착한 것이 있다 · 이번 턴에 다른 문자가 도착했다 | 없음(`later-sms-arrived`) |
+ * | 같은 자릿수 후보 없음 | 없음(`no-same-length`) |
+ * | 그 외 | 일치/다름 결과 1줄 |
+ *
+ * ⚠️ 이전 문서(`userTurnsAtArrival` 부재)는 0으로 본다 — 두 문서가 모두 0이면 "늦게"가 아니므로 대조한다(보수 쪽 아님:
+ * 무백필 세션의 드문 경우로 판단 — 보고서 인계).
+ */
+function evaluateByArrivalRecords(
+  input: OtpCheckInput,
+  otpItems: InCallSmsItem[],
+  spoken: string[],
+  records: readonly OtpDeliveredRecord[],
+): OtpCheckResult {
+  const none = (reason: OtpCheckReason): OtpCheckResult => ({ outcome: "none", reason });
+  let reason: OtpCheckReason = "not-delivered";
+  for (const item of otpItems) {
+    if (!item.otpCode) continue;
+    if (item.smsId === input.deliveredThisTurn) {
+      reason = "arrived-this-turn";
+      continue;
+    }
+    const own = records.find((r) => r.smsId === item.smsId);
+    if (!own) {
+      reason = "not-delivered";
+      continue;
+    }
+    const ownAt = own.userTurnsAtArrival ?? 0;
+    const laterArrived =
+      records.some((r) => r.smsId !== item.smsId && (r.userTurnsAtArrival ?? 0) > ownAt) ||
+      (input.deliveredThisTurn !== undefined && input.deliveredThisTurn !== item.smsId);
+    if (laterArrived) return none("later-sms-arrived");
     const candidates = spoken.filter((code) => code.length === item.otpCode!.length);
     if (candidates.length === 0) {
       reason = "no-same-length";

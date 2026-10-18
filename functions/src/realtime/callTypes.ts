@@ -21,16 +21,14 @@ export type CreateRealtimeCallResponse = {
    */
   difficultyApplied: boolean;
   /**
-   * T68(§15.1.2, API.md T57 증분) — 이 시나리오의 통화 중 문자 **트리거만**(`smsId` + 몇 번째
-   * 사기범 턴 이후). **본문·인증번호·발신번호는 포함하지 않는다** — 도착 시점에 `deliverInCallSms`가
-   * 서버 카탈로그에서 렌더해 Firestore에 쓰고, 화면은 그 구독으로만 그린다(사전 유출 방지).
-   * 카탈로그가 없는 시나리오는 필드 부재.
+   * ⭐ T191(문자 도달 조건 · PRD AC-099) — 예전 `inCallSmsTriggers`(`smsId` + 고정 턴)를 대체한다. `true`면 이 세션의
+   * 흐름 변형이 통화 중 문자를 선언했다는 뜻이고, 클라는 **사용자 발화 flush마다** `deliverInCallSms({ trigger:"backstop" })`
+   * 로 서버에 묻는다(서버가 `none_pending`을 주면 멈춘다). 목적 · 시점 · smsId는 내려가지 않는다(설계 금지 X1 —
+   * 도착 전 흐름 0). 선언이 없으면 필드 부재.
    *
-   * ⚠️ 이 카운팅은 §13.5 스킨과 같은 **프레젠테이션 층위**다 — 어떤 안전 판정도 게이팅하지 않는다.
-   * 클라가 임의 `smsId`를 보내도 서버가 시나리오 카탈로그 소속을 재검증하므로(G12), 위조의 최대
-   * 효과는 "자기 훈련용 모의 문자를 조금 일찍 보는 것"뿐이다.
+   * ⚠️ 클라 카운팅은 §13.5 스킨과 같은 **프레젠테이션 층위**다 — 어떤 안전 판정도 게이팅하지 않는다.
    */
-  inCallSmsTriggers?: { smsId: string; afterScammerTurns: number }[];
+  inCallSmsBackstop?: true;
   /**
    * T83(§16.1.5, API.md T79 증분) — 확인 시도 무력화(UF-011)의 **가용 게이트만**. 창구명·번호·모델
    * 지시는 포함하지 않는다(오퍼 시점에 `deliverVerifyOffer`가 서버 카탈로그에서 렌더 — 사전 유출

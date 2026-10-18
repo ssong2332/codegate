@@ -22,7 +22,7 @@
 // 경로로 보내고, 그 경로는 매 턴 서버가 프롬프트를 조립하므로 난이도가 정상 반영된다")가 여기에
 // 그대로 적용된다.
 //
-// ⭐ 낮춰도 **트리거는 남는다** — `verifyOffer`·`inCallSmsTriggers`·`isMock`은 손대지 않는다.
+// ⭐ 낮춰도 **트리거는 남는다** — `verifyOffer`·`inCallSmsBackstop`·`isMock`은 손대지 않는다.
 // 그것이 이 함수의 목적 전부다.
 import type { CreateRealtimeCallResponse } from "../api/types";
 
@@ -31,7 +31,7 @@ import type { CreateRealtimeCallResponse } from "../api/types";
  *
  * - `provider`/`signedUrl`/`geminiToken`/`geminiModel`: 실시간 세션을 마운트하지 못하도록 비운다.
  * - `difficultyApplied`: 텍스트 폴백은 서버가 매 턴 난이도를 반영하므로 true다(서버 폴백 계약 동일).
- * - 그 밖의 필드(`verifyOffer`·`inCallSmsTriggers`·`isMock`·`voiceId`·`language`)는 **무변경**.
+ * - 그 밖의 필드(`verifyOffer`·`inCallSmsBackstop`·`isMock`·`voiceId`·`language`)는 **무변경**.
  *
  * ⭐ 이미 `provider:"none"`인 응답(E3 = isMock/미가용 경로)에는 **아무 효과가 없다** — 그 경우
  * 반환값은 입력과 동등하며, 그래서 §54.9 (4) 1이 지정한 *"E3에서 `issued`를 그대로 보관"* 과

@@ -10,7 +10,7 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { ELEVENLABS_API_KEY, GEMINI_KEY_SECRETS } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
-import { listInCallSmsTriggers } from "../scenarios/inCallSms";
+import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { getVerifyOfferTrigger } from "../scenarios/verifyIntercept";
 import type { VoiceMode } from "../scenarios/publicMeta";
 import type { ChallengeDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
@@ -137,11 +137,14 @@ export const createRealtimeCall = onCall<
 
   const effectiveVoiceMode = resolveEffectiveVoiceMode(session.voiceSelectionSource);
   const provider = getRealtimeProvider(session.scenarioId, effectiveVoiceMode);
-  // T68(§15.1.2) — 통화 중 문자 **트리거만** 내려준다(본문·인증번호는 도착 시점에 deliverInCallSms가
-  // 서버에서 렌더). 카탈로그가 없는 시나리오면 빈 배열 → 필드 자체를 붙이지 않는다(API.md).
-  const inCallSmsTriggers = listInCallSmsTriggers(session.scenarioId);
+  // T68(§15.1.2) → ⭐ T191(문자 도달 조건) — 예전에는 카탈로그 트리거(`smsId` + `afterScammerTurns`)를 내려줘 클라가
+  // 고정 턴에 발송을 요청했다. 이제 발송 판정은 전부 서버(`inCallSms/smsGate.ts`)이고, 클라에 내려가는 것은
+  // **"이 세션은 문자 백스톱을 물어봐도 된다"는 표시 하나**다(목적 · 시점 · smsId 0 — 설계 금지 X1).
+  // 세션의 흐름 변형이 문자를 선언하지 않으면 필드 자체를 붙이지 않는다.
+  // ⭐ 리뷰 M2 — 도구 선언 · 프롬프트와 같은 단일 술어.
+  const smsDeclared = sessionDeclaresInCallSms(session.scenarioId, session.flowVariantId);
   const withSmsTriggers = <T extends object>(credentials: T): T =>
-    inCallSmsTriggers.length > 0 ? { ...credentials, inCallSmsTriggers } : credentials;
+    smsDeclared ? { ...credentials, inCallSmsBackstop: true as const } : credentials;
   // T83(§16.1.5) — 확인 시도 무력화의 **가용 게이트만** 내려준다(창구명·번호·모델 지시는 오퍼
   // 시점에 deliverVerifyOffer가 서버 카탈로그에서 렌더 — `withSmsTriggers`와 같은 자리·같은 원칙).
   //

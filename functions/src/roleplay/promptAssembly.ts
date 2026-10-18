@@ -753,8 +753,11 @@ const USER_INPUT_CLOSE = "[훈련참가자입력:데이터끝]";
 // 원천 차단한다. `[[SIGNAL:...]]`도 정규식에 이미 함께 포함돼(T29가 선제적으로 넣어 둠) 같은 보호를
 // 받는다 — T30(에스컬레이션 구현)이 실제로 escalationSignal.ts의 감지 로직을 추가한 뒤 이 정규식이
 // `[[SIGNAL:ESCALATE_VOICE]]` 흉내도 무력화함을 확인했다(별도 수정 불필요, 코드가 이미 앞서 있었음).
+// ⭐ T191(문자 도달 조건 설계 §78.3.1 — 정본 위치) — 텍스트 폴백의 문자 요청 마커 `[[SMS:목적]]`(`smsMarker.ts`)도 같은
+// 방식으로 무력화한다. 추출 정규식이 대소문자 · 공백을 허용하므로(`[[ sms : …]]`) 이쪽도 같은 폭으로 잡는다.
+// LINK · SIGNAL 정규식은 종전 그대로다(바이트 회귀 0).
 function escapeSentinelLookalikes(text: string): string {
-  return text.replace(/\[\[(LINK|SIGNAL):/g, "［［$1：");
+  return text.replace(/\[\[(LINK|SIGNAL):/g, "［［$1：").replace(/\[\[(\s*SMS\s*):/gi, "［［$1：");
 }
 
 function escapeDelimiterLookalikes(text: string): string {
