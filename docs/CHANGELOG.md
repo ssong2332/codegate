@@ -4,6 +4,16 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-18 추가분, 브랜치 `fix/llm-overload-retry`, 커밋 `1283ea9`, base `54cb12a`)**: 아직 main에 병합되지 않았고 배포 0회, 라이브 미검증이다. 테스트 수치는 QA 보고 인용값이다(docs 미재현).
+
+### Fixed
+- **Gemini 503(과부하)에 0.5초·1.5초 백오프로 최대 2회 재시도(2026-10-18 라이브 관측)**: 직전 항목(#292) 배포 뒤 2026-10-18T04:05:03Z 첫 턴이 Gemini 503 "high demand"로 922ms 만에 Mock으로 강등됐다. H1 프로브(03:12~03:28Z)에서도 503이 11/20이었다.
+  - **구성**: 신규 `functions/src/llm/overloadClass.ts`(`isOverloadError` — status 503, 또는 본문 JSON이 `UNAVAILABLE`·code 503)와 `overloadRetry.ts`(`withOverloadRetry` — 0.5초·1.5초 대기 후 최대 2회). `경과+대기+2초 > 시간 상한`이면 그 재시도는 생략한다. 429·타임아웃·네트워크 오류는 재시도하지 않아 API 키 순환(429)에는 간섭하지 않는다.
+  - **적용 범위**: `getLlmClient()`가 실 Gemini에만 씌우고 `withTimeout`이 가장 바깥이다. 팩토리 경유라 `sendMessage`(첫 턴 20초·이후 10초)·오프닝·되감기 판정에 모두 적용된다. 새 환경 변수는 없다.
+  - **한계**: 503 거절이 무료 쿼터에 집계되는지 미확인(추정 — 확인 방법: 재시도 다발 시간대의 쿼터 사용량 비교) · 타임아웃 뒤에도 진행 중이던 요청과 늦은 "재시도 성공" 로그가 남을 수 있음 · 503이면 API 키 1번에서만 재시도 · 모델 과부하 자체는 해결하지 않는다.
+  - **검토 중(미도입)**: 대체 모델 후보 프로브(2026-10-18)를 마쳤으나 도입은 User 결정 대기이며 코드에는 반영하지 않았다.
+  - **검증(인용값 — QA 보고)**: reviewer APPROVED(Minor 5) · QA GO · functions 967→982 pass / 0 fail · 루트 529 / 0 · 실제 타이머 실측(503 1회 뒤 +0.5초·2회 뒤 +2초에 성공, 10초 예산에서 7.6초에 온 503은 재시도 생략, 2키 429 순환 유지). `docs/Tasks.md`에 이 작업의 행이 없다(커밋 `Refs: (미등재 — planner 인계)`).
+
 ### Added (2026-10-18 · 브랜치 `test/AC-090-gaps` · PRD v1.19 AC-090 · 테스트만, 배포 불필요 · 미병합)
 - **AC-090(익명 세션이 수신 흐름 밖이면 `/login` 안내) 테스트 공백 2건 보강**: `src/lib/auth/anonymousScope.test.ts`에 (b) `/login` 익명 안내 블록이 `role="status"`로 렌더, (e) RouteGuard 비로그인 경로 불변 — 2건 추가. 변형 검증: `role="status"` 제거 → (b) 실패 · unauth 가드의 `!holdCurrentScreen` 제거 → (e) 실패. 오케스트레이터 실측 `npm --prefix functions test` 967/0 · `npm test` 531/0(docs 미재현). reviewer APPROVED(Minor 4: 정규식 취약성, 선택). (c) "Google 로그인 후 자가 훈련 성공"은 라이브 출력 증거로만 유지. 코드 동작 불변.
 
