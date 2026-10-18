@@ -410,8 +410,10 @@ const BEGINNER_BLOCK = `[난이도 — 초급: 수법이 눈에 띄게 드러나
 // 조건절은 "본인확인 항목 확인"만 막고 "조회용 모의 앱 설치"는 막지 못하므로, 이 목록 자체를 한
 // 번 더 갈라야 한다 — 안 하면 §43이 닫은 신고(고급 L4 선행 요구가 캐릭터에 안 맞는 예시를 제시)가
 // 문자 카탈로그를 가진 협박 시나리오에서 되살아난다.
+// T187(docs/Architecture.md §72.5 D5 P-2 · PRD v1.18 AC-086 (e)) — 행동 예시 목록은 **대사 층**이라
+// 표식 낱말("모의")을 뺐다(의미 보존 — 형제 상수 EXISTING_STEP_EXAMPLES_WITH_CATALOG의 "앱 설치"와 같은 결).
 const PRIOR_DEMAND_EXAMPLES_WITH_CATALOG_TRUE =
-  "본인확인 항목 확인, 안내 문자·링크 확인, 조회용 모의 앱 설치 등";
+  "본인확인 항목 확인, 안내 문자·링크 확인, 조회용 앱 설치 등";
 const PRIOR_DEMAND_EXAMPLES_WITH_CATALOG_FALSE =
   "안내 문자 확인, 상황을 되짚는 사실 확인 질문, 조건을 낮춘 작은 요구 먼저 통과시키기 등";
 // ⚠️ **구현 중 발견 — G301 게이트와의 정합을 위해 DEFAULT도 갈랐다(architect 원안은 이 목록을

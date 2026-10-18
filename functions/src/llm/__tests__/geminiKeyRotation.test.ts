@@ -109,6 +109,14 @@ function stubFetch(responses: { status: number; body: unknown }[]): FetchHarness
     apiKeyHeaders.push(readApiKeyHeader(init));
     const spec = responses[Math.min(calls, responses.length - 1)];
     calls += 1;
+    // H2(2026-10-18) — GeminiLlmClient가 generateContentStream(SSE)을 쓰므로 성공(200) 응답만 SSE
+    // 본문으로 준다. 오류(429 등)는 스트림 처리 전에 던져지므로 JSON 그대로 둔다.
+    if (spec.status === 200) {
+      return new Response(`data: ${JSON.stringify(spec.body)}\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    }
     return new Response(JSON.stringify(spec.body), {
       status: spec.status,
       headers: { "content-type": "application/json" },

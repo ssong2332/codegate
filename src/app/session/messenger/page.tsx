@@ -19,7 +19,12 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { collection, doc, getDoc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { getPendingSessionId } from "@/lib/recording";
+import {
+  getPendingSessionId,
+  isSessionAnswered,
+  isStartNoticeAcknowledged,
+  markStartNoticeAcknowledged,
+} from "@/lib/recording";
 import {
   recordMockScreenEvent,
   requestEscalation,
@@ -32,15 +37,14 @@ import {
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import { detectMessengerSkin, type MessengerSkin } from "@/lib/messenger/detectSkin";
 import EndTrainingButton from "@/components/EndTrainingButton";
-import SyntheticLabel from "@/components/SyntheticLabel";
 import MessengerFakeLanding from "@/components/MessengerFakeLanding";
-import {
-  DIFFICULTY_LABEL,
-  normalizeDifficultyLevel,
-  type DifficultyLevel,
-} from "@/lib/difficulty";
-import { Banner, Button } from "@/components/ui";
+import MessengerStartNotice from "@/components/MessengerStartNotice";
+import { Button } from "@/components/ui";
 import { foldDegraded, DIALOGUE_DEGRADED_NOTICE } from "@/lib/report/degradedDisclosure";
+import {
+  decideMessengerStartNotice,
+  type MessengerStartNoticeState,
+} from "@/lib/sessionboundary/startNoticeGate";
 
 type PageState = "checking" | "ready" | "no-session" | "scenario-not-found" | "load-error";
 // detectSkin.ts의 MessengerSkinSource는 auto|fallback만 다룬다(자동 감지 결과 타입) — 이 화면은
@@ -84,8 +88,10 @@ export default function MessengerSessionPage() {
   const [sessionId] = useState<string | null>(() => getPendingSessionId());
   const [pageState, setPageState] = useState<PageState>(sessionId ? "checking" : "no-session");
   const [scenario, setScenario] = useState<ScenarioDoc | null>(null);
-  // T72 — 이 대화의 난이도(세션 문서 기준, P-22 동일 라벨).
-  const [difficultyLevel, setDifficultyLevel] = useState<DifficultyLevel | null>(null);
+  // T187(docs/Architecture.md §72.5 D2 · UX-022 `start-notice` N-1~N-4 · AC-088) — 시작 전 고지
+  // 상태. 세션 로드 effect가 순수 함수 `decideMessengerStartNotice`로 정한다. "skip"이 되기 전에는
+  // 대화 목록을 구독하지 않는다(아래 구독 effect의 가드 — 첫 메시지 렌더 0이 구조로 성립).
+  const [startNotice, setStartNotice] = useState<MessengerStartNoticeState>("pending");
   // T158(§48.5.1, AC-084, P-31) — 대사 축 강등 관측. sticky OR-fold, false로 되돌리는 대입 0건
   // (G278). 마운트 시 `sessions/{sid}.llmProvider` + 매 턴 `SendMessageResponse.isMock`의 합.
   const [dialogueDegraded, setDialogueDegraded] = useState(false);
@@ -110,6 +116,9 @@ export default function MessengerSessionPage() {
   // 사용자 신고(2026-07-24) — 대화가 길어지면 자동으로 맨 아래로 스크롤되지 않던 문제. 목록 끝에
   // 빈 sentinel을 두고 메시지 도착·전송 중(타이핑 인디케이터 노출) 시마다 그 지점으로 스크롤한다.
   const scrollAnchorRef = useRef<HTMLLIElement | null>(null);
+  // T187(UX-022 v1.29 노트 (5)) — "메시지 보기" 뒤 포커스는 대화 목록으로(입력창 자동 포커스 ⛔).
+  const messageListRef = useRef<HTMLUListElement | null>(null);
+  const focusListAfterNoticeRef = useRef(false);
 
   // 세션·시나리오 로드 + (문자형이면) 스킨 결정. session/play/page.tsx와 동일하게 인라인 async
   // IIFE로 감싼다(react-hooks/set-state-in-effect 회피 관례).
@@ -132,9 +141,17 @@ export default function MessengerSessionPage() {
           return;
         }
         setScenario(found);
-        // T72(UX-022 v1.11 난이도 배지, P-22) — 세션 문서에 서버가 실제로 기록한 값을 읽는다.
-        // 메신저 채팅은 매 턴 sendMessage(서버 조립)를 타므로 난이도가 항상 반영된다.
-        setDifficultyLevel(normalizeDifficultyLevel(data.difficultyLevel));
+        // T187(§72 · M-13) — 세션 중 난이도 배지를 지워 난이도 읽기도 함께 걷었다(표기 전용이었다 —
+        // 난이도 반영은 서버 sendMessage 조립이 하므로 동작 변화 0).
+        // T187(§72.5 D2) — 시작 전 고지 판정. 확인 기록은 이 탭 sessionStorage(다른 키 — G450),
+        // 통화 "받기" 기록은 **읽기만**(역방향 도착 N-2).
+        setStartNotice(
+          decideMessengerStartNotice({
+            acknowledged: isStartNoticeAcknowledged(sessionId),
+            answeredInThisTab: isSessionAnswered(sessionId),
+            sessionEnded: data.status === "ended",
+          }),
+        );
         // T158(§48.5.1) — 마운트 시 관측(OR-fold 첫 항). `foldDegraded`가 sticky를 보장한다.
         setDialogueDegraded((current) => foldDegraded(current, data.llmProvider === "mock"));
         if (data.status === "ended") {
@@ -172,10 +189,11 @@ export default function MessengerSessionPage() {
     };
   }, [sessionId]);
 
-  // 대화 로그 구독 — "받기" 개념이 없어(채팅은 진입 즉시 오프닝 메시지가 보인다) 로드 완료 후
-  // 곧바로 구독한다.
+  // 대화 로그 구독 — T187(§72.5 D2 · AC-088 (b)) 시작 전 고지를 확인("skip")하기 전에는 구독하지
+  // 않는다. 통화 화면의 "받기 전에는 구독하지 않는다"와 같은 규칙이다(오프닝 메시지는 createSession
+  // 시점에 이미 문서에 있으므로 — §72.4 ② — 구독을 미루는 것만으로 첫 메시지 렌더 0이 성립한다).
   useEffect(() => {
-    if (!sessionId || pageState !== "ready") return;
+    if (!sessionId || pageState !== "ready" || startNotice !== "skip") return;
     const messagesQuery = query(
       collection(db, "sessions", sessionId, "messages"),
       orderBy("turnIndex", "asc"),
@@ -195,7 +213,14 @@ export default function MessengerSessionPage() {
       );
     });
     return unsubscribe;
-  }, [sessionId, pageState]);
+  }, [sessionId, pageState, startNotice]);
+
+  // T187(UX-022 v1.29 노트 (5)) — "메시지 보기"를 누른 직후 1회만 대화 목록에 포커스를 둔다.
+  useEffect(() => {
+    if (startNotice !== "skip" || !focusListAfterNoticeRef.current) return;
+    focusListAfterNoticeRef.current = false;
+    messageListRef.current?.focus();
+  }, [startNotice]);
 
   // 사용자 신고(2026-07-24) — 새 메시지가 오거나(상대 응답) 내가 보내서 "입력 중" 표시가 뜰 때마다
   // 맨 아래로 스크롤한다. scrollIntoView는 조상 스크롤 컨테이너가 없어도 안전(main 자체가 뷰포트
@@ -267,6 +292,14 @@ export default function MessengerSessionPage() {
     router.push("/session/end");
   };
 
+  // T187(§72.5 D2) — 시작 전 고지 확인. 기록은 새 키(`markStartNoticeAcknowledged`)에만 쓴다 —
+  // ⛔ `markSessionAnswered`를 쓰면 메신저→통화 에스컬레이션이 벨 화면 프리롤을 건너뛴다(G450).
+  const handleConfirmStartNotice = () => {
+    if (sessionId) markStartNoticeAcknowledged(sessionId);
+    focusListAfterNoticeRef.current = true;
+    setStartNotice("skip");
+  };
+
   // T84(§15.9.6/§15.9.7 G56) — 모의 화면 상호작용 기록. **핵심 루프를 막지 않는다**(오버레이는
   // 정상 열리고 닫히며 대화도 계속된다). 다만 **조용히 삼키지 않는다**: 이 write가 유실되면 그
   // 순간이 리포트에서 통째로 사라져 "참가자는 속았는데 리포트는 속지 않았다고 말하는" 상태가
@@ -282,7 +315,9 @@ export default function MessengerSessionPage() {
         try {
           await recordMockScreenEvent({ sessionId, landingId, event });
         } catch (err) {
-          console.warn("[T84] 모의 화면 이벤트 기록 실패(비차단 — 훈련은 계속됩니다)", {
+          // T187(G437) — 개발자 콘솔 문자열이지만 렌더 가능 리터럴 축은 호출 맥락을 가리지 않으므로
+          // 표식 낱말을 쓰지 않는다("모의" → "목업"). 동작 변화 0.
+          console.warn("[T84] 목업 화면 이벤트 기록 실패(비차단 — 훈련은 계속됩니다)", {
             landingId,
             event,
             err,
@@ -314,7 +349,7 @@ export default function MessengerSessionPage() {
     );
   }
 
-  if (pageState !== "ready" || !scenario) {
+  if (pageState !== "ready" || !scenario || startNotice === "pending") {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
         <p className="flex items-center gap-2 text-lg text-[#22303A]" role="status">
@@ -330,31 +365,46 @@ export default function MessengerSessionPage() {
 
   const surface = scenario.surface ?? "sms";
 
+  // T187(§72.5 D2 · UX-022 `start-notice` N-1/N-3) — 세션 전 고지. 대화 목록·헤더를 그리지 않는다
+  // (구독도 아직 0). ⛔ 아래 채팅 return 안에 고지·축약판을 두지 않는다(AC-088 (e) · G444 ③).
+  if (startNotice === "show") {
+    return (
+      <MessengerStartNotice
+        surface={surface}
+        onConfirm={handleConfirmStartNotice}
+        onEndTraining={handleEndTraining}
+      />
+    );
+  }
+
+  // T187(N-4) — 이미 종료된 세션인데 확인 기록이 없다(극히 드묾). 고지 대신 종료 푸터만 —
+  // ⛔ 대화 목록을 그리지 않는다(AC-088 (b)).
+  if (startNotice === "ended-footer") {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
+        <p className="text-base font-semibold text-[#22303A]" role="status">
+          대화가 종료되었습니다.
+        </p>
+        <div className="w-full max-w-xs">
+          <Button type="button" onClick={() => router.push("/session/end")}>
+            결과 확인하러 가기
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex min-h-screen flex-col bg-[#FAF8F5]">
-      {/* 상단 상시 고정 영역(스크롤 무관) — 카카오 면책 배너(닫기 불가·상시)·"AI 훈련용 모의"
-          표식·스킨 토글·"훈련 종료"(AC-006). */}
+      {/* 상단 상시 고정 영역(스크롤 무관) — 스킨 토글·"전화로 확인"·"훈련 종료"(AC-006).
+          T187(docs/Architecture.md §72 · PRD v1.18 AC-086 · UX D-81·D-82·M-13) — 이 화면은 세션
+          중이라 카카오 면책 배너·합성 표식·난이도 배지를 지웠다(면책은 시작 전 고지 ②로 옮겼다).
+          ⛔ 빈 자리를 채우지 않는다. */}
       <div className="sticky top-0 z-20 flex flex-col border-b border-[#E2DDD3] bg-white">
-        {surface === "kakao" && (
-          // AC-047 핵심 — 닫기 버튼 없음. 어떤 state도 이 배너를 숨기지 않는다(영구 비활성 불가).
-          // Banner 공용 컴포넌트(caution, sticky) 재사용 — 메신저 플로우.dc.html의 상시 고지
-          // 배너와 동일 톤(ⓘ 아이콘 + 주의 배경). 텍스트 내용은 기존 AC-047/045 문구를 그대로 유지.
-          // (Banner의 기본 rounded-[12px]는 그대로 둔다 — 모서리를 각지게 강제로 덮어쓰려면
-          // Banner.tsx 자체를 수정해야 하는데 공용 컴포넌트는 이 작업 범위 밖이다.)
-          <Banner variant="caution" sticky>
-            카카오톡 실제 서비스와 무관한 훈련용 재현입니다
-          </Banner>
-        )}
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+          {/* ⭐ G449 — 왼쪽 래퍼는 비어도(카카오 표면) 남긴다. justify-between의 첫 자식으로 남아야
+              오른쪽 그룹(전환 버튼·종료)이 오른쪽 끝에 그대로 있다. */}
           <div className="flex items-center gap-2">
-            <SyntheticLabel label="AI 훈련용 모의" />
-            {/* T72 난이도 배지(P-22) — 색 단독 금지, 텍스트 라벨. 이 배지가 있든 없든 위 면책
-                배너·모의 표식·아래 "훈련 종료"(AC-006)는 세 난이도에서 동일하다(AC-065). */}
-            {difficultyLevel && (
-              <span className="rounded-full bg-[#F2EFE9] px-3 py-1 text-sm font-semibold text-[#6B655C]">
-                난이도 {DIFFICULTY_LABEL[difficultyLevel]}
-              </span>
-            )}
             {surface === "sms" && (
               <button
                 type="button"
@@ -410,7 +460,12 @@ export default function MessengerSessionPage() {
       )}
 
       {/* 대화 목록 — 발신자 구분은 색이 아니라 라벨로(위에 "나"/callerLabel 텍스트). */}
-      <ul className="flex flex-1 flex-col gap-3 px-4 py-4" aria-live="polite">
+      <ul
+        ref={messageListRef}
+        tabIndex={-1}
+        className="flex flex-1 flex-col gap-3 px-4 py-4 outline-none"
+        aria-live="polite"
+      >
         {messages.map((message) => (
           <li
             key={message.id}
@@ -443,14 +498,12 @@ export default function MessengerSessionPage() {
                     // AC-062 보호). 승격되는 것은 아래 onInstallConsent뿐이다.
                     recordMockScreen(attachment.fakeLandingId, "shown");
                   }}
-                  aria-label={`링크(모의): ${attachment.displayText}`}
+                  // T187(UX P-36 (4) A4) — 낱말만 뺐다. 기능 설명("링크")은 유지(AC-086 (c)).
+                  aria-label={`링크: ${attachment.displayText}`}
                   className="mt-1 flex min-h-[44px] items-center gap-2 rounded-xl border-2 border-[#0E6B62] bg-[#E4F0EC] px-4 py-2 text-sm font-bold text-[#0E6B62] underline decoration-2 underline-offset-2"
                 >
                   <span aria-hidden="true">🔗</span>
                   {attachment.displayText}
-                  <span className="rounded-full bg-[#0E6B62] px-2 py-0.5 text-xs font-bold text-white">
-                    모의
-                  </span>
                 </button>
               ) : null,
             )}
@@ -558,10 +611,7 @@ export default function MessengerSessionPage() {
           landingKind={fakeLanding.landingKind}
           onClose={() => setFakeLanding(null)}
           onEndTraining={handleEndTraining}
-          // T84 reviewer Major 1 — 연속성 앵커(UX.md UF-012 Steps §6). 오버레이가 페이지 헤더를
-          // 덮으므로 난이도 배지를 함께 내려보낸다. **위 헤더가 쓰는 값을 그대로 넘긴다** —
-          // 두 표기가 갈라지지 않게 하는 유일한 방법이다.
-          difficultyLabel={difficultyLevel ? DIFFICULTY_LABEL[difficultyLevel] : undefined}
+          // T187(UX D-84) — UF-012 연속성 앵커는 "훈련 종료" 1종만 남아 난이도 라벨을 넘기지 않는다.
           // T84(D-51 ④) — 가짜 "권한 허용"에 **응한** 순간만 기록되고, 리포트 생성 시 속은 순간
           // 1건으로 승격된다(§15.9.5 e-1). ⚠️ 응낙이 채널 전이를 유발하지 않는다(G54) — 전이는
           // 기존 구조화 신호·max-turn 폴백·명시 버튼으로만 일어난다.
@@ -586,9 +636,7 @@ export default function MessengerSessionPage() {
           role="status"
           className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-[#22303A]/95 text-white"
         >
-          <span className="rounded-full border border-[#B96A1B]/50 bg-[#B96A1B]/25 px-3 py-1.5 text-xs font-semibold text-[#FBF3E8]">
-            🔊 훈련용 가상 통화
-          </span>
+          {/* T187(§72 · AC-086 (a) — 전이 연출도 세션 중) — 표식 칩 삭제. 벨 + 사건 문구만 남는다. */}
           <div className="relative flex items-center justify-center">
             <span
               aria-hidden="true"

@@ -1147,12 +1147,12 @@ test("[T125] 선언은 기존 4개 항목·수법 목록 문면을 바꾸지 않
 
 /** 현행 배포 문면(카탈로그 보유 분기) — B-4가 요구하는 **회귀 0**의 기준 문자열 두 줄. */
 const S43_L4_EXAMPLES_LINE_WITH_CATALOG =
-  "선행 요구는 **이 훈련이 이미 재현하는 것 중에서만** 고른다(본인확인 항목 확인, 안내 문자·링크 확인, 조회용 모의 앱 설치 등) — **새로운 형태의 요구를 발명하지 않는다.**";
+  "선행 요구는 **이 훈련이 이미 재현하는 것 중에서만** 고른다(본인확인 항목 확인, 안내 문자·링크 확인, 조회용 앱 설치 등) — **새로운 형태의 요구를 발명하지 않는다.**";
 const S43_L4_EXISTING_STEP_LINE_WITH_CATALOG =
   "이 대화의 흐름에 이미 앞선 단계(안내 링크 확인, 앱 설치 등)가 있다면 **그것이 곧 선행 요구이므로 새로 만들지 않고** 곧장 최종 요구로 이어간다.";
 
 /** 카탈로그가 없는 세션에서 **재현되지 않는** 요구를 가리키는 문구(있으면 선택지가 붕괴한다). */
-const S43_CATALOG_ONLY_EXAMPLES = ["안내 문자·링크 확인", "조회용 모의 앱 설치", "안내 링크 확인, 앱 설치 등"];
+const S43_CATALOG_ONLY_EXAMPLES = ["안내 문자·링크 확인", "조회용 앱 설치", "안내 링크 확인, 앱 설치 등"];
 
 /** 카탈로그 0 분기가 주는 대체 원천 — 전부 **이미 이 프롬프트에 있는 것**이다(§43.5 (2) ㉠㉡㉣). */
 const S43_FALLBACK_SOURCES = [
@@ -1327,7 +1327,7 @@ test("[§43/P-2 회귀] 신고 시나리오(kidnapping-threat·고급·카탈로
     inCallSmsEnabled: false,
   });
   assert.equal(assembled.includes("안내 문자·링크 확인"), false, "재현되지 않는 요구가 남아 있다(①-a)");
-  assert.equal(assembled.includes("조회용 모의 앱 설치"), false, "재현되지 않는 요구가 남아 있다(①-a)");
+  assert.equal(assembled.includes("조회용 앱 설치"), false, "재현되지 않는 요구가 남아 있다(①-a)");
   assert.ok(assembled.includes(S43_PERSONA_CONDITION), "본인확인을 끄는 조건절이 없다(①-b)");
   // ⛔ **선행 요구가 0개가 되면 안 된다(G62/G231)** — 협박 계열에 남는 원천이 실제로 있어야 한다.
   const remaining = S43_FALLBACK_SOURCES.filter((s) => assembled.includes(s));
@@ -1346,7 +1346,7 @@ test('[§43/G229] 잔여 오차를 숨기지 않는다 — 화면 카탈로그�
       ...realOptionsFor(id),
       difficultyLevel: "advanced",
     });
-    assert.equal(assembled.includes("조회용 모의 앱 설치"), false, `${id}: 잔여 오차 서술과 실제가 다르다`);
+    assert.equal(assembled.includes("조회용 앱 설치"), false, `${id}: 잔여 오차 서술과 실제가 다르다`);
   }
   t.diagnostic('G229 잔여 오차 실측: 메신저 2종은 "없음" 분기 — 예시 1개 손실은 채택된 대가다(§43.4 (ㄱ))');
 });

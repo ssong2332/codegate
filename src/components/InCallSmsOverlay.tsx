@@ -28,7 +28,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import EndTrainingButton from "./EndTrainingButton";
 import MessengerFakeLanding from "./MessengerFakeLanding";
-import SyntheticLabel from "./SyntheticLabel";
 import { sortByArrival, spellOutOtp, takeNewlyVisibleSmsIds, type InCallSmsView } from "@/lib/incallsms";
 import { runExitSequence } from "@/lib/incallsms/closeSequence";
 
@@ -236,7 +235,7 @@ export default function InCallSmsOverlay({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="통화 중 도착한 문자 — 훈련용 모의 문자함"
+        aria-label="통화 중 도착한 문자 — 문자함"
         className={`fixed inset-0 z-40 flex items-stretch justify-center bg-black/55 ${
           closing ? "sms-dim-exit" : "sms-dim-enter"
         }`}
@@ -295,9 +294,10 @@ export default function InCallSmsOverlay({
             <span className="sr-only">눌러서 통화로 돌아가기</span>
           </button>
 
-          {/* ── 상시 표식(AC-022) + 상시 종료(AC-006). 스크롤과 무관하게 항상 보인다. */}
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#E2DDD3] bg-white px-4 py-3">
-            <SyntheticLabel label="AI 훈련용 모의 문자" />
+          {/* ── 상시 종료(AC-006). 스크롤과 무관하게 항상 보인다. T187(§72 · PRD v1.18 AC-086) —
+              세션 중 표식을 지웠다(빈 자리를 채우지 않는다 — D-82). 유일한 자식이 된 종료 버튼이
+              오른쪽 끝에 그대로 남도록 justify-end(G449). */}
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-[#E2DDD3] bg-white px-4 py-3">
             <EndTrainingButton onClick={onEndTraining} />
           </div>
 
@@ -360,7 +360,8 @@ export default function InCallSmsOverlay({
                         )}
 
                         {/* 링크형(D-37/AC-045) — 실 URL이 없고, 탭하면 **기존** 인앱 가짜 랜딩으로만
-                            전환된다. 신규 랜딩을 만들지 않는다. 스크린리더에는 "모의 링크"로 안내.
+                            전환된다. 신규 랜딩을 만들지 않는다. 스크린리더 이름은 "링크: {표시 텍스트}"
+                            (T187 · UX P-36 (4) A3 — 세션 중 낱말 제거, 기능 설명은 유지).
                             §51.6 R10/G317 — kind가 아니라 필드 존재로 판정한다("account"형도 이제
                             링크를 병기할 수 있다, kind로 링크 부착 여부를 추론하지 않는다). */}
                         {sms.linkDisplayText && (
@@ -375,14 +376,11 @@ export default function InCallSmsOverlay({
                                 landingKind: sms.landingKind,
                               });
                             }}
-                            aria-label={`모의 링크: ${sms.linkDisplayText}`}
+                            aria-label={`링크: ${sms.linkDisplayText}`}
                             className="flex min-h-[48px] items-center gap-2 rounded-xl border-2 border-[#0E6B62] bg-[#E4F0EC] px-4 py-2 text-sm font-bold text-[#0E6B62] underline decoration-2 underline-offset-2"
                           >
                             <span aria-hidden="true">🔗</span>
                             {sms.linkDisplayText}
-                            <span className="rounded-full bg-[#0E6B62] px-2 py-0.5 text-xs font-bold text-white">
-                              모의
-                            </span>
                           </button>
                         )}
                       </div>

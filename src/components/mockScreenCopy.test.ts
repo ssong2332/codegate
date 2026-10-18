@@ -89,10 +89,27 @@ test("[R1] kind 분기가 **이 파일 안에서** 일어난다(신규 컴포넌
   assert.deepEqual(siblings, [], `가짜 랜딩/설치 화면 파일이 분리되면 안 된다(§15.9.1 R1): ${siblings.join(", ")}`);
 });
 
-test("[AC-022/AC-006] 모의 표식과 '훈련 종료'가 kind와 무관하게 **공유 헤더**에 있다", () => {
-  const headerEnd = componentCode.indexOf("landingKind === \"app-install\" ? (");
-  const header = componentCode.slice(0, headerEnd);
-  assert.ok(header.includes("AI 훈련용 모의 화면"), "상시 모의 표식이 분기 이전(공유 헤더)에 있어야 한다");
+// T187(PRD v1.18 AC-086 · T187 · docs/Architecture.md §72.8) — 표식 단언을 **반전**했다: 공유 헤더에
+// 표식·부정 문구가 0이고, "훈련 종료"만 공유 헤더에 정확히 1회 남는다(AC-006 절반은 그대로).
+/** 공유 헤더 텍스트에 남은 세션 중 표식·부정 문구. 반전 단언과 역검증이 같이 쓴다. */
+function sharedHeaderMarkers(header: string): string[] {
+  return [
+    "AI 훈련용 모의 화면",
+    "훈련용",
+    "모의",
+    "실제 설치·권한 부여가 아닙니다",
+    "실제 로그인/전송이 아니며",
+    "<Banner",
+  ].filter((token) => header.includes(token));
+}
+
+function sharedHeaderOf(code: string): string {
+  return code.slice(0, code.indexOf("landingKind === \"app-install\" ? ("));
+}
+
+test("[AC-006 · T187] '훈련 종료'가 kind와 무관하게 **공유 헤더**에 있고 공유 헤더에 세션 중 표식이 없다", () => {
+  const header = sharedHeaderOf(componentCode);
+  assert.deepEqual(sharedHeaderMarkers(header), [], "공유 헤더에 세션 중 표식·부정 문구가 남아 있다(AC-086)");
   assert.ok(header.includes("<EndTrainingButton"), "상시 '훈련 종료'가 분기 이전(공유 헤더)에 있어야 한다");
   // 헤더가 kind별로 복제되면 한쪽만 고쳐지는 사고가 난다.
   assert.equal(
@@ -100,6 +117,16 @@ test("[AC-022/AC-006] 모의 표식과 '훈련 종료'가 kind와 무관하게 *
     1,
     "종료 컨트롤은 정확히 한 번만 렌더된다(두 kind가 공유)",
   );
+});
+
+test("[AC-006 · T187 역검증] 공유 헤더에 옛 표식 배너를 되살린 사본은 반전 단언에 걸린다", () => {
+  const poisoned = componentCode.replace(
+    "<EndTrainingButton onClick={onEndTraining} />",
+    '<Banner variant="caution" sticky className="flex-1">AI 훈련용 모의 화면 · 실제 설치·권한 부여가 아닙니다</Banner>\n<EndTrainingButton onClick={onEndTraining} />',
+  );
+  assert.notEqual(poisoned, componentCode, "오염 지점을 찾지 못했다 — 역검증이 공회전한다");
+  const found = sharedHeaderMarkers(sharedHeaderOf(poisoned));
+  assert.ok(found.includes("AI 훈련용 모의 화면") && found.includes("<Banner"), `검출 실패: ${found.join(", ")}`);
 });
 
 test("[§15.9.6] 응낙 기록은 콜백으로 위임한다(컴포넌트가 직접 기록하지 않는다)", () => {
@@ -581,21 +608,33 @@ test("[AC-072] 화면 문구에도 실존 앱명·스토어 표기가 없다", (
 //
 // ⚠️ 난이도는 표기일 뿐 **어떤 안전장치도 게이팅하지 않는다**(AC-065). 이 테스트는 배지가
 // "보이는지"만 고정하고 배지가 동작을 바꾸는지는 검사하지 않는다 — 바꾸면 안 되기 때문이다.
-test("[T84] 모의 화면 오버레이 헤더가 난이도 배지를 다시 그린다(연속성 앵커, UF-012 Steps §6)", () => {
-  assert.ok(
-    /difficultyLabel/.test(component),
-    "오버레이가 난이도 라벨을 받지 않으면 2단계에서 연속성 앵커가 사라진다.",
-  );
-  assert.ok(
-    /난이도 \{difficultyLabel\}/.test(component),
-    "받은 라벨을 실제로 렌더해야 한다 — prop만 받고 안 그리면 의미가 없다.",
-  );
+// ⭐ T187(PRD v1.18 AC-086 · M-13 · T187 · docs/Architecture.md §72.8 · UX D-84) — **반전**. 앵커 3종 중
+// ①표식·③난이도 배지는 세션 중에서 빠지고 ②"훈련 종료"만 남는다(D-84). 그래서 이 테스트는 이제
+// "배지를 다시 그리지 않는다"를 고정한다. DIFFICULTY_LABEL 부재 단언(사전 이중화 금지)은 그대로 유지.
+/** 오버레이 코드에 남은 세션 중 난이도 배지 흔적. 반전 단언과 역검증이 같이 쓴다. */
+function difficultyBadgeTraces(code: string): string[] {
+  const traces: string[] = [];
+  if (/difficultyLabel/.test(code)) traces.push("difficultyLabel");
+  if (/난이도 \{/.test(code)) traces.push("난이도 {");
+  if (/DIFFICULTY_LABEL/.test(code)) traces.push("DIFFICULTY_LABEL");
+  return traces;
+}
 
-  // ⚠️ 라벨을 **번역해서** 받아야 한다 — 컴포넌트가 난이도 사전을 갖게 되면 표기 정본이
-  // 페이지 헤더와 오버레이 두 곳으로 갈라진다(드리프트).
-  assert.ok(
-    !/DIFFICULTY_LABEL/.test(component),
-    "컴포넌트가 난이도 사전을 import하면 표기 정본이 두 곳으로 갈라진다 — " +
-      "페이지가 자기 헤더에 쓰는 값을 그대로 내려보내야 한다.",
+test("[T84 → T187] 모의 화면 오버레이 헤더가 난이도 배지를 **그리지 않는다**(연속성 앵커 = '훈련 종료' 1종, UX D-84)", () => {
+  assert.deepEqual(
+    difficultyBadgeTraces(componentCode),
+    [],
+    "세션 중 난이도 배지가 되살아났다(M-13 · AC-086) — 연속성 앵커는 '훈련 종료' 하나다(D-84).",
   );
+  // ⚠️ 컴포넌트가 난이도 사전을 갖게 되면 표기 정본이 두 곳으로 갈라진다(기존 단언 유지 — 주석 포함 원문).
+  assert.ok(!/DIFFICULTY_LABEL/.test(component), "컴포넌트가 난이도 사전을 import하면 안 된다.");
+});
+
+test("[T84 → T187 역검증] 배지를 되살린 사본은 반전 단언에 걸린다", () => {
+  const poisoned = componentCode.replace(
+    "<EndTrainingButton onClick={onEndTraining} />",
+    "<span>난이도 {difficultyLabel}</span>\n<EndTrainingButton onClick={onEndTraining} />",
+  );
+  assert.notEqual(poisoned, componentCode, "오염 지점을 찾지 못했다 — 역검증이 공회전한다");
+  assert.deepEqual(difficultyBadgeTraces(poisoned), ["difficultyLabel", "난이도 {"]);
 });

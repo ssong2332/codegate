@@ -12,7 +12,7 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { maskPII } from "../guardrails";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
-import { completeWithFallback, getLlmClient } from "../llm";
+import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from "../llm";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { findDueInCallSms, hasInCallSms } from "../scenarios/inCallSms";
@@ -33,12 +33,13 @@ import { transitionChannel } from "../session/channelTransition";
 import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
 import { wasTurnInstructionSpoken } from "./announceMarking";
 import { extractEscalationSignal } from "./escalationSignal";
+import { isFirstUserTurn } from "./firstTurn";
 import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
-import { limitReplySentences } from "./replyLength";
+import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { speakerGenderFor } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
@@ -269,7 +270,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       turnInstruction = verifyItem?.announceInstruction;
     }
 
-    const completion = await completeWithFallback(getLlmClient(), {
+    // 첫 사용자 턴만 LLM 시간 제한 20초(2026-10-18, 사용자 결정 C — llm/index.ts LLM_FIRST_TURN_TIMEOUT_MS).
+    // AC-004 목표(95% ≤10초)의 예외 1건 — 첫 턴은 Gemini 지연이 반복돼 10초에서 Mock으로 강등됐고,
+    // 사용자는 문맥 없는 Mock 대사보다 더 기다리는 쪽을 골랐다. 20초는 onCall 기본 실행 제한(60초) 안이다.
+    // storedHistory는 이번 사용자 메시지를 쓰기 **전**에 읽은 이력이다(위 턴 확보 트랜잭션).
+    const llmClient = isFirstUserTurn(storedHistory) ? getLlmClient(LLM_FIRST_TURN_TIMEOUT_MS) : getLlmClient();
+    const completion = await completeWithFallback(llmClient, {
       // T85(§17.3 호출부 3곳 중 "텍스트 턴", G63) — 고급에서 D4(절차·서류 정당화) 블록을 얹을
       // 시나리오인지. 세 호출부가 같은 판정 함수를 쓰지 않으면 "텍스트 턴은 고급인데 오프닝만
       // 축소" 같은 비대칭이 **에러 없이** 생긴다(기본값이 축소형이다).
@@ -346,13 +352,16 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     );
     // ③-c 사기범 대사 손질(2026-10-17 라이브 신고 — 실존 은행명 + 5~7문장 대사). 링크·신호 마커가 다
     // 빠진 텍스트에만 적용한다. (1) 실존 은행·카드사 이름 → OO은행/OO카드(숫자는 그대로 —
-    // guardrails/realFinancialNames.ts 헤더). (2) 문장 수 상한(replyLength.ts) — ⛔ 이번 턴에
-    // `turnInstruction`이 주입됐으면 **적용하지 않는다**: 예고 문장이 잘려도 위 ②-e가 (실 LLM 턴이면) "예고
-    // 완료"로 마킹했으므로 "말하지 않은 예고" 결함(G343)이 재발한다.
+    // guardrails/realFinancialNames.ts 헤더). (2) 문장 수 상한(replyLength.ts) — ⛔ "예고 완료"를
+    // 마킹하는 지시 2종(`verify_announce`·`install_consent`) 턴에는 **적용하지 않는다**: 예고 문장이
+    // 잘려도 위 ②-e가 (실 LLM 턴이면) 마킹했으므로 "말하지 않은 예고" 결함(G343)이 재발한다.
+    // 마킹이 없는 `sms_announce`·`verify_reconnect`는 잘려도 상태 기록이 틀어지지 않아 적용한다
+    // (2026-10-18 문자 도착 턴 5문장 신고 · 한계는 `shouldLimitReplySentences` 주석).
     const { text: realNameFreeReplyText, replacedCount: realNameReplacedCount } =
       replaceRealFinancialNames(signalFreeReplyText);
-    const lengthLimited =
-      turnInstruction === undefined ? limitReplySentences(realNameFreeReplyText) : undefined;
+    const lengthLimited = shouldLimitReplySentences(turnChoice)
+      ? limitReplySentences(realNameFreeReplyText)
+      : undefined;
     const shapedReplyText = lengthLimited ? lengthLimited.text : realNameFreeReplyText;
     // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).
     if (realNameReplacedCount > 0) {

@@ -60,6 +60,13 @@ export type ParsedSource = {
   importModuleSpecifiers(): TextHit[];
   /** N2 — 값이 무엇인지 해석되지 않는 동적 태그(import도 파일 내 함수/컴포넌트 선언도 아님). */
   unresolvedDynamicTags(): TextHit[];
+  /**
+   * T187(docs/Architecture.md §72.5 D3 · G437~G441) — 화면에 그려질 수 있는 **텍스트 조각** 전부:
+   * `StringLiteral` · `NoSubstitutionTemplateLiteral` · 템플릿 `Head`/`Middle`/`Tail`의 `.text` ·
+   * `JsxText`(trim, 공백뿐이면 제외). 주석은 AST 노드가 아니므로 자동 제외된다. 폴딩은 하지 않는다
+   * (조각 단위 — 낱말이 조각 경계에 걸쳐 쪼개지는 런타임 조립은 자기 고지 대상이다).
+   */
+  renderableTextFragments(): TextHit[];
 };
 
 /**
@@ -164,6 +171,7 @@ export function parseTsx(file: string, code: string): ParsedSource {
   const calls: CallHit[] = [];
   const imports: TextHit[] = [];
   const dynamicTags: TextHit[] = [];
+  const fragments: TextHit[] = [];
 
   const collectAttributes = (node: ts.JsxAttributes) => {
     for (const property of node.properties) {
@@ -226,6 +234,20 @@ export function parseTsx(file: string, code: string): ParsedSource {
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       literals.push({ text: node.text, line: lineOf(node) });
     }
+    // T187 — renderableTextFragments 축(기존 축과 독립 · 합집합 N1).
+    if (
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node)
+    ) {
+      fragments.push({ text: node.text, line: lineOf(node) });
+    }
+    if (ts.isJsxText(node)) {
+      const text = node.text.trim();
+      if (text.length > 0) fragments.push({ text, line: lineOf(node) });
+    }
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
       const value = foldExpression(node);
       if (value !== null) literals.push({ text: value, line: lineOf(node) });
@@ -269,6 +291,7 @@ export function parseTsx(file: string, code: string): ParsedSource {
     callAndMemberNames: () => calls,
     importModuleSpecifiers: () => imports,
     unresolvedDynamicTags: () => dynamicTags,
+    renderableTextFragments: () => fragments,
   };
 }
 

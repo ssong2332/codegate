@@ -100,14 +100,36 @@ test("[AC-059/§15.1.3] 오버레이 상태는 마이크 게이팅에만 들어�
   );
 });
 
-test("[AC-006/G11] 오버레이 안에서 '훈련 종료'와 모의 표식에 도달할 수 있다", () => {
+// T187(PRD v1.18 AC-086 · T187 · docs/Architecture.md §72.8) — 표식 절반을 **반전**했다(세션 중 표식 0).
+// 종료 절반(AC-006 — 종료 컨트롤 · aria-modal · panelRef 안 종료)은 그대로 유지한다.
+/** 오버레이 소스에 세션 중 표식(합성 표식 컴포넌트 · 표식 낱말)이 남아 있는가. 반전 단언과 역검증이 같이 쓴다. */
+function overlayMarkerViolations(source: string): string[] {
+  const violations: string[] = [];
+  if (source.includes("SyntheticLabel")) violations.push("SyntheticLabel");
+  for (const word of ["AI 훈련용", "훈련용 모의", "모의 링크", "모의 문자"]) {
+    if (source.includes(word)) violations.push(word);
+  }
+  return violations;
+}
+
+test("[AC-006/G11 · T187] 오버레이 안에서 '훈련 종료'에 도달할 수 있고 세션 중 표식은 없다", () => {
   assert.ok(overlay.includes("EndTrainingButton"), "오버레이 자체에 종료 컨트롤이 있어야 한다");
-  assert.ok(overlay.includes("SyntheticLabel"), "모의·합성 표식이 상시 노출돼야 한다(AC-022)");
+  assert.deepEqual(overlayMarkerViolations(overlay), [], "세션 중 표식이 남아 있다(AC-086 · T187)");
   assert.ok(overlay.includes('aria-modal="true"'), "다이얼로그 관례(UX-023과 동일)");
   // 포커스 트랩이 종료 버튼을 가두지 않는지는 "종료가 트랩 안에 있다"로 보장된다 —
   // 트랩 대상(panelRef) 안에 EndTrainingButton이 렌더된다.
   const panelStart = overlay.indexOf("ref={panelRef}");
   assert.ok(panelStart > 0 && overlay.indexOf("EndTrainingButton", panelStart) > panelStart);
+});
+
+test("[AC-006/G11 · T187 역검증] 메모리 사본에 옛 합성 표식을 되살리면 반전 단언이 실패한다", () => {
+  const poisoned = overlay.replace(
+    "<EndTrainingButton onClick={onEndTraining} />",
+    '<SyntheticLabel label="AI 훈련용 모의 문자" />\n<EndTrainingButton onClick={onEndTraining} />',
+  );
+  assert.notEqual(poisoned, overlay, "오염 지점(EndTrainingButton 렌더)을 찾지 못했다 — 역검증이 공회전한다");
+  assert.ok(overlayMarkerViolations(poisoned).includes("SyntheticLabel"));
+  assert.ok(overlayMarkerViolations(poisoned).includes("AI 훈련용"));
 });
 
 /** AC-060 금지 토큰(요구 무변경 — T108은 **검출 축만** 더한다). 아래 `AC060_AXES`와 짝이다. */

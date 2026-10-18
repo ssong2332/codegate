@@ -53,6 +53,18 @@ export function getGeminiApiKeys(): GeminiKeySlot[] {
 export const LLM_TIMEOUT_MS = 10_000;
 
 /**
+ * 세션의 **첫 사용자 턴**(sendMessage) 전용 LLM 시간 제한(2026-10-18, 사용자 결정 C — OQ-A62 해당분 확정).
+ *
+ * 근거: 첫 sendMessage가 `elapsedMs:10002` 타임아웃 → Mock 강등(2026-10-17T07:58:14Z·
+ * 2026-10-18T02:20:34Z·PR #289 배포 후 재발). 첫 턴만 1차·예비 요청이 **둘 다** 10초를 넘겨 지연이
+ * 요청 간 상관돼 있었다 — 같은 요청을 한 번 더 보내도(예비 요청) 소용없었다.
+ * AC-004 목표(95% 턴 ≤10초)와의 관계: **첫 턴 1건만 예외**로, Mock 강등(문맥 없는 대사) 대신 더
+ * 기다리게 한 사용자 결정이다. 오프닝(createSession)·되감기 판정·이후 턴은 `LLM_TIMEOUT_MS` 그대로.
+ * 20초는 Cloud Functions onCall 기본 실행 제한(60초) 안이다.
+ */
+export const LLM_FIRST_TURN_TIMEOUT_MS = 20_000;
+
+/**
  * LlmClient.complete()을 Promise.race로 감싸 LLM_TIMEOUT_MS 초과 시 `deadline-exceeded`
  * HttpsError를 던진다. getLlmClient()가 반환하는 모든 구현체(Mock이든 향후 Claude/Gemini든)에
  * 공통 적용되도록 팩토리 단계에서 감싼다 — 호출부(sendMessage/generateOpeningLine)가 각자
@@ -109,12 +121,15 @@ export function withTimeout(client: LlmClient, timeoutMs: number): LlmClient {
  * ⚠️ deliverVerifyOffer·deliverVerifyReconnect(verifyIntercept/index.ts)는 getRealtimeProvider를
  * 부르면서도 시크릿 선언이 아예 없다 — **선재 결함이며 T133 별건**이다(이 목록에 넣지 않는다).
  */
-export function getLlmClient(): LlmClient {
+export function getLlmClient(timeoutMs: number = LLM_TIMEOUT_MS): LlmClient {
   const keys = getGeminiApiKeys();
   const client = keys.length > 0 ? createRotatingGeminiClient(keys) : new MockLlmClient();
-  // ⛔ withTimeout이 순환기 **바깥**이다(§37.5 (1)) — 모든 시도의 **총합**이 10초로 갇힌다.
-  // 뒤집으면 키마다 10초라 2키에서 최대 20초가 되어 AC-004 목표가 깨진다.
-  return withTimeout(client, LLM_TIMEOUT_MS);
+  // ⛔ withTimeout이 순환기 **바깥**이다(§37.5 (1)) — 모든 시도의 **총합**이 timeoutMs로 갇힌다.
+  // 뒤집으면 키마다 시간 제한이 걸려 2키에서 2배가 되어 AC-004 목표가 깨진다.
+  // 예비 요청(withHedge, PR #289)은 2026-10-18 되돌렸다 — 배포 후 실측에서 예비 요청 승리 0/2,
+  // 4초 초과 호출 3/3으로 Gemini 호출만 2배가 됐고, 첫 턴은 1차·예비 둘 다 10초를 넘겨 지연이
+  // 요청 간 상관돼 있었다(예비 요청이 구조적으로 무효). 대신 첫 턴만 LLM_FIRST_TURN_TIMEOUT_MS를 쓴다.
+  return withTimeout(client, timeoutMs);
 }
 
 /**
