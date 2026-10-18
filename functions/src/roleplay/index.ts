@@ -271,11 +271,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       turnInstruction = verifyItem?.announceInstruction;
     }
 
-    // ②-f 인증번호 대조(2026-10-18 사용자 신고 · Architecture §77) — 인증번호 문자가 이 세션에 도착한 뒤에는
-    // 매 턴 실제 번호와 "다르면 다시 불러 달라" 지시를 붙인다(이 경로는 지시가 그 턴에만 실리므로).
-    // 도착 전·인증번호 문자가 없는 시나리오는 지시도 Firestore 읽기도 없다(roleplay/otpCheck.ts 판정표).
+    // ②-f 인증번호 서버 대조(2026-10-18 · Architecture §78 — #300 회귀 수정) — 참가자가 **숫자를 부른 그 턴에만**
+    // 서버가 문자 속 번호와 비교해 "일치/다름" 결과 1줄을 붙인다. 번호(정답)는 모델에 주지 않는다. 숫자가 없는 턴·
+    // 계좌 등 다음 문자 도착 뒤·호 전환 뒤에는 지시가 없다(roleplay/otpCheck.ts 판정표).
     const otpCheckInstruction = await resolveOtpCheckInstruction({
       scenarioId: session.scenarioId,
+      userText,
       scammerTurnNumber,
       ...(deliveredSmsId ? { deliveredThisTurn: deliveredSmsId } : {}),
       isDelivered: async (smsId) => (await sessionRef.collection("inCallSms").doc(smsId).get()).exists,

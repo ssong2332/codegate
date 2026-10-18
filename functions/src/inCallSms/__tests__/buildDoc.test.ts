@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildInCallSmsResponse, resolveInCallSmsPlan, resolveModelToolSmsGate } from "../buildDoc";
-import { buildOtpCheckInstruction, IN_CALL_SMS } from "../../scenarios/inCallSms";
+import { IN_CALL_SMS } from "../../scenarios/inCallSms";
 
 const allItems = Object.values(IN_CALL_SMS).flat();
 
@@ -32,20 +32,12 @@ test("[§53.6 (3)] `placed:true`에는 announceInstruction을 **싣지 않는다
 });
 
 test("[§53.6 (3) 역검증] `placed:false`에서는 응답이 오늘과 완전히 같다(카탈로그 전 항목 — 회귀 0)", () => {
-  // 2026-10-18(Architecture §77) — 인증번호 문자(kind "otp")만 의도적으로 바뀐다: 기존 지시 **뒤에** 실제 번호
-  // 대조 지시 1줄이 붙는다. 그 밖의 항목은 여전히 카탈로그 원문 그대로다(회귀 0).
-  let otpCount = 0;
   for (const item of allItems) {
-    const isOtp = item.kind === "otp" && Boolean(item.otpCode);
-    if (isOtp) otpCount += 1;
     assert.deepEqual(buildInCallSmsResponse(item, { placed: false }), {
       smsId: item.smsId,
-      announceInstruction: isOtp
-        ? `${item.announceInstruction}\n${buildOtpCheckInstruction(item.otpCode!)}`
-        : item.announceInstruction,
+      announceInstruction: item.announceInstruction,
     });
   }
-  assert.equal(otpCount, 2, "인증번호 문자 수가 바뀌면 이 예외의 범위를 다시 확인하라");
 });
 
 test("[§53.6 (3) 역검증 2] 게이트를 되돌린 사본은 실제로 지시를 실어 버린다(죽은 게이트가 아니다)", () => {

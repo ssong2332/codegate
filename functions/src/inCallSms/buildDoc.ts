@@ -1,5 +1,4 @@
 // 카탈로그 항목 → Firestore 문서 변환 (T68). 부수효과 없는 순수 함수라 단위 테스트 대상이다.
-import { buildOtpCheckInstruction } from "../scenarios/inCallSms";
 import type { InCallSmsItem } from "../scenarios/inCallSms";
 import { DEFAULT_MOCK_SCREEN_KIND, resolveMockScreenKind } from "../scenarios/mockScreens";
 import type { DeliverInCallSmsResponse } from "./types";
@@ -109,14 +108,10 @@ export function buildInCallSmsResponse(
 ): Omit<DeliverInCallSmsResponse, "status" | "declineInstruction"> {
   const plan = resolveInCallSmsPlan(input);
   if (!plan.includeInstruction) return { smsId: item.smsId };
-  // 2026-10-18(§77) — 인증번호 문자는 도착 지시 뒤에 실제 번호 대조 지시를 붙인다. 실시간 경로는 이 문자열이
-  // Live 세션에 그대로 들어가 이후 턴에도 문맥으로 남는다. 번호는 이미 이 순간 Firestore 문서(`otpCode`)로
-  // 참가자 화면에 보이는 값이라 응답에 실려도 새로 노출되는 것이 없다.
-  const announceInstruction =
-    item.kind === "otp" && item.otpCode
-      ? `${item.announceInstruction}\n${buildOtpCheckInstruction(item.otpCode)}`
-      : item.announceInstruction;
-  return { smsId: item.smsId, announceInstruction };
+  // ⛔ 2026-10-18(§78) — 인증번호(정답)를 여기 싣지 않는다. #300이 실었다가 실시간 경로에서 모델이 번호를 먼저 말할
+  // 위험을 만들었다(텍스트 폴백에서 3/7 실측). Live는 서버가 참가자 발화를 실시간으로 보지 못해 서버 대조도 할 수 없다
+  // ⇒ 실시간 경로의 대조는 이번 수정에서 뺐다(대안 비교는 §78.4). 응답은 #300 이전과 같다.
+  return { smsId: item.smsId, announceInstruction: item.announceInstruction };
 }
 
 // ── §59.7/§59.10 커밋 B — 모델 도구 경로의 하한 재검증(순수 판정, G387) ─────────────────

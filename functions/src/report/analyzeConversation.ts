@@ -28,6 +28,7 @@ import {
 } from "../scenarios/tacticFlavor";
 import type { MessengerChannel } from "../shared/types";
 import { resolveTacticCategory, type TacticCategory } from "./tacticCategory";
+import { CODE_DIGITS_WITH_ENDING, CODE_HANGUL_DIGITS } from "../shared/spokenDigits";
 
 /** 대처법·예방 조언 문구를 고르는 채널. 부재는 "voice"다(`MessageDoc.channel` 하위호환 규칙과 같다). */
 export type AdviceChannel = MessengerChannel;
@@ -172,23 +173,7 @@ const ASKS_HOW_TO_COMPLY =
   /(어떻게|뭘|뭐|무엇을)\s*(해야|하면)\s*(돼|되(?!는지)|될까|됩|하나|합니|할까)/;
 const ACTION_THEN_OK =
   /(?<!(안|못)\s?)(보내|옮기|이체하|송금하|입금하|인출하|넣으|뽑으|맡기|불러\s*드리|알려\s*드리|말씀\s*드리|누르|설치하|입력하)면\s*(돼|되(?!는지)|될까|됩)/;
-const CODE_DIGITS_WITH_ENDING =
-  /(?<!\d)\d(?:[\s-]?\d){3,}(?=\s*(?:$|[.!?~,…]|이요|요|입니다|이에요|예요|이고|이구|번이요|번입니다|맞|이죠|이지요|인데요|이거든|이라고|라고))/;
-// (D4)는 세 형태를 이어 붙인다 — 한 정규식 리터럴로 쓰면 세 갈래가 한 줄에 섞여 검토가 어렵다.
-const HANGUL_DIGIT = "[공영일이삼사오육륙칠팔구]";
-const HANGUL_COMMON_DIGIT = "[일이삼사오]"; // 일반 단어에도 흔한 숫자 음절
-const HANGUL_RARE_DIGIT = "[공영육륙칠팔구]"; // 하나 이상 있어야 숫자 읽기로 본다
-const HANGUL_CODE_END = "(?=$|[\\s.!?~,…]|요|입니다|에요|예요|고요|구요|번|맞)";
-const CODE_HANGUL_DIGITS = new RegExp(
-  [
-    // 붙여 읽기 — "공사팔이삼일(이요)"
-    `(?<![가-힣])(?=${HANGUL_COMMON_DIGIT}*${HANGUL_RARE_DIGIT})${HANGUL_DIGIT}{4,}${HANGUL_CODE_END}`,
-    // 한 자씩 띄어 읽기 — "공 사 팔 이 삼 일"
-    `(?<![가-힣])(?=(?:${HANGUL_COMMON_DIGIT}\\s)*${HANGUL_RARE_DIGIT})${HANGUL_DIGIT}(?:\\s${HANGUL_DIGIT}){3,}${HANGUL_CODE_END}`,
-    // 세 자 이상씩 묶어 읽기 — "공사팔 이삼일"
-    `(?<![가-힣])(?=(?:${HANGUL_COMMON_DIGIT}|\\s)*${HANGUL_RARE_DIGIT})${HANGUL_DIGIT}{3,}(?:\\s${HANGUL_DIGIT}{3,})+${HANGUL_CODE_END}`,
-  ].join("|"),
-);
+// (D3)·(D4) 정규식은 `shared/spokenDigits.ts`로 옮겼다(2026-10-18, §78 — 인증번호 대조와 같은 규칙을 공유). 원문 무변경.
 const BIRTH_DATE =
   /\d{2,4}\s*년\s*(?:\d{1,2}\s*월\s*\d{1,2}\s*일\s*)?생(?=$|[\s.!?~,…]|이|인|입|예요|요)|생년월일[은는이]?\s*\d/;
 const BALANCE_DISCLOSURE =
