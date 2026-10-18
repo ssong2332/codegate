@@ -1,29 +1,38 @@
-# Claude Code Starter Kit
+# 안 당해본 사기는 못 막는다 — AI 금융사기 백신
 
-A production-ready Starter Kit for Claude Code projects: 6 specialized subagents, a documented agent contract, and a full project-documentation template set.
+AI 사기범과 실제 전화·문자처럼 대화하며 보이스피싱·메신저피싱을 **미리 당해 보는** 훈련 웹앱이다.
+사람들은 사기를 지식으로는 알아도 실제 상황의 압박(권위·긴급·공포·가족애)을 겪어 본 적이 없어 막상 당한다.
+약화된 실전 공격에 안전하게 노출시키고 "어디서·언제 속았는지" 짚어 주는 예방접종(inoculation)형 서비스다.
 
-## Features
-- ✅ 6 Specialized Subagents (planner, architect, implementer, reviewer, quality-assurance, docs)
-- ✅ CLAUDE.md
-- ✅ AGENTS.md (Agent Contract: Authority, Input/Output, Ownership, Document Priority)
-- ✅ PRD Workflow
-- ✅ Architecture Workflow
-- ✅ Decision Log
-- ✅ ADR
-- ✅ Definition of Done
-- ✅ Git Workflow
-- ✅ Prompt Rules
+- 라이브: https://voicefishing-ff47f.web.app (Google 로그인)
+- 요구사항 정본: [docs/PRD.md](docs/PRD.md) · 설계 정본: [docs/Architecture.md](docs/Architecture.md)
 
-## Quick Start
-1. Use this repository as a GitHub Template.
-2. Clone your new repository.
-3. Open Claude Code.
-4. Ask:
-   ```
-   planner 에이전트로 요구사항 정리해줘
-   ```
+## 무엇을 하나
 
-> After cloning, replace this README with your own project's README (`## Overview` / `## Getting Started` / the Documentation table below are a good starting shape). Fill in the `{{placeholders}}` in `CLAUDE.md`. Do **not** carry over this kit's root `CHANGELOG.md` — your project starts from the blank `docs/CHANGELOG.md` instead. Full agent invocation guide: `docs/PromptRules.md`.
+| 기능 | 내용 |
+|---|---|
+| 실시간 음성 통화 훈련 | 걸려 오는 전화를 받으면 AI 사기범(기관 사칭·대출 빙자·환급금 등)이 실시간 음성으로 대화한다. 화면은 실제 휴대폰 수신·통화 화면처럼 보인다 |
+| 통화 중 문자·가짜 이체 화면 | 통화 도중 인증번호·링크 문자가 오고, 링크를 누르면 가짜 기관·이체 화면이 열린다(입력값은 어디에도 전송되지 않는다) |
+| 메신저피싱 훈련 | 카카오톡형·문자형 대화로 접근하고, 의심하면 전화로 넘어오는 채널 간 에스컬레이션을 재현한다 |
+| 난이도 | 초급·중급·고급에 따라 압박 강도와 수법이 달라진다 |
+| 취약점 리포트 | 대화가 끝나면 몇 초 시점에 어떤 수법에 속았는지, 어떤 신호를 놓쳤는지 짚어 준다. 대화를 되짚는 다시보기 해설도 있다 |
+| 지인 챌린지(딥보이스) | 내 목소리를 복제해 지인에게 딥보이스 사기 체험을 보낸다. 사전 동의·정체 공개·음성 유출 차단이 전제다 |
+
+## 동작 방식
+
+```
+브라우저(Next.js 정적 페이지)
+  ├─ 실시간 음성: Gemini Live(gemini-3.8-live) — 서버가 프롬프트를 고정한 단기 토큰만 발급
+  ├─ 텍스트 대사: Cloud Functions → gemini-3.1-flash-lite → (503) gemini-3.5-flash-lite → (429·5xx·시간 초과) Groq
+  │              모두 실패하면 규칙 기반 목업으로 강등(대화는 끊기지 않는다)
+  ├─ 딥보이스: ElevenLabs(목소리 클론·Agents)
+  └─ 저장·인증: Firebase Auth(Google·익명) / Firestore / Storage
+결과 리포트: 대화 전사를 서버에서 규칙 기반으로 판정(functions/src/report/)
+```
+
+- 사기범 프롬프트는 서버에서만 조립되고 브라우저로 내려가지 않는다(ADR-0004).
+- 세션 중에는 '모의' 표식을 두지 않고, 시작 전 고지와 세션 후 정체 공개로 안전을 보장한다(T187).
+- 실존 은행명 대신 "OO은행" 같은 가상 명칭을 쓴다.
 
 ## Stack (T2 스캐폴딩 — docs/Architecture.md 확정)
 Next.js (App Router, TypeScript, Tailwind, 정적 export) + Firebase(Auth Google Provider /
@@ -48,8 +57,10 @@ Cloud Functions 2nd gen / Firestore / Storage) + ElevenLabs + LLM(Claude|Gemini 
 ### 2. 설치
 ```
 npm install
-npm --prefix functions install
+cd functions && npm install && cd ..
 ```
+⛔ `npm --prefix functions install`은 쓰지 않는다 — 이 형태에서만 `functions/package.json`에 잘못된 로컬
+의존성이 주입된다(T130, CLAUDE.md Verified Commands).
 `.env`/`functions/.env`가 없다면 아래 "Configuration"의 값(로컬 에뮬레이터용 데모 값)으로
 채운다.
 
