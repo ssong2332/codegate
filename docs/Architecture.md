@@ -424,6 +424,7 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 | — | 사용자가 수동 토글 | 선택값 | manual |
 
 - **신뢰도 한계:** 규칙표는 대표 케이스만 커버한다. 인앱 브라우저(카톡 내장 등)·커스텀 UA·에뮬레이터는 오판정 가능 → 그래서 **항상 수동 전환 토글**을 제공하고(AC-031), 기본 폴백은 `default` 스킨이다. 오판정의 영향은 "채팅 외형이 기기와 다르게 보임"뿐 — 콘텐츠·안전·리포트에 영향 없음.
+- > **(2026-10-18 덧붙임 — §73 참조)** 위 규칙표는 **§73.5 (1) 규칙표 v2**(iPadOS 데스크톱 UA · Chrome UA 축소 대응 UA-CH `model` 2행 추가)로 대체되고, 같은 값을 통화·문자함·랜딩에도 쓴다(§73.5 (2)). 수동 전환의 자리는 UX D-100(세션 전 선택)으로 옮겨지며 세션 중 칩 제거는 OQ-U64 뒤(§73.10 (3)). 위 원문은 사실 기록으로 보존.
 
 ### 13.6 조건부 clone/목소리 선택 데이터 흐름 (DECISIONS #18, AC-046/OQ-23)
 메신저→보이스 전이가 가능한 시나리오 진입 시(UX는 T23계열/T25), 통화에 쓸 목소리를 세 경로로 결정하고 **세션 문서**에 남긴다.
@@ -837,6 +838,7 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 | 재생·타이머 | `page.tsx:206-228`, `<audio>` 노드 | **손대지 않는다.** 오버레이 상태를 이 경로 어디에도 넣지 않는다(§15.1.1). |
 
 - 근거: 오버레이를 보는 동안 사용자의 혼잣말·주변 소음이 발화로 오인되면 사기범이 엉뚱하게 반응해 몰입이 깨진다. 반대로 재생·타이머를 멈추면 "통화가 살아 있다"는 이 기능의 전부가 사라진다(UX-027 Business Rules 하드 요구).
+- > **(2026-10-18 덧붙임 — §73 참조)** **문자 오버레이 쪽 마이크 게이팅은 User 결정(UX D-99)으로 폐지된다** — 실시간·폴백 두 경로 모두(§73.6 ⑥ · G452). 확인 오버레이(`verifyOverlayOpen`) 게이팅과 "재생·타이머 무접촉" 행은 그대로다. 위 근거의 위험(혼잣말 오인)은 User가 수용했다. 원문은 사실 기록으로 보존.
 
 #### 15.1.4 (d) 프롬프트 지시 위치 — 공유 조립 블록(조건부), 시나리오별 저작 아님
 **결정: 문자 관련 지시는 `promptAssembly.ts`의 공유 블록으로 두고, 해당 시나리오에 문자 카탈로그가 있을 때만 켠다. 13개 프롬프트 파일을 각각 고치지 않는다.**
@@ -16941,6 +16943,7 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 - `src/lib/realtime/outputGain.ts` — `export const GEMINI_OUTPUT_GAIN = 0.6;`(0.5~0.7 범위의 판단값, G433).
 - `outputContext` 생성 직후(`:574`) `createGain()` 1개 → `destination` 연결. 각 소스는 `destination` 대신 게인 노드에 연결한다(`:681`).
 - 음량 UI 없음(UX 경로 필요 — 범위 밖). ElevenLabs 경로(`RealtimeVoiceSession.tsx`)는 SDK가 재생하므로 범위 밖.
+- > **(2026-10-18 덧붙임 — §73 참조)** UX D-98이 그 경로를 만들었다 — 통화 화면 **스피커 버튼 = 음량 전환**(통화 모드 `CALL_MODE_GAIN` = 이 상수 · 스피커 모드 `SPEAKER_MODE_GAIN` 1.0)이고 ElevenLabs도 SDK `setVolume`으로 같은 값을 받는다(§73.3 표 S · §73.6 · G455). 위 두 줄은 사실 기록으로 보존.
 
 ### 71.8 구현 · 테스트 명세 (implementer — User 승인 뒤)
 
@@ -17007,3 +17010,338 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | 8 | 리뷰 반영 | M1/F1 — 3.8의 `interrupted` 직후 오디오 없는 `turnComplete`로는 보류분을 풀지 않는다(`afterInterrupt`). M2/F2 — `toolCall` ~ `toolResponse` 사이는 보류하고 stall로도 풀지 않는다(`toolPending`). 커밋 `26c7f2f` · 루트 475 → **479** · `npm run build` 재통과 |
 | 9 | 남긴 한계(동작 무영향 · 계측 정확도) | F3 — 오프닝 전송 뒤 첫 오디오 전에 마이크 RMS가 문턱을 넘으면 앵커가 `voice`로 잡힌다(오프닝 지연 과소 보고). F4 — `turnComplete` 뒤 늦게 온 청크는 `anchor:"none"` 레코드 1개를 만든다. 라이브 로그를 읽을 때 이 두 경우를 걸러 본다 |
 | 10 | 라이브 확인 추가 | ④에 "참가자 끼어들기 직후 지시가 겹치는가", ①에 "도구 결과 대기 중 타이핑" 케이스를 더한다 |
+
+## 73. (UX v1.33 실폰형 재설계 인계 — 제품 오너 지시 *"통화·문자·이체 화면을 실제 폰처럼"* · 사용자 결정 2026-10-18 D-96~D-102) **OQ-U68 실현성·라이선스 판정 + 구현 설계(T190 잠정)** — ⭐⭐ **Android에서는 수화부↔스피커 실제 전환을 웹이 할 수 없다(출력 장치 API가 Android에 없다) — D-98은 음량 전환으로 대체된다. iOS만 실기 프로브가 남는다** / ⭐⭐ **OS 글꼴·아이콘·벨소리 파일은 하나도 쓸 수 없다 — 그러나 글꼴은 `system-ui`가 기기 위에서 같은 글꼴을 그리므로 잃는 것이 없다** / ⭐ **D-102가 보류돼도 나머지는 전부 독립 구현된다 — 잃는 것은 "통화 경로의 수동 화면 모양 선택"과 "iOS 벨소리"뿐이다** — architect 판정 (ADR-0019)
+
+> 담당 태스크: **T190(잠정 — `docs/Tasks.md` 행 없음 · planner 등재 필요)**. 근거 문서: `docs/UX.md` v1.33(변경 이력 (c) 판정표 · (e) H-1~H-8 · (h) 사용자 결정 · UX-014/027/022/023 v1.33 노트 · P-37 · D-86~D-102 · OQ-U58~U68). ⚠️ **설계 기준 코드 = PR #291(T187, 미병합) 브랜치 스냅샷**이다(현재 워크트리 `src`는 #291 이전). 줄 인용은 **`S:` = #291 스냅샷**(`…\scratchpad\pr291\` 아래 같은 상대 경로) · **`C:` = 이 워크트리 현재**로 구분한다. #291이 바꾸지 않은 파일(`GeminiVoiceSession.tsx` · `detectSkin.ts` · `outputGain.ts` · functions 카탈로그 등)은 `C:`만 적는다.
+
+### 73.0 판정 요지 (⛔ 금지 먼저)
+
+1. ⛔ **이 절은 소스를 0줄 고쳤다.** 커밋 0 · 테스트·빌드·실기 실행 0(architect 셸 없음). 아래 "가능/불가"는 **문서·코드 판독 근거**이며 실기 관측이 아니다 — 실기가 필요한 것은 "미검증(실기 필요)"로 표시했다.
+2. ⛔ **OS 자산 파일(Apple SF Pro·SF Symbols·iOS 벨소리 · 삼성 글꼴·One UI 아이콘·Over the Horizon)을 저장소에 넣거나 배포하지 않는다**(73.2 ⑤ · 73.3 표 A). D-96 (5)의 *"허용이면 그대로"* 조건이 성립한 자산은 **0건**이다.
+3. ⛔ **선율을 옮기지 않는다** — 자체 합성 벨소리는 OS 기본 벨소리의 **음색·박자감만** 닮게 하고 음 높이 순서(선율)를 받아 적지 않는다(73.7).
+4. ⛔ **세션 중 화면(벨·통화·문자함·랜딩·메신저 대화)에 앱 문구를 더하지 않는다**(P-37 머리 · #291 G437/G440). 새 화면 문구는 세션 전 화면(`MessengerStartNotice` · 보류 중인 `pre-call-notice`)에만 둔다.
+5. ⛔ **게이트가 앵커로 삼는 문자열은 그 파일에 남긴다** — `play/page.tsx`의 종료 이름 2종(G441 불변)·`InCallSmsOverlay.tsx`의 통화 표시줄 5요소(T103)를 다른 컴포넌트 파일로 추출하지 않는다(73.4 R-3).
+6. ⛔ **새 컴포넌트를 `src/components/` 하위 디렉터리(`ui/` 외)에 두지 않는다** — 세션 표면 등록부 두 벌(G436 · T86)이 최상위 `*.tsx`만 훑어 하위 디렉터리는 **등록 없이 빠진다**(73.13 · G451).
+7. ⛔ **D-102(`pre-call-notice` · 벨 화면 문구 0)는 planner OQ-U66 확정 전 착수 금지**(73.12). ⛔ **메신저 세션 중 스킨 칩 제거는 planner OQ-U64(AC-031 해석) 확정 전 착수 금지**(73.10 (3)).
+8. ⛔ **스피커 "음량 전환" 대체는 사용자에게 보고해야 완결된다**(D-98 ③) — 이 절이 그 보고의 근거이며, 보고 자체는 오케스트레이터 몫이다(OQ-A94).
+
+### 73.1 착수 시 실측
+
+| # | 항목 | 값 | 출처 |
+|---|---|---|---|
+| 1 | 번호 | Architecture 최대 **§72**(#291) · DECISIONS 최대 **#119**(#291 — 이 워크트리는 #117) · ADR 최대 **0018**(#291 — 이 워크트리는 0017) · 가드 최대 **G450**(#291 `docs/Architecture.md:7`·`:17188`) · OQ-A 최대 **OQ-A93**(#291) ⇒ 이 절 **§73 · #120~#121 · ADR-0019 · G451~G461 · OQ-A94~A99** | 오케스트레이터 지시 + #291 스냅샷 grep(`G4[4-9]\d` 최대 G450 · `OQ-A9\d` 최대 A93) |
+| 2 | 버전 갭 | 이 문서 헤더 `Based on PRD Version: v1.7.1 · Based on UX Version: 1.13`(`C:docs/Architecture.md:5`) ↔ 현행 PRD **v1.17**(`C:docs/PRD.md:4`) · #291 PRD **v1.18** · UX **1.33**. ⇒ **헤더 미전진**(전 절 재검증을 하지 않았다 — §70.5 (4)와 같은 처분). 이 절은 UX 1.33 · PRD v1.18(#291 사본) 기준으로 작성 | 파일 열람 |
+| 3 | 실시간 오디오 경로 | Gemini: Web Audio `AudioContext` → `GainNode`(`GEMINI_OUTPUT_GAIN` 0.6) → `destination`(`C:src/lib/realtime/GeminiVoiceSession.tsx:678-687` · 소스 연결 `:803` · 상수 `C:src/lib/realtime/outputGain.ts:11`). 마이크 `getUserMedia({echoCancellation, noiseSuppression, autoGainControl: true})`(`:666-672`). ElevenLabs: SDK 재생(`connectionType: "websocket"` `C:src/lib/realtime/RealtimeVoiceSession.tsx:131`) — SDK가 `setVolume({volume})`을 노출(`C:\Projects\codegate\node_modules\@elevenlabs\react\dist\conversation\useConversation.d.ts:36` · 내부 `gain.gain.value = volume` `…\@elevenlabs\client\dist\lib.iife.js:22060-22062`, 메인 체크아웃 node_modules 1.10.1 판독 — 워크트리엔 node_modules 없음). 폴백: `<audio src={playbackUrl}>`(`S:src/app/session/play/page.tsx:1521-1529`) | 코드 판독 |
+| 4 | ⚠️ 음량 방향 모순 | `outputGain.ts:3` 주석 = 사용자 신고(2026-10-17) *"기본 음량이 좀 큼"* → 1.0에서 0.6으로 낮춤. UX D-98 = *"AI 음성 기본 음량이 작다는 문제도 함께 해결"*. **두 신고의 방향이 반대다.** 원인 **추정**: iOS는 마이크가 켜진 통화 중 출력을 수화부로 보낼 수 있어(WebKit bug 184141 보고자 관측 — 73.2 ①) 작게, Android는 스피커로 나와 크게 들렸을 수 있다 — 확인: 같은 통화를 iPhone·갤럭시에서 각각 듣고 소리 나는 위치(상단 수화부/하단 스피커) 기록(P-1) | 파일 열람 · OQ-A94 |
+| 5 | 스킨 감지 | 규칙 4줄(`C:src/lib/messenger/detectSkin.ts:24-40` = §13.5 표). 사용처 = 메신저 1곳(`S:src/app/session/messenger/page.tsx:162-178`). 통화 화면 사용 0 | 코드 판독 |
+| 6 | 색 체계 | `Grep "color-scheme\|colorScheme" src/` 0건(UX (d) 인용) · 루트 레이아웃 `metadata`만 export(`C:src/app/layout.tsx:8`), `viewport` export 없음 · 앱에 다크 테마 0(`Grep "prefers-color-scheme\|dark:" src/` 0건) · Next 16.2.10 `ColorSchemeEnum`에 `'only light'` 존재(`C:\Projects\codegate\node_modules\next\dist\lib\metadata\types\metadata-types.d.ts:36`) | 코드 판독 |
+
+### 73.2 OQ-U68 결론표 ①~⑥ (⛔ 실기 0회 — 문서 근거 판정)
+
+| # | 질문 | 결론 | 근거(출처) | 남는 것 |
+|---|---|---|---|---|
+| ①-A | **Android**(Chrome · 삼성 인터넷 · 웨일 등 Chromium) 수화부↔스피커 실제 전환 | **불가 — 음량 전환으로 대체(D-98 ② 발동)** | `HTMLMediaElement.setSinkId` `chrome_android: false` — *"Not available due to a limitation in Android"*(crbug 41276355) · `samsunginternet_android`·`webview_android` = mirror([MDN BCD HTMLMediaElement.json](https://raw.githubusercontent.com/mdn/browser-compat-data/main/api/HTMLMediaElement.json)) · Audio Session API `chrome: false`, `chrome_android: mirror`([MDN BCD AudioSession.json](https://raw.githubusercontent.com/mdn/browser-compat-data/main/api/AudioSession.json)) ⇒ 웹이 출력 경로를 고르는 API가 Android에 **없다**. ⚠️ `AudioContext.setSinkId`(Gemini 경로가 쓸 API)의 Android 값은 BCD를 열지 못해 **미확인** — 단 같은 Android 제약(crbug)이 원인이라 다를 이유가 없다고 **추정** | 출력이 스피커/수화부 중 어디로 나오는지 자체는 브라우저·OS가 정한다(미검증 — P-1) |
+| ①-B | **iOS Safari** 수화부↔스피커 실제 전환 | **미검증(실기 필요)** — 후보 API 2개가 존재하나 수화부/스피커를 갈라 주는지 문서 근거 0 | `setSinkId` `safari: 18.4`, `safari_ios: mirror`(BCD) — 단 Daily 문서 *"Safari 18.4 introduced speaker selection … does not work reliably"*([Daily](https://docs.daily.co/reference/daily-js/instance-methods/set-output-device-async)) · VideoSDK 문서는 *"iOS 26부터"* 로 적어 상충([VideoSDK](https://docs.videosdk.live/javascript/guide/video-and-audio-calling-api-sdk/handling-media/change-audio-ouptut-device)) · WebKit bug 184141 *"Can't select audio output on iOS"*(NEW, 2021-04-16 — `enumerateDevices()`가 출력 장치를 하나도 안 돌려준다) · bug 216641 *"Add support for speaker selection"*(NEW, 2025-08-02)([184141](https://bugs.webkit.org/show_bug.cgi?id=184141) · [216641](https://bugs.webkit.org/show_bug.cgi?id=216641)) · `navigator.audioSession.type` Safari 16.4+(BCD) — MDN: `"play-and-record"`은 *"may then adjust system volume routing (for example, using the earpiece instead of the speaker on mobile devices)"*([MDN Audio Session API](https://developer.mozilla.org/en-US/docs/Web/API/Audio_Session_API) · [W3C](https://www.w3.org/TR/audio-session/)) — **"may"·"hint"이며 보장 아님** | 프로브 P-1(73.17). 통과 전까지 iOS도 음량 전환(73.3 S-2) |
+| ② | 앱이 AI 음성 출력 음량을 조절할 수 있는가 | **Gemini = 가능 · ElevenLabs = 가능 · 텍스트 폴백 = Android/데스크톱 가능, iOS 불가** | Gemini: 이미 `GainNode` 1개 경유(`C:GeminiVoiceSession.tsx:685-687`·`:803`) — 값만 실시간으로 바꾸면 된다. ElevenLabs: SDK `setVolume`(73.1 #3). 폴백 `<audio>`: Apple 문서 *"On iOS devices … The volume property is not settable in JavaScript. Reading the volume property always returns 1."*([Apple Safari HTML5 Audio Guide — Device-Specific Considerations](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/Using_HTML5_Audio_Video/Device-SpecificConsiderations/Device-SpecificConsiderations.html), 보관 문서). ⚠️ iOS 폴백을 Web Audio(`MediaElementAudioSourceNode`)로 우회하면 교차 출처 오디오는 CORS 없이 무음이 된다(웹 오디오 일반 규칙 — **추정**, 이 저장소의 `playbackUrl` 출처·CORS 헤더 미확인) | iOS 폴백 칸 처분 OQ-A97 |
+| ③-a | Vibration API | **Android Chrome·삼성 인터넷 = 가능(사용자 활성화 필요) · iOS Safari = 불가** | `navigator.vibrate` `chrome_android: 32` — *"Beginning in Chrome 60, this method requires a user gesture. Otherwise it returns false."* · `safari: false`, `safari_ios: mirror`(=false) · `samsunginternet_android: mirror`([MDN BCD Navigator.json](https://raw.githubusercontent.com/mdn/browser-compat-data/main/api/Navigator.json)). UX의 *"iOS 미지원 추정"* 은 **문서로 확인됨**(실기 미확인) | "user gesture"가 sticky(이전 탭 1회)인지 transient(직전 탭)인지 BCD 문면만으로는 미확정 — **추정 sticky**, P-2 |
+| ③-b | 벨소리 자동재생 | **Chrome(Android 포함) = 같은 문서에서 이미 탭한 적 있으면 가능(추정) · iOS Safari = 그 화면에서의 탭 없이는 불가(추정)** | Chrome: *"The user has interacted with the domain (click, tap, etc.)"* 면 소리 있는 자동재생 허용 · *"If an AudioContext is created before the document receives a user gesture, it will be created in the 'suspended' state"*([Chrome autoplay](https://developer.chrome.com/blog/autoplay)) — 통화 화면은 앞 화면의 탭 뒤 **클라 라우팅**으로 도달하므로 같은 문서에 활성화가 남아 있다(**추정** — 새로고침·직접 진입은 예외). iOS: *"play() … inactive until the user initiates playback, unless … triggered by user action"*(위 Apple 문서) — Web Audio도 제스처 핸들러 안 `resume()`이 필요한 것으로 **추정** | ⇒ D-102(`준비됐어요` 탭)가 보류인 동안 **iOS 벨은 무음일 가능성이 높다**(OQ-A95). D-97 *"재생이 막히면 무음 · 오류 문구 0"* 이 그 상태를 이미 허용한다 |
+| ③-c | iOS 무음 스위치 | **Web Audio 벨소리는 무음 스위치를 따른다(추정) — 실제 폰과 같은 동작이므로 그대로 둔다** | WebKit 쪽 설명: Web Audio는 기본 `ambient`로 취급돼 무음 스위치를 따르고 `navigator.audioSession.type = "playback"`이 그것을 푼다(검색 결과 요약 — WebKit bug 237322 등 원문 **미열람**). ⛔ 벨을 위해 `audioSession.type`을 바꾸지 않는다 — 페이지 전체 오디오(통화 음성·마이크)에 걸리는 전역 설정이라 ①-B 프로브와 충돌한다 | 마이크가 켜진 통화 중에는 세션이 play-and-record로 바뀌어 무음 스위치와 무관해질 것으로 **추정** — P-1에서 함께 관측 |
+| ④ | 기종 구분 신호 | **iOS·삼성 인터넷 = UA로 구분 가능 · 삼성 기기 Chrome = UA로 불가, UA-CH `model`로 가능 · iPadOS 데스크톱 UA = 터치 지점 수로 보정** | Chrome Android UA는 Chrome 110부터 전 페이지 `Linux; Android 10; K`로 축소([Chromium UA reduction](https://www.chromium.org/updates/ua-reduction/)) — 모델명 `SM-…`이 UA에서 사라져 §13.5 규칙 2가 못 잡는다(UX 3d 라이브 관측과 일치). `navigator.userAgentData` `chrome: 90`(Android·삼성 인터넷 mirror) · `safari: false` · `firefox: false`(BCD) · 모델은 `getHighEntropyValues(["model"])` Promise([Chrome UA-CH](https://developer.chrome.com/docs/privacy-security/user-agent-client-hints)). iPadOS 13+ Safari는 Mac UA를 보내고 `maxTouchPoints`가 iPad 5 / Mac 0~1([Apple Developer Forums 119186](https://developer.apple.com/forums/thread/119186?page=2) — 포럼 근거) · `maxTouchPoints` Safari 13+(BCD) | 인앱 브라우저(카톡 내장)·Firefox Android는 UA-CH 없음 → 기존 규칙 그대로(신뢰도 한계 §13.5 계승). 실기 값 확인 P-3 |
+| ⑤ | OS 자산 재배포 | **전부 불가(재배포 허락 근거 0) → 자체 제작 대체** | **SF Pro**: Apple 글꼴 라이선스 원문 *"TO BE USED SOLELY FOR CREATING MOCK-UPS OF USER INTERFACES TO BE USED IN SOFTWARE PRODUCTS RUNNING ON APPLE'S iOS, OS X OR tvOS"* · *"You may not embed the Apple Font in any software programs or other products … website content"*([Apple Fonts](https://developer.apple.com/fonts/)). **SF Symbols**: 라이선스 원문 **미열람**(번들 안에만 있음) — Apple 포럼 답변 *"It's against the license included with the SF Symbols download"*([Forums 757407](https://developer.apple.com/forums/thread/757407) 외 검색 요약) ⇒ 불가로 판정(확도 높은 **추정**). **iOS 벨소리**: 재배포 허락 문서 발견 0 — OS 소프트웨어의 일부 ⇒ 기본 저작권 원칙상 불가(**법무 미확인**). **삼성 글꼴(SamsungOne/One UI Sans)·One UI 아이콘**: 공개 라이선스 발견 0 ⇒ 불가(**추정** — 확인: 삼성 공식 라이선스 문의). **Over the Horizon**: 2011 원곡 윤중삼 작곡 · 매년 외부 작곡가 편곡(검색 결과 — [Samsung Newsroom ZA](https://news.samsung.com/za/rock-to-classical-pop-crossovers-new-ocean-inspired-over-the-horizon-celebrates-10th-anniversary-of-galaxy-series) 등) · 이용 허락 문서 0 ⇒ 불가 | 대체(73.3 표 A): 글꼴 = `system-ui`(기기 위에서는 그 OS 글꼴로 보임 — 손실 0) · 아이콘 = 자체 제작 인라인 SVG · 벨소리 = Web Audio 합성. 오픈 라이선스 후보(채택 안 함 — 73.3 A-7): [Lucide](https://lucide.dev/license) ISC · [Material Symbols](https://github.com/google/material-design-icons) Apache-2.0 |
+| ⑥ | 강제 다크 방지(OQ-U65) | **Chrome 자동 다크 = 막을 수 있음 · 삼성 인터넷 다크 모드 = 개발자 측 수단 없음 · 웨일 = 미검증** | Chrome: `<meta name="color-scheme" content="only light">` 또는 `:root { color-scheme: only light }` 가 *"prevents Auto Dark Theme from being applied"*([Chrome Auto Dark Theme](https://developer.chrome.com/blog/auto-dark-theme)). 삼성 인터넷: 삼성 DevRel 답변 *"there is no way for developers to provide any custom logic … that can bypass Samsung Internet's dark mode"*(포럼 — [Samsung Developer Forum 22937](https://forum.developer.samsung.com/t/websites-dark-mode-gets-overridden-by-samsung-internets-dark-mode/22937)) · 2020 블로그의 *"Prefer Media Query Over Force Dark"* 는 사용자 실험 설정([Samsung Internet blog](https://developer.samsung.com/internet/blog/en/2020/12/15/dark-mode-in-samsung-internet)) | ⇒ 선언은 넣는다(73.11 · G458). 삼성 인터넷·웨일의 반전 결과에서 대비 유지 여부는 **미검증(실기)** — P-4. UX (c) 4g의 *"웨일 색 반전"* 관측은 오케스트레이터 인용값 |
+| (UX ⑥) | 실기 캡처 측정 계획(D-96 (2)) | **계획 확정 · 실행 미정(기기·담당 OQ-A98)** | — | 73.17 P-6 |
+
+### 73.3 판정 규칙표 (⛔ 이 표대로만 적용 — 표에 없는 케이스는 행 추가를 먼저 묻는다)
+
+**표 S — 스피커 버튼의 동작(D-98)**
+
+| # | if | then |
+|---|---|---|
+| S-1 | Android(모든 Chromium 계열) | **음량 전환**(통화 모드 = `CALL_MODE_GAIN` · 스피커 모드 = `SPEAKER_MODE_GAIN`) — 실제 전환 불가 근거 73.2 ①-A |
+| S-2 | iOS Safari, 프로브 P-1 미통과·미실행 | **음량 전환** |
+| S-3 | iOS Safari, P-1이 *"마이크·통화를 끊지 않고 수화부↔스피커가 바뀐다"* 를 실증 | 그 경로를 **iOS에만 별도 커밋으로 추가**하고 음량 전환은 그 경로 실패 시 폴백으로 남긴다 — OQ-A94 보고 뒤 착수 |
+| S-4 | 데스크톱 | **음량 전환**(수화부 개념 없음) |
+| S-5 | 텍스트 폴백 `<audio>` 경로 + `audio.volume` 설정이 반영되지 않는 환경(설정 후 다시 읽어 확인 — UA 판별 아님) | OQ-A97 결정 전: 칸을 **비활성 표현**(`aria-disabled` · 탭 무반응 — P-37 R-6′) |
+
+**표 A — 자산(D-96 (5) · D-97)**
+
+| # | 자산 | then |
+|---|---|---|
+| A-1 | Apple SF Pro 등 SF 글꼴 파일 | 번들 0 → `system-ui` 스택(iOS 기기에서는 iOS 글꼴로 그려짐) |
+| A-2 | SF Symbols | 사용 0 → 자체 제작 SVG |
+| A-3 | iOS 기본 벨소리 파일 | 사용 0 → Web Audio 합성(선율 비복제) |
+| A-4 | 삼성 글꼴 파일 | 번들 0 → `system-ui` |
+| A-5 | One UI 아이콘 | 사용 0 → 자체 제작 SVG |
+| A-6 | 삼성 기본 벨소리 | 사용 0 → Web Audio 합성(선율 비복제) |
+| A-7 | 오픈 라이선스 아이콘 세트 | **이번엔 채택하지 않는다** — 자체 SVG 10여 개로 충분하고 의존성·라이선스 고지 의무가 0이 된다. 구현 중 자체 제작이 품질상 막히면 Material Symbols(Apache-2.0)만 허용하되 같은 커밋에 `README.md` 고지 + 라이선스 사본 |
+| A-8 | 실기 캡처 이미지(측정용) | 저장소 커밋 0(OS UI 저작물) — 측정값(px·색)만 코드 주석으로 남긴다(OQ-A98) |
+
+**표 K — 스킨 해석 우선순위(D-88 · D-100)**
+
+| # | if | then |
+|---|---|---|
+| K-1 | 세션 문서에 `messengerSkin`·`skinSource`가 둘 다 있다(메신저 세션 · 메신저→통화 전이 세션) | 그 값 |
+| K-2 | 기기에 저장된 수동 선택(`localStorage` — 73.5 (3))이 있다 | 그 값(`skinSource = "manual"`) |
+| K-3 | 그 밖 | 감지 규칙표 v2(73.5 (1))의 결과 |
+
+### 73.4 컴포넌트·모듈 분해와 배치 규칙
+
+**배치 규칙** — R-1 순수 로직은 `src/lib/phone/*.ts`(React·DOM import 0 → `node --test` 단위 테스트) · R-2 DOM 부작용(오디오·진동)은 같은 디렉터리의 `*Player.ts` 1파일씩, 테스트는 순수 부분만 · **R-3 게이트 앵커 문자열을 가진 JSX는 원 파일에 둔다**(통화 셸 → `play/page.tsx` · 문자함 통화 표시줄 → `InCallSmsOverlay.tsx`) · R-4 새 컴포넌트는 `src/components/` **최상위**에 두고 등록부 2벌에 등록(G436 · T86 · G451).
+
+| 단위 | 위치(신규/기존) | 책임 | 테스트 |
+|---|---|---|---|
+| 스킨 감지·해석·저장 | **신규** `src/lib/phone/deviceSkin.ts` | 규칙표 v2(73.5 (1)) · 표 K 해석 · 저장값 파싱(잘못된 값 = 무시) · 선택지 라벨 상수 `DEVICE_SKIN_CHOICE_LABELS`(`ios: "iOS형"` · `samsung: "One UI형"` — OQ-U67 resolved, AC-032 해석은 planner) | `deviceSkin.test.ts`(G461) |
+| UA-CH 보강 | 같은 파일의 비동기 함수 `readUaModelHint(timeoutMs)` | `navigator.userAgentData?.getHighEntropyValues(["model"])` · 상한 300ms(판단값) · 실패 = `undefined` | 순수 부분만 |
+| 기존 감지 | **기존** `src/lib/messenger/detectSkin.ts` | **보존**(타입 `MessengerSkin` 정본 유지) — `detectMessengerSkin`은 v2 함수에 위임하도록 바꾸되 기존 테스트 기대값은 v1 케이스 그대로 통과해야 한다 | 기존 `detectSkin.test.ts` 무변경 통과 + G461 |
+| 스킨 토큰 | **신규** `src/lib/phone/skinTokens.ts` | UX v1.33 스킨 차이표 값(통화·문자함·메신저 문자형·브라우저 바·배너·랜딩 고정 색) — 값마다 출처 주석(*"UX v1.33 근사"* → 측정 후 *"실측: 기종/OS/화면/DPR"*) | `skinTokens.test.ts` — WCAG 대비 자동 계산(G456) |
+| 아이콘 | **신규** `src/components/PhoneIcon.tsx` | 자체 제작 단색 라인 SVG(획 2px) — `mute`·`keypad`·`speaker`·`message`·`chat`·`end-call`·`accept-call`·`person`·`chevron-back`·`link`·`globe`·`shield`·`send-up` · 전부 `aria-hidden` · 텍스트 노드 0 | 등록부(G436 in-session · T86 false) |
+| 화면 모양 선택 줄 | **신규** `src/components/DeviceSkinPicker.tsx` | 접힘/펼침(D-100 (3)) · 썸네일 = 자체 그린 축소 도식(캡처 이미지 0 — 표 A-8) · 문구는 상수 import | 등록부(G436 pre-session · T86 false) |
+| 배너 상태 | **신규** `src/lib/phone/bannerState.ts` | D-91 — 최신 `smsId` 기준 표시 · 6,000ms 뒤 숨김 · 정지(포커스/호버) · "확인한 마지막 smsId" | `bannerState.test.ts` |
+| 음량 모드 | **기존** `src/lib/realtime/outputGain.ts`에 상수 추가 | `CALL_MODE_GAIN = GEMINI_OUTPUT_GAIN`(0.6 — OQ-A89 계승) · `SPEAKER_MODE_GAIN = 1.0`(판단값 · 클리핑 방지 상한) · `gainFor(mode)` | 기존 `outputGain.test.ts` + G455 |
+| 벨소리 | **신규** `src/lib/phone/ringtone.ts`(순수) + `ringtonePlayer.ts`(Web Audio) | 73.7 | `ringtone.test.ts`(G454) |
+| 진동 | **신규** `src/lib/phone/vibration.ts` | 패턴 표(ios = `null`) · `"vibrate" in navigator` 감지 | 같은 테스트 |
+| 인증번호 분할 | **기존** `src/lib/incallsms/inCallSms.ts`에 함수 추가 | `splitBodyAtOtp(body, otpCode)` — `indexOf` 정확 일치 첫 1회 · 미일치 `null`(→ 박스 폴백) | 기존 `inCallSms.test.ts`에 추가(G459) |
+| 문자함 헤더 라벨 | 같은 파일 | `threadHeaderLabel(sorted)` — 전부 같은 `senderLabel`이면 그 값, 아니면 `"메시지"` + 말풍선별 표기(UX-027 v1.33 (3)) | 같은 테스트 |
+
+### 73.5 스킨 공유 — 감지 규칙표 v2(§13.5 표 대체) · 해석 · 저장
+
+**(1) 규칙표 v2**(순서대로 첫 매치 · ⛔ 표 밖 판단 금지 · 프레젠테이션 전용 — 어떤 안전 판정도 게이팅하지 않는다, §13.5 계승)
+
+| # | 조건 | skin | source | 근거 |
+|---|---|---|---|---|
+| 1 | UA에 `iPhone`\|`iPad`\|`iPod`\|`iOS` | `ios` | auto | §13.5 #1 |
+| 2 | UA에 `Macintosh` ∧ `navigator.maxTouchPoints > 1` | `ios` | auto | 신설 — iPadOS 데스크톱 UA(73.2 ④) |
+| 3 | UA에 `Android` ∧ (`SM-`\|`SamsungBrowser`\|`Samsung`) | `samsung` | auto | §13.5 #2 |
+| 4 | UA에 `Android` ∧ UA-CH `model`이 `/^SM-/` | `samsung` | auto | 신설 — Chrome UA 축소 보강(73.2 ④) |
+| 5 | UA에 `Android` | `default` | auto | §13.5 #3 |
+| 6 | 그 밖(데스크톱·미상·빈 UA) | `default` | fallback | §13.5 #4 |
+
+- 입력은 `{ userAgent, maxTouchPoints?, uaModel? }` 한 객체(순수). `uaModel`은 73.4 `readUaModelHint`가 300ms 안에 준 값만 쓴다 — 늦게 오면 버린다(화면 모양이 세션 중 바뀌지 않게 — D-100 (4) *"세션 끝까지 고정"*).
+- ⚠️ 규칙 4는 *"삼성 기기 Chrome이 기본으로 보인다"*(UX 3d — 오케스트레이터 라이브 인용값)를 고치는 유일한 행이다. 그 기기의 실제 `model` 값이 `SM-`로 시작하는지는 **미검증(실기 — P-3)**.
+
+**(2) 해석(표 K)과 소비처** — 모든 기기 재현 표면이 **같은 해석 함수 하나**를 쓴다(D-88 *"같은 기기에서 통화·문자·메신저가 같은 스킨"*).
+
+| 표면 | 스킨을 얻는 곳 | 쓰기 |
+|---|---|---|
+| UX-022 메신저(`surface="sms"`) | 기존 세션 문서 읽기(`S:messenger/page.tsx:162-178`) → 표 K | 기존 `updateMessengerSkin` 콜러블(`C:functions/src/session/index.ts:346-376`) 그대로 — 계약 무변경 |
+| UX-014 통화 | 기존 세션 문서 1회 읽기(`S:play/page.tsx:356-401`)에 `messengerSkin`·`skinSource` 읽기 2줄 추가 → 표 K | **서버 쓰기 0**(새 콜러블 호출 0 — 같은 기기에서 표 K가 결정론적이라 새로고침 일관성이 유지된다) |
+| UX-027 문자함 · UX-023 브라우저 바 | 통화 화면이 계산한 값을 prop `skin`으로 내려받음 | 0 |
+
+**(3) 기기 저장** — `localStorage` 키 `fv.deviceSkin.v1` = `{"skin":"ios"\|"samsung","at":<ms>}`(PII 0 · 프레젠테이션 선호값). 쓰는 곳 = 수동 선택 1곳(`DeviceSkinPicker`의 변경 콜백)뿐. 읽기 실패·파싱 실패·enum 밖 = 없는 것으로 본다(조용한 폴백이 아니라 *"선택 없음"* 이 정의된 값이다). `default`는 저장하지 않는다(선택지에 없음 — D-100 (3)).
+
+### 73.6 통화 셸(UX-014) 구현 명세 — 파일 `play/page.tsx` 하나
+
+| UX v1.33 항목 | 현재(S:) | 바뀌는 것 | 주의 |
+|---|---|---|---|
+| (1) 가짜 상태바 제거 | `:1369-1380` | 줄 삭제 · 그 자리 `env(safe-area-inset-top)` + 24px | 경과 시간 `role="status"`는 (3)의 줄로 이동 |
+| (2)(5) 배치·스킨 | 아바타 ☎ `:1444-1449` · 펄스 `:1429-1441` · 배경 `#22303A` `:1319` | 스킨 토큰(73.4) 적용 · iOS형 아바타 없음 · ☎ → `PhoneIcon person` | `prefers-reduced-motion` 0 모션(G457) |
+| (3) 번호 아래 phase 줄 | `:1454-1461` | 표(UX-014 v1.33 (3)) 그대로 — incoming = 빈 줄 + 숨김 글, live/opening = `mm:ss`(1시간 이상 `h:mm:ss` — 현 `formatElapsed` `:117-121`는 분이 60을 넘어도 `m:ss`이므로 함수 확장) | `aria-live` 없음(UX (3)) |
+| (4) 컨트롤 그리드 | 한 줄 `:1772-1866` | 3×2 그리드 + 아래 종료. 1행3 = 스피커(73.3 표 S) · 2행1 메시지 칸은 **처음부터 자리 예약** · 2행3 빈 칸 | ⛔ 종료 `aria-label="통화 종료 — 훈련 종료"`·거절 `"전화 거절 — 훈련 종료"` 리터럴을 이 파일에 유지(G441 불변 `S:inSessionMarkers.test.ts:356-357`) |
+| (4) 스피커 상태 | 없음 | `const [audioRoute, setAudioRoute] = useState<"call" \| "speaker">("call")` → `outputVolume={gainFor(audioRoute)}`를 `RealtimeVoiceSession`·`GeminiVoiceSession`에 새 prop으로, 폴백 `<audio>`는 effect에서 `audio.volume` 대입 | Gemini: `outputGain` 지역 변수를 ref로 올려 prop 변화 시 `gain.value` 갱신 — 초기화 줄 `outputGain.gain.value = GEMINI_OUTPUT_GAIN;`은 유지(G433 `C:outputGain.test.ts:24-26`). ElevenLabs: `conversation.setVolume({ volume })` effect |
+| (5) 받기 색 | `bg-[#0E6B62]` `:1561` | `call.accept #1E8E3E` | — |
+| (6) 떠 있는 배너 | 흐름 안 블록 `:1390-1411` · 고정 문구 `:1402` · `smsBannerDismissed` `:169` | `position: fixed` 레이어 + `bannerState`(73.4). `smsBannerDismissed` boolean → `bannerAckSmsId: string \| null`로 교체 — 쓰기 지점 3곳(`:594`·`:1018`·`:1204`)이 "최신 id 확인"으로 바뀐다 | ⭐ 부수 효과: 모델 도구 경로로 도착한 문자(`handleModelToolSmsDelivered`)도 새 id라 배너가 다시 뜬다 — 현행은 이 경로에서 `setSmsBannerDismissed(false)`가 없어 한 번 닫은 뒤 배너가 다시 안 뜰 수 있다(**추정 결함** — 확인: 문자함을 닫은 뒤 모델 도구로 둘째 문자 도착 시 배너 표시 여부). 문자함 열기 경로는 여전히 탭 1곳(D-56 게이트 `S:callContinuity.test.ts:510-524` 무변경) |
+| (6) 스크린리더 알림 | `:1417-1419` | 문구 *"{senderLabel}에서 문자가 왔습니다."* · 조건 `smsUnreadCount > 0` 유지(P-4/P-20 게이트 `S:callContinuity.test.ts:543-550`) | — |
+| (7) 키패드가 그리드 자리 대체 | 패널을 그리드 위에 쌓음 `:1585-1747` | `showTextInput`이면 그리드 대신 키패드 · 종료 버튼 고정 · 키패드 영역만 스크롤 · 두 `form`·`scrollIntoView` 무변경 | 폴백 상태 1줄(`buildFallbackStatusLine` — G443) 유지 |
+| ⑥ D-99 마이크 | `muted={muted \|\| smsOverlayOpen \|\| verifyOverlayOpen}` `:1329`·`:1348`(C: `:1327`·`:1346`) · `speech.stop()` `:1008`(C: `:1006`) · 자동청취 조건 `:961`·의존성 `:967` | `muted={muted \|\| verifyOverlayOpen}` 2곳 · `handleOpenSmsOverlay`의 `speech.stop()` 삭제 · 자동청취 effect 조건·의존성에서 `smsOverlayOpen` 삭제 · `:954-959` 주석 갱신 | 확인 오버레이 게이팅(`:1038` · `verifyOverlayOpen`)은 **유지**(D-99 대상 아님). 기존 단언 `S:callContinuity.test.ts:81-82`(정규식 2회)를 **같은 커밋에** 반전(G452). ⚠️ 남는 위험 R-1(폴백 STT 주변 소리 오인) = User 수용(D-99 Reason) |
+| (9)ⓒ 키패드·포커스 | — | 실시간·폴백 두 `form`의 `onFocus` `scrollIntoView` 무변경(`:1660-1662`·`:1721-1723`) | 실기 확인 P-5 |
+
+### 73.7 벨소리·진동 명세(D-97)
+
+- **재생 엔진**: Web Audio 합성(`OscillatorNode` + `GainNode` 엔벨로프) — 음원 파일 0(표 A-3·A-6). `ringtone.ts`(순수)가 스킨별 `RingPattern = { cycleMs, tones: { atMs, durMs, freqsHz: number[], wave: OscillatorType, peak: number }[] }`과 `RING_MAX_MS = 60_000`을 소유하고, `ringtonePlayer.ts`가 그 표를 스케줄한다.
+- ⛔ **선율 비복제**: 패턴 값은 *"OS 기본 벨소리의 음색(마림바/벨 계열)·주기·박자감"* 만 닮게 자체 설계한다 — 원곡의 음 높이 순서를 받아 적지 않는다(73.0 #3). 리뷰어 확인 항목(자동 검사 불가 — 정직 고지).
+- **진동**: `VIBRATION_PATTERNS = { ios: null, samsung: [...], default: [...] }`(D-97 — iOS형 진동 없음) · 벨 주기마다 `navigator.vibrate(pattern)` · 정지 `navigator.vibrate(0)` · `"vibrate" in navigator`가 거짓이면 0회.
+- **시작·정지 배선**(`play/page.tsx`): effect 1개 — `pageState === "ready" && phase === "incoming"`일 때 `startIncomingAlert(skin)` → cleanup에서 `stop()`. ⇒ 받기(`connecting`으로 전이)·거절(라우팅 언마운트)·종료·페이지 이탈이 전부 cleanup 하나로 모인다. 추가로 `pagehide`에서 `stop()`. `handleAnswer` 첫 줄에서도 `stop()`(전이 렌더 전 즉시 정지 — 실시간 오디오와 겹침 0).
+- **실패 처리**: `AudioContext` 생성 후 `resume()` 시도 → `state !== "running"`이면 **무음으로 끝낸다**(오류 문구 0 — D-97). 60초 뒤 소리만 멈추고 화면 연출은 계속(UX (10) ②). `stop()`은 멱등이며 `AudioContext.close()`까지 한다(통화 오디오 컨텍스트와 공존 시간 0).
+- **D-102 대비 구멍**: `startIncomingAlert(skin, { primedContext? })` — 나중에 `준비됐어요` 탭 핸들러 안에서 만든 컨텍스트를 넘길 수 있게 인자를 미리 둔다(지금은 미사용 — 73.12).
+- ⚠️ incoming 상태에 시간 한도가 없다는 UX 추정: 타이머 effect가 incoming에서 돌지 않고(`S:play/page.tsx:826-833`) 자동 종료 effect가 `phase !== "live"`면 빠지는 것(`:855`)까지 확인 — incoming 전체 effect 전수 열람은 하지 않았다(**부분 확인**).
+
+### 73.8 문자함(UX-027) + 랜딩(UX-023) 명세 — ⭐ 대화상자 1개 구조
+
+**판정**: in-call 경로의 랜딩을 **문자함 대화상자 안의 두 번째 뷰**로 넣는다(별도 `fixed` 대화상자를 겹치지 않는다).
+
+| 근거 | 내용 |
+|---|---|
+| ① 중첩 `aria-modal` 해소 | 현행은 문자함(`role="dialog" aria-modal` `S:InCallSmsOverlay.tsx:235-242`, z-40) 위에 랜딩(`role="dialog" aria-modal` `S:MessengerFakeLanding.tsx:77-82`, z-50)이 겹치고, 문자함의 문서 수준 키 트랩(`:206-231`)은 **뒤에 깔린** 문자함 패널 안에서 Tab을 돌린다. 한 대화상자 안의 두 뷰로 바꾸면 G26(중첩 금지 — §16.6)과 같은 원칙이 in-call 경로 안에서도 성립한다 |
+| ② D-94 숨김 마운트가 공짜로 성립 | 두 뷰를 `hidden` 속성으로 토글하면 숨긴 랜딩은 접근성 트리·포커스에서 빠지고(키 트랩의 `offsetParent !== null` 필터 `:216`가 이미 숨김 요소를 거른다) 입력값은 랜딩 로컬 state에 남는다(G138 무변경) |
+| ③ 통화 표시줄이 원 파일에 남는다 | 통화 표시줄을 대화상자 맨 위에 **한 번** 두면 두 뷰가 공유한다 — UX-023 (1)①(*"UX-027에서 열렸을 때만"*)이 구조로 충족되고, T103 5요소 단언(`S:callContinuity.test.ts:394-406`)·G87이 같은 파일을 계속 본다(73.4 R-3) |
+
+- **`MessengerFakeLanding` 새 prop**: `entrySurface?: "messenger" \| "in-call-sms"`(기본 `"messenger"` — 기존 호출부·렌더 게이트 무변경 통과) · `onHide?: () => void`(in-call 전용 *"문자"* 셰브런). `"in-call-sms"`이면 ① 바깥 래퍼가 `role="dialog"`/`aria-modal`/`fixed` 없는 `div`(`role="region"` + 기존 `aria-label={`${title} 화면`}` — A5 꼬리 유지) ② 완료 버튼 문면 *"문자로 돌아가기"*(UX-023 (5)) ③ 브라우저 바 왼쪽 셰브런 *"문자"* 표시. ⛔ 이 prop은 **표현만** 가른다 — kind 분기·제출 무인자·네트워크 0은 그대로(§15.9.4 파일 단위 계약).
+- **문자함 상태**: `landing: { smsId, … } \| null` + `view: "thread" \| "landing"`. 링크 탭: 같은 `smsId`의 랜딩이 이미 있으면 `view = "landing"`만(입력값 유지 — D-94), 다르면 교체(`key={landing.smsId}`로 새 마운트). `onHide` → `view = "thread"`. 닫기·완료 복귀 → `landing = null`. 통화 표시줄 탭·*"통화로 돌아가기"* → 문자함 전체 닫기(랜딩 언마운트 — 입력값 폐기, UX-023 (1)). Esc: 랜딩 뷰면 `view = "thread"`, 스레드면 기존 `requestClose`. `link_tapped` 기록은 탭마다(UX-023 (7) 허용 · 판정 영향 0).
+- **스레드(UX-027 v1.33 (3)(4))**: 헤더 = 셰브런(통화 복귀) · 아바타 · `threadHeaderLabel` · 오른쪽 `EndTrainingButton`을 **자기 혼자만 든 `div.justify-end`** 로 감싼다(G449 `S:inSessionMarkers.test.ts:451-455` — 자식 1개 · `justify-end`). 말풍선 위 모노 발신자(`S:InCallSmsOverlay.tsx:334-338`) 제거. 인증번호 박스(`:350-360`)는 `splitBodyAtOtp`가 `null`일 때만(G459). 링크 = `sms.linkAddress ?? sms.linkDisplayText`(73.9) 밑줄·색·아이콘 + `aria-label={`링크: ${…}`}`(A3 머리 유지). 하단 = *"통화로 돌아가기"* 큰 버튼(입력창 모양 0 — G80).
+- **랜딩(UX-023 v1.33)**: 브라우저 바 = 지구본 아이콘 + 주소 호스트(73.9 `mockHost`) + 오른쪽 `EndTrainingButton`(그 바 `div`에 `justify-end` — G449 `:456-460`) · ⚠ `S:MessengerFakeLanding.tsx:97-99`·모노 `:100` 제거 · 기관 헤더 띠(`issuerLabel`에서 정확 접두 `"ⓒ "` 1회 제거) · 🔒 `:311-315` 제거 · `CredentialFieldCopy`(`:127`)에 클라 전용 `inputMode?: "numeric"`(필드별 명시 — 라벨 추론 0, UX-023 (9)ⓓ) · 입력 테두리 `#8E8E93` · 발급처 `#6B655C`(`:353`) · 완료 문면 entrySurface별.
+
+### 73.9 가짜 주소 콘텐츠 필드(D-101) — 스키마
+
+| 필드 | 위치 | 필수성 | 화면 | 비고 |
+|---|---|---|---|---|
+| `mockHost: string` | **서버** `MockScreenItem`(`C:functions/src/scenarios/mockScreens.ts`) 8항목 전부 + **클라** `CredentialCopy`·`GENERIC_CREDENTIAL_COPY`·`app-install` 상수(`S:MessengerFakeLanding.tsx:128-150`·`:368-375`) | 필수 | 랜딩 브라우저 바(호스트만 — UX-023 (2)) | 서버↔클라 글자 일치는 기존 드리프트 게이트가 강제(`RENDERED_FIELDS`에 등록 — `S:mockScreenCopy.test.ts:291-299`) |
+| `linkAddress?: string` | **서버** `InCallSmsItem`(`C:functions/src/scenarios/inCallSms.ts`) — `fakeLandingId`가 있는 항목 · 문서 복사 `C:functions/src/incallsms/buildDoc.ts:36-37` 옆 1줄 · 클라 `InCallSmsView`(`C:src/lib/incallsms/inCallSms.ts:11-25`) · 구독 매핑(`S:play/page.tsx:457` 옆) | 링크 쌍과 함께 존재/부재(G111 → 3자 쌍) | 문자 말풍선 링크 줄(호스트+경로 — UX-027 (4)) | `linkAddress`는 그 문자의 `fakeLandingId` 랜딩의 `mockHost + "/"`로 시작해야 한다(G453 — 서버 테스트) |
+
+- **값**: 이체형 3종은 D-101 정본 그대로(`jasan-boho-center.invalid` · `/transfer/a7Kq` 등). 나머지 5랜딩(+클라 범용 폴백 1)은 implementer가 같은 규칙으로 짓고 UX D-101 표에 행을 더한다(UX 지시). TLD는 **`.invalid` 하나로 고정**(D-101 Rejected ⓐ가 architect에 맡긴 고정 — `.example`·`.test` 불허).
+- ⚠️ **정합 문제(OQ-A96)**: D-101 규칙 ③ *"경로 = `/` + 영문·숫자 4~12자"* 와 정본 값 `/transfer/a7Kq`(구획 2개 · 13자)가 **서로 맞지 않는다**. G453 정규식은 정본 값을 통과시키는 형태(`^(\/[A-Za-z0-9]{2,12}){1,2}$` · 연속 숫자 ≤3 · 전체 ≤24자 — 판단값)로 두고 UX에 규칙 문면 정합을 요청한다.
+- **영향 판정**: ① `linkDisplayText`는 **지우지 않는다** — 리포트·리플레이 타임라인(`functions/src/report/__tests__/smsTimeline.test.ts:186-206` 등)·G194 중복 검사(`C:functions/src/scenarios/__tests__/mockScreens.test.ts:995`)·랜딩 `title`(aria 이름)이 계속 쓴다. 화면 렌더에서만 주소로 바뀐다(UX-027 (4) *"데이터로 남고 화면에서는 쓰지 않는다"*). ② **문자 본문(`body`) 무변경** ⇒ AC-078 대조표의 `baitExcerpt`(본문 인용 — `C:mockScreens.test.ts:910-962`) 영향 0. ③ 무해화 게이트: `Record<keyof Item, FieldPolicy>`라 새 필드는 정책 등록 없이 **컴파일이 깨진다**(`C:functions/src/scenarios/__tests__/harmlessnessGate.test.ts:79-109`) → 두 필드 `{ profile: "mockSurface" }` 등록. `URL_PATTERN = /https?:\/\//i`·`LONG_DIGIT_SEQUENCE = /\d{8,}/`(`C:harmlessnessPatterns.ts:191-192`)에 걸리지 않는다(값 형식상). ④ 렌더 게이트: `RENDER_TARGET_FIELDS`(`S:renderGate.test.ts:51`)에 `mockHost` 추가 · 생존 신호의 `title` 센티널(`:129-131`)은 주소창에서 사라지므로 **새 신호로 재지정**(예: `mockHost` 문자열 ∧ "훈련 종료") — 같은 커밋.
+- **API·DB 문서**: `sessions/{sid}/inCallSms/{smsId}` 문서 필드 1개 증가 → `docs/Database.md` 갱신 필요(⛔ 이 패스 편집 범위 밖 — 73.19).
+
+### 73.10 메신저 문자형(UX-022 `surface="sms"`) + 세션 전 화면 모양 선택
+
+1. **표현**: `bubbleClass`(`S:messenger/page.tsx:71-`)를 `skinTokens` 조회로 대체 · 대화 헤더(왼쪽 아바타+`callerLabel` / 오른쪽 *"전화로 확인"* + `EndTrainingButton`) — G449 메신저 단언(`S:inSessionMarkers.test.ts:466-471`: 헤더 부모 `justify-between` · 자식 div 2개)을 지키는 2분할 유지 · 말풍선 위 이름 제거 + 숨김 글 *"{callerLabel}:"*/*"나:"* · 폭 430px 가운데 · placeholder *"메시지"*. 카카오형 무변경.
+2. **선택 줄(D-100)**: `MessengerStartNotice`(`S:src/components/MessengerStartNotice.tsx`)에 prop `skinPicker?: { value, source, onChange }` 추가 — `surface === "sms"`일 때만 렌더(카카오는 스킨 없음). 변경 시 ① 화면 상태 ② 기존 `updateMessengerSkin(manual)` ③ `localStorage`(73.5 (3)). 문면(*"화면 모양: …"* · *"사용하시는 휴대폰과 같은 화면 모양을 골라 주세요"*)은 `preSessionCopy.ts`에 둔다(세션 전 문면 정본 1곳 — `S:src/lib/sessionboundary/preSessionCopy.ts:1-8` 원칙). G438(`MessengerStartNotice` 사용처 1회 · `startNotice === "show"`)은 무변경.
+3. ⛔ **세션 중 스킨 칩(`S:messenger/page.tsx:282-287`·`:411-414`)과 폴백 안내 1줄(`:436`) 제거는 OQ-U64(planner — AC-031 *"수동 전환 옵션"* 충족 해석) 확정 전 착수 금지.** 선택 줄 추가(2)는 칩과 공존해도 무해하므로 먼저 들어간다(처방별 선행조건 분리).
+
+### 73.11 색 체계 고정(OQ-U65)
+
+- `src/app/layout.tsx`에 `export const viewport: Viewport = { colorScheme: "only light" }`(Next가 `<meta name="color-scheme">`를 낸다) + `src/app/globals.css` `:root { color-scheme: only light; }` — 두 겹(Chrome 문서가 둘 다 opt-out으로 인정 — 73.2 ⑥). 앱에 다크 테마가 없어 전역 적용의 손실 0(73.1 #6).
+- 한계(정직 고지): 삼성 인터넷 다크 모드·웨일은 이 선언으로 막힌다는 근거가 없다 → P-4에서 반전 화면의 대비만 실측하고, 미달 요소는 토큰 조정으로만 대응(UX OQ-U65 권고 ⓑ). 다크 스킨 설계는 범위 밖.
+
+### 73.12 D-102(벨 직전 고지 `pre-call-notice`) — 보류 분리 설계
+
+**(1) 보류 동안 그대로인 것**: 벨 화면 `PREROLL_NOTICE`(`S:play/page.tsx:1491-1495` · G438 `phase === "incoming"` 단언 `S:inSessionMarkers.test.ts:245-259` 무변경) · `Phase` 타입(`S:play/page.tsx:95`).
+
+**(2) 보류가 비우는 자리(⛔ 다른 단계가 메우지 않는다)**
+
+| 자리 | 보류 중 상태 | 영향 |
+|---|---|---|
+| 통화 경로의 수동 화면 모양 선택(D-100 (2)) | 없음 — 표 K의 K-2(메신저에서 고른 저장값)·K-3(감지)만 | 감지 실패 기기(데스크톱·미상)는 통화에서 기본(One UI형 골격) |
+| iOS 벨소리 | 무음 가능성 높음(73.2 ③-b 추정) | D-97 무음 폴백이 허용 |
+| 벨 화면 문구 0(결정 7) | 미충족 — `PREROLL_NOTICE`가 벨 화면에 남는다 | User 결정과 어긋난 상태가 planner 판정까지 지속(OQ-U66) |
+
+**(3) 해제 후 한 단계로 묶을 변경(T190-8)**: ① `Phase`에 `"pre-call-notice"` 추가 · 초기값 = 복원(answered)·이미 확인한 세션이 아니면 `pre-call-notice` ② 문면 `PRE_CALL_NOTICE = { title, confirmLabel }`을 `preSessionCopy.ts`에 · 본문은 `PREROLL_NOTICE` 재사용 ③ `{PREROLL_NOTICE}` 사용처를 `pre-call-notice` 블록으로 옮기고 **G438 단언의 좌변을 같은 커밋에 `phase === "pre-call-notice"`로 재지정** ④ `phase === "incoming"`을 "받기 전"으로 쓰는 가드 5곳(`S:play/page.tsx:415`·`:440`·`:474`·`:827`·`:980` — prefetch는 의도상 incoming 유지 여부 판정 필요)에 새 phase 포함 — 특히 `:415` 줄은 `S:startNoticeGate.test.ts:105`가 **문자열 그대로** 단언하므로 같은 커밋에 갱신 ⑤ `준비됐어요` 클릭 핸들러 안에서 오디오 컨텍스트 생성·`resume()` → `startIncomingAlert(skin, { primedContext })`(73.7) ⑥ `DeviceSkinPicker`를 이 상태에 배치 ⑦ 새로고침 생략(AC-087 (c)) = 기존 `isSessionAnswered`류 sessionStorage 플래그 패턴(`@/lib/recording`) 1개 추가 ⑧ 에스컬레이션 세션(`entryChannel === "messenger"`)의 처분은 OQ-U66 ⓑ/ⓒ 판정을 따른다.
+
+**(4) 독립성 판정**: T190-1~7은 `Phase` 타입·`PREROLL_NOTICE` 자리·G438을 건드리지 않는다 ⇒ **D-102 없이 전부 완결된다**. 73.7의 `primedContext` 인자 1개가 유일한 선행 배선이다.
+
+### 73.13 기존 게이트 영향표 (⛔ 게이트를 완화하지 않는다 — 바뀌는 단언은 같은 커밋에 갱신 + 역검증 유지)
+
+| 게이트 | 파일:줄(S:) | 이 설계가 닿는 지점 | 처리 |
+|---|---|---|---|
+| G436 등록부 | `src/lib/sessionboundary/inSessionMarkers.test.ts:48-64`·개수 `:85`(15) | 신규 `PhoneIcon.tsx`(in-session) · `DeviceSkinPicker.tsx`(pre-session) | 등록 + 개수 15 → **17** |
+| G437 범위 | 같은 파일 `:174-178`(12) | `PhoneIcon`이 in-session | 12 → **13** · 텍스트 노드 0이라 위반 0 기대 |
+| T86 등록부 | `src/components/harmlessnessScreens.test.ts:97-113` | 신규 컴포넌트 2 | `false`(사기 표면 아님) 등록 |
+| G438 | `inSessionMarkers.test.ts:245-259` | D-102 보류 중 무변경 | T190-8에서 재지정 |
+| G441 A3 역검증 | 같은 파일 `:378-384` — 오염 앵커가 리터럴 `` aria-label={`링크: ${sms.linkDisplayText}`} `` | 링크 표기식 변경 | ⚠️ 표기식을 바꾸면 앵커가 사라져 `assert.notEqual`이 실패한다 → **같은 커밋에 앵커 문자열 갱신** |
+| G441 불변 | 같은 파일 `:355-357` | 통화 셸 재배치 | `play/page.tsx`에 두 리터럴 유지(73.4 R-3) |
+| G449 | 같은 파일 `:449-473` | 문자함 헤더 · 랜딩 브라우저 바 · 메신저 헤더 | 73.8 · 73.10 (1)의 감싸기 형태 |
+| §15.1.3 마이크 게이팅 | `src/lib/incallsms/callContinuity.test.ts:77-82` | D-99 | **반전**(G452) — 타이머·한도 단언 `:84-100`은 무변경 |
+| G80 | 같은 파일 `:169-191` · AST `:281-293` | 하단 복귀 바 | 입력 모양 0 유지 · 랜딩 입력은 별 파일(정당) |
+| T103 통화 필 | 같은 파일 `:394-406` | 통화 표시줄 재배치 | `callerLabel`·`elapsedLabel`·`통화 중`·`scammerCaption`·`aria-live="polite"` 유지(인라인) |
+| T103 A2 reduce-motion | 같은 파일 `:425-458` | 배너 퇴장 클래스 · 새 수신 연출 | `sms-banner-*` 이름은 기존 검사에 걸림 — 그 밖 새 애니메이션은 G457이 덮는다 |
+| G76 드리프트 | `src/components/mockScreenCopy.test.ts:291-338` | `mockHost` | `RENDERED_FIELDS`에 등록(미등록이면 `:331-338`이 실패 — 트립와이어) |
+| G138 · G255 | 같은 파일 `:141-235` | 숨김 마운트 | 무변경 통과 확인 |
+| T116 렌더 | `src/lib/mockscreenrender/renderGate.test.ts:51`·`:129-144`·`:158` | `mockHost` · 생존 신호 · `entrySurface` | 73.9 ④ + 두 `entrySurface` 각각 렌더(대화상자/임베디드) |
+| T116 순서(G194) | `renderGate.test.ts:199-` | 기관 헤더 띠가 `issuerLabel`의 부분 문자열을 위에 한 번 더 그린다 | ⚠️ **오탐 가능성(미검증)** — 실행해 보고 걸리면 *"헤더 띠 = 발급처의 정확 접두 제거 사본"* 을 허용 목록으로 명시하고 역검증 1건을 더한다 |
+| 무해화 타입 | `C:functions/src/scenarios/__tests__/harmlessnessGate.test.ts:79-109` | 필드 2개 | 컴파일 강제 등록(73.9 ③) |
+| G111 쌍 | `C:functions/src/scenarios/__tests__/inCallSms.test.ts:85-95` | `linkAddress` | 3자 쌍으로 확장 |
+| buildDoc 복사 | 같은 파일 `:205-224` | `linkAddress` | 복사 단언 추가 |
+| G433 | `C:src/lib/realtime/outputGain.test.ts:13-27` | 실시간 음량 갱신 | 초기화 줄 유지 · 갱신은 ref 경유 |
+| 테스트 등록 | `C:src/lib/testRegistration.test.ts` · 루트 `package.json` `test` | 신규 테스트 파일 | 등록(미등록이면 실패) |
+
+### 73.14 신규 가드
+
+| ID | 내용 | 역검증(같은 함수 · 테스트 안 오염) |
+|---|---|---|
+| **G451** | `src/components/`의 하위 디렉터리에 `.tsx`가 있으면 `ui/`만 허용 — 등록부 2벌(G436·T86)의 최상위 전용 탐색을 우회하지 못하게 | 가상 경로 `src/components/phone/X.tsx` 목록을 넣으면 실패 |
+| **G452** | `play/page.tsx`: `muted={muted \|\| verifyOverlayOpen}` 정확히 2회 · `smsOverlayOpen`이 `muted=` 식·자동청취 effect 조건·`handleOpenSmsOverlay` 안 `speech.stop(` 어디에도 0 · `verifyOverlayOpen` 게이팅은 존재 | 옛 식 `muted \|\| smsOverlayOpen \|\| verifyOverlayOpen`을 되살린 사본은 실패 |
+| **G453** | 모든 `MOCK_SCREENS[*].mockHost` · 클라 범용/설치 호스트: `^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)*\.invalid$` · 스킴·`www.`·`href` 0 · 연속 숫자 ≤3. 모든 `IN_CALL_SMS[*].linkAddress` = 그 `fakeLandingId` 랜딩의 `mockHost + 경로`(경로 정규식 73.9 — OQ-A96) | `.com` 호스트 · `https://` 접두 · 숫자 4연속 샘플 각각 실패 |
+| **G454** | 벨·진동: `RING_MAX_MS === 60000` · `VIBRATION_PATTERNS.ios === null` · `play/page.tsx`에 `startIncomingAlert(` 1회이며 그 effect가 `phase !== "incoming"`이면 빠지고 cleanup이 `stop`을 부른다 · `handleAnswer` 안 `stop` 호출 | cleanup에서 `stop`을 지운 사본은 실패 |
+| **G455** | 음량: `CALL_MODE_GAIN === GEMINI_OUTPUT_GAIN` · `0 < CALL_MODE_GAIN < SPEAKER_MODE_GAIN <= 1.0` · 두 세션 컴포넌트 모두 `outputVolume=` prop 수신 · 폴백 `<audio>` 음량 대입 존재 | `SPEAKER_MODE_GAIN = 1.5` 사본 실패 |
+| **G456** | `skinTokens`의 모든 (글자색, 배경색) 쌍 대비 ≥ 4.5 · 비텍스트 쌍 ≥ 3.0(WCAG 상대 휘도 공식) — D-96 (3) *"접근성 하한 우선"* 의 자동 집행. 측정값 교체 후에도 같은 테스트가 막는다 | iOS 발신 말풍선 옛 값 `#0B84FF`+흰 글(UX 손계산 약 3.6:1) 샘플이 실패 |
+| **G457** | `globals.css`에서 `animation:`을 가진 모든 클래스가 `prefers-reduced-motion: reduce` 블록에서 꺼진다(T103 A2의 `sms-*` 한정 검사를 전역으로 일반화 — 기존 검사는 그대로 둔다) | 블록에 없는 새 클래스 사본 실패 |
+| **G458** | `layout.tsx`에 `colorScheme: "only light"` · `globals.css` `:root`에 `color-scheme: only light` | 한쪽 제거 사본 실패 |
+| **G459** | `splitBodyAtOtp`: 정확 일치 첫 1회 · 미일치 `null` · `InCallSmsOverlay`는 `null`일 때만 박스 렌더(인증번호가 화면 어디에도 없는 상태 0 — AC-061) | 본문에 코드가 없는 샘플에서 박스 분기가 빠진 사본 실패 |
+| **G460** | `MessengerFakeLanding`의 `entrySurface === "in-call-sms"` 렌더에 `role="dialog"`·`aria-modal` 0(정적 렌더 하네스로 확인) · `InCallSmsOverlay`의 두 뷰 토글은 `hidden` 속성 | 임베디드 렌더에 `aria-modal`을 남긴 사본 실패 |
+| **G461** | 규칙표 v2 케이스: 축소 UA `Linux; Android 10; K` + `uaModel "SM-S918N"` → samsung/auto · 같은 UA + `uaModel` 없음 → default/auto · `Macintosh` + `maxTouchPoints 5` → ios/auto · `Macintosh` + 0 → default/fallback · 기존 v1 케이스 전부 동일 | 규칙 4를 지운 사본에서 첫 케이스 실패 |
+
+### 73.15 파일별 변경 목록 (UX H-1~H-8 대조)
+
+| H | 파일 | 변경 | 단계 |
+|---|---|---|---|
+| H-1 · H-8 | `src/app/session/play/page.tsx` | 73.6 전부 · 73.7 배선 · 스킨 읽기 2줄 · `InCallSmsOverlay`에 `skin` prop | T190-3 · 4 |
+| H-1 | `src/lib/realtime/GeminiVoiceSession.tsx` · `RealtimeVoiceSession.tsx` | `outputVolume` prop + 갱신 effect | T190-3 |
+| H-1 | `src/lib/realtime/outputGain.ts` | `CALL_MODE_GAIN`·`SPEAKER_MODE_GAIN`·`gainFor` · 주석 *"앱 안에 음량 조절 UI는 없다"* 갱신 | T190-1 |
+| H-2 | `src/components/InCallSmsOverlay.tsx` | 73.8 (대화상자 1개 · 두 뷰 · 스레드 · 통화 표시줄 2줄 상한) | T190-5 |
+| H-3 | `src/app/session/messenger/page.tsx` | 73.10 (1)(2) · (3)은 OQ-U64 뒤 | T190-6 |
+| H-3 | `src/components/MessengerStartNotice.tsx` | `skinPicker` prop | T190-6 |
+| H-4 | `src/components/MessengerFakeLanding.tsx` | 73.8 랜딩 · `entrySurface`·`onHide` · `mockHost` · `inputMode` | T190-5 |
+| H-5 | `src/lib/messenger/detectSkin.ts`(+ 기존 테스트) | v2 위임 | T190-1 |
+| H-6 | `src/app/layout.tsx` · `src/app/globals.css` | 73.11 · 새 애니메이션 + reduced-motion | T190-1 · 3 |
+| H-7 | **신규** `src/components/PhoneIcon.tsx` · `DeviceSkinPicker.tsx` | 73.4 | T190-1 · 6 |
+| (신규) | `src/lib/phone/deviceSkin.ts` · `skinTokens.ts` · `bannerState.ts` · `ringtone.ts` · `ringtonePlayer.ts` · `vibration.ts` (+ 테스트) | 73.4 · 73.5 · 73.7 | T190-1 · 4 |
+| (기존 확장) | `src/lib/incallsms/inCallSms.ts`(+ 테스트) | `InCallSmsView.linkAddress` · `splitBodyAtOtp` · `threadHeaderLabel` | T190-1 · 2 |
+| (세션 전 문면) | `src/lib/sessionboundary/preSessionCopy.ts` | 선택 줄 문면 · (T190-8) `PRE_CALL_NOTICE` | T190-6 · 8 |
+| (서버) | `functions/src/scenarios/mockScreens.ts` · `inCallSms.ts` · `functions/src/incallsms/buildDoc.ts` · `functions/src/shared/types.ts`(문서 타입) | 73.9 | T190-2 |
+| (게이트) | 73.13 표의 테스트 파일들 + 신규 G451~G461 | 같은 커밋 갱신 | 각 단계 |
+
+### 73.16 T190 단계 분할 (구현 순서 · 완료 기준)
+
+⛔ 전 단계 공통: **#291 main 병합 뒤 착수**(UX (e) 착수 순서) · Verified Commands 원문 · 동시 실행 금지 · 기준 수치는 착수 시 main에서 다시 잰다.
+
+| 단계 | 내용 | 선행 | 완료 기준(자동) | 실기 |
+|---|---|---|---|---|
+| **T190-1** 기반 | 73.4 순수 모듈 전부 · `PhoneIcon` · `outputGain` 상수 · `detectSkin` v2 위임 · color-scheme · G451·G455(상수 부분)·G456·G457·G458·G459(함수)·G461 | #291 병합 | 루트 테스트 통과 · 신규 테스트 각 역검증 출력 · 화면 변화 = 색 체계 선언뿐 | — |
+| **T190-2** 콘텐츠 | `mockHost` 8+클라 2 · `linkAddress`(링크형 문자 전부) · buildDoc · 뷰 매핑 · G453 · 무해화/드리프트/렌더/G111 등록 | 1 | functions·루트 테스트 통과 | — |
+| **T190-3** 통화 셸 | 73.6 · 스피커 = 음량 전환 · D-99 · 스킨 적용 · G452 · G455(배선) | 1 | 테스트 통과 · `npm run build` 통과 | P-1 · P-5 |
+| **T190-4** 벨·진동 | 73.7 · G454 | 3 | 테스트 통과 | P-2 |
+| **T190-5** 문자함+랜딩 | 73.8 · G459(배선) · G460 · G441/G449/렌더 게이트 갱신 | 2 · 3 | 테스트 통과 · 렌더 게이트 두 `entrySurface` 출력 | P-5 |
+| **T190-6** 메신저 | 73.10 (1)(2) | 1 | 테스트 통과 | P-3 |
+| **T190-6b** 칩 제거 | 73.10 (3) | ⛔ **OQ-U64** | 테스트 통과 | — |
+| **T190-7** 실기 측정·프로브 | 73.17 P-1~P-6 → 토큰 교체(G456이 하한 집행) · 표 S의 S-3 판정 · OQ-A94 보고 자료 | 3~6 (P-1은 3 이전 가능) | 측정표·편차 목록(D-96 (3)) 기록 | 전부 |
+| **T190-8** pre-call-notice | 73.12 (3) | ⛔ **OQ-U66** | G438·G444 재지정 포함 테스트 통과 | P-2 재실행(iOS 벨) |
+
+- 배포: Functions(필드 추가)·Hosting 둘 다 바뀐다. **Hosting → Functions** 순서(CLAUDE.md Verified Commands 규범). 역순이어도 안전하다 — 새 필드는 옵셔널이고 클라가 `linkAddress ?? linkDisplayText`로 읽는다.
+
+### 73.17 실기 검증 목록 (자동 테스트로 확인 불가)
+
+| # | 항목 | 기기·브라우저 | 절차 | 판정 |
+|---|---|---|---|---|
+| P-1 | 출력 경로·음량 | iPhone(iOS 18.4+ · 가능하면 26) Safari · 갤럭시 Chrome · 삼성 인터넷 | 실시간 통화 중 ① 소리 나는 위치(수화부/스피커) ② iOS: `enumerateDevices()`의 `audiooutput` 목록 · `'setSinkId' in AudioContext.prototype` ③ iOS: 통화 전 `navigator.audioSession.type = "play-and-record"` 설정 시 경로 변화 · 마이크 유지 여부 ④ 스피커 버튼 0.6↔1.0 청감 차이 | 표 S의 S-3 성립 여부 · OQ-A94 값 |
+| P-2 | 벨·진동 | 같은 기기 + 무음 스위치/무음 모드 on·off | 앞 화면에서 탭 후 클라 라우팅 진입 · 새로고침 직접 진입 각각 | 소리·진동 유무 기록(무음 = D-97 허용 상태인지 구분) |
+| P-3 | 스킨 감지 신호 | 갤럭시 Chrome · 삼성 인터넷 · iPad Safari(데스크톱 사이트) · 카톡 인앱 | `navigator.userAgent` · `userAgentData.getHighEntropyValues(["model"])` · `maxTouchPoints` 출력 | G461 케이스가 실기 값과 일치하는지 |
+| P-4 | 강제 다크 | 삼성 인터넷(다크 모드) · 웨일 · Chrome(자동 다크 플래그) | 4화면 캡처 → 대비 측정 | 4.5:1 미달 요소 목록 |
+| P-5 | 레이아웃·포커스 | 375×812급 실기 2종 | 키패드 열림 시 입력창 `scrollIntoView` · 배너 6초 · 랜딩↔문자 왕복 입력 유지 · 스크린리더(VoiceOver/TalkBack) 순서 | UX-014 (8)(9) · UX-023 (7) |
+| P-6 | 정밀 측정(D-96 (2)) | iPhone · 갤럭시 각 1대(기종·OS 기록) | 수신·통화·키패드·통화 중 알림·메시지 대화·브라우저 주소창 캡처 → CSS px = 이미지 px ÷ DPR · 색 스포이드 | `skinTokens` 값 교체 + 편차 목록. ⛔ 캡처 이미지는 커밋하지 않는다(표 A-8) |
+
+### 73.18 열린 질문
+
+| ID | 대상 | 질문 | 기본값(답 전) |
+|---|---|---|---|
+| **OQ-A94** | **User**(오케스트레이터 보고) | D-98 ③ 보고: **Android는 웹에서 수화부↔스피커 실제 전환이 불가**(73.2 ①-A)해 **음량 전환으로 대체**한다. iOS는 실기 프로브(P-1) 전까지 같은 대체. 음량값 통화 모드 0.6(현행 OQ-A89 기본) / 스피커 모드 1.0으로 시작해도 되는가? ⚠️ 기본 음량에 대한 두 신고(*"좀 큼"* vs *"작다"*)가 반대 방향이다(73.1 #4) — 어느 기기에서 들은 것인가? | 0.6 / 1.0으로 구현, 실기 청취 후 조정 |
+| **OQ-A95** | **User** | D-102 보류 동안 iOS 벨소리는 무음일 가능성이 높다(73.2 ③-b 추정). ⓐ D-102 해제를 기다린다 ⓑ 통화로 들어가는 모든 탭 지점(난이도 시작·챌린지 동의·메신저 *"전화로 확인"* 등 4곳 이상)에서 오디오를 미리 깨우는 배선을 더한다(여러 화면 수정 · 자동 에스컬레이션은 여전히 무음) | ⓐ |
+| **OQ-A96** | **ux-design** | D-101 규칙 ③(*"경로 4~12자"*)과 정본 값 `/transfer/a7Kq`(2구획·13자)가 맞지 않는다 — 규칙 문면을 정본에 맞춰 고칠 것인가, 정본 값을 규칙에 맞출 것인가? | G453은 정본 값을 통과시키는 정규식(73.9) |
+| **OQ-A97** | **ux-design** | 출력 음량을 앱이 바꿀 수 없는 경로(iOS 텍스트 폴백 `<audio>` — 73.2 ②)에서 스피커 칸을 ⓐ 비활성 표현(R-6′) ⓑ 숨김(빈 칸) ⓒ 오디오 재생 경로 교체(Web Audio 디코드 — CORS 확인 선행) 중 무엇으로 할 것인가? | ⓐ(표 S S-5) |
+| **OQ-A98** | **User** | 정밀 측정(P-6)과 프로브(P-1~P-4)에 쓸 **iPhone·갤럭시 실기와 담당**은? 캡처 이미지를 저장소에 넣지 않는 것(표 A-8)에 동의하는가? | 측정 전까지 UX 근사값 + G456 하한 |
+| **OQ-A99** | **planner** | T190 완료 판정에서 ① 통화 경로 수동 화면 모양 선택(D-100 (2) — `pre-call-notice` 의존) ② 세션 중 스킨 칩 제거(OQ-U64 의존)를 **제외**하고 판정해도 되는가(73.12 (2) · 73.10 (3))? | 제외(각 해제 단계 T190-6b · T190-8로 분리) |
+
+### 73.19 인계 (⛔ 이 패스는 편집하지 않았다)
+
+| 대상 | 내용 |
+|---|---|
+| README · `.env.example` | **변경 불요** — 새 npm 의존성 0(자체 SVG · Web Audio 합성 · 표 A-7) · 새 환경변수 0. ⚠️ 구현 중 Material Symbols로 바꾸면 그 커밋에 `README.md` 의존성·라이선스 고지 필수(CLAUDE.md *Documentation Maintenance*) |
+| `docs/Database.md` | `sessions/{sid}/inCallSms/{smsId}`에 `linkAddress?: string` 추가(73.9) |
+| `docs/API.md` | 콜러블 계약 무변경(`updateMessengerSkin` 재사용) — 갱신 불요로 판정 |
+| `docs/Tasks.md`(planner) | T190 행 신설 · 하위 단계 73.16 · 선행조건(OQ-U64·OQ-U66) |
+| `docs/UX.md`(ux-design) | OQ-U68 → resolved(이 절) · OQ-U65 → resolved(73.11 + 잔여 P-4) · D-98 Status *"음량 대체(Android 확정 · iOS 프로브 대기)"* · OQ-A96/A97 |
+| 병합 충돌 고지 | 이 워크트리는 #291 이전 트리라 §73은 §71 뒤에 붙었다. #291 병합 시 **§72 → §73** 순서 · DECISIONS **#118~#119 → #120~#121** · ADR **0018 → 0019** 순서를 유지할 것 |
+| `docs/UpdateRequests.md` #32(architect · open) | DECISIONS #117이 이미 T186 결정을 기록해(`C:docs/DECISIONS.md:127`) 요청 내용이 해소된 것으로 보인다 — Status 전환은 이 패스 편집 범위 밖 |
+
+### 73.20 추정·미검증 목록
+
+| # | 내용 | 확인 방법 |
+|---|---|---|
+| 1 | iOS에서 수화부/스피커 실제 전환 가능 여부 | P-1 |
+| 2 | 통화 중 iOS 출력이 수화부로 나와 *"작다"*, Android가 스피커라 *"좀 큼"* 이라는 원인 가설(73.1 #4) | P-1 ① |
+| 3 | `AudioContext.setSinkId`의 Android 값(BCD 미열람) | MDN BCD `api/AudioContext.json` |
+| 4 | Chrome `vibrate`의 사용자 활성화가 sticky인지 | P-2 |
+| 5 | 클라 라우팅 진입 시 Android 벨 자동재생 성공 · iOS 무음 | P-2 |
+| 6 | Web Audio 벨이 iOS 무음 스위치를 따른다(WebKit 원문 미열람) | P-2 |
+| 7 | 삼성 기기 Chrome의 UA-CH `model`이 `SM-`로 시작 | P-3 |
+| 8 | SF Symbols 라이선스 원문(번들 안) · 삼성 글꼴·아이콘 라이선스 부재 | 원문 열람 · 삼성 문의(법무 미확인) |
+| 9 | 삼성 인터넷·웨일 강제 다크에서 대비 유지 | P-4 |
+| 10 | 렌더 게이트 G194 순서 검사가 기관 헤더 띠를 오탐하는지 | T190-5에서 실행 |
+| 11 | 현행 배너가 모델 도구 경로 문자에서 재표시되지 않는 결함(73.6 (6)) | 라이브 관측 또는 코드 전수 열람 |
+| 12 | incoming 상태에 시간 한도가 없음(부분 확인) | `play/page.tsx` 전 effect 열람 |
+| 13 | iOS 폴백 `<audio>`를 Web Audio로 우회하면 CORS 없이 무음 | `playbackUrl` 출처·응답 헤더 확인 |
+
+### 73.21 이 패스의 편집 범위
+
+- `docs/Architecture.md` §73 신설 + 짧은 참조 노트 3곳(§13.5 · §15.1.3 · §71.7 — 원문 무수정, 덧붙임) · `docs/DECISIONS.md` #120 · #121 · `docs/adr/0019-real-phone-surface-capability-boundary.md` 신설.
+- ⛔ 소스·테스트·PRD·UX·Tasks·README·Database·API 0줄 · 커밋 0 · 실행 0. 웹 근거는 2026-10-18 열람(검색 요약만 본 것은 해당 칸에 표기).
