@@ -339,6 +339,8 @@ function codeOnly(body: string): string {
 const PRIMARY_RE = /const primary =\s*keys\.length > 0\s*\?\s*withOverloadRetry\(tagServedBy\(createRotatingGeminiClient\(keys\), "gemini-primary"\), \{[\s\S]*?\}\)\s*:\s*new MockLlmClient\(\);/;
 const CLIENT_RE = /const gemini =\s*keys\.length > 0\s*\?\s*withOverloadFallback\(\s*primary,\s*tagServedBy\(\s*createRotatingGeminiClient\(keys, \(apiKey\) => new GeminiLlmClient\(apiKey, GEMINI_FALLBACK_TEXT_MODEL\)\),\s*"gemini-fallback",?\s*\),\s*\{([^}]*)\},?\s*\)\s*:\s*primary;/;
 
+// ⚠️ 이 스캔은 `budgetMs: geminiBudgetMs`라는 **이름**만 본다 — 그 값이 인자 timeoutMs에서 파생되는지는
+// overloadRetry.test.ts ⑩이 `const geminiBudgetMs = groqKey ? timeoutMs - GROQ_RESERVE_MS : timeoutMs` 정규식으로 고정한다(두 파일이 짝).
 function wiringViolations(body: string): string[] {
   const code = codeOnly(body);
   const violations: string[] = [];

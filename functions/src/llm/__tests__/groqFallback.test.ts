@@ -215,6 +215,24 @@ test("⑦-b 단계 상한 안에 Gemini가 답하면 Groq를 부르지 않는다
   await assert.rejects(pending, GeminiStageTimeoutError);
 });
 
+test("⑦-c 이미 취소된 신호로는 Gemini 요청을 시작하지 않는다(리뷰 m1 — SDK는 이벤트로만 abort를 잇는다)", async () => {
+  const { GeminiLlmClient } = await import("../geminiClient");
+  const original = globalThis.fetch;
+  let fetched = 0;
+  globalThis.fetch = (async () => {
+    fetched += 1;
+    throw new Error("호출되면 안 된다");
+  }) as typeof fetch;
+  const controller = new AbortController();
+  controller.abort();
+  try {
+    await assert.rejects(new GeminiLlmClient("k").complete({ ...INPUT, signal: controller.signal }), /취소/);
+  } finally {
+    globalThis.fetch = original;
+  }
+  assert.equal(fetched, 0);
+});
+
 test("⑧ tagServedBy는 단계 이름만 붙이고 이미 있으면 덮지 않는다 · Mock 강등은 servedBy: mock", async () => {
   assert.deepEqual(await tagServedBy(fake(GEMINI_OK).client, "gemini-primary").complete(INPUT), {
     ...GEMINI_OK,

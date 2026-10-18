@@ -10,8 +10,8 @@
 // | 대상 | 탐지 규칙 | 전송값 | 응답 복원 |
 // |---|---|---|---|
 // | 이메일·주민번호·전화·계좌(8자리+) | `maskPII` 재적용(사용자 턴만) | `[이메일]` 등 토큰 | 아니요(Gemini 경로와 같은 토큰) |
-// | 이름 | ① 사용자 턴 "이름/성함 은·는·이·:" 뒤 한글 2~4자 ② 직전 사기범 턴이 이름/성함을 물었고 사용자 턴이 이름으로 시작 | 가명(`GROQ_NAME_PSEUDONYMS`) | 예 |
-// | 생년월일 | 사용자 턴 "YYYY년 M월 D일"·"YY년 M월 D일"·"YYYY.MM.DD"(-,/) · 6자리 숫자(같은 턴 또는 직전 사기범 턴에 생년월일/생일 단서) | 가짜 날짜 | 예 |
+// | 이름 | ① 사용자 턴 "이름/성함 은·는·:" 뒤 한글 2~4자 ② 직전 사기범 턴이 이름/성함을 물었고 사용자 턴이 이름으로 시작 — 둘 다 첫 글자 성씨 · 절에 물음표 없음 · 흔한 말 제외 | 가명(`GROQ_NAME_PSEUDONYMS`) | 예 |
+// | 생년월일 | 사용자 턴 "YYYY년 M월 D일"·"YY년 M월 D일"·"YYYY.MM.DD"(-,/) · 첫 6자리 숫자 1개(같은 턴 또는 직전 사기범 턴에 생년월일/생일 단서) | 가짜 날짜 | 예 |
 //
 // 탐지된 원문 값은 **사용자 턴과 사기범 턴 모두**에서 같은 가명으로 바꾼다(사기범이 이름을 되불렀을 수 있다).
 // 사기범 턴에는 `maskPII`를 적용하지 않는다 — 사기범의 가상 계좌·번호가 `[계좌]` 토큰으로 바뀌면 모델이
@@ -34,17 +34,42 @@ export const GROQ_BIRTHDATE_PSEUDONYMS: readonly string[] = [
   "1963년 6월 18일",
 ];
 
-const NAME_SUFFIX = "(?=이에요|에요|예요|입니다|이고|이구요|이요|요|이야|야|이라고|라고|이며|[\\s.,!?~]|$)";
-const NAME_CUE_RE = new RegExp(`(?:이름|성함)\\s*(?:은|는|이|:)?\\s*([가-힣]{2,4}?)${NAME_SUFFIX}`, "g");
+// 이름 탐지는 **값이 서술된 경우만** 잡는다(리뷰 M1 — "이름이 뭐예요?"·"성함이 어떻게 되세요?" 같은 *질문*의
+// 어휘를 이름으로 오탐해 사기범 턴까지 치환하던 문제). 세 겹으로 좁힌다:
+//   ① 단서는 "이름/성함 + 은·는·:"만(질문은 보통 "이름이 …?"라 `이`를 뺐다)
+//   ② 첫 글자가 한국 성씨(SURNAMES)여야 한다
+//   ③ 그 절(쉼표·마침표 전까지)에 물음표가 있으면 버리고, 흔한 말 목록(NOT_A_NAME)도 버린다.
+const NAME_SUFFIX = "(?=이에요|에요|예요|입니다|이고|이구요|이요|요|이라고|라고|이며|[\\s.,!~]|$)";
+const NAME_CUE_RE = new RegExp(`(?:이름|성함)\\s*(?:은|는|:)\\s*([가-힣]{2,4}?)${NAME_SUFFIX}`, "g");
 const LEADING_NAME_RE = new RegExp(`^\\s*(?:네[,\\s]*)?([가-힣]{2,4}?)${NAME_SUFFIX}`);
 const ASKS_NAME_RE = /이름|성함/;
 const ASKS_BIRTHDATE_RE = /생년월일|생일/;
-/** 이름 자리에 오지만 이름이 아닌 흔한 말 — 가명으로 바꾸면 뜻이 바뀐다. */
+/** 흔한 한국 성씨(1글자). 첫 글자가 여기 없으면 이름으로 보지 않는다. */
+const SURNAMES = new Set(
+  "김이박최정강조윤장임한오서신권황안송류유전홍고문양손배백허남심노하곽성차주우구민진나지엄채원천방공현함변염여추도소석선설마길연위표명기반왕금옥육인맹제모탁국봉경태목형피두감호".split(""),
+);
+/** 성씨 글자로 시작하지만 이름이 아닌 흔한 말 — 가명으로 바꾸면 뜻이 바뀐다. */
 const NOT_A_NAME = new Set([
-  "아니", "아니요", "아뇨", "싫어", "싫어요", "왜요", "누구", "누구세요", "뭐라", "뭐요", "몰라", "모르",
-  "글쎄", "잠깐", "잠시", "제가", "저는", "그런", "그건", "그게", "여보", "여보세", "네네", "알겠", "말씀",
-  "말못", "못해", "안돼", "비밀", "확인", "본인",
+  "정말", "정확", "지금", "진짜", "진짜요", "조금", "잠깐", "이거", "이건", "이게", "이제", "이미", "이상",
+  "이유", "하지", "하나", "한번", "안돼", "안해", "안녕", "오늘", "오케이", "고객", "고객님", "고마워",
+  "문제", "신고", "경찰", "금감원", "금융", "검찰", "주소", "전화", "장난", "차라리", "최근", "방금", "서류",
+  "송금", "사기", "우리", "우선", "나중", "남편", "강제", "권한", "황당", "유선", "노노", "마음", "여기",
+  "연락", "명의", "공무원", "도대체", "소리", "선생", "설마", "마침", "모르", "모르겠", "모름", "제가", "제발",
+  "저기", "확인", "본인", "비밀", "민원", "구청", "국세청", "경찰서", "은행", "기다", "기억", "반대", "변호사",
 ]);
+
+function isNameCandidate(value: string | undefined, clause: string): value is string {
+  if (!value || NOT_A_NAME.has(value)) return false;
+  if (!SURNAMES.has(value[0])) return false;
+  return !clause.includes("?");
+}
+
+/** `text`에서 `index`가 속한 절(쉼표·마침표·줄바꿈 사이)을 돌려준다. */
+function clauseAround(text: string, start: number, end: number): string {
+  const before = text.slice(0, start).search(/[^,.\n]*$/);
+  const afterMatch = /[,.\n]/.exec(text.slice(end));
+  return text.slice(before, afterMatch ? end + afterMatch.index : text.length);
+}
 
 const BIRTHDATE_RES: readonly RegExp[] = [
   /(?:19|20)\d{2}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일/g,
@@ -63,16 +88,20 @@ export interface PseudonymizeResult {
 
 function collectNames(messages: readonly LlmMessage[]): string[] {
   const found: string[] = [];
-  const add = (value: string | undefined): void => {
-    if (!value || NOT_A_NAME.has(value) || found.includes(value)) return;
+  const add = (value: string | undefined, clause: string): void => {
+    if (!isNameCandidate(value, clause) || found.includes(value)) return;
     found.push(value);
   };
   messages.forEach((message, index) => {
     if (message.role !== "user") return;
-    for (const m of message.content.matchAll(NAME_CUE_RE)) add(m[1]);
+    const utterance = stripDataWrapper(message.content);
+    for (const m of utterance.matchAll(NAME_CUE_RE)) {
+      add(m[1], clauseAround(utterance, m.index ?? 0, (m.index ?? 0) + m[0].length));
+    }
     const previous = messages[index - 1];
     if (previous?.role === "assistant" && ASKS_NAME_RE.test(previous.content)) {
-      add(stripDataWrapper(message.content).match(LEADING_NAME_RE)?.[1]);
+      const m = LEADING_NAME_RE.exec(utterance);
+      if (m) add(m[1], clauseAround(utterance, m.index, m.index + m[0].length));
     }
   });
   return found;
@@ -97,7 +126,11 @@ function collectBirthdates(messages: readonly LlmMessage[]): string[] {
     const cued =
       ASKS_BIRTHDATE_RE.test(message.content) ||
       (previous?.role === "assistant" && ASKS_BIRTHDATE_RE.test(previous.content));
-    if (cued) for (const m of message.content.matchAll(SIX_DIGIT_RE)) add(m[0]);
+    // 단서가 있는 턴의 **첫 6자리 하나만**(리뷰 m3 — 같은 턴의 인증번호까지 날짜로 바꾸지 않게).
+    if (cued) {
+      const first = message.content.match(SIX_DIGIT_RE)?.[0];
+      if (first) add(first);
+    }
   });
   return found;
 }

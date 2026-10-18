@@ -132,6 +132,9 @@ export class GeminiLlmClient implements LlmClient {
   ) {}
 
   async complete(input: LlmCompletionInput): Promise<LlmCompletionResult> {
+    // 단계 시간 상한(§74)이 이미 끊은 신호면 새 요청을 시작하지 않는다 — SDK는 abort를 이벤트로만 연결해
+    // 이미 취소된 신호로는 요청을 멈추지 못한다(리뷰 m1). 신호가 없으면 기존과 같다.
+    if (input.signal?.aborted) throw new Error("Gemini 요청이 시작 전에 취소됐습니다(단계 시간 상한).");
     const client = new GoogleGenAI({ apiKey: this.apiKey });
     const contents: Content[] =
       input.messages.length > 0

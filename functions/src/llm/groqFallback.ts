@@ -21,6 +21,8 @@
 // **반환값 1개**로 1회만 한다 — 이 계층은 저장을 하지 않는다.
 //
 // ⛔ `providerName`은 1차를 그대로 위임한다(G176 — rewind/judge.ts가 `!== "mock"`으로 판정 진입을 가른다).
+//    그래서 Groq가 응답한 턴도 `providerName`은 "gemini"다 — 어느 공급자가 답했는지 저장·집계할 때는
+//    `providerName`이 아니라 응답의 `servedBy`를 써야 한다(리뷰 m2).
 // ⛔ 로그는 숫자·단계 이름만(G170).
 import { logger } from "firebase-functions";
 import { GROQ_TEXT_MODEL } from "./groqClient";

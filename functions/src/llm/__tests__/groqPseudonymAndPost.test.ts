@@ -47,6 +47,37 @@ test("① 이름 — 흔한 말·단서 없는 발화는 바꾸지 않는다(뜻
   assert.ok(r.messages[2].content.includes("저는 학생입니다"));
 });
 
+test("① 이름 — 리뷰 M1 음성 사례: 질문·일상어는 이름으로 잡지 않고 사기범 턴 어휘도 바뀌지 않는다", () => {
+  const cueCases = [
+    "성함이 어떻게 되세요?",
+    "이름이 뭐예요?",
+    "이름이 뭔데요",
+    "이름이 뭐라고요",
+    "이름이 뭡니까",
+    "성함 확인 좀 할게요",
+    "이름 없어요",
+    "성함은 어떻게 되세요?",
+    "이름은 왜요?",
+  ];
+  for (const text of cueCases) {
+    const r = pseudonymizeForGroq([user(text), scammer("어떻게 도와드릴까요? 지금 바로 확인하겠습니다.")]);
+    assert.equal(r.nameCount, 0, text);
+    assert.equal(r.messages[1].content, "어떻게 도와드릴까요? 지금 바로 확인하겠습니다.", `${text}: 사기범 턴 불변`);
+  }
+  const leadingCases = ["은행 직원이세요?", "금감원이요", "정말요", "지금 바빠요", "그게 왜요", "진짜요?"];
+  for (const text of leadingCases) {
+    const r = pseudonymizeForGroq([scammer("성함이 어떻게 되십니까?"), user(text)]);
+    assert.equal(r.nameCount, 0, text);
+  }
+});
+
+test("① 생년월일 — 같은 턴의 두 번째 6자리(인증번호)는 날짜로 바꾸지 않는다(리뷰 m3)", () => {
+  const r = pseudonymizeForGroq([scammer("생년월일과 인증번호를 불러 주세요."), user("850708 이고 인증번호는 482913")]);
+  assert.equal(r.birthdateCount, 1);
+  assert.ok(r.messages[1].content.includes("482913"));
+  assert.ok(!r.messages[1].content.includes("850708"));
+});
+
 test("① 생년월일 — 날짜 형식 3종과 단서 있는 6자리를 가명으로, 응답은 원문으로 복원", () => {
   const r = pseudonymizeForGroq([
     user("1990년 1월 2일이에요"),
