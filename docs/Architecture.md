@@ -569,7 +569,7 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 > **왜 미정이었나(잠재 모순 실측):** API.md `consentChallenge`는 체험 세션을 "uid=무계정/소유자 없음"으로 만들라 하면서, 같은 문서에서 "통화 자격증명은 `createRealtimeCall`을 재사용"하라고 적는다. 그러나 `createRealtimeCall`(functions/src/realtime/index.ts L48–51)은 `session.uid === request.auth.uid`를 강제한다 — **소유자 없는 세션에서는 이 검증이 성립할 수 없다.** 즉 §14의 "재사용" 주장과 "소유자 없음" 정책이 코드 레벨에서 상충한다. §14.7이 이를 해소한다.
 
 **결정: (A) Firebase 익명 인증(Anonymous Auth)을 내부적으로 재사용한다 — 정제형 A1.**
-사용자2 브라우저는 **동의 시점**에 로그인 UI·비밀번호·계정 생성 없이 익명으로 사인인해 **임시(에페메랄) `request.auth.uid`**를 얻고, 그 uid가 체험 `sessions/{sid}`를 소유한다. 이후 통화 자격증명(`createRealtimeCall`)·전사 제출(`submitRealtimeTranscript`)·종료(`endSession`)·리포트(`generateReport`)·리플레이 화면(`report/replay`)·`firestore.rules`의 소유자 read가 **전부 무개정 재사용**된다. 새로 필요한 것은 **챌린지 문서만 만지는 토큰-매개 콜러블**(landing/consent/report/result-sharing — 어느 옵션이든 필요)뿐이다.
+사용자2 브라우저는 **동의 시점**에 로그인 UI·비밀번호·계정 생성 없이 익명으로 사인인해 **임시(에페메랄) `request.auth.uid`**를 얻고, 그 uid가 체험 `sessions/{sid}`를 소유한다. 이후 통화 자격증명(`createRealtimeCall`)·전사 제출(`submitRealtimeTranscript`)·종료(`endSession`)·리포트(`generateReport`)·리플레이 화면(`report/replay`)·`firestore.rules`의 소유자 read가 **전부 무개정 재사용**된다. 새로 필요한 것은 **챌린지 문서만 만지는 토큰-매개 콜러블**(landing/consent/report/result-sharing — 어느 옵션이든 필요)뿐이다. ⭐ **T186(2026-10-17) 덧붙임 — 위 원문 보존**: 동의 탭 → `signInAnonymously` 단계는 이제 **조건부**다 — `handleConsent`가 `await auth.authStateReady()` 뒤 `needsAnonymousSignInForConsent(auth.currentUser)`(null · 익명 → true, 비익명 → false — `src/lib/challenge/landingView.ts:68`)일 때만 부른다(`src/app/challenge/join/page.tsx:144-146`). **이미 비익명으로 로그인한 브라우저는 이 단계를 건너뛰고** 그 uid가 체험 세션 · 리포트를 소유한다(서버 `consentChallenge`는 `request.auth` 존재만 요구 — 계약 무변경). 그 체험 리포트는 `/history` · 방어 등급에서 제외한다 — §68 R-5 행 · `docs/DECISIONS.md` #117. 아래 §14.7.5 표의 `consentChallenge` Auth 칸(*"익명 사인인 후"*)과 그 아래 *"consent에서 처음 익명 사인인"* 문장은 T186 이전 서술이며 같은 예외가 적용된다.
 
 **정제(A1) — 왜 "그냥 재사용"이 아니라 두 지점을 손대야 하는가:** 사용자2 세션 문서에 챌린지 clone `voiceId`를 **저장하지 않는다.** ① `voiceId`를 세션 문서에 담으면 사용자2가 자기 세션 문서를 소유자 자격으로 직접 read할 때 **사용자1의 raw clone id가 브라우저로 그대로 나간다**(reviewer가 `challenges`를 `if false`로 잠근 Critical #1과 동형의 유출, AC-041·ADR-0005 §14.2 위반). ② `onSessionEnded`(guardrails/index.ts L131)는 `after.voiceId`를 **ElevenLabs DELETE voice**로 폐기한다 — 세션 문서에 챌린지 voiceId가 있으면 **사용자2의 첫 체험이 끝나는 순간 사용자1의 챌린지 clone이 삭제**돼 기간제 보존(30일, §14.3)·2차 taker가 깨진다. 따라서 A1은 **선택이 아니라 정합성 요건**이다: 체험 세션은 `challengeId`만 갖고 `voiceId`는 갖지 않으며, `createRealtimeCall`이 발급 시점에 `challenges/{challengeId}`에서 서버측(admin)으로 voiceId를 해석하고 **동시에 §14.2의 발급 게이트(status∈{consented,in_progress} + 미만료)를 재검증**한다. 이로써 §14.2 "voiceId는 챌린지 문서 컨텍스트를 통해서만 해석된다"가 코드로 실현되고, clone 수명은 챌린지 문서(`retentionDeleteAt`)에만 묶여 체험 세션의 `onSessionEnded`와 완전 분리된다.
 
@@ -611,11 +611,11 @@ UA는 위조·모호(데스크톱·인앱 브라우저)가 가능하므로 **bes
 | 콜러블 | Auth | Request | Response | 처리 요지 |
 |---|---|---|---|---|
 | `getChallengeLanding` | 없음(토큰) | `{ token }` | `{ displayName, status, expired }` | 해시 조회·만료/소진 검증. **소모 안 함**(크롤러 선fetch 방지, §14.4). 음성·voiceId·scenario 상세 미노출 |
-| `consentChallenge` | **익명 사인인 후**(uid 필요) | `{ token }` | `{ sessionId }` | ① 토큰 유효·미만료·미소진 ② `markChallengeConsumed`(linkConsumedAt+status=consented) ③ **익명 uid 소유** `sessions/{}` 생성(`challengeId` 세팅, `voiceId` **미저장**, scenarioId·channel=voice·한도·오프닝 라인) ④ status=in_progress |
+| `consentChallenge` | **익명 사인인 후**(uid 필요) ⭐ **T186(2026-10-17) 덧붙임 — 원문 보존**: 이미 **비익명으로 로그인한 브라우저는 익명 사인인을 건너뛰고** 그 uid로 호출한다 — `src/app/challenge/join/page.tsx:144-146` · `src/lib/challenge/landingView.ts:68`(`needsAnonymousSignInForConsent`). 서버 계약 무변경(`request.auth` 존재만 요구). §14.7 A1 덧붙임(`:567`) · `docs/DECISIONS.md` #117 | `{ token }` | `{ sessionId }` | ① 토큰 유효·미만료·미소진 ② `markChallengeConsumed`(linkConsumedAt+status=consented) ③ **익명 uid 소유** `sessions/{}` 생성(`challengeId` 세팅, `voiceId` **미저장**, scenarioId·channel=voice·한도·오프닝 라인) ④ status=in_progress |
 | `reportChallenge` | 없음(토큰) | `{ token, reason, note? }` | `{ status:"reported" }` | 챌린지에 reportedAt·reportReason·reportNote(마스킹) 임베드 + status=reported(재생 차단) |
 | `setChallengeResultSharing` | 익명(세션 소유 확인 권장) | `{ token, share }` | `{ shared }` | share=true면 그 세션 리포트를 서버 read→resultSummary 파생·write + resultSharingConsented=true(§14.7.3) |
 
-- **콜러블 인증 비대칭 의도:** landing/report는 챌린지 문서만 보는 **세션 이전** 동작이라 무인증(토큰만)이 자연스럽다(익명 사인인을 랜딩 단순 열람·신고까지 강제할 이유 없음, 크롤러 익명 uid 양산 방지). consent에서 **처음** 익명 사인인해 세션을 소유한다 — AC-040 "동의 전 어떤 복제 음성도 재생 안 됨"과 정합(voiceId 발급은 consent 이후 `createRealtimeCall`에서만).
+- **콜러블 인증 비대칭 의도:** landing/report는 챌린지 문서만 보는 **세션 이전** 동작이라 무인증(토큰만)이 자연스럽다(익명 사인인을 랜딩 단순 열람·신고까지 강제할 이유 없음, 크롤러 익명 uid 양산 방지). consent에서 **처음** 익명 사인인해 세션을 소유한다 — AC-040 "동의 전 어떤 복제 음성도 재생 안 됨"과 정합(voiceId 발급은 consent 이후 `createRealtimeCall`에서만). ⭐ **T186(2026-10-17) 덧붙임 — 위 원문 보존**: *"처음 익명 사인인"* 에는 예외가 있다 — 이미 **비익명으로 로그인한 브라우저는 익명 사인인을 건너뛰고** 그 uid로 `consentChallenge`를 호출한다(`src/app/challenge/join/page.tsx:144-146` · `src/lib/challenge/landingView.ts:68` `needsAnonymousSignInForConsent`). 서버 계약 무변경(`request.auth` 존재만 요구). §14.7 A1 덧붙임(`:567`) · `docs/DECISIONS.md` #117.
 - **`createRealtimeCall` challenge 분기(A1 핵심 변경점):** `session.challengeId`가 있으면 `session.voiceId`(부재) 대신 `challenges/{challengeId}` admin read로 voiceId를 얻고, **그 챌린지의 status∈{consented,in_progress}+미만료를 재검증**한 뒤 자격증명을 발급한다. 소유권 검증(`session.uid===request.auth.uid`, 익명 uid)은 그대로. 순수 보이스 세션(challengeId 부재)은 기존 경로 무변경.
 
 #### 14.7.6 §14.0/§14.1 정책 문구 정정
@@ -15803,7 +15803,7 @@ export function assertAnonymousChallengeScope(                       // 익명�
 | **R-2** | (기존 위험 · 이 게이트와 무관) Google 계정 1개가 *생성 → 동의 → 삭제 → 생성* 루프를 돌리면 챌린지 경로는 **§66 창을 거치지 않는다** | `createChallenge`에는 속도 제한이 없고(활성 3개 상한 `challenge/index.ts:122-136`은 `deleteChallenge`로 풀린다), `decideConsentGate`는 **생성자 본인의 동의도 막지 않는다**(`consentGate.ts:41-47`) ⇒ **익명을 켜지 않아도 오늘 Google uid만으로 성립한다.** 익명은 이 루프를 더 싸게 만들지 않는다(비용이 드는 쪽인 생성이 D) → **OQ-A85** | 직접 열람 |
 | **R-3** | 챌린지 세션 1개가 쓰는 LLM 상한 | `sendMessage` ≤ **100턴**(`shared/constants.ts:15`, 챌린지 세션에 복사 `userAccess.ts:211`) · 입력 **1,000자**(`:19`) · **60분**(`:16`, 기점은 answeredAt) → 넘으면 종료(`roleplay/index.ts:354-365`). 되감기 ≤ **리포트당 50회**(`rewind/judge.ts:21`, 적용 `rewind/index.ts:96-100`). ⚠️ **실시간 자격증명(`createRealtimeCall`)은 세션당 발급 횟수 상한이 없다** — 상한은 `status === "active"`(`realtime/index.ts:98`)와 챌린지 보존기간 30일 재검증(`:116-126`)뿐이다. **Google 세션도 같다**(비챌린지 세션에는 보존기간 검사조차 없다) ⇒ 새 위험이 아니며 **OQ-A85**에 포함한다 | 직접 열람 |
 | **R-4** | App Check 부재 | 게이트는 **"익명 uid로 할 수 있는 일"을 줄일 뿐, "누가 호출하는가"를 증명하지 않는다.** 그래도 ⭐ **유효한 토큰 없이 익명이 LLM을 태울 경로는 0이다** — 익명이 S/R을 부르려면 챌린지 세션이 있어야 하고, 그 세션은 Google이 만든 챌린지에 동의해야만 생긴다 | §68.3 · §44.2 3 |
-| **R-5** | (기존 위험) 같은 브라우저의 Google 세션이 바뀐다 | `join/page.tsx:118`은 로그인 여부와 **무관하게** `signInAnonymously`를 부른다 ⇒ Google 로그인 사용자가 링크를 열고 동의하면 **Google 세션이 익명으로 바뀐다**(오케스트레이터의 Playwright 경고와 같은 현상). 게이트 전후 동일하다. 다만 그 뒤 자가 훈련으로 가면 **D에 걸려 오류를 보는 것은 새로 체감되는 부분**이다 → **OQ-A84** | 직접 열람 |
+| **R-5** | (기존 위험) 같은 브라우저의 Google 세션이 바뀐다 | `join/page.tsx:118`은 로그인 여부와 **무관하게** `signInAnonymously`를 부른다 ⇒ Google 로그인 사용자가 링크를 열고 동의하면 **Google 세션이 익명으로 바뀐다**(오케스트레이터의 Playwright 경고와 같은 현상). 게이트 전후 동일하다. 다만 그 뒤 자가 훈련으로 가면 **D에 걸려 오류를 보는 것은 새로 체감되는 부분**이다 → **OQ-A84** · ⭐ **T186(2026-10-17) 해소 — 위 원문 보존**(OQ-A84 후보 (c) 채택 · User 결정 2026-10-17): `handleConsent`가 `await auth.authStateReady()` 뒤 `needsAnonymousSignInForConsent(auth.currentUser)`(null · 익명 → true, 비익명 → false — `src/lib/challenge/landingView.ts:68`)일 때만 `signInAnonymously`를 부른다(`src/app/challenge/join/page.tsx:144-146`) ⇒ **이미 비익명으로 로그인했으면 익명 로그인을 건너뛰고**, 그 uid로 `consentChallenge`를 호출해 체험 세션 · 리포트를 소유한다. 서버 `consentChallenge`는 `request.auth` 존재만 요구한다(익명 여부 무관 — 계약 무변경). 소유 uid가 Google 계정일 수 있으므로 **`challengeId` 리포트는 `/history` 목록(`src/lib/history/mapHistoryItems.ts:31`)과 방어 등급(`functions/src/report/generateReportCore.ts:365-367` `updateDefenseGrade` → `functions/src/report/computeDefenseGrade.ts:19` `selectGradeReports`)에서 제외**한다 — 아카이브 AC-069와 같은 규칙 · 쿼리 · 인덱스 무변경. 발신자 본인 동의는 열린 채 남는다 → **OQ-A91**. 코드 PR #272 · 배포 Functions 26/26 + Hosting 2026-10-17(배포 기록 PR #274) · `docs/DECISIONS.md` **#117** | 직접 열람 |
 | **R-6** | fail-open 방향(클레임 부재 → 비익명) | SDK 필수 필드라 **도달 불가로 판정**한다(§68.2). 서버가 실제로 받는 페이로드는 관측하지 않았다 ⇒ **A-2가 익명 토큰에서 `permission-denied`를 관측하면 클레임 존재가 라이브로 확인된다** ⭐ (2026-10-02 덧붙임 — 위 원문 보존) **라이브로 닫혔다** — A-2 거부 6/6 `permission-denied`(오케스트레이터 실측 2026-10-01 · 인용값). 판별식이 그 클레임 하나뿐이므로(G415) 6/6 거부는 클레임 존재를 뜻한다 — §68.15 (9) | `token-verifier.d.ts:88` |
 | **R-7** | 에뮬레이터 스크립트 1건의 대조군 변화 | `scripts/t128-auth-invalidation-probe.mjs:118-125`는 익명으로 `listMyChallenges`를 *"정상 대조군"* 으로 부른다 → 게이트 뒤에는 5회 모두 `permission-denied`(경고 로그)가 난다. 감지기는 `unauthenticated`만 세므로(`:89`) **배너 판정 결론은 바뀌지 않는다**(⚠️ 추정 — 확인 방법: 재실행). 재사용할 때는 로그인을 E2 방식으로 바꿀 것. **이번 필수 작업은 아니다** | 직접 열람 |
 
@@ -15853,7 +15853,8 @@ export function assertAnonymousChallengeScope(                       // 익명�
 
 | OQ | 질문 | 소유 | 선행 조건 |
 |---|---|---|---|
-| **OQ-A84** | **익명 사용자가 수신 흐름 밖(자가 훈련 입구·챌린지 목록)에 도달했을 때 무엇을 보여주는가.** 오늘은 각 화면의 일반 오류다(§68.6 (5)). 후보: (a) 현행 유지 (b) 익명 상태로 자가 훈련 입구에 들어오면 *"Google로 로그인"* 안내 + 익명 로그아웃 (c) 동의 랜딩에서 이미 Google 로그인 상태면 `signInAnonymously`를 생략(R-5). ⚠️ G153(*"익명을 `/login`으로 보내지 말 것"*, §34)은 **훈련 중 무효화** 규칙이다 — 훈련 밖 진입 안내와의 관계는 UX 판정이 필요하다 ⭐ (2026-10-17 덧붙임 — 위 원문 보존) **종결 — User 결정 2026-10-17(오케스트레이터 전달 인용값): 후보 (b)의 변형.** 익명 세션이 수신 흐름 밖 라우트에 있으면 `RouteGuard`가 `/login`으로 보내고(판정 `src/lib/auth/RouteGuard.tsx:44-45` `anonymousOutOfScope` · 리다이렉트 `:55-58` · 렌더 보류 `:70`), `/login`은 익명일 때만 안내 1줄 *"지금은 친구가 보낸 체험용 임시 접속 상태입니다. 내 훈련을 하려면 Google로 로그인해 주세요."* 를 보인다(`src/app/(auth)/login/page.tsx:127-131` · 문구 상수 `src/lib/auth/anonymousScope.ts:30-31`). **(b) 원안과 다른 점**: ⛔ **강제 `signOut` 없음** — Google 로그인이 성공하면 SDK가 익명 사용자를 교체하고, 실패·취소하면 익명 세션이 남아 수신 흐름 화면은 계속 열린다. 익명은 `/login`에 머물 수 있다(`/login` → `/onboarding/consent` 이동은 비익명만 — `RouteGuard.tsx:61`). **수신 흐름 8경로 불변**: `/challenge/join` · `/session/play` · `/session/chat` · `/session/messenger` · `/session/end` · `/report` · `/report/replay` · `/report/rewind`(`anonymousScope.ts:18-27` · 판정 `:37-41`) — **`/report/archive`(UX-030) 포함 그 밖의 모든 라우트는 익명을 `/login`으로 보낸다.** ⛔ **후보 (c)(R-5 예방 — 이미 Google 로그인이면 `signInAnonymously` 생략)는 별건이며 열린 채 미착수다**(User가 후속으로 미룸). ⚠️ **알려진 부작용**(reviewer 지적 — 인용값): 익명 수신자가 Google 로그인하면 uid가 바뀌어 **방금 본 챌린지 리포트·리플레이에 다시 닿을 수 없다** · 수신 흐름 밖으로 나가는 버튼(`src/app/report/page.tsx:616-617` 모아보기 → `/report/archive` · `:619-620` 다른 시나리오 → `/scenarios` · `:625-626` 히스토리 → `/history` · 종료 화면 "홈으로" — 마지막은 인용값)은 `/login`에 도착한다. G153과의 관계 = **충돌 없음**(§34.9 G153 행 덧붙임). 서버 변경 0(`functions/**` 0건 — API 계약 무변경, `docs/API.md` 부록 D.5 덧붙임) · 코드 커밋 `84608e4` · `docs/DECISIONS.md` **#114** | **User → ux-design** | 없음 |
+| **OQ-A84** | **익명 사용자가 수신 흐름 밖(자가 훈련 입구·챌린지 목록)에 도달했을 때 무엇을 보여주는가.** 오늘은 각 화면의 일반 오류다(§68.6 (5)). 후보: (a) 현행 유지 (b) 익명 상태로 자가 훈련 입구에 들어오면 *"Google로 로그인"* 안내 + 익명 로그아웃 (c) 동의 랜딩에서 이미 Google 로그인 상태면 `signInAnonymously`를 생략(R-5). ⚠️ G153(*"익명을 `/login`으로 보내지 말 것"*, §34)은 **훈련 중 무효화** 규칙이다 — 훈련 밖 진입 안내와의 관계는 UX 판정이 필요하다 ⭐ (2026-10-17 덧붙임 — 위 원문 보존) **종결 — User 결정 2026-10-17(오케스트레이터 전달 인용값): 후보 (b)의 변형.** 익명 세션이 수신 흐름 밖 라우트에 있으면 `RouteGuard`가 `/login`으로 보내고(판정 `src/lib/auth/RouteGuard.tsx:44-45` `anonymousOutOfScope` · 리다이렉트 `:55-58` · 렌더 보류 `:70`), `/login`은 익명일 때만 안내 1줄 *"지금은 친구가 보낸 체험용 임시 접속 상태입니다. 내 훈련을 하려면 Google로 로그인해 주세요."* 를 보인다(`src/app/(auth)/login/page.tsx:127-131` · 문구 상수 `src/lib/auth/anonymousScope.ts:30-31`). **(b) 원안과 다른 점**: ⛔ **강제 `signOut` 없음** — Google 로그인이 성공하면 SDK가 익명 사용자를 교체하고, 실패·취소하면 익명 세션이 남아 수신 흐름 화면은 계속 열린다. 익명은 `/login`에 머물 수 있다(`/login` → `/onboarding/consent` 이동은 비익명만 — `RouteGuard.tsx:61`). **수신 흐름 8경로 불변**: `/challenge/join` · `/session/play` · `/session/chat` · `/session/messenger` · `/session/end` · `/report` · `/report/replay` · `/report/rewind`(`anonymousScope.ts:18-27` · 판정 `:37-41`) — **`/report/archive`(UX-030) 포함 그 밖의 모든 라우트는 익명을 `/login`으로 보낸다.** ⛔ **후보 (c)(R-5 예방 — 이미 Google 로그인이면 `signInAnonymously` 생략)는 별건이며 열린 채 미착수다**(User가 후속으로 미룸). ⚠️ **알려진 부작용**(reviewer 지적 — 인용값): 익명 수신자가 Google 로그인하면 uid가 바뀌어 **방금 본 챌린지 리포트·리플레이에 다시 닿을 수 없다** · 수신 흐름 밖으로 나가는 버튼(`src/app/report/page.tsx:616-617` 모아보기 → `/report/archive` · `:619-620` 다른 시나리오 → `/scenarios` · `:625-626` 히스토리 → `/history` · 종료 화면 "홈으로" — 마지막은 인용값)은 `/login`에 도착한다. G153과의 관계 = **충돌 없음**(§34.9 G153 행 덧붙임). 서버 변경 0(`functions/**` 0건 — API 계약 무변경, `docs/API.md` 부록 D.5 덧붙임) · 코드 커밋 `84608e4` · `docs/DECISIONS.md` **#114** · ⭐ **T186(2026-10-17) 해소 — 위 원문 보존**: 후보 **(c) 채택 · 해소**(User 결정 2026-10-17 — 오케스트레이터 전달 인용값). 위 *"후보 (c)는 별건이며 열린 채 미착수"* 는 T186 이전 기록이다. 이미 비익명으로 로그인한 브라우저는 동의 시 `signInAnonymously`를 생략하고 그 계정으로 체험한다(`src/app/challenge/join/page.tsx:144-146` · 판정 `src/lib/challenge/landingView.ts:68`) · 그 체험 리포트는 `/history` · 방어 등급에서 제외(§68 R-5 행 덧붙임). 발신자 본인 동의 차단은 범위 밖 → **OQ-A91**. 코드 PR #272 · 배포 2026-10-17(PR #274) · `docs/DECISIONS.md` **#117** | **User → ux-design** | 없음 |
+| **OQ-A91** (T186 · 2026-10-17 신규) | **발신자 본인 동의를 차단할 것인가** — `decideConsentGate`(`functions/src/challenge/consentGate.ts:41`)에 `creatorUid` 비교가 없다(입력은 기존 체험 세션 소유 uid와 호출자 uid뿐) ⇒ 발신자가 자기 링크에 동의할 수 있다(T186 이전은 익명으로, 이후 로그인 상태면 **본인 uid로**). 차단하려면 서버 변경 + Functions 배포가 필요하다. **User 2026-10-17: 이번엔 허용, 후속**(오케스트레이터 전달 인용값) · `docs/DECISIONS.md` **#117** | **User · architect** | 없음 |
 | **OQ-A85** | **챌린지 경로 남용 상한을 별건으로 다룰 것인가** — R-2(생성·동의·삭제 루프가 §66 창을 우회) · R-3(실시간 자격증명 발급 횟수 상한 없음). **기존 문제**이며 익명 활성화로 커지지 않는다(루프에서 비용이 드는 생성이 D) | **User** | 없음 |
 
 ### 68.12 ⛔ 닫지 못한 것 (자기 고지 — 지우지 말 것)
@@ -16805,7 +16806,7 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | (4) | §42.3 (ㄷ) · §42.9 (5) *"실 LLM에서는 부분 일치가 성립하지 않는다"* | T188 코드 주석이 같은 진단(*"실 LLM 대사는 인용구를 문장 단위로 섞어 쓰고 띄어쓰기도 바꾼다"*)으로 규칙을 바꿨다 — **(ㄷ)을 지지하는 인용 사례 1건**. 새 규칙도 **바꿔 말하면 못 찾는다**(코드 투명 고지) ⇒ §42.9 (4) *"부분 해소"* 는 그대로 | 덧붙임(§42.9 (5)) |
 | (5) | §18 G71 · §18 저작 규칙 표(`findMatchedTactic` 매칭) | **규칙(인용구 필수)은 오히려 더 중요해졌다** — 인용구가 없으면 설명부 전체로 폴백되고(`extractTacticFlavor`), 새 규칙은 그 설명부를 문구로 쪼개 키를 만들므로 **3인칭 설명문이 수법 키가 된다**(⚠️ 추정 — 인용구 없는 현행 수법 0건 여부는 이 패스에서 전수 대조하지 않았다; 확인 = `extractTacticFlavor`가 폴백 갈래로 가는 `weakenedTactics` 항목 grep). 심볼명만 `findMatchedTactic` → `findMatchedTactics` | 이 표로 갈음(원문 무편집) |
 | (6) | `functions/src/scenarios/tacticFlavor.ts` 주석(#29 ③ — architect 판정 대상) | 오케스트레이터 수정본 `:27-30`(새 규칙 서술)은 **현행 코드와 일치**한다. `:7` *"설명부 전체 앞 8자"* 는 **2026-07-24 버그의 역사 서술**이라 참이다. ⚠️ **잔여 1건**: `:30-32` *"그 참가자 대사가 리포트 수법 키가 돼 **사기범이 그 말을 할 때만** 수법이 잡힌다"* 는 새 규칙에서 **과다 서술**이다 — 키가 문구마다 하나씩 생기므로 두 누수 항목(`loanScam` *"부인 시 이익 전환"* · `bankSecurityVerifyScam` *"부인 시 명의 도용 암시"*)은 **같은 항목의 사기범 인용구**(*'아 그러면 더 좋으세요, …'* · *'그래서 더 위험한 겁니다, …'*)로도 잡힌다(⚠️ 추정 — 같은 시나리오 다른 수법과의 접두 충돌로 그 키가 제거되는지는 대조하지 않았다; 확인 = 두 시나리오의 `weakenedTactics`로 `buildTacticMatchers` 산출을 테스트에서 출력). 누수 자체(참가자 대사가 Mock 대사 맨 앞에 박힌다)는 **여전히 참** | ⛔ 소스 무편집 — **implementer 인계**(주석 1문장, 위 확인 후) |
-| (7) | DECISIONS 신규 행 필요 여부 | **불필요로 판정.** 근거: ① 바뀐 것은 DECISIONS #29(규칙 기반)·ADR-0008(패턴 export 공유)의 **안에서** 규칙 내용뿐이다 ② 모듈 경계·계약·데이터 모델 변경 0(70.1) ③ 기각된 대안(LLM 판정 · 범주 키워드 사전)의 사유는 코드 주석이 이미 보존한다. ⚠️ 덧붙여 `docs/UpdateRequests.md` #26이 다음 번호 **#115**를 R-5 결정 초안에 지목해 두었다 — 여기서 행을 추가하면 번호가 충돌한다 | 행 추가 0 |
+| (7) | DECISIONS 신규 행 필요 여부 | **불필요로 판정.** 근거: ① 바뀐 것은 DECISIONS #29(규칙 기반)·ADR-0008(패턴 export 공유)의 **안에서** 규칙 내용뿐이다 ② 모듈 경계·계약·데이터 모델 변경 0(70.1) ③ 기각된 대안(LLM 판정 · 범주 키워드 사전)의 사유는 코드 주석이 이미 보존한다. ⚠️ 덧붙여 `docs/UpdateRequests.md` #26이 다음 번호 **#115**를 R-5 결정 초안에 지목해 두었다 — 여기서 행을 추가하면 번호가 충돌한다. ⭐ **(2026-10-17 덧붙임 — 위 원문 보존)** 실제 R-5 결정 행은 **#117**로 등재됐다 — #115·#116은 §71(Gemini 3.8 Live, PR #280)이 먼저 썼다(PR #282) | 행 추가 0 |
 
 ### 70.4 스테일 줄 인용 → 심볼 대응표 (`analyzeConversation.ts`, 이 문서 전수)
 
@@ -16839,6 +16840,184 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 - ⛔ `functions/**` · `src/**` · `docs/DECISIONS.md`(70.3 (7)) · `docs/Tasks.md` · `docs/PRD.md` · `docs/UX.md` · `docs/API.md` · `docs/Database.md` · `docs/adr/**` · `CLAUDE.md` **0줄**. 갭·OQ 번호 신설 0. 커밋·push 0건.
 > **번호**: §70 = 착수 시 `^## ` 실측 최대 **§69**(`## 69.`) 다음. 재번호가 필요하면 치환 범위는 `## 70.` 이후 + 위 덧붙임 7곳의 `§70` 참조뿐(⛔ 전역 치환 금지).
 
+---
+
+## 71. (미등재 — planner 인계 · P3 · 기한 2026-11-17) Gemini Live 모델 전환 `gemini-2.5-flash-native-audio-preview-12-2025` → `gemini-3.8-live` + 지연 계측 + 출력 음량 — ⭐⭐ **3.8은 같은 설정을 그대로 받지만 기본 동작 두 가지가 다르다: 도구 호출이 턴을 끝내고(`NON_BLOCKING` 기본), `turnComplete:true`가 사기범 말을 끊는다 — 둘 다 명시적으로 2.5 의미로 고정한다** / ⭐ **첫 마디 지연의 지배항은 2.5의 thought 단계(5~7초)였다 — 3.8은 thought 파트를 보내지 않는다** — architect 판정 (ADR-0017)
+
+> 담당 태스크: **미등재** — `docs/Tasks.md` 행 없음(planner 인계, `Refs: (미등재 — planner 인계)`). 범위: `functions/src/realtime/**` · `src/lib/realtime/**` · 해당 테스트 · 루트 `package.json` 테스트 등록. 다른 세션 소관(`functions/src/roleplay/**` · `functions/src/report/**` · 익명 로그인 관련)은 0줄.
+
+### 71.0 판정 요지 (⛔ 금지 먼저)
+
+1. ⛔ **이 절은 소스를 0줄 고쳤다.** 구현은 User 설계 승인 뒤 implementer(71.8).
+2. ⛔ **모델 상수만 바꾸는 배포 금지** — 도구 `behavior: BLOCKING`(G430)과 클라 보류 큐(G431) 없이 3.8을 켜면 가짜 턴 경계와 말 끊김이 생긴다(71.2 실측).
+3. ⛔ **배포 순서 고정: Hosting(클라) → Functions(3.8)**(G434). 클라 변경은 2.5에서도 무해하다.
+4. ⛔ **`NON_BLOCKING` · `scheduling` 채택은 이번 범위가 아니다** — ADR-0015 "결과를 받고 이어 말한다"를 바꾸는 별도 설계다.
+5. ⛔ **`languageCode: "ko-KR"`를 지우지 않는다**(G435) — 3.8이 수용함을 실측했다. 문서상 native audio는 언어 코드를 쓰지 않으므로 효과는 0일 수 있다.
+6. ⛔ **Live 출력 길이 상한(`maxOutputTokens`)을 넣지 않는다** — 문장 중간 절단이 긴 턴보다 나쁘다. 길이는 프롬프트 소관(`roleplay/**`).
+7. ⚠️ 71.2의 수치는 **로컬 Node 프로브, 모델당 2~3통화의 소표본**이다. 브라우저 · 실기기 · 모바일 네트워크 지연은 포함되지 않는다.
+
+### 71.1 착수 시 실측
+
+| # | 항목 | 값 | 출처 |
+|---|---|---|---|
+| 1 | base | origin/main `a9cca63` · 테스트 functions **898/0** · 루트 **446/0** | 이 워크트리 실행 출력(2026-10-17) |
+| 2 | 종료일 | `gemini-2.5-flash-native-audio-preview-12-2025` **November 17, 2026**("earliest possible dates") · 대체 `gemini-3.8-live` · 같은 날 `gemini-3.1-flash-live-preview`도 종료 | ai.google.dev/gemini-api/docs/deprecations (Last updated 2026-10-12, 2026-10-17 열람) |
+| 3 | 3.8 변화 | 비동기 함수 호출이 기본(`BLOCKING`은 하위호환으로 명시 가능) · `turn_complete=true`가 진행 중 생성을 무조건 끊음 · affective dialog 제거 · proactive audio 상시(`false`면 오류) · `thinkingLevel` 미지원 · 한 이벤트에 여러 파트 | ai.google.dev/gemini-api/docs/models/gemini-3.8-live (2026-09-15) · live-api/capabilities (2026-09-18) |
+| 4 | 언어 코드 | *"Native audio output models automatically choose the appropriate language and don't support explicitly setting the language code"* — 오류인지 무시인지는 문서에 없다 | live-guide (2026-09-18) |
+| 5 | 단기 토큰 | 문서는 v1beta를 적지만 SDK 2.13.0은 `auth_tokens/` 키에 *"ephemeral token support is in v1alpha only"* 경고를 낸다(`functions/node_modules/@google/genai/dist/node/index.cjs:14785`) ⇒ 현행 v1alpha 유지 | 문서 + SDK 판독 |
+| 6 | SDK | `FunctionDeclaration.behavior?: Behavior`(`genai.d.ts:4730`) · `Behavior.BLOCKING`(`:1209`) · 토큰 변환이 선언을 그대로 통과(`index.cjs:17362` 이하 `item => item`) · `LiveServerMessage.data`는 파트별로 디코딩해 이어 붙인다(`index.cjs:3140-3158`) | SDK 판독 |
+| 7 | 무료 티어 | 3.8 Live · 2.5 native audio 둘 다 입출력 *"Free of charge"*. 무료 RPD · 동시 세션 수치는 문서에 없음(AI Studio 대시보드) | pricing (2026-10-16) · rate-limits |
+| 8 | 음성 | native audio는 TTS 음성 전부 지원(Puck/Aoede 포함) — 3.8 프로브에서 `Aoede` 수용 확인(청감은 미확인) | live-guide + 71.2 |
+| 9 | 번호 | `^## 70\.` · DECISIONS `#115` · `G430~G435` · `OQ-A89~A90` · ADR-0017 — origin/main 0히트(#114는 T185가 사용) | grep |
+
+### 71.2 라이브 프로브 실측 (2026-10-17 · `tax-refund-scam` advanced · 같은 TTS 대본 5발화 · 콜러블 2초 모사)
+
+| 항목 | 2.5 (현행) | 3.8 |
+|---|---|---|
+| 현행 토큰 제약(ko-KR · VAD 4개 · 전사 2개 · 도구 · v1alpha) | 수용 | **수용**(오류 0) |
+| 첫 마디(트리거 → 첫 오디오) | 7,878 / 4,893 / 4,949ms — 오디오 앞에 `text+thought` 파트 5~7초 | **951 / 878ms** — thought 파트 0 |
+| 발화 끝 → 첫 오디오(도구 없음) | 2,085 · 2,223 · 3,820 · 2,038 · 2,214ms | **1,025 · 1,041 · 1,240 · 978 · 1,360 · 962 · 187 · 1,097ms** |
+| 도구 턴 | 3,281ms — *"문자 한 통 보내드렸습니다"*를 **말한 뒤** `send_prepared_sms` 호출 | 3,618 / 3,671ms(2초 대기 포함) — **먼저 호출**, 결과 뒤 *"안내 문자를 발송해 드렸습니다"* |
+| 사기범 발화 중 `turnComplete:true` 텍스트 | **보류** — 그 턴의 `turnComplete` 뒤에 응답(`interrupted` 0) | **77ms 뒤 `interrupted`, 이어 `turnComplete`**(2회 중 2회) |
+| `turnComplete:false` 주입(A5-α) | 1.5초 내 응답 0 · 다음 음성 턴 정상 | 동일 |
+| `behavior` 생략 | (2.5 기본 = BLOCKING) | `toolCall`과 같은 시각 `generationComplete` + `turnComplete` — 턴이 끝난다 |
+| `behavior: BLOCKING` | **수용**(롤백 호환) | 결과 전 `turnComplete` 없음 |
+| `turnComplete` 시각 | 오디오 실시간 재생 끝 무렵 | 동일 |
+| 출력 포맷 | `audio/pcm;rate=24000` | 동일 |
+| 출력 전사의 비한국어 | 0 | **1건** *"취소될 수があります"*(2통화 중 1) |
+
+### 71.3 호환성 표
+
+| 영역 | 3.8 판정 | 조치 |
+|---|---|---|
+| 도구(`send_prepared_sms` · `offer_verification_desk`) | 기본 `NON_BLOCKING` → 호출 즉시 턴 종료 · 결과는 유휴 시 반영 | **D2** `behavior: BLOCKING` 명시 |
+| 전사(입력 · 출력) | 수용 · 오디오와 같은 이벤트에 실림(클라는 한 핸들러에서 둘 다 읽어 무영향) | 없음 |
+| 단기 토큰(`liveConnectConstraints` · v1alpha · uses 2) | 수용 | 없음 |
+| 음성 Puck/Aoede | 수용(청감은 User 확인) | 없음 |
+| `languageCode: "ko-KR"` | 수용 · 효과 미상 | 유지(G435). 비한국어 혼입은 OQ-A90 |
+| VAD 4개 손잡이 | 수용 · 발화 끝 187ms 응답 사례(400ms 침묵 기준보다 빠름) | 없음 — 71.9 라이브 확인 |
+| `turnComplete:true` 클라 콘텐츠 | 진행 중 턴을 끊음 | **D3** 클라 보류 큐 |
+| `turnComplete:false` | 응답 유발 안 함 | 없음(큐 밖 유지) |
+| proactive audio 상시 · affective dialog 제거 · thinking 미지원 | 이 앱은 셋 다 설정하지 않음(grep 0) | 없음 |
+| 출력 오디오 24kHz | 동일 | 없음 |
+| 무료 쿼터 | 무료 표기 · 한도 수치 미공개 | User가 AI Studio에서 확인 |
+
+### 71.4 결정
+
+| # | 결정 | 근거 |
+|---|---|---|
+| **D1** | `GEMINI_LIVE_MODEL = "gemini-3.8-live"`(`geminiProvider.ts:26`). `-extended-thinking` 아님 | 71.1 #2 · extended는 비동기 전용이라 D2 불가 |
+| **D2** | `liveTools.ts:69-81` 두 선언에 `behavior: Behavior.BLOCKING` | 71.2 `behavior` 생략 행 · ADR-0015 전제 보존 · 2.5도 수용(롤백 호환) |
+| **D3** | `GeminiVoiceSession.tsx`의 `turnComplete:true` 전송 3곳(오프닝 `:749` · 타이핑 `:868` · 지시 `:885`)을 **보류 큐 1곳**으로 모은다(71.5) | 71.2 텍스트 행 — 2.5의 서버 보류를 클라에서 재현 |
+| **D4** | `languageCode` 유지 · VAD 무변경 · v1alpha 유지 | 71.1 #4 · #5 · 71.2 |
+| **D5** | AI 음성에 GainNode — 기본 **0.6**(판단값) · 최종값은 실기기(OQ-A89) | 소스가 `destination`에 직결(`:681`) |
+| **D6** | 지연 계측: 순수 모듈 + production `console.info` 턴당 1줄(71.6) | §50.8.4 *"어느 구간이 실제로 몇 ms인지 아무도 잰 적이 없다"* · `log()`는 production에서 꺼짐(`:178-180`) |
+| **D7** | 출력 길이 상한 미도입 | 71.0 #6 · 3.8 턴 오디오 6.4~13.6초 = 2.5(8.9~14.4초)와 같은 범위 |
+
+### 71.5 D3 클라 보류 큐 명세
+
+순수 모듈 `src/lib/realtime/clientTurnQueue.ts`(React · DOM import 0). 상태 `{ modelTurnActive, awaitingSince, pending[] }`.
+
+| 이벤트 | 전이 | 전송 |
+|---|---|---|
+| `request(turn)` | 유휴(`!modelTurnActive && awaitingSince === null && pending` 비어 있음)면 `awaitingSince = now` | 그 자리에서 1건 |
+| | 유휴가 아니면 `pending` 뒤에 붙인다 | 없음 |
+| `modelAudio` | `modelTurnActive = true` · `awaitingSince = null` | 없음 |
+| `turnComplete` | `modelTurnActive = false` · `awaitingSince = null` → `pending`이 있으면 앞 1건을 꺼내 `awaitingSince = now` | 최대 1건 |
+| `interrupted` | `modelTurnActive = false` — **보내지 않는다**(참가자가 말하는 중) | 없음 |
+| `stall`(게이트 타이머가 진행 중 턴을 닫음, `agentSpeechGate`) | `turnComplete`와 같다 | 최대 1건 |
+| `tick` | `awaitingSince`가 `AWAIT_RESPONSE_TIMEOUT_MS`(**8,000ms**, 판단값 — 2.5 thought 포함 최장 실측 7.9초)를 넘고 `modelTurnActive = false`면 `turnComplete`와 같다 | 최대 1건 |
+
+- 종류 `opening | text | instruction`. 오프닝도 큐로 보낸다 — 첫 응답 전에 들어온 타이핑이 오프닝을 끊지 않게.
+- ⭐ 타이핑 전사(§57.4 D3 `appendUserTranscriptRef`)는 **실제 전송 시점**에 적립한다 — 보류 중에 적립하면 그 턴 flush에서 사용자 문장이 사기범 문장보다 먼저 기록된다.
+- `personaStateTurn`(`turnComplete:false`, `:904`)은 큐 밖 그대로.
+- 잔여 위험: 사용자 음성 끝 → 첫 오디오 사이(3.8 실측 ~1초)에는 클라가 모델 턴 시작을 모른다 — 그 창에 들어온 지시는 막 시작된 생성을 끊을 수 있다(2.5에서는 서버가 보류했다).
+
+### 71.6 D6 지연 계측 명세
+
+순수 모듈 `src/lib/realtime/liveLatency.ts` + `GeminiVoiceSession.tsx` · `useRealtimeCall.ts` 배선.
+
+| 기록 | 앵커 → 끝 | 배선 위치 |
+|---|---|---|
+| `setup`(통화당 1줄 — §50.10 P-0) | 받기(`start()`) → 자격증명 준비(프리페치 여부) → 마운트 → 마이크 → `connect` resolve → 오프닝 전송 → 첫 오디오 · `outputContext.baseLatency` / `outputLatency` | `useRealtimeCall.ts` `start` · `GeminiVoiceSession.tsx` |
+| `turn`(모델 턴당 1줄) | 앵커 → 첫 오디오 청크. 앵커 = 그 턴 직전의 **우리 전송**(opening/text/instruction) 또는 **로컬 RMS 마지막 문턱 초과 시각**(`userSpeechDebounceState.lastLoudAt` — AI 발화 중엔 억제되므로 = 참가자 발화 끝) 중 늦은 쪽. 둘 다 없으면 `anchor: "none"` | `:776-797` · `:670-672` |
+| | `toolWaitMs`(toolCall 수신 → toolResponse 전송의 합) · `toolCalls` · `audioMs` · `endedBy` | `:627-643` |
+| `summary`(종료 시 1줄) | 앵커 종류별 n · 중앙값 · 최댓값 | `onclose` / cleanup |
+
+- 출력: `console.info("[gemini-latency]", JSON.stringify({ v: 1, model, ... }))` — **숫자 · 종류 · 모델명만**(G432: 전사 텍스트 · sessionId · PII 0).
+- 전환 전후 비교 절차: Hosting 먼저 배포(G434) → 2.5로 같은 대본 통화 → Functions(3.8) 배포 → 같은 대본 통화 → 두 로그 비교. 실기기는 원격 디버깅(Android `chrome://inspect` · iOS Safari)으로 읽는다.
+
+### 71.7 D5 출력 게인 명세
+
+- `src/lib/realtime/outputGain.ts` — `export const GEMINI_OUTPUT_GAIN = 0.6;`(0.5~0.7 범위의 판단값, G433).
+- `outputContext` 생성 직후(`:574`) `createGain()` 1개 → `destination` 연결. 각 소스는 `destination` 대신 게인 노드에 연결한다(`:681`).
+- 음량 UI 없음(UX 경로 필요 — 범위 밖). ElevenLabs 경로(`RealtimeVoiceSession.tsx`)는 SDK가 재생하므로 범위 밖.
+
+### 71.8 구현 · 테스트 명세 (implementer — User 승인 뒤)
+
+| 커밋 | 내용 | 테스트 |
+|---|---|---|
+| C1 | `outputGain.ts` + 게인 배선 | 상수 범위 [0.5, 0.7] 단언 · 소스 스캔: `source.connect(outputContext.destination)` 0건 |
+| C2 | `clientTurnQueue.ts` + 배선(71.5) | 전이표 각 행 단위 테스트 · 소스 스캔: `turnComplete: true` 직접 전송이 큐 전송 함수 1곳뿐 |
+| C3 | `liveLatency.ts` + 배선(71.6) | 앵커 선택 · 도구 대기 합 · 요약 · 레코드의 문자열 필드가 `kind` / `anchor` / `model` / `endedBy`뿐 |
+| C4 | D1 + D2(Functions) | 모델 리터럴 고정 단언 · 모든 선언 `behavior === "BLOCKING"`(순수 함수 + 토큰 본문 fetch 캡처) · 기존 `languageCode` 단언 유지 |
+
+- 루트 신규 테스트 파일은 `package.json` `test`에 등록한다(`src/lib/testRegistration.test.ts`).
+- 테스트는 Verified Commands 그대로, 동시 실행 금지. 기준 898/0 · 446/0.
+
+### 71.9 배포 · 롤백 · 라이브 확인 (User)
+
+| 단계 | 내용 |
+|---|---|
+| 1 | Hosting 배포(C1~C3) — 2.5에서 무해. (선택) 같은 대본으로 2.5의 `[gemini-latency]` 수집 |
+| 2 | Functions 배포(C4) — `firebase deploy --only functions` |
+| 롤백 | 2026-11-17 전: C4의 모델 상수만 되돌려 Functions 재배포(2.5가 BLOCKING 수용 — 71.2). 그 뒤: 2.5 없음 — Mock 강등뿐 |
+
+라이브 확인 목록: ① 문자 도구 흐름(도구 호출 → 문자 도착 → 그 뒤 발화) ② 확인창구(오퍼 announce · commit) ③ 첫 마디 ④ 끼어들기 — 말을 잠깐 멈췄을 때 잘리는가(3.8 187ms 응답) · 타이핑이 사기범 말을 끊지 않는가 ⑤ 음량(0.5~0.7) ⑥ Android 통화 중 볼륨 키가 "통화"와 "미디어" 중 어느 슬라이더를 띄우는가(추정: echoCancellation으로 통화 모드) ⑦ 일본어 등 비한국어 혼입 ⑧ AI Studio의 3.8 무료 한도 ⑨ 통화 도중 끊김(서버 close 1011 — 71.13 #5).
+
+### 71.10 if/then 강등표 (⛔ 표에 없는 케이스는 행 추가를 물을 것)
+
+| # | If | Then |
+|---|---|---|
+| 1 | 배포 후 3.8 연결이 실패한다(setup 오류) | Functions의 모델 상수를 2.5로 되돌린다(11-17 전에만). 클라는 그대로 둔다 |
+| 2 | 도구 호출 뒤 모델이 말하지 않고 멈춘다 | BLOCKING 응답 누락이다 — `collectToolResponses` 경로부터 본다. `NON_BLOCKING`으로 바꾸지 않는다(71.0 #4) |
+| 3 | 타이핑 · 지시가 여전히 사기범 말을 끊는다 | 큐를 우회한 전송이 있다 — C2 소스 스캔 테스트를 먼저 본다 |
+| 4 | 보류된 지시가 한 턴 넘게 안 나간다 | `tick` 타임아웃 · `stall` 배선을 본다. 타임아웃 값을 바꾸기 전에 `[gemini-latency]`의 응답 지연 분포를 본다 |
+| 5 | 비한국어 혼입이 반복된다 | OQ-A90 — `roleplay` 소관 시스템 프롬프트 1줄. 이 절의 범위에서 프롬프트를 고치지 않는다 |
+| 6 | 말을 멈춘 참가자가 반복해서 잘린다 | VAD `silenceDurationMs` · `startOfSpeechSensitivity`가 3.8에서 먹는지 먼저 프로브로 본다(3.8은 침묵 기준 전에 답했다) |
+
+### 71.11 가드 · 열린 질문
+
+| ID | 내용 |
+|---|---|
+| **G430** | Live 도구 선언은 `behavior: BLOCKING`을 명시한다 |
+| **G431** | `turnComplete:true` 클라 콘텐츠는 보류 큐 1곳에서만 보낸다 — 모델 턴 진행 중 전송 금지 |
+| **G432** | 지연 로그는 숫자 · 종류 · 모델명만 — 전사 · 식별자 0 |
+| **G433** | 출력 게인은 상수 1곳 · 판단값 표기 |
+| **G434** | 배포 순서 Hosting → Functions |
+| **G435** | `languageCode: "ko-KR"` 유지 |
+| **OQ-A89** | 출력 게인 최종값(0.5~0.7) — 실기기 청취 후 **User** · 기본 0.6 |
+| **OQ-A90** | 3.8 비한국어 혼입 대응으로 시스템 프롬프트에 "한국어로만 말한다" 1줄을 넣을 것인가 — **User · roleplay 소관** · 기본 = 라이브에서 재현되면 착수 |
+
+### 71.12 이 패스의 편집 범위
+
+- `docs/Architecture.md` §71 신설(덧붙임만) · `docs/DECISIONS.md` #115 1행 · `docs/adr/0017-gemini-live-3-8-migration.md` 신설(`68a844e`).
+- ⛔ §0~§69 · `functions/**` · `src/**` · `docs/Tasks.md` · `docs/API.md` · `README.md` · `CLAUDE.md` 0줄. API 계약 무변경 — `geminiModel` 값만 바뀐다(`docs/API.md:46`은 값을 적지 않는다).
+
+### 71.13 승인 · 구현 패스 기록 (2026-10-17 · 덧붙임 — 위 원문 무변경)
+
+| # | 항목 | 값 |
+|---|---|---|
+| 1 | 승인 | User 채팅 원문 *"구현 시작해"*(2026-10-17) — DECISIONS **#116** · ADR-0017 `accepted` |
+| 2 | 구현 커밋 | `4a2010b`(클라 C1~C3) · `8d10bc3`(Functions C4) |
+| 3 | 테스트 | functions **898 → 901**(+3: §71 D1 · D2/G430 ×2) · 루트 **446 → 475**(+29) · lint 2종 통과 · `npm run build` 통과(임시 placeholder `.env`, 빌드 뒤 삭제) |
+| 4 | 실제 코드 경로 프로브 | 새 `functions/lib`의 `GeminiRealtimeProvider.createCallCredentials`로 3.8 토큰 발급 → 연결 2통화: 첫 마디 1,343 / 949ms · 도구 2종 모두 BLOCKING으로 호출(대기 중 오디오 0) · 비한국어 0건 |
+| 5 | ⚠️ 새 관측 | 3.8 세션 4건 중 1건이 대화 도중 서버 close **1011 "Internal error encountered."**(마지막 발화 직후, 도구 2회 뒤). 같은 설정 재실행은 정상 종료 ⇒ 일시 오류로 보되 **라이브 확인 ⑨**로 추가한다. 클라는 기존대로 `onclose` → 통화 종료 처리 — 2.5 프로브 4건에서는 0건 |
+| 6 | 구현이 명세와 다른 점 | `interrupted`는 응답 대기(`awaitingSince = now`)로 둔다 — 71.5 표의 "보내지 않는다"를 지키면서 그 뒤 응답이 안 오면 `tick` 타임아웃으로 풀리게 하려는 것(전이 테스트 `clientTurnQueue.test.ts`). §57.4 D3의 `appendUserTranscriptRef` 브리지는 큐가 전송 시점에 적립하면서 쓰임이 없어져 제거했다 |
+| 7 | reviewer · QA | reviewer **APPROVED**(Critical 0 · Major 2 권고) · QA **GO(조건부)** — 재측정 functions 901/0 · 루트 475/0 일치 |
+| 8 | 리뷰 반영 | M1/F1 — 3.8의 `interrupted` 직후 오디오 없는 `turnComplete`로는 보류분을 풀지 않는다(`afterInterrupt`). M2/F2 — `toolCall` ~ `toolResponse` 사이는 보류하고 stall로도 풀지 않는다(`toolPending`). 커밋 `26c7f2f` · 루트 475 → **479** · `npm run build` 재통과 |
+| 9 | 남긴 한계(동작 무영향 · 계측 정확도) | F3 — 오프닝 전송 뒤 첫 오디오 전에 마이크 RMS가 문턱을 넘으면 앵커가 `voice`로 잡힌다(오프닝 지연 과소 보고). F4 — `turnComplete` 뒤 늦게 온 청크는 `anchor:"none"` 레코드 1개를 만든다. 라이브 로그를 읽을 때 이 두 경우를 걸러 본다 |
+| 10 | 라이브 확인 추가 | ④에 "참가자 끼어들기 직후 지시가 겹치는가", ①에 "도구 결과 대기 중 타이핑" 케이스를 더한다 |
 ## 72. (T187 잠정 — `docs/PRD.md` v1.18 MVP #36 · AC-086~AC-089 · `docs/UX.md` v1.30 P-36 · D-78~D-84) 세션 중 '모의/훈련' 표식 전부 제거 — 기술 설계 — ⭐⭐ **판정 단위는 파일이 아니라 상태다 — 세션 경계 문면을 모듈 2개로 빼면 세션 중 파일의 리터럴 검사가 다시 성립하고, 빼 낸 식별자는 AST 사용처 가드로 상태에 묶인다** / ⭐⭐ **시작 고지 확인 기록은 `markSessionAnswered`와 *같은 범위*지만 *같은 키*를 쓰면 안 된다 — 쓰면 메신저→통화 에스컬레이션이 벨 화면 프리롤을 건너뛴다(T30 회귀 재발)** / ⭐ **코드 경로 실측 5칸 전부 소스로 닫혔다 — "받기" 전 발화 0 · 오프닝은 생성 시 이미 문서에 있다(구독 지연으로 충분) · 클론 오프닝 오디오 "받기" 전 재생 0 · `completed`/`deceived` 종료 경로 0 · 시작 고지 체류는 시간 한도에 산입되지 않는다** — architect 설계 (ADR-0018 · DECISIONS #118)
 
 > **소관**: `docs/Tasks.md` T187(잠정 번호) · PRD v1.18 MVP #36(판정표 P6-M M-1~M-13 · M-9 하위표 Q-1~Q-4) · AC-086 · AC-087 · AC-088 · AC-089 · UX v1.30 **P-36 (7) architect 인계 ①~⑥** · D-78 · D-79 · D-80 · D-81 · D-82 · D-83 · D-84.

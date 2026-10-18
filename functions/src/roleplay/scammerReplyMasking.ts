@@ -32,6 +32,8 @@
 // 없다. 그럼에도 별도 함수로 이름 붙여 둔 것은 (1) "사기범 응답에는 PII 마스킹을 적용하지 않는다"는
 // 결정을 호출부 인라인 주석이 아니라 **테스트 가능한 지점**으로 고정하고, (2) 향후 실수로
 // `maskPII(...)`가 다시 이 자리에 끼어드는 것을 리뷰에서 눈에 띄게 하기 위해서다.
+// ⚠️ 2026-10-17에 더한 손질 단계(실존 금융회사명 치환 `guardrails/realFinancialNames.ts` · 문장 수 상한
+// `replyLength.ts`)도 마커 추출처럼 **호출부에서 이 함수 앞에** 온다 — 이 함수는 항등 그대로 둔다.
 export function finalizeScammerReplyText(text: string): string {
   return text;
 }
