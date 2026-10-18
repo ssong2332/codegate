@@ -1,4 +1,4 @@
-// Groq 3차 예비(§74) — ① 가명 처리 판정표(piiPseudonymizer.ts) ② 대사 후처리가 Groq 출력에도 똑같이 걸린다.
+// Groq 3차 예비(§75) — ① 가명 처리 판정표(piiPseudonymizer.ts) ② 대사 후처리가 Groq 출력에도 똑같이 걸린다.
 //
 // ②의 근거: sendMessage는 공급자와 무관하게 `completion.text` 하나에 같은 손질 순서를 건다
 // (링크 마커 → 신호 마커 → 실존 금융회사명 치환 → 3문장 상한 → finalize — roleplay/index.ts).
@@ -126,7 +126,7 @@ function shapeLikeSendMessage(text: string, scenarioId: string): string {
 }
 
 test("② Groq형 출력(프로브 실측 5문장)에도 3문장 상한이 걸린다", () => {
-  // 2026-10-18 Groq 실호출 샘플 #1 원문(§74.2) — 5문장.
+  // 2026-10-18 Groq 실호출 샘플 #1 원문(§75.2) — 5문장.
   const groqSample =
     "네, 안녕하십니까. 저는 검찰청 수사팀 담당관입니다. 현재 귀하의 계좌가 최근 불법 자금 세탁 관련 수사 대상에 포함된 것으로 확인되었습니다. 절차상 바로 확인이 필요하니, 성함과 생년월일을 말씀해 주시겠습니까? 지금 바로 답변해 주셔야 진행됩니다.";
   assert.equal(countSentences(groqSample), 5);

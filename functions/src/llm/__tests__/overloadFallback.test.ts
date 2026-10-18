@@ -318,7 +318,7 @@ test("⑨ GeminiLlmClient: model 인자를 실제 요청과 성공 로그에 쓴
 // ⇒ 소스 스캔으로 배선을 못박고, 오염본으로 스캔이 실제로 가르는지 역검증한다.
 // 형태: `primary = keys.length > 0 ? withOverloadRetry(rotating(keys), {…}) : new MockLlmClient();`
 //       `gemini = keys.length > 0 ? withOverloadFallback(primary, tagServedBy(rotating(keys, 대체 모델), "gemini-fallback"), {budgetMs: geminiBudgetMs…}) : primary;`
-//       (2026-10-18 §74 — 변수명이 client → gemini로 바뀌고 Groq 3차 예비가 그 바깥 `client`가 됐다)
+//       (2026-10-18 §75 — 변수명이 client → gemini로 바뀌고 Groq 3차 예비가 그 바깥 `client`가 됐다)
 //       `return withTimeout(client, timeoutMs);` — overloadRetry.test.ts ⑩·firstTurnTimeout.test.ts의 기존 단언과 공존.
 const INDEX_SRC = path.resolve(__dirname, "../../../src/llm/index.ts");
 

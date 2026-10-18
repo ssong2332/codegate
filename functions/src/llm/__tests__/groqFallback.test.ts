@@ -1,7 +1,7 @@
-// Groq 3차 예비(2026-10-18, Architecture.md §74) — 판정표·단계 전환·중복 생성 방지·Groq 요청 형태·배선.
+// Groq 3차 예비(2026-10-18, Architecture.md §75) — 판정표·단계 전환·중복 생성 방지·Groq 요청 형태·배선.
 //
 // ⛔ 라이브 호출 0건 — Groq는 fetch 주입으로, Gemini 체인은 가짜 클라이언트로 흉내 낸다.
-// 실호출 샘플은 PR 본문(§74.2 프로브)에 따로 둔다.
+// 실호출 샘플은 PR 본문(§75.2 프로브)에 따로 둔다.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

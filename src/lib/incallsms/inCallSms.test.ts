@@ -2,11 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   countUnread,
+  formatSmsClock,
   latestSmsId,
+  needsTimeSeparator,
   pickDueInCallSms,
   sortByArrival,
   spellOutOtp,
+  splitBodyAtOtp,
   takeNewlyVisibleSmsIds,
+  threadHeaderLabel,
   type InCallSmsView,
 } from "./inCallSms.ts";
 
@@ -125,4 +129,54 @@ test("[T103/AC-026] 같은 문자를 두 번 기록하지 않는다(재교차·�
 
 test("[T103/AC-026] id를 못 읽은 항목은 조용히 건너뛴다(잘못된 id를 서버로 보내지 않는다)", () => {
   assert.deepEqual(takeNewlyVisibleSmsIds([{ isIntersecting: true, smsId: undefined }], new Set()), []);
+});
+
+// ── T190-1 — G459(함수) · 문자함 헤더 라벨 (docs/Architecture.md §74.4 · §74.14 G459 · UX D-89/D-90 · AC-061) ──
+// ⚠️ 문자함의 박스 분기 배선(`splitBodyAtOtp`가 null일 때만 박스)은 T190-5(문자함 개편)가 같은 G459로 더한다.
+test("[T190/G459] splitBodyAtOtp — 정확 일치 **첫 1회**로 가르고, 없으면 null(→ 박스 폴백)", () => {
+  assert.deepEqual(splitBodyAtOtp("[본인확인] 인증번호 [048231]\n타인에게", "048231"), {
+    before: "[본인확인] 인증번호 [",
+    code: "048231",
+    after: "]\n타인에게",
+  });
+  // 첫 1회만 — 뒤쪽 같은 숫자는 after에 남는다.
+  assert.deepEqual(splitBodyAtOtp("코드 1234 다시 1234", "1234"), { before: "코드 ", code: "1234", after: " 다시 1234" });
+  assert.equal(splitBodyAtOtp("본문에 코드가 없다", "048231"), null);
+  assert.equal(splitBodyAtOtp("본문", undefined), null);
+  assert.equal(splitBodyAtOtp("본문", ""), null);
+});
+
+test("[T190/G459 역검증 — AC-061] 본문에 코드가 없는 샘플에서 분할이 null이 아니면 '인증번호가 화면 어디에도 없는' 상태가 된다", () => {
+  // 화면 규칙: 분할 성공 → 본문 안 강조 · 분할 null → 박스. 두 갈래 중 하나에는 반드시 코드가 있다.
+  const shown = (body: string, code: string) => {
+    const split = splitBodyAtOtp(body, code);
+    return split ? split.code : code; // null이면 박스가 code를 그린다
+  };
+  assert.equal(shown("본문에 코드가 없다", "048231"), "048231");
+  // 오염: 박스 분기를 뺀 사본(= null일 때 아무것도 안 그림)
+  const shownWithoutBox = (body: string, code: string) => splitBodyAtOtp(body, code)?.code ?? "";
+  assert.equal(shownWithoutBox("본문에 코드가 없다", "048231"), "", "박스 분기가 빠지면 코드가 사라진다 — G459가 막는 상태");
+});
+
+test("[T190/UX-027 v1.33 (3)] threadHeaderLabel — 모두 같은 발신처면 그 값, 섞이면 '메시지'", () => {
+  assert.equal(threadHeaderLabel([]), "메시지");
+  assert.equal(threadHeaderLabel([view({ smsId: "a", senderLabel: "A" }), view({ smsId: "b", senderLabel: "A" })]), "A");
+  assert.equal(threadHeaderLabel([view({ smsId: "a", senderLabel: "A" }), view({ smsId: "b", senderLabel: "B" })]), "메시지");
+});
+
+test("[T190-5/UX-027 v1.33 (4)] formatSmsClock — 기기 현지 '오전/오후 h:mm' · 서버 시각 전(0)이면 null", () => {
+  // 2026-10-18T06:05:00Z = KST(+9, offset -540) 15:05
+  const at = Date.UTC(2026, 9, 18, 6, 5);
+  assert.equal(formatSmsClock(at, -540), "오후 3:05");
+  assert.equal(formatSmsClock(Date.UTC(2026, 9, 18, 15, 0), -540), "오전 12:00");
+  assert.equal(formatSmsClock(Date.UTC(2026, 9, 18, 3, 9), -540), "오후 12:09");
+  assert.equal(formatSmsClock(0), null);
+});
+
+test("[T190-5/UX-027 v1.33 (4)] needsTimeSeparator — 첫 문자 · 5분 이상 간격일 때만", () => {
+  const t0 = Date.UTC(2026, 9, 18, 6, 0);
+  assert.equal(needsTimeSeparator(null, t0), true);
+  assert.equal(needsTimeSeparator(t0, t0 + 4 * 60 * 1000), false);
+  assert.equal(needsTimeSeparator(t0, t0 + 5 * 60 * 1000), true);
+  assert.equal(needsTimeSeparator(t0, 0), false, "시각을 모르면 구분줄을 지어내지 않는다");
 });

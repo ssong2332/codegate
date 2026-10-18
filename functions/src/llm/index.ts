@@ -80,16 +80,16 @@ export const LLM_OVERLOAD_RETRY_DELAYS_MS: readonly number[] = [500, 1500];
 export const LLM_OVERLOAD_MIN_ATTEMPT_MS = 2000;
 
 /**
- * Groq 3차 예비에 남겨 두는 시간(ms, 2026-10-18 · Architecture.md §74.4).
+ * Groq 3차 예비에 남겨 두는 시간(ms, 2026-10-18 · Architecture.md §75.4).
  * Groq 키가 있을 때만 Gemini 체인(1·2차)의 예산이 `timeoutMs - 이 값`으로 줄고, 그 상한을 넘기면 Gemini
  * 요청을 취소하고 Groq로 넘어간다(일반 턴 7초 + 3초 · 첫 턴 17초 + 3초). Groq 키가 없으면 쓰지 않는다
- * (= 기존 동작 그대로). 근거: 실제 시스템 프롬프트 Groq 프로브 성공 2/2가 0.79~1.02초(§74.2).
+ * (= 기존 동작 그대로). 근거: 실제 시스템 프롬프트 Groq 프로브 성공 2/2가 0.79~1.02초(§75.2).
  */
 export const GROQ_RESERVE_MS = 3000;
 
 /**
  * Groq 키(하나만)를 읽는다 — 없거나 placeholder면 "". 값은 관측에 나가지 않는다(G170).
- * ⛔ 키 여러 개를 돌려 쓰는 구조로 바꾸지 말 것 — Groq 한도는 조직 단위다(§74.2).
+ * ⛔ 키 여러 개를 돌려 쓰는 구조로 바꾸지 말 것 — Groq 한도는 조직 단위다(§75.2).
  */
 export function getGroqApiKey(): string {
   return readSecret(GROQ_API_KEY);
@@ -157,7 +157,7 @@ export function withTimeout(client: LlmClient, timeoutMs: number): LlmClient {
  */
 export function getLlmClient(timeoutMs: number = LLM_TIMEOUT_MS): LlmClient {
   const keys = getGeminiApiKeys();
-  // Groq는 **3차 예비**일 뿐 단독 공급자로 쓰지 않는다(§74.1) — Gemini 키가 없으면 읽지도 않는다(= 지금처럼 Mock).
+  // Groq는 **3차 예비**일 뿐 단독 공급자로 쓰지 않는다(§75.1) — Gemini 키가 없으면 읽지도 않는다(= 지금처럼 Mock).
   const groqKey = keys.length > 0 ? getGroqApiKey() : "";
   if (keys.length > 0 && !groqKey && !groqDisabledLogged) {
     groqDisabledLogged = true;
@@ -190,7 +190,7 @@ export function getLlmClient(timeoutMs: number = LLM_TIMEOUT_MS): LlmClient {
           { budgetMs: geminiBudgetMs, minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS },
         )
       : primary;
-  // Groq 3차 예비(2026-10-18, §74) — 429·5xx·Gemini 단계 시간 초과에서만 1회. Gemini 체인에는 안쪽
+  // Groq 3차 예비(2026-10-18, §75) — 429·5xx·Gemini 단계 시간 초과에서만 1회. Gemini 체인에는 안쪽
   // 단계 상한(withStageDeadline)이 걸려, 상한을 넘기면 Gemini 요청을 취소하고 넘어온다.
   const client = groqKey
     ? withGroqFallback(withStageDeadline(gemini, geminiBudgetMs), new GroqLlmClient(groqKey), {

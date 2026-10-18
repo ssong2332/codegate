@@ -15,19 +15,37 @@
 //   - 상단 바 = "훈련 종료"만(오른쪽 끝 — chat 헤더와 같은 끝·문구·크기). 마운트 시 제목에 포커스.
 import { useEffect, useRef } from "react";
 import EndTrainingButton from "./EndTrainingButton";
+import DeviceSkinPicker from "./DeviceSkinPicker";
 import { Button } from "./ui";
-import { MESSENGER_START_NOTICE } from "@/lib/sessionboundary/preSessionCopy";
+import { MESSENGER_START_NOTICE, MESSENGER_START_NOTICE_WITH_CALL } from "@/lib/sessionboundary/preSessionCopy";
+import type { DeviceSkin, DeviceSkinSource } from "@/lib/phone/deviceSkin";
 
 type MessengerStartNoticeProps = {
   surface: "kakao" | "sms";
+  /**
+   * T190-8a(§74.22 (2) · OQ-52 (ㄴ)) — 이 시나리오가 전화로 이어질 수 있는가(`Boolean(scenario.escalation)` — 시나리오
+   * 성질이지 진입 채널이 아니다). 참이면 제목·고지 ①을 "메시지와 전화" 변형으로, 고지 ①-2(합성 음성)를 더한다.
+   */
+  includesCall: boolean;
   onConfirm: () => void;
   onEndTraining: () => void;
+  /**
+   * T190-6(docs/Architecture.md §74.10 (2) · D-100 · AC-092 (d)) — 세션 전 화면 모양 줄. **문자형 표면에서만** 그린다
+   * (카카오형은 스킨이 없다). 바꾸면 호출부가 화면 상태 · `updateMessengerSkin(manual)` · 기기 저장(`fv.deviceSkin.v1`)을 한다.
+   */
+  skinPicker?: {
+    value: DeviceSkin;
+    source: DeviceSkinSource;
+    onChange: (skin: "ios" | "samsung") => void;
+  };
 };
 
 export default function MessengerStartNotice({
   surface,
+  includesCall,
   onConfirm,
   onEndTraining,
+  skinPicker,
 }: MessengerStartNoticeProps) {
   const headingRef = useRef<HTMLHeadingElement | null>(null);
 
@@ -53,15 +71,25 @@ export default function MessengerStartNotice({
           tabIndex={-1}
           className="text-[26px] font-bold leading-[1.35] text-[#22303A] outline-none"
         >
-          {MESSENGER_START_NOTICE.title}
+          {includesCall ? MESSENGER_START_NOTICE_WITH_CALL.title : MESSENGER_START_NOTICE.title}
         </h1>
-        <p className="text-base leading-[1.7] text-[#6B655C]">{MESSENGER_START_NOTICE.notice}</p>
+        <p className="text-base leading-[1.7] text-[#6B655C]">
+          {includesCall ? MESSENGER_START_NOTICE_WITH_CALL.notice : MESSENGER_START_NOTICE.notice}
+        </p>
+        {includesCall && (
+          <p className="text-base leading-[1.7] text-[#6B655C]">
+            {MESSENGER_START_NOTICE_WITH_CALL.callVoiceNotice}
+          </p>
+        )}
         {surface === "kakao" && (
           <p className="text-base leading-[1.7] text-[#6B655C]">
             {MESSENGER_START_NOTICE.kakaoDisclaimer}
           </p>
         )}
         <p className="text-base leading-[1.7] text-[#6B655C]">{MESSENGER_START_NOTICE.stopHint}</p>
+        {surface === "sms" && skinPicker && (
+          <DeviceSkinPicker value={skinPicker.value} source={skinPicker.source} onChange={skinPicker.onChange} />
+        )}
       </div>
 
       {/* 주 버튼 — 화면 하단(엄지 도달 · P-30). */}

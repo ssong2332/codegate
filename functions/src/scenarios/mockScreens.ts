@@ -50,6 +50,14 @@ export type MockScreenItem = {
   /** 화면 하단 발신 주체 표기(현행 하드코딩 `"ⓒ 본인확인센터"`·`"ⓒ 업무처리 확인센터"`를
    * 카탈로그로 올린 것). **실존 기관명 금지** — `mockSurface` 프로파일을 탄다. */
   issuerLabel: string;
+  /**
+   * T190-2(docs/Architecture.md §74.9 · UX D-101 · PRD AC-094) — 가짜 브라우저 주소창에 보일 **가짜 호스트**
+   * (호스트만 — 경로·스킴 0). ⛔ 마지막 레이블은 반드시 `.invalid`(RFC 2606 예약 — 영구히 실존할 수 없는 이름)이고
+   * `http(s)://`·`www.`·`href` 0 · 연속 숫자 3자리 이하 · 실존 기관 도메인 꼴·실존 브랜드 낱말 0
+   * (`__tests__/mockAddress.test.ts` G453). 화면 렌더 정본은 클라 `MessengerFakeLanding.tsx`의 같은 글자이며
+   * 드리프트 테스트(`src/components/mockScreenCopy.test.ts` G76)가 묶는다. 눌러도 어디로도 이동하지 않는다.
+   */
+  mockHost: string;
   /** 입력 필드 라벨(`credential-form` 전용, **최대 3개** — UX-023 v1.13 표).
    * ⛔ `app-install`이면 반드시 `undefined`다(AC-072 *"입력 필드 0"*). G-C가 단언한다.
    * ⛔ 라벨 안에 숫자열을 넣지 않는다(`LONG_DIGIT_SEQUENCE`). */
@@ -102,6 +110,7 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
       "설치 후 접근 권한을 허용하면 담당자가 신청을 대신 처리해 드립니다.",
     ],
     issuerLabel: "ⓒ 업무처리 확인센터",
+    mockHost: "support-app-center.invalid",
     consentLabel: "권한 허용하고 계속하기",
     momentTactic: "앱 설치·원격 허용 유도",
     correctAction:
@@ -167,6 +176,7 @@ const MESSENGER_PARCEL_SMISHING_SMS: MockScreenItem[] = [
       "아래 정보를 확인해 주시면 오늘 중으로 재배송이 접수됩니다.",
     ],
     issuerLabel: "ⓒ 종합물류 재배송 접수처",
+    mockHost: "parcel-resend-desk.invalid",
     fields: ["받는 분 성함", "연락처", "받으실 주소"],
     submitLabel: "재배송 신청하기",
     successHeadline: "재배송이 접수되었습니다.",
@@ -189,6 +199,7 @@ const LOAN_REFINANCE_SCAM: MockScreenItem[] = [
     ],
     // 문자 본문의 가상 발신 주체(`inCallSms.ts` LOAN_SCAM `senderLabel`)와 표기를 맞춘다.
     issuerLabel: "ⓒ ○○캐피탈 전환심사팀",
+    mockHost: "loan-switch-center.invalid",
     fields: ["성함", "생년월일", "연락처"],
     submitLabel: "본인확인 완료하기",
     successHeadline: "본인확인이 완료되었습니다.",
@@ -210,6 +221,7 @@ const TAX_REFUND_SCAM: MockScreenItem[] = [
       "받으실 계좌를 등록하시면 당일 지급 처리됩니다.",
     ],
     issuerLabel: "ⓒ 환급금 지급 안내센터",
+    mockHost: "refund-pay-center.invalid",
     // ⛔ 라벨에 숫자열을 넣지 않는다(`LONG_DIGIT_SEQUENCE`) — 안내 텍스트만 쓴다.
     fields: ["예금주", "은행", "계좌번호"],
     submitLabel: "계좌 등록하기",
@@ -233,6 +245,7 @@ const COURIER_CUSTOMS_SCAM: MockScreenItem[] = [
     ],
     // 문자 본문의 가상 발신 주체(`inCallSms.ts` COURIER_CUSTOMS_SCAM)와 표기를 맞춘다.
     issuerLabel: "ⓒ 국제통관지원센터",
+    mockHost: "customs-check-desk.invalid",
     fields: ["수취인 성함", "연락처", "생년월일"],
     submitLabel: "수취인 정보 확인하기",
     successHeadline: "수취인 정보가 확인되었습니다.",
@@ -265,6 +278,7 @@ const INSTITUTIONAL_IMPERSONATION: MockScreenItem[] = [
     // 문자 발신 라벨(`inCallSms.ts` INSTITUTIONAL_IMPERSONATION `institution-safe-account`
     // "(자산보호 안내)")과 일관되게 맞춘다(P-28 (6)).
     issuerLabel: "ⓒ 자산보호 이체 안내센터",
+    mockHost: "jasan-boho-center.invalid",
     fields: ["안전계좌 번호", "이체 금액"],
     submitLabel: "안전계좌로 이체하기",
     successHeadline: "안전계좌로 이체가 완료되었습니다.",
@@ -292,6 +306,7 @@ const CARD_COMPANY_IMPERSONATION: MockScreenItem[] = [
     // 문자 발신 라벨(`inCallSms.ts` CARD_COMPANY_IMPERSONATION `card-relief-account`
     // "(피해금 이관 안내)")과 일관되게 맞춘다(P-28 (6)).
     issuerLabel: "ⓒ 카드 피해금 이관 지원센터",
+    mockHost: "card-relief-desk.invalid",
     fields: ["이관 전용 계좌번호", "이관 금액"],
     submitLabel: "피해금 이관하기",
     successHeadline: "피해금 이관이 접수되었습니다.",
@@ -319,6 +334,7 @@ const BANK_SECURITY_VERIFY_SCAM: MockScreenItem[] = [
     // 문자 발신 라벨(`inCallSms.ts` BANK_SECURITY_VERIFY_SCAM `bank-protect-account`
     // "(계좌보호 안내)")과 일관되게 맞춘다(P-28 (6)).
     issuerLabel: "ⓒ 금융사고대응 보호계좌센터",
+    mockHost: "acct-protect-desk.invalid",
     fields: ["보호계좌 번호", "옮길 금액"],
     submitLabel: "보호계좌로 옮기기",
     successHeadline: "보호계좌로 옮기기가 처리되었습니다.",

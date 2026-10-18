@@ -292,6 +292,9 @@ const RENDERED_FIELDS = [
   "headline",
   "bodyLines",
   "issuerLabel",
+  // T190-2(docs/Architecture.md §74.9 · §74.13 G76 행) — 가짜 주소창 호스트. 미등록이면 위 파서의 미등록 필드
+  // 단언이 실패한다(트립와이어).
+  "mockHost",
   "fields",
   "submitLabel",
   "successHeadline",
@@ -637,4 +640,77 @@ test("[T84 → T187 역검증] 배지를 되살린 사본은 반전 단언에 �
   );
   assert.notEqual(poisoned, componentCode, "오염 지점을 찾지 못했다 — 역검증이 공회전한다");
   assert.deepEqual(difficultyBadgeTraces(poisoned), ["difficultyLabel", "난이도 {"]);
+});
+
+// ── T190-2 — G453(클라 쪽) · 가짜 주소창 호스트 (docs/Architecture.md §74.9 · §74.14 G453 · PRD AC-094 (b)(g)) ──
+//
+// 서버 카탈로그의 8개 호스트는 `functions/src/scenarios/__tests__/mockAddress.test.ts`가 보고, 위 G76이 그 글자가
+// 컴포넌트에 그대로 있음을 묶는다. 여기서는 **컴포넌트에만 있는 호스트**(범용 폴백 `GENERIC_CREDENTIAL_COPY` ·
+// 설치 화면 `INSTALL_MOCK_HOST`)까지 포함해 컴포넌트 소스의 호스트 **전부**에 같은 규칙을 건다(두 패키지라
+// 함수를 import로 공유할 수 없어 같은 정규식을 둔다).
+const MOCK_HOST_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)*\.invalid$/;
+
+function clientHostViolations(host: string): string[] {
+  const out: string[] = [];
+  if (!MOCK_HOST_PATTERN.test(host)) out.push(`호스트 형식(.invalid 끝): ${host}`);
+  if (/https?:\/\//i.test(host) || /\bwww\./i.test(host) || /href/i.test(host)) out.push(`금지 표기: ${host}`);
+  if (/\d{4,}/.test(host)) out.push(`연속 숫자 4자리 이상: ${host}`);
+  return out;
+}
+
+function componentHosts(code: string): string[] {
+  return [
+    ...[...code.matchAll(/mockHost:\s*"([^"]*)"/g)].map((m) => m[1]),
+    ...[...code.matchAll(/INSTALL_MOCK_HOST\s*=\s*"([^"]*)"/g)].map((m) => m[1]),
+  ];
+}
+
+test("[T190/G453 클라] 컴포넌트의 가짜 호스트 전부(카탈로그 8 + 범용 폴백 1)가 .invalid 규칙을 지킨다", (t) => {
+  const hosts = componentHosts(componentCode);
+  t.diagnostic(`[G453 클라] 호스트 ${hosts.length}개: ${hosts.join(" · ")}`);
+  assert.equal(hosts.length, 9, "카탈로그 credential 7 + 설치 1 + 범용 폴백 1");
+  assert.deepEqual(hosts.flatMap(clientHostViolations), []);
+  // 범용 폴백 호스트는 카탈로그 호스트와 겹치지 않는다(겹치면 미스가 다른 사이트처럼 보인다).
+  assert.equal(new Set(hosts).size, hosts.length);
+  // 주소창은 호스트만 그린다 — 링크 표시 텍스트(`title`)를 주소창에 다시 그리지 않는다(AC-094 (a)).
+  assert.ok(componentCode.includes("{landingHostFor(landingKind, landingId)}"), "주소창이 가짜 호스트를 그려야 한다");
+});
+
+test("[T190/G453 클라 역검증] .com 호스트를 넣은 사본 · https:// 접두 사본은 같은 함수에 걸린다", () => {
+  const poisoned = componentCode.replace('mockHost: "id-verify-center.invalid"', 'mockHost: "id-verify-center.com"');
+  assert.notEqual(poisoned, componentCode, "오염 지점(범용 폴백 호스트)을 찾지 못했다");
+  assert.ok(componentHosts(poisoned).flatMap(clientHostViolations).length >= 1);
+  const schemed = componentCode.replace(
+    'INSTALL_MOCK_HOST = "support-app-center.invalid"',
+    'INSTALL_MOCK_HOST = "https://support-app-center.invalid"',
+  );
+  assert.notEqual(schemed, componentCode, "오염 지점(설치 호스트)을 찾지 못했다");
+  assert.ok(componentHosts(schemed).flatMap(clientHostViolations).length >= 1);
+});
+
+// ── T190-5 — D-93 숫자 자판 힌트(UX-023 v1.33 (4) · docs/Architecture.md §74.8) ─────────────────────────────
+// 클라 전용 표현 힌트(`placeholder`와 같은 층)라 서버 카탈로그 드리프트 대조 밖이다. 계좌번호·금액 칸에만 필드별로 명시한다.
+const NUMERIC_FIELD_LABELS = [
+  "계좌번호",
+  "안전계좌 번호",
+  "이체 금액",
+  "이관 전용 계좌번호",
+  "이관 금액",
+  "보호계좌 번호",
+  "옮길 금액",
+];
+
+test("[T190/D-93] 계좌번호·금액 칸에만 inputMode numeric — 검증(maxLength·pattern) 0 · type=text 유지", () => {
+  const numeric = [...componentCode.matchAll(/\{ label: "([^"]+)", placeholder: "[^"]*", inputMode: "numeric" \}/g)].map((m) => m[1]);
+  assert.deepEqual(numeric.sort(), [...NUMERIC_FIELD_LABELS].sort());
+  assert.ok(componentCode.includes("inputMode={field.inputMode}"), "입력 요소가 필드별 힌트를 받아야 한다");
+  for (const forbidden of ["maxLength", "pattern=", 'type="number"']) {
+    assert.equal(componentCode.includes(forbidden), false, `입력 검증·숫자 타입 금지(D-93): ${forbidden}`);
+  }
+});
+
+test("[T190/D-93] 완료 복귀 문면은 진입 표면이 정한다 — 메신저 '채팅으로' · 문자함 '문자로'", () => {
+  assert.ok(componentCode.includes('messenger: "채팅으로 돌아가기"'));
+  assert.ok(componentCode.includes('"in-call-sms": "문자로 돌아가기"'));
+  assert.equal((componentCode.match(/^\s*\{returnLabel\}\s*$/gm) ?? []).length, 2, "두 kind의 완료 버튼이 모두 진입 표면 문면을 쓴다");
 });

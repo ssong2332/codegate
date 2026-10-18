@@ -211,6 +211,9 @@ export type InCallSmsDoc = {
   otpCode?: string; // kind==="otp"일 때만. 콘텐츠 고정 리터럴(런타임 난수 금지)
   linkDisplayText?: string; // kind==="link"일 때만
   fakeLandingId?: string; // kind==="link"일 때만. **url/실 URL 필드는 이 스키마에 존재하지 않는다**
+  // T190-2(docs/Architecture.md §74.9 · D-101) — 말풍선 링크 줄의 **가짜 주소**(`.invalid` 호스트 + 경로 · 스킴 0).
+  // 실 URL이 아니다 — 탭은 인앱 랜딩만 연다. `linkDisplayText`·`fakeLandingId`와 함께만 존재(G111).
+  linkAddress?: string;
   // T104(§19.4) — 그 랜딩의 목업 종류. **kind의 진실 원천은 서버**이고(§15.9.1 R3) 클라는
   // `fakeLandingId` 문자열을 분류하지 않는다. 값이 기본값(`credential-form`)이면 **키를 만들지
   // 않는다** — `MessengerAttachment.landingKind`의 생략 규칙(`linkMarker.ts`)과 글자 그대로

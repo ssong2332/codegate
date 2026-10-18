@@ -1,4 +1,4 @@
-// Groq 텍스트 LLM 구현체 — 텍스트 대사 생성의 **3차 예비**(2026-10-18, Architecture.md §74).
+// Groq 텍스트 LLM 구현체 — 텍스트 대사 생성의 **3차 예비**(2026-10-18, Architecture.md §75).
 //
 // GeminiLlmClient와 같은 얇은 transport다: 이미 조립된 systemPrompt/messages를 보낸다(프롬프트 조립·
 // 구분자 감싸기는 호출부 책임 — llm/types.ts). 다른 점은 둘뿐이다.
@@ -6,7 +6,7 @@
 //   2. SDK 없이 OpenAI 호환 REST(`/openai/v1/chat/completions`)를 Node 22 내장 `fetch`로 부른다
 //      — 새 의존성 0(설치 단계·라이선스 검토 불필요).
 //
-// 모델·파라미터 근거(공식 문서, 2026-10-18 확인 — §74.2):
+// 모델·파라미터 근거(공식 문서, 2026-10-18 확인 — §75.2):
 //   - 모델 ID `openai/gpt-oss-120b`(https://console.groq.com/docs/model/openai/gpt-oss-120b).
 //   - 추론 모델이다. `reasoning_effort: "low"`(지연·토큰 절약), `include_reasoning: false`
 //     (추론문이 `message.reasoning`에도 오지 않게 — 대사에 섞일 경로 차단). `reasoning_format`은

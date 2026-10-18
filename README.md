@@ -214,7 +214,7 @@ Gemini Live 경로의 모델은 `gemini-3.8-live`다(`functions/src/realtime/gem
 > ⚠️ **이것은 할당량 문제의 해결이 아니라 완충이다.** 1일 수요는 약 26호출이고 키 1개의 캡이
 > 20이라, 키 2개(캡 40)로도 여유는 14회분뿐이다. 회차를 늘리면 다시 모자란다.
 
-##### 3차 예비 Groq (`GROQ_API_KEY`, 2026-10-18 · `docs/Architecture.md` §74)
+##### 3차 예비 Groq (`GROQ_API_KEY`, 2026-10-18 · `docs/Architecture.md` §75)
 
 텍스트 대사 생성 순서는 **1차 `gemini-3.1-flash-lite` → 2차 `gemini-3.5-flash-lite`(503일 때) → 3차 Groq
 `openai/gpt-oss-120b`** 다(`functions/src/llm/groqFallback.ts`·`groqClient.ts`). 실시간 음성(Gemini Live)은 바뀌지 않는다.

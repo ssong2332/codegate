@@ -28,8 +28,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import EndTrainingButton from "./EndTrainingButton";
 import MessengerFakeLanding from "./MessengerFakeLanding";
-import { sortByArrival, spellOutOtp, takeNewlyVisibleSmsIds, type InCallSmsView } from "@/lib/incallsms";
+import PhoneIcon from "./PhoneIcon";
+import {
+  formatSmsClock,
+  needsTimeSeparator,
+  sortByArrival,
+  spellOutOtp,
+  splitBodyAtOtp,
+  takeNewlyVisibleSmsIds,
+  threadHeaderLabel,
+  type InCallSmsView,
+} from "@/lib/incallsms";
 import { runExitSequence } from "@/lib/incallsms/closeSequence";
+import { CALL_BAR_TOKENS, smsThreadTokensFor } from "@/lib/phone/skinTokens";
+import type { MessengerSkin } from "@/lib/messenger/detectSkin";
 
 type InCallSmsOverlayProps = {
   messages: InCallSmsView[];
@@ -57,6 +69,11 @@ type InCallSmsOverlayProps = {
    * ⛔ 인자는 `smsId` 하나다 — 참가자 입력값은 이 경로에 실리지 않는다(G138/AC-045).
    */
   onLandingSubmitted: (smsId: string) => void;
+  /**
+   * T190-5(docs/Architecture.md §74.5 (2) · AC-092 (b)) — 통화 화면이 계산한 기기 스킨(한 세션 = 한 스킨).
+   * 문자함 헤더·스레드와 그 안에서 연 랜딩의 브라우저 바가 같은 값을 쓴다. 부재 = 기본.
+   */
+  skin?: MessengerSkin;
 };
 
 const FOCUSABLE =
@@ -81,8 +98,13 @@ export default function InCallSmsOverlay({
   onOpened,
   onLinkTapped,
   onLandingSubmitted,
+  skin = "default",
 }: InCallSmsOverlayProps) {
   const sorted = sortByArrival(messages);
+  const thread = smsThreadTokensFor(skin);
+  // UX-027 v1.33 (3) — 모두 같은 발신처면 헤더에 그 값, 섞이면 "메시지" + 말풍선마다 발신처(D-89).
+  const headerLabel = threadHeaderLabel(sorted);
+  const mixedSenders = sorted.length > 0 && sorted.some((sms) => sms.senderLabel !== sorted[0].senderLabel);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
   // 말풍선 스레드의 스크롤 컨테이너 = 열람 판정의 뷰포트(IntersectionObserver root).
@@ -103,12 +125,24 @@ export default function InCallSmsOverlay({
   const [entryNotice, setEntryNotice] = useState("");
   // T104 — 상황별 랜딩을 열려면 `fakeLandingId`(조회 키)와 서버가 확정한 `landingKind`가 함께
   // 필요하다. 둘 다 문자 문서에서 온 값이며 **클라가 문자열로 분류하지 않는다**(§15.9.1 R3/R8).
-  const [fakeLanding, setFakeLanding] = useState<{
+  // ⭐ T190-5(docs/Architecture.md §74.8 · UX D-94) — 랜딩은 이 대화상자 **안의 두 번째 보기**다(중첩 `aria-modal`
+  // 0 — G26/G460). `view`가 두 보기를 `hidden`으로 토글하고, 숨긴 랜딩은 마운트된 채 입력값을 자기 로컬 state에
+  // 그대로 갖는다(G138 — 값을 이 파일로 끌어올리지 않는다). 같은 문자의 링크를 다시 누르면 같은 랜딩이 돌아오고,
+  // 다른 문자면 `key`가 바뀌어 새로 마운트된다. 닫기·완료 복귀·문자함 닫기 → 언마운트(값 폐기 — UX-023 (1)).
+  const [landing, setLanding] = useState<{
     smsId: string;
     displayText: string;
     landingId?: string;
     landingKind?: "credential-form" | "app-install";
   } | null>(null);
+  const [view, setView] = useState<"thread" | "landing">("thread");
+  // ⭐ reviewer Major(포커스) — 보기 전환 때 포커스가 `hidden`이 된 요소와 함께 body로 떨어지지 않게 한다.
+  // 랜딩으로 가면 랜딩 영역(`role="region"` · 이름 "{제목} 화면")으로 옮겨 스크린리더가 그 이름을 읽어 전환을 안다
+  // (세션 중 새 문구 0 — AC-093 (e) · 기존 이름 A5를 쓴다). 스레드로 돌아오면 그 랜딩을 연 **링크 버튼**으로 되돌린다.
+  const landingViewRef = useRef<HTMLDivElement | null>(null);
+  const linkButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const returnFocusSmsIdRef = useRef<string | null>(null);
+  const previousViewRef = useRef<"thread" | "landing">("thread");
 
   /**
    * 닫기 요청 — Esc·바깥 탭·필 탭·"통화로 돌아가기"가 전부 여기로 온다.
@@ -207,7 +241,9 @@ export default function InCallSmsOverlay({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        requestClose();
+        // T190-5(§74.8) — 랜딩 보기에서는 Esc = 브라우저 뒤로("문자" — 숨김, 입력값 유지).
+        if (view === "landing") setView("thread");
+        else requestClose();
         return;
       }
       if (event.key !== "Tab" || !panelRef.current) return;
@@ -218,6 +254,12 @@ export default function InCallSmsOverlay({
       const first = focusables[0];
       const last = focusables[focusables.length - 1];
       const active = document.activeElement as HTMLElement | null;
+      // reviewer Major — 포커스가 패널 밖(body 등)에 있으면 Tab이 `aria-modal` 밖으로 새지 않게 안쪽으로 감싼다.
+      if (!active || !panelRef.current.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+        return;
+      }
       if (event.shiftKey && (active === first || active === titleRef.current)) {
         event.preventDefault();
         last.focus();
@@ -228,7 +270,44 @@ export default function InCallSmsOverlay({
     };
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [requestClose]);
+  }, [requestClose, view]);
+
+  // 보기 전환 뒤(커밋 뒤 — `hidden`이 풀린 다음) 포커스를 옮긴다. 첫 마운트는 위 제목 포커스가 맡는다.
+  useEffect(() => {
+    if (previousViewRef.current === view) return;
+    previousViewRef.current = view;
+    if (view === "landing") {
+      landingViewRef.current?.querySelector<HTMLElement>('[role="region"]')?.focus();
+      return;
+    }
+    const smsId = returnFocusSmsIdRef.current;
+    const trigger = smsId ? linkButtonRefs.current.get(smsId) : undefined;
+    if (trigger) trigger.focus();
+    else titleRef.current?.focus();
+  }, [view]);
+
+
+  const openLanding = (sms: InCallSmsView) => {
+    onLinkTapped(sms.smsId);
+    returnFocusSmsIdRef.current = sms.smsId;
+    // D-94 — 같은 문자의 랜딩이 이미 있으면 그대로 다시 보인다(입력값 유지). 다르면 교체(새 마운트).
+    setLanding((current) =>
+      current && current.smsId === sms.smsId
+        ? current
+        : {
+            smsId: sms.smsId,
+            displayText: sms.linkDisplayText ?? "",
+            landingId: sms.fakeLandingId,
+            landingKind: sms.landingKind,
+          },
+    );
+    setView("landing");
+  };
+
+  const closeLanding = () => {
+    setLanding(null);
+    setView("thread");
+  };
 
   return (
     <>
@@ -240,9 +319,7 @@ export default function InCallSmsOverlay({
           closing ? "sms-dim-exit" : "sms-dim-enter"
         }`}
       >
-        {/* 바깥 탭으로 닫기(UX-027 Exit). 세 브레이크포인트 전부에서 문자함이 주 표면이라
-            "뒤의 통화 셸이 주변에 보인다"는 v1.11 규칙은 v1.13 Responsive 노트로 대체됐다 —
-            통화가 살아 있다는 신호는 이제 상단 통화 필이 상시·실시간으로 맡는다. */}
+        {/* 바깥 탭으로 닫기(UX-027 Exit). 통화가 살아 있다는 신호는 상단 통화 표시줄이 상시·실시간으로 맡는다. */}
         <button
           type="button"
           aria-label="문자 닫고 통화로 돌아가기"
@@ -253,174 +330,269 @@ export default function InCallSmsOverlay({
 
         {/* 폰 폭 단일 컬럼 · 세 브레이크포인트 동일 규칙(Responsive v1.13 — 데스크톱에서도 폰 폭
             컨테이너 중앙 정렬, 메신저 셸 UX-022와 같은 규칙). 브레이크포인트마다 갈리던 모서리·
-            여백 이중 규칙(`sm:rounded-[20px]` 등)을 두지 않는다(D-57 ㄹ). */}
+            여백 이중 규칙을 두지 않는다(D-57 ㄹ). 글꼴은 system-ui(P-37 R-4). */}
         <div
           ref={panelRef}
-          className={`relative mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-[#FAF8F5] ${
+          className={`relative mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden ${
             closing ? "sms-surface-exit" : "sms-surface-enter"
           }`}
+          style={{ backgroundColor: thread.threadBg, fontFamily: "system-ui, sans-serif" }}
         >
           <p aria-live="polite" className="sr-only">
             {entryNotice}
           </p>
 
-          {/* ── 통화 필(P-27 (2)) — 스크롤·목록 길이와 무관하게 상단 고정. 5요소를 모두 담는다:
-              ① 상대 표기 ② 초 단위로 도는 경과 시간 ③ "통화 중" **텍스트**(색·아이콘 단독 금지)
-              ④ 최신 사기범 자막(aria-live, 2줄 클램프) ⑤ 탭 = 통화 복귀.
-              ⛔ 발신자는 호출부가 이미 계산해 넘긴 `callerLabel` prop **하나만** 읽는다(G87/§23.7
-              C1·C2) — `scenario`·`verifyOffer`·`reconnectedCallerLabel`을 직접 참조하지 않는다.
-              아래 스레드의 발신번호(`senderLabel`)는 **문자의 발신자**이고 통화 발신자와 다른 값이
-              정상이다 — 두 값을 섞지 않는다(§23.7 C3). */}
+          {/* ── ① 통화 표시줄(P-37 (4) · P-27 (2)(9) · UX-027 v1.33 (2)) — 스크롤과 무관하게 맨 위 고정이고, 문자함과
+              그 안의 랜딩 **두 보기가 함께 쓴다**(UX-023 (1) "UX-027에서 열렸을 때만" — 구조로 충족 · §74.8 ③).
+              5요소: ① 상대 표기 ② 초 단위 경과 시간 ③ "통화 중" **텍스트**(색·아이콘 단독 금지) ④ 최신 사기범 자막
+              (aria-live · **최대 2줄 · 높이 상한 36px** — 옛 `line-clamp-2 block` 충돌 해결, 문제 2c) ⑤ 탭 = 통화 복귀.
+              오른쪽 "통화로" 칩은 없앴다(표시줄 자체가 버튼이고 아래 큰 복귀 버튼이 있다).
+              ⛔ 발신자는 호출부가 이미 계산해 넘긴 `callerLabel` prop **하나만** 읽는다(G87/§23.7 C1·C2).
+              아래 스레드의 발신번호(`senderLabel`)는 **문자의 발신자**이고 통화 발신자와 다른 값이 정상이다(§23.7 C3). */}
           <button
             type="button"
             onClick={requestClose}
-            className="flex min-h-[48px] shrink-0 items-center justify-between gap-3 bg-[#22303A] px-4 py-2.5 text-left text-white"
+            className="flex min-h-[48px] shrink-0 flex-col text-left"
+            style={{ backgroundColor: CALL_BAR_TOKENS.bg, color: CALL_BAR_TOKENS.text }}
           >
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-semibold">{callerLabel}</span>
-              <span className="block text-xs text-[#C9D4DB]">통화 중 · 경과 {elapsedLabel}</span>
-              {scammerCaption ? (
-                <span
-                  aria-live="polite"
-                  className="mt-1 line-clamp-2 block text-xs leading-snug text-[#E4EAEE]"
-                >
-                  “{scammerCaption}”
-                </span>
-              ) : null}
+            <span className="flex h-11 w-full items-center gap-2 px-3.5">
+              <PhoneIcon name="accept-call" size={16} />
+              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{callerLabel}</span>
+              <span className="shrink-0 text-[15px] tabular-nums">통화 중 · {elapsedLabel}</span>
             </span>
-            <span className="shrink-0 rounded-full bg-[#41525E] px-2.5 py-1 text-xs font-semibold text-[#C9D4DB]">
-              통화로
-            </span>
+            {scammerCaption ? (
+              <span
+                aria-live="polite"
+                className="line-clamp-2 max-h-[36px] overflow-hidden px-3.5 pb-2 text-[13px] leading-[18px]"
+              >
+                “{scammerCaption}”
+              </span>
+            ) : null}
             <span className="sr-only">눌러서 통화로 돌아가기</span>
           </button>
 
-          {/* ── 상시 종료(AC-006). 스크롤과 무관하게 항상 보인다. T187(§72 · PRD v1.18 AC-086) —
-              세션 중 표식을 지웠다(빈 자리를 채우지 않는다 — D-82). 유일한 자식이 된 종료 버튼이
-              오른쪽 끝에 그대로 남도록 justify-end(G449). */}
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-[#E2DDD3] bg-white px-4 py-3">
-            <EndTrainingButton onClick={onEndTraining} />
-          </div>
-
-          {/* ── 말풍선 스레드(D-57 ㄴ) — 아코디언 카드·▼/▲ 토글을 없애 탭 1회가 줄어든다.
-              ⚠️ 상단 설명 문단("통화는 그대로 연결돼 있습니다…")은 제거했다(D-57 ㄷ) — 그 사실은
-              위 통화 필이 상시·실시간으로 증명한다. 제목은 스크린리더용 접근 이름으로만 남긴다. */}
-          <div ref={threadRef} className="flex-1 overflow-y-auto px-4 py-4">
-            <h2 ref={titleRef} tabIndex={-1} className="sr-only outline-none">
-              문자 메시지
-            </h2>
-
-            {sorted.length === 0 ? (
-              // Empty — 진입점이 없어 보통은 열리지 않지만, 예외적 진입 시 명시한다(UX-027 States).
-              <p role="status" className="rounded-[14px] bg-white p-5 text-base text-[#6B655C]">
-                아직 도착한 문자가 없습니다.
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-4">
-                {sorted.map((sms, index) => {
-                  // 발신번호는 스레드 헤더로 한 번만 — 같은 번호가 이어지면 반복하지 않는다
-                  // (실제 문자앱의 묶음 표시). 색이 아니라 **텍스트 라벨**로 구분한다.
-                  const showSender = index === 0 || sorted[index - 1].senderLabel !== sms.senderLabel;
-                  return (
-                    <li
-                      key={sms.smsId}
-                      data-sms-id={sms.smsId}
-                      ref={(node) => {
-                        // 열람 판정 대상 등록. 언마운트 시 지워 관측자가 죽은 노드를 붙들지 않게 한다.
-                        if (node) bubbleRefs.current.set(sms.smsId, node);
-                        else bubbleRefs.current.delete(sms.smsId);
-                      }}
-                      className="flex flex-col items-start gap-1.5"
-                    >
-                      {showSender && (
-                        <p className="font-mono text-xs font-semibold text-[#6B655C]">
-                          {sms.senderLabel}
-                        </p>
-                      )}
-
-                      {/* 수신 말풍선 — 링크 칩·인증번호 블록은 말풍선 **안**에 들어간다(D-57 ㄴ). */}
-                      <div className="flex max-w-[92%] flex-col gap-3 rounded-[18px] rounded-tl-[6px] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(34,48,58,0.08)]">
-                        <p className="whitespace-pre-line text-base leading-relaxed text-[#22303A]">
-                          {sms.body}
-                        </p>
-
-                        {/* 인증번호형(D-38/AC-061) — 6자리 모의 코드를 실제로 보여준다.
-                            ⚠️ **자동 클립보드 복사·자동 전송을 하지 않는다**(AC-061) — 앱이
-                            "복사해서 붙여 넣는" 실행 동선을 대신 만들어 주지 않는다. 사용자가
-                            길게 눌러 직접 선택할 수는 있다(브라우저 기본 동작, select-text). */}
-                        {sms.kind === "otp" && sms.otpCode && (
-                          <div className="rounded-[12px] bg-[#F2EFE9] p-4 text-center">
-                            <p className="mb-1 text-xs font-semibold text-[#6B655C]">인증번호</p>
-                            <p
-                              className="select-text font-mono text-3xl font-bold tracking-[0.25em] text-[#22303A]"
-                              aria-label={`인증번호 ${spellOutOtp(sms.otpCode)}`}
-                            >
-                              {sms.otpCode}
-                            </p>
-                          </div>
-                        )}
-
-                        {/* 링크형(D-37/AC-045) — 실 URL이 없고, 탭하면 **기존** 인앱 가짜 랜딩으로만
-                            전환된다. 신규 랜딩을 만들지 않는다. 스크린리더 이름은 "링크: {표시 텍스트}"
-                            (T187 · UX P-36 (4) A3 — 세션 중 낱말 제거, 기능 설명은 유지).
-                            §51.6 R10/G317 — kind가 아니라 필드 존재로 판정한다("account"형도 이제
-                            링크를 병기할 수 있다, kind로 링크 부착 여부를 추론하지 않는다). */}
-                        {sms.linkDisplayText && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onLinkTapped(sms.smsId);
-                              setFakeLanding({
-                                smsId: sms.smsId,
-                                displayText: sms.linkDisplayText ?? "",
-                                landingId: sms.fakeLandingId,
-                                landingKind: sms.landingKind,
-                              });
-                            }}
-                            aria-label={`링크: ${sms.linkDisplayText}`}
-                            className="flex min-h-[48px] items-center gap-2 rounded-xl border-2 border-[#0E6B62] bg-[#E4F0EC] px-4 py-2 text-sm font-bold text-[#0E6B62] underline decoration-2 underline-offset-2"
-                          >
-                            <span aria-hidden="true">🔗</span>
-                            {sms.linkDisplayText}
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-
-          {/* 큰 복귀 버튼은 **유지**한다(P-27 (3)) — 필은 어르신 기준 작은 보조 컨트롤이라
-              큰 1차 동선을 대체할 수 없다. 자리·문구 무변경. */}
-          <div className="shrink-0 border-t border-[#E2DDD3] bg-white px-4 py-3">
-            <button
-              type="button"
-              onClick={requestClose}
-              className="min-h-[52px] w-full rounded-[14px] bg-[#0E6B62] text-base font-bold text-white"
+          {/* ── 보기 1: 문자 스레드(UX-027 v1.33 (1)~(5)). 랜딩을 보는 동안 `hidden`(접근성 트리·포커스 밖 — G460). */}
+          <div
+            hidden={view !== "thread"}
+            className={view === "thread" ? "flex min-h-0 flex-1 flex-col" : "hidden"}
+          >
+            {/* ② 대화 헤더(D-89) — 왼쪽 뒤로(= 통화 복귀) · 발신자(iOS형 가운데 · One UI형 왼쪽) · 오른쪽 "훈련 종료".
+                ⛔ 실제 앱의 통화·영상·메뉴 아이콘을 그리지 않는다(동작 없는 버튼 금지 — P-37 R-6).
+                T187(§72 · AC-086) — 세션 중 표식 0. 종료 버튼은 **자기 혼자만 든** `justify-end` 칸에 둔다(G449). */}
+            <div
+              className="relative flex min-h-[56px] shrink-0 items-center gap-1 border-b pr-2"
+              style={{ backgroundColor: thread.headerBg, borderColor: thread.headerBorder }}
             >
-              통화로 돌아가기
-            </button>
+              <button
+                type="button"
+                onClick={requestClose}
+                aria-label="통화로 돌아가기"
+                className="flex h-12 w-12 shrink-0 items-center justify-center"
+                style={{ color: thread.chevron }}
+              >
+                <PhoneIcon name="chevron-back" size={24} />
+              </button>
+              {thread.headerLayout === "center" ? (
+                <div className="pointer-events-none absolute inset-x-28 inset-y-1 flex flex-col items-center justify-center text-center">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-white"
+                    style={{ backgroundColor: thread.avatarBg }}
+                  >
+                    <PhoneIcon name="person" size={20} />
+                  </span>
+                  <span className="mt-0.5 max-w-full truncate text-[13px] font-semibold" style={{ color: thread.headerText }}>
+                    {headerLabel}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
+                    style={{ backgroundColor: thread.avatarBg }}
+                  >
+                    <PhoneIcon name="person" size={22} />
+                  </span>
+                  <span className="min-w-0 truncate text-[17px] font-semibold" style={{ color: thread.headerText }}>
+                    {headerLabel}
+                  </span>
+                </div>
+              )}
+              <div className="ml-auto flex shrink-0 justify-end">
+                <EndTrainingButton onClick={onEndTraining} />
+              </div>
+            </div>
+
+            {/* ③ 스레드 — 말풍선 단위가 열람 판정 관측 대상이다(시각 구분줄은 관측 대상이 아니다 — UX-027 (7) ⓒ). */}
+            <div ref={threadRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+              <h2 ref={titleRef} tabIndex={-1} className="sr-only outline-none">
+                문자 메시지
+              </h2>
+
+              {sorted.length === 0 ? (
+                // Empty — 진입점이 없어 보통은 열리지 않지만, 예외적 진입 시 명시한다(UX-027 States).
+                <p role="status" className="rounded-[14px] bg-white p-5 text-base text-[#5F6368]">
+                  아직 도착한 문자가 없습니다.
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {sorted.map((sms, index) => {
+                    const previous = index > 0 ? sorted[index - 1] : null;
+                    const clock = formatSmsClock(sms.arrivedAtMs);
+                    const showSeparator =
+                      thread.timeStyle === "separator" &&
+                      clock !== null &&
+                      needsTimeSeparator(previous ? previous.arrivedAtMs : null, sms.arrivedAtMs);
+                    // 발신처가 섞였을 때만 말풍선 위에 다시 보인다(같은 발신처가 이어지면 반복하지 않는다 — D-89).
+                    const showSender =
+                      mixedSenders && (previous === null || previous.senderLabel !== sms.senderLabel);
+                    // D-90 · G459 — 본문 안 인증번호를 **정확 일치 첫 1회**로 감싼다. null이면 박스 폴백.
+                    const otpSplit = sms.otpCode ? splitBodyAtOtp(sms.body, sms.otpCode) : null;
+                    // D-101 — 링크 줄 = 가짜 주소(부재 = 옛 문서 → 표시 텍스트).
+                    const linkText = sms.linkAddress ?? sms.linkDisplayText;
+                    return (
+                      <li
+                        key={sms.smsId}
+                        data-sms-id={sms.smsId}
+                        ref={(node) => {
+                          // 열람 판정 대상 등록. 언마운트 시 지워 관측자가 죽은 노드를 붙들지 않게 한다.
+                          if (node) bubbleRefs.current.set(sms.smsId, node);
+                          else bubbleRefs.current.delete(sms.smsId);
+                        }}
+                        className="flex flex-col items-start gap-1"
+                      >
+                        {showSeparator && (
+                          <p className="mb-1 mt-2.5 w-full text-center text-xs" style={{ color: thread.time }}>
+                            오늘 {clock}
+                          </p>
+                        )}
+                        {showSender && (
+                          <p className="ml-1 mt-1.5 text-sm font-semibold" style={{ color: thread.headerText }}>
+                            {sms.senderLabel}
+                          </p>
+                        )}
+                        <div className="flex w-full items-end gap-1.5">
+                          {/* 수신 말풍선 — 본문 17px · 줄높이 1.45 · 최대폭 80%(UX-027 v1.33 (4)). */}
+                          <div
+                            className="flex max-w-[80%] flex-col gap-2 px-[13px] py-[9px]"
+                            style={{
+                              backgroundColor: thread.bubbleBg,
+                              color: thread.bubbleText,
+                              borderRadius: thread.bubbleRadius,
+                              border: thread.bubbleBorder ? `1px solid ${thread.bubbleBorder}` : undefined,
+                            }}
+                          >
+                            <p className="whitespace-pre-line break-words text-[17px] leading-[1.45]">
+                              {otpSplit ? (
+                                <>
+                                  {otpSplit.before}
+                                  {/* ⛔ 굵게·색·밑줄·"복사" 버튼 0(실제 폰의 코드 자동 인식·복사 제안을 재현하지 않는다 —
+                                      AC-061). 스크린리더는 한 자씩 읽는 이름을 듣는다(UX-027 Accessibility). */}
+                                  <span aria-hidden="true">{otpSplit.code}</span>
+                                  <span className="sr-only">인증번호 {spellOutOtp(otpSplit.code)}</span>
+                                  {otpSplit.after}
+                                </>
+                              ) : (
+                                sms.body
+                              )}
+                            </p>
+
+                            {/* 인증번호 박스 — ⚠️ **폴백 전용**(G459): 본문에 코드가 없을 때만(콘텐츠 드리프트) 그린다 —
+                                인증번호가 화면 어디에도 없는 상태 0(AC-061). 자동 복사·자동 전송 0. */}
+                            {sms.kind === "otp" && sms.otpCode && otpSplit === null && (
+                              <div className="rounded-[12px] bg-[#F2EFE9] p-4 text-center">
+                                <p className="mb-1 text-xs font-semibold text-[#6B655C]">인증번호</p>
+                                <p
+                                  className="select-text font-mono text-3xl font-bold tracking-[0.25em] text-[#22303A]"
+                                  aria-label={`인증번호 ${spellOutOtp(sms.otpCode)}`}
+                                >
+                                  {sms.otpCode}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* 링크(D-37/AC-045 · D-101) — 실 URL이 없고, 탭하면 **기존** 인앱 가짜 랜딩으로만 전환된다(이 대화상자
+                                안의 두 번째 보기). 링크라는 사실은 **밑줄·색·아이콘 세 겹**(색 단독 금지). 표시 = 가짜 주소.
+                                스크린리더 이름 = 보이는 글과 같게 "링크: {가짜 주소}"(A3 — WCAG 2.5.3).
+                                §51.6 R10/G317 — kind가 아니라 필드 존재로 판정한다. */}
+                            {sms.linkDisplayText && (
+                              <button
+                                type="button"
+                                ref={(node) => {
+                                  // 랜딩에서 돌아올 때 포커스를 되돌릴 자리(reviewer Major).
+                                  if (node) linkButtonRefs.current.set(sms.smsId, node);
+                                  else linkButtonRefs.current.delete(sms.smsId);
+                                }}
+                                onClick={() => openLanding(sms)}
+                                aria-label={`링크: ${linkText}`}
+                                className="flex min-h-[48px] items-center gap-1.5 text-left text-[17px] underline underline-offset-[3px] [overflow-wrap:anywhere]"
+                                style={{ color: thread.link }}
+                              >
+                                <PhoneIcon name="link" size={16} className="shrink-0" />
+                                {linkText}
+                              </button>
+                            )}
+                          </div>
+                          {thread.timeStyle === "beside" && clock !== null && (
+                            <span className="shrink-0 pb-0.5 text-[11px]" style={{ color: thread.time }}>
+                              {clock}
+                            </span>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            {/* ④ 하단 복귀 바(P-27 (3) 큰 복귀 버튼 유지 · UX-027 v1.33 (5)) — 실제 앱의 입력창 자리에 "통화로 돌아가기".
+                ⛔ 입력창 모양을 흉내 내지 않는다(placeholder·전송 화살표·＋·카메라 0 — AC-060 · G80). 안내 줄도 0. */}
+            <div
+              className="shrink-0 pb-[env(safe-area-inset-bottom)]"
+              style={{ backgroundColor: CALL_BAR_TOKENS.bg }}
+            >
+              <button
+                type="button"
+                onClick={requestClose}
+                className="flex h-[52px] w-full items-center justify-center gap-2 text-base font-bold"
+                style={{ color: CALL_BAR_TOKENS.text }}
+              >
+                <PhoneIcon name="accept-call" size={20} />
+                통화로 돌아가기
+              </button>
+            </div>
           </div>
+
+          {/* ── 보기 2: 랜딩(UX-023 재사용 — 그리는 곳은 여전히 MessengerFakeLanding 한 파일). 문자함과 **같은 대화상자
+              안**이라 포커스 트랩 하나가 두 보기를 덮고 "훈련 종료"는 랜딩 브라우저 바에서도 도달 가능하다(AC-006).
+              T104(§19.4 #6) — `landingId`·`landingKind`를 함께 넘겨 상황에 맞는 화면이 뜨게 한다.
+              ⛔ 이 파일은 콘텐츠를 하나도 갖지 않는다. */}
+          {landing && (
+            <div
+              ref={landingViewRef}
+              hidden={view !== "landing"}
+              className={view === "landing" ? "flex min-h-0 flex-1 flex-col" : "hidden"}
+            >
+              <MessengerFakeLanding
+                key={landing.smsId}
+                entrySurface="in-call-sms"
+                skin={skin}
+                title={landing.displayText}
+                landingId={landing.landingId}
+                landingKind={landing.landingKind}
+                onHide={() => setView("thread")}
+                onClose={closeLanding}
+                onEndTraining={onEndTraining}
+                // T123/AC-080 — 제출 **사실 하나**를 페이지로 중계한다. 인자는 이 문자의 id뿐이고
+                // 참가자 입력값은 콜백 자체가 무인자라 여기까지 오지 않는다(G138).
+                onCredentialSubmit={() => onLandingSubmitted(landing.smsId)}
+              />
+            </div>
+          )}
         </div>
       </div>
-
-      {/* UX-023 재사용(무개정) — 닫으면 이 문자 오버레이로 복귀하고, 거기서 다시 통화로 돌아간다.
-          "훈련 종료"는 가짜 랜딩 안에서도 그대로 도달 가능하다(AC-006).
-          T104(§19.4 #6) — `landingId`·`landingKind`를 함께 넘겨 **상황에 맞는 화면**이 뜨게 한다.
-          ⛔ 이 파일은 콘텐츠를 하나도 갖지 않는다(그리는 곳은 여전히 MessengerFakeLanding 한 파일). */}
-      {fakeLanding && (
-        <MessengerFakeLanding
-          title={fakeLanding.displayText}
-          landingId={fakeLanding.landingId}
-          landingKind={fakeLanding.landingKind}
-          onClose={() => setFakeLanding(null)}
-          onEndTraining={onEndTraining}
-          // T123/AC-080 — 제출 **사실 하나**를 페이지로 중계한다. 인자는 이 문자의 id뿐이고
-          // 참가자 입력값은 콜백 자체가 무인자라 여기까지 오지 않는다(G138).
-          onCredentialSubmit={() => onLandingSubmitted(fakeLanding.smsId)}
-        />
-      )}
     </>
   );
 }

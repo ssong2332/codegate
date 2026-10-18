@@ -38,7 +38,7 @@ export const GEMINI_API_KEY2 = defineSecret("GEMINI_API_KEY2");
 export const GEMINI_KEY_SECRETS = [GEMINI_API_KEY, GEMINI_API_KEY2] as const;
 
 /**
- * Groq API 키(2026-10-18, Architecture.md §74) — 텍스트 대사 생성의 **3차 예비** 공급자 전용.
+ * Groq API 키(2026-10-18, Architecture.md §75) — 텍스트 대사 생성의 **3차 예비** 공급자 전용.
  * 키는 **하나만** 쓴다 — Groq 한도는 조직 단위라 키를 늘려도 한도가 늘지 않는다(⛔ 순환 구조 금지).
  * 값이 없으면(미설정·`YOUR_` placeholder) 3차 단계만 조용히 꺼지고 로그 1줄이 남는다(llm/index.ts).
  *

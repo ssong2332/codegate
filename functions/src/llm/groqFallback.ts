@@ -1,4 +1,4 @@
-// Groq 3차 예비 단계 (2026-10-18, Architecture.md §74.3 판정표가 정본).
+// Groq 3차 예비 단계 (2026-10-18, Architecture.md §75.3 판정표가 정본).
 //
 // 순서: 1차 gemini-3.1-flash-lite → 2차 gemini-3.5-flash-lite(#296, 503일 때만) → **3차 Groq**.
 // 1·2차(기존 Gemini 체인)는 그대로 두고 이 파일의 두 데코레이터로 바깥을 감싼다(llm/index.ts).

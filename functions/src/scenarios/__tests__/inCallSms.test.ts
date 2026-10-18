@@ -31,7 +31,8 @@ test("[AC-060] 카탈로그 어디에도 실 URL(스킴/도메인) 필드·문�
   for (const item of allItems) {
     // 타입에 url 필드가 없다는 것(컴파일 타임)에 더해, 본문·표시 텍스트에 실제로 눌러 이동할 수
     // 있는 주소 형태가 섞여 들어오는 것도 막는다.
-    const surfaces = [item.body, item.linkDisplayText ?? "", item.senderLabel];
+    // T190-2(§74.9) — 가짜 주소(`.invalid` 호스트 + 경로)도 같은 두 검사를 탄다(`.invalid`는 아래 TLD 목록 밖이다).
+    const surfaces = [item.body, item.linkDisplayText ?? "", item.linkAddress ?? "", item.senderLabel];
     for (const text of surfaces) {
       assert.ok(
         !/https?:\/\//i.test(text),
@@ -82,17 +83,25 @@ test("[AC-060] kind별 필수 필드 계약 — link는 표시텍스트+가짜�
 // §51.6 R11/G111 — 링크 부착(linkDisplayText+fakeLandingId)은 항상 짝으로 존재하거나 함께
 // 부재한다. 한쪽만 있는 상태를 타입으로는 표현할 수 있지만 이 게이트가 금지한다
 // (docs/Architecture.md §27.1 (2)).
-test("[G111] linkDisplayText·fakeLandingId는 항상 짝으로 존재하거나 함께 부재한다", () => {
-  for (const item of allItems) {
-    const hasLink = item.linkDisplayText !== undefined;
-    const hasLanding = item.fakeLandingId !== undefined;
-    assert.equal(
-      hasLink,
-      hasLanding,
-      `${item.smsId}: linkDisplayText·fakeLandingId 중 한쪽만 있으면 안 된다 — ` +
-        "칩은 떴는데 열 랜딩이 없거나, 랜딩은 있는데 칩이 안 뜨는 상태가 생긴다(R11).",
-    );
+// ⭐ T190-2(docs/Architecture.md §74.9 · §74.13 G111 행) — 짝을 **3자 쌍**으로 넓혔다: `linkAddress`(가짜 주소)도
+// 링크 부착과 함께만 존재/부재한다. 판정은 아래 함수 하나이고 본 단언·역검증이 같이 쓴다.
+type LinkTriple = { smsId: string; linkDisplayText?: string; fakeLandingId?: string; linkAddress?: string };
+function linkTripleViolations(items: readonly LinkTriple[]): string[] {
+  const out: string[] = [];
+  for (const item of items) {
+    const present = [item.linkDisplayText, item.fakeLandingId, item.linkAddress].map((v) => v !== undefined);
+    if (present.some((p) => p !== present[0])) {
+      out.push(
+        `${item.smsId}: linkDisplayText·fakeLandingId·linkAddress 중 일부만 있다(${present.join("/")}) — ` +
+          "칩은 떴는데 열 랜딩이 없거나, 주소 없는 링크 줄이 생긴다(R11 · §74.9).",
+      );
+    }
   }
+  return out;
+}
+
+test("[G111] linkDisplayText·fakeLandingId·linkAddress는 항상 3자 쌍으로 존재하거나 함께 부재한다", () => {
+  assert.deepEqual(linkTripleViolations(allItems), []);
   // 역검증 — 카탈로그에 짝이 하나도 없으면 위 대칭 단언은 전부 자명하게 통과해 죽은 게이트가
   // 된다. account형이 링크를 병기하는 실제 항목이 최소 1건 있어야 이 게이트가 일하고 있다는
   // 증거가 된다(§27.7 커밋 ① 역검증 관례).
@@ -103,6 +112,16 @@ test("[G111] linkDisplayText·fakeLandingId는 항상 짝으로 존재하거나 
     pairedAccounts.length > 0,
     "account형 + 링크 병기 항목이 0건이면 이 게이트가 검증할 대상을 잃는다",
   );
+});
+
+test("[G111 역검증 — T190-2] linkAddress만 빠진 사본 · linkAddress만 남은 사본은 각각 실패한다", () => {
+  const linked = allItems.find((item) => item.linkAddress !== undefined);
+  assert.ok(linked, "linkAddress를 가진 항목이 있어야 역검증이 성립한다");
+  const withoutAddress = { ...linked!, linkAddress: undefined };
+  const onlyAddress = { smsId: "fixture-only-address", linkAddress: "fixture-desk.invalid/a/Bc" };
+  assert.equal(linkTripleViolations([withoutAddress]).length, 1);
+  assert.equal(linkTripleViolations([onlyAddress]).length, 1);
+  assert.equal(linkTripleViolations([linked!]).length, 0);
 });
 
 test("[AC-061] 인증번호형 문자는 본문에 '타인에게 알려주지 마세요'류 경고를 그대로 재현한다", () => {
@@ -206,6 +225,9 @@ test("buildInCallSmsDoc은 announceInstruction(모델용 지시)을 문서에 �
     else assert.equal(doc.linkDisplayText, undefined);
     if (item.fakeLandingId) assert.equal(doc.fakeLandingId, item.fakeLandingId);
     else assert.equal(doc.fakeLandingId, undefined);
+    // T190-2(§74.9 · §74.13 buildDoc 행) — 가짜 주소도 그대로 복사한다(부재면 키를 만들지 않는다).
+    if (item.linkAddress) assert.equal(doc.linkAddress, item.linkAddress);
+    else assert.equal("linkAddress" in doc, false);
   }
 });
 

@@ -132,7 +132,7 @@ export class GeminiLlmClient implements LlmClient {
   ) {}
 
   async complete(input: LlmCompletionInput): Promise<LlmCompletionResult> {
-    // 단계 시간 상한(§74)이 이미 끊은 신호면 새 요청을 시작하지 않는다 — SDK는 abort를 이벤트로만 연결해
+    // 단계 시간 상한(§75)이 이미 끊은 신호면 새 요청을 시작하지 않는다 — SDK는 abort를 이벤트로만 연결해
     // 이미 취소된 신호로는 요청을 멈추지 못한다(리뷰 m1). 신호가 없으면 기존과 같다.
     if (input.signal?.aborted) throw new Error("Gemini 요청이 시작 전에 취소됐습니다(단계 시간 상한).");
     const client = new GoogleGenAI({ apiKey: this.apiKey });
@@ -148,7 +148,7 @@ export class GeminiLlmClient implements LlmClient {
     const stream = await client.models.generateContentStream({
       model: this.model,
       contents,
-      // 단계 시간 상한(Groq 3차 예비, §74)이 이 호출을 버릴 때 요청도 취소한다 — 신호가 없으면 기존과 같다.
+      // 단계 시간 상한(Groq 3차 예비, §75)이 이 호출을 버릴 때 요청도 취소한다 — 신호가 없으면 기존과 같다.
       config: { systemInstruction: input.systemPrompt, ...(input.signal ? { abortSignal: input.signal } : {}) },
     });
     let ttfbMs: number | undefined;

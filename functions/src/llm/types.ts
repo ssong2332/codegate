@@ -26,7 +26,7 @@ export type LlmCompletionInput = {
    */
   mockTacticHints?: string[];
   /**
-   * 단계 시간 상한용 취소 신호(선택, 2026-10-18 Groq 3차 예비 — Architecture.md §74).
+   * 단계 시간 상한용 취소 신호(선택, 2026-10-18 Groq 3차 예비 — Architecture.md §75).
    * 주어지면 실 클라이언트는 진행 중 요청을 취소한다(Gemini SDK `abortSignal`, Groq `fetch`).
    * 없으면 지금까지와 완전히 같다. Mock은 무시한다.
    */
@@ -38,7 +38,7 @@ export type LlmCompletionResult = {
   /** true = Mock 구현체 산출물(T7). 실 Claude/Gemini 응답이면 반드시 false(PRD Risks 식별 표식). */
   isMock: boolean;
   /**
-   * 어느 단계 공급자가 응답했는가(관측 전용, 2026-10-18 · §74) — sendMessage 로그에 싣는다.
+   * 어느 단계 공급자가 응답했는가(관측 전용, 2026-10-18 · §75) — sendMessage 로그에 싣는다.
    * 팩토리(llm/index.ts)가 붙인다. Firestore·클라이언트 응답에는 싣지 않는다.
    */
   servedBy?: LlmServedBy;

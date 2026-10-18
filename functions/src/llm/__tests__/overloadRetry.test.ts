@@ -319,7 +319,7 @@ test("⑨ providerName을 그대로 위임한다(G176) — withTimeout으로 감
 // 단위 테스트에서는 defineSecret이 바인딩되지 않아 키가 0개라 실 Gemini 분기를 동적으로 못 탄다
 // ⇒ 소스 스캔으로 배선을 못박고, 오염본으로 스캔이 실제로 가르는지 역검증한다.
 // 형태: `primary = keys.length > 0 ? withOverloadRetry(tagServedBy(createRotatingGeminiClient(keys), "gemini-primary"), {…budgetMs: geminiBudgetMs…}) : new MockLlmClient();`
-//       (2026-10-18 §74 — Groq 3차 예비로 예산이 `geminiBudgetMs = groqKey ? timeoutMs - GROQ_RESERVE_MS : timeoutMs`가 됐다)
+//       (2026-10-18 §75 — Groq 3차 예비로 예산이 `geminiBudgetMs = groqKey ? timeoutMs - GROQ_RESERVE_MS : timeoutMs`가 됐다)
 //       `return withTimeout(client, timeoutMs);` — withTimeout이 가장 바깥(firstTurnTimeout.test.ts의 기존 단언과 공존).
 const INDEX_SRC = path.resolve(__dirname, "../../../src/llm/index.ts");
 
@@ -349,7 +349,7 @@ function wiringViolations(body: string): string[] {
     if (!/delaysMs: LLM_OVERLOAD_RETRY_DELAYS_MS\b/.test(opts)) violations.push("delaysMs가 LLM_OVERLOAD_RETRY_DELAYS_MS여야 한다");
     if (!/minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS\b/.test(opts)) violations.push("minAttemptMs가 LLM_OVERLOAD_MIN_ATTEMPT_MS여야 한다");
   }
-  // 2026-10-18 Groq 3차 예비(Architecture.md §74) — Gemini 체인 예산은 인자 timeoutMs에서 파생한다(Groq 없으면 timeoutMs 그대로).
+  // 2026-10-18 Groq 3차 예비(Architecture.md §75) — Gemini 체인 예산은 인자 timeoutMs에서 파생한다(Groq 없으면 timeoutMs 그대로).
   if (!/const geminiBudgetMs = groqKey \? timeoutMs - GROQ_RESERVE_MS : timeoutMs;/.test(code)) violations.push("geminiBudgetMs가 timeoutMs에서 파생돼야 한다(상수화 금지)");
   if (!/return withTimeout\(client, timeoutMs\);/.test(code)) violations.push("withTimeout(client, timeoutMs)가 가장 바깥이어야 한다");
   if ((code.match(/withTimeout\(/g) ?? []).length !== 1) violations.push("withTimeout은 정확히 1번(가장 바깥)만 감싸야 한다");

@@ -16,7 +16,7 @@ import { parseTsx } from "../sourcescan/scanSource.ts";
 
 // ── 정본 낱말·부정 패턴 — functions 쪽 단일 정본을 **소스 파싱**으로 읽는다(사본 0 · 드리프트 0) ──
 const CANONICAL_PATH = "functions/src/scenarios/__tests__/sessionMarkerWords.ts";
-const canonicalSource = readFileSync(CANONICAL_PATH, "utf8");
+const canonicalSource = readFileSync(CANONICAL_PATH, "utf8").replace(/\r\n/g, "\n");
 
 function canonicalBlock(constName: string): string {
   const start = canonicalSource.indexOf(`export const ${constName}`);
@@ -48,19 +48,22 @@ type SurfaceRole = "in-session" | "mixed" | "pre-session" | "post-session" | "re
 const SESSION_SURFACE_REGISTRY: Record<string, SurfaceRole> = {
   "src/components/AgeGate.tsx": "not-in-session", // 온보딩 연령 확인 — 세션 전 화면 부품
   "src/components/AuthInvalidationBanner.tsx": "in-session", // 세션 중에도 뜰 수 있는 인증 무효 안내(T128)
+  "src/components/CallStartNotice.tsx": "pre-session", // T190-8b UX-014 pre-call-notice(벨 직전 고지 — AC-091)
+  "src/components/DeviceSkinPicker.tsx": "pre-session", // T190-6 세션 전 화면 모양 줄(start-notice 안 — AC-092 (d))
   "src/components/CallWaveform.tsx": "in-session", // 통화 중 파형
   "src/components/DrilldownOptionCard.tsx": "not-in-session", // 시나리오 드릴다운 카드(세션 전)
   "src/components/EndTrainingButton.tsx": "in-session", // 상시 종료(AC-006) — 세션 중 유일한 상시 요소
   "src/components/InCallSmsOverlay.tsx": "in-session", // UX-027 통화 중 문자함
   "src/components/MessengerFakeLanding.tsx": "in-session", // UX-023 가짜 랜딩
   "src/components/MessengerStartNotice.tsx": "pre-session", // UX-022 start-notice(T187)
+  "src/components/PhoneIcon.tsx": "in-session", // T190-1 기기 재현 단색 아이콘(통화 셸 그리드 · 텍스트 노드 0)
   "src/components/SpoofImage.tsx": "not-in-session", // 렌더 사용처 0(M-12)
   "src/components/SyntheticLabel.tsx": "not-in-session", // 세션 중 사용처 0 — SpoofImage만 쓴다(M-12)
   "src/components/VerifyCallOverlay.tsx": "in-session", // UX-031 전환 시트
   "src/app/session/chat/page.tsx": "redirect", // return null 리다이렉트
   "src/app/session/end/page.tsx": "post-session", // UX-007 종료 고지
   "src/app/session/messenger/page.tsx": "mixed", // start-notice(세션 전) + chat(세션 중)
-  "src/app/session/play/page.tsx": "mixed", // incoming(세션 전) + 통화(세션 중)
+  "src/app/session/play/page.tsx": "mixed", // pre-call-notice(세션 전 — CallStartNotice) + 통화(세션 중)
 };
 
 function discoveredSurfaces(): string[] {
@@ -82,7 +85,29 @@ function registryMismatch(registry: Record<string, SurfaceRole>): { missing: str
 
 test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/session/*/page.tsx (등록 없이 우회 불가)", () => {
   assert.deepEqual(registryMismatch(SESSION_SURFACE_REGISTRY), { missing: [], stale: [] });
-  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 15);
+  // T190-1(docs/Architecture.md §74.22 (4) #21 단계별 누적) — 15 → 16(+PhoneIcon) → T190-6 17(+DeviceSkinPicker) →
+  // T190-8b 18(+CallStartNotice).
+  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 18);
+});
+
+// ── G451 — 등록부 2벌(G436 · T86)이 최상위 `src/components/*.tsx`만 훑으므로, 하위 디렉터리에 컴포넌트를 두면
+// **등록 없이 빠진다**(docs/Architecture.md §74.0 #6 · §74.14 G451). `ui/`만 허용한다.
+function nestedComponentViolations(paths: readonly string[]): string[] {
+  return paths
+    .map((p) => p.split("\\").join("/"))
+    .filter((p) => /^src\/components\/[^/]+\/.+\.tsx$/.test(p))
+    .filter((p) => !p.startsWith("src/components/ui/"));
+}
+
+test("[T190/G451] src/components 하위 디렉터리의 .tsx는 ui/ 안에만 있다(등록부 우회 금지)", () => {
+  const found = globSync("src/components/**/*.tsx");
+  assert.ok(found.length >= 15, `컴포넌트 탐색이 죽었다(${found.length}개)`);
+  assert.deepEqual(nestedComponentViolations(found), []);
+});
+
+test("[T190/G451 역검증] 가상 경로 src/components/phone/X.tsx를 넣은 목록은 실패한다", () => {
+  const found = globSync("src/components/**/*.tsx");
+  assert.deepEqual(nestedComponentViolations([...found, "src/components/phone/X.tsx"]), ["src/components/phone/X.tsx"]);
 });
 
 test("[T187/G436 역검증] 등록부에서 1개를 뺀 사본은 불일치로 걸린다", () => {
@@ -108,7 +133,7 @@ function scopeFiles(registry = SESSION_SURFACE_REGISTRY): string[] {
   ];
 }
 
-const read = (file: string) => readFileSync(file, "utf8");
+const read = (file: string) => readFileSync(file, "utf8").replace(/\r\n/g, "\n");
 
 // ── 판정 함수(본 게이트·역검증·G442가 **같은 함수**를 쓴다) ───────────────────────────────
 /** G437 — 렌더 가능 텍스트 조각의 낱말 + 표식 컴포넌트 import. */
@@ -173,7 +198,7 @@ function allInSessionViolations(file: string, code: string): string[] {
 // ── G437 · G439 · G440 본 게이트 ───────────────────────────────────────────────────────────
 test("[T187/G437] 세션 중 파일·문면 모듈의 렌더 가능 텍스트에 표식 낱말 0 · 표식 컴포넌트 import 0", () => {
   const files = scopeFiles();
-  assert.equal(files.length, 12, "범위 = in-session 6 + mixed 2 + 문면 모듈 4");
+  assert.equal(files.length, 13, "범위 = in-session 7(T190-1 +PhoneIcon) + mixed 2 + 문면 모듈 4");
   assert.deepEqual(files.flatMap((f) => markerViolations(f, read(f))), []);
 });
 
@@ -241,46 +266,81 @@ function findAll(root: ts.Node, pred: (n: ts.Node) => boolean): ts.Node[] {
   return out;
 }
 
-/** play — `{PREROLL_NOTICE}` JSX 식 정확히 1회 · 가장 가까운 `&&` 조상의 좌변 = `phase === "incoming"`. */
+/**
+ * ⭐ T190-8b(docs/Architecture.md §74.22 (1) ⓓ · G438 재지정 ④) — 대상 파일이 play에서 **세션 전 컴포넌트**
+ * `CallStartNotice.tsx`로 옮겨 갔다. `{PREROLL_NOTICE}` JSX 식 정확히 1회 · **조건 없음**(그 화면 전체가 세션 전이다).
+ * 옛 판정("play의 `phase === \"incoming\"` 아래 1회")은 벨 화면 프리롤을 허용 목록에 올리는 것이라 폐기했다(D-102 · AC-091 (c)).
+ */
 function prerollUsageViolations(code: string): string[] {
-  const sf = sourceFileOf("play.tsx", code);
+  const sf = sourceFileOf("CallStartNotice.tsx", code);
   const uses = findAll(
     sf,
     (n) => ts.isJsxExpression(n) && !!n.expression && ts.isIdentifier(n.expression) && n.expression.text === "PREROLL_NOTICE",
   );
   if (uses.length !== 1) return [`{PREROLL_NOTICE} JSX 식이 ${uses.length}회다(정확히 1회여야 한다)`];
   let node: ts.Node | undefined = uses[0].parent;
-  while (node && !(ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)) {
+  while (node && !ts.isReturnStatement(node)) {
+    if (
+      ts.isConditionalExpression(node) ||
+      (ts.isBinaryExpression(node) &&
+        (node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+          node.operatorToken.kind === ts.SyntaxKind.BarBarToken))
+    ) {
+      return [`PREROLL_NOTICE가 조건(${node.getText(sf).slice(0, 40)}) 아래에 있다 — 세션 전 화면에서는 조건 없이 그린다`];
+    }
     node = node.parent;
   }
-  if (!node) return ["PREROLL_NOTICE가 && 조건 아래에 있지 않다"];
-  const left = (node as ts.BinaryExpression).left.getText(sf).replace(/\s+/g, " ");
-  return left === 'phase === "incoming"' ? [] : [`PREROLL_NOTICE 조건이 ${left}다(phase === "incoming"이어야 한다)`];
+  return node ? [] : ["PREROLL_NOTICE가 return 안에 있지 않다"];
+}
+
+/**
+ * 세션 전 컴포넌트 사용처 판정(본 게이트·역검증 공용) — 정확히 1회 · 조상 = `if (조건)` 블록의 return · 그 if가
+ * 컴포넌트의 **마지막 return보다 앞**. messenger(`MessengerStartNotice` · `startNotice === "show"`)와
+ * play(`CallStartNotice` · `phase === "pre-call-notice"` — T190-8b ⓓ ①)가 **같은 함수**를 쓴다.
+ */
+function noticeElementViolations(
+  code: string,
+  file: string,
+  tag: string,
+  expectedCondition: string,
+  componentName: string,
+): string[] {
+  const sf = sourceFileOf(file, code);
+  const out: string[] = [];
+  const elements = findAll(
+    sf,
+    (n) => (ts.isJsxSelfClosingElement(n) || ts.isJsxOpeningElement(n)) && n.tagName.getText(sf) === tag,
+  );
+  if (elements.length !== 1) return [`<${tag} 가 ${elements.length}회다(정확히 1회여야 한다)`];
+  let node: ts.Node | undefined = elements[0].parent;
+  while (node && !ts.isReturnStatement(node)) node = node.parent;
+  const ifStatement = node?.parent && ts.isBlock(node.parent) ? node.parent.parent : undefined;
+  if (!ifStatement || !ts.isIfStatement(ifStatement)) return [`<${tag} 가 if 블록의 return 안에 있지 않다`];
+  const condition = ifStatement.expression.getText(sf).replace(/\s+/g, " ");
+  if (condition !== expectedCondition) out.push(`${tag} 조건이 ${condition}다`);
+  const component = findAll(sf, (n) => ts.isFunctionDeclaration(n) && n.name?.text === componentName)[0] as
+    | ts.FunctionDeclaration
+    | undefined;
+  const lastReturn = component?.body?.statements.filter(ts.isReturnStatement).at(-1);
+  if (!lastReturn) out.push("컴포넌트 마지막 return을 찾지 못했다");
+  else if (ifStatement.getStart(sf) >= lastReturn.getStart(sf)) out.push(`${tag} if가 마지막 return보다 뒤에 있다`);
+  return out;
 }
 
 /** messenger — `<MessengerStartNotice` 정확히 1회 · 조상 = `if (startNotice === "show")`의 return · 그 if가 마지막 return보다 앞. */
 function startNoticeUsageViolations(code: string): string[] {
-  const sf = sourceFileOf("messenger.tsx", code);
-  const out: string[] = [];
-  const elements = findAll(
-    sf,
-    (n) =>
-      (ts.isJsxSelfClosingElement(n) || ts.isJsxOpeningElement(n)) && n.tagName.getText(sf) === "MessengerStartNotice",
-  );
-  if (elements.length !== 1) return [`<MessengerStartNotice 가 ${elements.length}회다(정확히 1회여야 한다)`];
-  let node: ts.Node | undefined = elements[0].parent;
-  while (node && !ts.isReturnStatement(node)) node = node.parent;
-  const ifStatement = node?.parent && ts.isBlock(node.parent) ? node.parent.parent : undefined;
-  if (!ifStatement || !ts.isIfStatement(ifStatement)) return ["<MessengerStartNotice 가 if 블록의 return 안에 있지 않다"];
-  const condition = ifStatement.expression.getText(sf).replace(/\s+/g, " ");
-  if (condition !== 'startNotice === "show"') out.push(`시작 고지 조건이 ${condition}다`);
-  const component = findAll(
-    sf,
-    (n) => ts.isFunctionDeclaration(n) && n.name?.text === "MessengerSessionPage",
-  )[0] as ts.FunctionDeclaration | undefined;
-  const lastReturn = component?.body?.statements.filter(ts.isReturnStatement).at(-1);
-  if (!lastReturn) out.push("컴포넌트 마지막 return을 찾지 못했다");
-  else if (ifStatement.getStart(sf) >= lastReturn.getStart(sf)) out.push("시작 고지 if가 채팅 return보다 뒤에 있다");
+  return noticeElementViolations(code, "messenger.tsx", "MessengerStartNotice", 'startNotice === "show"', "MessengerSessionPage");
+}
+
+/** play — `<CallStartNotice` 정확히 1회 · 조상 = `if (phase === "pre-call-notice")`의 return · 그 if가 마지막 return보다 앞(ⓓ ①). */
+function callStartNoticeUsageViolations(code: string): string[] {
+  return noticeElementViolations(code, "play.tsx", "CallStartNotice", 'phase === "pre-call-notice"', "SessionCallPage");
+}
+
+/** play — 세션 전 문면 모듈 import 0 · 식별자 `PREROLL_NOTICE` 0(ⓓ ②). ⇒ 벨 화면(경로 ①③·에스컬레이션 무관) 프리롤 0. */
+function playPrerollViolations(code: string): string[] {
+  const out = boundaryImportViolations("play", code, /preSessionCopy|postSessionCopy/);
+  if (identifiersOf("play.tsx", code).has("PREROLL_NOTICE")) out.push("play에 식별자 PREROLL_NOTICE가 있다");
   return out;
 }
 
@@ -291,35 +351,62 @@ function boundaryImportViolations(file: string, code: string, banned: RegExp): s
     .map((spec) => `${file}:${spec.line} import ${spec.text}`);
 }
 
-test("[T187/G438] 세션 전 문면은 지정 사용처에서만 — play `phase === \"incoming\"` · messenger `if (startNotice === \"show\")` return", () => {
-  assert.deepEqual(prerollUsageViolations(read("src/app/session/play/page.tsx")), []);
+test("[T187/G438 → T190-8b 재지정 ⓓ] 세션 전 문면은 지정 사용처에서만 — CallStartNotice(조건 없음) · play `if (phase === \"pre-call-notice\")` return · messenger `if (startNotice === \"show\")` return", () => {
+  const play = read("src/app/session/play/page.tsx");
+  // ③④ 세션 전 컴포넌트가 고지 ①을 정확히 1회 · 조건 없이 그린다.
+  assert.deepEqual(prerollUsageViolations(read("src/components/CallStartNotice.tsx")), []);
+  // ① play는 그 컴포넌트를 벨 직전 고지 early return 하나에서만 쓴다.
+  assert.deepEqual(callStartNoticeUsageViolations(play), []);
+  // ② play는 세션 전 문면 모듈을 import하지 않고 PREROLL_NOTICE 식별자가 0이다(⇒ 벨 화면 프리롤 0).
+  assert.deepEqual(playPrerollViolations(play), []);
   const messenger = read("src/app/session/messenger/page.tsx");
   assert.deepEqual(startNoticeUsageViolations(messenger), []);
   assert.deepEqual(boundaryImportViolations("messenger", messenger, /preSessionCopy|postSessionCopy/), []);
-  assert.deepEqual(
-    boundaryImportViolations("play", read("src/app/session/play/page.tsx"), /postSessionCopy/),
-    [],
-  );
   const inSession = Object.entries(SESSION_SURFACE_REGISTRY)
     .filter(([, role]) => role === "in-session")
     .flatMap(([file]) => boundaryImportViolations(file, read(file), /preSessionCopy|postSessionCopy/));
   assert.deepEqual(inSession, [], "세션 중 파일이 세션 경계 문면을 import한다");
 });
 
-test("[T187/G438 역검증] 조건을 `phase !== \"ended\"`로 바꾼 사본 · 채팅 return 안에 시작 고지를 넣은 사본은 실패한다", () => {
+test("[T190-8b/G438 역검증 — AC-091 (f)ⓐⓒ] play에 `<p>{PREROLL_NOTICE}</p>` 사본 · 마지막 return 안 CallStartNotice 사본 · 채팅 return 안 시작 고지 사본은 각각 실패한다", (t) => {
+  // ⚠️ 옛 앵커('{phase === "incoming" && (')는 사라졌다 — 남기면 notEqual이 "오염 지점을 찾지 못했다"로 실패한다(§74.22 (1)).
   const play = read("src/app/session/play/page.tsx");
-  const playPoisoned = play.replace('{phase === "incoming" && (', '{phase !== "ended" && (');
-  assert.notEqual(playPoisoned, play, "오염 지점을 찾지 못했다");
-  assert.ok(prerollUsageViolations(playPoisoned).length >= 1);
+  const ringAnchor = "{/* ⛔ T190-8b(D-102 · AC-091 (c) · G438 재지정)";
+  assert.ok(play.includes(ringAnchor), "오염 지점(벨 화면 프리롤 자리)을 찾지 못했다");
+  const prerollOnRing = play.replace(ringAnchor, "<p>{PREROLL_NOTICE}</p>\n        " + ringAnchor);
+  const a = playPrerollViolations(prerollOnRing);
+
+  const lastAnchor = '<PhoneIcon name="end-call" size={32} />\n            </button>\n            <span className="text-sm"';
+  assert.ok(play.includes(lastAnchor), "오염 지점(마지막 return의 종료 버튼)을 찾지 못했다");
+  const noticeInShell = play.replace(
+    lastAnchor,
+    '<PhoneIcon name="end-call" size={32} />\n            </button>\n            <CallStartNotice onConfirm={handleConfirmPreCallNotice} onEndTraining={() => void handleEndTraining()} skinPicker={{ value: deviceSkin.skin, source: deviceSkin.source, onChange: handleChooseCallSkin }} />\n            <span className="text-sm"',
+  );
+  const b = callStartNoticeUsageViolations(noticeInShell);
 
   const messenger = read("src/app/session/messenger/page.tsx");
   const anchor = messenger.lastIndexOf("<EndTrainingButton onClick={handleEndTraining} />");
   assert.ok(anchor > 0);
   const messengerPoisoned =
     messenger.slice(0, anchor) +
-    "<MessengerStartNotice surface={surface} onConfirm={handleConfirmStartNotice} onEndTraining={handleEndTraining} />" +
+    "<MessengerStartNotice surface={surface} includesCall={false} onConfirm={handleConfirmStartNotice} onEndTraining={handleEndTraining} />" +
     messenger.slice(anchor);
-  assert.ok(startNoticeUsageViolations(messengerPoisoned).length >= 1);
+  const c = startNoticeUsageViolations(messengerPoisoned);
+  t.diagnostic(`[G438 ⓓ] 정상 0 / 벨 화면 프리롤 사본 ${JSON.stringify(a)} / 통화 셸 안 고지 사본 ${JSON.stringify(b)} / 채팅 안 시작 고지 ${c.length}건`);
+  assert.ok(a.includes("play에 식별자 PREROLL_NOTICE가 있다"));
+  assert.ok(b.some((v) => v.includes("CallStartNotice 가 2회")));
+  assert.ok(c.length >= 1);
+  // CallStartNotice 안에서 고지 ①을 조건 아래로 넣은 사본도 실패한다(④).
+  const notice = read("src/components/CallStartNotice.tsx");
+  const conditional = notice.replace("<p className=\"text-[17px] leading-[1.7] text-[#6B655C]\">{PREROLL_NOTICE}</p>", "{false && <p>{PREROLL_NOTICE}</p>}");
+  assert.notEqual(conditional, notice, "오염 지점(CallStartNotice 고지 ①)을 찾지 못했다");
+  assert.equal(prerollUsageViolations(conditional).length, 1);
+});
+
+// G449 — CallStartNotice 상단 바도 "훈련 종료"가 오른쪽 끝(MessengerStartNotice와 같은 형태 — §74.22 (1) 등록부 줄).
+test("[T190-8b/G449] CallStartNotice 상단 바 justify-end", () => {
+  const [c] = endButtonContainers("src/components/CallStartNotice.tsx", read("src/components/CallStartNotice.tsx"));
+  assert.ok(c && /\bjustify-end\b/.test(c.className), "CallStartNotice 상단 바가 justify-end가 아니다");
 });
 
 // ── G441 — 스크린리더 이름(기능 설명 유지 · 빈 이름 0) ─────────────────────────────────────
@@ -378,7 +465,9 @@ test("[T187/G441] 스크린리더 이름 A1~A5 정본 · 종료 이름 불변 3�
 test("[T187/G441 역검증] A3를 `${x}`(기능 설명 소실)로 바꾼 사본은 실패한다", () => {
   const sources = g441Sources();
   const file = "src/components/InCallSmsOverlay.tsx";
-  const poisoned = sources[file].replace("aria-label={`링크: ${sms.linkDisplayText}`}", "aria-label={`${sms.linkDisplayText}`}");
+  // T190-5(docs/Architecture.md §74.13 G441 A3 행) — 링크 표기식이 가짜 주소(`linkText = linkAddress ?? linkDisplayText`)로
+  // 바뀌어 오염 앵커를 같은 커밋에 갱신했다(옛 앵커를 남기면 notEqual이 "오염 지점을 찾지 못했다"로 실패한다).
+  const poisoned = sources[file].replace("aria-label={`링크: ${linkText}`}", "aria-label={`${linkText}`}");
   assert.notEqual(poisoned, sources[file], "오염 지점을 찾지 못했다");
   assert.deepEqual(ariaLabelViolations({ ...sources, [file]: poisoned }), ["A3"]);
 });

@@ -33,6 +33,8 @@ const allText = allItems
   .flatMap((item) => [
     item.headline,
     item.issuerLabel,
+    // T190-2(§74.9) — 가짜 주소창 호스트도 같은 금지 패턴(URL·스토어·패키지명·실존 앱명)을 탄다.
+    item.mockHost,
     item.submitLabel,
     item.successHeadline,
     item.consentLabel,
@@ -314,6 +316,7 @@ function fixtureItem(overrides: Partial<MockScreenItem>): MockScreenItem {
     headline: "픽스처 화면",
     bodyLines: ["픽스처 안내문."],
     issuerLabel: "ⓒ 픽스처센터",
+    mockHost: "fixture-desk.invalid",
     fields: ["성함"],
     submitLabel: "확인",
     successHeadline: "입력되었습니다.",

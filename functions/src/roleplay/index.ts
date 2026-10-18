@@ -294,7 +294,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       messages: llmHistory,
       mockTacticHints: scenarioPrompt.weakenedTactics,
     });
-    // 몇 단계 공급자가 응답했는지(2026-10-18 Groq 3차 예비, Architecture.md §74.7) — 라이브 로그로
+    // 몇 단계 공급자가 응답했는지(2026-10-18 Groq 3차 예비, Architecture.md §75.7) — 라이브 로그로
     // 1차 Gemini / 2차 Gemini 대체 / 3차 Groq / Mock 강등 비율을 읽는다. 숫자·ID·단계명만(G170).
     logger.info("sendMessage LLM 응답 단계", {
       scenarioId: session.scenarioId,
