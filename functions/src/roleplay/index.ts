@@ -294,6 +294,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         scammerTurnNumber,
         outcome: otpCheck.outcome,
         reason: otpCheck.reason,
+        repeat: otpCheck.repeat === true,
       });
     }
     const promptTurnInstruction = [turnInstruction, otpCheckInstruction].filter(Boolean).join("\n") || undefined;

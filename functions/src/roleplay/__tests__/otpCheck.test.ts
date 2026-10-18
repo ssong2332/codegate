@@ -268,7 +268,7 @@ test("[OTP] sendMessage 배선 — 원문 userText를 넘기고 턴 지시와 �
   assert.match(src, /const otpInputs = otpCheckInputsFromHistory\(storedHistory\);/);
   assert.match(src, /const otpCheck = await evaluateOtpCheck\(\{\n\s*scenarioId: session\.scenarioId,\n\s*userText,/);
   assert.match(src, /const otpCheckInstruction = otpCheck\.instruction;/);
-  assert.match(src, /logger\.info\("인증번호 대조 판정", \{\n\s*sessionId,\n\s*scenarioId: session\.scenarioId,\n\s*scammerTurnNumber,\n\s*outcome: otpCheck\.outcome,\n\s*reason: otpCheck\.reason,\n\s*\}\);/);
+  assert.match(src, /logger\.info\("인증번호 대조 판정", \{\n\s*sessionId,\n\s*scenarioId: session\.scenarioId,\n\s*scammerTurnNumber,\n\s*outcome: otpCheck\.outcome,\n\s*reason: otpCheck\.reason,\n\s*repeat: otpCheck\.repeat === true,\n\s*\}\);/);
   assert.match(src, /callTransferred: verifyState\?\.placed === true,/);
   assert.match(src, /\[turnInstruction, otpCheckInstruction\]\.filter\(Boolean\)\.join\("\\n"\)/);
 });
@@ -324,6 +324,9 @@ test("[OTP] §80 리뷰 #1 — 틀린 번호 → 되묻기(대사에 '인증번�
     const inputs = otpCheckInputsFromHistory(history);
     const retry = await evaluateOtpCheck({ scenarioId: SCENARIO, userText: "654321이요", ...inputs, isDelivered: async (id) => id === OTP.smsId });
     assert.deepEqual([retry.outcome, retry.reason], ["mismatch", "compared"], reask);
+    // QA §80 — 재시도에는 "이번에도 다르다" 문면(옛 mismatch 문면은 실호출 0/4)
+    assert.equal(retry.repeat, true, reask);
+    assert.equal(retry.instruction, buildOtpCompareInstruction("mismatch", { repeat: true }), reask);
     const fixed = await evaluateOtpCheck({ scenarioId: SCENARIO, userText: "048231이요", ...inputs, isDelivered: async (id) => id === OTP.smsId });
     assert.deepEqual([fixed.outcome, fixed.reason], ["match", "compared"], reask);
   }
@@ -357,4 +360,24 @@ test("[OTP] §80 문면 — 'mismatch'는 '확인했습니다' 금지·첫 문�
   assert.match(text, /첫 문장에서 인증번호가 맞지 않는다고 말하고/);
   assert.doesNotMatch(text, /넘어가지 말/);
   for (const code of ALL_OTP_CODES) assert.ok(!text.includes(code));
+});
+
+test("[OTP] §80 재시도 문면 — '이번에도 다르다 · 새로 불렀다고 맞는 것이 아니다' · '확인 완료'까지 금지 · 번호·진행 차단 표현 없음 · 첫 시도는 기존 문면", async () => {
+  const text = buildOtpCompareInstruction("mismatch", { repeat: true });
+  assert.match(text, /이번에 다시 불러 준 번호도 문자 속 인증번호와 다르다/);
+  assert.match(text, /번호를 새로 불렀다고 해서 맞는 것이 아니다/);
+  assert.match(text, /"확인 완료"라고 말하지 마라/);
+  assert.doesNotMatch(text, /넘어가지 말/);
+  for (const code of ALL_OTP_CODES) assert.ok(!text.includes(code));
+  assert.notEqual(text, buildOtpCompareInstruction("mismatch"));
+  assert.equal(buildOtpCompareInstruction("match", { repeat: true }), buildOtpCompareInstruction("match"), "맞으면 재시도 여부와 무관");
+  // 첫 시도(직전 사기범 발화가 인증번호 요구) → repeat 아님
+  const first = await evaluateOtpCheck({
+    scenarioId: SCENARIO,
+    userText: "123456이요",
+    ...otpCheckInputsFromHistory(LIVE_HISTORY),
+    isDelivered: async (id) => id === OTP.smsId,
+  });
+  assert.equal(first.repeat, undefined);
+  assert.equal(first.instruction, buildOtpCompareInstruction("mismatch"));
 });

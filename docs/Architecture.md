@@ -18745,6 +18745,16 @@ AC-089 (b) *"사용자 완료/속아 넘어감"* 행 → 구현 뒤 = **사기�
 | **강화 문면(채택)** — "(⚠️ 서버 확인 결과 — … 다르다. 이번 답변에서 \"확인했습니다\"·\"확인됐습니다\"라고 말하지 마라. 첫 문장에서 번호가 맞지 않는다고 말하고 … 한 번만 요구한다 …)" | **3/3 되물음**("번호가 안 맞는데요. 문자를 다시 한번 정확히 확인해서 불러주십시오…") · 번호 유출 0 | **3/3 진행**("확인됐습니다…") · 번호 되읽기 0 |
 | 대안(기각) — 결과를 최신 사용자 턴 뒤에 붙임 | 3/3 되물음 | 미측정 |
 
+**재시도(QA 발견 — 한 번 되물은 뒤 참가자가 다른 틀린 번호 "654321이요"를 부름 · 서버 판정은 `mismatch/compared` · 각 4회)**
+
+| 지시 | 다시 되물음 |
+|---|---|
+| 강화 문면(첫 시도용 그대로) | **0/4** — 4/4 "확인됐습니다"·"본인 확인 완료" 후 진행(QA 4/4와 같은 결과) |
+| **재시도 문면(채택)** — "이번에 다시 불러 준 번호도 … 다르다(두 번째 이후 불일치). 번호를 새로 불렀다고 해서 맞는 것이 아니다. … \"확인 완료\"라고 말하지 마라 … 첫 문장에서 이번 번호도 맞지 않는다고" | **4/4**(실제 구현 `buildOtpCompareInstruction("mismatch", {repeat:true})`로 재측정 4/4) |
+| 재시도 문면을 사용자 턴 뒤에 붙임 | 4/4(형식 변경이라 기각) |
+
+서버는 **직전 사기범 발화가 되묻기("번호가 … 안 맞/맞지 않/일치하지 않/틀…")였는지**로 재시도를 판단한다(무상태 — `REASKED_OTP`).
+
 ⇒ 메시지 형식을 바꾸지 않는 **문면 강화**를 채택한다(사용자 턴 뒤 첨부는 효과가 같지만 데이터 구분자 밖 사용자 역할 문자열이라 ADR-0004 구조를 흐린다). ⚠️ 표본 각 3회 — "n건 중 m건"으로만 읽는다.
 
 ### 80.3 변경
@@ -18755,7 +18765,8 @@ AC-089 (b) *"사용자 완료/속아 넘어감"* 행 → 구현 뒤 = **사기�
 | 판정 사유 | `evaluateOtpCheck` → `{instruction, outcome: match/mismatch/none, reason}` — reason은 판정표의 빠진 행(`no-otp-scenario`·`no-digits`·`not-asked`·`birthdate`·`transferred`·`before-arrival`·`later-sms-arrived`·`arrived-this-turn`·`not-delivered`·`no-same-length`·`compared`). `resolveOtpCheckInstruction`은 호환 래퍼 | `functions/src/roleplay/otpCheck.ts` |
 | 재시도 턴(리뷰 #1) | 되묻기 대사에 "인증번호"가 없으면 다음 턴이 `not-asked`로 빠져 **두 번째 틀린 번호가 다시 통과**할 수 있었다 ⇒ ① "직전 사기범 발화가 인증번호를 물었다" 판정에 되묻기 표현("번호가 … 안 맞/맞지 않/일치하지 않/틀…" · "문자 … 다시 … 불러")을 더하고 ② mismatch 예시 대사를 "인증번호가 안 맞는데요, …"로 | `roleplay/otpCheck.ts` `ASKED_FOR_OTP` · `buildOtpCompareInstruction` |
 | 이력 입력 | `otpCheckInputsFromHistory(storedHistory)` — sendMessage와 회귀 테스트가 같은 함수로 `scammerTurnNumber`·`lastScammerText`를 뽑는다 | 같은 파일 · `roleplay/index.ts` |
-| 라이브 로그 | `인증번호 대조 판정` `{sessionId, scenarioId, scammerTurnNumber, outcome, reason}` — 숫자를 부른 턴만(`no-digits`·`no-otp-scenario` 제외). ⛔ 번호·대사·사용자 발화 없음(G170) | `roleplay/index.ts` |
+| 재시도 문면 | 직전 사기범 발화가 되묻기면 `buildOtpCompareInstruction("mismatch", {repeat: true})` — "이번에도 다르다" 명시 | `roleplay/otpCheck.ts` `REASKED_OTP` · `scenarios/inCallSms.ts` |
+| 라이브 로그 | `인증번호 대조 판정` `{sessionId, scenarioId, scammerTurnNumber, outcome, reason, repeat}` — 숫자를 부른 턴만(`no-digits`·`no-otp-scenario` 제외). ⛔ 번호·대사·사용자 발화 없음(G170) | `roleplay/index.ts` |
 
 ### 80.4 게이트
 
@@ -18763,7 +18774,7 @@ AC-089 (b) *"사용자 완료/속아 넘어감"* 행 → 구현 뒤 = **사기�
 |---|---|---|
 | **G517** | 라이브 재현 대화 재생 — 틀린 번호 → `mismatch/compared`, 맞는 번호 → `match/compared`, 같은 턴 도착 → `none/arrived-this-turn` | `functions/src/roleplay/__tests__/otpCheck.test.ts` §80 |
 | **G518** | 판정 사유 전수(빠진 행마다 reason) | 같은 파일 |
-| **G520** | ⭐ 재시도 — 틀린 번호 → 되묻기(실측 대사 3종, "인증번호" 없음) → 다시 틀린 번호 `mismatch/compared` · 맞는 번호 `match` | 같은 파일 |
+| **G520** | ⭐ 재시도 — 틀린 번호 → 되묻기(실측 대사 3종, "인증번호" 없음) → 다시 틀린 번호 `mismatch/compared` + **재시도 문면(`repeat`)** · 맞는 번호 `match` · 재시도 문면 내용(이번에도 다름 · "확인 완료" 금지 · 번호·진행 차단 없음) · 첫 시도는 기존 문면 | 같은 파일 |
 | **G519** | mismatch 문면(서버 확인 결과 · "확인했습니다" 금지 · 첫 문장 지정 · 진행 차단·번호 없음) · sendMessage 배선·로그(소스 스캔) | 같은 파일 |
 
 ### 80.5 실시간(Live) 경로 대조 — 권장안 (⏸ 보고만 · 클라 파일 미접촉 · §78.4 갱신)
