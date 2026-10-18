@@ -60,7 +60,7 @@ export type CreateSessionResponse = {
   difficultyLevel: DifficultyLevel;
 };
 
-// T192 C4(§79.19 (6) ④ · G535) — 요청 타입 = 허용목록 3값(`user_ended` · `limit_reached` · `scammer_ended`). 옛 5값의
+// T192 C4(§79.19 (6) ④ · G557) — 요청 타입 = 허용목록 3값(`user_ended` · `limit_reached` · `scammer_ended`). 옛 5값의
 // `completed` · `deceived`는 사용처 0이었고 C1부터 서버가 `invalid-argument`로 거절했다(타입과 판정이 갈려 있었다).
 // 저장값 `SessionEndReason`(`shared/types.ts`)은 **무변경**(옛 문서 · 리포트 읽기 호환 — §79.5).
 export type EndSessionReason = AllowedEndSessionReason;

@@ -211,7 +211,7 @@ export type PendingInstruction = {
   text: string;
   priority: InstructionPriority;
   /**
-   * §78.4.2 — 화자 전환 첫 발화(확인 창구 재연결 지시)인가. 이 표시가 있는 항목만 `turnComplete:true`
+   * §82.4.2 — 화자 전환 첫 발화(확인 창구 재연결 지시)인가. 이 표시가 있는 항목만 `turnComplete:true`
    * 텍스트 턴으로 나가고, 나머지(문자 · 확인 권유 안내)는 맥락 주입(`turnComplete:false`)으로 나간다
    * (`src/lib/realtime/contextInjection.ts` `deliveryForInstruction`). 큐 순서 규칙(G31)과는 무관하다.
    */
@@ -287,10 +287,10 @@ export function announceTurnsOnInstructionDispatch(input: {
   return input.completedScammerTurns;
 }
 
-// ── §78.4 (T1) — 맥락 주입된 확인 권유의 예고 시점 ─────────────────────────────────
+// ── §82.4 (T1) — 맥락 주입된 확인 권유의 예고 시점 ─────────────────────────────────
 //
 // ⚠️ **왜 필요한가**: 확인 권유가 `turnComplete:true` 턴이던 때는 큐를 떠난 직후의 모델 턴이 곧 예고
-// 발화였다(위 `announceTurnsOnInstructionDispatch`가 큐 이탈 시점을 기록한 근거). 맥락 주입(§78.4.1 A안)은
+// 발화였다(위 `announceTurnsOnInstructionDispatch`가 큐 이탈 시점을 기록한 근거). 맥락 주입(§82.4.1 A안)은
 // 응답을 유발하지 않고 **참가자가 다음에 말한 뒤의 응답**에 실린다(S1 §3.2 반영 2/2). 큐 이탈 시점에
 // 기록하면, 그때 진행 중이던(예고가 없는) 사기범 턴이 끝나는 순간 2단계(`commit`)가 열려 **오퍼가 예고
 // 대사보다 먼저 드러난다** — §38.4 후보 E가 막은 바로 그 순서 역전이다.
@@ -308,7 +308,7 @@ export function announceTurnsOnInstructionDispatch(input: {
  *
  * ⭐ 리뷰 M2 — **응답 진행 중**(모델 턴 진행 · 응답 대기 중이거나, 아직 flush되지 않은 사용자 발화가 버퍼에 있다)에
  * 주입하면, 지금 생성 중인(또는 곧 생성될) 응답의 `turnComplete`에서 그 사용자 발화가 flush된다. 그 응답에는
- * 예고가 실리지 않았을 수 있다(주입이 생성 시작 뒤에 닿음 — §78.12 #1) ⇒ 그 flush로는 기록하지 않고 한 번 더 기다린다.
+ * 예고가 실리지 않았을 수 있다(주입이 생성 시작 뒤에 닿음 — §82.12 #1) ⇒ 그 flush로는 기록하지 않고 한 번 더 기다린다.
  */
 export function deferredAnnouncePendingOnDispatch(input: {
   priority: InstructionPriority;

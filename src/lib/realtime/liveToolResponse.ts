@@ -25,7 +25,7 @@
 // 수 없다(webpack 전용 별칭 — 메모리 관례).
 import type { LiveTools } from "../api/types";
 
-/** `toolCall.functionCalls[]` 1건. ⭐ T191 — `send_prepared_sms`는 `args.purpose`를 싣는다(G487). */
+/** `toolCall.functionCalls[]` 1건. ⭐ T191 — `send_prepared_sms`는 `args.purpose`를 싣는다(G538). */
 export type LiveToolFunctionCall = { id?: string; name?: string; args?: unknown };
 
 export type LiveToolFunctionResponse = {
@@ -96,7 +96,7 @@ export function resolveToolCallKind(
 }
 
 /**
- * ⭐ T191(문자 도달 조건 · G487) — `send_prepared_sms` 호출의 `purpose` 인자 원값을 꺼낸다. 화면은 **검증하지 않는다**
+ * ⭐ T191(문자 도달 조건 · G538) — `send_prepared_sms` 호출의 `purpose` 인자 원값을 꺼낸다. 화면은 **검증하지 않는다**
  * (enum 판정 · 변형 선언 대조는 서버 `resolveSmsGate` 한 곳 — 설계 금지 X4). 문자열이 아니면 `undefined`를 넘겨
  * 서버가 `not_allowed`로 거부하게 한다(거부 문면도 서버 소유 — G386).
  * 예전 `pickModelToolSmsId`(카탈로그 순서상 다음 미도착 smsId를 화면이 고름)는 폐기했다 — 화면은 smsId를 고르지 않는다.

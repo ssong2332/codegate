@@ -44,7 +44,7 @@ export const requestScammerHangup = onCall<
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
-  // T192 C3(§79.19 (6) ② ③ · G536) — 판독은 순수 함수 하나 · 세션 read **앞**(무효 요청이 read 비용을 태우지 않는다).
+  // T192 C3(§79.19 (6) ② ③ · G558) — 판독은 순수 함수 하나 · 세션 read **앞**(무효 요청이 read 비용을 태우지 않는다).
   const { sessionId, userTurns, pendingInstruction, kind } = readScammerHangupRequest(request.data);
 
   const session = await loadOwnedSession(sessionId, request.auth.uid);

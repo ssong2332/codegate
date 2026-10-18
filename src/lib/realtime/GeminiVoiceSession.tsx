@@ -138,7 +138,7 @@ export type GeminiVoiceSessionProps = {
    * `textMessage`와 전송 경로는 같지만(`sendClientContent`) **전사에 기록하지 않는다** — 이건 사용자
    * 발화가 아니라 오케스트레이션 지시라, 기록하면 리포트가 "사용자가 이런 말을 했다"고 오판한다.
    * 선례: 같은 파일의 `OPENING_TRIGGER_TURN`(연결 직후 발화 시작 신호, 역시 미기록).
-   * ⭐ §78.4(T1 · G491) — `delivery`가 전송 형태를 정한다: 문자 · 확인 권유 안내는 **맥락 주입**
+   * ⭐ §82.4(T1 · G542) — `delivery`가 전송 형태를 정한다: 문자 · 확인 권유 안내는 **맥락 주입**
    * (`turnComplete:false` — 응답을 유발하지 않고 참가자의 다음 발화에 대한 응답에 실린다, S1 §3.2),
    * 화자 전환 첫 발화(`speakerSwitch`)만 `relayGreeting` 텍스트 턴(§71.5 큐 경유)이다. 부재 = 맥락 주입.
    */
@@ -288,8 +288,8 @@ export default function GeminiVoiceSession({
   // §57.4 D3(G369)의 "타이핑 전사를 음성과 같은 flush 큐(`userBuffer`)에 넣는다"는 이제 큐가 실제로 보낼 때
   // (`sendClientTurn`) 지킨다 — 예전 `appendUserTranscriptRef` 브리지는 그래서 없앴다.
   const requestClientTurnRef = useRef<((turn: ClientTurn) => void) | null>(null);
-  // ⭐ §78.4(T1) — 문자 · 확인 권유 안내를 맥락 주입(`turnComplete:false`)으로 넣는 브리지. 응답 대기 큐(§71.5)를
-  // 점유하지 않으며, 문자 안내면 침묵 넛지(§78.4.2 · G492) 대기를 건다.
+  // ⭐ §82.4(T1) — 문자 · 확인 권유 안내를 맥락 주입(`turnComplete:false`)으로 넣는 브리지. 응답 대기 큐(§71.5)를
+  // 점유하지 않으며, 문자 안내면 침묵 넛지(§82.4.2 · G543) 대기를 건다.
   const injectContextRef = useRef<((text: string, delivery: InstructionDelivery) => void) | null>(null);
 
   useEffect(() => {
@@ -395,7 +395,7 @@ export default function GeminiVoiceSession({
     // 지점**(아래 `flushTranscript`의 비어 있지 않은 사용자 flush) · 같은 정의(`countTranscriptFlush`)다 — 위 사기범 카운터와
     // 같은 이유(도구 호출은 이 effect 클로저 안에서 동기로 처리해야 한다)로 사본을 둔다.
     let modelToolUserTurns = 0;
-    // ⭐ §78.3.4 N1(G488) — 직전 사기범 턴 경계 이후 모델 오디오 · 사기범 전사가 있었는가. 둘 다 없는
+    // ⭐ §82.3.4 N1(G539) — 직전 사기범 턴 경계 이후 모델 오디오 · 사기범 전사가 있었는가. 둘 다 없는
     // `turnComplete`(끼어들기 직후의 빈 마감 — S1 3/3)는 경계가 아니다. 끼어들기에서는 지우지 않는다 —
     // 끊긴 턴의 내용은 그 뒤 마감에 귀속된다.
     let audioSinceBoundary = false;
@@ -431,7 +431,7 @@ export default function GeminiVoiceSession({
             sessionId,
             purpose: readSmsPurposeArg(call.args),
             // ⭐ 리뷰 ⑥ — 도구 호출은 모델이 **사용자 발화 N에 답하는 도중**에 온다. 그 발화의 전사는 아직 `userBuffer`에
-            // 있고 flush(`turnComplete`)되지 않았으므로 flush 수만 보내면 폴백(이번 발화 포함)보다 1 작다. §78.3.4는
+            // 있고 flush(`turnComplete`)되지 않았으므로 flush 수만 보내면 폴백(이번 발화 포함)보다 1 작다. §82.3.4는
             // 카운터를 "flush 수"로 정의했지만 시점을 정하지 않았다 — 3경로 동일(AC-099 (f))을 위해 응답 중인 발화를 더한다.
             userTurns: modelToolUserTurns + (userBuffer.trim() ? 1 : 0),
             scammerTranscriptTurns: modelToolScammerTurns,
@@ -525,7 +525,7 @@ export default function GeminiVoiceSession({
         handlersRef.current.onTranscriptTurn("user", u);
       }
       if (s) {
-        // ⭐ §78.3.4(G488) — 부모의 `scammerTurnsRef`(비어 있지 않은 사기범 전사 flush 수)와 **같은 지점**.
+        // ⭐ §82.3.4(G539) — 부모의 `scammerTurnsRef`(비어 있지 않은 사기범 전사 flush 수)와 **같은 지점**.
         modelToolScammerTurns += 1;
         handlersRef.current.onTranscriptTurn("scammer", s);
       }
@@ -548,7 +548,7 @@ export default function GeminiVoiceSession({
     const flushScammerTurn = () => {
       const s = scammerBuffer.trim();
       if (s) {
-        // §78.3.4 — 끊긴 조각 flush도 사기범 전사 턴이다(`messages`에 문서 1개로 남는다).
+        // §82.3.4 — 끊긴 조각 flush도 사기범 전사 턴이다(`messages`에 문서 1개로 남는다).
         modelToolScammerTurns += 1;
         handlersRef.current.onTranscriptTurn("scammer", s);
       }
@@ -595,7 +595,7 @@ export default function GeminiVoiceSession({
         userSpeechBuffered: userBuffer.trim().length > 0,
       };
     };
-    // §78.4.2(G492) — 참가자 발화(음성 전사 조각 · 타이핑 전송) = 침묵 넛지 취소. 아래 넛지 상태를 쓴다(호출은 연결 뒤).
+    // §82.4.2(G543) — 참가자 발화(음성 전사 조각 · 타이핑 전송) = 침묵 넛지 취소. 아래 넛지 상태를 쓴다(호출은 연결 뒤).
     const noteUserSpeechForNudge = () => {
       silenceNudgeState = stepSilenceNudge(silenceNudgeState, { type: "userSpeech", nowMs: performance.now() }).state;
       if (silenceNudgeState.armedAt === null) clearSilenceNudgeTimer();
@@ -612,7 +612,7 @@ export default function GeminiVoiceSession({
         // §57.4 D3 — 타이핑 전사는 **실제로 보낸 시점에** 적립한다. 보류 중에 적립하면 그 턴의 flush에서
         // 사용자 문장이 아직 말하던 사기범 문장보다 먼저 기록된다(§71.5).
         if (turn.kind === "text") appendUserBuffer(turn.text.trim());
-        // §78.4.2(G492) — 타이핑 전송도 참가자 발화다(침묵 넛지 취소).
+        // §82.4.2(G543) — 타이핑 전송도 참가자 발화다(침묵 넛지 취소).
         if (turn.kind === "text") noteUserSpeechForNudge();
       } catch {
         // 전송 실패는 무시 — 통화는 계속된다(P-4 비차단). 오프닝이면 사용자가 먼저 말하면 이어진다.
@@ -633,8 +633,8 @@ export default function GeminiVoiceSession({
       }
     };
 
-    // ⭐⭐ §78.4(T1) — 맥락 주입 + 침묵 넛지. 문자 · 확인 권유 안내는 `turnComplete:false`로 **즉시** 넣는다
-    // (§78.4.1 A안 — 응답 유발 0/2 · 다음 응답 반영 2/2, S1 §3.2). 응답을 유발하지 않으므로 §71.5 응답 대기 큐에
+    // ⭐⭐ §82.4(T1) — 맥락 주입 + 침묵 넛지. 문자 · 확인 권유 안내는 `turnComplete:false`로 **즉시** 넣는다
+    // (§82.4.1 A안 — 응답 유발 0/2 · 다음 응답 반영 2/2, S1 §3.2). 응답을 유발하지 않으므로 §71.5 응답 대기 큐에
     // 넣지 않는다(넣으면 다음 보류분이 오지 않을 응답을 기다린다). ⛔ X5 — 이 두 안내를 `turnComplete:true`로 보내지 않는다.
     // 침묵 넛지: 문자 안내 뒤 8초 동안 참가자 발화가 없고 모델이 유휴면 `silence` 텍스트 턴 1회(판정 = 순수 함수).
     let silenceNudgeState = INITIAL_SILENCE_NUDGE_STATE;
@@ -931,7 +931,7 @@ export default function GeminiVoiceSession({
               // 전사 조각 누적(리포트 기록용). input=사용자 발화, output=사기범(모델) 발화.
               if (sc?.inputTranscription?.text) {
                 appendUserBuffer(sc.inputTranscription.text);
-                // §78.4.2(G492) — 참가자가 말하기 시작했다 = 침묵 넛지 취소.
+                // §82.4.2(G543) — 참가자가 말하기 시작했다 = 침묵 넛지 취소.
                 if (sc.inputTranscription.text.trim()) noteUserSpeechForNudge();
               }
               if (sc?.outputTranscription?.text) {
@@ -1011,12 +1011,12 @@ export default function GeminiVoiceSession({
               // 있다. 실제 개방 시각은 항상 잔여 재생 기준으로 다시 잡는다.
               if (hasAudio || hasTurnComplete) scheduleGateClose();
               if (hasTurnComplete) {
-                // ⭐ §78.3.4 N1(G488) — 판정은 flush **전에** 경계 이후 신호로 한다. 빈 마감이면 경계 콜백을 부르지 않는다.
+                // ⭐ §82.3.4 N1(G539) — 판정은 flush **전에** 경계 이후 신호로 한다. 빈 마감이면 경계 콜백을 부르지 않는다.
                 const emptyTurn = isEmptyTurnComplete({ audioSinceBoundary, scammerTextSinceBoundary });
                 audioSinceBoundary = false;
                 scammerTextSinceBoundary = false;
                 flushTranscript();
-                // ⭐ §59.6 ③ → §78.3.4 — `modelToolScammerTurns`는 이제 위 `flushTranscript`/`flushScammerTurn`이
+                // ⭐ §59.6 ③ → §82.3.4 — `modelToolScammerTurns`는 이제 위 `flushTranscript`/`flushScammerTurn`이
                 // 비어 있지 않은 사기범 전사를 내보낼 때 오른다(부모 `scammerTurnsRef`와 같은 지점 · 같은 정의).
                 // T68 — 사기범 발화 1턴 완료. 부모가 이 경계만 세어 통화 중 문자 도착을 판단한다
                 // (§15.1.2 "앱 오케스트레이션"). 세션 자체에는 아무 영향이 없다.
@@ -1058,7 +1058,7 @@ export default function GeminiVoiceSession({
         // §71.5(G431) — 타이핑 · 지시 effect는 이 함수로만 텍스트 턴을 넣는다(보류 큐 경유).
         requestClientTurnRef.current = (turn: ClientTurn) =>
           dispatchClientTurn({ type: "request", turn, nowMs: performance.now() });
-        // §78.4(T1) — 문자 · 확인 권유 안내는 이 함수로만 넣는다(맥락 주입 · 큐 밖).
+        // §82.4(T1) — 문자 · 확인 권유 안내는 이 함수로만 넣는다(맥락 주입 · 큐 밖).
         injectContextRef.current = injectContext;
 
         // 사용자 신고(2026-07-24) — 연결 직후 캐릭터가 먼저 말을 걸도록 트리거를 보낸다. onopen
@@ -1199,7 +1199,7 @@ export default function GeminiVoiceSession({
   // T68 — 문자 도착 announce 지시 주입(UX-027/UF-008). textMessage와 같은 경로지만 **전사에
   // 기록하지 않는다**(사용자 발화가 아니라 오케스트레이션 신호 — OPENING_TRIGGER_TURN과 동일 취지).
   // 실패해도 문자는 이미 도착해 있으므로 학습 가치는 보존된다(배너·문자함은 대사와 무관, P-4).
-  // ⭐ §78.4(T1 · G491) — 문자 · 확인 권유 안내는 맥락 주입(`turnComplete:false`)으로 **즉시** 넣는다. 화자 전환
+  // ⭐ §82.4(T1 · G542) — 문자 · 확인 권유 안내는 맥락 주입(`turnComplete:false`)으로 **즉시** 넣는다. 화자 전환
   // 첫 발화(확인 창구 재연결 지시)만 `relayGreeting` 텍스트 턴으로 보류 큐(§71.5)를 탄다.
   useEffect(() => {
     if (!instructionTurn || !instructionTurn.text.trim()) return;

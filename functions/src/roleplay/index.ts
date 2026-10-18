@@ -596,7 +596,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     }
 
     // ③-e 사기범 끊기 **사후 판정**(T192 C3 · §79.19 (5) 10 · 11) — 마커 발송 뒤 · 재확인 트랜잭션 앞. Mock 강등 턴(3행) ·
-    // 같은 응답의 문자 마커 도착(6행 — 문자가 이긴다, OQ-A131)이 여기서 걸린다. 신호는 SIGNAL 턴 + 사후 승인일 때만 효과가 있다.
+    // 같은 응답의 문자 마커 도착(6행 — 문자가 이긴다, OQ-A140)이 여기서 걸린다. 신호는 SIGNAL 턴 + 사후 승인일 때만 효과가 있다.
     const hangupPost = decideFallbackHangup(
       smsMarkerDeliveryFailed ? { ...hangupFacts, smsDeliveredLoaded: false } : hangupFacts,
       smsDeliveredAfterReply,

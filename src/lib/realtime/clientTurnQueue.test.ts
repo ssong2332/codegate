@@ -11,7 +11,7 @@ import {
 
 const opening: ClientTurn = { kind: "opening", text: "(오프닝)" };
 const typed: ClientTurn = { kind: "text", text: "잠깐만요" };
-// §78.4.2(G491) — 문자 안내는 이제 이 큐를 타지 않는다(맥락 주입). 큐 전이는 종류와 무관하므로 남은
+// §82.4.2(G542) — 문자 안내는 이제 이 큐를 타지 않는다(맥락 주입). 큐 전이는 종류와 무관하므로 남은
 // `turnComplete:true` 종류 중 하나(침묵 넛지)로 같은 시나리오를 그대로 검사한다(단언 무변경).
 const instr: ClientTurn = { kind: "silence", text: "(침묵 넛지)" };
 

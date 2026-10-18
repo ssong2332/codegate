@@ -1,4 +1,4 @@
-// §78.4 (T1) · §78.3.4 (N1) · §78.4.2 침묵 넛지 — S3 클라 순수 규칙(docs/Architecture.md §78.9 G488(계수) · G491 · G492).
+// §82.4 (T1) · §82.3.4 (N1) · §82.4.2 침묵 넛지 — S3 클라 순수 규칙(docs/Architecture.md §82.9 G539(계수) · G542 · G543).
 // 배선(`GeminiVoiceSession.tsx`)의 소스 스캔은 `clientTurnQueueWiring.test.ts`, 화면(`session/play/page.tsx`)의
 // 소스 스캔은 이 파일 끝에 있다. 역방향 샘플의 오염은 **이 테스트 코드 안에서만** 만든다(AC-098 (g)).
 import { test } from "node:test";
@@ -40,7 +40,7 @@ import {
 
 // ── (a) T1 — 안내는 turnComplete:false · 응답 대기 큐를 점유하지 않는다 ─────────────────
 
-test("[§78.4.2 T1] 지시 → 전달 방식: 문자 안내 · 확인 권유 = 맥락 주입, 재연결 = 화자 전환 첫 발화", () => {
+test("[§82.4.2 T1] 지시 → 전달 방식: 문자 안내 · 확인 권유 = 맥락 주입, 재연결 = 화자 전환 첫 발화", () => {
   assert.equal(deliveryForInstruction({ priority: "sms" }), "smsAnnounce");
   assert.equal(deliveryForInstruction({ priority: "verify" }), "verifyAnnounce");
   assert.equal(deliveryForInstruction({ priority: "verify", speakerSwitch: true }), "speakerSwitch");
@@ -65,7 +65,7 @@ function routeInstruction(
   return { queue: step.state, sent: step.send ? [{ turnComplete: true, kind: step.send.kind }] : [] };
 }
 
-test("[§78.4 T1 (a)] 문자 안내는 turnComplete:false로 나가고 응답 대기 큐를 점유하지 않는다 — 직후 타이핑이 즉시 나간다", () => {
+test("[§82.4 T1 (a)] 문자 안내는 turnComplete:false로 나가고 응답 대기 큐를 점유하지 않는다 — 직후 타이핑이 즉시 나간다", () => {
   const routed = routeInstruction(INITIAL_CLIENT_TURN_QUEUE_STATE, "smsAnnounce", "(문자 도착 안내)", 100);
   assert.deepEqual(routed.sent, [{ turnComplete: false }]);
   assert.deepEqual(routed.queue, INITIAL_CLIENT_TURN_QUEUE_STATE, "큐 상태가 그대로다(awaitingSince 없음)");
@@ -74,14 +74,14 @@ test("[§78.4 T1 (a)] 문자 안내는 turnComplete:false로 나가고 응답 �
   assert.deepEqual(next.send, typed, "주입이 큐를 점유했다면 타이핑이 8초 보류됐을 것이다");
 });
 
-test("[§78.4 T1 (a)] 모델 발화 도중이어도 맥락 주입은 큐에 쌓이지 않는다(보류분 0)", () => {
+test("[§82.4 T1 (a)] 모델 발화 도중이어도 맥락 주입은 큐에 쌓이지 않는다(보류분 0)", () => {
   const speaking = stepClientTurnQueue(INITIAL_CLIENT_TURN_QUEUE_STATE, { type: "modelAudio", nowMs: 0 }).state;
   const routed = routeInstruction(speaking, "verifyAnnounce", "(확인 권유)", 10);
   assert.deepEqual(routed.sent, [{ turnComplete: false }]);
   assert.equal(routed.queue.pending.length, 0);
 });
 
-test("[§78.4.2] 화자 전환 첫 발화(재연결 지시)는 relayGreeting 큐 턴 — 모델 발화 중이면 그 턴 뒤로 보류된다(§71.5 유지)", () => {
+test("[§82.4.2] 화자 전환 첫 발화(재연결 지시)는 relayGreeting 큐 턴 — 모델 발화 중이면 그 턴 뒤로 보류된다(§71.5 유지)", () => {
   const speaking = stepClientTurnQueue(INITIAL_CLIENT_TURN_QUEUE_STATE, { type: "modelAudio", nowMs: 0 }).state;
   const routed = routeInstruction(speaking, "speakerSwitch", "(재연결)", 10);
   assert.deepEqual(routed.sent, []);
@@ -109,7 +109,7 @@ function simulateCall(sendAsTurnCompleteTrue: (delivery: InstructionDelivery) =>
   return turns;
 }
 
-test("[§78.4 AC-098 (b)(g) 역방향] 제품 라우팅 = 지시 유발 연속 발화 0 · 옛 방식(turnComplete:true) 샘플 = 같은 검사에서 2", () => {
+test("[§82.4 AC-098 (b)(g) 역방향] 제품 라우팅 = 지시 유발 연속 발화 0 · 옛 방식(turnComplete:true) 샘플 = 같은 검사에서 2", () => {
   const product = countConsecutiveScammerTurns(simulateCall((d) => !sendsAsContextInjection(d)));
   const legacy = countConsecutiveScammerTurns(simulateCall(() => true));
   console.log(
@@ -120,7 +120,7 @@ test("[§78.4 AC-098 (b)(g) 역방향] 제품 라우팅 = 지시 유발 연속 �
   assert.equal(legacy.instruction, 2, "검사가 오염을 실제로 잡는다");
 });
 
-test("[§78.4 AC-098 (a)] 연속 발화 검사: 오프닝은 제외하고 · 원인은 뒤쪽 턴으로 분류한다", () => {
+test("[§82.4 AC-098 (a)] 연속 발화 검사: 오프닝은 제외하고 · 원인은 뒤쪽 턴으로 분류한다", () => {
   assert.deepEqual(
     countConsecutiveScammerTurns([
       { role: "scammer", cause: "opening" },
@@ -133,15 +133,15 @@ test("[§78.4 AC-098 (a)] 연속 발화 검사: 오프닝은 제외하고 · 원
   );
 });
 
-// ── (b) G488 계수 — 빈 turnComplete 미계수 · 사용자 카운터 = 비어 있지 않은 사용자 flush ────────
+// ── (b) G539 계수 — 빈 turnComplete 미계수 · 사용자 카운터 = 비어 있지 않은 사용자 flush ────────
 
-test("[§78.3.4 G488 N1] 오디오 0 · 전사 0인 turnComplete만 빈 마감이다", () => {
+test("[§82.3.4 G539 N1] 오디오 0 · 전사 0인 turnComplete만 빈 마감이다", () => {
   assert.equal(isEmptyTurnComplete({ audioSinceBoundary: false, scammerTextSinceBoundary: false }), true);
   assert.equal(isEmptyTurnComplete({ audioSinceBoundary: true, scammerTextSinceBoundary: false }), false);
   assert.equal(isEmptyTurnComplete({ audioSinceBoundary: false, scammerTextSinceBoundary: true }), false);
 });
 
-test("[§78.3.4 G488] 카운터는 비어 있지 않은 전사 flush만 센다(공백 flush 0)", () => {
+test("[§82.3.4 G539] 카운터는 비어 있지 않은 전사 flush만 센다(공백 flush 0)", () => {
   let c: TurnCounters = INITIAL_TURN_COUNTERS;
   c = countTranscriptFlush(c, "user", "여보세요");
   c = countTranscriptFlush(c, "user", "   ");
@@ -194,7 +194,7 @@ function countLive(events: LiveEvent[]) {
 // 리뷰 Minor 1 — S1 §3.5의 실제 모양은 "`interrupted` 뒤 오디오 · 전사 없는 `turnComplete` **1개**"(3/3)다.
 // 그 마감은 **끊긴 턴의 마감**이다: 끊기기 전에 오디오가 나갔으면 직전 경계 이후 내용이 있으므로 빈 마감이 아니다
 // (경계 1 · 끊긴 조각 전사 1). 옛 규칙과 새 규칙이 이 모양에서는 같은 수를 낸다 — 차이는 아래 "진짜 빈 마감"에서 난다.
-test("[§78.3.4 G488 N1] S1 모양(오디오 뒤 끊김 → turnComplete 1개)은 빈 마감이 아니다 — 끊긴 턴의 마감 1 · 조각 전사 1", () => {
+test("[§82.3.4 G539 N1] S1 모양(오디오 뒤 끊김 → turnComplete 1개)은 빈 마감이 아니다 — 끊긴 턴의 마감 1 · 조각 전사 1", () => {
   const sample: LiveEvent[] = [
     { t: "audio" },
     { t: "out", text: "안녕하세요 서울중앙지검" },
@@ -216,7 +216,7 @@ test("[§78.3.4 G488 N1] S1 모양(오디오 뒤 끊김 → turnComplete 1개)�
   assert.equal(r.legacyScammerTurns, 3);
 });
 
-test("[§78.3.4 G488 N1 · 역방향 ⓒ] 진짜 빈 마감(직전 경계 이후 모델 소리 0 — 첫 오디오 전 끼어들기)은 세지 않는다 · 옛 규칙은 같은 샘플에서 어긋난다", () => {
+test("[§82.3.4 G539 N1 · 역방향 ⓒ] 진짜 빈 마감(직전 경계 이후 모델 소리 0 — 첫 오디오 전 끼어들기)은 세지 않는다 · 옛 규칙은 같은 샘플에서 어긋난다", () => {
   const sample: LiveEvent[] = [
     { t: "audio" },
     { t: "out", text: "안녕하세요 서울중앙지검" },
@@ -231,7 +231,7 @@ test("[§78.3.4 G488 N1 · 역방향 ⓒ] 진짜 빈 마감(직전 경계 이후
   ];
   const r = countLive(sample);
   console.log(
-    `[G488 역방향 ⓒ] 사기범 전사 턴 ${r.counters.scammerTranscriptTurns} · 경계 ${r.boundaries} · 옛 규칙 ${r.legacyScammerTurns}`,
+    `[G539 역방향 ⓒ] 사기범 전사 턴 ${r.counters.scammerTranscriptTurns} · 경계 ${r.boundaries} · 옛 규칙 ${r.legacyScammerTurns}`,
   );
   assert.equal(r.counters.scammerTranscriptTurns, 2, "messages의 사기범 문서 수와 1:1");
   assert.equal(r.boundaries, 2, "빈 마감은 경계가 아니다");
@@ -239,7 +239,7 @@ test("[§78.3.4 G488 N1 · 역방향 ⓒ] 진짜 빈 마감(직전 경계 이후
   assert.notEqual(r.legacyScammerTurns, r.counters.scammerTranscriptTurns, "옛 규칙은 빈 마감을 세어 어긋난다(검사가 잡는다)");
 });
 
-test("[§78.3.4 G488] 지시 · 넛지로 생긴 사기범 턴은 사용자 카운터를 올리지 않는다", () => {
+test("[§82.3.4 G539] 지시 · 넛지로 생긴 사기범 턴은 사용자 카운터를 올리지 않는다", () => {
   const r = countLive([
     { t: "audio" },
     { t: "out", text: "상대가 말이 없어서요, 문자 보셨어요?" },
@@ -248,7 +248,7 @@ test("[§78.3.4 G488] 지시 · 넛지로 생긴 사기범 턴은 사용자 카�
   assert.equal(r.counters.userTurns, 0);
 });
 
-// ── (c) G492 침묵 넛지 — 8초 · 주입당 1회 · 사용자 발화 시 취소 · cause:"silence" ────────────────
+// ── (c) G543 침묵 넛지 — 8초 · 주입당 1회 · 사용자 발화 시 취소 · cause:"silence" ────────────────
 
 function runNudge(events: SilenceNudgeEvent[], start: SilenceNudgeState = INITIAL_SILENCE_NUDGE_STATE) {
   let state = start;
@@ -261,12 +261,12 @@ function runNudge(events: SilenceNudgeEvent[], start: SilenceNudgeState = INITIA
   return { state, fired };
 }
 
-test("[§78.4.2 G492] 설계값: 8초 · 문면은 설계 표 원문", () => {
+test("[§82.4.2 G543] 설계값: 8초 · 문면은 설계 표 원문", () => {
   assert.equal(SMS_MENTION_SILENCE_SEC, 8);
   assert.equal(SILENCE_NUDGE_TEXT, "(상대가 말이 없다. 방금 보낸 문자를 한 문장으로 언급하고 기다려라.)");
 });
 
-test("[§78.4.2 G492] 문자 안내 뒤 8초 침묵 · 모델 유휴면 넛지 1회 — 7.999초에는 없다", () => {
+test("[§82.4.2 G543] 문자 안내 뒤 8초 침묵 · 모델 유휴면 넛지 1회 — 7.999초에는 없다", () => {
   const { fired } = runNudge([
     { type: "injected", delivery: "smsAnnounce", nowMs: 1000 },
     { type: "tick", nowMs: 8999, modelIdle: true, userSpeakingLocally: false },
@@ -275,7 +275,7 @@ test("[§78.4.2 G492] 문자 안내 뒤 8초 침묵 · 모델 유휴면 넛지 1
   assert.deepEqual(fired, [9000]);
 });
 
-test("[§78.4.2 G492] 주입 1건당 최대 1회 — 넛지 뒤 계속 침묵해도 다시 나가지 않는다", () => {
+test("[§82.4.2 G543] 주입 1건당 최대 1회 — 넛지 뒤 계속 침묵해도 다시 나가지 않는다", () => {
   const { fired } = runNudge([
     { type: "injected", delivery: "smsAnnounce", nowMs: 0 },
     { type: "tick", nowMs: 8000, modelIdle: true, userSpeakingLocally: false },
@@ -285,7 +285,7 @@ test("[§78.4.2 G492] 주입 1건당 최대 1회 — 넛지 뒤 계속 침묵해
   assert.deepEqual(fired, [8000]);
 });
 
-test("[§78.4.2 G492] 사용자 발화가 오면 취소된다", () => {
+test("[§82.4.2 G543] 사용자 발화가 오면 취소된다", () => {
   const { fired, state } = runNudge([
     { type: "injected", delivery: "smsAnnounce", nowMs: 0 },
     { type: "userSpeech", nowMs: 3000 },
@@ -296,7 +296,7 @@ test("[§78.4.2 G492] 사용자 발화가 오면 취소된다", () => {
   assert.equal(state.armedAt, null);
 });
 
-test("[§78.4.2 G492] 기한이 지나도 모델이 말하는 중이면 기다렸다가 유휴가 되는 첫 점검에서 1회", () => {
+test("[§82.4.2 G543] 기한이 지나도 모델이 말하는 중이면 기다렸다가 유휴가 되는 첫 점검에서 1회", () => {
   const { fired } = runNudge([
     { type: "injected", delivery: "smsAnnounce", nowMs: 0 },
     { type: "tick", nowMs: 8000, modelIdle: false, userSpeakingLocally: false },
@@ -307,7 +307,7 @@ test("[§78.4.2 G492] 기한이 지나도 모델이 말하는 중이면 기다�
   assert.deepEqual(fired, [10000]);
 });
 
-test("[§78.4.2 G492] 문자 안내만 대상 — 확인 권유 · 화자 전환은 넛지를 걸지 않는다", () => {
+test("[§82.4.2 G543] 문자 안내만 대상 — 확인 권유 · 화자 전환은 넛지를 걸지 않는다", () => {
   for (const delivery of ["verifyAnnounce", "speakerSwitch"] as const) {
     const { fired } = runNudge([
       { type: "injected", delivery, nowMs: 0 },
@@ -317,7 +317,7 @@ test("[§78.4.2 G492] 문자 안내만 대상 — 확인 권유 · 화자 전환
   }
 });
 
-test("[§78.4.2 G492] 새 문자 안내는 새 대기를 건다(주입 1건당 1회)", () => {
+test("[§82.4.2 G543] 새 문자 안내는 새 대기를 건다(주입 1건당 1회)", () => {
   const { fired } = runNudge([
     { type: "injected", delivery: "smsAnnounce", nowMs: 0 },
     { type: "tick", nowMs: 8000, modelIdle: true, userSpeakingLocally: false },
@@ -328,7 +328,7 @@ test("[§78.4.2 G492] 새 문자 안내는 새 대기를 건다(주입 1건당 1
   assert.deepEqual(fired, [8000, 28000]);
 });
 
-test("[§78.4.2 G492 · 리뷰 M3] 로컬 입력 레벨이 임계를 넘는 동안(참가자가 말하는 중)은 기한이 지나도 보류한다", () => {
+test("[§82.4.2 G543 · 리뷰 M3] 로컬 입력 레벨이 임계를 넘는 동안(참가자가 말하는 중)은 기한이 지나도 보류한다", () => {
   const { fired, state } = runNudge([
     { type: "injected", delivery: "smsAnnounce", nowMs: 0 },
     { type: "tick", nowMs: 8000, modelIdle: true, userSpeakingLocally: true },
@@ -340,21 +340,21 @@ test("[§78.4.2 G492 · 리뷰 M3] 로컬 입력 레벨이 임계를 넘는 동�
   assert.deepEqual(after.fired, [10000], "레벨이 내려가고 전사도 없으면(소음 등) 그때 1회");
 });
 
-test("[§78.4.2 G492 · 리뷰 M3] 발화 시작(레벨 꺼짐→켜짐)만 사용자 발화로 본다", () => {
+test("[§82.4.2 G543 · 리뷰 M3] 발화 시작(레벨 꺼짐→켜짐)만 사용자 발화로 본다", () => {
   assert.equal(localSpeechStarted(false, true), true);
   assert.equal(localSpeechStarted(true, true), false, "이어지는 발화는 시작이 아니다");
   assert.equal(localSpeechStarted(true, false), false);
   assert.equal(localSpeechStarted(false, false), false);
 });
 
-test("[§78.4.2 G492] 로그: cause:\"silence\" 범주 · 숫자만(전사 0)", () => {
+test("[§82.4.2 G543] 로그: cause:\"silence\" 범주 · 숫자만(전사 0)", () => {
   assert.equal(LIVE_TURN_LOG_PREFIX, "[live-turn]");
   assert.equal(formatSilenceNudgeLog({ sinceInjectionMs: 8012.6 }), 'cause:"silence" sinceInjectionMs=8013');
 });
 
-// ── §78.4 T1 — 맥락 주입된 확인 권유의 예고 시점(§38.4 후보 E 순서 유지) ──────────────────────
+// ── §82.4 T1 — 맥락 주입된 확인 권유의 예고 시점(§38.4 후보 E 순서 유지) ──────────────────────
 
-test("[§78.4 T1 · 리뷰 M2] 예고 기록 대기는 맥락 주입된 확인 권유(announced)에서만 · 응답 진행 중이면 한 번 더 기다린다", () => {
+test("[§82.4 T1 · 리뷰 M2] 예고 기록 대기는 맥락 주입된 확인 권유(announced)에서만 · 응답 진행 중이면 한 번 더 기다린다", () => {
   const base = { userTurns: 4, current: null, responseInProgress: false };
   assert.equal(deferredAnnouncePendingOnDispatch({ ...base, priority: "verify", phase: "announced" }), 4);
   assert.equal(
@@ -431,7 +431,7 @@ const MID_RESPONSE: AnchorEvent[] = [
   { type: "reply", userFlush: true, announce: true },
 ];
 
-test("[§78.4 T1 · 리뷰 M2 역방향] 경계 시점 주입 · 응답 생성 중 주입 모두 2단계는 예고가 실린 응답 뒤에 열린다 — 위상을 무시하거나 큐 이탈 시점에 기록하면 응답 생성 중 주입에서 순서가 뒤집힌다", () => {
+test("[§82.4 T1 · 리뷰 M2 역방향] 경계 시점 주입 · 응답 생성 중 주입 모두 2단계는 예고가 실린 응답 뒤에 열린다 — 위상을 무시하거나 큐 이탈 시점에 기록하면 응답 생성 중 주입에서 순서가 뒤집힌다", () => {
   const rows = {
     "경계 · 제품": commitOpensAfterAnnounce(BOUNDARY, "product"),
     "생성 중 · 제품": commitOpensAfterAnnounce(MID_RESPONSE, "product"),
@@ -452,7 +452,7 @@ const page = readFileSync("src/app/session/play/page.tsx", "utf8").replace(/\r\n
   .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
   .join("\n");
 
-test("[§78.3.4 G488 배선] 사기범 턴 수는 비어 있지 않은 전사 flush 한 곳에서만 갱신된다(turnComplete +1 폐기)", () => {
+test("[§82.3.4 G539 배선] 사기범 턴 수는 비어 있지 않은 전사 flush 한 곳에서만 갱신된다(turnComplete +1 폐기)", () => {
   assert.equal(/scammerTurnsRef\.current \+= 1/.test(page), false, "옛 규칙(모든 turnComplete +1)이 남아 있으면 안 된다");
   assert.equal((page.match(/scammerTurnsRef\.current = /g) ?? []).length, 1);
   assert.ok(page.includes("turnCountersRef.current = countTranscriptFlush(turnCountersRef.current, role, text);"));
@@ -462,7 +462,7 @@ test("[§78.3.4 G488 배선] 사기범 턴 수는 비어 있지 않은 전사 fl
   assert.equal((page.match(/setScammerTurns\(/g) ?? []).length, 1);
 });
 
-test("[§78.4 T1 배선] 드레인은 전달 방식을 실어 보내고 · 확인 권유는 다음 사용자 발화에서 예고 시점을 기록한다", () => {
+test("[§82.4 T1 배선] 드레인은 전달 방식을 실어 보내고 · 확인 권유는 다음 사용자 발화에서 예고 시점을 기록한다", () => {
   assert.ok(page.includes("const delivery = deliveryForInstruction(item);"));
   assert.ok(page.includes("setInstructionTurn((prev) => ({ text: item.text, seq: (prev?.seq ?? 0) + 1, delivery }));"));
   assert.ok(page.includes("pendingVerifyAnnounceUserTurnsRef.current = deferredAnnouncePendingOnDispatch({"));

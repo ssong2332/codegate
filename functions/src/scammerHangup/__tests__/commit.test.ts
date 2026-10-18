@@ -140,8 +140,8 @@ test("[§79.5 배선] 콜러블은 트랜잭션 안에서 판정한다 · 세션
   assert.equal(commit.split("tx.update(").length - 1, 1, "commit.ts의 write 지점은 표식 1곳뿐이어야 한다");
 });
 
-// ── T192 C3 — 6행 서버 항(문자 대기 · §79.19 (4) · G532) · 판독 순서(G536) ────────────────────────────
-test("[G532] 콜러블 판정 — 서버 도착 기록으로 문자 대기를 본다(클라가 pendingInstruction:false라도 막는다) · 발화 뒤에는 승인", async () => {
+// ── T192 C3 — 6행 서버 항(문자 대기 · §79.19 (4) · G554) · 판독 순서(G558) ────────────────────────────
+test("[G554] 콜러블 판정 — 서버 도착 기록으로 문자 대기를 본다(클라가 pendingInstruction:false라도 막는다) · 발화 뒤에는 승인", async () => {
   const delivered = [{ smsId: "sms-1", userTurnsAtArrival: 5 }];
   const waiting = makeTx({ [SESSION_REF]: activeSession() });
   const blocked = await decideAndMarkRealtimeHangup(waiting.tx, REFS, CLAIMS, delivered, NOW);
@@ -153,13 +153,13 @@ test("[G532] 콜러블 판정 — 서버 도착 기록으로 문자 대기를 �
   assert.equal(spoke.updates.length, 1);
 });
 
-test("[G536 · §79.19 (4) 배선] 핸들러 — 판독은 세션 read 앞 · 도착 기록은 문자 선언 세션에서만 · 트랜잭션 밖에서 읽는다", () => {
+test("[G558 · §79.19 (4) 배선] 핸들러 — 판독은 세션 read 앞 · 도착 기록은 문자 선언 세션에서만 · 트랜잭션 밖에서 읽는다", () => {
   const src = stripComments(readFileSync(path.resolve(__dirname, "../../../src/scammerHangup/index.ts"), "utf8"));
   const readAt = src.indexOf("readScammerHangupRequest(request.data)");
   const loadAt = src.indexOf("await loadOwnedSession(");
   const deliveredAt = src.indexOf("readDeliveredSms(");
   const txAt = src.indexOf("db.runTransaction(");
-  assert.ok(readAt >= 0 && loadAt > readAt, "요청 판독이 세션 read보다 앞에 있지 않다(G536)");
+  assert.ok(readAt >= 0 && loadAt > readAt, "요청 판독이 세션 read보다 앞에 있지 않다(G558)");
   assert.ok(deliveredAt > loadAt && deliveredAt < txAt, "도착 기록 read가 소유권 확인 뒤 · 트랜잭션 앞이 아니다");
   assert.match(
     src,

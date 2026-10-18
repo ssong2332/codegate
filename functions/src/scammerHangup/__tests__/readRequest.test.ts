@@ -4,8 +4,8 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { MAX_CLAIMED_TURNS } from "../../inCallSms/smsGate";
 import { readScammerHangupRequest } from "../readRequest";
 
-// T192 C3 · G536 — `requestScammerHangup` 요청 판독 무효값 표(Architecture.md §79.19 (6) ② ③ · (8) G536).
-// 핸들러에서 판독이 세션 read보다 앞이라는 소스 순서는 `commit.test.ts` [G536 · §79.19 (4) 배선]이 본다.
+// T192 C3 · G558 — `requestScammerHangup` 요청 판독 무효값 표(Architecture.md §79.19 (6) ② ③ · (8) G558).
+// 핸들러에서 판독이 세션 read보다 앞이라는 소스 순서는 `commit.test.ts` [G558 · §79.19 (4) 배선]이 본다.
 
 const VALID = { sessionId: "sess-1", userTurns: 3, pendingInstruction: false, kind: "goal" };
 
@@ -17,7 +17,7 @@ function expectInvalid(data: unknown, label: string): void {
   );
 }
 
-test("[G536] 정상 요청 — 판독값 그대로 · kind 정규화", () => {
+test("[G558] 정상 요청 — 판독값 그대로 · kind 정규화", () => {
   assert.deepEqual(readScammerHangupRequest(VALID), { sessionId: "sess-1", userTurns: 3, pendingInstruction: false, kind: "goal" });
   assert.equal(readScammerHangupRequest({ ...VALID, kind: "give_up" }).kind, "give_up");
   for (const kind of [undefined, null, "", "GOAL", 1, {}]) {
@@ -29,7 +29,7 @@ test("[G536] 정상 요청 — 판독값 그대로 · kind 정규화", () => {
   assert.equal(readScammerHangupRequest({ ...VALID, pendingInstruction: true }).pendingInstruction, true);
 });
 
-test("[G536] 무효값 표 — 필드 하나만 바꾼 사본은 전부 invalid-argument", () => {
+test("[G558] 무효값 표 — 필드 하나만 바꾼 사본은 전부 invalid-argument", () => {
   const rows: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
     ["sessionId 숫자(C1 Minor ②)", { sessionId: 123 }],
     ["sessionId 객체", { sessionId: { id: "x" } }],

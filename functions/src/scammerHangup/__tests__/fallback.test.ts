@@ -14,15 +14,15 @@ import { extractEscalationSignal } from "../../roleplay/escalationSignal";
 import { extractSmsMarker } from "../../roleplay/smsMarker";
 import { wrapUserInputAsData } from "../../roleplay/promptAssembly";
 
-// T192 C3 — 폴백 끊기 배선(Architecture.md §79.7 · §79.19 (4) · (5) 10 · 11) · G507 · G532 · G530 ⓒ.
+// T192 C3 — 폴백 끊기 배선(Architecture.md §79.7 · §79.19 (4) · (5) 10 · 11) · G507 · G554 · G552 ⓒ.
 // `sendMessage`는 onCall이라 직접 실행할 수 없다 — 판정 · 효과를 순수 함수로 고정하고, 핸들러 자리는 소스 스캔으로 본다.
 const ROLEPLAY_INDEX = path.resolve(__dirname, "../../../src/roleplay/index.ts");
 
-test("[G532] isSmsAwaitingUser 진리표 — 도착 0 → 거짓 · userTurns ≤ last → 참 · > → 거짓 · 도착 시점 부재 = 0", () => {
+test("[G554] isSmsAwaitingUser 진리표 — 도착 0 → 거짓 · userTurns ≤ last → 참 · > → 거짓 · 도착 시점 부재 = 0", () => {
   const rows: ReadonlyArray<readonly [string, Array<{ smsId: string; userTurnsAtArrival?: number }>, number, boolean]> = [
     ["도착 0", [], 5, false],
     ["같은 발화(이번 응답과 함께 보임)", [{ smsId: "a", userTurnsAtArrival: 4 }], 4, true],
-    ["도착 기록보다 작은 값(강등 직후 보수 — OQ-A132)", [{ smsId: "a", userTurnsAtArrival: 4 }], 3, true],
+    ["도착 기록보다 작은 값(강등 직후 보수 — OQ-A141)", [{ smsId: "a", userTurnsAtArrival: 4 }], 3, true],
     ["도착 뒤 한 번 말함", [{ smsId: "a", userTurnsAtArrival: 4 }], 5, false],
     ["여러 건 — 마지막(최대) 기준", [{ smsId: "a", userTurnsAtArrival: 2 }, { smsId: "b", userTurnsAtArrival: 6 }], 6, true],
     ["여러 건 — 최대 뒤 발화", [{ smsId: "a", userTurnsAtArrival: 2 }, { smsId: "b", userTurnsAtArrival: 6 }], 7, false],
@@ -49,7 +49,7 @@ const FACTS: FallbackHangupFacts = {
   smsDeliveredLoaded: true,
 };
 
-test("[G532] 폴백 문자 대기 — 선언 0 → 거짓 · 기록 읽기 실패 → 대기(fail-closed) · 읽었으면 isSmsAwaitingUser", () => {
+test("[G554] 폴백 문자 대기 — 선언 0 → 거짓 · 기록 읽기 실패 → 대기(fail-closed) · 읽었으면 isSmsAwaitingUser", () => {
   const delivered = [{ smsId: "a", userTurnsAtArrival: 4 }];
   assert.equal(fallbackSmsAwaitingUser({ ...FACTS, smsDeclared: false, smsDeliveredLoaded: false }, delivered), false);
   assert.equal(fallbackSmsAwaitingUser({ ...FACTS, smsDeliveredLoaded: false }, []), true, "읽기 실패는 대기로 본다");
@@ -126,7 +126,7 @@ test("[G507] 같은 실행 출력 — ① 모델 출력 신호 → 종료 ② �
   assert.deepEqual(results.imitation.effect, { end: false }, "사용자 입력 흉내가 신호로 읽혔다");
 });
 
-test("[G532 · OQ-A131] 폴백 한 응답에 [[SMS:…]] 도착 + END_CALL_* → 종료 0 · 문자 1(문자가 이긴다)", () => {
+test("[G554 · OQ-A140] 폴백 한 응답에 [[SMS:…]] 도착 + END_CALL_* → 종료 0 · 문자 1(문자가 이긴다)", () => {
   const both = runTurn({
     facts: FACTS,
     delivered: [],
@@ -142,14 +142,14 @@ test("[G532 · OQ-A131] 폴백 한 응답에 [[SMS:…]] 도착 + END_CALL_* →
   assert.deepEqual(rejected.effect, { end: true, kind: "goal" });
 });
 
-test("[G530 ⓒ · §79.19 (5) 10 배선] sendMessage — 입력은 userTurnsNow · 실제 limitReached · 사전(LLM 전) → 프롬프트 → 사후(마커 뒤 · 재확인 앞)", () => {
+test("[G552 ⓒ · §79.19 (5) 10 배선] sendMessage — 입력은 userTurnsNow · 실제 limitReached · 사전(LLM 전) → 프롬프트 → 사후(마커 뒤 · 재확인 앞)", () => {
   const src = readFileSync(ROLEPLAY_INDEX, "utf8");
   const at = (needle: string): number => {
     const i = src.indexOf(needle);
     assert.ok(i >= 0, `없음: ${needle}`);
     return i;
   };
-  assert.ok(src.includes("userTurns: userTurnsNow,"), "폴백 하한 입력이 S5b와 같은 변수(userTurnsNow)가 아니다(G530 ⓒ)");
+  assert.ok(src.includes("userTurns: userTurnsNow,"), "폴백 하한 입력이 S5b와 같은 변수(userTurnsNow)가 아니다(G552 ⓒ)");
   const limitAt = at("const limitReached = isSessionLimitReached({");
   const preAt = at("decideFallbackHangup(hangupFacts, smsDelivered, false)");
   const llmAt = at("await completeWithFallback(");

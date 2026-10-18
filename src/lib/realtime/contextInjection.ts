@@ -1,4 +1,4 @@
-// §78.4 (T1) · §78.3.4 (N1) — 연속 발화 제거의 클라 순수 규칙(docs/Architecture.md §78 · AC-098 · S3).
+// §82.4 (T1) · §82.3.4 (N1) — 연속 발화 제거의 클라 순수 규칙(docs/Architecture.md §82 · AC-098 · S3).
 //
 // ⭐ 왜 필요한가(S1 실측, docs/research/s1-live-turn-measurement-2026-10.md): 문자 도착 안내를
 // `turnComplete:true` 텍스트 턴으로 넣으면 모델이 **사용자 차례를 건너뛰고 한 턴을 더 말한다** —
@@ -9,7 +9,7 @@
 // 이벤트를 넣고 결과대로 전송 · 기록한다. 브라우저 이벤트에 건 판정은 게이트를 전건 통과해도 틀린 것을
 // 못 잡으므로(이 저장소의 반복 교훈) 판정은 전부 여기서 단위 테스트로 고정한다.
 
-// ── 지시 종류별 전달 방식(§78.4.2 표) ─────────────────────────────────────────────
+// ── 지시 종류별 전달 방식(§82.4.2 표) ─────────────────────────────────────────────
 
 /**
  * 실시간 세션에 넣는 오케스트레이션 지시의 전달 방식.
@@ -21,7 +21,7 @@
  * | `speakerSwitch` | 확인 창구 재연결 지시(`reconnectInstruction`) | 화자 전환 첫 발화 — `relayGreeting` 텍스트 턴(`turnComplete:true`, §71.5 큐 경유) |
  * | `smsNudge` | 문자 백스톱 넛지(서버 `nudgeInstruction` — T191 문자 도달 조건 설계 "백스톱" 표가 정한 행) | 맥락 주입(`turnComplete:false`) · **침묵 넛지 대상 아님**(문자가 아직 안 갔다 — "방금 보낸 문자" 문면이 거짓이 된다) |
  *
- * ⛔ 표에 없는 지시가 생기면 행을 추가할지 먼저 묻는다(§78.4.2 머리말).
+ * ⛔ 표에 없는 지시가 생기면 행을 추가할지 먼저 묻는다(§82.4.2 머리말).
  */
 export type InstructionDelivery = "smsAnnounce" | "verifyAnnounce" | "speakerSwitch" | "smsNudge";
 
@@ -44,11 +44,11 @@ export function sendsAsContextInjection(delivery: InstructionDelivery | undefine
   return delivery !== "speakerSwitch";
 }
 
-// ── 침묵 넛지(§78.4.2 "침묵 넛지(신규)" 행 · G492) ─────────────────────────────────
+// ── 침묵 넛지(§82.4.2 "침묵 넛지(신규)" 행 · G543) ─────────────────────────────────
 
 /**
- * 맥락 주입 뒤 이 시간 동안 사용자 발화가 없고 모델이 유휴면 넛지 1회. **판단값**(§78.4.2 —
- * `SMS_MENTION_SILENCE_SEC`=8초, OQ-A110). 값을 바꾸려면 설계 표를 먼저 고친다.
+ * 맥락 주입 뒤 이 시간 동안 사용자 발화가 없고 모델이 유휴면 넛지 1회. **판단값**(§82.4.2 —
+ * `SMS_MENTION_SILENCE_SEC`=8초, OQ-A133). 값을 바꾸려면 설계 표를 먼저 고친다.
  */
 export const SMS_MENTION_SILENCE_SEC = 8;
 
@@ -56,7 +56,7 @@ export const SMS_MENTION_SILENCE_SEC = 8;
 export const SILENCE_NUDGE_RECHECK_MS = 1000;
 
 /**
- * 침묵 넛지 문면 — §78.4.2 표 원문 그대로. 오프닝 트리거(`OPENING_TRIGGER_TURN`)와 같은 **오케스트레이션
+ * 침묵 넛지 문면 — §82.4.2 표 원문 그대로. 오프닝 트리거(`OPENING_TRIGGER_TURN`)와 같은 **오케스트레이션
  * 신호**라 클라가 쥔다(모델이 응답할 입력일 뿐 낭독 대상이 아니다).
  */
 export const SILENCE_NUDGE_TEXT = "(상대가 말이 없다. 방금 보낸 문자를 한 문장으로 언급하고 기다려라.)";
@@ -123,12 +123,12 @@ export function localSpeechStarted(prevSpeaking: boolean, nextSpeaking: boolean)
   return !prevSpeaking && nextSpeaking;
 }
 
-/** 넛지 발동 로그 1줄 — 원인 범주 `cause:"silence"`(AC-098 (c) 별도 집계 · OQ-A110). 전사 · 식별자 0. */
+/** 넛지 발동 로그 1줄 — 원인 범주 `cause:"silence"`(AC-098 (c) 별도 집계 · OQ-A133). 전사 · 식별자 0. */
 export function formatSilenceNudgeLog(input: { sinceInjectionMs: number }): string {
   return `cause:"silence" sinceInjectionMs=${Math.round(input.sinceInjectionMs)}`;
 }
 
-// ── 계수 규칙(§78.3.4 · N1 · G488 계수 부분) ─────────────────────────────────────
+// ── 계수 규칙(§82.3.4 · N1 · G539 계수 부분) ─────────────────────────────────────
 
 /**
  * 실시간 경로 클라 카운터.

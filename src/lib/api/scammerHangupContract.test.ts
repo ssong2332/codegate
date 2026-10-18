@@ -1,4 +1,4 @@
-// T192 C4 · G535 — 서버 · 클라 계약 리터럴 양방향 대조(Architecture.md §79.19 (6) ⑤ ⓐ~ⓓ · (8) G535).
+// T192 C4 · G557 — 서버 · 클라 계약 리터럴 양방향 대조(Architecture.md §79.19 (6) ⑤ ⓐ~ⓓ · (8) G557).
 //
 // 서버 타입(`functions/src/**`)과 클라 타입(`src/lib/api/types.ts`)은 별도 빌드 루트라 import로 공유하지 않고 손으로
 // 미러링한다(1:1 주석 관례). 손 미러는 한쪽만 바뀌어도 컴파일이 통과하므로, **서버 소스를 읽어** 리터럴 집합을 뽑고 클라와
@@ -113,7 +113,7 @@ function assertContract(client: string): void {
   assert.deepEqual(c.sendEndClient, c.sendEndServer, "ⓓ SendMessageResponse.endReason 집합이 서버와 다르다");
 }
 
-test("[G535] 서버 · 클라 계약 리터럴 4종이 양방향으로 같다(ⓐ status · ⓑ 종료 사유 · ⓒ 요청 키 · ⓓ sendMessage endReason)", (t) => {
+test("[G557] 서버 · 클라 계약 리터럴 4종이 양방향으로 같다(ⓐ status · ⓑ 종료 사유 · ⓒ 요청 키 · ⓓ sendMessage endReason)", (t) => {
   const client = read(CLIENT_TYPES);
   assertContract(client);
   const c = contract(client);
@@ -122,15 +122,15 @@ test("[G535] 서버 · 클라 계약 리터럴 4종이 양방향으로 같다(�
   assert.deepEqual(c.endReasonServer, ["limit_reached", "scammer_ended", "user_ended"]);
   assert.deepEqual(c.requestKeysServer, ["kind", "pendingInstruction", "sessionId", "userTurns"]);
   assert.deepEqual(c.sendEndServer, ["limit_reached", "scammer_ended"]);
-  t.diagnostic(`[G535] status ${c.statusServer.length} · 종료 사유 ${c.endReasonServer.join("/")} · 요청 키 ${c.requestKeysServer.join("/")}`);
+  t.diagnostic(`[G557] status ${c.statusServer.length} · 종료 사유 ${c.endReasonServer.join("/")} · 요청 키 ${c.requestKeysServer.join("/")}`);
 });
 
-test("[G535 ⓑ] 서버 요청 타입 EndSessionReason은 허용목록 타입의 별칭이다(손 미러 0 — C1 Minor ④)", () => {
+test("[G557 ⓑ] 서버 요청 타입 EndSessionReason은 허용목록 타입의 별칭이다(손 미러 0 — C1 Minor ④)", () => {
   const body = typeBody(read(SERVER.sessionTypes), "EndSessionReason").trim();
   assert.equal(body, "AllowedEndSessionReason", "서버 요청 타입이 허용목록과 따로 노는 유니언으로 돌아갔다");
 });
 
-test("[G535 역검증] 클라 사본에서 리터럴 하나를 빼거나 더하면 해당 항목이 실패한다(ⓐ~ⓓ 각각)", () => {
+test("[G557 역검증] 클라 사본에서 리터럴 하나를 빼거나 더하면 해당 항목이 실패한다(ⓐ~ⓓ 각각)", () => {
   const client = read(CLIENT_TYPES);
   // ⚠️ 앵커는 한 줄짜리만 쓴다(줄바꿈 리터럴 앵커 금지 — CRLF 체크아웃). ⓒ는 요청 타입 블록 안에서만 바꾼다.
   const requestHead = "export type RequestScammerHangupRequest = {";

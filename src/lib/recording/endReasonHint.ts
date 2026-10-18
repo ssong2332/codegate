@@ -9,7 +9,7 @@
 //    기록한다 — 클라 힌트는 신뢰 근거가 아니다(§79.10 "신뢰 등급 변화 0").
 import type { EndSessionReason } from "../api/types";
 
-/** 종료 화면이 `endSession`에 보낼 수 있는 사유(서버 `END_SESSION_ALLOWED_REASONS`와 같은 3값 — G535가 대조). */
+/** 종료 화면이 `endSession`에 보낼 수 있는 사유(서버 `END_SESSION_ALLOWED_REASONS`와 같은 3값 — G557가 대조). */
 export const END_REASON_HINT_ALLOWED: readonly EndSessionReason[] = ["user_ended", "limit_reached", "scammer_ended"];
 
 export const END_REASON_HINT_DEFAULT: EndSessionReason = "user_ended";

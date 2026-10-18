@@ -1,9 +1,9 @@
-// T192 C3 — 텍스트 폴백(`sendMessage`)의 끊기 판정 배선(Architecture.md §79.7 · §79.19 (5) 10 · 11 · G507 · G532).
+// T192 C3 — 텍스트 폴백(`sendMessage`)의 끊기 판정 배선(Architecture.md §79.7 · §79.19 (5) 10 · 11 · G507 · G554).
 //
 // `sendMessage`는 onCall이라 에뮬레이터 없이 실행할 수 없다(관측 불가 지점) ⇒ 판정 입력 조립 · 변형 선택 · 효과 판정을
 // 이 순수 모듈로 내려 단위 테스트로 고정하고, 핸들러는 이 함수들을 정해진 자리에서 부르기만 한다(소스 스캔이 자리를 본다).
 // ⛔ 판정 자체는 `decideScammerHangup` 하나(실시간 콜러블과 같은 함수 — AC-103 (f) · G501) · 문자 대기는 `isSmsAwaitingUser`
-//    하나(G532). 이 파일은 표를 다시 쓰지 않는다.
+//    하나(G554). 이 파일은 표를 다시 쓰지 않는다.
 // ⛔ Firestore · LLM import 0(이 모듈은 `roleplay/index.ts`가 import한다 — 시크릿 폐포를 넓히지 않는다).
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import type { MessengerChannel, ScammerHangupKind, SessionStatus } from "../shared/types";
@@ -18,7 +18,7 @@ export type FallbackHangupFacts = {
   verifyEnabled: boolean;
   /** `verifyState?.placed === true` — 조회 실패(`undefined`)는 전환 전으로 본다(4행 fail-closed). */
   transferPlaced: boolean;
-  /** `userTurnsNow`(S5b 문자 게이트와 같은 변수 — G530 ⓒ). */
+  /** `userTurnsNow`(S5b 문자 게이트와 같은 변수 — G552 ⓒ). */
   userTurns: number;
   /** 턴 확보 트랜잭션 값으로 LLM 전에 계산한 한도(§79.19 (5) 10 — 옛 79.7 1의 `limitReached:false` 정정). */
   limitReached: boolean;
@@ -83,7 +83,7 @@ export type FallbackHangupEffect =
 /**
  * 효과 판정(§79.19 (5) 10) — `endCall && hangupMode === "signal" && 사후.status === "accepted"`일 때만 끝낸다. 그 밖에
  * 신호가 있으면 무시하고(텍스트에서는 이미 지워졌다) 로그용 근거를 돌려준다: SIGNAL이 아니었으면 사전 판정의 행 ·
- * SIGNAL이었으면 사후 판정의 행(한 응답에 문자 마커 + 신호 = 사후 6행 → 문자가 이긴다 · OQ-A131).
+ * SIGNAL이었으면 사후 판정의 행(한 응답에 문자 마커 + 신호 = 사후 6행 → 문자가 이긴다 · OQ-A140).
  */
 export function resolveFallbackHangupEffect(input: {
   endCall: "goal" | "give_up" | undefined;

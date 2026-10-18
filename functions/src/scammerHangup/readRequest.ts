@@ -1,7 +1,7 @@
-// T192 C3 — `requestScammerHangup` 요청 판독(Architecture.md §79.19 (6) ② ③ · G536).
+// T192 C3 — `requestScammerHangup` 요청 판독(Architecture.md §79.19 (6) ② ③ · G558).
 //
 // 핸들러(`index.ts`)는 onCall이라 에뮬레이터 없이 실행할 수 없다(관측 불가 지점) ⇒ 판독을 이 순수 함수로 내려
-// 필드별 무효값 표로 고정한다. 핸들러는 세션 read **앞에서** 이 함수 하나를 부른다(소스 순서 — G536).
+// 필드별 무효값 표로 고정한다. 핸들러는 세션 read **앞에서** 이 함수 하나를 부른다(소스 순서 — G558).
 // ⛔ Firestore import 0. 무효값은 조용히 보정하지 않고 `invalid-argument`로 거절한다(6행 차단 무력화 방지).
 // `userTurns`는 S5b `deliverInCallSms`와 **같은 판독 규칙**(정수 · 0~`MAX_CLAIMED_TURNS` — OQ-A120 같은 등급).
 import { HttpsError } from "firebase-functions/v2/https";

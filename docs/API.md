@@ -575,7 +575,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 
 ## 부록 G — 문자 도달 조건(서버 문자 게이트) (T191 S5b · PRD **AC-099** · `docs/Architecture.md` T191 절 "문자 도달 조건" — 설계 금지 X1 · X4)
 
-> ⭐ **세 경로(실시간 도구 · 텍스트 폴백 마커 · 백스톱)가 판정 함수 1개(`functions/src/inCallSms/smsGate.ts` `resolveSmsGate`)와 발송 통로 1개(`smsDelivery.ts` `deliverSmsThroughGate` — 도착 기록을 읽은 같은 트랜잭션에서 판정 → 생성)를 지난다.** 카탈로그 고정 턴(`afterScammerTurns`)만으로 자동 발송하는 경로는 0이다(G489). 문자 본문 · 인증번호 · 발신번호의 원천은 여전히 서버 카탈로그(`IN_CALL_SMS`)다.
+> ⭐ **세 경로(실시간 도구 · 텍스트 폴백 마커 · 백스톱)가 판정 함수 1개(`functions/src/inCallSms/smsGate.ts` `resolveSmsGate`)와 발송 통로 1개(`smsDelivery.ts` `deliverSmsThroughGate` — 도착 기록을 읽은 같은 트랜잭션에서 판정 → 생성)를 지난다.** 카탈로그 고정 턴(`afterScammerTurns`)만으로 자동 발송하는 경로는 0이다(G540). 문자 본문 · 인증번호 · 발신번호의 원천은 여전히 서버 카탈로그(`IN_CALL_SMS`)다.
 
 ### G.1 `deliverInCallSms` — 요청
 | 필드 | 타입 | 규칙 |
@@ -609,12 +609,12 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 
 **백스톱(`planSmsBackstop`) — 필수 목적만 강제 · 선택 목적은 건너뛰기(AC-099 (e))**: 아직 안 간 `required:true` 문자의 게이트 개방 시점 `openAt` 기준 — `userTurns === openAt + 2` → `nudge` 1회 · `userTurns >= openAt + 4` → 같은 게이트를 다시 통과시켜 발송(`trigger:"backstop"`) · 남은 필수 없음 → `none_pending`. 클라는 **사용자 발화 flush마다 최대 1회** 묻는다.
 
-### G.4 Live 도구 `send_prepared_sms` — 인자 (G487 · G384 "인자 없음"을 의도적으로 교체)
+### G.4 Live 도구 `send_prepared_sms` — 인자 (G538 · G384 "인자 없음"을 의도적으로 교체)
 `parameters = { type: OBJECT, properties: { purpose: { type: STRING, format: "enum", enum: ["identity","transfer","link"] } }, required: ["purpose"] }` · `behavior: BLOCKING` 유지(G430). `offer_verification_desk`는 **인자 없음 그대로**. 도구 응답 `{status, guidance}`의 `guidance` = delivered면 `announceInstruction`, 그 외 `declineInstruction`(콜러블 실패면 `liveTools.failureInstruction` — 종전).
 
 ### G.5 텍스트 폴백(`sendMessage`) — 계약 무변경, 내부 동작만
 - 요청 · 응답 필드 **무변경**(`sms?: { smsId }`는 그 턴 도착분 — 백스톱 또는 마커).
-- 백스톱은 LLM 호출 **전**(announce가 같은 응답의 턴 지시로) · 모델 마커 `[[SMS:identity|transfer|link]]`는 응답 저장 **뒤** 판정 · 지금 게이트가 열린 목적만 턴 지시로 제시. 마커는 저장 전에 지운다(참가자 0 노출). 사용자 입력 속 흉내는 `promptAssembly` `escapeSentinelLookalikes`가 무력화(§78.3.1 정본 위치).
+- 백스톱은 LLM 호출 **전**(announce가 같은 응답의 턴 지시로) · 모델 마커 `[[SMS:identity|transfer|link]]`는 응답 저장 **뒤** 판정 · 지금 게이트가 열린 목적만 턴 지시로 제시. 마커는 저장 전에 지운다(참가자 0 노출). 사용자 입력 속 흉내는 `promptAssembly` `escapeSentinelLookalikes`가 무력화(§82.3.1 정본 위치).
 - 사용자 발화 수 = max(`messages` user 수 + 1, 마지막 도착 문서 `userTurnsAtArrival`)(리뷰 M1 — 실시간에서 강등된 세션의 단위 혼합 보정).
 - 인증번호 대조(#306·#312)의 "다음 문자 도착" 판정은 도착 기록(문서 존재 · `userTurnsAtArrival` 순서)으로(리뷰 M3). 결과 1줄 문면 · 번호 비노출 무변경.
 

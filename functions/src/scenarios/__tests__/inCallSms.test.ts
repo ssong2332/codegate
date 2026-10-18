@@ -16,7 +16,7 @@ import { resolveAnchor } from "../../report/smsTimeline";
 import { SCENARIO_PROMPTS } from "../index";
 
 const allItems = Object.values(IN_CALL_SMS).flat();
-/** 문서 모양 검사용 임의 앵커(값 자체는 이 검사의 대상이 아니다 — 앵커 의미는 아래 [G488 통합] 테스트가 고정). */
+/** 문서 모양 검사용 임의 앵커(값 자체는 이 검사의 대상이 아니다 — 앵커 의미는 아래 [G539 통합] 테스트가 고정). */
 const DOC_ANCHOR = 2;
 /** T104 — `buildInCallSmsDoc`이 `landingKind` 판정을 위해 scenarioId를 받는다(§19.4 #2). */
 const allEntries = Object.entries(IN_CALL_SMS).flatMap(([scenarioId, items]) =>
@@ -265,7 +265,7 @@ test("[T89] buildInCallSmsDoc은 신규 문서에 anchorScammerTurn을 **항상*
 // (1) createSession이 오프닝 사기범 메시지를 turnIndex 0으로 **먼저** 쓴다 (2) 실시간 전사는 그 뒤에 append되고
 // 클라의 `scammerTranscriptTurns`는 비어 있지 않은 사기범 전사 flush 수다 → 실시간 = 1 + 그 수.
 // 텍스트 경로는 쓰는 순간의 사기범 문서 수 그대로(오프닝 포함 · 서버가 센다).
-test("[T89→T191 G488 통합] 경로별 앵커가 리포트 리졸버에서 '문자를 언급한 사기범 줄' 바로 앞(또는 그 줄)에 놓인다", () => {
+test("[T89→T191 G539 통합] 경로별 앵커가 리포트 리졸버에서 '문자를 언급한 사기범 줄' 바로 앞(또는 그 줄)에 놓인다", () => {
   // 대화(turnIndex): 0 오프닝 · 1 user · 2 scammer · 3 user · 4 scammer(문자 언급) · 5 user
   const messages = [
     { role: "scammer" as const, turnIndex: 0, createdAtMs: 0 },

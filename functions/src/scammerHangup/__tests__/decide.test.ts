@@ -13,7 +13,7 @@ import {
 } from "../decide";
 
 // T192 C1 · G501 — `decideScammerHangup` 판정표(Architecture.md §79.2 + User 결정 2026-10-19 릴레이 행) 전수 ·
-// 행 순서 · 역검증. T192 C3 — §79.19 (2)~(4): 하한 = 사용자 발화(G530) · 6행 = 지시 대기 ∨ 문자 대기 · 8행 위치(G531).
+// 행 순서 · 역검증. T192 C3 — §79.19 (2)~(4): 하한 = 사용자 발화(G552) · 6행 = 지시 대기 ∨ 문자 대기 · 8행 위치(G553).
 // 테스트는 컴파일된 lib/에서 돈다 — 소스 경로는 명시적으로 잡는다.
 const SRC_DIR = path.resolve(__dirname, "../../../src/scammerHangup");
 const SRC_ROOT = path.resolve(__dirname, "../../../src");
@@ -55,7 +55,7 @@ function assertTableShape(rules: readonly ScammerHangupRule[]): void {
   );
 }
 
-test("[G501 · G526 · G531] 판정표가 §79.19 (3) 순서 그대로다(10행 — 8행은 2-b 바로 뒤)", () => {
+test("[G501 · G526 · G553] 판정표가 §79.19 (3) 순서 그대로다(10행 — 8행은 2-b 바로 뒤)", () => {
   assertTableShape(SCAMMER_HANGUP_RULES);
   assert.equal(SCAMMER_HANGUP_MIN_USER_TURNS, 3, "하한 판단값(OQ-A118 — 사용자 발화 3)이 바뀌었다 — User 확정 없이 바꾸지 말 것");
 });
@@ -66,7 +66,7 @@ test("[G501 역검증] 행 두 개의 순서를 바꾼 사본은 표 모양 단�
   assert.throws(() => assertTableShape(swapped), "순서가 바뀐 표가 통과했다 — 순서 단언이 죽었다");
   const dropped = SCAMMER_HANGUP_RULES.filter((r) => r.row !== "2-b");
   assert.throws(() => assertTableShape(dropped), "릴레이 행이 빠진 표가 통과했다");
-  // C1 순서(8행이 7행 뒤)로 되돌린 사본도 걸린다 — G531의 형태 쪽 역검증.
+  // C1 순서(8행이 7행 뒤)로 되돌린 사본도 걸린다 — G553의 형태 쪽 역검증.
   const legacy = SCAMMER_HANGUP_RULES.filter((r) => r.row !== "8");
   legacy.splice(legacy.length - 1, 0, SCAMMER_HANGUP_RULES.find((r) => r.row === "8")!);
   assert.throws(() => assertTableShape(legacy), "8행을 옛 자리(7행 뒤)로 되돌린 표가 통과했다");
@@ -116,14 +116,14 @@ test("[G501] 4행 — 확인 무력화 세션이라도 전환(placedAt) 뒤에�
   assert.equal(decideScammerHangup({ ...PASSING, verifyEnabled: false, transferPlaced: true }).status, "accepted");
 });
 
-test("[G530 ⓐ] 5행 경계 — 사용자 발화 2 too_early · 3 다음 행(accepted) · 0 · 비유한값은 too_early(fail-closed)", () => {
+test("[G552 ⓐ] 5행 경계 — 사용자 발화 2 too_early · 3 다음 행(accepted) · 0 · 비유한값은 too_early(fail-closed)", () => {
   assert.equal(decideScammerHangup({ ...PASSING, userTurns: 2 }).status, "too_early");
   assert.equal(decideScammerHangup({ ...PASSING, userTurns: 3 }).status, "accepted");
   assert.equal(decideScammerHangup({ ...PASSING, userTurns: 0 }).status, "too_early");
   assert.equal(decideScammerHangup({ ...PASSING, userTurns: Number.NaN }).status, "too_early");
 });
 
-test("[G530 ⓑ] 폴백 교대 엄격 표(k = 0~10) — 옛 `사기범 턴 번호 ≥ 4` ⇔ 새 `userTurns ≥ 3`", () => {
+test("[G552 ⓑ] 폴백 교대 엄격 표(k = 0~10) — 옛 `사기범 턴 번호 ≥ 4` ⇔ 새 `userTurns ≥ 3`", () => {
   // 폴백은 매 요청이 사용자 1 + 사기범 1(오프닝 사기범 문서 포함) — 사용자 k번째 발화에 답하는 턴의 사기범 턴 번호 =
   // 저장된 사기범 문서(k) + 1 = k + 1(`roleplay/index.ts` `scammerTurnNumber` 정의) · 사용자 발화 수 = k(`userTurnsNow`).
   const OLD_MIN_SCAMMER_TURN_NUMBER = 4;
@@ -217,7 +217,7 @@ test("[G526 ⓐ 역검증] 중간 leg를 넣으면 9행 판정과 갈리는 조�
   assert.ok(diverged > 0, "중간 leg가 판정을 하나도 바꾸지 않는다 — 2-b 행이 죽었다");
 });
 
-test("[G531] 표식 있는 입력은 3 · 4 · 5 · 6 · 7행 조건을 무엇을 켜도 already_accepted · 1 · 2 · 2-b는 여전히 이긴다", () => {
+test("[G553] 표식 있는 입력은 3 · 4 · 5 · 6 · 7행 조건을 무엇을 켜도 already_accepted · 1 · 2 · 2-b는 여전히 이긴다", () => {
   const laterRowPatches: ReadonlyArray<readonly [string, Partial<ScammerHangupInput>, ScammerHangupStatus]> = [
     ["3 Mock", { isMockTurn: true }, "mock_turn"],
     ["4 전환 전", { verifyEnabled: true }, "blocked_transfer"],
@@ -299,8 +299,8 @@ test("[G501 배선] 실시간 콜러블은 commit.ts 경유로 판정한다 · �
   }
 });
 
-// C1 Minor ⑥ ⑦ — C1이 *"C3 배선 뒤에 더한다"* 로 인계한 폴백 쪽 단언(G501 · G526 ⓓ · G532).
-test("[G501 · G526 ⓓ · G532 배선] 폴백 sendMessage도 같은 판정 함수 · isSmsAwaitingUser · resolveHangupRelay를 부른다", () => {
+// C1 Minor ⑥ ⑦ — C1이 *"C3 배선 뒤에 더한다"* 로 인계한 폴백 쪽 단언(G501 · G526 ⓓ · G554).
+test("[G501 · G526 ⓓ · G554 배선] 폴백 sendMessage도 같은 판정 함수 · isSmsAwaitingUser · resolveHangupRelay를 부른다", () => {
   const roleplay = readFileSync(path.join(SRC_ROOT, "roleplay/index.ts"), "utf8");
   const fallback = readFileSync(path.join(SRC_DIR, "fallback.ts"), "utf8");
   const commit = readFileSync(path.join(SRC_DIR, "commit.ts"), "utf8");
@@ -308,7 +308,7 @@ test("[G501 · G526 ⓓ · G532 배선] 폴백 sendMessage도 같은 판정 함�
   assert.equal(roleplay.split("decideFallbackHangup(").length - 1, 2, "폴백 사전 · 사후 판정이 각 1회여야 한다");
   assert.ok(fallback.includes("decideScammerHangup({"), "fallback.ts가 decideScammerHangup을 부르지 않는다");
   assert.ok(roleplay.includes("relay: resolveHangupRelay(session)"), "폴백 판정 입력의 릴레이가 resolveHangupRelay에서 오지 않는다");
-  // 문자 대기 판정 지점 하나(G532) — 폴백 · 콜러블 모두 isSmsAwaitingUser. 조건식 복사(직접 비교) 0.
+  // 문자 대기 판정 지점 하나(G554) — 폴백 · 콜러블 모두 isSmsAwaitingUser. 조건식 복사(직접 비교) 0.
   assert.ok(fallback.includes("isSmsAwaitingUser("), "폴백이 isSmsAwaitingUser를 부르지 않는다");
   assert.ok(commit.includes("isSmsAwaitingUser("), "콜러블 판정이 isSmsAwaitingUser를 부르지 않는다");
   for (const [label, src] of [["roleplay/index.ts", roleplay], ["fallback.ts", fallback], ["commit.ts", commit]] as const) {
@@ -341,7 +341,7 @@ function requestTypeBlock(src: string): string {
   return src.slice(start, src.indexOf("};", start) + 2);
 }
 
-test("[G530 ⓓ] scammerHangup/** · 서버 · 클라 요청 타입에 옛 사기범 턴 식별자 0", () => {
+test("[G552 ⓓ] scammerHangup/** · 서버 · 클라 요청 타입에 옛 사기범 턴 식별자 0", () => {
   const files = listTs(SRC_DIR);
   assert.ok(files.length >= 8, `스캔 파일이 너무 적다(${files.length}) — 경로가 깨졌다`);
   const hits = files.filter((f) => readFileSync(f, "utf8").includes(OLD_TURN_FIELD)).map((f) => path.relative(SRC_DIR, f));
@@ -354,7 +354,7 @@ test("[G530 ⓓ] scammerHangup/** · 서버 · 클라 요청 타입에 옛 사�
   }
 });
 
-test("[G530 ⓓ 역검증] 옛 식별자를 끼운 요청 타입 사본은 같은 스캔에 걸린다", () => {
+test("[G552 ⓓ 역검증] 옛 식별자를 끼운 요청 타입 사본은 같은 스캔에 걸린다", () => {
   const block = requestTypeBlock(readFileSync(path.join(SRC_DIR, "types.ts"), "utf8"));
   const poisoned = block.replace("userTurns: number;", `${OLD_TURN_FIELD}: number;`);
   assert.notEqual(poisoned, block, "주입 앵커가 맞지 않는다");

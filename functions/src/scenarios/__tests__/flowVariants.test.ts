@@ -511,5 +511,5 @@ test("[T191 S5 호출부] 시나리오 프롬프트 해석이 단일 지점을 �
   const realtime = fs.readFileSync(path.join(FUNCTIONS_SRC, "realtime/index.ts"), "utf-8");
   assert.ok(realtime.includes("flowVariantId: session.flowVariantId"));
   const eleven = fs.readFileSync(path.join(FUNCTIONS_SRC, "realtime/elevenLabsProvider.ts"), "utf-8");
-  assert.equal(eleven.includes("flowVariant"), false, "ElevenLabs 경로는 변형 미적용(OQ-A108 기본값)");
+  assert.equal(eleven.includes("flowVariant"), false, "ElevenLabs 경로는 변형 미적용(OQ-A131 기본값)");
 });

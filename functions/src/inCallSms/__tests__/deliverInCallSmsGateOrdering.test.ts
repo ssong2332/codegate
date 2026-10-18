@@ -1,4 +1,4 @@
-// 문자 발송 배선 — 소스 스캔(G486 세 호출부 단일 함수 · G489 고정 턴 자동 발송 0 · 거부 시 쓰기 0).
+// 문자 발송 배선 — 소스 스캔(G537 세 호출부 단일 함수 · G540 고정 턴 자동 발송 0 · 거부 시 쓰기 0).
 //
 // ⚠️ **관측 불가 지점 방어**(`feedback_unobservable_behavior_gates`) — `deliverInCallSms`·`sendMessage`는 `onCall`
 // 핸들러라 에뮬레이터 없이 유닛 계층에서 직접 호출·관측할 수 없다. 판정(`resolveSmsGate`)과 실행
@@ -45,7 +45,7 @@ const DELIVERY = codeOnly(read("inCallSms/smsDelivery.ts"));
 const CALLABLE = codeOnly(read("inCallSms/index.ts"));
 const FALLBACK = codeOnly(read("roleplay/index.ts"));
 
-test("[G486] 단일 통로 — smsDelivery.ts만 resolveSmsGate를 부른 뒤 문서를 만든다(거부면 create 전에 return)", () => {
+test("[G537] 단일 통로 — smsDelivery.ts만 resolveSmsGate를 부른 뒤 문서를 만든다(거부면 create 전에 return)", () => {
   const gateIdx = DELIVERY.indexOf("resolveSmsGate(");
   const createIdx = DELIVERY.indexOf("tx.create(");
   assert.ok(gateIdx > -1 && createIdx > -1, "판정 호출과 create가 둘 다 있어야 한다");
@@ -57,7 +57,7 @@ test("[G486] 단일 통로 — smsDelivery.ts만 resolveSmsGate를 부른 뒤 �
   );
 });
 
-test("[G486] 세 호출부(실시간 도구 · 폴백 마커 · 백스톱)가 전부 deliverSmsThroughGate를 지난다", () => {
+test("[G537] 세 호출부(실시간 도구 · 폴백 마커 · 백스톱)가 전부 deliverSmsThroughGate를 지난다", () => {
   // 실시간 콜러블: model_tool과 backstop이 같은 호출 1곳을 공유한다(purpose만 다르다).
   assert.equal(CALLABLE.split("deliverSmsThroughGate(").length - 1, 1, "콜러블의 발송 호출은 1곳");
   // 폴백: 백스톱(응답 전) 1곳 + 마커(응답 저장 뒤) 1곳.
@@ -66,7 +66,7 @@ test("[G486] 세 호출부(실시간 도구 · 폴백 마커 · 백스톱)가 �
   assert.match(FALLBACK, /trigger: "model_marker"/);
 });
 
-test("[G486/X4] inCallSms 문서를 만드는 코드는 smsDelivery.ts 한 곳뿐이다(경로별 판정 분기 0)", () => {
+test("[G537/X4] inCallSms 문서를 만드는 코드는 smsDelivery.ts 한 곳뿐이다(경로별 판정 분기 0)", () => {
   const offenders: string[] = [];
   for (const file of listSourceFiles(SRC_ROOT)) {
     const rel = path.relative(SRC_ROOT, file).replace(/\\/g, "/");
@@ -80,7 +80,7 @@ test("[G486/X4] inCallSms 문서를 만드는 코드는 smsDelivery.ts 한 곳�
   assert.deepEqual(offenders, [], "inCallSms 문서를 직접 만드는 다른 경로가 생겼다");
 });
 
-test("[G489] 고정 턴 자동 발송 경로 0 — findDueInCallSms · listInCallSmsTriggers · fallbackAnchorScammerTurn · resolveModelToolSmsGate 정의·호출 0", () => {
+test("[G540] 고정 턴 자동 발송 경로 0 — findDueInCallSms · listInCallSmsTriggers · fallbackAnchorScammerTurn · resolveModelToolSmsGate 정의·호출 0", () => {
   const banned = ["findDueInCallSms", "listInCallSmsTriggers", "fallbackAnchorScammerTurn", "resolveModelToolSmsGate"];
   const offenders: string[] = [];
   for (const file of listSourceFiles(SRC_ROOT)) {
@@ -94,7 +94,7 @@ test("[G489] 고정 턴 자동 발송 경로 0 — findDueInCallSms · listInCal
   assert.deepEqual(offenders, []);
 });
 
-test("[G489] afterScammerTurns가 발송 판정 코드(smsGate · smsDelivery · 콜러블 · sendMessage)에 등장하지 않는다", () => {
+test("[G540] afterScammerTurns가 발송 판정 코드(smsGate · smsDelivery · 콜러블 · sendMessage)에 등장하지 않는다", () => {
   const gate = codeOnly(read("inCallSms/smsGate.ts"));
   for (const [name, code] of [
     ["smsGate.ts", gate],
@@ -106,7 +106,7 @@ test("[G489] afterScammerTurns가 발송 판정 코드(smsGate · smsDelivery ·
   }
 });
 
-test("[G489 역검증] 고정 턴 비교를 되살린 오염본은 같은 검사식에 걸린다", () => {
+test("[G540 역검증] 고정 턴 비교를 되살린 오염본은 같은 검사식에 걸린다", () => {
   const poisoned = `${FALLBACK}\nconst due = IN_CALL_SMS[id].find((i) => i.afterScammerTurns === n);`;
   assert.equal(poisoned.includes("afterScammerTurns"), true, "오염본은 실패해야 한다");
   assert.equal(FALLBACK.includes("afterScammerTurns"), false, "정상본은 통과");

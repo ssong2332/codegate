@@ -21,7 +21,7 @@ import { SCAMMER_HANGUP_FAILURE_INSTRUCTION } from "../scammerHangup/guidance";
 
 /**
  * §59.5 T1 — 클라가 하드코딩하지 않도록 이름은 `createRealtimeCall` 응답으로도 내려간다(G385).
- * ⭐ T191(문자 도달 조건 · G487) — 인자 없음(G384)을 **의도적으로 바꿨다**: `purpose` enum 필수.
+ * ⭐ T191(문자 도달 조건 · G538) — 인자 없음(G384)을 **의도적으로 바꿨다**: `purpose` enum 필수.
  */
 export const LIVE_TOOL_SEND_PREPARED_SMS = "send_prepared_sms";
 /**
@@ -104,7 +104,7 @@ export type EndCallScope = {
 const NO_ARGS_PARAMETERS = { type: Type.OBJECT, properties: {} };
 
 /**
- * ⭐ T191(문자 도달 조건 · PRD AC-099 (b) · G487) — `send_prepared_sms`의 유일한 인자 `purpose`(enum 필수).
+ * ⭐ T191(문자 도달 조건 · PRD AC-099 (b) · G538) — `send_prepared_sms`의 유일한 인자 `purpose`(enum 필수).
  * 모델이 대화 단계를 보고 무엇을 보낼지 고르고, 서버가 세션 흐름 변형의 선언 · 간격으로 재검증한다
  * (`inCallSms/smsGate.ts` — 선언 밖 목적은 `not_allowed`). enum 값은 서버 상수 `SMS_PURPOSES`가 원천이다.
  */
@@ -171,7 +171,7 @@ const END_CALL_DECLARATION: FunctionDeclaration = {
 
 /**
  * §59.5 선언 조건(정본 표). T192 C3 — `end_call`은 기존 두 선언 **뒤에** 붙는다(§79.19 (5) 3). `end_call`이 거짓이면
- * (메신저 · 중간 leg) 배열은 S5b 판정 그대로(바이트 동일 — G534). ⚠️ 옛 주석 *"둘 다 걸리지 않으면 [] — 토큰 요청
+ * (메신저 · 중간 leg) 배열은 S5b 판정 그대로(바이트 동일 — G556). ⚠️ 옛 주석 *"둘 다 걸리지 않으면 [] — 토큰 요청
  * 바이트가 오늘과 동일 · G388이 기대는 유일한 레버"* 는 C3부터 **거짓**이다: 문자 · 확인 도구가 없는 Gemini 통화 세션에도
  * `end_call`이 선언된다(§79.3 ⚠️). G388(백스톱 지연 창)은 도구별 키(`sendPreparedSms` · `offerVerificationDesk`)라 무영향.
  */

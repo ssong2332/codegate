@@ -35,9 +35,9 @@ import { SCENARIO_PROMPTS } from "../../scenarios";
 const ALLOWED_NAMES = new Set([LIVE_TOOL_SEND_PREPARED_SMS, LIVE_TOOL_OFFER_VERIFICATION_DESK, LIVE_TOOL_END_CALL]);
 
 /**
- * ⚠️ T192 C3(G534) — 이 파일의 §59 · §61 단언(문자 · 확인 도구의 선언 조건)은 **`end_call` 거짓 입력**(메신저)으로 돈다.
- * 그 범위에서 출력이 S5b 판정과 바이트 동일해야 한다는 것이 G534이고, 음성 통화(`end_call` 참)와의 관계는 아래
- * [T192/C3 G534] 테스트가 "기존 선언 뒤에 1개"로 따로 고정한다.
+ * ⚠️ T192 C3(G556) — 이 파일의 §59 · §61 단언(문자 · 확인 도구의 선언 조건)은 **`end_call` 거짓 입력**(메신저)으로 돈다.
+ * 그 범위에서 출력이 S5b 판정과 바이트 동일해야 한다는 것이 G556이고, 음성 통화(`end_call` 참)와의 관계는 아래
+ * [T192/C3 G556] 테스트가 "기존 선언 뒤에 1개"로 따로 고정한다.
  */
 const NO_END_CALL: EndCallScope = { channel: "messenger", relay: undefined };
 const VOICE: EndCallScope = { channel: undefined, relay: undefined };
@@ -162,10 +162,10 @@ test("[§61 T-3/G400] declaresOfferVerificationDesk가 선언·liveTools 이름 
   assert.ok(checked >= 30, "전 조합을 충분히 검사해야 한다");
 });
 
-// R1 ④ — 인자 계약. ⚠️ T191(문자 도달 조건 · G487)이 **G384 "인자 없음" 단언을 의도적으로 바꿨다**:
+// R1 ④ — 인자 계약. ⚠️ T191(문자 도달 조건 · G538)이 **G384 "인자 없음" 단언을 의도적으로 바꿨다**:
 // `send_prepared_sms`는 이제 `purpose` enum(identity|transfer|link) 1개가 필수다(모델이 무엇을 보낼지 고르고 서버가
 // 재검증 — PRD AC-099 (b)). `offer_verification_desk`는 여전히 인자 없음(G384 그대로). BLOCKING 유지(G430)도 함께 본다.
-test("[§59.9 R1④/G384→G487] send_prepared_sms = purpose enum 필수 · offer_verification_desk = 인자 없음 · 둘 다 BLOCKING", () => {
+test("[§59.9 R1④/G384→G538] send_prepared_sms = purpose enum 필수 · offer_verification_desk = 인자 없음 · 둘 다 BLOCKING", () => {
   const scenarioDifficultyPairs: [string, "beginner" | "intermediate" | "advanced" | undefined][] = [
     ["reputation-blackmail-scam", "advanced"],
     ["bank-security-verify-scam", "advanced"],
@@ -199,7 +199,7 @@ test("[§59.9 R1④/G384→G487] send_prepared_sms = purpose enum 필수 · offe
   assert.ok(checked >= 4, "선언된 함수를 최소 4개 이상 실제로 검사해야 한다");
 });
 
-test("[G487 역검증] purpose를 필수에서 뺀 오염본 · enum 밖 값을 넣은 오염본은 같은 검사식에 걸린다", () => {
+test("[G538 역검증] purpose를 필수에서 뺀 오염본 · enum 밖 값을 넣은 오염본은 같은 검사식에 걸린다", () => {
   const [tool] = buildLiveToolDeclarations("reputation-blackmail-scam", "advanced", undefined, NO_END_CALL);
   const decl = (tool.functionDeclarations ?? []).find((d) => d.name === LIVE_TOOL_SEND_PREPARED_SMS);
   assert.ok(decl, "send_prepared_sms 선언이 있어야 한다");
@@ -405,7 +405,7 @@ test("[§71 G430] 선언된 모든 함수는 behavior: BLOCKING을 명시한다"
   assert.ok(checked > 0, "검사한 선언이 0개다 — 시나리오 목록이 비었다");
 });
 
-// ── T192 C3 — G534 · G527 · G502 · G503: `end_call` 선언(Architecture.md §79.3 · §79.19 (5) 1~6 · §79.19 (8)) ──────────
+// ── T192 C3 — G556 · G527 · G502 · G503: `end_call` 선언(Architecture.md §79.3 · §79.19 (5) 1~6 · §79.19 (8)) ──────────
 
 /** 릴레이 범위 표 — 오늘(S7 전) 실제 값은 항상 `undefined`지만 선언 술어는 값 자체로 판정한다(G527). */
 const END_CALL_SCOPES: ReadonlyArray<readonly [string, EndCallScope, boolean]> = [
@@ -435,7 +435,7 @@ function* allToolInputs(): Generator<readonly [string, "beginner" | "intermediat
   for (const v of FLOW_VARIANTS) yield [v.scenarioId, v.level, v.variantId];
 }
 
-test("[T192/C3 G534] end_call 거짓이면 선언 · 이름 출력이 메신저와 바이트 동일 · 참이면 기존 선언 **뒤에** end_call 1개 + 이름 쌍", () => {
+test("[T192/C3 G556] end_call 거짓이면 선언 · 이름 출력이 메신저와 바이트 동일 · 참이면 기존 선언 **뒤에** end_call 1개 + 이름 쌍", () => {
   let checked = 0;
   for (const [scenarioId, difficultyLevel, flowVariantId] of allToolInputs()) {
     const base = buildLiveToolDeclarations(scenarioId, difficultyLevel, flowVariantId, NO_END_CALL);
@@ -471,7 +471,7 @@ test("[T192/C3 G534] end_call 거짓이면 선언 · 이름 출력이 메신저�
   assert.ok(checked > 0, "end_call 참 조합을 하나도 검사하지 않았다");
 });
 
-test("[T192/C3 G534 · G503] end_call 선언 — reason enum(goal · give_up) 필수 · BLOCKING · 설명에 숫자 0", () => {
+test("[T192/C3 G556 · G503] end_call 선언 — reason enum(goal · give_up) 필수 · BLOCKING · 설명에 숫자 0", () => {
   const decl = buildLiveToolDeclarations("kidnapping-threat", "advanced", undefined, VOICE)
     .flatMap((t) => t.functionDeclarations ?? [])
     .find((d) => d.name === LIVE_TOOL_END_CALL);
@@ -490,7 +490,7 @@ test("[T192/C3 G534 · G503] end_call 선언 — reason enum(goal · give_up) �
   );
 });
 
-test("[T192/C3 G534 역검증] end_call을 맨 앞에 넣은 사본 · 메신저에서도 선언한 사본은 같은 판정식에 걸린다", () => {
+test("[T192/C3 G556 역검증] end_call을 맨 앞에 넣은 사본 · 메신저에서도 선언한 사본은 같은 판정식에 걸린다", () => {
   const voice = buildLiveToolDeclarations("loan-refinance-scam", "advanced", undefined, VOICE);
   const base = buildLiveToolDeclarations("loan-refinance-scam", "advanced", undefined, NO_END_CALL);
   const flat = voice.flatMap((t) => t.functionDeclarations ?? []);

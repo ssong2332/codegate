@@ -15,7 +15,7 @@ import { resolveSessionAccountNumber } from "../../shared/fictionalBank";
 import { SCAMMER_HANGUP_FAILURE_INSTRUCTION } from "../../scammerHangup/guidance";
 
 // T192 C3(§79.19 (5) 8) — `RealtimeCallInput`의 필수 키 2개. 기본 = 음성 통화 · 릴레이 없음(= `end_call` 선언).
-// 메신저 범위는 `end_call` 거짓 입력이다 — S5b 판정과 바이트 동일해야 하는 회귀 단언에 쓴다(G534).
+// 메신저 범위는 `end_call` 거짓 입력이다 — S5b 판정과 바이트 동일해야 하는 회귀 단언에 쓴다(G556).
 const VOICE_SCOPE = { channel: undefined, hangupRelay: undefined } as const;
 const MESSENGER_SCOPE = { channel: "messenger", hangupRelay: undefined } as const;
 
@@ -149,7 +149,7 @@ test("GeminiRealtimeProvider: 도구는 서버가 조건에 따라 선언한 이
   }
 });
 
-// ⚠️ T192 C3(§79.3 ⚠️ · G534) — 옛 제목 "오늘과 동일하게 tools가 빈 배열"은 **음성 통화에서 거짓이 됐다**(`end_call`).
+// ⚠️ T192 C3(§79.3 ⚠️ · G556) — 옛 제목 "오늘과 동일하게 tools가 빈 배열"은 **음성 통화에서 거짓이 됐다**(`end_call`).
 // 빈 배열 단언은 `end_call` 거짓 입력(메신저)으로 옮겨 S5b 판정과의 바이트 동일을 그대로 지키고, 음성은 `end_call` 1개를 본다.
 test("GeminiRealtimeProvider: 카탈로그·게이트 둘 다 없는 시나리오 — 메신저 범위는 tools 빈 배열(S5b 그대로) · 음성은 end_call 1개(T192 C3)", async () => {
   const capture = captureTokenRequest();
@@ -164,7 +164,7 @@ test("GeminiRealtimeProvider: 카탈로그·게이트 둘 다 없는 시나리�
     const setup = (capture.bodies()[0] as {
       bidiGenerateContentSetup?: { tools?: unknown[] };
     }).bidiGenerateContentSetup;
-    assert.deepEqual(setup?.tools, [], "end_call 거짓 입력 + 카탈로그·게이트 없음 = tools 빈 배열(G388 · G534)");
+    assert.deepEqual(setup?.tools, [], "end_call 거짓 입력 + 카탈로그·게이트 없음 = tools 빈 배열(G388 · G556)");
     await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "kidnapping-threat",
