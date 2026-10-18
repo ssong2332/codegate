@@ -12,9 +12,11 @@
 // | 호 전환(확인 데스크) 뒤 | 없음 | 0 |
 // | 이번 사기범 턴이 인증번호 문자 도착 턴보다 이르다 | 없음 | 0 |
 // | **인증번호 다음 문자(계좌·링크 등)가 이미 도착했다**(같은 턴 도착 포함) | 없음 — 이체 단계로 넘어간 뒤 인증번호로 되돌아가지 않는다(R8 회귀 ①) | 0~1 |
+// | 인증번호 문자가 **이번 턴에** 도착했다 | 없음 — 참가자는 아직 문자를 못 봤다(도착 지시와 충돌, 리뷰 #1) | 0 |
 // | 인증번호 문자가 도착하지 않았다 · 조회 실패(경고 로그) | 없음 | 1 |
-// | 불러 준 숫자열 중 하나가 `otpCode`와 같다 | `buildOtpCompareInstruction("match")` | 1 |
-// | 그 밖 | `buildOtpCompareInstruction("mismatch")` | 1 |
+// | 불러 준 숫자열 중 **정답과 자릿수가 같은 것**이 없다(전화·금액·계좌 등 — 리뷰 #2) | 없음 | 1 |
+// | 같은 자릿수 후보 중 하나가 `otpCode`와 같다 | `buildOtpCompareInstruction("match")` | 1 |
+// | 그 밖(같은 자릿수인데 다르다) | `buildOtpCompareInstruction("mismatch")` | 1 |
 import { logger } from "firebase-functions";
 import { buildOtpCompareInstruction, IN_CALL_SMS, listOtpItems } from "../scenarios/inCallSms";
 import { extractSpokenCodes } from "../shared/spokenDigits";
@@ -57,8 +59,14 @@ export async function resolveOtpCheckInstruction(input: {
     for (const later of laterItems) {
       if (input.scammerTurnNumber >= later.afterScammerTurns && (await delivered(later.smsId))) return undefined;
     }
+    // 이번 턴에 막 도착한 문자는 참가자가 아직 보지 못했다 — 이 턴의 숫자는 그 번호에 대한 답이 아니다(리뷰 #1).
+    if (item.smsId === input.deliveredThisTurn) continue;
     if (!(await delivered(item.smsId))) continue;
-    return buildOtpCompareInstruction(spoken.includes(item.otpCode) ? "match" : "mismatch");
+    // 정답과 자릿수가 같은 숫자열만 인증번호 답으로 본다 — 전화번호·금액·계좌 등 다른 숫자에 "번호가 안 맞는다"를
+    // 내지 않는다(리뷰 #2, #300 과발동 방향 회피). 8자리 이상은 저장 전 maskPII가 `[계좌]`로 바꾸는 값이라 자연히 빠진다.
+    const candidates = spoken.filter((code) => code.length === item.otpCode!.length);
+    if (candidates.length === 0) continue;
+    return buildOtpCompareInstruction(candidates.includes(item.otpCode) ? "match" : "mismatch");
   }
   return undefined;
 }

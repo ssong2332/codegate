@@ -5,7 +5,7 @@
 // 프롬프트에 실은 것. ⇒ 서버 대조로 바꾸고, 아래 테스트가 "번호가 모델 입력에 0회"·"계좌 문자 뒤 0건"을 고정한다.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import * as path from "node:path";
 import { logger } from "firebase-functions";
 import { buildOtpCompareInstruction, findInCallSmsItem, IN_CALL_SMS, listOtpItems } from "../../scenarios/inCallSms";
@@ -147,6 +147,55 @@ test("[OTP] 도착 전·미도착·호 전환 뒤·조회 실패·비해당 시�
   assert.equal(await none({ scenarioId: "family-accident-deepvoice" }), undefined, "인증번호 문자 없는 시나리오");
 });
 
+test("[OTP] 인증번호 문자가 **이번 턴에** 막 도착했으면 대조하지 않는다 — 참가자가 아직 문자를 못 봤다(리뷰 #1)", async () => {
+  const s = store([]);
+  assert.equal(
+    await resolveOtpCheckInstruction({
+      scenarioId: SCENARIO,
+      userText: "123456이요",
+      scammerTurnNumber: OTP.afterScammerTurns,
+      deliveredThisTurn: OTP.smsId,
+      isDelivered: s.isDelivered,
+    }),
+    undefined,
+  );
+});
+
+test("[OTP] 정답과 자릿수가 다른 숫자(전화·금액·4자리·계좌)는 대조하지 않는다 — '번호가 안 맞는다' 과발동 방지(리뷰 #2)", async () => {
+  for (const userText of ["010 1234 5678이요", "3000이요", "1234요", "110-123-456789이요", "35 048231이요"]) {
+    const s = store([OTP.smsId]);
+    assert.equal(
+      await resolveOtpCheckInstruction({ scenarioId: SCENARIO, userText, scammerTurnNumber: OTP.afterScammerTurns + 1, isDelivered: s.isDelivered }),
+      undefined,
+      userText,
+    );
+  }
+});
+
+test("[OTP] 불변식 — 인증번호 문자가 있는 시나리오에는 그보다 늦게 오는 다음 문자가 있다('다음 문자 뒤 0건' 판정의 전제, 리뷰 #6)", () => {
+  const otpScenarios = Object.keys(IN_CALL_SMS).filter((id) => listOtpItems(id).length > 0);
+  assert.ok(otpScenarios.length >= 2);
+  for (const id of otpScenarios) {
+    for (const otp of listOtpItems(id)) {
+      const later = (IN_CALL_SMS[id] ?? []).filter((item) => item.afterScammerTurns > otp.afterScammerTurns && item.kind !== "otp");
+      assert.ok(later.length > 0, `${id}: 인증번호 뒤에 오는 문자가 없다 — '다음 문자 뒤 0건' 판정을 다시 설계하라`);
+    }
+  }
+});
+
+test("[OTP] 정적 스캔 — 프롬프트·LLM·실시간 소스는 otpCode를 참조하지 않는다(대조 모듈 otpCheck.ts만 예외, 리뷰 #3)", () => {
+  const srcRoot = path.resolve(__dirname, "../../../src");
+  const dirs = ["llm", "roleplay", "realtime"];
+  const offenders: string[] = [];
+  for (const dir of dirs) {
+    for (const name of readdirSync(path.join(srcRoot, dir))) {
+      if (!name.endsWith(".ts") || name === "otpCheck.ts") continue;
+      if (readFileSync(path.join(srcRoot, dir, name), "utf8").includes("otpCode")) offenders.push(`${dir}/${name}`);
+    }
+  }
+  assert.deepEqual(offenders, [], "모델 입력을 만드는 소스가 인증번호를 읽으면 유출 경로가 된다");
+});
+
 // ── ⭐ 번호(정답)가 모델 입력에 0회 ─────────────────────────────────────────────────
 test("[OTP] ⭐ 번호 미노출 — 대조 결과 지시 2종·도착 응답(실시간)·카탈로그 도착 지시·조립 프롬프트 어디에도 인증번호가 없다(R8 회귀 ②)", async () => {
   assert.ok(ALL_OTP_CODES.length >= 2, "인증번호 카탈로그 수집 실패(거짓 초록 방지)");
@@ -166,9 +215,8 @@ test("[OTP] ⭐ 번호 미노출 — 대조 결과 지시 2종·도착 응답(�
       const check = await resolveOtpCheckInstruction({
         scenarioId,
         userText,
-        scammerTurnNumber: item.afterScammerTurns,
-        deliveredThisTurn: item.smsId,
-        isDelivered: async () => false,
+        scammerTurnNumber: item.afterScammerTurns + 1,
+        isDelivered: async (smsId) => smsId === item.smsId,
       });
       assert.ok(check, `${scenarioId}: 대조 지시가 붙어야 이 검사가 의미 있다`);
       modelInputs.push(
