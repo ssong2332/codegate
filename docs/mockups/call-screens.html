@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>통화 화면 시안</title>
+<style>
+:root{color-scheme:light;--page:#E7E9EC;--ink:#1F2933;--muted:#52606D;--oq:#E0A800;--oqbg:#FFE38A;--note:#3D6FC4;--notebg:#DCE7FB}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--page);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-text-size-adjust:100%}
+.doc{max-width:1200px;margin:0 auto;padding:24px 16px 64px}
+.doc h1{font-size:22px;margin:0 0 6px}
+.doc .lead{font-size:14px;color:var(--muted);line-height:1.6;margin:0 0 12px;max-width:820px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:12px;color:var(--muted);margin:0 0 20px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw-oq{width:22px;height:14px;border:2px dashed var(--oq);background:#FFF7D6;border-radius:3px}
+.sw-note{width:22px;height:14px;border:2px dashed var(--note);background:#EEF3FD;border-radius:3px}
+section.state{margin:0 0 48px}
+section.state>h2{font-size:17px;margin:0 0 4px}
+section.state>p.sdesc{font-size:13px;color:var(--muted);margin:0 0 16px;line-height:1.55;max-width:820px}
+.pair{display:flex;flex-wrap:wrap;gap:32px 40px;justify-content:center;align-items:stretch}
+figure.shot{margin:0;width:375px;max-width:100%;display:flex;flex-direction:column;justify-content:flex-end}
+figcaption{font-size:12px;line-height:1.5;color:var(--muted);margin:0 0 8px}
+figcaption b{color:var(--ink);font-size:13px}
+.chip{display:inline-block;background:var(--oqbg);color:#4A3A00;border:1px solid var(--oq);border-radius:4px;padding:0 6px;font-size:11px;font-weight:600;margin:2px 4px 0 0}
+.chip.n{background:var(--notebg);color:#1E3F7A;border-color:var(--note)}
+.notes{font-size:13px;line-height:1.65;color:var(--muted);max-width:900px;background:#fff;border-radius:10px;padding:16px 20px}
+.notes h2{font-size:15px;color:var(--ink);margin:0 0 8px}
+.notes ul{margin:0;padding-left:18px}
+/* ---------- 폰 프레임(일반형 외곽 — 실존 기기 외형 아님) ---------- */
+.phone{position:relative;width:375px;max-width:100%;height:812px;overflow:hidden;border-radius:28px;
+  box-shadow:0 0 0 1px #B9BFC6,0 10px 28px rgba(0,0,0,.14);font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column}
+.safe-top{height:44px;flex:none}
+.safe-bot{height:34px;flex:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ic{display:block;flex:none}
+/* OQ 표식(프레임 위 점선 + 노란 라벨) · 주석(파란 점선) */
+.oq{position:relative;outline:2px dashed var(--oq);outline-offset:3px;border-radius:6px}
+.oq>.oqtag,.nt>.oqtag{position:absolute;top:-14px;left:2px;z-index:5;background:var(--oqbg);color:#4A3A00;font:600 10px/1.3 system-ui,sans-serif;padding:1px 5px;border-radius:3px;white-space:nowrap;letter-spacing:0}
+.nt{position:relative;outline:2px dashed var(--note);outline-offset:3px;border-radius:6px}
+.nt>.oqtag{background:var(--notebg);color:#1E3F7A}
+.memo{border:2px dashed var(--note);background:rgba(220,231,251,.92);color:#1E3F7A;border-radius:8px;font:500 11px/1.45 system-ui,sans-serif;padding:6px 8px}
+/* ---------- 통화 셸 ---------- */
+.call{color:#fff}
+.call.ios{background:#1C1C1E}
+.call.oneui{background:#101418}
+.call .who{display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 24px}
+.call.ios .who{padding-top:72px}
+.call.oneui .who{padding-top:calc(146px - 44px)}
+.avatar{width:88px;height:88px;border-radius:50%;background:#3A4148;color:#C9D4DB;display:flex;align-items:center;justify-content:center;position:relative;margin-bottom:20px}
+.ring{position:absolute;inset:-14px;border-radius:50%;border:2px solid rgba(201,212,219,.35);animation:ring 2s ease-out infinite}
+.ring.r2{animation-delay:.7s}
+@keyframes ring{0%{transform:scale(.85);opacity:.9}100%{transform:scale(1.35);opacity:0}}
+.num{font-weight:600;letter-spacing:.2px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.call.ios .num{font-size:32px}
+.call.oneui .num{font-size:30px}
+.sub{font-size:17px;color:#C9D4DB;margin-top:6px;min-height:24px;font-variant-numeric:tabular-nums}
+.spacer{flex:1}
+.prenote{margin:0 auto 48px;max-width:300px;width:calc(100% - 48px);text-align:center}
+.answer-row{display:flex;justify-content:space-between;padding:0 56px;margin-bottom:32px}
+.cbtn{display:flex;flex-direction:column;align-items:center;gap:8px;font-size:15px;color:#C9D4DB}
+.round76{width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff}
+.decline{background:#C6392F}
+.accept{background:#1E8E3E;position:relative}
+.call.ios .accept::after{content:"";position:absolute;inset:-6px;border-radius:50%;box-shadow:0 0 0 0 rgba(30,142,62,.55);animation:pulse 1.8s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(30,142,62,.55)}100%{box-shadow:0 0 0 14px rgba(30,142,62,0)}}
+@media (prefers-reduced-motion:reduce){.ring,.call.ios .accept::after{animation:none}}
+.grid{display:grid;grid-template-columns:repeat(3,72px);column-gap:24px;row-gap:20px;justify-content:center}
+.gcell{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:14px;color:#fff;min-height:98px}
+.gbtn{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;position:relative}
+.call.ios .gbtn{background:rgba(255,255,255,.16)}
+.call.oneui .gbtn{background:transparent}
+.badge{position:absolute;top:6px;right:6px;min-width:20px;height:20px;border-radius:10px;background:#C6392F;color:#fff;font:700 12px/20px system-ui,sans-serif;text-align:center;padding:0 5px}
+.emptycell{width:72px;height:72px;border-radius:12px}
+.endwrap{display:flex;flex-direction:column;align-items:center;gap:6px;margin:24px 0 32px;font-size:14px;color:#fff}
+.endbtn{width:76px;height:76px;border-radius:50%;background:#C6392F;display:flex;align-items:center;justify-content:center;color:#fff}
+/* ---------- 떠 있는 문자 배너 ---------- */
+.banner{position:absolute;top:52px;left:8px;right:8px;max-width:414px;z-index:4;padding:12px 14px;color:#1C1C1E;box-shadow:0 6px 20px rgba(0,0,0,.35)}
+.banner.ios{background:rgba(245,245,247,.96);border-radius:18px}
+.banner.oneui{background:#FFFFFF;border-radius:22px;color:#1B1B1F}
+.banner .l1{display:flex;align-items:center;gap:8px;font-size:13px;color:#5F6368}
+.banner .appic{width:20px;height:20px;border-radius:6px;background:#4C6A85;color:#fff;display:flex;align-items:center;justify-content:center}
+.banner .l1 .t{margin-left:auto}
+.banner .l2{font-size:15px;font-weight:600;margin-top:6px}
+.banner .l3{font-size:15px;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* ---------- 통화 표시줄(P-37 (4)) ---------- */
+.callbar{background:#17803A;color:#fff;flex:none}
+.callbar .r1{height:44px;display:flex;align-items:center;gap:8px;padding:0 14px}
+.callbar .r1 .lbl{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.callbar .r1 .st{font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.callbar .r2{font-size:13px;line-height:18px;max-height:36px;padding:0 14px 8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;opacity:.95}
+/* ---------- 훈련 종료(EndTrainingButton 현행 모양) ---------- */
+.endtrain{flex:none;display:inline-flex;align-items:center;gap:8px;min-height:48px;padding:0 14px;border:2px solid #C6392F;border-radius:12px;background:#fff;color:#C6392F;font:700 16px system-ui,sans-serif;white-space:nowrap}
+.endtrain i{width:13px;height:13px;border-radius:3px;background:#C6392F;display:block}
+/* ---------- 메시지 앱 대화 헤더 ---------- */
+.mhead{flex:none;display:flex;align-items:center;padding:0 8px 0 0;position:relative}
+.mhead .back{width:48px;height:48px;display:flex;align-items:center;justify-content:center;color:#0A63C9;flex:none}
+.mhead.ios{background:#F7F7F7;border-bottom:1px solid #D1D1D6;height:88px}
+.mhead.oneui{background:#FFFFFF;height:56px}
+.mhead.oneui .back{color:#1B1B1F}
+.mhead .center{position:absolute;left:132px;right:132px;top:6px;bottom:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none}
+.mav{border-radius:50%;background:#B8BEC6;color:#fff;display:flex;align-items:center;justify-content:center;flex:none}
+.mhead.ios .mav{width:40px;height:40px}
+.mhead.ios .nm{font-size:13px;font-weight:600;color:#1C1C1E;margin-top:3px;line-height:1.25;word-break:keep-all}
+.mhead.oneui .mav{width:36px;height:36px;margin-right:10px}
+.mhead.oneui .nm{font-size:17px;font-weight:600;color:#1B1B1F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.mhead .grow{flex:1}
+/* ---------- 스레드 ---------- */
+.thread{flex:1;min-height:0;overflow:hidden;padding:12px 12px 16px;display:flex;flex-direction:column;gap:6px}
+.thread.ios{background:#FFFFFF}
+.thread.oneui{background:#F2F3F5}
+.tsep{text-align:center;font-size:12px;margin:10px 0 4px}
+.thread.ios .tsep{color:#6E6E73}
+.thread.oneui .tsep{color:#5F6368}
+.slabel{font-size:14px;font-weight:600;margin:6px 0 2px 4px}
+.thread.ios .slabel{color:#1C1C1E}
+.thread.oneui .slabel{color:#1B1B1F}
+.brow{display:flex;align-items:flex-end;gap:6px}
+.bub{max-width:80%;font-size:17px;line-height:1.45;padding:9px 13px;white-space:pre-line;word-break:keep-all;overflow-wrap:anywhere}
+.thread.ios .bub{background:#E9E9EB;color:#1C1C1E;border-radius:18px 18px 18px 6px}
+.thread.oneui .bub{background:#FFFFFF;color:#1B1B1F;border-radius:20px}
+.btime{font-size:11px;color:#5F6368;white-space:nowrap;padding-bottom:2px}
+.lnk{display:flex;align-items:center;gap:6px;min-height:48px;text-decoration:underline;text-underline-offset:3px;white-space:normal}
+.thread.ios .lnk{color:#0A63C9}
+.thread.oneui .lnk{color:#0B57D0}
+.retbar{flex:none;background:#17803A;color:#fff}
+.retbar .in{height:52px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:16px;font-weight:700}
+/* ---------- 가짜 기관 페이지 ---------- */
+.web{background:#FFFFFF;color:#22303A}
+.bbar{flex:none;height:52px;display:flex;align-items:center;gap:6px;padding:0 8px 0 0;border-bottom:1px solid #DADCE0}
+.bbar.ios{background:#F7F7F7}
+.bbar.oneui{background:#FFFFFF}
+.bbar .bk{display:flex;align-items:center;gap:0;min-width:56px;height:48px;padding:0 4px 0 2px;color:#0A63C9;font-size:15px;flex:none}
+.bbar.oneui .bk{color:#1B1B1F}
+.addr{flex:1;min-width:0;height:36px;display:flex;align-items:center;gap:6px;padding:0 10px;font-size:14px;color:#3C3C43}
+.bbar.ios .addr{background:#E3E3E8;border-radius:12px}
+.bbar.oneui .addr{background:#F1F3F4;border-radius:18px}
+.addr .ic{color:#6E6E73}
+.addr .tx{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bbar .endtrain{margin-left:4px}
+.issuer{flex:none;height:56px;background:#1F3A5F;color:#fff;display:flex;align-items:center;gap:10px;padding:0 16px;font-size:16px;font-weight:600}
+.page{flex:1;min-height:0;overflow:hidden;padding:16px 20px 0;display:flex;flex-direction:column;gap:10px}
+.page h3{margin:0;font-size:20px;line-height:1.3;font-weight:700;color:#22303A}
+.page .bl{margin:0;font-size:15px;line-height:1.55;color:#6B655C}
+.fld{display:flex;flex-direction:column;gap:5px;font-size:15px;font-weight:600;color:#22303A}
+.inp{height:52px;border:1px solid #8E8E93;border-radius:10px;padding:0 14px;display:flex;align-items:center;font-size:17px;font-weight:400;color:#22303A}
+.inp.ph{color:#6E6E73}
+.inp.focus{border:2px solid #1F3A5F;padding:0 13px}
+.caret{display:inline-block;width:2px;height:22px;background:#1F3A5F;margin-right:2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.caret{animation:none}}
+.submit{height:52px;border-radius:10px;background:#41525E;color:#fff;font-size:16px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none}
+.close{height:48px;border-radius:10px;border:1px solid #8E8E93;color:#22303A;font-size:16px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none}
+.issuerfoot{text-align:center;font-size:13px;color:#6B655C}
+.done{font-size:18px;font-weight:600;color:#22303A;line-height:1.45;margin:8px 0 0}
+@media (max-width:420px){.doc{padding:20px 16px 48px}.pair{gap:28px}}
+</style>
+</head>
+<body>
+<main class="doc">
+<h1>통화 화면 시안 — 수신 · 통화 중 (UX-014 v1.33)</h1>
+<p class="lead">정적 시안(앱 코드 아님). 같은 상태를 iOS형 / One UI형 두 프레임으로 나란히 그렸다. 근거: docs/UX.md v1.33 — UX-014 노트 · P-10 증분 · P-37 · D-86~D-88 · D-95 · OQ-U58/U59/U61.</p>
+<div class="legend">
+  <span><i class="sw-oq"></i>노란 라벨 + 점선 = 결정 대기(OQ) 요소 — 스펙 권고안으로 그림</span>
+  <span><i class="sw-note"></i>파란 점선 = 시안 주석(실제 화면에는 없음)</span>
+  <span>프레임 375×812 · 라이트 · 상단 44px·하단 34px는 기기 안전 영역(가짜 상태바는 그리지 않음 — P-37 R-1)</span>
+</div>
+<section class="state"><h2>① 수신 화면 (phase = incoming)</h2><p class="sdesc">번호 아래 줄은 비워 두고(숨김 상태 글 "전화가 오고 있습니다"), 왼쪽 거절·오른쪽 받기 76px 원. 받기 = <code>call.accept #1E8E3E</code>, 거절 = <code>#C6392F</code>. 스와이프 없이 탭만(P-37 R-9). 가짜 상태바 없음(R-1).</p><div class="pair"><figure class="shot"><figcaption><b>iOS형 · 수신</b><br>UX-014 v1.33 (2)(3)(5) · D-86 · D-87 · D-88 · P-37 R-1/R-9<br>울림 연출 = 받기 버튼만 은은한 맥동 · reduced-motion이면 정지<br><span class="chip">OQ-U58 — 결정 대기: 벨소리·진동 (결정 전 = 무음 유지 · 권고 ⓑ 고유 합성음)</span><span class="chip">OQ-U61 — 결정 대기: 스킨 수동 전환 자리 (통화 화면엔 그리지 않음)</span></figcaption><div class="phone call ios"><div class="safe-top"></div><div class="who"><div class="num">02-6478-2718</div><div class="sub" role="status"><span class="sr">전화가 오고 있습니다</span></div></div><div class="spacer"></div><div class="prenote nt"><span class="oqtag">주석 · ⑤ 세션 전 고지 1줄 자리</span><div style="font-size:15px;color:#C9D4DB;line-height:1.5;padding:4px 0">[세션 전 고지 문장 — 문면 무변경, 시안에서는 생략]</div></div><div class="answer-row"><div class="cbtn"><span class="round76 decline" role="button" aria-label="전화 거절 — 훈련 종료"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(135 12 12)"><path d="M5 3.5h3.2l1.9 4.6-2.4 1.6a11.5 11.5 0 0 0 6.6 6.6l1.6-2.4 4.6 1.9v3.2a2 2 0 0 1-2.1 2A17 17 0 0 1 3 5.6a2 2 0 0 1 2-2.1z"/></g></svg></span>거절</div><div class="cbtn"><span class="round76 accept" role="button" aria-label="전화 받기"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3.5h3.2l1.9 4.6-2.4 1.6a11.5 11.5 0 0 0 6.6 6.6l1.6-2.4 4.6 1.9v3.2a2 2 0 0 1-2.1 2A17 17 0 0 1 3 5.6a2 2 0 0 1 2-2.1z"/></svg></span>받기</div></div><div class="safe-bot"></div></div></figure><figure class="shot"><figcaption><b>One UI형 · 수신</b><br>UX-014 v1.33 (2)(3)(5) · D-86 · D-87 · D-88 · P-37 R-1/R-9<br>울림 연출 = 아바타 둘레 파동(현행 call-ring-pulse 재사용) · reduced-motion이면 정지<br><span class="chip">OQ-U58 — 결정 대기: 벨소리·진동 (결정 전 = 무음 유지 · 권고 ⓑ 고유 합성음)</span><span class="chip">OQ-U61 — 결정 대기: 스킨 수동 전환 자리 (통화 화면엔 그리지 않음)</span></figcaption><div class="phone call oneui"><div class="safe-top"></div><div class="who"><div class="avatar"><span class="ring" aria-hidden="true"></span><span class="ring r2" aria-hidden="true"></span><svg class="ic" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg></div><div class="num">02-6478-2718</div><div class="sub" role="status"><span class="sr">전화가 오고 있습니다</span></div></div><div class="spacer"></div><div class="prenote nt"><span class="oqtag">주석 · ⑤ 세션 전 고지 1줄 자리</span><div style="font-size:15px;color:#C9D4DB;line-height:1.5;padding:4px 0">[세션 전 고지 문장 — 문면 무변경, 시안에서는 생략]</div></div><div class="answer-row"><div class="cbtn"><span class="round76 decline" role="button" aria-label="전화 거절 — 훈련 종료"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(135 12 12)"><path d="M5 3.5h3.2l1.9 4.6-2.4 1.6a11.5 11.5 0 0 0 6.6 6.6l1.6-2.4 4.6 1.9v3.2a2 2 0 0 1-2.1 2A17 17 0 0 1 3 5.6a2 2 0 0 1 2-2.1z"/></g></svg></span>거절</div><div class="cbtn"><span class="round76 accept" role="button" aria-label="전화 받기"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3.5h3.2l1.9 4.6-2.4 1.6a11.5 11.5 0 0 0 6.6 6.6l1.6-2.4 4.6 1.9v3.2a2 2 0 0 1-2.1 2A17 17 0 0 1 3 5.6a2 2 0 0 1 2-2.1z"/></svg></span>받기</div></div><div class="safe-bot"></div></div></figure></div></section><section class="state"><h2>② 통화 중 화면 (phase = live · 문자 1건 도착 뒤)</h2><p class="sdesc">번호 바로 아래 경과 시간 <code>mm:ss</code>(화면에 시간 표시는 이것 하나). 단색 아이콘 2×3 그리드 — 1행 음소거·키패드·스피커 / 2행 메시지(미확인 수 배지)·채팅으로(메신저 채널만 — 이 시나리오는 통화 채널이라 빈 칸)·빈 칸. 하단 가운데 빨간 종료 76px.</p><div class="pair"><figure class="shot"><figcaption><b>iOS형 · 통화 중</b><br>UX-014 v1.33 (2)(3)(4)(5) · D-86 · D-87 · P-10 v1.33 · P-37 (3)(5)<br>종료 버튼 접근 이름 = "통화 종료 — 훈련 종료"(AC-006 · 키패드 열림·배너 중에도 같은 자리)<br>그리드 버튼 = 원 72px · 배경 흰색 16%<br><span class="chip">OQ-U59 — 스피커: 권고 ⓒ(음량 전환 동작 정의)로 그림 · 확정 전 구현 기본값은 칸 비움</span><span class="chip">OQ-U60 — 문자함 열람 중 마이크 (이 화면엔 표시 없음)</span></figcaption><div class="phone call ios"><div class="safe-top"></div><div class="who"><div class="num">02-6478-2718</div><div class="sub" aria-label="통화 중, 경과 3분 27초">03:27</div></div><div class="spacer"></div><div class="grid"><div class="gcell"><span class="gbtn" role="button" aria-label="음소거"><svg class="ic" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/><path d="M4 4l16 16"/></svg></span>음소거</div><div class="gcell"><span class="gbtn" role="button" aria-label="키패드"><svg class="ic" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="4.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="4.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="18" cy="4.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="6" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="18" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="6" cy="15.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="15.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="18" cy="15.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="21" r="1.4" fill="currentColor" stroke="none"/></svg></span>키패드</div><div class="gcell oq"><span class="oqtag">OQ-U59 — 결정 대기</span><span class="gbtn" role="button" aria-label="스피커"><svg class="ic" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6"/><path d="M18.3 6.5a8 8 0 0 1 0 11"/></svg></span>스피커</div><div class="gcell"><span class="gbtn" role="button" aria-label="메시지"><svg class="ic" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.5h14a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-8.5L6 20.5V17H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z"/></svg><span class="badge">1</span></span>메시지</div><div class="gcell nt" style="justify-content:flex-start"><span class="oqtag">주석 · 조건부 칸</span><div class="emptycell" style="display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;line-height:1.35;color:#9AA5B1;padding:4px">채팅으로<br>(메신저<br>채널만)</div></div><div class="gcell"><div class="emptycell"></div></div></div><div class="endwrap"><span class="endbtn" role="button" aria-label="통화 종료 — 훈련 종료"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(135 12 12)"><path d="M5 3.5h3.2l1.9 4.6-2.4 1.6a11.5 11.5 0 0 0 6.6 6.6l1.6-2.4 4.6 1.9v3.2a2 2 0 0 1-2.1 2A17 17 0 0 1 3 5.6a2 2 0 0 1 2-2.1z"/></g></svg></span>종료</div><div class="safe-bot" style="height:2px"></div></div></figure><figure class="shot"><figcaption><b>One UI형 · 통화 중</b><br>UX-014 v1.33 (2)(3)(4)(5) · D-86 · D-87 · P-10 v1.33 · P-37 (3)(5)<br>종료 버튼 접근 이름 = "통화 종료 — 훈련 종료"(AC-006 · 키패드 열림·배너 중에도 같은 자리)<br>그리드 버튼 = 원 배경 없음(눌림 때만 원 등장)<br><span class="chip">OQ-U59 — 스피커: 권고 ⓒ(음량 전환 동작 정의)로 그림 · 확정 전 구현 기본값은 칸 비움</span><span class="chip">OQ-U60 — 문자함 열람 중 마이크 (이 화면엔 표시 없음)</span></figcaption><div class="phone call oneui"><div class="safe-top"></div><div class="who"><div class="avatar"><svg class="ic" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg></div><div class="num">02-6478-2718</div><div class="sub" aria-label="통화 중, 경과 3분 27초">03:27</div></div><div class="spacer"></div><div class="grid"><div class="gcell"><span class="gbtn" role="button" aria-label="음소거"><svg class="ic" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/><path d="M4 4l16 16"/></svg></span>음소거</div><div class="gcell"><span class="gbtn" role="button" aria-label="키패드"><svg class="ic" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="4.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="4.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="18" cy="4.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="6" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="18" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="6" cy="15.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="15.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="18" cy="15.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="21" r="1.4" fill="currentColor" stroke="none"/></svg></span>키패드</div><div class="gcell oq"><span class="oqtag">OQ-U59 — 결정 대기</span><span class="gbtn" role="button" aria-label="스피커"><svg class="ic" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6"/><path d="M18.3 6.5a8 8 0 0 1 0 11"/></svg></span>스피커</div><div class="gcell"><span class="gbtn" role="button" aria-label="메시지"><svg class="ic" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.5h14a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-8.5L6 20.5V17H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z"/></svg><span class="badge">1</span></span>메시지</div><div class="gcell nt" style="justify-content:flex-start"><span class="oqtag">주석 · 조건부 칸</span><div class="emptycell" style="display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;line-height:1.35;color:#9AA5B1;padding:4px">채팅으로<br>(메신저<br>채널만)</div></div><div class="gcell"><div class="emptycell"></div></div></div><div class="endwrap"><span class="endbtn" role="button" aria-label="통화 종료 — 훈련 종료"><svg class="ic" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(135 12 12)"><path d="M5 3.5h3.2l1.9 4.6-2.4 1.6a11.5 11.5 0 0 0 6.6 6.6l1.6-2.4 4.6 1.9v3.2a2 2 0 0 1-2.1 2A17 17 0 0 1 3 5.6a2 2 0 0 1 2-2.1z"/></g></svg></span>종료</div><div class="safe-bot" style="height:2px"></div></div></figure></div></section><div class="notes"><h2>시안 메모 — 스펙이 정하지 않아 임의로 정한 것(추정)</h2><ul>
+<li>발신 번호 값은 기관 사칭 시나리오의 현행 표기(<code>02-6478-2718</code>)를 썼다.</li>
+<li>세션 전 고지(⑤)는 지우지 않는 자리지만 문면을 시안에 옮기지 않고 회색 자리 표시로만 그렸다(세션 중 표식 0 원칙과 혼동 방지용 — 실제 구현은 문면 무변경).</li>
+<li>One UI형 번호의 위치: 아바타를 화면 높이 18% 지점(약 146px)에 두고 번호를 아바타 아래 20px에 두었다(스펙은 "번호 상단 18%"와 "아바타 아래"를 함께 적어 둘 중 아바타 기준으로 해석).</li>
+<li>메시지 배지 색은 스펙에 없어 <code>#C6392F</code>(종료와 같은 빨강)으로 그렸다 — 대안 검토 필요.</li>
+<li>그리드 2행 2칸 "채팅으로"는 이 시나리오에서 숨겨지는 칸임을 보이려고 파란 주석으로만 표시했다.</li>
+</ul></div>
+</main>
+</body>
+</html>
