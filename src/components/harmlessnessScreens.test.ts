@@ -104,6 +104,7 @@ const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   "CallWaveform.tsx": false, // 통화 파형 시각화
   "DrilldownOptionCard.tsx": false, // 드릴다운 선택 카드
   "EndTrainingButton.tsx": false, // 상시 종료 버튼
+  "MessengerStartNotice.tsx": false, // 세션 전 시작 고지(UX-022 start-notice, T187) — 앱 자신의 고지, 사기 표면 아님
   "SyntheticLabel.tsx": false, // 합성 음성 표식
 };
 

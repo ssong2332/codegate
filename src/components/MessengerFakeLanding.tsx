@@ -9,8 +9,8 @@
 // ── T84(UX-023 v1.12 kind 축 · §15.9.1 · DECISIONS #42 · AC-072) ─────────────────────────────
 // **kind 분기는 반드시 이 파일 *안에서* 한다(R1).** 신규 컴포넌트 파일·신규 라우트를 만들지
 // 않는다. 이유는 "화면이 하나"여서가 아니라 **안전 계약이 파일 단위로 성립**하기 때문이다 —
-// 위 (1) `src/lib/api` 미import, (2) 제출이 로컬 state만 변경, (3) 상시 모의 표식 + 상시 "훈련
-// 종료"가 모두 이 파일 안에서 보장된다. 파일을 쪼개면 그 계약이 신규 파일에는 자동으로 적용되지
+// 위 (1) `src/lib/api` 미import, (2) 제출이 로컬 state만 변경, (3) 상시 "훈련 종료"(T187 §72 —
+// 세션 중 표식은 폐지)가 모두 이 파일 안에서 보장된다. 파일을 쪼개면 그 계약이 신규 파일에는 자동으로 적용되지
 // 않아 **검증 경로가 이중화**되고, 그것이 정확히 AC-072가 금지한 상태다. 파일이 커지면 아래처럼
 // **같은 파일 안의 서브 컴포넌트**로 나눈다.
 //
@@ -26,7 +26,7 @@
 // (`src/components/mockScreenCopy.test.ts`)가 문자열을 직접 대조한다.
 import { useEffect, useState } from "react";
 import EndTrainingButton from "./EndTrainingButton";
-import { Banner, Button } from "./ui";
+import { Button } from "./ui";
 
 /** UX-023의 목업 종류. 부재 → `credential-form`(하위호환 읽기 규칙, §15.9.1 R2). */
 export type MessengerFakeLandingKind = "credential-form" | "app-install";
@@ -62,11 +62,6 @@ type MessengerFakeLandingProps = {
    * ⚠️ 이 컴포넌트는 **네트워크 호출을 하지 않는다** — 기록은 페이지가 담당한다(§15.9.6).
    */
   onCredentialSubmit?: () => void;
-  /** 연속성 앵커(UX.md UF-012 Steps §6) — 3단계 내내 자리를 지켜야 하는 난이도 표기.
-   *  ⚠️ **레벨 코드가 아니라 이미 번역된 라벨을 받는다.** 이 컴포넌트가 난이도 사전을 알게 되면
-   *  표기 정본이 두 곳으로 갈라진다(페이지 헤더 ↔ 오버레이). 페이지가 자기 헤더에 쓰는 값을
-   *  그대로 내려보내면 두 표기가 구조적으로 같아진다. */
-  difficultyLabel?: string;
 };
 
 export default function MessengerFakeLanding({
@@ -77,38 +72,21 @@ export default function MessengerFakeLanding({
   onEndTraining,
   onInstallConsent,
   onCredentialSubmit,
-  difficultyLabel,
 }: MessengerFakeLandingProps) {
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`${title} — 훈련용 모의 화면`}
+      aria-label={`${title} 화면`}
       className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-[#FAF8F5]"
     >
-      {/* AC-022/045 상시 표식 — 브랜드 스킨과 무관한 모듈이라 새 디자인 시스템(Banner)을 자유롭게
-          적용한다. 텍스트는 기존 문구 그대로(내용 변경 없음, 컨테이너만 Banner로 교체).
-          ⚠️ T84: 이 헤더는 **두 kind가 공유**한다 — 표식(AC-022)과 상시 종료(AC-006)가 kind와
-          무관하게 성립해야 하고, 그것이 파일 분리를 금지하는 두 번째 이유다(§15.9.4 표 #2). */}
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-[#E2DDD3] bg-white px-4 py-3">
-        <Banner variant="caution" sticky className="flex-1">
-          <span className="font-semibold text-[#B96A1B]">AI 훈련용 모의 화면</span> ·{" "}
-          {landingKind === "app-install"
-            ? "실제 설치·권한 부여가 아닙니다"
-            : "실제 로그인/전송이 아니며 돈도 오가지 않습니다"}
-        </Banner>
-        {/* T84 reviewer Major 1(2026-07-26) — UX.md UF-012 Steps §6은 **연속성 앵커 3종**이
-            "세 단계 내내 자리를 지킨다"고 요구하는데, 이 오버레이가 `fixed inset-0`으로 페이지
-            헤더를 통째로 덮어 **2단계에서만 난이도 배지가 사라졌다.** 앵커의 존재 이유가
-            "지금 같은 훈련 안에 있다"는 감각을 끊지 않는 것이라, 한 단계에서만 사라지면 그
-            목적이 무너진다. 표기·스타일은 페이지 헤더(P-22)와 동일하게 맞춘다.
-            ⚠️ 난이도는 표기일 뿐 **어떤 안전장치도 게이팅하지 않는다**(AC-065) — 이 배지가
-            있든 없든 위 모의 표식과 아래 "훈련 종료"는 세 난이도에서 동일하다. */}
-        {difficultyLabel && (
-          <span className="rounded-full bg-[#F2EFE9] px-3 py-1 text-sm font-semibold text-[#6B655C]">
-            난이도 {difficultyLabel}
-          </span>
-        )}
+      {/* 상시 종료(AC-006). ⚠️ T84: 이 헤더는 **두 kind가 공유**한다 — 상시 종료가 kind와 무관하게
+          성립해야 하고, 그것이 파일 분리를 금지하는 두 번째 이유다(§15.9.4 표 #2).
+          T187(docs/Architecture.md §72 · PRD v1.18 AC-086 · UX D-81·D-83) — 이 화면은 전부 세션
+          중이라 상단 표식 배너와 난이도 배지(UF-012 연속성 앵커 ①③)를 지웠다. 앵커는 "훈련 종료"
+          하나만 남는다(D-83). 빈 자리를 채우지 않는다. 종료 버튼이 오른쪽 끝에 남도록
+          justify-end(G449). */}
+      <div className="sticky top-0 z-10 flex flex-wrap items-center justify-end gap-3 border-b border-[#E2DDD3] bg-white px-4 py-3">
         <EndTrainingButton onClick={onEndTraining} />
       </div>
 
@@ -319,11 +297,8 @@ function CredentialFormMockup({
         <p role="status" className="text-lg font-semibold text-[#0E6B62]">
           {copy.successHeadline}
         </p>
-        {/* ⚠️ **상황이 갈려도 이 고지는 갈리지 않는다**(P-28 ⑤ · G-D) — 컴포넌트 상수이며
-            카탈로그 필드가 아니다. 갈리는 것은 위 가짜 성공 문구뿐이다. */}
-        <p className="text-sm leading-relaxed text-[#6B655C]">
-          (실제로는 어디에도 전송되지 않았고 돈도 오가지 않았습니다 — 훈련용 모의 화면입니다.)
-        </p>
+        {/* T187(§72 · PRD v1.18 AC-086 (d) · UX D-82) — 제출 직후 부정 고지를 지웠다. 그 사실은
+            세션 후 UX-007의 사실 공개 문장이 말한다. 빈 자리를 채우지 않는다. */}
         <Button type="button" onClick={onClose}>
           채팅으로 돌아가기
         </Button>
@@ -526,10 +501,7 @@ function AppInstallMockup({ onClose, onConsent }: { onClose: () => void; onConse
           <p role="status" className="text-lg font-semibold text-[#0E6B62]">
             권한이 허용되었습니다.
           </p>
-          <p className="text-sm leading-relaxed text-[#6B655C]">
-            (실제로는 아무것도 설치되지 않았고 어떤 권한도 부여되지 않았습니다 — 훈련용 모의
-            화면입니다.)
-          </p>
+          {/* T187(§72 · AC-086 (d) · D-82) — 설치 뒤 부정 고지 삭제. 세션 후 사실 공개가 잇는다. */}
           <Button type="button" onClick={onClose}>
             채팅으로 돌아가기
           </Button>

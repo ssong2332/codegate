@@ -73,6 +73,7 @@ import {
 import { normalizeDifficultyLevel, type DifficultyLevel } from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import { foldDegraded, buildFallbackStatusLine } from "@/lib/report/degradedDisclosure";
+import { PREROLL_NOTICE } from "@/lib/sessionboundary/preSessionCopy";
 import CallWaveform from "@/components/CallWaveform";
 import InCallSmsOverlay from "@/components/InCallSmsOverlay";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
@@ -102,8 +103,9 @@ type ChatMessage = {
   turnIndex: number;
 };
 
-const PREROLL_NOTICE =
-  "지금부터 재생되는 음성은 실제 전화가 아니라 AI로 합성된 훈련용 음성입니다.";
+// T187(docs/Architecture.md §72.5 D1) — 벨 화면 세션 전 고지 `PREROLL_NOTICE`는 바이트 그대로
+// `src/lib/sessionboundary/preSessionCopy.ts`로 옮겼다(사용처는 아래 `phase === "incoming"` 1곳 —
+// G438). 이 파일에 표식 낱말 리터럴을 남기지 않기 위해서다(G437).
 
 // T83/UX-031 States — "연결 중…" 연출 길이. **고정값**이다(랜덤 없음 = 테스트 결정론, §16.2).
 // ⚠️ 이 구간은 화면 연출일 뿐 실제 발신이 아니다(AC-019). 이 동안에도 통화 축소 표시·"훈련 종료"가
@@ -1268,7 +1270,7 @@ export default function SessionCallPage() {
   // T75(2026-07-25, 사용자 요청) — 발신자 표기에서 "(사칭)"을 제거하고 **번호만** 보여준다.
   // 실제 보이스피싱은 모르는 번호로 걸려오며, 화면에 "사칭"이라고 적혀 있으면 판단 훈련이
   // 성립하지 않는다(정답을 미리 알려주는 셈). 시뮬레이션 고지는 수신 화면의 사전 고지
-  // (PREROLL_NOTICE)와 상시 합성 표식이 계속 담당한다(AC-012/AC-022 무변경).
+  // (PREROLL_NOTICE)가 담당한다(AC-012 무변경 · T187 §72 — 세션 중 상시 표식은 폐지, AC-086).
   // T83(§16.2 발신자 라벨 전환) — 모의 재연결 후에는 구독 중인 **문서의** `reconnectedCallerLabel`을
   // 우선 표시한다(UX-014 `verify-reconnected` state). 클라 상태가 아니라 문서를 소스로 삼는 이유:
   // 새로고침·재마운트 후에도 재연결 상태가 유지되고, 실시간·폴백 두 경로의 렌더 코드가 갈라지지
@@ -1402,9 +1404,7 @@ export default function SessionCallPage() {
               <span className="block truncate text-sm text-[#6B655C]">
                 {latestSms.body.split("\n")[0]}
               </span>
-              <span className="mt-1 inline-block rounded-full bg-[#EFEBF7] px-2 py-0.5 text-xs font-semibold text-[#463880]">
-                AI 훈련용 모의 문자
-              </span>
+              {/* T187(§72 · PRD v1.18 AC-086 · UX D-81) — 세션 중 표식 칩 삭제. 빈 자리를 채우지 않는다. */}
             </span>
           </button>
         </div>
@@ -1475,18 +1475,14 @@ export default function SessionCallPage() {
           {/* T83(§16.2/UX-014 `verify-reconnected`) — 재연결 후 1줄 상태 문구. 폴백 경로에서
               서버가 별도 인사말을 생성하지 않기 때문에 이 자리가 그 공백을 메운다. **연결 사실만**
               알리고 구조 설명은 하지 않는다(OQ-38 확정 = 세션 중엔 상황만).
-              ⭐⭐ G272/D-68 — 오버레이(전환 시트)는 전환이 성사되면 자동으로 닫힌다(`handlePlaceVerifyCall`
-              의 `setVerifyOverlayOpen(false)`). "실제로 전화가 걸리지 않습니다" 취지 고지의 **정본
-              자리**는 이제 여기다 — 오버레이가 닫힌 뒤에도 세션 종료까지 상시 유지된다(§46.3 (2)
-              규범 — "화면이 X를 했다고 말하면, 고지는 X를 하지 않았다고 말한다"). 문면은
-              `VerifyCallOverlay.tsx`의 기존 고지와 같은 취지 — 새로 발명하지 않는다. */}
+              ⭐⭐ T187(docs/Architecture.md §72 · PRD v1.18 AC-086 (d) · UX D-82) — G272가 여기 두던
+              전화 부정 고지 1줄은 User 결정 "전부 제거"로 세션 중에서 지웠다(G272 반전). §46.3 규범의
+              부정은 세션 후 UX-007의 POST_SESSION_FACT_DISCLOSURE가 맡는다. 주장 줄(아래 라벨)은
+              유지한다. 빈 자리를 채우지 않는다. */}
           {verifyConnectedLabel && phase !== "ended" && (
             <div className="flex flex-col items-center gap-0.5">
               <p role="status" className="text-sm text-[#C9D4DB]">
                 {verifyConnectedLabel}
-              </p>
-              <p role="status" className="text-xs text-[#8FA0AC]">
-                훈련용 모의 화면입니다 · 실제로 전화가 걸리지 않습니다
               </p>
             </div>
           )}

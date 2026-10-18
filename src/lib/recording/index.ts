@@ -24,6 +24,9 @@ export {
   clearPendingSession,
   markSessionAnswered,
   isSessionAnswered,
+  // T187(§72 D2) — 메신저 시작 전 고지 확인 기록(answered와 같은 범위 · 다른 키, G450).
+  markStartNoticeAcknowledged,
+  isStartNoticeAcknowledged,
   setSelectedTrainingType,
   getSelectedTrainingType,
   setSelectedVoiceModeChoice,

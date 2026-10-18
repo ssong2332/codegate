@@ -198,7 +198,7 @@ export default function DifficultySelectPage() {
         <p className="text-base leading-relaxed text-[#6B655C]">
           같은 상황을 어느 강도로 훈련할지 고릅니다. 어떤 난이도를 골라도{" "}
           <strong className="font-semibold text-[#22303A]">
-            사전 고지·동의·언제든 훈련 종료·모의 표식은 똑같이 적용
+            사전 고지·동의·언제든 훈련 종료·끝난 뒤 &apos;훈련이었습니다&apos; 안내는 똑같이 적용
           </strong>
           됩니다.
         </p>

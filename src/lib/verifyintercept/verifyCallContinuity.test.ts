@@ -483,19 +483,38 @@ test("[G268/§49 V5] `shouldRevealVerifyOffer`는 삭제되지 않았다 — 계
   );
 });
 
-test("[G272] 전환 완료 고지의 정본 자리는 오버레이가 아니라 통화 셸(verifyConnectedLabel 블록)이다", () => {
-  const rendered = codeOnly(page);
+// ⭐ T187(PRD v1.18 AC-086 (d) · T187 · docs/Architecture.md §72.8 — G272 **반전**) — 세션 중 전화 부정
+// 고지는 통화 셸·오버레이 양쪽에서 0이다. 주장 줄({verifyConnectedLabel})은 유지하고, 부정의 새 정본
+// 자리는 세션 후 UX-007의 POST_SESSION_FACT_DISCLOSURE다("실제 전화도 걸리지 않았습니다").
+const PHONE_NEGATION = /실제로 전화가 걸리지 않습니다/;
+
+/** 셸 블록·오버레이에 남은 세션 중 전화 부정 고지 자리. 반전 단언과 역검증이 같이 쓴다. */
+function inSessionPhoneNegations(pageSource: string, overlaySource: string): string[] {
+  const rendered = codeOnly(pageSource);
   const labelBlockStart = rendered.indexOf("{verifyConnectedLabel && phase !== \"ended\" && (");
   assert.ok(labelBlockStart > 0, "verifyConnectedLabel 렌더 블록을 찾을 수 있어야 한다");
   const labelBlock = rendered.slice(labelBlockStart, labelBlockStart + 400);
-  assert.ok(
-    /실제로 전화가 걸리지 않습니다/.test(labelBlock),
-    "G272 — 오버레이가 자동으로 닫힌 뒤에도 고지가 남는 자리가 이 블록이어야 한다(§46.3 (2) 규범)",
+  assert.ok(labelBlock.includes("{verifyConnectedLabel}"), "주장 줄(연결 사실 라벨)은 유지돼야 한다");
+  const found: string[] = [];
+  if (PHONE_NEGATION.test(labelBlock)) found.push("통화 셸");
+  if (PHONE_NEGATION.test(codeOnly(overlaySource))) found.push("오버레이");
+  return found;
+}
+
+test("[G272 → T187] 세션 중 전화 부정 고지가 통화 셸·오버레이 어디에도 없고, 부정은 세션 후 사실 공개가 맡는다", () => {
+  assert.deepEqual(inSessionPhoneNegations(page, overlay), [], "세션 중 부정 고지가 남아 있다(AC-086 (d))");
+  const postCopy = readFileSync("src/lib/sessionboundary/postSessionCopy.ts", "utf8");
+  assert.ok(postCopy.includes("실제 전화도 걸리지 않았습니다"), "부정의 새 정본 자리(세션 후 사실 공개)에 전화 절이 없다");
+});
+
+test("[G272 → T187 역검증] 셸 블록에 옛 고지 줄을 되살린 사본은 반전 단언에 걸린다", () => {
+  const poisoned = page.replace(
+    "{verifyConnectedLabel}\n",
+    "{verifyConnectedLabel}\n<p>훈련용 모의 화면입니다 · 실제로 전화가 걸리지 않습니다</p>\n",
+  ).replace(
+    "{verifyConnectedLabel}\r\n",
+    "{verifyConnectedLabel}\r\n<p>훈련용 모의 화면입니다 · 실제로 전화가 걸리지 않습니다</p>\r\n",
   );
-  // ⛔ 오버레이가 닫히면 사라지는 자리(overlay 전용)만으로는 §46.3 (2)를 어긴다 — page.tsx 쪽에도
-  // 있어야 한다. VerifyCallOverlay.tsx 쪽 고지는 삭제 대상이 아니므로(중복은 안전) 별도로 확인한다.
-  assert.ok(
-    /실제로 전화가 걸리지 않습니다/.test(codeOnly(overlay)),
-    "오버레이 안의 기존 고지도 함께 유지돼야 한다(삭제 금지 — 중복은 안전)",
-  );
+  assert.notEqual(poisoned, page, "오염 지점을 찾지 못했다 — 역검증이 공회전한다");
+  assert.deepEqual(inSessionPhoneNegations(poisoned, overlay), ["통화 셸"]);
 });

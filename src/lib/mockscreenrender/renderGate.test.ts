@@ -125,6 +125,11 @@ const catalogItems = parseCatalogItems();
 const TITLE_SENTINEL = "ZZ-TITLE-SENTINEL-ZZ";
 const DIFFICULTY_SENTINEL = "ZZ-DIFF-SENTINEL-ZZ";
 
+/** G447 생존 신호 — 본 게이트와 역검증이 같은 함수를 쓴다. */
+function isRenderAlive(text: string): boolean {
+  return text.includes("훈련 종료") && text.includes(TITLE_SENTINEL);
+}
+
 function propsFor(item: CatalogItem): Record<string, unknown> {
   return {
     title: TITLE_SENTINEL,
@@ -160,10 +165,15 @@ test("[T116/렌더-존재] 카탈로그 **도달 가능 전수**의 초기 렌�
     // G140 ①②④ — 하네스가 죽은 채 "위반 0건"으로 통과하지 않게 한다.
     assert.ok(transpiledCount >= 3, `훅이 변환한 모듈이 ${transpiledCount}개다 — 하네스가 죽었다`);
     assert.ok(markup.length >= 500, `마크업이 ${markup.length}자다 — 빈 렌더를 통과시키고 있다`);
+    // ⭐ T187(PRD v1.18 AC-086 · T187 · docs/Architecture.md §72.7 G447) — 생존 신호 **이동**(G140 유지).
+    // 옛 신호(공유 헤더의 모의 표식)는 세션 중 표식 폐지로 사라졌다. 새 신호 = 자식 모듈
+    // `EndTrainingButton`이 그린 "훈련 종료"(자식 모듈 렌더 증명) ∧ title 센티널(prop 흐름 증명).
     assert.ok(
-      text.includes("AI 훈련용 모의 화면"),
-      "상시 모의 표식(kind 무관 공유 헤더)이 마크업에 없다 — 렌더가 통째로 실패했을 수 있다",
+      isRenderAlive(text),
+      "생존 신호('훈련 종료' + title 센티널)가 마크업에 없다 — 렌더가 통째로 실패했을 수 있다",
     );
+    // prop을 넘겨도 세션 중 난이도 배지가 그려지지 않는다(M-13 · 앵커 1종 — UX D-83).
+    assert.equal(text.includes(DIFFICULTY_SENTINEL), false, "난이도 라벨이 렌더됐다 — 세션 중 배지가 되살아났다");
 
     const targets = targetTexts(item);
     assert.ok(targets.length >= 4, `${item.landingId}: 대조 대상이 ${targets.length}건뿐이다 — 파서가 필드를 놓쳤다`);
@@ -309,6 +319,21 @@ function assertExistingGateInputsUnchanged(original: string, poisoned: string): 
 function existenceViolations(item: CatalogItem, text: string): number {
   return targetTexts(item).filter((entry) => !text.includes(entry.text)).length;
 }
+
+test("[T187/G447 역검증] `EndTrainingButton` 렌더 지점을 끊으면 생존 신호가 실패하고 G76·AC-079 입력은 불변이다", (t) => {
+  const { original, poisoned, overrides } = poisonedComponentSource(
+    "<EndTrainingButton onClick={onEndTraining} />",
+    "",
+  );
+  assert.notEqual(poisoned, original, "오염 샘플이 실제로 만들어져야 한다 — 치환 대상 문면이 바뀌었으면 여기서 걸린다");
+  const item = catalogItems.find((entry) => entry.kind === "app-install") ?? catalogItems[0];
+  const clean = renderLandingScreen(propsFor(item));
+  const dirty = renderLandingScreen(propsFor(item), overrides);
+  assert.equal(isRenderAlive(clean.text), true, "정상 경로의 생존 신호가 살아 있어야 한다");
+  assert.equal(isRenderAlive(dirty.text), false, "자식 모듈 렌더를 끊었는데 생존 신호가 살아 있다 — 신호가 공회전한다");
+  const [g76Caught, catalogDelta] = assertExistingGateInputsUnchanged(original, poisoned);
+  t.diagnostic(`[G447 역검증] 생존 신호 정상 true / 오염 false / G76 리터럴 검출 ${g76Caught}건 / 카탈로그 변경 ${catalogDelta}바이트`);
+});
 
 test("[T116/역검증 ①] **필드 누락**(issuerLabel 렌더 지점 차단) — 새 검사는 실패하고 G76·AC-079는 통과한다", (t) => {
   const { original, poisoned, overrides } = poisonedComponentSource(

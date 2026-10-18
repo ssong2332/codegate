@@ -19,6 +19,7 @@ import { endSession } from "@/lib/api";
 import { clearPendingSession, getPendingSessionId } from "@/lib/recording";
 import { Button } from "@/components/ui";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
+import { POST_SESSION_FACT_DISCLOSURE } from "@/lib/sessionboundary/postSessionCopy";
 
 type PageState = "no-session" | "ending" | "ended" | "error";
 
@@ -308,6 +309,12 @@ export default function SessionEndPage() {
           </>
         )}
       </p>
+
+      {/* T187(docs/Architecture.md §72.5 D4 · PRD v1.18 AC-089 (c) · UX-007 v1.29 노트 · D-82) —
+          세션 후 사실 공개 문장. 세션 중 화면에서 지운 부정 고지의 정본 자리다. ⛔ 페이지 상태·세션
+          내용(채널·난이도·제출/설치 여부)으로 가르거나 숨기지 않는다 — 제목과 같은 조건(무조건)으로
+          렌더한다(G445). 디스컬레이션 문단과 같은 크기·색 · 경고 표현 0. */}
+      <p className="text-base leading-[1.7] text-[#6B655C]">{POST_SESSION_FACT_DISCLOSURE}</p>
 
       <div className="flex w-full flex-col items-stretch gap-3">{body}</div>
     </main>

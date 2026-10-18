@@ -34,14 +34,13 @@
 // ⚠️ **AC-006**: 시트가 통화 셸 하단의 종료 버튼을 덮으므로, 이 시트 **안에** 자체 "훈련 종료"를
 // 둔다(선례: InCallSmsOverlay·MessengerFakeLanding, D-68 Reason ①/Impact).
 //
-// ⭐⭐ **G272/D-68** — "훈련용 모의 화면입니다. 이 화면에서만 재현되며 실제로 전화가 걸리지
-// 않습니다." 고지는 **이 시트에도 그대로 남아 있다**(삭제 대상이 아니다). ⛔ 단, 이 시트는 전환이
-// 성사되면 **자동으로 닫히므로**, 전환 이후 세션 종료까지 상시 유지되는 **정본 자리는 이제
-// `src/app/session/play/page.tsx`의 `verifyConnectedLabel` 블록**이다 — 이 파일의 고지는 그 정본을
-// 대체하지 않고 병존한다(중복은 안전, §47.7 (†)).
+// ⭐⭐ **T187 — docs/Architecture.md §72(PRD v1.18 AC-086 (b)(c)(d) · UX D-81·D-82)** — 이 시트는
+// **전부 세션 중**이다. 옛 G272 고지(전화 부정 1문장)와 상단 합성 표식은 User 결정 *"전부 제거"*
+// 로 지웠다 — 전화 부정의 새 정본 자리는 세션 후 UX-007의 `POST_SESSION_FACT_DISCLOSURE`
+// (`src/lib/sessionboundary/postSessionCopy.ts`)다. ⛔ 빈 자리를 다른 문구·배지로 채우지 않는다
+// (D-81 · G437/G440).
 import { useEffect } from "react";
 import EndTrainingButton from "./EndTrainingButton";
-import SyntheticLabel from "./SyntheticLabel";
 import { type VerifyInterceptView } from "@/lib/verifyintercept";
 
 type VerifyCallOverlayProps = {
@@ -83,7 +82,7 @@ export default function VerifyCallOverlay({
   return (
     <div
       role="region"
-      aria-label="확인 부서 연결 — 훈련용 모의 화면"
+      aria-label="확인 부서 연결 화면"
       className="fixed inset-0 z-40 flex items-stretch justify-center bg-black/55 sm:items-center sm:p-6"
     >
       {/* 바깥 탭으로 닫기(UX-031 Exit — 재연결 없이 원래 통화가 계속된다. 전환을 취소하지 않는다). */}
@@ -109,9 +108,9 @@ export default function VerifyCallOverlay({
           </span>
         </div>
 
-        {/* ── 상시 표식(AC-022) + 상시 종료(AC-006). 스크롤과 무관하게 항상 보인다. */}
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#E2DDD3] bg-white px-4 py-3">
-          <SyntheticLabel label="AI 훈련용 모의 화면" />
+        {/* ── 상시 종료(AC-006). 스크롤과 무관하게 항상 보인다. T187(§72 G449) — 표식이 빠져 유일한
+            자식이 된 종료 버튼이 오른쪽 끝에 그대로 남도록 justify-end. */}
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-[#E2DDD3] bg-white px-4 py-3">
           <EndTrainingButton onClick={onEndTraining} />
         </div>
 
@@ -121,17 +120,14 @@ export default function VerifyCallOverlay({
             통화는 끊기지 않습니다. 담당자가 바뀌어 이어집니다.
           </p>
 
-          {/* ⭐ T110 §22.1 C4 — 연락 수단 표기 카드는 통째로 제거됐다. 남는 것은 창구명 1줄 +
-              모의 화면 고지다. 카탈로그에도 값이 없으므로 되돌리려면 스키마부터 되살려야 한다
+          {/* ⭐ T110 §22.1 C4 — 연락 수단 표기 카드는 통째로 제거됐다. 남는 것은 창구명 1줄
+              뿐이다(T187 §72 — 고지 줄도 세션 중에서 빠졌다). 카탈로그에도 값이 없으므로 되돌리려면 스키마부터 되살려야 한다
               (= 되돌릴 수 없게 만드는 것이 이 제거의 목적이다, G85).
               ⚠️ 이 JSX 주석은 `codeOnly()`가 걷어내지 못하므로 G85-UI 스캔 대상에 남는다 —
               그래서 금지 단어를 서술에 쓰지 않는다(파일 서두 `//` 주석이 전문을 담는다). */}
           <div className="rounded-[14px] border-[1.5px] border-[#E2DDD3] bg-white p-5">
             <p className="text-base text-[#6B655C]">상대가 연결해 주겠다는 확인 창구</p>
             <p className="mt-1 text-xl font-bold text-[#22303A]">{offer.deskLabel}</p>
-            <p className="mt-2 text-sm text-[#6B655C]">
-              훈련용 모의 화면입니다. 이 화면에서만 재현되며 실제로 전화가 걸리지 않습니다.
-            </p>
           </div>
 
           {/* Dialing — "연결 중…"(aria-live). 이 구간에도 통화 축소 표시·"훈련 종료"가 계속 보인다. */}
