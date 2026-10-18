@@ -24,6 +24,7 @@ import { Badge, Button } from "@/components/ui";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { buildStageNotice, type ReportStage } from "@/lib/report/stageNotice";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
+import { tacticsAccordionLabel, TACTICS_NOT_FOUND_TEXT } from "@/lib/report/reportTacticsCopy";
 import {
   isReportDialogueDegraded,
   REPORT_DEGRADED_NOTICE,
@@ -539,7 +540,7 @@ export default function ReportPage() {
           aria-expanded={expandedSection === "tactics"}
           className="flex min-h-[56px] items-center justify-between rounded-2xl border border-[#E2DDD3] bg-white px-[18px] text-lg font-semibold text-[#22303A]"
         >
-          시도된 수법 {report.tacticsUsed.length}가지
+          {tacticsAccordionLabel(report.tacticsUsed.length)}
           <span aria-hidden="true" className="text-[#6B655C]">
             {expandedSection === "tactics" ? "▴" : "▾"}
           </span>
@@ -556,7 +557,7 @@ export default function ReportPage() {
               </div>
             ) : (
               <p className="rounded-2xl border border-[#E2DDD3] bg-white p-4 text-base text-[#6B655C]">
-                식별된 수법이 없습니다.
+                {TACTICS_NOT_FOUND_TEXT}
               </p>
             )}
           </section>
