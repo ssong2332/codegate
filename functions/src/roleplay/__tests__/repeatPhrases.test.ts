@@ -20,7 +20,7 @@ import {
   IN_CALL_SMS,
   SMS_DECLINE_ALREADY,
   SMS_DECLINE_TOO_EARLY,
-  buildOtpCheckInstruction,
+  buildOtpCompareInstruction,
   hasInCallSms,
   listOtpItems,
 } from "../../scenarios/inCallSms";
@@ -56,7 +56,8 @@ function realTurnInstructionsFor(scenarioId: string): string[] {
   const verify = VERIFY_INTERCEPT[scenarioId];
   if (verify) out.push(verify.announceInstruction, verify.reconnectInstruction);
   for (const sms of IN_CALL_SMS[scenarioId] ?? []) out.push(sms.announceInstruction);
-  for (const otp of listOtpItems(scenarioId)) out.push(buildOtpCheckInstruction(otp.otpCode ?? ""));
+  // §78 — 인증번호 대조는 서버 대조 결과 지시 2종으로 바뀌었다(번호 미포함).
+  if (listOtpItems(scenarioId).length > 0) out.push(buildOtpCompareInstruction("match"), buildOtpCompareInstruction("mismatch"));
   if ((MOCK_SCREENS[scenarioId] ?? []).length > 0) out.push(MOCK_INSTALL_CONSENT_INSTRUCTION);
   return out;
 }
@@ -143,8 +144,8 @@ test("[T191/S4 · A1] 본인확인 처리 항목은 되읽기/되짚기 확인 +
   }
 });
 
-test("[T191/S4 · #300 공존] 인증번호가 **틀렸을 때** 다시 확인해 불러 달라는 대조 지시(§77)는 그대로 살아 있다", () => {
-  const instruction = buildOtpCheckInstruction("048231");
+test("[T191/S4 · #300 공존] 인증번호가 **틀렸을 때** 다시 확인해 불러 달라는 대조 지시(§78 서버 대조 결과)는 그대로 살아 있다", () => {
+  const instruction = buildOtpCompareInstruction("mismatch");
   assert.ok(instruction.includes("번호가 안 맞는데요, 문자 다시 확인해서 불러 주세요."));
   const assembled = buildSystemPrompt(SCENARIO_PROMPTS["institutional-impersonation"], {
     inCallSmsEnabled: true,
