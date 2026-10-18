@@ -18,7 +18,7 @@ import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { speakerGenderFor } from "../realtime/scenarioVoice";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { ScammerMessage } from "./types";
-import { applyFictionalBank } from "../shared/fictionalBank";
+import { applyFictionalBank, resolveSessionAccountNumber } from "../shared/fictionalBank";
 
 // 사용자 신고(2026-07-25) — 오프닝 대사가 다짜고짜 요구·압박부터 들어가 시나리오 배경이 없다는
 // 피드백. buildSystemPrompt는 모든 턴에 공통으로 쓰이므로(sendMessage도 재사용), "이번이 첫 마디다"
@@ -102,6 +102,7 @@ export async function generateOpeningLine(
       speakerGender: speakerGenderFor(scenarioId),
       turnInstruction: OPENING_TURN_INSTRUCTION,
       ...(fictionalBankName ? { fictionalBankName } : {}),
+      sessionAccountNumber: resolveSessionAccountNumber(scenarioId),
     }),
     messages: [], // 오프닝 대사에는 아직 사용자 입력이 없다.
     mockTacticHints: scenarioPrompt.weakenedTactics,

@@ -23,7 +23,7 @@ import { scanText } from "./harmlessnessPatterns";
 // personaAuthority/scenarioVoice를 "단일 원천"으로 못박았다).
 import { PERSONA_AUTHORITY, asksIdentityCheck } from "../../roleplay/personaAuthority";
 import { speakerGenderFor } from "../../realtime/scenarioVoice";
-import { applyFictionalBank, FICTIONAL_BANK_NAMES } from "../../shared/fictionalBank";
+import { applyFictionalBank, FICTIONAL_BANK_NAMES, resolveSessionAccountNumber } from "../../shared/fictionalBank";
 
 // AC-005: 실제 운영 가능한 사기 정보(실계좌번호 패턴·실제 송금 절차 지시·실제 URL)가 절대
 // 포함되면 안 된다. 계좌번호형 숫자(8자리 이상 연속 숫자)와 http(s) 링크를 금지 패턴으로 검사한다.
@@ -1359,6 +1359,8 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
       label: `${targetId}[턴지시:${label}]`,
       text: buildSystemPrompt(SCENARIO_PROMPTS[targetId], {
         fictionalBankName,
+        // §81.6 — 세션 계좌번호 축(계좌 문자 시나리오는 그 문자 속 계좌).
+        sessionAccountNumber: resolveSessionAccountNumber(targetId),
         difficultyLevel: "advanced",
         l3Procedural: true,
         inCallSmsEnabled: true,
@@ -1735,6 +1737,10 @@ test("[T113] 축 전용 블록이 스캔 목록에 실제로 들어왔다(`verif
   for (const { label, value } of turnInstructionSources()) {
     // §81 — 조립 결과는 자리표시자 "OO은행"이 세션 가상 은행명으로 바뀌어 있을 수 있다(바뀐 값으로도 찾는다).
     const forms = [value, ...FICTIONAL_BANK_NAMES.map((bank) => applyFictionalBank(value, bank))];
+    // §81.6 — 예시 계좌가 세션 계좌로 바뀐 형태도 찾는다.
+    const accounts = [...new Set(Object.keys(SCENARIO_PROMPTS).map((id) => resolveSessionAccountNumber(id)))];
+    const bankForms = [...forms];
+    for (const account of accounts) for (const f of bankForms) forms.push(f.split("948-2716-5093-27").join(account));
     assert.ok(
       scanned.some((text) => forms.some((form) => text.includes(form))),
       `턴 지시 "${label}"이 스캔 목록에 없다 — 조립 산출물의 일부인데 무검사 구간으로 남는다.`,

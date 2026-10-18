@@ -11,6 +11,8 @@
 // ⛔ 이름을 늘리거나 바꿀 때는 §81.1 대조표를 다시 돌린다. "OO뱅크"류, 실존 브랜드와 한 글자 차이, 카드사·
 //    증권사·보험사 상호와 같은 이름은 넣지 않는다.
 
+import { IN_CALL_SMS } from "../scenarios/inCallSms";
+
 /** 카탈로그·프롬프트에 쓰는 가상 은행 자리표시자(템플릿 토큰). 실제 출력 전에 세션 은행명으로 바뀐다. */
 export const BANK_PLACEHOLDER = "OO은행";
 
@@ -63,4 +65,29 @@ export function applyFictionalBank(text: string, bankName: string): string {
   PLACEHOLDER_PATTERN.lastIndex = 0;
   if (!PLACEHOLDER_PATTERN.test(text)) return text;
   return text.replace(PLACEHOLDER_PATTERN, bankName);
+}
+
+/**
+ * 프롬프트·시나리오 수법의 **예시 계좌번호**(템플릿 토큰) — §81.6. 모델이 이 예시를 문자 속 계좌인 양 그대로 읽어
+ * 문자(카탈로그 계좌)와 대사가 갈렸다(R8: 예시 계좌를 말한 세션 pre 6/7 · post 3/7, 문자 속 계좌를 말한 세션 0/14).
+ */
+export const EXAMPLE_ACCOUNT_NUMBER = "948-2716-5093-27";
+const ACCOUNT_NUMBER_PATTERN = /\d{3}-\d{4}-\d{4}-\d{2}/;
+
+/** 문자 본문에서 가상 은행 자리표시자 줄의 계좌번호를 뽑는다(없으면 undefined). */
+export function extractAccountNumber(body: string): string | undefined {
+  const line = body.split("\n").find((l) => l.includes(BANK_PLACEHOLDER) || /[Oo○Ｏｏ]{2}\s?은행/.test(l));
+  return line?.match(ACCOUNT_NUMBER_PATTERN)?.[0];
+}
+
+/**
+ * 이 시나리오의 세션 계좌번호 — **계좌 문자가 있으면 그 문자 속 계좌**(대사와 문자가 같은 번호), 없으면 예시 계좌.
+ * 프롬프트(`buildSystemPrompt` `sessionAccountNumber`)와 문자 문서(`accountNumber`)가 같은 값을 쓴다.
+ */
+export function resolveSessionAccountNumber(scenarioId: string): string {
+  for (const item of IN_CALL_SMS[scenarioId] ?? []) {
+    const found = extractAccountNumber(item.body);
+    if (found) return found;
+  }
+  return EXAMPLE_ACCOUNT_NUMBER;
 }

@@ -4,7 +4,7 @@
 import type { ScenarioPromptDoc } from "../shared/types";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { LlmMessage } from "../llm";
-import { applyFictionalBank } from "../shared/fictionalBank";
+import { applyFictionalBank, EXAMPLE_ACCOUNT_NUMBER } from "../shared/fictionalBank";
 
 // 사용자 신고(2026-07-25) — "사람과 대화한다는 느낌이 안 든다", "대화가 자연스럽지 않다",
 // "시나리오대로 유도하되 사용자의 말을 파악해서 흘러가야 한다". 기존 프롬프트는 페르소나(누구인가)와
@@ -569,6 +569,12 @@ export type BuildSystemPromptOptions = {
    * 문자 본문(`inCallSms/buildDoc.ts`)과 같은 이름이라 대사와 문자가 일치한다. 부재면 종전과 같은 문자열("OO은행")이다.
    */
   fictionalBankName?: string;
+  /**
+   * 2026-10-19(Architecture §81.6) — 이 세션의 계좌번호(`resolveSessionAccountNumber`). 주어지면 조립 결과의 예시 계좌
+   * `948-2716-5093-27`(공통 규칙·시나리오 수법)을 이 번호로 바꾸고, "이 대화에서 계좌를 불러 줄 때는 이 번호를 그대로
+   * 쓴다" 1문장을 붙인다 — 계좌 문자가 있는 시나리오는 문자 속 계좌와 같은 번호가 된다. 부재면 종전 문자열.
+   */
+  sessionAccountNumber?: string;
   /** UX-029에서 사용자가 고른 강도. 부재·intermediate면 블록을 내보내지 않는다(기준선). */
   difficultyLevel?: DifficultyLevel;
   /**
@@ -725,7 +731,8 @@ export function buildSystemPrompt(
     ...(opts.turnInstruction ? [opts.turnInstruction, ""] : []),
     prompt.guardrailPreamble,
   ].join("\n");
-  return opts.fictionalBankName ? applyFictionalBank(assembled, opts.fictionalBankName) : assembled;
+  const withAccount = opts.sessionAccountNumber ? applySessionAccount(assembled, opts.sessionAccountNumber) : assembled;
+  return opts.fictionalBankName ? applyFictionalBank(withAccount, opts.fictionalBankName) : withAccount;
 }
 
 const USER_INPUT_OPEN = "[훈련참가자입력:데이터시작]";
@@ -776,4 +783,16 @@ export function toLlmHistory(
       ? { role: "user" as const, content: wrapUserInputAsData(m.textMasked) }
       : { role: "assistant" as const, content: m.textMasked },
   );
+}
+
+/** §81.6 — 예시 계좌를 세션 계좌로 바꾸고, 그 번호만 쓰라는 1문장을 [진행 강제] 가상값 줄에 붙인다. */
+const ACCOUNT_RULE_ANCHOR = `숫자는 실제처럼 들리는 형식으로 또박또박 부른다(예: "OO은행 ${EXAMPLE_ACCOUNT_NUMBER}").`;
+function applySessionAccount(text: string, accountNumber: string): string {
+  const withRule = text.includes(ACCOUNT_RULE_ANCHOR)
+    ? text.replace(
+        ACCOUNT_RULE_ANCHOR,
+        `${ACCOUNT_RULE_ANCHOR} **이 대화에서 계좌번호를 불러 줄 때는 이 번호를 그대로 쓴다** — 문자로 보낸 계좌가 있으면 그 문자 속 계좌와 같은 번호다. 다른 계좌번호를 지어내지 않는다.`,
+      )
+    : text;
+  return withRule.split(EXAMPLE_ACCOUNT_NUMBER).join(accountNumber);
 }

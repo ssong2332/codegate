@@ -21,6 +21,7 @@ import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { buildLiveToolDeclarations, buildLiveToolNames, declaresOfferVerificationDesk } from "./liveTools";
 import { SCENARIO_SPEAKER_GENDER, speakerGenderFor } from "./scenarioVoice";
 import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider } from "./types";
+import { resolveSessionAccountNumber } from "../shared/fictionalBank";
 
 /**
  * 무료 티어에서 쓸 수 있는 실시간 음성 모델.
@@ -129,6 +130,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       offerToolDeclared: declaresOfferVerificationDesk(input.scenarioId, input.difficultyLevel),
       // §81 — 세션 가상 은행명(문자 본문과 같은 이름). 부재면 종전 문자열("OO은행").
       ...(input.fictionalBankName ? { fictionalBankName: input.fictionalBankName } : {}),
+      sessionAccountNumber: resolveSessionAccountNumber(input.scenarioId),
     });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });

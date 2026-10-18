@@ -110,6 +110,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | body | string | required | 본문. **서버 카탈로그가 원천**이며 사용자·LLM이 생성하지 않는다 → PII 마스킹 대상 아님(사용자 텍스트가 아님) |
 | otpCode | string? | `kind==="otp"`일 때만 | **콘텐츠에 고정된 리터럴**(런타임 난수 금지 — 결정론적 테스트 + 모의값 불변식) |
 | bankName | string? | 본문에 가상 은행 자리표시자가 있었던 문자만 | **2026-10-18 증분(Architecture §79)** — 그 세션의 가상 은행명(본문은 이미 치환돼 저장). 가짜 랜딩 미리 채움(D-115)의 원천 |
+| accountNumber | string? | 본문에 가상 은행 자리표시자 줄이 있는 문자만 | **2026-10-19 증분(Architecture §81.6)** — 그 줄의 계좌번호(카탈로그 고정 가상값, `bankName`과 한 쌍). D-115 랜딩 미리 채움의 원천 |
 | linkDisplayText | string? | `kind==="link"`일 때만 | 모의 표기 문자열. UX-023(`MessengerFakeLanding`)의 제목으로 그대로 쓰인다 |
 | fakeLandingId | string? | `kind==="link"`일 때만 | 인앱 가짜 랜딩 참조. **`url`/실 URL 필드는 이 스키마에 존재하지 않는다**(AC-032/045 구조적 금지 — `MessengerAttachment`와 동형) |
 | landingKind | string? | `kind==="link"` + **기본값이 아닐 때만** | **§19.4 증분(OQ-U26 (b)).** `credential-form`\|`app-install`. 서버가 `resolveMockScreenKind(session.scenarioId, fakeLandingId)`로 확정해 `functions/src/inCallSms/buildDoc.ts` **한 곳에서만** 기록한다 — **클라가 `fakeLandingId` 문자열로 kind를 추론하지 않는다**(§15.9.1 R3, AC-024 계승). **값이 기본값(`credential-form`)이면 키 자체를 만들지 않는다** — `MessengerAttachment.landingKind`의 생략 규칙(`functions/src/roleplay/linkMarker.ts:58`)과 **글자 그대로 동일**하며, 같은 개념에 생략 규칙이 두 벌이 되는 것을 막는다. 읽기 규칙: `landingKind ?? "credential-form"`(무백필 — 기존 문서 바이트 동일). ⚠️ 생략된 키가 `app-install`을 뜻할 수 없음은 게이트 **G-A**(`entrySurface==="in-call-sms"` ⇒ `kind!=="app-install"`, Architecture.md §19.5)가 보장한다 |

@@ -226,6 +226,8 @@ export type InCallSmsDoc = {
   linkAddress?: string;
   /** 2026-10-18(Architecture §81) — 본문에 가상 은행 자리표시자가 있었던 문자에만, 그 세션의 가상 은행명. 가짜 랜딩 미리 채움(D-115)의 원천. */
   bankName?: string;
+  /** 2026-10-19(Architecture §81.6) — 같은 문자 본문의 계좌번호(`bankName`과 한 쌍). D-115 랜딩 미리 채움의 원천. */
+  accountNumber?: string;
   // T104(§19.4) — 그 랜딩의 목업 종류. **kind의 진실 원천은 서버**이고(§15.9.1 R3) 클라는
   // `fakeLandingId` 문자열을 분류하지 않는다. 값이 기본값(`credential-form`)이면 **키를 만들지
   // 않는다** — `MessengerAttachment.landingKind`의 생략 규칙(`linkMarker.ts`)과 글자 그대로

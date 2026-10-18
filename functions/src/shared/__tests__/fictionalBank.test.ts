@@ -7,8 +7,11 @@ import {
   applyFictionalBank,
   BANK_PLACEHOLDER,
   FICTIONAL_BANK_NAMES,
+  EXAMPLE_ACCOUNT_NUMBER,
+  extractAccountNumber,
   pickFictionalBankName,
   resolveFictionalBankName,
+  resolveSessionAccountNumber,
 } from "../fictionalBank";
 import { replaceRealFinancialNames } from "../../guardrails/realFinancialNames";
 import { buildSystemPrompt } from "../../roleplay/promptAssembly";
@@ -180,4 +183,42 @@ test("[은행명] ⭐ 서버가 클라·모델에 내보내는 문자열 전수 
   assert.equal(buildVerifyInterceptDoc(bankVerify, ts, 1).deskLabel, bankVerify.deskLabel);
   assert.equal(buildVerifyReconnectParts(bankVerify).reconnectInstruction, bankVerify.reconnectInstruction);
   assert.ok(buildVerifyReconnectParts(bankVerify, bank).reconnectedCallerLabel.startsWith(bank));
+});
+
+test("[계좌] §81.6 세션 계좌번호 — 계좌 문자가 있으면 그 문자 속 계좌, 없으면 예시 계좌 · 프롬프트에 예시 잔존 0 · 같은 번호만 쓰라는 1문장", () => {
+  assert.equal(resolveSessionAccountNumber("institutional-impersonation"), "210-3391-5540-08");
+  assert.equal(resolveSessionAccountNumber("courier-customs-scam"), "604-2270-1183-91");
+  assert.equal(resolveSessionAccountNumber("family-accident-deepvoice"), EXAMPLE_ACCOUNT_NUMBER, "계좌 문자 없는 시나리오는 예시 계좌");
+  let withSms = 0;
+  for (const [id, scenario] of Object.entries(SCENARIO_PROMPTS)) {
+    const account = resolveSessionAccountNumber(id);
+    const prompt = buildSystemPrompt(scenario, { difficultyLevel: "advanced", inCallSmsEnabled: true, fictionalBankName: "가온은행", sessionAccountNumber: account });
+    assert.ok(prompt.includes(`"가온은행 ${account}"`), `${id}: 예시가 세션 계좌로`);
+    assert.ok(prompt.includes("이 대화에서 계좌번호를 불러 줄 때는 이 번호를 그대로 쓴다"), `${id}: 규칙 1문장`);
+    if (account !== EXAMPLE_ACCOUNT_NUMBER) {
+      withSms += 1;
+      assert.ok(!prompt.includes(EXAMPLE_ACCOUNT_NUMBER), `${id}: 예시 계좌가 남았다(문자 속 계좌와 갈린다)`);
+    }
+    const legacy = buildSystemPrompt(scenario, { difficultyLevel: "advanced" });
+    assert.ok(!legacy.includes("이 대화에서 계좌번호를 불러 줄 때는"), `${id}: 옵션 없으면 종전 문면`);
+  }
+  assert.ok(withSms >= 5, `계좌 문자 시나리오 수집 실패(${withSms})`);
+});
+
+test("[계좌] §81.6 문자 문서 — 자리표시자 줄의 계좌번호를 accountNumber로(은행명과 한 쌍, D-115 원천) · 프롬프트 세션 계좌와 같은 값", () => {
+  const ts = { toMillis: () => 0 } as unknown as FirebaseFirestore.Timestamp;
+  for (const [scenarioId, items] of Object.entries(IN_CALL_SMS)) {
+    for (const item of items) {
+      const doc = buildInCallSmsDoc(item, ts, 1, scenarioId, "가온은행");
+      const extracted = extractAccountNumber(item.body);
+      if (extracted) {
+        assert.equal(doc.accountNumber, extracted);
+        assert.equal(doc.bankName, "가온은행");
+        assert.equal(resolveSessionAccountNumber(scenarioId), extracted, `${scenarioId}: 프롬프트 계좌 = 문자 계좌`);
+        assert.ok(doc.body.includes(`가온은행 ${extracted}`));
+      } else {
+        assert.equal("accountNumber" in doc, false);
+      }
+    }
+  }
 });

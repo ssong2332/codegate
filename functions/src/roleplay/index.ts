@@ -45,7 +45,7 @@ import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { speakerGenderFor } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
-import { applyFictionalBank, resolveFictionalBankName } from "../shared/fictionalBank";
+import { applyFictionalBank, resolveFictionalBankName, resolveSessionAccountNumber } from "../shared/fictionalBank";
 
 export { generateOpeningLine } from "./openingLine";
 export type { OpeningLineResult } from "./openingLine";
@@ -325,6 +325,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         speakerGender: speakerGenderFor(session.scenarioId),
         ...(promptTurnInstruction ? { turnInstruction: promptTurnInstruction } : {}),
         fictionalBankName,
+        sessionAccountNumber: resolveSessionAccountNumber(session.scenarioId),
       }),
       messages: llmHistory,
       mockTacticHints: scenarioPrompt.weakenedTactics,
