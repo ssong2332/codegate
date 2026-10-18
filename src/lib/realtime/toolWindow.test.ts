@@ -5,6 +5,7 @@ import {
   TOOL_WINDOW_MAX_BOUNDARIES,
   TOOL_WINDOW_STALL_SEC,
   shouldFireBackstop,
+  shouldRequestSmsBackstop,
 } from "./toolWindow.ts";
 
 test("[상수] 판단값이 architect 원문과 같다(§59.8)", () => {
@@ -128,5 +129,34 @@ test("[경계값] 경계·초 모두 상한 바로 아래 + 도구 있음 + 실�
       toolCallFailed: false,
     }),
     false,
+  );
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════
+// ⭐ T191 문자 도달 조건 — 화면의 문자 백스톱 질의 규칙(`shouldRequestSmsBackstop`). 무엇을 넛지/발송할지는 서버
+// (`functions/src/inCallSms/__tests__/smsGate.test.ts`)가 고정한다. 여기서는 "사용자 발화 1회당 최대 1회 묻는다"만.
+const smsBase = { enabled: true, userTurns: 3, lastRequestedUserTurns: 2, nonePending: false, inFlight: false };
+
+test("[T191 백스톱 질의] 새 사용자 발화면 묻는다", () => {
+  assert.equal(shouldRequestSmsBackstop(smsBase), true);
+  assert.equal(shouldRequestSmsBackstop({ ...smsBase, userTurns: 0, lastRequestedUserTurns: -1 }), true, "통화 시작 직후 1회");
+});
+
+test("[T191 백스톱 질의] 같은 발화 수로는 다시 묻지 않는다(서버 넛지가 '정확히 그 발화'에서 1회가 되는 근거)", () => {
+  assert.equal(shouldRequestSmsBackstop({ ...smsBase, lastRequestedUserTurns: 3 }), false);
+});
+
+test("[T191 백스톱 질의] 문자 선언 없음 · none_pending · 진행 중이면 묻지 않는다", () => {
+  assert.equal(shouldRequestSmsBackstop({ ...smsBase, enabled: false }), false);
+  assert.equal(shouldRequestSmsBackstop({ ...smsBase, nonePending: true }), false);
+  assert.equal(shouldRequestSmsBackstop({ ...smsBase, inFlight: true }), false);
+});
+
+test("[T191 백스톱 질의 역검증] 발화 수 비교를 지운 오염본은 같은 발화에 두 번 묻는다 — 정본은 한 번", () => {
+  const poisoned = (i: typeof smsBase) => i.enabled && !i.nonePending && !i.inFlight; // 오염: 발화 수 비교 삭제
+  const sameTurn = { ...smsBase, lastRequestedUserTurns: 3 };
+  assert.deepEqual(
+    { poisoned: poisoned(sameTurn), canonical: shouldRequestSmsBackstop(sameTurn) },
+    { poisoned: true, canonical: false },
   );
 });

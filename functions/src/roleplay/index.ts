@@ -15,12 +15,23 @@ import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from "../llm";
 import { triggerReportGeneration } from "../report";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
-import { findDueInCallSms, hasInCallSms } from "../scenarios/inCallSms";
+import { hasInCallSms } from "../scenarios/inCallSms";
+import type { InCallSmsItem } from "../scenarios/inCallSms";
 import {
   hasAppInstallMockScreen,
   MOCK_INSTALL_CONSENT_INSTRUCTION,
 } from "../scenarios/mockScreens";
-import { buildInCallSmsDoc, fallbackAnchorScammerTurn } from "../inCallSms";
+import { textPathAnchorScammerTurn } from "../inCallSms/buildDoc";
+import {
+  buildSmsMarkerOfferInstruction,
+  buildSmsNudgeInstruction,
+  planSmsBackstop,
+  resolveDeclaredSms,
+  resolveSmsGate,
+} from "../inCallSms/smsGate";
+import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
+import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms } from "../inCallSms/smsDelivery";
+import type { SmsDeliveryInput } from "../inCallSms/smsDelivery";
 import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { pickFallbackTurnInstruction } from "../verifyIntercept/fallbackTurn";
 import { announcedVerifyAnchor } from "../verifyIntercept/buildDoc";
@@ -38,6 +49,7 @@ import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { asksIdentityCheck } from "./personaAuthority";
+import { escapeSmsMarkerLookalikes, extractSmsMarker } from "./smsMarker";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
 import { evaluateOtpCheck, otpCheckInputsFromHistory } from "./otpCheck";
 import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
@@ -54,6 +66,25 @@ ensureFirebaseAdminApp();
 // GEMINI_API_KEY 선언(2026-07-24) — getLlmClient()가 실 Gemini로 격상될 수 있어, Functions v2가
 // 배포 환경에서 이 secret을 런타임에 주입하도록 명시해야 한다(realtime/index.ts의
 // createRealtimeCall과 동일 이유).
+/** T191 — 문자 판정 1줄(도착 · 거부 모두 · AC-099 (h) 사용자 발화 수 포함). ⛔ G170 — 대사 · 번호 0. */
+function logSmsGate(
+  sessionId: string,
+  trigger: "backstop" | "model_marker",
+  purpose: string | undefined,
+  status: string,
+  userTurns: number,
+  declaredReason?: string,
+): void {
+  logger.info("[T191] sendMessage 문자 판정", {
+    sessionId,
+    trigger,
+    purpose: purpose ?? null,
+    status,
+    userTurns,
+    ...(declaredReason ? { declaredReason } : {}),
+  });
+}
+
 export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageResponse>>(
   { secrets: [...LLM_TEXT_SECRETS] },
   async (request) => {
@@ -154,8 +185,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
 
     // ② 서버에서 scenarioPrompts 기반으로 조립한 프롬프트 + 사용자 입력 구분자 감싸기(ADR-0004) →
     // LLM 어댑터(functions/src/llm) 호출.
-    const llmHistory = toLlmHistory(storedHistory);
-    llmHistory.push({ role: "user", content: wrapUserInputAsData(maskedUserText) });
+    // T191 — 사용자 입력 속 `[[SMS:` 흉내는 LLM에 닿기 전에 무력화한다(`smsMarker.ts` — 모델이 그대로 따라 써도 마커가 아니다).
+    const llmHistory = toLlmHistory(
+      storedHistory.map((m) =>
+        m.role === "user" ? { ...m, textMasked: escapeSmsMarkerLookalikes(m.textMasked) } : m,
+      ),
+    );
+    llmHistory.push({ role: "user", content: wrapUserInputAsData(escapeSmsMarkerLookalikes(maskedUserText)) });
 
     // reviewer 리뷰 Major #1 수정(2026-07-24, 실 Gemini 활성화로 처음 실측 가능해진 결함) — 사용자
     // 턴은 이미 위 트랜잭션(#8, 동시 탭 방지용 원자적 클레임)에서 커밋됐고 turnCount도 이미
@@ -164,31 +200,49 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // T72(§15.3.3 호출부 3곳 중 "텍스트 턴") — 세션에 기록된 난이도를 그대로 반영한다. 부재·
     // enum 밖이면 normalizeDifficultyLevel이 중급으로 확정하며, 중급은 모디파이어 블록을 내보내지
     // 않으므로 난이도 도입 이전 세션의 프롬프트 문자열이 한 글자도 바뀌지 않는다(회귀 0).
-    // ②-b 통화 중 문자(T68, §15.1.2 폴백 경로 — 실시간 경로의 deliverInCallSms와 **같은 컬렉션**에
-    // 쓴다). 실시간 경로에서는 클라가 사기범 턴 경계를 세지만, 이 텍스트 경로에서는 서버가 직접
-    // 셀 수 있다: 지금 만들어질 사기범 응답이 몇 번째인가 = 이력의 사기범 메시지 수 + 1.
-    // 도착은 LLM 호출과 **무관하게** 확정되고(먼저 write), 캐릭터가 그 사실을 알리게 하는 1줄은
-    // 이 턴의 systemPrompt에 turnInstruction으로 주입된다(가드레일 앞 — §15.5 순서 불변식은
-    // buildSystemPrompt 안에서 강제된다).
+    // ②-b 통화 중 문자 — ⭐ T191 문자 도달 조건(PRD AC-099 · 설계 "문자 도달 조건"). 예전에는 카탈로그 고정 턴
+    // (`afterScammerTurns === 이번 사기범 턴`)이면 무조건 도착시켰다. 이제 발송 경로는 2개이고 둘 다 실시간과 **같은
+    // 단일 통로**(`deliverSmsThroughGate` → `resolveSmsGate`)를 지난다:
+    //   ① 백스톱(필수 목적만) — LLM 호출 **전**. 발송되면 announce가 이번 응답의 턴 지시로 실린다(같은 응답 — 설계 P7).
+    //   ② 모델 마커 `[[SMS:목적]]` — LLM 응답을 저장한 **뒤**. 지금 게이트가 열린 목적만 턴 지시로 제시한다.
+    // 사용자 발화 수는 서버가 `messages`로 센다(이번 발화 포함 — 위 트랜잭션이 이미 썼다).
     const scammerTurnNumber = storedHistory.filter((m) => m.role === "scammer").length + 1;
-    const dueSms = findDueInCallSms(session.scenarioId, scammerTurnNumber);
+    const userTurnsNow = storedHistory.filter((m) => m.role === "user").length + 1;
+    const { declared: smsDeclared, reason: smsDeclaredReason } = resolveDeclaredSms(
+      session.scenarioId,
+      session.flowVariantId,
+    );
+    const smsStore = firestoreSmsStore(db, sessionRef);
+    const smsDeliveryBase: Omit<SmsDeliveryInput, "purpose" | "anchorScammerTurn" | "trigger"> = {
+      scenarioId: session.scenarioId,
+      declared: smsDeclared,
+      userTurns: userTurnsNow,
+    };
+    let smsDelivered: DeliveredSmsRecord[] = [];
+    let dueSms: InCallSmsItem | undefined;
     let deliveredSmsId: string | undefined;
-    if (dueSms) {
+    let smsNudgeInstruction: string | undefined;
+    if (smsDeclared.length > 0) {
       try {
-        const smsRef = sessionRef.collection("inCallSms").doc(dueSms.smsId);
-        if (!(await smsRef.get()).exists) {
-          // 앵커(§15.1.5 (4)) — 이 경로는 사기범 응답 **직전**에 write하므로 완료된 사기범 발화가
-          // 하나 적다. 보정은 fallbackAnchorScammerTurn이 소유한다(실시간 경로와 대칭).
-          await smsRef.create(
-            buildInCallSmsDoc(
-              dueSms,
-              Timestamp.now(),
-              fallbackAnchorScammerTurn(dueSms),
-              session.scenarioId,
-            ),
-          );
+        smsDelivered = await readDeliveredSms(sessionRef);
+        const plan = planSmsBackstop({ declared: smsDeclared, delivered: smsDelivered, userTurns: userTurnsNow });
+        if (plan.action === "deliver") {
+          // 앵커 — 응답 **전**에 쓰므로 이번 응답은 포함되지 않는다(`textPathAnchorScammerTurn` 주석).
+          const result = await deliverSmsThroughGate(smsStore, {
+            ...smsDeliveryBase,
+            purpose: plan.item.purpose,
+            anchorScammerTurn: textPathAnchorScammerTurn(scammerTurnNumber - 1),
+            trigger: "backstop",
+          });
+          logSmsGate(sessionId, "backstop", plan.item.purpose, result.status, userTurnsNow);
+          if (result.status === "delivered") {
+            dueSms = result.item;
+            deliveredSmsId = result.item.smsId;
+            smsDelivered = [...smsDelivered, { smsId: result.item.smsId, userTurnsAtArrival: userTurnsNow }];
+          }
+        } else if (plan.action === "nudge") {
+          smsNudgeInstruction = buildSmsNudgeInstruction(plan.item.purpose);
         }
-        deliveredSmsId = dueSms.smsId;
       } catch {
         // 문자 도착 실패가 대화 자체를 막지 않는다(P-4 핵심 루프 비차단). 이 경우 announce 지시도
         // 넣지 않는다 — "말은 했는데 문자가 없는" 불일치(UF-008 Failure (a))를 만들지 않기 위해서다.
@@ -298,7 +352,27 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         repeat: otpCheck.repeat === true,
       });
     }
+    // ②-g T191 — 텍스트 폴백의 문자 요청 제시(지금 게이트가 열린 목적만 · 전환 뒤에는 제시하지 않는다 — 원 사기범이 없다).
+    // 백스톱 넛지는 같은 자리에 1줄 더 붙는다(설계 "폴백 — 넛지 = 턴 지시 1줄").
+    const smsOfferInstruction =
+      smsDeclared.length > 0 && verifyState?.placed !== true
+        ? buildSmsMarkerOfferInstruction(
+            smsDeclared
+              .filter(
+                (item) =>
+                  resolveSmsGate({
+                    purpose: item.purpose,
+                    declared: smsDeclared,
+                    delivered: smsDelivered,
+                    userTurns: userTurnsNow,
+                  }).status === "allowed",
+              )
+              .map((item) => item.purpose),
+          )
+        : undefined;
     const promptTurnInstruction = [turnInstruction, otpCheckInstruction].filter(Boolean).join("\n") || undefined;
+    const turnInstructionWithSms =
+      [promptTurnInstruction, smsNudgeInstruction, smsOfferInstruction].filter(Boolean).join("\n") || undefined;
 
     // 첫 사용자 턴만 LLM 시간 제한 20초(2026-10-18, 사용자 결정 C — llm/index.ts LLM_FIRST_TURN_TIMEOUT_MS).
     // AC-004 목표(95% ≤10초)의 예외 1건 — 첫 턴은 Gemini 지연이 반복돼 10초에서 Mock으로 강등됐고,
@@ -319,7 +393,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         l3Procedural: isL3Procedural(session.scenarioId),
         identityCheckAllowed: asksIdentityCheck(session.scenarioId),
         speakerGender: speakerGenderFor(session.scenarioId),
-        ...(promptTurnInstruction ? { turnInstruction: promptTurnInstruction } : {}),
+        ...(turnInstructionWithSms ? { turnInstruction: turnInstructionWithSms } : {}),
       }),
       messages: llmHistory,
       mockTacticHints: scenarioPrompt.weakenedTactics,
@@ -379,13 +453,16 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       completion.text,
       session.scenarioId,
     );
+    // ③-a′ T191 — 문자 요청 마커를 걷어 낸다(아래 문장 수 상한보다 **앞** — 상한이 끝의 마커를 잘라 먹지 않게).
+    const { text: smsMarkerFreeText, purpose: markerPurpose, markerCount: smsMarkerCount } =
+      extractSmsMarker(linkFreeReplyText);
 
     // ③-b 에스컬레이션 확장(T30, Architecture.md §13.2, AC-034/024) — 구조화 신호
     // ([[SIGNAL:ESCALATE_VOICE]])를 링크 마커와 같은 sentinel 패턴으로 스캔·제거한다. 사용자는
     // 마커 원문을 절대 보지 않는다. 이 스캔은 **LLM 완성 텍스트에만** 적용된다(사용자 입력에는
     // 절대 적용하지 않음 — AC-024, escapeSentinelLookalikes가 사용자 입력의 흉내를 이미 무력화).
     const { text: signalFreeReplyText, escalate: signalEscalate } = extractEscalationSignal(
-      linkFreeReplyText,
+      smsMarkerFreeText,
     );
     // ③-c 사기범 대사 손질(2026-10-17 라이브 신고 — 실존 은행명 + 5~7문장 대사). 링크·신호 마커가 다
     // 빠진 텍스트에만 적용한다. (1) 실존 은행·카드사 이름 → OO은행/OO카드(숫자는 그대로 —
@@ -427,6 +504,22 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       ...(replyAttachments ? { attachments: replyAttachments } : {}),
       ...(session.channel ? { channel: session.channel } : {}),
     } satisfies MessageDoc);
+
+    // ③-d T191 — 모델 마커 경로. 응답을 저장한 **뒤**라 앵커에 이번 응답이 포함된다. 같은 단일 통로를 지난다.
+    if (smsMarkerCount > 0) {
+      try {
+        const result = await deliverSmsThroughGate(smsStore, {
+          ...smsDeliveryBase,
+          purpose: markerPurpose,
+          anchorScammerTurn: textPathAnchorScammerTurn(scammerTurnNumber),
+          trigger: "model_marker",
+        });
+        logSmsGate(sessionId, "model_marker", markerPurpose, result.status, userTurnsNow, smsDeclaredReason);
+        if (result.status === "delivered" && !deliveredSmsId) deliveredSmsId = result.item.smsId;
+      } catch {
+        // P-4 — 문자 도착 실패가 대화를 막지 않는다(응답은 이미 저장됐다).
+      }
+    }
 
     // ④ 한도 체크 → 도달 시 ended:true + status=ended(→onSessionEnded 트리거, AC-007).
     // turnCount 증가와 answeredAt 기록은 위 트랜잭션(#8)에서 이미 원자적으로 끝났으므로, 여기서는

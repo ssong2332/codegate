@@ -15,8 +15,9 @@
 //   - `otpCode`는 **콘텐츠에 고정된 리터럴**이다(런타임 난수 금지) — 결정론적 테스트 + "모의값" 불변식.
 //   - `senderLabel`·`body`의 기관명·계좌는 **실존하지 않는 값만** 쓴다(AC-005/013, `SCENARIO_PROGRESSION`의
 //     "페이로드는 가상값만"과 동일 기준). 문자 내용은 100% 이 파일에서만 나오며 LLM이 생성하지 않는다.
-//   - 이 파일은 **클라이언트에 원문 배포되지 않는다.** `createRealtimeCall`이 내려주는 것은 트리거
-//     (`smsId` + `afterScammerTurns`)뿐이고, 본문·인증번호는 도착 시점에 서버가 Firestore에 쓴다.
+//   - 이 파일은 **클라이언트에 원문 배포되지 않는다.** 본문·인증번호는 도착 시점에 서버가 Firestore에 쓴다.
+//     T191(문자 도달 조건) 이후로는 트리거(`smsId` + `afterScammerTurns`)도 클라에 내려가지 않는다 — 발송 여부는
+//     세션 흐름 변형의 `sms` 선언 + `inCallSms/smsGate.ts`가 정한다.
 
 export type InCallSmsKind = "account" | "link" | "otp";
 
@@ -45,7 +46,11 @@ export type InCallSmsItem = {
   /** `kind==="link"|"account"`일 때 병기 가능(§51.6 R10 — `"otp"`에는 금지). 기존 인앱 가짜 랜딩
    * 참조(실 URL 필드는 존재하지 않는다). */
   fakeLandingId?: string;
-  /** "사기범 발화 N턴이 완료된 뒤 도착". 시간 기반·랜덤 없음(결정론적·테스트 가능). */
+  /**
+   * ⚠️ T191(문자 도달 조건) 이후 **발송 판정 입력이 아니다** — 발송 시점은 흐름 변형의 `notBeforeUserTurns` +
+   * `inCallSms/smsGate.ts`가 정한다(이 값만으로 자동 발송하는 경로 0 — 소스 스캔이 고정). 남아 있는 쓰임은 폴백
+   * 인증번호 대조(`roleplay/otpCheck.ts` — 그 구조는 이번 범위에서 유지)의 "이른 턴" 판정뿐이다.
+   */
   afterScammerTurns: number;
   /** 도착 순간 캐릭터가 "문자 보냈다"고 알리게 하는 1줄 지시(서버 소유 — 전달 응답으로만 나간다). */
   announceInstruction: string;
@@ -288,29 +293,4 @@ export function buildOtpCompareInstruction(result: "match" | "mismatch", options
 /** 이 시나리오의 인증번호 문자 항목(`kind==="otp"` · `otpCode` 있음). 없으면 빈 배열. */
 export function listOtpItems(scenarioId: string): InCallSmsItem[] {
   return (IN_CALL_SMS[scenarioId] ?? []).filter((item) => item.kind === "otp" && Boolean(item.otpCode));
-}
-
-/**
- * 클라(실시간 경로)에 내려보내는 트리거 목록 — **본문·인증번호·발신번호는 포함하지 않는다**
- * (사전 유출 방지, API.md `createRealtimeCall` T57 증분). 클라는 턴만 세고 `deliverInCallSms`를
- * 부르며, 실제 렌더는 Firestore 구독이 담당한다.
- */
-export function listInCallSmsTriggers(
-  scenarioId: string,
-): { smsId: string; afterScammerTurns: number }[] {
-  return (IN_CALL_SMS[scenarioId] ?? []).map(({ smsId, afterScammerTurns }) => ({
-    smsId,
-    afterScammerTurns,
-  }));
-}
-
-/**
- * 폴백(텍스트) 경로용 — 지금 만들어질 사기범 턴이 `scammerTurnNumber`번째일 때 도착해야 할 문자.
- * 실시간 경로의 클라 카운팅과 **같은 규칙**(`afterScammerTurns === N`)을 서버에서 계산할 뿐이다.
- */
-export function findDueInCallSms(
-  scenarioId: string,
-  scammerTurnNumber: number,
-): InCallSmsItem | undefined {
-  return IN_CALL_SMS[scenarioId]?.find((item) => item.afterScammerTurns === scammerTurnNumber);
 }

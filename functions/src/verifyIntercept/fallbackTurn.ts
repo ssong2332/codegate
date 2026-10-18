@@ -5,7 +5,7 @@
 // G31이 그 상황에 대해 규칙을 고정했고, 여기서 그 규칙을 **코드로** 옮긴다. 두 지시를 이어 붙이지
 // 않는다(조립 순서·길이 모두 위험 — G31 명시).
 export type FallbackTurnState = {
-  /** 이번 턴에 통화 중 문자가 도착하는가(T68 `findDueInCallSms`). */
+  /** 이번 턴에 통화 중 문자가 (응답 전에) 도착했는가 — T191 이후 = 폴백 백스톱 발송(`roleplay/index.ts`). */
   smsDue: boolean;
   /** 확인 오퍼 문서의 현재 상태(문서가 없으면 undefined). */
   verify?: {

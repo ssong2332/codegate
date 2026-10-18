@@ -14,9 +14,13 @@ import { Behavior, Type } from "@google/genai";
 import type { FunctionDeclaration, Tool } from "@google/genai";
 import type { DifficultyLevel } from "../shared/difficulty";
 import { hasInCallSms } from "../scenarios/inCallSms";
+import { SMS_PURPOSES } from "../inCallSms/smsGate";
 import { hasVerifyIntercept, VERIFY_DECLINE_ALREADY } from "../scenarios/verifyIntercept";
 
-/** §59.5 T1 — 인자 없음(G384). 클라가 하드코딩하지 않도록 이름은 `createRealtimeCall` 응답으로도 내려간다(G385). */
+/**
+ * §59.5 T1 — 클라가 하드코딩하지 않도록 이름은 `createRealtimeCall` 응답으로도 내려간다(G385).
+ * ⭐ T191(문자 도달 조건 · G487) — 인자 없음(G384)을 **의도적으로 바꿨다**: `purpose` enum 필수.
+ */
 export const LIVE_TOOL_SEND_PREPARED_SMS = "send_prepared_sms";
 /**
  * §59.5 T2 — 인자 없음(G384). §61(OQ-A73 User 확정) — 확인 무력화 카탈로그 6종 전부 · advanced에
@@ -63,8 +67,27 @@ export function declaresOfferVerificationDesk(
   return hasVerifyIntercept(scenarioId) && difficultyLevel === "advanced";
 }
 
-/** §59.5 — 두 도구 모두 인자 없음(G384). `parameters.properties`가 빈 객체임을 R1 ④가 기계로 단언한다. */
+/** §59.5 — `offer_verification_desk`는 인자 없음(G384 — R1 ④가 기계로 단언한다). */
 const NO_ARGS_PARAMETERS = { type: Type.OBJECT, properties: {} };
+
+/**
+ * ⭐ T191(문자 도달 조건 · PRD AC-099 (b) · G487) — `send_prepared_sms`의 유일한 인자 `purpose`(enum 필수).
+ * 모델이 대화 단계를 보고 무엇을 보낼지 고르고, 서버가 세션 흐름 변형의 선언 · 간격으로 재검증한다
+ * (`inCallSms/smsGate.ts` — 선언 밖 목적은 `not_allowed`). enum 값은 서버 상수 `SMS_PURPOSES`가 원천이다.
+ */
+const SEND_PREPARED_SMS_PARAMETERS = {
+  type: Type.OBJECT,
+  properties: {
+    purpose: {
+      type: Type.STRING,
+      format: "enum",
+      enum: [...SMS_PURPOSES],
+      description:
+        "보낼 안내 문자의 목적. identity = 본인확인용 인증번호 문자, transfer = 이체할 계좌 안내 문자, link = 눌러서 진행하는 링크 문자.",
+    },
+  },
+  required: ["purpose"],
+};
 
 /**
  * ⭐ §71.4 D2(G430 · ADR-0017) — 두 도구 모두 **동기(BLOCKING)를 명시한다.** `gemini-3.8-live`는 기본값이
@@ -78,8 +101,8 @@ const TOOL_BEHAVIOR = Behavior.BLOCKING;
 const SEND_PREPARED_SMS_DECLARATION: FunctionDeclaration = {
   name: LIVE_TOOL_SEND_PREPARED_SMS,
   description:
-    "지금 이 순간 상대의 휴대전화로 미리 준비된 안내 문자 한 통을 실제로 보낸다. 계좌 안내·링크·인증번호 중 무엇이 나갈지는 시스템이 정하며 너는 고르지 않는다. 지금이 문자를 보낼 적절한 때라고 판단될 때 부른다. 아직 이를 때는 거절될 수 있고, 그때는 그냥 대화를 이어가면 된다.",
-  parameters: NO_ARGS_PARAMETERS,
+    "지금 이 순간 상대의 휴대전화로 미리 준비된 안내 문자 한 통을 실제로 보낸다. 대화가 본인확인 · 이체 · 링크 진행 중 어느 단계에 이르렀는지 보고 purpose로 하나를 고른다. 문자 내용은 시스템이 정한다. 이 통화에서 쓸 수 없는 목적이거나 아직 이르면 거절될 수 있고, 그때는 문자를 보냈다고 말하지 말고 그냥 대화를 이어가면 된다.",
+  parameters: SEND_PREPARED_SMS_PARAMETERS,
   behavior: TOOL_BEHAVIOR,
 };
 

@@ -216,6 +216,11 @@ export type PendingInstruction = {
    * (`src/lib/realtime/contextInjection.ts` `deliveryForInstruction`). 큐 순서 규칙(G31)과는 무관하다.
    */
   speakerSwitch?: boolean;
+  /**
+   * T191(문자 도달 조건) — 문자 백스톱 **넛지**인가(문자 도착 안내가 아니다). 맥락 주입으로 나가되 침묵 넛지를 걸지
+   * 않는다(`deliveryForInstruction` → `smsNudge`). 큐 순서 규칙(G31)과는 무관하다.
+   */
+  smsNudge?: boolean;
 };
 
 /** 우선순위 순위값 — 낮을수록 먼저 나간다(문자 announce 우선, G31 고정 규칙). */

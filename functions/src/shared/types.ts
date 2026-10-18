@@ -239,7 +239,16 @@ export type InCallSmsDoc = {
   // Policy) — 신규 문서에는 항상 채워진다(buildDoc 단위 테스트가 고정). 부재 문서는 리포트
   // 스냅샷에서 앵커 미해결(anchorResolved:false)로 정직하게 표기된다.
   anchorScammerTurn?: number;
+  // T191 문자 도달 조건(PRD AC-099 (h)) — 도착 기록 3필드. 옵셔널인 이유는 위 앵커와 같다(이전 문서 무백필).
+  // 쓰는 곳은 `inCallSms/smsDelivery.ts` 한 곳뿐이다. `purpose`는 도착 뒤에만 생기는 값이며 `kind`와 같은 수준의
+  // 정보다(도착 전 응답 · 자격증명에는 목적이 실리지 않는다).
+  purpose?: "identity" | "transfer" | "link";
+  trigger?: InCallSmsTriggerKind;
+  userTurnsAtArrival?: number;
 };
+
+/** 도착 경로 — 실시간 모델 도구 · 텍스트 폴백 마커 · 백스톱(두 경로 공통). */
+export type InCallSmsTriggerKind = "model_tool" | "model_marker" | "backstop";
 
 // --- sessions/{sessionId}/verifyIntercept/{offerId} (T83, UX-031/UF-011, §16.3.1, AC-071/019) ---
 //

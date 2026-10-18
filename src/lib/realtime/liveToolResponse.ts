@@ -22,13 +22,11 @@
 // ⚠️ 타입만 상대 경로로 가져온다(`@/` 별칭 아님) — `import type`은 strip 단계에서 통째로
 // 지워지므로 값 자체는 필요 없지만, 이 파일이 `node --experimental-strip-types`로 직접 실행되는
 // 단위 테스트(`liveToolResponse.test.ts`)의 의존 대상이라 값 import에 tsconfig의 `@/*` 매핑을 쓸
-// 수 없다(webpack 전용 별칭 — 메모리 관례). 아래 `pickModelToolSmsId`는 `@/lib/incallsms`의
-// `pickDueInCallSms`를 재사용하지 않고 **직접 구현**한다 — 그 함수를 값으로 import하면 프로덕션
-// 파일 간에는 전례 없는 `.ts` 확장자 상대 import가 필요해지고(디렉터리 import는 Node ESM에서
-// `ERR_UNSUPPORTED_DIR_IMPORT`), 로직 자체도 4줄 남짓이라 분리 비용이 재사용 이득보다 크다.
-import type { InCallSmsTrigger, LiveTools } from "../api/types";
+// 수 없다(webpack 전용 별칭 — 메모리 관례).
+import type { LiveTools } from "../api/types";
 
-export type LiveToolFunctionCall = { id?: string; name?: string };
+/** `toolCall.functionCalls[]` 1건. ⭐ T191 — `send_prepared_sms`는 `args.purpose`를 싣는다(G487). */
+export type LiveToolFunctionCall = { id?: string; name?: string; args?: unknown };
 
 export type LiveToolFunctionResponse = {
   id?: string;
@@ -98,29 +96,15 @@ export function resolveToolCallKind(
 }
 
 /**
- * §59.6 ③ — "다음 미도착 항목"을 고른다. 모델이 이르게 부를 수도 있으므로(§59.6 `status` 표의
- * `too_early`) **턴 게이트(`afterScammerTurns`)로 후보를 좁히지 않는다** — 그 재검증은 서버
- * (`deliverInCallSms`의 `trigger:"model_tool"` 경로, §59.7)가 진다. 클라의 일은 오직 "아직 안
- * 보낸 것 중 카탈로그 순서상 가장 이른 것"을 고르는 것뿐이다.
- *
- * ⚠️ **미도착 항목이 0건(전부 이미 도착)이면 `null`이 아니라 카탈로그에서 가장 이른 항목의
- * smsId를 돌려준다(구현 판단 — architect 원문에 이 경우의 명문 처리가 없다).** 서버는 그 smsId가
- * 이미 도착했음을 재확인해 `status:"already_delivered"`로 응답하고(§59.6 status 표, 멱등), 그
- * 텍스트는 표가 `"none_pending"`과 **동일하게** 규정한 declineInstruction이다. 이렇게 하면
- * 클라가 "미도착 0건" 전용 문자열을 새로 저작하지 않고도(G386 — 모델 대면 한국어는 서버 소유)
- * 표가 요구하는 문면을 그대로 낼 수 있다. `triggers`가 완전히 비어 있을 때만(도구가 선언됐는데
- * 카탈로그가 빈 경우 — 선언 조건상 오늘 도달 불가) `null`을 돌려주고, 호출부는 이를 unsupported로
- * 안전하게 처리한다.
+ * ⭐ T191(문자 도달 조건 · G487) — `send_prepared_sms` 호출의 `purpose` 인자 원값을 꺼낸다. 화면은 **검증하지 않는다**
+ * (enum 판정 · 변형 선언 대조는 서버 `resolveSmsGate` 한 곳 — 설계 금지 X4). 문자열이 아니면 `undefined`를 넘겨
+ * 서버가 `not_allowed`로 거부하게 한다(거부 문면도 서버 소유 — G386).
+ * 예전 `pickModelToolSmsId`(카탈로그 순서상 다음 미도착 smsId를 화면이 고름)는 폐기했다 — 화면은 smsId를 고르지 않는다.
  */
-export function pickModelToolSmsId(
-  triggers: readonly InCallSmsTrigger[],
-  deliveredSmsIds: readonly string[],
-): string | null {
-  if (triggers.length === 0) return null;
-  const delivered = new Set(deliveredSmsIds);
-  const sorted = [...triggers].sort((a, b) => a.afterScammerTurns - b.afterScammerTurns);
-  const nextUndelivered = sorted.find((t) => !delivered.has(t.smsId));
-  return (nextUndelivered ?? sorted[0]).smsId;
+export function readSmsPurposeArg(args: unknown): string | undefined {
+  if (typeof args !== "object" || args === null) return undefined;
+  const purpose = (args as { purpose?: unknown }).purpose;
+  return typeof purpose === "string" ? purpose : undefined;
 }
 
 /**

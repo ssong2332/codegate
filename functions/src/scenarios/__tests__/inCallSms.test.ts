@@ -5,17 +5,11 @@
 // 것이 이 기능에서 가장 현실적인 회귀다(AC-060/AC-061).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  IN_CALL_SMS,
-  findDueInCallSms,
-  findInCallSmsItem,
-  hasInCallSms,
-  listInCallSmsTriggers,
-} from "../inCallSms";
+import { IN_CALL_SMS, findInCallSmsItem, hasInCallSms } from "../inCallSms";
 import {
   buildInCallSmsDoc,
-  fallbackAnchorScammerTurn,
   realtimeAnchorScammerTurn,
+  textPathAnchorScammerTurn,
 } from "../../inCallSms/buildDoc";
 import { PUBLIC_SCENARIOS } from "../publicMeta";
 import { SCENARIO_PROMPTS } from "../index";
@@ -188,27 +182,17 @@ test("[§15.6 G12] findInCallSmsItem은 다른 시나리오의 smsId를 거부�
   assert.equal(findInCallSmsItem("family-accident-deepvoice", "loan-account"), undefined);
 });
 
-test("listInCallSmsTriggers는 트리거만 내려주고 본문·인증번호를 노출하지 않는다(사전 유출 방지)", () => {
-  const triggers = listInCallSmsTriggers("institutional-impersonation");
-  assert.ok(triggers.length > 0);
-  for (const trigger of triggers) {
-    assert.deepEqual(Object.keys(trigger).sort(), ["afterScammerTurns", "smsId"]);
-  }
-  assert.deepEqual(listInCallSmsTriggers("family-accident-deepvoice"), []);
-});
-
-test("hasInCallSms / findDueInCallSms — 폴백 경로의 서버측 턴 계산이 실시간 규칙과 같다", () => {
+// T191(문자 도달 조건) — `listInCallSmsTriggers`(클라에 고정 턴 트리거를 내려줌) · `findDueInCallSms`(폴백 `===` 고정 턴)
+// 는 폐기했다(AC-099 (d)(f)). 그 2건의 테스트도 함께 지웠고, 대체 판정은 `inCallSms/__tests__/smsGate.test.ts`가 고정한다.
+test("hasInCallSms — 카탈로그 유무 판정(도구 선언 · 프롬프트 조건의 원천)은 그대로다", () => {
   assert.equal(hasInCallSms("loan-refinance-scam"), true);
   assert.equal(hasInCallSms("family-accident-deepvoice"), false);
-  assert.equal(findDueInCallSms("loan-refinance-scam", 3)?.smsId, "loan-account");
-  assert.equal(findDueInCallSms("loan-refinance-scam", 4), undefined);
-  assert.equal(findDueInCallSms("family-accident-deepvoice", 3), undefined);
 });
 
 test("buildInCallSmsDoc은 announceInstruction(모델용 지시)을 문서에 넣지 않는다(AC-024 계승)", () => {
   const fakeTimestamp = { seconds: 0, nanoseconds: 0 } as unknown as FirebaseFirestore.Timestamp;
   for (const { scenarioId, item } of allEntries) {
-    const doc = buildInCallSmsDoc(item, fakeTimestamp, realtimeAnchorScammerTurn(item), scenarioId);
+    const doc = buildInCallSmsDoc(item, fakeTimestamp, realtimeAnchorScammerTurn(item.afterScammerTurns), scenarioId);
     assert.equal(
       (doc as unknown as Record<string, unknown>).announceInstruction,
       undefined,
@@ -240,7 +224,7 @@ test("[G317 역검증] kind===\"account\"이면서 fakeLandingId를 가진 문�
   assert.ok(withLanding, "account+링크 병기 항목이 카탈로그에 없으면 이 테스트가 검증 대상을 잃는다");
   const fakeTimestamp = { seconds: 0, nanoseconds: 0 } as unknown as FirebaseFirestore.Timestamp;
   const { scenarioId, item } = withLanding!;
-  const doc = buildInCallSmsDoc(item, fakeTimestamp, realtimeAnchorScammerTurn(item), scenarioId);
+  const doc = buildInCallSmsDoc(item, fakeTimestamp, realtimeAnchorScammerTurn(item.afterScammerTurns), scenarioId);
   assert.equal(doc.kind, "account");
   assert.equal(doc.fakeLandingId, item.fakeLandingId);
   assert.equal(doc.linkDisplayText, item.linkDisplayText);
@@ -249,7 +233,7 @@ test("[G317 역검증] kind===\"account\"이면서 fakeLandingId를 가진 문�
 test("[T104/§19.4 #3] buildInCallSmsDoc의 landingKind는 기본값이면 **키를 만들지 않는다**(무백필)", () => {
   const fakeTimestamp = { seconds: 0, nanoseconds: 0 } as unknown as FirebaseFirestore.Timestamp;
   for (const { scenarioId, item } of allEntries) {
-    const doc = buildInCallSmsDoc(item, fakeTimestamp, realtimeAnchorScammerTurn(item), scenarioId);
+    const doc = buildInCallSmsDoc(item, fakeTimestamp, realtimeAnchorScammerTurn(item.afterScammerTurns), scenarioId);
     const raw = doc as unknown as Record<string, unknown>;
     // 현행 통화 경로 랜딩 3종은 전부 credential-form(=기본값)이라 **오늘 쓰이는 문서는 한 바이트도
     // 바뀌지 않는다.** `extractLinkMarker`의 생략 규칙과 글자 그대로 같은 규칙이다(드리프트 방지).
@@ -265,7 +249,7 @@ test("[T104/§19.4 #3] buildInCallSmsDoc의 landingKind는 기본값이면 **키
 test("[T89] buildInCallSmsDoc은 신규 문서에 anchorScammerTurn을 **항상** 채운다(리졸버가 미해결로 떨어지지 않게)", () => {
   const fakeTimestamp = { seconds: 0, nanoseconds: 0 } as unknown as FirebaseFirestore.Timestamp;
   for (const { scenarioId, item } of allEntries) {
-    const doc = buildInCallSmsDoc(item, fakeTimestamp, realtimeAnchorScammerTurn(item), scenarioId);
+    const doc = buildInCallSmsDoc(item, fakeTimestamp, realtimeAnchorScammerTurn(item.afterScammerTurns), scenarioId);
     assert.equal(
       typeof doc.anchorScammerTurn,
       "number",
@@ -274,13 +258,13 @@ test("[T89] buildInCallSmsDoc은 신규 문서에 anchorScammerTurn을 **항상*
   }
 });
 
-// ⚠️ G21이 "실측하고 어긋나면 리졸버가 아니라 write 지점 값을 ±1 하라"고 지목한 지점을 고정한다.
-// 실측 사실 두 가지: (1) createSession이 오프닝 사기범 메시지를 turnIndex 0으로 **먼저** 쓴다
-// (functions/src/session/index.ts), (2) 실시간 전사는 그 뒤에 append된다(submitTranscript.ts
-// `nextIndex = historySnap.size`)이고 클라의 turn 카운터는 Live turnComplete만 센다.
-// → 실시간은 +1, 폴백은 -1. 두 경로 모두 "문자 뒤 그 다음 사기범 발화가 announce"가 되도록 맞춘다.
-test("[T89] 앵커 값 — 실시간=+1(오프닝 행 보정), 폴백=-1(응답 직전 write)", () => {
-  const item = { afterScammerTurns: 3 } as Parameters<typeof realtimeAnchorScammerTurn>[0];
-  assert.equal(realtimeAnchorScammerTurn(item), 4);
-  assert.equal(fallbackAnchorScammerTurn(item), 2);
+// ⚠️ G21 계보 — T191(문자 도달 조건 설계 "계수 규칙")부터 앵커는 카탈로그 값이 아니라 **관측값**이다.
+// (1) createSession이 오프닝 사기범 메시지를 turnIndex 0으로 **먼저** 쓴다 (2) 실시간 전사는 그 뒤에 append되고
+// 클라의 `scammerTranscriptTurns`는 비어 있지 않은 사기범 전사 flush 수다 → 실시간 = 1 + 그 수.
+// 텍스트 경로는 쓰는 순간의 사기범 문서 수 그대로(오프닝 포함 · 서버가 센다).
+test("[T89→T191 G488] 앵커 값 — 실시간=1+사기범 전사 수, 텍스트 경로=쓰는 순간 사기범 문서 수", () => {
+  assert.equal(realtimeAnchorScammerTurn(0), 1, "오프닝 문서 1개");
+  assert.equal(realtimeAnchorScammerTurn(3), 4);
+  assert.equal(textPathAnchorScammerTurn(2), 2, "백스톱(응답 전 write) — 이번 응답 미포함");
+  assert.equal(textPathAnchorScammerTurn(3), 3, "마커(응답 저장 뒤 write) — 이번 응답 포함");
 });

@@ -24,9 +24,10 @@
 // `INTERMEDIATE_EXISTING_TACTIC_EXEMPT`(데이터에서 재계산해 같아야 통과)에 명시한다. bank 중급의 "확인 시도
 // 무력화"(D3) 제외는 D-54("초급 · 중급에서는 D3가 등장하지 않을 뿐")에 근거해 유지한다.
 //
-// ⚠️ **문자(`sms`)는 S5에서 선언값이다.** 발송 판정 입력으로 쓰는 것은 S5b(`resolveSmsGate`)다 —
-// S5b 전까지는 카탈로그(`inCallSms.ts`)가 오늘처럼 보낸다(이 파일은 그 파일을 import하지 않는다:
-// 다른 세션 편집 중 · 순환 회피). 선언과 카탈로그의 정합(smsId 존재)은 테스트가 고정한다.
+// ⚠️ **문자(`sms`)는 S5b부터 실제 동작이다** — 발송 판정(`inCallSms/smsGate.ts` `resolveSmsGate`)의 허용 집합 ·
+// 하한(`notBeforeUserTurns`) · 백스톱 강제 여부(`required`)가 이 선언에서 나온다. 문자 본문은 여전히 카탈로그
+// (`inCallSms.ts`)가 원천이다(이 파일은 그 파일을 import하지 않는다 — 순환 회피). 선언과 카탈로그의 정합(smsId 존재)은
+// 테스트가 고정한다.
 //
 // ⚠️ **릴레이(인원 ≥ 2)는 S7 전까지 한 화자로 진행한다.** `legs`는 S7(`startRelayLeg`)이 쓸 데이터이고,
 // 지금은 `resolveVariantPrompt`가 0번 leg 하나로 전체 단계를 진행하게 하며 *"다른 담당자에게 넘긴다"*

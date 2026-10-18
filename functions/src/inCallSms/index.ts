@@ -11,15 +11,19 @@ import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
-import { SMS_DECLINE_ALREADY, SMS_DECLINE_TOO_EARLY, findInCallSmsItem } from "../scenarios/inCallSms";
+import { SMS_DECLINE_ALREADY, SMS_DECLINE_TOO_EARLY } from "../scenarios/inCallSms";
 import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import type { SessionDoc } from "../shared/types";
+import { buildInCallSmsResponse, realtimeAnchorScammerTurn } from "./buildDoc";
 import {
-  buildInCallSmsDoc,
-  buildInCallSmsResponse,
-  realtimeAnchorScammerTurn,
-  resolveModelToolSmsGate,
-} from "./buildDoc";
+  MAX_CLAIMED_TURNS,
+  SMS_DECLINE_NOT_ALLOWED,
+  buildSmsNudgeInstruction,
+  planSmsBackstop,
+  resolveDeclaredSms,
+} from "./smsGate";
+import type { SmsGateStatus } from "./smsGate";
+import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms } from "./smsDelivery";
 import type {
   DeliverInCallSmsRequest,
   DeliverInCallSmsResponse,
@@ -34,9 +38,8 @@ export {
   buildInCallSmsDoc,
   buildInCallSmsResponse,
   realtimeAnchorScammerTurn,
-  fallbackAnchorScammerTurn,
+  textPathAnchorScammerTurn,
   resolveInCallSmsPlan,
-  resolveModelToolSmsGate,
 } from "./buildDoc";
 
 /**
@@ -101,6 +104,21 @@ function readTrigger(value: unknown): DeliverInCallSmsTrigger | undefined {
   throw new HttpsError("invalid-argument", "trigger는 backstop 또는 model_tool이어야 합니다.");
 }
 
+/** T191 — 클라 주장 카운터의 범위 검사(설계 "서버는 범위만 검사"). 범위 밖은 오류(조용히 0으로 바꾸지 않는다). */
+function readClaimedTurns(value: unknown, name: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_CLAIMED_TURNS) {
+    throw new HttpsError("invalid-argument", `${name}는 0~${MAX_CLAIMED_TURNS} 정수여야 합니다.`);
+  }
+  return value;
+}
+
+/** 거부 4종 → 서버 소유 거부 문면(설계 "거부 응답 문면"). */
+function declineInstructionFor(status: Exclude<SmsGateStatus, "allowed">): string {
+  if (status === "not_allowed") return SMS_DECLINE_NOT_ALLOWED;
+  if (status === "already_delivered") return SMS_DECLINE_ALREADY;
+  return SMS_DECLINE_TOO_EARLY; // too_early · too_soon
+}
+
 export const deliverInCallSms = onCall<
   DeliverInCallSmsRequest,
   Promise<DeliverInCallSmsResponse>
@@ -108,9 +126,9 @@ export const deliverInCallSms = onCall<
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
-  const { sessionId, smsId, scammerTurns } = request.data ?? {};
-  if (!sessionId || !smsId) {
-    throw new HttpsError("invalid-argument", "sessionId와 smsId가 필요합니다.");
+  const { sessionId } = request.data ?? {};
+  if (!sessionId) {
+    throw new HttpsError("invalid-argument", "sessionId가 필요합니다.");
   }
   const trigger = readTrigger(request.data?.trigger);
 
@@ -120,65 +138,66 @@ export const deliverInCallSms = onCall<
     throw new HttpsError("failed-precondition", "이미 종료되었거나 활성 상태가 아닌 세션입니다.");
   }
 
-  // ⚠️ G12 — smsId가 **이 세션 시나리오의 카탈로그 소속**인지 재검증한다. 이게 없으면 클라가 다른
-  // 시나리오(혹은 존재하지 않는) 문자를 임의로 주입하는 경로가 된다(§15.6 G12).
-  const item = findInCallSmsItem(session.scenarioId, smsId);
-  if (!item) {
-    throw new HttpsError("invalid-argument", "이 시나리오의 문자가 아닙니다.");
+  // T191 — 이 계약 이전 클라(캐시된 화면 · `smsId`만 보낸다)는 문자를 보내지 않는다. 옛 화면은 `status`가
+  // "delivered"가 아니면 아무것도 주입하지 않고 오류도 띄우지 않으므로, throw 대신 거부로 응답한다(배포 직후
+  // HTML 캐시 1시간 동안의 관측 가능한 강등 — 로그 1줄).
+  if (request.data?.userTurns === undefined) {
+    logger.info("[T191] deliverInCallSms 구 계약 요청 — 발송 안 함", { sessionId, trigger: trigger ?? null });
+    return { status: "not_allowed", declineInstruction: SMS_DECLINE_NOT_ALLOWED };
+  }
+  const userTurns = readClaimedTurns(request.data.userTurns, "userTurns");
+  const scammerTranscriptTurns = readClaimedTurns(
+    request.data.scammerTranscriptTurns,
+    "scammerTranscriptTurns",
+  );
+
+  // ⭐ T191 — 판정 원천은 세션의 흐름 변형 선언이다(카탈로그 고정 턴 폐기). 선언 밖 목적은 보내지 않는다.
+  const { declared, reason: declaredReason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId);
+  const db = getFirestore();
+  const sessionRef = db.collection("sessions").doc(sessionId);
+
+  // 백스톱(목적 없음) — 필수 목적만 강제 · 선택 목적은 건너뛴다. 계획은 트랜잭션 밖 조회로 세우고, 발송은
+  // 아래 단일 통로가 같은 게이트를 다시 통과시킨다.
+  let purpose: unknown = request.data.purpose;
+  if (trigger === "backstop") {
+    const plan = planSmsBackstop({ declared, delivered: await readDeliveredSms(sessionRef), userTurns });
+    if (plan.action === "none_pending" || plan.action === "wait") {
+      return { status: plan.action === "wait" ? "waiting" : "none_pending" };
+    }
+    if (plan.action === "nudge") {
+      // 전환(호 전환) 뒤에는 원 사기범이 없다 — 넛지를 싣지 않는다(§53.6 (3)과 같은 판단).
+      const placed = await isVerifyOfferPlaced(db, sessionId, session.scenarioId);
+      if (placed) return { status: "waiting" };
+      return { status: "nudge", nudgeInstruction: buildSmsNudgeInstruction(plan.item.purpose) };
+    }
+    purpose = plan.item.purpose;
   }
 
-  // 멱등 — 이미 도착한 문자는 다시 쓰지 않는다(클라의 중복 호출·재연결로 arrivedAt이 밀리거나
-  // openedAt이 지워지면 안 된다).
-  const db = getFirestore();
-  const smsRef = db.collection("sessions").doc(sessionId).collection("inCallSms").doc(smsId);
-  const existing = await smsRef.get();
-  const alreadyDelivered = existing.exists;
-
-  // §59.11 관측 — 도착 경로 비율(model_tool vs backstop)이 백스톱 창 크기 조정의 유일한 근거다.
-  // Firestore 필드는 늘리지 않는다(§59.11 — 로그 1종으로 충분).
-  logger.info("[§59.11] deliverInCallSms 발동 경로", {
-    sessionId,
-    smsId,
-    trigger: trigger ?? null,
-    scammerTurns: scammerTurns ?? null,
+  const result = await deliverSmsThroughGate(firestoreSmsStore(db, sessionRef), {
+    scenarioId: session.scenarioId,
+    declared,
+    purpose,
+    userTurns,
+    anchorScammerTurn: realtimeAnchorScammerTurn(scammerTranscriptTurns),
+    trigger: trigger ?? "model_tool",
   });
 
-  // ⭐ §59.7/§59.10 커밋 B — `trigger:"model_tool"`에서만 하한을 재검증한다(G387). 부재·"backstop"
-  // 은 재검증 없이 **아래 종전 로직을 한 글자도 바꾸지 않고** 그대로 탄다 — 오늘 유일한 실호출이라
-  // 회귀 0을 이 분기로 보증한다.
-  if (trigger === "model_tool") {
-    if (typeof scammerTurns !== "number" || !Number.isFinite(scammerTurns)) {
-      throw new HttpsError("invalid-argument", "model_tool 트리거에는 scammerTurns가 필요합니다.");
-    }
-    const gate = resolveModelToolSmsGate({
-      alreadyDelivered,
-      scammerTurns,
-      afterScammerTurns: item.afterScammerTurns,
-    });
-    if (!gate.allowed) {
-      // ⛔ Firestore write 0회(G387) — too_early/already_delivered는 문서를 만들지도 건드리지도
-      // 않는다. throw하지 않는다 — 던지면 클라가 모델에게 돌려줄 서버 문면을 잃는다(API.md).
-      return {
-        smsId: item.smsId,
-        status: gate.status,
-        declineInstruction: gate.status === "too_early" ? SMS_DECLINE_TOO_EARLY : SMS_DECLINE_ALREADY,
-      };
-    }
-  }
+  // 관측(§59.11 관례 · AC-099 (h)) — 도착 · 거부 모두 그 시점의 사용자 발화 수와 함께 1줄. 거부는 Firestore 델타 0.
+  logger.info("[T191] deliverInCallSms 판정", {
+    sessionId,
+    trigger: trigger ?? null,
+    purpose: typeof purpose === "string" ? purpose : null,
+    status: result.status,
+    userTurns,
+    scammerTranscriptTurns,
+    ...(declaredReason ? { declaredReason } : {}),
+  });
 
-  if (!alreadyDelivered) {
-    // 앵커(§15.1.5 (4)) — 실시간 경로 보정은 realtimeAnchorScammerTurn이 소유한다(근거는 그 함수
-    // doc 주석). 여기서 손으로 ±1 하지 않는다 — 두 경로의 보정이 갈라지지 않게 하기 위해서다.
-    await smsRef.create(
-      buildInCallSmsDoc(item, Timestamp.now(), realtimeAnchorScammerTurn(item), session.scenarioId),
-    );
+  if (result.status !== "delivered") {
+    return { status: result.status, declineInstruction: declineInstructionFor(result.status) };
   }
-
   const placed = await isVerifyOfferPlaced(db, sessionId, session.scenarioId);
-  return {
-    ...buildInCallSmsResponse(item, { placed }),
-    status: alreadyDelivered ? "already_delivered" : "delivered",
-  };
+  return { ...buildInCallSmsResponse(result.item, { placed }), status: "delivered" };
 });
 
 export const recordInCallSmsEvent = onCall<

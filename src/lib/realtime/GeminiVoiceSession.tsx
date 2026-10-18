@@ -41,7 +41,7 @@ import {
   buildAlreadyAnnouncedToolResponse,
   buildUnsupportedToolResponses,
   collectToolResponses,
-  pickModelToolSmsId,
+  readSmsPurposeArg,
   resolveToolCallKind,
 } from "./liveToolResponse";
 import { GEMINI_OUTPUT_GAIN } from "./outputGain";
@@ -143,19 +143,9 @@ export type GeminiVoiceSessionProps = {
    * 화자 전환 첫 발화(`speakerSwitch`)만 `relayGreeting` 텍스트 턴(§71.5 큐 경유)이다. 부재 = 맥락 주입.
    */
   instructionTurn?: { text: string; seq: number; delivery?: InstructionDelivery } | null;
-  /**
-   * §59.10 커밋 D(G390) — 이 통화에서 모델이 `send_prepared_sms`를 실제로 성공시킨(`delivered` 또는
-   * `already_delivered`) smsId를 부모에게 알린다. 부모(`session/play/page.tsx`)는 이 값을 자신의
-   * 요청 완료 집합에 더해, 지연된(백스톱 창이 아직 열려 있는) 앱 오케스트레이션 경로가 **같은
-   * 문자를 중복으로 다시 요청하지 않게** 한다(`pickDueInCallSms`의 `deliveredSmsIds` 필터 재사용).
-   */
-  onModelToolSmsDelivered?: (smsId: string) => void;
-  /**
-   * §59.10 커밋 D(G390) — 모델이 `send_prepared_sms`를 불렀지만 콜러블 경로 자체가 실패했을 때
-   * (네트워크·throw, `dispatchToolCall`의 catch) 그 smsId를 알린다. 부모는 이 신호로 백스톱 창을
-   * **즉시 닫아**(`shouldFireBackstop`의 `toolCallFailed` 입력) 말과 사실의 간격을 사후에 맞춘다.
-   */
-  onModelToolSmsFailed?: (smsId: string) => void;
+  // ⭐ T191(문자 도달 조건) — 예전 `onModelToolSmsDelivered`·`onModelToolSmsFailed`(모델 도구 성공 · 실패를 부모의
+  // 고정 턴 백스톱에 알리던 콜백)는 폐기했다. 문자 백스톱은 이제 서버가 도착 기록으로 판정하므로(`planSmsBackstop`)
+  // 부모가 모델 경로의 결과를 따로 알 필요가 없다.
   /**
    * §59.10 커밋 D — 모델이 `offer_verification_desk`(announce 단계)를 실제로 성공시켰을 때 알린다.
    * 부모는 자신의 `verifyOfferPhaseRef`를 `"announced"`로 전진시켜야 한다 — 그래야 commit 단계
@@ -265,8 +255,6 @@ export default function GeminiVoiceSession({
   outputVolume,
   textMessage,
   onScammerTurnComplete,
-  onModelToolSmsDelivered,
-  onModelToolSmsFailed,
   onModelToolVerifyAnnounced,
   onModelToolVerifyFailed,
   claimVerifyAnnounceSlot,
@@ -284,8 +272,6 @@ export default function GeminiVoiceSession({
     onUserSpeakingChange,
     onTranscriptTurn,
     onScammerTurnComplete,
-    onModelToolSmsDelivered,
-    onModelToolSmsFailed,
     onModelToolVerifyAnnounced,
     onModelToolVerifyFailed,
     claimVerifyAnnounceSlot,
@@ -315,8 +301,6 @@ export default function GeminiVoiceSession({
       onUserSpeakingChange,
       onTranscriptTurn,
       onScammerTurnComplete,
-      onModelToolSmsDelivered,
-      onModelToolSmsFailed,
       onModelToolVerifyAnnounced,
       onModelToolVerifyFailed,
       claimVerifyAnnounceSlot,
@@ -330,8 +314,6 @@ export default function GeminiVoiceSession({
     onUserSpeakingChange,
     onTranscriptTurn,
     onScammerTurnComplete,
-    onModelToolSmsDelivered,
-    onModelToolSmsFailed,
     onModelToolVerifyAnnounced,
     onModelToolVerifyFailed,
     claimVerifyAnnounceSlot,
@@ -403,22 +385,21 @@ export default function GeminiVoiceSession({
     let userBuffer = "";
     let scammerBuffer = "";
 
-    // ⭐ §59.6(reviewer Critical #1) — Live 도구 라우팅이 쓰는 상태 2종.
+    // ⭐ §59.6(reviewer Critical #1) — Live 도구 라우팅이 쓰는 상태.
     // `modelToolScammerTurns`는 부모(session/play/page.tsx)의 `scammerTurnsRef`와 **같은 경계**
     // (turnComplete)에서 증가하는 이 컴포넌트 자체의 사본이다 — `toolCall`은 이 effect의 onmessage
     // 클로저 안에서 **동기적으로** 처리해야 하는데, 부모의 최신 `scammerTurns` state는 prop으로
-    // 내려오지 않는다(리렌더 지연). `deliveredSmsIds`는 이 세션이 model_tool 경로로 도착시켰다고
-    // **확인한**(서버 응답 `status`가 delivered/already_delivered) smsId만 담는다 — 앱 오케스트레이션
-    // (백스톱) 경로가 같은 문자를 먼저 보냈어도 이 Set은 그 사실을 모를 수 있지만, 그래도 안전하다:
-    // 서버가 같은 smsId로 다시 호출되면 멱등하게 `already_delivered`로만 응답할 뿐 중복 write가
-    // 없다(§59.6 status 표, G387).
+    // 내려오지 않는다(리렌더 지연). (T191 — 예전 `deliveredSmsIds` Set은 화면이 smsId를 고를 때만 필요했다. 폐기.)
     let modelToolScammerTurns = 0;
+    // ⭐ T191(문자 도달 조건) — 모델 도구 경로가 서버에 넘기는 사용자 발화 수. 부모 `turnCountersRef.userTurns`와 **같은
+    // 지점**(아래 `flushTranscript`의 비어 있지 않은 사용자 flush) · 같은 정의(`countTranscriptFlush`)다 — 위 사기범 카운터와
+    // 같은 이유(도구 호출은 이 effect 클로저 안에서 동기로 처리해야 한다)로 사본을 둔다.
+    let modelToolUserTurns = 0;
     // ⭐ §78.3.4 N1(G488) — 직전 사기범 턴 경계 이후 모델 오디오 · 사기범 전사가 있었는가. 둘 다 없는
     // `turnComplete`(끼어들기 직후의 빈 마감 — S1 3/3)는 경계가 아니다. 끼어들기에서는 지우지 않는다 —
     // 끊긴 턴의 내용은 그 뒤 마감에 귀속된다.
     let audioSinceBoundary = false;
     let scammerTextSinceBoundary = false;
-    const deliveredSmsIds = new Set<string>();
 
     /**
      * §59.6 ②~⑥ — 도구 이름을 실제 콜러블로 라우팅하고, 호출 결과(또는 실패)를 모델에게 돌려줄
@@ -426,7 +407,7 @@ export default function GeminiVoiceSession({
      * — 모든 분기가 반드시 응답 객체를 반환한다(unsupported·성공·거절·실패 전부).
      */
     const dispatchToolCall = async (
-      call: { id?: string; name?: string },
+      call: { id?: string; name?: string; args?: unknown },
     ): Promise<{ id?: string; name: string; response: { status: string; guidance?: string } }> => {
       const liveTools = credentials.liveTools;
       const kind = resolveToolCallKind(call.name, liveTools);
@@ -443,25 +424,16 @@ export default function GeminiVoiceSession({
       });
 
       if (kind === "send_prepared_sms") {
-        const smsId = pickModelToolSmsId(
-          credentials.inCallSmsTriggers ?? [],
-          [...deliveredSmsIds],
-        );
-        // 구조적으로 도달 불가(도구가 선언됐다는 것 자체가 카탈로그 비어있지 않음을 뜻한다,
-        // §59.5) — 그래도 방어적으로 unsupported로 안전하게 떨어뜨린다(G390, 응답 생략 금지).
-        if (!smsId) return buildUnsupportedToolResponses([call])[0];
+        // ⭐ T191(문자 도달 조건 · AC-099 (b)) — 모델이 고른 목적을 그대로 넘기고 판정은 서버가 한다(선언 · 간격 ·
+        // 이미 보냄 — `resolveSmsGate`). 화면은 smsId를 고르지 않는다(예전 `pickModelToolSmsId` 폐기).
         try {
           const result = await deliverInCallSms({
             sessionId,
-            smsId,
-            scammerTurns: modelToolScammerTurns,
+            purpose: readSmsPurposeArg(call.args),
+            userTurns: modelToolUserTurns,
+            scammerTranscriptTurns: modelToolScammerTurns,
             trigger: "model_tool",
           });
-          if (result.status === "delivered" || result.status === "already_delivered") {
-            deliveredSmsIds.add(smsId);
-            // §59.10 커밋 D — 부모에게도 알린다(백스톱이 같은 smsId를 중복 요청하지 않도록).
-            handlersRef.current.onModelToolSmsDelivered?.(smsId);
-          }
           return {
             id: call.id,
             name: call.name ?? "unknown",
@@ -472,13 +444,9 @@ export default function GeminiVoiceSession({
             },
           };
         } catch {
-          // ⚠️ **G390(콜러블이 던지든 네트워크가 끊기든 반드시 응답을 보낸다) — architect 원문에
-          // 정확한 실패 상태값의 명문 지정은 없다(§59.6은 "실패" 행의 문면만 정했다). 통화를 막지
-          // 않는 방향(P-4)으로 판단해 `status:"unavailable"` + 서버가 이미 저작해 둔
-          // `failureInstruction`을 그대로 돌려준다 — architect 재확인이 필요하면 이 상태 이름을
-          // 바꾸면 된다(문면은 이미 정본이라 바뀌지 않는다).
-          // §59.10 커밋 D(G390) — 백스톱이 이 항목의 창을 즉시 닫도록 부모에게 실패를 알린다.
-          handlersRef.current.onModelToolSmsFailed?.(smsId);
+          // ⚠️ **G390(콜러블이 던지든 네트워크가 끊기든 반드시 응답을 보낸다)** — 서버가 이미 저작해 둔
+          // `failureInstruction`을 그대로 돌려준다(통화를 막지 않는다 — P-4). 문자 백스톱은 서버 도착 기록으로
+          // 판정하므로 이 실패를 부모에게 따로 알리지 않는다(T191).
           return failureResponse();
         }
       }
@@ -549,7 +517,10 @@ export default function GeminiVoiceSession({
     const flushTranscript = () => {
       const u = userBuffer.trim();
       const s = scammerBuffer.trim();
-      if (u) handlersRef.current.onTranscriptTurn("user", u);
+      if (u) {
+        modelToolUserTurns += 1;
+        handlersRef.current.onTranscriptTurn("user", u);
+      }
       if (s) {
         // ⭐ §78.3.4(G488) — 부모의 `scammerTurnsRef`(비어 있지 않은 사기범 전사 flush 수)와 **같은 지점**.
         modelToolScammerTurns += 1;
