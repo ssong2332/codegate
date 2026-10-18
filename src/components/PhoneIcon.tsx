@@ -20,7 +20,9 @@ export type PhoneIconName =
   | "link"
   | "globe"
   | "shield"
-  | "send-up";
+  | "send-up"
+  // 사용자 결정(2026-10-18 · UX D-116) — 메신저에서 연 가짜 랜딩 브라우저 바 왼쪽 ✕(닫기).
+  | "close";
 
 type PhoneIconProps = {
   name: PhoneIconName;
@@ -120,6 +122,13 @@ function glyph(name: PhoneIconName) {
         <>
           <path d="M12 19V5" />
           <path d="M6 11l6-6 6 6" />
+        </>
+      );
+    case "close":
+      return (
+        <>
+          <path d="M6 6l12 12" />
+          <path d="M18 6L6 18" />
         </>
       );
   }
