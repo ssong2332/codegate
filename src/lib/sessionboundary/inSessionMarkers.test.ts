@@ -538,15 +538,17 @@ function endButtonContainers(file: string, code: string): { className: string; e
 
 function layoutViolations(sources: Record<string, string>): string[] {
   const out: string[] = [];
-  for (const file of ["src/components/VerifyCallOverlay.tsx", "src/components/InCallSmsOverlay.tsx"]) {
+  for (const file of ["src/components/VerifyCallOverlay.tsx"]) {
     const [c] = endButtonContainers(file, sources[file]);
     if (!c || c.elementChildren !== 1) out.push(`${file}: 종료 버튼 헤더 행의 자식이 1개가 아니다`);
     else if (!/\bjustify-end\b/.test(c.className) || /\bjustify-between\b/.test(c.className)) out.push(`${file}: justify-end 아님`);
   }
-  {
-    const file = "src/components/MessengerFakeLanding.tsx";
-    const [c] = endButtonContainers(file, sources[file]);
-    if (!c || !/\bjustify-end\b/.test(c.className)) out.push(`${file}: 헤더 justify-end 아님`);
+  // ⭐ 사용자 결정(2026-10-18) — 문자함 헤더(InCallSmsOverlay)와 가짜 랜딩 브라우저 바(MessengerFakeLanding — 메신저·
+  // 문자함 진입 둘 다)의 "훈련 종료"를 없앴다. 옛 G449 단언(그 자리가 justify-end)을 **"그 두 파일에 종료 버튼 0"** 으로
+  // 반전했다. VerifyCallOverlay·MessengerStartNotice·메신저 대화 화면은 결정 밖이라 그대로다.
+  for (const file of ["src/components/InCallSmsOverlay.tsx", "src/components/MessengerFakeLanding.tsx"]) {
+    const count = endButtonContainers(file, sources[file]).length;
+    if (count !== 0) out.push(`${file}: 종료 버튼이 ${count}개 있다(사용자 결정 2026-10-18 — 0이어야 한다)`);
   }
   {
     const file = "src/components/MessengerStartNotice.tsx";
@@ -580,4 +582,50 @@ test("[T187/G449 역검증] justify-end → justify-between 사본은 실패한�
   const poisoned = sources[file].replace("items-center justify-end gap-2", "items-center justify-between gap-2");
   assert.notEqual(poisoned, sources[file], "오염 지점을 찾지 못했다");
   assert.deepEqual(layoutViolations({ ...sources, [file]: poisoned }), [`${file}: justify-end 아님`]);
+});
+
+/** 사용자 결정(2026-10-18)이 **남기라고 한** 종료 컨트롤 2곳 — 통화 화면 빨간 통화 종료 · 메신저 대화 화면 "훈련 종료". */
+function retainedEndControlViolations(play: string, messenger: string): string[] {
+  const out: string[] = [];
+  const playLabels = ariaLabelsOf("p.tsx", play);
+  if (!playLabels.some((l) => l.kind === "string" && l.text === "통화 종료 — 훈련 종료")) out.push("통화 화면 빨간 통화 종료");
+  const header = endButtonContainers("m.tsx", messenger).find((c) => /\bjustify-between\b/.test(c.parentClassName));
+  if (!header) out.push("메신저 대화 화면 헤더의 훈련 종료");
+  return out;
+}
+
+test("[사용자 결정 2026-10-18] 통화 화면 빨간 통화 종료와 메신저 대화 화면 '훈련 종료'는 그대로 있다", () => {
+  assert.deepEqual(
+    retainedEndControlViolations(read("src/app/session/play/page.tsx"), read("src/app/session/messenger/page.tsx")),
+    [],
+  );
+});
+
+test("[사용자 결정 2026-10-18 역검증] 남겨야 할 종료 컨트롤을 지운 사본은 각각 실패한다", () => {
+  const play = read("src/app/session/play/page.tsx");
+  const messenger = read("src/app/session/messenger/page.tsx");
+  const playPoisoned = play.split('"통화 종료 — 훈련 종료"').join('"통화 종료"');
+  const messengerPoisoned = messenger.split("<EndTrainingButton onClick={handleEndTraining} />").join("");
+  assert.notEqual(playPoisoned, play, "오염 지점(빨간 통화 종료 이름)을 찾지 못했다");
+  assert.notEqual(messengerPoisoned, messenger, "오염 지점(대화 화면 종료 버튼)을 찾지 못했다");
+  assert.deepEqual(retainedEndControlViolations(playPoisoned, messenger), ["통화 화면 빨간 통화 종료"]);
+  assert.deepEqual(retainedEndControlViolations(play, messengerPoisoned), ["메신저 대화 화면 헤더의 훈련 종료"]);
+});
+
+test("[사용자 결정 2026-10-18 · G449 역검증] 문자함 헤더·가짜 랜딩 브라우저 바에 종료 버튼을 되살린 사본은 각각 실패한다", () => {
+  const sources = Object.fromEntries(G449_FILES.map((f) => [f, read(f)]));
+  const sms = "src/components/InCallSmsOverlay.tsx";
+  const landing = "src/components/MessengerFakeLanding.tsx";
+  const smsAnchor = '<PhoneIcon name="chevron-back" size={24} />';
+  const landingAnchor = "{landingHostFor(landingKind, landingId)}";
+  const smsPoisoned = sources[sms].replace(smsAnchor, `${smsAnchor}<EndTrainingButton onClick={() => {}} />`);
+  const landingPoisoned = sources[landing].replace(landingAnchor, `${landingAnchor}<EndTrainingButton onClick={() => {}} />`);
+  assert.notEqual(smsPoisoned, sources[sms], "오염 지점(문자함 헤더)을 찾지 못했다");
+  assert.notEqual(landingPoisoned, sources[landing], "오염 지점(랜딩 브라우저 바)을 찾지 못했다");
+  assert.deepEqual(layoutViolations({ ...sources, [sms]: smsPoisoned }), [
+    `${sms}: 종료 버튼이 1개 있다(사용자 결정 2026-10-18 — 0이어야 한다)`,
+  ]);
+  assert.deepEqual(layoutViolations({ ...sources, [landing]: landingPoisoned }), [
+    `${landing}: 종료 버튼이 1개 있다(사용자 결정 2026-10-18 — 0이어야 한다)`,
+  ]);
 });

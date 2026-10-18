@@ -447,7 +447,7 @@ test("[§78.4 T1 · 리뷰 M2 역방향] 경계 시점 주입 · 응답 생성 �
 
 // ── 화면 배선(소스 스캔) — `session/play/page.tsx`는 이 러너로 렌더할 수 없다 ────────────────────
 
-const page = readFileSync("src/app/session/play/page.tsx", "utf8")
+const page = readFileSync("src/app/session/play/page.tsx", "utf8").replace(/\r\n/g, "\n")
   .split("\n")
   .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
   .join("\n");

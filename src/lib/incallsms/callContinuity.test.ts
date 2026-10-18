@@ -156,22 +156,44 @@ function overlayMarkerViolations(source: string): string[] {
   return violations;
 }
 
-test("[AC-006/G11 · T187] 오버레이 안에서 '훈련 종료'에 도달할 수 있고 세션 중 표식은 없다", () => {
-  assert.ok(overlay.includes("EndTrainingButton"), "오버레이 자체에 종료 컨트롤이 있어야 한다");
+// ⭐ 사용자 결정(2026-10-18) — 문자함 헤더 오른쪽 "훈련 종료"를 **없앴다**. 옛 단언("오버레이 자체에 종료 컨트롤이
+// 있고 트랩 안에 렌더된다")을 반전했다: 오버레이 코드에 종료 컨트롤이 0이고, 대신 **통화로 돌아가는 컨트롤**
+// (= 통화 화면 빨간 통화 종료로 가는 길)이 트랩 대상(panelRef) 안에 있어 트랩이 참가자를 가두지 않는다.
+/** 오버레이 코드에 남은 종료 컨트롤 흔적(주석 제외). 반전 단언과 역검증이 같이 쓴다. */
+function overlayEndControlTraces(code: string): string[] {
+  const body = code.slice(code.indexOf("export default function InCallSmsOverlay("));
+  const out = ["EndTrainingButton", "훈련 종료"].filter((token) => code.includes(token));
+  // 타입에는 호출부 호환으로 `onEndTraining?`가 남는다 — **컴포넌트 본문**에서 쓰이면 위반이다.
+  if (body.includes("onEndTraining")) out.push("본문의 onEndTraining");
+  return out;
+}
+
+test("[사용자 결정 2026-10-18 · G11 · T187] 문자함에 '훈련 종료'가 없고, 통화 복귀 컨트롤이 트랩 안에 있으며, 세션 중 표식은 없다", () => {
+  assert.deepEqual(overlayEndControlTraces(overlayCode), [], "문자함에 종료 컨트롤이 되살아났다(사용자 결정 2026-10-18)");
   assert.deepEqual(overlayMarkerViolations(overlay), [], "세션 중 표식이 남아 있다(AC-086 · T187)");
   assert.ok(overlay.includes('aria-modal="true"'), "다이얼로그 관례(UX-023과 동일)");
-  // 포커스 트랩이 종료 버튼을 가두지 않는지는 "종료가 트랩 안에 있다"로 보장된다 —
-  // 트랩 대상(panelRef) 안에 EndTrainingButton이 렌더된다.
-  const panelStart = overlay.indexOf("ref={panelRef}");
-  assert.ok(panelStart > 0 && overlay.indexOf("EndTrainingButton", panelStart) > panelStart);
+  // 트랩 대상(panelRef) 안에 "통화로 돌아가기" 버튼(헤더 뒤로 · 하단 버튼)과 통화 표시줄(탭 = 복귀)이 있다.
+  const panelStart = overlayCode.indexOf("ref={panelRef}");
+  assert.ok(panelStart > 0, "트랩 대상(panelRef)을 찾지 못했다");
+  const panel = overlayCode.slice(panelStart);
+  assert.ok(panel.includes('aria-label="통화로 돌아가기"'), "헤더 뒤로(통화 복귀)가 트랩 안에 있어야 한다");
+  assert.ok(/통화로 돌아가기\s*<\/button>/.test(panel), "하단 '통화로 돌아가기' 버튼이 트랩 안에 있어야 한다");
+  assert.ok(panel.includes("눌러서 통화로 돌아가기"), "통화 표시줄(탭 = 통화 복귀)이 트랩 안에 있어야 한다");
+  assert.ok(panel.split("onClick={requestClose}").length - 1 >= 3, "트랩 안 통화 복귀 컨트롤이 3개(표시줄·뒤로·하단) 미만이다");
+});
+
+test("[사용자 결정 2026-10-18 역검증] 문자함 헤더에 종료 버튼을 되살린 사본은 반전 단언에 걸린다", () => {
+  const anchor = '<PhoneIcon name="chevron-back" size={24} />';
+  const poisoned = overlayCode.replace(anchor, `${anchor}\n<EndTrainingButton onClick={onEndTraining} />`);
+  assert.notEqual(poisoned, overlayCode, "오염 지점(헤더 뒤로 아이콘)을 찾지 못했다 — 역검증이 공회전한다");
+  assert.deepEqual(overlayEndControlTraces(poisoned), ["EndTrainingButton", "본문의 onEndTraining"]);
 });
 
 test("[AC-006/G11 · T187 역검증] 메모리 사본에 옛 합성 표식을 되살리면 반전 단언이 실패한다", () => {
-  const poisoned = overlay.replace(
-    "<EndTrainingButton onClick={onEndTraining} />",
-    '<SyntheticLabel label="AI 훈련용 모의 문자" />\n<EndTrainingButton onClick={onEndTraining} />',
-  );
-  assert.notEqual(poisoned, overlay, "오염 지점(EndTrainingButton 렌더)을 찾지 못했다 — 역검증이 공회전한다");
+  // 사용자 결정(2026-10-18) — 옛 오염 앵커(`<EndTrainingButton …/>`)가 사라져 같은 헤더의 뒤로 아이콘으로 옮겼다.
+  const anchor = '<PhoneIcon name="chevron-back" size={24} />';
+  const poisoned = overlay.replace(anchor, `${anchor}\n<SyntheticLabel label="AI 훈련용 모의 문자" />`);
+  assert.notEqual(poisoned, overlay, "오염 지점(헤더 뒤로 아이콘)을 찾지 못했다 — 역검증이 공회전한다");
   assert.ok(overlayMarkerViolations(poisoned).includes("SyntheticLabel"));
   assert.ok(overlayMarkerViolations(poisoned).includes("AI 훈련용"));
 });
@@ -435,11 +457,39 @@ test("[T108/한계] 아래 형태는 이 스캔이 **잡지 못한다** — 통�
 // 표현 계층 개편이라 "화면이 어떻게 보이는가"는 런타임 관찰로 낸다(완료 증거 ①③④⑤⑦).
 // 여기서 고정하는 것은 **관찰로는 잡히지 않고 조용히 회귀하는** 구조 조건뿐이다.
 
-test("[T103/P-27 (2)] 통화 필은 5요소를 담고, 발신자는 callerLabel prop 하나만 읽는다(G87 계승)", () => {
-  // ①상대 표기 ②경과 ③"통화 중" 텍스트(색·아이콘 단독 금지) ④최신 사기범 자막(aria-live) ⑤탭=복귀
-  for (const required of ["callerLabel", "elapsedLabel", "통화 중", "scammerCaption", 'aria-live="polite"']) {
-    assert.ok(overlayCode.includes(required), `통화 필의 필수 구성요소가 없다: ${required}`);
+/**
+ * 통화 표시줄 블록(첫 `<button` ~ 그 `</button>`)을 주석 제외 코드에서 잘라 낸다. 표시줄은 `ref={panelRef}` 뒤
+ * 첫 버튼이다(문자함·랜딩 두 보기가 함께 쓰는 한 부품 — 이 블록 하나가 두 표면을 다 덮는다).
+ */
+function callBarBlock(code: string): string {
+  const panelStart = code.indexOf("ref={panelRef}");
+  const start = code.indexOf("<button", panelStart);
+  const end = code.indexOf("</button>", start);
+  return panelStart > 0 && start > 0 && end > start ? code.slice(start, end) : "";
+}
+
+/** 통화 표시줄에 남은 사기범 자막 흔적. 반전 단언과 역검증이 같이 쓴다. */
+function callBarCaptionTraces(code: string): string[] {
+  const bar = callBarBlock(code);
+  const body = code.slice(code.indexOf("export default function InCallSmsOverlay("));
+  const out = ["scammerCaption", "aria-live", "line-clamp"].filter((token) => bar.includes(token));
+  // 타입에는 호출부 호환으로 `scammerCaption?`가 남는다 — **컴포넌트 본문**에서 읽히면 위반이다.
+  if (body.includes("scammerCaption")) out.push("본문의 scammerCaption");
+  return out;
+}
+
+// ⭐ 사용자 결정(2026-10-18) — 통화 표시줄의 AI 대사 자막(옛 ④)을 **없앴다**(문자함·이체 랜딩 둘 다 — 표시줄은 한 부품).
+// 옛 단언 중 `"scammerCaption"`·`'aria-live="polite"'` 존재 요구를 빼고, 자막 0을 **표시줄 블록 단위로** 단언한다.
+// (`aria-live="polite"`는 진입 알림 `entryNotice`에도 있어 파일 전체 존재 검사로는 자막 유무를 가를 수 없다.)
+// ①②③⑤와 G87(발신자 단일 소스)은 결정과 무관해 그대로 둔다.
+test("[T103/P-27 (2) · 사용자 결정 2026-10-18] 통화 표시줄은 ①②③⑤ 4요소를 담고 자막은 없으며, 발신자는 callerLabel prop 하나만 읽는다(G87 계승)", () => {
+  const bar = callBarBlock(overlayCode);
+  assert.ok(bar.length > 0, "통화 표시줄 블록을 찾지 못했다");
+  // ①상대 표기 ②경과 ③"통화 중" 텍스트(색·아이콘 단독 금지) ⑤탭=복귀
+  for (const required of ["{callerLabel}", "{elapsedLabel}", "통화 중", "onClick={requestClose}", "눌러서 통화로 돌아가기"]) {
+    assert.ok(bar.includes(required), `통화 표시줄의 필수 구성요소가 없다: ${required}`);
   }
+  assert.deepEqual(callBarCaptionTraces(overlayCode), [], "통화 표시줄에 사기범 자막이 되살아났다(사용자 결정 2026-10-18)");
   // ⛔ 두 번째 발신자 소스 금지(§23.7 C2) — 필이 `scenario`·`verifyOffer`를 직접 읽기 시작하면
   // T110이 확정한 우선순위가 UI 층에서 갈라져 "전환 후 필에 원 화자가 남는" 결함이 되살아난다.
   for (const forbidden of ["reconnectedCallerLabel", "verifyOffer", "scenario."]) {
@@ -449,21 +499,46 @@ test("[T103/P-27 (2)] 통화 필은 5요소를 담고, 발신자는 callerLabel 
   assert.ok(page.includes("callerLabel={callerLabel}"), "호출부가 계산한 발신자를 그대로 넘겨야 한다");
 });
 
-test("[T103/G79·G93] 필 자막은 **사기범 턴만** 받는다(참가자 PII가 마스킹 없이 남지 않게)", () => {
-  const turnStart = page.indexOf("const handleTranscriptTurn");
-  const turnBlock = page.slice(turnStart, page.indexOf("}, []);", turnStart));
-  assert.ok(turnStart > 0 && turnBlock.length > 0, "전사 턴 핸들러를 찾을 수 있어야 한다");
-  assert.ok(
-    /if\s*\(\s*role\s*===\s*"scammer"\s*\)\s*setLiveScammerCaption/.test(turnBlock),
-    "참가자 턴을 필에 그리면 참가자가 말한 계좌·생년월일이 마스킹 없이 화면에 남는다(§19.6 (4))",
+test("[사용자 결정 2026-10-18 역검증] 통화 표시줄에 자막을 되살린 사본은 자막 0 단언에 걸린다", () => {
+  const anchor = '<span className="sr-only">눌러서 통화로 돌아가기</span>';
+  const poisoned = overlayCode.replace(
+    anchor,
+    `{scammerCaption ? (<span aria-live="polite" className="line-clamp-2">“{scammerCaption}”</span>) : null}${anchor}`,
   );
-  // 실시간 경로는 통화 중 `messages`가 갱신되지 않으므로 폴백 값만 쓰면 주 경로에서 자막이 영영
-  // 안 뜬다(§19.6 (1) 3행). 실시간 우선 + 폴백 계승이 계약이다.
-  assert.ok(
-    page.includes("const pillCaption = liveScammerCaption ?? latestScammerLine;"),
-    "필 자막은 실시간 턴 자막 우선, 폴백 계승이어야 한다",
-  );
-  assert.ok(page.includes("scammerCaption={pillCaption}"), "필 자막이 오버레이로 배선돼야 한다");
+  assert.notEqual(poisoned, overlayCode, "오염 지점(표시줄 스크린리더 꼬리)을 찾지 못했다 — 역검증이 공회전한다");
+  assert.deepEqual(callBarCaptionTraces(poisoned), ["scammerCaption", "aria-live", "line-clamp", "본문의 scammerCaption"]);
+  // 같은 자막을 표시줄 **밖**(예: 진입 알림 옆)에 두면 표시줄 블록 단언은 못 보지만 본문 단언이 잡는다.
+  const outside = overlayCode.replace("{entryNotice}", "{entryNotice}{scammerCaption}");
+  assert.notEqual(outside, overlayCode, "오염 지점(진입 알림)을 찾지 못했다");
+  assert.deepEqual(callBarCaptionTraces(outside), ["본문의 scammerCaption"]);
+});
+
+// ⭐ 사용자 결정(2026-10-18 · UX D-117 · P-27 (10) ④) — 통화 표시줄 자막을 없애 옛 "필 자막 배선" 단언
+// (`pillCaption` 계산식 · `scammerCaption={pillCaption}` 배선 존재 요구)은 결정과 **반대**를 단언하게 됐다.
+// ⛔ 삭제로 통과시키지 않고 "**오버레이에 자막이 없다**(호출부가 무엇을 넘기든 그리지 않는다)"로 뒤집었다.
+// 호출부(session/play/page.tsx)의 `pillCaption` 배선은 그 파일 소유 세션이 정리할 때까지 남는다 — 남아 있어도
+// 오버레이가 읽지 않으므로 화면에 닿지 않는다. 그래서 배선 **존재** 대신 오버레이 쪽 **소비 0**을 고정한다.
+// 참가자 PII 안전 조건(G79/G93 — 전사 턴 중 사기범 턴만 캡션 상태에 넣는다)은 그 상태가 남아 있는 동안은
+// 결정과 무관하게 유효해 **조건부로 유지**한다(상태 자체가 사라지면 위험도 함께 사라진다).
+test("[T103/G79·G93 · 사용자 결정 2026-10-18] 오버레이는 호출부가 넘긴 자막을 그리지 않고, 남은 캡션 상태는 사기범 턴만 받는다", () => {
+  assert.deepEqual(callBarCaptionTraces(overlayCode), [], "오버레이가 자막을 그리고 있다(사용자 결정 2026-10-18)");
+  if (page.includes("setLiveScammerCaption")) {
+    const turnStart = page.indexOf("const handleTranscriptTurn");
+    const turnBlock = page.slice(turnStart, page.indexOf("}, []);", turnStart));
+    assert.ok(turnStart > 0 && turnBlock.length > 0, "전사 턴 핸들러를 찾을 수 있어야 한다");
+    assert.ok(
+      /if\s*\(\s*role\s*===\s*"scammer"\s*\)\s*setLiveScammerCaption/.test(turnBlock),
+      "참가자 턴을 캡션 상태에 넣으면 참가자가 말한 계좌·생년월일이 마스킹 없이 남는다(§19.6 (4))",
+    );
+  }
+});
+
+test("[T103/G79·G93 · 사용자 결정 2026-10-18 역검증] 오버레이 본문이 넘겨받은 자막을 다시 읽는 사본은 실패한다", () => {
+  // 구조 분해에 되살리는 것만으로도(그리기 전 단계) 걸린다 — 표시줄 밖 어디에 그려도 본문 단언이 잡는다.
+  const anchor = "  elapsedLabel,";
+  const poisoned = overlayCode.replace(anchor, `${anchor} scammerCaption,`);
+  assert.notEqual(poisoned, overlayCode, "오염 지점(구조 분해)을 찾지 못했다 — 역검증이 공회전한다");
+  assert.deepEqual(callBarCaptionTraces(poisoned), ["본문의 scammerCaption"]);
 });
 
 test("[T103/§23.6 A2] 신설 전환 클래스는 **전부** prefers-reduced-motion에서 꺼진다", () => {
@@ -628,8 +703,9 @@ test("[T190/G460 · D-94] 문자함과 랜딩은 대화상자 하나 안의 두 
   assert.ok(code.includes('hidden={view !== "landing"}'), "랜딩 보기가 hidden으로 토글돼야 한다(숨김 마운트 — 입력값 유지)");
   assert.ok(code.includes('entrySurface="in-call-sms"'), "문자함 안 랜딩은 in-call-sms 진입이어야 한다(대화상자 역할 없음)");
   assert.ok(code.includes('onHide={() => setView("thread")}'), "브라우저 뒤로 '문자'는 숨기기만 한다(언마운트 아님)");
-  // 통화 표시줄 자막 — 최대 2줄 · 높이 36px 상한(옛 `line-clamp-2 block` 충돌 제거 — 문제 2c).
-  assert.ok(code.includes("line-clamp-2 max-h-[36px]"), "통화 표시줄 자막 2줄·36px 상한");
+  // 사용자 결정(2026-10-18) — 통화 표시줄 자막 자체를 없앴다. 옛 "자막 2줄·36px 상한 클래스가 있다" 단언은 대상이
+  // 사라져 **반전**했다(자막 0은 위 `callBarCaptionTraces`가 표시줄 블록 단위로 본다). 옛 충돌 부재 단언은 그대로 둔다.
+  assert.equal(code.includes("line-clamp-2 max-h-[36px]"), false, "통화 표시줄 자막 클래스가 되살아났다(사용자 결정 2026-10-18)");
   assert.equal(code.includes("line-clamp-2 block"), false, "line-clamp를 display:block이 덮는 옛 충돌이 남았다");
 });
 

@@ -9,8 +9,10 @@
 // ── T84(UX-023 v1.12 kind 축 · §15.9.1 · DECISIONS #42 · AC-072) ─────────────────────────────
 // **kind 분기는 반드시 이 파일 *안에서* 한다(R1).** 신규 컴포넌트 파일·신규 라우트를 만들지
 // 않는다. 이유는 "화면이 하나"여서가 아니라 **안전 계약이 파일 단위로 성립**하기 때문이다 —
-// 위 (1) `src/lib/api` 미import, (2) 제출이 로컬 state만 변경, (3) 상시 "훈련 종료"(T187 §72 —
-// 세션 중 표식은 폐지)가 모두 이 파일 안에서 보장된다. 파일을 쪼개면 그 계약이 신규 파일에는 자동으로 적용되지
+// 위 (1) `src/lib/api` 미import, (2) 제출이 로컬 state만 변경, (3) 이 화면에 종료 버튼을 두지 않음(사용자 결정
+// 2026-10-18 — 브라우저 바의 종료 버튼 제거. 끝내는 경로는 메신저 = 닫기 → 대화 화면의 종료 버튼, 문자함 = "‹ 문자"
+// → "통화로 돌아가기" → 빨간 통화 종료. T187 §72 — 세션 중 표식도 폐지)가 모두 이 파일 안에서 보장된다.
+// 파일을 쪼개면 그 계약이 신규 파일에는 자동으로 적용되지
 // 않아 **검증 경로가 이중화**되고, 그것이 정확히 AC-072가 금지한 상태다. 파일이 커지면 아래처럼
 // **같은 파일 안의 서브 컴포넌트**로 나눈다.
 //
@@ -24,8 +26,7 @@
 // ⚠️ 아래 app-install 문구는 서버 카탈로그(`functions/src/scenarios/mockScreens.ts`)의
 // `headline`/`bodyLines`/`consentLabel`이 정본이며, 두 곳이 갈라지지 않도록 드리프트 테스트
 // (`src/components/mockScreenCopy.test.ts`)가 문자열을 직접 대조한다.
-import { useEffect, useState, type ReactNode } from "react";
-import EndTrainingButton from "./EndTrainingButton";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import PhoneIcon from "./PhoneIcon";
 import { Button } from "./ui";
 // ⚠️ 상대 경로로 import한다 — 렌더 게이트 하네스(`src/lib/mockscreenrender/renderHarness.ts`)가 CommonJS require로
@@ -66,8 +67,8 @@ type MessengerFakeLandingProps = {
   onClose: () => void;
   /** `"in-call-sms"` 전용 — 브라우저 뒤로 "문자"(랜딩을 **숨기기만** 한다 · 입력값은 이 컴포넌트 안에 남는다). */
   onHide?: () => void;
-  /** "훈련 종료"는 이 화면에서도 접근 가능해야 한다(AC-006). */
-  onEndTraining: () => void;
+  // ⚠️ 사용자 결정(2026-10-18) — 브라우저 바의 종료 버튼을 없애 `onEndTraining` prop도 없앴다(이 화면은 종료를
+  // 직접 하지 않는다 — 연 표면으로 닫고, 그 표면의 종료 컨트롤로 끝낸다).
   /**
    * kind=`app-install`에서 참가자가 가짜 "권한 허용"에 응한 순간(§15.9.5 e-1 D-51 ④).
    * ⚠️ 이 컴포넌트는 **네트워크 호출을 하지 않는다** — 기록은 페이지가 담당한다(§15.9.6).
@@ -91,6 +92,10 @@ const RETURN_LABELS: Record<MessengerFakeLandingEntrySurface, string> = {
   "in-call-sms": "문자로 돌아가기",
 };
 
+/** 포커스 트랩 후보(InCallSmsOverlay와 같은 선택자). */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export default function MessengerFakeLanding({
   title,
   landingKind = "credential-form",
@@ -99,25 +104,91 @@ export default function MessengerFakeLanding({
   skin = "default",
   onClose,
   onHide,
-  onEndTraining,
   onInstallConsent,
   onCredentialSubmit,
 }: MessengerFakeLandingProps) {
   const bar = browserBarTokensFor(skin);
   const returnLabel = RETURN_LABELS[entrySurface];
+  const isMessenger = entrySurface === "messenger";
+
+  // ── 메신저 진입 대화상자의 포커스(사용자 결정 2026-10-18 · UX-023 v1.36 표 · D-116) ───────────────────────────
+  // 진입 = 대화상자 컨테이너(이름 "{표시} 화면") · 트랩 = ✕ → 입력 칸 → 제출 → 하단 닫기(첫/끝은 매 Tab마다 실제 보이는
+  // 요소에서 다시 고른다 — 완료 화면이면 끝 = 복귀 버튼) · Esc = 닫기 · 닫힌 뒤 = 연 요소(링크)로 포커스 복귀.
+  // ⚠️ 문자함 진입(`in-call-sms`)은 문자함 대화상자가 트랩·Esc를 맡는다(중첩 트랩 0 — G460). 여기서는 아무것도 하지 않는다.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+  useEffect(() => {
+    if (!isMessenger) return;
+    const opener = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const panel = dialogRef.current;
+      if (!panel) return;
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusables = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => el.offsetParent !== null,
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (!active || !panel.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+        return;
+      }
+      if (event.shiftKey && (active === first || active === panel)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown, true);
+      if (opener && opener.isConnected) opener.focus();
+    };
+  }, [isMessenger]);
+
   const content: ReactNode = (
     <>
-      {/* ② 브라우저 바(UX-023 v1.33 (2) · D-92) — 높이 52px · 주소 필드(지구본 + 가짜 호스트) + 오른쪽 "훈련 종료".
-          ⚠️ T84: 이 바는 **두 kind가 공유**한다 — 상시 종료가 kind와 무관하게 성립해야 하고, 그것이 파일 분리를
-          금지하는 두 번째 이유다(§15.9.4 표 #2). T187(§72 · AC-086 · D-82·D-84) — 세션 중 표식·난이도 배지는 없다.
-          종료 버튼이 오른쪽 끝에 남도록 justify-end(G449).
+      {/* ② 브라우저 바(UX-023 v1.33 (2) · D-92) — 높이 52px · 왼쪽(메신저 진입 = ✕ 닫기 · 문자함 진입 = "‹ 문자")
+          + 주소 필드(지구본 + 가짜 호스트 · 오른쪽 끝 8px 앞까지 = 바의 `px-2`).
+          ⚠️ 사용자 결정(2026-10-18) — 오른쪽 끝의 종료 버튼을 **없앴다**(메신저 진입·문자함 진입 둘 다). 주소 필드가
+          `flex-1`로 남은 폭을 채우므로 옛 `justify-end`(종료 버튼을 오른쪽 끝에 붙이던 G449 클래스)도 뺐다.
+          ⚠️ T84: 이 바는 **두 kind가 공유**한다 — 바가 kind와 무관하게 하나라는 것이 파일 분리를 금지하는 두 번째
+          이유다(§15.9.4 표 #2). T187(§72 · AC-086 · D-82·D-84) — 세션 중 표식·난이도 배지는 없다.
           ⭐ T190-2/T190-5(§74.9 · D-101 · D-92) — 주소 = 그 랜딩의 **가짜 호스트**(`.invalid` · 호스트만 · 스킴 0 ·
           누를 수 없는 텍스트). 빨간 ⚠(사이트 위험 판정 힌트 — D-6 위반)·모노 글꼴·자물쇠("안전한 연결"이라는 새
           주장)를 그리지 않는다. 글꼴은 system-ui. `title`은 대화상자 이름(A5)으로만 쓴다. */}
       <div
-        className="sticky top-0 z-10 flex h-[52px] shrink-0 items-center justify-end gap-1.5 border-b px-2"
+        className="sticky top-0 z-10 flex h-[52px] shrink-0 items-center gap-1.5 border-b px-2"
         style={{ backgroundColor: bar.barBg, borderColor: bar.barBorder, fontFamily: "system-ui, sans-serif" }}
       >
+        {/* ⭐ 메신저 진입 전용 ✕(닫기 — UX-023 v1.36 표 · D-116 (3)): 종료 버튼이 빠진 뒤 위쪽 출구가 0이 되지 않게
+            한다. 터치 48px · 단색 선 아이콘 22px · 이름 "닫기"(그 화면에 이미 있는 말 — 새 문구 0) · 동작 = 하단 닫기와
+            같은 `onClose`. */}
+        {isMessenger && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="닫기"
+            className="flex h-12 w-12 shrink-0 items-center justify-center"
+            style={{ color: bar.back }}
+          >
+            <PhoneIcon name="close" size={22} />
+          </button>
+        )}
         {entrySurface === "in-call-sms" && onHide && (
           <button
             type="button"
@@ -140,7 +211,6 @@ export default function MessengerFakeLanding({
             {landingHostFor(landingKind, landingId)}
           </p>
         </div>
-        <EndTrainingButton onClick={onEndTraining} />
       </div>
 
       <div className="mx-auto flex w-full max-w-sm flex-1 flex-col">
@@ -180,10 +250,13 @@ export default function MessengerFakeLanding({
   }
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={`${title} 화면`}
-      className="fixed inset-0 z-50 flex flex-col overflow-y-auto"
+      // 진입 포커스를 받는 컨테이너(UX-023 v1.36 — 이름을 읽어 전환을 안다). Tab 순서에는 들지 않는다.
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex flex-col overflow-y-auto outline-none"
       style={{ backgroundColor: LANDING_PAGE_TOKENS.pageBg }}
     >
       {content}
@@ -525,8 +598,7 @@ type InstallPhase = "intro" | "installing" | "permission" | "done";
  * "권한 허용"은 `<button>`이며, 브라우저·OS 권한 API를 **호출하지 않는다**. 참가자 기기에는
  * 아무것도 설치되지 않고 외부로 나가는 경로도 없다(AC-072).
  * ⚠️ 응낙 순간의 **기록**은 `onConsent` 콜백으로 페이지에 넘긴다 — 이 파일에 네트워크 경로가
- * 없다는 불변식을 kind 추가 후에도 유지하기 위해서다(§15.9.6, 기존 `onClose`/`onEndTraining`과
- * 같은 패턴).
+ * 없다는 불변식을 kind 추가 후에도 유지하기 위해서다(§15.9.6, 기존 `onClose`와 같은 패턴).
  */
 function AppInstallMockup({
   onClose,

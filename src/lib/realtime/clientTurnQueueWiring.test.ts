@@ -5,7 +5,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const session = readFileSync("src/lib/realtime/GeminiVoiceSession.tsx", "utf8");
+// 줄바꿈 정규화 — core.autocrlf=true 체크아웃(CRLF)에서도 줄바꿈 앵커 단언이 LF 체크아웃과 같은 결과를 내게 한다.
+const session = readFileSync("src/lib/realtime/GeminiVoiceSession.tsx", "utf8").replace(/\r\n/g, "\n");
 const code = session
   .split("\n")
   .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
@@ -66,7 +67,7 @@ function g491Violations(sessionCode: string, queueSource: string): string[] {
   return out;
 }
 
-const queueSource = readFileSync("src/lib/realtime/clientTurnQueue.ts", "utf8");
+const queueSource = readFileSync("src/lib/realtime/clientTurnQueue.ts", "utf8").replace(/\r\n/g, "\n");
 
 test("[§78.4 G491] 문자 · 확인 권유 안내는 turnComplete:false로만 · turnComplete:true 종류는 opening/text/silence/relayGreeting뿐", () => {
   assert.deepEqual(g491Violations(code, queueSource), []);
