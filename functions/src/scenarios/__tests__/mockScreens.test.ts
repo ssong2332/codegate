@@ -386,26 +386,56 @@ test("[T104/G-C 역검증] app-install에 fields를 넣거나 credential-form에
 
 // G-D — 안전 고지는 상황과 무관하게 **컴포넌트 상수**로 남는다(§19.3 (3) · P-28 ⑤).
 // 카탈로그 필드가 되면 항목마다 다른 고지가 가능해져 "상황이 갈려도 안 갈리는 것"이 무너진다.
-const SHARED_SAFETY_NOTICES = [
+//
+// ⭐ T187(PRD v1.18 AC-086 · T187 · docs/Architecture.md §72 G448) — **대상 이동**(게이트 삭제 0).
+// 세션 중 공유 고지는 폐지되고 고지가 세션 경계(시작 전 · 종료 후)로 옮겨 갔다. 그래서 목록을
+// 둘로 나눈다:
+//   - ACTIVE  — 지금 살아 있는 공유 고지(세션 후 사실 공개 · 상시 종료 · 메신저 시작 전 고지 ①).
+//     루트 `src/lib/sessionboundary/*Copy.ts`의 값과 **글자 그대로** 같아야 한다 — 루트 테스트
+//     `postSessionDisclosure.test.ts`가 이 파일 텍스트에서 그 값을 찾아 드리프트를 잡는다.
+//   - RETIRED — 세션 중에서 퇴역한 고지. ⛔ 지우지 않는다 — 카탈로그 경유로 세션 중 부정이 되살아
+//     나는 우회(카탈로그 문구 → 화면)를 막는 것이 이 목록의 일이다.
+const ACTIVE_SHARED_NOTICES = [
+  "훈련 중 화면에서 무엇을 입력하거나 누르셨더라도 실제로는 어떤 정보도 전송되지 않았고, 돈도 오가지 않았으며, 아무것도 설치되거나 허용되지 않았고, 실제 전화도 걸리지 않았습니다.",
+  "훈련 종료",
+  "지금부터 받는 메시지는 실제 연락이 아니라 AI 훈련 프로그램이 보내는 훈련용 메시지입니다.",
+];
+const RETIRED_IN_SESSION_NOTICES = [
+  // 옛 G-D 3종
   "(실제로는 어디에도 전송되지 않았습니다 — 훈련용 모의 화면입니다.)",
   "(실제로는 어디에도 전송되지 않았고 돈도 오가지 않았습니다 — 훈련용 모의 화면입니다.)",
   "AI 훈련용 모의 화면",
-  "훈련 종료",
+  // T187에서 화면에서 지운 세션 중 부정 고지
+  "실제 설치·권한 부여가 아닙니다",
+  "실제 로그인/전송이 아니며 돈도 오가지 않습니다",
+  "훈련용 모의 화면입니다. 이 화면에서만 재현되며 실제로 전화가 걸리지 않습니다.",
+  "(실제로는 아무것도 설치되지 않았고 어떤 권한도 부여되지 않았습니다 — 훈련용 모의 화면입니다.)",
 ];
 
-test("[T104/G-D] 공유 안전 고지 문구가 카탈로그 어느 필드에도 없다", () => {
-  for (const notice of SHARED_SAFETY_NOTICES) {
-    assert.equal(
-      allText.includes(notice),
-      false,
-      `공유 안전 고지는 컴포넌트 상수여야 한다(P-28 ⑤): ${notice}`,
-    );
-  }
+/** 카탈로그 텍스트에 든 공유·퇴역 고지 목록(빈 배열 = 통과). 본 게이트와 역검증이 같은 함수를 쓴다. */
+function findSharedNoticeLeaks(catalogText: string): string[] {
+  return [...ACTIVE_SHARED_NOTICES, ...RETIRED_IN_SESSION_NOTICES].filter((notice) =>
+    catalogText.includes(notice),
+  );
+}
+
+test("[T104/G-D · T187/G448] 공유 안전 고지(ACTIVE)와 퇴역 고지(RETIRED) 어느 쪽도 카탈로그 필드에 없다", () => {
+  assert.deepEqual(
+    findSharedNoticeLeaks(allText),
+    [],
+    "공유·퇴역 고지는 카탈로그에 있으면 안 된다(P-28 ⑤ · T187 G448)",
+  );
 });
 
-test("[T104/G-D 역검증] 안전 고지를 카탈로그 문구에 넣으면 위 검사가 실패한다", () => {
-  const poisoned = `${allText}\n(실제로는 어디에도 전송되지 않았고 돈도 오가지 않았습니다 — 훈련용 모의 화면입니다.)`;
-  assert.ok(SHARED_SAFETY_NOTICES.some((notice) => poisoned.includes(notice)));
+test("[T104/G-D · T187/G448 역검증] 두 목록의 **각 항목**을 카탈로그 문구에 넣으면 위 검사가 실패한다", (t) => {
+  let caught = 0;
+  for (const notice of [...ACTIVE_SHARED_NOTICES, ...RETIRED_IN_SESSION_NOTICES]) {
+    const leaks = findSharedNoticeLeaks(`${allText}\n${notice}`);
+    assert.ok(leaks.includes(notice), `오염 1건을 놓쳤다: ${notice}`);
+    caught += 1;
+  }
+  assert.equal(caught, ACTIVE_SHARED_NOTICES.length + RETIRED_IN_SESSION_NOTICES.length);
+  t.diagnostic(`G448 역검증: ACTIVE ${ACTIVE_SHARED_NOTICES.length} · RETIRED ${RETIRED_IN_SESSION_NOTICES.length} — 오염 ${caught}건 전부 검출`);
 });
 
 test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(좁힌 조건의 공회전 방지)", () => {

@@ -129,6 +129,8 @@ export function clearPendingSession(): void {
   window.sessionStorage.removeItem(OPENING_MESSAGE_TEXT_KEY);
   window.sessionStorage.removeItem(SELECTED_SCENARIO_ID_KEY);
   window.sessionStorage.removeItem(ANSWERED_SESSION_KEY);
+  // T187(§72 D2 · G450) — 메신저 시작 고지 확인 기록도 같은 세션 단위로 비운다.
+  window.sessionStorage.removeItem(START_NOTICE_ACK_SESSION_KEY);
   window.sessionStorage.removeItem(SELECTED_TRAINING_TYPE_KEY);
   window.sessionStorage.removeItem(SELECTED_VOICE_MODE_CHOICE_KEY);
   window.sessionStorage.removeItem(MESSENGER_VOICE_SELECT_RETURN_KEY);
@@ -232,6 +234,23 @@ export function markSessionAnswered(sessionId: string): void {
 export function isSessionAnswered(sessionId: string): boolean {
   if (!hasSessionStorage()) return false;
   return window.sessionStorage.getItem(ANSWERED_SESSION_KEY) === sessionId;
+}
+
+// T187(docs/Architecture.md §72.5 D2 · UX-022 `start-notice` N-1~N-4) — 메신저 시작 전 고지를
+// 이 탭에서 이 세션에 대해 이미 확인했는지. `ANSWERED_SESSION_KEY`와 **같은 범위(탭 sessionStorage ·
+// 값 = 세션 id) · 다른 키**다. ⛔ 같은 키를 쓰면 메신저→통화 에스컬레이션 도착 시
+// `isSessionAnswered`가 참이 되어 벨 화면 프리롤을 건너뛴다(T30 회귀 재발 — §72.4 ⑥ · G450).
+// 서버 필드가 아니다(API/DB 델타 0).
+const START_NOTICE_ACK_SESSION_KEY = "session.startNoticeAckSessionId";
+
+export function markStartNoticeAcknowledged(sessionId: string): void {
+  if (!hasSessionStorage()) return;
+  window.sessionStorage.setItem(START_NOTICE_ACK_SESSION_KEY, sessionId);
+}
+
+export function isStartNoticeAcknowledged(sessionId: string): boolean {
+  if (!hasSessionStorage()) return false;
+  return window.sessionStorage.getItem(START_NOTICE_ACK_SESSION_KEY) === sessionId;
 }
 
 // UX-025 조건부 목소리 선택(T30, Architecture.md §13.6) — "즉시 녹음" 경로는 기존 UX-002/003
