@@ -24,7 +24,9 @@ import {
   consumeOpeningAudioUrl,
   consumeOpeningMessageText,
   getPendingSessionId,
+  isPreCallNoticeSeen,
   isSessionAnswered,
+  markPreCallNoticeSeen,
   markSessionAnswered,
   useSpeechRecognition,
 } from "@/lib/recording";
@@ -41,10 +43,39 @@ import {
 import type { InCallSmsEvent, TranscriptTurn } from "@/lib/api";
 import {
   countUnread,
+  latestSmsId,
   pickDueInCallSms,
   sortByArrival,
   type InCallSmsView,
 } from "@/lib/incallsms";
+// T190(docs/Architecture.md §74) — 실폰형 통화 셸: 스킨 해석(표 K) · 토큰 · 떠 있는 배너 · 벨·진동 · 음량 모드.
+import { detectDeviceSkin } from "@/lib/messenger/detectSkin";
+import {
+  DEVICE_SKIN_STORAGE_KEY,
+  parseSessionSkin,
+  parseStoredDeviceSkin,
+  readUaModelHint,
+  resolveDeviceSkin,
+  serializeStoredDeviceSkin,
+  type DeviceSkin,
+  type ResolvedDeviceSkin,
+} from "@/lib/phone/deviceSkin";
+import { bannerTokensFor, callTokensFor } from "@/lib/phone/skinTokens";
+import {
+  BANNER_VISIBLE_MS,
+  ackOnOverlayClose,
+  shouldRunBannerTimer,
+  visibleBannerSmsId,
+} from "@/lib/phone/bannerState";
+import { formatCallElapsed, spokenCallElapsed } from "@/lib/phone/callClock";
+import {
+  primeIncomingAlertAudio,
+  startIncomingAlert,
+  type IncomingAlert,
+} from "@/lib/phone/ringtonePlayer";
+import { gainFor, isVolumeSettable, type AudioRoute } from "@/lib/realtime/outputGain";
+import PhoneIcon from "@/components/PhoneIcon";
+import EndTrainingButton from "@/components/EndTrainingButton";
 import {
   announceTurnsOnInstructionDispatch,
   enqueueInstruction,
@@ -73,7 +104,10 @@ import {
 import { normalizeDifficultyLevel, type DifficultyLevel } from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
 import { foldDegraded, buildFallbackStatusLine } from "@/lib/report/degradedDisclosure";
-import { PREROLL_NOTICE } from "@/lib/sessionboundary/preSessionCopy";
+// ⭐ T190-8b(docs/Architecture.md §74.22 (1) ⓓ · G438 재지정) — 이 파일은 세션 전 문면 모듈을 import하지 **않는다**.
+// 벨 직전 고지(`pre-call-notice`)는 세션 전 컴포넌트 `CallStartNotice`가 그리고, 벨 화면(`incoming`)에는 문구가 0이다.
+import { decideInitialCallPhase, type CallPhase } from "@/lib/sessionboundary/startNoticeGate";
+import CallStartNotice from "@/components/CallStartNotice";
 import CallWaveform from "@/components/CallWaveform";
 import InCallSmsOverlay from "@/components/InCallSmsOverlay";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
@@ -92,7 +126,8 @@ const GeminiVoiceSession = dynamic(() => import("@/lib/realtime/GeminiVoiceSessi
 });
 
 type PageState = "checking" | "ready" | "no-session" | "scenario-not-found" | "load-error";
-type Phase = "incoming" | "connecting" | "opening" | "live" | "ended";
+// T190-8b(§74.22 (4) #1) — 벨 직전 고지 `pre-call-notice`가 맨 앞에 더해졌다(정의는 startNoticeGate.ts 한 곳).
+type Phase = CallPhase;
 /** realtime = speech-to-speech 실시간 통화, fallback = 기존 STT/텍스트 경로. */
 type CallMode = "undecided" | "realtime" | "fallback";
 
@@ -103,9 +138,14 @@ type ChatMessage = {
   turnIndex: number;
 };
 
-// T187(docs/Architecture.md §72.5 D1) — 벨 화면 세션 전 고지 `PREROLL_NOTICE`는 바이트 그대로
-// `src/lib/sessionboundary/preSessionCopy.ts`로 옮겼다(사용처는 아래 `phase === "incoming"` 1곳 —
-// G438). 이 파일에 표식 낱말 리터럴을 남기지 않기 위해서다(G437).
+// T187(docs/Architecture.md §72.5 D1) — 세션 전 고지 문면은 `src/lib/sessionboundary/preSessionCopy.ts`가 정본이다.
+// ⭐ T190-8b(§74.22 (1) ⓓ · D-102 · AC-091) — 그 고지의 자리가 벨 화면(`incoming`)에서 **벨 직전 고지**
+// (`pre-call-notice` — 세션 전 컴포넌트 `CallStartNotice`)로 옮겨 갔다. 이 파일에는 그 문면도, 그 모듈 import도 없다
+// (G438 — 벨 화면 프리롤 0이 import 0 한 줄로 증명된다). 표식 낱말 리터럴도 남기지 않는다(G437).
+
+// T190-8b(UX-014 v1.33 (11) ① "탭 뒤" · §74.22 (3)) — "준비됐어요" 뒤 벨이 울리기 전 짧은 정적(빈 통화 배경).
+// 0.6~1.2초 범위의 **설계 추정값**(실제 착신까지의 짧은 정적 — 확인: 실기 관찰).
+const PRE_CALL_GAP_MS = 800;
 
 // T83/UX-031 States — "연결 중…" 연출 길이. **고정값**이다(랜덤 없음 = 테스트 결정론, §16.2).
 // ⚠️ 이 구간은 화면 연출일 뿐 실제 발신이 아니다(AC-019). 이 동안에도 통화 축소 표시·"훈련 종료"가
@@ -114,11 +154,8 @@ const VERIFY_DIALING_MS = 2500;
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-function formatElapsed(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
+// T190-3(§74.6 (3)) — 경과 시간 표기는 `@/lib/phone/callClock`(`mm:ss` · 1시간 이상 `h:mm:ss`)로 옮겼다.
+// 예전 지역 함수는 60분을 넘어도 `m:ss`였다.
 
 export default function SessionCallPage() {
   const router = useRouter();
@@ -128,7 +165,14 @@ export default function SessionCallPage() {
   // 마운트 시 한 번만 읽는다(재렌더마다 다시 읽어 소진되는 것을 방지).
   const [openingMessageText] = useState<string | null>(() => consumeOpeningMessageText());
   const [pageState, setPageState] = useState<PageState>(sessionId ? "checking" : "no-session");
-  const [phase, setPhase] = useState<Phase>("incoming");
+  // T190-8b — 세션 문서를 읽기 전 초기값은 "아무 일도 일어나지 않는" 벨 직전 고지다(벨·구독·연결 0). 실제 값은
+  // 아래 세션 로드에서 `decideInitialCallPhase`(G463)가 정한다.
+  const [phase, setPhase] = useState<Phase>("pre-call-notice");
+  // "준비됐어요"를 누른 뒤 벨까지의 짧은 정적 동안 true(빈 통화 배경만 그린다).
+  const [preCallLeaving, setPreCallLeaving] = useState(false);
+  const preCallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // "준비됐어요" 탭(사용자 제스처) 안에서 만든 벨 오디오 컨텍스트 — 벨 effect가 한 번 넘겨받는다(§74.7).
+  const primedAlertContextRef = useRef<AudioContext | null>(null);
   const [callMode, setCallMode] = useState<CallMode>("undecided");
   const [scenario, setScenario] = useState<ScenarioDoc | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -166,8 +210,24 @@ export default function SessionCallPage() {
   // 않는다(§15.1.1 — 넣으면 통화가 멈춰 이 기능의 존재 이유가 무너진다).
   const [inCallSms, setInCallSms] = useState<InCallSmsView[]>([]);
   const [smsOverlayOpen, setSmsOverlayOpen] = useState(false);
-  const [smsBannerDismissed, setSmsBannerDismissed] = useState(false);
+  // T190-3(UX D-91 · §74.6 (6)) — 예전 boolean `smsBannerDismissed`를 **"확인한 마지막 smsId"** 로 바꿨다.
+  // 새 문자는 도착 경로(백스톱 · 모델 도구 · 폴백)와 무관하게 id가 새로우므로 되돌리는 쓰기 지점이 필요 없다
+  // (판정은 `@/lib/phone/bannerState`). 6초가 지나 접힌 id · 포커스/호버로 멈춘 id도 같은 방식으로 둔다.
+  const [bannerAckSmsId, setBannerAckSmsId] = useState<string | null>(null);
+  const [bannerExpiredSmsId, setBannerExpiredSmsId] = useState<string | null>(null);
+  const [bannerPausedSmsId, setBannerPausedSmsId] = useState<string | null>(null);
   const [smsError, setSmsError] = useState<string | null>(null);
+  // T190-3(§74.5 (2) · 표 K · AC-092 (b)) — 이 통화의 화면 모양. 세션 문서 1회 읽기에서 **한 번** 정하고 세션
+  // 끝까지 바꾸지 않는다(D-100 (4)). 서버 쓰기 0(같은 기기에서 표 K가 결정론적이라 새로고침에도 같다).
+  const [deviceSkin, setDeviceSkin] = useState<ResolvedDeviceSkin>({ skin: "default", source: "fallback" });
+  // T190-3(§74.3 표 S · UX D-98 · AC-093 (c)) — 스피커 버튼 = 통화 모드(0.6) ↔ 스피커 모드(1.0) **음량 전환**.
+  // 웹은 Android에서 수화부↔스피커 실제 출력 전환을 할 수 없다(§74.2 ①-A) — iOS도 실기 프로브 전까지 같다.
+  const [audioRoute, setAudioRoute] = useState<AudioRoute>("call");
+  // D-103(표 S S-5) — 텍스트 폴백 `<audio>`에 음량을 대입한 뒤 다시 읽어 반영되지 않으면(대표 사례 iOS Safari —
+  // UA로 판별하지 않는다) 그 경로에서 스피커 칸은 비활성 표현이다. 한 번 관측되면 이 세션 동안 유지한다.
+  const [fallbackVolumeLocked, setFallbackVolumeLocked] = useState(false);
+  // T190-4(§74.7) — 수신 벨·진동. `stop()`은 멱등이며 받기 첫 줄 · effect cleanup · pagehide에서 부른다.
+  const incomingAlertRef = useRef<IncomingAlert | null>(null);
   // T103(P-27 (2) ④ · OQ-U27 (a) · §19.6) — 전면 문자함의 통화 필에 이어 붙일 **최신 사기범 자막**.
   // ⚠️ 실시간(Gemini Live) 경로에서는 통화 중 `messages`가 갱신되지 않아(전사는 종료 직전 1회 제출)
   // `latestScammerLine`이 통화 내내 null이다 — 그래서 이미 흐르고 있는 턴 콜백을 화면 지역 state로
@@ -353,13 +413,36 @@ export default function SessionCallPage() {
     let cancelled = false;
     (async () => {
       try {
-        const snapshot = await getDoc(doc(db, "sessions", sessionId));
+        // T190-3(§74.5 (1) · §74.4) — UA-CH `model` 보강값은 세션 문서 읽기와 **나란히** 받는다(상한 300ms ·
+        // 늦게 오면 버린다). 화면 모양은 `ready` 전에 한 번 정해져 세션 중 바뀌지 않는다(D-100 (4)).
+        const [snapshot, uaModel] = await Promise.all([
+          getDoc(doc(db, "sessions", sessionId)),
+          readUaModelHint(typeof navigator === "undefined" ? undefined : navigator),
+        ]);
         if (cancelled) return;
         const data = snapshot.data();
         if (!data) {
           setPageState("load-error");
           return;
         }
+        // 표 K(§74.3) — 세션 문서(메신저 세션 · 메신저→통화 전이 세션) > 이 기기의 수동 선택 > 자동 감지.
+        let storedSkin: DeviceSkin | null = null;
+        try {
+          storedSkin = parseStoredDeviceSkin(window.localStorage.getItem(DEVICE_SKIN_STORAGE_KEY));
+        } catch {
+          storedSkin = null; // 저장소 접근 불가 = "선택 없음"(§74.5 (3))
+        }
+        setDeviceSkin(
+          resolveDeviceSkin({
+            session: parseSessionSkin(data.messengerSkin, data.skinSource),
+            stored: storedSkin,
+            detected: detectDeviceSkin({
+              userAgent: navigator.userAgent,
+              maxTouchPoints: navigator.maxTouchPoints,
+              uaModel,
+            }),
+          }),
+        );
         const scenarioId = data.scenarioId as string | undefined;
         const found = scenarioId ? scenarios[scenarioId] : undefined;
         if (!found) {
@@ -382,23 +465,30 @@ export default function SessionCallPage() {
         //
         // T30 수정(검증 중 발견): entryChannel==="messenger"(에스컬레이션 세션)는 메신저 단계에서
         // 이미 turnCount≥1이 쌓인 채로 이 화면에 처음 진입한다 — turnCount만으로 판단하면 P-18
-        // "수신(벨) 화면 인계"를 건너뛰고 곧장 통화 중으로 복원돼 사전 고지(PREROLL_NOTICE)·수신
-        // 연출이 통째로 스킵되는 회귀가 있었다(AC-036 "사전 고지 유지" 위반). 에스컬레이션 세션은
-        // isSessionAnswered 플래그(이 화면에서 실제로 "받기"를 눌렀는지)만으로 판단한다.
+        // "수신(벨) 화면 인계"를 건너뛰고 곧장 통화 중으로 복원돼 수신 연출이 통째로 스킵되는 회귀가
+        // 있었다. 에스컬레이션 세션은 isSessionAnswered 플래그(이 화면에서 실제로 "받기"를 눌렀는지)만으로 판단한다.
+        // ⭐ T190-8b(OQ-52 (ㄴ) · UX-014 v1.33 (11) ③ · §74.22 (3)) — 에스컬레이션 세션의 벨 화면에는 이제 프리롤이
+        // **없다**(예전 "사전 고지 유지" 근거는 뒤집혔다). 그 통화의 사전 고지는 메신저 시작 전 고지가 "메시지와 전화"로
+        // 맡는다(T190-8a). 에스컬레이션은 벨 직전 고지(`pre-call-notice`)도 거치지 않고 `incoming`으로 바로 간다.
         const isEscalated = data.entryChannel === "messenger";
         const answered =
           isSessionAnswered(sessionId) || (!isEscalated && (data.turnCount as number) >= 1);
-        if (data.status === "ended") {
-          setPhase("ended");
-        } else if (data.status === "active" && answered) {
+        // G463 — 초기 phase 진리표는 순수 함수 하나가 소유한다(이 자리에서 분기를 다시 짜지 않는다).
+        const initialPhase = decideInitialCallPhase({
+          status: data.status as string | undefined,
+          answered,
+          isEscalated,
+          preCallNoticeSeen: isPreCallNoticeSeen(sessionId),
+        });
+        if (initialPhase === "live") {
           const answeredAtMs =
             (data.answeredAt as { toMillis?: () => number } | undefined)?.toMillis?.() ?? null;
           if (answeredAtMs) {
             setElapsedSec(Math.max(0, Math.floor((Date.now() - answeredAtMs) / 1000)));
           }
           setCallMode("fallback");
-          setPhase("live");
         }
+        setPhase(initialPhase);
         setPageState("ready");
       } catch {
         if (!cancelled) setPageState("load-error");
@@ -412,7 +502,7 @@ export default function SessionCallPage() {
   // 대화 로그 구독 — 폴백 경로의 자막/이력용. 실시간 경로는 음성이 주채널이라 자막이 없을 수 있다.
   // "받기" 전에는 구독하지 않아 아직 공개되지 않은 오프닝 텍스트가 미리 새지 않는다.
   useEffect(() => {
-    if (!sessionId || phase === "incoming" || phase === "connecting") return;
+    if (!sessionId || phase === "pre-call-notice" || phase === "incoming" || phase === "connecting") return;
     const messagesQuery = query(
       collection(db, "sessions", sessionId, "messages"),
       orderBy("turnIndex", "asc"),
@@ -437,7 +527,7 @@ export default function SessionCallPage() {
   // 실시간은 deliverInCallSms가, 폴백 텍스트는 sendMessage가 같은 컬렉션에 쓰므로 화면 코드가
   // 갈라지지 않는다. 콜러블 응답은 렌더 소스가 아니다.
   useEffect(() => {
-    if (!sessionId || phase === "incoming" || phase === "connecting") return;
+    if (!sessionId || phase === "pre-call-notice" || phase === "incoming" || phase === "connecting") return;
     const smsQuery = query(
       collection(db, "sessions", sessionId, "inCallSms"),
       orderBy("arrivedAt", "asc"),
@@ -456,6 +546,8 @@ export default function SessionCallPage() {
             otpCode: data.otpCode as string | undefined,
             linkDisplayText: data.linkDisplayText as string | undefined,
             fakeLandingId: data.fakeLandingId as string | undefined,
+            // T190-2(§74.9) — 말풍선 링크 줄의 가짜 주소(부재 = 옛 문서 → 화면은 `linkDisplayText`로 읽는다).
+            linkAddress: data.linkAddress as string | undefined,
             // T104(§19.4 #5) — 서버가 확정한 목업 종류. 클라는 그대로 나른다(§15.9.1 R3).
             landingKind: data.landingKind as InCallSmsView["landingKind"],
             arrivedAtMs: arrivedAt?.toMillis?.() ?? 0,
@@ -471,7 +563,7 @@ export default function SessionCallPage() {
   // 콜러블 응답에는 모델 지시만 실리고 창구명·번호는 이 구독으로만 화면에 들어온다(사전 유출 방지).
   // 문서를 소스로 삼기 때문에 **새로고침·재마운트 후에도 재연결 상태(발신자 라벨)가 유지**된다.
   useEffect(() => {
-    if (!sessionId || phase === "incoming" || phase === "connecting") return;
+    if (!sessionId || phase === "pre-call-notice" || phase === "incoming" || phase === "connecting") return;
     const verifyQuery = query(
       collection(db, "sessions", sessionId, "verifyIntercept"),
       orderBy("offeredAt", "asc"),
@@ -591,7 +683,7 @@ export default function SessionCallPage() {
       try {
         const result = await deliverInCallSms({ sessionId, smsId: dueSmsId, trigger: "backstop" });
         setSmsError(null);
-        setSmsBannerDismissed(false);
+        // T190-3(§74.6 (6)) — 배너를 되살리는 쓰기가 필요 없다: 새 문자는 id가 새로워 자동으로 "미확인"이다.
         // T83 — 직접 세팅하지 않고 큐를 통한다(같은 턴에 확인 지시와 겹쳐도 유실되지 않게, G31).
         // §53.6 (3) — 전환이 끝난 오퍼가 연 문자에는 값이 없다(서버가 생략). 값이 없으면
         // 주입하지 않는다 — 문서 자체(계좌·링크)는 그대로 도착했으니 배너·문자함은 정상 표시된다.
@@ -824,7 +916,8 @@ export default function SessionCallPage() {
 
   // 통화 경과 타이머 — "받기"(answeredAt) 기점, ended면 정지.
   useEffect(() => {
-    if (phase === "incoming" || phase === "ended") return;
+    // T190-8b(§74.22 (4) #4) — 벨 직전 고지에서도 돌지 않는다(타이머 = 받기 기점 · OQ-U8).
+    if (phase === "pre-call-notice" || phase === "incoming" || phase === "ended") return;
     const interval = setInterval(() => {
       elapsedSecRef.current += 1;
       setElapsedSec(elapsedSecRef.current);
@@ -921,6 +1014,27 @@ export default function SessionCallPage() {
     }
   }, [realtime.status, realtime.credentials]);
 
+  // T190-3(§74.6 (4) · G455 · D-103) — 폴백 `<audio>`에도 같은 음량 모드를 대입한다(⚠️ 아래 자동재생 effect보다
+  // **먼저** 선언한다 — effect는 선언 순서로 돌므로 재생 전에 음량이 먼저 들어간다). 대입 뒤 **다시 읽어**
+  // 반영되지 않으면(iOS Safari는 volume을 설정할 수 없고 늘 1을 돌려준다 — §74.2 ②) 이 경로의 스피커 칸을
+  // 비활성으로 돌린다(눌리는데 아무것도 안 바뀌는 활성 버튼 0 — AC-093 (c)). UA로 판별하지 않는다.
+  // 인라인 async IIFE로 감싼다(react-hooks/set-state-in-effect 회피 — 이 화면의 다른 effect들과 같은 관례).
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !playbackUrl) return;
+    // reviewer Minor(D-103 거짓 양성) — 판정은 **1이 아닌 값**으로 따로 프로브한다(스피커 1.0을 먼저 켜 두면 iOS에서
+    // 1.0을 쓰고 읽어도 1이라 "반영됨"으로 잘못 판정됐다). 잠기면 모드를 통화로 되돌려 `aria-pressed`와 상태를 맞춘다.
+    const settable = isVolumeSettable(audio);
+    const requested = gainFor(audioRoute);
+    audio.volume = requested;
+    (async () => {
+      if (!settable) {
+        setFallbackVolumeLocked(true);
+        setAudioRoute("call");
+      }
+    })();
+  }, [playbackUrl, audioRoute]);
+
   // 폴백 경로 오디오 자동재생 — 브라우저 정책으로 막히면 "탭하여 듣기" 버튼만 최소로 노출(P-4).
   useEffect(() => {
     if (!playbackUrl) return;
@@ -951,20 +1065,21 @@ export default function SessionCallPage() {
   // status가 idle로 떨어진다. live 구간에서 재생 중/전송 중이 아니면 idle이 될 때마다 다시 연다.
   // start()가 status를 listening으로 바꿔 이 effect가 곧 멈추므로 타이트 루프가 아니다.
   //
-  // T68(§15.1.3) — 문자 오버레이가 열려 있는 동안에는 **마이크 입력만** 멈춘다(읽는 중 혼잣말·
-  // 주변 소음이 발화로 오인되면 사기범이 엉뚱하게 반응해 몰입이 깨진다). 오버레이를 닫으면 이
-  // 조건이 다시 참이 되어 기존 재개 로직이 자동으로 청취를 연다(추가 코드 불요).
-  // ⚠️ 재생·타이머는 이 게이팅 대상이 아니다 — 통화가 살아 있다는 것이 이 기능의 전부다.
-  // T83(§16.2) — 확인 오버레이도 **같은 규칙**으로 마이크만 게이팅한다(오디오 재생·타이머·한도·
-  // 소켓은 손대지 않는다). 음소거 버튼의 aria-pressed는 여전히 사용자 의도 `muted`에만 바인딩한다.
+  // ⭐ T190-3(UX D-99 · AC-093 (d) · docs/Architecture.md §74.6 ⑥ · G452) — **문자함이 열려 있어도 마이크를
+  // 멈추지 않는다**(실시간·폴백 두 경로 모두). 예전(T68 §15.1.3)에는 문자 오버레이가 열린 동안 이 effect가
+  // 청취 재개를 막았다 — 그 조건을 지웠다. 마이크는 참가자 자신의 음소거 버튼(`muted`)만 따른다.
+  // ⚠️ 남는 위험 R-1(폴백 STT가 문자를 읽는 중 혼잣말·주변 소리를 발화로 보낼 수 있음) = User 수용(D-99 Reason).
+  // ⚠️ 재생·타이머는 원래도 게이팅 대상이 아니다 — 통화가 살아 있다는 것이 이 기능의 전부다.
+  // T83(§16.2) — 확인 오버레이(UX-031)의 마이크 게이팅은 **D-99 대상이 아니라 유지**한다(User 원문은 문자함만
+  // 말한다). 음소거 버튼의 aria-pressed는 여전히 사용자 의도 `muted`에만 바인딩한다.
   useEffect(() => {
-    if (callMode !== "fallback" || phase !== "live" || smsOverlayOpen || verifyOverlayOpen) return;
+    if (callMode !== "fallback" || phase !== "live" || verifyOverlayOpen) return;
     if (speech.status !== "idle") return;
     if (sending || playbackUrl) return;
     const timer = setTimeout(() => speech.start(), 400);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callMode, phase, speech.status, sending, playbackUrl, smsOverlayOpen, verifyOverlayOpen]);
+  }, [callMode, phase, speech.status, sending, playbackUrl, verifyOverlayOpen]);
 
   // P-11 이음새 없는 전환 — 오프닝 재생이 끝나면 확인 버튼 없이 곧바로 실시간 청취로 넘어간다.
   const handlePlaybackEnded = () => {
@@ -982,7 +1097,79 @@ export default function SessionCallPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageState, sessionId, phase, realtime.prefetch]);
 
+  // ⭐ T190-4(UX D-97 · AC-093 (a)(b) · docs/Architecture.md §74.7 · G454) — 수신(`incoming`) 동안만 벨·진동.
+  // effect **하나**에 시작·정지를 모은다: 받기(`connecting`으로 전이) · 거절(라우팅 언마운트) · 종료 · 페이지
+  // 이탈이 전부 아래 cleanup 하나로 정지된다. 추가로 `pagehide`에서도 멈춘다(bfcache 이탈).
+  // ⚠️ 자동재생이 막히면 **무음으로 진행**하고 오류 문구 0(D-97). iOS형은 진동 없음(D-97). ⏳ iOS 벨은 D-102
+  // (`pre-call-notice` 탭 — T190-8b)까지 무음일 수 있다(User 결정 OQ-A95 ⓐ — 그대로 둔다).
+  useEffect(() => {
+    if (pageState !== "ready" || phase !== "incoming") return;
+    // T190-8b — "준비됐어요" 탭에서 미리 깨운 컨텍스트가 있으면 넘긴다(소유권 이전 — 알림이 stop에서 닫는다).
+    const primedContext = primedAlertContextRef.current ?? undefined;
+    primedAlertContextRef.current = null;
+    const alert = startIncomingAlert(deviceSkin.skin, { primedContext });
+    incomingAlertRef.current = alert;
+    const handlePageHide = () => alert.stop();
+    window.addEventListener("pagehide", handlePageHide);
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      alert.stop();
+      if (incomingAlertRef.current === alert) incomingAlertRef.current = null;
+    };
+  }, [pageState, phase, deviceSkin.skin]);
+
+  // T190-3(UX D-91 · §74.6 (6)) — 떠 있는 배너의 6초 타이머. 포커스·호버 중에는 멈춘다(WCAG 2.2.1 — 재개 시
+  // 처음부터 6초). ⛔ 새 setInterval을 만들지 않는다(`toolWindowWiring.test.ts` — 화면의 setInterval은 통화 경과
+  // 타이머 1개뿐이다). 시각적으로 사라질 뿐 정보는 "메시지" 버튼 배지와 문자함에 남는다.
+  const bannerSmsId = visibleBannerSmsId({
+    latestSmsId: latestSmsId(inCallSms),
+    ackSmsId: bannerAckSmsId,
+    expiredSmsId: bannerExpiredSmsId,
+    overlayOpen: smsOverlayOpen,
+    ended: phase === "ended",
+  });
+  useEffect(() => {
+    if (!shouldRunBannerTimer(bannerSmsId, bannerPausedSmsId === bannerSmsId)) return;
+    const timer = setTimeout(() => setBannerExpiredSmsId(bannerSmsId), BANNER_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [bannerSmsId, bannerPausedSmsId]);
+
+  // T190-8b(UX-014 v1.33 (11) ① · §74.22 (3) · AC-087 (c)) — "준비됐어요". ① 이 세션의 고지 확인 기록(새로고침 생략)
+  // ② **이 제스처 안에서** 벨 오디오를 준비(iOS 자동재생 — OQ-A95 ⓐ의 해제 지점) ③ 짧은 정적 뒤 벨(`incoming`).
+  const handleConfirmPreCallNotice = () => {
+    if (preCallLeaving) return;
+    if (sessionId) markPreCallNoticeSeen(sessionId);
+    primedAlertContextRef.current = primeIncomingAlertAudio();
+    setPreCallLeaving(true);
+    preCallTimerRef.current = setTimeout(() => {
+      preCallTimerRef.current = null;
+      setPhase("incoming");
+      setPreCallLeaving(false);
+    }, PRE_CALL_GAP_MS);
+  };
+
+  // 정적 중에 화면을 떠나면 타이머와 준비한 컨텍스트를 정리한다(벨이 울리지 않은 채 컨텍스트가 남지 않게).
+  useEffect(() => {
+    return () => {
+      if (preCallTimerRef.current) clearTimeout(preCallTimerRef.current);
+      void primedAlertContextRef.current?.close().catch(() => {});
+    };
+  }, []);
+
+  // T190-8b(§74.12 (3) ⑥ · D-100 (2)) — 통화 경로의 세션 전 화면 모양 선택. 서버 쓰기 0(§74.5 (2) — 같은 기기에서
+  // 표 K가 결정론적이다) · 기기 저장(`fv.deviceSkin.v1` — 새로고침·다음 세션의 K-2). ⛔ 세션 중(벨 이후)에는 부르는 곳 0.
+  const handleChooseCallSkin = (next: "ios" | "samsung") => {
+    setDeviceSkin({ skin: next, source: "manual" });
+    try {
+      window.localStorage.setItem(DEVICE_SKIN_STORAGE_KEY, serializeStoredDeviceSkin(next, Date.now()));
+    } catch {
+      // 저장소를 쓸 수 없으면 이번 세션 값만 남는다(비차단).
+    }
+  };
+
   const handleAnswer = () => {
+    // T190-4(§74.7) — 전이 렌더 전에 **즉시** 벨을 멈춘다(실시간 오디오와 겹침 0). cleanup도 다시 부르지만 멱등이다.
+    incomingAlertRef.current?.stop();
     if (!sessionId) return;
     // finding #4: "받기"를 누른 세션을 기록해, 통화 중 새로고침 시 벨 화면이 아니라 통화로 복원.
     markSessionAnswered(sessionId);
@@ -1004,8 +1191,10 @@ export default function SessionCallPage() {
   // GeminiVoiceSession/RealtimeVoiceSession은 언마운트되지 않고 통화가 그대로 유지된다.
   const handleOpenSmsOverlay = (trigger: HTMLButtonElement | null) => {
     smsTriggerRef.current = trigger;
-    // 폴백 경로에서는 오버레이를 여는 즉시 마이크를 닫는다(위 자동 청취 effect의 재개 조건과 짝).
-    if (callMode === "fallback") speech.stop();
+    // ⭐ T190-3(UX D-99 · G452) — 폴백 경로에서도 문자함을 열 때 마이크를 닫지 **않는다**(예전 T68은 여기서 STT를
+    // 멈췄다). 참가자는 문자를 보면서 인증번호를 그대로 불러 줄 수 있다(AC-061 "불러준 사실").
+    // T190-3(D-91 ③) — 문자함을 열면 그때까지 온 건의 배너는 다시 뜨지 않는다.
+    setBannerAckSmsId((current) => ackOnOverlayClose(latestSmsId(inCallSms), current));
     // ⚠️ 동시 열림 금지(§16.2 신규 규칙 / §16.6 G26) — 두 오버레이 모두 `aria-modal="true"`라
     // 겹치면 **포커스 트랩이 중첩돼 "훈련 종료" 도달성이 깨진다**(AC-006). 상태를 하나로 합치는
     // 리팩터는 하지 않는다(요청되지 않은 변경 금지) — 여는 쪽에서 상대를 닫는 것으로 충분하다.
@@ -1015,7 +1204,8 @@ export default function SessionCallPage() {
 
   const handleCloseSmsOverlay = () => {
     setSmsOverlayOpen(false);
-    setSmsBannerDismissed(true);
+    // T190-3(§74.6 (6)) — 닫는 순간의 최신 id까지 확인 처리(열려 있는 동안 도착한 건 포함 — 현행 의미 유지).
+    setBannerAckSmsId((current) => ackOnOverlayClose(latestSmsId(inCallSms), current));
     // 직전 트리거(배너 또는 "문자함" 버튼)로 포커스 복귀(UX-027 Focus Order).
     smsTriggerRef.current?.focus();
   };
@@ -1199,9 +1389,8 @@ export default function SessionCallPage() {
       setDialogueDegraded((current) => foldDegraded(current, result.isMock));
       setInput("");
       speech.reset();
-      // T68 폴백 경로 — 서버가 이번 턴에 문자를 도착시켰으면 배너를 다시 띄운다(렌더 자체는
-      // inCallSms 구독이 담당하므로 여기서는 배너 노출 여부만 되돌린다).
-      if (result.sms) setSmsBannerDismissed(false);
+      // T68 폴백 경로 — 서버가 이번 턴에 문자를 도착시키면 inCallSms 구독이 렌더한다. T190-3(§74.6 (6)) —
+      // 새 문자는 id가 새로워 배너가 자동으로 다시 뜨므로 되돌리는 쓰기가 없다.
       if (result.audioUrl) {
         setPlaybackUrl(result.audioUrl);
       } else if (!result.ended) {
@@ -1267,10 +1456,39 @@ export default function SessionCallPage() {
     );
   }
 
+  // ⭐ T190-8b(docs/Architecture.md §74.22 (1) ⓓ · G438 · D-102 · AC-091) — 벨 직전 고지. 세션 전 컴포넌트를 이
+  // early return 하나에서만 그린다(메신저 `if (startNotice === "show")`와 같은 형태). 이 시점엔 실시간 세션 컴포넌트가
+  // 아직 마운트되지 않았다(마운트 조건 = 받기 뒤 자격증명) — early return이 통화를 끊지 않는다.
+  if (phase === "pre-call-notice") {
+    // "준비됐어요" 뒤 짧은 정적 — 빈 통화 배경(UX-014 v1.33 (11) ① "탭 뒤"). 안내 문구 0.
+    // reviewer Minor(AC-006 — 모든 상태에서 종료 1탭) — 이 짧은 구간에도 "훈련 종료"를 오른쪽 위 같은 자리에 둔다
+    // (고지 화면 상단 바와 같은 자리 · 같은 컨트롤 — 새 문구가 아니라 상시 종료 컨트롤이다).
+    if (preCallLeaving) {
+      return (
+        <main
+          aria-busy="true"
+          className="flex min-h-screen flex-col"
+          style={{ backgroundColor: callTokensFor(deviceSkin.skin).bg }}
+        >
+          <div className="flex justify-end px-4 py-2.5">
+            <EndTrainingButton onClick={() => void handleEndTraining()} />
+          </div>
+        </main>
+      );
+    }
+    return (
+      <CallStartNotice
+        onConfirm={handleConfirmPreCallNotice}
+        onEndTraining={() => void handleEndTraining()}
+        skinPicker={{ value: deviceSkin.skin, source: deviceSkin.source, onChange: handleChooseCallSkin }}
+      />
+    );
+  }
+
   // T75(2026-07-25, 사용자 요청) — 발신자 표기에서 "(사칭)"을 제거하고 **번호만** 보여준다.
   // 실제 보이스피싱은 모르는 번호로 걸려오며, 화면에 "사칭"이라고 적혀 있으면 판단 훈련이
-  // 성립하지 않는다(정답을 미리 알려주는 셈). 시뮬레이션 고지는 수신 화면의 사전 고지
-  // (PREROLL_NOTICE)가 담당한다(AC-012 무변경 · T187 §72 — 세션 중 상시 표식은 폐지, AC-086).
+  // 성립하지 않는다(정답을 미리 알려주는 셈). 시뮬레이션 고지는 벨 직전 고지(`pre-call-notice` —
+  // T190-8b) · 에스컬레이션은 메신저 시작 전 고지가 담당한다(AC-012 무변경 · AC-086 · AC-091).
   // T83(§16.2 발신자 라벨 전환) — 모의 재연결 후에는 구독 중인 **문서의** `reconnectedCallerLabel`을
   // 우선 표시한다(UX-014 `verify-reconnected` state). 클라 상태가 아니라 문서를 소스로 삼는 이유:
   // 새로고침·재마운트 후에도 재연결 상태가 유지되고, 실시간·폴백 두 경로의 렌더 코드가 갈라지지
@@ -1292,8 +1510,14 @@ export default function SessionCallPage() {
   const sortedSms = sortByArrival(inCallSms);
   const latestSms = sortedSms.length > 0 ? sortedSms[sortedSms.length - 1] : null;
   const smsUnreadCount = countUnread(inCallSms);
-  const showSmsBanner =
-    latestSms !== null && !smsBannerDismissed && !smsOverlayOpen && phase !== "ended";
+  // T190-3(UX D-91) — 표시 판정은 위 `bannerSmsId`(최신 1건 · 확인 id · 6초 만료 · 문자함/종료 중 0) 하나다.
+  const showSmsBanner = bannerSmsId !== null && latestSms !== null && latestSms.smsId === bannerSmsId;
+  // T190-3(§74.6 (2)(5)) — 스킨 토큰(UX v1.33 근사 — 실기 측정 전). 값은 인라인 style로만 쓴다(Tailwind는
+  // 런타임에 조립한 클래스 이름을 생성하지 못한다).
+  const callTokens = callTokensFor(deviceSkin.skin);
+  const bannerTokens = bannerTokensFor(deviceSkin.skin);
+  // D-103 — 음량을 바꿀 수 없는 경로(폴백 `<audio>` + 대입 미반영)에서만 스피커 칸이 비활성이다.
+  const speakerDisabled = callMode === "fallback" && fallbackVolumeLocked;
   // ⛔ §49(V5, 2026-08-02 정정) — 상시 확인 컨트롤(과거 `showVerifyTrigger`가 표시 조건, 과거
   // `hasVerifyCredential`이 등장 시점을 판별했다)이 완전히 삭제되며 두 값 모두 소비하는 곳이
   // 없어져 폐기한다. ⛔ `shouldRevealVerifyOffer`는 삭제하지 않는다(G268) — 위 자동 전환 effect가
@@ -1316,7 +1540,8 @@ export default function SessionCallPage() {
           : "말씀하세요";
 
   return (
-    <main className="flex min-h-screen flex-col bg-[#22303A] text-white">
+    // T190-3(UX-014 v1.33 (8) Responsive · W-D) — 최대폭 430px 가운데 정렬, 바깥은 `call.bg`보다 한 단계 어두운 단색.
+    <main className="flex min-h-screen flex-col text-white" style={{ backgroundColor: callTokens.outerBg }}>
       {/* 실시간 speech-to-speech 세션 — 서버가 자격증명을 준 경우에만 마운트된다(지연 로딩).
           화면 요소는 없고 SDK 세션 생명주기만 관리한다. */}
       {realtime.credentials?.provider === "elevenlabs" && (
@@ -1324,9 +1549,11 @@ export default function SessionCallPage() {
           credentials={realtime.credentials}
           firstMessage={openingMessageText ?? undefined}
           stopSignal={realtime.stopSignal}
-          // T68(§15.1.3) — 오버레이가 열린 동안 **마이크 입력만** 멈춘다. 아래 음소거 버튼의
-          // aria-pressed는 사용자 의도(muted)에만 바인딩한다(근거 없는 표기 금지).
-          muted={muted || smsOverlayOpen || verifyOverlayOpen}
+          // ⭐ T190-3(UX D-99 · G452) — 문자함이 열려도 마이크를 멈추지 않는다(`smsOverlayOpen` 제외). 확인
+          // 오버레이(UX-031) 게이팅만 남는다. 아래 음소거 버튼의 aria-pressed는 사용자 의도(muted)에만 바인딩한다.
+          muted={muted || verifyOverlayOpen}
+          // T190-3(§74.3 표 S · G455) — 스피커 버튼의 음량 모드(통화 0.6 / 스피커 1.0).
+          outputVolume={gainFor(audioRoute)}
           onActive={realtime.handleActive}
           onEnded={realtime.handleEnded}
           onError={realtime.handleError}
@@ -1345,7 +1572,8 @@ export default function SessionCallPage() {
             credentials={realtime.credentials}
             sessionId={sessionId}
             stopSignal={realtime.stopSignal}
-            muted={muted || smsOverlayOpen || verifyOverlayOpen}
+            muted={muted || verifyOverlayOpen}
+            outputVolume={gainFor(audioRoute)}
             onActive={realtime.handleActive}
             onEnded={realtime.handleEnded}
             onError={realtime.handleError}
@@ -1366,46 +1594,66 @@ export default function SessionCallPage() {
         )
       )}
 
-      {/* 상단 상태 바 — 통신사/신호 자리에 통화 상태와 경과 시간(실제 통화 화면 관례). */}
-      <div className="flex items-center justify-between px-6 pt-5 text-sm text-[#C9D4DB]">
-        <span>휴대전화</span>
-        {phase !== "incoming" && phase !== "connecting" && (
-          <span
-            role="status"
-            className="font-mono tabular-nums font-semibold tracking-wider text-[#C9D4DB]"
-          >
-            {formatElapsed(elapsedSec)}
-          </span>
-        )}
-      </div>
-
+      {/* ⭐ T190-3(UX-014 v1.33 · D-86~D-88 · P-37 · docs/Architecture.md §74.6) — 실폰형 통화 셸.
+          ⛔ 가짜 OS 상태바(시계·통신사 자리)를 그리지 않는다(P-37 R-1 — 기기의 진짜 상태바가 이미 위에 있다).
+          그 자리는 `env(safe-area-inset-top)` + 24px 여백이다. 경과 시간은 번호 바로 아래 한 줄 하나뿐이다(D-86).
+          색·크기는 스킨 토큰(UX v1.33 근사 — 실기 측정 전, `@/lib/phone/skinTokens`)이며 대비 하한은 G456이 막는다.
+          ⚠️ 이 래퍼는 표현 계층일 뿐이다 — 세션 컴포넌트(위)·오버레이(아래)는 여전히 `<main>`의 형제 노드다(G10). */}
+      <div
+        className="mx-auto flex min-h-screen w-full max-w-[430px] flex-1 flex-col"
+        style={{
+          backgroundColor: callTokens.bg,
+          paddingTop: "calc(env(safe-area-inset-top) + 24px)",
+        }}
+      >
       {/* T68 문자 도착 배너(UX-014 `sms-arrived` state / UF-008 Step 2) — 통화는 그대로 진행 중이다.
           시각 배너와 **aria-live 알림을 동시에** 제공한다(P-20 (6) — 시각에만 의존하지 않는다).
           탭하면 오버레이가 열릴 뿐 **라우팅이 일어나지 않는다**(D-35).
+          ⭐ T190-3(UX D-91 · UX-014 v1.33 (6)) — **떠 있는 알림**이다(흐름 밖 `position: fixed` — 레이아웃을 밀지
+          않는다). 3줄 = 메시지 앱 아이콘 + "메시지" + "지금" / 발신 라벨 / 본문 첫 줄(최대 2줄). 고정 문구
+          "문자 1건이 도착했습니다"는 지웠다(건수는 "메시지" 버튼 배지가 맡는다). 6초 뒤 사라지고 포커스·호버 중엔
+          멈춘다. z = 통화 셸 위 · 오버레이(z-40) 아래.
           T103/P-27 (5) ① — 한 프레임에 튀어나오지 않도록 배너도 같은 규칙으로 부드럽게 내려온다
           (`prefers-reduced-motion`이면 즉시 교체 — globals.css의 폴백 블록).
           ⚠️ **도착은 배너만 띄운다**(D-56) — 여기서 `setSmsOverlayOpen(true)`를 부르지 않는다.
           문자함으로 넘어갈지는 훈련 대상인 참가자의 결정이고, 자동 전환은 한도 도달·종료 고지
           순간을 덮을 수 있다(AC-059). */}
       {showSmsBanner && latestSms && (
-        <div className="sms-banner-enter px-4 pt-3">
+        <div
+          className="sms-banner-enter fixed inset-x-0 z-30 flex justify-center px-2"
+          style={{ top: "calc(env(safe-area-inset-top) + 8px)" }}
+        >
           <button
             type="button"
-            onClick={(event) => handleOpenSmsOverlay(event.currentTarget)}
-            className="flex w-full items-start gap-3 rounded-[14px] border-[1.5px] border-[#C9C2B6] bg-white/95 px-4 py-3 text-left"
+            onClick={(event) => {
+              setBannerPausedSmsId(null);
+              handleOpenSmsOverlay(event.currentTarget);
+            }}
+            onFocus={() => setBannerPausedSmsId(latestSms.smsId)}
+            onBlur={() => setBannerPausedSmsId(null)}
+            onMouseEnter={() => setBannerPausedSmsId(latestSms.smsId)}
+            onMouseLeave={() => setBannerPausedSmsId(null)}
+            className="flex w-full max-w-[414px] flex-col gap-1 px-3.5 py-3 text-left shadow-[0_6px_20px_rgba(0,0,0,0.35)]"
+            style={{
+              backgroundColor: bannerTokens.bg,
+              borderRadius: bannerTokens.radiusPx,
+              color: bannerTokens.text,
+            }}
           >
-            <span aria-hidden="true" className="mt-0.5 text-lg">
-              ✉
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-bold text-[#22303A]">
-                문자 1건이 도착했습니다 · {latestSms.senderLabel}
+            <span className="flex items-center gap-2 text-[13px]" style={{ color: bannerTokens.textSecondary }}>
+              <span
+                aria-hidden="true"
+                className="flex h-5 w-5 items-center justify-center rounded-md"
+                style={{ backgroundColor: bannerTokens.appIconBg, color: bannerTokens.appIconFg }}
+              >
+                <PhoneIcon name="message" size={14} />
               </span>
-              <span className="block truncate text-sm text-[#6B655C]">
-                {latestSms.body.split("\n")[0]}
-              </span>
-              {/* T187(§72 · PRD v1.18 AC-086 · UX D-82) — 세션 중 표식 칩 삭제. 빈 자리를 채우지 않는다. */}
+              <span>메시지</span>
+              <span className="ml-auto">지금</span>
             </span>
+            <span className="block truncate text-[15px] font-semibold">{latestSms.senderLabel}</span>
+            <span className="line-clamp-2 text-[15px] leading-snug">{latestSms.body.split("\n")[0]}</span>
+            {/* T187(§72 · PRD v1.18 AC-086 · UX D-82) — 세션 중 표식 칩 삭제. 빈 자리를 채우지 않는다. */}
           </button>
         </div>
       )}
@@ -1413,9 +1661,10 @@ export default function SessionCallPage() {
           ⚠️ 버그 수정(사용자 브라우저 실측, 2026-07-25): 조건이 `latestSms`(도착한 문자가 있는가)라
           미확인 건수가 0이 된 뒤에도 **"문자 0건이 도착했습니다."** 를 계속 알렸다. 시각적으로는
           sr-only라 보이지 않지만 스크린리더 사용자에게는 매 렌더마다 들리는 **사실과 다른 안내**다.
-          알릴 사실이 실제로 있을 때(미확인 ≥ 1)만 문구를 채운다. */}
+          알릴 사실이 실제로 있을 때(미확인 ≥ 1)만 문구를 채운다.
+          T190-3(UX-014 v1.33 (6)) — 문구 = "{senderLabel}에서 문자가 왔습니다."(건수 문장 대체 · 조건 유지). */}
       <p aria-live="polite" className="sr-only">
-        {smsUnreadCount > 0 ? `문자 ${smsUnreadCount}건이 도착했습니다.` : ""}
+        {smsUnreadCount > 0 ? `${latestSms?.senderLabel ?? ""}에서 문자가 왔습니다.` : ""}
       </p>
       {smsError && (
         <p role="alert" className="px-4 pt-2 text-center text-xs text-[#F0A79E]">
@@ -1423,43 +1672,63 @@ export default function SessionCallPage() {
         </p>
       )}
 
-      <div className="flex flex-1 flex-col items-center justify-center gap-5 px-8">
-        {/* 발신자 아바타 — 수신 중에는 파동, 통화 중 상대 발화 시에도 파동으로 존재감을 준다. */}
-        <div className="relative flex items-center justify-center">
-          {(isRinging || agentSpeaking) && (
-            <>
-              <span
-                aria-hidden="true"
-                className="call-ring-pulse absolute h-28 w-28 rounded-full bg-[#7CD9C2]/30"
-              />
-              <span
-                aria-hidden="true"
-                className="call-ring-pulse absolute h-28 w-28 rounded-full bg-[#7CD9C2]/20"
-                style={{ animationDelay: "0.7s" }}
-              />
-            </>
+      {/* ① (One UI형만) 아바타 · ② 발신 번호 · ③ 번호 바로 아래 phase 줄 · ④ 전환 뒤 줄 · G288 줄(UX-014 v1.33 (2)).
+          상단 여백(근사): iOS형 safe-area+72px · One UI형 화면 높이 18% 지점. */}
+      <div
+        className="flex flex-1 flex-col items-center gap-5 px-6"
+        style={{ paddingTop: callTokens.hasAvatar ? "max(0px, calc(18vh - 24px))" : "48px" }}
+      >
+        <div className="flex w-full flex-col items-center text-center">
+          {callTokens.hasAvatar && (
+            <div
+              aria-hidden="true"
+              className="relative mb-5 flex h-[88px] w-[88px] items-center justify-center rounded-full"
+              style={{ backgroundColor: callTokens.avatarBg, color: callTokens.avatarFg }}
+            >
+              {/* One UI형 울림 연출 = 아바타 둘레 파동(현행 `call-ring-pulse` 재사용 · reduced-motion이면 정지).
+                  통화 중 상대 발화 시의 파동(현행)도 유지한다. */}
+              {(isRinging || agentSpeaking) && (
+                <>
+                  <span className="call-ring-pulse absolute h-[88px] w-[88px] rounded-full bg-[#C9D4DB]/25" />
+                  <span
+                    className="call-ring-pulse absolute h-[88px] w-[88px] rounded-full bg-[#C9D4DB]/15"
+                    style={{ animationDelay: "0.7s" }}
+                  />
+                </>
+              )}
+              <PhoneIcon name="person" size={44} className="relative" />
+            </div>
           )}
-          {/* T75 — 발신자가 이제 번호이므로 첫 글자를 따면 "0"·"+" 같은 무의미한 문자가 뜬다.
-              실제 전화 앱이 저장되지 않은 번호에 쓰는 일반 아이콘으로 대체한다. */}
-          <div
-            aria-hidden="true"
-            className="relative flex h-28 w-28 items-center justify-center rounded-full bg-[#41525E] text-5xl text-[#C9D4DB]"
+          {/* T75 — 발신자는 번호만 보여 준다(사칭 표기 없음 · 정답을 미리 알려 주지 않는다). */}
+          <p
+            className="max-w-full truncate font-semibold leading-tight"
+            style={{ fontSize: callTokens.numberSizePx, color: callTokens.textPrimary }}
           >
-            ☎
-          </div>
-        </div>
-
-        <div className="flex flex-col items-center gap-1">
-          <p className="text-3xl font-bold">{callerLabel}</p>
-          <p className="text-base text-[#C9D4DB]">
-            {phase === "incoming"
-              ? "휴대전화 수신 중…"
-              : phase === "connecting"
-                ? "연결하는 중…"
-                : phase === "ended"
-                  ? "통화 종료"
-                  : "통화 중"}
+            {callerLabel}
           </p>
+          {/* ③ UX-014 v1.33 (3) 정본 — ⛔ 이 표 밖의 문구를 두지 않는다. incoming = 비움(숨김 글) · connecting =
+              "연결 중…" · opening/live = 경과 시간(`aria-live` 없음 — 숫자를 매초 읽지 않는다, 접근 이름으로 대신) ·
+              ended = "통화 종료". 옛 문구("휴대전화 수신 중…"·"연결하는 중…"·"통화 중")는 Superseded(D-86). */}
+          {phase === "opening" || phase === "live" ? (
+            <p
+              role="timer"
+              aria-label={spokenCallElapsed(elapsedSec)}
+              className="mt-1.5 min-h-[24px] text-[17px] tabular-nums"
+              style={{ color: callTokens.textSecondary }}
+            >
+              {formatCallElapsed(elapsedSec)}
+            </p>
+          ) : (
+            <p role="status" className="mt-1.5 min-h-[24px] text-[17px]" style={{ color: callTokens.textSecondary }}>
+              {phase === "incoming" ? (
+                <span className="sr-only">전화가 오고 있습니다</span>
+              ) : phase === "connecting" ? (
+                "연결 중…"
+              ) : (
+                "통화 종료"
+              )}
+            </p>
+          )}
           {/* §49.5(2026-08-02, 사용자 신고 7ⓐ) — D-15 계보 4회째 요청으로 상시 "난이도 X" 배지를
               지운다(참가자가 직전 화면에서 이미 고른 값의 단순 반복, 신규 정보 0). ⛔ 미적용 문구는
               지우지 않는다(G288) — ElevenLabs 실시간 경로는 프롬프트가 에이전트 쪽에 있어 난이도가
@@ -1468,7 +1737,7 @@ export default function SessionCallPage() {
               세 난이도에서 완전히 동일하다(AC-065). 고른 난이도의 기록은 리포트 요약(report/page.tsx)이
               대신 담당한다. */}
           {difficultyLevel && !difficultyApplied && (
-            <p className="text-sm text-[#C9D4DB]">
+            <p className="mt-1.5 text-[15px]" style={{ color: callTokens.textSecondary }}>
               이 통화 경로에서는 고른 난이도가 적용되지 않습니다
             </p>
           )}
@@ -1480,26 +1749,17 @@ export default function SessionCallPage() {
               부정은 세션 후 UX-007의 POST_SESSION_FACT_DISCLOSURE가 맡는다. 주장 줄(아래 라벨)은
               유지한다. 빈 자리를 채우지 않는다. */}
           {verifyConnectedLabel && phase !== "ended" && (
-            <div className="flex flex-col items-center gap-0.5">
-              <p role="status" className="text-sm text-[#C9D4DB]">
+            <div className="mt-1.5 flex flex-col items-center gap-0.5">
+              <p role="status" className="text-[15px]" style={{ color: callTokens.textSecondary }}>
                 {verifyConnectedLabel}
               </p>
             </div>
           )}
         </div>
 
-        {phase === "incoming" && (
-          <p role="status" className="max-w-xs text-center text-sm leading-relaxed text-[#C9D4DB]">
-            {PREROLL_NOTICE}
-          </p>
-        )}
-
-        {phase === "connecting" && (
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-[#C9D4DB] border-t-transparent"
-          />
-        )}
+        {/* ⛔ T190-8b(D-102 · AC-091 (c) · G438 재지정) — 벨 화면(`incoming`)의 세션 전 고지 문장을 지웠다. 같은 고지는
+            벨 직전 고지(`CallStartNotice` — 위 early return)로 옮겨 갔고, 에스컬레이션 벨은 메신저 시작 전 고지가 맡는다.
+            빈 자리를 채우지 않는다. */}
 
         {/* 통화 중 발화 인디케이터 — 실제 통화 화면에 있는 유일한 "상태" 표시다.
             자막·안내문·오류는 여기 두지 않는다(2026-07-22 사용자 피드백: 화면이 통화처럼 안 보임)
@@ -1527,42 +1787,54 @@ export default function SessionCallPage() {
             className="hidden"
           />
         )}
-        {/* 자동재생이 막힌 경우에만 노출 — 이건 누르지 않으면 통화가 진행되지 않아 화면에 남긴다. */}
+        {/* 자동재생이 막힌 경우에만 노출 — 이건 누르지 않으면 통화가 진행되지 않아 화면에 남긴다.
+            T190-3(P-37 (3)) — 이모지(🔊) 대신 자체 제작 단색 아이콘. */}
         {playbackBlocked && (
           <button
             type="button"
             onClick={handleManualPlay}
-            className="rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white"
+            className="flex min-h-[48px] items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white"
           >
-            🔊 탭하여 듣기
+            <PhoneIcon name="speaker" size={18} />
+            탭하여 듣기
           </button>
         )}
       </div>
 
-      {/* 하단 컨트롤 — 실제 폰 통화 UI 관례(수신 화면은 거절/받기, 통화 중은 음소거·키패드·종료). */}
+      {/* 하단 컨트롤 — 실제 폰 통화 UI 관례(수신 화면은 거절/받기, 통화 중은 2×3 그리드 + 아래 가운데 종료).
+          T190-3(UX-014 v1.33 (4)(5) · D-87) — 받기 = `call.accept`(초록 — 앱 청록은 Superseded) · 원 76px · 탭만
+          (스와이프 재현 0 — 어르신·접근성 · 키보드 도달). iOS형 울림 = 받기 버튼 맥동(`call-accept-pulse`). */}
       {phase === "incoming" ? (
-        <div className="flex justify-around px-10 pb-12">
+        <div className="flex justify-between px-14 pb-[calc(env(safe-area-inset-bottom)+56px)]">
           <div className="flex flex-col items-center gap-2">
             <button
               type="button"
               onClick={handleDecline}
               aria-label="전화 거절 — 훈련 종료"
-              className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[#C6392F] text-3xl shadow-lg transition active:scale-95"
+              className="flex h-[76px] w-[76px] items-center justify-center rounded-full shadow-lg transition active:scale-95"
+              style={{ backgroundColor: callTokens.end, color: callTokens.roundIcon }}
             >
-              <span aria-hidden="true">✕</span>
+              <PhoneIcon name="end-call" size={32} />
             </button>
-            <span className="text-sm text-[#C9D4DB]">거절</span>
+            <span className="text-[15px]" style={{ color: callTokens.textSecondary }}>
+              거절
+            </span>
           </div>
           <div className="flex flex-col items-center gap-2">
             <button
               type="button"
               onClick={handleAnswer}
               aria-label="전화 받기"
-              className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[#0E6B62] text-3xl shadow-lg transition active:scale-95"
+              className={`relative flex h-[76px] w-[76px] items-center justify-center rounded-full shadow-lg transition active:scale-95 ${
+                callTokens.ringStyle === "accept-pulse" ? "call-accept-pulse" : ""
+              }`}
+              style={{ backgroundColor: callTokens.accept, color: callTokens.roundIcon }}
             >
-              <span aria-hidden="true">✆</span>
+              <PhoneIcon name="accept-call" size={32} />
             </button>
-            <span className="text-sm text-[#C9D4DB]">받기</span>
+            <span className="text-[15px]" style={{ color: callTokens.textSecondary }}>
+              받기
+            </span>
           </div>
         </div>
       ) : phase === "ended" ? (
@@ -1579,42 +1851,44 @@ export default function SessionCallPage() {
           </button>
         </div>
       ) : (
-        <div className="px-6 pb-10">
-          {/* 키패드 패널 — 기본 화면을 통화답게 유지하려고, 자막·안내·오류·텍스트 입력을 전부
-              여기로 모았다. 닫혀 있으면 통화 화면에는 발신자와 컨트롤만 남는다. */}
-          {showTextInput && (
-            <div className="mb-5 rounded-2xl bg-black/25 p-4">
+        <div className="flex flex-col pb-[calc(env(safe-area-inset-bottom)+32px)]">
+          {/* T190-3(UX-014 v1.33 (7)) — 키패드를 열면 **그리드 자리를 키패드가 대체**한다(실제 통화 앱처럼). 높이가
+              모자라면 키패드 영역만 스크롤되고 종료 버튼은 아래 같은 자리에 고정이다(AC-006). 자막·안내·오류·
+              텍스트 입력(두 `form` · `scrollIntoView`)은 예전 그대로 이 영역 안에 있다 — 문면 무변경. */}
+          {showTextInput ? (
+            <div className="max-h-[56vh] overflow-y-auto px-6">
               {/* 실제 통화 키패드(사용자 신고 2026-07-25 — "키패드가 있는데 실제로 작동하지 않는다").
                   상대가 "인증번호 눌러주세요"류를 요구하는 시나리오에서 실제로 눌러 응답할 수 있다.
                   누른 숫자는 화면에 그대로 보이고, 전송하면 음성/텍스트와 동일한 경로로 상대에게
                   전달된다(실시간이면 Live 세션, 폴백이면 sendMessage). */}
               <div className="mb-4">
                 <div
-                  className="mb-3 flex min-h-[44px] items-center justify-center rounded-xl bg-black/30 px-4 font-mono text-2xl tracking-[0.2em] text-white"
+                  className="mb-3 flex min-h-[44px] items-center justify-center px-4 text-[28px] tracking-[0.2em] text-white tabular-nums"
                   aria-live="polite"
                   aria-label="입력한 번호"
                 >
-                  {dialpadValue || <span className="text-base tracking-normal text-[#8FA0AC]">번호를 누르세요</span>}
+                  {dialpadValue || <span className="text-base tracking-normal text-[#C9D4DB]">번호를 누르세요</span>}
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-[repeat(3,64px)] justify-center gap-x-6 gap-y-3">
                   {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((key) => (
                     <button
                       key={key}
                       type="button"
                       onClick={() => setDialpadValue((v) => (v.length >= 32 ? v : v + key))}
                       aria-label={`${key} 누르기`}
-                      className="min-h-[52px] rounded-xl bg-white/10 text-xl font-semibold text-white transition active:scale-95 hover:bg-white/20"
+                      className="flex h-16 w-16 items-center justify-center rounded-full text-[28px] text-white transition active:scale-95"
+                      style={{ backgroundColor: callTokens.keypadKeyBg }}
                     >
                       {key}
                     </button>
                   ))}
                 </div>
-                <div className="mt-2 flex gap-2">
+                <div className="mt-3 flex gap-2">
                   <button
                     type="button"
                     onClick={() => setDialpadValue((v) => v.slice(0, -1))}
                     disabled={!dialpadValue}
-                    className="min-h-[44px] flex-1 rounded-xl bg-white/10 text-sm font-semibold text-[#C9D4DB] disabled:opacity-40"
+                    className="min-h-[48px] flex-1 rounded-xl bg-white/10 text-sm font-semibold text-[#C9D4DB] disabled:opacity-40"
                   >
                     ← 지우기
                   </button>
@@ -1626,13 +1900,12 @@ export default function SessionCallPage() {
                       setDialpadValue("");
                     }}
                     disabled={!dialpadValue}
-                    className="min-h-[44px] flex-1 rounded-xl bg-[#0E6B62] text-sm font-bold text-white disabled:opacity-40"
+                    className="min-h-[48px] flex-1 rounded-xl bg-[#0E6B62] text-sm font-bold text-white disabled:opacity-40"
                   >
                     번호 전송
                   </button>
                 </div>
               </div>
-
               {/* finding #3(2026-07-25 갱신): 실시간 모드에서도 이제 타이핑할 수 있다 — 다만
                   sendMessage가 아니라 **같은 Live 세션**에 텍스트 턴으로 넣으므로(handleSend의
                   realtime 분기) 목소리가 겹치지 않는다. 마이크가 없거나 쓸 수 없는 환경에서도
@@ -1744,14 +2017,155 @@ export default function SessionCallPage() {
                 </>
               )}
             </div>
+          ) : (
+            /* T190-3(UX-014 v1.33 (4) · D-87) — 3열×2행 그리드(72px 원 · 단색 아이콘 28px · 라벨 14px · ⛔ 이모지 0).
+               1행 = 음소거 · 키패드 · 스피커 / 2행 = 메시지(문자 1건 도착 뒤 — 칸은 처음부터 예약) · 채팅으로(메신저
+               채널만) · 빈 칸. 동작 없는 버튼을 채워 넣지 않는다 — 빈 칸은 자리만 차지한다(초점 대상 0).
+               스크린리더 순서 = 1행 왼→오 · 2행 왼→오 · 종료. */
+            <div className="grid grid-cols-[repeat(3,72px)] justify-center gap-x-6 gap-y-5">
+              <div className="flex min-h-[98px] flex-col items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleToggleMute}
+                  aria-pressed={muted}
+                  aria-label={muted ? "음소거 해제" : "음소거"}
+                  className="flex h-[72px] w-[72px] items-center justify-center rounded-full transition active:scale-95"
+                  style={{
+                    backgroundColor: muted ? callTokens.gridButtonPressedBg : callTokens.gridButtonBg,
+                    color: muted ? callTokens.gridIconPressed : callTokens.gridIcon,
+                  }}
+                >
+                  <PhoneIcon name="mute" />
+                </button>
+                <span className="text-sm" style={{ color: callTokens.textPrimary }}>
+                  {muted ? "음소거 중" : "음소거"}
+                </span>
+              </div>
+
+              <div className="flex min-h-[98px] flex-col items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setShowTextInput((v) => !v)}
+                  aria-pressed={showTextInput}
+                  aria-label="키패드 — 텍스트로 입력"
+                  className="flex h-[72px] w-[72px] items-center justify-center rounded-full transition active:scale-95"
+                  style={{ backgroundColor: callTokens.gridButtonBg, color: callTokens.gridIcon }}
+                >
+                  <PhoneIcon name="keypad" />
+                </button>
+                <span className="text-sm" style={{ color: callTokens.textPrimary }}>
+                  키패드
+                </span>
+              </div>
+
+              {/* ⭐ T190-3(UX D-98 · D-103 · §74.3 표 S · AC-093 (c)) — 스피커 = **음량 전환**(통화 모드 0.6 ↔ 스피커
+                  모드 1.0). 눌림 = 스피커 모드(`aria-pressed`가 실제 모드와 일치). 음량을 바꿀 수 없는 경로(폴백
+                  `<audio>` + 대입 미반영)에서는 **비활성 표현**(흐림 · `aria-disabled` · 탭 무반응 · 안내 문구 0). */}
+              <div className="flex min-h-[98px] flex-col items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (speakerDisabled) return;
+                    setAudioRoute((route) => (route === "speaker" ? "call" : "speaker"));
+                  }}
+                  aria-pressed={!speakerDisabled && audioRoute === "speaker"}
+                  aria-disabled={speakerDisabled ? true : undefined}
+                  aria-label="스피커"
+                  className={`flex h-[72px] w-[72px] items-center justify-center rounded-full transition ${
+                    speakerDisabled ? "opacity-40" : "active:scale-95"
+                  }`}
+                  style={{
+                    backgroundColor:
+                      !speakerDisabled && audioRoute === "speaker"
+                        ? callTokens.gridButtonPressedBg
+                        : callTokens.gridButtonBg,
+                    color:
+                      !speakerDisabled && audioRoute === "speaker" ? callTokens.gridIconPressed : callTokens.gridIcon,
+                  }}
+                >
+                  <PhoneIcon name="speaker" />
+                </button>
+                <span
+                  className={`text-sm ${speakerDisabled ? "opacity-40" : ""}`}
+                  style={{ color: callTokens.textPrimary }}
+                >
+                  스피커
+                </span>
+              </div>
+
+              {/* T68 — "메시지"(현행 "문자함" 라벨 대체 — UX-014 v1.33 (4)) 컨트롤. 문자가 1건 이상 도착한 뒤부터
+                  남아 언제든 UX-027을 다시 연다(미확인 수 배지 — 숫자 텍스트). 라우팅 없음(D-35).
+                  ⭐ 칸은 처음부터 예약해 두어 등장 때 레이아웃이 밀리지 않는다. */}
+              <div className="flex min-h-[98px] flex-col items-center gap-1.5">
+                {inCallSms.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(event) => handleOpenSmsOverlay(event.currentTarget)}
+                      aria-label={`메시지 — 도착 ${inCallSms.length}건, 미확인 ${smsUnreadCount}건`}
+                      className="relative flex h-[72px] w-[72px] items-center justify-center rounded-full transition active:scale-95"
+                      style={{ backgroundColor: callTokens.gridButtonBg, color: callTokens.gridIcon }}
+                    >
+                      <PhoneIcon name="message" />
+                      {smsUnreadCount > 0 && (
+                        <span
+                          aria-hidden="true"
+                          className="absolute right-1.5 top-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-xs font-bold"
+                          style={{ backgroundColor: callTokens.badgeBg, color: callTokens.badgeText }}
+                        >
+                          {smsUnreadCount}
+                        </span>
+                      )}
+                    </button>
+                    <span className="text-sm" style={{ color: callTokens.textPrimary }}>
+                      메시지
+                    </span>
+                  </>
+                )}
+              </div>
+
+              {/* T40 fast-follow — 역방향 명시 전환 버튼(§13.1/AC-039 · "채팅으로" — 현행 "메시지로" 대체, 2행 1의
+                  "메시지"와 혼동 방지 UX-014 v1.33 (4)). 정방향 "전화로 확인"(session/messenger/page.tsx)과 대칭이며
+                  scenario.channel==="messenger"(메신저 콘텐츠가 실제로 존재하는 시나리오)일 때만 노출한다 — 서버
+                  (requestReverseEscalation)도 동일 조건을 재검증하므로 이중 방어다. */}
+              <div className="flex min-h-[98px] flex-col items-center gap-1.5">
+                {scenario.channel === "messenger" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void handleRequestReverseEscalation()}
+                      disabled={switchingToMessenger}
+                      aria-label="채팅으로 — 메시지 화면으로 전환"
+                      className="flex h-[72px] w-[72px] items-center justify-center rounded-full transition active:scale-95 disabled:opacity-50"
+                      style={{ backgroundColor: callTokens.gridButtonBg, color: callTokens.gridIcon }}
+                    >
+                      {switchingToMessenger ? (
+                        <span
+                          aria-hidden="true"
+                          className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                        />
+                      ) : (
+                        <PhoneIcon name="chat" />
+                      )}
+                    </button>
+                    <span className="text-sm" style={{ color: callTokens.textPrimary }}>
+                      채팅으로
+                    </span>
+                  </>
+                )}
+              </div>
+
+              {/* 2행 3 — 빈 칸(동작 없는 버튼을 채워 넣지 않는다 · 초점 대상 0). */}
+              <div aria-hidden="true" className="min-h-[98px]" />
+            </div>
           )}
 
-          {/* T40 fast-follow — 역방향 전환("메시지로 전환") 오류만 컨트롤 행 위에 상시 노출.
+          {/* T40 fast-follow — 역방향 전환("채팅으로") 오류만 종료 버튼 위에 상시 노출.
               메신저 채팅으로 이어질 수 있는 시나리오(scenario.channel==="messenger", 즉 메신저→
-              보이스로 정방향 에스컬레이션된 세션)에서만 아래 버튼 자체가 보이므로, 이 오류 문구도
+              보이스로 정방향 에스컬레이션된 세션)에서만 위 버튼 자체가 보이므로, 이 오류 문구도
               같은 조건에서만 의미가 있다. */}
           {scenario.channel === "messenger" && switchError && (
-            <p role="alert" className="mb-3 text-center text-xs leading-relaxed text-[#F0A79E]">
+            <p role="alert" className="mt-3 px-6 text-center text-xs leading-relaxed text-[#F0A79E]">
               {switchError}
             </p>
           )}
@@ -1760,112 +2174,42 @@ export default function SessionCallPage() {
               Step 1 / P-32)은 완전히 삭제됐다. 게이트 도달은 이제 참가자 탭이 아니라 위 자동 전환
               effect가 대신 처리한다(계열 A·B 공통) — 참가자가 "선택"하는 행위 자체가 사라졌다. */}
           {verifyError && !verifyOverlayOpen && (
-            <p role="alert" className="mb-3 text-center text-xs leading-relaxed text-[#F0A79E]">
+            <p role="alert" className="mt-3 px-6 text-center text-xs leading-relaxed text-[#F0A79E]">
               {verifyError}
             </p>
           )}
 
-          {/* 실제 폰 통화의 컨트롤 행: 음소거 · 통화 종료(빨강, 가운데) · 키패드 · (해당 시) 메시지로
-              전환. 가운데 빨강 버튼이 AC-006의 "상시 즉시 종료" 컨트롤을 겸한다 — 별도 "훈련 종료"
-              버튼을 두면 통화 화면처럼 보이지 않는다는 피드백을 반영하되, 종료 수단은 모든
-              상태에서 한 번의 탭으로 도달 가능하다는 요건은 그대로 지킨다. */}
-          <div className="flex items-end justify-center gap-9">
-            <div className="flex flex-col items-center gap-2">
+          {/* ⑧ 통화 종료(UX-014 v1.33 (2) ⑧ · AC-006) — 가운데 76px 빨강 · 내려놓은 수화기 아이콘 · 아래 "종료".
+              **어느 상태(키패드 열림 포함)에서도 이 자리 그대로**이고 이름 "통화 종료 — 훈련 종료"는 무변경(M-7 ·
+              G441 — 이 리터럴은 이 파일에 둔다, §74.4 R-3). 키패드가 열려 있으면 오른쪽 아래 "숨기기"(48px)가
+              그리드로 되돌린다. */}
+          <div className="relative mt-6 flex flex-col items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => void handleEndTraining()}
+              aria-label="통화 종료 — 훈련 종료"
+              className="flex h-[76px] w-[76px] items-center justify-center rounded-full shadow-lg transition active:scale-95"
+              style={{ backgroundColor: callTokens.end, color: callTokens.roundIcon }}
+            >
+              <PhoneIcon name="end-call" size={32} />
+            </button>
+            <span className="text-sm" style={{ color: callTokens.textPrimary }}>
+              종료
+            </span>
+            {showTextInput && (
               <button
                 type="button"
-                onClick={handleToggleMute}
-                aria-pressed={muted}
-                aria-label={muted ? "음소거 해제" : "음소거"}
-                className={`flex h-14 w-14 items-center justify-center rounded-full text-xl transition active:scale-95 ${
-                  muted ? "bg-white text-[#22303A]" : "bg-[#41525E] text-[#C9D4DB]"
-                }`}
+                onClick={() => setShowTextInput(false)}
+                className="absolute right-6 top-3.5 min-h-[48px] px-3 text-base font-semibold"
+                style={{ color: callTokens.textPrimary }}
               >
-                <span aria-hidden="true">{muted ? "🔇" : "🎙"}</span>
+                숨기기
               </button>
-              <span className="text-xs text-[#C9D4DB]">{muted ? "음소거 중" : "음소거"}</span>
-            </div>
-
-            <div className="flex flex-col items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void handleEndTraining()}
-                aria-label="통화 종료 — 훈련 종료"
-                className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[#C6392F] text-3xl shadow-lg transition active:scale-95"
-              >
-                <span aria-hidden="true">✆</span>
-              </button>
-              <span className="text-xs text-[#C9D4DB]">종료</span>
-            </div>
-
-            <div className="flex flex-col items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowTextInput((v) => !v)}
-                aria-pressed={showTextInput}
-                aria-label="키패드 — 텍스트로 입력"
-                className={`flex h-14 w-14 items-center justify-center rounded-full text-xl transition active:scale-95 ${
-                  showTextInput ? "bg-white text-[#22303A]" : "bg-[#41525E] text-[#C9D4DB]"
-                }`}
-              >
-                <span aria-hidden="true">⌨</span>
-              </button>
-              <span className="text-xs text-[#C9D4DB]">키패드</span>
-            </div>
-
-            {/* T68 — "문자함"(N) 상시 컨트롤(UX-014 v1.11 추가). 문자가 1건 이상 도착한 뒤부터
-                남아 언제든 UX-027을 다시 연다(미확인 수 배지). 라우팅 없음(D-35). */}
-            {inCallSms.length > 0 && (
-              <div className="flex flex-col items-center gap-2">
-                <button
-                  type="button"
-                  onClick={(event) => handleOpenSmsOverlay(event.currentTarget)}
-                  aria-label={`문자함 열기 — 도착 ${inCallSms.length}건, 미확인 ${smsUnreadCount}건`}
-                  className="relative flex h-14 w-14 items-center justify-center rounded-full bg-[#41525E] text-xl text-[#C9D4DB] transition active:scale-95"
-                >
-                  <span aria-hidden="true">✉</span>
-                  {smsUnreadCount > 0 && (
-                    <span
-                      aria-hidden="true"
-                      className="absolute -right-0.5 -top-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#C6392F] px-1 text-xs font-bold text-white"
-                    >
-                      {smsUnreadCount}
-                    </span>
-                  )}
-                </button>
-                <span className="text-xs text-[#C9D4DB]">문자함</span>
-              </div>
-            )}
-
-            {/* T40 fast-follow — 역방향 명시 전환 버튼("메시지로 전환", §13.1/AC-039). 정방향
-                "전화로 확인"(session/messenger/page.tsx)과 대칭이지만, 이쪽은 UX 설계 문서가 없어
-                버튼만(구조화 신호·max-turn 폴백 없음) 최소 배선한다. scenario.channel==="messenger"
-                (메신저 콘텐츠가 실제로 존재하는 시나리오 — 현재는 메신저→보이스로 정방향
-                에스컬레이션된 세션만 해당)일 때만 노출한다 — 서버(requestReverseEscalation)도
-                동일 조건을 재검증하므로 이중 방어다. */}
-            {scenario.channel === "messenger" && (
-              <div className="flex flex-col items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleRequestReverseEscalation()}
-                  disabled={switchingToMessenger}
-                  aria-label="메시지 화면으로 전환"
-                  className="flex h-14 w-14 items-center justify-center rounded-full bg-[#41525E] text-xl text-[#C9D4DB] transition active:scale-95 disabled:opacity-50"
-                >
-                  {switchingToMessenger ? (
-                    <span
-                      aria-hidden="true"
-                      className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-                    />
-                  ) : (
-                    <span aria-hidden="true">💬</span>
-                  )}
-                </button>
-                <span className="text-xs text-[#C9D4DB]">메시지로</span>
-              </div>
             )}
           </div>
         </div>
       )}
+      </div>
 
       {/* ⚠️ T68/UX-027 — 문자 오버레이는 **세션 컴포넌트(위)의 형제 노드**로 조건부 렌더된다.
           early return·상위 래퍼·`key` 변경·router.push 중 어느 하나라도 하면 GeminiVoiceSession/
@@ -1874,8 +2218,10 @@ export default function SessionCallPage() {
       {smsOverlayOpen && (
         <InCallSmsOverlay
           messages={inCallSms}
+          // T190-5(§74.5 (2) · AC-092 (b)) — 통화 셸과 같은 스킨(한 세션 = 한 스킨).
+          skin={deviceSkin.skin}
           callerLabel={callerLabel}
-          elapsedLabel={formatElapsed(elapsedSec)}
+          elapsedLabel={formatCallElapsed(elapsedSec)}
           scammerCaption={pillCaption}
           onClose={handleCloseSmsOverlay}
           onEndTraining={() => void handleEndTraining()}
@@ -1896,7 +2242,7 @@ export default function SessionCallPage() {
         <VerifyCallOverlay
           offer={verifyOffer}
           callerLabel={callerLabel}
-          elapsedLabel={formatElapsed(elapsedSec)}
+          elapsedLabel={formatCallElapsed(elapsedSec)}
           dialing={verifyDialing}
           errorMessage={verifyError}
           onClose={handleCloseVerifyOverlay}

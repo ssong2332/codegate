@@ -19,8 +19,8 @@ import {
   type ScanHit,
 } from "../sourcescan/scanSource.ts";
 
-const page = readFileSync("src/app/session/play/page.tsx", "utf8");
-const overlay = readFileSync("src/components/InCallSmsOverlay.tsx", "utf8");
+const page = readFileSync("src/app/session/play/page.tsx", "utf8").replace(/\r\n/g, "\n");
+const overlay = readFileSync("src/components/InCallSmsOverlay.tsx", "utf8").replace(/\r\n/g, "\n");
 
 /** 금지 토큰 검사는 **주석을 제외한 실제 코드**만 본다 — 이 저장소는 "왜 하지 않는가"를 주석에
  *  길게 남기는 관례라, 주석까지 세면 근거를 적었다는 이유로 테스트가 깨진다
@@ -74,12 +74,56 @@ test("[AC-059] 문자 오버레이는 라우트가 아니다 — 신규 라우�
   assert.ok(!openHandler.includes("router.push("), "열기/닫기는 상태만 바꾼다");
 });
 
-test("[AC-059/§15.1.3] 오버레이 상태는 마이크 게이팅에만 들어가고 타이머·한도 종료에는 들어가지 않는다", () => {
-  // 마이크 입력만 정지 — 두 세션 컴포넌트 모두에 오버레이 상태가 muted와 함께 전달돼야 한다.
-  // ⚠️ T83(§16.2)에서 확인 오버레이가 **같은 규칙**으로 추가됐다: `muted || smsOverlayOpen ||
-  // verifyOverlayOpen`. 검사를 느슨하게 푼 것이 아니라 **두 오버레이 모두**를 요구하도록 좁혔다.
-  const mutedProps = page.match(/muted=\{muted \|\| smsOverlayOpen \|\| verifyOverlayOpen\}/g) ?? [];
-  assert.equal(mutedProps.length, 2, "실시간 두 경로 모두 마이크만 게이팅해야 한다");
+// ⭐ T190-3(UX D-99 · PRD AC-093 (d) · docs/Architecture.md §74.6 ⑥ · §74.13 "§15.1.3 마이크 게이팅" 행 · G452) —
+// 이 단언을 **반전**했다(같은 커밋). 문자함이 열려도 마이크를 음소거하지 않는다 — 실시간·폴백 두 경로 모두.
+// 확인 오버레이(UX-031)의 게이팅은 D-99 대상이 아니라 **유지**를 단언한다. 판정은 아래 함수 하나이고 본 단언과
+// 역검증(옛 식을 되살린 사본)이 같은 함수를 쓴다. 타이머·한도 단언(아래)은 무변경이다.
+function micGatingViolations(source: string): string[] {
+  const code = codeOnly(source);
+  const out: string[] = [];
+  const allMuted = code.match(/muted=\{[^}]*\}/g) ?? [];
+  const expected = allMuted.filter((m) => m === "muted={muted || verifyOverlayOpen}");
+  if (expected.length !== 2) out.push(`muted={muted || verifyOverlayOpen}가 ${expected.length}회다(정확히 2회 — 실시간 두 경로)`);
+  if (allMuted.some((m) => m.includes("smsOverlayOpen"))) out.push("muted= 식에 smsOverlayOpen이 있다(D-99 위반)");
+  // 폴백 자동청취 effect의 조건·의존성에 문자함 상태가 없다(확인 오버레이는 있다).
+  const autoStart = code.indexOf("useEffect(() => {\n    if (callMode !== \"fallback\" || phase !== \"live\"");
+  const autoBlock = autoStart >= 0 ? code.slice(autoStart, code.indexOf("]);", autoStart) + 3) : "";
+  if (!autoBlock) out.push("폴백 자동청취 effect를 찾지 못했다");
+  else {
+    if (autoBlock.includes("smsOverlayOpen")) out.push("자동청취 effect가 smsOverlayOpen으로 게이팅한다(D-99 위반)");
+    if (!autoBlock.includes("verifyOverlayOpen")) out.push("자동청취 effect의 확인 오버레이 게이팅이 사라졌다(유지 대상)");
+  }
+  // 문자함을 여는 핸들러 안에서 STT를 멈추지 않는다.
+  const openSms = code.slice(code.indexOf("const handleOpenSmsOverlay"), code.indexOf("const handleCloseSmsOverlay"));
+  if (openSms.includes("speech.stop(")) out.push("handleOpenSmsOverlay가 speech.stop()을 부른다(D-99 위반)");
+  // 확인 오버레이를 여는 핸들러의 STT 정지는 유지된다.
+  const openVerify = code.slice(code.indexOf("const handleOpenVerifyOverlay"), code.indexOf("const handleCloseVerifyOverlay"));
+  if (!openVerify.includes("speech.stop(")) out.push("확인 오버레이의 STT 정지가 사라졌다(유지 대상)");
+  return out;
+}
+
+test("[T190/G452 · AC-093 (d)] 문자함 열림은 마이크를 게이팅하지 않는다 — 확인 오버레이 게이팅은 유지", () => {
+  assert.deepEqual(micGatingViolations(page), []);
+});
+
+test("[T190/G452 역검증 — AC-093 (g)ⓐ] 옛 식 `muted || smsOverlayOpen || verifyOverlayOpen`을 되살린 사본은 실패한다", (t) => {
+  const poisoned = page.split("muted={muted || verifyOverlayOpen}").join("muted={muted || smsOverlayOpen || verifyOverlayOpen}");
+  assert.notEqual(poisoned, page, "오염 지점을 찾지 못했다");
+  const poisonedStt = page.replace(
+    "    smsTriggerRef.current = trigger;\n",
+    '    smsTriggerRef.current = trigger;\n    if (callMode === "fallback") speech.stop();\n',
+  );
+  assert.notEqual(poisonedStt, page, "오염 지점(handleOpenSmsOverlay)을 찾지 못했다");
+  const normal = micGatingViolations(page);
+  const a = micGatingViolations(poisoned);
+  const b = micGatingViolations(poisonedStt);
+  t.diagnostic(`[G452] 정상 ${normal.length}건 / 옛 muted 식 ${a.length}건 / 문자함 열 때 STT 정지 ${b.length}건`);
+  assert.deepEqual(normal, []);
+  assert.ok(a.length >= 1);
+  assert.ok(b.length >= 1);
+});
+
+test("[AC-059/§15.1.3] 오버레이 상태는 타이머·한도 종료에 들어가지 않는다(마이크 게이팅은 위 G452가 본다)", () => {
 
   // 경과 타이머 effect의 의존성에 오버레이 상태가 들어가면 통화 타이머가 멈춘다.
   const timerStart = page.indexOf("// 통화 경과 타이머");
@@ -423,7 +467,7 @@ test("[T103/G79·G93] 필 자막은 **사기범 턴만** 받는다(참가자 PII
 });
 
 test("[T103/§23.6 A2] 신설 전환 클래스는 **전부** prefers-reduced-motion에서 꺼진다", () => {
-  const css = readFileSync("src/app/globals.css", "utf8");
+  const css = readFileSync("src/app/globals.css", "utf8").replace(/\r\n/g, "\n");
   // 화면이 실제로 쓰는 전환 클래스만 대상으로 한다(정의만 하고 안 쓰는 클래스는 검증 의미가 없다).
   const used = [
     ...new Set(
@@ -552,4 +596,73 @@ test("[P-4/P-20] 미확인 문자가 0건이면 aria-live 영역이 아무것도
     !/\{latestSms \?/.test(liveBlock),
     "latestSms로 게이팅하면 전부 읽은 뒤에도 '문자 0건이 도착했습니다.'가 계속 읽힌다",
   );
+});
+
+// ── T190-5 — G459 배선 · 두 보기 토글 · 통화 표시줄 높이 상한(docs/Architecture.md §74.8 · §74.14 G459/G460) ──────
+/** G459 배선 위반 — 본문 분할을 쓰고, 인증번호 박스는 분할이 null일 때만 그린다(인증번호가 화면 어디에도 없는 상태 0). */
+function otpWiringViolations(source: string): string[] {
+  const code = codeOnly(source);
+  const out: string[] = [];
+  if (!code.includes("splitBodyAtOtp(sms.body, sms.otpCode)")) out.push("본문 인증번호 분할(splitBodyAtOtp)을 쓰지 않는다");
+  if (!code.includes('sms.kind === "otp" && sms.otpCode && otpSplit === null && (')) out.push("인증번호 박스가 분할 실패(null) 폴백으로만 그려지지 않는다");
+  if (!code.includes("{otpSplit.code}")) out.push("분할 성공 시 본문 안 인증번호를 그리지 않는다");
+  return out;
+}
+
+test("[T190/G459 배선 · AC-061] 문자함 — 인증번호는 본문 안 1회 · 박스는 본문에 코드가 없을 때만", () => {
+  assert.deepEqual(otpWiringViolations(overlay), []);
+});
+
+test("[T190/G459 역검증] 박스 폴백 분기를 지운 사본 · 박스를 항상 그리는 사본은 각각 실패한다", () => {
+  const withoutFallback = overlay.replace('sms.kind === "otp" && sms.otpCode && otpSplit === null && (', "false && (");
+  const alwaysBox = overlay.replace('sms.kind === "otp" && sms.otpCode && otpSplit === null && (', 'sms.kind === "otp" && sms.otpCode && (');
+  assert.notEqual(withoutFallback, overlay, "오염 지점을 찾지 못했다");
+  assert.equal(otpWiringViolations(withoutFallback).length, 1);
+  assert.equal(otpWiringViolations(alwaysBox).length, 1);
+});
+
+test("[T190/G460 · D-94] 문자함과 랜딩은 대화상자 하나 안의 두 보기 — hidden 토글 · 랜딩은 in-call-sms 진입", () => {
+  const code = codeOnly(overlay);
+  assert.equal(code.split('role="dialog"').length - 1, 1, "대화상자는 하나뿐이어야 한다(중첩 aria-modal 0)");
+  assert.ok(code.includes('hidden={view !== "thread"}'), "스레드 보기가 hidden으로 토글돼야 한다");
+  assert.ok(code.includes('hidden={view !== "landing"}'), "랜딩 보기가 hidden으로 토글돼야 한다(숨김 마운트 — 입력값 유지)");
+  assert.ok(code.includes('entrySurface="in-call-sms"'), "문자함 안 랜딩은 in-call-sms 진입이어야 한다(대화상자 역할 없음)");
+  assert.ok(code.includes('onHide={() => setView("thread")}'), "브라우저 뒤로 '문자'는 숨기기만 한다(언마운트 아님)");
+  // 통화 표시줄 자막 — 최대 2줄 · 높이 36px 상한(옛 `line-clamp-2 block` 충돌 제거 — 문제 2c).
+  assert.ok(code.includes("line-clamp-2 max-h-[36px]"), "통화 표시줄 자막 2줄·36px 상한");
+  assert.equal(code.includes("line-clamp-2 block"), false, "line-clamp를 display:block이 덮는 옛 충돌이 남았다");
+});
+
+// ── reviewer Major — 보기 전환 포커스 · 포커스 트랩 안쪽 감싸기(UX-027/UX-023 v1.33 · AC-006 · WCAG 2.4.3) ──────────
+/** 위반 목록 — 본 단언과 역검증이 같은 함수를 쓴다. */
+function viewFocusViolations(source: string): string[] {
+  const code = codeOnly(source);
+  const out: string[] = [];
+  if (!code.includes("landingViewRef.current?.querySelector<HTMLElement>('[role=\"region\"]')?.focus();")) {
+    out.push("랜딩 보기로 바뀔 때 랜딩 영역으로 포커스를 옮기지 않는다");
+  }
+  if (!code.includes("returnFocusSmsIdRef.current = sms.smsId;")) out.push("랜딩을 연 링크를 기억하지 않는다");
+  if (!code.includes("if (trigger) trigger.focus();")) out.push("스레드로 돌아올 때 연 링크로 포커스를 되돌리지 않는다");
+  if (!code.includes("if (!active || !panelRef.current.contains(active)) {")) out.push("포커스가 패널 밖일 때 트랩이 안쪽으로 감싸지 않는다");
+  return out;
+}
+
+test("[T190/reviewer Major] 문자함↔랜딩 보기 전환 때 포커스가 body로 떨어지지 않는다 · 트랩은 패널 밖 포커스도 안쪽으로 감싼다", () => {
+  assert.deepEqual(viewFocusViolations(overlay), []);
+  // 랜딩 영역이 포커스를 받을 수 있어야 한다(이름 = A5 "{제목} 화면" — 새 문구 0).
+  const landing = codeOnly(readFileSync("src/components/MessengerFakeLanding.tsx", "utf8").replace(/\r\n/g, "\n"));
+  assert.ok(/role="region"[\s\S]{0,200}tabIndex=\{-1\}/.test(landing), "랜딩 영역에 tabIndex={-1}이 없다");
+});
+
+test("[T190/reviewer Major 역검증] 포커스 이동·되돌리기·트랩 보강을 각각 지운 사본은 실패한다", () => {
+  const cases: Array<[string, string]> = [
+    ["landingViewRef.current?.querySelector<HTMLElement>('[role=\"region\"]')?.focus();", ""],
+    ["if (trigger) trigger.focus();", ""],
+    ["if (!active || !panelRef.current.contains(active)) {", "if (false) {"],
+  ];
+  for (const [from, to] of cases) {
+    const poisoned = overlay.replace(from, to);
+    assert.notEqual(poisoned, overlay, `오염 지점을 찾지 못했다: ${from}`);
+    assert.equal(viewFocusViolations(poisoned).length, 1, `${from} 를 지웠는데 잡히지 않았다`);
+  }
 });

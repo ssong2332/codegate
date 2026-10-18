@@ -53,6 +53,12 @@ export type RealtimeVoiceSessionProps = {
   stopSignal: number;
   /** 통화 중 음소거 — 실제 마이크 입력을 끊는다. */
   muted: boolean;
+  /**
+   * ⭐ T190-3(docs/Architecture.md §74.3 표 S · G455) — 스피커 버튼의 음량 모드 값(통화 0.6 / 스피커 1.0).
+   * SDK `useConversation`의 `volume` 옵션으로 넘긴다 — SDK가 값이 바뀔 때마다 `setVolume({ volume })`을 부른다
+   * (`@elevenlabs/react` `useConversation.js` 판독 — 세션 시작 뒤에도 반영). 부재 = SDK 기본값.
+   */
+  outputVolume?: number;
 };
 
 // 사용자 파형 문턱값(2026-07-24) — ElevenLabs 문서 관례상 vadScore는 0.0(무음)~1.0(큰 목소리)
@@ -72,6 +78,7 @@ function SessionRunner({
   onUserSpeakingChange,
   stopSignal,
   muted,
+  outputVolume,
 }: RealtimeVoiceSessionProps) {
   // 사용자 발화 파형 인디케이터 상태 — 리렌더로 초기화되면 안 되므로 ref에 둔다(state가 아님).
   const userSpeakingRef = useRef(false);
@@ -79,6 +86,7 @@ function SessionRunner({
 
   const conversation = useConversation({
     micMuted: muted,
+    volume: outputVolume,
     onConnect: () => handlersRef.current.onActive(),
     onDisconnect: () => handlersRef.current.onEnded(),
     onError: () => handlersRef.current.onError(),

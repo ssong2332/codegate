@@ -15,6 +15,9 @@ export type InCallSmsView = {
   body: string;
   otpCode?: string;
   linkDisplayText?: string;
+  /** T190-2(§74.9 · D-101) — 말풍선 링크 줄에 보일 **가짜 주소**(`.invalid` 호스트 + 경로, 스킴 0). 서버가
+   *  `fakeLandingId`와 짝으로만 싣는다. 부재(옛 문서) → 화면은 `linkDisplayText`로 읽는다(`linkAddress ?? linkDisplayText`). */
+  linkAddress?: string;
   fakeLandingId?: string;
   /** T104 — 그 랜딩의 목업 종류. **서버가 확정해 내려준 값**이며 클라가 문자열로 추론하지 않는다
    *  (§15.9.1 R3). 부재 → `credential-form`(하위호환 읽기 규칙, §15.9.1 R2). */
@@ -103,4 +106,64 @@ export function takeNewlyVisibleSmsIds(
     picked.push(smsId);
   }
   return picked;
+}
+
+// ── T190-1(docs/Architecture.md §74.4 · G459 · UX D-89/D-90 · UX-027 v1.33 (3)(4)) ───────────────
+
+/**
+ * 본문 안 인증번호를 **정확 일치 첫 1회**로 갈라낸다(D-90 — 본문 안에서 강조 표시하고 큰 박스를 따로 두지
+ * 않는다). 본문에 코드가 없으면(또는 코드가 비면) `null` → 화면은 기존 인증번호 박스로 폴백한다 —
+ * **인증번호가 화면 어디에도 없는 상태 0**(AC-061 · G459).
+ * ⛔ 정규식·부분 패턴으로 "숫자처럼 보이는 것"을 찾지 않는다 — 서버가 준 `otpCode` 문자열 그대로만 찾는다.
+ */
+export function splitBodyAtOtp(
+  body: string,
+  otpCode: string | undefined,
+): { before: string; code: string; after: string } | null {
+  if (!otpCode) return null;
+  const at = body.indexOf(otpCode);
+  if (at < 0) return null;
+  return { before: body.slice(0, at), code: otpCode, after: body.slice(at + otpCode.length) };
+}
+
+/** 여러 발신처가 섞인 스레드의 헤더 라벨(UX-027 v1.33 (3)) — 이 낱말 외의 새 문구를 만들지 않는다. */
+export const MIXED_THREAD_HEADER_LABEL = "메시지";
+
+/**
+ * 문자함 헤더 라벨 — 전부 같은 `senderLabel`이면 그 값, 아니면 `"메시지"`(이때 말풍선마다 발신처를 따로
+ * 표기한다 — UX-027 v1.33 (3)). 빈 목록이면 `"메시지"`.
+ */
+export function threadHeaderLabel(sorted: readonly InCallSmsView[]): string {
+  const first = sorted[0]?.senderLabel;
+  if (first === undefined) return MIXED_THREAD_HEADER_LABEL;
+  return sorted.every((item) => item.senderLabel === first) ? first : MIXED_THREAD_HEADER_LABEL;
+}
+
+// ── T190-5(UX-027 v1.33 (4) — 스레드 시각) ────────────────────────────────────────────────────────
+
+/** iOS형 구분줄을 다시 넣는 간격(UX-027 v1.33 (4) — 앞 문자와 5분 이상 떨어질 때만). */
+export const TIME_SEPARATOR_GAP_MS = 5 * 60 * 1000;
+
+/**
+ * 도착 시각 → `"오후 3:05"` 꼴(기기 현지 시각 · 신규 데이터 0 — `arrivedAtMs`만 쓴다). 서버 시각이 아직 반영되지
+ * 않았으면(`arrivedAtMs` 0 이하) `null` — 화면은 시각을 그리지 않는다(지어내지 않는다).
+ * @param tzOffsetMinutes 테스트용 고정 오프셋(`Date#getTimezoneOffset`과 같은 부호). 생략하면 기기 현지 시각.
+ */
+export function formatSmsClock(arrivedAtMs: number, tzOffsetMinutes?: number): string | null {
+  if (!(arrivedAtMs > 0)) return null;
+  const date = new Date(arrivedAtMs);
+  const offset = tzOffsetMinutes ?? date.getTimezoneOffset();
+  const local = new Date(arrivedAtMs - offset * 60 * 1000);
+  const hours24 = local.getUTCHours();
+  const minutes = local.getUTCMinutes();
+  const period = hours24 < 12 ? "오전" : "오후";
+  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+  return `${period} ${hours12}:${minutes.toString().padStart(2, "0")}`;
+}
+
+/** iOS형 구분줄 판정 — 첫 문자이거나 앞 문자와 5분 이상 떨어졌을 때(시각을 모르면 그리지 않는다). */
+export function needsTimeSeparator(previousArrivedAtMs: number | null, arrivedAtMs: number): boolean {
+  if (!(arrivedAtMs > 0)) return false;
+  if (previousArrivedAtMs === null || !(previousArrivedAtMs > 0)) return true;
+  return arrivedAtMs - previousArrivedAtMs >= TIME_SEPARATOR_GAP_MS;
 }
