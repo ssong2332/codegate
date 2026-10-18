@@ -4,6 +4,8 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ✅ **실기 결과(2026-10-18 덧붙임)**: 아래 블록(PR #301)은 main `9971f89`로 병합·Hosting 배포됐고, User가 갤럭시 S25 · 네이버 웨일에서 기본 설정(A)으로 AI 음성이 들리는 것을 확인했다 — **웨일 무음 해소 확인(A), 원인 가설은 미분리**(B·C·D 비교 미실시 · Architecture §74.23).
+
 > ⚠️ **이 블록(2026-10-18, 브랜치 `claude/fix-realtime-prefetch-race`, base `b99f239`)**: 미병합 · 배포 0회 · **실기 미검증** — 웨일 무음이 고쳐졌는지는 갤럭시 S25 웨일 A/B 확인 전까지 판정하지 않는다(Architecture §74.23 (4)).
 
 ### Fixed
