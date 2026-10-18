@@ -20,6 +20,14 @@ test("[언어] 규칙 문면: 항상 한국어로만 말하고, 못 알아들었
   assert.match(LANGUAGE_RULE, /한국어로 되묻는다/);
 });
 
+test("[언어] 실측 사례 — \"그래요?\"가 \"creo?\"(스페인어)로 전사돼 모델이 스페인어로 답함: 외국어·뜻 없는 소리는 한국어 짧은 되물음으로 간주하라고 지시한다", () => {
+  assert.match(LANGUAGE_RULE, /상대는 한국어로 말하고 있다/);
+  assert.match(LANGUAGE_RULE, /외국어 단어나 뜻 없는 소리로 들리면/);
+  for (const shortReply of ["그래요?", "네?", "뭐라고요?"]) assert.ok(LANGUAGE_RULE.includes(shortReply), shortReply);
+  assert.match(LANGUAGE_RULE, /스페인어/);
+  assert.match(LANGUAGE_RULE, /그 언어를 따라가지 말고/);
+});
+
 test("[언어] 전 시나리오 × 전 난이도 × Live/텍스트 옵션에서 규칙이 정확히 1번 실리고, 가드레일은 여전히 맨 끝이다", () => {
   const ids = Object.keys(SCENARIO_PROMPTS);
   assert.ok(ids.length >= 10, `시나리오 수집이 ${ids.length}건 — 거짓 초록 방지`);

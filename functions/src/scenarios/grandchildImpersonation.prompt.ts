@@ -55,9 +55,9 @@
 //  한국어로 되묻는다)을 넣었다 → **조립 산출물이 바뀐다 → 재생성 대기 중** — 실시간 통화(ElevenLabs clone)에는
 //  아직 반영되지 않았다. 재생성 완료 후에만 "재생성 완료"로 갱신할 것.
 //  재생성 담당자 대조값(같은 방법, 직전 값은 base `b99f239`):
-//  beginner len=5910 sha=0041d8678c3c2d76 (직전 5661 · aa171a005814c927) ·
-//  intermediate len=5170 sha=7bbad5354b14068e (직전 4921 · c499265c6fbb696f) ·
-//  advanced len=6292 sha=7579a69b7a693d25 (직전 6043 · c061787f6f137505).)
+//  beginner len=6090 sha=675df2b30e3d2a1e (직전 5661 · aa171a005814c927) ·
+//  intermediate len=5350 sha=c53aead78efdf0d8 (직전 4921 · c499265c6fbb696f) ·
+//  advanced len=6472 sha=da98590896fc3d4e (직전 6043 · c061787f6f137505).)
 import type { ScenarioPromptDoc } from "../shared/types";
 
 // src/content/scenarios/grandchildImpersonation.ts의 상수와 동일한 문자열이어야 한다.

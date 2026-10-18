@@ -58,9 +58,9 @@
 //  한국어로 되묻는다)을 넣었다 → **조립 산출물이 바뀐다 → 재생성 대기 중** — 실시간 통화(ElevenLabs clone)에는
 //  아직 반영되지 않았다. 재생성 완료 후에만 "재생성 완료"로 갱신할 것.
 //  재생성 담당자 대조값(같은 방법, 직전 값은 base `b99f239`):
-//  beginner len=6435 sha=81c419ac475fdeba (직전 6186 · 33a0ef828e631e4c) ·
-//  intermediate len=5695 sha=7befe18412d13db1 (직전 5446 · 2d40298b9a2c3951) ·
-//  advanced len=6817 sha=965c0dbd309e6c0d (직전 6568 · 0f52f9fce8b897d4).)
+//  beginner len=6615 sha=2d9b470954d60e29 (직전 6186 · 33a0ef828e631e4c) ·
+//  intermediate len=5875 sha=298ce096e3f9d72f (직전 5446 · 2d40298b9a2c3951) ·
+//  advanced len=6997 sha=75c3eeb15a858ef7 (직전 6568 · 0f52f9fce8b897d4).)
 import type { ScenarioPromptDoc } from "../shared/types";
 
 // src/content/scenarios/familyAccidentDeepvoice.ts의 FAMILY_ACCIDENT_SCENARIO_ID와 동일한 문자열
