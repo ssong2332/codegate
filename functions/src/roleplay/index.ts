@@ -12,7 +12,7 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { maskPII } from "../guardrails";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
-import { completeWithFallback, getLlmClient } from "../llm";
+import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from "../llm";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { findDueInCallSms, hasInCallSms } from "../scenarios/inCallSms";
@@ -33,6 +33,7 @@ import { transitionChannel } from "../session/channelTransition";
 import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
 import { wasTurnInstructionSpoken } from "./announceMarking";
 import { extractEscalationSignal } from "./escalationSignal";
+import { isFirstUserTurn } from "./firstTurn";
 import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
@@ -269,7 +270,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       turnInstruction = verifyItem?.announceInstruction;
     }
 
-    const completion = await completeWithFallback(getLlmClient(), {
+    // 첫 사용자 턴만 LLM 시간 제한 20초(2026-10-18, 사용자 결정 C — llm/index.ts LLM_FIRST_TURN_TIMEOUT_MS).
+    // AC-004 목표(95% ≤10초)의 예외 1건 — 첫 턴은 Gemini 지연이 반복돼 10초에서 Mock으로 강등됐고,
+    // 사용자는 문맥 없는 Mock 대사보다 더 기다리는 쪽을 골랐다. 20초는 onCall 기본 실행 제한(60초) 안이다.
+    // storedHistory는 이번 사용자 메시지를 쓰기 **전**에 읽은 이력이다(위 턴 확보 트랜잭션).
+    const llmClient = isFirstUserTurn(storedHistory) ? getLlmClient(LLM_FIRST_TURN_TIMEOUT_MS) : getLlmClient();
+    const completion = await completeWithFallback(llmClient, {
       // T85(§17.3 호출부 3곳 중 "텍스트 턴", G63) — 고급에서 D4(절차·서류 정당화) 블록을 얹을
       // 시나리오인지. 세 호출부가 같은 판정 함수를 쓰지 않으면 "텍스트 턴은 고급인데 오프닝만
       // 축소" 같은 비대칭이 **에러 없이** 생긴다(기본값이 축소형이다).

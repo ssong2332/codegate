@@ -13,7 +13,7 @@
 // role 분리+구분자 감싸기가 구조적 1차 방어다.
 import { logger } from "firebase-functions";
 import { GoogleGenAI } from "@google/genai";
-import type { Content } from "@google/genai";
+import type { Content, GenerateContentResponseUsageMetadata } from "@google/genai";
 import type { LlmClient, LlmCompletionInput, LlmCompletionResult, LlmMessage } from "./types";
 
 /** 텍스트 생성용 Gemini 모델 — 음성 전용 모델(GEMINI_LIVE_MODEL)과 다르다(realtime과 별개 경로).
@@ -125,12 +125,24 @@ export class GeminiLlmClient implements LlmClient {
         ? input.messages.map(toGeminiContent)
         : [{ role: "user", parts: [{ text: OPENING_TRIGGER_TURN }] }];
 
+    // H2(2026-10-18) — 스트림으로 받아 **첫 청크 도착 시각(ttfbMs)**을 잰다. "Gemini가 늦게 시작했나
+    // (ttfbMs가 큼)" vs "생성·전송이 늦었나/함수 쪽이 늦었나(ttfbMs 작고 elapsedMs 큼)"를 로그로 가른다.
+    // 청크 텍스트를 모두 이어 붙이므로 돌려주는 `text`는 generateContent와 같다. 재시도는 여전히 없다.
     const startedAt = Date.now();
-    const response = await client.models.generateContent({
+    const stream = await client.models.generateContentStream({
       model: GEMINI_TEXT_MODEL,
       contents,
       config: { systemInstruction: input.systemPrompt },
     });
+    let ttfbMs: number | undefined;
+    let text = "";
+    let usage: GenerateContentResponseUsageMetadata | undefined;
+    for await (const chunk of stream) {
+      if (ttfbMs === undefined) ttfbMs = Date.now() - startedAt;
+      text += chunk.text ?? "";
+      // usage는 마지막 청크 것이 누적 최종값이다(있는 청크만 덮어쓴다).
+      if (chunk.usageMetadata) usage = chunk.usageMetadata;
+    }
     const elapsedMs = Date.now() - startedAt;
 
     // §56.8 A안(관측 최소 증분) — **성공 경로의 유일한 로그다.** 그 전까지 이 클래스는 성공에
@@ -139,17 +151,17 @@ export class GeminiLlmClient implements LlmClient {
     // 실제로 3주 가까이 100% 강등을 가렸다). 강등율의 **분모**를 만드는 것이 이 한 줄의 목적이다.
     // ⛔ **G170/ADR-0004 계승 — 수치와 모델명만 싣는다.** systemPrompt·messages·응답 본문·API 키는
     // 어떤 형태로도 넣지 말 것(PII와 프롬프트 본문이 로그로 새는 경로가 된다).
-    const usage = response.usageMetadata;
     logger.info("Gemini 텍스트 생성 성공", {
       model: GEMINI_TEXT_MODEL,
       elapsedMs,
+      // 청크가 하나도 오지 않았으면(빈 스트림) 첫 바이트 시각이 없다 — 지어내지 않고 생략한다.
+      ...(ttfbMs === undefined ? {} : { ttfbMs }),
       // 추론 토큰은 모델·요청에 따라 아예 오지 않는다(그때는 필드 자체를 생략한다 — 0으로 채우면
       // "추론 안 함"과 "정보 없음"이 §56.5와 같은 종류로 구분 불가능해진다).
       ...(usage?.thoughtsTokenCount === undefined ? {} : { thoughtsTokenCount: usage.thoughtsTokenCount }),
       ...(usage?.totalTokenCount === undefined ? {} : { totalTokenCount: usage.totalTokenCount }),
     });
 
-    const text = response.text;
     if (!text) {
       throw new Error("Gemini 텍스트 응답이 비어 있습니다(candidates/safety 차단 가능성).");
     }
