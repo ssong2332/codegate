@@ -43,7 +43,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | uid | string | required, indexed | 소유자(귀속) |
 | scenarioId | string | required | 선택 시나리오 |
 | status | string | `created`\|`active`\|`ended` | ended 전이가 폐기 트리거(ADR-0003) |
-| endReason | string? | `user_ended`\|`completed`\|`deceived`\|`limit_reached` | AC-007 |
+| endReason | string? | `user_ended`\|`completed`\|`deceived`\|`limit_reached` ⇒ **(2026-10-19 T192 C1 증분)** + `scammer_ended` | AC-007. **T192 C1(Architecture §79.5 · AC-103 (e))**: `scammer_ended` = 사기범이 먼저 끊은 종료 — ⛔ 서버 승인 표식 `scammerHangup`(아래 T192 증분)이 **있을 때만** 기록되고, 표식 없이 요청되면 `user_ended`로 기록된다(`functions/src/session/endReason.ts:25-31`). `endSession`이 받는 값은 `user_ended`·`limit_reached`·`scammer_ended`뿐이다(그 밖 `invalid-argument` — `functions/src/session/index.ts:340-346`) ⇒ `completed`·`deceived`는 타입(`functions/src/shared/types.ts:30-37`)에 남지만 새로 기록되는 경로 0. ⛔ 리포트는 이 값을 읽지 않는다(G511) · 무백필 |
 | voiceId | string? | **폐기 시 클리어** | ElevenLabs 클론 voice(임시). AC-021 |
 | voiceProvider | string? | `mock`\|`elevenlabs` | 코드 정합(shared/types.ts T19) — voiceId를 만든 VoiceProvider(감사·목업 잔존 방어). UpdateRequests #3 반영 |
 | cloneStatus | string | `pending`\|`ready`\|`failed`\|`fallback` | UX-003 구독(DECISIONS #9) |
@@ -75,6 +75,13 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 |---|---|---|---|
 | difficultyLevel | string? | `beginner`\|`intermediate`\|`advanced` | 사용자가 UX-029에서 고른 훈련 강도. **부재→`intermediate`**(계산 기본값, 무백필). `createSession` 요청의 옵셔널 값을 서버가 enum 검증 후 기록하며, enum 밖·부재는 조용히 임의값으로 진행하지 않고 `intermediate`로 확정한다. 2인 챌린지 체험 세션은 `consentChallenge`가 `challenges.difficultyLevel`을 **복사**해 채운다(§15.3.2 — 복사하지 않으면 발신자 선택이 소실). ⚠️ 시나리오 메타의 기존 산문 필드 `difficulty`(예: "중간 — 감정적 압박이 강한 편입니다")와 **다른 축이며 이름을 겹치지 않는다**(§15.3.2, AC-002 무변경). 난이도는 압박 강도·요구 도달 속도·수법 은밀함만 바꾸고 **어떤 안전장치도 게이팅하지 않는다**(D-42/AC-050 — 강제는 프롬프트 조립 순서로, §15.5) |
 | fictionalBankName | string? | `shared/fictionalBank.ts` `FICTIONAL_BANK_NAMES` 중 하나 | **2026-10-18 증분(Architecture §81)** — 이 세션의 가상 은행명. `createSession`·`consentChallenge`가 생성 시 1회 기록하고 바꾸지 않는다. 문자 본문·사기범 대사·Live 프롬프트가 이 값으로 "OO은행" 자리표시자를 치환한다. **부재(옛 세션)→sessionId 해시로 결정**(무백필) · 목록 밖 값은 무시 |
+
+**T192 C1 사기범 끊기 증분(옵셔널, 하위호환 — Architecture.md §79.5 · AC-103 · 2026-10-19):**
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| scammerHangup | map? `{ acceptedAt: timestamp, kind: "goal"\|"give_up"\|"unspecified", path: "realtime"\|"fallback" }` | **서버만 write**(클라 write는 `firestore.rules:41-43` `allow write: if false`가 이미 전부 거부) · **부재 = 끊기 승인 없음** · 한 번 쓰면 덮어쓰지 않는다 | 사기범 먼저 끊기의 **서버 승인 표식** = `endReason: "scammer_ended"`의 서버측 근거(타입 `ScammerHangupMarker` `functions/src/shared/types.ts:38-46` · 필드 `:149`). 쓰는 곳: `requestScammerHangup` 트랜잭션에서 판정이 `accepted`일 때만 `path:"realtime"`(`functions/src/scammerHangup/commit.ts:84-88`) · `sendMessage` 폴백 신호 `path:"fallback"`은 **C3 — 미구현**. `acceptedAt` = 첫 승인 시각, `kind` = 모델이 보낸 사유(누락·오기입은 `unspecified`) — ⛔ **판정 입력이 아니다**(기록일 뿐 · §79.2). 읽는 곳: `endSession` 사유 강등(`functions/src/session/endReason.ts:29`) · 끊기 판정 8행 `already_accepted`(`commit.ts:80`). ⛔ 리포트(`functions/src/report/**`)는 읽지 않는다(G511 — `report/__tests__/endReasonIndependence.test.ts`). 세션을 끝내지 않는다(`status`·`endedAt`과 독립). read = 기존 세션 규칙(소유자) · 무백필 · 인덱스 불요(쿼리 0) |
+
+> ⛔ **등재하지 않는 필드(2026-10-19)**: §79.15 (2) ⓐ의 `inCallSms.transferAccount`는 **철회됐다**(§79.15 (6) 1번 — D-115 미리 채움 원천은 #311의 `inCallSms.bankName` · `accountNumber`, 아래 `inCallSms` 표). 이 문서에 그 필드를 만들지 않는다.
 
 #### `sessions/{sessionId}/messages/{messageId}`  — 대화 로그 (UX-006, AC-024)
 | Field | Type | Constraints | Description |

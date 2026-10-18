@@ -4,6 +4,17 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-19 추가분, 브랜치 `claude/t192-c1-hangup-decision`, 커밋 `5fbe4d0`, main `e9a4967` 병합 `e394840`)**: 아직 main에 병합되지 않았고 배포 0회, 라이브 미검증이다. **화면 변화 0** — 끊기 도구 선언·프롬프트·클라 종료 순서는 C2~C5(S5b 병합 뒤)에서 한다.
+
+### Added
+- **T192 C1 — 사기범이 먼저 끊기의 서버 기반**:
+  - **판정 함수 `decideScammerHangup`**: 10행 판정표. 하한은 사기범 4턴. 릴레이 중에는 마지막 화자만 끊을 수 있다(사용자 결정 2026-10-19). S7 전에는 해당 없음.
+  - **새 콜러블 `requestScammerHangup`**: 승인 표식 `scammerHangup`만 기록하고 세션은 끝내지 않는다.
+
+### Changed
+- **`endSession` 사유 허용목록**: 새 값 `scammer_ended`를 허용한다. 승인 표식 없이 오면 `user_ended`로 기록한다. 리포트 판정은 사유와 무관하다.
+- 테스트: functions 1102 → 1150 pass / 0 fail(main 병합 트리 · C1 신규 37 + #311분), 루트 697 / 0. lint·build 통과.
+
 > ⚠️ **이 블록(2026-10-18 추가분, 브랜치 `feat/fictional-bank-names`, base `733b9da`)**: 아직 main에 병합되지 않았고 배포 0회, 라이브 미검증이다.
 
 ### Changed
