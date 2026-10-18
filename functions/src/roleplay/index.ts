@@ -39,6 +39,7 @@ import { extractLinkMarker } from "./linkMarker";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
+import { resolveOtpCheckInstruction } from "./otpCheck";
 import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { speakerGenderFor } from "../realtime/scenarioVoice";
@@ -270,6 +271,18 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       turnInstruction = verifyItem?.announceInstruction;
     }
 
+    // ②-f 인증번호 대조(2026-10-18 사용자 신고 · Architecture §77) — 인증번호 문자가 이 세션에 도착한 뒤에는
+    // 매 턴 실제 번호와 "다르면 다시 불러 달라" 지시를 붙인다(이 경로는 지시가 그 턴에만 실리므로).
+    // 도착 전·인증번호 문자가 없는 시나리오는 지시도 Firestore 읽기도 없다(roleplay/otpCheck.ts 판정표).
+    const otpCheckInstruction = await resolveOtpCheckInstruction({
+      scenarioId: session.scenarioId,
+      scammerTurnNumber,
+      ...(deliveredSmsId ? { deliveredThisTurn: deliveredSmsId } : {}),
+      isDelivered: async (smsId) => (await sessionRef.collection("inCallSms").doc(smsId).get()).exists,
+      callTransferred: verifyState?.placed === true,
+    });
+    const promptTurnInstruction = [turnInstruction, otpCheckInstruction].filter(Boolean).join("\n") || undefined;
+
     // 첫 사용자 턴만 LLM 시간 제한 20초(2026-10-18, 사용자 결정 C — llm/index.ts LLM_FIRST_TURN_TIMEOUT_MS).
     // AC-004 목표(95% ≤10초)의 예외 1건 — 첫 턴은 Gemini 지연이 반복돼 10초에서 Mock으로 강등됐고,
     // 사용자는 문맥 없는 Mock 대사보다 더 기다리는 쪽을 골랐다. 20초는 onCall 기본 실행 제한(60초) 안이다.
@@ -289,7 +302,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         l3Procedural: isL3Procedural(session.scenarioId),
         identityCheckAllowed: asksIdentityCheck(session.scenarioId),
         speakerGender: speakerGenderFor(session.scenarioId),
-        ...(turnInstruction ? { turnInstruction } : {}),
+        ...(promptTurnInstruction ? { turnInstruction: promptTurnInstruction } : {}),
       }),
       messages: llmHistory,
       mockTacticHints: scenarioPrompt.weakenedTactics,
