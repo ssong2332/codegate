@@ -1230,6 +1230,7 @@ function stackingDirectives(text: string): string[] {
 //   | `l3Procedural` | **고급에만 곱한다**(난이도 변형 4 → 5) | `buildDifficultyBlock`이 고급이 아니면 이 값을 **읽지 않는다**(`promptAssembly.ts:290-293`). 초·중급에 곱하면 **완전히 같은 문자열**이 한 벌씩 더 생길 뿐이라 검출력이 0이고 조합만 2배가 된다. |
 //   | `turnInstruction` | **곱하지 않고 더한다**(+22벌) | 이 옵션은 상수가 아니라 **호출부가 넘기는 문자열**이라 "축"이 아니라 **값의 집합**이다(실제 값 22종 — 아래 `turnInstructionSources`). 22를 곱하면 시나리오당 20 → 440(총 6,160)이 되는데, 두 게이트의 판정은 **인용구 단위 / 매치 지점 ±14자**라 곱해서 얻는 검출력이 없다. 각 값을 **자기 시나리오에 한 번씩** 얹어 스캔 목록에 넣는 것으로 같은 사각을 없앤다. |
 //   | `toolDrivenTiming`(§59 커밋 C 신설) | **곱한다**(2값) | `verifyInterceptEnabled`와 같은 이유 — `inCallSmsEnabled`/`verifyInterceptEnabled`와 **함께** 조립됐을 때만 보이는 대체 문구(`OFF_SCREEN_RULE_WITH_SMS`·`VERIFY_INTERCEPT_RULE`의 도구-주도 변형)가 있다. 시나리오당 20 → 40(총 조합 2배). ⚠️ 실측: 이 옵션의 두 변형(`SMS_METHOD_LINE_TOOL_DRIVEN`·`VERIFY_NAME_LINE_TOOL_DRIVEN`)은 **인용구를 새로 만들지 않는다**(따옴표 `"..."` 0건 신설) — `VERIFY_OFFER_LINE_TOOL_DRIVEN`만 기존과 동일한 인용구(`"잠시만요, 확인 부서를 연결해 드리겠습니다"`)를 재사용한다. 그래도 곱하는 이유는 T113 자기 고지(`stackingDirectives`의 14자 윈도가 블록 경계를 넘는다)가 이 축에도 적용되기 때문 — 문면이 바뀌면 창이 다르게 열린다. |
+//   | `hangupMode`(T192 C2 신설 · §79.6) | **운영 짝으로만 곱한다**(2값) — `toolDrivenTiming:true` → `none`·`tool` / `false` → `none`·`signal` | TOOL은 Gemini Live 토큰(= `toolDrivenTiming:true`의 유일한 호출부 `geminiProvider.ts`)에만, SIGNAL은 폴백 `sendMessage`(= `toolDrivenTiming` 미전달)에만 실린다(§79.6 표). 반대 짝(`tool`+`false` · `signal`+`true`)은 **운영에서 조립되지 않는다**(`l3Procedural`을 고급에만 곱한 것과 같은 판단). 슬롯은 [진행 강제] 안 `{{OFF_SCREEN_RULE}}` 바로 뒤라 `inCallSmsEnabled`·`toolDrivenTiming`이 바꾸는 이웃 문면과 **함께** 봐야 창이 맞다 → 나머지 축과는 곱한다. 시나리오당 40 → 80. 새 문면이 인용구 3개(*"그럼 통화 종료하겠습니다"* 등 — NONE과 같은 인용구)를 다시 쓰므로 무해화 · 요구몰림 스캔이 TOOL · SIGNAL 문면도 받게 된다. |
 //
 // ⚠️ **남는 사각(자기 고지 — 이 태스크에서 닫지 않는다). 노출되는 게이트를 이름으로 적는다.**
 //
@@ -1259,6 +1260,10 @@ function stackingDirectives(text: string): string[] {
 // 축을 줄여야 할 실제 사유(예: CI 예산 초과)가 생기면 **줄이기 전에 무엇이 무검사로 돌아가는지
 // 위 판정표대로 다시 실측해 적을 것.**
 // ══════════════════════════════════════════════════════════════════════════════
+
+/** T192 C2 — 끊기 변형의 운영 짝(위 판정표 마지막 행). `none`은 양쪽 모두에 있다(비허용 턴 · `end_call` 미선언). */
+const HANGUP_MODES_LIVE = ["none", "tool"] as const;
+const HANGUP_MODES_FALLBACK = ["none", "signal"] as const;
 
 /** 난이도 변형 — `l3Procedural`은 고급에서만 읽히므로 고급에만 붙인다(위 판정표 2행). */
 const ASSEMBLY_LEVEL_VARIANTS: ReadonlyArray<{
@@ -1324,21 +1329,25 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
           // verifyInterceptEnabled와 같은 이유: 상시 블록과 **함께** 조립됐을 때만 보이는 문면이
           // 있다(OFF_SCREEN_RULE_WITH_SMS·VERIFY_INTERCEPT_RULE의 도구-주도 대체 문구).
           for (const toolDrivenTiming of [false, true]) {
-            out.push({
-              label:
-                `${scenarioId}[${variant.suffix}` +
-                `${inCallSmsEnabled ? "/문자" : ""}${verifyInterceptEnabled ? "/확인안내" : ""}` +
-                `${toolDrivenTiming ? "/도구주도" : ""}]`,
-              text: buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], {
-                ...variant.opts,
-                inCallSmsEnabled,
-                verifyInterceptEnabled,
-                toolDrivenTiming,
-                identityCheckAllowed,
-                ...(speakerGender ? { speakerGender } : {}),
-                ...(offerToolDeclared ? { offerToolDeclared } : {}),
-              }),
-            });
+            // T192 C2 — hangupMode는 운영 짝으로만 곱한다(위 판정표 마지막 행).
+            for (const hangupMode of toolDrivenTiming ? HANGUP_MODES_LIVE : HANGUP_MODES_FALLBACK) {
+              out.push({
+                label:
+                  `${scenarioId}[${variant.suffix}` +
+                  `${inCallSmsEnabled ? "/문자" : ""}${verifyInterceptEnabled ? "/확인안내" : ""}` +
+                  `${toolDrivenTiming ? "/도구주도" : ""}${hangupMode === "none" ? "" : `/끊기:${hangupMode}`}]`,
+                text: buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], {
+                  ...variant.opts,
+                  inCallSmsEnabled,
+                  verifyInterceptEnabled,
+                  toolDrivenTiming,
+                  identityCheckAllowed,
+                  ...(speakerGender ? { speakerGender } : {}),
+                  ...(offerToolDeclared ? { offerToolDeclared } : {}),
+                  ...(hangupMode === "none" ? {} : { hangupMode }),
+                }),
+              });
+            }
           }
         }
       }
@@ -1541,6 +1550,67 @@ test("[§50/종료선언 G308] 조립 산출물 전수에 '마무리되도록 �
     [],
     "이 문구가 남아 있으면 모델이 통화를 스스로 마무리해도 된다는 지시가 살아 있는 것이다(§50.7.2).",
   );
+});
+
+// ── T192 C2 — G506: 시나리오 끝 문장 교체(Architecture.md §79.6 (2) · §79.19 (7) C2-4 · C2-5) ─────────
+//
+// ⛔ 기대 수를 상수(14 · 17)로 두지 않는다 — `assembledPrompts()`가 순회하는 시나리오 수가 기대 수다
+// (시나리오가 추가되면 그 시나리오도 새 문장을 가져야 한다 · 0이면 공허 통과라 실패).
+// 새 문장은 NONE · TOOL · SIGNAL 세 변형 모두에서 참이다(NONE은 허락하는 경우가 없다 — §79.6 (2)) ⇒ 메신저 4벌 포함.
+const G506_OLD_SENTENCE = "네 쪽에서 대화를 마무리하지는 않는다";
+const G506_NEW_SENTENCE = "통화를 네 쪽에서 먼저 끝내는 것은 [진행 강제]의 끊기 규칙이 허락할 때뿐이다.";
+
+test("[T192/C2 G506] 조립 산출물 전수에 옛 끝 문장 0건 · 순회한 시나리오 전부가 새 끝 문장을 갖는다", () => {
+  const oldHits: string[] = [];
+  const missingNew: string[] = [];
+  const scenariosSeen = new Set<string>();
+  for (const { label, text } of assembledPrompts()) {
+    scenariosSeen.add(label.split("[")[0]);
+    if (text.includes(G506_OLD_SENTENCE)) oldHits.push(label);
+    if (!text.includes(G506_NEW_SENTENCE)) missingNew.push(label);
+  }
+  assert.ok(scenariosSeen.size > 0, "assembledPrompts()가 비었다 — 공허 통과");
+  assert.equal(
+    scenariosSeen.size,
+    Object.keys(SCENARIO_PROMPTS).length,
+    "assembledPrompts()가 SCENARIO_PROMPTS 전부를 순회하지 않는다 — 빠진 시나리오는 검사되지 않는다",
+  );
+  assert.deepEqual(oldHits, [], "옛 끝 문장이 남은 조립본 — 새 [진행 강제] 끊기 규칙(TOOL · SIGNAL)과 모순 2문장이 된다(G128)");
+  assert.deepEqual(missingNew, [], "새 끝 문장이 없는 조립본 — §79.6 (2) 교체가 빠진 시나리오");
+
+  // 시나리오 원문 층에서도 1벌당 정확히 1회(조립 경로를 거치지 않는 ElevenLabs 에이전트 원문 대조용).
+  const perScenario = Object.entries(SCENARIO_PROMPTS)
+    .map(([id, doc]) => [id, doc.personaPrompt.split(G506_NEW_SENTENCE).length - 1] as const)
+    .filter(([, n]) => n !== 1);
+  assert.deepEqual(perScenario, [], "personaPrompt에 새 끝 문장이 정확히 1회가 아니다");
+});
+
+test("[T192/C2 G506 역검증] 옛 문장을 되살린 사본 · 새 문장을 지운 사본을 같은 판정이 잡는다(죽은 게이트 방지)", () => {
+  const [id, doc] = Object.entries(SCENARIO_PROMPTS)[0];
+  const revived = doc.personaPrompt.replace(G506_NEW_SENTENCE, `${G506_OLD_SENTENCE}.`);
+  assert.notEqual(revived, doc.personaPrompt, `${id}: 앵커가 맞지 않아 사본이 원본과 같다`);
+  const text = buildSystemPrompt({ ...doc, personaPrompt: revived });
+  assert.equal(text.includes(G506_OLD_SENTENCE), true, "되살린 옛 문장을 판정이 못 본다");
+  assert.equal(text.includes(G506_NEW_SENTENCE), false, "지운 새 문장이 여전히 보인다");
+});
+
+test("[T192/C2 G128] 조립 산출물 전수에서 끊기 변형은 정확히 1개다(새 축 hangupMode가 실제로 순회됐는지 포함)", () => {
+  const markers = {
+    none: "- **통화를 끝내는 것은 상대다 — 너는 끝내지 않는다.**",
+    tool: "먼저 `end_call` 도구를 부르고",
+    signal: "[[SIGNAL:END_CALL_GOAL]]",
+  } as const;
+  const seen = { none: 0, tool: 0, signal: 0 };
+  const violations: string[] = [];
+  for (const { label, text } of assembledPrompts()) {
+    const present = (Object.keys(markers) as Array<keyof typeof markers>).filter((m) => text.includes(markers[m]));
+    if (present.length !== 1) violations.push(`${label} :: [${present.join(", ")}]`);
+    for (const m of present) seen[m] += 1;
+  }
+  assert.deepEqual(violations, [], "끊기 변형이 0개이거나 2개 이상 실린 조립본(G128 · G505)");
+  for (const m of ["none", "tool", "signal"] as const) {
+    assert.ok(seen[m] > 0, `hangupMode=${m} 조립본이 스캔 목록에 없다 — 그 문면은 무해화 · 요구몰림 스캔을 받지 않는다(T113)`);
+  }
 });
 
 test("[T109/요구몰림] 사기범 대사 한 차례에 독립 요구가 2건 이상 들어가지 않는다(조립 결과 전수)", () => {

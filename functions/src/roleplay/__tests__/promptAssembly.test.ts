@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "../promptAssembly";
+import {
+  buildSystemPrompt,
+  HANGUP_RULE_NONE,
+  HANGUP_RULE_SIGNAL,
+  HANGUP_RULE_TOOL,
+  HANGUP_RULE_TOOL_VERIFY_SUFFIX,
+  toLlmHistory,
+  wrapUserInputAsData,
+} from "../promptAssembly";
 import { SCENARIO_PROMPTS, FAMILY_ACCIDENT_SCENARIO_ID } from "../../scenarios";
 // T86 — 신규 콘텐츠(T83 확인 무력화 · T84 모의 설치 · T85 난이도 블록 · T95 전용 시나리오)가
 // **실제 조립 값**으로 매트릭스에 들어오게 하는 입력들.
@@ -1667,4 +1675,158 @@ test("[2026-10-17 계좌 문자 역검증] 옛 institutional 수법 문구를 �
   assert.notDeepEqual(accountTacticsViolations(noSmsClause), [], "문자 확인 절을 뺀 오염본도 잡혀야 한다");
 
   assert.deepEqual(accountTacticsViolations(SCENARIO_PROMPTS[id].weakenedTactics), [], "정본은 통과한다");
+});
+
+// ── T192 C2 — G505: 끊기 규칙 슬롯 `{{HANGUP_RULE}}` 3변형(Architecture.md §79.6 (1) · §79.16 · DECISIONS #139) ──
+//
+// ⚠️ 아래 세 리터럴은 **정본의 사본**이다 — 소스 상수에서 읽지 않는다(읽으면 소스가 바뀌어도 같이 바뀌어
+// 게이트가 공회전한다). NONE은 C2 직전 `promptAssembly.ts:161`(main `9c760eb`) 원문, TOOL · SIGNAL은
+// §79.6 ① ②(SIGNAL의 괄호 *"(① TOOL과 같은 두 경우 · 같은 제외 문장)"* 은 §79.19 (7) C2-3대로 펼쳤다).
+// ⚠️ 줄바꿈 리터럴로 앵커를 잡지 않는다(CRLF 체크아웃 대비) — 전부 한 줄 문자열 · 위치는 indexOf 순서로 본다.
+const G505_NONE_ORIGINAL =
+  '- **통화를 끝내는 것은 상대다 — 너는 끝내지 않는다.** "그럼 통화 종료하겠습니다", "끊겠습니다", "여기까지 하겠습니다"처럼 네가 통화를 마치겠다는 말을 어떤 표현으로도 하지 않는다. 상대가 침묵하거나 대화가 소강 상태가 되어도 네 쪽에서 마무리 인사를 하지 않고, 상황에 맞는 말로 대화를 이어 둔다. 상대가 스스로 끊는 것은 상대의 몫이다.';
+const G505_TOOL_CANON =
+  '- **통화는 상대가 끝내는 것이 원칙이다 — 네가 먼저 끊는 것은 아래 두 경우뿐이다.** 첫째, 네가 원하던 것을 얻었다: 상대가 문자로 온 이체 화면에서 이체를 마쳤거나, 네가 요구한 정보(인증번호·계좌번호·카드번호 등)를 불러 주었다. 둘째, 상대가 거절이나 의심을 되풀이해 더는 진행할 수 없다. 상대가 침묵하거나 대화가 소강 상태이거나 시간이 오래 걸린다는 이유로는 끊지 않는다. **끊기로 했으면 작별 인사를 하기 전에 먼저 `end_call` 도구를 부르고, 결과가 허락한 뒤에만** 짧은 마무리 한마디를 하고 더 말하지 않는다. 결과가 허락하지 않으면 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어간다. 도구를 부르지 않은 응답에서는 "그럼 통화 종료하겠습니다", "끊겠습니다", "여기까지 하겠습니다"처럼 네가 통화를 마치겠다는 말을 어떤 표현으로도 하지 않는다.';
+const G505_TOOL_VERIFY_SUFFIX_CANON = "확인 부서로 통화를 넘기기 전에는 어떤 경우에도 끊지 않는다.";
+const G505_SIGNAL_CANON =
+  '- **통화는 상대가 끝내는 것이 원칙이다 — 네가 먼저 끊는 것은 아래 두 경우뿐이다.** 첫째, 네가 원하던 것을 얻었다: 상대가 문자로 온 이체 화면에서 이체를 마쳤거나, 네가 요구한 정보(인증번호·계좌번호·카드번호 등)를 불러 주었다. 둘째, 상대가 거절이나 의심을 되풀이해 더는 진행할 수 없다. 상대가 침묵하거나 대화가 소강 상태이거나 시간이 오래 걸린다는 이유로는 끊지 않는다. **이번 응답에서 끊기로 했다면** 짧은 마무리 한마디만 하고, 응답 맨 끝에 첫째 경우면 [[SIGNAL:END_CALL_GOAL]], 둘째 경우면 [[SIGNAL:END_CALL_GIVEUP]]을 붙인다. 끊지 않는 응답에는 마무리 말도 신호도 넣지 않는다. 신호 없이 "그럼 통화 종료하겠습니다", "끊겠습니다", "여기까지 하겠습니다"처럼 네가 통화를 마치겠다는 말을 어떤 표현으로도 하지 않는다.';
+
+/** 변형별 고유 표지 — 조립 산출물에서 어느 변형이 몇 개 실렸는지 센다(G128 공존 판정). */
+const G505_MARKERS = {
+  none: "- **통화를 끝내는 것은 상대다 — 너는 끝내지 않는다.**",
+  tool: "먼저 `end_call` 도구를 부르고",
+  signal: "[[SIGNAL:END_CALL_GOAL]]",
+} as const;
+
+function countOccurrences(text: string, needle: string): number {
+  return text.split(needle).length - 1;
+}
+
+const PAYLOAD_LINE_HEAD = "- **페이로드는 가상값만 쓴다.**";
+
+test("[T192/C2 G505] NONE 변형은 C2 직전 원문과 바이트 동일하다(정본 사본 대조)", () => {
+  assert.equal(HANGUP_RULE_NONE, G505_NONE_ORIGINAL, "NONE 문면이 한 글자라도 바뀌었다 — G505 위반(§79.6 표 NONE 행)");
+  // 역검증 — 대조가 공회전하지 않음(한 글자 바꾼 사본은 다르다).
+  assert.notEqual(HANGUP_RULE_NONE, G505_NONE_ORIGINAL.replace("상대의 몫이다", "상대의 몫이다 "));
+});
+
+test("[T192/C2 G505] TOOL · SIGNAL · 확인 무력화 1문장이 §79.6 ① ② 정본과 바이트 동일하다", () => {
+  assert.equal(HANGUP_RULE_TOOL, G505_TOOL_CANON, "TOOL 문면이 §79.6 ① 정본과 다르다");
+  assert.equal(HANGUP_RULE_SIGNAL, G505_SIGNAL_CANON, "SIGNAL 문면이 §79.6 ② 정본(펼친 형태)과 다르다");
+  assert.equal(HANGUP_RULE_TOOL_VERIFY_SUFFIX, G505_TOOL_VERIFY_SUFFIX_CANON, "확인 무력화 1문장이 §79.6 ①과 다르다");
+});
+
+test("[T192/C2 G505 동작 변화 0] hangupMode 부재 = 'none'이고, 슬롯은 종전 줄 위치(화면 밖 항목 뒤 · 페이로드 줄 앞)에 NONE을 싣는다", () => {
+  let checked = 0;
+  for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
+    for (const verifyInterceptEnabled of [false, true]) {
+      for (const toolDrivenTiming of [false, true]) {
+        const base = { ...realOptionsFor(scenarioId), difficultyLevel: "advanced" as const, verifyInterceptEnabled, toolDrivenTiming };
+        const absent = buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], base);
+        const explicitNone = buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], { ...base, hangupMode: "none" });
+        assert.equal(absent, explicitNone, `${scenarioId}: 부재와 명시 'none'의 조립이 다르다`);
+        assert.equal(countOccurrences(absent, G505_NONE_ORIGINAL), 1, `${scenarioId}: NONE 원문이 정확히 1회 실려야 한다`);
+        assert.equal(absent.includes("{{HANGUP_RULE}}"), false, `${scenarioId}: 슬롯이 치환되지 않고 남았다`);
+        const at = absent.indexOf(G505_NONE_ORIGINAL);
+        const progression = absent.indexOf("[진행 강제 — 반드시 지킨다]");
+        const payload = absent.indexOf(PAYLOAD_LINE_HEAD);
+        assert.ok(progression >= 0 && progression < at && at < payload, `${scenarioId}: 끊기 규칙이 [진행 강제] 안 종전 자리에 없다`);
+        checked += 1;
+      }
+    }
+  }
+  assert.ok(checked > 0, "순회가 비었다 — 공허 통과");
+});
+
+test("[T192/C2 G505 · G128] 한 프롬프트에 끊기 변형은 정확히 1개 — TOOL만 확인 무력화 1문장을 받고 SIGNAL은 받지 않는다", () => {
+  const modes = ["none", "tool", "signal"] as const;
+  let checked = 0;
+  for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
+    for (const hangupMode of modes) {
+      for (const verifyInterceptEnabled of [false, true]) {
+        const text = buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], {
+          ...realOptionsFor(scenarioId),
+          difficultyLevel: "advanced",
+          verifyInterceptEnabled,
+          toolDrivenTiming: hangupMode === "tool",
+          hangupMode,
+        });
+        const label = `${scenarioId}[${hangupMode}${verifyInterceptEnabled ? "/확인안내" : ""}]`;
+        for (const m of modes) {
+          assert.equal(
+            countOccurrences(text, G505_MARKERS[m]),
+            m === hangupMode ? 1 : 0,
+            `${label}: 변형 ${m}의 표지 개수가 틀렸다 — 변형 2개 공존(G128) 또는 누락`,
+          );
+        }
+        const expectedRule =
+          hangupMode === "none" ? G505_NONE_ORIGINAL : hangupMode === "tool" ? G505_TOOL_CANON : G505_SIGNAL_CANON;
+        assert.ok(text.includes(expectedRule), `${label}: 정본 문면이 그대로 실리지 않았다`);
+        const wantsSuffix = hangupMode === "tool" && verifyInterceptEnabled;
+        assert.equal(
+          text.includes(G505_TOOL_VERIFY_SUFFIX_CANON),
+          wantsSuffix,
+          `${label}: 확인 무력화 1문장은 TOOL + verifyInterceptEnabled에서만 실린다(§79.6 ① · ② 아래 근거)`,
+        );
+        if (wantsSuffix) {
+          assert.ok(text.includes(`${G505_TOOL_CANON} ${G505_TOOL_VERIFY_SUFFIX_CANON}`), `${label}: 1문장이 TOOL 끝에 붙지 않았다`);
+        }
+        checked += 1;
+      }
+    }
+  }
+  assert.equal(checked, Object.keys(SCENARIO_PROMPTS).length * 6);
+  assert.ok(checked > 0, "순회가 비었다 — 공허 통과");
+});
+
+test("[T192/C2 G505 역검증] 표지 개수 판정이 실제로 공존을 잡는다(죽은 게이트 방지)", () => {
+  const text = buildSystemPrompt(scenarioPrompt, { hangupMode: "tool" });
+  const poisoned = `${text}\n${G505_NONE_ORIGINAL}`;
+  assert.equal(countOccurrences(poisoned, G505_MARKERS.none), 1, "오염본(TOOL + NONE)에서 NONE 표지가 잡혀야 한다");
+  assert.equal(countOccurrences(poisoned, G505_MARKERS.tool), 1);
+  // 알 수 없는 값(JS 호출부 오기입)은 NONE으로 떨어진다 — 끊기 허용 문면이 실수로 실리지 않는다.
+  const unknown = buildSystemPrompt(scenarioPrompt, { hangupMode: "TOOL" as unknown as "tool" });
+  assert.equal(unknown, buildSystemPrompt(scenarioPrompt), "알 수 없는 hangupMode가 NONE으로 떨어지지 않았다");
+});
+
+/**
+ * G505 *"세 변형 모두 횟수 · 턴 번호 0(G130)"* — F11 카운터 검출기를 **그대로** 건다(약화 없음).
+ * 정본 문면에서 검출기가 무는 것은 아래 허용 목록뿐이며, 전부 횟수 · 턴 조건이 아니다:
+ *   - `"첫째"` · `"둘째"`(고유어 서수) — 끊어도 되는 **두 경우의 열거**(§79.6 ① ② 정본 문면). SIGNAL은 신호를
+ *     고르는 자리에서 같은 열거를 한 번 더 부른다(*"첫째 경우면 … 둘째 경우면"*).
+ *   - `"이번"`(한자어 수사+단위 형태) — *"이번 응답에서"* 의 지시어(this)다. 수사 `이`(二)가 아니다.
+ * ⛔ 목록은 **정확 일치**로 단언한다 — 새 표현이 하나라도 생기면 실패한다(열거 외 카운터 유입 차단).
+ */
+const G505_COUNTER_ALLOWED: Record<"none" | "tool" | "toolVerify" | "signal", string[]> = {
+  none: [],
+  tool: ['고유어 서수(-째): "첫째"', '고유어 서수(-째): "둘째"'],
+  toolVerify: ['고유어 서수(-째): "첫째"', '고유어 서수(-째): "둘째"'],
+  signal: [
+    '한자어 수사+단위: "이번"',
+    '고유어 서수(-째): "첫째"',
+    '고유어 서수(-째): "둘째"',
+    '고유어 서수(-째): "첫째"',
+    '고유어 서수(-째): "둘째"',
+  ],
+};
+
+test("[T192/C2 G505 · G130] 세 변형 모두 숫자 0 · 카운터 표현은 열거 · 지시어 허용 목록과 정확히 같다", () => {
+  const rules: Record<keyof typeof G505_COUNTER_ALLOWED, string> = {
+    none: HANGUP_RULE_NONE,
+    tool: HANGUP_RULE_TOOL,
+    toolVerify: `${HANGUP_RULE_TOOL} ${HANGUP_RULE_TOOL_VERIFY_SUFFIX}`,
+    signal: HANGUP_RULE_SIGNAL,
+  };
+  for (const [label, text] of Object.entries(rules) as Array<[keyof typeof rules, string]>) {
+    assert.equal(/[0-9０-９]/.test(text), false, `${label} 문면에 숫자가 있다(G130)`);
+    assert.deepEqual(findCounterExpressions(text), G505_COUNTER_ALLOWED[label], `${label} 문면의 카운터 표현이 허용 목록과 다르다(G130)`);
+  }
+});
+
+test("[T192/C2 G505 · G130 역검증] 횟수 표현을 끼운 사본은 허용 목록과 달라진다(죽은 게이트 방지)", () => {
+  for (const injected of ["한 번만 더 설득한 뒤", "세 번째 거절이면", "두 턴 뒤에"]) {
+    const poisoned = HANGUP_RULE_TOOL.replace("둘째, 상대가", `둘째, ${injected} 상대가`);
+    assert.notEqual(poisoned, HANGUP_RULE_TOOL, "주입이 적용되지 않았다 — 앵커가 깨졌다");
+    assert.notDeepEqual(findCounterExpressions(poisoned), G505_COUNTER_ALLOWED.tool, `"${injected}" 주입본이 통과했다`);
+  }
 });

@@ -98,3 +98,4 @@
 - [T190-1~4 실폰형 통화 셸](project_codegate_t190_real_phone_1to4.md) — ⭐ 루트 lib는 잎 모듈만(확장자 없는 상대 import 실패), Navigator 약한 타입 TS2559, heredoc python `\b`→0x08 오염, 렌더 게이트 생존 신호 재지정.
 - [미리 받기 경합 + 수정안 A + audiodebug 패널](project_codegate_prefetch_race_audio_prime.md) — ⭐ createPrefetchSlot 실행 테스트, ctx 소유권=화면(Strict Mode 근거), 새 컴포넌트 시 게이트 3곳, python heredoc `\n` 개행 박힘.
 - [T192 C1 끊기 판정·endSession 허용목록](project_codegate_t192_c1_hangup_decision.md) — ⭐ 새 콜러블=anonymousGate 카운트 갱신, Transaction 제네릭 명시(TS2345), 작업 중 정본 확정 대응.
+- [T192 C2 끊기 규칙 슬롯](project_codegate_t192_c2_hangup_slot.md) — ⭐ F11 검출기가 정본 "첫째·둘째·이번"을 문다(정확 일치 허용 목록), 축은 운영 짝으로만 곱함, 템플릿 바이트 동일 증명.
