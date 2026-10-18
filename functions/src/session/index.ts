@@ -21,7 +21,7 @@ import {
   MESSENGER_ESCALATION_MAX_USER_TURNS,
 } from "../shared/constants";
 import { isCreateSessionRateLimited } from "./rateLimit";
-import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, GEMINI_KEY_SECRETS } from "../shared/config";
+import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, LLM_TEXT_SECRETS } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "./channelTransition";
@@ -72,7 +72,7 @@ function readSkinSource(value: unknown): MessengerSkinSource {
 // GEMINI_API_KEY 선언(2026-07-24) — generateOpeningLine()이 getLlmClient()를 통해 실 Gemini로
 // 격상될 수 있어(llm/index.ts 참고) Functions v2가 배포 환경에서 이 secret을 주입하도록 명시한다.
 export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionResponse>>(
-  { secrets: [...GEMINI_KEY_SECRETS] },
+  { secrets: [...LLM_TEXT_SECRETS] },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
@@ -291,7 +291,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
 // ⛔ "이 핸들러가 직접 읽는다"는 뜻이 아니다(§41.10 (6)). 선언 프로필이 다른 콜러블을 이 파일에
 // 새로 추가하지 말 것 — 파일을 나눠라(G212).
 export const endSession = onCall<EndSessionRequest, Promise<EndSessionResponse>>(
-  { secrets: [...GEMINI_KEY_SECRETS] },
+  { secrets: [...LLM_TEXT_SECRETS] },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
@@ -346,7 +346,7 @@ export const endSession = onCall<EndSessionRequest, Promise<EndSessionResponse>>
 export const updateMessengerSkin = onCall<
   UpdateMessengerSkinRequest,
   Promise<UpdateMessengerSkinResponse>
->({ secrets: [...GEMINI_KEY_SECRETS] }, async (request) => {
+>({ secrets: [...LLM_TEXT_SECRETS] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
@@ -382,7 +382,7 @@ export const updateMessengerSkin = onCall<
 export const requestEscalation = onCall<
   RequestEscalationRequest,
   Promise<RequestEscalationResponse>
->({ secrets: [...GEMINI_KEY_SECRETS] }, async (request) => {
+>({ secrets: [...LLM_TEXT_SECRETS] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
@@ -435,7 +435,7 @@ export const requestEscalation = onCall<
 export const requestReverseEscalation = onCall<
   RequestReverseEscalationRequest,
   Promise<RequestReverseEscalationResponse>
->({ secrets: [...GEMINI_KEY_SECRETS] }, async (request) => {
+>({ secrets: [...LLM_TEXT_SECRETS] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }

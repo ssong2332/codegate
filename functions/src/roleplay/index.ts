@@ -25,7 +25,7 @@ import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verify
 import { pickFallbackTurnInstruction } from "../verifyIntercept/fallbackTurn";
 import { announcedVerifyAnchor } from "../verifyIntercept/buildDoc";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
-import { GEMINI_KEY_SECRETS } from "../shared/config";
+import { LLM_TEXT_SECRETS } from "../shared/config";
 import { MESSENGER_ESCALATION_FALLBACK_TURNS, SEND_MESSAGE_MAX_LENGTH } from "../shared/constants";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
@@ -54,7 +54,7 @@ ensureFirebaseAdminApp();
 // 배포 환경에서 이 secret을 런타임에 주입하도록 명시해야 한다(realtime/index.ts의
 // createRealtimeCall과 동일 이유).
 export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageResponse>>(
-  { secrets: [...GEMINI_KEY_SECRETS] },
+  { secrets: [...LLM_TEXT_SECRETS] },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
@@ -293,6 +293,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       }),
       messages: llmHistory,
       mockTacticHints: scenarioPrompt.weakenedTactics,
+    });
+    // 몇 단계 공급자가 응답했는지(2026-10-18 Groq 3차 예비, Architecture.md §74.7) — 라이브 로그로
+    // 1차 Gemini / 2차 Gemini 대체 / 3차 Groq / Mock 강등 비율을 읽는다. 숫자·ID·단계명만(G170).
+    logger.info("sendMessage LLM 응답 단계", {
+      scenarioId: session.scenarioId,
+      servedBy: completion.servedBy ?? (completion.isMock ? "mock" : "unknown"),
+      isMock: completion.isMock,
     });
 
     // ②-e ⭐⭐ **"예고 완료" 마킹 — 발화된 턴에만**(D2/F2 · §54.9 (4) 4 · **G343**).

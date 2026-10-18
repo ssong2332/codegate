@@ -138,6 +138,7 @@ cp functions/.env.example functions/.env
 |---|---|
 | `GEMINI_API_KEY` | **무료** 실시간 음성 통화(Gemini Live, generic 3종) + **텍스트 대화(사기범 역할극) LLM**(DECISIONS #29) — 아래 설명 참조 |
 | `GEMINI_API_KEY2` | (선택) 1번 키가 일일 할당량을 소진했을 때 넘어갈 **2번 키** — 아래 "키 순환" 참조. ⚠️ **반드시 다른 GCP 프로젝트의 키여야 한다** |
+| `GROQ_API_KEY` | (선택) 텍스트 대사 생성 **3차 예비**(Groq `openai/gpt-oss-120b`) — 아래 "3차 예비 Groq" 참조. 키는 **하나만**. 로컬은 `functions/.secret.local` 권장 |
 | `ELEVENLABS_API_KEY` | ElevenLabs Instant Voice Cloning + TTS + Agents(실시간 통화) API 키 |
 | `ELEVENLABS_AGENT_IDS` | 실시간 음성 통화용 `scenarioId:agentId` 매핑(쉼표 구분) — 아래 설명 참조 |
 | `LLM_API_KEY` | 사기범 역할극/리포트 생성용 LLM API 키 |
@@ -212,6 +213,30 @@ Gemini Live 경로의 모델은 `gemini-3.8-live`다(`functions/src/realtime/gem
 
 > ⚠️ **이것은 할당량 문제의 해결이 아니라 완충이다.** 1일 수요는 약 26호출이고 키 1개의 캡이
 > 20이라, 키 2개(캡 40)로도 여유는 14회분뿐이다. 회차를 늘리면 다시 모자란다.
+
+##### 3차 예비 Groq (`GROQ_API_KEY`, 2026-10-18 · `docs/Architecture.md` §74)
+
+텍스트 대사 생성 순서는 **1차 `gemini-3.1-flash-lite` → 2차 `gemini-3.5-flash-lite`(503일 때) → 3차 Groq
+`openai/gpt-oss-120b`** 다(`functions/src/llm/groqFallback.ts`·`groqClient.ts`). 실시간 음성(Gemini Live)은 바뀌지 않는다.
+
+- **넘어가는 조건**: Gemini 쪽 최종 오류가 429·5xx이거나, Gemini 단계가 시간 상한을 넘겼을 때만 넘어간다.
+  4xx 입력 오류·안전 차단·네트워크 오류에서는 넘어가지 않고 기존처럼 목업으로 강등한다.
+- **시간 예산**: 전체 상한(일반 턴 10초 · 첫 턴 20초)은 그대로다. 키가 있으면 Gemini 단계가 3초를 남기고
+  끝나야 한다(7초 · 17초). 넘기면 Gemini 요청을 취소하고 Groq를 1회 부른다.
+- **개인정보**: 보내기 전에 대화의 이름·생년월일을 가명으로 바꾸고, 전화·주민번호·계좌는 기존 마스킹을
+  한 번 더 적용한다. 응답에 가명이 나오면 원래 값으로 되돌려 보여 준다.
+- **설정**: [console.groq.com/keys](https://console.groq.com/keys)에서 키를 발급해 `functions/.secret.local`에
+  `GROQ_API_KEY=...`를 넣고 에뮬레이터를 재시작한다. 배포 전에는 `firebase functions:secrets:set GROQ_API_KEY`가
+  **먼저** 필요하다. 등록하지 않고 배포하면 배포 분석 단계가 값을 요구하며 멈춘다. 키가 없으면 3차만 꺼지고
+  `Groq 3차 예비 비활성 — GROQ_API_KEY 없음` 로그가 1줄 남는다.
+- **확인**: `sendMessage LLM 응답 단계` 로그의 `servedBy`(`gemini-primary` · `gemini-fallback` · `groq` · `mock`)로
+  라이브에서 어느 단계가 응답했는지 본다.
+
+> ⚠️ **한도**: 이 모델의 한도는 분당 30회 · 하루 1,000회 · **분당 8,000토큰** · 하루 20만 토큰이다
+> ([공식 한도표](https://console.groq.com/docs/rate-limits) + 이 키의 응답 헤더 실측. 조직 단위로 적용된다).
+> 이 서비스의 요청 1건은 약 3,500~4,200토큰이라(2026-10-18 실측) **실제로는 분당 1~2건 · 하루 약 50건**까지만
+> 처리된다. 넘치면 Groq가 429를 돌려주고 그 턴은 목업으로 강등된다. Gemini가 오래 장애일 때의 대체재가 아니라
+> 짧은 순간 장애를 메우는 완충이다.
 
 > 어느 키로 넘어갔는지는 **서버 로그에만** 남는다(`geminiKeySlot`·`geminiKeyIndex`·`quotaClass`).
 > ⛔ 키 값은 로그·응답·리포트 어디에도 기록하지 않는다.

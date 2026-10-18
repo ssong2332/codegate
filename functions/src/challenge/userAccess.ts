@@ -21,7 +21,7 @@ import { generateOpeningLine } from "../roleplay";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { markChallengeInProgressIfConsented } from "../shared/challengeCompletion";
-import { GEMINI_KEY_SECRETS } from "../shared/config";
+import { LLM_TEXT_SECRETS } from "../shared/config";
 import {
   CHALLENGE_REPORT_NOTE_MAX_LENGTH,
   GENERIC_VOICE_ID,
@@ -67,7 +67,7 @@ async function findExperienceSession(
 export const getChallengeLanding = onCall<
   GetChallengeLandingRequest,
   Promise<GetChallengeLandingResponse>
->({ secrets: [...GEMINI_KEY_SECRETS] }, async (request) => {
+>({ secrets: [...LLM_TEXT_SECRETS] }, async (request) => {
   const { token } = request.data ?? {};
   if (!token) {
     throw new HttpsError("invalid-argument", "token이 필요합니다.");
@@ -94,7 +94,7 @@ export const getChallengeLanding = onCall<
 // GEMINI_API_KEY 선언(2026-07-24) — generateOpeningLine()이 getLlmClient()를 통해 실 Gemini로
 // 격상될 수 있어(llm/index.ts 참고) Functions v2가 배포 환경에서 이 secret을 주입하도록 명시한다.
 export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentChallengeResponse>>(
-  { secrets: [...GEMINI_KEY_SECRETS] },
+  { secrets: [...LLM_TEXT_SECRETS] },
   async (request) => {
     // §14.7/ADR-0006 A1 — 로그인 UI는 없지만 클라가 동의 탭 시점에 signInAnonymously로 이미
     // 익명 uid를 확보한 뒤 호출한다. 그 uid가 곧 생성될 체험 세션의 소유자가 된다.
@@ -306,7 +306,7 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
 
 // reportChallenge — 사용자2 신고 (T37 · UX-021 · AC-049)
 export const reportChallenge = onCall<ReportChallengeRequest, Promise<ReportChallengeResponse>>(
-  { secrets: [...GEMINI_KEY_SECRETS] },
+  { secrets: [...LLM_TEXT_SECRETS] },
   async (request) => {
     // 무인증(토큰) — getChallengeLanding과 동일 패턴. 동의 전에도, 소진 후에도 신고할 수 있어야
     // 한다(§14.5 "1명뿐인 taker" — 별도 신고 컬렉션 불요, 챌린지 문서에 직접 임베드).
@@ -381,7 +381,7 @@ export function deriveChallengeResultSummary(
 export const setChallengeResultSharing = onCall<
   SetChallengeResultSharingRequest,
   Promise<SetChallengeResultSharingResponse>
->({ secrets: [...GEMINI_KEY_SECRETS] }, async (request) => {
+>({ secrets: [...LLM_TEXT_SECRETS] }, async (request) => {
   // API.md "Auth: 익명(세션 소유 확인 권장)" — "권장"을 느슨하게 두지 않고 실제로 강제한다(이
   // 태스크의 배경이 된 두 차례 유출/데이터손실 사고를 고려해 보수적으로 판단, 근거는 아래 소유권
   // 검증). 인증 없이는 "세션 소유 확인"이라는 게이트 자체가 성립하지 않는다.

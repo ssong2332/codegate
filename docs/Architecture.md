@@ -17467,3 +17467,157 @@ completeWithFallback(                                   ← 실패 시 Mock 강�
 - `docs/UpdateRequests.md` — 기존 architect 행 Status 칸만(#38 · #41 · #47). 새 행 0.
 - ⛔ `functions/**` · `src/**` · `docs/PRD.md` · `docs/API.md` · `docs/Tasks.md` · `docs/CHANGELOG.md` · `CLAUDE.md` **0줄**. 헤더 버전 줄 무접촉(#45). 커밋 0건.
 > **번호**: §73(이 트리 최대 §72) · G451~G455(최대 G450) · OQ-A94~A96(최대 OQ-A93) · #121(이 워크트리 · main 체크아웃 모두 최대 #120). ⛔ 예약 아님 — 병합 순서로 확정. 재번호 시 치환 범위는 `## 73.` 이후 + 머리 고지 1문단 + §37.5 시점 부착 1줄 + DECISIONS #121 행뿐(⛔ 전역 치환 금지).
+
+## 74. (Architecture change — 2026-10-18 · 브랜치 `claude/llm-groq-fallback-cb0815`) **텍스트 대사 생성 3차 예비 공급자 Groq** — ⭐⭐ **1차 `gemini-3.1-flash-lite` → 2차 `gemini-3.5-flash-lite`(§73, 503일 때) → 3차 Groq `openai/gpt-oss-120b`(429·5xx·Gemini 단계 시간 초과일 때)** / ⭐⭐ **총 시간 상한은 그대로다 — Groq가 있으면 Gemini 단계가 3초를 남기고 끝나야 하고, 넘기면 요청을 취소하고 넘어온다** / ⭐ **Groq로 보내는 대화는 이름·생년월일을 가명 처리한다(Gemini 경로 확대 여부는 정책 결정 — 74.9)** — architect 기록
+
+### 74.0 금지 먼저 (⛔ 다른 판단보다 우선)
+
+1. ⛔ **Groq 키를 여러 개 돌려 쓰지 말 것** — Groq 한도는 **조직 단위**다(74.2 ①). 키를 늘려도 한도가 늘지 않고, 약관 우회 구조가 된다. `LLM_TEXT_SECRETS`의 Groq 슬롯은 1개다(테스트 ⑫).
+2. ⛔ **`GROQ_API_KEY`를 `GEMINI_KEY_SECRETS`에 넣지 말 것** — 그 배열은 Gemini 키 순환 순서다(`getGeminiApiKeys`).
+3. ⛔ **4xx 입력 오류·안전 차단·네트워크 오류에 Groq를 붙이지 말 것** — §73.0 2·3과 같은 이유(안전 판단 우회, 원인 은폐).
+4. ⛔ **Groq를 단독 공급자로 쓰지 말 것** — Gemini 키가 0개면 Groq 키도 읽지 않는다(= 기존처럼 Mock). 3차 예비라는 결정의 범위다.
+5. ⛔ **`withTimeout`을 안쪽으로 옮기지 말 것**(§37.5 (1)) — Groq를 포함한 모든 시도의 총합이 바깥 상한 하나로 갇힌다.
+6. ⛔ **로그에 키·프롬프트·응답 본문·Groq 에러 본문·가명 처리 원문을 싣지 말 것**(G170). Groq 에러 본문에는 조직 ID가 들어 있다(74.2 프로브 실측).
+7. ⛔ **실시간 음성(Gemini Live, `gemini-3.8-live`)은 이 절의 대상이 아니다** — 무변경.
+
+### 74.1 ⭐⭐ 배치 — 정본
+
+```
+completeWithFallback(                                         ← 실패 시 Mock 강등(기존, servedBy: "mock")
+  withTimeout(                                                ← 가장 바깥 · 총합 상한(10초 / 첫 턴 20초) — 무변경
+    withGroqFallback(                                         ← [신규] 판정표 "예"면 Groq 1회 (Groq 키 있을 때만)
+      withStageDeadline(                                      ← [신규] Gemini 단계 상한 = timeoutMs - 3초, 넘기면 abort
+        withOverloadFallback(withOverloadRetry(1차), 2차),    ← §73 그대로(예산만 geminiBudgetMs)
+        geminiBudgetMs),
+      GroqLlmClient),                                         ← [신규] 가명 처리 → REST → 가명 복원
+    timeoutMs))
+```
+
+| 항목 | 값 | 근거(파일) |
+|---|---|---|
+| Groq 키 없음 | 위 그림에서 `withGroqFallback`·`withStageDeadline`이 빠지고 **Gemini 예산 = timeoutMs** → §73 배치와 동작이 같다(로그 1줄 `Groq 3차 예비 비활성 — GROQ_API_KEY 없음`, 인스턴스당 1회) | `functions/src/llm/index.ts` `getLlmClient` |
+| Gemini 키 없음 | Mock(기존). Groq 키를 읽지 않는다 | 같은 곳 |
+| 단계 표시 | `tagServedBy`가 응답에 `servedBy`(`gemini-primary`·`gemini-fallback`·`groq`·`mock`)를 붙인다 — 관측 전용, Firestore·클라 응답에 싣지 않는다 | `llm/groqFallback.ts` · `llm/types.ts` |
+| 라이브 확인 로그 | `sendMessage LLM 응답 단계` `{scenarioId, servedBy, isMock}` | `roleplay/index.ts` |
+| 적용 경로 | 팩토리 경유 전부 — `sendMessage` · 오프닝(`createSession`·`consentChallenge`) · 되감기 판정 | §73.1과 같음 |
+| 시크릿 선언 | 위 경로의 onCall 4개 파일이 `[...LLM_TEXT_SECRETS]`(= Gemini 2 + Groq 1)를 선언 — `secretDeclarationGate` 테스트가 대조해 확정한 집합. realtime·verifyIntercept는 Groq를 읽지 않아 `GEMINI_KEY_SECRETS` 그대로 | `shared/config.ts` · `challenge/userAccess.ts` · `session/index.ts` · `rewind/index.ts` · `roleplay/index.ts` |
+| 의존성 | 신규 0 — Node 22 내장 `fetch`로 OpenAI 호환 REST 호출 | `llm/groqClient.ts` |
+
+### 74.2 ⭐⭐ 공식 문서 검증 (2026-10-18 · 원문 기준 · 출처)
+
+| # | 확인 항목(브리프 전제) | 결과 | 출처 / 근거 |
+|---|---|---|---|
+| ① | 한도 — 분당 30회 · 하루 1,000회 · 하루 20만 토큰 | **수치 일치** — 표 행 `openai/gpt-oss-120b 30 1K 8K 200K`(RPM·RPD·TPM·TPD). ⚠️ 표 바로 앞 문구는 *"the base limits for the Developer plan"* 이라 **Free 플랜 표기는 공식 문서에 없다**. 대신 이 키의 응답 헤더 실측이 `x-ratelimit-limit-tokens: 8000` · `x-ratelimit-limit-requests: 1000`으로 같은 값이다. *"Rate limits apply at the organization level, not individual users."* | https://console.groq.com/docs/rate-limits · 프로브 헤더 |
+| ①-b | ⭐ **전제에 없던 제약 — 분당 8,000토큰(TPM)** | 실제 시스템 프롬프트 요청 1건 = **3,493~4,464 토큰**(프로브 실측 · 첫 턴형). ⇒ **실효 처리량 분당 약 1~2건 · 하루 약 45~57건**(TPD 20만 ÷ 3.5~4.5천). 프로브 6회 연속 호출에서 3번째부터 **TPM 429**(152~220ms 즉답) | 아래 프로브 |
+| ② | 무료 플랜 상업적 사용 | **금지 조항 없음**. 서비스 약관은 무료 제공을 명시(§5.1 *"fee-free … for a limited time"*)하고 무료 서비스 배상 상한을 둔다(§14.2). 제한은 경쟁 서비스 개발 금지(§6.3(e))와 머리 조항 *"…are not for consumer use"* — ⚠️ 이 문구는 **고객(이 서비스 운영자)이 개인 소비자 자격으로 쓰는 것**을 겨냥한 조항으로 **추정**한다(법률 판단 아님 — 확인 방법: Groq 문의 또는 법무 검토) | https://console.groq.com/docs/legal/services-agreement |
+| ③ | 입출력 학습 미사용 | **확인** — §4.2 *"Groq is not permitted to use Inputs or Outputs for training or fine-tuning any AI Model Services."* | 같은 약관 §4.2 |
+| ④ | 최대 30일 임시 보관 | **확인** — *"By default, Groq does not retain customer data for inference requests."* 다만 문제 해결·남용 조사용 로그는 *"retained for up to 30 days, unless legally required to retain longer."* · 모든 고객이 Data Controls에서 **ZDR(Zero Data Retention)** 을 켤 수 있다 | https://console.groq.com/docs/your-data |
+| ⑤ | 한국어 지원 | **명시 목록 없음** — 모델 페이지는 *"strong performance across 81+ languages"* · MMMLU 81.3%만 적는다. **실호출로 확인**: 한국어 사기범 대사 생성이 자연스러웠다(샘플은 PR 본문) | https://console.groq.com/docs/model/openai/gpt-oss-120b |
+| ⑥ | 모델 ID | **`openai/gpt-oss-120b`** 확정 · 컨텍스트 131,072 · 최대 출력 65,536 · 추론 모델(`reasoning_effort` low/medium/high, `include_reasoning` 지원, `reasoning_format` **미지원**) | 모델 페이지 · https://console.groq.com/docs/reasoning |
+
+⇒ **판정: 브리프 전제(수치·약관·보관·한국어)와 어긋나는 항목은 없다**(②의 "consumer use" 해석과 ①의 플랜 표기는 ⚠️로 남긴다). **새로 드러난 것은 ①-b TPM 제약**이다 — 비용·정책·AC 변경을 요구하지 않으므로 구현을 진행했고, 용량 한계로 기록한다(74.9 OQ-A98).
+
+**프로브(2026-10-18 · 로컬 · 실제 키 · `buildSystemPrompt` 실제 조립 · 원시 REST · `reasoning_effort: low` · `include_reasoning: false`)**
+
+| 회 | 시나리오 · 난이도 | HTTP | 지연 | 프롬프트 / 출력 토큰 |
+|---|---|---|---|---|
+| 1 | institutional-impersonation · advanced | 200 | 1,017ms | 4,141 / 99 |
+| 2 | institutional-impersonation · intermediate | 200 | 786ms | 3,493 / 103 |
+| 3~6 | (연속 호출 간격 2.5초) | **429 TPM** | 152~220ms | 요청 3,821~4,464 |
+| 7 | institutional-impersonation · advanced(간격 35초 — 이하 같음) | 200 | 995ms | 4,141 / 109 |
+| 8 | institutional-impersonation · intermediate | 200 | 1,717ms | 3,493 / 105 |
+| 9 | loan-refinance-scam · beginner | 200 | 1,002ms | 3,966 / 110 |
+| 10 | card-company-impersonation · intermediate | 200 | 911ms | 3,378 / 138 |
+| 11 | institutional-impersonation · advanced(사용자가 이름·생년월일 발화 — 테스트 값) | 200 | 923ms | 4,166 / 98 |
+
+⇒ TPM 안에서는 **7/7 성공 · 0.79~1.72초**. TPM을 넘기면 즉시 429(4/4).
+
+### 74.3 ⭐⭐ 단계 전환 판정표 — 정본 (⛔ 표 밖은 "아니요")
+
+| Gemini 체인(1·2차)의 최종 오류 | Groq 시도 | 최종 |
+|---|---|---|
+| 숫자 `status` **429**(일일·분당·불명 무관 — 키 순환이 끝난 뒤의 429) | **예, 1회** | Groq 성공 → 실 응답 / 실패 → Mock |
+| 숫자 `status` **500~599**(2차 대체까지 쓴 뒤의 503 포함) | **예, 1회** | 같음 |
+| 숫자 status 없음 + 본문 JSON `error.code`가 429 또는 5xx | **예, 1회** | 같음 |
+| **Gemini 단계 시간 초과**(`GeminiStageTimeoutError` — `geminiBudgetMs` 초과, 요청 abort) | **예, 1회** | 같음 |
+| 400·401·403·404 등 4xx | 아니요 | Mock |
+| 안전 차단 · 빈 응답 | 아니요(안전 판단 우회 방지) | Mock |
+| 네트워크(`fetch failed`) · 바깥 `withTimeout` `deadline-exceeded` · 그 밖 | 아니요 | Mock |
+
+- **예산 조건**: `timeoutMs - 경과 < 2,000ms`(`LLM_OVERLOAD_MIN_ATTEMPT_MS`)이면 Groq를 생략한다(같으면 시도).
+- **Groq 실패**는 종류를 묻지 않고 던진다(재시도·추가 단계 없음). Groq 429/5xx도 재시도하지 않는다.
+- `providerName`은 1차(`"gemini"`)를 위임한다(G176). `GroqLlmClient` 자체는 `"groq"`(`LlmClient` 유니온 확장) — rewind/judge.ts는 `!== "mock"`만 보므로 영향 없다.
+
+### 74.4 예산 산술 (⭐ 총합은 늘지 않는다)
+
+| 턴 | 총 상한(무변경) | Gemini 단계 상한 | Groq 몫 |
+|---|---|---|---|
+| 일반 턴 · 오프닝 · 되감기 | 10초 | **7초** | 3초 |
+| `sendMessage` 첫 사용자 턴 | 20초 | **17초** | 3초 |
+
+- `GROQ_RESERVE_MS = 3000` 근거: Groq 성공 2/2가 0.79~1.02초(74.2). 최소 시도 여유 2초보다 크게 잡았다.
+- ⚠️ **Groq 키가 있으면 Gemini가 7~10초에 답하던 일반 턴은 이제 Groq로 넘어간다**(Gemini 단계에서 3초를 덜어 오므로). Gemini의 503 재시도·2차 대체 판정도 `geminiBudgetMs` 기준으로 예산 부족 판정이 더 일찍 난다. Groq 키가 없으면 §73과 완전히 같다. 이것이 이 변경의 유일한 Gemini 쪽 행동 차이이며 **설정값(키 유무)으로만 갈린다**.
+
+### 74.5 개인식별정보 가명 처리 (Groq 단계 전용 · `llm/piiPseudonymizer.ts` 판정표가 정본)
+
+| 대상 | 탐지 | Groq로 보내는 값 | 응답 복원 |
+|---|---|---|---|
+| 이메일·주민번호·전화·계좌(8자리+) | 사용자 턴에 `maskPII` **재적용**(저장 전 이미 적용됨 — `roleplay/index.ts:100` — 멱등 방어선) | `[이메일]`·`[주민번호]`·`[전화]`·`[계좌]` | 아니요 |
+| 이름 | 사용자 턴 "이름/성함 + 은·는·이·:" 뒤 한글 2~4자 · 직전 사기범 턴이 이름/성함을 물었고 답이 이름으로 시작 | 가명(`정하윤`·`한지호`…) | **예** — 모델이 가명을 되부르면 원래 이름으로 |
+| 생년월일 | `YYYY년 M월 D일` · `YY년 M월 D일` · `YYYY.MM.DD`(`-`·`/`) · 단서(같은 턴 또는 직전 사기범 턴의 "생년월일/생일")가 있는 6자리 | 가짜 날짜(`1971년 3월 14일`…) | **예** |
+
+- 탐지된 원문 값은 **사기범 턴에서도** 같은 가명으로 바꾼다(사기범이 이름을 되불렀을 수 있다). 사기범 턴에는 `maskPII`를 걸지 않는다 — 가상 계좌가 `[계좌]` 토큰이 되면 모델이 토큰을 읊는다(2026-09-06 사고 부류).
+- ⚠️ 한계: 단서 없는 이름("저는 홍길동입니다")·한글로 쓴 날짜는 잡지 않는다. "저는 X입니다"를 이름으로 보면 "학생입니다"의 뜻이 바뀐다 — **과소 탐지를 택했다**. systemPrompt는 사용자 데이터를 담지 않아 대상이 아니다.
+- 로그에는 개수만(`pseudonymizedNames`·`pseudonymizedBirthdates`).
+
+### 74.6 대사 규칙 · 품질
+
+| 규칙 | Groq 출력 적용 | 근거 |
+|---|---|---|
+| 3문장 상한(`limitReplySentences`) · 실존 금융회사명 → OO은행(`replaceRealFinancialNames`, #277·#289) · 링크/신호 마커 · finalize | **같다** — `sendMessage`가 공급자 구분 없이 `completion.text` 하나에 같은 순서로 건다(분기 0) | `roleplay/index.ts` · 테스트 `groqPseudonymAndPost.test.ts` ② |
+| 페이로드 가상값 규칙(`promptAssembly.ts:132`) | **같다** — 시스템 프롬프트 문면이며 Groq 요청 system 메시지가 `buildSystemPrompt` 결과를 바이트 그대로 싣는다 | 같은 테스트 ② |
+
+- ⚠️ **관찰(프로브 7회)**: Groq 원문은 4~6문장으로 Gemini(3~4문장)보다 길다 → 3문장 상한이 7/7 걸렸고, 뒤쪽 문장에 있던 **구체적 요구("성함과 생년월일을 말씀해 주시겠습니까?" 등)가 6/7에서 잘렸다**. 상한 로직은 공급자 공통이라 이 PR은 손대지 않는다 — OQ-A99.
+- 한국어 자연스러움 샘플: PR 본문에 원문·후처리본을 첨부한다.
+
+### 74.7 관측 해석 규칙
+
+| 로그 | 위치 | 의미 |
+|---|---|---|
+| `sendMessage LLM 응답 단계` `servedBy` | `roleplay/index.ts` | 이 턴을 응답한 단계 — `gemini-primary`/`gemini-fallback`/`groq`/`mock` |
+| `Groq 3차 예비 응답` `{reason}` | `groqFallback.ts` | 넘어온 이유 `http-429`·`http-503`·`stage-timeout` 등 |
+| `Groq 3차 예비 실패` `{status}` | 같은 곳 | 이어서 Mock 강등 로그. `status: 429`가 이어지면 TPM/TPD 소진(74.2 ①-b) |
+| `Groq 3차 예비 — 예산 부족으로 생략` | 같은 곳 | 남은 시간 < 2초 |
+| `Groq 텍스트 생성 성공` `{promptTokens, completionTokens, pseudonymized*}` | `groqClient.ts` | 토큰 사용량 — TPM 여유 판단 근거 |
+| `Groq 3차 예비 비활성 — GROQ_API_KEY 없음` | `llm/index.ts` | 키 미설정(인스턴스당 1회) |
+
+### 74.8 게이트
+
+| G | 고정하는 것 | 테스트 |
+|---|---|---|
+| **G456** | 단계 전환 판정표 전수(429·5xx·본문 code·단계 시간 초과만 예) | `llm/__tests__/groqFallback.test.ts` ① |
+| **G457** | Groq 1회·재시도 없음·예산 경계(`<` 생략, `=` 시도)·providerName 위임 | 같은 파일 ②~⑥ |
+| **G458** | 단계 상한에서 Gemini abort → Groq 1회, 늦은 Gemini 응답은 결과로 안 쓰임(중복 생성·저장 방지) · 바깥 취소 전파 | ⑦ · ⑦-b |
+| **G459** | 배선 소스 스캔 + 오염본 역검증(단계 상한 누락·Groq 단독·예산 상수화·Groq가 바깥 상한 밖) · §73 G451 스캔은 `geminiBudgetMs`·`tagServedBy` 형태로 갱신 | ⑩ · ⑩-역검증 · `overloadRetry.test.ts` ⑩ · `overloadFallback.test.ts` ⑩ |
+| **G460** | Groq 요청 형태(모델 ID·reasoning low·추론문 제외·키는 헤더에만)·에러 본문 비노출·가명 처리/복원·로그에 원문 없음 | ⑨~⑨-e · `groqPseudonymAndPost.test.ts` ① |
+| **G461** | 후처리 동일 적용(3문장·OO은행·페이로드 규칙 문면) · 호출부 공급자 분기 0 | `groqPseudonymAndPost.test.ts` ② |
+| **G462** | 시크릿: Groq 1슬롯·Gemini 순환 배열 불포함 · 읽기=선언 정합 | ⑫ · `devtools/__tests__/secretDeclarationGate.test.ts` |
+
+### 74.9 남은 결정 · 위험 (⛔ 자기 고지)
+
+| # | 항목 | 상태 | 선택지 / 확인 방법 |
+|---|---|---|---|
+| **OQ-A97** | **Gemini 경로에도 이름·생년월일 가명 처리를 넓힐지** — 정책 결정 사항(브리프: 결정하지 말고 선택지로) | User 결정 대기 | (A) Groq만(현행) — Gemini 경로 무변경 / (B) Gemini에도 같은 가명 처리 적용 — Gemini 무료분 학습 사용 위험(README)을 줄이지만 Gemini 프롬프트가 바뀌어 품질 재검증 필요 / (C) 저장 단계 `maskPII`에 이름·생년월일을 추가 — 모든 공급자·Firestore 이력까지 가려지지만 리포트·리플레이 표시가 바뀐다 |
+| **OQ-A98** | **TPM 8,000 → 실효 분당 1~2건 · 하루 약 50건** — Gemini가 오래 장애이면 Groq도 곧 429 → Mock | 기록 | 배포 후 `Groq 3차 예비 실패 status 429` 빈도. 필요하면 유료 플랜(비용 결정) |
+| **OQ-A99** | Groq 원문이 길어 3문장 상한이 구체적 요구를 자른다 | 기록 | (A) 그대로 / (B) Groq에만 길이 지시 1줄 추가(프롬프트 변경 — 별건) / (C) 상한 로직 개선(공급자 공통 — 별건) |
+| ⚠️ | 약관 머리 조항 *"not for consumer use"* 해석 | 추정 | Groq 문의 · 법무 검토 |
+| ⚠️ | Groq 키를 등록하지 않고 배포하면 배포가 멈춘다(`defineSecret` 선언 함정 — `shared/config.ts`) | 배포 절차 | 배포 전 `firebase functions:secrets:set GROQ_API_KEY`(User 승인) |
+| ⚠️ | 로컬 키 위치 — 현재 메인 체크아웃 `functions/.env`에 있다. 시크릿은 `functions/.secret.local`이 관례 | User 작업 | User가 직접 옮긴다(값 출력 금지) |
+| 한계 | Groq 모델 종료·ID 변경 시 404 → 판정표상 Mock(조용히 3차가 죽는다 — §73 OQ-A95와 같은 부류) | 기록 | `Groq 3차 예비 실패 status 404` |
+
+### 74.10 이 패스의 편집 범위
+
+- 코드: `functions/src/llm/{groqClient,groqFallback,piiPseudonymizer}.ts`(신규) · `llm/index.ts` · `llm/types.ts` · `llm/geminiClient.ts`(`OPENING_TRIGGER_TURN` export, `abortSignal` 전달 — 신호 없으면 무변경) · `shared/config.ts` · onCall 4개 파일 시크릿 선언 · `roleplay/index.ts`(로그 1줄).
+- 테스트: 신규 2파일 · `overloadRetry.test.ts`·`overloadFallback.test.ts` 배선 정규식 갱신(G451 형태 변경).
+- 문서: 이 절 · DECISIONS #122 · README · `functions/.env.example` · CHANGELOG.
+> **번호**: §74 · G456~G462 · OQ-A97~A99 · #122(이 워크트리 최대 §73·G455·OQ-A96·#121). ⛔ 예약 아님 — 병합 순서로 확정.

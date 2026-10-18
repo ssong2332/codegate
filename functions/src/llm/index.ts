@@ -7,14 +7,17 @@
 // 반환하고 있었다(텍스트 대화가 음성 통화와 달리 문맥을 전혀 반영 못하는 원인). realtime/
 // provider.ts의 readSecret 패턴을 그대로 재사용해 GEMINI_API_KEY가 있으면 실제 Gemini 텍스트
 // 생성으로 격상한다. Claude(LLM_API_KEY/LLM_PROVIDER)는 여전히 placeholder라 그 분기는 TODO로 남김.
-export type { LlmClient, LlmCompletionInput, LlmCompletionResult, LlmMessage, LlmMessageRole } from "./types";
+export type { LlmClient, LlmCompletionInput, LlmCompletionResult, LlmMessage, LlmMessageRole, LlmServedBy } from "./types";
 export { MockLlmClient } from "./mockClient";
 export { GeminiLlmClient } from "./geminiClient";
+export { GroqLlmClient } from "./groqClient";
 
 import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
-import { GEMINI_KEY_SECRETS } from "../shared/config";
+import { GEMINI_KEY_SECRETS, GROQ_API_KEY } from "../shared/config";
 import { GEMINI_FALLBACK_TEXT_MODEL, GeminiLlmClient } from "./geminiClient";
+import { GroqLlmClient } from "./groqClient";
+import { tagServedBy, withGroqFallback, withStageDeadline } from "./groqFallback";
 import { MockLlmClient } from "./mockClient";
 import { withOverloadFallback } from "./overloadFallback";
 import { withOverloadRetry } from "./overloadRetry";
@@ -77,6 +80,25 @@ export const LLM_OVERLOAD_RETRY_DELAYS_MS: readonly number[] = [500, 1500];
 export const LLM_OVERLOAD_MIN_ATTEMPT_MS = 2000;
 
 /**
+ * Groq 3차 예비에 남겨 두는 시간(ms, 2026-10-18 · Architecture.md §74.4).
+ * Groq 키가 있을 때만 Gemini 체인(1·2차)의 예산이 `timeoutMs - 이 값`으로 줄고, 그 상한을 넘기면 Gemini
+ * 요청을 취소하고 Groq로 넘어간다(일반 턴 7초 + 3초 · 첫 턴 17초 + 3초). Groq 키가 없으면 쓰지 않는다
+ * (= 기존 동작 그대로). 근거: 실제 시스템 프롬프트 Groq 프로브 성공 2/2가 0.79~1.02초(§74.2).
+ */
+export const GROQ_RESERVE_MS = 3000;
+
+/**
+ * Groq 키(하나만)를 읽는다 — 없거나 placeholder면 "". 값은 관측에 나가지 않는다(G170).
+ * ⛔ 키 여러 개를 돌려 쓰는 구조로 바꾸지 말 것 — Groq 한도는 조직 단위다(§74.2).
+ */
+export function getGroqApiKey(): string {
+  return readSecret(GROQ_API_KEY);
+}
+
+/** 키 부재 로그는 인스턴스당 1회만(매 턴 반복하지 않는다). */
+let groqDisabledLogged = false;
+
+/**
  * LlmClient.complete()을 Promise.race로 감싸 LLM_TIMEOUT_MS 초과 시 `deadline-exceeded`
  * HttpsError를 던진다. getLlmClient()가 반환하는 모든 구현체(Mock이든 향후 Claude/Gemini든)에
  * 공통 적용되도록 팩토리 단계에서 감싼다 — 호출부(sendMessage/generateOpeningLine)가 각자
@@ -135,28 +157,48 @@ export function withTimeout(client: LlmClient, timeoutMs: number): LlmClient {
  */
 export function getLlmClient(timeoutMs: number = LLM_TIMEOUT_MS): LlmClient {
   const keys = getGeminiApiKeys();
+  // Groq는 **3차 예비**일 뿐 단독 공급자로 쓰지 않는다(§74.1) — Gemini 키가 없으면 읽지도 않는다(= 지금처럼 Mock).
+  const groqKey = keys.length > 0 ? getGroqApiKey() : "";
+  if (keys.length > 0 && !groqKey && !groqDisabledLogged) {
+    groqDisabledLogged = true;
+    logger.info("Groq 3차 예비 비활성 — GROQ_API_KEY 없음");
+  }
+  // Gemini 체인(1·2차)의 예산 — Groq가 있으면 3초를 남기고 끝나야 한다. 없으면 기존과 같은 timeoutMs.
+  const geminiBudgetMs = groqKey ? timeoutMs - GROQ_RESERVE_MS : timeoutMs;
   // 과부하 재시도(withOverloadRetry)는 **실 Gemini에만** 감싼다 — Mock은 throw하지 않는다.
-  // 예산(budgetMs)은 바깥 withTimeout과 같은 timeoutMs다(재시도 포함 총합이 timeoutMs로 갇힌다).
+  // 예산(budgetMs)은 Gemini 체인의 몫이다(Groq가 없으면 바깥 withTimeout과 같은 timeoutMs).
+  // tagServedBy는 응답에 단계 이름만 붙인다(관측 전용 — 재시도·순환 동작 무관).
   const primary =
     keys.length > 0
-      ? withOverloadRetry(createRotatingGeminiClient(keys), {
+      ? withOverloadRetry(tagServedBy(createRotatingGeminiClient(keys), "gemini-primary"), {
           delaysMs: LLM_OVERLOAD_RETRY_DELAYS_MS,
-          budgetMs: timeoutMs,
+          budgetMs: geminiBudgetMs,
           minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS,
         })
       : new MockLlmClient();
   // 과부하 대체 모델(withOverloadFallback, 2026-10-18)도 **실 Gemini에만** — 재시도를 다 쓴 뒤의 최종
   // 과부하에만 GEMINI_FALLBACK_TEXT_MODEL로 1회 묻는다(재시도 바깥, withTimeout 안쪽). 같은 키 순환기를
   // 대체 모델용으로 하나 더 만든다(429 키 전환 규칙이 대체 호출에도 그대로 적용된다).
-  const client =
+  const gemini =
     keys.length > 0
       ? withOverloadFallback(
           primary,
-          createRotatingGeminiClient(keys, (apiKey) => new GeminiLlmClient(apiKey, GEMINI_FALLBACK_TEXT_MODEL)),
-          { budgetMs: timeoutMs, minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS },
+          tagServedBy(
+            createRotatingGeminiClient(keys, (apiKey) => new GeminiLlmClient(apiKey, GEMINI_FALLBACK_TEXT_MODEL)),
+            "gemini-fallback",
+          ),
+          { budgetMs: geminiBudgetMs, minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS },
         )
       : primary;
-  // ⛔ withTimeout이 순환기·과부하 재시도·대체 모델 **바깥**이다(§37.5 (1)) — 모든 시도의 **총합**이 timeoutMs로 갇힌다.
+  // Groq 3차 예비(2026-10-18, §74) — 429·5xx·Gemini 단계 시간 초과에서만 1회. Gemini 체인에는 안쪽
+  // 단계 상한(withStageDeadline)이 걸려, 상한을 넘기면 Gemini 요청을 취소하고 넘어온다.
+  const client = groqKey
+    ? withGroqFallback(withStageDeadline(gemini, geminiBudgetMs), new GroqLlmClient(groqKey), {
+        budgetMs: timeoutMs,
+        minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS,
+      })
+    : gemini;
+  // ⛔ withTimeout이 순환기·과부하 재시도·대체 모델·Groq **바깥**이다(§37.5 (1)) — 모든 시도의 **총합**이 timeoutMs로 갇힌다.
   // 뒤집으면 키마다 시간 제한이 걸려 2키에서 2배가 되어 AC-004 목표가 깨진다.
   // 예비 요청(withHedge, PR #289)은 2026-10-18 되돌렸다 — 배포 후 실측에서 예비 요청 승리 0/2,
   // 4초 초과 호출 3/3으로 Gemini 호출만 2배가 됐고, 첫 턴은 1차·예비 둘 다 10초를 넘겨 지연이
@@ -203,6 +245,6 @@ export async function completeWithFallback(
       attemptedKeys: readAttemptedKeys(error),
       error: error instanceof Error ? error.message : String(error),
     });
-    return await new MockLlmClient().complete(input);
+    return { ...(await new MockLlmClient().complete(input)), servedBy: "mock" };
   }
 }
