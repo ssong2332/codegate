@@ -4,6 +4,15 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **아래 첫 블록(2026-10-18 추가분, 브랜치 `fix/llm-overload-fallback-model`, 커밋 `81b103f`, base `2904d16`)**: 아직 main에 병합되지 않았고 배포 0회, 라이브 미검증이다. 테스트 수치는 보고 인용값이다(docs 미재현). User 결정(2026-10-18): 구현·리뷰·QA 후 #295와 함께 배포.
+
+### Fixed
+- **Gemini 503 재시도 후에도 과부하면 `gemini-3.5-flash-lite`로 1회 대체**: 아래 #295 항목의 "검토 중(미도입)" 대체 모델이 이번에 도입됐다. 재시도(0.5초·1.5초)를 다 쓰고도 503이면 대체 모델로 1회 호출한다. 근거: 대체 후보 프로브 5/5 성공 · p50 1.25초.
+  - **조건**: `경과+2초 <= 시간 상한`일 때만 실행한다(예산이 모자라면 생략). 429·안전 차단·타임아웃·네트워크 오류는 대체하지 않는다. 대체 모델이 429면 API 키 전환은 기존대로 동작한다.
+  - **적용 범위**: `sendMessage`·오프닝·되감기 판정. `GeminiLlmClient`가 실제 호출 모델을 요청·성공 로그에 기록한다. 대체 응답은 `isMock: false`라 "미리 준비된 대사" 고지(`llmProvider` mock)가 붙지 않는다. 대체도 실패하면 기존대로 Mock으로 강등한다. 새 환경 변수는 없다.
+  - **한계**: 라이브 미검증 · 대체 모델 품질은 5회 표본뿐 · 대체 호출도 같은 키의 쿼터를 쓴다.
+  - **검증(인용값)**: functions 982→996 pass / 0 fail · 루트 531 / 0 · reviewer APPROVED(Minor 4) · QA GO(가짜 fetch 8시나리오: 대체 성공 2.0초 · 대체 실패 시 Mock 강등 · 429·안전 차단은 대체 미호출 · 10초 예산에서 8.5초 503은 생략, 20초 예산은 실행 · 대체 모델 429 키 전환). `docs/Tasks.md`에 행이 없다(`Refs: (미등재 — planner 인계)`).
+
 > ⚠️ **이 블록(2026-10-18 추가분, 브랜치 `fix/llm-overload-retry`, 커밋 `1283ea9`, base `54cb12a`)**: 아직 main에 병합되지 않았고 배포 0회, 라이브 미검증이다. 테스트 수치는 QA 보고 인용값이다(docs 미재현).
 
 ### Fixed
@@ -11,7 +20,7 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
   - **구성**: 신규 `functions/src/llm/overloadClass.ts`(`isOverloadError` — status 503, 또는 본문 JSON이 `UNAVAILABLE`·code 503)와 `overloadRetry.ts`(`withOverloadRetry` — 0.5초·1.5초 대기 후 최대 2회). `경과+대기+2초 > 시간 상한`이면 그 재시도는 생략한다. 429·타임아웃·네트워크 오류는 재시도하지 않아 API 키 순환(429)에는 간섭하지 않는다.
   - **적용 범위**: `getLlmClient()`가 실 Gemini에만 씌우고 `withTimeout`이 가장 바깥이다. 팩토리 경유라 `sendMessage`(첫 턴 20초·이후 10초)·오프닝·되감기 판정에 모두 적용된다. 새 환경 변수는 없다.
   - **한계**: 503 거절이 무료 쿼터에 집계되는지 미확인(추정 — 확인 방법: 재시도 다발 시간대의 쿼터 사용량 비교) · 타임아웃 뒤에도 진행 중이던 요청과 늦은 "재시도 성공" 로그가 남을 수 있음 · 503이면 API 키 1번에서만 재시도 · 모델 과부하 자체는 해결하지 않는다.
-  - **검토 중(미도입)**: 대체 모델 후보 프로브(2026-10-18)를 마쳤으나 도입은 User 결정 대기이며 코드에는 반영하지 않았다.
+  - **검토 중(미도입)**: 대체 모델 후보 프로브(2026-10-18)를 마쳤으나 도입은 User 결정 대기이며 코드에는 반영하지 않았다. → 이후 User가 도입을 결정해 `gemini-3.5-flash-lite` 대체가 위 첫 항목(`81b103f`)으로 구현됐다.
   - **검증(인용값 — QA 보고)**: reviewer APPROVED(Minor 5) · QA GO · functions 967→982 pass / 0 fail · 루트 529 / 0 · 실제 타이머 실측(503 1회 뒤 +0.5초·2회 뒤 +2초에 성공, 10초 예산에서 7.6초에 온 503은 재시도 생략, 2키 429 순환 유지). `docs/Tasks.md`에 이 작업의 행이 없다(커밋 `Refs: (미등재 — planner 인계)`).
 
 ### Added (2026-10-18 · 브랜치 `test/AC-090-gaps` · PRD v1.19 AC-090 · 테스트만, 배포 불필요 · 미병합)
