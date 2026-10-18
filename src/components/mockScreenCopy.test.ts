@@ -107,22 +107,64 @@ function sharedHeaderOf(code: string): string {
   return code.slice(0, code.indexOf("landingKind === \"app-install\" ? ("));
 }
 
-test("[AC-006 · T187] '훈련 종료'가 kind와 무관하게 **공유 헤더**에 있고 공유 헤더에 세션 중 표식이 없다", () => {
+// ⭐ 사용자 결정(2026-10-18) — 가짜 랜딩 브라우저 바의 "훈련 종료"를 **없앴다**(메신저 진입·문자함 진입 둘 다).
+// 그래서 옛 단언("공유 헤더에 `<EndTrainingButton`이 정확히 1회")을 **반전**했다: 이 파일 어디에도 종료 컨트롤·
+// 종료 콜백이 없어야 한다. 표식 0 단언(AC-086)은 결정과 무관해 그대로 둔다.
+/** 이 파일에 남은 종료 컨트롤 흔적. 반전 단언과 역검증이 같이 쓴다. */
+function endControlTraces(code: string): string[] {
+  return ["EndTrainingButton", "onEndTraining", "훈련 종료"].filter((token) => code.includes(token));
+}
+
+test("[사용자 결정 2026-10-18 · T187] 가짜 랜딩(공유 헤더 포함)에 '훈련 종료'가 **없고** 공유 헤더에 세션 중 표식이 없다", () => {
   const header = sharedHeaderOf(componentCode);
   assert.deepEqual(sharedHeaderMarkers(header), [], "공유 헤더에 세션 중 표식·부정 문구가 남아 있다(AC-086)");
-  assert.ok(header.includes("<EndTrainingButton"), "상시 '훈련 종료'가 분기 이전(공유 헤더)에 있어야 한다");
-  // 헤더가 kind별로 복제되면 한쪽만 고쳐지는 사고가 난다.
-  assert.equal(
-    componentCode.split("<EndTrainingButton").length - 1,
-    1,
-    "종료 컨트롤은 정확히 한 번만 렌더된다(두 kind가 공유)",
+  assert.deepEqual(
+    endControlTraces(componentCode),
+    [],
+    "가짜 랜딩에 종료 컨트롤이 되살아났다 — 사용자 결정(2026-10-18)으로 브라우저 바의 '훈련 종료'는 없다",
   );
 });
 
+test("[사용자 결정 2026-10-18 역검증] 공유 헤더에 종료 버튼을 되살린 사본은 반전 단언에 걸린다", () => {
+  const anchor = "{landingHostFor(landingKind, landingId)}";
+  const poisoned = componentCode.replace(anchor, `${anchor}\n<EndTrainingButton onClick={onEndTraining} />`);
+  assert.notEqual(poisoned, componentCode, "오염 지점(주소창 호스트)을 찾지 못했다 — 역검증이 공회전한다");
+  assert.deepEqual(endControlTraces(poisoned), ["EndTrainingButton", "onEndTraining"]);
+});
+
+// ⭐ 사용자 결정(2026-10-18 · UX-023 v1.36 표 · D-116) — 메신저 진입 대화상자의 진입 포커스 · 트랩 · Esc · 복귀.
+// 키보드 이벤트는 이 저장소에서 실행 관측이 안 돼(렌더러·DOM 없음) 소스 형태로 고정한다(실행 확인은 브라우저).
+function messengerDialogFocusViolations(code: string): string[] {
+  const out: string[] = [];
+  if (!code.includes("if (!isMessenger) return;")) out.push("문자함 진입에서도 트랩이 돈다(중첩 트랩 — G460)");
+  if (!code.includes("dialogRef.current?.focus();")) out.push("진입 포커스가 대화상자로 가지 않는다");
+  if (!/event\.key === "Escape"[\s\S]{0,80}onCloseRef\.current\(\)/.test(code)) out.push("Esc = 닫기가 아니다");
+  if (!code.includes("(event.shiftKey ? last : first).focus();")) out.push("밖 포커스를 안쪽으로 감싸지 않는다");
+  if (!code.includes("first.focus();") || !code.includes("last.focus();")) out.push("첫/끝 순환이 없다");
+  if (!code.includes("opener.focus();")) out.push("닫힌 뒤 연 요소로 포커스가 돌아가지 않는다");
+  if (!code.includes("ref={dialogRef}")) out.push("대화상자에 ref가 없다");
+  return out;
+}
+
+test("[사용자 결정 2026-10-18 · UX-023 v1.36] 메신저 진입 대화상자: 진입 포커스 · 트랩 · Esc = 닫기 · 연 요소로 복귀", () => {
+  assert.deepEqual(messengerDialogFocusViolations(componentCode), []);
+});
+
+test("[사용자 결정 2026-10-18 역검증] Esc 처리 · 진입 포커스를 지운 사본은 각각 실패한다", () => {
+  const noEsc = componentCode.replace('event.key === "Escape"', 'event.key === "Esc-removed"');
+  const noFocus = componentCode.replace("dialogRef.current?.focus();", "");
+  assert.notEqual(noEsc, componentCode, "오염 지점(Esc)을 찾지 못했다");
+  assert.notEqual(noFocus, componentCode, "오염 지점(진입 포커스)을 찾지 못했다");
+  assert.deepEqual(messengerDialogFocusViolations(noEsc), ["Esc = 닫기가 아니다"]);
+  assert.deepEqual(messengerDialogFocusViolations(noFocus), ["진입 포커스가 대화상자로 가지 않는다"]);
+});
+
 test("[AC-006 · T187 역검증] 공유 헤더에 옛 표식 배너를 되살린 사본은 반전 단언에 걸린다", () => {
+  // 사용자 결정(2026-10-18) — 옛 오염 앵커(`<EndTrainingButton …/>`)가 사라져 같은 공유 헤더 안의 주소창 호스트로 옮겼다.
+  const anchor = "{landingHostFor(landingKind, landingId)}";
   const poisoned = componentCode.replace(
-    "<EndTrainingButton onClick={onEndTraining} />",
-    '<Banner variant="caution" sticky className="flex-1">AI 훈련용 모의 화면 · 실제 설치·권한 부여가 아닙니다</Banner>\n<EndTrainingButton onClick={onEndTraining} />',
+    anchor,
+    `${anchor}\n<Banner variant="caution" sticky className="flex-1">AI 훈련용 모의 화면 · 실제 설치·권한 부여가 아닙니다</Banner>`,
   );
   assert.notEqual(poisoned, componentCode, "오염 지점을 찾지 못했다 — 역검증이 공회전한다");
   const found = sharedHeaderMarkers(sharedHeaderOf(poisoned));
@@ -634,10 +676,9 @@ test("[T84 → T187] 모의 화면 오버레이 헤더가 난이도 배지를 **
 });
 
 test("[T84 → T187 역검증] 배지를 되살린 사본은 반전 단언에 걸린다", () => {
-  const poisoned = componentCode.replace(
-    "<EndTrainingButton onClick={onEndTraining} />",
-    "<span>난이도 {difficultyLabel}</span>\n<EndTrainingButton onClick={onEndTraining} />",
-  );
+  // 사용자 결정(2026-10-18) — 옛 오염 앵커(`<EndTrainingButton …/>`)가 사라져 같은 헤더의 주소창 호스트로 옮겼다.
+  const anchor = "{landingHostFor(landingKind, landingId)}";
+  const poisoned = componentCode.replace(anchor, `${anchor}\n<span>난이도 {difficultyLabel}</span>`);
   assert.notEqual(poisoned, componentCode, "오염 지점을 찾지 못했다 — 역검증이 공회전한다");
   assert.deepEqual(difficultyBadgeTraces(poisoned), ["difficultyLabel", "난이도 {"]);
 });

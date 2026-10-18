@@ -16,17 +16,17 @@
 // ⚠️ **말풍선 스레드로 바뀌어도 "보내는 쪽"은 닮지 않는다**(P-27 (6)) — 스레드 하단 입력 바를
 // 만드는 것이 이 화면의 최빈 사고이며, `callContinuity.test.ts`의 G80 스캔이 그것을 고정한다.
 //
-// ⚠️ **AC-006**: 포커스 트랩이 통화 셸 하단의 종료 버튼을 가두므로, 이 오버레이 **안에** 자체
-// "훈련 종료"를 둔다(선례: MessengerFakeLanding). 트랩을 푸는 방식은 쓰지 않는다.
-// 표식(AC-022)·종료(AC-006)는 스크롤과 무관한 `shrink-0` 헤더에 남는다 — 말풍선 스레드 안으로
-// 넣어 함께 스크롤되게 만들지 않는다(§23.4).
+// ⚠️ **종료 경로(사용자 결정 2026-10-18)**: 이 오버레이 안의 자체 종료 버튼(헤더 오른쪽)을 **없앴다**.
+// 끝내려면 "통화로 돌아가기"(통화 표시줄 탭 · 헤더 뒤로 · 하단 버튼 · 랜딩 "‹ 문자" 뒤 그 경로) → 통화 화면의
+// 빨간 통화 종료다. 복귀 컨트롤은 전부 포커스 트랩(panelRef) **안**에 있어 트랩이 사용자를 가두지 않는다.
+// 트랩을 푸는 방식은 쓰지 않는다. 복귀 컨트롤은 스크롤과 무관한 `shrink-0` 영역에 남는다 — 말풍선
+// 스레드 안으로 넣어 함께 스크롤되게 만들지 않는다(§23.4).
 //
 // ⚠️ **퇴장 연출은 이 컴포넌트 내부 상태로만 처리한다**(§23.6 A4 / G89) — 호출부에 두 번째 상태를
 // 만들어 언마운트를 지연시키면 **한도 도달 시 종료 고지가 연출 시간만큼 가려진다**(AC-059).
 // 호출부가 `setSmsOverlayOpen(false)`를 부르는 경로(한도 자동 종료·훈련 종료)는 이 상태를 거치지
 // 않고 **즉시 언마운트**된다(§23.6 A5).
 import { useCallback, useEffect, useRef, useState } from "react";
-import EndTrainingButton from "./EndTrainingButton";
 import MessengerFakeLanding from "./MessengerFakeLanding";
 import PhoneIcon from "./PhoneIcon";
 import {
@@ -49,15 +49,17 @@ type InCallSmsOverlayProps = {
   callerLabel: string;
   elapsedLabel: string;
   /**
-   * 통화 필에 이어 붙이는 **최신 사기범 자막**(P-27 (2) ④ · OQ-U27 (a)).
-   * 문자함이 전면이 되면 통화 셸의 자막이 시각에서 사라지므로, 자막을 필로 옮기지 않으면
-   * *"사기범 음성 대사는 항상 자막 동시 제공"* 규약이 깨진다(청각 접근성 회귀).
-   * ⛔ **참가자 턴은 오지 않는다** — 호출부가 `role === "scammer"` 턴만 넣는다(G79/G93:
-   * 참가자가 말한 계좌·생년월일이 마스킹 없이 화면에 남는 것을 막는 **안전 조건**이다).
+   * ⛔ **더 이상 그리지 않는다**(사용자 결정 2026-10-18 — 통화 표시줄의 AI 대사 자막 제거, 문자함·그 안의 랜딩
+   * 둘 다). 대사 자막은 통화 화면 자체 자막에만 남는다(표시줄 탭 = 통화 복귀). 호출부(session/play/page.tsx)가
+   * 아직 넘기므로 타입에만 남겨 두고 **구조 분해하지 않는다** — 호출부 정리는 그 파일 소유 세션의 몫이다.
    */
   scammerCaption?: string | null;
   onClose: () => void;
-  onEndTraining: () => void;
+  /**
+   * ⛔ **더 이상 쓰지 않는다**(사용자 결정 2026-10-18 — 헤더 오른쪽 종료 버튼 제거). 호출부가 아직 넘기므로 타입에만
+   * 남겨 두고 구조 분해하지 않는다(위 `scammerCaption`과 같은 이유).
+   */
+  onEndTraining?: () => void;
   /** 문자를 열어본 시각 기록(fire-and-forget — 실패해도 훈련을 막지 않는다). */
   onOpened: (smsId: string) => void;
   /** 링크 칩 탭 기록. */
@@ -92,9 +94,7 @@ export default function InCallSmsOverlay({
   messages,
   callerLabel,
   elapsedLabel,
-  scammerCaption,
   onClose,
-  onEndTraining,
   onOpened,
   onLinkTapped,
   onLandingSubmitted,
@@ -236,7 +236,8 @@ export default function InCallSmsOverlay({
     return () => observer.disconnect();
   }, [threadIds]);
 
-  // Esc 닫기 + 포커스 트랩(AC-006 — 트랩 안에 "훈련 종료"가 포함돼 있어 종료는 항상 도달 가능).
+  // Esc 닫기 + 포커스 트랩(트랩 안에 "통화로 돌아가기" 컨트롤이 있어 통화 화면의 종료로 항상 돌아갈 수 있다 —
+  // 첫/끝 요소는 매 Tab마다 실제 보이는 요소에서 다시 고르므로 헤더 종료 버튼이 빠져도 그대로 동작한다).
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -344,30 +345,24 @@ export default function InCallSmsOverlay({
 
           {/* ── ① 통화 표시줄(P-37 (4) · P-27 (2)(9) · UX-027 v1.33 (2)) — 스크롤과 무관하게 맨 위 고정이고, 문자함과
               그 안의 랜딩 **두 보기가 함께 쓴다**(UX-023 (1) "UX-027에서 열렸을 때만" — 구조로 충족 · §74.8 ③).
-              5요소: ① 상대 표기 ② 초 단위 경과 시간 ③ "통화 중" **텍스트**(색·아이콘 단독 금지) ④ 최신 사기범 자막
-              (aria-live · **최대 2줄 · 높이 상한 36px** — 옛 `line-clamp-2 block` 충돌 해결, 문제 2c) ⑤ 탭 = 통화 복귀.
+              4요소: ① 상대 표기 ② 초 단위 경과 시간 ③ "통화 중" **텍스트**(색·아이콘 단독 금지) ⑤ 탭 = 통화 복귀.
+              ⛔ 옛 ④ 최신 사기범 자막은 **없앴다**(사용자 결정 2026-10-18 — 문자함·랜딩 두 보기 모두). 대사 자막은 통화
+              화면 자체 자막에만 남고, 표시줄 탭 1번으로 그 화면에 돌아간다. 번호는 옛 5요소 번호를 그대로 둔다.
               오른쪽 "통화로" 칩은 없앴다(표시줄 자체가 버튼이고 아래 큰 복귀 버튼이 있다).
               ⛔ 발신자는 호출부가 이미 계산해 넘긴 `callerLabel` prop **하나만** 읽는다(G87/§23.7 C1·C2).
               아래 스레드의 발신번호(`senderLabel`)는 **문자의 발신자**이고 통화 발신자와 다른 값이 정상이다(§23.7 C3). */}
           <button
             type="button"
             onClick={requestClose}
-            className="flex min-h-[48px] shrink-0 flex-col text-left"
+            className="flex h-12 shrink-0 items-center text-left"
             style={{ backgroundColor: CALL_BAR_TOKENS.bg, color: CALL_BAR_TOKENS.text }}
           >
-            <span className="flex h-11 w-full items-center gap-2 px-3.5">
+            {/* 사용자 결정(2026-10-18 · UX-027 v1.36 (2) ①) — 한 줄 48px 고정(2행 없음). */}
+            <span className="flex h-12 w-full items-center gap-2 px-3.5">
               <PhoneIcon name="accept-call" size={16} />
               <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{callerLabel}</span>
               <span className="shrink-0 text-[15px] tabular-nums">통화 중 · {elapsedLabel}</span>
             </span>
-            {scammerCaption ? (
-              <span
-                aria-live="polite"
-                className="line-clamp-2 max-h-[36px] overflow-hidden px-3.5 pb-2 text-[13px] leading-[18px]"
-              >
-                “{scammerCaption}”
-              </span>
-            ) : null}
             <span className="sr-only">눌러서 통화로 돌아가기</span>
           </button>
 
@@ -376,11 +371,14 @@ export default function InCallSmsOverlay({
             hidden={view !== "thread"}
             className={view === "thread" ? "flex min-h-0 flex-1 flex-col" : "hidden"}
           >
-            {/* ② 대화 헤더(D-89) — 왼쪽 뒤로(= 통화 복귀) · 발신자(iOS형 가운데 · One UI형 왼쪽) · 오른쪽 "훈련 종료".
+            {/* ② 대화 헤더(D-89) — 왼쪽 뒤로(= 통화 복귀) · 발신자(iOS형 가운데 · One UI형 왼쪽).
                 ⛔ 실제 앱의 통화·영상·메뉴 아이콘을 그리지 않는다(동작 없는 버튼 금지 — P-37 R-6).
-                T187(§72 · AC-086) — 세션 중 표식 0. 종료 버튼은 **자기 혼자만 든** `justify-end` 칸에 둔다(G449). */}
+                T187(§72 · AC-086) — 세션 중 표식 0. ⚠️ 사용자 결정(2026-10-18) — 오른쪽 종료 버튼과 그것만 들던
+                `justify-end` 칸(옛 G449)을 **없앴다**. 오른쪽은 비워 둔다(새 컨트롤로 채우지 않는다 — P-37 R-6).
+                UX-027 v1.36 (2) ② — iOS형 가운데 발신자 칸은 좌우 대칭 `inset-x-28` 유지(오른쪽 빈 자리로 가운데 유지) ·
+                One UI형·기본은 이름 칸이 오른쪽 끝 16px 앞까지 늘어난다(`pr-4`). */}
             <div
-              className="relative flex min-h-[56px] shrink-0 items-center gap-1 border-b pr-2"
+              className="relative flex min-h-[56px] shrink-0 items-center gap-1 border-b pr-4"
               style={{ backgroundColor: thread.headerBg, borderColor: thread.headerBorder }}
             >
               <button
@@ -419,9 +417,6 @@ export default function InCallSmsOverlay({
                   </span>
                 </div>
               )}
-              <div className="ml-auto flex shrink-0 justify-end">
-                <EndTrainingButton onClick={onEndTraining} />
-              </div>
             </div>
 
             {/* ③ 스레드 — 말풍선 단위가 열람 판정 관측 대상이다(시각 구분줄은 관측 대상이 아니다 — UX-027 (7) ⓒ). */}
@@ -566,7 +561,8 @@ export default function InCallSmsOverlay({
           </div>
 
           {/* ── 보기 2: 랜딩(UX-023 재사용 — 그리는 곳은 여전히 MessengerFakeLanding 한 파일). 문자함과 **같은 대화상자
-              안**이라 포커스 트랩 하나가 두 보기를 덮고 "훈련 종료"는 랜딩 브라우저 바에서도 도달 가능하다(AC-006).
+              안**이라 포커스 트랩 하나가 두 보기를 덮는다(랜딩에서는 맨 위 통화 표시줄 · 브라우저 바 "‹ 문자"로 복귀 —
+              사용자 결정 2026-10-18로 랜딩 브라우저 바의 종료 버튼은 없다).
               T104(§19.4 #6) — `landingId`·`landingKind`를 함께 넘겨 상황에 맞는 화면이 뜨게 한다.
               ⛔ 이 파일은 콘텐츠를 하나도 갖지 않는다. */}
           {landing && (
@@ -584,7 +580,6 @@ export default function InCallSmsOverlay({
                 landingKind={landing.landingKind}
                 onHide={() => setView("thread")}
                 onClose={closeLanding}
-                onEndTraining={onEndTraining}
                 // T123/AC-080 — 제출 **사실 하나**를 페이지로 중계한다. 인자는 이 문자의 id뿐이고
                 // 참가자 입력값은 콜백 자체가 무인자라 여기까지 오지 않는다(G138).
                 onCredentialSubmit={() => onLandingSubmitted(landing.smsId)}
