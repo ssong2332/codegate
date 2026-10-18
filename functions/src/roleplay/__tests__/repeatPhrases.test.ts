@@ -323,7 +323,9 @@ test("[T191/S4b · G500 · AC-096 (d)] 전 시나리오 × {원본 + 초급 변�
                   `turn=${turnInstruction ? turnInstruction.slice(0, 20) : "-"} → ${found.join(", ")}`,
               );
             }
-            assert.ok(/물러선다/.test(assembled), `${id}/${variantId}: 초급 산출물에 물러섬 지시("물러선다")가 있어야 한다`);
+            // ⚠️ 정직 고지(리뷰 Minor 1): "물러선다"는 모든 초급 산출물에 공통으로 붙는 BEGINNER_BLOCK에 있다 — 이 단언은
+            // "초급 블록이 붙었다"를 확인할 뿐 시나리오별 물러섬 문면을 보증하지 않는다.
+            assert.ok(/물러선다/.test(assembled), `${id}/${variantId}: 초급 블록(물러섬 지시)이 붙어 있어야 한다`);
           }
         }
       }
@@ -332,7 +334,8 @@ test("[T191/S4b · G500 · AC-096 (d)] 전 시나리오 × {원본 + 초급 변�
   t.diagnostic(`시나리오 ${ids.length}종 · 초급 변형 ${variantCount}개 · 조합 ${combos}`);
   // 초급 변형이 0개로 비면 "원본만 검사"로 조용히 줄어든다 — 변형 데이터가 살아 있음을 함께 단언한다.
   assert.ok(variantCount >= 14, `초급 변형이 너무 적다(${variantCount}) — 변형 경로가 빠지면 거짓 OK다`);
-  assert.ok(combos >= 17 * 2 * 2, `조합 수가 너무 적다(${combos})`);
+  // 리뷰 Minor 2 — 하한을 실측(412) 근처로: 턴 지시 목록이 조용히 비면 실패한다.
+  assert.ok(combos >= 400, `조합 수가 너무 적다(${combos}) — 실측 412`);
   assert.deepEqual(violations, [], `초급 산출물에 지속성 지시가 남아 있다:\n${violations.join("\n")}`);
 });
 
@@ -374,7 +377,7 @@ test("[T191/S4b · G500] 중급 = 옵션 미전달 출력 불변식 — 전 시�
   assert.ok(checked >= 17, `검사 수가 너무 적다(${checked})`);
 });
 
-test("[T191/S4b] 수법은 그대로 — 조건을 낮춰 다시 요구하는 5항목은 라벨·인용 대사를 유지하고 '새 조건으로 다시 요구한다'로 끝난다", () => {
+test("[T191/S4b] 수법은 그대로 — 조건을 낮춰 다시 요구하는 5항목은 라벨·인용 대사를 유지하고 '새 조건으로 다시 요구한다'를 포함한다", () => {
   const expected: [string, string, string][] = [
     ["grandchild-impersonation", "상품권 대체 요구", "'그럼 편의점 가서 문화상품권 사서 뒷면 번호만 사진 찍어 보내주세요'"],
     ["kidnapping-threat", "금액 조정 재요구", "'그럼 지금 당장 되는 만큼만 먼저 넣어요'"],
