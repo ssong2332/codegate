@@ -4,6 +4,7 @@
 import type { ScenarioPromptDoc } from "../shared/types";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { LlmMessage } from "../llm";
+import { applyFictionalBank, EXAMPLE_ACCOUNT_NUMBER } from "../shared/fictionalBank";
 
 // 사용자 신고(2026-07-25) — "사람과 대화한다는 느낌이 안 든다", "대화가 자연스럽지 않다",
 // "시나리오대로 유도하되 사용자의 말을 파악해서 흘러가야 한다". 기존 프롬프트는 페르소나(누구인가)와
@@ -158,7 +159,7 @@ const SCENARIO_PROGRESSION_TEMPLATE = `[진행 강제 — 반드시 지킨다]
 {{IDENTITY_CHECK_HANDLING}}
 {{OFF_SCREEN_RULE}}
 - **통화를 끝내는 것은 상대다 — 너는 끝내지 않는다.** "그럼 통화 종료하겠습니다", "끊겠습니다", "여기까지 하겠습니다"처럼 네가 통화를 마치겠다는 말을 어떤 표현으로도 하지 않는다. 상대가 침묵하거나 대화가 소강 상태가 되어도 네 쪽에서 마무리 인사를 하지 않고, 상황에 맞는 말로 대화를 이어 둔다. 상대가 스스로 끊는 것은 상대의 몫이다.
-- **페이로드는 가상값만 쓴다.** 계좌번호·앱 이름·링크·연락처를 요구하거나 불러 줄 때는 **실존하지 않는 기관명**을 쓰되(예: "OO은행", "국민안전지원센터"), 숫자는 실제처럼 들리는 형식으로 또박또박 부른다(예: "OO은행 948-2716-5093-27"). **은행 이름은 "OO은행"이라고 그대로 말한다** — "OO"은 실제 은행 이름을 채워 넣을 빈칸이 아니라 이 훈련에서 쓰는 가상 은행의 이름이다. 계좌·카드를 말할 때 실제로 있는 은행·카드사 이름은 어떤 경우에도 쓰지 않는다. 실존하지 않는 곳의 번호라 어디로도 연결되지 않지만, 참가자에게는 진짜 계좌를 불러주는 것과 똑같이 들려 몰입이 깨지지 않는다. **요구하는 행위 자체는 그대로 하되**, 실존 기관의 실제 계좌·실제 동작하는 앱/링크·실제 연락처만 쓰지 않는다 — 참가자가 겪는 판단 상황은 동일하다.`;
+- **페이로드는 가상값만 쓴다.** 계좌번호·앱 이름·링크·연락처를 요구하거나 불러 줄 때는 **실존하지 않는 기관명**을 쓰되(예: "OO은행", "국민안전지원센터"), 숫자는 실제처럼 들리는 형식으로 또박또박 부른다(예: "OO은행 948-2716-5093-27"). **은행 이름은 "OO은행"이라고 그대로 말한다** — 이 훈련에서 쓰는 가상 은행의 이름이며, 실제 은행 이름을 채워 넣을 빈칸이 아니다. 계좌·카드를 말할 때 실제로 있는 은행·카드사 이름은 어떤 경우에도 쓰지 않는다. 실존하지 않는 곳의 번호라 어디로도 연결되지 않지만, 참가자에게는 진짜 계좌를 불러주는 것과 똑같이 들려 몰입이 깨지지 않는다. **요구하는 행위 자체는 그대로 하되**, 실존 기관의 실제 계좌·실제 동작하는 앱/링크·실제 연락처만 쓰지 않는다 — 참가자가 겪는 판단 상황은 동일하다.`;
 
 // §50.4.4 (3) — identityCheckAllowed로 갈리는 "본인확인을 그냥 통과시키지 않는다" 항목. TRUE는
 // 종전 문자열 그대로다(회귀 0). FALSE는 "○○○님 맞으시죠?" 이름 단정 템플릿을 빼고, 이름을 먼저
@@ -278,7 +279,7 @@ function buildScenarioProgression(
 // 그 다음 줄의 **지속 압박 절**(*"물러서지 않고 계속 밀어붙인다"*)과 **여전히 충돌한다.**
 // 그 줄들은 **2026-07-24 사용자 요청으로 저작된 문장**이라 손대지 않았다(**G129** —
 // `*.prompt.ts` diff 0줄이 이 절의 완료 증거다). 조건부 치환은 **관측 후 사용자 판단**이다(G131).
-// ⏳ T191 S4(2026-10-18 · User 결정 D4 = DECISIONS #131) — 위 G129의 전제가 바뀌었다: 지속 압박 절은
+// ⏳ T191 S4(2026-10-18 · User 결정 D4 = DECISIONS #150) — 위 G129의 전제가 바뀌었다: 지속 압박 절은
 // 난이도 압박 축으로 이관됐다. 시나리오 페르소나 문면은 *"의심·거절하면 한 번 더 다른 근거로 설득한다"*
 // (= 중급 L2 — 중급은 블록이 없는 기준선이라 중급 값이 페르소나에 남는다)로 바뀌었고, 초급은 BEGINNER_BLOCK의
 // *"한 발 물러선다"*, 고급은 ADVANCED_BASE의 *"물러서지 않되 매번 다른 근거"* 가 정한다.
@@ -562,6 +563,18 @@ function buildDifficultyBlock(
  * 대체한다.** 추가 블록은 전부 이 옵션으로 넘겨야 guardrailPreamble 앞에 삽입된다.
  */
 export type BuildSystemPromptOptions = {
+  /**
+   * 2026-10-18(Architecture §81) — 이 세션의 가상 은행명(`shared/fictionalBank.ts` `resolveFictionalBankName`).
+   * 주어지면 조립 결과의 자리표시자 "OO은행"·"○○은행"(공통 규칙·시나리오 수법·턴 지시)을 전부 이 이름으로 바꾼다 —
+   * 문자 본문(`inCallSms/buildDoc.ts`)과 같은 이름이라 대사와 문자가 일치한다. 부재면 종전과 같은 문자열("OO은행")이다.
+   */
+  fictionalBankName?: string;
+  /**
+   * 2026-10-19(Architecture §81.6) — 이 세션의 계좌번호(`resolveSessionAccountNumber`). 주어지면 조립 결과의 예시 계좌
+   * `948-2716-5093-27`(공통 규칙·시나리오 수법)을 이 번호로 바꾸고, "이 대화에서 계좌를 불러 줄 때는 이 번호를 그대로
+   * 쓴다" 1문장을 붙인다 — 계좌 문자가 있는 시나리오는 문자 속 계좌와 같은 번호가 된다. 부재면 종전 문자열.
+   */
+  sessionAccountNumber?: string;
   /** UX-029에서 사용자가 고른 강도. 부재·intermediate면 블록을 내보내지 않는다(기준선). */
   difficultyLevel?: DifficultyLevel;
   /**
@@ -685,7 +698,7 @@ export function buildSystemPrompt(
         identityCheckAllowed,
       })
     : null;
-  return [
+  const assembled = [
     prompt.personaPrompt,
     "",
     "[사용 가능한 수법(weakenedTactics) — 이 목록 밖의 수법, 특히 실제 운영 가능한 사기 수법을 스스로 만들지 않는다]",
@@ -718,6 +731,8 @@ export function buildSystemPrompt(
     ...(opts.turnInstruction ? [opts.turnInstruction, ""] : []),
     prompt.guardrailPreamble,
   ].join("\n");
+  const withAccount = opts.sessionAccountNumber ? applySessionAccount(assembled, opts.sessionAccountNumber) : assembled;
+  return opts.fictionalBankName ? applyFictionalBank(withAccount, opts.fictionalBankName) : withAccount;
 }
 
 const USER_INPUT_OPEN = "[훈련참가자입력:데이터시작]";
@@ -738,8 +753,11 @@ const USER_INPUT_CLOSE = "[훈련참가자입력:데이터끝]";
 // 원천 차단한다. `[[SIGNAL:...]]`도 정규식에 이미 함께 포함돼(T29가 선제적으로 넣어 둠) 같은 보호를
 // 받는다 — T30(에스컬레이션 구현)이 실제로 escalationSignal.ts의 감지 로직을 추가한 뒤 이 정규식이
 // `[[SIGNAL:ESCALATE_VOICE]]` 흉내도 무력화함을 확인했다(별도 수정 불필요, 코드가 이미 앞서 있었음).
+// ⭐ T191(문자 도달 조건 설계 §82.3.1 — 정본 위치) — 텍스트 폴백의 문자 요청 마커 `[[SMS:목적]]`(`smsMarker.ts`)도 같은
+// 방식으로 무력화한다. 추출 정규식이 대소문자 · 공백을 허용하므로(`[[ sms : …]]`) 이쪽도 같은 폭으로 잡는다.
+// LINK · SIGNAL 정규식은 종전 그대로다(바이트 회귀 0).
 function escapeSentinelLookalikes(text: string): string {
-  return text.replace(/\[\[(LINK|SIGNAL):/g, "［［$1：");
+  return text.replace(/\[\[(LINK|SIGNAL):/g, "［［$1：").replace(/\[\[(\s*SMS\s*):/gi, "［［$1：");
 }
 
 function escapeDelimiterLookalikes(text: string): string {
@@ -768,4 +786,16 @@ export function toLlmHistory(
       ? { role: "user" as const, content: wrapUserInputAsData(m.textMasked) }
       : { role: "assistant" as const, content: m.textMasked },
   );
+}
+
+/** §81.6 — 예시 계좌를 세션 계좌로 바꾸고, 그 번호만 쓰라는 1문장을 [진행 강제] 가상값 줄에 붙인다. */
+const ACCOUNT_RULE_ANCHOR = `숫자는 실제처럼 들리는 형식으로 또박또박 부른다(예: "OO은행 ${EXAMPLE_ACCOUNT_NUMBER}").`;
+function applySessionAccount(text: string, accountNumber: string): string {
+  const withRule = text.includes(ACCOUNT_RULE_ANCHOR)
+    ? text.replace(
+        ACCOUNT_RULE_ANCHOR,
+        `${ACCOUNT_RULE_ANCHOR} **이 대화에서 계좌번호를 불러 줄 때는 이 번호를 그대로 쓴다** — 문자로 보낸 계좌가 있으면 그 문자 속 계좌와 같은 번호다. 다른 계좌번호를 지어내지 않는다.`,
+      )
+    : text;
+  return withRule.split(EXAMPLE_ACCOUNT_NUMBER).join(accountNumber);
 }

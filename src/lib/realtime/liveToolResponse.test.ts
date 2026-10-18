@@ -5,7 +5,7 @@ import {
   buildAlreadyAnnouncedToolResponse,
   buildUnsupportedToolResponses,
   collectToolResponses,
-  pickModelToolSmsId,
+  readSmsPurposeArg,
   resolveToolCallKind,
 } from "./liveToolResponse.ts";
 
@@ -75,27 +75,19 @@ test("resolveToolCallKind — 도구 1개만 선언된 세션(sendPreparedSms만
   assert.equal(resolveToolCallKind("offer_verification_desk", smsOnly), "unsupported");
 });
 
-const TRIGGERS_TWO = [
-  { smsId: "sms-a", afterScammerTurns: 3 },
-  { smsId: "sms-b", afterScammerTurns: 5 },
-];
-
-test("[§59.6 ③] pickModelToolSmsId — 게이트 도달 전이어도 가장 이른 미도착 항목을 고른다(하한 재검증은 서버 몫)", () => {
-  // scammerTurns가 아무리 낮아도(=아직 이르더라도) 후보에서 제외하지 않는다 — 이 함수는 턴 게이트를
-  // 보지 않는다(§59.7 하한 재검증은 deliverInCallSms의 model_tool 경로가 진다).
-  assert.equal(pickModelToolSmsId(TRIGGERS_TWO, []), "sms-a");
+// ⭐ T191(문자 도달 조건 · G538) — 예전 `pickModelToolSmsId`(화면이 카탈로그 순서로 smsId를 고름) 테스트 4건은 함수
+// 폐기와 함께 지웠다. 화면은 모델이 고른 `purpose` 원값을 꺼내 넘기기만 하고 검증은 서버가 한다.
+test("[G538] readSmsPurposeArg — args.purpose 문자열을 그대로 꺼낸다(enum 검증은 서버 몫이라 enum 밖 값도 그대로)", () => {
+  assert.equal(readSmsPurposeArg({ purpose: "transfer" }), "transfer");
+  assert.equal(readSmsPurposeArg({ purpose: "anything" }), "anything");
 });
 
-test("pickModelToolSmsId — 이미 도착한 항목은 건너뛰고 다음 항목을 고른다", () => {
-  assert.equal(pickModelToolSmsId(TRIGGERS_TWO, ["sms-a"]), "sms-b");
-});
-
-test("pickModelToolSmsId — 전부 이미 도착했으면 카탈로그에서 가장 이른 항목을 다시 돌려준다(서버가 already_delivered로 응답 — none_pending과 동일 문면)", () => {
-  assert.equal(pickModelToolSmsId(TRIGGERS_TWO, ["sms-a", "sms-b"]), "sms-a");
-});
-
-test("pickModelToolSmsId — 카탈로그 자체가 비어 있으면 null이다(도구 선언 조건상 오늘 도달 불가, 방어값)", () => {
-  assert.equal(pickModelToolSmsId([], []), null);
+test("readSmsPurposeArg — args 부재 · 객체 아님 · purpose 비문자열이면 undefined(서버가 not_allowed로 거부)", () => {
+  assert.equal(readSmsPurposeArg(undefined), undefined);
+  assert.equal(readSmsPurposeArg(null), undefined);
+  assert.equal(readSmsPurposeArg("transfer"), undefined);
+  assert.equal(readSmsPurposeArg({}), undefined);
+  assert.equal(readSmsPurposeArg({ purpose: 3 }), undefined);
 });
 
 // ══════════════════════════════════════════════════════════════════════════════════════════

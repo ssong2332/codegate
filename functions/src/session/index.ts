@@ -7,6 +7,7 @@
 // 만들 필요 없이 세션 라이프사이클의 나머지 부분(endSession 본문, AC-006/015/023 — 상시 종료·
 // 디스컬레이션·"훈련이었습니다" 고지)에 집중하면 된다(구현 보고서에 크로스트랙 노트로 남김).
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope, denyAnonymous } from "../shared/anonymousGate";
@@ -25,6 +26,9 @@ import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, LLM_TEXT_SECRETS } fr
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "./channelTransition";
+import { readEndSessionReason, resolveRecordedEndReason } from "./endReason";
+import { assertDifficultyAllowed } from "./difficultyAllowance";
+import { assignFlowVariantForSession, commitSessionWithVariant } from "./variantAssignment";
 import type { MessageDoc, MessengerSkin, MessengerSkinSource, SessionDoc } from "../shared/types";
 import type {
   CreateSessionRequest,
@@ -38,6 +42,7 @@ import type {
   UpdateMessengerSkinRequest,
   UpdateMessengerSkinResponse,
 } from "./types";
+import { pickFictionalBankName } from "../shared/fictionalBank";
 
 ensureFirebaseAdminApp();
 
@@ -95,6 +100,10 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     if (!SCENARIO_PROMPTS[scenarioId]) {
       throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
     }
+    // T191 S5(PRD AC-097 (b) · UX 계약 C-2) — 고급 전용 시나리오를 초급 · 중급 · **난이도 미전달**로
+    // 만드는 요청을 거부한다. ⛔ 위치가 설계다: 정규화(아래 normalizeDifficultyLevel) **전** 원값으로,
+    // 어떤 Firestore 읽기 · 쓰기 · LLM · 음성 호출보다 앞(거부는 그 호출 0회로 일어난다).
+    assertDifficultyAllowed(scenarioId, difficultyLevel);
 
     // T72(§15.3.2, UX-029/AC-064) — 난이도는 enum 검증 후에만 기록한다. 부재·enum 밖이면 조용히
     // 임의 난이도로 진행하지 않고 "intermediate"로 확정하며, 응답에 그 확정값을 실어 클라가 폴백
@@ -171,9 +180,22 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     // 주석 참고. 사용자 실측 신고로 발견된 정합성 버그 수정, 2026-07-24).
     // T72(§15.3.3 호출부 3곳 중 "오프닝 대사") — 세션 문서 write 전이라 요청값(정규화 완료)을 직접
     // 넘긴다. 여기서 빠뜨리면 오프닝 첫 마디만 중급으로 나오는 비대칭이 생긴다(§15.6 G5).
+    // §81 — 세션 가상 은행명을 오프닝 전에 고른다(오프닝 대사와 세션 문서가 같은 이름을 쓴다).
+    const fictionalBankName = pickFictionalBankName();
+    // T191 S5(PRD AC-096 (e) · D6) — 흐름 변형 배정. 오프닝 대사도 배정된 변형으로 조립해야 하므로
+    // generateOpeningLine 앞이다. Firestore 접근은 회전 문서 키 조회 1건뿐(인덱스 0 — 설계 금지 X6).
+    // 동의 · 한도 게이트 뒤라 거절된 시도는 회전 문서를 읽지도 쓰지도 않는다.
+    const variantAssignment = await assignFlowVariantForSession(
+      db,
+      request.auth.uid,
+      scenarioId,
+      resolvedDifficultyLevel,
+    );
     const { message: openingMessage, isMock } = await generateOpeningLine(
       scenarioId,
       resolvedDifficultyLevel,
+      variantAssignment.flowVariantId,
+      fictionalBankName,
     );
 
     // T4: sessionId(온보딩 "사전 세션 id")가 넘어오면 createVoiceClone이 만들어 둔 pending
@@ -236,10 +258,24 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       // T72(§15.3.2) — 항상 확정값을 기록한다(부재 문서는 하위호환 읽기로만 처리하고, 새 문서는
       // 명시 필드를 남긴다 — "값이 없으니 기본이겠지"를 판정 근거로 삼지 않는다는 §15.0-4 원칙).
       difficultyLevel: resolvedDifficultyLevel,
+      fictionalBankName,
+      // T191 S5(AC-096 (e)) — 배정된 흐름 변형의 **불투명 ID**만 기록한다(수법 · 흐름 0 — X1 · C-4).
+      // 여기 값은 미리보기이고, 아래 트랜잭션이 회전 문서를 다시 읽어 확정값으로 덮어 쓴다.
+      // 응답에는 싣지 않는다(세션 전 화면에 변형 정보 0 — 아래 return 참고).
+      flowVariantId: variantAssignment.flowVariantId,
     };
     // merge:true — sessionId를 채택한 경우 pending 문서(createVoiceClone이 만든 voiceProvider 등
     // 부가 필드)를 지우지 않고 scenarioId/status 등을 덧씌운다. 새 문서인 경우는 기존과 동일.
-    await sessionRef.set(sessionDoc, { merge: true });
+    // T191 S5 — 회전 문서(`users/{uid}/variantRotation/{scenarioId}__{level}`)와 세션 문서를 **한
+    // 트랜잭션**으로 쓴다(회전 문서를 다시 읽어 확정 → 둘을 같은 커밋). 동시 생성 경합에서도 연속 배정 0.
+    // 후보가 1개면 회전 문서를 읽지도 쓰지도 않는다.
+    sessionDoc.flowVariantId = await commitSessionWithVariant(
+      db,
+      sessionRef,
+      sessionDoc,
+      variantAssignment,
+      now,
+    );
 
     await sessionRef.collection("messages").add({
       role: "scammer",
@@ -300,6 +336,14 @@ export const endSession = onCall<EndSessionRequest, Promise<EndSessionResponse>>
     if (!sessionId || !endReason) {
       throw new HttpsError("invalid-argument", "sessionId와 endReason이 필요합니다.");
     }
+    // T192 C1(§79.5 ① · G508) — 사유 허용목록. 그 밖의 문자열은 기록하지 않는다.
+    const requestedReason = readEndSessionReason(endReason);
+    if (!requestedReason) {
+      throw new HttpsError(
+        "invalid-argument",
+        "endReason은 user_ended · limit_reached · scammer_ended 중 하나여야 합니다.",
+      );
+    }
 
     const db = getFirestore();
     const sessionRef = db.collection("sessions").doc(sessionId);
@@ -322,9 +366,19 @@ export const endSession = onCall<EndSessionRequest, Promise<EndSessionResponse>>
       return { status: "ended", reportPending: true };
     }
 
+    // T192 C1(§79.5 ② · G508) — 서버 승인 표식 없는 `scammer_ended`는 `user_ended`로 기록한다(거절 0 —
+    // AC-006 "종료는 항상 성공"). 멱등 반환(위)보다 **뒤**라 먼저 쓴 사유는 그대로 남는다.
+    const recordedReason = resolveRecordedEndReason(requestedReason, session);
+    if (recordedReason !== requestedReason) {
+      logger.info("endSession 사유 강등 — 끊기 승인 표식 없음", {
+        requested: requestedReason,
+        recorded: recordedReason,
+      });
+    }
+
     await sessionRef.update({
       status: "ended",
-      endReason,
+      endReason: recordedReason,
       endedAt: Timestamp.now(),
     } satisfies Partial<SessionDoc>);
 

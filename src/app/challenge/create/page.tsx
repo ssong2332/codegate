@@ -29,7 +29,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createChallenge } from "@/lib/api";
 import { getSelectedDifficultyLevel } from "@/lib/recording";
 import {
+  ADVANCED_ONLY_NOT_CHALLENGEABLE_LINE,
+  ADVANCED_ONLY_NOT_CHALLENGEABLE_REASON,
   ADVANCED_SEND_NOTICE,
+  DIFFICULTY_NOT_ALLOWED_REASON,
   DIFFICULTY_LABEL,
   DIFFICULTY_SEND_DESCRIPTION,
   type DifficultyLevel,
@@ -45,6 +48,7 @@ type PageState =
   | "error-cap"
   | "error-clone"
   | "error-escalation"
+  | "error-advanced-only"
   | "error-issue";
 
 function getFunctionsErrorInfo(err: unknown): { code: string | null; reason: string | null } {
@@ -130,6 +134,13 @@ export default function ChallengeCreatePage() {
         setState("error-cap");
       } else if (code === "functions/failed-precondition" && reason === "escalation_not_supported") {
         setState("error-escalation");
+      } else if (
+        code === "functions/failed-precondition" &&
+        (reason === ADVANCED_ONLY_NOT_CHALLENGEABLE_REASON || reason === DIFFICULTY_NOT_ALLOWED_REASON)
+      ) {
+        // T191 S5(D-107 · C-2) — 고급 전용 시나리오 거부. 아래 "error-clone"(클론 미완료)으로 떨어지면 엉뚱한
+        // 안내가 나간다 — 같은 failed-precondition이라 `details.reason`으로 먼저 가른다.
+        setState("error-advanced-only");
       } else if (code === "functions/failed-precondition") {
         setState("error-clone");
       } else {
@@ -214,6 +225,22 @@ export default function ChallengeCreatePage() {
         <div className="w-full max-w-xs">
           <Button type="button" onClick={() => router.push("/onboarding/record")}>
             목소리 클론하러 가기
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
+  if (state === "error-advanced-only") {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+          <span aria-hidden="true">⚠</span>
+          <span>{ADVANCED_ONLY_NOT_CHALLENGEABLE_LINE}</span>
+        </p>
+        <div className="w-full max-w-xs">
+          <Button type="button" onClick={() => router.push("/scenarios/voice/generic")}>
+            다른 시나리오 선택하기
           </Button>
         </div>
       </main>

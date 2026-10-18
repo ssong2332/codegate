@@ -27,7 +27,12 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getExperienceMode, setSelectedScenarioId as persistSelectedScenarioId } from "@/lib/recording";
-import { SCENARIO_TRAIT_LABEL } from "@/lib/difficulty";
+import {
+  ADVANCED_ONLY_GROUP_TITLE,
+  ADVANCED_ONLY_TAG,
+  SCENARIO_TRAIT_LABEL,
+  partitionScenarioList,
+} from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc, type VoiceMode } from "@/content/scenarios";
 import { Badge, Button } from "@/components/ui";
 
@@ -48,7 +53,10 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
   const searchParams = useSearchParams();
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(() => {
     const preset = searchParams.get("scenarioId");
-    return preset && scenarios[preset]?.voiceMode === mode ? preset : null;
+    if (!preset || scenarios[preset]?.voiceMode !== mode) return null;
+    // T191 S5(D-107) — 지인에게 보내기 목록에는 고급 전용이 없으므로 프리셋도 받지 않는다.
+    if (scenarios[preset]?.advancedOnly === true && getExperienceMode() === "send") return null;
+    return preset;
   });
   // 단계 표시(breadcrumb) 전용 — self는 UX-016을 건너뛰어 유형→체험선택→시나리오(③)이고, send는
   // UX-016을 거쳐 유형→체험선택→방식→시나리오(④)다(v1.10 D-31 순서 반영). lazy initializer로 마운트
@@ -59,6 +67,20 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
   const filteredEntries = Object.entries(scenarios).filter(
     ([, scenario]) => scenario.voiceMode === mode,
   );
+  // T191 S5(UX-017 v1.34 · D-104 · D-107) — 기존 카드는 순서 무변경, 고급 전용 3종은 아래 별도 묶음.
+  // send(챌린지) 목록에서는 고급 전용 0건 · 묶음 제목도 없다(AC-097 (g) · 서버 createChallenge도 거부).
+  const { regular: regularEntries, advancedOnly: advancedOnlyEntries } = partitionScenarioList(
+    filteredEntries,
+    experienceModeHint === "send" ? "send" : "self",
+  );
+
+  const handleSelectScenario = (scenarioId: string) => {
+    setSelectedScenarioId(scenarioId);
+    // UX 계약 C-10 — 이벤트는 종류만(시나리오 ID · 수법 0).
+    if (scenarios[scenarioId]?.advancedOnly === true) {
+      console.info(JSON.stringify({ event: "advanced_only_scenario_selected" }));
+    }
+  };
 
   // (T72, v1.11 D-41) — 이 화면은 이제 **시나리오만 확정**하고 난이도 선택(UX-029)으로 넘긴다.
   // 세션/챌린지 생성 분기(send → UX-019, self·generic → createSession)는 그 화면이 그대로 넘겨받아
@@ -87,7 +109,7 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
             name="scenario"
             value={scenarioId}
             checked={selected}
-            onChange={() => setSelectedScenarioId(scenarioId)}
+            onChange={() => handleSelectScenario(scenarioId)}
             className="sr-only"
             aria-describedby={`scenario-${scenarioId}-meta`}
           />
@@ -106,7 +128,15 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
 
           <span className="flex min-w-0 flex-1 flex-col gap-1.5">
             <span className="flex items-start justify-between gap-2">
-              <span className="text-lg font-bold text-[#22303A]">{scenario.title}</span>
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="text-lg font-bold text-[#22303A]">{scenario.title}</span>
+                {/* T191 S5(D-104 (1)) — 텍스트 태그(테두리 칩 · 색 단독 금지, P-22). */}
+                {scenario.advancedOnly === true && (
+                  <span className="rounded-full border border-[#22303A] px-2 py-0.5 text-[13px] font-semibold text-[#22303A]">
+                    {ADVANCED_ONLY_TAG}
+                  </span>
+                )}
+              </span>
               {/* 선택 표시는 색 단독이 아니라 아이콘 병행(접근성). */}
               {selected && (
                 <span
@@ -163,15 +193,28 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
         </p>
       </header>
 
-      {filteredEntries.length === 0 ? (
+      {regularEntries.length + advancedOnlyEntries.length === 0 ? (
         // Empty 상태(UX-017 States) — 현재 데이터상 clone 2종·generic 7종 다 있어 실질 발생 안 함.
         <p className="rounded-xl border border-[#E2DDD3] bg-white p-4 text-base text-[#6B655C]">
           이 방식의 시나리오가 아직 없습니다.
         </p>
       ) : (
         <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2">
-          {filteredEntries.map(([scenarioId, scenario]) => renderScenarioCard(scenarioId, scenario))}
+          {regularEntries.map(([scenarioId, scenario]) => renderScenarioCard(scenarioId, scenario))}
         </ul>
+      )}
+
+      {/* T191 S5(UX-017 v1.34 (1) · D-104) — 고급 전용 묶음. 데이터가 없거나 send 모드면 묶음 자체를
+          그리지 않는다(빈 묶음 제목 0 — (5)). 제목은 h2라 스크린리더 목록 탐색에서 구분된다. */}
+      {advancedOnlyEntries.length > 0 && (
+        <section className="flex flex-col gap-3" aria-labelledby="advanced-only-group-title">
+          <h2 id="advanced-only-group-title" className="text-lg font-bold text-[#22303A]">
+            {ADVANCED_ONLY_GROUP_TITLE}
+          </h2>
+          <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2">
+            {advancedOnlyEntries.map(([scenarioId, scenario]) => renderScenarioCard(scenarioId, scenario))}
+          </ul>
+        </section>
       )}
 
       {/* 하단 고정 CTA(구 scenarios/page.tsx 관례 계승) — 목록이 뷰포트보다 길어질 수 있어 시작

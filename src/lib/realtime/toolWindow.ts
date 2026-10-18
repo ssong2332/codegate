@@ -1,4 +1,5 @@
 // §59.10 커밋 D — 천장(백스톱) 순수 판정. docs/Architecture.md §59.8·§59.9(R6) · G388·G390.
+// ⭐ T191 — `shouldFireBackstop`은 이제 확인 오퍼 백스톱 전용이다. 문자 백스톱은 파일 끝 `shouldRequestSmsBackstop`.
 //
 // ⛔ 이 모듈은 `src/lib/verifyintercept/verifyIntercept.ts`에 얹지 않는다(architect 지시 —
 // 그 파일은 이미 4개 축이 들어 있다, §59.8). 여기는 Live 도구(모델 주도 발동)의 **상한**만 다룬다.
@@ -52,4 +53,37 @@ export function shouldFireBackstop(input: ShouldFireBackstopInput): boolean {
   if (input.boundariesSinceDue >= TOOL_WINDOW_MAX_BOUNDARIES) return true;
   if (input.secondsSinceLastBoundary >= TOOL_WINDOW_STALL_SEC) return true;
   return false;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════
+// ⭐ T191 문자 도달 조건(PRD AC-099 (e) · 설계 "백스톱 — 필수 목적만 강제 · 선택 목적은 건너뛰기")
+//
+// 문자에는 위 `shouldFireBackstop`(사기범 턴 경계 · 90초)을 **더 이상 쓰지 않는다** — 그 함수는 확인 오퍼
+// (`offer_verification_desk`) 백스톱에만 남는다. 문자 백스톱의 계수는 **사용자 발화**이고, 무엇을 · 언제 넛지/발송할지는
+// 서버(`functions/src/inCallSms/smsGate.ts` `planSmsBackstop`)가 정한다 — 화면에는 목적 · 시점이 없다(설계 금지 X1).
+// 화면이 정하는 것은 "지금 서버에 물어볼까" 하나다(아래 표).
+//
+// | If | Then |
+// |---|---|
+// | 이 세션에 문자 선언이 없다(`credentials.inCallSmsBackstop` 부재) | 묻지 않는다 |
+// | 서버가 이미 `none_pending`(남은 필수 문자 없음)을 줬다 | 묻지 않는다 |
+// | 직전 질의가 아직 진행 중 | 묻지 않는다(다음 사용자 발화에서 최신 값으로 묻는다) |
+// | 이 사용자 발화 수로 이미 물었다 | 묻지 않는다(발화 1회당 최대 1회 — 서버 넛지가 "정확히 그 발화"에서만 나가는 근거) |
+// | 그 외(새 사용자 발화) | 묻는다 |
+
+export type ShouldRequestSmsBackstopInput = {
+  enabled: boolean;
+  /** 비어 있지 않은 사용자 전사 flush 수(`countTranscriptFlush`). */
+  userTurns: number;
+  /** 마지막으로 물은 시점의 `userTurns`(아직 묻지 않았으면 -1). */
+  lastRequestedUserTurns: number;
+  nonePending: boolean;
+  inFlight: boolean;
+};
+
+export function shouldRequestSmsBackstop(input: ShouldRequestSmsBackstopInput): boolean {
+  if (!input.enabled) return false;
+  if (input.nonePending) return false;
+  if (input.inFlight) return false;
+  return input.userTurns > input.lastRequestedUserTurns;
 }

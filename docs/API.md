@@ -48,6 +48,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | 처리 | 서버가 시나리오에 맞는 프로바이더를 고른다(functions/src/realtime/provider.ts). **① ElevenLabs**(키+에이전트 매핑 있을 때): 본인 목소리 클론 가능(유료), `GET /v1/convai/conversation/get-signed-url`로 서명 URL 발급, 프롬프트는 에이전트 쪽 보관. **② Gemini Live**(키 있고 generic 시나리오일 때): 무료 티어 가능하지만 고정 프리셋 음성만, `authTokens.create`로 단기 토큰 발급하며 모델·시스템 프롬프트·도구를 `liveConnectConstraints`로 서버에서 고정(ADR-0004 — 프롬프트가 클라로 안 감, 클라가 setup 프레임을 바꿔치기 못함). 어느 쪽이든 클라가 받는 건 접속 자격증명뿐이다. |
 | **challenge 분기**(T37·§14.7/ADR-0006·A1) | `session.challengeId`가 있으면(2인 사용자2 체험 세션): `session.voiceId`(부재) 대신 `challenges/{challengeId}` admin read로 voiceId 해석 + **그 챌린지 `status∈{consented,in_progress}`+미만료 재검증**(§14.2 발급 게이트) 후 자격증명 발급. 소유권 검증(`session.uid===request.auth.uid`, 익명 uid)은 유지. challengeId 부재 세션은 기존 경로 무변경. **T38 QA 수정, ADR-0006 Addendum A2**: 응답의 `voiceId`는 challenge 세션이면 `provider==="elevenlabs"`일 때만 채워진다(ElevenLabs 프로토콜상 클라 개시 TTS override에 실제로 필요 — `RealtimeVoiceSession`이 그 경우에만 마운트) — mock/none(`isMock:true`) 폴백은 어차피 클라가 쓰지 않으므로 `voiceId:""`로 비워 불필요한 노출을 막는다. challenge 아닌 일반 세션은 무변경(본인 소유 voiceId 그대로 반환). |
 | **T79 증분**(§16.1.5) | **`verifyOffer?: { availableAfterScammerTurns: number }`** — 확인 시도 무력화(UF-011)의 **가용 게이트만** 내려준다. **창구명·번호·모델 지시는 포함하지 않는다**(오퍼 시점에 `deliverVerifyOffer`가 서버 카탈로그에서 렌더 — `inCallSmsTriggers`와 동일 원칙). **부착 조건 3개를 전부 만족할 때만 필드가 존재한다**: ① `VERIFY_INTERCEPT[scenarioId]` 보유 ② `session.difficultyLevel === "advanced"` ③ `difficultyApplied === true`. → **ElevenLabs 경로에는 구조적으로 붙지 않는다**(주입 지점 부재 + 난이도 미적용, §16.6 G23) → 클라에 컨트롤이 **존재하지 않는다**. 부착 지점은 `inCallSmsTriggers`의 `withSmsTriggers` 래퍼와 **같은 자리**(`functions/src/realtime/index.ts:95-97`)이며, `provider:"none"` 폴백 분기에도 **붙인다**(그 경로는 `difficultyApplied:true`이고 확인 무력화가 성립한다 — `index.ts:125-136`). |
+| **T191 S5b 증분**(문자 도달 조건 · PRD AC-099 · `docs/Architecture.md` T191 절 "문자 도달 조건") | ⭐ **`inCallSmsTriggers` 제거 → `inCallSmsBackstop?: true`.** 위 Response · T57 증분 ①의 `inCallSmsTriggers`(smsId + 고정 턴)는 **더 이상 내려가지 않는다**(원문 보존 — 역사 기록). 발송 판정은 전부 서버이고, 클라에는 "이 세션은 사용자 발화마다 문자 백스톱을 물어도 된다"는 표시 하나만 간다(목적 · 시점 · smsId 0 — 설계 금지 X1). 부착 술어 = `sessionDeclaresInCallSms(scenarioId, flowVariantId)`(변형 문자 선언 ≥1 · 변형 부재면 종전 `hasInCallSms`). 상세 **부록 G**. |
 | Errors | 프로바이더 미설정·발급 실패는 **에러가 아니라** `provider:"none"`+`isMock:true`로 응답해 클라가 텍스트 폴백으로 강등한다(P-4 핵심 루프 비차단). `unauthenticated`/`permission-denied`/`failed-precondition`(세션 없음·비활성·challenge 만료/미동의)만 throw. |
 
 ### `createSession` — (Track B · T8 · UX-006 진입)
@@ -81,6 +82,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | Response | `{ status: "ended", reportPending: true }` |
 | 처리 | `sessions/{sid}.status=ended`·`endReason`·`endedAt` write. 이 write가 ① `onSessionEnded`(폐기 트리거) ② `generateReport` 개시를 유발. 클라는 `reports/{sid}`·`deletionLogs` 구독으로 완료 반영. |
 | Errors | `permission-denied`, `failed-precondition`(이미 ended면 멱등 처리). |
+| **T192 C1 증분**(2026-10-19 · `docs/Architecture.md` §79.5 `endSession` 행 · AC-103 (e) · G508 — 위 원문 무수정) | ① **사유 허용목록**: Request `endReason`은 **`"user_ended"` \| `"limit_reached"` \| `"scammer_ended"`만** 받는다(정확 일치 — `functions/src/session/endReason.ts:13-22`). 그 밖(위 Request 행의 `completed` · `deceived` 포함 — 사용처 0)은 **`invalid-argument`** *"endReason은 user_ended · limit_reached · scammer_ended 중 하나여야 합니다."*(`functions/src/session/index.ts:340-346`) — 누락은 종전대로 `invalid-argument` *"sessionId와 endReason이 필요합니다."*(`:336-338`). 둘 다 세션 read **앞**(I/O 0회). ② **`scammer_ended` 강등**: 세션에 서버 승인 표식 `scammerHangup`(→ `requestScammerHangup` · 부록 F)이 없으면 **`user_ended`로 기록**한다 — ⛔ 거절하지 않는다(AC-006 *"종료는 항상 성공"*) · 로그 *"endSession 사유 강등 — 끊기 승인 표식 없음"*(`endReason.ts:25-31` · `session/index.ts:371-377`). 응답은 무변경(`{ status: "ended", reportPending: true }` — 기록된 사유를 돌려주지 않는다). ③ **멱등 무변경**: 이미 `ended`면 재작성 0으로 같은 응답(`:365-367`) — 강등 판정은 그 **뒤**라 먼저 기록된 사유가 그대로 남는다. 클라 타입 `EndSessionReason`(`src/lib/api/types.ts:304-310`)에 `scammer_ended`가 추가됐고 `completed` · `deceived`는 타입에 남는다(서버가 거절). 기존 호출부 영향 0(클라는 `user_ended`만 보낸다 — §79.5). ⚠️ 줄번호 정정 고지: 위 Auth 행의 소유 검증 `:311-313` · 게이트 `:314`는 현행 `:355-357` · `:358`이다(내용 무변경). |
 
 ### `generateReport` — (Track A · T9 · UX-008)
 | Item | Value |
@@ -212,6 +214,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | 렌더링 | 응답은 렌더 소스가 **아니다** — 화면은 `sessions/{sid}/inCallSms` 구독(onSnapshot)으로 그린다(실시간·폴백 단일 소스, DECISIONS #12). |
 | 안전 | 본문·인증번호·계좌·발신번호는 **전부 서버 카탈로그의 모의값**(AC-005/013). **`url` 필드가 스키마에 없어** 외부 이동 경로가 구조적으로 존재하지 않는다(AC-032/045). LLM이 문자 내용을 생성하지 않는다. |
 | Errors | `permission-denied`(타인 세션), `failed-precondition`(세션 미활성), `invalid-argument`(카탈로그 밖 `smsId`). 실패해도 **통화는 계속된다** — 클라는 배너 자리에 인라인 오류+재시도만 표시(P-4). |
+| **T191 S5b 증분** | ⭐ **요청 · 응답이 바뀌었다** — 클라는 `smsId`를 고르지 않고 목적(`purpose`)과 사용자 발화 수를 보낸다. 위 Request/Response/처리 ①(카탈로그 소속 재검증)은 **역사 기록**이며, 현행 계약은 **부록 G**. |
 
 ### `recordInCallSmsEvent` — 문자 확인·링크 탭 기록 (T57 · UX-027 · §15.1.2)
 | Item | Value |
@@ -399,6 +402,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 |---|---|
 | Response 증분 | `{ …기존, liveTools?: { sendPreparedSms?: string; offerVerificationDesk?: string; failureInstruction: string } }` — **옵셔널 객체 1개 추가.** Request **무변경**. |
 | 부착 조건 | **Gemini 프로바이더 && 도구가 하나라도 선언될 때만** 필드가 존재한다. `sendPreparedSms`는 `hasInCallSms(scenarioId)`, `offerVerificationDesk`는 `hasVerifyIntercept && difficultyLevel==="advanced" && verifySeriesFor()==="A"`(⚠️ 오늘은 `bank-security-verify-scam` **1종뿐** — 계열 B 확장은 **OQ-A73**, **G392**). |
+| **부착 조건 · T191 S5b 증분** | `sendPreparedSms`(이름) · `send_prepared_sms`(선언)의 술어가 `hasInCallSms(scenarioId)` → **`sessionDeclaresInCallSms(scenarioId, flowVariantId)`**(리뷰 M2 — 프롬프트 `inCallSmsEnabled` 3곳 · `inCallSmsBackstop`과 **같은 단일 술어**). 문자 선언 0 변형(fv-c5fj · fv-pgqt · fv-aqp6 · fv-akj5)은 도구 · 문자 문면이 꺼진다. 변형 부재 세션은 종전과 바이트 동일. 도구 **인자** 변경은 부록 G. |
 | 왜 이름을 내려보내는가 | ⛔ **클라가 도구 이름을 하드코딩하지 않게 하려는 것이다(G385).** 클라는 `toolCall.functionCalls[].name`을 **이 값과 비교**해 어느 콜러블인지 정한다 ⇒ 서버가 이름을 바꿔도 **드리프트가 성립할 자리가 없다**(드리프트 게이트를 만드는 대신 자리를 없앤다). |
 | `failureInstruction` | 콜러블이 **아예 닿지 못했을 때** 모델에게 돌려줄 **서버 소유 한국어 1줄**. ⛔ **클라가 저작하지 않는다(G386)** — 저작하면 G86-a/b/c·G101이 카탈로그 필드로 묶어 둔 "모델 대면 문자열" 경계가 풀린다. |
 | 안전 | 도구 **선언 자체는 여전히 토큰(`liveConnectConstraints.config.tools`)에 서버 고정**이다 — 이 필드는 **이름 사본**일 뿐이라 클라가 바꿔도 세션의 도구 집합은 달라지지 않는다(`geminiProvider.ts:187` 잠금 취지 무변경). 페르소나 프롬프트·카탈로그 본문은 **여전히 내려가지 않는다**(AC-024/AC-060). |
@@ -418,6 +422,7 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | 거절 문자열 | `declineInstruction`은 **`functions/src/scenarios/inCallSms.ts`의 모듈 상수**(`NO_NUMBER_INVENTION` 선례와 같은 자리) — 시나리오별 저작 0건, 2종(`too_early` / `already_delivered`·`none_pending`). |
 | 관측 | `trigger` 값을 **`logger.info` 1줄**로 남긴다(§59.11 — 도착 경로 비율이 백스톱 N 조정의 유일한 근거다). ⛔ **Firestore 필드는 늘리지 않는다**(`docs/Database.md` 무변경). |
 | 무변경 | **G12 카탈로그 소속 재검증 · 소유권 · `status==="active"` · 본문/인증번호/발신번호의 서버 카탈로그 소유 · `url` 필드 부재 · 앵커 계산(`realtimeAnchorScammerTurn`)** 전건. |
+| **T191 S5b 증분** | 이 절의 `scammerTurns` 하한 재검증(`>= afterScammerTurns`) · `smsId` 요청은 **폐기**됐다 — 판정은 `resolveSmsGate`(부록 G). 원문은 역사 기록으로 보존. |
 
 ### `deliverVerifyOffer` **증분** — 도구 경로 판별자 + 상태 (§59.6 · **G391/G392**)
 | Item | Value |
@@ -484,8 +489,10 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 | 24 | `setChallengeResultSharing` | **E** | 토큰 매개 — 세션을 `challengeId`로 찾고(`:391`) 소유를 강제한다(`:396-398`) | 없음(G418 · `userAccess.ts:370-423`) | ✅ | `setChallengeResultSharing` Auth 행 |
 | 25 | `onSessionEnded` | X | 해당 없음(Firestore 트리거 — 클라 호출 불가) | —(`functions/src/guardrails/index.ts:123`) | (서버 내부) | `onSessionEnded` 절 |
 | 26 | `purgeExpiredChallenges` | X | 해당 없음(스케줄) | —(`functions/src/challenge/index.ts:349`) | — | 설계명 `onChallengeRetentionExpiry` 절 |
+| 27 | `requestScammerHangup` (2026-10-19 추가 · T192 C1) | S | *범위 검사* — 헬퍼에 active 검사가 없어 M-1형 예외 아님(비활성 세션은 throw 없이 `status:"not_active"`) | `functions/src/scammerHangup/index.ts:70`(소유 `:69` → 헬퍼 `:26-36` 뒤 · 트랜잭션 `:74` 앞) | 0(화면 배선 C5 전) | 부록 F |
 
 **집계**: D **6** · S **13** + R **1** = 챌린지 범위 **14** · E **2** · N **2** · X **2** = **26**. 게이트 호출 = **20곳**(`denyAnonymous(` 6 + `assertAnonymousChallengeScope(` 14 — `functions/src` 비테스트 grep, 정의부 제외) · E·N·X **0곳**.
+⇒ **(2026-10-19 시점 부착 — T192 C1 · 위 원문 무수정)** #27 추가로 D **6** · S **14** + R **1** = 챌린지 범위 **15** · E **2** · N **2** · X **2** = **27**(정본 `docs/Architecture.md` §68.3 #27 · 기계 사본 `functions/src/shared/__tests__/anonymousGate.test.ts:127-155`). 게이트 호출 현행 grep = **22곳**(`denyAnonymous(` **7** — T181이 `functions/src/realtime/submitTranscript.ts:66`에 1곳을 더했다 · `assertAnonymousChallengeScope(` **15**). 위 표 머리 *"export 26개"* 와 머리글의 줄번호(`:127-154`)는 그 시점 값이다.
 ⚠️ **이 문서에 절이 없는 export가 4개다**(`updateMessengerSkin`·`requestEscalation`·`requestReverseEscalation`·`listMyChallenges`) + 기본 절이 없는 `submitRealtimeTranscript`. ⛔ 이번 반영은 **절을 새로 만들지 않았다** — 익명 정책은 이 표가, `updateMessengerSkin`의 입력 검증은 부록 E가 갖는다.
 
 ### D.3 ⚠️ 예외 M-1 — `deliverVerifyOffer`·`deliverVerifyReconnect` (`docs/DECISIONS.md` **#109** · §68.15 (1) · AC-085 (b) 갱신 고지 — 코드 무변경)
@@ -544,3 +551,72 @@ UX-014 화면 통합 이후 호출부가 사라져 삭제했다. 오프닝 음�
 - ⚠️ **E-2는 쿼터 보호가 아니다** — 한 사람의 초 단위 폭주(연타·다중 탭·루프)만 막는 백스톱이다(G180 승계 · §66.0 3). 익명은 이 창에 닿지 않는다(`createSession`이 클래스 D — 부록 D).
 - ⚠️ **E-3·E-4의 `invalid-argument`는 다른 원인과 코드를 공유한다**(E-3: 빈 값·미지의 scenarioId / E-4: token·reason 누락·무효) ⇒ **오류 코드만으로는 길이 초과를 구별할 수 없다**(T178 B). 표현 층 해소는 T178(ux-design → implementer) 소관이고, 원인 구별 필드 같은 **응답 계약 델타가 필요해지면 architect를 거친다.**
 - `updateMessengerSkin`은 이 문서에 절이 없다 — 계약 원천은 `functions/src/session/types.ts:76-84`(Request `{ sessionId, messengerSkin, skinSource }` → Response `{ messengerSkin, skinSource }`). 인증·소유·익명 범위는 **부록 D #4**. ⛔ 이번 반영은 절을 새로 만들지 않았다.
+
+## 부록 F — 사기범의 먼저 끊기 (T192 C1 · `docs/Architecture.md` **§79** · **AC-103** · ADR-0021 · `docs/DECISIONS.md` **#138~#140** · **#146**)
+
+> ⭐ **정본 델타 = §79.5**(이 부록과 어긋나면 §79.5와 코드가 이긴다). 아래 줄번호는 브랜치 `claude/t192-c1-hangup-decision`(HEAD `e394840` = C1 `5fbe4d0` + main `e9a4967` — 해시는 지시 인용값) 소스를 직접 열람한 값이다. **미배포**(라이브 함수 수는 아직 26으로 추정 — 배포 뒤 `firebase functions:list`로 확인).
+> ⛔ **이 부록이 다루지 않는 것(C3 이후 — 미구현)**: `sendMessage` 응답 `endReason?: "scammer_ended"`(폴백 신호 경로) · `createRealtimeCall.liveTools.endCall` · `endCallFailureInstruction`. 정본은 §79.5 표의 해당 행이고, 구현 커밋에서 이 부록에 덧붙인다.
+> **UX 추적성**: UX-014(통화 — 실시간 `end_call` 분기, 배선 C5) · UX-007(종료 — 사유 `scammer_ended`).
+
+### `requestScammerHangup` — 실시간 `end_call`의 서버 판정 (§79.5 · AC-103 (a)(b)(f))
+| Item | Value |
+|---|---|
+| Purpose | Gemini Live 모델이 `end_call`(BLOCKING)을 부르면 클라가 이 콜러블로 **끊어도 되는지** 서버 판정을 받는다. 승인이면 세션에 승인 표식을 남긴다. ⛔ **세션을 끝내지 않는다**(`status` · `endReason` · `endedAt` write 0) — 끝내는 것은 전사 제출 뒤 `endSession`(사유 `scammer_ended`). LLM 호출 0 · 시크릿 선언 0(`functions/src/scammerHangup/index.ts:6-10`). |
+| Auth | required(`!request.auth` → `unauthenticated` `:58-60`). 소유 검증 `loadOwnedSession`(`:26-36` · 호출 `:69`). ⭐ **익명(§68.3 #27 · 클래스 S — 챌린지 세션 범위)**: 소유 검증 **바로 뒤**(`:70`)에서 익명이면 세션 `challengeId`가 있어야 한다 — 없으면 `permission-denied` *"이 기능은 로그인한 계정에서만 이용할 수 있습니다."*(부록 D.1). 트랜잭션 **앞**. 남의 세션은 소유 검증이 먼저 걸린다. |
+| Request | `{ sessionId: string, scammerTurns: number, pendingInstruction: boolean, kind?: string }`(`functions/src/scammerHangup/types.ts:4-12` · 클라 `src/lib/api/types.ts:331-336`). `scammerTurns` = 클라가 센 사기범 턴 수(**클라 주장값** — OQ-A120) · `pendingInstruction` = 보류 지시 큐 비어 있지 않음 ∨ 도구 응답 대기(클라 주장) · `kind` = 모델의 `end_call` 인자 `reason`. |
+| 입력 판독 | `sessionId` 누락 → `invalid-argument`(`:61-64`) · `scammerTurns`가 유한한 0 이상 숫자가 아니면 `invalid-argument`(`:39-44`) · `pendingInstruction`이 boolean이 아니면 `invalid-argument`(`:47-52` — 조용히 `false`로 떨어뜨리지 않는다) · `kind`는 `"goal"` \| `"give_up"`만 그대로, 누락 · 그 밖은 **`"unspecified"`**(⛔ 거절하지 않는다 — `decide.ts:115-118`). 전부 세션 read **앞**. |
+| Response | `{ status: ScammerHangupStatus, guidance: string }`(`types.ts:14-18`). `status` ∈ `not_active` · `wrong_channel` · `not_last_leg` · `mock_turn` · `blocked_transfer` · `too_early` · `blocked_pending` · `limit_reached` · `already_accepted` · `accepted`(`decide.ts:16-26`). **끊어도 되는 값은 `accepted` · `already_accepted` 둘뿐**(`hangup:true`). `guidance` = 서버 소유 문면 — 클라는 **그대로** `sendToolResponse`에 싣고 한국어를 저작하지 않는다(G386 · G516). 화면에 표시하지 않는다. |
+| 판정 | `decideScammerHangup`(`decide.ts:71-109`) — §79.2 / §79.18 (1) 판정표 **10행, 위에서 첫 번째로 맞는 행**: 1 `status !== "active"` → `not_active` · 2 `channel === "messenger"` → `wrong_channel` · 2-b 릴레이 중간 leg → `not_last_leg`(⚠️ `resolveHangupRelay`는 S7 전 `RELAY_RUNTIME_AVAILABLE === false`라 **항상 `undefined`** ⇒ 이 행은 오늘 맞지 않는다 — `relayContext.ts:20`) · 3 Mock 턴 → `mock_turn`(실시간은 항상 거짓) · 4 확인 무력화 세션(`hasVerifyIntercept` ∧ 고급)인데 호 전환 전(`verifyIntercept` 문서 `placedAt` 없음) → `blocked_transfer` · 5 `scammerTurns < 4`(비유한값 포함) → `too_early` · 6 `pendingInstruction` → `blocked_pending` · 7 한도 → `limit_reached`(실시간은 항상 거짓) · 8 표식 이미 있음 → `already_accepted` · 9 그 밖 → `accepted`. ⛔ `kind`는 판정 입력이 아니다. 하한 `4`는 판단값(OQ-A118). |
+| 처리 · 쓰기 | **트랜잭션 안에서** 세션(필요 시 `verifyIntercept/{offerId}`)을 읽어 판정하고, **`accepted`일 때만** `sessions/{sid}.scammerHangup = { acceptedAt, kind, path: "realtime" }`을 update한다(`commit.ts:38-90` · 쓰기 `:84-88`). 거절 행 · `already_accepted`는 쓰기 0. 판정 직전 세션이 사라졌으면 1행(`not_active`)으로 판정한다(`:46-60`). 관측 로그 *"사기범 끊기 판정"* `{ sessionId, path, status, row, kind, scammerTurns }`(`index.ts:90-97`). 필드 정의 = `docs/Database.md` `sessions` T192 증분. |
+| 멱등 | 재호출 안전 — 표식이 이미 있으면 8행 `already_accepted`(승인 문면 그대로)이고 **첫 승인의 `acceptedAt` · `kind`가 유지**된다(덮어쓰지 않는다). 동시 호출은 Firestore 트랜잭션 재시도로 직렬화된다(두 번째는 `already_accepted`). |
+| Errors | `unauthenticated`(미인증) · `invalid-argument`(위 입력 판독) · `failed-precondition` *"존재하지 않는 세션입니다."*(`:28-30`) · `permission-denied` *"본인 세션이 아닙니다."*(`:32-34`) 또는 익명 범위 밖(부록 D.1 문구). ⭐ **판정 거절은 오류가 아니다** — 정상 응답의 `status`로 온다(비활성 세션 포함). 콜러블이 닿지 않으면(네트워크 · throw) 클라는 `createRealtimeCall`이 내려 줄 `endCallFailureInstruction`을 도구 응답에 싣는다(C3 · G504 — 미구현). |
+| 서버 소유 문면 | 승인(`accepted` · `already_accepted`) · 거절 공통 · 거절 `blocked_transfer` · 실패(콜러블 미도달 — C3 원천) 4개 — 정본 문자열은 §79.5 *"서버 소유 문면"* · 상수 `functions/src/scammerHangup/guidance.ts:7-20` · 선택 `:23-27`. ⛔ 횟수 · 턴 번호 0 · 거절 사유 설명 0. |
+| 클라 래퍼 | `src/lib/api/requestScammerHangup.ts:11-18`(`callCallable` 단일 지점) · `src/lib/api/index.ts:18`. ⚠️ 화면 호출 **0** — `GeminiVoiceSession.tsx` `end_call` 분기 배선은 C5(§79.13). |
+
+## 부록 G — 문자 도달 조건(서버 문자 게이트) (T191 S5b · PRD **AC-099** · `docs/Architecture.md` T191 절 "문자 도달 조건" — 설계 금지 X1 · X4)
+
+> ⭐ **세 경로(실시간 도구 · 텍스트 폴백 마커 · 백스톱)가 판정 함수 1개(`functions/src/inCallSms/smsGate.ts` `resolveSmsGate`)와 발송 통로 1개(`smsDelivery.ts` `deliverSmsThroughGate` — 도착 기록을 읽은 같은 트랜잭션에서 판정 → 생성)를 지난다.** 카탈로그 고정 턴(`afterScammerTurns`)만으로 자동 발송하는 경로는 0이다(G540). 문자 본문 · 인증번호 · 발신번호의 원천은 여전히 서버 카탈로그(`IN_CALL_SMS`)다.
+
+### G.1 `deliverInCallSms` — 요청
+| 필드 | 타입 | 규칙 |
+|---|---|---|
+| `sessionId` | string | 필수(종전과 같은 소유 · 활성 · 익명 범위 검사) |
+| `trigger` | `"model_tool"` \| `"backstop"` | 클라는 항상 보낸다. 부재는 `model_tool`로 본다. 그 밖의 값 `invalid-argument` |
+| `purpose` | string? | `trigger:"model_tool"`에서 — 모델이 도구 인자로 고른 원값. **검증은 서버**(enum 밖 · 선언 밖 → `not_allowed`). 백스톱은 보내지 않는다 |
+| `userTurns` | number | 비어 있지 않은 사용자 전사 flush 수(음성 · 타이핑 공통). 모델 도구 호출은 **응답 중인 사용자 발화 1을 더해** 보낸다(폴백 "이번 발화 포함"과 같은 뜻 — 리뷰 ⑥). 0~200 정수가 아니면 `invalid-argument`. ⚠️ 클라 주장값이다(서버가 통화 중 전사를 보지 못한다) — 위조의 최대 효과는 자기 훈련용 모의 문자를 조금 일찍 받는 것(G12 위상) |
+| `scammerTranscriptTurns` | number | 비어 있지 않은 사기범 전사 flush 수 — 앵커 = 1 + 이 값. 범위 검사 같음 |
+| `smsId` · `scammerTurns` | — | **@deprecated** — 서버가 읽지 않는다. **`userTurns`가 없는 요청(이 계약 이전 화면)은 throw 없이 `{status:"not_allowed"}`**(문자 0통 · 로그 `[T191] deliverInCallSms 구 계약 요청`) |
+
+### G.2 `deliverInCallSms` — 응답
+`{ status, smsId?, announceInstruction?, declineInstruction?, nudgeInstruction? }`
+
+| `status` | 의미 | 실리는 필드 | Firestore 쓰기 |
+|---|---|---|---|
+| `delivered` | 이번 호출로 도착 | `smsId` · `announceInstruction`(**호 전환 뒤에는 생략** — 문자는 그대로 도착하고 확인 데스크 화자가 "제가 보냈다"고 말하지 않게 하는 의도된 동작, §53.6 (3)) | 문서 1건 |
+| `already_delivered` · `too_early` · `too_soon` · `not_allowed` | 거부 | `declineInstruction`(서버 소유: not_allowed = *"(그런 안내는 보낼 수 없다. 문자를 보냈다고 말하지 말고 하던 이야기를 이어가라.)"* · too_early/too_soon = `SMS_DECLINE_TOO_EARLY` · already = `SMS_DECLINE_ALREADY`) | 0(로그 1줄 — 사용자 발화 수 포함, AC-099 (h)) |
+| `nudge` | 백스톱 1단계 | `nudgeInstruction`(*"(필요하면 지금 {인증번호\|계좌\|링크} 안내 문자를 보내도 된다 — 아직 그 단계가 아니면 무시하라.)"* — 클라는 맥락 주입, 침묵 넛지 대상 아님) | 세션 문서 `smsNudgedOpenAt` arrayUnion 1회(넛지 1회 보장) |
+| `waiting` | 백스톱 — 아직 할 일 없음(또는 전환 뒤 넛지 생략 · 이미 넛지함) | — | 0 |
+| `none_pending` | 백스톱 — 남은 필수 문자 없음(클라는 더 묻지 않는다) | — | 0 |
+
+### G.3 판정표(`resolveSmsGate` — 이 순서 그대로)
+| # | If | Then |
+|---|---|---|
+| 1 | `purpose`가 세션 흐름 변형의 `sms` 선언에 없다(enum 밖 · 부재 · 변형 부재 포함) | `not_allowed` |
+| 2 | 그 목적의 문자가 이미 도착 | `already_delivered` |
+| 3 | `userTurns < max(notBeforeUserTurns, 2)` | `too_early` |
+| 4 | 직전 문자 도착 이후 사용자 발화 `< 2`(AC-099 (c)) | `too_soon` |
+| 5 | 그 외 | 발송 |
+
+**백스톱(`planSmsBackstop`) — 필수 목적만 강제 · 선택 목적은 건너뛰기(AC-099 (e))**: 아직 안 간 `required:true` 문자의 게이트 개방 시점 `openAt` 기준 — `userTurns === openAt + 2` → `nudge` 1회 · `userTurns >= openAt + 4` → 같은 게이트를 다시 통과시켜 발송(`trigger:"backstop"`) · 남은 필수 없음 → `none_pending`. 클라는 **사용자 발화 flush마다 최대 1회** 묻는다.
+
+### G.4 Live 도구 `send_prepared_sms` — 인자 (G538 · G384 "인자 없음"을 의도적으로 교체)
+`parameters = { type: OBJECT, properties: { purpose: { type: STRING, format: "enum", enum: ["identity","transfer","link"] } }, required: ["purpose"] }` · `behavior: BLOCKING` 유지(G430). `offer_verification_desk`는 **인자 없음 그대로**. 도구 응답 `{status, guidance}`의 `guidance` = delivered면 `announceInstruction`, 그 외 `declineInstruction`(콜러블 실패면 `liveTools.failureInstruction` — 종전).
+
+### G.5 텍스트 폴백(`sendMessage`) — 계약 무변경, 내부 동작만
+- 요청 · 응답 필드 **무변경**(`sms?: { smsId }`는 그 턴 도착분 — 백스톱 또는 마커).
+- 백스톱은 LLM 호출 **전**(announce가 같은 응답의 턴 지시로) · 모델 마커 `[[SMS:identity|transfer|link]]`는 응답 저장 **뒤** 판정 · 지금 게이트가 열린 목적만 턴 지시로 제시. 마커는 저장 전에 지운다(참가자 0 노출). 사용자 입력 속 흉내는 `promptAssembly` `escapeSentinelLookalikes`가 무력화(§82.3.1 정본 위치).
+- 사용자 발화 수 = max(`messages` user 수 + 1, 마지막 도착 문서 `userTurnsAtArrival`)(리뷰 M1 — 실시간에서 강등된 세션의 단위 혼합 보정).
+- 인증번호 대조(#306·#312)의 "다음 문자 도착" 판정은 도착 기록(문서 존재 · `userTurnsAtArrival` 순서)으로(리뷰 M3). 결과 1줄 문면 · 번호 비노출 무변경.
+
+### G.6 배포
+화면과 서버가 함께 바뀐다 — **Hosting → Functions** 순서(CLAUDE.md 표 · G434). 옛 화면(이 계약 이전)은 G.1 마지막 행대로 문자 0통으로 강등된다(오류 표시 없음). Firestore 규칙 · 인덱스 무변경.

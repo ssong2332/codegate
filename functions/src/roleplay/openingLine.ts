@@ -7,8 +7,8 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
-import { SCENARIO_PROMPTS } from "../scenarios";
-import { hasInCallSms } from "../scenarios/inCallSms";
+import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
+import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
 import { asksIdentityCheck } from "./personaAuthority";
@@ -18,6 +18,7 @@ import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { speakerGenderFor } from "../realtime/scenarioVoice";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { ScammerMessage } from "./types";
+import { applyFictionalBank, resolveSessionAccountNumber } from "../shared/fictionalBank";
 
 // 사용자 신고(2026-07-25) — 오프닝 대사가 다짜고짜 요구·압박부터 들어가 시나리오 배경이 없다는
 // 피드백. buildSystemPrompt는 모든 턴에 공통으로 쓰이므로(sendMessage도 재사용), "이번이 첫 마디다"
@@ -70,8 +71,13 @@ export async function generateOpeningLine(
   // (createSession/consentChallenge)가 요청값(이미 서버에서 enum 정규화된 값)을 그대로 넘긴다.
   // 부재면 buildSystemPrompt가 기준선(중급 = 모디파이어 없음)으로 조립한다.
   difficultyLevel?: DifficultyLevel,
+  // T191 S5(AC-096) — 호출부가 방금 배정한 흐름 변형 ID(세션 문서 write 전이라 세션에서 읽을 수 없다).
+  // 부재 = 원본 시나리오 프롬프트(하위호환).
+  flowVariantId?: string,
+  // §81 — 이 세션의 가상 은행명(호출부가 세션 생성 전에 골라 세션 문서에도 같은 값을 쓴다). 부재면 종전("OO은행").
+  fictionalBankName?: string,
 ): Promise<OpeningLineResult> {
-  const scenarioPrompt = SCENARIO_PROMPTS[scenarioId];
+  const scenarioPrompt = resolveSessionScenarioPrompt(scenarioId, flowVariantId);
   if (!scenarioPrompt) {
     throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
   }
@@ -82,7 +88,8 @@ export async function generateOpeningLine(
       // T68(§15.6 G5와 같은 이유 — 호출부가 갈라지면 "오프닝에만 다른 규칙"이 생긴다). 오프닝
       // 턴에는 아직 도착한 문자가 없지만(카탈로그 최소 afterScammerTurns는 2), 조건형 문구는
       // 세션 지시 성격이라 세 호출부에서 동일하게 켠다.
-      inCallSmsEnabled: hasInCallSms(scenarioId),
+      // ⭐ 리뷰 M2 — 세 호출부 · 도구 선언과 같은 단일 술어(변형 기준 · 변형 부재 = 종전).
+      inCallSmsEnabled: sessionDeclaresInCallSms(scenarioId, flowVariantId),
       // T85(§17.3 호출부 3곳 중 "오프닝 대사", G63) — 고급에서 D4(절차·서류 정당화) 블록을 얹을
       // 시나리오인지. 세 호출부가 갈라지면 "오프닝만 축소"라는 비대칭이 조용히 생긴다.
       // ⚠️ 오프닝 턴 특례(§17.6.2): 위 OPENING_TURN_INSTRUCTION이 "다짜고짜 요구부터 하지 말고"를
@@ -95,6 +102,8 @@ export async function generateOpeningLine(
       identityCheckAllowed: asksIdentityCheck(scenarioId),
       speakerGender: speakerGenderFor(scenarioId),
       turnInstruction: OPENING_TURN_INSTRUCTION,
+      ...(fictionalBankName ? { fictionalBankName } : {}),
+      sessionAccountNumber: resolveSessionAccountNumber(scenarioId),
     }),
     messages: [], // 오프닝 대사에는 아직 사용자 입력이 없다.
     mockTacticHints: scenarioPrompt.weakenedTactics,
@@ -109,7 +118,9 @@ export async function generateOpeningLine(
   // 2026-10-17 라이브 신고(실존 은행명 + 5~7문장 대사) — sendMessage와 같은 순서로 손질한다:
   // (1) 실존 은행·카드사 이름 → OO은행/OO카드(숫자는 그대로), (2) 문장 수 상한은 **항상** 적용한다
   // — 오프닝 지시(OPENING_TURN_INSTRUCTION)는 예고 계열이 아니고 "예고 완료" 마킹도 없다.
-  const { text: realNameFreeText, replacedCount } = replaceRealFinancialNames(linkFreeText);
+  const { text: realNameReplacedText, replacedCount } = replaceRealFinancialNames(linkFreeText);
+  // §81 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다.
+  const realNameFreeText = fictionalBankName ? applyFictionalBank(realNameReplacedText, fictionalBankName) : realNameReplacedText;
   const lengthLimited = limitReplySentences(realNameFreeText);
   // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).
   if (replacedCount > 0) {

@@ -44,7 +44,6 @@ import type { InCallSmsEvent, TranscriptTurn } from "@/lib/api";
 import {
   countUnread,
   latestSmsId,
-  pickDueInCallSms,
   sortByArrival,
   type InCallSmsView,
 } from "@/lib/incallsms";
@@ -101,24 +100,35 @@ import PhoneIcon from "@/components/PhoneIcon";
 import EndTrainingButton from "@/components/EndTrainingButton";
 import {
   announceTurnsOnInstructionDispatch,
+  deferredAnnouncePendingOnDispatch,
   enqueueInstruction,
+  IDLE_LIVE_TURN_PHASE,
   INSTRUCTION_DRAIN_BACKSTOP_SEC,
   INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES,
+  isResponseInProgress,
   nextVerifyOfferStage,
   rollbackVerifyOfferPhase,
   shouldAnnounceVerifyOffer,
   shouldDrainInstructionQueue,
   shouldOfferVerify,
+  shouldRecordDeferredAnnounce,
   shouldReinjectTransferState,
   shouldRetryVerifyOffer,
   shouldRevealVerifyOffer,
   takeNextInstruction,
   verifySeriesFor,
+  type LiveTurnPhase,
   type PendingInstruction,
   type VerifyInterceptView,
   type VerifyOfferPhase,
 } from "@/lib/verifyintercept";
-import { shouldFireBackstop } from "@/lib/realtime/toolWindow";
+import { shouldFireBackstop, shouldRequestSmsBackstop } from "@/lib/realtime/toolWindow";
+import {
+  countTranscriptFlush,
+  deliveryForInstruction,
+  INITIAL_TURN_COUNTERS,
+  type InstructionDelivery,
+} from "@/lib/realtime/contextInjection";
 import {
   claimAnnounceSlot,
   releaseAnnounceSlot,
@@ -270,7 +280,10 @@ export default function SessionCallPage() {
   // ⚠️ T83(§16.6 G31) — 문자 announce와 확인 지시가 **같은 슬롯**을 쓰므로 큐를 거쳐 한 턴에
   // 하나씩만 주입한다(아래 enqueueTurnInstruction 참고). 예전엔 이 상태를 문자 전용으로 직접
   // 세팅했는데, 그러면 같은 턴 경계에 둘이 겹칠 때 나중 것이 앞것을 조용히 덮어쓴다.
-  const [instructionTurn, setInstructionTurn] = useState<{ text: string; seq: number } | null>(null);
+  // ⭐ §82.4(T1) — `delivery`가 전송 형태를 정한다(문자 · 확인 권유 = 맥락 주입 · 재연결 = 화자 전환 첫 발화).
+  const [instructionTurn, setInstructionTurn] = useState<
+    { text: string; seq: number; delivery: InstructionDelivery } | null
+  >(null);
   const instructionQueueRef = useRef<PendingInstruction[]>([]);
   // 이번 사기범 턴에 이미 지시를 하나 넣었는가(다음 turnComplete까지 추가 주입을 보류한다).
   const instructionBusyRef = useRef(false);
@@ -290,20 +303,27 @@ export default function SessionCallPage() {
   const instructionCapReachedAtSecRef = useRef<number | null>(null);
   // 사기범 발화 턴 수(실시간 경로) — GeminiVoiceSession의 turnComplete 경계만 센다.
   const [scammerTurns, setScammerTurns] = useState(0);
+  // ⭐ T191(문자 도달 조건) — 비어 있지 않은 사용자 전사 flush 수의 state 사본(문자 백스톱 효과의 트리거). 값의 원천은
+  // `turnCountersRef.current.userTurns`이고 갱신 지점은 `handleTranscriptTurn` **한 곳**뿐이다.
+  const [userTurnCount, setUserTurnCount] = useState(0);
   // ⭐ **§45.7 V2** — 같은 값의 ref 사본. `drainInstructionQueue`는 턴 완료 콜백 **안에서** 불리는데
   // 그 시점의 `scammerTurns` state는 아직 리렌더 전이라 **한 턴 낡은 값**이다. 큐를 떠난 시점을
   // 재려면 그 순간의 값이 필요하므로 ref로 함께 센다(⛔ 갱신 지점은 아래 handleScammerTurnComplete
   // **한 곳**뿐이다 — 두 곳이 되면 state와 조용히 어긋난다).
   const scammerTurnsRef = useRef(0);
-  // 이미 서버에 전달을 요청한 smsId(중복 호출 방지). 렌더와 무관해 ref에 둔다. §59.10 커밋 D부터는
-  // 앱이 직접 요청한 것뿐 아니라 모델이 도구로 **성공시킨** smsId도 여기 더해진다
-  // (handleModelToolSmsDelivered) — `pickDueInCallSms`가 그 값을 "이미 처리됨"으로 걸러내
-  // 백스톱이 같은 문자를 중복으로 다시 요청하지 않는다.
-  const requestedSmsRef = useRef<Set<string>>(new Set());
-  // §59.10 커밋 D(G390) — 모델의 도구 경로가 **실패**했다고 알려온 마지막 smsId. 문자는 한 번에
-  // 하나만 "due" 상태가 되므로(카탈로그 순서상 가장 이른 미도착 항목, pickDueInCallSms) 슬롯 하나로
-  // 충분하다 — 다음 문자가 due가 되면 이 값은 그 문자의 smsId와 더 이상 일치하지 않아 자연히 무시된다.
-  const smsToolCallFailedIdRef = useRef<string | null>(null);
+  // ⭐ §82.3.4(G539) — 실시간 경로 카운터(순수 함수 `countTranscriptFlush`). `scammerTurnsRef`/`scammerTurns`는
+  // 이제 **비어 있지 않은 사기범 전사 flush 수**(`scammerTranscriptTurns`)다 — 지시 턴 · 빈 `turnComplete`(N1)를
+  // 세지 않는다. ⛔ 갱신 지점은 `handleTranscriptTurn` **한 곳**뿐이다(전에는 `handleScammerTurnComplete`).
+  const turnCountersRef = useRef(INITIAL_TURN_COUNTERS);
+  // ⭐ §82.4(T1) — 맥락 주입된 확인 권유의 예고 기록 대기(큐 이탈 시점의 사용자 발화 수). `null` = 대기 없음.
+  // 다음 사용자 발화 flush에서 `verifyAnnounceTurnsRef`를 기록한다(`deferredAnnouncePendingOnDispatch` 주석).
+  const pendingVerifyAnnounceUserTurnsRef = useRef<number | null>(null);
+  // ⭐ 리뷰 M2 — `GeminiVoiceSession`이 갱신하는 현재 턴 위상(모델 응답 중 · 사용자 버퍼). 드레인이 읽는다.
+  const liveTurnPhaseRef = useRef<LiveTurnPhase>(IDLE_LIVE_TURN_PHASE);
+  // ⭐ T191(문자 도달 조건 · AC-099 (e)) — 문자 백스톱 질의 상태. 예전 `requestedSmsRef`(요청한 smsId 집합) ·
+  // `smsToolCallFailedIdRef`(모델 도구 실패 smsId)는 화면이 고정 턴으로 smsId를 고를 때만 필요했다 — 폐기.
+  // 지금은 사용자 발화 flush마다 서버에 한 번 묻고(`shouldRequestSmsBackstop`), 무엇을 할지는 서버가 정한다.
+  const smsBackstopRef = useRef({ lastRequestedUserTurns: -1, nonePending: false, inFlight: false });
   // §59.10 커밋 D(G390) — 확인 오퍼(offer_verification_desk) 도구 경로 실패 신호. 세션당 오퍼가
   // 하나뿐이라(카탈로그 보유 && advanced 세션에만 도구가 선언된다, §61) id 없이 boolean 하나로
   // 충분하다.
@@ -402,8 +422,31 @@ export default function SessionCallPage() {
     const atMs =
       answeredAtMsRef.current !== null ? Date.now() - answeredAtMsRef.current : undefined;
     transcriptRef.current.push({ role, text, atMs });
+    // ⭐ §82.3.4(G539) — 계수는 비어 있지 않은 전사 flush 기준(빈 `turnComplete`는 여기까지 오지 않는다).
+    turnCountersRef.current = countTranscriptFlush(turnCountersRef.current, role, text);
+    if (role === "scammer") {
+      scammerTurnsRef.current = turnCountersRef.current.scammerTranscriptTurns;
+      setScammerTurns(scammerTurnsRef.current);
+    }
     // T118(§25.3 (3)) — A5 재주입 조건의 관측 지점. 참가자가 한 번이라도 말한 뒤에만 다시 넣는다.
     if (role === "user") {
+      setUserTurnCount(turnCountersRef.current.userTurns);
+      // ⭐ §82.4(T1) — 맥락 주입된 확인 권유는 이 사용자 발화에 대한 응답에 실린다. 그 응답(사기범 전사)이
+      // 세어지기 **직전**인 지금 예고 시점을 기록한다 — 기록 함수는 §45.7 V2 그대로다.
+      if (
+        shouldRecordDeferredAnnounce({
+          pendingAtUserTurns: pendingVerifyAnnounceUserTurnsRef.current,
+          userTurns: turnCountersRef.current.userTurns,
+        })
+      ) {
+        verifyAnnounceTurnsRef.current = announceTurnsOnInstructionDispatch({
+          priority: "verify",
+          phase: verifyOfferPhaseRef.current,
+          completedScammerTurns: scammerTurnsRef.current,
+          current: verifyAnnounceTurnsRef.current,
+        });
+        pendingVerifyAnnounceUserTurnsRef.current = null;
+      }
       userTurnsSinceInjectionRef.current += 1;
       // §52.7 (5) 가·나 — 참가자가 말했으니 G31 큐 드레인 게이트를 다시 연다(억제 스트릭도
       // 초기화). ⭐ §57.4 D3 이후로는 이 콜백이 타이핑·음성 모두 **턴 완료(flush) 시각**에만
@@ -662,88 +705,102 @@ export default function SessionCallPage() {
     instructionCapReachedAtSecRef.current = null;
     // ⭐⭐ **§45.7 V2 — 예고 시점은 *여기서* 잰다.** 요청을 보낸 자리가 아니라 지시가 **실제로 큐를
     // 떠나 `instructionTurn`에 실리는** 이 자리다(§45.6 (3) F2-a c·d). 판정은 순수 함수가 소유한다.
-    verifyAnnounceTurnsRef.current = announceTurnsOnInstructionDispatch({
-      priority: item.priority,
-      phase: verifyOfferPhaseRef.current,
-      completedScammerTurns: scammerTurnsRef.current,
-      current: verifyAnnounceTurnsRef.current,
-    });
-    setInstructionTurn((prev) => ({ text: item.text, seq: (prev?.seq ?? 0) + 1 }));
+    // ⭐ §82.4(T1) — 맥락 주입된 확인 권유는 큐 이탈 시점이 아니라 **다음 사용자 발화 flush**에서 기록한다
+    // (응답을 유발하지 않으므로 지금 진행 중인 턴은 예고가 아니다). 그 외 항목은 종전 그대로다.
+    const delivery = deliveryForInstruction(item);
+    if (delivery === "verifyAnnounce") {
+      pendingVerifyAnnounceUserTurnsRef.current = deferredAnnouncePendingOnDispatch({
+        priority: item.priority,
+        speakerSwitch: item.speakerSwitch,
+        phase: verifyOfferPhaseRef.current,
+        userTurns: turnCountersRef.current.userTurns,
+        responseInProgress: isResponseInProgress(liveTurnPhaseRef.current),
+        current: pendingVerifyAnnounceUserTurnsRef.current,
+      });
+    } else {
+      verifyAnnounceTurnsRef.current = announceTurnsOnInstructionDispatch({
+        priority: item.priority,
+        phase: verifyOfferPhaseRef.current,
+        completedScammerTurns: scammerTurnsRef.current,
+        current: verifyAnnounceTurnsRef.current,
+      });
+    }
+    setInstructionTurn((prev) => ({ text: item.text, seq: (prev?.seq ?? 0) + 1, delivery }));
   }, []);
 
   const enqueueTurnInstruction = useCallback(
-    (text: string, priority: PendingInstruction["priority"]) => {
+    (
+      text: string,
+      priority: PendingInstruction["priority"],
+      options?: { speakerSwitch?: boolean; smsNudge?: boolean },
+    ) => {
       instructionQueueRef.current = enqueueInstruction(instructionQueueRef.current, {
         text,
         priority,
+        ...(options?.speakerSwitch ? { speakerSwitch: true } : {}),
+        ...(options?.smsNudge ? { smsNudge: true } : {}),
       });
       drainInstructionQueue();
     },
     [drainInstructionQueue],
   );
 
-  // T68 — 사기범 턴 경계에 도달하면 문자를 도착시킨다(실시간 경로, §15.1.2 앱 오케스트레이션).
-  // 서버가 문서를 쓰고 announce 지시를 돌려주면 그것을 **같은 Live 세션에 텍스트 턴으로** 넣어
-  // 캐릭터가 "문자 보냈어요"라고 말하게 한다. 실패해도 통화는 계속된다(P-4 — 인라인 안내만).
-  //
-  // ⭐⭐ **§59.10 커밋 D — 지연 발동(백스톱).** 이 문자에 Live 도구(`send_prepared_sms`)가 선언된
-  // 세션에서는 하한 도달 즉시 앱이 보내지 않는다 — 모델이 스스로 도구를 부를 창을 먼저 준다
-  // (`shouldFireBackstop`, §59.8). 도구가 선언되지 않은 세션은 **지연 0**(오늘과 바이트 단위로
-  // 같은 타이밍, G388). `trigger:"backstop"`을 명시해 서버 로그(§59.11)가 이 발동을 `model_tool`과
-  // 구분할 수 있게 한다(서버 로직 자체는 부재·"backstop" 둘 다 동일하게 처리한다).
+  // T68 → ⭐ T191 문자 도달 조건(PRD AC-099 · 설계 "백스톱 — 필수 목적만 강제 · 선택 목적은 건너뛰기").
+  // 예전에는 카탈로그 고정 턴(`afterScammerTurns`)에 도달하면 화면이 smsId를 골라 발송을 요청했다(AC-099 (d)가 폐지한
+  // 경로). 이제 화면은 **사용자 발화 flush마다 한 번** 서버에 묻기만 한다(`trigger:"backstop"`, 목적 없음) — 무엇을
+  // 넛지/발송할지는 서버 `planSmsBackstop`이 그 세션 흐름 변형의 필수 목적 · 도착 기록 · 사용자 발화 수로 정하고,
+  // 발송도 모델 도구 경로와 같은 `resolveSmsGate`를 지난다(X4). 선택 목적은 백스톱이 건드리지 않는다(모델이 부를 때만).
+  //   - `delivered` → 서버 announce를 맥락 주입(G31 큐, `sms`) · `nudge` → 넛지 1줄 맥락 주입(침묵 넛지 대상 아님)
+  //   - `none_pending` → 남은 필수 문자 없음 → 더 묻지 않는다 · 그 외(`waiting`·거부) → 아무것도 하지 않는다
+  // 실패해도 통화는 계속된다(P-4 — 인라인 안내만). 배너는 서버가 문서를 만든 순간 구독으로 뜬다(D-109).
   useEffect(() => {
     if (!sessionId || callMode !== "realtime" || phase !== "live") return;
-    const triggers = realtime.credentials?.inCallSmsTriggers ?? [];
-    if (triggers.length === 0) return;
-    const dueSmsId = pickDueInCallSms({
-      triggers,
-      scammerTurns,
-      deliveredSmsIds: [...requestedSmsRef.current],
-    });
-    if (!dueSmsId) return;
-    const dueTrigger = triggers.find((t) => t.smsId === dueSmsId);
-    const toolAvailable = Boolean(realtime.credentials?.liveTools?.sendPreparedSms);
-    const fire = shouldFireBackstop({
-      toolAvailable,
-      boundariesSinceDue: dueTrigger ? Math.max(0, scammerTurns - dueTrigger.afterScammerTurns) : 0,
-      secondsSinceLastBoundary: Math.max(0, elapsedSec - lastScammerBoundaryAtSecRef.current),
-      toolCallFailed: smsToolCallFailedIdRef.current === dueSmsId,
-    });
-    if (!fire) return;
-    requestedSmsRef.current.add(dueSmsId);
+    const state = smsBackstopRef.current;
+    if (
+      !shouldRequestSmsBackstop({
+        enabled: realtime.credentials?.inCallSmsBackstop === true,
+        userTurns: userTurnCount,
+        lastRequestedUserTurns: state.lastRequestedUserTurns,
+        nonePending: state.nonePending,
+        inFlight: state.inFlight,
+      })
+    ) {
+      return;
+    }
+    state.lastRequestedUserTurns = userTurnCount;
+    state.inFlight = true;
+    const counters = turnCountersRef.current;
     (async () => {
       try {
-        const result = await deliverInCallSms({ sessionId, smsId: dueSmsId, trigger: "backstop" });
+        const result = await deliverInCallSms({
+          sessionId,
+          userTurns: counters.userTurns,
+          scammerTranscriptTurns: counters.scammerTranscriptTurns,
+          trigger: "backstop",
+        });
         setSmsError(null);
-        // T190-3(§74.6 (6)) — 배너를 되살리는 쓰기가 필요 없다: 새 문자는 id가 새로워 자동으로 "미확인"이다.
-        // T83 — 직접 세팅하지 않고 큐를 통한다(같은 턴에 확인 지시와 겹쳐도 유실되지 않게, G31).
-        // §53.6 (3) — 전환이 끝난 오퍼가 연 문자에는 값이 없다(서버가 생략). 값이 없으면
-        // 주입하지 않는다 — 문서 자체(계좌·링크)는 그대로 도착했으니 배너·문자함은 정상 표시된다.
-        // ⭐ §59.10 커밋 D — `status`도 함께 본다. 서버는 `alreadyDelivered`(모델이 먼저 도구로
-        // 이미 전달한 경우 포함)에서도 `announceInstruction`을 생략하지 않으므로(응답 조립 자체는
-        // §59 범위 밖 무변경), 여기서 `"delivered"`일 때만 주입해 이미 도착한 문자를 캐릭터가
-        // 두 번 말하지 않게 한다(중복 발동 방지의 마지막 안전망 — 1차 방어는 위 `requestedSmsRef`
-        // 에 모델 성공을 미리 반영하는 `handleModelToolSmsDelivered`).
+        if (result.status === "none_pending") state.nonePending = true;
+        // §53.6 (3) — 전환이 끝난 오퍼가 연 문자에는 announce 값이 없다(서버가 생략) — 그때는 주입하지 않는다.
         if (result.status === "delivered" && result.announceInstruction) {
           enqueueTurnInstruction(result.announceInstruction, "sms");
         }
+        if (result.status === "nudge" && result.nudgeInstruction) {
+          enqueueTurnInstruction(result.nudgeInstruction, "sms", { smsNudge: true });
+        }
       } catch {
-        // 다음 턴 경계에서 다시 시도할 수 있게 요청 기록을 되돌린다.
-        requestedSmsRef.current.delete(dueSmsId);
+        // 같은 발화 수로는 다시 묻지 않는다 — 다음 사용자 발화에서 최신 값으로 다시 묻는다(발송 단계는 `>=`라 놓치지 않는다).
         setSmsError("문자를 받지 못했습니다. 통화는 계속됩니다.");
+      } finally {
+        state.inFlight = false;
       }
     })();
-    // enqueueTurnInstruction은 안정 참조(useCallback, 의존성 없음)라 이 목록에 넣어도 effect가
-    // 추가로 재실행되지 않는다 — 기존 트리거 조건은 그대로다. `elapsedSec`은 §59.8의 정지(stall)
-    // 시계를 재판정하기 위한 것 — 새 타이머가 아니라 이미 떠 있는 통화 경과 타이머에 올라탄다.
+    // enqueueTurnInstruction은 안정 참조(useCallback, 의존성 없음)라 이 목록에 넣어도 effect가 추가로 재실행되지 않는다.
   }, [
     sessionId,
     callMode,
     phase,
-    scammerTurns,
-    elapsedSec,
-    realtime.credentials?.inCallSmsTriggers,
-    realtime.credentials?.liveTools?.sendPreparedSms,
+    userTurnCount,
+    realtime.credentials?.inCallSmsBackstop,
     enqueueTurnInstruction,
   ]);
 
@@ -864,7 +921,10 @@ export default function SessionCallPage() {
           retryable: shouldRetryVerifyOffer(error),
         });
         // 되돌린 단계가 1단계면 주입 시점 기록도 함께 지운다(다음 시도에서 다시 잰다).
-        if (verifyOfferPhaseRef.current === "idle") verifyAnnounceTurnsRef.current = null;
+        if (verifyOfferPhaseRef.current === "idle") {
+          verifyAnnounceTurnsRef.current = null;
+          pendingVerifyAnnounceUserTurnsRef.current = null;
+        }
       } finally {
         // ⭐ §59 Critical 수정 — 위에서 클레임한 슬롯을 성공·실패 무관하게 되돌린다(다음 재시도가
         // 영영 막히지 않게). 클레임은 `stage === "announce" && callMode === "realtime"`일 때만
@@ -889,10 +949,9 @@ export default function SessionCallPage() {
   ]);
 
   const handleScammerTurnComplete = useCallback(() => {
-    // ⭐ **§45.7 V2** — ref를 **먼저** 올린다. 아래 드레인이 이 값으로 예고 시점을 재기 때문에,
-    // state 갱신만 하면(리렌더 전이라) 한 턴 낡은 값이 기록된다.
-    scammerTurnsRef.current += 1;
-    setScammerTurns(scammerTurnsRef.current);
+    // ⭐ §82.3.4(G539) — 사기범 턴 수는 여기서 올리지 않는다. 같은 `turnComplete`의 전사 flush(`handleTranscriptTurn`,
+    // 이 콜백보다 **먼저** 불린다 — `GeminiVoiceSession`)가 이미 올렸다 ⇒ 아래 드레인이 읽는 ref는 최신이다(§45.7 V2 유지).
+    // 빈 `turnComplete`(N1)에서는 이 콜백 자체가 불리지 않는다.
     // §59.8 — 이 경계가 곧 "마지막 사기범 턴 경계"다. 백스톱의 정지(stall) 시계를 여기서 리셋한다.
     lastScammerBoundaryAtSecRef.current = elapsedSecRef.current;
     // 턴이 끝났으니 보류분을 하나 더 내보낸다(위 계약 (2)).
@@ -913,19 +972,6 @@ export default function SessionCallPage() {
       setPersonaStateTurn((prev) => ({ text: line, seq: (prev?.seq ?? 0) + 1 }));
     }
   }, [drainInstructionQueue]);
-
-  // §59.10 커밋 D — 모델이 Live 도구로 직접 문자를 도착시켰다(또는 이미 도착해 있었다). 앱의 지연
-  // 발동(백스톱) 효과가 같은 smsId를 다시 요청하지 않도록 요청-완료 집합에 더한다(`pickDueInCallSms`
-  // 재사용, 새 판정 로직 불필요).
-  const handleModelToolSmsDelivered = useCallback((smsId: string) => {
-    requestedSmsRef.current.add(smsId);
-  }, []);
-
-  // §59.10 커밋 D(G390) — 모델의 도구 경로가 이 smsId에 대해 실패했다. 다음 렌더의 백스톱 판정이
-  // `toolCallFailed: true`를 보고 창을 즉시 닫도록 기록만 한다(판정 자체는 SMS 효과가 한다).
-  const handleModelToolSmsFailed = useCallback((smsId: string) => {
-    smsToolCallFailedIdRef.current = smsId;
-  }, []);
 
   // §59.10 커밋 D — 모델이 확인 오퍼 예고를 도구로 직접 성공시켰다. 앱의 `verifyOfferPhaseRef`를
   // 전진시켜야 (1) 백스톱이 같은 예고를 중복으로 다시 보내지 않고 (2) commit 단계(문서 실제 생성)가
@@ -1418,7 +1464,8 @@ export default function SessionCallPage() {
       ]);
       // 실시간 경로만 클라가 주입한다(폴백은 서버가 다음 턴 프롬프트에 싣는다 — §16.2).
       if (requestCallMode === "realtime") {
-        enqueueTurnInstruction(result.reconnectInstruction, "verify");
+        // §82.4.2 — 재연결 지시는 화자 전환 첫 발화다(맥락 주입이 아니라 `relayGreeting` 텍스트 턴).
+        enqueueTurnInstruction(result.reconnectInstruction, "verify", { speakerSwitch: true });
         // T118 / A5 — 이 시점부터 전환 상태 단언이 참이 된다(`placed`). 카운터를 0으로 두어
         // **참가자가 한 번 말한 뒤**부터 재주입되게 한다(G99 — 여기서 0으로 두지 않으면 다음
         // 사기범 턴 경계에서 곧바로 한 번 더 들어간다).
@@ -1732,14 +1779,13 @@ export default function SessionCallPage() {
             onTranscriptTurn={handleTranscriptTurn}
             textMessage={textMessage}
             onScammerTurnComplete={handleScammerTurnComplete}
-            onModelToolSmsDelivered={handleModelToolSmsDelivered}
-            onModelToolSmsFailed={handleModelToolSmsFailed}
             onModelToolVerifyAnnounced={handleModelToolVerifyAnnounced}
             onModelToolVerifyFailed={handleModelToolVerifyFailed}
             claimVerifyAnnounceSlot={claimVerifyAnnounceSlot}
             releaseVerifyAnnounceSlot={releaseVerifyAnnounceSlot}
             instructionTurn={instructionTurn}
             personaStateTurn={personaStateTurn}
+            turnPhaseRef={liveTurnPhaseRef}
             primedAudio={primedCallAudio}
           />
         )

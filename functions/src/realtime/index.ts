@@ -10,13 +10,14 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { ELEVENLABS_API_KEY, GEMINI_KEY_SECRETS } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
-import { listInCallSmsTriggers } from "../scenarios/inCallSms";
+import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { getVerifyOfferTrigger } from "../scenarios/verifyIntercept";
 import type { VoiceMode } from "../scenarios/publicMeta";
 import type { ChallengeDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
 import { getRealtimeProvider } from "./provider";
 import type { CreateRealtimeCallRequest, CreateRealtimeCallResponse } from "./callTypes";
 import type { RealtimeProviderName } from "./types";
+import { resolveFictionalBankName } from "../shared/fictionalBank";
 
 /**
  * 에스컬레이션된 세션(§13.6 통합 버그 수정)의 "유효 voiceMode" 유추 — session.voiceSelectionSource가
@@ -136,11 +137,14 @@ export const createRealtimeCall = onCall<
 
   const effectiveVoiceMode = resolveEffectiveVoiceMode(session.voiceSelectionSource);
   const provider = getRealtimeProvider(session.scenarioId, effectiveVoiceMode);
-  // T68(§15.1.2) — 통화 중 문자 **트리거만** 내려준다(본문·인증번호는 도착 시점에 deliverInCallSms가
-  // 서버에서 렌더). 카탈로그가 없는 시나리오면 빈 배열 → 필드 자체를 붙이지 않는다(API.md).
-  const inCallSmsTriggers = listInCallSmsTriggers(session.scenarioId);
+  // T68(§15.1.2) → ⭐ T191(문자 도달 조건) — 예전에는 카탈로그 트리거(`smsId` + `afterScammerTurns`)를 내려줘 클라가
+  // 고정 턴에 발송을 요청했다. 이제 발송 판정은 전부 서버(`inCallSms/smsGate.ts`)이고, 클라에 내려가는 것은
+  // **"이 세션은 문자 백스톱을 물어봐도 된다"는 표시 하나**다(목적 · 시점 · smsId 0 — 설계 금지 X1).
+  // 세션의 흐름 변형이 문자를 선언하지 않으면 필드 자체를 붙이지 않는다.
+  // ⭐ 리뷰 M2 — 도구 선언 · 프롬프트와 같은 단일 술어.
+  const smsDeclared = sessionDeclaresInCallSms(session.scenarioId, session.flowVariantId);
   const withSmsTriggers = <T extends object>(credentials: T): T =>
-    inCallSmsTriggers.length > 0 ? { ...credentials, inCallSmsTriggers } : credentials;
+    smsDeclared ? { ...credentials, inCallSmsBackstop: true as const } : credentials;
   // T83(§16.1.5) — 확인 시도 무력화의 **가용 게이트만** 내려준다(창구명·번호·모델 지시는 오퍼
   // 시점에 deliverVerifyOffer가 서버 카탈로그에서 렌더 — `withSmsTriggers`와 같은 자리·같은 원칙).
   //
@@ -169,6 +173,10 @@ export const createRealtimeCall = onCall<
       // T72(§15.3.3) — 세션 문서에 기록된 난이도(부재→중급). Gemini 경로만 실제로 반영하며,
       // 반영 여부는 각 provider가 credentials.difficultyApplied로 정직하게 보고한다(§15.6 G6).
       difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
+      // §81 — 세션 가상 은행명(문자 본문과 같은 이름). 부재(옛 세션)는 sessionId 해시.
+      fictionalBankName: resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName }),
+      // T191 S5(AC-096 (e)) — 배정된 흐름 변형. Gemini 경로만 반영한다(ElevenLabs는 무시 — 현행).
+      ...(session.flowVariantId ? { flowVariantId: session.flowVariantId } : {}),
     });
     // T38 QA NO-GO 수정, architect 판정(ADR-0006 Addendum A2, 2026-07-24) — §14.2 "추출 차단"은
     // raw voiceId를 응답에 실어 보내는 모든 경로를 무조건 막지 않는다(ElevenLabs 프로토콜상

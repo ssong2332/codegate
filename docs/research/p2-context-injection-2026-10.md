@@ -1,8 +1,8 @@
-# P1·P2 프로브 — gemini-3.8-live `turnComplete:false` 맥락 주입 (T191 S3 리뷰 M1 · §78.4.4)
+# P1·P2 프로브 — gemini-3.8-live `turnComplete:false` 맥락 주입 (T191 S3 리뷰 M1 · §82.4.4)
 
 ## 금지·전제
 - ⛔ 앱 코드 수정 0 · 커밋 0. 측정 전용 스크립트는 scratchpad에만 있다(저장소 밖).
-- 소스: `origin/claude/t191-s3-consecutive-turns` `10ff92f`(G490 새 announce 문면) — `git archive`로 scratchpad `p2\`에 풀고 `npm --prefix functions run build` 성공(`[lib-build] hash 1de540f482c3`).
+- 소스: `origin/claude/t191-s3-consecutive-turns` `10ff92f`(G541 새 announce 문면) — `git archive`로 scratchpad `p2\`에 풀고 `npm --prefix functions run build` 성공(`[lib-build] hash 1de540f482c3`).
 - 모델: `gemini-3.8-live`(`functions/src/realtime/geminiProvider.ts:36`), 시나리오 `institutional-impersonation`, 설정은 앱과 같은 함수로 조립(`buildSystemPrompt` · `buildLiveToolDeclarations` · VAD 값 동일).
 - Live 세션 **7개**(한도 8): P2 4개(중급 2 · 고급 2) · P1 3개(중급 2 · 고급 1). 오류·비정상 종료 0(전부 close code 1000).
 - 키: 메인 체크아웃 `functions/.secret.local` → `p2\functions\.secret.local` 복사(내용 미출력) → 종료 후 삭제. 부재 확인 출력: `absent: functions/.secret.local` · `no secret* files in p2/functions`.
@@ -72,7 +72,7 @@
 | 유휴 주입은 자발 발화를 유발하지 않는다 | **확정**(n=6, 0/6; S1 포함 0/8) | P1 표 |
 | 주입은 진행 중인 턴 내용을 바꾸지 않고 다음 응답부터 반영된다 | **확정**(0/8 같은 턴 반영) | P2 표 "같은 턴 반영" |
 | 다음 응답 반영률 ≥ n−1 (P3) | **안전계좌에서 반증**(4/7) · 인증번호는 충족(7/7) | P1·P2 표 |
-| §78.12 남는 위험 1의 대비책(주입을 다음 `turnComplete` 뒤로 미루기)은 불필요 | **추정** — P2 결과로는 미룰 이유가 없다 | 위 확정 3행 |
+| §82.12 남는 위험 1의 대비책(주입을 다음 `turnComplete` 뒤로 미루기)은 불필요 | **추정** — P2 결과로는 미룰 이유가 없다 | 위 확정 3행 |
 
 ## 한계
 - 사용자 발화가 **텍스트 턴**이다(음성·VAD 경로 아님). 음성 입력 중 주입·사용자 끼어들기와 겹치는 경우는 미측정.

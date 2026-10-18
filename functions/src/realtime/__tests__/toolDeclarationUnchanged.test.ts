@@ -144,8 +144,10 @@ test("[§61 T-3/G400] declaresOfferVerificationDesk가 선언·liveTools 이름 
   assert.ok(checked >= 30, "전 조합을 충분히 검사해야 한다");
 });
 
-// R1 ④ — 선언된 모든 함수의 parameters.properties가 빈 객체다(G384 기계 집행 — 인자 없음).
-test("[§59.9 R1④/G384] 선언된 모든 함수는 인자가 없다(parameters.properties === {})", () => {
+// R1 ④ — 인자 계약. ⚠️ T191(문자 도달 조건 · G538)이 **G384 "인자 없음" 단언을 의도적으로 바꿨다**:
+// `send_prepared_sms`는 이제 `purpose` enum(identity|transfer|link) 1개가 필수다(모델이 무엇을 보낼지 고르고 서버가
+// 재검증 — PRD AC-099 (b)). `offer_verification_desk`는 여전히 인자 없음(G384 그대로). BLOCKING 유지(G430)도 함께 본다.
+test("[§59.9 R1④/G384→G538] send_prepared_sms = purpose enum 필수 · offer_verification_desk = 인자 없음 · 둘 다 BLOCKING", () => {
   const scenarioDifficultyPairs: [string, "beginner" | "intermediate" | "advanced" | undefined][] = [
     ["reputation-blackmail-scam", "advanced"],
     ["bank-security-verify-scam", "advanced"],
@@ -157,17 +159,47 @@ test("[§59.9 R1④/G384] 선언된 모든 함수는 인자가 없다(parameters
     const tools = buildLiveToolDeclarations(scenarioId, difficultyLevel);
     for (const tool of tools) {
       for (const decl of tool.functionDeclarations ?? []) {
-        assert.deepEqual(
-          decl.parameters?.properties,
-          {},
-          `${scenarioId}/${decl.name}의 parameters.properties는 빈 객체여야 한다(G384)`,
-        );
         assert.equal(decl.parameters?.type, "OBJECT");
+        assert.equal(decl.behavior, "BLOCKING", `${scenarioId}/${decl.name} — G430 BLOCKING 유지`);
+        if (decl.name === LIVE_TOOL_SEND_PREPARED_SMS) {
+          assert.deepEqual(Object.keys(decl.parameters?.properties ?? {}), ["purpose"], "인자는 purpose 1개");
+          const purpose = decl.parameters?.properties?.purpose;
+          assert.equal(purpose?.type, "STRING");
+          assert.deepEqual(purpose?.enum, ["identity", "transfer", "link"]);
+          assert.deepEqual(decl.parameters?.required, ["purpose"], "purpose는 필수");
+        } else {
+          assert.deepEqual(
+            decl.parameters?.properties,
+            {},
+            `${scenarioId}/${decl.name}의 parameters.properties는 빈 객체여야 한다(G384)`,
+          );
+        }
         checked += 1;
       }
     }
   }
   assert.ok(checked >= 4, "선언된 함수를 최소 4개 이상 실제로 검사해야 한다");
+});
+
+test("[G538 역검증] purpose를 필수에서 뺀 오염본 · enum 밖 값을 넣은 오염본은 같은 검사식에 걸린다", () => {
+  const [tool] = buildLiveToolDeclarations("reputation-blackmail-scam", "advanced");
+  const decl = (tool.functionDeclarations ?? []).find((d) => d.name === LIVE_TOOL_SEND_PREPARED_SMS);
+  assert.ok(decl, "send_prepared_sms 선언이 있어야 한다");
+  const requiredOk = (d: typeof decl) => JSON.stringify(d?.parameters?.required) === JSON.stringify(["purpose"]);
+  const enumOk = (d: typeof decl) =>
+    JSON.stringify(d?.parameters?.properties?.purpose?.enum) === JSON.stringify(["identity", "transfer", "link"]);
+  const noRequired = { ...decl!, parameters: { ...decl!.parameters, required: [] } };
+  const extraEnum = {
+    ...decl!,
+    parameters: {
+      ...decl!.parameters,
+      properties: { purpose: { ...decl!.parameters!.properties!.purpose, enum: ["identity", "transfer", "link", "any"] } },
+    },
+  };
+  assert.equal(requiredOk(decl), true, "정상 선언은 통과");
+  assert.equal(enumOk(decl), true, "정상 선언은 통과");
+  assert.equal(requiredOk(noRequired), false, "필수에서 뺀 오염본은 실패");
+  assert.equal(enumOk(extraEnum), false, "enum을 넓힌 오염본은 실패");
 });
 
 // R1 ⑤ — 허용목록 밖 이름 0건(집합 동등 비교이므로 전 시나리오 × 전 난이도 순회로 자동 검증).

@@ -31,7 +31,19 @@ export type SessionEndReason =
   | "user_ended"
   | "completed"
   | "deceived"
-  | "limit_reached";
+  | "limit_reached"
+  // T192 C1(Architecture.md §79.5 · AC-103 (e)) — 사기범의 먼저 끊기. ⛔ 서버 승인 표식(`scammerHangup`)이
+  // 있을 때만 기록된다(`session/endReason.ts`). 리포트는 이 값을 읽지 않는다(G511).
+  | "scammer_ended";
+// T192 C1(§79.5) — 끊기 승인 표식. `requestScammerHangup`(실시간) · `sendMessage`(폴백 — C3)만 쓴다.
+// `kind`는 모델 판단의 기록일 뿐 판정에 쓰지 않는다(§79.2).
+export type ScammerHangupKind = "goal" | "give_up" | "unspecified";
+export type ScammerHangupPath = "realtime" | "fallback";
+export type ScammerHangupMarker = {
+  acceptedAt: FirebaseFirestore.Timestamp;
+  kind: ScammerHangupKind;
+  path: ScammerHangupPath;
+};
 export type CloneStatus = "pending" | "ready" | "failed" | "fallback";
 
 // T19 추가(옵셔널, 하위호환 — Migration Policy): 어떤 VoiceProvider가 클론을 만들었는지 감사용
@@ -121,6 +133,25 @@ export type SessionDoc = {
   // 블록을 내보내지 않아 프롬프트가 도입 전과 완전히 동일하다). 시나리오 메타의 산문 `difficulty`
   // (ScenarioDoc)와는 이름·의미가 다른 별개 필드다(오버로드 금지, §15.3.2).
   difficultyLevel?: DifficultyLevel;
+  /**
+   * 2026-10-18(Architecture §81) — 이 세션의 가상 은행명(`shared/fictionalBank.ts` 목록 중 하나). 세션 생성 때 1회
+   * 고르고 바꾸지 않는다 — 문자 본문·사기범 대사·Live 프롬프트·(예정) 가짜 랜딩 미리 채움이 **이 필드 하나**를 읽는다.
+   * 부재(옛 세션)면 `resolveFictionalBankName`이 sessionId 해시로 결정적으로 고른다.
+   */
+  fictionalBankName?: string;
+  /**
+   * T191 문자 도달 조건(리뷰 Minor ③) — 문자 백스톱이 이미 넛지한 게이트 개방 시점(사용자 발화 수) 목록. 넛지 1회 보장용
+   * (`inCallSms/smsGate.ts` `alreadyNudged`). 쓰는 곳은 `deliverInCallSms` 백스톱 넛지 분기 한 곳. 숫자만 — 목적 · smsId 0.
+   */
+  smsNudgedOpenAt?: number[];
+  // T191 S5 추가(옵셔널, 하위호환 · 무백필 — PRD AC-096 (e)(f)) — 세션 생성 시 서버가 배정한 흐름 변형의
+  // **불투명 ID**(`fv-xxxx`). 수법 · 단계 · 인원은 `functions/src/scenarios/flowVariants.ts`(서버 전용)에만
+  // 있다(D-46 · ADR-0004). 부재 = 변형 도입 이전 세션 → 원본 시나리오 프롬프트로 해석(무소급).
+  flowVariantId?: string;
+  // T192 C1 추가(옵셔널, 하위호환 · 무백필 — Architecture.md §79.5) — 사기범 끊기 승인 표식. 서버만 쓴다
+  // (클라 write는 firestore.rules가 전부 거부). `endReason: "scammer_ended"`의 **서버측 근거**다 —
+  // 이것 없이 온 `scammer_ended`는 `user_ended`로 기록된다(`session/endReason.ts`).
+  scammerHangup?: ScammerHangupMarker;
 };
 
 // --- users/{uid}/voices/{voiceId} (P-8·AC-046, ADR-0005·Database.md 1:1) ---
@@ -214,6 +245,10 @@ export type InCallSmsDoc = {
   // T190-2(docs/Architecture.md §74.9 · D-101) — 말풍선 링크 줄의 **가짜 주소**(`.invalid` 호스트 + 경로 · 스킴 0).
   // 실 URL이 아니다 — 탭은 인앱 랜딩만 연다. `linkDisplayText`·`fakeLandingId`와 함께만 존재(G111).
   linkAddress?: string;
+  /** 2026-10-18(Architecture §81) — 본문에 가상 은행 자리표시자가 있었던 문자에만, 그 세션의 가상 은행명. 가짜 랜딩 미리 채움(D-115)의 원천. */
+  bankName?: string;
+  /** 2026-10-19(Architecture §81.6) — 같은 문자 본문의 계좌번호(`bankName`과 한 쌍). D-115 랜딩 미리 채움의 원천. */
+  accountNumber?: string;
   // T104(§19.4) — 그 랜딩의 목업 종류. **kind의 진실 원천은 서버**이고(§15.9.1 R3) 클라는
   // `fakeLandingId` 문자열을 분류하지 않는다. 값이 기본값(`credential-form`)이면 **키를 만들지
   // 않는다** — `MessengerAttachment.landingKind`의 생략 규칙(`linkMarker.ts`)과 글자 그대로
@@ -235,7 +270,16 @@ export type InCallSmsDoc = {
   // Policy) — 신규 문서에는 항상 채워진다(buildDoc 단위 테스트가 고정). 부재 문서는 리포트
   // 스냅샷에서 앵커 미해결(anchorResolved:false)로 정직하게 표기된다.
   anchorScammerTurn?: number;
+  // T191 문자 도달 조건(PRD AC-099 (h)) — 도착 기록 3필드. 옵셔널인 이유는 위 앵커와 같다(이전 문서 무백필).
+  // 쓰는 곳은 `inCallSms/smsDelivery.ts` 한 곳뿐이다. `purpose`는 도착 뒤에만 생기는 값이며 `kind`와 같은 수준의
+  // 정보다(도착 전 응답 · 자격증명에는 목적이 실리지 않는다).
+  purpose?: "identity" | "transfer" | "link";
+  trigger?: InCallSmsTriggerKind;
+  userTurnsAtArrival?: number;
 };
+
+/** 도착 경로 — 실시간 모델 도구 · 텍스트 폴백 마커 · 백스톱(두 경로 공통). */
+export type InCallSmsTriggerKind = "model_tool" | "model_marker" | "backstop";
 
 // --- sessions/{sessionId}/verifyIntercept/{offerId} (T83, UX-031/UF-011, §16.3.1, AC-071/019) ---
 //
@@ -436,6 +480,10 @@ export type ReportDoc = {
   // **난이도는 리포트 판정에 어떤 영향도 주지 않는다**(§15.3.5 — analyzeConversation/
   // buildPreventionAdvice/computeDefenseGrade 시그니처 무변경). 표기 전용이다(P-22).
   difficultyLevel?: DifficultyLevel;
+  // T191 S5 추가(옵셔널, 하위호환 · 무백필 — PRD AC-096 (f) · 설계 "reports flowVariantId 스냅샷") — 리포트를
+  // 만든 세션의 흐름 변형 **불투명 ID**. 리플레이 · 되감기 · 실패 아카이브가 같은 변형으로 해석한다.
+  // 부재 = 변형 도입 이전 리포트(기존 방식 그대로 표시 — AC-077).
+  flowVariantId?: string;
   createdAt: FirebaseFirestore.Timestamp;
   // T74 추가(전부 옵셔널, 하위호환 — §15.4.1 "아카이브 카드가 필요로 하는 세션 메타를 리포트에
   // 역정규화"). 없으면 아카이브가 카드 1장마다 세션 문서를 추가 read해야 한다(N+1, §15.6 G8).

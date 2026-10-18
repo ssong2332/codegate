@@ -28,6 +28,7 @@ import { resolveEffectiveVoiceMode } from "../realtime";
 import {
   buildVerifyInterceptDoc,
   buildVerifyOfferResponse,
+  buildVerifyReconnectParts,
   fallbackVerifyAnchor,
   realtimeVerifyAnchor,
   resolveModelToolVerifyGate,
@@ -55,6 +56,7 @@ export {
   resolveModelToolVerifyGate,
   resolveVerifyOfferPlan,
 } from "./buildDoc";
+import { resolveFictionalBankName } from "../shared/fictionalBank";
 
 /** 세션 소유권 검증 — 익명 uid(2인 챌린지 사용자2)도 자기 세션이면 그대로 성립한다(§14.7). */
 async function loadOwnedActiveSession(sessionId: string, uid: string): Promise<SessionDoc> {
@@ -187,6 +189,8 @@ export const deliverVerifyOffer = onCall<
   const session = await loadOwnedActiveSession(sessionId, request.auth.uid);
   assertAnonymousChallengeScope(request.auth, session);
   const item = assertVerifyEligible(session);
+  // §81 — 세션 가상 은행명(창구 이름·도착 지시가 문자·대사와 같은 이름).
+  const fictionalBankName = resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName });
 
   const db = getFirestore();
   const offerRef = db
@@ -263,14 +267,14 @@ export const deliverVerifyOffer = onCall<
     // 못하고 함수가 끝난다. 여기도 같은 이유로 "error"를 찍는다 — 판정 로직·게이트 순서는 그대로다.
     try {
       const anchor = await resolveAnchorScammerTurn(sessionId, callMode, scammerTurns);
-      await offerRef.create(buildVerifyInterceptDoc(item, Timestamp.now(), anchor));
+      await offerRef.create(buildVerifyInterceptDoc(item, Timestamp.now(), anchor, fictionalBankName));
     } catch (err) {
       logOfferOutcome("error", "persist_failed");
       throw err;
     }
   }
 
-  const response = buildVerifyOfferResponse(item, { placed, ...(stage ? { stage } : {}) });
+  const response = buildVerifyOfferResponse(item, { placed, ...(stage ? { stage } : {}), fictionalBankName });
   // ⭐ §59.6/§59.11 — 관측용 상태 태그. `announceInstruction` 유무를 그대로 재해석할 뿐 새로운
   // 판정을 추가하지 않는다(응답 필드 추가는 하위호환 — 이 값을 읽는 클라는 아직 없다).
   const status: DeliverVerifyOfferStatus = plan.includeInstruction ? "announced" : "already_announced";
@@ -299,6 +303,11 @@ export const deliverVerifyReconnect = onCall<
   const session = await loadOwnedActiveSession(sessionId, request.auth.uid);
   assertAnonymousChallengeScope(request.auth, session);
   const item = assertVerifyEligible(session, offerId);
+  // §81 — 재연결 화자 이름·지시·전환 상태 줄을 세션 가상 은행명으로.
+  const reconnectParts = buildVerifyReconnectParts(
+    item,
+    resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName }),
+  );
 
   const db = getFirestore();
   const offerRef = db
@@ -319,13 +328,13 @@ export const deliverVerifyReconnect = onCall<
     await offerRef.update({
       placedAt: Timestamp.now(),
       reconnectAnchorScammerTurn: anchor,
-      reconnectedCallerLabel: item.reconnectedCallerLabel,
+      reconnectedCallerLabel: reconnectParts.reconnectedCallerLabel,
     });
   }
 
   // T118/A5-3 — 전환 상태 단언 1줄을 함께 내려보낸다(클라가 이후 턴 경계마다 다시 넣는다, §25.3).
   return {
-    reconnectInstruction: item.reconnectInstruction,
-    transferStateLine: item.transferStateLine,
+    reconnectInstruction: reconnectParts.reconnectInstruction,
+    transferStateLine: reconnectParts.transferStateLine,
   };
 });

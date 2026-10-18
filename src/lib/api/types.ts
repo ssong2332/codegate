@@ -136,12 +136,12 @@ export type CreateRealtimeCallResponse = {
    */
   difficultyApplied: boolean;
   /**
-   * T68(Architecture.md §15.1.2, UX-027/UF-008) — 이 시나리오의 통화 중 문자 **트리거만**
-   * (`smsId` + 몇 번째 사기범 턴 이후). **본문·인증번호·발신번호는 오지 않는다** — 도착 시점에
-   * `deliverInCallSms`가 서버에서 렌더해 Firestore에 쓰고, 화면은 그 구독으로만 그린다.
-   * 카탈로그가 없는 시나리오는 필드 부재.
+   * ⭐ T191(문자 도달 조건 · PRD AC-099) — 예전 `inCallSmsTriggers`(`smsId` + 고정 턴)를 대체한다. `true`면 이 세션의
+   * 흐름 변형이 통화 중 문자를 선언했다는 뜻이고, 화면은 **사용자 발화 flush마다** `deliverInCallSms({ trigger:"backstop" })`
+   * 로 서버에 묻는다(`none_pending`이면 멈춘다). 목적 · 시점 · smsId는 오지 않는다 — 발송 판정은 전부 서버다.
+   * 문자를 선언하지 않은 세션은 필드 부재. functions/src/realtime/callTypes.ts와 1:1.
    */
-  inCallSmsTriggers?: InCallSmsTrigger[];
+  inCallSmsBackstop?: true;
   /**
    * T83(Architecture.md §16.1.5, UX-031/UF-011) — 확인 시도 무력화의 **가용 게이트만**
    * (몇 번째 사기범 턴 이후부터 확인 권유가 가능한가). **창구명·번호는 오지 않는다** — 오퍼 시점에
@@ -159,7 +159,6 @@ export type CreateRealtimeCallResponse = {
    */
   liveTools?: LiveTools;
 };
-export type InCallSmsTrigger = { smsId: string; afterScammerTurns: number };
 export type VerifyOfferTrigger = { availableAfterScammerTurns: number };
 export type LiveTools = {
   sendPreparedSms?: string;
@@ -174,24 +173,38 @@ export type LiveTools = {
 //
 // ⚠️ **읽기 전용 계약(AC-060)**: 답장·전달·전송 요청 타입이 존재하지 않는다. 실 URL 필드도
 // 어느 타입에도 없다 — 링크는 표시 텍스트 + 인앱 가짜 랜딩 참조로만 표현된다(AC-032/045).
-// ⭐ §59.6/§59.10 커밋 B(§59, `docs/API.md` 부록 C) — 옵셔널 2개 추가. **둘 다 부재 = 오늘 동작
-// 100%**(하위호환). `trigger:"model_tool"`을 보내는 호출부는 아직 없다(§59 커밋 C 이전) — 회귀 0.
+// ⭐ T191(문자 도달 조건 · PRD AC-099) — 요청이 "어느 문자(smsId)"에서 "어떤 목적(purpose)"으로 바뀌었다. 화면은
+// smsId를 고르지 않는다. 판정 입력은 사용자 발화 수(`userTurns`) · 앵커는 `scammerTranscriptTurns`(둘 다 비어 있지 않은
+// 전사 flush 수 — `src/lib/realtime/contextInjection.ts` `countTranscriptFlush`). 계약 원천은 `functions/src/inCallSms/types.ts`.
 export type DeliverInCallSmsTrigger = "backstop" | "model_tool";
 export type DeliverInCallSmsRequest = {
   sessionId: string;
-  smsId: string;
-  scammerTurns?: number;
-  trigger?: DeliverInCallSmsTrigger;
+  /** `trigger:"model_tool"`에서 — 모델이 도구 인자로 고른 목적 원값(검증은 서버). 백스톱은 보내지 않는다. */
+  purpose?: string;
+  userTurns: number;
+  scammerTranscriptTurns: number;
+  trigger: DeliverInCallSmsTrigger;
 };
 // ⭐ §53.6 (3)(T118/R-1과 동형) — 전환(호 전환)이 끝난 오퍼가 연 문자에는 `announceInstruction`이
-// 생략된다. 값이 없으면 클라는 주입하지 않는다. 계약 원천은 `functions/src/inCallSms/types.ts`.
-export type DeliverInCallSmsStatus = "delivered" | "too_early" | "already_delivered" | "none_pending";
+// 생략된다. 값이 없으면 클라는 주입하지 않는다.
+export type DeliverInCallSmsStatus =
+  | "delivered"
+  | "already_delivered"
+  | "too_early"
+  | "too_soon"
+  | "not_allowed"
+  | "nudge"
+  | "waiting"
+  | "none_pending";
 export type DeliverInCallSmsResponse = {
-  smsId: string;
+  /** `status==="delivered"`일 때만. */
+  smsId?: string;
   announceInstruction?: string;
-  /** ⭐ §59.6/§59.11 — 관측용(도착 경로). 오늘 이 값을 읽는 호출부는 없다(추가만 됐다). */
   status: DeliverInCallSmsStatus;
+  /** 거부 4종(already_delivered · too_early · too_soon · not_allowed)에서만 — 서버 소유 문면. */
   declineInstruction?: string;
+  /** `status==="nudge"`에서만 — 백스톱 넛지 1줄(서버 소유 · 맥락 주입). */
+  nudgeInstruction?: string;
 };
 // T123/AC-080 — `landing_submitted` = "그 문자가 연 가짜 랜딩의 폼을 제출했다"는 **사실 하나**.
 // ⛔ 참가자 입력값(계좌번호·예금주명)을 담을 필드가 아래 요청 타입에 **존재하지 않는다**(AC-045).
@@ -305,12 +318,39 @@ export type EndSessionReason =
   | "user_ended"
   | "completed"
   | "deceived"
-  | "limit_reached";
+  | "limit_reached"
+  // T192 C1(Architecture.md §79.5) — 서버 승인 표식이 없으면 서버가 `user_ended`로 기록한다.
+  | "scammer_ended";
 export type EndSessionRequest = {
   sessionId: string;
   endReason: EndSessionReason;
 };
 export type EndSessionResponse = { status: "ended"; reportPending: true };
+
+// --- requestScammerHangup (T192 C1 · Architecture.md §79.5 · AC-103) ---
+// 실시간 `end_call` 도구 호출의 서버 판정(functions/src/scammerHangup/types.ts와 1:1). 세션을 끝내지 않는다.
+// `guidance`는 서버 소유 문면이다 — 클라는 그대로 도구 응답에 싣고 한국어를 저작하지 않는다(G386 · G516).
+export type ScammerHangupStatus =
+  | "not_active"
+  | "wrong_channel"
+  | "not_last_leg"
+  | "mock_turn"
+  | "blocked_transfer"
+  | "too_early"
+  | "blocked_pending"
+  | "limit_reached"
+  | "already_accepted"
+  | "accepted";
+export type RequestScammerHangupRequest = {
+  sessionId: string;
+  scammerTurns: number;
+  pendingInstruction: boolean;
+  kind?: string;
+};
+export type RequestScammerHangupResponse = {
+  status: ScammerHangupStatus;
+  guidance: string;
+};
 
 // --- updateMessengerSkin (T29 · UX-022 · AC-031/P-16) ---
 // 메신저 채팅(UX-022)의 UA 자동 감지·수동 전환 결과를 세션 문서에 지속한다(리포트·새로고침·

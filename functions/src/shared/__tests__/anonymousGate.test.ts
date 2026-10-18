@@ -123,7 +123,7 @@ test("[T176 T-1] 비익명 호출자에 대해 assertAnonymousChallengeScope는 
 
 type AnonymousPolicy = "deny" | "session" | "report" | "entry" | "no_auth" | "not_callable";
 
-/** Architecture.md §68.3 — 26행. 새 export를 추가하면 여기에 분류를 추가해야 테스트가 통과한다. */
+/** Architecture.md §68.3 — 26행 + T192 C1 `requestScammerHangup`(§79.5 — S 클래스, §68.3 표 반영은 하류 docs) = 27행. 새 export를 추가하면 여기에 분류를 추가해야 테스트가 통과한다. */
 const ANONYMOUS_POLICY: Record<string, AnonymousPolicy> = {
   createVoiceClone: "deny",
   createSession: "deny",
@@ -141,6 +141,7 @@ const ANONYMOUS_POLICY: Record<string, AnonymousPolicy> = {
   deliverVerifyOffer: "session",
   deliverVerifyReconnect: "session",
   recordMockScreenEvent: "session",
+  requestScammerHangup: "session",
   getBeginnerBriefing: "deny",
   createChallenge: "deny",
   deleteChallenge: "deny",
@@ -199,19 +200,19 @@ const EXPORTED_NAMES: readonly string[] = Object.keys(callables);
 
 test("[T176 T-2] index.ts export 집합과 §68.3 정책표가 양방향으로 일치한다(G421)", () => {
   assertNoClassificationGaps(EXPORTED_NAMES, ANONYMOUS_POLICY);
-  assert.equal(EXPORTED_NAMES.length, 26, "§68.1 1 — 서버 진입점은 26개(콜러블 24 + 트리거 1 + 스케줄 1)");
+  assert.equal(EXPORTED_NAMES.length, 27, "§68.1 1 — 서버 진입점은 27개(콜러블 25 + 트리거 1 + 스케줄 1 — T192 C1 +1)");
 });
 
-test("[T176 T-2] 정책표 클래스별 개수 = §68.3(D 6 · S 13 · R 1 · E 2 · N 2 · X 2 — 변경 대상 20)", () => {
+test("[T176 T-2] 정책표 클래스별 개수 = §68.3(D 6 · S 14 · R 1 · E 2 · N 2 · X 2 — 변경 대상 21 · T192 C1 S +1)", () => {
   const count = (policy: AnonymousPolicy) =>
     Object.values(ANONYMOUS_POLICY).filter((p) => p === policy).length;
   assert.equal(count("deny"), 6);
-  assert.equal(count("session"), 13);
+  assert.equal(count("session"), 14);
   assert.equal(count("report"), 1);
   assert.equal(count("entry"), 2);
   assert.equal(count("no_auth"), 2);
   assert.equal(count("not_callable"), 2);
-  assert.equal(count("deny") + count("session") + count("report"), 20);
+  assert.equal(count("deny") + count("session") + count("report"), 21);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -299,12 +300,12 @@ function bodyOf(name: string): string {
   return extractBody(fs.readFileSync(file, "utf-8"), name);
 }
 
-test("[T176 T-3 전제] 진입점 스캐너가 정책표의 26개 이름을 전부 찾는다(조용한 건너뜀 방지)", () => {
+test("[T176 T-3 전제] 진입점 스캐너가 정책표의 27개 이름을 전부 찾는다(조용한 건너뜀 방지)", () => {
   const missing = Object.keys(ANONYMOUS_POLICY).filter((name) => !entryFiles.has(name));
   assert.deepEqual(missing, [], `listEntryPoints()가 찾지 못한 이름: ${missing.join(", ")}`);
 });
 
-test("[T176 T-3] 20개 변경 대상에 게이트 호출이 있고, 입구 4개에는 없다(G418·G419·G420)", () => {
+test("[T176 T-3] 21개 변경 대상에 게이트 호출이 있고, 입구 4개에는 없다(G418·G419·G420)", () => {
   const report: string[] = [];
   for (const [name, policy] of Object.entries(ANONYMOUS_POLICY)) {
     for (const violation of findGateViolations(policy, bodyOf(name))) {

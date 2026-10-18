@@ -3,8 +3,8 @@
 - Status: proposed
 - Date: 2026-10-18
 - Owner: architect
-- DECISIONS.md entry: #138 후보(미기록 — 이번 패스는 DECISIONS 편집 금지. 병합 순서로 번호 확정)
-- 상세: `docs/Architecture.md` §78
+- DECISIONS.md entry: #156 후보(미기록 — 이번 패스는 DECISIONS 편집 금지. 병합 순서로 번호 확정)
+- 상세: `docs/Architecture.md` §82
 
 ## 금지 (이 ADR을 근거로 구현할 때 먼저)
 - ⛔ 인계문을 클라가 만들거나 클라가 보낸 요약을 프롬프트에 넣지 않는다. 인계문을 클라에 돌려주지 않는다.
@@ -13,7 +13,7 @@
 - ⛔ §22.2의 A · C · D · E 판정과 §16.5 원문은 바꾸지 않는다 — 이 ADR은 B 한 행의 근거만 정정한다.
 
 ## Context
-User 결정 D3(DECISIONS #131)는 여러 사람 릴레이를 *"다른 목소리로 재연결"* 로 골랐다. §22.2 B는 소켓 재연결을 두 근거로 기각했었다: ① Live 대화 컨텍스트 소실 ② 컨텍스트를 넘기려면 미마스킹 전사를 통화 중 서버로 올려야 해 §19.6 (4) · G79 논거가 무너진다. AC-101 (d)는 이 둘을 다시 판정하고, 해소 못 하면 구현하지 말라고 했다. 동시에 AC-096은 난이도별 흐름 변형을 서버 데이터로 정의하라고 했다.
+User 결정 D3(DECISIONS #149)는 여러 사람 릴레이를 *"다른 목소리로 재연결"* 로 골랐다. §22.2 B는 소켓 재연결을 두 근거로 기각했었다: ① Live 대화 컨텍스트 소실 ② 컨텍스트를 넘기려면 미마스킹 전사를 통화 중 서버로 올려야 해 §19.6 (4) · G79 논거가 무너진다. AC-101 (d)는 이 둘을 다시 판정하고, 해소 못 하면 구현하지 말라고 했다. 동시에 AC-096은 난이도별 흐름 변형을 서버 데이터로 정의하라고 했다.
 
 ## Decision
 릴레이 교대는 **이전 Live 연결을 끊고, 서버가 마스킹 저장된 `messages`와 변형 데이터로 만든 인계 블록을 새 토큰의 `systemInstruction`에 넣어 다른 음성으로 새로 연결**한다(텍스트 폴백은 같은 인계 블록 + leg 프롬프트 교체). 재판정: ①은 인계 블록으로 해소(조건부), ②는 전제 오류 — 같은 원문 전사가 이미 통화 종료 때 `submitRealtimeTranscript`로 서버에 올라가 `maskPII` 후에만 저장되며(`functions/src/realtime/submitTranscript.ts:110-136`), G79는 화면 표시 규칙이다(`docs/Architecture.md:2711` · `:2733`).
@@ -31,5 +31,5 @@ User 결정 D3(DECISIONS #131)는 여러 사람 릴레이를 *"다른 목소리�
 
 ## Consequences
 - Positive: D3 실현(Gemini · 폴백) · 화자 경계가 `relay.legStartTurnIndex` · `messages.speakerLabel`로 처음 관측됨(릴레이 한정) · 변형 데이터가 D-46 경계 안에 남음.
-- Negative / accepted trade-offs: 교대 지연(목표 p50 ≤4초 · p95 ≤8초, 최대 대기 15초) · 무료 등급 Live 세션 시작 1+R배 소비 · 유료 환산 −19%~+27%(R=2, 과금 모형 미확인) · ElevenLabs는 라우팅으로 회피(AC-101 (e) 해석은 User 결정 OQ-A108).
-- Follow-ups required: OQ-A108(User) · OQ-A109/OQ-U73(planner) · 3.8 프로브 P6 · Gemini 음성 풀 확장(OQ-A113) · DECISIONS 행 기록 · API.md/Database.md 갱신(S7).
+- Negative / accepted trade-offs: 교대 지연(목표 p50 ≤4초 · p95 ≤8초, 최대 대기 15초) · 무료 등급 Live 세션 시작 1+R배 소비 · 유료 환산 −19%~+27%(R=2, 과금 모형 미확인) · ElevenLabs는 라우팅으로 회피(AC-101 (e) 해석은 User 결정 OQ-A131).
+- Follow-ups required: OQ-A131(User) · OQ-A132/OQ-U73(planner) · 3.8 프로브 P6 · Gemini 음성 풀 확장(OQ-A136) · DECISIONS 행 기록 · API.md/Database.md 갱신(S7).

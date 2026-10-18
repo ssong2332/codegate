@@ -3,6 +3,7 @@
 import type { VerifyInterceptItem } from "../scenarios/verifyIntercept";
 import type { VerifyInterceptDoc } from "../shared/types";
 import type { DeliverVerifyOfferResponse, VerifyOfferStage } from "./types";
+import { applyFictionalBank } from "../shared/fictionalBank";
 
 /**
  * ⚠️ **여기서 나가는 필드가 곧 클라가 볼 수 있는 전부다**(AC-019/AC-024 구조적 금지의 마지막 관문).
@@ -17,10 +18,12 @@ export function buildVerifyInterceptDoc(
   item: VerifyInterceptItem,
   offeredAt: FirebaseFirestore.Timestamp,
   offerAnchorScammerTurn: number,
+  // §81 — 세션 가상 은행명. 창구 이름("○○은행 금융사고대응 확인창구")을 저장 시 치환한다(통화 오버레이·다시보기가 이 값을 그대로 보인다).
+  fictionalBankName?: string,
 ): VerifyInterceptDoc {
   return {
     offerId: item.offerId,
-    deskLabel: item.deskLabel,
+    deskLabel: fictionalBankName ? applyFictionalBank(item.deskLabel, fictionalBankName) : item.deskLabel,
     offeredAt,
     offerAnchorScammerTurn,
   };
@@ -46,11 +49,31 @@ export function buildVerifyInterceptDoc(
  */
 export function buildVerifyOfferResponse(
   item: VerifyInterceptItem,
-  input: { placed: boolean; stage?: VerifyOfferStage },
+  input: { placed: boolean; stage?: VerifyOfferStage; fictionalBankName?: string },
 ): Omit<DeliverVerifyOfferResponse, "status" | "declineInstruction"> {
   const plan = resolveVerifyOfferPlan({ placed: input.placed, ...(input.stage ? { stage: input.stage } : {}) });
   if (!plan.includeInstruction) return { offerId: item.offerId };
-  return { offerId: item.offerId, announceInstruction: item.announceInstruction };
+  // §81 — 실시간 경로는 이 지시가 그대로 Live 세션에 들어간다(buildSystemPrompt를 거치지 않는다).
+  const announceInstruction = input.fictionalBankName
+    ? applyFictionalBank(item.announceInstruction, input.fictionalBankName)
+    : item.announceInstruction;
+  return { offerId: item.offerId, announceInstruction };
+}
+
+/**
+ * §81 — 재연결(호 전환) 응답과 문서 필드를 세션 은행명으로 조립한다(리뷰 #1 — 종전엔 `deliverVerifyReconnect`가
+ * 카탈로그 원문을 그대로 돌려줘 Live 세션에 "○○은행"이 주입됐다). 은행명이 없으면 카탈로그 원문 그대로.
+ */
+export function buildVerifyReconnectParts(
+  item: VerifyInterceptItem,
+  fictionalBankName?: string,
+): { reconnectedCallerLabel: string; reconnectInstruction: string; transferStateLine: string } {
+  const apply = (text: string): string => (fictionalBankName ? applyFictionalBank(text, fictionalBankName) : text);
+  return {
+    reconnectedCallerLabel: apply(item.reconnectedCallerLabel),
+    reconnectInstruction: apply(item.reconnectInstruction),
+    transferStateLine: apply(item.transferStateLine),
+  };
 }
 
 // ── ⭐⭐ §38.4 후보 E — **2단 오퍼**(실시간 경로 전용) ────────────────────────────

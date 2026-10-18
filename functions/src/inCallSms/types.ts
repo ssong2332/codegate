@@ -5,25 +5,49 @@
 // 하나로만 그린다(실시간·폴백 단일 렌더 소스, DECISIONS #12 계승). 응답은 "도착시켰다 + 캐릭터가
 // 알리게 할 1줄 지시"만 돌려준다.
 
-// ⭐ §59.6/§59.10 커밋 B(§59 — 모델 주도 발동 시점, `docs/API.md` 부록 C) — 옵셔널 2개 추가.
-// **둘 다 부재 = 오늘 동작 100%**(하위호환). `trigger:"model_tool"`을 보내는 클라는 아직 없다
-// (§59 커밋 C 이전) — 그래서 아래 신규 필드는 오늘 어떤 요청·응답에도 실리지 않는다(회귀 0).
+// ⭐ T191 문자 도달 조건(PRD AC-099 · 설계 "문자 도달 조건") — 요청이 "어느 문자(smsId)"에서 "어떤 목적(purpose)"으로
+// 바뀌었다. 클라는 더 이상 smsId를 고르지 않는다 — 서버가 세션의 흐름 변형 선언에서 목적으로 찾는다.
+// 판정 입력은 **사용자 발화 수**(`userTurns`)이고, `scammerTranscriptTurns`는 앵커(리포트 타임라인 위치)에만 쓴다.
+// ⚠️ 두 카운터는 클라 주장값이다(실시간 경로에서 서버가 참가자 발화를 통화 중에 보지 못한다) — 서버는 범위만 검사한다
+// (0 이상 · 200 이하 정수). 위조의 최대 효과는 "자기 훈련용 모의 문자를 조금 일찍 받는 것"이다(G12와 같은 위상).
 export type DeliverInCallSmsTrigger = "backstop" | "model_tool";
 export type DeliverInCallSmsRequest = {
   sessionId: string;
-  smsId: string;
-  /** `trigger:"model_tool"`일 때만 필수(§59.7 하한 재검증). 그 외에는 읽지 않는다. */
-  scammerTurns?: number;
+  /** `trigger:"model_tool"`에서 필수 — 모델이 도구 인자로 고른 목적(`identity|transfer|link`). 백스톱은 보내지 않는다. */
+  purpose?: string;
+  /** 비어 있지 않은 사용자 전사 flush 수(음성 · 타이핑 공통). **부재 = 이 계약 이전 클라**(아래 `legacy` 처리). */
+  userTurns?: number;
+  /** 비어 있지 않은 사기범 전사 flush 수 — 앵커 = 1 + 이 값. */
+  scammerTranscriptTurns?: number;
   trigger?: DeliverInCallSmsTrigger;
-};
-// ⭐ §59.6 — `status`·`declineInstruction` 필드 2개 추가. `status`는 관측용(§59.11)이며
-// `trigger:"model_tool"`이 아닌 호출(오늘 유일한 실호출)에서는 기존 `smsId`/`announceInstruction`
-// 계산을 **한 글자도 바꾸지 않는다** — 새 필드는 그 위에 얹힐 뿐이다.
-export type DeliverInCallSmsStatus = "delivered" | "too_early" | "already_delivered" | "none_pending";
-export type DeliverInCallSmsResponse = {
-  smsId: string;
   /**
-   * 클라가 **같은 Live 세션에 텍스트 턴으로 주입**해 캐릭터가 문자 발송을 알리게 하는 1줄.
+   * @deprecated 이 계약 이전 클라(캐시된 화면)가 보내는 값. 서버는 **읽지 않는다** — `userTurns`가 없는 요청은
+   * 문자를 보내지 않고 `not_allowed`로 응답한다(옛 화면은 그 응답에 오류를 띄우지 않는다).
+   */
+  smsId?: string;
+  /** @deprecated 위와 같다(옛 `scammerTurns`). */
+  scammerTurns?: number;
+};
+/**
+ * - `delivered` — 이번 호출로 도착(문서 생성). `announceInstruction`(전환 뒤면 생략)이 실린다.
+ * - `already_delivered` · `too_early` · `too_soon` · `not_allowed` — 거부(문서 0). `declineInstruction`이 실린다.
+ * - `nudge` — 백스톱 1단계: 모델에게 맥락 주입할 `nudgeInstruction`이 실린다(문서 0).
+ * - `waiting` — 백스톱: 아직 할 일 없음. `none_pending` — 백스톱: 남은 필수 문자 없음(클라는 더 묻지 않는다).
+ */
+export type DeliverInCallSmsStatus =
+  | "delivered"
+  | "already_delivered"
+  | "too_early"
+  | "too_soon"
+  | "not_allowed"
+  | "nudge"
+  | "waiting"
+  | "none_pending";
+export type DeliverInCallSmsResponse = {
+  /** `status==="delivered"`일 때만(도착한 문서 id = 화면 구독 키). 거부 · 백스톱 대기에는 없다(도착 전 문자 id 0). */
+  smsId?: string;
+  /**
+   * 클라가 **같은 Live 세션에 맥락 주입**해 캐릭터가 문자 발송을 알리게 하는 1줄.
    *
    * ⭐ **§53.6 (3)(T118/R-1과 동형, Architecture.md §53)** — 이 문자가 연 확인 시도 무력화
    * 오퍼에 이미 `placedAt`이 있으면(=호 전환이 끝난 뒤면) **생략된다.** 전환 이후에는 원
@@ -31,14 +55,14 @@ export type DeliverInCallSmsResponse = {
    * 말하면 참가자가 겪은 사실과 모순된다. 값이 없으면 클라는 **주입하지 않는다** — 문서
    * 자체(계좌·링크)는 전환 여부와 무관하게 그대로 도착한다.
    *
-   * ⭐ §59.6 — `status==="delivered"`일 때만 실린다(위 §53.6 (3) 생략 규칙과 **AND**로 곱해진다).
+   * ⭐ `status==="delivered"`일 때만 실린다(위 §53.6 (3) 생략 규칙과 **AND**로 곱해진다).
    */
   announceInstruction?: string;
-  /** ⭐ §59.6/§59.11 — 도착 경로 관측용. 오늘 유일한 실호출(트리거 부재)에서는 `"delivered"`
-   * 또는 `"already_delivered"`로만 채워지며, 이 값을 읽는 클라는 아직 없다(추가만 됐다). */
   status: DeliverInCallSmsStatus;
-  /** ⭐ §59.6 — `status !== "delivered"`일 때만 실리는 서버 소유 거절 지시(G386). */
+  /** 거부 4종에서만 실리는 서버 소유 지시(G386). */
   declineInstruction?: string;
+  /** `status==="nudge"`에서만 — 서버 소유 넛지 1줄(맥락 주입 · 전환 뒤에는 `waiting`으로 대신한다). */
+  nudgeInstruction?: string;
 };
 
 // T123/AC-080 — `landing_submitted`는 **"그 문자가 연 가짜 랜딩의 폼을 제출했다"**는 사실 하나다.

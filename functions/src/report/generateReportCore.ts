@@ -7,7 +7,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { SCENARIO_PROMPTS } from "../scenarios";
+import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { listAppInstallMockScreens, MOCK_SCREENS } from "../scenarios/mockScreens";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
@@ -97,7 +97,13 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     };
   });
 
-  const scenarioPrompt = SCENARIO_PROMPTS[session.scenarioId];
+  // T191 S5(PRD AC-096 (f)) — 세션에 배정된 흐름 변형의 수법 목록으로 해석한다(실제로 그 통화에 쓰인
+  // 목록). flowVariantId 부재 = 과거 세션 → 원본 시나리오 수법(무소급 — AC-077).
+  // ⚠️ 의도된 비대칭: ElevenLabs 경로(clone)는 변형 미적용이라 **원본 프롬프트로 통화**하지만, 리포트는
+  // 세션의 flowVariantId(Gemini · 폴백 기준 배정값)로 해석한다. 변형 수법은 원본 수법의 부분집합 + 변형 전용
+  // 수법이라, 원본으로 통화한 세션에서 변형 밖 수법이 나오면 그 수법은 리포트 추정에서 빠질 수 있다(OQ-A131
+  // 기본값 — ElevenLabs 변형 적용은 User 결정 대기).
+  const scenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId);
   const weakenedTactics = scenarioPrompt?.weakenedTactics ?? [];
 
   // ② 대화 로그 규칙 기반 분석(analyzeConversation.ts 참고 — Mock 단계 한계 고지 포함) →
@@ -291,6 +297,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     // T72(§15.3.2/§15.4.1) — 세션에서 역정규화(표기 전용). 리포트·리플레이·실패 아카이브가 세션
     // 문서를 추가로 read하지 않고 같은 라벨을 그릴 수 있게 한다(P-22).
     difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
+    // T191 S5(AC-096 (f)) — 흐름 변형 불투명 ID 스냅샷(부재 세션이면 필드를 만들지 않는다 — 무소급).
+    ...(session.flowVariantId ? { flowVariantId: session.flowVariantId } : {}),
     createdAt: Timestamp.now(),
     scenarioId: session.scenarioId,
     channel: session.channel ?? "voice",

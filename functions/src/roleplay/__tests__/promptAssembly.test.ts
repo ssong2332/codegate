@@ -1529,11 +1529,12 @@ test("[reviewer Critical #2 역검증] 계열 B라도 SMS 카탈로그가 있으
 const VERIFY_INTERCEPT_CATALOG_IDS = Object.keys(VERIFY_INTERCEPT);
 const G403_PROMISE_LITERALS = ["연결해 드리겠습니다", "연결해 드릴", "확인해 드리겠습니다"];
 
-test("[§64.8 G403] TOOL_DRIVEN 조립(카탈로그 6종 × advanced × 도구 선언) — 이행 약속 표현 0건 + DEFAULT는 존재 유지(양방향)", () => {
+// T191 S5 — 고급 전용 ① card-delivery-call이 확인 무력화 카탈로그를 재사용해(AC-097 (c) ①) 7종이 됐다.
+test("[§64.8 G403] TOOL_DRIVEN 조립(카탈로그 7종 × advanced × 도구 선언) — 이행 약속 표현 0건 + DEFAULT는 존재 유지(양방향)", () => {
   assert.equal(
     VERIFY_INTERCEPT_CATALOG_IDS.length,
-    6,
-    "확인 무력화 카탈로그 전제(6종)가 깨졌다 — G403의 순회 범위가 바뀐다",
+    7,
+    "확인 무력화 카탈로그 전제(7종)가 깨졌다 — G403의 순회 범위가 바뀐다",
   );
   for (const id of VERIFY_INTERCEPT_CATALOG_IDS) {
     const prompt = SCENARIO_PROMPTS[id];

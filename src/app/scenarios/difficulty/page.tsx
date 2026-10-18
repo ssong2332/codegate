@@ -19,7 +19,7 @@
 // createSession의 consents 확인)·상시 종료(AC-006)·합성/모의 표식(AC-022)·사전 고지(AC-012)·
 // 2인 안전제약(AC-040/042/043)은 세 난이도에서 완전히 동일하다. 고급 선택 시 **고지가 늘어날
 // 뿐**(아래 ADVANCED_*_NOTICE) 어떤 컨트롤도 숨기거나 완화하지 않는다.
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSession, getBeginnerBriefing } from "@/lib/api";
 import {
@@ -33,15 +33,19 @@ import {
   setSelectedScenarioId,
 } from "@/lib/recording";
 import {
+  ADVANCED_ONLY_LINE,
   ADVANCED_SELF_NOTICE,
   ADVANCED_SEND_NOTICE,
+  DIFFICULTY_NOT_ALLOWED_REASON,
+  PRE_SESSION_BURDEN_NOTICE,
   DIFFICULTY_LABEL,
-  DIFFICULTY_LEVELS,
   DIFFICULTY_SELF_DESCRIPTION,
   DIFFICULTY_SEND_DESCRIPTION,
   DIFFICULTY_SUMMARY,
   RECOMMENDED_DIFFICULTY_LEVEL,
   SCENARIO_TRAIT_LABEL,
+  readFunctionsErrorReason,
+  selectableDifficultyLevels,
   type DifficultyLevel,
 } from "@/lib/difficulty";
 import { scenarios, GENERIC_VOICE_ID } from "@/content/scenarios";
@@ -56,7 +60,10 @@ export default function DifficultySelectPage() {
   const [scenarioId] = useState<string | null>(() => getSelectedScenarioId());
   const [isSendMode] = useState<boolean>(() => getExperienceMode() === "send");
 
-  const [selected, setSelected] = useState<DifficultyLevel | null>(null);
+  // T191 S5(UX-029 v1.34 (3) · D-104) — 고급 전용 시나리오는 고급 카드 1장이 **처음부터 선택된 상태**다.
+  const [selected, setSelected] = useState<DifficultyLevel | null>(() =>
+    scenarioId && scenarios[scenarioId]?.advancedOnly === true ? "advanced" : null,
+  );
   const [state, setState] = useState<PageState>("ready");
   const [startError, setStartError] = useState<string | null>(null);
   const [appliedLevel, setAppliedLevel] = useState<DifficultyLevel | null>(null);
@@ -69,6 +76,13 @@ export default function DifficultySelectPage() {
   const [briefingError, setBriefingError] = useState(false);
 
   const scenario = scenarioId ? scenarios[scenarioId] : undefined;
+  const isAdvancedOnly = scenario?.advancedOnly === true;
+  // T191 S5(UX 계약 C-9 · D-106) — 부담 고지는 고급 고지 **바로 아래**(고급이 선택돼 있을 때만).
+  const showBurdenNotice = scenario?.preSessionBurdenNotice === true && selected === "advanced";
+  useEffect(() => {
+    // UX 계약 C-10 — 이벤트는 종류만(시나리오 ID · 수법 0).
+    if (showBurdenNotice) console.info(JSON.stringify({ event: "burden_notice_shown" }));
+  }, [showBurdenNotice]);
 
   const handleSelect = (level: DifficultyLevel) => {
     setSelected(level);
@@ -150,8 +164,14 @@ export default function DifficultySelectPage() {
         return;
       }
       await startSelfSession(selected, scenarioId);
-    } catch {
-      setStartError("훈련을 시작하지 못했습니다. 다시 시도해 주세요.");
+    } catch (err) {
+      // T191 S5(UX 계약 C-2 · UX-029 v1.34 (3)) — 서버의 고급 전용 거부는 같은 1줄로 알린다(⛔ 중급 폴백 0).
+      // 재시도는 그대로 같은 버튼이다(P-4).
+      setStartError(
+        readFunctionsErrorReason(err) === DIFFICULTY_NOT_ALLOWED_REASON
+          ? ADVANCED_ONLY_LINE
+          : "훈련을 시작하지 못했습니다. 다시 시도해 주세요.",
+      );
       setState("ready");
     }
   };
@@ -209,8 +229,10 @@ export default function DifficultySelectPage() {
         </p>
       </header>
 
+      {/* T191 S5(UX-029 v1.34 (3)) — 고급 전용: 카드 위 1줄 · 고급 1장만(초급 · 중급 카드는 비활성 표시도 0). */}
+      {isAdvancedOnly && <p className="text-base font-semibold text-[#22303A]">{ADVANCED_ONLY_LINE}</p>}
       <div className="flex flex-col gap-3 lg:grid lg:grid-cols-3">
-        {DIFFICULTY_LEVELS.map((level) => (
+        {selectableDifficultyLevels(scenario).map((level) => (
           <SelectableCard
             key={level}
             className="min-h-[48px]"
@@ -238,6 +260,7 @@ export default function DifficultySelectPage() {
           알린다. aria-live로 스크린리더에도 즉시 전달된다. 고지가 늘어날 뿐 안전 컨트롤은 그대로다. */}
       <p aria-live="polite" className="sr-only">
         {selected === "advanced" ? advancedNotice : ""}
+        {showBurdenNotice ? ` ${PRE_SESSION_BURDEN_NOTICE}` : ""}
       </p>
       {selected === "advanced" && (
         <div className="rounded-[16px] border-[1.5px] border-[#E8C89A] bg-[#FBF3E8] p-4">
@@ -251,9 +274,17 @@ export default function DifficultySelectPage() {
           </p>
         </div>
       )}
+      {/* T191 S5(UX-029 v1.34 (5) · D-106) — 셀프 감금 부담 고지. 고급 고지와 같은 인라인 형식 · 다이얼로그 ·
+          체크 · 추가 탭 0 · 경고 아이콘 · 경고색 0(안내다 — P-36). 낭독은 위 aria-live가 고급 고지에 이어 읽는다. */}
+      {showBurdenNotice && (
+        <p className="rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4 text-[15px] leading-relaxed text-[#22303A]">
+          {PRE_SESSION_BURDEN_NOTICE}
+        </p>
+      )}
 
       {/* 초급 사전 브리핑(D-43/AC-066) — "이 대화에서 나올 수 있는 위험 신호 미리 보기". */}
-      {selected === "beginner" && (
+      {/* T191 S5(UX 계약 C-3 · OQ-U72) — 서버가 공통 신호 0개(빈 배열)를 주면 진입 자체를 그리지 않는다. */}
+      {selected === "beginner" && !(briefingSignals && briefingSignals.length === 0) && (
         <div className="rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4">
           <button
             type="button"

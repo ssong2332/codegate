@@ -26,19 +26,22 @@ function codeOnly(source: string): string {
 const pageCode = codeOnly(page);
 const sessionCode = codeOnly(session);
 
-test("[§59.10 D] play/page.tsx가 toolWindow의 shouldFireBackstop을 import한다", () => {
-  assert.match(page, /import \{ shouldFireBackstop \} from "@\/lib\/realtime\/toolWindow";/);
+test("[§59.10 D → T191] play/page.tsx가 toolWindow의 shouldFireBackstop(오퍼) · shouldRequestSmsBackstop(문자)을 import한다", () => {
+  assert.match(page, /import \{ shouldFireBackstop, shouldRequestSmsBackstop \} from "@\/lib\/realtime\/toolWindow";/);
 });
 
-test("[§59.10 D] shouldFireBackstop이 문자·오퍼 두 발동 효과 모두에서 쓰인다(지연 발동 전환)", () => {
+// ⚠️ T191(문자 도달 조건) — 문자 효과는 고정 턴 지연 발동(`shouldFireBackstop`)을 더 이상 쓰지 않는다(사용자 발화 기준 ·
+// 서버 판정으로 교체). 그래서 이 검사의 기대값을 2 → 1(오퍼 효과만)로 **의도적으로** 바꿨다.
+test("[§59.10 D → T191] shouldFireBackstop은 오퍼(announce) 효과 1곳에서만 쓰이고, 문자 효과는 shouldRequestSmsBackstop을 쓴다", () => {
   const occurrences = pageCode.split("shouldFireBackstop({").length - 1;
-  assert.equal(occurrences, 2, `문자 효과 1회 + 오퍼(announce) 효과 1회 = 2회여야 한다(실측: ${occurrences})`);
+  assert.equal(occurrences, 1, `오퍼 효과 1회여야 한다(실측: ${occurrences})`);
+  assert.equal(pageCode.split("shouldRequestSmsBackstop({").length - 1, 1, "문자 효과 1회");
 });
 
-test("[G388] SMS 효과의 toolAvailable은 credentials.liveTools?.sendPreparedSms에서 온다", () => {
+test("[T191] 문자 효과는 credentials.inCallSmsBackstop(서버가 변형 선언으로 붙인 표시)일 때만 서버에 묻는다", () => {
   assert.ok(
-    pageCode.includes('Boolean(realtime.credentials?.liveTools?.sendPreparedSms)'),
-    "toolAvailable 판정이 liveTools.sendPreparedSms를 읽지 않는다",
+    pageCode.includes("enabled: realtime.credentials?.inCallSmsBackstop === true,"),
+    "문자 백스톱 질의가 서버 표시를 읽지 않는다",
   );
 });
 
@@ -65,11 +68,14 @@ test("[중복 발동 방지 역검증] status 게이트를 지운 오염본은 �
   assert.ok(pageCode.includes('if (result.status === "delivered" && result.announceInstruction) {'));
 });
 
-test("[백스톱 발동] 서버 관측(§59.11)을 위해 backstop 발동 호출은 trigger:\"backstop\"을 명시한다", () => {
-  assert.ok(
-    pageCode.includes('deliverInCallSms({ sessionId, smsId: dueSmsId, trigger: "backstop" })'),
-    "trigger를 명시하지 않으면 §59.11 로그가 model_tool과 이 경로를 구분하지 못한다",
-  );
+test("[백스톱 발동 · T191] 문자 백스톱 호출은 trigger:\"backstop\" · 사용자 발화 수 · 사기범 전사 수를 싣고 smsId·목적은 싣지 않는다", () => {
+  const start = pageCode.indexOf("const result = await deliverInCallSms({");
+  assert.ok(start > -1, "문자 백스톱 호출을 찾지 못했다");
+  const call = pageCode.slice(start, pageCode.indexOf("});", start));
+  assert.match(call, /trigger: "backstop",/);
+  assert.match(call, /userTurns: counters\.userTurns,/);
+  assert.match(call, /scammerTranscriptTurns: counters\.scammerTranscriptTurns,/);
+  assert.equal(/smsId|purpose/.test(call), false, "화면이 문자 id · 목적을 고르면 안 된다(설계 금지 X1 · X4)");
 });
 
 // §61.7/G402 — verify-offer 백스톱 호출부도 SMS와 같은 방식으로 `trigger`를 명시해야 한다.
@@ -95,10 +101,19 @@ test("[R8] 백스톱 게이트는 announce 단계 · realtime 경로에만 걸�
   );
 });
 
-test("[toolCallFailed 배선] SMS 효과는 실패 신호(smsToolCallFailedIdRef)를 shouldFireBackstop에 넘긴다", () => {
+test("[G540 · T191] 화면에 고정 턴 문자 선택이 남아 있지 않다(pickDueInCallSms · requestedSmsRef · smsToolCallFailedIdRef · inCallSmsTriggers 0)", () => {
+  for (const name of ["pickDueInCallSms", "requestedSmsRef", "smsToolCallFailedIdRef", "inCallSmsTriggers"]) {
+    assert.equal(pageCode.includes(name), false, `page.tsx에 ${name}이 남아 있다`);
+  }
+  for (const name of ["pickModelToolSmsId", "inCallSmsTriggers", "deliveredSmsIds"]) {
+    assert.equal(sessionCode.includes(name), false, `GeminiVoiceSession.tsx에 ${name}이 남아 있다`);
+  }
+});
+
+test("[T191 넛지] 서버 넛지는 smsNudge 표시로 큐에 들어간다(맥락 주입 · 침묵 넛지 대상 아님)", () => {
   assert.ok(
-    pageCode.includes("toolCallFailed: smsToolCallFailedIdRef.current === dueSmsId,"),
-    "SMS 효과가 모델 도구 실패 신호를 백스톱 판정에 반영하지 않는다(G390)",
+    pageCode.includes('enqueueTurnInstruction(result.nudgeInstruction, "sms", { smsNudge: true });'),
+    "넛지가 문자 도착 안내와 구분되지 않으면 '방금 보낸 문자' 침묵 넛지가 거짓으로 나간다",
   );
 });
 
@@ -116,9 +131,16 @@ test("[새 타이머 금지] play/page.tsx의 setInterval 개수는 여전히 1�
 
 // ── GeminiVoiceSession.tsx — dispatchToolCall이 부모 콜백 4종을 실제로 호출하는가 ────────────
 
-test("[배선] dispatchToolCall이 SMS 성공/실패 콜백을 각각 부른다", () => {
-  assert.ok(sessionCode.includes("handlersRef.current.onModelToolSmsDelivered?.(smsId);"));
-  assert.ok(sessionCode.includes("handlersRef.current.onModelToolSmsFailed?.(smsId);"));
+test("[배선 · T191 G538] dispatchToolCall의 send_prepared_sms는 모델 purpose · 사용자 발화 수를 넘기고 smsId를 고르지 않는다", () => {
+  const start = sessionCode.indexOf('if (kind === "send_prepared_sms") {');
+  assert.ok(start > -1);
+  const branch = sessionCode.slice(start, sessionCode.indexOf("return failureResponse();", start));
+  assert.match(branch, /purpose: readSmsPurposeArg\(call\.args\),/);
+  // 리뷰 ⑥ — 응답 중인 사용자 발화(아직 flush 전)를 더해 폴백(이번 발화 포함)과 같은 뜻으로 보낸다.
+  assert.match(branch, /userTurns: modelToolUserTurns \+ \(userBuffer\.trim\(\) \? 1 : 0\),/);
+  assert.match(branch, /scammerTranscriptTurns: modelToolScammerTurns,/);
+  assert.match(branch, /trigger: "model_tool",/);
+  assert.equal(branch.includes("smsId"), false);
 });
 
 test("[배선] dispatchToolCall이 오퍼 announce 성공/실패 콜백을 각각 부른다", () => {
@@ -135,28 +157,20 @@ test("[배선 역검증] 오퍼 성공 콜백 호출을 지운 오염본은 같�
   assert.ok(sessionCode.includes("handlersRef.current.onModelToolVerifyAnnounced?.();"));
 });
 
-test("[props 타입] GeminiVoiceSessionProps에 4개 콜백이 옵셔널로 선언돼 있다", () => {
-  assert.match(sessionCode, /onModelToolSmsDelivered\?: \(smsId: string\) => void;/);
-  assert.match(sessionCode, /onModelToolSmsFailed\?: \(smsId: string\) => void;/);
+test("[props 타입 · T191] 오퍼 콜백 2개는 옵셔널로 남고, 문자 콜백 2개(onModelToolSms*)는 폐기됐다", () => {
   assert.match(sessionCode, /onModelToolVerifyAnnounced\?: \(\) => void;/);
   assert.match(sessionCode, /onModelToolVerifyFailed\?: \(\) => void;/);
+  assert.equal(/onModelToolSms(Delivered|Failed)/.test(sessionCode), false);
 });
 
-test("[배선] play/page.tsx가 GeminiVoiceSession에 4개 콜백을 모두 넘긴다", () => {
-  assert.ok(pageCode.includes("onModelToolSmsDelivered={handleModelToolSmsDelivered}"));
-  assert.ok(pageCode.includes("onModelToolSmsFailed={handleModelToolSmsFailed}"));
+test("[배선 · T191] play/page.tsx가 GeminiVoiceSession에 오퍼 콜백 2개를 넘기고 문자 콜백은 넘기지 않는다", () => {
   assert.ok(pageCode.includes("onModelToolVerifyAnnounced={handleModelToolVerifyAnnounced}"));
   assert.ok(pageCode.includes("onModelToolVerifyFailed={handleModelToolVerifyFailed}"));
+  assert.equal(/onModelToolSms(Delivered|Failed)|handleModelToolSms/.test(pageCode), false);
 });
 
-test("[중복 발동 방지] handleModelToolSmsDelivered는 requestedSmsRef에 더한다(pickDueInCallSms 재필터)", () => {
-  assert.ok(
-    pageCode.includes(
-      "const handleModelToolSmsDelivered = useCallback((smsId: string) => {\nrequestedSmsRef.current.add(smsId);",
-    ) || /handleModelToolSmsDelivered = useCallback\(\(smsId: string\) => \{\s*requestedSmsRef\.current\.add\(smsId\);/.test(pageCode),
-    "모델이 도구로 전달한 smsId가 requestedSmsRef에 반영되지 않으면 백스톱이 같은 문자를 다시 요청할 수 있다",
-  );
-});
+// T191 — 예전 "[중복 발동 방지] handleModelToolSmsDelivered는 requestedSmsRef에 더한다"는 대상(화면의 smsId 선택)이
+// 폐기돼 지웠다. 중복 방지는 이제 서버 단일 통로의 `already_delivered`(같은 트랜잭션 안 판정)가 진다.
 
 test("[중복 발동 방지] handleModelToolVerifyAnnounced는 idle일 때만 verifyOfferPhaseRef를 announced로 전진시킨다", () => {
   assert.match(

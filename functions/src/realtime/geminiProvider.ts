@@ -15,12 +15,13 @@ import { GoogleGenAI, Modality, EndSensitivity, StartSensitivity } from "@google
 import { asksIdentityCheck } from "../roleplay/personaAuthority";
 import { isL3Procedural } from "../roleplay/l3Depth";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
-import { SCENARIO_PROMPTS } from "../scenarios";
-import { hasInCallSms } from "../scenarios/inCallSms";
+import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
+import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { buildLiveToolDeclarations, buildLiveToolNames, declaresOfferVerificationDesk } from "./liveTools";
 import { SCENARIO_SPEAKER_GENDER, speakerGenderFor } from "./scenarioVoice";
 import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider } from "./types";
+import { resolveSessionAccountNumber } from "../shared/fictionalBank";
 
 /**
  * 무료 티어에서 쓸 수 있는 실시간 음성 모델.
@@ -82,7 +83,9 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
   constructor(private readonly apiKey: string) {}
 
   async createCallCredentials(input: RealtimeCallInput): Promise<RealtimeCallCredentials> {
-    const scenarioPrompt = SCENARIO_PROMPTS[input.scenarioId];
+    // T191 S5(AC-096 (e)) — 세션에 배정된 흐름 변형을 합성한 프롬프트(sendMessage · 오프닝과 같은 단일
+    // 해석 지점). flowVariantId 부재 = 원본(무소급).
+    const scenarioPrompt = resolveSessionScenarioPrompt(input.scenarioId, input.flowVariantId);
     if (!scenarioPrompt) {
       throw new Error(`시나리오 프롬프트가 없습니다: ${input.scenarioId}`);
     }
@@ -108,10 +111,11 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // §59.5/§59.10 커밋 C — 이 세션에 실제로 선언할 Live 도구(조건은 buildLiveToolDeclarations
     // 자신이 진다 — hasInCallSms · declaresOfferVerificationDesk, §61). 프롬프트 조건부 치환
     // (toolDrivenTiming)과 **같은 트리거로 묶지 않는다** — 아래 buildSystemPrompt 호출부 주석 참고.
-    const liveToolDeclarations = buildLiveToolDeclarations(input.scenarioId, input.difficultyLevel);
+    const liveToolDeclarations = buildLiveToolDeclarations(input.scenarioId, input.difficultyLevel, input.flowVariantId);
     const systemPrompt = buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: input.difficultyLevel,
-      inCallSmsEnabled: hasInCallSms(input.scenarioId),
+      // ⭐ 리뷰 M2 — 도구 선언과 같은 단일 술어(변형 기준 · 변형 부재 = 종전 `hasInCallSms`).
+      inCallSmsEnabled: sessionDeclaresInCallSms(input.scenarioId, input.flowVariantId),
       verifyInterceptEnabled:
         hasVerifyIntercept(input.scenarioId) && input.difficultyLevel === "advanced",
       l3Procedural: isL3Procedural(input.scenarioId),
@@ -125,6 +129,9 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       // 않는다(reviewer Critical #2가 세운 정합 유지, G400). 로직 중복 구현 금지 —
       // declaresOfferVerificationDesk()가 유일한 원천이다.
       offerToolDeclared: declaresOfferVerificationDesk(input.scenarioId, input.difficultyLevel),
+      // §81 — 세션 가상 은행명(문자 본문과 같은 이름). 부재면 종전 문자열("OO은행").
+      ...(input.fictionalBankName ? { fictionalBankName: input.fictionalBankName } : {}),
+      sessionAccountNumber: resolveSessionAccountNumber(input.scenarioId),
     });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });
@@ -230,7 +237,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     if (!tokenName) {
       throw new Error("Gemini 단기 토큰 발급 응답에 name이 없습니다.");
     }
-    const liveTools = buildLiveToolNames(input.scenarioId, input.difficultyLevel);
+    const liveTools = buildLiveToolNames(input.scenarioId, input.difficultyLevel, input.flowVariantId);
 
     return {
       provider: "gemini",

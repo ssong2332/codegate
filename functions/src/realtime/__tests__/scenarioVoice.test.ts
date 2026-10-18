@@ -25,11 +25,13 @@ test("[역검증] 표에서 한 행을 빼면 위 게이트가 실제로 실패�
   );
 });
 
-// ── 강제 장치 ② 분포 고정 — male 4 / female 5 / notApplicable 5 ──────────────────
-test("분포가 §50.3.3 확정값과 같다(male 4 · female 5 · notApplicable 5)", () => {
+// ── 강제 장치 ② 분포 고정 — male 6 / female 6 / notApplicable 5 ──────────────────
+// T191 S5 — 고급 전용 3종 추가로 §50.3.3의 4/5/5에서 male +2(asset-protection-notice-call ·
+// prosecution-cooperation-call) · female +1(card-delivery-call)이 됐다(Architecture T191 절 "표 갱신").
+test("분포가 §50.3.3 확정값 + T191 S5 3종과 같다(male 6 · female 6 · notApplicable 5)", () => {
   const counts = { male: 0, female: 0, notApplicable: 0 };
   for (const v of Object.values(SCENARIO_SPEAKER_GENDER)) counts[v] += 1;
-  assert.deepEqual(counts, { male: 4, female: 5, notApplicable: 5 });
+  assert.deepEqual(counts, { male: 6, female: 6, notApplicable: 5 });
 });
 
 test("speakerGenderFor: notApplicable은 undefined를 반환한다(either가 아니다 — §50.3.3)", () => {

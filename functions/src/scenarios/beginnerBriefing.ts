@@ -18,6 +18,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { denyAnonymous } from "../shared/anonymousGate";
 import { SCENARIO_PROMPTS } from "./index";
+import { beginnerBriefingLabels } from "./flowVariants";
 import { extractTacticLabel } from "./tacticFlavor";
 import type {
   GetBeginnerBriefingRequest,
@@ -57,5 +58,9 @@ export const getBeginnerBriefing = onCall<
   if (!scenarioPrompt) {
     throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
   }
-  return { signals: buildBeginnerBriefingSignals(scenarioPrompt.weakenedTactics) };
+  // T191 S5(UX 계약 C-3 · D-108 · PRD AC-096 (e)) — 라벨 원천이 시나리오 원본 수법에서 **그 시나리오
+  // 초급 변형 전부의 수법 라벨 교집합**으로 바뀌었다. 브리핑은 세션 생성(= 변형 배정) 전에 불리므로,
+  // 교집합이어야 어느 변형이 배정돼도 *"브리핑 라벨 ⊆ 배정 변형 수법"* 이 성립한다. 교집합 0개(또는
+  // 고급 전용 — 초급 변형 없음) → `signals: []`(화면이 브리핑 진입을 숨긴다 — OQ-U72). 요청 타입 무변경.
+  return { signals: beginnerBriefingLabels(scenarioId) };
 });

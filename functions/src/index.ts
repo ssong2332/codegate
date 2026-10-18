@@ -32,6 +32,9 @@ export { deliverVerifyOffer, deliverVerifyReconnect } from "./verifyIntercept";
 // ⚠️ **참가자 기기에 실제로 무언가가 설치되지 않는다**(AC-072): 이 함수의 요청·응답·스키마
 // 어디에도 실 설치 파일·스토어 URL·실존 앱명·OS 권한 필드가 없고, 하는 일은 Firestore write 1건뿐이다.
 export { recordMockScreenEvent } from "./mockScreens";
+// 사기범의 먼저 끊기(T192 C1, Architecture.md §79.5, AC-103) — 실시간 `end_call` 도구 호출의 서버 판정 ·
+// 승인 표식 기록. ⚠️ 세션을 끝내지 않는다(끝내는 것은 `endSession`) · LLM 경로 import 0(시크릿 선언 0).
+export { requestScammerHangup } from "./scammerHangup";
 // 초급 사전 브리핑(T72, UX-029, §15.3.4, AC-066) — 세션 **시작 전** 화면에서만 소비되는 수법
 // 라벨 조회. 대화 중 실시간 판정 경로는 신설하지 않는다(D-6 유지).
 export { getBeginnerBriefing } from "./scenarios/beginnerBriefing";
