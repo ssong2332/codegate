@@ -4,6 +4,16 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-18 추가분, 브랜치 `claude/llm-groq-fallback-cb0815`, base `432fc87`)**: 아직 main에 병합되지 않았고 배포 0회, 라이브 미검증이다. 배포 전 `firebase functions:secrets:set GROQ_API_KEY`(User 승인)가 필요하다.
+
+### Added
+- **텍스트 대사 생성 3차 예비 공급자 Groq `openai/gpt-oss-120b`**(Architecture §74 · DECISIONS #122): 1차 `gemini-3.1-flash-lite` → 2차 `gemini-3.5-flash-lite`(503) → 3차 Groq. 실시간 음성(Gemini Live)은 바뀌지 않는다.
+  - **조건**: Gemini 쪽 최종 오류가 429·5xx이거나 Gemini 단계가 시간 상한(일반 7초·첫 턴 17초)을 넘겼을 때만 Groq 1회. 4xx 입력 오류·안전 차단·네트워크 오류는 기존대로 Mock 강등. 총 상한(10초·20초)은 그대로다. 단계 상한을 넘기면 Gemini 요청을 취소한다.
+  - **개인정보**: Groq로 보내기 전 이름·생년월일을 가명으로 바꾸고 사용자 턴에 기존 마스킹을 한 번 더 건다. 응답의 가명은 원래 값으로 되돌린다. Gemini 경로는 무변경(확대 여부는 OQ-A97 — User 결정).
+  - **설정**: 새 시크릿 `GROQ_API_KEY`(1개, `defineSecret`). 없으면 3차만 꺼지고 로그 1줄. 로컬은 `functions/.secret.local` 권장. `sendMessage LLM 응답 단계` 로그의 `servedBy`로 응답 단계를 본다.
+  - **한계**: 분당 8,000토큰 한도 때문에 실효 분당 1~2건·하루 약 50건(요청 1건 3.4~4.5천 토큰) · Groq 원문이 길어 3문장 상한이 요구 문장을 자르는 경우가 많다(프로브 6/7, OQ-A99) · 이름은 "이름은/성함은" 단서나 이름 질문 직후 답만 잡는다.
+  - **검증**: functions 996→1028 pass / 0 fail(신규 32) · 루트 531 / 0 · lint 통과 · reviewer APPROVED(Major 1·Minor 3 반영) · QA 조건부 GO→CRLF 테스트 수정 후 1028/0 · Groq 실호출 8회 성공(0.79~1.72초) · TPM 초과 4회는 즉시 429.
+
 > ⚠️ **아래 첫 블록(2026-10-18 추가분, 브랜치 `fix/llm-overload-fallback-model`, 커밋 `81b103f`, base `2904d16`)**: 아직 main에 병합되지 않았고 배포 0회, 라이브 미검증이다. 테스트 수치는 보고 인용값이다(docs 미재현). User 결정(2026-10-18): 구현·리뷰·QA 후 #295와 함께 배포.
 
 ### Fixed
