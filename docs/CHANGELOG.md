@@ -4,6 +4,13 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-18 추가분, 브랜치 `fix/live-korean-only`, base `b99f239`)**: 아직 main에 병합되지 않았고 배포 0회, 라이브 미검증이다.
+
+### Fixed
+- **실시간 통화 중 AI가 갑자기 외국어로 말하던 문제**(사용자 신고, Architecture §76 · DECISIONS #126): Live 네이티브 오디오 모델은 언어 코드 지정을 지원하지 않아 `languageCode: "ko-KR"`만으로는 출력 언어가 고정되지 않는다(공식 문서). 공통 프롬프트 조립부에 "항상 한국어로만 말하고, 못 알아들었으면 한국어로 되묻는다" 규칙을 무조건 넣었다. Live 통화 · 텍스트 대화 · 오프닝 · Groq 3차 예비에 같이 적용된다.
+  - **한계**: ElevenLabs clone 2종은 에이전트 프롬프트를 재생성해야 반영된다 · 시스템 지시는 강제가 아니라 재발률은 배포 후에만 알 수 있다 · 운영 전사의 실제 외국어 사례는 이 패스에서 확인하지 못했다.
+  - **검증**: functions 1033 → 1038 pass / 0 fail(신규 5).
+
 > ⚠️ **이 블록(2026-10-18 추가분, 브랜치 `claude/llm-groq-fallback-cb0815`, base `432fc87`)**: 아직 main에 병합되지 않았고 배포 0회, 라이브 미검증이다. 배포 전 `firebase functions:secrets:set GROQ_API_KEY`(User 승인)가 필요하다.
 
 ### Added

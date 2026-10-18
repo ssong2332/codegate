@@ -18057,3 +18057,51 @@ completeWithFallback(                                         ← 실패 시 Moc
 - 테스트: 신규 2파일 · `overloadRetry.test.ts`·`overloadFallback.test.ts` 배선 정규식 갱신(G451 형태 변경).
 - 문서: 이 절 · DECISIONS #125 · README · `functions/.env.example` · CHANGELOG.
 > **번호**: §75 · G464~G470 · OQ-A100~A102 · #125 — main `d13e718`(#290 병합분: §74 · G451~G463 · OQ-A97~A99 · #122~#124)과 겹쳐 병합 시 재번호(이전 §74 · G456~G462 · OQ-A97~A99 · #122). ⛔ 예약 아님.
+
+## 76. (Bug fix — 2026-10-18 · 브랜치 `fix/live-korean-only`) **사기범 발화 언어를 한국어로 고정** — ⭐⭐ **Live 네이티브 오디오 모델은 언어 코드 지정을 지원하지 않는다 → `speechConfig.languageCode: "ko-KR"`만으로는 출력이 한국어로 고정되지 않는다 → 시스템 지시가 유일한 손잡이다** — architect·implementer 기록
+
+### 76.0 금지 먼저
+
+1. ⛔ **`LANGUAGE_RULE`을 조건부로 만들지 말 것** — 시나리오·난이도·경로와 무관하게 항상 붙는다(테스트가 전 시나리오 × 전 난이도 × Live/텍스트 옵션을 고정).
+2. ⛔ **가드레일(`guardrailPreamble`)보다 뒤에 두지 말 것** — 가드레일 최후미 불변식(기존 테스트) 유지.
+3. ⛔ **`languageCode: "ko-KR"`을 지우지 말 것** — 이 PR은 그 설정을 바꾸지 않는다(문서상 네이티브 오디오에서 효과가 없더라도 제거는 별건 판단).
+
+### 76.1 근거 (공식 문서 · 2026-10-18)
+
+| 확인 | 결과 | 출처 |
+|---|---|---|
+| 네이티브 오디오 Live 모델의 언어 코드 | *"don't support explicitly setting the language code"* — 언어를 스스로 고르고 대화 중 자연스럽게 바꿀 수 있다 | https://ai.google.dev/gemini-api/docs/live-api/capabilities (모델 `gemini-3.8-live` 기준 페이지) |
+| 말하는 언어를 제한하는 방법 | *"restrict the languages it speaks in by specifying it in the system instructions"* — 문서상 유일한 방법 | 같은 페이지 |
+| 입력 전사 언어 힌트 | **문서화된 설정 없음** — `input_audio_transcription: {}`만. 출력 전사 언어는 모델 응답에서 추론 | 같은 페이지 |
+| 이 저장소 | 프롬프트에 "한국어로만" 지시 0건(수정 전 grep) · `geminiProvider.ts`는 `languageCode: "ko-KR"`만 | `functions/src/realtime/geminiProvider.ts` |
+
+- 원인 가설(**추정**): 짧은 발화·잡음이 외국어로 인식되면 모델이 그 언어를 따라 답한다. 확인 방법: 신고 세션의 `submitRealtimeTranscript` 전사에서 외국어 턴 직전 사용자 전사의 언어를 본다(이 패스는 운영 Firestore를 읽지 않았다 — 76.4).
+
+### 76.2 변경
+
+| 항목 | 내용 | 파일 |
+|---|---|---|
+| 규칙 | `LANGUAGE_RULE` — 항상 한국어로만 말한다(다른 언어로 들리거나·알아듣기 어렵거나·상대가 다른 언어로 말해도) · 못 알아들었으면 한국어로 되묻는다 | `functions/src/roleplay/promptAssembly.ts` |
+| 배치 | `buildSystemPrompt`의 `CONVERSATION_STYLE` 바로 뒤, 무조건부 | 같은 파일 |
+| 적용 경로 | `buildSystemPrompt` 한 곳이라 **Live 통화 토큰(Gemini) · sendMessage · 오프닝 · Groq 3차 예비** 모두 같은 문면 | `realtime/geminiProvider.ts` · `roleplay/index.ts` · `roleplay/openingLine.ts` |
+| 입력 전사 언어 힌트 | **넣지 않음** — 문서화된 설정이 없다 | — |
+| 프롬프트 길이 | 조립 결과 +249자(예: family-accident-deepvoice beginner 6,186 → 6,435) | clone 2종 `.prompt.ts` 대조값 주석 |
+
+### 76.3 게이트
+
+| G | 고정하는 것 | 테스트 |
+|---|---|---|
+| **G471** | 규칙 문면(한국어로만 · 다른 언어로 들려도 · 한국어로 되묻기) | `functions/src/roleplay/__tests__/languageRule.test.ts` |
+| **G472** | 전 시나리오 × 난이도 4종(미지정 포함) × toolDrivenTiming 2종에서 정확히 1회 · 가드레일 앞 · 가드레일 최후미 불변 | 같은 파일 |
+| **G473** | 시스템 프롬프트 호출부 3곳이 모두 `buildSystemPrompt`(우회 0) · Groq system 메시지에 포함 | 같은 파일 |
+| **G474** | Live 토큰 발급 요청 본문의 `systemInstruction`에 전 시나리오 포함(행동 증거) | `functions/src/realtime/__tests__/geminiProvider.test.ts` |
+
+### 76.4 남은 위험 · OQ
+
+| # | 항목 | 상태 | 확인 방법 |
+|---|---|---|---|
+| **OQ-A103** | **ElevenLabs clone 2종(family-accident-deepvoice · grandchild-impersonation)은 프롬프트가 ElevenLabs 에이전트에 따로 저장돼 있어 재생성 전까지 이 규칙이 없다** — 기존 재생성 대기 항목에 합류 | User 운영 조치 | 각 `.prompt.ts` 머리 주석의 대조값(len·sha)으로 재생성 후 대조 |
+| **OQ-A104** | 시스템 지시는 **강제가 아니라 지시**다 — 문서도 "제한할 수 있다"고만 한다. 재발률은 배포 후에만 알 수 있다 | 기록 | 배포 후 Live 출력 전사(`outputAudioTranscription`)에서 한글 아닌 문자 비율 관측 |
+| ⚠️ | 운영 Firestore 전사에서 실제 외국어 턴 사례를 **확인하지 못했다** — 이 환경에 gcloud·관리자 자격증명이 없고, CLI 저장 토큰을 꺼내 쓰는 우회는 하지 않았다 | 미검증 | 콘솔에서 신고 세션 `sessions/{sid}/messages` 열람(언어·턴 위치만) |
+
+> **번호**: §76 · G471~G474 · OQ-A103~A104 · #126(이 트리 최대 §75 · G470 · OQ-A102 · #125). ⛔ 예약 아님 — 병합 순서로 확정.

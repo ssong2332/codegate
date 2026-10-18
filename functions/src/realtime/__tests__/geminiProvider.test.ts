@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GeminiRealtimeProvider, GEMINI_LIVE_MODEL, pickGeminiVoiceName } from "../geminiProvider";
 import { SCENARIO_PROMPTS } from "../../scenarios";
-import { buildSystemPrompt } from "../../roleplay/promptAssembly";
+import { buildSystemPrompt, LANGUAGE_RULE } from "../../roleplay/promptAssembly";
 import { isL3Procedural } from "../../roleplay/l3Depth";
 import { verifySeriesFor, declaresOfferVerificationDesk } from "../liveTools";
 
@@ -515,6 +515,31 @@ test("[§71 D2/G430] 토큰에 잠기는 모든 도구 선언은 behavior: BLOCK
     const decls = (setup?.tools ?? []).flatMap((t) => t.functionDeclarations ?? []);
     assert.equal(decls.length, 2);
     for (const d of decls) assert.equal(d.behavior, "BLOCKING", `${d.name}의 behavior`);
+  } finally {
+    capture.restore();
+  }
+});
+
+// 2026-10-18 사용자 신고(통화 중 외국어 발화) — Live 네이티브 오디오는 언어 코드 지정을 지원하지 않아
+// 시스템 지시가 유일한 손잡이다(roleplay/promptAssembly.ts LANGUAGE_RULE 주석). 발급 요청 본문으로 확인한다.
+test("GeminiRealtimeProvider: 토큰에 고정되는 systemInstruction에 한국어 고정 규칙이 실린다(languageCode만으로는 부족)", async () => {
+  const capture = captureTokenRequest();
+  try {
+    for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
+      await new GeminiRealtimeProvider("test-key").createCallCredentials({
+        sessionId: "sess",
+        scenarioId,
+        voiceId: "ignored-for-gemini",
+        difficultyLevel: "advanced",
+      });
+    }
+    const prompts = capture.bodies().map(
+      (b) =>
+        (b as { bidiGenerateContentSetup?: { systemInstruction?: { parts?: { text?: string }[] } } })
+          .bidiGenerateContentSetup?.systemInstruction?.parts?.[0]?.text ?? "",
+    );
+    assert.equal(prompts.length, Object.keys(SCENARIO_PROMPTS).length);
+    for (const prompt of prompts) assert.ok(prompt.includes(LANGUAGE_RULE), "Live 시스템 지시에 언어 규칙이 없다");
   } finally {
     capture.restore();
   }
