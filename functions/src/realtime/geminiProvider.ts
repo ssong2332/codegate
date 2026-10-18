@@ -125,7 +125,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       // 않는다(reviewer Critical #2가 세운 정합 유지, G400). 로직 중복 구현 금지 —
       // declaresOfferVerificationDesk()가 유일한 원천이다.
       offerToolDeclared: declaresOfferVerificationDesk(input.scenarioId, input.difficultyLevel),
-      // §79 — 세션 가상 은행명(문자 본문과 같은 이름). 부재면 종전 문자열("OO은행").
+      // §81 — 세션 가상 은행명(문자 본문과 같은 이름). 부재면 종전 문자열("OO은행").
       ...(input.fictionalBankName ? { fictionalBankName: input.fictionalBankName } : {}),
     });
 

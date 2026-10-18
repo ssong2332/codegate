@@ -189,7 +189,7 @@ export const deliverVerifyOffer = onCall<
   const session = await loadOwnedActiveSession(sessionId, request.auth.uid);
   assertAnonymousChallengeScope(request.auth, session);
   const item = assertVerifyEligible(session);
-  // §79 — 세션 가상 은행명(창구 이름·도착 지시가 문자·대사와 같은 이름).
+  // §81 — 세션 가상 은행명(창구 이름·도착 지시가 문자·대사와 같은 이름).
   const fictionalBankName = resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName });
 
   const db = getFirestore();
@@ -303,7 +303,7 @@ export const deliverVerifyReconnect = onCall<
   const session = await loadOwnedActiveSession(sessionId, request.auth.uid);
   assertAnonymousChallengeScope(request.auth, session);
   const item = assertVerifyEligible(session, offerId);
-  // §79 — 재연결 화자 이름·지시·전환 상태 줄을 세션 가상 은행명으로.
+  // §81 — 재연결 화자 이름·지시·전환 상태 줄을 세션 가상 은행명으로.
   const reconnectParts = buildVerifyReconnectParts(
     item,
     resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName }),

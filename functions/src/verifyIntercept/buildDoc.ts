@@ -18,7 +18,7 @@ export function buildVerifyInterceptDoc(
   item: VerifyInterceptItem,
   offeredAt: FirebaseFirestore.Timestamp,
   offerAnchorScammerTurn: number,
-  // §79 — 세션 가상 은행명. 창구 이름("○○은행 금융사고대응 확인창구")을 저장 시 치환한다(통화 오버레이·다시보기가 이 값을 그대로 보인다).
+  // §81 — 세션 가상 은행명. 창구 이름("○○은행 금융사고대응 확인창구")을 저장 시 치환한다(통화 오버레이·다시보기가 이 값을 그대로 보인다).
   fictionalBankName?: string,
 ): VerifyInterceptDoc {
   return {
@@ -53,7 +53,7 @@ export function buildVerifyOfferResponse(
 ): Omit<DeliverVerifyOfferResponse, "status" | "declineInstruction"> {
   const plan = resolveVerifyOfferPlan({ placed: input.placed, ...(input.stage ? { stage: input.stage } : {}) });
   if (!plan.includeInstruction) return { offerId: item.offerId };
-  // §79 — 실시간 경로는 이 지시가 그대로 Live 세션에 들어간다(buildSystemPrompt를 거치지 않는다).
+  // §81 — 실시간 경로는 이 지시가 그대로 Live 세션에 들어간다(buildSystemPrompt를 거치지 않는다).
   const announceInstruction = input.fictionalBankName
     ? applyFictionalBank(item.announceInstruction, input.fictionalBankName)
     : item.announceInstruction;
@@ -61,7 +61,7 @@ export function buildVerifyOfferResponse(
 }
 
 /**
- * §79 — 재연결(호 전환) 응답과 문서 필드를 세션 은행명으로 조립한다(리뷰 #1 — 종전엔 `deliverVerifyReconnect`가
+ * §81 — 재연결(호 전환) 응답과 문서 필드를 세션 은행명으로 조립한다(리뷰 #1 — 종전엔 `deliverVerifyReconnect`가
  * 카탈로그 원문을 그대로 돌려줘 Live 세션에 "○○은행"이 주입됐다). 은행명이 없으면 카탈로그 원문 그대로.
  */
 export function buildVerifyReconnectParts(

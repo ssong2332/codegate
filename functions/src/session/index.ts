@@ -172,7 +172,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     // 주석 참고. 사용자 실측 신고로 발견된 정합성 버그 수정, 2026-07-24).
     // T72(§15.3.3 호출부 3곳 중 "오프닝 대사") — 세션 문서 write 전이라 요청값(정규화 완료)을 직접
     // 넘긴다. 여기서 빠뜨리면 오프닝 첫 마디만 중급으로 나오는 비대칭이 생긴다(§15.6 G5).
-    // §79 — 세션 가상 은행명을 오프닝 전에 고른다(오프닝 대사와 세션 문서가 같은 이름을 쓴다).
+    // §81 — 세션 가상 은행명을 오프닝 전에 고른다(오프닝 대사와 세션 문서가 같은 이름을 쓴다).
     const fictionalBankName = pickFictionalBankName();
     const { message: openingMessage, isMock } = await generateOpeningLine(
       scenarioId,

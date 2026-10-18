@@ -721,8 +721,9 @@ export default function MessengerSessionPage() {
           // T190-6(AC-092 (b)) — 브라우저 바도 같은 스킨(카카오형은 스킨이 없어 기본).
           skin={isSms ? messengerSkin : "default"}
           onClose={() => setFakeLanding(null)}
-          onEndTraining={handleEndTraining}
-          // T187(UX D-84) — UF-012 연속성 앵커는 "훈련 종료" 1종만 남아 난이도 라벨을 넘기지 않는다.
+          // 사용자 결정(2026-10-18) — 가짜 페이지 브라우저 바의 종료 버튼을 없애 `onEndTraining`을 넘기지 않는다.
+          // 끝내는 경로 = 닫기 → 이 대화 화면 헤더의 종료 버튼(그대로 남는다).
+          // T187(UX D-84) — 난이도 라벨은 넘기지 않는다(세션 중 배지 없음).
           // T84(D-51 ④) — 가짜 "권한 허용"에 **응한** 순간만 기록되고, 리포트 생성 시 속은 순간
           // 1건으로 승격된다(§15.9.5 e-1). ⚠️ 응낙이 채널 전이를 유발하지 않는다(G54) — 전이는
           // 기존 구조화 신호·max-turn 폴백·명시 버튼으로만 일어난다.

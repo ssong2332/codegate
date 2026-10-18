@@ -130,13 +130,17 @@ const DIFFICULTY_SENTINEL = "ZZ-DIFF-SENTINEL-ZZ";
 
 /**
  * G447 생존 신호 — 본 게이트와 역검증이 같은 함수를 쓴다.
- * ⭐ T190-2 재지정(§74.9 ④): "훈련 종료"(자식 모듈 `EndTrainingButton` 렌더 증명) ∧ **그 항목의 `mockHost`**
+ * ⭐ T190-2 재지정(§74.9 ④): 자식 모듈 렌더 증명 ∧ **그 항목의 `mockHost`**
  * (카탈로그 값이 kind 분기·정확 일치 조회를 거쳐 주소창까지 흘렀다는 증명 — 옛 `title` 센티널의 prop 흐름
  * 증명을 대신한다).
+ * ⭐ 사용자 결정(2026-10-18) 재지정 — 자식 모듈 렌더 증명이던 "훈련 종료"(`EndTrainingButton`)가 브라우저 바에서
+ * 빠졌다. 같은 공유 브라우저 바에 남는 자식 모듈 `PhoneIcon`의 **지구본 글리프**(`GLOBE_GLYPH` — 그 파일에만
+ * 있는 원 지름)로 옮겼다. 텍스트 노드가 없는 아이콘이라 `text`가 아니라 `markup`을 본다(G140 유지).
  */
-function isRenderAlive(text: string, item: CatalogItem): boolean {
+const GLOBE_GLYPH = '<circle cx="12" cy="12" r="8.5"';
+function isRenderAlive(rendered: { text: string; markup: string }, item: CatalogItem): boolean {
   const host = item.fields.get("mockHost")?.[0];
-  return text.includes("훈련 종료") && host !== undefined && text.includes(host);
+  return rendered.markup.includes(GLOBE_GLYPH) && host !== undefined && rendered.text.includes(host);
 }
 
 function propsFor(item: CatalogItem): Record<string, unknown> {
@@ -146,6 +150,7 @@ function propsFor(item: CatalogItem): Record<string, unknown> {
     landingId: item.landingId,
     difficultyLabel: DIFFICULTY_SENTINEL,
     onClose: () => {},
+    // 사용자 결정(2026-10-18) — 컴포넌트가 더 이상 받지 않는 prop이다. 일부러 남겨 "넘겨도 '훈련 종료'가 안 그려진다"를 본다.
     onEndTraining: () => {},
     onInstallConsent: () => {},
     onCredentialSubmit: () => {},
@@ -175,13 +180,15 @@ test("[T116/렌더-존재] 카탈로그 **도달 가능 전수**의 초기 렌�
     assert.ok(transpiledCount >= 3, `훅이 변환한 모듈이 ${transpiledCount}개다 — 하네스가 죽었다`);
     assert.ok(markup.length >= 500, `마크업이 ${markup.length}자다 — 빈 렌더를 통과시키고 있다`);
     // ⭐ T187(PRD v1.18 AC-086 · T187 · docs/Architecture.md §72.7 G447) — 생존 신호 **이동**(G140 유지).
-    // 옛 신호(공유 헤더의 모의 표식)는 세션 중 표식 폐지로 사라졌다. 새 신호 = 자식 모듈
-    // `EndTrainingButton`이 그린 "훈련 종료"(자식 모듈 렌더 증명) ∧ title 센티널(prop 흐름 증명).
+    // 옛 신호(공유 헤더의 모의 표식)는 세션 중 표식 폐지로 사라졌다. 새 신호 = 자식 모듈 렌더 증명 ∧ prop 흐름 증명.
     // ⭐ T190-2(§74.9 ④) — title 센티널 → 그 항목의 mockHost로 재지정(주소창이 title을 더 그리지 않는다).
+    // ⭐ 사용자 결정(2026-10-18) — 자식 모듈 증명을 "훈련 종료"(EndTrainingButton 제거) → PhoneIcon 지구본 글리프로 재지정.
     assert.ok(
-      isRenderAlive(text, item),
-      "생존 신호('훈련 종료' + 그 랜딩의 mockHost)가 마크업에 없다 — 렌더가 통째로 실패했을 수 있다",
+      isRenderAlive({ text, markup }, item),
+      "생존 신호(지구본 글리프 + 그 랜딩의 mockHost)가 마크업에 없다 — 렌더가 통째로 실패했을 수 있다",
     );
+    // 사용자 결정(2026-10-18) — 가짜 랜딩(메신저 진입)에 "훈련 종료"가 그려지지 않는다(onEndTraining을 넘겨도 — propsFor).
+    assert.equal(text.includes("훈련 종료"), false, `${item.landingId}: 가짜 랜딩에 '훈련 종료'가 그려졌다`);
     // 주소창은 링크 표시 텍스트(title)를 **다시 그리지 않는다**(호스트만 — AC-094 (a)).
     assert.equal(text.includes(TITLE_SENTINEL), false, "주소창에 title이 남아 있다 — 호스트만 그려야 한다");
     // prop을 넘겨도 세션 중 난이도 배지가 그려지지 않는다(M-13 · 앵커 1종 — UX D-84).
@@ -332,17 +339,18 @@ function existenceViolations(item: CatalogItem, text: string): number {
   return targetTexts(item).filter((entry) => !text.includes(entry.text)).length;
 }
 
-test("[T187/G447 역검증] `EndTrainingButton` 렌더 지점을 끊으면 생존 신호가 실패하고 G76·AC-079 입력은 불변이다", (t) => {
+// 사용자 결정(2026-10-18) — 옛 오염 지점(`<EndTrainingButton …/>`)이 사라져 재지정한 자식 모듈(PhoneIcon 지구본) 렌더 지점을 끊는다.
+test("[T187/G447 역검증 · 사용자 결정 2026-10-18 재지정] 지구본 `PhoneIcon` 렌더 지점을 끊으면 생존 신호가 실패하고 G76·AC-079 입력은 불변이다", (t) => {
   const { original, poisoned, overrides } = poisonedComponentSource(
-    "<EndTrainingButton onClick={onEndTraining} />",
+    '<PhoneIcon name="globe" size={16} />',
     "",
   );
   assert.notEqual(poisoned, original, "오염 샘플이 실제로 만들어져야 한다 — 치환 대상 문면이 바뀌었으면 여기서 걸린다");
   const item = catalogItems.find((entry) => entry.kind === "app-install") ?? catalogItems[0];
   const clean = renderLandingScreen(propsFor(item));
   const dirty = renderLandingScreen(propsFor(item), overrides);
-  assert.equal(isRenderAlive(clean.text, item), true, "정상 경로의 생존 신호가 살아 있어야 한다");
-  assert.equal(isRenderAlive(dirty.text, item), false, "자식 모듈 렌더를 끊었는데 생존 신호가 살아 있다 — 신호가 공회전한다");
+  assert.equal(isRenderAlive(clean, item), true, "정상 경로의 생존 신호가 살아 있어야 한다");
+  assert.equal(isRenderAlive(dirty, item), false, "자식 모듈 렌더를 끊었는데 생존 신호가 살아 있다 — 신호가 공회전한다");
   const [g76Caught, catalogDelta] = assertExistingGateInputsUnchanged(original, poisoned);
   t.diagnostic(`[G447 역검증] 생존 신호 정상 true / 오염 false / G76 리터럴 검출 ${g76Caught}건 / 카탈로그 변경 ${catalogDelta}바이트`);
 });
@@ -359,8 +367,8 @@ test("[T190-2/G447 역검증] 주소창 호스트 렌더 지점을 끊으면 생
     const host = item.fields.get("mockHost")?.[0] ?? "";
     return {
       landingId: item.landingId,
-      cleanAlive: isRenderAlive(clean.text, item),
-      dirtyAlive: isRenderAlive(dirty.text, item),
+      cleanAlive: isRenderAlive(clean, item),
+      dirtyAlive: isRenderAlive(dirty, item),
       dirtyHasHost: dirty.text.includes(host),
     };
   });
@@ -504,13 +512,54 @@ test("[T190/G460 · 렌더] entrySurface 두 갈래 — 메신저 = 대화상자
       [],
       `${item.landingId}: 문자함 안 렌더에서 카탈로그 문구가 빠졌다`,
     );
-    assert.ok(isRenderAlive(inCall.text, item), `${item.landingId}: 문자함 안 렌더의 생존 신호가 없다`);
+    assert.ok(isRenderAlive(inCall, item), `${item.landingId}: 문자함 안 렌더의 생존 신호가 없다`);
+    // 사용자 결정(2026-10-18) — 두 진입 표면 모두 브라우저 바에 "훈련 종료"가 없다.
+    assert.equal(messenger.text.includes("훈련 종료"), false, `${item.landingId}: 메신저 진입 랜딩에 '훈련 종료'가 그려졌다`);
+    assert.equal(inCall.text.includes("훈련 종료"), false, `${item.landingId}: 문자함 안 랜딩에 '훈련 종료'가 그려졌다`);
     // D-94 — 문자함 안에서만 브라우저 뒤로 "문자"가 있다.
     assert.equal(messenger.text.split("\n").includes("문자"), false, "메신저 진입에 '문자' 뒤로가 그려졌다");
     assert.equal(inCall.text.split("\n").includes("문자"), true, `${item.landingId}: 문자함 안에 '문자' 뒤로가 없다`);
     rows.push(`${item.landingId}=메신저 ${messenger.markup.length}자/문자함 ${inCall.markup.length}자`);
   }
   t.diagnostic(`[T190/G460] 8종 × 두 진입 표면 렌더 — ${rows.join(" · ")}`);
+});
+
+/** 메신저 진입 랜딩의 ✕(닫기) 위반 — 본 단언과 역검증이 같은 함수를 쓴다(사용자 결정 2026-10-18 · UX-023 v1.36 · D-116). */
+function closeButtonViolations(messengerMarkup: string, inCallMarkup: string): string[] {
+  const out: string[] = [];
+  const closeButton = /<button[^>]*aria-label="닫기"[^>]*>/;
+  if (!closeButton.test(messengerMarkup)) out.push("메신저 진입에 ✕(닫기)가 없다");
+  else {
+    if (!/<button[^>]*aria-label="닫기"[^>]*><svg/.test(messengerMarkup)) out.push("✕ 아이콘이 없다");
+    // 왼쪽 = 주소 필드(지구본)보다 앞.
+    if (messengerMarkup.search(closeButton) > messengerMarkup.indexOf(GLOBE_GLYPH)) out.push("✕가 주소 필드 왼쪽이 아니다");
+  }
+  if (closeButton.test(inCallMarkup)) out.push("문자함 진입에 ✕가 그려졌다(왼쪽은 '‹ 문자')");
+  return out;
+}
+
+test("[사용자 결정 2026-10-18 · UX-023 v1.36] 메신저 진입 랜딩 브라우저 바 왼쪽에 ✕(닫기)가 있고 문자함 진입에는 없다", () => {
+  for (const item of catalogItems) {
+    const messenger = renderLandingScreen(propsFor(item));
+    const inCall = renderLandingScreen({ ...propsFor(item), entrySurface: "in-call-sms", onHide: () => {} });
+    assert.deepEqual(closeButtonViolations(messenger.markup, inCall.markup), [], item.landingId);
+    // 진입 포커스를 받는 컨테이너 — 대화상자 자신이 tabindex=-1이다.
+    assert.ok(/role="dialog"[^>]*tabindex="-1"|tabindex="-1"[^>]*role="dialog"/.test(messenger.markup), `${item.landingId}: 대화상자가 포커스를 받을 수 없다`);
+  }
+});
+
+test("[사용자 결정 2026-10-18 역검증] ✕ 렌더 지점을 끊은 사본은 실패한다", () => {
+  const { original, poisoned, overrides } = poisonedComponentSource('<PhoneIcon name="close" size={22} />', "");
+  assert.notEqual(poisoned, original, "오염 지점(✕ 아이콘)을 찾지 못했다");
+  const { poisoned: noButton, overrides: noButtonOverrides } = poisonedComponentSource("{isMessenger && (", "{false && (");
+  assert.notEqual(noButton, original, "오염 지점(✕ 조건)을 찾지 못했다");
+  const item = catalogItems[0];
+  const inCall = renderLandingScreen({ ...propsFor(item), entrySurface: "in-call-sms", onHide: () => {} });
+  const dirty = renderLandingScreen(propsFor(item), noButtonOverrides);
+  assert.deepEqual(closeButtonViolations(dirty.markup, inCall.markup), ["메신저 진입에 ✕(닫기)가 없다"]);
+  // 아이콘만 끊으면 이름만 있는 빈 버튼이 남는다 — 아이콘 판정이 잡는다.
+  const iconless = renderLandingScreen(propsFor(item), overrides);
+  assert.deepEqual(closeButtonViolations(iconless.markup, inCall.markup), ["✕ 아이콘이 없다"]);
 });
 
 test("[T190/G460 역검증] 문자함 안 래퍼에 aria-modal을 남긴 사본은 실패한다", () => {

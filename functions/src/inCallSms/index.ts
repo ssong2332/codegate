@@ -167,7 +167,7 @@ export const deliverInCallSms = onCall<
     }
   }
 
-  // §79 — 세션 가상 은행명(문자 본문·도착 지시·대사가 같은 이름). 부재(옛 세션)는 sessionId 해시.
+  // §81 — 세션 가상 은행명(문자 본문·도착 지시·대사가 같은 이름). 부재(옛 세션)는 sessionId 해시.
   const fictionalBankName = resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName });
   if (!alreadyDelivered) {
     // 앵커(§15.1.5 (4)) — 실시간 경로 보정은 realtimeAnchorScammerTurn이 소유한다(근거는 그 함수

@@ -71,7 +71,7 @@ export async function generateOpeningLine(
   // (createSession/consentChallenge)가 요청값(이미 서버에서 enum 정규화된 값)을 그대로 넘긴다.
   // 부재면 buildSystemPrompt가 기준선(중급 = 모디파이어 없음)으로 조립한다.
   difficultyLevel?: DifficultyLevel,
-  // §79 — 이 세션의 가상 은행명(호출부가 세션 생성 전에 골라 세션 문서에도 같은 값을 쓴다). 부재면 종전("OO은행").
+  // §81 — 이 세션의 가상 은행명(호출부가 세션 생성 전에 골라 세션 문서에도 같은 값을 쓴다). 부재면 종전("OO은행").
   fictionalBankName?: string,
 ): Promise<OpeningLineResult> {
   const scenarioPrompt = SCENARIO_PROMPTS[scenarioId];
@@ -114,7 +114,7 @@ export async function generateOpeningLine(
   // (1) 실존 은행·카드사 이름 → OO은행/OO카드(숫자는 그대로), (2) 문장 수 상한은 **항상** 적용한다
   // — 오프닝 지시(OPENING_TURN_INSTRUCTION)는 예고 계열이 아니고 "예고 완료" 마킹도 없다.
   const { text: realNameReplacedText, replacedCount } = replaceRealFinancialNames(linkFreeText);
-  // §79 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다.
+  // §81 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다.
   const realNameFreeText = fictionalBankName ? applyFictionalBank(realNameReplacedText, fictionalBankName) : realNameReplacedText;
   const lengthLimited = limitReplySentences(realNameFreeText);
   // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).

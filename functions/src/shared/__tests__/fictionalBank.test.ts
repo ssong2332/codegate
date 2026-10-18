@@ -1,4 +1,4 @@
-// 세션별 가상 은행명(2026-10-18 사용자 결정 · Architecture §79) 회귀 테스트.
+// 세션별 가상 은행명(2026-10-18 사용자 결정 · Architecture §81) 회귀 테스트.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -19,11 +19,11 @@ import { VERIFY_INTERCEPT } from "../../scenarios/verifyIntercept";
 import { buildVerifyInterceptDoc, buildVerifyOfferResponse, buildVerifyReconnectParts } from "../../verifyIntercept/buildDoc";
 
 /**
- * §79.1 대조표의 실존·과거 기관명(2026-10-18 조회). 가상명이 이 이름들과 **같거나 그 이름을 포함하거나
+ * §81.1 대조표의 실존·과거 기관명(2026-10-18 조회). 가상명이 이 이름들과 **같거나 그 이름을 포함하거나
  * 그 이름에 포함되면** 안 된다(앞 두 글자 고유어 기준).
  * - 은행: 전국은행연합회 소비자포털 "은행전화번호 진위확인" 은행 목록(https://portal.kfb.or.kr/voice/bankphonenumber.php)
  * - 저축은행: 저축은행중앙회 정기예금 비교공시 목록(https://www.fsb.or.kr/ratedepo_0100.act)
- * - 상호금융·우체국·카드사·과거 퇴출·합병 은행: Architecture §79.1
+ * - 상호금융·우체국·카드사·과거 퇴출·합병 은행: Architecture §81.1
  */
 const EXISTING_NAME_STEMS = [
   // 은행(은행연합회)
@@ -52,7 +52,7 @@ test("[은행명] 목록은 6~10개 · 모두 '…은행' · 중복 없음 · '�
   }
 });
 
-test("[은행명] 실존·과거 기관명과 겹치지 않는다(§79.1 대조표)", () => {
+test("[은행명] 실존·과거 기관명과 겹치지 않는다(§81.1 대조표)", () => {
   for (const name of FICTIONAL_BANK_NAMES) {
     const stem = name.replace(/은행$/, "");
     for (const existing of EXISTING_NAME_STEMS) {
@@ -87,7 +87,7 @@ test("[은행명] 배정 — 새 세션은 목록 안에서 고르고, 저장값
 test("[은행명] 자리표시자 치환 — 'OO은행'·'○○은행'·표기 변형(띄어쓰기·소문자·전각) 모두, 없으면 입력 그대로, 멱등", () => {
   assert.equal(applyFictionalBank("OO은행 948-2716 / ○○은행 금융사고대응팀", "한결은행"), "한결은행 948-2716 / 한결은행 금융사고대응팀");
   assert.equal(applyFictionalBank("OO 은행 · oo은행 · ＯＯ은행", "한결은행"), "한결은행 · 한결은행 · 한결은행");
-  assert.equal(applyFictionalBank("OO카드 · 오오은행", "한결은행"), "OO카드 · 오오은행", "범위 밖 표기는 그대로(§79.5)");
+  assert.equal(applyFictionalBank("OO카드 · 오오은행", "한결은행"), "OO카드 · 오오은행", "범위 밖 표기는 그대로(§81.5)");
   const plain = "자리표시자 없음";
   assert.equal(applyFictionalBank(plain, "한결은행"), plain);
   const once = applyFictionalBank("OO은행", "한결은행");

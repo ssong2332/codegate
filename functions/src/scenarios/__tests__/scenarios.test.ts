@@ -1336,7 +1336,7 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
     const targetId = scenarioId ?? fallbackScenarioId;
     const speakerGender = speakerGenderFor(targetId);
     const offerToolDeclared = hasVerifyIntercept(targetId);
-    // §79 — 세션 가상 은행명 축(fictionalBankName)도 운영 조합처럼 켠다(목록을 돌아가며) — 자리표시자가 실제
+    // §81 — 세션 가상 은행명 축(fictionalBankName)도 운영 조합처럼 켠다(목록을 돌아가며) — 자리표시자가 실제
     // 이름으로 바뀐 조립 결과도 무해화 스캔을 받게 한다.
     const fictionalBankName = FICTIONAL_BANK_NAMES[bankIndex++ % FICTIONAL_BANK_NAMES.length];
     out.push({
@@ -1716,7 +1716,7 @@ test("[T113] 축 전용 블록이 스캔 목록에 실제로 들어왔다(`verif
   // 턴 지시는 값의 집합이라 표지가 아니라 **값 자체**가 들어왔는지로 확인한다.
   const scanned = all.map(({ text }) => text);
   for (const { label, value } of turnInstructionSources()) {
-    // §79 — 조립 결과는 자리표시자 "OO은행"이 세션 가상 은행명으로 바뀌어 있을 수 있다(바뀐 값으로도 찾는다).
+    // §81 — 조립 결과는 자리표시자 "OO은행"이 세션 가상 은행명으로 바뀌어 있을 수 있다(바뀐 값으로도 찾는다).
     const forms = [value, ...FICTIONAL_BANK_NAMES.map((bank) => applyFictionalBank(value, bank))];
     assert.ok(
       scanned.some((text) => forms.some((form) => text.includes(form))),

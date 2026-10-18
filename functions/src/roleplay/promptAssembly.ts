@@ -279,7 +279,7 @@ function buildScenarioProgression(
 // 그 다음 줄의 **지속 압박 절**(*"물러서지 않고 계속 밀어붙인다"*)과 **여전히 충돌한다.**
 // 그 줄들은 **2026-07-24 사용자 요청으로 저작된 문장**이라 손대지 않았다(**G129** —
 // `*.prompt.ts` diff 0줄이 이 절의 완료 증거다). 조건부 치환은 **관측 후 사용자 판단**이다(G131).
-// ⏳ T191 S4(2026-10-18 · User 결정 D4 = DECISIONS #131) — 위 G129의 전제가 바뀌었다: 지속 압박 절은
+// ⏳ T191 S4(2026-10-18 · User 결정 D4 = DECISIONS #132) — 위 G129의 전제가 바뀌었다: 지속 압박 절은
 // 난이도 압박 축으로 이관됐다. 시나리오 페르소나 문면은 *"의심·거절하면 한 번 더 다른 근거로 설득한다"*
 // (= 중급 L2 — 중급은 블록이 없는 기준선이라 중급 값이 페르소나에 남는다)로 바뀌었고, 초급은 BEGINNER_BLOCK의
 // *"한 발 물러선다"*, 고급은 ADVANCED_BASE의 *"물러서지 않되 매번 다른 근거"* 가 정한다.
@@ -564,7 +564,7 @@ function buildDifficultyBlock(
  */
 export type BuildSystemPromptOptions = {
   /**
-   * 2026-10-18(Architecture §79) — 이 세션의 가상 은행명(`shared/fictionalBank.ts` `resolveFictionalBankName`).
+   * 2026-10-18(Architecture §81) — 이 세션의 가상 은행명(`shared/fictionalBank.ts` `resolveFictionalBankName`).
    * 주어지면 조립 결과의 자리표시자 "OO은행"·"○○은행"(공통 규칙·시나리오 수법·턴 지시)을 전부 이 이름으로 바꾼다 —
    * 문자 본문(`inCallSms/buildDoc.ts`)과 같은 이름이라 대사와 문자가 일치한다. 부재면 종전과 같은 문자열("OO은행")이다.
    */

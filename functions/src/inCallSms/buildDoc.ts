@@ -17,7 +17,7 @@ export function buildInCallSmsDoc(
   arrivedAt: FirebaseFirestore.Timestamp,
   anchorScammerTurn: number,
   scenarioId: string,
-  // §79 — 세션 가상 은행명. 카탈로그 본문의 자리표시자 "OO은행"을 이 이름으로 바꿔 **저장한다**(문자함·리포트·
+  // §81 — 세션 가상 은행명. 카탈로그 본문의 자리표시자 "OO은행"을 이 이름으로 바꿔 **저장한다**(문자함·리포트·
   // 다시보기가 같은 이름을 본다). 부재면 카탈로그 원문 그대로(종전).
   fictionalBankName?: string,
 ): InCallSmsDoc {
@@ -32,7 +32,7 @@ export function buildInCallSmsDoc(
     kind: item.kind,
     senderLabel: item.senderLabel,
     body: fictionalBankName ? applyFictionalBank(item.body, fictionalBankName) : item.body,
-    // §79 — 본문에 자리표시자가 있었던 문자만 은행명을 구조화 필드로도 싣는다(가짜 랜딩 미리 채움 D-115의 원천).
+    // §81 — 본문에 자리표시자가 있었던 문자만 은행명을 구조화 필드로도 싣는다(가짜 랜딩 미리 채움 D-115의 원천).
     ...(fictionalBankName && item.body !== applyFictionalBank(item.body, fictionalBankName) ? { bankName: fictionalBankName } : {}),
     // 종류별 필드는 해당 kind일 때만 채운다(부재를 판별자로 오버로드하지 않되, 무의미한 빈 값도
     // 만들지 않는다 — kind가 유일한 판별자다, §14.9.1 원칙).
@@ -117,7 +117,7 @@ export function buildInCallSmsResponse(
   // ⛔ 2026-10-18(§78) — 인증번호(정답)를 여기 싣지 않는다. #300이 실었다가 실시간 경로에서 모델이 번호를 먼저 말할
   // 위험을 만들었다(텍스트 폴백에서 3/7 실측). Live는 서버가 참가자 발화를 실시간으로 보지 못해 서버 대조도 할 수 없다
   // ⇒ 실시간 경로의 대조는 이번 수정에서 뺐다(대안 비교는 §78.4). 응답은 #300 이전과 같다.
-  // §79 — 도착 지시에 자리표시자가 있으면 세션 은행명으로(실시간 경로는 이 문자열이 그대로 모델에 간다).
+  // §81 — 도착 지시에 자리표시자가 있으면 세션 은행명으로(실시간 경로는 이 문자열이 그대로 모델에 간다).
   const announceInstruction = input.fictionalBankName
     ? applyFictionalBank(item.announceInstruction, input.fictionalBankName)
     : item.announceInstruction;

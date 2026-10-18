@@ -171,7 +171,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 이 턴의 systemPrompt에 turnInstruction으로 주입된다(가드레일 앞 — §15.5 순서 불변식은
     // buildSystemPrompt 안에서 강제된다).
     const scammerTurnNumber = storedHistory.filter((m) => m.role === "scammer").length + 1;
-    // §79 — 세션 가상 은행명: 프롬프트·문자 본문·대사 후처리가 같은 이름을 쓴다. 부재(옛 세션)는 sessionId 해시.
+    // §81 — 세션 가상 은행명: 프롬프트·문자 본문·대사 후처리가 같은 이름을 쓴다. 부재(옛 세션)는 sessionId 해시.
     const fictionalBankName = resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName });
     const dueSms = findDueInCallSms(session.scenarioId, scammerTurnNumber);
     let deliveredSmsId: string | undefined;
@@ -386,7 +386,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // (2026-10-18 문자 도착 턴 5문장 신고 · 한계는 `shouldLimitReplySentences` 주석).
     const { text: realNameReplacedText, replacedCount: realNameReplacedCount } =
       replaceRealFinancialNames(signalFreeReplyText);
-    // §79 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다(문자 본문과 일치).
+    // §81 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다(문자 본문과 일치).
     const realNameFreeReplyText = applyFictionalBank(realNameReplacedText, fictionalBankName);
     const lengthLimited = shouldLimitReplySentences(turnChoice)
       ? limitReplySentences(realNameFreeReplyText)

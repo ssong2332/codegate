@@ -10,7 +10,10 @@
 // `send`를 실제로 전송한다. 한 번에 1건만 내보낸다: 보낸 턴의 응답이 끝나야(`turnComplete`) 다음 건이 나간다.
 // ⛔ `turnComplete:false` 주입(`personaStateTurn`, A5-α)은 응답을 유발하지 않고 생성을 끊지도 않아 이 큐 밖이다.
 
-export type ClientTurnKind = "opening" | "text" | "instruction";
+// ⭐ §78.4.2(G491) — `turnComplete:true` 종류는 이 넷뿐이다. 문자 · 확인 권유 안내(종전 `instruction`)는
+// 맥락 주입(`turnComplete:false`, `contextInjection.ts`)으로 옮겨 이 큐를 타지 않는다(X5 · S1 §3.1).
+// `silence` = 침묵 넛지 · `relayGreeting` = 화자 전환 첫 발화(확인 창구 재연결 지시 · S7 릴레이 leg).
+export type ClientTurnKind = "opening" | "text" | "silence" | "relayGreeting";
 
 export type ClientTurn = { kind: ClientTurnKind; text: string };
 
