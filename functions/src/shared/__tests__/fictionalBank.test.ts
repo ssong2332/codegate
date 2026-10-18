@@ -160,7 +160,18 @@ test("[은행명] ⭐ 서버가 클라·모델에 내보내는 문자열 전수 
   const outputs: Array<[string, string]> = [];
   for (const [scenarioId, items] of Object.entries(IN_CALL_SMS)) {
     for (const item of items) {
-      outputs.push([`${item.smsId}.body`, buildInCallSmsDoc(item, ts, 1, scenarioId, bank).body]);
+      // architect 지적(ux-real-phone) — 본문만이 아니라 **문서의 모든 문자열 필드**(bankName·accountNumber·발신자·링크 등)를 본다.
+      // 랜딩 미리 채움(D-115)은 bankName·accountNumber를 그대로 쓰므로, 여기에 자리표시자가 남으면 화면에 "OO은행"이 나온다.
+      const doc = buildInCallSmsDoc(item, ts, 1, scenarioId, bank) as unknown as Record<string, unknown>;
+      let stringFields = 0;
+      for (const [field, value] of Object.entries(doc)) {
+        if (typeof value === "string") {
+          stringFields += 1;
+          outputs.push([`${item.smsId}.${field}`, value]);
+        }
+      }
+      assert.ok(stringFields >= 3, `${item.smsId}: 문자열 필드 수집 실패`);
+      if (doc.bankName !== undefined) assert.equal(doc.bankName, bank, `${item.smsId}.bankName은 세션 은행명`);
       outputs.push([`${item.smsId}.announce`, buildInCallSmsResponse(item, { placed: false, fictionalBankName: bank }).announceInstruction ?? ""]);
     }
   }
