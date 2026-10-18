@@ -76,6 +76,15 @@
 //  beginner len=6119 sha=0538c815d83c7875 (직전 6123 · d051f2222c324d1f) · intermediate len=5298 sha=5537d8d95facb424
 //  (직전 5302 · 316e3e38bfd4f6a0) · advanced len=6420 sha=041bf7cc353368af (직전 6424 · ce9d32e54313827d).
 //  family-accident-deepvoice는 3/3 동일(이 변경이 닿지 않는다 — 재생성 불요). 재생성 완료 후에만 "재생성 완료"로 갱신할 것.)
+// (T192 C2 2026-10-19 · Architecture.md §79.6 (2) · DECISIONS #139: [진행 방식] 끝 문장 "네 쪽에서 대화를 마무리하지는 않는다."를
+//  "통화를 네 쪽에서 먼저 끝내는 것은 [진행 강제]의 끊기 규칙이 허락할 때뿐이다."로 바꿨다(17벌 공통) → **조립 산출물이 바뀌었다 —
+//  재생성 대기 중.** 공통 [진행 강제]의 끊기 줄은 슬롯이 됐지만 ElevenLabs 조립은 NONE(= 종전 문면 바이트 동일)이라 그 줄은 무변화 —
+//  바뀐 것은 이 끝 문장뿐이다(ElevenLabs는 끊기 미지원 · 기능 영향 0 — OQ-A122 · OQ-A103과 같은 재생성 대기열).
+//  대조값 = `buildSystemPrompt(SCENARIO_PROMPTS[id], { difficultyLevel })`의 sha256 앞 16자(빌드 산출물 `functions/lib` · 직전 값은
+//  base `520afd6`(= main `9c760eb` 코드) 같은 방법 실측 — 위 기록들은 다른 base 값이라 직전 값으로 쓰지 않는다):
+//  beginner len=6143 sha=621e9f0452d167e6 (직전 6119 · 0538c815d83c7875) · intermediate len=5322 sha=c4830f9bc792e7f8
+//  (직전 5298 · 5537d8d95facb424) · advanced len=6444 sha=3959ff484a8c6451 (직전 6420 · 041bf7cc353368af).
+//  family-accident-deepvoice도 같은 문장 교체로 3/3 바뀌었다. 재생성 완료 후에만 "재생성 완료"로 갱신할 것.)
 import type { ScenarioPromptDoc } from "../shared/types";
 
 // src/content/scenarios/grandchildImpersonation.ts의 상수와 동일한 문자열이어야 한다.
@@ -97,7 +106,7 @@ const personaPrompt = `너는 보이스피싱 예방 훈련 시뮬레이션에�
 [진행 방식]
 - weakenedTactics에 정의된 수법만 사용한다. 목록 밖의 새로운 수법(특히 실제 운영 가능한 사기 수법)을 스스로 창작하지 않는다.
 - 노년층 대상임을 감안해 지나치게 복잡한 기술 용어는 쓰지 않는다.
-- 정해진 시간에 쫓기지 말고, 상대의 반응을 살피며 자연스럽게 다음 단계로 넘어간다. 네 쪽에서 대화를 마무리하지는 않는다.`;
+- 정해진 시간에 쫓기지 말고, 상대의 반응을 살피며 자연스럽게 다음 단계로 넘어간다. 통화를 네 쪽에서 먼저 끝내는 것은 [진행 강제]의 끊기 규칙이 허락할 때뿐이다.`;
 
 const weakenedTactics: string[] = [
   "다급함 조성 — '지금 아니면 안 돼요', '조금만 늦어도 큰일 나요' 처럼 구체적 기한 없이 시간 압박만 준다.",

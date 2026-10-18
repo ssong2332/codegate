@@ -1,6 +1,7 @@
 // session 모듈 요청/응답 타입 — src/lib/api/types.ts(클라 계약)와 1:1 대응(API.md).
 import type { ScammerMessage } from "../roleplay/types";
 import type { DifficultyLevel } from "../shared/difficulty";
+import type { AllowedEndSessionReason } from "./endReason";
 import type {
   MessengerChannel,
   MessengerSkin,
@@ -59,13 +60,10 @@ export type CreateSessionResponse = {
   difficultyLevel: DifficultyLevel;
 };
 
-export type EndSessionReason =
-  | "user_ended"
-  | "completed"
-  | "deceived"
-  | "limit_reached"
-  // T192 C1(§79.5) — 서버 표식이 없으면 `user_ended`로 기록된다(`session/endReason.ts`).
-  | "scammer_ended";
+// T192 C4(§79.19 (6) ④ · G557) — 요청 타입 = 허용목록 3값(`user_ended` · `limit_reached` · `scammer_ended`). 옛 5값의
+// `completed` · `deceived`는 사용처 0이었고 C1부터 서버가 `invalid-argument`로 거절했다(타입과 판정이 갈려 있었다).
+// 저장값 `SessionEndReason`(`shared/types.ts`)은 **무변경**(옛 문서 · 리포트 읽기 호환 — §79.5).
+export type EndSessionReason = AllowedEndSessionReason;
 export type EndSessionRequest = {
   sessionId: string;
   endReason: EndSessionReason;

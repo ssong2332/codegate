@@ -324,7 +324,9 @@ test("[T128/G155] `unauthenticated` 분기는 단일 지점 1곳 — 24개 래�
   );
   assert.deepEqual(offenders, [], `${dir}: 콜러블 호출은 callable.ts 한 곳을 거쳐야 한다(G155).`);
 
-  const wrappers = files.filter((f) => !["index.ts", "types.ts", "callable.ts"].includes(f));
+  // T192 C4 — 계약 테스트(`scammerHangupContract.test.ts` · G557 정본 위치)는 래퍼가 아니다. 테스트 파일만 뺀다
+  // (위 `httpsCallable` 직접 호출 스캔은 테스트 파일까지 그대로 본다).
+  const wrappers = files.filter((f) => !["index.ts", "types.ts", "callable.ts"].includes(f) && !f.endsWith(".test.ts"));
   assert.ok(wrappers.length >= 24, `래퍼가 ${wrappers.length}개뿐이다 — 스캔 대상이 줄었는지 확인하라.`);
   for (const f of wrappers) {
     assert.ok(

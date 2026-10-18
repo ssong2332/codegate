@@ -441,7 +441,7 @@ test("[M2] 변형 있는 세션 — 술어 = 변형 선언 수 > 0 · 도구 선
   for (const v of FLOW_VARIANTS) {
     const declares = sessionDeclaresInCallSms(v.scenarioId, v.variantId);
     assert.equal(declares, v.sms.length > 0, v.variantId);
-    const names = buildLiveToolDeclarations(v.scenarioId, v.level, v.variantId).flatMap(
+    const names = buildLiveToolDeclarations(v.scenarioId, v.level, v.variantId, { channel: undefined, relay: undefined, liveAvailable: false }).flatMap(
       (t) => (t.functionDeclarations ?? []).map((d) => d.name),
     );
     assert.equal(names.includes(LIVE_TOOL_SEND_PREPARED_SMS), declares, `${v.variantId}: 도구 선언 ≠ 술어`);

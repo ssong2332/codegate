@@ -28,6 +28,7 @@ import {
   isSessionAnswered,
   markPreCallNoticeSeen,
   markSessionAnswered,
+  setPendingEndReason,
   useSpeechRecognition,
 } from "@/lib/recording";
 import { useRealtimeCall } from "@/lib/realtime";
@@ -1039,6 +1040,10 @@ export default function SessionCallPage() {
       // T83/UX-031 Exit — 확인 오버레이도 같은 규칙으로 먼저 내린다(종료 고지가 가려지지 않게).
       setVerifyOverlayOpen(false);
       await flushTranscript();
+      // T192 C4(§79.10 · §79.19 (7) C4-3) — 실시간 한도 종료의 사유 힌트. 종전에는 종료 화면이 `user_ended`로
+      // 기록해 AC-007 "정의된 종료 조건" 기록이 틀렸다. 전사 flush 뒤 · 이동 직전(§79.9 E5 → E6 순서). ⛔ 이 화면의
+      // 힌트 기록은 이 1곳뿐이다 — 폴백 끊기 응답의 힌트 · 재생 대기는 공통 종료 함수(C5) 소관.
+      if (sessionId) setPendingEndReason(sessionId, "limit_reached");
       router.push("/session/end");
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps

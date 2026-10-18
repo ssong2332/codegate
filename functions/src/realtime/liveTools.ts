@@ -13,8 +13,11 @@
 import { Behavior, Type } from "@google/genai";
 import type { FunctionDeclaration, Tool } from "@google/genai";
 import type { DifficultyLevel } from "../shared/difficulty";
+import type { MessengerChannel } from "../shared/types";
 import { SMS_PURPOSES, sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { hasVerifyIntercept, VERIFY_DECLINE_ALREADY } from "../scenarios/verifyIntercept";
+import { isNonLastRelayLeg, type HangupRelayContext } from "../scammerHangup/decide";
+import { SCAMMER_HANGUP_FAILURE_INSTRUCTION } from "../scammerHangup/guidance";
 
 /**
  * §59.5 T1 — 클라가 하드코딩하지 않도록 이름은 `createRealtimeCall` 응답으로도 내려간다(G385).
@@ -26,6 +29,11 @@ export const LIVE_TOOL_SEND_PREPARED_SMS = "send_prepared_sms";
  * 선언된다. 계열 A/B 구분은 선언 조건이 아니다(`declaresOfferVerificationDesk` 참고).
  */
 export const LIVE_TOOL_OFFER_VERIFICATION_DESK = "offer_verification_desk";
+/**
+ * T192 C3(Architecture.md §79.3 · §79.19 (5) 4 · 5) — 사기범의 먼저 끊기. BLOCKING이라 모델은 **결과를 받은 뒤에만**
+ * 작별한다(신고 ⑪을 막는 것은 금지문이 아니라 순서 — §79 머리). 서버 판정은 `requestScammerHangup`.
+ */
+export const LIVE_TOOL_END_CALL = "end_call";
 
 /**
  * §61.1(OQ-A73 정정본) — 확인 무력화 카탈로그(`VERIFY_INTERCEPT`) 6종 중 **이 훈련을 위해 저작된
@@ -65,6 +73,46 @@ export function declaresOfferVerificationDesk(
 ): boolean {
   return hasVerifyIntercept(scenarioId) && difficultyLevel === "advanced";
 }
+
+/**
+ * ⛔ T192 PR A 리뷰 M1 — 실시간 `end_call` **런타임 스위치**(코드 상수 · 선례 `RELAY_RUNTIME_AVAILABLE = false`).
+ * 클라의 `end_call` 라우팅(`GeminiVoiceSession` · 공통 종료 함수)은 C5(PR B)다. 그 전에 토큰에 `end_call`이 선언되면
+ * 모델이 부른 `end_call`이 클라에서 `unsupported`(guidance 없음)로 떨어진다 ⇒ **C5가 이 값을 `true`로 바꿀 때까지
+ * 선언 · 이름 · TOOL 문면 세 자리가 전부 꺼진다**(실시간 setup · 프롬프트 = C3 전과 같다 — G556 운영값 단언).
+ * ⛔ 환경 변수 · defineBoolean 아님(배포 설정으로 켜지지 않게). ⛔ 폴백 SIGNAL(`sendMessage`)은 이 값과 무관하다.
+ */
+export const END_CALL_LIVE_AVAILABLE = false;
+
+/**
+ * T192 C3(§79.3 · §79.18 (1) · G502 · G527) — `end_call` **선언 자격**. ⛔ 이 술어가 유일한 원천이다: 도구 선언
+ * (`buildLiveToolDeclarations`) · 이름 하향(`buildLiveToolNames`) · 프롬프트 TOOL 변형(`geminiProvider` →
+ * `promptAssembly.hangupMode`) 세 자리가 **전부 이 함수를 부른다**(G400 선례).
+ * - 메신저 단계 → `false`(통화형만 — AC-103 머리 · 판정표 2행과 같은 조건).
+ * - 릴레이 중간 leg → `false`(마지막 화자만 끊는다 — DECISIONS #146 · 판정표 2-b와 **같은 함수**로 이중 방어).
+ * - ElevenLabs는 이 경로(Gemini 프로바이더)를 타지 않아 자동 제외된다(§79.3).
+ * ⛔ 문자 · 확인 도구 술어와 **독립**이다(§79.19 (5) 1 — 서로를 조건으로 쓰면 "문자 없는 세션 = 끊기 0"이 조용히 생긴다).
+ * `scenarioId`는 정본 시그니처(§79.3 · G527)에 있으나 오늘 판정에 쓰지 않는다(전 시나리오 동일) — 자리만 둔다.
+ */
+export function declaresEndCall(
+  _scenarioId: string,
+  channel: MessengerChannel | undefined,
+  relay: HangupRelayContext | undefined,
+  // M1 — 런타임 스위치(운영값 = `END_CALL_LIVE_AVAILABLE`). 판정 로직 테스트는 `true`로 돈다.
+  liveAvailable: boolean,
+): boolean {
+  if (!liveAvailable) return false;
+  if (channel === "messenger") return false;
+  return !isNonLastRelayLeg(relay);
+}
+
+/** 선언 빌더의 `end_call` 범위 — ⭐ 필수 인자(빠뜨리면 컴파일 오류 · "말없이 미선언" 방지 — §79.19 (5) 2). */
+export type EndCallScope = {
+  channel: MessengerChannel | undefined;
+  /** `resolveHangupRelay(session)`의 값만(G527 — 이 인자를 만드는 곳은 그 함수 하나). 오늘 항상 `undefined`. */
+  relay: HangupRelayContext | undefined;
+  /** M1 — 운영 호출부(`geminiProvider`)는 `END_CALL_LIVE_AVAILABLE`을 넘긴다. 필수 키(빠뜨리면 컴파일 오류). */
+  liveAvailable: boolean;
+};
 
 /** §59.5 — `offer_verification_desk`는 인자 없음(G384 — R1 ④가 기계로 단언한다). */
 const NO_ARGS_PARAMETERS = { type: Type.OBJECT, properties: {} };
@@ -114,19 +162,47 @@ const OFFER_VERIFICATION_DESK_DECLARATION: FunctionDeclaration = {
 };
 
 /**
- * §59.5 선언 조건(정본 표) — 둘 다 걸리지 않으면 `[]`를 그대로 반환한다 ⇒ 그 세션의 토큰 요청
- * 바이트가 오늘과 동일하다(회귀 0, G388이 이 사실에 기대는 유일한 레버).
+ * T192 C3(§79.19 (5) 4 · 5) — `reason` enum 필수(S5b `purpose` 선례). 서버는 누락 · 오기입도 `unspecified`로 받는다
+ * (`normalizeScammerHangupKind` — 거절 0). 설명 문면은 서버 소유 · ⛔ 숫자 · 횟수 0(G130).
+ */
+const END_CALL_DECLARATION: FunctionDeclaration = {
+  name: LIVE_TOOL_END_CALL,
+  description:
+    "네 쪽에서 통화를 먼저 끝내기로 했을 때, 작별 인사를 하기 전에 먼저 부른다. reason은 goal(원하던 것을 얻었다) 또는 give_up(상대가 거절이나 의심을 되풀이해 더 진행할 수 없다) 중 하나다. 결과가 허락하지 않으면 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어간다.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      reason: {
+        type: Type.STRING,
+        format: "enum",
+        enum: ["goal", "give_up"],
+      },
+    },
+    required: ["reason"],
+  },
+  behavior: TOOL_BEHAVIOR,
+};
+
+/**
+ * §59.5 선언 조건(정본 표). T192 C3 — `end_call`은 기존 두 선언 **뒤에** 붙는다(§79.19 (5) 3). `end_call`이 거짓이면
+ * (메신저 · 중간 leg) 배열은 S5b 판정 그대로(바이트 동일 — G556). ⚠️ 옛 주석 *"둘 다 걸리지 않으면 [] — 토큰 요청
+ * 바이트가 오늘과 동일 · G388이 기대는 유일한 레버"* 는 C3부터 **거짓**이다: 문자 · 확인 도구가 없는 Gemini 통화 세션에도
+ * `end_call`이 선언된다(§79.3 ⚠️). G388(백스톱 지연 창)은 도구별 키(`sendPreparedSms` · `offerVerificationDesk`)라 무영향.
  */
 export function buildLiveToolDeclarations(
   scenarioId: string,
-  difficultyLevel?: DifficultyLevel,
+  difficultyLevel: DifficultyLevel | undefined,
   // ⭐ 리뷰 M2 — 세션 흐름 변형. 문자 선언 0 변형은 `send_prepared_sms`를 선언하지 않는다(부재 = 종전 판정).
-  flowVariantId?: string,
+  flowVariantId: string | undefined,
+  endCallScope: EndCallScope,
 ): Tool[] {
   const declarations: FunctionDeclaration[] = [];
   if (sessionDeclaresInCallSms(scenarioId, flowVariantId)) declarations.push(SEND_PREPARED_SMS_DECLARATION);
   if (declaresOfferVerificationDesk(scenarioId, difficultyLevel)) {
     declarations.push(OFFER_VERIFICATION_DESK_DECLARATION);
+  }
+  if (declaresEndCall(scenarioId, endCallScope.channel, endCallScope.relay, endCallScope.liveAvailable)) {
+    declarations.push(END_CALL_DECLARATION);
   }
   if (declarations.length === 0) return [];
   return [{ functionDeclarations: declarations }];
@@ -145,6 +221,16 @@ export type LiveToolNames = {
    * 값은 `VERIFY_DECLINE_ALREADY`의 사본이다 — 새 문면 저작 0건(리터럴 복사 금지, import 재사용).
    */
   verifyAlreadyAnnouncedInstruction?: string;
+  /**
+   * T192 C3(§79.5 · §79.19 (5) 6) — `end_call`과 `endCallFailureInstruction`은 **쌍**이다(둘 다 있거나 둘 다 없다).
+   * 실패 문면은 콜러블이 아예 닿지 않을 때 모델에게 돌려줄 서버 소유 1줄(`SCAMMER_HANGUP_FAILURE_INSTRUCTION`).
+   */
+  endCall?: typeof LIVE_TOOL_END_CALL;
+  endCallFailureInstruction?: string;
+  /**
+   * 문자 전용 실패 문면 — **필수 그대로**(클라 타입이 필수라서). `end_call`만 선언된 세션에서도 실리지만 무해하다:
+   * 그 문면을 쓰는 분기(문자 도구)가 그 세션에 없다(§79.19 (5) 6).
+   */
   failureInstruction: string;
 };
 
@@ -152,15 +238,24 @@ export type LiveToolNames = {
  * `createRealtimeCall` 응답 `liveTools` 필드(§59.6 ②·G385, `docs/API.md` 부록 C). 도구가 하나도
  * 선언되지 않으면 `undefined`(필드 자체가 응답에 없다 — 부착 조건은 `buildLiveToolDeclarations`와
  * **같은 판정**이어야 한다, 안 그러면 클라가 존재하지 않는 도구 이름을 credentials로 받는다).
+ * ⚠️ T192 C3 — 세 술어(문자 · 확인 · 끊기) 중 **하나라도** 참이면 부착된다 ⇒ 문자 · 확인 도구가 없는 Gemini 통화
+ * 세션에도 이제 `liveTools`가 붙는다(`endCall` 쌍 + 필수 `failureInstruction`).
  */
 export function buildLiveToolNames(
   scenarioId: string,
-  difficultyLevel?: DifficultyLevel,
-  flowVariantId?: string,
+  difficultyLevel: DifficultyLevel | undefined,
+  flowVariantId: string | undefined,
+  endCallScope: EndCallScope,
 ): LiveToolNames | undefined {
   const smsDeclared = sessionDeclaresInCallSms(scenarioId, flowVariantId);
   const offerDeclared = declaresOfferVerificationDesk(scenarioId, difficultyLevel);
-  if (!smsDeclared && !offerDeclared) return undefined;
+  const endCallDeclared = declaresEndCall(
+    scenarioId,
+    endCallScope.channel,
+    endCallScope.relay,
+    endCallScope.liveAvailable,
+  );
+  if (!smsDeclared && !offerDeclared && !endCallDeclared) return undefined;
   return {
     ...(smsDeclared ? { sendPreparedSms: LIVE_TOOL_SEND_PREPARED_SMS } : {}),
     ...(offerDeclared
@@ -168,6 +263,9 @@ export function buildLiveToolNames(
           offerVerificationDesk: LIVE_TOOL_OFFER_VERIFICATION_DESK,
           verifyAlreadyAnnouncedInstruction: VERIFY_DECLINE_ALREADY,
         }
+      : {}),
+    ...(endCallDeclared
+      ? { endCall: LIVE_TOOL_END_CALL, endCallFailureInstruction: SCAMMER_HANGUP_FAILURE_INSTRUCTION }
       : {}),
     failureInstruction: LIVE_TOOL_FAILURE_INSTRUCTION,
   };

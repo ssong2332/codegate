@@ -34,6 +34,14 @@ import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms } from "../inCallSms/smsDelivery";
 import type { SmsDeliveryInput } from "../inCallSms/smsDelivery";
 import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
+import {
+  decideFallbackHangup,
+  fallbackHangupMode,
+  fallbackSmsDeclaredFor,
+  resolveFallbackHangupEffect,
+  type FallbackHangupFacts,
+} from "../scammerHangup/fallback";
+import { resolveHangupRelay } from "../scammerHangup/relayContext";
 import { pickFallbackTurnInstruction } from "../verifyIntercept/fallbackTurn";
 import { announcedVerifyAnchor } from "../verifyIntercept/buildDoc";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
@@ -186,6 +194,20 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const storedHistory = claim.history;
     const nextIndex = claim.userIndex;
 
+    // ④ 한도 계산(T192 C3 — §79.19 (5) 10: 입력이 전부 턴 확보 트랜잭션 값이라 **LLM 전에** 계산한다. 끊기 사전 판정이
+    // 같은 값을 쓰고, 아래 종료 반영 · 응답도 이 값을 그대로 재사용한다 — 계산 지점 1곳).
+    // turnCount 증가와 answeredAt 기록은 위 트랜잭션(#8)에서 이미 원자적으로 끝났으므로, 여기서는
+    // 트랜잭션이 확정한 값을 그대로 쓴다. 경과시간 기점은 answeredAt(통화 시작 = 첫 사용자 발화)
+    // 이다(#6) — 수신 화면에 머문 시간이 대화 예산을 깎지 않으며, UI 통화 타이머와도 정합.
+    const turnCount = claim.turnCount;
+    const elapsedMs = userWriteTime.toMillis() - claim.answeredAt.toMillis();
+    const limitReached = isSessionLimitReached({
+      turnCount,
+      maxUserTurns: claim.maxUserTurns,
+      elapsedMs,
+      maxSessionMs: claim.maxSessionMs,
+    });
+
     // ② 서버에서 scenarioPrompts 기반으로 조립한 프롬프트 + 사용자 입력 구분자 감싸기(ADR-0004) →
     // LLM 어댑터(functions/src/llm) 호출.
     // T191 — 사용자 입력 속 `[[SMS:` 흉내는 `wrapUserInputAsData`(promptAssembly `escapeSentinelLookalikes`)가 무력화한다.
@@ -228,7 +250,10 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     let dueSms: InCallSmsItem | undefined;
     let deliveredSmsId: string | undefined;
     let smsNudgeInstruction: string | undefined;
-    if (smsDeclared.length > 0) {
+    // T192 PR A 리뷰 Minor-1 — 도착 기록 read 조건 = 콜러블과 같은 단일 술어(변형 ID 없는 세션도 실시간 구간 문자를 본다).
+    // 백스톱 계획 · 문자 제시는 여전히 `smsDeclared`(변형 선언 — 비면 할 일 0)를 쓴다.
+    const smsSessionDeclared = fallbackSmsDeclaredFor(session.scenarioId, session.flowVariantId);
+    if (smsSessionDeclared) {
       try {
         smsDelivered = await readDeliveredSms(sessionRef);
         smsDeliveredLoaded = true;
@@ -289,6 +314,25 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         // 조회 실패가 대화를 막지 않는다(P-4 핵심 루프 비차단) — 이번 턴은 지시 없이 진행한다.
       }
     }
+
+    // ②-c′ 사기범 끊기 **사전 판정**(T192 C3 · Architecture.md §79.7 · §79.19 (5) 10 · AC-103). LLM 호출 전에 아는 값만으로
+    // 실시간 콜러블과 **같은 판정 함수**를 부른다(AC-103 (f)). `accepted`인 턴에만 [진행 강제] 끊기 규칙이 SIGNAL 변형으로
+    // 실린다(그 밖 = NONE — 종전 문면). 신호를 실제로 받아들일지는 응답 뒤 사후 판정이 다시 정한다(Mock · 문자 마커).
+    const hangupFacts: FallbackHangupFacts = {
+      status: session.status,
+      channel: session.channel,
+      verifyEnabled,
+      // 조회 실패(`verifyState` 부재)는 전환 전으로 본다 — 4행 fail-closed.
+      transferPlaced: verifyState?.placed === true,
+      userTurns: userTurnsNow,
+      limitReached,
+      alreadyAccepted: Boolean(session.scammerHangup),
+      relay: resolveHangupRelay(session),
+      smsDeclared: smsSessionDeclared,
+      smsDeliveredLoaded,
+    };
+    const hangupPre = decideFallbackHangup(hangupFacts, smsDelivered, false);
+    const hangupMode = fallbackHangupMode(hangupPre);
     // ②-d 모의 설치 응낙의 **인과 배선**(T84, §15.9.3 — §15.1.2/§15.1.4와 동형). 오버레이
     // 상호작용은 클라 전용이라 모델이 볼 수 없다. 이 턴에 `sessions/{sid}/mockScreens`에서
     // **응낙됐고(consentedAt) 아직 알리지 않은(consentAnnouncedAt 부재)** 항목을 찾으면 다음
@@ -408,6 +452,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         ...(turnInstructionWithSms ? { turnInstruction: turnInstructionWithSms } : {}),
         fictionalBankName,
         sessionAccountNumber: resolveSessionAccountNumber(session.scenarioId),
+        // T192 C3 — 사전 판정이 `accepted`인 턴만 "signal"(§79.6 ②). 그 밖 = "none"(종전 문면 바이트 동일 · G505).
+        hangupMode,
       }),
       messages: llmHistory,
       mockTacticHints: scenarioPrompt.weakenedTactics,
@@ -475,9 +521,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // ([[SIGNAL:ESCALATE_VOICE]])를 링크 마커와 같은 sentinel 패턴으로 스캔·제거한다. 사용자는
     // 마커 원문을 절대 보지 않는다. 이 스캔은 **LLM 완성 텍스트에만** 적용된다(사용자 입력에는
     // 절대 적용하지 않음 — AC-024, escapeSentinelLookalikes가 사용자 입력의 흉내를 이미 무력화).
-    const { text: signalFreeReplyText, escalate: signalEscalate } = extractEscalationSignal(
-      smsMarkerFreeText,
-    );
+    // T192 C3 — 같은 추출이 끊기 신호(`END_CALL_GOAL` · `END_CALL_GIVEUP`)도 판별한다(정규식 · 자리 · 정리 무변경 — 신호는
+    // 어느 경우든 텍스트에서 지워진다). 효과는 아래 사후 판정이 정한다.
+    const {
+      text: signalFreeReplyText,
+      escalate: signalEscalate,
+      endCall: endCallSignal,
+    } = extractEscalationSignal(smsMarkerFreeText);
     // ③-c 사기범 대사 손질(2026-10-17 라이브 신고 — 실존 은행명 + 5~7문장 대사). 링크·신호 마커가 다
     // 빠진 텍스트에만 적용한다. (1) 실존 은행·카드사 이름 → OO은행/OO카드(숫자는 그대로 —
     // guardrails/realFinancialNames.ts 헤더). (2) 문장 수 상한(replyLength.ts) — ⛔ "예고 완료"를
@@ -522,6 +572,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     } satisfies MessageDoc);
 
     // ③-d T191 — 모델 마커 경로. 응답을 저장한 **뒤**라 앵커에 이번 응답이 포함된다. 같은 단일 통로를 지난다.
+    // T192 C3 — 사후 판정용 도착 목록(마커 도착 1건을 같은 발화 수로 더한다 — §79.19 (4)).
+    let smsDeliveredAfterReply: readonly DeliveredSmsRecord[] = smsDelivered;
+    let smsMarkerDeliveryFailed = false;
     if (smsMarkerCount > 0) {
       try {
         const result = await deliverSmsThroughGate(smsStore, {
@@ -533,23 +586,39 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         });
         logSmsGate(sessionId, "model_marker", markerPurpose, result.status, userTurnsNow, smsDeclaredReason);
         if (result.status === "delivered" && !deliveredSmsId) deliveredSmsId = result.item.smsId;
+        if (result.status === "delivered") {
+          smsDeliveredAfterReply = [
+            ...smsDeliveredAfterReply,
+            { smsId: result.item.smsId, userTurnsAtArrival: userTurnsNow },
+          ];
+        }
       } catch {
         // P-4 — 문자 도착 실패가 대화를 막지 않는다(응답은 이미 저장됐다).
+        // T192 C3 — 도착 여부를 모르는 턴은 끊기 쪽에서 문자 대기로 본다(fail-closed · 그 턴만 끊기 0).
+        smsMarkerDeliveryFailed = true;
       }
     }
 
-    // ④ 한도 체크 → 도달 시 ended:true + status=ended(→onSessionEnded 트리거, AC-007).
-    // turnCount 증가와 answeredAt 기록은 위 트랜잭션(#8)에서 이미 원자적으로 끝났으므로, 여기서는
-    // 트랜잭션이 확정한 값을 그대로 쓴다. 경과시간 기점은 answeredAt(통화 시작 = 첫 사용자 발화)
-    // 이다(#6) — 수신 화면에 머문 시간이 대화 예산을 깎지 않으며, UI 통화 타이머와도 정합.
-    const turnCount = claim.turnCount;
-    const elapsedMs = userWriteTime.toMillis() - claim.answeredAt.toMillis();
-    const limitReached = isSessionLimitReached({
-      turnCount,
-      maxUserTurns: claim.maxUserTurns,
-      elapsedMs,
-      maxSessionMs: claim.maxSessionMs,
+    // ③-e 사기범 끊기 **사후 판정**(T192 C3 · §79.19 (5) 10 · 11) — 마커 발송 뒤 · 재확인 트랜잭션 앞. Mock 강등 턴(3행) ·
+    // 같은 응답의 문자 마커 도착(6행 — 문자가 이긴다, OQ-A140)이 여기서 걸린다. 신호는 SIGNAL 턴 + 사후 승인일 때만 효과가 있다.
+    const hangupPost = decideFallbackHangup(
+      smsMarkerDeliveryFailed ? { ...hangupFacts, smsDeliveredLoaded: false } : hangupFacts,
+      smsDeliveredAfterReply,
+      completion.isMock,
+    );
+    const hangupEffect = resolveFallbackHangupEffect({
+      endCall: endCallSignal,
+      hangupMode,
+      pre: hangupPre,
+      post: hangupPost,
     });
+    if (!hangupEffect.end && hangupEffect.ignored) {
+      // G170 — 단계명 · 행 · status만(대사 0).
+      logger.info("끊기 신호 무시", { sessionId, row: hangupEffect.ignored.row, status: hangupEffect.ignored.status });
+    }
+
+    // ④ 한도 도달 → ended:true + status=ended(→onSessionEnded 트리거, AC-007). 값(`limitReached`)은 위 ④ 한도 계산
+    // (LLM 전 · T192 C3)이 이미 정했다.
 
     // #9 종료 레이스 방지(T31 reviewer Major #1, 2026-07-24): 사용자 메시지 확보(#8) 이후 LLM 호출은
     // 트랜잭션 밖에서 시간이 걸리므로, 그 사이 endSession(예: 사용자의 "훈련 종료" 중복 탭)이 먼저
@@ -572,6 +641,16 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         update.endReason = "limit_reached";
         update.endedAt = Timestamp.now();
       }
+      // T192 C3(§79.19 (5) 10) — 끊기 승인 = 같은 트랜잭션에서 종료 + 승인 표식(서버측 근거 · 리포트는 읽지 않는다 — G511).
+      // 한도가 이긴다(7행 — `!limitReached`). 이미 끝난 세션은 건드리지 않는다(`stillActive`).
+      const hangupEnded = hangupEffect.end && stillActive && !limitReached;
+      if (hangupEffect.end && hangupEnded) {
+        const endedAt = Timestamp.now();
+        update.status = "ended";
+        update.endReason = "scammer_ended";
+        update.endedAt = endedAt;
+        update.scammerHangup = { acceptedAt: endedAt, kind: hangupEffect.kind, path: "fallback" };
+      }
       // 2026-07-24 수정(실 Gemini 연동으로 처음 드러난 잠재 버그) — update가 llmProvider 태그도
       // 종료 필드도 없이 완전히 빈 객체({})가 되는 경우(=isMock:false·limitReached 아님·이미
       // 종료된 세션 아님, 즉 실 LLM으로 정상 진행 중인 통상적인 턴)가 그동안은 존재하지 않았다
@@ -581,7 +660,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       if (Object.keys(update).length > 0) {
         tx.update(sessionRef, update);
       }
-      return { stillActive };
+      return { stillActive, hangupEnded };
     });
 
     // T8 배선: 한도 도달로 이 턴이 세션을 자동 종료시켰다면(status=ended, endReason=limit_reached),
@@ -592,7 +671,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 내부에서 에러를 흡수, functions/src/report/index.ts 참고). stillActive가 false면 위에서 이미
     // 종료 필드를 반영하지 않았으므로(=이 턴이 종료를 일으키지 않았으므로) 트리거하지 않는다 —
     // 그 세션은 이미 다른 경로(endSession)로 리포트가 트리거됐다.
-    if (limitReached && finalize.stillActive) {
+    // T192 C3 — 끊기로 이 턴이 세션을 끝냈어도 같은 트리거 지점을 거친다(조건만 확장 · §79.7 5).
+    if ((limitReached || finalize.hangupEnded) && finalize.stillActive) {
       await triggerReportGeneration(sessionId);
     }
 
@@ -651,8 +731,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     return {
       reply,
       turnCount,
-      ended: limitReached,
-      ...(limitReached ? { endReason: "limit_reached" as const } : {}),
+      ended: limitReached || finalize.hangupEnded,
+      ...(limitReached
+        ? { endReason: "limit_reached" as const }
+        : finalize.hangupEnded
+          ? { endReason: "scammer_ended" as const }
+          : {}),
       isMock: completion.isMock,
       ...(audioUrl ? { audioUrl } : {}),
       ...(escalationTrigger ? { escalation: { toChannel: "voice" as const } } : {}),

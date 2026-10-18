@@ -22,6 +22,8 @@
 //   서명 URL만 발급한다. 클라가 보내는 오버라이드는 민감하지 않은 voice_id(본인 클론 id)뿐이다.
 
 import type { DifficultyLevel } from "../shared/difficulty";
+import type { MessengerChannel } from "../shared/types";
+import type { HangupRelayContext } from "../scammerHangup/decide";
 import type { LiveToolNames } from "./liveTools";
 
 export type RealtimeCallInput = {
@@ -49,6 +51,17 @@ export type RealtimeCallInput = {
    * 부재 = 원본 시나리오 프롬프트.
    */
   flowVariantId?: string;
+  /**
+   * T192 C3(Architecture.md §79.19 (5) 8) — 세션 채널(`session.channel` 그대로 · 부재 = voice). `end_call` 선언 술어
+   * `declaresEndCall`의 입력이다. ⭐ 옵셔널이 아니라 **필수 키**(빠뜨리면 컴파일 오류). ElevenLabs · Mock 프로바이더는
+   * 받기만 하고 무시한다(`flowVariantId`와 같은 처리).
+   */
+  channel: MessengerChannel | undefined;
+  /**
+   * T192 C3(§79.19 (5) 8 · G527) — **이미 해석된** 릴레이 위치(`resolveHangupRelay(session)`의 값 — 호출부가 1회 해석).
+   * 프로바이더 안에서 다시 해석하지 않는다. 오늘 항상 `undefined`(S7 전). 필수 키.
+   */
+  hangupRelay: HangupRelayContext | undefined;
 };
 
 /**
@@ -93,6 +106,8 @@ export type RealtimeCallCredentials = {
    * `createRealtimeCall` 증분). Gemini 프로바이더가 도구를 하나라도 선언할 때만 존재한다
    * (`realtime/liveTools.ts`의 `buildLiveToolNames`와 같은 판정). elevenlabs/none이거나 도구가
    * 하나도 선언되지 않으면 필드 자체가 없다.
+   * ⚠️ T192 C3 — `end_call`이 메신저 · 중간 leg가 아닌 모든 Gemini 통화 세션에 선언되므로, 문자 · 확인 도구가 없는
+   * 세션에도 이제 이 필드가 있다(`endCall` ⇔ `endCallFailureInstruction` 쌍). "도구 0 = 필드 없음"은 메신저 · 중간 leg뿐이다.
    */
   liveTools?: LiveToolNames;
 };

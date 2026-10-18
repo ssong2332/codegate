@@ -87,7 +87,8 @@ export type SendMessageResponse = {
   reply: ScammerMessage;
   turnCount: number;
   ended: boolean;
-  endReason?: "limit_reached";
+  // T192 C3(Architecture.md §79.5 · §79.19 (6) ⑧) — functions/src/roleplay/types.ts와 1:1.
+  endReason?: "limit_reached" | "scammer_ended";
   isMock: boolean;
   // 실시간 음성 통화 전환(2026-07-22 사용자 결정) — 사기범 응답 합성 오디오(서버가 이미 반환 중,
   // functions/src/roleplay/types.ts와 1:1).
@@ -314,13 +315,9 @@ export type SubmitRealtimeTranscriptRequest = {
 export type SubmitRealtimeTranscriptResponse = { written: number };
 
 // --- endSession (Track B · T8 · UX-007 · AC-006/AC-007/AC-021) ---
-export type EndSessionReason =
-  | "user_ended"
-  | "completed"
-  | "deceived"
-  | "limit_reached"
-  // T192 C1(Architecture.md §79.5) — 서버 승인 표식이 없으면 서버가 `user_ended`로 기록한다.
-  | "scammer_ended";
+// T192 C4(Architecture.md §79.19 (6) ④ · G557) — 서버 허용목록 `END_SESSION_ALLOWED_REASONS`와 같은 3값(옛 `completed` ·
+// `deceived`는 사용처 0 · 서버가 거절). `scammer_ended`는 서버 승인 표식이 없으면 서버가 `user_ended`로 기록한다.
+export type EndSessionReason = "user_ended" | "limit_reached" | "scammer_ended";
 export type EndSessionRequest = {
   sessionId: string;
   endReason: EndSessionReason;
@@ -343,7 +340,8 @@ export type ScammerHangupStatus =
   | "accepted";
 export type RequestScammerHangupRequest = {
   sessionId: string;
-  scammerTurns: number;
+  // T192 C3(§79.19 (2) 8) — 사용자 발화 수(S5b `send_prepared_sms`와 같은 클라 식 — 호출부 배선은 C5).
+  userTurns: number;
   pendingInstruction: boolean;
   kind?: string;
 };

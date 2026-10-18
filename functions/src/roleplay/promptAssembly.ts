@@ -139,8 +139,15 @@ function buildOffScreenRuleWithSms(toolDrivenTiming: boolean): string {
 // ("세션은 짧게 마무리되도록 진행한다" — 대화를 마무리시키라는 상시 지시), 그 문구를 지우기만 하면
 // 규칙이 없는 상태가 될 뿐이라 **여기 [진행 강제]에 무조건형 규칙을 신설**하고 14벌의 문구를 그
 // 규칙과 모순되지 않게 정정한다(한 커밋 — §30 G128과 같은 이유: 같은 프롬프트 안에 모순 2문장을
-// 남기지 않는다). ⛔ **이 규칙은 모델의 발화만 다룬다** — 세션 종료는 여전히 참가자의
-// `stopSignal`/`endSession`이 한다(AC-006 종료 경로 무접촉).
+// 남기지 않는다). ⛔ **(§50.7 시점 — T192 C2까지 참) 이 규칙은 모델의 발화만 다룬다** — 세션 종료는
+// 참가자의 `stopSignal`/`endSession`이 한다(AC-006 종료 경로 무접촉).
+// ⏳ T192 C2(2026-10-19 · Architecture.md §79.6 · DECISIONS #139 — "실제로 끊을 때만 작별 허용"이 #85 ⑪을
+// 좁혔다): 이 줄은 슬롯 `{{HANGUP_RULE}}`이 됐고, 위 무조건형 문면은 그 **NONE 변형**(`HANGUP_RULE_NONE`
+// — 바이트 동일 · G505)으로 존속한다. ⚠️ 위 *"종료 경로 무접촉"* 은 **C3 병합 전까지만 참**이다 — C3부터
+// 폴백 서버가 SIGNAL 턴의 끊기 신호로 세션을 `scammer_ended`로 끝낸다(§79.19 (1) · (5) 10). G309는
+// §79.6 (3)에서 재지정됐고(*"상시 종료는 끊기 연출 중에도 도달 · 끊기 경로가 그 대기를 늘리지 않는다"*),
+// 그 단언은 문서상 G509(`src/lib/session/callEnding.test.ts` — C5)다 — 코드 단언은 이 커밋 시점 0건
+// (`functions/src` · `src` grep "G309" = 이 주석뿐).
 //
 // 라이브 신고(2026-10-17, institutional-impersonation·중급·텍스트 폴백) — 모델이 "계좌번호는
 // '농협은행 352-0812-…'"처럼 **실존 은행명**을 붙여 불렀다. 아래 "페이로드는 가상값만" 줄의 "OO"을
@@ -158,7 +165,7 @@ const SCENARIO_PROGRESSION_TEMPLATE = `[진행 강제 — 반드시 지킨다]
 - **상대가 응하면 실제로 진행시킨다.** 참가자가 요구에 따르면 "확인됐다"며 멈추지 말고, 다음 단계 요구로 이어가 상황이 어디까지 굴러가는지 겪게 한다(추가 이체, 추가 정보, 비밀 유지 요구 등).
 {{IDENTITY_CHECK_HANDLING}}
 {{OFF_SCREEN_RULE}}
-- **통화를 끝내는 것은 상대다 — 너는 끝내지 않는다.** "그럼 통화 종료하겠습니다", "끊겠습니다", "여기까지 하겠습니다"처럼 네가 통화를 마치겠다는 말을 어떤 표현으로도 하지 않는다. 상대가 침묵하거나 대화가 소강 상태가 되어도 네 쪽에서 마무리 인사를 하지 않고, 상황에 맞는 말로 대화를 이어 둔다. 상대가 스스로 끊는 것은 상대의 몫이다.
+{{HANGUP_RULE}}
 - **페이로드는 가상값만 쓴다.** 계좌번호·앱 이름·링크·연락처를 요구하거나 불러 줄 때는 **실존하지 않는 기관명**을 쓰되(예: "OO은행", "국민안전지원센터"), 숫자는 실제처럼 들리는 형식으로 또박또박 부른다(예: "OO은행 948-2716-5093-27"). **은행 이름은 "OO은행"이라고 그대로 말한다** — 이 훈련에서 쓰는 가상 은행의 이름이며, 실제 은행 이름을 채워 넣을 빈칸이 아니다. 계좌·카드를 말할 때 실제로 있는 은행·카드사 이름은 어떤 경우에도 쓰지 않는다. 실존하지 않는 곳의 번호라 어디로도 연결되지 않지만, 참가자에게는 진짜 계좌를 불러주는 것과 똑같이 들려 몰입이 깨지지 않는다. **요구하는 행위 자체는 그대로 하되**, 실존 기관의 실제 계좌·실제 동작하는 앱/링크·실제 연락처만 쓰지 않는다 — 참가자가 겪는 판단 상황은 동일하다.`;
 
 // §50.4.4 (3) — identityCheckAllowed로 갈리는 "본인확인을 그냥 통과시키지 않는다" 항목. TRUE는
@@ -174,6 +181,45 @@ const IDENTITY_CHECK_HANDLING_TRUE = `- **본인확인을 그냥 통과시키지
 
 const IDENTITY_CHECK_HANDLING_FALSE = `- **상대가 응한 것을 그냥 통과시키지 않는다.** 상대가 무언가를 답하거나 넘겼으면 곧바로 "확인됐습니다"로 넘기지 말고, 한 번 더 되짚는다 — 받은 답을 되짚어 확인하거나, 요구를 하나 더 얹는다. **상대의 이름을 네가 먼저 말하거나 단정하지 않는다** — 너는 상대가 누구인지 이름으로 알지 못한다.`;
 
+// ── T192 C2 — [진행 강제]의 끊기 규칙 슬롯 `{{HANGUP_RULE}}`(Architecture.md §79.6 (1) · DECISIONS #139) ──
+//
+// 변형은 경로가 정한다 — ⛔ 이 파일은 시나리오 카탈로그·선언 술어를 읽지 않는다(§17.3). 값은 호출부가 넘긴다.
+//   | 변형 | 실리는 곳(§79.6 표) |
+//   |---|---|
+//   | NONE | 오프닝 · consentChallenge · 메신저 · 폴백 비허용 턴 · `end_call` 미선언 세션 · ElevenLabs 조립 |
+//   | TOOL | Gemini Live 토큰 프롬프트(`declaresEndCall`이 참일 때만 — C3가 켠다) |
+//   | SIGNAL | 폴백 `sendMessage`의 허용 턴(LLM 호출 전 판정 통과 — C3가 켠다) |
+// ⚠️ C2 시점에는 **어느 호출부도 `hangupMode`를 넘기지 않는다** — 부재 = NONE = 종전 문면 바이트 동일(동작 변화 0).
+// ⛔ 한 프롬프트에 변형 2개 공존 0(G128 · G505) — 슬롯이 1개라 구조상 1개만 들어간다.
+// ⛔ 세 변형 모두 횟수 · 턴 번호 0(G130). TOOL · SIGNAL의 *"첫째"·"둘째"* 는 끊어도 되는 **두 경우의 열거**다
+// (횟수 조건이 아니다 — 정본 문면 그대로 · `promptAssembly.test.ts` [T192/C2 G505]가 열거 2건만 허용한다).
+
+/** NONE — §50.7.2 (1) 확정 문면 그대로(⛔ 바이트 동일 · G505 — 한 글자도 고치지 않는다). */
+export const HANGUP_RULE_NONE = `- **통화를 끝내는 것은 상대다 — 너는 끝내지 않는다.** "그럼 통화 종료하겠습니다", "끊겠습니다", "여기까지 하겠습니다"처럼 네가 통화를 마치겠다는 말을 어떤 표현으로도 하지 않는다. 상대가 침묵하거나 대화가 소강 상태가 되어도 네 쪽에서 마무리 인사를 하지 않고, 상황에 맞는 말로 대화를 이어 둔다. 상대가 스스로 끊는 것은 상대의 몫이다.`;
+
+/** TOOL · SIGNAL 공통 머리(원칙 + 두 경우 + 제외 문장) — §79.19 (7) C2-3: SIGNAL의 괄호는 이 문장들을 그대로 펼친다. */
+const HANGUP_RULE_CASES = `- **통화는 상대가 끝내는 것이 원칙이다 — 네가 먼저 끊는 것은 아래 두 경우뿐이다.** 첫째, 네가 원하던 것을 얻었다: 상대가 문자로 온 이체 화면에서 이체를 마쳤거나, 네가 요구한 정보(인증번호·계좌번호·카드번호 등)를 불러 주었다. 둘째, 상대가 거절이나 의심을 되풀이해 더는 진행할 수 없다. 상대가 침묵하거나 대화가 소강 상태이거나 시간이 오래 걸린다는 이유로는 끊지 않는다.`;
+
+/** TOOL — §79.6 ① 정본. */
+export const HANGUP_RULE_TOOL = `${HANGUP_RULE_CASES} **끊기로 했으면 작별 인사를 하기 전에 먼저 \`end_call\` 도구를 부르고, 결과가 허락한 뒤에만** 짧은 마무리 한마디를 하고 더 말하지 않는다. 결과가 허락하지 않으면 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어간다. 도구를 부르지 않은 응답에서는 "그럼 통화 종료하겠습니다", "끊겠습니다", "여기까지 하겠습니다"처럼 네가 통화를 마치겠다는 말을 어떤 표현으로도 하지 않는다.`;
+
+/** TOOL + 확인 무력화 세션(`verifyInterceptEnabled`)일 때 TOOL 끝에 붙는 1문장 — §79.6 ①. SIGNAL에는 붙이지 않는다(§79.6 ② 아래 근거). */
+export const HANGUP_RULE_TOOL_VERIFY_SUFFIX = `확인 부서로 통화를 넘기기 전에는 어떤 경우에도 끊지 않는다.`;
+
+/** SIGNAL — §79.6 ② 정본. */
+export const HANGUP_RULE_SIGNAL = `${HANGUP_RULE_CASES} **이번 응답에서 끊기로 했다면** 짧은 마무리 한마디만 하고, 응답 맨 끝에 첫째 경우면 [[SIGNAL:END_CALL_GOAL]], 둘째 경우면 [[SIGNAL:END_CALL_GIVEUP]]을 붙인다. 끊지 않는 응답에는 마무리 말도 신호도 넣지 않는다. 신호 없이 "그럼 통화 종료하겠습니다", "끊겠습니다", "여기까지 하겠습니다"처럼 네가 통화를 마치겠다는 말을 어떤 표현으로도 하지 않는다.`;
+
+export type HangupMode = "none" | "tool" | "signal";
+
+/** 슬롯 값 — 알 수 없는 값·부재는 NONE(fail-closed: 끊기 허용 문면이 실수로 실리지 않는다). */
+function buildHangupRule(hangupMode: HangupMode, verifyInterceptEnabled: boolean): string {
+  if (hangupMode === "tool") {
+    return verifyInterceptEnabled ? `${HANGUP_RULE_TOOL} ${HANGUP_RULE_TOOL_VERIFY_SUFFIX}` : HANGUP_RULE_TOOL;
+  }
+  if (hangupMode === "signal") return HANGUP_RULE_SIGNAL;
+  return HANGUP_RULE_NONE;
+}
+
 /**
  * 조건형 [진행 강제] 블록 조립 — 문자 카탈로그 유무에 따라 "화면에 없는 것" 항목을, 페르소나
  * 권한(identityCheckAllowed, §50.4.4)에 따라 "본인확인을 그냥 통과시키지 않는다" 항목과(카탈로그가
@@ -182,11 +228,16 @@ const IDENTITY_CHECK_HANDLING_FALSE = `- **상대가 응한 것을 그냥 통과
  * ⚠️ 카탈로그가 있으면(inCallSmsEnabled) "화면에 없는 것" 항목은 identityCheckAllowed와 무관하게
  * `OFF_SCREEN_RULE_WITH_SMS`로 고정된다 — 문자로 도착한 것을 요구해도 된다는 규칙은 페르소나
  * 권한과 별개다(§50.6.2 부작용 1).
+ *
+ * T192 C2 — `hangupMode`·`verifyInterceptEnabled`로 끊기 규칙 슬롯을 채운다(⛔ 필수 인자 — 빠뜨리면
+ * 컴파일 오류. 기본값 NONE은 `buildSystemPrompt`가 옵션 부재를 해석해 정한다).
  */
 function buildScenarioProgression(
   inCallSmsEnabled: boolean,
   identityCheckAllowed: boolean,
   toolDrivenTiming: boolean,
+  hangupMode: HangupMode,
+  verifyInterceptEnabled: boolean,
 ): string {
   return SCENARIO_PROGRESSION_TEMPLATE.replace(
     "{{IDENTITY_CHECK_HANDLING}}",
@@ -198,7 +249,7 @@ function buildScenarioProgression(
       : identityCheckAllowed
         ? OFF_SCREEN_RULE_DEFAULT_TRUE
         : OFF_SCREEN_RULE_DEFAULT_FALSE,
-  );
+  ).replace("{{HANGUP_RULE}}", buildHangupRule(hangupMode, verifyInterceptEnabled));
 }
 
 // 확인 시도 무력화 동기화 블록(T83, Architecture.md §16.1.4 — §15.1.4/G1 교정과 **같은 방식**).
@@ -661,6 +712,13 @@ export type BuildSystemPromptOptions = {
    * 직접 읽지 않는다(§17.3).
    */
   offerToolDeclared?: boolean;
+  /**
+   * ⭐ T192 C2(Architecture.md §79.6 (1)) — [진행 강제]의 끊기 규칙 변형. 부재(기본) = `"none"` =
+   * 종전 무조건형 문면 바이트 동일(`HANGUP_RULE_NONE` · G505). `"tool"`은 `end_call`을 선언한 Gemini Live
+   * 세션에만, `"signal"`은 폴백의 허용 턴에만 넘긴다 — ⛔ C2 시점에는 어느 호출부도 넘기지 않는다(켜는 것은 C3).
+   * `"tool"` + `verifyInterceptEnabled`면 확인 무력화 1문장이 TOOL 끝에 붙는다.
+   */
+  hangupMode?: HangupMode;
 };
 
 /**
@@ -719,6 +777,9 @@ export function buildSystemPrompt(
       opts.inCallSmsEnabled === true,
       identityCheckAllowed,
       opts.toolDrivenTiming === true,
+      // T192 C2 — 부재 = NONE(종전 문면 · 동작 변화 0).
+      opts.hangupMode ?? "none",
+      opts.verifyInterceptEnabled === true,
     ),
     "",
     // 아래 세 블록은 "있을 때만" 삽입된다 — intermediate(=블록 없음)·확인 무력화 미적용·턴 지시

@@ -2,10 +2,25 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GeminiRealtimeProvider, GEMINI_LIVE_MODEL, pickGeminiVoiceName } from "../geminiProvider";
 import { SCENARIO_PROMPTS } from "../../scenarios";
-import { buildSystemPrompt, LANGUAGE_RULE } from "../../roleplay/promptAssembly";
+import {
+  buildSystemPrompt,
+  HANGUP_RULE_NONE,
+  HANGUP_RULE_TOOL,
+  HANGUP_RULE_TOOL_VERIFY_SUFFIX,
+  LANGUAGE_RULE,
+} from "../../roleplay/promptAssembly";
 import { isL3Procedural } from "../../roleplay/l3Depth";
-import { verifySeriesFor, declaresOfferVerificationDesk } from "../liveTools";
+import { verifySeriesFor, declaresOfferVerificationDesk, END_CALL_LIVE_AVAILABLE } from "../liveTools";
 import { resolveSessionAccountNumber } from "../../shared/fictionalBank";
+import { SCAMMER_HANGUP_FAILURE_INSTRUCTION } from "../../scammerHangup/guidance";
+
+// T192 C3(§79.19 (5) 8) — `RealtimeCallInput`의 필수 키 2개. 기본 = 음성 통화 · 릴레이 없음(= `end_call` 선언).
+// 메신저 범위는 `end_call` 거짓 입력이다 — S5b 판정과 바이트 동일해야 하는 회귀 단언에 쓴다(G556).
+const VOICE_SCOPE = { channel: undefined, hangupRelay: undefined } as const;
+const MESSENGER_SCOPE = { channel: "messenger", hangupRelay: undefined } as const;
+// ⚠️ PR A 리뷰 M1 — 이 파일의 기존 단언은 **켬 입력**(생성자 두 번째 인자 `true`)으로 돈다. 운영값(기본 생성자 = 끔)은
+// 파일 끝 [M1 운영값] 테스트가 따로 고정한다.
+const ENDCALL_ON = true;
 
 /**
  * 토큰 발급 호출을 가로채기 위해 provider 내부의 GoogleGenAI 인스턴스를 대신할 수 없으므로,
@@ -43,8 +58,8 @@ function captureTokenRequest(): {
 test("GeminiRealtimeProvider: 시스템 프롬프트를 토큰에 고정해 발급한다(클라로 내려보내지 않음, ADR-0004)", async () => {
   const capture = captureTokenRequest();
   try {
-    const provider = new GeminiRealtimeProvider("test-key");
-    const creds = await provider.createCallCredentials({
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    const creds = await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "tax-refund-scam",
       voiceId: "ignored-for-gemini",
@@ -81,6 +96,8 @@ test("GeminiRealtimeProvider: 시스템 프롬프트를 토큰에 고정해 발�
         identityCheckAllowed: true,
         speakerGender: "female",
         toolDrivenTiming: true,
+        // T192 C3 — 음성 통화 토큰은 `end_call`을 선언하므로 TOOL 변형(§79.6 ①).
+        hangupMode: "tool",
       }),
       "토큰 발급 시 systemInstruction이 서버에서 고정되어야 한다",
     );
@@ -103,8 +120,8 @@ test("GeminiRealtimeProvider: 시스템 프롬프트를 토큰에 고정해 발�
 test("GeminiRealtimeProvider: 도구는 서버가 조건에 따라 선언한 이름만 토큰에 잠근다(클라의 setup 프레임 주입 차단, §59.9 R1 대체)", async () => {
   const capture = captureTokenRequest();
   try {
-    const provider = new GeminiRealtimeProvider("test-key");
-    await provider.createCallCredentials({
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "loan-refinance-scam",
       voiceId: "",
@@ -124,9 +141,10 @@ test("GeminiRealtimeProvider: 도구는 서버가 조건에 따라 선언한 이
     // §61(OQ-A73 User 확정) — loan-refinance-scam(계열 B)도 확인 무력화 카탈로그를 가지므로
     // advanced에서 offer_verification_desk가 함께 선언된다. 순서는 send_prepared_sms → offer 다
     // (liveTools.ts의 push 순서, deepEqual이라 순서까지 맞춰야 한다).
+    // T192 C3(§79.19 (5) 3) — `end_call`은 기존 두 선언 **뒤에** 붙는다.
     assert.deepEqual(
       names,
-      ["send_prepared_sms", "offer_verification_desk"],
+      ["send_prepared_sms", "offer_verification_desk", "end_call"],
       "loan-refinance-scam(계열 B) advanced에 선언된 이름 집합",
     );
   } finally {
@@ -134,11 +152,13 @@ test("GeminiRealtimeProvider: 도구는 서버가 조건에 따라 선언한 이
   }
 });
 
-test("GeminiRealtimeProvider: 카탈로그·게이트 둘 다 없는 시나리오는 오늘과 동일하게 tools가 빈 배열이다(회귀 0)", async () => {
+// ⚠️ T192 C3(§79.3 ⚠️ · G556) — 옛 제목 "오늘과 동일하게 tools가 빈 배열"은 **음성 통화에서 거짓이 됐다**(`end_call`).
+// 빈 배열 단언은 `end_call` 거짓 입력(메신저)으로 옮겨 S5b 판정과의 바이트 동일을 그대로 지키고, 음성은 `end_call` 1개를 본다.
+test("GeminiRealtimeProvider: 카탈로그·게이트 둘 다 없는 시나리오 — 메신저 범위는 tools 빈 배열(S5b 그대로) · 음성은 end_call 1개(T192 C3)", async () => {
   const capture = captureTokenRequest();
   try {
-    const provider = new GeminiRealtimeProvider("test-key");
-    await provider.createCallCredentials({
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    await provider.createCallCredentials({ ...MESSENGER_SCOPE,
       sessionId: "sess",
       scenarioId: "kidnapping-threat",
       voiceId: "",
@@ -147,7 +167,18 @@ test("GeminiRealtimeProvider: 카탈로그·게이트 둘 다 없는 시나리�
     const setup = (capture.bodies()[0] as {
       bidiGenerateContentSetup?: { tools?: unknown[] };
     }).bidiGenerateContentSetup;
-    assert.deepEqual(setup?.tools, [], "카탈로그·게이트가 없는 세션은 tools가 빈 배열이어야 한다(G388)");
+    assert.deepEqual(setup?.tools, [], "end_call 거짓 입력 + 카탈로그·게이트 없음 = tools 빈 배열(G388 · G556)");
+    await provider.createCallCredentials({ ...VOICE_SCOPE,
+      sessionId: "sess",
+      scenarioId: "kidnapping-threat",
+      voiceId: "",
+      difficultyLevel: "advanced",
+    });
+    const voiceSetup = (capture.bodies()[1] as {
+      bidiGenerateContentSetup?: { tools?: { functionDeclarations?: { name?: string }[] }[] };
+    }).bidiGenerateContentSetup;
+    const voiceNames = (voiceSetup?.tools ?? []).flatMap((t) => t.functionDeclarations ?? []).map((d) => d.name);
+    assert.deepEqual(voiceNames, ["end_call"], "음성 통화는 문자 · 확인 도구가 없어도 end_call만 선언된다(§79.3)");
   } finally {
     capture.restore();
   }
@@ -156,8 +187,8 @@ test("GeminiRealtimeProvider: 카탈로그·게이트 둘 다 없는 시나리�
 test("GeminiRealtimeProvider: 고정 프리셋 음성이라 클론 voiceId를 되돌려주지 않는다(거짓 표기 방지)", async () => {
   const capture = captureTokenRequest();
   try {
-    const provider = new GeminiRealtimeProvider("test-key");
-    const creds = await provider.createCallCredentials({
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    const creds = await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "institutional-impersonation",
       voiceId: "user-cloned-voice-id",
@@ -173,8 +204,8 @@ test("GeminiRealtimeProvider: 고정 프리셋 음성이라 클론 voiceId를 �
 test("GeminiRealtimeProvider: 응답 지연 튜닝 — 발화 종료 침묵 대기(silenceDurationMs)를 400ms로 토큰에 고정한다(2026-07-24 재조정)", async () => {
   const capture = captureTokenRequest();
   try {
-    const provider = new GeminiRealtimeProvider("test-key");
-    await provider.createCallCredentials({
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "tax-refund-scam",
       voiceId: "",
@@ -203,8 +234,8 @@ test("GeminiRealtimeProvider: 응답 지연 튜닝 — 발화 종료 침묵 대�
 test("GeminiRealtimeProvider: 신고 ④ 대응 — 발화 시작 민감도(startOfSpeechSensitivity)를 LOW로, prefixPaddingMs를 300ms로 토큰에 고정한다(§50.8.5)", async () => {
   const capture = captureTokenRequest();
   try {
-    const provider = new GeminiRealtimeProvider("test-key");
-    await provider.createCallCredentials({
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "tax-refund-scam",
       voiceId: "",
@@ -240,13 +271,13 @@ test("GeminiRealtimeProvider: 신고 ④ 대응 — 발화 시작 민감도(star
 test("GeminiRealtimeProvider: 성별 다양화 — 시나리오별로 다른 프리셋 음성이 토큰에 실릴 수 있다(2026-07-25, §50.3.3 갱신)", async () => {
   const capture = captureTokenRequest();
   try {
-    const provider = new GeminiRealtimeProvider("test-key");
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
     // female 배정(tax-refund-scam)과 male 배정(kidnapping-threat)을 같은 sessionId로 태워도
     // 다른 음성이 나오는지 확인한다 — "앱 전체가 고정 단일 음성으로 되돌아가는 회귀"를 이제
     // 시나리오 축으로 잡는다.
     const seenVoices = new Set<string>();
     for (const scenarioId of ["tax-refund-scam", "kidnapping-threat"]) {
-      await provider.createCallCredentials({ sessionId: "sess-fixed", scenarioId, voiceId: "" });
+      await provider.createCallCredentials({ ...VOICE_SCOPE, sessionId: "sess-fixed", scenarioId, voiceId: "" });
       const bodies = capture.bodies();
       const setup = (bodies[bodies.length - 1] as {
         bidiGenerateContentSetup?: {
@@ -278,7 +309,7 @@ test("[T85/G63] 통화 토큰 경로도 고급에서 D4(절차 정당화) 블록
   const capture = captureTokenRequest();
   const D4_BLOCK_HEADER = "[난이도 — 고급(심화): 절차로 정당화한다]";
   try {
-    const provider = new GeminiRealtimeProvider("test-key");
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
     const readLastPrompt = (): string => {
       const bodies = capture.bodies();
       const setup = (bodies[bodies.length - 1] as {
@@ -288,7 +319,7 @@ test("[T85/G63] 통화 토큰 경로도 고급에서 D4(절차 정당화) 블록
     };
 
     // procedural(d3_and_d4) — 기관·금융 사칭 계열
-    await provider.createCallCredentials({
+    await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "loan-refinance-scam",
       voiceId: "",
@@ -300,7 +331,7 @@ test("[T85/G63] 통화 토큰 경로도 고급에서 D4(절차 정당화) 블록
     );
 
     // reduced — 가족 사칭(접수번호를 부르면 페르소나가 무너진다)
-    await provider.createCallCredentials({
+    await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "family-accident-deepvoice",
       voiceId: "",
@@ -309,7 +340,7 @@ test("[T85/G63] 통화 토큰 경로도 고급에서 D4(절차 정당화) 블록
     assert.equal(readLastPrompt().includes(D4_BLOCK_HEADER), false);
 
     // 초급 — L3는 고급 전용이다(상한 규칙).
-    await provider.createCallCredentials({
+    await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "loan-refinance-scam",
       voiceId: "",
@@ -369,8 +400,8 @@ test("[P-5] pickGeminiVoiceName: notApplicable 시나리오는 sessionId 100개�
 test("GeminiRealtimeProvider: 도구가 선언되면 credentials.liveTools에 이름이 실린다(§59.6 ②, G385)", async () => {
   const capture = captureTokenRequest();
   try {
-    const provider = new GeminiRealtimeProvider("test-key");
-    const creds = await provider.createCallCredentials({
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    const creds = await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "bank-security-verify-scam",
       voiceId: "",
@@ -382,6 +413,9 @@ test("GeminiRealtimeProvider: 도구가 선언되면 credentials.liveTools에 �
       // §59.6 갱신 2(G394) — offerVerificationDesk와 1:1로 붙는 클레임 실패 조기 응답용 문자열.
       verifyAlreadyAnnouncedInstruction:
         "(그 안내는 이미 전달했다. 새로 안내하지 말고, 연결해 드리겠다는 말도 다시 하지 말고, 지금 하던 이야기를 그대로 이어가라.)",
+      // T192 C3(§79.19 (5) 6) — `endCall` ⇔ `endCallFailureInstruction` 쌍.
+      endCall: "end_call",
+      endCallFailureInstruction: SCAMMER_HANGUP_FAILURE_INSTRUCTION,
       failureInstruction: "(지금은 문자를 보낼 수 없다. 문자를 보냈다고 말하지 말고 하던 이야기를 그대로 이어가라.)",
     });
   } finally {
@@ -389,17 +423,29 @@ test("GeminiRealtimeProvider: 도구가 선언되면 credentials.liveTools에 �
   }
 });
 
-test("GeminiRealtimeProvider: 도구가 하나도 선언되지 않으면 credentials.liveTools 필드 자체가 없다(회귀 0)", async () => {
+// ⚠️ T192 C3 — "도구 0 = liveTools 없음"은 이제 `end_call` 거짓 입력(메신저 · 중간 leg)에서만 성립한다.
+test("GeminiRealtimeProvider: 도구가 하나도 선언되지 않으면 credentials.liveTools 필드 자체가 없다(메신저 범위) · 음성은 endCall 쌍만 실린다", async () => {
   const capture = captureTokenRequest();
   try {
-    const provider = new GeminiRealtimeProvider("test-key");
-    const creds = await provider.createCallCredentials({
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    const creds = await provider.createCallCredentials({ ...MESSENGER_SCOPE,
       sessionId: "sess",
       scenarioId: "kidnapping-threat",
       voiceId: "",
       difficultyLevel: "advanced",
     });
     assert.equal("liveTools" in creds, false, "도구 미선언 세션은 liveTools 필드가 없어야 한다");
+    const voice = await provider.createCallCredentials({ ...VOICE_SCOPE,
+      sessionId: "sess",
+      scenarioId: "kidnapping-threat",
+      voiceId: "",
+      difficultyLevel: "advanced",
+    });
+    assert.deepEqual(voice.liveTools, {
+      endCall: "end_call",
+      endCallFailureInstruction: SCAMMER_HANGUP_FAILURE_INSTRUCTION,
+      failureInstruction: "(지금은 문자를 보낼 수 없다. 문자를 보냈다고 말하지 말고 하던 이야기를 그대로 이어가라.)",
+    });
   } finally {
     capture.restore();
   }
@@ -410,8 +456,8 @@ test("GeminiRealtimeProvider: 도구가 하나도 선언되지 않으면 credent
 test("GeminiRealtimeProvider: 토큰 발급 시 systemInstruction이 toolDrivenTiming:true로 조립된다(§59.3)", async () => {
   const capture = captureTokenRequest();
   try {
-    const provider = new GeminiRealtimeProvider("test-key");
-    await provider.createCallCredentials({
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "bank-security-verify-scam",
       voiceId: "",
@@ -436,6 +482,8 @@ test("GeminiRealtimeProvider: 토큰 발급 시 systemInstruction이 toolDrivenT
         // §61(OQ-A73 User 확정) — bank-security-verify-scam은 도구가 선언되므로(advanced)
         // offerToolDeclared:true라 TOOL_DRIVEN 문구가 실린다.
         offerToolDeclared: declaresOfferVerificationDesk("bank-security-verify-scam", "advanced"),
+        // T192 C3 — `end_call` 선언 토큰 = TOOL 변형(확인 무력화 세션이라 1문장이 붙는다).
+        hangupMode: "tool",
       }),
     );
     assert.ok(sentPrompt.includes("send_prepared_sms"), "도구 이름이 토큰에 실린 프롬프트에 있어야 한다");
@@ -454,8 +502,8 @@ test("GeminiRealtimeProvider: 토큰 발급 시 systemInstruction이 toolDrivenT
 test("GeminiRealtimeProvider: 계열 B(advanced)는 toolDrivenTiming:true면 TOOL_DRIVEN 확인 안내로 조립된다(§61)", async () => {
   const capture = captureTokenRequest();
   try {
-    const provider = new GeminiRealtimeProvider("test-key");
-    await provider.createCallCredentials({
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "tax-refund-scam",
       voiceId: "",
@@ -481,9 +529,9 @@ test("GeminiRealtimeProvider: 계열 B(advanced)는 toolDrivenTiming:true면 TOO
 });
 
 test("GeminiRealtimeProvider: 존재하지 않는 시나리오는 명시적으로 실패한다", async () => {
-  const provider = new GeminiRealtimeProvider("test-key");
+  const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
   await assert.rejects(
-    () => provider.createCallCredentials({ sessionId: "s", scenarioId: "nope", voiceId: "" }),
+    () => provider.createCallCredentials({ ...VOICE_SCOPE, sessionId: "s", scenarioId: "nope", voiceId: "" }),
     /시나리오 프롬프트가 없습니다/,
   );
 });
@@ -494,8 +542,8 @@ test("[§71 D1] 실시간 모델은 gemini-3.8-live이고 토큰과 자격증명
   assert.equal(GEMINI_LIVE_MODEL, "gemini-3.8-live");
   const capture = captureTokenRequest();
   try {
-    const provider = new GeminiRealtimeProvider("test-key");
-    const creds = await provider.createCallCredentials({ sessionId: "sess", scenarioId: "tax-refund-scam", voiceId: "" });
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    const creds = await provider.createCallCredentials({ ...VOICE_SCOPE, sessionId: "sess", scenarioId: "tax-refund-scam", voiceId: "" });
     const setup = (capture.bodies()[0] as { bidiGenerateContentSetup?: { model?: string } }).bidiGenerateContentSetup;
     assert.equal(setup?.model, "models/gemini-3.8-live");
     assert.equal(creds.geminiModel, "gemini-3.8-live");
@@ -507,8 +555,8 @@ test("[§71 D1] 실시간 모델은 gemini-3.8-live이고 토큰과 자격증명
 test("[§71 D2/G430] 토큰에 잠기는 모든 도구 선언은 behavior: BLOCKING이다(3.8 기본 NON_BLOCKING 차단)", async () => {
   const capture = captureTokenRequest();
   try {
-    const provider = new GeminiRealtimeProvider("test-key");
-    await provider.createCallCredentials({
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "loan-refinance-scam",
       voiceId: "",
@@ -518,7 +566,8 @@ test("[§71 D2/G430] 토큰에 잠기는 모든 도구 선언은 behavior: BLOCK
       bidiGenerateContentSetup?: { tools?: { functionDeclarations?: { name?: string; behavior?: string }[] }[] };
     }).bidiGenerateContentSetup;
     const decls = (setup?.tools ?? []).flatMap((t) => t.functionDeclarations ?? []);
-    assert.equal(decls.length, 2);
+    // T192 C3 — `end_call`도 BLOCKING(G503 — 이 전수 단언에 자동 포함된다).
+    assert.equal(decls.length, 3);
     for (const d of decls) assert.equal(d.behavior, "BLOCKING", `${d.name}의 behavior`);
   } finally {
     capture.restore();
@@ -531,7 +580,7 @@ test("GeminiRealtimeProvider: 토큰에 고정되는 systemInstruction에 한국
   const capture = captureTokenRequest();
   try {
     for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
-      await new GeminiRealtimeProvider("test-key").createCallCredentials({
+      await new GeminiRealtimeProvider("test-key", ENDCALL_ON).createCallCredentials({ ...VOICE_SCOPE,
         sessionId: "sess",
         scenarioId,
         voiceId: "ignored-for-gemini",
@@ -545,6 +594,96 @@ test("GeminiRealtimeProvider: 토큰에 고정되는 systemInstruction에 한국
     );
     assert.equal(prompts.length, Object.keys(SCENARIO_PROMPTS).length);
     for (const prompt of prompts) assert.ok(prompt.includes(LANGUAGE_RULE), "Live 시스템 지시에 언어 규칙이 없다");
+  } finally {
+    capture.restore();
+  }
+});
+
+// ── T192 C3 — G502 · G527: `end_call` 선언 · 이름 하향 · TOOL 문면이 `declaresEndCall` 하나를 따른다 ──────────────
+function sentSystemPrompt(body: unknown): string {
+  const setup = (body as { bidiGenerateContentSetup?: { systemInstruction?: { parts?: { text?: string }[] } } })
+    .bidiGenerateContentSetup;
+  return setup?.systemInstruction?.parts?.[0]?.text ?? "";
+}
+function sentToolNames(body: unknown): (string | undefined)[] {
+  const setup = (body as { bidiGenerateContentSetup?: { tools?: { functionDeclarations?: { name?: string }[] }[] } })
+    .bidiGenerateContentSetup;
+  return (setup?.tools ?? []).flatMap((t) => t.functionDeclarations ?? []).map((d) => d.name);
+}
+
+test("[T192/C3 G502 · G527] 선언 · liveTools · TOOL 문면 세 자리가 같이 켜지고 같이 꺼진다(음성 · 메신저 · 중간 leg · 마지막 leg)", async () => {
+  const capture = captureTokenRequest();
+  try {
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    const cases = [
+      ["음성 · 릴레이 없음", VOICE_SCOPE, true],
+      ["메신저", MESSENGER_SCOPE, false],
+      ["중간 leg 0/2", { channel: undefined, hangupRelay: { legIndex: 0, legCount: 2 } }, false],
+      ["마지막 leg 1/2", { channel: undefined, hangupRelay: { legIndex: 1, legCount: 2 } }, true],
+    ] as const;
+    for (const [label, scope, expected] of cases) {
+      const creds = await provider.createCallCredentials({
+        ...scope,
+        sessionId: "sess",
+        scenarioId: "kidnapping-threat",
+        voiceId: "",
+        difficultyLevel: "advanced",
+      });
+      const bodies = capture.bodies();
+      const body = bodies[bodies.length - 1];
+      const prompt = sentSystemPrompt(body);
+      assert.equal(sentToolNames(body).includes("end_call"), expected, `${label}: 선언`);
+      assert.equal(creds.liveTools?.endCall === "end_call", expected, `${label}: 이름 하향`);
+      assert.equal(creds.liveTools?.endCallFailureInstruction !== undefined, expected, `${label}: 실패 문면 쌍`);
+      assert.equal(prompt.includes(HANGUP_RULE_TOOL), expected, `${label}: TOOL 문면`);
+      assert.equal(prompt.includes(HANGUP_RULE_NONE), !expected, `${label}: NONE 문면(정확히 하나만 실린다)`);
+    }
+  } finally {
+    capture.restore();
+  }
+});
+
+test("[T192/C3 §79.6 ①] 확인 무력화 고급 세션의 TOOL 문면에만 '확인 부서로 넘기기 전에는 끊지 않는다' 1문장이 붙는다", async () => {
+  const capture = captureTokenRequest();
+  try {
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    await provider.createCallCredentials({ ...VOICE_SCOPE, sessionId: "s", scenarioId: "bank-security-verify-scam", voiceId: "", difficultyLevel: "advanced" });
+    await provider.createCallCredentials({ ...VOICE_SCOPE, sessionId: "s", scenarioId: "bank-security-verify-scam", voiceId: "", difficultyLevel: "intermediate" });
+    const [advanced, intermediate] = capture.bodies().map(sentSystemPrompt);
+    assert.ok(advanced.includes(`${HANGUP_RULE_TOOL} ${HANGUP_RULE_TOOL_VERIFY_SUFFIX}`), "고급(확인 무력화) = TOOL + 1문장");
+    assert.ok(intermediate.includes(HANGUP_RULE_TOOL), "중급 = TOOL");
+    assert.equal(intermediate.includes(HANGUP_RULE_TOOL_VERIFY_SUFFIX), false, "중급(확인 무력화 아님)에는 1문장 0");
+  } finally {
+    capture.restore();
+  }
+});
+
+// ── T192 PR A 리뷰 M1 — 운영값(기본 생성자 = 끔): 음성 세션 setup · 프롬프트 · liveTools에 end_call 0 ───────────────
+test("[M1 운영값] 기본 생성자(운영) — 음성 세션의 tools · systemInstruction · liveTools가 end_call 거짓 입력(메신저 범위)과 바이트 동일", async () => {
+  assert.equal(END_CALL_LIVE_AVAILABLE, false, "⚠️ C5(PR B)가 켤 때 이 테스트를 함께 바꾼다");
+  const capture = captureTokenRequest();
+  try {
+    let checked = 0;
+    for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
+      for (const difficultyLevel of [undefined, "beginner", "intermediate", "advanced"] as const) {
+        const input = { sessionId: "sess", scenarioId, voiceId: "", ...(difficultyLevel ? { difficultyLevel } : {}) };
+        const operational = await new GeminiRealtimeProvider("test-key").createCallCredentials({ ...VOICE_SCOPE, ...input });
+        const baseline = await new GeminiRealtimeProvider("test-key", ENDCALL_ON).createCallCredentials({ ...MESSENGER_SCOPE, ...input });
+        const bodies = capture.bodies();
+        const [opBody, baseBody] = [bodies[bodies.length - 2], bodies[bodies.length - 1]];
+        const tag = `${scenarioId}/${difficultyLevel}`;
+        // 만료 시각(Date.now)은 호출마다 다르다 — 모델 · 도구 · 프롬프트가 실리는 setup 전체를 대조한다.
+        const setupOf = (body: unknown) => JSON.stringify((body as { bidiGenerateContentSetup?: unknown }).bidiGenerateContentSetup);
+        assert.ok(setupOf(opBody) !== undefined && setupOf(opBody).length > 2, `${tag}: setup이 비었다`);
+        assert.equal(setupOf(opBody), setupOf(baseBody), `${tag}: 운영 setup(tools · systemInstruction 포함)이 S5b 판정과 다르다`);
+        assert.equal(JSON.stringify(operational.liveTools), JSON.stringify(baseline.liveTools), `${tag}: liveTools`);
+        const prompt = sentSystemPrompt(opBody);
+        assert.ok(prompt.includes(HANGUP_RULE_NONE) && !prompt.includes(HANGUP_RULE_TOOL), `${tag}: 운영 프롬프트가 NONE이 아니다`);
+        assert.equal(sentToolNames(opBody).includes("end_call"), false, `${tag}: 운영 선언에 end_call`);
+        checked += 1;
+      }
+    }
+    assert.ok(checked > 0);
   } finally {
     capture.restore();
   }

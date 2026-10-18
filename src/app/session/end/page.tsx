@@ -16,7 +16,8 @@ import { useRouter } from "next/navigation";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { endSession } from "@/lib/api";
-import { clearPendingSession, getPendingSessionId } from "@/lib/recording";
+import type { EndSessionReason } from "@/lib/api/types";
+import { clearPendingEndReason, clearPendingSession, getPendingSessionId, peekPendingEndReason } from "@/lib/recording";
 import { Button } from "@/components/ui";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { POST_SESSION_FACT_DISCLOSURE } from "@/lib/sessionboundary/postSessionCopy";
@@ -44,9 +45,19 @@ async function fetchChallengeContext(
   }
 }
 
+// T192 C4 — 사유를 인자로 받는 순수 헬퍼(컴포넌트 밖 — effect 의존성에 함수가 끼지 않게).
+function requestEndSession(sid: string, endReason: EndSessionReason) {
+  return endSession({ sessionId: sid, endReason });
+}
+
 export default function SessionEndPage() {
   const router = useRouter();
   const [sessionId] = useState<string | null>(() => getPendingSessionId());
+  // T192 C4(§79.9 종료 화면 · §79.19 (7) C4-2) — 통화 화면이 남긴 1회성 사유 힌트. 허용목록(`user_ended` ·
+  // `limit_reached` · `scammer_ended`) 밖 · 없음 · 다른 세션이면 `user_ended`(판정 = `endReasonHint.ts`). 초기화
+  // 함수에서 **읽기만** 하고(부수효과 0 — 초기화 이중 호출에도 같은 값 · PR A 리뷰 Minor-2), 지우기는 `endSession` 성공 뒤다
+  // — 요청이 실패해 재시도하거나 새로고침해도 같은 사유가 남는다.
+  const [endReason] = useState<EndSessionReason>(() => (sessionId ? peekPendingEndReason(sessionId) : "user_ended"));
   const [state, setState] = useState<PageState>(sessionId ? "ending" : "no-session");
   const [challenge, setChallenge] = useState<{ challengeId: string; displayName: string } | null>(
     null,
@@ -58,22 +69,21 @@ export default function SessionEndPage() {
   const [deceivedMomentCount, setDeceivedMomentCount] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
-  // endReason: 현재 이 화면에 도달하는 유일한 실경로는 EndTrainingButton(상시 종료)이라
-  // "user_ended"로 고정한다. 훗날 완료(completed)/한도 도달(limit_reached) 등 다른 경로가 이
-  // 화면으로 진입 파라미터를 넘기게 되면(예: 채팅 화면 완성 후) 그 값을 받아 쓰도록 확장하면
-  // 된다 — endSession 서버는 이미 어떤 endReason이든 멱등하게 처리한다. 네트워크 호출 자체는
+  // endReason: (T192 C4 정정) 옛 주석은 "유일한 실경로가 상시 종료라 user_ended 고정 · endSession 서버는 어떤
+  // endReason이든 멱등하게 처리한다"였다 — 둘 다 더는 참이 아니다. 실시간 한도 종료가 `limit_reached` 힌트를 남기고
+  // (§79.10), 서버는 C1부터 허용목록 3값만 받으며(그 밖 = `invalid-argument` · `session/endReason.ts`) 표식 없는
+  // `scammer_ended`는 `user_ended`로 기록한다. 멱등(이미 ended면 재작성 0)은 그대로다. 네트워크 호출 자체는
   // setState를 하지 않는 순수 헬퍼로 분리하고(scenarios/page.tsx와 동일 패턴), 마운트 시
   // effect 안의 인라인 IIFE와 재시도 클릭 핸들러가 각자 결과에 따라 setState한다
   // (react-hooks/set-state-in-effect 규칙 — effect 안에서 이름 있는 함수를 통해 setState를
   // 호출하면 정적 분석이 "동기 setState"로 오탐하므로, effect 쪽은 인라인 IIFE로 둔다).
-  const requestEndSession = (sid: string) => endSession({ sessionId: sid, endReason: "user_ended" });
 
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
     (async () => {
       try {
-        await requestEndSession(sessionId);
+        await requestEndSession(sessionId, endReason);
         if (cancelled) return;
         const challengeContext = await fetchChallengeContext(sessionId);
         if (cancelled) return;
@@ -90,7 +100,7 @@ export default function SessionEndPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [sessionId, endReason]);
 
   // 리포트 준비 폴링(T70) — reports/{sessionId}는 endSession 내부 트리거가 만든다(reportId =
   // sessionId, generateReportCore.ts). 이 화면은 리포트를 **읽기만** 하며 생성을 재촉하지 않는다
@@ -140,8 +150,10 @@ export default function SessionEndPage() {
   const handleRetry = () => {
     if (!sessionId) return;
     setState("ending");
-    requestEndSession(sessionId)
+    requestEndSession(sessionId, endReason)
       .then(async () => {
+        // Minor-2 — 종료가 성공한 뒤에만 사유 힌트를 지운다(실패 경로는 남겨 다음 재시도 · 새로고침이 같은 값을 보낸다).
+        clearPendingEndReason();
         setChallenge(await fetchChallengeContext(sessionId));
         setState("ended");
       })

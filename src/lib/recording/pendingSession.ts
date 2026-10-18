@@ -21,6 +21,8 @@
 // T4/T8이 실제 `sessions/{sid}` 문서 생성 시 이 값을 채워 넣을 수 있게 한다.
 
 import { isDifficultyLevel, type DifficultyLevel } from "@/lib/difficulty";
+import type { EndSessionReason } from "@/lib/api/types";
+import { END_REASON_HINT_DEFAULT, encodeEndReasonHint, readEndReasonHint } from "./endReasonHint";
 
 const SESSION_ID_KEY = "onboarding.pendingSessionId";
 const IDENTITY_CONFIRMED_KEY = "onboarding.identityConfirmed";
@@ -45,6 +47,44 @@ export function getOrCreatePendingSessionId(): string {
 export function getPendingSessionId(): string | null {
   if (!hasSessionStorage()) return null;
   return window.sessionStorage.getItem(SESSION_ID_KEY);
+}
+
+// T192 C4(Architecture.md §79.9 E6 · §79.19 (7) C4-1) — 종료 사유 힌트(통화 화면 → 종료 화면 1회성). 판정(허용목록 ·
+// 세션 일치)은 순수 모듈 `endReasonHint.ts`. 저장소 접근 실패(사파리 사생활 모드 할당량 등)는 삼킨다 — 힌트가 없으면
+// 종료 화면이 종전 고정값 `user_ended`를 보낸다(종료 자체는 막지 않는다 · AC-006).
+const END_REASON_HINT_KEY = "session.pendingEndReason";
+
+export function setPendingEndReason(sessionId: string, reason: EndSessionReason): void {
+  if (!hasSessionStorage()) return;
+  try {
+    window.sessionStorage.setItem(END_REASON_HINT_KEY, encodeEndReasonHint(sessionId, reason));
+  } catch {
+    // 힌트 유실 = `user_ended`(종전 동작).
+  }
+}
+
+/**
+ * **읽기만 한다**(부수효과 0 — PR A 리뷰 Minor-2). 없음 · 다른 세션 · 허용목록 밖 · 저장소 오류 = `user_ended`.
+ * 지우는 것은 `endSession` **성공 뒤** `clearPendingEndReason`(또는 `clearPendingSession`) — 종료 요청이 실패해 재시도하거나
+ * 새로고침해도 같은 사유(예: `limit_reached`)가 남는다.
+ */
+export function peekPendingEndReason(sessionId: string): EndSessionReason {
+  if (!hasSessionStorage()) return END_REASON_HINT_DEFAULT;
+  try {
+    return readEndReasonHint(window.sessionStorage.getItem(END_REASON_HINT_KEY), sessionId);
+  } catch {
+    return END_REASON_HINT_DEFAULT;
+  }
+}
+
+/** `endSession` 성공 뒤에만 부른다. */
+export function clearPendingEndReason(): void {
+  if (!hasSessionStorage()) return;
+  try {
+    window.sessionStorage.removeItem(END_REASON_HINT_KEY);
+  } catch {
+    // 지우기 실패 = 다음 세션 종료에서 세션 id 불일치로 버려진다(`readEndReasonHint`).
+  }
 }
 
 // T37(UF-005 사용자2) — consentChallenge는 (온보딩 클론 흐름과 달리) 클라가 사전 id를 먼저 만들어
@@ -129,6 +169,8 @@ export function clearPendingSession(): void {
   window.sessionStorage.removeItem(OPENING_MESSAGE_TEXT_KEY);
   window.sessionStorage.removeItem(SELECTED_SCENARIO_ID_KEY);
   window.sessionStorage.removeItem(ANSWERED_SESSION_KEY);
+  // T192 C4 — 종료 사유 힌트도 같은 세션 단위로 비운다(종료 화면의 성공 경로 · 재시도 성공의 `clearPendingEndReason`과 겹쳐도 멱등).
+  window.sessionStorage.removeItem(END_REASON_HINT_KEY);
   // T187(§72 D2 · G450) — 메신저 시작 고지 확인 기록도 같은 세션 단위로 비운다.
   window.sessionStorage.removeItem(START_NOTICE_ACK_SESSION_KEY);
   // T190-8b(§74.22 (3)) — 통화 벨 직전 고지 확인 기록도 같은 세션 단위로 비운다.

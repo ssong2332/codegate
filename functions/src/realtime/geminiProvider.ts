@@ -18,7 +18,14 @@ import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
-import { buildLiveToolDeclarations, buildLiveToolNames, declaresOfferVerificationDesk } from "./liveTools";
+import {
+  buildLiveToolDeclarations,
+  buildLiveToolNames,
+  declaresEndCall,
+  declaresOfferVerificationDesk,
+  END_CALL_LIVE_AVAILABLE,
+  type EndCallScope,
+} from "./liveTools";
 import { SCENARIO_SPEAKER_GENDER, speakerGenderFor } from "./scenarioVoice";
 import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider } from "./types";
 import { resolveSessionAccountNumber } from "../shared/fictionalBank";
@@ -80,7 +87,14 @@ const NEW_SESSION_EXPIRE_MINUTES = 2;
 export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
   readonly providerName = "gemini" as const;
 
-  constructor(private readonly apiKey: string) {}
+  /**
+   * `endCallLiveAvailable` — T192 PR A 리뷰 M1의 런타임 스위치. 운영 생성자(`provider.ts`)는 인자를 넘기지 않아 항상
+   * `END_CALL_LIVE_AVAILABLE`(오늘 `false`)이다. 판정 로직 테스트만 `true`를 넘긴다(켬 입력).
+   */
+  constructor(
+    private readonly apiKey: string,
+    private readonly endCallLiveAvailable: boolean = END_CALL_LIVE_AVAILABLE,
+  ) {}
 
   async createCallCredentials(input: RealtimeCallInput): Promise<RealtimeCallCredentials> {
     // T191 S5(AC-096 (e)) — 세션에 배정된 흐름 변형을 합성한 프롬프트(sendMessage · 오프닝과 같은 단일
@@ -111,7 +125,20 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // §59.5/§59.10 커밋 C — 이 세션에 실제로 선언할 Live 도구(조건은 buildLiveToolDeclarations
     // 자신이 진다 — hasInCallSms · declaresOfferVerificationDesk, §61). 프롬프트 조건부 치환
     // (toolDrivenTiming)과 **같은 트리거로 묶지 않는다** — 아래 buildSystemPrompt 호출부 주석 참고.
-    const liveToolDeclarations = buildLiveToolDeclarations(input.scenarioId, input.difficultyLevel, input.flowVariantId);
+    // ⭐ T192 C3(§79.19 (5) 2 · 9) — `end_call` 범위(채널 · 이미 해석된 릴레이)는 선언 · 이름 · 프롬프트 TOOL 변형 세
+    // 자리에 같은 값으로 들어간다. 세 자리가 전부 `declaresEndCall` 하나를 부른다(G502). ⚠️ 옛 주석의 "도구가 없으면
+    // 빈 배열 = 오늘과 동일"은 C3부터 메신저 · 중간 leg에서만 참이다(아래 `tools` 주석).
+    const endCallScope: EndCallScope = {
+      channel: input.channel,
+      relay: input.hangupRelay,
+      liveAvailable: this.endCallLiveAvailable,
+    };
+    const liveToolDeclarations = buildLiveToolDeclarations(
+      input.scenarioId,
+      input.difficultyLevel,
+      input.flowVariantId,
+      endCallScope,
+    );
     const systemPrompt = buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: input.difficultyLevel,
       // ⭐ 리뷰 M2 — 도구 선언과 같은 단일 술어(변형 기준 · 변형 부재 = 종전 `hasInCallSms`).
@@ -132,6 +159,11 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       // §81 — 세션 가상 은행명(문자 본문과 같은 이름). 부재면 종전 문자열("OO은행").
       ...(input.fictionalBankName ? { fictionalBankName: input.fictionalBankName } : {}),
       sessionAccountNumber: resolveSessionAccountNumber(input.scenarioId),
+      // ⭐ T192 C3(§79.6 ① · §79.19 (5) 9 · G502) — `end_call`을 선언한 토큰에만 TOOL 변형(같은 술어 3번째 호출부).
+      // 확인 무력화 1문장은 위 `verifyInterceptEnabled`로 조립 함수가 붙인다. 그 밖 = NONE(종전 문면 바이트 동일).
+      hangupMode: declaresEndCall(input.scenarioId, endCallScope.channel, endCallScope.relay, endCallScope.liveAvailable)
+        ? "tool"
+        : "none",
     });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });
@@ -214,8 +246,9 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
                 silenceDurationMs: 400,
               },
             },
-            // §59.5/§59.10 커밋 C — 이 세션에 걸리는 도구만 서버가 고정해 선언한다(빈 배열이면
-            // 오늘과 바이트 단위로 동일 — 회귀 0, G388). 클라는 이 배열을 읽지도 바꾸지도 못한다
+            // §59.5/§59.10 커밋 C — 이 세션에 걸리는 도구만 서버가 고정해 선언한다. ⚠️ T192 C3 — 빈 배열은 이제
+            // 메신저 · 중간 leg 세션뿐이다(그 밖 Gemini 통화는 `end_call`이 붙는다 — G388은 도구별 키라 무영향, §79.3).
+            // 클라는 이 배열을 읽지도 바꾸지도 못한다
             // (`geminiProvider.ts:187` 잠금 취지 무변경 — 잠금이 막던 것은 "클라가 임의 도구를
             // 주입"이지, 서버가 선언 자체를 하는 것이 아니다).
             //
@@ -237,7 +270,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     if (!tokenName) {
       throw new Error("Gemini 단기 토큰 발급 응답에 name이 없습니다.");
     }
-    const liveTools = buildLiveToolNames(input.scenarioId, input.difficultyLevel, input.flowVariantId);
+    const liveTools = buildLiveToolNames(input.scenarioId, input.difficultyLevel, input.flowVariantId, endCallScope);
 
     return {
       provider: "gemini",

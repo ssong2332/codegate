@@ -18,6 +18,7 @@ import { getRealtimeProvider } from "./provider";
 import type { CreateRealtimeCallRequest, CreateRealtimeCallResponse } from "./callTypes";
 import type { RealtimeProviderName } from "./types";
 import { resolveFictionalBankName } from "../shared/fictionalBank";
+import { resolveHangupRelay } from "../scammerHangup/relayContext";
 
 /**
  * 에스컬레이션된 세션(§13.6 통합 버그 수정)의 "유효 voiceMode" 유추 — session.voiceSelectionSource가
@@ -177,6 +178,10 @@ export const createRealtimeCall = onCall<
       fictionalBankName: resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName }),
       // T191 S5(AC-096 (e)) — 배정된 흐름 변형. Gemini 경로만 반영한다(ElevenLabs는 무시 — 현행).
       ...(session.flowVariantId ? { flowVariantId: session.flowVariantId } : {}),
+      // ⭐ T192 C3(§79.19 (5) 8 · G527) — `end_call` 선언 범위. 릴레이는 여기서 **1회** 해석해 넘긴다(프로바이더 안에서
+      // 다시 해석하지 않는다 — `relay` 인자를 만드는 곳은 `resolveHangupRelay` 하나). 오늘 항상 `undefined`.
+      channel: session.channel,
+      hangupRelay: resolveHangupRelay(session),
     });
     // T38 QA NO-GO 수정, architect 판정(ADR-0006 Addendum A2, 2026-07-24) — §14.2 "추출 차단"은
     // raw voiceId를 응답에 실어 보내는 모든 경로를 무조건 막지 않는다(ElevenLabs 프로토콜상

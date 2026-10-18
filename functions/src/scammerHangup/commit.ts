@@ -7,9 +7,11 @@
 // ⛔ 표식은 이미 있으면 그대로 둔다(멱등 — 첫 승인의 `acceptedAt` · `kind` 유지).
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
+import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import type { ScammerHangupKind, ScammerHangupMarker, SessionDoc } from "../shared/types";
 import { decideScammerHangup, type ScammerHangupDecision } from "./decide";
 import { resolveHangupRelay } from "./relayContext";
+import { isSmsAwaitingUser } from "./smsWait";
 
 /** 이 모듈이 쓰는 Firestore 트랜잭션의 최소 면(가짜 구현으로 테스트할 수 있게). */
 export type HangupDocSnapshot = { exists: boolean; data(): unknown };
@@ -18,8 +20,9 @@ export type HangupTransaction<Ref> = {
   update(ref: Ref, data: { scammerHangup: ScammerHangupMarker }): unknown;
 };
 
+/** 클라 주장값(OQ-A120 — S5b와 같은 등급). T192 C3: 하한 입력이 사기범 턴에서 사용자 발화로 바뀌었다(§79.19 (2) 8). */
 export type RealtimeHangupClaims = {
-  scammerTurns: number;
+  userTurns: number;
   pendingInstruction: boolean;
   kind: ScammerHangupKind;
 };
@@ -39,8 +42,14 @@ export async function decideAndMarkRealtimeHangup<Ref>(
   tx: HangupTransaction<Ref>,
   refs: RealtimeHangupRefs<Ref>,
   claims: RealtimeHangupClaims,
+  /**
+   * 서버 도착 기록(T192 C3 · §79.19 (4)) — 핸들러가 `sessionDeclaresInCallSms`일 때만 트랜잭션 **밖**에서 읽어 넘긴다
+   * (선언 0 세션 = `[]`). 6행 서버 항은 이 값에서만 나온다(클라 주장값 아님).
+   */
+  delivered: readonly DeliveredSmsRecord[],
   acceptedAt: FirebaseFirestore.Timestamp,
 ): Promise<ScammerHangupDecision> {
+  const smsAwaitingUser = isSmsAwaitingUser(delivered, claims.userTurns);
   const sessionSnap = await tx.get(refs.session);
   const session = (sessionSnap.exists ? sessionSnap.data() : undefined) as SessionDoc | undefined;
   if (session === undefined) {
@@ -51,8 +60,9 @@ export async function decideAndMarkRealtimeHangup<Ref>(
       isMockTurn: false,
       verifyEnabled: false,
       transferPlaced: false,
-      scammerTurns: claims.scammerTurns,
+      userTurns: claims.userTurns,
       pendingInstruction: claims.pendingInstruction,
+      smsAwaitingUser,
       limitReached: false,
       alreadyAccepted: false,
       relay: undefined,
@@ -74,8 +84,9 @@ export async function decideAndMarkRealtimeHangup<Ref>(
     isMockTurn: false,
     verifyEnabled,
     transferPlaced,
-    scammerTurns: claims.scammerTurns,
+    userTurns: claims.userTurns,
     pendingInstruction: claims.pendingInstruction,
+    smsAwaitingUser,
     limitReached: false,
     alreadyAccepted: Boolean(session.scammerHangup),
     // §79.18 (1) — 서버 값만(세션 문서 · 카탈로그). 클라 요청에는 이 값이 없다. S7 전에는 항상 undefined.
