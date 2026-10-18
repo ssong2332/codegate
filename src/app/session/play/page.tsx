@@ -201,6 +201,8 @@ export default function SessionCallPage() {
   const [primedCallAudio, setPrimedCallAudio] = useState<PrimedCallAudio | null>(null);
   // reviewer m2 — 받기 재진입 가드(같은 렌더 안의 연속 탭에도 정확하도록 상태가 아니라 ref로 판정한다).
   const primedCallAudioRef = useRef<PrimedCallAudio | null>(null);
+  // QA L-4 — handleAnswer 전체 재진입 가드(realtime.start 이중 실행 방지). 한 마운트에 받기는 한 번뿐이다.
+  const answerHandledRef = useRef(false);
   // reviewer M3 — 미룬 벨 컨텍스트 close(호출 = 즉시 닫기 · 멱등). 언마운트 cleanup이 반드시 부른다.
   const deferredRingCloseRef = useRef<(() => void) | null>(null);
   const [callMode, setCallMode] = useState<CallMode>("undecided");
@@ -1272,6 +1274,9 @@ export default function SessionCallPage() {
     // T190-4(§74.7) — 전이 렌더 전에 **즉시** 벨을 멈춘다(실시간 오디오와 겹침 0). cleanup도 다시 부르지만 멱등이다.
     incomingAlertRef.current?.stop();
     if (!sessionId) return;
+    // QA L-4 — 받기 연타(같은 렌더 안 두 번째 호출)로 realtime.start·markSessionAnswered가 두 번 도는 것을 막는다.
+    if (answerHandledRef.current) return;
+    answerHandledRef.current = true;
     // finding #4: "받기"를 누른 세션을 기록해, 통화 중 새로고침 시 벨 화면이 아니라 통화로 복원.
     markSessionAnswered(sessionId);
     // §57.2 (6) 처방 D1 — 통화 타이머(`elapsedSec`)가 0이 되는 바로 이 지점의 시각을 참가자 시계
