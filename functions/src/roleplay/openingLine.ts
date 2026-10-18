@@ -18,6 +18,7 @@ import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { speakerGenderFor } from "../realtime/scenarioVoice";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { ScammerMessage } from "./types";
+import { applyFictionalBank } from "../shared/fictionalBank";
 
 // 사용자 신고(2026-07-25) — 오프닝 대사가 다짜고짜 요구·압박부터 들어가 시나리오 배경이 없다는
 // 피드백. buildSystemPrompt는 모든 턴에 공통으로 쓰이므로(sendMessage도 재사용), "이번이 첫 마디다"
@@ -70,6 +71,8 @@ export async function generateOpeningLine(
   // (createSession/consentChallenge)가 요청값(이미 서버에서 enum 정규화된 값)을 그대로 넘긴다.
   // 부재면 buildSystemPrompt가 기준선(중급 = 모디파이어 없음)으로 조립한다.
   difficultyLevel?: DifficultyLevel,
+  // §79 — 이 세션의 가상 은행명(호출부가 세션 생성 전에 골라 세션 문서에도 같은 값을 쓴다). 부재면 종전("OO은행").
+  fictionalBankName?: string,
 ): Promise<OpeningLineResult> {
   const scenarioPrompt = SCENARIO_PROMPTS[scenarioId];
   if (!scenarioPrompt) {
@@ -95,6 +98,7 @@ export async function generateOpeningLine(
       identityCheckAllowed: asksIdentityCheck(scenarioId),
       speakerGender: speakerGenderFor(scenarioId),
       turnInstruction: OPENING_TURN_INSTRUCTION,
+      ...(fictionalBankName ? { fictionalBankName } : {}),
     }),
     messages: [], // 오프닝 대사에는 아직 사용자 입력이 없다.
     mockTacticHints: scenarioPrompt.weakenedTactics,
@@ -109,7 +113,9 @@ export async function generateOpeningLine(
   // 2026-10-17 라이브 신고(실존 은행명 + 5~7문장 대사) — sendMessage와 같은 순서로 손질한다:
   // (1) 실존 은행·카드사 이름 → OO은행/OO카드(숫자는 그대로), (2) 문장 수 상한은 **항상** 적용한다
   // — 오프닝 지시(OPENING_TURN_INSTRUCTION)는 예고 계열이 아니고 "예고 완료" 마킹도 없다.
-  const { text: realNameFreeText, replacedCount } = replaceRealFinancialNames(linkFreeText);
+  const { text: realNameReplacedText, replacedCount } = replaceRealFinancialNames(linkFreeText);
+  // §79 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다.
+  const realNameFreeText = fictionalBankName ? applyFictionalBank(realNameReplacedText, fictionalBankName) : realNameReplacedText;
   const lengthLimited = limitReplySentences(realNameFreeText);
   // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).
   if (replacedCount > 0) {

@@ -40,6 +40,8 @@ export type RealtimeCallInput = {
    * 무시하며, 그 사실을 `RealtimeCallCredentials.difficultyApplied:false`로 명시한다.
    */
   difficultyLevel?: DifficultyLevel;
+  /** 2026-10-18(§79) — 세션 가상 은행명. Gemini 경로는 시스템 프롬프트의 "OO은행"을 이 이름으로 바꾼다(ElevenLabs는 반영 지점 없음). */
+  fictionalBankName?: string;
 };
 
 /**

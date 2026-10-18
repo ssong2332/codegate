@@ -4,6 +4,12 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-18 추가분, 브랜치 `feat/fictional-bank-names`, base `733b9da`)**: 아직 main에 병합되지 않았고 배포 0회, 라이브 미검증이다.
+
+### Changed
+- **"OO은행" → 세션마다 고정되는 가상 은행명**(사용자 결정, Architecture §79 · DECISIONS #130): 문자에 "OO은행"이 보이면 바로 훈련인 줄 알아 현실감이 떨어졌다. 실존·과거 은행 목록과 대조한 가상 이름 8개(한결·다온·새솔·늘봄·해담·가온·미르·보담은행) 중 하나를 세션 시작 때 골라, 그 세션의 문자·사기범 대사·실시간 통화 프롬프트에서 같은 이름을 쓴다. 실존 은행명을 말하면 바꾸는 기존 안전장치는 그대로다.
+  - **한계**: ElevenLabs 목소리 복제 통화 2종은 "OO은행"이 남는다(에이전트 프롬프트 고정) · 세션 밖 화면의 "○○은행"·"OO뱅크" 문구는 그대로다.
+
 > ⚠️ **이 블록(2026-10-18 추가분, 브랜치 `fix/otp-check-server-compare`, base `9971f89`)**: 아직 main에 병합되지 않았고 배포 0회, 라이브 미검증이다. **#300 회귀 수정 — 이 수정 전에는 Functions 배포 금지.**
 
 ### Fixed

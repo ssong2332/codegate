@@ -38,6 +38,7 @@ import type {
   UpdateMessengerSkinRequest,
   UpdateMessengerSkinResponse,
 } from "./types";
+import { pickFictionalBankName } from "../shared/fictionalBank";
 
 ensureFirebaseAdminApp();
 
@@ -171,9 +172,12 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     // 주석 참고. 사용자 실측 신고로 발견된 정합성 버그 수정, 2026-07-24).
     // T72(§15.3.3 호출부 3곳 중 "오프닝 대사") — 세션 문서 write 전이라 요청값(정규화 완료)을 직접
     // 넘긴다. 여기서 빠뜨리면 오프닝 첫 마디만 중급으로 나오는 비대칭이 생긴다(§15.6 G5).
+    // §79 — 세션 가상 은행명을 오프닝 전에 고른다(오프닝 대사와 세션 문서가 같은 이름을 쓴다).
+    const fictionalBankName = pickFictionalBankName();
     const { message: openingMessage, isMock } = await generateOpeningLine(
       scenarioId,
       resolvedDifficultyLevel,
+      fictionalBankName,
     );
 
     // T4: sessionId(온보딩 "사전 세션 id")가 넘어오면 createVoiceClone이 만들어 둔 pending
@@ -236,6 +240,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       // T72(§15.3.2) — 항상 확정값을 기록한다(부재 문서는 하위호환 읽기로만 처리하고, 새 문서는
       // 명시 필드를 남긴다 — "값이 없으니 기본이겠지"를 판정 근거로 삼지 않는다는 §15.0-4 원칙).
       difficultyLevel: resolvedDifficultyLevel,
+      fictionalBankName,
     };
     // merge:true — sessionId를 채택한 경우 pending 문서(createVoiceClone이 만든 voiceProvider 등
     // 부가 필드)를 지우지 않고 scenarioId/status 등을 덧씌운다. 새 문서인 경우는 기존과 동일.

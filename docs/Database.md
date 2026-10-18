@@ -74,6 +74,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | Field | Type | Constraints | Description |
 |---|---|---|---|
 | difficultyLevel | string? | `beginner`\|`intermediate`\|`advanced` | 사용자가 UX-029에서 고른 훈련 강도. **부재→`intermediate`**(계산 기본값, 무백필). `createSession` 요청의 옵셔널 값을 서버가 enum 검증 후 기록하며, enum 밖·부재는 조용히 임의값으로 진행하지 않고 `intermediate`로 확정한다. 2인 챌린지 체험 세션은 `consentChallenge`가 `challenges.difficultyLevel`을 **복사**해 채운다(§15.3.2 — 복사하지 않으면 발신자 선택이 소실). ⚠️ 시나리오 메타의 기존 산문 필드 `difficulty`(예: "중간 — 감정적 압박이 강한 편입니다")와 **다른 축이며 이름을 겹치지 않는다**(§15.3.2, AC-002 무변경). 난이도는 압박 강도·요구 도달 속도·수법 은밀함만 바꾸고 **어떤 안전장치도 게이팅하지 않는다**(D-42/AC-050 — 강제는 프롬프트 조립 순서로, §15.5) |
+| fictionalBankName | string? | `shared/fictionalBank.ts` `FICTIONAL_BANK_NAMES` 중 하나 | **2026-10-18 증분(Architecture §79)** — 이 세션의 가상 은행명. `createSession`·`consentChallenge`가 생성 시 1회 기록하고 바꾸지 않는다. 문자 본문·사기범 대사·Live 프롬프트가 이 값으로 "OO은행" 자리표시자를 치환한다. **부재(옛 세션)→sessionId 해시로 결정**(무백필) · 목록 밖 값은 무시 |
 
 #### `sessions/{sessionId}/messages/{messageId}`  — 대화 로그 (UX-006, AC-024)
 | Field | Type | Constraints | Description |
@@ -108,6 +109,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 | senderLabel | string | required | 발신번호 라벨(실존하지 않는 모의값, AC-005/013) |
 | body | string | required | 본문. **서버 카탈로그가 원천**이며 사용자·LLM이 생성하지 않는다 → PII 마스킹 대상 아님(사용자 텍스트가 아님) |
 | otpCode | string? | `kind==="otp"`일 때만 | **콘텐츠에 고정된 리터럴**(런타임 난수 금지 — 결정론적 테스트 + 모의값 불변식) |
+| bankName | string? | 본문에 가상 은행 자리표시자가 있었던 문자만 | **2026-10-18 증분(Architecture §79)** — 그 세션의 가상 은행명(본문은 이미 치환돼 저장). 가짜 랜딩 미리 채움(D-115)의 원천 |
 | linkDisplayText | string? | `kind==="link"`일 때만 | 모의 표기 문자열. UX-023(`MessengerFakeLanding`)의 제목으로 그대로 쓰인다 |
 | fakeLandingId | string? | `kind==="link"`일 때만 | 인앱 가짜 랜딩 참조. **`url`/실 URL 필드는 이 스키마에 존재하지 않는다**(AC-032/045 구조적 금지 — `MessengerAttachment`와 동형) |
 | landingKind | string? | `kind==="link"` + **기본값이 아닐 때만** | **§19.4 증분(OQ-U26 (b)).** `credential-form`\|`app-install`. 서버가 `resolveMockScreenKind(session.scenarioId, fakeLandingId)`로 확정해 `functions/src/inCallSms/buildDoc.ts` **한 곳에서만** 기록한다 — **클라가 `fakeLandingId` 문자열로 kind를 추론하지 않는다**(§15.9.1 R3, AC-024 계승). **값이 기본값(`credential-form`)이면 키 자체를 만들지 않는다** — `MessengerAttachment.landingKind`의 생략 규칙(`functions/src/roleplay/linkMarker.ts:58`)과 **글자 그대로 동일**하며, 같은 개념에 생략 규칙이 두 벌이 되는 것을 막는다. 읽기 규칙: `landingKind ?? "credential-form"`(무백필 — 기존 문서 바이트 동일). ⚠️ 생략된 키가 `app-install`을 뜻할 수 없음은 게이트 **G-A**(`entrySurface==="in-call-sms"` ⇒ `kind!=="app-install"`, Architecture.md §19.5)가 보장한다 |

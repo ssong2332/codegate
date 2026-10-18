@@ -38,6 +38,7 @@ export {
   resolveInCallSmsPlan,
   resolveModelToolSmsGate,
 } from "./buildDoc";
+import { resolveFictionalBankName } from "../shared/fictionalBank";
 
 /**
  * §53.6 (3)/§53.8 2 — 이 세션의 확인 시도 무력화 오퍼가 이미 **전환 완료**(`placedAt` 존재)
@@ -166,17 +167,19 @@ export const deliverInCallSms = onCall<
     }
   }
 
+  // §79 — 세션 가상 은행명(문자 본문·도착 지시·대사가 같은 이름). 부재(옛 세션)는 sessionId 해시.
+  const fictionalBankName = resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName });
   if (!alreadyDelivered) {
     // 앵커(§15.1.5 (4)) — 실시간 경로 보정은 realtimeAnchorScammerTurn이 소유한다(근거는 그 함수
     // doc 주석). 여기서 손으로 ±1 하지 않는다 — 두 경로의 보정이 갈라지지 않게 하기 위해서다.
     await smsRef.create(
-      buildInCallSmsDoc(item, Timestamp.now(), realtimeAnchorScammerTurn(item), session.scenarioId),
+      buildInCallSmsDoc(item, Timestamp.now(), realtimeAnchorScammerTurn(item), session.scenarioId, fictionalBankName),
     );
   }
 
   const placed = await isVerifyOfferPlaced(db, sessionId, session.scenarioId);
   return {
-    ...buildInCallSmsResponse(item, { placed }),
+    ...buildInCallSmsResponse(item, { placed, fictionalBankName }),
     status: alreadyDelivered ? "already_delivered" : "delivered",
   };
 });

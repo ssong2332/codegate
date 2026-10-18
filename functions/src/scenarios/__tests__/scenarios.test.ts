@@ -23,6 +23,7 @@ import { scanText } from "./harmlessnessPatterns";
 // personaAuthority/scenarioVoice를 "단일 원천"으로 못박았다).
 import { PERSONA_AUTHORITY, asksIdentityCheck } from "../../roleplay/personaAuthority";
 import { speakerGenderFor } from "../../realtime/scenarioVoice";
+import { applyFictionalBank, FICTIONAL_BANK_NAMES } from "../../shared/fictionalBank";
 
 // AC-005: 실제 운영 가능한 사기 정보(실계좌번호 패턴·실제 송금 절차 지시·실제 URL)가 절대
 // 포함되면 안 된다. 계좌번호형 숫자(8자리 이상 연속 숫자)와 http(s) 링크를 금지 패턴으로 검사한다.
@@ -1330,13 +1331,18 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
   // 턴 지시는 곱하지 않고 더한다(판정표 3행) — 값마다 **운영에서 실제로 성립하는 조합**에 한 번씩.
   // 확인 무력화는 `카탈로그 보유 && 고급`에서만 켜지므로(`roleplay/index.ts:186`) 그 조합을 쓴다.
   const fallbackScenarioId = scenarioIds[0];
+  let bankIndex = 0;
   for (const { scenarioId, label, value } of turnInstructionSources()) {
     const targetId = scenarioId ?? fallbackScenarioId;
     const speakerGender = speakerGenderFor(targetId);
     const offerToolDeclared = hasVerifyIntercept(targetId);
+    // §79 — 세션 가상 은행명 축(fictionalBankName)도 운영 조합처럼 켠다(목록을 돌아가며) — 자리표시자가 실제
+    // 이름으로 바뀐 조립 결과도 무해화 스캔을 받게 한다.
+    const fictionalBankName = FICTIONAL_BANK_NAMES[bankIndex++ % FICTIONAL_BANK_NAMES.length];
     out.push({
       label: `${targetId}[턴지시:${label}]`,
       text: buildSystemPrompt(SCENARIO_PROMPTS[targetId], {
+        fictionalBankName,
         difficultyLevel: "advanced",
         l3Procedural: true,
         inCallSmsEnabled: true,
@@ -1710,8 +1716,10 @@ test("[T113] 축 전용 블록이 스캔 목록에 실제로 들어왔다(`verif
   // 턴 지시는 값의 집합이라 표지가 아니라 **값 자체**가 들어왔는지로 확인한다.
   const scanned = all.map(({ text }) => text);
   for (const { label, value } of turnInstructionSources()) {
+    // §79 — 조립 결과는 자리표시자 "OO은행"이 세션 가상 은행명으로 바뀌어 있을 수 있다(바뀐 값으로도 찾는다).
+    const forms = [value, ...FICTIONAL_BANK_NAMES.map((bank) => applyFictionalBank(value, bank))];
     assert.ok(
-      scanned.some((text) => text.includes(value)),
+      scanned.some((text) => forms.some((form) => text.includes(form))),
       `턴 지시 "${label}"이 스캔 목록에 없다 — 조립 산출물의 일부인데 무검사 구간으로 남는다.`,
     );
   }

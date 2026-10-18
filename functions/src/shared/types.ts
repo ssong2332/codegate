@@ -121,6 +121,12 @@ export type SessionDoc = {
   // 블록을 내보내지 않아 프롬프트가 도입 전과 완전히 동일하다). 시나리오 메타의 산문 `difficulty`
   // (ScenarioDoc)와는 이름·의미가 다른 별개 필드다(오버로드 금지, §15.3.2).
   difficultyLevel?: DifficultyLevel;
+  /**
+   * 2026-10-18(Architecture §79) — 이 세션의 가상 은행명(`shared/fictionalBank.ts` 목록 중 하나). 세션 생성 때 1회
+   * 고르고 바꾸지 않는다 — 문자 본문·사기범 대사·Live 프롬프트·(예정) 가짜 랜딩 미리 채움이 **이 필드 하나**를 읽는다.
+   * 부재(옛 세션)면 `resolveFictionalBankName`이 sessionId 해시로 결정적으로 고른다.
+   */
+  fictionalBankName?: string;
 };
 
 // --- users/{uid}/voices/{voiceId} (P-8·AC-046, ADR-0005·Database.md 1:1) ---
@@ -214,6 +220,8 @@ export type InCallSmsDoc = {
   // T190-2(docs/Architecture.md §74.9 · D-101) — 말풍선 링크 줄의 **가짜 주소**(`.invalid` 호스트 + 경로 · 스킴 0).
   // 실 URL이 아니다 — 탭은 인앱 랜딩만 연다. `linkDisplayText`·`fakeLandingId`와 함께만 존재(G111).
   linkAddress?: string;
+  /** 2026-10-18(Architecture §79) — 본문에 가상 은행 자리표시자가 있었던 문자에만, 그 세션의 가상 은행명. 가짜 랜딩 미리 채움(D-115)의 원천. */
+  bankName?: string;
   // T104(§19.4) — 그 랜딩의 목업 종류. **kind의 진실 원천은 서버**이고(§15.9.1 R3) 클라는
   // `fakeLandingId` 문자열을 분류하지 않는다. 값이 기본값(`credential-form`)이면 **키를 만들지
   // 않는다** — `MessengerAttachment.landingKind`의 생략 규칙(`linkMarker.ts`)과 글자 그대로
