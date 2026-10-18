@@ -20,3 +20,16 @@ export const MESSENGER_START_NOTICE = {
   stopHint: "언제든 '훈련 종료'로 멈출 수 있습니다.",
   confirmLabel: "메시지 보기",
 } as const;
+
+/**
+ * T190-6(UX-014 v1.33 (11) ② 정본 · D-100 · AC-092 (d)(e)) — **세션 전** 화면 모양 줄 문면. 선택지 라벨
+ * ("iOS형" · "One UI형")은 `src/lib/phone/deviceSkin.ts`의 `DEVICE_SKIN_CHOICE_LABELS`가 정본이다.
+ * ⛔ 세션 중 화면에 이 줄·스킨 이름·감지 실패 안내 0(AC-092 (d)).
+ */
+export const DEVICE_SKIN_PICKER_COPY = {
+  /** 접힘 — "화면 모양: {라벨}" 앞부분. */
+  collapsedPrefix: "화면 모양: ",
+  changeLabel: "바꾸기",
+  /** 펼침(감지 실패 또는 "바꾸기") 안내. */
+  expandedPrompt: "사용하시는 휴대폰과 같은 화면 모양을 골라 주세요.",
+} as const;

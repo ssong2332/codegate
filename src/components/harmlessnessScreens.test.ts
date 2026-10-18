@@ -102,6 +102,7 @@ const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   "AgeGate.tsx": false, // 연령 확인 게이트
   "AuthInvalidationBanner.tsx": false, // 인증 무효화 안내 배너(T128) — 앱 자신의 고지이지 사기 표면이 아니다
   "CallWaveform.tsx": false, // 통화 파형 시각화
+  "DeviceSkinPicker.tsx": false, // T190-6 세션 전 화면 모양 선택 줄 — 앱 자신의 설정 부품, 사기 표면 아님
   "DrilldownOptionCard.tsx": false, // 드릴다운 선택 카드
   "EndTrainingButton.tsx": false, // 상시 종료 버튼
   "MessengerStartNotice.tsx": false, // 세션 전 시작 고지(UX-022 start-notice, T187) — 앱 자신의 고지, 사기 표면 아님

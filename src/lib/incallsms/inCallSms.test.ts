@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   countUnread,
+  formatSmsClock,
   latestSmsId,
+  needsTimeSeparator,
   pickDueInCallSms,
   sortByArrival,
   spellOutOtp,
@@ -160,4 +162,21 @@ test("[T190/UX-027 v1.33 (3)] threadHeaderLabel — 모두 같은 발신처면 �
   assert.equal(threadHeaderLabel([]), "메시지");
   assert.equal(threadHeaderLabel([view({ smsId: "a", senderLabel: "A" }), view({ smsId: "b", senderLabel: "A" })]), "A");
   assert.equal(threadHeaderLabel([view({ smsId: "a", senderLabel: "A" }), view({ smsId: "b", senderLabel: "B" })]), "메시지");
+});
+
+test("[T190-5/UX-027 v1.33 (4)] formatSmsClock — 기기 현지 '오전/오후 h:mm' · 서버 시각 전(0)이면 null", () => {
+  // 2026-10-18T06:05:00Z = KST(+9, offset -540) 15:05
+  const at = Date.UTC(2026, 9, 18, 6, 5);
+  assert.equal(formatSmsClock(at, -540), "오후 3:05");
+  assert.equal(formatSmsClock(Date.UTC(2026, 9, 18, 15, 0), -540), "오전 12:00");
+  assert.equal(formatSmsClock(Date.UTC(2026, 9, 18, 3, 9), -540), "오후 12:09");
+  assert.equal(formatSmsClock(0), null);
+});
+
+test("[T190-5/UX-027 v1.33 (4)] needsTimeSeparator — 첫 문자 · 5분 이상 간격일 때만", () => {
+  const t0 = Date.UTC(2026, 9, 18, 6, 0);
+  assert.equal(needsTimeSeparator(null, t0), true);
+  assert.equal(needsTimeSeparator(t0, t0 + 4 * 60 * 1000), false);
+  assert.equal(needsTimeSeparator(t0, t0 + 5 * 60 * 1000), true);
+  assert.equal(needsTimeSeparator(t0, 0), false, "시각을 모르면 구분줄을 지어내지 않는다");
 });

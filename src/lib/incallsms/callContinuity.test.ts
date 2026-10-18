@@ -597,3 +597,38 @@ test("[P-4/P-20] 미확인 문자가 0건이면 aria-live 영역이 아무것도
     "latestSms로 게이팅하면 전부 읽은 뒤에도 '문자 0건이 도착했습니다.'가 계속 읽힌다",
   );
 });
+
+// ── T190-5 — G459 배선 · 두 보기 토글 · 통화 표시줄 높이 상한(docs/Architecture.md §73.8 · §73.14 G459/G460) ──────
+/** G459 배선 위반 — 본문 분할을 쓰고, 인증번호 박스는 분할이 null일 때만 그린다(인증번호가 화면 어디에도 없는 상태 0). */
+function otpWiringViolations(source: string): string[] {
+  const code = codeOnly(source);
+  const out: string[] = [];
+  if (!code.includes("splitBodyAtOtp(sms.body, sms.otpCode)")) out.push("본문 인증번호 분할(splitBodyAtOtp)을 쓰지 않는다");
+  if (!code.includes('sms.kind === "otp" && sms.otpCode && otpSplit === null && (')) out.push("인증번호 박스가 분할 실패(null) 폴백으로만 그려지지 않는다");
+  if (!code.includes("{otpSplit.code}")) out.push("분할 성공 시 본문 안 인증번호를 그리지 않는다");
+  return out;
+}
+
+test("[T190/G459 배선 · AC-061] 문자함 — 인증번호는 본문 안 1회 · 박스는 본문에 코드가 없을 때만", () => {
+  assert.deepEqual(otpWiringViolations(overlay), []);
+});
+
+test("[T190/G459 역검증] 박스 폴백 분기를 지운 사본 · 박스를 항상 그리는 사본은 각각 실패한다", () => {
+  const withoutFallback = overlay.replace('sms.kind === "otp" && sms.otpCode && otpSplit === null && (', "false && (");
+  const alwaysBox = overlay.replace('sms.kind === "otp" && sms.otpCode && otpSplit === null && (', 'sms.kind === "otp" && sms.otpCode && (');
+  assert.notEqual(withoutFallback, overlay, "오염 지점을 찾지 못했다");
+  assert.equal(otpWiringViolations(withoutFallback).length, 1);
+  assert.equal(otpWiringViolations(alwaysBox).length, 1);
+});
+
+test("[T190/G460 · D-94] 문자함과 랜딩은 대화상자 하나 안의 두 보기 — hidden 토글 · 랜딩은 in-call-sms 진입", () => {
+  const code = codeOnly(overlay);
+  assert.equal(code.split('role="dialog"').length - 1, 1, "대화상자는 하나뿐이어야 한다(중첩 aria-modal 0)");
+  assert.ok(code.includes('hidden={view !== "thread"}'), "스레드 보기가 hidden으로 토글돼야 한다");
+  assert.ok(code.includes('hidden={view !== "landing"}'), "랜딩 보기가 hidden으로 토글돼야 한다(숨김 마운트 — 입력값 유지)");
+  assert.ok(code.includes('entrySurface="in-call-sms"'), "문자함 안 랜딩은 in-call-sms 진입이어야 한다(대화상자 역할 없음)");
+  assert.ok(code.includes('onHide={() => setView("thread")}'), "브라우저 뒤로 '문자'는 숨기기만 한다(언마운트 아님)");
+  // 통화 표시줄 자막 — 최대 2줄 · 높이 36px 상한(옛 `line-clamp-2 block` 충돌 제거 — 문제 2c).
+  assert.ok(code.includes("line-clamp-2 max-h-[36px]"), "통화 표시줄 자막 2줄·36px 상한");
+  assert.equal(code.includes("line-clamp-2 block"), false, "line-clamp를 display:block이 덮는 옛 충돌이 남았다");
+});

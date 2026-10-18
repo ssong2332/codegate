@@ -35,7 +35,19 @@ import {
   type MockScreenKind,
 } from "@/lib/api";
 import { scenarios, type ScenarioDoc } from "@/content/scenarios";
-import { detectMessengerSkin, type MessengerSkin } from "@/lib/messenger/detectSkin";
+import { detectDeviceSkin, type MessengerSkin } from "@/lib/messenger/detectSkin";
+// T190-6(docs/Architecture.md §73.5 · 표 K · UX-022 v1.33) — 통화·문자함과 **같은 해석 함수**(한 세션 = 한 스킨).
+import {
+  DEVICE_SKIN_STORAGE_KEY,
+  parseSessionSkin,
+  parseStoredDeviceSkin,
+  readUaModelHint,
+  resolveDeviceSkin,
+  serializeStoredDeviceSkin,
+  type DeviceSkin,
+} from "@/lib/phone/deviceSkin";
+import { messengerSmsTokensFor, smsThreadTokensFor } from "@/lib/phone/skinTokens";
+import PhoneIcon from "@/components/PhoneIcon";
 import EndTrainingButton from "@/components/EndTrainingButton";
 import MessengerFakeLanding from "@/components/MessengerFakeLanding";
 import MessengerStartNotice from "@/components/MessengerStartNotice";
@@ -59,28 +71,33 @@ type ChatMessage = {
   attachments?: MessengerAttachment[];
 };
 
-const SKIN_CYCLE: MessengerSkin[] = ["ios", "samsung", "default"];
-const SKIN_LABEL: Record<MessengerSkin, string> = {
-  ios: "iOS 메시지",
-  samsung: "삼성 메시지",
-  default: "기본 화면",
-};
+// ⛔ T190-6b(UX D-100 · PRD AC-092 (d) · AC-031 읽기 고지) — 세션 중 스킨 전환 칩(`SKIN_CYCLE`/`SKIN_LABEL`)과
+// 감지 실패 안내 줄을 없앴다. 수동 선택은 **세션 전** `start-notice`의 화면 모양 줄(DeviceSkinPicker)이 맡는다.
 
-// 표면·스킨별 말풍선 색(외형뿐 — 어떤 안전 판정도 게이팅하지 않는다, §13.4/13.5). 카카오는
-// 실제 카카오톡 말풍선 배색(정확 모사, OQ-18 accepted risk)을 재현한다.
-function bubbleClass(role: "scammer" | "user", surface: "kakao" | "sms", skin: MessengerSkin) {
-  if (surface === "kakao") {
-    return role === "user"
-      ? "bg-[#FEE500] text-[#22303A]"
-      : "bg-white text-[#22303A] border border-[#E2DDD3]";
+/** 카카오 표면 말풍선 색(정확 모사 — OQ-18 accepted risk · UX-022 v1.33 범위 밖이라 무변경). */
+function kakaoBubbleClass(role: "scammer" | "user") {
+  return role === "user"
+    ? "bg-[#FEE500] text-[#22303A]"
+    : "bg-white text-[#22303A] border border-[#E2DDD3]";
+}
+
+/**
+ * T190-6(UX-022 v1.33 (2)) — 문자형 표면 말풍선 모양(스킨 토큰 · UX v1.33 근사). 색만이 아니라 모서리·꼬리까지 스킨이
+ * 정한다. 외형뿐 — 어떤 안전 판정도 게이팅하지 않는다(§13.4/13.5).
+ */
+function smsBubbleStyle(role: "scammer" | "user", skin: MessengerSkin): React.CSSProperties {
+  const t = messengerSmsTokensFor(skin);
+  const r = t.radiusPx;
+  const tail = t.tailRadiusPx;
+  if (role === "user") {
+    return { backgroundColor: t.outgoingBg, color: t.outgoingText, borderRadius: `${r}px ${r}px ${tail}px ${r}px` };
   }
-  if (skin === "ios") {
-    return role === "user" ? "bg-[#0B84FF] text-white" : "bg-[#E5E5EA] text-[#22303A]";
-  }
-  if (skin === "samsung") {
-    return role === "user" ? "bg-[#1D6FE0] text-white" : "bg-[#EFF1F5] text-[#22303A]";
-  }
-  return role === "user" ? "bg-[#0E6B62] text-white" : "bg-white text-[#22303A] border border-[#E2DDD3]";
+  return {
+    backgroundColor: t.incomingBg,
+    color: t.incomingText,
+    borderRadius: `${r}px ${r}px ${r}px ${tail}px`,
+    border: t.incomingBorder ? `1px solid ${t.incomingBorder}` : undefined,
+  };
 }
 
 export default function MessengerSessionPage() {
@@ -159,23 +176,38 @@ export default function MessengerSessionPage() {
         }
 
         if (found.surface === "sms") {
-          const persistedSkin = data.messengerSkin as MessengerSkin | undefined;
-          const persistedSource = data.skinSource as SkinSourceState | undefined;
-          if (persistedSkin && persistedSource) {
-            // 이미 결정된 스킨이 있다(새로고침 복원 또는 이전 수동 전환, P-16) — 재감지하지 않는다.
-            setMessengerSkin(persistedSkin);
-            setSkinSource(persistedSource);
+          // T190-6(§73.3 표 K · §73.5) — 세션 문서(새로고침 복원·이전 선택) > 이 기기의 수동 선택 > 감지 규칙표 v2.
+          const sessionSkin = parseSessionSkin(data.messengerSkin, data.skinSource);
+          if (sessionSkin) {
+            // 이미 결정된 스킨이 있다(새로고침 복원 또는 이전 선택, P-16) — 재감지하지 않는다.
+            setMessengerSkin(sessionSkin.skin);
+            setSkinSource(sessionSkin.source);
           } else {
-            const detected = detectMessengerSkin(
-              typeof navigator !== "undefined" ? navigator.userAgent : "",
-            );
-            setMessengerSkin(detected.skin);
-            setSkinSource(detected.source);
-            // 세션 문서에 지속(P-16) — 실패해도 화면 표시는 이미 로컬 state로 끝났다(비차단).
+            let storedSkin: DeviceSkin | null = null;
+            try {
+              storedSkin = parseStoredDeviceSkin(window.localStorage.getItem(DEVICE_SKIN_STORAGE_KEY));
+            } catch {
+              storedSkin = null; // 저장소 접근 불가 = "선택 없음"(§73.5 (3))
+            }
+            const uaModel = await readUaModelHint(typeof navigator === "undefined" ? undefined : navigator);
+            if (cancelled) return;
+            const resolved = resolveDeviceSkin({
+              session: null,
+              stored: storedSkin,
+              detected: detectDeviceSkin({
+                userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+                maxTouchPoints: typeof navigator !== "undefined" ? navigator.maxTouchPoints : 0,
+                uaModel,
+              }),
+            });
+            setMessengerSkin(resolved.skin);
+            setSkinSource(resolved.source);
+            // 세션 문서에 지속(P-16 · 이어지는 통화가 같은 값을 쓴다 — AC-092 (b)) — 실패해도 화면 표시는 이미
+            // 로컬 state로 끝났다(비차단). 기존 콜러블 계약 그대로(§73.5 (2)).
             updateMessengerSkin({
               sessionId,
-              messengerSkin: detected.skin,
-              skinSource: detected.source,
+              messengerSkin: resolved.skin,
+              skinSource: resolved.source,
             }).catch(() => {});
           }
         }
@@ -279,12 +311,18 @@ export default function MessengerSessionPage() {
     return () => clearTimeout(timer);
   }, [escalating, router]);
 
-  const handleToggleSkin = () => {
-    const next = SKIN_CYCLE[(SKIN_CYCLE.indexOf(messengerSkin) + 1) % SKIN_CYCLE.length];
+  // T190-6(§73.10 (2) · D-100) — 세션 전 화면 모양 줄에서 고른 값. ① 화면 상태 ② 기존 `updateMessengerSkin(manual)`
+  // ③ 기기 저장(`fv.deviceSkin.v1` — 다음 세션·통화의 표 K K-2). 쓰는 곳은 이 1곳뿐이다(§73.5 (3)).
+  const handleChooseSkin = (next: "ios" | "samsung") => {
     setMessengerSkin(next);
     setSkinSource("manual");
     if (sessionId) {
       updateMessengerSkin({ sessionId, messengerSkin: next, skinSource: "manual" }).catch(() => {});
+    }
+    try {
+      window.localStorage.setItem(DEVICE_SKIN_STORAGE_KEY, serializeStoredDeviceSkin(next, Date.now()));
+    } catch {
+      // 저장소를 쓸 수 없으면 이번 세션 값만 남는다(비차단).
     }
   };
 
@@ -364,6 +402,10 @@ export default function MessengerSessionPage() {
   }
 
   const surface = scenario.surface ?? "sms";
+  // T190-6(UX-022 v1.33) — 문자형 표면의 화면 문법 토큰(UX v1.33 근사 — 실기 측정 전 · 대비 하한 G456).
+  const isSms = surface === "sms";
+  const smsTokens = messengerSmsTokensFor(messengerSkin);
+  const threadTokens = smsThreadTokensFor(messengerSkin);
 
   // T187(§72.5 D2 · UX-022 `start-notice` N-1/N-3) — 세션 전 고지. 대화 목록·헤더를 그리지 않는다
   // (구독도 아직 0). ⛔ 아래 채팅 return 안에 고지·축약판을 두지 않는다(AC-088 (e) · G444 ③).
@@ -373,6 +415,7 @@ export default function MessengerSessionPage() {
         surface={surface}
         onConfirm={handleConfirmStartNotice}
         onEndTraining={handleEndTraining}
+        skinPicker={{ value: messengerSkin, source: skinSource, onChange: handleChooseSkin }}
       />
     );
   }
@@ -395,49 +438,75 @@ export default function MessengerSessionPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col bg-[#FAF8F5]">
-      {/* 상단 상시 고정 영역(스크롤 무관) — 스킨 토글·"전화로 확인"·"훈련 종료"(AC-006).
+    // T190-6(UX-022 v1.33 (2)(5)) — 문자형 표면은 스킨이 **화면 문법**(바탕·헤더·말풍선 모양·입력 바)을 정하고 최대폭
+    // 430px 가운데 정렬이다(바깥 #E5E7EA). 카카오형은 범위 밖이라 무변경.
+    <div
+      className={isSms ? "flex min-h-screen flex-col" : "contents"}
+      style={isSms ? { backgroundColor: smsTokens.outerBg } : undefined}
+    >
+    <main
+      className={`flex min-h-screen flex-col ${isSms ? "mx-auto w-full max-w-[430px]" : "bg-[#FAF8F5]"}`}
+      style={isSms ? { backgroundColor: smsTokens.screenBg, fontFamily: "system-ui, sans-serif" } : undefined}
+    >
+      {/* 상단 상시 고정 영역(스크롤 무관) — (문자형) 대화 헤더 · "전화로 확인" · "훈련 종료"(AC-006).
           T187(docs/Architecture.md §72 · PRD v1.18 AC-086 · UX D-81·D-82·M-13) — 이 화면은 세션
           중이라 카카오 면책 배너·합성 표식·난이도 배지를 지웠다(면책은 시작 전 고지 ②로 옮겼다).
-          ⛔ 빈 자리를 채우지 않는다. */}
-      <div className="sticky top-0 z-20 flex flex-col border-b border-[#E2DDD3] bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+          ⛔ 빈 자리를 채우지 않는다.
+          ⛔ T190-6b(D-100 · AC-092 (d)) — 세션 중 스킨 전환 칩·감지 실패 안내 줄을 지웠다(세션 전 선택 줄이 대신한다). */}
+      <div
+        className={`sticky top-0 z-20 flex flex-col border-b ${isSms ? "" : "border-[#E2DDD3] bg-white"}`}
+        style={isSms ? { backgroundColor: threadTokens.headerBg, borderColor: threadTokens.headerBorder } : undefined}
+      >
+        <div className="flex min-h-[56px] flex-wrap items-center justify-between gap-2 px-4 py-2">
           {/* ⭐ G449 — 왼쪽 래퍼는 비어도(카카오 표면) 남긴다. justify-between의 첫 자식으로 남아야
-              오른쪽 그룹(전환 버튼·종료)이 오른쪽 끝에 그대로 있다. */}
-          <div className="flex items-center gap-2">
-            {surface === "sms" && (
-              <button
-                type="button"
-                onClick={handleToggleSkin}
-                className="min-h-[40px] rounded-full border border-[#C9C2B6] px-3 text-sm font-semibold text-[#22303A] hover:bg-[#F2EFE9]"
-              >
-                스킨: {SKIN_LABEL[messengerSkin]} (탭하여 전환)
-              </button>
+              오른쪽 그룹(전환 버튼·종료)이 오른쪽 끝에 그대로 있다.
+              T190-6(UX-022 v1.33 (3) · D-89) — 문자형은 여기에 일반형 아바타 + 발신자(`callerLabel`)를 둔다.
+              ⛔ 뒤로 셰브런은 그리지 않는다(돌아갈 대화 목록이 없다 — 동작 없는 버튼 금지). */}
+          <div className="flex min-w-0 items-center gap-2.5">
+            {isSms && (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
+                  style={{ backgroundColor: threadTokens.avatarBg }}
+                >
+                  <PhoneIcon name="person" size={22} />
+                </span>
+                <span className="min-w-0 truncate text-[17px] font-semibold" style={{ color: threadTokens.headerText }}>
+                  {scenario.callerLabel}
+                </span>
+              </>
             )}
           </div>
           <div className="flex items-center gap-2">
             {/* 명시 전환 버튼(§13.3 — 1턴부터 상시, AC-034) — 에스컬레이션 가능 시나리오에서만.
-                전이 플로우.dc.html의 "📞 전화로 확인" 채움 스타일(브랜드 청록 CTA)을 그대로 채용
-                — 위치는 상단 sticky 툴바에 그대로 두었다(항상 노출 요건은 이미 충족, §13.3 판단
-                근거는 보고 참고). */}
+                T190-6(UX-022 v1.33 (3)) — 문자형은 수화기 단색 아이콘 + "전화로 확인"(📞 이모지 대체 · 48px).
+                카카오형은 무변경. */}
             {scenario.escalation && !ended && (
               <button
                 type="button"
                 onClick={() => void handleRequestEscalation()}
                 disabled={escalating}
-                className="min-h-[40px] rounded-full bg-[#0E6B62] px-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#0B564F] disabled:cursor-not-allowed disabled:bg-[#F2EFE9] disabled:text-[#C9C2B6]"
+                className={
+                  isSms
+                    ? "flex min-h-[48px] items-center gap-1.5 rounded-full px-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                    : "min-h-[40px] rounded-full bg-[#0E6B62] px-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#0B564F] disabled:cursor-not-allowed disabled:bg-[#F2EFE9] disabled:text-[#C9C2B6]"
+                }
+                style={isSms ? { color: threadTokens.link } : undefined}
               >
-                📞 전화로 확인
+                {isSms ? (
+                  <>
+                    <PhoneIcon name="accept-call" size={20} />
+                    전화로 확인
+                  </>
+                ) : (
+                  "📞 전화로 확인"
+                )}
               </button>
             )}
             <EndTrainingButton onClick={handleEndTraining} />
           </div>
         </div>
-        {surface === "sms" && skinSource === "fallback" && (
-          <p role="status" className="px-4 pb-2 text-xs leading-relaxed text-[#6B655C]">
-            기기를 자동 인식하지 못해 기본 화면으로 표시합니다. 직접 바꿀 수 있어요.
-          </p>
-        )}
         {escalationError && (
           <p role="alert" className="px-4 pb-2 text-xs leading-relaxed text-[#C6392F]">
             {escalationError}
@@ -445,8 +514,9 @@ export default function MessengerSessionPage() {
         )}
       </div>
 
-      {/* 대화 상단 맥락 — 발신자(사칭 대상)와 표면. */}
-      <p className="px-4 pt-3 text-sm text-[#6B655C]">
+      {/* 대화 상단 맥락 — 발신자(사칭 대상)와 표면.
+          ⚠️ T190-6 — UX-022 v1.33 (3)은 이 시스템 문구를 지우지 않는다(dubinsky OQ-U57 ② — User 결정 대상). 무변경. */}
+      <p className="px-4 pt-3 text-sm" style={{ color: isSms ? threadTokens.time : "#6B655C" }}>
         {scenario.callerLabel}(으)로부터 {surface === "kakao" ? "카카오톡" : "문자"} 메시지가
         도착했습니다.
       </p>
@@ -459,7 +529,9 @@ export default function MessengerSessionPage() {
         </p>
       )}
 
-      {/* 대화 목록 — 발신자 구분은 색이 아니라 라벨로(위에 "나"/callerLabel 텍스트). */}
+      {/* 대화 목록 — 발신자 구분은 색이 아니라 라벨로. 카카오형 = 위에 "나"/callerLabel 텍스트(무변경).
+          T190-6(UX-022 v1.33 (3)) — 문자형은 헤더가 발신자를 말하므로 말풍선 위 이름을 없애고, 구분은 **좌우 정렬 +
+          말풍선 모양 + 스크린리더 숨김 글("{callerLabel}:" / "나:")** 세 겹으로 유지한다(색 단독 금지). */}
       <ul
         ref={messageListRef}
         tabIndex={-1}
@@ -471,18 +543,27 @@ export default function MessengerSessionPage() {
             key={message.id}
             className={`flex flex-col gap-1 ${message.role === "user" ? "items-end" : "items-start"}`}
           >
-            <span className="text-xs font-semibold text-[#6B655C]">
-              {message.role === "user" ? "나" : scenario.callerLabel}
-            </span>
-            <span
-              className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-base leading-relaxed ${bubbleClass(
-                message.role,
-                surface,
-                messengerSkin,
-              )}`}
-            >
-              {message.text}
-            </span>
+            {isSms ? (
+              <span className="sr-only">{message.role === "user" ? "나:" : `${scenario.callerLabel}:`}</span>
+            ) : (
+              <span className="text-xs font-semibold text-[#6B655C]">
+                {message.role === "user" ? "나" : scenario.callerLabel}
+              </span>
+            )}
+            {isSms ? (
+              <span
+                className="max-w-[80%] whitespace-pre-line break-words px-[13px] py-[9px] text-[17px] leading-[1.45]"
+                style={smsBubbleStyle(message.role, messengerSkin)}
+              >
+                {message.text}
+              </span>
+            ) : (
+              <span
+                className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-base leading-relaxed ${kakaoBubbleClass(message.role)}`}
+              >
+                {message.text}
+              </span>
+            )}
             {message.attachments?.map((attachment, i) =>
               attachment.kind === "link" ? (
                 <button
@@ -515,13 +596,10 @@ export default function MessengerSessionPage() {
             구현한다 — 상대가 실제로 답장을 쓰고 있는 것처럼 보이는 점 3개 애니메이션. */}
         {sending && (
           <li className="flex flex-col items-start gap-1" aria-hidden="true">
-            <span className="text-xs font-semibold text-[#6B655C]">{scenario.callerLabel}</span>
+            {!isSms && <span className="text-xs font-semibold text-[#6B655C]">{scenario.callerLabel}</span>}
             <span
-              className={`flex items-center gap-1 rounded-2xl px-4 py-3 ${bubbleClass(
-                "scammer",
-                surface,
-                messengerSkin,
-              )}`}
+              className={`flex items-center gap-1 px-4 py-3 ${isSms ? "" : `rounded-2xl ${kakaoBubbleClass("scammer")}`}`}
+              style={isSms ? smsBubbleStyle("scammer", messengerSkin) : undefined}
             >
               {[0, 1, 2].map((i) => (
                 <span
@@ -541,8 +619,15 @@ export default function MessengerSessionPage() {
         </p>
       )}
 
-      {/* 입력·전송 또는 종료 상태 — 빈 메시지 전송 방지, 전송 중 중복 전송 방지. */}
-      <div className="sticky bottom-0 border-t border-[#E2DDD3] bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+      {/* 입력·전송 또는 종료 상태 — 빈 메시지 전송 방지, 전송 중 중복 전송 방지.
+          T190-6(UX-022 v1.33 (2)) — 문자형 입력 바: 높이 64px(필드 48px) · 스킨별 필드·전송 원 · placeholder "메시지".
+          ⛔ 실제 앱의 ＋·카메라·이모지·음성 버튼은 그리지 않는다(동작 없는 버튼 금지 — P-37 R-6). */}
+      <div
+        className={`sticky bottom-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 ${
+          isSms ? "" : "border-t border-[#E2DDD3] bg-white"
+        }`}
+        style={isSms ? { backgroundColor: smsTokens.inputBarBg } : undefined}
+      >
         {ended ? (
           <div className="flex flex-col gap-3 text-center">
             <p className="text-base font-semibold text-[#22303A]" role="status">
@@ -580,20 +665,42 @@ export default function MessengerSessionPage() {
                   event.currentTarget.scrollIntoView({ behavior: "smooth", block: "center" })
                 }
                 disabled={sending}
-                placeholder="메시지를 입력하세요..."
-                className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-[#C9C2B6] px-[18px] py-3 text-lg text-[#22303A] placeholder:text-[#6B655C]"
+                placeholder={isSms ? "메시지" : "메시지를 입력하세요..."}
+                className={
+                  isSms
+                    ? "min-h-[48px] flex-1 px-4 py-2.5 text-[17px] placeholder:text-[var(--sms-placeholder)]"
+                    : "min-h-[50px] flex-1 rounded-full border-[1.5px] border-[#C9C2B6] px-[18px] py-3 text-lg text-[#22303A] placeholder:text-[#6B655C]"
+                }
+                style={
+                  isSms
+                    ? ({
+                        backgroundColor: smsTokens.fieldBg,
+                        color: smsTokens.fieldText,
+                        borderRadius: smsTokens.fieldRadiusPx,
+                        border: smsTokens.fieldBorder ? `1px solid ${smsTokens.fieldBorder}` : "none",
+                        "--sms-placeholder": smsTokens.placeholder,
+                      } as React.CSSProperties)
+                    : undefined
+                }
               />
               <button
                 type="submit"
                 disabled={sending || !input.trim()}
                 aria-label="전송"
-                className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-lg font-bold text-white disabled:opacity-50"
+                className={
+                  isSms
+                    ? "flex h-12 w-12 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
+                    : "flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-lg font-bold text-white disabled:opacity-50"
+                }
+                style={isSms ? { backgroundColor: smsTokens.sendBg, color: smsTokens.sendIcon } : undefined}
               >
                 {sending ? (
                   <span
                     aria-hidden="true"
                     className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
                   />
+                ) : isSms ? (
+                  <PhoneIcon name="send-up" size={22} />
                 ) : (
                   "↑"
                 )}
@@ -609,6 +716,8 @@ export default function MessengerSessionPage() {
           // T104 — 상황별 콘텐츠 조회 키(§19.4 R8: 정확 일치 조회 전용).
           landingId={fakeLanding.fakeLandingId}
           landingKind={fakeLanding.landingKind}
+          // T190-6(AC-092 (b)) — 브라우저 바도 같은 스킨(카카오형은 스킨이 없어 기본).
+          skin={isSms ? messengerSkin : "default"}
           onClose={() => setFakeLanding(null)}
           onEndTraining={handleEndTraining}
           // T187(UX D-84) — UF-012 연속성 앵커는 "훈련 종료" 1종만 남아 난이도 라벨을 넘기지 않는다.
@@ -655,5 +764,6 @@ export default function MessengerSessionPage() {
         </div>
       )}
     </main>
+    </div>
   );
 }

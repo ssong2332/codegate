@@ -1,6 +1,8 @@
 export {
   countUnread,
+  formatSmsClock,
   latestSmsId,
+  needsTimeSeparator,
   pickDueInCallSms,
   sortByArrival,
   spellOutOtp,

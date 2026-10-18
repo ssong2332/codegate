@@ -480,3 +480,60 @@ test("[T116/G193] 태그 경계에서 인접 텍스트가 **붙지 않는다**",
   );
   assert.equal(extractText("<p>A&amp;B</p>"), "A&B", "엔티티를 디코드해야 원문과 대조된다");
 });
+
+// ── T190-5 — 두 진입 표면 각각 렌더(docs/Architecture.md §73.13 T116 행 · §73.14 G460 · UX D-93/D-94) ──────────
+
+/** G460 판정 — 같은 함수를 본 게이트와 역검증이 쓴다. 임베디드(문자함 안) 렌더에 대화상자 역할·aria-modal이 없어야 한다. */
+function embeddedDialogViolations(markup: string): string[] {
+  const out: string[] = [];
+  if (/role="dialog"/.test(markup)) out.push('role="dialog"');
+  if (/aria-modal/.test(markup)) out.push("aria-modal");
+  if (!/role="region"/.test(markup)) out.push('role="region" 없음');
+  return out;
+}
+
+test("[T190/G460 · 렌더] entrySurface 두 갈래 — 메신저 = 대화상자 · 문자함 = 영역(중첩 aria-modal 0) · 대상 문구는 둘 다 그려진다", (t) => {
+  const rows: string[] = [];
+  for (const item of catalogItems) {
+    const messenger = renderLandingScreen(propsFor(item));
+    const inCall = renderLandingScreen({ ...propsFor(item), entrySurface: "in-call-sms", onHide: () => {} });
+    assert.ok(/role="dialog"/.test(messenger.markup) && /aria-modal="true"/.test(messenger.markup), "메신저 진입은 대화상자 그대로");
+    assert.deepEqual(embeddedDialogViolations(inCall.markup), [], `${item.landingId}: 문자함 안 랜딩이 대화상자로 그려졌다(G460)`);
+    assert.deepEqual(
+      targetTexts(item).filter((entry) => !inCall.text.includes(entry.text)).map((m) => `${m.field}: ${m.text}`),
+      [],
+      `${item.landingId}: 문자함 안 렌더에서 카탈로그 문구가 빠졌다`,
+    );
+    assert.ok(isRenderAlive(inCall.text, item), `${item.landingId}: 문자함 안 렌더의 생존 신호가 없다`);
+    // D-94 — 문자함 안에서만 브라우저 뒤로 "문자"가 있다.
+    assert.equal(messenger.text.split("\n").includes("문자"), false, "메신저 진입에 '문자' 뒤로가 그려졌다");
+    assert.equal(inCall.text.split("\n").includes("문자"), true, `${item.landingId}: 문자함 안에 '문자' 뒤로가 없다`);
+    rows.push(`${item.landingId}=메신저 ${messenger.markup.length}자/문자함 ${inCall.markup.length}자`);
+  }
+  t.diagnostic(`[T190/G460] 8종 × 두 진입 표면 렌더 — ${rows.join(" · ")}`);
+});
+
+test("[T190/G460 역검증] 문자함 안 래퍼에 aria-modal을 남긴 사본은 실패한다", () => {
+  const { original, poisoned, overrides } = poisonedComponentSource(
+    '        role="region"\n',
+    '        role="region"\n        aria-modal="true"\n',
+  );
+  assert.notEqual(poisoned, original, "오염 지점(임베디드 래퍼)을 찾지 못했다");
+  const item = catalogItems[0];
+  const dirty = renderLandingScreen({ ...propsFor(item), entrySurface: "in-call-sms" }, overrides);
+  assert.deepEqual(embeddedDialogViolations(dirty.markup), ["aria-modal"]);
+});
+
+test("[T190/UX-023 v1.33 (2)(3)] 주소창 ⚠·모노 글꼴·🔒 0 · 기관 헤더 띠 = issuerLabel의 'ⓒ ' 정확 접두 1회 제거", () => {
+  for (const item of catalogItems) {
+    const { markup, text } = renderLandingScreen(propsFor(item));
+    assert.equal(text.includes("⚠"), false, `${item.landingId}: 주소창 경고 표시가 남았다(D-92)`);
+    assert.equal(text.includes("🔒"), false, `${item.landingId}: 자물쇠가 남았다(D-92)`);
+    assert.equal(/font-mono/.test(markup), false, `${item.landingId}: 모노 글꼴이 남았다`);
+    if (item.kind === "credential-form") {
+      const issuer = item.fields.get("issuerLabel")?.[0] ?? "";
+      const name = issuer.startsWith("ⓒ ") ? issuer.slice(2) : issuer;
+      assert.ok(text.split("\n").includes(name), `${item.landingId}: 기관 헤더 띠("${name}")가 없다`);
+    }
+  }
+});

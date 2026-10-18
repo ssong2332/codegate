@@ -2120,6 +2120,8 @@ export default function SessionCallPage() {
       {smsOverlayOpen && (
         <InCallSmsOverlay
           messages={inCallSms}
+          // T190-5(§73.5 (2) · AC-092 (b)) — 통화 셸과 같은 스킨(한 세션 = 한 스킨).
+          skin={deviceSkin.skin}
           callerLabel={callerLabel}
           elapsedLabel={formatCallElapsed(elapsedSec)}
           scammerCaption={pillCaption}

@@ -14,3 +14,5 @@ T190-1~4(§73 — 스킨 감지 v2·토큰·배너·벨·진동·음량 모드·
 - 렌더 게이트(T116) 생존 신호가 `title` 센티널이었는데 주소창이 `mockHost`를 그리면서 텍스트에서 사라짐 → `isRenderAlive(text, item)` = "훈련 종료" ∧ 그 항목의 mockHost로 재지정 + 주소창 렌더 식 차단 역검증 추가. mockScreenCopy의 `CREDENTIAL_LANDING_COPY[landingId]` 첫 등장은 kind 분기 **뒤**여야 하고 `function AppInstallMockup` 이후엔 0건이어야 한다 — 새 헬퍼는 두 함수 사이에 둔다.
 - 오케스트레이터가 명령을 Verified 4종(functions build/test/lint · 루트 test)으로 제한 → 루트 `npm run build`·eslint·타입체크 **미실행**(워크트리에 `.env`도 없음). TS 구문만 `ts.createSourceFile().parseDiagnostics`로 확인(0건)하고 보고에 고지했다.
 - G438 역검증은 `'{phase === "incoming" && ('`의 **첫 등장**을 오염시킨다 — play에 같은 문자열을 프리롤 블록보다 앞에 두면 역검증이 엉뚱한 곳을 친다(이번엔 수신 버튼을 삼항으로 둬서 회피).
+- (2차 T190-5/6/6b) ⭐ **렌더 게이트 하네스(CJS require 훅)는 `@/` 별칭을 못 푼다** — `MessengerFakeLanding.tsx`가 새로 import하는 모듈은 **상대 경로**(`../lib/phone/skinTokens`)로 써야 한다(값 import 없는 잎 모듈이면 `.ts` 훅이 변환). 오염 앵커는 `String.replace` **첫 등장**만 바꾼다 — `{copy.issuerLabel}`을 띠에 재사용하지 말고 `issuerNameOf(copy.issuerLabel)`처럼 다른 문자열로.
+- G444 ⑤가 `MESSENGER_START_NOTICE`를 deepEqual로 묶어 새 세션 전 문면은 **별도 상수**(`DEVICE_SKIN_PICKER_COPY`)로 둬야 한다.

@@ -15,19 +15,31 @@
 //   - 상단 바 = "훈련 종료"만(오른쪽 끝 — chat 헤더와 같은 끝·문구·크기). 마운트 시 제목에 포커스.
 import { useEffect, useRef } from "react";
 import EndTrainingButton from "./EndTrainingButton";
+import DeviceSkinPicker from "./DeviceSkinPicker";
 import { Button } from "./ui";
 import { MESSENGER_START_NOTICE } from "@/lib/sessionboundary/preSessionCopy";
+import type { DeviceSkin, DeviceSkinSource } from "@/lib/phone/deviceSkin";
 
 type MessengerStartNoticeProps = {
   surface: "kakao" | "sms";
   onConfirm: () => void;
   onEndTraining: () => void;
+  /**
+   * T190-6(docs/Architecture.md §73.10 (2) · D-100 · AC-092 (d)) — 세션 전 화면 모양 줄. **문자형 표면에서만** 그린다
+   * (카카오형은 스킨이 없다). 바꾸면 호출부가 화면 상태 · `updateMessengerSkin(manual)` · 기기 저장(`fv.deviceSkin.v1`)을 한다.
+   */
+  skinPicker?: {
+    value: DeviceSkin;
+    source: DeviceSkinSource;
+    onChange: (skin: "ios" | "samsung") => void;
+  };
 };
 
 export default function MessengerStartNotice({
   surface,
   onConfirm,
   onEndTraining,
+  skinPicker,
 }: MessengerStartNoticeProps) {
   const headingRef = useRef<HTMLHeadingElement | null>(null);
 
@@ -62,6 +74,9 @@ export default function MessengerStartNotice({
           </p>
         )}
         <p className="text-base leading-[1.7] text-[#6B655C]">{MESSENGER_START_NOTICE.stopHint}</p>
+        {surface === "sms" && skinPicker && (
+          <DeviceSkinPicker value={skinPicker.value} source={skinPicker.source} onChange={skinPicker.onChange} />
+        )}
       </div>
 
       {/* 주 버튼 — 화면 하단(엄지 도달 · P-30). */}

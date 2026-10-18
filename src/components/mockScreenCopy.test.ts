@@ -687,3 +687,30 @@ test("[T190/G453 클라 역검증] .com 호스트를 넣은 사본 · https:// �
   assert.notEqual(schemed, componentCode, "오염 지점(설치 호스트)을 찾지 못했다");
   assert.ok(componentHosts(schemed).flatMap(clientHostViolations).length >= 1);
 });
+
+// ── T190-5 — D-93 숫자 자판 힌트(UX-023 v1.33 (4) · docs/Architecture.md §73.8) ─────────────────────────────
+// 클라 전용 표현 힌트(`placeholder`와 같은 층)라 서버 카탈로그 드리프트 대조 밖이다. 계좌번호·금액 칸에만 필드별로 명시한다.
+const NUMERIC_FIELD_LABELS = [
+  "계좌번호",
+  "안전계좌 번호",
+  "이체 금액",
+  "이관 전용 계좌번호",
+  "이관 금액",
+  "보호계좌 번호",
+  "옮길 금액",
+];
+
+test("[T190/D-93] 계좌번호·금액 칸에만 inputMode numeric — 검증(maxLength·pattern) 0 · type=text 유지", () => {
+  const numeric = [...componentCode.matchAll(/\{ label: "([^"]+)", placeholder: "[^"]*", inputMode: "numeric" \}/g)].map((m) => m[1]);
+  assert.deepEqual(numeric.sort(), [...NUMERIC_FIELD_LABELS].sort());
+  assert.ok(componentCode.includes("inputMode={field.inputMode}"), "입력 요소가 필드별 힌트를 받아야 한다");
+  for (const forbidden of ["maxLength", "pattern=", 'type="number"']) {
+    assert.equal(componentCode.includes(forbidden), false, `입력 검증·숫자 타입 금지(D-93): ${forbidden}`);
+  }
+});
+
+test("[T190/D-93] 완료 복귀 문면은 진입 표면이 정한다 — 메신저 '채팅으로' · 문자함 '문자로'", () => {
+  assert.ok(componentCode.includes('messenger: "채팅으로 돌아가기"'));
+  assert.ok(componentCode.includes('"in-call-sms": "문자로 돌아가기"'));
+  assert.equal((componentCode.match(/^\s*\{returnLabel\}\s*$/gm) ?? []).length, 2, "두 kind의 완료 버튼이 모두 진입 표면 문면을 쓴다");
+});

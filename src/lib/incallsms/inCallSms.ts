@@ -138,3 +138,32 @@ export function threadHeaderLabel(sorted: readonly InCallSmsView[]): string {
   if (first === undefined) return MIXED_THREAD_HEADER_LABEL;
   return sorted.every((item) => item.senderLabel === first) ? first : MIXED_THREAD_HEADER_LABEL;
 }
+
+// ── T190-5(UX-027 v1.33 (4) — 스레드 시각) ────────────────────────────────────────────────────────
+
+/** iOS형 구분줄을 다시 넣는 간격(UX-027 v1.33 (4) — 앞 문자와 5분 이상 떨어질 때만). */
+export const TIME_SEPARATOR_GAP_MS = 5 * 60 * 1000;
+
+/**
+ * 도착 시각 → `"오후 3:05"` 꼴(기기 현지 시각 · 신규 데이터 0 — `arrivedAtMs`만 쓴다). 서버 시각이 아직 반영되지
+ * 않았으면(`arrivedAtMs` 0 이하) `null` — 화면은 시각을 그리지 않는다(지어내지 않는다).
+ * @param tzOffsetMinutes 테스트용 고정 오프셋(`Date#getTimezoneOffset`과 같은 부호). 생략하면 기기 현지 시각.
+ */
+export function formatSmsClock(arrivedAtMs: number, tzOffsetMinutes?: number): string | null {
+  if (!(arrivedAtMs > 0)) return null;
+  const date = new Date(arrivedAtMs);
+  const offset = tzOffsetMinutes ?? date.getTimezoneOffset();
+  const local = new Date(arrivedAtMs - offset * 60 * 1000);
+  const hours24 = local.getUTCHours();
+  const minutes = local.getUTCMinutes();
+  const period = hours24 < 12 ? "오전" : "오후";
+  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+  return `${period} ${hours12}:${minutes.toString().padStart(2, "0")}`;
+}
+
+/** iOS형 구분줄 판정 — 첫 문자이거나 앞 문자와 5분 이상 떨어졌을 때(시각을 모르면 그리지 않는다). */
+export function needsTimeSeparator(previousArrivedAtMs: number | null, arrivedAtMs: number): boolean {
+  if (!(arrivedAtMs > 0)) return false;
+  if (previousArrivedAtMs === null || !(previousArrivedAtMs > 0)) return true;
+  return arrivedAtMs - previousArrivedAtMs >= TIME_SEPARATOR_GAP_MS;
+}

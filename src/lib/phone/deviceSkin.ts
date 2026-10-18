@@ -107,3 +107,12 @@ export async function readUaModelHint(
     if (timer !== undefined) clearTimeout(timer);
   }
 }
+
+/**
+ * T190-6(UX-014 v1.33 (11) ② · D-100) — 세션 전 화면 모양 줄이 **접힌 채** 시작하는가. 감지 성공(`auto`)·이전
+ * 선택(`manual`)이면 접힘, 감지 실패(`fallback`)면 펼침. ⚠️ 표에 없는 경우: 감지 결과가 `default`(삼성 외
+ * Android)이면 보여 줄 라벨이 없어("기본"은 선택지가 아니다) 펼친다 — 구현 판단(보고 대상).
+ */
+export function pickerStartsCollapsed(value: DeviceSkin, source: DeviceSkinSource): boolean {
+  return source !== "fallback" && value !== "default";
+}

@@ -7,9 +7,8 @@
 // 대비 쌍 전부를 WCAG 상대 휘도 공식으로 계산해 막는다(글자 4.5:1 · 비텍스트 3:1). 측정값으로 바꿔도
 // 같은 테스트가 막는다.
 //
-// 잎(leaf) 모듈 — import 0. 이번 단계(T190-1~4)가 실제로 쓰는 표면(통화 셸 · 떠 있는 배너 · 통화
-// 표시줄)의 토큰만 둔다. 문자함 스레드·메신저 문자형·랜딩 브라우저 바 토큰은 그 화면을 고치는 단계
-// (T190-5 · T190-6)가 같은 형식으로 더한다(쓰이지 않는 값을 미리 두면 대비 검사가 실제 화면과 어긋난다).
+// 잎(leaf) 모듈 — 타입 import만. 표면: 통화 셸 · 떠 있는 배너 · 통화 표시줄(T190-1~4) + 문자함 스레드 · 랜딩
+// 브라우저 바·본문 · 메신저 문자형(T190-5·6). 쓰이는 값만 둔다(쓰이지 않는 값은 대비 검사가 실제 화면과 어긋난다).
 import type { MessengerSkin } from "../messenger/detectSkin";
 
 export type CallSkinTokens = {
@@ -147,6 +146,218 @@ export function bannerTokensFor(skin: MessengerSkin): BannerSkinTokens {
   return BANNER_TOKENS[skin];
 }
 
+// ── T190-5 — 문자함 스레드(UX-027 v1.33 (6)) · 랜딩 브라우저 바(UX-023 v1.33 (2)(8)) · 랜딩 고정 색 ──────
+
+export type SmsThreadSkinTokens = {
+  /** 대화 헤더 바탕 · 아래 구분선(One UI형은 구분선 없음 = 바탕과 같은 색). UX v1.33 근사. */
+  headerBg: string;
+  headerBorder: string;
+  headerText: string;
+  /** 헤더 발신자 배치 — iOS형 가운데(아바타 위·이름 아래) · One UI형 왼쪽(아바타 옆). */
+  headerLayout: "center" | "left";
+  /** 뒤로 셰브런 색. 근사. */
+  chevron: string;
+  /** 스레드 바탕. */
+  threadBg: string;
+  /** 수신 말풍선 바탕 · 글 · 테두리(기본 스킨만 1px) · 모서리. */
+  bubbleBg: string;
+  bubbleText: string;
+  bubbleBorder: string | null;
+  bubbleRadius: string;
+  /** `sms.link` — 밑줄·색·아이콘 세 겹 중 색. */
+  link: string;
+  /** 시각 글(iOS형 구분줄 · One UI형 말풍선 옆 11px). */
+  time: string;
+  timeStyle: "separator" | "beside";
+  /** 장식 아바타 원(스크린리더 숨김 — 대비 하한 대상 아님). */
+  avatarBg: string;
+};
+
+const ONE_UI_THREAD: SmsThreadSkinTokens = {
+  headerBg: "#FFFFFF",
+  headerBorder: "#FFFFFF",
+  headerText: "#1B1B1F",
+  headerLayout: "left",
+  chevron: "#1B1B1F",
+  threadBg: "#F2F3F5",
+  bubbleBg: "#FFFFFF",
+  bubbleText: "#1B1B1F",
+  bubbleBorder: null,
+  bubbleRadius: "20px",
+  link: "#0B57D0",
+  time: "#5F6368",
+  timeStyle: "beside",
+  avatarBg: "#B8BEC6",
+};
+
+const SMS_THREAD_TOKENS: Record<MessengerSkin, SmsThreadSkinTokens> = {
+  ios: {
+    headerBg: "#F7F7F7",
+    headerBorder: "#D1D1D6",
+    headerText: "#1C1C1E",
+    headerLayout: "center",
+    chevron: "#0A63C9",
+    threadBg: "#FFFFFF",
+    bubbleBg: "#E9E9EB",
+    bubbleText: "#1C1C1E",
+    bubbleBorder: null,
+    bubbleRadius: "18px 18px 18px 6px",
+    link: "#0A63C9",
+    time: "#6E6E73",
+    timeStyle: "separator",
+    avatarBg: "#B8BEC6",
+  },
+  samsung: ONE_UI_THREAD,
+  default: { ...ONE_UI_THREAD, bubbleBorder: "#E2DDD3" },
+};
+
+export function smsThreadTokensFor(skin: MessengerSkin): SmsThreadSkinTokens {
+  return SMS_THREAD_TOKENS[skin];
+}
+
+export type BrowserBarSkinTokens = {
+  barBg: string;
+  barBorder: string;
+  fieldBg: string;
+  fieldRadiusPx: number;
+  /** 지구본 아이콘(비텍스트) · 주소 글. */
+  icon: string;
+  text: string;
+  /** 브라우저 뒤로 셰브런 "문자"(UX-027에서 열었을 때만). */
+  back: string;
+};
+
+const BROWSER_BAR_TOKENS: Record<MessengerSkin, BrowserBarSkinTokens> = {
+  ios: {
+    barBg: "#F7F7F7",
+    barBorder: "#DADCE0",
+    fieldBg: "#E3E3E8",
+    fieldRadiusPx: 12,
+    icon: "#6E6E73",
+    text: "#3C3C43",
+    back: "#0A63C9",
+  },
+  samsung: {
+    barBg: "#FFFFFF",
+    barBorder: "#DADCE0",
+    fieldBg: "#F1F3F4",
+    fieldRadiusPx: 18,
+    icon: "#5F6368",
+    text: "#3C3C43",
+    back: "#1B1B1F",
+  },
+  default: {
+    barBg: "#FFFFFF",
+    barBorder: "#DADCE0",
+    fieldBg: "#F1F3F4",
+    fieldRadiusPx: 18,
+    icon: "#5F6368",
+    text: "#3C3C43",
+    back: "#1B1B1F",
+  },
+};
+
+export function browserBarTokensFor(skin: MessengerSkin): BrowserBarSkinTokens {
+  return BROWSER_BAR_TOKENS[skin];
+}
+
+/**
+ * 랜딩 본문 ③~⑧ — **기관 페이지**라 기기 스킨과 무관하게 같다(UX-023 v1.33 (8)). 근사.
+ * 발급처 `#6B655C`(현행 `#C9C2B6` 약 1.7:1 미달 Superseded) · 입력 테두리 `#8E8E93`(현행 `#E2DDD3` 3:1 미달 Superseded).
+ */
+export const LANDING_PAGE_TOKENS = {
+  pageBg: "#FFFFFF",
+  issuerBarBg: "#1F3A5F",
+  issuerBarText: "#FFFFFF",
+  headline: "#22303A",
+  body: "#6B655C",
+  inputBorder: "#8E8E93",
+  inputText: "#22303A",
+  submitBg: "#41525E",
+  submitText: "#FFFFFF",
+  issuerFooter: "#6B655C",
+} as const;
+
+// ── T190-6 — 메신저 문자형(`surface="sms"`) 화면 문법(UX-022 v1.33 (2)) ──────────────────────────
+
+export type MessengerSmsSkinTokens = {
+  /** 화면 바탕 · 최대폭 430px 바깥(UX-022 v1.33 (5)). */
+  screenBg: string;
+  outerBg: string;
+  incomingBg: string;
+  incomingText: string;
+  incomingBorder: string | null;
+  outgoingBg: string;
+  outgoingText: string;
+  /** 말풍선 모서리 — 꼬리 쪽은 iOS형만 6px. */
+  radiusPx: number;
+  tailRadiusPx: number;
+  inputBarBg: string;
+  fieldBg: string;
+  fieldBorder: string | null;
+  fieldRadiusPx: number;
+  fieldText: string;
+  placeholder: string;
+  sendBg: string;
+  sendIcon: string;
+};
+
+const ONE_UI_MESSENGER: MessengerSmsSkinTokens = {
+  screenBg: "#F2F3F5",
+  outerBg: "#E5E7EA",
+  incomingBg: "#FFFFFF",
+  incomingText: "#1B1B1F",
+  incomingBorder: null,
+  outgoingBg: "#D3E3FD",
+  outgoingText: "#1B1B1F",
+  radiusPx: 20,
+  tailRadiusPx: 20,
+  inputBarBg: "#FFFFFF",
+  fieldBg: "#F2F3F5",
+  fieldBorder: null,
+  fieldRadiusPx: 20,
+  fieldText: "#1B1B1F",
+  placeholder: "#5F6368",
+  sendBg: "#0B57D0",
+  sendIcon: "#FFFFFF",
+};
+
+const MESSENGER_SMS_TOKENS: Record<MessengerSkin, MessengerSmsSkinTokens> = {
+  ios: {
+    screenBg: "#FFFFFF",
+    outerBg: "#E5E7EA",
+    incomingBg: "#E9E9EB",
+    incomingText: "#1C1C1E",
+    incomingBorder: null,
+    // UX-022 v1.33 (2) — 옛 #0B84FF + 흰 글(약 3.6:1, 4.5 미달)은 Superseded.
+    outgoingBg: "#0A6CDC",
+    outgoingText: "#FFFFFF",
+    radiusPx: 18,
+    tailRadiusPx: 6,
+    inputBarBg: "#FFFFFF",
+    fieldBg: "#FFFFFF",
+    fieldBorder: "#D1D1D6",
+    fieldRadiusPx: 20,
+    fieldText: "#1C1C1E",
+    placeholder: "#6E6E73",
+    sendBg: "#0A6CDC",
+    sendIcon: "#FFFFFF",
+  },
+  samsung: ONE_UI_MESSENGER,
+  default: {
+    ...ONE_UI_MESSENGER,
+    incomingBorder: "#E2DDD3",
+    outgoingBg: "#E8EAED",
+    radiusPx: 16,
+    tailRadiusPx: 16,
+    sendBg: "#41525E",
+  },
+};
+
+export function messengerSmsTokensFor(skin: MessengerSkin): MessengerSmsSkinTokens {
+  return MESSENGER_SMS_TOKENS[skin];
+}
+
 // ── WCAG 대비 계산(G456) ────────────────────────────────────────────────────────────
 
 type Rgba = { r: number; g: number; b: number; a: number };
@@ -227,6 +438,37 @@ export function skinContrastPairs(skin: MessengerSkin): ContrastPair[] {
     { name: `${skin}.banner.textSecondary`, fg: banner.textSecondary, ...onCall(banner.bg), kind: "text" },
     { name: `${skin}.banner.appIcon`, fg: banner.appIconFg, bg: banner.appIconBg, kind: "nonText" },
     { name: "callBar.text", fg: CALL_BAR_TOKENS.text, bg: CALL_BAR_TOKENS.bg, kind: "text" },
+    ...smsSurfacePairs(skin),
+  ];
+}
+
+/** T190-5·6 표면(문자함 스레드 · 브라우저 바 · 랜딩 본문 · 메신저 문자형)의 대비 쌍. */
+function smsSurfacePairs(skin: MessengerSkin): ContrastPair[] {
+  const thread = smsThreadTokensFor(skin);
+  const bar = browserBarTokensFor(skin);
+  const page = LANDING_PAGE_TOKENS;
+  const chat = messengerSmsTokensFor(skin);
+  return [
+    { name: `${skin}.thread.headerText`, fg: thread.headerText, bg: thread.headerBg, kind: "text" },
+    { name: `${skin}.thread.chevron`, fg: thread.chevron, bg: thread.headerBg, kind: "nonText" },
+    { name: `${skin}.thread.bubbleText`, fg: thread.bubbleText, bg: thread.bubbleBg, kind: "text" },
+    { name: `${skin}.thread.link`, fg: thread.link, bg: thread.bubbleBg, kind: "text" },
+    { name: `${skin}.thread.time`, fg: thread.time, bg: thread.threadBg, kind: "text" },
+    { name: `${skin}.thread.senderLabel`, fg: thread.headerText, bg: thread.threadBg, kind: "text" },
+    { name: `${skin}.browserBar.text`, fg: bar.text, bg: bar.fieldBg, kind: "text" },
+    { name: `${skin}.browserBar.globe`, fg: bar.icon, bg: bar.fieldBg, kind: "nonText" },
+    { name: `${skin}.browserBar.back`, fg: bar.back, bg: bar.barBg, kind: "text" },
+    { name: "landing.issuerBar", fg: page.issuerBarText, bg: page.issuerBarBg, kind: "text" },
+    { name: "landing.headline", fg: page.headline, bg: page.pageBg, kind: "text" },
+    { name: "landing.body", fg: page.body, bg: page.pageBg, kind: "text" },
+    { name: "landing.inputBorder", fg: page.inputBorder, bg: page.pageBg, kind: "nonText" },
+    { name: "landing.submit", fg: page.submitText, bg: page.submitBg, kind: "text" },
+    { name: "landing.issuerFooter", fg: page.issuerFooter, bg: page.pageBg, kind: "text" },
+    { name: `${skin}.messenger.incoming`, fg: chat.incomingText, bg: chat.incomingBg, kind: "text" },
+    { name: `${skin}.messenger.outgoing`, fg: chat.outgoingText, bg: chat.outgoingBg, kind: "text" },
+    { name: `${skin}.messenger.fieldText`, fg: chat.fieldText, bg: chat.fieldBg, kind: "text" },
+    { name: `${skin}.messenger.placeholder`, fg: chat.placeholder, bg: chat.fieldBg, kind: "text" },
+    { name: `${skin}.messenger.sendIcon`, fg: chat.sendIcon, bg: chat.sendBg, kind: "nonText" },
   ];
 }
 

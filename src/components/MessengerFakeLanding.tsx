@@ -24,15 +24,30 @@
 // ⚠️ 아래 app-install 문구는 서버 카탈로그(`functions/src/scenarios/mockScreens.ts`)의
 // `headline`/`bodyLines`/`consentLabel`이 정본이며, 두 곳이 갈라지지 않도록 드리프트 테스트
 // (`src/components/mockScreenCopy.test.ts`)가 문자열을 직접 대조한다.
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import EndTrainingButton from "./EndTrainingButton";
+import PhoneIcon from "./PhoneIcon";
 import { Button } from "./ui";
+// ⚠️ 상대 경로로 import한다 — 렌더 게이트 하네스(`src/lib/mockscreenrender/renderHarness.ts`)가 CommonJS require로
+// 이 파일을 불러와 `@/` 별칭을 풀지 못한다. 토큰 모듈은 값 import가 없는 잎 모듈이다.
+import { LANDING_PAGE_TOKENS, browserBarTokensFor } from "../lib/phone/skinTokens";
+import type { MessengerSkin } from "../lib/messenger/detectSkin";
 
 /** UX-023의 목업 종류. 부재 → `credential-form`(하위호환 읽기 규칙, §15.9.1 R2). */
 export type MessengerFakeLandingKind = "credential-form" | "app-install";
 
+/**
+ * T190-5(docs/Architecture.md §73.8 · UX D-93 · D-94) — 이 랜딩을 연 표면. ⛔ **표현만** 가른다(kind 분기·제출
+ * 무인자·네트워크 0은 그대로 — §15.9.4 파일 단위 계약):
+ * - `"messenger"`(기본 · UX-022에서 연 경우) — 지금처럼 화면 전체를 덮는 대화상자. 완료 버튼 "채팅으로 돌아가기".
+ * - `"in-call-sms"`(UX-027 문자함 안의 두 번째 보기) — 대화상자 역할·`aria-modal`·`fixed`가 **없는** 영역
+ *   (문자함 대화상자 하나 안에 들어간다 — 중첩 `aria-modal` 0, G460). 완료 버튼 "문자로 돌아가기" · 브라우저 바
+ *   왼쪽 "문자" 셰브런(숨김 = 입력값 유지, D-94). 통화 표시줄은 문자함이 맨 위에 한 번 그린다(T103 5요소).
+ */
+export type MessengerFakeLandingEntrySurface = "messenger" | "in-call-sms";
+
 type MessengerFakeLandingProps = {
-  /** 링크의 displayText(모의 표기) — 이 목업의 제목으로도 그대로 쓴다. */
+  /** 링크의 displayText(모의 표기) — 이 목업의 대화상자 이름(aria-label)으로 쓴다(주소창은 가짜 호스트). */
   title: string;
   /** 서버 카탈로그가 확정한 목업 종류(§15.9.1 R3). 클라가 문자열로 추론하지 않는다. */
   landingKind?: MessengerFakeLandingKind;
@@ -43,8 +58,14 @@ type MessengerFakeLandingProps = {
    * 만들지 않는다. 그것이 R5 "app-install 방향 폴백 금지"를 우회하는 유일한 구멍이다).
    */
   landingId?: string;
-  /** 닫기/복귀 — UX-022 채팅으로 되돌아간다. */
+  /** 진입 표면(위 타입 주석). 부재 = `"messenger"` — 기존 호출부·렌더 게이트 무변경. */
+  entrySurface?: MessengerFakeLandingEntrySurface;
+  /** 브라우저 바의 기기 스킨(UX-023 v1.33 (2)(8) — 바의 모서리·배경만 다르다). 부재 = 기본. */
+  skin?: MessengerSkin;
+  /** 닫기/복귀 — 연 표면(채팅 또는 문자함)으로 되돌아간다. */
   onClose: () => void;
+  /** `"in-call-sms"` 전용 — 브라우저 뒤로 "문자"(랜딩을 **숨기기만** 한다 · 입력값은 이 컴포넌트 안에 남는다). */
+  onHide?: () => void;
   /** "훈련 종료"는 이 화면에서도 접근 가능해야 한다(AC-006). */
   onEndTraining: () => void;
   /**
@@ -64,61 +85,106 @@ type MessengerFakeLandingProps = {
   onCredentialSubmit?: () => void;
 };
 
+/** 완료 화면 복귀 버튼 문면(UX-023 v1.33 (5) · D-93) — 진입 표면이 정한다. 동작은 둘 다 `onClose`. */
+const RETURN_LABELS: Record<MessengerFakeLandingEntrySurface, string> = {
+  messenger: "채팅으로 돌아가기",
+  "in-call-sms": "문자로 돌아가기",
+};
+
 export default function MessengerFakeLanding({
   title,
   landingKind = "credential-form",
   landingId,
+  entrySurface = "messenger",
+  skin = "default",
   onClose,
+  onHide,
   onEndTraining,
   onInstallConsent,
   onCredentialSubmit,
 }: MessengerFakeLandingProps) {
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${title} 화면`}
-      className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-[#FAF8F5]"
-    >
-      {/* 상시 종료(AC-006). ⚠️ T84: 이 헤더는 **두 kind가 공유**한다 — 상시 종료가 kind와 무관하게
-          성립해야 하고, 그것이 파일 분리를 금지하는 두 번째 이유다(§15.9.4 표 #2).
-          T187(docs/Architecture.md §72 · PRD v1.18 AC-086 · UX D-82·D-84) — 이 화면은 전부 세션
-          중이라 상단 표식 배너와 난이도 배지(UF-012 연속성 앵커 ①③)를 지웠다. 앵커는 "훈련 종료"
-          하나만 남는다(D-84). 빈 자리를 채우지 않는다. 종료 버튼이 오른쪽 끝에 남도록
-          justify-end(G449). */}
-      <div className="sticky top-0 z-10 flex flex-wrap items-center justify-end gap-3 border-b border-[#E2DDD3] bg-white px-4 py-3">
+  const bar = browserBarTokensFor(skin);
+  const returnLabel = RETURN_LABELS[entrySurface];
+  const content: ReactNode = (
+    <>
+      {/* ② 브라우저 바(UX-023 v1.33 (2) · D-92) — 높이 52px · 주소 필드(지구본 + 가짜 호스트) + 오른쪽 "훈련 종료".
+          ⚠️ T84: 이 바는 **두 kind가 공유**한다 — 상시 종료가 kind와 무관하게 성립해야 하고, 그것이 파일 분리를
+          금지하는 두 번째 이유다(§15.9.4 표 #2). T187(§72 · AC-086 · D-82·D-84) — 세션 중 표식·난이도 배지는 없다.
+          종료 버튼이 오른쪽 끝에 남도록 justify-end(G449).
+          ⭐ T190-2/T190-5(§73.9 · D-101 · D-92) — 주소 = 그 랜딩의 **가짜 호스트**(`.invalid` · 호스트만 · 스킴 0 ·
+          누를 수 없는 텍스트). 빨간 ⚠(사이트 위험 판정 힌트 — D-6 위반)·모노 글꼴·자물쇠("안전한 연결"이라는 새
+          주장)를 그리지 않는다. 글꼴은 system-ui. `title`은 대화상자 이름(A5)으로만 쓴다. */}
+      <div
+        className="sticky top-0 z-10 flex h-[52px] shrink-0 items-center justify-end gap-1.5 border-b px-2"
+        style={{ backgroundColor: bar.barBg, borderColor: bar.barBorder, fontFamily: "system-ui, sans-serif" }}
+      >
+        {entrySurface === "in-call-sms" && onHide && (
+          <button
+            type="button"
+            onClick={onHide}
+            className="flex h-12 min-w-[56px] shrink-0 items-center text-[15px]"
+            style={{ color: bar.back }}
+          >
+            <PhoneIcon name="chevron-back" size={22} />
+            문자
+          </button>
+        )}
+        <div
+          className="flex h-9 min-w-0 flex-1 items-center gap-1.5 px-2.5"
+          style={{ backgroundColor: bar.fieldBg, borderRadius: bar.fieldRadiusPx }}
+        >
+          <span className="shrink-0" style={{ color: bar.icon }}>
+            <PhoneIcon name="globe" size={16} />
+          </span>
+          <p className="truncate text-sm" style={{ color: bar.text }}>
+            {landingHostFor(landingKind, landingId)}
+          </p>
+        </div>
         <EndTrainingButton onClick={onEndTraining} />
       </div>
 
-      {/* 메신저 플로우.dc.html "가짜 브라우저 주소창" 재현 — 새 state·네트워크 호출은 없다(AC-045 무변경).
-          ⭐ T190-2(docs/Architecture.md §73.9 · UX D-101 · AC-094 (a)) — 주소창 글자는 링크 표시 텍스트가 아니라
-          그 랜딩의 **가짜 호스트**(`.invalid` — 호스트만, 스킴 0)다. 눌러도 아무 데도 가지 않는다(텍스트일 뿐).
-          `title`은 대화상자 이름(A5 — aria-label)으로 계속 쓴다. 주소창의 나머지 모양(⚠·모노 글꼴 제거 · 지구본)은
-          T190-5(§73.8)가 바꾼다. */}
-      <div className="flex items-center gap-2 border-b border-[#E2DDD3] bg-[#F2EFE9] px-4 py-2.5">
-        <div className="flex h-9 flex-1 items-center gap-2 rounded-full border border-[#E2DDD3] bg-white px-3.5">
-          <span aria-hidden="true" className="text-xs text-[#C6392F]">
-            ⚠
-          </span>
-          <p className="truncate font-mono text-xs text-[#6B655C]">{landingHostFor(landingKind, landingId)}</p>
-        </div>
-      </div>
-
-      <div className="mx-auto flex w-full max-w-sm flex-1 flex-col gap-6 p-6">
+      <div className="mx-auto flex w-full max-w-sm flex-1 flex-col">
         {/* ⚠️ **kind 분기가 먼저 끝난다**(§19.4 R7). 상황별 콘텐츠 조회는 선택된 서브 컴포넌트
             **안쪽**에서만 일어나며, 조회 결과가 kind를 바꾸는 경로는 존재하지 않는다. */}
         {/* ⚠️ `app-install`은 상황 축을 갖지 않는다 — 도달 가능한 항목이 `subsidy-install` 1종뿐이고
             D-58이 "무변경"으로 확정했다. 조회 표를 억지로 만들면 도달 불가 콘텐츠가 생긴다. */}
         {landingKind === "app-install" ? (
-          <AppInstallMockup onClose={onClose} onConsent={onInstallConsent} />
+          <AppInstallMockup onClose={onClose} onConsent={onInstallConsent} returnLabel={returnLabel} />
         ) : (
           <CredentialFormMockup
             landingId={landingId}
             onClose={onClose}
             onCredentialSubmit={onCredentialSubmit}
+            returnLabel={returnLabel}
           />
         )}
       </div>
+    </>
+  );
+
+  // ⭐ T190-5(§73.8 · G460) — 문자함 안에서 열리면 대화상자가 아니라 **영역**이다(문자함 대화상자 하나 안의 두 번째
+  // 보기). `aria-label`은 두 경우 모두 같은 형태다(A5 — 꼬리 " 화면" 유지).
+  if (entrySurface === "in-call-sms") {
+    return (
+      <div
+        role="region"
+        aria-label={`${title} 화면`}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        style={{ backgroundColor: LANDING_PAGE_TOKENS.pageBg }}
+      >
+        {content}
+      </div>
+    );
+  }
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${title} 화면`}
+      className="fixed inset-0 z-50 flex flex-col overflow-y-auto"
+      style={{ backgroundColor: LANDING_PAGE_TOKENS.pageBg }}
+    >
+      {content}
     </div>
   );
 }
@@ -127,7 +193,16 @@ export default function MessengerFakeLanding({
  *  (`functions/src/scenarios/mockScreens.ts`)가 정본**이고 여기는 렌더 문자열이다 —
  *  두 패키지라 import로 공유할 수 없어 `mockScreenCopy.test.ts`가 소스 텍스트를 직접 대조한다.
  *  ⚠️ `placeholder`는 카탈로그 필드가 아닌 **순수 표현 힌트**다(숫자열 금지 — AC-005). */
-type CredentialFieldCopy = { label: string; placeholder: string };
+type CredentialFieldCopy = {
+  label: string;
+  placeholder: string;
+  /**
+   * T190-5(UX-023 v1.33 (4) · D-93) — **클라 전용 자판 힌트**(`placeholder`와 같은 층 · 서버 카탈로그 필드 아님 —
+   * 드리프트 대조 밖). 계좌번호·금액 칸에만 **필드별로 명시**한다(라벨로 추론하지 않는다 — §73.8).
+   * ⛔ 검증이 아니다 — `type="text"` 유지 · maxlength·pattern·자동 서식·오류 문구 0.
+   */
+  inputMode?: "numeric";
+};
 type CredentialCopy = {
   headline: string;
   bodyLines: string[];
@@ -199,7 +274,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     fields: [
       { label: "예금주", placeholder: "예금주를 입력하세요" },
       { label: "은행", placeholder: "은행을 입력하세요" },
-      { label: "계좌번호", placeholder: "계좌번호를 입력하세요" },
+      { label: "계좌번호", placeholder: "계좌번호를 입력하세요", inputMode: "numeric" },
     ],
     submitLabel: "계좌 등록하기",
     successHeadline: "계좌가 등록되었습니다.",
@@ -231,8 +306,8 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
       "문자로 안내된 계좌번호와 금액을 아래에 입력해 주세요.",
     ],
     fields: [
-      { label: "안전계좌 번호", placeholder: "문자로 받은 계좌번호를 입력하세요" },
-      { label: "이체 금액", placeholder: "이체하실 금액을 입력하세요" },
+      { label: "안전계좌 번호", placeholder: "문자로 받은 계좌번호를 입력하세요", inputMode: "numeric" },
+      { label: "이체 금액", placeholder: "이체하실 금액을 입력하세요", inputMode: "numeric" },
     ],
     submitLabel: "안전계좌로 이체하기",
     successHeadline: "안전계좌로 이체가 완료되었습니다.",
@@ -248,8 +323,8 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
       "문자로 안내된 이관 계좌와 금액을 아래에 입력해 주세요.",
     ],
     fields: [
-      { label: "이관 전용 계좌번호", placeholder: "문자로 받은 이관 계좌번호를 입력하세요" },
-      { label: "이관 금액", placeholder: "이관하실 금액을 입력하세요" },
+      { label: "이관 전용 계좌번호", placeholder: "문자로 받은 이관 계좌번호를 입력하세요", inputMode: "numeric" },
+      { label: "이관 금액", placeholder: "이관하실 금액을 입력하세요", inputMode: "numeric" },
     ],
     submitLabel: "피해금 이관하기",
     successHeadline: "피해금 이관이 접수되었습니다.",
@@ -265,8 +340,8 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
       "문자로 안내된 계좌번호와 옮기실 금액을 아래에 입력해 주세요.",
     ],
     fields: [
-      { label: "보호계좌 번호", placeholder: "문자로 받은 계좌번호를 입력하세요" },
-      { label: "옮길 금액", placeholder: "옮기실 금액을 입력하세요" },
+      { label: "보호계좌 번호", placeholder: "문자로 받은 계좌번호를 입력하세요", inputMode: "numeric" },
+      { label: "옮길 금액", placeholder: "옮기실 금액을 입력하세요", inputMode: "numeric" },
     ],
     submitLabel: "보호계좌로 옮기기",
     successHeadline: "보호계좌로 옮기기가 처리되었습니다.",
@@ -286,25 +361,40 @@ function landingHostFor(kind: MessengerFakeLandingKind, landingId?: string): str
 }
 
 /**
+ * ③ 기관 헤더 띠의 이름(UX-023 v1.33 (3) · D-92) — `issuerLabel`(무변경 카탈로그 값)에서 **맨 앞의 정확한 두 글자
+ * `"ⓒ "`만** 1회 뗀다(없으면 그대로 — 정확 접두 1회, 패턴 추론 아님).
+ */
+function issuerNameOf(issuerLabel: string): string {
+  const prefix = "ⓒ ";
+  return issuerLabel.slice(0, prefix.length) === prefix ? issuerLabel.slice(prefix.length) : issuerLabel;
+}
+
+/**
  * kind=`credential-form` — 가짜 로그인/정보입력 랜딩.
  *
  * T104: 그리는 문구만 landingId로 갈리고 **안전 계약은 하나도 갈리지 않는다**(P-28) —
  * 네트워크 호출 0건, 제출은 로컬 state만 변경, 완료 화면의 안전 고지는 상황과 무관하게 동일하다.
+ * T190-5(UX-023 v1.33 (1)(3)~(6)) — 배치 = ③ 기관 헤더 띠 → ④ 헤드라인·안내 → ⑤ 입력 → ⑥ 제출 → ⑦ 닫기 → ⑧ 발급처.
+ * 🔒 원은 없앴다(Superseded). 본문 ③~⑧은 기관 페이지라 기기 스킨과 무관하게 같다(UX-023 v1.33 (8)).
  */
 function CredentialFormMockup({
   landingId,
   onClose,
   onCredentialSubmit,
+  returnLabel,
 }: {
   landingId?: string;
   onClose: () => void;
   /** ⛔ 무인자 콜백이다 — 입력값은 아래 `values` state를 벗어나지 않는다(§31.6 G138/AC-045). */
   onCredentialSubmit?: () => void;
+  /** 완료 화면 복귀 버튼 문면(진입 표면이 정한다 — D-93). */
+  returnLabel: string;
 }) {
   // R8 — **정확 일치 키 조회**만 한다(문자열 분해·부분 일치 금지).
   const copy = (landingId ? CREDENTIAL_LANDING_COPY[landingId] : undefined) ?? GENERIC_CREDENTIAL_COPY;
   const [values, setValues] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+  const page = LANDING_PAGE_TOKENS;
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -315,52 +405,69 @@ function CredentialFormMockup({
     onCredentialSubmit?.();
   };
 
+  const issuerBar = (
+    <div
+      className="flex h-14 shrink-0 items-center gap-2.5 px-4 text-base font-semibold"
+      style={{ backgroundColor: page.issuerBarBg, color: page.issuerBarText }}
+    >
+      <PhoneIcon name="shield" size={24} />
+      <span className="truncate">{issuerNameOf(copy.issuerLabel)}</span>
+    </div>
+  );
+
   if (submitted) {
     return (
-      <div className="flex flex-col gap-4 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-5">
-        <p role="status" className="text-lg font-semibold text-[#0E6B62]">
-          {copy.successHeadline}
-        </p>
-        {/* T187(§72 · PRD v1.18 AC-086 (d) · UX D-83) — 제출 직후 부정 고지를 지웠다. 그 사실은
-            세션 후 UX-007의 사실 공개 문장이 말한다. 빈 자리를 채우지 않는다. */}
-        <Button type="button" onClick={onClose}>
-          채팅으로 돌아가기
-        </Button>
-      </div>
+      <>
+        {issuerBar}
+        <div className="flex flex-col gap-4 p-5">
+          {/* ⛔ 입력값 재표시 0(G255) — 완료 문구 + 복귀 버튼 1개뿐이다. */}
+          <p role="status" className="text-lg font-semibold leading-snug" style={{ color: page.headline }}>
+            {copy.successHeadline}
+          </p>
+          {/* T187(§72 · PRD v1.18 AC-086 (d) · UX D-83) — 제출 직후 부정 고지를 지웠다. 그 사실은
+              세션 후 UX-007의 사실 공개 문장이 말한다. 빈 자리를 채우지 않는다. */}
+          <Button type="button" onClick={onClose}>
+            {returnLabel}
+          </Button>
+        </div>
+      </>
     );
   }
 
   return (
     <>
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#F2EFE9]">
-        <span aria-hidden="true" className="text-2xl">
-          🔒
-        </span>
-      </div>
-      <div className="-mt-4 flex flex-col gap-2">
-        <h1 className="text-xl font-bold leading-snug text-[#22303A]">{copy.headline}</h1>
+      {issuerBar}
+      <div className="flex flex-col gap-2.5 px-5 pt-4">
+        <h1 className="text-xl font-bold leading-snug" style={{ color: page.headline }}>
+          {copy.headline}
+        </h1>
         {copy.bodyLines.map((line) => (
-          <p key={line} className="text-sm leading-relaxed text-[#6B655C]">
+          <p key={line} className="text-[15px] leading-relaxed" style={{ color: page.body }}>
             {line}
           </p>
         ))}
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-5 pb-6 pt-4">
         {copy.fields.map((field) => (
           <label
             key={field.label}
-            className="flex flex-col gap-1.5 text-sm font-semibold text-[#22303A]"
+            className="flex flex-col gap-1.5 text-[15px] font-semibold"
+            style={{ color: page.headline }}
           >
             {field.label}
+            {/* T190-5(D-93) — 숫자 칸은 숫자 자판 힌트만(`inputMode` — 필드별 명시). ⛔ 검증 0. */}
             <input
               type="text"
+              inputMode={field.inputMode}
+              autoComplete="off"
               value={values[field.label] ?? ""}
               onChange={(event) =>
                 setValues((current) => ({ ...current, [field.label]: event.target.value }))
               }
               placeholder={field.placeholder}
-              className="min-h-[48px] rounded-[10px] border border-[#E2DDD3] px-3.5 text-base text-[#22303A] outline-none focus:border-[#6B655C]"
+              className="min-h-[52px] rounded-[10px] border px-3.5 text-[17px] font-normal outline-none focus:border-2"
+              style={{ borderColor: page.inputBorder, color: page.inputText }}
             />
           </label>
         ))}
@@ -370,18 +477,23 @@ function CredentialFormMockup({
             효과(진짜 앱 버튼과 구분)를 살린다(메신저 플로우.dc.html의 동일 의도적 선택). */}
         <button
           type="submit"
-          className="min-h-[52px] rounded-[10px] bg-[#41525E] text-base font-semibold text-white transition-colors hover:bg-[#374049]"
+          className="min-h-[52px] rounded-[10px] text-base font-semibold transition-colors"
+          style={{ backgroundColor: page.submitBg, color: page.submitText }}
         >
           {copy.submitLabel}
         </button>
-        <p className="text-center text-xs text-[#C9C2B6]">{copy.issuerLabel}</p>
         <button
           type="button"
           onClick={onClose}
-          className="min-h-[44px] rounded-[10px] border border-[#C9C2B6] px-6 py-2.5 text-base font-semibold text-[#22303A] hover:bg-white"
+          className="min-h-[48px] rounded-[10px] border px-6 py-2.5 text-base font-semibold"
+          style={{ borderColor: page.inputBorder, color: page.headline }}
         >
           닫기
         </button>
+        {/* ⑧ 발급처 — 13px · #6B655C(흰 바탕 대비 약 5.8:1 · 옛 #C9C2B6 미달 Superseded). */}
+        <p className="text-center text-[13px]" style={{ color: page.issuerFooter }}>
+          {copy.issuerLabel}
+        </p>
       </form>
     </>
   );
@@ -414,7 +526,16 @@ type InstallPhase = "intro" | "installing" | "permission" | "done";
  * 없다는 불변식을 kind 추가 후에도 유지하기 위해서다(§15.9.6, 기존 `onClose`/`onEndTraining`과
  * 같은 패턴).
  */
-function AppInstallMockup({ onClose, onConsent }: { onClose: () => void; onConsent?: () => void }) {
+function AppInstallMockup({
+  onClose,
+  onConsent,
+  returnLabel,
+}: {
+  onClose: () => void;
+  onConsent?: () => void;
+  /** 완료 화면 복귀 버튼 문면(T190-5 · D-93 — 진입 표면이 정한다). */
+  returnLabel: string;
+}) {
   const [phase, setPhase] = useState<InstallPhase>("intro");
   const [progress, setProgress] = useState(0);
 
@@ -442,7 +563,8 @@ function AppInstallMockup({ onClose, onConsent }: { onClose: () => void; onConse
   };
 
   return (
-    <>
+    // T190-5 — 랜딩 본문 여백을 이 kind 안으로 옮겼다(공유 래퍼는 credential 화면의 전폭 기관 헤더 띠 때문에 여백 0).
+    <div className="flex flex-col gap-6 p-6">
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#F2EFE9]">
         <span aria-hidden="true" className="text-2xl">
           📱
@@ -466,7 +588,7 @@ function AppInstallMockup({ onClose, onConsent }: { onClose: () => void; onConse
           >
             설치 진행하기
           </button>
-          <p className="text-center text-xs text-[#C9C2B6]">{INSTALL_ISSUER_LABEL}</p>
+          <p className="text-center text-[13px] text-[#6B655C]">{INSTALL_ISSUER_LABEL}</p>
           <button
             type="button"
             onClick={onClose}
@@ -529,10 +651,10 @@ function AppInstallMockup({ onClose, onConsent }: { onClose: () => void; onConse
           </p>
           {/* T187(§72 · AC-086 (d) · D-83) — 설치 뒤 부정 고지 삭제. 세션 후 사실 공개가 잇는다. */}
           <Button type="button" onClick={onClose}>
-            채팅으로 돌아가기
+            {returnLabel}
           </Button>
         </div>
       )}
-    </>
+    </div>
   );
 }

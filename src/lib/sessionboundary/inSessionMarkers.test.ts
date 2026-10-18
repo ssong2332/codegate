@@ -48,6 +48,7 @@ type SurfaceRole = "in-session" | "mixed" | "pre-session" | "post-session" | "re
 const SESSION_SURFACE_REGISTRY: Record<string, SurfaceRole> = {
   "src/components/AgeGate.tsx": "not-in-session", // 온보딩 연령 확인 — 세션 전 화면 부품
   "src/components/AuthInvalidationBanner.tsx": "in-session", // 세션 중에도 뜰 수 있는 인증 무효 안내(T128)
+  "src/components/DeviceSkinPicker.tsx": "pre-session", // T190-6 세션 전 화면 모양 줄(start-notice 안 — AC-092 (d))
   "src/components/CallWaveform.tsx": "in-session", // 통화 중 파형
   "src/components/DrilldownOptionCard.tsx": "not-in-session", // 시나리오 드릴다운 카드(세션 전)
   "src/components/EndTrainingButton.tsx": "in-session", // 상시 종료(AC-006) — 세션 중 유일한 상시 요소
@@ -83,9 +84,9 @@ function registryMismatch(registry: Record<string, SurfaceRole>): { missing: str
 
 test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/session/*/page.tsx (등록 없이 우회 불가)", () => {
   assert.deepEqual(registryMismatch(SESSION_SURFACE_REGISTRY), { missing: [], stale: [] });
-  // T190-1(docs/Architecture.md §73.22 (4) #21 단계별 누적) — 15 → 16(+PhoneIcon). T190-6 +DeviceSkinPicker(17) →
+  // T190-1(docs/Architecture.md §73.22 (4) #21 단계별 누적) — 15 → 16(+PhoneIcon) → T190-6 17(+DeviceSkinPicker) →
   // T190-8b +CallStartNotice(18)이 같은 형식으로 늘린다.
-  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 16);
+  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 17);
 });
 
 // ── G451 — 등록부 2벌(G436 · T86)이 최상위 `src/components/*.tsx`만 훑으므로, 하위 디렉터리에 컴포넌트를 두면
@@ -401,7 +402,9 @@ test("[T187/G441] 스크린리더 이름 A1~A5 정본 · 종료 이름 불변 3�
 test("[T187/G441 역검증] A3를 `${x}`(기능 설명 소실)로 바꾼 사본은 실패한다", () => {
   const sources = g441Sources();
   const file = "src/components/InCallSmsOverlay.tsx";
-  const poisoned = sources[file].replace("aria-label={`링크: ${sms.linkDisplayText}`}", "aria-label={`${sms.linkDisplayText}`}");
+  // T190-5(docs/Architecture.md §73.13 G441 A3 행) — 링크 표기식이 가짜 주소(`linkText = linkAddress ?? linkDisplayText`)로
+  // 바뀌어 오염 앵커를 같은 커밋에 갱신했다(옛 앵커를 남기면 notEqual이 "오염 지점을 찾지 못했다"로 실패한다).
+  const poisoned = sources[file].replace("aria-label={`링크: ${linkText}`}", "aria-label={`${linkText}`}");
   assert.notEqual(poisoned, sources[file], "오염 지점을 찾지 못했다");
   assert.deepEqual(ariaLabelViolations({ ...sources, [file]: poisoned }), ["A3"]);
 });
