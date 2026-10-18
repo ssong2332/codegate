@@ -1187,6 +1187,8 @@ export default function SessionCallPage() {
       })
     ) {
       closePrimedCallAudio(primedCallAudio);
+      // reviewer 2차 Minor — 재진입 가드 ref도 비운다(닫힌 컨텍스트를 다음 받기가 "이미 준비됨"으로 보지 않게).
+      if (primedCallAudioRef.current === primedCallAudio) primedCallAudioRef.current = null;
     }
   }, [primedCallAudio, realtime.status, realtime.credentials?.provider, phase, callMode]);
 
