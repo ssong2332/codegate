@@ -1,4 +1,5 @@
 // 카탈로그 항목 → Firestore 문서 변환 (T68). 부수효과 없는 순수 함수라 단위 테스트 대상이다.
+import { buildOtpCheckInstruction } from "../scenarios/inCallSms";
 import type { InCallSmsItem } from "../scenarios/inCallSms";
 import { DEFAULT_MOCK_SCREEN_KIND, resolveMockScreenKind } from "../scenarios/mockScreens";
 import type { DeliverInCallSmsResponse } from "./types";
@@ -108,7 +109,14 @@ export function buildInCallSmsResponse(
 ): Omit<DeliverInCallSmsResponse, "status" | "declineInstruction"> {
   const plan = resolveInCallSmsPlan(input);
   if (!plan.includeInstruction) return { smsId: item.smsId };
-  return { smsId: item.smsId, announceInstruction: item.announceInstruction };
+  // 2026-10-18(§77) — 인증번호 문자는 도착 지시 뒤에 실제 번호 대조 지시를 붙인다. 실시간 경로는 이 문자열이
+  // Live 세션에 그대로 들어가 이후 턴에도 문맥으로 남는다. 번호는 이미 이 순간 Firestore 문서(`otpCode`)로
+  // 참가자 화면에 보이는 값이라 응답에 실려도 새로 노출되는 것이 없다.
+  const announceInstruction =
+    item.kind === "otp" && item.otpCode
+      ? `${item.announceInstruction}\n${buildOtpCheckInstruction(item.otpCode)}`
+      : item.announceInstruction;
+  return { smsId: item.smsId, announceInstruction };
 }
 
 // ── §59.7/§59.10 커밋 B — 모델 도구 경로의 하한 재검증(순수 판정, G387) ─────────────────
