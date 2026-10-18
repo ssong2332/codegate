@@ -39,7 +39,7 @@ import { extractLinkMarker } from "./linkMarker";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
-import { resolveOtpCheckInstruction } from "./otpCheck";
+import { evaluateOtpCheck, otpCheckInputsFromHistory } from "./otpCheck";
 import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { speakerGenderFor } from "../realtime/scenarioVoice";
@@ -274,15 +274,29 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // ②-f 인증번호 서버 대조(2026-10-18 · Architecture §78 — #300 회귀 수정) — 참가자가 **숫자를 부른 그 턴에만**
     // 서버가 문자 속 번호와 비교해 "일치/다름" 결과 1줄을 붙인다. 번호(정답)는 모델에 주지 않는다. 숫자가 없는 턴·
     // 계좌 등 다음 문자 도착 뒤·호 전환 뒤에는 지시가 없다(roleplay/otpCheck.ts 판정표).
-    const otpCheckInstruction = await resolveOtpCheckInstruction({
+    const otpInputs = otpCheckInputsFromHistory(storedHistory);
+    const otpCheck = await evaluateOtpCheck({
       scenarioId: session.scenarioId,
       userText,
-      lastScammerText: [...storedHistory].reverse().find((m) => m.role === "scammer")?.textMasked,
+      ...(otpInputs.lastScammerText !== undefined ? { lastScammerText: otpInputs.lastScammerText } : {}),
       scammerTurnNumber,
       ...(deliveredSmsId ? { deliveredThisTurn: deliveredSmsId } : {}),
       isDelivered: async (smsId) => (await sessionRef.collection("inCallSms").doc(smsId).get()).exists,
       callTransferred: verifyState?.placed === true,
     });
+    const otpCheckInstruction = otpCheck.instruction;
+    // §80 — 라이브에서 대조가 붙었는지 확인할 수 있게 판정 결과를 남긴다. 숫자가 없는 턴(대부분)은 남기지 않는다.
+    // ⛔ G170 — 번호·대사·사용자 발화는 싣지 않는다(코드값·ID·턴 번호만).
+    if (otpCheck.reason !== "no-digits" && otpCheck.reason !== "no-otp-scenario") {
+      logger.info("인증번호 대조 판정", {
+        sessionId,
+        scenarioId: session.scenarioId,
+        scammerTurnNumber,
+        outcome: otpCheck.outcome,
+        reason: otpCheck.reason,
+        repeat: otpCheck.repeat === true,
+      });
+    }
     const promptTurnInstruction = [turnInstruction, otpCheckInstruction].filter(Boolean).join("\n") || undefined;
 
     // 첫 사용자 턴만 LLM 시간 제한 20초(2026-10-18, 사용자 결정 C — llm/index.ts LLM_FIRST_TURN_TIMEOUT_MS).
