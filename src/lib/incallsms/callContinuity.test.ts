@@ -632,3 +632,37 @@ test("[T190/G460 · D-94] 문자함과 랜딩은 대화상자 하나 안의 두 
   assert.ok(code.includes("line-clamp-2 max-h-[36px]"), "통화 표시줄 자막 2줄·36px 상한");
   assert.equal(code.includes("line-clamp-2 block"), false, "line-clamp를 display:block이 덮는 옛 충돌이 남았다");
 });
+
+// ── reviewer Major — 보기 전환 포커스 · 포커스 트랩 안쪽 감싸기(UX-027/UX-023 v1.33 · AC-006 · WCAG 2.4.3) ──────────
+/** 위반 목록 — 본 단언과 역검증이 같은 함수를 쓴다. */
+function viewFocusViolations(source: string): string[] {
+  const code = codeOnly(source);
+  const out: string[] = [];
+  if (!code.includes("landingViewRef.current?.querySelector<HTMLElement>('[role=\"region\"]')?.focus();")) {
+    out.push("랜딩 보기로 바뀔 때 랜딩 영역으로 포커스를 옮기지 않는다");
+  }
+  if (!code.includes("returnFocusSmsIdRef.current = sms.smsId;")) out.push("랜딩을 연 링크를 기억하지 않는다");
+  if (!code.includes("if (trigger) trigger.focus();")) out.push("스레드로 돌아올 때 연 링크로 포커스를 되돌리지 않는다");
+  if (!code.includes("if (!active || !panelRef.current.contains(active)) {")) out.push("포커스가 패널 밖일 때 트랩이 안쪽으로 감싸지 않는다");
+  return out;
+}
+
+test("[T190/reviewer Major] 문자함↔랜딩 보기 전환 때 포커스가 body로 떨어지지 않는다 · 트랩은 패널 밖 포커스도 안쪽으로 감싼다", () => {
+  assert.deepEqual(viewFocusViolations(overlay), []);
+  // 랜딩 영역이 포커스를 받을 수 있어야 한다(이름 = A5 "{제목} 화면" — 새 문구 0).
+  const landing = codeOnly(readFileSync("src/components/MessengerFakeLanding.tsx", "utf8"));
+  assert.ok(/role="region"[\s\S]{0,200}tabIndex=\{-1\}/.test(landing), "랜딩 영역에 tabIndex={-1}이 없다");
+});
+
+test("[T190/reviewer Major 역검증] 포커스 이동·되돌리기·트랩 보강을 각각 지운 사본은 실패한다", () => {
+  const cases: Array<[string, string]> = [
+    ["landingViewRef.current?.querySelector<HTMLElement>('[role=\"region\"]')?.focus();", ""],
+    ["if (trigger) trigger.focus();", ""],
+    ["if (!active || !panelRef.current.contains(active)) {", "if (false) {"],
+  ];
+  for (const [from, to] of cases) {
+    const poisoned = overlay.replace(from, to);
+    assert.notEqual(poisoned, overlay, `오염 지점을 찾지 못했다: ${from}`);
+    assert.equal(viewFocusViolations(poisoned).length, 1, `${from} 를 지웠는데 잡히지 않았다`);
+  }
+});

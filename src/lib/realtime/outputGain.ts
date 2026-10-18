@@ -49,3 +49,15 @@ export function gainModeViolations(values: { call: number; speaker: number; base
 export function isVolumeApplied(requested: number, readBack: number): boolean {
   return Math.abs(requested - readBack) < 0.01;
 }
+
+/** D-103 프로브 값 — 1이 아니어야 한다(iOS는 읽으면 늘 1을 돌려주므로 1로 재면 거짓 양성이 난다 — reviewer Minor). */
+export const VOLUME_PROBE = 0.5;
+
+/**
+ * `<audio>`의 음량을 앱이 바꿀 수 있는가 — **1이 아닌 프로브 값**을 대입하고 다시 읽는다(대입 값은 호출부가 곧바로
+ * 실제 모드 값으로 덮는다). 판정 기준은 `isVolumeApplied` 하나다(UA로 판별하지 않는다).
+ */
+export function isVolumeSettable(media: { volume: number }): boolean {
+  media.volume = VOLUME_PROBE;
+  return isVolumeApplied(VOLUME_PROBE, media.volume);
+}

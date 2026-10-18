@@ -169,7 +169,9 @@ export default function MessengerFakeLanding({
       <div
         role="region"
         aria-label={`${title} 화면`}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        // reviewer Major — 문자함이 보기를 바꿀 때 이 영역으로 포커스를 옮긴다(스크린리더가 이름을 읽어 전환을 안다).
+        tabIndex={-1}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto outline-none"
         style={{ backgroundColor: LANDING_PAGE_TOKENS.pageBg }}
       >
         {content}

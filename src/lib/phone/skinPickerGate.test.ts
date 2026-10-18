@@ -139,3 +139,26 @@ test("[T190-6 역검증] 화면 모양 줄을 조건 없이 그린 사본은 실
   assert.notEqual(poisoned, notice);
   assert.equal(pickerPlacementViolations(poisoned).length, 1);
 });
+
+// ── reviewer Minor — 이미 선택된 칸을 다시 골라도 접히고 수동 선택으로 저장된다 ─────────────────────────────────
+function reselectViolations(picker: string): string[] {
+  const code = codeOnly(picker);
+  const start = code.indexOf("onClick={() => {");
+  if (start < 0) return ["라디오에 onClick 처리가 없다(같은 값 재선택 시 change가 오지 않는다)"];
+  const block = code.slice(start, code.indexOf("}}", start));
+  const out: string[] = [];
+  if (!block.includes("if (current !== skin) return;")) out.push("새 값 선택 때 onChange와 겹쳐 두 번 저장된다");
+  if (!block.includes("onChange(skin);") || !block.includes("setExpanded(false);")) out.push("같은 값 재선택이 저장·접힘을 하지 않는다");
+  return out;
+}
+
+test("[T190/reviewer Minor] DeviceSkinPicker — 같은 값을 다시 고르면 접고 저장한다(새 값은 onChange 한 번만)", () => {
+  assert.deepEqual(reselectViolations(read("src/components/DeviceSkinPicker.tsx")), []);
+});
+
+test("[T190/reviewer Minor 역검증] 재선택 처리를 지운 사본은 실패한다", () => {
+  const picker = read("src/components/DeviceSkinPicker.tsx");
+  const poisoned = picker.replace("if (current !== skin) return;\n                onChange(skin);", "if (current !== skin) return;");
+  assert.notEqual(poisoned, picker, "오염 지점을 찾지 못했다");
+  assert.ok(reselectViolations(poisoned).length >= 1);
+});

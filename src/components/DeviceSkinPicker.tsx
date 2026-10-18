@@ -94,6 +94,13 @@ export default function DeviceSkinPicker({ value, source, onChange }: DeviceSkin
                 onChange(skin);
                 setExpanded(false);
               }}
+              // reviewer Minor — 이미 선택된 칸을 다시 고르면 change 이벤트가 오지 않는다 ⇒ 접고 그 값을 수동 선택으로 저장한다.
+              // (새 값을 고를 때는 렌더 시점의 `current`가 다르므로 여기서 두 번 부르지 않는다.)
+              onClick={() => {
+                if (current !== skin) return;
+                onChange(skin);
+                setExpanded(false);
+              }}
               className="h-5 w-5 accent-[#0E6B62]"
             />
             <SkinThumbnail skin={skin} />

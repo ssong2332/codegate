@@ -136,6 +136,13 @@ export default function InCallSmsOverlay({
     landingKind?: "credential-form" | "app-install";
   } | null>(null);
   const [view, setView] = useState<"thread" | "landing">("thread");
+  // ⭐ reviewer Major(포커스) — 보기 전환 때 포커스가 `hidden`이 된 요소와 함께 body로 떨어지지 않게 한다.
+  // 랜딩으로 가면 랜딩 영역(`role="region"` · 이름 "{제목} 화면")으로 옮겨 스크린리더가 그 이름을 읽어 전환을 안다
+  // (세션 중 새 문구 0 — AC-093 (e) · 기존 이름 A5를 쓴다). 스레드로 돌아오면 그 랜딩을 연 **링크 버튼**으로 되돌린다.
+  const landingViewRef = useRef<HTMLDivElement | null>(null);
+  const linkButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const returnFocusSmsIdRef = useRef<string | null>(null);
+  const previousViewRef = useRef<"thread" | "landing">("thread");
 
   /**
    * 닫기 요청 — Esc·바깥 탭·필 탭·"통화로 돌아가기"가 전부 여기로 온다.
@@ -247,6 +254,12 @@ export default function InCallSmsOverlay({
       const first = focusables[0];
       const last = focusables[focusables.length - 1];
       const active = document.activeElement as HTMLElement | null;
+      // reviewer Major — 포커스가 패널 밖(body 등)에 있으면 Tab이 `aria-modal` 밖으로 새지 않게 안쪽으로 감싼다.
+      if (!active || !panelRef.current.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+        return;
+      }
       if (event.shiftKey && (active === first || active === titleRef.current)) {
         event.preventDefault();
         last.focus();
@@ -259,9 +272,24 @@ export default function InCallSmsOverlay({
     return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [requestClose, view]);
 
+  // 보기 전환 뒤(커밋 뒤 — `hidden`이 풀린 다음) 포커스를 옮긴다. 첫 마운트는 위 제목 포커스가 맡는다.
+  useEffect(() => {
+    if (previousViewRef.current === view) return;
+    previousViewRef.current = view;
+    if (view === "landing") {
+      landingViewRef.current?.querySelector<HTMLElement>('[role="region"]')?.focus();
+      return;
+    }
+    const smsId = returnFocusSmsIdRef.current;
+    const trigger = smsId ? linkButtonRefs.current.get(smsId) : undefined;
+    if (trigger) trigger.focus();
+    else titleRef.current?.focus();
+  }, [view]);
+
 
   const openLanding = (sms: InCallSmsView) => {
     onLinkTapped(sms.smsId);
+    returnFocusSmsIdRef.current = sms.smsId;
     // D-94 — 같은 문자의 랜딩이 이미 있으면 그대로 다시 보인다(입력값 유지). 다르면 교체(새 마운트).
     setLanding((current) =>
       current && current.smsId === sms.smsId
@@ -491,6 +519,11 @@ export default function InCallSmsOverlay({
                             {sms.linkDisplayText && (
                               <button
                                 type="button"
+                                ref={(node) => {
+                                  // 랜딩에서 돌아올 때 포커스를 되돌릴 자리(reviewer Major).
+                                  if (node) linkButtonRefs.current.set(sms.smsId, node);
+                                  else linkButtonRefs.current.delete(sms.smsId);
+                                }}
                                 onClick={() => openLanding(sms)}
                                 aria-label={`링크: ${linkText}`}
                                 className="flex min-h-[48px] items-center gap-1.5 text-left text-[17px] underline underline-offset-[3px] [overflow-wrap:anywhere]"
@@ -538,6 +571,7 @@ export default function InCallSmsOverlay({
               ⛔ 이 파일은 콘텐츠를 하나도 갖지 않는다. */}
           {landing && (
             <div
+              ref={landingViewRef}
               hidden={view !== "landing"}
               className={view === "landing" ? "flex min-h-0 flex-1 flex-col" : "hidden"}
             >

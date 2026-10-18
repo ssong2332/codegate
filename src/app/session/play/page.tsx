@@ -73,8 +73,9 @@ import {
   startIncomingAlert,
   type IncomingAlert,
 } from "@/lib/phone/ringtonePlayer";
-import { gainFor, isVolumeApplied, type AudioRoute } from "@/lib/realtime/outputGain";
+import { gainFor, isVolumeSettable, type AudioRoute } from "@/lib/realtime/outputGain";
 import PhoneIcon from "@/components/PhoneIcon";
+import EndTrainingButton from "@/components/EndTrainingButton";
 import {
   announceTurnsOnInstructionDispatch,
   enqueueInstruction,
@@ -1021,11 +1022,16 @@ export default function SessionCallPage() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !playbackUrl) return;
+    // reviewer Minor(D-103 거짓 양성) — 판정은 **1이 아닌 값**으로 따로 프로브한다(스피커 1.0을 먼저 켜 두면 iOS에서
+    // 1.0을 쓰고 읽어도 1이라 "반영됨"으로 잘못 판정됐다). 잠기면 모드를 통화로 되돌려 `aria-pressed`와 상태를 맞춘다.
+    const settable = isVolumeSettable(audio);
     const requested = gainFor(audioRoute);
     audio.volume = requested;
-    const applied = isVolumeApplied(requested, audio.volume);
     (async () => {
-      if (!applied) setFallbackVolumeLocked(true);
+      if (!settable) {
+        setFallbackVolumeLocked(true);
+        setAudioRoute("call");
+      }
     })();
   }, [playbackUrl, audioRoute]);
 
@@ -1454,14 +1460,20 @@ export default function SessionCallPage() {
   // early return 하나에서만 그린다(메신저 `if (startNotice === "show")`와 같은 형태). 이 시점엔 실시간 세션 컴포넌트가
   // 아직 마운트되지 않았다(마운트 조건 = 받기 뒤 자격증명) — early return이 통화를 끊지 않는다.
   if (phase === "pre-call-notice") {
-    // "준비됐어요" 뒤 짧은 정적 — 빈 통화 배경(UX-014 v1.33 (11) ① "탭 뒤"). 문구 0.
+    // "준비됐어요" 뒤 짧은 정적 — 빈 통화 배경(UX-014 v1.33 (11) ① "탭 뒤"). 안내 문구 0.
+    // reviewer Minor(AC-006 — 모든 상태에서 종료 1탭) — 이 짧은 구간에도 "훈련 종료"를 오른쪽 위 같은 자리에 둔다
+    // (고지 화면 상단 바와 같은 자리 · 같은 컨트롤 — 새 문구가 아니라 상시 종료 컨트롤이다).
     if (preCallLeaving) {
       return (
         <main
           aria-busy="true"
-          className="min-h-screen"
+          className="flex min-h-screen flex-col"
           style={{ backgroundColor: callTokensFor(deviceSkin.skin).bg }}
-        />
+        >
+          <div className="flex justify-end px-4 py-2.5">
+            <EndTrainingButton onClick={() => void handleEndTraining()} />
+          </div>
+        </main>
       );
     }
     return (

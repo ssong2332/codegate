@@ -10,6 +10,8 @@ import {
   gainFor,
   gainModeViolations,
   isVolumeApplied,
+  isVolumeSettable,
+  VOLUME_PROBE,
 } from "./outputGain.ts";
 
 const session = readFileSync("src/lib/realtime/GeminiVoiceSession.tsx", "utf8");
@@ -84,4 +86,52 @@ test("[T190/G455 배선 역검증] 폴백 음량 대입을 지운 사본은 실�
   const poisoned = pageSource.replace("audio.volume = requested;", "");
   assert.notEqual(poisoned, pageSource, "오염 지점을 찾지 못했다");
   assert.deepEqual(gainWiringViolations(poisoned, session, elevenSource), ["폴백 <audio> 음량 대입이 없다"]);
+});
+
+// ── reviewer Minor(D-103 거짓 양성) — 판정은 1이 아닌 값으로 프로브한다 ─────────────────────────────────────────
+/** iOS Safari처럼 `volume` 대입이 무시되고 늘 1을 읽어 주는 가짜 미디어. */
+const iosLikeMedia = () => ({
+  get volume() {
+    return 1;
+  },
+  set volume(value: number) {
+    // 무시(iOS — Apple 문서 "The volume property is not settable in JavaScript")
+    void value;
+  },
+});
+/** 대입이 그대로 반영되는 가짜 미디어(Android·데스크톱). */
+const settableMedia = () => {
+  let v = 1;
+  return {
+    get volume() {
+      return v;
+    },
+    set volume(value: number) {
+      v = value;
+    },
+  };
+};
+
+test("[T190/D-103 프로브] 1이 아닌 값으로 재므로 스피커(1.0)를 먼저 켜 둔 iOS에서도 잠긴다", (t) => {
+  assert.notEqual(VOLUME_PROBE, 1, "프로브가 1이면 iOS(늘 1)에서 거짓 양성이 난다");
+  // 옛 판정(요청값 그대로 대입 후 재기)의 거짓 양성을 같은 출력에 보인다 — 스피커 1.0이면 iOS도 '반영됨'.
+  const ios = iosLikeMedia();
+  ios.volume = 1.0;
+  const oldVerdict = isVolumeApplied(1.0, ios.volume);
+  const newVerdict = isVolumeSettable(iosLikeMedia());
+  t.diagnostic(`[D-103] 옛 판정(스피커 1.0 · iOS) 반영됨=${oldVerdict} / 프로브 판정 iOS=${newVerdict} · 반영 가능 기기=${isVolumeSettable(settableMedia())}`);
+  assert.equal(oldVerdict, true, "옛 판정이 거짓 양성이었다는 대조군");
+  assert.equal(newVerdict, false);
+  assert.equal(isVolumeSettable(settableMedia()), true);
+});
+
+test("[T190/D-103 배선] 폴백 <audio>는 프로브로 판정하고, 잠기면 모드를 통화로 되돌린다(aria-pressed와 상태 일치)", () => {
+  const code = pageSource.split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n");
+  const start = code.indexOf("const settable = isVolumeSettable(audio);");
+  assert.ok(start > 0, "폴백 음량 effect가 프로브 판정을 쓰지 않는다");
+  const block = code.slice(start, code.indexOf("}, [playbackUrl, audioRoute]);", start));
+  assert.ok(block.includes("if (!settable) {"));
+  assert.ok(block.includes("setFallbackVolumeLocked(true);"));
+  assert.ok(block.includes('setAudioRoute("call");'), "잠길 때 모드를 통화로 되돌리지 않으면 aria-pressed가 실제와 어긋난다");
+  assert.equal(code.includes("isVolumeApplied(requested, audio.volume)"), false, "요청값으로 재는 옛 판정이 남았다");
 });

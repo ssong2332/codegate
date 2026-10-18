@@ -366,3 +366,25 @@ test("[T190-8b/G463 배선] play는 초기 phase를 decideInitialCallPhase 하�
   // 받기 기록과 키를 공유하지 않는다(G450과 같은 축).
   assert.equal(play.includes("markSessionAnswered(sessionId);\n    markPreCallNoticeSeen"), false);
 });
+
+// ── reviewer Minor(AC-006) — "준비됐어요" 뒤 짧은 정적에도 "훈련 종료" 1탭 ─────────────────────────────────────────
+function preCallGapViolations(play: string): string[] {
+  const code = codeOnly(play);
+  const start = code.indexOf("if (preCallLeaving) {");
+  if (start < 0) return ["정적 구간 분기를 찾지 못했다"];
+  const block = code.slice(start, code.indexOf("return (\n      <CallStartNotice", start));
+  const out: string[] = [];
+  if (!block.includes("<EndTrainingButton onClick={() => void handleEndTraining()} />")) out.push("정적 구간에 훈련 종료가 없다(AC-006)");
+  return out;
+}
+
+test("[T190/reviewer Minor · AC-006] pre-call-notice 뒤 정적 구간에도 '훈련 종료'가 있다", () => {
+  assert.deepEqual(preCallGapViolations(read(PLAY)), []);
+});
+
+test("[T190/reviewer Minor 역검증] 정적 구간의 훈련 종료를 지운 사본은 실패한다", () => {
+  const play = read(PLAY);
+  const anchor = "          <div className=\"flex justify-end px-4 py-2.5\">\n            <EndTrainingButton onClick={() => void handleEndTraining()} />\n          </div>\n";
+  assert.ok(play.includes(anchor), "오염 지점을 찾지 못했다");
+  assert.deepEqual(preCallGapViolations(play.replace(anchor, "")), ["정적 구간에 훈련 종료가 없다(AC-006)"]);
+});
