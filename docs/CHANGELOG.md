@@ -4,6 +4,16 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-18 추가분, 브랜치 `fix/llm-overload-retry`, 커밋 `1283ea9`, base `54cb12a`)**: 아직 main에 병합되지 않았고 배포 0회, 라이브 미검증이다. 테스트 수치는 QA 보고 인용값이다(docs 미재현).
+
+### Fixed
+- **Gemini 503(과부하)에 0.5초·1.5초 백오프로 최대 2회 재시도(2026-10-18 라이브 관측)**: 직전 항목(#292) 배포 뒤 2026-10-18T04:05:03Z 첫 턴이 Gemini 503 "high demand"로 922ms 만에 Mock으로 강등됐다. H1 프로브(03:12~03:28Z)에서도 503이 11/20이었다.
+  - **구성**: 신규 `functions/src/llm/overloadClass.ts`(`isOverloadError` — status 503, 또는 본문 JSON이 `UNAVAILABLE`·code 503)와 `overloadRetry.ts`(`withOverloadRetry` — 0.5초·1.5초 대기 후 최대 2회). `경과+대기+2초 > 시간 상한`이면 그 재시도는 생략한다. 429·타임아웃·네트워크 오류는 재시도하지 않아 API 키 순환(429)에는 간섭하지 않는다.
+  - **적용 범위**: `getLlmClient()`가 실 Gemini에만 씌우고 `withTimeout`이 가장 바깥이다. 팩토리 경유라 `sendMessage`(첫 턴 20초·이후 10초)·오프닝·되감기 판정에 모두 적용된다. 새 환경 변수는 없다.
+  - **한계**: 503 거절이 무료 쿼터에 집계되는지 미확인(추정 — 확인 방법: 재시도 다발 시간대의 쿼터 사용량 비교) · 타임아웃 뒤에도 진행 중이던 요청과 늦은 "재시도 성공" 로그가 남을 수 있음 · 503이면 API 키 1번에서만 재시도 · 모델 과부하 자체는 해결하지 않는다.
+  - **검토 중(미도입)**: 대체 모델 후보 프로브(2026-10-18)를 마쳤으나 도입은 User 결정 대기이며 코드에는 반영하지 않았다.
+  - **검증(인용값 — QA 보고)**: reviewer APPROVED(Minor 5) · QA GO · functions 967→982 pass / 0 fail · 루트 529 / 0 · 실제 타이머 실측(503 1회 뒤 +0.5초·2회 뒤 +2초에 성공, 10초 예산에서 7.6초에 온 503은 재시도 생략, 2키 429 순환 유지). `docs/Tasks.md`에 이 작업의 행이 없다(커밋 `Refs: (미등재 — planner 인계)`).
+
 > ⚠️ **이 블록(2026-10-18 · T187 · 브랜치 `claude/nervous-dubinsky-4e928f`, HEAD `a9364e0`)**: 배포 0회, 브라우저 확인 0회. 테스트 수치 중 구현 시점 값(479→516 · 944→946)은 오케스트레이터 전달값이고, 병합 후 값(root 529/0 · functions 965/0)도 docs가 재현하지 않았다.
 
 ### Changed (2026-10-18 · T187 · PRD v1.18 MVP #36 · AC-086~089 · 미배포)
