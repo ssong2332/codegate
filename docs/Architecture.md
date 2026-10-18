@@ -17328,7 +17328,7 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 
 ## 73. (UX v1.33 실폰형 재설계 인계 — 제품 오너 지시 *"통화·문자·이체 화면을 실제 폰처럼"* · 사용자 결정 2026-10-18 D-96~D-102) **OQ-U68 실현성·라이선스 판정 + 구현 설계(T190 잠정)** — ⭐⭐ **Android에서는 수화부↔스피커 실제 전환을 웹이 할 수 없다(출력 장치 API가 Android에 없다) — D-98은 음량 전환으로 대체된다. iOS만 실기 프로브가 남는다** / ⭐⭐ **OS 글꼴·아이콘·벨소리 파일은 하나도 쓸 수 없다 — 그러나 글꼴은 `system-ui`가 기기 위에서 같은 글꼴을 그리므로 잃는 것이 없다** / ⭐ **D-102가 보류돼도 나머지는 전부 독립 구현된다 — 잃는 것은 "통화 경로의 수동 화면 모양 선택"과 "iOS 벨소리"뿐이다** — architect 판정 (ADR-0019)
 
-> 담당 태스크: **T190(잠정 — `docs/Tasks.md` 행 없음 · planner 등재 필요)**. 근거 문서: `docs/UX.md` v1.33(변경 이력 (c) 판정표 · (e) H-1~H-8 · (h) 사용자 결정 · UX-014/027/022/023 v1.33 노트 · P-37 · D-86~D-102 · OQ-U58~U68). ⚠️ **설계 기준 코드 = PR #291(T187, 미병합) 브랜치 스냅샷**이다(현재 워크트리 `src`는 #291 이전). 줄 인용은 **`S:` = #291 스냅샷**(`…\scratchpad\pr291\` 아래 같은 상대 경로) · **`C:` = 이 워크트리 현재**로 구분한다. #291이 바꾸지 않은 파일(`GeminiVoiceSession.tsx` · `detectSkin.ts` · `outputGain.ts` · functions 카탈로그 등)은 `C:`만 적는다.
+> 담당 태스크: **T190(잠정 — `docs/Tasks.md` 행 없음 · planner 등재 필요)**. 근거 문서: `docs/UX.md` v1.33(변경 이력 (c) 판정표 · (e) H-1~H-8 · (h) 사용자 결정 · UX-014/027/022/023 v1.33 노트 · P-37 · D-86~D-102 · OQ-U58~U68). ⚠️ **설계 기준 코드 = PR #291(T187, 미병합) 브랜치 스냅샷**이다(현재 워크트리 `src`는 #291 이전). 줄 인용은 **`S:` = #291 스냅샷**(`…\scratchpad\pr291\` 아래 같은 상대 경로) · **`C:` = 이 워크트리 현재**로 구분한다. #291이 바꾸지 않은 파일(`GeminiVoiceSession.tsx` · `detectSkin.ts` · `outputGain.ts` · functions 카탈로그 등)은 `C:`만 적는다. **(후속 2026-10-18)** #291이 main에 병합됐고 이 브랜치에 main을 병합했다 — 기준 = 현재 워크트리. `S:` 인용을 현재 파일에 다시 대 보았고 **이 절이 인용한 줄은 전부 같은 줄에 있다**(재확인 표 = 73.22 (4) 착수 체크리스트). 이후 `S:`는 *"#291 병합 후 현재 줄"* 로 읽는다.
 
 ### 73.0 판정 요지 (⛔ 금지 먼저)
 
@@ -17338,7 +17338,7 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 4. ⛔ **세션 중 화면(벨·통화·문자함·랜딩·메신저 대화)에 앱 문구를 더하지 않는다**(P-37 머리 · #291 G437/G440). 새 화면 문구는 세션 전 화면(`MessengerStartNotice` · 보류 중인 `pre-call-notice`)에만 둔다.
 5. ⛔ **게이트가 앵커로 삼는 문자열은 그 파일에 남긴다** — `play/page.tsx`의 종료 이름 2종(G441 불변)·`InCallSmsOverlay.tsx`의 통화 표시줄 5요소(T103)를 다른 컴포넌트 파일로 추출하지 않는다(73.4 R-3).
 6. ⛔ **새 컴포넌트를 `src/components/` 하위 디렉터리(`ui/` 외)에 두지 않는다** — 세션 표면 등록부 두 벌(G436 · T86)이 최상위 `*.tsx`만 훑어 하위 디렉터리는 **등록 없이 빠진다**(73.13 · G451).
-7. ⛔ **D-102(`pre-call-notice` · 벨 화면 문구 0)는 planner OQ-U66 확정 전 착수 금지**(73.12). ⛔ **메신저 세션 중 스킨 칩 제거는 planner OQ-U64(AC-031 해석) 확정 전 착수 금지**(73.10 (3)).
+7. ~~⛔ **D-102(`pre-call-notice` · 벨 화면 문구 0)는 planner OQ-U66 확정 전 착수 금지**(73.12). ⛔ **메신저 세션 중 스킨 칩 제거는 planner OQ-U64(AC-031 해석) 확정 전 착수 금지**(73.10 (3)).~~ → **(후속 2026-10-18 — 두 금지 모두 해제)** planner PRD v1.20(M-15 · AC-091 · AC-092)이 OQ-U66(경로 ①③)·OQ-U64를 판정했고, User가 PRD OQ-52를 **(ㄴ)** 으로 답했다(에스컬레이션 벨 화면도 문구 0 · 메신저 시작 전 고지를 "메시지와 전화"로). ⇒ T190-6b · T190-8 착수 가능. ⛔ 지킬 순서 1건: **T190-8a(에스컬레이션 시작 전 고지 확장)를 T190-8b(프리롤 이동)보다 먼저** — 거꾸로 하면 에스컬레이션 경로의 전화 고지가 사라진다(73.22 (2)). 문면 정본은 ux-design이 확정했다(`docs/UX.md:1109-1127` · `:1761-1771`).
 8. ⛔ **스피커 "음량 전환" 대체는 사용자에게 보고해야 완결된다**(D-98 ③) — 이 절이 그 보고의 근거이며, 보고 자체는 오케스트레이터 몫이다(OQ-A94).
 
 ### 73.1 착수 시 실측
@@ -17502,7 +17502,8 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 
 1. **표현**: `bubbleClass`(`S:messenger/page.tsx:71-`)를 `skinTokens` 조회로 대체 · 대화 헤더(왼쪽 아바타+`callerLabel` / 오른쪽 *"전화로 확인"* + `EndTrainingButton`) — G449 메신저 단언(`S:inSessionMarkers.test.ts:466-471`: 헤더 부모 `justify-between` · 자식 div 2개)을 지키는 2분할 유지 · 말풍선 위 이름 제거 + 숨김 글 *"{callerLabel}:"*/*"나:"* · 폭 430px 가운데 · placeholder *"메시지"*. 카카오형 무변경.
 2. **선택 줄(D-100)**: `MessengerStartNotice`(`S:src/components/MessengerStartNotice.tsx`)에 prop `skinPicker?: { value, source, onChange }` 추가 — `surface === "sms"`일 때만 렌더(카카오는 스킨 없음). 변경 시 ① 화면 상태 ② 기존 `updateMessengerSkin(manual)` ③ `localStorage`(73.5 (3)). 문면(*"화면 모양: …"* · *"사용하시는 휴대폰과 같은 화면 모양을 골라 주세요"*)은 `preSessionCopy.ts`에 둔다(세션 전 문면 정본 1곳 — `S:src/lib/sessionboundary/preSessionCopy.ts:1-8` 원칙). G438(`MessengerStartNotice` 사용처 1회 · `startNotice === "show"`)은 무변경.
-3. ⛔ **세션 중 스킨 칩(`S:messenger/page.tsx:282-287`·`:411-414`)과 폴백 안내 1줄(`:436`) 제거는 OQ-U64(planner — AC-031 *"수동 전환 옵션"* 충족 해석) 확정 전 착수 금지.** 선택 줄 추가(2)는 칩과 공존해도 무해하므로 먼저 들어간다(처방별 선행조건 분리).
+3. ⛔ **세션 중 스킨 칩(`S:messenger/page.tsx:282-287`·`:411-414`)과 폴백 안내 1줄(`:436`) 제거는 OQ-U64(planner — AC-031 *"수동 전환 옵션"* 충족 해석) 확정 전 착수 금지.** 선택 줄 추가(2)는 칩과 공존해도 무해하므로 먼저 들어간다(처방별 선행조건 분리). → **(후속 2026-10-18) 해제** — planner가 AC-031을 *"세션 전 선택으로 충족"* 으로 읽고(AC-031 읽기 고지) 세션 중 칩 제거를 AC-092 (d)로 허용했다. T190-6b 착수 가능(순서는 (2) 뒤 — 선택 줄이 먼저 있어야 칩을 지워도 수동 전환 수단이 남는다).
+4. **(후속 2026-10-18 · OQ-52 (ㄴ))** 에스컬레이션 가능 시나리오(`scenario.escalation` 존재 — 타입 `C:src/content/scenarios/familyAccidentDeepvoice.ts:47` · 같은 필드가 *"전화로 확인"* 버튼을 가른다 `C:src/app/session/messenger/page.tsx:423` · 현재 보유 2종 `messengerSubsidySmishingSms.ts:22` · `messengerChildImpersonationKakao.ts:24`)의 시작 전 고지는 **"메시지와 전화"** 를 말하는 문면으로 바뀐다 — 설계 73.22 (2).
 
 ### 73.11 색 체계 고정(OQ-U65)
 
@@ -17510,6 +17511,8 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 - 한계(정직 고지): 삼성 인터넷 다크 모드·웨일은 이 선언으로 막힌다는 근거가 없다 → P-4에서 반전 화면의 대비만 실측하고, 미달 요소는 토큰 조정으로만 대응(UX OQ-U65 권고 ⓑ). 다크 스킨 설계는 범위 밖.
 
 ### 73.12 D-102(벨 직전 고지 `pre-call-notice`) — 보류 분리 설계
+
+> **(후속 2026-10-18) 보류 해제** — planner M-15 · AC-091(경로 ①③) + User OQ-52 (ㄴ)(에스컬레이션). 아래 (1)(2)는 보류 기간의 기록으로 보존하고, (3)은 ⑧만 확정값으로 바꿨다. G438 재지정 형태와 에스컬레이션 분기는 **73.22**가 정본이다.
 
 **(1) 보류 동안 그대로인 것**: 벨 화면 `PREROLL_NOTICE`(`S:play/page.tsx:1491-1495` · G438 `phase === "incoming"` 단언 `S:inSessionMarkers.test.ts:245-259` 무변경) · `Phase` 타입(`S:play/page.tsx:95`).
 
@@ -17521,7 +17524,7 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | iOS 벨소리 | 무음 가능성 높음(73.2 ③-b 추정) | D-97 무음 폴백이 허용 |
 | 벨 화면 문구 0(결정 7) | 미충족 — `PREROLL_NOTICE`가 벨 화면에 남는다 | User 결정과 어긋난 상태가 planner 판정까지 지속(OQ-U66) |
 
-**(3) 해제 후 한 단계로 묶을 변경(T190-8)**: ① `Phase`에 `"pre-call-notice"` 추가 · 초기값 = 복원(answered)·이미 확인한 세션이 아니면 `pre-call-notice` ② 문면 `PRE_CALL_NOTICE = { title, confirmLabel }`을 `preSessionCopy.ts`에 · 본문은 `PREROLL_NOTICE` 재사용 ③ `{PREROLL_NOTICE}` 사용처를 `pre-call-notice` 블록으로 옮기고 **G438 단언의 좌변을 같은 커밋에 `phase === "pre-call-notice"`로 재지정** ④ `phase === "incoming"`을 "받기 전"으로 쓰는 가드 5곳(`S:play/page.tsx:415`·`:440`·`:474`·`:827`·`:980` — prefetch는 의도상 incoming 유지 여부 판정 필요)에 새 phase 포함 — 특히 `:415` 줄은 `S:startNoticeGate.test.ts:105`가 **문자열 그대로** 단언하므로 같은 커밋에 갱신 ⑤ `준비됐어요` 클릭 핸들러 안에서 오디오 컨텍스트 생성·`resume()` → `startIncomingAlert(skin, { primedContext })`(73.7) ⑥ `DeviceSkinPicker`를 이 상태에 배치 ⑦ 새로고침 생략(AC-087 (c)) = 기존 `isSessionAnswered`류 sessionStorage 플래그 패턴(`@/lib/recording`) 1개 추가 ⑧ 에스컬레이션 세션(`entryChannel === "messenger"`)의 처분은 OQ-U66 ⓑ/ⓒ 판정을 따른다.
+**(3) 해제 후 한 단계로 묶을 변경(T190-8)**: ① `Phase`에 `"pre-call-notice"` 추가 · 초기값 = 복원(answered)·이미 확인한 세션이 아니면 `pre-call-notice` ② 문면 `PRE_CALL_NOTICE = { title, confirmLabel }`을 `preSessionCopy.ts`에 · 본문은 `PREROLL_NOTICE` 재사용 ③ ~~`{PREROLL_NOTICE}` 사용처를 `pre-call-notice` 블록으로 옮기고 **G438 단언의 좌변을 같은 커밋에 `phase === "pre-call-notice"`로 재지정**~~ → **(후속) 73.22 (1) ⓓ로 대체** — 신규 `CallStartNotice.tsx` + `if (phase === "pre-call-notice")` return · play의 `preSessionCopy` import 0 ④ `phase === "incoming"`을 "받기 전"으로 쓰는 가드 5곳(`S:play/page.tsx:415`·`:440`·`:474`·`:827`·`:980` — prefetch는 의도상 incoming 유지 여부 판정 필요)에 새 phase 포함 — 특히 `:415` 줄은 `S:startNoticeGate.test.ts:105`가 **문자열 그대로** 단언하므로 같은 커밋에 갱신 ⑤ `준비됐어요` 클릭 핸들러 안에서 오디오 컨텍스트 생성·`resume()` → `startIncomingAlert(skin, { primedContext })`(73.7) ⑥ `DeviceSkinPicker`를 이 상태에 배치 ⑦ 새로고침 생략(AC-087 (c)) = 기존 `isSessionAnswered`류 sessionStorage 플래그 패턴(`@/lib/recording`) 1개 추가 ⑧ ~~에스컬레이션 세션(`entryChannel === "messenger"`)의 처분은 OQ-U66 ⓑ/ⓒ 판정을 따른다.~~ **(후속 확정 · OQ-52 (ㄴ))** 에스컬레이션 세션은 `pre-call-notice`를 거치지 않고 `incoming`으로 바로 들어가며 그 벨 화면에도 `PREROLL_NOTICE`가 없다. 고지는 메신저 시작 전 고지가 "메시지와 전화"로 맡는다 — 같은 단계·같은 커밋(73.22 (1)(2)).
 
 **(4) 독립성 판정**: T190-1~7은 `Phase` 타입·`PREROLL_NOTICE` 자리·G438을 건드리지 않는다 ⇒ **D-102 없이 전부 완결된다**. 73.7의 `primedContext` 인자 1개가 유일한 선행 배선이다.
 
@@ -17532,7 +17535,7 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | G436 등록부 | `src/lib/sessionboundary/inSessionMarkers.test.ts:48-64`·개수 `:85`(15) | 신규 `PhoneIcon.tsx`(in-session) · `DeviceSkinPicker.tsx`(pre-session) | 등록 + 개수 15 → **17** |
 | G437 범위 | 같은 파일 `:174-178`(12) | `PhoneIcon`이 in-session | 12 → **13** · 텍스트 노드 0이라 위반 0 기대 |
 | T86 등록부 | `src/components/harmlessnessScreens.test.ts:97-113` | 신규 컴포넌트 2 | `false`(사기 표면 아님) 등록 |
-| G438 | `inSessionMarkers.test.ts:245-259` | D-102 보류 중 무변경 | T190-8에서 재지정 |
+| G438 | `inSessionMarkers.test.ts:245-259` | D-102 보류 중 무변경 | ~~T190-8에서 재지정~~ → **(후속) T190-8b에서 재지정 — 형태 확정 73.22 (1)** |
 | G441 A3 역검증 | 같은 파일 `:378-384` — 오염 앵커가 리터럴 `` aria-label={`링크: ${sms.linkDisplayText}`} `` | 링크 표기식 변경 | ⚠️ 표기식을 바꾸면 앵커가 사라져 `assert.notEqual`이 실패한다 → **같은 커밋에 앵커 문자열 갱신** |
 | G441 불변 | 같은 파일 `:355-357` | 통화 셸 재배치 | `play/page.tsx`에 두 리터럴 유지(73.4 R-3) |
 | G449 | 같은 파일 `:449-473` | 문자함 헤더 · 랜딩 브라우저 바 · 메신저 헤더 | 73.8 · 73.10 (1)의 감싸기 형태 |
@@ -17598,9 +17601,11 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | **T190-4** 벨·진동 | 73.7 · G454 | 3 | 테스트 통과 | P-2 |
 | **T190-5** 문자함+랜딩 | 73.8 · G459(배선) · G460 · G441/G449/렌더 게이트 갱신 | 2 · 3 | 테스트 통과 · 렌더 게이트 두 `entrySurface` 출력 | P-5 |
 | **T190-6** 메신저 | 73.10 (1)(2) | 1 | 테스트 통과 | P-3 |
-| **T190-6b** 칩 제거 | 73.10 (3) | ⛔ **OQ-U64** | 테스트 통과 | — |
-| **T190-7** 실기 측정·프로브 | 73.17 P-1~P-6 → 토큰 교체(G456이 하한 집행) · 표 S의 S-3 판정 · OQ-A94 보고 자료 | 3~6 (P-1은 3 이전 가능) | 측정표·편차 목록(D-96 (3)) 기록 | 전부 |
-| **T190-8** pre-call-notice | 73.12 (3) | ⛔ **OQ-U66** | G438·G444 재지정 포함 테스트 통과 | P-2 재실행(iOS 벨) |
+| **T190-6b** 칩 제거 | 73.10 (3) | ~~⛔ OQ-U64~~ → **6**(OQ-U64 해소 — 후속 2026-10-18) | 테스트 통과 · 메신저 문자형에서 `handleToggleSkin`·칩·폴백 안내 1줄 0 | — |
+| **T190-7** 실기 측정·프로브 | 73.17 P-1~P-6 → 토큰 교체(G456이 하한 집행) · 표 S의 S-3 판정 · ~~OQ-A94 보고 자료~~(답 받음 — 73.18) · **측정 = User 직접**(OQ-A98) | 3~6 (P-1은 3 이전 가능) | 측정표·편차 목록(D-96 (3)) 기록 | 전부 |
+| ~~**T190-8** pre-call-notice~~ | ~~73.12 (3)~~ | ~~⛔ OQ-U66~~ | — | — |
+| **T190-8a** 시작 전 고지 확장(OQ-52 (ㄴ)) | 73.22 (2) — `MESSENGER_START_NOTICE`에 전화 포함 문면 1필드 · `scenario.escalation`일 때만 그 문면 · G444 ⑤ 기대 객체 · G462 | ~~⛔ ux-design 정본 문면~~ → 해소(`docs/UX.md:1761-1771`) · 6 | 테스트 통과 · 에스컬레이션 2종 시작 전 고지에 새 문면 · 비에스컬레이션 시나리오 문면 무변경 | — |
+| **T190-8b** pre-call-notice + 벨 화면 문구 0 | 73.12 (3) ①~⑦ + 73.22 (1)(3) — `Phase` 추가 · `decideInitialCallPhase` · `{PREROLL_NOTICE}` 이동 · 에스컬레이션 = `incoming` 직행·프리롤 0 · G438 재지정 · G444 `:105` 갱신 · `DeviceSkinPicker` 배치 · `준비됐어요` 탭에서 벨 오디오 준비 | **8a**(⛔ 8a 없이 8b를 넣으면 에스컬레이션 경로의 전화 고지가 0이 된다) · 3 · 4 · 6 | G438(재지정)·G444·G462·초기 phase 진리표 통과 · `npm run build` 통과 | P-2 재실행(iOS 벨 — 경로 ①③은 탭 뒤 · 에스컬레이션은 탭 없이 진입이라 iOS 무음 가능 — OQ-A95 ⓐ) |
 
 - 배포: Functions(필드 추가)·Hosting 둘 다 바뀐다. **Hosting → Functions** 순서(CLAUDE.md Verified Commands 규범). 역순이어도 안전하다 — 새 필드는 옵셔널이고 클라가 `linkAddress ?? linkDisplayText`로 읽는다.
 
@@ -17625,6 +17630,18 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 | **OQ-A97** | **ux-design** | 출력 음량을 앱이 바꿀 수 없는 경로(iOS 텍스트 폴백 `<audio>` — 73.2 ②)에서 스피커 칸을 ⓐ 비활성 표현(R-6′) ⓑ 숨김(빈 칸) ⓒ 오디오 재생 경로 교체(Web Audio 디코드 — CORS 확인 선행) 중 무엇으로 할 것인가? | ⓐ(표 S S-5) |
 | **OQ-A98** | **User** | 정밀 측정(P-6)과 프로브(P-1~P-4)에 쓸 **iPhone·갤럭시 실기와 담당**은? 캡처 이미지를 저장소에 넣지 않는 것(표 A-8)에 동의하는가? | 측정 전까지 UX 근사값 + G456 하한 |
 | **OQ-A99** | **planner** | T190 완료 판정에서 ① 통화 경로 수동 화면 모양 선택(D-100 (2) — `pre-call-notice` 의존) ② 세션 중 스킨 칩 제거(OQ-U64 의존)를 **제외**하고 판정해도 되는가(73.12 (2) · 73.10 (3))? | 제외(각 해제 단계 T190-6b · T190-8로 분리) |
+
+**(후속 2026-10-18) 답·상태** — 출처: 오케스트레이터 전달(User 답) · `docs/UpdateRequests.md` #48(planner 판정 · PRD v1.20 커밋 `8fd318e` — 인용값) · ux-design 결과(오케스트레이터 전달 · `docs/UX.md:93` · D-103 `:4021`).
+
+| ID | 상태 | 답 | 이 절에 미치는 것 |
+|---|---|---|---|
+| OQ-A94 | **resolved** | User: 음량 전환 **통화 0.6 / 스피커 1.0**. 대체 사실 보고 완료(UpdateRequests #48 ④) | 73.4 상수값 확정(`CALL_MODE_GAIN` 0.6 · `SPEAKER_MODE_GAIN` 1.0 — 판단값 → **User 확정값**). 음량 방향 모순(73.1 #4)은 답에 없었다 — P-1에서 함께 관측 |
+| OQ-A95 | **resolved** | User: **ⓐ D-102 해제까지 대기** — 그 뒤 planner가 경로 ①③ 해제 | 탭 지점 프라이밍 배선은 만들지 않는다. 경로 ①③은 `준비됐어요` 탭이 벨 오디오를 준비한다(T190-8b). ⚠️ 에스컬레이션은 `pre-call-notice`를 거치지 않아(OQ-52 (ㄴ)) **iOS에서 벨이 무음일 가능성이 남는다**(추정) — ⓐ의 범위 안이므로 새 질문으로 올리지 않는다 |
+| OQ-A96 | **resolved** | ux-design: 규칙 문면을 정본에 맞춤(구획 1~2개 · 각 2~12자 · 전체 ≤24자 · 연속 숫자 ≤3) · 정본 값 무변경 | G453 정규식(73.9) 그대로 — 문면과 일치 |
+| OQ-A97 | **resolved** | ux-design D-103: 음량을 바꿀 수 없는 경로는 스피커 칸 **비활성 표현** | 표 S S-5 확정 |
+| OQ-A98 | **resolved** | User: 실기 측정 **User 직접** · 캡처 이미지 저장소 비커밋 **동의**(오케스트레이터 전달. ⚠️ UpdateRequests #48 ④는 *"동의 여부 미전달"* 로 적었다 — 이 절은 더 늦은 오케스트레이터 전달을 따른다) | T190-7 담당 = User · 표 A-8 확정 |
+| OQ-A99 | **resolved** | planner: **제외 불요** — ①② 모두 T190 범위 안 · 제외는 S-3(iOS 실제 전환) · 실기 항목뿐(Tasks T190 E — 인용값) | T190-6b · 8a · 8b가 완료 판정에 포함 |
+| (PRD) OQ-52 | **User 답 (ㄴ)** | 에스컬레이션 벨 화면 문구 0 + 메신저 시작 전 고지를 "메시지와 전화"로 | 73.22. ⚠️ PRD OQ-52 행(`docs/PRD.md:1116`)은 이 편집 시점 `open` — Status 반영은 planner 몫 |
 
 ### 73.19 인계 (⛔ 이 패스는 편집하지 않았다)
 
@@ -17660,3 +17677,85 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 
 - `docs/Architecture.md` §73 신설 + 짧은 참조 노트 3곳(§13.5 · §15.1.3 · §71.7 — 원문 무수정, 덧붙임) · `docs/DECISIONS.md` #122 · #123 · `docs/adr/0019-real-phone-surface-capability-boundary.md` 신설.
 - ⛔ 소스·테스트·PRD·UX·Tasks·README·Database·API 0줄 · 커밋 0 · 실행 0. 웹 근거는 2026-10-18 열람(검색 요약만 본 것은 해당 칸에 표기).
+- **(후속 2026-10-18)** §73 안 갱신 = 머리 노트 · 73.0 #7 · 73.10 (3)(4) · 73.12 머리·(3) ⑧ · 73.13 G438 행 · 73.16 표(6b · 7 · 8 → 8a/8b) · 73.18 답 표 · 73.22 신설 · `docs/DECISIONS.md` #124 · ADR-0019 Consequences 1줄. 원문은 취소선·*"후속"* 표기로 보존. 소스·테스트 0줄 · 실행 0.
+
+### 73.22 (후속 2026-10-18) 보류 해제 반영 — G438 재지정 확정 · 에스컬레이션 분기 · 착수 체크리스트
+
+**전제(바뀐 사실)**: ① planner PRD v1.20 — M-15 · AC-091(경로 ①③ 벨 화면 표시 0 + `pre-call-notice`) · AC-092(공통 스킨 · 세션 전 선택 · 세션 중 칩 제거 허용) · AC-091~AC-095 신설(`docs/PRD.md:9` · `:666`) ② User — PRD OQ-52 **(ㄴ)**(`docs/PRD.md:1116`의 선택지 (ㄴ): 벨 화면 문구 0 + 에스컬레이션 가능 시나리오의 메신저 시작 전 고지 문면을 "메시지와 전화"로) ③ UpdateRequests #48이 architect에 G438 재지정 형태 확정을 요청했다 — #48 작성 시점 기본값(에스컬레이션 벨 프리롤 유지)이면 `{PREROLL_NOTICE}`가 두 곳이 되지만, ②로 그 기본값이 소멸했다.
+
+**(1) ⭐ G438 재지정 판정 — ⓓ "세션 전 컴포넌트 + `if (phase === "pre-call-notice")` return" 으로 확정**(메신저 `start-notice`와 같은 형태)
+
+> 정정 고지: 이 소절의 첫 작성(같은 날)은 ⓐ를 채택했다. 직후 ux-design 정본(`docs/UX.md:1109-1127` UX-014 v1.33 (11) — 커밋 `6aeadd4` 인용값)이 `pre-call-notice`를 **통화 셸이 아닌 앱 화면 모양**(바탕 `#FAF8F5` · 통화 스킨 0 · 상단 바 "훈련 종료"만)으로 확정해 ⓓ로 바꿨다. ⓐ 행은 기각 근거와 함께 보존한다.
+
+| 후보 | 형태 | 판정 |
+|---|---|---|
+| ~~ⓐ 사용처 1곳 · 좌변 교체~~ | play 안 `{PREROLL_NOTICE}` 정확히 1회 · 가장 가까운 `&&` 좌변 = `phase === "pre-call-notice"` | ❌(정정) — 앱 화면 모양의 별 화면을 통화 셸 `<main>`(바탕 `#22303A` `src/app/session/play/page.tsx:1319`) 안 조건 블록으로 그리게 되고, play가 세션 전 문면 모듈을 계속 import한다 |
+| ⓑ 사용처 2곳(`pre-call-notice` + 에스컬레이션 `incoming`) | 개수 2 · 각 좌변 지정 | ❌ — (ㄱ) 기본값 전제. (ㄴ)에서는 에스컬레이션 벨 화면 프리롤 자체가 금지(결정 7)라 **금지 상태를 허용 목록에 올리는 것**이 된다 |
+| ⓒ 조건식 1곳 | 좌변 `phase === "pre-call-notice" \|\| (phase === "incoming" && isEscalated)` | ❌ — ⓑ와 같은 이유 + 좌변 문자열 비교가 식 재배열에 취약 |
+| **ⓓ 세션 전 컴포넌트 + if-return** | 신규 `src/components/CallStartNotice.tsx`(등록부 role `pre-session`)가 `{PREROLL_NOTICE}`를 **정확히 1회 · 무조건** 렌더 · play는 `<CallStartNotice` **정확히 1회**를 `if (phase === "pre-call-notice") { return … }` 블록 안에서만, 그 if는 `SessionCallPage`의 마지막 return보다 앞 · **play의 `preSessionCopy` import 0 · 식별자 `PREROLL_NOTICE` 0** | ✅ **채택** — ① 메신저 쪽 G438 반쪽이 이미 이 형태다(`startNoticeUsageViolations` `src/lib/sessionboundary/inSessionMarkers.test.ts:262-285` — 같은 함수를 대상 이름만 바꿔 재사용) ② "벨 화면 프리롤 0"이 **import 0** 한 줄로 증명된다(경로 ①③·에스컬레이션 구분 없이 통화 셸 전체에서 0 — ⓐ보다 강하다) ③ 이 시점엔 실시간 세션 컴포넌트가 아직 마운트되지 않았다(마운트 조건 = 받기 뒤 자격증명 `:1322`·`:1337`) — early return이 통화를 끊지 않는다. 기존 early return(`:1232-1268`)과 같은 위치·같은 성격 |
+
+- **G438(재지정) 단언 4개**: ① play: `<CallStartNotice` 1회 · 조상 = `if (phase === "pre-call-notice")`의 return · 그 if가 마지막 return보다 앞 ② play: `boundaryImportViolations(…, /preSessionCopy|postSessionCopy/)` = 0(현행 `:299-302`는 `postSessionCopy`만 금지 — 넓힌다) · 식별자 `PREROLL_NOTICE` 0 ③ `CallStartNotice.tsx`: `{PREROLL_NOTICE}` 1회 ④ `prerollUsageViolations`(`:245-258`)는 대상 파일을 `CallStartNotice.tsx`로 바꾸고 조건 요구를 "조건 없음"으로 바꾼다(그 화면 전체가 세션 전).
+- **역검증**(같은 커밋 · 같은 함수): play에 `<p>{PREROLL_NOTICE}</p>`를 넣은 사본 → ② 실패 · `<CallStartNotice … />`를 마지막 return 안에 넣은 사본 → ① 실패. 옛 앵커 `'{phase === "incoming" && ('`(`:311`)는 사라지므로 역검증을 새 오염 2건으로 **교체**한다(옛 앵커를 남기면 `assert.notEqual`이 *"오염 지점을 찾지 못했다"* 로 실패 — 73.13 G441 A3과 같은 함정).
+- **등록부**: G436 개수 = 15 + `PhoneIcon` + `DeviceSkinPicker` + `CallStartNotice` = **18**(73.13의 "17"을 대체) · G437 범위는 13 그대로(pre-session은 검사 범위 밖) · T86 `false` 등록 · G449: `CallStartNotice`의 "훈련 종료" 상단 바도 `justify-end`(`MessengerStartNotice` 단언 `:461-465`과 같은 형태로 1행 추가).
+- **G438이 혼자 못 보는 것**: "에스컬레이션 세션이 `pre-call-notice`를 건너뛴다"는 **phase 초기값 결정**이 정한다 — 위 단언만으로는 *"에스컬레이션 세션도 `pre-call-notice`를 보여 준다"*(OQ-52 (ㄷ) 상태)를 못 막는다 ⇒ 초기값 진리표(**G463** — (3)).
+- 함께 바뀌는 주석: `src/app/session/play/page.tsx:106-108` · `:383-387`(에스컬레이션 프리롤 *"유지"* 근거 → OQ-52 (ㄴ)로 고쳐 쓴다 — UX (11) ③이 *"`:381-388` 경로 제거"* 로 지목한 자리) · `:1270-1273`.
+- `CallStartNotice` 문면: `preSessionCopy.ts`에 `PRE_CALL_NOTICE = { title: "곧 훈련 전화가 걸려 옵니다", stopHint: "언제든 '훈련 종료'로 멈출 수 있습니다.", confirmLabel: "준비됐어요" }` + 고지 ① = `PREROLL_NOTICE` 재사용(UX (11) ① 정본 — 글자 대조는 G444 ⑤에 같이 넣는다). props = `onConfirm` · `onEndTraining` · `skinPicker`(G444 ⑥ 금지 낱말 없음).
+
+**(2) 에스컬레이션 시나리오의 시작 전 고지 확장(T190-8a · OQ-52 (ㄴ))**
+
+- 문면 위치(정정 — ux-design 정본 `docs/UX.md:1761-1771` UX-022 v1.33 (7) 확정 반영): 바뀌는 줄은 **제목 · 고지 ① · 고지 ①-2(신설) 세 줄**이다. `src/lib/sessionboundary/preSessionCopy.ts`에 **변형 1벌** `MESSENGER_START_NOTICE_WITH_CALL = { title: "훈련을 시작합니다", notice: "지금부터 받는 메시지와 전화는 실제 연락이 아니라 AI 훈련 프로그램이 보내는 훈련용 연락입니다.", callVoiceNotice: "전화로 이어지면 그 목소리도 AI로 합성된 훈련용 음성입니다." }`(이름은 제안 · 값은 UX 정본 글자 그대로) — `kakaoDisclaimer` · `stopHint` · `confirmLabel`은 기존 `MESSENGER_START_NOTICE`(`:15-22`) 값을 그대로 쓴다(두 벌에 같은 문장 사본 0). 기존 `MESSENGER_START_NOTICE` 값 **무변경**(비에스컬레이션은 지금 그대로 · UX *"오지 않을 전화를 예고하지 않는다"*). ~~정본 확정 전 착수 금지~~ → 정본 확정(커밋 `6aeadd4` 인용값) ⇒ **T190-8a 선행 해소**.
+- 선택 위치: `MessengerStartNotice`에 prop `includesCall: boolean` — 페이지가 `Boolean(scenario.escalation)`(`src/app/session/messenger/page.tsx:423`과 같은 술어)을 넘긴다. 컴포넌트는 `includesCall`로 제목·고지 ①을 변형 쪽에서 고르고(각 삼항 1곳), 고지 ①-2는 `includesCall &&` 아래에서만 렌더한다(카카오 면책 `surface === "kakao" &&` 단언 `startNoticeGate.test.ts:123-139`와 같은 형태로 단언). ⛔ props에 채널(자가/수신자)·난이도 입력을 만들지 않는다는 #291 규칙(`src/components/MessengerStartNotice.tsx:13-14`)과 충돌하지 않는다 — `includesCall`은 시나리오 성질이지 진입 채널이 아니다. ⚠️ G444 ⑥은 props 타입 문자열을 `/difficult|level|challenge|channel|recipient/i`로 검사한다(`src/lib/sessionboundary/startNoticeGate.test.ts:142`) — 새 prop 이름(`includesCall` · 73.10 (2)의 `skinPicker`)에 그 낱말을 넣지 않는다(예: `includesChannel`·`escalationChannel` 금지).
+- **G462**: ① `MESSENGER_START_NOTICE_WITH_CALL`의 세 필드가 `MessengerStartNotice.tsx`에서 각각 정확히 1회 · 조건이 `includesCall`(①-2는 `includesCall &&`) ② `messenger/page.tsx`가 `includesCall={Boolean(scenario.escalation)}`를 넘긴다 ③ G444 ⑤(`src/lib/sessionboundary/startNoticeGate.test.ts:108-120`)에 변형 객체와 `PRE_CALL_NOTICE`를 UX 정본 글자로 `deepEqual` 추가 ④ 역검증: 조건을 `true`로 바꾼 사본 · ①-2를 조건 없이 그린 사본 각각 실패. ⚠️ `chatReturnResidue`(`:79`)는 `Object.values(MESSENGER_START_NOTICE)`만 본다 — 변형 객체 값도 그 목록에 **명시적으로 더한다**(안 더하면 새 문면이 채팅 return 안으로 새도 잡히지 않는다).
+- ✅ **UF-012 확인 결과(코드 열람 2026-10-18 — 추정 해소)**: 3단계 결합 시나리오 = `messenger-subsidy-smishing-sms`(§15.9 특례 `docs/Architecture.md:2168` · app-install 랜딩 `subsidy-install` `functions/src/scenarios/mockScreens.ts:93-97`) — **`escalation` 필드를 갖는다**(서버 미러 `functions/src/scenarios/publicMeta.ts:239` `{ toChannel: "voice", voiceMode: "generic" }` · 클라 정본 `src/content/scenarios/messengerSubsidySmishingSms.ts:22`). 세션의 `entryChannel`은 생성 시 채널로 고정된다(`functions/src/session/index.ts:224` `entryChannel: channel ?? "voice"` · 챌린지 수신자 `functions/src/challenge/userAccess.ts:220`) ⇒ 메신저로 시작한 세션의 통화 진입은 언제나 `isEscalated = true`(`src/app/session/play/page.tsx:388`). ⇒ **UF-012는 UF-007과 같은 경로**: 시작 전 고지 = 변형 문면(전화·합성 음성 포함) · 벨 = `pre-call-notice` 없이 `incoming` 직행 · 프리롤 0. **별도 경로 설계 불요.** ⚠️ 이 결론은 "에스컬레이션 시나리오 = `scenario.escalation` 보유"와 "통화 진입 = 메신저 세션의 에스컬레이션"이 같은 집합이라는 데 기댄다 — 현재 보유 2종(`messengerChildImpersonationKakao.ts:24` · `messengerSubsidySmishingSms.ts:22`) 모두 일치. 새 메신저 시나리오가 `escalation` 없이 통화로 넘어가는 경로가 생기면 깨진다 메신저→통화 전이 경로 2개의 서버 조건도 같은 술어다: `requestEscalation` `functions/src/session/index.ts:411`(`!PUBLIC_SCENARIOS[session.scenarioId]?.escalation`이면 거부) · `sendMessage` 자동 전이 `functions/src/roleplay/index.ts:460`(`Boolean(PUBLIC_SCENARIOS[…]?.escalation)`일 때만 판단 → `transitionChannel` `:476`). 이 집합이 갈라지지 않게 **G462 ⑤**: 두 조건이 `PUBLIC_SCENARIOS[…].escalation` 술어를 쓴다는 소스 단언 + 클라 `scenario.escalation` 보유 집합 = 서버 `PUBLIC_SCENARIOS` 보유 집합(기존 드리프트 테스트 `functions/src/scenarios/__tests__/scenarios.test.ts`가 미러를 비교한다 — 그 비교가 `escalation`을 포함하는지는 착수 시 확인).
+
+**(3) 초기 phase 결정(T190-8b) — 순수 함수 + 진리표(G463)**
+
+`decideInitialCallPhase({ status, answered, isEscalated, preCallNoticeSeen })` — 위치 `src/lib/sessionboundary/startNoticeGate.ts`(같은 성격의 `decideMessengerStartNotice`가 `:22`에 있다). 현재 분기(`src/app/session/play/page.tsx:388-401` — `isEscalated` `:388` · `answered` `:389-390`)를 이 함수로 옮긴다.
+
+| `status` | `answered` | `isEscalated` | `preCallNoticeSeen` | 결과 |
+|---|---|---|---|---|
+| `ended` | * | * | * | `ended` |
+| `active` | true | * | * | `live`(현행 복원 그대로) |
+| 그 밖 | false | **true** | * | **`incoming`**(OQ-52 (ㄴ) — 프리롤 없는 벨) |
+| 그 밖 | false | false | false | **`pre-call-notice`** |
+| 그 밖 | false | false | true | `incoming`(새로고침 생략 — AC-087 (c)) |
+
+- 역검증: 에스컬레이션 행이 `pre-call-notice`를 내는 사본 · 비에스컬레이션 미확인 행이 `incoming`을 내는 사본 각각 실패.
+- `preCallNoticeSeen` = `@/lib/recording`의 `isSessionAnswered`/`markSessionAnswered` 패턴(sessionStorage · 세션 id 키)으로 `isPreCallNoticeSeen`/`markPreCallNoticeSeen` 1쌍 추가. `준비됐어요` 클릭 핸들러가 ① mark ② 벨 오디오 컨텍스트 생성·`resume()`(제스처 안 — 73.7 `primedContext`) ③ 짧은 정적(UX 0.6~1.2초 — 설계 추정값) 뒤 `setPhase("incoming")`.
+
+**(4) 착수 체크리스트 — 현재 워크트리 줄(#291 병합 후 · 2026-10-18 grep 재확인)**
+
+| # | 대상 | 현재 위치 | 할 일 | 단계 |
+|---|---|---|---|---|
+| 1 | `Phase` 타입 | `src/app/session/play/page.tsx:95` | `"pre-call-notice"` 추가 | 8b |
+| 2 | 초기 phase 분기 | 같은 파일 `:388-401` | (3) 함수로 이전 | 8b |
+| 3 | 대화 구독 가드 | 같은 파일 `:415`(+ 같은 형태 `:440` · `:474`) | `phase === "pre-call-notice" \|\|` 추가 · `:415` 문자열은 `startNoticeGate.test.ts:105`가 그대로 단언 → 같은 커밋 갱신 | 8b |
+| 4 | 경과 타이머 가드 | 같은 파일 `:827` | `pre-call-notice`에서도 안 돈다(타이머 = 받기 기점 · OQ-U8) | 8b |
+| 5 | 자격증명 프리페치 | 같은 파일 `:980`(`phase !== "incoming"`) | **무변경**(Gemini 토큰 2분 유효 — `useRealtimeCall.ts:80-81` 주석 · 고지 화면 체류가 길면 낭비) | — |
+| 6 | 프리롤 렌더 | 같은 파일 `:1491-1495` · import `:76` | 삭제 · 신규 `src/components/CallStartNotice.tsx`로(early return `if (phase === "pre-call-notice")` — 기존 early return `:1232-1268` 뒤) · play의 `preSessionCopy` import 0 | 8b |
+| 7 | G438 | `src/lib/sessionboundary/inSessionMarkers.test.ts:245-258` · `:262-285`(재사용 함수) · `:294-307` · 역검증 `:309-323` | (1) ⓓ 단언 4개 + 역검증 교체 | 8b |
+| 8 | 수신 상태 문구 | `play/page.tsx:1454-1461` | UX-014 v1.33 (3) | 3 |
+| 9 | 가짜 상태바 | 같은 파일 `:1370-1380` | 삭제 | 3 |
+| 10 | 받기 색 | 같은 파일 `:1561` | `#1E8E3E` | 3 |
+| 11 | 종료 이름 리터럴 | 같은 파일 `:1549` · `:1792` | 유지(G441 `inSessionMarkers.test.ts:355-357`) | 3 |
+| 12 | D-99 마이크 | 같은 파일 `:1329` · `:1348` · `:1008` · `:961` | 73.6 ⑥ · 단언 `src/lib/incallsms/callContinuity.test.ts:81-82` 반전(G452) | 3 |
+| 13 | 확인 오버레이 게이팅 | 같은 파일 `:1038` | **유지** | — |
+| 14 | 배너 상태 | 같은 파일 `:169` · `:594` · `:1018` · `:1204` | `bannerAckSmsId` 교체(73.6 (6)) | 3 |
+| 15 | 세션 컴포넌트 음량 | 같은 파일 `:1323-1366` · `src/lib/realtime/GeminiVoiceSession.tsx:685-687` · `:803` | `outputVolume` prop · 초기화 줄 유지(`outputGain.test.ts:24-26`) | 3 |
+| 16 | 음량 상수 | `src/lib/realtime/outputGain.ts:11` | `CALL_MODE_GAIN` 0.6 · `SPEAKER_MODE_GAIN` 1.0(User 확정) | 1 |
+| 17 | 문자함 대화상자 | `src/components/InCallSmsOverlay.tsx:235-242` · 종료 행 `:300` · 모노 발신자 `:335` · 인증번호 박스 `:350` · 랜딩 마운트 `:413` | 73.8 | 5 |
+| 18 | 랜딩 래퍼·주소창·문면 | `src/components/MessengerFakeLanding.tsx:78-79` · `:95-102` · `:127` · `:303` · `:353` · `:506` | 73.8 · 73.9 | 2 · 5 |
+| 19 | 메신저 스킨·칩 | `src/app/session/messenger/page.tsx:71` · `:282` · `:414` · `:436` | 73.10 (1)·(3) | 6 · 6b |
+| 20 | 시작 전 고지 | `src/components/MessengerStartNotice.tsx:51-58`(제목·고지 ①) · `src/lib/sessionboundary/preSessionCopy.ts:15-22` · G444 `startNoticeGate.test.ts:79` · `:108-120` · `:123-139` | (2) — 변형 1벌 · `includesCall` · G462 | 8a |
+| 21 | 등록부 | `inSessionMarkers.test.ts:85`(15) · `:176`(12) · `src/components/harmlessnessScreens.test.ts:97-113` | 단계별 누적: T190-1 +`PhoneIcon`(16·13) → T190-6 +`DeviceSkinPicker`(17) → T190-8b +`CallStartNotice`(**18**) · T86 신규 3 `false` | 1 · 6 · 8b |
+| 22 | 드리프트·렌더 | `src/components/mockScreenCopy.test.ts:291` · `src/lib/mockscreenrender/renderGate.test.ts:51` · `:125-131` · `:158` | 73.9 ④ | 2 · 5 |
+| 23 | 링크 이름 역검증 앵커 | `inSessionMarkers.test.ts:381` | 표기식 변경과 같은 커밋 | 5 |
+| 24 | 서버 필드 | `functions/src/scenarios/mockScreens.ts` · `inCallSms.ts`(링크 항목 `:90-91` · `:118-119` · `:174-175` 등) · `functions/src/incallsms/buildDoc.ts:36-37` · 정책표 `functions/src/scenarios/__tests__/harmlessnessGate.test.ts:79-109` · G111 `inCallSms.test.ts:85-95` · 복사 `:205-224` | 73.9 | 2 |
+| 25 | 색 체계 | `src/app/layout.tsx:8` 옆 · `src/app/globals.css` | 73.11 | 1 |
+| 26 | 신규 테스트 등록 | 루트 `package.json:11` `test` · `src/lib/testRegistration.test.ts` | 등록 | 각 단계 |
+
+- 테스트·빌드 명령은 CLAUDE.md Verified Commands 원문(`npm --prefix functions test` · `npm test` · `npm run build`) · 동시 실행 금지 · 기준 수치는 착수 시 main에서 다시 잰다(이 절은 실행 0 — 수치 미기재).
+
+**(5) 신규 가드 추가분**: **G462**((2)) · **G463**((3)). 73.14 표의 G451~G461과 합쳐 이 절의 가드는 **G451~G463**.
+
+**(6) 최종 구현 단계** = 73.16 표(T190-1 → 2 → 3 → 4 → 5 → 6 → 6b → 8a → 8b, T190-7은 User 실기 — P-1은 3 이전 가능). ~~남은 선행은 ux-design의 에스컬레이션용 시작 전 고지 정본 문면 1건(8a)뿐이다.~~ → **문면 정본 확정(UX-014 v1.33 (11) · UX-022 v1.33 (7)) ⇒ 문서상 선행 0** — 단계 간 순서(8a → 8b)만 남는다. 범위 밖으로 남는 것: 표 S S-3(iOS 실제 출력 전환 — P-1 결과 뒤 별 커밋) · 실기 항목.

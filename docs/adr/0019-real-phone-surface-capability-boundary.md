@@ -23,6 +23,7 @@
 - Positive: D-102(벨 직전 고지)와 세션 중 칩 제거가 보류돼도 나머지 전부가 독립 구현된다(§73.12 (4)) · 접근성 하한이 대비 자동 계산 게이트(G456)로 정밀 재현 뒤에도 유지된다 · 문자함/랜딩의 단일 대화상자 구조가 G26 원칙을 in-call 경로에도 성립시킨다.
 - Negative / accepted trade-offs: D-98은 Android에서 "실제 전환"을 충족하지 못한다(대체 — 사용자 보고 OQ-A94) · iOS 텍스트 폴백 경로는 음량 제어 불가(칸 비활성 — OQ-A97) · 실기 측정 전 수치는 UX 근사값 · 삼성 인터넷 강제 다크는 막을 수 없다.
 - Follow-ups required: 실기 프로브 P-1~P-6(§73.17 · 기기·담당 OQ-A98) · iOS 실제 전환 성립 시 별 커밋(§73.3 S-3) · OQ-U64/OQ-U66 해제 후 T190-6b/T190-8 · `docs/Database.md`에 `linkAddress` 등재 · planner T190 행 등재. User 승인 시 Status → accepted(DECISIONS 새 행).
+- (후속 2026-10-18 · DECISIONS #124) 보류 두 건(D-102 · 세션 중 칩 제거)이 planner·User 결정으로 해제됐다 — 에스컬레이션 벨 화면도 문구 0(PRD OQ-52 (ㄴ)) · G438은 세션 전 컴포넌트 `CallStartNotice` + `if (phase === "pre-call-notice")` return 1곳 · 통화 화면의 세션 전 문면 import 0으로 재지정(§73.22 (1) ⓓ). 이 ADR의 결정 문장(능력 경계 모델)은 바뀌지 않는다. Status는 User 승인 기록이 없어 proposed 유지.
 
 ---
 *Copy this file to `NNNN-slug.md` (numbering starts at 0001, never reuse numbers). Accepted ADRs are immutable — to change course, write a new ADR that supersedes this one.*
