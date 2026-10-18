@@ -26,6 +26,7 @@ import {
 } from "../../scenarios/inCallSms";
 import { VERIFY_INTERCEPT, hasVerifyIntercept } from "../../scenarios/verifyIntercept";
 import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_SCREENS } from "../../scenarios/mockScreens";
+import { listFlowVariants, resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
 
 /**
  * 반복을 유도하는 금지 문구(AC-100 (a) "금지 문구 목록은 테스트 상수에 명시한다").
@@ -264,5 +265,128 @@ test("[T191/S4 · A4] 이미 보낸 문자는 다시 언급하지 않고, 도착
         assert.ok(item.announceInstruction.includes("상대의 반응을 기다려라"), `${scenarioId}/${item.smsId}: 반응 대기 지시`);
       }
     }
+  }
+});
+
+// ── G500 (T191 S4b · Architecture.md §78.11.1 · AC-096 (d)) ───────────────────────────────────────
+// 초급 산출 프롬프트(전 시나리오 × {원본 + 허용 초급 변형})에 **지속성 지시** 0건. 중급 · 고급은 난이도 블록이
+// 지속성을 정하므로 이 게이트 대상이 아니다(고급 블록의 "물러서지 않되 매번 다른 근거"는 정당한 고급 지시).
+// ⚠️ 정직 고지: 위 반복 게이트와 같이 **표기**를 본다 — 패턴 밖의 다른 표현으로 같은 지시를 쓰면 못 잡는다.
+// "조건을 낮춘 새 조건으로 다시 요구"는 수법(새 조건 재요구)이라 지속성 지시가 아니다(리뷰 판정) — 패턴이 그것을 때리지 않는다.
+const PERSISTENCE_PATTERNS = [/물러서지 않/, /계속\s*(밀어붙|압박)/, /강도를 높인다/] as const;
+
+function findPersistencePatterns(text: string): string[] {
+  return PERSISTENCE_PATTERNS.filter((re) => re.test(text)).map((re) => re.source);
+}
+
+/** 세션이 실제로 받을 수 있는 초급 해석 프롬프트 — 원본(변형 없는 과거 세션) + 그 시나리오의 초급 변형 전부. */
+function beginnerResolvedPrompts(scenarioId: string): [string, NonNullable<ReturnType<typeof resolveSessionScenarioPrompt>>][] {
+  const out: [string, NonNullable<ReturnType<typeof resolveSessionScenarioPrompt>>][] = [];
+  const base = resolveSessionScenarioPrompt(scenarioId);
+  assert.ok(base, `${scenarioId}: 원본 프롬프트가 해석돼야 한다`);
+  out.push(["-", base]);
+  for (const variant of listFlowVariants(scenarioId, "beginner")) {
+    const resolved = resolveSessionScenarioPrompt(scenarioId, variant.variantId);
+    assert.ok(resolved, `${scenarioId}/${variant.variantId}: 변형 프롬프트가 해석돼야 한다`);
+    out.push([variant.variantId, resolved]);
+  }
+  return out;
+}
+
+test("[T191/S4b · G500 · AC-096 (d)] 전 시나리오 × {원본 + 초급 변형} × 실제 턴 지시의 초급 산출물에 지속성 패턴이 0건이고, 물러섬 지시는 ≥1건이다", (t) => {
+  const ids = Object.keys(SCENARIO_PROMPTS);
+  assert.ok(ids.length >= 17, `시나리오가 17종 이상이어야 한다(현재 ${ids.length}종)`);
+  let combos = 0;
+  let variantCount = 0;
+  const violations: string[] = [];
+  for (const id of ids) {
+    const resolvedList = beginnerResolvedPrompts(id);
+    variantCount += resolvedList.length - 1;
+    for (const [variantId, prompt] of resolvedList) {
+      for (const identityCheckAllowed of [asksIdentityCheck(id), !asksIdentityCheck(id)]) {
+        for (const toolDrivenTiming of [false, true]) {
+          for (const turnInstruction of [undefined, ...realTurnInstructionsFor(id)]) {
+            const assembled = buildSystemPrompt(prompt, {
+              difficultyLevel: "beginner",
+              inCallSmsEnabled: hasInCallSms(id),
+              verifyInterceptEnabled: false,
+              l3Procedural: isL3Procedural(id),
+              identityCheckAllowed,
+              toolDrivenTiming,
+              ...(turnInstruction ? { turnInstruction } : {}),
+            });
+            combos += 1;
+            const found = findPersistencePatterns(assembled);
+            if (found.length > 0) {
+              violations.push(
+                `${id}/${variantId}/identity=${identityCheckAllowed}/tool=${toolDrivenTiming}/` +
+                  `turn=${turnInstruction ? turnInstruction.slice(0, 20) : "-"} → ${found.join(", ")}`,
+              );
+            }
+            assert.ok(/물러선다/.test(assembled), `${id}/${variantId}: 초급 산출물에 물러섬 지시("물러선다")가 있어야 한다`);
+          }
+        }
+      }
+    }
+  }
+  t.diagnostic(`시나리오 ${ids.length}종 · 초급 변형 ${variantCount}개 · 조합 ${combos}`);
+  // 초급 변형이 0개로 비면 "원본만 검사"로 조용히 줄어든다 — 변형 데이터가 살아 있음을 함께 단언한다.
+  assert.ok(variantCount >= 14, `초급 변형이 너무 적다(${variantCount}) — 변형 경로가 빠지면 거짓 OK다`);
+  assert.ok(combos >= 17 * 2 * 2, `조합 수가 너무 적다(${combos})`);
+  assert.deepEqual(violations, [], `초급 산출물에 지속성 지시가 남아 있다:\n${violations.join("\n")}`);
+});
+
+test("[T191/S4b · G500] 역방향 — 지속성 패턴을 하나씩 넣은 초급 오염 샘플은 검사에 걸리고, 정상 샘플은 통과한다(같은 실행 출력)", (t) => {
+  const prompt = resolveSessionScenarioPrompt("loan-refinance-scam");
+  assert.ok(prompt);
+  const clean = buildSystemPrompt(prompt, { difficultyLevel: "beginner", inCallSmsEnabled: true });
+  const cleanResult = findPersistencePatterns(clean);
+  t.diagnostic(`정상 샘플: 검출 ${cleanResult.length}건`);
+  assert.deepEqual(cleanResult, []);
+  const samples: [string, string][] = [
+    ["물러서지 않", "상대가 부담된다고 하면 물러서지 않고 다시 요구한다."],
+    ["계속\\s*(밀어붙|압박)", "통화로 넘어가 계속  압박을 이어간다."],
+    ["계속\\s*(밀어붙|압박)", "의심해도 계속 밀어붙인다."],
+    ["강도를 높인다", "압박이 안 먹히면 강도를 높인다."],
+  ];
+  for (const [source, sample] of samples) {
+    const mid = Math.floor(clean.length / 2);
+    const contaminated = `${clean.slice(0, mid)}\n${sample}\n${clean.slice(mid)}`;
+    const found = findPersistencePatterns(contaminated);
+    t.diagnostic(`오염 샘플("${sample}"): 검출 ${found.length}건 → ${found.join(", ")}`);
+    assert.deepEqual(found, [source], `"${sample}"을 넣은 샘플이 /${source}/에 걸려야 한다`);
+  }
+  // 고급 블록의 지속성 지시는 정당하다 — 이 게이트가 초급만 보는 이유를 같은 실행에서 보인다.
+  const advanced = buildSystemPrompt(prompt, { difficultyLevel: "advanced" });
+  assert.deepEqual(findPersistencePatterns(advanced), ["물러서지 않"], "고급은 '물러서지 않되 매번 다른 근거'를 가진다");
+});
+
+test("[T191/S4b · G500] 중급 = 옵션 미전달 출력 불변식 — 전 시나리오 원본 + 중급 변형", () => {
+  let checked = 0;
+  for (const id of Object.keys(SCENARIO_PROMPTS)) {
+    const prompts = [resolveSessionScenarioPrompt(id), ...listFlowVariants(id, "intermediate").map((v) => resolveSessionScenarioPrompt(id, v.variantId))];
+    for (const prompt of prompts) {
+      assert.ok(prompt, `${id}: 프롬프트가 해석돼야 한다`);
+      assert.equal(buildSystemPrompt(prompt, { difficultyLevel: "intermediate" }), buildSystemPrompt(prompt), `${id}: 중급 = 옵션 미전달 출력이어야 한다`);
+      checked += 1;
+    }
+  }
+  assert.ok(checked >= 17, `검사 수가 너무 적다(${checked})`);
+});
+
+test("[T191/S4b] 수법은 그대로 — 조건을 낮춰 다시 요구하는 5항목은 라벨·인용 대사를 유지하고 '새 조건으로 다시 요구한다'로 끝난다", () => {
+  const expected: [string, string, string][] = [
+    ["grandchild-impersonation", "상품권 대체 요구", "'그럼 편의점 가서 문화상품권 사서 뒷면 번호만 사진 찍어 보내주세요'"],
+    ["kidnapping-threat", "금액 조정 재요구", "'그럼 지금 당장 되는 만큼만 먼저 넣어요'"],
+    ["loan-refinance-scam", "수수료 낮춰 재요구", "'그럼 절반만 먼저, 나머지는 실행일에 빼드릴게요'"],
+    ["messenger-friend-loan-kakao", "금액 낮춰 재요구", "'그럼 지금 되는 만큼만이라도 부탁할게'"],
+    ["reputation-blackmail-scam", "분할 재요구", "'그럼 오늘은 절반만, 나머지는 내일 넣으세요'"],
+  ];
+  for (const [id, label, quote] of expected) {
+    const tactic = SCENARIO_PROMPTS[id].weakenedTactics.find((x) => x.startsWith(`${label} — `));
+    assert.ok(tactic, `${id}: "${label}" 수법이 있어야 한다`);
+    assert.ok(tactic.includes(quote), `${id}/${label}: 인용 대사(리포트 수법 키)가 그대로여야 한다`);
+    assert.ok(tactic.includes("새 조건으로 다시 요구한다"), `${id}/${label}: 새 조건 재요구 수법이 남아 있어야 한다`);
+    assert.deepEqual(findPersistencePatterns(tactic), [], `${id}/${label}: 지속성 어구가 남아 있다`);
   }
 });
