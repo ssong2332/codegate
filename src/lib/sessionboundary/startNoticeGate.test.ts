@@ -383,7 +383,7 @@ test("[T190/reviewer Minor · AC-006] pre-call-notice 뒤 정적 구간에도 '�
 });
 
 test("[T190/reviewer Minor 역검증] 정적 구간의 훈련 종료를 지운 사본은 실패한다", () => {
-  const play = read(PLAY);
+  const play = read(PLAY).replace(/\r\n/g, "\n"); // CRLF 체크아웃 대응
   const anchor = "          <div className=\"flex justify-end px-4 py-2.5\">\n            <EndTrainingButton onClick={() => void handleEndTraining()} />\n          </div>\n";
   assert.ok(play.includes(anchor), "오염 지점을 찾지 못했다");
   assert.deepEqual(preCallGapViolations(play.replace(anchor, "")), ["정적 구간에 훈련 종료가 없다(AC-006)"]);

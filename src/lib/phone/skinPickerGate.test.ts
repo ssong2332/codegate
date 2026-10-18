@@ -157,7 +157,7 @@ test("[T190/reviewer Minor] DeviceSkinPicker — 같은 값을 다시 고르면 
 });
 
 test("[T190/reviewer Minor 역검증] 재선택 처리를 지운 사본은 실패한다", () => {
-  const picker = read("src/components/DeviceSkinPicker.tsx");
+  const picker = read("src/components/DeviceSkinPicker.tsx").replace(/\r\n/g, "\n"); // CRLF 체크아웃 대응
   const poisoned = picker.replace("if (current !== skin) return;\n                onChange(skin);", "if (current !== skin) return;");
   assert.notEqual(poisoned, picker, "오염 지점을 찾지 못했다");
   assert.ok(reselectViolations(poisoned).length >= 1);

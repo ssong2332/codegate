@@ -34,8 +34,8 @@ const CATALOG_PATH = "functions/src/scenarios/mockScreens.ts";
 
 /** ⚠️ **카탈로그를 import하지 않는다**(§32.5 (2) R-F) — `functions/`는 별도 TS 빌드 루트다.
  *  현행 G76과 **같은 방식**으로 소스 텍스트를 파싱해 값을 얻는다. */
-const catalogSource = readFileSync(CATALOG_PATH, "utf8").replace(/\r\n/g, "\n");
-const componentSource = readFileSync(COMPONENT_PATH, "utf8").replace(/\r\n/g, "\n");
+const catalogSource = readFileSync(CATALOG_PATH, "utf8");
+const componentSource = readFileSync(COMPONENT_PATH, "utf8");
 
 /** G76과 같은 주석 제거 — "주석에 문구를 적어 둔 것"으로 통과하면 안 된다. */
 function codeOnly(source: string): string {
@@ -318,11 +318,11 @@ function assertExistingGateInputsUnchanged(original: string, poisoned: string): 
     "이 오염이 소스 리터럴 집합을 바꿨다 — G76이 잡아 버리므로 '같은 샘플에서 G76은 통과한다'가 성립하지 않는다(G191)",
   );
   // (b) AC-079의 입력 = 카탈로그 소스. 한 바이트도 바뀌지 않았음을 단언한다.
-  const catalogNow = readFileSync(CATALOG_PATH, "utf8").replace(/\r\n/g, "\n");
+  const catalogNow = readFileSync(CATALOG_PATH, "utf8");
   const catalogDelta = catalogNow === catalogSource ? 0 : 1;
   assert.equal(catalogDelta, 0, "카탈로그가 바뀌었다 — AC-079의 입력이 불변이어야 한다");
   // (c) 디스크의 컴포넌트도 그대로다(오염은 메모리에서만 만든다).
-  assert.equal(readFileSync(COMPONENT_PATH, "utf8").replace(/\r\n/g, "\n"), original, "디스크의 컴포넌트가 변경됐다 — 오염이 새어 나갔다");
+  assert.equal(readFileSync(COMPONENT_PATH, "utf8"), original, "디스크의 컴포넌트가 변경됐다 — 오염이 새어 나갔다");
   return [literalCaught.length, catalogDelta];
 }
 
@@ -515,8 +515,9 @@ test("[T190/G460 · 렌더] entrySurface 두 갈래 — 메신저 = 대화상자
 
 test("[T190/G460 역검증] 문자함 안 래퍼에 aria-modal을 남긴 사본은 실패한다", () => {
   const { original, poisoned, overrides } = poisonedComponentSource(
-    '        role="region"\n',
-    '        role="region"\n        aria-modal="true"\n',
+    // CRLF 체크아웃(autocrlf=true)에서도 맞도록 앵커에 줄바꿈을 넣지 않는다(QA 격리 워크트리 실측 실패).
+    'role="region"',
+    'role="region" aria-modal="true"',
   );
   assert.notEqual(poisoned, original, "오염 지점(임베디드 래퍼)을 찾지 못했다");
   const item = catalogItems[0];
