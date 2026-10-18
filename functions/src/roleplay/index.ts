@@ -37,6 +37,7 @@ import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verify
 import {
   decideFallbackHangup,
   fallbackHangupMode,
+  fallbackSmsDeclaredFor,
   resolveFallbackHangupEffect,
   type FallbackHangupFacts,
 } from "../scammerHangup/fallback";
@@ -249,7 +250,10 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     let dueSms: InCallSmsItem | undefined;
     let deliveredSmsId: string | undefined;
     let smsNudgeInstruction: string | undefined;
-    if (smsDeclared.length > 0) {
+    // T192 PR A 리뷰 Minor-1 — 도착 기록 read 조건 = 콜러블과 같은 단일 술어(변형 ID 없는 세션도 실시간 구간 문자를 본다).
+    // 백스톱 계획 · 문자 제시는 여전히 `smsDeclared`(변형 선언 — 비면 할 일 0)를 쓴다.
+    const smsSessionDeclared = fallbackSmsDeclaredFor(session.scenarioId, session.flowVariantId);
+    if (smsSessionDeclared) {
       try {
         smsDelivered = await readDeliveredSms(sessionRef);
         smsDeliveredLoaded = true;
@@ -324,7 +328,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       limitReached,
       alreadyAccepted: Boolean(session.scammerHangup),
       relay: resolveHangupRelay(session),
-      smsDeclared: smsDeclared.length > 0,
+      smsDeclared: smsSessionDeclared,
       smsDeliveredLoaded,
     };
     const hangupPre = decideFallbackHangup(hangupFacts, smsDelivered, false);

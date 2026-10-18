@@ -75,6 +75,15 @@ export function declaresOfferVerificationDesk(
 }
 
 /**
+ * ⛔ T192 PR A 리뷰 M1 — 실시간 `end_call` **런타임 스위치**(코드 상수 · 선례 `RELAY_RUNTIME_AVAILABLE = false`).
+ * 클라의 `end_call` 라우팅(`GeminiVoiceSession` · 공통 종료 함수)은 C5(PR B)다. 그 전에 토큰에 `end_call`이 선언되면
+ * 모델이 부른 `end_call`이 클라에서 `unsupported`(guidance 없음)로 떨어진다 ⇒ **C5가 이 값을 `true`로 바꿀 때까지
+ * 선언 · 이름 · TOOL 문면 세 자리가 전부 꺼진다**(실시간 setup · 프롬프트 = C3 전과 같다 — G556 운영값 단언).
+ * ⛔ 환경 변수 · defineBoolean 아님(배포 설정으로 켜지지 않게). ⛔ 폴백 SIGNAL(`sendMessage`)은 이 값과 무관하다.
+ */
+export const END_CALL_LIVE_AVAILABLE = false;
+
+/**
  * T192 C3(§79.3 · §79.18 (1) · G502 · G527) — `end_call` **선언 자격**. ⛔ 이 술어가 유일한 원천이다: 도구 선언
  * (`buildLiveToolDeclarations`) · 이름 하향(`buildLiveToolNames`) · 프롬프트 TOOL 변형(`geminiProvider` →
  * `promptAssembly.hangupMode`) 세 자리가 **전부 이 함수를 부른다**(G400 선례).
@@ -88,7 +97,10 @@ export function declaresEndCall(
   _scenarioId: string,
   channel: MessengerChannel | undefined,
   relay: HangupRelayContext | undefined,
+  // M1 — 런타임 스위치(운영값 = `END_CALL_LIVE_AVAILABLE`). 판정 로직 테스트는 `true`로 돈다.
+  liveAvailable: boolean,
 ): boolean {
+  if (!liveAvailable) return false;
   if (channel === "messenger") return false;
   return !isNonLastRelayLeg(relay);
 }
@@ -98,6 +110,8 @@ export type EndCallScope = {
   channel: MessengerChannel | undefined;
   /** `resolveHangupRelay(session)`의 값만(G527 — 이 인자를 만드는 곳은 그 함수 하나). 오늘 항상 `undefined`. */
   relay: HangupRelayContext | undefined;
+  /** M1 — 운영 호출부(`geminiProvider`)는 `END_CALL_LIVE_AVAILABLE`을 넘긴다. 필수 키(빠뜨리면 컴파일 오류). */
+  liveAvailable: boolean;
 };
 
 /** §59.5 — `offer_verification_desk`는 인자 없음(G384 — R1 ④가 기계로 단언한다). */
@@ -187,7 +201,7 @@ export function buildLiveToolDeclarations(
   if (declaresOfferVerificationDesk(scenarioId, difficultyLevel)) {
     declarations.push(OFFER_VERIFICATION_DESK_DECLARATION);
   }
-  if (declaresEndCall(scenarioId, endCallScope.channel, endCallScope.relay)) {
+  if (declaresEndCall(scenarioId, endCallScope.channel, endCallScope.relay, endCallScope.liveAvailable)) {
     declarations.push(END_CALL_DECLARATION);
   }
   if (declarations.length === 0) return [];
@@ -235,7 +249,12 @@ export function buildLiveToolNames(
 ): LiveToolNames | undefined {
   const smsDeclared = sessionDeclaresInCallSms(scenarioId, flowVariantId);
   const offerDeclared = declaresOfferVerificationDesk(scenarioId, difficultyLevel);
-  const endCallDeclared = declaresEndCall(scenarioId, endCallScope.channel, endCallScope.relay);
+  const endCallDeclared = declaresEndCall(
+    scenarioId,
+    endCallScope.channel,
+    endCallScope.relay,
+    endCallScope.liveAvailable,
+  );
   if (!smsDeclared && !offerDeclared && !endCallDeclared) return undefined;
   return {
     ...(smsDeclared ? { sendPreparedSms: LIVE_TOOL_SEND_PREPARED_SMS } : {}),

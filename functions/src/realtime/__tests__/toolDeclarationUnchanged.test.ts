@@ -18,6 +18,7 @@ import {
   buildLiveToolDeclarations,
   buildLiveToolNames,
   declaresEndCall,
+  END_CALL_LIVE_AVAILABLE,
   LIVE_TOOL_END_CALL,
   LIVE_TOOL_SEND_PREPARED_SMS,
   LIVE_TOOL_OFFER_VERIFICATION_DESK,
@@ -39,8 +40,12 @@ const ALLOWED_NAMES = new Set([LIVE_TOOL_SEND_PREPARED_SMS, LIVE_TOOL_OFFER_VERI
  * 그 범위에서 출력이 S5b 판정과 바이트 동일해야 한다는 것이 G556이고, 음성 통화(`end_call` 참)와의 관계는 아래
  * [T192/C3 G556] 테스트가 "기존 선언 뒤에 1개"로 따로 고정한다.
  */
-const NO_END_CALL: EndCallScope = { channel: "messenger", relay: undefined };
-const VOICE: EndCallScope = { channel: undefined, relay: undefined };
+// ⚠️ PR A 리뷰 M1 — 아래 판정 로직 단언은 **켬 입력**(`liveAvailable: true`)으로 돈다. 운영값(끔) 단언은 파일 끝
+// [M1 운영값] 테스트가 따로 고정한다.
+const NO_END_CALL: EndCallScope = { channel: "messenger", relay: undefined, liveAvailable: true };
+const VOICE: EndCallScope = { channel: undefined, relay: undefined, liveAvailable: true };
+/** 운영값 그대로의 음성 범위(`geminiProvider` 기본 생성자와 같은 값). */
+const VOICE_OPERATIONAL: EndCallScope = { channel: undefined, relay: undefined, liveAvailable: END_CALL_LIVE_AVAILABLE };
 
 function declaredNames(
   scenarioId: string,
@@ -410,18 +415,21 @@ test("[§71 G430] 선언된 모든 함수는 behavior: BLOCKING을 명시한다"
 /** 릴레이 범위 표 — 오늘(S7 전) 실제 값은 항상 `undefined`지만 선언 술어는 값 자체로 판정한다(G527). */
 const END_CALL_SCOPES: ReadonlyArray<readonly [string, EndCallScope, boolean]> = [
   ["음성 · 릴레이 없음", VOICE, true],
-  ["음성 명시", { channel: "voice", relay: undefined }, true],
+  ["음성 명시", { channel: "voice", relay: undefined, liveAvailable: true }, true],
   ["메신저", NO_END_CALL, false],
-  ["중간 leg 0/2", { channel: undefined, relay: { legIndex: 0, legCount: 2 } }, false],
-  ["가운데 leg 1/3", { channel: "voice", relay: { legIndex: 1, legCount: 3 } }, false],
-  ["마지막 leg 1/2", { channel: undefined, relay: { legIndex: 1, legCount: 2 } }, true],
-  ["단일 leg 0/1", { channel: undefined, relay: { legIndex: 0, legCount: 1 } }, true],
-  ["메신저 + 마지막 leg", { channel: "messenger", relay: { legIndex: 1, legCount: 2 } }, false],
+  ["중간 leg 0/2", { channel: undefined, relay: { legIndex: 0, legCount: 2 }, liveAvailable: true }, false],
+  ["가운데 leg 1/3", { channel: "voice", relay: { legIndex: 1, legCount: 3 }, liveAvailable: true }, false],
+  ["마지막 leg 1/2", { channel: undefined, relay: { legIndex: 1, legCount: 2 }, liveAvailable: true }, true],
+  ["단일 leg 0/1", { channel: undefined, relay: { legIndex: 0, legCount: 1 }, liveAvailable: true }, true],
+  ["메신저 + 마지막 leg", { channel: "messenger", relay: { legIndex: 1, legCount: 2 }, liveAvailable: true }, false],
+  // M1 — 스위치가 꺼지면 다른 입력과 무관하게 거짓(운영값).
+  ["음성 · 스위치 끔", { channel: undefined, relay: undefined, liveAvailable: false }, false],
+  ["마지막 leg · 스위치 끔", { channel: "voice", relay: { legIndex: 1, legCount: 2 }, liveAvailable: false }, false],
 ];
 
 test("[T192/C3 G527] declaresEndCall — 메신저 · 중간 leg = false · 음성 · 마지막 leg · 릴레이 없음 = true", () => {
   for (const [label, scope, expected] of END_CALL_SCOPES) {
-    assert.equal(declaresEndCall("kidnapping-threat", scope.channel, scope.relay), expected, label);
+    assert.equal(declaresEndCall("kidnapping-threat", scope.channel, scope.relay, scope.liveAvailable), expected, label);
   }
 });
 
@@ -508,12 +516,52 @@ test("[T192/C3 G502 배선] 선언 · 이름 · 프롬프트 세 자리가 decla
   const indexSrc = readFileSync(path.resolve(__dirname, "../../../src/realtime/index.ts"), "utf8");
   const declBody = liveSrc.slice(liveSrc.indexOf("export function buildLiveToolDeclarations("), liveSrc.indexOf("export const LIVE_TOOL_FAILURE_INSTRUCTION"));
   const namesBody = liveSrc.slice(liveSrc.indexOf("export function buildLiveToolNames("));
-  assert.ok(declBody.includes("declaresEndCall(scenarioId, endCallScope.channel, endCallScope.relay)"), "선언 빌더");
-  assert.ok(namesBody.includes("declaresEndCall(scenarioId, endCallScope.channel, endCallScope.relay)"), "이름 빌더");
-  assert.ok(
-    provSrc.includes('hangupMode: declaresEndCall(input.scenarioId, input.channel, input.hangupRelay) ? "tool" : "none"'),
-    "프롬프트 TOOL 변형이 같은 술어를 부르지 않는다",
+  // M1 — 세 자리가 같은 범위(스위치 포함)로 같은 술어를 부른다. 줄바꿈은 공백 클래스로 잇는다(CRLF 안전).
+  const CALL = /declaresEndCall\(\s*scenarioId,\s*endCallScope\.channel,\s*endCallScope\.relay,\s*endCallScope\.liveAvailable,?\s*\)/;
+  assert.match(declBody, CALL, "선언 빌더");
+  assert.match(namesBody, CALL, "이름 빌더");
+  assert.match(
+    provSrc,
+    /hangupMode: declaresEndCall\(input\.scenarioId, endCallScope\.channel, endCallScope\.relay, endCallScope\.liveAvailable\)\s*\?\s*"tool"\s*:\s*"none"/,
+    "프롬프트 TOOL 변형이 같은 술어 · 같은 범위를 부르지 않는다",
   );
+  assert.match(provSrc, /liveAvailable: this\.endCallLiveAvailable,/, "프로바이더 범위가 생성자 스위치를 쓰지 않는다");
+  assert.match(
+    provSrc,
+    /private readonly endCallLiveAvailable: boolean = END_CALL_LIVE_AVAILABLE,/,
+    "프로바이더 스위치 기본값이 운영 상수가 아니다",
+  );
+  const providerFactory = readFileSync(path.resolve(__dirname, "../../../src/realtime/provider.ts"), "utf8");
+  assert.match(providerFactory, /new GeminiRealtimeProvider\(geminiKey\)/, "운영 생성자가 스위치를 직접 넘긴다(켬 우회)");
   assert.ok(indexSrc.includes("hangupRelay: resolveHangupRelay(session)"), "발급 입력의 릴레이가 resolveHangupRelay에서 오지 않는다");
   assert.equal(provSrc.includes("resolveHangupRelay("), false, "프로바이더 안에서 릴레이를 다시 해석한다(G527)");
+});
+
+// ── T192 PR A 리뷰 M1 — 운영값(끔): C5 전에는 실시간 setup · 이름 · 프롬프트에 end_call이 0 ─────────────────────────
+test("[M1 운영값] END_CALL_LIVE_AVAILABLE === false — ⚠️ C5(PR B)가 켤 때 이 테스트와 아래 운영값 단언을 함께 바꾼다", () => {
+  assert.equal(END_CALL_LIVE_AVAILABLE, false, "클라 end_call 라우팅(C5) 전에 실시간 end_call이 켜졌다");
+});
+
+test("[M1 운영값 · G556] 끔이면 음성 범위의 선언 · 이름이 전 조합에서 end_call 거짓 입력(S5b 판정)과 바이트 동일", () => {
+  let checked = 0;
+  for (const [scenarioId, difficultyLevel, flowVariantId] of allToolInputs()) {
+    const tag = `${scenarioId}/${difficultyLevel}/${flowVariantId ?? "-"}`;
+    assert.equal(
+      JSON.stringify(buildLiveToolDeclarations(scenarioId, difficultyLevel, flowVariantId, VOICE_OPERATIONAL)),
+      JSON.stringify(buildLiveToolDeclarations(scenarioId, difficultyLevel, flowVariantId, NO_END_CALL)),
+      `${tag}: 운영값 선언에 end_call이 샜다`,
+    );
+    assert.equal(
+      JSON.stringify(buildLiveToolNames(scenarioId, difficultyLevel, flowVariantId, VOICE_OPERATIONAL)),
+      JSON.stringify(buildLiveToolNames(scenarioId, difficultyLevel, flowVariantId, NO_END_CALL)),
+      `${tag}: 운영값 liveTools에 endCall이 샜다`,
+    );
+    checked += 1;
+  }
+  assert.ok(checked > 0);
+  // 대조군 — 같은 입력을 켬으로 돌리면 갈린다(위 단언이 공허하지 않다).
+  assert.notEqual(
+    JSON.stringify(buildLiveToolDeclarations("kidnapping-threat", "advanced", undefined, VOICE)),
+    JSON.stringify(buildLiveToolDeclarations("kidnapping-threat", "advanced", undefined, VOICE_OPERATIONAL)),
+  );
 });

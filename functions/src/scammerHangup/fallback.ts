@@ -5,7 +5,7 @@
 // ⛔ 판정 자체는 `decideScammerHangup` 하나(실시간 콜러블과 같은 함수 — AC-103 (f) · G501) · 문자 대기는 `isSmsAwaitingUser`
 //    하나(G554). 이 파일은 표를 다시 쓰지 않는다.
 // ⛔ Firestore · LLM import 0(이 모듈은 `roleplay/index.ts`가 import한다 — 시크릿 폐포를 넓히지 않는다).
-import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
+import { sessionDeclaresInCallSms, type DeliveredSmsRecord } from "../inCallSms/smsGate";
 import type { MessengerChannel, ScammerHangupKind, SessionStatus } from "../shared/types";
 import { decideScammerHangup, type HangupRelayContext, type ScammerHangupDecision } from "./decide";
 import { isSmsAwaitingUser } from "./smsWait";
@@ -26,11 +26,21 @@ export type FallbackHangupFacts = {
   alreadyAccepted: boolean;
   /** `resolveHangupRelay(session)`(오늘 항상 `undefined`). */
   relay: HangupRelayContext | undefined;
-  /** 이 세션 흐름 변형이 문자를 선언했는가(`resolveDeclaredSms(...).declared.length > 0` — 도착 기록 read와 같은 조건). */
+  /** 이 세션이 통화 중 문자를 가질 수 있는가(`fallbackSmsDeclaredFor` — 도착 기록 read와 **같은 값**). */
   smsDeclared: boolean;
   /** 도착 기록을 읽었는가(`smsDeliveredLoaded`). */
   smsDeliveredLoaded: boolean;
 };
+
+/**
+ * T192 PR A 리뷰 Minor-1(G554 취지) — 폴백이 도착 기록을 읽을지 · 문자 대기를 볼지 정하는 **단일 조건**. 실시간 콜러블
+ * (`scammerHangup/index.ts`)과 같은 술어 `sessionDeclaresInCallSms`다. ⚠️ 옛 조건(`resolveDeclaredSms(...).declared.length > 0`)은
+ * 변형 ID가 없는 세션(무소급 · 2인 챌린지)에서 거짓이라, 실시간 중 문자가 도착한 뒤 폴백으로 강등되면 기록을 읽지 않고
+ * "문자 대기 없음"으로 끊기를 허용했다(콜러블은 같은 세션에서 막는다 — AC-103 (f) 위반).
+ */
+export function fallbackSmsDeclaredFor(scenarioId: string, flowVariantId: string | undefined): boolean {
+  return sessionDeclaresInCallSms(scenarioId, flowVariantId);
+}
 
 /**
  * 폴백 6행 서버 항. 문자를 선언한 세션에서 도착 기록을 못 읽었으면 **대기 중으로 본다**(fail-closed — 그 턴만 끊기 0 ·

@@ -35,22 +35,47 @@ test("[G512] 저장 형식 왕복 — 같은 세션이면 그 값 · 다른 세�
   assert.equal(readEndReasonHint(encodeEndReasonHint("sess-a", "scammer_ended"), "sess-a"), "scammer_ended");
 });
 
-test("[G512 · C4-1] pendingSession — set/consume는 세션 저장소 · try/catch · consume는 지운다 · clearPendingSession도 지운다", () => {
+/** `export function name(` 본문(다음 `export ` 앞까지). */
+function fnBody(src: string, name: string): string {
+  const start = src.indexOf(`export function ${name}(`);
+  assert.ok(start >= 0, `${name}를 찾지 못했다`);
+  const next = src.indexOf("export ", start + 1);
+  return src.slice(start, next < 0 ? src.length : next);
+}
+
+test("[G512 · C4-1 · Minor-2] pendingSession — set은 세션 저장소 · try/catch · peek는 읽기만(삭제 0) · clear가 지운다 · clearPendingSession도 지운다", () => {
   const src = read("src/lib/recording/pendingSession.ts");
-  const setBody = src.slice(src.indexOf("export function setPendingEndReason("), src.indexOf("export function consumePendingEndReason("));
-  const consumeStart = src.indexOf("export function consumePendingEndReason(");
-  const consumeBody = src.slice(consumeStart, src.indexOf("\n}", consumeStart));
+  const setBody = fnBody(src, "setPendingEndReason");
+  const peekBody = fnBody(src, "peekPendingEndReason");
+  const clearHintBody = fnBody(src, "clearPendingEndReason");
   assert.ok(setBody.includes("window.sessionStorage.setItem(END_REASON_HINT_KEY") && setBody.includes("try {"), "set이 세션 저장소 · try/catch가 아니다");
-  assert.ok(consumeBody.includes("window.sessionStorage.removeItem(END_REASON_HINT_KEY)"), "consume이 힌트를 지우지 않는다(1회성)");
-  assert.ok(consumeBody.includes("readEndReasonHint(stored, sessionId)") && consumeBody.includes("try {"), "consume이 순수 판정을 거치지 않는다");
+  // Minor-2 — 읽기는 순수(초기화 함수에서 불려도 부수효과 0). 함수 머리 주석까지 잘리지 않게 본문의 코드만 본다.
+  const peekCode = peekBody.slice(peekBody.indexOf("{"));
+  assert.equal(/removeItem|setItem/.test(peekCode), false, "peek에 저장소 쓰기 · 삭제 부수효과가 있다(Minor-2)");
+  assert.ok(
+    peekCode.includes("readEndReasonHint(window.sessionStorage.getItem(END_REASON_HINT_KEY), sessionId)") && peekCode.includes("try {"),
+    "peek이 순수 판정을 거치지 않는다",
+  );
+  assert.ok(clearHintBody.includes("window.sessionStorage.removeItem(END_REASON_HINT_KEY)") && clearHintBody.includes("try {"), "clear가 힌트를 지우지 않는다");
+  assert.equal(src.includes("consumePendingEndReason"), false, "읽으며 지우는 옛 API가 남았다");
   const clearBody = src.slice(src.indexOf("export function clearPendingSession("));
   assert.ok(clearBody.includes("window.sessionStorage.removeItem(END_REASON_HINT_KEY)"), "clearPendingSession이 힌트를 남긴다");
-  assert.equal(/localStorage/.test(setBody + consumeBody), false, "힌트는 탭 범위(세션 저장소)여야 한다");
+  assert.equal(/localStorage/.test(setBody + peekBody + clearHintBody), false, "힌트는 탭 범위(세션 저장소)여야 한다");
 });
 
-test("[G512 · C4-2] 종료 화면 — 힌트를 읽어 endSession에 싣는다 · 하드코딩 user_ended 0", () => {
+test("[G512 · C4-2 · Minor-2] 종료 화면 — 힌트를 읽어 endSession에 싣는다 · 지우기는 endSession 성공 뒤에만 · 하드코딩 user_ended 0", () => {
   const src = read("src/app/session/end/page.tsx");
-  assert.ok(src.includes("consumePendingEndReason(sessionId)"), "종료 화면이 힌트를 읽지 않는다");
+  assert.ok(src.includes("peekPendingEndReason(sessionId)"), "종료 화면이 힌트를 읽지 않는다");
+  // 두 성공 경로: 마운트 effect(`clearPendingSession` — 힌트 키 포함) · 재시도(`.then` 안의 `clearPendingEndReason`).
+  const effectAwait = src.indexOf("await requestEndSession(sessionId, endReason);");
+  const effectClear = src.indexOf("clearPendingSession();");
+  assert.ok(effectAwait >= 0 && effectClear > effectAwait, "마운트 경로의 정리가 endSession 성공 뒤가 아니다");
+  const retryStart = src.indexOf("const handleRetry");
+  const retryThen = src.indexOf(".then(", retryStart);
+  const retryCatch = src.indexOf(".catch(", retryThen);
+  const retryClear = src.indexOf("clearPendingEndReason();", retryStart);
+  assert.ok(retryThen > 0 && retryClear > retryThen && retryClear < retryCatch, "재시도 경로의 힌트 삭제가 성공 콜백(.then) 안이 아니다");
+  assert.equal(src.split("clearPendingEndReason(").length - 1, 1, "힌트 삭제 호출은 재시도 성공 콜백 1곳뿐이어야 한다");
   assert.ok(src.includes("endSession({ sessionId: sid, endReason })"), "endSession 요청에 힌트 값이 실리지 않는다");
   assert.equal(src.includes('endReason: "user_ended"'), false, "옛 고정값 요청이 남았다");
   // C4-2 주석 정정 — 옛 문장(C1 허용목록 뒤 거짓)이 원문 그대로 남아 있지 않다.

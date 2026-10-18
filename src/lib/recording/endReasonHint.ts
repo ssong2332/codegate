@@ -1,7 +1,7 @@
 // T192 C4(Architecture.md §79.9 E6 · 종료 화면 글머리 · §79.10 · §79.19 (7) C4-1 · C4-2) — 종료 사유 힌트의 순수 판정.
 //
 // 통화 화면이 "어떤 이유로 끝났는가"를 종료 화면(`/session/end`)에 넘기는 1회성 힌트다. 저장 · 삭제는
-// `pendingSession.ts`의 `setPendingEndReason` · `consumePendingEndReason`이 하고(세션 저장소), 이 파일은 **값 판정만**
+// `pendingSession.ts`의 `setPendingEndReason` · `peekPendingEndReason` · `clearPendingEndReason`이 하고(세션 저장소), 이 파일은 **값 판정만**
 // 한다 — 브라우저 API · 별칭(`@/`) import 0이라 루트 테스트 러너에서 그대로 돈다.
 //
 // ⛔ 허용목록 밖 · 없음 · 깨진 값 · 다른 세션의 힌트는 전부 `user_ended`(종료 화면의 종전 고정값 — AC-006 "종료는 항상

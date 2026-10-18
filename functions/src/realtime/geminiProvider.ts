@@ -23,6 +23,7 @@ import {
   buildLiveToolNames,
   declaresEndCall,
   declaresOfferVerificationDesk,
+  END_CALL_LIVE_AVAILABLE,
   type EndCallScope,
 } from "./liveTools";
 import { SCENARIO_SPEAKER_GENDER, speakerGenderFor } from "./scenarioVoice";
@@ -86,7 +87,14 @@ const NEW_SESSION_EXPIRE_MINUTES = 2;
 export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
   readonly providerName = "gemini" as const;
 
-  constructor(private readonly apiKey: string) {}
+  /**
+   * `endCallLiveAvailable` — T192 PR A 리뷰 M1의 런타임 스위치. 운영 생성자(`provider.ts`)는 인자를 넘기지 않아 항상
+   * `END_CALL_LIVE_AVAILABLE`(오늘 `false`)이다. 판정 로직 테스트만 `true`를 넘긴다(켬 입력).
+   */
+  constructor(
+    private readonly apiKey: string,
+    private readonly endCallLiveAvailable: boolean = END_CALL_LIVE_AVAILABLE,
+  ) {}
 
   async createCallCredentials(input: RealtimeCallInput): Promise<RealtimeCallCredentials> {
     // T191 S5(AC-096 (e)) — 세션에 배정된 흐름 변형을 합성한 프롬프트(sendMessage · 오프닝과 같은 단일
@@ -120,7 +128,11 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // ⭐ T192 C3(§79.19 (5) 2 · 9) — `end_call` 범위(채널 · 이미 해석된 릴레이)는 선언 · 이름 · 프롬프트 TOOL 변형 세
     // 자리에 같은 값으로 들어간다. 세 자리가 전부 `declaresEndCall` 하나를 부른다(G502). ⚠️ 옛 주석의 "도구가 없으면
     // 빈 배열 = 오늘과 동일"은 C3부터 메신저 · 중간 leg에서만 참이다(아래 `tools` 주석).
-    const endCallScope: EndCallScope = { channel: input.channel, relay: input.hangupRelay };
+    const endCallScope: EndCallScope = {
+      channel: input.channel,
+      relay: input.hangupRelay,
+      liveAvailable: this.endCallLiveAvailable,
+    };
     const liveToolDeclarations = buildLiveToolDeclarations(
       input.scenarioId,
       input.difficultyLevel,
@@ -149,7 +161,9 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       sessionAccountNumber: resolveSessionAccountNumber(input.scenarioId),
       // ⭐ T192 C3(§79.6 ① · §79.19 (5) 9 · G502) — `end_call`을 선언한 토큰에만 TOOL 변형(같은 술어 3번째 호출부).
       // 확인 무력화 1문장은 위 `verifyInterceptEnabled`로 조립 함수가 붙인다. 그 밖 = NONE(종전 문면 바이트 동일).
-      hangupMode: declaresEndCall(input.scenarioId, input.channel, input.hangupRelay) ? "tool" : "none",
+      hangupMode: declaresEndCall(input.scenarioId, endCallScope.channel, endCallScope.relay, endCallScope.liveAvailable)
+        ? "tool"
+        : "none",
     });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });

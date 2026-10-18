@@ -17,7 +17,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { endSession } from "@/lib/api";
 import type { EndSessionReason } from "@/lib/api/types";
-import { clearPendingSession, consumePendingEndReason, getPendingSessionId } from "@/lib/recording";
+import { clearPendingEndReason, clearPendingSession, getPendingSessionId, peekPendingEndReason } from "@/lib/recording";
 import { Button } from "@/components/ui";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { POST_SESSION_FACT_DISCLOSURE } from "@/lib/sessionboundary/postSessionCopy";
@@ -55,8 +55,9 @@ export default function SessionEndPage() {
   const [sessionId] = useState<string | null>(() => getPendingSessionId());
   // T192 C4(§79.9 종료 화면 · §79.19 (7) C4-2) — 통화 화면이 남긴 1회성 사유 힌트. 허용목록(`user_ended` ·
   // `limit_reached` · `scammer_ended`) 밖 · 없음 · 다른 세션이면 `user_ended`(판정 = `endReasonHint.ts`). 초기화
-  // 함수에서 1회 읽어 상태로 들고 있어 재시도 버튼도 같은 값을 보낸다(Strict Mode의 초기화 이중 호출은 첫 결과를 쓴다).
-  const [endReason] = useState<EndSessionReason>(() => (sessionId ? consumePendingEndReason(sessionId) : "user_ended"));
+  // 함수에서 **읽기만** 하고(부수효과 0 — 초기화 이중 호출에도 같은 값 · PR A 리뷰 Minor-2), 지우기는 `endSession` 성공 뒤다
+  // — 요청이 실패해 재시도하거나 새로고침해도 같은 사유가 남는다.
+  const [endReason] = useState<EndSessionReason>(() => (sessionId ? peekPendingEndReason(sessionId) : "user_ended"));
   const [state, setState] = useState<PageState>(sessionId ? "ending" : "no-session");
   const [challenge, setChallenge] = useState<{ challengeId: string; displayName: string } | null>(
     null,
@@ -151,6 +152,8 @@ export default function SessionEndPage() {
     setState("ending");
     requestEndSession(sessionId, endReason)
       .then(async () => {
+        // Minor-2 — 종료가 성공한 뒤에만 사유 힌트를 지운다(실패 경로는 남겨 다음 재시도 · 새로고침이 같은 값을 보낸다).
+        clearPendingEndReason();
         setChallenge(await fetchChallengeContext(sessionId));
         setState("ended");
       })

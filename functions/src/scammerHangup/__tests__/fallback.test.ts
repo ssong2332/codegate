@@ -3,10 +3,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { isSmsAwaitingUser } from "../smsWait";
+import { effectiveTextPathUserTurns, resolveDeclaredSms } from "../../inCallSms/smsGate";
+import { hasInCallSms } from "../../scenarios/inCallSms";
 import {
   decideFallbackHangup,
   fallbackHangupMode,
   fallbackSmsAwaitingUser,
+  fallbackSmsDeclaredFor,
   resolveFallbackHangupEffect,
   type FallbackHangupFacts,
 } from "../fallback";
@@ -173,4 +176,38 @@ test("[G552 ⓒ · §79.19 (5) 10 배선] sendMessage — 입력은 userTurnsNow
   );
   assert.ok(src.includes("const hangupEnded = hangupEffect.end && stillActive && !limitReached;"), "한도가 이기지 않는다(7행)");
   assert.ok(src.includes("if ((limitReached || finalize.hangupEnded) && finalize.stillActive) {"), "리포트 트리거 조건 확장 없음");
+});
+
+// ── T192 PR A 리뷰 Minor-1(G554 취지) — 폴백 문자 선언 판정 = 콜러블과 같은 단일 술어 ─────────────────────────────
+test("[Minor-1 · G554] 변형 ID 없는 세션 — 실시간 중 문자가 도착한 뒤 폴백으로 강등된 턴은 문자 대기(콜러블과 같은 답)", () => {
+  const scenarioId = "reputation-blackmail-scam";
+  assert.equal(hasInCallSms(scenarioId), true, "전제 — 카탈로그 보유 시나리오");
+  assert.equal(resolveDeclaredSms(scenarioId, undefined).declared.length, 0, "전제 — 변형 ID가 없으면 변형 선언은 비어 있다(옛 조건은 거짓)");
+  // 실시간 구간에서 사용자 발화 4번째에 문자 도착 → 폴백 강등 · 서버 messages에는 아직 발화 2건(실시간 전사 미반영).
+  const delivered = [{ smsId: "realtime-sms", userTurnsAtArrival: 4 }];
+  const userTurns = effectiveTextPathUserTurns(2, delivered);
+  assert.equal(userTurns, 4);
+  const facts: FallbackHangupFacts = {
+    ...FACTS,
+    smsDeclared: fallbackSmsDeclaredFor(scenarioId, undefined),
+    smsDeliveredLoaded: true,
+    userTurns,
+  };
+  assert.equal(facts.smsDeclared, true, "폴백 문자 선언 판정이 콜러블 술어(sessionDeclaresInCallSms)와 다르다");
+  const decision = decideFallbackHangup(facts, delivered, false);
+  assert.deepEqual([decision.status, decision.row], ["blocked_pending", "6"]);
+  // 콜러블(실시간)도 같은 도착 기록 · 같은 발화 수에서 막는다(commit.ts → isSmsAwaitingUser).
+  assert.equal(isSmsAwaitingUser(delivered, userTurns), true);
+});
+
+test("[Minor-1 배선] sendMessage — 도착 기록 read 조건과 끊기 판정의 문자 선언이 같은 값 하나(fallbackSmsDeclaredFor)", () => {
+  const src = readFileSync(ROLEPLAY_INDEX, "utf8");
+  assert.equal(src.split("fallbackSmsDeclaredFor(").length - 1, 1, "판정 지점은 1곳");
+  assert.ok(src.includes("const smsSessionDeclared = fallbackSmsDeclaredFor(session.scenarioId, session.flowVariantId);"));
+  assert.match(
+    src,
+    /if \(smsSessionDeclared\) \{\s*try \{\s*smsDelivered = await readDeliveredSms\(sessionRef\);/,
+    "도착 기록 read가 같은 조건에 묶여 있지 않다",
+  );
+  assert.ok(src.includes("smsDeclared: smsSessionDeclared,"), "끊기 판정 입력이 같은 값을 쓰지 않는다");
 });
