@@ -74,6 +74,25 @@ import {
   type IncomingAlert,
 } from "@/lib/phone/ringtonePlayer";
 import { gainFor, isVolumeSettable, type AudioRoute } from "@/lib/realtime/outputGain";
+import { GEMINI_OUTPUT_SAMPLE_RATE } from "@/lib/realtime/pcm";
+import {
+  RESUME_GESTURE_EVENTS,
+  closePrimedCallAudio,
+  primeCallAudio,
+  resumeSuspendedContexts,
+  shouldReleasePrimedCallAudio,
+  type PrimedCallAudio,
+} from "@/lib/realtime/callAudio";
+import {
+  noteAudioError,
+  noteFallbackPlay,
+  noteResumeRetry,
+  registerCallAudio,
+  registerFallbackAudio,
+  registerRingContext,
+  registeredCallContexts,
+} from "@/lib/realtime/audioDiagnostics";
+import AudioDebugPanel from "@/components/AudioDebugPanel";
 import PhoneIcon from "@/components/PhoneIcon";
 import EndTrainingButton from "@/components/EndTrainingButton";
 import {
@@ -173,6 +192,9 @@ export default function SessionCallPage() {
   const preCallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // "준비됐어요" 탭(사용자 제스처) 안에서 만든 벨 오디오 컨텍스트 — 벨 effect가 한 번 넘겨받는다(§74.7).
   const primedAlertContextRef = useRef<AudioContext | null>(null);
+  // ⭐ 수정안 A(2026-10-18, 라이브 d13e718 무음 신고) — "받기" 탭 안에서 동기로 만들고 resume한 통화 오디오 컨텍스트.
+  // GeminiVoiceSession이 빌려 쓰고, **닫는 것은 이 화면 한 곳**이다(아래 해제 effect · 언마운트 cleanup).
+  const [primedCallAudio, setPrimedCallAudio] = useState<PrimedCallAudio | null>(null);
   const [callMode, setCallMode] = useState<CallMode>("undecided");
   const [scenario, setScenario] = useState<ScenarioDoc | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -1040,9 +1062,12 @@ export default function SessionCallPage() {
     if (!playbackUrl) return;
     (async () => {
       setPlaybackBlocked(false);
+      registerFallbackAudio(audioRef.current); // 진단 패널 관찰 전용
       try {
         await audioRef.current?.play();
-      } catch {
+        noteFallbackPlay("ok");
+      } catch (err) {
+        noteFallbackPlay(err instanceof Error ? err.name : "unknown");
         setPlaybackBlocked(true);
       }
     })();
@@ -1051,8 +1076,11 @@ export default function SessionCallPage() {
   const handleManualPlay = () => {
     audioRef.current
       ?.play()
-      .then(() => setPlaybackBlocked(false))
-      .catch(() => {});
+      .then(() => {
+        noteFallbackPlay("ok");
+        setPlaybackBlocked(false);
+      })
+      .catch((err: unknown) => noteFallbackPlay(err instanceof Error ? err.name : "unknown"));
   };
 
   const maybeStartListening = useCallback(() => {
@@ -1091,8 +1119,13 @@ export default function SessionCallPage() {
   // 사용자 신고(2026-07-25) — "전화가 연결되면 바로 말하는 걸로". 전화가 울리는 동안(아직 "받기"
   // 전) 자격증명만 미리 받아 둔다 — 마이크 접근·"받기" 소비는 그대로 handleAnswer에서만 일어나므로
   // "받기 전엔 아무 것도 새지 않는다"는 관례는 무변경이다(realtime.prefetch 자체가 상태를 안 바꿈).
+  // ⭐ 2026-10-18(라이브 d13e718 회귀) — 벨 직전 고지(`pre-call-notice`)가 보이는 동안부터 시작한다. T190에서 고지와
+  // "준비됐어요" 뒤 정적이 생겨 `incoming`이 늦게 시작되자, 받기를 빨리 누르면 미리 받기가 끝나기 전에 받기가 와서
+  // 같은 자격증명이 두 번 발급됐다. `incoming` 조건도 남긴다(새로고침으로 벨에 바로 들어오는 경로 · 에스컬레이션 경로).
+  // 고지→벨 전이로 다시 불려도 진행 중·신선한 결과가 있으면 훅이 다시 걸지 않는다(`shouldStartPrefetch`).
   useEffect(() => {
-    if (pageState !== "ready" || !sessionId || phase !== "incoming") return;
+    if (pageState !== "ready" || !sessionId) return;
+    if (phase !== "pre-call-notice" && phase !== "incoming") return;
     realtime.prefetch(sessionId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageState, sessionId, phase, realtime.prefetch]);
@@ -1134,12 +1167,52 @@ export default function SessionCallPage() {
     return () => clearTimeout(timer);
   }, [bannerSmsId, bannerPausedSmsId]);
 
+  // ⭐ 수정안 A — 받기 시점 컨텍스트 해제. Gemini 세션이 그것을 쓸 일이 없어지면(ElevenLabs · 폴백 · 마운트 전 오류 ·
+  // 통화 종료) 닫는다. 판단은 `shouldReleasePrimedCallAudio` 하나가 소유한다. 닫기는 멱등이다.
+  useEffect(() => {
+    if (
+      shouldReleasePrimedCallAudio({
+        status: realtime.status,
+        provider: realtime.credentials?.provider,
+        ended: phase === "ended",
+      })
+    ) {
+      closePrimedCallAudio(primedCallAudio);
+    }
+  }, [primedCallAudio, realtime.status, realtime.credentials?.provider, phase]);
+
+  // 언마운트(또는 다른 값으로 교체) 시 반드시 닫는다 — 누수 0.
+  useEffect(() => {
+    if (!primedCallAudio) return;
+    return () => closePrimedCallAudio(primedCallAudio);
+  }, [primedCallAudio]);
+
+  // ⭐ 수정안 A 안전망 — 통화 중 컨텍스트가 suspended로 남아 있으면 **다음 사용자 탭**(어느 컨트롤이든)에서 resume을 한 번
+  // 더 요청한다. 리스너는 capture · passive로만 듣고 기본 동작·전파를 막지 않는다(기존 컨트롤 동작 무변경 · 문구 0).
+  // running·closed인 컨텍스트는 건드리지 않는다(멱등).
+  useEffect(() => {
+    if (phase !== "connecting" && phase !== "opening" && phase !== "live") return;
+    const handleGesture = () => {
+      const targets = new Set([primedCallAudio?.output, primedCallAudio?.input, ...registeredCallContexts()]);
+      noteResumeRetry(resumeSuspendedContexts([...targets], noteAudioError));
+    };
+    for (const type of RESUME_GESTURE_EVENTS) {
+      window.addEventListener(type, handleGesture, { capture: true, passive: true });
+    }
+    return () => {
+      for (const type of RESUME_GESTURE_EVENTS) {
+        window.removeEventListener(type, handleGesture, { capture: true });
+      }
+    };
+  }, [phase, primedCallAudio]);
+
   // T190-8b(UX-014 v1.33 (11) ① · §74.22 (3) · AC-087 (c)) — "준비됐어요". ① 이 세션의 고지 확인 기록(새로고침 생략)
   // ② **이 제스처 안에서** 벨 오디오를 준비(iOS 자동재생 — OQ-A95 ⓐ의 해제 지점) ③ 짧은 정적 뒤 벨(`incoming`).
   const handleConfirmPreCallNotice = () => {
     if (preCallLeaving) return;
     if (sessionId) markPreCallNoticeSeen(sessionId);
     primedAlertContextRef.current = primeIncomingAlertAudio();
+    registerRingContext(primedAlertContextRef.current); // 진단 패널(`?audiodebug=1`) 관찰 전용
     setPreCallLeaving(true);
     preCallTimerRef.current = setTimeout(() => {
       preCallTimerRef.current = null;
@@ -1176,11 +1249,23 @@ export default function SessionCallPage() {
     // §57.2 (6) 처방 D1 — 통화 타이머(`elapsedSec`)가 0이 되는 바로 이 지점의 시각을 참가자 시계
     // 기준으로 래치한다. 이후 모든 전사 턴의 `atMs`는 이 값 기준 상대 ms다(T-1 처방).
     answeredAtMsRef.current = Date.now();
+    // ⭐ 수정안 A — **이 탭 핸들러 안에서 동기로** 통화 오디오 컨텍스트를 만들고 resume한다(벨 primed 컨텍스트와 같은
+    // 패턴). 예전엔 받기 뒤 비동기 effect에서 만들어, 탭과의 간격이 길면 일부 Android 브라우저에서 suspended로 남았다
+    // (가설 — 실기 확인 대상). ⛔ 이 줄 앞에 await를 두지 않는다.
+    const primedAudio = primeCallAudio(GEMINI_OUTPUT_SAMPLE_RATE, performance.now());
+    setPrimedCallAudio(primedAudio);
     setPhase("connecting");
     setCallMode("realtime");
     // 실시간 연결을 먼저 시도한다(위 prefetch로 미리 받아 둔 자격증명이 신선하면 재사용). 불가하면
     // 위 effect가 폴백으로 강등한다.
     void realtime.start(sessionId);
+    // 진단 패널(`?audiodebug=1`) 관찰 전용 — start()가 받기 시점 값을 비운 직후에 적는다.
+    registerCallAudio({
+      output: primedAudio.output,
+      input: primedAudio.input,
+      origin: "primed",
+      createdAtMs: primedAudio.createdAtMs,
+    });
   };
 
   const handleDecline = () => {
@@ -1544,6 +1629,13 @@ export default function SessionCallPage() {
     <main className="flex min-h-screen flex-col text-white" style={{ backgroundColor: callTokens.outerBg }}>
       {/* 실시간 speech-to-speech 세션 — 서버가 자격증명을 준 경우에만 마운트된다(지연 로딩).
           화면 요소는 없고 SDK 세션 생명주기만 관리한다. */}
+      {/* `?audiodebug=1`일 때만 그린다(없으면 DOM 0 — 컴포넌트 첫 분기). 관찰 전용 · 탭을 가로채지 않는다. */}
+      <AudioDebugPanel
+        callMode={callMode}
+        status={realtime.status}
+        provider={realtime.isMock ? "mock" : (realtime.credentials?.provider ?? "-")}
+        audioRoute={audioRoute}
+      />
       {realtime.credentials?.provider === "elevenlabs" && (
         <RealtimeVoiceSession
           credentials={realtime.credentials}
@@ -1590,6 +1682,7 @@ export default function SessionCallPage() {
             releaseVerifyAnnounceSlot={releaseVerifyAnnounceSlot}
             instructionTurn={instructionTurn}
             personaStateTurn={personaStateTurn}
+            primedAudio={primedCallAudio}
           />
         )
       )}

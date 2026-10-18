@@ -68,6 +68,14 @@ import {
   type LiveLatencyTurnRecord,
   type TurnEndReason,
 } from "./liveLatency";
+import { isUsableContext, type PrimedCallAudio } from "./callAudio";
+import {
+  noteAudioError,
+  noteChunkReceived,
+  noteChunkScheduled,
+  registerCallAudio,
+  registerOutputGain,
+} from "./audioDiagnostics";
 
 export type GeminiVoiceSessionProps = {
   credentials: CreateRealtimeCallResponse;
@@ -163,6 +171,12 @@ export type GeminiVoiceSessionProps = {
    * "사용자가 이런 말을 했다"고 오판해 속았는지 판정이 오염된다.
    */
   personaStateTurn?: { text: string; seq: number } | null;
+  /**
+   * ⭐ 수정안 A(2026-10-18, 라이브 d13e718 무음 신고) — 통화 화면이 **받기 탭 안에서 동기로** 만들고 `resume()`한 출력·입력
+   * 컨텍스트(`callAudio.ts` `primeCallAudio`). 살아 있으면 새로 만들지 않고 이것을 쓴다. ⛔ **빌려 쓰기만 한다** — 이
+   * 컴포넌트는 넘겨받은 컨텍스트를 닫지 않는다(소유권 = 통화 화면). 없거나 닫혔으면 종전대로 여기서 만들고 여기서 닫는다.
+   */
+  primedAudio?: PrimedCallAudio | null;
 };
 
 // 마이크 캡처 버퍼 크기 — 작을수록 지연이 낮지만 콜백이 잦다. 사용자 신고(2026-07-25, "내가 말하고
@@ -237,6 +251,7 @@ export default function GeminiVoiceSession({
   releaseVerifyAnnounceSlot,
   instructionTurn,
   personaStateTurn,
+  primedAudio,
 }: GeminiVoiceSessionProps) {
   const handlersRef = useRef({
     onActive,
@@ -324,6 +339,11 @@ export default function GeminiVoiceSession({
     // §71.7(G433) — AI 음성은 이 게인 노드를 거쳐 스피커로 나간다(예전엔 destination 직결 = 최대 음량).
     let outputGain: GainNode | null = null;
     let processor: ScriptProcessorNode | null = null;
+    // 수정안 A — 통화 화면에서 빌린 컨텍스트인가(빌린 것은 닫지 않고 우리가 붙인 노드만 뗀다).
+    let outputBorrowed = false;
+    let inputBorrowed = false;
+    let micSourceNode: MediaStreamAudioSourceNode | null = null;
+    let silenceNode: GainNode | null = null;
     let session: GeminiLiveSession | null = null;
     // 받은 오디오를 이어붙일 다음 재생 시작 시각(출력 컨텍스트 시간축 기준).
     let nextPlayTime = 0;
@@ -659,8 +679,19 @@ export default function GeminiVoiceSession({
       if (userLevelRafId !== null) cancelAnimationFrame(userLevelRafId);
       processor?.disconnect();
       stream?.getTracks().forEach((track) => track.stop());
-      void inputContext?.close().catch(() => {});
-      void outputContext?.close().catch(() => {});
+      // 수정안 A — 빌린 컨텍스트는 닫지 않는다(통화 화면이 닫는다). 대신 이 실행이 붙인 노드와 예약 재생을 뗀다.
+      if (outputBorrowed) {
+        stopAllPlayback();
+        outputGain?.disconnect();
+      } else {
+        void outputContext?.close().catch(() => {});
+      }
+      if (inputBorrowed) {
+        micSourceNode?.disconnect();
+        silenceNode?.disconnect();
+      } else {
+        void inputContext?.close().catch(() => {});
+      }
       try {
         session?.close();
       } catch {
@@ -694,11 +725,23 @@ export default function GeminiVoiceSession({
           return;
         }
 
-        outputContext = new AudioContext({ sampleRate: GEMINI_OUTPUT_SAMPLE_RATE });
-        inputContext = new AudioContext();
-        // 비동기 effect에서 만든 컨텍스트는 suspended로 시작할 수 있다 — 명시적으로 깨운다.
-        await outputContext.resume().catch(() => {});
-        await inputContext.resume().catch(() => {});
+        // 수정안 A — 받기 탭 안에서 미리 깨운 컨텍스트가 살아 있으면 그것을 쓴다(없거나 닫혔으면 종전대로 만든다).
+        const primedOutput = primedAudio?.output ?? null;
+        const primedInput = primedAudio?.input ?? null;
+        outputBorrowed = isUsableContext(primedOutput);
+        inputBorrowed = isUsableContext(primedInput);
+        outputContext =
+          outputBorrowed && primedOutput ? primedOutput : new AudioContext({ sampleRate: GEMINI_OUTPUT_SAMPLE_RATE });
+        inputContext = inputBorrowed && primedInput ? primedInput : new AudioContext();
+        registerCallAudio({
+          output: outputContext,
+          input: inputContext,
+          origin: outputBorrowed ? "primed" : "session",
+          createdAtMs: outputBorrowed && primedAudio ? primedAudio.createdAtMs : performance.now(),
+        });
+        // 비동기 effect에서 만든 컨텍스트는 suspended로 시작할 수 있다 — 명시적으로 깨운다(빌린 것도 한 번 더 요청한다).
+        await outputContext.resume().catch((e: unknown) => noteAudioError(e instanceof Error ? e.name : "unknown"));
+        await inputContext.resume().catch((e: unknown) => noteAudioError(e instanceof Error ? e.name : "unknown"));
         // §71.7(G433) — 기본 음량은 `GEMINI_OUTPUT_GAIN`(판단값 · OQ-A89). 받은 오디오 소스는 전부 이
         // 노드에 연결한다(아래 onmessage).
         outputGain = outputContext.createGain();
@@ -707,6 +750,7 @@ export default function GeminiVoiceSession({
         // T190-3(G455) — 스피커 버튼 음량 모드 반영(위 초기값 = 통화 모드 = 같은 값. 연결 전에 바뀌었으면 여기서 맞춘다).
         if (outputVolumeRef.current !== GEMINI_OUTPUT_GAIN) outputGain.gain.value = outputVolumeRef.current;
         outputGainNodeRef.current = outputGain;
+        registerOutputGain(outputGain);
         markCallSetup("micReady", performance.now());
         log("audio contexts ready; connecting… model=", credentials.geminiModel);
 
@@ -814,6 +858,7 @@ export default function GeminiVoiceSession({
               const samples = message.data ? base64ToFloat32(message.data) : null;
               const hasAudio = samples !== null && samples.length > 0;
               if (hasAudio && samples) {
+                noteChunkReceived();
                 const buffer = outputContext.createBuffer(
                   1,
                   samples.length,
@@ -826,6 +871,7 @@ export default function GeminiVoiceSession({
                 // 이전 청크가 끝나는 시점에 이어붙인다(겹침·끊김 방지).
                 const startAt = Math.max(outputContext.currentTime, nextPlayTime);
                 source.start(startAt);
+                noteChunkScheduled(performance.now());
                 nextPlayTime = startAt + buffer.duration;
                 scheduledSources.add(source);
                 source.onended = () => scheduledSources.delete(source);
@@ -927,6 +973,7 @@ export default function GeminiVoiceSession({
         // 마이크 → PCM16 16kHz → 전송. ScriptProcessor는 구식이지만 AudioWorklet과 달리 별도
         // 워커 파일 없이 동작해, 정적 export 구성(next.config.ts)에서 추가 배포 산출물이 없다.
         const micSource = inputContext.createMediaStreamSource(stream);
+        micSourceNode = micSource;
 
         // 사용자 발화 파형 인디케이터용 병렬 탭(2026-07-24, 사용자 신고 — "일단 잘 파악하는지
         // 보고 싶다"는 진단 목적 + 실제 UX). micSource를 기존 processor 체인과 완전히 별개로
@@ -995,9 +1042,11 @@ export default function GeminiVoiceSession({
         silence.gain.value = 0;
         processor.connect(silence);
         silence.connect(inputContext.destination);
+        silenceNode = silence;
         log("mic pipeline attached");
       } catch (err) {
         log("connect threw", err);
+        noteAudioError(err instanceof Error ? err.name : "unknown");
         if (!cancelled) {
           cleanup();
           handlersRef.current.onError();
