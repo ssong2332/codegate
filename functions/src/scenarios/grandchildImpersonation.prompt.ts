@@ -50,6 +50,14 @@
 //  beginner len=5661 sha=aa171a005814c927 (직전 5531 · 58a136818845ced4) ·
 //  intermediate len=4921 sha=c499265c6fbb696f (직전 4791 · f4d40f5855e13f3e) ·
 //  advanced len=6043 sha=c061787f6f137505 (직전 5913 · 6d21e1bb87c49a47).)
+// (2026-10-18 수정분(사용자 신고 — 실시간 통화 중 AI가 갑자기 외국어로 말함): 공통 조립부에 **무조건부**
+//  `[언어 — 반드시 지킨다]` 블록(`promptAssembly.ts` LANGUAGE_RULE — 항상 한국어로만 말하고 못 알아들으면
+//  한국어로 되묻는다)을 넣었다 → **조립 산출물이 바뀐다 → 재생성 대기 중** — 실시간 통화(ElevenLabs clone)에는
+//  아직 반영되지 않았다. 재생성 완료 후에만 "재생성 완료"로 갱신할 것.
+//  재생성 담당자 대조값(같은 방법, 직전 값은 base `b99f239`):
+//  beginner len=6090 sha=675df2b30e3d2a1e (직전 5661 · aa171a005814c927) ·
+//  intermediate len=5350 sha=c53aead78efdf0d8 (직전 4921 · c499265c6fbb696f) ·
+//  advanced len=6472 sha=da98590896fc3d4e (직전 6043 · c061787f6f137505).)
 import type { ScenarioPromptDoc } from "../shared/types";
 
 // src/content/scenarios/grandchildImpersonation.ts의 상수와 동일한 문자열이어야 한다.
