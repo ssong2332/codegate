@@ -5,9 +5,12 @@ import {
   buildAlreadyAnnouncedToolResponse,
   buildUnsupportedToolResponses,
   collectToolResponses,
+  endCallBatchHasOtherCalls,
+  readEndCallReasonArg,
   readSmsPurposeArg,
   resolveToolCallKind,
 } from "./liveToolResponse.ts";
+import { INITIAL_CLIENT_TURN_QUEUE_STATE, stepClientTurnQueue } from "./clientTurnQueue.ts";
 
 // §59.10 커밋 A — 도구가 아직 선언되지 않은 단계의 유일한 분기(G383/G386/G390).
 
@@ -217,7 +220,8 @@ function codeOnly(source: string): string {
 /** toolCall 분기 안에서 sendToolResponse 호출보다 앞서 collectToolResponses를 실제로 부르는가. */
 function callsCollectBeforeSend(source: string): boolean {
   const code = codeOnly(source);
-  const collectAt = code.indexOf("await collectToolResponses(calls, dispatchToolCall)");
+  // T192 C5(G555) — dispatch가 같은 배치를 함께 받는다(배치 항). 호출 형태만 바뀌었고 순서 단언은 그대로다.
+  const collectAt = code.indexOf("await collectToolResponses(calls, (call) => dispatchToolCall(call, calls))");
   const sendAt = code.indexOf("session.sendToolResponse({ functionResponses: responses })");
   return collectAt >= 0 && sendAt >= 0 && collectAt < sendAt;
 }
@@ -228,8 +232,8 @@ test("[G390 배선] GeminiVoiceSession.tsx가 collectToolResponses를 sendToolRe
 
 test("[G390 배선 역검증] collectToolResponses 호출을 지운 오염본은 같은 검사식이 잡아낸다", () => {
   const poisoned = geminiSession.replace(
-    "await collectToolResponses(calls, dispatchToolCall)",
-    "await Promise.all(calls.map((call) => dispatchToolCall(call)))",
+    "await collectToolResponses(calls, (call) => dispatchToolCall(call, calls))",
+    "await Promise.all(calls.map((call) => dispatchToolCall(call, calls)))",
   );
   assert.equal(
     callsCollectBeforeSend(poisoned),
@@ -237,4 +241,91 @@ test("[G390 배선 역검증] collectToolResponses 호출을 지운 오염본은
     "옛 무방비 Promise.all로 되돌리면 게이트가 잡아내야 한다",
   );
   assert.equal(callsCollectBeforeSend(geminiSession), true, "정본은 같은 검사식을 통과한다");
+});
+
+// ── T192 C5 — 실시간 `end_call` 라우팅(Architecture.md §79.8 R1 · R3 · §79.19 (3) · G504 · G555) ─────────────────────
+const LIVE_TOOLS_WITH_END_CALL = {
+  ...LIVE_TOOLS_BOTH,
+  endCall: "end_call",
+  endCallFailureInstruction: "(지금은 통화를 끝낼 수 없다. 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어가라.)",
+};
+
+test("[§79.8 R1 · G385] resolveToolCallKind — liveTools.endCall과 일치할 때만 end_call · 미선언 세션은 unsupported", () => {
+  assert.equal(resolveToolCallKind("end_call", LIVE_TOOLS_WITH_END_CALL), "end_call");
+  assert.equal(resolveToolCallKind("end_call", LIVE_TOOLS_BOTH), "unsupported", "선언되지 않은 세션에서 라우팅했다");
+  assert.equal(resolveToolCallKind("send_prepared_sms", LIVE_TOOLS_WITH_END_CALL), "send_prepared_sms", "기존 라우팅 회귀");
+});
+
+test("[G555 ⓑ] endCallBatchHasOtherCalls 진리표 — 단독 거짓 · 다른 도구 동반 참 · end_call 2개 거짓 · 이름 없음 참", () => {
+  const rows: ReadonlyArray<readonly [string, { id?: string; name?: string }[], boolean]> = [
+    ["단독 end_call", [{ id: "a", name: "end_call" }], false],
+    ["send_prepared_sms 동반", [{ id: "a", name: "end_call" }, { id: "b", name: "send_prepared_sms" }], true],
+    ["offer_verification_desk 동반", [{ id: "b", name: "offer_verification_desk" }, { id: "a", name: "end_call" }], true],
+    ["end_call 2개", [{ id: "a", name: "end_call" }, { id: "b", name: "end_call" }], false],
+    ["이름 없는 호출 동반(무엇인지 모르면 막는다)", [{ id: "a", name: "end_call" }, { id: "b" }], true],
+  ];
+  for (const [label, calls, expected] of rows) {
+    assert.equal(endCallBatchHasOtherCalls(calls, LIVE_TOOLS_WITH_END_CALL), expected, label);
+  }
+  // liveTools에 endCall이 없으면 무엇이든 "다른 호출"이다(라우팅도 unsupported라 도달하지 않는다 — 막는 쪽).
+  assert.equal(endCallBatchHasOtherCalls([{ name: "end_call" }], LIVE_TOOLS_BOTH), true);
+});
+
+test("[G555 ⓒ 역검증] 큐의 toolPending을 OR한 사본은 단독 end_call에서도 참이 된다(= 끊기 0) — 같은 출력에", (t) => {
+  // `toolCall` 이벤트가 오면 큐는 분기 **전에** toolPending=true가 된다(`GeminiVoiceSession`: dispatchClientTurn("toolCall") → collect).
+  const afterToolCall = stepClientTurnQueue(INITIAL_CLIENT_TURN_QUEUE_STATE, { type: "toolCall", nowMs: 0 }).state;
+  const batch = [{ id: "a", name: "end_call" }];
+  const parentPending = false; // 지시 큐 비어 있음 · busy 아님 · 교대 아님
+  const correct = parentPending || endCallBatchHasOtherCalls(batch, LIVE_TOOLS_WITH_END_CALL);
+  const poisoned = parentPending || afterToolCall.toolPending || endCallBatchHasOtherCalls(batch, LIVE_TOOLS_WITH_END_CALL);
+  t.diagnostic(`[G555] 단독 end_call — 정본 pending=${correct} · toolPending OR 사본 pending=${poisoned}`);
+  assert.equal(afterToolCall.toolPending, true, "전제 — toolCall 직후 큐는 도구 대기다");
+  assert.equal(correct, false, "정본은 단독 end_call을 막지 않는다");
+  assert.equal(poisoned, true, "toolPending을 OR하면 자기 자신 때문에 항상 막힌다(자기참조 결함)");
+});
+
+/** `if (kind === "end_call") {` 분기 본문(다음 `if (kind === "send_prepared_sms")` 앞까지 · 주석 제외). */
+function endCallBranch(source: string): string {
+  const code = codeOnly(source);
+  const start = code.indexOf('if (kind === "end_call") {');
+  assert.ok(start >= 0, "end_call 분기를 찾지 못했다");
+  return code.slice(start, code.indexOf('if (kind === "send_prepared_sms") {', start));
+}
+
+test("[G555 ⓐ · G552 ⓒ · R1] end_call 분기 — 클라 항 = 부모 getter ∨ 배치 항 · toolPending 0 · 사용자 발화는 claimedUserTurns() 하나", () => {
+  const branch = endCallBranch(geminiSession);
+  assert.match(branch, /handlersRef\.current\.getPendingInstruction\(\) \|\| endCallBatchHasOtherCalls\(batch, liveTools\)/);
+  assert.equal(branch.includes("toolPending"), false, "end_call 분기가 큐의 toolPending을 읽는다(G555 ⓐ)");
+  assert.match(branch, /userTurns: claimedUserTurns\(\),/);
+  assert.match(branch, /kind: readEndCallReasonArg\(call\.args\),/);
+  assert.ok(branch.includes("requestScammerHangup({"), "서버 판정 콜러블을 부르지 않는다");
+  // 컴포넌트 전체에서도 지역 사용자 발화 사본 · 지역 승인 래치가 없다(G528 ⓐ ⓑ).
+  const code = codeOnly(geminiSession);
+  assert.equal(/let \w*UserTurns\b/.test(code), false, "지역 사용자 발화 카운터가 되살아났다(G528 ⓐ)");
+  assert.equal(/\bhangupPending\b/.test(code), false, "컴포넌트 지역 승인 래치가 있다(G528 ⓑ — 래치는 부모 callEnding.ts)");
+});
+
+test("[G555 ⓐ 역검증] end_call 분기에 toolPending을 넣은 사본은 같은 검사식이 잡는다", () => {
+  const poisoned = geminiSession.replace(
+    "handlersRef.current.getPendingInstruction() || endCallBatchHasOtherCalls(batch, liveTools)",
+    "handlersRef.current.getPendingInstruction() || clientTurnState.toolPending || endCallBatchHasOtherCalls(batch, liveTools)",
+  );
+  assert.notEqual(poisoned, geminiSession, "주입 앵커가 없다");
+  assert.equal(endCallBranch(poisoned).includes("toolPending"), true);
+});
+
+test("[G504 · R3 · G386] end_call — 승인이면 응답 전에 부모 래치 · 콜러블 throw = endCallFailureInstruction(문면 저작 0) · 응답 생략 0", () => {
+  const branch = endCallBranch(geminiSession);
+  const acceptedAt = branch.indexOf('result.status === "accepted" || result.status === "already_accepted"');
+  const latchAt = branch.indexOf("handlersRef.current.onScammerHangupAccepted();");
+  const returnAt = branch.indexOf("response: { status: result.status, guidance: result.guidance }");
+  assert.ok(acceptedAt >= 0 && latchAt > acceptedAt && returnAt > latchAt, "래치가 응답 반환(= sendToolResponse) 앞이 아니다(R2)");
+  assert.match(branch, /guidance: liveTools\.endCallFailureInstruction \?\? liveTools\.failureInstruction,/);
+  assert.equal(/["'`][^"'`]*[가-힣][^"'`]*["'`]/.test(branch), false, "end_call 분기에 한국어 리터럴이 있다(G386)");
+});
+
+test("[R1] readEndCallReasonArg — 문자열만 넘기고 판정 · 정규화는 서버", () => {
+  assert.equal(readEndCallReasonArg({ reason: "goal" }), "goal");
+  assert.equal(readEndCallReasonArg({ reason: "아무거나" }), "아무거나");
+  for (const bad of [undefined, null, "goal", { reason: 1 }, {}]) assert.equal(readEndCallReasonArg(bad), undefined);
 });

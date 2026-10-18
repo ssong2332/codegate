@@ -137,7 +137,12 @@ test("[AC-059/§15.1.3] 오버레이 상태는 타이머·한도 종료에 들�
   // 한도 자동 종료 effect의 **조건·의존성**에도 들어가면 안 된다(오버레이 닫기 호출 자체는 허용).
   const autoEndStart = page.indexOf("const autoEndedRef");
   const autoEndBlock = page.slice(autoEndStart, page.indexOf("}, [callMode, phase, elapsedSec", autoEndStart));
-  assert.ok(autoEndBlock.includes("setSmsOverlayOpen(false)"), "한도 도달 시 오버레이를 먼저 내린다");
+  // ⭐ T192 C5(§79.9 E2) — 오버레이 닫기는 이제 공통 종료 함수 `endCall`의 E2가 한다. 한도 effect는 그 함수를 부르고,
+  // 그 함수는 정지(E4)보다 **먼저** 오버레이를 내린다(종료 고지가 문자 화면에 가려지지 않게 — 단언 대상만 옮겼다).
+  assert.ok(autoEndBlock.includes('await endCall("limit")'), "한도 도달이 공통 종료 함수를 타지 않는다");
+  const endCallBody = page.slice(page.indexOf("const endCall = async ("), page.indexOf("const handleEndTraining = async ("));
+  const closeAt = endCallBody.indexOf("setSmsOverlayOpen(false)");
+  assert.ok(closeAt >= 0 && closeAt < endCallBody.indexOf("realtime.stop()"), "공통 종료 함수가 정지보다 먼저 오버레이를 내리지 않는다");
   assert.ok(
     !/if\s*\([^)]*smsOverlayOpen/.test(autoEndBlock),
     "오버레이가 열려 있다고 한도 종료가 멈추면 안 된다(AC-059/UX-027 Failure (d))",

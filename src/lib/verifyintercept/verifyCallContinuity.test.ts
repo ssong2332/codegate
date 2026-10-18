@@ -100,8 +100,12 @@ test("[AC-006] 오버레이 안에 자체 '훈련 종료'가 있고, 한도 도�
     autoEndStart,
     page.indexOf("}, [callMode, phase, elapsedSec", autoEndStart),
   );
+  // ⭐ T192 C5(§79.9 E2) — 오버레이 닫기는 공통 종료 함수 `endCall`의 E2가 한다. 한도 effect · 상시 종료 모두 그 함수를
+  // 부르고, 그 함수가 정지(E4)보다 먼저 확인 오버레이를 내린다(단언 대상만 옮겼다 — 규칙은 그대로).
+  const endCallBody = page.slice(page.indexOf("const endCall = async ("), page.indexOf("const handleEndTraining = async ("));
+  const verifyCloseAt = endCallBody.indexOf("setVerifyOverlayOpen(false)");
   assert.ok(
-    autoEndBlock.includes("setVerifyOverlayOpen(false)"),
+    autoEndBlock.includes('await endCall("limit")') && verifyCloseAt >= 0 && verifyCloseAt < endCallBody.indexOf("realtime.stop()"),
     "한도 도달 시 확인 오버레이도 먼저 내린다(종료 고지가 가려지지 않게)",
   );
   assert.ok(
@@ -112,7 +116,7 @@ test("[AC-006] 오버레이 안에 자체 '훈련 종료'가 있고, 한도 도�
     page.indexOf("const handleEndTraining"),
     page.indexOf("const handleRequestReverseEscalation"),
   );
-  assert.ok(endTraining.includes("setVerifyOverlayOpen(false)"), "종료 시에도 먼저 닫는다");
+  assert.ok(endTraining.includes('await endCall("user")'), "종료 시에도 먼저 닫는다(공통 종료 함수 E2)");
 });
 
 test("[AC-019 하드] 실 발신·외부 이동 경로가 **코드에 존재하지 않는다**(조심이 아니라 부재)", () => {

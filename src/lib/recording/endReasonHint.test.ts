@@ -82,23 +82,34 @@ test("[G512 · C4-2 · Minor-2] 종료 화면 — 힌트를 읽어 endSession에
   assert.equal(src.includes("endSession 서버는 이미 어떤 endReason이든 멱등하게 처리한다"), false, "옛 거짓 주석이 그대로 남았다");
 });
 
-test("[G512 · C4-3] 실시간 한도 effect에만 힌트 limit_reached — 화면 전체 setPendingEndReason 호출 1곳 · 이동 직전 · flush 뒤", () => {
+/**
+ * ⭐ T192 C5(§79.9 E6) — 힌트 기록은 공통 종료 함수 `endCall`의 E6 **한 곳**으로 옮겨졌다(C4의 한도 effect 직접 기록 → 래치 사유).
+ * 사유 값은 `beginCallEnding`이 래치한 `ending.reason`(`reasonForEndedBy` — limit → `limit_reached` · scammer → `scammer_ended`)이다.
+ */
+function endCallBody(src: string): string {
+  const start = src.indexOf("const endCall = async (");
+  assert.ok(start > 0, "공통 종료 함수를 찾지 못했다");
+  return src.slice(start, src.indexOf("const handleEndTraining = async (", start));
+}
+
+test("[G512 · C4-3 → C5] 힌트는 공통 종료 함수 E6 한 곳 — 래치 사유 · flush 뒤 · 이동 앞 · 한도 effect는 endCall(\"limit\")", () => {
   const src = read("src/app/session/play/page.tsx");
   const calls = src.match(/setPendingEndReason\(/g) ?? [];
-  assert.equal(calls.length, 1, "통화 화면의 힌트 기록이 1곳이 아니다(폴백 끊기 힌트는 C5 공통 종료 함수 소관)");
+  assert.equal(calls.length, 1, "통화 화면의 힌트 기록이 1곳이 아니다");
+  const body = endCallBody(src);
+  const hintAt = body.indexOf("if (sessionId) setPendingEndReason(sessionId, ending.reason);");
+  assert.ok(hintAt >= 0, "공통 종료 함수에 래치 사유 힌트가 없다");
+  assert.ok(body.indexOf("await flushTranscript();") < hintAt, "힌트가 전사 flush 앞이다(§79.9 E5 → E6)");
+  assert.ok(hintAt < body.lastIndexOf('router.push("/session/end")'), "힌트가 이동 뒤다 — 종료 화면이 못 읽는다");
   const effectStart = src.indexOf("autoEndedRef.current = true;");
   const effectEnd = src.indexOf("}, [callMode, phase, elapsedSec, maxSessionMs]);");
   assert.ok(effectStart > 0 && effectEnd > effectStart, "실시간 한도 effect를 찾지 못했다");
-  const effect = src.slice(effectStart, effectEnd);
-  const hintAt = effect.indexOf('setPendingEndReason(sessionId, "limit_reached")');
-  assert.ok(hintAt >= 0, "한도 effect에 limit_reached 힌트가 없다");
-  assert.ok(effect.indexOf("await flushTranscript();") < hintAt, "힌트가 전사 flush 앞이다(§79.9 E5 → E6)");
-  assert.ok(hintAt < effect.indexOf('router.push("/session/end")'), "힌트가 이동 뒤다 — 종료 화면이 못 읽는다");
+  assert.ok(src.slice(effectStart, effectEnd).includes('await endCall("limit")'), "한도 effect가 공통 종료 함수를 limit으로 부르지 않는다");
 });
 
 test("[G512 역검증] 힌트 줄을 지운 사본 · 고정값으로 되돌린 사본은 같은 판정식에 걸린다", () => {
   const play = read("src/app/session/play/page.tsx");
-  const playPoisoned = play.replace('if (sessionId) setPendingEndReason(sessionId, "limit_reached");', "");
+  const playPoisoned = play.replace("if (sessionId) setPendingEndReason(sessionId, ending.reason);", "");
   assert.notEqual(playPoisoned, play, "주입 앵커가 없다");
   assert.equal((playPoisoned.match(/setPendingEndReason\(/g) ?? []).length, 0);
   const end = read("src/app/session/end/page.tsx");

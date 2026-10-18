@@ -166,6 +166,12 @@ export type LiveTools = {
   offerVerificationDesk?: string;
   /** 클레임 실패 조기 응답 전용(§59.6 갱신 2) — 값은 서버 `VERIFY_DECLINE_ALREADY`의 사본이다. */
   verifyAlreadyAnnouncedInstruction?: string;
+  /**
+   * T192 C5(Architecture.md §79.5 · §79.19 (5) 6) — `end_call` 도구 이름과 콜러블 미도달 실패 문면은 **쌍**이다(둘 다 있거나
+   * 둘 다 없다 — 서버 `functions/src/realtime/liveTools.ts` `LiveToolNames`와 1:1). 문면은 서버 소유(G386).
+   */
+  endCall?: string;
+  endCallFailureInstruction?: string;
   failureInstruction: string;
 };
 

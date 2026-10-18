@@ -15,7 +15,7 @@
 //
 // Phase: incoming(수신) → connecting(연결) → opening(폴백 전용 오프닝 재생) → live(대화) → ended.
 // 통화 타이머·서버 시간 한도는 모두 answeredAt("받기") 기점이다(OQ-U8).
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { collection, doc, getDoc, onSnapshot, orderBy, query } from "firebase/firestore";
@@ -32,6 +32,18 @@ import {
   useSpeechRecognition,
 } from "@/lib/recording";
 import { useRealtimeCall } from "@/lib/realtime";
+import {
+  HANGUP_DRAIN_CAP_MS,
+  HANGUP_NO_AUDIO_READ_MS,
+  HANGUP_NOTICE_MS,
+  INITIAL_CALL_ENDING_STATE,
+  REMOTE_HANGUP_STATUS_LINE,
+  beginCallEnding,
+  isEndLatched,
+  latchHangupAccepted,
+  type CallEndedBy,
+  type CallEndingState,
+} from "@/lib/session/callEnding";
 import {
   deliverInCallSms,
   deliverVerifyOffer,
@@ -316,6 +328,66 @@ export default function SessionCallPage() {
   // 이제 **비어 있지 않은 사기범 전사 flush 수**(`scammerTranscriptTurns`)다 — 지시 턴 · 빈 `turnComplete`(N1)를
   // 세지 않는다. ⛔ 갱신 지점은 `handleTranscriptTurn` **한 곳**뿐이다(전에는 `handleScammerTurnComplete`).
   const turnCountersRef = useRef(INITIAL_TURN_COUNTERS);
+  // ⭐⭐ T192 C5(Architecture.md §79.9 E1~E7 · §79.11 · §79.18 (2) — 동결 인터페이스) — 통화 종료 래치는 **부모 하나**가 소유한다
+  // (순수 상태 `callEnding.ts`). 세션 컴포넌트는 getter로만 읽는다(G528 ⓑ — leg 재마운트에도 살아남는다).
+  const callEndingRef = useRef<CallEndingState>(INITIAL_CALL_ENDING_STATE);
+  // E6 `callEndedBy` — 화면 표현(`remote-hangup` 하위 상태)의 판별자. `null` = 아직 끝나지 않았다.
+  const [callEndedBy, setCallEndedBy] = useState<CallEndedBy | null>(null);
+  // 래치가 걸렸는가의 state 사본(효과 조건용 — 폴백 자동 청취 · 전송 차단). 값의 원천은 `callEndingRef`.
+  const [endLatched, setEndLatched] = useState(false);
+  // 진행 중인 종료 대기(E3 마지막 대사 · E7 끊김 표시)를 끊는 함수. 참가자 탭이 부른다(AC-006 즉시성 — D-114).
+  const skipEndWaitRef = useRef<(() => void) | null>(null);
+  // 참가자 탭이 끊기 대기를 끊었는가 — 그러면 끊김 표시 없이 바로 이동한다(UX-014 v1.35 (8) 2행).
+  const endWaitSkippedByUserRef = useRef(false);
+  // E3(폴백) — 마지막 대사 `<audio>` 종료 · 재생 거부 알림(`handlePlaybackEnded` · 자동재생 effect가 부른다).
+  const fallbackLastLineDoneRef = useRef<(() => void) | null>(null);
+  const fallbackLastLineRejectedRef = useRef<(() => void) | null>(null);
+  // 기존 `ended` 셸(연결 종료)의 "결과 확인하러 가기" 이중 탭 방지.
+  const endedShellNavigatingRef = useRef(false);
+  // ⭐ C5 리뷰 m2 — 공통 종료 함수의 언마운트 가드. 언마운트 뒤에는 `router.push` 0회 · 대기 타이머를 모두 지운다.
+  const endCallMountedRef = useRef(true);
+  const endCallTimersRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    endCallMountedRef.current = true;
+    const timers = endCallTimersRef.current;
+    return () => {
+      endCallMountedRef.current = false;
+      timers.forEach((id) => window.clearTimeout(id));
+      timers.clear();
+      // 진행 중인 대기를 풀어 `endCall`이 끝나게 한다(아래 마운트 가드가 이동을 막는다).
+      skipEndWaitRef.current?.();
+    };
+  }, []);
+  /** 공통 종료 함수 전용 타이머 — 언마운트 시 일괄 정리된다. */
+  const endTimeout = (fn: () => void, ms: number) => {
+    const id = window.setTimeout(() => {
+      endCallTimersRef.current.delete(id);
+      fn();
+    }, ms);
+    endCallTimersRef.current.add(id);
+  };
+  // ⛔ §79.18 (3) ⑤ — C5에서는 상수 `false`. S7이 교대 대기 읽기로 바꾼다(이 이름 · 이 자리 그대로).
+  const isRelaySwitchPending = useCallback(() => false, []);
+  // §79.18 (2) getter — 세션 누적 사용자 발화 수(갱신 지점 = `handleTranscriptTurn` 한 곳).
+  const getSessionUserTurns = useCallback(() => turnCountersRef.current.userTurns, []);
+  // §79.19 (3) — 부모 클라 항: 지시 큐 비어 있지 않음 ∨ 이번 턴 지시 처리 중 ∨ 교대 대기. ⛔ `toolPending`은 없다(G555).
+  const getPendingInstruction = useCallback(
+    () => instructionQueueRef.current.length > 0 || instructionBusyRef.current || isRelaySwitchPending(),
+    [isRelaySwitchPending],
+  );
+  const isHangupLatched = useCallback(() => isEndLatched(callEndingRef.current), []);
+  // ⭐ T192 C5(UX-014 v1.35 `remote-hangup` — `ended` 안의 하위 상태 · 신규 phase 0) — 사기범이 먼저 끊은 종료 표시.
+  const remoteHangup = phase === "ended" && callEndedBy === "scammer";
+  const hangupDimRef = useRef<HTMLDivElement | null>(null);
+  const endCallButtonRef = useRef<HTMLButtonElement | null>(null);
+  // UX (9) ② — 초점이 흐려지는 요소(그리드 · 키패드 · 입력창) 위에 있었으면 통화 종료 버튼으로 옮긴다(그 밖이면 그대로).
+  // C5 리뷰 m1 — 레이아웃 effect로 옮겼다(흐림 · `inert`가 칠해지기 전에 옮겨 초점 소실 프레임 0). React 19는 서버에서
+  // `useLayoutEffect` 경고를 내지 않는다(이 화면은 정적 export의 클라 컴포넌트 — 빌드 출력으로 확인).
+  useLayoutEffect(() => {
+    if (!remoteHangup) return;
+    const active = typeof document !== "undefined" ? document.activeElement : null;
+    if (active && hangupDimRef.current?.contains(active)) endCallButtonRef.current?.focus();
+  }, [remoteHangup]);
   // ⭐ §82.4(T1) — 맥락 주입된 확인 권유의 예고 기록 대기(큐 이탈 시점의 사용자 발화 수). `null` = 대기 없음.
   // 다음 사용자 발화 flush에서 `verifyAnnounceTurnsRef`를 기록한다(`deferredAnnouncePendingOnDispatch` 주석).
   const pendingVerifyAnnounceUserTurnsRef = useRef<number | null>(null);
@@ -675,6 +747,8 @@ export default function SessionCallPage() {
   // 세션에서 영영 안 뜬다). (3) `seq`는 단조 증가시킨다(늦게 도착한 앞 순번이 뒤 순번을 덮어쓰지
   // 않게). 순서 규칙 자체는 순수 함수(`@/lib/verifyintercept`)로 분리해 단위 테스트로 고정했다.
   const drainInstructionQueue = useCallback(() => {
+    // T192 C5(§79.9 E2) — 승인 · 종료 래치 뒤에는 지시를 내보내지 않는다(동결 · 큐는 버리지 않는다).
+    if (isEndLatched(callEndingRef.current)) return;
     if (instructionBusyRef.current) return;
     if (instructionQueueRef.current.length === 0) return;
     // §52.7 (5) 가·나 / §57.5 — G31 큐에도 G99와 같은 참가자 턴 조건을 곱한다(T-4). ⛔ 큐에서
@@ -756,6 +830,8 @@ export default function SessionCallPage() {
   // 실패해도 통화는 계속된다(P-4 — 인라인 안내만). 배너는 서버가 문서를 만든 순간 구독으로 뜬다(D-109).
   useEffect(() => {
     if (!sessionId || callMode !== "realtime" || phase !== "live") return;
+    // T192 C5(§79.9 E2) — 래치 뒤 문자 백스톱 동결.
+    if (isEndLatched(callEndingRef.current)) return;
     const state = smsBackstopRef.current;
     if (
       !shouldRequestSmsBackstop({
@@ -1019,6 +1095,127 @@ export default function SessionCallPage() {
     drainInstructionQueue();
   }, [elapsedSec, phase, drainInstructionQueue]);
 
+  // ⭐⭐ T192 C5 — 공통 종료 함수(Architecture.md §79.9 E1~E7 · §79.11 · UX-014 v1.35 D-110~D-114). **모든 종료 트리거**
+  // (상시 종료 · 실시간 한도 · 사기범 끊기[실시간 R5 · 폴백 신호] · 서버 close)가 이 함수 하나를 탄다.
+  //   E1 재진입 가드 + 사유 래치(`beginCallEnding` — 먼저 래치된 사유가 남는다 · 두 번째 트리거 = 이동 0, 참가자 탭이면 대기만 끊는다)
+  //   E2 오버레이 닫기 + 동결(지시 큐 · 백스톱 · 자동 호 전환은 각 자리의 래치 가드 · 폴백 STT 정지)
+  //   E3 마지막 대사 대기 — 폴백만(실시간은 세션 컴포넌트가 R4~R5로 이미 기다리고 `onScammerHangupReady`를 부른다)
+  //   E4 정지 → E5 전사 flush(종료 **전**에 — 리포트가 실제 대화를 분석) → E6 사유 힌트 + `callEndedBy`
+  //   E7 끊기 = 끊김 표시(`HANGUP_NOTICE_MS`) 뒤 **자동** 이동(탭 0 — AC-103 (d)) / 상시 · 한도 = 즉시(오늘) / 서버 close = 셸 + 탭(오늘)
+  // ⚠️ 끊김 표시는 E4 직후 그린다(UX (11) ② "표시는 기록 완료를 기다리지 않는다") — 이동만 max(표시 시간, 기록 완료)다.
+  const waitForEndStep = (start: (finish: () => void) => void) =>
+    new Promise<void>((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        if (skipEndWaitRef.current === finish) skipEndWaitRef.current = null;
+        resolve();
+      };
+      skipEndWaitRef.current = finish;
+      start(finish);
+    });
+
+  const endCall = async (by: CallEndedBy, opts?: { fallbackLastLine?: { hasAudio: boolean } }) => {
+    // E1
+    const step = beginCallEnding(callEndingRef.current, by);
+    callEndingRef.current = step.next;
+    if (!step.started) {
+      // 이미 진행 중인 종료 — 참가자 탭이면 남은 대기(마지막 대사 · 끊김 표시)만 끊는다(사유 유지 · 이동은 진행 중인 쪽이 1회).
+      if (step.skipWait) {
+        endWaitSkippedByUserRef.current = true;
+        audioRef.current?.pause();
+        skipEndWaitRef.current?.();
+      }
+      return;
+    }
+    const ending = step.next;
+    if (ending.phase !== "ending") return;
+    setEndLatched(true);
+    if (by === "user") endWaitSkippedByUserRef.current = true;
+    // E2 — 종료 고지가 문자 · 확인 화면에 가려지지 않게 **둘 다** 먼저 내린다(AC-006 · AC-059 · D-113).
+    setSmsOverlayOpen(false);
+    setVerifyOverlayOpen(false);
+    speech.stop();
+    // E3 — 폴백 마지막 대사: `<audio onEnded>` · 오디오 없음/재생 거부 = 1500ms · 상한 15초 · 참가자 탭 = 즉시.
+    if (!step.skipWait && opts?.fallbackLastLine) {
+      const { hasAudio } = opts.fallbackLastLine;
+      await waitForEndStep((finish) => {
+        endTimeout(finish, hasAudio ? HANGUP_DRAIN_CAP_MS : HANGUP_NO_AUDIO_READ_MS);
+        if (hasAudio) {
+          fallbackLastLineDoneRef.current = finish;
+          fallbackLastLineRejectedRef.current = () => endTimeout(finish, HANGUP_NO_AUDIO_READ_MS);
+        }
+      });
+      fallbackLastLineDoneRef.current = null;
+      fallbackLastLineRejectedRef.current = null;
+    }
+    // m2 — 대기 중 화면이 사라졌으면(라우팅 · 탭 닫기) 아무것도 하지 않는다(cleanup이 통화를 이미 닫는다).
+    if (!endCallMountedRef.current) return;
+    // E4
+    audioRef.current?.pause();
+    realtime.stop();
+    if (ending.endedBy === "remote") {
+      // 서버 close — 오늘 동작 그대로(기존 `ended` 셸 · "결과 확인하러 가기" 탭에서 flush → 이동).
+      setCallEndedBy("remote");
+      setPhase("ended");
+      return;
+    }
+    // E6(표시) — 끊기만 `remote-hangup` 하위 상태를 그린다(참가자가 대기를 끊었으면 표시 0 — UX (8) 2행).
+    const showHangupNotice = ending.endedBy === "scammer" && !endWaitSkippedByUserRef.current;
+    let noticeWait: Promise<void> | null = null;
+    if (showHangupNotice) {
+      setCallEndedBy("scammer");
+      setPhase("ended");
+      noticeWait = waitForEndStep((finish) => {
+        endTimeout(finish, HANGUP_NOTICE_MS);
+      });
+    }
+    // ⭐ C5 리뷰 m3 — E5~E7을 try/finally로 감싼다: 전사 제출이 던져도 종료 화면으로는 간다(AC-006 "종료는 항상 성공").
+    try {
+      // E5 — 실시간 전사를 먼저 제출한다(/session/end가 endSession → 리포트 생성을 트리거하므로 그 전에 messages가 채워져야 한다).
+      await flushTranscript();
+      // E6(사유) — 종료 화면이 읽는 1회성 힌트(C4 · 허용목록 밖이면 종료 화면이 `user_ended`). ⛔ 이 화면의 힌트 기록은 이 1곳뿐이다.
+      if (sessionId) setPendingEndReason(sessionId, ending.reason);
+      // E7
+      if (noticeWait) await noticeWait;
+    } finally {
+      // m2 — 언마운트 뒤 이동 0회.
+      if (endCallMountedRef.current) router.push("/session/end");
+    }
+  };
+
+  // AC-006 — 상시 종료(통화 종료 버튼 · 벨 직전 고지 · 정적 구간의 훈련 종료). 끊기 대기 중이면 사유를 유지하고 대기를 건너뛴다.
+  const handleEndTraining = async () => {
+    await endCall("user");
+  };
+
+  // 기존 `ended` 셸("통화가 종료되었습니다." — 서버 close · 폴백 한도)의 "결과 확인하러 가기". 래치가 없으면(폴백 한도 —
+  // 서버가 이미 끝냈다) 상시 종료와 같고, 서버 close 뒤면 정지는 이미 했으므로 flush → 이동만 한다(오늘 동작).
+  const handleEndedShellProceed = async () => {
+    if (endedShellNavigatingRef.current) return;
+    endedShellNavigatingRef.current = true;
+    if (!isEndLatched(callEndingRef.current)) {
+      await endCall("user");
+      return;
+    }
+    await flushTranscript();
+    router.push("/session/end");
+  };
+
+  // ⭐ T192 C5(§79.8 R2) — 실시간 끊기 승인. 래치만 건다(화면은 마지막 대사가 끝날 때까지 통화 중 그대로 — D-112 · 예고 0).
+  // UX D-113 — 열려 있던 문자함 · 확인 시트는 **마지막 대사 재생보다 먼저** 닫는다.
+  const handleScammerHangupAccepted = () => {
+    callEndingRef.current = latchHangupAccepted(callEndingRef.current);
+    setEndLatched(true);
+    setSmsOverlayOpen(false);
+    setVerifyOverlayOpen(false);
+  };
+  // ⭐ T192 C5(§79.8 R5) — 마지막 대사 재생이 끝났다 → 공통 종료 함수.
+  const handleScammerHangupReady = () => {
+    void endCall("scammer");
+  };
+
   // finding #2: 실시간 음성 통화의 시간 한도 자동 종료. 폴백 경로는 sendMessage가 서버에서
   // 한도를 판정해 자동 종료하지만(AC-007), 실시간 경로는 sendMessage를 안 타 한도가 강제되지
   // 않았다. 클라 타이머(answeredAt 기점, elapsedSec)가 서버 maxSessionMs를 넘으면 통화를 끝낸다.
@@ -1028,23 +1225,13 @@ export default function SessionCallPage() {
     if (autoEndedRef.current) return;
     if (elapsedSec * 1000 < maxSessionMs) return;
     autoEndedRef.current = true;
-    // T68/UX-027 Failure (d) — 한도 도달 시 오버레이를 **먼저 내린다**. 종료 고지(AC-015/023)가
-    // 문자 화면에 가려지면 안 된다(AC-059). 이 effect의 조건·의존성에는 오버레이 상태를 넣지
-    // 않는다(넣으면 오버레이가 열린 동안 한도 종료가 멈춘다 — §15.1.1).
-    audioRef.current?.pause();
-    realtime.stop();
-    // 인라인 async IIFE로 감싼다(react-hooks/set-state-in-effect 회피 — 이 화면의 다른 effect들과
-    // 동일한 관례). setSmsOverlayOpen도 그 안에서 호출한다.
+    // T68/UX-027 Failure (d) — 한도 도달 시 오버레이를 **먼저 내린다**(종료 고지가 문자 화면에 가려지면 안 된다 —
+    // AC-059). 이 effect의 조건·의존성에는 오버레이 상태를 넣지 않는다(넣으면 오버레이가 열린 동안 한도 종료가 멈춘다 —
+    // §15.1.1). ⭐ T192 C5 — 오버레이 닫기(E2) · 정지(E4) · 전사 flush(E5) · 사유 힌트 `limit_reached`(E6 — C4 §79.10) ·
+    // 즉시 이동(E7)은 전부 공통 종료 함수 `endCall`이 한다. 끊기 대기 중이면 무시된다(§79.11 2행 — 끊기 쪽이 마저 끝낸다).
+    // 인라인 async IIFE로 감싼다(react-hooks/set-state-in-effect 회피 — 이 화면의 다른 effect들과 동일한 관례).
     (async () => {
-      setSmsOverlayOpen(false);
-      // T83/UX-031 Exit — 확인 오버레이도 같은 규칙으로 먼저 내린다(종료 고지가 가려지지 않게).
-      setVerifyOverlayOpen(false);
-      await flushTranscript();
-      // T192 C4(§79.10 · §79.19 (7) C4-3) — 실시간 한도 종료의 사유 힌트. 종전에는 종료 화면이 `user_ended`로
-      // 기록해 AC-007 "정의된 종료 조건" 기록이 틀렸다. 전사 flush 뒤 · 이동 직전(§79.9 E5 → E6 순서). ⛔ 이 화면의
-      // 힌트 기록은 이 1곳뿐이다 — 폴백 끊기 응답의 힌트 · 재생 대기는 공통 종료 함수(C5) 소관.
-      if (sessionId) setPendingEndReason(sessionId, "limit_reached");
-      router.push("/session/end");
+      await endCall("limit");
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callMode, phase, elapsedSec, maxSessionMs]);
@@ -1077,9 +1264,12 @@ export default function SessionCallPage() {
           setPhase("live");
         }
       } else if (realtime.status === "ended") {
-        setPhase("ended");
+        // ⭐ T192 C5(§79.9 셸 `ended` 구분) — 서버 close = `remote`(오늘 동작: 기존 `ended` 셸 + 탭). 이 화면이 스스로
+        // `realtime.stop()`한 뒤에도 이 분기가 오지만, 그때는 래치가 이미 `ending`이라 `endCall`이 무시한다(E1).
+        await endCall("remote");
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callMode, realtime.status]);
 
   // ⭐ §55 D3(G351) — 래치 세팅 지점. **Gemini Live 세션이 실제로 연결된 것을 관측했을 때만** 켠다.
@@ -1130,6 +1320,8 @@ export default function SessionCallPage() {
       } catch (err) {
         noteFallbackPlay(err instanceof Error ? err.name : "unknown");
         setPlaybackBlocked(true);
+        // T192 C5(E3 · UX D-112) — 끊기 대기 중 마지막 대사 재생이 거부되면 읽을 틈(1500ms)을 재생 완료로 본다.
+        fallbackLastLineRejectedRef.current?.();
       }
     })();
   }, [playbackUrl]);
@@ -1163,16 +1355,21 @@ export default function SessionCallPage() {
   // 말한다). 음소거 버튼의 aria-pressed는 여전히 사용자 의도 `muted`에만 바인딩한다.
   useEffect(() => {
     if (callMode !== "fallback" || phase !== "live" || verifyOverlayOpen) return;
+    // T192 C5(§79.9 E2) — 끊기 · 종료 래치 뒤에는 자동 청취를 다시 열지 않는다.
+    if (endLatched) return;
     if (speech.status !== "idle") return;
     if (sending || playbackUrl) return;
     const timer = setTimeout(() => speech.start(), 400);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callMode, phase, speech.status, sending, playbackUrl, verifyOverlayOpen]);
+  }, [callMode, phase, speech.status, sending, playbackUrl, verifyOverlayOpen, endLatched]);
 
   // P-11 이음새 없는 전환 — 오프닝 재생이 끝나면 확인 버튼 없이 곧바로 실시간 청취로 넘어간다.
   const handlePlaybackEnded = () => {
     setPlaybackUrl(null);
+    // ⭐ T192 C5(E3 · G515) — 끊기 대기 중이면 이 `onEnded`가 마지막 대사 재생 완료다. 종료 순서는 이 뒤에만 `ended`로 간다.
+    fallbackLastLineDoneRef.current?.();
+    if (isEndLatched(callEndingRef.current)) return;
     setPhase((p) => (p === "opening" ? "live" : p));
     maybeStartListening();
   };
@@ -1384,6 +1581,8 @@ export default function SessionCallPage() {
   // T68 — 오버레이 열기/닫기. **라우팅을 하지 않는다**(D-35 하드 요구): 상태만 바꾸므로
   // GeminiVoiceSession/RealtimeVoiceSession은 언마운트되지 않고 통화가 그대로 유지된다.
   const handleOpenSmsOverlay = (trigger: HTMLButtonElement | null) => {
+    // ⭐ C5 리뷰 M1 — 끊기 승인 · 종료 래치 뒤에는 문자함을 열지 않는다(E2가 닫은 뒤 다시 열려 끊김 표시를 가리면 안 된다 — D-113).
+    if (isEndLatched(callEndingRef.current)) return;
     smsTriggerRef.current = trigger;
     // ⭐ T190-3(UX D-99 · G452) — 폴백 경로에서도 문자함을 열 때 마이크를 닫지 **않는다**(예전 T68은 여기서 STT를
     // 멈췄다). 참가자는 문자를 보면서 인증번호를 그대로 불러 줄 수 있다(AC-061 "불러준 사실").
@@ -1419,6 +1618,8 @@ export default function SessionCallPage() {
   // 트리거 컨트롤이 삭제되며 그 `ref`(`verifyTriggerRef`)도 함께 없앤다 — 포커스를 되돌릴 트리거
   // 자체가 더 이상 화면에 없다.
   const handleOpenVerifyOverlay = () => {
+    // ⭐ C5 리뷰 M1 — 래치 뒤 확인 시트 열기 0(자동 호 전환 effect의 래치 가드와 같은 이유 · 여는 지점에서도 막는다).
+    if (isEndLatched(callEndingRef.current)) return;
     if (callMode === "fallback") speech.stop();
     // 동시 열림 금지(§16.6 G26) — 반대 방향도 동일하게 상대를 닫는다.
     setSmsOverlayOpen(false);
@@ -1501,6 +1702,8 @@ export default function SessionCallPage() {
   // (재시도 컨트롤 자체가 C3에 의해 없다, §47.3 (2) R1과 같은 급의 알려진 한계).
   useEffect(() => {
     if (phase !== "live" || verifyOverlayOpen) return;
+    // T192 C5(§79.9 E2) — 래치 뒤 자동 호 전환 동결.
+    if (isEndLatched(callEndingRef.current)) return;
     if (!verifyOffer || autoReconnectOfferIdRef.current === verifyOffer.offerId) return;
     const revealed = shouldRevealVerifyOffer({
       callMode: callMode === "realtime" ? "realtime" : "fallback",
@@ -1517,24 +1720,13 @@ export default function SessionCallPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, verifyOverlayOpen, callMode, verifyOffer]);
 
-  const handleEndTraining = async () => {
-    // 오버레이가 열려 있어도 종료는 항상 도달 가능해야 한다(AC-006). 종료 고지 화면이 문자·확인
-    // 화면에 가려지지 않도록 **둘 다** 먼저 내린다(T83/UX-031 Exit도 같은 규칙).
-    setSmsOverlayOpen(false);
-    setVerifyOverlayOpen(false);
-    audioRef.current?.pause();
-    realtime.stop();
-    // 실시간 전사를 먼저 제출해 리포트가 실제 대화를 분석할 수 있게 한 뒤 종료 화면으로 이동한다
-    // (/session/end가 endSession→리포트 생성을 트리거하므로 그 전에 messages가 채워져야 한다).
-    await flushTranscript();
-    router.push("/session/end");
-  };
-
   // T40 fast-follow — 역방향 명시 전환 버튼("메시지로 전환", §13.1/AC-039). 명시 버튼만 지원(구조화
   // 신호·max-turn 폴백은 이 태스크 범위 밖 — docs/Tasks.md T40 행 참고). 서버가 시나리오 자격을
   // 다시 검증하므로(requestReverseEscalation) 실패 시 화면에 그대로 안내만 남긴다.
   const handleRequestReverseEscalation = async () => {
     if (!sessionId || switchingToMessenger) return;
+    // T192 C5 — 끊기 · 종료 래치 뒤에는 채널 전환을 시작하지 않는다(종료가 먼저 래치됐다).
+    if (isEndLatched(callEndingRef.current)) return;
     setSwitchError(null);
     setSwitchingToMessenger(true);
     try {
@@ -1565,6 +1757,8 @@ export default function SessionCallPage() {
 
   const handleSend = async (textOverride?: string) => {
     const text = (textOverride ?? input).trim();
+    // T192 C5(UX D-112 (5)) — 끊기 · 종료 래치 뒤 입력은 화면 변화 없이 받는다(전송 0 · 입력창 글자는 지우지 않는다).
+    if (isEndLatched(callEndingRef.current)) return;
     // finding #3(2026-07-25 갱신): 실시간 통화 중에는 여전히 sendMessage(별도 텍스트 LLM+TTS)를
     // 호출하지 않는다 — 그러면 실시간 음성 위에 다른 AI 목소리가 겹쳐 흐른다. 대신 **같은 Live
     // 세션 안으로** 텍스트 턴을 넣는다(GeminiVoiceSession.textMessage). 응답은 평소처럼 이 통화의
@@ -1584,6 +1778,13 @@ export default function SessionCallPage() {
       setDialogueDegraded((current) => foldDegraded(current, result.isMock));
       setInput("");
       speech.reset();
+      // ⭐ T192 C5(§79.7 6 · G515) — 폴백 끊기: 서버가 이미 세션을 끝냈다(`scammer_ended` · 표식). 마지막 대사를 끝까지
+      // 재생한 **뒤에만** `ended`로 간다 — 재생은 아래와 같은 `<audio>`가 하고, 종료 순서는 그 `onEnded`를 기다린다(E3).
+      if (result.ended && result.endReason === "scammer_ended") {
+        if (result.audioUrl) setPlaybackUrl(result.audioUrl);
+        void endCall("scammer", { fallbackLastLine: { hasAudio: Boolean(result.audioUrl) } });
+        return;
+      }
       // T68 폴백 경로 — 서버가 이번 턴에 문자를 도착시키면 inCallSms 구독이 렌더한다. T190-3(§74.6 (6)) —
       // 새 문자는 id가 새로워 배너가 자동으로 다시 뜨므로 되돌리는 쓰기가 없다.
       if (result.audioUrl) {
@@ -1792,6 +1993,11 @@ export default function SessionCallPage() {
             personaStateTurn={personaStateTurn}
             turnPhaseRef={liveTurnPhaseRef}
             primedAudio={primedCallAudio}
+            getSessionUserTurns={getSessionUserTurns}
+            getPendingInstruction={getPendingInstruction}
+            isHangupLatched={isHangupLatched}
+            onScammerHangupAccepted={handleScammerHangupAccepted}
+            onScammerHangupReady={handleScammerHangupReady}
           />
         )
       )}
@@ -1926,9 +2132,20 @@ export default function SessionCallPage() {
                 <span className="sr-only">전화가 오고 있습니다</span>
               ) : phase === "connecting" ? (
                 "연결 중…"
+              ) : remoteHangup ? (
+                // T192 C5(UX-014 v1.35 (1) 정본 · D-110) — 사기범 종료일 때만 이 문구로 대체된다(기존 `role="status"` 1회 낭독).
+                REMOTE_HANGUP_STATUS_LINE
               ) : (
                 "통화 종료"
               )}
+            </p>
+          )}
+          {/* T192 C5(UX-014 v1.35 (3)) — One UI형 · 기본은 정지된 통화 시간을 남긴다(iOS형은 숨김 — 추정 근사). */}
+          {remoteHangup && deviceSkin.skin !== "ios" && (
+            // C5 리뷰 M3 — 일반 `<p>`에 aria-label을 달지 않는다(무시되는 이름). 시각 숫자는 숨기고 읽을 문장을 따로 둔다.
+            <p className="mt-1 text-[15px] tabular-nums" style={{ color: callTokens.textSecondary }}>
+              <span aria-hidden="true">{formatCallElapsed(elapsedSec)}</span>
+              <span className="sr-only">{`통화 시간 ${Math.floor(elapsedSec / 60)}분 ${elapsedSec % 60}초`}</span>
             </p>
           )}
           {/* §49.5(2026-08-02, 사용자 신고 7ⓐ) — D-15 계보 4회째 요청으로 상시 "난이도 X" 배지를
@@ -1985,6 +2202,8 @@ export default function SessionCallPage() {
             ref={audioRef}
             src={playbackUrl}
             onEnded={handlePlaybackEnded}
+            // ⭐ C5 리뷰 M2(UX D-112) — 재생 오류(로드 실패 · 디코드 실패)도 거부와 같다: 끊기 대기는 읽을 틈(1500ms) 뒤 끝난다.
+            onError={() => fallbackLastLineRejectedRef.current?.()}
             aria-label="상대방 음성 재생"
             className="hidden"
           />
@@ -2039,14 +2258,14 @@ export default function SessionCallPage() {
             </span>
           </div>
         </div>
-      ) : phase === "ended" ? (
+      ) : phase === "ended" && !remoteHangup ? (
         <div className="flex flex-col gap-3 p-6 text-center">
           <p className="text-lg font-semibold" role="status">
             통화가 종료되었습니다.
           </p>
           <button
             type="button"
-            onClick={() => void handleEndTraining()}
+            onClick={() => void handleEndedShellProceed()}
             className="min-h-[56px] rounded-[14px] bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white"
           >
             결과 확인하러 가기
@@ -2057,6 +2276,15 @@ export default function SessionCallPage() {
           {/* T190-3(UX-014 v1.33 (7)) — 키패드를 열면 **그리드 자리를 키패드가 대체**한다(실제 통화 앱처럼). 높이가
               모자라면 키패드 영역만 스크롤되고 종료 버튼은 아래 같은 자리에 고정이다(AC-006). 자막·안내·오류·
               텍스트 입력(두 `form` · `scrollIntoView`)은 예전 그대로 이 영역 안에 있다 — 문면 무변경. */}
+          {/* ⭐ T192 C5(UX-014 v1.35 (3) · (9) · D-110) — `remote-hangup`: 그리드 · 열린 키패드는 **그 자리 그대로** 흐려지고
+              (불투명도 40% · 200ms · `aria-disabled` · 탭 무반응) 통화 종료만 활성으로 남는다. */}
+          <div
+            ref={hangupDimRef}
+            aria-disabled={remoteHangup ? true : undefined}
+            inert={remoteHangup ? true : undefined}
+            className="transition-opacity duration-200 motion-reduce:transition-none"
+            style={remoteHangup ? { opacity: 0.4, pointerEvents: "none" } : undefined}
+          >
           {showTextInput ? (
             <div className="max-h-[56vh] overflow-y-auto px-6">
               {/* 실제 통화 키패드(사용자 신고 2026-07-25 — "키패드가 있는데 실제로 작동하지 않는다").
@@ -2361,6 +2589,7 @@ export default function SessionCallPage() {
               <div aria-hidden="true" className="min-h-[98px]" />
             </div>
           )}
+          </div>
 
           {/* T40 fast-follow — 역방향 전환("채팅으로") 오류만 종료 버튼 위에 상시 노출.
               메신저 채팅으로 이어질 수 있는 시나리오(scenario.channel==="messenger", 즉 메신저→
@@ -2387,6 +2616,7 @@ export default function SessionCallPage() {
               그리드로 되돌린다. */}
           <div className="relative mt-6 flex flex-col items-center gap-1.5">
             <button
+              ref={endCallButtonRef}
               type="button"
               onClick={() => void handleEndTraining()}
               aria-label="통화 종료 — 훈련 종료"

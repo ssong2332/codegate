@@ -137,7 +137,13 @@ test("[배선 · T191 G538] dispatchToolCall의 send_prepared_sms는 모델 purp
   const branch = sessionCode.slice(start, sessionCode.indexOf("return failureResponse();", start));
   assert.match(branch, /purpose: readSmsPurposeArg\(call\.args\),/);
   // 리뷰 ⑥ — 응답 중인 사용자 발화(아직 flush 전)를 더해 폴백(이번 발화 포함)과 같은 뜻으로 보낸다.
-  assert.match(branch, /userTurns: modelToolUserTurns \+ \(userBuffer\.trim\(\) \? 1 : 0\),/);
+  // ⭐ T192 C5(G552 ⓒ · §79.18 (3) ↳ ②) — 값의 원천이 지역 사본에서 부모 누적 getter로 옮겨졌다(같은 flush에서 오른다 —
+  // 오늘 동작 변화 0). 식은 `end_call` 분기와 공유하는 `claimedUserTurns()` 하나다.
+  assert.match(branch, /userTurns: claimedUserTurns\(\),/);
+  assert.match(
+    sessionCode,
+    /const claimedUserTurns = \(\) => handlersRef\.current\.getSessionUserTurns\(\) \+ \(userBuffer\.trim\(\) \? 1 : 0\);/,
+  );
   assert.match(branch, /scammerTranscriptTurns: modelToolScammerTurns,/);
   assert.match(branch, /trigger: "model_tool",/);
   assert.equal(branch.includes("smsId"), false);
