@@ -71,17 +71,24 @@ function scanPromptMarkers(text: string): MarkerHit[] {
     unquoted = unquoted.slice(0, q.start) + " ".repeat(q.end - q.start) + unquoted.slice(q.end);
   }
   unquoted = unquoted.replace(/\*\*/g, "");
+  // ⭐ reviewer M1(2026-10-18) — 자기 인용 판정을 조였다. 부분 문자열 일치(includes)만으로는 짧은 대사
+  // 예시(`'가상값'`)가 본문 허용 구간 글자열과 겹치기만 해도 통과했다. 이제 둘 다 만족해야 자기 인용이다:
+  //   ① 본문 길이 ≥ SELF_CITATION_MIN_LENGTH(짧은 낱말 단위 인용은 대사로 본다)
+  //   ② 따옴표 밖 본문에 **독립 구절**로 등장(앞뒤가 문장 경계 — 다른 낱말 속 부분 일치 불인정)
+  const SELF_CITATION_MIN_LENGTH = 8;
+  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const isSelfCitation = (q: Span) => {
     const body = q.content.replace(/\*\*/g, "").trim();
-    return body.length > 0 && unquoted.includes(body);
+    if (body.length < SELF_CITATION_MIN_LENGTH) return false;
+    return new RegExp(`(^|[\\s(\\-·,:])${escapeRegExp(body)}($|[\\s.,)·!?:])`, "m").test(unquoted);
   };
-  const dialogueQuote = (pos: number) =>
-    quotes.find((q) => q.start <= pos && pos < q.end && !isSelfCitation(q));
+  const quoteAt = (pos: number) => quotes.find((q) => q.start <= pos && pos < q.end);
   const inTitle = (pos: number) => titles.some((t) => t.start <= pos && pos < t.end);
+  // 허용 구간은 **따옴표 밖** 출현만 센다 — 자기 인용 따옴표 안의 글자열도 허용 근거가 되지 않는다(M1).
   const allowed = (pos: number, length: number) =>
     PROMPT_META_ALLOWLIST.some(({ phrase }) => {
       for (let i = text.indexOf(phrase); i >= 0; i = text.indexOf(phrase, i + 1)) {
-        if (i <= pos && pos + length <= i + phrase.length && !dialogueQuote(i)) return true;
+        if (i <= pos && pos + length <= i + phrase.length && !quoteAt(i)) return true;
       }
       return false;
     });
@@ -90,7 +97,12 @@ function scanPromptMarkers(text: string): MarkerHit[] {
   for (const word of SESSION_MARKER_WORDS) {
     for (let pos = text.indexOf(word); pos >= 0; pos = text.indexOf(word, pos + 1)) {
       const excerpt = text.slice(Math.max(0, pos - 30), pos + word.length + 30).replace(/\r?\n/g, " ⏎ ");
-      if (inTitle(pos) || dialogueQuote(pos)) hits.push({ layer: "T1", word, excerpt });
+      const quote = quoteAt(pos);
+      if (inTitle(pos)) hits.push({ layer: "T1", word, excerpt });
+      else if (quote && !isSelfCitation(quote)) hits.push({ layer: "T1", word, excerpt });
+      // 자기 인용 따옴표 안 낱말은 여기서 허용하지 않고 **원문 자리**에서 판정한다 — 원문은 따옴표 밖이라
+      // 같은 루프가 그 위치에서 따로 검사한다(②가 원문의 존재를 보장).
+      else if (quote) continue;
       else if (!allowed(pos, word.length)) hits.push({ layer: "T2", word, excerpt });
     }
   }
@@ -152,6 +164,13 @@ test("[T187/G446 역검증] 옛 문면 복원 → T2 검출 · 따옴표 대사 
   const dialogue = scanPromptMarkers("- 예: '가상값으로 보내드릴게요'라고 말한다.");
   assert.ok(dialogue.some((h) => h.layer === "T1" && h.word === "가상"), "따옴표 대사 예시를 T1이 놓쳤다(허용목록이 대사 층에 새면 안 된다)");
 
+  // reviewer M1 — 짧은 대사 예시가 본문 허용 구간 글자열과 겹쳐도 자기 인용으로 빠지지 않는다.
+  const shortDialogue = scanPromptMarkers("- 계좌는 가상값으로만 부른다.\n- 예: '가상값'이라고 말한다.");
+  assert.ok(shortDialogue.some((h) => h.layer === "T1" && h.word === "가상"), "짧은 대사 예시('가상값')를 T1이 놓쳤다(M1)");
+  // reviewer M1 — 길어도 본문에서 **다른 구절의 일부**로만 겹치면(독립 구절 아님) 자기 인용이 아니다.
+  const partialOverlap = scanPromptMarkers("- 계좌는 가상값으로만 부른다.\n- 예: '계좌는 가상값으로'라고 말한다.");
+  assert.ok(partialOverlap.some((h) => h.layer === "T1" && h.word === "가상"), "부분 겹침 인용을 자기 인용으로 오판했다(M1)");
+
   const title = scanPromptMarkers("[모의 앱 설치 유도 — 이 훈련의 2단계]\n- 본문");
   assert.ok(title.some((h) => h.layer === "T1" && h.word === "모의"), "섹션 제목(P-3)을 T1이 놓쳤다");
 
@@ -161,6 +180,6 @@ test("[T187/G446 역검증] 옛 문면 복원 → T2 검출 · 따옴표 대사 
   assert.deepEqual(meta, [], "메타 문장·자기 인용이 오검출됐다");
 
   t.diagnostic(
-    `G446 역검증: 복원 T2 ${restored.length} · 대사 T1 ${dialogue.length} · 제목 T1 ${title.length} · 메타 ${meta.length}`,
+    `G446 역검증: 복원 T2 ${restored.length} · 대사 T1 ${dialogue.length} · 짧은 대사 T1 ${shortDialogue.length} · 부분 겹침 T1 ${partialOverlap.length} · 제목 T1 ${title.length} · 메타 ${meta.length}`,
   );
 });
