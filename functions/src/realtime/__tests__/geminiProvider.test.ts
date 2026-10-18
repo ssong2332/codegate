@@ -658,9 +658,10 @@ test("[T192/C3 §79.6 ①] 확인 무력화 고급 세션의 TOOL 문면에만 '
   }
 });
 
-// ── T192 PR A 리뷰 M1 — 운영값(기본 생성자 = 끔): 음성 세션 setup · 프롬프트 · liveTools에 end_call 0 ───────────────
-test("[M1 운영값] 기본 생성자(운영) — 음성 세션의 tools · systemInstruction · liveTools가 end_call 거짓 입력(메신저 범위)과 바이트 동일", async () => {
-  assert.equal(END_CALL_LIVE_AVAILABLE, false, "⚠️ C5(PR B)가 켤 때 이 테스트를 함께 바꾼다");
+// ── T192 C5 — 운영값(기본 생성자 = 켬): 음성 세션 setup · 프롬프트 · liveTools에 end_call이 실린다 ─────────────────────
+// ⚠️ PR A 리뷰 M1의 "끔 운영값" 단언을 C5에서 켬으로 바꿨다(상수와 함께). 메신저 범위는 여전히 end_call 0이다(아래 대조).
+test("[C5 운영값] 기본 생성자(운영) — 음성 세션의 tools · systemInstruction · liveTools가 켬 입력과 바이트 동일 · end_call · TOOL 문면", async () => {
+  assert.equal(END_CALL_LIVE_AVAILABLE, true, "⚠️ 끄면 이 테스트를 함께 바꾼다");
   const capture = captureTokenRequest();
   try {
     let checked = 0;
@@ -668,18 +669,24 @@ test("[M1 운영값] 기본 생성자(운영) — 음성 세션의 tools · syst
       for (const difficultyLevel of [undefined, "beginner", "intermediate", "advanced"] as const) {
         const input = { sessionId: "sess", scenarioId, voiceId: "", ...(difficultyLevel ? { difficultyLevel } : {}) };
         const operational = await new GeminiRealtimeProvider("test-key").createCallCredentials({ ...VOICE_SCOPE, ...input });
-        const baseline = await new GeminiRealtimeProvider("test-key", ENDCALL_ON).createCallCredentials({ ...MESSENGER_SCOPE, ...input });
+        const baseline = await new GeminiRealtimeProvider("test-key", ENDCALL_ON).createCallCredentials({ ...VOICE_SCOPE, ...input });
         const bodies = capture.bodies();
         const [opBody, baseBody] = [bodies[bodies.length - 2], bodies[bodies.length - 1]];
         const tag = `${scenarioId}/${difficultyLevel}`;
         // 만료 시각(Date.now)은 호출마다 다르다 — 모델 · 도구 · 프롬프트가 실리는 setup 전체를 대조한다.
         const setupOf = (body: unknown) => JSON.stringify((body as { bidiGenerateContentSetup?: unknown }).bidiGenerateContentSetup);
         assert.ok(setupOf(opBody) !== undefined && setupOf(opBody).length > 2, `${tag}: setup이 비었다`);
-        assert.equal(setupOf(opBody), setupOf(baseBody), `${tag}: 운영 setup(tools · systemInstruction 포함)이 S5b 판정과 다르다`);
+        assert.equal(setupOf(opBody), setupOf(baseBody), `${tag}: 운영 setup(tools · systemInstruction 포함)이 켬 판정과 다르다`);
         assert.equal(JSON.stringify(operational.liveTools), JSON.stringify(baseline.liveTools), `${tag}: liveTools`);
+        assert.equal(operational.liveTools?.endCall, "end_call", `${tag}: 운영 liveTools에 endCall이 없다`);
         const prompt = sentSystemPrompt(opBody);
-        assert.ok(prompt.includes(HANGUP_RULE_NONE) && !prompt.includes(HANGUP_RULE_TOOL), `${tag}: 운영 프롬프트가 NONE이 아니다`);
-        assert.equal(sentToolNames(opBody).includes("end_call"), false, `${tag}: 운영 선언에 end_call`);
+        assert.ok(prompt.includes(HANGUP_RULE_TOOL) && !prompt.includes(HANGUP_RULE_NONE), `${tag}: 운영 프롬프트가 TOOL이 아니다`);
+        assert.equal(sentToolNames(opBody).includes("end_call"), true, `${tag}: 운영 선언에 end_call이 없다`);
+        // 대조군 — 같은 운영 생성자라도 메신저 범위는 end_call 0 · NONE(위 단언이 공허하지 않다).
+        await new GeminiRealtimeProvider("test-key").createCallCredentials({ ...MESSENGER_SCOPE, ...input });
+        const messengerBody = capture.bodies()[capture.bodies().length - 1];
+        assert.equal(sentToolNames(messengerBody).includes("end_call"), false, `${tag}: 메신저 범위에 end_call`);
+        assert.ok(sentSystemPrompt(messengerBody).includes(HANGUP_RULE_NONE), `${tag}: 메신저 범위가 NONE이 아니다`);
         checked += 1;
       }
     }

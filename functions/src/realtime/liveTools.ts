@@ -76,12 +76,13 @@ export function declaresOfferVerificationDesk(
 
 /**
  * ⛔ T192 PR A 리뷰 M1 — 실시간 `end_call` **런타임 스위치**(코드 상수 · 선례 `RELAY_RUNTIME_AVAILABLE = false`).
- * 클라의 `end_call` 라우팅(`GeminiVoiceSession` · 공통 종료 함수)은 C5(PR B)다. 그 전에 토큰에 `end_call`이 선언되면
- * 모델이 부른 `end_call`이 클라에서 `unsupported`(guidance 없음)로 떨어진다 ⇒ **C5가 이 값을 `true`로 바꿀 때까지
- * 선언 · 이름 · TOOL 문면 세 자리가 전부 꺼진다**(실시간 setup · 프롬프트 = C3 전과 같다 — G556 운영값 단언).
+ * ⭐ T192 C5(PR B) — 클라 `end_call` 라우팅(`GeminiVoiceSession` `dispatchToolCall` · `resolveToolCallKind` · 공통 종료 함수
+ * `endCall`)이 들어와 **켰다**. 선언 · 이름 · TOOL 문면 세 자리가 다시 `declaresEndCall` 판정대로 실린다.
+ * ⚠️ 끄면(= `false`) 세 자리가 함께 꺼진다(실시간 setup · 프롬프트 = C3 전). 운영값 트립와이어 3건이 이 값을 고정한다
+ * (`toolDeclarationUnchanged.test.ts` · `geminiProvider.test.ts` [운영값]). ⚠️ 배포 순서 = Hosting(클라) → Functions(§79.13).
  * ⛔ 환경 변수 · defineBoolean 아님(배포 설정으로 켜지지 않게). ⛔ 폴백 SIGNAL(`sendMessage`)은 이 값과 무관하다.
  */
-export const END_CALL_LIVE_AVAILABLE = false;
+export const END_CALL_LIVE_AVAILABLE = true;
 
 /**
  * T192 C3(§79.3 · §79.18 (1) · G502 · G527) — `end_call` **선언 자격**. ⛔ 이 술어가 유일한 원천이다: 도구 선언

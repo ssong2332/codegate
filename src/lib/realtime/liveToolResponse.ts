@@ -77,7 +77,7 @@ export async function collectToolResponses(
 // ══════════════════════════════════════════════════════════════════════════════════════════
 // §59.6 ②~⑥ — 실제 라우팅(판정만, 부수효과 0)
 
-export type ResolvedToolCallKind = "send_prepared_sms" | "offer_verification_desk" | "unsupported";
+export type ResolvedToolCallKind = "send_prepared_sms" | "offer_verification_desk" | "end_call" | "unsupported";
 
 /**
  * §59.6 ②(G385) — `toolCall`이 부른 함수 이름을 **하드코딩된 문자열이 아니라
@@ -92,7 +92,31 @@ export function resolveToolCallKind(
   if (!liveTools || !name) return "unsupported";
   if (name === liveTools.sendPreparedSms) return "send_prepared_sms";
   if (name === liveTools.offerVerificationDesk) return "offer_verification_desk";
+  // T192 C5(§79.8 R1) — 서버가 이 세션에 `end_call`을 선언했을 때만(이름은 서버 값 · 하드코딩 0 — G385).
+  if (liveTools.endCall !== undefined && name === liveTools.endCall) return "end_call";
   return "unsupported";
+}
+
+/**
+ * ⭐ T192 C5(Architecture.md §79.19 (3) · G555) — 실시간 `end_call` 판정의 클라 항 중 **같은 `toolCall` 배치에 `end_call`이 아닌
+ * 호출이 있는가**. 같은 배치의 `send_prepared_sms`는 `collectToolResponses`의 `Promise.all`로 **병렬** 처리돼 문자가 이번 응답
+ * 도중에 보일 수 있다 ⇒ 같은 응답에서 끊으면 참가자가 문자를 못 본다(6행 `blocked_pending`).
+ * ⛔ 컴포넌트의 `toolPending`(큐 상태)을 대신 쓰지 않는다 — `end_call` 자신이 도구 대기라 항상 참이 된다(자기참조 결함).
+ * 진리표: 단독 `end_call` → 거짓 · 다른 도구 동반 → 참 · `end_call` 2개 → 거짓 · 이름 없는 호출 → 참(무엇인지 모르면 막는 쪽).
+ */
+export function endCallBatchHasOtherCalls(
+  calls: readonly LiveToolFunctionCall[],
+  liveTools: LiveTools | undefined,
+): boolean {
+  const endCallName = liveTools?.endCall;
+  return calls.some((call) => endCallName === undefined || call.name !== endCallName);
+}
+
+/** T192 C5 — `end_call`의 `reason` 인자 원값(문자열만). 정규화 · 판정은 서버(`normalizeScammerHangupKind` — 거절 0). */
+export function readEndCallReasonArg(args: unknown): string | undefined {
+  if (typeof args !== "object" || args === null) return undefined;
+  const reason = (args as { reason?: unknown }).reason;
+  return typeof reason === "string" ? reason : undefined;
 }
 
 /**

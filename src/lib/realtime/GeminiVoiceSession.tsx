@@ -23,7 +23,7 @@
 import { useEffect, useRef } from "react";
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { CreateRealtimeCallResponse } from "@/lib/api";
-import { deliverInCallSms, deliverVerifyOffer } from "@/lib/api";
+import { deliverInCallSms, deliverVerifyOffer, requestScammerHangup } from "@/lib/api";
 import {
   GEMINI_INPUT_SAMPLE_RATE,
   GEMINI_OUTPUT_SAMPLE_RATE,
@@ -41,9 +41,13 @@ import {
   buildAlreadyAnnouncedToolResponse,
   buildUnsupportedToolResponses,
   collectToolResponses,
+  endCallBatchHasOtherCalls,
+  readEndCallReasonArg,
   readSmsPurposeArg,
   resolveToolCallKind,
+  type LiveToolFunctionCall,
 } from "./liveToolResponse";
+import { HANGUP_DRAIN_CAP_MS, HANGUP_FINAL_TURN_CAP_MS, hangupDrainDelayMs } from "@/lib/session/callEnding";
 import { GEMINI_OUTPUT_GAIN } from "./outputGain";
 import {
   AWAIT_RESPONSE_TIMEOUT_MS,
@@ -189,6 +193,18 @@ export type GeminiVoiceSessionProps = {
    * 화면의 G31 드레인이 확인 권유 예고 기록 시점을 정할 때 읽는다(`deferredAnnouncePendingOnDispatch`). 부재 = 미보고.
    */
   turnPhaseRef?: { current: LiveTurnPhase };
+  // ── ⭐ T192 C5(Architecture.md §79.18 (2) 동결 인터페이스 · §79.8 R1~R5 · G528) — 세션 단위 상태는 부모가 소유한다
+  // (leg 재마운트에도 살아남게). 이 컴포넌트는 getter로 읽고 콜백으로 알린다 — 지역 `hangupPending` 0(G528 ⓑ).
+  /** 세션 누적 사용자 발화 수(부모 `turnCountersRef.current.userTurns`). `end_call` · `send_prepared_sms`가 같은 값을 쓴다. */
+  getSessionUserTurns: () => number;
+  /** 부모 클라 항 — 지시 큐 비어 있지 않음 ∨ 이번 턴 지시 처리 중 ∨ 교대 대기(`isRelaySwitchPending` — S7 전 `false`). */
+  getPendingInstruction: () => boolean;
+  /** 승인 · 종료 래치(`isEndLatched(callEndingRef.current)`) — 마이크 · 클라 텍스트 턴 · 침묵 넛지 차단의 판정(G510). */
+  isHangupLatched: () => boolean;
+  /** R2 — 승인 응답을 `sendToolResponse`로 보내기 **전에** 부른다(부모: `latchHangupAccepted`). */
+  onScammerHangupAccepted: () => void;
+  /** R5 — 응답 뒤 첫 `turnComplete`(또는 끼어들기 · close · 상한) + 잔여 재생 + 꼬리가 지난 뒤 1회(부모: `endCall("scammer")`). */
+  onScammerHangupReady: () => void;
 };
 
 // 마이크 캡처 버퍼 크기 — 작을수록 지연이 낮지만 콜백이 잦다. 사용자 신고(2026-07-25, "내가 말하고
@@ -263,6 +279,11 @@ export default function GeminiVoiceSession({
   personaStateTurn,
   primedAudio,
   turnPhaseRef,
+  getSessionUserTurns,
+  getPendingInstruction,
+  isHangupLatched,
+  onScammerHangupAccepted,
+  onScammerHangupReady,
 }: GeminiVoiceSessionProps) {
   const handlersRef = useRef({
     onActive,
@@ -276,6 +297,11 @@ export default function GeminiVoiceSession({
     onModelToolVerifyFailed,
     claimVerifyAnnounceSlot,
     releaseVerifyAnnounceSlot,
+    getSessionUserTurns,
+    getPendingInstruction,
+    isHangupLatched,
+    onScammerHangupAccepted,
+    onScammerHangupReady,
   });
   const mutedRef = useRef(muted);
   // 정리 대상들 — 언마운트 시 전부 닫지 않으면 마이크가 계속 열려 있다.
@@ -305,6 +331,11 @@ export default function GeminiVoiceSession({
       onModelToolVerifyFailed,
       claimVerifyAnnounceSlot,
       releaseVerifyAnnounceSlot,
+      getSessionUserTurns,
+      getPendingInstruction,
+      isHangupLatched,
+      onScammerHangupAccepted,
+      onScammerHangupReady,
     };
   }, [
     onActive,
@@ -318,6 +349,11 @@ export default function GeminiVoiceSession({
     onModelToolVerifyFailed,
     claimVerifyAnnounceSlot,
     releaseVerifyAnnounceSlot,
+    getSessionUserTurns,
+    getPendingInstruction,
+    isHangupLatched,
+    onScammerHangupAccepted,
+    onScammerHangupReady,
   ]);
 
   useEffect(() => {
@@ -391,10 +427,49 @@ export default function GeminiVoiceSession({
     // 클로저 안에서 **동기적으로** 처리해야 하는데, 부모의 최신 `scammerTurns` state는 prop으로
     // 내려오지 않는다(리렌더 지연). (T191 — 예전 `deliveredSmsIds` Set은 화면이 smsId를 고를 때만 필요했다. 폐기.)
     let modelToolScammerTurns = 0;
-    // ⭐ T191(문자 도달 조건) — 모델 도구 경로가 서버에 넘기는 사용자 발화 수. 부모 `turnCountersRef.userTurns`와 **같은
-    // 지점**(아래 `flushTranscript`의 비어 있지 않은 사용자 flush) · 같은 정의(`countTranscriptFlush`)다 — 위 사기범 카운터와
-    // 같은 이유(도구 호출은 이 effect 클로저 안에서 동기로 처리해야 한다)로 사본을 둔다.
-    let modelToolUserTurns = 0;
+    // ⭐ T192 C5(§79.18 (3) ↳ ② · §79.19 (7) · G552 ⓒ) — 예전 지역 사용자 발화 사본은 없앴다. 모델 도구 경로가
+    // 서버에 넘기는 사용자 발화 수는 이제 부모 누적값(`getSessionUserTurns` — 같은 flush에서 오른다 · leg 재마운트에도 유지)
+    // + 응답 중 발화 1이다. `send_prepared_sms` · `end_call` 두 분기가 **이 함수 하나**를 쓴다(오늘 동작 변화 0 — §79.18 끝).
+    const claimedUserTurns = () => handlersRef.current.getSessionUserTurns() + (userBuffer.trim() ? 1 : 0);
+    // ⭐ T192 C5(§79.8 R4 · R5 · G510) — 승인 뒤 마지막 대사 대기. 래치가 아니라 **대기 진행 상태**다(래치는 부모 소유).
+    //   "idle" → 승인 응답 전송 → "awaitingTurnEnd"(첫 turnComplete · 끼어들기 · close · 상한 8초) → "draining"(잔여 재생 + 꼬리)
+    //   → 준비 신호 1회 → "done". 전체 상한 15초(`HANGUP_DRAIN_CAP_MS`)가 어느 단계에서든 준비 신호를 낸다.
+    let hangupDrain: "idle" | "awaitingTurnEnd" | "draining" | "done" = "idle";
+    let hangupFinalTurnTimer: ReturnType<typeof setTimeout> | null = null;
+    let hangupDrainTimer: ReturnType<typeof setTimeout> | null = null;
+    let hangupCapTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearHangupTimers = () => {
+      if (hangupFinalTurnTimer) clearTimeout(hangupFinalTurnTimer);
+      if (hangupDrainTimer) clearTimeout(hangupDrainTimer);
+      if (hangupCapTimer) clearTimeout(hangupCapTimer);
+      hangupFinalTurnTimer = null;
+      hangupDrainTimer = null;
+      hangupCapTimer = null;
+    };
+    const signalHangupReady = () => {
+      if (hangupDrain === "done") return;
+      hangupDrain = "done";
+      clearHangupTimers();
+      if (!cancelled) handlersRef.current.onScammerHangupReady();
+    };
+    // R4 → R5 — 잔여 재생 `max(0, nextPlayTime − currentTime)` + 꼬리 뒤 준비 신호(재생 도중 절단 0 — AC-103 (c)).
+    const beginHangupDrain = () => {
+      if (hangupDrain !== "awaitingTurnEnd") return;
+      hangupDrain = "draining";
+      if (hangupFinalTurnTimer) clearTimeout(hangupFinalTurnTimer);
+      hangupFinalTurnTimer = null;
+      const remainingMs = outputContext ? (nextPlayTime - outputContext.currentTime) * 1000 : 0;
+      hangupDrainTimer = setTimeout(signalHangupReady, hangupDrainDelayMs(remainingMs));
+    };
+    // R2 이후 · 응답 전송 직후에 건다(`toolCall` 처리부).
+    // 이번 배치에서 끊기가 승인됐는가 — 응답 전송 직후 R4를 걸지 정하는 1회용 표시(래치 아님 · 래치는 부모 소유).
+    let armDrainAfterSend = false;
+    const armHangupDrain = () => {
+      if (hangupDrain !== "idle") return;
+      hangupDrain = "awaitingTurnEnd";
+      hangupFinalTurnTimer = setTimeout(beginHangupDrain, HANGUP_FINAL_TURN_CAP_MS);
+      hangupCapTimer = setTimeout(signalHangupReady, HANGUP_DRAIN_CAP_MS);
+    };
     // ⭐ §82.3.4 N1(G539) — 직전 사기범 턴 경계 이후 모델 오디오 · 사기범 전사가 있었는가. 둘 다 없는
     // `turnComplete`(끼어들기 직후의 빈 마감 — S1 3/3)는 경계가 아니다. 끼어들기에서는 지우지 않는다 —
     // 끊긴 턴의 내용은 그 뒤 마감에 귀속된다.
@@ -408,6 +483,8 @@ export default function GeminiVoiceSession({
      */
     const dispatchToolCall = async (
       call: { id?: string; name?: string; args?: unknown },
+      // T192 C5(G555) — 같은 `toolCall` 배치 전체(`end_call` 판정의 배치 항). 다른 분기는 읽지 않는다.
+      batch: readonly LiveToolFunctionCall[],
     ): Promise<{ id?: string; name: string; response: { status: string; guidance?: string } }> => {
       const liveTools = credentials.liveTools;
       const kind = resolveToolCallKind(call.name, liveTools);
@@ -423,6 +500,42 @@ export default function GeminiVoiceSession({
         response: { status: "unavailable", guidance: liveTools.failureInstruction },
       });
 
+      // ⭐ T192 C5(§79.8 R1 · R2 · R3 · G504 · G555) — 사기범 끊기. 판정은 서버(`requestScammerHangup` — 폴백과 같은 판정표)이고
+      // 화면은 판정 입력 2개(사용자 발화 수 · 클라 지시 대기)와 모델 인자만 넘긴다. 문면은 전부 서버 소유(G386 · G516).
+      if (kind === "end_call") {
+        // 클라 항 = 부모 지시 대기 ∨ 같은 배치의 다른 호출. ⛔ 큐의 `toolPending`은 읽지 않는다(자기 자신이 도구 대기 — G555 ⓐ).
+        const pendingInstruction =
+          handlersRef.current.getPendingInstruction() || endCallBatchHasOtherCalls(batch, liveTools);
+        try {
+          const result = await requestScammerHangup({
+            sessionId,
+            userTurns: claimedUserTurns(),
+            pendingInstruction,
+            kind: readEndCallReasonArg(call.args),
+          });
+          if (result.status === "accepted" || result.status === "already_accepted") {
+            // R2 — 응답 전송 **전에** 부모 래치를 건다(마이크 · 클라 텍스트 턴 · 침묵 넛지가 즉시 멈춘다 — G510).
+            handlersRef.current.onScammerHangupAccepted();
+            armDrainAfterSend = true;
+          }
+          return {
+            id: call.id,
+            name: call.name ?? "unknown",
+            response: { status: result.status, guidance: result.guidance },
+          };
+        } catch {
+          // G504 — 콜러블이 닿지 않아도 응답을 생략하지 않는다. 끊기 전용 실패 문면(서버 소유 · 쌍으로 내려온다).
+          return {
+            id: call.id,
+            name: call.name ?? "unknown",
+            response: {
+              status: "unavailable",
+              guidance: liveTools.endCallFailureInstruction ?? liveTools.failureInstruction,
+            },
+          };
+        }
+      }
+
       if (kind === "send_prepared_sms") {
         // ⭐ T191(문자 도달 조건 · AC-099 (b)) — 모델이 고른 목적을 그대로 넘기고 판정은 서버가 한다(선언 · 간격 ·
         // 이미 보냄 — `resolveSmsGate`). 화면은 smsId를 고르지 않는다(예전 `pickModelToolSmsId` 폐기).
@@ -433,7 +546,7 @@ export default function GeminiVoiceSession({
             // ⭐ 리뷰 ⑥ — 도구 호출은 모델이 **사용자 발화 N에 답하는 도중**에 온다. 그 발화의 전사는 아직 `userBuffer`에
             // 있고 flush(`turnComplete`)되지 않았으므로 flush 수만 보내면 폴백(이번 발화 포함)보다 1 작다. §82.3.4는
             // 카운터를 "flush 수"로 정의했지만 시점을 정하지 않았다 — 3경로 동일(AC-099 (f))을 위해 응답 중인 발화를 더한다.
-            userTurns: modelToolUserTurns + (userBuffer.trim() ? 1 : 0),
+            userTurns: claimedUserTurns(),
             scammerTranscriptTurns: modelToolScammerTurns,
             trigger: "model_tool",
           });
@@ -521,7 +634,6 @@ export default function GeminiVoiceSession({
       const u = userBuffer.trim();
       const s = scammerBuffer.trim();
       if (u) {
-        modelToolUserTurns += 1;
         handlersRef.current.onTranscriptTurn("user", u);
       }
       if (s) {
@@ -604,6 +716,9 @@ export default function GeminiVoiceSession({
     const sendClientTurn = (turn: ClientTurn) => {
       const activeSession = session;
       if (!activeSession) return;
+      // ⭐ T192 C5(§79.8 R2 ② · G510) — 승인 · 종료 래치 뒤에는 클라 텍스트 턴(타이핑 · 지시 · 침묵 넛지)을 보내지 않는다.
+      // 이 함수가 `turnComplete: true` 전송의 유일한 지점이라(G431) 여기 한 곳에서 막으면 보류분까지 전부 막힌다.
+      if (handlersRef.current.isHangupLatched()) return;
       try {
         activeSession.sendClientContent({ turns: turn.text, turnComplete: true });
         const nowMs = performance.now();
@@ -645,6 +760,8 @@ export default function GeminiVoiceSession({
     };
     const runSilenceNudgeCheck = () => {
       silenceNudgeTimer = null;
+      // T192 C5(G510) — 승인 뒤 침묵 넛지 0(대기 자체를 끝낸다).
+      if (handlersRef.current.isHangupLatched()) return;
       const nowMs = performance.now();
       const armedAt = silenceNudgeState.armedAt;
       const step = stepSilenceNudge(silenceNudgeState, {
@@ -763,6 +880,7 @@ export default function GeminiVoiceSession({
     };
 
     const cleanup = () => {
+      clearHangupTimers();
       if (speakingTimer) clearTimeout(speakingTimer);
       if (clientTurnTick) clearTimeout(clientTurnTick);
       clearSilenceNudgeTimer();
@@ -905,7 +1023,7 @@ export default function GeminiVoiceSession({
                   // reviewer M2 — 도구 결과를 기다리는 동안 보류 큐가 텍스트 턴을 내보내지 않게 한다.
                   dispatchClientTurn({ type: "toolCall", nowMs: performance.now() });
                   void (async () => {
-                    const responses = await collectToolResponses(calls, dispatchToolCall);
+                    const responses = await collectToolResponses(calls, (call) => dispatchToolCall(call, calls));
                     // 대기 중 언마운트되거나 세션이 교체됐으면 죽은 소켓에 쓰지 않는다.
                     if (cancelled || !session) return;
                     try {
@@ -914,6 +1032,12 @@ export default function GeminiVoiceSession({
                     } catch {
                       // G390 — 전송 실패도 통화를 막지 않는다(P-4 비차단). 무응답만은 피하는 것이
                       // 이 배선의 목적이지만, 소켓 자체가 끊긴 경우까지 되살릴 수는 없다.
+                    }
+                    // ⭐ T192 C5(§79.8 R4) — 승인 응답을 보낸 **뒤** 첫 turnComplete를 기다리기 시작한다(래치는 R2에서 이미 걸렸다).
+                    // 전송이 실패해도 건다 — 상한이 준비 신호를 낸다(끊기 승인 뒤 통화가 끝나지 않는 상태 0).
+                    if (armDrainAfterSend) {
+                      armDrainAfterSend = false;
+                      armHangupDrain();
                     }
                     // 성공 · 실패 무관 — 큐의 도구 대기를 푼다(턴 자체는 turnComplete에서 끝난다).
                     dispatchClientTurn({ type: "toolResponseSent", nowMs: performance.now() });
@@ -948,6 +1072,8 @@ export default function GeminiVoiceSession({
                 flushScammerTurn();
                 closeLatencyTurn("interrupted");
                 dispatchClientTurn({ type: "interrupted", nowMs: performance.now() });
+                // T192 C5(§79.8 R4) — 끼어들기도 마지막 응답의 끝으로 본다.
+                beginHangupDrain();
                 return;
               }
               // **오디오를 먼저 예약한다**(reviewer Critical 수정). 두 가지 이유:
@@ -1030,6 +1156,9 @@ export default function GeminiVoiceSession({
                 // 타이핑은 여기서야 userBuffer에 적립돼 다음 턴의 사용자 발화로 기록된다.
                 closeLatencyTurn("turnComplete");
                 dispatchClientTurn({ type: "turnComplete", nowMs: performance.now() });
+                // T192 C5(§79.8 R4) — 승인 응답 뒤 첫 turnComplete = 마지막 대사가 다 왔다 → 잔여 재생을 기다린다(R5).
+                // 오디오를 먼저 예약했으므로(위) `nextPlayTime`에 이 턴의 마지막 청크까지 들어 있다.
+                beginHangupDrain();
               }
             },
             onerror: (e: unknown) => {
@@ -1042,6 +1171,8 @@ export default function GeminiVoiceSession({
                 flushTranscript();
                 logLatencySummary();
                 handlersRef.current.onEnded();
+                // T192 C5(§79.8 R4 · §79.11 3행) — 끊기 대기 중 서버 close는 R4를 즉시 푼다(사유는 먼저 래치된 scammer).
+                beginHangupDrain();
               }
             },
           },
@@ -1124,6 +1255,8 @@ export default function GeminiVoiceSession({
         const inputRate = inputContext.sampleRate;
         processor.onaudioprocess = (event) => {
           if (cancelled || !session || mutedRef.current) return;
+          // ⭐ T192 C5(§79.8 R2 ① · G510) — 승인 · 종료 래치 뒤에는 마이크 프레임을 보내지 않는다(마지막 대사가 끊기지 않게).
+          if (handlersRef.current.isHangupLatched()) return;
           // 반이중: AI가 말하는 동안엔 마이크를 보내지 않아 에코가 AI를 끊지 못하게 한다.
           if (agentSpeaking) return;
           const pcm = floatToPcm16(
