@@ -1,3 +1,4 @@
+- [데이터가 런타임보다 앞서 있으면 입력은 부재여야](feedback_data_ahead_of_runtime_flag.md) — 플래그 꺼짐+데이터 있음 칸을 단언; 해석은 플래그 아는 함수 하나, 키는 `T | undefined` 필수
 - [예외는 승인 사건에 묶는다](feedback_exception_bound_to_observable_event.md) — 무조건 금지를 좁힐 땐 BLOCKING 도구 응답·허용 턴 문면 뒤에만 행동; NON_BLOCKING은 선언이 승인보다 앞선다
 - [모바일 웹 오디오·진동·UA·자산 능력표](reference_mobile_web_audio_capabilities.md) — Android 출력 전환 API 없음 · iOS 미검증 · OS 글꼴 웹 임베드 금지; BCD는 raw JSON으로 읽어라
 - [묶음 수정엔 가설별 플래그가 필요하다](feedback_bundled_fix_needs_per_hypothesis_flag.md) — 한 플래그에 가설 둘이 묶이면 보조 관측 열로 가른다; "전부 끈 칸 ≠ 회귀 트리"
