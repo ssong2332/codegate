@@ -19,8 +19,8 @@ import {
   type ScanHit,
 } from "../sourcescan/scanSource.ts";
 
-const page = readFileSync("src/app/session/play/page.tsx", "utf8");
-const overlay = readFileSync("src/components/InCallSmsOverlay.tsx", "utf8");
+const page = readFileSync("src/app/session/play/page.tsx", "utf8").replace(/\r\n/g, "\n");
+const overlay = readFileSync("src/components/InCallSmsOverlay.tsx", "utf8").replace(/\r\n/g, "\n");
 
 /** 금지 토큰 검사는 **주석을 제외한 실제 코드**만 본다 — 이 저장소는 "왜 하지 않는가"를 주석에
  *  길게 남기는 관례라, 주석까지 세면 근거를 적었다는 이유로 테스트가 깨진다
@@ -467,7 +467,7 @@ test("[T103/G79·G93] 필 자막은 **사기범 턴만** 받는다(참가자 PII
 });
 
 test("[T103/§23.6 A2] 신설 전환 클래스는 **전부** prefers-reduced-motion에서 꺼진다", () => {
-  const css = readFileSync("src/app/globals.css", "utf8");
+  const css = readFileSync("src/app/globals.css", "utf8").replace(/\r\n/g, "\n");
   // 화면이 실제로 쓰는 전환 클래스만 대상으로 한다(정의만 하고 안 쓰는 클래스는 검증 의미가 없다).
   const used = [
     ...new Set(
@@ -650,7 +650,7 @@ function viewFocusViolations(source: string): string[] {
 test("[T190/reviewer Major] 문자함↔랜딩 보기 전환 때 포커스가 body로 떨어지지 않는다 · 트랩은 패널 밖 포커스도 안쪽으로 감싼다", () => {
   assert.deepEqual(viewFocusViolations(overlay), []);
   // 랜딩 영역이 포커스를 받을 수 있어야 한다(이름 = A5 "{제목} 화면" — 새 문구 0).
-  const landing = codeOnly(readFileSync("src/components/MessengerFakeLanding.tsx", "utf8"));
+  const landing = codeOnly(readFileSync("src/components/MessengerFakeLanding.tsx", "utf8").replace(/\r\n/g, "\n"));
   assert.ok(/role="region"[\s\S]{0,200}tabIndex=\{-1\}/.test(landing), "랜딩 영역에 tabIndex={-1}이 없다");
 });
 

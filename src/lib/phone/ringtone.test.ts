@@ -12,7 +12,7 @@ import { RING_MAX_MS, RING_PATTERNS, ringCycleCount, ringPatternFor, tonesWithin
 import { VIBRATION_PATTERNS, canVibrate, vibrationPatternFor } from "./vibration.ts";
 
 const PLAY = "src/app/session/play/page.tsx";
-const play = readFileSync(PLAY, "utf8");
+const play = readFileSync(PLAY, "utf8").replace(/\r\n/g, "\n");
 
 test("[T190/G454] 상한 60초 · iOS형 진동 없음 · One UI형·기본만 진동", () => {
   assert.equal(RING_MAX_MS, 60000);
@@ -128,7 +128,7 @@ test("[T190/G454 역검증 — AC-093 (g)ⓑ] cleanup에서 stop을 지운 사�
 });
 
 test("[T190/G454] 플레이어는 음원 파일·전역 오디오 세션 설정을 쓰지 않는다(OS 벨소리 0 — §74.3 A-3/A-6 · §74.2 ③-c)", () => {
-  const player = readFileSync("src/lib/phone/ringtonePlayer.ts", "utf8");
+  const player = readFileSync("src/lib/phone/ringtonePlayer.ts", "utf8").replace(/\r\n/g, "\n");
   const code = player.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   for (const forbidden of [/\.(mp3|m4a|ogg|wav|aac|caf)\b/i, /new Audio\(/, /decodeAudioData/, /audioSession/, /fetch\(/]) {
     assert.equal(forbidden.test(code), false, `플레이어 코드에 있으면 안 되는 것: ${forbidden}`);

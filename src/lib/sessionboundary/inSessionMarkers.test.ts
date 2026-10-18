@@ -16,7 +16,7 @@ import { parseTsx } from "../sourcescan/scanSource.ts";
 
 // ── 정본 낱말·부정 패턴 — functions 쪽 단일 정본을 **소스 파싱**으로 읽는다(사본 0 · 드리프트 0) ──
 const CANONICAL_PATH = "functions/src/scenarios/__tests__/sessionMarkerWords.ts";
-const canonicalSource = readFileSync(CANONICAL_PATH, "utf8");
+const canonicalSource = readFileSync(CANONICAL_PATH, "utf8").replace(/\r\n/g, "\n");
 
 function canonicalBlock(constName: string): string {
   const start = canonicalSource.indexOf(`export const ${constName}`);
@@ -133,7 +133,7 @@ function scopeFiles(registry = SESSION_SURFACE_REGISTRY): string[] {
   ];
 }
 
-const read = (file: string) => readFileSync(file, "utf8");
+const read = (file: string) => readFileSync(file, "utf8").replace(/\r\n/g, "\n");
 
 // ── 판정 함수(본 게이트·역검증·G442가 **같은 함수**를 쓴다) ───────────────────────────────
 /** G437 — 렌더 가능 텍스트 조각의 낱말 + 표식 컴포넌트 import. */
