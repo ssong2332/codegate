@@ -172,7 +172,7 @@ test("[T116/렌더-존재] 카탈로그 **도달 가능 전수**의 초기 렌�
       isRenderAlive(text),
       "생존 신호('훈련 종료' + title 센티널)가 마크업에 없다 — 렌더가 통째로 실패했을 수 있다",
     );
-    // prop을 넘겨도 세션 중 난이도 배지가 그려지지 않는다(M-13 · 앵커 1종 — UX D-83).
+    // prop을 넘겨도 세션 중 난이도 배지가 그려지지 않는다(M-13 · 앵커 1종 — UX D-84).
     assert.equal(text.includes(DIFFICULTY_SENTINEL), false, "난이도 라벨이 렌더됐다 — 세션 중 배지가 되살아났다");
 
     const targets = targetTexts(item);

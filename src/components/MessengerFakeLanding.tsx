@@ -82,9 +82,9 @@ export default function MessengerFakeLanding({
     >
       {/* 상시 종료(AC-006). ⚠️ T84: 이 헤더는 **두 kind가 공유**한다 — 상시 종료가 kind와 무관하게
           성립해야 하고, 그것이 파일 분리를 금지하는 두 번째 이유다(§15.9.4 표 #2).
-          T187(docs/Architecture.md §72 · PRD v1.18 AC-086 · UX D-81·D-83) — 이 화면은 전부 세션
+          T187(docs/Architecture.md §72 · PRD v1.18 AC-086 · UX D-82·D-84) — 이 화면은 전부 세션
           중이라 상단 표식 배너와 난이도 배지(UF-012 연속성 앵커 ①③)를 지웠다. 앵커는 "훈련 종료"
-          하나만 남는다(D-83). 빈 자리를 채우지 않는다. 종료 버튼이 오른쪽 끝에 남도록
+          하나만 남는다(D-84). 빈 자리를 채우지 않는다. 종료 버튼이 오른쪽 끝에 남도록
           justify-end(G449). */}
       <div className="sticky top-0 z-10 flex flex-wrap items-center justify-end gap-3 border-b border-[#E2DDD3] bg-white px-4 py-3">
         <EndTrainingButton onClick={onEndTraining} />
@@ -297,7 +297,7 @@ function CredentialFormMockup({
         <p role="status" className="text-lg font-semibold text-[#0E6B62]">
           {copy.successHeadline}
         </p>
-        {/* T187(§72 · PRD v1.18 AC-086 (d) · UX D-82) — 제출 직후 부정 고지를 지웠다. 그 사실은
+        {/* T187(§72 · PRD v1.18 AC-086 (d) · UX D-83) — 제출 직후 부정 고지를 지웠다. 그 사실은
             세션 후 UX-007의 사실 공개 문장이 말한다. 빈 자리를 채우지 않는다. */}
         <Button type="button" onClick={onClose}>
           채팅으로 돌아가기
@@ -501,7 +501,7 @@ function AppInstallMockup({ onClose, onConsent }: { onClose: () => void; onConse
           <p role="status" className="text-lg font-semibold text-[#0E6B62]">
             권한이 허용되었습니다.
           </p>
-          {/* T187(§72 · AC-086 (d) · D-82) — 설치 뒤 부정 고지 삭제. 세션 후 사실 공개가 잇는다. */}
+          {/* T187(§72 · AC-086 (d) · D-83) — 설치 뒤 부정 고지 삭제. 세션 후 사실 공개가 잇는다. */}
           <Button type="button" onClick={onClose}>
             채팅으로 돌아가기
           </Button>

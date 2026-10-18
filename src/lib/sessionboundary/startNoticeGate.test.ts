@@ -139,7 +139,7 @@ function startNoticeComponentViolations(source: string): string[] {
     if (left !== 'surface === "kakao"') out.push(`kakaoDisclaimer 조건이 "${left}"다`);
   }
   const propsType = /type MessengerStartNoticeProps = \{([\s\S]*?)\};/.exec(source)?.[1] ?? "";
-  if (/difficult|level|challenge|channel|recipient/i.test(propsType)) out.push("props에 난이도·채널 입력이 있다(AC-065 · D-79)");
+  if (/difficult|level|challenge|channel|recipient/i.test(propsType)) out.push("props에 난이도·채널 입력이 있다(AC-065 · D-80)");
   if (/role="alert"/.test(codeOnly(source))) out.push('role="alert"(경고 표현 금지)');
   return out;
 }
@@ -160,7 +160,7 @@ test("[T187/G444 ⑥ 역검증] 면책을 조건 없이 그리거나 props에 �
 
 const DIFFICULTY_PAGE = "src/app/scenarios/difficulty/page.tsx";
 
-test("[T187/G444 ⑦] 난이도 선택 화면 머리글 — '모의 표식' 0 · 넷째 항목 = 끝난 뒤 '훈련이었습니다' 안내(AC-087 (e) · UX D-84)", () => {
+test("[T187/G444 ⑦] 난이도 선택 화면 머리글 — '모의 표식' 0 · 넷째 항목 = 끝난 뒤 '훈련이었습니다' 안내(AC-087 (e) · UX D-85)", () => {
   const page = read(DIFFICULTY_PAGE);
   assert.equal(codeOnly(page).includes("모의 표식"), false);
   assert.ok(page.includes("사전 고지·동의·언제든 훈련 종료·끝난 뒤 &apos;훈련이었습니다&apos; 안내는 똑같이 적용"));

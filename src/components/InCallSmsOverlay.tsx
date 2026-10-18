@@ -295,7 +295,7 @@ export default function InCallSmsOverlay({
           </button>
 
           {/* ── 상시 종료(AC-006). 스크롤과 무관하게 항상 보인다. T187(§72 · PRD v1.18 AC-086) —
-              세션 중 표식을 지웠다(빈 자리를 채우지 않는다 — D-81). 유일한 자식이 된 종료 버튼이
+              세션 중 표식을 지웠다(빈 자리를 채우지 않는다 — D-82). 유일한 자식이 된 종료 버튼이
               오른쪽 끝에 그대로 남도록 justify-end(G449). */}
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-[#E2DDD3] bg-white px-4 py-3">
             <EndTrainingButton onClick={onEndTraining} />

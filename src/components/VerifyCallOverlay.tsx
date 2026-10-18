@@ -34,11 +34,11 @@
 // ⚠️ **AC-006**: 시트가 통화 셸 하단의 종료 버튼을 덮으므로, 이 시트 **안에** 자체 "훈련 종료"를
 // 둔다(선례: InCallSmsOverlay·MessengerFakeLanding, D-68 Reason ①/Impact).
 //
-// ⭐⭐ **T187 — docs/Architecture.md §72(PRD v1.18 AC-086 (b)(c)(d) · UX D-81·D-82)** — 이 시트는
+// ⭐⭐ **T187 — docs/Architecture.md §72(PRD v1.18 AC-086 (b)(c)(d) · UX D-82·D-83)** — 이 시트는
 // **전부 세션 중**이다. 옛 G272 고지(전화 부정 1문장)와 상단 합성 표식은 User 결정 *"전부 제거"*
 // 로 지웠다 — 전화 부정의 새 정본 자리는 세션 후 UX-007의 `POST_SESSION_FACT_DISCLOSURE`
 // (`src/lib/sessionboundary/postSessionCopy.ts`)다. ⛔ 빈 자리를 다른 문구·배지로 채우지 않는다
-// (D-81 · G437/G440).
+// (D-82 · G437/G440).
 import { useEffect } from "react";
 import EndTrainingButton from "./EndTrainingButton";
 import { type VerifyInterceptView } from "@/lib/verifyintercept";

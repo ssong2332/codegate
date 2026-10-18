@@ -397,7 +397,7 @@ export default function MessengerSessionPage() {
   return (
     <main className="flex min-h-screen flex-col bg-[#FAF8F5]">
       {/* 상단 상시 고정 영역(스크롤 무관) — 스킨 토글·"전화로 확인"·"훈련 종료"(AC-006).
-          T187(docs/Architecture.md §72 · PRD v1.18 AC-086 · UX D-80·D-81·M-13) — 이 화면은 세션
+          T187(docs/Architecture.md §72 · PRD v1.18 AC-086 · UX D-81·D-82·M-13) — 이 화면은 세션
           중이라 카카오 면책 배너·합성 표식·난이도 배지를 지웠다(면책은 시작 전 고지 ②로 옮겼다).
           ⛔ 빈 자리를 채우지 않는다. */}
       <div className="sticky top-0 z-20 flex flex-col border-b border-[#E2DDD3] bg-white">
@@ -611,7 +611,7 @@ export default function MessengerSessionPage() {
           landingKind={fakeLanding.landingKind}
           onClose={() => setFakeLanding(null)}
           onEndTraining={handleEndTraining}
-          // T187(UX D-83) — UF-012 연속성 앵커는 "훈련 종료" 1종만 남아 난이도 라벨을 넘기지 않는다.
+          // T187(UX D-84) — UF-012 연속성 앵커는 "훈련 종료" 1종만 남아 난이도 라벨을 넘기지 않는다.
           // T84(D-51 ④) — 가짜 "권한 허용"에 **응한** 순간만 기록되고, 리포트 생성 시 속은 순간
           // 1건으로 승격된다(§15.9.5 e-1). ⚠️ 응낙이 채널 전이를 유발하지 않는다(G54) — 전이는
           // 기존 구조화 신호·max-turn 폴백·명시 버튼으로만 일어난다.

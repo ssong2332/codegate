@@ -32,6 +32,11 @@ import {
 } from "@/lib/replay/buildReplayTimeline";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
+import {
+  countReplaySignalCards,
+  replayNavEmptyText,
+  TACTICS_NOT_FOUND_TEXT,
+} from "@/lib/report/reportTacticsCopy";
 
 type ReportSummary = {
   wasDeceived: boolean;
@@ -205,6 +210,11 @@ export default function ReplayPage() {
   };
 
   const annotatedTurnIndexes = getAnnotatedTurnIndexes(timeline);
+  // T189(UX-008 v1.31 (2)) — 타임라인이 말풍선 주석 밖에 그리는 "여기가 신호였어요" 카드 수.
+  // 모의 화면 판정은 렌더(ReplayMockScreenItem)와 같은 함수·같은 deceivedMoments로 한다.
+  const signalCardCount = countReplaySignalCards(timeline, (mockScreen) =>
+    resolveMockScreenCopy(mockScreen, deceivedMoments, "replay"),
+  );
 
   // T70(UX-028 진입점, AC-062/AC-042) — 이 화면은 2인 사용자2의 **강제 해설 단계 그 자체**이므로
   // 여기서부터는 되감기를 선택 단계로 노출해도 강제 순서를 앞지르지 않는다(afterForcedReplay).
@@ -367,17 +377,18 @@ export default function ReplayPage() {
             대응했는지 아래에서 되짚어 보세요. 이건 한 번에 끝나는 게 아니라 계속 유지해야 할 개선
             영역입니다.
           </p>
-          {report.tacticsUsed.length > 0 && (
-            <>
-              <p className="mt-3 text-sm font-semibold text-[#22303A]">시도된 수법</p>
-              <div className="mt-1.5 flex flex-wrap gap-2">
-                {report.tacticsUsed.map((tactic) => (
-                  <Badge key={tactic} variant="neutral">
-                    {tactic}
-                  </Badge>
-                ))}
-              </div>
-            </>
+          <p className="mt-3 text-sm font-semibold text-[#22303A]">시도된 수법</p>
+          {report.tacticsUsed.length > 0 ? (
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              {report.tacticsUsed.map((tactic) => (
+                <Badge key={tactic} variant="neutral">
+                  {tactic}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            // TB-7(UX-008 v1.31) — 리포트 TB-4와 같은 문장. role 없음(상자 첫 줄이 이미 status).
+            <p className="mt-1.5 text-base leading-relaxed text-[#6B655C]">{TACTICS_NOT_FOUND_TEXT}</p>
           )}
         </div>
       )}
@@ -407,9 +418,10 @@ export default function ReplayPage() {
             </button>
           </>
         ) : (
-          // Failure(UX-018): 신호가 하나도 없으면 침묵하지 않고 명시한다.
+          // Failure(UX-018): 이동할 속은 순간이 없으면 침묵하지 않고 명시한다 — 문면은 TB-9a~d
+          // (UX-008 v1.31). 한 문단 두 문장, role="status" 유지.
           <p className="text-base text-[#6B655C]" role="status">
-            이번 대화에서는 뚜렷한 위험 신호가 없었습니다.
+            {replayNavEmptyText(report.wasDeceived, signalCardCount)}
           </p>
         )}
       </div>

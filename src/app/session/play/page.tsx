@@ -1404,7 +1404,7 @@ export default function SessionCallPage() {
               <span className="block truncate text-sm text-[#6B655C]">
                 {latestSms.body.split("\n")[0]}
               </span>
-              {/* T187(§72 · PRD v1.18 AC-086 · UX D-81) — 세션 중 표식 칩 삭제. 빈 자리를 채우지 않는다. */}
+              {/* T187(§72 · PRD v1.18 AC-086 · UX D-82) — 세션 중 표식 칩 삭제. 빈 자리를 채우지 않는다. */}
             </span>
           </button>
         </div>
@@ -1475,7 +1475,7 @@ export default function SessionCallPage() {
           {/* T83(§16.2/UX-014 `verify-reconnected`) — 재연결 후 1줄 상태 문구. 폴백 경로에서
               서버가 별도 인사말을 생성하지 않기 때문에 이 자리가 그 공백을 메운다. **연결 사실만**
               알리고 구조 설명은 하지 않는다(OQ-38 확정 = 세션 중엔 상황만).
-              ⭐⭐ T187(docs/Architecture.md §72 · PRD v1.18 AC-086 (d) · UX D-82) — G272가 여기 두던
+              ⭐⭐ T187(docs/Architecture.md §72 · PRD v1.18 AC-086 (d) · UX D-83) — G272가 여기 두던
               전화 부정 고지 1줄은 User 결정 "전부 제거"로 세션 중에서 지웠다(G272 반전). §46.3 규범의
               부정은 세션 후 UX-007의 POST_SESSION_FACT_DISCLOSURE가 맡는다. 주장 줄(아래 라벨)은
               유지한다. 빈 자리를 채우지 않는다. */}
