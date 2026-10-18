@@ -17,6 +17,7 @@ import type { ChallengeDoc, SessionDoc, VoiceSelectionSource } from "../shared/t
 import { getRealtimeProvider } from "./provider";
 import type { CreateRealtimeCallRequest, CreateRealtimeCallResponse } from "./callTypes";
 import type { RealtimeProviderName } from "./types";
+import { resolveFictionalBankName } from "../shared/fictionalBank";
 
 /**
  * 에스컬레이션된 세션(§13.6 통합 버그 수정)의 "유효 voiceMode" 유추 — session.voiceSelectionSource가
@@ -169,6 +170,8 @@ export const createRealtimeCall = onCall<
       // T72(§15.3.3) — 세션 문서에 기록된 난이도(부재→중급). Gemini 경로만 실제로 반영하며,
       // 반영 여부는 각 provider가 credentials.difficultyApplied로 정직하게 보고한다(§15.6 G6).
       difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
+      // §81 — 세션 가상 은행명(문자 본문과 같은 이름). 부재(옛 세션)는 sessionId 해시.
+      fictionalBankName: resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName }),
       // T191 S5(AC-096 (e)) — 배정된 흐름 변형. Gemini 경로만 반영한다(ElevenLabs는 무시 — 현행).
       ...(session.flowVariantId ? { flowVariantId: session.flowVariantId } : {}),
     });

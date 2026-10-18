@@ -5,6 +5,7 @@ import { SCENARIO_PROMPTS } from "../../scenarios";
 import { buildSystemPrompt, LANGUAGE_RULE } from "../../roleplay/promptAssembly";
 import { isL3Procedural } from "../../roleplay/l3Depth";
 import { verifySeriesFor, declaresOfferVerificationDesk } from "../liveTools";
+import { resolveSessionAccountNumber } from "../../shared/fictionalBank";
 
 /**
  * 토큰 발급 호출을 가로채기 위해 provider 내부의 GoogleGenAI 인스턴스를 대신할 수 없으므로,
@@ -74,6 +75,8 @@ test("GeminiRealtimeProvider: 시스템 프롬프트를 토큰에 고정해 발�
     assert.equal(
       sentPrompt,
       buildSystemPrompt(SCENARIO_PROMPTS["tax-refund-scam"], {
+        // §81.6 — Live 토큰도 세션 계좌번호를 넘긴다(계좌 문자 시나리오는 문자 속 계좌).
+        sessionAccountNumber: resolveSessionAccountNumber("tax-refund-scam"),
         inCallSmsEnabled: true,
         identityCheckAllowed: true,
         speakerGender: "female",
@@ -421,6 +424,8 @@ test("GeminiRealtimeProvider: 토큰 발급 시 systemInstruction이 toolDrivenT
     assert.equal(
       sentPrompt,
       buildSystemPrompt(SCENARIO_PROMPTS["bank-security-verify-scam"], {
+        // §81.6 — Live 토큰도 세션 계좌번호를 넘긴다(계좌 문자 시나리오는 문자 속 계좌).
+        sessionAccountNumber: resolveSessionAccountNumber("bank-security-verify-scam"),
         difficultyLevel: "advanced",
         inCallSmsEnabled: true,
         verifyInterceptEnabled: true,

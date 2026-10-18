@@ -223,6 +223,9 @@ const COURIER_CUSTOMS_SCAM: InCallSmsItem[] = [
  * 메신저 채널 시나리오는 의도적으로 비워 둔다 — 이미 메시지 표면 안이라 "통화를 유지한 채 문자를
  * 본다"는 문제 자체가 없다(UX.md UX-022 v1.11 갱신).
  */
+// ⚠️ 계좌 문자 본문 규칙(Architecture §81.6) — 계좌는 "OO은행 ###-####-####-##"(자리표시자 + 3-4-4-2 형식) 한 줄로 쓴다.
+// `shared/fictionalBank.ts` `extractAccountNumber`가 이 형식으로 세션 계좌를 뽑아 프롬프트·문자 문서(`accountNumber`)에 쓴다 —
+// 형식이 바뀌면 조용히 예시 계좌로 돌아가 대사와 문자가 다시 갈린다(테스트 `fictionalBank.test.ts` [계좌]가 잡는다).
 export const IN_CALL_SMS: Record<string, InCallSmsItem[]> = {
   "loan-refinance-scam": LOAN_SCAM,
   "institutional-impersonation": INSTITUTIONAL_IMPERSONATION,
