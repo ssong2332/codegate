@@ -14,7 +14,10 @@ export { GeminiLlmClient } from "./geminiClient";
 import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { GEMINI_KEY_SECRETS } from "../shared/config";
+import { GEMINI_FALLBACK_TEXT_MODEL, GeminiLlmClient } from "./geminiClient";
 import { MockLlmClient } from "./mockClient";
+import { withOverloadFallback } from "./overloadFallback";
+import { withOverloadRetry } from "./overloadRetry";
 import { createRotatingGeminiClient, readAttemptedKeys } from "./rotatingClient";
 import type { GeminiKeySlot } from "./rotatingClient";
 import type { LlmClient, LlmCompletionInput, LlmCompletionResult } from "./types";
@@ -63,6 +66,15 @@ export const LLM_TIMEOUT_MS = 10_000;
  * 20초는 Cloud Functions onCall 기본 실행 제한(60초) 안이다.
  */
 export const LLM_FIRST_TURN_TIMEOUT_MS = 20_000;
+
+/**
+ * Gemini 과부하(503 UNAVAILABLE) 재시도 전 대기(ms) — 0.5초 → 1.5초, 최대 재시도 2회(2026-10-18).
+ * 근거·429와의 분리·한계는 `overloadRetry.ts` 머리 주석.
+ */
+export const LLM_OVERLOAD_RETRY_DELAYS_MS: readonly number[] = [500, 1500];
+
+/** 재시도 1회가 바깥 시간 상한에 잘리지 않으려면 남아 있어야 하는 최소 시간(ms). */
+export const LLM_OVERLOAD_MIN_ATTEMPT_MS = 2000;
 
 /**
  * LlmClient.complete()을 Promise.race로 감싸 LLM_TIMEOUT_MS 초과 시 `deadline-exceeded`
@@ -123,8 +135,28 @@ export function withTimeout(client: LlmClient, timeoutMs: number): LlmClient {
  */
 export function getLlmClient(timeoutMs: number = LLM_TIMEOUT_MS): LlmClient {
   const keys = getGeminiApiKeys();
-  const client = keys.length > 0 ? createRotatingGeminiClient(keys) : new MockLlmClient();
-  // ⛔ withTimeout이 순환기 **바깥**이다(§37.5 (1)) — 모든 시도의 **총합**이 timeoutMs로 갇힌다.
+  // 과부하 재시도(withOverloadRetry)는 **실 Gemini에만** 감싼다 — Mock은 throw하지 않는다.
+  // 예산(budgetMs)은 바깥 withTimeout과 같은 timeoutMs다(재시도 포함 총합이 timeoutMs로 갇힌다).
+  const primary =
+    keys.length > 0
+      ? withOverloadRetry(createRotatingGeminiClient(keys), {
+          delaysMs: LLM_OVERLOAD_RETRY_DELAYS_MS,
+          budgetMs: timeoutMs,
+          minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS,
+        })
+      : new MockLlmClient();
+  // 과부하 대체 모델(withOverloadFallback, 2026-10-18)도 **실 Gemini에만** — 재시도를 다 쓴 뒤의 최종
+  // 과부하에만 GEMINI_FALLBACK_TEXT_MODEL로 1회 묻는다(재시도 바깥, withTimeout 안쪽). 같은 키 순환기를
+  // 대체 모델용으로 하나 더 만든다(429 키 전환 규칙이 대체 호출에도 그대로 적용된다).
+  const client =
+    keys.length > 0
+      ? withOverloadFallback(
+          primary,
+          createRotatingGeminiClient(keys, (apiKey) => new GeminiLlmClient(apiKey, GEMINI_FALLBACK_TEXT_MODEL)),
+          { budgetMs: timeoutMs, minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS },
+        )
+      : primary;
+  // ⛔ withTimeout이 순환기·과부하 재시도·대체 모델 **바깥**이다(§37.5 (1)) — 모든 시도의 **총합**이 timeoutMs로 갇힌다.
   // 뒤집으면 키마다 시간 제한이 걸려 2키에서 2배가 되어 AC-004 목표가 깨진다.
   // 예비 요청(withHedge, PR #289)은 2026-10-18 되돌렸다 — 배포 후 실측에서 예비 요청 승리 0/2,
   // 4초 초과 호출 3/3으로 Gemini 호출만 2배가 됐고, 첫 턴은 1차·예비 둘 다 10초를 넘겨 지연이

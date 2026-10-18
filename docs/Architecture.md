@@ -4,6 +4,9 @@ Owner: architect (see AGENTS.md). Others read-only.
 Major decisions are logged in DECISIONS.md; details in adr/.
 Based on PRD Version: v1.7.1 · Based on UX Version: 1.13 · Last Updated: 2026-07-27
 
+> **갱신 고지(2026-10-18, 텍스트 LLM 과부하 대응 계층 — User 결정 기록 · 새 설계 아님):** 범위는 **신규 §73 + §37.5 (1) 표 뒤 시점 부착 1줄**(원문 삭제 0) · `docs/DECISIONS.md` **#121**. 현행 배치 `withTimeout → withOverloadFallback → withOverloadRetry → 키 순환기 → GeminiLlmClient`(§73.1), 503만 재시도 · 대체하고 429는 키 순환이 맡는다(§73.3), 예비 요청(hedge)은 **시도 후 되돌림**(§73.2). ⚠️ 위 헤더 버전(PRD v1.7.1 · UX 1.13)은 **이 패스가 갱신하지 않았다** — UpdateRequests #45(open)가 소유한다.
+>
+
 > **갱신 고지(2026-10-17, T187 잠정 — 세션 중 '모의/훈련' 표식 전부 제거 · User 결정 *"전부 제거"* · ⛔ 법무 확인 미완료 · 설계는 User 확인 대기):** 범위는 **신규 §72 + 기존 절 시점 부착 5곳**(§6.3 · §13.7 · §23.4 · §46.3 · §49.7 — **원문 삭제 0** · ⛔ §22.1 무접촉) · `docs/DECISIONS.md` **#118** · **ADR-0018**(ADR-0014 결정 (B)의 세션 중 반전 — ADR-0014 본문 무수정). ⭐ 핵심 3건: ① 판정 단위는 상태 — 세션 경계 문면을 모듈 2개로 분리하고 식별자는 AST 사용처 가드로 묶는다(§72.5 D1) ② 시작 고지 확인 기록은 `markSessionAnswered`와 같은 범위 · **다른 키**(같은 키면 T30 회귀 — §72.4 ⑥) ③ 코드 경로 실측 5칸 전부 소스로 닫힘(§72.4). 게이트 **G436~G450** · OQ **OQ-A92 · OQ-A93**. ⚠️ 번호: main(`10e0249`)이 §71 · ADR-0017 · #115~#116 · G430~G435 · OQ-A89~A90을, 동시 패스가 #117 · OQ-A91을 소진 — 이 트리에는 그 항목들이 아직 없다. ⚠️ 버전 갭: 헤더 PRD v1.7.1 · UX 1.13 ↔ 현행 **PRD v1.18 · UX 1.32**(재번호 후 · 원 판독 1.30 — §72 판정 입력은 현행본 직접 열람 — 헤더 미전진). architect 셸 없음 — 실행 0건.
 >
 
@@ -6959,6 +6962,8 @@ completeWithFallback( withTimeout( RotatingGeminiClient([key1, key2, …]) ) )  
 | ⭐ **`withTimeout`과의 순서** | ⭐ **`withTimeout(순환기)`** — 타임아웃이 **바깥** | ⛔ **뒤집으면 AC-004가 깨진다.** `순환기(withTimeout(키))`는 **키마다 10초**라 2키면 최대 **20초**다. `withTimeout` 바깥이면 **모든 시도의 총합이 10초**로 갇힌다(`llm/index.ts:47-69`·`:38`). ⚠️ **대가**: 1번 키가 느리게 죽으면 2번 키가 못 뜬다 — ⭐ 다만 **일일 429는 모델 추론 없이 즉답**이라 실측상 문제없을 것으로 **추정**하며, **확인은 P-2**(**G177** — 추정을 확정으로 옮겨 적지 말 것) |
 | **호출부 3곳 변경** | ⭐ **0줄** | `openingLine.ts:74` · `roleplay/index.ts:261` · `rewind/index.ts:102` 셋 다 **`getLlmClient()` 반환값을 그대로 넘긴다** ⇒ 팩토리만 바꾸면 **세 경로가 동시에, 동일하게** 바뀐다. ⭐ **이 저장소가 반복해 경계한 *"호출부가 갈라지면 한 경로만 조용히 축소된다"*(§15.6 G5)를 구조적으로 회피** |
 | ⭐ **Mock 강등보다 먼저 오는가** | ⭐ **자동으로 그렇다** | `completeWithFallback(getLlmClient(), …)`의 **인자 안**에서 순환이 끝나므로, `catch`(=Mock 강등, `llm/index.ts:116-122`)는 **전 키가 소진된 뒤에만** 도달한다. ⛔ **별도 배선 불필요 — 순서를 코드로 강제하려 하지 말 것**(중복 방어가 오히려 순서를 헷갈리게 한다) |
+
+> **(2026-10-18 덧붙임 — §73 · DECISIONS #121)** 위 그림은 2026-07-28 시점이다. 현행 배치는 `withTimeout( withOverloadFallback( withOverloadRetry( 순환기 ), 순환기(대체 모델) ) )`이며 **이 표의 4개 판정(순환기 위치 · `providerName` 위임 · `withTimeout` 바깥 · 호출부 0줄)은 그대로 유지된다** — 새 층 2개는 순환기와 `withTimeout` **사이**에 끼었을 뿐이다. 정본은 §73.1.
 
 **(2) ⭐⭐ 키 목록의 선언 형태 — ⓹ "2개로 못박지 않는다"의 구현**
 
@@ -17326,6 +17331,145 @@ export async function markChallengeInProgressIfConsented(db: Firestore, challeng
 
 **배포 차단 해제 패스(2026-10-18 · 중단 시 복구 체크리스트)** — `docs/Architecture.md`: 72.0 표 뒤 X-11 해제 1문단 · 72.9 끝 브라우저 확인 결과 표 · 72.10 User 결정 문단 뒤 해제 1문단 · 72.11 User 결정 문단 뒤 1문단 · 이 문단. `docs/DECISIONS.md`: **#120** 1행 append(이 워크트리 최대 #119 — ⛔ 예약 아님). ⛔ 원문 삭제 0 · §22.1 · PRD · UX · Tasks · 소스 0줄. 손대지 않은 OQ-49 언급: 72.2 (*"법무 확인 미완료"* — 위험 3건 목록으로 계속 유효) · 72.13 3번(*"법적 판단 0"* — 여전히 참) · §6.3 끝 시점 부착 줄(`:446`).
 
+## 73. (User 결정 기록 — 2026-10-18 텍스트 LLM 호출 계층 3단계 변경 · PR #289 → #292 → #295 → 이번 PR `fix/llm-overload-fallback-model`) **과부하 대응 계층** — ⭐⭐ **503(과부하)과 429(쿼터)는 다른 층이 맡는다: 503은 기다리거나 다른 모델로 풀리고, 429는 기다려도 안 풀린다** / ⭐⭐ **예비 요청(hedge)은 시도 후 되돌렸다 — 지연이 요청 간 상관돼 같은 요청을 한 번 더 보내는 것은 구조적으로 무효였다** / ⭐ **모든 시도는 `withTimeout` 한 상한 안에 갇힌다 — 새 층은 시간 예산을 늘리지 않고 나눠 쓴다** — architect 기록(⛔ 새 설계·재설계 아님)
+
+### 73.0 금지 먼저 (⛔ 다른 판단보다 우선)
+
+1. ⛔ **이 절은 이미 내려진 결정과 이미 병합·검증된 구현을 적는다.** 설계 변경 제안 0건. 수치는 전부 **인용값**(오케스트레이터 전달 · UpdateRequests #41 · #47 · 소스 주석) — architect 실행 0회(셸 없음).
+2. ⛔ **429에 재시도·대체를 붙이지 말 것** — 키 순환(§37 · DECISIONS #69)의 판정을 가로채고, 대체 모델 응답이 쿼터 소진을 가린다.
+3. ⛔ **안전 차단/빈 응답에 대체를 붙이지 말 것** — 다른 모델로 다시 물으면 안전 판단을 우회하는 경로가 된다.
+4. ⛔ **`withTimeout`을 안쪽으로 옮기지 말 것** — §37.5 (1) 순서 판정이 그대로 적용된다(층마다 상한이 걸리면 총합이 배가 된다).
+5. ⛔ **`providerName`을 바꾸지 말 것** — 두 데코레이터 모두 위임한다(G176, `rewind/judge.ts`의 `!== "mock"`).
+6. ⛔ **로그에 프롬프트·응답·에러 본문·키를 싣지 말 것** — 새 로그는 숫자·모델명만(G170).
+
+### 73.1 ⭐⭐ 현행 배치 — 정본
+
+```
+completeWithFallback(                                   ← 실패 시 Mock 강등(기존 · llm/index.ts:184-208)
+  withTimeout(                                          ← 가장 바깥 · 모든 시도의 총합 상한(10초 / 첫 턴 20초)
+    withOverloadFallback(                               ← 최종 503이면 대체 모델 1회
+      withOverloadRetry( 순환기(기본 모델) ),           ← 503이면 0.5초·1.5초 대기 후 최대 2회
+      순환기(대체 모델 gemini-3.5-flash-lite)           ← 대체 호출도 일일 429면 다음 키
+    ), timeoutMs))
+```
+
+| 항목 | 확정값 | 근거(파일:줄) |
+|---|---|---|
+| 팩토리 | `getLlmClient(timeoutMs = LLM_TIMEOUT_MS)` | `functions/src/llm/index.ts:136-165` |
+| 적용 대상 | **실 Gemini에만**(키가 1개 이상일 때). 키 0개 → `MockLlmClient`를 감싸지 않고 `withTimeout`만 | `index.ts:140-158` |
+| 적용 경로 | 팩토리 경유 전부 — `sendMessage`(`roleplay/index.ts:277-278`) · 오프닝(`roleplay/openingLine.ts:79` — `createSession` · `consentChallenge`) · 되감기 판정(`rewind/index.ts:110`). ⚠️ 위 그림의 바깥 `completeWithFallback`(Mock 강등)은 **앞의 두 경로만**이다 — 되감기 판정은 `completeWithFallback`을 거치지 않고 자체 규칙 폴백(`judgeRewindAnswerWith`)이 실패를 받는다 | 호출부 변경 0줄(§37.5 (1) 표 4행과 같은 구조) |
+| 시간 상한 | `sendMessage` **세션 첫 사용자 턴만 20초**(`LLM_FIRST_TURN_TIMEOUT_MS`), 그 외 전부 10초(`LLM_TIMEOUT_MS`) | `index.ts:56` · `:68` · `roleplay/index.ts:277` |
+| 재시도 상수 | 대기 `[500, 1500]` · 최소 시도 여유 `2000` | `index.ts:74` · `:77` |
+| 기본 / 대체 모델 | `GEMINI_TEXT_MODEL`="gemini-3.1-flash-lite" / `GEMINI_FALLBACK_TEXT_MODEL`="gemini-3.5-flash-lite" | `geminiClient.ts:62` · `:70` |
+| `isMock` · `llmProvider` | 대체 응답은 `isMock:false` 그대로 — mock 전용 sticky 태그 `llmProvider`와 충돌 없음 | `overloadFallback.ts:20-23` |
+
+⭐ **AC-004와의 관계**: 첫 턴 20초는 **User 결정 C에 의한 의도적 예외**다(Mock 강등 대신 더 기다린다). PRD 반영은 **UpdateRequests #40(planner)** 소관이며 이 절은 PRD를 고치지 않는다.
+
+### 73.2 변경 이력 — 3단계 (⭐ 2단계는 되돌림)
+
+| 단계 | PR · 커밋 | 무엇 | 근거(인용값) | 현재 상태 |
+|---|---|---|---|---|
+| 0 | PR #289 · `77a89fe` | 예비 요청 `withHedge` — 4초 안 응답이 없으면 같은 요청 1회 더, 먼저 성공한 쪽 사용 | 라이브 2026-10-17T07:58:14Z · 2026-10-18T02:20:34Z 첫 턴 10초 타임아웃 → Mock 강등 | ⛔ **되돌림**(아래 1단계) |
+| 1 | PR #292 · `1c68bc4` | ① `withHedge` 제거(`hedgedClient.ts` 삭제) ② 첫 사용자 턴만 20초 ③ `GeminiLlmClient`가 스트림으로 받아 성공 로그에 `ttfbMs` | 배포 실측(2026-10-18 03:06Z): 예비 요청 **승리 0/2** · 4초 초과 3/3 → **호출만 2배** · 첫 턴은 1차·예비 **둘 다** 10초 초과 = 지연이 요청 간 상관 | 유효 |
+| 2 | PR #295 · `1283ea9` | `isOverloadError` + `withOverloadRetry` — 503에 0.5초·1.5초 백오프 최대 2회 | 라이브 2026-10-18T04:05:03Z 첫 턴 **503 → 922ms 만에 Mock 강등**(20초 예산을 거의 안 쓰고 포기) · H1 프로브 503 11/20 | 유효 |
+| 3 | 이번 PR · `81b103f` | `withOverloadFallback` — 재시도 후에도 503이면 대체 모델 1회 | 대체 후보 프로브(73.5) · User 결정 원문(73.5) | 유효 |
+
+### 73.3 ⭐⭐ 오류별 처리 판정표 — 정본 (⛔ 표 밖 케이스는 "아니요")
+
+| 기본 모델 오류 | 키 순환기 | 재시도(`withOverloadRetry`) | 대체(`withOverloadFallback`) | 최종 |
+|---|---|---|---|---|
+| **503 / `UNAVAILABLE`**(`isOverloadError` true) | 키 안 바꿈(`not-quota` → 그대로 throw, `rotatingClient.ts:113-116`) | **예, 최대 2회** — `경과+대기+2초 > 상한`이면 생략 | **예, 1회** — `경과+2초 > 상한`이면 생략 | 대체 성공 → 실 응답 · 대체 실패 → throw → Mock 강등 |
+| **429 일일**(`daily`) | **다음 키로**(§37.2) | 아니요 | 아니요 | 전 키 소진 → Mock 강등 |
+| **429 분당/불명** | 키 안 바꿈(§37.2 (a)) | 아니요 | 아니요 | Mock 강등 |
+| 안전 차단 · 빈 응답 | — | 아니요 | **아니요**(안전 판단 우회 방지) | Mock 강등 |
+| `deadline-exceeded`(`withTimeout`) | — | 아니요 | **아니요**(예산 소진) | Mock 강등 |
+| 네트워크(`fetch failed`) · 그 밖의 HTTP(400·401·403·404·500) | — | 아니요 | 아니요 | Mock 강등 |
+
+- **`isOverloadError` 규칙**(`overloadClass.ts:42-48`): 숫자 `status`가 **있으면 그것만** 본다(503이면 true) — 그래서 `status:429`는 본문이 무엇이든 false. 숫자 status가 없을 때만 메시지의 **구조화 JSON 필드** `error.status === "UNAVAILABLE"` 또는 `error.code === 503`을 본다(산문 "high demand" 매칭 금지 — T98).
+- **대체 호출의 실패**는 종류를 묻지 않고 그대로 던진다 — 대체에 대한 재시도·두 번째 대체 없음(`overloadFallback.ts:70-76`).
+- ⭐ **503은 순환기에서 키 1번에서만 반복된다** — 재시도마다 순환기에 새로 들어가지만 503은 `not-quota`라 키를 넘기지 않는다.
+
+### 73.4 예산 산술 (⭐ 새 층은 시간을 늘리지 않는다)
+
+| 항목 | 값 |
+|---|---|
+| 지속 503일 때 한 호출의 최대 Gemini 요청 수 | **4** = 기본 3(최초 + 재시도 2) + 대체 1. 일일 429로 키가 넘어가면 그만큼 더 |
+| 예시(⚠️ **추정** — 매 시도가 라이브 관측값 922ms로 실패한다고 가정) | 0.9 + 0.5 + 0.9 + 1.5 + 0.9 ≈ **4.7초**에 재시도 소진 → `4.7+2 ≤ 10` 이므로 **10초 예산에서도 대체가 뜬다** |
+| 예산 부족 경계 | 재시도: `경과+대기+2초 > 상한`이면 생략(`overloadRetry.ts:65`) · 대체: `경과+2초 > 상한`이면 생략(`overloadFallback.ts:58`). 같으면 시도한다 |
+| 첫 턴 20초의 효과 | 같은 상황(8.5초 경과에 503)에서 10초 예산은 대체를 생략하고 20초 예산은 실행한다(`overloadFallback.test.ts:249` 테스트 ⑦) |
+
+### 73.5 근거 수치 (전부 인용값)
+
+| 관측 | 결과 |
+|---|---|
+| 라이브 Mock 강등 | 2026-10-18T04:05:03Z — 첫 턴 503 → **922ms** 만에 강등 |
+| H1 프로브(03:12~03:28Z · 로컬 · 실제 키 · `gemini-3.1-flash-lite` · 20회) | 503 **11** · 연결 실패 1 · 성공 8. 성공 지연: 첫 턴형 1.5~3.4초 · 오프닝형 **13.3~111.4초** |
+| 대체 후보 프로브(첫 턴형 실제 프롬프트 · 후보당 5회 · 같은 시간대) | `gemini-3.5-flash-lite` **5/5 · p50 1.25초 · 추론 토큰 0** / `gemini-2.5-flash-lite` **0/5**(404 — 신규 사용자 불가) / `gemini-3.5-flash` 5/5 · p50 4.5초 · 추론 300~500 |
+| User 결정 원문 | *"gemini-3.5-flash-lite를 503 재시도 후에도 실패할 때의 대체 모델로 넣고, 구현·리뷰·QA 후 #295와 함께 배포해줘."* |
+
+### 73.6 기각 · 보류된 대안
+
+| 대안 | 판정 | 사유 |
+|---|---|---|
+| 예비 요청(hedge, 4초) | ⛔ **시도 후 되돌림**(PR #292) | 승리 0/2 · 호출 2배 · 지연이 요청 간 상관 — 같은 모델에 같은 요청을 더 보내는 것으로는 꼬리 지연이 안 풀렸다 |
+| 429에 재시도·대체 | ⛔ 기각 | 쿼터 소진은 기다려도 안 풀리고, 대체 응답이 쿼터 문제를 가린다(키 순환 담당 — §37) |
+| 안전 차단·빈 응답에 대체 | ⛔ 기각 | 안전 판단 우회 경로 |
+| `deadline-exceeded`에 대체 | ⛔ 기각 | 예산 소진 — 대체도 같은 상한에 잘린다 |
+| 대체 후보 `gemini-2.5-flash-lite` | ⛔ 기각 | 404(신규 사용자 불가) 0/5 |
+| 대체 후보 `gemini-3.5-flash` | ⛔ 기각 | p50 4.5초 · 추론 토큰 300~500 — 남은 예산 안에서 느림 |
+| **기본 모델 교체(F)** | ⏸ **보류**(기각 아님) | User 미결정 — OQ-A96 |
+
+### 73.7 관측 해석 규칙 (로그 읽는 법)
+
+| 로그 문구 | 위치 | 의미 |
+|---|---|---|
+| `Gemini 과부하(503) — 재시도` | `overloadRetry.ts:74` | 재시도 1회 진입(`attempt` · `delayMs` · `elapsedMs`) |
+| `Gemini 과부하 재시도 성공` | `overloadRetry.ts:57` | 재시도로 회복 |
+| `Gemini 과부하 — 예산 부족으로 재시도 생략` | `overloadRetry.ts:66` | 재시도 포기 → 대체 판정으로 |
+| `Gemini 대체 모델 응답` | `overloadFallback.ts:65` | 대체 성공(`model` · `elapsedMs`) |
+| `Gemini 대체 모델 실패` / `— 예산 부족으로 생략` | `overloadFallback.ts:71` / `:59` | 이어서 Mock 강등 로그가 나온다 |
+| `LLM 1차 클라이언트 실패 — Mock으로 강등` | `index.ts:200-205` | 최종 강등 |
+
+⚠️ **해석 주의(소스 판독)**: 대체를 시도한 뒤 강등되면 Mock 강등 로그의 `attemptedKeys`·`error`는 **대체 클라이언트의 에러**에서 온다(`overloadFallback.ts:75`가 `fallbackError`를 던진다). 대체를 생략했으면 기본 모델의 에러다. ⇒ **강등 로그 한 줄만으로는 대체 시도 여부를 가릴 수 없다 — 바로 앞의 `Gemini 대체 모델 …` 로그와 짝지어 읽는다.** 결함이 아니라 읽는 규칙이다.
+
+### 73.8 게이트 — 이미 있는 테스트를 번호로 묶는다 (신규 테스트 요구 0)
+
+| G | 고정하는 것 | 실행 근거 |
+|---|---|---|
+| **G451** | 배치 순서 `withTimeout(withOverloadFallback(withOverloadRetry(rotating), rotating(대체)), timeoutMs)` · Mock 무부착 · 예산이 `timeoutMs` 변수(상수화 금지) — 오염본 역검증 포함 | `functions/src/llm/__tests__/overloadFallback.test.ts:360` ⑩ · `:365` ⑩-역검증 · `overloadRetry.test.ts:358` · `:363` |
+| **G452** | 대체 판정표 전수 — 503만 대체 1회, 429 · 안전 차단/빈 응답 · `deadline-exceeded` · `fetch failed`는 대체 없음 | `overloadFallback.test.ts:389` ⑪ · `:192` ④ · `:201` ⑤ |
+| **G453** | 재시도 판정표 — 429 무간섭 · 503×3이면 최대 2회 후 throw · 순환기 태그 보존 · `isOverloadError` 전수 | `overloadRetry.test.ts:186` ⑤ · `:158` ④ · `:382` ⑪ |
+| **G454** | 예산 경계 — 재시도 `>` · 대체 `<=` 그대로, 20초 예산이면 대체 실행 | `overloadRetry.test.ts:228` · `:246` · `overloadFallback.test.ts:216` · `:236` · `:249` |
+| **G455** | 첫 턴에서만 20초 · 기본값 10초 · 예비 요청 제거 상태 | `roleplay/__tests__/firstTurn.test.ts:50` · `llm/__tests__/firstTurnTimeout.test.ts:12` · `:25` |
+
+⚠️ 위 테스트의 통과 수치는 이 패스가 실행하지 않았다(QA 보고 인용 — CHANGELOG · UpdateRequests #48). `providerName` 위임은 기존 G176이 덮는다(`overloadFallback.test.ts:263` · `overloadRetry.test.ts:302`).
+
+### 73.9 남은 위험 · OQ (⛔ 자기 고지)
+
+| # | 위험 | 상태 | 확인 방법 |
+|---|---|---|---|
+| **OQ-A94** | **503 거절이 무료 쿼터(RPD/RPM)에 집계되는지 미확인** — 집계된다면 지속 503 구간에서 턴당 최대 4요청(73.4)이 쿼터를 빠르게 깎는다 | open(추정) | 503 다발 시간대 뒤 같은 키의 429 `quotaId` 발생 시점 대조 · Google 문서 확인 |
+| **OQ-A95** | **대체 모델 역할극 품질 표본 5회뿐** + **대체 모델 종료(404) 시 조용히 Mock 수렴** — 404는 대체 실패로 던져지고 Mock이 흡수하므로 대화는 안 끊기지만 기능이 조용히 죽는다(§37.8 (b)와 같은 부류) | open | 배포 후 `Gemini 대체 모델 응답` 대비 `… 실패` 비율 · 실패가 연속이면 모델 수명 확인(전례: Live 모델 2026-11-17 종료) |
+| **OQ-A96** | **기본 모델 교체(F)** 보류 | User 결정 대기 | — |
+| 한계 | **시간 상한에 걸린 진행 중 요청을 취소하지 않는다** — `withTimeout`은 `Promise.race`라 패배한 Gemini 호출이 계속 돌고(`index.ts:86-108`), 쿼터·비용이 남는다 | 미처리(PR #289 시절부터 같은 한계) | — |
+| 한계 | 오프닝형 호출 13.3~111.4초 지연(H1)은 10초 상한 그대로 — 이 계층이 오프닝 꼬리 지연을 줄이지는 않는다(503 즉답 실패만 구제) | 기록만 | 배포 후 `ttfbMs` 분포 |
+
+### 73.10 UpdateRequests #38 (2)항 기록 — 3문장 상한 면제 축소 (PR #289에서 hedge와 함께 들어와 **유지됨**)
+
+| 항목 | 현행 | 근거 |
+|---|---|---|
+| 면제 대상 | "예고 완료"를 **마킹하는** 지시 2종 `verify_announce` · `install_consent`만 상한 미적용 | `functions/src/roleplay/replyLength.ts:37-47` `shouldLimitReplySentences` |
+| 상한 적용 | `none` · `sms_announce` · `verify_reconnect`(이전에는 `turnInstruction` 있는 턴 전부 면제였다) · 오프닝은 항상 | 같은 파일 `:13-15` · `:29-33` |
+| 면제 이유 | 예고 문장이 잘려도 `announcedAt`/`consentAnnouncedAt`은 참으로 마킹되므로 "말하지 않은 예고"(G343)가 재발한다 | `replyLength.ts:14-15` |
+| 알려진 한계 | 상한 적용 턴에서 예고 문장이 4번째 이후면 잘린다 · 쉼표 규칙 과절단 가능 · Live 음성 경로 비적용 | `replyLength.ts:17` · `:34` · UpdateRequests #38 |
+
+### 73.11 이 패스의 편집 범위 (⛔ 정본 — 중단 시 복구 체크리스트)
+
+- `docs/Architecture.md` — **덧붙임만**(원문 삭제 0): 머리 갱신 고지 1문단 · §37.5 (1) 표 뒤 시점 부착 1줄 · **§73 신설**.
+- `docs/DECISIONS.md` — **#121** 1행 append.
+- `docs/UpdateRequests.md` — 기존 architect 행 Status 칸만(#38 · #41 · #47). 새 행 0.
+- ⛔ `functions/**` · `src/**` · `docs/PRD.md` · `docs/API.md` · `docs/Tasks.md` · `docs/CHANGELOG.md` · `CLAUDE.md` **0줄**. 헤더 버전 줄 무접촉(#45). 커밋 0건.
+> **번호**: §73(이 트리 최대 §72) · G451~G455(최대 G450) · OQ-A94~A96(최대 OQ-A93) · #121(이 워크트리 · main 체크아웃 모두 최대 #120). ⛔ 예약 아님 — 병합 순서로 확정. 재번호 시 치환 범위는 `## 73.` 이후 + 머리 고지 1문단 + §37.5 시점 부착 1줄 + DECISIONS #121 행뿐(⛔ 전역 치환 금지).
 ## 74. (UX v1.33 실폰형 재설계 인계 — 제품 오너 지시 *"통화·문자·이체 화면을 실제 폰처럼"* · 사용자 결정 2026-10-18 D-96~D-102) **OQ-U68 실현성·라이선스 판정 + 구현 설계(T190 잠정)** — ⭐⭐ **Android에서는 수화부↔스피커 실제 전환을 웹이 할 수 없다(출력 장치 API가 Android에 없다) — D-98은 음량 전환으로 대체된다. iOS만 실기 프로브가 남는다** / ⭐⭐ **OS 글꼴·아이콘·벨소리 파일은 하나도 쓸 수 없다 — 그러나 글꼴은 `system-ui`가 기기 위에서 같은 글꼴을 그리므로 잃는 것이 없다** / ⭐ **D-102가 보류돼도 나머지는 전부 독립 구현된다 — 잃는 것은 "통화 경로의 수동 화면 모양 선택"과 "iOS 벨소리"뿐이다** — architect 판정 (ADR-0019)
 
 > 담당 태스크: **T190(잠정 — `docs/Tasks.md` 행 없음 · planner 등재 필요)**. 근거 문서: `docs/UX.md` v1.33(변경 이력 (c) 판정표 · (e) H-1~H-8 · (h) 사용자 결정 · UX-014/027/022/023 v1.33 노트 · P-37 · D-86~D-102 · OQ-U58~U68). ⚠️ **설계 기준 코드 = PR #291(T187, 미병합) 브랜치 스냅샷**이다(현재 워크트리 `src`는 #291 이전). 줄 인용은 **`S:` = #291 스냅샷**(`…\scratchpad\pr291\` 아래 같은 상대 경로) · **`C:` = 이 워크트리 현재**로 구분한다. #291이 바꾸지 않은 파일(`GeminiVoiceSession.tsx` · `detectSkin.ts` · `outputGain.ts` · functions 카탈로그 등)은 `C:`만 적는다. **(후속 2026-10-18)** #291이 main에 병합됐고 이 브랜치에 main을 병합했다 — 기준 = 현재 워크트리. `S:` 인용을 현재 파일에 다시 대 보았고 **이 절이 인용한 줄은 전부 같은 줄에 있다**(재확인 표 = 74.22 (4) 착수 체크리스트). 이후 `S:`는 *"#291 병합 후 현재 줄"* 로 읽는다.
