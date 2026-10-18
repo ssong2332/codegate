@@ -144,10 +144,10 @@ test("[§61 T-3/G400] declaresOfferVerificationDesk가 선언·liveTools 이름 
   assert.ok(checked >= 30, "전 조합을 충분히 검사해야 한다");
 });
 
-// R1 ④ — 인자 계약. ⚠️ T191(문자 도달 조건 · G487)이 **G384 "인자 없음" 단언을 의도적으로 바꿨다**:
+// R1 ④ — 인자 계약. ⚠️ T191(문자 도달 조건 · G538)이 **G384 "인자 없음" 단언을 의도적으로 바꿨다**:
 // `send_prepared_sms`는 이제 `purpose` enum(identity|transfer|link) 1개가 필수다(모델이 무엇을 보낼지 고르고 서버가
 // 재검증 — PRD AC-099 (b)). `offer_verification_desk`는 여전히 인자 없음(G384 그대로). BLOCKING 유지(G430)도 함께 본다.
-test("[§59.9 R1④/G384→G487] send_prepared_sms = purpose enum 필수 · offer_verification_desk = 인자 없음 · 둘 다 BLOCKING", () => {
+test("[§59.9 R1④/G384→G538] send_prepared_sms = purpose enum 필수 · offer_verification_desk = 인자 없음 · 둘 다 BLOCKING", () => {
   const scenarioDifficultyPairs: [string, "beginner" | "intermediate" | "advanced" | undefined][] = [
     ["reputation-blackmail-scam", "advanced"],
     ["bank-security-verify-scam", "advanced"],
@@ -181,7 +181,7 @@ test("[§59.9 R1④/G384→G487] send_prepared_sms = purpose enum 필수 · offe
   assert.ok(checked >= 4, "선언된 함수를 최소 4개 이상 실제로 검사해야 한다");
 });
 
-test("[G487 역검증] purpose를 필수에서 뺀 오염본 · enum 밖 값을 넣은 오염본은 같은 검사식에 걸린다", () => {
+test("[G538 역검증] purpose를 필수에서 뺀 오염본 · enum 밖 값을 넣은 오염본은 같은 검사식에 걸린다", () => {
   const [tool] = buildLiveToolDeclarations("reputation-blackmail-scam", "advanced");
   const decl = (tool.functionDeclarations ?? []).find((d) => d.name === LIVE_TOOL_SEND_PREPARED_SMS);
   assert.ok(decl, "send_prepared_sms 선언이 있어야 한다");

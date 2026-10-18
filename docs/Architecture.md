@@ -18441,7 +18441,7 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 - 입력: `{ status, channel, isMockTurn, verifyEnabled, transferPlaced, scammerTurns, pendingInstruction, limitReached, alreadyAccepted }` — 서버가 아는 것은 서버 값, 실시간의 `scammerTurns` · `pendingInstruction`은 **클라 주장값**(선례: `deliverInCallSms`의 `scammerTurns` — §59 · G12 위상).
 - 사유 종류 `kind`: `"goal"`(목적 달성) · `"give_up"`(포기) · `"unspecified"`(인자 누락 · 오기입 — 거절하지 않는다: 이미 작별을 준비한 모델을 거절하면 ⑪이 재발할 수 있다). ⭐ **`kind`는 모델 판단의 기록일 뿐 판정에 쓰지 않는다** — 라이브 관측(AC-103 (h) 목적 달성 1건 · 포기 1건)을 가르는 용도다.
 - 서버가 아는 목적 달성 사실 `landing_submitted`(`functions/src/inCallSms/index.ts:228-236` — planner 인용 좌표)는 **판정 입력으로 쓰지 않는다**: 끊는 판단은 모델이 한다(AC-103 (a))이고, 서버 하한은 *막는* 쪽만 맡는다. 그 사실은 모델이 대화 맥락으로 이미 안다(문자 도착 지시 · 참가자 발화).
-- **(2026-10-19 추가 — 행 2-b · 원문 위 3줄 무수정)** 입력에 **`relay?: HangupRelayContext`**(`{ legIndex: number; legCount: number }`)를 더한다. ⭐ **이 값은 클라 주장값이 아니다** — 서버가 세션 문서에서 읽는다: `legIndex` = `session.relay?.legIndex ?? 0`(S7 `startRelayLeg`만 쓰는 서버 필드 — scenario-review §78.6.2 트랜잭션) · `legCount` = `findFlowVariant(session.flowVariantId)?.legs.length`(서버 카탈로그). 해석은 **단일 지점** `resolveHangupRelay(session)`(신설 `functions/src/scammerHangup/relayContext.ts` — `flowVariants.ts`를 import하므로 잎 모듈 `decide.ts` 밖에 둔다)이 하고, 폴백 `sendMessage` · `requestScammerHangup` · 토큰 발급(`declaresEndCall` — 79.18 (1))이 같은 함수를 부른다. ⛔ **`RELAY_RUNTIME_AVAILABLE === false`이거나 변형이 없거나 `legs.length < 2`이면 `undefined`를 돌려준다** — 오늘 legs ≥ 2 변형 3종은 한 화자가 전체를 진행하므로 그 화자가 곧 마지막 화자다(79.1 #22 · G526). 범위 밖 `legIndex ≥ legCount`는 마지막으로 본다(S7 검증 *"변형에 leg 존재"* 가 막는 값 — 이 함수는 보정하지 않는다).
+- **(2026-10-19 추가 — 행 2-b · 원문 위 3줄 무수정)** 입력에 **`relay?: HangupRelayContext`**(`{ legIndex: number; legCount: number }`)를 더한다. ⭐ **이 값은 클라 주장값이 아니다** — 서버가 세션 문서에서 읽는다: `legIndex` = `session.relay?.legIndex ?? 0`(S7 `startRelayLeg`만 쓰는 서버 필드 — scenario-review §82.6.2 트랜잭션) · `legCount` = `findFlowVariant(session.flowVariantId)?.legs.length`(서버 카탈로그). 해석은 **단일 지점** `resolveHangupRelay(session)`(신설 `functions/src/scammerHangup/relayContext.ts` — `flowVariants.ts`를 import하므로 잎 모듈 `decide.ts` 밖에 둔다)이 하고, 폴백 `sendMessage` · `requestScammerHangup` · 토큰 발급(`declaresEndCall` — 79.18 (1))이 같은 함수를 부른다. ⛔ **`RELAY_RUNTIME_AVAILABLE === false`이거나 변형이 없거나 `legs.length < 2`이면 `undefined`를 돌려준다** — 오늘 legs ≥ 2 변형 3종은 한 화자가 전체를 진행하므로 그 화자가 곧 마지막 화자다(79.1 #22 · G526). 범위 밖 `legIndex ≥ legCount`는 마지막으로 본다(S7 검증 *"변형에 leg 존재"* 가 막는 값 — 이 함수는 보정하지 않는다).
 - **(2026-10-19 추가)** 행 2-b의 위치: 구조 사실(세션 · 채널 · leg)이 턴 사실(Mock · 전환 · 하한 · 문자 대기)보다 먼저다. 79.6 SIGNAL 사전 판정 목록 *"#1·#2·#4·#5·#6"* 은 **#1·#2·#2-b·#4·#5·#6**으로 읽는다(LLM 호출 전에 아는 값이다). `not_last_leg`의 모델용 문면 = 79.5 **거절(공통)** 그대로(⛔ 새 문면 0 — *"거절 사유를 모델에게 설명하지 않는다"* 79.5 끝). 이 행은 79.18 (1) *"`end_call`은 마지막 leg에만 선언"* 과 **이중 방어**다 — 도구가 선언되지 않은 토큰에서도 서버가 거절한다.
 
 ### 79.3 끊는 수단 판정 — ⭐ **BLOCKING 도구 채택**
@@ -18547,7 +18547,7 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 6. 응답 `ended:true` · `endReason:"scammer_ended"` · `audioUrl`(마지막 대사 — 기존 합성 `:505-517`).
 - ⭐ 사용자 입력 흉내(AC-024 · AC-103 (g)(h)): `[[SIGNAL:END_CALL_GOAL]]`을 입력해도 `escapeSentinelLookalikes`(`promptAssembly.ts:728-732`)가 LLM 전달 전에 전각 치환하고, 추출은 **LLM 완성 텍스트에만** 돈다(`escalationSignal.ts:4-6`) ⇒ 새 코드 0줄로 성립 — G507이 같은 실행 출력에서 보인다.
 - 대사 손질(`:380-385` 실존 은행명 · 문장 상한)은 신호 추출 **뒤**라 신호를 자르지 않는다(현행 순서 유지).
-- **(2026-10-19 추가)** 1의 `preDecision` 입력에 `relay: resolveHangupRelay(session)`(79.2 끝)을 더한다 — 오늘 `undefined`. 좌표는 79.1 #23(`extractEscalationSignal` 호출 = main `f1a7ba2` `:387`)으로 다시 찾는다. S7 폴백 교대 마커 `[[TRANSFER]]`(scenario-review §78.6.2)와 `END_CALL_*`가 한 응답에 함께 나오는 경우는 79.18 (3) ⑩.
+- **(2026-10-19 추가)** 1의 `preDecision` 입력에 `relay: resolveHangupRelay(session)`(79.2 끝)을 더한다 — 오늘 `undefined`. 좌표는 79.1 #23(`extractEscalationSignal` 호출 = main `f1a7ba2` `:387`)으로 다시 찾는다. S7 폴백 교대 마커 `[[TRANSFER]]`(scenario-review §82.6.2)와 `END_CALL_*`가 한 응답에 함께 나오는 경우는 79.18 (3) ⑩.
 
 ### 79.8 실시간 흐름 (`src/lib/realtime/GeminiVoiceSession.tsx`)
 
@@ -18643,14 +18643,14 @@ AC-089 (b) *"사용자 완료/속아 넘어감"* 행 → 구현 뒤 = **사기�
 
 **S3와 겹치는 지점(⛔ 병합 순서는 메인 세션)**:
 
-| 지점 | S3가 하는 일(§78.4 · §78.11) | C5가 하는 일 | 권고 |
+| 지점 | S3가 하는 일(§82.4 · §82.11) | C5가 하는 일 | 권고 |
 |---|---|---|---|
 | `play/page.tsx` 지시 큐(`enqueueTurnInstruction` · `drainInstructionQueue` · `:629-` 부근) | 문자 안내를 맥락 주입(`turnComplete:false`)으로 바꾸고 G31 슬롯을 옮긴다 | S2 동결 · `pendingInstruction` 읽기 | S3 **뒤**에 C5 — 큐의 새 형태를 보고 동결 지점을 고른다 |
 | `GeminiVoiceSession.tsx` 침묵 넛지(신규 `turnComplete:true` 1회) | 사용자 침묵 8초면 모델에게 말을 시킨다 | 승인 뒤 넛지 금지(G510) | S3 뒤 — 넛지 타이머를 `hangupPending`으로 막는다 |
 | `clientTurnQueue.ts` 종류 | `opening \| text \| silence \| relayGreeting` | 승인 뒤 `request` 무시 | 같은 파일 · 다른 함수 |
 | `GeminiVoiceSession.tsx` 도구 라우팅(S5b) | `send_prepared_sms` `purpose` 인자 | `end_call` 분기 추가 | 같은 함수(`dispatchToolCall`) — 나중 병합 쪽이 분기 1개를 얹는다 |
 | `inCallSms.ts`(S3 announce 문면) | announce 8개 문면 | (79.15 prefill 필드 — 별 작업) | 다른 필드 |
-| **S7 릴레이**(통화 중 새 Live 연결) | leg마다 새 토큰 | `end_call`은 **leg마다 선언**되어야 하고 S4의 `stop()`은 **현재 leg**를 닫아야 한다 | S7 설계 확정(OQ-A108 scenario-review) 뒤 1행 확인 |
+| **S7 릴레이**(통화 중 새 Live 연결) | leg마다 새 토큰 | `end_call`은 **leg마다 선언**되어야 하고 S4의 `stop()`은 **현재 leg**를 닫아야 한다 | S7 설계 확정(OQ-A131 scenario-review) 뒤 1행 확인 |
 
 - 테스트 수 before/after는 각 커밋 착수 시 재측정(⛔ 인용값 금지 · 같은 체크아웃 동시 실행 금지 — CLAUDE.md).
 - 배포: C1~C3(Functions)와 C4~C5(Hosting)는 **Hosting → Functions**(79.0 8).
@@ -18793,7 +18793,7 @@ AC-089 (b) *"사용자 완료/속아 넘어감"* 행 → 구현 뒤 = **사기�
 
 ### 79.18 (2026-10-19 신설) 릴레이(S7)와의 계약 — ⭐⭐ **C5가 인터페이스를 고정하고 S7이 그 위에 맞춘다** / ⭐ **마지막 화자만 끊는다는 결정은 두 층(선언 · 서버 판정)에서 집행된다**
 
-> **근거**: User 결정(2026-10-18~19 · 메인 세션 객관식 — *"릴레이 도중에는 마지막 화자만 먼저 끊을 수 있다. 중간 상담원은 끊지 않고 다음 사람에게 넘긴다"* · DECISIONS #146) · 메인 세션 병합 순서(**#311 → T192(C1~C5) → D-115 → S7** — T192는 S7을 기다리지 않는다) · scenario-review가 약속한 S7 접점 4개(메인 세션 전달) · 접점 분석 공유 노트 `C:\Users\박수홍\AppData\Roaming\Claude\side-session-notes\local_34b66afc-10f0-40b6-b301-4543847b7c51\T192-D115-x-S7-311-interface.md`(K1~K11 · B8 초안 — ⚠️ 노트에는 요약만 있고 K 항목별 본문은 이 패스가 보지 못했다 · 아래 ①~⑨는 메인 세션이 전달한 목록) · S7 설계 `C:\Projects\codegate\.claude\worktrees\agitated-zhukovsky-f406bb\docs\Architecture.md:18555-18586`(§78.6.2 · §78.6.3).
+> **근거**: User 결정(2026-10-18~19 · 메인 세션 객관식 — *"릴레이 도중에는 마지막 화자만 먼저 끊을 수 있다. 중간 상담원은 끊지 않고 다음 사람에게 넘긴다"* · DECISIONS #146) · 메인 세션 병합 순서(**#311 → T192(C1~C5) → D-115 → S7** — T192는 S7을 기다리지 않는다) · scenario-review가 약속한 S7 접점 4개(메인 세션 전달) · 접점 분석 공유 노트 `C:\Users\박수홍\AppData\Roaming\Claude\side-session-notes\local_34b66afc-10f0-40b6-b301-4543847b7c51\T192-D115-x-S7-311-interface.md`(K1~K11 · B8 초안 — ⚠️ 노트에는 요약만 있고 K 항목별 본문은 이 패스가 보지 못했다 · 아래 ①~⑨는 메인 세션이 전달한 목록) · S7 설계 `C:\Projects\codegate\.claude\worktrees\agitated-zhukovsky-f406bb\docs\Architecture.md:18555-18586`(§82.6.2 · §82.6.3).
 > **(2026-10-19 정정 — 위 근거의 병합 순서 · 원문 보존)** 메인 세션 최신 확정 = **#311 → S5b → T192 → D-115 → S7**(79.13 정정 줄). 이 절의 계약(C5가 고정 · S7이 맞춘다)은 무변경 — T192가 여전히 S7보다 앞이다.
 > **전제**: S7 미구현(79.1 #22). 이 절이 정하는 기본은 **"릴레이 없음 = 기존 판정"** 이고, C1~C5는 그 기본에서 **동작 변화 0**이다.
 
@@ -18879,16 +18879,16 @@ isRelaySwitchPending: () => boolean;                // ⛔ C5에서는 `() => fa
 
 | # | 규칙 | 집행 | 근거 | 단언 |
 |---|---|---|---|---|
-| ① | `startRelayLeg` 토큰 발급도 `declaresEndCall(scenarioId, channel, { legIndex: toLegIndex, legCount })` · `hangupMode` · `fictionalBankName`(#311)을 쓴다 — ⛔ `createRealtimeCall`과 **같은 발급 옵션 빌더**를 부른다(따로 조립하면 새 leg에서 선언 · 은행명이 빠진다 — 노트 K1) | **S7 착수 조건** | §78.6.2 *"발급"* 행(*"기존과 같은 authTokens.create · leg별 도구 선언"*) | G529 ⓑ |
+| ① | `startRelayLeg` 토큰 발급도 `declaresEndCall(scenarioId, channel, { legIndex: toLegIndex, legCount })` · `hangupMode` · `fictionalBankName`(#311)을 쓴다 — ⛔ `createRealtimeCall`과 **같은 발급 옵션 빌더**를 부른다(따로 조립하면 새 leg에서 선언 · 은행명이 빠진다 — 노트 K1) | **S7 착수 조건** | §82.6.2 *"발급"* 행(*"기존과 같은 authTokens.create · leg별 도구 선언"*) | G529 ⓑ |
 | ② | `end_call`의 `scammerTurns` = 세션 누적값(부모 getter `getSessionScammerTurns`) — 새 leg 첫 4턴이 `too_early`가 되지 않게(노트 K2) | **C5 선반영(확정)** | 79.8 끝 | G528 ⓐ |
 | ③ | 승인 · 종료 래치는 부모 `callEnding.ts`가 소유(노트 K3 — 컴포넌트 안 래치는 재마운트로 소실) | **C5 선반영(확정)** | 79.9 · (2) | G528 ⓑ |
 | ④ | 래치 중에는 교대를 무시하고(`shouldAcceptRelaySwitch` = false면 교대 시작 0) **도착한 leg 토큰을 버린다**(재마운트 0) · 서버 `startRelayLeg`는 `scammerHangup`이 있으면 거부(`failed-precondition` — 메시지 키는 S7) — 실제 경합 경로 = 교대 연출 중 참가자 *"훈련 종료"* · 한도 도달(래치 `ending`) | **S7 착수 조건**(C5는 `shouldAcceptRelaySwitch`만) | 메인 세션 4항 3 · 4 | G529 ⓐⓓ |
 | ⑤ | 교대 대기(교대 확정 ~ 새 leg 연결)면 `pendingInstruction = true` → `blocked_pending` | **C5 선반영(확정)** — `isRelaySwitchPending`을 OR 항으로 두고 `() => false` · S7이 구현을 바꾼다 | 79.2 #6 | G528 ⓓ |
-| ⑥ | 전사 제출 순서: 교대 때 `startRelayLeg` 델타 append(서버 · 순차 — §78.6.3 #4) → 종료 E5 `flushTranscript()` → `endSession`. E5는 **진행 중인 `startRelayLeg`를 기다린 뒤** 마지막 델타 커서 이후만 올린다(중복 · 순서 역전 0) | **S7 착수 조건** | 79.9 E5 · §78.6.2 트랜잭션 | S7 테스트 |
-| ⑦ | 교대용 이전 leg 닫기는 **별도 신호**(예: `closeLegForRelay`) — `endCall(trigger)` · E4 `realtime.stop()` · `onScammerHangupReady` · 끊기 대기(R4~R5)를 타지 않고 래치를 바꾸지 않는다 | **S7 착수 조건** | §78.6.3 #3(`stopSignal`) · 79.13 S7 행 | G529 ⓒ |
-| ⑧ | 교대 중 소켓 close는 **`remote`가 아니다** — `callEndedBy = "remote"` · `beginCallEnding("remote")` 0(§78.6.3 #8 `handleEnded` 무시와 같은 창). AC-006 상시 종료는 그 창에서도 즉시 통한다 | **S7 착수 조건** | 79.9 셸 `ended` 구분 · 79.11 3행 | G529 ⓒ |
+| ⑥ | 전사 제출 순서: 교대 때 `startRelayLeg` 델타 append(서버 · 순차 — §82.6.3 #4) → 종료 E5 `flushTranscript()` → `endSession`. E5는 **진행 중인 `startRelayLeg`를 기다린 뒤** 마지막 델타 커서 이후만 올린다(중복 · 순서 역전 0) | **S7 착수 조건** | 79.9 E5 · §82.6.2 트랜잭션 | S7 테스트 |
+| ⑦ | 교대용 이전 leg 닫기는 **별도 신호**(예: `closeLegForRelay`) — `endCall(trigger)` · E4 `realtime.stop()` · `onScammerHangupReady` · 끊기 대기(R4~R5)를 타지 않고 래치를 바꾸지 않는다 | **S7 착수 조건** | §82.6.3 #3(`stopSignal`) · 79.13 S7 행 | G529 ⓒ |
+| ⑧ | 교대 중 소켓 close는 **`remote`가 아니다** — `callEndedBy = "remote"` · `beginCallEnding("remote")` 0(§82.6.3 #8 `handleEnded` 무시와 같은 창). AC-006 상시 종료는 그 창에서도 즉시 통한다 | **S7 착수 조건** | 79.9 셸 `ended` 구분 · 79.11 3행 | G529 ⓒ |
 | ⑨ | **User 결정 = 마지막 화자만 끊는다** | **C1(행 2-b · G526) · C3(선언 술어 · G527) 확정** · S7은 ①로 relay 값을 넘긴다 | DECISIONS #146 | G526 · G527 |
-| ⑩ | (이 패스 추가) S7 `transfer_call` 결과 문면 · 폴백 `[[TRANSFER]]` 응답 지시는 **통화 종료 어휘를 쓰지 않는다**(P-H H1 어휘 상수와 교집합 0 · §22.1 G82). 폴백 한 응답에 `[[TRANSFER]]` + `END_CALL_*`: 중간 leg = `hangupMode` NONE이라 `END_CALL_*`는 지워지고 무시(79.7 4) · 마지막 leg = 다음 leg가 없어 `[[TRANSFER]]` 무효(§78.6.2 *"변형에 leg 존재"*) ⇒ 두 효과가 한 응답에서 함께 나는 경우 0 | **S7 착수 조건** | 79.6 끝 · 79.7 끝 | S7 테스트 |
+| ⑩ | (이 패스 추가) S7 `transfer_call` 결과 문면 · 폴백 `[[TRANSFER]]` 응답 지시는 **통화 종료 어휘를 쓰지 않는다**(P-H H1 어휘 상수와 교집합 0 · §22.1 G82). 폴백 한 응답에 `[[TRANSFER]]` + `END_CALL_*`: 중간 leg = `hangupMode` NONE이라 `END_CALL_*`는 지워지고 무시(79.7 4) · 마지막 leg = 다음 leg가 없어 `[[TRANSFER]]` 무효(§82.6.2 *"변형에 leg 존재"*) ⇒ 두 효과가 한 응답에서 함께 나는 경우 0 | **S7 착수 조건** | 79.6 끝 · 79.7 끝 | S7 테스트 |
 
 ⇒ **C5가 S7보다 먼저 들어간다(확정)**: ②③⑤는 C5에 선반영 · ⑨는 C1 · C3 · **①④⑥⑦⑧⑩은 S7 착수 조건**(S7이 C5 인터페이스에 맞춰 구현). 79.13 S7 행의 *"E4의 `stop()`은 현재 leg를 닫아야"* 는 ⑦과 같은 뜻(재마운트된 현재 컴포넌트의 `stop()`).
 
@@ -18913,7 +18913,7 @@ isRelaySwitchPending: () => boolean;                // ⛔ C5에서는 `() => fa
 **(6) 이 패스가 하지 않는 것 · 하류(UpdateRequests 등재 제안 — 등재는 각 owner)**
 
 - **planner**: AC-101 (a)에 *"중간 화자는 먼저 끊지 않는다(마지막 화자만)"* 반영 · AC-103과 교차 고지(OQ-A130).
-- **scenario-review(S7 owner)**: ① 그 트리 DECISIONS **#145가 같은 User 결정**을 적었다 — 이 트리 **#146**과 중복이므로 병합 시 한쪽을 다른 쪽 참조로 줄인다(병합 순서상 #146이 먼저 main에 들어간다) ② §78.6.2 *"발급"* 행 · §78.6.3에 (3) ①④⑥⑦⑧⑩ 반영 ③ `docs/Tasks.md` S7 착수 조건에 G529.
+- **scenario-review(S7 owner)**: ① 그 트리 DECISIONS **#145가 같은 User 결정**을 적었다 — 이 트리 **#146**과 중복이므로 병합 시 한쪽을 다른 쪽 참조로 줄인다(병합 순서상 #146이 먼저 main에 들어간다) ② §82.6.2 *"발급"* 행 · §82.6.3에 (3) ①④⑥⑦⑧⑩ 반영 ③ `docs/Tasks.md` S7 착수 조건에 G529.
 - **#311 owner**: G525를 `buildInCallSmsDoc` 출력 문자열 필드 전수형으로(공유 노트 B4) · §81.3 D-115 행 — 79.15 (6)으로 **`bankName`에 소비처가 생긴다**(D-115가 `bankName` + `accountNumber`를 읽는다) ⇒ 노트의 *"bankName 소비처 0 — 유지/삭제 OQ"* 는 **유지**로 닫힌다.
 - **docs(하류)**: 79.17 하류 목록의 `docs/Database.md` *"`inCallSms.transferAccount`"* 는 **철회**(79.15 (6) 1) — `bankName` · `accountNumber`는 #311이 Database.md에 올린다. `docs/API.md` 무변경(`requestScammerHangup` 요청 · 응답 무변경 — 상태값 `not_last_leg` 1개 추가만).
 - ⚠️ 미확인: `docs/adr/0021-scammer-initiated-hangup.md` · `docs/Tasks.md` T192의 S1~S7 표기(79.9 고지 범위 밖) · 공유 노트 K1~K11 본문(요약만 봄) · 부모 사기범 턴 카운터의 존재와 증가 지점.
@@ -19090,3 +19090,506 @@ isRelaySwitchPending: () => boolean;                // ⛔ C5에서는 `() => fa
 | 지시는 강제가 아니다 — 모델이 다른 번호를 지어낼 수 있다 | 배포 후 대사의 계좌번호 관찰 |
 
 > **번호**: §81 · G521~G525 · OQ-A127~A129 · #142 — main `b77a36b` 최대 §79(T192) · G516 · OQ-A124 · #140과 미병합 인증번호 수정(§80 · G517~G520 · OQ-A125~A126 · #141) 다음(병합 시 §79 · G497~G501 · OQ-A114~A116 · #130에서 재번호). ⛔ 예약 아님.
+## 82. (T191 S2 — PRD v1.24 MVP #38 · AC-096~AC-102 · User 결정 D1~D9 = DECISIONS #147~#155) **난이도별 흐름 변형 · 문자 도달 조건 · 연속 발화 제거 · 릴레이 다른 목소리 재연결** — ⭐⭐ **§22.2 B의 소켓 재연결 기각 근거 2개를 재판정했다: ①(문맥 소실)은 서버가 만든 인계 블록으로 해소되고, ②(미마스킹 전사를 통화 중 서버로 올려야 한다)는 *전제가 틀렸다* — 같은 원문 전사가 이미 통화 종료 때 같은 콜러블로 서버에 올라가 마스킹 후 저장된다. 결론: Gemini 경로·텍스트 폴백은 *조건부 가능*, ElevenLabs 경로는 *안전 조건 하 불가*(릴레이 변형을 그 경로로 보내지 않는다)** / ⭐⭐ **S1 실측: 모델이 문자 도구를 스스로 먼저 부른 것은 0/8 세션 ⇒ "모델 도구 호출만으로 발송"은 사실상 문자 0통이다 — 백스톱은 지울 수 없고 *필수 목적만 강제·선택 목적은 건너뛰기*로 바꾼다** / ⭐ **유료 요금으로 환산하면 재연결은 세션 비용을 *줄일 수도 늘릴 수도 있다*(−19%~+27%, R=2): Live는 매 턴 누적 문맥을 다시 과금하는데 새 연결은 그 문맥을 짧은 인계문으로 바꾼다 — 어느 쪽인지는 과금 방식 확인(OQ-A137)에 달렸다** — architect 설계 (ADR-0020)
+
+> 소관: `docs/Tasks.md` T191 S2. 입력: `docs/ScenarioDifficultyRedesign.md`(설계 초안 · 이하 "초안") · `docs/PRD.md` v1.24 AC-096~AC-102 · `docs/DECISIONS.md` #147~#155 · **S1 측정 보고서 `docs/research/s1-live-turn-measurement-2026-10.md`(커밋 `fd3c4b1` — 이하 "S1")**. 기준 트리: 이 워크트리 HEAD `a8b9840`(main `d2cfb37` 병합 — #300 인증번호 대조 포함).
+> ⚠️ **번호 정정(인계 대비)**: 지시는 *"§77 · G475~ · OQ-A106~"* 를 예약값으로 줬지만 main `d2cfb37`의 §77(인증번호 대조) · G475~G478 · OQ-A106~A107이 이미 그 번호를 썼다(이 파일 `## 77.` 줄 · `77.4` · `77.6`). ⇒ 이 절은 **§82 · G530~G551 · OQ-A131~A139 · ADR-0020**이다(오케스트레이터 정정 지시와 일치 · 편집 시점 grep: `G530`~`G551`·`OQ-A131`~·`ADR-0020`·`§82` 저장소 0히트). ⛔ 예약 아님 — 병합 순서로 확정. PRD·DECISIONS·Tasks의 *"§77"* 인용은 이 절을 가리키도록 고쳐야 한다(82.3 요청).
+
+### 82.0 금지 먼저 (⛔ 이 절을 근거로 구현할 때 다른 모든 항목보다 우선)
+
+| # | 금지 | 이유 |
+|---|---|---|
+| X1 | ⛔ **흐름 변형 데이터를 클라 번들 · `publicMeta.ts` · Firestore `scenarios/{}` 에 두지 않는다.** 세션 문서에는 **의미 없는 불투명 ID**만 쓴다 | `scenarios/{}`·`sessions/{}`는 클라 read 허용(`firestore.rules:34`·`:88`). 수법·흐름을 계약에 넣지 않는 것이 D-46 · ADR-0004의 강한 보장이다(`functions/src/scenarios/axes.ts:3-15`와 같은 원칙) |
+| X2 | ⛔ **릴레이 인계문을 클라가 만들거나, 클라가 보낸 요약을 프롬프트에 넣지 않는다.** 인계문은 서버가 **마스킹 저장된 `messages` + 변형 데이터**로만 만든다. 인계문을 응답으로 클라에 돌려주지 않는다 | 82. 재판정의 조건. 깨면 근거 ②가 다시 참이 된다 |
+| X3 | ⛔ **ElevenLabs 경로에서 릴레이 변형을 실행하지 않는다.** 그 경로의 프롬프트는 에이전트에 저장돼 있고 인계문을 넣을 서버 측 통로가 없다 | 82..4 — 클라 경유 동적 변수는 가드레일 우회 통로가 된다 |
+| X4 | ⛔ **문자 발송 판정 함수를 경로마다 따로 두지 않는다**(실시간 도구 · 폴백 마커 · 백스톱이 **같은 순수 함수 1개**) | AC-099 (f) 3경로 동일 — 오늘의 `>=`(`buildDoc.ts:138`) vs `===`(`inCallSms.ts:308`) 분기가 정확히 이 금지를 어긴 사례다 |
+| X5 | ⛔ **문자 안내 · 확인 창구 안내를 `turnComplete:true` 턴으로 보내지 않는다** | S1 §3.1 — 연속 발화 14회 전부가 이 형태 직후(예외 0) |
+| X6 | ⛔ **새 Firestore 복합 인덱스를 만들지 않는다**(회전 배정은 키 조회 1건) | §66 — 인덱스 배포 누락이 `createSession` 전체 장애를 낸 이력 |
+| X7 | ⛔ **`promptAssembly.ts`의 S4 범위(A1·A2·A3·A4) 밖 줄을 S4에서 고치지 않는다** — 다른 세션이 같은 파일을 편집 중이다 | 82.1 파일 소유 |
+| X8 | ⛔ **#300 인증번호 대조(§77) 동작을 바꾸지 않는다** — 실시간 도착 응답의 대조 지시 · 폴백의 도착 이후 매 턴 지시 · 세션 시작 프롬프트에 번호 0 | §77.0 · G475~G478. 문면 변경은 OQ-A135 재측정 뒤 별건 |
+| X9 | ⛔ **이 절은 소스를 0줄 고쳤다.** 커밋 0 | 설계 패스 |
+
+### 82.1 착수 시 실측 (근거)
+
+| # | 항목 | 값 | 근거 |
+|---|---|---|---|
+| 1 | 난이도 차이 | 프롬프트 끝 문단 1~2개뿐 | 초안 §1.1 · `promptAssembly.ts:671-677`·`:707` |
+| 2 | 문자 시점 | 카탈로그 고정 턴 `afterScammerTurns`, 실시간 클라 계수 `===`/`>=` · 폴백 `===` | `inCallSms.ts:48-49` · `:304-309` · `page.tsx:666-679` · `buildDoc.ts:132-140` |
+| 3 | 계수 | 모든 `turnComplete` +1(지시 턴 · 빈 턴 포함) | `GeminiVoiceSession.tsx:866-884` → `page.tsx:859-863` |
+| 4 | 도구 | `send_prepared_sms` 인자 없음 · *"무엇이 나갈지는 시스템이 정한다"* | `liveTools.ts:67` · `:78-84` |
+| 5 | 백스톱 | 하한 뒤 경계 2개 또는 90초면 **강제 발송** | `toolWindow.ts:17` · `:24` · `:49-55` |
+| 6 | 전사 제출 | 클라 버퍼를 비우며 제출(델타) · 서버가 `maskPII` 후 `historySnap.size` 뒤에 append | `page.tsx:391-409` · `submitTranscript.ts:93` · `:110-136` |
+| 7 | Live 토큰 | 음성 · 프롬프트 · 도구를 발급 시 고정 · `uses: 2` · 30분 · 새 세션 2분 | `geminiProvider.ts:75-77` · `:132-227` |
+| 8 | 음성 풀 | 여 `["Aoede"]` · 남 `["Puck"]` — **성별당 1개** | `geminiProvider.ts:51-54` |
+| 9 | ElevenLabs | 난이도 미적용(`difficultyApplied:false`) · 턴 지시 자격 없음 | `elevenLabsProvider.ts:56-61` · `realtime/index.ts:59` |
+| 10 | 회전용 인덱스 | 선언 3개(uid+createdAt 등). `users/{uid}` 하위 컬렉션은 기본 거부 | `firestore.indexes.json:3-26` · `firestore.rules:11-26` · `:131-133` |
+| 11 | 브리핑 | `scenarioId`만 받는다(세션 생성 전) | `beginnerBriefing.ts:44-61` · `briefingTypes.ts:3` |
+| 12 | 연결 지연 근거 | 3.8 첫 마디 951/878ms(프로브) · 실제 코드 경로 1,343/949ms · setupComplete ~2초(Node 실측 인용) | §71.2 · §71.13 #4 · `useRealtimeCall.ts:130-131` |
+
+**S1 결과 중 이 설계가 기대는 것**(n이 작다 — S1 §0 금지대로 "n건 중 m건"으로만 읽는다):
+
+| S1 | 값 | 이 절에서 쓰는 곳 |
+|---|---|---|
+| §3.1 | 연속 발화(런≥2) **14회 전부 announce 직후** · 앱 백스톱 규칙(A′)에서도 2턴 늦게 같은 모양 | 82. T1 채택 |
+| §3.2 | `turnComplete:false` 주입: 10초 내 응답 유발 **0/2** · 다음 응답에 문자 반영 **2/2** | 82. T1 채택 · 침묵 경로 |
+| §3.1 | 모델이 문자를 **먼저** 보낸 횟수 **0/8 세션**(도구 호출 4회 전부 announce 뒤) | 82. 백스톱 존치 |
+| §3.5 N1 | 끼어들기 뒤 76~229ms에 **오디오 · 전사 없는 `turnComplete` 3/3** — 앱이 사기범 턴으로 센다 | 82..4 계수 규칙 |
+| §3.5 N2 | 0.7초 재생 조각의 전사가 문장 전체(추정) | OQ-A138 |
+| §3.4 | announce 지시문의 **예시 문장을 거의 그대로 낭독** 5/13 | 82..3 문면 규칙 |
+| §3.2 ⚠️ | `already_delivered` 응답 문면이 재촉을 한 번 더 유발(1회) | 82. A4 |
+| §3.6 | 폴백 고급: 안전계좌 문자 뒤에도 인증번호만 반복(n=1, `otpCheck` 상호작용 추정) | OQ-A135 |
+| §4 | R5 반증(문장) · R6 반증(텍스트 끼어들기 0/3) · R8 약화 | 82. A5/A6 우선순위 |
+
+### 82.2 흐름 변형(flow variant) 데이터 모델 — AC-096 · AC-097
+
+#### 82.2.1 원천과 경계
+
+| 결정 | 값 | 근거 |
+|---|---|---|
+| 원천 파일 | 신규 `functions/src/scenarios/flowVariants.ts` (+ 시나리오별 `*.variants.ts`로 나눠도 됨) — **Functions 전용**, `inCallSms.ts`·`verifyIntercept.ts`·`axes.ts`와 같은 경계 | X1 |
+| 클라 노출 | 세션 문서 `flowVariantId`(불투명) · 릴레이 화자 라벨(`callerLabel`, 화면 표시값)뿐. 수법 · 단계 · 문자 목적 · 인원 구성은 0 | D-46 · AC-096 (e) |
+| ID 형식 | `fv-` + 소문자·숫자 4자 이상, **의미 없는 문자열**(예 `fv-q7k2`). ⛔ `institutional-relay` 같은 서술형 금지 | 네트워크 응답에서 흐름을 읽을 수 없게 |
+| `l3Depth.ts`와의 관계 | `l3Depth.ts`는 계속 `axes.ts`·`flowVariants.ts`를 import하지 않는다(ADR-0011 (A)). 변형의 축 D 값 검사는 **테스트에서만** 축 열거형을 쓴다 | `l3Depth.ts:4-11` |
+
+#### 82.2.2 타입 (구현 기준 — 필드 이름은 implementer가 다듬어도 되나 **의미 · 필수성은 고정**)
+
+```ts
+type SmsPurpose = "identity" | "transfer" | "link";          // 본인확인(인증번호) · 이체(계좌) · 링크
+type FlowVariant = {
+  variantId: string;                     // 불투명 ID (82..1)
+  scenarioId: string;
+  level: DifficultyLevel;                // 변형 1개 = 난이도 1개
+  authoring: "authored" | "current";     // "current" = 초안 §2.6.3의 "현행" 닫힌 예외(AC-096 (c))
+  stages: { stageId: string; summary: string }[];   // 모델용 단계 요약(서버 전용)
+  tactics: string[];                     // 이 변형의 weakenedTactics(시나리오 공통분 + 변형분)
+  exitBlock: string[];                   // 축 D 값(D0~D5) — AC-096 (b) 자동 검증 입력
+  sms: { purpose: SmsPurpose; smsId: string; required: boolean; notBeforeUserTurns: number }[]; // 0~3
+  legs: {                                // 인원 · 교대 순서(AC-101 (a)) — 1~3
+    callerLabel: string; personaPrompt?: string;     // 0번 leg는 시나리오 persona 재사용 가능
+    speakerGender: "male" | "female"; minUserTurns: number; maxUserTurns: number;
+  }[];
+  pressure: "low" | "mid" | "high"; signal: "overt" | "mixed" | "covert"; channels: string[];
+  demandStages: number;                  // 요구 단계 수(AC-074 L4)
+  decisionMoment?: string;               // 고급 3종 필수(AC-097 (e))
+  sources?: string[];                    // 사례 C·S 번호(AC-097 (c) · 초안 X4)
+  briefingLabels?: string[];             // 초급만 — ⊆ tactics 라벨(AC-096 (e) · D9)
+};
+```
+
+- 문자 본문 · 인증번호 · 링크는 **여전히 `IN_CALL_SMS` 카탈로그가 원천**이다(`smsId` 참조만). 카탈로그의 `afterScammerTurns`는 S5b에서 **발송 판정 입력이 아니게 된다**(82.) — 필드는 `notBeforeUserTurns`로 옮기고 지운다(G540).
+- `required` = 백스톱이 강제해도 되는 문자(82..3). `false`면 모델이 부르지 않는 한 건너뛴다(T4).
+- 프롬프트 조립: `resolveVariantPrompt(scenarioPrompt, variant, legIndex)`가 `ScenarioPromptDoc` 모양(`personaPrompt`·`weakenedTactics`·`guardrailPreamble`)을 돌려주고 **`buildSystemPrompt`의 시그니처는 그대로**다 — 새 옵션은 `relayHandoff?` 1개(82..2). `promptAssembly.ts` 편집량을 최소로 해 동시 편집 충돌을 줄인다(X7).
+
+#### 82.2.3 AC-096 (b) 자동 검증표 (테스트가 그대로 단언 — G530)
+
+| 난이도 | 문자 수 | 인원(legs) | 축 D | 요구 단계 |
+|---|---|---|---|---|
+| 초급 | 0~1 | 1 | `D0` 또는 `D1` 1개까지 | 1 |
+| 중급 | 1~2 | 1~2(교대 최대 1회) | ⊆ {D1, D2, D5} | ≥1 |
+| 고급 | 0~3 | 1~3 | **D3 또는 D4 ≥1** | ≥2 |
+
+- 서술 칸(`pressure`·`signal`·`channels`)은 값으로 적고 reviewer 대조표로 판정한다(AC-096 (b)).
+- `authoring:"current"` 행은 (c) 차이 검사에서 빠지되 **테스트 상수 `CURRENT_VARIANT_ROWS`에 명시**(조용한 누락 금지).
+
+#### 82.2.4 배정 · 회전(D6) — 인덱스 0
+
+| If | Then |
+|---|---|
+| 세션 생성(`createSession`) — 일반 사용자 | 허용 변형 = `variants.filter(scenarioId, level)`. 0개면 `failed-precondition`(조용히 임의 배정 금지 — AC-096 (f)). 1개면 그것. 2개 이상이면 **`users/{uid}/variantRotation/{scenarioId}__{level}` 문서 1건을 키로 읽어** `lastVariantId` 다음 순번을 고르고, 세션 문서 생성과 **같은 트랜잭션/배치**에서 갱신 |
+| 2인 챌린지 수신자(익명 · 이력 없음) | 회전 문서를 쓰지 않는다(익명 쓰기 최소 — §69). `hash(challengeId) mod n`으로 결정론적 배정 |
+| 고급 전용 3종 + 챌린지 | AC-097 (g) 기본값 — 챌린지 생성에서 거부(선택 목록에 없음) |
+| 회전 문서 조회 실패 | 첫 순번으로 배정하고 경고 로그 1줄(통화를 막지 않는다 — P-4). 연속 배정 0 보장은 정상 경로에서만 성립(OQ 아님 — 관측 가능한 강등) |
+
+- 왜 쿼리가 아니라 키 조회인가: `sessions where uid==&&scenarioId==&&difficultyLevel== orderBy createdAt` 은 **새 복합 인덱스**가 필요하다(X6). 기존 `uid+createdAt` 인덱스로 최근 N건을 읽어 메모리 필터하면 인덱스는 필요 없지만 창 밖의 직전 세션을 놓친다. 키 조회는 read 1 · write 1 · 인덱스 0 · 정확하다.
+- 규칙: `users/{uid}/variantRotation/{key}` — 명시 `allow read, write: if false`(기본 거부와 같지만 의도를 문서화). 클라가 쓰면 변형을 고를 수 있게 된다(AC-096 (e) "참가자는 고르지 않는다").
+- 폐기: 회전 문서는 PII가 아니다(변형 ID 1개). ADR-0003 즉시 폐기 대상 아님.
+
+#### 82.2.5 세션 문서 · 하류 연결 (AC-096 (e)(f))
+
+| 위치 | 필드 | 쓰는 곳 | 읽는 곳 |
+|---|---|---|---|
+| `sessions/{sid}` | `flowVariantId: string` | `createSession`(1회) | `createRealtimeCall` · `sendMessage` · `startRelayLeg` · `deliverInCallSms` · 리포트 |
+| `sessions/{sid}` | `relay?: { legIndex: number; legStartTurnIndex: number[] }` | `startRelayLeg` · `sendMessage`(폴백 교대) | 리플레이 화자 라벨 · 폴백 프롬프트 |
+| `reports/{rid}` | `flowVariantId` 스냅샷 | `generateReport` | 리플레이 · 되감기 · 실패 아카이브 |
+| `messages/{mid}` | `speakerLabel?: string`(교대 뒤 사기범 줄만 · 옵셔널 — UX 계약 C-8) | 서버가 append 시점의 `relay.legIndex`로 변형 leg의 `callerLabel`을 붙인다(`startRelayLeg` 델타 = 이전 leg · 이후 flush = 현재 leg · 폴백 `sendMessage` 동일). 클라가 보낸 라벨은 받지 않는다 | 자막 접두 · 리플레이 줄 표기(같은 값) · 경계는 `relay.legStartTurnIndex`와 이중 기록(대조 테스트 G547) |
+
+- **무소급**: `flowVariantId` 부재 = 과거 세션 → 기존 해석 그대로(AC-077 · AC-096 (f)).
+- **브리핑(D9 · AC-096 (e) · UX v1.37 계약 C-3 · D-108)**: 브리핑은 세션 생성 **전**에 `scenarioId`만으로 불린다(82. #11). ⇒ `getBeginnerBriefing`의 산출 규칙을 **그 시나리오의 초급 변형 전부의 `briefingLabels` 교집합**으로 바꾼다(요청 타입 무변경). 어느 변형이 배정돼도 *"브리핑 라벨 ⊆ 배정 변형 수법"* 이 성립한다. 교집합 0개 → `signals: []`(화면이 진입을 숨긴다 — OQ-U72). 초급 변형이 1개뿐이면 교집합 = 그 변형의 라벨이다. **G534**이 교집합 규칙과 역방향(교집합 밖 라벨 샘플 실패)을 고정한다. *(첫 판의 "초급 변형 시나리오당 1개 고정" 안은 C-3이 더 넓어 대체됐다.)*
+
+#### 82.2.6 고급 전용 3종 (AC-097)
+
+| 항목 | 설계 |
+|---|---|
+| 강제 지점 | `createSession`에서 **인증 · 소유 검사 직후, 어떤 쓰기 · LLM · 음성 호출보다 앞**에 `isAdvancedOnly(scenarioId) && rawLevel !== "advanced"` ⇒ `HttpsError("failed-precondition", …, { reason: "difficulty-not-allowed" })`(UX 계약 C-2 — 구분 가능한 오류 코드). ⭐ **판정은 정규화 *전* 원값으로 한다** — 난이도 미전달을 중급으로 바꾸는 `normalizeDifficultyLevel`(AC-064 폴백)을 먼저 타면 *"미전달 = 중급"* 이 되어 거부 사유가 흐려진다. 고급 전용에서는 **미전달도 거부**(C-2 *"중급 폴백 금지"*). 챌린지 생성 콜러블도 같은 술어로 거부 |
+| 표시값 | `PUBLIC_SCENARIOS[id].advancedOnly: true`(C-1 — 화면 목록 · UX-029 1장 표시용, 수법 아님) · send 모드 목록에서 고급 전용 0건(목록 필터 + 서버 거부 둘 다) · ③ 셀프 감금에 `preSessionBurdenNotice: true`(C-9). 기존 *"협박 · 납치류 고급 부담 경고"* 의 판별자는 이 패스에서 **확인하지 않았다** — 같은 플래그로 묶을지는 S5 착수 시 그 판별 코드를 열어 정한다(묶으면 그 시나리오들에도 플래그를 켠다) |
+| 세션 전 응답 | 목록 · 브리핑 · `createSession` 응답 어디에도 `flowVariantId`·변형 이름 · 흐름 0(C-4) — 세션 문서에만 |
+| 표 갱신(같은 커밋) | `axes.ts` `SCENARIO_AXES` 3행 · `l3Depth.ts` `L3_DEPTH_TABLE` 3행(① ② ③ 모두 `procedural` 후보 — 확정은 S5) · `scenarioVoice.ts` 성별 · `personaAuthority.ts` · `seed.ts` · `src/content/scenarios` · `axisCoverage.ts:48` `DECLARED_COVERAGE_GAPS` E4 행 **삭제**(깨지는 것이 정상 — PRD v1.24 소급 영향 ①) |
+| ① 카드 배송→릴레이→가로채기 | 확인 전화 가로채기 = `verifyIntercept.ts` 카탈로그 재사용(AC-071) · 보안 앱 = `mockScreens.ts` 모의 설치 재사용(AC-072) · 릴레이 = 82. |
+| ② 대면 편취 | 결정 순간 기본값 = *"인출 · 전달 약속에 동의"*(AC-097 (e)) · 문자 0~1 |
+| ③ 셀프 감금 | 고립 지시는 형식만(AC-102 (e)) · 새 표면 0(AC-097 (d)) |
+| 금지 패턴 | AC-102 (b)~(f) 목록을 테스트 상수로 — 신규 콘텐츠 전부 + 릴레이 leg persona 전부 대상 |
+
+### 82.3 문자 도달 조건 — AC-099 (D7)
+
+#### 82.3.1 경로별 "요청" 형태 (판정은 하나)
+
+| 경로 | 요청 | 판정 |
+|---|---|---|
+| 실시간(Gemini) | `send_prepared_sms({ purpose })` — `purpose` enum 필수 · `behavior: BLOCKING` 유지(G430) | 클라 → `deliverInCallSms({ sessionId, purpose, userTurns, scammerTranscriptTurns, trigger:"model_tool" })` → **`resolveSmsGate`** |
+| 텍스트 폴백 | 사기범 응답 끝 마커 `[[SMS:identity|transfer|link]]` — 서버가 텍스트를 쥐므로 제거 가능(ADR-0007이 마커를 기각한 이유는 *오디오 경로*였다). `[[SIGNAL:…]]`(`escalationSignal.ts`)와 같은 방식 · 사용자 입력 흉내는 `escapeSentinelLookalikes`(`promptAssembly.ts:731-733`)에 `SMS|TRANSFER` 추가 | `sendMessage`가 응답 저장 뒤 **같은 `resolveSmsGate`** |
+| 백스톱(두 경로) | 82..3 | **같은 `resolveSmsGate`** |
+| ElevenLabs | 도구 · 지시 주입 지점 없음(82. #9) — 오늘과 같다 | 82..4 · OQ-A131 |
+
+- `smsId`는 더 이상 클라가 고르지 않는다(`pickModelToolSmsId` 폐기). 서버가 `session.flowVariantId` → `variant.sms`에서 `purpose`로 찾는다. G12 재검증(시나리오 소속)은 이 조회가 대체한다.
+
+#### 82.3.2 `resolveSmsGate` (순수 함수 · 신규 `functions/src/inCallSms/smsGate.ts`) — ⛔ 이 순서 그대로
+
+| # | If | Then(status) |
+|---|---|---|
+| 1 | `purpose`가 변형 `sms`에 없다 | `not_allowed`(쓰기 0) |
+| 2 | 그 목적의 문자가 이미 도착 | `already_delivered`(쓰기 0) |
+| 3 | `userTurns < item.notBeforeUserTurns` 또는 `userTurns < FIRST_SMS_MIN_USER_TURNS`(=**2**, 판단값 — 오프닝 뒤 참가자가 두 번 말하기 전엔 문자 없음) | `too_early` |
+| 4 | 직전 문자 도착 이후 사용자 발화 `< MIN_USER_TURNS_BETWEEN_SMS`(=**2**, AC-099 (c)) | `too_soon` |
+| 5 | 그 외 | `allowed` → 문서 생성 |
+
+- *"본인확인을 요구했다 · 이체를 요구했다"* 같은 **의미 판단은 모델 몫**이다 — 서버는 대화 내용을 분류하지 않는다(D7 · AC-099 (b) — 추가 LLM 0회).
+- 직전 문자의 발화 수: 도착 문서에 `userTurnsAtArrival`를 새로 쓴다(AC-099 (h)). 판정 때 `inCallSms` 하위 컬렉션 전체(세션당 ≤3건)를 읽는다 — 조회 1회.
+- 거부 응답 문면: `too_early`·`too_soon` = 기존 `SMS_DECLINE_TOO_EARLY`(`inCallSms.ts:243-244`) 재사용 · `not_allowed` = 신규 1줄(*"그런 안내는 보낼 수 없다. 문자를 보냈다고 말하지 말고 하던 이야기를 이어가라."*) · `already_delivered` = A4 개정본(82.).
+- 기록: 도착은 문서 필드(`purpose`·`trigger`·`userTurnsAtArrival`·`anchorScammerTurn`), 거부는 구조화 로그 1줄(§59.11 관례 — Firestore 델타 0).
+- ⭐ **#300 유지**: `buildInCallSmsResponse`(`buildDoc.ts:106-120`)의 인증번호 대조 지시 부착과 `placed` 게이트는 그대로 쓴다 — 응답 조립 함수는 바꾸지 않고 **호출 전 판정만** 갈아 끼운다. 폴백의 `resolveOtpCheckInstruction` 호출(`roleplay/index.ts:277-284`)도 그대로다(입력 `deliveredThisTurn`만 마커 경로에서 채운다).
+
+#### 82.3.3 백스톱 — ⭐ **"강제 발송"을 "필수 목적만 강제 · 선택 목적은 건너뛰기"로** (T4 · AC-099 (e))
+
+S1에서 모델이 먼저 부른 경우가 0/8이다. 백스톱을 없애면 사실상 모든 세션이 문자 0통이 된다 ⇒ **존치**한다(ADR-0015의 "카운터가 천장"은 필수 목적에만 남는다).
+
+| If | Then |
+|---|---|
+| 아직 안 보낸 `required:true` 문자가 있고, 게이트 3·4가 열린 뒤 **사용자 발화 2회**(=`BACKSTOP_USER_TURNS`, 판단값) 동안 모델 호출이 없다 | **넛지 1회**: 맥락 주입(`turnComplete:false`) *"(필요하면 지금 {목적} 안내 문자를 보내도 된다 — 아직 그 단계가 아니면 무시하라.)"* — 서버 소유 문면(liveTools 응답으로 내려 보낸다, G101 관례) |
+| 넛지 뒤 사용자 발화 2회가 더 지나도 호출 없음 | 백스톱이 `resolveSmsGate`를 통과시켜 **발송**(`trigger:"backstop"`) → 안내는 82. T1 방식(맥락 주입) |
+| `required:false` 문자 | 백스톱은 **아무것도 하지 않는다**(건너뛰기) — 모델이 부를 때만 간다 |
+| 폴백 | 같은 규칙을 서버가 `sendMessage`에서 판정(사용자 발화 수는 서버가 `messages`로 센다) · 넛지 = 턴 지시 1줄 · 발송 시 안내는 같은 응답(P7 — AC-098 (b)가 허용) |
+| Mock 강등 턴 | 마커를 안 내므로 백스톱만 작동(필수 문자는 간다) |
+
+- `toolWindow.ts`의 `TOOL_WINDOW_MAX_BOUNDARIES`(사기범 경계 기준)·`TOOL_WINDOW_STALL_SEC` 90초는 **사용자 발화 기준으로 바뀐다** — 침묵 정지는 82..2 침묵 경로가 맡는다.
+- ⚠️ 대가: 선택 문자는 모델이 안 부르면 영영 안 간다 ⇒ AC-099 (d) *"대화에 따라 순서가 달라짐"* 의 관측이 S1 수준의 호출률이면 드물 수 있다 — **OQ-A134**(3.8 프로브 P5로 목적 인자 선언 후 선제 호출률 재측정).
+
+#### 82.3.4 계수 규칙 — T2 + N1 (AC-098 (f) · AC-099 (c))
+
+| 카운터 | 정의(클라 · 실시간) | 정의(폴백 · 서버) | 쓰는 곳 |
+|---|---|---|---|
+| `userTurns` | **비어 있지 않은** 사용자 전사 flush 수(음성 · 타이핑 공통 — `handleTranscriptTurn` `role==="user"`, `page.tsx:365-382`) | `messages` 중 `role==="user"` 수 | 게이트 3·4 · 백스톱 · 릴레이 leg 하한 |
+| `scammerTranscriptTurns` | 비어 있지 않은 사기범 전사 flush 수(끊긴 조각 flush 포함 — `GeminiVoiceSession.tsx:517-521`) | `messages` 중 `role==="scammer"` 수 | 앵커 |
+| (폐기) `scammerTurns` | 모든 `turnComplete` +1 | — | ⛔ 게이트 입력에서 제거 |
+
+- **N1 규칙**: 오디오 0 · 전사 0인 `turnComplete`(끼어들기 직후의 빈 마감 — S1 3/3)는 **어느 카운터도 올리지 않는다.** 지시로 생긴 발화는 82. 이후 존재하지 않아야 하지만(AC-098), 남더라도 `userTurns`에는 들어가지 않는다 — 게이트가 사용자 발화 기준이라 **지시 턴이 문자 간격을 줄이는 경로(P2)가 구조적으로 사라진다.**
+- **앵커 정합(G21 계보)**: 앵커의 의미는 그대로 *"도착 시점까지 `messages`에 있는 scammer 문서 수"*(`buildDoc.ts:50-53`).
+  - 실시간: `anchor = 1 + scammerTranscriptTurns`(1 = `createSession`의 오프닝 문서 — `buildDoc.ts:58-66`의 +1 근거 그대로). 정적 `afterScammerTurns + 1`(`:67-69`)을 **실제 관측값**으로 바꾼다 — 빈 턴을 세지 않으므로 전사 문서 수와 1:1이다.
+  - 폴백: 마커는 응답 저장 **뒤**에 판정하므로 `anchor = 이 응답 포함 scammer 문서 수`. `fallbackAnchorScammerTurn`(`-1`, `:79-81`)은 폐기.
+  - 리포트 `smsTimeline`·AC-082 사후 판정 입력은 `messages`와 앵커만 읽는다 — 계수 변경은 **`messages`를 바꾸지 않으므로** 판정 입력이 어긋나지 않는다(AC-098 (f)). 남는 오차: 클라 카운터는 주장값이다(presentation 층 — G12와 같은 위상). 서버는 범위만 검사(`0 ≤ scammerTranscriptTurns ≤ 200`).
+
+### 82.4 연속 발화 제거 — AC-098 (T1)
+
+#### 82.4.1 방식 판정 — ⭐ **A안(맥락 주입) 채택**
+
+| 안 | 내용 | S1 | 판정 |
+|---|---|---|---|
+| **A. 즉시 맥락 주입** | 문자 도착 즉시 `turnComplete:false`로 *"참고: 상대 휴대전화에 ○○ 문자가 도착했다. 상대가 다음에 말하면 그 대답 안에서 한 문장으로 언급하라. 지금 따로 말을 꺼내지 마라."* | 응답 유발 0/2 · 반영 2/2 · 연속 발화 0 | ✅ **채택** |
+| B. 사용자 발화까지 보류 후 주입 | 사용자 발화 시작(VAD) 때 주입 | 미측정 | 기각 — 주입이 모델 응답 생성 **시작 뒤**에 닿을 수 있다(사용자 발화 끝 → 첫 오디오 ~1초, §71.5 잔여 위험). A가 실측으로 성립하므로 늦출 이유가 없다 |
+| C. 현행(`turnComplete:true`) | — | 연속 14회 | ⛔ X5 |
+
+#### 82.4.2 지시 종류별 규칙 (⛔ 표에 없는 지시가 생기면 행 추가를 묻는다)
+
+| 지시 | 오늘 | 바꾼 뒤 | 근거 |
+|---|---|---|---|
+| 문자 도착 안내(`announceInstruction`) | `enqueueTurnInstruction(…, "sms")` = `turnComplete:true`(`page.tsx:695-696`) | 맥락 주입(A) | S1 §3.2 |
+| 확인 창구 권유(`verify` announce) | 같은 큐 `turnComplete:true`(`page.tsx:821-823`) | 맥락 주입(A) | AC-098 (b) 대상 |
+| 확인 창구 재연결 지시(`reconnectInstruction`) | 같은 큐(`page.tsx:1278`) | **화자 전환 첫 발화 규칙**(아래 릴레이와 같다) | 화자가 바뀐 직후 |
+| 릴레이 새 leg 첫 발화 | — | 새 연결 후 **사용자 발화를 기다린다**("여보세요?"). `RELAY_GREETING_WAIT_MS`=**3,000ms**(판단값) 침묵이면 leg 오프닝 트리거 1회 — 그 발화는 **침묵 범주**로 분류 | AC-098 (a)(c) · OQ-A132 |
+| 침묵 넛지(신규) | — | 맥락 주입 뒤 `SMS_MENTION_SILENCE_SEC`=**8초**(판단값) 동안 사용자 발화가 없고 모델이 유휴면 `turnComplete:true` 1회(*"상대가 말이 없다. 방금 보낸 문자를 한 문장으로 언급하고 기다려라."*). 주입 1건당 최대 1회 · 로그 `cause:"silence"` | S1 §6 침묵 경로 · AC-098 (c) 별도 범주 · OQ-A133 |
+| 페르소나 상태(`personaStateTurn`) | 이미 `turnComplete:false`(`GeminiVoiceSession.tsx:1058-1072`) | 무변경 | §25.3 |
+| 오프닝 · 타이핑 입력 | 큐 `turnComplete:true` | 무변경 | 오프닝은 AC-098 (a) 제외 · 타이핑은 사용자 발화 |
+| 반복 감지 힌트(A5, 신규) | — | 맥락 주입 | 82. |
+
+- 큐: G31(한 번에 하나)은 **맥락 주입 슬롯**으로 옮긴다 — 주입은 즉시 1건, 다음 건은 **다음 사용자 발화 flush 뒤**(한 응답에 언급 요구 2개가 겹치지 않게). `clientTurnQueue.ts`의 `turnComplete:true` 종류는 `opening | text | silence | relayGreeting`만 남는다(G491이 소스로 고정).
+- 도구 경로: 모델이 응답 도중 도구를 부르고 BLOCKING 결과를 받아 **같은 턴**에 언급하는 것은 연속 발화가 아니다(AC-098 (b) *"그 응답이 문자를 보낸 응답이어도 된다"*).
+
+#### 82.4.3 안내 문면 규칙 (T5 · AC-099 (g)) — `inCallSms.ts` announce 8개
+
+| 규칙 | 근거 |
+|---|---|
+| *"재촉"·"다급"* 0 · 문자를 보냈다는 사실 1문장 + 상대 반응 대기 | AC-099 (g) |
+| **인용 예시 대사 0**(`— 예: "…"` 꼴 삭제) | S1 §3.4 — 예시 문장 낭독 5/13 · 세션 간 같은 대사의 원천 |
+| 맥락 주입형 어미: *"상대가 다음에 말하면 그 대답 안에서 …"* · *"지금 따로 말을 꺼내지 마라"* | A안 의미 계약 |
+| 인증번호 항목 2개는 **#300 대조 지시가 뒤에 붙는다**(`buildDoc.ts:115-118`) — 앞 문면만 바꾼다 | X8 |
+
+#### 82.4.4 3.8 프로브 필요 항목 (S3 착수 전 · User 승인 키로 · S1 스크립트 `t1` 변형 확장)
+
+| P | 묻는 것 | 통과 기준 | S1 현황 |
+|---|---|---|---|
+| P1 | 유휴 시 맥락 주입 → 10초 내 자발 발화 없음(3.8 proactive audio 상시) | 0/n | ✅ 0/2 (n 확대 필요: ≥6) |
+| P2 | **모델 발화 도중** 주입 → `interrupted` 없음 · 재시작 없음 | 0/n | ⏳ 미측정 |
+| P3 | 다음 응답 반영률 · 이후 턴 재언급 횟수(A4: 1회까지) | 반영 ≥ n−1 · 재언급 ≤1 | 반영 2/2 · 재언급 미집계 |
+| P4 | 빈 `turnComplete` 무시 후 끼어들기 3회 → 카운터 정확 | 빈 턴 계수 0 | N1 3/3 관측(규칙 미적용) |
+| P5 | `purpose` 인자 선언 후 모델 선제 호출률 · enum 오기입 | 측정 보고 | 선제 0/8(인자 없음 상태) |
+| P6 | 릴레이: 새 토큰(인계 포함) 연결 시간 · "여보세요" 뒤 첫 오디오 · 첫 3발화 내 사건 이어 말하기 | 82. 목표 | ⏳ |
+
+### 82.5 (요약) 3경로 동작표 — AC-098 (e) · AC-099 (f) · AC-101 (e)
+
+| 동작 | 실시간(Gemini) | 텍스트 폴백 | ElevenLabs |
+|---|---|---|---|
+| 문자 요청 | 도구 `purpose` | 마커 `[[SMS:…]]` | ✗(오늘도 없음) |
+| 문자 판정 | `resolveSmsGate` | 같은 함수 | — |
+| 안내 | 맥락 주입 → 다음 응답 | 같은 응답(턴 지시) | — |
+| 계수 | 클라 `userTurns` | 서버 `messages` | — |
+| 릴레이 | 새 Live 연결 + 인계 | leg 프롬프트 교체 + 같은 인계 | ⛔ 실행 안 함(라우팅 — 82..4) |
+
+### 82.6 ⭐⭐ 릴레이 다른 목소리 재연결 — AC-101 (D3) · §22.2 B 재판정
+
+#### 82.6.1 재판정 — 기각 근거 2개를 코드로 다시 친다
+
+| 근거(§22.2 B · `:3143`) | 판별 질문 | 코드 실측 | 판정 |
+|---|---|---|---|
+| ① Live 대화 컨텍스트 소실 → 새 화자가 앞 요구를 "확인해 줄" 수 없다(§16.5) | 새 연결에 앞 대화를 서버가 넣을 수 있는가 | 새 토큰의 `systemInstruction`은 서버가 고정한다(`geminiProvider.ts:140-144`). 앞 대화는 그 시점 `messages`(마스킹본)에 있다 — 클라 델타를 같은 호출에서 먼저 append하면 된다(`submitTranscript.ts:93` 인덱스 규칙 그대로) | **해소(조건부)** — 정확한 어조 · 오래된 세부는 잃는다. 실제 전화 교대에서도 새 사람은 "넘겨받은 것"만 안다. 판정은 AC-101 (d) 전사 대조(첫 3발화)로 QA |
+| ② 컨텍스트를 넘기려면 **미마스킹 전사를 통화 중 서버로** 올려야 한다 → §19.6 (4) · G79 논거 붕괴 | 그 업로드가 새로운 데이터 흐름인가 · G79가 지키는 것은 무엇인가 | (a) **같은 원문 전사가 오늘 이미 같은 서버로 간다** — 통화 종료 때 `submitRealtimeTranscript`가 받아 `maskPII` 후에만 쓴다(`submitTranscript.ts:110-136`, 헤더 `:8-11`). §19.6 (4) 자신이 *"마스킹의 보호 대상은 저장 · 리포트에 남는 PII이고 그 경로는 `submitRealtimeTranscript`가 담당"* 이라고 적는다(`:2711`). 시점이 통화 중으로 당겨질 뿐 데이터 종류 · 처리(원문 미저장 · 서버 마스킹 강제 = ADR-0004)는 같다. (b) **G79는 화면 표시 규칙**이다 — *"참가자 턴을 자막 필에 그리면 마스킹 없이 화면에 남는다"*(`:2711` · `:2733`). 서버 업로드는 화면을 건드리지 않는다. (c) 모델 쪽: 실시간 경로의 모델은 **참가자 원음을 이미 듣는다** — 인계문은 마스킹 텍스트라 새 leg가 받는 PII는 이전 leg보다 **적다** | **전제 오류 — 기각 근거로 성립하지 않는다.** 단 X2 조건(서버 마스킹본으로만 인계 · 클라 요약 금지 · 인계문 클라 미반환)을 지킬 때만 |
+
+⇒ **결론: 조건부 가능** — Gemini · 폴백은 아래 설계로 가능, ElevenLabs는 불가(82..4). AC-101 (d)의 *"해소하지 못하면 S7 착수 금지"* 조건은 Gemini · 폴백에 대해 **해소**, ElevenLabs에 대해 **미해소 → 라우팅으로 회피**(User 수용 필요 — OQ-A131). DECISIONS 기록 요청 82.3.
+
+> ⚠️ §22.2의 다른 판정(A 세션 중 프롬프트 교체 불가 · C 세션 중 음색 전환 미확인 · D · E 불가)은 **무변경**이다. 이 절이 바꾸는 것은 B 한 행의 근거뿐이다. 그 절과 §16.5 원문은 고치지 않는다(사실 기록 보존 — 이 표가 정정이다).
+
+#### 82.6.2 서버 — 신규 콜러블 `startRelayLeg`
+
+| 단계 | 내용 |
+|---|---|
+| 요청 | `{ sessionId, toLegIndex, turns: TranscriptTurn[] /* 마지막 flush 이후 델타 */, answeredAtMs?, openingNotSpoken? }` |
+| 검증 | 인증 · 소유 · 익명 범위(`assertAnonymousChallengeScope`) · `status==="active"` · 변형에 leg 존재 · `toLegIndex === relay.legIndex + 1`(같은 값 재요청 = 멱등 재발급 · 토큰만 새로) · 이전 leg `userTurns ≥ minUserTurns` · 확인 창구 오퍼가 `announced` 후 미완료 상태면 거부(교대와 호 전환이 겹치지 않게) |
+| 트랜잭션 | 델타를 **`submitRealtimeTranscript`와 같은 코어 함수**(신규 `appendMaskedTranscriptTurns` — 기존 콜러블도 이것을 쓰게 추출)로 마스킹 append → `relay.legIndex = toLegIndex` · `relay.legStartTurnIndex.push(nextIndex)` |
+| 인계문 | `buildRelayHandoff({ variant, fromLeg, maskedMessages /* 방금 쓴 것 포함, 최근 12턴 · 1,500자 상한 */, delivered /* inCallSms 목적 목록 */, verifyState })` — ① 변형 데이터의 앞 leg 역할 · 단계 요약(저작값) ② 이미 보낸 문자 목적 ③ 최근 대화(참가자 턴은 `wrapUserInputAsData`로 데이터 표기) ④ *"참가자가 이미 답한 것을 처음부터 다시 묻지 마라 · 첫 마디는 앞 담당자에게 넘겨받았다고 밝혀라"*. **LLM 요약 호출 없음**(결정론 · 비용 0 · 지연 0 — 82. 대안 비교) |
+| 프롬프트 | `buildSystemPrompt(resolveVariantPrompt(…, toLegIndex), { …기존 옵션, relayHandoff })` — 블록 위치는 난이도 블록 **앞**, 가드레일 최후미 불변(§15.5) |
+| 음성 | `pickRelayVoiceName(scenarioId, sessionId, legIndex)` — **이전 leg들과 다른 음성 보장**(G545). 풀 확장 필요: 오늘 성별당 1개(82. #8) ⇒ 남 ≥3 · 여 ≥3. 성별 라벨은 추정(`geminiProvider.ts:38-44`) → OQ-A136 |
+| 발급 | 기존과 같은 `authTokens.create`(모델 · VAD · 전사 · v1alpha 동일) · leg별 도구 선언(다음 leg가 있으면 `transfer_call` 포함) |
+| 응답 | `{ geminiToken, geminiModel, legIndex, callerLabel, liveTools? }` — ⛔ 인계문 · 프롬프트 0(X2) |
+| 시크릿 | `GEMINI_KEY_SECRETS` 선언 목록에 등록(§41 계보 — 선언은 목록 상수, G550) |
+| 텍스트 폴백 | 토큰 없이 같은 트랜잭션만 수행하는 `mode:"text"` 분기 — 또는 `sendMessage`가 마커 `[[TRANSFER]]`로 같은 코어를 부른다 |
+
+#### 82.6.3 클라 — 교대 순서 (S7)
+
+| # | 실시간 | 텍스트 폴백 |
+|---|---|---|
+| 1 | 시점: 모델이 `transfer_call`(인자 없음 · BLOCKING) 호출 → 서버 하한 확인 → 결과 문면 *"지금 '연결해 드리겠습니다'처럼 한 문장 말하고 끝내라"* | 모델 응답 끝 `[[TRANSFER]]` → 서버 하한 확인 → 같은 응답이 마지막 말 |
+| 2 | 천장: leg `maxUserTurns` 도달 → 넛지 맥락 주입 1회 → 사용자 발화 2회 더 지나면 다음 사기범 `turnComplete`에서 **강제 교대**(교대 순서는 변형 사전 정의 — AC-101 (a), 문자와 달리 건너뛰지 않는다) | 서버가 같은 규칙으로 턴 지시 |
+| 3 | 그 턴의 `turnComplete` → `relayTransitionRef=true` → 기존 Live 세션 종료(`stopSignal`) · 전환 연출 시작(끊김 · 연결음 — 형태는 ux-design) | 같은 연출 컴포넌트 · 화자 라벨 전환 |
+| 4 | `startRelayLeg`(델타 포함) — 순차 호출(병렬로 당기면 마지막 문장이 새 leg 경계 뒤로 기록돼 라벨이 틀린다) | 서버가 응답 처리 중 이미 수행 |
+| 5 | `<GeminiVoiceSession key={legIndex} credentials={leg}>` 재마운트(세션 effect는 마운트 1회 — §19.6 (3) ①) | 다음 `sendMessage`부터 leg persona · 인계 · **경계 이후 이력만**(인계 내용을 실시간과 같게) |
+| 6 | 새 leg는 사용자 발화를 기다린다(82..2) | 같은 규칙(사용자 입력이 다음 턴) |
+| 7 | 실패(콜러블 오류 · 12초 연결 타임아웃 — `useRealtimeCall.ts:132-141`): 서버가 leg를 이미 올렸으면 **텍스트 폴백으로 강등**(AC-084 고지 · 새 leg persona로 계속), 못 올렸으면 1회 재시도 후 `mode:"text"`로 올리고 폴백. 둘 다 실패면 종료 고지. ⛔ 같은 목소리로 조용히 이어가기 · 침묵 종료 금지(AC-101 (i)) | — |
+| 8 | `handleEnded`(`useRealtimeCall.ts:262-274`)는 `relayTransitionRef` 동안만 무시 — 상시 종료(AC-006)는 연출 중에도 `stop()`이 즉시 통한다 | — |
+
+- 세션 시간(AC-007): 연출 시간도 통화 경과에 **포함**(실제 전화의 대기와 같다). 세션 · 타임라인 · 리포트는 하나(AC-101 (f)) — 경계는 `relay.legStartTurnIndex`. 이 경계는 §55 R-D의 *"화자 경계를 아무 층도 관측하지 않는다"* 를 **릴레이에 한해** 닫는다(확인 창구 전환은 무변경).
+- 도중 강등(실시간 → 폴백): 서버의 `relay.legIndex`가 정본이라 폴백이 그 leg에서 잇는다(AC-101 (e)).
+- 기존 확인 창구 모의 재연결(AC-071)은 **현행 유지**(AC-101 (h) 기본값) — 같은 소켓.
+- 클론 음성은 교대 화자에 쓰지 않는다(AC-101 (b) · G545).
+
+#### 82.6.4 ElevenLabs — **안전 조건 하 불가 → 라우팅으로 회피**
+
+| 요소 | 가능 여부 | 근거 |
+|---|---|---|
+| 다른 목소리 | 가능 — 새 서명 URL로 새 대화 + 클라 `overrides.tts.voiceId` | ElevenLabs 클라 개시 오버라이드(ADR-0006 A2) |
+| leg별 persona | leg별 에이전트가 있어야 함(프롬프트는 에이전트에 저장 · 클라 프롬프트 오버라이드 금지 — ADR-0004) | `elevenLabsProvider.ts:7` |
+| **인계문** | ⛔ **서버 측 통로 없음.** 서명 URL 발급 API는 `agent_id` 외 인자가 없고, 대화 문맥은 클라가 보내는 `dynamic_variables`/오버라이드로만 들어간다 ⇒ 인계문이 클라를 지나며 변조 가능 → 가드레일 앞 문자열을 사용자가 바꿀 수 있다(AC-065) · 수법 단계 요약이 클라에 노출된다(D-46) | 서명 URL 파라미터(위 근거 · 2026-07-24 확인 기록) |
+| 난이도 · 변형 자체 | ⛔ 오늘도 미적용(`difficultyApplied:false`) — 흐름 변형(AC-096)이 이 경로에서는 **원래 성립하지 않는다** | `elevenLabsProvider.ts:56-61` |
+
+⇒ **규칙(G546)**: 릴레이 변형이 배정된 세션의 `createRealtimeCall`은 프로바이더가 `RELAY_CAPABLE_PROVIDERS = ["gemini","none"]`(**허용목록** — G233 관례) 밖이면 Gemini(generic · 키 있음) 또는 텍스트 폴백으로 보낸다. 오늘 ElevenLabs 경로가 운영에서 켜져 있는지는 **미확인**(`ELEVENLABS_AGENT_IDS` 운영값을 이 환경에서 읽지 못함 · `.env.example:58`은 빈 값) — 릴레이 후보 시나리오는 전부 generic이다. AC-101 (e) *"3경로 동일"* 을 *"ElevenLabs 경로는 릴레이 변형을 실행하지 않는다"* 로 읽어도 되는지는 **User 결정(OQ-A131)**.
+
+#### 82.6.5 UX v1.37 계약 대응(C-1~C-10 · 커밋 `2312e77` — UX.md 변경 이력 v1.33→v1.34 (d)가 정본)
+
+| C | UX 요구 | 이 절의 대응 | 위치 |
+|---|---|---|---|
+| C-1 | 허용 난이도 메타 · send 목록 0건 | `advancedOnly` · 목록 필터 + 챌린지 생성 거부 | 82..6 |
+| C-2 | 고급 전용 비고급 · 미전달 거부 + 구분 코드 · 중급 폴백 금지 | `reason:"difficulty-not-allowed"` · 정규화 전 원값 판정 | 82..6 · G535 |
+| C-3 | 브리핑 = 초급 변형 교집합 | `getBeginnerBriefing` 규칙 변경 | 82..5 · G534 |
+| C-4 | 세션 전 응답에 변형 정보 0 | 세션 문서에만 불투명 ID | 82..1 · 82..6 · G532 |
+| C-5 | 문자 도착 = 서버 수락 시점 · 거부는 클라 이벤트 0 | 거부는 Firestore 쓰기 0(로그만) → 구독 이벤트 0 · 도착은 문서 생성 시각 | 82..2 |
+| C-6 | 교대 신호: 순번 · `speakerLabel` · `cut`→`hold`(최소 2초)→`resume` · 3경로 동일 | `startRelayLeg` 응답 `legIndex`·`callerLabel`(=speakerLabel) · 클라 단계 상태 · 최소 2초는 클라 상수 `RELAY_HOLD_MIN_MS=2000` · 최대는 아래 OQ-U70 판정 | 82..3 |
+| C-7 | 실패 → 강등 → 불가 시 종료 | 82..3 #7 그대로 | G548 |
+| C-8 | 교대 뒤 사기범 발화에 화자 표기 기록 | `messages.speakerLabel`(서버 부여) | 82..5 |
+| C-9 | 부담 고지 플래그 | `preSessionBurdenNotice` | 82..6 |
+| C-10 | 이벤트 5종 | 클라 구조화 로그(숫자 · 종류만 — G432 형식): `relay_handover_started`/`completed{latencyMs = cut→resume}`/`failed{reason}` · `advanced_only_scenario_selected` · `burden_notice_shown`. `completed.latencyMs`가 AC-101 (g) QA 실측 입력 | S5 · S7 |
+
+**OQ-U70 판정(architect 몫 — 릴레이 대기 수치 · 대기 중 입력 · 한도 · 강등)**:
+
+| 항목 | 판정 | 근거 |
+|---|---|---|
+| 최대 대기(`cut` → 새 연결 준비) | **15초**(UX 제안 채택 — `RELAY_HOLD_MAX_MS=15000`, 판단값) | 콜드 추정 6~10초(82..3) + 기존 연결 타임아웃 12초(`useRealtimeCall.ts:132-141`)를 덮는다. 15초를 넘으면 C-7 |
+| 최소 대기 | 2초(C-6) — 연결이 빨라도 채운다 | UX P-38 (1) |
+| 대기 중 사용자 음성 | **캡처 · 전사하지 않는다**(이전 소켓 종료 · 새 소켓 미연결 — 실제 대기음 중에도 상대에게 들리지 않는다) | 구조상 보낼 세션이 없다 |
+| 대기 중 타이핑 | 입력은 받되 보류 → `resume` 뒤 첫 사용자 턴으로 보낸다(사용자 발화이므로 AC-098 위반 아님) | `clientTurnQueue`의 `text` 종류 그대로 |
+| 세션 시간 한도 | 대기 시간도 통화 경과에 **포함** · 대기 중 한도 도달 → 연결음 정지 후 기존 한도 종료(UF-013 Failure (d)) | AC-007 · 82..3 |
+| `resume` 정의 | OQ-U73(planner) 결과를 따른다: 예외 인정 → 새 화자 첫 오디오(폴백은 첫 텍스트)와 동시 · 예외 불인정 → 새 연결 준비 순간 | OQ-A132 = OQ-U73과 같은 질문(번호 병기) |
+
+### 82.7 반복 방지 런타임 층 — AC-100 (A5 · A6)
+
+| 층 | 위치 | 계약 | 판정 |
+|---|---|---|---|
+| **A4 문면**(S4) | `SMS_DECLINE_ALREADY`(`inCallSms.ts:245-246`) · announce | *"이미 보낸 문자를 확인해 달라고 하거나"* 삭제 → *"새로 보냈다고 말하지 말고 하던 이야기를 이어가라. 이미 보낸 문자 언급은 통화 전체에서 한 번까지다."* | S1 §3.2 ⚠️ 관측 1회 근거 |
+| **A5 실시간 반복 힌트** | 클라 순수 모듈 신규 `src/lib/realtime/repeatHint.ts` + `page.tsx` 배선 | 사기범 전사 flush마다 직전 3개 사기범 발화와 문장 자카드(바이그램, **≥0.6** — S1 §2 규칙과 같은 정의) 비교 → 반복이면 **서버 소유 1줄**(`liveTools.repeatHintInstruction`)을 `turnComplete:false`로 주입. 조건: 직전 주입 뒤 사용자 발화 ≥1(G99 자기 구동 루프 방지) · 세션당 상한 3회. 사용자 텍스트를 인용하지 않는다 | **도입 가능 · 우선순위 낮음** — S1: 문장 반복 Live 0~9%, 체감 반복은 *같은 요구의 표현 바꾼 반복*이라 자카드가 못 잡는다(S1 §5-6) |
+| **A6 폴백 재생성** | `roleplay/index.ts` 응답 직후(`completeWithFallback` 결과) | 같은 규칙으로 반복이면 턴 지시 1줄 더해 **1회** 재생성. `withTimeout` 남은 예산 안에서만(§73 — 시간 상한을 늘리지 않는다) · 부족하면 원 응답 · Mock 응답 제외 · 로그 1줄 | **도입 가능 · 폴백 전용 완화로 표기** |
+
+- **G225(§43.6)와의 정합**: G225가 금지한 것은 ③ *요구 도달*의 **런타임 강제**이고, 그 근거는 *"주 경로에 개입 지점이 없다"* 였다. 그 뒤 §25.3 A5-α · §59 도구로 실시간에도 **맥락 주입 지점은 생겼다**. A5는 강제가 아니라 힌트이고 대상도 ③이 아니다 ⇒ **G225 위반 아님**. 단 §43.6 (1)의 경고는 그대로 적용한다 — A6는 *폴백에서만 도는 재생성*이므로 *"반복 안전망이 있다"* 로 보고하지 않는다(경로별로 측정 · 표기).
+- 두 구현(클라 TS · Functions TS)의 판정 일치는 **공유 픽스처**(같은 입력 배열 → 같은 판정)로 고정한다(G549). S1 스크립트(`scripts/live-turn-probe.mjs:452-472`)와 같은 정규화 · 임계값을 쓴다 — 측정과 개입이 같은 자를 쓴다.
+- AC-100 (d): 수치 기준값은 S1 before 뒤 planner가 갱신 고지로 적는다 — 이 절은 수치를 정하지 않는다.
+
+### 82.8 ⭐ 비용 · 지연 수치 — AC-101 (g)
+
+#### 82.8.1 연결 수
+
+| 항목 | before | after | 근거 |
+|---|---|---|---|
+| 세션당 Live 연결(토큰 발급) | **1**(프리페치가 90초 넘게 묵으면 2 — `useRealtimeCall.ts:83` · Strict Mode 이중 마운트는 같은 토큰 `uses:2`) | **1 + R**(R = 교대 수: 중급 교대 변형 1 · 고급 릴레이 1~2. AC-096 (b) 상 최대 2) | 확인 창구 재연결은 같은 소켓(§22) — 연결 수에 안 든다 |
+| 콜러블 호출 | `createRealtimeCall` 1 + `submitRealtimeTranscript` 1 | + `startRelayLeg` R | — |
+| Firestore | — | 교대당 read ≈ 세션 1 + messages ≤20 + inCallSms ≤3 + verify 1 · write = 전사(종료 때 쓰던 것을 당김 — 순증 0) + 세션 1 | 무료 일일 read 5만 대비 무시 가능(추정) |
+
+#### 82.8.2 비용 — 공식 가격(2026-10-16 갱신 페이지) · 가정 · 계산
+
+| 출처 값 | 무료 등급 | 유료 등급 | 출처 |
+|---|---|---|---|
+| `gemini-3.8-live` 입력 텍스트 / 입력 오디오 / 출력 오디오 | Free of charge | $0.75 / $3.00 ($0.005/분) / $12.00 ($0.018/분) per 1M | https://ai.google.dev/gemini-api/docs/pricing ("Last updated 2026-10-16 UTC") |
+| `gemini-3.1-flash-lite` 입력 / 출력 | Free | $0.25 / $1.50 per 1M | 같은 페이지 |
+| Live 세션 · 연결 · 토큰 발급 요금 | — | **페이지에 없음**(토큰 단위 과금만) | 같은 페이지 |
+| `system_instruction` · 도구 선언 | — | **매 턴** 표준 텍스트 입력 단가로 과금 · 3.8 Live는 컨텍스트 캐시 미지원 | Google 직원 포럼 답변 2026-10-08 — https://discuss.ai.google.dev/t/title-context-caching-or-cached-input-pricing-for-the-gemini-live-api-native-audio/186850 (⚠️ 공식 문서 아님) |
+| 이전 턴 오디오(누적 이력) 재과금 | — | 매 턴 오디오 입력 단가로 재과금된다는 직원 답변이 **다른 모델 스레드**에 있음 | https://discuss.ai.google.dev/t/does-gemini-live-native-audio-bill-cumulative-prompt-tokens-on-every-turn-cost-seems-to-scale-with-turn-count-not-call-duration/173248 — **3.8 확인 안 됨 → 두 모형(M1/M2)으로 계산** |
+
+**계산 가정**(저장소에 세션 평균 비용 근거 **없음** — grep `세션당 비용|1세션 비용` 0건 ⇒ 아래는 전부 **추정**):
+
+| 가정 | 값 | 확인 방법 |
+|---|---|---|
+| 통화 길이 · 모델 턴 | 6분 · 12턴(사용자 음성 2.5분 · 사기범 3.5분) | QA 실측(턴 수는 S1 Live 11턴과 비슷) |
+| 시스템 프롬프트 + 도구 S | **6,300토큰**(고급 조립 ~9,000자 × 0.67토큰/자 + 도구 ~300) — clone 2종 조립 길이 5,875~6,997자(`familyAccidentDeepvoice.prompt.ts:61-63`)보다 문자 · 확인 블록만큼 길다고 봄 | `countTokens`로 실제 조립 결과 측정 |
+| 오디오 토큰 | 입력 1,667/분 · 출력 1,500/분(분당 가격 ÷ 토큰 가격) | 가격표 환산 |
+| 인계문 H | **1,000토큰**(최근 12턴 ≤1,500자 + 단계 요약) | 구현 후 측정 |
+| 교대당 추가 턴 | 모델 2턴(넘기는 말 · 새 leg 첫 마디, 각 6초) + 사용자 "여보세요" 1초 | — |
+| M1 | 매 턴 S + 누적 오디오 재과금 | — |
+| M2 | 매 턴 S만 재과금(누적 오디오는 첫 1회만) | — |
+
+| 시나리오(유료 등급) | M1 세션 비용 | M1 증감 | M2 세션 비용 | M2 증감 |
+|---|---|---|---|---|
+| **before**(1 leg · 12턴) | **$0.287** | — | **$0.132** | — |
+| R=1(2 leg · 14턴) | $0.237 | **−17%** | $0.151 | **+14%** |
+| **R=2(3 leg · 16턴)** | $0.232 | **−19%** | $0.167 | **+27%** |
+| R=3(4 leg · 18턴 — AC-096 범위 밖, 참고) | $0.237 | −17% | $0.182 | +38% |
+| 인계문을 LLM(flash-lite)으로 만들 경우 교대당 | +$0.0012(입력 3,000 · 출력 300) | +0.4% 내외 | 같음 | +1% 내외 |
+
+- 계산 내역(before, M1): S 6,300×12턴×$0.75/1M = $0.0567 · 새 입력 오디오 2.5분×$0.005 = $0.0125 · 출력 오디오 3.5분×$0.018 = $0.063 · 누적 이력 9,417토큰×평균 5.5턴×$3/1M = $0.155 ⇒ $0.287. R=2: S/S+H 111,800토큰 = $0.0839 · 입력 $0.0127 · 출력 3.9분 $0.0702 · leg별 이력 합 21,840토큰 $0.0655 ⇒ $0.232.
+- ⭐ **왜 M1에서 줄어드는가**: 새 연결은 누적 오디오 이력(매 턴 재과금)을 1,000토큰 인계문으로 바꾼다. **M2라면 늘어난다**(턴 2개 · 인계문 재과금만 순증). 어느 모형인지는 **OQ-A137**(한 세션의 `usageMetadata` 턴별 합을 AI Studio 청구와 대조 — 포럼 개발자는 턴별 합이 청구와 3% 이내였다고 보고).
+- **무료 등급(현 운영 — §44 *"사용량이 많아지면 유료로"*)**: 금액 증가 **$0**. 대신 세션당 Live 세션 시작이 **1 → 1+R**로 늘어 3.8 무료 일일 한도(수치 미공개 — §71.1 #7)를 그만큼 빨리 쓴다(R=2면 릴레이 세션 1건이 연결 3건).
+- **ElevenLabs(참고 — 82..4로 실행 안 함)**: 통화 분당 **$0.08**(추가 분 · 모든 요금제) · LLM은 별도 과금(모델별) · 최소 과금 · 반올림 규칙은 페이지에 없음 — https://elevenlabs.io/pricing/agents (2026-10-18 열람). 6분 세션 $0.48 + LLM 기준, R=2의 순증은 초 단위 과금이면 연결 공백 2×3초 ≈ **+$0.008(+2%)**, 대화마다 분 단위 올림이면 최대 **+$0.16(+33%)** + leg마다 에이전트 프롬프트 재입력 LLM 비용(미확인).
+
+#### 82.8.3 지연 (이전 화자 `turnComplete` → 새 화자 첫 음성)
+
+| 구간 | 추정값 | 근거 |
+|---|---|---|
+| `startRelayLeg` 왕복(웜) | 0.8~1.5초 | **미측정**(추정) — 트랜잭션 + messages 읽기 + `authTokens.create`. §50.8.3 #1·#2도 미측정으로 남김 |
+| 콜드스타트 추가 | +2~5초 | `minInstances` 0(§44.4 — 무료 운영 제약) · 추정 |
+| `live.connect` → setupComplete | ~2초 | `useRealtimeCall.ts:130-131`("Node 실측상 ~2초" — 인용값) |
+| 재마운트(마이크 권한 이미 있음 · AudioContext) | 0.1~0.3초 | 추정 |
+| 새 화자 첫 오디오(트리거/사용자 발화 뒤) | 0.9~1.3초 | §71.2(951/878ms) · §71.13 #4(1,343/949ms) |
+| **합계(웜)** | **≈ 3.8~5.1초**(연출 시작 → 새 화자 첫 마디, 사용자 "여보세요" 대기 제외) | 위 합 |
+| **합계(콜드)** | **≈ 6~10초** | 위 합 |
+
+- **목표(판단값 — QA가 p50/p95 실측, AC-101 (g))**: 연출 시작 → 새 연결 준비 **p50 ≤ 4초 · p95 ≤ 8초** · "여보세요" 뒤 첫 음성 **p50 ≤ 1.5초**. 12초 연결 타임아웃은 기존값 유지(실패 경로 82..3 #7).
+- 단축 후보(채택 안 함 · 측정 뒤 판단): ① 넘기는 말 도중 `startRelayLeg` 선발급(−1~1.5초) — 마지막 문장 경계 문제로 2단계 콜러블이 필요 ② `minInstances:1`(§44 기각 사유 유지).
+
+### 82.9 게이트 (G530~G551)
+
+| G | 고정하는 것 | 테스트(신규 · 위치) | 단계 |
+|---|---|---|---|
+| **G530** | (시나리오 17종 × 난이도 3) 모두 변형 ≥1 · 82..3 범위표 · 역방향 ⓐ 초급 D3 샘플 실패 | `functions/src/scenarios/__tests__/flowVariants.test.ts` | S5 |
+| **G531** | AC-096 (c) — "현행" 아닌 시나리오의 난이도별 수법 목록 상이 + {문자 · 인원 · 요구 단계} 중 1개 이상 상이 · `CURRENT_VARIANT_ROWS` 명시 · 역방향 ⓑ | 같은 파일 | S5 |
+| **G532** | 변형 데이터 서버 전용 — `src/**`에서 import 0 · `publicMeta`·시드 문서에 필드 0 · `flowVariantId` 형식 `/^fv-[a-z0-9]{4,}$/` | 같은 파일 + 소스 스캔 | S5 |
+| **G533** | 회전 — 연속 같은 변형 0(역방향 ⓒ) · 회전 문서 키 조회 1건 · **`firestore.indexes.json` 인덱스 수 3 불변** · 0개 허용이면 throw | `functions/src/session/__tests__/variantAssignment.test.ts` | S5 |
+| **G534** | 초급 변형 시나리오당 정확히 1(트립와이어 — 실패 메시지에 처방) · 브리핑 라벨 ⊆ 변형 수법(역방향 ⓓ) | `beginnerBriefing` 테스트 | S5 |
+| **G535** | 고급 전용 3종 비고급 생성 거부가 **쓰기 · LLM · 음성 0회로**(주입 스텁 호출 수 0 단언) · 챌린지 생성 거부 · 역방향 AC-097 (i) ⓐⓑ | `session` 테스트 | S5 |
+| **G536** | 축 표 · L3 표 · 성별 표 · 권한 표 · `PUBLIC_SCENARIOS` 1:1(신규 3 포함) · E4 공백 행 삭제 · AC-102 금지 패턴 전 콘텐츠(릴레이 leg 포함) | 기존 게이트 확장 | S5 |
+| **G537** | `resolveSmsGate` 진리표 5행 · 세 호출부(실시간 · 폴백 마커 · 백스톱)가 같은 함수(소스 스캔) · 역방향 AC-099 (i) ⓐⓑ | `functions/src/inCallSms/__tests__/smsGate.test.ts` | S5b |
+| **G538** | `send_prepared_sms`에 `purpose` enum 필수 · BLOCKING 유지 — ⚠️ **G384 *"인자 없음"* 단언을 의도적으로 바꾼다**(테스트 변경 사유 주석) | `liveTools` 테스트 | S5b |
+| **G539** | 계수: 빈 `turnComplete` 미계수(N1) · 사용자 카운터 = 비어 있지 않은 사용자 flush · 앵커 = 1+사기범 전사 수(실시간) / 응답 포함 문서 수(폴백) · 역방향 ⓒ(지시 턴 계수 샘플 실패) | 클라 순수 모듈 테스트 + `buildDoc` 테스트 | S3(계수) · S5b(앵커) |
+| **G540** | `findDueInCallSms`·`afterScammerTurns`만으로 자동 발송하는 경로 0(소스 스캔) · `fallbackAnchorScammerTurn` 제거 | 소스 스캔 | S5b |
+| **G541** | announce 8개: *"재촉·다급"* 0 · 인용 예시(`예: "`) 0 · 인증번호 2개는 원문 뒤 대조 지시 유지(G476 공존) · 역방향 ⓓ | `inCallSms` 테스트 | S3 |
+| **G542** | 문자 · 확인 권유 안내가 `turnComplete:false`로만 · `turnComplete:true` 종류는 `opening/text/silence/relayGreeting`뿐(G431 소스 스캔 확장) · 역방향 AC-098 (g) | `clientTurnQueueWiring.test.ts` 확장 | S3 |
+| **G543** | 침묵 넛지: 8초 · 주입당 1회 · 사용자 발화 시 취소 · 로그 `cause:"silence"` | 클라 순수 모듈 | S3 |
+| **G544** | 인계문: 서버 마스킹본으로만(클라 원문 PII 샘플 → 인계문엔 마스킹형) · 참가자 턴 데이터 표기 · 응답에 인계문 0 · 가드레일 최후미 | `startRelayLeg` 테스트 | S7 |
+| **G545** | leg마다 음성 상이 · 클론 voiceId 미사용 · 역방향 AC-101 (j) ⓐ | `geminiProvider`/`relay` 테스트 | S7 |
+| **G546** | 릴레이 변형 × 프로바이더 허용목록 `["gemini","none"]` — 허용목록을 좁히면 판정이 뒤집히는 역검증(G234 관례) | `realtime` 테스트 | S7 |
+| **G547** | 경계 `relay.legStartTurnIndex`가 델타 append와 같은 트랜잭션 · 리플레이 라벨 해석 · 단일 리포트 · 역방향 ⓑ(인계 없이 시작) · ⓒ(경로별 교대 시점 어긋남) | 같은 파일 + 리포트 테스트 | S7 |
+| **G548** | 실패 경로: 같은 음성 조용히 계속 0 · 침묵 종료 0 · `handleEnded` 무시는 전환 중에만 | 클라 테스트 | S7 |
+| **G549** | A5(클라) · A6(Functions) 반복 판정이 공유 픽스처에서 일치 · A6는 시간 예산 안 · Mock 제외 | 양쪽 테스트 | S4(문면) 이후 별 커밋 |
+| **G550** | `startRelayLeg`가 시크릿 선언 목록에 있다(정적 스캔 `devtools/secretDeclarationScan.ts` 확장) | 기존 스캔 | S7 |
+| **G551** | AC-096 (d) — 초급 산출 프롬프트(전 시나리오)에 지속성 패턴(82.1.1) 0 · *"의심하면 물러선다"* 류 ≥1 · 역방향(패턴 1개 넣은 샘플 실패) | `promptAssembly`/`scenarios` 테스트 | S4b |
+
+### 82.10 OQ (OQ-A131~A139)
+
+| OQ | 내용 | 담당 | 기본값(확정 전) |
+|---|---|---|---|
+| **OQ-A131** | AC-101 (e)·AC-099 (f) *"3경로 동일"* 에서 ElevenLabs를 *"릴레이 변형을 실행하지 않는다(라우팅)"* 로 충족시켜도 되는가. 또 그 경로는 난이도 자체가 미적용이라 흐름 변형(AC-096)도 성립하지 않는다 — 클론 2종의 고급 변형(초안 §2.6.3 "딥보이스 + 다른 번호로 연락")은 **leg/변형별 ElevenLabs 에이전트**(설정 · 운영 재생성)로만 가능 | User | 라우팅(G546) · 클론 2종은 Gemini/폴백에서만 변형 적용 |
+| **OQ-A132** (= UX **OQ-U73**) | 릴레이 새 leg 첫 발화: (가) 사용자 "여보세요" 대기 + 3초 침묵 시 발화(AC-098 문면 그대로 충족) vs (나) AC-098 (a)에 *"leg 첫 발화도 오프닝처럼 1회 제외"* 추가(UX 권고 · 더 자연스러움 · P-38 기본 흐름). 구현 차이는 새 연결 뒤 leg 오프닝 트리거를 **즉시** 보내느냐 **3초 침묵 뒤** 보내느냐 상수 1개뿐 | planner | S7 착수 전 판정 필수(S7은 OQ-A131로도 묶여 있다) — 판정 전 구현 0 |
+| **OQ-A133** | 침묵 넛지 발화를 AC-098 (c) *"무응답 재촉"* 범주로 분류해도 되는가 | planner | 그렇게 분류 · 별도 집계 |
+| **OQ-A134** | 모델 선제 도구 호출 0/8(S1) — 목적 인자 선언 후 호출률(P5). 낮으면 선택 문자는 거의 안 가고 순서 다양화(AC-099 (d)) 관측이 어렵다 | QA → User | 필수/선택 구분(82..3) |
+| **OQ-A135** | 폴백 고급에서 계좌 문자 뒤에도 인증번호만 반복(n=1) — #300 `otpCheck` 매 턴 지시와의 상호작용 의심. 같은 조건 3회 이상 재측정 뒤 문면 조정 여부 | QA → architect | #300 그대로(X8) |
+| **OQ-A136** | 릴레이용 Gemini 음성 풀 확장(성별당 ≥3) — 성별 라벨은 추정 · 청감 확인 | User | 구현 시 후보 제시 |
+| **OQ-A137** | 3.8 Live 누적 이력 재과금 여부(M1/M2) — 비용 증감의 부호를 가른다 | User(AI Studio 청구 확인) | 두 값 병기 |
+| **OQ-A138** | N2 — 끊긴 조각 전사가 들린 소리보다 길다(추정). 리포트 · 리플레이에 참가자가 못 들은 문장이 남을 수 있다 | QA(앱 경로 확인) | 범위 밖 기록 |
+| **OQ-A139** | 교대 지연 목표(p50 ≤4초 · p95 ≤8초)는 판단값 — 실측이 넘으면 선발급(82..3 ①) 검토 | QA → architect | 판단값 |
+
+### 82.11 구현 단계 · 파일 소유 · 순서
+
+| 단계 | 범위 | 파일(예상) | 선행 조건 | 게이트 |
+|---|---|---|---|---|
+| **S3** | 연속 발화 제거: T1(맥락 주입) · 침묵 넛지 · 계수 규칙(N1 · 사용자 발화 기준) · announce 문면(T5) | `src/app/session/play/page.tsx` · `src/lib/realtime/GeminiVoiceSession.tsx` · `clientTurnQueue.ts` · `toolWindow.ts` · 신규 순수 모듈 · `functions/src/scenarios/inCallSms.ts`(announce 문면만) | ⛔ **ux-real-phone(무음 PR) 병합 뒤** · P1~P4 프로브 | G539(계수) · G541 · G542 · G543 |
+| **S4** | 반복 문면만: **A1**(`promptAssembly.ts` 본인확인 재요구 문구) · **A2/D4**(`*.prompt.ts` 5파일 *"밀어붙"* → 난이도 블록) · **A3**(*"같은 요구를 그대로"* → *"다른 근거로 한 번만"*) · **A4**(`SMS_DECLINE_ALREADY`) | `promptAssembly.ts`(⛔ A1 · A2의 난이도 블록 줄만) · `functions/src/scenarios/*.prompt.ts` · `inCallSms.ts:245-246` | ⛔ **현재 `promptAssembly.ts` 편집 세션 병합 뒤** · 그 세션 범위와 겹치는 줄 0 | AC-100 (a)(b) 문면 테스트(planner 금지 목록 상수) |
+| **S4b** | **지속성 문면 잔여 정리**(82.1.1) — S4가 다루지 않는 `*.prompt.ts` 4파일 머리말 · 본문 + `weakenedTactics`의 *"물러서지 않고"* 5항목 | `taxRefundScam` · `grandchildImpersonation` · `courierCustomsScam` · `loanScam` `.prompt.ts`(머리말 · 본문) · `grandchildImpersonation`·`reputationBlackmailScam`·`kidnappingThreat`·`messengerFriendLoanKakao`·`loanScam` `.prompt.ts`(수법 항목 어구) | S4 병합 뒤 · 별 커밋 | **G551**(AC-096 (d) 초급 산출 프롬프트 지속성 패턴 0) |
+| S4c | A5 · A6 런타임 | `src/lib/realtime/repeatHint.ts` · `roleplay/index.ts` | S3 · S4 뒤 · AC-100 (e) 선택 — User가 생략 가능 | G549 |
+| **S5** | 흐름 변형 데이터 · 배정 · 회전 · 고급 3종 · 브리핑 · 표 갱신 | 신규 `scenarios/flowVariants.ts` · `session/index.ts` · `challenge/*` · `scenarios/*`(축 · L3 · 성별 · 권한 · 시드 · `publicMeta`) · `src/content/scenarios` · `firestore.rules`(회전 문서 명시 거부) · `beginnerBriefing.ts` · `roleplay`(변형 프롬프트 해석) | S3 · S4 뒤 | G530~G536 |
+| **S5b** | 서버 문자 게이트: `resolveSmsGate` · `purpose` 인자 · 폴백 마커 · 백스톱(필수/선택) · 앵커 · `findDueInCallSms` 폐기 | `inCallSms/smsGate.ts` · `inCallSms/index.ts` · `buildDoc.ts`(앵커 함수만 — 응답 조립 무변경) · `liveTools.ts` · `roleplay/index.ts` · `GeminiVoiceSession.tsx`(도구 라우팅) · `toolWindow.ts` · `promptAssembly.ts`(마커 이스케이프 1줄) | S5(변형 `sms` 필요) · P5 | G537 · G538 · G539(앵커) · G540 |
+| **S7** | 릴레이 재연결 | 신규 `realtime/startRelayLeg.ts` · `realtime/relayHandoff.ts` · `appendMaskedTranscriptTurns` 추출 · `geminiProvider.ts`(음성 풀 · leg 발급) · `realtime/index.ts`(허용목록) · `page.tsx` · `useRealtimeCall.ts` · `roleplay/index.ts`(폴백 교대) · `docs/API.md`·`Database.md` | ⛔ **OQ-A131 User 결정** · S5 · P6 프로브 | G544~G548 · G550 |
+
+#### 82.11.1 S4 잔여 지속성 문면 — ⭐ **S4b로 분리한다(S5로 미루지 않는다)**
+
+오케스트레이터 인계: S4(구현 중)의 D4 범위는 PRD v1.24 소급 영향 ②가 grep으로 고른 *"밀어붙"* 5파일이다. 이 패스의 grep(`물러서지 않|계속 압박|밀어붙`, `functions/src/scenarios/*.prompt.ts`)으로 범위 밖 잔여를 셌다:
+
+| 종류 | 파일:줄 | S4 범위 | 판정 |
+|---|---|---|---|
+| `[말투/톤]` 머리말 *"압박이 한 번에 안 먹히면 물러서지 않고 강도를 높인다"* | `taxRefundScam:29` · `grandchildImpersonation:73` · `courierCustomsScam:27` · `loanScam:28` | ✗ | **S4b** — 지속성 지시 그 자체. S4와 같은 방식(난이도 압박 축으로 이관) |
+| 같은 머리말 | `institutionalImpersonation:34` · `familyAccidentDeepvoice:83` · `cardCompanyImpersonation:33` | ✓(S4 5파일) | S4가 처리해야 함 — 머리말 줄까지 포함하는지 S4 리뷰에서 확인 |
+| 본문 *"계속 압박"* | `courierCustomsScam:30` | ✗ | **S4b** |
+| 수법 항목 *"물러서지 않고 … 조건을 낮춰 재요구"* | `grandchildImpersonation:91` · `reputationBlackmailScam:40` · `kidnappingThreat:56` · `messengerFriendLoanKakao:46` · `loanScam:51` | ✗ | **S4b — 어구만**: 수법(조건 낮춰 재요구)은 남기고 *"물러서지 않고"* 를 뺀다. 초급에서 그 수법 자체를 뺄지는 S5 변형 `tactics`가 정한다 |
+
+- **왜 분리인가**: AC-096 (d) *"초급 산출 프롬프트에 지속성 지시 0건"* 은 흐름 변형과 무관하게 **오늘의 시나리오 프롬프트로 판정 가능**하다. S5(변형)까지 미루면 그 사이 초급이 계속 지속성 지시를 받는다. 반대로 S4에 합치면 이미 진행 중인 커밋 범위를 넓힌다(X7).
+- **판정 패턴(테스트 상수 — G551)**: `/물러서지 않/` · `/계속\s*(밀어붙|압박)/` · `/강도를 높인다/` 를 **초급 산출 프롬프트(전 시나리오)** 에서 0건. 중급 · 고급은 난이도 블록이 지속성을 준다(AC-096 (d) 중급 *"한 번 더"* · 고급 *"서로 다른 근거로"*).
+- ⚠️ `familyAccidentDeepvoice` · `grandchildImpersonation`은 ElevenLabs 에이전트에 저장된 프롬프트가 따로 있다 — 문면을 바꾸면 **에이전트 재생성 운영 조치**가 필요하다(OQ-A103과 같은 대기열 · 각 파일 머리 주석 대조값 갱신).
+- S4가 머리말 줄을 빼먹으면(위 표 2행) G500이 그 3파일에서도 실패한다 — 테스트가 잔여를 잡는다.
+
+- 배포: 화면과 서버가 함께 바뀌는 S3 · S5b · S7은 **Hosting → Functions**(CLAUDE.md 표 · G434). S5는 Firestore 규칙 배포 포함 · 인덱스 배포 없음(X6).
+- 테스트 수 before/after는 각 단계 착수 시 재측정(인용값 금지 — AC-096 (h)).
+
+### 82.12 남는 위험
+
+| # | 위험 | 완화 |
+|---|---|---|
+| 1 | 맥락 주입이 모델 발화 **도중**에 닿을 때의 동작 미측정 | P2 프로브 · 실패 시 주입을 다음 `turnComplete` 직후로 미룬다(모델 유휴 시점) |
+| 2 | 선택 문자가 거의 안 간다(OQ-A134) | 필수/선택 표기 · P5 측정 |
+| 3 | 클라 카운터는 주장값 | 범위 검사 · presentation 층(안전 판정 비게이팅 — G12 위상) |
+| 4 | 인계문의 마스킹 누락(정규식 마스킹의 한계는 기존 저장 경로와 같다) | 새 위험 아님 — 같은 `maskPII`. G544 역검증 |
+| 5 | 릴레이 콜드스타트 지연 6~10초(추정) | 연출로 가림 · 실측 뒤 OQ-A139 |
+| 6 | 무료 한도를 릴레이가 1+R배로 소비 | 사용량 관측 · 유료 전환 시 82..2 표 |
+
+### 82.13 하류 변경 요청 (⛔ 이 패스는 수정하지 않았다)
+
+| 문서 | 요청 | 담당 |
+|---|---|---|
+| `docs/PRD.md` | ① v1.24(원래 v1.21로 작성된 문면)의 *"architect §77"* 인용 전부 → **§82**(PRD `:15` · `:1113` · AC-096 (a) · AC-098 (a)(f) · AC-101 (d)(g) 등) ② OQ-A131(ElevenLabs 라우팅으로 AC-101 (e) 충족 여부) · OQ-A132 · OQ-A133 결정 반영 ③ Assumptions의 T1 추정 행(`:1046`)에 S1 결과(0/2 · 2/2) 시점 부착 ④ AC-099 (b) *"발송은 도구 호출이 있을 때만"* 과 (e) 백스톱의 관계를 *"필수 목적은 백스톱이 게이트를 지켜 보낼 수 있다"* 로 명시(S1 0/8 근거) | planner |
+| `docs/UX.md` | 릴레이 전환 연출(끊김 · 연결음 · 새 화자 라벨 · 연출 중 종료 버튼 · 실패 고지) · 고급 전용 표시 · 침묵 넛지는 화면 변화 없음 · 문자 도착 배너는 즉시(안내 발화만 늦다) | ux-design |
+| `docs/Tasks.md` | T191 S3~S7 행에 82.1 선행 조건 · 게이트 번호 · S4b(선택) 추가 · S7 착수 조건에 OQ-A131 | planner |
+| `docs/DECISIONS.md` | 신규 행(다음 미사용 번호 — 편집 시점 최대 #155 ⇒ **#156** 후보, 병합 순서로 확정): *"§22.2 B 재판정 — 근거 ① 해소(서버 인계 블록) · 근거 ② 전제 오류(같은 원문이 종료 시 같은 경로로 올라감 · G79는 화면 규칙). Gemini · 폴백 릴레이 조건부 가능 · ElevenLabs 불가(라우팅). ADR-0020"* · 그리고 #149 비용 영향 칸에 82. 수치 참조 | architect(다음 패스) — 이번 지시가 DECISIONS 편집을 금지했다 |
+| `docs/API.md` · `docs/Database.md` | `startRelayLeg` · `deliverInCallSms` 요청 변경(`purpose`·`userTurns`·`scammerTranscriptTurns`) · 세션 `flowVariantId`·`relay` · `inCallSms` 새 필드 · 회전 문서 | S5/S5b/S7 구현 패스 |
+| `docs/Architecture.md` 헤더 `:5` | 버전 갭(UpdateRequests #45 open) — 이번 패스 범위 밖 | architect |
+
+> **번호**: §82 · G530~G551 · OQ-A131~A139 · ADR-0020 — 이 트리 최대 §77 · G478 · OQ-A107 · ADR-0019 다음. ⛔ 예약 아님 — 병합 순서로 확정.

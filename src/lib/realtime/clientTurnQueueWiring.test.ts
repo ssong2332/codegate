@@ -19,19 +19,19 @@ test("[§71.5 G431] turnComplete: true 전송은 sendClientTurn 한 곳뿐이다
   assert.ok(sendFn.includes("sendClientContent({ turns: turn.text, turnComplete: true })"));
 });
 
-// ⚠️ §78.4(G491 · S3) — 이 테스트는 종전에 `kind: "instruction"`(문자 · 확인 안내를 `turnComplete:true` 큐 턴으로)을
-// 단언했다. §78.0 X5가 그 형태를 금지하므로 **의도적으로** 바꾼다: 큐 턴으로 남는 지시는 화자 전환 첫 발화
+// ⚠️ §82.4(G542 · S3) — 이 테스트는 종전에 `kind: "instruction"`(문자 · 확인 안내를 `turnComplete:true` 큐 턴으로)을
+// 단언했다. §82.0 X5가 그 형태를 금지하므로 **의도적으로** 바꾼다: 큐 턴으로 남는 지시는 화자 전환 첫 발화
 // (`relayGreeting`)뿐이다. "세션에 직접 보내지 않고 큐에 넣는다"는 단언 자체는 그대로 유지한다.
 test("[§71.5 G431] 타이핑 · 화자 전환 지시 effect는 세션에 직접 보내지 않고 큐에 넣는다", () => {
   assert.ok(code.includes('requestClientTurnRef.current?.({ kind: "text", text: textMessage.text })'));
   assert.ok(code.includes('requestClientTurnRef.current?.({ kind: "relayGreeting", text: instructionTurn.text })'));
 });
 
-// ── §78.4.2 G491 — 문자 · 확인 권유 안내는 `turnComplete:false`로만 · `turnComplete:true` 종류는 넷뿐 ─────────
+// ── §82.4.2 G542 — 문자 · 확인 권유 안내는 `turnComplete:false`로만 · `turnComplete:true` 종류는 넷뿐 ─────────
 const ALLOWED_TC_TRUE_KINDS = ["opening", "text", "silence", "relayGreeting"];
 
 /**
- * G491 소스 위반 목록(빈 배열 = 통과). 실제 소스와 **테스트 안에서만** 오염시킨 사본에 같은 함수를 돌려
+ * G542 소스 위반 목록(빈 배열 = 통과). 실제 소스와 **테스트 안에서만** 오염시킨 사본에 같은 함수를 돌려
  * 역방향(AC-098 (g))을 같은 실행 출력에 나란히 보인다.
  */
 function g491Violations(sessionCode: string, queueSource: string): string[] {
@@ -69,11 +69,11 @@ function g491Violations(sessionCode: string, queueSource: string): string[] {
 
 const queueSource = readFileSync("src/lib/realtime/clientTurnQueue.ts", "utf8").replace(/\r\n/g, "\n");
 
-test("[§78.4 G491] 문자 · 확인 권유 안내는 turnComplete:false로만 · turnComplete:true 종류는 opening/text/silence/relayGreeting뿐", () => {
+test("[§82.4 G542] 문자 · 확인 권유 안내는 turnComplete:false로만 · turnComplete:true 종류는 opening/text/silence/relayGreeting뿐", () => {
   assert.deepEqual(g491Violations(code, queueSource), []);
 });
 
-test("[§78.4 G491 · AC-098 (g) 역방향] 옛 방식(안내를 instruction 큐 턴으로)으로 오염시킨 사본은 같은 검사에서 실패한다", () => {
+test("[§82.4 G542 · AC-098 (g) 역방향] 옛 방식(안내를 instruction 큐 턴으로)으로 오염시킨 사본은 같은 검사에서 실패한다", () => {
   const contaminatedSession = code
     .replace(
       "sendClientContent({ turns: text, turnComplete: false })",
@@ -89,7 +89,7 @@ test("[§78.4 G491 · AC-098 (g) 역방향] 옛 방식(안내를 instruction 큐
   );
   const normal = g491Violations(code, queueSource);
   const bad = g491Violations(contaminatedSession, contaminatedQueue);
-  console.log(`[G491 역방향] 정상 위반 ${normal.length}건 · 오염 위반 ${bad.length}건: ${bad.join(" / ")}`);
+  console.log(`[G542 역방향] 정상 위반 ${normal.length}건 · 오염 위반 ${bad.length}건: ${bad.join(" / ")}`);
   assert.equal(normal.length, 0);
   assert.ok(bad.includes("허용 밖 종류: instruction"));
   assert.ok(bad.includes("허용 밖 ClientTurn 리터럴: instruction"));
@@ -98,13 +98,13 @@ test("[§78.4 G491 · AC-098 (g) 역방향] 옛 방식(안내를 instruction 큐
   assert.ok(bad.some((v) => v.startsWith("turnComplete: true ")));
 });
 
-test("[§78.4 T1] 맥락 주입은 응답 대기 큐(dispatchClientTurn)를 거치지 않는다", () => {
+test("[§82.4 T1] 맥락 주입은 응답 대기 큐(dispatchClientTurn)를 거치지 않는다", () => {
   const inject = code.slice(code.indexOf("const injectContext = "), code.indexOf("const injectContext = ") + 900);
   assert.equal(inject.includes("dispatchClientTurn("), false, "주입이 큐를 점유하면 오지 않을 응답을 기다린다");
   assert.equal(inject.includes("requestClientTurnRef"), false);
 });
 
-test("[§78.4.2 G492 배선] 침묵 넛지는 silence 큐 턴으로만 나가고 · 사용자 발화(음성 전사 · 타이핑)가 취소하며 · cause 로그를 남긴다", () => {
+test("[§82.4.2 G543 배선] 침묵 넛지는 silence 큐 턴으로만 나가고 · 사용자 발화(음성 전사 · 타이핑)가 취소하며 · cause 로그를 남긴다", () => {
   assert.ok(code.includes('dispatchClientTurn({ type: "request", turn: { kind: "silence", text: SILENCE_NUDGE_TEXT }, nowMs })'));
   assert.ok(code.includes("console.info(LIVE_TURN_LOG_PREFIX, formatSilenceNudgeLog("));
   assert.ok(code.includes("if (sc.inputTranscription.text.trim()) noteUserSpeechForNudge();"));
@@ -131,7 +131,7 @@ test("[리뷰 M3 배선] 침묵 넛지 점검은 로컬 입력 레벨로 보류�
   assert.ok(code.includes("if (localSpeechStarted(userSpeechDebounceState.speaking, nextState.speaking)) noteUserSpeechForNudge();"));
 });
 
-test("[§78.3.4 G488 배선] 빈 turnComplete(N1)는 경계 콜백을 부르지 않고 · 도구 경로 사본도 전사 flush에서만 오른다", () => {
+test("[§82.3.4 G539 배선] 빈 turnComplete(N1)는 경계 콜백을 부르지 않고 · 도구 경로 사본도 전사 flush에서만 오른다", () => {
   assert.ok(code.includes("const emptyTurn = isEmptyTurnComplete({ audioSinceBoundary, scammerTextSinceBoundary });"));
   assert.ok(code.includes("if (!emptyTurn) handlersRef.current.onScammerTurnComplete?.();"));
   assert.equal(

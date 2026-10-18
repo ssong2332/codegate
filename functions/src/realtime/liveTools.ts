@@ -18,7 +18,7 @@ import { hasVerifyIntercept, VERIFY_DECLINE_ALREADY } from "../scenarios/verifyI
 
 /**
  * §59.5 T1 — 클라가 하드코딩하지 않도록 이름은 `createRealtimeCall` 응답으로도 내려간다(G385).
- * ⭐ T191(문자 도달 조건 · G487) — 인자 없음(G384)을 **의도적으로 바꿨다**: `purpose` enum 필수.
+ * ⭐ T191(문자 도달 조건 · G538) — 인자 없음(G384)을 **의도적으로 바꿨다**: `purpose` enum 필수.
  */
 export const LIVE_TOOL_SEND_PREPARED_SMS = "send_prepared_sms";
 /**
@@ -70,7 +70,7 @@ export function declaresOfferVerificationDesk(
 const NO_ARGS_PARAMETERS = { type: Type.OBJECT, properties: {} };
 
 /**
- * ⭐ T191(문자 도달 조건 · PRD AC-099 (b) · G487) — `send_prepared_sms`의 유일한 인자 `purpose`(enum 필수).
+ * ⭐ T191(문자 도달 조건 · PRD AC-099 (b) · G538) — `send_prepared_sms`의 유일한 인자 `purpose`(enum 필수).
  * 모델이 대화 단계를 보고 무엇을 보낼지 고르고, 서버가 세션 흐름 변형의 선언 · 간격으로 재검증한다
  * (`inCallSms/smsGate.ts` — 선언 밖 목적은 `not_allowed`). enum 값은 서버 상수 `SMS_PURPOSES`가 원천이다.
  */

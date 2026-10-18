@@ -75,9 +75,9 @@ test("resolveToolCallKind — 도구 1개만 선언된 세션(sendPreparedSms만
   assert.equal(resolveToolCallKind("offer_verification_desk", smsOnly), "unsupported");
 });
 
-// ⭐ T191(문자 도달 조건 · G487) — 예전 `pickModelToolSmsId`(화면이 카탈로그 순서로 smsId를 고름) 테스트 4건은 함수
+// ⭐ T191(문자 도달 조건 · G538) — 예전 `pickModelToolSmsId`(화면이 카탈로그 순서로 smsId를 고름) 테스트 4건은 함수
 // 폐기와 함께 지웠다. 화면은 모델이 고른 `purpose` 원값을 꺼내 넘기기만 하고 검증은 서버가 한다.
-test("[G487] readSmsPurposeArg — args.purpose 문자열을 그대로 꺼낸다(enum 검증은 서버 몫이라 enum 밖 값도 그대로)", () => {
+test("[G538] readSmsPurposeArg — args.purpose 문자열을 그대로 꺼낸다(enum 검증은 서버 몫이라 enum 밖 값도 그대로)", () => {
   assert.equal(readSmsPurposeArg({ purpose: "transfer" }), "transfer");
   assert.equal(readSmsPurposeArg({ purpose: "anything" }), "anything");
 });

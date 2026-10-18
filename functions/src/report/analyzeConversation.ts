@@ -198,7 +198,7 @@ export const COMPLIANCE_PATTERN = new RegExp(
   `${BASE_COMPLIANCE_PATTERN.source}|^(?![\\s\\S]*(?:${REFUSAL_IN_ANSWER.source}))[\\s\\S]*?(?:${CONTEXT_FREE_COMPLIANCE})`,
 );
 
-// ⭐ T191 J-2(2026-10-19 · DECISIONS #143 · PRD AC-097 갱신 고지 ③) — 대면 편취(E4)의 속은 시점 =
+// ⭐ T191 J-2(2026-10-19 · DECISIONS #161 · PRD AC-097 갱신 고지 ③) — 대면 편취(E4)의 속은 시점 =
 // **"인출 · 전달 약속에 동의한 순간"**. 위 `COMPLIANCE_PATTERN`은 "인출하면 돼요"형과 범용 "알겠어"류만
 // 잡아 "수표로 찾아 둘게요" · "인출해서 맡길게요" · "직원분께 드릴게요"를 놓쳤다(실측 before: 동의 22개 중
 // 3개). 셀프 감금(E5)의 "코인으로 바꿔 둘게요" · "옮길게요"도 같다(6개 중 1개).
@@ -215,7 +215,7 @@ export const COMPLIANCE_PATTERN = new RegExp(
 // |  | (`REFUSAL_IN_ANSWER`도 그대로 적용) |
 // | 저항 우선 | 무변경 — `RESISTANCE_PATTERN`이 맞으면 이 갈래와 관계없이 속지 않음이다 |
 //
-// ⛔ 주소 · 장소 발화는 판정 조건이 아니다(DECISIONS #143 — PII · AC-024). 어휘 목록에 장소 명사를 넣지 않는다.
+// ⛔ 주소 · 장소 발화는 판정 조건이 아니다(DECISIONS #161 — PII · AC-024). 어휘 목록에 장소 명사를 넣지 않는다.
 // ⛔ `COMPLIANCE_PATTERN`·`RESISTANCE_PATTERN`·`REFUSAL_IN_ANSWER`는 **무변경**이다 — 되감기 규칙 폴백
 // (`rewind/judge.ts`)이 문맥 없이 답변만으로 같은 패턴을 쓰므로, 이 갈래를 패턴에 섞으면 사기범 요구가 없는
 // 되감기 질문에서도 "드릴게요"가 위험으로 잡힌다. ⚠️ 한계(투명 고지): 그래서 되감기 규칙 폴백은 이 갈래를

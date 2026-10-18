@@ -101,7 +101,7 @@ test("[R8] 백스톱 게이트는 announce 단계 · realtime 경로에만 걸�
   );
 });
 
-test("[G489 · T191] 화면에 고정 턴 문자 선택이 남아 있지 않다(pickDueInCallSms · requestedSmsRef · smsToolCallFailedIdRef · inCallSmsTriggers 0)", () => {
+test("[G540 · T191] 화면에 고정 턴 문자 선택이 남아 있지 않다(pickDueInCallSms · requestedSmsRef · smsToolCallFailedIdRef · inCallSmsTriggers 0)", () => {
   for (const name of ["pickDueInCallSms", "requestedSmsRef", "smsToolCallFailedIdRef", "inCallSmsTriggers"]) {
     assert.equal(pageCode.includes(name), false, `page.tsx에 ${name}이 남아 있다`);
   }
@@ -131,7 +131,7 @@ test("[새 타이머 금지] play/page.tsx의 setInterval 개수는 여전히 1�
 
 // ── GeminiVoiceSession.tsx — dispatchToolCall이 부모 콜백 4종을 실제로 호출하는가 ────────────
 
-test("[배선 · T191 G487] dispatchToolCall의 send_prepared_sms는 모델 purpose · 사용자 발화 수를 넘기고 smsId를 고르지 않는다", () => {
+test("[배선 · T191 G538] dispatchToolCall의 send_prepared_sms는 모델 purpose · 사용자 발화 수를 넘기고 smsId를 고르지 않는다", () => {
   const start = sessionCode.indexOf('if (kind === "send_prepared_sms") {');
   assert.ok(start > -1);
   const branch = sessionCode.slice(start, sessionCode.indexOf("return failureResponse();", start));

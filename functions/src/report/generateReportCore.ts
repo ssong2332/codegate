@@ -101,7 +101,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   // 목록). flowVariantId 부재 = 과거 세션 → 원본 시나리오 수법(무소급 — AC-077).
   // ⚠️ 의도된 비대칭: ElevenLabs 경로(clone)는 변형 미적용이라 **원본 프롬프트로 통화**하지만, 리포트는
   // 세션의 flowVariantId(Gemini · 폴백 기준 배정값)로 해석한다. 변형 수법은 원본 수법의 부분집합 + 변형 전용
-  // 수법이라, 원본으로 통화한 세션에서 변형 밖 수법이 나오면 그 수법은 리포트 추정에서 빠질 수 있다(OQ-A108
+  // 수법이라, 원본으로 통화한 세션에서 변형 밖 수법이 나오면 그 수법은 리포트 추정에서 빠질 수 있다(OQ-A131
   // 기본값 — ElevenLabs 변형 적용은 User 결정 대기).
   const scenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId);
   const weakenedTactics = scenarioPrompt?.weakenedTactics ?? [];

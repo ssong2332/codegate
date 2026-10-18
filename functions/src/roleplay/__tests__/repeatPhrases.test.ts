@@ -1,7 +1,7 @@
 // T191 S4 — 반복 유도 문면 0건 게이트(사용자 신고 2026-10-18 "AI가 같은 말을 반복한다").
 //
 // 근거: docs/ScenarioDifficultyRedesign.md §1.4 R1~R4 · §2.5 A1~A4 · docs/PRD.md AC-100 (a)(b)(f) ·
-// AC-096 (d) · docs/DECISIONS.md #132(D4).
+// AC-096 (d) · docs/DECISIONS.md #150(D4).
 //
 // 판정 대상은 **소스가 아니라 조립 산출물**이다 — 모델에게 실제로 도달하는 문자열(시스템 프롬프트 +
 // 턴 지시 + 도구 거절 지시)만 본다. 소스 주석에는 변경 이력 설명으로 옛 문구가 남아 있을 수 있고,
@@ -268,7 +268,7 @@ test("[T191/S4 · A4] 이미 보낸 문자는 다시 언급하지 않고, 도착
   }
 });
 
-// ── G500 (T191 S4b · Architecture.md §78.11.1 · AC-096 (d)) ───────────────────────────────────────
+// ── G551 (T191 S4b · Architecture.md §82.11.1 · AC-096 (d)) ───────────────────────────────────────
 // 초급 산출 프롬프트(전 시나리오 × {원본 + 허용 초급 변형})에 **지속성 지시** 0건. 중급 · 고급은 난이도 블록이
 // 지속성을 정하므로 이 게이트 대상이 아니다(고급 블록의 "물러서지 않되 매번 다른 근거"는 정당한 고급 지시).
 // ⚠️ 정직 고지: 위 반복 게이트와 같이 **표기**를 본다 — 패턴 밖의 다른 표현으로 같은 지시를 쓰면 못 잡는다.
@@ -293,7 +293,7 @@ function beginnerResolvedPrompts(scenarioId: string): [string, NonNullable<Retur
   return out;
 }
 
-test("[T191/S4b · G500 · AC-096 (d)] 전 시나리오 × {원본 + 초급 변형} × 실제 턴 지시의 초급 산출물에 지속성 패턴이 0건이고, 물러섬 지시는 ≥1건이다", (t) => {
+test("[T191/S4b · G551 · AC-096 (d)] 전 시나리오 × {원본 + 초급 변형} × 실제 턴 지시의 초급 산출물에 지속성 패턴이 0건이고, 물러섬 지시는 ≥1건이다", (t) => {
   const ids = Object.keys(SCENARIO_PROMPTS);
   assert.ok(ids.length >= 17, `시나리오가 17종 이상이어야 한다(현재 ${ids.length}종)`);
   let combos = 0;
@@ -339,7 +339,7 @@ test("[T191/S4b · G500 · AC-096 (d)] 전 시나리오 × {원본 + 초급 변�
   assert.deepEqual(violations, [], `초급 산출물에 지속성 지시가 남아 있다:\n${violations.join("\n")}`);
 });
 
-test("[T191/S4b · G500] 역방향 — 지속성 패턴을 하나씩 넣은 초급 오염 샘플은 검사에 걸리고, 정상 샘플은 통과한다(같은 실행 출력)", (t) => {
+test("[T191/S4b · G551] 역방향 — 지속성 패턴을 하나씩 넣은 초급 오염 샘플은 검사에 걸리고, 정상 샘플은 통과한다(같은 실행 출력)", (t) => {
   const prompt = resolveSessionScenarioPrompt("loan-refinance-scam");
   assert.ok(prompt);
   const clean = buildSystemPrompt(prompt, { difficultyLevel: "beginner", inCallSmsEnabled: true });
@@ -364,7 +364,7 @@ test("[T191/S4b · G500] 역방향 — 지속성 패턴을 하나씩 넣은 초�
   assert.deepEqual(findPersistencePatterns(advanced), ["물러서지 않"], "고급은 '물러서지 않되 매번 다른 근거'를 가진다");
 });
 
-test("[T191/S4b · G500] 중급 = 옵션 미전달 출력 불변식 — 전 시나리오 원본 + 중급 변형", () => {
+test("[T191/S4b · G551] 중급 = 옵션 미전달 출력 불변식 — 전 시나리오 원본 + 중급 변형", () => {
   let checked = 0;
   for (const id of Object.keys(SCENARIO_PROMPTS)) {
     const prompts = [resolveSessionScenarioPrompt(id), ...listFlowVariants(id, "intermediate").map((v) => resolveSessionScenarioPrompt(id, v.variantId))];

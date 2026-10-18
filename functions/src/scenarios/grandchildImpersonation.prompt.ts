@@ -70,7 +70,7 @@
 //  beginner len=6128 sha=81ec29538c5acc67 (직전 6090 · 675df2b30e3d2a1e) · intermediate len=5307 sha=1682be3296bb47d6
 //  (직전 5350 · c53aead78efdf0d8) · advanced len=6429 sha=2e96d1d0b11110ea (직전 6472 · da98590896fc3d4e).
 //  재생성 완료 후에만 "재생성 완료"로 갱신할 것.)
-// (T191 S4b 2026-10-19 · Architecture.md §78.11.1 G500: 이 파일의 "상품권 대체 요구" 수법에서 지속성 어구("물러서지 않고")를
+// (T191 S4b 2026-10-19 · Architecture.md §82.11.1 G551: 이 파일의 "상품권 대체 요구" 수법에서 지속성 어구("물러서지 않고")를
 //  빼고 "더 쉬운 방법의 새 조건으로 다시 요구한다"로 바꿨다(라벨·인용 대사·수법 자체는 그대로) → **조립 산출물이 바뀌었다 —
 //  재생성 대기 중.** 대조값 = `buildSystemPrompt(SCENARIO_PROMPTS[id], { difficultyLevel })`의 sha256 앞 16자(직전 값은 base main `e9a4967`):
 //  beginner len=6119 sha=0538c815d83c7875 (직전 6123 · d051f2222c324d1f) · intermediate len=5298 sha=5537d8d95facb424
