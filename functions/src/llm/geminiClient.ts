@@ -61,6 +61,14 @@ import type { LlmClient, LlmCompletionInput, LlmCompletionResult, LlmMessage } f
  * 고정 버전을 쓰는 목적이다 — 변경 시점을 커밋으로 남기고 검증을 강제한다). */
 export const GEMINI_TEXT_MODEL = "gemini-3.1-flash-lite";
 
+/** 과부하 대체 모델 — 기본 모델이 503 재시도(`overloadRetry.ts`) 후에도 과부하일 때 **1회만** 쓴다
+ * (2026-10-18 사용자 결정, `overloadFallback.ts`). 429·안전 차단·타임아웃·네트워크 오류에는 쓰지 않는다.
+ *
+ * 근거(프로브 2026-10-18, 첫 턴형 실제 프롬프트 5회): 성공 5/5 · p50 1.25초 · 추론 토큰 0 · 문장 3~4.
+ * 같은 시간대 기본 모델은 503 55%. `models` 목록 조회로 실재를 확인했다.
+ * ⛔ 위 `GEMINI_TEXT_MODEL`과 같은 원칙 — **비-preview·비-별칭 고정 버전**만 쓴다(`-latest`·`-preview` 금지). */
+export const GEMINI_FALLBACK_TEXT_MODEL = "gemini-3.5-flash-lite";
+
 // 오프닝 대사(messages:[])에는 실제 사용자 입력이 없어 Gemini에 보낼 "첫 turn"이 없다 — systemPrompt
 // 만으로는 생성이 시작되지 않는 모델도 있어(빈 contents), 화면에 노출되지 않는 내부 트리거 turn을
 // 하나 합성해 넣는다(캐릭터 지시가 아니라 "지금 시작하라"는 오케스트레이션 신호일 뿐이라 role
@@ -116,7 +124,12 @@ function toGeminiContent(message: LlmMessage): Content {
 export class GeminiLlmClient implements LlmClient {
   readonly providerName = "gemini" as const;
 
-  constructor(private readonly apiKey: string) {}
+  /** `model`은 실제 호출 모델이다 — 기본값은 `GEMINI_TEXT_MODEL`(기존 동작), 과부하 대체 경로만
+   * `GEMINI_FALLBACK_TEXT_MODEL`을 넘긴다(llm/index.ts). 요청과 성공 로그가 같은 값을 쓴다. */
+  constructor(
+    private readonly apiKey: string,
+    private readonly model: string = GEMINI_TEXT_MODEL,
+  ) {}
 
   async complete(input: LlmCompletionInput): Promise<LlmCompletionResult> {
     const client = new GoogleGenAI({ apiKey: this.apiKey });
@@ -130,7 +143,7 @@ export class GeminiLlmClient implements LlmClient {
     // 청크 텍스트를 모두 이어 붙이므로 돌려주는 `text`는 generateContent와 같다. 재시도는 여전히 없다.
     const startedAt = Date.now();
     const stream = await client.models.generateContentStream({
-      model: GEMINI_TEXT_MODEL,
+      model: this.model,
       contents,
       config: { systemInstruction: input.systemPrompt },
     });
@@ -152,7 +165,7 @@ export class GeminiLlmClient implements LlmClient {
     // ⛔ **G170/ADR-0004 계승 — 수치와 모델명만 싣는다.** systemPrompt·messages·응답 본문·API 키는
     // 어떤 형태로도 넣지 말 것(PII와 프롬프트 본문이 로그로 새는 경로가 된다).
     logger.info("Gemini 텍스트 생성 성공", {
-      model: GEMINI_TEXT_MODEL,
+      model: this.model,
       elapsedMs,
       // 청크가 하나도 오지 않았으면(빈 스트림) 첫 바이트 시각이 없다 — 지어내지 않고 생략한다.
       ...(ttfbMs === undefined ? {} : { ttfbMs }),
