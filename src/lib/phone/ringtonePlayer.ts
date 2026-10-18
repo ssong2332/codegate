@@ -11,12 +11,25 @@
 //     "준비됐어요" 탭이 `primedContext`를 넘길 때까지 무음일 수 있다(User 결정 OQ-A95 ⓐ — 그대로 둔다).
 //   - 60초 뒤 소리·진동만 멈춘다(화면 연출은 계속 — UX-014 v1.33 (10) ②).
 //   - `stop()`은 멱등이며 `AudioContext.close()`까지 한다(통화 오디오 컨텍스트와 공존 시간 0).
+//     ⭐ 2026-10-18 개정(reviewer M3 · 라이브 d13e718 Android 무음 조사) — 이 규칙의 목적은 **벨 소리와 통화 오디오가
+//     겹쳐 들리지 않는 것**(§74.7 "실시간 오디오와 겹침 0")이다. 받기에서는 `holdOpen()`이 **소리·진동을 즉시 0으로**
+//     만들고(예약 오실레이터 정지 · 엔벨로프 분리 · 타이머 정리) 컨텍스트 `close()`만 통화 오디오가 running이 된 뒤로
+//     미룬다 — "벨 컨텍스트를 닫은 직후 통화 컨텍스트를 만드는 순서"가 Android 무음 원인 후보라 그 순서를 가를 수
+//     있게 하려는 것이다(`?ringclose=immediate`면 종전대로 즉시 close). 소리 공존 시간은 여전히 0이다.
+//     ⏳ §74.7 문서 개정은 Docs 단계로 넘긴다.
 //   - ⛔ `navigator.audioSession.type`을 바꾸지 않는다(§74.2 ③-c — 페이지 전체 오디오에 걸리는 전역 설정).
 import type { MessengerSkin } from "../messenger/detectSkin";
 import { RING_MAX_MS, ringCycleCount, ringPatternFor, tonesWithinCap, type RingTone } from "./ringtone";
 import { canVibrate, vibrationPatternFor } from "./vibration";
 
-export type IncomingAlert = { stop: () => void };
+export type IncomingAlert = {
+  stop: () => void;
+  /**
+   * 소리·진동을 **즉시** 멈추되 컨텍스트는 열어 둔다. 반환값(`release`)을 부르면 그때 닫는다(멱등). 이 뒤의 `stop()`은
+   * 아무것도 하지 않는다(이미 멈췄다). ⛔ 반환값을 부르는 쪽이 반드시 닫아야 한다(호출부의 해제 판정 + 언마운트 cleanup).
+   */
+  holdOpen: () => () => void;
+};
 
 /** 자동재생 판정 유예 — `resume()`이 이 안에 `running`이 되지 않으면 무음으로 끝낸다(판단값). */
 const RESUME_GRACE_MS = 600;
@@ -31,7 +44,14 @@ function audioContextCtor(): AudioContextCtor | null {
   return w.webkitAudioContext ?? null;
 }
 
-function scheduleTone(ctx: AudioContext, tone: RingTone, cycleStartAt: number): void {
+type ScheduledVoice = { osc: OscillatorNode; envelope: GainNode };
+
+function scheduleTone(
+  ctx: AudioContext,
+  tone: RingTone,
+  cycleStartAt: number,
+  voices: Set<ScheduledVoice>,
+): void {
   const start = cycleStartAt + tone.atMs / 1000;
   const end = start + tone.durMs / 1000;
   const envelope = ctx.createGain();
@@ -46,6 +66,9 @@ function scheduleTone(ctx: AudioContext, tone: RingTone, cycleStartAt: number): 
     osc.connect(envelope);
     osc.start(start);
     osc.stop(end + 0.02);
+    const voice = { osc, envelope };
+    voices.add(voice);
+    osc.onended = () => voices.delete(voice);
   }
 }
 
@@ -65,6 +88,8 @@ export function startIncomingAlert(
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let stopped = false;
   let ctx: AudioContext | null = null;
+  // holdOpen이 즉시 멈출 수 있도록 예약한 음을 들고 있는다.
+  const voices = new Set<ScheduledVoice>();
 
   const later = (fn: () => void, ms: number) => {
     const timer = setTimeout(() => {
@@ -109,7 +134,7 @@ export function startIncomingAlert(
     }
     if (ctx && ctx.state === "running") {
       const cycleStartAt = ctx.currentTime + 0.03;
-      for (const tone of tonesWithinCap(pattern, cycleIndex, RING_MAX_MS)) scheduleTone(ctx, tone, cycleStartAt);
+      for (const tone of tonesWithinCap(pattern, cycleIndex, RING_MAX_MS)) scheduleTone(ctx, tone, cycleStartAt, voices);
     }
     if (vibration) vibrateOnce([...vibration]);
     later(() => runCycle(cycleIndex + 1), pattern.cycleMs);
@@ -129,13 +154,34 @@ export function startIncomingAlert(
     begin();
   }
 
+  const haltTimers = () => {
+    stopped = true;
+    for (const timer of timers) clearTimeout(timer);
+    timers.clear();
+  };
+
   return {
     stop: () => {
       if (stopped) return;
-      stopped = true;
-      for (const timer of timers) clearTimeout(timer);
-      timers.clear();
+      haltTimers();
       silenceAll();
+    },
+    holdOpen: () => {
+      if (!stopped) {
+        haltTimers();
+        // 소리 즉시 0 — 예약·재생 중인 음을 멈추고 엔벨로프를 떼어 낸다(컨텍스트는 닫지 않는다).
+        for (const voice of voices) {
+          try {
+            voice.osc.stop();
+          } catch {
+            // 이미 끝난 음은 무시.
+          }
+          voice.envelope.disconnect();
+        }
+        voices.clear();
+        vibrateOnce(0);
+      }
+      return closeAudio; // 멱등(ctx를 비운 뒤 닫는다)
     },
   };
 }
