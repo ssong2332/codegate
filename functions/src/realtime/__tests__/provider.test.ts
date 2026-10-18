@@ -4,9 +4,12 @@ import { MockRealtimeProvider } from "../mockProvider";
 import { ElevenLabsRealtimeProvider } from "../elevenLabsProvider";
 import { getRealtimeProvider } from "../provider";
 
+// T192 C3(§79.19 (5) 8) — `RealtimeCallInput` 필수 키 2개. ElevenLabs · Mock은 받기만 하고 무시한다.
+const VOICE_SCOPE = { channel: undefined, hangupRelay: undefined } as const;
+
 test("MockRealtimeProvider는 isMock:true와 provider:none을 반환한다(클라가 텍스트 폴백으로 강등)", async () => {
   const provider = new MockRealtimeProvider();
-  const creds = await provider.createCallCredentials({
+  const creds = await provider.createCallCredentials({ ...VOICE_SCOPE,
     sessionId: "s1",
     scenarioId: "family-accident-deepvoice",
     voiceId: "voice_1",
@@ -31,7 +34,7 @@ test("ElevenLabsRealtimeProvider: 매핑에 없는 시나리오는 명시적으�
   const provider = new ElevenLabsRealtimeProvider("test-key", { "known-scenario": "agent_a" });
   await assert.rejects(
     () =>
-      provider.createCallCredentials({
+      provider.createCallCredentials({ ...VOICE_SCOPE,
         sessionId: "s1",
         scenarioId: "unknown-scenario",
         voiceId: "v1",
@@ -55,7 +58,7 @@ test("ElevenLabsRealtimeProvider: 서명 URL 응답을 그대로 자격증명으
 
   try {
     const provider = new ElevenLabsRealtimeProvider("test-key", { s1: "agent_a" });
-    const creds = await provider.createCallCredentials({
+    const creds = await provider.createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "s1",
       voiceId: "cloned_voice",
@@ -77,7 +80,7 @@ test("ElevenLabsRealtimeProvider: 서명 URL 응답을 그대로 자격증명으
 // 않은 경로를 자격증명이 정직하게 구분해 보고해야 한다. 이 값이 뒤집히면 클라가 적용되지 않은
 // 난이도를 배지로 표기하거나(근거 없는 표기), 반대로 적용된 난이도를 숨기게 된다.
 test("[T72/G6] difficultyApplied: ElevenLabs 경로는 false(프롬프트 주입 지점 없음), 목업(텍스트 폴백)은 true", async () => {
-  const mockCreds = await new MockRealtimeProvider().createCallCredentials({
+  const mockCreds = await new MockRealtimeProvider().createCallCredentials({ ...VOICE_SCOPE,
     sessionId: "s1",
     scenarioId: "family-accident-deepvoice",
     voiceId: "voice_1",
@@ -95,7 +98,7 @@ test("[T72/G6] difficultyApplied: ElevenLabs 경로는 false(프롬프트 주입
     json: async () => ({ signed_url: "wss://example.invalid/convai" }),
   })) as unknown as typeof globalThis.fetch;
   try {
-    const creds = await new ElevenLabsRealtimeProvider("test-key", { s1: "agent_a" }).createCallCredentials({
+    const creds = await new ElevenLabsRealtimeProvider("test-key", { s1: "agent_a" }).createCallCredentials({ ...VOICE_SCOPE,
       sessionId: "sess",
       scenarioId: "s1",
       voiceId: "cloned_voice",
@@ -117,7 +120,7 @@ test("ElevenLabsRealtimeProvider: 실패 응답이면 throw한다(호출부가 M
   try {
     const provider = new ElevenLabsRealtimeProvider("bad-key", { s1: "agent_a" });
     await assert.rejects(
-      () => provider.createCallCredentials({ sessionId: "x", scenarioId: "s1", voiceId: "v" }),
+      () => provider.createCallCredentials({ ...VOICE_SCOPE, sessionId: "x", scenarioId: "s1", voiceId: "v" }),
       /401/,
     );
   } finally {

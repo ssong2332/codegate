@@ -6,15 +6,34 @@
 // 흉내는 promptAssembly.ts의 escapeSentinelLookalikes가 LLM에 전달되기 전에 이미 무력화한다.
 const SIGNAL_MARKER_PATTERN = /\[\[SIGNAL:([A-Z_]+)\]\]/g;
 const ESCALATE_VOICE_SIGNAL = "ESCALATE_VOICE";
+/**
+ * T192 C3(Architecture.md §79.6 ② · §79.19 (5) 10 · C3-6) — 폴백 SIGNAL 변형의 끊기 신호. ⛔ 정규식 · 자리 · 정리는
+ * 무변경(`SIGNAL_MARKER_PATTERN`이 이미 이 이름들을 매치하고 지운다) — 이 표는 **판별**만 더한다.
+ * ⚠️ 신호가 있다고 끊기는 것이 아니다 — 효과는 `sendMessage`의 사후 판정이 정한다(SIGNAL 턴 · 승인일 때만).
+ */
+const END_CALL_SIGNALS: Readonly<Record<string, EndCallSignalKind>> = {
+  END_CALL_GOAL: "goal",
+  END_CALL_GIVEUP: "give_up",
+};
+
+export type EndCallSignalKind = "goal" | "give_up";
+
+export type EscalationSignalResult = {
+  text: string;
+  escalate: boolean;
+  /** 끊기 신호 — 여러 개면 **처음 나온 것**(정리된 텍스트에는 어느 쪽도 남지 않는다). 없으면 키 자체가 없다. */
+  endCall?: EndCallSignalKind;
+};
 
 /**
  * 어시스턴트 완성 텍스트에서 `[[SIGNAL:*]]` 마커를 전부 찾아 텍스트에서 제거하고(사용자는 마커
  * 원문을 보지 않는다), 그중 `ESCALATE_VOICE`가 있었는지를 별도 boolean으로 반환한다. 마커가 없으면
- * 원문을 그대로 반환한다.
+ * 원문을 그대로 반환한다. T192 C3 — `END_CALL_GOAL` · `END_CALL_GIVEUP`이면 `endCall`도 채운다.
  */
-export function extractEscalationSignal(text: string): { text: string; escalate: boolean } {
+export function extractEscalationSignal(text: string): EscalationSignalResult {
   let escalate = false;
   let found = false;
+  let endCall: EndCallSignalKind | undefined;
 
   // 매치가 하나라도 있었는지는 replace 콜백의 부수효과(found)로만 판정한다 — 전역(g) 정규식의
   // .test()/.exec() 상태(lastIndex)를 별도로 건드리지 않기 위해서다(재사용 시 상태 버그 방지,
@@ -23,6 +42,10 @@ export function extractEscalationSignal(text: string): { text: string; escalate:
     .replace(SIGNAL_MARKER_PATTERN, (_match, signalName: string) => {
       found = true;
       if (signalName === ESCALATE_VOICE_SIGNAL) escalate = true;
+      const endKind = Object.prototype.hasOwnProperty.call(END_CALL_SIGNALS, signalName)
+        ? END_CALL_SIGNALS[signalName]
+        : undefined;
+      if (endKind !== undefined && endCall === undefined) endCall = endKind;
       return "";
     })
     // linkMarker.ts와 동일한 마무리 정리 — 마커 제거로 생긴 연속 공백·구두점 앞 공백만 정리한다.
@@ -33,5 +56,5 @@ export function extractEscalationSignal(text: string): { text: string; escalate:
   if (!found) {
     return { text, escalate: false };
   }
-  return { text: cleaned, escalate };
+  return { text: cleaned, escalate, ...(endCall !== undefined ? { endCall } : {}) };
 }

@@ -1,17 +1,20 @@
 // T192 C1 — 사기범 끊기 승인 판정표(Architecture.md §79.2 · AC-103 (a)(b)(f) · G501).
+// T192 C3 — S5b 병합 뒤 재판정(§79.19 (2)~(4)): 하한 단위 = 사용자 발화 · 6행 = 지시 대기 ∨ 문자 대기 · 8행 위치 이동.
 //
-// ⛔ 잎 모듈 — Firestore · 네트워크 · LLM import 0(값 import 0, 타입 import만). 텍스트 폴백(`sendMessage` —
-//    배선은 C3)과 실시간 콜러블(`requestScammerHangup`)이 **이 함수 하나**를 부른다(AC-103 (f) "같은 조건").
+// ⛔ 잎 모듈 — Firestore · 네트워크 · LLM import 0(값 import 0, 타입 import만). 텍스트 폴백(`sendMessage`)과
+//    실시간 콜러블(`requestScammerHangup`)이 **이 함수 하나**를 부른다(AC-103 (f) "같은 조건").
 // ⛔ 행은 위에서부터 **첫 번째로 맞는 행**이 이긴다. 표에 없는 경우는 행 추가를 묻는다(§79.2 머리).
 // ⛔ `kind`(goal/give_up)는 판정 입력이 아니다 — 끊는 판단은 모델이 하고 서버 하한은 *막는* 쪽만 맡는다.
 import type { MessengerChannel, ScammerHangupKind, SessionStatus } from "../shared/types";
 
 /**
- * 하한 — 사기범 턴 수가 이 값보다 작으면 `too_early`(§79.2 #5).
- * ⚠️ **판단값**(OQ-A118 — 진행 강제가 요구를 "2~3턴 안"에 내게 하고 그 뒤 1턴 대처 기회). 라이브 관측 뒤
- * User가 확정한다.
+ * 하한 — **사용자 발화 수**가 이 값보다 작으면 `too_early`(§79.2 #5 · T192 C3 = §79.19 (2) 6).
+ * 옛 `SCAMMER_HANGUP_MIN_SCAMMER_TURNS = 4`(사기범 턴)는 폴백 교대 엄격에서 `userTurns ≥ 3`과 동치였고, 실시간에서는
+ * 한 발화 늦게 열려 AC-103 (f) *"같은 조건"* 을 어겼다(§79.19 (2) 3). 계수는 S5b 문자 게이트와 **같은** 사용자 발화
+ * 수다(새 계수기 0 — §79.19 (0) 1).
+ * ⚠️ **판단값**(OQ-A118 — 진행 강제가 요구를 "2~3턴 안"에 내게 하고 그 뒤 대처 기회). 라이브 관측 뒤 User가 확정한다.
  */
-export const SCAMMER_HANGUP_MIN_SCAMMER_TURNS = 4;
+export const SCAMMER_HANGUP_MIN_USER_TURNS = 3;
 
 export type ScammerHangupStatus =
   | "not_active"
@@ -43,10 +46,21 @@ export type ScammerHangupInput = {
   verifyEnabled: boolean;
   /** `verifyIntercept` 문서에 `placedAt`이 있는가(호 전환 완료). */
   transferPlaced: boolean;
-  /** 사기범 턴 수. 실시간은 **클라 주장값**(OQ-A120). */
-  scammerTurns: number;
-  /** 문자 대기 — 폴백 = 이 턴에 문자 도착 · 실시간 = 클라 주장(보류 지시 · 도구 대기). */
+  /**
+   * 사용자 발화 수(이번에 답하려는 발화 포함). 폴백 = 서버 `userTurnsNow` · 실시간 = **클라 주장값**(OQ-A120 —
+   * S5b `deliverInCallSms`와 같은 등급 · 같은 판독 규칙 `readScammerHangupRequest`).
+   */
+  userTurns: number;
+  /**
+   * 지시 대기(클라 항) — 실시간 = 클라 주장(지시 큐 ∨ busy ∨ 교대 대기 ∨ 같은 배치의 다른 도구 · ⛔ 컴포넌트
+   * `toolPending` 제외 — §79.19 (3)) · 폴백 = 항상 `false`(클라 큐가 없다).
+   */
   pendingInstruction: boolean;
+  /**
+   * 문자 대기(서버 항) — 문자가 참가자에게 보인 뒤 참가자가 아직 말하지 않았다(`isSmsAwaitingUser` — 서버 도착 기록).
+   * ⭐ 옵셔널이 아니라 필수 키(빠뜨리면 컴파일 오류 — §79.19 (4)).
+   */
+  smsAwaitingUser: boolean;
   /** 같은 턴 한도 도달 — 폴백만 참이 될 수 있다. */
   limitReached: boolean;
   /** 세션에 `scammerHangup` 표식이 이미 있는가. */
@@ -59,7 +73,7 @@ export type ScammerHangupInput = {
 };
 
 export type ScammerHangupRule = {
-  /** §79.2 행 번호(`2-b` = 릴레이 행 — §79.18 (1) 최종형의 순서 3). */
+  /** §79.2 행 번호(`2-b` = 릴레이 행). ⚠️ 번호와 배열 위치는 다르다 — 8행이 4번째다(§79.19 (3)). */
   row: string;
   status: ScammerHangupStatus;
   /** 끊기 허용 여부(`accepted` · `already_accepted`만 참). */
@@ -67,17 +81,25 @@ export type ScammerHangupRule = {
   when: (input: ScammerHangupInput) => boolean;
 };
 
-/** §79.2 판정표(§79.18 (1) 최종형 10행) — 배열 순서 = 표의 순서. ⛔ 순서를 바꾸지 말 것(G501이 순서까지 고정한다). */
+/**
+ * 릴레이 중간 leg인가(§79.18 (1) 정본 조건 그대로). 행 2-b와 선언 층 `declaresEndCall`(`realtime/liveTools.ts` — 이중
+ * 방어)이 이 함수 하나를 쓴다. 범위 밖 `legIndex ≥ legCount`는 마지막으로 본다(보정하지 않는다, §79.2 끝).
+ */
+export function isNonLastRelayLeg(relay: HangupRelayContext | undefined): boolean {
+  return relay !== undefined && relay.legIndex < relay.legCount - 1;
+}
+
+/**
+ * §79.2 판정표(10행) — 배열 순서 = 판정 순서. ⛔ 순서를 바꾸지 말 것(G501 · G531이 순서까지 고정한다).
+ * ⭐ T192 C3(§79.19 (3) · C1 Minor-1) — 8행을 2-b 바로 뒤로: `1 · 2 · 2-b · 8 · 3 · 4 · 5 · 6 · 7 · 9`. 표식이 생긴 뒤
+ * 3~7행 입력은 바뀔 수 없거나(단조) 바뀌어도 무의미하다(이미 끊는 중) ⇒ 승인 뒤 재호출이 판정을 뒤집지 않는다.
+ * 1 · 2 · 2-b가 앞에 남는 이유: 세션이 끝났거나 · 메신저 단계거나 · 다른 leg면 승인 유지가 틀린 답이다.
+ */
 export const SCAMMER_HANGUP_RULES: readonly ScammerHangupRule[] = [
   { row: "1", status: "not_active", hangup: false, when: (i) => i.status !== "active" },
   { row: "2", status: "wrong_channel", hangup: false, when: (i) => i.channel === "messenger" },
-  {
-    row: "2-b",
-    status: "not_last_leg",
-    hangup: false,
-    // §79.18 (1) 정본 조건 그대로 — 범위 밖 `legIndex ≥ legCount`는 마지막으로 본다(보정하지 않는다, §79.2 끝).
-    when: (i) => i.relay !== undefined && i.relay.legIndex < i.relay.legCount - 1,
-  },
+  { row: "2-b", status: "not_last_leg", hangup: false, when: (i) => isNonLastRelayLeg(i.relay) },
+  { row: "8", status: "already_accepted", hangup: true, when: (i) => i.alreadyAccepted },
   { row: "3", status: "mock_turn", hangup: false, when: (i) => i.isMockTurn },
   {
     row: "4",
@@ -90,11 +112,16 @@ export const SCAMMER_HANGUP_RULES: readonly ScammerHangupRule[] = [
     status: "too_early",
     hangup: false,
     // `!(x >= 하한)` — 정본 `x < 하한`과 유한값에서 같고, 비유한값(NaN)은 막는 쪽으로 떨어진다(fail-closed).
-    when: (i) => !(i.scammerTurns >= SCAMMER_HANGUP_MIN_SCAMMER_TURNS),
+    when: (i) => !(i.userTurns >= SCAMMER_HANGUP_MIN_USER_TURNS),
   },
-  { row: "6", status: "blocked_pending", hangup: false, when: (i) => i.pendingInstruction },
+  {
+    row: "6",
+    status: "blocked_pending",
+    hangup: false,
+    // §79.19 (4) — 클라 항(지시 대기) ∨ 서버 항(문자 대기). 같은 status · 같은 로그 row.
+    when: (i) => i.pendingInstruction || i.smsAwaitingUser,
+  },
   { row: "7", status: "limit_reached", hangup: false, when: (i) => i.limitReached },
-  { row: "8", status: "already_accepted", hangup: true, when: (i) => i.alreadyAccepted },
   { row: "9", status: "accepted", hangup: true, when: () => true },
 ];
 

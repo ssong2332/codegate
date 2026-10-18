@@ -87,7 +87,8 @@ export type SendMessageResponse = {
   reply: ScammerMessage;
   turnCount: number;
   ended: boolean;
-  endReason?: "limit_reached";
+  // T192 C3(Architecture.md §79.5 · §79.19 (6) ⑧) — functions/src/roleplay/types.ts와 1:1.
+  endReason?: "limit_reached" | "scammer_ended";
   isMock: boolean;
   // 실시간 음성 통화 전환(2026-07-22 사용자 결정) — 사기범 응답 합성 오디오(서버가 이미 반환 중,
   // functions/src/roleplay/types.ts와 1:1).
@@ -343,7 +344,8 @@ export type ScammerHangupStatus =
   | "accepted";
 export type RequestScammerHangupRequest = {
   sessionId: string;
-  scammerTurns: number;
+  // T192 C3(§79.19 (2) 8) — 사용자 발화 수(S5b `send_prepared_sms`와 같은 클라 식 — 호출부 배선은 C5).
+  userTurns: number;
   pendingInstruction: boolean;
   kind?: string;
 };

@@ -15,7 +15,8 @@ export type SendMessageResponse = {
   reply: ScammerMessage;
   turnCount: number;
   ended: boolean;
-  endReason?: "limit_reached";
+  /** T192 C3(§79.5 · §79.19 (6) ⑧) — `scammer_ended` = 폴백 끊기 승인으로 이 턴이 세션을 끝냈다(서버 표식 있음). */
+  endReason?: "limit_reached" | "scammer_ended";
   /**
    * T7 추가(옵셔널, T19의 isMock 패턴과 동일) — true면 이번 응답이 MockLlmClient 산출물이라는 뜻
    * (LLM_API_KEY 미확보, PRD Risks급 고지). API.md에는 아직 명시 안 됨 — 클라(src/lib/api/types.ts)

@@ -14,10 +14,12 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { findVerifyInterceptItem } from "../scenarios/verifyIntercept";
+import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
+import { readDeliveredSms } from "../inCallSms/smsDelivery";
 import type { SessionDoc } from "../shared/types";
 import { decideAndMarkRealtimeHangup } from "./commit";
-import { normalizeScammerHangupKind } from "./decide";
 import { scammerHangupGuidance } from "./guidance";
+import { readScammerHangupRequest } from "./readRequest";
 import type { RequestScammerHangupRequest, RequestScammerHangupResponse } from "./types";
 
 ensureFirebaseAdminApp();
@@ -35,22 +37,6 @@ async function loadOwnedSession(sessionId: string, uid: string): Promise<Session
   return session;
 }
 
-/** 클라 주장 턴 수 — 유한한 0 이상 숫자만(`deliverInCallSms`의 `scammerTurns` 판독과 같은 판단). */
-function readScammerTurns(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    throw new HttpsError("invalid-argument", "scammerTurns는 0 이상의 숫자여야 합니다.");
-  }
-  return value;
-}
-
-/** 클라 주장 문자 대기 — boolean만. 다른 값을 조용히 `false`로 떨어뜨리면 6행 차단이 무력화된다. */
-function readPendingInstruction(value: unknown): boolean {
-  if (typeof value !== "boolean") {
-    throw new HttpsError("invalid-argument", "pendingInstruction은 true 또는 false여야 합니다.");
-  }
-  return value;
-}
-
 export const requestScammerHangup = onCall<
   RequestScammerHangupRequest,
   Promise<RequestScammerHangupResponse>
@@ -58,16 +44,18 @@ export const requestScammerHangup = onCall<
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
-  const { sessionId } = request.data ?? {};
-  if (!sessionId) {
-    throw new HttpsError("invalid-argument", "sessionId가 필요합니다.");
-  }
-  const scammerTurns = readScammerTurns(request.data?.scammerTurns);
-  const pendingInstruction = readPendingInstruction(request.data?.pendingInstruction);
-  const kind = normalizeScammerHangupKind(request.data?.kind);
+  // T192 C3(§79.19 (6) ② ③ · G536) — 판독은 순수 함수 하나 · 세션 read **앞**(무효 요청이 read 비용을 태우지 않는다).
+  const { sessionId, userTurns, pendingInstruction, kind } = readScammerHangupRequest(request.data);
 
   const session = await loadOwnedSession(sessionId, request.auth.uid);
   assertAnonymousChallengeScope(request.auth, session);
+
+  // T192 C3(§79.19 (4)) — 6행 서버 항(문자 대기)의 입력. 문자를 선언한 세션에서만 트랜잭션 **밖**에서 읽는다
+  // (밖 읽기의 경합은 같은 배치의 문자 호출뿐이고 클라 배치 항이 막는다 — §79.19 (3)). 읽기 실패는 throw →
+  // 클라 `endCallFailureInstruction`(끊기 0 · fail-closed).
+  const delivered = sessionDeclaresInCallSms(session.scenarioId, session.flowVariantId)
+    ? await readDeliveredSms(getFirestore().collection("sessions").doc(sessionId))
+    : [];
 
   const db = getFirestore();
   const sessionRef = db.collection("sessions").doc(sessionId);
@@ -81,7 +69,8 @@ export const requestScammerHangup = onCall<
           return item ? sessionRef.collection("verifyIntercept").doc(item.offerId) : undefined;
         },
       },
-      { scammerTurns, pendingInstruction, kind },
+      { userTurns, pendingInstruction, kind },
+      delivered,
       Timestamp.now(),
     ),
   );
@@ -93,7 +82,7 @@ export const requestScammerHangup = onCall<
     status: decision.status,
     row: decision.row,
     kind,
-    scammerTurns,
+    userTurns,
   });
 
   return { status: decision.status, guidance: scammerHangupGuidance(decision.status) };

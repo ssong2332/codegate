@@ -99,3 +99,4 @@
 - [미리 받기 경합 + 수정안 A + audiodebug 패널](project_codegate_prefetch_race_audio_prime.md) — ⭐ createPrefetchSlot 실행 테스트, ctx 소유권=화면(Strict Mode 근거), 새 컴포넌트 시 게이트 3곳, python heredoc `\n` 개행 박힘.
 - [T192 C1 끊기 판정·endSession 허용목록](project_codegate_t192_c1_hangup_decision.md) — ⭐ 새 콜러블=anonymousGate 카운트 갱신, Transaction 제네릭 명시(TS2345), 작업 중 정본 확정 대응.
 - [T192 C2 끊기 규칙 슬롯](project_codegate_t192_c2_hangup_slot.md) — ⭐ F11 검출기가 정본 "첫째·둘째·이번"을 문다(정확 일치 허용 목록), 축은 운영 짝으로만 곱함, 템플릿 바이트 동일 증명.
+- [T192 C3 끊기 서버 배선](project_codegate_t192_c3_hangup_server.md) — ⭐ 폴백 판정 순수 모듈화, C3 단독 배포 시 Live end_call unsupported 위험, S5b 도구 테스트 메신저 범위 재지정.
