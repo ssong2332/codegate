@@ -106,7 +106,7 @@ test("[PR-A2 · end_call 끔 · 리뷰 Minor 3] 끔(주입) · 모듈 운영값 
         );
         assert.ok(required.length > 0, `${tag}: 필수 계좌 · 링크 문자 선언이 없다(표본 전제)`);
         for (const item of required) {
-          const field = buildConfirmResultField({ placed: false }, item);
+          const field = buildConfirmResultField({ placed: false, scenarioId: LOAN }, item);
           assert.equal(field.confirmResultInstruction, buildLiveConfirmResultInstruction(item.purpose as "transfer" | "link"), `${tag}/${item.smsId}`);
           fields.push(`${level}/${item.smsId}:${field.confirmResultInstruction}`);
         }

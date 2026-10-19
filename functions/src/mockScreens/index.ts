@@ -15,6 +15,7 @@ import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { findMockScreenItem, isMockScreenReachable } from "../scenarios/mockScreens";
 import { sessionReachableLandingIds } from "../scenarios/reachability";
+import { anchorFromInCallSmsDoc, findDeclaredSmsIdForLanding, readMockScreenCallMode } from "./inCallAnchor";
 import type { MockScreenDoc, SessionDoc } from "../shared/types";
 import type { RecordMockScreenEventRequest, RecordMockScreenEventResponse } from "./types";
 
@@ -37,6 +38,28 @@ async function loadOwnedSession(sessionId: string, uid: string): Promise<Session
 }
 
 /**
+ * ⑥ T194-c-1(§84.15.3) — 통화 중 설치 화면의 도착 검증 + 명시 앵커(판정은 `./inCallAnchor.ts` 순수 함수 — 이 함수는 get 1회만 한다).
+ * `callMode`는 c-1에서 관측 로그로만 쓴다(실시간 응낙 지시 동봉은 T194-c-2).
+ */
+async function readInCallLandingAnchor(
+  sessionId: string,
+  session: SessionDoc,
+  landingId: string,
+  rawCallMode: unknown,
+): Promise<number | undefined> {
+  const callMode = readMockScreenCallMode(rawCallMode);
+  const smsId = findDeclaredSmsIdForLanding(session.scenarioId, session.flowVariantId, landingId);
+  if (!smsId) {
+    throw new HttpsError("failed-precondition", "이 세션에서는 열 수 없는 화면입니다.");
+  }
+  const smsSnap = await getFirestore().collection("sessions").doc(sessionId).collection("inCallSms").doc(smsId).get();
+  const anchor = anchorFromInCallSmsDoc({ exists: smsSnap.exists, anchorScammerTurn: smsSnap.get("anchorScammerTurn") });
+  // G170 — ID · 경로 · 숫자만(대사 0).
+  logger.info("[T194-c-1] 통화 중 설치 화면 기록", { sessionId, landingId, smsId, callMode, anchorResolved: anchor !== undefined });
+  return anchor;
+}
+
+/**
  * 서버 검증 **순서 고정**(§15.9.6 표):
  *   ① 인증 + 세션 소유권 → `permission-denied`
  *   ② `session.status === "active"` → `failed-precondition`(§15.6 **G20**이 `recordInCallSmsEvent`
@@ -48,6 +71,9 @@ async function loadOwnedSession(sessionId: string, uid: string): Promise<Session
  *   ⑤-a G588(§84.13.2) — `landingId ∈ sessionReachableLandingIds(scenarioId, flowVariantId)`(전 kind) → `failed-precondition`
  *   ⑤ T194-a(§84.4.4 · G582) — 그 항목이 **이 세션에서 도달 가능**한지(`isMockScreenReachable`) → `failed-precondition`.
  *      ⚠️ 실행 위치는 ③ **바로 뒤**(④보다 앞)다 — 도달 불가 항목은 어떤 이벤트도 기록하지 않는다(번호는 추가 순서).
+ *   ⑥ T194-c-1(§84.5.3 · §84.15.3 · G584 · G606) — **통화 중 문자 표면 항목(Q2)만**: `callMode` 필수(부재 · 값 밖 → `invalid-argument`) →
+ *      그 랜딩을 연 **선언 문자의 도착 문서**(`inCallSms/{smsId}`) get 1회(부재 → `failed-precondition`) → 새 문서의 `anchorScammerTurn` =
+ *      그 문자 문서의 값 복사(응낙 시점의 클라 계수 0 — Q-X5). 메신저 표면 항목은 이 단계를 타지 않는다(무변경).
  */
 export const recordMockScreenEvent = onCall<
   RecordMockScreenEventRequest,
@@ -92,6 +118,12 @@ export const recordMockScreenEvent = onCall<
   if (!isMockScreenReachable(session, item)) {
     throw new HttpsError("failed-precondition", "이 세션에서는 열 수 없는 화면입니다.");
   }
+  // ⑥ T194-c-1 — 통화 중 문자 표면(Q2)의 도착 검증 + 명시 앵커(§84.15.3). 메신저 표면은 `undefined`(앵커는 첨부 기반 리졸버 — 무변경).
+  // 리뷰 Minor — 판별을 **통화 중 설치 화면**으로 좁힌다(통화 중 credential-form은 이 콜러블을 쓰지 않으며 ⑥ 대상이 아니다 — 위 주석 "Q2만").
+  const inCallAnchor =
+    item.entrySurface === "in-call-sms" && item.kind === "app-install"
+      ? await readInCallLandingAnchor(sessionId, session, landingId, request.data?.callMode)
+      : undefined;
   if (event === "consented" && item.kind !== "app-install") {
     throw new HttpsError("invalid-argument", "이 화면에는 권한 허용 단계가 없습니다.");
   }
@@ -114,6 +146,8 @@ export const recordMockScreenEvent = onCall<
       landingId,
       kind: item.kind,
       shownAt: now,
+      // T194-c-1(§84.15.3 · G606) — 통화 중 설치 문서만. 부재 = 메신저 경로(종전 문서와 같은 모양).
+      ...(inCallAnchor !== undefined ? { anchorScammerTurn: inCallAnchor } : {}),
       ...(event === "consented" ? { consentedAt: now } : {}),
       ...(event === "submitted" ? { submittedAt: now } : {}),
     };

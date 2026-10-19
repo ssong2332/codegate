@@ -41,7 +41,7 @@ export type FallbackTurnChoice =
  * | 1 | `placed && reconnectAnchorScammerTurn === scammerDocCount` | `verify_reconnect` | 재연결 대사는 **이번 턴 하나에만** 자리가 있다 — `reconnectAnchorScammerTurn`은 이미 서버에 기록됐고 리포트의 판정 앵커가 `scammers[그 값]`(=이번 턴에 만들어질 대사)을 가리키기 때문이다(§16.3.2). 미루면 큐가 없어 **영영 유실**된다 |
  * | 2 | `smsDue && !placed` | `sms_announce` | G31의 고정 규칙 그대로 — 문자 announce가 확인 **announce**보다 우선한다. ⭐ **§53.6 (3)/G337** — `placed`(전환 완료) 뒤에는 원 사기범이 이미 없으므로 announce하지 않는다. `findDueInCallSms`는 정확 일치라 이 announce는 다음 턴으로 **이월되지 않는다**(의도된 열화 — 문서 자체는 그대로 도착한다, `inCallSms/buildDoc.ts`의 `resolveInCallSmsPlan`과 같은 판정을 폴백 경로에도 적용한 것) |
  * | 3 | 오퍼 문서가 있고 아직 `announced`가 아님 | `verify_announce` | 2에 밀렸어도 **버리지 않는다**(G31 (2)) — `announcedAt` 부재가 곧 큐라서 다음 턴에 다시 due가 된다 |
- * | 4 | `installConsentDue` | `install_consent` | T84(§15.9.3 G55). **문자 announce가 이긴다** — 문자는 이미 화면에 떠 있어 언급이 없으면 즉시 불일치가 보이지만, 설치 지시는 다음 턴으로 이월돼도 사실이 사라지지 않는다(`consentAnnouncedAt` 미세팅 → 다음 턴 재시도). 현행 콘텐츠에서 `MOCK_SCREENS`는 `IN_CALL_SMS`·`VERIFY_INTERCEPT`와 **scenarioId를 공유하지 않아** 실제로 경합하지 않으며, 그 비공유를 테스트로 고정한다 |
+ * | 4 | `installConsentDue` | `install_consent` | T84(§15.9.3 G55). **문자 announce가 이긴다** — 문자는 이미 화면에 떠 있어 언급이 없으면 즉시 불일치가 보이지만, 설치 지시는 다음 턴으로 이월돼도 사실이 사라지지 않는다(`consentAnnouncedAt` 미세팅 → 다음 턴 재시도). ⚠️ T194-c-1(§84.5.1 · G585) — 옛 *"`MOCK_SCREENS`(app-install)는 `IN_CALL_SMS`·`VERIFY_INTERCEPT`와 scenarioId를 공유하지 않는다"* 는 Q2 3종(`IN_CALL_INSTALL_SCENARIOS`)에서 거짓이 됐다 — 셋 다 공유한다. 비공유 단언은 **이 우선순위 표를 Q2 3종 조합으로 전수 고정하는 테스트**로 대체했다(`scenarios/__tests__/mockScreens.test.ts` G585 블록). 판정 근거(이월돼도 사실이 사라지지 않는다)는 그대로다 |
  *
  * ⚠️ **1이 2보다 앞선 것은 implementer 판정이다**(G31이 규율한 것은 "문자 announce ↔ 확인
  * **announce**"이고 재연결 대사는 그 표에 없다). 근거: (a) 확인 announce는 `announcedAt` 부재로

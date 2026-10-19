@@ -72,6 +72,13 @@ type InCallSmsOverlayProps = {
    */
   onLandingSubmitted: (smsId: string) => void;
   /**
+   * T194-c-1(docs/Architecture.md §84.15.4 · §84.16.5 단계 6 · Q2) — 통화 중 문자가 연 **모의 설치 화면**(`landingKind === "app-install"`)이
+   * 보였다 · 가짜 "권한 허용"에 응했다는 사실을 페이지로 중계한다(기록은 페이지 — `recordMockScreenEvent`). 인자는 랜딩 id뿐이다.
+   * 부재 = 중계 0(종전 동작 — 이 표면의 설치 화면이 없는 세션).
+   */
+  onInstallShown?: (landingId: string) => void;
+  onInstallConsent?: (landingId: string) => void;
+  /**
    * T190-5(docs/Architecture.md §74.5 (2) · AC-092 (b)) — 통화 화면이 계산한 기기 스킨(한 세션 = 한 스킨).
    * 문자함 헤더·스레드와 그 안에서 연 랜딩의 브라우저 바가 같은 값을 쓴다. 부재 = 기본.
    */
@@ -98,6 +105,8 @@ export default function InCallSmsOverlay({
   onOpened,
   onLinkTapped,
   onLandingSubmitted,
+  onInstallShown,
+  onInstallConsent,
   skin = "default",
 }: InCallSmsOverlayProps) {
   const sorted = sortByArrival(messages);
@@ -290,6 +299,8 @@ export default function InCallSmsOverlay({
 
   const openLanding = (sms: InCallSmsView) => {
     onLinkTapped(sms.smsId);
+    // T194-c-1(Q2) — 설치 화면이 열리는 순간을 페이지로 중계한다(서버가 `shown`을 최초 1회만 세팅 — 다시 열어도 멱등).
+    if (sms.landingKind === "app-install" && sms.fakeLandingId) onInstallShown?.(sms.fakeLandingId);
     returnFocusSmsIdRef.current = sms.smsId;
     // D-94 — 같은 문자의 랜딩이 이미 있으면 그대로 다시 보인다(입력값 유지). 다르면 교체(새 마운트).
     setLanding((current) =>
@@ -583,6 +594,10 @@ export default function InCallSmsOverlay({
                 // T123/AC-080 — 제출 **사실 하나**를 페이지로 중계한다. 인자는 이 문자의 id뿐이고
                 // 참가자 입력값은 콜백 자체가 무인자라 여기까지 오지 않는다(G138).
                 onCredentialSubmit={() => onLandingSubmitted(landing.smsId)}
+                // T194-c-1(Q2) — 가짜 "권한 허용" 응낙 **사실 하나**를 페이지로 중계한다(인자 = 랜딩 id뿐 · 이 파일은 콜러블을 부르지 않는다).
+                onInstallConsent={() => {
+                  if (landing.landingKind === "app-install" && landing.landingId) onInstallConsent?.(landing.landingId);
+                }}
               />
             </div>
           )}

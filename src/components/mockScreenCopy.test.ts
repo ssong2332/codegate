@@ -300,7 +300,10 @@ test("[G138/AC-080 (a)] 기록 콜러블 2종의 요청 타입에 **입력값을
   const mock = requestFieldKeys(mockScreenTypes, "RecordMockScreenEventRequest");
   t.diagnostic(`요청 필드 — recordInCallSmsEvent: ${sms.join(",")} / recordMockScreenEvent: ${mock.join(",")}`);
   assert.deepEqual(sms, ["event", "sessionId", "smsId"], "세션 id·문자 id·고정 enum 3개뿐이어야 한다");
-  assert.deepEqual(mock, ["event", "landingId", "sessionId"], "세션 id·랜딩 id·고정 enum 3개뿐이어야 한다");
+  // T194-c-1(docs/Architecture.md §84.5.3 · §84.15.3 · G584) — `callMode`(통화 경로 고정 enum 2값 "realtime" · "fallback")가 더해졌다.
+  // 참가자 입력값이 아니라 화면 상태(통화 경로)라 AC-045 "입력값 서버 미전송"은 그대로다 — 아래에서 enum 리터럴 타입임을 함께 고정한다.
+  assert.deepEqual(mock, ["callMode", "event", "landingId", "sessionId"], "세션 id·랜딩 id·고정 enum 2개(event · callMode)뿐이어야 한다");
+  assert.match(mockScreenTypes, /callMode\?: "realtime" \| "fallback";/, "callMode는 고정 enum 리터럴이어야 한다(자유 문자열 0)");
 });
 
 test("[G138/역검증] 요청 타입에 입력값 필드가 하나라도 붙으면 위 단언이 실제로 실패한다", (t) => {
@@ -709,7 +712,7 @@ function componentHosts(code: string): string[] {
 test("[T190/G453 클라] 컴포넌트의 가짜 호스트 전부(카탈로그 8 + 범용 폴백 1)가 .invalid 규칙을 지킨다", (t) => {
   const hosts = componentHosts(componentCode);
   t.diagnostic(`[G453 클라] 호스트 ${hosts.length}개: ${hosts.join(" · ")}`);
-  assert.equal(hosts.length, 10, "카탈로그 credential 7 + 설치 2(T194-a parcel-install) + 범용 폴백 1");
+  assert.equal(hosts.length, 13, "카탈로그 credential 7 + 설치 5(T194-a parcel-install · T194-c-1 Q2 3종) + 범용 폴백 1");
   assert.deepEqual(hosts.flatMap(clientHostViolations), []);
   // 범용 폴백 호스트는 카탈로그 호스트와 겹치지 않는다(겹치면 미스가 다른 사이트처럼 보인다).
   assert.equal(new Set(hosts).size, hosts.length);
@@ -768,7 +771,8 @@ test("[T194-a §84.13.3 ③ ⓐ] 설치 문구 표의 키 집합 = 서버 카탈
     .map((item) => item.landingId)
     .sort();
   assert.deepEqual(keys, installIds, "표에만 있거나 카탈로그에만 있는 설치 항목이 있다");
-  assert.deepEqual(installIds, ["parcel-install", "subsidy-install"]);
+  // T194-c-1(§84.15.4) — Q2 통화 중 설치 화면 3종이 더해졌다.
+  assert.deepEqual(installIds, ["card-delivery-app-install", "card-guard-app-install", "loan-check-app-install", "parcel-install", "subsidy-install"]);
 });
 
 test("[T194-a §84.13.3 ③ ⓑ] 표에 없는 id의 app-install은 설치 화면을 그리지 않는다 — 기본 문구 폴백 0(소스 구조) · 역방향", (t) => {

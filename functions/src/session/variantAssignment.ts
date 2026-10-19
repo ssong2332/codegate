@@ -21,7 +21,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import type { DocumentReference, Firestore } from "firebase-admin/firestore";
 import type { DifficultyLevel } from "../shared/difficulty";
-import { assignablePool } from "../scenarios/flowVariants";
+import { assignablePool } from "../scenarios/variantPool";
 
 export const VARIANT_ROTATION_COLLECTION = "variantRotation";
 
@@ -52,7 +52,7 @@ export function pickChallengeVariantId(candidates: readonly string[], challengeI
 }
 
 // T194-a(§84.13.5 · G590) — 후보 = 배정 가능 풀(허용 변형 중 세션 종류의 에스컬레이션 값과 통화 단계 유무가 같은 것). 자가(`challengeId` 부재) ·
-// 수신자 배정이 같은 필터를 탄다.
+// 수신자 배정이 같은 필터를 탄다. T194-c-1(§84.16.1) — 풀 함수는 `scenarios/variantPool.ts`로 옮겼고 통화 중 설치 문자 항이 AND로 더해졌다.
 function candidatesOrThrow(scenarioId: string, level: DifficultyLevel, challengeId?: string): string[] {
   const candidates = assignablePool(scenarioId, level, challengeId).map((v) => v.variantId);
   if (candidates.length === 0) {

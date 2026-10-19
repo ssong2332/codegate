@@ -14,6 +14,7 @@ import { buildConfirmResultField, buildInCallSmsResponse } from "../buildDoc";
 import { resolveDeclaredSms } from "../smsGate";
 import { FLOW_VARIANTS, type FlowVariantSms } from "../../scenarios/flowVariants";
 import { findInCallSmsItem } from "../../scenarios/inCallSms";
+import { isInCallInstallSms } from "../../scenarios/mockScreens";
 
 const LOAN = "loan-refinance-scam";
 const loanVariant = (level: "beginner" | "intermediate" | "advanced") => {
@@ -32,6 +33,7 @@ const SCRIPT_A_PRIORS = ["네 누구세요?", "네", "김민수요", "네", "잠
 test("[A-1/⑦ 판정표] 대본 A — 문자 도착 뒤 '알겠어요, 보냈어요'에 1회 confirm, 이어지는 '확인됐어요?'·'아직이에요?'·'네'에는 0", () => {
   const delivered = [{ smsId: "loan-account", userTurnsAtArrival: 7 }];
   const claim = planConfirmResult({
+    scenarioId: LOAN,
     declared: [TRANSFER],
     delivered,
     userTurns: 8,
@@ -42,18 +44,18 @@ test("[A-1/⑦ 판정표] 대본 A — 문자 도착 뒤 '알겠어요, 보냈�
   assert.equal(claim.instruction, buildConfirmResultInstruction("transfer"));
   const priors8 = [...SCRIPT_A_PRIORS, "알겠어요, 보냈어요"];
   assert.equal(
-    planConfirmResult({ declared: [TRANSFER], delivered, userTurns: 9, currentUserText: "확인됐어요?", priorUserTexts: priors8 }).reason,
+    planConfirmResult({ scenarioId: LOAN, declared: [TRANSFER], delivered, userTurns: 9, currentUserText: "확인됐어요?", priorUserTexts: priors8 }).reason,
     "no_claim",
   );
   // 같은 주장을 다시 해도 1회뿐(4행) — 상태 저장 없이 대화 기록에서 판정한다.
   assert.equal(
-    planConfirmResult({ declared: [TRANSFER], delivered, userTurns: 9, currentUserText: "보냈다니까요", priorUserTexts: priors8 }).reason,
+    planConfirmResult({ scenarioId: LOAN, declared: [TRANSFER], delivered, userTurns: 9, currentUserText: "보냈다니까요", priorUserTexts: priors8 }).reason,
     "already_claimed",
   );
 });
 
 test("[A-1/⑦ 판정표] 1행 — 필수 계좌·링크 문자가 아직 안 왔거나, 선택 문자 · 인증번호 문자만 왔으면 no_required_arrival", () => {
-  const base = { userTurns: 9, currentUserText: "보냈어요", priorUserTexts: SCRIPT_A_PRIORS };
+  const base = { scenarioId: LOAN, userTurns: 9, currentUserText: "보냈어요", priorUserTexts: SCRIPT_A_PRIORS };
   assert.equal(planConfirmResult({ ...base, declared: [TRANSFER], delivered: [] }).reason, "no_required_arrival");
   assert.equal(
     planConfirmResult({ ...base, declared: [LINK_OPTIONAL, TRANSFER], delivered: [{ smsId: "loan-apply-link", userTurnsAtArrival: 4 }] }).reason,
@@ -69,6 +71,7 @@ test("[A-1/⑦ 판정표] 1행 — 필수 계좌·링크 문자가 아직 안 �
 
 test("[A-1/⑦ 판정표] 2행 — 문자가 도착한 바로 그 발화에서는 before_reply(참가자가 아직 문자를 못 봤다)", () => {
   const plan = planConfirmResult({
+    scenarioId: LOAN,
     declared: [TRANSFER],
     delivered: [{ smsId: "loan-account", userTurnsAtArrival: 7 }],
     userTurns: 7,
@@ -103,6 +106,7 @@ test("[A-1/⑦ 완료 주장] 판정표 — 계좌·링크·공통은 잡고, �
 
 test("[A-1/⑦ 역방향] 판정이 없던 b7fde97(결과 신호 0)과 같은 입력이면 지금은 지시가 나온다 — 신호를 지우면 이 단언이 깨진다", () => {
   const plan = planConfirmResult({
+    scenarioId: LOAN,
     declared: resolveDeclaredSms(LOAN, loanVariant("beginner").variantId).declared,
     delivered: [{ smsId: "loan-account", userTurnsAtArrival: 7 }],
     userTurns: 8,
@@ -133,14 +137,14 @@ test("[A-1/⑦ 문면] 결과 신호 4종 — 숫자·따옴표 대사·재촉/�
 
 // ── Live 응답 필드(deliverInCallSms) ─────────────────────────────────────────────────────────
 test("[A-1/⑦ Live] buildConfirmResultField — 필수 계좌 문자에만 confirmResultInstruction, 전환 뒤 · 선택 문자 · 인증번호 · 선언 미전달은 빈 객체 / buildInCallSmsResponse는 종전 그대로", () => {
-  assert.deepEqual(buildConfirmResultField({ placed: false }, TRANSFER), {
+  assert.deepEqual(buildConfirmResultField({ placed: false, scenarioId: LOAN }, TRANSFER), {
     confirmResultInstruction: buildLiveConfirmResultInstruction("transfer"),
   });
-  assert.deepEqual(buildConfirmResultField({ placed: true }, TRANSFER), {}, "전환 뒤에는 원 사기범이 없다(announce와 같은 게이트)");
-  assert.deepEqual(buildConfirmResultField({ placed: false }, LINK_OPTIONAL), {}, "선택 문자에는 싣지 않는다");
-  assert.deepEqual(buildConfirmResultField({ placed: false }, OTP), {}, "인증번호 결과는 otpCheck 소관");
-  assert.deepEqual(buildConfirmResultField({ placed: false }, undefined), {}, "선언 항목을 못 찾으면 종전 응답");
-  assert.equal(confirmResultPurposeFor(OTP), undefined);
+  assert.deepEqual(buildConfirmResultField({ placed: true, scenarioId: LOAN }, TRANSFER), {}, "전환 뒤에는 원 사기범이 없다(announce와 같은 게이트)");
+  assert.deepEqual(buildConfirmResultField({ placed: false, scenarioId: LOAN }, LINK_OPTIONAL), {}, "선택 문자에는 싣지 않는다");
+  assert.deepEqual(buildConfirmResultField({ placed: false, scenarioId: LOAN }, OTP), {}, "인증번호 결과는 otpCheck 소관");
+  assert.deepEqual(buildConfirmResultField({ placed: false, scenarioId: LOAN }, undefined), {}, "선언 항목을 못 찾으면 종전 응답");
+  assert.equal(confirmResultPurposeFor(OTP, LOAN), undefined);
   const item = findInCallSmsItem(LOAN, "loan-account");
   assert.ok(item);
   assert.deepEqual(Object.keys(buildInCallSmsResponse(item, { placed: false })).sort(), ["announceInstruction", "smsId"], "종전 응답 키 무변경");
@@ -171,7 +175,8 @@ test("[A-1/⑦ 배선] sendMessage — 다른 턴 지시가 없는 턴에만 pla
 test("[A-1/⑦ 배선] deliverInCallSms — 도착 응답에 선언 항목으로 만든 결과 신호 필드를 덧붙인다(종전 응답 조립은 그대로)", () => {
   const src = read("inCallSms/index.ts");
   assert.match(src, /const declaredItem = declared\.find\(\(d\) => d\.smsId === item\.smsId\);/);
-  assert.match(src, /\.\.\.buildInCallSmsResponse\(item, \{ placed, fictionalBankName \}\),\n\s*\.\.\.buildConfirmResultField\(\{ placed \}, declaredItem\),/);
+  // T194-c-1 G608 — 결과 신호 판별에 세션 시나리오를 함께 넘긴다(설치 문자 제외 — 폴백과 같은 함수).
+  assert.match(src, /\.\.\.buildInCallSmsResponse\(item, \{ placed, fictionalBankName \}\),\n\s*\.\.\.buildConfirmResultField\(\{ placed, scenarioId: session\.scenarioId \}, declaredItem\),/);
 });
 
 // ── A-1 리뷰 Major-2 — 송금·전송과 무관한 "~했어요" 오탐(허용목록 행 추가) ─────────────────────────
@@ -203,7 +208,7 @@ test("[A-1 리뷰 Major-2] 행동 대상이 송금·전송·설치·링크가 �
   for (const text of MAJOR2_FALSE_POSITIVES) {
     assert.equal(isCompletionClaim(text, "transfer"), false, `오탐(transfer): ${text}`);
     assert.equal(isCompletionClaim(text, "link"), false, `오탐(link): ${text}`);
-    const plan = planConfirmResult({ declared: [TRANSFER], delivered, userTurns: 8, currentUserText: text, priorUserTexts: SCRIPT_A_PRIORS });
+    const plan = planConfirmResult({ scenarioId: LOAN, declared: [TRANSFER], delivered, userTurns: 8, currentUserText: text, priorUserTexts: SCRIPT_A_PRIORS });
     assert.equal(plan.reason, "no_claim", `confirm이 나갔다: ${text}`);
   }
 });
@@ -344,6 +349,7 @@ test("[A-2 리뷰 Major 1] 뒤 절이 앞 절을 번복하면 문장 전체 제�
 test("[A-2 QA ⓐ 판정 경로] 주장+질문 발화가 필수 문자 도착 뒤 첫 주장이면 confirm 1회 — 고치기 전이면 no_claim이었다", () => {
   const delivered = [{ smsId: "loan-account", userTurnsAtArrival: 7 }];
   const plan = planConfirmResult({
+    scenarioId: LOAN,
     declared: [TRANSFER],
     delivered,
     userTurns: 8,
@@ -352,4 +358,67 @@ test("[A-2 QA ⓐ 판정 경로] 주장+질문 발화가 필수 문자 도착 �
   });
   assert.equal(plan.reason, "confirm");
   assert.equal(legacyIsCompletionClaim("방금 보냈어요, 확인되나요?", "transfer"), false, "역검증 전제 — 고치기 전에는 놓쳤다");
+});
+
+// ── T194-c-1 G608(docs/Architecture.md §84.15.4 · Q-X3) — 설치 화면을 여는 문자(Q2)는 결과 신호 대상이 아니다 ─────────────
+/** R-e 사본 — T194-c-1 이전 `confirmResultPurposeFor` 원문 그대로(목적만 본다 · 설치 문자 판별 없음). */
+function confirmResultPurposeForBeforeQ2(item: FlowVariantSms | undefined): "transfer" | "link" | undefined {
+  if (!item || !item.required || !(item.purpose === "transfer" || item.purpose === "link")) return undefined;
+  return item.purpose;
+}
+
+test("[T194-c-1 G608 · R-e] Q2 설치 문자 — 사본(목적만)은 'link'로 결과 신호를 내고, 수정본은 폴백 · Live 모두 대상 0 · 계좌 문자는 그대로", (t) => {
+  const q2 = FLOW_VARIANTS.filter((v) => v.sms.some((s) => isInCallInstallSms(v.scenarioId, s.smsId)));
+  assert.deepEqual(q2.map((v) => v.variantId).sort(), ["fv-m3hd", "fv-tvnj", "fv-x7ue"], "Q2 설치 문자를 선언한 변형은 자가 고급 3벌");
+  const lines: string[] = [];
+  for (const v of q2) {
+    const declared = resolveDeclaredSms(v.scenarioId, v.variantId).declared;
+    const install = declared.find((d) => isInCallInstallSms(v.scenarioId, d.smsId));
+    assert.ok(install && install.required && install.purpose === "link", `${v.variantId}: 설치 문자는 필수 link(#182)`);
+    const before = confirmResultPurposeForBeforeQ2(install);
+    const after = confirmResultPurposeFor(install, v.scenarioId);
+    // 폴백 — 설치 문자가 도착한 뒤 "앱 설치했어요"(공통 완료 동사 + 대상 "설치 · 앱" — 예전이면 주장으로 셌다).
+    assert.equal(isCompletionClaim("앱 설치했어요", "link"), true, "전제 — 이 발화는 link 완료 주장 판정에 걸린다");
+    const fallback = planConfirmResult({
+      scenarioId: v.scenarioId,
+      declared,
+      delivered: [{ smsId: install.smsId, userTurnsAtArrival: 4 }],
+      userTurns: 5,
+      currentUserText: "앱 설치했어요",
+      priorUserTexts: ["네", "누구세요", "네", "알겠어요"],
+    });
+    const live = buildConfirmResultField({ placed: false, scenarioId: v.scenarioId }, install);
+    lines.push(`${v.variantId}: 사본=${before} · 수정본=${after} · 폴백=${fallback.reason} · Live=${JSON.stringify(live)}`);
+    assert.equal(before, "link", "R-e 사본이 결과 신호를 내야 역방향이 성립한다");
+    assert.equal(after, undefined);
+    assert.equal(fallback.reason, "no_required_arrival");
+    assert.equal(fallback.instruction, undefined);
+    assert.deepEqual(live, {});
+  }
+  t.diagnostic(`[G608 · R-e] ${lines.join(" | ")}`);
+  // 같은 loan 자가 고급 세션의 계좌 문자는 결과 신호 그대로(설치 제외가 계좌까지 막지 않는다).
+  const loanSelf = resolveDeclaredSms(LOAN, "fv-m3hd").declared;
+  const transferItem = loanSelf.find((d) => d.purpose === "transfer");
+  assert.equal(confirmResultPurposeFor(transferItem, LOAN), "transfer");
+  const afterTransfer = planConfirmResult({
+    scenarioId: LOAN,
+    declared: loanSelf,
+    delivered: [
+      { smsId: "loan-check-app-link", userTurnsAtArrival: 4 },
+      { smsId: "loan-account", userTurnsAtArrival: 7 },
+    ],
+    userTurns: 8,
+    currentUserText: "알겠어요, 보냈어요",
+    priorUserTexts: SCRIPT_A_PRIORS,
+  });
+  assert.equal(afterTransfer.reason, "confirm");
+  assert.equal(afterTransfer.purpose, "transfer");
+});
+
+test("[T194-c-1 G608 배선] 폴백(sendMessage)과 Live(deliverInCallSms)가 같은 판별 함수에 세션 시나리오를 넘긴다(소스 스캔)", () => {
+  assert.match(read("roleplay/index.ts"), /\? planConfirmResult\(\{\n\s*scenarioId: session\.scenarioId,/);
+  const confirmSrc = read("inCallSms/confirmResult.ts");
+  assert.match(confirmSrc, /if \(isInCallInstallSms\(scenarioId, item\.smsId\)\) return undefined;/);
+  assert.match(confirmSrc, /const purpose = confirmResultPurposeFor\(item, input\.scenarioId\);/);
+  assert.match(read("inCallSms/buildDoc.ts"), /const purpose = confirmResultPurposeFor\(declaredItem, input\.scenarioId\);/);
 });

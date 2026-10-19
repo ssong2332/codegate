@@ -12,7 +12,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {
   FLOW_VARIANTS,
-  assignablePool,
   FLOW_VARIANT_SPECS,
   RELAY_RUNTIME_AVAILABLE,
   UNRESOLVED_TACTIC_LABELS,
@@ -22,6 +21,8 @@ import {
   type FlowVariant,
 } from "../flowVariants";
 import { SCENARIO_PROMPTS } from "../index";
+// T194-c-1(§84.16.1) — 배정 풀은 `variantPool.ts`로 옮겼다(순환 회피 — 정의 이동 · 단언 무변경).
+import { assignablePool } from "../variantPool";
 import { resolveScenarioEscalation, resolveSessionEscalation } from "../escalation";
 import { PUBLIC_SCENARIOS, isAdvancedOnlyScenario } from "../publicMeta";
 import { IN_CALL_SMS } from "../inCallSms";
@@ -542,6 +543,10 @@ type PoolFn = (scenarioId: string, level: DifficultyLevel, challengeId?: string)
 function sessionKindExists(scenarioId: string, level: DifficultyLevel, kind: SessionKind): boolean {
   if (listFlowVariants(scenarioId, level).length === 0) return false; // 고급 전용 시나리오의 초급 · 중급
   if (kind === "챌린지" && resolveScenarioEscalation(PUBLIC_SCENARIOS[scenarioId], "beginner") !== undefined) return false;
+  // T194-c-1(§84.16.4 G590 "챌린지 거부 조합 제외") — 고급 전용 시나리오는 챌린지 생성이 거부된다(`challenge/index.ts` AC-097 (g)).
+  // 예전에는 그 칸의 풀이 우연히 비지 않아 드러나지 않았다 — card-delivery-call 고급 변형이 Q2 설치 문자를 선언하자 챌린지 풀이 0이 됐다
+  // (존재하지 않는 세션 종류라 정상).
+  if (kind === "챌린지" && isAdvancedOnlyScenario(scenarioId)) return false;
   return true;
 }
 

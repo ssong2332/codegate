@@ -241,6 +241,11 @@ export type RecordMockScreenEventRequest = {
   sessionId: string;
   landingId: string;
   event: MockScreenEvent;
+  /**
+   * T194-c-1(docs/Architecture.md §84.5.3 · §84.15.3) — 통화 중 문자로 연 설치 화면(Q2)에만 **필수**(서버가 부재면 거부) · 메신저 경로는 보내지
+   * 않는다(무시된다). ⛔ 응낙 시점의 사기범 턴 계수는 보내지 않는다 — 앵커는 서버가 문자 문서에서 복사한다.
+   */
+  callMode?: "realtime" | "fallback";
 };
 export type RecordMockScreenEventResponse = { ok: true };
 

@@ -19,6 +19,8 @@
 //    문면 상수를 쓴다(클라 저작 0 — G101/G386 관례).
 // ⛔ 문면에 횟수·턴 번호 0(F11/G130) · 따옴표 대사 예시 0 · "재촉"·"다급" 0(smsGate 문면 규칙과 같은 기준).
 import type { FlowVariantSms, SmsPurpose } from "../scenarios/flowVariants";
+// T194-c-1 G608 — 값 import는 카탈로그 판별자 1개뿐이다(Firestore · LLM 0 유지 — 위 "잎 모듈" 행의 예외).
+import { isInCallInstallSms } from "../scenarios/mockScreens";
 import type { DeliveredSmsRecord } from "./smsGate";
 
 /** 결과 신호 대상 목적. identity는 `otpCheck`가 소유한다(위 머리 주석). */
@@ -50,9 +52,18 @@ export function buildLiveConfirmResultInstruction(purpose: "transfer" | "link"):
   return `(상대가 이 문자 안내대로 마쳤다고 말하면, 그 말에 대답할 때 ${RESULT_PHRASE[purpose]} 그럴듯하게 알려 주고, 곧바로 다음 요구로 넘어가거나 더 요구할 것이 없으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 마무리하라. 확인 중이라거나 기다려 달라는 말은 하지 마라.)`;
 }
 
-/** 이 선언 항목이 결과 신호 대상인가(필수 + transfer/link). Live 응답 조립이 같은 조건을 쓴다. */
-export function confirmResultPurposeFor(item: FlowVariantSms | undefined): "transfer" | "link" | undefined {
+/**
+ * 이 선언 항목이 결과 신호 대상인가(필수 + transfer/link). Live 응답 조립이 같은 조건을 쓴다.
+ * T194-c-1 G608(docs/Architecture.md §84.15.4 · Q-X3) — **설치 화면을 여는 문자(Q2)는 제외**한다. 결과 신호의 "신청과 본인확인 처리가
+ * 끝났다 · 마무리하라"는 설치 문자에 거짓이고, 설치 직후 끊기를 불러 AC-105 기회를 닫는다. 판별자는 목적이 아니라 그 문자의 카탈로그 랜딩
+ * kind(`isInCallInstallSms`)다 — 그래서 `scenarioId`가 필요하다. 설치 결과의 신호는 응낙 구조화 이벤트 하나뿐이다(X9).
+ */
+export function confirmResultPurposeFor(
+  item: FlowVariantSms | undefined,
+  scenarioId: string,
+): "transfer" | "link" | undefined {
   if (!item || !item.required || !isConfirmPurpose(item.purpose)) return undefined;
+  if (isInCallInstallSms(scenarioId, item.smsId)) return undefined;
   return item.purpose;
 }
 
@@ -138,6 +149,8 @@ export type ConfirmResultPlan = {
 };
 
 export type ConfirmResultInput = {
+  /** T194-c-1 G608 — 설치 문자 제외 판별(`confirmResultPurposeFor`)의 입력. */
+  scenarioId: string;
   declared: readonly FlowVariantSms[];
   delivered: readonly DeliveredSmsRecord[];
   /** 이번 발화 포함 사용자 발화 수(폴백 `userTurnsNow` — 문자 게이트와 같은 변수). */
@@ -157,7 +170,7 @@ export function planConfirmResult(input: ConfirmResultInput): ConfirmResultPlan 
   const deliveredIds = new Map(input.delivered.map((d) => [d.smsId, d.userTurnsAtArrival ?? 0] as const));
   let target: { purpose: "transfer" | "link"; arrival: number } | undefined;
   for (const item of input.declared) {
-    const purpose = confirmResultPurposeFor(item);
+    const purpose = confirmResultPurposeFor(item, input.scenarioId);
     const arrival = deliveredIds.get(item.smsId);
     if (purpose === undefined || arrival === undefined) continue;
     if (target === undefined || arrival > target.arrival) target = { purpose, arrival };

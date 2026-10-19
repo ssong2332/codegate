@@ -16,6 +16,7 @@ import { SCENARIO_PROMPTS, FAMILY_ACCIDENT_SCENARIO_ID } from "../../scenarios";
 import { hasInCallSms, IN_CALL_SMS } from "../../scenarios/inCallSms";
 import { hasVerifyIntercept, VERIFY_INTERCEPT } from "../../scenarios/verifyIntercept";
 import {
+  IN_CALL_INSTALL_CONSENT_INSTRUCTION,
   MOCK_INSTALL_CONSENT_INSTRUCTION,
   MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL,
   MOCK_SCREENS,
@@ -623,6 +624,10 @@ function realTurnInstructionsFor(scenarioId: string): string[] {
   for (const sms of IN_CALL_SMS[scenarioId] ?? []) instructions.push(sms.announceInstruction);
   if ((MOCK_SCREENS[scenarioId] ?? []).length > 0) {
     instructions.push(MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL);
+    // T194-c-1 G585 — 통화 중 설치 화면이 있는 시나리오(Q2)는 실시간 응낙 지시도 매트릭스에 싣는다.
+    if ((MOCK_SCREENS[scenarioId] ?? []).some((item) => item.entrySurface === "in-call-sms" && item.kind === "app-install")) {
+      instructions.push(IN_CALL_INSTALL_CONSENT_INSTRUCTION);
+    }
   }
   // A-1 ⑦⑧ — 새 폴백 턴 지시(확인 결과 · 에스컬레이션 뒤 맥락)도 같은 전수 매트릭스에 싣는다.
   if ((IN_CALL_SMS[scenarioId] ?? []).length > 0) {
@@ -738,6 +743,8 @@ test("[T86 전수②] T83·T84가 실제로 싣는 **진짜 턴 지시 문구**�
     (Object.keys(VERIFY_INTERCEPT).length * 2 +
       Object.values(IN_CALL_SMS).flat().length +
       Object.keys(MOCK_SCREENS).length * 2 +
+      // T194-c-1 G585 — 통화 중 설치 화면 시나리오(Q2 3종) +1(실시간 응낙 지시).
+      Object.keys(MOCK_SCREENS).filter((k) => MOCK_SCREENS[k].some((item) => item.entrySurface === "in-call-sms" && item.kind === "app-install")).length +
       Object.keys(IN_CALL_SMS).filter((k) => IN_CALL_SMS[k].length > 0).length * 2 +
       Object.keys(SCENARIO_PROMPTS).length) *
     3;
