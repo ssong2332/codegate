@@ -119,6 +119,36 @@ test("[PR-A2 F6 판정표] audit-A 원문 대기 턴은 대기 · 질문으로 �
   }
 });
 
+test("[PR-A2 리뷰 Major 2] 대기 어휘는 마지막 문장만 · 참가자 행동을 청하는 끝맺음은 대기가 아니다 — 1차 판정(전체 텍스트)은 오탐했다(역검증)", () => {
+  /** 1차 판정 그대로(전체 텍스트에 어휘 검사) — 역검증 전용 사본. */
+  const firstVersion = (text: string): boolean => {
+    const t = text.trim();
+    if (!t) return false;
+    const ss = t.match(/[^.?!\n]+[.?!]?/g) ?? [];
+    if ((ss[ss.length - 1] ?? "").trim().endsWith("?")) return false;
+    return /확인\s*(?:하는\s*)?중|확인하고\s*있|확인\s*절차|처리\s*(?:하는\s*)?중|처리하고\s*있|조회\s*중|확인되는\s*대로|처리되는\s*대로|확인되면|기다려|기다리|대기\s*중|지연|잠시만/.test(t);
+  };
+  for (const line of [
+    "잠시만요 선생님, 이 계좌로 지금 바로 이체해 주세요.", // 요구로 끝남
+    "입금 확인되면 말씀해 주세요.", // 참가자 행동을 기다리는 정당한 대기
+    "입금 확인되면 말씀해주세요",
+    "확인 중입니다. 지금 바로 앱을 설치해 주세요.", // 대기 뒤 요구로 끝남
+    "잠시만요, 조회해 보겠습니다. 고객님 한도는 천만 원까지 승인됐습니다.", // 대기 뒤 결과로 끝남(마지막 문장 한정이 가른다)
+  ]) {
+    assert.equal(isStallLine(line), false, `오탐: ${line}`);
+    assert.equal(firstVersion(line), true, `역검증 전제 — 1차 판정이 이 표본을 대기로 잡아야 한다: ${line}`);
+  }
+  // 대기를 청하는 끝맺음 · 호칭 꼬리는 그대로 대기다.
+  for (const line of [
+    "잠시만 기다려 주세요. 고객님.",
+    "알겠습니다. 확인되는 대로 바로 다음 단계 안내드릴 테니 잠시만 그대로 기다려 주세요, 고객님.",
+    "조금만 더 기다려 주시면 바로 안내해 드리겠습니다.",
+    "잠시만 대기해 주세요.",
+  ]) {
+    assert.equal(isStallLine(line), true, `놓침: ${line}`);
+  }
+});
+
 const turn = (nowMs: number, stallLike: boolean, participantHasSpoken = true): StallNudgeEvent => ({
   type: "scammerTurn",
   nowMs,
@@ -299,7 +329,7 @@ test("[PR-A2 배선 · 세션 컴포넌트] 넛지는 래치 뒤 0 · silence �
 test("[PR-A2 배선 · 세션 컴포넌트] 맥락 주입 슬롯 — instructionTurn 뒤 · personaStateTurn 앞 effect · 래치 가드 · 맥락 주입 함수 경유(turnComplete:false) · 전사 기록 0 · 결과 신호는 도구 응답 전송 뒤", () => {
   const effect = slice(sessionCode, "if (!contextTurn || !contextTurn.text.trim()) return;", "}, [contextTurn?.seq]);");
   assert.ok(effect.includes("if (handlersRef.current.isHangupLatched()) return;"));
-  assert.ok(effect.includes("injectContextRef.current?.(contextTurn.text, contextTurn.delivery);"));
+  assert.ok(effect.includes("if (injectContextRef.current?.(contextTurn.text, contextTurn.delivery)) {"));
   assert.equal(/onTranscriptTurn|turnComplete: true|requestClientTurnRef/.test(effect), false);
   const iInstr = sessionCode.indexOf("}, [instructionTurn?.seq]);");
   const iCtx = sessionCode.indexOf("}, [contextTurn?.seq]);");
@@ -328,9 +358,32 @@ test("[PR-A2 배선 · 화면] 백스톱은 안내를 큐에 넣기 전에 판�
   assert.ok(place.includes("const plan = planVerifyReconnectFailure({"));
   assert.ok(place.includes("for (let attempt = 1; attempt <= VERIFY_RECONNECT_MAX_ATTEMPTS && result === null; attempt += 1) {"));
   assert.ok(place.includes("latched: isEndLatched(callEndingRef.current),"), "래치 뒤 재시도 · 주입 0(G510)");
-  assert.ok(place.includes('delivery: "verifyReconnectFailed"'));
+  assert.ok(place.includes('pushContextTurn(text, "verifyReconnectFailed");'));
   assert.ok(pageCode.includes("contextTurn={contextTurn}"));
   assert.ok(pageCode.includes("onConfirmResultInstruction={handleConfirmResultInstruction}"));
   // 자동 전환 래치(오퍼당 1회)는 그대로다.
   assert.ok(pageCode.includes("autoReconnectOfferIdRef.current = verifyOffer.offerId"));
+});
+
+test("[PR-A2 리뷰 Minor 1] 맥락 주입 슬롯은 실제로 보냈을 때만 비운다 — 연결 전 · 재마운트 공백분은 쥐었다가 연결 직후 1회(유실 0) · 보낸 뒤 비워 재주입 0(중복 0)", () => {
+  // 세션 컴포넌트 — 못 보내면 쥐고, 보내면 부모에 알린다.
+  const effect = slice(sessionCode, "if (!contextTurn || !contextTurn.text.trim()) return;", "}, [contextTurn?.seq]);");
+  assert.ok(effect.includes("handlersRef.current.onContextTurnDelivered?.(contextTurn.seq);"));
+  assert.ok(effect.includes("pendingContextTurnRef.current = contextTurn;"), "세션이 없을 때 버린다(결과 신호 영구 소실)");
+  // 맥락 주입 함수는 보냈는지를 돌려준다(세션 없음 · 전송 예외 = false).
+  const inject = slice(sessionCode, "const injectContext = (text: string, delivery: InstructionDelivery): boolean => {", "let stallNudgeState = ");
+  assert.ok(inject.includes("if (!activeSession) return false;"));
+  assert.ok(inject.includes("return true;"));
+  // 연결 직후(주입 함수를 노출한 바로 그 자리) 쥔 것을 보낸다 · 래치 뒤 0.
+  const connect = slice(sessionCode, "injectContextRef.current = injectContext;", "OPENING_TRIGGER_TURN");
+  assert.ok(connect.includes("const pendingContext = pendingContextTurnRef.current;"));
+  assert.ok(connect.includes("!handlersRef.current.isHangupLatched() && injectContext(pendingContext.text, pendingContext.delivery)"));
+  assert.ok(connect.includes("handlersRef.current.onContextTurnDelivered?.(pendingContext.seq);"));
+  // 화면 — 전달 확인이 온 seq만 비운다 · seq는 단조 증가(비운 뒤에도 재사용 0).
+  assert.ok(pageCode.includes("setContextTurn((prev) => (prev && prev.seq === seq ? null : prev));"));
+  assert.ok(pageCode.includes("onContextTurnDelivered={handleContextTurnDelivered}"));
+  const push = slice(pageCode, "const pushContextTurn = useCallback(", "const handleContextTurnDelivered = ");
+  assert.ok(push.includes("contextTurnSeqRef.current += 1;"));
+  assert.equal(/prev\?\.seq \?\? 0\) \+ 1, delivery: "(?:confirmResult|verifyReconnectFailed)"/.test(pageCode), false, "prev 기반 seq가 남았다(비운 뒤 1로 되돌아간다)");
+  assert.equal((pageCode.match(/setContextTurn\(/g) ?? []).length, 2, "슬롯 쓰기는 pushContextTurn · 전달 확인 두 곳뿐");
 });

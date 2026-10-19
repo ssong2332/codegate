@@ -77,25 +77,44 @@ test("[PR-A2 · end_call 끔] loan 3난이도 Live — end_call 0 · NONE 문면
   }
 });
 
-test("[PR-A2 · end_call 끔] 결과 신호 필드(deliverInCallSms 응답)는 끊기 스위치를 입력으로 받지 않는다 — 끔 · 운영값 어느 쪽이든 필수 계좌 · 링크 문자에 실린다", () => {
-  // 시그니처 자체가 스위치를 받지 않는다(인자 2개 — 전환 여부 · 선언 항목).
+test("[PR-A2 · end_call 끔 · 리뷰 Minor 3] 끔(주입) · 모듈 운영값 각각으로 세션을 만들어도 결과 신호가 지나갈 문자 도구가 선언되고, 결과 신호 필드는 스위치와 무관하게 같은 1줄이다", async () => {
+  // 결과 신호 필드 조립 함수는 스위치를 입력으로 받지 않는다(인자 2개 — 전환 여부 · 선언 항목).
   assert.equal(buildConfirmResultField.length, 2);
-  for (const liveAvailable of [false, END_CALL_LIVE_AVAILABLE]) {
-    for (const level of LEVELS) {
-      const variant = FLOW_VARIANTS.find((v) => v.scenarioId === LOAN && v.level === level);
-      assert.ok(variant);
-      const required = resolveDeclaredSms(LOAN, variant.variantId).declared.filter(
-        (d) => d.required && (d.purpose === "transfer" || d.purpose === "link"),
-      );
-      assert.ok(required.length > 0, `loan ${level}: 필수 계좌 · 링크 문자 선언이 없다(표본 전제)`);
-      for (const item of required) {
-        const field = buildConfirmResultField({ placed: false }, item);
-        assert.equal(
-          field.confirmResultInstruction,
-          buildLiveConfirmResultInstruction(item.purpose as "transfer" | "link"),
-          `liveAvailable=${liveAvailable} ${level}/${item.smsId}`,
+  const capture = captureTokenRequest();
+  try {
+    const seen = new Map<boolean, string[]>();
+    for (const liveAvailable of [false, END_CALL_LIVE_AVAILABLE]) {
+      const fields: string[] = [];
+      for (const level of LEVELS) {
+        const variant = FLOW_VARIANTS.find((v) => v.scenarioId === LOAN && v.level === level);
+        assert.ok(variant);
+        const creds = await new GeminiRealtimeProvider("test-key", liveAvailable).createCallCredentials({
+          ...VOICE_SCOPE,
+          sessionId: "sess",
+          scenarioId: LOAN,
+          voiceId: "",
+          difficultyLevel: level,
+          flowVariantId: variant.variantId,
+        });
+        const tag = `liveAvailable=${liveAvailable} ${level}`;
+        // 스위치가 실제로 반영됐다(값을 쓴다는 증거) — 끊기 도구 유무가 값을 따른다.
+        assert.equal(creds.liveTools?.endCall !== undefined, liveAvailable, `${tag}: end_call 유무가 스위치를 따르지 않는다`);
+        // 결과 신호가 실려 오는 경로(send_prepared_sms → deliverInCallSms 응답)는 스위치와 무관하게 있다.
+        assert.equal(creds.liveTools?.sendPreparedSms, "send_prepared_sms", `${tag}: 문자 도구가 없다`);
+        const required = resolveDeclaredSms(LOAN, variant.variantId).declared.filter(
+          (d) => d.required && (d.purpose === "transfer" || d.purpose === "link"),
         );
+        assert.ok(required.length > 0, `${tag}: 필수 계좌 · 링크 문자 선언이 없다(표본 전제)`);
+        for (const item of required) {
+          const field = buildConfirmResultField({ placed: false }, item);
+          assert.equal(field.confirmResultInstruction, buildLiveConfirmResultInstruction(item.purpose as "transfer" | "link"), `${tag}/${item.smsId}`);
+          fields.push(`${level}/${item.smsId}:${field.confirmResultInstruction}`);
+        }
       }
+      seen.set(liveAvailable, fields);
     }
+    assert.deepEqual(seen.get(false), seen.get(END_CALL_LIVE_AVAILABLE), "끔과 운영값에서 결과 신호가 다르다");
+  } finally {
+    capture.restore();
   }
 });

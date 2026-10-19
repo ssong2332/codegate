@@ -86,10 +86,15 @@ export function releaseConfirmResultOnDispatch(
  *
  * | # | If(그 턴의 사기범 전사) | Then |
  * |---|---|---|
+ * ⭐ 아래 2~5행은 **마지막 문장**만 본다(A-2 리뷰 Major 2 — 전체 텍스트에 걸면 "잠시만요 …, 지금 바로 이체해 주세요."처럼
+ * 요구로 끝난 턴이 대기로 잡혔다). 마지막 문장 = 두 어절 이상인 마지막 문장 — "…기다려 주세요. 고객님."의 호칭 · "네." 같은
+ * 한 어절 꼬리 문장은 건너뛴다(모든 문장이 한 어절이면 맨 끝 문장).
+ *
  * | 1 | 비었다 | 아님 |
  * | 2 | 마지막 문장이 `?`로 끝난다(참가자에게 물었다 — 그 뒤 침묵은 참가자 차례다) | 아님 |
- * | 3 | 대기 · 확인 중 어휘가 있다 — 확인 중 · 확인하고 있 · 확인 절차 · 처리 중 · 처리하고 있 · 조회 중 · 확인되는 대로 · 처리되는 대로 · 확인되면 · 기다려/기다리 · 대기 중 · 지연 · 잠시만 | **대기** |
- * | 4 | 그 외 | 아님 |
+ * | 3 | 마지막 문장이 참가자에게 **기다림이 아닌 행동**을 청한다 — `~해 주세요/주십시오/주시면/주시겠어요` 앞말이 기다려·기다리·대기해·대기하가 아니다(A-2 리뷰 Major 2) | 아님("입금 확인되면 말씀해 주세요"는 참가자 행동을 기다리는 정당한 대기 · "지금 바로 이체해 주세요"는 요구) |
+ * | 4 | 마지막 문장에 대기 · 확인 중 어휘가 있다 — 확인 중 · 확인하고 있 · 확인 절차 · 처리 중 · 처리하고 있 · 조회 중 · 확인되는 대로 · 처리되는 대로 · 확인되면 · 기다려/기다리 · 대기 중 · 지연 · 잠시만 | **대기** |
+ * | 5 | 그 외 | 아님 |
  *
  * 표본(audit-A 원문): "잠시만 기다려 주세요" · "확인되는 대로 바로 안내해 드릴게요" · "전산 처리 과정에서 조금 지연되고 있는데" ·
  * "아직 입금이 확인되지 않아서 대기 중입니다". ⚠️ "대기" 단독은 넣지 않았다("대기자"가 걸린다 — audit-A 정규식 오탐).
@@ -97,13 +102,28 @@ export function releaseConfirmResultOnDispatch(
 const STALL_VOCABULARY =
   /확인\s*(?:하는\s*)?중|확인하고\s*있|확인\s*절차|처리\s*(?:하는\s*)?중|처리하고\s*있|조회\s*중|확인되는\s*대로|처리되는\s*대로|확인되면|기다려|기다리|대기\s*중|지연|잠시만/;
 
+/** 3행 — 참가자에게 청하는 형태와 그 앞말. 앞말이 아래 `WAIT_REQUEST_HEAD`면 대기를 청한 것이다. */
+const REQUEST_FORM = /(\S+?)\s*주(?:세요|십시오|시면|시겠어요|시겠습니까|실래요)/g;
+const WAIT_REQUEST_HEAD = /^(?:기다려|기다리|대기해|대기하)/;
+
+/** 두 어절 이상인 마지막 문장(한 어절 꼬리 — 호칭 · "네." — 는 건너뛴다). 전부 한 어절이면 맨 끝 문장. */
+function lastSubstantiveSentence(text: string): string {
+  const sentences = (text.match(/[^.?!\n]+[.?!]?/g) ?? []).map((s) => s.trim()).filter((s) => s.length > 0);
+  for (let i = sentences.length - 1; i >= 0; i -= 1) {
+    if (/\s/.test(sentences[i])) return sentences[i];
+  }
+  return sentences[sentences.length - 1] ?? "";
+}
+
 export function isStallLine(text: string): boolean {
   const trimmed = text.trim();
   if (trimmed.length === 0) return false;
-  const sentences = trimmed.match(/[^.?!\n]+[.?!]?/g) ?? [];
-  const last = (sentences[sentences.length - 1] ?? "").trim();
+  const last = lastSubstantiveSentence(trimmed);
   if (last.endsWith("?")) return false;
-  return STALL_VOCABULARY.test(trimmed);
+  for (const m of last.matchAll(REQUEST_FORM)) {
+    if (!WAIT_REQUEST_HEAD.test(m[1])) return false;
+  }
+  return STALL_VOCABULARY.test(last);
 }
 
 /**

@@ -293,6 +293,54 @@ test("[A-2 QA 정탐 회귀] 기존 정탐 · 오탐 표본은 판정이 그대�
   assert.equal(isCompletionClaim("보냈다니까요", "transfer"), true);
 });
 
+/**
+ * A-2 1차(절 나눔만 · 번복 행 없음) 판정 그대로 — 리뷰 Major 1 역검증 전용 사본. ⛔ 제품 코드가 이것을 쓰면 안 된다.
+ * 지금 판정에서 "뒤 절 번복" 행만 뺀 것이다.
+ */
+function clauseSplitWithoutRetraction(text: string, purpose: "transfer" | "link"): boolean {
+  const byPurpose = {
+    transfer: /보냈|부쳤|(?:입금|이체|송금)\s*(?:했|해\s*드렸|완료)|넣었|넣어\s*드렸/,
+    link: /눌렀|들어갔|접속했|입력했|신청했|진행했|인증했/,
+  }[purpose];
+  const generic = /다\s*했|했어요|했습니다|완료(?:했|됐)|마쳤|끝냈/;
+  const target = { transfer: /송금|입금|이체|계좌/, link: /링크|신청|설치|앱|인증/ }[purpose];
+  const followed =
+    /말씀하신\s*대로|안내(?:하신|해\s*주신)?\s*대로|알려\s*주신\s*대로|시키신\s*대로|하라는\s*대로|하라고\s*하신\s*대로|문자(?:\s*안내)?\s*대로/;
+  const exclude =
+    /(?:안|못)\s*(?:보냈|했|넣었|눌렀|해|들어갔|접속했|입력했|신청했|진행했|인증했)|않았|아직|싫|안\s*할|못\s*하겠|할까요|하나요|해야|전화했|물어봤|신고했|확인했|알아봤/;
+  if (/취소|되돌렸|돌려받/.test(text)) return false;
+  return (text.match(/[^.?!\n]+[.?!]?/g) ?? []).some((raw) => {
+    const s = raw.trim();
+    if (s.length === 0) return false;
+    const targeted = target.test(s) || followed.test(s);
+    return s.split(/(?<=[요다죠])\s*,\s*|(?<=[요다죠])\s+(?=그런데|근데)/).some((rc) => {
+      const c = rc.trim();
+      if (c.length === 0 || c.endsWith("?")) return false;
+      if (exclude.test(c)) return false;
+      return byPurpose.test(c) || (generic.test(c) && targeted);
+    });
+  });
+}
+
+test("[A-2 리뷰 Major 1] 뒤 절이 앞 절을 번복하면 문장 전체 제외 — 번복 행 없는 1차 판정은 주장으로 잡았다(역검증) · ⓐ 표본은 그대로 참", () => {
+  const retracted: Array<[string, "transfer" | "link"]> = [
+    ["보냈어요, 아니 아직 안 보냈어요", "transfer"],
+    ["보냈어요, 못 보냈어요", "transfer"],
+    ["이체했어요, 아뇨 아직이에요", "transfer"],
+    ["링크 눌렀어요, 근데 안 들어갔어요", "link"],
+  ];
+  for (const [text, purpose] of retracted) {
+    assert.equal(isCompletionClaim(text, purpose), false, `번복 놓침(${purpose}): ${text}`);
+    assert.equal(clauseSplitWithoutRetraction(text, purpose), true, `역검증 전제 — 1차 판정이 이 표본을 주장으로 잡아야 한다: ${text}`);
+  }
+  // ⓐ 유지 — 뒤 절이 질문이면 번복이 아니다.
+  for (const c of A2_CASES.filter((x) => x.row === "ⓐ")) {
+    assert.equal(isCompletionClaim(c.text, c.purpose), true, `ⓐ 회귀: ${c.text}`);
+  }
+  // 번복 뒤 다시 주장(앞 절이 부정 · 뒤 절이 주장)은 주장이다.
+  assert.equal(isCompletionClaim("아까는 못 보냈어요, 방금 보냈어요", "transfer"), true);
+});
+
 test("[A-2 QA ⓐ 판정 경로] 주장+질문 발화가 필수 문자 도착 뒤 첫 주장이면 confirm 1회 — 고치기 전이면 no_claim이었다", () => {
   const delivered = [{ smsId: "loan-account", userTurnsAtArrival: 7 }];
   const plan = planConfirmResult({

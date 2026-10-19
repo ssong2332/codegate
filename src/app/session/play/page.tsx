@@ -318,6 +318,17 @@ export default function SessionCallPage() {
   >(null);
   // PR-A2 — 확인 결과 신호 주입 상태(세션당 1회 · 도착 안내 뒤 대기분). 판정은 순수 함수(`stallRecovery.ts`).
   const confirmResultInjectionRef = useRef<ConfirmResultInjectionState>(INITIAL_CONFIRM_RESULT_INJECTION_STATE);
+  // PR-A2 리뷰 Minor 1 — 슬롯 seq는 단조 증가(전달 확인으로 슬롯을 비운 뒤에도 앞 seq를 재사용하지 않는다).
+  const contextTurnSeqRef = useRef(0);
+  const pushContextTurn = useCallback((text: string, delivery: "confirmResult" | "verifyReconnectFailed") => {
+    contextTurnSeqRef.current += 1;
+    setContextTurn({ text, seq: contextTurnSeqRef.current, delivery });
+  }, []);
+  // PR-A2 리뷰 Minor 1 — 세션 컴포넌트가 그 슬롯을 **실제로 보냈을 때만** 비운다. 연결 전 · 재마운트 공백에 도착한 지시는 슬롯에 남아
+  // 연결 직후 보내진다(유실 0) · 보낸 뒤에는 비워져 다음 재마운트가 다시 넣지 않는다(중복 0).
+  const handleContextTurnDelivered = useCallback((seq: number) => {
+    setContextTurn((prev) => (prev && prev.seq === seq ? null : prev));
+  }, []);
   // 이번 사기범 턴에 이미 지시를 하나 넣었는가(다음 turnComplete까지 추가 주입을 보류한다).
   const instructionBusyRef = useRef(false);
   // §52.7 (5) 가·나 / §57.5(G369) — `shouldDrainInstructionQueue`의 입력. 아직 지시를 한 번도
@@ -829,9 +840,9 @@ export default function SessionCallPage() {
     confirmResultInjectionRef.current = confirm.state;
     const confirmText = confirm.injectNow;
     if (confirmText) {
-      setContextTurn((prev) => ({ text: confirmText, seq: (prev?.seq ?? 0) + 1, delivery: "confirmResult" }));
+      pushContextTurn(confirmText, "confirmResult");
     }
-  }, []);
+  }, [pushContextTurn]);
 
   const enqueueTurnInstruction = useCallback(
     (
@@ -861,10 +872,10 @@ export default function SessionCallPage() {
     });
     confirmResultInjectionRef.current = step.state;
     const text = step.injectNow;
-    if (text) setContextTurn((prev) => ({ text, seq: (prev?.seq ?? 0) + 1, delivery: "confirmResult" }));
+    if (text) pushContextTurn(text, "confirmResult");
     // 대기분(`pending`)은 그 안내가 큐를 떠나는 순간 `drainInstructionQueue`가 낸다. ⛔ 그래서 백스톱 경로는 안내를 큐에 넣기
     // **전에** 이 함수를 부른다(넣는 즉시 드레인될 수 있다 — 순서가 바뀌면 대기분이 영영 풀리지 않는다).
-  }, []);
+  }, [pushContextTurn]);
   // 모델 도구 경로(`send_prepared_sms`) — 도착 안내는 도구 응답으로 이미 나갔다(세션 컴포넌트가 응답 전송 뒤 부른다).
   const handleConfirmResultInstruction = useCallback(
     (text: string) => offerConfirmResult(text, undefined),
@@ -1750,7 +1761,7 @@ export default function SessionCallPage() {
           // 재시도까지 실패(실시간) — "연결이 안 됐다고 하지 말고 하던 이야기를 이어가라" 맥락 1줄(G31 큐 밖 · 응답 유발 0).
           if (plan.action === "inject") {
             const text = plan.text;
-            setContextTurn((prev) => ({ text, seq: (prev?.seq ?? 0) + 1, delivery: "verifyReconnectFailed" }));
+            pushContextTurn(text, "verifyReconnectFailed");
           }
           throw error;
         }
@@ -2080,6 +2091,7 @@ export default function SessionCallPage() {
             releaseVerifyAnnounceSlot={releaseVerifyAnnounceSlot}
             instructionTurn={instructionTurn}
             contextTurn={contextTurn}
+            onContextTurnDelivered={handleContextTurnDelivered}
             onConfirmResultInstruction={handleConfirmResultInstruction}
             personaStateTurn={personaStateTurn}
             turnPhaseRef={liveTurnPhaseRef}

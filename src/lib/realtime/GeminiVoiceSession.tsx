@@ -166,6 +166,8 @@ export type GeminiVoiceSessionProps = {
    * **보낸 뒤에** 부른다(도착 안내보다 먼저 가지 않게). 세션당 1회 판정은 부모(`planConfirmResultInjection`)가 한다.
    */
   onConfirmResultInstruction?: (text: string) => void;
+  /** PR-A2 리뷰 Minor 1 — `contextTurn`을 실제로 세션에 보냈다(부모가 그 슬롯을 비워 재마운트 중복을 막는다). */
+  onContextTurnDelivered?: (seq: number) => void;
   // ⭐ T191(문자 도달 조건) — 예전 `onModelToolSmsDelivered`·`onModelToolSmsFailed`(모델 도구 성공 · 실패를 부모의
   // 고정 턴 백스톱에 알리던 콜백)는 폐기했다. 문자 백스톱은 이제 서버가 도착 기록으로 판정하므로(`planSmsBackstop`)
   // 부모가 모델 경로의 결과를 따로 알 필요가 없다.
@@ -293,6 +295,7 @@ export default function GeminiVoiceSession({
   onModelToolVerifyAnnounced,
   onModelToolVerifyFailed,
   onConfirmResultInstruction,
+  onContextTurnDelivered,
   claimVerifyAnnounceSlot,
   releaseVerifyAnnounceSlot,
   instructionTurn,
@@ -317,6 +320,7 @@ export default function GeminiVoiceSession({
     onModelToolVerifyAnnounced,
     onModelToolVerifyFailed,
     onConfirmResultInstruction,
+    onContextTurnDelivered,
     claimVerifyAnnounceSlot,
     releaseVerifyAnnounceSlot,
     getSessionUserTurns,
@@ -338,7 +342,13 @@ export default function GeminiVoiceSession({
   const requestClientTurnRef = useRef<((turn: ClientTurn) => void) | null>(null);
   // ⭐ §82.4(T1) — 문자 · 확인 권유 안내를 맥락 주입(`turnComplete:false`)으로 넣는 브리지. 응답 대기 큐(§71.5)를
   // 점유하지 않으며, 문자 안내면 침묵 넛지(§82.4.2 · G543) 대기를 건다.
-  const injectContextRef = useRef<((text: string, delivery: InstructionDelivery) => void) | null>(null);
+  const injectContextRef = useRef<((text: string, delivery: InstructionDelivery) => boolean) | null>(null);
+  // PR-A2 리뷰 Minor 1 — 세션이 없어 아직 못 보낸 맥락 주입 슬롯(연결 직후 1회 보낸다).
+  const pendingContextTurnRef = useRef<{
+    text: string;
+    seq: number;
+    delivery: "confirmResult" | "verifyReconnectFailed";
+  } | null>(null);
 
   useEffect(() => {
     handlersRef.current = {
@@ -352,6 +362,7 @@ export default function GeminiVoiceSession({
       onModelToolVerifyAnnounced,
       onModelToolVerifyFailed,
       onConfirmResultInstruction,
+      onContextTurnDelivered,
       claimVerifyAnnounceSlot,
       releaseVerifyAnnounceSlot,
       getSessionUserTurns,
@@ -371,6 +382,7 @@ export default function GeminiVoiceSession({
     onModelToolVerifyAnnounced,
     onModelToolVerifyFailed,
     onConfirmResultInstruction,
+    onContextTurnDelivered,
     claimVerifyAnnounceSlot,
     releaseVerifyAnnounceSlot,
     getSessionUserTurns,
@@ -819,14 +831,15 @@ export default function GeminiVoiceSession({
         }, SILENCE_NUDGE_RECHECK_MS);
       }
     };
-    const injectContext = (text: string, delivery: InstructionDelivery) => {
+    // PR-A2 리뷰 Minor 1 — 실제로 보냈는지 돌려준다(맥락 주입 슬롯이 미전달분을 연결 뒤 다시 보내는 판단에 쓴다).
+    const injectContext = (text: string, delivery: InstructionDelivery): boolean => {
       const activeSession = session;
-      if (!activeSession) return;
+      if (!activeSession) return false;
       try {
         activeSession.sendClientContent({ turns: text, turnComplete: false });
       } catch {
         // 무시 — 통화는 계속된다(P-4 비차단). 문자 자체는 이미 화면에 도착해 있다(D-109).
-        return;
+        return false;
       }
       log("contextInjection", delivery, text.slice(0, 12));
       silenceNudgeState = stepSilenceNudge(silenceNudgeState, {
@@ -840,6 +853,7 @@ export default function GeminiVoiceSession({
           if (!cancelled) runSilenceNudgeCheck();
         }, SMS_MENTION_SILENCE_SEC * 1000);
       }
+      return true;
     };
 
     // ⭐ PR-A2(F6 · audit-A R6) — 대기 · 확인 중 뒤 침묵 넛지. 사기범 턴이 "확인 중 · 기다려 주세요"로 끝났는데 참가자가
@@ -1286,6 +1300,12 @@ export default function GeminiVoiceSession({
           dispatchClientTurn({ type: "request", turn, nowMs: performance.now() });
         // §82.4(T1) — 문자 · 확인 권유 안내는 이 함수로만 넣는다(맥락 주입 · 큐 밖).
         injectContextRef.current = injectContext;
+        // PR-A2 리뷰 Minor 1 — 연결 전(또는 재마운트 공백)에 도착해 못 보낸 맥락 주입 슬롯을 지금 보낸다(전달되면 부모에 알려 비운다).
+        const pendingContext = pendingContextTurnRef.current;
+        if (pendingContext && !handlersRef.current.isHangupLatched() && injectContext(pendingContext.text, pendingContext.delivery)) {
+          pendingContextTurnRef.current = null;
+          handlersRef.current.onContextTurnDelivered?.(pendingContext.seq);
+        }
 
         // 사용자 신고(2026-07-24) — 연결 직후 캐릭터가 먼저 말을 걸도록 트리거를 보낸다. onopen
         // 콜백(위)이 아니라 connect()가 실제로 resolve된 직후에 보내는 이유: onopen은 소켓 이벤트라
@@ -1445,7 +1465,14 @@ export default function GeminiVoiceSession({
   useEffect(() => {
     if (!contextTurn || !contextTurn.text.trim()) return;
     if (handlersRef.current.isHangupLatched()) return;
-    injectContextRef.current?.(contextTurn.text, contextTurn.delivery);
+    // PR-A2 리뷰 Minor 1 — 세션이 아직 없으면(연결 전 · 재마운트 공백) 버리지 않고 쥐었다가 연결 직후 보낸다. 전달되면 부모가 슬롯을
+    // 비운다(`onContextTurnDelivered`) — 다음 재마운트가 같은 지시를 다시 넣지 않는다(중복 0).
+    if (injectContextRef.current?.(contextTurn.text, contextTurn.delivery)) {
+      pendingContextTurnRef.current = null;
+      handlersRef.current.onContextTurnDelivered?.(contextTurn.seq);
+    } else {
+      pendingContextTurnRef.current = contextTurn;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextTurn?.seq]);
 

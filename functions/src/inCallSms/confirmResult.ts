@@ -70,6 +70,7 @@ export function confirmResultPurposeFor(item: FlowVariantSms | undefined): "tran
 // | 제외(되돌림 · A-2 QA ⓓ) | **발화 어디든** 취소 · 되돌렸 · 돌려받 — 절 · 문장 단위가 아니라 발화 전체에 건다(뒤 문장에서 되돌려도 주장이 아니다) | "보냈다가 취소했어요" · "보냈어요. 근데 취소했어요" |
 // | 절 나눔(A-2 QA ⓐ) | 한 문장 안에서 **종결 어미(요·다·죠) 뒤**의 쉼표, 또는 그 뒤 공백 + 그런데/근데 앞에서 절을 나눈다. 아래 의문문 · 부정·유보 · 다른 행동 · 주장 판정은 **절 단위**, 행동 대상 허용목록은 **문장 단위**다 | "방금 보냈어요, 확인되나요?" · "보냈어요 그런데 아직 안 들어갔나요?" ⭕(앞 절이 주장) |
 // | 제외(의문문) | 그 절이 `?`로 끝난다. 연결 어미(-는데 등)로 이어진 절은 나누지 않는다 | "보냈는데 확인됐어요?"는 한 절이라 제외된다(종전 그대로) |
+// | 제외(뒤 절 번복 · A-2 리뷰 Major 1) | 주장 절 **뒤의** 평서 절이 부정·유보(아니/아뇨/아냐로 시작 · 아직 · 안/못 + 동사 · 않았)이면 **그 문장 전체**를 제외한다. 뒤 절이 질문(`?`)이면 번복이 아니다(ⓐ 유지) | "보냈어요, 아니 아직 안 보냈어요" · "보냈어요, 못 보냈어요" ✖ / "보냈어요 그런데 아직 안 들어갔나요?" ⭕ |
 const CLAIM_BY_PURPOSE: Record<"transfer" | "link", RegExp> = {
   transfer: /보냈|부쳤|(?:입금|이체|송금)\s*(?:했|해\s*드렸|완료)|넣었|넣어\s*드렸/,
   link: /눌렀|들어갔|접속했|입력했|신청했|진행했|인증했/,
@@ -93,6 +94,9 @@ const CLAIM_EXCLUDE =
   /(?:안|못)\s*(?:보냈|했|넣었|눌렀|해|들어갔|접속했|입력했|신청했|진행했|인증했)|않았|아직|싫|안\s*할|못\s*하겠|할까요|하나요|해야|전화했|물어봤|신고했|확인했|알아봤/;
 /** A-2 QA ⓓ — 되돌림. 발화 전체에 건다(판정표 "제외(되돌림)" 행). */
 const CLAIM_REVERSED = /취소|되돌렸|돌려받/;
+/** A-2 리뷰 Major 1 — 뒤 절 번복(부정·유보). 부정 동사 목록은 `CLAIM_EXCLUDE`와 같다(목록을 새로 늘리지 않는다). */
+const CLAIM_RETRACTED =
+  /^(?:아니|아뇨|아냐)|아직|(?:안|못)\s*(?:보냈|했|넣었|눌렀|해|들어갔|접속했|입력했|신청했|진행했|인증했)|않았/;
 /** A-2 QA ⓐ — 절 경계: 종결 어미(요·다·죠) 뒤의 쉼표, 또는 그 뒤 공백 + 그런데/근데. 연결 어미 뒤는 나누지 않는다. */
 const CLAUSE_BOUNDARY = /(?<=[요다죠])\s*,\s*|(?<=[요다죠])\s+(?=그런데|근데)/;
 
@@ -108,12 +112,15 @@ export function isCompletionClaim(text: string, purpose: "transfer" | "link"): b
     const sentence = raw.trim();
     if (sentence.length === 0) return false;
     const targeted = CLAIM_GENERIC_TARGET[purpose].test(sentence) || CLAIM_FOLLOWED_INSTRUCTION.test(sentence);
-    return sentence.split(CLAUSE_BOUNDARY).some((rawClause) => {
-      const clause = rawClause.trim();
+    const clauses = sentence.split(CLAUSE_BOUNDARY).map((c) => c.trim());
+    const claimAt = clauses.findIndex((clause) => {
       if (clause.length === 0 || clause.endsWith("?")) return false;
       if (CLAIM_EXCLUDE.test(clause)) return false;
       return CLAIM_BY_PURPOSE[purpose].test(clause) || (CLAIM_GENERIC.test(clause) && targeted);
     });
+    if (claimAt < 0) return false;
+    // A-2 리뷰 Major 1 — 주장 절 뒤의 평서 절이 앞 절을 번복하면 문장 전체 제외(판정표 "뒤 절 번복" 행).
+    return !clauses.slice(claimAt + 1).some((clause) => !clause.endsWith("?") && CLAIM_RETRACTED.test(clause));
   });
 }
 
