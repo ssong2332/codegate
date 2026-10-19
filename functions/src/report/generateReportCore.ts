@@ -29,6 +29,7 @@ import { computeDefenseGrade, selectGradeReports } from "./computeDefenseGrade";
 import {
   buildSmsTimeline,
   promoteSmsLandingSubmits,
+  resolveAnchor,
   type SmsTimelineSource,
 } from "./smsTimeline";
 import { applyVerifyIntercept, type VerifyTimelineSource } from "./verifyTimeline";
@@ -221,6 +222,10 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       ...(data.consentedAt ? { consentedAtMs: data.consentedAt.toMillis() } : {}),
       // T123/AC-080 — 메신저 표면(경로 B)의 제출 승격 입력. 부재면 이 기능 도입 전과 동일하다.
       ...(data.submittedAt ? { submittedAtMs: data.submittedAt.toMillis() } : {}),
+      // T194-c-1(§84.15.3 · G606) — 통화 중 설치 문서(Q2)는 문자와 **같은 리졸버**로 푼 명시 앵커를 넘긴다(시각 해결 0). 부재 = 메신저 경로.
+      ...(typeof data.anchorScammerTurn === "number"
+        ? { explicitAnchor: resolveAnchor(data.anchorScammerTurn, messages, session.createdAt.toMillis()) }
+        : {}),
     };
   });
   const mock = applyMockScreens(

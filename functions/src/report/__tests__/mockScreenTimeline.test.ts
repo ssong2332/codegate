@@ -21,6 +21,7 @@ import {
   type MockScreenSource,
 } from "../mockScreenTimeline";
 import { MOCK_SCREENS } from "../../scenarios/mockScreens";
+import { promoteSmsLandingSubmits, resolveAnchor, type SmsTimelineSource } from "../smsTimeline";
 
 const SESSION_CREATED_MS = 1_000_000;
 const CATALOG = MOCK_SCREENS["messenger-subsidy-smishing-sms"];
@@ -431,4 +432,94 @@ test("[T194-a G587] parcel 초급 · 중급 · 챌린지 세션 = 단계 행 0(�
     }, `subsidy ${level}: 현행 무변경`);
   }
   t.diagnostic(`[G587] ${lines.join(" | ")}`);
+});
+
+// ── T194-c-1 G605 ② · G606(docs/Architecture.md §84.15.2 ④⑤ · §84.15.3) — 통화 중 설치 화면(Q2)의 명시 앵커 · D-61 분기 ─────────────
+//
+// 실시간 경로 메시지(첨부 0) — 설치 문자는 앵커 2(= 두 번째 사기범 메시지 turnIndex 2)에 도착했다.
+const q2Messages: MockScreenMessage[] = [
+  { role: "scammer", turnIndex: 0, createdAtMs: SESSION_CREATED_MS + 1_000 },
+  { role: "user", turnIndex: 1, createdAtMs: SESSION_CREATED_MS + 5_000 },
+  { role: "scammer", turnIndex: 2, createdAtMs: SESSION_CREATED_MS + 9_000 },
+  { role: "user", turnIndex: 3, createdAtMs: SESSION_CREATED_MS + 14_000 },
+  { role: "scammer", turnIndex: 4, createdAtMs: SESSION_CREATED_MS + 20_000 },
+];
+const Q2_CARD_CATALOG = MOCK_SCREENS["card-company-impersonation"];
+const Q2_INSTALL = "card-guard-app-install";
+
+/**
+ * D-61 표시 분기(클라 `src/lib/report/mockScreenTimelineCopy.ts` `resolveMockScreenBranch`)의 대조 키 = 승격된 순간의 turnIndex ↔ 항목의
+ * anchorTurnIndex(OQ-U32 — 위 블록이 확정). 루트 모듈은 functions 테스트에서 import할 수 없어 같은 규칙을 그대로 옮긴다(규칙 원문 · 짝 테스트는
+ * 루트 `mockScreenTimelineCopy.test.ts`).
+ */
+function d61Branch(entry: { consented: boolean; anchorResolved: boolean; anchorTurnIndex: number }, moments: readonly { turnIndex: number }[]) {
+  if (entry.consented) return "consented";
+  if (!entry.anchorResolved || entry.anchorTurnIndex < 0) return "submitted";
+  return moments.some((m) => m.turnIndex === entry.anchorTurnIndex) ? "submitted" : "declined";
+}
+
+test("[T194-c-1 G606] 통화 중 설치 문서 — 명시 앵커(문자 문서 값을 resolveAnchor로 푼 값)로 붙고 첨부 기반 리졸버를 타지 않는다 · 응낙 = 그 턴에 승격", (t) => {
+  const explicitAnchor = resolveAnchor(2, q2Messages, SESSION_CREATED_MS);
+  // 첨부 기반 리졸버라면 실시간 메시지(첨부 0)에서 미해결이다 — 명시 앵커 없이는 승격이 0이 된다(대조군).
+  const viaAttachment = resolveMockScreenAnchor(Q2_INSTALL, q2Messages, SESSION_CREATED_MS);
+  const consentedDoc: MockScreenSource = {
+    landingId: Q2_INSTALL,
+    kind: "app-install",
+    shownAtMs: SESSION_CREATED_MS + 10_000,
+    consentedAtMs: SESSION_CREATED_MS + 11_000,
+    explicitAnchor,
+  };
+  const withAnchor = applyMockScreens([consentedDoc], [], q2Messages, SESSION_CREATED_MS, Q2_CARD_CATALOG);
+  const { explicitAnchor: _drop, ...withoutAnchorDoc } = consentedDoc;
+  const withoutAnchor = applyMockScreens([withoutAnchorDoc], [], q2Messages, SESSION_CREATED_MS, Q2_CARD_CATALOG);
+  t.diagnostic(
+    `[G606] 명시 앵커 ${JSON.stringify(explicitAnchor)} → 승격 ${withAnchor.promotedCount}(turnIndex ${withAnchor.deceivedMoments[0]?.turnIndex}) / 첨부 리졸버 ${JSON.stringify(viaAttachment)} → 승격 ${withoutAnchor.promotedCount}`,
+  );
+  assert.deepEqual(explicitAnchor, { anchorTurnIndex: 2, anchorResolved: true, timeLabel: "9초 시점" });
+  assert.equal(viaAttachment.anchorResolved, false);
+  assert.equal(withAnchor.promotedCount, 1);
+  assert.equal(withAnchor.deceivedMoments[0].turnIndex, 2);
+  assert.equal(withAnchor.mockScreenTimeline[0].consented, true);
+  assert.equal(withoutAnchor.promotedCount, 0);
+  // G135 — 명시 앵커가 대화 맨 앞(-1)이면 응낙이어도 승격하지 않는다(되감기 1:1 전제).
+  const atStart = applyMockScreens(
+    [{ ...consentedDoc, explicitAnchor: resolveAnchor(0, q2Messages, SESSION_CREATED_MS) }],
+    [],
+    q2Messages,
+    SESSION_CREATED_MS,
+    Q2_CARD_CATALOG,
+  );
+  assert.equal(atStart.promotedCount, 0);
+});
+
+test("[T194-c-1 G605 ② · R-b] D-61 — Q2 1랜딩 세션에서 닫은 설치 화면은 '다' / 같은 앵커에 이체 랜딩 제출이 겹친 2랜딩 픽스처는 '나'(오분류 재현)", (t) => {
+  const installShown: MockScreenSource = {
+    landingId: Q2_INSTALL,
+    kind: "app-install",
+    shownAtMs: SESSION_CREATED_MS + 10_000,
+    explicitAnchor: resolveAnchor(2, q2Messages, SESSION_CREATED_MS),
+  };
+  // 정상 — Q2 1랜딩(설치 화면만 도달). 닫았다 = 승격 0 ⇒ "다".
+  const normal = applyMockScreens([installShown], [], q2Messages, SESSION_CREATED_MS, Q2_CARD_CATALOG);
+  const normalBranch = d61Branch(normal.mockScreenTimeline[0], normal.deceivedMoments);
+  // R-b — 2랜딩 픽스처(오늘 콘텐츠에서는 도달 불가 — 단위 2랜딩 = §35.6 1행 대상): 같은 앵커 2의 이체 문자 랜딩 제출 + 설치 화면 닫음.
+  const transferSms: SmsTimelineSource = {
+    smsId: "card-relief-account",
+    kind: "account",
+    senderLabel: "0000-0000",
+    body: "본문",
+    anchorScammerTurn: 2,
+    arrivedAtMs: SESSION_CREATED_MS + 9_500,
+    fakeLandingId: "card-relief-transfer",
+    landingSubmittedAtMs: SESSION_CREATED_MS + 12_000,
+  };
+  const promoted = promoteSmsLandingSubmits([transferSms], [], q2Messages, SESSION_CREATED_MS, Q2_CARD_CATALOG);
+  const twoLanding = applyMockScreens([installShown], promoted.deceivedMoments, q2Messages, SESSION_CREATED_MS, Q2_CARD_CATALOG);
+  const installEntry = twoLanding.mockScreenTimeline.find((e) => e.landingId === Q2_INSTALL);
+  assert.ok(installEntry);
+  const twoLandingBranch = d61Branch(installEntry, twoLanding.deceivedMoments);
+  t.diagnostic(`[G605 ②] 정상(1랜딩) 설치 항목 분기 = ${normalBranch} / R-b(2랜딩 · 같은 앵커 제출) 설치 항목 분기 = ${twoLandingBranch}(정답 '다' — 오분류)`);
+  assert.equal(normalBranch, "declined");
+  assert.equal(promoted.promotedCount, 1, "R-b 전제 — 이체 랜딩 제출이 같은 앵커에 승격돼야 한다");
+  assert.equal(twoLandingBranch, "submitted", "R-b — 2랜딩이면 닫은 설치 항목이 '나'로 오분류된다(§35.8 P-3 모양)");
 });

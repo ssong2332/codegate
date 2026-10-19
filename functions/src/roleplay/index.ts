@@ -17,10 +17,11 @@ import { triggerReportGeneration } from "../report";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import type { InCallSmsItem } from "../scenarios/inCallSms";
 import {
+  findMockScreenItem,
+  installConsentInstructionFor,
   isMockScreenReachable,
   listAppInstallMockScreens,
-  MOCK_INSTALL_CONSENT_INSTRUCTION,
-  MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL,
+  type MockScreenEntrySurface,
 } from "../scenarios/mockScreens";
 import { textPathAnchorScammerTurn } from "../inCallSms/buildDoc";
 import { planConfirmResult } from "../inCallSms/confirmResult";
@@ -362,6 +363,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // ⚠️ 응낙이 **채널 전이를 유발하지 않는다**(§15.9.7 G54, AC-073) — 아래 ④-b 전이 판단은
     // 여전히 구조화 신호·max-turn 폴백만 본다.
     let mockConsentRef: FirebaseFirestore.DocumentReference | undefined;
+    // T194-c-1 G607 — 그 응낙 항목의 진입 표면(메신저 링크 · 통화 중 문자). 응낙 지시 선택 함수의 입력이다(문서 id = landingId).
+    let mockConsentSurface: MockScreenEntrySurface | undefined;
     // T194-a(리뷰 m1) — 카탈로그 소속이 아니라 **이 세션에서 도달 가능한** 설치 항목이 있을 때만 읽는다. 도달 불가 항목은
     // `recordMockScreenEvent`가 응낙 문서를 만들지 않으므로(G588 · ⑤) 동작은 같고, parcel 초급 · 중급의 매 턴 읽기 1회가 사라진다.
     if (listAppInstallMockScreens(session.scenarioId).some((item) => isMockScreenReachable(session, item))) {
@@ -372,7 +375,10 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         const pending = mockSnap.docs.find(
           (doc) => Boolean(doc.get("consentedAt")) && !doc.get("consentAnnouncedAt"),
         );
-        if (pending) mockConsentRef = pending.ref;
+        if (pending) {
+          mockConsentRef = pending.ref;
+          mockConsentSurface = findMockScreenItem(session.scenarioId, pending.id)?.entrySurface;
+        }
       } catch {
         // 조회 실패가 대화를 막지 않는다(P-4 핵심 루프 비차단) — 이번 턴은 지시 없이 진행한다.
       }
@@ -394,7 +400,14 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const escalatedCall = isEscalatedVoiceCall(session.channel, session.channelHistory);
     let turnInstruction: string | undefined;
     if (turnChoice === "install_consent") {
-      turnInstruction = escalatedCall ? MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL : MOCK_INSTALL_CONSENT_INSTRUCTION;
+      // ⭐ T194-c-1 G607(§84.15.4 · Q-X4) — 선택은 이 함수 하나(폴백 · 실시간 같은 함수). 처음부터 통화인 Q2 세션은 `escalatedCall`이
+      // 거짓이라 예전 선택식이 "전화로 이어서"를 실었다 — 진입 표면을 함께 본다. 표면을 못 찾으면(카탈로그 밖 문서) 메신저 행(현행).
+      turnInstruction = installConsentInstructionFor({
+        entrySurface: mockConsentSurface ?? "messenger-link",
+        escalatedCall,
+        path: "fallback",
+        transferPlaced: verifyState?.placed === true,
+      });
     } else if (turnChoice === "verify_reconnect") {
       turnInstruction = verifyItem?.reconnectInstruction;
     } else if (turnChoice === "sms_announce") {
@@ -461,6 +474,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       !smsNudgeInstruction &&
       verifyState?.placed !== true
         ? planConfirmResult({
+            scenarioId: session.scenarioId,
             declared: smsDeclared,
             delivered: smsDelivered,
             userTurns: userTurnsNow,

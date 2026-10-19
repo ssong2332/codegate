@@ -631,6 +631,40 @@ const INSTALL_LANDING_COPY: Record<string, InstallCopy> = {
     issuerLabel: "ⓒ 종합물류 배송확인센터",
     mockHost: "parcel-app-desk.invalid",
   },
+  // T194-c-1(docs/Architecture.md §84.15.4 · §84.16.5 단계 6) — Q2 통화 중 설치 화면 3종(문자함 안에서 열린다). 서버 카탈로그 항목과 바이트 동일(G76).
+  "card-guard-app-install": {
+    headline: "피해 차단용 보안 앱을 설치해야 보호 조치가 시작됩니다",
+    bodyLines: [
+      "명의 도용 피해가 다른 결제로 번지지 않도록 보호 조치가 필요합니다.",
+      "아래에서 피해 차단용 보안 앱 설치를 진행해 주세요.",
+      "설치 후 접근 권한을 허용하면 상담원이 보호 조치를 이어서 진행해 드립니다.",
+    ],
+    consentLabel: "권한 허용하고 계속하기",
+    issuerLabel: "ⓒ 카드 명의보호 안내센터",
+    mockHost: "card-guard-check.invalid",
+  },
+  "loan-check-app-install": {
+    headline: "심사용 보안 점검 앱을 설치해야 대출 심사가 진행됩니다",
+    bodyLines: [
+      "저금리 전환 심사 전에 휴대폰 보안 점검이 남아 있습니다.",
+      "아래에서 심사용 보안 점검 앱 설치를 진행해 주세요.",
+      "설치 후 접근 권한을 허용하면 상담사가 심사 접수를 이어서 진행해 드립니다.",
+    ],
+    consentLabel: "권한 허용하고 계속하기",
+    issuerLabel: "ⓒ 대출심사 보안점검 안내",
+    mockHost: "loan-check-app.invalid",
+  },
+  "card-delivery-app-install": {
+    headline: "보안 점검 앱을 설치해야 사고 접수가 이어집니다",
+    bodyLines: [
+      "신청하지 않은 카드 발급 건이 명의 도용 사고로 접수 대기 중입니다.",
+      "아래에서 보안 점검 앱 설치를 진행해 주세요.",
+      "설치 후 접근 권한을 허용하면 상담원이 사고 접수를 이어서 처리해 드립니다.",
+    ],
+    consentLabel: "권한 허용하고 계속하기",
+    issuerLabel: "ⓒ 카드 사고접수 안내",
+    mockHost: "card-safe-check.invalid",
+  },
 };
 
 /** 정확 일치 조회 — 미스면 `undefined`(⛔ 기본 문구 폴백 0 — 호출부가 설치 화면을 그리지 않는다). */

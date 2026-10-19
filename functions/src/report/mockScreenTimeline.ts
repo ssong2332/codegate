@@ -49,6 +49,13 @@ export type MockScreenSource = {
    * 같은 문서에서 승격이 두 번 일어나지 않는다.
    */
   submittedAtMs?: number;
+  /**
+   * T194-c-1(docs/Architecture.md §84.15.3 · G584 · G606) — **통화 중 설치 화면(Q2) 문서만**: 문서의 `anchorScammerTurn`(설치 문자 문서에서 복사한
+   * 값)을 호출부가 **문자와 같은 리졸버**(`smsTimeline.resolveAnchor` — §15.1.5 (6) 리졸버 1개)로 푼 결과. 있으면 아래 첨부 기반 리졸버
+   * (`resolveMockScreenAnchor` — 메신저 전용)를 타지 않는다. 부재 = 메신저 경로(무변경).
+   * ⚠️ 이 모듈이 `smsTimeline.ts`를 import하면 순환이다(그쪽이 이미 `buildLandingSubmitMoment`를 import한다) — 그래서 푼 값을 받는다.
+   */
+  explicitAnchor?: MockScreenAnchor;
 };
 
 /**
@@ -171,9 +178,13 @@ export function applyMockScreens(
   const promoted: DeceivedMomentResult[] = [];
 
   for (const doc of docs) {
-    const anchor = resolveMockScreenAnchor(doc.landingId, sortedMessages, sessionCreatedAtMs);
+    // T194-c-1(§84.15.3 · G606) — 통화 중 설치 문서는 명시 앵커(호출부가 `resolveAnchor`로 푼 값) · 그 밖은 첨부 기반 리졸버(종전).
+    const anchor = doc.explicitAnchor ?? resolveMockScreenAnchor(doc.landingId, sortedMessages, sessionCreatedAtMs);
     const item = catalog.find((c) => c.landingId === doc.landingId);
-    const consented = doc.consentedAtMs !== undefined && anchor.anchorResolved && item !== undefined;
+    // T194-c-1(§84.15.3 "승격 조건 G135 그대로") — `anchorTurnIndex >= 0`을 응낙에도 함께 본다. 첨부 기반 리졸버는 해결 시 항상 실제 메시지
+    // turnIndex(≥ 0)라 메신저 경로는 동작 무변경이고, 명시 앵커(`resolveAnchor` 규칙 1 = 대화 맨 앞 -1)만 이 조건에 걸린다.
+    const consented =
+      doc.consentedAtMs !== undefined && anchor.anchorResolved && anchor.anchorTurnIndex >= 0 && item !== undefined;
     // T123/AC-080 — 제출 승격. ⭐ `anchorTurnIndex >= 0`을 함께 본다(§31.6 **G135**): 이 리졸버는
     // 오늘 그 값을 내지 않지만(항상 실제 메시지 turnIndex), 조건을 표면마다 다르게 적으면 다음
     // 사람이 어느 쪽이 맞는지 판정할 수 없다. 승격 조건은 두 표면에서 **한 벌**이다.

@@ -14,9 +14,13 @@ import {
   pickRotatedVariantId,
   rotationDocKey,
 } from "../variantAssignment";
-import { FLOW_VARIANTS, assignablePool, listFlowVariants } from "../../scenarios/flowVariants";
+import { FLOW_VARIANTS, listFlowVariants, type FlowVariant } from "../../scenarios/flowVariants";
+// T194-c-1(§84.16.1 · G590 갱신) — 배정 풀은 `variantPool.ts`로 옮겼다(순환 회피) · 통화 중 설치 문자 항이 더해졌다.
+import { assignablePool, declaresInCallInstall, expectsInCallInstall } from "../../scenarios/variantPool";
+import { resolveDeclaredSms } from "../../inCallSms/smsGate";
+import { sessionReachableLandingIds } from "../../scenarios/reachability";
 import { resolveSessionEscalation } from "../../scenarios/escalation";
-import { PUBLIC_SCENARIOS } from "../../scenarios/publicMeta";
+import { PUBLIC_SCENARIOS, isAdvancedOnlyScenario } from "../../scenarios/publicMeta";
 import { DIFFICULTY_LEVELS } from "../../shared/difficulty";
 
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
@@ -190,11 +194,16 @@ test("[T194-a G590] 풀 진리표 — 전 시나리오 × 3난이도 × {자가 
       for (const challengeId of [undefined, "c1"]) {
         // 챌린지는 에스컬레이션 메타 시나리오에서 거부된다(`challenge/index.ts` S-6) — 그 조합은 풀 대상이 아니다.
         if (challengeId && PUBLIC_SCENARIOS[id].escalation) continue;
+        // T194-c-1(§84.16.4) — 고급 전용 시나리오도 챌린지가 거부된다(`challenge/index.ts` AC-097 (g)) — card-delivery-call 챌린지 풀 = 0(정상).
+        if (challengeId && isAdvancedOnlyScenario(id)) continue;
         const pool = assignablePool(id, level, challengeId);
         const label = `${id}/${level}/${challengeId ? "챌린지" : "자가"}`;
         assert.ok(pool.length > 0, `${label}: 배정 풀 0 — failed-precondition으로 막힌다`);
         const escalates = Boolean(resolveSessionEscalation({ scenarioId: id, difficultyLevel: level, challengeId }, PUBLIC_SCENARIOS));
         for (const v of pool) assert.equal(Boolean(v.escalatesToVoice), escalates, `${label}: ${v.variantId}`);
+        // T194-c-1 G590 갱신(§84.16.4) — 풀의 모든 변형이 **두 항을 함께** 만족한다(통화 중 설치 문자 선언 = 세션의 기대).
+        const expectsInstall = expectsInCallInstall(id, level, challengeId);
+        for (const v of pool) assert.equal(declaresInCallInstall(v), expectsInstall, `${label}: ${v.variantId} — 설치 문자 항`);
         cells += 1;
       }
     }
@@ -205,6 +214,71 @@ test("[T194-a G590] 풀 진리표 — 전 시나리오 × 3난이도 × {자가 
     assignablePool("institutional-impersonation", "advanced", "c1").map((v) => v.variantId),
     listFlowVariants("institutional-impersonation", "advanced").map((v) => v.variantId),
   );
+  // T194-c-1 G590 갱신 — 정의 위치는 `variantPool.ts` 1곳(소스 스캔 — `flowVariants.ts`에 정의 0 · 재수출 0).
+  const flowSrc = fs.readFileSync(path.join(FUNCTIONS_SRC, "scenarios/flowVariants.ts"), "utf8").replace(/\/\/[^\n]*/g, "");
+  const poolSrc = fs.readFileSync(path.join(FUNCTIONS_SRC, "scenarios/variantPool.ts"), "utf8").replace(/\/\/[^\n]*/g, "");
+  assert.equal(/function assignablePool\b|assignablePool\s*[,}]/.test(flowSrc), false, "flowVariants.ts에 assignablePool 정의 · 재수출이 있다");
+  assert.equal((poolSrc.match(/export function assignablePool\(/g) ?? []).length, 1);
+});
+
+// ── T194-c-1 G611(docs/Architecture.md §84.16.4 · PRD AC-105 갱신 고지 3 ④ ⓙ · DECISIONS #192) — 챌린지 기대값 ─────────────
+
+/** ⓙ 사본 — 통화 중 설치 문자 항을 끈 풀(T194-c-1 이전 `assignablePool` 원문 그대로 · 에스컬레이션 항만). */
+function assignablePoolBeforeQ2(scenarioId: string, level: (typeof DIFFICULTY_LEVELS)[number], challengeId?: string): FlowVariant[] {
+  const escalates = Boolean(resolveSessionEscalation({ scenarioId, difficultyLevel: level, challengeId }, PUBLIC_SCENARIOS));
+  return listFlowVariants(scenarioId, level).filter((v) => Boolean(v.escalatesToVoice) === escalates);
+}
+
+/** 챌린지 풀 위반 = 챌린지 고급 card-company · loan 풀에 Q2 설치 문자 선언 변형이 들어간 것. */
+function challengeQ2Leaks(pool: typeof assignablePool): string[] {
+  const leaks: string[] = [];
+  for (const id of ["card-company-impersonation", "loan-refinance-scam"]) {
+    for (const v of pool(id, "advanced", "c1")) if (declaresInCallInstall(v)) leaks.push(`${id}/챌린지/${v.variantId}`);
+  }
+  return leaks;
+}
+
+test("[T194-c-1 G611 · ⓙ] 챌린지 고급 card-company = [fv-akj5] 문자 0 · loan = [fv-6s5p] 선언 {loan-apply-link, loan-account} 도달 [loan-refinance-apply] · 자가 Q2 3종 = Q2 변형 / 설치 항을 끈 사본은 챌린지에 Q2 변형을 준다", (t) => {
+  const ids = (pool: FlowVariant[]) => pool.map((v) => v.variantId);
+  // 챌린지 기대값(#192 — base 선언 그대로).
+  assert.deepEqual(ids(assignablePool("card-company-impersonation", "advanced", "c1")), ["fv-akj5"]);
+  assert.deepEqual(resolveDeclaredSms("card-company-impersonation", "fv-akj5").declared, []);
+  assert.deepEqual(ids(assignablePool("loan-refinance-scam", "advanced", "c1")), ["fv-6s5p"]);
+  assert.deepEqual(resolveDeclaredSms("loan-refinance-scam", "fv-6s5p").declared.map((d) => d.smsId).sort(), ["loan-account", "loan-apply-link"]);
+  assert.deepEqual(sessionReachableLandingIds("loan-refinance-scam", "fv-6s5p"), ["loan-refinance-apply"]);
+  // 자가 고급 Q2 3종 풀 = Q2 변형(전부 설치 문자 선언).
+  const selfPools = {
+    "card-delivery-call": ids(assignablePool("card-delivery-call", "advanced")),
+    "card-company-impersonation": ids(assignablePool("card-company-impersonation", "advanced")),
+    "loan-refinance-scam": ids(assignablePool("loan-refinance-scam", "advanced")),
+  };
+  assert.deepEqual(selfPools, { "card-delivery-call": ["fv-tvnj"], "card-company-impersonation": ["fv-x7ue"], "loan-refinance-scam": ["fv-m3hd"] });
+  // 전 시나리오 챌린지 풀 변형의 설치 문자 선언 = 거짓.
+  const challengeInstall: string[] = [];
+  for (const id of Object.keys(PUBLIC_SCENARIOS)) {
+    for (const level of DIFFICULTY_LEVELS) {
+      for (const v of assignablePool(id, level, "c1")) if (declaresInCallInstall(v)) challengeInstall.push(`${id}/${level}/${v.variantId}`);
+    }
+  }
+  assert.deepEqual(challengeInstall, []);
+  // ⓙ 역방향 — 설치 항을 끈 사본.
+  const normalLeaks = challengeQ2Leaks(assignablePool);
+  const poisonedLeaks = challengeQ2Leaks(assignablePoolBeforeQ2);
+  t.diagnostic(`[G611 정상] 챌린지 card-company ${JSON.stringify(ids(assignablePool("card-company-impersonation", "advanced", "c1")))} · loan ${JSON.stringify(ids(assignablePool("loan-refinance-scam", "advanced", "c1")))} · 자가 ${JSON.stringify(selfPools)} · 챌린지 Q2 누수 ${JSON.stringify(normalLeaks)}`);
+  t.diagnostic(`[G611 ⓙ 역방향] 설치 항을 끈 사본 → 챌린지 Q2 누수 ${JSON.stringify(poisonedLeaks)} — 실패 재현`);
+  assert.deepEqual(normalLeaks, []);
+  assert.deepEqual(poisonedLeaks, ["card-company-impersonation/챌린지/fv-x7ue", "loan-refinance-scam/챌린지/fv-m3hd"]);
+});
+
+test("[T194-c-1 G611] 수신자 배정 — 40개 챌린지 ID 전부 base 변형(fv-akj5 · fv-6s5p)만 · 자가 회전은 Q2 변형", async () => {
+  const challengeIds = Array.from({ length: 40 }, (_, i) => `challenge-${i}`);
+  for (const [id, expected] of [["card-company-impersonation", "fv-akj5"], ["loan-refinance-scam", "fv-6s5p"]] as const) {
+    const received = new Set(challengeIds.map((c) => assignFlowVariantForChallenge(id, "advanced", c)));
+    assert.deepEqual([...received], [expected], `${id}: 수신자는 현행 선언 변형만`);
+  }
+  const { db } = fakeDb(undefined);
+  assert.equal((await assignFlowVariantForSession(db, "u1", "card-company-impersonation", "advanced")).flowVariantId, "fv-x7ue");
+  assert.equal((await assignFlowVariantForSession(db, "u1", "loan-refinance-scam", "advanced")).flowVariantId, "fv-m3hd");
 });
 
 test("[T194-a G590] 두 배정 함수가 같은 풀을 쓴다 — 자가 고급 parcel = fv-g454 · 수신자 = fv-k7qm(현행 고급) · 역방향: 필터를 끈 사본은 수신자에게 fv-g454를 준다", async (t) => {

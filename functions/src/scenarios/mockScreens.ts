@@ -21,6 +21,7 @@
 //   - 이 파일은 **클라이언트에 원문 배포되지 않는다.** 클라에 내려가는 것은 `MessengerAttachment.
 //     landingKind` 하나뿐이다(`roleplay/linkMarker.ts`).
 import { resolveSessionEscalation, type EscalationSessionView } from "./escalation";
+import { findInCallSmsItem } from "./inCallSms";
 import { PUBLIC_SCENARIOS } from "./publicMeta";
 import { sessionReachableLandingIds } from "./reachability";
 
@@ -107,6 +108,46 @@ export const MOCK_INSTALL_CONSENT_INSTRUCTION =
 export const MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL =
   "(참가자가 방금 안내대로 설치와 권한 허용을 마쳤다. 지금 캐릭터로서 한두 문장으로 그 사실을 자연스럽게 확인해 주고, 이미 통화 중이니 전화하겠다는 말 없이 이 통화에서 다음 안내를 바로 이어가라. 설치 절차·권한의 구체적인 작동 방식을 설명하지는 마라.)";
 
+/**
+ * ⭐ T194-c-1(docs/Architecture.md §84.5.4 정본 · §84.15.4 진리표 실시간 행) — 통화 중 문자로 연 설치 화면(Q2)의 응낙을 **실시간(Live)**
+ * 사기범에게 알리는 맥락 주입용 조건형 지시(*"대답할 때 그 대답 안에서"*). ⚠️ 이 상수를 Live에 싣는 배선(맥락 주입 전달 행 G609)은
+ * T194-c-2(PR-A2 뒤)다 — c-1에서는 선택 함수의 진리표 행으로만 존재한다(어떤 응답에도 아직 실리지 않는다).
+ */
+export const IN_CALL_INSTALL_CONSENT_INSTRUCTION =
+  "(참가자가 방금 문자 속 링크에서 안내대로 앱 설치와 권한 허용을 마쳤다. 상대의 말에 대답할 때 그 대답 안에서 한두 문장으로 그 사실을 자연스럽게 확인하고 다음 요구로 이어가라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 설치 절차·권한의 구체적인 작동 방식은 설명하지 마라. 전화를 새로 걸겠다거나 다른 사람이 연락하겠다는 말은 하지 마라.)";
+
+/** 응낙 지시를 실을 경로 — 폴백(`sendMessage` 턴 지시) · 실시간(Live 맥락 주입 — c-2). */
+export type InstallConsentPath = "fallback" | "realtime";
+
+/**
+ * ⭐ T194-c-1 G607(docs/Architecture.md §84.15.4 진리표 · Q-X4) — 설치 응낙 지시 선택의 **단일 함수**(폴백 · 실시간 응답이 같은 함수 · J-1).
+ * 예전 선택식(`escalatedCall ? …_IN_CALL : …`)은 메신저→통화 전이 기록만 봐서, **처음부터 통화인** Q2 세션(통화 중 문자 → 설치)에
+ * *"이제 담당자가 전화로 이어서 안내하겠다"* 를 실었다(거짓 문면). 진입 표면을 함께 본다.
+ *
+ * | `entrySurface` | `escalatedCall` | `path` | `transferPlaced` | 결과 |
+ * |---|---|---|---|---|
+ * | `messenger-link` | false | fallback | — | `MOCK_INSTALL_CONSENT_INSTRUCTION`(현행) |
+ * | `messenger-link` | true | fallback | — | `MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL`(현행) |
+ * | `in-call-sms` | 무관 | fallback | false | `MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL` 재사용(새 문면 0) |
+ * | `in-call-sms` | 무관 | realtime | false | `IN_CALL_INSTALL_CONSENT_INSTRUCTION`(조건형 · 소비는 c-2) |
+ * | `in-call-sms` | 무관 | 둘 다 | true | `undefined` — 호 전환 뒤 화자는 확인 창구다(`resolveInCallSmsPlan`과 같은 게이트) |
+ *
+ * ⚠️ 표 밖 조합(`messenger-link` + `realtime`)은 오늘 호출부가 없다 — 메신저 표면은 실시간 경로가 없다. 그 조합은 현행 메신저 행과
+ * 같은 값(전이 여부로 고른다)을 돌려준다(새 판단 0 — 표에 행을 더할 때 architect에 묻는다).
+ */
+export function installConsentInstructionFor(input: {
+  entrySurface: MockScreenEntrySurface;
+  escalatedCall: boolean;
+  path: InstallConsentPath;
+  transferPlaced: boolean;
+}): string | undefined {
+  if (input.entrySurface === "in-call-sms") {
+    if (input.transferPlaced) return undefined;
+    return input.path === "realtime" ? IN_CALL_INSTALL_CONSENT_INSTRUCTION : MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL;
+  }
+  return input.escalatedCall ? MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL : MOCK_INSTALL_CONSENT_INSTRUCTION;
+}
+
 // UF-012 2단계 — 지원금 안내 문자(1단계)에서 이어지는 모의 앱 설치 화면.
 // OQ-42 확정 = (b) 지원금 문자 확장 → `messenger-subsidy-smishing-sms`의 기존 escalation 배선을
 // 그대로 재사용한다(신규 전이 경로 미신설).
@@ -166,6 +207,9 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `safe-account-transfer` | `scenarios/inCallSms.ts:87-91`(문자 본문·칩) | "아래에서 안전계좌 이체를 진행해 주세요." | 링크에서 안전계좌 이체 | "안전계좌 이체가 아직 완료되지 않았습니다" | "안전계좌로 이체하기" |
 // | `card-relief-transfer` | `scenarios/inCallSms.ts:117-119`(문자 본문·칩) | "아래에서 피해금 이관을 진행해 주세요." | 링크에서 피해금 이관 | "피해금 이관 신청이 완료되지 않았습니다" | "피해금 이관하기" |
 // | `protect-account-transfer` | `scenarios/inCallSms.ts:173-175`(문자 본문·칩) | "아래에서 보호계좌로 옮기기를 진행해 주세요." | 링크에서 보호계좌로 옮기기 | "보호계좌로 옮기기가 아직 처리되지 않았습니다" | "보호계좌로 옮기기" |
+// | `card-delivery-app-install` | `scenarios/inCallSms.ts` CARD_DELIVERY_CALL(문자 본문·칩 — T194-c-1 Q2) | "아래에서 보안 점검 앱을 설치해 주세요." | 보안 점검 앱 설치 | "보안 점검 앱을 설치해야 사고 접수가 이어집니다" | "권한 허용하고 계속하기" |
+// | `card-guard-app-install` | `scenarios/inCallSms.ts` CARD_COMPANY_IMPERSONATION(문자 본문·칩 — T194-c-1 Q2) | "아래에서 피해 차단용 보안 앱을 설치해 주세요." | 피해 차단용 보안 앱 설치 | "피해 차단용 보안 앱을 설치해야 보호 조치가 시작됩니다" | "권한 허용하고 계속하기" |
+// | `loan-check-app-install` | `scenarios/inCallSms.ts` LOAN_SCAM(문자 본문·칩 — T194-c-1 Q2) | "아래에서 심사용 보안 점검 앱을 설치해 주세요." | 심사용 보안 점검 앱 설치 | "심사용 보안 점검 앱을 설치해야 대출 심사가 진행됩니다" | "권한 허용하고 계속하기" |
 //
 // ⚠️ **이 표가 조용히 낡지 않게 하는 장치(주석은 강제가 아니다).** 위 **줄 번호는 스냅샷일 뿐이며
 // 앵커가 아니다** — 파일이 바뀌면 줄은 밀린다. 진짜 앵커는 `__tests__/mockScreens.test.ts`의
@@ -240,6 +284,26 @@ const LOAN_REFINANCE_SCAM: MockScreenItem[] = [
     momentTactic: "저금리 전환 승인을 빌미로 한 신상정보 입력 유도",
     correctAction:
       "전환 신청서라며 링크로 본인확인을 요구하면 입력하지 말고 화면을 닫으세요. ① 대출 상담은 이미 알고 있는 금융회사 대표번호로 직접 걸어 확인하기 ② 생년월일·연락처를 링크에 넣지 않기 ③ 가족이나 가까운 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+  // ⭐ T194-c-1(docs/Architecture.md §84.5.2 · §84.16.2 · DECISIONS #191 · AC-105 갱신 고지 1 · 3) — **자가 훈련 고급** loan 세션의 통화 중
+  // 설치 문자(`loan-check-app-link`)가 여는 모의 설치 화면(Q2). kind = 기존 `app-install`(신규 kind 0 · AC-072 제약 그대로). 위
+  // `loan-refinance-apply`는 **삭제하지 않는다** — 챌린지 고급 loan(`fv-6s5p` 무변경)이 계속 그 링크를 선언한다(#191 · AC-078 (a)).
+  {
+    landingId: "loan-check-app-install",
+    kind: "app-install",
+    entrySurface: "in-call-sms",
+    headline: "심사용 보안 점검 앱을 설치해야 대출 심사가 진행됩니다",
+    bodyLines: [
+      "저금리 전환 심사 전에 휴대폰 보안 점검이 남아 있습니다.",
+      "아래에서 심사용 보안 점검 앱 설치를 진행해 주세요.",
+      "설치 후 접근 권한을 허용하면 상담사가 심사 접수를 이어서 진행해 드립니다.",
+    ],
+    issuerLabel: "ⓒ 대출심사 보안점검 안내",
+    mockHost: "loan-check-app.invalid",
+    consentLabel: "권한 허용하고 계속하기",
+    momentTactic: "대출 심사를 빌미로 한 보안 점검 앱 설치·권한 허용 유도",
+    correctAction:
+      "대출 심사를 이유로 앱 설치나 권한 허용을 요구받으면 그 자리에서 허용하지 말고 화면을 닫으세요. ① 대출 상담은 이미 알고 있는 금융회사 대표번호로 직접 확인하기 ② 문자 속 링크로 앱을 설치하지 않기 ③ 가족이나 가까운 창구에서 함께 확인하기 ④ 이미 허용했다면 그 휴대폰 말고 가족 휴대폰이나 집 전화로 112(경찰)·1332(금융감독원)에 신고하기.",
   },
 ];
 
@@ -348,6 +412,47 @@ const CARD_COMPANY_IMPERSONATION: MockScreenItem[] = [
     correctAction:
       "'피해금을 다른 계좌로 옮기라'고 하면 그 자리에서 멈추세요 — 카드사는 결제를 막기 위해 고객 돈을 옮기지 않습니다. ① 통화를 끊고 카드 뒷면이나 명세서에 적힌 번호로 직접 확인하기 ② 계좌번호·금액을 문자 링크에 넣지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
   },
+  // ⭐ T194-c-1(docs/Architecture.md §84.5.2 · §84.16.2 · DECISIONS #192) — **자가 훈련 고급** card-company 세션의 통화 중 설치 문자
+  // (`card-guard-app-link`)가 여는 모의 설치 화면(Q2). 챌린지 고급(`fv-akj5` 무변경 · 문자 선언 0)은 이 화면에 도달하지 않는다.
+  {
+    landingId: "card-guard-app-install",
+    kind: "app-install",
+    entrySurface: "in-call-sms",
+    headline: "피해 차단용 보안 앱을 설치해야 보호 조치가 시작됩니다",
+    bodyLines: [
+      "명의 도용 피해가 다른 결제로 번지지 않도록 보호 조치가 필요합니다.",
+      "아래에서 피해 차단용 보안 앱 설치를 진행해 주세요.",
+      "설치 후 접근 권한을 허용하면 상담원이 보호 조치를 이어서 진행해 드립니다.",
+    ],
+    issuerLabel: "ⓒ 카드 명의보호 안내센터",
+    mockHost: "card-guard-check.invalid",
+    consentLabel: "권한 허용하고 계속하기",
+    momentTactic: "명의 도용 피해 차단을 빌미로 한 보안 앱 설치·권한 허용 유도",
+    correctAction:
+      "피해를 막아 주겠다며 앱 설치나 권한 허용을 요구받으면 그 자리에서 허용하지 말고 화면을 닫으세요. ① 통화를 끊고 카드 뒷면이나 명세서에 적힌 번호로 직접 확인하기 ② 문자 속 링크로 앱을 설치하지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 허용했다면 그 휴대폰 말고 가족 휴대폰이나 집 전화로 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+];
+
+// ⭐ T194-c-1(docs/Architecture.md §84.5.2 · §84.15.4 · AC-105 갱신 고지 1) — `card-delivery-call`(고급 전용 · 챌린지 불가) 최초의 모의
+// 화면. 통화 중 설치 문자(`card-delivery-app-link`)에서 열린다. 앱 이름은 일반명뿐(AC-102 (b) · AC-072).
+const CARD_DELIVERY_CALL: MockScreenItem[] = [
+  {
+    landingId: "card-delivery-app-install",
+    kind: "app-install",
+    entrySurface: "in-call-sms",
+    headline: "보안 점검 앱을 설치해야 사고 접수가 이어집니다",
+    bodyLines: [
+      "신청하지 않은 카드 발급 건이 명의 도용 사고로 접수 대기 중입니다.",
+      "아래에서 보안 점검 앱 설치를 진행해 주세요.",
+      "설치 후 접근 권한을 허용하면 상담원이 사고 접수를 이어서 처리해 드립니다.",
+    ],
+    issuerLabel: "ⓒ 카드 사고접수 안내",
+    mockHost: "card-safe-check.invalid",
+    consentLabel: "권한 허용하고 계속하기",
+    momentTactic: "카드 명의 도용 사고 접수를 빌미로 한 보안 점검 앱 설치·권한 허용 유도",
+    correctAction:
+      "카드 사고 접수를 이유로 앱 설치나 권한 허용을 요구받으면 그 자리에서 허용하지 말고 화면을 닫으세요. ① 통화를 끊고 카드 뒷면이나 카드사 공식 경로에서 찾은 번호로 직접 확인하기 ② 문자 속 링크로 앱을 설치하지 않기 ③ 가족이나 가까운 사람에게 화면을 보여 주고 함께 확인하기 ④ 이미 허용했다면 그 휴대폰 말고 가족 휴대폰이나 집 전화로 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
 ];
 
 // UF-008 — `bank-protect-account` 문자(§53/§51 커밋 D)에서 열린다. §51.6 R10 — 신규
@@ -389,10 +494,10 @@ const BANK_SECURITY_VERIFY_SCAM: MockScreenItem[] = [
  * attachment 문서가 도입 전과 한 바이트도 같고, `sendMessage`의 추가 read도 일어나지 않는다
  * (`hasInCallSms(...)` 게이팅과 동형 — 나머지 12개 시나리오 회귀 0).
  *
- * ⚠️ **R6(§15.9.1) — 무변경**: 통화 중 문자(`InCallSmsDoc.fakeLandingId`)로 **`app-install`이**
- * 열리는 경로는 여전히 범위 밖이다. T104 이후 이 불변식은 **양쪽에서** 검사된다 —
- * `IN_CALL_SMS` 쪽(R6 단언)과 카탈로그 쪽(G-A: `entrySurface === "in-call-sms"` ⇒
- * `kind !== "app-install"`). UF-012의 설치는 **메신저 단계**에서 일어난다.
+ * ⚠️ **R6(§15.9.1) — T194-c-1(§84.5.1 J-3 · G583)로 허용목록 대체**: 통화 중 문자(`InCallSmsDoc.fakeLandingId`)로
+ * **`app-install`이** 열리는 경로는 `IN_CALL_INSTALL_SCENARIOS`(아래) 3종에서만 열린다. 그 항목을 가리키는 문자는 **고급 변형에서만**
+ * 선언되고, 응낙 문서는 시각이 아니라 그 문자 문서의 명시 앵커(`anchorScammerTurn` 복사 — §84.15.3)를 쓴다(R6이 막던 합성 타임스탬프
+ * 얽힘의 원인 제거). 허용목록 밖의 통화 시나리오는 여전히 양쪽(`IN_CALL_SMS` R6 단언 · 카탈로그 G-A)에서 막힌다.
  *
  * ⚠️ **T104**: 통화 경로 `credential-form` 랜딩 3종이 여기 등재된다. 이들은 `turnInstruction`을
  * 만들지 않고(`listAppInstallMockScreens` 게이팅), `consentedAt`도 가질 수 없어(콜러블이 거부)
@@ -416,7 +521,31 @@ export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   "tax-refund-scam": TAX_REFUND_SCAM,
   "courier-customs-scam": COURIER_CUSTOMS_SCAM,
   "bank-security-verify-scam": BANK_SECURITY_VERIFY_SCAM,
+  // T194-c-1(§84.5.2) — 카탈로그 신설(이 시나리오 첫 항목 · 통화 중 설치 화면 1건).
+  "card-delivery-call": CARD_DELIVERY_CALL,
 };
+
+/**
+ * ⭐ T194-c-1(docs/Architecture.md §84.5.1 G-A 대체 · J-3 · G583) — 통화 중 문자 표면(`in-call-sms`)에서 `app-install`이 열려도 되는
+ * 시나리오 **허용목록**(DECISIONS #177 · AC-105 갱신 고지 1). 이 목록 밖에서는 통화 중 설치 화면이 카탈로그에 들어올 수 없고(G583
+ * 테스트) 도달 술어도 거짓이다(`isMockScreenReachable`). 챌린지 배정 풀의 판별(`variantPool.ts` `expectsInCallInstall`)도 이 상수를
+ * 재사용한다(두 목록 금지).
+ */
+export const IN_CALL_INSTALL_SCENARIOS: readonly string[] = [
+  "card-delivery-call",
+  "card-company-impersonation",
+  "loan-refinance-scam",
+];
+
+/**
+ * ⭐ T194-c-1(§84.16.1 · §84.15.4 G608) — 이 통화 중 문자가 **설치 화면을 여는 문자**인가(카탈로그 문자의 `fakeLandingId`가 그 시나리오
+ * 카탈로그의 `app-install` 랜딩). 데이터에서 도출하는 **단일 판별자**다(새 필드 0) — 챌린지 풀(`variantPool.ts` `declaresInCallInstall`) ·
+ * 결과 신호 제외(`inCallSms/confirmResult.ts`) · 실시간 프로바이더 라우팅(`realtime/provider.ts`)이 전부 이 함수를 거친다.
+ */
+export function isInCallInstallSms(scenarioId: string, smsId: string): boolean {
+  const landingId = findInCallSmsItem(scenarioId, smsId)?.fakeLandingId;
+  return landingId !== undefined && resolveMockScreenKind(scenarioId, landingId) === "app-install";
+}
 
 /**
  * ⚠️ G12 동형 방어 — `landingId`가 **이 시나리오 카탈로그 소속인지** 재검증하는 유일한 지점.
@@ -458,7 +587,9 @@ export function listAppInstallMockScreens(scenarioId: string): MockScreenItem[] 
  * | `credential-form` | 현행 그대로 — 카탈로그 소속이면 도달 가능 |
  * | `app-install` · `messenger-link` · 시나리오가 `escalation` 보유(지원금) | 현행 그대로 — 세 난이도 모두 도달 가능 |
  * | `app-install` · `messenger-link` · 시나리오가 `advancedEscalation`만 보유(택배) | 이 세션의 (시나리오 × 난이도) 전이가 있을 때만(`resolveSessionEscalation`) — 초급 · 중급 · 2인 챌린지 = 불가 |
- * | `app-install` · 그 밖(통화 중 문자 표면 — Q2) | **불가**(이 PR 범위 밖 · 오늘 그런 항목은 G-A가 카탈로그에서 막는다). Q2가 행을 추가한다 |
+ * | `app-install` · `in-call-sms`(Q2 — T194-c-1 §84.15.7 단계 3) | 시나리오가 `IN_CALL_INSTALL_SCENARIOS` 소속일 때만(위 도달 집합 AND 유지 —
+ *   선언 문자가 그 랜딩을 가리키는 변형 = 자가 고급만). "그 문자가 **이 세션에 도착**했다"는 조건은 Firestore를 읽어야 해서
+ *   `recordMockScreenEvent`가 같은 get으로 따로 검사한다(§84.4.4 3행 · §84.15.3) |
  *
  * 쓰는 곳: `recordMockScreenEvent`(도달 불가면 `failed-precondition` — 검증 ⑤) · `extractLinkMarker`(지어낸 마커 강등) ·
  * 리포트 단계 파생(`installIntended`).
@@ -471,7 +602,8 @@ export function isMockScreenReachable(
   // 아래 표의 조건은 그 위에 AND로 남는다(택배 고급 챌린지처럼 변형 프롬프트에는 있어도 전이가 없는 세션을 거른다).
   if (!sessionReachableLandingIds(session.scenarioId, session.flowVariantId).includes(item.landingId)) return false;
   if (item.kind !== "app-install") return true;
-  if (item.entrySurface !== "messenger-link") return false;
+  // T194-c-1(§84.15.7 단계 3 · G583) — 통화 중 문자 표면의 설치는 허용목록 시나리오에서만(그 밖은 닫힌 쪽).
+  if (item.entrySurface === "in-call-sms") return IN_CALL_INSTALL_SCENARIOS.includes(session.scenarioId);
   // 표의 2 · 3행을 한 식으로 — `escalation` 보유 시나리오는 세션 술어가 세 난이도 · 챌린지 모두에서 값을 내므로 "현행 그대로"와
   // 같고, `advancedEscalation`만 가진 시나리오는 고급 자가 세션에서만 값을 낸다(메타 필드 직접 읽기 0 — G580).
   return resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined;

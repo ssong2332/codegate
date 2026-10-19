@@ -49,6 +49,7 @@ import {
   deliverVerifyOffer,
   deliverVerifyReconnect,
   recordInCallSmsEvent,
+  recordMockScreenEvent,
   requestReverseEscalation,
   sendMessage,
   submitRealtimeTranscript,
@@ -1625,6 +1626,26 @@ export default function SessionCallPage() {
     void recordInCallSmsEvent({ sessionId, smsId, event }).catch(() => {});
   };
 
+  // T194-c-1(docs/Architecture.md §84.5.3 · §84.15.3 · Q2) — 통화 중 문자가 연 모의 설치 화면의 노출 · 응낙 기록. `callMode`는 서버가 통화 중
+  // 설치 항목에 필수로 요구한다(앵커는 서버가 그 문자 문서에서 복사 — 클라 계수를 보내지 않는다). 응낙이 유실되면 리포트가 그 순간을 잃으므로
+  // 메신저 경로(`messenger/page.tsx` T84)와 같이 1회 재시도하고 실패는 콘솔 경고로 남긴다(비차단).
+  // ⚠️ 실시간 사기범이 응낙을 언급하게 하는 주입(맥락 주입 전달 행)은 T194-c-2(PR-A2 뒤) — 여기는 기록만 한다.
+  const handleRecordInCallInstall = (landingId: string, event: "shown" | "consented") => {
+    if (!sessionId) return;
+    const request = { sessionId, landingId, event, callMode: callMode === "realtime" ? "realtime" : "fallback" } as const;
+    void (async () => {
+      try {
+        await recordMockScreenEvent(request);
+      } catch {
+        try {
+          await recordMockScreenEvent(request);
+        } catch (err) {
+          console.warn("[T194-c-1] 목업 화면 이벤트 기록 실패(비차단 — 훈련은 계속됩니다)", { landingId, event, err });
+        }
+      }
+    })();
+  };
+
   // T83 — 확인 오버레이 열기/닫기. **라우팅을 하지 않는다**(D-35 하드 요구, §16.2): 상태만 바꾸므로
   // 통화 세션 컴포넌트가 언마운트되지 않고 통화·타이머·오디오가 그대로 유지된다.
   // ⭐⭐ §47.4 W4/D-68 + §49(V5, 2026-08-02) — 이 오버레이는 참가자가 여는 화면이 아니라 **게이트
@@ -2678,6 +2699,9 @@ export default function SessionCallPage() {
           // ⛔ 참가자가 입력한 값은 이 경로에 실리지 않는다(콜백이 무인자다 — G138/AC-045).
           // ⚠️ 위 `link_tapped`와 달리 이 이벤트만 리포트에서 "속은 순간"으로 승격된다(AC-080 (b)).
           onLandingSubmitted={(smsId) => handleRecordSmsEvent(smsId, "landing_submitted")}
+          // T194-c-1(Q2) — 통화 중 문자로 연 설치 화면의 노출 · 응낙(기록만 — 실시간 언급 주입은 T194-c-2).
+          onInstallShown={(landingId) => handleRecordInCallInstall(landingId, "shown")}
+          onInstallConsent={(landingId) => handleRecordInCallInstall(landingId, "consented")}
         />
       )}
 

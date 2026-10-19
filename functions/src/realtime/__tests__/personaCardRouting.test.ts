@@ -30,8 +30,57 @@ function withElevenLabsConfigured<T>(fn: () => T): T {
 
 test("[G567] 술어 — 세션 문서에 카드가 있으면 참, 없으면 거짓", () => {
   const personaCard = buildPersonaCard({ sessionId: "s", scenarioId: SCENARIO, fictionalBankName: "한결은행" });
-  assert.equal(requiresServerPromptProvider({ personaCard }), true);
-  assert.equal(requiresServerPromptProvider({}), false);
+  // T194-c-1 G610 — 술어 입력에 세션 시나리오 · 변형이 더해졌다(Q2 항). 카드 항 판정은 그대로다.
+  assert.equal(requiresServerPromptProvider({ personaCard, scenarioId: SCENARIO }), true);
+  assert.equal(requiresServerPromptProvider({ scenarioId: SCENARIO }), false);
+});
+
+// ── T194-c-1 G610(docs/Architecture.md §84.15.4 J-4 · §84.16.3) — Q2 설치 문자 선언 세션도 ElevenLabs로 가지 않는다 ─────────────
+/** R-f 사본 — Q2 항을 끈 술어(T194-c-1 이전 원문 그대로 · 카드 항만). */
+const requiresServerPromptProviderBeforeQ2 = (session: { personaCard?: unknown; scenarioId: string }): boolean => session.personaCard !== undefined;
+
+function withElevenLabsFor<T>(scenarioId: string, fn: () => T): T {
+  const saved = { key: process.env.ELEVENLABS_API_KEY, map: process.env.ELEVENLABS_AGENT_IDS };
+  process.env.ELEVENLABS_API_KEY = "test-elevenlabs-key";
+  process.env.ELEVENLABS_AGENT_IDS = `${scenarioId}:agent_test`;
+  try {
+    return fn();
+  } finally {
+    if (saved.key === undefined) delete process.env.ELEVENLABS_API_KEY;
+    else process.env.ELEVENLABS_API_KEY = saved.key;
+    if (saved.map === undefined) delete process.env.ELEVENLABS_AGENT_IDS;
+    else process.env.ELEVENLABS_AGENT_IDS = saved.map;
+  }
+}
+
+test("[T194-c-1 G610 · R-f] card-delivery-call 고급(카드 없음 · Q2 설치 문자 선언) — 술어 참 → ElevenLabs 아님 / Q2 항을 끈 사본 → ElevenLabs(실패 재현)", (t) => {
+  const session = { scenarioId: "card-delivery-call", flowVariantId: "fv-tvnj" };
+  const { normal, poisoned } = withElevenLabsFor("card-delivery-call", () => ({
+    normal: getRealtimeProvider(session.scenarioId, "generic", requiresServerPromptProvider(session)).providerName,
+    poisoned: getRealtimeProvider(session.scenarioId, "generic", requiresServerPromptProviderBeforeQ2(session)).providerName,
+  }));
+  t.diagnostic(`[G610 · R-f] 정상 술어 → ${normal} · Q2 항을 끈 사본 → ${poisoned}`);
+  assert.equal(poisoned, "elevenlabs", "사본이 ElevenLabs가 아니면 역방향이 성립하지 않는다");
+  assert.notEqual(normal, "elevenlabs");
+  // 진리표 — 자가 Q2 3 단위 참 · 챌린지 단위(base 변형) · 변형 없는 세션 · 다른 시나리오 거짓.
+  const rows: [string, { scenarioId: string; flowVariantId?: string }, boolean][] = [
+    ["card-delivery 자가 고급", { scenarioId: "card-delivery-call", flowVariantId: "fv-tvnj" }, true],
+    ["card-company 자가 고급", { scenarioId: "card-company-impersonation", flowVariantId: "fv-x7ue" }, true],
+    ["loan 자가 고급", { scenarioId: "loan-refinance-scam", flowVariantId: "fv-m3hd" }, true],
+    ["card-company 챌린지 고급(fv-akj5)", { scenarioId: "card-company-impersonation", flowVariantId: "fv-akj5" }, false],
+    ["loan 챌린지 고급(fv-6s5p)", { scenarioId: "loan-refinance-scam", flowVariantId: "fv-6s5p" }, false],
+    ["card-delivery 변형 없음(옛 세션)", { scenarioId: "card-delivery-call" }, false],
+    ["다른 시나리오의 변형 ID", { scenarioId: "loan-refinance-scam", flowVariantId: "fv-tvnj" }, false],
+  ];
+  for (const [label, s, expected] of rows) assert.equal(requiresServerPromptProvider(s), expected, label);
+});
+
+test("[T194-c-1 G610 배선] 술어는 함수 1개 · Q2 항은 variantPool의 단일 판별자를 쓴다(두 목록 금지 — 소스 스캔)", () => {
+  const src = readFileSync(path.resolve(__dirname, "../../../src/realtime/provider.ts"), "utf8").replace(/\r\n/g, "\n");
+  assert.match(src, /return session\.personaCard !== undefined \|\| sessionDeclaresInCallInstall\(session\.scenarioId, session\.flowVariantId\);/);
+  assert.equal((src.match(/export function requiresServerPromptProvider/g) ?? []).length, 1);
+  const pool = readFileSync(path.resolve(__dirname, "../../../src/scenarios/variantPool.ts"), "utf8").replace(/\r\n/g, "\n");
+  assert.match(pool, /return variant !== undefined && variant\.scenarioId === scenarioId && declaresInCallInstall\(variant\);/);
 });
 
 test("[G567] 키 · 에이전트 맵이 있어도 카드 세션은 ElevenLabs를 고르지 않는다 — 카드 없는 세션은 오늘 그대로 ElevenLabs(대조군)", (t) => {

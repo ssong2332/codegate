@@ -80,6 +80,39 @@ const LOAN_SCAM: InCallSmsItem[] = [
     announceInstruction:
       "(참가자 휴대전화로 방금 신청서 링크 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 그 링크를 눌러 본인확인을 마쳐 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 실제 주소를 읽어 주지는 말고, 문자 속 링크를 누르라고만 하라.)",
   },
+  // ⭐ T194-c-1(docs/Architecture.md §84.5.2 · §84.16.2 · DECISIONS #191) — **자가 훈련 고급** loan의 `link` 슬롯 문자(Q2 — 통화 중 문자
+  // → 모의 설치). 위 `loan-apply-link`는 삭제하지 않는다(챌린지 고급 `fv-6s5p`가 계속 선언한다). afterScammerTurns=2: 이 시나리오의
+  // 3 · 5와 겹치지 않는 값(시나리오 내 중복 금지 — `inCallSms.test.ts`). 발송 시점은 변형 선언(`notBeforeUserTurns`)이 정한다.
+  {
+    smsId: "loan-check-app-link",
+    kind: "link",
+    senderLabel: "0000-0000 (○○캐피탈 상담센터)",
+    body: "[○○캐피탈] 저금리 전환 심사 전 보안 점검 안내\n아래에서 심사용 보안 점검 앱을 설치해 주세요.",
+    linkDisplayText: "심사용 보안 점검 앱 설치하기",
+    fakeLandingId: "loan-check-app-install",
+    linkAddress: "loan-check-app.invalid/setup/Vr7c",
+    afterScammerTurns: 2,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 보안 점검 앱 설치 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 앱 설치를 진행해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 실제 주소를 읽어 주지 말고, 설치 방법·권한 설정은 설명하지 마라.)",
+  },
+];
+
+// ⭐ T194-c-1(docs/Architecture.md §84.5.2 · §84.15.4) — `card-delivery-call`(고급 전용 · 챌린지 불가) 최초의 통화 중 문자. 고급 변형
+// `fv-tvnj`의 `link` 슬롯이 선언한다(Q2 — 통화 중 문자 → 모의 설치). ⚠️ 이 키가 생기면 `hasInCallSms("card-delivery-call")`가 참이 되어
+// **변형 없는 세션**(옛 세션)의 조립 산출물이 바뀐다(`sessionDeclaresInCallSms`의 무소급 분기 — §84.16.5 단계 4 · 의도된 변경).
+const CARD_DELIVERY_CALL: InCallSmsItem[] = [
+  {
+    smsId: "card-delivery-app-link",
+    kind: "link",
+    senderLabel: "0000-0000 (카드 사고접수 안내)",
+    body: "[명의도용 사고접수] 휴대폰 보안 점검이 필요합니다.\n아래에서 보안 점검 앱을 설치해 주세요.",
+    linkDisplayText: "보안 점검 앱 설치하기",
+    fakeLandingId: "card-delivery-app-install",
+    linkAddress: "card-safe-check.invalid/app/Ns4k",
+    afterScammerTurns: 2,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 보안 점검 앱 설치 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 앱 설치를 진행해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 실제 주소를 읽어 주지 말고, 설치 방법·권한 설정은 설명하지 마라.)",
+  },
 ];
 
 const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [
@@ -138,6 +171,20 @@ const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
     afterScammerTurns: 5,
     announceInstruction:
       '(참가자 휴대전화로 방금 피해금 이관 계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 이관을 마쳐 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)',
+  },
+  // ⭐ T194-c-1(docs/Architecture.md §84.5.2 · §84.16.2 · DECISIONS #192) — **자가 훈련 고급** card-company 신규 변형의 `link` 슬롯 문자(Q2).
+  // 챌린지 고급(`fv-akj5` 무변경 · 문자 선언 0)은 이 문자를 선언하지 않는다. afterScammerTurns=2: 이 시나리오의 3 · 5와 겹치지 않는다.
+  {
+    smsId: "card-guard-app-link",
+    kind: "link",
+    senderLabel: "0000-0000 (카드 명의보호 안내)",
+    body: "[명의도용 피해예방] 다른 결제로 번지지 않게 보호 조치가 필요합니다.\n아래에서 피해 차단용 보안 앱을 설치해 주세요.",
+    linkDisplayText: "피해 차단용 보안 앱 설치하기",
+    fakeLandingId: "card-guard-app-install",
+    linkAddress: "card-guard-check.invalid/guard/Kt2m",
+    afterScammerTurns: 2,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 보안 앱 설치 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 앱 설치를 진행해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 실제 주소를 읽어 주지 말고, 설치 방법·권한 설정은 설명하지 마라.)",
   },
 ];
 
@@ -244,6 +291,8 @@ export const IN_CALL_SMS: Record<string, InCallSmsItem[]> = {
   "reputation-blackmail-scam": REPUTATION_BLACKMAIL_SCAM,
   // §53(§51 커밋 D) — 카탈로그 자체가 신설(이 시나리오 첫 항목). OQ-A31 (b) 집행.
   "bank-security-verify-scam": BANK_SECURITY_VERIFY_SCAM,
+  // T194-c-1(§84.5.2) — 카탈로그 신설(이 시나리오 첫 항목 · Q2 설치 문자).
+  "card-delivery-call": CARD_DELIVERY_CALL,
 };
 
 // ── §59.6/§59.10 커밋 B — 모델 도구 경로의 거절 지시(서버 소유, G386) ─────────────────
