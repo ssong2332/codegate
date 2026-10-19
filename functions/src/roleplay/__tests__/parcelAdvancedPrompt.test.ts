@@ -45,12 +45,13 @@ const sha256 = (text: string) => crypto.createHash("sha256").update(text).digest
 
 /**
  * ⭐ 변경 **전** 기준값 — 병합 기준 시점(base = main 49defd7 — #320 가상 기관명 · #321 A-1 공회전 수정 병합 뒤. 최초 측정은 b7fde97 기준이었고 main 병합 때 같은 스크립트로 다시 쟀다)의 `functions/lib`로 같은 옵션을 조립해 잰 sha256.
+ * 2026-10-20 재측정(Architecture §85 — 실존 회사명 금지 1문장 94자를 promptAssembly "페이로드는 가상값만" 줄에 덧붙임): 새 값에서 그 1문장을 걷어 내면 옛 값과 바이트까지 같다(스크립트 실측).
  * 측정 스크립트는 위 `assembleFor`와 같은 옵션(speakerGender = undefined)이다. 가드레일 보강 1항(§84.4.2 ⚠️ — 의도된 변경)을
  * 걷어 낸 산출물이 이 값과 같아야 한다 ⇒ 초급 · 중급 조립은 그 1항 외에 한 바이트도 바뀌지 않았다(AC-106 (f) · §84.4.6).
  */
 const BASE_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { variantId: string; sha256: string; length: number }>> = {
-  beginner: { variantId: "fv-prr3", sha256: "c51c2658da7d615059316c343b7fcc671121c0a3bb4cfe8d7632b1c87f5f7b81", length: 6050 },
-  intermediate: { variantId: "fv-tvq2", sha256: "b1a0c56bf39269221c5b3ffc7df42b1753ab24dfa5cedcf60210193e6bd6edfe", length: 5316 },
+  beginner: { variantId: "fv-prr3", sha256: "17aed4c0e1896358fa137c3e92529407a0451261e19d22d5d9baa9fcffdee0fd", length: 6144 },
+  intermediate: { variantId: "fv-tvq2", sha256: "dce971dc9af3e37a7eeab1f3897a4f406fc82ba51bce4ca6eb3879b913d2850c", length: 5410 },
 };
 
 /**
@@ -60,8 +61,8 @@ const BASE_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { varia
  * 위 변경 전 값과의 차이는 그 1항뿐이다(아래 테스트가 항을 걷어 내 변경 전 값과 대조한다).
  */
 const AFTER_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { sha256: string; length: number }>> = {
-  beginner: { sha256: "5c5bde9a746c5f2da0fbc675350df6442c68f6446c2cfeb81c608d63eccd322f", length: 6127 },
-  intermediate: { sha256: "17e9abde78ad5a3f626b2527d8f82c58f3a1aefb5b060aa8c9f01bbb2fef1dcc", length: 5393 },
+  beginner: { sha256: "848274077c00499247019d45dc66be1ef53298d70f7e4c1c4dcbaea9a7b4c924", length: 6221 },
+  intermediate: { sha256: "88ee49b765f0164b73504e6e21461c314ad9111f808ee894d5e49d8529bece02", length: 5487 },
 };
 
 test("[T194-a G586 · §84.13.3 ④] parcel 초급 · 중급 조립 = 갱신 기대값(가드레일 (5)항 포함) · 가드레일 최후미", () => {
