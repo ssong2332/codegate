@@ -31,7 +31,7 @@ import { derivedExitBlock } from "./exitBlockLabelRules";
 import { REAL_WORLD_APP_NAMES, REAL_WORLD_HOTLINES } from "./harmlessnessPatterns";
 import { SESSION_MARKER_WORDS } from "./sessionMarkerWords";
 import { l3DepthMode } from "../../roleplay/l3Depth";
-import { buildSystemPrompt } from "../../roleplay/promptAssembly";
+import { buildSystemPrompt, REAL_COMPANY_PROMPT_SENTENCE } from "../../roleplay/promptAssembly";
 import { resolveTacticCategory } from "../../report/tacticCategory";
 import { DIFFICULTY_LEVELS, type DifficultyLevel } from "../../shared/difficulty";
 import * as crypto from "node:crypto";
@@ -680,9 +680,13 @@ test("[T194-a §84.13.3 ② · 리뷰 M2] 플래그만 더한 child-kakao · sub
       identityCheckAllowed: asksIdentityCheck(row.scenarioId),
       speakerGender,
     });
-    const hash = crypto.createHash("sha256").update(assembled).digest("hex");
-    lines.push(`${row.variantId} ${hash.slice(0, 12)}(${assembled.length}자) = 기준 ${row.sha256.slice(0, 12)}(${row.length}자)`);
-    assert.equal(assembled.length, row.length, `${row.variantId}: 길이가 변경 전과 다르다`);
+    // §85(리뷰 M1) — 실존 회사명 금지 1문장은 의도된 변경이다. 정확히 1회 있고, 그것을 걷어 낸 바이트가 변경 전 실측값과 같아야 한다.
+    const companySentence = ` ${REAL_COMPANY_PROMPT_SENTENCE}`;
+    assert.equal(assembled.split(companySentence).length - 1, 1, `${row.variantId}: §85 금지 1문장이 정확히 1회 있어야 한다`);
+    const strippedAssembled = assembled.replace(companySentence, "");
+    const hash = crypto.createHash("sha256").update(strippedAssembled).digest("hex");
+    lines.push(`${row.variantId} ${hash.slice(0, 12)}(${strippedAssembled.length}자) = 기준 ${row.sha256.slice(0, 12)}(${row.length}자)`);
+    assert.equal(strippedAssembled.length, row.length, `${row.variantId}: 길이가 변경 전과 다르다`);
     assert.equal(hash, row.sha256, `${row.variantId}: 조립 바이트가 변경 전과 다르다`);
     // 화자 성별 = 변경 전 표 값(child-kakao = notApplicable → undefined → [화자] 블록 0).
     assert.equal(speakerGender, speakerGenderFor(row.scenarioId), `${row.variantId}: 화자 성별이 표 값과 다르다`);
