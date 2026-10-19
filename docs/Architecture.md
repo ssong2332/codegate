@@ -20330,3 +20330,40 @@ architect가 진입 표면에 거는 **조건만**(UX 재판정의 입력):
 | OQ-A148 | T194-c 착수 전 — 통화 중 두 랜딩(이체 · 설치)의 앵커 충돌 가능성 판정 → (b) 선행 여부(architect) · 필요 시 UX 금지 ② 재확인(ux-design) |
 
 > **번호**: §83.13 · G584~G585 · OQ-A148 — §83 직후 값. ⛔ 예약 아님.
+
+#### 83.13.5 (추가 판정 — 2026-10-19) 챌린지 수신자에게 3단계 변형이 배정된다 — ⭐ **ⓐ의 변형: 배정 풀을 "세션의 에스컬레이션 값과 같은 변형"으로 거르고, parcel 고급에 챌린지용 비에스컬레이션 변형 1벌을 둔다**
+
+| 실측 | 근거 |
+|---|---|
+| 수신자 배정은 `listFlowVariants(scenarioId, level)` 전체에서 해시로 고른다 — 세션 종류를 보지 않는다 | `functions/src/session/variantAssignment.ts:54-64` · `:149-155` |
+| parcel 고급 허용 변형은 `fv-g454` **1벌뿐**(`flowVariants.ts:768-780`) ⇒ 단순히 에스컬레이션 변형을 빼면(ⓐ 그대로) 후보 0 → `failed-precondition`(`:56-61`) — **parcel 고급 챌린지가 생성 불가**가 된다 | 같음 |
+| 수신자 세션의 에스컬레이션 = 시나리오 메타만(`resolveSessionEscalation` — 83.4.1) · parcel 챌린지는 허용(`challenge/index.ts:110-113` 무변경) ⇒ 지금은 **프롬프트는 3단계 · 전이 · 설치 기록은 0**인 어긋난 세션이 생긴다(보고된 그대로) | 83.4.1 |
+
+| 안 | 판정 | 이유 |
+|---|---|---|
+| ⓐ 챌린지 풀에서 `escalatesToVoice` 변형 제외만 | ⛔ 기각(단독으로는) | parcel 고급 후보 0 → 챌린지 생성 실패 |
+| ⓑ 챌린지는 원본 프롬프트로 강등 | ⛔ 기각 | 전 시나리오 수신자에 일괄 적용하면 기존 수신자 변형(AC-096)이 사라지고, parcel만 강등하면 "변형 없음"이 판별자로 오버로드된다(§14.9.1) · AC-096 (f) *"조용한 임의 배정 금지"* 와도 어긋난다 |
+| **ⓒ 풀 필터 + 챌린지용 변형 1벌(채택)** | ⭐ | 아래 |
+
+**처방(구현 — T194-a에 포함)**:
+
+1. **풀 함수 1개**(J-1): `assignablePool(scenarioId, level, challengeId?)` = `listFlowVariants(scenarioId, level).filter(v => Boolean(v.escalatesToVoice) === Boolean(resolveSessionEscalation({ scenarioId, difficultyLevel: level, challengeId })))`. `candidatesOrThrow`(`variantAssignment.ts:54`)가 이 함수를 쓴다 ⇒ `assignFlowVariantForSession`(자가) · `assignFlowVariantForChallenge`(수신자) 둘 다 같은 필터. 별도 `audience` 필드는 만들지 않는다(판별자는 에스컬레이션 값 하나).
+2. **parcel 고급 챌린지용 변형 1벌 추가**: 내용 = T194 이전 `fv-g454`와 같다(`authoring:"current"` · `stages:[]` · `exitBlock:["D2_secrecy","D4_procedural_legitimacy"]` · `ONE_LEG("택배 배송 안내","female")` · `ADVANCED` · `channels:["messenger"]` · `demandStages:2` · `escalatesToVoice` 부재). ⛔ **새 불투명 ID**(`fv-` + 4자 · 기존 ID 재사용 금지) — `fv-g454`는 자가 고급 3단계로 남는다. 결과: 자가 고급 풀 = `{fv-g454}` · 수신자 고급 풀 = `{새 ID}` = AC-106 (g) 기본값(*"챌린지에서는 현행 고급"*)이 프롬프트 층까지 성립.
+3. **회귀 범위**: 다른 시나리오는 필터가 항등이다 — 음성 시나리오는 플래그 0 · 세션 에스컬레이션 0, 에스컬레이션 메신저(subsidy · child-kakao)는 챌린지 자체가 거부된다(`challenge/index.ts:113`). parcel 초급 · 중급도 플래그 0 · 에스컬레이션 0으로 항등.
+4. **AC-106 (i) 검사 단위 정정(G577 갱신)**: 균일성은 **(시나리오 × 난이도 × 세션 종류{자가 · 챌린지})의 배정 가능 풀**에서 검사한다(①을 `assignablePool` 결과로) · 기대값에 *"parcel 고급 챌린지 풀 = 없음"* 1행 추가. ⚠️ AC-106 (i) 원문은 *"같은 (시나리오 × 난이도)에 허용된 변형"* 이다 — *"허용"* 을 세션 종류별 배정 풀로 읽는 해석이며, 근거는 같은 AC의 목적(UX-025 · start-notice가 세션 전에 고르는 값과 배정 변형의 일치 — 수신자 start-notice는 시나리오 단위 값 = 없음으로 이미 갈린다 · 83.4.1 C-2)이다 ⇒ planner 읽기 확인 **OQ-A149**(⛔ 비차단 — 이 해석 없이는 (g) 기본값이 성립하지 않는다).
+
+**G584는 챌린지에서 올바른가 — 처방 2 뒤에만 그렇다**:
+
+| 상태 | `sessionReachableLandingIds(parcel, 수신자 변형)` | 판정 |
+|---|---|---|
+| 지금(수신자에게 `fv-g454`) | `{parcel-install}` — 프롬프트와는 일치하나 `isMockScreenReachable`(에스컬레이션 0 → 설치 거부)과 **모순** | ⛔ 틀린 집합(원인은 G584가 아니라 배정) |
+| 처방 2 뒤(새 변형) | 원본 persona · tactics의 `[[LINK:parcel-redelivery]]` → `{parcel-redelivery}` | ✅ 수신자가 실제로 보는 프롬프트와 같은 집합. G584는 변형 ID만 입력으로 받으므로 **세션 종류를 따로 볼 필요가 없다**(입력이 올바르면 출력이 올바르다) |
+
+| G | 단언 | 테스트 지점 |
+|---|---|---|
+| **G586** | `assignablePool` 진리표: 전 시나리오 × 3난이도 × {자가 · 챌린지}에서 풀 비어 있지 않음(챌린지가 거부되는 조합 제외) · 풀의 모든 변형이 `Boolean(escalatesToVoice) === Boolean(resolveSessionEscalation)` · 두 배정 함수가 이 함수를 쓴다(소스 스캔) · **역방향**: 필터를 끈 사본에서 parcel 고급 챌린지가 `fv-g454`를 받는 샘플 → 실패를 같은 실행 출력에 | `session/__tests__/variantAssignment.test.ts` |
+| **G587** | 정합: 모든 (시나리오 × 난이도 × 세션 종류) 풀 변형에 대해 `messenger-link` `app-install` ∈ `sessionReachableLandingIds` ⇒ 그 세션 종류의 `resolveSessionEscalation` 참(설치 화면은 통화로 이어지는 세션에만) | `scenarios/__tests__/mockScreens.test.ts` |
+
+**구현자 처방(짧게)**: ① `assignablePool` 추가 → `candidatesOrThrow`가 사용 ② parcel 고급에 옛 `fv-g454` 내용의 새 ID 변형 1벌(플래그 부재) ③ G577의 균일성 단위를 세션 종류까지 넓히고 기대값 1행 추가 ④ G586 · G587 + 역방향 1건을 같은 커밋 ⑤ G584 · G585는 변경 없음(새 변형이 G585의 `base`/변형 단위에 자동 포함 — `{parcel-redelivery}` 1건). 완료 보고에 *"챌린지 3단계를 막았다"* 대신 *"챌린지 풀을 세션 에스컬레이션 값으로 걸러 수신자는 현행 고급 변형을 받는다"* 로 쓴다.
+
+> **번호**: §83.13.5 · G586~G587 · OQ-A149 — 직전 G585 · OQ-A148 다음. ⛔ 예약 아님.
