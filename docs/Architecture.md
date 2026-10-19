@@ -19656,6 +19656,7 @@ export function isVerifyTransferReachable(input: {
 
 - ⚠️ 워크트리 `C:\Projects\codegate\.claude\worktrees\agitated-zhukovsky-f406bb`(§84 계열 · planner/architect 다른 패스)가 **G604 ~ G611 · OQ-A155 · DECISIONS #191 · #192**를 쓰고 있다(그 트리 `docs/Architecture.md:20896-21158` · `docs/DECISIONS.md:188-189` 열람). 이 절의 **G604 ~ G608 · OQ-A155 · OQ-A156과 겹친다** — 이 절 작성 시점(같은 날 앞선 grep)에는 0건이었다 · 그 트리는 #190을 비워 두었다(우리 #190과는 겹침 0).
 - 처분: ⛔ **이 패스는 재번호하지 않는다**(병합 순서로 확정 — 나중 병합 쪽이 자기 절 · 자기 DECISIONS 행 · 자기 시점 부착 줄만 치환 · 전역 치환 금지). 이번 보강의 새 번호는 그 트리도 피했다: **G612 · DECISIONS #193**(⛔ 예약 아님).
+- **(2026-10-19 23:37Z C6-F2 P-H 2차 재측정 결과 — G608 · 위 원문 무수정)** 23세션(accept 11 · reject 12 · 빌드 `6d6ad62` · 오류/429 0) ⇒ **판정표 #4 — G603/G608 미충족**: H1 **0/21** · H3 **0/10** · H5 0/10 충족(⇒ #1 "2회 실패" 아님) · H2 turnComplete 10/10이나 **오디오 ≤6초 9/10(#11 6.83초) · 문장 ≤2 9/10(#10 3문장)**. 처방 = 79.14 #2(승인 문면 1회 수정 → R4·R5) · #5(accept 미호출 1 — architect 재소집) 함께 해당. 관측: 호출 전 결과 알림·종료 선언 0/21 · Live "새 요구 + end_call" 2건(accept #11 · reject #12)과 약속 시점 goal 1건(accept #2) = T192-C7 근거. 상세 `docs/research/ph-hangup-probe-2026-10.md` 2차.
 
 ## 80. (Bug fix — 2026-10-18 · 브랜치 `fix/otp-compare-live-miss`) **라이브에서 틀린 인증번호를 "확인되었습니다"로 넘긴 문제** — ⭐⭐ **판정은 정상(mismatch)이었고 지시도 실렸다. Gemini가 §78의 "(참고 — …)" 1줄을 무시했다(같은 조건 실호출 3/3)** ⇒ 결과 지시 문면 강화 + 판정 결과 로그 — implementer 기록
 
