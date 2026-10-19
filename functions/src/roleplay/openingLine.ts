@@ -18,6 +18,7 @@ import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { ScammerMessage } from "./types";
+import type { PersonaCardItem } from "../shared/types";
 import { applyFictionalBank, resolveSessionAccountNumber } from "../shared/fictionalBank";
 
 // 사용자 신고(2026-07-25) — 오프닝 대사가 다짜고짜 요구·압박부터 들어가 시나리오 배경이 없다는
@@ -35,6 +36,27 @@ import { applyFictionalBank, resolveSessionAccountNumber } from "../shared/ficti
 // 모듈 지역 상수로 두면 게이트가 이 자리를 볼 수 없다 — 그것이 T113이 없앤 사각의 형태다.
 export const OPENING_TURN_INSTRUCTION =
   "[오프닝 지침] 지금이 이 통화/대화의 첫 마디다. 다짜고짜 요구나 압박부터 하지 말고, 먼저 신분(사칭 기관·관계)과 연락한 이유(어떤 사건·문제 때문인지)를 1~2문장으로 밝혀 상황을 설명한 뒤에 이어간다.";
+
+/**
+ * `generateOpeningLine`의 세션 문맥(세션 문서 write 전이라 세션에서 읽을 수 없는 값들 — 호출부가 방금 정한 값을 넘긴다).
+ * ⭐ 세 키 모두 **필수 키**다(값은 `undefined`일 수 있다) — 옵셔널이면 호출부 누락이 "없음"으로 조용히 통과한다.
+ */
+export type OpeningSessionContext = {
+  /** §81 — 이 세션의 가상 은행명(호출부가 세션 생성 전에 골라 세션 문서에도 같은 값을 쓴다). `undefined`면 종전("OO은행"). */
+  fictionalBankName: string | undefined;
+  /**
+   * T194-a(§84.4.3 · §84.4.4) — 2인 챌린지 수신자 세션이면 그 챌린지 ID(호출부 `consentChallenge`). 화자 성별 · 링크 마커 도달
+   * 판정의 세션 술어 입력이다(챌린지 = 시나리오 단위 전이 — AC-106 (g)). 자가 세션 = `undefined`.
+   */
+  challengeId: string | undefined;
+  /**
+   * T194-b(§84.3.2 · §84.3.4) — 이 세션의 가상 신상 카드 행(서버 `buildPersonaCard`가 방금 만든 값 — 세션 문서에 같은 값을 쓴다).
+   * 오프닝도 카드를 알아야 첫 마디에서 "이미 안다"를 꺼낼 수 있다. 카드 없는 세션 = `undefined`.
+   */
+  personaCard: readonly PersonaCardItem[] | undefined;
+};
+
+const NO_SESSION_CONTEXT: OpeningSessionContext = { fictionalBankName: undefined, challengeId: undefined, personaCard: undefined };
 
 export type OpeningLineResult = {
   message: ScammerMessage;
@@ -74,12 +96,13 @@ export async function generateOpeningLine(
   // T191 S5(AC-096) — 호출부가 방금 배정한 흐름 변형 ID(세션 문서 write 전이라 세션에서 읽을 수 없다).
   // 부재 = 원본 시나리오 프롬프트(하위호환).
   flowVariantId?: string,
-  // §81 — 이 세션의 가상 은행명(호출부가 세션 생성 전에 골라 세션 문서에도 같은 값을 쓴다). 부재면 종전("OO은행").
-  fictionalBankName?: string,
-  // T194-a(§84.4.3 · §84.4.4) — 2인 챌린지 수신자 세션이면 그 챌린지 ID(호출부 `consentChallenge`). 세션 문서 write 전이라
-  // 세션에서 읽을 수 없다. 화자 성별 · 링크 마커 도달 판정의 세션 술어 입력이다(챌린지 = 시나리오 단위 전이 — AC-106 (g)).
-  challengeId?: string,
+  // ⭐ T194-b(§84.13.3 ⑤ ⓒ) — 꼬리 인자를 **객체 1개**로 묶었다(6번째 위치 인자 금지 — 위치 인자 순서 실수 방지).
+  // 운영 호출부(createSession · consentChallenge)는 세 키를 전부 **명시**로 넘긴다(자가 세션의 `challengeId` = `undefined` · 카드 없는
+  // 세션의 `personaCard` = `undefined` — `shared/__tests__/fictionalBank.test.ts`가 호출 모양을 고정한다). 기본값은 앞 인자들이 옵셔널이라
+  // 필요한 것(TS1016)이고, 단위 테스트의 1인자 호출만 쓴다.
+  sessionContext: OpeningSessionContext = NO_SESSION_CONTEXT,
 ): Promise<OpeningLineResult> {
+  const { fictionalBankName, challengeId, personaCard } = sessionContext;
   // 세션 문서가 아직 없으므로 세션 술어 입력을 호출부 값으로 조립한다(sendMessage는 세션 문서를 그대로 넘긴다).
   const sessionView = {
     scenarioId,
@@ -117,6 +140,8 @@ export async function generateOpeningLine(
       turnInstruction: OPENING_TURN_INSTRUCTION,
       ...(fictionalBankName ? { fictionalBankName } : {}),
       sessionAccountNumber: resolveSessionAccountNumber(scenarioId),
+      // T194-b(§84.3.4 · G568 호출부 3곳 중 "오프닝 대사") — 부재 = 블록 0(바이트 동일).
+      ...(personaCard ? { personaCard } : {}),
     }),
     messages: [], // 오프닝 대사에는 아직 사용자 입력이 없다.
     mockTacticHints: scenarioPrompt.weakenedTactics,

@@ -140,8 +140,13 @@ test("[은행명] 배선 — 세션 생성 2곳이 저장·오프닝에 전달, 
     assert.match(s, /const fictionalBankName = pickFictionalBankName\(\);/, file);
     // T191 S5(#313) 병합 — 3번째 인자는 흐름 변형 ID, 4번째가 은행명이다.
     // T194-a(§84.13.3 ⑤) — 5번째 인자 = 챌린지 ID(세션 술어 입력). 호출부 전부 **명시** 전달(자가 세션 = `undefined`) — 5인자 형태로 고정한다.
-    // 4번째 = 은행명은 그대로다.
-    assert.match(s, /generateOpeningLine\(\n\s*scenarioId,\n\s*[\w.]+,\n\s*[\w.]+,\n\s*fictionalBankName,\n\s*[\w.]+,\n\s*\)/, file);
+    // ⭐ T194-b(§84.13.3 ⑤ ⓒ) — 꼬리 인자(은행명 · 챌린지 ID · 카드)를 **객체 1개**(4번째 인자)로 묶었다(6번째 위치 인자 금지).
+    // 4인자 형태 + 객체의 세 키가 이 순서 · **명시**로 있어야 한다(완화 아님 — 키 하나라도 빠지면 실패). 은행명 키는 단축형 그대로다.
+    assert.match(
+      s,
+      /generateOpeningLine\(\n\s*scenarioId,\n\s*[\w.]+,\n\s*[\w.]+,\n\s*\{ fictionalBankName, challengeId: [\w.]+, personaCard: [\w.?]+ \},\n\s*\)/,
+      file,
+    );
     // 세션 문서 객체 리터럴 안(difficultyLevel 바로 다음 줄)에 저장하는지 — 오프닝 호출 인자와 구별한다(리뷰 #2).
     assert.match(s, /difficultyLevel: [\w.]+,\n\s*fictionalBankName,\n/, `${file}: 세션 문서에 저장`);
   }

@@ -494,6 +494,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         ...(turnInstructionWithSms ? { turnInstruction: turnInstructionWithSms } : {}),
         fictionalBankName,
         sessionAccountNumber: resolveSessionAccountNumber(session.scenarioId),
+        // T194-b(§84.3.4 · G568 호출부 3곳 중 "텍스트 턴") — 세션 문서 값 그대로(부재 = 블록 0 · 바이트 동일).
+        // ⚠️ `hangupMode` 앞에 둔다 — G552 ⓒ 소스 스캔이 hangupMode를 옵션 마지막으로 고정한다.
+        personaCard: session.personaCard?.items,
         // T192 C3 — 사전 판정이 `accepted`인 턴만 "signal"(§79.6 ②). 그 밖 = "none"(종전 문면 바이트 동일 · G505).
         hangupMode,
       }),

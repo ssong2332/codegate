@@ -44,6 +44,7 @@ import type {
   UpdateMessengerSkinResponse,
 } from "./types";
 import { pickFictionalBankName } from "../shared/fictionalBank";
+import { resolveSessionPersonaCard } from "./personaCard";
 
 ensureFirebaseAdminApp();
 
@@ -195,14 +196,6 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       scenarioId,
       resolvedDifficultyLevel,
     );
-    const { message: openingMessage, isMock } = await generateOpeningLine(
-      scenarioId,
-      resolvedDifficultyLevel,
-      variantAssignment.flowVariantId,
-      fictionalBankName,
-      undefined,
-    );
-
     // T4: sessionId(온보딩 "사전 세션 id")가 넘어오면 createVoiceClone이 만들어 둔 pending
     // sessions/{sid} 문서를 새로 만들지 않고 채택한다 — sessionId 불일치 갭 해소. 넘어오지 않으면
     // 기존과 동일하게 새 id를 발급한다(하위호환). ID 생성/채택 로직만 바꿨고, 그 외 인격유지·
@@ -229,6 +222,21 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       }
       sessionRef = candidateRef;
     }
+    // ⭐ T194-b(docs/Architecture.md §84.3.2 · PRD AC-104) — 훈련용 가상 신상 카드. 대상 술어는 **여기서 한 번만** 평가되고
+    // 결과는 세션 문서 `personaCard`의 존재/부재로만 남는다. 시드가 sessionId라 위에서 `sessionRef` id를 오프닝 **앞**으로 당겼다
+    // (write 시점은 그대로 아래 트랜잭션). 오프닝 대사도 카드를 알아야 한다(§81과 같은 이유) — 그래서 오프닝 앞이다.
+    // ⛔ 입력은 서버가 정한 값뿐이다(요청 구조분해에 카드 필드 0 — G564 · 계정 정보 0 — G566).
+    const personaCard = resolveSessionPersonaCard(
+      { scenarioId, difficultyLevel: resolvedDifficultyLevel, challengeId: undefined, channel },
+      { sessionId: sessionRef.id, scenarioId, fictionalBankName },
+    );
+    const { message: openingMessage, isMock } = await generateOpeningLine(
+      scenarioId,
+      resolvedDifficultyLevel,
+      variantAssignment.flowVariantId,
+      { fictionalBankName, challengeId: undefined, personaCard: personaCard?.items },
+    );
+
     const now = Timestamp.now();
 
     // NOTE(T3/T8 후속): identitySelfConfirmed는 CreateSessionRequest 계약에 없다(API.md). voiceId가
@@ -268,6 +276,8 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       // 여기 값은 미리보기이고, 아래 트랜잭션이 회전 문서를 다시 읽어 확정값으로 덮어 쓴다.
       // 응답에는 싣지 않는다(세션 전 화면에 변형 정보 0 — 아래 return 참고).
       flowVariantId: variantAssignment.flowVariantId,
+      // T194-b(§84.3.2) — 대상 세션에만 필드가 생긴다(대상 밖 = 부재 · 빈 값 0). 오프닝에 넘긴 것과 같은 객체다.
+      ...(personaCard ? { personaCard } : {}),
     };
     // merge:true — sessionId를 채택한 경우 pending 문서(createVoiceClone이 만든 voiceProvider 등
     // 부가 필드)를 지우지 않고 scenarioId/status 등을 덧씌운다. 새 문서인 경우는 기존과 동일.

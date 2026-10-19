@@ -43,6 +43,7 @@ import {
   type MockScreenSource,
 } from "./mockScreenTimeline";
 import type { GenerateReportResponse } from "./types";
+import { buildPersonaBlock } from "./personaBlock";
 
 export async function generateReportForSession(sessionId: string): Promise<GenerateReportResponse> {
   const db = getFirestore();
@@ -283,6 +284,11 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   // 추가 비용이 없다. **옵셔널 필드는 값이 있을 때만 넣는다** — Firestore는 `undefined` 필드 write를
   // 거부하고(Database.md Migration Policy의 "부재로 하위호환"과도 정합), §14.8.3의 "값이 없으면
   // 셀 자체가 비는" store-nothing 방어와 같은 형태다.
+  // ②-g T194-b(§84.3.6 · D-120) — "상대가 먼저 꺼낸 '내 정보'" 판정. 위에서 이미 읽은 `messages`(turnIndex 순 · notSpoken 표시 포함)와
+  // 세션 문서 카드만 쓴다(추가 read 0 · 통화 중 쓰기 0). 카드 없는 세션 = undefined = 필드 부재(R-4).
+  // ⚠️ `selfDialIntercepted`는 U2(T194-d · AC-105) 전이라 항상 false — R-3은 그 PR이 이 인자를 서버 기록으로 채울 때 열린다.
+  const personaBlock = buildPersonaBlock(session.personaCard, messages, false);
+
   const reportDoc: ReportDoc = {
     reportId: sessionId,
     sessionId,
@@ -324,6 +330,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     // T158(§48.2.1, AC-084) — 세션의 대사 축 강등 태그를 리포트로 역정규화(read 0회 추가,
     // `session`은 위에서 이미 읽었다). 순수 함수로 뽑아 단위 테스트한다(§reportLlmProvider.test.ts).
     ...deriveReportLlmProviderField(session),
+    // T194-b(§84.3.6) — 최초 생성 시 1회만 기록(멱등 early-return). 카드 없는 세션은 필드를 만들지 않는다(무백필).
+    ...(personaBlock ? { personaBlock } : {}),
   };
   await reportRef.set(reportDoc);
 

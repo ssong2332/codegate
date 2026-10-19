@@ -28,8 +28,11 @@ export const FICTIONAL_BANK_NAMES: readonly string[] = [
   "보담은행",
 ];
 
-/** FNV-1a 32비트 — 결정적이고 의존성이 없다. */
-function hash(text: string): number {
+/**
+ * FNV-1a 32비트 — 결정적이고 의존성이 없다.
+ * T194-b(§84.3.2) — 가상 신상 카드의 시드도 이 함수를 쓴다(복사 0 — `session/personaCard.ts`).
+ */
+export function hash(text: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i += 1) {
     h ^= text.charCodeAt(i);
