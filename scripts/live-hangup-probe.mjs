@@ -2,7 +2,8 @@
 // T192 PR B — P-H 프로브(Architecture.md §79.4): 사기범의 먼저 끊기(`end_call` · BLOCKING)가 실제 3.8 Live에서
 // "승인 뒤에만 작별"하는가를 잰다. ⛔ 측정 전용 — 앱 코드를 바꾸지 않는다.
 //
-// 방법(§79.4): 새 `functions/lib`의 `GeminiRealtimeProvider` **기본 생성자**(= 운영값 `END_CALL_LIVE_AVAILABLE`)로
+// 방법(§79.4): 새 `functions/lib`의 `GeminiRealtimeProvider`에 **켬 입력(`true`)을 명시**해(T192 C6-F2 — 운영 상수
+// `END_CALL_LIVE_AVAILABLE`이 `false`(운영 off)여도 `end_call` 선언 · TOOL 문면으로 잰다 · 두 값을 요약에 함께 기록)
 // 단기 토큰을 받는다 → 토큰에 고정된 setup(TOOL 문면 · `end_call` 선언)으로 Node에서 Live 세션을 연다 → 사용자 발화는
 // 텍스트 턴(`turnComplete:true` — 앱의 타이핑 경로)으로 대본을 보낸다. 콜러블 `requestScammerHangup`은 **응답 모사**다
 // (승인/거절을 실행 모드가 고른다 · 문면은 서버 상수 그대로 — `functions/lib/scammerHangup/guidance.js`).
@@ -39,6 +40,8 @@ const require = createRequire(path.join(fnRoot, "package.json"));
 const { GoogleGenAI, Modality } = require("@google/genai");
 const { GeminiRealtimeProvider } = require(path.join(fnRoot, "lib/realtime/geminiProvider.js"));
 const { END_CALL_LIVE_AVAILABLE } = require(path.join(fnRoot, "lib/realtime/liveTools.js"));
+/** T192 C6-F2 — 측정은 항상 `end_call` 켬으로 한다(운영 상수와 분리 · ⛔ 기본 생성자를 쓰지 않는다). */
+const END_CALL_LIVE_FORCED_ON = true;
 const { SCAMMER_HANGUP_ACCEPTED_GUIDANCE, SCAMMER_HANGUP_DECLINED_GUIDANCE } = require(
   path.join(fnRoot, "lib/scammerHangup/guidance.js"),
 );
@@ -165,8 +168,8 @@ async function runSession(index, apiKey) {
   /** H7 — 대기 구간이 시작되는 사용자 발화 순번(1-기반). */
   const idleStartUserTurn = SCRIPT_IDLE.length - IDLE_WAIT_LINES.length + 1;
 
-  // ⭐ 운영과 같은 발급 — 기본 생성자(스위치 = 운영 상수) · 음성 채널 · 릴레이 없음.
-  const provider = new GeminiRealtimeProvider(apiKey);
+  // ⭐ 발급 — 켬 입력 명시(스위치 = END_CALL_LIVE_FORCED_ON · 운영 상수 무관) · 음성 채널 · 릴레이 없음.
+  const provider = new GeminiRealtimeProvider(apiKey, END_CALL_LIVE_FORCED_ON);
   const creds = await provider.createCallCredentials({
     sessionId: `hangup-probe-${mode}-${index}-${t0}`,
     scenarioId: SCENARIO_ID,
@@ -376,7 +379,10 @@ async function runSession(index, apiKey) {
 }
 
 async function main() {
-  console.log(`[hangup-probe] mode=${mode} n=${n} END_CALL_LIVE_AVAILABLE=${END_CALL_LIVE_AVAILABLE}`);
+  console.log(
+    `[hangup-probe] mode=${mode} n=${n} endCallLiveForcedOn: ${END_CALL_LIVE_FORCED_ON} ` +
+      `END_CALL_LIVE_AVAILABLE(운영)=${END_CALL_LIVE_AVAILABLE}`,
+  );
   const apiKey = readApiKey();
   mkdirSync(outDir, { recursive: true });
   const ts = Date.now();
@@ -411,6 +417,8 @@ async function main() {
   const summary = {
     mode,
     n,
+    endCallLiveForcedOn: END_CALL_LIVE_FORCED_ON,
+    endCallLiveAvailableProduction: END_CALL_LIVE_AVAILABLE,
     sessionsWithError: results.filter((r) => r.error).length,
     sessionsWithEndCall: called.length,
     endCallTotal: allCalls.length,
