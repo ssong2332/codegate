@@ -20874,3 +20874,285 @@ architect가 진입 표면에 거는 **조건만**(UX 재판정의 입력):
 | `docs/Tasks.md` | T194-R B architect ①~⑥ = 84.14.2 · 84.14.3 · G594 · 84.14.4 · #182 · 84.14.5 로 충족(설계) | planner |
 
 > **번호**: §84.14 · G592~G595 · 신규 OQ-A 0 — 직전 G591 · OQ-A151(이 트리 = 메인 동일). ⛔ 예약 아님 — 병합 순서로 확정.
+
+### 84.15 (T194-c 착수 전 판정 — 2026-10-20 · 브랜치 `claude/t194c-q2-design` = main `a376166` · ⛔ 84.0~84.14 무수정 · 아래가 우선한다) **OQ-A150 · Q2 구현 지점** — ⭐⭐ **OQ-A150은 조건부로 닫힌다: (시나리오 × 변형) 단위의 도달 가능 랜딩이 1건이면 앵커 규칙과 무관하게 오분류가 불가능하다 — 그 조건은 OQ-A145 = "교체"(또는 loan 제외)일 때 Q2 3종 전부에서 성립하고, 대안 "목적 신설"일 때만 깨진다(그때는 T129 (b) 선행)** / ⭐⭐ **문자 간격 하한(`MIN_USER_TURNS_BETWEEN_SMS = 2`)은 두 문자의 앵커 분리를 보장하지 않는다 — 실시간 앵커는 클라 계수라 같은 값에 도달할 수 있다** / ⭐ **84.13.2의 전제(*"card-company 고급 한 세션에 이체 랜딩과 설치 화면이 둘 다 도달"*)는 거짓이다 — `fv-akj5`는 문자를 하나도 선언하지 않는다** / ⭐ **Q2 폴백에서 오늘 코드는 *"전화로 이어서"* 문면을 고른다(선택 판정이 메신저→통화 전이 기록만 본다) · A-1 ⑦ 결과 신호가 설치 문자를 "신청과 본인확인 완료"로 말하게 한다 — 둘 다 Q2 착수 시 같이 닫는다**
+
+#### 84.15.0 ⛔ 금지 (이 절의 다른 판단보다 우선)
+
+| # | 금지 | 근거 |
+|---|---|---|
+| Q-X1 | 문자 간격 하한을 "두 랜딩 앵커가 갈린다"의 근거로 쓰는 것 | 84.15.2 앵커 표 — 실시간 앵커는 클라 계수 |
+| Q-X2 | 한 (시나리오 × 변형)에 도달 가능 랜딩 2건(OQ-A145 대안 B 등)을 T129 (b) 선행 커밋 없이 병합 | §35.6 1행 · G159/G589 처방 문구 |
+| Q-X3 | Q2 설치 문자를 A-1 ⑦ 결과 신호(`confirmResult`) 대상에 남기는 것 | 84.15.4 ③ — 거짓 문면 + 통화 마무리 유도 |
+| Q-X4 | 처음부터 통화인 세션의 설치 응낙 지시를 `isEscalatedVoiceCall` 하나로 고르는 것 | `functions/src/roleplay/index.ts:381-384` — Q2에서 거짓 문면 |
+| Q-X5 | 통화 중 응낙 문서의 앵커를 응낙 시점의 클라 주장 계수로 쓰는 것 | 84.15.3 |
+| Q-X6 | Q2 데이터가 든 Functions를 Hosting보다 먼저 배포 | 옛 화면은 설치 랜딩 문구가 없어 빈 보기(`src/components/MessengerFakeLanding.tsx:164`) — `CLAUDE.md` Hosting → Functions 순서 |
+| Q-X7 | OQ-A145를 이 절이 판정한 것으로 인용 | 84.15.5는 선택지별 영향만 — 판정은 planner |
+
+#### 84.15.1 착수 실측
+
+| 항목 | 값 | 근거 |
+|---|---|---|
+| 번호 | G 최대 **G595** · OQ-A 최대 **A151** ⇒ 이 절 = **G604~G610 · OQ-A155** | 이 트리와 메인 체크아웃 `C:\Projects\codegate\docs`에서 `G59[6-9]` · `G6[0-9][0-9]` · `OQ-A15[2-9]` grep 0건. ⛔ 예약 아님 |
+| 버전 갭 | 헤더 `:5` = PRD v1.7.1 · UX 1.13 / 현행 PRD **v1.27**(`docs/PRD.md:4`) | 전진시키지 않는다(UpdateRequests #45 소유 — §84.1 관례) |
+| 인계 정정 ① | 인계의 *"DECISIONS #175(Q2 승인)"* = 행 **#177**(`docs/DECISIONS.md:175`). #175 행은 없다(`docs/PRD.md:12`) | 84.5.2 본문(`:20127`)의 *"#175"* 인용도 #177을 가리킨다 |
+| 인계 정정 ② | UX 금지 ②(*"스키마 확장을 요구하는 것"*)는 지금 `docs/UX.md:3071` | 84.13.1(`:20382`)은 `:2948`, §35는 `:1700`을 인용 — 줄 이동 |
+| PR-A1 | **병합됨** = A-1(#321) — `inCallSms/confirmResult.ts` · `roleplay/escalatedCall.ts` 실재 | 파일 열람 |
+| D-115 | 클라 **미구현** — `src`에서 `bankName` · `accountNumber`는 테스트 1파일(`src/components/mockScreenCopy.test.ts`)뿐 | grep |
+| PR-A2 | 미착수(인계값 · ⛔ 미검증). 인계의 `src/app/session/page.tsx`는 이 트리에 없다 — `src/app/session/play/page.tsx`로 읽었다 | Glob |
+| 실행 | ⛔ 셸 없음 — 테스트 · 빌드 0회. 아래 파일:줄은 이 트리 열람값 | — |
+
+#### 84.15.2 ⭐⭐ OQ-A150 판정 — 두 랜딩 앵커 충돌
+
+**① 84.13.2 전제 정정**
+
+| 84.13.2 `:20399`의 전제 | 실측 | 판정 |
+|---|---|---|
+| *"`card-company-impersonation` 고급 한 세션 안에 `card-relief-transfer`(이체 문자)와 설치 화면이 둘 다 도달 가능해진다(같은 변형)"* | 고급 `fv-akj5`는 `sms: []`(`functions/src/scenarios/flowVariants.ts:316`) ⇒ `resolveDeclaredSms` 빈 선언(`inCallSms/smsGate.ts:144-153`) ⇒ `sessionReachableLandingIds`의 문자 항(`scenarios/reachability.ts:35-38`) 0건. `card-relief-account`(`card-relief-transfer`)를 선언하는 변형은 **중급 `fv-35f2`뿐**(`flowVariants.ts:294`) | **거짓.** 오늘 card-company 고급의 도달 가능 랜딩 = 0 · Q2 뒤 = 설치 1 |
+
+**② 단위별 도달 가능 랜딩(G589 단위 = 시나리오 × 변형)**
+
+| 단위 | 현행 | Q2 뒤 — OQ-A145 = A(교체) | Q2 뒤 — OQ-A145 = B(목적 신설) |
+|---|---|---|---|
+| `card-delivery-call#fv-tvnj` | 0 — `sms: []`(`flowVariants.ts:940`) · `IN_CALL_SMS`에 키 없음(`scenarios/inCallSms.ts:236-247`) | {설치} | {설치} |
+| `card-company-impersonation#fv-akj5` | 0 | {설치} | {설치} |
+| `loan-refinance-scam#fv-6s5p` | {`loan-refinance-apply`} — `link: loan-apply-link`(`flowVariants.ts:379` · `inCallSms.ts:77`) | {설치} | {`loan-refinance-apply`, 설치} ⇒ **G589 빨간불** |
+
+**③ 앵커 규칙 — 간격 하한이 분리를 보장하는가**
+
+| 앵커 | 출처 | 판정 |
+|---|---|---|
+| 폴백 문자 | 서버 계수 — 백스톱 = 응답 **전** `textPathAnchorScammerTurn(scammerTurnNumber - 1)`(`roleplay/index.ts:274`) · 마커 = 응답 **후** `(scammerTurnNumber)`(`:631`) | **분리됨(추정)**: 두 도착 사이 사용자 발화 ≥ 2(`smsGate.ts:35` · `:93`) ⇒ 그 사이 사기범 응답 문서 ≥ 1 ⇒ 앵커 차 ≥ 1. ⚠️ 전제 *"사용자 턴마다 사기범 문서 1건이 저장된다"* 는 오류 경로에서 미확인(확인: `sendMessage` 실패 경로의 쓰기 단위 판독) |
+| 실시간 문자 | 클라 주장 `1 + scammerTranscriptTurns`(`inCallSms/index.ts:151-154` · `:190` · `inCallSms/buildDoc.ts:73-75`) | ⛔ **보장 안 함**: 빈 `turnComplete`는 세지 않는다(`buildDoc.ts:70-71`) — 사용자 발화 2회 사이에 사기범 flush 0이 가능하므로 **같은 앵커 도달 가능**(코드 판독 · 라이브 미측정) |
+| 84.5.3 응낙(사건 시점) | 응낙 순간의 클라 계수 | ⛔ 간격 게이트를 **아예 타지 않는다** — 응낙 앵커 = 그 뒤 도착한 다른 문자의 앵커가 될 수 있다 ⇒ 84.15.3에서 대체 |
+
+**④ 오분류 경로(D-61)** — 분류 대상은 `mockScreenTimeline` 항목(= `mockScreens` 문서)뿐이다(`src/lib/report/mockScreenTimelineCopy.ts:66-77`). Q2 세션의 그 항목은 설치 랜딩 1건이다. 같은 사기범 turnIndex의 승격 순간을 만드는 경로는 ⓐ 통화 중 랜딩 제출 `promoteSmsLandingSubmits`(`functions/src/report/smsTimeline.ts:241-270`) ⓑ `applyMockScreens`(`report/mockScreenTimeline.ts:158-216`) 둘뿐이고, 유기적 순간은 사용자 turnIndex라 겹칠 수 없다(§35.2 (3)). 설치 항목 자신의 승격은 응낙일 때만 생기고 그때는 `:70`에서 먼저 "가"로 갈린다.
+
+**⑤ 판정**
+
+| 조건 | 판정 | 처방 |
+|---|---|---|
+| 단위 도달 가능 랜딩 ≤ 1 (card-delivery · card-company · loan = A 또는 loan 제외) | ⭐ **충돌 불가 — 앵커 규칙과 무관** | T129 (b) **불요** · UX 금지 ② 재확인 **불요** · 아래 INV를 게이트로(G604 · G605) |
+| 단위 도달 가능 랜딩 = 2 (loan = B · 또는 장래 card-company 고급에 이체 문자 추가) | ⛔ **충돌 가능** — 실시간에서 두 문자가 같은 앵커 → 이체 랜딩 제출 + 설치 화면 닫음 ⇒ 설치 항목이 "나"(정답 "다" — 칭찬 누락) | §35.6 1행 그대로: **T129 (b) 선행 커밋**(`DeceivedMoment.landingId?` — 영속 스키마) + **ux-design에 `docs/UX.md:3071` 금지 ② 재확인 요청** + ADR(§35.10 (f) *"(b)가 발동되면 ADR이 필요하다"*). 그 전 병합 금지(Q-X2) |
+
+**⑥ 테스트 가능한 불변식(충돌 불가의 근거)**
+
+| INV | 진술 | 게이트 |
+|---|---|---|
+| INV-1 | ∀ 단위 u: `sessionReachableLandingIds(u).length ≤ 1` · Q2 3 단위의 값 = 정확히 [그 설치 랜딩] | G589(현행) + **G604**(기대값 고정) |
+| INV-2 | ∀ 단위 u: {`resolveDeclaredSms(u)` 문자의 카탈로그 `fakeLandingId`} ⊆ `sessionReachableLandingIds(u)` · `mockScreens` 문서 ⊆ 도달 가능 집합(`mockScreens/index.ts:86-88` G588) · `inCallSms` 문서는 선언 문자만(`smsGate.ts:86-89` 1행) | **G605** ① |
+| INV-3 | INV-1 ∧ INV-2 ⇒ Q2 세션에서 설치 항목과 같은 turnIndex의 승격 순간은 그 항목 자신의 것뿐 ⇒ 닫은 설치 항목은 항상 "다" | **G605** ② 픽스처 |
+
+⇒ **OQ-A150 = resolved(조건부)** — OQ-A145가 A(또는 loan 제외)이면 (b) 불요. B이면 위 표 2행.
+
+#### 84.15.3 응낙 앵커 — 84.5.3 "앵커" 행 대체 (Q-X5)
+
+| 항목 | 84.5.3 | 대체 |
+|---|---|---|
+| 앵커 값 | 응낙 시점 `realtimeAnchorScammerTurn(scammerTurns)` / `textPathAnchorScammerTurn` | 그 설치 랜딩을 연 **문자 문서 `inCallSms/{smsId}.anchorScammerTurn`을 그대로 복사**(문서 = 선언 문자 중 카탈로그 `fakeLandingId === landingId`인 smsId) |
+| 요청 증분 | `callMode` · `scammerTurns` | `callMode`만(84.5.4 실시간 마킹 · `consentInstruction` 동봉 판정용) · `scammerTurns` **삭제** |
+| 도착 검증 | 84.4.4 *"그 문자가 이 세션에 도착"* | 같은 get 1회 — 부재면 `failed-precondition`(`mockScreens/index.ts:92` 뒤) |
+| 리포트 | 84.5.5 · G584 | `anchorScammerTurn`이 있는 문서는 `resolveAnchor`(`report/smsTimeline.ts:114-142` — 리졸버 1개 §15.1.5 (6))로, 없는 문서는 기존 `resolveMockScreenAnchor`(`mockScreenTimeline.ts:84-103` 첨부 기반 — 메신저 전용). 승격 조건 `anchorResolved ∧ anchorTurnIndex ≥ 0`(G135) 그대로 |
+
+이유: ① 메신저 경로와 같은 의미 — 앵커는 *"링크를 실은 메시지"*(`mockScreenTimeline.ts:73-75` · §15.9.5 e-2) ② 도착 검증 때문에 어차피 그 문서를 읽는다(read +0) ③ 클라 주장값 0 ④ 문자 항목과 설치 순간이 같은 turnIndex에 놓여 리플레이에서 붙어 보인다(`smsTimeline.ts:150-180` 정렬 키) ⑤ 장래 단위 2랜딩이 되면 충돌 분석이 "문자 대 문자" 한 표(84.15.2 ③)로 줄어든다. ADR-0022 Decision 2의 *"`deliverInCallSms`와 같은 함수"* 와 같은 값이다(그 함수가 도착 때 계산해 둔 값).
+
+#### 84.15.4 구현 지점 (파일:줄)
+
+| 항목 | `card-delivery-call` | `card-company-impersonation` | `loan-refinance-scam` |
+|---|---|---|---|
+| ① 문자 목적 선언 | `flowVariants.ts:940` `sms: []` → `[{ purpose:"link", smsId:<신규>, required:true, notBeforeUserTurns:2 }]` | `:316` 같음 | `:378-381` — OQ-A145대로(84.15.5) |
+| 카탈로그 문자 | `inCallSms.ts` 신규 배열 + `IN_CALL_SMS` 키(`:236-247`) | `CARD_COMPANY_IMPERSONATION`(`:115-142`)에 1항목 | `LOAN_SCAM`(`:59-83`)에 1항목 |
+| 설치 화면 | `scenarios/mockScreens.ts` 신규 배열 + `MOCK_SCREENS` 키(`:410-419`) | 기존 배열에 1항목 | 기존 배열에 1항목 |
+| 클라 설치 문구 | `src/components/MessengerFakeLanding.tsx:615` `INSTALL_LANDING_COPY` 1행(서버 항목과 바이트 동일 — 84.13.3 ③ ⓐ) | 같음 | 같음 |
+| ② 백스톱(#182) | `required:true` → `planSmsBackstop`(`smsGate.ts:119-136`) | 같음 | 필수 2개 — 설치 `notBefore 2` · 계좌 `3`(`:380`) ⇒ `gateOpensAtUserTurns`(`:109-116`)상 설치가 먼저 열린다(변형 단계 2 *"앱 설치"* → 단계 4 *"상환 · 선입금"* 순서와 같다) |
+| ③ 응낙 지시 · 결과 신호 | 아래 표 | 같음 | 같음 — 결과 신호 대상은 계좌 문자만 남는다 |
+| J-4 라우팅 | `realtime/provider.ts:102-104` 술어 = `personaCard` 존재뿐 — card-delivery-call은 카드 대상 밖(84.14.4) ⇒ **술어에 "Q2 설치 문자 선언 세션" 추가 필요**(G610 · 두 목록 금지) | 카드 있음 — 이미 참 | 카드 있음 — 이미 참 |
+
+**"전화로 이어서" 거짓 지점(Q-X4)**: `roleplay/index.ts:384` = `escalatedCall ? MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL : MOCK_INSTALL_CONSENT_INSTRUCTION`. `isEscalatedVoiceCall`(`roleplay/escalatedCall.ts:23-29`)은 messenger→voice 전이 기록이 있어야 참이라 **처음부터 통화인 Q2 세션은 거짓** ⇒ `mockScreens.ts:98-99` *"이제 담당자가 전화로 이어서 안내하겠다고 말하라"* 가 실린다.
+
+**선택 함수 `installConsentInstructionFor({ entrySurface, escalatedCall, path, transferPlaced })` 진리표(J-1 — 폴백 · 실시간 응답이 같은 함수 · G607)** — 84.5.4의 *"신규 상수 1개 + 두 상수 중 선택"* 을 다음으로 대체한다(A-1 ⑧이 같은 날 통화 중 변형을 이미 만들었다):
+
+| `entrySurface` | `escalatedCall` | `path` | `transferPlaced` | 결과 |
+|---|---|---|---|---|
+| `messenger-link` | false | fallback | — | `MOCK_INSTALL_CONSENT_INSTRUCTION`(`mockScreens.ts:98`) — 현행 |
+| `messenger-link` | true | fallback | — | `MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL`(`:107`) — 현행 |
+| `in-call-sms` | 무관 | fallback | false | **`MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL` 재사용** — 문면 *"이미 통화 중이니 전화하겠다는 말 없이 이 통화에서 다음 안내를 바로 이어가라"* 가 Q2에서 참(새 문면 0) |
+| `in-call-sms` | 무관 | realtime | false | 84.5.4 정본 `IN_CALL_INSTALL_CONSENT_INSTRUCTION`(신규 — *"대답할 때 그 대답 안에서"* 조건형 · 맥락 주입용) |
+| `in-call-sms` | 무관 | 둘 다 | **true** | `undefined` — 호 전환(AC-071) 뒤 화자는 확인 창구라 설치를 아는 척하면 *"한편"* 이 드러난다. `resolveInCallSmsPlan`(`inCallSms/buildDoc.ts:97-99`)과 같은 게이트 |
+
+**결과 신호 제외(Q-X3 · G608)**: `confirmResultPurposeFor`(`inCallSms/confirmResult.ts:54-57`)는 목적만 본다 ⇒ Q2 설치 문자(`link` · 필수)가 대상이 된다. 그러면 ⓐ 실시간 도착 응답에 *"신청과 본인확인 처리가 끝났다고 … 더 요구할 것이 없으면 … 마무리하라"*(`:30` · `:49-51` · `buildDoc.ts:130-137` · `inCallSms/index.ts:213-216`)가 실리고 ⓑ 폴백에서 *"앱 설치했어요"* 가 공통 완료 동사(`:74`) + 대상 *"설치 · 앱"*(`:80`)으로 주장이 돼 같은 문면이 나간다(`roleplay/index.ts:443-457`). 둘 다 거짓이고, *"마무리"* 는 설치 직후 끊기를 부른다 — 끊기면 연락처 칸이 비활성(84.14.2 C-1)이라 **AC-105 기회가 닫힌다.** 처방: 판별자 = 그 문자의 카탈로그 랜딩 kind(`resolveMockScreenKind(scenarioId, item.fakeLandingId) === "app-install"`이면 제외) · 시그니처에 `scenarioId` 추가 · 두 경로가 같은 함수. 설치 결과의 신호는 응낙 구조화 이벤트 하나뿐이다(X9).
+
+#### 84.15.5 OQ-A145 — 선택지별 영향 (⛔ 판정 아님 · planner)
+
+| 선택지 | 단위 랜딩 | 고급 문자 수 | T129 (b) | 바뀌는 코드 | 잃는 것 |
+|---|---|---|---|---|---|
+| **A 교체**(architect 권고 유지 — 84.5.2) | 1 | 2(필수 2) | 불요 | `flowVariants.ts:379` 1줄 + 카탈로그 1항목 | `loan-apply-link` · `loan-refinance-apply`를 선언하는 변형이 0이 된다(초급 `:337` · 중급 `:356`은 계좌만) ⇒ **모든 세션에서 도달 0 = 죽은 콘텐츠**. AC-078 (a)는 카탈로그 경로(`scenarios/__tests__/mockScreens.test.ts:670-674`)로 계속 "도달 가능"으로 센다 — 게이트가 과대 서술한다. 유지(이력) · 삭제는 planner |
+| **B 목적 `install` 신설** | 2 ⇒ G589 빨강 | 3(AC-096 (b) 상한) | **선행 필수** + UX `:3071` 재확인 + ADR | `SmsPurpose` 전파: `smsGate.ts:41` · `:214-218` · `realtime/liveTools.ts:132-134` · `:152` · `roleplay/promptAssembly.ts:118-123` · `roleplay/smsMarker.ts` · 테스트 전부(결과 신호 제외는 목적만으로 가능해진다 — 유일한 이점) | 없음 |
+| **C loan을 Q2에서 제외** | 1(현행) | 2(현행) | 불요 | 0 | PRD AC-105 갱신 고지 1 범위(3종)와 어긋난다 — 범위 결정(오케스트레이터 · planner) |
+
+#### 84.15.6 파일 겹침 (main `a376166` 기준)
+
+| 파일 | #325 U1(병합) | #321 A-1(병합) | PR-A2(미착수) | D-115(클라 미구현) | T194-c 변경 | 판정 |
+|---|---|---|---|---|---|---|
+| `functions/src/scenarios/mockScreens.ts` | | ●(`:101-108` ⑧) | | | 항목 3 · 키 1 · `:474` 허용목록 · 실시간 상수 1 | 무충돌 — ⑧ 상수 **재사용**(84.15.4) |
+| `functions/src/scenarios/inCallSms.ts` | | ●(`:64-66` ③) | | | 문자 3 · 키 1 | 무충돌(배열 append) |
+| `functions/src/scenarios/flowVariants.ts` | | | | | `sms` 3벌 | 무 |
+| `functions/src/inCallSms/confirmResult.ts` · `buildDoc.ts` · `inCallSms/index.ts` | | ●(⑦ 신설) | ●?(A-2 = 클라 주입 — 서버 응답 소비) | | G608 판별자 | **의미 충돌** — A-2가 `confirmResultInstruction`을 주입하기 **전에** G600이 들어가야 설치 문자에 거짓 문면이 주입되지 않는다 |
+| `functions/src/roleplay/index.ts` | ●(카드 옵션) | ●(⑦ `:443-457` · ⑧ `:381-384`) | | | `:381-384` 선택 함수 · `:450` 입력 | 무충돌(다른 블록) · ⑧ 판정 **확장** |
+| `functions/src/mockScreens/index.ts` · `types.ts` | | | | | 도착 검증 · 앵커 복사 · `callMode` · 응답 증분 | 무 |
+| `functions/src/shared/types.ts` | ●(`SessionDoc.personaCard`) | | | | `MockScreenDoc.anchorScammerTurn`(`:373-381`) | 무충돌(다른 타입) |
+| `functions/src/report/generateReportCore.ts` · `mockScreenTimeline.ts` | ●(`personaBlock`) | | | | `:214-234` 앵커 분기(84.15.3) | 무충돌(다른 블록) |
+| `functions/src/realtime/provider.ts` | ●(`:102-104` 술어 신설) | | | | 술어 확장(G610) | 무충돌 — 같은 함수에 항 추가(두 목록 금지) |
+| `functions/src/verifyIntercept/fallbackTurn.ts` | | | | | `:44` 주석 · 우선순위 표 테스트(G585) | 무 |
+| `src/components/MessengerFakeLanding.tsx` | | | | ●(credential 미리 채움 — 추정) | `:615` 설치 문구 3행 | 낮음(다른 블록) |
+| `src/components/InCallSmsOverlay.tsx` | | | | ●(랜딩에 은행 · 계좌 전달 — 추정) | `:574-586` `MessengerFakeLanding` props에 `onInstallConsent` · shown 중계 | **중간** — 같은 JSX 요소의 props. 먼저 오는 쪽이 넣고 뒤가 rebase |
+| `src/app/session/play/page.tsx` | ●(`:258` · `:612` · `:1400` · `:1894`) | | ●(Live 배선 — 인계) | ● | `:2666-2680` 오버레이 props · 응낙 핸들러(`recordMockScreenEvent` + `callMode`) · 실시간이면 `enqueueTurnInstruction`(`:813-825`) | **높음**(모든 클라 PR이 지난다) — 블록은 다름 |
+| `src/lib/realtime/contextInjection.ts` · 지시 큐(`PendingInstruction`) | | | **●**(A-2 결과 신호 주입 = 새 전달 행 예상) | | 새 전달 행 `installConsent`(G609) | **높음** — 같은 표(`:12-37`)에 둘 다 행을 더한다. 표 머리 *"표에 없는 지시가 생기면 행을 추가할지 먼저 묻는다"* — 이 절이 그 행을 정한다 |
+| `src/lib/realtime/GeminiVoiceSession.tsx` | | | ● | | 0(전달 행이 기존 맥락 주입 브리지 `:317` · `:751-793`를 탄다) | 무 — 84.9의 *"Q2 응낙 지시 주입"* 은 이 파일이 아니라 위 두 파일이다(정정) |
+
+#### 84.15.7 구현자 처방 (이 순서대로)
+
+| 단계 | 내용 | 게이트 |
+|---|---|---|
+| 0 | 기준선: `npm --prefix functions test` · `npm test` 원문 그대로 · **단독 실행**(`CLAUDE.md` ⛔ 동시 실행 금지) · before 수치 기록 | — |
+| 1 | **게이트 먼저(G75)** — G583 집행: 아래 기존 단언을 **같은 커밋에 허용목록 대체 + 역방향 샘플**로(X8 — 삭제 0): `mockScreens.test.ts:182-206`(G55 비공유 → `IN_CALL_INSTALL_SCENARIOS`만 공유 허용 + G585 우선순위 표) · `:208-220`(R6) · `:233-240` · `:342-350`(G-A) · `:465-467`(`appInstallScenarioIds` 기대값) · `:489-492`(통화 채널 설치 0 → 허용목록 밖만) · `:495-508`(표면 분포 기대값) · `:524-530`(설치 ⇒ 메신저 → `messenger-link` 항목만) · `:533-560`(AC-073 칸 → `messenger-link` 설치만 — 통화 시작 세션은 전이 없음 G587) · `:587-589`(G582 통화 중 설치 불가 → Q2 행 추가) · `verifyIntercept/fallbackTurn.ts:44` 주석 | G583 · G585 |
+| 2 | 바이트 고정 갱신: `card-delivery-call`에 `IN_CALL_SMS` 키가 생기면 변형 없는 세션의 `sessionDeclaresInCallSms`(`smsGate.ts:173-176`)가 뒤집혀 조립 산출물이 바뀐다 — `smsGate.test.ts` 기대값을 **같은 커밋 · 사유 주석**으로 | 84.4.6 관례 |
+| 3 | 서버: `isMockScreenReachable` `:474`를 *"`in-call-sms` ⇒ `IN_CALL_INSTALL_SCENARIOS` 소속"* 으로(`:472` 도달 집합 AND 유지) · `recordMockScreenEvent` 도착 검증 + 앵커 복사 + `callMode`(84.15.3) · 선택 함수(84.15.4) · 결과 신호 판별자 · 리포트 앵커 분기 · 라우팅 술어 | G604~G608 · G610 |
+| 4 | 데이터: card-delivery · card-company. **loan은 OQ-A145 확정 뒤**(84.14.1 기본값 그대로) | G604 |
+| 5 | 클라: 설치 문구 3행 · `InCallSmsOverlay` → `onInstallConsent` · shown 중계 → `play/page.tsx` 핸들러 | G76(문구 대조) |
+| 6 | (T194-c-2 · PR-A2 뒤) `contextInjection` 전달 행 `installConsent` = 맥락 주입(`turnComplete:false`) · **침묵 넛지 대상 아님**(넛지 문면 *"방금 보낸 문자"*(`contextInjection.ts:62`)가 응낙과 무관) · 큐 우선순위 = 문자 announce > 확인 announce > 설치 응낙(폴백 `fallbackTurn.ts:52-67`과 같은 순서) | G609 |
+| 7 | 배포: **Hosting → Functions**(Q-X6) | — |
+
+**역방향 샘플(정상 통과와 같은 실행 출력에)**
+
+| # | 샘플 | 기대 |
+|---|---|---|
+| R-a | `fv-6s5p` 사본에 `loan-apply-link` 유지 + 설치 문자 추가(대안 B 모양) | `findMultiLandingScenarios` = `["loan-refinance-scam#fv-6s5p"]`(G604) |
+| R-b | 2랜딩 픽스처: 같은 앵커의 이체 랜딩 제출 + 설치 화면 닫음 → `promoteSmsLandingSubmits` → `applyMockScreens` → `resolveMockScreenBranch` | 설치 항목 `"submitted"`(오분류 재현 — §35.8 P-3 모양) / Q2 1랜딩 정상 픽스처 = `"declined"`(G605) |
+| R-c | 응낙 요청에 `scammerTurns: 99`를 실음 · 설치 문자 미도착 상태의 응낙 | 문서 앵커 = 문자 문서 값(99 아님) · 미도착 = `failed-precondition`(G606) |
+| R-d | 현행 선택식(`escalatedCall`만) 사본으로 Q2 폴백 응낙 | 지시에 *"전화로 이어서"* 포함 → 실패 단언(G607) |
+| R-e | 현행 `confirmResultPurposeFor` 사본 + Q2 설치 문자(필수 `link`) · 폴백 *"앱 설치했어요"* | 사본 = `"link"`(실패) / 수정본 = `undefined` · `planConfirmResult`에 설치 문자 대상 0(G608) |
+| R-f | `card-delivery-call` 고급 세션 + ElevenLabs 키 · 에이전트 맵 있음 · 술어 끈 사본 | 사본 = ElevenLabs(실패) / 정상 = Gemini 또는 폴백(G610) |
+| R-g | 허용목록 밖 통화 시나리오(`tax-refund-scam`)에 `in-call-sms` 설치 항목 | G583 위반(실패) |
+
+#### 84.15.8 PR 분할 갱신 (84.10 5행의 선행을 좁힌다)
+
+| PR | 범위 | 선행 | 남는 결손(고지) |
+|---|---|---|---|
+| **T194-c-1** | 84.15.7 단계 0~5 · 7 | T194-a(병합) · A-1(병합) · loan만 OQ-A145 | 실시간 세션에서 응낙은 기록되고(AC-105 (a) 성립) 폴백은 언급까지 되지만, **실시간 사기범은 응낙을 언급하지 않는다**(AC-072 인과 배선의 실시간 결손 — c-2까지) |
+| **T194-c-2** | 단계 6 | PR-A2(같은 표 · 같은 큐) | — |
+
+근거: 84.10 ①이 Q2를 PR-A2 · D-115 뒤에 둔 이유는 파일 겹침이었다. 실측 결과 PR-A2와 겹치는 것은 `contextInjection` 행 하나와 `play/page.tsx`의 다른 블록이고, D-115와는 같은 JSX 요소 props뿐이다 ⇒ 실시간 주입만 떼면 나머지는 기다릴 이유가 없다. ⚠️ PR-A2가 c-1보다 먼저 병합되면 c-1/c-2를 다시 합쳐도 된다. G600은 **A-2(결과 신호 클라 주입)보다 먼저** 병합돼야 한다(84.15.6).
+
+#### 84.15.9 게이트 · 번호 · 열린 질문
+
+| G | 단언 | 테스트 지점 | PR |
+|---|---|---|---|
+| **G604** | Q2 3 단위의 `sessionReachableLandingIds` = 정확히 [설치 랜딩](loan은 A145 확정 뒤 행 추가) · Q2 시나리오 전 단위 ≤ 1 · 역방향 R-a | `scenarios/__tests__/mockScreens.test.ts`(G159 블록 옆) | c-1 |
+| **G605** | ① INV-2(선언 문자 랜딩 ⊆ 도달 집합 — 전 단위) ② D-61 픽스처: Q2 1랜딩 = `"declined"` · 역방향 R-b | `scenarios/__tests__` · `report/__tests__/mockScreenTimeline.test.ts` | c-1 |
+| **G606** | 통화 중 설치 문서 앵커 = 그 문자 문서의 `anchorScammerTurn` · 요청에 `scammerTurns` 필드 없음(타입) · 미도착 거부 · 리포트가 `resolveAnchor`로 해결 · G584의 앵커 출처를 이것으로 갱신(`callMode` 필수는 유지) · 역방향 R-c | `mockScreens/__tests__` · `report/__tests__` | c-1 |
+| **G607** | `installConsentInstructionFor` 진리표(84.15.4) · `roleplay/index.ts`가 이 함수만 부른다(소스 스캔) · 통화 중 행 전부 *"전화로 이어서"* 0 · `transferPlaced` → `undefined` · 역방향 R-d | `roleplay/__tests__` | c-1(실시간 행 소비는 c-2) |
+| **G608** | 설치 랜딩 문자는 결과 신호 대상 0(실시간 응답 · 폴백 모두 같은 함수) · 역방향 R-e | `inCallSms/__tests__/confirmResult.test.ts` | c-1 |
+| **G609** | 전달 행 `installConsent` = 맥락 주입 · 침묵 넛지 비대상 · 큐 우선순위 · `turnComplete:true` 0(X5 계승) | `src/lib/realtime/contextInjection.test.ts` 계열 | c-2 |
+| **G610** | `requiresServerPromptProvider`에 Q2 설치 문자 선언 세션 항 · 같은 함수 1개(두 목록 금지 — G567) · 역방향 R-f | `realtime/__tests__/personaCardRouting.test.ts` 옆 | c-1 |
+
+| OQ | 질문 | 담당 | 막는 것 | 확정 전 기본값 |
+|---|---|---|---|---|
+| OQ-A150 | (옛) 통화 중 두 랜딩 앵커 충돌 | — | — | **resolved(조건부)** — 84.15.2 ⑤ |
+| OQ-A145 | loan 고급 `link` 슬롯 | planner | c-1의 loan 1종 | 84.14.1 그대로(확정 전 2종) · 선택지 영향 = 84.15.5 |
+| **OQ-A155** | Q2 설치 문자를 **2인 챌린지 수신자** 고급 세션에도 보내는가. 오늘 배정 풀 필터(`assignablePool` — 84.13.5)는 에스컬레이션 값만 보므로 수신자도 `fv-akj5` · `fv-6s5p`를 받아 설치 문자가 간다. AC-105는 챌린지에서 발동 0(84.6.3 #2)이라 수신자에게는 응낙 순간(AC-072)만 남는다. AC-104는 챌린지 0(#181 ①), AC-106은 챌린지 현행(#181 ④) | planner | 없음(데이터 그대로면 동작) | **보낸다**(변형 데이터 그대로 · 신규 분기 0) — 빼려면 parcel처럼 챌린지용 변형이 시나리오마다 필요하다(84.13.5 ⓒ 모양) |
+
+**남는 한계(자기 고지)**: ① 84.15.2는 **정적 판독**이다 — 실시간 앵커 동일 도달은 코드에서 연역했고 라이브로 측정하지 않았다. ② 폴백 앵커 분리의 전제(턴마다 사기범 문서 1건)는 오류 경로에서 미확인이다(판정에는 쓰지 않았다 — 판정 근거는 랜딩 기수). ③ INV는 **콘텐츠 경로만** 지킨다 — 수기 Firestore 문서 · 배포 중 변형 데이터 변경은 막지 않는다(§35.10 (d)와 같은 한계). ④ *"오분류가 불가능해졌다"* 로 일반화 금지 — 쓸 문장: *"Q2 세 변형은 단위 도달 랜딩이 1건이라 D-61 매칭 키 충돌의 선행 조건이 없다. 단위 2랜딩이 되면 G589가 알리고 §35.6 1행이 적용된다."*
+
+**하류**: `docs/API.md` · `docs/Database.md` — `recordMockScreenEvent` 요청 `callMode`(84.5.3의 `scammerTurns` 삭제) · `MockScreenDoc.anchorScammerTurn` 출처(구현 PR — §82.13 관례) / `docs/DECISIONS.md` 행 초안: *"§84.15 — OQ-A150 조건부 해소(단위 도달 랜딩 ≤ 1이면 T129 (b) 불요) · 통화 중 응낙 앵커 = 설치 문자 문서 앵커 · 응낙 지시 선택에 진입 표면 · 설치 문자 결과 신호 제외 · Q2 세션 서버 프롬프트 프로바이더 · T194-c 2분할"* (architect 다음 패스 — 이번 지시가 편집 대상을 Architecture · ADR로 한정) / planner: OQ-A145 · OQ-A155.
+
+> **번호**: §84.15 · G604~G610 · OQ-A155 — 직전 G595 · OQ-A151(이 트리 = 메인 체크아웃 동일 grep). ⛔ 예약 아님 — 병합 순서로 확정.
+
+### 84.16 (planner 판정 반영 — 2026-10-20 · PRD v1.28 AC-105 갱신 고지 3 · DECISIONS #191 · #192 · Tasks T194-R2 · ⛔ 84.0~84.15 무수정 · 아래가 우선한다) **OQ-A145 = A 교체 · OQ-A155 = 챌린지에 보내지 않음** — ⭐⭐ **챌린지 풀을 가르는 기준 = 변형이 "통화 중 설치 문자"를 선언하는가(데이터에서 도출 · 새 필드 0) ≡ 세션이 그것을 기대하는가(자가 ∧ 고급 ∧ Q2 허용목록). §84.13.5 `assignablePool`에 항 1개를 AND로 더한다** / ⭐ **기존 ID `fv-akj5` · `fv-6s5p`는 내용 무변경으로 챌린지 풀에 남고, Q2 자가 변형은 새 ID 2벌이다(§84.13.5의 parcel과 반대 방향 — 이유 84.16.2)** / ⭐ **`assignablePool`은 `flowVariants.ts`에 둘 수 없다 — 판별에 `mockScreens.ts`가 필요한데 `mockScreens → reachability → flowVariants`라 순환이 생긴다**
+
+#### 84.16.0 착수 실측
+
+| 항목 | 값 | 근거 |
+|---|---|---|
+| 판정 | OQ-A145 = **A**(자가 고급 loan = 설치 1 + 계좌 1 · 필수 2 · `loan-apply-link` · `loan-refinance-apply` 유지 — #186이 뒤집히면 같은 PR에서 삭제) / OQ-A155 = **보내지 않는다**(챌린지 수신자 고급 card-company · loan = base `a376166` 선언 그대로 · card-delivery-call은 챌린지 불가 `functions/src/challenge/index.ts:93-95`) | `docs/DECISIONS.md:183-184` · `docs/PRD.md:1080` |
+| 정상 기대값(PRD) | 자가 고급 3 단위 = 정확히 [설치 랜딩] · 챌린지 card-company 고급 = 문자 선언 0 · 챌린지 loan 고급 = 현행 선언(도달 랜딩 [`loan-refinance-apply`]) | `docs/PRD.md:1080` |
+| 현행 풀 | 자가 · 챌린지 모두 card-company 고급 = {`fv-akj5`}(`flowVariants.ts:302` · `sms: []` `:316`) · loan 고급 = {`fv-6s5p`}(`:363` · `sms` `:378-381`). 풀 함수 `assignablePool`(`:1012-1017`)은 에스컬레이션 항 하나 — 두 시나리오에서 항등 | 열람 |
+| 사용처 | `assignablePool` = `session/variantAssignment.ts:24` · `:56-57` + 테스트 3파일(`scenarios/__tests__/flowVariants.test.ts` · `mockScreens.test.ts` · `session/__tests__/variantAssignment.test.ts`) | grep |
+| 번호 | 이 절 신규 = **G611** · 신규 OQ-A **0** · DECISIONS 최대 #192 ⇒ architect 초안은 **#193 · #194** | `docs/DECISIONS.md:184` |
+
+#### 84.16.1 챌린지 풀 기준 — `assignablePool` 항 추가 (#183 세션 종류 축 안)
+
+| 항 | 정의 | 출처 |
+|---|---|---|
+| 기존 | `Boolean(v.escalatesToVoice) === Boolean(resolveSessionEscalation({scenarioId, difficultyLevel: level, challengeId}))` | §84.13.5 처방 1 |
+| **신규** | `declaresInCallInstall(v) === expectsInCallInstall(scenarioId, level, challengeId)` | 이 절 |
+| `declaresInCallInstall(v)` | `v.sms`의 어느 항목이라도 카탈로그 문자(`findInCallSmsItem`)의 `fakeLandingId`가 `resolveMockScreenKind(...) === "app-install"` | 데이터에서 도출 — 새 필드 · `audience` 0(§84.13.5 *"판별자는 하나"* 와 같은 원칙: 플래그를 따로 두면 데이터와 갈라진다) |
+| `expectsInCallInstall` | `!challengeId ∧ level === "advanced" ∧ IN_CALL_INSTALL_SCENARIOS.includes(scenarioId)`(84.5.1 G-A 허용목록 상수 재사용) | #192 · AC-105 고급 한정 |
+| 결과 | 자가 고급 Q2 3종 = Q2 변형만 · 챌린지 고급 card-company · loan = 현행 변형만 · **그 밖 전부 항등**(두 값 모두 거짓 — parcel · subsidy는 통화 중 문자 0, 다른 음성 시나리오는 설치 선언 0) | — |
+
+**위치(⛔ 순환 금지)**: 판별에 `mockScreens.ts`가 필요하다. 그런데 `mockScreens.ts:25 → reachability.ts → flowVariants.ts` 이므로 `flowVariants.ts`(또는 `reachability.ts`)가 `mockScreens`를 import하면 순환한다. ⇒ `assignablePool` · `declaresInCallInstall` · `expectsInCallInstall`을 **신규 잎 모듈 `functions/src/scenarios/variantPool.ts`** 로 옮긴다(이 모듈을 import하는 시나리오 모듈 0). `flowVariants.ts:1006-1017`의 정의는 삭제하고 사용처 4곳의 import를 바꾼다(동작 이동 — 정의 두 벌 금지 J-1). 재수출(re-export)도 순환이라 두지 않는다.
+
+#### 84.16.2 변형 데이터 — ID 방향
+
+| 단위 | 처리 | ID |
+|---|---|---|
+| card-company 고급 **챌린지** | `fv-akj5` **내용 무변경**(`sms: []`) | 유지 |
+| loan 고급 **챌린지** | `fv-6s5p` **내용 무변경**(`link: loan-apply-link` 선택 · `transfer: loan-account` 필수) | 유지 |
+| card-company 고급 **자가** | 신규 = `{ ...fv-akj5 정의, variantId: <새 ID>, sms: [{ purpose:"link", smsId:<card 설치 문자>, required:true, notBeforeUserTurns:2 }] }` | **새 불투명 ID**(`fv-` + 4자) |
+| loan 고급 **자가** | 신규 = `{ ...fv-6s5p 정의, variantId: <새 ID>, sms: [{ purpose:"link", smsId:<loan 설치 문자>, required:true, notBeforeUserTurns:2 }, { purpose:"transfer", smsId:"loan-account", required:true, notBeforeUserTurns:3 }] }` | **새 불투명 ID** |
+| card-delivery 고급(자가 전용) | `fv-tvnj` 내용 교체(84.15.4 ①) | 유지(챌린지 불가라 받는 세션 종류가 하나) |
+
+- **스프레드로 만든다**: 두 기존 정의를 모듈 상수로 빼고 신규 변형은 `{ ...BASE, variantId, sms }` — 단계 · 수법 · 출처 문구 사본 0(드리프트 차단).
+- **왜 기존 ID를 챌린지에 남기나(§84.13.5와 반대 방향)**: ① 변형 ID가 *"그 내용"* 의 정체성으로 남는다 — 배포 순간 진행 중이던 챌린지 · 자가 세션의 `flowVariantId`가 가리키는 선언이 바뀌지 않는다(#192 *"현행 선언(base `a376166`)"* 이 ID 단위로 그대로 참) ② 리포트는 세션 `flowVariantId`로 수법을 다시 푼다(`report/generateReportCore.ts:107`) — 과거 세션 해석이 흔들리지 않는다 ③ #186이 뒤집히면 삭제 대상이 `fv-akj5` · `fv-6s5p` · `loan-apply-link` · `loan-refinance-apply`로 한 묶음이 된다(#191 조건과 같은 단위). §84.13.5에서 `fv-g454`를 자가 쪽에 남긴 것은 그때 챌린지 쪽이 *"새로 생긴"* 변형이었기 때문이고, 여기서는 챌린지 쪽이 *"바뀌지 않는"* 변형이라 방향이 바뀐다. 두 판정의 공통 규칙: **내용이 바뀌지 않는 쪽이 기존 ID를 갖는다.**
+- 신규 변형 수 = **2벌**(PRD 대가 *"챌린지용 변형 최대 2벌"* 과 수가 같다 — 방향만 자가 쪽).
+
+#### 84.16.3 84.15 갱신분 (원문 무수정 — 이 표가 우선)
+
+| 84.15 위치 | 갱신 |
+|---|---|
+| 84.15.4 표 loan 열 ① | `flowVariants.ts:378-381`(`fv-6s5p`) **무변경** · 자가 고급 loan = 84.16.2 신규 변형(설치 + 계좌 · 필수 2). card-company 열 ①도 `:316` 무변경 · 신규 자가 변형 |
+| 84.15.4 표 loan 열 카탈로그 | `LOAN_SCAM`(`inCallSms.ts:59-83`)에 설치 문자 1항목 **추가**(기존 `loan-apply-link` 삭제 0) · `MOCK_SCREENS` loan 배열에 설치 1항목 추가(`loan-refinance-apply` 유지) |
+| 84.15.5 A행 "잃는 것" | **해소** — `loan-apply-link` · `loan-refinance-apply`는 챌린지 loan 고급(`fv-6s5p`)이 계속 선언해 도달 가능(#191). AC-078 (a)의 카탈로그 경로 과대 서술 우려는 이 판정에선 성립하지 않는다(실제 도달 단위가 있다) |
+| 84.15.7 단계 4 | *"loan은 OQ-A145 확정 뒤"* → **loan 포함**(T194-c-1) |
+| 84.15.8 c-1 선행 | *"loan만 OQ-A145"* 삭제 — 선행 = T194-a · A-1(둘 다 병합) |
+| 84.15.9 G604 | 단위 = **자가 단위만**: card-delivery `fv-tvnj` · card-company 신규 ID · loan 신규 ID = 정확히 [설치 랜딩]. 챌린지 단위는 G611 |
+| 84.15.9 OQ 표 | OQ-A145 = **resolved — #191(A)** · OQ-A155 = **resolved — #192(보내지 않음 · architect 기본값과 반대)** |
+| 84.15.4 J-4 라우팅(G610) | 술어 항 *"Q2 설치 문자 선언 세션"* = `declaresInCallInstall(그 세션 변형)` — 같은 판별자를 쓴다(두 정의 금지) |
+
+#### 84.16.4 게이트
+
+| G | 단언 | 테스트 지점 | PR |
+|---|---|---|---|
+| **G590 갱신** | `assignablePool` 진리표에 신규 항 — 전 시나리오 × 3난이도 × {자가 · 챌린지}에서 풀 비어 있지 않음(챌린지 거부 조합 제외) · 풀의 모든 변형이 두 항을 함께 만족 · 정의 위치 = `variantPool.ts` 1곳(소스 스캔 — `flowVariants.ts`에 `assignablePool` 정의 0) | `session/__tests__/variantAssignment.test.ts` | c-1 |
+| **G604 갱신** | 84.16.3 — 자가 3 단위 기대값 · 역방향 **ⓚ** = 84.15.7 R-a(loan 자가 단위에 `loan-apply-link` 유지 + 설치 추가 사본 → `["loan-refinance-scam#<자가 ID>"]`) — PRD *"R-a와 같으면 갈음"* | `scenarios/__tests__/mockScreens.test.ts` | c-1 |
+| **G611** | **챌린지 기대값**: 챌린지 고급 card-company 풀 = [`fv-akj5`] · 문자 선언 0 / 챌린지 고급 loan 풀 = [`fv-6s5p`] · 선언 = {`loan-apply-link`, `loan-account`} · 도달 랜딩 = [`loan-refinance-apply`] / 전 시나리오 챌린지 풀 변형의 `declaresInCallInstall` = 거짓 / 자가 고급 Q2 3종 풀 변형 = 전부 참. **역방향 ⓙ**: 신규 항을 끈 풀 함수 사본 → 챌린지 고급 card-company · loan 풀에 Q2 변형이 들어감 → 실패. 정상 · ⓙ · ⓚ를 **같은 실행 출력**에(`t.diagnostic` — G589 관례) | `session/__tests__/variantAssignment.test.ts` | c-1 |
+
+AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
+
+#### 84.16.5 구현자 처방 — 최종 (84.15.7 · 84.15.8 · 84.16을 합친 정본)
+
+| 단계 | 내용 | 게이트 | PR |
+|---|---|---|---|
+| 0 | 기준선 `npm --prefix functions test` · `npm test` 원문 · **단독 실행** · before 수치 기록 | — | c-1 |
+| 1 | **게이트 먼저(G75)** — 84.15.7 단계 1 목록 그대로(같은 커밋 허용목록 대체 + 역방향 · 삭제 0) | G583 · G585 | c-1 |
+| 2 | 풀 이동: `variantPool.ts` 신설 · `flowVariants.ts:1006-1017` 정의 이동 · import 4곳 갱신 · 신규 항 추가 | G590 갱신 | c-1 |
+| 3 | 데이터: 설치 문자 3(`inCallSms.ts` — card-delivery 키 신설 · card-company · loan 배열 append) · 설치 화면 3(`mockScreens.ts` — card-delivery 키 신설) · 변형: `fv-tvnj` 내용 교체 · 자가 신규 2벌(84.16.2 스프레드) · `fv-akj5` · `fv-6s5p` **무변경** | G604 · G611 | c-1 |
+| 4 | 바이트 고정 갱신: card-delivery-call 변형 없는 세션의 문자 문면 뒤집힘(`smsGate.ts:173-176`) — 같은 커밋 · 사유 주석. `fv-akj5` · `fv-6s5p`의 조립 산출물은 **바이트 동일**이어야 한다(챌린지 무변경의 증거) | 84.4.6 관례 | c-1 |
+| 5 | 서버: `isMockScreenReachable` `:474` 허용목록 · `recordMockScreenEvent` 도착 검증 + 앵커 복사 + `callMode`(84.15.3) · `installConsentInstructionFor`(84.15.4) · 결과 신호 판별자 · 리포트 앵커 분기 · 라우팅 술어(`declaresInCallInstall` 재사용) | G605~G608 · G610 | c-1 |
+| 6 | 클라: 설치 문구 3행(`MessengerFakeLanding.tsx:615`) · `InCallSmsOverlay.tsx:574-586` 응낙 · shown 중계 · `play/page.tsx` 핸들러 | G76 | c-1 |
+| 7 | 실시간 응낙 주입: `contextInjection` 전달 행 `installConsent` · 큐 우선순위 | G609 | **c-2 — PR-A2 뒤** |
+| 8 | 배포: **Hosting → Functions** | — | 각 PR |
+
+역방향 묶음(같은 실행 출력): R-a(=ⓚ) · R-b · R-c · R-d · R-e · R-f · R-g(84.15.7) + **ⓙ**(G611).
+⚠️ 병합 순서 주의: G608(결과 신호 판별자)은 A-2(결과 신호 클라 주입 — PR-A2)보다 **먼저**.
+완료 보고 문장: *"자가 고급 Q2 3종은 단위 도달 랜딩이 1건이고, 챌린지 고급은 base 선언 그대로다(풀 항 1개). D-61 매칭 키 충돌의 선행 조건은 없다 — 단위 2랜딩이 되면 G589가 알린다."* ⛔ *"오분류가 불가능해졌다"* 금지.
+
+#### 84.16.6 하류
+
+| 문서 | 요청 | 담당 |
+|---|---|---|
+| `docs/DECISIONS.md` | 초안 **#193**: *"§84.14 — G573 뒤집기(공공 창구 필수 · 숫자 0 · 서버 가나다순) · 카드 블록 예외 문장 삭제(4종 전부 institution) · 창구 음성 다른 leg 강제 · 진입 = `selfDial` 필드 단일 원천 · 프롬프트 층 W-10p"*(84.14.7 초안의 #191 후보 표기는 이 번호로 대체) / 초안 **#194**: *"§84.15 · §84.16 — OQ-A150 조건부 해소(단위 도달 랜딩 ≤ 1이면 T129 (b) 불요) · 통화 중 응낙 앵커 = 설치 문자 문서 앵커 · 응낙 지시 선택에 진입 표면 · 설치 문자 결과 신호 제외 · Q2 세션 서버 프롬프트 프로바이더 · 챌린지 풀 항 `declaresInCallInstall ≡ 자가∧고급∧허용목록`(변형 데이터에서 도출 · 새 필드 0) · 내용이 안 바뀌는 쪽이 기존 변형 ID를 갖는다 · T194-c 2분할"*. ⛔ 예약 아님 — 병합 순서로 확정 | architect(다음 패스 — 이번 지시가 Architecture · ADR로 한정) |
+| `docs/API.md` · `docs/Database.md` | 84.15.9 하류 그대로 | 구현 PR |
+| `docs/Tasks.md` | T194-c를 c-1 · c-2로 · c-1에 loan 포함 · G611 | planner |
+
+> **번호**: §84.16 · G611(G590 · G604 갱신) · 신규 OQ-A 0 · DECISIONS 초안 #193 · #194 — 직전 G610 · OQ-A155 · #192. ⛔ 예약 아님.
