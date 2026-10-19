@@ -109,7 +109,7 @@ test("[조사 보정] 받침이 다른 일반명으로 바뀌어도 이/가·은
   for (const [input, expected] of cases) {
     assert.equal(replaceRealFinancialNames(input).text, expected, input);
   }
-  // 한계(문서화 — OQ-A156): 목록 밖 활용형("이니까" 등)은 조사로 보지 않는다.
+  // 한계(문서화 — OQ-A157): 목록 밖 활용형("이니까" 등)은 조사로 보지 않는다.
   assert.equal(replaceRealFinancialNames("CJ대한통운이니까").text, "택배사이니까");
   assert.equal(fixParticle("쇼핑몰", "으로"), "로");
   assert.equal(fixParticle("택배사", "으로"), "로");
