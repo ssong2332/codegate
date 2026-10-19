@@ -337,7 +337,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     ],
     submitLabel: "본인확인 완료하기",
     successHeadline: "본인확인이 완료되었습니다.",
-    issuerLabel: "ⓒ ○○캐피탈 전환심사팀",
+    issuerLabel: "ⓒ 대환대출 전환심사팀",
     mockHost: "loan-switch-center.invalid",
   },
   "tax-refund-claim": {
