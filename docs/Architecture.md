@@ -19786,3 +19786,493 @@ S1에서 모델이 먼저 부른 경우가 0/8이다. 백스톱을 없애면 사
 | `docs/Architecture.md` 헤더 `:5` | 버전 갭(UpdateRequests #45 open) — 이번 패스 범위 밖 | architect |
 
 > **번호**: §82 · G530~G551 · OQ-A131~A139 · ADR-0020 — 이 트리 최대 §77 · G478 · OQ-A107 · ADR-0019 다음. ⛔ 예약 아님 — 병합 순서로 확정.
+
+## 83. (T194 — PRD v1.26 AC-104 · AC-105 · AC-106 (i) · Q2 승인 범위 · UX v1.38 UF-012 · UF-014 · UF-015 · T194-C1~C10 · D-118~D-124 · DECISIONS #168~#175) **고급 강도 보강 1차 — 가상 신상 카드 · 직접 거는 확인 전화 · 택배 문자 고급 3단계 · 통화 중 문자 → 모의 설치** — ⭐⭐ **UX D-121의 전제("기존 '직접 확인해 볼게요' 컨트롤 1개 재사용")는 코드에서 거짓이다: 그 컨트롤은 §49 V5로 완전 삭제됐고, 그 문구가 되살아나면 실패하는 테스트가 있다 ⇒ AC-105의 진입 표면은 UX 재판정 대기, 서버 설계는 진입 표면과 독립으로 진행한다** / ⭐⭐ **Q2는 R6 · G-A · G81(통화 중 문자로 `app-install`을 열지 않는다)을 뒤집는다 — 그 금지의 근거(합성 타임스탬프로 응낙 앵커를 푼다)는 "응낙 문서에 앵커를 명시 기록"으로 닫는다** / ⭐⭐ **AC-106은 "에스컬레이션 = 시나리오 속성" 가정을 깬다 — 서버 5곳 · 클라 4곳이 `PUBLIC_SCENARIOS[id].escalation`을 직접 읽는다 ⇒ (시나리오 × 난이도) 단일 술어로 바꾼다** / ⭐ **카드의 거래 은행은 세션 가상 은행명(§81)과 달라야 한다 — 같으면 계좌 문자가 "먼저 말했다" 판정을 오염시킨다** / ⭐ **AC-104 (c)는 기존 문면 2곳(`IDENTITY_CHECK_HANDLING_FALSE` · 대출 고급 변형 "지어내 단정 금지")과 부딪힌다 — 카드 블록이 예외를 명시해야 한다** — architect 설계 (ADR-0022)
+
+### 83.0 ⛔ 금지 (이 절의 다른 모든 판단보다 우선)
+
+| # | 금지 | 근거 |
+|---|---|---|
+| X1 | 클라이언트가 보낸 값이 카드 값 · 창구 · 자격 판정에 들어가는 경로 | AC-104 (d) · AC-105 (a) · ADR-0004 |
+| X2 | 카드 값에 사용자 계정 정보(표시 이름 · 이메일 · uid) 사용 | AC-104 (e) · U1 ⓑ 기각 |
+| X3 | 창구 카탈로그 · 요청 · 응답 · 화면에 번호 필드 · `tel:` · 실제 발신 | AC-105 (b) · AC-019 |
+| X4 | 가로채기 원리 설명(세션 · 리포트 · 모델 지시 어디서든) | AC-105 (d) · AC-005 · OQ-38 |
+| X5 | 신규 `MockScreenKind` · Screen ID · 라우트 | AC-106 (a) · AC-105 갱신 고지 ② |
+| X6 | parcel 초급 · 중급, 나머지 메신저 · 평판 3종에 3단계 부착 · 2인 챌린지 수신자에게 3단계 · 카드 | AC-106 (f)(g) · AC-104 (g) 기본값 |
+| X7 | §49 V5로 삭제된 *"직접 확인해 볼게요"* 문구 컨트롤의 부활 | DECISIONS #84 · `src/lib/verifyintercept/verifyCallContinuity.test.ts:194-200` · 83.6.1 |
+| X8 | 게이트 · 단언 삭제로 통과(아래 "대체" 표기 게이트는 같은 커밋에 대체 단언이 있어야 한다) | T194 E항 |
+| X9 | 응낙 · 첫 언급 판정에 자유텍스트 분류 | AC-024 · AC-060 · AC-105 (a) |
+
+### 83.1 착수 실측
+
+| 항목 | 값 | 근거 |
+|---|---|---|
+| 번호 | §83 · G559~G583 · OQ-A142~A147 · ADR-0022 | 이 트리 = 메인 체크아웃 `C:\Projects\codegate\docs`: `^## ` 최대 §82(`Architecture.md:19286`) · G 최대 G558(`:19095`) · OQ-A 최대 A141(`:19099`) · ADR 최대 0021(`docs/adr/0021-scammer-initiated-hangup.md`) · DECISIONS 최대 #175(이 트리) / #167(메인). ⛔ 예약 아님 — 병합 순서로 확정 |
+| PRD · UX | PRD v1.26(`docs/PRD.md:4`) · UX v1.38(`docs/UX.md:10`) — 이 절은 **MVP #40 범위만** 대조했다 | 헤더 `Architecture.md:5`(PRD v1.7.1 · UX 1.13)는 **전진시키지 않는다**(§0~§82 전체 재검증이 아니다 — §31 · §70 관례) |
+| S7(릴레이) | **미병합** — `RELAY_RUNTIME_AVAILABLE = false`(`functions/src/scenarios/flowVariants.ts:92`) · `startRelayLeg` 0건 | grep |
+| D-115 | 서버는 `bankName` · `accountNumber`를 이미 쓴다(`functions/src/inCallSms/buildDoc.ts:38-40`) · 클라 랜딩 미리 채움은 `src/components`에 0건(테스트 파일 1개만) ⇒ **클라 쪽 미구현 추정** | grep — 확인: D-115 브랜치 diff |
+| PR-A1 · PR-A2 | 파일 목록은 오케스트레이터 인계값(⛔ 이 패스 미검증 — 브랜치 미대조) | 인계 |
+| UpdateRequests | T194 · AC-104~106 관련 `open` 행 0건 | `docs/UpdateRequests.md` grep |
+| 실행 | ⛔ 셸 없음 — 테스트 · 빌드 0회. 아래 파일:줄은 이 트리 열람값 | — |
+
+### 83.2 판정 기준표 (이 절의 반복 판단은 이 표대로만 — 표 밖 케이스는 행 추가를 묻는다)
+
+| # | if | then |
+|---|---|---|
+| J-1 | 같은 사실을 여러 경로(폴백 · 실시간 · 오프닝 · 리포트)가 판정한다 | **순수 함수 1개**를 만들고 모든 경로가 부른다(복사 0 — G63 · §59 Critical #2 계보) |
+| J-2 | 새 값이 모델 프롬프트에 들어간다 | 서버 원천만 · 조립은 `buildSystemPrompt` 옵션으로만(가드레일 최후미 — §15.5) · 호출부 3곳(`roleplay/index.ts:444` · `roleplay/openingLine.ts:86` · `realtime/geminiProvider.ts:142`) + 새 leg 발급 전부 |
+| J-3 | 기존 금지 게이트를 넓혀야 한다 | 삭제 금지 — **허용목록으로 좁혀 대체**하고 같은 커밋에 역방향 샘플 |
+| J-4 | 서버 프롬프트를 실을 수 없는 경로(ElevenLabs — 서명 URL에 서버 측 인자 없음 §82.6.4)에 새 서버 값이 필요하다 | 그 세션을 그 경로로 보내지 않는다(허용목록 — G546 관례) |
+| J-5 | UX 계약의 전제가 코드와 다르다 | 설계를 그 전제 위에 짓지 않는다 — OQ로 되돌리고, 전제와 독립인 층만 진행 |
+| J-6 | 리포트가 "일어났다"고 단정한다 | 서버 기록이 있을 때만(D-61 · D-120) — 없으면 조건문 상태 |
+
+### 83.3 AC-104 — 훈련용 가상 신상 카드 (UF-014 · T194-C1 · C2 · C3 · C10)
+
+#### 83.3.1 대상 게이트 — 단일 술어 `personaCardEligible`
+
+| 입력 | 조건 | 근거 |
+|---|---|---|
+| `scenarioId` | `PERSONA_CARD_SCENARIOS`(데이터 상수 — 기본값 5종: `institutional-impersonation` · `card-company-impersonation` · `loan-refinance-scam` · `courier-customs-scam` · `kidnapping-threat`) | AC-104 (a) 기본값 · OQ-U80(User 대기 — 상수 1줄로 바뀐다) |
+| `difficultyLevel`(정규화 뒤) | `"advanced"` | 같음 |
+| 세션 종류 | 자가 훈련 `createSession`만 — `challenge/userAccess.ts:178-190`(수신자 세션 생성)은 부르지 않는다 | AC-104 (g) 기본값 · OQ-U81 |
+| `channel` | `"voice"` 또는 부재(기본 5종은 전부 통화형 — 메신저 시작은 D-118 (5) 조건부) | — |
+
+⛔ 이 술어는 `createSession`(`functions/src/session/index.ts:80`~) 안에서 **한 번** 평가되고, 결과는 세션 문서 필드의 **존재/부재**로만 남는다. 다른 경로는 술어를 다시 평가하지 않고 필드만 읽는다(필드가 원천 — 술어가 나중에 바뀌어도 진행 중 세션은 흔들리지 않는다).
+
+#### 83.3.2 생성 — 서버 소유 · 결정적 · 세션 문서 저장
+
+| 항목 | 설계 |
+|---|---|
+| 모듈 | 신규 `functions/src/session/personaCard.ts`(순수 — Firestore · LLM import 0) + 신규 `functions/src/scenarios/personaCardCatalog.ts`(값 풀 · 대상 상수 · 시나리오별 행 구성) |
+| 함수 | `buildPersonaCard({ sessionId, scenarioId, fictionalBankName }): PersonaCard` — ⛔ 인자에 `request` · `auth` · `uid` · 표시 이름이 **없다**(X2 — G562가 시그니처를 고정) |
+| 결정성 | 시드 = FNV-1a(`${sessionId}:persona`) — `shared/fictionalBank.ts:32-39` `hash`와 같은 함수(복사 말고 export해 재사용). 같은 sessionId → 같은 카드(테스트 재현) |
+| 호출 지점 | `createSession`의 `pickFictionalBankName()`(`session/index.ts:184`) **바로 뒤 · `generateOpeningLine`(`:194`) 앞** — 오프닝 대사도 카드를 알아야 한다(§81과 같은 이유). ⚠️ `sessionRef.id`가 정해지는 곳은 `:205-226`이라 **id 확정을 오프닝 앞으로 당기거나**(권고 — `sessionRef`만 먼저 만든다, write는 그대로 `:272`) 시드를 생성 직후 난수로 두고 저장값을 원천으로 쓴다. 권고 = 전자(결정성 유지) |
+| 저장 | `SessionDoc.personaCard?: { v: 1; items: PersonaCardItem[] }` · `PersonaCardItem = { key: PersonaCardKey; label: string; value: string }` · `PersonaCardKey = "name" \| "birthYear" \| "region" \| "bank" \| "card" \| "loan" \| "child"` — `sessionDoc`(`session/index.ts:233-266`)에 `fictionalBankName` 옆으로 1필드. 대상 밖 세션은 **필드 부재**(빈 객체 · `null` 0 — 부재와 빈 값을 같은 뜻으로 두지 않는다 §14.9.1) |
+| 쓰기 권한 | 서버만(`firestore.rules:41-43` `sessions/{sessionId}` write false 그대로) |
+
+**항목 형식(OQ-U82의 architect 몫 — 판정)** — UX 제안표(`docs/UX.md:1258-1266`)와 planner 의견(AC-104 읽기 고지)을 **그대로 채택**한다.
+
+| key | 라벨(화면 · 프롬프트 공통) | 값 형식 | 풀 · 규칙 | 대상 행 |
+|---|---|---|---|---|
+| `name` | 이름 | 흔한 가상 이름 3자(성 1 + 이름 2) | 8개 이상 풀(실존 유명인 대조 — #164 관례) | 5종 전부 |
+| `birthYear` | 출생 연도 | `"{YYYY}년생"`(1955~1975) | 연도만 · 월일 0 | kidnapping 제외 4종 |
+| `region` | 사는 곳 | 도 → `"{도 이름} ○○시"` · 특별 · 광역시 → `"{시 이름} ○○구"` | 광역 단위 8개 풀. ⛔ 시 · 군 · 구 이하 실제 지명 · 도로명 · 건물명 · 아파트명 0(AC-104 읽기 고지) | 5종 전부 |
+| `bank` | 거래 은행 | `FICTIONAL_BANK_NAMES`(`shared/fictionalBank.ts:20-29`) 중 하나 — ⭐ **세션 `fictionalBankName`과 다른 이름**(인덱스 + 1 + 시드 mod 7) | 아래 ⭐ | 5종 전부 |
+| `card` | 사용 카드 | `"○○카드"` 고정 | 가림 | card-company |
+| `loan` | 대출 | `"○○저축은행 대출 이용 중"` 고정(금액 0) | 가림 | loan |
+| `child` | 자녀 | `"{가상 이름 3자}(초등학생) · 다니는 학원 ○○학원"` | 이름 풀 별도 | kidnapping |
+
+⭐ **거래 은행 ≠ 세션 가상 은행명인 이유**: 세션 가상 은행명은 계좌 문자 본문 · 사기범 대사의 "OO은행" 자리표시자를 채운다(`roleplay/promptAssembly.ts:796` · `inCallSms/buildDoc.ts:36`). 카드 은행이 같으면 ① 사기범이 *"한결은행 계좌로 보내 주세요"* 라고 **수취 계좌**를 말한 것이 "내 거래 은행을 먼저 말했다"로 집계되고(83.3.6 오염) ② 참가자 화면에서 내 은행 = 사기범 계좌 은행이 되어 상황이 어색해진다. ⛔ 카드 값은 `PLACEHOLDER_PATTERN`(`fictionalBank.ts:61` — `[Oo○Ｏｏ]{2}\s?은행`)에 걸리면 안 된다(조립 끝의 `applyFictionalBank`가 카드 값을 세션 은행명으로 덮어쓴다) — `"○○저축은행"`은 `○○` 뒤가 `저`라 걸리지 않는다(G561이 전 풀로 단언).
+
+#### 83.3.3 클라 전달 경로 (T194-C1)
+
+| 경로 | 판정 | 근거 |
+|---|---|---|
+| ⓐ `createSession` 응답에 싣기 | **기각** | 응답을 받는 곳은 난이도 화면(`src/app/scenarios/difficulty/page.tsx:122`)이고 카드를 그리는 곳은 통화 화면이다 — 화면 사이에 값을 나르는 클라 저장소가 하나 더 생긴다. 새로고침 복원도 따로 짜야 한다 |
+| ⓑ **세션 문서 read(채택)** | 통화 화면은 마운트 때 이미 `getDoc(doc(db, "sessions", sessionId))`를 한다(`src/app/session/play/page.tsx:566-605`) — 같은 스냅샷에서 `data.personaCard`를 읽어 `CallStartNotice`(`src/components/CallStartNotice.tsx`)에 넘긴다. 추가 read 0 · 새로고침 복원 자동 · 응답 계약 무변경(C-4 *"세션 전 응답에 변형 정보 0"* 과도 무충돌) |
+| ⛔ 클라 → 서버 | 카드 값을 보내는 필드 · 콜러블 **0**(T194-C1) — `createSession` 요청 구조분해(`session/index.ts:86-96`)에 `personaCard`를 넣지 않는다(G560이 AST로 고정) |
+
+⚠️ 클라 방어(UF-014 Failure (c)): 세션 문서의 `difficultyLevel !== "advanced"`인데 카드가 실려 오면 그리지 않는다 — **충족 수단이 아니다**(서버 G559가 충족 수단).
+
+#### 83.3.4 프롬프트 주입 — `buildSystemPrompt` 신규 옵션 `personaCard`
+
+| 항목 | 설계 |
+|---|---|
+| 옵션 | `BuildSystemPromptOptions.personaCard?: readonly PersonaCardItem[]`(`promptAssembly.ts:616-722`에 1필드) — 부재 = 블록 0 = 조립 결과 바이트 동일(회귀 0) |
+| 위치 | 확정 순서(`:737-739`)에 1칸: persona → tactics → [화자] → 대화 방식 → 언어 → 진행 강제 → 확인 안내 → **[미리 확보한 상대 정보](신규 · 조건형)** → (S7 인계 블록) → 난이도 → 턴 지시 → 가드레일. 코드 좌표 = `:788-790`(확인 안내) 뒤 · `:791`(난이도) 앞. ⭐ [진행 강제] **뒤**에 두는 이유: 아래 예외 문장이 금지 규칙(`:182`)보다 **나중에** 읽혀야 한다 |
+| 호출부 | J-2의 3곳 + S7 leg 발급 + self-dial leg 발급(83.6.4) — 전부 `session.personaCard?.items`를 그대로 넘긴다(G564) |
+
+**블록 정본(⛔ architect 소유 모델 대면 문자열 — G386 관례 · implementer는 그대로 복사)**:
+
+```
+[미리 확보한 상대 정보 — 이 통화에서만]
+너는 통화 전에 상대에 대해 아래 정보를 이미 확보해 두었다. 상대가 스스로 말하기 전에 이 가운데 한두 가지를 네가 먼저, 확인하듯 자연스럽게 꺼내 상대가 '이 사람은 나를 이미 알고 있다'고 느끼게 한다.
+- {label}: {value}
+…(카드 행 그대로)
+이 목록의 값은 네가 먼저 말해도 된다 — 위에서 상대의 이름을 먼저 말하거나 단정하지 말라고 한 규칙은 이 목록 값에는 적용되지 않는다. 목록에 없는 이름·나이·금액·금융사·주소는 지어내 말하지 않는다. '사는 곳'은 알고 있다는 확인에만 쓰고, 만날 곳·찾아갈 곳·돈을 건넬 곳을 정하는 데 쓰지 않는다. 이 정보를 어디서 얻었는지는 설명하지 않는다.
+```
+
+**충돌 해소 대조표(⭐ 이 블록이 없으면 AC-104 (c)가 모델 쪽에서 막힌다)**:
+
+| 기존 문면 | 좌표 | 실리는 세션(카드 대상 안) | 충돌 | 해소 |
+|---|---|---|---|---|
+| `IDENTITY_CHECK_HANDLING_FALSE` *"상대의 이름을 네가 먼저 말하거나 단정하지 않는다"* | `promptAssembly.ts:182` · 판별 `personaAuthority.ts:45`(`kidnapping-threat` = anonymous) | kidnapping 고급 | 카드의 자녀 · 본인 이름을 먼저 말하라는 지시와 정면 충돌 | 블록 셋째 문단의 **예외 문장**(상수 무변경 — 다른 세션 바이트 불변). ⚠️ 이 금지는 §50.4.4 사용자 신고 ⑩ⓐ(이름 단정)의 처방이다 — 카드 세션에 한해 뒤집는 것을 planner/User가 확인해야 한다(**OQ-A145**) |
+| 대출 고급 변형 *"상대가 말하지 않은 이름 · 금액 · 금융사는 지어내 단정하지 않는다"* | `flowVariants.ts:357` · `:363` | loan 고급 | 약한 충돌(카드 값은 "지어낸" 것이 아니다) | 블록의 *"목록에 없는 … 지어내 말하지 않는다"* 가 같은 규칙을 목록 밖에 유지한다 — 변형 문면 무변경 |
+| 기관 고급 변형 *"거래 은행과 자산 규모부터 묻는다"* | `flowVariants.ts:211` · `:240` | institutional 고급 | 묻기 ↔ 이미 앎 | 무충돌로 판정 — *"한결은행 거래하시죠? 잔액이 얼마나 되십니까"* 처럼 확인 후 질문이 성립한다(추정 — 라이브 관측 대상) |
+| AC-102 (d) 장소 특정 금지 | — | 대면 편취형 변형 | 사는 곳 → 전달 장소 | 블록의 *"만날 곳 · … 정하는 데 쓰지 않는다"* (G565가 문장 존재를 단언) |
+
+#### 83.3.5 원자성 (T194-C2 — "카드만 / 사기범만" 0)
+
+| 경로 | 카드 표시 | 사기범 앎 | 처리 |
+|---|---|---|---|
+| Gemini Live | 세션 문서 | `geminiProvider.ts:142` 조립에 옵션 | 둘 다 |
+| 텍스트 폴백 · 오프닝 | 세션 문서 | `roleplay/index.ts:444` · `openingLine.ts:86` | 둘 다 |
+| **ElevenLabs** | 세션 문서 | ⛔ **실을 방법 없음** — 프롬프트는 에이전트에 저장되고 서명 URL에 서버 측 인자가 없다(§82.6.4 · `elevenLabsProvider.ts:7`) | **라우팅 회피(J-4)**: `createRealtimeCall`(`realtime/index.ts:139-140`)이 `requiresServerPromptProvider(session)`가 참이면 `getRealtimeProvider`의 ① ElevenLabs 분기(`provider.ts:102-109`)를 건너뛰고 Gemini 또는 폴백으로 보낸다. 술어 = `session.personaCard` 존재 ∨ 릴레이 변형(S7 G546) ∨ self-dial 가능 세션(83.6.3). ⚠️ S7이 먼저 병합되면 그 허용목록(`RELAY_CAPABLE_PROVIDERS`)을 이 술어로 **일반화**한다(두 목록 금지). 이 회피가 수용 가능한지는 OQ-A131(User)과 같은 질문 |
+| 카드 생성 실패 | — | — | `buildPersonaCard`는 순수 함수라 실패 경로가 사실상 없다. 그래도 throw 시 **필드 부재로 세션 진행**(카드 0 · 블록 0 — 원자성 유지 · UF-014 Failure (a)) |
+
+#### 83.3.6 "먼저 말했다" 기록 (OQ-U83 — architect 답: **리포트 생성 시 서버 대조** · 채택)
+
+| 항목 | 설계 |
+|---|---|
+| 판정 시점 | `generateReportCore`(리포트 1회 생성 — 멱등 early-return)에서 **결정론적으로** 계산 — 통화 중 쓰기 0 · 클라 이벤트 0 |
+| 입력 | `session.personaCard.items` + `messages`(turnIndex 순). ⛔ `notSpoken: true` 문서 제외(`shared/types.ts:206-209` — 참가자가 듣지 못한 Gemini 오프닝을 "먼저 말함"으로 세면 거짓이다 · §55) |
+| 원문 성질 | 사기범 줄: 텍스트 경로 = LLM 원문 · 실시간 = 전사 마스킹본(`types.ts:190-197`). 참가자 줄: 마스킹본. `maskPII`(`guardrails/index.ts:32-47`)는 이메일 · 주민번호 · 전화 · 8자리 이상 숫자만 바꾼다 ⇒ **이름 · 4자리 연도 · 지역명 · 은행명은 두 줄 모두에 원형으로 남는다**(대조 가능) |
+| 토큰(서버 소유 · 순수 함수 `personaMatchTokens(item)`) | `name`: 전체 이름 · 이름 2자 / `birthYear`: `"1961"` · `"61년"` · `"육십일"`(전사 표기 변형 — 추정) / `region`: 광역명(`"경기도"` · `"서울"` …) / `bank`: 카드 은행명 그대로 / `child`: 자녀 전체 이름 · 이름 2자 / `card` · `loan`: **대조 제외**(가림 값이라 고유 토큰 없음) |
+| 규칙 | 항목별 `s` = 그 토큰이 처음 나온 **사기범** turnIndex, `u` = 처음 나온 **참가자** turnIndex(없으면 ∞). `s < u` 인 항목만 `firstMentions`에 `{ key, scammerTurnIndex: s }` |
+| 자유 분류 | 0 — 서버가 만든 값과의 **문자열 포함**만 본다(UX OQ-U83 권고와 같다 · X9) |
+| 오차 방향 | 거짓 음성(전사 오기 · 다른 표기) → R-2(조건문)로 떨어진다 = 안전 쪽. 거짓 양성(사기범이 우연히 같은 지역명을 말함) → R-1 문면 *"내가 말하기 전에 먼저 말했습니다"* 는 문자 그대로 여전히 참이다(D-61 부류의 거짓 아님 — 판정 근거를 남긴다) |
+| 저장 | 리포트 문서 `personaBlock?: { state: "R-1" \| "R-2" \| "R-3"; items: { key; label; value; scammerTurnIndex? }[] }` · 카드 없는 세션 = 필드 부재(= R-4) |
+
+#### 83.3.7 리포트 · 리플레이 (D-120 · T194-C3)
+
+- 상태 선택(위에서 첫 일치 · 순수 함수 `resolvePersonaBlockState`): `personaCard` 부재 → R-4(필드 부재) / self-dial 리포트 카드 V-1 · V-2 존재(83.6.6) → R-3 / `firstMentions ≥ 1` → R-1 / 그 밖 → R-2. 문면은 `docs/UX.md:1726-1733` 정본 그대로 신규 상수 모듈 `functions/src/report/personaCopy.ts`.
+- 리플레이(UX-018) 주석 앵커 = `scammerTurnIndex`(R-1 항목만). 되감기 진입점 0(속은 순간 아님 — D-51).
+- 클라 이벤트 T194-C10(`persona_card_shown` · `persona_report_block_shown`)은 **클라 구조화 로그**(숫자 · 종류만 — G432 형식 · §82.6.5 C-10 관례). 서버 저장 0.
+
+### 83.4 AC-106 — 택배 문자 고급 3단계 (UF-012 v1.38 · T194-C9 · D-124)
+
+#### 83.4.1 ⭐⭐ 에스컬레이션을 (시나리오 × 난이도) 술어로 — 현행 직접 읽기 전수
+
+오늘 에스컬레이션 여부는 **시나리오 공개 메타 1필드**다(`publicMeta.ts:31` · 보유 2종 `:206` · `:246`). parcel은 이 필드가 없다(`:222-233`). parcel 고급만 통화로 이어지려면 이 필드를 직접 읽는 곳이 전부 바뀌어야 한다.
+
+| # | 위치 | 현행 | 대체 | 비고 |
+|---|---|---|---|---|
+| S-1 | `functions/src/session/index.ts:117` | `isEscalationCapable = Boolean(PUBLIC_SCENARIOS[scenarioId]?.escalation)` → `maxUserTurns` | `resolveScenarioEscalation(meta, resolvedDifficultyLevel)` | 난이도는 `:112`에서 이미 확정 |
+| S-2 | `session/index.ts:465` | `requestEscalation` 거부 조건 | `resolveSessionEscalation(session)` | 수동 "전화로 확인" |
+| S-3 | `roleplay/index.ts:684-687` | 자동 전이 `canEscalate` | 같음 | 신호 · max-turn |
+| S-4 | `report/generateReportCore.ts:244` | `voiceIntended` | 같음 | 단계 파생 |
+| S-5 | `report/mockScreenTimeline.ts:271` · `:284` | 같은 술어 서술 | 같음 | |
+| S-6 | `functions/src/challenge/index.ts:110-113` | 에스컬레이션 시나리오 챌린지 거부 | **무변경 — 시나리오 단위 그대로** | parcel 챌린지는 계속 허용되고 수신자는 현행 고급(AC-106 (g) 기본값) |
+| C-1 | `src/app/scenarios/difficulty/page.tsx:158` | `if (scenario?.escalation)` → UX-025로 | `resolveScenarioEscalation(scenario, 고른 난이도)` | D-124 ① *"고급을 고른 뒤에만 UX-025"* |
+| C-2 | `src/app/session/messenger/page.tsx:417` | `includesCall={Boolean(scenario.escalation)}` | 세션 문서 `difficultyLevel` · `challengeId`로 같은 술어 | D-124 ② start-notice 열 |
+| C-3 | `messenger/page.tsx:487` | "전화로 확인" 버튼 | 같음 | S-2와 같은 술어여야 한다 |
+| C-4 | `src/app/scenarios/messenger/voice-select/page.tsx:52` | 진입 가드 | 같음(난이도는 경로 쿼리 · 세션 전 값) | |
+| C-5 | `src/app/scenarios/messenger/page.tsx:69` | send 목록 필터 | **무변경**(S-6과 짝) | |
+
+**술어 정의(J-1)**:
+- 공개 메타 신규 필드 `advancedEscalation?: EscalationConfig`(서버 미러 `publicMeta.ts` + 클라 원본 `src/content/scenarios/messengerParcelSmishingSms.ts` 동시 — 드리프트 테스트 `scenarios.test.ts`가 대조). parcel에만 `{ toChannel: "voice", voiceMode: "generic" }`.
+- `resolveScenarioEscalation(meta, level) = meta.escalation ?? (level === "advanced" ? meta.advancedEscalation : undefined)` — 서버 `functions/src/scenarios/escalation.ts` · 클라 `src/content/scenarios/escalation.ts`(같은 식 · 테스트가 두 구현을 전 시나리오 × 3난이도로 대조).
+- `resolveSessionEscalation(session) = session.challengeId ? meta.escalation : resolveScenarioEscalation(meta, normalize(session.difficultyLevel))`.
+- ⚠️ 이 값은 **(시나리오 × 난이도)** 값이지 배정 변형 값이 아니다 — AC-096 (e) 해석(DECISIONS #174 · AC-106 (i))이 그 조건에서만 성립한다. 변형 데이터와의 정합은 G577.
+- ⚠️ 리터럴 고정 테스트 `src/lib/sessionboundary/startNoticeGate.test.ts:270-298`(`includesCall={Boolean(scenario.escalation)}` · `!PUBLIC_SCENARIOS[session.scenarioId]?.escalation` 문자열 단언)은 **새 술어 문자열로 바꾼다**(완화 아님 — "버튼 · 고지 · 서버 전이가 같은 술어"라는 단언 내용은 그대로).
+
+#### 83.4.2 변형 데이터 — `flowVariants.ts` 추가 방법
+
+| 대상 | 현행 | 변경 |
+|---|---|---|
+| `fv-g454`(parcel 고급) `:768-780` | `authoring:"current"` · `stages:[]` · `channels:["messenger"]` | **같은 ID 유지 · 내용 교체**(회전 문서 키 · 진행 중 세션 무영향 — 단일 변형이라 회전 0): `authoring:"authored"` · `stages` 3~4개(문자 링크 → 설치 → 상담원 전화 → 최종 요구) · `channels:["messenger","voice"]` · `escalatesToVoice: true` · `sources:["N1","N2","C08"]`(AC-106 (e)) · `extraTactics:[{ from:"messenger-subsidy-smishing-sms", label:"앱 설치·권한 허용 유도" }, { from:"messenger-subsidy-smishing-sms", label:"채널 전환 유도" }]`(문구 사본 0 — `:152-157` 관례) · `legs[0].personaPrompt` = **parcel 고급 전용 페르소나**(아래) · `exitBlock` 고급 범위(D3 또는 D4 ≥ 1 — 현행 `D2 · D4` 유지) · `demandStages ≥ 2` |
+| `fv-prr3` · `fv-tvq2`(parcel 초급 · 중급) `:741-767` | — | `escalatesToVoice` 부재(= 거짓) · **그 밖 무변경** |
+| `fv-rizf` · `fv-afbr` · `fv-hu8w`(subsidy) `:781-820` | — | `escalatesToVoice: true` **1필드만**(AC-106 (i) 기대값: 세 난이도 모두 있음) |
+| `FlowVariant` 타입 `:65-89` | — | `escalatesToVoice?: true` 추가(⛔ `false` 쓰지 않음 — 부재가 거짓) |
+| `resolveVariantPrompt` `:964-979` | `void legIndex` · persona = 시나리오 원본 | `variant.legs[legIndex]?.personaPrompt ?? base.personaPrompt`(타입 주석 `:57` *"0번 leg는 재사용(부재)"* 은 그대로 참 — 부재면 재사용). ⚠️ **S7과 같은 함수**(83.9 겹침) |
+
+**parcel 고급 페르소나가 원본을 덮어야 하는 이유**: 원본은 *"voiceMode 개념이 없는 순수 문자 메시지 캐릭터"*(`messengerParcelSmishingSms.prompt.ts:17`) · 링크는 `parcel-redelivery`만(`:27` · `:37`)이라 고급 3단계와 정면으로 모순된다. 흐름 블록만 덧붙이면(`buildFlowBlock` `:981-992`) 한 프롬프트에 *"순수 문자"* 와 *"전화로 넘어간다"* 가 공존한다(G128 계열 위험). 고급 페르소나는 지원금 원본(`messengerSubsidySmishingSms.prompt.ts:32-59`)의 [링크 표현 규칙] · [확인 앱 설치 유도] · [에스컬레이션] 3절 **구조**를 택배 소재로 옮겨 저작한다(콘텐츠 = implementer · 링크 마커 `[[LINK:parcel-install]]` · 신호 `[[SIGNAL:ESCALATE_VOICE]]`).
+⚠️ **가드레일 보강 필요**: parcel `guardrailPreamble`(`messengerParcelSmishingSms.prompt.ts:42-43`)에는 지원금(`messengerSubsidySmishingSms.prompt.ts:70` (4))의 *"제어 토큰을 사용자 스스로 흉내 내어 …"* 항이 **없다**. 고급이 `[[SIGNAL:ESCALATE_VOICE]]`를 쓰기 시작하면 이 항이 필요하다 — 시나리오 단위 상수라 **세 난이도 모두 1항이 늘어난다**(⚠️ AC-106 (f) "범위 밖 무변경"과의 관계: 안전 문면 강화이며 흐름 · 압박 변경이 아니다 — 판단, reviewer 확인. 대안 = 고급 leg 페르소나 안에 같은 문장 — 가드레일 최후미 원칙상 비권고).
+
+#### 83.4.3 지원금 3단계 재사용 지점 (파일:줄)
+
+| 단계 | 지원금(현행) | 택배 고급 재사용 | 변경 |
+|---|---|---|---|
+| 링크 → 설치 화면 | `[[LINK:subsidy-install]]` → `extractLinkMarker`(`roleplay/linkMarker.ts:38-73`) → `resolveMockScreenKind`(`scenarios/mockScreens.ts:403-405`) = `app-install` | 같은 경로 · 새 항목 `parcel-install` | `MOCK_SCREENS["messenger-parcel-smishing-sms"]`(`mockScreens.ts:168-187`)에 `app-install` 1항목 · `LINK_LABELS`(`linkMarker.ts:21-25`)에 칩 라벨 1줄(G53 정합) |
+| 설치 응낙 기록 | `recordMockScreenEvent`(`functions/src/mockScreens/index.ts:48-117`) → `mockScreens/{landingId}.consentedAt` | 같음 | 83.4.4 도달 술어 1줄 |
+| 응낙 → 사기범 언급 | `roleplay/index.ts:345-358`(read) · `:372-373`(`MOCK_INSTALL_CONSENT_INSTRUCTION` — `mockScreens.ts:95-96`) | 같음 | 게이트 `hasAppInstallMockScreen(scenarioId)`(`:346`)는 parcel에서 세 난이도 모두 참이 된다 — read 1회 늘 뿐 동작 무변화(초급 · 중급은 응낙 문서가 생길 수 없다 — 83.4.4) |
+| 메신저 → 통화 | `[[SIGNAL:ESCALATE_VOICE]]` · max-turn(`roleplay/index.ts:684-704`) · 수동(`session/index.ts:465`) → `transitionChannel` | 같음(술어만 S-2 · S-3) | — |
+| 통화 단계 | `createRealtimeCall` · `resolveEffectiveVoiceMode(voiceSelectionSource)`(`realtime/index.ts:139-140`) | 같음 | 화자 성별: `scenarioVoice.ts:42` parcel = `notApplicable` → **세션 단위 해석**이 필요하다(아래) |
+| 리포트 | `deriveReportStages`(`generateReportCore.ts:235-248`) | 같음 | `installIntended` · `voiceIntended`를 세션 술어로(G583) |
+
+**화자 성별**: `speakerGenderFor(scenarioId)`(`scenarioVoice.ts:49`)는 시나리오 단위다. parcel 값을 `"female"`로 바꾸면 **초급 · 중급 텍스트 프롬프트에도 [화자] 블록이 생긴다**(`promptAssembly.ts:767` — 호출부 3곳이 무조건 넘긴다) = AC-106 (f) 위반. ⇒ 표 값은 `notApplicable` 유지 · 신규 `resolveSessionSpeakerGender(session)` = `speakerGenderFor(id) ?? (resolveSessionEscalation(session) ? 배정 변형 legs[0].speakerGender : undefined)`를 호출부 3곳 + `pickGeminiVoiceName` 입력에 쓴다(층 1 · 층 2 같은 표 — §50.3.1).
+
+#### 83.4.4 모의 화면 도달 술어 `isMockScreenReachable(session, item)` (U7 · Q2 공용)
+
+| 항목 종류 | 도달 조건 | 쓰는 곳 |
+|---|---|---|
+| `credential-form` | 현행 그대로(카탈로그 소속 — `mockScreens.ts:391-396`) | — |
+| `app-install` · `entrySurface:"messenger-link"` | 시나리오가 `advancedEscalation`만 가진 경우(parcel) ⇒ `resolveSessionEscalation(session)` 참 / `escalation` 보유(subsidy) ⇒ 현행 | `recordMockScreenEvent`(`mockScreens/index.ts:76` 뒤 1줄 — 도달 불가면 `failed-precondition`) · 링크 마커(`roleplay/index.ts` · `openingLine.ts`의 `extractLinkMarker` 호출부) |
+| `app-install` · `entrySurface:"in-call-sms"`(Q2) | 그 항목을 `fakeLandingId`로 가진 문자가 **이 세션에 도착**(`inCallSms/{smsId}` 존재) | `recordMockScreenEvent` |
+
+링크 마커 처리: 도달 불가 `app-install` 마커(초급 parcel 모델이 `[[LINK:parcel-install]]`을 지어냄)는 **그 시나리오의 기본 credential 랜딩**(`parcel-redelivery`)으로 강등하고 경고 로그 1줄(조용한 임의 동작 0 — `flowVariants.ts:1009-1011` 관례). `app-install` 방향 폴백은 여전히 0(`mockScreens.ts:398-402` R5).
+
+#### 83.4.5 AC-106 (i) 테스트 게이트 — "같은 (시나리오 × 난이도) 허용 변형의 통화 단계 유무 동일"
+
+| 단언 | 내용 |
+|---|---|
+| ① 균일성 | `FLOW_VARIANTS`를 (scenarioId, level)로 묶어 `Boolean(v.escalatesToVoice)` 집합 크기 = 1 |
+| ② 메타 정합 | 각 묶음 값 = `resolveScenarioEscalation(PUBLIC_SCENARIOS[id], level) !== undefined` |
+| ③ 기대값 고정 | parcel 초급 · 중급 = 없음 · 고급 = 있음 / subsidy = 세 난이도 모두 있음 / 그 밖 메신저 시나리오 = 메타 그대로(PRD AC-106 (i) 신설 시점 값) |
+| 역방향 ⓓ | 테스트 안에서 `[...FLOW_VARIANTS, { ...fv-g454, variantId:"fv-zz01", escalatesToVoice: undefined }]` 사본에 ①을 돌려 **실패**를 단언 · 원 데이터 통과를 **같은 실행 출력**에 나란히(AC-106 (h) 형식) |
+| 역방향 ⓐⓑⓒ | ⓐ 초급 parcel 세션 + `parcel-install` 응낙 요청 → `isMockScreenReachable` 거짓(`recordMockScreenEvent` 거부) ⓑ `MockScreenKind` 합집합 = `{"credential-form","app-install"}` 고정(신규 kind 샘플 → 실패) ⓒ 신호 없이 대사만 *"전화드릴게요"* 인 응답 → `transitionChannel` 0회(기존 G54 단언 재사용) |
+
+#### 83.4.6 범위 밖 무변경 보증
+
+parcel 초급 · 중급의 조립 프롬프트는 바이트 동일해야 한다 — 기존 바이트 고정 테스트(`smsGate.test.ts`가 전 시나리오 × 난이도의 조립 산출물을 고정 — `inCallSms/smsGate.ts:170` 주석)가 그대로 보증한다. 예외는 83.4.2 ⚠️ 가드레일 1항(의도된 변경 — 기대값 갱신을 같은 커밋 · 사유 주석).
+
+### 83.5 Q2 — 통화 중 문자 링크 → 모의 앱 설치 (DECISIONS #175 · AC-105 갱신 고지)
+
+#### 83.5.1 ⭐⭐ R6 · G-A · G81 재판정
+
+| 금지 | 원문 근거 | 금지가 막던 것 | 오늘 상태 | 판정 |
+|---|---|---|---|---|
+| **R6**(§15.9.1 · `Architecture.md:1243`) | 통화 중 응낙의 앵커가 실시간 경로의 합성 타임스탬프(G15/G21)와 얽힌다 | 응낙 → 사기범 턴 연결을 `createdAt` 비교로 풀면 실시간 전사 시각(제출 시각 + i초 합성)이 틀려 엉뚱한 턴에 붙는다 | 합성은 클라가 `atMs`를 보낼 때만 해소된다(`realtime/transcriptTiming.ts:39-47` — 부재면 합성 그대로) ⇒ **시각 비교 앵커는 여전히 위험** | **조건부 해제** — 통화 중 `app-install` 응낙은 **시각이 아니라 명시 앵커**(`anchorScammerTurn`)를 문서에 쓴다(83.5.3). 리포트는 그 값을 쓰고 시각 해결을 타지 않는다(G580) ⇒ 얽힘의 원인이 사라진다 |
+| **G-A**(§19 · `:2672`) | `entrySurface==="in-call-sms"` ⇒ `kind!=="app-install"` | R6의 카탈로그 쪽 거울 | — | **허용목록으로 대체(J-3)**: `in-call-sms ∧ app-install`은 `IN_CALL_INSTALL_SCENARIOS = ["card-delivery-call","card-company-impersonation","loan-refinance-scam"]` 에서만 · 그 항목을 가리키는 문자는 **고급 변형에서만 선언**(G579) |
+| **G81**(`:2735`) | 통화 경로에서 `recordMockScreenEvent` 호출 금지 | 통화 세션에 `mockScreens` 문서가 생겨 시각 앵커 · stages 파생이 돈다 | — | **좁혀서 대체**: `credential-form`은 계속 `recordInCallSmsEvent("link_tapped")`만 · `app-install`만 `recordMockScreenEvent`(앵커 필수) |
+| `fallbackTurn.ts:44` 주석의 "비공유" 단언 | `MOCK_SCREENS`(app-install)와 `IN_CALL_SMS` · `VERIFY_INTERCEPT`가 scenarioId를 공유하지 않아 경합 0 | — | Q2 3종은 셋 다 공유하게 된다 | **우선순위 표 테스트로 대체**(G581) — 현행 순서(재연결 > 문자 announce > 확인 announce > 설치 응낙) 유지가 판정: 설치 응낙은 `consentAnnouncedAt` 부재가 큐라 이월돼도 사실이 사라지지 않는다(`:44` 근거 그대로) |
+
+#### 83.5.2 데이터
+
+| 파일 | 추가 | 제약 |
+|---|---|---|
+| `scenarios/mockScreens.ts` | 3종 각 `app-install` 1항목(`entrySurface:"in-call-sms"` · 가상 앱 이름 · `consentLabel` · `momentTactic` · `correctAction`) · `MOCK_SCREENS`(`:376-385`)에 `card-delivery-call` 키 신설 | AC-072 하드 제약 전부(입력 필드 0 · 스토어 · URL 0) · `BAIT_TO_LANDING` 표(`mockScreens.ts:141-165` 주석 ↔ `__tests__/mockScreens.test.ts`)에 3행(① 집합 일치 단언이 강제) |
+| `scenarios/inCallSms.ts` | 3종 각 `kind:"link"` 설치 안내 문자 1항목(`linkDisplayText` · `fakeLandingId` · `linkAddress` 3자 쌍 — G111 · G453) · `IN_CALL_SMS`(`:234-245`)에 `card-delivery-call` 키 신설 | 본문 · announce에 실존 앱명 0 · announce 문면 규칙(재촉 · 다급 0 — `smsGate.ts:193`) |
+| `scenarios/flowVariants.ts` | 고급 변형 3벌의 `sms`에 `{ purpose:"link", smsId:<설치 문자>, required:?, notBeforeUserTurns:2 }` | ⚠️ 목적당 1문자(`smsGate.ts:86-88` `declared.find(purpose)`) — 아래 표 |
+
+| 변형 | 현행 `sms` | 설치 문자 자리 | 판정 |
+|---|---|---|---|
+| `fv-akj5` card-company 고급 `:290-315` | `[]` | `link` 비어 있음 | 추가 |
+| `fv-tvnj` card-delivery 고급 `:864-887` | `[]` · 카탈로그 자체 없음 | `link` 비어 있음 | 추가(카탈로그 신설) |
+| `fv-6s5p` loan 고급 `:351-375` | `link: loan-apply-link`(credential) · `transfer: loan-account` | ⚠️ `link` 점유 | **권고 = 고급만 `link` 슬롯을 설치 문자로 교체** — 이 변형의 단계 2가 이미 *"보안 점검 앱을 설치"*(`:358`)이고 신청서 본인확인 단계는 고급 단계 목록에 없다. 대안 = `SmsPurpose`에 `"install"` 신설 → Live 도구 enum(`realtime/liveTools.ts:132`) · 폴백 마커 · 넛지 문면 · 테스트 전부가 바뀐다(비용 큼 · 비권고). 콘텐츠 판단이라 **OQ-A143**(planner) |
+
+`required`(백스톱 강제 여부): S1 실측에서 모델이 문자 도구를 스스로 먼저 부른 것은 0/8 세션(§82 머리) ⇒ `required:false`면 Q2 설치 문자는 **사실상 0통**이고 AC-105가 통화형에서 일어나지 않는다(DECISIONS #175가 기각한 상태). 권고 = `required:true`. ⚠️ loan 고급은 필수 문자가 2개가 된다(`planSmsBackstop` `smsGate.ts:119-136`이 "먼저 열리는 것"을 고른다 — 동작 성립). User/planner 확인 **OQ-A144**.
+
+#### 83.5.3 응낙 기록 — `recordMockScreenEvent` 확장 (명시 앵커)
+
+| 항목 | 설계 |
+|---|---|
+| 요청 증분 | `callMode?: "realtime" \| "fallback"` · `scammerTurns?: number` — **`item.entrySurface === "in-call-sms"`일 때 필수**(부재면 `invalid-argument`) · 그 밖 항목은 무시(메신저 경로 무변경) |
+| 검증 순서 | 현행 ①~④(`mockScreens/index.ts:38-47`) 뒤에 ⑤ `isMockScreenReachable`(83.4.4) — 순서 고정(G578) |
+| 앵커 | `deliverInCallSms`와 **같은 함수**: 실시간 `realtimeAnchorScammerTurn(scammerTurns)` · 폴백 `textPathAnchorScammerTurn(서버가 센 scammer 문서 수)`(`inCallSms/buildDoc.ts:69` · `:78`) → 문서 `anchorScammerTurn` |
+| 문서 증분 | `MockScreenDoc.anchorScammerTurn?: number`(통화 중 `app-install`만 · 부재 = 메신저 경로) · `consentAnnouncedAt` 기존 |
+| 응답 증분 | `consentInstruction?: string`(통화 중 `app-install`의 **최초** `consented`에만 — 실시간 클라가 Live에 `turnComplete:false`로 주입) · `selfDial?: { desks }`(83.6.3) |
+| 시크릿 | 증분은 Firestore · 순수 함수뿐 — **선언 추가 0**(프로바이더를 읽지 않는다 · §41). ⚠️ 이 콜러블이 프로바이더를 읽게 바꾸면 선언 목록 상수 갱신이 같은 커밋에 와야 한다(G212) |
+
+#### 83.5.4 응낙 → 사기범 언급 (실시간 · 폴백)
+
+- **문면은 메신저와 달라야 한다**: `MOCK_INSTALL_CONSENT_INSTRUCTION`(`mockScreens.ts:95-96`)은 *"이제 담당자가 전화로 이어서 안내하겠다고 말하라"* — 이미 통화 중인 세션에서는 거짓 행동 지시다. 신규 상수 `IN_CALL_INSTALL_CONSENT_INSTRUCTION`(정본):
+  `(참가자가 방금 문자 속 링크에서 안내대로 앱 설치와 권한 허용을 마쳤다. 상대의 말에 대답할 때 그 대답 안에서 한두 문장으로 그 사실을 자연스럽게 확인하고 다음 요구로 이어가라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 설치 절차·권한의 구체적인 작동 방식은 설명하지 마라. 전화를 새로 걸겠다거나 다른 사람이 연락하겠다는 말은 하지 마라.)`
+- 선택 지점 1곳: `roleplay/index.ts:372-373`의 `install_consent` 분기가 그 문서 `landingId`의 `entrySurface`로 두 상수 중 하나를 고른다(순수 함수 `installConsentInstructionFor(item)` — 실시간 응답 · 폴백이 같은 함수 · J-1).
+- 실시간 마킹: 응답에 실은 시점에 `consentAnnouncedAt`을 같은 update로 쓴다(실시간에는 Mock 턴이 없다 — §54 D2 "말하지 않은 예고 마킹" 위험은 폴백 전용). 폴백은 기존 `wasTurnInstructionSpoken` 뒤 마킹 그대로.
+
+#### 83.5.5 리포트
+
+- 설치 응낙 순간(AC-072 · 속은 순간 승격)은 기존 `applyMockScreens`(`generateReportCore.ts:225-233`)가 처리하되, `anchorScammerTurn`이 있으면 시각 해결 없이 그 턴에 붙인다(G580).
+- `deriveReportStages`(`:237-248`)의 `installIntended` = `listAppInstallMockScreens(scenarioId).length > 0`(`:236`)은 Q2 · U7 뒤 **세션과 무관하게 참**이 된다 ⇒ `installIntended`는 "메신저 시작 3단계"일 때만: `resolveSessionEscalation(session) ∧ 메신저 경로 설치 항목 보유`. 통화 시작 세션(Q2)은 3단계 표시를 만들지 않는다(G583).
+
+### 83.6 AC-105 — 참가자가 직접 거는 확인 전화 (UF-015 · T194-C4~C8)
+
+#### 83.6.1 ⭐⭐ D-121 전제 오류 — 재사용할 컨트롤이 없다 (J-5)
+
+| UX 전제 | 코드 실측 | 판정 |
+|---|---|---|
+| *"기존 컨트롤(P-32 — 자리 · 문구 · 보조 문구 무변경) · 표시 조건에 `selfDialEligible` 추가"*(D-121 (1) · `docs/UX.md:4701` · UX-014 v1.38 (5) `:1274`) | ① `src/app/session/play/page.tsx`에 *"직접 확인해 볼게요"* 문자열 **0건**(grep — 남은 곳은 주석 `src/lib/verifyintercept/verifyIntercept.ts:88`과 테스트뿐) ② 테스트가 그 문구의 **부활을 실패로** 단언한다: `verifyCallContinuity.test.ts:194-200` *"V5 — 상시 트리거 컨트롤 문구가 되살아나면 안 된다(컨트롤 완전 제거)"* ③ UX 자신이 `docs/UX.md:3066`에 *"상시 확인 컨트롤 자체는 §49로 이미 삭제됐다 — DECISIONS #84"* 라고 적는다 ④ DECISIONS #84 근거 = 사용자 답 *"상시 노출은 원하는 게 아니다 · 실제 통화와 같은 경험이 아니다"* | **전제 거짓.** 진입 표면을 새로 정해야 한다 — 그것은 UX(표면) · planner/User(#84 · OQ-A43과의 관계)의 몫이다 ⇒ **OQ-A142**. ⛔ architect는 표면을 고르지 않는다 |
+
+architect가 진입 표면에 거는 **조건만**(UX 재판정의 입력):
+1. **존재가 자격과 상관되지 않는다**(R4 — `docs/UX.md:373`): 응낙 세션에만 *나타나는* 요소는 "이번엔 가로채진다"의 힌트다(OQ-U84와 같은 문제). 후보 예: 실제 통화 앱의 컨트롤 그리드에는 빈 칸이 이미 예약돼 있다(`page.tsx:2451-2454` — *"2행 … · 빈 칸. 동작 없는 버튼을 채워 넣지 않는다"*) — 실제 폰의 "통화 추가"류 칸은 **항상** 있는 요소다(⚠️ 후보 제시일 뿐 · 판정은 UX).
+2. X7 — 삭제된 문구 컨트롤을 되살리지 않는다.
+3. 자격이 없는 세션에서의 동작은 OQ-U84(planner → User)가 정한다 — 서버는 자격 없는 세션의 `placeSelfDial`을 **항상 거부**한다(83.6.3).
+
+⇒ **서버 설계(아래)는 진입 표면과 독립이다** — 어떤 표면이든 "참가자가 창구를 골랐다"는 구조화 이벤트 1개로 `placeSelfDial`을 부른다.
+
+#### 83.6.2 §22 재판정 — "T110 이전 형태의 부활"인가
+
+| §22가 "새로 걸기"를 폐기한 근거(`Architecture.md:3093-3096`) | AC-105 self-dial에서 | 판정 |
+|---|---|---|
+| 같은 소켓 · 같은 시스템 프롬프트에서 원 화자가 *"끊지 않고 기다리겠다"* 며 잔류(`:3095`) — 프롬프트 교체 불가(§22.2 A) | self-dial은 **새 연결**이다 — 새 토큰의 `systemInstruction`은 서버가 새로 고정한다(§82.6.1 ①) ⇒ 원 페르소나가 새 leg에 **존재하지 않는다** | 근거가 성립하지 않는다 |
+| 화면의 "안내받은 번호" 은유(`verifyIntercept.ts` A4 · G85) | 창구는 이름만 · 번호 0(X3) · 창구는 사기범이 안내하지 않고 참가자가 고른다 | 해당 없음 |
+| AC-071(사기범이 연결) 경로 | **무변경**(AC-105 (f)) — 호 전환 · 같은 소켓 · `deliverVerifyOffer`/`Reconnect`(`verifyIntercept/index.ts:174-340`) 그대로 | §22는 AC-071에 대해 유효 |
+
+⇒ **§22는 고치지 않는다.** AC-105는 §22의 대상(AC-071)이 아닌 **별개 사건**이고, 그 구현 수단은 §22가 기각한 "같은 소켓 새로 걸기"가 아니라 §82가 조건부 가능으로 판정한 **재연결**이다.
+
+#### 83.6.3 자격 판정 `selfDialEligible` (T194-C4) — 단일 술어 · 서버 소유
+
+`resolveSelfDialEligibility(session, mockScreenDocs, deliveredSms)` (순수 · `functions/src/selfDial/eligibility.ts` 신규):
+
+| # | 조건(전부 참) | 근거 |
+|---|---|---|
+| 1 | `normalizeDifficultyLevel(session.difficultyLevel) === "advanced"` | AC-105 (a) |
+| 2 | `!session.challengeId` | UF-015 Actor(챌린지 0) |
+| 3 | `kind:"app-install"` ∧ `consentedAt` 존재 ∧ `isMockScreenReachable` 참인 `mockScreens` 문서 ≥ 1 | AC-072 응낙 · 구조화 이벤트만(X9) |
+| 4 | `SELF_DIAL_DESKS[session.scenarioId]` 길이 2~3 | UF-015 Failure (b) — 카탈로그 없는 세션에 자격 0 |
+| 5 | `!session.scammerHangup` | 끊기 승인 뒤 새 통화 0(I-4 관례) |
+
+| 쓰는 곳 | 동작 |
+|---|---|
+| `recordMockScreenEvent`(`consented` 처리 직후) | 참이고 `session.selfDial` 부재면 세션 문서 `selfDial: { eligibleAt, desks: [{ deskId, label }] }`를 **mockScreens 갱신과 같은 batch**로 쓴다 · 응답 `selfDial` |
+| `placeSelfDial`(재검증) | 같은 함수를 **다시** 부른다 — 세션 필드만 믿지 않는다(G24 계보 — 위조 호출 방어) |
+| 클라 | 통화 화면 마운트 read(`page.tsx:566`)의 `data.selfDial` + 통화 중 응낙 응답의 `selfDial` — ⛔ 클라가 자격을 계산하지 않는다 |
+
+**창구 카탈로그 `SELF_DIAL_DESKS`**(T194-C5 · 신규 `functions/src/scenarios/selfDialDesks.ts` · 서버 전용):
+
+| 필드 | 제약 |
+|---|---|
+| `deskId` · `label` · `speakerGender` · `deskInstruction` | ⛔ 번호 필드 0 — **모든 필드**를 `Object.entries` 순회로 숫자열 · `tel:` · URL 검사(G86-c 관례 · G569) |
+| 대상 키 | `messenger-subsidy-smishing-sms` · `messenger-parcel-smishing-sms` · `card-delivery-call` · `card-company-impersonation` · `loan-refinance-scam`(응낙이 생길 수 있는 5종) |
+| 라벨 | 그 시나리오의 회사 · 금융사 · 생활 서비스 창구 가상 이름 2~3개 · ⛔ `112` · `1332` · `1301` · 경찰 · 금융감독원 · 검찰 0(D-123 — User 확인 대기 OQ-U85, 확인 전 기본값 = 제외) · 실존 기관명 0(무해화 게이트 대상 등록) |
+| `○○은행` 표기 | 쓰면 세션 가상 은행명으로 치환된다(`applyFictionalBank`) — 의도된 동작(문자 · 대사와 같은 은행) |
+
+#### 83.6.4 새 통화 시작 방식 — **재연결 채택**(⛔ 같은 소켓 지시 주입 기각)
+
+| 방식 | 끊김 → 발신 → 새 통화 표현 | 다른 목소리 | 원 페르소나 잔류 | 판정 |
+|---|---|---|---|---|
+| A. 같은 Live 소켓에 지시 주입(AC-071 방식) | 연출만 가능 · 소켓은 그대로 | ⛔ 불가 — 음성은 토큰에 고정(§22.2 C · Gemini Live 제약) | **있음**(시스템 프롬프트 고정 — §22 폐기 근거 그대로 재현) | 기각 |
+| **B. 재연결(S7 프리미티브 공유)** | 소켓 종료 = `self-dial-hangup` · 새 토큰 대기 = `self-dial-outgoing` · 연결 = 응답 — **1:1 대응** | 가능(목소리 결정 OQ-U86과 **독립** — 같은 목소리를 골라도 방식은 같다) | 없음(새 `systemInstruction`) | **채택** |
+| C. 텍스트 폴백으로 강등 | 화자 라벨만 전환 | 해당 없음 | 없음 | B의 실패 경로로만(UF-015 Failure (a) ①) |
+
+**신규 콜러블 `placeSelfDial`**(신규 `functions/src/selfDial/index.ts` — 파일 폐포 시크릿 목록 상수 사용):
+
+| 단계 | 내용 |
+|---|---|
+| 요청 | `{ sessionId, deskId, callMode: "realtime" \| "fallback", userTurns: number, turns?: TranscriptTurn[] /* 실시간 — 마지막 flush 이후 델타 */, answeredAtMs?: number }` — ⛔ 번호 필드 없음(타입 · X3) |
+| 검증(순서 고정 · G570) | 인증 → 소유 → `assertAnonymousChallengeScope` → `status==="active"` → `resolveSelfDialEligibility` 재계산 → `deskId ∈ SELF_DIAL_DESKS[scenarioId]` → `!scammerHangup` → 시도 수 `< SELF_DIAL_MAX_PLACEMENTS`(=3 · 판단값 · OQ-A146) |
+| 트랜잭션 | 델타를 **`appendMaskedTranscriptTurns`**(S7이 추출하는 코어 — `submitRealtimeTranscript`와 같은 마스킹 append · §82.6.2)로 append → `sessions/{sid}/selfDial/{n}` 생성 `{ deskId, deskLabel, callMode, placedAt, legStartTurnIndex, userTurnsAtPlace }` → 세션 `selfDial.activeAttempt = n` |
+| 프롬프트(실시간 · 폴백 공통 빌더 1개) | `buildSystemPrompt(deskPrompt(desk), { …createRealtimeCall과 같은 발급 옵션 빌더, personaCard, relayHandoff: buildRelayHandoff(…) /* S7 — 서버 마스킹본만 · LLM 요약 0 */, verifyInterceptEnabled: false, offerToolDeclared: false })` |
+| 음성 | `pickRelayVoiceName`(S7 — 이전 leg와 다른 음성) · ⚠️ 다른 목소리 여부 자체는 OQ-U86(User) — 결정 전에는 이 한 줄만 보류하고 나머지는 진행(선행조건은 처방마다) |
+| 도구 | S7 leg 도구 빌더에서 `offer_verification_desk` 제외(G572) · `end_call`은 선언(83.7 2-c행이 막는다) |
+| 응답 | 실시간 `{ attempt, deskLabel, geminiToken, geminiModel, liveTools? }` · 폴백 `{ attempt, deskLabel }` — ⛔ 프롬프트 · 인계문 0(X2 · §82 X2) |
+| 폴백 다음 턴 | `sendMessage`가 `selfDial.activeAttempt`를 읽어 같은 빌더로 조립 · 이력은 `legStartTurnIndex` 이후만 + 인계(§82.6.3 #5와 같은 규칙) · 저장 `messages.speakerLabel = deskLabel`(S7 스키마 재사용 — `Architecture.md:19407`) |
+| 클라 | `<GeminiVoiceSession key={…attempt}>` 재마운트(§82.6.3 #5) · 연결음 최소 2초 · 최대 15초(`RELAY_HOLD_MIN_MS` · `RELAY_HOLD_MAX_MS` — OQ-U70 판정 재사용) · 실패 → 강등 → 불가 시 종료(§82.6.3 #7 · UF-015 Failure (a)) · 대기 중 음성 미전송 |
+
+**창구 지시 `deskInstruction` 공통 꼬리(정본 — 카탈로그마다 복제하지 않고 상수 1벌 · G84 관례)**:
+`너는 '{deskLabel}' 상담원이다. 지금 걸려 온 전화를 받았다. 먼저 창구 이름으로 전화를 받고 무엇을 도와드릴지 묻는다. 상대가 사정을 말하기 전에는 앞서 있었던 일을 먼저 꺼내지 않는다. 상대가 사정을 말하면 앞서 받은 안내가 정상 절차가 맞다고 확인해 주고 같은 요구를 이어간다. 네가 앞선 통화의 사람들과 한편이라는 사실, 이 전화가 어떻게 너에게 왔는지는 어떤 형태로도 말하지 않는다.`
+⚠️ *"먼저 창구 이름으로 받는다"* = 새 화자 선발화 1회 — AC-098(연속 발화) 해석이 OQ-U73 · OQ-A132와 같은 질문이다 ⇒ **OQ-A147**(확정 전 기본값 = UX 권고 선발화. 참가자가 건 전화를 상대가 먼저 받는 것은 실제 전화의 순서다).
+
+#### 83.6.5 한 세션 안의 순서 · 횟수 (OQ-U87 — architect 답)
+
+| # | 상황 | 판정 | 강제 층 |
+|---|---|---|---|
+| O-1 | 자격(응낙) 있음 ∧ AC-071 확인 오퍼 자격도 있음(card-delivery · card-company · loan 고급) | 둘 다 성립한다 — AC-071은 사기범이 시작하고(무변경), AC-105는 참가자가 시작한다. 진입이 다르므로 "탭 우선순위"(UX M-1/M-2)는 진입 표면이 정해진 뒤 UX가 정한다(OQ-A142에 종속) | — |
+| O-2 | self-dial 배치 뒤 | AC-071 오퍼 · 재연결 **영구 비활성** — 새 leg 자격증명에 `verifyOffer` 미부착 · 도구 미선언 · 폴백 `verifyEnabled = hasVerifyIntercept ∧ advanced ∧ !selfDial.activeAttempt`(`roleplay/index.ts:295` 정의 변경). ⛔ 거절 문면(`VERIFY_DECLINE_ALREADY` — *"그 안내는 이미 전달했다"*)을 재사용하지 않는다: 안내한 적 없는 세션에서 거짓이 된다 ⇒ **선언 층에서 끈다** | G572 |
+| O-3 | AC-071 전환(`placedAt`) 뒤 self-dial | 허용 — 참가자가 "연결해 준 창구"를 끊고 자기가 아는 곳에 다시 거는 것은 C04 그대로다 | — |
+| O-4 | AC-071 오퍼가 `announced` 후 미전환인데 self-dial | 허용 · 그 오퍼는 O-2로 소멸(리포트는 "권유됨"으로만 남는다 — 기존 `verifyTimeline` 판정 무변경) | — |
+| O-5 | 릴레이(S7) 진행 중 | 교대 연출 중(클라 `relayTransitionRef`) 진입 무시 · self-dial 배치 뒤 남은 릴레이 leg **취소**: `startRelayLeg`는 `selfDial.activeAttempt`가 있으면 거부 · `resolveHangupRelay`(`scammerHangup/relayContext.ts`)는 그때 `undefined`(창구 leg = 마지막 화자) | G570 · S7 착수 조건 추가 |
+| O-6 | 사기범 끊기(AC-103) | 83.7 | G573 |
+| O-7 | 반복 | 허용 · 최대 3회(OQ-A146) — 4번째는 시트의 기존 오류 줄(*"확인 전화를 연결하지 못했습니다"* — 사실 그대로) | G570 |
+| O-8 | 세션 시간 | 연결음 시간도 통화 경과에 **포함**(AC-007 · §82 OQ-U70 판정) · 화면의 00:00 재시작은 **표시만**(OQ-U86 UX 권고 — 서버 한도는 누적 · `answeredAt` 불변) | — |
+
+#### 83.6.6 리포트 (D-122 · V-1~V-4)
+
+| 입력 | 원천(서버) |
+|---|---|
+| 응답 도달 | `selfDial/{n}` 존재 ∧ `turnIndex ≥ legStartTurnIndex`인 사기범 `messages`(notSpoken 제외) ≥ 1 — ⛔ 클라 `self_dial_answered` 주장값을 쓰지 않는다 |
+| 그 뒤 응낙 | 기존 속은 순간 판정 결과(`mock.deceivedMoments` — `generateReportCore.ts:252` 계보) 중 앵커 turnIndex ≥ `legStartTurnIndex`인 것 ≥ 1 |
+| 상태 | V-1(도달 ∧ 응낙) · V-2(도달 ∧ 응낙 0) · V-3(자격 있음 ∧ 도달 0) · V-4(그 밖) — 순수 함수 `resolveSelfDialReportState` |
+| 문면 | `docs/UX.md:1734-1741` 정본 그대로 신규 `functions/src/report/selfDialCopy.ts` · W-1~W-8(`:1742-1753`) 문자열 게이트(G574) |
+| 이벤트 T194-C7 | `self_dial_desk_chosen`(= `placeSelfDial` 서버 문서) · `self_dial_answered`(= 위 서버 파생) · `self_dial_opened` · `self_dial_abandoned` · `self_dial_failed`(= 클라 구조화 로그 — G432 형식) |
+
+### 83.7 T192 `scammerHangup`과의 상호작용 (T194-C8 · AC-105 (g))
+
+| 변경 | 위치 | 내용 |
+|---|---|---|
+| 판정표 행 신설 **`2-c`** | `functions/src/scammerHangup/decide.ts:98-126` — `2-b` 바로 뒤 · `8` 앞 | `{ row:"2-c", status:"self_dial_pending", hangup:false, when: (i) => i.selfDialAwaitingUser }` |
+| 입력 필수 키 | `ScammerHangupInput`(`:38-73`) | `selfDialAwaitingUser: boolean` = `selfDial.activeAttempt` 존재 ∧ `userTurns ≤ userTurnsAtPlace`(⭐ **필수 키** — 옵셔널이면 호출부 누락이 "대기 없음"으로 조용히 통과 · `:61-63` 관례). 서버 값(세션 문서)만 — 클라 주장값 0 |
+| 호출부 2곳 | 폴백 `roleplay/index.ts:321-334` · 실시간 `requestScammerHangup` | 같은 함수 · 같은 입력 해석(AC-103 (f)) |
+| row 4 정의 | `verifyEnabled` 입력 | O-2의 새 정의(`!selfDial.activeAttempt`)를 **두 호출부가 같이** 쓴다 — 창구 leg에서 *"확인 부서로 넘기기 전 끊기 금지"*(`promptAssembly.ts:207`)가 영원히 막는 상태를 만들지 않는다 |
+| 프롬프트 | 창구 leg의 `hangupMode` | TOOL(선언 시) · `verifyInterceptEnabled:false` ⇒ `HANGUP_RULE_TOOL_VERIFY_SUFFIX` 미부착 |
+| 순서 보증 | — | 실시간: `self-dial-hangup` ~ `outgoing` 동안은 소켓이 없어 `end_call` 자체가 불가(구조) · 창구 첫마디 뒤 참가자 첫 발화 전까지는 2-c가 막는다 ⇒ **T194-C8 "self-dial 시작부터 창구 첫마디까지 끊기 0" 충족 + 참가자 1발화까지 연장**. 끊기 승인(`scammerHangup` 표식) 뒤에는 `placeSelfDial` 거부(83.6.3 #5) ⇒ `remote-hangup`(D-110) 뒤 다시 거는 경로 0(UX 권고와 같다) |
+
+⚠️ G501 · G553(판정표 순서 고정 테스트)은 **행 추가에 맞춰 기대 순서를 갱신**한다(`1 · 2 · 2-b · 2-c · 8 · 3 · 4 · 5 · 6 · 7 · 9`) — 단언 삭제 0(X8).
+
+### 83.8 게이트 목록
+
+| G | 단언 | 테스트 지점 | PR |
+|---|---|---|---|
+| **G559** | `personaCardEligible` 진리표: 전 시나리오 × 3난이도 × {자가 voice · 메신저 · 챌린지}에서 기본 5종 × 고급 × 자가만 참 · `createSession`이 그 경우에만 `personaCard`를 쓴다(역방향 AC-104 (h) ⓓ — 대상 밖에 카드가 붙는 샘플 실패) | `session/__tests__/personaCard.test.ts`(신규) | U1 |
+| **G560** | 클라 입력 경로 0: `createSession` 요청 구조분해에 `personaCard` 없음(AST) · 프롬프트 호출부의 카드 인자는 `session.personaCard` 읽기에서만 온다(역방향 ⓐ — 요청에 `personaCard`를 실은 샘플에서도 저장값 = 서버 빌더 값) | 같음 + 소스 스캔 | U1 |
+| **G561** | 카드 값 풀 무해화: 기존 무해화 게이트(`harmlessnessGate.test.ts` `collectAllSurfaces`)에 풀 등록 · 실존 금융사명 0 · `PLACEHOLDER_PATTERN` 불일치 · 5자리 이상 숫자열 0 · 지역 형식 정규식(`^(광역명) ○○(시\|구)$`) · 카드 은행 ≠ 세션 은행(전 8 × 시드 표본)(역방향 ⓑ — 실존 은행명 카드 샘플 실패) | 같음 · `scenarios/__tests__/harmlessnessGate.test.ts` | U1 |
+| **G562** | 계정 정보 0: `buildPersonaCard` 매개변수 키 = `{sessionId, scenarioId, fictionalBankName}` 고정 · `personaCard.ts` · 카탈로그에 `auth` · `displayName` · `email` · `uid` 식별자 0(역방향 ⓒ — 표시 이름 매개변수를 더한 사본 실패) | 소스 스캔 | U1 |
+| **G563** | 원자성: 카드 있는 세션의 `createRealtimeCall`은 ElevenLabs를 고르지 않는다(`requiresServerPromptProvider` 허용목록 — 키 · 에이전트 맵이 있어도) · S7 병합 뒤에는 릴레이 허용목록과 **같은 상수** | `realtime/__tests__` | U1 |
+| **G564** | 호출부 전수: 프롬프트 조립 지점(J-2 3곳 + leg 발급) 전부가 `personaCard`를 넘긴다(소스 스캔 — G63 · G298 형식) | `roleplay/__tests__/promptAssembly.test.ts` | U1(+S7 · U2) |
+| **G565** | 카드 블록: 위치(확인 안내 뒤 · 난이도 앞 · 가드레일 최후미 불변) · 예외 문장 · *"목록에 없는"* 문장 · *"만날 곳 · 찾아갈 곳 · 돈을 건넬 곳"* 문장 존재 · 부재 시 바이트 동일 · kidnapping 고급 조립에 `IDENTITY_CHECK_HANDLING_FALSE`와 예외 문장이 함께 있다 | 같음 | U1 |
+| **G566** | 첫 언급 판정: `personaMatchTokens` · `resolvePersonaFirstMentions` — 참가자 선발화 항목 제외 · `notSpoken` 제외 · 가림 항목 제외 · 상태 R-1~R-4 진리표 · R-1은 기록 ≥ 1에서만 | `report/__tests__/personaBlock.test.ts`(신규) | U1 |
+| **G567** | 리포트 R 문면 = UX 정본 바이트 동일 · 공통 꼬리 1줄 | 같음 | U1 |
+| **G568** | 자격 술어 진리표(83.6.3 #1~#5) · 쓰는 곳 2곳이 같은 함수 · 응낙 없는 세션의 `placeSelfDial` 거부(역방향 AC-105 (h) ⓐ — 응낙 없는 세션에서 가로채기가 일어나는 샘플 실패) | `selfDial/__tests__`(신규) | U2 |
+| **G569** | 창구 카탈로그: 시나리오당 2~3 · 전 필드 숫자열 · `tel:` · URL 0 · 금지 라벨(112 · 1332 · 1301 · 경찰 · 금융감독원 · 검찰) 0 · 무해화 게이트 등록 · 클라 self-dial 컴포넌트에 번호 입력 칸 · `type="tel"` · 다이얼패드 0(역방향 ⓒ — 번호 입력 UI 샘플 실패) | 같음 + `src` 소스 스캔 | U2 |
+| **G570** | `placeSelfDial` 검증 순서 · 시도 상한 · `scammerHangup` 거부 · 릴레이 취소(`startRelayLeg` 거부 · `resolveHangupRelay` undefined) · 시크릿 선언 목록 등록(`devtools/secretDeclarationScan.ts` 기계 대조) | 같음 · `devtools/__tests__/secretDeclarationGate.test.ts` | U2 |
+| **G571** | 창구 지시 · 인계: W-4 원리 금지어(`docs/UX.md:1748`) 0 · *"한편"* 류 자기 고백 금지 문장 존재 · 인계문은 서버 마스킹본만(G544 재사용) · 응답에 프롬프트 0 · 가드레일 최후미(역방향 ⓓ — 원리 설명 문구 샘플 실패) | 같음 | U2 |
+| **G572** | self-dial 배치 뒤 AC-071 비활성: 새 leg 자격증명 `verifyOffer` 부재 · 도구에 `offer_verification_desk` 부재 · 폴백 `verifyEnabled` 거짓 · `VERIFY_DECLINE_*` 문면 미사용 | 같음 | U2 |
+| **G573** | 끊기 판정표 `2-c` 행 · 필수 키 · 순서(`1 · 2 · 2-b · 2-c · 8 · …`) · 두 호출부 같은 입력 해석(G501 · G553 기대값 갱신) | `scammerHangup/__tests__` | U2 |
+| **G574** | 리포트 V-1~V-4 진리표(서버 파생 입력만) · V 문면 UX 정본 바이트 동일 · W-3 금지 문자열(`112도` · `1332도` · `공식 번호도` · `어디에 걸어도` · `확인해도 소용` …) · W-4 원리어 0 · W-6(*"이미 알고 있는 번호"* 단독 대처 0)(역방향 ⓑ 교훈 없는 리포트 · ⓓ 원리 · ⓔ *"112도 믿지 마라"* 샘플 실패) | `report/__tests__/selfDialReport.test.ts`(신규) | U2 |
+| **G575** | 실제 발신 0: `placeSelfDial` 요청 · 응답 타입에 번호 필드 없음(타입 단언) · 클라 self-dial 경로에 `tel:` · `sms:` · `window.open` · `location.href` 0 | 소스 스캔 | U2 |
+| **G576** | 에스컬레이션 술어 단일 지점: `PUBLIC_SCENARIOS[…]?.escalation` · `scenario.escalation` 직접 읽기는 허용목록(S-6 · C-5 · 술어 구현 자신)에서만 · 서버 · 클라 구현이 전 시나리오 × 3난이도에서 같은 값 · `startNoticeGate.test.ts:270-298` 리터럴을 새 술어로 대체(내용 동치) | `scenarios/__tests__/escalation.test.ts`(신규) · `src/lib/sessionboundary/startNoticeGate.test.ts` | U7 |
+| **G577** | AC-106 (i) — 83.4.5 ①~③ + 역방향 ⓓ | `scenarios/__tests__/flowVariants.test.ts` | U7 |
+| **G578** | 도달 술어: parcel 초급 · 중급의 `parcel-install` 응낙 요청 거부 · 도달 불가 `app-install` 링크 마커 강등(경고 로그) · `recordMockScreenEvent` 검증 순서 ⑤ · 통화 중 항목은 문자 도착 없이 거부(역방향 AC-106 (h) ⓐ) | `mockScreens/__tests__` · `roleplay/__tests__/linkMarker.test.ts` | U7(메신저) · Q2(통화) |
+| **G579** | G-A 대체: `in-call-sms ∧ app-install`은 `IN_CALL_INSTALL_SCENARIOS`에서만 · 그 항목을 가리키는 `IN_CALL_SMS` 항목은 고급 변형에서만 선언(전 변형 순회) · R6 단언(`IN_CALL_SMS.fakeLandingId ∉ app-install`)도 같은 허용목록으로 대체 · `MockScreenKind` 2값 고정(역방향 AC-106 (h) ⓑ — 신규 kind 샘플 실패 · 허용목록 밖 시나리오의 통화 중 설치 샘플 실패) | `scenarios/__tests__/mockScreens.test.ts` · `inCallSms.test.ts` | Q2 |
+| **G580** | 통화 중 응낙 앵커: 통화 중 `app-install` 문서는 `anchorScammerTurn` 필수(요청에 `callMode` 없으면 거부) · 리포트가 그 값을 쓰고 시각 해결을 타지 않는다 · G81 대체(통화 경로 `recordMockScreenEvent`는 `app-install`만) | `mockScreens/__tests__` · `report/__tests__/mockScreenTimeline.test.ts` | Q2 |
+| **G581** | 응낙 지시: 통화 중 항목 → `IN_CALL_INSTALL_CONSENT_INSTRUCTION`(*"전화로 이어서"* 0) · 메신저 항목 → 기존 상수 · 선택 함수 1개 · 폴백 우선순위 표(`fallbackTurn.ts:52-67`)를 Q2 3종 조합으로 전수(비공유 단언 대체) · 무해화 게이트 · 마커 낱말 게이트(`promptMarkerWords.test.ts`)에 새 상수 등록 | `verifyIntercept/__tests__` · `roleplay/__tests__` | Q2 |
+| **G582** | parcel 고급 프롬프트: leg0 페르소나에 `[[LINK:parcel-install]]` · `[[SIGNAL:ESCALATE_VOICE]]` 규칙 · *"순수 문자"* 문장 0 · 가드레일 제어 토큰 항 · 초급 · 중급 조립 바이트 = 기대값(가드레일 1항 외 무변경) · 화자 성별 세션 해석(초급 · 중급 [화자] 블록 0) | `roleplay/__tests__/promptAssembly.test.ts` · `smsGate.test.ts` | U7 |
+| **G583** | 단계 파생: `installIntended` · `voiceIntended`가 세션 술어 · 통화 시작 세션(Q2)에 3단계 표시 0 · parcel 초급 · 중급에 설치 단계 "미도달" 표기 0 | `report/__tests__/mockScreenTimeline.test.ts` | U7(+Q2) |
+
+**AC 역방향 대응(같은 실행 출력 요구)**: AC-104 (h) ⓐ~ⓓ = G560 · G561 · G562 · G559 / AC-105 (h) ⓐ~ⓔ = G568 · G574 · G569 · G571+G574 · G574 / AC-106 (h) ⓐ~ⓒ + (i) ⓓ = G578 · G579 · G54 재사용 · G577.
+
+### 83.9 진행 중 작업과의 파일 겹침
+
+| 파일 | PR-A1(공회전) | PR-A2(Live 클라) | D-115 | S7 | T194 쓰는 PR | 판정 |
+|---|---|---|---|---|---|---|
+| `functions/src/roleplay/promptAssembly.ts` | ●([진행 강제] · SMS 템플릿) | | | ●(인계 블록 옵션) | U1(카드 옵션 · 블록) · U2(창구 빌더 옵션 재사용) | **충돌 높음** — 같은 옵션 타입 · 같은 조립 배열(`:759-794`). PR-A1 뒤 |
+| `functions/src/scenarios/inCallSms.ts` | ● | | (buildDoc만) | | Q2(설치 문자 3 · 카탈로그 키 1) | 충돌 중간(배열 끝 append) · PR-A1 뒤 |
+| `functions/src/inCallSms/smsGate.ts` | ● | | | ●(델타) | Q2(변경 0 권고 — 목적 신설 기각) | 낮음 |
+| `functions/src/verifyIntercept/fallbackTurn.ts` | ● | | | | Q2(테스트 · 주석) · U2(`verifyEnabled` 입력은 호출부) | 중간 · PR-A1 뒤 |
+| `loanScam` · `cardDeliveryCall` 프롬프트 | ● | | | | Q2(설치 문자 언급 콘텐츠가 필요하면) | 중간 — Q2 콘텐츠는 변형 `stages`로 넣고 원본 프롬프트는 건드리지 않는 것을 권고 |
+| `bankSecurityVerifyScam` 프롬프트 | ● | | | | 없음 | 무 |
+| `src/lib/realtime/GeminiVoiceSession.tsx` | | ● | | ●(재마운트) | U2(재마운트) · Q2(응낙 지시 주입) | **충돌 높음** — S7 · U2가 같은 재마운트 패턴. PR-A2 → S7 → U2 |
+| `src/app/session/play/page.tsx` | | ● | ●? | ● | U1(카드 prop) · Q2(통화 중 설치 랜딩 응낙 → 주입) · U2(진입 · 상태) | **충돌 높음** — 모든 클라 PR이 지나는 파일 |
+| `src/components/InCallSmsOverlay.tsx` | | | ●(랜딩 미리 채움 — 추정) | | Q2(`app-install` 보기) | 중간 · D-115 뒤 |
+| `src/components/CallStartNotice.tsx` | | | | | U1 | 무 |
+| `functions/src/scenarios/flowVariants.ts` | | | | ●(`resolveVariantPrompt` leg) | U7(parcel · subsidy 플래그 · leg persona) · Q2(sms 3벌) | 중간 — `resolveVariantPrompt` 1줄을 S7 · U7이 둘 다 쓴다(먼저 오는 쪽이 넣고 뒤는 재사용) |
+| `functions/src/roleplay/index.ts` | | | | ●(폴백 교대) | U7(S-3 · 링크 강등) · Q2(응낙 지시 선택) · U1(카드 옵션) · U2(창구 leg · `verifyEnabled` · 2-c 입력) | **충돌 높음**(T194 내부 4PR + S7) |
+| `functions/src/realtime/index.ts` · `geminiProvider.ts` | | | | ● | U1(라우팅 · 옵션) · U7(화자 성별) | 중간 |
+| `functions/src/scammerHangup/decide.ts` · `relayContext.ts` | | | | ●(I-4) | U2 | 중간 · S7 뒤 |
+| `functions/src/session/index.ts` | | | | | U1(카드 · id 선확정) · U7(S-1 · S-2) | T194 내부 |
+| `functions/src/mockScreens/index.ts` · `scenarios/mockScreens.ts` · `linkMarker.ts` | | | | | U7 · Q2 | T194 내부 — U7 먼저 |
+| `src/content/scenarios/*` · `difficulty` · `messenger` · `voice-select` 페이지 | | | | | U7 | 무 |
+| `functions/src/report/generateReportCore.ts` · `mockScreenTimeline.ts` | | | | ●(화자 라벨?) | U7 · Q2 · U1 · U2 | T194 내부 — 블록마다 다른 줄 |
+
+⚠️ PR-A1 · PR-A2 · D-115 · S7의 파일 목록은 인계값과 이 트리 grep(S7 = `Architecture.md:19745`)에 근거한다 — 실제 브랜치 diff는 미대조(확인: 각 브랜치 `git diff --stat main...`).
+
+### 83.10 구현 PR 분할 · 병합 순서
+
+**판정: 지시의 "U7+Q2 / U1 / U2" 순서는 부분 채택 — Q2를 U7에서 떼어 U1 뒤로 둔다.**
+
+| 근거 | 내용 |
+|---|---|
+| ① 겹침이 다르다 | U7은 PR-A1 · PR-A2 파일을 거의 건드리지 않는다(83.9 — `promptAssembly.ts` · `inCallSms.ts` · `page.tsx` 0). Q2는 `inCallSms.ts` · `fallbackTurn.ts`(PR-A1) · `page.tsx` · `GeminiVoiceSession.tsx`(PR-A2) · `InCallSmsOverlay.tsx`(D-115)를 지난다 |
+| ② 위험 등급이 다르다 | Q2는 하드 게이트 3개(R6 · G-A · G81)의 대체다 — §19 G75 순서 강제(*"게이트 먼저, 콘텐츠 나중"*)를 따르려면 독립 PR이 리뷰하기 쉽다 |
+| ③ Q2의 존재 이유는 U2다 | Q2가 만드는 응낙은 AC-105 발동 조건이다. U2 없이 Q2만 병합돼도 동작 손실은 없지만(설치 순간 카드는 기존 AC-072로 성립) U7과 묶을 이유도 없다 |
+
+| 순서 | PR | 범위 | 선행 | 게이트 |
+|---|---|---|---|---|
+| 1 | **T194-a (U7)** | 83.4 전부 · 도달 술어(메신저 쪽) | 없음 — PR-A1과 **병렬 가능** · S7과는 `resolveVariantPrompt` 1줄만 겹침 | G576 · G577 · G578(메신저) · G582 · G583 |
+| 2 | PR-A1 병합 | — | — | — |
+| 3 | **T194-b (U1)** | 83.3 전부 | PR-A1(`promptAssembly.ts`) · ⚠️ OQ-A145 답(kidnapping 예외) — 답 전에는 kidnapping을 상수에서 빼고 4종으로 진행 가능 | G559~G567 |
+| 4 | PR-A2 · D-115 병합 | — | — | — |
+| 5 | **T194-c (Q2)** | 83.5 전부 | PR-A1 · PR-A2 · D-115 · T194-a(도달 술어) · OQ-A143 · OQ-A144 | G578(통화) · G579 · G580 · G581 |
+| 6 | S7 병합 | — | OQ-A131 | G544~G548 · G550 · ⭐ 착수 조건 추가: O-5 · G570 일부 |
+| 7 | **T194-d (U2)** | 83.6 · 83.7 | S7(공유 코어) · T194-c · **OQ-A142(진입 표면 — UX)** · OQ-U86(목소리 1줄만) · OQ-A147 | G568~G575 · G573 |
+
+⚠️ S7이 오래 지연되면: U2가 코어(`appendMaskedTranscriptTurns` · 인계 빌더 · leg 발급 빌더)를 **먼저 추출**하고 S7이 그 위에 올라탄다(코어 두 벌 금지). 어느 쪽이 먼저든 **코어는 1벌**이다.
+⚠️ 3(U1)과 5(Q2)는 서로 겹침이 작아(`roleplay/index.ts`의 다른 블록 · `generateReportCore.ts`의 다른 블록) 순서를 바꿔도 된다.
+
+### 83.11 열린 질문
+
+| OQ | 질문 | 담당 | 막는 것 | 확정 전 기본값 |
+|---|---|---|---|---|
+| **OQ-A142** | AC-105 진입 표면 — D-121이 재사용하려던 *"직접 확인해 볼게요"* 컨트롤은 §49 V5로 삭제됐다(83.6.1). 새 표면은 무엇이며, DECISIONS #84 · OQ-A43(사용자 *"실제 통화와 같은 경험이 아니다"*)과 어떻게 양립하는가. 자격 없는 세션의 동작(OQ-U84)과 한 묶음 | ux-design → planner → User | T194-d 클라 진입(서버는 무관) | 없음 — 진입 구현 0 |
+| **OQ-A143** | loan 고급 변형의 `link` 슬롯을 신청서 링크(credential)에서 설치 링크로 교체해도 되는가(대안 = 문자 목적 신설 — 비권고) | planner | T194-c loan 1종 | 교체(권고) — 확정 전에는 card-delivery · card-company 2종만 |
+| **OQ-A144** | Q2 설치 문자를 `required:true`(백스톱 강제)로 두는가 — `false`면 S1 실측상 사실상 0통 | planner → User | T194-c 발동률 | `true` |
+| **OQ-A145** | 카드 세션에 한해 §50.4.4(신고 ⑩ⓐ — 이름 단정 금지)를 뒤집는 것을 확인하는가(kidnapping 고급 · 그 밖 4종은 institution이라 `IDENTITY_CHECK_HANDLING_TRUE`가 이미 *"○○○님 맞으시죠?"* 를 허용) | planner → User | T194-b kidnapping 1종 | kidnapping 제외 4종으로 진행 |
+| **OQ-A146** | self-dial 시도 상한 3회(판단값 — 시도마다 새 Live 연결) | architect(라이브 뒤 확정) | 없음 | 3 |
+| **OQ-A147** | 창구 상담원의 첫마디 선발화 — AC-098(연속 발화 제거)과의 관계는 OQ-U73 · OQ-A132와 같은 질문 | planner | T194-d 연결 직후 1턴 | 선발화(UX 권고) |
+| (의존) | OQ-A131(ElevenLabs 라우팅 회피 수용 — G563 · O-5와 같은 질문) · OQ-A136(음성 풀 확장) · OQ-U86(목소리) · OQ-U80/U81/U85/U90/U91(User — 상수 · 카탈로그 값만 바뀐다) | — | — | 각 기본값 |
+
+**UX 열린 질문 중 architect 몫의 답(⛔ Status 변경은 ux-design 몫)**: OQ-U82 → 83.3.2 항목 형식(UX 권고 + planner 의견 그대로) · OQ-U83 → 83.3.6(서버 대조 · 불가 시 R-2) · OQ-U86(연결 · 한도) → 83.6.4 재연결 · 83.6.5 O-8 · OQ-U87 → 83.6.5 · 83.7.
+
+### 83.12 하류 요청 · 편집 범위
+
+| 문서 | 요청 | 담당 |
+|---|---|---|
+| `docs/UX.md` | ① **D-121 (1) · UX-014 v1.38 (5) · UF-015 Trigger의 전제 정정**(83.6.1 — 컨트롤 부재) + OQ-A142 표면 재판정 ② OQ-U82 · U83 · U86(연결 · 한도) · U87 Status(위 답) ③ UF-012 v1.38 E-2(설치 화면 중 전이 신호)는 지원금 경로 그대로 탄다 — 확인됨(83.4.3) | ux-design |
+| `docs/PRD.md` | OQ-A143 · A144 · A145 · A147 판정 · AC-105 (a) *"모의 설치 화면이 있는 시나리오는 지원금 1종"* 은 T194-a · c 뒤 낡는다(고지) | planner |
+| `docs/DECISIONS.md` | 신규 행 초안(다음 미사용 번호 — 이 트리 최대 #175 ⇒ #176~ 후보 · 병합 순서로 확정): ① 에스컬레이션 (시나리오 × 난이도) 술어 · 공개 메타 `advancedEscalation` ② Q2 — R6 · G-A · G81 허용목록 대체 · 명시 앵커 ③ self-dial = 재연결(S7 코어 공유) · §22 무변경 · 배치 뒤 AC-071 선언 층 비활성 · ADR-0022 ④ 카드 = 세션 문서 전달 · 은행 ≠ 세션 은행 · 첫 언급 = 리포트 시 서버 대조 | architect(다음 패스) — 이번 지시가 편집 대상을 Architecture · Database · API · ADR로 한정했다 |
+| `docs/API.md` · `docs/Database.md` | `placeSelfDial` 신설 · `recordMockScreenEvent` 요청/응답 증분 · `SessionDoc.personaCard` · `selfDial` · `sessions/{sid}/selfDial/{n}` · `MockScreenDoc.anchorScammerTurn` · 리포트 `personaBlock` · self-dial 상태 · 공개 메타 `advancedEscalation` | 구현 패스(§82.13 관례 — 필드명이 구현에서 확정된 뒤 같은 PR) |
+| `docs/Tasks.md` | T194를 a~d 4행으로 분할 · 선행(83.10) · S7 착수 조건에 O-5 | planner |
+| `docs/Architecture.md` 헤더 `:5` | 버전 갭 — 이 패스 범위 밖 | architect |
+
+> **번호**: §83 · G559~G583 · OQ-A142~A147 · ADR-0022 — 이 트리 = 메인 체크아웃 최대 §82 · G558 · OQ-A141 · ADR-0021 다음. ⛔ 예약 아님 — 병합 순서로 확정.
