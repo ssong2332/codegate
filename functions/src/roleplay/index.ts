@@ -42,6 +42,7 @@ import {
   type FallbackHangupFacts,
 } from "../scammerHangup/fallback";
 import { resolveHangupRelay } from "../scammerHangup/relayContext";
+import { isVerifyTransferReachable, type VerifyOfferDocState } from "../scammerHangup/transferReach";
 import { pickFallbackTurnInstruction } from "../verifyIntercept/fallbackTurn";
 import { announcedVerifyAnchor } from "../verifyIntercept/buildDoc";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
@@ -297,10 +298,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const scammerDocCount = scammerTurnNumber - 1;
     let verifyOfferRef: FirebaseFirestore.DocumentReference | undefined;
     let verifyState: { announced: boolean; placed: boolean; reconnectAnchorScammerTurn?: number } | undefined;
+    // T192 C6-R(§79.20 (3) ③) — 오퍼 문서 상태(끊기 4행 입력). 읽지 않았거나(verifyItem 없음) 실패하면 `unknown`(막는 쪽).
+    let verifyOfferDoc: VerifyOfferDocState = "unknown";
     if (verifyItem) {
       try {
         verifyOfferRef = sessionRef.collection("verifyIntercept").doc(verifyItem.offerId);
         const verifySnap = await verifyOfferRef.get();
+        verifyOfferDoc = verifySnap.exists ? "present" : "absent";
         if (verifySnap.exists) {
           verifyState = {
             announced: Boolean(verifySnap.get("announcedAt")),
@@ -324,6 +328,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       verifyEnabled,
       // 조회 실패(`verifyState` 부재)는 전환 전으로 본다 — 4행 fail-closed.
       transferPlaced: verifyState?.placed === true,
+      // T192 C6-R(OQ-A150 (가)) — 폴백 계열 B ∧ 오퍼 문서 없음(읽기 성공)일 때만 false(서버 값만 · 클라 값 0).
+      transferReachable: isVerifyTransferReachable({
+        path: "fallback",
+        scenarioId: session.scenarioId,
+        offerDoc: verifyOfferDoc,
+      }),
       userTurns: userTurnsNow,
       limitReached,
       alreadyAccepted: Boolean(session.scammerHangup),

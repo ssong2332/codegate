@@ -101,3 +101,4 @@
 - [T192 C2 끊기 규칙 슬롯](project_codegate_t192_c2_hangup_slot.md) — ⭐ F11 검출기가 정본 "첫째·둘째·이번"을 문다(정확 일치 허용 목록), 축은 운영 짝으로만 곱함, 템플릿 바이트 동일 증명.
 - [T192 C3 끊기 서버 배선](project_codegate_t192_c3_hangup_server.md) — ⭐ 폴백 판정 순수 모듈화, C3 단독 배포 시 Live end_call unsupported 위험, S5b 도구 테스트 메신저 범위 재지정.
 - [T192 C5 공통 종료 함수](project_codegate_t192_c5_call_ending.md) — ⭐ effect가 뒤 정의 함수 호출 시 컴파일러 lint error(블록 이동), UX vs E5/E6 순서 판단, node -e 백슬래시 소실.
+- [T192 C6-R transferReachable](project_codegate_t192_c6r_transfer_reach.md) — ⭐ 부분 문자열 스캔 함정, `}): boolean {` 본문 자르기, tsc에 먼저 잡히는 프로브, LF 파일 앵커.

@@ -47,6 +47,12 @@ export type ScammerHangupInput = {
   /** `verifyIntercept` 문서에 `placedAt`이 있는가(호 전환 완료). */
   transferPlaced: boolean;
   /**
+   * ⭐ T192 C6-R(§79.20 (3) · OQ-A150 (가)) — 전환이 **이 경로에서** 일어날 수 있는가(`transferReach.ts`
+   * `isVerifyTransferReachable` — 서버 값만). `false`인 칸은 폴백 ∧ 계열 B ∧ 오퍼 문서 없음 하나뿐이다.
+   * ⭐ 옵셔널이 아니라 필수 키(빠뜨리면 컴파일 오류).
+   */
+  transferReachable: boolean;
+  /**
    * 사용자 발화 수(이번에 답하려는 발화 포함). 폴백 = 서버 `userTurnsNow` · 실시간 = **클라 주장값**(OQ-A120 —
    * S5b `deliverInCallSms`와 같은 등급 · 같은 판독 규칙 `readScammerHangupRequest`).
    */
@@ -105,7 +111,8 @@ export const SCAMMER_HANGUP_RULES: readonly ScammerHangupRule[] = [
     row: "4",
     status: "blocked_transfer",
     hangup: false,
-    when: (i) => i.verifyEnabled && !i.transferPlaced,
+    // T192 C6-R — 전환이 이 경로에서 가능한데 아직 안 됐을 때만 막는다(열릴 길이 0인 칸은 다음 행으로).
+    when: (i) => i.verifyEnabled && !i.transferPlaced && i.transferReachable,
   },
   {
     row: "5",

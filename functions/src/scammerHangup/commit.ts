@@ -12,6 +12,7 @@ import type { ScammerHangupKind, ScammerHangupMarker, SessionDoc } from "../shar
 import { decideScammerHangup, type ScammerHangupDecision } from "./decide";
 import { resolveHangupRelay } from "./relayContext";
 import { isSmsAwaitingUser } from "./smsWait";
+import { isVerifyTransferReachable, type VerifyOfferDocState } from "./transferReach";
 
 /** 이 모듈이 쓰는 Firestore 트랜잭션의 최소 면(가짜 구현으로 테스트할 수 있게). */
 export type HangupDocSnapshot = { exists: boolean; data(): unknown };
@@ -60,6 +61,8 @@ export async function decideAndMarkRealtimeHangup<Ref>(
       isMockTurn: false,
       verifyEnabled: false,
       transferPlaced: false,
+      // 세션 부재 = 1행이 이긴다(값 무의미 · 막는 쪽).
+      transferReachable: true,
       userTurns: claims.userTurns,
       pendingInstruction: claims.pendingInstruction,
       smsAwaitingUser,
@@ -70,10 +73,12 @@ export async function decideAndMarkRealtimeHangup<Ref>(
   }
   const verifyEnabled = isVerifyInterceptSession(session);
   let transferPlaced = false;
+  let offerDoc: VerifyOfferDocState = "unknown";
   if (verifyEnabled) {
     const verifyRef = refs.verifyOffer(session.scenarioId);
     if (verifyRef !== undefined) {
       const verifySnap = await tx.get(verifyRef);
+      offerDoc = verifySnap.exists ? "present" : "absent";
       const verifyData = (verifySnap.exists ? verifySnap.data() : undefined) as { placedAt?: unknown } | undefined;
       transferPlaced = Boolean(verifyData?.placedAt);
     }
@@ -84,6 +89,8 @@ export async function decideAndMarkRealtimeHangup<Ref>(
     isMockTurn: false,
     verifyEnabled,
     transferPlaced,
+    // T192 C6-R — 실시간 경로는 진리표 1행(항상 true · 동작 변화 0). 같은 함수를 부른다(판정 지점 하나 — G588).
+    transferReachable: isVerifyTransferReachable({ path: "realtime", scenarioId: session.scenarioId, offerDoc }),
     userTurns: claims.userTurns,
     pendingInstruction: claims.pendingInstruction,
     smsAwaitingUser,

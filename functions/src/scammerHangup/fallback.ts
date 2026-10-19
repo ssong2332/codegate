@@ -18,6 +18,8 @@ export type FallbackHangupFacts = {
   verifyEnabled: boolean;
   /** `verifyState?.placed === true` — 조회 실패(`undefined`)는 전환 전으로 본다(4행 fail-closed). */
   transferPlaced: boolean;
+  /** T192 C6-R — `isVerifyTransferReachable({ path: "fallback", … })`(서버 값만 · 읽기 실패 = `unknown` → true = 막는 쪽). */
+  transferReachable: boolean;
   /** `userTurnsNow`(S5b 문자 게이트와 같은 변수 — G552 ⓒ). */
   userTurns: number;
   /** 턴 확보 트랜잭션 값으로 LLM 전에 계산한 한도(§79.19 (5) 10 — 옛 79.7 1의 `limitReached:false` 정정). */
@@ -70,6 +72,7 @@ export function decideFallbackHangup(
     isMockTurn,
     verifyEnabled: facts.verifyEnabled,
     transferPlaced: facts.transferPlaced,
+    transferReachable: facts.transferReachable,
     userTurns: facts.userTurns,
     pendingInstruction: false,
     smsAwaitingUser: fallbackSmsAwaitingUser(facts, delivered),

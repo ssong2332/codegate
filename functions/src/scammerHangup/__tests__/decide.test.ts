@@ -25,6 +25,8 @@ const PASSING: ScammerHangupInput = {
   isMockTurn: false,
   verifyEnabled: false,
   transferPlaced: false,
+  // T192 C6-R — 기준 입력은 "전환이 이 경로에서 가능"(옛 판정과 같은 쪽).
+  transferReachable: true,
   userTurns: SCAMMER_HANGUP_MIN_USER_TURNS,
   pendingInstruction: false,
   smsAwaitingUser: false,
@@ -171,7 +173,7 @@ function nineRowStatusNewOrder(i: ScammerHangupInput): ScammerHangupStatus {
   if (i.channel === "messenger") return "wrong_channel";
   if (i.alreadyAccepted) return "already_accepted";
   if (i.isMockTurn) return "mock_turn";
-  if (i.verifyEnabled && !i.transferPlaced) return "blocked_transfer";
+  if (i.verifyEnabled && !i.transferPlaced && i.transferReachable) return "blocked_transfer";
   if (i.userTurns < SCAMMER_HANGUP_MIN_USER_TURNS) return "too_early";
   if (i.pendingInstruction || i.smsAwaitingUser) return "blocked_pending";
   if (i.limitReached) return "limit_reached";
@@ -185,18 +187,19 @@ function* allInputs(relay: ScammerHangupInput["relay"]): Generator<ScammerHangup
       for (const isMockTurn of bools)
         for (const verifyEnabled of bools)
           for (const transferPlaced of bools)
+            for (const transferReachable of bools)
             for (const userTurns of [0, 2, 3, 9])
               for (const pendingInstruction of bools)
                 for (const smsAwaitingUser of bools)
                   for (const limitReached of bools)
                     for (const alreadyAccepted of bools)
                       yield {
-                        status, channel, isMockTurn, verifyEnabled, transferPlaced, userTurns,
+                        status, channel, isMockTurn, verifyEnabled, transferPlaced, transferReachable, userTurns,
                         pendingInstruction, smsAwaitingUser, limitReached, alreadyAccepted, relay,
                       };
 }
 
-const INPUT_COMBOS = 3 * 3 * 2 * 2 * 2 * 4 * 2 * 2 * 2 * 2;
+const INPUT_COMBOS = 3 * 3 * 2 * 2 * 2 * 2 * 4 * 2 * 2 * 2 * 2;
 
 test("[G526 ⓐ] relay 부재 · 마지막 leg — 전 입력 조합에서 새 순서 9행 판정과 같다(회귀 0)", () => {
   let n = 0;
@@ -362,12 +365,12 @@ test("[G552 ⓓ 역검증] 옛 식별자를 끼운 요청 타입 사본은 같�
   assert.equal(/\buserTurns: number;/.test(poisoned), false);
 });
 
-// ── T192 C6 · G592(Architecture.md §79.20 (11)) — 판정 입력 키 집합 정확 일치(C6-F 시점 = 현행 11키) ─────────────────
+// ── T192 C6 · G592(Architecture.md §79.20 (11)) — 판정 입력 키 집합 정확 일치(C6-R 뒤 = 12키) ─────────────────────────
 // AC-103 (a) "시간 · 소강으로 끊지 않는다" · §79.20 (0) 6 "목적 달성 사실은 판정 입력 아님"을 기계로 고정한다 —
-// 사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 키가 들어오면 빨개진다. ⚠️ C6-R(`transferReachable`)이 들어오면 12키로 바꾼다.
+// 사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 키가 들어오면 빨개진다. C6-R이 `transferReachable`(서버 값) 1키를 더했다.
 const G592_KEYS = [
   "alreadyAccepted", "channel", "isMockTurn", "limitReached", "pendingInstruction", "relay",
-  "smsAwaitingUser", "status", "transferPlaced", "userTurns", "verifyEnabled",
+  "smsAwaitingUser", "status", "transferPlaced", "transferReachable", "userTurns", "verifyEnabled",
 ];
 
 /** `export type ScammerHangupInput = { … };` 블록의 최상위 키(주석 제거). */
@@ -378,7 +381,7 @@ function inputTypeKeys(src: string): string[] {
   return [...body.matchAll(/^\s*(\w+)\??:/gm)].map((m) => m[1]!).sort();
 }
 
-test("[G592] ScammerHangupInput 키 집합 = 정확히 11키(사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 0)", () => {
+test("[G592] ScammerHangupInput 키 집합 = 정확히 12키(사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 0)", () => {
   const src = readFileSync(path.join(SRC_DIR, "decide.ts"), "utf8").replace(/\r\n/g, "\n");
   assert.deepEqual(inputTypeKeys(src), G592_KEYS);
   assert.deepEqual(Object.keys(PASSING).sort(), G592_KEYS, "기준 입력과 타입 키가 갈렸다");
@@ -389,4 +392,32 @@ test("[G592 역검증] 키를 하나 더한 타입 사본은 같은 판정식에
   const poisoned = src.replace("  userTurns: number;\n", "  userTurns: number;\n  elapsedMs: number;\n");
   assert.notEqual(poisoned, src, "주입 앵커가 없다");
   assert.notDeepEqual(inputTypeKeys(poisoned), G592_KEYS);
+});
+
+// ── T192 C6-R · G588(Architecture.md §79.20 (3) · (11)) — 4행 조건 ─────────────────────────────────────────────────
+test("[G588 · 4행] transferReachable=false면 verifyEnabled ∧ !transferPlaced여도 다음 행으로 · true면 blocked_transfer(옛 판정과 같음)", () => {
+  const blockedInput = { ...PASSING, verifyEnabled: true, transferPlaced: false };
+  assert.deepEqual(decideScammerHangup({ ...blockedInput, transferReachable: true }), { status: "blocked_transfer", hangup: false, row: "4" });
+  assert.deepEqual(decideScammerHangup({ ...blockedInput, transferReachable: false }), { status: "accepted", hangup: true, row: "9" });
+  // 다음 행들은 그대로 막는다 — 4행만 비켜선다.
+  assert.equal(decideScammerHangup({ ...blockedInput, transferReachable: false, userTurns: 1 }).status, "too_early");
+  assert.equal(decideScammerHangup({ ...blockedInput, transferReachable: false, smsAwaitingUser: true }).status, "blocked_pending");
+  assert.equal(decideScammerHangup({ ...blockedInput, transferReachable: false, limitReached: true }).status, "limit_reached");
+  // 전환이 끝났으면(placed) 값과 무관 · 확인 무력화 세션이 아니면 값과 무관(옛 판정).
+  for (const transferReachable of [true, false]) {
+    assert.equal(decideScammerHangup({ ...PASSING, verifyEnabled: true, transferPlaced: true, transferReachable }).status, "accepted");
+    assert.equal(decideScammerHangup({ ...PASSING, verifyEnabled: false, transferReachable }).status, "accepted");
+  }
+});
+
+test("[G588 · 회귀 0] transferReachable=true인 전 입력에서 판정이 C6-R 전 4행(verifyEnabled ∧ !transferPlaced)과 같다", () => {
+  const before = (i: ScammerHangupInput): ScammerHangupStatus =>
+    nineRowStatusNewOrder({ ...i, transferReachable: true });
+  let n = 0;
+  for (const input of allInputs(undefined)) {
+    if (!input.transferReachable) continue;
+    assert.equal(decideScammerHangup(input).status, before(input), JSON.stringify(input));
+    n += 1;
+  }
+  assert.equal(n, INPUT_COMBOS / 2);
 });
