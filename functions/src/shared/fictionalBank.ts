@@ -95,7 +95,8 @@ export function fictionalOrgNamesFor(bankName: string): { cardName: string; capi
 const PLACEHOLDER_PATTERN = /[Oo○Ｏｏ]{2}\s?은행/g;
 /** §83 — 카드사·캐피탈 자리표시자("○○카드"·"○○캐피탈" 및 같은 표기 변형). 실명 가드레일의 "OO카드" 출력도 여기서 바뀐다. */
 const CARD_PLACEHOLDER_PATTERN = /[Oo○Ｏｏ]{2}\s?카드/g;
-const CAPITAL_PLACEHOLDER_PATTERN = /[Oo○Ｏｏ]{2}\s?캐피탈/g;
+// 리뷰 Minor #2 — 표준어 표기 "캐피털"도 잡는다.
+const CAPITAL_PLACEHOLDER_PATTERN = /[Oo○Ｏｏ]{2}\s?캐피[탈털]/g;
 
 /** 텍스트에 가상 **은행** 자리표시자가 있는가(문자 문서 `bankName` 필드 판정용 — 카드·캐피탈 자리표시자는 세지 않는다). */
 export function hasBankPlaceholder(text: string): boolean {

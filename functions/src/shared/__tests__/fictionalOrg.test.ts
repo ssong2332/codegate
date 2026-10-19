@@ -95,6 +95,7 @@ test("[기관명] 치환 — '○○카드'·'OO카드'·'○○캐피탈'·표�
   const masked = replaceRealFinancialNames("신한카드에서 연락드렸습니다").text;
   assert.match(masked, /OO카드/);
   assert.equal(applyFictionalBank(masked, bank), `${cardName}에서 연락드렸습니다`);
+  assert.equal(applyFictionalBank("OO캐피털 대출", bank), `${capitalName} 대출`, "표준어 표기 '캐피털'(리뷰 Minor #2)");
   const once = applyFictionalBank("○○카드 · ○○캐피탈", bank);
   assert.equal(applyFictionalBank(once, bank), once);
   assert.equal(hasBankPlaceholder("○○캐피탈 · ○○카드"), false, "bankName 판정은 은행 자리표시자만 센다");
