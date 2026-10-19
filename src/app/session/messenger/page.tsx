@@ -105,7 +105,7 @@ export default function MessengerSessionPage() {
   const [sessionId] = useState<string | null>(() => getPendingSessionId());
   const [pageState, setPageState] = useState<PageState>(sessionId ? "checking" : "no-session");
   const [scenario, setScenario] = useState<ScenarioDoc | null>(null);
-  // T194-a(Architecture.md §83.4.1 C-2 · C-3 · UX D-124 ② · PRD AC-106 (i)) — 이 세션이 통화로 이어질 수 있는가. 세션 문서의
+  // T194-a(Architecture.md §84.4.1 C-2 · C-3 · UX D-124 ② · PRD AC-106 (i)) — 이 세션이 통화로 이어질 수 있는가. 세션 문서의
   // `difficultyLevel` · `challengeId`로 (시나리오 × 난이도) 술어를 푼 값이다 — 시작 고지 열("메시지와 전화")과 "전화로 확인" 버튼이
   // **이 값 하나**를 쓴다(서버 requestEscalation · sendMessage 자동 전이와 같은 술어 — G462 ⑤). 택배 문자는 고급 세션만 참.
   const [sessionEscalates, setSessionEscalates] = useState(false);
@@ -423,7 +423,7 @@ export default function MessengerSessionPage() {
     return (
       <MessengerStartNotice
         surface={surface}
-        // T190-8a(§74.22 (2) · OQ-52 (ㄴ)) — "전화로 확인" 버튼과 같은 술어. T194-a(§83.4.1 C-2 · D-124 ②) — 세션 단위 값.
+        // T190-8a(§74.22 (2) · OQ-52 (ㄴ)) — "전화로 확인" 버튼과 같은 술어. T194-a(§84.4.1 C-2 · D-124 ②) — 세션 단위 값.
         includesCall={sessionEscalates}
         onConfirm={handleConfirmStartNotice}
         onEndTraining={handleEndTraining}

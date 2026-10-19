@@ -183,7 +183,7 @@ export const createRealtimeCall = onCall<
       // 다시 해석하지 않는다 — `relay` 인자를 만드는 곳은 `resolveHangupRelay` 하나). 오늘 항상 `undefined`.
       channel: session.channel,
       hangupRelay: resolveHangupRelay(session),
-      // T194-a(§83.4.3) — 세션 단위 화자 성별(표 값이 있으면 그대로 · parcel 고급만 변형 leg 성별). 여기서 **1회** 해석해 넘긴다.
+      // T194-a(§84.4.3) — 세션 단위 화자 성별(표 값이 있으면 그대로 · parcel 고급만 변형 leg 성별). 여기서 **1회** 해석해 넘긴다.
       speakerGender: resolveSessionSpeakerGender(session),
     });
     // T38 QA NO-GO 수정, architect 판정(ADR-0006 Addendum A2, 2026-07-24) — §14.2 "추출 차단"은

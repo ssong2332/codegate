@@ -1,11 +1,11 @@
-// T194-a(docs/Architecture.md §83.4.1 · PRD AC-106 (i) · UX D-124) — 메신저 → 통화 전이 여부의 **(시나리오 × 난이도)
+// T194-a(docs/Architecture.md §84.4.1 · PRD AC-106 (i) · UX D-124) — 메신저 → 통화 전이 여부의 **(시나리오 × 난이도)
 // 단일 술어**(클라 쪽). 서버 `functions/src/scenarios/escalation.ts`와 **같은 식**이며, 루트 테스트
 // (`src/content/scenarios/escalation.test.ts`)가 전 시나리오 × 3난이도 × {자가 · 챌린지}에서 두 구현이 같은 값을 내는지 대조한다.
 //
-// ⛔ 화면이 `scenario.escalation` · `scenario.advancedEscalation`을 직접 읽지 않는다 — 이 파일만 읽는다(G576).
+// ⛔ 화면이 `scenario.escalation` · `scenario.advancedEscalation`을 직접 읽지 않는다 — 이 파일만 읽는다(G580).
 //   쓰는 곳: 난이도 화면(UX-025로 갈지 — D-124 ①) · 목소리 선택 진입 가드(UX-025) · 메신저 셸의 시작 고지 열과
 //   "전화로 확인" 버튼(D-124 ② — 둘이 같은 값). 2인 발송 목록 필터(`scenarios/messenger/page.tsx`)는 시나리오 단위
-//   그대로다(§83.4.1 C-5 — 서버 챌린지 거부와 짝).
+//   그대로다(§84.4.1 C-5 — 서버 챌린지 거부와 짝).
 // ⚠️ 이 값은 **(시나리오 × 난이도)** 값이다 — 같은 난이도 안에서 어느 흐름이 배정됐는지와 무관하다(PRD AC-096 읽기 고지 4 ·
 //   AC-106 (i)). 그 전제(같은 난이도의 허용 흐름은 통화 단계 유무가 같다)는 서버 테스트가 고정한다.
 // ⚠️ 잎 모듈이다(타입 import만) — 루트 테스트 러너(`node --experimental-strip-types`)가 직접 불러온다.

@@ -28,7 +28,14 @@ import {
 } from "./harmlessnessPatterns";
 import { SCENARIO_PROMPTS } from "../index";
 import { PUBLIC_SCENARIOS, type ScenarioMeta } from "../publicMeta";
-import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_SCREENS, type MockScreenItem } from "../mockScreens";
+import {
+  MOCK_INSTALL_CONSENT_INSTRUCTION,
+  MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL,
+  MOCK_SCREENS,
+  type MockScreenItem,
+} from "../mockScreens";
+import { buildConfirmResultInstruction, buildLiveConfirmResultInstruction } from "../../inCallSms/confirmResult";
+import { ESCALATED_CALL_CONTEXT_INSTRUCTION } from "../../roleplay/escalatedCall";
 import { VERIFY_INTERCEPT, type VerifyInterceptItem } from "../verifyIntercept";
 import { IN_CALL_SMS, type InCallSmsItem } from "../inCallSms";
 import { FLOW_VARIANTS, resolveVariantPrompt, type FlowVariant } from "../flowVariants";
@@ -58,7 +65,7 @@ const SCENARIO_META_FIELDS: Record<keyof ScenarioMeta, FieldPolicy> = {
   channel: { skip: "열거형 'voice'|'messenger'" },
   surface: { skip: "열거형 'kakao'|'sms'" },
   escalation: { skip: "열거형 조합 {toChannel,voiceMode} — 자유 문자열 없음" },
-  // T194-a(§83.4.1) — `escalation`과 같은 모양(고급 세션 전용 전이 설정).
+  // T194-a(§84.4.1) — `escalation`과 같은 모양(고급 세션 전용 전이 설정).
   advancedEscalation: { skip: "열거형 조합 {toChannel,voiceMode} — 자유 문자열 없음" },
   // T191 S5 — 리터럴 `true` 플래그 2종(UX 계약 C-1 · C-9). 자유 문자열이 아니다.
   advancedOnly: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
@@ -138,7 +145,7 @@ const FLOW_VARIANT_FIELDS: Record<keyof FlowVariant, FieldPolicy> = {
   channels: { skip: "채널 열거값 목록" },
   demandStages: { skip: "숫자" },
   sources: { skip: "사례 ID 목록(C·S 번호)" },
-  // T194-a(§83.4.2 · AC-106 (i)) — 리터럴 `true` 플래그.
+  // T194-a(§84.4.2 · AC-106 (i)) — 리터럴 `true` 플래그.
   escalatesToVoice: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
 };
 
@@ -248,6 +255,18 @@ function collectAllSurfaces(): Surface[] {
     text: MOCK_INSTALL_CONSENT_INSTRUCTION,
     profile: "modelInstruction",
   });
+  // A-1 ⑦⑧ — 모듈 상수·문면 함수로 만든 새 모델 지시(등록부에서 빠지기 쉬운 자리라 명시로 싣는다).
+  const a1Instructions: Array<[string, string]> = [
+    ["MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL", MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL],
+    ["ESCALATED_CALL_CONTEXT_INSTRUCTION", ESCALATED_CALL_CONTEXT_INSTRUCTION],
+    ["confirmResult:transfer", buildConfirmResultInstruction("transfer")],
+    ["confirmResult:link", buildConfirmResultInstruction("link")],
+    ["confirmResultLive:transfer", buildLiveConfirmResultInstruction("transfer")],
+    ["confirmResultLive:link", buildLiveConfirmResultInstruction("link")],
+  ];
+  for (const [field, text] of a1Instructions) {
+    surfaces.push({ domain: "moduleConstant", itemId: "a1", field, text, profile: "modelInstruction" });
+  }
 
   return surfaces;
 }
@@ -344,7 +363,9 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
     "T84/T104 모의 화면 항목당 공통 5필드(T190-2 +mockHost) + bodyLines + kind 전용 필드",
   );
   assert.equal(byDomain.get("inCallSms"), expectedSms, "T68 통화 중 문자 항목당 3필드 + 옵셔널 3(T190-2 +linkAddress)");
-  assert.equal(byDomain.get("moduleConstant"), 1, "MOCK_INSTALL_CONSENT_INSTRUCTION");
+  // A-1 ⑦⑧(2026-10-19) — 모듈 상수·문면 함수 모델 지시가 1 → 7(응낙 통화 중 변형 1 · 에스컬레이션 뒤 맥락 1 · 확인 결과 폴백 2 ·
+  // Live 2). 늘어난 것은 **검사 대상**이지 예외가 아니다.
+  assert.equal(byDomain.get("moduleConstant"), 1 + 6, "MOCK_INSTALL_CONSENT_INSTRUCTION + A-1 지시 6");
   // T191 S5 — 흐름 변형: 수법 + 단계 요약 + leg 표기(+persona) + 결정 순간 + 합성 페르소나(단계가 있을 때).
   const expectedFlow = FLOW_VARIANTS.reduce(
     (n, v) =>
@@ -360,7 +381,7 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
   t.diagnostic(`[AC-102 (a)] 흐름 변형 표면 after=${expectedFlow} (before=0 — 도메인 신설)`);
   assert.equal(
     ALL_SURFACES.length,
-    expectedPrompt + expectedMeta + expectedVerify + expectedMock + expectedSms + 1 + expectedFlow,
+    expectedPrompt + expectedMeta + expectedVerify + expectedMock + expectedSms + 1 + 6 + expectedFlow,
   );
   assert.ok(ALL_SURFACES.length >= 300, `총 검사 표면 수가 줄었다(현재 ${ALL_SURFACES.length})`);
 });
@@ -549,9 +570,9 @@ const SCENARIO_MODULE_INVENTORY: Record<string, string> = {
   "beginnerBriefing.ts": "파생 — weakenedTactics에서 만들어지므로 원본이 이미 스캔된다",
   "briefingTypes.ts": "콘텐츠 아님 — 타입 정의",
   "tacticFlavor.ts": "파생 — weakenedTactics 문자열을 자르는 순수 함수",
-  // T194-a(§83.4.1) — 메신저 → 통화 전이의 (시나리오 × 난이도) 술어. 문자열 콘텐츠 0.
+  // T194-a(§84.4.1) — 메신저 → 통화 전이의 (시나리오 × 난이도) 술어. 문자열 콘텐츠 0.
   "escalation.ts": "콘텐츠 아님 — 에스컬레이션 판정 순수 함수",
-  // T194-a G584(§83.13.2) — 세션 도달 가능 랜딩 집합(프롬프트 마커 · 선언 문자 파생). 문자열 콘텐츠 0.
+  // T194-a G588(§84.13.2) — 세션 도달 가능 랜딩 집합(프롬프트 마커 · 선언 문자 파생). 문자열 콘텐츠 0.
   "reachability.ts": "콘텐츠 아님 — 세션 도달 가능 랜딩 파생 순수 함수",
   "seed.ts": "콘텐츠 아님 — 시딩 스크립트(PUBLIC_SCENARIOS를 쓴다)",
 };

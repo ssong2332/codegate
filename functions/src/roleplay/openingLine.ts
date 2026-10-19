@@ -8,7 +8,7 @@ import { logger } from "firebase-functions";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
-import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
+import { sessionDeclaredSmsPurposes, sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
 import { asksIdentityCheck } from "./personaAuthority";
@@ -76,7 +76,7 @@ export async function generateOpeningLine(
   flowVariantId?: string,
   // §81 — 이 세션의 가상 은행명(호출부가 세션 생성 전에 골라 세션 문서에도 같은 값을 쓴다). 부재면 종전("OO은행").
   fictionalBankName?: string,
-  // T194-a(§83.4.3 · §83.4.4) — 2인 챌린지 수신자 세션이면 그 챌린지 ID(호출부 `consentChallenge`). 세션 문서 write 전이라
+  // T194-a(§84.4.3 · §84.4.4) — 2인 챌린지 수신자 세션이면 그 챌린지 ID(호출부 `consentChallenge`). 세션 문서 write 전이라
   // 세션에서 읽을 수 없다. 화자 성별 · 링크 마커 도달 판정의 세션 술어 입력이다(챌린지 = 시나리오 단위 전이 — AC-106 (g)).
   challengeId?: string,
 ): Promise<OpeningLineResult> {
@@ -100,6 +100,8 @@ export async function generateOpeningLine(
       // 세션 지시 성격이라 세 호출부에서 동일하게 켠다.
       // ⭐ 리뷰 M2 — 세 호출부 · 도구 선언과 같은 단일 술어(변형 기준 · 변형 부재 = 종전).
       inCallSmsEnabled: sessionDeclaresInCallSms(scenarioId, flowVariantId),
+      // A-1 ② — 문자 예외 항목의 예시를 선언 목적만으로(호출부 3곳 같은 술어 · G63).
+      inCallSmsPurposes: sessionDeclaredSmsPurposes(scenarioId, flowVariantId),
       // T85(§17.3 호출부 3곳 중 "오프닝 대사", G63) — 고급에서 D4(절차·서류 정당화) 블록을 얹을
       // 시나리오인지. 세 호출부가 갈라지면 "오프닝만 축소"라는 비대칭이 조용히 생긴다.
       // ⚠️ 오프닝 턴 특례(§17.6.2): 위 OPENING_TURN_INSTRUCTION이 "다짜고짜 요구부터 하지 말고"를
@@ -110,7 +112,7 @@ export async function generateOpeningLine(
       // 화자가 스스로 이름·성별을 드러내는 **첫 마디**라 speakerGender가 특히 중요하다(§50.3.1
       // 층 2가 정확히 이 시점에 정해진다).
       identityCheckAllowed: asksIdentityCheck(scenarioId),
-      // T194-a(§83.4.3) — 세션 단위 해석(표 값이 있으면 그대로 · parcel 고급만 변형 leg 성별).
+      // T194-a(§84.4.3) — 세션 단위 해석(표 값이 있으면 그대로 · parcel 고급만 변형 leg 성별).
       speakerGender: resolveSessionSpeakerGender(sessionView),
       turnInstruction: OPENING_TURN_INSTRUCTION,
       ...(fictionalBankName ? { fictionalBankName } : {}),
@@ -125,7 +127,7 @@ export async function generateOpeningLine(
   // 아니다) — 여기서는 마커 제거를 먼저 해 마스킹이 이미 정돈된 텍스트만 보게 한다.
   // T84(§15.9.1 R4) — 오프닝 대사에 실린 링크에도 같은 규칙으로 `landingKind`가 붙는다(호출부가
   // 갈라지면 "오프닝 링크만 kind가 없는" 비대칭이 생긴다 — §15.6 G5와 같은 이유).
-  // T194-a(§83.4.4 · G578) — 세션 술어 입력을 넘겨 이 세션에서 도달 불가한 설치 마커를 강등한다.
+  // T194-a(§84.4.4 · G582) — 세션 술어 입력을 넘겨 이 세션에서 도달 불가한 설치 마커를 강등한다.
   const { text: linkFreeText, attachments } = extractLinkMarker(completion.text, scenarioId, sessionView);
   // 2026-10-17 라이브 신고(실존 은행명 + 5~7문장 대사) — sendMessage와 같은 순서로 손질한다:
   // (1) 실존 은행·카드사 이름 → OO은행/OO카드(숫자는 그대로), (2) 문장 수 상한은 **항상** 적용한다

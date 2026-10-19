@@ -1,9 +1,11 @@
 // 카탈로그 항목 → Firestore 문서 변환 (T68). 부수효과 없는 순수 함수라 단위 테스트 대상이다.
 import type { InCallSmsItem } from "../scenarios/inCallSms";
+import type { FlowVariantSms } from "../scenarios/flowVariants";
+import { buildLiveConfirmResultInstruction, confirmResultPurposeFor } from "./confirmResult";
 import { DEFAULT_MOCK_SCREEN_KIND, resolveMockScreenKind } from "../scenarios/mockScreens";
 import type { DeliverInCallSmsResponse } from "./types";
 import type { InCallSmsDoc } from "../shared/types";
-import { applyFictionalBank, extractAccountNumber } from "../shared/fictionalBank";
+import { applyFictionalBank, extractAccountNumber, hasBankPlaceholder } from "../shared/fictionalBank";
 
 /**
  * ⚠️ **여기서 나가는 필드가 곧 클라가 볼 수 있는 전부다**(AC-060 구조적 금지의 마지막 관문).
@@ -32,10 +34,12 @@ export function buildInCallSmsDoc(
   return {
     smsId: item.smsId,
     kind: item.kind,
-    senderLabel: item.senderLabel,
+    // §83 — 발신자 표시의 "○○캐피탈" 등도 세션 이름으로(본문과 같은 이름).
+    senderLabel: fictionalBankName ? applyFictionalBank(item.senderLabel, fictionalBankName) : item.senderLabel,
     body: fictionalBankName ? applyFictionalBank(item.body, fictionalBankName) : item.body,
     // §81 — 본문에 자리표시자가 있었던 문자만 은행명을 구조화 필드로도 싣는다(가짜 랜딩 미리 채움 D-115의 원천).
-    ...(fictionalBankName && item.body !== applyFictionalBank(item.body, fictionalBankName) ? { bankName: fictionalBankName } : {}),
+    // §83 — 카드·캐피탈 자리표시자만 있는 문자는 은행명을 싣지 않는다(은행 자리표시자 기준으로 판정).
+    ...(fictionalBankName && hasBankPlaceholder(item.body) ? { bankName: fictionalBankName } : {}),
     // §81.6 — 같은 줄의 계좌번호도 구조화 필드로(D-115 랜딩 미리 채움 원천 — 은행명과 한 쌍).
     ...(fictionalBankName && accountNumber ? { accountNumber } : {}),
     // 종류별 필드는 해당 kind일 때만 채운다(부재를 판별자로 오버로드하지 않되, 무의미한 빈 값도
@@ -116,4 +120,18 @@ export function buildInCallSmsResponse(
     ? applyFictionalBank(item.announceInstruction, input.fictionalBankName)
     : item.announceInstruction;
   return { smsId: item.smsId, announceInstruction };
+}
+
+/**
+ * A-1 ⑦(2026-10-19) — `deliverInCallSms` 도착 응답에 덧붙일 결과 신호 필드(조건형 1줄 · `inCallSms/confirmResult.ts`).
+ * 판정은 announce와 **같은 게이트**(`resolveInCallSmsPlan` — 전환 뒤 생략)에 곱해지고, 대상은 변형 선언의 **필수** 계좌·링크
+ * 문자뿐이다(`confirmResultPurposeFor`). 해당 없으면 빈 객체(= 종전 응답 그대로). ⚠️ 클라 주입 배선은 A-2.
+ */
+export function buildConfirmResultField(
+  input: { placed: boolean },
+  declaredItem: FlowVariantSms | undefined,
+): Pick<DeliverInCallSmsResponse, "confirmResultInstruction"> {
+  if (!resolveInCallSmsPlan(input).includeInstruction) return {};
+  const purpose = confirmResultPurposeFor(declaredItem);
+  return purpose ? { confirmResultInstruction: buildLiveConfirmResultInstruction(purpose) } : {};
 }

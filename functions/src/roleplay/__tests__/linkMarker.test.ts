@@ -82,7 +82,7 @@ test("[R5] 미상 id·다른 시나리오의 id는 app-install로 폴백하지 �
   assert.equal("landingKind" in unknownId.attachments![0], false);
 });
 
-// ── T194-a G578 — 도달 불가 설치 마커 강등 (docs/Architecture.md §83.4.4 · PRD AC-106 (f)(h) ⓐ) ──
+// ── T194-a G582 — 도달 불가 설치 마커 강등 (docs/Architecture.md §84.4.4 · PRD AC-106 (f)(h) ⓐ) ──
 //
 // 초급 · 중급 parcel 세션의 모델이 `[[LINK:parcel-install]]`을 지어내도 설치 화면이 열리면 안 된다(AC-106 (f) — 그 세션에는
 // 3단계가 없다). 강등 대상은 그 시나리오의 기본 credential 랜딩(`parcel-redelivery`)이고 경고 1줄을 남긴다.
@@ -102,7 +102,7 @@ function captureWarnings(run: () => void): string[] {
   return lines;
 }
 
-test("[T194-a G578] 초급 · 중급 · 챌린지 parcel 세션의 설치 마커는 재배송 폼으로 강등되고 경고를 남긴다 · 고급 자가 세션은 설치 화면 그대로", (t) => {
+test("[T194-a G582] 초급 · 중급 · 챌린지 parcel 세션의 설치 마커는 재배송 폼으로 강등되고 경고를 남긴다 · 고급 자가 세션은 설치 화면 그대로", (t) => {
   const reply = "재배송 접수는 배송 확인 앱을 설치하셔야 진행됩니다 [[LINK:parcel-install]]";
   const rows: [string, { difficultyLevel?: string; challengeId?: string; flowVariantId?: string } | undefined, string, string | undefined][] = [
     ["초급", { difficultyLevel: "beginner" }, "parcel-redelivery", undefined],
@@ -136,10 +136,10 @@ test("[T194-a G578] 초급 · 중급 · 챌린지 parcel 세션의 설치 마커
       assert.equal(warnings.length, 0, `${label}: 도달 가능하면 경고 0`);
     }
   }
-  t.diagnostic(`[G578 · AC-106 (h) ⓐ] ${lines.join(" | ")}`);
+  t.diagnostic(`[G582 · AC-106 (h) ⓐ] ${lines.join(" | ")}`);
 });
 
-test("[T194-a G578] 지원금 설치 마커는 세 난이도 · 챌린지 모두 강등되지 않는다(현행 무변경) · 마커 없는 텍스트는 원문 그대로", () => {
+test("[T194-a G582] 지원금 설치 마커는 세 난이도 · 챌린지 모두 강등되지 않는다(현행 무변경) · 마커 없는 텍스트는 원문 그대로", () => {
   for (const session of [{ difficultyLevel: "beginner" }, { difficultyLevel: "intermediate" }, { difficultyLevel: "advanced" }, { challengeId: "c1" }, undefined]) {
     const warnings = captureWarnings(() => {
       const result = extractLinkMarker("[[LINK:subsidy-install]]", "messenger-subsidy-smishing-sms", session);
@@ -151,7 +151,7 @@ test("[T194-a G578] 지원금 설치 마커는 세 난이도 · 챌린지 모두
   assert.equal(extractLinkMarker(plain, "messenger-parcel-smishing-sms", { difficultyLevel: "beginner" }).text, plain);
 });
 
-test("[T194-a G578] 호출부 2곳(sendMessage · 오프닝)이 세션 술어 입력을 extractLinkMarker에 넘긴다(소스 스캔)", () => {
+test("[T194-a G582] 호출부 2곳(sendMessage · 오프닝)이 세션 술어 입력을 extractLinkMarker에 넘긴다(소스 스캔)", () => {
   const read = (rel: string) =>
     fs.readFileSync(path.resolve(__dirname, "../../../src/roleplay", rel), "utf8").replace(/\r\n/g, "\n");
   assert.match(read("index.ts"), /extractLinkMarker\(\n\s*completion\.text,\n\s*session\.scenarioId,\n\s*session,\n\s*\)/);

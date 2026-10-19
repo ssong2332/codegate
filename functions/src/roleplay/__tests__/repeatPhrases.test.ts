@@ -25,7 +25,9 @@ import {
   listOtpItems,
 } from "../../scenarios/inCallSms";
 import { VERIFY_INTERCEPT, hasVerifyIntercept } from "../../scenarios/verifyIntercept";
-import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_SCREENS } from "../../scenarios/mockScreens";
+import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL, MOCK_SCREENS } from "../../scenarios/mockScreens";
+import { buildConfirmResultInstruction } from "../../inCallSms/confirmResult";
+import { ESCALATED_CALL_CONTEXT_INSTRUCTION } from "../escalatedCall";
 import { listFlowVariants, resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
 
 /**
@@ -59,7 +61,10 @@ function realTurnInstructionsFor(scenarioId: string): string[] {
   for (const sms of IN_CALL_SMS[scenarioId] ?? []) out.push(sms.announceInstruction);
   // §78 — 인증번호 대조는 서버 대조 결과 지시 2종으로 바뀌었다(번호 미포함).
   if (listOtpItems(scenarioId).length > 0) out.push(buildOtpCompareInstruction("match"), buildOtpCompareInstruction("mismatch"));
-  if ((MOCK_SCREENS[scenarioId] ?? []).length > 0) out.push(MOCK_INSTALL_CONSENT_INSTRUCTION);
+  if ((MOCK_SCREENS[scenarioId] ?? []).length > 0) out.push(MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL);
+  // A-1 ⑦⑧ — 확인 결과 지시(문자 시나리오) · 에스컬레이션 뒤 맥락(전 시나리오에 더해도 무해 — 반복 유도 문구 0 확인용).
+  if ((IN_CALL_SMS[scenarioId] ?? []).length > 0) out.push(buildConfirmResultInstruction("transfer"), buildConfirmResultInstruction("link"));
+  out.push(ESCALATED_CALL_CONTEXT_INSTRUCTION);
   return out;
 }
 

@@ -16,7 +16,7 @@ import { asksIdentityCheck } from "../roleplay/personaAuthority";
 import { isL3Procedural } from "../roleplay/l3Depth";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
-import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
+import { sessionDeclaredSmsPurposes, sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import {
   buildLiveToolDeclarations,
@@ -73,7 +73,7 @@ const GEMINI_VOICE_POOL = [...FEMALE_VOICES, ...MALE_VOICES] as const;
 export function pickGeminiVoiceName(
   scenarioId: string,
   sessionId: string,
-  // T194-a(§83.4.3) — 세션 단위로 이미 해석된 성별(`RealtimeCallInput.speakerGender`). 있으면 그 풀, 없으면 표(오늘 동작 그대로).
+  // T194-a(§84.4.3) — 세션 단위로 이미 해석된 성별(`RealtimeCallInput.speakerGender`). 있으면 그 풀, 없으면 표(오늘 동작 그대로).
   sessionSpeakerGender?: "male" | "female",
 ): string {
   const gender = sessionSpeakerGender ?? SCENARIO_SPEAKER_GENDER[scenarioId];
@@ -133,7 +133,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // ⭐ T192 C3(§79.19 (5) 2 · 9) — `end_call` 범위(채널 · 이미 해석된 릴레이)는 선언 · 이름 · 프롬프트 TOOL 변형 세
     // 자리에 같은 값으로 들어간다. 세 자리가 전부 `declaresEndCall` 하나를 부른다(G502). ⚠️ 옛 주석의 "도구가 없으면
     // 빈 배열 = 오늘과 동일"은 C3부터 메신저 · 중간 leg에서만 참이다(아래 `tools` 주석).
-    // T194-a(§83.4.3) — 층 1(음성 풀) · 층 2([화자] 블록)가 **같은 값**을 쓴다(§50.3.1).
+    // T194-a(§84.4.3) — 층 1(음성 풀) · 층 2([화자] 블록)가 **같은 값**을 쓴다(§50.3.1).
     const speakerGender = input.speakerGender ?? speakerGenderFor(input.scenarioId);
     const endCallScope: EndCallScope = {
       channel: input.channel,
@@ -150,11 +150,13 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       difficultyLevel: input.difficultyLevel,
       // ⭐ 리뷰 M2 — 도구 선언과 같은 단일 술어(변형 기준 · 변형 부재 = 종전 `hasInCallSms`).
       inCallSmsEnabled: sessionDeclaresInCallSms(input.scenarioId, input.flowVariantId),
+      // A-1 ② — 문자 예외 항목의 예시를 선언 목적만으로(호출부 3곳 같은 술어 · G63).
+      inCallSmsPurposes: sessionDeclaredSmsPurposes(input.scenarioId, input.flowVariantId),
       verifyInterceptEnabled:
         hasVerifyIntercept(input.scenarioId) && input.difficultyLevel === "advanced",
       l3Procedural: isL3Procedural(input.scenarioId),
       identityCheckAllowed: asksIdentityCheck(input.scenarioId),
-      // T194-a(§83.4.3) — 호출부가 해석한 세션 단위 성별(부재 = 표 값 — 표에 값이 있는 시나리오는 같은 값).
+      // T194-a(§84.4.3) — 호출부가 해석한 세션 단위 성별(부재 = 표 값 — 표에 값이 있는 시나리오는 같은 값).
       speakerGender,
       // §59.3 — 이 경로가 §59 커밋 C가 정한 **유일한 `true` 호출부**다(폴백 sendMessage·오프닝은
       // Live 세션이 없어 도구가 존재하지 않으므로 넘기지 않는다, G382).

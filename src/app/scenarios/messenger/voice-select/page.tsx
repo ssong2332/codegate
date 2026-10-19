@@ -49,7 +49,7 @@ export default function MessengerVoiceSelectPage() {
   const [isReturningFlow] = useState<boolean>(() => hasMessengerVoiceSelectReturn());
 
   const [pageState, setPageState] = useState<PageState>(() => {
-    // T194-a(Architecture.md §83.4.1 C-4 · UX-025 v1.38) — 진입 가드도 (시나리오 × 난이도) 술어다. 난이도는 이 화면보다 앞(UX-029)에서
+    // T194-a(Architecture.md §84.4.1 C-4 · UX-025 v1.38) — 진입 가드도 (시나리오 × 난이도) 술어다. 난이도는 이 화면보다 앞(UX-029)에서
     // 확정된 세션 전 힌트를 쓴다(부재 = 서버 기본값 중급과 같은 결과). 택배 초급 · 중급으로는 이 화면에 들어올 수 없다.
     if (!scenarioId || !scenario || !resolveScenarioEscalation(scenario, getSelectedDifficultyLevel())) return "no-scenario";
     return "ready";

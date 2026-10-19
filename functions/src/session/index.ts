@@ -115,7 +115,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     // 교차채널 세션 총 한도(T30, Architecture.md §13.3, PoC 전 가정치) — 에스컬레이션 가능
     // 시나리오는 두 채널을 합쳐도 기존 10턴 안에 다 담기 어려워
     // maxUserTurns를 상향 발급한다.
-    // ⭐ T194-a(§83.4.1 S-1) — "에스컬레이션 가능"은 (시나리오 × 난이도) 술어다(parcel은 고급만). 난이도는 위에서 이미 확정됐다.
+    // ⭐ T194-a(§84.4.1 S-1) — "에스컬레이션 가능"은 (시나리오 × 난이도) 술어다(parcel은 고급만). 난이도는 위에서 이미 확정됐다.
     // 이 콜러블은 자가 세션만 만든다(챌린지 수신자 세션은 consentChallenge가 만든다).
     const isEscalationCapable =
       resolveScenarioEscalation(PUBLIC_SCENARIOS[scenarioId], resolvedDifficultyLevel) !== undefined;
@@ -467,7 +467,7 @@ export const requestEscalation = onCall<
   if (session.channel !== "messenger") {
     throw new HttpsError("failed-precondition", "메신저 채널 세션에서만 요청할 수 있습니다.");
   }
-  // T194-a(§83.4.1 S-2) — 세션 술어(sendMessage 자동 전이 · 클라 버튼 · 시작 고지 열과 같은 술어).
+  // T194-a(§84.4.1 S-2) — 세션 술어(sendMessage 자동 전이 · 클라 버튼 · 시작 고지 열과 같은 술어).
   if (!resolveSessionEscalation(session, PUBLIC_SCENARIOS)) {
     throw new HttpsError("failed-precondition", "이 시나리오는 통화 전이를 지원하지 않습니다.");
   }

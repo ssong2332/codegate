@@ -53,7 +53,7 @@ const allText = allItems
   .filter((text): text is string => text !== undefined)
   .join("\n");
 
-/** T194-a(§83.13.2) — 그 (시나리오 × 난이도)의 첫 허용 변형 ID(세션 도달 집합 G584의 입력). 변형이 없으면 undefined(= 원본). */
+/** T194-a(§84.13.2) — 그 (시나리오 × 난이도)의 첫 허용 변형 ID(세션 도달 집합 G584의 입력). 변형이 없으면 undefined(= 원본). */
 function firstVariantId(scenarioId: string, level: string): string | undefined {
   return FLOW_VARIANTS.find((v) => v.scenarioId === scenarioId && v.level === level)?.variantId;
 }
@@ -166,7 +166,7 @@ test("[§15.9.7 G53] entrySurface='messenger-link' 항목의 landingId가 LINK_L
   for (const [scenarioId, items] of Object.entries(MOCK_SCREENS)) {
     for (const item of items) {
       if (item.entrySurface !== "messenger-link") continue;
-      // T194-a(§83.4.4) — 고급 자가 세션으로 넘긴다(그 세션에서 도달 가능한 항목의 칩 라벨 · kind를 본다). 강등 경로는 G578이 본다.
+      // T194-a(§84.4.4) — 고급 자가 세션으로 넘긴다(그 세션에서 도달 가능한 항목의 칩 라벨 · kind를 본다). 강등 경로는 G578이 본다.
       const { attachments } = extractLinkMarker(`[[LINK:${item.landingId}]]`, scenarioId, { difficultyLevel: "advanced", flowVariantId: firstVariantId(scenarioId, "advanced") });
       assert.ok(attachments);
       assert.notEqual(
@@ -463,7 +463,7 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
   assert.equal(attachments?.[0].displayText, "확인하기", "G53이 잡아야 할 상태가 재현되지 않는다");
 
   // G55·channel — app-install 판정 키가 실제 카탈로그에서 비어 있지 않다(공회전 방지).
-  // T194-a(§83.4.3) — parcel(고급 세션 전용 `parcel-install`)이 더해졌다.
+  // T194-a(§84.4.3) — parcel(고급 세션 전용 `parcel-install`)이 더해졌다.
   assert.deepEqual(appInstallScenarioIds, ["messenger-subsidy-smishing-sms", "messenger-parcel-smishing-sms"]);
   // 통화 채널 시나리오가 **실제로** 카탈로그에 들어와 있다 — 정밀화가 없었다면 여기서 깨졌을 상태다.
   // ⚠️ `channel`은 옵셔널이고 **음성 시나리오는 아예 필드를 갖지 않는다**(`publicMeta.ts:29`) —
@@ -531,7 +531,7 @@ test("landingId는 전역 유일하고, 카탈로그의 모든 scenarioId가 실
 });
 
 test("[AC-073] app-install 카탈로그를 가진 시나리오는 escalation 배선을 이미 갖고 있다(신규 전이 경로 0건)", () => {
-  // ⚠️ T194-a(docs/Architecture.md §83.4.1 · AC-106) — **대체 단언**(X8 — 같은 커밋에 대체): 에스컬레이션이 시나리오 속성에서
+  // ⚠️ T194-a(docs/Architecture.md §84.4.1 · AC-106) — **대체 단언**(X8 — 같은 커밋에 대체): 에스컬레이션이 시나리오 속성에서
   // (시나리오 × 난이도) 술어로 바뀌었다. 단언 내용 "설치 단계가 있는 세션은 기존 전이 배선(toChannel=voice)을 갖는다"는 그대로이되,
   // 판정 단위를 **설치 항목에 도달할 수 있는 (시나리오 × 난이도) 칸**으로 옮긴다 — parcel은 고급 칸에서만 설치 항목에 도달한다.
   const cells: string[] = [];
@@ -560,9 +560,9 @@ test("[AC-073] app-install 카탈로그를 가진 시나리오는 escalation 배
   );
 });
 
-// ── T194-a G578 — 모의 화면 도달 술어 `isMockScreenReachable` (docs/Architecture.md §83.4.4 · PRD AC-106 (h) ⓐ) ──
+// ── T194-a G582 — 모의 화면 도달 술어 `isMockScreenReachable` (docs/Architecture.md §84.4.4 · PRD AC-106 (h) ⓐ) ──
 
-test("[T194-a G578] 도달 술어 진리표 — 택배 설치는 고급 자가 세션만 · 지원금 설치는 세 난이도 · 챌린지 모두 · credential은 항상", () => {
+test("[T194-a G582] 도달 술어 진리표 — 택배 설치는 고급 자가 세션만 · 지원금 설치는 세 난이도 · 챌린지 모두 · credential은 항상", () => {
   const parcelInstall = findMockScreenItem("messenger-parcel-smishing-sms", "parcel-install");
   const subsidyInstall = findMockScreenItem("messenger-subsidy-smishing-sms", "subsidy-install");
   const parcelForm = findMockScreenItem("messenger-parcel-smishing-sms", "parcel-redelivery");
@@ -574,8 +574,8 @@ test("[T194-a G578] 도달 술어 진리표 — 택배 설치는 고급 자가 �
     ["parcel 고급 · 설치", { scenarioId: "messenger-parcel-smishing-sms", difficultyLevel: "advanced", flowVariantId: "fv-g454" }, parcelInstall, true],
     ["parcel 고급 챌린지 · 설치(AC-106 (g) — 변형 프롬프트엔 있어도 전이 없음)", { scenarioId: "messenger-parcel-smishing-sms", difficultyLevel: "advanced", challengeId: "c1", flowVariantId: "fv-g454" }, parcelInstall, false],
     ["parcel 초급 · 재배송 폼", { scenarioId: "messenger-parcel-smishing-sms", difficultyLevel: "beginner", flowVariantId: "fv-prr3" }, parcelForm, true],
-    // ⭐ G584(§83.13.2) — 고급 세션의 도달 가능 집합은 parcel-install 하나다(원본 링크 수법 제외) ⇒ 재배송 폼은 기록 거부.
-    ["parcel 고급 · 재배송 폼(G584 — 세션 밖 랜딩)", { scenarioId: "messenger-parcel-smishing-sms", difficultyLevel: "advanced", flowVariantId: "fv-g454" }, parcelForm, false],
+    // ⭐ G588(§84.13.2) — 고급 세션의 도달 가능 집합은 parcel-install 하나다(원본 링크 수법 제외) ⇒ 재배송 폼은 기록 거부.
+    ["parcel 고급 · 재배송 폼(G588 — 세션 밖 랜딩)", { scenarioId: "messenger-parcel-smishing-sms", difficultyLevel: "advanced", flowVariantId: "fv-g454" }, parcelForm, false],
     ["subsidy 초급 · 설치", { scenarioId: "messenger-subsidy-smishing-sms", difficultyLevel: "beginner", flowVariantId: "fv-rizf" }, subsidyInstall, true],
     ["subsidy 중급 · 설치", { scenarioId: "messenger-subsidy-smishing-sms", difficultyLevel: "intermediate", flowVariantId: "fv-afbr" }, subsidyInstall, true],
     ["subsidy 고급 · 설치", { scenarioId: "messenger-subsidy-smishing-sms", difficultyLevel: "advanced", flowVariantId: "fv-hu8w" }, subsidyInstall, true],
@@ -592,7 +592,7 @@ test("[T194-a G578] 도달 술어 진리표 — 택배 설치는 고급 자가 �
   assert.equal(findDefaultCredentialLanding("messenger-subsidy-smishing-sms"), undefined);
 });
 
-test("[T194-a G578 · AC-106 (h) ⓑ] MockScreenKind는 2값 고정 — 신규 kind 샘플은 이 검사에 걸린다", (t) => {
+test("[T194-a G582 · AC-106 (h) ⓑ] MockScreenKind는 2값 고정 — 신규 kind 샘플은 이 검사에 걸린다", (t) => {
   const ALLOWED_KINDS: readonly MockScreenKind[] = ["credential-form", "app-install"];
   const kindViolations = (items: readonly { landingId: string; kind: string }[]) =>
     items.filter((item) => !(ALLOWED_KINDS as readonly string[]).includes(item.kind)).map((item) => item.landingId);
@@ -605,7 +605,7 @@ test("[T194-a G578 · AC-106 (h) ⓑ] MockScreenKind는 2값 고정 — 신규 k
   assert.match(source, /export type MockScreenKind = "credential-form" \| "app-install";/);
 });
 
-test("[T194-a G578 · AC-106 (h) ⓐ] recordMockScreenEvent — 도달 술어 검증이 카탈로그 소속(③) 바로 뒤 · 기록 이전에 있다(소스 순서)", () => {
+test("[T194-a G582 · AC-106 (h) ⓐ] recordMockScreenEvent — 도달 술어 검증이 카탈로그 소속(③) 바로 뒤 · 기록 이전에 있다(소스 순서)", () => {
   const code = readFileSync(path.resolve(__dirname, "../../../src/mockScreens/index.ts"), "utf8").replace(/\/\/[^\n]*/g, "");
   const membership = code.indexOf("findMockScreenItem(session.scenarioId, landingId)");
   const reach = code.indexOf("isMockScreenReachable(session, item)");
@@ -676,7 +676,7 @@ function reachableLandingKeys(): string[] {
 }
 
 /**
- * ⭐ T194-a G585(docs/Architecture.md §83.13.2) — **(시나리오 × 변형 · 변형 없는 원본 `base` 포함)** 단위의 도달 가능 랜딩 키
+ * ⭐ T194-a G589(docs/Architecture.md §84.13.2) — **(시나리오 × 변형 · 변형 없는 원본 `base` 포함)** 단위의 도달 가능 랜딩 키
  * `"{scenarioId}#{variantId|base}::{landingId}"`. 소스 함수 `sessionReachableLandingIds`(기록 층 G584와 같은 원천)를 그대로 부른다 —
  * 테스트에 정규식 사본 0. G159 헬퍼는 `::` 앞을 단위로 묶으므로 헬퍼 · 처방 문구 무변경으로 단위만 바뀐다.
  * ⚠️ 위 `reachableLandingKeys()`(시나리오 단위 · 원본 프롬프트만)는 G159 기존 역검증의 입력으로 **그대로** 남긴다(바이트 무변경).
@@ -696,7 +696,7 @@ function reachableLandingKeysBySession(): string[] {
 }
 
 /**
- * T194-a(§83.13.2 G585 ⑤ — AC-078 (a) 확장 수용) — 전 단위(원본 · 전 변형) 합집합을 `scenarioId::landingId`로 접은 도달 가능 집합.
+ * T194-a(§84.13.2 G589 ⑤ — AC-078 (a) 확장 수용) — 전 단위(원본 · 전 변형) 합집합을 `scenarioId::landingId`로 접은 도달 가능 집합.
  * 원본 프롬프트만 보면 고급 변형이 내는 마커(`parcel-install`)를 영영 못 본다 — **넓히는** 방향의 정정이다.
  * 원본 경로(`reachableLandingKeys` — 통화 중 문자 카탈로그 전수 포함)도 합집합에 넣어 총 집합이 좁아지지 않게 한다.
  */
@@ -784,7 +784,7 @@ function findMultiLandingScenarios(keys: readonly string[]): string[] {
 }
 
 test("[G159 트립와이어] 한 시나리오에 도달 가능 랜딩이 2건 이상 들어오면 알린다(T129 §35.6)", () => {
-  // ⭐ T194-a G585(§83.13.2) — 입력만 (시나리오 × 변형) 단위 키로 바꿨다(헬퍼 · 처방 문구 무변경).
+  // ⭐ T194-a G589(§84.13.2) — 입력만 (시나리오 × 변형) 단위 키로 바꿨다(헬퍼 · 처방 문구 무변경).
   const offenders = findMultiLandingScenarios(reachableLandingKeysBySession());
   assert.deepEqual(
     offenders,
@@ -804,11 +804,11 @@ test("[G159 트립와이어 역검증] 오염 키 1건을 주입하면 해당 sc
   assert.ok(G159_PRESCRIPTION.includes("선행 커밋"));
 });
 
-test("[T194-a G585 역검증] 한 (시나리오 × 변형) 안에 랜딩이 2건이 되면 그 단위를 돌려준다 — 고급 변형에 원본 재배송 폼을 넣은 샘플", (t) => {
+test("[T194-a G589 역검증] 한 (시나리오 × 변형) 안에 랜딩이 2건이 되면 그 단위를 돌려준다 — 고급 변형에 원본 재배송 폼을 넣은 샘플", (t) => {
   const bySession = reachableLandingKeysBySession();
   const polluted = [...bySession, "messenger-parcel-smishing-sms#fv-g454::parcel-redelivery"];
   t.diagnostic(
-    `[G585] 정상 단위 위반 ${JSON.stringify(findMultiLandingScenarios(bySession))} / #fv-g454::parcel-redelivery 주입 → ${JSON.stringify(findMultiLandingScenarios(polluted))}`,
+    `[G589] 정상 단위 위반 ${JSON.stringify(findMultiLandingScenarios(bySession))} / #fv-g454::parcel-redelivery 주입 → ${JSON.stringify(findMultiLandingScenarios(polluted))}`,
   );
   assert.deepEqual(findMultiLandingScenarios(polluted), ["messenger-parcel-smishing-sms#fv-g454"]);
   // 키 형식 고정 — 헬퍼가 `::` 앞을 단위로 묶는다(변형 · 원본 `base` 모두).
@@ -817,7 +817,7 @@ test("[T194-a G585 역검증] 한 (시나리오 × 변형) 안에 랜딩이 2건
   assert.equal(bySession.some((key) => key.startsWith("messenger-parcel-smishing-sms#fv-g454::parcel-redelivery")), false);
 });
 
-test("[T194-a G584 기록 층 역검증] 세션 도달 집합 — 고급 parcel의 재배송 폼 · 초급 parcel의 설치 화면은 거부, 정상 2건은 통과", (t) => {
+test("[T194-a G588 기록 층 역검증] 세션 도달 집합 — 고급 parcel의 재배송 폼 · 초급 parcel의 설치 화면은 거부, 정상 2건은 통과", (t) => {
   const rows: [string, string, string | undefined, string, boolean][] = [
     ["parcel 고급 + parcel-redelivery", "messenger-parcel-smishing-sms", "fv-g454", "parcel-redelivery", false],
     ["parcel 초급 + parcel-install", "messenger-parcel-smishing-sms", "fv-prr3", "parcel-install", false],
@@ -831,7 +831,7 @@ test("[T194-a G584 기록 층 역검증] 세션 도달 집합 — 고급 parcel�
     lines.push(`${label} → ${recordable ? "통과" : "거부"}`);
     assert.equal(recordable, expected, label);
   }
-  t.diagnostic(`[G584] ${lines.join(" | ")}`);
+  t.diagnostic(`[G588] ${lines.join(" | ")}`);
   // 통화 중 랜딩은 그 변형이 문자를 선언했을 때만(선언 문자의 fakeLandingId) — 원본(변형 부재)은 마커만.
   assert.ok(sessionReachableLandingIds("institutional-impersonation", "fv-5cn4").includes("safe-account-transfer"));
   assert.equal(sessionReachableLandingIds("institutional-impersonation", undefined).includes("safe-account-transfer"), false);
@@ -839,7 +839,7 @@ test("[T194-a G584 기록 층 역검증] 세션 도달 집합 — 고급 parcel�
   const membership = code.indexOf("findMockScreenItem(session.scenarioId, landingId)");
   const g584 = code.indexOf("sessionReachableLandingIds(session.scenarioId, session.flowVariantId).includes(landingId)");
   const write = code.indexOf('.collection("mockScreens")');
-  assert.ok(membership > 0 && g584 > membership && write > g584, "G584 거부가 소속 검증 뒤 · 기록 앞에 있어야 한다");
+  assert.ok(membership > 0 && g584 > membership && write > g584, "G588 거부가 소속 검증 뒤 · 기록 앞에 있어야 한다");
 });
 
 /** (b) 수렴 금지 판정용 본문 조합 — 헤드라인·안내문·필드 라벨 구성·CTA·완료 문구. */
@@ -1071,7 +1071,7 @@ test("[AC-079 (b)] 옵셔널 필드가 **양쪽 다 부재인 쌍**은 비교에
     "successHeadline: install-a ↔ install-b",
   ]);
 
-  // 한쪽만 부재인 쌍은 **서로 다른 것으로 본다**. T194-a(§83.4.3) — `parcel-install`이 더해져 app-install이 **2종**이 됐다 ⇒
+  // 한쪽만 부재인 쌍은 **서로 다른 것으로 본다**. T194-a(§84.4.3) — `parcel-install`이 더해져 app-install이 **2종**이 됐다 ⇒
   // 위 주석이 예고한 대로 오늘 실제로 제외되는 쌍이 생겼다(`subsidy-install ↔ parcel-install`의 fields · successHeadline 각 1쌍).
   const realStats = fieldDivergenceStats(Object.values(MOCK_SCREENS).flat());
   t.diagnostic(
@@ -1133,7 +1133,7 @@ const BAIT_TO_LANDING: {
     ctaAnchors: [], // app-install — 위 주석의 예외(권한 허용 버튼)
   },
   {
-    // T194-a(§83.4.3 · UF-012 v1.38) — parcel 고급의 설치 화면. 미끼 = 칩 라벨 + 고급 leg 페르소나 · 설치 수법.
+    // T194-a(§84.4.3 · UF-012 v1.38) — parcel 고급의 설치 화면. 미끼 = 칩 라벨 + 고급 leg 페르소나 · 설치 수법.
     landingId: "parcel-install",
     baitSource: "roleplay/linkMarker.ts:25 (칩 라벨) · messengerParcelSmishingSms.prompt.ts (PARCEL_ADVANCED_LEG_PERSONA · PARCEL_ADVANCED_INSTALL_TACTIC)",
     baitExcerpt: "배송 확인 앱 설치하기",
@@ -1188,7 +1188,7 @@ const BAIT_TO_LANDING: {
 function baitTextFor(scenarioId: string, item: MockScreenItem): string {
   const parts: string[] = [];
   if (item.entrySurface === "messenger-link") {
-    // T194-a — 그 항목에 도달하는 세션(고급 자가)의 칩 라벨을 모은다(초급 세션이면 강등돼 다른 랜딩의 라벨이 나온다 — G578).
+    // T194-a — 그 항목에 도달하는 세션(고급 자가)의 칩 라벨을 모은다(초급 세션이면 강등돼 다른 랜딩의 라벨이 나온다 — G582).
     const { attachments } = extractLinkMarker(`[[LINK:${item.landingId}]]`, scenarioId, { difficultyLevel: "advanced", flowVariantId: firstVariantId(scenarioId, "advanced") });
     if (attachments) parts.push(attachments[0].displayText);
     const prompt = SCENARIO_PROMPTS[scenarioId];
@@ -1348,9 +1348,9 @@ test("[§15.9.7 G54] 응낙 턴 지시가 채널 전이 신호를 담지 않는�
   );
 });
 
-// ── T194-a G587 — 설치 화면은 통화로 이어지는 세션에만 (docs/Architecture.md §83.13.5) ──
+// ── T194-a G591 — 설치 화면은 통화로 이어지는 세션에만 (docs/Architecture.md §84.13.5) ──
 
-test("[T194-a G587] 모든 (시나리오 × 난이도 × 세션 종류) 배정 풀 변형에서 메신저 설치 화면이 도달 가능하면 그 세션 종류의 에스컬레이션이 참 · 역방향", (t) => {
+test("[T194-a G591] 모든 (시나리오 × 난이도 × 세션 종류) 배정 풀 변형에서 메신저 설치 화면이 도달 가능하면 그 세션 종류의 에스컬레이션이 참 · 역방향", (t) => {
   const installIds = new Set(
     allItems.filter((item) => item.kind === "app-install" && item.entrySurface === "messenger-link").map((item) => item.landingId),
   );
@@ -1375,7 +1375,7 @@ test("[T194-a G587] 모든 (시나리오 × 난이도 × 세션 종류) 배정 �
   const normal = check(assignablePool);
   // 역방향 — 필터를 끈 풀(허용 변형 전체): parcel 고급 챌린지가 fv-g454(설치 화면 도달)를 받는다.
   const unfiltered = check((id, level) => listFlowVariants(id, level));
-  t.diagnostic(`[G587] 배정 풀: 설치 도달 ${normal.reachableInstall}건 · 위반 ${JSON.stringify(normal.bad)} / 필터 해제: 위반 ${JSON.stringify(unfiltered.bad)}`);
+  t.diagnostic(`[G591] 배정 풀: 설치 도달 ${normal.reachableInstall}건 · 위반 ${JSON.stringify(normal.bad)} / 필터 해제: 위반 ${JSON.stringify(unfiltered.bad)}`);
   assert.ok(normal.reachableInstall > 0, "설치 화면에 도달하는 풀 변형이 0이면 이 게이트가 아무것도 안 잡는다");
   assert.deepEqual(normal.bad, []);
   assert.ok(unfiltered.bad.some((entry) => entry.startsWith("messenger-parcel-smishing-sms/advanced/챌린지/fv-g454")), "역방향 샘플이 잡혀야 한다");

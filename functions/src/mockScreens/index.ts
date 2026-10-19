@@ -45,8 +45,8 @@ async function loadOwnedSession(sessionId: string, uid: string): Promise<Session
  *   ③ `MOCK_SCREENS[session.scenarioId]`에 그 `landingId`가 **소속**되는지 → `failed-precondition`
  *      (§15.6 G12 동형 — 클라가 임의 landingId를 넣어 가짜 "속은 순간"을 만들 수 없다)
  *   ④ `event==="consented"`는 `kind==="app-install"`일 때만 → `invalid-argument`
- *   ⑤-a G584(§83.13.2) — `landingId ∈ sessionReachableLandingIds(scenarioId, flowVariantId)`(전 kind) → `failed-precondition`
- *   ⑤ T194-a(§83.4.4 · G578) — 그 항목이 **이 세션에서 도달 가능**한지(`isMockScreenReachable`) → `failed-precondition`.
+ *   ⑤-a G588(§84.13.2) — `landingId ∈ sessionReachableLandingIds(scenarioId, flowVariantId)`(전 kind) → `failed-precondition`
+ *   ⑤ T194-a(§84.4.4 · G582) — 그 항목이 **이 세션에서 도달 가능**한지(`isMockScreenReachable`) → `failed-precondition`.
  *      ⚠️ 실행 위치는 ③ **바로 뒤**(④보다 앞)다 — 도달 불가 항목은 어떤 이벤트도 기록하지 않는다(번호는 추가 순서).
  */
 export const recordMockScreenEvent = onCall<
@@ -81,12 +81,12 @@ export const recordMockScreenEvent = onCall<
   if (!item) {
     throw new HttpsError("failed-precondition", "이 시나리오의 모의 화면이 아닙니다.");
   }
-  // ⑤-a G584(docs/Architecture.md §83.13.2) — 그 세션(시나리오 × 변형)의 **도달 가능 랜딩 집합 밖**이면 kind와 무관하게 거부한다.
-  // 세션의 `mockScreens` 문서 ⊆ 도달 가능 집합 — G159(단위 = 시나리오 × 변형, G585)가 세는 조건이 런타임에서도 참이 되게 하는 짝이다.
+  // ⑤-a G588(docs/Architecture.md §84.13.2) — 그 세션(시나리오 × 변형)의 **도달 가능 랜딩 집합 밖**이면 kind와 무관하게 거부한다.
+  // 세션의 `mockScreens` 문서 ⊆ 도달 가능 집합 — G159(단위 = 시나리오 × 변형, G589)가 세는 조건이 런타임에서도 참이 되게 하는 짝이다.
   if (!sessionReachableLandingIds(session.scenarioId, session.flowVariantId).includes(landingId)) {
     throw new HttpsError("failed-precondition", "이 세션에서는 열 수 없는 화면입니다.");
   }
-  // ⑤ T194-a(docs/Architecture.md §83.4.4 · G578 · AC-106 (h) ⓐ) — 카탈로그 소속(③)은 시나리오 단위다. 같은 시나리오 안에서
+  // ⑤ T194-a(docs/Architecture.md §84.4.4 · G582 · AC-106 (h) ⓐ) — 카탈로그 소속(③)은 시나리오 단위다. 같은 시나리오 안에서
   // 난이도로 갈리는 항목(parcel 고급의 `parcel-install`)은 **이 세션에서 도달 가능할 때만** 기록한다 — 초급 · 중급 · 챌린지
   // 세션이 그 항목의 응낙을 만들면 AC-105 발동 조건(응낙 세션)이 거짓으로 성립한다.
   if (!isMockScreenReachable(session, item)) {

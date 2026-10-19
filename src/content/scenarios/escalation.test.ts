@@ -1,5 +1,5 @@
-// T194-a G576(클라 쪽) — 메신저 → 통화 전이의 (시나리오 × 난이도) 술어: **서버 · 클라 두 구현의 대조** + 클라 직접 읽기 허용목록
-// (docs/Architecture.md §83.4.1 · PRD AC-106 (i) · UX D-124).
+// T194-a G580(클라 쪽) — 메신저 → 통화 전이의 (시나리오 × 난이도) 술어: **서버 · 클라 두 구현의 대조** + 클라 직접 읽기 허용목록
+// (docs/Architecture.md §84.4.1 · PRD AC-106 (i) · UX D-124).
 //
 // 왜 루트 테스트인가: functions 빌드 루트는 `src/`를 import할 수 없다(TS6059). 루트 러너(`node --experimental-strip-types`)는
 // 두 잎 모듈(서버 `functions/src/scenarios/escalation.ts` · 공개 메타 미러 `publicMeta.ts`)을 직접 불러올 수 있다.
@@ -44,7 +44,7 @@ async function loadClientCatalog(): Promise<Record<string, EscalationMetaView & 
   return catalog;
 }
 
-test("[T194-a G576] 서버 · 클라 술어가 전 시나리오 × 난이도(원값 포함) × {자가 · 챌린지}에서 같은 값 · 두 메타의 전이 필드가 같다", async (t) => {
+test("[T194-a G580] 서버 · 클라 술어가 전 시나리오 × 난이도(원값 포함) × {자가 · 챌린지}에서 같은 값 · 두 메타의 전이 필드가 같다", async (t) => {
   const client = await loadClientCatalog();
   assert.deepEqual(Object.keys(client).sort(), Object.keys(PUBLIC_SCENARIOS).sort(), "클라 · 서버 시나리오 집합이 다르다");
   let cells = 0;
@@ -66,7 +66,7 @@ test("[T194-a G576] 서버 · 클라 술어가 전 시나리오 × 난이도(원
       }
     }
   }
-  t.diagnostic(`[G576 클라·서버 대조] ${cells}칸 일치 · 자가 세션 전이 있음 ${yes.length}칸`);
+  t.diagnostic(`[G580 클라·서버 대조] ${cells}칸 일치 · 자가 세션 전이 있음 ${yes.length}칸`);
   assert.deepEqual(
     yes.filter((key) => key.startsWith("messenger-parcel-smishing-sms/")),
     ["messenger-parcel-smishing-sms/advanced"],
@@ -77,7 +77,7 @@ test("[T194-a G576] 서버 · 클라 술어가 전 시나리오 × 난이도(원
 // ── 클라 직접 읽기 허용목록 ──────────────────────────────────────────────────────
 
 const DIRECT_META_READ = /(\bscenario\??|\bmeta\??|\bfound\??)\.(escalation|advancedEscalation)\b/g;
-/** §83.4.1 — C-5(2인 발송 목록 필터 — 서버 챌린지 거부 S-6과 짝, 시나리오 단위 그대로) · 술어 구현 자신. */
+/** §84.4.1 — C-5(2인 발송 목록 필터 — 서버 챌린지 거부 S-6과 짝, 시나리오 단위 그대로) · 술어 구현 자신. */
 const CLIENT_ALLOWLIST = ["src/app/scenarios/messenger/page.tsx", "src/content/scenarios/escalation.ts"];
 
 const codeOnly = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
@@ -90,7 +90,7 @@ function clientHits(files: Record<string, string>): string[] {
   return hits.filter((hit) => !CLIENT_ALLOWLIST.some((allowed) => hit.startsWith(`${allowed}:`))).sort();
 }
 
-test("[T194-a G576] 클라 소스의 메타 전이 필드 직접 읽기는 허용목록(C-5 · 술어 구현)에서만 · 역방향 샘플은 걸린다", (t) => {
+test("[T194-a G580] 클라 소스의 메타 전이 필드 직접 읽기는 허용목록(C-5 · 술어 구현)에서만 · 역방향 샘플은 걸린다", (t) => {
   const files: Record<string, string> = {};
   for (const pattern of ["src/**/*.ts", "src/**/*.tsx"]) {
     for (const rel of fs.globSync(pattern, { cwd: REPO_ROOT })) {
@@ -105,14 +105,14 @@ test("[T194-a G576] 클라 소스의 메타 전이 필드 직접 읽기는 허�
     ...files,
     "src/app/session/messenger/page.tsx": `${files["src/app/session/messenger/page.tsx"]}\nconst x = Boolean(scenario.escalation);`,
   });
-  t.diagnostic(`[G576 클라] 허용목록 밖 직접 읽기 ${outside.length}건 / 옛 C-2 형태를 되살린 샘플 → ${tainted.length}건`);
-  assert.deepEqual(outside, [], "화면은 resolveScenarioEscalation · resolveSessionEscalation만 쓴다(G576)");
+  t.diagnostic(`[G580 클라] 허용목록 밖 직접 읽기 ${outside.length}건 / 옛 C-2 형태를 되살린 샘플 → ${tainted.length}건`);
+  assert.deepEqual(outside, [], "화면은 resolveScenarioEscalation · resolveSessionEscalation만 쓴다(G580)");
   assert.equal(tainted.length, 1);
   // C-5는 무변경이다(2인 발송 목록 — 시나리오 단위).
   assert.ok(codeOnly(files["src/app/scenarios/messenger/page.tsx"]).includes("!scenario.escalation"), "C-5 무변경");
 });
 
-test("[T194-a G576] 화면 판정 지점 — C-1 난이도 화면 · C-4 목소리 선택 가드가 고른 난이도로 술어를 부른다(UX D-124 ① · UX-025 v1.38)", () => {
+test("[T194-a G580] 화면 판정 지점 — C-1 난이도 화면 · C-4 목소리 선택 가드가 고른 난이도로 술어를 부른다(UX D-124 ① · UX-025 v1.38)", () => {
   const read = (rel: string) => codeOnly(fs.readFileSync(path.join(REPO_ROOT, rel), "utf8"));
   assert.match(read("src/app/scenarios/difficulty/page.tsx"), /if \(resolveScenarioEscalation\(scenario, selected\)\)/);
   assert.match(

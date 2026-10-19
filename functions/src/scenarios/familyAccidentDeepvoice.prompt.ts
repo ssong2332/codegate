@@ -82,6 +82,13 @@
 //  beginner len=6666 sha=e7b9b37d6de53378 (직전 6642 · 2c7f0cedbd7a9f35) · intermediate len=5845 sha=353f06efa4cdc18a
 //  (직전 5821 · 7b185cace013f6a3) · advanced len=6967 sha=087eef00603e3c4e (직전 6943 · 46d51df0f2996233).
 //  grandchild-impersonation도 같은 문장 교체로 3/3 바뀌었다. 재생성 완료 후에만 "재생성 완료"로 갱신할 것.)
+// (A-1 2026-10-19 · audit-A R1: 공통 [진행 강제]에 **무조건부** "'확인 중'이라며 붙잡아 두지 않는다" 항목(promptAssembly.ts
+//  NO_STALL_RULE — 끊기 슬롯 바로 뒤 · 리뷰 Minor-2의 결과 지시 우선 문장 포함)을 넣었다 → **조립 산출물이 바뀌었다 — 재생성 대기 중.** 실시간 통화(ElevenLabs clone)에는 아직
+//  반영되지 않았다. 재생성 완료 후에만 "재생성 완료"로 갱신할 것. 대조값 = `buildSystemPrompt(SCENARIO_PROMPTS[id], { difficultyLevel })`의
+//  sha256 앞 16자(빌드 산출물 `functions/lib` · 직전 값은 base main `b7fde97` 같은 방법 실측):
+//  beginner len=7104 sha=dc33feb1cf15665b (직전 6666 · e7b9b37d6de53378) · intermediate len=6283 sha=63675aebedcbc3f5
+//  (직전 5845 · 353f06efa4cdc18a) · advanced len=7405 sha=bdfb73d950684a27 (직전 6967 · 087eef00603e3c4e).
+//  grandchild-impersonation도 같은 항목으로 3/3 바뀌었다.)
 import type { ScenarioPromptDoc } from "../shared/types";
 
 // src/content/scenarios/familyAccidentDeepvoice.ts의 FAMILY_ACCIDENT_SCENARIO_ID와 동일한 문자열

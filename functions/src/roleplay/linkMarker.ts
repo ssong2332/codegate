@@ -29,7 +29,7 @@ const LINK_LABELS: Record<string, string> = {
   "parcel-redelivery": "재배송 신청 확인하기",
   "subsidy-apply": "지원금 신청하기",
   "subsidy-install": "지원금 신청 앱 설치하기",
-  // T194-a(§83.4.3 · G53) — parcel 고급의 모의 앱 설치 칩.
+  // T194-a(§84.4.3 · G53) — parcel 고급의 모의 앱 설치 칩.
   "parcel-install": "배송 확인 앱 설치하기",
 };
 const DEFAULT_LINK_LABEL = "확인하기";
@@ -44,7 +44,7 @@ const DEFAULT_LINK_LABEL = "확인하기";
  * 기본값(`credential-form`)일 때는 **키 자체를 만들지 않는다** — 카탈로그가 없는 12개 시나리오의
  * attachment 문서가 도입 전과 완전히 동일하게 유지된다(무백필·회귀 0, §15.0.4 하위호환 읽기 규칙).
  *
- * ⭐ T194-a(docs/Architecture.md §83.4.4 · G578) — `session`(세션의 시나리오 · 난이도 · 챌린지 여부)을 받아 **이 세션에서 도달할 수
+ * ⭐ T194-a(docs/Architecture.md §84.4.4 · G582) — `session`(세션의 시나리오 · 난이도 · 챌린지 여부)을 받아 **이 세션에서 도달할 수
  * 없는 `app-install` 마커**(예: 초급 parcel 모델이 `[[LINK:parcel-install]]`을 지어냄)를 그 시나리오의 기본 credential 랜딩으로
  * 강등하고 경고 1줄을 남긴다(조용한 임의 동작 0 — `flowVariants.ts` `flow_variant_unresolved` 관례). 기본 랜딩이 없으면 첨부를
  * 만들지 않는다(마커는 텍스트에서 지워진다). ⛔ `app-install` 방향 폴백은 여전히 0이다(R5).
@@ -99,7 +99,7 @@ export function extractLinkMarker(
 }
 
 /**
- * 마커 id → 이 세션에서 실제로 열 랜딩 id(§83.4.4). 카탈로그에 없는 id · `credential-form` · 도달 가능한 `app-install`은 그대로,
+ * 마커 id → 이 세션에서 실제로 열 랜딩 id(§84.4.4). 카탈로그에 없는 id · `credential-form` · 도달 가능한 `app-install`은 그대로,
  * 도달 불가 `app-install`은 기본 credential 랜딩 id(없으면 `undefined` = 첨부 없음).
  */
 function reachableLandingIdFor(
@@ -108,8 +108,8 @@ function reachableLandingIdFor(
   session: (Omit<EscalationSessionView, "scenarioId"> & { flowVariantId?: string }) | undefined,
 ): string | undefined {
   const item = findMockScreenItem(scenarioId, markerLandingId);
-  // ⛔ §83.13.2 G161 — 이 함수는 세션 도달 집합으로 마커를 거르지 않는다(다중 마커 능력 유지 · 거부는 기록 층 G584). 강등은
-  // §83.4.4의 "도달 불가 `app-install`" 한 경우뿐이다 — credential-form · 카탈로그 밖 id는 종전 그대로 통과한다.
+  // ⛔ §84.13.2 G161 — 이 함수는 세션 도달 집합으로 마커를 거르지 않는다(다중 마커 능력 유지 · 거부는 기록 층 G588). 강등은
+  // §84.4.4의 "도달 불가 `app-install`" 한 경우뿐이다 — credential-form · 카탈로그 밖 id는 종전 그대로 통과한다.
   if (!item || item.kind !== "app-install" || isMockScreenReachable({ ...session, scenarioId }, item)) return markerLandingId;
   const fallback = findDefaultCredentialLanding(scenarioId);
   console.warn(

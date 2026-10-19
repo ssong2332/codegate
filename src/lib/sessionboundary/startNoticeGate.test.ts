@@ -267,7 +267,7 @@ function withCallComponentViolations(source: string): string[] {
   return out;
 }
 
-// ⚠️ T194-a(docs/Architecture.md §83.4.1 · G576 "대체" — X8: 같은 커밋에 대체 단언) — 아래 3개 테스트의 **리터럴**을 새 술어
+// ⚠️ T194-a(docs/Architecture.md §84.4.1 · G580 "대체" — X8: 같은 커밋에 대체 단언) — 아래 3개 테스트의 **리터럴**을 새 술어
 // 문자열로 바꿨다. 단언 내용("버튼 · 고지 · 서버 전이가 같은 술어")은 그대로다: 예전 술어는 시나리오 속성
 // (`scenario.escalation`)이었고, 이제 (시나리오 × 난이도) 세션 술어 `resolveSessionEscalation`이다(택배 문자는 고급 세션만 참 —
 // UX D-124 ② · PRD AC-106 (i)).

@@ -1,4 +1,4 @@
-// T194-a(docs/Architecture.md §83.4.1 · PRD AC-106 · AC-106 (i) · J-1) — 메신저 → 통화 전이 여부의 **(시나리오 × 난이도)
+// T194-a(docs/Architecture.md §84.4.1 · PRD AC-106 · AC-106 (i) · J-1) — 메신저 → 통화 전이 여부의 **(시나리오 × 난이도)
 // 단일 술어**(서버 쪽).
 //
 // **왜 술어로 바꿨나**: 예전에는 전이 여부가 공개 메타 1필드(`escalation`)라 서버 5곳 · 클라 4곳이 그 필드를 직접 읽었다.
@@ -11,7 +11,7 @@
 // ⛔ 무변경: `createChallenge`의 에스컬레이션 시나리오 거부(S-6)는 시나리오 단위 그대로다(parcel 챌린지는 계속 허용되고
 //   수신자는 현행 고급 — AC-106 (g) 기본값).
 // ⚠️ 이 값은 (시나리오 × 난이도) 값이지 배정된 흐름 변형 값이 아니다 — 변형 데이터(`escalatesToVoice`)와의 정합은
-//   `__tests__/flowVariants.test.ts`(G577 — AC-106 (i))가 고정한다.
+//   `__tests__/flowVariants.test.ts`(G581 — AC-106 (i))가 고정한다.
 // ⚠️ 잎 모듈이다(타입 import만) — 루트 테스트 러너가 이 파일을 직접 불러와 클라 구현과 대조한다.
 import type { EscalationConfig, ScenarioMeta } from "./publicMeta";
 

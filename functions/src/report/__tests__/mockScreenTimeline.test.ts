@@ -385,9 +385,9 @@ test("설치 카탈로그가 없고 escalation만 있으면 2행(messenger·voic
   );
 });
 
-// ── T194-a G583 — 단계 파생의 "의도됐는가"가 세션 술어다 (docs/Architecture.md §83.4.1 S-4 · S-5 · PRD AC-106 (c)(f)) ──
+// ── T194-a G587 — 단계 파생의 "의도됐는가"가 세션 술어다 (docs/Architecture.md §84.4.1 S-4 · S-5 · PRD AC-106 (c)(f)) ──
 
-test("[T194-a G583] parcel 초급 · 중급 · 챌린지 세션 = 단계 행 0(설치 '미도달' 표기 0) · 고급 = 3단계 · 지원금은 현행 3단계", (t) => {
+test("[T194-a G587] parcel 초급 · 중급 · 챌린지 세션 = 단계 행 0(설치 '미도달' 표기 0) · 고급 = 3단계 · 지원금은 현행 3단계", (t) => {
   const PARCEL = "messenger-parcel-smishing-sms";
   const SUBSIDY = "messenger-subsidy-smishing-sms";
   const stagesFor = (session: Parameters<typeof resolveSessionStageIntent>[0], reachedLandingIds: string[] = []) => {
@@ -430,5 +430,5 @@ test("[T194-a G583] parcel 초급 · 중급 · 챌린지 세션 = 단계 행 0(�
       voiceIntended: true,
     }, `subsidy ${level}: 현행 무변경`);
   }
-  t.diagnostic(`[G583] ${lines.join(" | ")}`);
+  t.diagnostic(`[G587] ${lines.join(" | ")}`);
 });

@@ -588,9 +588,9 @@ test("[T190/UX-023 v1.33 (2)(3)] 주소창 ⚠·모노 글꼴·🔒 0 · 기관 
   }
 });
 
-// ── T194-a(docs/Architecture.md §83.13.3 ③) — 설치 화면 상황별 문구 · 표 밖 id 생략 ────────────────────────────────
+// ── T194-a(docs/Architecture.md §84.13.3 ③) — 설치 화면 상황별 문구 · 표 밖 id 생략 ────────────────────────────────
 
-test("[T194-a §83.13.3 ③] 설치 항목마다 자기 문구만 그린다(교차 0) · 표에 없는 id의 app-install은 아무것도 그리지 않는다(지원금 기본값 0)", (t) => {
+test("[T194-a §84.13.3 ③] 설치 항목마다 자기 문구만 그린다(교차 0) · 표에 없는 id의 app-install은 아무것도 그리지 않는다(지원금 기본값 0)", (t) => {
   const installs = catalogItems.filter((item) => item.kind === "app-install");
   assert.equal(installs.length, 2, "설치 항목 2종(subsidy · parcel)");
   const lines: string[] = [];

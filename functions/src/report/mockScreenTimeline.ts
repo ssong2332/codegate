@@ -282,7 +282,7 @@ export type StageDerivationInput = {
 };
 
 /**
- * ⭐ T194-a(docs/Architecture.md §83.4.1 S-4 · S-5 · G583) — 위 표의 "의도됐는가" 두 칸을 **세션 술어**로 푼다(리포트 단일 지점).
+ * ⭐ T194-a(docs/Architecture.md §84.4.1 S-4 · S-5 · G587) — 위 표의 "의도됐는가" 두 칸을 **세션 술어**로 푼다(리포트 단일 지점).
  * - 설치: 카탈로그 `app-install` 중 **이 세션에서 도달 가능한** 항목(`isMockScreenReachable`) — parcel 초급 · 중급은 0개라 설치 단계
  *   "미도달" 표기가 생기지 않는다(그 세션에는 애초에 설치 단계가 없다).
  * - 통화: (시나리오 × 난이도) 세션 술어(`resolveSessionEscalation`) — 메신저 전이 판정(S-1~S-3)과 같은 술어.

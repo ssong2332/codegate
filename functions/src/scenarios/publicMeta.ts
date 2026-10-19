@@ -29,9 +29,9 @@ export type ScenarioMeta = {
   channel?: Channel;
   surface?: MessengerSurface;
   escalation?: EscalationConfig;
-  // T194-a(Architecture.md §83.4.1 · PRD AC-106 · AC-106 (i)) — **고급 세션에서만** 통화로 이어지는 시나리오의
+  // T194-a(Architecture.md §84.4.1 · PRD AC-106 · AC-106 (i)) — **고급 세션에서만** 통화로 이어지는 시나리오의
   // 전이 설정. `escalation`(세 난이도 모두)이 있으면 이 필드는 쓰이지 않는다. 판정은 반드시
-  // `scenarios/escalation.ts`의 (시나리오 × 난이도) 술어로만 한다 — 이 필드를 직접 읽지 않는다(G576).
+  // `scenarios/escalation.ts`의 (시나리오 × 난이도) 술어로만 한다 — 이 필드를 직접 읽지 않는다(G580).
   // 클라 원본(messengerParcelSmishingSms.ts)과 같은 값이어야 한다(루트 대조 테스트 escalation.test.ts).
   advancedEscalation?: EscalationConfig;
   // T191 S5(고급 전용 3종 — PRD AC-097 (b) · UX 계약 C-1) — 이 시나리오는 고급으로만 만들 수 있다.
@@ -235,7 +235,7 @@ export const messengerParcelSmishingSmsScenario: ScenarioMeta = {
   callerLabel: "택배 배송 안내",
   channel: "messenger",
   surface: "sms",
-  // T194-a(§83.4.1 · AC-106) — 고급만 문자 → 설치 → 상담원 전화 3단계(초급 · 중급은 현행 — AC-106 (f)).
+  // T194-a(§84.4.1 · AC-106) — 고급만 문자 → 설치 → 상담원 전화 3단계(초급 · 중급은 현행 — AC-106 (f)).
   advancedEscalation: { toChannel: "voice", voiceMode: "generic" },
 };
 

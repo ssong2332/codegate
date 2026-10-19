@@ -90,7 +90,8 @@ test("[은행명] 배정 — 새 세션은 목록 안에서 고르고, 저장값
 test("[은행명] 자리표시자 치환 — 'OO은행'·'○○은행'·표기 변형(띄어쓰기·소문자·전각) 모두, 없으면 입력 그대로, 멱등", () => {
   assert.equal(applyFictionalBank("OO은행 948-2716 / ○○은행 금융사고대응팀", "한결은행"), "한결은행 948-2716 / 한결은행 금융사고대응팀");
   assert.equal(applyFictionalBank("OO 은행 · oo은행 · ＯＯ은행", "한결은행"), "한결은행 · 한결은행 · 한결은행");
-  assert.equal(applyFictionalBank("OO카드 · 오오은행", "한결은행"), "OO카드 · 오오은행", "범위 밖 표기는 그대로(§81.5)");
+  // §83 — "OO카드"는 이제 세션 카드사명으로 바뀐다(fictionalOrg.test.ts). 한글로 읽은 표기·"OO뱅크"는 여전히 범위 밖.
+  assert.equal(applyFictionalBank("OO뱅크 · 오오은행", "한결은행"), "OO뱅크 · 오오은행", "범위 밖 표기는 그대로(§81.5)");
   const plain = "자리표시자 없음";
   assert.equal(applyFictionalBank(plain, "한결은행"), plain);
   const once = applyFictionalBank("OO은행", "한결은행");
@@ -119,7 +120,8 @@ test("[은행명] 문자 — 저장 본문·도착 지시가 세션 은행명으
         assert.ok(doc.body.includes("늘봄은행"));
         assert.equal(doc.bankName, "늘봄은행");
       } else {
-        assert.equal(doc.body, item.body);
+        // §83 — 캐피탈·카드 자리표시자만 있는 문자는 본문이 그 이름으로 바뀌지만 bankName은 싣지 않는다.
+        if (!/[Oo○]{2}\s?(?:카드|캐피탈)/.test(item.body)) assert.equal(doc.body, item.body);
         assert.equal("bankName" in doc, false);
       }
       const legacy = buildInCallSmsDoc(item, ts, 1, scenarioId);
@@ -137,7 +139,7 @@ test("[은행명] 배선 — 세션 생성 2곳이 저장·오프닝에 전달, 
     const s = src(file);
     assert.match(s, /const fictionalBankName = pickFictionalBankName\(\);/, file);
     // T191 S5(#313) 병합 — 3번째 인자는 흐름 변형 ID, 4번째가 은행명이다.
-    // T194-a(§83.13.3 ⑤) — 5번째 인자 = 챌린지 ID(세션 술어 입력). 호출부 전부 **명시** 전달(자가 세션 = `undefined`) — 5인자 형태로 고정한다.
+    // T194-a(§84.13.3 ⑤) — 5번째 인자 = 챌린지 ID(세션 술어 입력). 호출부 전부 **명시** 전달(자가 세션 = `undefined`) — 5인자 형태로 고정한다.
     // 4번째 = 은행명은 그대로다.
     assert.match(s, /generateOpeningLine\(\n\s*scenarioId,\n\s*[\w.]+,\n\s*[\w.]+,\n\s*fictionalBankName,\n\s*[\w.]+,\n\s*\)/, file);
     // 세션 문서 객체 리터럴 안(difficultyLevel 바로 다음 줄)에 저장하는지 — 오프닝 호출 인자와 구별한다(리뷰 #2).

@@ -58,7 +58,7 @@ export function speakerGenderFor(scenarioId: string): "male" | "female" | undefi
 }
 
 /**
- * ⭐ T194-a(docs/Architecture.md §83.4.3 "화자 성별" · G582) — **세션 단위** 화자 성별. 표는 시나리오 단위라
+ * ⭐ T194-a(docs/Architecture.md §84.4.3 "화자 성별" · G586) — **세션 단위** 화자 성별. 표는 시나리오 단위라
  * `messenger-parcel-smishing-sms`(초급 · 중급은 통화 경로 0 = `notApplicable`)를 `"female"`로 바꾸면 **초급 · 중급 텍스트
  * 프롬프트에도 [화자] 블록이 생긴다**(호출부 3곳이 무조건 넘긴다) = AC-106 (f) 위반. ⇒ 표 값은 그대로 두고, 표가 값을 내지 않는
  * 시나리오는 **이 세션에 통화 단계가 있을 때만** 배정된 흐름 변형의 0번 leg 성별을 쓴다.
@@ -73,7 +73,7 @@ export function resolveSessionSpeakerGender(
   if (fromTable) return fromTable;
   // ⛔ 리뷰 C1 — 변형 leg 성별은 **`advancedEscalation`만 가진 시나리오**(택배 문자 — 고급만 통화)에서만 쓴다. `escalation`(세 난이도 ·
   // 클론 — child-kakao)을 가진 notApplicable 시나리오에 leg 성별을 주면 [화자] 블록이 새로 생기고 Gemini 음성 풀이 줄어든다(#162 ·
-  // §83.4.6 위반). 판정은 메타 직접 읽기 대신 술어로 한다(G576): 중급 값 없음 ∧ 고급 값 있음 = advancedEscalation 전용.
+  // §84.4.6 위반). 판정은 메타 직접 읽기 대신 술어로 한다(G580): 중급 값 없음 ∧ 고급 값 있음 = advancedEscalation 전용.
   const meta = PUBLIC_SCENARIOS[session.scenarioId];
   const advancedOnlyEscalation =
     resolveScenarioEscalation(meta, "intermediate") === undefined && resolveScenarioEscalation(meta, "advanced") !== undefined;

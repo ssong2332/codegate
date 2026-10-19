@@ -229,7 +229,7 @@ const CURRENT_VARIANT_ROWS: readonly string[] = [
   "messenger-friend-loan-kakao/beginner",
   "messenger-friend-loan-kakao/intermediate",
   // T194-a(PRD AC-096 갱신 고지 3 ① · AC-106 · User 결정 U7) — parcel 고급의 자가 변형 `fv-g454`는 authored(새 흐름)가 됐고,
-  // §83.13.5 처방 2로 챌린지 수신자용 "현행" 변형(`fv-k7qm` — T194 이전 `fv-g454` 내용)이 들어와 이 행은 그 변형을 가리킨다.
+  // §84.13.5 처방 2로 챌린지 수신자용 "현행" 변형(`fv-k7qm` — T194 이전 `fv-g454` 내용)이 들어와 이 행은 그 변형을 가리킨다.
   "messenger-parcel-smishing-sms/advanced",
   // 초급 · 중급은 그대로 "현행"(AC-106 (f)).
   "messenger-parcel-smishing-sms/beginner",
@@ -477,7 +477,7 @@ test("[T191 S5 프롬프트 합성] 가드레일 원문 불변 · 최후미 · '
     const resolved = resolveVariantPrompt(base, v);
     assert.equal(resolved.guardrailPreamble, base.guardrailPreamble, `${v.variantId}: 가드레일 변형 금지`);
     assert.deepEqual(resolved.weakenedTactics, v.tactics);
-    // T194-a(§83.4.2) — 0번 leg 페르소나가 있으면 그것이 원본을 대신한다(부재 = 원본 재사용 — 종전 단언 그대로).
+    // T194-a(§84.4.2) — 0번 leg 페르소나가 있으면 그것이 원본을 대신한다(부재 = 원본 재사용 — 종전 단언 그대로).
     const persona = v.legs[0]?.personaPrompt ?? base.personaPrompt;
     if (v.stages.length === 0) {
       assert.equal(resolved.personaPrompt, persona, `${v.variantId}: 단계 없는 변형은 페르소나 무변경`);
@@ -529,7 +529,7 @@ test("[T191 S5 호출부] 시나리오 프롬프트 해석이 단일 지점을 �
   assert.equal(eleven.includes("flowVariant"), false, "ElevenLabs 경로는 변형 미적용(OQ-A131 기본값)");
 });
 
-// ── T194-a G577 — PRD AC-106 (i) "같은 (시나리오 × 난이도) 허용 변형의 통화 단계 유무 동일" (docs/Architecture.md §83.4.5) ──
+// ── T194-a G581 — PRD AC-106 (i) "같은 (시나리오 × 난이도) 허용 변형의 통화 단계 유무 동일" (docs/Architecture.md §84.4.5) ──
 //
 // 왜 필요한가: UX-025 안내와 시작 고지의 "메시지와 전화"는 (시나리오 × 난이도) 값으로 갈린다(PRD AC-096 읽기 고지 4).
 // 같은 칸의 허용 변형 중 하나라도 통화 단계 유무가 다르면 안내 유무가 **배정된 변형을 드러내** AC-096 (e) 위반이 된다.
@@ -545,7 +545,7 @@ function sessionKindExists(scenarioId: string, level: DifficultyLevel, kind: Ses
   return true;
 }
 
-/** (scenarioId/level/세션 종류) → 그 배정 풀 변형들의 통화 단계 유무 값 집합. ⭐ §83.13.5 — 단위에 세션 종류가 들어간다. */
+/** (scenarioId/level/세션 종류) → 그 배정 풀 변형들의 통화 단계 유무 값 집합. ⭐ §84.13.5 — 단위에 세션 종류가 들어간다. */
 function callStageByCell(pool: PoolFn): Map<string, Set<boolean>> {
   const cells = new Map<string, Set<boolean>>();
   for (const id of Object.keys(PUBLIC_SCENARIOS)) {
@@ -573,17 +573,17 @@ const UNFILTERED_POOL: PoolFn = (scenarioId, level) => listFlowVariants(scenario
 const EXPECTED_CALL_STAGE: Readonly<Record<string, Readonly<Record<DifficultyLevel, boolean>>>> = {
   "messenger-parcel-smishing-sms": { beginner: false, intermediate: false, advanced: true },
   "messenger-subsidy-smishing-sms": { beginner: true, intermediate: true, advanced: true },
-  // 그 밖 메신저 시나리오 = 공개 메타 그대로(AC-106 (i) 신설 시점 값 — §83.4.5 ③).
+  // 그 밖 메신저 시나리오 = 공개 메타 그대로(AC-106 (i) 신설 시점 값 — §84.4.5 ③).
   "messenger-child-impersonation-kakao": { beginner: true, intermediate: true, advanced: true },
   "messenger-friend-loan-kakao": { beginner: false, intermediate: false, advanced: false },
 };
-// ⭐ §83.13.5 처방 4 — 챌린지 세션 기대값: 전부 "없음"(에스컬레이션 메타 시나리오는 챌린지 자체가 거부된다).
+// ⭐ §84.13.5 처방 4 — 챌린지 세션 기대값: 전부 "없음"(에스컬레이션 메타 시나리오는 챌린지 자체가 거부된다).
 // 명시 1행: parcel 고급 챌린지 = 통화 단계 없음(AC-106 (g) 기본값 — 수신자는 현행 고급 변형).
 const EXPECTED_CHALLENGE_CALL_STAGE: Readonly<Record<string, boolean>> = {
   "messenger-parcel-smishing-sms/advanced": false,
 };
 
-test("[T194-a G577 · AC-106 (i) · §83.13.5] ① (시나리오 × 난이도 × 세션 종류) 배정 풀마다 통화 단계 유무가 하나 ② 그 값 = 세션 술어 ③ 기대값 · 역방향 ⓓ", (t) => {
+test("[T194-a G581 · AC-106 (i) · §84.13.5] ① (시나리오 × 난이도 × 세션 종류) 배정 풀마다 통화 단계 유무가 하나 ② 그 값 = 세션 술어 ③ 기대값 · 역방향 ⓓ", (t) => {
   // ①
   const violations = callStageUniformityViolations(assignablePool);
   // 역방향 ⓓ — 필터를 끈 풀(허용 변형 전체): parcel 고급에는 통화 단계 있는 변형과 없는 변형이 공존한다.
@@ -625,14 +625,14 @@ test("[T194-a G577 · AC-106 (i) · §83.13.5] ① (시나리오 × 난이도 ×
   assert.deepEqual(assignablePool("messenger-parcel-smishing-sms", "advanced").map((v) => v.variantId), ["fv-g454"]);
 });
 
-test("[T194-a G577] escalatesToVoice는 `true` 또는 부재뿐이다(부재가 거짓 — `false` 표기 0)", () => {
+test("[T194-a G581] escalatesToVoice는 `true` 또는 부재뿐이다(부재가 거짓 — `false` 표기 0)", () => {
   for (const v of FLOW_VARIANTS) {
     assert.ok(v.escalatesToVoice === undefined || v.escalatesToVoice === true, `${v.variantId}: ${String(v.escalatesToVoice)}`);
     assert.equal(Object.prototype.hasOwnProperty.call(v, "escalatesToVoice") && v.escalatesToVoice !== true, false, `${v.variantId}: false/undefined를 명시하지 말 것`);
   }
 });
 
-test("[T194-a §83.4.2] parcel 고급 변형 — authored · 3단계 이상 · 메신저+통화 채널 · 출처 N1·N2·C08 · 원본 링크 수법 제외 · leg 페르소나", () => {
+test("[T194-a §84.4.2] parcel 고급 변형 — authored · 3단계 이상 · 메신저+통화 채널 · 출처 N1·N2·C08 · 원본 링크 수법 제외 · leg 페르소나", () => {
   const v = FLOW_VARIANTS.find((x) => x.variantId === "fv-g454") as FlowVariant;
   assert.equal(v.scenarioId, "messenger-parcel-smishing-sms");
   assert.equal(v.level, "advanced");
@@ -650,21 +650,21 @@ test("[T194-a §83.4.2] parcel 고급 변형 — authored · 3단계 이상 · �
 });
 
 /**
- * ⭐ 리뷰 M2 — **변경 전(base = 커밋 6c9548b 추출본 lib) 실측값 고정.** `escalatesToVoice`를 1필드만 더한 child-kakao 3벌 · subsidy 3벌의
+ * ⭐ 리뷰 M2 — **변경 전(base = main 49defd7 lib — main 병합 때 같은 옵션으로 다시 잼) 실측값 고정.** `escalatesToVoice`를 1필드만 더한 child-kakao 3벌 · subsidy 3벌의
  * 조립 산출물이 T194-a 전후로 한 바이트도 바뀌지 않았음을 보인다(예전의 "플래그 제거본과 같다"는 같은 코드로 두 번 조립한 자기확증이라
  * 화자 성별 누수(리뷰 C1)를 못 잡았다). 측정 옵션 = sendMessage 텍스트 경로와 같은 옵션(난이도 · 문자 술어 · L3 · 신원 확인 · 화자 성별 =
  * base는 표 값 `speakerGenderFor` / 현재는 세션 해석 `resolveSessionSpeakerGender`). 측정 스크립트: base lib에 같은 옵션으로 조립.
  */
 const BASE_FLAGGED_ASSEMBLY: readonly { scenarioId: string; level: DifficultyLevel; variantId: string; sha256: string; length: number }[] = [
-  { scenarioId: "messenger-child-impersonation-kakao", level: "beginner", variantId: "fv-34v5", sha256: "e66dbed0dcbeac2e6a30e373f8f0a1771233bd0f5b880c9f8b6b4b16d64e5887", length: 6187 },
-  { scenarioId: "messenger-child-impersonation-kakao", level: "intermediate", variantId: "fv-tpr3", sha256: "f0ef3fbea9bc090c548332b7dfcfb9d2c74ccfa041ba00992ad1b1e2a99aa105", length: 5422 },
-  { scenarioId: "messenger-child-impersonation-kakao", level: "advanced", variantId: "fv-tdgg", sha256: "738acd2b9b5902eb9cc4238cad27765920dcbbd533b8e0822604ab4273501a8c", length: 6885 },
-  { scenarioId: "messenger-subsidy-smishing-sms", level: "beginner", variantId: "fv-rizf", sha256: "865e82108f3880f75eecb17bf883035581f7b6654fe8d6660b2016b6e2f0f86b", length: 6827 },
-  { scenarioId: "messenger-subsidy-smishing-sms", level: "intermediate", variantId: "fv-afbr", sha256: "97b8e1cf66f1b2f6f8dba4b2980e53a53ee693313a2e3c847dff666d9be9b3e7", length: 6088 },
-  { scenarioId: "messenger-subsidy-smishing-sms", level: "advanced", variantId: "fv-hu8w", sha256: "c9c2d05539c4444370937674debe2dc8b7f29146ce47168b8a29a2a75d05095b", length: 8005 },
+  { scenarioId: "messenger-child-impersonation-kakao", level: "beginner", variantId: "fv-34v5", sha256: "5d2ab0397bf0b43db0ba6dfdea2bea47ce420f2f038ef6f78881fce612fa2ebf", length: 6625 },
+  { scenarioId: "messenger-child-impersonation-kakao", level: "intermediate", variantId: "fv-tpr3", sha256: "43addc55a5e13b7074231e776ae80ea12bc07fa2e846f2e381db68b76ea33492", length: 5860 },
+  { scenarioId: "messenger-child-impersonation-kakao", level: "advanced", variantId: "fv-tdgg", sha256: "81f2ea3e212c1384f3bf077d43fb00c2bc547ff6a6c23c8f8c206d1d92c97436", length: 7323 },
+  { scenarioId: "messenger-subsidy-smishing-sms", level: "beginner", variantId: "fv-rizf", sha256: "a2e606c25ff5bfd88c95a1424c002a5e010cd149a30245e33e5528f35965e434", length: 7265 },
+  { scenarioId: "messenger-subsidy-smishing-sms", level: "intermediate", variantId: "fv-afbr", sha256: "67ab2d736788293f0978cc034b53ac74c85bd1d3397a607d70e5f0394f60fdad", length: 6526 },
+  { scenarioId: "messenger-subsidy-smishing-sms", level: "advanced", variantId: "fv-hu8w", sha256: "b29e4c651cda6960e4f9d5a28ab3f61165c6a97da68f78d6d34398e1d8e4de48", length: 8443 },
 ];
 
-test("[T194-a §83.13.3 ② · 리뷰 M2] 플래그만 더한 child-kakao · subsidy 6벌 — 조립 바이트 = 변경 전 실측값 · child-kakao [화자] 블록 0 · Gemini 음성 풀 불변", (t) => {
+test("[T194-a §84.13.3 ② · 리뷰 M2] 플래그만 더한 child-kakao · subsidy 6벌 — 조립 바이트 = 변경 전 실측값 · child-kakao [화자] 블록 0 · Gemini 음성 풀 불변", (t) => {
   const lines: string[] = [];
   for (const row of BASE_FLAGGED_ASSEMBLY) {
     const v = FLOW_VARIANTS.find((x) => x.variantId === row.variantId);
@@ -687,7 +687,7 @@ test("[T194-a §83.13.3 ② · 리뷰 M2] 플래그만 더한 child-kakao · sub
     // 화자 성별 = 변경 전 표 값(child-kakao = notApplicable → undefined → [화자] 블록 0).
     assert.equal(speakerGender, speakerGenderFor(row.scenarioId), `${row.variantId}: 화자 성별이 표 값과 다르다`);
     if (row.scenarioId === "messenger-child-impersonation-kakao") {
-      assert.equal(assembled.includes("[화자"), false, `${row.variantId}: [화자] 블록이 생겼다(#162 · §83.4.6)`);
+      assert.equal(assembled.includes("[화자"), false, `${row.variantId}: [화자] 블록이 생겼다(#162 · §84.4.6)`);
     }
     // Gemini 음성 풀 — 세션 성별을 넘긴 선택 = 변경 전(표만 보는) 선택.
     for (let i = 0; i < 30; i += 1) {

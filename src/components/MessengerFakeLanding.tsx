@@ -160,7 +160,7 @@ export default function MessengerFakeLanding({
     };
   }, [isMessenger]);
 
-  // T194-a(§83.13.3 ③ ⓑ) — 표에 없는 id의 `app-install`은 설치 화면을 그리지 않는다(지원금 문구 · credential 폴백 0 — UF-012 Failure (a) 생략).
+  // T194-a(§84.13.3 ③ ⓑ) — 표에 없는 id의 `app-install`은 설치 화면을 그리지 않는다(지원금 문구 · credential 폴백 0 — UF-012 Failure (a) 생략).
   if (landingKind === "app-install" && installCopyFor(landingId) === undefined) return null;
 
   const content: ReactNode = (
@@ -345,7 +345,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     ],
     submitLabel: "본인확인 완료하기",
     successHeadline: "본인확인이 완료되었습니다.",
-    issuerLabel: "ⓒ ○○캐피탈 전환심사팀",
+    issuerLabel: "ⓒ 대환대출 전환심사팀",
     mockHost: "loan-switch-center.invalid",
   },
   "tax-refund-claim": {
@@ -605,10 +605,10 @@ type InstallCopy = {
 };
 
 /**
- * ⭐ T194-a(docs/Architecture.md §83.4.3 · §83.13.3 ③ · UX UF-012 v1.38 (1) "콘텐츠 1벌 · 가상 앱 이름 — D-58 콘텐츠 축") — 설치 화면의
+ * ⭐ T194-a(docs/Architecture.md §84.4.3 · §84.13.3 ③ · UX UF-012 v1.38 (1) "콘텐츠 1벌 · 가상 앱 이름 — D-58 콘텐츠 축") — 설치 화면의
  * **상황별 콘텐츠**. 예전 주석(*"`app-install`은 상황 축을 갖지 않는다 — 도달 가능한 항목이 1종뿐"*)의 전제가 택배 고급
  * (`parcel-install`)으로 깨져, landingId 정확 일치 조회 표를 둔다.
- * ⛔ 규칙(§83.13.3 ③): ⓐ 키 = 서버 카탈로그 `app-install` 항목의 landingId 전수 · 값 = 그 항목 화면 필드와 **바이트 동일**(키 집합 양방향 ·
+ * ⛔ 규칙(§84.13.3 ③): ⓐ 키 = 서버 카탈로그 `app-install` 항목의 landingId 전수 · 값 = 그 항목 화면 필드와 **바이트 동일**(키 집합 양방향 ·
  * 값 대조 = `mockScreenCopy.test.ts`) ⓑ **표에 없는 id면 설치 화면을 그리지 않는다** — 지원금 문구 기본값 폴백 0 · credential 폴백 0(R5 ·
  * UF-012 Failure (a) 생략) ⓒ kind 분기가 먼저 끝난 뒤 조회(R7) · 정확 일치만(R8) · 신규 kind · 컴포넌트 파일 0(AC-106 (a)).
  */
@@ -691,7 +691,7 @@ function AppInstallMockup({
     onConsent?.();
   };
 
-  // T194-a(§83.13.3 ③ ⓑ) — 상위가 이미 걸렀지만 이 서브 컴포넌트도 표 밖 id에서는 아무것도 그리지 않는다(기본 문구 폴백 0).
+  // T194-a(§84.13.3 ③ ⓑ) — 상위가 이미 걸렀지만 이 서브 컴포넌트도 표 밖 id에서는 아무것도 그리지 않는다(기본 문구 폴백 0).
   if (!installCopy) return null;
 
   return (

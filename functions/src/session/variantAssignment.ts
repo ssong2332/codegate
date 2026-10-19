@@ -51,7 +51,7 @@ export function pickChallengeVariantId(candidates: readonly string[], challengeI
   return candidates[hash % candidates.length];
 }
 
-// T194-a(§83.13.5 · G586) — 후보 = 배정 가능 풀(허용 변형 중 세션 종류의 에스컬레이션 값과 통화 단계 유무가 같은 것). 자가(`challengeId` 부재) ·
+// T194-a(§84.13.5 · G590) — 후보 = 배정 가능 풀(허용 변형 중 세션 종류의 에스컬레이션 값과 통화 단계 유무가 같은 것). 자가(`challengeId` 부재) ·
 // 수신자 배정이 같은 필터를 탄다.
 function candidatesOrThrow(scenarioId: string, level: DifficultyLevel, challengeId?: string): string[] {
   const candidates = assignablePool(scenarioId, level, challengeId).map((v) => v.variantId);

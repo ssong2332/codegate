@@ -24,6 +24,9 @@ import { SCENARIO_PROMPTS } from "../../scenarios";
 import { IN_CALL_SMS } from "../../scenarios/inCallSms";
 import { hasVerifyIntercept, VERIFY_INTERCEPT } from "../../scenarios/verifyIntercept";
 import { MOCK_INSTALL_CONSENT_INSTRUCTION } from "../../scenarios/mockScreens";
+import { MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL } from "../../scenarios/mockScreens";
+import { buildConfirmResultInstruction, buildLiveConfirmResultInstruction } from "../../inCallSms/confirmResult";
+import { ESCALATED_CALL_CONTEXT_INSTRUCTION } from "../escalatedCall";
 import { isL3Procedural } from "../l3Depth";
 import { asksIdentityCheck } from "../personaAuthority";
 import { speakerGenderFor } from "../../realtime/scenarioVoice";
@@ -142,6 +145,13 @@ function assembledPromptTexts(): Set<string> {
     for (const sms of IN_CALL_SMS[id] ?? []) texts.add(sms.announceInstruction);
   }
   texts.add(MOCK_INSTALL_CONSENT_INSTRUCTION);
+  // A-1 ⑦⑧ — 새 서버 소유 턴 지시(폴백) · Live 응답 필드도 같은 게이트를 받는다.
+  texts.add(MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL);
+  texts.add(ESCALATED_CALL_CONTEXT_INSTRUCTION);
+  for (const purpose of ["transfer", "link"] as const) {
+    texts.add(buildConfirmResultInstruction(purpose));
+    texts.add(buildLiveConfirmResultInstruction(purpose));
+  }
   return texts;
 }
 

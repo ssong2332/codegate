@@ -180,9 +180,9 @@ test("[T191 S5 회전 경합 · M3] 같은 미리보기로 동시에 생성해�
   assert.equal(store.has("users/u1/variantRotation/other"), false);
 });
 
-// ── T194-a G586 — 배정 가능 풀 `assignablePool` (docs/Architecture.md §83.13.5 · PRD AC-106 (g) · AC-096 (e)) ──
+// ── T194-a G590 — 배정 가능 풀 `assignablePool` (docs/Architecture.md §84.13.5 · PRD AC-106 (g) · AC-096 (e)) ──
 
-test("[T194-a G586] 풀 진리표 — 전 시나리오 × 3난이도 × {자가 · 챌린지}(거부 조합 제외) 비어 있지 않음 · 풀의 변형은 통화 단계 유무 = 세션 술어", (t) => {
+test("[T194-a G590] 풀 진리표 — 전 시나리오 × 3난이도 × {자가 · 챌린지}(거부 조합 제외) 비어 있지 않음 · 풀의 변형은 통화 단계 유무 = 세션 술어", (t) => {
   let cells = 0;
   for (const id of Object.keys(PUBLIC_SCENARIOS)) {
     for (const level of DIFFICULTY_LEVELS) {
@@ -199,15 +199,15 @@ test("[T194-a G586] 풀 진리표 — 전 시나리오 × 3난이도 × {자가 
       }
     }
   }
-  t.diagnostic(`[G586] 풀 ${cells}칸 · parcel 고급 자가 ${JSON.stringify(assignablePool("messenger-parcel-smishing-sms", "advanced").map((v) => v.variantId))} / 챌린지 ${JSON.stringify(assignablePool("messenger-parcel-smishing-sms", "advanced", "c1").map((v) => v.variantId))}`);
-  // 다른 시나리오는 필터가 항등이다(§83.13.5 처방 3) — 풀 = 허용 변형 전체.
+  t.diagnostic(`[G590] 풀 ${cells}칸 · parcel 고급 자가 ${JSON.stringify(assignablePool("messenger-parcel-smishing-sms", "advanced").map((v) => v.variantId))} / 챌린지 ${JSON.stringify(assignablePool("messenger-parcel-smishing-sms", "advanced", "c1").map((v) => v.variantId))}`);
+  // 다른 시나리오는 필터가 항등이다(§84.13.5 처방 3) — 풀 = 허용 변형 전체.
   assert.deepEqual(
     assignablePool("institutional-impersonation", "advanced", "c1").map((v) => v.variantId),
     listFlowVariants("institutional-impersonation", "advanced").map((v) => v.variantId),
   );
 });
 
-test("[T194-a G586] 두 배정 함수가 같은 풀을 쓴다 — 자가 고급 parcel = fv-g454 · 수신자 = fv-k7qm(현행 고급) · 역방향: 필터를 끈 사본은 수신자에게 fv-g454를 준다", async (t) => {
+test("[T194-a G590] 두 배정 함수가 같은 풀을 쓴다 — 자가 고급 parcel = fv-g454 · 수신자 = fv-k7qm(현행 고급) · 역방향: 필터를 끈 사본은 수신자에게 fv-g454를 준다", async (t) => {
   // 소스 스캔 — candidatesOrThrow가 assignablePool을 쓰고, 두 배정 함수가 candidatesOrThrow를 거친다(수신자는 challengeId까지 넘긴다).
   const code = fs.readFileSync(path.join(FUNCTIONS_SRC, "session/variantAssignment.ts"), "utf8").replace(/\/\/[^\n]*/g, "");
   assert.match(code, /const candidates = assignablePool\(scenarioId, level, challengeId\)\.map\(\(v\) => v\.variantId\);/);
@@ -228,7 +228,7 @@ test("[T194-a G586] 두 배정 함수가 같은 풀을 쓴다 — 자가 고급 
   const consistent = (variantId: string) =>
     Boolean(FLOW_VARIANTS.find((v) => v.variantId === variantId)?.escalatesToVoice) ===
     Boolean(resolveSessionEscalation({ scenarioId: "messenger-parcel-smishing-sms", difficultyLevel: "advanced", challengeId: "c1" }, PUBLIC_SCENARIOS));
-  t.diagnostic(`[G586 역방향] 필터 해제 시 3단계 변형을 받은 챌린지 ${leaked.length}/${ids.length} · 정합(정상 fv-k7qm=${consistent("fv-k7qm")} / 누수 fv-g454=${consistent("fv-g454")})`);
+  t.diagnostic(`[G590 역방향] 필터 해제 시 3단계 변형을 받은 챌린지 ${leaked.length}/${ids.length} · 정합(정상 fv-k7qm=${consistent("fv-k7qm")} / 누수 fv-g454=${consistent("fv-g454")})`);
   assert.ok(leaked.length > 0, "역방향 샘플이 만들어지지 않았다 — 필터 해제 시 누수가 재현돼야 한다");
   assert.equal(consistent("fv-k7qm"), true);
   assert.equal(consistent("fv-g454"), false, "필터를 끈 사본의 배정은 정합 검사에 걸려야 한다");

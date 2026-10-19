@@ -756,9 +756,9 @@ test("[T190/D-93] 완료 복귀 문면은 진입 표면이 정한다 — 메신�
   assert.equal((componentCode.match(/^\s*\{returnLabel\}\s*$/gm) ?? []).length, 2, "두 kind의 완료 버튼이 모두 진입 표면 문면을 쓴다");
 });
 
-// ── T194-a(docs/Architecture.md §83.13.3 ③) — 설치 화면 상황별 표 `INSTALL_LANDING_COPY` ─────────────────────────────
+// ── T194-a(docs/Architecture.md §84.13.3 ③) — 설치 화면 상황별 표 `INSTALL_LANDING_COPY` ─────────────────────────────
 
-test("[T194-a §83.13.3 ③ ⓐ] 설치 문구 표의 키 집합 = 서버 카탈로그 app-install landingId 집합(양방향) · 값 리터럴은 G76 · 렌더 게이트가 대조", () => {
+test("[T194-a §84.13.3 ③ ⓐ] 설치 문구 표의 키 집합 = 서버 카탈로그 app-install landingId 집합(양방향) · 값 리터럴은 G76 · 렌더 게이트가 대조", () => {
   const start = componentCode.indexOf("const INSTALL_LANDING_COPY");
   assert.ok(start > 0, "설치 문구 표가 있어야 한다");
   const body = componentCode.slice(start, componentCode.indexOf("\n};", start));
@@ -771,7 +771,7 @@ test("[T194-a §83.13.3 ③ ⓐ] 설치 문구 표의 키 집합 = 서버 카탈
   assert.deepEqual(installIds, ["parcel-install", "subsidy-install"]);
 });
 
-test("[T194-a §83.13.3 ③ ⓑ] 표에 없는 id의 app-install은 설치 화면을 그리지 않는다 — 기본 문구 폴백 0(소스 구조) · 역방향", (t) => {
+test("[T194-a §84.13.3 ③ ⓑ] 표에 없는 id의 app-install은 설치 화면을 그리지 않는다 — 기본 문구 폴백 0(소스 구조) · 역방향", (t) => {
   // 조회는 정확 일치 · 미스 = undefined(폴백 식 없음).
   assert.match(componentCode, /function installCopyFor\(landingId\?: string\): InstallCopy \| undefined \{\s*return landingId \? INSTALL_LANDING_COPY\[landingId\] : undefined;\s*\}/);
   // 상위 컴포넌트 · 서브 컴포넌트 둘 다 미스에서 null.

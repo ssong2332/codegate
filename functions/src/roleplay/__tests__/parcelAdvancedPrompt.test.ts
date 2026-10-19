@@ -1,8 +1,8 @@
-// T194-a G582 — parcel 고급 프롬프트 · 범위 밖 무변경 · 화자 성별 세션 해석 (docs/Architecture.md §83.4.2 · §83.4.3 · §83.4.6 ·
+// T194-a G586 — parcel 고급 프롬프트 · 범위 밖 무변경 · 화자 성별 세션 해석 (docs/Architecture.md §84.4.2 · §84.4.3 · §84.4.6 ·
 // PRD AC-106 (a)(b)(f)).
 //
 // ⚠️ 위치: 설계 표는 `promptAssembly.test.ts`를 지목했으나 그 파일(1,800줄+)에 섞지 않고 같은 디렉터리의 새 파일로 뒀다 — 단언 내용은
-// 설계 G582 행 그대로다.
+// 설계 G586 행 그대로다.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as crypto from "node:crypto";
@@ -44,27 +44,27 @@ function assembleFor(level: DifficultyLevel, variantId: string, speakerGender: "
 const sha256 = (text: string) => crypto.createHash("sha256").update(text).digest("hex");
 
 /**
- * ⭐ 변경 **전** 기준값 — 이 PR 착수 시점(base = 커밋 6c9548b 추출본)의 `functions/lib`로 같은 옵션을 조립해 잰 sha256.
- * 측정 스크립트는 위 `assembleFor`와 같은 옵션(speakerGender = undefined)이다. 가드레일 보강 1항(§83.4.2 ⚠️ — 의도된 변경)을
- * 걷어 낸 산출물이 이 값과 같아야 한다 ⇒ 초급 · 중급 조립은 그 1항 외에 한 바이트도 바뀌지 않았다(AC-106 (f) · §83.4.6).
+ * ⭐ 변경 **전** 기준값 — 병합 기준 시점(base = main 49defd7 — #320 가상 기관명 · #321 A-1 공회전 수정 병합 뒤. 최초 측정은 b7fde97 기준이었고 main 병합 때 같은 스크립트로 다시 쟀다)의 `functions/lib`로 같은 옵션을 조립해 잰 sha256.
+ * 측정 스크립트는 위 `assembleFor`와 같은 옵션(speakerGender = undefined)이다. 가드레일 보강 1항(§84.4.2 ⚠️ — 의도된 변경)을
+ * 걷어 낸 산출물이 이 값과 같아야 한다 ⇒ 초급 · 중급 조립은 그 1항 외에 한 바이트도 바뀌지 않았다(AC-106 (f) · §84.4.6).
  */
 const BASE_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { variantId: string; sha256: string; length: number }>> = {
-  beginner: { variantId: "fv-prr3", sha256: "df00e5ceefb299238a38b5425862f65f28f22a3848e8aef07b11e4fe83114801", length: 5612 },
-  intermediate: { variantId: "fv-tvq2", sha256: "de3aa4686ee6cfd46c1e298accf8bfd096475fb02411f252d1aa12caef8a3f12", length: 4878 },
+  beginner: { variantId: "fv-prr3", sha256: "c51c2658da7d615059316c343b7fcc671121c0a3bb4cfe8d7632b1c87f5f7b81", length: 6050 },
+  intermediate: { variantId: "fv-tvq2", sha256: "b1a0c56bf39269221c5b3ffc7df42b1753ab24dfa5cedcf60210193e6bd6edfe", length: 5316 },
 };
 
 /**
- * ⭐ 변경 **후** 기대값(§83.13.3 ④ — 기대값 갱신은 사유와 함께). **사유**: parcel 가드레일에 제어 토큰 흉내 거부 항
+ * ⭐ 변경 **후** 기대값(§84.13.3 ④ — 기대값 갱신은 사유와 함께). **사유**: parcel 가드레일에 제어 토큰 흉내 거부 항
  * (`PARCEL_CONTROL_TOKEN_GUARD_ITEM`, 77자)을 끝에 (5)로 덧붙였다 — 고급 흐름이 `[[SIGNAL:ESCALATE_VOICE]]`를 쓰기 시작해 지원금
- * 시나리오와 같은 안전 문면이 필요해졌고, 가드레일은 시나리오 단위 상수라 세 난이도 모두 1항이 는다(§83.4.2 ⚠️ 예고 그대로).
+ * 시나리오와 같은 안전 문면이 필요해졌고, 가드레일은 시나리오 단위 상수라 세 난이도 모두 1항이 는다(§84.4.2 ⚠️ 예고 그대로).
  * 위 변경 전 값과의 차이는 그 1항뿐이다(아래 테스트가 항을 걷어 내 변경 전 값과 대조한다).
  */
 const AFTER_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { sha256: string; length: number }>> = {
-  beginner: { sha256: "3f5fbc537b813938c7e1ee0656ed46929fccf29649546684543e9e0478d49d88", length: 5689 },
-  intermediate: { sha256: "feda2f5bac63808a03a4512edf5a9ce783fd0c4096b27f69d788fd89f0e46078", length: 4955 },
+  beginner: { sha256: "5c5bde9a746c5f2da0fbc675350df6442c68f6446c2cfeb81c608d63eccd322f", length: 6127 },
+  intermediate: { sha256: "17e9abde78ad5a3f626b2527d8f82c58f3a1aefb5b060aa8c9f01bbb2fef1dcc", length: 5393 },
 };
 
-test("[T194-a G582 · §83.13.3 ④] parcel 초급 · 중급 조립 = 갱신 기대값(가드레일 (5)항 포함) · 가드레일 최후미", () => {
+test("[T194-a G586 · §84.13.3 ④] parcel 초급 · 중급 조립 = 갱신 기대값(가드레일 (5)항 포함) · 가드레일 최후미", () => {
   for (const level of ["beginner", "intermediate"] as const) {
     const variantId = BASE_ASSEMBLY_SHA256[level].variantId;
     const assembled = assembleFor(level, variantId, undefined);
@@ -76,7 +76,7 @@ test("[T194-a G582 · §83.13.3 ④] parcel 초급 · 중급 조립 = 갱신 기
   }
 });
 
-test("[T194-a G582 · §83.4.6] parcel 초급 · 중급 조립 = 변경 전 바이트(가드레일 1항 외 무변경) · [화자] 블록 0 · 역방향", (t) => {
+test("[T194-a G586 · §84.4.6] parcel 초급 · 중급 조립 = 변경 전 바이트(가드레일 1항 외 무변경) · [화자] 블록 0 · 역방향", (t) => {
   const lines: string[] = [];
   for (const level of ["beginner", "intermediate"] as const) {
     const base = BASE_ASSEMBLY_SHA256[level];
@@ -97,10 +97,10 @@ test("[T194-a G582 · §83.4.6] parcel 초급 · 중급 조립 = 변경 전 바�
     assert.equal(sha256(stripped), base.sha256, `${level}: 가드레일 1항 외의 바이트가 바뀌었다`);
     assert.notEqual(sha256(withSpeaker), base.sha256, `${level}: 역방향 — [화자] 블록이 생긴 샘플을 이 검사가 잡아야 한다`);
   }
-  t.diagnostic(`[§83.4.6 before/after] ${lines.join(" | ")}`);
+  t.diagnostic(`[§84.4.6 before/after] ${lines.join(" | ")}`);
 });
 
-test("[T194-a G582] parcel 고급 프롬프트 — leg0 페르소나 · 설치 링크 · 전이 신호 규칙 · '순수 문자' 0 · 가드레일 제어 토큰 항 · 최후미", () => {
+test("[T194-a G586] parcel 고급 프롬프트 — leg0 페르소나 · 설치 링크 · 전이 신호 규칙 · '순수 문자' 0 · 가드레일 제어 토큰 항 · 최후미", () => {
   const [variant] = listFlowVariants(PARCEL, "advanced");
   assert.equal(variant.variantId, "fv-g454");
   assert.equal(variant.legs[0].personaPrompt, PARCEL_ADVANCED_LEG_PERSONA);
@@ -121,7 +121,7 @@ test("[T194-a G582] parcel 고급 프롬프트 — leg0 페르소나 · 설치 �
   }
 });
 
-test("[T194-a G582 · §83.4.3] 화자 성별 세션 해석 — 표 값이 있으면 그대로 · parcel은 고급 자가만 변형 leg 성별 · 음성 풀도 같은 값", () => {
+test("[T194-a G586 · §84.4.3] 화자 성별 세션 해석 — 표 값이 있으면 그대로 · parcel은 고급 자가만 변형 leg 성별 · 음성 풀도 같은 값", () => {
   // ⭐ 리뷰 C1 — 표 값이 notApplicable인 시나리오도 **전부** 본다(예전 `if (!table) continue`가 child-kakao 누수를 가렸다).
   // 기대값: 표 값이 있으면 그 값 · notApplicable이면 undefined — 단 택배 고급 자가 세션(advancedEscalation 전용)만 변형 leg 성별.
   const notApplicableSeen: string[] = [];
@@ -181,7 +181,7 @@ test("[T194-a G582 · §83.4.3] 화자 성별 세션 해석 — 표 값이 있�
   assert.ok(union.size >= 2, "넘기지 않으면 종전(notApplicable = 합집합) 그대로");
 });
 
-test("[T194-a G582] 호출부 — 프롬프트 3곳이 세션 단위 성별을 쓰고 createRealtimeCall이 그 값을 1회 해석해 넘긴다(소스 스캔)", () => {
+test("[T194-a G586] 호출부 — 프롬프트 3곳이 세션 단위 성별을 쓰고 createRealtimeCall이 그 값을 1회 해석해 넘긴다(소스 스캔)", () => {
   const read = (rel: string) => fs.readFileSync(path.join(FUNCTIONS_SRC, rel), "utf8").replace(/\/\/[^\n]*/g, "");
   assert.match(read("roleplay/index.ts"), /speakerGender: resolveSessionSpeakerGender\(session\),/);
   assert.match(read("roleplay/openingLine.ts"), /speakerGender: resolveSessionSpeakerGender\(sessionView\),/);

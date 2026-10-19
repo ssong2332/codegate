@@ -98,6 +98,15 @@ export const DEFAULT_MOCK_SCREEN_KIND: MockScreenKind = "credential-form";
 export const MOCK_INSTALL_CONSENT_INSTRUCTION =
   "(참가자가 방금 안내대로 설치와 권한 허용을 마쳤다. 지금 캐릭터로서 한두 문장으로 그 사실을 자연스럽게 확인해 주고, 이제 담당자가 전화로 이어서 안내하겠다고 말하라. 설치 절차·권한의 구체적인 작동 방식을 설명하지는 마라.)";
 
+/**
+ * A-1 ⑧(2026-10-19 · audit-B 1일차 #2) — 이미 통화로 넘어온 뒤(메신저→voice 전이 뒤 폴백)에 응낙이 알려질 때의 변형.
+ * 위 원문의 "전화로 이어서 안내하겠다고 말하라"가 통화 중에는 **이미 일어난 일을 다시 예고**하게 만들어, 폴백에서
+ * "곧 전화드리겠습니다"가 반복됐다. 판정은 `roleplay/escalatedCall.ts` `isEscalatedVoiceCall` 한 곳이 소유한다.
+ * ⛔ 원문(위)은 메신저 단계 응낙용으로 그대로 둔다(바이트 동일).
+ */
+export const MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL =
+  "(참가자가 방금 안내대로 설치와 권한 허용을 마쳤다. 지금 캐릭터로서 한두 문장으로 그 사실을 자연스럽게 확인해 주고, 이미 통화 중이니 전화하겠다는 말 없이 이 통화에서 다음 안내를 바로 이어가라. 설치 절차·권한의 구체적인 작동 방식을 설명하지는 마라.)";
+
 // UF-012 2단계 — 지원금 안내 문자(1단계)에서 이어지는 모의 앱 설치 화면.
 // OQ-42 확정 = (b) 지원금 문자 확장 → `messenger-subsidy-smishing-sms`의 기존 escalation 배선을
 // 그대로 재사용한다(신규 전이 경로 미신설).
@@ -188,7 +197,7 @@ const MESSENGER_PARCEL_SMISHING_SMS: MockScreenItem[] = [
     correctAction:
       "문자 링크로 배송 정보를 입력하지 말고 화면을 닫으세요. ① 배송 상태는 주문한 판매처나 택배사 공식 경로에서 직접 조회하기 ② 주소·연락처를 링크로 요구하면 일단 멈추기 ③ 가족이나 가까운 사람에게 화면을 보여 주고 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
   },
-  // ⭐ T194-a(docs/Architecture.md §83.4.3 · PRD AC-106 (a) · UX UF-012 v1.38 (1) "콘텐츠 1벌") — **고급 세션에서만** 도달하는
+  // ⭐ T194-a(docs/Architecture.md §84.4.3 · PRD AC-106 (a) · UX UF-012 v1.38 (1) "콘텐츠 1벌") — **고급 세션에서만** 도달하는
   // 모의 앱 설치 화면(UF-012 2단계의 두 번째 사용처). kind = 기존 `app-install`(신규 kind 0). 도달 조건은 카탈로그 소속만으로
   // 끝나지 않는다 — `isMockScreenReachable`(아래)이 세션의 (시나리오 × 난이도)로 거른다(초급 · 중급 응낙 기록 거부 ·
   // 지어낸 링크 마커 강등). 앱 이름은 가상 일반명이다(AC-102 (b) · AC-072).
@@ -223,7 +232,7 @@ const LOAN_REFINANCE_SCAM: MockScreenItem[] = [
       "아래 정보를 입력하시면 상담사가 접수 완료를 안내해 드립니다.",
     ],
     // 문자 본문의 가상 발신 주체(`inCallSms.ts` LOAN_SCAM `senderLabel`)와 표기를 맞춘다.
-    issuerLabel: "ⓒ ○○캐피탈 전환심사팀",
+    issuerLabel: "ⓒ 대환대출 전환심사팀",
     mockHost: "loan-switch-center.invalid",
     fields: ["성함", "생년월일", "연락처"],
     submitLabel: "본인확인 완료하기",
@@ -440,7 +449,7 @@ export function listAppInstallMockScreens(scenarioId: string): MockScreenItem[] 
 }
 
 /**
- * ⭐ T194-a(docs/Architecture.md §83.4.4 · G578 · PRD AC-106 (f)(h) ⓐ) — **이 세션에서** 그 카탈로그 항목에 도달할 수 있는가.
+ * ⭐ T194-a(docs/Architecture.md §84.4.4 · G582 · PRD AC-106 (f)(h) ⓐ) — **이 세션에서** 그 카탈로그 항목에 도달할 수 있는가.
  * 카탈로그 소속(`findMockScreenItem` — G12)은 시나리오 단위라, 같은 시나리오 안에서 난이도로 갈리는 항목(parcel 고급의
  * `parcel-install`)을 거르지 못한다. 이 술어가 그 둘째 거름이다.
  *
@@ -458,18 +467,18 @@ export function isMockScreenReachable(
   session: EscalationSessionView & { flowVariantId?: string },
   item: MockScreenItem,
 ): boolean {
-  // ⭐ §83.13.2 G584 흡수 — 먼저 **세션 도달 가능 집합**(그 세션 변형 프롬프트의 마커 ∪ 선언 문자의 랜딩)에 있어야 한다(전 kind).
+  // ⭐ §84.13.2 G588 흡수 — 먼저 **세션 도달 가능 집합**(그 세션 변형 프롬프트의 마커 ∪ 선언 문자의 랜딩)에 있어야 한다(전 kind).
   // 아래 표의 조건은 그 위에 AND로 남는다(택배 고급 챌린지처럼 변형 프롬프트에는 있어도 전이가 없는 세션을 거른다).
   if (!sessionReachableLandingIds(session.scenarioId, session.flowVariantId).includes(item.landingId)) return false;
   if (item.kind !== "app-install") return true;
   if (item.entrySurface !== "messenger-link") return false;
   // 표의 2 · 3행을 한 식으로 — `escalation` 보유 시나리오는 세션 술어가 세 난이도 · 챌린지 모두에서 값을 내므로 "현행 그대로"와
-  // 같고, `advancedEscalation`만 가진 시나리오는 고급 자가 세션에서만 값을 낸다(메타 필드 직접 읽기 0 — G576).
+  // 같고, `advancedEscalation`만 가진 시나리오는 고급 자가 세션에서만 값을 낸다(메타 필드 직접 읽기 0 — G580).
   return resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined;
 }
 
 /**
- * T194-a(§83.4.4 "링크 마커 처리") — 도달 불가 `app-install` 마커를 강등할 **그 시나리오의 기본 credential 랜딩**(메신저 링크
+ * T194-a(§84.4.4 "링크 마커 처리") — 도달 불가 `app-install` 마커를 강등할 **그 시나리오의 기본 credential 랜딩**(메신저 링크
  * 표면의 첫 `credential-form` 항목). 없으면 `undefined`(호출부가 첨부를 만들지 않는다). ⛔ `app-install` 방향 폴백은 여전히 0이다(R5).
  */
 export function findDefaultCredentialLanding(scenarioId: string): MockScreenItem | undefined {

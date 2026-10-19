@@ -63,7 +63,7 @@ export type RealtimeCallInput = {
    */
   hangupRelay: HangupRelayContext | undefined;
   /**
-   * T194-a(docs/Architecture.md §83.4.3 "화자 성별") — **이미 해석된** 세션 단위 화자 성별(`resolveSessionSpeakerGender(session)` —
+   * T194-a(docs/Architecture.md §84.4.3 "화자 성별") — **이미 해석된** 세션 단위 화자 성별(`resolveSessionSpeakerGender(session)` —
    * 호출부 `createRealtimeCall`이 1회 해석). Gemini 경로는 프롬프트 [화자] 블록(층 2)과 음성 풀(층 1)에 같은 값을 쓴다.
    * 표(`scenarioVoice.ts`)에 값이 있는 시나리오는 표 값 그대로라 오늘 동작과 같다. 부재면 Gemini 프로바이더가 표 값으로
    * 떨어진다(표에 값이 있는 시나리오는 세션 해석과 같은 값 — 부재가 동작을 바꾸는 시나리오는 표가 값을 내지 않는 parcel 고급뿐이고,
