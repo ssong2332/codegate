@@ -13,6 +13,7 @@ import {
   VERIFY_RECONNECT_MAX_ATTEMPTS,
   formatStallNudgeLog,
   isStallLine,
+  judgeStallLine,
   planConfirmResultInjection,
   planVerifyReconnectFailure,
   releaseConfirmResultOnDispatch,
@@ -94,33 +95,50 @@ test("[PR-A2 결과 주입 전달 방식] confirmResult · verifyReconnectFailed
 
 // ══ 2. 대기 뒤 침묵 넛지(audit-A R6 · F6) ════════════════════════════════════════════════════════
 
-test("[PR-A2 F6 판정표] audit-A 원문 대기 턴은 대기 · 질문으로 끝난 턴 · 일반 턴은 아님", () => {
-  // audit-A §1 턴 발췌(Live 초급 C9 · C11 · C13 · 고급 C14 · 폴백 고급 C10).
-  for (const line of [
-    "네, 입금 확인되는 대로 신규 대출 승인 절차를 빠르게 진행 도와드리겠습니다. 잠시만 기다려 주세요.",
-    "거의 다 되었습니다, 고객님. 전산 처리 과정에서 조금 지연되고 있는데, 확인되는 대로 바로 안내해 드릴게요.",
-    "확인이 거의 다 완료되어 가고 있으니 조금만 더 기다려 주시면 바로 안내해 드리겠습니다.",
-    "확인되는 대로 바로 다음 단계 안내드릴 테니 잠시만 그대로 기다려 주세요, 고객님.",
-    "아직 입금이 확인되지 않아서 대기 중입니다, 고객님.",
-    "지금 확인 중입니다.",
-  ]) {
-    assert.equal(isStallLine(line), true, `놓침: ${line}`);
-  }
+// audit-A 원문(scratchpad/audit/stall-out — Live 3 · 폴백 3 기록에서 턴 원문 그대로).
+const AUDIT_STALL_TURNS: Array<[string, string]> = [
+  ["Live 초급 C9", "네, 입금 확인되는 대로 신규 대출 승인 절차를 빠르게 진행 도와드리겠습니다. 잠시만 기다려 주세요."],
+  ["Live 초급 C11", "거의 다 되었습니다, 고객님. 전산 처리 과정에서 조금 지연되고 있는데, 확인되는 대로 바로 안내해 드릴게요."],
+  ["Live 초급 C13", "확인이 거의 다 완료되어 가고 있으니 조금만 더 기다려 주시면 바로 안내해 드리겠습니다."],
+  ["Live 고급 C14", "확인되는 대로 바로 다음 단계 안내드릴 테니 잠시만 그대로 기다려 주세요, 고객님."],
+  ["폴백 초급 C11", "시스템에서 일시적으로 전송 지연이 발생하는 것 같네요. 잠시만 기다려 주시면 다시 한번 발송해 드리겠습니다."],
+  // 폴백 고급 C10 축약본(대기 문장 부분 — 대기 문장 뒤에 설명이 붙은 꼴 · 재QA F-1).
+  ["폴백 고급 C10 축약", "아직 입금이 확인되지 않아서 대기 중입니다, 고객님. 지금 전산상에 300만 원 입금 내역이 들어와야…"],
+];
+/** 폴백 고급 C10 원문 전체 — 입금 진행을 묻는 질문으로 끝난다(참가자 차례 · 2행). */
+const AUDIT_C10_FULL =
+  "아직 입금이 확인되지 않아서 대기 중입니다, 고객님. 지금 전산상에 300만 원 입금 내역이 들어와야 보증보험 등록이 완료되거든요. \n\n시간이 얼마 없습니다. 제가 안내해 드린 OO은행 계좌로 지금 바로 송금해 주셔야 저희도 심사 부서에 완료 보고를 올릴 수 있어요. 혹시 금액이 조금 부담되시는 건가요? 그러시면 절반인 150만 원이라도 먼저 입금해 주시면, 나머지 금액은 대출 실행일에 잔금에서 빼드릴 수 있게 조정해 드릴게요. 바로 입금 진행하시겠어요?";
+
+/** 리뷰 Major 2 오탐 표본(M2-1~M2-5) — 전부 비대기. */
+const M2_NOT_STALL: Array<[string, string]> = [
+  ["M2-1", "잠시만요 선생님, 이 계좌로 지금 바로 이체해 주세요."], // 요구로 끝남(3행)
+  ["M2-2", "입금 확인되면 말씀해 주세요."], // 참가자 행동을 기다리는 정당한 대기(3행)
+  ["M2-3", "입금 확인되면 말씀해주세요"],
+  ["M2-4", "확인 중입니다. 지금 바로 앱을 설치해 주세요."], // 대기 뒤 요구로 끝남(3행)
+  ["M2-5", "잠시만요, 조회해 보겠습니다. 고객님 한도는 천만 원까지 승인됐습니다."], // 대기 뒤 결과로 끝남(4행)
+];
+
+test("[PR-A2 F6 판정표 · C안] audit-A 원문 대기 6 = 대기 · C10 원문 전체 = 비대기(질문 끝) · 질문 · 일반 턴 · 한 어절 질문 꼬리 = 비대기", () => {
+  for (const [name, line] of AUDIT_STALL_TURNS) assert.equal(isStallLine(line), true, `놓침(${name}): ${line}`);
+  assert.equal(isStallLine(AUDIT_C10_FULL), false, "C10 원문 전체는 질문으로 끝난다 — 참가자 차례(2행)");
   for (const line of [
     "",
     "   ",
-    // Live 중급 C10 — 마지막 문장이 참가자에게 묻는다(그 뒤 침묵은 참가자 차례).
+    // Live 중급 C10 — 마지막 문장이 참가자에게 묻는다.
     "네, 입금 확인 절차 진행 중입니다. 혹시 이체하신 금액이 정확히 얼마인지 다시 한번 말씀해 주시겠어요?",
     "대출 몇 건이세요?",
     "대기자 명단에 올려 두었습니다. 지금 바로 이체를 진행해 주셔야 합니다.",
     "고객님 명의로 대출 신청이 접수돼 있습니다.",
+    // 재리뷰 Minor — 맨 끝이 한 어절 질문이어도 참가자 차례다.
+    "지금 확인 중입니다. 맞죠?",
+    "잠시만 기다려 주세요. 네?",
   ]) {
     assert.equal(isStallLine(line), false, `오탐: ${line}`);
   }
 });
 
-test("[PR-A2 리뷰 Major 2] 대기 어휘는 마지막 문장만 · 참가자 행동을 청하는 끝맺음은 대기가 아니다 — 1차 판정(전체 텍스트)은 오탐했다(역검증)", () => {
-  /** 1차 판정 그대로(전체 텍스트에 어휘 검사) — 역검증 전용 사본. */
+test("[PR-A2 리뷰 Major 2 · C안] M2-1~M2-5 비대기 유지 · 대기를 청하는 끝맺음 · 호칭 꼬리는 대기 · 1차 판정(전체 텍스트 · 요청형 행 없음)은 M2를 오탐했다(역검증)", () => {
+  /** 1차 판정 그대로(전체 텍스트 어휘 · 맨 끝 질문만 제외) — 역검증 전용 사본. */
   const firstVersion = (text: string): boolean => {
     const t = text.trim();
     if (!t) return false;
@@ -128,17 +146,10 @@ test("[PR-A2 리뷰 Major 2] 대기 어휘는 마지막 문장만 · 참가자 �
     if ((ss[ss.length - 1] ?? "").trim().endsWith("?")) return false;
     return /확인\s*(?:하는\s*)?중|확인하고\s*있|확인\s*절차|처리\s*(?:하는\s*)?중|처리하고\s*있|조회\s*중|확인되는\s*대로|처리되는\s*대로|확인되면|기다려|기다리|대기\s*중|지연|잠시만/.test(t);
   };
-  for (const line of [
-    "잠시만요 선생님, 이 계좌로 지금 바로 이체해 주세요.", // 요구로 끝남
-    "입금 확인되면 말씀해 주세요.", // 참가자 행동을 기다리는 정당한 대기
-    "입금 확인되면 말씀해주세요",
-    "확인 중입니다. 지금 바로 앱을 설치해 주세요.", // 대기 뒤 요구로 끝남
-    "잠시만요, 조회해 보겠습니다. 고객님 한도는 천만 원까지 승인됐습니다.", // 대기 뒤 결과로 끝남(마지막 문장 한정이 가른다)
-  ]) {
-    assert.equal(isStallLine(line), false, `오탐: ${line}`);
-    assert.equal(firstVersion(line), true, `역검증 전제 — 1차 판정이 이 표본을 대기로 잡아야 한다: ${line}`);
+  for (const [name, line] of M2_NOT_STALL) {
+    assert.equal(isStallLine(line), false, `오탐(${name}): ${line}`);
+    assert.equal(firstVersion(line), true, `역검증 전제 — 1차 판정이 ${name}를 대기로 잡아야 한다`);
   }
-  // 대기를 청하는 끝맺음 · 호칭 꼬리는 그대로 대기다.
   for (const line of [
     "잠시만 기다려 주세요. 고객님.",
     "알겠습니다. 확인되는 대로 바로 다음 단계 안내드릴 테니 잠시만 그대로 기다려 주세요, 고객님.",
@@ -147,6 +158,38 @@ test("[PR-A2 리뷰 Major 2] 대기 어휘는 마지막 문장만 · 참가자 �
   ]) {
     assert.equal(isStallLine(line), true, `놓침: ${line}`);
   }
+});
+
+test("[PR-A2 C안 ③④ 역검증] 결과 진술 행(③) · 부정 단서 행(④)을 뺀 사본에서 해당 표본이 뒤집힌다 — 같은 실행 출력", () => {
+  const ALL = { resultStatement: true, negatedResult: true };
+  const NO_RESULT_ROW = { resultStatement: false, negatedResult: false }; // ③ 제거(④는 ③의 단서라 함께 빠진다)
+  const NO_NEGATION_ROW = { resultStatement: true, negatedResult: false }; // ④ 제거
+  // ③ — 대기 말 뒤에 결과를 낸 턴은 비대기. 행을 빼면 대기로 뒤집힌다.
+  const resultSamples = [
+    "잠시만요, 조회해 보겠습니다. 고객님 한도는 천만 원까지 승인됐습니다.", // M2-5
+    "확인 중입니다. 네 고객님, 입금 확인되었습니다.",
+    "잠시만 기다려 주세요. 등록 처리가 완료되었습니다.",
+  ];
+  // ④ — 부정형 결과 진술은 결과가 아니다(대기 쪽). 행을 빼면 비대기로 뒤집힌다.
+  const negatedSamples = [
+    "잠시만요, 조회 중입니다. 입금이 확인되지 않았습니다.", // 마지막 문장 = 부정형 결과 · 앞에 대기 어휘
+    "확인 중입니다. 아직 처리가 안 됐습니다.",
+  ];
+  const flipped: string[] = [];
+  for (const s of resultSamples) {
+    assert.equal(judgeStallLine(s, ALL), false, `③ 결과 진술 놓침: ${s}`);
+    if (judgeStallLine(s, NO_RESULT_ROW) === true) flipped.push(`③ ${s}`);
+  }
+  for (const s of negatedSamples) {
+    assert.equal(judgeStallLine(s, ALL), true, `④ 부정형 결과를 결과로 봤다: ${s}`);
+    if (judgeStallLine(s, NO_NEGATION_ROW) === false) flipped.push(`④ ${s}`);
+  }
+  console.log(`[C안 역검증] 행을 뺀 사본에서 뒤집힌 표본 ${flipped.length}/${resultSamples.length + negatedSamples.length}`);
+  assert.equal(flipped.length, resultSamples.length + negatedSamples.length, "뒤집히지 않는 표본은 그 행의 증거가 아니다");
+  // 지시 표본 — 부정형 결과 + 대기 요청으로 끝나는 턴은 대기(③④와 무관하게 5행).
+  assert.equal(isStallLine("아직 입금이 확인되지 않았습니다. 잠시만 기다려 주세요."), true);
+  // 판정 본체를 전부 켠 것이 제품 판정이다.
+  for (const [, line] of [...AUDIT_STALL_TURNS, ...M2_NOT_STALL]) assert.equal(isStallLine(line), judgeStallLine(line, ALL));
 });
 
 const turn = (nowMs: number, stallLike: boolean, participantHasSpoken = true): StallNudgeEvent => ({

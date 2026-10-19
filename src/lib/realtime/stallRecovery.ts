@@ -82,22 +82,22 @@ export function releaseConfirmResultOnDispatch(
 // ── 2. 대기 · 확인 중 뒤 침묵 넛지(R6 · F6) ────────────────────────────────────────────────────
 
 /**
- * 사기범 턴이 "대기 · 확인 중"으로 끝났는가 — 판정표(⛔ 새 형태가 나오면 임의로 넓히지 말고 행을 추가할 것).
+ * 사기범 턴이 "대기 · 확인 중"으로 끝났는가 — 판정표(⛔ 이 순서 그대로 — 위에서 첫 매치 · 새 형태가 나오면 임의로 넓히지 말고 행을 추가할 것).
+ *
+ * 용어: **마지막 실질 문장** = 두 어절 이상인 마지막 문장("…기다려 주세요. 고객님."의 호칭 · "네." 같은 한 어절 꼬리는 건너뛴다 —
+ * 모든 문장이 한 어절이면 맨 끝 문장). **맨 끝 문장** = 꼬리를 건너뛰지 않은 진짜 마지막 문장.
  *
  * | # | If(그 턴의 사기범 전사) | Then |
  * |---|---|---|
- * ⭐ 아래 2~5행은 **마지막 문장**만 본다(A-2 리뷰 Major 2 — 전체 텍스트에 걸면 "잠시만요 …, 지금 바로 이체해 주세요."처럼
- * 요구로 끝난 턴이 대기로 잡혔다). 마지막 문장 = 두 어절 이상인 마지막 문장 — "…기다려 주세요. 고객님."의 호칭 · "네." 같은
- * 한 어절 꼬리 문장은 건너뛴다(모든 문장이 한 어절이면 맨 끝 문장).
- *
  * | 1 | 비었다 | 아님 |
- * | 2 | 마지막 문장이 `?`로 끝난다(참가자에게 물었다 — 그 뒤 침묵은 참가자 차례다) | 아님 |
- * | 3 | 마지막 문장이 참가자에게 **기다림이 아닌 행동**을 청한다 — `~해 주세요/주십시오/주시면/주시겠어요` 앞말이 기다려·기다리·대기해·대기하가 아니다(A-2 리뷰 Major 2) | 아님("입금 확인되면 말씀해 주세요"는 참가자 행동을 기다리는 정당한 대기 · "지금 바로 이체해 주세요"는 요구) |
- * | 4 | 마지막 문장에 대기 · 확인 중 어휘가 있다 — 확인 중 · 확인하고 있 · 확인 절차 · 처리 중 · 처리하고 있 · 조회 중 · 확인되는 대로 · 처리되는 대로 · 확인되면 · 기다려/기다리 · 대기 중 · 지연 · 잠시만 | **대기** |
- * | 5 | 그 외 | 아님 |
+ * | 2 | 맨 끝 문장 또는 마지막 실질 문장이 `?`로 끝난다(참가자에게 물었다 — 그 뒤 침묵은 참가자 차례다 · "…확인 중입니다. 맞죠?" 포함) | 아님 |
+ * | 3 | 마지막 실질 문장이 참가자에게 **기다림이 아닌 행동**을 청한다 — `~해 주세요/주십시오/주시면/주시겠어요` 앞말이 기다려·기다리·대기해·대기하가 아니다(A-2 리뷰 Major 2) | 아님("입금 확인되면 말씀해 주세요" · "지금 바로 이체해 주세요") |
+ * | 4 | 마지막 실질 문장이 **결과 진술**이다 — 승인·완료·처리·확인·등록·접수 + 됐/되었/되셨(A-2 C안 ③). 단 **부정형**(안·못 + 됐 · 되지 않/못)은 결과가 아니다(C안 ④ — "아직 입금이 확인되지 않았습니다"는 대기 쪽이다) | 아님(대기 말 뒤에 결과를 냈다) |
+ * | 5 | 턴 **전체**에 대기 · 확인 중 어휘가 있다 — 확인 중 · 확인하고 있 · 확인 절차 · 처리 중 · 처리하고 있 · 조회 중 · 확인되는 대로 · 처리되는 대로 · 확인되면 · 기다려/기다리 · 대기 중 · 지연 · 잠시만(C안 ① — 대기 문장 뒤에 설명이 붙은 턴도 잡는다) | **대기** |
+ * | 6 | 그 외 | 아님 |
  *
  * 표본(audit-A 원문): "잠시만 기다려 주세요" · "확인되는 대로 바로 안내해 드릴게요" · "전산 처리 과정에서 조금 지연되고 있는데" ·
- * "아직 입금이 확인되지 않아서 대기 중입니다". ⚠️ "대기" 단독은 넣지 않았다("대기자"가 걸린다 — audit-A 정규식 오탐).
+ * "아직 입금이 확인되지 않아서 대기 중입니다, 고객님. 지금 전산상에 … 들어와야…". ⚠️ "대기" 단독은 넣지 않았다("대기자"가 걸린다).
  */
 const STALL_VOCABULARY =
   /확인\s*(?:하는\s*)?중|확인하고\s*있|확인\s*절차|처리\s*(?:하는\s*)?중|처리하고\s*있|조회\s*중|확인되는\s*대로|처리되는\s*대로|확인되면|기다려|기다리|대기\s*중|지연|잠시만/;
@@ -105,6 +105,11 @@ const STALL_VOCABULARY =
 /** 3행 — 참가자에게 청하는 형태와 그 앞말. 앞말이 아래 `WAIT_REQUEST_HEAD`면 대기를 청한 것이다. */
 const REQUEST_FORM = /(\S+?)\s*주(?:세요|십시오|시면|시겠어요|시겠습니까|실래요)/g;
 const WAIT_REQUEST_HEAD = /^(?:기다려|기다리|대기해|대기하)/;
+/** 4행 — 결과 진술의 어간(긍정 · 부정 둘 다 잡는다). 부정 여부는 `NEGATED_RESULT`가 가른다. */
+const RESULT_STATEMENT = /(?:승인|완료|처리|확인|등록|접수)(?:\s*[이가])?\s*(?:(?:안|못)\s*)?(?:됐|되었|되셨|되지)/;
+/** 4행 단서 — 부정형 결과(안·못 + 됐 · 되지 않/못). */
+const NEGATED_RESULT =
+  /(?:승인|완료|처리|확인|등록|접수)(?:\s*[이가])?\s*(?:안|못)\s*(?:됐|되었|되셨)|(?:승인|완료|처리|확인|등록|접수)되지\s*(?:않|못)/;
 
 /** 두 어절 이상인 마지막 문장(한 어절 꼬리 — 호칭 · "네." — 는 건너뛴다). 전부 한 어절이면 맨 끝 문장. */
 function lastSubstantiveSentence(text: string): string {
@@ -115,15 +120,28 @@ function lastSubstantiveSentence(text: string): string {
   return sentences[sentences.length - 1] ?? "";
 }
 
-export function isStallLine(text: string): boolean {
+/**
+ * 판정표의 4행(결과 진술 · 부정 단서)을 켜고 끌 수 있는 판정 본체. ⛔ 제품 호출부는 `isStallLine`(전부 켬)만 쓴다 —
+ * 끄는 옵션은 역검증(그 행을 뺀 사본에서 표본이 뒤집히는지) 전용이다.
+ */
+export function judgeStallLine(text: string, rows: { resultStatement: boolean; negatedResult: boolean }): boolean {
   const trimmed = text.trim();
-  if (trimmed.length === 0) return false;
+  if (trimmed.length === 0) return false; // 1행
+  if (trimmed.endsWith("?")) return false; // 2행(맨 끝 문장)
   const last = lastSubstantiveSentence(trimmed);
-  if (last.endsWith("?")) return false;
+  if (last.endsWith("?")) return false; // 2행(마지막 실질 문장)
   for (const m of last.matchAll(REQUEST_FORM)) {
-    if (!WAIT_REQUEST_HEAD.test(m[1])) return false;
+    if (!WAIT_REQUEST_HEAD.test(m[1])) return false; // 3행
   }
-  return STALL_VOCABULARY.test(last);
+  if (rows.resultStatement && RESULT_STATEMENT.test(last)) {
+    const negated = rows.negatedResult && NEGATED_RESULT.test(last);
+    if (!negated) return false; // 4행
+  }
+  return STALL_VOCABULARY.test(trimmed); // 5행(턴 전체) · 6행
+}
+
+export function isStallLine(text: string): boolean {
+  return judgeStallLine(text, { resultStatement: true, negatedResult: true });
 }
 
 /**
