@@ -198,7 +198,7 @@ const LOAN_REFINANCE_SCAM: MockScreenItem[] = [
       "아래 정보를 입력하시면 상담사가 접수 완료를 안내해 드립니다.",
     ],
     // 문자 본문의 가상 발신 주체(`inCallSms.ts` LOAN_SCAM `senderLabel`)와 표기를 맞춘다.
-    issuerLabel: "ⓒ ○○캐피탈 전환심사팀",
+    issuerLabel: "ⓒ 대환대출 전환심사팀",
     mockHost: "loan-switch-center.invalid",
     fields: ["성함", "생년월일", "연락처"],
     submitLabel: "본인확인 완료하기",
