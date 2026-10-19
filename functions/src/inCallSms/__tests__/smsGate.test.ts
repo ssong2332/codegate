@@ -513,7 +513,8 @@ test("[#311 통합] deliverSmsThroughGate로 만든 계좌 문자 — 본문의 
 });
 
 // ── T194-c-1(docs/Architecture.md §84.16.5 단계 4 · 84.4.6 관례) — 조립 산출물 바이트 고정 ─────────────────────────────────────
-// 기준값 = T194-c-1 **이전**(main `dcbd523`) 빌드에서 같은 조립식으로 잰 sha256(2026-10-20 실측 — 작업 전 기준선 프로브).
+// 기준값 = T194-c-1 **이전** main 빌드에서 같은 조립식으로 잰 sha256. 최초 측정은 main `dcbd523`(작업 전 기준선 프로브)였고, main `4f6681e`
+// (#329 실존 회사명 가드레일 · #330 PR-A3 병합 뒤) 병합 때 같은 조립식으로 다시 쟀다 — 옛 값은 25db450 lib로 먼저 재현해 일치를 확인했다. tools 해시는 변화 없음.
 // ① 챌린지 고급 base 변형(`fv-akj5` · `fv-6s5p`)은 **바이트 동일**이어야 한다(#192 "현행 선언" — 챌린지 무변경의 증거).
 // ② ⚠️ **의도된 변경 1건(사유)**: `card-delivery-call`에 `IN_CALL_SMS` 키가 생겨 **변형 없는 세션**(옛 세션)의 무소급 분기
 //    (`sessionDeclaresInCallSms` → `hasInCallSms`)가 거짓 → 참으로 뒤집힌다. 바뀌는 것은 그 플래그 하나뿐이다 — 같은 조립식에
@@ -532,15 +533,15 @@ const toolsOf = (scenarioId: string, variantId: string | undefined) =>
     .join("\n");
 const BEFORE_T194C1 = {
   "card-company-impersonation#fv-akj5": {
-    system: "0966fbae165f90b9369ebbb575adec4cd86d34a63a38f60b25a25e050afb20d8",
+    system: "88f328a14d7bea4eb91140a38878eb368a5607ef9b3d77d1f59c06fb0020f598",
     tools: "80a9e329f59ffb105342a83df61783b52cf2409d8e623e9bd973023ecb36bb8e",
   },
   "loan-refinance-scam#fv-6s5p": {
-    system: "66723ec620b7f2b865d1786808f6d350a6f1fc26e3ea5354a4eb58dda829477b",
+    system: "108b1014639383d31060258b17cee7bf9e030dd8e0c270f5d723000b10c3237f",
     tools: "566b114b6b691b89918021e2d15b11d4241e4d16dde82fb248aed0be72da1c23",
   },
   "card-delivery-call#base": {
-    system: "24b6711e10455377b62dbb0492d408a6e1826f6ff1ebe607bf56943aed64959d",
+    system: "0292f11fae2b1df0f870394ce637933149acbffccbbe3ecf6250316d38588fd1",
     tools: "80a9e329f59ffb105342a83df61783b52cf2409d8e623e9bd973023ecb36bb8e",
   },
 } as const;

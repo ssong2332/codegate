@@ -14,6 +14,7 @@ import { extractLinkMarker } from "./linkMarker";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt } from "./promptAssembly";
 import { limitReplySentences } from "./replyLength";
+import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import type { DifficultyLevel } from "../shared/difficulty";
@@ -157,7 +158,9 @@ export async function generateOpeningLine(
   // 2026-10-17 라이브 신고(실존 은행명 + 5~7문장 대사) — sendMessage와 같은 순서로 손질한다:
   // (1) 실존 은행·카드사 이름 → OO은행/OO카드(숫자는 그대로), (2) 문장 수 상한은 **항상** 적용한다
   // — 오프닝 지시(OPENING_TURN_INSTRUCTION)는 예고 계열이 아니고 "예고 완료" 마킹도 없다.
-  const { text: realNameReplacedText, replacedCount } = replaceRealFinancialNames(linkFreeText);
+  // PR-A3 — 모델 표기 잔재(굵게 별표 · 빈 백틱 · 지문 괄호) 정리. sendMessage와 같은 자리(마커 뒤 · 실존명 치환 앞).
+  const { text: markupFreeText } = tidyScammerReplyMarkup(linkFreeText);
+  const { text: realNameReplacedText, replacedCount } = replaceRealFinancialNames(markupFreeText);
   // §81 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다.
   const realNameFreeText = fictionalBankName ? applyFictionalBank(realNameReplacedText, fictionalBankName) : realNameReplacedText;
   const lengthLimited = limitReplySentences(realNameFreeText);

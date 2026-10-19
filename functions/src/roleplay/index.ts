@@ -64,6 +64,8 @@ import { ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall } from "./esca
 import { isFirstUserTurn } from "./firstTurn";
 import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
+import { dropRepeatedLinkChips } from "./linkChipRepeat";
+import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { asksIdentityCheck } from "./personaAuthority";
 import { extractSmsMarker } from "./smsMarker";
@@ -582,11 +584,14 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // T84(§15.9.1 R4) — 시나리오를 함께 넘겨 attachment에 `landingKind`가 실린다(서버 카탈로그가
     // 진실 원천, 클라 분류 금지). 카탈로그가 없는 시나리오는 키 자체가 붙지 않아 무변경이다.
     // T194-a(§84.4.4 · G582) — 세션을 넘겨 이 세션에서 도달 불가한 설치 마커를 강등한다(초급 · 중급 parcel).
-    const { text: linkFreeReplyText, attachments: replyAttachments } = extractLinkMarker(
+    const { text: linkFreeReplyText, attachments: markerAttachments } = extractLinkMarker(
       completion.text,
       session.scenarioId,
       session,
     );
+    // ③-a PR-A3(감사 B 1일차 #4) — 이미 대화에 나온 링크 칩을 링크를 말하지 않는 대사에 또 붙이지 않는다(linkChipRepeat.ts 표).
+    // 첫 칩 · 링크를 다시 가리키는 대사의 칩은 그대로다 — 앵커(첫 칩 메시지)는 바뀌지 않는다.
+    const replyAttachments = dropRepeatedLinkChips(markerAttachments, linkFreeReplyText, storedHistory);
     // ③-a′ T191 — 문자 요청 마커를 걷어 낸다(아래 문장 수 상한보다 **앞** — 상한이 끝의 마커를 잘라 먹지 않게).
     const { text: smsMarkerFreeText, purpose: markerPurpose, markerCount: smsMarkerCount } =
       extractSmsMarker(linkFreeReplyText);
@@ -609,8 +614,10 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 잘려도 위 ②-e가 (실 LLM 턴이면) 마킹했으므로 "말하지 않은 예고" 결함(G343)이 재발한다.
     // 마킹이 없는 `sms_announce`·`verify_reconnect`는 잘려도 상태 기록이 틀어지지 않아 적용한다
     // (2026-10-18 문자 도착 턴 5문장 신고 · 한계는 `shouldLimitReplySentences` 주석).
+    // ③-c′ PR-A3 — 모델 표기 잔재(굵게 별표 · 빈 백틱 · 지문 괄호)를 지운다(replyMarkup.ts 표). 마커가 다 빠진 뒤 · 문장 상한 앞.
+    const { text: markupFreeReplyText } = tidyScammerReplyMarkup(signalFreeReplyText);
     const { text: realNameReplacedText, replacedCount: realNameReplacedCount } =
-      replaceRealFinancialNames(signalFreeReplyText);
+      replaceRealFinancialNames(markupFreeReplyText);
     // §81 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다(문자 본문과 일치).
     const realNameFreeReplyText = applyFictionalBank(realNameReplacedText, fictionalBankName);
     const lengthLimited = shouldLimitReplySentences(turnChoice)
