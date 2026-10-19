@@ -11,10 +11,15 @@
 // ⛔ API 키는 functions/.secret.local 의 `GEMINI_API_KEY=`(첫 값)를 메모리에서만 쓴다 — 어떤 출력·파일에도 쓰지 않는다.
 //
 // 사용법(저장소 루트): npm --prefix functions run build 뒤
-//   node scripts/live-hangup-probe.mjs <accept|reject|silence> <n> [--out <dir>]
+//   node scripts/live-hangup-probe.mjs <accept|reject|silence|idle> <n> --out <저장소 밖 dir>
 //     accept  — 목적 달성 대본(ⓐ) · 첫 end_call에 accepted(재호출은 already_accepted) → H1 · H2 · H4 · H5 · H6ⓐ
 //     reject  — 홀수 회차 목적 달성 대본 · 짝수 회차 거절 반복 대본(ⓑ) · end_call마다 too_early → H1 · H3 · H4 · H6ⓐⓑ
 //     silence — 침묵 · 소강 대본(ⓒ) · end_call이 오면 too_early → H6ⓒ(호출 0이 정상)
+//     idle    — (T192 C6 · §79.20 (8) H7) 목적 달성 대본 + 끝에 대기 발화 2개(공회전) · 첫 end_call에 accepted →
+//               대기 구간 안 end_call(goal) 호출률 · reason 분포(관측 — 하드 아님)
+// ⭐ T192 C6 재실측 준비(§79.20 (8)): 목적 달성 대본을 앞당기고 길게 했다(옛 대본은 승인 경로 호출 4/10 — 대본 끝에 닿아
+// 호출이 없던 세션 6) · H2 오디오 판정은 **그 턴 전체** `audioSec ≤ 6초`(정본 §79.4 H2 — 호출 전 발화 포함)로 하고, 집계는
+// accept 모드만이다. `audioAfterResponseSec`(응답 뒤 오디오만)는 판정에 쓰지 않는 참고값이다(summary `audioAfterResponseSecReference`).
 // 출력: <out>/hangup-<mode>-<i>-<ts>.json(세션별 원시) + <out>/hangup-<mode>-summary-<ts>.json
 //
 // 한계(보고서 기재): 사용자 발화는 오디오가 아니라 텍스트 턴이다 · 콜러블은 모사(서버 판정 0 — 하한 · 문자 대기 미적용) ·
@@ -23,6 +28,7 @@
 import { createRequire } from "node:module";
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -52,16 +58,44 @@ export const FAREWELL_WORDS = [
 ];
 
 // 대본(개인정보 0 · 숫자는 가짜).
+// ⭐ C6 — 요구 · 이행이 대본 앞쪽에 오도록 앞당기고(사용자 발화 3번째부터 이행) 이행 확인 발화를 늘렸다(12턴).
 const SCRIPT_GOAL = [
   "여보세요?",
-  "네? 우리 애요? 무사한 거죠?",
-  "알겠어요 시키는 대로 할게요",
-  "얼마를 어디로 보내면 돼요?",
-  "지금 바로 보낼게요",
-  "방금 말한 계좌로 다 이체했어요",
-  "보냈어요 확인해 보세요",
+  "네? 우리 애요? 무사한 거죠? 시키는 대로 할게요",
+  "얼마를 어디로 보내면 돼요? 계좌 불러 주세요",
+  "지금 바로 그 계좌로 보낼게요",
+  "방금 말한 계좌로 전액 다 이체했어요",
+  "이체 완료 화면 떴어요 확인해 보세요",
+  "더 보낼 돈은 없어요 이게 전부예요",
   "이제 우리 애 보내 주세요",
-  "다 보냈다니까요",
+  "다 보냈다니까요 이제 어떻게 하면 돼요?",
+  "시키는 건 다 했어요",
+  "더 필요한 거 있어요?",
+  "이제 끝난 거죠?",
+];
+/** H7 — 목적 달성 뒤 공회전(대기 발화 2개). 개인정보 0. */
+const IDLE_WAIT_LINES = ["보냈어요", "확인됐어요?"];
+const SCRIPT_IDLE = [...SCRIPT_GOAL.slice(0, 7), ...IDLE_WAIT_LINES];
+/** 조기 끊김 판정 기준 — 목적 달성 대본의 **이행 발화** 순번(1-기반). 이보다 앞의 첫 end_call = 조기 끊김. */
+const GOAL_FULFILLMENT_LINE = "방금 말한 계좌로 전액 다 이체했어요";
+const GOAL_FULFILLMENT_USER_TURN = SCRIPT_GOAL.indexOf(GOAL_FULFILLMENT_LINE) + 1;
+
+/** C6 리뷰 Minor 1 — 오류 메시지 · URL에서 키 모양 문자열을 가린다. ⛔ 모든 오류 출력 · 파일 쓰기가 이 함수를 거친다. */
+export function maskSecrets(text) {
+  return String(text)
+    .replace(/AIza[0-9A-Za-z_\-]{20,}/g, "AIza***")
+    .replace(/([?&](?:key|access_token)=)[^&\s"']+/gi, "$1***");
+}
+const errText = (e, max = 300) => maskSecrets(String(e?.message ?? e)).slice(0, max);
+/** JSON 직렬화 결과도 한 번 더 가린다(대사 · 이벤트에 섞여 들어온 경우까지). */
+const writeJson = (file, value) => writeFileSync(file, maskSecrets(JSON.stringify(value, null, 2)));
+
+/** C6 리뷰 Major 2 — 요약에 고정으로 남기는 측정 한계(해석 시 함께 읽는다). */
+const LIMITATIONS = [
+  "승인 대본(goal)은 이행 · '더 보낼 돈 없음' 같은 '더 요구할 것 없음' 신호를 일찍 · 반복 노출하는 최선 시나리오다 — end_call 호출률은 실제 참가자 대화 대비 상한 추정치다.",
+  "콜러블(requestScammerHangup)은 모사다 — 서버 판정표(하한 사용자 발화 3 · 문자 대기 · 확인 무력화 · 한도)가 적용되지 않는다. 실제로는 이른 호출 일부가 too_early로 거절된다.",
+  "H7(idle)은 대기 구간 전에 호출이 오면 그 세션이 대기 구간 표본에서 빠진다 — 대기 구간 호출률 표본이 희석될 수 있다.",
+  "사용자 발화는 오디오가 아니라 텍스트 턴이다(앱 타이핑 경로) · 로컬 Node · 소표본(§79.4 끝).",
 ];
 const SCRIPT_REFUSE = [
   "여보세요?",
@@ -83,9 +117,23 @@ const argVal = (name, def) => {
   const i = args.indexOf(name);
   return i >= 0 && args[i + 1] ? args[i + 1] : def;
 };
-const outDir = path.resolve(argVal("--out", path.join(repoRoot, "hangup-raw")));
-if (!["accept", "reject", "silence"].includes(mode) || !Number.isInteger(n) || n < 1 || n > 10) {
-  console.error("사용법: node scripts/live-hangup-probe.mjs <accept|reject|silence> <1..10> [--out <dir>]");
+const USAGE =
+  "사용법: node scripts/live-hangup-probe.mjs <accept|reject|silence|idle> <1..10> --out <저장소 밖 디렉터리>" +
+  ` (예: --out "${path.join(os.tmpdir(), "hangup-raw")}")`;
+if (!["accept", "reject", "silence", "idle"].includes(mode) || !Number.isInteger(n) || n < 1 || n > 10) {
+  console.error(USAGE);
+  process.exit(2);
+}
+// C6 리뷰 Minor 2 — 결과(대사 포함)를 저장소 안에 기본으로 쓰지 않는다. `--out` 필수 · 저장소 안 경로는 거부.
+const GAP_MS = Number(argVal("--gap-ms", "60000"));
+const outArg = argVal("--out", null);
+if (!outArg) {
+  console.error(`[hangup-probe] --out 이 없어 실행하지 않는다(실호출 0). ${USAGE}`);
+  process.exit(2);
+}
+const outDir = path.resolve(outArg);
+if (outDir === repoRoot || outDir.startsWith(repoRoot + path.sep)) {
+  console.error(`[hangup-probe] --out 이 저장소 안이다 — 저장소 밖 경로를 쓴다(실호출 0). ${USAGE}`);
   process.exit(2);
 }
 
@@ -107,8 +155,15 @@ const audioSecondsOfBase64 = (b64) => (b64.length * 3) / 4 / 2 / 24000;
 async function runSession(index, apiKey) {
   const t0 = Date.now();
   const now = () => Date.now() - t0;
-  const script = mode === "accept" ? SCRIPT_GOAL : mode === "silence" ? SCRIPT_SILENCE : index % 2 === 1 ? SCRIPT_GOAL : SCRIPT_REFUSE;
-  const scriptName = script === SCRIPT_GOAL ? "goal" : script === SCRIPT_REFUSE ? "refuse" : "silence";
+  const script =
+    mode === "accept" ? SCRIPT_GOAL
+    : mode === "idle" ? SCRIPT_IDLE
+    : mode === "silence" ? SCRIPT_SILENCE
+    : index % 2 === 1 ? SCRIPT_GOAL : SCRIPT_REFUSE;
+  const scriptName =
+    script === SCRIPT_GOAL ? "goal" : script === SCRIPT_IDLE ? "idle" : script === SCRIPT_REFUSE ? "refuse" : "silence";
+  /** H7 — 대기 구간이 시작되는 사용자 발화 순번(1-기반). */
+  const idleStartUserTurn = SCRIPT_IDLE.length - IDLE_WAIT_LINES.length + 1;
 
   // ⭐ 운영과 같은 발급 — 기본 생성자(스위치 = 운영 상수) · 음성 채널 · 릴레이 없음.
   const provider = new GeminiRealtimeProvider(apiKey);
@@ -197,10 +252,10 @@ async function runSession(index, apiKey) {
           notify({ type: "turnComplete" });
         }
       },
-      onerror: (e) => events.push({ t: now(), ev: "error", msg: String(e?.message ?? e).slice(0, 200) }),
+      onerror: (e) => events.push({ t: now(), ev: "error", msg: errText(e, 200) }),
       onclose: (e) => {
         closed = true;
-        events.push({ t: now(), ev: "close", code: e?.code, reason: String(e?.reason ?? "").slice(0, 200) });
+        events.push({ t: now(), ev: "close", code: e?.code, reason: maskSecrets(String(e?.reason ?? "")).slice(0, 200) });
         notify({ type: "close" });
       },
     },
@@ -209,7 +264,7 @@ async function runSession(index, apiKey) {
   async function respondTools(fcs) {
     const responses = fcs.map((fc) => {
       if (fc.name !== "end_call") return { id: fc.id, name: fc.name ?? "unknown", response: { status: "unsupported" } };
-      if (mode === "accept") {
+      if (mode === "accept" || mode === "idle") {
         const status = hangupAccepted ? "already_accepted" : "accepted";
         hangupAccepted = true;
         return { id: fc.id, name: fc.name, response: { status, guidance: SCAMMER_HANGUP_ACCEPTED_GUIDANCE } };
@@ -225,7 +280,7 @@ async function runSession(index, apiKey) {
       events.push({ t: now(), ev: "toolResponse", statuses: responses.map((r) => r.response.status) });
       notify({ type: "toolResponse" });
     } catch (e) {
-      events.push({ t: now(), ev: "toolResponseError", msg: String(e?.message ?? e).slice(0, 200) });
+      events.push({ t: now(), ev: "toolResponseError", msg: errText(e, 200) });
     }
   }
   const send = (text) => {
@@ -244,10 +299,10 @@ async function runSession(index, apiKey) {
   while (!closed && userIdx < script.length) {
     if (calls.length > 0 && !firstCallSeen) {
       firstCallSeen = true;
-      if (mode === "accept") break;
+      if (mode === "accept" || mode === "idle") break;
     }
     // 거절 경로: 첫 거절 뒤 사용자 발화 2개까지만 더 보내고 끝낸다(H3 = 거절 뒤 다음 2턴).
-    if (mode !== "accept" && calls.length > 0 && afterReject === null) {
+    if (mode !== "accept" && mode !== "idle" && calls.length > 0 && afterReject === null) {
       afterReject = { scammerTurnsAtReject: turns.filter((x) => x.role === "scammer").length, userSentAfter: 0 };
     }
     if (afterReject && afterReject.userSentAfter >= 2) break;
@@ -259,7 +314,7 @@ async function runSession(index, apiKey) {
     await waitFor((e) => e.type === "turnComplete", 30000);
   }
   // 승인 경로: 첫 호출이 마지막 대기 안에서 왔을 수 있다 — 승인 응답 뒤 turnComplete까지 기다린다.
-  if (mode === "accept" && calls.length > 0) {
+  if ((mode === "accept" || mode === "idle") && calls.length > 0) {
     const firstCall = calls[0];
     // 응답이 아직 안 나갔으면 기다린다.
     if (lastResponseSentAt === null) await waitFor((e) => e.type === "toolResponse", 5000);
@@ -286,8 +341,17 @@ async function runSession(index, apiKey) {
     await sleep(10000);
     result.h5 = { audioChunksIn10s: audioChunksTotal - chunksBefore, newTurnsIn10s: turns.length - turnsBefore };
     result.firstCallReason = firstCall.reason;
+    // H7 — 첫 호출이 대기 구간(목적 달성 뒤 공회전 발화) 안이었는가.
+    if (mode === "idle") {
+      result.h7 = {
+        idleStartUserTurn,
+        firstCallUserTurn: firstCall.userTurnsSent,
+        inIdleSegment: firstCall.userTurnsSent >= idleStartUserTurn,
+        reason: firstCall.reason ?? null,
+      };
+    }
   }
-  if (mode !== "accept" && calls.length > 0) {
+  if (mode !== "accept" && mode !== "idle" && calls.length > 0) {
     // H3 — 첫 거절 응답 뒤: 그 턴의 남은 말 + 다음 2턴의 작별 어휘 · 대화 계속 여부.
     await waitFor((e) => e.type === "turnComplete", 8000);
     const firstRejectAt = calls[0].t;
@@ -322,17 +386,24 @@ async function main() {
     try {
       r = await runSession(i, apiKey);
     } catch (e) {
-      r = { index: i, mode, error: String(e?.message ?? e).slice(0, 300) };
+      r = { index: i, mode, error: errText(e) };
     }
-    writeFileSync(path.join(outDir, `hangup-${mode}-${i}-${ts}.json`), JSON.stringify(r, null, 2));
+    writeJson(path.join(outDir, `hangup-${mode}-${i}-${ts}.json`), r);
     results.push(r);
-    console.log(
+    // P-H 실행 조건(오케스트레이터) — 429/쿼터 오류는 1회라도 즉시 중단 · 세션 사이 간격(기본 60초).
+    if (/(^|[^0-9.])429([^0-9.]|$)|RESOURCE_EXHAUSTED|quota/i.test(JSON.stringify(r))) {
+      console.error(`[hangup-probe] #${i} 429/쿼터 오류 — 즉시 중단(남은 세션 실행 0)`);
+      break;
+    }
+    if (i < n) await sleep(GAP_MS);
+    console.log(maskSecrets(
       `[hangup-probe] #${i} script=${r.script ?? "-"} calls=${r.endCallCount ?? "-"} ` +
         `preFarewell=${(r.calls ?? []).map((c) => c.preCallFarewell.length).join("/") || "-"} ` +
-        `h2=${r.h2 ? `${r.h2.turnCompleteMs}ms/${r.h2.audioSec}s/${r.h2.sentences}문` : "-"} ` +
+        `h2=${r.h2 ? `${r.h2.turnCompleteMs}ms/응답뒤${r.h2.audioAfterResponseSec}s(턴${r.h2.audioSec}s)/${r.h2.sentences}문` : "-"} ` +
+        `h7=${r.h7 ? `${r.h7.inIdleSegment ? "대기구간" : "이전"}:${r.h7.reason}` : "-"} ` +
         `h5=${r.h5 ? r.h5.audioChunksIn10s : "-"} h3=${r.h3 ? `${r.h3.farewellHits.length}/${r.h3.continued}` : "-"}` +
         (r.error ? ` error=${r.error}` : ""),
-    );
+    ));
   }
   // 요약(대사 텍스트 제외).
   const called = results.filter((r) => (r.endCallCount ?? 0) > 0);
@@ -344,6 +415,8 @@ async function main() {
     sessionsWithEndCall: called.length,
     endCallTotal: allCalls.length,
     H1_preCallFarewell: { violations: allCalls.filter((c) => c.preCallFarewell.length > 0).length, calls: allCalls.length },
+    // ⭐ C6 리뷰 — H2 하한 집계는 accept 모드만(idle 승인 세션은 H5 보조 · H7로만). 오디오 통과 조건 = **그 턴 전체**
+    // `audioSec ≤ 6초`(정본 §79.4 H2 "그 턴 오디오 길이"). `audioAfterResponseSec`(응답 뒤만)는 참고값으로만 보고한다.
     H2: mode === "accept"
       ? {
           samples: called.filter((r) => r.h2?.turnCompleteMs != null).length,
@@ -352,10 +425,12 @@ async function main() {
           sentencesLe2: called.filter((r) => r.h2?.sentences != null && r.h2.sentences <= 2).length,
           turnCompleteMs: called.map((r) => r.h2?.turnCompleteMs ?? null),
           audioSec: called.map((r) => r.h2?.audioSec ?? null),
+          audioAfterResponseSecReference: called.map((r) => r.h2?.audioAfterResponseSec ?? null),
           sentences: called.map((r) => r.h2?.sentences ?? null),
+          audioCriterion: "audioSec(그 턴 전체) <= 6초 — 정본 §79.4 H2",
         }
       : undefined,
-    H3: mode !== "accept"
+    H3: mode !== "accept" && mode !== "idle"
       ? {
           samples: called.filter((r) => r.h3).length,
           farewellViolations: called.filter((r) => r.h3 && r.h3.farewellHits.length > 0).length,
@@ -366,20 +441,57 @@ async function main() {
     H5: mode === "accept"
       ? { samples: called.filter((r) => r.h5).length, zeroAudio: called.filter((r) => r.h5?.audioChunksIn10s === 0).length }
       : undefined,
+    // idle 모드 승인 세션은 H5 **보조** 표본(하한 집계에 넣지 않는다).
+    H5_auxiliary: mode === "idle"
+      ? { samples: called.filter((r) => r.h5).length, zeroAudio: called.filter((r) => r.h5?.audioChunksIn10s === 0).length }
+      : undefined,
+    H7: mode === "idle"
+      ? {
+          sessions: results.filter((r) => !r.error).length,
+          calledInIdleSegment: results.filter((r) => r.h7?.inIdleSegment).length,
+          calledBeforeIdleSegment: results.filter((r) => r.h7 && !r.h7.inIdleSegment).length,
+          notCalled: results.filter((r) => !r.error && (r.endCallCount ?? 0) === 0).length,
+          reasons: results.filter((r) => r.h7).map((r) => r.h7.reason),
+        }
+      : undefined,
     H6_callRateByScript: Object.fromEntries(
-      ["goal", "refuse", "silence"].map((s) => {
+      ["goal", "refuse", "silence", "idle"].map((s) => {
         const of = results.filter((r) => r.script === s);
         return [s, { sessions: of.length, called: of.filter((r) => (r.endCallCount ?? 0) > 0).length }];
       }),
     ),
     reasons: allCalls.map((c) => c.reason ?? null),
     userTurnsAtFirstCall: called.map((r) => r.calls[0].userTurnsSent),
+    // C6 리뷰 — goal · idle 대본에서 첫 end_call이 이행 발화(GOAL_FULFILLMENT_USER_TURN)보다 앞이면 조기 끊김.
+    earlyHangup: (() => {
+      const goalCalled = called.filter((r) => r.script === "goal" || r.script === "idle");
+      const early = goalCalled.filter((r) => r.calls[0].userTurnsSent < GOAL_FULFILLMENT_USER_TURN).length;
+      return {
+        fulfillmentUserTurn: GOAL_FULFILLMENT_USER_TURN,
+        goalSessionsWithCall: goalCalled.length,
+        early,
+        ratio: goalCalled.length > 0 ? Number((early / goalCalled.length).toFixed(3)) : null,
+      };
+    })(),
+    // C6 리뷰 — reject 모드 refuse 대본 호출의 reason 분포(give_up이 기대값).
+    refuseReasonDistribution:
+      mode === "reject"
+        ? results
+            .filter((r) => r.script === "refuse")
+            .flatMap((r) => r.calls ?? [])
+            .reduce((acc, c) => {
+              const key = c.reason ?? "missing";
+              acc[key] = (acc[key] ?? 0) + 1;
+              return acc;
+            }, {})
+        : undefined,
+    limitations: LIMITATIONS,
   };
-  writeFileSync(path.join(outDir, `hangup-${mode}-summary-${ts}.json`), JSON.stringify(summary, null, 2));
-  console.log(`[hangup-probe] summary ${JSON.stringify(summary)}`);
+  writeJson(path.join(outDir, `hangup-${mode}-summary-${ts}.json`), summary);
+  console.log(maskSecrets(`[hangup-probe] summary ${JSON.stringify(summary)}`));
 }
 
 main().catch((e) => {
-  console.error("[hangup-probe] 실패:", String(e?.message ?? e).slice(0, 300));
+  console.error("[hangup-probe] 실패:", errText(e));
   process.exit(1);
 });

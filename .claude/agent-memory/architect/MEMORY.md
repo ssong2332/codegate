@@ -1,3 +1,4 @@
+- [막는 게이트는 개시를 못 만든다](feedback_deny_gate_cannot_initiate.md) — "N턴 행 추가" 요청엔 허용 행이 개시인지부터; 호출 0 vs 호출+거절을 로그로 가르고 개시/차단 층을 따로 처방
 - [데이터가 런타임보다 앞서 있으면 입력은 부재여야](feedback_data_ahead_of_runtime_flag.md) — 플래그 꺼짐+데이터 있음 칸을 단언; 해석은 플래그 아는 함수 하나, 키는 `T | undefined` 필수
 - [대기 플래그는 자기 자신을 세우는가](feedback_pending_flag_self_reference.md) — 판정을 부른 사건이 그 플래그를 먼저 세우면 항상 참 → 기능 조용히 0; "같은 배치의 다른 호출"로 정의
 - [예외는 승인 사건에 묶는다](feedback_exception_bound_to_observable_event.md) — 무조건 금지를 좁힐 땐 BLOCKING 도구 응답·허용 턴 문면 뒤에만 행동; NON_BLOCKING은 선언이 승인보다 앞선다

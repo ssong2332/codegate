@@ -18445,6 +18445,8 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 - **(2026-10-19 추가 — 행 2-b · 원문 위 3줄 무수정)** 입력에 **`relay?: HangupRelayContext`**(`{ legIndex: number; legCount: number }`)를 더한다. ⭐ **이 값은 클라 주장값이 아니다** — 서버가 세션 문서에서 읽는다: `legIndex` = `session.relay?.legIndex ?? 0`(S7 `startRelayLeg`만 쓰는 서버 필드 — scenario-review §82.6.2 트랜잭션) · `legCount` = `findFlowVariant(session.flowVariantId)?.legs.length`(서버 카탈로그). 해석은 **단일 지점** `resolveHangupRelay(session)`(신설 `functions/src/scammerHangup/relayContext.ts` — `flowVariants.ts`를 import하므로 잎 모듈 `decide.ts` 밖에 둔다)이 하고, 폴백 `sendMessage` · `requestScammerHangup` · 토큰 발급(`declaresEndCall` — 79.18 (1))이 같은 함수를 부른다. ⛔ **`RELAY_RUNTIME_AVAILABLE === false`이거나 변형이 없거나 `legs.length < 2`이면 `undefined`를 돌려준다** — 오늘 legs ≥ 2 변형 3종은 한 화자가 전체를 진행하므로 그 화자가 곧 마지막 화자다(79.1 #22 · G526). 범위 밖 `legIndex ≥ legCount`는 마지막으로 본다(S7 검증 *"변형에 leg 존재"* 가 막는 값 — 이 함수는 보정하지 않는다).
 - **(2026-10-19 추가)** 행 2-b의 위치: 구조 사실(세션 · 채널 · leg)이 턴 사실(Mock · 전환 · 하한 · 문자 대기)보다 먼저다. 79.6 SIGNAL 사전 판정 목록 *"#1·#2·#4·#5·#6"* 은 **#1·#2·#2-b·#4·#5·#6**으로 읽는다(LLM 호출 전에 아는 값이다). `not_last_leg`의 모델용 문면 = 79.5 **거절(공통)** 그대로(⛔ 새 문면 0 — *"거절 사유를 모델에게 설명하지 않는다"* 79.5 끝). 이 행은 79.18 (1) *"`end_call`은 마지막 leg에만 선언"* 과 **이중 방어**다 — 도구가 선언되지 않은 토큰에서도 서버가 거절한다.
 - **(2026-10-19 S5b 병합 뒤 정정 — 79.19 (2)~(4) · 위 표 · 글머리 원문 무수정 · 이 줄이 우선)** ① **5행 하한의 단위 = 사용자 발화**: 입력 `scammerTurns` → **`userTurns`**(폴백 = `userTurnsNow` · 실시간 = S5b와 같은 클라 식) · 상수 → **`SCAMMER_HANGUP_MIN_USER_TURNS = 3`**(폴백 옛 값과 동치 — 옛 *"사기범 4턴"* 은 실시간에서 한 발화 늦게 열려 AC-103 (f)를 어겼다). ② **6행 = `pendingInstruction`(실시간 클라 항 — 지시 큐 ∨ busy ∨ 교대 대기 ∨ 같은 배치의 다른 도구 · ⛔ 컴포넌트 `toolPending` 제외) ∨ `smsAwaitingUser`(서버 도착 기록 — 문자가 보인 뒤 참가자가 아직 말하지 않았다)** — 폴백의 *"이 턴에 문자 도착"* 은 서버 항이 대신한다. ③ **8행을 2-b 바로 뒤로**(순서 `1 · 2 · 2-b · 8 · 3 · 4 · 5 · 6 · 7 · 9` — C1 Minor-1). ④ OQ-A120은 해소가 아니라 *"S5b와 같은 등급"* 으로 남는다.
+- **(2026-10-19 T192 C6 추가 — 79.20 · 위 표 · 글머리 원문 무수정)** ① **4행 조건 = `verifyEnabled && !transferPlaced && transferReachable`**(필수 입력 `transferReachable` — 서버 순수 함수 `isVerifyTransferReachable` · 폴백 계열 B ∧ 오퍼 문서 없음에서만 거짓 · ⛔ **OQ-A152 답 전 미적용**) ② **"공회전 N턴" 행은 두지 않는다**(표는 끊기를 일으킬 수 없다 · AC-103 (a)(f) — 79.20 (2) ③) — 판정표 행 수 · 순서 무변경.
+- **(2026-10-20 OQ 해소 — 위 줄 원문 무수정 · 이 줄이 우선)** ①의 *"OQ-A152 답 전 미적용"* 은 **해소**: OQ-A152 = (가)(User 객관식 *"이 경우만 끊기 허용"* · PRD AC-103 갱신 고지 2 — `docs/PRD.md:1015`) · DECISIONS #187 ⇒ 4행 조건은 **적용됐다**(`c1d056a` — `functions/src/scammerHangup/decide.ts:115` · 필수 키 `:54` · 판정 입력 12키). ②는 OQ-A153 = (가)로 확정(#188). 세부는 79.20 (11) 끝 줄.
 
 ### 79.3 끊는 수단 판정 — ⭐ **BLOCKING 도구 채택**
 
@@ -18519,6 +18521,7 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 - 폴백 SIGNAL 변형에 확인 무력화 문장을 넣지 않는 이유: #4가 **LLM 호출 전에** 판정되므로 전환 전 턴에는 애초에 NONE이 나간다 — 조건을 아는 층이 거른다(⛔ 문면으로 중복 금지하지 않는다).
 - ⚠️ 경로 비대칭(정직 고지): 실시간은 토큰 발급 시 1회 고정이라 TOOL 문면이 통화 내내 실리고 거르기는 **콜러블 응답**이 한다 · 폴백은 매 턴 조립이라 **문면 자체가** 거른다(§22.8 (3)과 같은 구조).
 - **(2026-10-19 추가 — 중간 화자 금지 문장 판정)** ⛔ **TOOL · SIGNAL 어느 변형에도 *"중간 담당자는 끊지 않는다"* 류 문장을 넣지 않는다.** 판정: 중간 leg는 **조건을 아는 층이 이미 NONE으로 거른다** — 실시간 = 토큰이 leg마다 새로 발급되고 `declaresEndCall(…, relay)`가 중간 leg에 `false`(79.3 끝)라 TOOL 문면 자체가 실리지 않는다 · 폴백 = 행 2-b가 LLM 호출 **전** 판정이라 중간 leg 턴은 NONE이다. 마지막 leg 프롬프트에 그 문장을 넣으면 *"넘길 사람이 있다"* 는 거짓 전제를 마지막 화자에게 주고, 중간 leg에 넣으면 NONE과 함께 변형 2개 공존이 된다(G128 · G505). 중간 leg NONE 화자의 *"연결해 드리겠습니다"* 는 종료 선언이 아니다(§22.1 G82 — 79.6 (3) 표) — S7 `transfer_call` 결과 문면은 *"통화를 끝낸다"* 로 읽히지 않게 쓴다(79.18 (3) ⑩).
+- **(2026-10-20 T192 C6-F 반영 — 79.20 (2) ④ · 위 ① ② 코드 블록 원문 무수정 · 이 줄이 우선)** ① TOOL · ② SIGNAL의 공통 머리(`HANGUP_RULE_CASES` — SIGNAL 괄호 *"(① TOOL과 같은 두 경우 · 같은 제외 문장)"* 이 펼치는 부분)에 **1문장이 더해졌다** — 위치 = 첫째 경우 끝 *"…불러 주었다."* 뒤 · *"둘째,"* 앞: `원하던 것을 얻었고 상대에게 더 요구할 것이 남지 않았다면, 통화를 붙잡아 두지 말고 그때 끊는다.` ⇒ ① ②의 정본은 위 블록에 이 문장을 그 자리에 넣은 것으로 읽는다(코드 = `functions/src/roleplay/promptAssembly.ts:205` · 단언 = G505 사본 `functions/src/roleplay/__tests__/promptAssembly.test.ts:1713-1716`(실패 문구 *"§79.6 ① 정본과 다르다"*) · G599 `hangupRuleCases.test.ts`). 셋째 끊기 경우가 아니다(첫째 경우의 *시점* — `kind = goal` · `END_CALL_GOAL`). **NONE · 확인 무력화 1문장(`HANGUP_RULE_TOOL_VERIFY_SUFFIX`) · ①의 나머지 글자 · (2) 끝 문장 = 무변경**(G505). 결정 = DECISIONS #185.
 
 **(2) 14벌 끝 문장 교체**(⛔ 전건 · 각 파일 앞절은 무변경):
 `"… 네 쪽에서 대화를 마무리하지는 않는다."` → `"… 통화를 네 쪽에서 먼저 끝내는 것은 [진행 강제]의 끊기 규칙이 허락할 때뿐이다."`
@@ -18791,6 +18794,7 @@ AC-089 (b) *"사용자 완료/속아 넘어감"* 행 → 구현 뒤 = **사기�
 | **G529** (2026-10-19) | S7 착수 조건(79.18 (3) ①④⑥⑦⑧⑩)의 단언 — ⓐ `startRelayLeg`가 `scammerHangup` 표식 있는 세션을 거부 ⓑ 발급 옵션이 `createRealtimeCall`과 같은 빌더(`declaresEndCall` · `hangupMode` · `fictionalBankName`) ⓒ 교대 close가 `endCall(trigger)` · `callEndedBy="remote"`를 타지 않는다 ⓓ 래치 중 받은 leg 토큰 폐기. ⛔ **번호만 예약 — 단언 자리 · 실행은 S7 owner**(T192 C1~C5의 완료 조건이 아니다 — 앞 커밋에 못 박지 않는다) | S7 테스트 |
 | **OQ-A130** (2026-10-19) | AC-101 (a)(릴레이 순서)에 *"중간 화자는 먼저 끊지 않는다"* 규칙이 PRD 문면에 없다(공유 노트 K11) — User 결정(DECISIONS #146)은 났으나 PRD 반영은 planner 소관 | planner — UpdateRequests 등재 제안(79.18 (6)) |
 | ↳ G528 · G501 (2026-10-19 S5b 뒤) | G528 ⓐ의 getter는 **`getSessionUserTurns()`**(요청 필드 `userTurns`) · ⓓ의 *"∨ toolPending"* 은 **G555 정의로 대체**(자기참조 결함 — 79.19 (3)). G501 *"순서"* 는 8행이 2-b 뒤로 옮긴 순서(G553). 신규 G552~G558 · OQ-A140~A141 = **79.19 (8)** | 79.19 (8) |
+| ↳ C6 (2026-10-19) | T192 C6(F2 · R4) 신규 **G596~G603 · OQ-A152~A154** = **79.20 (11)**. OQ-A117은 실시간 칸이 OQ-A154로 다시 묻힌다(원 행 무수정) · G501 *"10행"* 은 그대로(행 추가 0 · 4행 조건만 변경) | 79.20 (11) |
 
 ### 79.17 이 패스의 편집 범위 · 닫지 못한 것
 
@@ -18799,6 +18803,8 @@ AC-089 (b) *"사용자 완료/속아 넘어감"* 행 → 구현 뒤 = **사기�
 - ⛔ 닫지 못한 것: 프로브 0회(79.4) · 3.8 `end_call` 동작은 SMS 도구 실측(§71.2)에서 **유추**했다 · 라이브 모델값 미확인 · `play/page.tsx` 폴백 `ended` 뒤 `<audio>` 지속 재생 여부 미검증 · 렌더 하네스의 입력값 추출 규칙 미확인 · 메인 체크아웃 작업 트리 = `9971f89` 동일성 미검증.
 - **(2026-10-19 보강 패스 — 브랜치 `claude/t192-c1-hangup-decision` = main `f1a7ba2`)** 편집: 79.1 #21~#25 · 79.2 행 2-b + 입력 글머리 2 · 79.3 · 79.6 · 79.7 · 79.8 · 79.13 시점 부착 각 1 · 79.9 기호 고지(S→E 대응표) · 79.15 (6) · 79.16 행 7 · 이 줄 · 79.18 신설 · `docs/DECISIONS.md` #146. 원문 삭제 · 수정 0(전부 덧붙임 · 표에는 행 삽입). 번호(grep): main `f1a7ba2` = G520 · OQ-A126 · DECISIONS #141 / #311 워크트리 = G525 · OQ-A129 · #142 / scenario-review 워크트리 = G500 · OQ-A116 · **#145**(⚠️ 같은 User 결정을 그 트리 #145가 이미 적었다 — 79.18 (6)) ⇒ **G526~G529 · OQ-A130 · #146**. ⛔ 예약 아님 — 병합 순서로 확정.
 - **(2026-10-19 S5b 병합 뒤 재판정 패스 — 브랜치 `claude/t192-c2-c4-hangup-server` = main `9c760eb`)** 편집 범위 = 79.19 (10). 번호 G552~G558 · OQ-A140~A141 · DECISIONS #167(scenario-review 워크트리 #147).
+- **(2026-10-19 T192 C6 설계 패스 — 브랜치 `claude/t192-c5-call-ending` HEAD `12cbc02` · 기준 main `b7fde97`)** 편집 범위 = 79.20 (12). 번호 G596~G603 · OQ-A152~A154 · DECISIONS #185~#186(⛔ 예약 아님 — 병합 순서로 확정).
+- **(2026-10-20 C6 OQ 해소 정합 패스 — 브랜치 `claude/t192-c6-idle-hangup` HEAD `c1d056a` · 위 줄 원문 무수정)** 편집 = `docs/Architecture.md`만: 79.2 · 79.6 시점 부착 각 1 · 이 줄 · 79.20 시점 부착(머리 번호 블록 · (0) · (2) ③ · (3) ① · (3) ⑤ · (4) · (7) · (8) D0 · C6-R · P-H · (9) · (11) · (12)). 원문 삭제 · 수정 0. ⭐ **DECISIONS 번호 대응(위 줄 *"#185~#186"* 은 설계 시점 2행이다 — 결정 기록은 5행)**: **#185** = F2 설계(문면 · 공회전 행 기각) · **#186** = R4 설계 권고 · **#187** = OQ-A152 User 확정(4행 1칸 해제) · **#188** = OQ-A153 확정(공회전 서버 행 없음) · **#189** = OQ-A154 확정(실시간 문면 그대로) + T195 등재 승인 + D0 처분(`docs/DECISIONS.md:167-171`).
 
 ### 79.18 (2026-10-19 신설) 릴레이(S7)와의 계약 — ⭐⭐ **C5가 인터페이스를 고정하고 S7이 그 위에 맞춘다** / ⭐ **마지막 화자만 끊는다는 결정은 두 층(선언 · 서버 판정)에서 집행된다**
 
@@ -19110,6 +19116,303 @@ isRelaySwitchPending: () => boolean;                // ⛔ C5에서는 `() => fa
 - 편집: 이 79.19 신설 · 시점 부착(79.1 #26 · 79.2 · 79.5 · 79.6 (2) · 79.7 · 79.8 · 79.13 · 79.16 ↳ G528 · 79.17 · 79.18 (1)(2)(3) · 이 절 바로 위 확인 줄) · `docs/DECISIONS.md` #167. 원문 삭제 · 수정 0.
 - 하류(⛔ 미편집): `docs/API.md` 부록 F `requestScammerHangup` 요청(`scammerTurns` → `userTurns` · 판독 규칙) · `createRealtimeCall.liveTools`(`endCall` · `endCallFailureInstruction`) · `sendMessage` 응답 `endReason` / `docs/Database.md`(변경 0 — `scammerHangup` 필드 무변경) — 구현 뒤 docs.
 - ⛔ 닫지 못한 것: 실행 0(테스트 · 프로브 · 해시) · clone 대조값 미측정 · `instructionBusyRef` 해제 시점과 맥락 주입 발화의 대응 미확인 · S5b 설계 원문(§82.3)은 미병합 워크트리라 코드만 정본으로 읽었다 · 3.8이 한 `toolCall`에 `end_call`과 다른 호출을 실제로 함께 내는지는 미관측(배치 항은 방어).
+
+### 79.20 (2026-10-19 신설 · T192 C6) "입금 확인 중" 공회전 신고 — F2(단계 소진 끊기) · R4(열릴 수 없는 확인 오퍼가 끊기를 막는다) — ⭐⭐ **판정표는 막는 쪽만 맡는다 — "N턴 공회전" 행은 끊기를 *일으킬* 수 없고, AC-103 (a)가 금지한 이유(시간이 오래 걸림)를 서버가 대신 판정하게 된다 ⇒ 행 추가 기각 · 끊기를 일으키는 층은 문면(+ A-1 확인 결과 신호)** / ⭐⭐ **R4의 4행은 "전환이 *이 경로에서* 일어날 수 있는데 아직 안 일어났다"로 좁힌다 — 판정 입력은 전부 서버 값(경로 · 계열 · 오퍼 문서 존재)이고 클라 값은 받지 않는다** / ⭐ **C6은 `play/page.tsx` · `GeminiVoiceSession.tsx`를 고치지 않는다**
+
+> **⭐ 파일 경계(오케스트레이터 요구 — 맨 위 명시)**: C6의 편집 대상은 **서버(`functions/src/scammerHangup/**` · `functions/src/roleplay/index.ts`) + 프롬프트(`functions/src/roleplay/promptAssembly.ts`의 끊기 상수 1개) + 테스트**뿐이다. ⛔ **`src/app/session/play/page.tsx` · `src/lib/realtime/GeminiVoiceSession.tsx` 변경 0줄.** 루트 테스트 1개(G597 트립와이어 — 신설 파일)가 `play/page.tsx`를 **읽기만** 한다(scenario-review가 그 파일의 `verifyIntentExpressed` 줄을 바꾸면 이 테스트가 빨개진다 — 의도된 동작, (3) ④).
+> **범위(오케스트레이터 2026-10-19 범위 변경 지시)**: F2 · R4 · P-H 재실측 계획만. ⛔ **F6(침묵 넛지 확대) · F8(자동 호 전환 재시도) · 서버 '확인 결과' 신호의 Live 맥락 주입은 설계하지 않는다** — scenario-review **PR-A2**(Live 클라 배선) 소관. 경계만 (6)에 적는다.
+> **기준선**: 브랜치 `claude/t192-c5-call-ending` HEAD `12cbc02`(main `8bf6333` 병합). 오케스트레이터 전달 = main **`b7fde97`**(#319 C5 병합 · C5 코드는 이 체크아웃과 같다). `C:\Projects\codegate\.git\refs\remotes\origin\main` = `b7fde97d…` 직접 판독 · `.git/logs/refs/remotes/origin/main:311` `8bf6333 → b7fde97` fast-forward. 아래 좌표는 **이 워크트리 열람값**(실행 0 · 테스트 0 · 셸 없음 · `git show` 불가).
+> **번호(grep — 착수 시 실측)**: 이 워크트리 · 메인 체크아웃 `C:\Projects\codegate\docs`(HEAD = `b7fde97` fast-forward — 작업 트리 = 커밋 동일성은 추정) 둘 다 **G 최대 G558 · OQ-A 최대 OQ-A141 · DECISIONS 최대 #167** · `C:\Projects\codegate\.claude\worktrees\*\docs\*.md`에 `G596~` · `OQ-A152~` · `#185~` · `79.20` **0건** ⇒ **G596~G603 · OQ-A152~A154 · DECISIONS #185~#186**. ⛔ **예약 아님 — 병합 순서로 확정**(scenario-review가 같은 범위를 동시에 쓸 수 있다. 재번호 시 이 절 · #185~#186 행 · 79.2 / 79.16 / 79.17 시점 부착 줄만 치환 — 전역 치환 금지).
+> **(2026-10-20 번호 정합 — 위 인용 원문 무수정 · 이 줄이 우선)** 위 번호는 재배정 결과로 확정됐다(커밋 `a9f2ce9` — 원 G559~G566 · OQ-A142~A144 · #168~#169에서). 이 절의 결정 기록은 **#185~#186 두 행이 아니라 다섯 행**이다: **#185** F2 설계((2)) · **#186** R4 설계 권고((3)) · **#187** OQ-A152 User 확정 · **#188** OQ-A153 확정 · **#189** OQ-A154 확정(+ T195 · D0) — `docs/DECISIONS.md:167-171`. 이 절 본문 · (11) 게이트 표 · (12)가 *"#185~#186"* 로만 가리키는 곳은 결정 *내용*을 이 대응으로 읽는다(해소 사실은 (11) 끝 줄).
+> **⚠️ 버전 갭**: 헤더(`:5`) PRD v1.7.1 · UX 1.13 ↔ 현행 PRD **v1.24**(`docs/PRD.md:4`). 판정 입력 AC-103 · AC-071 · AC-006은 `docs/PRD.md:1014` · `:925`에서 직접 읽었다. 헤더 미전진(UpdateRequests #45 소관 — §79 머리와 같은 처분).
+> **⚠️ 신고 원자료 미열람**: *"loan-refinance-scam · Live와 폴백 · 3난이도 6/6 재현"* 은 오케스트레이터 전달(scenario-review 감사 A)이고 이 패스는 원 로그 · 전사를 보지 못했다. 아래 원인 서술은 **코드에서 도출한 추정**이며 확인 방법은 (8) D0.
+
+**(0) 금지 먼저**
+
+1. ⛔ **판정표에 "공회전 N턴 → 승인/강제" 행을 두지 않는다**((2) ③). 끊기를 *일으키는* 서버 행은 AC-103 (a) *"판단은 모델이 한다 · 시간이 오래 걸림으로는 끊지 않는다"*(`docs/PRD.md:1014`)와 정면 충돌한다.
+2. ⛔ **R4 허용 조건에 클라 값을 쓰지 않는다** — 그 값은 끊기 허용 범위를 **넓힌다**(79.18 (5) 2행과 같은 규칙).
+3. ⛔ **R4는 OQ-A152(User/planner) 답 전 구현 금지** — AC-103 (b)① 문면(*"확인 무력화 흐름이 선언된 세션에서는 … 전환이 끝나기 전에는 끊지 않는다"*)을 경로별로 좁히는 변경이다. F2 문면(아래 (2) ④)은 이 선행 조건에 묶이지 않는다(처방별 선행 조건).
+4. ⛔ **NONE 변형(`HANGUP_RULE_NONE`)은 한 글자도 바꾸지 않는다**(G505). F2 문면은 TOOL · SIGNAL 공통 머리 `HANGUP_RULE_CASES` 1곳만.
+5. ⛔ **A-1(scenario-review)과 같은 줄을 고치지 않는다**((6)). C6은 `SCENARIO_PROGRESSION_TEMPLATE` 0줄.
+6. ⛔ **`goal` 사실(가짜 랜딩 제출 · 확인 결과)을 판정 입력으로 쓰지 않는다** — 79.2 글머리 *"`landing_submitted`는 판정 입력으로 쓰지 않는다 · 서버 하한은 막는 쪽만"* 그대로.
+
+- **(2026-10-20 OQ 해소 — 위 1~6 원문 무수정 · 이 줄이 우선)** 3의 선행 조건은 **풀렸다**: OQ-A152 = (가)(User 객관식 *"이 경우만 끊기 허용"*) · PRD AC-103 갱신 고지 2(v1.24 후속 5 — `docs/PRD.md:1015`) 반영 완료 · DECISIONS #187 ⇒ C6-R 구현 = `c1d056a`. 1 · 2 · 4 · 5 · 6은 그대로 유효하다(1은 OQ-A153 = (가)로 확정 — #188).
+
+**(1) 착수 시 실측 (파일 열람 · grep — 실행 0)**
+
+| # | 확인 | 결과 | 근거 |
+|---|---|---|---|
+| 1 | 판정표가 끊기를 *일으키는* 행이 있는가 | **없다** — 10행 중 `hangup:true`는 8 · 9행뿐이고 둘 다 "막는 행에 안 걸림"의 결과. 끊기 개시는 모델의 `end_call` 호출(실시간) · `[[SIGNAL:END_CALL_*]]`(폴백)뿐 | `functions/src/scammerHangup/decide.ts:98-126` · `fallback.ts:98-110` |
+| 2 | 런타임 "같은 의미 반복" 감지기 | **0건**(`similar\|duplicate\|repetition\|levenshtein…` 비테스트 소스 0 · 테스트 1건 `mockScreens.test.ts`뿐) | grep |
+| 3 | 실시간 서버가 사기범 텍스트를 쥐는가 | **아니다** — 응답 모달리티 오디오 고정 · 서버가 사기범 텍스트를 쥐는 지점 0 · 실시간 전사는 통화 종료 뒤 `submitRealtimeTranscript`로만 온다 | `functions/src/scenarios/verifyIntercept.ts:4-7` · 79.19 (2) 2 |
+| 4 | 가짜 랜딩 제출 사실 | 서버 `inCallSms` 문서 `landingSubmittedAt`(클라 이벤트 `recordInCallSmsEvent("landing_submitted")` — 서버가 `fakeLandingId` 보유 문서만 수락). ⭐ **모델에게 전달하는 경로 0** — 클라는 기록만 한다(`onLandingSubmitted` → `handleRecordSmsEvent`) · 도착 기록 `DeliveredSmsRecord`에 그 필드 없음 | `functions/src/shared/types.ts:265` · `functions/src/inCallSms/index.ts:227` · `:259-264` · `src/app/session/play/page.tsx:2665` · `functions/src/inCallSms/smsGate.ts:48-54` |
+| 5 | 공회전과 충돌하는 상시 문면 | [진행 강제] *"상대가 응하면 실제로 진행시킨다 … '확인됐다'며 멈추지 말고, 다음 단계 요구로 이어가"* — 끝이 열려 있다(언제 멈추는지 문면 0) · TOOL/SIGNAL 첫째 경우 *"이체를 마쳤거나"* 는 모델이 **확인할 수 없는 사실**(4 — 전달 경로 0) | `promptAssembly.ts:165` · `:201` |
+| 6 | 계열 B 6종 | 카탈로그 7종 중 `bank-security-verify-scam`만 계열 A(서버 `VERIFY_SERIES_A_SCENARIOS` · 클라 `verifySeriesFor`) ⇒ B = institutional · card-company · **loan-refinance** · tax-refund · courier-customs · card-delivery-call | `functions/src/scenarios/verifyIntercept.ts:208-216` · `functions/src/realtime/liveTools.ts:48` · `:57-60` · `src/lib/verifyintercept/verifyIntercept.ts:80-82` |
+| 7 | ⭐ 폴백 계열 B의 오퍼 개시 경로 | **0** — 앱 주도 announce = `shouldAnnounceVerifyOffer` B ⇒ `intentExpressed` · `verifyIntentExpressed`는 setter 없는 `useState(false)`(G393) · 모델 도구는 폴백에 없다(`GeminiVoiceSession` 미마운트) | `src/app/session/play/page.tsx:421` · `:925-938` · `:939-944` 주석 · `src/lib/verifyintercept/verifyIntercept.ts:96-104` |
+| 8 | 실시간 계열 B의 오퍼 개시 경로 | **있다** — `offer_verification_desk`는 카탈로그 7종 × 고급에 선언(§61 · 계열 무관) | `liveTools.ts:70-75` · `:202-204` |
+| 9 | 폴백에서 전환(`placedAt`)이 생기는 조건 | 오퍼 문서 존재 + `announcedAt` → 확인 컨트롤 노출 → 참가자 탭 → `deliverVerifyReconnect`가 `placedAt` write. 문서가 없으면 재연결은 `failed-precondition` | `src/lib/verifyintercept/verifyIntercept.ts:142-151` · `functions/src/verifyIntercept/index.ts:318-333` |
+| 10 | 4행 입력 현행 | 폴백 = `verifyState?.placed === true`(문서 없음 · 읽기 실패 둘 다 `verifyState` 부재 → 구분 불가) · 실시간 = 트랜잭션 안 `verifySnap.exists` · `placedAt` | `roleplay/index.ts:295-316` · `:321-333` · `scammerHangup/commit.ts:71-80` |
+| 11 | ⭐ 폴백 계열 B 고급의 끊기 | 사전 판정이 **매 턴 `blocked_transfer`**(문서가 영영 안 생긴다 — 7) ⇒ `hangupMode` 항상 `"none"`(`fallback.ts:85-87`) ⇒ SIGNAL 문면이 한 번도 실리지 않는다 ⇒ **끊기 0 · 로그 0**(신호가 없으니 *"끊기 신호 무시"* 로그 `roleplay/index.ts:615-618`도 안 남는다) | 코드 판독 |
+| 12 | 폴백 사전 판정 로그 | **없다** — `hangupPre`는 로그를 남기지 않는다(신호가 있을 때만 무시 로그) ⇒ 11의 정지가 라이브에서 **보이지 않는다** | `roleplay/index.ts:334-335` · `:615-618` |
+| 13 | 실시간 판정 로그 | `logger.info("사기범 끊기 판정", { sessionId, path, status, row, kind, userTurns })` — 호출이 있었을 때만 | `functions/src/scammerHangup/index.ts:79-86` |
+| 14 | 한도(근접) 신호 | 폴백 = 서버 `isSessionLimitReached`(턴 확보 트랜잭션 값) · 실시간 = **클라 한도 effect**(서버 판정 0) | `roleplay/index.ts:204-209` · 79.19 (1) 실시간 한도 행 |
+
+**(2) F2 판정 — "단계 소진 · 공회전 N턴" 행을 둘 것인가**
+
+① **입력 후보 전수(⛔ 표에 없는 신호는 행 추가를 묻는다)**
+
+| 후보 신호 | 폴백에서 | 실시간에서 | 신뢰 등급 | "공회전"을 가르는가 | 판정 |
+|---|---|---|---|---|---|
+| 수법 진행 단계 | 서버 상태 **0**(수법 목록 `weakenedTactics`는 순서 · 진행 기록이 없다) | 0 | — | — | ⛔ 존재하지 않음 |
+| 선언 문자 목적 소진(S5b `declared` 전부 도착) | 서버(`readDeliveredSms` · `resolveDeclaredSms`) | 서버(같은 문서 — 콜러블이 이미 읽는다 `index.ts:56-58`) | 서버 값 | ✗ — "보낼 문자를 다 보냈다"는 공회전이 아니라 진행의 중간이다(이체 요구는 그 뒤에 온다) | 입력 기각 |
+| S5b 사용자 발화 수 `userTurns` | 서버 `userTurnsNow` | **클라 주장**(OQ-A120) | 혼합 | ✗ — 공회전 중에도 단조 증가(상태를 구분하지 않는다) | 5행 하한 그대로 |
+| 사기범 턴 수 | 서버 `scammerTurnNumber` | 클라 · 넛지/proactive로 참가자 무발화에도 증가(79.19 (2) 5) | 혼합 | ✗ — 침묵 중에 늘어난다 = AC-103 (a) 금지 이유와 같은 방향 | 기각(79.19와 같은 근거) |
+| 같은 의미 반복 감지 | 서버가 텍스트를 쥔다(만들 수는 있다 — 오늘 0) | ⛔ **서버가 텍스트를 쥐지 않는다**(1) #3) — 클라 전사 주장으로만 가능 | 폴백 서버 · 실시간 클라 주장 | △ — 폴백만 계산 가능 | ⛔ **AC-103 (f) "같은 조건" 위반**(한 경로만 계산) · 새 감지기 = 새 메커니즘 |
+| 한도 근접 | 서버 | 클라 | 혼합 | ✗ — "시간이 오래 걸림" 그 자체 | ⛔ **AC-103 (a) 금지 이유** |
+| 가짜 랜딩 제출 `landingSubmittedAt` | 서버 문서 | 서버 문서 | 클라 이벤트의 서버 기록 | ✓ **목적 달성 사실** — 공회전의 *원인*(모델이 그 사실을 모른다 — (1) #4 · #5) | ⛔ 판정 입력 아님((0) 6) · **모델에게 알리는 것은 A-1 "확인 결과 신호"**((6)) |
+
+② **원인 판정(추정 — 확인은 (8) D0)**: 공회전 문면(*"입금 확인 중, 잠시만 기다려 주세요"*)은 **이체 요구 뒤 · 결과를 모르는 상태**의 발화다. 그 상태에서 ⓐ 모델은 *"이체를 마쳤다"* 를 확인할 수단이 없고(#4) ⓑ [진행 강제] `:165`는 멈출 지점을 주지 않으며 ⓒ TOOL/SIGNAL은 **언제 끊을 수 있는지**만 말하고 *"할 일이 끝났으면 끊는다"* 를 말하지 않는다 ⇒ 모델은 끊기 조건을 만족했는지 판정하지 못한 채 시간을 번다. 판정표가 막은 것이 아니다 — **초급 · 중급**은 4행이 꺼져 있고(`verifyEnabled = 고급`) 사용자 발화가 이어지면 5 · 6행도 통과한다. **고급**은 R4(아래 (3))가 겹친다(폴백 계열 B = 끊기 0 확정 · 실시간 계열 B = 모델이 확인 오퍼를 안 열면 끊기 0 — OQ-A117).
+
+③ **판정: 판정표 행 추가 = ⛔ 기각.** 이유 셋:
+- **표는 끊기를 일으킬 수 없다**(#1). 행을 더해도 모델이 `end_call`을 부르지 않으면 효과 0 — 신고의 결함(끊지 않음)을 닫지 못한다.
+- 끊기를 *강제*하는 서버 행(예: *"공회전 N턴이면 서버가 세션을 끝낸다"*)은 **AC-103 (a)** 의 *"판단은 모델이 한다"* · *"시간이 오래 걸림 … 으로는 끊지 않는다"* 를 서버가 어기는 것이고, 마지막 대사 · 작별 순서(79.3 — 승인 *뒤에만* 작별)를 건너뛴다.
+- 계산 가능한 반복 신호는 폴백에만 있다(①) — **AC-103 (f) 위반**.
+⇒ "N값"은 고를 대상이 없다. 행을 두는 대안은 OQ-A153에 선택지로만 남긴다(User 확인 — 권고 = 두지 않음).
+- **(2026-10-20 OQ 해소 — 위 줄 원문 무수정)** OQ-A153 = **(가) 두지 않는다** — User 질문 없이 **오케스트레이터가 권고안대로** 정했다(기술 판단) · 기각 확정 · #188.
+
+④ **판정: 끊기를 일으키는 층 = 문면 + A-1 신호(둘 다, 역할 분리)**
+
+| 층 | 무엇을 하는가 | 소유 | 경로 |
+|---|---|---|---|
+| **A-1 "확인 결과 신호"**(scenario-review) | 모델이 모르던 **사실**(이체 · 확인 결과)을 알린다 — ⓐ의 해소 | scenario-review PR A-1 | 폴백 = 서버 조립 · 실시간 = 서버 응답 필드까지(Live 주입은 PR-A2) |
+| **A-1 프롬프트 "확인 중 연속 금지 · 가짜 확인 결과 제시"** | 결과를 모르는 상태에서도 시간을 벌지 말고 결과를 *지어내 제시*하게 한다 — 대화가 요구 · 거절 쪽으로 다시 굴러간다(② 의 정지 해소) | scenario-review PR A-1 | 공통 블록 |
+| **C6 끊기 문면(이 절)** | *"할 일이 끝났으면 그때 끊는다"* — ⓒ의 해소. 끊는 **이유는 여전히 두 경우뿐**(목적 달성) | T192 C6 | TOOL · SIGNAL 공통 머리 |
+
+**C6 정본 문면** — `HANGUP_RULE_CASES`(`promptAssembly.ts:201`)의 *"…불러 주었다."* 와 *"둘째, …"* 사이에 **1문장 삽입**(⛔ 다른 글자 무변경):
+```
+원하던 것을 얻었고 상대에게 더 요구할 것이 남지 않았다면, 통화를 붙잡아 두지 말고 그때 끊는다.
+```
+- 결과(TOOL · SIGNAL 정본 갱신 — 79.6 ① ②와 G505 사본 `promptAssembly.test.ts:1688-1692`를 같은 커밋에서 갱신): `… 불러 주었다. 원하던 것을 얻었고 상대에게 더 요구할 것이 남지 않았다면, 통화를 붙잡아 두지 말고 그때 끊는다. 둘째, 상대가 …`
+- **왜 셋째 경우가 아닌가**: AC-103 (a) *"끊는 조건(이 둘뿐)"*. 이 문장은 첫째 경우의 **시점**을 정한다(이유를 더하지 않는다) ⇒ `kind = "goal"` · SIGNAL은 `END_CALL_GOAL`.
+- **G130**: 숫자 0 · 서수 0(*"첫째"* 를 다시 부르지 않는다 — `G505_COUNTER_ALLOWED`(`promptAssembly.test.ts:1800-1811`) 무변경이 목표). ⚠️ F11 검출기가 이 문장에서 새 표현을 하나라도 잡으면 **문장을 고치지 말고 멈춰 보고**(검출기를 약화하지 않는다).
+- **G128**: 같은 프롬프트에 *"끊지 않는다"* 류와 공존하는 문장 0 — 제외 문장 *"침묵 · 소강 · 시간이 오래 걸림으로는 끊지 않는다"* 는 그대로 뒤에 남는다(이유가 다르다: 이쪽은 *할 일이 끝남*). `:165` *"다음 단계 요구로 이어가"* 와는 순서로 이어진다(다음 요구가 있으면 잇고 · 없으면 끊는다).
+- **반영 범위**: TOOL(실시간 토큰 — `createRealtimeCall`) · SIGNAL(폴백 허용 턴). NONE · 오프닝 · 메신저 · ElevenLabs = 무변경 ⇒ clone 2종 대조값(NONE 조립) **무변경**.
+- **기존 하한 · 6행 · 7행과의 관계**: 무변경 — 이 문면이 모델에게 끊을 *때*를 알려 주면 그 호출은 기존 표를 그대로 지난다. 사용자 발화 < 3이면 `too_early`(공회전 신고는 4~5턴 뒤라 해당 없음) · 문자가 막 보였으면 `blocked_pending` · 폴백 한도 같은 턴이면 한도가 이긴다.
+- **H6 ⓒ(침묵 대본 호출 0)과의 관계**: 이 문장에 침묵 · 대기 어휘 0 ⇒ 침묵만으로 *"원하던 것을 얻었다"* 가 참이 되지 않는다. 재실측((8) P-H)이 확인한다.
+
+**(3) R4 판정 — "오퍼가 실제로 열릴 수 없는 세션"을 서버가 가른다**
+
+① **판정 축**
+
+| 축 | 사실 | 결론 |
+|---|---|---|
+| AC-103 (b)① 의도 | *"전환이 끝나기 전에는 끊지 않는다 — **함정 자체가 사라지기 때문이다**"*(`docs/PRD.md:1014`) | 지키려는 것 = **확인 전화 가로채기 체험의 기회**. 그 기회가 이 경로에서 **구조상 0**이면 막아도 지킬 것이 없고, 대가는 무한 공회전(끊기 0) |
+| 폴백 계열 B | 오퍼 개시 경로 0((1) #7) · 문서가 없으면 전환 0((1) #9) | **열릴 수 없다** — 단, Live 구간에서 이미 문서가 생겼으면(강등 전 모델 도구) 폴백 컨트롤로 전환할 수 있다 ⇒ **문서 유무가 판별자** |
+| 폴백 계열 A(bank) | 턴 게이트만으로 announce(`shouldAnnounceVerifyOffer` A ⇒ true) | 열릴 수 있다 — 무변경 |
+| 실시간 6종 + bank | `offer_verification_desk` 선언 | 열릴 수 있다 — 무변경(모델이 끝내 안 열면 끊기 0 = **OQ-A117 그대로**) |
+| 누가 아는가 | 경로 = 어느 콜러블이 판정을 불렀는가(`sendMessage` vs `requestScammerHangup` — 요청 필드가 아니다) · 계열 = 서버 `verifySeriesFor` · 문서 = 서버 read | ⭐ **전부 서버 값** ⇒ 클라 값 0 |
+| AC-103 (f) "같은 조건" | 규칙은 하나(*"전환이 이 경로에서 가능한데 아직 안 됐으면 막는다"*) · 판정 함수 하나 · 입력이 경로별 사실 | 같은 조건(경로 사실이 다를 뿐) — ⚠️ 문면 해석이라 OQ-A152에 함께 묻는다 |
+
+- **(2026-10-20 OQ 해소 — 위 표 원문 무수정)** 마지막 행의 *"OQ-A152에 함께 묻는다"* 는 **해소**: PRD AC-103 갱신 고지 2가 (f) *"같은 조건"* 을 *"규칙 하나를 두 경로에 같게 적용 · 입력 사실이 경로마다 다를 뿐"* 으로 읽는다고 적었다(`docs/PRD.md:1015` — planner 해석 · OQ-A152 (가)의 귀결) · #187.
+
+② **진리표 — 신설 순수 함수 `isVerifyTransferReachable`**(⛔ 표에 없는 경우는 행 추가를 묻는다)
+
+| # | `path` | 계열(`verifySeriesFor` 서버) | 오퍼 문서 `offerDoc` | Then `transferReachable` | 근거 |
+|---|---|---|---|---|---|
+| 1 | `"realtime"` | 무관 | 무관 | **true** | (1) #8 — 모델 도구 경로 존재 |
+| 2 | `"fallback"` | `undefined`(카탈로그 없음) | 무관 | **true** | 4행은 `verifyEnabled`가 이미 거짓 — 값 무의미 · fail-closed 쪽 |
+| 3 | `"fallback"` | `"A"` | 무관 | **true** | 앱 주도 announce |
+| 4 | `"fallback"` | `"B"` | `"present"` | **true** | (1) #9 — 문서가 있으면 컨트롤 · 재연결 가능 |
+| 5 | `"fallback"` | `"B"` | `"unknown"`(읽기 실패) | **true** | ⛔ fail-closed(그 턴 4행 차단 — 옛 동작) |
+| 6 | `"fallback"` | `"B"` | `"absent"`(읽기 성공 · 문서 없음) | **false** | (1) #7 — 이 경로에서 열릴 길 0 |
+
+```ts
+// functions/src/scammerHangup/transferReach.ts — 신설(`realtime/liveTools.ts`의 `verifySeriesFor` 값 import라 잎 모듈 decide.ts 밖 ·
+// 순환 없음: liveTools → decide/guidance 방향만 있고 decide는 이 파일을 import하지 않는다). Firestore · LLM import 0.
+export type VerifyOfferDocState = "present" | "absent" | "unknown";
+export function isVerifyTransferReachable(input: {
+  path: "realtime" | "fallback";              // `ScammerHangupMarker.path`와 같은 리터럴(shared/types.ts)
+  scenarioId: string;
+  offerDoc: VerifyOfferDocState;
+}): boolean; // = !(input.path === "fallback" && verifySeriesFor(input.scenarioId) === "B" && input.offerDoc === "absent")
+```
+
+③ **4행 조건 변경**: `ScammerHangupInput`에 **필수 키 `transferReachable: boolean`**(옵셔널 금지 — 빠뜨리면 컴파일 오류 · 79.18 (1) 관례) · 4행 `when` = **`verifyEnabled && !transferPlaced && transferReachable`**. 순서 무변경(G553 · 79.19 (0) 3). 모델용 문면: 4행에 안 걸리면 다음 행으로 — 새 문면 0 · `SCAMMER_HANGUP_BLOCKED_TRANSFER_GUIDANCE` 무변경.
+- 호출부: 폴백 = `roleplay/index.ts` 오퍼 read(`:300-316`)에서 지역 `verifyOfferDoc` 상태를 남기고(`exists` → `"present"`/`"absent"` · `catch` → `"unknown"` · `verifyItem` 없음 → `"unknown"`) `FallbackHangupFacts`에 **필수 `transferReachable`** 로 넘긴다(`fallback.ts:14-33` · `:62-80`) / 실시간 = `commit.ts:71-80`이 트랜잭션 안 `verifySnap.exists`로 `offerDoc`을 만들어 `path:"realtime"`으로 부른다(결과 항상 true — **동작 변화 0**). 세션 부재 분기(`commit.ts:55-70`)는 1행이 이기므로 `true`.
+- ⚠️ 정직 고지: 폴백 계열 B 고급 프롬프트에는 여전히 확인 무력화 조건형 블록(*"…다시 고집하면 확인 창구로 넘긴다"* — `promptAssembly.ts` §30 블록 · `verifyInterceptEnabled`)이 실린다 ⇒ 그 세션에서 모델이 *"넘겨 드리겠다"* 고 말해도 전환은 오지 않는다. **기존 결함**(G393 · §57.12 이래) · R4가 만들지 않았고 고치지도 않는다(범위 밖 — 79.20 (12) 하류).
+
+④ **트립와이어(G597)** — 6행의 전제 *"폴백 계열 B는 오퍼가 열릴 수 없다"* 는 **클라 코드**(G393)가 보장한다. 서버 함수는 그것을 볼 수 없다 ⇒ 신설 루트 테스트가 ⓐ `src/app/session/play/page.tsx`에 `const [verifyIntentExpressed] = useState(false);`(setter 없음)가 있고 ⓑ `src/lib/verifyintercept/verifyIntercept.ts` `shouldAnnounceVerifyOffer`의 B 분기가 `intentExpressed`를 반환하며 ⓒ `functions/src/scammerHangup/transferReach.ts`가 존재할 때 — 셋 중 ⓐ·ⓑ가 깨지면 실패 메시지 *"폴백 계열 B 오퍼 개시 경로가 생겼다 — transferReach 6행(R4) 전제가 무너졌다. architect 재소집 · 6행을 지우기 전엔 병합 금지"* 로 빨개진다(계약이 아니라 트립와이어 — 처방을 메시지에 담는다). 기존 G393 회귀 게이트(`src/lib/verifyintercept/verifyCallContinuity.test.ts:386`)와 같은 앵커 형태를 쓴다.
+
+⑤ **안전 의도를 어디까지 유지하는가**
+
+| 유지 | 완화 |
+|---|---|
+| 실시간 7종 고급 — 전환 전 끊기 0(+ TOOL 확인 무력화 1문장) | 폴백 계열 B 6종 고급 **∧ 오퍼 문서 없음** — 4행 미적용(5 · 6 · 7행은 그대로) |
+| 폴백 bank 고급 — 전환 전 끊기 0 | — |
+| 폴백 계열 B 고급 ∧ 문서 있음(Live에서 연 뒤 강등) — 전환 전 끊기 0 | — |
+| 읽기 실패 — 그 턴 끊기 0 | — |
+
+⇒ 완화는 **"함정이 이 경로에서 구조상 0인 칸" 1칸**뿐이다. 그래도 AC-103 (b)① 문면(*"선언된 세션"*)과 글자가 어긋나므로 **OQ-A152**(User 판단 + planner PRD 갱신 고지)를 선행 조건으로 건다.
+- **(2026-10-20 OQ 해소 — 위 줄 원문 무수정)** 선행 조건 **충족**: User 답 OQ-A152 = (가) · planner PRD AC-103 갱신 고지 2(`docs/PRD.md:1015` — (b)① 을 *"그 경로에서 호 전환이 일어날 수 있는 세션"* 으로 읽는다 · 이 표의 *"유지"* 열 4행은 고지의 *"그대로 필수"* ①~④와 같다) · #187.
+
+**(4) 판정표 diff (79.2 · 79.18 (1) · 79.19 (3) 위에 얹는다 — 원문 무수정)**
+
+| 배열 순서 | 행 | 조건(이전) | 조건(C6 뒤) | `status` |
+|---|---|---|---|---|
+| 1 | #1 | `status !== "active"` | 무변경 | `not_active` |
+| 2 | #2 | `channel === "messenger"` | 무변경 | `wrong_channel` |
+| 3 | #2-b | `isNonLastRelayLeg(relay)` | 무변경 | `not_last_leg` |
+| 4 | #8 | `alreadyAccepted` | 무변경 | `already_accepted` |
+| 5 | #3 | `isMockTurn` | 무변경 | `mock_turn` |
+| 6 | **#4** | `verifyEnabled && !transferPlaced` | **`verifyEnabled && !transferPlaced && transferReachable`** ⛔ OQ-A152 뒤 | `blocked_transfer` |
+| 7 | #5 | `!(userTurns >= 3)` | 무변경 | `too_early` |
+| 8 | #6 | `pendingInstruction \|\| smsAwaitingUser` | 무변경 | `blocked_pending` |
+| 9 | #7 | `limitReached` | 무변경 | `limit_reached` |
+| 10 | #9 | 그 밖 | 무변경 | `accepted` |
+| — | (행 추가 없음) | — | ⛔ "공회전 N턴" 행 기각((2) ③) | — |
+
+입력 diff: `ScammerHangupInput` + **`transferReachable: boolean`**(필수) — 키 집합은 이것 하나만 는다(G600이 정확 일치로 고정).
+- **(2026-10-20 OQ 해소 — 위 표 · 줄 원문 무수정)** 6번째 줄(#4)의 *"⛔ OQ-A152 뒤"* 는 **해소**(OQ-A152 = (가) · #187) · 조건(C6 뒤)은 `c1d056a` `decide.ts:115`와 같다 · 키 12개(`decide.ts:54`).
+
+**(5) 입력 신호 · 신뢰 등급 (C6 뒤 전수)**
+
+| 입력 | 폴백 | 실시간 | 등급 | 변화 |
+|---|---|---|---|---|
+| `status` · `channel` · `relay` · `alreadyAccepted` | 서버 | 서버 | 서버 | 무 |
+| `isMockTurn` | 서버 | 항상 false | 서버 | 무 |
+| `verifyEnabled` · `transferPlaced` | 서버 | 서버 | 서버 | 무 |
+| **`transferReachable`** | **서버**(경로 = 진입점 · 계열 = 카탈로그 · 문서 = read) | **서버**(항상 true) | **서버** | **신설** |
+| `userTurns` | 서버 | 클라 주장(OQ-A120) | 혼합 | 무 |
+| `pendingInstruction` | false | 클라 주장 | 클라 | 무 |
+| `smsAwaitingUser` · `limitReached` | 서버 | 서버 / false | 서버 | 무 |
+| ⛔ 쓰지 않는 것 | 사기범 턴 · 반복 · 한도 근접 · 랜딩 제출 · 확인 결과 · `kind` | 같음 | — | (2) ① · (0) 6 |
+
+- ⚠️ 위조 경로 1건(정직 고지): 실시간 계열 B 고급 세션의 클라가 `sendMessage`(텍스트 진행)를 직접 불러 폴백 경로로 바꾸면 그 턴부터 6행이 적용될 수 있다(오퍼 문서가 아직 없을 때). 효과 = **자기 세션이 `scammer_ended`로 끝남**뿐 — 리포트 판정은 사유와 무관(G511)이고 다른 사용자에게 닿지 않는다. 텍스트 진행 전환 자체가 정상 UI 경로(§80.1 *"텍스트로 진행"*)이고 그 뒤 실시간 오퍼 경로가 닫히는 것도 사실이라 **결함 아님**.
+
+**(6) 조율 — A-1(scenario-review) · PR-A2 경계**
+
+*A-1과의 문면 · 슬롯 경계(어느 쪽이 먼저 병합돼도 줄 충돌 0을 목표로)*
+
+| 자리 | A-1 | C6 |
+|---|---|---|
+| `SCENARIO_PROGRESSION_TEMPLATE`(`promptAssembly.ts:160-169` — `{{HANGUP_RULE}}` `:168` 인접 줄 포함) | 고친다(새 줄 추가 · `:165` 등) — ⛔ 단 `{{HANGUP_RULE}}` 슬롯 줄 자체의 이름 · 위치 · 줄 단독성(한 줄에 슬롯 하나)은 유지 | ⛔ **0줄** |
+| 끊기 상수 블록(`:184-221` — `HANGUP_RULE_NONE` · `_CASES` · `_TOOL` · `_TOOL_VERIFY_SUFFIX` · `_SIGNAL` · `buildHangupRule`) | ⛔ **0줄** | `HANGUP_RULE_CASES` 1문장 삽입만 |
+| `promptAssembly.test.ts` | 자기 describe/테스트 블록 | G505 사본 2개(`:1688-1692`) 갱신만 · 새 단언(G599)은 **신설 파일** `functions/src/roleplay/__tests__/hangupRuleCases.test.ts` |
+| 문면 의미 | *"확인 중 연속 금지 · 가짜 확인 결과 제시"* = 대화 진행 규칙 · ⛔ 끊기 어휘(*"끊는다" · "통화를 마친다"*) 0 — 끊기 권한의 출처를 슬롯 하나로 둔다(G128) | *"할 일이 끝나면 그때 끊는다"* = 끊기 시점 규칙 · ⛔ *"확인 중"* 어휘 0(A-1 문면과 중복 금지 — 한쪽만 고쳐질 때 어긋나지 않게) |
+| clone 2종 대조값 | NONE 조립이 바뀌면(템플릿 줄 추가) **A-1이** 갱신 | NONE 무변경 ⇒ 갱신 0 |
+| 병합 순서 | 무관 — 위 경계면 줄 겹침 0. 나중 병합 쪽이 `promptAssembly.test.ts`의 G505 사본(`G505_TOOL_CANON` · `G505_SIGNAL_CANON`)이 **현재 상수와 같은지만** 재확인(A-1은 상수를 안 고치므로 C6 쪽 값이 정본) | |
+
+*A-1 "확인 결과 신호" — C6이 기대는 가정(⛔ A-1 PR 미열람 — 가정이다 · 어긋나면 architect 재소집)*
+- **가정 1**: 신호는 **판정 입력이 아니다** — `decide.ts` · `ScammerHangupInput`에 들어오지 않는다((0) 6 · G600).
+- **가정 2**: 신호 문면에 끊기 지시 · 허락 어휘가 없다(*"이제 끊어도 된다"* 류 0). 있으면 끊기 권한이 슬롯 밖에 하나 더 생긴다(G128) ⇒ 재소집.
+- **가정 3**: 폴백 = 서버가 매 턴 조립에 싣는다(턴 지시 슬롯 G31 경합은 A-1 소관) · 실시간 = 서버 응답 필드까지 · **Live 주입은 PR-A2**.
+- **가정 4**: 신호가 *"확인됐다(목적 달성)"* 를 알리면, 그 뒤 더 요구할 것이 없을 때 C6 문장이 `end_call(goal)`로 잇는다 — 두 PR이 각각 단독으로도 무해하다(A-1만: 공회전이 결과 제시로 풀린다 · C6만: 끊을 때를 안다).
+
+*PR-A2(Live 클라 배선 — scenario-review) 경계 — ⛔ 이 절은 설계하지 않는다*
+- **F6 침묵 넛지 · F8 자동 전환 재시도 · 확인 결과 Live 주입**: ⛔ 래치(`isEndLatched` · `isHangupLatched()`) 뒤 넛지 · 재시도 · 주입 0(G510 계승 — C5가 이미 막는 자리에 얹는다) · 넛지 문면에 끊기 어휘 0(넛지는 AC-103 (a)상 끊기 이유가 될 수 없는 침묵 대응이다) · 재시도 중(전환 진행 중)은 4행이 이미 막는다(`placedAt` 부재 = 전환 전 — AC-103 (b)① *"전환 진행 중 포함"*). C6 쪽 인터페이스 변경 0.
+
+**(7) 동작 변화**
+
+| 세션 | 이전 | C6 뒤 | 근거 |
+|---|---|---|---|
+| 폴백 · 계열 B 6종 · **고급** · 오퍼 문서 없음 | 끊기 0(매 턴 NONE) | 5 · 6 · 7행 통과 턴에 **SIGNAL** → 모델 판단으로 끊기 가능 | (3) · ⛔ OQ-A152 뒤 |
+| 폴백 · 계열 B · 고급 · 문서 있음 / 읽기 실패 | 전환 전 끊기 0 | 같음 | 진리표 4 · 5 |
+| 폴백 · bank 고급 / 실시간 7종 고급 | 전환 전 끊기 0 | 같음 | 진리표 1 · 3 |
+| TOOL · SIGNAL이 실리는 모든 통화(초 · 중 · 고) | 끊기 시점 문면 없음 | 첫째 경우에 1문장(할 일이 끝나면 그때 끊는다) | (2) ④ |
+| NONE(오프닝 · 메신저 · ElevenLabs · 폴백 비허용 턴) | — | **바이트 동일** | G505 |
+| 폴백 매 턴 로그 | 사전 판정 로그 0 | `끊기 사전 판정` 1줄(G601) | (1) #12 |
+| 리포트 · 종료 순서 · 화면 | — | 무변경 | G511 · 79.9 |
+
+- **(2026-10-20 OQ 해소 — 위 표 원문 무수정)** 1행 근거 열의 *"⛔ OQ-A152 뒤"* 는 **해소**(OQ-A152 = (가) · #187) — 그 행의 *"C6 뒤"* 동작은 `c1d056a`에 들어 있다(배포 전).
+
+**(8) 착수 체크리스트 (⛔ 각 항목은 심볼로 다시 찾는다 — 줄은 `12cbc02` 열람값)**
+
+*D0 — 원인 확인(⛔ C6-F 착수 전 · 실행 = QA/scenario-review · 산출물 = 보고 1개)*
+- 신고 6건 각각 ⓐ 실시간: 세션 로그 `사기범 끊기 판정` 건수(0 = 모델이 `end_call`을 안 불렀다 · ≥1 = `row` 값) ⓑ 폴백: `끊기 신호 무시` 건수 · 그 세션의 난이도(고급이면 사전 판정이 매 턴 4행일 것 — (1) #11). ⛔ 판정: ⓐ가 1건 이상 `row` 4 · 5 · 6으로 거절이면 F2 문면이 아니라 **거절 원인**이 범인 → architect 재소집(이 절의 (2) ② 추정 정정).
+- **(2026-10-20 D0 처분 — 위 글머리 원문 무수정 · 이 줄이 우선)** 신고 세션은 **T192 배포 전**에 생겼다(오케스트레이터 전달 · DECISIONS #189) ⇒ 그 세션 운영 로그에는 `사기범 끊기 판정` · `끊기 신호 무시` · `끊기 사전 판정` 줄이 생길 수 없어 **D0는 운영 로그로 실행 불가**다. (2) ② 추정(F2)은 **C6 뒤 P-H 재실측(H7 포함) · B 2일차 실측**으로 검증한다 · (10) #10의 If도 그 실측에서 다시 본다. (2) ② 는 그때까지 **추정** 그대로다.
+
+*C6-F — F2 문면(한 커밋)*
+- F-1 `functions/src/roleplay/promptAssembly.ts` `HANGUP_RULE_CASES`(`:201`)에 (2) ④ 1문장 삽입. 다른 상수 · 템플릿 0줄.
+- F-2 `promptAssembly.test.ts` `G505_TOOL_CANON` · `G505_SIGNAL_CANON`(`:1688-1692`)을 새 정본으로 · `G505_NONE_ORIGINAL` · `G505_COUNTER_ALLOWED`(`:1800-1811`) **무변경**(바뀌어야 테스트가 통과한다면 멈추고 보고).
+- F-3 신설 `functions/src/roleplay/__tests__/hangupRuleCases.test.ts` — G599.
+- F-4 79.6 ① ② 정본은 이 절 (2) ④가 갱신한다(원문 무수정 · 79.6 아래 시점 부착은 docs 하류).
+
+*C6-R — R4(⛔ OQ-A152 답 뒤 · 한 커밋)*
+- R-1 신설 `functions/src/scammerHangup/transferReach.ts`(`isVerifyTransferReachable` · `VerifyOfferDocState`).
+- R-2 `decide.ts` `ScammerHangupInput` + `transferReachable`(필수) · 4행 `when`(`:104-109`).
+- R-3 `fallback.ts` `FallbackHangupFacts` + `transferReachable`(필수) · `decideFallbackHangup` 전달.
+- R-4 `roleplay/index.ts` 오퍼 read(`:300-316`)에 지역 `verifyOfferDoc` · `hangupFacts`(`:321-333`)에 `transferReachable: isVerifyTransferReachable({ path: "fallback", scenarioId, offerDoc })`.
+- R-5 `commit.ts`(`:71-94`) 실시간 호출부 + 세션 부재 분기(`:55-70`).
+- R-6 테스트: `decide.test.ts` `EXPECTED_TABLE`(`:37`) · 기본 입력에 키 추가 · G596 · G598 · G600 / `fallback.test.ts` 계열 B 고급 × 문서 3상태 / 신설 루트 `src/lib/verifyintercept/transferReachPremise.test.ts` — G597.
+- **(2026-10-20 OQ 해소 — 위 C6-R 머리 · R-1~R-6 원문 무수정 · 이 줄이 우선)** 머리의 *"⛔ OQ-A152 답 뒤"* 는 **해소**(OQ-A152 = (가) · #187) · R-1~R-6 = **`c1d056a`에서 구현 완료**(세부는 (11) 끝 줄 ⑤).
+
+*C6-L — 관측(F · R 어느 커밋이든 · 판단값)*
+- L-1 `roleplay/index.ts` `hangupPre` 직후 `logger.info("끊기 사전 판정", { sessionId, row, status, mode: hangupMode })`(G170 범위 — 숫자 · 단계명만 · 대사 0) — G601.
+
+*공통*
+- 테스트 수 before/after는 착수 시 재측정(⛔ 인용값 금지 · 같은 체크아웃 동시 실행 금지 — CLAUDE.md). 검증 명령은 CLAUDE.md *Verified Commands* 원문.
+
+*P-H 재실측(⛔ C6-F 빌드 산출물로 · 배포 전 · 실행 = implementer/QA · 승인된 키 — 79.4 기준 그대로 · 문면이 바뀌어 기존 측정은 무효)*
+
+| P | 대본 · 모드 | 표본(⛔ 하한) | 통과 기준 |
+|---|---|---|---|
+| H1 | `accept` · `reject` 전 호출 | 호출 전수 | 승인 전 작별 어휘 **0 / n**(하드) |
+| H2 | `accept` | **승인 ≥ 10건**(세션 10이 아니라 *승인* 10 — 모자라면 `accept` 재실행으로 채운다 · 1회 실행 n ≤ 10은 스크립트 상한 `scripts/live-hangup-probe.mjs:87`) | `turnComplete` ≤ 8,000ms **n/n** · 그 턴 오디오 **≤ 6초** · 문장 ≤ 2(하드) |
+| H3 | `reject`(짝수 회차 거절 대본) | **거절 응답 ≥ 10건** | 거절 뒤 2턴 작별 어휘 **0 / n** · 대화 계속 n/n(하드) |
+| H4 | `accept` | — | 재호출 수 기록 |
+| H5 | `accept` | **승인 ≥ 5건** | 승인 뒤 무입력 10초 모델 오디오 **0 / n**(하드) |
+| H6 | `silence` ⓒ | 각 5 | 호출률 보고(ⓒ = 0이 정상 — ≥ 1이면 79.14 #4) |
+| **H7**(신설 · 관측) | 목적 달성 뒤 공회전 대본(`SCRIPT_GOAL` 끝에 *"보냈어요" · "확인됐어요?"* 류 대기 발화 2개 — 실행자가 저작 · 개인정보 0) | 5 | 대기 발화 구간 안에 `end_call(goal)` 호출률 · `reason` 분포 보고(⛔ 하드 아님 — 모델 판단) |
+
+- H7 대상 시나리오: 스크립트 상수 `SCENARIO_ID = "kidnapping-threat"`(`:45` — 다른 도구 왕복 0) 그대로. ⚠️ 신고 시나리오(`loan-refinance-scam`)는 `send_prepared_sms`가 함께 선언돼 스크립트가 그 호출을 모사해야 한다 — 확장이 필요하면 모사 응답 문면은 **서버 상수에서만** 읽는다(저작 0) · 상수가 없으면 확장하지 말고 보고.
+- ⛔ H1 · H3 실패 시 79.14 #1 · #3(2회 실패면 3번째 문면안 금지 · 층 변경). H7 호출률 0/5면 79.20 (10) #11.
+- R4는 Live 프로브 대상이 아니다(폴백 경로) — 단위 테스트(G596 · G598) + 에뮬레이터 통합(`scripts/emulator-hangup-integration.mjs` — 폴백 계열 B 고급 1행 추가 가능 여부는 실행자 확인 · 실 LLM이 아니면 *"재현하지 못했다"* 로 적는다 — AC-103 (h)).
+- **(2026-10-20 리뷰 반영 정정 — 위 P-H 표 · 글머리 원문 무수정 · 이 줄이 우선)** ① **실행 계획 = 상한 25세션**, 순서 **`accept` 6 → (호출률에 따라 남은 몫 재배분) → `reject` 10 → `idle` 5 → `silence` 4**(오케스트레이터 전달 · 리뷰 확정). H7 대본의 실행 모드 이름은 **`idle`**(`scripts/live-hangup-probe.mjs:18-19`) · H6 ⓒ 표본은 위 표 *"각 5"* 가 아니라 **4**로 읽는다(관측 행 — 하드 아님). ② **H2 오디오 = 그 턴 전체 `audioSec` ≤ 6초**(정본 79.4 H2 *"그 턴 오디오 길이"* — `live-hangup-probe.mjs:410-422`) · 응답 뒤만 잰 `audioAfterResponseSec`은 참고값으로만 보고한다. ③ **H2 · H5 하한은 `accept` 모드 세션만 센다**(`:412` · `:433`) — `idle` 승인 세션은 H5 **보조** 표본 · H7로만 쓴다(`:436-439`). ④ 표의 표본 하한(H2 승인 ≥ 10 · H3 거절 응답 ≥ 10 · H5 승인 ≥ 5)은 **무변경**이고 G603는 하한을 포함한다 ⇒ 상한 25 안에서 하한을 못 채우면 그 항목은 **미충족**으로 보고한다(상한을 넘겨 채울지는 이 줄이 정하지 않는다 — 오케스트레이터 판단). ⚠️ 같은 스크립트 머리 주석 `:20-21`(*"H2 오디오 판정은 `audioAfterResponseSec`로 한다"*)은 `:410-422`와 어긋난다 — 집계 코드가 ②와 같으므로 판정은 ②대로 · 주석 정정은 코드 owner 몫(이 패스 미편집).
+
+**(9) 배포 순서**
+
+- C6은 **Functions만** 바뀐다(클라 0 · 루트 테스트는 배포물이 아니다) ⇒ Hosting 배포 불요 · 79.0 8의 *Hosting → Functions* 제약은 해당 없음(새 클라 계약 0).
+- 영향 함수: `sendMessage`(폴백 문면 · 4행 · 로그) · `createRealtimeCall`(TOOL 문면 — 토큰 setup) · `requestScammerHangup`(입력 키 추가 · 동작 0). ⇒ **`firebase deploy --only functions` 전체**(CLAUDE.md 검증 명령 원문 · 일부 배포는 세 함수가 같은 `decide.ts`를 쓰므로 혼합 버전 창을 만든다 — 해롭지는 않지만 관측이 흐려진다).
+- 순서: ① C6-F(+L) 배포 → P-H 재실측 통과 확인은 **배포 전**(빌드 산출물) ② C6-R은 OQ-A152 답 뒤 별 배포 가능(F와 독립).
+- **(2026-10-20 OQ 해소 — 위 글머리 원문 무수정 · 이 줄이 우선)** ②의 *"OQ-A152 답 뒤"* 조건은 **충족됐다**(OQ-A152 = (가) · DECISIONS #187 — (11) 끝 줄) · C6-R 코드 = `c1d056a`. 배포 순서 · 대상(`firebase deploy --only functions` 전체 · Hosting 불요)은 그대로.
+- A-1 · PR-A2와의 순서: 독립(줄 · 계약 겹침 0 — (6)). A-1의 서버 필드 + PR-A2 클라는 그쪽 PR이 Hosting → Functions를 따른다.
+
+**(10) 강등표 추가 행 (79.14 · 79.19 (9)에 이어 읽는다 — ⛔ 표에 없으면 행 추가를 묻는다)**
+
+| # | If | Then |
+|---|---|---|
+| 10 | D0에서 공회전 세션의 실시간 `end_call` 거절(`row` 4 · 5 · 6)이 있었다 | (2) ② 추정 정정 · architect 재소집(문면 층이 아니다) |
+| 11 | H7 호출률 0/5 또는 라이브 공회전 재발(A-1 병합 뒤) | 문면 1회 수정(문장 위치를 *"끊기로 했으면"* 앞으로) → 그래도 0이면 **문면 3번째 안 금지** — 층을 바꾼다: A-1 확인 결과 신호의 *목적 달성* 상태 줄을 끊기 슬롯 조건부 치환으로 내리는 안(서버가 아는 사실 → 조건부 문면)을 architect가 재판정 |
+| 12 | H6 ⓒ 호출 ≥ 1이 C6 뒤에 새로 생겼다 | 이 문장이 원인 — 79.14 #4 순서(제외 문장 앞으로) 전에 C6 문장을 먼저 되돌린다 |
+| 13 | C6-R 뒤 폴백 계열 B 고급에서 *"확인 부서로 넘겨 드리겠다"* 직후 끊김이 관측된다 | (3) ③ 정직 고지의 기존 결함 — planner 등재(이 절은 고치지 않는다) |
+| 14 | G597 트립와이어 빨강(폴백 계열 B 오퍼 개시 경로가 생겼다) | 진리표 6행 제거 + architect 재소집 · 그 변경의 병합 보류 |
+
+**(11) 가드 · 열린 질문 (79.16 · 79.19 (8)에 이어 읽는다)**
+
+| ID | 내용 | 단언 자리 |
+|---|---|---|
+| **G596** | `isVerifyTransferReachable` 진리표 6행 전수 + 역검증(6행 입력에서 `offerDoc`만 `present`/`unknown` · `path`만 `realtime` · 계열만 A로 바꾼 사본은 각각 true) · 4행: `transferReachable=false`면 `verifyEnabled ∧ !transferPlaced`여도 다음 행으로 · `true`면 `blocked_transfer`(옛 판정과 같음) · 폴백 · 콜러블이 **이 함수 하나**를 부른다(소스 스캔 — G501 형태) | `scammerHangup/__tests__/transferReach.test.ts` · `decide.test.ts` — C6-R |
+| **G597** | 트립와이어 — (3) ④ ⓐⓑⓒ · 실패 메시지에 처방 · 역검증(`useState(false)`를 setter 있는 사본으로 바꾼 문자열에서 실패) | `src/lib/verifyintercept/transferReachPremise.test.ts` — C6-R |
+| **G598** | fail-closed: 폴백 오퍼 read 실패 → `"unknown"` → 4행 차단 · `verifyItem` 없음 → `"unknown"` · 실시간 → 항상 true(오늘 판정과 전 입력 동일 — 회귀 0) | `fallback.test.ts` · `commit.test.ts` — C6-R |
+| **G599** | F2 문면: ⓐ `HANGUP_RULE_CASES`에 (2) ④ 문장 정확히 1회 · *"…불러 주었다."* 뒤 · *"둘째,"* 앞 ⓑ NONE 바이트 동일(G505 무변경 통과) ⓒ F11 카운터 표현 = 기존 허용 목록과 **정확 일치**(G130) ⓓ 문장에 *"침묵" · "소강" · "기다" · "확인 중"* 0(H6 ⓒ · A-1 중복 방지) ⓔ 역검증(문장을 뺀 사본 · *"셋째"* 를 넣은 사본이 실패) | `functions/src/roleplay/__tests__/hangupRuleCases.test.ts` — C6-F |
+| **G600** | `ScammerHangupInput` 키 집합 정확 일치(C6-R 뒤 **12키** = 현행 11키 `status` · `channel` · `isMockTurn` · `verifyEnabled` · `transferPlaced` · `userTurns` · `pendingInstruction` · `smsAwaitingUser` · `limitReached` · `alreadyAccepted` · `relay`(`decide.ts:38-73`) + `transferReachable` — 사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 키 0) — AC-103 (a) *"시간 · 소강으로 끊지 않는다"* 와 (0) 6을 기계로 고정 · 역검증(키를 하나 더한 타입 사본 문자열이 실패 — 소스 스캔) | `decide.test.ts` — C6-R(F만 먼저 가면 C6-F에 현행 11키로) |
+| **G601** | 폴백 `끊기 사전 판정` 로그: 매 턴 1회 · 필드 = `sessionId` · `row` · `status` · `mode`만(대사 · 사용자 입력 0 — G170) | `roleplay` 소스 스캔 — C6-L |
+| **G602** | A-1 경계 — "확인 결과 신호" 문면에 끊기 어휘(P-H `FAREWELL_WORDS` + *"끊"*) 0 · `decide.ts`가 그 신호를 import하지 않는다. ⛔ **번호만 — 단언 자리 · 실행은 A-1 owner**(C6 완료 조건 아님 · 참조 대상이 A-1 PR에 온다) | A-1 테스트 |
+| **G603** | P-H 재실측 하드 기준((8) 표 H1 · H2 · H3 · H5 — 표본 하한 포함)을 C6-F 배포 게이트로 · 결과를 이 절 아래 시점 부착 1줄로 남긴다 | 실행 보고 — C6-F |
+| **OQ-A152** | **R4 허용 범위** — 폴백 계열 B 6종 고급 · 오퍼 문서 없음에서 4행(전환 전 끊기 금지)을 풀 것인가. AC-103 (b)① 문면 *"확인 무력화 흐름이 **선언된** 세션"* 은 이 칸을 포함한다(카탈로그 선언) · 의도(*"함정이 사라지기 때문"*)는 이 칸에서 대상 0. **권고 (가)** 진리표대로 푼다 + planner가 (b)①에 *"그 경로에서 전환이 일어날 수 있는 세션"* 갱신 고지 · (나) 그대로 둔다(그 칸은 끊기 0 · 공회전 신고가 고급 폴백에서 계속) · (다) (가) + 같은 칸의 확인 무력화 프롬프트 블록도 끈다(범위 밖 — 별 설계 · (3) ③ 기존 결함까지 닫는다). ⚠️ 안전 의도 약화 여부: (가)는 실시간 · bank · 문서 있음 칸을 하나도 풀지 않는다 — 약화 대상 칸에 함정 체험 기회가 구조상 0 | **User**(+ planner PRD 반영) · C6-R 선행 조건 |
+| **OQ-A153** | **공회전 서버 행** — (2) ③ 기각의 확인. **권고 (가)** 두지 않는다(N값 없음) · (나) 폴백만 서버 반복 감지 → 턴 지시(끊으라는 말 0 · 결과 제시 유도) — AC-103 (f) 비대칭 · 새 감지기 · A-1과 겹침 · (다) 실시간 클라 주장 반복 수 — 클라 주장값이 끊기를 넓힌다(79.18 (5)) ⇒ ⛔ | **User** · 기본 = (가) |
+| **OQ-A154** | 실시간 계열 B 고급에서 모델이 끝내 확인 오퍼를 열지 않으면 전환 전 끊기 0 — **OQ-A117의 실시간 칸**이 이번 신고(Live 고급)에도 겹친다. R4의 *"열릴 수 있다"* 판정(모델 도구 존재)은 *"열린다"* 가 아니다. 그대로 둘 것인가 | **User** · 기본 = OQ-A117과 같이(문면 그대로) · 라이브 빈도(D0 · 로그 `row` 4)로 판단 |
+| ↳ F6 · F8 · Live 주입 | 넛지 횟수 · 재시도 횟수/백오프 · 확인 결과 Live 주입 지점 = **PR-A2 owner 설계**(오케스트레이터 범위 변경) — 이 절은 경계만((6)) | scenario-review |
+
+- **(2026-10-19 20:07Z P-H 재실측 결과 — G603 · 위 표 원문 무수정)** 25세션(accept 6 · reject 10 · idle 5 · silence 4 · 오류/429 0 · 빌드 `d211cb9`) ⇒ **G603 미충족**: H1 위반 **1**/호출 19(reject #5 — 도구 호출 전 *"이제 통화 끝내겠습니다"*) · H2 6/6 값 충족이나 **표본 미달**(승인 6 < 10 · 문장 ≤2는 5/6) · H3 위반 1/8 **표본 미달** · H5 0/6 충족. 관측: goal 호출률 11/11 · 조기 끊김 0/15 · silence 호출 0/4(C6-F 되돌림 조건 아님) · refuse reason 전부 give_up. 처방 = 79.13 1행(문면 1회 수정) — 판단 대기. 상세 `docs/research/ph-hangup-probe-2026-10.md`.
+- **(2026-10-20 OQ 해소 — 위 표 원문 무수정 · 이 줄이 우선)** ① **OQ-A152 = (가)**(User 객관식 *"이 경우만 끊기 허용"*) — 4행은 (3) ② 진리표대로 **폴백 ∧ 계열 B 6종 ∧ 오퍼 문서 `"absent"`(읽기 성공) 1칸에서만** `transferReachable = false` · PRD AC-103 **갱신 고지 2**(v1.24 후속 5 — `docs/PRD.md:1015`)가 (b)① 문면을 *"그 경로에서 확인 부서로의 호 전환이 일어날 수 있는 세션"* 으로 읽게 했다(닫힌 열거 1칸 · 유추 확장 금지) ⇒ **(0) 3 선행 조건 해소** · DECISIONS **#187**(= #186 R4 권고의 User 확정). ② **OQ-A153 = (가) 두지 않는다**(오케스트레이터 — 권고안대로 · PRD 문면 변경 0) ⇒ (2) ③ 기각 확정 · **#188**(= #185 F2 설계의 공회전 행 기각 확정). ③ **OQ-A154 = 문면 그대로**(오케스트레이터 — 권고안대로 · OQ-A117 실시간 칸 기본값과 같다) · 라이브 빈도는 C6 배포 뒤 `끊기 사전 판정` 로그(G601)로 다시 본다 · **#189**. ④ 하류: (3) ③ 정직 고지의 기존 결함(폴백 계열 B 고급의 *"넘겨 드리겠다"* 빈 약속) = `docs/Tasks.md` **T195**(scenario-review A-1 ⑥과 같은 대상 — A-1 결과를 본 뒤 처리 · (10) #13의 처분처). ⑤ **C6-R 구현 = `c1d056a`**: `functions/src/scammerHangup/transferReach.ts` `isVerifyTransferReachable` 신설 · `decide.ts:115` 4행 `when` = `i.verifyEnabled && !i.transferPlaced && i.transferReachable` · `decide.ts:54` 필수 키(판정 입력 **12키** — G600) · G596(`transferReach.test.ts` · `decide.test.ts`) · G597(`src/lib/verifyintercept/transferReachPremise.test.ts`) · G598(`fallback.test.ts` · `commit.test.ts`) — 파일 존재 · 키 · 조건은 이 패스가 열람으로 확인했고, 테스트 수 **functions 1277/0 · 루트 739/0은 오케스트레이터 전달 인용값**(이 패스 실행 0).
+
+**(12) 이 패스의 편집 범위 · 닫지 못한 것**
+
+- 편집: 이 79.20 신설 · 시점 부착(79.2 글머리 끝 · 79.16 표 끝 ↳ 행 · 79.17 끝) · `docs/DECISIONS.md` #185 · #186. 원문 삭제 · 수정 0.
+- 하류(⛔ 미편집): 79.6 ① ② 정본 아래 시점 부착(구현 뒤 docs) · `docs/API.md` 무변경(요청 · 응답 계약 0 변경) · `docs/Database.md` 무변경 · **planner 등재 제안**: AC-103 (b)① 갱신 고지(OQ-A152 (가) 채택 시) · (3) ③ 폴백 계열 B 고급의 *"넘겨 드리겠다"* 빈 약속(기존 결함). UpdateRequests 등재는 각 owner(이 패스 미편집).
+- ⛔ 닫지 못한 것: 신고 원자료 미열람((8) D0) · A-1 PR 미열람(가정 4개 — (6)) · 실행 0(테스트 · 프로브) · F11 검출기가 새 문장에 0건인지 미실행 · `scripts/emulator-hangup-integration.mjs`가 폴백 계열 B 고급을 돌릴 수 있는지 미확인 · 메인 체크아웃 작업 트리 = `b7fde97` 동일성 미검증(추정) · UpdateRequests의 architect `open` 행(#55 · #56 등)은 이 범위 밖이라 flip하지 않았다.
+- **(2026-10-20 OQ 해소 뒤 정합 패스 — 브랜치 `claude/t192-c6-idle-hangup` HEAD `c1d056a` · 위 글머리 원문 무수정 · 이 줄이 우선)** 하류 처분: ① *"79.6 ① ② 정본 아래 시점 부착(구현 뒤 docs)"* = **이 패스가 달았다**(79.6 (1) 끝 줄) ② planner 등재 제안 두 건 = **둘 다 등재됨** — AC-103 (b)① 갱신 고지 2(`docs/PRD.md:1015` · v1.24 후속 5) · 빈 약속 기존 결함 = `docs/Tasks.md` **T195**(scenario-review A-1 ⑥과 같은 대상 · A-1 결과 뒤 처리) ③ 이 패스 편집 = `docs/Architecture.md`만(79.2 · 79.6 · 79.17 · 79.20 시점 부착 줄 추가 — 원문 삭제 · 수정 0). `docs/API.md` · `docs/Database.md` 무변경 판정은 그대로(C6-R은 요청 · 응답 계약 0 변경 — `requestScammerHangup` 요청 키 무변경 · 판정 입력 키만 12키).
 
 ## 80. (Bug fix — 2026-10-18 · 브랜치 `fix/otp-compare-live-miss`) **라이브에서 틀린 인증번호를 "확인되었습니다"로 넘긴 문제** — ⭐⭐ **판정은 정상(mismatch)이었고 지시도 실렸다. Gemini가 §78의 "(참고 — …)" 1줄을 무시했다(같은 조건 실호출 3/3)** ⇒ 결과 지시 문면 강화 + 판정 결과 로그 — implementer 기록
 

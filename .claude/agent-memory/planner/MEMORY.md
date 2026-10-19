@@ -18,4 +18,5 @@
 - [done 집행 전 3곳 대조](project_done_promotion_audit.md) — 행 문면·절차의 번호범위 인용·AC 조건부 항목 · 해당 여부 미확인은 "해당 없음"이 아니다 → review
 - [두 User 결정의 충돌](project_conflicting_user_decisions.md) — 같은 화면에 다른 답이면 고르지 않는다 · 다툼 없는 범위만 반영 · 충돌분 OQ + 기본값=현행
 - [새 결정이 옛 결정을 다시 고를 때](project_decision_reopens_prior.md) — OQ Decision란·기각표 grep · 이름이 같으면 재개 · 옛 기각 근거를 새 AC 조건으로
+- [대기 결정의 해소 형식](project_pending_decision_resolution.md) — DECISIONS "User 확정 대기"는 새 행으로 · 버전 bump 회피 시 "후속 N" 고지 · 외부 감사 항목 0건이면 새 행
 - ["N회 호출" 관찰](project_call_count_observation.md) — 판정 전 호출 지점 지도부터 · 조작 수 비례면 재등재 조건에 조작 수 기록 · ref를 await 뒤에 세우면 중복 경로
