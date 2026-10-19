@@ -19,8 +19,10 @@ import type { InCallSmsItem } from "../scenarios/inCallSms";
 import {
   hasAppInstallMockScreen,
   MOCK_INSTALL_CONSENT_INSTRUCTION,
+  MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL,
 } from "../scenarios/mockScreens";
 import { textPathAnchorScammerTurn } from "../inCallSms/buildDoc";
+import { planConfirmResult } from "../inCallSms/confirmResult";
 import {
   buildSmsMarkerOfferInstruction,
   buildSmsNudgeInstruction,
@@ -28,6 +30,7 @@ import {
   effectiveTextPathUserTurns,
   resolveDeclaredSms,
   resolveSmsGate,
+  sessionDeclaredSmsPurposes,
   sessionDeclaresInCallSms,
 } from "../inCallSms/smsGate";
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
@@ -54,6 +57,7 @@ import { transitionChannel } from "../session/channelTransition";
 import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
 import { wasTurnInstructionSpoken } from "./announceMarking";
 import { extractEscalationSignal } from "./escalationSignal";
+import { ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall } from "./escalatedCall";
 import { isFirstUserTurn } from "./firstTurn";
 import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
@@ -381,9 +385,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 지시를 반영할 수 있었던 경우에만 한다(아래 `wasTurnInstructionSpoken` 블록).
     // 예전에는 이 자리에서 곧바로 마크했고, Mock 강등 턴(= systemPrompt를 읽지 않는다)에서
     // **말하지 않은 예고가 "예고 완료"로 기록**돼 자동 전환이 열렸다(§54.2 (3)).
+    // A-1 ⑧ — 메신저→voice 에스컬레이션 뒤의 폴백 턴인가(`roleplay/escalatedCall.ts` 판정표). 이미 통화 중이면 응낙 지시를
+    // 통화 중 변형으로 바꾸고(아래), 다른 지시가 없는 턴에는 맥락 1줄을 싣는다(②-h).
+    const escalatedCall = isEscalatedVoiceCall(session.channel, session.channelHistory);
     let turnInstruction: string | undefined;
     if (turnChoice === "install_consent") {
-      turnInstruction = MOCK_INSTALL_CONSENT_INSTRUCTION;
+      turnInstruction = escalatedCall ? MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL : MOCK_INSTALL_CONSENT_INSTRUCTION;
     } else if (turnChoice === "verify_reconnect") {
       turnInstruction = verifyItem?.reconnectInstruction;
     } else if (turnChoice === "sms_announce") {
@@ -438,9 +445,37 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
               .map((item) => item.purpose),
           )
         : undefined;
+    // ②-h A-1 ⑦ — 필수 계좌·링크 문자가 도착한 뒤 참가자가 "했다" 류로 응한 턴에 1회 "결과(입금 확인·처리 완료)를 알리고
+    // 다음 단계(또는 마무리)로" 지시(`inCallSms/confirmResult.ts` 판정표). G31(턴 지시 1개)에 맞춰 **다른 턴 지시가 없는 턴에만**
+    // 싣는다(문자 announce · 확인 오퍼 · 응낙 · 인증번호 대조 · 문자 마커 제시 · 백스톱 넛지가 있는 턴 · 호 전환 뒤 = 0 — 리뷰 Minor-1).
+    // ⛔ 공유 판정 패턴(J-2) 무접촉.
+    const confirmPlan =
+      smsDeliveredLoaded &&
+      turnChoice === "none" &&
+      !otpCheckInstruction &&
+      !smsOfferInstruction &&
+      !smsNudgeInstruction &&
+      verifyState?.placed !== true
+        ? planConfirmResult({
+            declared: smsDeclared,
+            delivered: smsDelivered,
+            userTurns: userTurnsNow,
+            currentUserText: maskedUserText,
+            priorUserTexts: storedHistory.filter((m) => m.role === "user").map((m) => m.textMasked),
+          })
+        : undefined;
+    if (confirmPlan?.instruction) {
+      // G170 — 단계명 · 목적 · 발화 수만(대사 0).
+      logger.info("[A-1] sendMessage 확인 결과 지시", { sessionId, purpose: confirmPlan.purpose, userTurns: userTurnsNow });
+    }
+    // A-1 ⑧ — 에스컬레이션 뒤 폴백 턴의 맥락 1줄(다른 턴 지시가 없는 턴에만 — G31).
+    const escalatedCallInstruction =
+      escalatedCall && turnChoice === "none" ? ESCALATED_CALL_CONTEXT_INSTRUCTION : undefined;
     const promptTurnInstruction = [turnInstruction, otpCheckInstruction].filter(Boolean).join("\n") || undefined;
+    const confirmAndCallContext = [confirmPlan?.instruction, escalatedCallInstruction].filter(Boolean).join("\n") || undefined;
     const turnInstructionWithSms =
-      [promptTurnInstruction, smsNudgeInstruction, smsOfferInstruction].filter(Boolean).join("\n") || undefined;
+      [promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction].filter(Boolean).join("\n") ||
+      undefined;
 
     // 첫 사용자 턴만 LLM 시간 제한 20초(2026-10-18, 사용자 결정 C — llm/index.ts LLM_FIRST_TURN_TIMEOUT_MS).
     // AC-004 목표(95% ≤10초)의 예외 1건 — 첫 턴은 Gemini 지연이 반복돼 10초에서 Mock으로 강등됐고,
@@ -458,6 +493,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         difficultyLevel,
         // ⭐ 리뷰 M2 — 세 호출부 · 도구 선언과 같은 단일 술어(변형 기준 · 변형 부재 = 종전).
         inCallSmsEnabled: sessionDeclaresInCallSms(session.scenarioId, session.flowVariantId),
+        // A-1 ② — 문자 예외 항목의 예시를 선언 목적만으로(호출부 3곳 같은 술어 · G63).
+        inCallSmsPurposes: sessionDeclaredSmsPurposes(session.scenarioId, session.flowVariantId),
         verifyInterceptEnabled: verifyEnabled,
         l3Procedural: isL3Procedural(session.scenarioId),
         identityCheckAllowed: asksIdentityCheck(session.scenarioId),

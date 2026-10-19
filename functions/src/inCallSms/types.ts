@@ -63,6 +63,12 @@ export type DeliverInCallSmsResponse = {
   declineInstruction?: string;
   /** `status==="nudge"`에서만 — 서버 소유 넛지 1줄(맥락 주입 · 전환 뒤에는 `waiting`으로 대신한다). */
   nudgeInstruction?: string;
+  /**
+   * A-1 ⑦(2026-10-19) — `status==="delivered"`이고 그 문자가 **필수 계좌·링크 문자**일 때만(`announceInstruction`과 같은
+   * 전환 뒤 생략 규칙). 참가자가 문자대로 마쳤다고 말하면 사기범이 결과(입금 확인·처리 완료)를 알리고 다음 단계로 넘어가게
+   * 하는 **조건형** 1줄(`inCallSms/confirmResult.ts`). ⚠️ 이 필드를 Live 세션에 주입하는 클라 배선은 아직 없다(A-2).
+   */
+  confirmResultInstruction?: string;
 };
 
 // T123/AC-080 — `landing_submitted`는 **"그 문자가 연 가짜 랜딩의 폼을 제출했다"**는 사실 하나다.
