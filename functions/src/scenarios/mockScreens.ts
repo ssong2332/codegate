@@ -20,6 +20,9 @@
 //     재진입할 수 있게 된다).
 //   - 이 파일은 **클라이언트에 원문 배포되지 않는다.** 클라에 내려가는 것은 `MessengerAttachment.
 //     landingKind` 하나뿐이다(`roleplay/linkMarker.ts`).
+import { resolveSessionEscalation, type EscalationSessionView } from "./escalation";
+import { PUBLIC_SCENARIOS } from "./publicMeta";
+import { sessionReachableLandingIds } from "./reachability";
 
 export type MockScreenKind = "credential-form" | "app-install";
 
@@ -147,6 +150,7 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // |---|---|---|---|---|---|
 // | `parcel-redelivery` | `roleplay/linkMarker.ts:22`(칩 라벨) · `messengerParcelSmishingSms.prompt.ts:37` | "재배송 신청 확인하기" | 주소 확인 → 재배송 신청 | "주소가 확인되지 않아 배송이 보류되었습니다" | "재배송 신청하기" |
 // | `subsidy-install` | `roleplay/linkMarker.ts:24`(칩 라벨) · `messengerSubsidySmishingSms.prompt.ts:64` | "지원금 신청 앱 설치하기" | 확인 앱 설치 | "업무처리 확인 앱을 설치해야 진행됩니다" | "권한 허용하고 계속하기" |
+// | `parcel-install` | `roleplay/linkMarker.ts:25`(칩 라벨) · `messengerParcelSmishingSms.prompt.ts`(고급 leg 페르소나 · 설치 수법) | "배송 확인 앱 설치하기" | 배송 확인 앱 설치 | "배송 확인 앱을 설치해야 재배송이 접수됩니다" | "권한 허용하고 계속하기" |
 // | `loan-refinance-apply` | `scenarios/inCallSms.ts:57-58`(문자 본문·칩) | "아래에서 본인확인 후 신청을 완료해 주세요." | 링크에서 본인확인 → 신청 완료 | "전환 신청서 본인확인이 필요합니다" | "본인확인 완료하기" |
 // | `tax-refund-claim` | `scenarios/inCallSms.ts:106-107`(문자 본문·칩) | "아래에서 계좌를 등록하시면 당일 지급됩니다." | 수령 계좌 등록 → 당일 지급 | "환급금 받으실 계좌를 등록해 주세요" | "계좌 등록하기" |
 // | `courier-customs-check` | `scenarios/inCallSms.ts:120-121`(문자 본문·칩) | "수취인 정보 불일치로 통관이 보류되었습니다." | 수취인 정보 확인 → 통관 재개 | "수취인 정보가 일치하지 않아 통관이 보류되었습니다" | "수취인 정보 확인하기" |
@@ -183,6 +187,27 @@ const MESSENGER_PARCEL_SMISHING_SMS: MockScreenItem[] = [
     momentTactic: "배송 보류를 빌미로 한 개인정보 입력 유도",
     correctAction:
       "문자 링크로 배송 정보를 입력하지 말고 화면을 닫으세요. ① 배송 상태는 주문한 판매처나 택배사 공식 경로에서 직접 조회하기 ② 주소·연락처를 링크로 요구하면 일단 멈추기 ③ 가족이나 가까운 사람에게 화면을 보여 주고 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+  // ⭐ T194-a(docs/Architecture.md §83.4.3 · PRD AC-106 (a) · UX UF-012 v1.38 (1) "콘텐츠 1벌") — **고급 세션에서만** 도달하는
+  // 모의 앱 설치 화면(UF-012 2단계의 두 번째 사용처). kind = 기존 `app-install`(신규 kind 0). 도달 조건은 카탈로그 소속만으로
+  // 끝나지 않는다 — `isMockScreenReachable`(아래)이 세션의 (시나리오 × 난이도)로 거른다(초급 · 중급 응낙 기록 거부 ·
+  // 지어낸 링크 마커 강등). 앱 이름은 가상 일반명이다(AC-102 (b) · AC-072).
+  {
+    landingId: "parcel-install",
+    kind: "app-install",
+    entrySurface: "messenger-link",
+    headline: "배송 확인 앱을 설치해야 재배송이 접수됩니다",
+    bodyLines: [
+      "주소 확인이 끝나지 않아 재배송 접수가 보류되어 있습니다.",
+      "아래에서 배송 확인 앱 설치를 진행해 주세요.",
+      "설치 후 접근 권한을 허용하면 상담원이 재배송 접수를 마무리해 드립니다.",
+    ],
+    issuerLabel: "ⓒ 종합물류 배송확인센터",
+    mockHost: "parcel-app-desk.invalid",
+    consentLabel: "권한 허용하고 계속하기",
+    momentTactic: "재배송 접수를 빌미로 한 앱 설치·권한 허용 유도",
+    correctAction:
+      "배송 확인을 이유로 앱 설치나 권한 허용을 요구받으면 그 자리에서 허용하지 말고 화면을 닫으세요. ① 배송 상태는 주문한 판매처나 택배사 공식 경로에서 직접 조회하기 ② 설치를 권유받으면 대화를 멈추고 이미 알고 있는 번호로 직접 확인하기 ③ 가족·가까운 사람에게 화면을 보여 주고 함께 확인하기 ④ 이미 허용했다면 112(경찰)·1332(금융감독원)에 신고하기.",
   },
 ];
 
@@ -412,4 +437,43 @@ export function hasAppInstallMockScreen(scenarioId: string): boolean {
 /** 이 시나리오의 `app-install` 항목 목록(단계 도달 판정·인과 배선이 함께 쓴다). */
 export function listAppInstallMockScreens(scenarioId: string): MockScreenItem[] {
   return (MOCK_SCREENS[scenarioId] ?? []).filter((item) => item.kind === "app-install");
+}
+
+/**
+ * ⭐ T194-a(docs/Architecture.md §83.4.4 · G578 · PRD AC-106 (f)(h) ⓐ) — **이 세션에서** 그 카탈로그 항목에 도달할 수 있는가.
+ * 카탈로그 소속(`findMockScreenItem` — G12)은 시나리오 단위라, 같은 시나리오 안에서 난이도로 갈리는 항목(parcel 고급의
+ * `parcel-install`)을 거르지 못한다. 이 술어가 그 둘째 거름이다.
+ *
+ * | 항목 | 도달 조건 |
+ * |---|---|
+ * | `credential-form` | 현행 그대로 — 카탈로그 소속이면 도달 가능 |
+ * | `app-install` · `messenger-link` · 시나리오가 `escalation` 보유(지원금) | 현행 그대로 — 세 난이도 모두 도달 가능 |
+ * | `app-install` · `messenger-link` · 시나리오가 `advancedEscalation`만 보유(택배) | 이 세션의 (시나리오 × 난이도) 전이가 있을 때만(`resolveSessionEscalation`) — 초급 · 중급 · 2인 챌린지 = 불가 |
+ * | `app-install` · 그 밖(통화 중 문자 표면 — Q2) | **불가**(이 PR 범위 밖 · 오늘 그런 항목은 G-A가 카탈로그에서 막는다). Q2가 행을 추가한다 |
+ *
+ * 쓰는 곳: `recordMockScreenEvent`(도달 불가면 `failed-precondition` — 검증 ⑤) · `extractLinkMarker`(지어낸 마커 강등) ·
+ * 리포트 단계 파생(`installIntended`).
+ */
+export function isMockScreenReachable(
+  session: EscalationSessionView & { flowVariantId?: string },
+  item: MockScreenItem,
+): boolean {
+  // ⭐ §83.13.2 G584 흡수 — 먼저 **세션 도달 가능 집합**(그 세션 변형 프롬프트의 마커 ∪ 선언 문자의 랜딩)에 있어야 한다(전 kind).
+  // 아래 표의 조건은 그 위에 AND로 남는다(택배 고급 챌린지처럼 변형 프롬프트에는 있어도 전이가 없는 세션을 거른다).
+  if (!sessionReachableLandingIds(session.scenarioId, session.flowVariantId).includes(item.landingId)) return false;
+  if (item.kind !== "app-install") return true;
+  if (item.entrySurface !== "messenger-link") return false;
+  // 표의 2 · 3행을 한 식으로 — `escalation` 보유 시나리오는 세션 술어가 세 난이도 · 챌린지 모두에서 값을 내므로 "현행 그대로"와
+  // 같고, `advancedEscalation`만 가진 시나리오는 고급 자가 세션에서만 값을 낸다(메타 필드 직접 읽기 0 — G576).
+  return resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined;
+}
+
+/**
+ * T194-a(§83.4.4 "링크 마커 처리") — 도달 불가 `app-install` 마커를 강등할 **그 시나리오의 기본 credential 랜딩**(메신저 링크
+ * 표면의 첫 `credential-form` 항목). 없으면 `undefined`(호출부가 첨부를 만들지 않는다). ⛔ `app-install` 방향 폴백은 여전히 0이다(R5).
+ */
+export function findDefaultCredentialLanding(scenarioId: string): MockScreenItem | undefined {
+  return (MOCK_SCREENS[scenarioId] ?? []).find(
+    (item) => item.kind === "credential-form" && item.entrySurface === "messenger-link",
+  );
 }

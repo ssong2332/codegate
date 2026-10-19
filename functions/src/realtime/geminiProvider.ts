@@ -70,8 +70,13 @@ const GEMINI_VOICE_POOL = [...FEMALE_VOICES, ...MALE_VOICES] as const;
  * 않는다 — 배선이 바뀌어 도달해도 통화를 죽이지 않는다, P-4 비차단 관례). 이 폴백은 도입 전
  * `pickGeminiVoiceName(sessionId)`의 동작과 바이트 단위로 동일하다.
  */
-export function pickGeminiVoiceName(scenarioId: string, sessionId: string): string {
-  const gender = SCENARIO_SPEAKER_GENDER[scenarioId];
+export function pickGeminiVoiceName(
+  scenarioId: string,
+  sessionId: string,
+  // T194-a(§83.4.3) — 세션 단위로 이미 해석된 성별(`RealtimeCallInput.speakerGender`). 있으면 그 풀, 없으면 표(오늘 동작 그대로).
+  sessionSpeakerGender?: "male" | "female",
+): string {
+  const gender = sessionSpeakerGender ?? SCENARIO_SPEAKER_GENDER[scenarioId];
   const pool = gender === "male" ? MALE_VOICES : gender === "female" ? FEMALE_VOICES : GEMINI_VOICE_POOL;
   let hash = 0;
   for (let i = 0; i < sessionId.length; i++) {
@@ -128,6 +133,8 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     // ⭐ T192 C3(§79.19 (5) 2 · 9) — `end_call` 범위(채널 · 이미 해석된 릴레이)는 선언 · 이름 · 프롬프트 TOOL 변형 세
     // 자리에 같은 값으로 들어간다. 세 자리가 전부 `declaresEndCall` 하나를 부른다(G502). ⚠️ 옛 주석의 "도구가 없으면
     // 빈 배열 = 오늘과 동일"은 C3부터 메신저 · 중간 leg에서만 참이다(아래 `tools` 주석).
+    // T194-a(§83.4.3) — 층 1(음성 풀) · 층 2([화자] 블록)가 **같은 값**을 쓴다(§50.3.1).
+    const speakerGender = input.speakerGender ?? speakerGenderFor(input.scenarioId);
     const endCallScope: EndCallScope = {
       channel: input.channel,
       relay: input.hangupRelay,
@@ -147,7 +154,8 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
         hasVerifyIntercept(input.scenarioId) && input.difficultyLevel === "advanced",
       l3Procedural: isL3Procedural(input.scenarioId),
       identityCheckAllowed: asksIdentityCheck(input.scenarioId),
-      speakerGender: speakerGenderFor(input.scenarioId),
+      // T194-a(§83.4.3) — 호출부가 해석한 세션 단위 성별(부재 = 표 값 — 표에 값이 있는 시나리오는 같은 값).
+      speakerGender,
       // §59.3 — 이 경로가 §59 커밋 C가 정한 **유일한 `true` 호출부**다(폴백 sendMessage·오프닝은
       // Live 세션이 없어 도구가 존재하지 않으므로 넘기지 않는다, G382).
       toolDrivenTiming: true,
@@ -185,7 +193,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
               languageCode: "ko-KR",
               voiceConfig: {
                 prebuiltVoiceConfig: {
-                  voiceName: pickGeminiVoiceName(input.scenarioId, input.sessionId),
+                  voiceName: pickGeminiVoiceName(input.scenarioId, input.sessionId, speakerGender),
                 },
               },
             },

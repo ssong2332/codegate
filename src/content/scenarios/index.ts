@@ -17,6 +17,8 @@ export * from "./bankSecurityVerifyScam";
 export * from "./cardDeliveryCall";
 export * from "./assetProtectionNoticeCall";
 export * from "./prosecutionCooperationCall";
+// T194-a(§83.4.1) — 메신저 → 통화 전이의 (시나리오 × 난이도) 단일 술어.
+export * from "./escalation";
 
 import { FAMILY_ACCIDENT_SCENARIO_ID, familyAccidentDeepvoiceScenario, type ScenarioDoc } from "./familyAccidentDeepvoice";
 import {

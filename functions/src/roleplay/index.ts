@@ -45,6 +45,7 @@ import { resolveHangupRelay } from "../scammerHangup/relayContext";
 import { pickFallbackTurnInstruction } from "../verifyIntercept/fallbackTurn";
 import { announcedVerifyAnchor } from "../verifyIntercept/buildDoc";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import { resolveSessionEscalation } from "../scenarios/escalation";
 import { LLM_TEXT_SECRETS } from "../shared/config";
 import { MESSENGER_ESCALATION_FALLBACK_TURNS, SEND_MESSAGE_MAX_LENGTH } from "../shared/constants";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
@@ -63,7 +64,7 @@ import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAs
 import { evaluateOtpCheck, otpCheckInputsFromHistory } from "./otpCheck";
 import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
-import { speakerGenderFor } from "../realtime/scenarioVoice";
+import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
 import { applyFictionalBank, resolveFictionalBankName, resolveSessionAccountNumber } from "../shared/fictionalBank";
@@ -448,7 +449,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         verifyInterceptEnabled: verifyEnabled,
         l3Procedural: isL3Procedural(session.scenarioId),
         identityCheckAllowed: asksIdentityCheck(session.scenarioId),
-        speakerGender: speakerGenderFor(session.scenarioId),
+        // T194-a(§83.4.3) — 세션 단위 해석(표 값이 있으면 그대로 · parcel 고급만 변형 leg 성별).
+        speakerGender: resolveSessionSpeakerGender(session),
         ...(turnInstructionWithSms ? { turnInstruction: turnInstructionWithSms } : {}),
         fictionalBankName,
         sessionAccountNumber: resolveSessionAccountNumber(session.scenarioId),
@@ -509,9 +511,11 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 원칙을 대화 로그 전체에 일관 적용 — ADR-0004).
     // T84(§15.9.1 R4) — 시나리오를 함께 넘겨 attachment에 `landingKind`가 실린다(서버 카탈로그가
     // 진실 원천, 클라 분류 금지). 카탈로그가 없는 시나리오는 키 자체가 붙지 않아 무변경이다.
+    // T194-a(§83.4.4 · G578) — 세션을 넘겨 이 세션에서 도달 불가한 설치 마커를 강등한다(초급 · 중급 parcel).
     const { text: linkFreeReplyText, attachments: replyAttachments } = extractLinkMarker(
       completion.text,
       session.scenarioId,
+      session,
     );
     // ③-a′ T191 — 문자 요청 마커를 걷어 낸다(아래 문장 수 상한보다 **앞** — 상한이 끝의 마커를 잘라 먹지 않게).
     const { text: smsMarkerFreeText, purpose: markerPurpose, markerCount: smsMarkerCount } =
@@ -677,14 +681,16 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     }
 
     // ④-b 채널 전이(T30, Architecture.md §13.2/13.3, AC-034/039) — 이 시나리오가 에스컬레이션
-    // 가능(scenario.escalation 존재)하고 아직 메신저 단계일 때만 판단한다. 우선순위: 구조화 신호
+    // 가능하고 아직 메신저 단계일 때만 판단한다. 우선순위: 구조화 신호
     // > max-turn 폴백(MESSENGER_ESCALATION_FALLBACK_TURNS, §13.3 PoC 전 가정치). 이번 턴에 전체
     // 세션 한도(limitReached)로 이미 종료됐다면 전이보다 종료를 우선한다(모순된 상태 방지). 위
     // 트랜잭션에서 이미 종료된 것으로 확인됐다면(stillActive=false) 이 턴이 전이를 일으키지 않는다.
+    // ⭐ T194-a(§83.4.1 S-3) — "에스컬레이션 가능"은 (시나리오 × 난이도) 세션 술어다(parcel은 고급만). `requestEscalation`(S-2) ·
+    // 클라 "전화로 확인" 버튼 · 시작 고지 열과 같은 술어다(startNoticeGate.test.ts G462 ⑤).
     const canEscalate =
       finalize.stillActive &&
       session.channel === "messenger" &&
-      Boolean(PUBLIC_SCENARIOS[session.scenarioId]?.escalation);
+      resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined;
     let escalationTrigger: ChannelTransitionTrigger | undefined;
     if (canEscalate && !limitReached) {
       if (signalEscalate) {

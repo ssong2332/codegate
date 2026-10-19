@@ -36,6 +36,9 @@ import type { DifficultyLevel } from "../shared/difficulty";
 import type { ScenarioPromptDoc } from "../shared/types";
 import type { AxisExitBlock } from "./axes";
 import { SCENARIO_PROMPTS } from "./index";
+import { PARCEL_ADVANCED_INSTALL_TACTIC, PARCEL_ADVANCED_LEG_PERSONA } from "./messengerParcelSmishingSms.prompt";
+import { resolveSessionEscalation } from "./escalation";
+import { PUBLIC_SCENARIOS } from "./publicMeta";
 import { extractTacticLabel } from "./tacticFlavor";
 import { hasVerifyIntercept } from "./verifyIntercept";
 
@@ -86,6 +89,14 @@ export type FlowVariant = {
   decisionMoment?: string;
   /** 사례 C · S 번호(AC-097 (c) · 설계 금지 X4). */
   sources?: string[];
+  /**
+   * T194-a(docs/Architecture.md §83.4.2 · PRD AC-106 (i) · G577) — 이 변형에 메신저 → 통화 단계가 있는가.
+   * ⛔ `false`를 쓰지 않는다 — **부재가 거짓**이다. 같은 (시나리오 × 난이도)의 허용 변형은 이 값이 모두 같아야 하고
+   * (UX-025 · 시작 고지가 (시나리오 × 난이도) 값으로 갈리므로 — 하나라도 다르면 안내 유무가 배정 변형을 드러낸다),
+   * 그 값은 공개 메타 술어 `resolveScenarioEscalation`과 같아야 한다(테스트가 고정한다). 런타임 전이 판정은 이 필드가 아니라
+   * 그 술어가 한다(`scenarios/escalation.ts`).
+   */
+  escalatesToVoice?: true;
 };
 
 /** S7(릴레이 재연결) 구현 전에는 false — legs ≥ 2 변형도 한 화자로 진행한다. */
@@ -684,6 +695,8 @@ const SPECS: VariantSpec[] = [
     ...BEGINNER,
     channels: ["messenger"],
     demandStages: 1,
+    // T194-a(AC-106 (i) ②) — 공개 메타 `escalation` 보유 시나리오라 세 난이도 모두 통화 단계가 있다.
+    escalatesToVoice: true,
   },
   {
     variantId: "fv-tpr3",
@@ -697,6 +710,7 @@ const SPECS: VariantSpec[] = [
     ...INTERMEDIATE,
     channels: ["messenger"],
     demandStages: 1,
+    escalatesToVoice: true,
   },
   {
     variantId: "fv-tdgg",
@@ -720,6 +734,7 @@ const SPECS: VariantSpec[] = [
     channels: ["messenger"],
     demandStages: 3,
     sources: ["C15", "S6"],
+    escalatesToVoice: true,
   },
 
   // ── messenger-friend-loan / parcel / subsidy · reputation-blackmail — §2.6.3 세 난이도 "현행" ──
@@ -765,8 +780,52 @@ const SPECS: VariantSpec[] = [
     channels: ["messenger"],
     demandStages: 1,
   },
+  // ⭐ T194-a(docs/Architecture.md §83.4.2 · PRD AC-106 · User 결정 U7 · DECISIONS #170) — parcel **고급만** 새 흐름
+  // "문자 → (모의) 앱 설치 → 상담원 전화"(지원금 3단계 메커니즘 재사용 · 신규 kind · 화면 0). **같은 ID 유지 · 내용 교체** —
+  // 이 칸의 허용 변형은 1벌이라 회전 문서 키 · 진행 중 세션에 영향이 없다(회전 0).
+  // - 0번 leg 페르소나를 고급 전용으로 덮는다(원본은 "순수 문자" 캐릭터라 3단계와 모순 — 프롬프트 파일 주석).
+  // - 원본 "링크 클릭 유도"(`[[LINK:parcel-redelivery]]`)는 뺀다 — 고급 세션의 링크는 `parcel-install` 하나다(한 세션 랜딩 1종).
+  // - 설치 수법은 설계 표와 달리 지원금 문구를 빌리지 않고 택배용으로 저작했다(마커가 subsidy-install이라 — 프롬프트 파일 주석).
+  // - 사칭 주체 · 최종 요구는 PRD AC-106 (d) 확정 전 기본값 = 지원금과 같은 꼴(생활 서비스 상담원 · 기관 격상 없음).
+  // - 출처 N1 · N2 · C08(AC-106 (e) · 설계 금지 X4).
   {
     variantId: "fv-g454",
+    scenarioId: "messenger-parcel-smishing-sms",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(
+      "주소지 오류로 배송이 보류됐다는 문자로 접근한다.",
+      "재배송을 접수하려면 배송 확인 앱을 먼저 설치해야 한다며 설치 링크를 보내고 권한 허용까지 권한다.",
+      "설치를 마쳤거나 상대가 계속 의심하면 배송 상담원이 직접 전화하겠다며 통화로 넘어간다.",
+      "통화에서는 상담원으로서 재배송 접수를 마무리하려면 앱에서 권한을 하나 더 허용해야 한다며 다시 요구한다.",
+    ),
+    dropLabels: ["링크 클릭 유도"],
+    extraTactics: [
+      PARCEL_ADVANCED_INSTALL_TACTIC,
+      { from: "messenger-subsidy-smishing-sms", label: "채널 전환 유도" },
+    ],
+    exitBlock: ["D2_secrecy", "D4_procedural_legitimacy"],
+    sms: [],
+    legs: [
+      {
+        callerLabel: "택배 배송 안내",
+        personaPrompt: PARCEL_ADVANCED_LEG_PERSONA,
+        speakerGender: "female",
+        minUserTurns: 0,
+        maxUserTurns: 20,
+      },
+    ],
+    ...ADVANCED,
+    channels: ["messenger", "voice"],
+    demandStages: 2,
+    sources: ["N1", "N2", "C08"],
+    escalatesToVoice: true,
+  },
+  // ⭐ T194-a(docs/Architecture.md §83.13.5 처방 2) — parcel 고급 **2인 챌린지 수신자용** 비에스컬레이션 변형. 내용 = T194 이전 `fv-g454`
+  // ("현행" — 단계 0 · 페르소나 무변경 · 수법 원본 그대로)와 같다. 새 불투명 ID다(기존 ID 재사용 금지). 수신자 세션은 에스컬레이션이 없어
+  // (`resolveSessionEscalation` — AC-106 (g) 기본값) 배정 풀(`assignablePool`)이 이 변형만 남기고, 자가 고급 풀은 `fv-g454`만 남긴다.
+  {
+    variantId: "fv-k7qm",
     scenarioId: "messenger-parcel-smishing-sms",
     level: "advanced",
     authoring: "current",
@@ -778,6 +837,7 @@ const SPECS: VariantSpec[] = [
     channels: ["messenger"],
     demandStages: 2,
   },
+  // T194-a(AC-106 (i) 기대값) — 지원금은 공개 메타 `escalation` 보유라 세 난이도 모두 통화 단계가 있다(`escalatesToVoice` 1필드만 추가).
   {
     variantId: "fv-rizf",
     scenarioId: "messenger-subsidy-smishing-sms",
@@ -791,6 +851,7 @@ const SPECS: VariantSpec[] = [
     ...BEGINNER,
     channels: ["messenger"],
     demandStages: 1,
+    escalatesToVoice: true,
   },
   {
     variantId: "fv-afbr",
@@ -804,6 +865,7 @@ const SPECS: VariantSpec[] = [
     ...INTERMEDIATE,
     channels: ["messenger"],
     demandStages: 2,
+    escalatesToVoice: true,
   },
   {
     variantId: "fv-hu8w",
@@ -817,6 +879,7 @@ const SPECS: VariantSpec[] = [
     ...ADVANCED,
     channels: ["messenger"],
     demandStages: 2,
+    escalatesToVoice: true,
   },
   {
     variantId: "fv-9nx7",
@@ -940,6 +1003,19 @@ export function listFlowVariants(scenarioId: string, level: DifficultyLevel): Fl
   return FLOW_VARIANTS.filter((v) => v.scenarioId === scenarioId && v.level === level);
 }
 
+/**
+ * ⭐ T194-a(docs/Architecture.md §83.13.5 · G586) — **배정 가능 풀**: 허용 변형 중 통화 단계 유무(`escalatesToVoice`)가 그 세션 종류
+ * (자가 = 시나리오 × 난이도 · 챌린지 수신자 = 시나리오 단위)의 에스컬레이션 값(`resolveSessionEscalation`)과 같은 것만.
+ * 자가 · 수신자 배정(`session/variantAssignment.ts` `candidatesOrThrow`)이 이 함수 하나를 쓴다(J-1). 별도 `audience` 필드는 두지 않는다 —
+ * 판별자는 에스컬레이션 값 하나다. 결과: parcel 고급 자가 = 3단계 변형 · 수신자 = 현행 고급 변형(AC-106 (g) 기본값). 다른 시나리오는 항등이다.
+ */
+export function assignablePool(scenarioId: string, level: DifficultyLevel, challengeId?: string): FlowVariant[] {
+  const escalates = Boolean(
+    resolveSessionEscalation({ scenarioId, difficultyLevel: level, challengeId }, PUBLIC_SCENARIOS),
+  );
+  return listFlowVariants(scenarioId, level).filter((v) => Boolean(v.escalatesToVoice) === escalates);
+}
+
 export function findFlowVariant(variantId: string | undefined): FlowVariant | undefined {
   if (!variantId) return undefined;
   return FLOW_VARIANTS.find((v) => v.variantId === variantId);
@@ -959,18 +1035,21 @@ const SINGLE_SPEAKER_VERIFY_EXCEPTION = "확인 창구 안내 지시가 따로 �
  * - `current` 변형: 페르소나 무변경 · 수법만 변형 목록(대부분 원본과 같다).
  * - `authored` 변형: 페르소나 끝에 [이번 통화의 흐름] 블록 · 수법은 변형 목록.
  * - 가드레일 원문은 그대로 넘긴다 — 조립 순서(가드레일 최후미)는 `buildSystemPrompt`가 강제한다.
- * ⚠️ `legIndex`는 S7 전까지 0만 쓴다(`RELAY_RUNTIME_AVAILABLE`).
+ * - T194-a(§83.4.2) — 그 leg에 페르소나가 있으면 시나리오 원본 대신 그것을 쓴다(부재 = 원본 재사용 — `FlowVariantLeg`
+ *   주석 그대로). 오늘 이 경로를 타는 것은 parcel 고급(`fv-g454`) 1벌이다.
+ * ⚠️ `legIndex`는 S7 전까지 0만 쓴다(`RELAY_RUNTIME_AVAILABLE`). ⚠️ S7(릴레이 leg 발급)과 같은 함수다 — 아래 1줄을 S7이
+ *   재사용한다(§83.9 겹침 — 먼저 오는 쪽이 넣고 뒤는 재사용).
  */
 export function resolveVariantPrompt(
   base: ScenarioPromptDoc,
   variant: FlowVariant,
   legIndex = 0,
 ): ScenarioPromptDoc {
-  void legIndex;
+  const legPersona = variant.legs[legIndex]?.personaPrompt ?? base.personaPrompt;
   const personaPrompt =
     variant.stages.length === 0
-      ? base.personaPrompt
-      : `${base.personaPrompt}\n\n${buildFlowBlock(variant)}`;
+      ? legPersona
+      : `${legPersona}\n\n${buildFlowBlock(variant)}`;
   return {
     ...base,
     personaPrompt,

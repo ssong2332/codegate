@@ -12,6 +12,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {
   FLOW_VARIANTS,
+  assignablePool,
   FLOW_VARIANT_SPECS,
   RELAY_RUNTIME_AVAILABLE,
   UNRESOLVED_TACTIC_LABELS,
@@ -21,6 +22,7 @@ import {
   type FlowVariant,
 } from "../flowVariants";
 import { SCENARIO_PROMPTS } from "../index";
+import { resolveScenarioEscalation, resolveSessionEscalation } from "../escalation";
 import { PUBLIC_SCENARIOS, isAdvancedOnlyScenario } from "../publicMeta";
 import { IN_CALL_SMS } from "../inCallSms";
 import { extractTacticLabel } from "../tacticFlavor";
@@ -220,7 +222,10 @@ const CURRENT_VARIANT_ROWS: readonly string[] = [
   "messenger-friend-loan-kakao/advanced",
   "messenger-friend-loan-kakao/beginner",
   "messenger-friend-loan-kakao/intermediate",
+  // T194-a(PRD AC-096 갱신 고지 3 ① · AC-106 · User 결정 U7) — parcel 고급의 자가 변형 `fv-g454`는 authored(새 흐름)가 됐고,
+  // §83.13.5 처방 2로 챌린지 수신자용 "현행" 변형(`fv-k7qm` — T194 이전 `fv-g454` 내용)이 들어와 이 행은 그 변형을 가리킨다.
   "messenger-parcel-smishing-sms/advanced",
+  // 초급 · 중급은 그대로 "현행"(AC-106 (f)).
   "messenger-parcel-smishing-sms/beginner",
   "messenger-parcel-smishing-sms/intermediate",
   "messenger-subsidy-smishing-sms/advanced",
@@ -326,7 +331,9 @@ function newVariantTexts(): { where: string; text: string }[] {
     for (const tactic of v.tactics) if (!baseTactics.has(tactic)) out.push({ where: `${v.variantId} tactic`, text: tactic });
     for (const stage of v.stages) out.push({ where: `${v.variantId} ${stage.stageId}`, text: stage.summary });
     const composed = resolveVariantPrompt(SCENARIO_PROMPTS[v.scenarioId], v).personaPrompt;
-    const block = composed.slice(SCENARIO_PROMPTS[v.scenarioId].personaPrompt.length);
+    // T194-a — 0번 leg 페르소나가 원본을 덮는 변형(parcel 고급)은 그 페르소나 뒤가 흐름 블록이다(페르소나 자체는 아래 leg 표면으로 들어간다).
+    const personaHead = v.legs[0]?.personaPrompt ?? SCENARIO_PROMPTS[v.scenarioId].personaPrompt;
+    const block = composed.slice(personaHead.length);
     if (block) out.push({ where: `${v.variantId} flowBlock`, text: block });
     v.legs.forEach((leg, i) => out.push({ where: `${v.variantId} leg${i}`, text: `${leg.callerLabel} ${leg.personaPrompt ?? ""}` }));
     if (v.decisionMoment) out.push({ where: `${v.variantId} decisionMoment`, text: v.decisionMoment });
@@ -464,10 +471,12 @@ test("[T191 S5 프롬프트 합성] 가드레일 원문 불변 · 최후미 · '
     const resolved = resolveVariantPrompt(base, v);
     assert.equal(resolved.guardrailPreamble, base.guardrailPreamble, `${v.variantId}: 가드레일 변형 금지`);
     assert.deepEqual(resolved.weakenedTactics, v.tactics);
+    // T194-a(§83.4.2) — 0번 leg 페르소나가 있으면 그것이 원본을 대신한다(부재 = 원본 재사용 — 종전 단언 그대로).
+    const persona = v.legs[0]?.personaPrompt ?? base.personaPrompt;
     if (v.stages.length === 0) {
-      assert.equal(resolved.personaPrompt, base.personaPrompt, `${v.variantId}: 단계 없는 변형은 페르소나 무변경`);
+      assert.equal(resolved.personaPrompt, persona, `${v.variantId}: 단계 없는 변형은 페르소나 무변경`);
     } else {
-      assert.ok(resolved.personaPrompt.startsWith(base.personaPrompt), `${v.variantId}: 원본 페르소나 보존`);
+      assert.ok(resolved.personaPrompt.startsWith(persona), `${v.variantId}: (leg 또는 원본) 페르소나 보존`);
       assert.ok(resolved.personaPrompt.includes("[이번 통화의 흐름]"));
     }
     for (const level of DIFFICULTY_LEVELS as readonly DifficultyLevel[]) {
@@ -512,4 +521,142 @@ test("[T191 S5 호출부] 시나리오 프롬프트 해석이 단일 지점을 �
   assert.ok(realtime.includes("flowVariantId: session.flowVariantId"));
   const eleven = fs.readFileSync(path.join(FUNCTIONS_SRC, "realtime/elevenLabsProvider.ts"), "utf-8");
   assert.equal(eleven.includes("flowVariant"), false, "ElevenLabs 경로는 변형 미적용(OQ-A131 기본값)");
+});
+
+// ── T194-a G577 — PRD AC-106 (i) "같은 (시나리오 × 난이도) 허용 변형의 통화 단계 유무 동일" (docs/Architecture.md §83.4.5) ──
+//
+// 왜 필요한가: UX-025 안내와 시작 고지의 "메시지와 전화"는 (시나리오 × 난이도) 값으로 갈린다(PRD AC-096 읽기 고지 4).
+// 같은 칸의 허용 변형 중 하나라도 통화 단계 유무가 다르면 안내 유무가 **배정된 변형을 드러내** AC-096 (e) 위반이 된다.
+// ⇒ ① 칸마다 값이 하나로 모이고 ② 그 값이 공개 메타 술어와 같으며 ③ 신설 시점 기대값을 고정한다 + 역방향 ⓓ.
+
+type SessionKind = "자가" | "챌린지";
+type PoolFn = (scenarioId: string, level: DifficultyLevel, challengeId?: string) => readonly FlowVariant[];
+
+/** 이 (시나리오 × 난이도)에서 그 세션 종류가 존재하는가 — 챌린지는 에스컬레이션 메타 시나리오에서 거부된다(`challenge/index.ts` S-6). */
+function sessionKindExists(scenarioId: string, level: DifficultyLevel, kind: SessionKind): boolean {
+  if (listFlowVariants(scenarioId, level).length === 0) return false; // 고급 전용 시나리오의 초급 · 중급
+  if (kind === "챌린지" && resolveScenarioEscalation(PUBLIC_SCENARIOS[scenarioId], "beginner") !== undefined) return false;
+  return true;
+}
+
+/** (scenarioId/level/세션 종류) → 그 배정 풀 변형들의 통화 단계 유무 값 집합. ⭐ §83.13.5 — 단위에 세션 종류가 들어간다. */
+function callStageByCell(pool: PoolFn): Map<string, Set<boolean>> {
+  const cells = new Map<string, Set<boolean>>();
+  for (const id of Object.keys(PUBLIC_SCENARIOS)) {
+    for (const level of DIFFICULTY_LEVELS) {
+      for (const kind of ["자가", "챌린지"] as const) {
+        if (!sessionKindExists(id, level, kind)) continue;
+        const set = new Set<boolean>();
+        for (const v of pool(id, level, kind === "챌린지" ? "c1" : undefined)) set.add(v.escalatesToVoice === true);
+        cells.set(`${id}/${level}/${kind}`, set);
+      }
+    }
+  }
+  return cells;
+}
+
+/** ① 균일성 위반 칸 목록(빈 배열 = 통과). 풀 함수를 인자로 받아 역방향에서 필터를 끈 풀을 넣을 수 있다. */
+function callStageUniformityViolations(pool: PoolFn): string[] {
+  return [...callStageByCell(pool).entries()].filter(([, set]) => set.size > 1).map(([key]) => key).sort();
+}
+
+/** 필터를 끈 풀(역방향 전용) — 허용 변형 전체. */
+const UNFILTERED_POOL: PoolFn = (scenarioId, level) => listFlowVariants(scenarioId, level);
+
+/** ③ PRD AC-106 (i) 신설 시점 기대값(자가 세션) — 메신저 4종 명시(그 밖 시나리오는 전부 "없음"). */
+const EXPECTED_CALL_STAGE: Readonly<Record<string, Readonly<Record<DifficultyLevel, boolean>>>> = {
+  "messenger-parcel-smishing-sms": { beginner: false, intermediate: false, advanced: true },
+  "messenger-subsidy-smishing-sms": { beginner: true, intermediate: true, advanced: true },
+  // 그 밖 메신저 시나리오 = 공개 메타 그대로(AC-106 (i) 신설 시점 값 — §83.4.5 ③).
+  "messenger-child-impersonation-kakao": { beginner: true, intermediate: true, advanced: true },
+  "messenger-friend-loan-kakao": { beginner: false, intermediate: false, advanced: false },
+};
+// ⭐ §83.13.5 처방 4 — 챌린지 세션 기대값: 전부 "없음"(에스컬레이션 메타 시나리오는 챌린지 자체가 거부된다).
+// 명시 1행: parcel 고급 챌린지 = 통화 단계 없음(AC-106 (g) 기본값 — 수신자는 현행 고급 변형).
+const EXPECTED_CHALLENGE_CALL_STAGE: Readonly<Record<string, boolean>> = {
+  "messenger-parcel-smishing-sms/advanced": false,
+};
+
+test("[T194-a G577 · AC-106 (i) · §83.13.5] ① (시나리오 × 난이도 × 세션 종류) 배정 풀마다 통화 단계 유무가 하나 ② 그 값 = 세션 술어 ③ 기대값 · 역방향 ⓓ", (t) => {
+  // ①
+  const violations = callStageUniformityViolations(assignablePool);
+  // 역방향 ⓓ — 필터를 끈 풀(허용 변형 전체): parcel 고급에는 통화 단계 있는 변형과 없는 변형이 공존한다.
+  const taintedViolations = callStageUniformityViolations(UNFILTERED_POOL);
+  t.diagnostic(
+    `[AC-106 (i) ⓓ] 배정 풀 위반 ${JSON.stringify(violations)} / 필터를 끈 풀(parcel 고급에 통화 없는 변형 공존) 위반 ${JSON.stringify(taintedViolations)}`,
+  );
+  assert.deepEqual(violations, [], "같은 세션 종류의 배정 풀이 통화 단계 유무에서 갈린다 — 안내 유무가 배정 변형을 드러낸다");
+  assert.deepEqual(
+    taintedViolations,
+    ["messenger-parcel-smishing-sms/advanced/자가", "messenger-parcel-smishing-sms/advanced/챌린지"],
+    "역방향 ⓓ — 오염(필터 해제) 샘플이 정확히 그 칸들에서 실패해야 한다",
+  );
+
+  // ② · ③
+  const table: string[] = [];
+  for (const [key, set] of callStageByCell(assignablePool)) {
+    assert.equal(set.size, 1, `${key}: 배정 풀이 비었다 — 배정이 failed-precondition으로 막힌다`);
+    const [id, level, kind] = key.split("/") as [string, DifficultyLevel, SessionKind];
+    const value = [...set][0];
+    const fromSession =
+      resolveSessionEscalation({ scenarioId: id, difficultyLevel: level, challengeId: kind === "챌린지" ? "c1" : undefined }, PUBLIC_SCENARIOS) !==
+      undefined;
+    assert.equal(value, fromSession, `${key}: 풀의 통화 단계(${value}) ≠ 세션 술어(${fromSession})`);
+    const expected =
+      kind === "자가" ? (EXPECTED_CALL_STAGE[id]?.[level] ?? false) : (EXPECTED_CHALLENGE_CALL_STAGE[`${id}/${level}`] ?? false);
+    assert.equal(value, expected, `${key}: AC-106 (i) 기대값(${expected})과 다르다`);
+    // 자가 세션 값은 (시나리오 × 난이도) 공개 메타 술어와도 같다.
+    if (kind === "자가") assert.equal(value, resolveScenarioEscalation(PUBLIC_SCENARIOS[id], level) !== undefined, key);
+    if (value) table.push(key);
+  }
+  t.diagnostic(`[AC-106 (i)] 통화 단계 있음 칸 ${table.length}개: ${table.join(" · ")}`);
+  assert.deepEqual(
+    table.filter((key) => key.startsWith("messenger-parcel-smishing-sms/")),
+    ["messenger-parcel-smishing-sms/advanced/자가"],
+    "parcel은 고급 자가 세션만 통화 단계가 있다(AC-106 (f)(g))",
+  );
+  assert.deepEqual(assignablePool("messenger-parcel-smishing-sms", "advanced", "c1").map((v) => v.variantId), ["fv-k7qm"]);
+  assert.deepEqual(assignablePool("messenger-parcel-smishing-sms", "advanced").map((v) => v.variantId), ["fv-g454"]);
+});
+
+test("[T194-a G577] escalatesToVoice는 `true` 또는 부재뿐이다(부재가 거짓 — `false` 표기 0)", () => {
+  for (const v of FLOW_VARIANTS) {
+    assert.ok(v.escalatesToVoice === undefined || v.escalatesToVoice === true, `${v.variantId}: ${String(v.escalatesToVoice)}`);
+    assert.equal(Object.prototype.hasOwnProperty.call(v, "escalatesToVoice") && v.escalatesToVoice !== true, false, `${v.variantId}: false/undefined를 명시하지 말 것`);
+  }
+});
+
+test("[T194-a §83.4.2] parcel 고급 변형 — authored · 3단계 이상 · 메신저+통화 채널 · 출처 N1·N2·C08 · 원본 링크 수법 제외 · leg 페르소나", () => {
+  const v = FLOW_VARIANTS.find((x) => x.variantId === "fv-g454") as FlowVariant;
+  assert.equal(v.scenarioId, "messenger-parcel-smishing-sms");
+  assert.equal(v.level, "advanced");
+  assert.equal(v.authoring, "authored");
+  assert.ok(v.stages.length >= 3 && v.stages.length <= 4, `단계 ${v.stages.length}개(3~4)`);
+  assert.deepEqual(v.channels, ["messenger", "voice"]);
+  assert.deepEqual(v.sources, ["N1", "N2", "C08"], "AC-106 (e) 출처");
+  assert.ok(v.demandStages >= 2, "AC-096 (b) 고급 요구 2단 이상");
+  const labels = v.tactics.map(extractTacticLabel);
+  assert.equal(labels.includes("링크 클릭 유도"), false, "원본 parcel-redelivery 링크 수법은 고급에서 빠진다(한 세션 랜딩 1종)");
+  assert.ok(labels.includes("앱 설치·권한 허용 유도") && labels.includes("채널 전환 유도"), "지원금 3단계와 같은 라벨");
+  const composed = resolveVariantPrompt(SCENARIO_PROMPTS[v.scenarioId], v);
+  const markers = [...[composed.personaPrompt, ...composed.weakenedTactics].join("\n").matchAll(/\[\[LINK:([a-zA-Z0-9_-]+)\]\]/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(markers)], ["parcel-install"], "고급 세션이 내는 링크 마커는 parcel-install 하나다");
+});
+
+test("[T194-a §83.13.3 ②] escalatesToVoice는 프롬프트 조립에 영향 0 — child-kakao 3벌(플래그 1필드만 추가) 등 플래그 보유 변형 전부 플래그 제거본과 조립 바이트 동일", (t) => {
+  const flagged = FLOW_VARIANTS.filter((v) => v.escalatesToVoice === true);
+  const child = flagged.filter((v) => v.scenarioId === "messenger-child-impersonation-kakao").map((v) => v.variantId).sort();
+  assert.deepEqual(child, ["fv-34v5", "fv-tdgg", "fv-tpr3"]);
+  let compared = 0;
+  for (const v of flagged) {
+    const { escalatesToVoice: _flag, ...withoutFlag } = v;
+    const base = SCENARIO_PROMPTS[v.scenarioId];
+    for (const level of DIFFICULTY_LEVELS as readonly DifficultyLevel[]) {
+      const a = buildSystemPrompt(resolveVariantPrompt(base, v), { difficultyLevel: level });
+      const b = buildSystemPrompt(resolveVariantPrompt(base, withoutFlag as FlowVariant), { difficultyLevel: level });
+      assert.equal(a, b, `${v.variantId}/${level}: 플래그가 조립 바이트를 바꿨다`);
+      compared += 1;
+    }
+  }
+  t.diagnostic(`[②] 플래그 보유 변형 ${flagged.length}벌 × 3난이도 = ${compared}건 바이트 동일`);
 });

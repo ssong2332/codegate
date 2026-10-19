@@ -48,7 +48,7 @@ import {
   selectableDifficultyLevels,
   type DifficultyLevel,
 } from "@/lib/difficulty";
-import { scenarios, GENERIC_VOICE_ID } from "@/content/scenarios";
+import { scenarios, GENERIC_VOICE_ID, resolveScenarioEscalation } from "@/content/scenarios";
 import { Badge, Button, SelectableCard } from "@/components/ui";
 
 type PageState = "ready" | "starting" | "start-error" | "difficulty-fallback";
@@ -155,7 +155,9 @@ export default function DifficultySelectPage() {
         router.push(`/challenge/create?scenarioId=${encodeURIComponent(scenarioId)}`);
         return;
       }
-      if (scenario?.escalation) {
+      // T194-a(Architecture.md §83.4.1 C-1 · UX D-124 ① · PRD AC-046 읽기 고지) — "에스컬레이션 가능"은 **고른 난이도까지 본**
+      // (시나리오 × 난이도) 술어다. 택배 문자는 고급을 고른 경우에만 UX-025로 간다(초급 · 중급은 오지 않을 통화의 목소리를 묻지 않는다).
+      if (resolveScenarioEscalation(scenario, selected)) {
         // (self·메신저 에스컬레이션 가능) UX-025 목소리 선택이 세션 생성을 마무리한다(D-25).
         // 난이도는 목소리 선택보다 **앞**이다(UX-024 v1.11 갱신) — 여기서 확정해 힌트로 넘긴다.
         setSelectedScenarioId(scenarioId);

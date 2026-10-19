@@ -58,6 +58,8 @@ const SCENARIO_META_FIELDS: Record<keyof ScenarioMeta, FieldPolicy> = {
   channel: { skip: "열거형 'voice'|'messenger'" },
   surface: { skip: "열거형 'kakao'|'sms'" },
   escalation: { skip: "열거형 조합 {toChannel,voiceMode} — 자유 문자열 없음" },
+  // T194-a(§83.4.1) — `escalation`과 같은 모양(고급 세션 전용 전이 설정).
+  advancedEscalation: { skip: "열거형 조합 {toChannel,voiceMode} — 자유 문자열 없음" },
   // T191 S5 — 리터럴 `true` 플래그 2종(UX 계약 C-1 · C-9). 자유 문자열이 아니다.
   advancedOnly: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
   preSessionBurdenNotice: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
@@ -136,6 +138,8 @@ const FLOW_VARIANT_FIELDS: Record<keyof FlowVariant, FieldPolicy> = {
   channels: { skip: "채널 열거값 목록" },
   demandStages: { skip: "숫자" },
   sources: { skip: "사례 ID 목록(C·S 번호)" },
+  // T194-a(§83.4.2 · AC-106 (i)) — 리터럴 `true` 플래그.
+  escalatesToVoice: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
 };
 
 // ── 표면 수집 ────────────────────────────────────────────────────────────────
@@ -528,7 +532,8 @@ const SCENARIO_MODULE_INVENTORY: Record<string, string> = {
   "loanScam.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
   "messengerChildImpersonationKakao.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
   "messengerFriendLoanKakao.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
-  "messengerParcelSmishingSms.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
+  // T194-a — 고급 leg 페르소나 · 설치 수법 상수는 FLOW_VARIANTS(fv-g454의 legs · tactics) 경유로 스캔된다.
+  "messengerParcelSmishingSms.prompt.ts": "scanned (SCENARIO_PROMPTS 경유 + 고급 전용 상수는 FLOW_VARIANTS 경유)",
   "messengerSubsidySmishingSms.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
   "reputationBlackmailScam.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
   "taxRefundScam.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
@@ -544,6 +549,10 @@ const SCENARIO_MODULE_INVENTORY: Record<string, string> = {
   "beginnerBriefing.ts": "파생 — weakenedTactics에서 만들어지므로 원본이 이미 스캔된다",
   "briefingTypes.ts": "콘텐츠 아님 — 타입 정의",
   "tacticFlavor.ts": "파생 — weakenedTactics 문자열을 자르는 순수 함수",
+  // T194-a(§83.4.1) — 메신저 → 통화 전이의 (시나리오 × 난이도) 술어. 문자열 콘텐츠 0.
+  "escalation.ts": "콘텐츠 아님 — 에스컬레이션 판정 순수 함수",
+  // T194-a G584(§83.13.2) — 세션 도달 가능 랜딩 집합(프롬프트 마커 · 선언 문자 파생). 문자열 콘텐츠 0.
+  "reachability.ts": "콘텐츠 아님 — 세션 도달 가능 랜딩 파생 순수 함수",
   "seed.ts": "콘텐츠 아님 — 시딩 스크립트(PUBLIC_SCENARIOS를 쓴다)",
 };
 

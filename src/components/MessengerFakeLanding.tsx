@@ -160,6 +160,9 @@ export default function MessengerFakeLanding({
     };
   }, [isMessenger]);
 
+  // T194-a(§83.13.3 ③ ⓑ) — 표에 없는 id의 `app-install`은 설치 화면을 그리지 않는다(지원금 문구 · credential 폴백 0 — UF-012 Failure (a) 생략).
+  if (landingKind === "app-install" && installCopyFor(landingId) === undefined) return null;
+
   const content: ReactNode = (
     <>
       {/* ② 브라우저 바(UX-023 v1.33 (2) · D-92) — 높이 52px · 왼쪽(메신저 진입 = ✕ 닫기 · 문자함 진입 = "‹ 문자")
@@ -216,10 +219,15 @@ export default function MessengerFakeLanding({
       <div className="mx-auto flex w-full max-w-sm flex-1 flex-col">
         {/* ⚠️ **kind 분기가 먼저 끝난다**(§19.4 R7). 상황별 콘텐츠 조회는 선택된 서브 컴포넌트
             **안쪽**에서만 일어나며, 조회 결과가 kind를 바꾸는 경로는 존재하지 않는다. */}
-        {/* ⚠️ `app-install`은 상황 축을 갖지 않는다 — 도달 가능한 항목이 `subsidy-install` 1종뿐이고
-            D-58이 "무변경"으로 확정했다. 조회 표를 억지로 만들면 도달 불가 콘텐츠가 생긴다. */}
+        {/* ⚠️ T194-a — `app-install`도 상황별 콘텐츠를 갖게 됐다(`subsidy-install` · `parcel-install` 2종 — UF-012 v1.38
+            "콘텐츠 1벌"). 조회는 여전히 서브 컴포넌트 안쪽 · 정확 일치 · 같은 kind 기본 문구 폴백이다(INSTALL_LANDING_COPY). */}
         {landingKind === "app-install" ? (
-          <AppInstallMockup onClose={onClose} onConsent={onInstallConsent} returnLabel={returnLabel} />
+          <AppInstallMockup
+            landingId={landingId}
+            onClose={onClose}
+            onConsent={onInstallConsent}
+            returnLabel={returnLabel}
+          />
         ) : (
           <CredentialFormMockup
             landingId={landingId}
@@ -431,7 +439,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
  * 범용 폴백이다(`CredentialFormMockup`과 같은 규칙).
  */
 function landingHostFor(kind: MessengerFakeLandingKind, landingId?: string): string {
-  if (kind === "app-install") return INSTALL_MOCK_HOST;
+  if (kind === "app-install") return installCopyFor(landingId)?.mockHost ?? "";
   return ((landingId ? CREDENTIAL_LANDING_COPY[landingId] : undefined) ?? GENERIC_CREDENTIAL_COPY).mockHost;
 }
 
@@ -587,6 +595,49 @@ const INSTALL_ISSUER_LABEL = "ⓒ 업무처리 확인센터";
 /** T190-2(§74.9) — 설치 화면 가짜 주소창 호스트(서버 `subsidy-install.mockHost`와 같은 글자 — G76). */
 const INSTALL_MOCK_HOST = "support-app-center.invalid";
 
+/** 설치 화면 한 벌의 문구(서버 카탈로그 `app-install` 항목의 화면 필드와 1:1). */
+type InstallCopy = {
+  headline: string;
+  bodyLines: string[];
+  consentLabel: string;
+  issuerLabel: string;
+  mockHost: string;
+};
+
+/**
+ * ⭐ T194-a(docs/Architecture.md §83.4.3 · §83.13.3 ③ · UX UF-012 v1.38 (1) "콘텐츠 1벌 · 가상 앱 이름 — D-58 콘텐츠 축") — 설치 화면의
+ * **상황별 콘텐츠**. 예전 주석(*"`app-install`은 상황 축을 갖지 않는다 — 도달 가능한 항목이 1종뿐"*)의 전제가 택배 고급
+ * (`parcel-install`)으로 깨져, landingId 정확 일치 조회 표를 둔다.
+ * ⛔ 규칙(§83.13.3 ③): ⓐ 키 = 서버 카탈로그 `app-install` 항목의 landingId 전수 · 값 = 그 항목 화면 필드와 **바이트 동일**(키 집합 양방향 ·
+ * 값 대조 = `mockScreenCopy.test.ts`) ⓑ **표에 없는 id면 설치 화면을 그리지 않는다** — 지원금 문구 기본값 폴백 0 · credential 폴백 0(R5 ·
+ * UF-012 Failure (a) 생략) ⓒ kind 분기가 먼저 끝난 뒤 조회(R7) · 정확 일치만(R8) · 신규 kind · 컴포넌트 파일 0(AC-106 (a)).
+ */
+const INSTALL_LANDING_COPY: Record<string, InstallCopy> = {
+  "subsidy-install": {
+    headline: INSTALL_HEADLINE,
+    bodyLines: INSTALL_BODY_LINES,
+    consentLabel: INSTALL_CONSENT_LABEL,
+    issuerLabel: INSTALL_ISSUER_LABEL,
+    mockHost: INSTALL_MOCK_HOST,
+  },
+  "parcel-install": {
+    headline: "배송 확인 앱을 설치해야 재배송이 접수됩니다",
+    bodyLines: [
+      "주소 확인이 끝나지 않아 재배송 접수가 보류되어 있습니다.",
+      "아래에서 배송 확인 앱 설치를 진행해 주세요.",
+      "설치 후 접근 권한을 허용하면 상담원이 재배송 접수를 마무리해 드립니다.",
+    ],
+    consentLabel: "권한 허용하고 계속하기",
+    issuerLabel: "ⓒ 종합물류 배송확인센터",
+    mockHost: "parcel-app-desk.invalid",
+  },
+};
+
+/** 정확 일치 조회 — 미스면 `undefined`(⛔ 기본 문구 폴백 0 — 호출부가 설치 화면을 그리지 않는다). */
+function installCopyFor(landingId?: string): InstallCopy | undefined {
+  return landingId ? INSTALL_LANDING_COPY[landingId] : undefined;
+}
+
 /** 가짜 설치 진행 표시의 단계(UX-023 v1.12 ①→②→③→④). 전부 **로컬 state**이며 시간 경과 외에
  *  아무 부수효과가 없다 — 타이머는 진행률 숫자만 올린다. */
 type InstallPhase = "intro" | "installing" | "permission" | "done";
@@ -601,15 +652,19 @@ type InstallPhase = "intro" | "installing" | "permission" | "done";
  * 없다는 불변식을 kind 추가 후에도 유지하기 위해서다(§15.9.6, 기존 `onClose`와 같은 패턴).
  */
 function AppInstallMockup({
+  landingId,
   onClose,
   onConsent,
   returnLabel,
 }: {
+  /** T194-a — 상황별 설치 문구 조회 키(정확 일치만 · 미스 = 기본 설치 문구). */
+  landingId?: string;
   onClose: () => void;
   onConsent?: () => void;
   /** 완료 화면 복귀 버튼 문면(T190-5 · D-93 — 진입 표면이 정한다). */
   returnLabel: string;
 }) {
+  const installCopy = installCopyFor(landingId);
   const [phase, setPhase] = useState<InstallPhase>("intro");
   const [progress, setProgress] = useState(0);
 
@@ -636,6 +691,9 @@ function AppInstallMockup({
     onConsent?.();
   };
 
+  // T194-a(§83.13.3 ③ ⓑ) — 상위가 이미 걸렀지만 이 서브 컴포넌트도 표 밖 id에서는 아무것도 그리지 않는다(기본 문구 폴백 0).
+  if (!installCopy) return null;
+
   return (
     // T190-5 — 랜딩 본문 여백을 이 kind 안으로 옮겼다(공유 래퍼는 credential 화면의 전폭 기관 헤더 띠 때문에 여백 0).
     <div className="flex flex-col gap-6 p-6">
@@ -645,8 +703,8 @@ function AppInstallMockup({
         </span>
       </div>
       <div className="-mt-4 flex flex-col gap-2">
-        <h1 className="text-xl font-bold leading-snug text-[#22303A]">{INSTALL_HEADLINE}</h1>
-        {INSTALL_BODY_LINES.map((line) => (
+        <h1 className="text-xl font-bold leading-snug text-[#22303A]">{installCopy.headline}</h1>
+        {installCopy.bodyLines.map((line) => (
           <p key={line} className="text-sm leading-relaxed text-[#6B655C]">
             {line}
           </p>
@@ -662,7 +720,7 @@ function AppInstallMockup({
           >
             설치 진행하기
           </button>
-          <p className="text-center text-[13px] text-[#6B655C]">{INSTALL_ISSUER_LABEL}</p>
+          <p className="text-center text-[13px] text-[#6B655C]">{installCopy.issuerLabel}</p>
           <button
             type="button"
             onClick={onClose}
@@ -706,7 +764,7 @@ function AppInstallMockup({
             onClick={handleConsent}
             className="min-h-[52px] rounded-[10px] bg-[#41525E] text-base font-semibold text-white transition-colors hover:bg-[#374049]"
           >
-            {INSTALL_CONSENT_LABEL}
+            {installCopy.consentLabel}
           </button>
           <button
             type="button"

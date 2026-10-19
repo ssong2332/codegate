@@ -21,7 +21,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import type { DocumentReference, Firestore } from "firebase-admin/firestore";
 import type { DifficultyLevel } from "../shared/difficulty";
-import { listFlowVariants } from "../scenarios/flowVariants";
+import { assignablePool } from "../scenarios/flowVariants";
 
 export const VARIANT_ROTATION_COLLECTION = "variantRotation";
 
@@ -51,8 +51,10 @@ export function pickChallengeVariantId(candidates: readonly string[], challengeI
   return candidates[hash % candidates.length];
 }
 
-function candidatesOrThrow(scenarioId: string, level: DifficultyLevel): string[] {
-  const candidates = listFlowVariants(scenarioId, level).map((v) => v.variantId);
+// T194-a(§83.13.5 · G586) — 후보 = 배정 가능 풀(허용 변형 중 세션 종류의 에스컬레이션 값과 통화 단계 유무가 같은 것). 자가(`challengeId` 부재) ·
+// 수신자 배정이 같은 필터를 탄다.
+function candidatesOrThrow(scenarioId: string, level: DifficultyLevel, challengeId?: string): string[] {
+  const candidates = assignablePool(scenarioId, level, challengeId).map((v) => v.variantId);
   if (candidates.length === 0) {
     // AC-096 (f) — 배정 실패가 조용히 임의 변형으로 귀결되지 않는다.
     console.warn(JSON.stringify({ event: "flow_variant_none", scenarioId, level }));
@@ -151,5 +153,5 @@ export function assignFlowVariantForChallenge(
   level: DifficultyLevel,
   challengeId: string,
 ): string {
-  return pickChallengeVariantId(candidatesOrThrow(scenarioId, level), challengeId);
+  return pickChallengeVariantId(candidatesOrThrow(scenarioId, level, challengeId), challengeId);
 }

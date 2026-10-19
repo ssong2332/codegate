@@ -188,6 +188,7 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
       resolved.difficultyLevel,
       flowVariantId,
       fictionalBankName,
+      resolved.challengeId,
     );
 
     const challengeRef = db.collection("challenges").doc(resolved.challengeId);

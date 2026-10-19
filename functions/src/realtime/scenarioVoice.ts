@@ -11,6 +11,10 @@
 // "정답을 미리 알려주지 않는다" 축 계승). 이 파일은 `functions/src/realtime/`(서버 전용) 밖으로
 // import되지 않는다 — `roleplay/index.ts`·`roleplay/openingLine.ts`가 읽는 것도 이 파일이 export한
 // **표의 값**뿐이고, 클라로 나가는 응답 어디에도 이 표는 실리지 않는다.
+import { resolveSessionEscalation, type EscalationSessionView } from "../scenarios/escalation";
+import { findFlowVariant } from "../scenarios/flowVariants";
+import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+
 export type SpeakerGenderAssignment = "male" | "female" | "notApplicable";
 
 /**
@@ -39,7 +43,9 @@ export const SCENARIO_SPEAKER_GENDER: Record<string, SpeakerGenderAssignment> = 
   "grandchild-impersonation": "notApplicable", // voiceMode:"clone"
   "messenger-child-impersonation-kakao": "notApplicable", // 에스컬레이션 voiceMode:"clone"
   "messenger-friend-loan-kakao": "notApplicable", // 에스컬레이션 없음 — 통화 경로 0
-  "messenger-parcel-smishing-sms": "notApplicable", // 에스컬레이션 없음
+  // 초급 · 중급은 통화 경로 0. T194-a — 고급 세션만 통화로 이어지며 그 성별은 아래 `resolveSessionSpeakerGender`가 변형 leg에서 푼다
+  // (⛔ 여기를 "female"로 바꾸지 말 것 — 초급 · 중급 프롬프트에 [화자] 블록이 생긴다 · AC-106 (f)).
+  "messenger-parcel-smishing-sms": "notApplicable",
 };
 
 /**
@@ -49,4 +55,24 @@ export const SCENARIO_SPEAKER_GENDER: Record<string, SpeakerGenderAssignment> = 
 export function speakerGenderFor(scenarioId: string): "male" | "female" | undefined {
   const assignment = SCENARIO_SPEAKER_GENDER[scenarioId];
   return assignment === "male" || assignment === "female" ? assignment : undefined;
+}
+
+/**
+ * ⭐ T194-a(docs/Architecture.md §83.4.3 "화자 성별" · G582) — **세션 단위** 화자 성별. 표는 시나리오 단위라
+ * `messenger-parcel-smishing-sms`(초급 · 중급은 통화 경로 0 = `notApplicable`)를 `"female"`로 바꾸면 **초급 · 중급 텍스트
+ * 프롬프트에도 [화자] 블록이 생긴다**(호출부 3곳이 무조건 넘긴다) = AC-106 (f) 위반. ⇒ 표 값은 그대로 두고, 표가 값을 내지 않는
+ * 시나리오는 **이 세션에 통화 단계가 있을 때만** 배정된 흐름 변형의 0번 leg 성별을 쓴다.
+ * 쓰는 곳: 프롬프트 호출부 3곳(`roleplay/index.ts` · `roleplay/openingLine.ts` · `realtime/geminiProvider.ts` — 마지막은
+ * `createRealtimeCall`이 이 값을 계산해 넘긴다) + Gemini 음성 풀 선택(층 1 · 층 2 같은 원천 — §50.3.1).
+ * 표에 값이 있는 시나리오는 **표 값 그대로**다(오늘 동작 바이트 동일).
+ */
+export function resolveSessionSpeakerGender(
+  session: EscalationSessionView & { flowVariantId?: string },
+): "male" | "female" | undefined {
+  const fromTable = speakerGenderFor(session.scenarioId);
+  if (fromTable) return fromTable;
+  if (!resolveSessionEscalation(session, PUBLIC_SCENARIOS)) return undefined;
+  const variant = findFlowVariant(session.flowVariantId);
+  if (!variant || variant.scenarioId !== session.scenarioId) return undefined;
+  return variant.legs[0]?.speakerGender;
 }

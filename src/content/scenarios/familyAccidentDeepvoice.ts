@@ -45,6 +45,9 @@ export type ScenarioDoc = {
   channel?: Channel; // 부재="voice"(하위호환)
   surface?: MessengerSurface; // channel="messenger"일 때만
   escalation?: EscalationConfig; // 메신저→보이스 전이 가능한 시나리오만(AC-046)
+  // T194-a(Architecture.md §83.4.1 · PRD AC-106 (i)) — 고급 세션에서만 통화로 이어지는 시나리오의 전이 설정.
+  // ⛔ 화면이 이 필드를 직접 읽지 않는다 — (시나리오 × 난이도) 술어 `resolveScenarioEscalation`(./escalation.ts)만 쓴다.
+  advancedEscalation?: EscalationConfig;
   // T191 S5(PRD AC-097 (b) · UX 계약 C-1) — 고급으로만 만들 수 있는 시나리오. **화면 표시값**
   // (UX-017 "고급 전용" 묶음 · UX-029 고급 1장)이며 수법·흐름 정보가 아니다(C-4). 강제는 서버가
   // 한다(createSession · createChallenge 거부). 부재 = 세 난이도 모두 허용(AC-064 원문).
