@@ -221,3 +221,135 @@ test("[A-1 리뷰 Major-2 · 역방향] 고치기 전 판정(공통 완료 동�
   assert.ok(legacyHits.length >= 5, `역검증 전제 — 옛 판정이 오탐 표본을 잡아야 한다(잡힌 수 ${legacyHits.length})`);
   for (const t of legacyHits) assert.equal(isCompletionClaim(t, "transfer"), false, `현행 판정이 여전히 오탐: ${t}`);
 });
+
+// ── A-2 — A-1 QA 경미 관찰 4건(판정표 행 추가 · 정규식 확대 아님) ─────────────────────────────────
+// 각 행마다 ① 이번 표본 ② 정탐 회귀 ③ 고치기 전 판정(A-1 그대로 복사)이면 결과가 반대였다는 역검증을 나란히 둔다.
+
+/** 고치기 전(A-1 main) 판정 그대로 — 역검증 전용 사본. ⛔ 제품 코드가 이것을 쓰면 안 된다. */
+function legacyIsCompletionClaim(text: string, purpose: "transfer" | "link"): boolean {
+  const byPurpose = {
+    transfer: /보냈|부쳤|(?:입금|이체|송금)\s*(?:했|해\s*드렸|완료)|넣었|넣어\s*드렸/,
+    link: /눌렀|들어갔|접속했|입력했|신청했|진행했|인증했/,
+  }[purpose];
+  const generic = /다\s*했|했어요|했습니다|완료(?:했|됐)|마쳤|끝냈/;
+  const target =
+    /송금|입금|이체|계좌|링크|신청|설치|앱|인증|말씀하신\s*대로|안내(?:하신|해\s*주신)?\s*대로|알려\s*주신\s*대로|시키신\s*대로|하라는\s*대로|하라고\s*하신\s*대로|문자(?:\s*안내)?\s*대로/;
+  const exclude =
+    /(?:안|못)\s*(?:보냈|했|넣었|눌렀|해)|않았|아직|싫|안\s*할|못\s*하겠|할까요|하나요|해야|전화했|물어봤|신고했|확인했|알아봤/;
+  return (text.match(/[^.?!\n]+[.?!]?/g) ?? []).some((raw) => {
+    const s = raw.trim();
+    if (s.length === 0 || s.endsWith("?")) return false;
+    if (exclude.test(s)) return false;
+    return byPurpose.test(s) || (generic.test(s) && target.test(s));
+  });
+}
+
+const A2_CASES: Array<{ row: string; text: string; purpose: "transfer" | "link"; expected: boolean }> = [
+  // ⓐ 주장 + 질문이 한 문장(종결 어미 뒤 쉼표 · 그런데/근데)
+  { row: "ⓐ", text: "방금 보냈어요, 확인되나요?", purpose: "transfer", expected: true },
+  { row: "ⓐ", text: "보냈어요 그런데 아직 안 들어갔나요?", purpose: "transfer", expected: true },
+  { row: "ⓐ", text: "이체했어요, 근데 확인됐어요?", purpose: "transfer", expected: true },
+  { row: "ⓐ", text: "링크 눌렀어요, 이제 어떻게 해요?", purpose: "link", expected: true },
+  // ⓑ 목적 교차 — transfer 세션에서 다른 목적의 행동
+  { row: "ⓑ", text: "앱 설치했어요", purpose: "transfer", expected: false },
+  { row: "ⓑ", text: "링크 눌러서 신청했어요", purpose: "transfer", expected: false },
+  // ⓒ link 갈래 부정
+  { row: "ⓒ", text: "보냈는데 안 들어갔대요", purpose: "link", expected: false },
+  { row: "ⓒ", text: "링크가 안 들어갔어요", purpose: "link", expected: false },
+  // ⓓ 되돌림
+  { row: "ⓓ", text: "보냈다가 취소했어요", purpose: "transfer", expected: false },
+  { row: "ⓓ", text: "보냈어요. 근데 바로 취소했어요", purpose: "transfer", expected: false },
+];
+
+test("[A-2 QA ⓐⓑⓒⓓ] 판정표 추가 행 — 표본 전부 기대대로 · 고치기 전 판정이면 전부 반대였다(역검증)", () => {
+  const flipped: string[] = [];
+  for (const c of A2_CASES) {
+    assert.equal(isCompletionClaim(c.text, c.purpose), c.expected, `${c.row} ${c.purpose}: ${c.text}`);
+    if (legacyIsCompletionClaim(c.text, c.purpose) !== c.expected) flipped.push(`${c.row} ${c.text}`);
+  }
+  console.log(`[A-2 QA 역검증] 고치기 전 판정과 다른 표본 ${flipped.length}/${A2_CASES.length}`);
+  assert.equal(flipped.length, A2_CASES.length, "표본 중 고치기 전에도 이미 맞던 것이 있다 — 그 표본은 이 행의 증거가 아니다");
+});
+
+test("[A-2 QA 정탐 회귀] 기존 정탐 · 오탐 표본은 판정이 그대로다(ⓐ 절 나눔이 연결 어미 문장을 쪼개지 않는다 포함)", () => {
+  for (const [text, purpose] of MAJOR2_TRUE_POSITIVES) {
+    assert.equal(isCompletionClaim(text, purpose), true, `놓침(${purpose}): ${text}`);
+  }
+  for (const text of MAJOR2_FALSE_POSITIVES) {
+    assert.equal(isCompletionClaim(text, "transfer"), false, `오탐(transfer): ${text}`);
+    assert.equal(isCompletionClaim(text, "link"), false, `오탐(link): ${text}`);
+  }
+  // 종전 행 유지 — 연결 어미(-는데)로 이어진 질문은 한 절이다 · 순수 질문 · 부정은 그대로 아니다.
+  for (const text of ["보냈는데 확인됐어요?", "확인됐어요?", "아직이에요?", "보내야 하나요?", "아직 안 보냈어요", "네, 보낼게요"]) {
+    assert.equal(isCompletionClaim(text, "transfer"), false, `오탐: ${text}`);
+  }
+  // ⓑ 반대 방향 — link 세션의 설치 · 신청은 여전히 주장이다(목적별로 나눴을 뿐 항목은 그대로).
+  for (const text of ["앱 설치했어요", "링크 눌러서 신청했어요", "앱 설치 마쳤어요"]) {
+    assert.equal(isCompletionClaim(text, "link"), true, `놓침(link): ${text}`);
+  }
+  // ⓒ 반대 방향 — 부정이 없는 link 완료는 그대로 주장이다.
+  assert.equal(isCompletionClaim("들어갔어요", "link"), true);
+  // ⓓ 되돌림 어휘가 없는 transfer 완료는 그대로 주장이다.
+  assert.equal(isCompletionClaim("보냈다니까요", "transfer"), true);
+});
+
+/**
+ * A-2 1차(절 나눔만 · 번복 행 없음) 판정 그대로 — 리뷰 Major 1 역검증 전용 사본. ⛔ 제품 코드가 이것을 쓰면 안 된다.
+ * 지금 판정에서 "뒤 절 번복" 행만 뺀 것이다.
+ */
+function clauseSplitWithoutRetraction(text: string, purpose: "transfer" | "link"): boolean {
+  const byPurpose = {
+    transfer: /보냈|부쳤|(?:입금|이체|송금)\s*(?:했|해\s*드렸|완료)|넣었|넣어\s*드렸/,
+    link: /눌렀|들어갔|접속했|입력했|신청했|진행했|인증했/,
+  }[purpose];
+  const generic = /다\s*했|했어요|했습니다|완료(?:했|됐)|마쳤|끝냈/;
+  const target = { transfer: /송금|입금|이체|계좌/, link: /링크|신청|설치|앱|인증/ }[purpose];
+  const followed =
+    /말씀하신\s*대로|안내(?:하신|해\s*주신)?\s*대로|알려\s*주신\s*대로|시키신\s*대로|하라는\s*대로|하라고\s*하신\s*대로|문자(?:\s*안내)?\s*대로/;
+  const exclude =
+    /(?:안|못)\s*(?:보냈|했|넣었|눌렀|해|들어갔|접속했|입력했|신청했|진행했|인증했)|않았|아직|싫|안\s*할|못\s*하겠|할까요|하나요|해야|전화했|물어봤|신고했|확인했|알아봤/;
+  if (/취소|되돌렸|돌려받/.test(text)) return false;
+  return (text.match(/[^.?!\n]+[.?!]?/g) ?? []).some((raw) => {
+    const s = raw.trim();
+    if (s.length === 0) return false;
+    const targeted = target.test(s) || followed.test(s);
+    return s.split(/(?<=[요다죠])\s*,\s*|(?<=[요다죠])\s+(?=그런데|근데)/).some((rc) => {
+      const c = rc.trim();
+      if (c.length === 0 || c.endsWith("?")) return false;
+      if (exclude.test(c)) return false;
+      return byPurpose.test(c) || (generic.test(c) && targeted);
+    });
+  });
+}
+
+test("[A-2 리뷰 Major 1] 뒤 절이 앞 절을 번복하면 문장 전체 제외 — 번복 행 없는 1차 판정은 주장으로 잡았다(역검증) · ⓐ 표본은 그대로 참", () => {
+  const retracted: Array<[string, "transfer" | "link"]> = [
+    ["보냈어요, 아니 아직 안 보냈어요", "transfer"],
+    ["보냈어요, 못 보냈어요", "transfer"],
+    ["이체했어요, 아뇨 아직이에요", "transfer"],
+    ["링크 눌렀어요, 근데 안 들어갔어요", "link"],
+  ];
+  for (const [text, purpose] of retracted) {
+    assert.equal(isCompletionClaim(text, purpose), false, `번복 놓침(${purpose}): ${text}`);
+    assert.equal(clauseSplitWithoutRetraction(text, purpose), true, `역검증 전제 — 1차 판정이 이 표본을 주장으로 잡아야 한다: ${text}`);
+  }
+  // ⓐ 유지 — 뒤 절이 질문이면 번복이 아니다.
+  for (const c of A2_CASES.filter((x) => x.row === "ⓐ")) {
+    assert.equal(isCompletionClaim(c.text, c.purpose), true, `ⓐ 회귀: ${c.text}`);
+  }
+  // 번복 뒤 다시 주장(앞 절이 부정 · 뒤 절이 주장)은 주장이다.
+  assert.equal(isCompletionClaim("아까는 못 보냈어요, 방금 보냈어요", "transfer"), true);
+});
+
+test("[A-2 QA ⓐ 판정 경로] 주장+질문 발화가 필수 문자 도착 뒤 첫 주장이면 confirm 1회 — 고치기 전이면 no_claim이었다", () => {
+  const delivered = [{ smsId: "loan-account", userTurnsAtArrival: 7 }];
+  const plan = planConfirmResult({
+    declared: [TRANSFER],
+    delivered,
+    userTurns: 8,
+    currentUserText: "방금 보냈어요, 확인되나요?",
+    priorUserTexts: SCRIPT_A_PRIORS,
+  });
+  assert.equal(plan.reason, "confirm");
+  assert.equal(legacyIsCompletionClaim("방금 보냈어요, 확인되나요?", "transfer"), false, "역검증 전제 — 고치기 전에는 놓쳤다");
+});

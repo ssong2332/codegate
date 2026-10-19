@@ -143,6 +143,14 @@ import {
   type InstructionDelivery,
 } from "@/lib/realtime/contextInjection";
 import {
+  INITIAL_CONFIRM_RESULT_INJECTION_STATE,
+  VERIFY_RECONNECT_MAX_ATTEMPTS,
+  planConfirmResultInjection,
+  planVerifyReconnectFailure,
+  releaseConfirmResultOnDispatch,
+  type ConfirmResultInjectionState,
+} from "@/lib/realtime/stallRecovery";
+import {
   claimAnnounceSlot,
   releaseAnnounceSlot,
   type AnnounceSlotState,
@@ -303,6 +311,24 @@ export default function SessionCallPage() {
     { text: string; seq: number; delivery: InstructionDelivery } | null
   >(null);
   const instructionQueueRef = useRef<PendingInstruction[]>([]);
+  // ⭐ PR-A2(audit-A R1 · R8) — G31 큐 **밖** 맥락 주입 슬롯(확인 결과 신호 · 자동 호 전환 실패). 응답을 유발하지 않고 턴 슬롯을
+  // 쓰지 않아 큐(참가자 발화 조건 · 턴 경계 대기)를 타지 않는다 — 전환 상태 단언(`personaStateTurn`)과 같은 이유의 별도 슬롯.
+  const [contextTurn, setContextTurn] = useState<
+    { text: string; seq: number; delivery: "confirmResult" | "verifyReconnectFailed" } | null
+  >(null);
+  // PR-A2 — 확인 결과 신호 주입 상태(세션당 1회 · 도착 안내 뒤 대기분). 판정은 순수 함수(`stallRecovery.ts`).
+  const confirmResultInjectionRef = useRef<ConfirmResultInjectionState>(INITIAL_CONFIRM_RESULT_INJECTION_STATE);
+  // PR-A2 리뷰 Minor 1 — 슬롯 seq는 단조 증가(전달 확인으로 슬롯을 비운 뒤에도 앞 seq를 재사용하지 않는다).
+  const contextTurnSeqRef = useRef(0);
+  const pushContextTurn = useCallback((text: string, delivery: "confirmResult" | "verifyReconnectFailed") => {
+    contextTurnSeqRef.current += 1;
+    setContextTurn({ text, seq: contextTurnSeqRef.current, delivery });
+  }, []);
+  // PR-A2 리뷰 Minor 1 — 세션 컴포넌트가 그 슬롯을 **실제로 보냈을 때만** 비운다. 연결 전 · 재마운트 공백에 도착한 지시는 슬롯에 남아
+  // 연결 직후 보내진다(유실 0) · 보낸 뒤에는 비워져 다음 재마운트가 다시 넣지 않는다(중복 0).
+  const handleContextTurnDelivered = useCallback((seq: number) => {
+    setContextTurn((prev) => (prev && prev.seq === seq ? null : prev));
+  }, []);
   // 이번 사기범 턴에 이미 지시를 하나 넣었는가(다음 turnComplete까지 추가 주입을 보류한다).
   const instructionBusyRef = useRef(false);
   // §52.7 (5) 가·나 / §57.5(G369) — `shouldDrainInstructionQueue`의 입력. 아직 지시를 한 번도
@@ -459,7 +485,8 @@ export default function SessionCallPage() {
   const userTurnsSinceInjectionRef = useRef(0);
   // ⭐ §47.3 C3/D-69 + §49 정정(2026-08-02) — 오퍼별 자동 전환 시도를 1회로 latch한다(offerId 키,
   // 계열 A·B 공통). 실패해도 재시도를 자동으로 걸지 않는다(재시도는 §47.3 C3가 금지한 "두 번째
-  // 컨트롤" 없이는 불가능하다 — 애초에 컨트롤이 없다).
+  // 컨트롤" 없이는 불가능하다 — 애초에 컨트롤이 없다). PR-A2(F8) — 단, 그 1회 시도 **안에서** 콜러블 1회 재시도는 한다
+  // (`handlePlaceVerifyCall` · `planVerifyReconnectFailure`). 이 래치(오퍼당 자동 시도 1회)는 그대로다.
   const autoReconnectOfferIdRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speech = useSpeechRecognition();
@@ -808,7 +835,14 @@ export default function SessionCallPage() {
       });
     }
     setInstructionTurn((prev) => ({ text: item.text, seq: (prev?.seq ?? 0) + 1, delivery }));
-  }, []);
+    // PR-A2(audit-A R1) — 결과 신호가 이 도착 안내를 기다리고 있었으면 뒤따라 낸다(같은 렌더 · 세션 컴포넌트가 안내 먼저 주입).
+    const confirm = releaseConfirmResultOnDispatch(confirmResultInjectionRef.current, item.text);
+    confirmResultInjectionRef.current = confirm.state;
+    const confirmText = confirm.injectNow;
+    if (confirmText) {
+      pushContextTurn(confirmText, "confirmResult");
+    }
+  }, [pushContextTurn]);
 
   const enqueueTurnInstruction = useCallback(
     (
@@ -825,6 +859,27 @@ export default function SessionCallPage() {
       drainInstructionQueue();
     },
     [drainInstructionQueue],
+  );
+
+  // ⭐ PR-A2(audit-A R1) — 서버 결과 신호(`confirmResultInstruction` — 필수 계좌·링크 문자 도착 응답에만 실린다)를 Live에 넣는다.
+  // 판정(래치 · 세션당 1회 · 도착 안내 뒤 순서)은 순수 함수 `planConfirmResultInjection`이 소유한다. 실시간 경로 전용이다(폴백은
+  // 서버가 매 턴 `planConfirmResult`로 조립한다). `announceQueuedText` = 같은 응답의 도착 안내를 G31 큐에 넣었으면 그 문자열.
+  const offerConfirmResult = useCallback((instruction: string | undefined, announceQueuedText: string | undefined) => {
+    const step = planConfirmResultInjection(confirmResultInjectionRef.current, {
+      instruction,
+      announceQueuedText,
+      latched: isEndLatched(callEndingRef.current),
+    });
+    confirmResultInjectionRef.current = step.state;
+    const text = step.injectNow;
+    if (text) pushContextTurn(text, "confirmResult");
+    // 대기분(`pending`)은 그 안내가 큐를 떠나는 순간 `drainInstructionQueue`가 낸다. ⛔ 그래서 백스톱 경로는 안내를 큐에 넣기
+    // **전에** 이 함수를 부른다(넣는 즉시 드레인될 수 있다 — 순서가 바뀌면 대기분이 영영 풀리지 않는다).
+  }, [pushContextTurn]);
+  // 모델 도구 경로(`send_prepared_sms`) — 도착 안내는 도구 응답으로 이미 나갔다(세션 컴포넌트가 응답 전송 뒤 부른다).
+  const handleConfirmResultInstruction = useCallback(
+    (text: string) => offerConfirmResult(text, undefined),
+    [offerConfirmResult],
   );
 
   // T68 → ⭐ T191 문자 도달 조건(PRD AC-099 · 설계 "백스톱 — 필수 목적만 강제 · 선택 목적은 건너뛰기").
@@ -865,6 +920,10 @@ export default function SessionCallPage() {
         setSmsError(null);
         if (result.status === "none_pending") state.nonePending = true;
         // §53.6 (3) — 전환이 끝난 오퍼가 연 문자에는 announce 값이 없다(서버가 생략) — 그때는 주입하지 않는다.
+        if (result.status === "delivered") {
+          // PR-A2(audit-A R1) — 결과 신호 판정을 안내를 큐에 넣기 **전에** 한다(위 `offerConfirmResult` 주석).
+          offerConfirmResult(result.confirmResultInstruction, result.announceInstruction);
+        }
         if (result.status === "delivered" && result.announceInstruction) {
           enqueueTurnInstruction(result.announceInstruction, "sms");
         }
@@ -886,6 +945,7 @@ export default function SessionCallPage() {
     userTurnCount,
     realtime.credentials?.inCallSmsBackstop,
     enqueueTurnInstruction,
+    offerConfirmResult,
   ]);
 
   // §47.3 C2/§47.6 P-5 — 계열 판별은 이 한 곳에서만 한다(클라·서버 복제 금지, G84). scenarioId가
@@ -1662,26 +1722,51 @@ export default function SessionCallPage() {
    * 흐름(UX-031 States): Dialing("연결 중…" 2.5초 고정) → 성공 시 오버레이 자동 닫힘 → 통화 셸의
    * `verify-reconnected`(발신자 라벨이 문서의 `reconnectedCallerLabel`로 바뀐다). 실패 시 Error
    * 상태를 시트 안에 보여주고 **원래 통화 유지**(세션·리포트는 정상 진행 — UF-011 Failure (c),
-   * 침묵 실패 금지). 재시도 컨트롤은 없다(계열 무관) — 참가자가 재탭할 컨트롤 자체가 없으므로
-   * 자동 재시도도 만들지 않는다(C3가 두 번째 컨트롤을 금지, §47.3 (2) R1과 같은 급의 알려진 한계).
+   * 침묵 실패 금지). 재시도 컨트롤은 없다(계열 무관) — 참가자가 재탭할 컨트롤 자체가 없다(C3).
+   * ⭐ PR-A2(F8 · audit-A R8 — 2026-10-20 갱신, 위 원문의 "자동 재시도도 만들지 않는다"를 대체) — 이 함수 **안에서** 콜러블을
+   * 1회 재시도한다(컨트롤 추가 0 · 오퍼당 자동 시도 래치 무변경). 재시도까지 실패하면 실시간 경로는 "연결이 안 됐다고 하지 말고
+   * 하던 이야기를 이어가라" 맥락 1줄을 넣는다(모델이 이미 "연결해 드릴 테니 잠시만"이라고 말해 둔 상태라 공회전이 된다).
    */
   const handlePlaceVerifyCall = async () => {
     if (!sessionId || !verifyOffer || verifyDialing) return;
     setVerifyError(null);
     setVerifyDialing(true);
     const requestCallMode = callMode === "realtime" ? "realtime" : "fallback";
+    const offerId = verifyOffer.offerId;
     try {
       // 연출 시간과 서버 호출을 **동시에** 흘려보낸다 — 실패는 곧바로 드러나고(즉시 reject),
       // 성공은 항상 같은 길이의 "연결 중…"을 거친다(결정론).
-      const [result] = await Promise.all([
-        deliverVerifyReconnect({
-          sessionId,
-          offerId: verifyOffer.offerId,
-          callMode: requestCallMode,
-          ...(requestCallMode === "realtime" ? { scammerTurns } : {}),
-        }),
-        delay(VERIFY_DIALING_MS),
-      ]);
+      // ⭐ PR-A2(F8 · audit-A R8) — 실패하면 1회 재시도한다(시도 상한 `VERIFY_RECONNECT_MAX_ATTEMPTS`). 서버는 `placedAt`이 있으면
+      // 다시 쓰지 않아(멱등) 재시도가 안전하다. ⛔ 이 재시도는 `deliverVerifyReconnect`만 부른다 — `deliverVerifyOffer`(오퍼 개시)는
+      // 부르지 않는다(폴백 계열 B는 오퍼가 열리지 않는다는 전제를 지킨다). 판정은 순수 함수 `planVerifyReconnectFailure`.
+      let result: Awaited<ReturnType<typeof deliverVerifyReconnect>> | null = null;
+      for (let attempt = 1; attempt <= VERIFY_RECONNECT_MAX_ATTEMPTS && result === null; attempt += 1) {
+        try {
+          [result] = await Promise.all([
+            deliverVerifyReconnect({
+              sessionId,
+              offerId,
+              callMode: requestCallMode,
+              ...(requestCallMode === "realtime" ? { scammerTurns } : {}),
+            }),
+            delay(VERIFY_DIALING_MS),
+          ]);
+        } catch (error) {
+          const plan = planVerifyReconnectFailure({
+            attemptsMade: attempt,
+            latched: isEndLatched(callEndingRef.current),
+            callMode: requestCallMode,
+          });
+          if (plan.action === "retry") continue;
+          // 재시도까지 실패(실시간) — "연결이 안 됐다고 하지 말고 하던 이야기를 이어가라" 맥락 1줄(G31 큐 밖 · 응답 유발 0).
+          if (plan.action === "inject") {
+            const text = plan.text;
+            pushContextTurn(text, "verifyReconnectFailed");
+          }
+          throw error;
+        }
+      }
+      if (result === null) return;
       // 실시간 경로만 클라가 주입한다(폴백은 서버가 다음 턴 프롬프트에 싣는다 — §16.2).
       if (requestCallMode === "realtime") {
         // §82.4.2 — 재연결 지시는 화자 전환 첫 발화다(맥락 주입이 아니라 `relayGreeting` 텍스트 턴).
@@ -1712,8 +1797,8 @@ export default function SessionCallPage() {
   // 않는다(§49.9 row 5 — 이 effect가 손대는 지점이 아니다). ⚠️ **정직 고지**: 참가자가 컨트롤을
   // "선택"하는 행위 자체가 사라졌다 — 이 전환은 더 이상 참가자 행동이 아니라 앱이 게이트 도달만
   // 보고 대신 진행하는 것이다.
-  // ⚠️ `autoReconnectOfferIdRef`로 오퍼당 1회만 자동 시도한다 — 실패해도 자동 재시도는 없다
-  // (재시도 컨트롤 자체가 C3에 의해 없다, §47.3 (2) R1과 같은 급의 알려진 한계).
+  // ⚠️ `autoReconnectOfferIdRef`로 오퍼당 1회만 자동 시도한다(재시도 컨트롤 자체가 C3에 의해 없다). PR-A2(F8) — 콜러블 실패
+  // 1회 재시도와 최종 실패 시 맥락 주입은 `handlePlaceVerifyCall` 안에서 한다(이 래치 · 이 effect는 무변경).
   useEffect(() => {
     if (phase !== "live" || verifyOverlayOpen) return;
     // T192 C5(§79.9 E2) — 래치 뒤 자동 호 전환 동결.
@@ -2005,6 +2090,9 @@ export default function SessionCallPage() {
             claimVerifyAnnounceSlot={claimVerifyAnnounceSlot}
             releaseVerifyAnnounceSlot={releaseVerifyAnnounceSlot}
             instructionTurn={instructionTurn}
+            contextTurn={contextTurn}
+            onContextTurnDelivered={handleContextTurnDelivered}
+            onConfirmResultInstruction={handleConfirmResultInstruction}
             personaStateTurn={personaStateTurn}
             turnPhaseRef={liveTurnPhaseRef}
             primedAudio={primedCallAudio}

@@ -70,6 +70,14 @@ import {
   type InstructionDelivery,
 } from "./contextInjection";
 import {
+  INITIAL_STALL_NUDGE_STATE,
+  STALL_NUDGE_TEXT,
+  STALL_SILENCE_SEC,
+  formatStallNudgeLog,
+  isStallLine,
+  stepStallNudge,
+} from "./stallRecovery";
+import {
   INITIAL_LIVE_LATENCY_STATE,
   LIVE_LATENCY_LOG_PREFIX,
   buildCallSetupRecord,
@@ -147,6 +155,19 @@ export type GeminiVoiceSessionProps = {
    * 화자 전환 첫 발화(`speakerSwitch`)만 `relayGreeting` 텍스트 턴(§71.5 큐 경유)이다. 부재 = 맥락 주입.
    */
   instructionTurn?: { text: string; seq: number; delivery?: InstructionDelivery } | null;
+  /**
+   * PR-A2(audit-A R1 · R8) — G31 큐 **밖**의 맥락 주입 슬롯(`turnComplete:false` · 응답 유발 0 · 턴 슬롯 소비 0 — 전환 상태 단언
+   * `personaStateTurn`과 같은 이유로 별도 슬롯). 확인 결과 신호(`confirmResult`)와 자동 호 전환 실패(`verifyReconnectFailed`)만
+   * 싣는다. 판정은 부모가 순수 함수(`stallRecovery.ts`)로 한다. ⚠️ 전사에 기록하지 않는다(G105).
+   */
+  contextTurn?: { text: string; seq: number; delivery: "confirmResult" | "verifyReconnectFailed" } | null;
+  /**
+   * PR-A2(audit-A R1) — 모델 도구 `send_prepared_sms`가 도착시킨 문자의 서버 결과 신호(`confirmResultInstruction`). 도구 응답을
+   * **보낸 뒤에** 부른다(도착 안내보다 먼저 가지 않게). 세션당 1회 판정은 부모(`planConfirmResultInjection`)가 한다.
+   */
+  onConfirmResultInstruction?: (text: string) => void;
+  /** PR-A2 리뷰 Minor 1 — `contextTurn`을 실제로 세션에 보냈다(부모가 그 슬롯을 비워 재마운트 중복을 막는다). */
+  onContextTurnDelivered?: (seq: number) => void;
   // ⭐ T191(문자 도달 조건) — 예전 `onModelToolSmsDelivered`·`onModelToolSmsFailed`(모델 도구 성공 · 실패를 부모의
   // 고정 턴 백스톱에 알리던 콜백)는 폐기했다. 문자 백스톱은 이제 서버가 도착 기록으로 판정하므로(`planSmsBackstop`)
   // 부모가 모델 경로의 결과를 따로 알 필요가 없다.
@@ -273,9 +294,12 @@ export default function GeminiVoiceSession({
   onScammerTurnComplete,
   onModelToolVerifyAnnounced,
   onModelToolVerifyFailed,
+  onConfirmResultInstruction,
+  onContextTurnDelivered,
   claimVerifyAnnounceSlot,
   releaseVerifyAnnounceSlot,
   instructionTurn,
+  contextTurn,
   personaStateTurn,
   primedAudio,
   turnPhaseRef,
@@ -295,6 +319,8 @@ export default function GeminiVoiceSession({
     onScammerTurnComplete,
     onModelToolVerifyAnnounced,
     onModelToolVerifyFailed,
+    onConfirmResultInstruction,
+    onContextTurnDelivered,
     claimVerifyAnnounceSlot,
     releaseVerifyAnnounceSlot,
     getSessionUserTurns,
@@ -316,7 +342,13 @@ export default function GeminiVoiceSession({
   const requestClientTurnRef = useRef<((turn: ClientTurn) => void) | null>(null);
   // ⭐ §82.4(T1) — 문자 · 확인 권유 안내를 맥락 주입(`turnComplete:false`)으로 넣는 브리지. 응답 대기 큐(§71.5)를
   // 점유하지 않으며, 문자 안내면 침묵 넛지(§82.4.2 · G543) 대기를 건다.
-  const injectContextRef = useRef<((text: string, delivery: InstructionDelivery) => void) | null>(null);
+  const injectContextRef = useRef<((text: string, delivery: InstructionDelivery) => boolean) | null>(null);
+  // PR-A2 리뷰 Minor 1 — 세션이 없어 아직 못 보낸 맥락 주입 슬롯(연결 직후 1회 보낸다).
+  const pendingContextTurnRef = useRef<{
+    text: string;
+    seq: number;
+    delivery: "confirmResult" | "verifyReconnectFailed";
+  } | null>(null);
 
   useEffect(() => {
     handlersRef.current = {
@@ -329,6 +361,8 @@ export default function GeminiVoiceSession({
       onScammerTurnComplete,
       onModelToolVerifyAnnounced,
       onModelToolVerifyFailed,
+      onConfirmResultInstruction,
+      onContextTurnDelivered,
       claimVerifyAnnounceSlot,
       releaseVerifyAnnounceSlot,
       getSessionUserTurns,
@@ -347,6 +381,8 @@ export default function GeminiVoiceSession({
     onScammerTurnComplete,
     onModelToolVerifyAnnounced,
     onModelToolVerifyFailed,
+    onConfirmResultInstruction,
+    onContextTurnDelivered,
     claimVerifyAnnounceSlot,
     releaseVerifyAnnounceSlot,
     getSessionUserTurns,
@@ -464,6 +500,8 @@ export default function GeminiVoiceSession({
     // R2 이후 · 응답 전송 직후에 건다(`toolCall` 처리부).
     // 이번 배치에서 끊기가 승인됐는가 — 응답 전송 직후 R4를 걸지 정하는 1회용 표시(래치 아님 · 래치는 부모 소유).
     let armDrainAfterSend = false;
+    // PR-A2(audit-A R1) — 이번 배치의 `send_prepared_sms`가 받은 서버 결과 신호. 도구 응답 전송 뒤 1회 부모에 넘기고 비운다.
+    let confirmResultAfterToolResponse: string | null = null;
     const armHangupDrain = () => {
       if (hangupDrain !== "idle") return;
       hangupDrain = "awaitingTurnEnd";
@@ -550,6 +588,10 @@ export default function GeminiVoiceSession({
             scammerTranscriptTurns: modelToolScammerTurns,
             trigger: "model_tool",
           });
+          // PR-A2(audit-A R1) — 서버 결과 신호는 도구 응답에 섞지 않고, 응답을 **보낸 뒤** 부모에 넘긴다(아래 `toolCall` 처리부).
+          if (result.status === "delivered" && result.confirmResultInstruction) {
+            confirmResultAfterToolResponse = result.confirmResultInstruction;
+          }
           return {
             id: call.id,
             name: call.name ?? "unknown",
@@ -711,6 +753,9 @@ export default function GeminiVoiceSession({
     const noteUserSpeechForNudge = () => {
       silenceNudgeState = stepSilenceNudge(silenceNudgeState, { type: "userSpeech", nowMs: performance.now() }).state;
       if (silenceNudgeState.armedAt === null) clearSilenceNudgeTimer();
+      // PR-A2(F6) — 대기 뒤 침묵 넛지도 취소하고 넛지 이력을 초기화한다(참가자가 말했으니 다음 침묵에 다시 1회 가능).
+      stallNudgeState = stepStallNudge(stallNudgeState, { type: "userSpeech", nowMs: performance.now() }).state;
+      clearStallNudgeTimer();
     };
     let clientTurnTick: ReturnType<typeof setTimeout> | null = null;
     const sendClientTurn = (turn: ClientTurn) => {
@@ -786,14 +831,15 @@ export default function GeminiVoiceSession({
         }, SILENCE_NUDGE_RECHECK_MS);
       }
     };
-    const injectContext = (text: string, delivery: InstructionDelivery) => {
+    // PR-A2 리뷰 Minor 1 — 실제로 보냈는지 돌려준다(맥락 주입 슬롯이 미전달분을 연결 뒤 다시 보내는 판단에 쓴다).
+    const injectContext = (text: string, delivery: InstructionDelivery): boolean => {
       const activeSession = session;
-      if (!activeSession) return;
+      if (!activeSession) return false;
       try {
         activeSession.sendClientContent({ turns: text, turnComplete: false });
       } catch {
         // 무시 — 통화는 계속된다(P-4 비차단). 문자 자체는 이미 화면에 도착해 있다(D-109).
-        return;
+        return false;
       }
       log("contextInjection", delivery, text.slice(0, 12));
       silenceNudgeState = stepSilenceNudge(silenceNudgeState, {
@@ -806,6 +852,60 @@ export default function GeminiVoiceSession({
         silenceNudgeTimer = setTimeout(() => {
           if (!cancelled) runSilenceNudgeCheck();
         }, SMS_MENTION_SILENCE_SEC * 1000);
+      }
+      return true;
+    };
+
+    // ⭐ PR-A2(F6 · audit-A R6) — 대기 · 확인 중 뒤 침묵 넛지. 사기범 턴이 "확인 중 · 기다려 주세요"로 끝났는데 참가자가
+    // 침묵하면 Live 모델은 아무 말도 하지 않는다(재현 3/3). 그 대기 턴 뒤 8초 침묵 · 모델 유휴면 "결과를 제시하고 다음 단계로"
+    // `silence` 텍스트 턴 1회(참가자가 다시 말할 때까지 재발동 0). 판정은 순수 함수(`stallRecovery.ts`). 끊기 경로와 무관하다.
+    let stallNudgeState = INITIAL_STALL_NUDGE_STATE;
+    let stallNudgeTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearStallNudgeTimer = () => {
+      if (stallNudgeTimer) clearTimeout(stallNudgeTimer);
+      stallNudgeTimer = null;
+    };
+    const runStallNudgeCheck = () => {
+      stallNudgeTimer = null;
+      // G510 — 승인 · 종료 래치 뒤 넛지 0.
+      if (handlersRef.current.isHangupLatched()) return;
+      const nowMs = performance.now();
+      const armedAt = stallNudgeState.armedAt;
+      const step = stepStallNudge(stallNudgeState, {
+        type: "tick",
+        nowMs,
+        modelIdle:
+          !clientTurnState.modelTurnActive &&
+          clientTurnState.awaitingSince === null &&
+          !clientTurnState.toolPending,
+        userSpeakingLocally: userSpeechDebounceState.speaking,
+        otherNudgeArmed: silenceNudgeState.armedAt !== null,
+      });
+      stallNudgeState = step.state;
+      if (step.fire) {
+        console.info(LIVE_TURN_LOG_PREFIX, formatStallNudgeLog({ sinceScammerTurnMs: nowMs - (armedAt ?? nowMs) }));
+        dispatchClientTurn({ type: "request", turn: { kind: "silence", text: STALL_NUDGE_TEXT }, nowMs });
+        return;
+      }
+      if (stallNudgeState.armedAt !== null) {
+        stallNudgeTimer = setTimeout(() => {
+          if (!cancelled) runStallNudgeCheck();
+        }, SILENCE_NUDGE_RECHECK_MS);
+      }
+    };
+    /** 비어 있지 않은 사기범 턴 경계마다 1회(`turnComplete` 처리부) — 그 턴의 전사로 대기 여부를 정한다. */
+    const noteScammerTurnForStallNudge = (scammerText: string) => {
+      stallNudgeState = stepStallNudge(stallNudgeState, {
+        type: "scammerTurn",
+        nowMs: performance.now(),
+        stallLike: isStallLine(scammerText),
+        participantHasSpoken: handlersRef.current.getSessionUserTurns() > 0,
+      }).state;
+      clearStallNudgeTimer();
+      if (stallNudgeState.armedAt !== null) {
+        stallNudgeTimer = setTimeout(() => {
+          if (!cancelled) runStallNudgeCheck();
+        }, STALL_SILENCE_SEC * 1000);
       }
     };
 
@@ -883,6 +983,7 @@ export default function GeminiVoiceSession({
       clearHangupTimers();
       if (speakingTimer) clearTimeout(speakingTimer);
       if (clientTurnTick) clearTimeout(clientTurnTick);
+      clearStallNudgeTimer();
       clearSilenceNudgeTimer();
       logLatencySummary();
       if (userLevelRafId !== null) cancelAnimationFrame(userLevelRafId);
@@ -1039,6 +1140,10 @@ export default function GeminiVoiceSession({
                       armDrainAfterSend = false;
                       armHangupDrain();
                     }
+                    // PR-A2(audit-A R1) — 도착 안내(도구 응답)가 나간 **뒤** 결과 신호를 부모에 넘긴다(세션당 1회 판정 · 래치는 부모).
+                    const confirmText = confirmResultAfterToolResponse;
+                    confirmResultAfterToolResponse = null;
+                    if (confirmText) handlersRef.current.onConfirmResultInstruction?.(confirmText);
                     // 성공 · 실패 무관 — 큐의 도구 대기를 푼다(턴 자체는 turnComplete에서 끝난다).
                     dispatchClientTurn({ type: "toolResponseSent", nowMs: performance.now() });
                   })();
@@ -1141,6 +1246,8 @@ export default function GeminiVoiceSession({
                 const emptyTurn = isEmptyTurnComplete({ audioSinceBoundary, scammerTextSinceBoundary });
                 audioSinceBoundary = false;
                 scammerTextSinceBoundary = false;
+                // PR-A2(F6) — 이 턴의 사기범 전사(flush가 비우기 전에 읽는다). 대기 뒤 침묵 넛지 판정의 입력이다.
+                const scammerTurnText = scammerBuffer;
                 flushTranscript();
                 // ⭐ §59.6 ③ → §82.3.4 — `modelToolScammerTurns`는 이제 위 `flushTranscript`/`flushScammerTurn`이
                 // 비어 있지 않은 사기범 전사를 내보낼 때 오른다(부모 `scammerTurnsRef`와 같은 지점 · 같은 정의).
@@ -1151,6 +1258,8 @@ export default function GeminiVoiceSession({
                 // 직후**라는 원래 순서를 그대로 유지한다 — 문자 도착 판단이 전사보다 앞서면
                 // 앵커 턴 계산(§15.1.5 G21)이 한 턴 어긋난다.
                 if (!emptyTurn) handlersRef.current.onScammerTurnComplete?.();
+                // PR-A2(F6) — 빈 마감은 사기범 턴 경계가 아니다(위와 같은 조건).
+                if (!emptyTurn) noteScammerTurnForStallNudge(scammerTurnText);
                 // §71.6 — 이 모델 턴의 지연 레코드를 닫는다. §71.5 — 턴이 끝났으니 보류분 1건을 보낸다
                 // (2.5가 서버에서 하던 순서와 같다). 전사 flush · 부모 경계 콜백 **뒤**에 둔다 — 보류됐던
                 // 타이핑은 여기서야 userBuffer에 적립돼 다음 턴의 사용자 발화로 기록된다.
@@ -1191,6 +1300,12 @@ export default function GeminiVoiceSession({
           dispatchClientTurn({ type: "request", turn, nowMs: performance.now() });
         // §82.4(T1) — 문자 · 확인 권유 안내는 이 함수로만 넣는다(맥락 주입 · 큐 밖).
         injectContextRef.current = injectContext;
+        // PR-A2 리뷰 Minor 1 — 연결 전(또는 재마운트 공백)에 도착해 못 보낸 맥락 주입 슬롯을 지금 보낸다(전달되면 부모에 알려 비운다).
+        const pendingContext = pendingContextTurnRef.current;
+        if (pendingContext && !handlersRef.current.isHangupLatched() && injectContext(pendingContext.text, pendingContext.delivery)) {
+          pendingContextTurnRef.current = null;
+          handlersRef.current.onContextTurnDelivered?.(pendingContext.seq);
+        }
 
         // 사용자 신고(2026-07-24) — 연결 직후 캐릭터가 먼저 말을 걸도록 트리거를 보낸다. onopen
         // 콜백(위)이 아니라 connect()가 실제로 resolve된 직후에 보내는 이유: onopen은 소켓 이벤트라
@@ -1343,6 +1458,23 @@ export default function GeminiVoiceSession({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instructionTurn?.seq]);
+
+  // PR-A2(audit-A R1 · R8) — G31 큐 밖 맥락 주입(확인 결과 신호 · 자동 호 전환 실패). **위 instructionTurn effect보다 뒤에
+  // 선언한다** — 같은 렌더에서 도착 안내와 결과 신호가 함께 바뀌면 안내가 먼저 나가야 한다(결과 신호는 "이 문자"를 가리킨다).
+  // `turnComplete:false`(맥락 주입 함수 경유 — X5)이고 전사에 기록하지 않는다(G105). 래치 뒤에는 넣지 않는다(G510).
+  useEffect(() => {
+    if (!contextTurn || !contextTurn.text.trim()) return;
+    if (handlersRef.current.isHangupLatched()) return;
+    // PR-A2 리뷰 Minor 1 — 세션이 아직 없으면(연결 전 · 재마운트 공백) 버리지 않고 쥐었다가 연결 직후 보낸다. 전달되면 부모가 슬롯을
+    // 비운다(`onContextTurnDelivered`) — 다음 재마운트가 같은 지시를 다시 넣지 않는다(중복 0).
+    if (injectContextRef.current?.(contextTurn.text, contextTurn.delivery)) {
+      pendingContextTurnRef.current = null;
+      handlersRef.current.onContextTurnDelivered?.(contextTurn.seq);
+    } else {
+      pendingContextTurnRef.current = contextTurn;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextTurn?.seq]);
 
   // T118 / A5-α — 전환 상태 단언 재주입(§25.3). **위 instructionTurn effect보다 뒤에 선언한다**:
   // 같은 렌더에서 둘이 함께 바뀌면 지시가 먼저 나가야 한다(§25.4 A5-α 결정론 계약). α는 응답을
