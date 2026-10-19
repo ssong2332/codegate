@@ -1,0 +1,336 @@
+// PR-A2(2026-10-20 · audit-A "확인 중이니 기다려라" 공회전) — Live 클라 배선의 순수 규칙 + 배선 소스 스캔.
+// 순수 규칙은 `stallRecovery.ts`, 배선은 `GeminiVoiceSession.tsx` · `session/play/page.tsx`(렌더 러너가 없어 소스로 못박는다 —
+// `clientTurnQueueWiring.test.ts` · `callEndingWiring.test.ts`와 같은 관례).
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import {
+  INITIAL_CONFIRM_RESULT_INJECTION_STATE,
+  INITIAL_STALL_NUDGE_STATE,
+  STALL_NUDGE_TEXT,
+  STALL_SILENCE_SEC,
+  VERIFY_RECONNECT_FAILED_TEXT,
+  VERIFY_RECONNECT_MAX_ATTEMPTS,
+  formatStallNudgeLog,
+  isStallLine,
+  planConfirmResultInjection,
+  planVerifyReconnectFailure,
+  releaseConfirmResultOnDispatch,
+  stepStallNudge,
+  type StallNudgeEvent,
+  type StallNudgeState,
+} from "./stallRecovery.ts";
+import { SMS_MENTION_SILENCE_SEC, sendsAsContextInjection, stepSilenceNudge, INITIAL_SILENCE_NUDGE_STATE } from "./contextInjection.ts";
+import { shouldAnnounceVerifyOffer } from "../verifyintercept/verifyIntercept.ts";
+
+/** 주석 줄 제거(설명 주석이 스캔을 때리지 않게 — 자기 주석 함정). */
+function codeOnly(source: string): string {
+  return source
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .filter((line) => {
+      const t = line.trim();
+      return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*") && !t.startsWith("{/*");
+    })
+    .join("\n");
+}
+function slice(code: string, startToken: string, endToken: string): string {
+  const start = code.indexOf(startToken);
+  assert.ok(start >= 0, `시작 앵커 없음: ${startToken}`);
+  const end = code.indexOf(endToken, start + startToken.length);
+  assert.ok(end > start, `끝 앵커 없음: ${endToken}`);
+  return code.slice(start, end);
+}
+const sessionCode = codeOnly(readFileSync("src/lib/realtime/GeminiVoiceSession.tsx", "utf8"));
+const pageCode = codeOnly(readFileSync("src/app/session/play/page.tsx", "utf8"));
+const recoveryCode = codeOnly(readFileSync("src/lib/realtime/stallRecovery.ts", "utf8"));
+
+// ══ 1. 확인 결과 주입(audit-A R1) ════════════════════════════════════════════════════════════════
+
+const CONFIRM = "(상대가 이 문자 안내대로 마쳤다고 말하면 …)";
+const ANNOUNCE = "(방금 계좌 안내 문자가 도착했다 …)";
+
+test("[PR-A2 결과 주입 판정표] 1 래치 · 2 신호 없음 · 3 이미 정함 → 0 / 4 안내가 큐에 있음 → 대기 / 5 그 외 → 즉시", () => {
+  const S0 = INITIAL_CONFIRM_RESULT_INJECTION_STATE;
+  // 1행
+  assert.deepEqual(planConfirmResultInjection(S0, { instruction: CONFIRM, announceQueuedText: undefined, latched: true }), {
+    state: S0,
+    injectNow: null,
+  });
+  // 2행 — 선택 문자 · 인증번호 · 전환 뒤에는 서버가 싣지 않는다(빈 문자열 포함).
+  for (const instruction of [undefined, "", "  "]) {
+    assert.deepEqual(planConfirmResultInjection(S0, { instruction, announceQueuedText: ANNOUNCE, latched: false }), {
+      state: S0,
+      injectNow: null,
+    });
+  }
+  // 5행 — 모델 도구 경로(안내는 이미 도구 응답으로 나갔다).
+  const now = planConfirmResultInjection(S0, { instruction: CONFIRM, announceQueuedText: undefined, latched: false });
+  assert.equal(now.injectNow, CONFIRM);
+  assert.deepEqual(now.state, { claimed: true, pending: null });
+  // 3행 — 세션당 1회(두 번째 문자 · 두 경로 겹침).
+  assert.equal(planConfirmResultInjection(now.state, { instruction: CONFIRM, announceQueuedText: undefined, latched: false }).injectNow, null);
+  assert.equal(planConfirmResultInjection(now.state, { instruction: CONFIRM, announceQueuedText: ANNOUNCE, latched: false }).injectNow, null);
+  // 4행 — 백스톱 경로(안내가 큐에 있다) → 그 안내가 떠날 때만 풀린다.
+  const queued = planConfirmResultInjection(S0, { instruction: CONFIRM, announceQueuedText: ANNOUNCE, latched: false });
+  assert.equal(queued.injectNow, null);
+  assert.deepEqual(queued.state, { claimed: true, pending: { afterText: ANNOUNCE, text: CONFIRM } });
+  const other = releaseConfirmResultOnDispatch(queued.state, "(확인 권유 지시)");
+  assert.equal(other.injectNow, null, "다른 지시가 먼저 떠나면 계속 기다린다");
+  assert.deepEqual(other.state, queued.state);
+  const released = releaseConfirmResultOnDispatch(other.state, ANNOUNCE);
+  assert.equal(released.injectNow, CONFIRM);
+  assert.deepEqual(released.state, { claimed: true, pending: null });
+  assert.equal(releaseConfirmResultOnDispatch(released.state, ANNOUNCE).injectNow, null, "두 번 풀리지 않는다");
+});
+
+test("[PR-A2 결과 주입 전달 방식] confirmResult · verifyReconnectFailed는 맥락 주입(turnComplete:false)이고 문자 안내 침묵 넛지를 걸지 않는다", () => {
+  for (const delivery of ["confirmResult", "verifyReconnectFailed"] as const) {
+    assert.equal(sendsAsContextInjection(delivery), true, `${delivery}: turnComplete:true로 나간다(X5 위반)`);
+    const step = stepSilenceNudge(INITIAL_SILENCE_NUDGE_STATE, { type: "injected", delivery, nowMs: 1000 });
+    assert.equal(step.state.armedAt, null, `${delivery}: "방금 보낸 문자" 넛지가 걸린다`);
+  }
+});
+
+// ══ 2. 대기 뒤 침묵 넛지(audit-A R6 · F6) ════════════════════════════════════════════════════════
+
+test("[PR-A2 F6 판정표] audit-A 원문 대기 턴은 대기 · 질문으로 끝난 턴 · 일반 턴은 아님", () => {
+  // audit-A §1 턴 발췌(Live 초급 C9 · C11 · C13 · 고급 C14 · 폴백 고급 C10).
+  for (const line of [
+    "네, 입금 확인되는 대로 신규 대출 승인 절차를 빠르게 진행 도와드리겠습니다. 잠시만 기다려 주세요.",
+    "거의 다 되었습니다, 고객님. 전산 처리 과정에서 조금 지연되고 있는데, 확인되는 대로 바로 안내해 드릴게요.",
+    "확인이 거의 다 완료되어 가고 있으니 조금만 더 기다려 주시면 바로 안내해 드리겠습니다.",
+    "확인되는 대로 바로 다음 단계 안내드릴 테니 잠시만 그대로 기다려 주세요, 고객님.",
+    "아직 입금이 확인되지 않아서 대기 중입니다, 고객님.",
+    "지금 확인 중입니다.",
+  ]) {
+    assert.equal(isStallLine(line), true, `놓침: ${line}`);
+  }
+  for (const line of [
+    "",
+    "   ",
+    // Live 중급 C10 — 마지막 문장이 참가자에게 묻는다(그 뒤 침묵은 참가자 차례).
+    "네, 입금 확인 절차 진행 중입니다. 혹시 이체하신 금액이 정확히 얼마인지 다시 한번 말씀해 주시겠어요?",
+    "대출 몇 건이세요?",
+    "대기자 명단에 올려 두었습니다. 지금 바로 이체를 진행해 주셔야 합니다.",
+    "고객님 명의로 대출 신청이 접수돼 있습니다.",
+  ]) {
+    assert.equal(isStallLine(line), false, `오탐: ${line}`);
+  }
+});
+
+const turn = (nowMs: number, stallLike: boolean, participantHasSpoken = true): StallNudgeEvent => ({
+  type: "scammerTurn",
+  nowMs,
+  stallLike,
+  participantHasSpoken,
+});
+const tick = (nowMs: number, over: Partial<Extract<StallNudgeEvent, { type: "tick" }>> = {}): StallNudgeEvent => ({
+  type: "tick",
+  nowMs,
+  modelIdle: true,
+  userSpeakingLocally: false,
+  otherNudgeArmed: false,
+  ...over,
+});
+function run(events: StallNudgeEvent[]): { fires: number[]; state: StallNudgeState } {
+  let state = INITIAL_STALL_NUDGE_STATE;
+  const fires: number[] = [];
+  for (const e of events) {
+    const step = stepStallNudge(state, e);
+    state = step.state;
+    if (step.fire) fires.push(e.nowMs);
+  }
+  return { fires, state };
+}
+
+test("[PR-A2 F6 전이] 대기 턴 뒤 8초 침묵 · 모델 유휴면 1회 — 7.999초에는 없다 · 설계값은 문자 넛지와 같은 8초", () => {
+  assert.equal(STALL_SILENCE_SEC, 8);
+  assert.equal(STALL_SILENCE_SEC, SMS_MENTION_SILENCE_SEC);
+  assert.deepEqual(run([turn(1000, true), tick(8999)]).fires, []);
+  assert.deepEqual(run([turn(1000, true), tick(9000)]).fires, [9000]);
+});
+
+test("[PR-A2 F6 전이] 참가자가 다시 말할 때까지 재발동 0 — 넛지 응답이 또 대기로 끝나도 자기 구동 루프가 없다", () => {
+  const r = run([turn(0, true), tick(8000), turn(12000, true), tick(30000), tick(60000)]);
+  assert.deepEqual(r.fires, [8000]);
+  // 참가자가 말하면 이력이 풀리고 다음 대기 뒤 침묵에 다시 1회.
+  const r2 = run([turn(0, true), tick(8000), { type: "userSpeech", nowMs: 9000 }, turn(10000, true), tick(18000)]);
+  assert.deepEqual(r2.fires, [8000, 18000]);
+});
+
+test("[PR-A2 F6 전이] 보류 · 해제 — 참가자 발화 · 대기가 아닌 다음 턴 · 오프닝 구간 · 모델 발화 중 · 로컬 발화 중 · 문자 넛지 대기 중", () => {
+  assert.deepEqual(run([turn(0, true), { type: "userSpeech", nowMs: 3000 }, tick(9000)]).fires, [], "참가자 발화가 취소한다");
+  assert.deepEqual(run([turn(0, true), turn(2000, false), tick(11000)]).fires, [], "마지막 턴이 대기가 아니면 해제");
+  assert.deepEqual(run([turn(0, true, false), tick(9000)]).fires, [], "참가자가 아직 한 번도 말하지 않았다(오프닝)");
+  assert.deepEqual(run([turn(0, true), tick(9000, { modelIdle: false }), tick(10000)]).fires, [10000], "모델 발화 중 보류 → 유휴 첫 점검에서 1회");
+  assert.deepEqual(run([turn(0, true), tick(9000, { userSpeakingLocally: true })]).fires, []);
+  assert.deepEqual(run([turn(0, true), tick(9000, { otherNudgeArmed: true }), tick(9500)]).fires, [9500], "문자 넛지가 먼저");
+});
+
+test("[PR-A2 F6 문면] 넛지 · 전환 실패 문면 — 숫자 · 횟수 표현 · 번호/인증번호 · 따옴표 · 끊기 어휘 · 재촉 0 / 결과 제시 · 다음 단계 · 대기 금지 포함", () => {
+  for (const text of [STALL_NUDGE_TEXT, VERIFY_RECONNECT_FAILED_TEXT]) {
+    assert.equal(/[0-9０-９]/.test(text), false, `숫자: ${text}`);
+    assert.equal(/한\s*번|두\s*번|세\s*번|몇|횟수|차례|번째|다시|또|반복|되풀이|[일이삼사오]\s*회/.test(text), false, `횟수 표현: ${text}`);
+    assert.equal(/번호|인증/.test(text), false, `번호/인증번호: ${text}`);
+    assert.equal(/["“”'‘’]/.test(text), false, `따옴표 대사: ${text}`);
+    assert.equal(/끊|마무리|종료|통화를\s*(?:마|끝)|끝내/.test(text), false, `끊기 어휘: ${text}`);
+    assert.equal(/재촉|다급/.test(text), false, `재촉·다급: ${text}`);
+    assert.ok(text.startsWith("(") && text.endsWith(")"), "지시는 괄호 한 덩어리(다른 오케스트레이션 신호와 같은 꼴)");
+  }
+  assert.ok(STALL_NUDGE_TEXT.includes("결과를 그럴듯하게 정해 지금 알려 주고"));
+  assert.ok(STALL_NUDGE_TEXT.includes("다음 요구로 넘어가라"));
+  assert.ok(STALL_NUDGE_TEXT.includes("기다려 달라는 말은 하지 마라"));
+  assert.ok(VERIFY_RECONNECT_FAILED_TEXT.includes("연결이 안 됐다고 말하지 말고"));
+  assert.ok(VERIFY_RECONNECT_FAILED_TEXT.includes("지금 하던 이야기를 그대로 이어가라"));
+  assert.equal(formatStallNudgeLog({ sinceScammerTurnMs: 8123.6 }), 'cause:"silence" trigger:"stall" sinceScammerTurnMs=8124');
+});
+
+// ══ 3. 자동 호 전환 실패(audit-A R8 · F8) ═════════════════════════════════════════════════════════
+
+test("[PR-A2 F8 판정표] 1 래치 → none / 2 첫 실패 → retry / 3 폴백 최종 실패 → none / 4 실시간 최종 실패 → inject", () => {
+  assert.equal(VERIFY_RECONNECT_MAX_ATTEMPTS, 2, "첫 시도 + 재시도 1회");
+  assert.deepEqual(planVerifyReconnectFailure({ attemptsMade: 1, latched: true, callMode: "realtime" }), { action: "none" });
+  assert.deepEqual(planVerifyReconnectFailure({ attemptsMade: 1, latched: false, callMode: "realtime" }), { action: "retry" });
+  assert.deepEqual(planVerifyReconnectFailure({ attemptsMade: 1, latched: false, callMode: "fallback" }), { action: "retry" });
+  assert.deepEqual(planVerifyReconnectFailure({ attemptsMade: 2, latched: false, callMode: "fallback" }), { action: "none" });
+  assert.deepEqual(planVerifyReconnectFailure({ attemptsMade: 2, latched: false, callMode: "realtime" }), {
+    action: "inject",
+    text: VERIFY_RECONNECT_FAILED_TEXT,
+  });
+  assert.deepEqual(planVerifyReconnectFailure({ attemptsMade: 2, latched: true, callMode: "realtime" }), { action: "none" });
+});
+
+// ══ 4. 체크리스트 — 폴백 계열 B에서 deliverVerifyOffer 신규 호출 0(C6-R · R4 전제) ═════════════════
+
+test("[PR-A2 체크리스트] deliverVerifyOffer 호출부는 종전 그대로(화면 1 · 세션 컴포넌트 1) · 새 재시도 경로는 재연결 콜러블만 부른다 · 계열 B는 오퍼 개시 게이트가 닫혀 있다", () => {
+  assert.equal(pageCode.split("deliverVerifyOffer(").length - 1, 1, "화면에 오퍼 개시 호출이 늘었다");
+  assert.equal(sessionCode.split("deliverVerifyOffer(").length - 1, 1, "세션 컴포넌트(실시간 전용)에 오퍼 개시 호출이 늘었다");
+  const place = slice(pageCode, "const handlePlaceVerifyCall = async () => {", "useEffect(() => {");
+  assert.equal(place.includes("deliverVerifyOffer"), false, "재시도 경로가 오퍼 개시를 부른다");
+  assert.ok(place.includes("deliverVerifyReconnect({"), "재시도는 재연결 콜러블이어야 한다");
+  assert.ok(place.includes("if (!sessionId || !verifyOffer || verifyDialing) return;"), "오퍼 문서가 없으면(계열 B 폴백) 진입 0");
+  // 계열 B — 참가자 의사 operand는 상수 false(§49 V5)이고, 그 값으로는 게이트가 닫힌다(폴백 계열 B = 오퍼 문서 0).
+  assert.ok(pageCode.includes("const [verifyIntentExpressed] = useState(false);"));
+  assert.equal(shouldAnnounceVerifyOffer({ series: "B", gateReached: true, intentExpressed: false }), false);
+  assert.equal(shouldAnnounceVerifyOffer({ series: "A", gateReached: true, intentExpressed: false }), true, "대조군");
+  // 새 맥락 주입 · 넛지 코드는 오퍼 개시 · 확인 권유 백스톱과 무관하다.
+  for (const forbidden of ["deliverVerifyOffer", "claimVerifyAnnounceSlot", "verifyOfferPhaseRef"]) {
+    assert.equal(recoveryCode.includes(forbidden), false, `순수 규칙이 ${forbidden}를 안다`);
+  }
+});
+
+// ══ 5. 체크리스트 — END_CALL_LIVE_AVAILABLE=false여도 공회전이 끝난다 ═══════════════════════════════
+
+/** 서버 운영값을 소스에서 읽는다(⛔ liveTools.ts는 이 PR이 고치지 않는다 — 값이 무엇이든 아래 판정이 같아야 한다). */
+function readEndCallLiveAvailable(): boolean {
+  const src = readFileSync("functions/src/realtime/liveTools.ts", "utf8");
+  const m = /export const END_CALL_LIVE_AVAILABLE = (true|false);/.exec(src);
+  assert.ok(m, "END_CALL_LIVE_AVAILABLE 선언을 찾지 못했다");
+  return m[1] === "true";
+}
+
+/**
+ * audit-A 대본 A의 Live 구간(참가자 "보냈어요" → 사기범 대기 턴 → 참가자 침묵 15초)을 클라 규칙으로 돌린다. `endCallLive`는
+ * 서버 스위치 값이다 — 클라 규칙은 이 값을 **입력으로 받지 않으므로** 결과가 같아야 한다(끊기 경로에 기대지 않는다).
+ */
+function simulateStallAfterTransfer(endCallLive: boolean): { nudges: number; confirmInjected: boolean; liveTools: { endCall?: string } } {
+  const liveTools = endCallLive ? { endCall: "end_call" } : {};
+  // 결과 신호: 백스톱 경로로 필수 계좌 문자 도착 → 안내가 큐를 떠나며 결과 신호가 뒤따른다.
+  let confirm = planConfirmResultInjection(INITIAL_CONFIRM_RESULT_INJECTION_STATE, {
+    instruction: CONFIRM,
+    announceQueuedText: ANNOUNCE,
+    latched: false,
+  });
+  confirm = releaseConfirmResultOnDispatch(confirm.state, ANNOUNCE);
+  // 넛지: 참가자 "알겠어요, 보냈어요" → 사기범 "잠시만 기다려 주세요" → 15초 침묵(1초 점검).
+  const events: StallNudgeEvent[] = [
+    { type: "userSpeech", nowMs: 0 },
+    turn(1000, isStallLine("네, 입금 확인되는 대로 신규 대출 승인 절차를 빠르게 진행 도와드리겠습니다. 잠시만 기다려 주세요.")),
+  ];
+  for (let t = 2000; t <= 16000; t += 1000) events.push(tick(t));
+  return { nudges: run(events).fires.length, confirmInjected: confirm.injectNow === CONFIRM, liveTools };
+}
+
+test("[PR-A2 체크리스트 · end_call 끔] 서버 스위치가 false(주입)여도 결과 신호 주입 1 · 대기 뒤 넛지 1 — 운영값으로 돌려도 같다", () => {
+  const off = simulateStallAfterTransfer(false);
+  assert.equal(off.liveTools.endCall, undefined, "전제 — 끔이면 클라 credentials에 end_call이 없다");
+  assert.equal(off.confirmInjected, true, "끔에서 결과 신호가 주입되지 않는다");
+  assert.equal(off.nudges, 1, "끔에서 대기 뒤 침묵 넛지가 나가지 않는다(R6 공회전 그대로)");
+  const operational = readEndCallLiveAvailable();
+  const op = simulateStallAfterTransfer(operational);
+  console.log(`[PR-A2 end_call] 운영값 END_CALL_LIVE_AVAILABLE=${operational} · 끔 넛지 ${off.nudges} · 운영값 넛지 ${op.nudges}`);
+  assert.deepEqual({ nudges: op.nudges, confirmInjected: op.confirmInjected }, { nudges: off.nudges, confirmInjected: off.confirmInjected });
+});
+
+test("[PR-A2 체크리스트 · end_call 끔] 새 코드는 끊기 경로를 참조하지 않는다 — 순수 규칙 · 넛지 블록 · 맥락 주입 effect · 결과 주입 · 재시도 경로", () => {
+  const blocks: Array<[string, string]> = [
+    ["stallRecovery.ts", recoveryCode],
+    ["넛지 블록", slice(sessionCode, "let stallNudgeState = INITIAL_STALL_NUDGE_STATE;", "let turnInProgress = false;")],
+    ["맥락 주입 effect", slice(sessionCode, "if (!contextTurn || !contextTurn.text.trim()) return;", "}, [contextTurn?.seq]);")],
+    ["결과 주입(화면)", slice(pageCode, "const offerConfirmResult = useCallback(", "const handleConfirmResultInstruction = ")],
+    ["재시도(화면)", slice(pageCode, "const handlePlaceVerifyCall = async () => {", "useEffect(() => {")],
+  ];
+  for (const [name, code] of blocks) {
+    assert.equal(/endCall|end_call|END_CALL|requestScammerHangup|onScammerHangup/.test(code), false, `${name}가 끊기 경로를 참조한다`);
+  }
+});
+
+// ══ 6. 배선(G510 래치 · 순서 · G105 · X5) ══════════════════════════════════════════════════════════
+
+test("[PR-A2 배선 · 세션 컴포넌트] 넛지는 래치 뒤 0 · silence 큐 턴 · 비어 있지 않은 경계에서만 판정 · 참가자 발화가 취소 · 언마운트 정리", () => {
+  const check = slice(sessionCode, "const runStallNudgeCheck = () => {", "const noteScammerTurnForStallNudge = ");
+  assert.ok(
+    check.indexOf("if (handlersRef.current.isHangupLatched()) return;") >= 0 &&
+      check.indexOf("if (handlersRef.current.isHangupLatched()) return;") < check.indexOf("dispatchClientTurn("),
+    "넛지가 래치 뒤에도 나간다(G510)",
+  );
+  assert.ok(check.includes('dispatchClientTurn({ type: "request", turn: { kind: "silence", text: STALL_NUDGE_TEXT }, nowMs });'));
+  assert.ok(check.includes("otherNudgeArmed: silenceNudgeState.armedAt !== null,"));
+  const tc = slice(sessionCode, "if (hasTurnComplete) {", "onerror:");
+  assert.ok(tc.indexOf("const scammerTurnText = scammerBuffer;") < tc.indexOf("flushTranscript();"), "flush가 비운 뒤에 읽는다");
+  assert.ok(tc.includes("if (!emptyTurn) noteScammerTurnForStallNudge(scammerTurnText);"), "빈 마감에서도 판정한다");
+  const note = slice(sessionCode, "const noteUserSpeechForNudge = () => {", "let clientTurnTick");
+  assert.ok(note.includes('stallNudgeState = stepStallNudge(stallNudgeState, { type: "userSpeech", nowMs: performance.now() }).state;'));
+  assert.ok(slice(sessionCode, "const cleanup = () => {", "cleanupRef.current = cleanup;").includes("clearStallNudgeTimer();"));
+  assert.ok(sessionCode.includes("}, STALL_SILENCE_SEC * 1000);"), "대기는 설계값 상수로만 건다");
+});
+
+test("[PR-A2 배선 · 세션 컴포넌트] 맥락 주입 슬롯 — instructionTurn 뒤 · personaStateTurn 앞 effect · 래치 가드 · 맥락 주입 함수 경유(turnComplete:false) · 전사 기록 0 · 결과 신호는 도구 응답 전송 뒤", () => {
+  const effect = slice(sessionCode, "if (!contextTurn || !contextTurn.text.trim()) return;", "}, [contextTurn?.seq]);");
+  assert.ok(effect.includes("if (handlersRef.current.isHangupLatched()) return;"));
+  assert.ok(effect.includes("injectContextRef.current?.(contextTurn.text, contextTurn.delivery);"));
+  assert.equal(/onTranscriptTurn|turnComplete: true|requestClientTurnRef/.test(effect), false);
+  const iInstr = sessionCode.indexOf("}, [instructionTurn?.seq]);");
+  const iCtx = sessionCode.indexOf("}, [contextTurn?.seq]);");
+  const iPersona = sessionCode.indexOf("}, [personaStateTurn?.seq]);");
+  assert.ok(iInstr < iCtx && iCtx < iPersona, "같은 렌더에서 도착 안내가 결과 신호보다 먼저 나가야 한다");
+  const toolBlock = slice(sessionCode, "const responses = await collectToolResponses(", 'dispatchClientTurn({ type: "toolResponseSent"');
+  assert.ok(
+    toolBlock.indexOf("session.sendToolResponse(") < toolBlock.indexOf("handlersRef.current.onConfirmResultInstruction?.(confirmText)"),
+    "결과 신호가 도착 안내(도구 응답)보다 먼저 간다",
+  );
+  assert.ok(sessionCode.includes('if (result.status === "delivered" && result.confirmResultInstruction) {'));
+});
+
+test("[PR-A2 배선 · 화면] 백스톱은 안내를 큐에 넣기 전에 판정 · 드레인이 대기분을 푼다 · 재시도는 순수 판정 · 슬롯을 세션 컴포넌트에 넘긴다", () => {
+  const backstop = slice(pageCode, 'if (result.status === "none_pending") state.nonePending = true;', 'if (result.status === "nudge"');
+  const iOffer = backstop.indexOf("offerConfirmResult(result.confirmResultInstruction, result.announceInstruction);");
+  const iEnqueue = backstop.indexOf('enqueueTurnInstruction(result.announceInstruction, "sms");');
+  assert.ok(iOffer >= 0 && iOffer < iEnqueue, "안내가 즉시 드레인되면 대기분이 영영 안 풀린다");
+  const drain = slice(pageCode, "const drainInstructionQueue = useCallback(() => {", "const enqueueTurnInstruction = useCallback(");
+  assert.ok(
+    drain.indexOf("setInstructionTurn((prev)") < drain.indexOf("releaseConfirmResultOnDispatch(confirmResultInjectionRef.current, item.text);"),
+  );
+  const offer = slice(pageCode, "const offerConfirmResult = useCallback(", "const handleConfirmResultInstruction = ");
+  assert.ok(offer.includes("latched: isEndLatched(callEndingRef.current),"));
+  const place = slice(pageCode, "const handlePlaceVerifyCall = async () => {", "useEffect(() => {");
+  assert.ok(place.includes("const plan = planVerifyReconnectFailure({"));
+  assert.ok(place.includes("for (let attempt = 1; attempt <= VERIFY_RECONNECT_MAX_ATTEMPTS && result === null; attempt += 1) {"));
+  assert.ok(place.includes("latched: isEndLatched(callEndingRef.current),"), "래치 뒤 재시도 · 주입 0(G510)");
+  assert.ok(place.includes('delivery: "verifyReconnectFailed"'));
+  assert.ok(pageCode.includes("contextTurn={contextTurn}"));
+  assert.ok(pageCode.includes("onConfirmResultInstruction={handleConfirmResultInstruction}"));
+  // 자동 전환 래치(오퍼당 1회)는 그대로다.
+  assert.ok(pageCode.includes("autoReconnectOfferIdRef.current = verifyOffer.offerId"));
+});

@@ -21,9 +21,19 @@
  * | `speakerSwitch` | 확인 창구 재연결 지시(`reconnectInstruction`) | 화자 전환 첫 발화 — `relayGreeting` 텍스트 턴(`turnComplete:true`, §71.5 큐 경유) |
  * | `smsNudge` | 문자 백스톱 넛지(서버 `nudgeInstruction` — T191 문자 도달 조건 설계 "백스톱" 표가 정한 행) | 맥락 주입(`turnComplete:false`) · **침묵 넛지 대상 아님**(문자가 아직 안 갔다 — "방금 보낸 문자" 문면이 거짓이 된다) |
  *
- * ⛔ 표에 없는 지시가 생기면 행을 추가할지 먼저 묻는다(§82.4.2 머리말).
+ * | `confirmResult` | PR-A2 — 확인 결과 신호(서버 `confirmResultInstruction`, 조건형 1줄 · 필수 계좌·링크 문자 도착 뒤 세션당 1회) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖**(`stallRecovery.ts` `planConfirmResultInjection`) · 침묵 넛지 대상 아님 |
+ * | `verifyReconnectFailed` | PR-A2 — 자동 호 전환이 재시도까지 실패(`stallRecovery.ts` `VERIFY_RECONNECT_FAILED_TEXT`) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖** · 침묵 넛지 대상 아님 |
+ *
+ * ⛔ 표에 없는 지시가 생기면 행을 추가할지 먼저 묻는다(§82.4.2 머리말). ⚠️ 위 두 행(`confirmResult` ·
+ * `verifyReconnectFailed`)은 PR-A2 지시(오케스트레이터 2026-10-20)로 추가했다 — 설계 표(§82.4.2) 반영은 architect 몫으로 남는다.
  */
-export type InstructionDelivery = "smsAnnounce" | "verifyAnnounce" | "speakerSwitch" | "smsNudge";
+export type InstructionDelivery =
+  | "smsAnnounce"
+  | "verifyAnnounce"
+  | "speakerSwitch"
+  | "smsNudge"
+  | "confirmResult"
+  | "verifyReconnectFailed";
 
 /** G31 큐(`@/lib/verifyintercept` `PendingInstruction`) 항목 → 전달 방식. */
 export function deliveryForInstruction(item: {
