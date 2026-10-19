@@ -165,7 +165,7 @@ const OFFER_VERIFICATION_DESK_DECLARATION: FunctionDeclaration = {
 /**
  * T192 C3(§79.19 (5) 4 · 5) — `reason` enum 필수(S5b `purpose` 선례). 서버는 누락 · 오기입도 `unspecified`로 받는다
  * (`normalizeScammerHangupKind` — 거절 0). 설명 문면은 서버 소유 · ⛔ 숫자 · 횟수 0(G130).
- * T192 C6-F2(§79.21 (10) ② · G612) — 문장1 범위를 "그 응답의 모든 말"로 · 도구 결과 전 알림 · 종료 · 작별 금지 1문장 신설
+ * T192 C6-F2(§79.21 (10) ② · G621) — 문장1 범위를 "그 응답의 모든 말"로 · 도구 결과 전 알림 · 종료 · 작별 금지 1문장 신설
  * (TOOL 꼬리와 같은 1회분 · reason · 거절 문장 바이트 동일).
  */
 const END_CALL_DECLARATION: FunctionDeclaration = {
