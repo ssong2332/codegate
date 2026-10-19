@@ -62,7 +62,8 @@ export function confirmResultPurposeFor(item: FlowVariantSms | undefined): "tran
 // |---|---|---|
 // | 계좌(transfer) | 보냈 · 부쳤 · 입금/이체/송금 + 했·완료 · 넣었 | "알겠어요, 보냈어요" · "이체했습니다" |
 // | 링크(link) | 눌렀 · 들어갔 · 접속했 · 입력했 · 신청했 · 진행했 · 인증했 | "링크 눌러서 신청했어요" |
-// | 공통 | 다 했 · 했어요 · 했습니다 · 완료했/완료됐 · 마쳤 · 끝냈 | "말씀하신 대로 했어요" |
+// | 공통(완료 동사) | 다 했 · 했어요 · 했습니다 · 완료했/완료됐 · 마쳤 · 끝냈 — ⚠️ **단독으로는 주장이 아니다**(아래 행과 곱한다) | — |
+// | 공통(행동 대상 허용목록 · A-1 리뷰 Major-2) | 같은 문장에 행동 대상(송금·입금·이체·계좌·링크·신청·설치·앱·인증) 또는 지시 따름(말씀하신 대로·안내대로·알려 주신 대로·시키신 대로·하라는 대로·문자 안내대로)이 있을 때만 공통 완료 동사를 주장으로 센다 | "말씀하신 대로 했어요" · "이체 다 했어요" ⭕ / "아들한테 얘기했어요" · "의심했어요" · "말했어요" ✖ |
 // | 제외(부정·유보) | 안/못 + 동사 · 않았 · 아직 · 싫 · 안 할 · 못 하겠 · 할까요 · 하나요 · 해야 | "아직 안 보냈어요" |
 // | 제외(다른 행동) | 전화했 · 물어봤 · 신고했 · 확인했 · 알아봤 | "은행에 전화했어요" — 문자 안내를 마친 것이 아니다 |
 // | 제외(의문문) | 그 문장이 `?`로 끝난다 | "보냈는데 확인됐어요?"의 첫 절은 같은 문장이라 제외된다 |
@@ -71,6 +72,12 @@ const CLAIM_BY_PURPOSE: Record<"transfer" | "link", RegExp> = {
   link: /눌렀|들어갔|접속했|입력했|신청했|진행했|인증했/,
 };
 const CLAIM_GENERIC = /다\s*했|했어요|했습니다|완료(?:했|됐)|마쳤|끝냈/;
+/**
+ * A-1 리뷰 Major-2 — 공통 완료 동사는 이 허용목록과 **같은 문장**에 있을 때만 센다(허용목록 방향 — 제외목록을 늘리는 방식은
+ * J-2에서 두 번 샜다). "문자"는 넣지 않았다("아들한테 문자로 얘기했어요"가 걸린다) — 문자는 "문자 안내대로"로만 센다.
+ */
+const CLAIM_GENERIC_TARGET =
+  /송금|입금|이체|계좌|링크|신청|설치|앱|인증|말씀하신\s*대로|안내(?:하신|해\s*주신)?\s*대로|알려\s*주신\s*대로|시키신\s*대로|하라는\s*대로|하라고\s*하신\s*대로|문자(?:\s*안내)?\s*대로/;
 const CLAIM_EXCLUDE =
   /(?:안|못)\s*(?:보냈|했|넣었|눌렀|해)|않았|아직|싫|안\s*할|못\s*하겠|할까요|하나요|해야|전화했|물어봤|신고했|확인했|알아봤/;
 
@@ -85,7 +92,7 @@ export function isCompletionClaim(text: string, purpose: "transfer" | "link"): b
     const sentence = raw.trim();
     if (sentence.length === 0 || sentence.endsWith("?")) return false;
     if (CLAIM_EXCLUDE.test(sentence)) return false;
-    return CLAIM_BY_PURPOSE[purpose].test(sentence) || CLAIM_GENERIC.test(sentence);
+    return CLAIM_BY_PURPOSE[purpose].test(sentence) || (CLAIM_GENERIC.test(sentence) && CLAIM_GENERIC_TARGET.test(sentence));
   });
 }
 

@@ -79,7 +79,7 @@ test("[A-1/⑦ 판정표] 2행 — 문자가 도착한 바로 그 발화에서�
 });
 
 test("[A-1/⑦ 완료 주장] 판정표 — 계좌·링크·공통은 잡고, 부정·유보·다른 행동·의문문은 잡지 않는다", () => {
-  for (const text of ["알겠어요, 보냈어요", "방금 이체했습니다", "180만 원 넣었어요", "말씀하신 대로 했어요", "네 다 했어요. 이제 뭐 하면 돼요?"]) {
+  for (const text of ["알겠어요, 보냈어요", "방금 이체했습니다", "180만 원 넣었어요", "말씀하신 대로 했어요", "네 이체 다 했어요. 이제 뭐 하면 돼요?"]) {
     assert.equal(isCompletionClaim(text, "transfer"), true, `놓침: ${text}`);
   }
   for (const text of ["링크 눌러서 신청했어요", "본인확인 입력했습니다"]) {
@@ -155,12 +155,14 @@ test("[A-1/⑦ 배선] sendMessage — 다른 턴 지시가 없는 턴에만 pla
   assert.match(src, /import \{ planConfirmResult \} from "\.\.\/inCallSms\/confirmResult";/);
   assert.match(
     src,
-    /const confirmPlan =\n\s*smsDeliveredLoaded && turnChoice === "none" && !otpCheckInstruction && verifyState\?\.placed !== true\n\s*\? planConfirmResult\(\{/,
+    /const confirmPlan =\n\s*smsDeliveredLoaded &&\n\s*turnChoice === "none" &&\n\s*!otpCheckInstruction &&\n\s*!smsOfferInstruction &&\n\s*!smsNudgeInstruction &&\n\s*verifyState\?\.placed !== true\n\s*\? planConfirmResult\(\{/,
   );
   assert.match(src, /currentUserText: maskedUserText,/);
   assert.match(src, /\[confirmPlan\?\.instruction, escalatedCallInstruction\]\.filter\(Boolean\)/);
   assert.match(src, /\[promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction\]/);
-  // 계산 순서 — 인증번호 대조(otpCheckInstruction) 뒤, LLM 호출 앞.
+  // 계산 순서 — 인증번호 대조 · 문자 마커 제시 · 넛지가 정해진 뒤(리뷰 Minor-1 — 같은 턴 겹침 0), LLM 호출 앞.
+  assert.ok(src.indexOf("const smsOfferInstruction =") < src.indexOf("const confirmPlan ="), "문자 마커 제시가 정해진 뒤에 판정해야 한다");
+  assert.ok(src.indexOf("let smsNudgeInstruction") < src.indexOf("const confirmPlan ="), "넛지가 정해진 뒤에 판정해야 한다");
   const iConfirm = src.indexOf("const confirmPlan =");
   assert.ok(src.indexOf("const otpCheckInstruction = otpCheck.instruction;") < iConfirm, "인증번호 대조 결과를 본 뒤에 판정해야 한다");
   assert.ok(iConfirm < src.indexOf("const completion = await completeWithFallback("), "LLM 호출 앞에서 판정해야 한다");
@@ -170,4 +172,52 @@ test("[A-1/⑦ 배선] deliverInCallSms — 도착 응답에 선언 항목으로
   const src = read("inCallSms/index.ts");
   assert.match(src, /const declaredItem = declared\.find\(\(d\) => d\.smsId === item\.smsId\);/);
   assert.match(src, /\.\.\.buildInCallSmsResponse\(item, \{ placed, fictionalBankName \}\),\n\s*\.\.\.buildConfirmResultField\(\{ placed \}, declaredItem\),/);
+});
+
+// ── A-1 리뷰 Major-2 — 송금·전송과 무관한 "~했어요" 오탐(허용목록 행 추가) ─────────────────────────
+const MAJOR2_FALSE_POSITIVES = [
+  "아들한테 얘기했어요",
+  "의심했어요",
+  "말했어요",
+  "남편이랑 상의했어요",
+  "아들한테 문자로 얘기했어요",
+  "생각 다 했어요",
+  "고민했습니다",
+];
+const MAJOR2_TRUE_POSITIVES: Array<[string, "transfer" | "link"]> = [
+  ["알겠어요, 보냈어요", "transfer"],
+  ["방금 이체했습니다", "transfer"],
+  ["180만 원 넣었어요", "transfer"],
+  ["말씀하신 대로 했어요", "transfer"],
+  ["알려 주신 대로 했습니다", "transfer"],
+  ["문자 안내대로 했어요", "transfer"],
+  ["네 이체 다 했어요", "transfer"],
+  ["송금 완료했어요", "transfer"],
+  ["링크 눌러서 신청했어요", "link"],
+  ["앱 설치 마쳤어요", "link"],
+  ["본인확인 입력했습니다", "link"],
+];
+
+test("[A-1 리뷰 Major-2] 행동 대상이 송금·전송·설치·링크가 아닌 '~했어요'는 완료 주장이 아니다 — 필수 문자 도착 뒤에도 confirm 0", () => {
+  const delivered = [{ smsId: "loan-account", userTurnsAtArrival: 7 }];
+  for (const text of MAJOR2_FALSE_POSITIVES) {
+    assert.equal(isCompletionClaim(text, "transfer"), false, `오탐(transfer): ${text}`);
+    assert.equal(isCompletionClaim(text, "link"), false, `오탐(link): ${text}`);
+    const plan = planConfirmResult({ declared: [TRANSFER], delivered, userTurns: 8, currentUserText: text, priorUserTexts: SCRIPT_A_PRIORS });
+    assert.equal(plan.reason, "no_claim", `confirm이 나갔다: ${text}`);
+  }
+});
+
+test("[A-1 리뷰 Major-2 · 회귀] 송금·전송·설치·링크·지시 따름의 완료 주장은 그대로 잡힌다", () => {
+  for (const [text, purpose] of MAJOR2_TRUE_POSITIVES) {
+    assert.equal(isCompletionClaim(text, purpose), true, `놓침(${purpose}): ${text}`);
+  }
+});
+
+test("[A-1 리뷰 Major-2 · 역방향] 고치기 전 판정(공통 완료 동사 단독)이면 오탐 표본이 주장으로 잡힌다 — 이 테스트가 그 결함을 실제로 재현한다", () => {
+  // 고치기 전 정규식 그대로(confirmResult.ts 리뷰 전 CLAIM_GENERIC 단독 판정).
+  const legacyGeneric = /다\s*했|했어요|했습니다|완료(?:했|됐)|마쳤|끝냈/;
+  const legacyHits = MAJOR2_FALSE_POSITIVES.filter((t) => legacyGeneric.test(t));
+  assert.ok(legacyHits.length >= 5, `역검증 전제 — 옛 판정이 오탐 표본을 잡아야 한다(잡힌 수 ${legacyHits.length})`);
+  for (const t of legacyHits) assert.equal(isCompletionClaim(t, "transfer"), false, `현행 판정이 여전히 오탐: ${t}`);
 });

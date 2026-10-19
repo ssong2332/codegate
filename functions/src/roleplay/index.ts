@@ -434,9 +434,15 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         : undefined;
     // ②-h A-1 ⑦ — 필수 계좌·링크 문자가 도착한 뒤 참가자가 "했다" 류로 응한 턴에 1회 "결과(입금 확인·처리 완료)를 알리고
     // 다음 단계(또는 마무리)로" 지시(`inCallSms/confirmResult.ts` 판정표). G31(턴 지시 1개)에 맞춰 **다른 턴 지시가 없는 턴에만**
-    // 싣는다(문자 announce · 확인 오퍼 · 응낙 · 인증번호 대조가 있는 턴 · 호 전환 뒤 = 0). ⛔ 공유 판정 패턴(J-2) 무접촉.
+    // 싣는다(문자 announce · 확인 오퍼 · 응낙 · 인증번호 대조 · 문자 마커 제시 · 백스톱 넛지가 있는 턴 · 호 전환 뒤 = 0 — 리뷰 Minor-1).
+    // ⛔ 공유 판정 패턴(J-2) 무접촉.
     const confirmPlan =
-      smsDeliveredLoaded && turnChoice === "none" && !otpCheckInstruction && verifyState?.placed !== true
+      smsDeliveredLoaded &&
+      turnChoice === "none" &&
+      !otpCheckInstruction &&
+      !smsOfferInstruction &&
+      !smsNudgeInstruction &&
+      verifyState?.placed !== true
         ? planConfirmResult({
             declared: smsDeclared,
             delivered: smsDelivered,
