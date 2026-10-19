@@ -176,6 +176,25 @@ export function sessionDeclaresInCallSms(scenarioId: string, flowVariantId: stri
 }
 
 /**
+ * A-1 ②(2026-10-19 · audit-A R3) — 프롬프트 문자 예외 항목에 실을 **선언 목적**(`promptAssembly` `inCallSmsPurposes`).
+ * 호출부 3곳(`geminiProvider` · `roleplay/index` · `openingLine`)이 `sessionDeclaresInCallSms`와 나란히 이 함수를 부른다
+ * (조건식 복사 금지 — 같은 원천 `resolveDeclaredSms`).
+ * - 변형 ID가 없으면 `undefined`(종전 템플릿 — 조립 산출물 바이트 동일 · `sessionDeclaresInCallSms`의 무소급 규칙과 같은 갈래).
+ * - 변형 ID가 있으면 선언 순서대로 중복 없는 목적 목록(선언 0이면 빈 배열 — 그때는 문자 문면 자체가 꺼진다).
+ */
+export function sessionDeclaredSmsPurposes(
+  scenarioId: string,
+  flowVariantId: string | undefined,
+): SmsPurpose[] | undefined {
+  if (!flowVariantId) return undefined;
+  const purposes: SmsPurpose[] = [];
+  for (const item of resolveDeclaredSms(scenarioId, flowVariantId).declared) {
+    if (!purposes.includes(item.purpose)) purposes.push(item.purpose);
+  }
+  return purposes;
+}
+
+/**
  * ⭐ 리뷰 M1 — 텍스트 폴백 판정에 쓰는 사용자 발화 수 = max(서버 `messages`의 user 수, 마지막 도착 문서의
  * `userTurnsAtArrival`). 실시간 통화가 도중에 폴백으로 강등되면 실시간 구간의 전사는 통화 종료 때에야 `messages`에
  * 올라가므로(`submitTranscript`) 서버 계수가 실시간 클라 계수보다 작다. 보정하지 않으면 실시간에서 받은 문자의

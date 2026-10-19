@@ -95,6 +95,15 @@ export const DEFAULT_MOCK_SCREEN_KIND: MockScreenKind = "credential-form";
 export const MOCK_INSTALL_CONSENT_INSTRUCTION =
   "(참가자가 방금 안내대로 설치와 권한 허용을 마쳤다. 지금 캐릭터로서 한두 문장으로 그 사실을 자연스럽게 확인해 주고, 이제 담당자가 전화로 이어서 안내하겠다고 말하라. 설치 절차·권한의 구체적인 작동 방식을 설명하지는 마라.)";
 
+/**
+ * A-1 ⑧(2026-10-19 · audit-B 1일차 #2) — 이미 통화로 넘어온 뒤(메신저→voice 전이 뒤 폴백)에 응낙이 알려질 때의 변형.
+ * 위 원문의 "전화로 이어서 안내하겠다고 말하라"가 통화 중에는 **이미 일어난 일을 다시 예고**하게 만들어, 폴백에서
+ * "곧 전화드리겠습니다"가 반복됐다. 판정은 `roleplay/escalatedCall.ts` `isEscalatedVoiceCall` 한 곳이 소유한다.
+ * ⛔ 원문(위)은 메신저 단계 응낙용으로 그대로 둔다(바이트 동일).
+ */
+export const MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL =
+  "(참가자가 방금 안내대로 설치와 권한 허용을 마쳤다. 지금 캐릭터로서 한두 문장으로 그 사실을 자연스럽게 확인해 주고, 이미 통화 중이니 전화하겠다는 말 없이 이 통화에서 다음 안내를 바로 이어가라. 설치 절차·권한의 구체적인 작동 방식을 설명하지는 마라.)";
+
 // UF-012 2단계 — 지원금 안내 문자(1단계)에서 이어지는 모의 앱 설치 화면.
 // OQ-42 확정 = (b) 지원금 문자 확장 → `messenger-subsidy-smishing-sms`의 기존 escalation 배선을
 // 그대로 재사용한다(신규 전이 경로 미신설).

@@ -6,6 +6,7 @@ import {
   HANGUP_RULE_SIGNAL,
   HANGUP_RULE_TOOL,
   HANGUP_RULE_TOOL_VERIFY_SUFFIX,
+  NO_STALL_RULE,
   toLlmHistory,
   wrapUserInputAsData,
 } from "../promptAssembly";
@@ -14,8 +15,17 @@ import { SCENARIO_PROMPTS, FAMILY_ACCIDENT_SCENARIO_ID } from "../../scenarios";
 // **실제 조립 값**으로 매트릭스에 들어오게 하는 입력들.
 import { hasInCallSms, IN_CALL_SMS } from "../../scenarios/inCallSms";
 import { hasVerifyIntercept, VERIFY_INTERCEPT } from "../../scenarios/verifyIntercept";
-import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_SCREENS } from "../../scenarios/mockScreens";
+import {
+  MOCK_INSTALL_CONSENT_INSTRUCTION,
+  MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL,
+  MOCK_SCREENS,
+} from "../../scenarios/mockScreens";
 import { isL3Procedural } from "../l3Depth";
+import { FLOW_VARIANTS } from "../../scenarios/flowVariants";
+import type { SmsPurpose } from "../../scenarios/flowVariants";
+import { sessionDeclaredSmsPurposes } from "../../inCallSms/smsGate";
+import { buildConfirmResultInstruction } from "../../inCallSms/confirmResult";
+import { ESCALATED_CALL_CONTEXT_INSTRUCTION } from "../escalatedCall";
 import { verifySeriesFor } from "../../realtime/liveTools";
 import { scanText } from "../../scenarios/__tests__/harmlessnessPatterns";
 
@@ -612,8 +622,13 @@ function realTurnInstructionsFor(scenarioId: string): string[] {
   if (verify) instructions.push(verify.announceInstruction, verify.reconnectInstruction);
   for (const sms of IN_CALL_SMS[scenarioId] ?? []) instructions.push(sms.announceInstruction);
   if ((MOCK_SCREENS[scenarioId] ?? []).length > 0) {
-    instructions.push(MOCK_INSTALL_CONSENT_INSTRUCTION);
+    instructions.push(MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL);
   }
+  // A-1 ⑦⑧ — 새 폴백 턴 지시(확인 결과 · 에스컬레이션 뒤 맥락)도 같은 전수 매트릭스에 싣는다.
+  if ((IN_CALL_SMS[scenarioId] ?? []).length > 0) {
+    instructions.push(buildConfirmResultInstruction("transfer"), buildConfirmResultInstruction("link"));
+  }
+  instructions.push(ESCALATED_CALL_CONTEXT_INSTRUCTION);
   return instructions;
 }
 
@@ -717,10 +732,14 @@ test("[T86 전수②] T83·T84가 실제로 싣는 **진짜 턴 지시 문구**�
     }
   }
   // 실제 지시를 가진 시나리오가 하나도 없으면 이 테스트가 조용히 무의미해진다.
+  // A-1 ⑦⑧(2026-10-19) — realTurnInstructionsFor가 늘었다: 모의 설치 시나리오 +1(통화 중 응낙 변형) · 문자 시나리오 +2(확인 결과
+  // transfer/link) · 전 시나리오 +1(에스컬레이션 뒤 맥락). 늘어난 것은 검사 대상이다.
   const expected =
     (Object.keys(VERIFY_INTERCEPT).length * 2 +
       Object.values(IN_CALL_SMS).flat().length +
-      Object.keys(MOCK_SCREENS).length) *
+      Object.keys(MOCK_SCREENS).length * 2 +
+      Object.keys(IN_CALL_SMS).filter((k) => IN_CALL_SMS[k].length > 0).length * 2 +
+      Object.keys(SCENARIO_PROMPTS).length) *
     3;
   assert.equal(combos, expected, `실 턴 지시 조합 수(예상 ${expected})`);
   assert.ok(combos >= 60, `실 턴 지시 조합이 60건 이상이어야 한다(현재 ${combos})`);
@@ -1538,7 +1557,7 @@ const VERIFY_INTERCEPT_CATALOG_IDS = Object.keys(VERIFY_INTERCEPT);
 const G403_PROMISE_LITERALS = ["연결해 드리겠습니다", "연결해 드릴", "확인해 드리겠습니다"];
 
 // T191 S5 — 고급 전용 ① card-delivery-call이 확인 무력화 카탈로그를 재사용해(AC-097 (c) ①) 7종이 됐다.
-test("[§64.8 G403] TOOL_DRIVEN 조립(카탈로그 7종 × advanced × 도구 선언) — 이행 약속 표현 0건 + DEFAULT는 존재 유지(양방향)", () => {
+test("[§64.8 G403 · A-1 ⑥] TOOL_DRIVEN · DEFAULT 조립(카탈로그 7종 × advanced) — 이행 약속 표현 0건 + 받아 주기 문구 존재(양방향)", () => {
   assert.equal(
     VERIFY_INTERCEPT_CATALOG_IDS.length,
     7,
@@ -1561,15 +1580,27 @@ test("[§64.8 G403] TOOL_DRIVEN 조립(카탈로그 7종 × advanced × 도구 �
       );
     }
 
-    // 양방향 — 같은 6종의 DEFAULT 조립(도구 미선언)에서는 이행 약속 문구가 그대로 있어야 한다.
+    // ⭐ A-1 ⑥(2026-10-19 · audit-A R4) — 종전 이 자리는 "DEFAULT에는 이행 약속 문구가 **남아 있어야** 한다"(§64 무접촉)였다.
+    // DEFAULT는 폴백·오프닝에만 실리고, 폴백 계열 B는 오퍼 게이트가 늘 닫혀 "연결해 드리겠습니다, 잠시만요" 뒤에 연결이
+    // 오지 않았다 ⇒ A-1이 DEFAULT도 "받아 주고 하던 이야기를 잇는다"로 바꿨다(오케스트레이터 승인 범위 ⑥).
+    // 양방향은 유지한다: DEFAULT에서도 이행 약속 표현 0 + **새 정본 문구가 실제로 실려 있다**(DEFAULT를 통째로 지운 상태를 잡는다).
     const defaultAssembled = buildSystemPrompt(prompt, {
       ...realOptionsFor(id),
       difficultyLevel: "advanced",
     });
+    for (const literal of G403_PROMISE_LITERALS) {
+      assert.equal(
+        defaultAssembled.includes(literal),
+        false,
+        `${id}: DEFAULT 조립에 이행 약속 표현 "${literal}"이 남아 있다(A-1 ⑥ — 폴백에서는 연결이 오지 않을 수 있다)`,
+      );
+    }
     assert.ok(
-      defaultAssembled.includes("확인 부서를 연결해 드리겠습니다"),
-      `${id}: DEFAULT 조립에서까지 이행 약속 문구가 사라지면 안 된다(G403 양방향 — DEFAULT는 §64 무접촉)`,
+      defaultAssembled.includes("앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다") &&
+        defaultAssembled.includes("받아 둔 뒤 하던 이야기를 그대로 이어간다"),
+      `${id}: DEFAULT 조립에서 확인 받아 주기 문구가 사라졌다(A-1 ⑥ 양방향 — 블록을 통째로 지운 상태)`,
     );
+    assert.equal(defaultAssembled.includes("받아 두고 기다린다"), false, `${id}: 옛 대기 문구가 남아 있다(A-1 ⑥)`);
   }
 });
 
@@ -1829,4 +1860,162 @@ test("[T192/C2 G505 · G130 역검증] 횟수 표현을 끼운 사본은 허용 
     assert.notEqual(poisoned, HANGUP_RULE_TOOL, "주입이 적용되지 않았다 — 앵커가 깨졌다");
     assert.notDeepEqual(findCounterExpressions(poisoned), G505_COUNTER_ALLOWED.tool, `"${injected}" 주입본이 통과했다`);
   }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════
+// ⭐ A-1(2026-10-19 · scratchpad audit-A R1/R3/R4) — "확인한다며 기다리게 하고 결과 없이" 통화가 이어지던 결함.
+// ⚠️ 증분이다. 위 테스트는 G403 · T110 보류 문구 단언 2곳만 A-1 ⑥에 맞춰 고쳤다(그 테스트 안 주석 참고).
+// ══════════════════════════════════════════════════════════════════════════════════════════
+
+const A1_LEVELS = ["beginner", "intermediate", "advanced"] as const;
+const A1_HANGUP_MODES = ["none", "tool", "signal"] as const;
+const A1_PAYLOAD_HEAD = "- **페이로드는 가상값만 쓴다.**";
+
+/** 끊기 슬롯이 실제로 내보내는 문면(T192 C2 정본 — 이 파일 위 import 상수 그대로). */
+function a1ExpectedHangupRule(mode: (typeof A1_HANGUP_MODES)[number], verifyEnabled: boolean): string {
+  if (mode === "tool") return verifyEnabled ? `${HANGUP_RULE_TOOL} ${HANGUP_RULE_TOOL_VERIFY_SUFFIX}` : HANGUP_RULE_TOOL;
+  if (mode === "signal") return HANGUP_RULE_SIGNAL;
+  return HANGUP_RULE_NONE;
+}
+
+/** ① 판정 — 끊기 슬롯 문면(무변경) **바로 뒤**에 '확인 중 금지' 규칙이 있고 그 뒤가 페이로드 항목이다. */
+function a1NoStallFollowsHangup(text: string, hangupRule: string): boolean {
+  return text.includes(`${hangupRule}\n${NO_STALL_RULE}\n${A1_PAYLOAD_HEAD}`);
+}
+
+test("[A-1/①] 전 시나리오 × 3난이도 × 끊기 변형 3종 — '확인 중' 금지 규칙이 끊기 슬롯 바로 뒤에 1회 실리고 슬롯 문면은 그대로다", (t) => {
+  let combos = 0;
+  for (const id of Object.keys(SCENARIO_PROMPTS)) {
+    for (const difficultyLevel of A1_LEVELS) {
+      const verifyInterceptEnabled = hasVerifyIntercept(id) && difficultyLevel === "advanced";
+      for (const hangupMode of A1_HANGUP_MODES) {
+        const assembled = buildSystemPrompt(SCENARIO_PROMPTS[id], {
+          ...realOptionsFor(id),
+          difficultyLevel,
+          verifyInterceptEnabled,
+          hangupMode,
+        });
+        assert.ok(
+          a1NoStallFollowsHangup(assembled, a1ExpectedHangupRule(hangupMode, verifyInterceptEnabled)),
+          `${id}/${difficultyLevel}/${hangupMode}: 끊기 슬롯 바로 뒤에 '확인 중' 금지 규칙이 없다(또는 슬롯 문면이 바뀌었다)`,
+        );
+        assert.equal(assembled.split(NO_STALL_RULE).length - 1, 1, `${id}/${difficultyLevel}/${hangupMode}: 규칙이 1회가 아니다`);
+        combos += 1;
+      }
+    }
+  }
+  t.diagnostic(`A-1 ①: ${combos}조합 전부 끊기 슬롯 바로 뒤 1회`);
+});
+
+test("[A-1/① 순서형] 규칙 문면 — 횟수·서수·턴 번호·숫자 0(F11/G130) + 결과 제시 · 다음 요구 · 마무리 연결 · 대기 금지", () => {
+  assert.deepEqual(findCounterExpressions(NO_STALL_RULE), [], "'확인 중' 금지 규칙에 카운터 표현이 있다(F11/G130)");
+  assert.equal(/[0-9０-９]/.test(NO_STALL_RULE), false, "'확인 중' 금지 규칙에 숫자가 있다(F11/G130)");
+  for (const part of [
+    "같은 대답 안에서 또는 바로 다음 대답에서", // 순서(결과 제시 시점)
+    "확인 결과를 지어내 알려 준다", // 결과 제시
+    "곧바로 다음 요구로 넘어가고", // 다음 요구
+    "바로 위 통화 끝내기 항목이 정한 대로 한다", // 남은 단계가 없을 때 = T192 슬롯에 위임(새 끊기 메커니즘 0)
+    "대기 말을 한 다음 대답에서는 대기 말을 다시 하지 않는다", // 대기 연속 금지(순서형)
+  ]) {
+    assert.ok(NO_STALL_RULE.includes(part), `'확인 중' 금지 규칙에 "${part}"가 없다`);
+  }
+});
+
+test("[A-1/① 역방향] 규칙을 뺀 옛 조립(b7fde97 형태)과 횟수형으로 쓴 사본은 각각 위 검사에 걸린다", () => {
+  const id = "loan-refinance-scam";
+  const assembled = buildSystemPrompt(SCENARIO_PROMPTS[id], { ...realOptionsFor(id), difficultyLevel: "advanced" });
+  const legacy = assembled.replace(`\n${NO_STALL_RULE}`, "");
+  assert.notEqual(legacy, assembled, "역검증 전제 — 규칙이 조립에 실제로 있어야 뺄 수 있다");
+  assert.equal(a1NoStallFollowsHangup(legacy, HANGUP_RULE_NONE), false, "규칙이 없는 옛 조립을 통과시켰다 — 죽은 검사");
+  const counted = NO_STALL_RULE.replace("대기 말을 한 다음 대답에서는", "대기 말을 두 번 연속");
+  assert.ok(findCounterExpressions(counted).length > 0, "횟수형으로 바꾼 사본을 카운터 검출기가 놓쳤다");
+});
+
+// ── ② 문자 예외 항목 — 선언 목적만 ───────────────────────────────────────────────────────
+const A1_SMS_EXAMPLE: Record<SmsPurpose, string> = {
+  identity: `"방금 문자로 간 인증번호를 불러 달라"`,
+  transfer: `"문자로 보낸 계좌로 보내 달라"`,
+  link: `"문자 속 링크를 눌러 달라"`,
+};
+const A1_LEGACY_SMS_KINDS = "문자(계좌 안내·링크·인증번호)";
+
+test("[A-1/②] loan 3난이도 실제 변형 — 인증번호 예시·괄호가 0이고, 선언 목적 예시만 남고, 미선언 문자 금지 1문장이 붙는다", (t) => {
+  const id = "loan-refinance-scam";
+  const variants = FLOW_VARIANTS.filter((v) => v.scenarioId === id);
+  assert.ok(variants.length >= 3, `loan 변형이 3개 이상이어야 한다(현재 ${variants.length})`);
+  for (const variant of variants) {
+    const purposes = sessionDeclaredSmsPurposes(id, variant.variantId);
+    assert.ok(purposes && purposes.length > 0 && !purposes.includes("identity"), `${variant.variantId}: 전제(인증번호 미선언) 깨짐`);
+    for (const toolDrivenTiming of [false, true]) {
+      const assembled = buildSystemPrompt(SCENARIO_PROMPTS[id], {
+        ...realOptionsFor(id),
+        difficultyLevel: variant.level,
+        inCallSmsEnabled: true,
+        inCallSmsPurposes: purposes,
+        toolDrivenTiming,
+      });
+      assert.equal(assembled.includes(A1_SMS_EXAMPLE.identity), false, `${variant.variantId}: 인증번호 요구 예시가 실렸다(R3)`);
+      assert.equal(assembled.includes(A1_LEGACY_SMS_KINDS), false, `${variant.variantId}: 괄호에 인증번호가 남았다(R3)`);
+      for (const p of purposes) assert.ok(assembled.includes(A1_SMS_EXAMPLE[p]), `${variant.variantId}: 선언 목적 ${p}의 예시가 없다`);
+      assert.ok(assembled.includes("인증번호 문자는 보낸 적이 없으니"), `${variant.variantId}: 미선언 문자 금지 문장이 없다`);
+    }
+    t.diagnostic(`A-1 ② ${variant.variantId}(${variant.level}) 선언 목적 = ${purposes.join("·")}`);
+  }
+});
+
+test("[A-1/② 전수] 문자를 선언한 변형 전부 — 미선언 목적 예시 0 · 선언 목적 예시 전부 존재", (t) => {
+  let checked = 0;
+  for (const variant of FLOW_VARIANTS) {
+    const purposes = sessionDeclaredSmsPurposes(variant.scenarioId, variant.variantId);
+    if (!purposes || purposes.length === 0) continue;
+    const assembled = buildSystemPrompt(SCENARIO_PROMPTS[variant.scenarioId], {
+      ...realOptionsFor(variant.scenarioId),
+      difficultyLevel: variant.level,
+      inCallSmsEnabled: true,
+      inCallSmsPurposes: purposes,
+    });
+    for (const p of ["identity", "transfer", "link"] as const) {
+      assert.equal(assembled.includes(A1_SMS_EXAMPLE[p]), purposes.includes(p), `${variant.variantId}: 목적 ${p} 예시 유무가 선언과 다르다`);
+    }
+    checked += 1;
+  }
+  assert.ok(checked > 0, "문자를 선언한 변형이 0개 — 검사가 아무것도 재지 않았다");
+  t.diagnostic(`A-1 ② 전수: 문자 선언 변형 ${checked}개`);
+});
+
+test("[A-1/② 회귀] 목적 부재(변형 없는 세션) · 빈 배열 · 세 목적 전부는 종전 템플릿과 바이트 동일하다", () => {
+  for (const id of Object.keys(SCENARIO_PROMPTS).filter((x) => hasInCallSms(x))) {
+    for (const toolDrivenTiming of [false, true]) {
+      const base = { ...realOptionsFor(id), difficultyLevel: "advanced" as const, inCallSmsEnabled: true, toolDrivenTiming };
+      const legacy = buildSystemPrompt(SCENARIO_PROMPTS[id], base);
+      assert.ok(legacy.includes(A1_LEGACY_SMS_KINDS), `${id}: 전제 — 종전 템플릿 괄호가 있어야 한다`);
+      assert.equal(buildSystemPrompt(SCENARIO_PROMPTS[id], { ...base, inCallSmsPurposes: undefined }), legacy, `${id}: 부재 ≠ 종전`);
+      assert.equal(buildSystemPrompt(SCENARIO_PROMPTS[id], { ...base, inCallSmsPurposes: [] }), legacy, `${id}: 빈 배열 ≠ 종전`);
+      assert.equal(
+        buildSystemPrompt(SCENARIO_PROMPTS[id], { ...base, inCallSmsPurposes: ["link", "identity", "transfer"] }),
+        legacy,
+        `${id}: 세 목적 전부 ≠ 종전(순서 무관해야 한다)`,
+      );
+    }
+  }
+});
+
+test("[A-1/② 역방향] 종전 템플릿(목적 미전달)은 loan 검사에 걸린다 — 인증번호 예시가 실린다", () => {
+  const id = "loan-refinance-scam";
+  const legacy = buildSystemPrompt(SCENARIO_PROMPTS[id], { ...realOptionsFor(id), difficultyLevel: "beginner", inCallSmsEnabled: true });
+  assert.ok(legacy.includes(A1_SMS_EXAMPLE.identity), "역검증 실패 — 종전 템플릿에도 인증번호 예시가 없다면 이 검사는 죽은 검사다");
+});
+
+// ── ⑥ 확인 안내 DEFAULT ─────────────────────────────────────────────────────────────────────
+test("[A-1/⑥ 역방향] 옛 DEFAULT 보류 문구('…연결해 드리겠습니다'처럼 받아 두고 기다린다)를 끼운 사본은 G403 · 대기 검사에 걸린다", () => {
+  const id = "loan-refinance-scam";
+  const assembled = buildSystemPrompt(SCENARIO_PROMPTS[id], {
+    ...realOptionsFor(id),
+    difficultyLevel: "advanced",
+    verifyInterceptEnabled: true,
+  });
+  assert.ok(assembled.includes("받아 둔 뒤 하던 이야기를 그대로 이어간다"), "전제 — 새 DEFAULT 문구가 조립에 있어야 한다");
+  assert.equal(assembled.includes("받아 두고 기다린다"), false, "현행 DEFAULT에 옛 대기 문구가 남아 있다");
+  const tainted = `${assembled}\n"잠시만요, 확인 부서를 연결해 드리겠습니다"처럼 받아 두고 기다린다.`;
+  assert.ok(G403_PROMISE_LITERALS.some((literal) => tainted.includes(literal)), "옛 약속 문구를 G403 목록이 못 잡는다");
 });

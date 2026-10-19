@@ -13,7 +13,11 @@ import type { DifficultyLevel } from "../../shared/difficulty";
 // T113 — `turnInstruction`으로 조립에 들어오는 문자열의 **원본 4곳**. 이 값들은 조립 산출물의
 // 일부인데도 종전 축(난이도 × 문자)이 순회하지 않아 요구몰림 게이트의 스캔 대상 밖이었다.
 import { OPENING_TURN_INSTRUCTION } from "../../roleplay/openingLine";
-import { MOCK_INSTALL_CONSENT_INSTRUCTION } from "../mockScreens";
+import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL } from "../mockScreens";
+import { FLOW_VARIANTS } from "../flowVariants";
+import { sessionDeclaredSmsPurposes } from "../../inCallSms/smsGate";
+import { buildConfirmResultInstruction, buildLiveConfirmResultInstruction } from "../../inCallSms/confirmResult";
+import { ESCALATED_CALL_CONTEXT_INSTRUCTION } from "../../roleplay/escalatedCall";
 import { VERIFY_INTERCEPT, hasVerifyIntercept } from "../verifyIntercept";
 import { IN_CALL_SMS } from "../inCallSms";
 import { scanText } from "./harmlessnessPatterns";
@@ -1288,6 +1292,14 @@ function turnInstructionSources(): Array<{ scenarioId?: string; label: string; v
   const out: Array<{ scenarioId?: string; label: string; value: string }> = [
     { label: "오프닝", value: OPENING_TURN_INSTRUCTION },
     { label: "모의설치응낙", value: MOCK_INSTALL_CONSENT_INSTRUCTION },
+    // A-1 ⑧ — 에스컬레이션 뒤 폴백 턴의 응낙 변형 · 맥락 1줄(roleplay/index.ts ②-h).
+    { label: "모의설치응낙(통화중)", value: MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL },
+    { label: "에스컬레이션뒤맥락", value: ESCALATED_CALL_CONTEXT_INSTRUCTION },
+    // A-1 ⑦ — 확인 결과 지시(폴백 턴 지시) · Live 응답 필드(조건형 — 클라 주입은 A-2지만 모델에 닿을 문면이라 같이 잰다).
+    { label: "확인결과:transfer", value: buildConfirmResultInstruction("transfer") },
+    { label: "확인결과:link", value: buildConfirmResultInstruction("link") },
+    { label: "확인결과Live:transfer", value: buildLiveConfirmResultInstruction("transfer") },
+    { label: "확인결과Live:link", value: buildLiveConfirmResultInstruction("link") },
   ];
   for (const [scenarioId, item] of Object.entries(VERIFY_INTERCEPT)) {
     out.push({ scenarioId, label: `확인안내:${item.offerId}`, value: item.announceInstruction });
@@ -1351,6 +1363,29 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
           }
         }
       }
+    }
+  }
+  // A-1 ② — `inCallSmsPurposes`는 **흐름 변형별 derive 값**이다(수동 토글 축이 아니다 — identityCheckAllowed와 같은 이유).
+  // 곱하지 않고 더한다: 문자를 선언한 변형마다 그 변형의 실 옵션 조합(난이도 · 도구주도 on/off)으로 한 번씩.
+  for (const flowVariant of FLOW_VARIANTS) {
+    const inCallSmsPurposes = sessionDeclaredSmsPurposes(flowVariant.scenarioId, flowVariant.variantId);
+    if (!inCallSmsPurposes || inCallSmsPurposes.length === 0) continue;
+    const speakerGender = speakerGenderFor(flowVariant.scenarioId);
+    const verifyInterceptEnabled = hasVerifyIntercept(flowVariant.scenarioId) && flowVariant.level === "advanced";
+    for (const toolDrivenTiming of [false, true]) {
+      out.push({
+        label: `${flowVariant.scenarioId}[${flowVariant.level}/변형:${flowVariant.variantId}/선언문자${toolDrivenTiming ? "/도구주도" : ""}]`,
+        text: buildSystemPrompt(SCENARIO_PROMPTS[flowVariant.scenarioId], {
+          difficultyLevel: flowVariant.level,
+          inCallSmsEnabled: true,
+          inCallSmsPurposes,
+          verifyInterceptEnabled,
+          toolDrivenTiming,
+          identityCheckAllowed: asksIdentityCheck(flowVariant.scenarioId),
+          ...(speakerGender ? { speakerGender } : {}),
+          ...(verifyInterceptEnabled ? { offerToolDeclared: true } : {}),
+        }),
+      });
     }
   }
   // 턴 지시는 곱하지 않고 더한다(판정표 3행) — 값마다 **운영에서 실제로 성립하는 조합**에 한 번씩.

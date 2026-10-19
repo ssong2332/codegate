@@ -1,5 +1,7 @@
 // 카탈로그 항목 → Firestore 문서 변환 (T68). 부수효과 없는 순수 함수라 단위 테스트 대상이다.
 import type { InCallSmsItem } from "../scenarios/inCallSms";
+import type { FlowVariantSms } from "../scenarios/flowVariants";
+import { buildLiveConfirmResultInstruction, confirmResultPurposeFor } from "./confirmResult";
 import { DEFAULT_MOCK_SCREEN_KIND, resolveMockScreenKind } from "../scenarios/mockScreens";
 import type { DeliverInCallSmsResponse } from "./types";
 import type { InCallSmsDoc } from "../shared/types";
@@ -116,4 +118,18 @@ export function buildInCallSmsResponse(
     ? applyFictionalBank(item.announceInstruction, input.fictionalBankName)
     : item.announceInstruction;
   return { smsId: item.smsId, announceInstruction };
+}
+
+/**
+ * A-1 ⑦(2026-10-19) — `deliverInCallSms` 도착 응답에 덧붙일 결과 신호 필드(조건형 1줄 · `inCallSms/confirmResult.ts`).
+ * 판정은 announce와 **같은 게이트**(`resolveInCallSmsPlan` — 전환 뒤 생략)에 곱해지고, 대상은 변형 선언의 **필수** 계좌·링크
+ * 문자뿐이다(`confirmResultPurposeFor`). 해당 없으면 빈 객체(= 종전 응답 그대로). ⚠️ 클라 주입 배선은 A-2.
+ */
+export function buildConfirmResultField(
+  input: { placed: boolean },
+  declaredItem: FlowVariantSms | undefined,
+): Pick<DeliverInCallSmsResponse, "confirmResultInstruction"> {
+  if (!resolveInCallSmsPlan(input).includeInstruction) return {};
+  const purpose = confirmResultPurposeFor(declaredItem);
+  return purpose ? { confirmResultInstruction: buildLiveConfirmResultInstruction(purpose) } : {};
 }

@@ -936,7 +936,10 @@ test("[T110/G82] 7종 × 고급 × 확인 무력화 — 조립 프롬프트의 *
     }
     // ⓐ 붙잡지 않기 — 전환 제안으로 받아 두는 문구도 상시 블록에 있어야 한다.
     assert.ok(/붙잡지도\s*않는다/.test(ruleBlock), `A1 ⓐ 누락: ${scenarioId}`);
-    assert.ok(/확인 부서를 연결해 드리겠습니다/.test(ruleBlock), `A1 ⓐ 보류 문구 누락: ${scenarioId}`);
+    // A-1 ⑥(2026-10-19) — 보류 문구가 "'확인 부서를 연결해 드리겠습니다'처럼 받아 두고 기다린다"에서 "받아 둔 뒤 하던 이야기를
+    // 그대로 이어간다"로 바뀌었다(폴백 계열 B는 오퍼 게이트가 늘 닫혀 연결이 오지 않는다 — audit-A R4). 받아 두는 문구 자체는 남는다.
+    assert.ok(/받아 둔 뒤 하던 이야기를 그대로 이어간다/.test(ruleBlock), `A1 ⓐ 보류 문구 누락: ${scenarioId}`);
+    assert.equal(/받아 두고 기다린다/.test(ruleBlock), false, `A-1 ⑥ 옛 대기 문구 잔존: ${scenarioId}`);
 
     const exitIndex = assembled.indexOf("빠진 사람이다");
     const guardrailIndex = assembled.indexOf(prompt.guardrailPreamble.trimEnd().slice(0, 40));

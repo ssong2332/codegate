@@ -8,7 +8,7 @@ import { logger } from "firebase-functions";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
-import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
+import { sessionDeclaredSmsPurposes, sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
 import { asksIdentityCheck } from "./personaAuthority";
@@ -90,6 +90,8 @@ export async function generateOpeningLine(
       // 세션 지시 성격이라 세 호출부에서 동일하게 켠다.
       // ⭐ 리뷰 M2 — 세 호출부 · 도구 선언과 같은 단일 술어(변형 기준 · 변형 부재 = 종전).
       inCallSmsEnabled: sessionDeclaresInCallSms(scenarioId, flowVariantId),
+      // A-1 ② — 문자 예외 항목의 예시를 선언 목적만으로(호출부 3곳 같은 술어 · G63).
+      inCallSmsPurposes: sessionDeclaredSmsPurposes(scenarioId, flowVariantId),
       // T85(§17.3 호출부 3곳 중 "오프닝 대사", G63) — 고급에서 D4(절차·서류 정당화) 블록을 얹을
       // 시나리오인지. 세 호출부가 갈라지면 "오프닝만 축소"라는 비대칭이 조용히 생긴다.
       // ⚠️ 오프닝 턴 특례(§17.6.2): 위 OPENING_TURN_INSTRUCTION이 "다짜고짜 요구부터 하지 말고"를

@@ -4,6 +4,7 @@
 import type { ScenarioPromptDoc } from "../shared/types";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { LlmMessage } from "../llm";
+import type { SmsPurpose } from "../scenarios/flowVariants";
 import { applyFictionalBank, EXAMPLE_ACCOUNT_NUMBER } from "../shared/fictionalBank";
 
 // 사용자 신고(2026-07-25) — "사람과 대화한다는 느낌이 안 든다", "대화가 자연스럽지 않다",
@@ -104,9 +105,51 @@ const SMS_METHOD_LINE_TOOL_DRIVEN = `- **문자는 네가 임의로 "보냈다"�
 const OFF_SCREEN_RULE_WITH_SMS_TEMPLATE = `- **참가자가 볼 수 없는 것은 가리키지 않는다. 단, 문자로 도착한 것은 예외다.** 이 훈련에서는 네가 통화 중에 보내는 문자(계좌 안내·링크·인증번호)가 **참가자 화면에 실제로 도착해 표시된다.** 따라서 "방금 문자로 간 인증번호를 불러 달라", "문자로 보낸 계좌로 보내 달라", "문자 속 링크를 눌러 달라"고 요구해도 된다 — 참가자는 화면에서 실제로 볼 수 있다. 반대로 문자로 도착하지 않은 것(방금 뜬 팝업, 설치된 앱 화면 등)은 여전히 가리키지 않는다.
 {{SMS_METHOD_LINE}}`;
 
-/** §59.3 조건부 치환 — `toolDrivenTiming` 부재/false는 오늘 문자열과 바이트 단위로 동일하다(회귀 0). */
-function buildOffScreenRuleWithSms(toolDrivenTiming: boolean): string {
-  return OFF_SCREEN_RULE_WITH_SMS_TEMPLATE.replace(
+// ── A-1 ②(2026-10-19 · audit-A R3) — 문자 예외 항목을 **세션이 선언한 문자 목적만** 예시로 남긴다 ─────────
+// 재현(폴백 loan 초급·중급 2/2): 위 템플릿은 선언과 무관하게 "인증번호를 불러 달라"를 예시로 싣는다. loan 변형은 계좌
+// (transfer)·링크(link)만 선언하는데, 요구가 끝난 막다른 지점에서 모델이 **없는 인증번호 문자**를 지어냈다 → 화면에 없음
+// → "전송 지연·재발송·기다려" 루프. 그래서 호출부가 선언 목적(`inCallSmsPurposes`)을 넘기면 예시·괄호를 그 목적만으로
+// 조립하고, 선언하지 않은 종류의 문자는 보냈다고 하지 않는다는 1문장을 붙인다.
+// ⛔ 목적이 부재(변형 ID 없는 세션 — `sessionDeclaredSmsPurposes`가 `undefined`)이거나 빈 배열이면 **종전 템플릿 그대로**
+//    (바이트 동일 · 회귀 0). 세 목적을 모두 선언하면 결과가 종전 템플릿과 바이트 동일하다(`[A-1/②]` 테스트가 고정).
+// ⛔ 이 파일은 시나리오 카탈로그를 읽지 않는다(§17.3) — 목적 목록은 호출부 3곳이 같은 술어로 계산해 넘긴다(G63).
+/** 문자 목적 → 괄호 안 종류 이름(종전 괄호 순서 "계좌 안내·링크·인증번호"). */
+const SMS_KIND_LABEL: Record<SmsPurpose, string> = { transfer: "계좌 안내", link: "링크", identity: "인증번호" };
+/** 문자 목적 → 요구 예시(종전 예시 순서 = identity · transfer · link). */
+const SMS_DEMAND_EXAMPLE: Record<SmsPurpose, string> = {
+  identity: `"방금 문자로 간 인증번호를 불러 달라"`,
+  transfer: `"문자로 보낸 계좌로 보내 달라"`,
+  link: `"문자 속 링크를 눌러 달라"`,
+};
+const SMS_KIND_ORDER: readonly SmsPurpose[] = ["transfer", "link", "identity"];
+const SMS_EXAMPLE_ORDER: readonly SmsPurpose[] = ["identity", "transfer", "link"];
+
+/** 선언 목적 기준 문자 예외 항목(첫 줄). 세 목적 전부면 종전 템플릿 첫 줄과 바이트 동일하다. */
+function buildDeclaredSmsExceptionLine(purposes: readonly SmsPurpose[]): string {
+  const has = (p: SmsPurpose) => purposes.includes(p);
+  const kinds = SMS_KIND_ORDER.filter(has).map((p) => SMS_KIND_LABEL[p]).join("·");
+  const examples = SMS_EXAMPLE_ORDER.filter(has).map((p) => SMS_DEMAND_EXAMPLE[p]).join(", ");
+  const undeclared = SMS_KIND_ORDER.filter((p) => !has(p)).map((p) => SMS_KIND_LABEL[p]);
+  const onlyDeclared =
+    undeclared.length > 0
+      ? ` 이 통화에서 네가 보내는 문자는 위 종류뿐이다 — ${undeclared.join("·")} 문자는 보낸 적이 없으니, 그런 문자를 보냈다고 말하거나 그 내용을 불러 달라고 하지 않는다.`
+      : "";
+  return `- **참가자가 볼 수 없는 것은 가리키지 않는다. 단, 문자로 도착한 것은 예외다.** 이 훈련에서는 네가 통화 중에 보내는 문자(${kinds})가 **참가자 화면에 실제로 도착해 표시된다.** 따라서 ${examples}고 요구해도 된다 — 참가자는 화면에서 실제로 볼 수 있다. 반대로 문자로 도착하지 않은 것(방금 뜬 팝업, 설치된 앱 화면 등)은 여전히 가리키지 않는다.${onlyDeclared}`;
+}
+
+/**
+ * §59.3 조건부 치환 — `toolDrivenTiming` 부재/false는 오늘 문자열과 바이트 단위로 동일하다(회귀 0).
+ * A-1 ② — `declaredPurposes`가 비어 있지 않을 때만 첫 줄을 선언 목적 기준으로 조립한다(부재 = 종전 템플릿).
+ */
+function buildOffScreenRuleWithSms(
+  toolDrivenTiming: boolean,
+  declaredPurposes: readonly SmsPurpose[] | undefined,
+): string {
+  const template =
+    declaredPurposes !== undefined && declaredPurposes.length > 0
+      ? `${buildDeclaredSmsExceptionLine(declaredPurposes)}\n{{SMS_METHOD_LINE}}`
+      : OFF_SCREEN_RULE_WITH_SMS_TEMPLATE;
+  return template.replace(
     "{{SMS_METHOD_LINE}}",
     toolDrivenTiming ? SMS_METHOD_LINE_TOOL_DRIVEN : SMS_METHOD_LINE_DEFAULT,
   );
@@ -166,6 +209,7 @@ const SCENARIO_PROGRESSION_TEMPLATE = `[진행 강제 — 반드시 지킨다]
 {{IDENTITY_CHECK_HANDLING}}
 {{OFF_SCREEN_RULE}}
 {{HANGUP_RULE}}
+{{NO_STALL_RULE}}
 - **페이로드는 가상값만 쓴다.** 계좌번호·앱 이름·링크·연락처를 요구하거나 불러 줄 때는 **실존하지 않는 기관명**을 쓰되(예: "OO은행", "국민안전지원센터"), 숫자는 실제처럼 들리는 형식으로 또박또박 부른다(예: "OO은행 948-2716-5093-27"). **은행 이름은 "OO은행"이라고 그대로 말한다** — 이 훈련에서 쓰는 가상 은행의 이름이며, 실제 은행 이름을 채워 넣을 빈칸이 아니다. 계좌·카드를 말할 때 실제로 있는 은행·카드사 이름은 어떤 경우에도 쓰지 않는다. 실존하지 않는 곳의 번호라 어디로도 연결되지 않지만, 참가자에게는 진짜 계좌를 불러주는 것과 똑같이 들려 몰입이 깨지지 않는다. **요구하는 행위 자체는 그대로 하되**, 실존 기관의 실제 계좌·실제 동작하는 앱/링크·실제 연락처만 쓰지 않는다 — 참가자가 겪는 판단 상황은 동일하다.`;
 
 // §50.4.4 (3) — identityCheckAllowed로 갈리는 "본인확인을 그냥 통과시키지 않는다" 항목. TRUE는
@@ -211,6 +255,18 @@ export const HANGUP_RULE_SIGNAL = `${HANGUP_RULE_CASES} **이번 응답에서 �
 
 export type HangupMode = "none" | "tool" | "signal";
 
+// ── A-1 ①(2026-10-19 · audit-A R1) — "확인 중"으로 붙잡아 두지 않는다(순서형 규칙) ─────────────────────────
+// 재현(loan 3난이도 × Live·폴백 6/6): 참가자가 요구에 응한 뒤 사기범이 "입금 확인 중·잠시만 기다려 주세요"만 4~5턴
+// 반복했다. 원인은 ① "확인 결과"를 내놓으라는 규칙이 없고 ② 남은 단계가 없을 때 위 "상대가 응하면 … '확인됐다'며 멈추지
+// 말고"만 있어 모델이 "확인 중"으로 버틴 것이다. 그래서 **결과 제시 → 다음 요구 또는 마무리**의 순서를 명문으로 넣는다.
+// ⛔ 횟수·서수·턴 번호를 쓰지 않는다(F11/G130 — 모델에 카운터가 없다). "같은 대답 안 또는 바로 다음 대답"·"대기 말을
+//    한 다음 대답" 같은 **순서**로만 쓴다(`[A-1/①]` 테스트가 카운터 검출기로 고정한다).
+// ⛔ T192 끊기 슬롯(`{{HANGUP_RULE}}` 3변형)은 **한 글자도 바꾸지 않는다** — 이 항목은 그 **바로 뒤**에 붙어 "더 요구할
+//    것이 없을 때"를 그 슬롯이 정한 대로 처리하게 한다(새 끊기 메커니즘 0): 끊어도 되는 경우(TOOL·SIGNAL의 첫째 경우)면
+//    그 방법으로, 아니면(NONE 포함) 상황에 맞는 말로 대화를 이어 둔다 — NONE의 "대화를 이어 둔다"와 같은 방향이다.
+// ⚠️ 무조건부 블록이라 clone 2종(ElevenLabs) 조립 산출물도 바뀐다 → 두 프롬프트 파일 상단의 재생성 대기 기록 갱신.
+export const NO_STALL_RULE = `- **"확인 중"이라며 붙잡아 두지 않는다 — 확인하겠다고 했으면 결과를 내놓는다.** 입금·이체·조회·서류처럼 무언가를 확인하겠다고 말했으면, 같은 대답 안에서 또는 바로 다음 대답에서 그럴듯한 확인 결과를 지어내 알려 준다(예: "확인됐습니다", "처리됐습니다", "한 가지가 더 필요합니다"). 결과를 알린 뒤에는 곧바로 다음 요구로 넘어가고, 더 요구할 것이 없으면 바로 위 통화 끝내기 항목이 정한 대로 한다 — 끊어도 되는 경우면 그 방법으로 마무리하고, 아니면 비밀 유지 당부처럼 상황에 맞는 말로 대화를 이어 둔다. "확인 중입니다", "잠시만 기다려 주세요" 같은 대기 말을 한 다음 대답에서는 대기 말을 다시 하지 않는다.`;
+
 /** 슬롯 값 — 알 수 없는 값·부재는 NONE(fail-closed: 끊기 허용 문면이 실수로 실리지 않는다). */
 function buildHangupRule(hangupMode: HangupMode, verifyInterceptEnabled: boolean): string {
   if (hangupMode === "tool") {
@@ -238,6 +294,7 @@ function buildScenarioProgression(
   toolDrivenTiming: boolean,
   hangupMode: HangupMode,
   verifyInterceptEnabled: boolean,
+  inCallSmsPurposes: readonly SmsPurpose[] | undefined,
 ): string {
   return SCENARIO_PROGRESSION_TEMPLATE.replace(
     "{{IDENTITY_CHECK_HANDLING}}",
@@ -245,11 +302,13 @@ function buildScenarioProgression(
   ).replace(
     "{{OFF_SCREEN_RULE}}",
     inCallSmsEnabled
-      ? buildOffScreenRuleWithSms(toolDrivenTiming)
+      ? buildOffScreenRuleWithSms(toolDrivenTiming, inCallSmsPurposes)
       : identityCheckAllowed
         ? OFF_SCREEN_RULE_DEFAULT_TRUE
         : OFF_SCREEN_RULE_DEFAULT_FALSE,
-  ).replace("{{HANGUP_RULE}}", buildHangupRule(hangupMode, verifyInterceptEnabled));
+  )
+    .replace("{{HANGUP_RULE}}", buildHangupRule(hangupMode, verifyInterceptEnabled))
+    .replace("{{NO_STALL_RULE}}", NO_STALL_RULE);
 }
 
 // 확인 시도 무력화 동기화 블록(T83, Architecture.md §16.1.4 — §15.1.4/G1 교정과 **같은 방식**).
@@ -351,7 +410,15 @@ function buildScenarioProgression(
 // 호출부(`realtime/geminiProvider.ts`)가 그 함수로 계산한 결과를 `offerToolDeclared` 옵션으로
 // 넘긴다. `promptAssembly.ts`가 시나리오 카탈로그를 직접 읽지 않는다는 원칙(§17.3)은 그대로
 // 유지된다 — 여기서는 캐릭터 이름이 아니라 호출부가 이미 계산해 준 불리언만 비교한다.
-const VERIFY_OFFER_LINE_DEFAULT = `- **상대가 그렇게 다시 확인하겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다.** 다만 **앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다** — "잠시만요, 확인 부서를 연결해 드리겠습니다"처럼 받아 두고 기다린다.`;
+// ⭐ A-1 ⑥(2026-10-19 · audit-A R4) — DEFAULT의 *"'잠시만요, 확인 부서를 연결해 드리겠습니다'처럼 받아 두고 기다린다"* 를
+// 걷어냈다. DEFAULT가 실리는 곳은 Live 도구가 없는 경로(폴백 `sendMessage` · 오프닝)뿐인데, 폴백에서 오퍼가 열리는 것은
+// 클라 턴 게이트가 통과할 때뿐이고 계열 B 5종은 그 게이트가 **늘 닫혀 있다**(`page.tsx` `verifyIntentExpressed`=false 고정 →
+// `shouldAnnounceVerifyOffer` false). 그 세션에서 모델이 이 문장대로 말하면 "연결해 드리겠습니다, 잠시만요" 뒤에 연결이
+// 영영 오지 않는다. 서버는 계열을 판별하지 않으므로(§47.3 C2 — 계열은 클라 게이트 층에만 있다) 문면 하나를 두 계열 모두에
+// 맞게 바꿨다: 계열 A에서도 창구 안내는 앱의 턴 지시가 열고(`announceInstruction`), 그 전까지 모델이 할 일은 **받아 주고
+// 하던 이야기를 잇는 것**이다 — TOOL_DRIVEN(§64)이 이미 택한 방향과 같다. ⛔ 창구 이름 선행 금지는 그대로다.
+// ⛔ T192 판정(4행 `blocked_transfer`)은 건드리지 않았다 — 계열 B 폴백 고급은 여전히 전환 전이라 끊기가 막힌다(보고 사항).
+const VERIFY_OFFER_LINE_DEFAULT = `- **상대가 그렇게 다시 확인하겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다.** 다만 **앱의 안내 지시가 오기 전에는 확인 창구 이름을 먼저 꺼내지 않는다** — 연결해 주겠다는 말도 하지 않고, "네, 확인해 보시는 게 맞습니다"처럼 상대가 확인하고 싶어 한다는 것만 받아 둔 뒤 하던 이야기를 그대로 이어간다.`;
 
 const VERIFY_OFFER_LINE_TOOL_DRIVEN = `- **상대가 그렇게 다시 확인하겠다고 하면 막지 않는다 — 끊지 마시라고 붙잡지도 않는다.** 상대가 직접 확인해 보고 싶어 한다고 판단되면 **\`offer_verification_desk\` 도구를 부르고, 그 결과가 돌아온 뒤에만** 창구 이름을 꺼낸다. **도구 결과가 돌아오기 전에는 연결해 주겠다거나 확인해 주겠다는 말을 하지 않는다** — "네, 확인해 보시는 게 맞습니다"처럼 상대가 확인하고 싶어 한다는 것만 받아 두고 하던 이야기를 그대로 이어간다.`;
 
@@ -642,6 +709,15 @@ export type BuildSystemPromptOptions = {
    */
   inCallSmsEnabled?: boolean;
   /**
+   * A-1 ②(2026-10-19 · audit-A R3) — 이 세션 흐름 변형이 **선언한** 문자 목적(`inCallSms/smsGate.ts`
+   * `sessionDeclaredSmsPurposes`). `inCallSmsEnabled`가 참이고 이 값이 비어 있지 않으면 문자 예외 항목의 괄호·예시가
+   * 이 목적만으로 조립되고, 선언하지 않은 종류의 문자는 보냈다고 하지 않는다는 1문장이 붙는다(loan처럼 인증번호를
+   * 선언하지 않은 세션에 인증번호 예시가 실리지 않는다). 부재(변형 ID 없는 세션)·빈 배열 = 종전 문자열 바이트 동일.
+   * ⚠️ **호출부 3곳(sendMessage·오프닝·Gemini Live 토큰) 전부에 같은 술어로 넘긴다**(G63 — 한 곳이 빠지면 그 경로만
+   * 종전 예시가 실린다. 에러는 나지 않는다).
+   */
+  inCallSmsPurposes?: readonly SmsPurpose[];
+  /**
    * T83(§16.1.4) — 이 세션에서 확인 시도 무력화가 성립하는가(카탈로그 보유 **&& 고급**).
    * true면 앱 오케스트레이션과의 동기화 블록이 삽입된다(게이트 이전에 창구를 먼저 부르지 않게).
    * false(기본)면 문자열이 도입 전과 완전히 동일하다(회귀 0).
@@ -780,6 +856,8 @@ export function buildSystemPrompt(
       // T192 C2 — 부재 = NONE(종전 문면 · 동작 변화 0).
       opts.hangupMode ?? "none",
       opts.verifyInterceptEnabled === true,
+      // A-1 ② — 부재 = 종전 문자 예외 항목(바이트 동일).
+      opts.inCallSmsPurposes,
     ),
     "",
     // 아래 세 블록은 "있을 때만" 삽입된다 — intermediate(=블록 없음)·확인 무력화 미적용·턴 지시
