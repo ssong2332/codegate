@@ -213,7 +213,7 @@ export const deliverInCallSms = onCall<
   const declaredItem = declared.find((d) => d.smsId === item.smsId);
   return {
     ...buildInCallSmsResponse(item, { placed, fictionalBankName }),
-    ...buildConfirmResultField({ placed }, declaredItem),
+    ...buildConfirmResultField({ placed, scenarioId: session.scenarioId }, declaredItem),
     status: "delivered",
   };
 });

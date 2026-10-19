@@ -14,6 +14,7 @@
 // 빠뜨렸을 때 조용히 엉뚱한 에이전트로 연결되는 사고가 나지 않는다.
 import { ELEVENLABS_API_KEY, GEMINI_API_KEY, getElevenLabsAgentIds } from "../shared/config";
 import { PUBLIC_SCENARIOS, type VoiceMode } from "../scenarios/publicMeta";
+import { sessionDeclaresInCallInstall } from "../scenarios/variantPool";
 import { parseAgentMap } from "./agentMap";
 import { ElevenLabsRealtimeProvider } from "./elevenLabsProvider";
 import { GeminiRealtimeProvider } from "./geminiProvider";
@@ -98,9 +99,16 @@ function readSecret(param: SecretParamLike): string {
  * ElevenLabs는 프롬프트가 에이전트 쪽에 저장되고 서명 URL에 서버 측 인자가 없어(§82.6.4) 세션마다 다른 서버 값(가상 신상 카드)을
  * 실을 방법이 없다 — 그 경로로 보내면 "카드는 보이는데 사기범은 모르는" 세션이 된다(T194-C2 원자성 위반).
  * 술어 = 세션 문서 `personaCard` 존재(설계의 릴레이 변형 · self-dial 항은 S7 · U2가 병합되면 **이 함수에** 더한다 — 두 목록 금지).
+ * ⭐ T194-c-1 G610(§84.15.4 J-4 · §84.16.3) — 항 추가: **Q2 설치 문자를 선언한 세션**(`sessionDeclaresInCallInstall` — 판별자
+ * `declaresInCallInstall` 하나). ElevenLabs로 가면 서버가 문자 도구 · 설치 응낙 지시를 실을 수 없어 "설치 문자는 오는데 사기범은 모르는"
+ * 세션이 된다. card-delivery-call은 카드 대상 밖이라(§84.14.4) 이 항이 없으면 그 경로를 탈 수 있다.
  */
-export function requiresServerPromptProvider(session: { personaCard?: unknown }): boolean {
-  return session.personaCard !== undefined;
+export function requiresServerPromptProvider(session: {
+  personaCard?: unknown;
+  scenarioId: string;
+  flowVariantId?: string;
+}): boolean {
+  return session.personaCard !== undefined || sessionDeclaresInCallInstall(session.scenarioId, session.flowVariantId);
 }
 
 export function getRealtimeProvider(

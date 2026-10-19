@@ -34,6 +34,10 @@ import { buildSystemPrompt, wrapUserInputAsData } from "../../roleplay/promptAss
 import { buildLiveToolDeclarations, LIVE_TOOL_SEND_PREPARED_SMS } from "../../realtime/liveTools";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { hasInCallSms } from "../../scenarios/inCallSms";
+import { createHash } from "node:crypto";
+import { resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
+import { hasVerifyIntercept } from "../../scenarios/verifyIntercept";
+import { sessionDeclaredSmsPurposes } from "../smsGate";
 
 const ID: FlowVariantSms = { purpose: "identity", smsId: "institution-otp", required: false, notBeforeUserTurns: 2 };
 const TR: FlowVariantSms = { purpose: "transfer", smsId: "institution-safe-account", required: true, notBeforeUserTurns: 3 };
@@ -506,4 +510,80 @@ test("[#311 통합] deliverSmsThroughGate로 만든 계좌 문자 — 본문의 
   assert.equal(plainDoc.body, item.body);
   assert.equal("bankName" in plainDoc, false);
   assert.equal("accountNumber" in plainDoc, false);
+});
+
+// ── T194-c-1(docs/Architecture.md §84.16.5 단계 4 · 84.4.6 관례) — 조립 산출물 바이트 고정 ─────────────────────────────────────
+// 기준값 = T194-c-1 **이전** main 빌드에서 같은 조립식으로 잰 sha256. 최초 측정은 main `dcbd523`(작업 전 기준선 프로브)였고, main `4f6681e`
+// (#329 실존 회사명 가드레일 · #330 PR-A3 병합 뒤) 병합 때 같은 조립식으로 다시 쟀다 — 옛 값은 25db450 lib로 먼저 재현해 일치를 확인했다. tools 해시는 변화 없음.
+// ① 챌린지 고급 base 변형(`fv-akj5` · `fv-6s5p`)은 **바이트 동일**이어야 한다(#192 "현행 선언" — 챌린지 무변경의 증거).
+// ② ⚠️ **의도된 변경 1건(사유)**: `card-delivery-call`에 `IN_CALL_SMS` 키가 생겨 **변형 없는 세션**(옛 세션)의 무소급 분기
+//    (`sessionDeclaresInCallSms` → `hasInCallSms`)가 거짓 → 참으로 뒤집힌다. 바뀌는 것은 그 플래그 하나뿐이다 — 같은 조립식에
+//    `inCallSmsEnabled:false`를 넣으면 기준값과 바이트 동일하다(아래가 고정한다).
+const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+const assembled = (scenarioId: string, variantId: string | undefined, inCallSmsEnabled = sessionDeclaresInCallSms(scenarioId, variantId)) =>
+  buildSystemPrompt(resolveSessionScenarioPrompt(scenarioId, variantId)!, {
+    difficultyLevel: "advanced",
+    inCallSmsEnabled,
+    inCallSmsPurposes: sessionDeclaredSmsPurposes(scenarioId, variantId),
+    verifyInterceptEnabled: hasVerifyIntercept(scenarioId),
+  });
+const toolsOf = (scenarioId: string, variantId: string | undefined) =>
+  buildLiveToolDeclarations(scenarioId, "advanced", variantId, { channel: undefined, relay: undefined, liveAvailable: false })
+    .flatMap((t) => (t.functionDeclarations ?? []).map((d) => JSON.stringify(d)))
+    .join("\n");
+const BEFORE_T194C1 = {
+  "card-company-impersonation#fv-akj5": {
+    system: "88f328a14d7bea4eb91140a38878eb368a5607ef9b3d77d1f59c06fb0020f598",
+    tools: "80a9e329f59ffb105342a83df61783b52cf2409d8e623e9bd973023ecb36bb8e",
+  },
+  "loan-refinance-scam#fv-6s5p": {
+    system: "108b1014639383d31060258b17cee7bf9e030dd8e0c270f5d723000b10c3237f",
+    tools: "566b114b6b691b89918021e2d15b11d4241e4d16dde82fb248aed0be72da1c23",
+  },
+  "card-delivery-call#base": {
+    system: "0292f11fae2b1df0f870394ce637933149acbffccbbe3ecf6250316d38588fd1",
+    tools: "80a9e329f59ffb105342a83df61783b52cf2409d8e623e9bd973023ecb36bb8e",
+  },
+} as const;
+
+test("[T194-c-1 단계 4] 챌린지 base 변형(fv-akj5 · fv-6s5p) 조립 산출물 · 도구 선언 = T194-c-1 이전과 바이트 동일 · 선언 · 도달 집합 무변경", (t) => {
+  for (const [scenarioId, variantId] of [["card-company-impersonation", "fv-akj5"], ["loan-refinance-scam", "fv-6s5p"]] as const) {
+    const key = `${scenarioId}#${variantId}` as keyof typeof BEFORE_T194C1;
+    const system = sha256(assembled(scenarioId, variantId));
+    const tools = sha256(toolsOf(scenarioId, variantId));
+    t.diagnostic(`[단계 4] ${key} system ${system.slice(0, 16)} (기준 ${BEFORE_T194C1[key].system.slice(0, 16)}) · tools ${tools.slice(0, 16)} (기준 ${BEFORE_T194C1[key].tools.slice(0, 16)})`);
+    assert.equal(system, BEFORE_T194C1[key].system, `${key}: 조립 프롬프트가 바뀌었다 — 챌린지 수신자 선언이 흔들린다(#192)`);
+    assert.equal(tools, BEFORE_T194C1[key].tools, `${key}: Live 도구 선언이 바뀌었다`);
+  }
+  assert.deepEqual(resolveDeclaredSms("card-company-impersonation", "fv-akj5").declared, []);
+  assert.deepEqual(
+    resolveDeclaredSms("loan-refinance-scam", "fv-6s5p").declared.map((d) => [d.smsId, d.required, d.notBeforeUserTurns]),
+    [["loan-apply-link", false, 2], ["loan-account", true, 3]],
+  );
+});
+
+test("[T194-c-1 단계 4] 의도된 변경 — card-delivery-call 변형 없는 세션은 문자 플래그만 뒤집힌다(그 플래그를 끄면 기준값과 바이트 동일)", (t) => {
+  const key = "card-delivery-call#base";
+  const now = sha256(assembled("card-delivery-call", undefined));
+  const flagOff = sha256(assembled("card-delivery-call", undefined, false));
+  t.diagnostic(`[단계 4] ${key} 지금 ${now.slice(0, 16)} ≠ 기준 ${BEFORE_T194C1[key].system.slice(0, 16)} · 플래그만 끈 조립 ${flagOff.slice(0, 16)} = 기준`);
+  assert.equal(hasInCallSms("card-delivery-call"), true, "카탈로그 키 신설(Q2)");
+  assert.equal(sessionDeclaresInCallSms("card-delivery-call", undefined), true, "무소급 분기 = 종전 hasInCallSms 그대로 따른다");
+  assert.notEqual(now, BEFORE_T194C1[key].system, "의도된 변경이 일어나지 않았다");
+  assert.equal(flagOff, BEFORE_T194C1[key].system, "플래그 외 다른 바이트가 바뀌었다");
+  // Live 도구 선언도 **같은 단일 술어**(리뷰 M2)를 따라 `send_prepared_sms`가 함께 켜진다 — 바뀐 것은 그 도구 1개뿐이다
+  // (발송 판정은 변형 선언 기준이라 변형 없는 세션의 호출은 `not_allowed`로 강등된다 — 관측 가능한 무소급 규칙 그대로).
+  const toolNames = (variantId: string | undefined) =>
+    buildLiveToolDeclarations("card-delivery-call", "advanced", variantId, { channel: undefined, relay: undefined, liveAvailable: false })
+      .flatMap((t) => (t.functionDeclarations ?? []).map((d) => d.name));
+  const nowTools = toolNames(undefined);
+  t.diagnostic(`[단계 4] ${key} 도구 ${JSON.stringify(nowTools)} — 기준 해시 ${BEFORE_T194C1[key].tools.slice(0, 16)} · 지금 ${sha256(toolsOf("card-delivery-call", undefined)).slice(0, 16)}`);
+  assert.notEqual(sha256(toolsOf("card-delivery-call", undefined)), BEFORE_T194C1[key].tools);
+  assert.ok(nowTools.includes(LIVE_TOOL_SEND_PREPARED_SMS));
+  // 문자 도구 선언 1건을 빼면 기준값과 바이트 동일하다(다른 도구 선언은 그대로).
+  const withoutSmsTool = buildLiveToolDeclarations("card-delivery-call", "advanced", undefined, { channel: undefined, relay: undefined, liveAvailable: false })
+    .flatMap((t) => (t.functionDeclarations ?? []).filter((d) => d.name !== LIVE_TOOL_SEND_PREPARED_SMS).map((d) => JSON.stringify(d)))
+    .join("\n");
+  assert.equal(sha256(withoutSmsTool), BEFORE_T194C1[key].tools);
+  assert.equal(resolveDeclaredSms("card-delivery-call", undefined).reason, "no_variant");
 });

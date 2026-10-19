@@ -29,6 +29,7 @@ import {
 import { SCENARIO_PROMPTS } from "../index";
 import { PUBLIC_SCENARIOS, type ScenarioMeta } from "../publicMeta";
 import {
+  IN_CALL_INSTALL_CONSENT_INSTRUCTION,
   MOCK_INSTALL_CONSENT_INSTRUCTION,
   MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL,
   MOCK_SCREENS,
@@ -272,6 +273,8 @@ function collectAllSurfaces(): Surface[] {
     ["confirmResult:link", buildConfirmResultInstruction("link")],
     ["confirmResultLive:transfer", buildLiveConfirmResultInstruction("transfer")],
     ["confirmResultLive:link", buildLiveConfirmResultInstruction("link")],
+    // T194-c-1 G585 — 통화 중 설치 응낙 실시간 지시(조건형 · Live 소비는 c-2)도 같은 게이트를 받는다.
+    ["IN_CALL_INSTALL_CONSENT_INSTRUCTION", IN_CALL_INSTALL_CONSENT_INSTRUCTION],
   ];
   for (const [field, text] of a1Instructions) {
     surfaces.push({ domain: "moduleConstant", itemId: "a1", field, text, profile: "modelInstruction" });
@@ -396,7 +399,8 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
   assert.equal(byDomain.get("inCallSms"), expectedSms, "T68 통화 중 문자 항목당 3필드 + 옵셔널 3(T190-2 +linkAddress)");
   // A-1 ⑦⑧(2026-10-19) — 모듈 상수·문면 함수 모델 지시가 1 → 7(응낙 통화 중 변형 1 · 에스컬레이션 뒤 맥락 1 · 확인 결과 폴백 2 ·
   // Live 2). 늘어난 것은 **검사 대상**이지 예외가 아니다.
-  assert.equal(byDomain.get("moduleConstant"), 1 + 6, "MOCK_INSTALL_CONSENT_INSTRUCTION + A-1 지시 6");
+  // T194-c-1 G585 — IN_CALL_INSTALL_CONSENT_INSTRUCTION 1 추가(검사 대상이 늘었다 — 예외 아님).
+  assert.equal(byDomain.get("moduleConstant"), 1 + 6 + 1, "MOCK_INSTALL_CONSENT_INSTRUCTION + A-1 지시 6 + T194-c-1 실시간 응낙 1");
   // T191 S5 — 흐름 변형: 수법 + 단계 요약 + leg 표기(+persona) + 결정 순간 + 합성 페르소나(단계가 있을 때).
   const expectedFlow = FLOW_VARIANTS.reduce(
     (n, v) =>
@@ -422,7 +426,8 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
   t.diagnostic(`[AC-104 G565] 가상 신상 카드 표면 after=${expectedPersona} (before=0 — 도메인 신설) · 총 표면 after=${ALL_SURFACES.length} · before=${ALL_SURFACES.length - expectedPersona}`);
   assert.equal(
     ALL_SURFACES.length,
-    expectedPrompt + expectedMeta + expectedVerify + expectedMock + expectedSms + 1 + 6 + expectedFlow + expectedPersona,
+    // T194-c-1 G585 — 모듈 상수 +1(IN_CALL_INSTALL_CONSENT_INSTRUCTION).
+    expectedPrompt + expectedMeta + expectedVerify + expectedMock + expectedSms + 1 + 6 + 1 + expectedFlow + expectedPersona,
   );
   assert.ok(ALL_SURFACES.length >= 300, `총 검사 표면 수가 줄었다(현재 ${ALL_SURFACES.length})`);
 });
@@ -615,6 +620,8 @@ const SCENARIO_MODULE_INVENTORY: Record<string, string> = {
   "escalation.ts": "콘텐츠 아님 — 에스컬레이션 판정 순수 함수",
   // T194-a G588(§84.13.2) — 세션 도달 가능 랜딩 집합(프롬프트 마커 · 선언 문자 파생). 문자열 콘텐츠 0.
   "reachability.ts": "콘텐츠 아님 — 세션 도달 가능 랜딩 파생 순수 함수",
+  // T194-c-1(§84.16.1) — 흐름 변형 배정 가능 풀(에스컬레이션 항 · 통화 중 설치 문자 항). 문자열 콘텐츠 0.
+  "variantPool.ts": "콘텐츠 아님 — 배정 가능 풀 판정 순수 함수",
   "seed.ts": "콘텐츠 아님 — 시딩 스크립트(PUBLIC_SCENARIOS를 쓴다)",
   // T194-b(§84.3.2 · G565) — 가상 신상 카드 값 풀 · 라벨 · 가림 고정값.
   "personaCardCatalog.ts": "scanned (personaCard 도메인 — 라벨 · 이름 · 지역 · 가림 고정값)",

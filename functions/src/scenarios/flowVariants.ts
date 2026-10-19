@@ -37,8 +37,6 @@ import type { ScenarioPromptDoc } from "../shared/types";
 import type { AxisExitBlock } from "./axes";
 import { SCENARIO_PROMPTS } from "./index";
 import { PARCEL_ADVANCED_INSTALL_TACTIC, PARCEL_ADVANCED_LEG_PERSONA } from "./messengerParcelSmishingSms.prompt";
-import { resolveSessionEscalation } from "./escalation";
-import { PUBLIC_SCENARIOS } from "./publicMeta";
 import { extractTacticLabel } from "./tacticFlavor";
 import { hasVerifyIntercept } from "./verifyIntercept";
 
@@ -171,6 +169,63 @@ const AGENCY_PROBE = { from: "card-delivery-call", label: "기관 조사 언급"
 const OTHER_NUMBER_PRETEXT =
   "채널 전환 유도 — '폰이 고장 나서 다른 번호로 걸었어, 원래 번호로는 연락이 안 돼' 처럼 다른 번호로 연락한 이유를 대고, 원래 번호로 확인해 보지 못하게 한다.";
 
+// ── T194-c-1(docs/Architecture.md §84.16.2) — 챌린지 쪽에 **내용 무변경**으로 남는 기존 고급 변형 2벌. 자가 Q2 변형이 이 정의를
+// 스프레드한다(`variantId` · `sms`만 다르다). ⛔ 이 두 상수의 내용을 바꾸면 챌린지 수신자 선언(base `a376166` — #192)이 바뀐다 —
+// 조립 산출물 바이트 고정(`inCallSms/__tests__/smsGate.test.ts` T194-c-1 블록)이 잡는다.
+const CARD_COMPANY_ADVANCED_FV_AKJ5: VariantSpec = {
+  variantId: "fv-akj5",
+  scenarioId: "card-company-impersonation",
+  level: "advanced",
+  authoring: "authored",
+  stages: st(
+    "카드사 상담원이라며 명의 도용 피해가 의심된다고 알린다.",
+    "피해가 번지지 않게 휴대폰 보안 점검 앱을 설치하라고 요구한다.",
+    "금융당국 조사가 시작됐다며 불안을 키운다.",
+    "확인하겠다는 상대를 막지 않고, 확인 뒤에도 같은 요구를 이어 간다.",
+    "카드 정보와 피해금 이관을 요구한다.",
+  ),
+  keepLabels: ["놀람 유발", "긴급성 조성", "카드정보 직접 요구", "피해금 이관 요구", "부인 시 명의 도용 암시", "안심 유도"],
+  extraTactics: [APP_INSTALL, AGENCY_PROBE],
+  exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],
+  sms: [],
+  legs: [
+    { callerLabel: "카드사 상담원", speakerGender: "female", minUserTurns: 3, maxUserTurns: 8 },
+    { callerLabel: "금융감독원 직원", speakerGender: "male", minUserTurns: 2, maxUserTurns: 10 },
+  ],
+  ...ADVANCED,
+  channels: ["voice"],
+  demandStages: 3,
+  decisionMoment: "보안 점검 앱 설치 또는 피해금 이관에 동의하는 순간",
+  sources: ["C03", "C04", "S4", "S22"],
+};
+
+const LOAN_ADVANCED_FV_6S5P: VariantSpec = {
+  variantId: "fv-6s5p",
+  scenarioId: "loan-refinance-scam",
+  level: "advanced",
+  authoring: "authored",
+  stages: st(
+    "상대 대출 이력을 이미 아는 듯 맞춤 안내라고 말한다. 상대가 말하지 않은 이름 · 금액은 지어내 단정하지 않는다.",
+    "대출 심사 전에 보안 점검 앱을 설치하고 쓰던 금융 앱은 잠시 지우라고 요구한다.",
+    "절차와 서류를 들어 정식 상담처럼 꾸민다.",
+    "기존 대출 상환 또는 선입금을 요구한다.",
+  ),
+  extraTactics: [
+    "개인정보 보유 암시 — '고객님 대출 이력 보고 맞춤으로 연락드렸습니다' 처럼 이미 정보를 아는 듯 말한다. 상대가 말하지 않은 이름 · 금액 · 금융사는 지어내 단정하지 않는다.",
+    "보안 앱 설치·금융 앱 삭제 요구 — '심사 전에 ○○안심보안 점검 앱을 설치하시고, 쓰시던 금융 앱은 잠시 지워 주셔야 합니다' 처럼 요구한다. 설치 방법 · 경로 · 권한 설정은 설명하지 않는다.",
+  ],
+  exitBlock: ["D1_time_pressure", "D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
+  sms: [
+    { purpose: "link", smsId: "loan-apply-link", required: false, notBeforeUserTurns: 2 },
+    { purpose: "transfer", smsId: "loan-account", required: true, notBeforeUserTurns: 3 },
+  ],
+  legs: ONE_LEG("캐피탈 상담원", "female"),
+  ...ADVANCED,
+  channels: ["voice", "sms"],
+  demandStages: 3,
+  sources: ["S10", "S19", "C13", "C22"],
+};
+
 const SPECS: VariantSpec[] = [
   // ── institutional-impersonation (§2.6.3 1행 — 사례 C10 · C11 · C09, S16 · S11 · S27) ──────
   {
@@ -298,31 +353,16 @@ const SPECS: VariantSpec[] = [
     channels: ["voice", "sms"],
     demandStages: 2,
   },
+  // ⭐ T194-c-1(docs/Architecture.md §84.16.2 · DECISIONS #192) — `fv-akj5`는 **내용 무변경**으로 2인 챌린지 수신자 고급 풀에 남고(문자 선언 0
+  // = base 선언 그대로), 자가 훈련 고급은 Q2 설치 문자를 선언한 새 ID 변형을 받는다(배정 풀 `variantPool.ts` `assignablePool`이 가른다).
+  // 신규 변형은 같은 정의의 **스프레드**다(단계 · 수법 · 출처 사본 0 — 드리프트 차단). 공통 규칙: 내용이 바뀌지 않는 쪽이 기존 ID를 갖는다.
+  CARD_COMPANY_ADVANCED_FV_AKJ5,
   {
-    variantId: "fv-akj5",
-    scenarioId: "card-company-impersonation",
-    level: "advanced",
-    authoring: "authored",
-    stages: st(
-      "카드사 상담원이라며 명의 도용 피해가 의심된다고 알린다.",
-      "피해가 번지지 않게 휴대폰 보안 점검 앱을 설치하라고 요구한다.",
-      "금융당국 조사가 시작됐다며 불안을 키운다.",
-      "확인하겠다는 상대를 막지 않고, 확인 뒤에도 같은 요구를 이어 간다.",
-      "카드 정보와 피해금 이관을 요구한다.",
-    ),
-    keepLabels: ["놀람 유발", "긴급성 조성", "카드정보 직접 요구", "피해금 이관 요구", "부인 시 명의 도용 암시", "안심 유도"],
-    extraTactics: [APP_INSTALL, AGENCY_PROBE],
-    exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],
-    sms: [],
-    legs: [
-      { callerLabel: "카드사 상담원", speakerGender: "female", minUserTurns: 3, maxUserTurns: 8 },
-      { callerLabel: "금융감독원 직원", speakerGender: "male", minUserTurns: 2, maxUserTurns: 10 },
-    ],
-    ...ADVANCED,
-    channels: ["voice"],
-    demandStages: 3,
-    decisionMoment: "보안 점검 앱 설치 또는 피해금 이관에 동의하는 순간",
-    sources: ["C03", "C04", "S4", "S22"],
+    ...CARD_COMPANY_ADVANCED_FV_AKJ5,
+    variantId: "fv-x7ue",
+    sms: [{ purpose: "link", smsId: "card-guard-app-link", required: true, notBeforeUserTurns: 2 }],
+    // T194-c-1 리뷰 Minor — 문자를 선언하므로 채널 메타에 "sms"를 더한다(fv-m3hd가 스프레드로 받는 값과 같은 꼴 · 프롬프트 바이트 무영향).
+    channels: ["voice", "sms"],
   },
 
   // ── loan-refinance-scam (§2.6.3 3행 — S10 · S19) ─────────────────────────────────────────
@@ -359,31 +399,17 @@ const SPECS: VariantSpec[] = [
     channels: ["voice", "sms"],
     demandStages: 2,
   },
+  // ⭐ T194-c-1(docs/Architecture.md §84.16.2 · DECISIONS #191 · #192) — `fv-6s5p`는 **내용 무변경**으로 챌린지 고급 풀에 남는다(신청서 링크
+  // 선택 + 계좌 필수 = base 선언). 자가 고급은 `link` 슬롯을 Q2 설치 문자로 바꾼 새 ID 변형(설치 필수 + 계좌 필수 — #182 · OQ-A145 = A).
+  // `planSmsBackstop`이 먼저 열리는 필수 문자를 고른다 — 설치(하한 2)가 계좌(3)보다 먼저 열린다(단계 2 "앱 설치" → 단계 4 "상환" 순서와 같다).
+  LOAN_ADVANCED_FV_6S5P,
   {
-    variantId: "fv-6s5p",
-    scenarioId: "loan-refinance-scam",
-    level: "advanced",
-    authoring: "authored",
-    stages: st(
-      "상대 대출 이력을 이미 아는 듯 맞춤 안내라고 말한다. 상대가 말하지 않은 이름 · 금액은 지어내 단정하지 않는다.",
-      "대출 심사 전에 보안 점검 앱을 설치하고 쓰던 금융 앱은 잠시 지우라고 요구한다.",
-      "절차와 서류를 들어 정식 상담처럼 꾸민다.",
-      "기존 대출 상환 또는 선입금을 요구한다.",
-    ),
-    extraTactics: [
-      "개인정보 보유 암시 — '고객님 대출 이력 보고 맞춤으로 연락드렸습니다' 처럼 이미 정보를 아는 듯 말한다. 상대가 말하지 않은 이름 · 금액 · 금융사는 지어내 단정하지 않는다.",
-      "보안 앱 설치·금융 앱 삭제 요구 — '심사 전에 ○○안심보안 점검 앱을 설치하시고, 쓰시던 금융 앱은 잠시 지워 주셔야 합니다' 처럼 요구한다. 설치 방법 · 경로 · 권한 설정은 설명하지 않는다.",
-    ],
-    exitBlock: ["D1_time_pressure", "D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
+    ...LOAN_ADVANCED_FV_6S5P,
+    variantId: "fv-m3hd",
     sms: [
-      { purpose: "link", smsId: "loan-apply-link", required: false, notBeforeUserTurns: 2 },
+      { purpose: "link", smsId: "loan-check-app-link", required: true, notBeforeUserTurns: 2 },
       { purpose: "transfer", smsId: "loan-account", required: true, notBeforeUserTurns: 3 },
     ],
-    legs: ONE_LEG("캐피탈 상담원", "female"),
-    ...ADVANCED,
-    channels: ["voice", "sms"],
-    demandStages: 3,
-    sources: ["S10", "S19", "C13", "C22"],
   },
 
   // ── tax-refund-scam (§2.6.3 4행 — 초급만 저작, 중급 · 고급 "현행") ─────────────────────────
@@ -823,7 +849,7 @@ const SPECS: VariantSpec[] = [
   },
   // ⭐ T194-a(docs/Architecture.md §84.13.5 처방 2) — parcel 고급 **2인 챌린지 수신자용** 비에스컬레이션 변형. 내용 = T194 이전 `fv-g454`
   // ("현행" — 단계 0 · 페르소나 무변경 · 수법 원본 그대로)와 같다. 새 불투명 ID다(기존 ID 재사용 금지). 수신자 세션은 에스컬레이션이 없어
-  // (`resolveSessionEscalation` — AC-106 (g) 기본값) 배정 풀(`assignablePool`)이 이 변형만 남기고, 자가 고급 풀은 `fv-g454`만 남긴다.
+  // (`resolveSessionEscalation` — AC-106 (g) 기본값) 배정 풀(`variantPool.ts` `assignablePool`)이 이 변형만 남기고, 자가 고급 풀은 `fv-g454`만 남긴다.
   {
     variantId: "fv-k7qm",
     scenarioId: "messenger-parcel-smishing-sms",
@@ -937,13 +963,16 @@ const SPECS: VariantSpec[] = [
       "조사가 끝날 때까지 자산을 보호 계좌로 옮기라고 요구한다.",
     ),
     exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],
-    sms: [],
+    // ⭐ T194-c-1(docs/Architecture.md §84.15.4 ① · §84.16.2) — 내용 교체(ID 유지 — 고급 전용 · 챌린지 불가라 받는 세션 종류가 하나).
+    // Q2 설치 문자(단계 3 "보안 점검 앱 설치")를 백스톱 강제로 선언한다(#182). 단위 도달 랜딩 = [설치 화면] 1건(G604).
+    sms: [{ purpose: "link", smsId: "card-delivery-app-link", required: true, notBeforeUserTurns: 2 }],
     legs: [
       { callerLabel: "카드 배송 안내", speakerGender: "female", minUserTurns: 3, maxUserTurns: 8 },
       { callerLabel: "금융감독원 직원", speakerGender: "male", minUserTurns: 2, maxUserTurns: 10 },
     ],
     ...ADVANCED,
-    channels: ["voice"],
+    // T194-c-1 리뷰 Minor — 위 sms 선언과 맞춘다(채널 메타 · 프롬프트 바이트 무영향).
+    channels: ["voice", "sms"],
     demandStages: 3,
     decisionMoment: "보안 점검 앱 설치 또는 자산 보호 이체에 동의하는 순간",
     sources: ["C03", "C04", "S4", "S22"],
@@ -1003,18 +1032,8 @@ export function listFlowVariants(scenarioId: string, level: DifficultyLevel): Fl
   return FLOW_VARIANTS.filter((v) => v.scenarioId === scenarioId && v.level === level);
 }
 
-/**
- * ⭐ T194-a(docs/Architecture.md §84.13.5 · G590) — **배정 가능 풀**: 허용 변형 중 통화 단계 유무(`escalatesToVoice`)가 그 세션 종류
- * (자가 = 시나리오 × 난이도 · 챌린지 수신자 = 시나리오 단위)의 에스컬레이션 값(`resolveSessionEscalation`)과 같은 것만.
- * 자가 · 수신자 배정(`session/variantAssignment.ts` `candidatesOrThrow`)이 이 함수 하나를 쓴다(J-1). 별도 `audience` 필드는 두지 않는다 —
- * 판별자는 에스컬레이션 값 하나다. 결과: parcel 고급 자가 = 3단계 변형 · 수신자 = 현행 고급 변형(AC-106 (g) 기본값). 다른 시나리오는 항등이다.
- */
-export function assignablePool(scenarioId: string, level: DifficultyLevel, challengeId?: string): FlowVariant[] {
-  const escalates = Boolean(
-    resolveSessionEscalation({ scenarioId, difficultyLevel: level, challengeId }, PUBLIC_SCENARIOS),
-  );
-  return listFlowVariants(scenarioId, level).filter((v) => Boolean(v.escalatesToVoice) === escalates);
-}
+// ⭐ T194-c-1(docs/Architecture.md §84.16.1 · G590 갱신) — 배정 가능 풀 `assignablePool`은 `scenarios/variantPool.ts`로 옮겼다. 판별에
+// `mockScreens.ts`가 필요한데 `mockScreens → reachability → flowVariants`라 여기 두면 순환한다. ⛔ 재수출도 순환이라 두지 않는다.
 
 export function findFlowVariant(variantId: string | undefined): FlowVariant | undefined {
   if (!variantId) return undefined;

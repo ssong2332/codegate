@@ -25,6 +25,7 @@ import { IN_CALL_SMS } from "../../scenarios/inCallSms";
 import { hasVerifyIntercept, VERIFY_INTERCEPT } from "../../scenarios/verifyIntercept";
 import { MOCK_INSTALL_CONSENT_INSTRUCTION } from "../../scenarios/mockScreens";
 import { MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL } from "../../scenarios/mockScreens";
+import { IN_CALL_INSTALL_CONSENT_INSTRUCTION } from "../../scenarios/mockScreens";
 import { buildConfirmResultInstruction, buildLiveConfirmResultInstruction } from "../../inCallSms/confirmResult";
 import { ESCALATED_CALL_CONTEXT_INSTRUCTION } from "../escalatedCall";
 import { isL3Procedural } from "../l3Depth";
@@ -147,6 +148,8 @@ function assembledPromptTexts(): Set<string> {
   texts.add(MOCK_INSTALL_CONSENT_INSTRUCTION);
   // A-1 ⑦⑧ — 새 서버 소유 턴 지시(폴백) · Live 응답 필드도 같은 게이트를 받는다.
   texts.add(MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL);
+  // T194-c-1 G585 — 통화 중 설치 응낙 실시간 지시(c-2에서 Live 맥락 주입).
+  texts.add(IN_CALL_INSTALL_CONSENT_INSTRUCTION);
   texts.add(ESCALATED_CALL_CONTEXT_INSTRUCTION);
   for (const purpose of ["transfer", "link"] as const) {
     texts.add(buildConfirmResultInstruction(purpose));

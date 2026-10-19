@@ -13,6 +13,7 @@ import {
   findDefaultCredentialLanding,
   findMockScreenItem,
   hasAppInstallMockScreen,
+  IN_CALL_INSTALL_SCENARIOS,
   isMockScreenReachable,
   listAppInstallMockScreens,
   MOCK_INSTALL_CONSENT_INSTRUCTION,
@@ -22,10 +23,15 @@ import {
   type MockScreenKind,
 } from "../mockScreens";
 import { IN_CALL_SMS } from "../inCallSms";
+import { pickFallbackTurnInstruction } from "../../verifyIntercept/fallbackTurn";
+import { resolveDeclaredSms } from "../../inCallSms/smsGate";
+import { findInCallSmsItem } from "../inCallSms";
 import { VERIFY_INTERCEPT } from "../verifyIntercept";
 import { SCENARIO_PROMPTS } from "../index";
 import { PUBLIC_SCENARIOS } from "../publicMeta";
-import { FLOW_VARIANTS, assignablePool, listFlowVariants, resolveVariantPrompt } from "../flowVariants";
+import { FLOW_VARIANTS, listFlowVariants, resolveVariantPrompt } from "../flowVariants";
+// T194-c-1(§84.16.1) — 배정 풀은 `variantPool.ts`로 옮겼다(순환 회피).
+import { assignablePool } from "../variantPool";
 import { sessionReachableLandingIds } from "../reachability";
 import { resolveScenarioEscalation, resolveSessionEscalation } from "../escalation";
 import { DIFFICULTY_LEVELS } from "../../shared/difficulty";
@@ -153,6 +159,72 @@ test("[D-52/P-25] correctAction에 무력감 표현이 없고, 유효 대처가 
   }
 });
 
+// ── T194-c-1 · UX v1.40 D-128(W-12) · W-10 — Q2 설치 순간 카드(통화 중 문자 표면 app-install)의 리포트 문면 ──────────────
+// 정본 = docs/UX.md UX-023 v1.40 (5) · UX-008 v1.40(W-12) · v1.39 (3) W-10. 대상 = Q2 3항목(적용 범위 — 기존 두 설치 카드 확대는 OQ-U93).
+/** UX-023 v1.40 (5) 정본 ④ — 글자 단위. */
+const D128_STEP4 = "④ 이미 허용했다면 가족 휴대폰이나 집 전화로 경찰이나 금융감독원에 신고하기.";
+/** W-10 — 공공 낱말 · 부정 토큰(UX v1.39 (3) W-10 원문 목록). */
+const W10_PUBLIC = ["112", "1332", "경찰", "금융감독원", "금감원"];
+const W10_NEGATION = ["사기", "가짜", "아니", "없", "못", "믿지", "소용"];
+
+const q2InstallItems = allItems.filter((item) => item.kind === "app-install" && item.entrySurface === "in-call-sms");
+
+/** W-12 위반 사유(없으면 빈 배열) — ⓐ 112 · 1332 숫자 0 ⓑ "그 휴대폰 말고 / 그 휴대폰으로는" 대비 0 ⓒ 허용 뒤 행동 = D-128 정본 ④. */
+function w12Violations(correctAction: string): string[] {
+  const out: string[] = [];
+  if (/112|1332/.test(correctAction)) out.push("ⓐ 112·1332 숫자");
+  if (/그\s*휴대폰\s*(?:말고|으로는)/.test(correctAction)) out.push("ⓑ 대비 문구");
+  if (!correctAction.endsWith(D128_STEP4)) out.push("ⓒ ④ ≠ D-128 정본");
+  return out;
+}
+
+/** W-10 위반 문장(없으면 빈 배열) — `.` `?` `!`로 문장을 나눈 뒤 공공 낱말이 든 문장에 부정 토큰이 있으면 위반. */
+function w10Violations(text: string): string[] {
+  return text
+    .split(/(?<=[.?!])/)
+    .map((s) => s.trim())
+    .filter((s) => W10_PUBLIC.some((p) => s.includes(p)))
+    .filter((s) => W10_NEGATION.some((n) => s.includes(n)));
+}
+
+test("[T194-c-1 · UX v1.40 D-128 W-12 · W-10] Q2 설치 카드 3벌 — correctAction ④가 정본 그대로 · 숫자 0 · 대비 문구 0 · 공공 낱말 든 문장에 부정 토큰 0", (t) => {
+  assert.deepEqual(
+    q2InstallItems.map((i) => i.landingId).sort(),
+    ["card-delivery-app-install", "card-guard-app-install", "loan-check-app-install"],
+    "Q2 설치 카드 대상이 3벌이 아니다",
+  );
+  const lines: string[] = [];
+  for (const item of q2InstallItems) {
+    assert.deepEqual(w12Violations(item.correctAction), [], `${item.landingId}: W-12`);
+    assert.deepEqual(w10Violations(item.correctAction), [], `${item.landingId}: W-10(correctAction)`);
+    assert.deepEqual(w10Violations(item.momentTactic), [], `${item.landingId}: W-10(momentTactic)`);
+    const publicSentences = item.correctAction.split(/(?<=[.?!])/).filter((s) => W10_PUBLIC.some((p) => s.includes(p)));
+    // W-10이 공회전하지 않는다 — 검사 대상 문장(공공 낱말 포함)이 실제로 있다.
+    assert.ok(publicSentences.length >= 1, `${item.landingId}: 공공 낱말 든 문장이 없다(W-10 공회전)`);
+    lines.push(`${item.landingId}: 공공 문장 ${publicSentences.length}`);
+  }
+  t.diagnostic(`[W-10] ${lines.join(" · ")}`);
+});
+
+test("[T194-c-1 · W-12 역방향] 설치 카드 ④에 112 · 1332가 든 사본(초안 96670aa · 기존 두 설치 카드 꼴)은 실패한다 · [W-10 역방향] 공공 낱말 문장에 부정 토큰을 넣으면 실패한다", (t) => {
+  const item = q2InstallItems.find((i) => i.landingId === "card-delivery-app-install");
+  assert.ok(item);
+  const draft = item.correctAction.replace(
+    D128_STEP4,
+    "④ 이미 허용했다면 그 휴대폰 말고 가족 휴대폰이나 집 전화로 112(경찰)·1332(금융감독원)에 신고하기.",
+  );
+  const legacyForm = item.correctAction.replace(D128_STEP4, "④ 이미 허용했다면 112(경찰)·1332(금융감독원)에 신고하기.");
+  assert.notEqual(draft, item.correctAction, "역검증 전제 — 사본이 원본과 같다");
+  assert.deepEqual(w12Violations(draft), ["ⓐ 112·1332 숫자", "ⓑ 대비 문구", "ⓒ ④ ≠ D-128 정본"]);
+  assert.deepEqual(w12Violations(legacyForm), ["ⓐ 112·1332 숫자", "ⓒ ④ ≠ D-128 정본"]);
+  // 숫자만 넣고 ④ 문형은 그대로 둔 사본도 ⓐ 하나로 잡힌다(ⓒ에만 기대지 않는다).
+  const digitsOnly = item.correctAction.replace("① 통화를 끊고", "① 통화를 끊고 112에 묻지 말고");
+  assert.deepEqual(w12Violations(digitsOnly), ["ⓐ 112·1332 숫자"]);
+  const negated = item.correctAction.replace(D128_STEP4, "④ 이미 허용했다면 경찰도 소용없으니 가족 휴대폰이나 집 전화로 신고하기.");
+  assert.equal(w10Violations(negated).length, 1, "W-10 역방향 — 부정 토큰을 넣은 사본이 잡히지 않는다");
+  t.diagnostic(`[W-12 역방향] 초안=${w12Violations(draft).join("/")} · 기존 꼴=${w12Violations(legacyForm).join("/")} · [W-10 역방향] ${w10Violations(negated).length}문장`);
+});
+
 test("[§15.9.7 G53] entrySurface='messenger-link' 항목의 landingId가 LINK_LABELS에 있다(칩 라벨 드리프트 방지)", () => {
   // extractLinkMarker가 기본 라벨("확인하기")로 떨어지면 설치 유도 링크가 무의미한 라벨로 뜬다.
   //
@@ -190,7 +262,12 @@ test("[§15.9.7 G55] **app-install 항목을 가진** 시나리오는 IN_CALL_SM
   // (`roleplay/index.ts:213` → `mockScreens.ts` `listAppInstallMockScreens`), 지시의 전제인
   // `consentedAt`은 `kind !== "app-install"`이면 콜러블이 거부한다(`mockScreens/index.ts:74-76`).
   // 즉 `credential-form` 항목은 **경합 자체를 만들 수 없다**(§19.1 (2) ①②).
+  //
+  // ⚠️ **T194-c-1 허용목록 대체(§84.5.1 · G583 · G585 — X8 삭제 0)**: Q2(통화 중 문자 → 설치)는 `IN_CALL_INSTALL_SCENARIOS` 3종에서 설치 ·
+  // 문자 · 확인 카탈로그를 **공유한다**(설계 승인 — DECISIONS #177). 그 3종의 경합은 아래 `[G585]` 우선순위 표 전수 테스트가 판정하고,
+  // **허용목록 밖** 시나리오의 비공유는 이 단언이 그대로 지킨다.
   for (const scenarioId of appInstallScenarioIds) {
+    if (IN_CALL_INSTALL_SCENARIOS.includes(scenarioId)) continue;
     assert.equal(
       IN_CALL_SMS[scenarioId],
       undefined,
@@ -203,20 +280,117 @@ test("[§15.9.7 G55] **app-install 항목을 가진** 시나리오는 IN_CALL_SM
     );
   }
   assert.ok(appInstallScenarioIds.length > 0, "app-install 항목이 0건이면 이 게이트가 아무것도 안 잡는다");
+  // 허용목록 밖 · app-install 보유 시나리오가 실제로 남아 있다(공회전 방지 — 지원금 · 택배).
+  assert.deepEqual(
+    appInstallScenarioIds.filter((id) => !IN_CALL_INSTALL_SCENARIOS.includes(id)),
+    ["messenger-subsidy-smishing-sms", "messenger-parcel-smishing-sms"],
+  );
 });
 
-test("[§15.9.1 R6] IN_CALL_SMS가 app-install 랜딩을 참조하지 않는다(통화 중 문자 경로는 범위 밖)", () => {
-  const installIds = new Set(allItems.filter((i) => i.kind === "app-install").map((i) => i.landingId));
-  for (const [scenarioId, items] of Object.entries(IN_CALL_SMS)) {
-    for (const sms of items) {
-      if (!sms.fakeLandingId) continue;
-      assert.equal(
-        installIds.has(sms.fakeLandingId),
-        false,
-        `${scenarioId}/${sms.smsId}: 통화 중 문자로 설치 목업을 열면 앵커 규칙이 합성 타임스탬프 문제와 얽힌다(R6)`,
-      );
+// ── T194-c-1 G585(§84.5.1 4행 · fallbackTurn.ts 우선순위 표) — Q2 3종은 문자 announce · 확인 announce · 재연결 · 설치 응낙이 한 시나리오에서
+// 경합한다. 비공유 단언 대신 **표의 순서를 Q2 3종 × 상태 조합 전수로** 고정한다(재연결 > 문자 announce > 확인 announce > 설치 응낙).
+
+/** 정본 우선순위 표(`verifyIntercept/fallbackTurn.ts` 머리 주석 1~4행)를 그대로 옮긴 판정 — 역방향 사본과 비교하는 기준. */
+function expectedFallbackChoice(state: Parameters<typeof pickFallbackTurnInstruction>[0]): ReturnType<typeof pickFallbackTurnInstruction> {
+  const v = state.verify;
+  if (v?.placed && v.reconnectAnchorScammerTurn !== undefined && v.reconnectAnchorScammerTurn === state.scammerDocCount) return "verify_reconnect";
+  if (state.smsDue && !v?.placed) return "sms_announce";
+  if (v && !v.announced) return "verify_announce";
+  if (state.installConsentDue === true) return "install_consent";
+  return "none";
+}
+
+function fallbackStates(): Parameters<typeof pickFallbackTurnInstruction>[0][] {
+  const verifies: (Parameters<typeof pickFallbackTurnInstruction>[0]["verify"] | undefined)[] = [
+    undefined,
+    { announced: false, placed: false },
+    { announced: true, placed: false },
+    { announced: true, placed: true, reconnectAnchorScammerTurn: 3 },
+    { announced: true, placed: true, reconnectAnchorScammerTurn: 9 },
+  ];
+  const out: Parameters<typeof pickFallbackTurnInstruction>[0][] = [];
+  for (const smsDue of [false, true]) {
+    for (const verify of verifies) {
+      for (const installConsentDue of [false, true]) {
+        out.push({ smsDue, scammerDocCount: 3, installConsentDue, ...(verify ? { verify } : {}) });
+      }
     }
   }
+  return out;
+}
+
+test("[T194-c-1 G585] Q2 3종은 설치 · 문자 · 확인 카탈로그를 공유하고, 폴백 턴 지시 우선순위 표가 상태 조합 전수에서 그대로다 · 역방향(설치 응낙을 앞세운 사본)은 실패", (t) => {
+  for (const scenarioId of IN_CALL_INSTALL_SCENARIOS) {
+    assert.ok(hasAppInstallMockScreen(scenarioId), `${scenarioId}: 설치 항목`);
+    assert.ok((IN_CALL_SMS[scenarioId] ?? []).length > 0, `${scenarioId}: 통화 중 문자`);
+    assert.ok(VERIFY_INTERCEPT[scenarioId], `${scenarioId}: 확인 무력화`);
+  }
+  const states = fallbackStates();
+  const mismatches = states.filter((s) => pickFallbackTurnInstruction(s) !== expectedFallbackChoice(s));
+  // 설치 응낙은 다른 세 지시를 절대 밀어내지 않는다 — 설치 due 여부와 무관하게 앞 세 지시의 선택이 같다.
+  const preempted = states.filter(
+    (s) => s.installConsentDue === true && pickFallbackTurnInstruction({ ...s, installConsentDue: false }) !== "none" && pickFallbackTurnInstruction(s) === "install_consent",
+  );
+  // 역방향 — 설치 응낙을 문자 announce 앞에 둔 사본.
+  const swapped = (s: Parameters<typeof pickFallbackTurnInstruction>[0]) =>
+    s.installConsentDue === true ? "install_consent" : pickFallbackTurnInstruction(s);
+  const swappedMismatches = states.filter((s) => swapped(s) !== expectedFallbackChoice(s));
+  t.diagnostic(`[G585] Q2 ${IN_CALL_INSTALL_SCENARIOS.length}종 카탈로그 공유 확인 · 상태 ${states.length}조합(선택 함수는 시나리오를 입력으로 받지 않는다) — 정본 불일치 ${mismatches.length} · 설치가 앞 지시를 밀어낸 조합 ${preempted.length} / 역방향(설치 우선 사본) 불일치 ${swappedMismatches.length}`);
+  assert.equal(states.length, 20);
+  assert.deepEqual(mismatches, []);
+  assert.deepEqual(preempted, []);
+  assert.ok(swappedMismatches.length > 0, "역방향 사본이 표와 같으면 이 검사는 변별력이 없다");
+});
+
+/**
+ * T194-c-1 G583(§84.5.1 R6 · J-3) — R6 단언(`IN_CALL_SMS.fakeLandingId ∉ app-install`)의 **허용목록 대체**. 위반 = ① 허용목록 밖 시나리오의
+ * 통화 중 문자가 설치 랜딩을 가리킨다 ② 설치 문자를 **고급이 아닌** 변형이 선언한다(전 변형 순회).
+ */
+function findInCallInstallSmsViolations(
+  smsCatalog: Record<string, { smsId: string; fakeLandingId?: string }[]>,
+  variants: readonly { variantId: string; scenarioId: string; level: string; sms: readonly { smsId: string }[] }[],
+): string[] {
+  const installIds = new Set(allItems.filter((i) => i.kind === "app-install").map((i) => i.landingId));
+  const failures: string[] = [];
+  const installSms = new Set<string>();
+  for (const [scenarioId, items] of Object.entries(smsCatalog)) {
+    for (const sms of items) {
+      if (!sms.fakeLandingId || !installIds.has(sms.fakeLandingId)) continue;
+      installSms.add(`${scenarioId}::${sms.smsId}`);
+      if (!IN_CALL_INSTALL_SCENARIOS.includes(scenarioId)) {
+        failures.push(`${scenarioId}/${sms.smsId}: 허용목록 밖 시나리오의 통화 중 문자가 설치 화면을 연다(R6 · G583)`);
+      }
+    }
+  }
+  for (const v of variants) {
+    for (const s of v.sms) {
+      if (installSms.has(`${v.scenarioId}::${s.smsId}`) && v.level !== "advanced") {
+        failures.push(`${v.variantId}(${v.level}): 설치 문자 ${s.smsId}를 고급이 아닌 변형이 선언한다(G583)`);
+      }
+    }
+  }
+  return failures;
+}
+
+test("[§15.9.1 R6 → T194-c-1 G583] IN_CALL_SMS의 설치 랜딩 참조는 허용목록 3종 안에서만 · 그 문자는 고급 변형만 선언한다 · 역방향", (t) => {
+  // ⚠️ 허용목록 대체(X8 — 삭제 0): 옛 단언 "IN_CALL_SMS가 app-install 랜딩을 참조하지 않는다"는 허용목록 밖에서 그대로 성립한다.
+  assert.deepEqual(findInCallInstallSmsViolations(IN_CALL_SMS, FLOW_VARIANTS), []);
+  // 역방향 ① — 허용목록 밖 통화 시나리오(tax-refund-scam)의 문자가 설치 화면을 가리키는 샘플(R-g 짝).
+  const outside = findInCallInstallSmsViolations(
+    { ...IN_CALL_SMS, "tax-refund-scam": [{ smsId: "tax-install-link", fakeLandingId: "card-guard-app-install" }] },
+    FLOW_VARIANTS,
+  );
+  // 역방향 ② — 중급 card-company 변형(fv-35f2)이 설치 문자를 선언한 샘플.
+  const intermediate = findInCallInstallSmsViolations(IN_CALL_SMS, [
+    ...FLOW_VARIANTS,
+    { variantId: "fv-35f2-copy", scenarioId: "card-company-impersonation", level: "intermediate", sms: [{ smsId: "card-guard-app-link" }] },
+  ]);
+  t.diagnostic(`[G583] 정상 위반 0 · 허용목록 밖 샘플 → ${JSON.stringify(outside)} · 중급 선언 샘플 → ${JSON.stringify(intermediate)}`);
+  assert.equal(outside.length, 1);
+  assert.equal(intermediate.length, 1);
+  // 실제로 설치 문자를 선언하는 변형이 있다(공회전 방지).
+  const declaring = FLOW_VARIANTS.filter((v) => v.sms.some((s) => (IN_CALL_SMS[v.scenarioId] ?? []).some((i) => i.smsId === s.smsId && allItems.some((m) => m.kind === "app-install" && m.landingId === i.fakeLandingId))));
+  assert.deepEqual(declaring.map((v) => v.variantId).sort(), ["fv-m3hd", "fv-tvnj", "fv-x7ue"]);
 });
 
 // ── T104 신규 게이트 G-A~G-E (Architecture.md §19.5 · ADR-0012) ───────────────
@@ -230,13 +404,16 @@ test("[§15.9.1 R6] IN_CALL_SMS가 app-install 랜딩을 참조하지 않는다(
 
 type Catalog = Record<string, MockScreenItem[]>;
 
-/** G-A — 통화 중 문자 표면에서는 `app-install`이 열릴 수 없다(R6을 카탈로그 쪽에서 한 번 더). */
+/**
+ * G-A — 통화 중 문자 표면에서는 `app-install`이 열릴 수 없다(R6을 카탈로그 쪽에서 한 번 더).
+ * ⚠️ T194-c-1 허용목록 대체(§84.5.1 J-3 · G583): `IN_CALL_INSTALL_SCENARIOS` 3종만 예외다(Q2 — DECISIONS #177). 그 밖은 그대로 위반이다.
+ */
 function findEntrySurfaceKindViolations(catalog: Catalog): string[] {
   const failures: string[] = [];
   for (const [scenarioId, items] of Object.entries(catalog)) {
     for (const item of items) {
-      if (item.entrySurface === "in-call-sms" && item.kind === "app-install") {
-        failures.push(`${scenarioId}/${item.landingId}: in-call-sms 표면에 app-install kind(G-A/R6)`);
+      if (item.entrySurface === "in-call-sms" && item.kind === "app-install" && !IN_CALL_INSTALL_SCENARIOS.includes(scenarioId)) {
+        failures.push(`${scenarioId}/${item.landingId}: in-call-sms 표면에 app-install kind(G-A/R6 — 허용목록 밖)`);
       }
     }
   }
@@ -343,13 +520,19 @@ test("[T104/G-A] entrySurface='in-call-sms' 항목은 app-install kind일 수 �
   assert.deepEqual(findEntrySurfaceKindViolations(MOCK_SCREENS), []);
 });
 
-test("[T104/G-A 역검증] 통화 표면에 app-install을 넣으면 실제로 걸린다", () => {
-  const poisoned: Catalog = {
-    "loan-refinance-scam": [
-      fixtureItem({ entrySurface: "in-call-sms", kind: "app-install", consentLabel: "허용", fields: undefined }),
-    ],
-  };
-  assert.equal(findEntrySurfaceKindViolations(poisoned).length, 1);
+test("[T104/G-A 역검증 · T194-c-1 R-g] 허용목록 밖 통화 시나리오(tax-refund-scam)에 통화 표면 app-install을 넣으면 실제로 걸린다 · 허용목록 안은 통과", (t) => {
+  // ⚠️ T194-c-1 — 옛 샘플(loan-refinance-scam)은 이제 허용목록 안(Q2)이라 위반이 아니다. 같은 모양을 허용목록 밖으로 옮겼다(R-g).
+  const install = fixtureItem({ entrySurface: "in-call-sms", kind: "app-install", consentLabel: "허용", fields: undefined, submitLabel: undefined, successHeadline: undefined });
+  const outside = findEntrySurfaceKindViolations({ "tax-refund-scam": [install] });
+  const inside = findEntrySurfaceKindViolations({ "loan-refinance-scam": [install] });
+  t.diagnostic(`[G583 · R-g] tax-refund-scam 통화 중 설치 → 위반 ${outside.length}건 / loan-refinance-scam(허용목록) → 위반 ${inside.length}건`);
+  assert.equal(outside.length, 1);
+  assert.equal(inside.length, 0);
+  // 도달 술어도 같은 허용목록으로 닫는다 — 허용목록 밖 시나리오의 통화 중 설치 항목은 도달 불가.
+  // (전제: 그 랜딩은 세션 도달 집합 안이다 — 거짓은 도달 집합이 아니라 허용목록 항에서 나온다.)
+  const taxVariant = firstVariantId("tax-refund-scam", "beginner");
+  assert.ok(sessionReachableLandingIds("tax-refund-scam", taxVariant).includes("tax-refund-claim"));
+  assert.equal(isMockScreenReachable({ scenarioId: "tax-refund-scam", difficultyLevel: "beginner", flowVariantId: taxVariant }, { ...install, landingId: "tax-refund-claim" }), false);
 });
 
 test("[T104/G-B] IN_CALL_SMS ↔ MOCK_SCREENS 양방향 참조 정합(통화 경로 랜딩의 M5를 닫는다)", () => {
@@ -464,7 +647,14 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
 
   // G55·channel — app-install 판정 키가 실제 카탈로그에서 비어 있지 않다(공회전 방지).
   // T194-a(§84.4.3) — parcel(고급 세션 전용 `parcel-install`)이 더해졌다.
-  assert.deepEqual(appInstallScenarioIds, ["messenger-subsidy-smishing-sms", "messenger-parcel-smishing-sms"]);
+  // T194-c-1(§84.5.2 · G583) — Q2 3종(통화 중 문자 표면 설치 — 허용목록)이 더해졌다(카탈로그 순서).
+  assert.deepEqual(appInstallScenarioIds, [
+    "messenger-subsidy-smishing-sms",
+    "messenger-parcel-smishing-sms",
+    "card-company-impersonation",
+    "loan-refinance-scam",
+    "card-delivery-call",
+  ]);
   // 통화 채널 시나리오가 **실제로** 카탈로그에 들어와 있다 — 정밀화가 없었다면 여기서 깨졌을 상태다.
   // ⚠️ `channel`은 옵셔널이고 **음성 시나리오는 아예 필드를 갖지 않는다**(`publicMeta.ts:29`) —
   // `=== "voice"`로 세면 0건이 나온다. 정밀화된 단언과 같은 판정("messenger가 아닌 것")을 쓴다.
@@ -479,15 +669,25 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
     [
       "bank-security-verify-scam",
       "card-company-impersonation",
+      // T194-c-1(§84.5.2) — card-delivery-call 카탈로그 신설(통화 중 설치 화면 1건).
+      "card-delivery-call",
       "courier-customs-scam",
       "institutional-impersonation",
       "loan-refinance-scam",
       "tax-refund-scam",
     ],
-    "통화 채널 6종이 카탈로그에 없으면 정밀화가 아무것도 안 푼 것이다",
+    "통화 채널 7종이 카탈로그에 없으면 정밀화가 아무것도 안 푼 것이다",
   );
-  // 그리고 그 5종은 **app-install을 하나도 갖지 않는다**(정밀화의 안전 전제 = M2 차단).
+  // 그리고 **허용목록 밖** 통화 채널 시나리오는 app-install을 하나도 갖지 않는다(정밀화의 안전 전제 = M2 차단).
+  // ⚠️ T194-c-1 허용목록 대체(§84.5.1 · G583 — X8): 허용목록 3종은 설치 항목을 갖되 **통화 중 문자 표면으로만** 갖는다.
   for (const scenarioId of voiceScoped) {
+    if (IN_CALL_INSTALL_SCENARIOS.includes(scenarioId)) {
+      assert.ok(
+        listAppInstallMockScreens(scenarioId).every((item) => item.entrySurface === "in-call-sms"),
+        `${scenarioId}: 허용목록 시나리오의 설치 화면은 통화 중 문자 표면뿐이다`,
+      );
+      continue;
+    }
     assert.equal(hasAppInstallMockScreen(scenarioId), false, `${scenarioId}: 통화 채널에 설치 목업 금지`);
   }
   // entrySurface 분포도 고정한다 — 표면 선언이 통째로 한쪽으로 쏠리면 G53/G-B 중 하나가 공회전한다.
@@ -498,6 +698,10 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
     "in-call-sms",
     "in-call-sms",
     "in-call-sms",
+    "in-call-sms",
+    "in-call-sms",
+    "in-call-sms",
+    // T194-c-1 — Q2 설치 화면 3종(card-company · loan · card-delivery — 통화 중 문자 표면).
     "in-call-sms",
     "in-call-sms",
     "in-call-sms",
@@ -521,12 +725,21 @@ test("landingId는 전역 유일하고, 카탈로그의 모든 scenarioId가 실
   // 그래서 판정 키를 `app-install` 항목을 가진 시나리오로 좁힌다. 통화 채널의
   // `credential-form` 랜딩은 `recordMockScreenEvent`를 타지 않아(§19.4 #4) 앵커 자체가 생기지
   // 않는다(§19.1 (2) ④).
-  for (const scenarioId of appInstallScenarioIds) {
+  // ⚠️ T194-c-1 허용목록 대체(§84.5.1 · G583 — X8): 판정 대상을 **메신저 링크 표면** 설치 항목을 가진 시나리오로 좁힌다. 통화 중 문자
+  // 표면의 설치(Q2)는 `IN_CALL_INSTALL_SCENARIOS`에서만 열리고 그 시나리오는 통화 채널이다(UF-012가 아니라 UF-015 경로).
+  const messengerInstallScenarioIds = appInstallScenarioIds.filter((scenarioId) =>
+    listAppInstallMockScreens(scenarioId).some((item) => item.entrySurface === "messenger-link"),
+  );
+  assert.deepEqual(messengerInstallScenarioIds, ["messenger-subsidy-smishing-sms", "messenger-parcel-smishing-sms"]);
+  for (const scenarioId of messengerInstallScenarioIds) {
     assert.equal(
       PUBLIC_SCENARIOS[scenarioId].channel,
       "messenger",
       `${scenarioId}: 모의 설치는 메신저 단계에서 일어난다(UF-012 Step 2)`,
     );
+  }
+  for (const scenarioId of appInstallScenarioIds.filter((id) => !messengerInstallScenarioIds.includes(id))) {
+    assert.ok(IN_CALL_INSTALL_SCENARIOS.includes(scenarioId), `${scenarioId}: 통화 중 설치는 허용목록에서만`);
   }
 });
 
@@ -538,9 +751,13 @@ test("[AC-073] app-install 카탈로그를 가진 시나리오는 escalation 배
   for (const scenarioId of Object.keys(MOCK_SCREENS)) {
     if (!hasAppInstallMockScreen(scenarioId)) continue;
     for (const level of DIFFICULTY_LEVELS) {
-      const reachable = listAppInstallMockScreens(scenarioId).some((item) =>
-        isMockScreenReachable({ scenarioId, difficultyLevel: level, flowVariantId: firstVariantId(scenarioId, level) }, item),
-      );
+      // T194-c-1(§84.15.7 단계 1 · G587) — **메신저 링크 표면** 설치 항목만 본다. 통화 중 문자 표면 설치(Q2)는 처음부터 통화인 세션이라
+      // 메신저 → 통화 전이가 없다(3단계 표시 0 — G587). 그 세션의 단계 파생은 `report/__tests__/mockScreenTimeline.test.ts`가 본다.
+      const reachable = listAppInstallMockScreens(scenarioId)
+        .filter((item) => item.entrySurface === "messenger-link")
+        .some((item) =>
+          isMockScreenReachable({ scenarioId, difficultyLevel: level, flowVariantId: firstVariantId(scenarioId, level) }, item),
+        );
       if (!reachable) continue;
       const escalation = resolveScenarioEscalation(PUBLIC_SCENARIOS[scenarioId], level);
       assert.ok(escalation, `${scenarioId}/${level}: 설치 단계에 도달하는 칸은 기존 전이 배선이 있어야 3단계로 이어진다`);
@@ -584,9 +801,25 @@ test("[T194-a G582] 도달 술어 진리표 — 택배 설치는 고급 자가 �
   for (const [label, session, item, expected] of rows) {
     assert.equal(isMockScreenReachable(session, item), expected, label);
   }
-  // 통화 중 문자 표면의 app-install(Q2 범위 — 오늘 카탈로그에 없다)은 닫힌 쪽(불가)이다.
+  // 통화 중 문자 표면의 app-install — 허용목록 밖(지원금)은 닫힌 쪽(불가)이다.
   const inCallInstall: MockScreenItem = { ...subsidyInstall, landingId: "q2-sample", entrySurface: "in-call-sms" };
   assert.equal(isMockScreenReachable({ scenarioId: "messenger-subsidy-smishing-sms", difficultyLevel: "advanced" }, inCallInstall), false);
+  // ⭐ T194-c-1(§84.15.7 단계 1 — G582 "통화 중 설치 불가" → Q2 행 추가): 허용목록 3종의 통화 중 설치 화면은 **그 화면을 여는 문자를 선언한
+  // 변형**(자가 고급)에서만 도달 가능 · 챌린지 base 변형 · 중급 · 변형 없음은 불가. "문자 도착" 조건은 recordMockScreenEvent ⑥이 따로 본다.
+  const q2Rows: [string, string, string, string | undefined, boolean][] = [
+    ["card-delivery 자가 고급(fv-tvnj)", "card-delivery-call", "card-delivery-app-install", "fv-tvnj", true],
+    ["card-delivery 변형 없음(옛 세션)", "card-delivery-call", "card-delivery-app-install", undefined, false],
+    ["card-company 자가 고급(fv-x7ue)", "card-company-impersonation", "card-guard-app-install", "fv-x7ue", true],
+    ["card-company 챌린지 고급(fv-akj5)", "card-company-impersonation", "card-guard-app-install", "fv-akj5", false],
+    ["card-company 중급(fv-35f2)", "card-company-impersonation", "card-guard-app-install", "fv-35f2", false],
+    ["loan 자가 고급(fv-m3hd)", "loan-refinance-scam", "loan-check-app-install", "fv-m3hd", true],
+    ["loan 챌린지 고급(fv-6s5p)", "loan-refinance-scam", "loan-check-app-install", "fv-6s5p", false],
+  ];
+  for (const [label, scenarioId, landingId, flowVariantId, expected] of q2Rows) {
+    const item = findMockScreenItem(scenarioId, landingId);
+    assert.ok(item && item.kind === "app-install" && item.entrySurface === "in-call-sms", label);
+    assert.equal(isMockScreenReachable({ scenarioId, difficultyLevel: "advanced", flowVariantId }, item), expected, label);
+  }
   // 강등 대상 기본 credential 랜딩.
   assert.equal(findDefaultCredentialLanding("messenger-parcel-smishing-sms")?.landingId, "parcel-redelivery");
   assert.equal(findDefaultCredentialLanding("messenger-subsidy-smishing-sms"), undefined);
@@ -679,7 +912,8 @@ function reachableLandingKeys(): string[] {
  * ⭐ T194-a G589(docs/Architecture.md §84.13.2) — **(시나리오 × 변형 · 변형 없는 원본 `base` 포함)** 단위의 도달 가능 랜딩 키
  * `"{scenarioId}#{variantId|base}::{landingId}"`. 소스 함수 `sessionReachableLandingIds`(기록 층 G584와 같은 원천)를 그대로 부른다 —
  * 테스트에 정규식 사본 0. G159 헬퍼는 `::` 앞을 단위로 묶으므로 헬퍼 · 처방 문구 무변경으로 단위만 바뀐다.
- * ⚠️ 위 `reachableLandingKeys()`(시나리오 단위 · 원본 프롬프트만)는 G159 기존 역검증의 입력으로 **그대로** 남긴다(바이트 무변경).
+ * ⚠️ 위 `reachableLandingKeys()`(시나리오 단위 · 원본 프롬프트만)는 AC-078 (a) 합집합의 입력으로 남는다. G159 역검증의 기준 입력은
+ *   T194-c-1에서 이 함수(현행 단위)로 옮겼다(그 테스트의 주석 참고).
  */
 function reachableLandingKeysBySession(): string[] {
   const keys = new Set<string>();
@@ -720,7 +954,7 @@ test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **�
     false,
     "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
   );
-  assert.equal(reachableLandingKeysAllUnits().length, 9, "도달 가능 랜딩은 9종이다(§53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가)");
+  assert.equal(reachableLandingKeysAllUnits().length, 12, "도달 가능 랜딩은 12종이다(§53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가)");
 });
 
 test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
@@ -793,11 +1027,16 @@ test("[G159 트립와이어] 한 시나리오에 도달 가능 랜딩이 2건 �
   );
 });
 
-test("[G159 트립와이어 역검증] 오염 키 1건을 주입하면 해당 scenarioId를 실제로 돌려준다", () => {
-  const polluted = [...reachableLandingKeys(), "tax-refund-scam::extra-landing"];
-  assert.deepEqual(findMultiLandingScenarios(polluted), ["tax-refund-scam"]);
-  // 같은 시나리오의 **같은** 랜딩이 중복돼도 발화하지 않는다(오탐 0 — 조건 1과 정확히 일치).
-  const duplicated = [...reachableLandingKeys(), reachableLandingKeys()[0]];
+test("[G159 트립와이어 역검증] 오염 키 1건을 주입하면 해당 scenarioId를 실제로 돌려준다", (t) => {
+  // ⚠️ T194-c-1(§84.15.2 · G589) — 역검증의 기준 입력을 **G159의 현행 단위(시나리오 × 변형)** 키로 옮겼다. 옛 입력(`reachableLandingKeys()` —
+  // 시나리오 단위 · 카탈로그 전수 합집합)은 Q2 뒤 card-company · loan에서 2건이 된다(서로 다른 **변형**의 랜딩 — 자가 Q2 변형의 설치 화면 ·
+  // 다른 난이도 / 챌린지 변형의 이체 · 신청서 랜딩). 그 단위는 §84.13 이후 G159의 단위가 아니다(같은 세션에 함께 오지 않는다).
+  const bySession = reachableLandingKeysBySession();
+  t.diagnostic(`[G159] 옛 시나리오 단위 입력의 2랜딩 시나리오 ${JSON.stringify(findMultiLandingScenarios(reachableLandingKeys()))}(서로 다른 변형 — 단위 밖) / 현행 단위 ${JSON.stringify(findMultiLandingScenarios(bySession))}`);
+  const polluted = [...bySession, "tax-refund-scam#base::extra-landing", "tax-refund-scam#base::tax-refund-claim"];
+  assert.deepEqual(findMultiLandingScenarios(polluted), ["tax-refund-scam#base"]);
+  // 같은 단위의 **같은** 랜딩이 중복돼도 발화하지 않는다(오탐 0 — 조건 1과 정확히 일치).
+  const duplicated = [...bySession, bySession[0]];
   assert.deepEqual(findMultiLandingScenarios(duplicated), []);
   // 처방 문구가 비어 있으면 빨간불이 "숫자를 고쳐라"로 읽힌다(§35.7 4 · G159).
   assert.ok(G159_PRESCRIPTION.includes("§35.6"));
@@ -815,6 +1054,56 @@ test("[T194-a G589 역검증] 한 (시나리오 × 변형) 안에 랜딩이 2건
   assert.ok(bySession.includes("messenger-parcel-smishing-sms#fv-g454::parcel-install"));
   assert.ok(bySession.includes("messenger-parcel-smishing-sms#base::parcel-redelivery"));
   assert.equal(bySession.some((key) => key.startsWith("messenger-parcel-smishing-sms#fv-g454::parcel-redelivery")), false);
+});
+
+// ── T194-c-1 G604 · G605 ①(docs/Architecture.md §84.15.2 ⑥ INV-1 · INV-2 · §84.16.3 · §84.16.4) ─────────────────────────────
+
+test("[T194-c-1 G604 · ⓚ(=R-a)] 자가 고급 Q2 3 단위 = 정확히 [설치 화면] · Q2 시나리오 전 단위 ≤ 1 / loan 자가 단위에 신청서 링크를 남긴 사본은 2랜딩 → G159가 그 단위를 돌려준다", (t) => {
+  const expected: Record<string, string[]> = {
+    "card-delivery-call#fv-tvnj": ["card-delivery-app-install"],
+    "card-company-impersonation#fv-x7ue": ["card-guard-app-install"],
+    "loan-refinance-scam#fv-m3hd": ["loan-check-app-install"],
+  };
+  for (const [unit, landings] of Object.entries(expected)) {
+    const [scenarioId, variantId] = unit.split("#");
+    assert.deepEqual(sessionReachableLandingIds(scenarioId, variantId), landings, unit);
+  }
+  const bySession = reachableLandingKeysBySession();
+  const q2Units = bySession.filter((key) => IN_CALL_INSTALL_SCENARIOS.some((id) => key.startsWith(`${id}#`)));
+  assert.deepEqual(findMultiLandingScenarios(q2Units), [], "Q2 시나리오의 어느 단위도 도달 랜딩 2건이 아니다(INV-1)");
+  // ⓚ = R-a — 대안 B 모양(loan 자가 단위에 loan-apply-link를 유지한 채 설치 문자 추가).
+  const polluted = [...bySession, "loan-refinance-scam#fv-m3hd::loan-refinance-apply"];
+  t.diagnostic(
+    `[G604] 자가 3 단위 ${JSON.stringify(Object.keys(expected).map((u) => `${u}=${sessionReachableLandingIds(u.split("#")[0], u.split("#")[1]).join(",")}`))} · Q2 단위 2랜딩 ${JSON.stringify(findMultiLandingScenarios(q2Units))} / ⓚ(R-a) 사본 → ${JSON.stringify(findMultiLandingScenarios(polluted))}`,
+  );
+  assert.deepEqual(findMultiLandingScenarios(polluted), ["loan-refinance-scam#fv-m3hd"]);
+});
+
+test("[T194-c-1 G605 ①] INV-2 — 전 단위(원본 · 전 변형)에서 선언 문자의 랜딩 ⊆ 도달 가능 집합 · 역방향(선언 문자 랜딩을 뺀 집합 사본)은 실패", (t) => {
+  const violations = (reach: (scenarioId: string, variantId: string | undefined) => string[]): string[] => {
+    const out: string[] = [];
+    for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
+      const units: (string | undefined)[] = [undefined, ...FLOW_VARIANTS.filter((v) => v.scenarioId === scenarioId).map((v) => v.variantId)];
+      for (const variantId of units) {
+        const reachable = new Set(reach(scenarioId, variantId));
+        for (const d of resolveDeclaredSms(scenarioId, variantId).declared) {
+          const landing = findInCallSmsItem(scenarioId, d.smsId)?.fakeLandingId;
+          if (landing && !reachable.has(landing)) out.push(`${scenarioId}#${variantId ?? "base"}::${landing}`);
+        }
+      }
+    }
+    return out;
+  };
+  const normal = violations(sessionReachableLandingIds);
+  // 역방향 — 선언 문자 항을 빼고 마커만 보는 집합(옛 G159 입력 모양).
+  const markersOnly = (scenarioId: string, variantId: string | undefined) =>
+    sessionReachableLandingIds(scenarioId, variantId).filter(
+      (landing) => !resolveDeclaredSms(scenarioId, variantId).declared.some((d) => findInCallSmsItem(scenarioId, d.smsId)?.fakeLandingId === landing),
+    );
+  const poisoned = violations(markersOnly);
+  t.diagnostic(`[G605 ①] 정상 위반 ${normal.length} / 선언 문자 항을 뺀 사본 위반 ${poisoned.length}(예: ${poisoned.filter((p) => p.includes("app-install")).join(", ")})`);
+  assert.deepEqual(normal, []);
+  assert.ok(poisoned.includes("card-delivery-call#fv-tvnj::card-delivery-app-install"));
 });
 
 test("[T194-a G588 기록 층 역검증] 세션 도달 집합 — 고급 parcel의 재배송 폼 · 초급 parcel의 설치 화면은 거부, 정상 2건은 통과", (t) => {
@@ -967,7 +1256,7 @@ function findFieldConvergence(
 
 test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
   const items = Object.values(MOCK_SCREENS).flat();
-  assert.equal(items.length, 9, "현행 비교 대상은 도달 가능 랜딩 9종이다(§53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가)");
+  assert.equal(items.length, 12, "현행 비교 대상은 도달 가능 랜딩 12종이다(§53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가)");
   const stats = fieldDivergenceStats(items);
   for (const { field, compared, excluded, converged } of stats) {
     t.diagnostic(
@@ -1077,10 +1366,11 @@ test("[AC-079 (b)] 옵셔널 필드가 **양쪽 다 부재인 쌍**은 비교에
   t.diagnostic(
     `현행 카탈로그 제외쌍: ${realStats.map((s) => `${s.field}=${s.excluded}`).join(" · ")}`,
   );
+  // T194-c-1 — Q2 설치 화면 3종이 더해져 app-install이 **5종**이 됐다 ⇒ 제외쌍 = C(5,2) = 10(fields · successHeadline 각각).
   assert.deepEqual(
     realStats.map((s) => s.excluded),
-    [0, 1, 1, 0],
-    "app-install 2종(subsidy · parcel) — fields · successHeadline에서 제외 규칙이 실제로 일한다",
+    [0, 10, 10, 0],
+    "app-install 5종(subsidy · parcel · Q2 3종) — fields · successHeadline에서 제외 규칙이 실제로 일한다",
   );
   const oneSideAbsent = fieldDivergenceStats([
     twoInstalls[0],
@@ -1181,6 +1471,28 @@ const BAIT_TO_LANDING: {
     baitExcerpt: "아래에서 보호계좌로 옮기기를 진행해 주세요.",
     headlineAnchors: ["보호계좌", "옮기기"],
     ctaAnchors: ["보호계좌", "옮기기"],
+  },
+  // T194-c-1(§84.5.2) — Q2 통화 중 설치 화면 3종. 미끼 = 통화 중 설치 문자 본문 · 칩. CTA는 app-install 예외(권한 허용 버튼).
+  {
+    landingId: "card-delivery-app-install",
+    baitSource: "scenarios/inCallSms.ts:CARD_DELIVERY_CALL (문자 본문·칩)",
+    baitExcerpt: "아래에서 보안 점검 앱을 설치해 주세요.",
+    headlineAnchors: ["보안 점검", "앱", "설치"],
+    ctaAnchors: [],
+  },
+  {
+    landingId: "card-guard-app-install",
+    baitSource: "scenarios/inCallSms.ts:CARD_COMPANY_IMPERSONATION (문자 본문·칩)",
+    baitExcerpt: "아래에서 피해 차단용 보안 앱을 설치해 주세요.",
+    headlineAnchors: ["피해 차단용", "보안 앱", "설치"],
+    ctaAnchors: [],
+  },
+  {
+    landingId: "loan-check-app-install",
+    baitSource: "scenarios/inCallSms.ts:LOAN_SCAM (문자 본문·칩)",
+    baitExcerpt: "아래에서 심사용 보안 점검 앱을 설치해 주세요.",
+    headlineAnchors: ["심사용", "보안 점검", "설치"],
+    ctaAnchors: [],
   },
 ];
 

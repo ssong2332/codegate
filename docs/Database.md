@@ -407,6 +407,7 @@ match /users/{uid}/sessions/{sid}/{allPaths=**} {
 | consentedAt | Timestamp? | | 가짜 "권한 허용"에 응한 시각. 최초 1회만 세팅. **부재 = 응낙 없음**(D-51 ③) |
 | consentAnnouncedAt | Timestamp? | | 사기범이 그 사실을 언급하도록 프롬프트 1줄 지시를 주입한 시각(§15.9.3 — 1회 주입 보장) |
 | **submittedAt** | Timestamp? | | ⭐ **§31 증분(T123 · AC-080 · 경로 B).** `kind==="credential-form"` 랜딩의 **입력 폼을 제출한 시각**(`recordMockScreenEvent("submitted")`). 최초 1회만 세팅. **부재 = 제출 없음.** ⛔ **`consentedAt`과 겹치지 않는다** — 서버가 `consented`는 `app-install`에만, `submitted`는 `credential-form`에만 허용한다. **승격**: 존재 ⇒ `deceivedMoments` 1건 추가(앵커 해결 시). `shownAt`만 있는 항목은 **여전히 승격되지 않는다**(D-51 ③ · AC-080 (b)) |
+| **anchorScammerTurn** | number? | | ⭐ **T194-c-1 증분(Architecture.md §84.5.3 · §84.15.3 · §84.15.9 하류 · G606).** **통화 중 문자로 연 설치 화면(Q2 — `entrySurface === "in-call-sms"` ∧ `kind === "app-install"`) 문서만.** 그 화면을 연 **선언 문자의 도착 문서**(`sessions/{sid}/inCallSms/{smsId}.anchorScammerTurn`)의 값을 서버가 `recordMockScreenEvent` 첫 기록(새 문서 생성) 때 **그대로 복사**한다 — 클라 계수 0(요청에 `scammerTurns` 없음 · Q-X5). 값이 정수 ≥ 0이 아니면 키를 만들지 않는다. **리포트**: 이 값이 있으면 문자와 같은 리졸버(`report/smsTimeline.ts` `resolveAnchor`)로 `anchorTurnIndex`를 풀고 첨부 기반 리졸버(`resolveMockScreenAnchor` — 메신저 전용)를 타지 않는다. 응낙 승격 조건 = `anchorResolved ∧ anchorTurnIndex ≥ 0`(G135). **부재 = 메신저 경로 문서**(종전과 같은 모양 · 무백필). 규칙 · 인덱스 변경 0 |
 
 - **저장하지 않는 것(구조적 금지):** 참가자 입력값(애초에 컴포넌트 로컬 state를 벗어나지 않는다 — AC-045), 실 URL·스토어 URL·실존 앱명·OS 권한 목록(AC-072). **`url` 계열 필드는 이 스키마에도 존재하지 않는다.**
 

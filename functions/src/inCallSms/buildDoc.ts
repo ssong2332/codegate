@@ -126,12 +126,13 @@ export function buildInCallSmsResponse(
  * A-1 ⑦(2026-10-19) — `deliverInCallSms` 도착 응답에 덧붙일 결과 신호 필드(조건형 1줄 · `inCallSms/confirmResult.ts`).
  * 판정은 announce와 **같은 게이트**(`resolveInCallSmsPlan` — 전환 뒤 생략)에 곱해지고, 대상은 변형 선언의 **필수** 계좌·링크
  * 문자뿐이다(`confirmResultPurposeFor`). 해당 없으면 빈 객체(= 종전 응답 그대로). ⚠️ 클라 주입 배선은 A-2.
+ * T194-c-1 G608 — 설치 화면을 여는 문자(Q2)는 대상이 아니다(폴백 `planConfirmResult`와 **같은 함수** · `scenarioId`로 판별).
  */
 export function buildConfirmResultField(
-  input: { placed: boolean },
+  input: { placed: boolean; scenarioId: string },
   declaredItem: FlowVariantSms | undefined,
 ): Pick<DeliverInCallSmsResponse, "confirmResultInstruction"> {
   if (!resolveInCallSmsPlan(input).includeInstruction) return {};
-  const purpose = confirmResultPurposeFor(declaredItem);
+  const purpose = confirmResultPurposeFor(declaredItem, input.scenarioId);
   return purpose ? { confirmResultInstruction: buildLiveConfirmResultInstruction(purpose) } : {};
 }

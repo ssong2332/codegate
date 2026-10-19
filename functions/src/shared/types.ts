@@ -379,6 +379,10 @@ export type MockScreenDoc = {
   consentedAt?: FirebaseFirestore.Timestamp;
   // 사기범이 응낙 사실을 언급하도록 `turnInstruction` 1줄을 주입한 시각(§15.9.3 — 1회 주입 보장).
   consentAnnouncedAt?: FirebaseFirestore.Timestamp;
+  // T194-c-1(docs/Architecture.md §84.5.3 · §84.15.3 · ADR-0022 Addendum 2 · G584 · G606) — **통화 중 문자로 연 설치 화면(Q2)만**: 그 화면을 연
+  // 문자 문서(`inCallSms/{smsId}`)의 `anchorScammerTurn`을 서버가 그대로 복사한 값. 리포트는 이 값이 있으면 `resolveAnchor`(문자와 같은
+  // 리졸버)로 풀고 시각 해결을 타지 않는다. **부재 = 메신저 경로**(첨부 기반 리졸버 — 종전 문서와 같은 모양 · 무백필).
+  anchorScammerTurn?: number;
   // T123/AC-080 — 이 랜딩의 입력 폼을 **제출한 시각**. **최초 1회만** 세팅. **부재 = 제출 없음**
   // (링크 탭·화면 노출·입력 중은 승격 대상이 아니다 — AC-080 (b)).
   // ⛔ `consentedAt`(가짜 "권한 허용")과 **다른 필드다** — 같은 값을 재사용하면 과거 리포트의

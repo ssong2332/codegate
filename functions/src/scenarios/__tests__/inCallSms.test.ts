@@ -12,6 +12,7 @@ import {
   textPathAnchorScammerTurn,
 } from "../../inCallSms/buildDoc";
 import { PUBLIC_SCENARIOS } from "../publicMeta";
+import { IN_CALL_INSTALL_SCENARIOS, isInCallInstallSms } from "../mockScreens";
 import { resolveAnchor } from "../../report/smsTimeline";
 import { SCENARIO_PROMPTS } from "../index";
 
@@ -238,6 +239,13 @@ test("[T104/§19.4 #3] buildInCallSmsDoc의 landingKind는 기본값이면 **키
   for (const { scenarioId, item } of allEntries) {
     const doc = buildInCallSmsDoc(item, fakeTimestamp, DOC_ANCHOR, scenarioId);
     const raw = doc as unknown as Record<string, unknown>;
+    // ⚠️ T194-c-1 허용목록 대체(§84.5.1 · G583 — X8): 설치 화면을 여는 Q2 문자(허용목록 3종)는 kind가 기본값이 아니므로
+    // `landingKind: "app-install"`을 **싣는 것이 맞다**(클라가 그 값으로 설치 화면을 연다 — §15.9.1 R3). 아래 단언은 그 밖 문자에 그대로다.
+    if (item.fakeLandingId && isInCallInstallSms(scenarioId, item.smsId)) {
+      assert.ok(IN_CALL_INSTALL_SCENARIOS.includes(scenarioId), `${scenarioId}/${item.smsId}: 허용목록 밖 설치 문자`);
+      assert.equal(raw.landingKind, "app-install", `${scenarioId}/${item.smsId}: 설치 문자는 landingKind를 싣는다`);
+      continue;
+    }
     // 현행 통화 경로 랜딩 3종은 전부 credential-form(=기본값)이라 **오늘 쓰이는 문서는 한 바이트도
     // 바뀌지 않는다.** `extractLinkMarker`의 생략 규칙과 글자 그대로 같은 규칙이다(드리프트 방지).
     assert.equal(
