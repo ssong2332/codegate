@@ -5,6 +5,7 @@ import type { PersonaCardItem, ScenarioPromptDoc } from "../shared/types";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { LlmMessage } from "../llm";
 import type { SmsPurpose } from "../scenarios/flowVariants";
+import { personaCardPromptValue } from "../scenarios/personaCardCatalog";
 import { applyFictionalBank, EXAMPLE_ACCOUNT_NUMBER } from "../shared/fictionalBank";
 
 // 사용자 신고(2026-07-25) — "사람과 대화한다는 느낌이 안 든다", "대화가 자연스럽지 않다",
@@ -689,10 +690,13 @@ export const PERSONA_CARD_BLOCK_HEAD = `[미리 확보한 상대 정보 — 이 
 너는 통화 전에 상대에 대해 아래 정보를 이미 확보해 두었다. 상대가 스스로 말하기 전에 이 가운데 한두 가지를 네가 먼저, 확인하듯 자연스럽게 꺼내 상대가 '이 사람은 나를 이미 알고 있다'고 느끼게 한다.`;
 export const PERSONA_CARD_BLOCK_TAIL = `목록에 없는 이름·나이·금액·금융사·주소는 지어내 말하지 않는다. '사는 곳'은 알고 있다는 확인에만 쓰고, 만날 곳·찾아갈 곳·돈을 건넬 곳을 정하는 데 쓰지 않는다. 이 정보를 어디서 얻었는지는 설명하지 않는다.`;
 
-/** 카드 행이 1개 이상일 때만 블록을 만든다(빈 배열 = 블록 0 — 부재와 같은 결과). */
+/**
+ * 카드 행이 1개 이상일 때만 블록을 만든다(빈 배열 = 블록 0 — 부재와 같은 결과). 값은 프롬프트용 값(`personaCardPromptValue` —
+ * 리뷰 M1: 블록 안 "○○" 리터럴 0)이다.
+ */
 export function buildPersonaCardBlock(items: readonly PersonaCardItem[]): string | null {
   if (items.length === 0) return null;
-  return [PERSONA_CARD_BLOCK_HEAD, ...items.map((item) => `- ${item.label}: ${item.value}`), PERSONA_CARD_BLOCK_TAIL].join("\n");
+  return [PERSONA_CARD_BLOCK_HEAD, ...items.map((item) => `- ${item.label}: ${personaCardPromptValue(item)}`), PERSONA_CARD_BLOCK_TAIL].join("\n");
 }
 
 /**

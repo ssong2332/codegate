@@ -43,6 +43,7 @@ import type { ScenarioPromptDoc } from "../../shared/types";
 import {
   PERSONA_CARD_FIXED_VALUES,
   PERSONA_CARD_LABELS,
+  PERSONA_LOAN_PROMPT_VALUE,
   PERSONA_NAME_POOL,
   PERSONA_REGION_MASK_SUFFIX,
   PERSONA_REGION_POOL,
@@ -293,6 +294,8 @@ function personaCardSurfaces(): Surface[] {
       "mockSurface",
     ]),
     ...Object.entries(PERSONA_CARD_FIXED_VALUES).map(([key, text]): [string, string, ScanProfile] => [`fixed:${key}`, text, "mockSurface"]),
+    // 리뷰 M1 — 프롬프트에만 실리는 대출 일반명.
+    ["PERSONA_LOAN_PROMPT_VALUE", PERSONA_LOAN_PROMPT_VALUE, "mockSurface"],
     ["PERSONA_CARD_BLOCK_HEAD", PERSONA_CARD_BLOCK_HEAD, "modelInstruction"],
     ["PERSONA_CARD_BLOCK_TAIL", PERSONA_CARD_BLOCK_TAIL, "modelInstruction"],
   ];
@@ -407,12 +410,13 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
   );
   assert.equal(byDomain.get("flowVariant"), expectedFlow, "T191 S5 흐름 변형 표면");
   t.diagnostic(`[AC-102 (a)] 흐름 변형 표면 after=${expectedFlow} (before=0 — 도메인 신설)`);
-  // T194-b(G565) — 가상 신상 카드: 라벨 + 이름 풀 + 지역 풀 + 가림 고정값 + 블록 머리 · 꼬리(before=0 — 도메인 신설).
+  // T194-b(G565) — 가상 신상 카드: 라벨 + 이름 풀 + 지역 풀 + 가림 고정값 + 대출 프롬프트 일반명 + 블록 머리 · 꼬리(before=0 — 도메인 신설).
   const expectedPersona =
     Object.keys(PERSONA_CARD_LABELS).length +
     PERSONA_NAME_POOL.length +
     PERSONA_REGION_POOL.length +
     Object.keys(PERSONA_CARD_FIXED_VALUES).length +
+    1 +
     2;
   assert.equal(byDomain.get("personaCard"), expectedPersona, "T194-b 가상 신상 카드 표면");
   t.diagnostic(`[AC-104 G565] 가상 신상 카드 표면 after=${expectedPersona} (before=0 — 도메인 신설) · 총 표면 after=${ALL_SURFACES.length} · before=${ALL_SURFACES.length - expectedPersona}`);

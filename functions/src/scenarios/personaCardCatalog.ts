@@ -89,3 +89,23 @@ export const PERSONA_CARD_FIXED_VALUES = {
   card: "○○카드",
   loan: "○○저축은행 대출 이용 중",
 } as const;
+
+/**
+ * ⭐ T194-b 리뷰 M1 — 프롬프트에 싣는 대출 행 값. 화면 값 `"○○저축은행 대출 이용 중"`의 `"○○"`는 은행 자리표시자 패턴에 걸리지 않아
+ * 모델에 리터럴로 간다(모델이 "○○"를 읽거나 이름을 지어낸다). 가상 이름을 새로 짓지 않고 **일반명**으로 싣는다(#320 "지어낸 센터는
+ * 일반명"과 같은 원칙) — 블록 꼬리의 "목록에 없는 … 금융사는 지어내 말하지 않는다"와 모순되지 않는다(이름이 없는 일반명이다).
+ */
+export const PERSONA_LOAN_PROMPT_VALUE = "저축은행 대출 이용 중";
+
+/**
+ * 카드 행의 **프롬프트용** 값(화면 값은 세션 문서 그대로). 블록 안 `"○○"` 리터럴 0이 목표다(리뷰 M1).
+ * - loan: 일반명(`PERSONA_LOAN_PROMPT_VALUE`)
+ * - region: 가림 꼬리(`" ○○시"`)를 떼고 도 이름만 — 시 이하 지명은 모델도 모른다(장소 특정 금지와 같은 방향)
+ * - card: 그대로 — 조립 끝 `applyFictionalBank`가 `"○○카드"`를 세션 가상 카드사명으로 바꾼다(§83 · 열린 질문)
+ * - 그 밖: 그대로(가림 표기 없음)
+ */
+export function personaCardPromptValue(item: { key: PersonaCardKey; value: string }): string {
+  if (item.key === "loan") return PERSONA_LOAN_PROMPT_VALUE;
+  if (item.key === "region") return item.value.replace(` ${PERSONA_REGION_MASK_SUFFIX}`, "");
+  return item.value;
+}

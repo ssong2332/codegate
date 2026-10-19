@@ -14,6 +14,7 @@ import { SCENARIO_PROMPTS } from "../../scenarios";
 import { PERSONA_CARD_SCENARIOS } from "../../scenarios/personaCardCatalog";
 import { hasVerifyIntercept } from "../../scenarios/verifyIntercept";
 import { buildPersonaCard } from "../../session/personaCard";
+import { personaCardPromptValue, PERSONA_LOAN_PROMPT_VALUE } from "../../scenarios/personaCardCatalog";
 import { asksIdentityCheck } from "../personaAuthority";
 import { isL3Procedural } from "../l3Depth";
 import { speakerGenderFor } from "../../realtime/scenarioVoice";
@@ -67,9 +68,14 @@ test("[G569] 위치 — [진행 강제] · [확인 안내] 뒤 · 난이도 앞 
       assert.ok(prompt.endsWith(SCENARIO_PROMPTS[scenarioId].guardrailPreamble), `${scenarioId}: 가드레일 최후미`);
       for (const item of card.items) {
         // §83 — "○○카드"는 조립 끝 applyFictionalBank가 세션 카드사명으로 바꾼다(화면 값은 그대로 — 카탈로그 주석 · 열린 질문).
-        const shown = item.key === "card" ? fictionalOrgNamesFor(bank).cardName : item.value;
+        // 리뷰 M1 — 블록 값은 프롬프트용 값(대출 = 일반명 · 지역 = 도 이름만).
+        const shown = item.key === "card" ? fictionalOrgNamesFor(bank).cardName : personaCardPromptValue(item);
         assert.ok(prompt.includes(`- ${item.label}: ${shown}`), `${scenarioId}/${bank}: 카드 행 "${item.label}: ${shown}"이 없다`);
       }
+      // 리뷰 M1 — 블록 구간(머리 ~ 꼬리)에 "○○" 리터럴 0.
+      const segment = prompt.slice(at, prompt.indexOf(PERSONA_CARD_BLOCK_TAIL, at) + PERSONA_CARD_BLOCK_TAIL.length);
+      assert.ok(segment.startsWith(PERSONA_CARD_BLOCK_HEAD) && segment.endsWith(PERSONA_CARD_BLOCK_TAIL), "블록 구간을 못 잘랐다");
+      assert.equal(/[○Oo]{2}/.test(segment), false, `${scenarioId}/${bank}: 블록에 가림 리터럴이 남았다 — ${segment}`);
       checked += 1;
     }
   }
@@ -127,4 +133,17 @@ test("[G568] 호출부 전수 — 프롬프트 조립 3곳이 모두 카드를 �
   };
   walk(SRC);
   assert.deepEqual(found.sort(), [...assemblyCallers, "roleplay/promptAssembly.ts"].sort());
+});
+
+test("[리뷰 M1] 대출 행은 프롬프트에 일반명으로 실린다(가상 이름 0 · '○○' 0) — 블록 생성기를 우회해 화면 값을 그대로 실은 사본은 걸린다", (t) => {
+  const card = buildPersonaCard({ sessionId: "m1", scenarioId: "loan-refinance-scam", fictionalBankName: "한결은행" })!;
+  const loan = card.items.find((i) => i.key === "loan")!;
+  assert.equal(loan.value, "○○저축은행 대출 이용 중", "화면 값은 그대로");
+  assert.equal(PERSONA_LOAN_PROMPT_VALUE, "저축은행 대출 이용 중");
+  const block = buildPersonaCardBlock(card.items)!;
+  assert.ok(block.includes("- 대출: 저축은행 대출 이용 중"));
+  assert.equal(block.includes("○○"), false);
+  const naive = [PERSONA_CARD_BLOCK_HEAD, ...card.items.map((i) => `- ${i.label}: ${i.value}`), PERSONA_CARD_BLOCK_TAIL].join("\n");
+  assert.equal(naive.includes("○○"), true, "역방향 사본이 가림 리터럴을 싣지 않는다 — 검사가 무력하다");
+  t.diagnostic("[M1] 정본 블록 '○○' 0 · 화면 값을 그대로 실은 사본 → '○○' 검출(실패 확인)");
 });
