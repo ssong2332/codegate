@@ -23,10 +23,13 @@
 //     (`\s?`)은 고유 브랜드명에만 둔다.
 //
 // ⚠️ **한계**: (1) **Live 음성 경로(Gemini Live·ElevenLabs clone)는 오디오라 적용할 수 없다** — 그쪽은
-// 프롬프트 문면이 유일한 층이다. (2) 잔여 범위: 저축은행·캐피탈·증권사·보험사·우체국·외국계 은행
+// 프롬프트 문면이 유일한 층이다. (2) 잔여 범위: (2026-10-20 §85 — 저축은행·캐피탈·증권사·보험사·택배·통신·쇼핑몰은
+// `realCompanyNames.ts`가 먼저 처리한다) 우체국·외국계 은행
 // 지점명 등은 목록에 없다(늘릴 때는 이 표에 규칙과 양성 샘플을 함께 더한다 — 테스트가 표를 순회한다).
 // (3) 한글 정규식에 JS `\b`를 쓰지 않는다(ASCII 경계 — T86 reviewer Major 1). 일반 낱말 안에 박히는
 // 짧은 이름(`신한`·`신협`·`수협`)은 `(?<![가-힣])` 앞 경계로 막는다("당신한테"·"통신협회"·"인수협의").
+
+import { replaceRealCompanyNames } from "./realCompanyNames";
 
 export const FICTIONAL_BANK_NAME = "OO은행";
 export const FICTIONAL_CARD_NAME = "OO카드";
@@ -121,8 +124,11 @@ export const REAL_FINANCIAL_NAME_RULES: readonly RealFinancialNameRule[] = [
  * 치환이 0건이면 **입력 문자열을 그대로** 돌려준다.
  */
 export function replaceRealFinancialNames(text: string): { text: string; replacedCount: number } {
-  let replacedCount = 0;
-  let current = text;
+  // §85 — 실존 민간 회사명(택배·통신·보험·증권·쇼핑몰·캐피탈·저축은행)을 **먼저** 바꾼다. 아래 은행 짧은
+  // 규칙(`신한`·`IBK`·`농협`)이 "신한라이프"·"IBK캐피탈"을 "OO은행라이프"로 깨뜨리지 않게 하기 위해서다.
+  const company = replaceRealCompanyNames(text);
+  let replacedCount = company.replacedCount;
+  let current = company.text;
   for (const rule of REAL_FINANCIAL_NAME_RULES) {
     current = current.replace(rule.pattern, () => {
       replacedCount += 1;

@@ -599,11 +599,12 @@ test("[T192/C3 G502 배선] 선언 · 이름 · 프롬프트 세 자리가 decla
   assert.equal(provSrc.includes("resolveHangupRelay("), false, "프로바이더 안에서 릴레이를 다시 해석한다(G527)");
 });
 
-// ── T192 C5 — 운영값(켬): 클라 end_call 라우팅이 들어와 실시간 end_call이 운영에서 켜졌다 ────────────────────────────
-// ⚠️ PR A 리뷰 M1의 "끔 운영값" 트립와이어를 C5에서 **켬 운영값**으로 바꿨다(그 테스트가 요구한 대로 — 상수와 함께 바뀐다).
-test("[M1 → C5 운영값] END_CALL_LIVE_AVAILABLE === true — 클라가 end_call을 라우팅한다(소스로 확인 — 끄면 이 테스트와 아래를 함께 바꾼다)", () => {
-  assert.equal(END_CALL_LIVE_AVAILABLE, true, "C5 클라 라우팅이 있는데 실시간 end_call이 꺼져 있다");
-  // 켤 수 있는 전제(C5 — 클라가 unsupported로 떨어뜨리지 않는다): 클라 라우팅 · 분기 · 공통 종료 함수가 실제로 있다.
+// ── T192 운영 off — 운영값(끔): P-H(G603) 통과 전 실시간 setup · 이름 · 프롬프트에 end_call이 0 ─────────────────────
+// ⚠️ C5의 "켬 운영값" 트립와이어를 **끔 운영값**으로 되돌렸다(PR A `1040c97` 형태 · 상수와 함께 바뀐다).
+// P-H 통과 뒤 true로 되돌리는 PR이 이 테스트와 아래 운영값 단언을 함께 켬으로 바꾼다. 클라 라우팅은 그대로 남아 있다(아래 단언).
+test("[M1 운영값 · P-H 전 off] END_CALL_LIVE_AVAILABLE === false — 클라 end_call 라우팅은 남아 있다(소스로 확인 — 켜면 이 테스트와 아래를 함께 바꾼다)", () => {
+  assert.equal(END_CALL_LIVE_AVAILABLE, false, "P-H(G603) 통과 전에 실시간 end_call이 운영에서 켜졌다");
+  // 다시 켤 수 있는 전제(C5 — 클라가 unsupported로 떨어뜨리지 않는다): 클라 라우팅 · 분기 · 공통 종료 함수가 실제로 있다.
   const repo = path.resolve(__dirname, "../../../..");
   const clientRoute = readFileSync(path.join(repo, "src/lib/realtime/liveToolResponse.ts"), "utf8");
   const clientSession = readFileSync(path.join(repo, "src/lib/realtime/GeminiVoiceSession.tsx"), "utf8");
@@ -616,26 +617,26 @@ test("[M1 → C5 운영값] END_CALL_LIVE_AVAILABLE === true — 클라가 end_c
   assert.ok(clientPage.includes("onScammerHangupReady={handleScammerHangupReady}"), "화면이 끊기 준비 신호를 받지 않는다");
 });
 
-test("[C5 운영값 · G556] 켬이면 음성 범위의 선언 · 이름이 전 조합에서 켬 입력(VOICE)과 바이트 동일 · 메신저와는 다르다(대조)", () => {
+test("[M1 운영값 · G556 · P-H 전 off] 끔이면 음성 범위의 선언 · 이름이 전 조합에서 end_call 거짓 입력(S5b 판정)과 바이트 동일", () => {
   let checked = 0;
   for (const [scenarioId, difficultyLevel, flowVariantId] of allToolInputs()) {
     const tag = `${scenarioId}/${difficultyLevel}/${flowVariantId ?? "-"}`;
     assert.equal(
       JSON.stringify(buildLiveToolDeclarations(scenarioId, difficultyLevel, flowVariantId, VOICE_OPERATIONAL)),
-      JSON.stringify(buildLiveToolDeclarations(scenarioId, difficultyLevel, flowVariantId, VOICE)),
-      `${tag}: 운영값 선언이 켬 판정과 다르다`,
+      JSON.stringify(buildLiveToolDeclarations(scenarioId, difficultyLevel, flowVariantId, NO_END_CALL)),
+      `${tag}: 운영값 선언에 end_call이 샜다`,
     );
     assert.equal(
       JSON.stringify(buildLiveToolNames(scenarioId, difficultyLevel, flowVariantId, VOICE_OPERATIONAL)),
-      JSON.stringify(buildLiveToolNames(scenarioId, difficultyLevel, flowVariantId, VOICE)),
-      `${tag}: 운영값 liveTools가 켬 판정과 다르다`,
+      JSON.stringify(buildLiveToolNames(scenarioId, difficultyLevel, flowVariantId, NO_END_CALL)),
+      `${tag}: 운영값 liveTools에 endCall이 샜다`,
     );
     checked += 1;
   }
   assert.ok(checked > 0);
-  // 대조군 — 운영 음성 범위는 메신저(끔 입력)와 갈린다(위 단언이 공허하지 않다).
+  // 대조군 — 같은 입력을 켬으로 돌리면 갈린다(위 단언이 공허하지 않다).
   assert.notEqual(
-    JSON.stringify(buildLiveToolDeclarations("kidnapping-threat", "advanced", undefined, NO_END_CALL)),
+    JSON.stringify(buildLiveToolDeclarations("kidnapping-threat", "advanced", undefined, VOICE)),
     JSON.stringify(buildLiveToolDeclarations("kidnapping-threat", "advanced", undefined, VOICE_OPERATIONAL)),
   );
 });

@@ -40,6 +40,7 @@ import {
   SCENARIO_PROMPTS,
 } from "../../scenarios";
 import { judgeByRule } from "../../rewind/judge";
+import { NEUTRAL_SCAMMER_LINES } from "./neutralScammerLines";
 
 const SESSION_START_MS = 1_000_000;
 const INSTITUTIONAL = SCENARIO_PROMPTS[INSTITUTIONAL_IMPERSONATION_SCENARIO_ID].weakenedTactics;
@@ -345,15 +346,8 @@ test("[수법 추정] 한 대사에 수법이 여럿이면 모두 '시도된 수
 });
 
 test("[수법 추정] 저작 문구가 없는 일반 대사는 어떤 수법으로도 잡지 않는다(발명하지 않음)", () => {
-  const neutral = [
-    "네 고객님, 확인 도와드리겠습니다.",
-    "네, 잠시만 기다려 주세요.",
-    "안녕하세요, 접수처입니다. 물품이 접수처에 보관 중이라 받는 분 정보를 한 번만 확인 부탁드립니다.",
-    // 인용구 안에 있지만 어느 대화에나 나오는 한 단어 대꾸(손주 사칭·대출·가족 사고 시나리오 인용구).
-    "아니에요, 괜찮아요.",
-    "잠깐만요, 확인해 볼게요.",
-    "진짜야? 고마워.",
-  ];
+  // PR-A3 리뷰 Major 2 — 표본은 공용 모듈로 옮겼다(문구 그대로 · demandFallbackLabel.test.ts가 같은 표본을 쓴다).
+  const neutral = NEUTRAL_SCAMMER_LINES;
   for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
     const tactics = SCENARIO_PROMPTS[scenarioId].weakenedTactics;
     for (const line of neutral) {

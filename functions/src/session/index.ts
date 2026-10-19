@@ -297,6 +297,9 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       textMasked: openingMessage.text,
       turnIndex: 0,
       createdAt: now,
+      // PR-A3(감사 B 1일차 #11) — 오프닝 대사에 실린 링크 칩도 저장한다. 빠져 있으면 리포트 앵커(첫 칩 메시지 ·
+      // mockScreenTimeline.ts)가 첫 응답으로 밀린다. 칩이 없으면 필드 부재(종전 그대로).
+      ...(openingMessage.attachments ? { attachments: openingMessage.attachments } : {}),
       // T30 추가(§13.1) — 교차채널 타임라인(AC-037)용 채널 표기. 보이스 전용 세션은 기존과 동일하게
       // 필드 부재.
       ...(channel ? { channel } : {}),
