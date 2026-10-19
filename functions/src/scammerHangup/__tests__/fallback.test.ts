@@ -214,7 +214,7 @@ test("[Minor-1 배선] sendMessage — 도착 기록 read 조건과 끊기 판�
   assert.ok(src.includes("smsDeclared: smsSessionDeclared,"), "끊기 판정 입력이 같은 값을 쓰지 않는다");
 });
 
-// ── T192 C6-L · G593(Architecture.md §79.20 (1) #12 · (8) L-1) — 폴백 사전 판정 로그 ───────────────────────────────
+// ── T192 C6-L · G601(Architecture.md §79.20 (1) #12 · (8) L-1) — 폴백 사전 판정 로그 ───────────────────────────────
 /** `logger.info("끊기 사전 판정", { … })` 호출의 필드 이름(정확 집합 판정용). 없으면 null. */
 function preDecisionLogFields(src: string): string[] | null {
   const m = /logger\.info\("끊기 사전 판정", \{([^}]*)\}\);/.exec(src);
@@ -222,7 +222,7 @@ function preDecisionLogFields(src: string): string[] | null {
   return m[1]!.split(",").map((part) => part.split(":")[0]!.trim()).filter(Boolean).sort();
 }
 
-test("[G593] 폴백 사전 판정 로그 — 매 턴 1회(사전 판정 직후 · 핸들러 본문) · 필드 = sessionId · row · status · mode만(대사 0)", () => {
+test("[G601] 폴백 사전 판정 로그 — 매 턴 1회(사전 판정 직후 · 핸들러 본문) · 필드 = sessionId · row · status · mode만(대사 0)", () => {
   const src = readFileSync(ROLEPLAY_INDEX, "utf8");
   assert.equal(src.split('logger.info("끊기 사전 판정"').length - 1, 1, "로그 지점이 1곳이 아니다");
   assert.deepEqual(preDecisionLogFields(src), ["mode", "row", "sessionId", "status"]);
@@ -233,15 +233,15 @@ test("[G593] 폴백 사전 판정 로그 — 매 턴 1회(사전 판정 직후 �
   assert.match(src, /logger\.info\("끊기 사전 판정", \{ sessionId, row: hangupPre\.row, status: hangupPre\.status, mode: hangupMode \}\);/);
 });
 
-test("[G593 역검증] 대사 · 사용자 입력 필드를 더한 사본은 같은 판정식에 걸린다", () => {
+test("[G601 역검증] 대사 · 사용자 입력 필드를 더한 사본은 같은 판정식에 걸린다", () => {
   const src = readFileSync(ROLEPLAY_INDEX, "utf8");
   const poisoned = src.replace("mode: hangupMode });", "mode: hangupMode, userText });");
   assert.notEqual(poisoned, src);
   assert.notDeepEqual(preDecisionLogFields(poisoned), ["mode", "row", "sessionId", "status"]);
 });
 
-// ── T192 C6-R · G590(Architecture.md §79.20 (3) ③ · (11)) — 폴백 4행 fail-closed ──────────────────────────────────────
-test("[G590] 폴백 계열 B 고급 — 오퍼 문서 있음 → 4행 · 없음(읽기 성공) → 다음 행 · 읽기 실패/미조회 → 4행", () => {
+// ── T192 C6-R · G598(Architecture.md §79.20 (3) ③ · (11)) — 폴백 4행 fail-closed ──────────────────────────────────────
+test("[G598] 폴백 계열 B 고급 — 오퍼 문서 있음 → 4행 · 없음(읽기 성공) → 다음 행 · 읽기 실패/미조회 → 4행", () => {
   const scenarioId = "loan-refinance-scam";
   const reach = (offerDoc: VerifyOfferDocState) =>
     isVerifyTransferReachable({ path: "fallback", scenarioId, offerDoc });
@@ -266,7 +266,7 @@ test("[G590] 폴백 계열 B 고급 — 오퍼 문서 있음 → 4행 · 없음(
   assert.equal(decideFallbackHangup(bank, [], false).row, "4");
 });
 
-test("[G590 배선] sendMessage — 오퍼 문서 상태 초기값 unknown · exists로만 present/absent · catch는 값을 바꾸지 않는다", () => {
+test("[G598 배선] sendMessage — 오퍼 문서 상태 초기값 unknown · exists로만 present/absent · catch는 값을 바꾸지 않는다", () => {
   const src = readFileSync(ROLEPLAY_INDEX, "utf8");
   assert.match(src, /let verifyOfferDoc: VerifyOfferDocState = "unknown";/);
   assert.equal(src.split("verifyOfferDoc = ").length - 1, 1, "verifyOfferDoc 대입은 read 성공 지점 1곳뿐");

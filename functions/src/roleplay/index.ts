@@ -332,7 +332,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       verifyEnabled,
       // 조회 실패(`verifyState` 부재)는 전환 전으로 본다 — 4행 fail-closed.
       transferPlaced: verifyState?.placed === true,
-      // T192 C6-R(OQ-A150 (가)) — 폴백 계열 B ∧ 오퍼 문서 없음(읽기 성공)일 때만 false(서버 값만 · 클라 값 0).
+      // T192 C6-R(OQ-A152 (가)) — 폴백 계열 B ∧ 오퍼 문서 없음(읽기 성공)일 때만 false(서버 값만 · 클라 값 0).
       transferReachable: isVerifyTransferReachable({
         path: "fallback",
         scenarioId: session.scenarioId,
@@ -347,7 +347,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     };
     const hangupPre = decideFallbackHangup(hangupFacts, smsDelivered, false);
     const hangupMode = fallbackHangupMode(hangupPre);
-    // ⭐ T192 C6-L(§79.20 (1) #12 · (8) L-1 · G593) — 사전 판정은 매 턴 1줄 남긴다. 신호가 없으면 "끊기 신호 무시" 로그도
+    // ⭐ T192 C6-L(§79.20 (1) #12 · (8) L-1 · G601) — 사전 판정은 매 턴 1줄 남긴다. 신호가 없으면 "끊기 신호 무시" 로그도
     // 없어서, 4행 등이 매 턴 막는 세션(끊기 0)이 라이브에서 보이지 않았다. ⛔ G170 — 숫자 · 단계명만(대사 · 사용자 입력 0).
     logger.info("끊기 사전 판정", { sessionId, row: hangupPre.row, status: hangupPre.status, mode: hangupMode });
     // ②-d 모의 설치 응낙의 **인과 배선**(T84, §15.9.3 — §15.1.2/§15.1.4와 동형). 오버레이

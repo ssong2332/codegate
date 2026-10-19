@@ -47,7 +47,7 @@ export type ScammerHangupInput = {
   /** `verifyIntercept` 문서에 `placedAt`이 있는가(호 전환 완료). */
   transferPlaced: boolean;
   /**
-   * ⭐ T192 C6-R(§79.20 (3) · OQ-A150 (가)) — 전환이 **이 경로에서** 일어날 수 있는가(`transferReach.ts`
+   * ⭐ T192 C6-R(§79.20 (3) · OQ-A152 (가)) — 전환이 **이 경로에서** 일어날 수 있는가(`transferReach.ts`
    * `isVerifyTransferReachable` — 서버 값만). `false`인 칸은 폴백 ∧ 계열 B ∧ 오퍼 문서 없음 하나뿐이다.
    * ⭐ 옵셔널이 아니라 필수 키(빠뜨리면 컴파일 오류).
    */

@@ -89,7 +89,7 @@ export async function decideAndMarkRealtimeHangup<Ref>(
     isMockTurn: false,
     verifyEnabled,
     transferPlaced,
-    // T192 C6-R — 실시간 경로는 진리표 1행(항상 true · 동작 변화 0). 같은 함수를 부른다(판정 지점 하나 — G588).
+    // T192 C6-R — 실시간 경로는 진리표 1행(항상 true · 동작 변화 0). 같은 함수를 부른다(판정 지점 하나 — G596).
     transferReachable: isVerifyTransferReachable({ path: "realtime", scenarioId: session.scenarioId, offerDoc }),
     userTurns: claims.userTurns,
     pendingInstruction: claims.pendingInstruction,

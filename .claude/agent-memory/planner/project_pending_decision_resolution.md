@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-**DECISIONS.md "User 확정 대기" 행은 고치지 않고 새 행으로 확정한다** — 파일 Rules가 append-only이고 선례가 새 행이다(#156 남은 결정 OQ-A131 → #157 User 결정). 새 행 Decision 첫머리에 *"#N의 대기가 해소됐다"* 와 ADR 열에 `→ #N` 을 둔다. 번호는 이 트리 · 메인 체크아웃 `docs/DECISIONS.md` · `.claude/worktrees/*/docs/DECISIONS.md` 세 곳 최대값 다음(⛔ 예약 아님). 2026-10-20 T192 C6: #178~#180.
+**DECISIONS.md "User 확정 대기" 행은 고치지 않고 새 행으로 확정한다** — 파일 Rules가 append-only이고 선례가 새 행이다(#156 남은 결정 OQ-A131 → #157 User 결정). 새 행 Decision 첫머리에 *"#N의 대기가 해소됐다"* 와 ADR 열에 `→ #N` 을 둔다. 번호는 이 트리 · 메인 체크아웃 `docs/DECISIONS.md` · `.claude/worktrees/*/docs/DECISIONS.md` 세 곳 최대값 다음(⛔ 예약 아님). 2026-10-20 T192 C6: #187~#189.
 
 **Why:** 원행에 덧붙이면 다른 브랜치의 같은 줄 재번호 치환과 충돌하고, append-only 규칙을 깬다.
 

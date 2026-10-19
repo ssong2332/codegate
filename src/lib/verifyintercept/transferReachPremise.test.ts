@@ -1,4 +1,4 @@
-// T192 C6-R · G589(Architecture.md §79.20 (3) ④ · (11)) — `transferReach.ts` 진리표 6행의 **클라 전제** 트립와이어.
+// T192 C6-R · G597(Architecture.md §79.20 (3) ④ · (11)) — `transferReach.ts` 진리표 6행의 **클라 전제** 트립와이어.
 //
 // 6행(폴백 ∧ 계열 B ∧ 오퍼 문서 없음 → transferReachable=false)은 *"폴백 계열 B는 오퍼가 열릴 수 없다"* 에 기대며,
 // 그 전제는 **클라 코드**(G393 — 참가자 의사 setter 0)가 보장한다. 서버 함수는 그것을 볼 수 없으므로 여기서 고정한다.
@@ -50,13 +50,13 @@ function premiseSeriesBNeedsIntent(lib: string): boolean {
   return GATE_FALSE.test(body) && SERIES_A_TRUE.test(body) && SERIES_B_INTENT.test(body);
 }
 
-test("[G589] 폴백 계열 B 오퍼 개시 경로 0 — ⓐ 의사 setter 0 · ⓑ B 분기 = intentExpressed · ⓒ transferReach.ts 존재", () => {
+test("[G597] 폴백 계열 B 오퍼 개시 경로 0 — ⓐ 의사 setter 0 · ⓑ B 분기 = intentExpressed · ⓒ transferReach.ts 존재", () => {
   assert.ok(existsSync(TRANSFER_REACH), "ⓒ transferReach.ts가 없다 — 이 트립와이어의 보호 대상이 사라졌다(6행을 지웠다면 이 테스트도 함께 지운다)");
   assert.ok(premiseNoIntentSetter(readFileSync(PAGE, "utf8")), `ⓐ ${PREMISE_BROKEN}`);
   assert.ok(premiseSeriesBNeedsIntent(readFileSync(LIB, "utf8")), `ⓑ ${PREMISE_BROKEN}`);
 });
 
-test("[G589 역검증] setter 있는 사본 · B 분기를 바꾼 사본 · 주석으로만 남긴 사본은 전제 판정에 걸린다", () => {
+test("[G597 역검증] setter 있는 사본 · B 분기를 바꾼 사본 · 주석으로만 남긴 사본은 전제 판정에 걸린다", () => {
   const page = readFileSync(PAGE, "utf8");
   const lib = readFileSync(LIB, "utf8");
   const withSetter = page.replace(
@@ -86,7 +86,7 @@ test("[G589 역검증] setter 있는 사본 · B 분기를 바꾼 사본 · 주�
   assert.equal(premiseNoIntentSetter(trueInit), false, "초기값 true 사본이 통과했다");
 });
 
-test("[G589 역검증 · 형식 무관] 의미는 같고 형식만 바꾼 사본(`useState<boolean>(false)` · 중괄호 블록 · 공백)은 통과한다", () => {
+test("[G597 역검증 · 형식 무관] 의미는 같고 형식만 바꾼 사본(`useState<boolean>(false)` · 중괄호 블록 · 공백)은 통과한다", () => {
   const page = readFileSync(PAGE, "utf8");
   const lib = readFileSync(LIB, "utf8");
   for (const variant of [

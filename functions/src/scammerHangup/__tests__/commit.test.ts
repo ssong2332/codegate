@@ -172,8 +172,8 @@ test("[G558 · §79.19 (4) 배선] 핸들러 — 판독은 세션 read 앞 · �
   assert.equal(/function read[A-Z]\w*\(/.test(src), false, "핸들러에 개별 판독 함수가 다시 생겼다 — readRequest.ts 하나로");
 });
 
-// ── T192 C6-R · G590(Architecture.md §79.20 (3) ① · (11)) — 실시간 경로는 문서 상태와 무관하게 4행 그대로 ───────────
-test("[G590] 실시간 콜러블 — 계열 B 고급 6종 · 오퍼 문서 없음이어도 blocked_transfer(C6-R 전과 같음) · write 0", async () => {
+// ── T192 C6-R · G598(Architecture.md §79.20 (3) ① · (11)) — 실시간 경로는 문서 상태와 무관하게 4행 그대로 ───────────
+test("[G598] 실시간 콜러블 — 계열 B 고급 6종 · 오퍼 문서 없음이어도 blocked_transfer(C6-R 전과 같음) · write 0", async () => {
   const seriesB = ["institutional-impersonation", "card-company-impersonation", "loan-refinance-scam", "tax-refund-scam", "courier-customs-scam", "card-delivery-call"];
   for (const scenarioId of seriesB) {
     const session = activeSession({ scenarioId, difficultyLevel: "advanced" });

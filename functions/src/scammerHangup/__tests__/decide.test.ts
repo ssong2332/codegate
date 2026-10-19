@@ -365,10 +365,10 @@ test("[G552 ⓓ 역검증] 옛 식별자를 끼운 요청 타입 사본은 같�
   assert.equal(/\buserTurns: number;/.test(poisoned), false);
 });
 
-// ── T192 C6 · G592(Architecture.md §79.20 (11)) — 판정 입력 키 집합 정확 일치(C6-R 뒤 = 12키) ─────────────────────────
+// ── T192 C6 · G600(Architecture.md §79.20 (11)) — 판정 입력 키 집합 정확 일치(C6-R 뒤 = 12키) ─────────────────────────
 // AC-103 (a) "시간 · 소강으로 끊지 않는다" · §79.20 (0) 6 "목적 달성 사실은 판정 입력 아님"을 기계로 고정한다 —
 // 사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 키가 들어오면 빨개진다. C6-R이 `transferReachable`(서버 값) 1키를 더했다.
-const G592_KEYS = [
+const G600_KEYS = [
   "alreadyAccepted", "channel", "isMockTurn", "limitReached", "pendingInstruction", "relay",
   "smsAwaitingUser", "status", "transferPlaced", "transferReachable", "userTurns", "verifyEnabled",
 ];
@@ -381,21 +381,21 @@ function inputTypeKeys(src: string): string[] {
   return [...body.matchAll(/^\s*(\w+)\??:/gm)].map((m) => m[1]!).sort();
 }
 
-test("[G592] ScammerHangupInput 키 집합 = 정확히 12키(사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 0)", () => {
+test("[G600] ScammerHangupInput 키 집합 = 정확히 12키(사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 0)", () => {
   const src = readFileSync(path.join(SRC_DIR, "decide.ts"), "utf8").replace(/\r\n/g, "\n");
-  assert.deepEqual(inputTypeKeys(src), G592_KEYS);
-  assert.deepEqual(Object.keys(PASSING).sort(), G592_KEYS, "기준 입력과 타입 키가 갈렸다");
+  assert.deepEqual(inputTypeKeys(src), G600_KEYS);
+  assert.deepEqual(Object.keys(PASSING).sort(), G600_KEYS, "기준 입력과 타입 키가 갈렸다");
 });
 
-test("[G592 역검증] 키를 하나 더한 타입 사본은 같은 판정식에 걸린다", () => {
+test("[G600 역검증] 키를 하나 더한 타입 사본은 같은 판정식에 걸린다", () => {
   const src = readFileSync(path.join(SRC_DIR, "decide.ts"), "utf8").replace(/\r\n/g, "\n");
   const poisoned = src.replace("  userTurns: number;\n", "  userTurns: number;\n  elapsedMs: number;\n");
   assert.notEqual(poisoned, src, "주입 앵커가 없다");
-  assert.notDeepEqual(inputTypeKeys(poisoned), G592_KEYS);
+  assert.notDeepEqual(inputTypeKeys(poisoned), G600_KEYS);
 });
 
-// ── T192 C6-R · G588(Architecture.md §79.20 (3) · (11)) — 4행 조건 ─────────────────────────────────────────────────
-test("[G588 · 4행] transferReachable=false면 verifyEnabled ∧ !transferPlaced여도 다음 행으로 · true면 blocked_transfer(옛 판정과 같음)", () => {
+// ── T192 C6-R · G596(Architecture.md §79.20 (3) · (11)) — 4행 조건 ─────────────────────────────────────────────────
+test("[G596 · 4행] transferReachable=false면 verifyEnabled ∧ !transferPlaced여도 다음 행으로 · true면 blocked_transfer(옛 판정과 같음)", () => {
   const blockedInput = { ...PASSING, verifyEnabled: true, transferPlaced: false };
   assert.deepEqual(decideScammerHangup({ ...blockedInput, transferReachable: true }), { status: "blocked_transfer", hangup: false, row: "4" });
   assert.deepEqual(decideScammerHangup({ ...blockedInput, transferReachable: false }), { status: "accepted", hangup: true, row: "9" });
@@ -410,7 +410,7 @@ test("[G588 · 4행] transferReachable=false면 verifyEnabled ∧ !transferPlace
   }
 });
 
-test("[G588 · 회귀 0] transferReachable=true인 전 입력에서 판정이 C6-R 전 4행(verifyEnabled ∧ !transferPlaced)과 같다", () => {
+test("[G596 · 회귀 0] transferReachable=true인 전 입력에서 판정이 C6-R 전 4행(verifyEnabled ∧ !transferPlaced)과 같다", () => {
   const before = (i: ScammerHangupInput): ScammerHangupStatus =>
     nineRowStatusNewOrder({ ...i, transferReachable: true });
   let n = 0;
