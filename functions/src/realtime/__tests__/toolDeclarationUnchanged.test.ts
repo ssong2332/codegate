@@ -493,9 +493,71 @@ test("[T192/C3 G556 · G503] end_call 선언 — reason enum(goal · give_up) �
   assert.equal(/[0-9０-９]/.test(decl!.description ?? ""), false, "설명 문면에 숫자(G130)");
   assert.equal(
     decl!.description,
-    "네 쪽에서 통화를 먼저 끝내기로 했을 때, 작별 인사를 하기 전에 먼저 부른다. reason은 goal(원하던 것을 얻었다) 또는 give_up(상대가 거절이나 의심을 되풀이해 더 진행할 수 없다) 중 하나다. 결과가 허락하지 않으면 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어간다.",
-    "§79.19 (5) 5 정본 문면",
+    "네 쪽에서 통화를 먼저 끝내기로 했으면, 그 응답에서는 어떤 말보다도 먼저 부른다. 그 응답에서 도구 결과를 받기 전에는 확인 결과를 알리는 말도, 끝내겠다는 말도, 작별 인사도 하지 않는다. reason은 goal(원하던 것을 얻었다) 또는 give_up(상대가 거절이나 의심을 되풀이해 더 진행할 수 없다) 중 하나다. 결과가 허락하지 않으면 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어간다.",
+    "§79.21 (10) ② 정본 문면(G621 — 옛 정본 §79.19 (5) 5를 대체)",
   );
+});
+
+// ── T192 C6-F2 · G621(Architecture.md §79.21 (10) ② · ④) — end_call 도구 설명 = TOOL 꼬리와 같은 범위 ─────────────────
+/** §79.21 (10) ② 정본(사본 — 소스 상수에서 읽지 않는다). */
+const G621_DESCRIPTION_CANON =
+  "네 쪽에서 통화를 먼저 끝내기로 했으면, 그 응답에서는 어떤 말보다도 먼저 부른다. 그 응답에서 도구 결과를 받기 전에는 확인 결과를 알리는 말도, 끝내겠다는 말도, 작별 인사도 하지 않는다. reason은 goal(원하던 것을 얻었다) 또는 give_up(상대가 거절이나 의심을 되풀이해 더 진행할 수 없다) 중 하나다. 결과가 허락하지 않으면 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어간다.";
+/** C6-F2 이전 설명(§79.19 (5) 5) — 역검증용. */
+const G621_OLD_DESCRIPTION =
+  "네 쪽에서 통화를 먼저 끝내기로 했을 때, 작별 인사를 하기 전에 먼저 부른다. reason은 goal(원하던 것을 얻었다) 또는 give_up(상대가 거절이나 의심을 되풀이해 더 진행할 수 없다) 중 하나다. 결과가 허락하지 않으면 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어간다.";
+
+/**
+ * F11 카운터 검출기 — ⭐ 사본을 만들지 않는다. 정본 검출기(`promptAssembly.test.ts` 의 COUNTER_PATTERNS · findCounterExpressions)를
+ * 컴파일된 테스트 파일에서 잘라 그대로 실행한다(패턴이 바뀌면 이 판정도 같이 바뀐다 — 드리프트 0).
+ */
+function loadCounterDetector(): (text: string) => string[] {
+  const js = readFileSync(path.resolve(__dirname, "../../roleplay/__tests__/promptAssembly.test.js"), "utf8");
+  const start = js.indexOf("const NATIVE_NUMERALS");
+  const end = js.indexOf("function extractVerifyInterceptBlock(");
+  assert.ok(start >= 0 && end > start, "F11 검출기를 컴파일 산출물에서 찾지 못했다");
+  return new Function(`${js.slice(start, end)}\nreturn findCounterExpressions;`)() as (text: string) => string[];
+}
+
+/** G621 판정 — 정확 일치 · 옛 범위 0회 · 새 범위 1회 · 숫자 0 · F11 카운터 0 · A-1 리터럴 0. */
+function g612(description: string, findCounters: (text: string) => string[]): boolean {
+  return (
+    description === G621_DESCRIPTION_CANON &&
+    description.split("작별 인사를 하기 전에").length - 1 === 0 &&
+    description.split("어떤 말보다도 먼저 부른다").length - 1 === 1 &&
+    !/[0-9０-９]/.test(description) &&
+    findCounters(description).length === 0 &&
+    !description.includes("확인됐습니다") &&
+    !description.includes("처리됐습니다")
+  );
+}
+
+function endCallDescription(): string {
+  const decl = buildLiveToolDeclarations("kidnapping-threat", "advanced", undefined, VOICE)
+    .flatMap((t) => t.functionDeclarations ?? [])
+    .find((d) => d.name === LIVE_TOOL_END_CALL);
+  assert.ok(decl, "end_call 선언이 있어야 한다");
+  return decl!.description ?? "";
+}
+
+test("[G621] end_call 설명 = §79.21 (10) ② 정본 · '작별 인사를 하기 전에' 0 · '어떤 말보다도 먼저 부른다' 1 · 숫자 · 카운터 · A-1 리터럴 0", () => {
+  const findCounters = loadCounterDetector();
+  // 검출기가 살아 있다(대조군) — 정본 TOOL 열거 "첫째"를 잡는다.
+  assert.ok(findCounters("첫째, 둘째").length > 0, "F11 검출기가 아무것도 잡지 않는다 — 로딩이 깨졌다");
+  const description = endCallDescription();
+  assert.equal(description, G621_DESCRIPTION_CANON, "end_call 설명이 §79.21 (10) ② 정본과 다르다");
+  assert.deepEqual(findCounters(description), [], "설명에 카운터 표현(G130)");
+  assert.ok(g612(description, findCounters));
+});
+
+test("[G621 역검증] 옛 설명 사본 · 숫자 · 카운터를 끼운 사본은 G621 판정에 걸린다", () => {
+  const findCounters = loadCounterDetector();
+  assert.equal(g612(G621_OLD_DESCRIPTION, findCounters), false, "옛 설명이 통과했다 — G621 단언이 죽었다");
+  const counter = G621_DESCRIPTION_CANON.replace("어떤 말보다도 먼저 부른다", "한 번 어떤 말보다도 먼저 부른다");
+  assert.notEqual(counter, G621_DESCRIPTION_CANON);
+  assert.ok(findCounters(counter).length > 0, "카운터 주입본을 검출기가 놓쳤다");
+  const narrowed = G621_DESCRIPTION_CANON.replace("그 응답에서는 어떤 말보다도 먼저 부른다", "작별 인사를 하기 전에 먼저 부른다");
+  assert.notEqual(narrowed, G621_DESCRIPTION_CANON);
+  assert.equal(narrowed.split("작별 인사를 하기 전에").length - 1, 1);
 });
 
 test("[T192/C3 G556 역검증] end_call을 맨 앞에 넣은 사본 · 메신저에서도 선언한 사본은 같은 판정식에 걸린다", () => {

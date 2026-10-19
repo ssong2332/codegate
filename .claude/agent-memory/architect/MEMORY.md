@@ -88,3 +88,4 @@
 - [상태 쓰기 조건화는 내려간 값을 회수 못 한다](feedback_state_write_fix_cannot_recall_delivered_values.md) — "경쟁이 함께 닫힌다"는 재읽기 경로뿐; 경쟁 쓰기 전수 표 · 버려지는 서버 문면은 편집 지점 아님
 - [스테일 줄 인용은 심볼 대응표로](feedback_stale_line_cites_map_by_symbol.md) — 정합 패스는 원문 무편집+대응표; 공유 상수 확장은 소비처 판정까지 따라간다
 - [같은 범위 ≠ 같은 키](feedback_same_scope_not_same_key.md) — "기존 기록과 같은 범위" 인계는 키 분리가 기본; 그 키의 읽기 지점이 다른 라우트 게이트면 회귀(T187)
+- [순서 금지문은 비교 대상·면제 조건부터](feedback_order_rule_scope_gap.md) — "작별 전에 먼저 도구"는 선언을 못 막는다; 저기저율 위반 0/n은 약한 증거 → 선행 지표 병기

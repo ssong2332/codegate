@@ -166,11 +166,13 @@ const OFFER_VERIFICATION_DESK_DECLARATION: FunctionDeclaration = {
 /**
  * T192 C3(§79.19 (5) 4 · 5) — `reason` enum 필수(S5b `purpose` 선례). 서버는 누락 · 오기입도 `unspecified`로 받는다
  * (`normalizeScammerHangupKind` — 거절 0). 설명 문면은 서버 소유 · ⛔ 숫자 · 횟수 0(G130).
+ * T192 C6-F2(§79.21 (10) ② · G621) — 문장1 범위를 "그 응답의 모든 말"로 · 도구 결과 전 알림 · 종료 · 작별 금지 1문장 신설
+ * (TOOL 꼬리와 같은 1회분 · reason · 거절 문장 바이트 동일).
  */
 const END_CALL_DECLARATION: FunctionDeclaration = {
   name: LIVE_TOOL_END_CALL,
   description:
-    "네 쪽에서 통화를 먼저 끝내기로 했을 때, 작별 인사를 하기 전에 먼저 부른다. reason은 goal(원하던 것을 얻었다) 또는 give_up(상대가 거절이나 의심을 되풀이해 더 진행할 수 없다) 중 하나다. 결과가 허락하지 않으면 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어간다.",
+    "네 쪽에서 통화를 먼저 끝내기로 했으면, 그 응답에서는 어떤 말보다도 먼저 부른다. 그 응답에서 도구 결과를 받기 전에는 확인 결과를 알리는 말도, 끝내겠다는 말도, 작별 인사도 하지 않는다. reason은 goal(원하던 것을 얻었다) 또는 give_up(상대가 거절이나 의심을 되풀이해 더 진행할 수 없다) 중 하나다. 결과가 허락하지 않으면 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어간다.",
   parameters: {
     type: Type.OBJECT,
     properties: {
