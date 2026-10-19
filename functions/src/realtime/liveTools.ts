@@ -81,8 +81,9 @@ export function declaresOfferVerificationDesk(
  * ⚠️ 끄면(= `false`) 세 자리가 함께 꺼진다(실시간 setup · 프롬프트 = C3 전). 운영값 트립와이어 3건이 이 값을 고정한다
  * (`toolDeclarationUnchanged.test.ts` · `geminiProvider.test.ts` [운영값]). ⚠️ 배포 순서 = Hosting(클라) → Functions(§79.13).
  * ⛔ 환경 변수 · defineBoolean 아님(배포 설정으로 켜지지 않게). ⛔ 폴백 SIGNAL(`sendMessage`)은 이 값과 무관하다.
+ * ⛔ P-H(G603) 통과 전 운영 off — 2026-10-19 재실측 H1 위반 1 · 통과 뒤 true로 되돌리는 PR
  */
-export const END_CALL_LIVE_AVAILABLE = true;
+export const END_CALL_LIVE_AVAILABLE = false;
 
 /**
  * T192 C3(§79.3 · §79.18 (1) · G502 · G527) — `end_call` **선언 자격**. ⛔ 이 술어가 유일한 원천이다: 도구 선언
