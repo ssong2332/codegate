@@ -97,7 +97,8 @@ export const REAL_COMPANY_NAME_RULES: readonly RealCompanyNameRule[] = [
   telecom("SKT", `${LATIN_START}SKT${LATIN_END}`, "SKT"),
   // 리뷰 M2 — "지유플러스"·"ku+"·"U+3"을 잡지 않게 앞뒤 경계.
   telecom("LG유플러스", `${NOT_AFTER_HANGUL}${LATIN_START}(?:LG\\s?|엘지\\s?)?(?:유플러스|U\\+(?![0-9]))`, "LG유플러스"),
-  telecom("KT", `${LATIN_START}KT${LATIN_END}`, "KT"),
+  // 재QA — 야구팀 "KT 위즈"는 잡지 않는다.
+  telecom("KT", `${LATIN_START}KT${LATIN_END}(?!\\s?위즈)`, "KT"),
   telecom("케이티", `${NOT_AFTER_HANGUL}케이티`, "케이티"),
   // 리뷰 M3 — 케이블·인터넷(MSO) 사업자.
   telecom("MSO", `${NOT_AFTER_HANGUL}${LATIN_START}(?:(?:SK|에스케이)\\s?브로드밴드|LG\\s?헬로비전|헬로비전|딜라이브(?!러리)|HCN)`, "SK브로드밴드"),
