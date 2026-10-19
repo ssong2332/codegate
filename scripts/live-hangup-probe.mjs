@@ -125,6 +125,7 @@ if (!["accept", "reject", "silence", "idle"].includes(mode) || !Number.isInteger
   process.exit(2);
 }
 // C6 리뷰 Minor 2 — 결과(대사 포함)를 저장소 안에 기본으로 쓰지 않는다. `--out` 필수 · 저장소 안 경로는 거부.
+const GAP_MS = Number(argVal("--gap-ms", "60000"));
 const outArg = argVal("--out", null);
 if (!outArg) {
   console.error(`[hangup-probe] --out 이 없어 실행하지 않는다(실호출 0). ${USAGE}`);
@@ -389,6 +390,12 @@ async function main() {
     }
     writeJson(path.join(outDir, `hangup-${mode}-${i}-${ts}.json`), r);
     results.push(r);
+    // P-H 실행 조건(오케스트레이터) — 429/쿼터 오류는 1회라도 즉시 중단 · 세션 사이 간격(기본 60초).
+    if (/(^|[^0-9.])429([^0-9.]|$)|RESOURCE_EXHAUSTED|quota/i.test(JSON.stringify(r))) {
+      console.error(`[hangup-probe] #${i} 429/쿼터 오류 — 즉시 중단(남은 세션 실행 0)`);
+      break;
+    }
+    if (i < n) await sleep(GAP_MS);
     console.log(maskSecrets(
       `[hangup-probe] #${i} script=${r.script ?? "-"} calls=${r.endCallCount ?? "-"} ` +
         `preFarewell=${(r.calls ?? []).map((c) => c.preCallFarewell.length).join("/") || "-"} ` +
