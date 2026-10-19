@@ -115,7 +115,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 |---|---|---|---|
 | smsId | string | PK(=doc id) | 시나리오 문자 카탈로그(`functions/src/scenarios/inCallSms.ts`) 항목 id. 서버가 `IN_CALL_SMS[session.scenarioId]` 소속을 **재검증**한 값만 기록(§15.1.2 G12) |
 | kind | string | `account`\|`link`\|`otp` | 계좌·요구형 / 링크형 / 인증번호형(UX-027 Content 3종) |
-| senderLabel | string | required | 발신번호 라벨(실존하지 않는 모의값, AC-005/013) |
+| senderLabel | string | required | 발신번호 라벨(실존하지 않는 모의값, AC-005/013). **2026-10-19 증분(Architecture §83.2)** — 라벨의 "○○캐피탈"·"○○카드"는 세션 가상 이름으로 치환돼 저장된다(본문과 같은 이름) |
 | body | string | required | 본문. **서버 카탈로그가 원천**이며 사용자·LLM이 생성하지 않는다 → PII 마스킹 대상 아님(사용자 텍스트가 아님) |
 | otpCode | string? | `kind==="otp"`일 때만 | **콘텐츠에 고정된 리터럴**(런타임 난수 금지 — 결정론적 테스트 + 모의값 불변식) |
 | bankName | string? | 본문에 가상 은행 자리표시자가 있었던 문자만 | **2026-10-18 증분(Architecture §81)** — 그 세션의 가상 은행명(본문은 이미 치환돼 저장). 가짜 랜딩 미리 채움(D-115)의 원천 |

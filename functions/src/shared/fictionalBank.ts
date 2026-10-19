@@ -55,16 +55,71 @@ export function resolveFictionalBankName(session: { sessionId?: string; fictiona
 }
 
 /**
+ * 대조를 통과한 가상 카드사·캐피탈 이름(§83.1). **세션 은행명과 같은 자리(index)의 이름을 쓴다** — 세션 원천은
+ * 여전히 `fictionalBankName` 하나라서, 은행명이 전달되는 모든 경로(프롬프트·대사 후처리·문자·확인창구·Live)가
+ * 새 필드·새 배선 없이 같은 카드사·캐피탈 이름을 쓴다(§83.2). 순서·길이를 바꾸면 기존 세션의 배정이 달라진다.
+ * ⛔ 이름을 늘리거나 바꿀 때는 §83.1 대조표를 다시 돌린다. 은행명 어간과 같은 어간은 쓰지 않는다(계열사로 오인).
+ */
+export const FICTIONAL_CARD_NAMES: readonly string[] = [
+  "초롱카드",
+  "반디카드",
+  "버들카드",
+  "마중카드",
+  "찬별카드",
+  "윤채카드",
+  "잎새카드",
+  "타래카드",
+];
+export const FICTIONAL_CAPITAL_NAMES: readonly string[] = [
+  "이랑캐피탈",
+  "벼리캐피탈",
+  "너울캐피탈",
+  "포근캐피탈",
+  "자람캐피탈",
+  "마노캐피탈",
+  "휘나리캐피탈",
+  "아띠캐피탈",
+];
+
+/** 세션 은행명에 딸린 가상 카드사·캐피탈 이름(§83.2). 목록 밖의 은행명이면 그 이름의 해시로 고른다(결정적). */
+export function fictionalOrgNamesFor(bankName: string): { cardName: string; capitalName: string } {
+  const at = FICTIONAL_BANK_NAMES.indexOf(bankName);
+  const index = at >= 0 ? at : hash(bankName) % FICTIONAL_CARD_NAMES.length;
+  return { cardName: FICTIONAL_CARD_NAMES[index]!, capitalName: FICTIONAL_CAPITAL_NAMES[index]! };
+}
+
+/**
  * 자리표시자 표기 변형까지 잡는다(리뷰 #4 — 모델이 "OO 은행"·"oo은행"·전각 "ＯＯ은행"으로 쓸 수 있다).
- * ⚠️ 한계: 한글로 읽은 "오오은행"·"OO뱅크"·"OO카드"는 대상이 아니다(§81.5).
+ * ⚠️ 한계: 한글로 읽은 "오오은행"·"OO뱅크"는 대상이 아니다(§81.5).
  */
 const PLACEHOLDER_PATTERN = /[Oo○Ｏｏ]{2}\s?은행/g;
+/** §83 — 카드사·캐피탈 자리표시자("○○카드"·"○○캐피탈" 및 같은 표기 변형). 실명 가드레일의 "OO카드" 출력도 여기서 바뀐다. */
+const CARD_PLACEHOLDER_PATTERN = /[Oo○Ｏｏ]{2}\s?카드/g;
+const CAPITAL_PLACEHOLDER_PATTERN = /[Oo○Ｏｏ]{2}\s?캐피탈/g;
 
-/** 텍스트의 자리표시자("OO은행"·"○○은행" 및 표기 변형)를 세션 은행명으로 바꾼다. 자리표시자가 없으면 입력을 그대로 돌려준다. */
+/** 텍스트에 가상 **은행** 자리표시자가 있는가(문자 문서 `bankName` 필드 판정용 — 카드·캐피탈 자리표시자는 세지 않는다). */
+export function hasBankPlaceholder(text: string): boolean {
+  PLACEHOLDER_PATTERN.lastIndex = 0;
+  return PLACEHOLDER_PATTERN.test(text);
+}
+
+/**
+ * 텍스트의 가상 금융사 자리표시자를 세션 이름으로 바꾼다 — "OO은행"·"○○은행" → 세션 은행명, §83 "○○카드" → 세션
+ * 카드사명, "○○캐피탈" → 세션 캐피탈명(모두 표기 변형 포함). 자리표시자가 없으면 입력을 그대로 돌려준다.
+ */
 export function applyFictionalBank(text: string, bankName: string): string {
   PLACEHOLDER_PATTERN.lastIndex = 0;
-  if (!PLACEHOLDER_PATTERN.test(text)) return text;
-  return text.replace(PLACEHOLDER_PATTERN, bankName);
+  CARD_PLACEHOLDER_PATTERN.lastIndex = 0;
+  CAPITAL_PLACEHOLDER_PATTERN.lastIndex = 0;
+  const hasBank = PLACEHOLDER_PATTERN.test(text);
+  const hasCard = CARD_PLACEHOLDER_PATTERN.test(text);
+  const hasCapital = CAPITAL_PLACEHOLDER_PATTERN.test(text);
+  if (!hasBank && !hasCard && !hasCapital) return text;
+  const { cardName, capitalName } = fictionalOrgNamesFor(bankName);
+  let out = hasBank ? text.replace(PLACEHOLDER_PATTERN, bankName) : text;
+  if (hasCard) out = out.replace(CARD_PLACEHOLDER_PATTERN, cardName);
+  if (hasCapital) out = out.replace(CAPITAL_PLACEHOLDER_PATTERN, capitalName);
+  return out;
 }
 
 /**

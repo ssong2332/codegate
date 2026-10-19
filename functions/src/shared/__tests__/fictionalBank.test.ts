@@ -90,7 +90,8 @@ test("[은행명] 배정 — 새 세션은 목록 안에서 고르고, 저장값
 test("[은행명] 자리표시자 치환 — 'OO은행'·'○○은행'·표기 변형(띄어쓰기·소문자·전각) 모두, 없으면 입력 그대로, 멱등", () => {
   assert.equal(applyFictionalBank("OO은행 948-2716 / ○○은행 금융사고대응팀", "한결은행"), "한결은행 948-2716 / 한결은행 금융사고대응팀");
   assert.equal(applyFictionalBank("OO 은행 · oo은행 · ＯＯ은행", "한결은행"), "한결은행 · 한결은행 · 한결은행");
-  assert.equal(applyFictionalBank("OO카드 · 오오은행", "한결은행"), "OO카드 · 오오은행", "범위 밖 표기는 그대로(§81.5)");
+  // §83 — "OO카드"는 이제 세션 카드사명으로 바뀐다(fictionalOrg.test.ts). 한글로 읽은 표기·"OO뱅크"는 여전히 범위 밖.
+  assert.equal(applyFictionalBank("OO뱅크 · 오오은행", "한결은행"), "OO뱅크 · 오오은행", "범위 밖 표기는 그대로(§81.5)");
   const plain = "자리표시자 없음";
   assert.equal(applyFictionalBank(plain, "한결은행"), plain);
   const once = applyFictionalBank("OO은행", "한결은행");
@@ -119,7 +120,8 @@ test("[은행명] 문자 — 저장 본문·도착 지시가 세션 은행명으
         assert.ok(doc.body.includes("늘봄은행"));
         assert.equal(doc.bankName, "늘봄은행");
       } else {
-        assert.equal(doc.body, item.body);
+        // §83 — 캐피탈·카드 자리표시자만 있는 문자는 본문이 그 이름으로 바뀌지만 bankName은 싣지 않는다.
+        if (!/[Oo○]{2}\s?(?:카드|캐피탈)/.test(item.body)) assert.equal(doc.body, item.body);
         assert.equal("bankName" in doc, false);
       }
       const legacy = buildInCallSmsDoc(item, ts, 1, scenarioId);
