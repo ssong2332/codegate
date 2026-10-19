@@ -34,7 +34,7 @@ import {
   type MockScreenEvent,
   type MockScreenKind,
 } from "@/lib/api";
-import { scenarios, type ScenarioDoc } from "@/content/scenarios";
+import { resolveSessionEscalation, scenarios, type ScenarioDoc } from "@/content/scenarios";
 import { detectDeviceSkin, type MessengerSkin } from "@/lib/messenger/detectSkin";
 // T190-6(docs/Architecture.md §74.5 · 표 K · UX-022 v1.33) — 통화·문자함과 **같은 해석 함수**(한 세션 = 한 스킨).
 import {
@@ -105,6 +105,10 @@ export default function MessengerSessionPage() {
   const [sessionId] = useState<string | null>(() => getPendingSessionId());
   const [pageState, setPageState] = useState<PageState>(sessionId ? "checking" : "no-session");
   const [scenario, setScenario] = useState<ScenarioDoc | null>(null);
+  // T194-a(Architecture.md §84.4.1 C-2 · C-3 · UX D-124 ② · PRD AC-106 (i)) — 이 세션이 통화로 이어질 수 있는가. 세션 문서의
+  // `difficultyLevel` · `challengeId`로 (시나리오 × 난이도) 술어를 푼 값이다 — 시작 고지 열("메시지와 전화")과 "전화로 확인" 버튼이
+  // **이 값 하나**를 쓴다(서버 requestEscalation · sendMessage 자동 전이와 같은 술어 — G462 ⑤). 택배 문자는 고급 세션만 참.
+  const [sessionEscalates, setSessionEscalates] = useState(false);
   // T187(docs/Architecture.md §72.5 D2 · UX-022 `start-notice` N-1~N-4 · AC-088) — 시작 전 고지
   // 상태. 세션 로드 effect가 순수 함수 `decideMessengerStartNotice`로 정한다. "skip"이 되기 전에는
   // 대화 목록을 구독하지 않는다(아래 구독 effect의 가드 — 첫 메시지 렌더 0이 구조로 성립).
@@ -158,6 +162,12 @@ export default function MessengerSessionPage() {
           return;
         }
         setScenario(found);
+        setSessionEscalates(
+          resolveSessionEscalation(
+            { scenarioId: scenarioId as string, difficultyLevel: data.difficultyLevel, challengeId: data.challengeId },
+            scenarios,
+          ) !== undefined,
+        );
         // T187(§72 · M-13) — 세션 중 난이도 배지를 지워 난이도 읽기도 함께 걷었다(표기 전용이었다 —
         // 난이도 반영은 서버 sendMessage 조립이 하므로 동작 변화 0).
         // T187(§72.5 D2) — 시작 전 고지 판정. 확인 기록은 이 탭 sessionStorage(다른 키 — G450),
@@ -413,8 +423,8 @@ export default function MessengerSessionPage() {
     return (
       <MessengerStartNotice
         surface={surface}
-        // T190-8a(§74.22 (2) · OQ-52 (ㄴ)) — "전화로 확인" 버튼과 같은 술어(에스컬레이션 가능 시나리오).
-        includesCall={Boolean(scenario.escalation)}
+        // T190-8a(§74.22 (2) · OQ-52 (ㄴ)) — "전화로 확인" 버튼과 같은 술어. T194-a(§84.4.1 C-2 · D-124 ②) — 세션 단위 값.
+        includesCall={sessionEscalates}
         onConfirm={handleConfirmStartNotice}
         onEndTraining={handleEndTraining}
         skinPicker={{ value: messengerSkin, source: skinSource, onChange: handleChooseSkin }}
@@ -484,7 +494,7 @@ export default function MessengerSessionPage() {
             {/* 명시 전환 버튼(§13.3 — 1턴부터 상시, AC-034) — 에스컬레이션 가능 시나리오에서만.
                 T190-6(UX-022 v1.33 (3)) — 문자형은 수화기 단색 아이콘 + "전화로 확인"(📞 이모지 대체 · 48px).
                 카카오형은 무변경. */}
-            {scenario.escalation && !ended && (
+            {sessionEscalates && !ended && (
               <button
                 type="button"
                 onClick={() => void handleRequestEscalation()}

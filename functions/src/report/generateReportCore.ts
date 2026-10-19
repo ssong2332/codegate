@@ -8,8 +8,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
-import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
-import { listAppInstallMockScreens, MOCK_SCREENS } from "../scenarios/mockScreens";
+import { MOCK_SCREENS } from "../scenarios/mockScreens";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import type {
@@ -39,6 +38,7 @@ import {
   applyMockScreens,
   deriveReportStages,
   mergePromotedTactics,
+  resolveSessionStageIntent,
   type MockScreenMessage,
   type MockScreenSource,
 } from "./mockScreenTimeline";
@@ -233,7 +233,9 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   );
 
   // 단계 도달 판정(§15.9.5 e-3, OQ-U24) — 전부 파생이라 세션 문서에 신규 필드가 0건이다.
-  const installLandingIds = listAppInstallMockScreens(session.scenarioId).map((i) => i.landingId);
+  // ⭐ T194-a(§84.4.1 S-4 · G587) — 설치 · 통화 단계의 "의도됐는가"는 **세션 술어**다. parcel은 카탈로그에 설치 항목이 있어도
+  // 초급 · 중급 세션에서는 도달할 수 없으므로(`isMockScreenReachable`) 설치 단계 "미도달" 표기가 생기면 안 된다.
+  const { installLandingIds, voiceIntended } = resolveSessionStageIntent(session);
   const stages = deriveReportStages({
     ...(session.entryChannel ?? session.channel
       ? { entryChannel: session.entryChannel ?? session.channel }
@@ -241,7 +243,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     installIntended: installLandingIds.length > 0,
     reachedLandingIds: mockSources.map((d) => d.landingId),
     installLandingIds,
-    voiceIntended: Boolean(PUBLIC_SCENARIOS[session.scenarioId]?.escalation),
+    voiceIntended,
     voiceReached: (session.channelHistory ?? []).some(
       (entry) => entry.from === "messenger" && entry.to === "voice",
     ),

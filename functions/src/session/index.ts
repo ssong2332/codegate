@@ -15,6 +15,7 @@ import { generateOpeningLine } from "../roleplay";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import { resolveScenarioEscalation, resolveSessionEscalation } from "../scenarios/escalation";
 import {
   CREATE_SESSION_WINDOW_MAX,
   MAX_SESSION_MS,
@@ -112,9 +113,12 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     const resolvedDifficultyLevel = normalizeDifficultyLevel(difficultyLevel);
 
     // 교차채널 세션 총 한도(T30, Architecture.md §13.3, PoC 전 가정치) — 에스컬레이션 가능
-    // 시나리오(scenario.escalation 존재)는 두 채널을 합쳐도 기존 10턴 안에 다 담기 어려워
+    // 시나리오는 두 채널을 합쳐도 기존 10턴 안에 다 담기 어려워
     // maxUserTurns를 상향 발급한다.
-    const isEscalationCapable = Boolean(PUBLIC_SCENARIOS[scenarioId]?.escalation);
+    // ⭐ T194-a(§84.4.1 S-1) — "에스컬레이션 가능"은 (시나리오 × 난이도) 술어다(parcel은 고급만). 난이도는 위에서 이미 확정됐다.
+    // 이 콜러블은 자가 세션만 만든다(챌린지 수신자 세션은 consentChallenge가 만든다).
+    const isEscalationCapable =
+      resolveScenarioEscalation(PUBLIC_SCENARIOS[scenarioId], resolvedDifficultyLevel) !== undefined;
 
     // UX-025(§13.6) "남/여 기본 보이스" 폴백 — 클라는 실제 ElevenLabs voiceId를 모르므로(서버
     // 전용 설정), voiceSelectionSource로 요청하면 서버가 FALLBACK_VOICE_MALE_ID/FEMALE_ID로
@@ -196,6 +200,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       resolvedDifficultyLevel,
       variantAssignment.flowVariantId,
       fictionalBankName,
+      undefined,
     );
 
     // T4: sessionId(온보딩 "사전 세션 id")가 넘어오면 createVoiceClone이 만들어 둔 pending
@@ -462,7 +467,8 @@ export const requestEscalation = onCall<
   if (session.channel !== "messenger") {
     throw new HttpsError("failed-precondition", "메신저 채널 세션에서만 요청할 수 있습니다.");
   }
-  if (!PUBLIC_SCENARIOS[session.scenarioId]?.escalation) {
+  // T194-a(§84.4.1 S-2) — 세션 술어(sendMessage 자동 전이 · 클라 버튼 · 시작 고지 열과 같은 술어).
+  if (!resolveSessionEscalation(session, PUBLIC_SCENARIOS)) {
     throw new HttpsError("failed-precondition", "이 시나리오는 통화 전이를 지원하지 않습니다.");
   }
 

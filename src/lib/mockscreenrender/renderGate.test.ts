@@ -169,7 +169,7 @@ function targetTexts(item: CatalogItem): Array<{ field: string; text: string }> 
 // ── ① 존재 대조(R-B) + 건수 단언(R-D) ────────────────────────────────────────────────
 
 test("[T116/렌더-존재] 카탈로그 **도달 가능 전수**의 초기 렌더 대상 문구가 실제 렌더 결과에 등장한다", (t) => {
-  assert.equal(catalogItems.length, 8, "도달 가능 랜딩은 8종이다(credential-form 7 + app-install 1, §53/§51 커밋 D)");
+  assert.equal(catalogItems.length, 9, "도달 가능 랜딩은 9종이다(credential-form 7 + app-install 2, §53/§51 커밋 D · T194-a parcel-install)");
 
   let compared = 0;
   const perItem: string[] = [];
@@ -372,7 +372,7 @@ test("[T190-2/G447 역검증] 주소창 호스트 렌더 지점을 끊으면 생
       dirtyHasHost: dirty.text.includes(host),
     };
   });
-  assert.ok(results.every((r) => r.cleanAlive), "정상 경로(8종 전부)의 생존 신호가 살아 있어야 한다");
+  assert.ok(results.every((r) => r.cleanAlive), "정상 경로(9종 전부)의 생존 신호가 살아 있어야 한다");
   assert.deepEqual(
     results.filter((r) => r.dirtyAlive || r.dirtyHasHost).map((r) => r.landingId),
     [],
@@ -380,7 +380,7 @@ test("[T190-2/G447 역검증] 주소창 호스트 렌더 지점을 끊으면 생
   );
   const [g76Caught, catalogDelta] = assertExistingGateInputsUnchanged(original, poisoned);
   t.diagnostic(
-    `[T190-2 역검증] 8종 정상 생존 ${results.filter((r) => r.cleanAlive).length} / 오염 생존 ${results.filter((r) => r.dirtyAlive).length} / G76 리터럴 검출 ${g76Caught}건 / 카탈로그 변경 ${catalogDelta}바이트`,
+    `[T190-2 역검증] 9종 정상 생존 ${results.filter((r) => r.cleanAlive).length} / 오염 생존 ${results.filter((r) => r.dirtyAlive).length} / G76 리터럴 검출 ${g76Caught}건 / 카탈로그 변경 ${catalogDelta}바이트`,
   );
 });
 
@@ -521,7 +521,7 @@ test("[T190/G460 · 렌더] entrySurface 두 갈래 — 메신저 = 대화상자
     assert.equal(inCall.text.split("\n").includes("문자"), true, `${item.landingId}: 문자함 안에 '문자' 뒤로가 없다`);
     rows.push(`${item.landingId}=메신저 ${messenger.markup.length}자/문자함 ${inCall.markup.length}자`);
   }
-  t.diagnostic(`[T190/G460] 8종 × 두 진입 표면 렌더 — ${rows.join(" · ")}`);
+  t.diagnostic(`[T190/G460] 9종 × 두 진입 표면 렌더 — ${rows.join(" · ")}`);
 });
 
 /** 메신저 진입 랜딩의 ✕(닫기) 위반 — 본 단언과 역검증이 같은 함수를 쓴다(사용자 결정 2026-10-18 · UX-023 v1.36 · D-116). */
@@ -586,4 +586,26 @@ test("[T190/UX-023 v1.33 (2)(3)] 주소창 ⚠·모노 글꼴·🔒 0 · 기관 
       assert.ok(text.split("\n").includes(name), `${item.landingId}: 기관 헤더 띠("${name}")가 없다`);
     }
   }
+});
+
+// ── T194-a(docs/Architecture.md §84.13.3 ③) — 설치 화면 상황별 문구 · 표 밖 id 생략 ────────────────────────────────
+
+test("[T194-a §84.13.3 ③] 설치 항목마다 자기 문구만 그린다(교차 0) · 표에 없는 id의 app-install은 아무것도 그리지 않는다(지원금 기본값 0)", (t) => {
+  const installs = catalogItems.filter((item) => item.kind === "app-install");
+  assert.equal(installs.length, 2, "설치 항목 2종(subsidy · parcel)");
+  const lines: string[] = [];
+  for (const item of installs) {
+    const { text } = renderLandingScreen(propsFor(item));
+    for (const other of installs.filter((o) => o.landingId !== item.landingId)) {
+      const otherHeadline = other.fields.get("headline")?.[0] ?? "";
+      assert.equal(text.includes(otherHeadline), false, `${item.landingId} 화면에 ${other.landingId} 헤드라인이 그려졌다`);
+    }
+    lines.push(`${item.landingId}=${text.length}자`);
+  }
+  const unknown = renderLandingScreen({ ...propsFor(installs[0]), landingId: "no-such-install" });
+  const subsidyHeadline = installs.find((i) => i.landingId === "subsidy-install")?.fields.get("headline")?.[0] ?? "";
+  lines.push(`표 밖 id=${unknown.markup.length}자 마크업`);
+  t.diagnostic(`[③] ${lines.join(" · ")}`);
+  assert.equal(unknown.markup, "", "표에 없는 id의 설치 화면은 생략돼야 한다(UF-012 Failure (a))");
+  assert.equal(unknown.text.includes(subsidyHeadline), false);
 });

@@ -7,7 +7,14 @@
 // 표현에도 그대로 적용한 것이다. 사용자 입력은 절대 신호로 해석하지 않는다는 원칙(AC-024)도
 // 동일하게 적용된다 — 이 함수는 LLM 완성 텍스트(오프닝 대사·sendMessage 응답)에만 호출되고,
 // 사용자 입력에는 호출되지 않는다(functions/src/roleplay/openingLine.ts·index.ts 참고).
-import { DEFAULT_MOCK_SCREEN_KIND, resolveMockScreenKind } from "../scenarios/mockScreens";
+import {
+  DEFAULT_MOCK_SCREEN_KIND,
+  findDefaultCredentialLanding,
+  findMockScreenItem,
+  isMockScreenReachable,
+  resolveMockScreenKind,
+} from "../scenarios/mockScreens";
+import type { EscalationSessionView } from "../scenarios/escalation";
 import type { MessengerAttachment } from "../shared/types";
 
 const LINK_MARKER_PATTERN = /\[\[LINK:([a-zA-Z0-9_-]+)\]\]/g;
@@ -22,6 +29,8 @@ const LINK_LABELS: Record<string, string> = {
   "parcel-redelivery": "재배송 신청 확인하기",
   "subsidy-apply": "지원금 신청하기",
   "subsidy-install": "지원금 신청 앱 설치하기",
+  // T194-a(§84.4.3 · G53) — parcel 고급의 모의 앱 설치 칩.
+  "parcel-install": "배송 확인 앱 설치하기",
 };
 const DEFAULT_LINK_LABEL = "확인하기";
 
@@ -34,18 +43,31 @@ const DEFAULT_LINK_LABEL = "확인하기";
  * 필요해 `scenarioId`를 받으며(호출부 2곳: `roleplay/index.ts`·`roleplay/openingLine.ts`),
  * 기본값(`credential-form`)일 때는 **키 자체를 만들지 않는다** — 카탈로그가 없는 12개 시나리오의
  * attachment 문서가 도입 전과 완전히 동일하게 유지된다(무백필·회귀 0, §15.0.4 하위호환 읽기 규칙).
+ *
+ * ⭐ T194-a(docs/Architecture.md §84.4.4 · G582) — `session`(세션의 시나리오 · 난이도 · 챌린지 여부)을 받아 **이 세션에서 도달할 수
+ * 없는 `app-install` 마커**(예: 초급 parcel 모델이 `[[LINK:parcel-install]]`을 지어냄)를 그 시나리오의 기본 credential 랜딩으로
+ * 강등하고 경고 1줄을 남긴다(조용한 임의 동작 0 — `flowVariants.ts` `flow_variant_unresolved` 관례). 기본 랜딩이 없으면 첨부를
+ * 만들지 않는다(마커는 텍스트에서 지워진다). ⛔ `app-install` 방향 폴백은 여전히 0이다(R5).
+ * `session` 부재는 **고급 아님 · 챌린지 아님**으로 본다(닫힌 쪽 — `advancedEscalation`만 가진 시나리오의 설치 마커는 강등된다).
+ * 호출부 2곳(`roleplay/index.ts` · `roleplay/openingLine.ts`)은 항상 넘긴다(`linkMarker.test.ts` 소스 스캔).
  */
 export function extractLinkMarker(
   text: string,
   scenarioId?: string,
+  session?: Omit<EscalationSessionView, "scenarioId"> & { flowVariantId?: string },
 ): {
   text: string;
   attachments?: MessengerAttachment[];
 } {
   const attachments: MessengerAttachment[] = [];
+  let markerCount = 0;
 
   const cleaned = text
-    .replace(LINK_MARKER_PATTERN, (_match, fakeLandingId: string) => {
+    .replace(LINK_MARKER_PATTERN, (_match, markerLandingId: string) => {
+      markerCount += 1;
+      const fakeLandingId =
+        scenarioId === undefined ? markerLandingId : reachableLandingIdFor(scenarioId, markerLandingId, session);
+      if (fakeLandingId === undefined) return "";
       const landingKind =
         scenarioId === undefined
           ? DEFAULT_MOCK_SCREEN_KIND
@@ -66,8 +88,37 @@ export function extractLinkMarker(
     .replace(/ ([.,!?])/g, "$1")
     .trim();
 
-  if (attachments.length === 0) {
+  if (markerCount === 0) {
     return { text };
   }
+  // T194-a — 마커는 있었으나 전부 강등 대상(기본 랜딩 없음)이면 첨부 없이 마커만 지운 텍스트를 돌려준다(마커 원문 노출 0).
+  if (attachments.length === 0) {
+    return { text: cleaned };
+  }
   return { text: cleaned, attachments };
+}
+
+/**
+ * 마커 id → 이 세션에서 실제로 열 랜딩 id(§84.4.4). 카탈로그에 없는 id · `credential-form` · 도달 가능한 `app-install`은 그대로,
+ * 도달 불가 `app-install`은 기본 credential 랜딩 id(없으면 `undefined` = 첨부 없음).
+ */
+function reachableLandingIdFor(
+  scenarioId: string,
+  markerLandingId: string,
+  session: (Omit<EscalationSessionView, "scenarioId"> & { flowVariantId?: string }) | undefined,
+): string | undefined {
+  const item = findMockScreenItem(scenarioId, markerLandingId);
+  // ⛔ §84.13.2 G161 — 이 함수는 세션 도달 집합으로 마커를 거르지 않는다(다중 마커 능력 유지 · 거부는 기록 층 G588). 강등은
+  // §84.4.4의 "도달 불가 `app-install`" 한 경우뿐이다 — credential-form · 카탈로그 밖 id는 종전 그대로 통과한다.
+  if (!item || item.kind !== "app-install" || isMockScreenReachable({ ...session, scenarioId }, item)) return markerLandingId;
+  const fallback = findDefaultCredentialLanding(scenarioId);
+  console.warn(
+    JSON.stringify({
+      event: "mock_screen_link_demoted",
+      scenarioId,
+      from: markerLandingId,
+      to: fallback?.landingId ?? null,
+    }),
+  );
+  return fallback?.landingId;
 }

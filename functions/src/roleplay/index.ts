@@ -17,7 +17,8 @@ import { triggerReportGeneration } from "../report";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import type { InCallSmsItem } from "../scenarios/inCallSms";
 import {
-  hasAppInstallMockScreen,
+  isMockScreenReachable,
+  listAppInstallMockScreens,
   MOCK_INSTALL_CONSENT_INSTRUCTION,
   MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL,
 } from "../scenarios/mockScreens";
@@ -48,6 +49,7 @@ import { resolveHangupRelay } from "../scammerHangup/relayContext";
 import { pickFallbackTurnInstruction } from "../verifyIntercept/fallbackTurn";
 import { announcedVerifyAnchor } from "../verifyIntercept/buildDoc";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import { resolveSessionEscalation } from "../scenarios/escalation";
 import { LLM_TEXT_SECRETS } from "../shared/config";
 import { MESSENGER_ESCALATION_FALLBACK_TURNS, SEND_MESSAGE_MAX_LENGTH } from "../shared/constants";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
@@ -67,7 +69,7 @@ import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAs
 import { evaluateOtpCheck, otpCheckInputsFromHistory } from "./otpCheck";
 import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
-import { speakerGenderFor } from "../realtime/scenarioVoice";
+import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
 import { applyFictionalBank, resolveFictionalBankName, resolveSessionAccountNumber } from "../shared/fictionalBank";
@@ -347,7 +349,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // ⚠️ 응낙이 **채널 전이를 유발하지 않는다**(§15.9.7 G54, AC-073) — 아래 ④-b 전이 판단은
     // 여전히 구조화 신호·max-turn 폴백만 본다.
     let mockConsentRef: FirebaseFirestore.DocumentReference | undefined;
-    if (hasAppInstallMockScreen(session.scenarioId)) {
+    // T194-a(리뷰 m1) — 카탈로그 소속이 아니라 **이 세션에서 도달 가능한** 설치 항목이 있을 때만 읽는다. 도달 불가 항목은
+    // `recordMockScreenEvent`가 응낙 문서를 만들지 않으므로(G588 · ⑤) 동작은 같고, parcel 초급 · 중급의 매 턴 읽기 1회가 사라진다.
+    if (listAppInstallMockScreens(session.scenarioId).some((item) => isMockScreenReachable(session, item))) {
       try {
         // 세션당 문서가 한 자릿수라(카탈로그 항목 수 상한) 전체를 읽고 메모리에서 고른다 —
         // 부등호 쿼리·복합 인덱스를 새로 만들지 않는다(Database.md 인덱스 표 무변경).
@@ -485,7 +489,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         verifyInterceptEnabled: verifyEnabled,
         l3Procedural: isL3Procedural(session.scenarioId),
         identityCheckAllowed: asksIdentityCheck(session.scenarioId),
-        speakerGender: speakerGenderFor(session.scenarioId),
+        // T194-a(§84.4.3) — 세션 단위 해석(표 값이 있으면 그대로 · parcel 고급만 변형 leg 성별).
+        speakerGender: resolveSessionSpeakerGender(session),
         ...(turnInstructionWithSms ? { turnInstruction: turnInstructionWithSms } : {}),
         fictionalBankName,
         sessionAccountNumber: resolveSessionAccountNumber(session.scenarioId),
@@ -546,9 +551,11 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 원칙을 대화 로그 전체에 일관 적용 — ADR-0004).
     // T84(§15.9.1 R4) — 시나리오를 함께 넘겨 attachment에 `landingKind`가 실린다(서버 카탈로그가
     // 진실 원천, 클라 분류 금지). 카탈로그가 없는 시나리오는 키 자체가 붙지 않아 무변경이다.
+    // T194-a(§84.4.4 · G582) — 세션을 넘겨 이 세션에서 도달 불가한 설치 마커를 강등한다(초급 · 중급 parcel).
     const { text: linkFreeReplyText, attachments: replyAttachments } = extractLinkMarker(
       completion.text,
       session.scenarioId,
+      session,
     );
     // ③-a′ T191 — 문자 요청 마커를 걷어 낸다(아래 문장 수 상한보다 **앞** — 상한이 끝의 마커를 잘라 먹지 않게).
     const { text: smsMarkerFreeText, purpose: markerPurpose, markerCount: smsMarkerCount } =
@@ -714,14 +721,16 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     }
 
     // ④-b 채널 전이(T30, Architecture.md §13.2/13.3, AC-034/039) — 이 시나리오가 에스컬레이션
-    // 가능(scenario.escalation 존재)하고 아직 메신저 단계일 때만 판단한다. 우선순위: 구조화 신호
+    // 가능하고 아직 메신저 단계일 때만 판단한다. 우선순위: 구조화 신호
     // > max-turn 폴백(MESSENGER_ESCALATION_FALLBACK_TURNS, §13.3 PoC 전 가정치). 이번 턴에 전체
     // 세션 한도(limitReached)로 이미 종료됐다면 전이보다 종료를 우선한다(모순된 상태 방지). 위
     // 트랜잭션에서 이미 종료된 것으로 확인됐다면(stillActive=false) 이 턴이 전이를 일으키지 않는다.
+    // ⭐ T194-a(§84.4.1 S-3) — "에스컬레이션 가능"은 (시나리오 × 난이도) 세션 술어다(parcel은 고급만). `requestEscalation`(S-2) ·
+    // 클라 "전화로 확인" 버튼 · 시작 고지 열과 같은 술어다(startNoticeGate.test.ts G462 ⑤).
     const canEscalate =
       finalize.stillActive &&
       session.channel === "messenger" &&
-      Boolean(PUBLIC_SCENARIOS[session.scenarioId]?.escalation);
+      resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined;
     let escalationTrigger: ChannelTransitionTrigger | undefined;
     if (canEscalate && !limitReached) {
       if (signalEscalate) {
