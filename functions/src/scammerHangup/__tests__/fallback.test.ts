@@ -211,3 +211,29 @@ test("[Minor-1 배선] sendMessage — 도착 기록 read 조건과 끊기 판�
   );
   assert.ok(src.includes("smsDeclared: smsSessionDeclared,"), "끊기 판정 입력이 같은 값을 쓰지 않는다");
 });
+
+// ── T192 C6-L · G564(Architecture.md §79.20 (1) #12 · (8) L-1) — 폴백 사전 판정 로그 ───────────────────────────────
+/** `logger.info("끊기 사전 판정", { … })` 호출의 필드 이름(정확 집합 판정용). 없으면 null. */
+function preDecisionLogFields(src: string): string[] | null {
+  const m = /logger\.info\("끊기 사전 판정", \{([^}]*)\}\);/.exec(src);
+  if (!m) return null;
+  return m[1]!.split(",").map((part) => part.split(":")[0]!.trim()).filter(Boolean).sort();
+}
+
+test("[G564] 폴백 사전 판정 로그 — 매 턴 1회(사전 판정 직후 · 핸들러 본문) · 필드 = sessionId · row · status · mode만(대사 0)", () => {
+  const src = readFileSync(ROLEPLAY_INDEX, "utf8");
+  assert.equal(src.split('logger.info("끊기 사전 판정"').length - 1, 1, "로그 지점이 1곳이 아니다");
+  assert.deepEqual(preDecisionLogFields(src), ["mode", "row", "sessionId", "status"]);
+  const preAt = src.indexOf("const hangupMode = fallbackHangupMode(hangupPre);");
+  const logAt = src.indexOf('logger.info("끊기 사전 판정"');
+  const llmAt = src.indexOf("await completeWithFallback(");
+  assert.ok(preAt >= 0 && logAt > preAt && logAt < llmAt, "로그가 사전 판정 직후 · LLM 호출 앞이 아니다");
+  assert.match(src, /logger\.info\("끊기 사전 판정", \{ sessionId, row: hangupPre\.row, status: hangupPre\.status, mode: hangupMode \}\);/);
+});
+
+test("[G564 역검증] 대사 · 사용자 입력 필드를 더한 사본은 같은 판정식에 걸린다", () => {
+  const src = readFileSync(ROLEPLAY_INDEX, "utf8");
+  const poisoned = src.replace("mode: hangupMode });", "mode: hangupMode, userText });");
+  assert.notEqual(poisoned, src);
+  assert.notDeepEqual(preDecisionLogFields(poisoned), ["mode", "row", "sessionId", "status"]);
+});

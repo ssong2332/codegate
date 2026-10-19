@@ -15,6 +15,10 @@
 //     accept  — 목적 달성 대본(ⓐ) · 첫 end_call에 accepted(재호출은 already_accepted) → H1 · H2 · H4 · H5 · H6ⓐ
 //     reject  — 홀수 회차 목적 달성 대본 · 짝수 회차 거절 반복 대본(ⓑ) · end_call마다 too_early → H1 · H3 · H4 · H6ⓐⓑ
 //     silence — 침묵 · 소강 대본(ⓒ) · end_call이 오면 too_early → H6ⓒ(호출 0이 정상)
+//     idle    — (T192 C6 · §79.20 (8) H7) 목적 달성 대본 + 끝에 대기 발화 2개(공회전) · 첫 end_call에 accepted →
+//               대기 구간 안 end_call(goal) 호출률 · reason 분포(관측 — 하드 아님)
+// ⭐ T192 C6 재실측 준비(§79.20 (8)): 목적 달성 대본을 앞당기고 길게 했다(옛 대본은 승인 경로 호출 4/10 — 대본 끝에 닿아
+// 호출이 없던 세션 6) · H2 오디오 판정은 `audioAfterResponseSec`(응답 뒤 오디오만)로 한다(옛 판정은 턴 전체 — 호출 전 발화 포함).
 // 출력: <out>/hangup-<mode>-<i>-<ts>.json(세션별 원시) + <out>/hangup-<mode>-summary-<ts>.json
 //
 // 한계(보고서 기재): 사용자 발화는 오디오가 아니라 텍스트 턴이다 · 콜러블은 모사(서버 판정 0 — 하한 · 문자 대기 미적용) ·
@@ -52,17 +56,24 @@ export const FAREWELL_WORDS = [
 ];
 
 // 대본(개인정보 0 · 숫자는 가짜).
+// ⭐ C6 — 요구 · 이행이 대본 앞쪽에 오도록 앞당기고(사용자 발화 3번째부터 이행) 이행 확인 발화를 늘렸다(12턴).
 const SCRIPT_GOAL = [
   "여보세요?",
-  "네? 우리 애요? 무사한 거죠?",
-  "알겠어요 시키는 대로 할게요",
-  "얼마를 어디로 보내면 돼요?",
-  "지금 바로 보낼게요",
-  "방금 말한 계좌로 다 이체했어요",
-  "보냈어요 확인해 보세요",
+  "네? 우리 애요? 무사한 거죠? 시키는 대로 할게요",
+  "얼마를 어디로 보내면 돼요? 계좌 불러 주세요",
+  "지금 바로 그 계좌로 보낼게요",
+  "방금 말한 계좌로 전액 다 이체했어요",
+  "이체 완료 화면 떴어요 확인해 보세요",
+  "더 보낼 돈은 없어요 이게 전부예요",
   "이제 우리 애 보내 주세요",
-  "다 보냈다니까요",
+  "다 보냈다니까요 이제 어떻게 하면 돼요?",
+  "시키는 건 다 했어요",
+  "더 필요한 거 있어요?",
+  "이제 끝난 거죠?",
 ];
+/** H7 — 목적 달성 뒤 공회전(대기 발화 2개). 개인정보 0. */
+const IDLE_WAIT_LINES = ["보냈어요", "확인됐어요?"];
+const SCRIPT_IDLE = [...SCRIPT_GOAL.slice(0, 7), ...IDLE_WAIT_LINES];
 const SCRIPT_REFUSE = [
   "여보세요?",
   "누구세요?",
@@ -84,8 +95,8 @@ const argVal = (name, def) => {
   return i >= 0 && args[i + 1] ? args[i + 1] : def;
 };
 const outDir = path.resolve(argVal("--out", path.join(repoRoot, "hangup-raw")));
-if (!["accept", "reject", "silence"].includes(mode) || !Number.isInteger(n) || n < 1 || n > 10) {
-  console.error("사용법: node scripts/live-hangup-probe.mjs <accept|reject|silence> <1..10> [--out <dir>]");
+if (!["accept", "reject", "silence", "idle"].includes(mode) || !Number.isInteger(n) || n < 1 || n > 10) {
+  console.error("사용법: node scripts/live-hangup-probe.mjs <accept|reject|silence|idle> <1..10> [--out <dir>]");
   process.exit(2);
 }
 
@@ -107,8 +118,15 @@ const audioSecondsOfBase64 = (b64) => (b64.length * 3) / 4 / 2 / 24000;
 async function runSession(index, apiKey) {
   const t0 = Date.now();
   const now = () => Date.now() - t0;
-  const script = mode === "accept" ? SCRIPT_GOAL : mode === "silence" ? SCRIPT_SILENCE : index % 2 === 1 ? SCRIPT_GOAL : SCRIPT_REFUSE;
-  const scriptName = script === SCRIPT_GOAL ? "goal" : script === SCRIPT_REFUSE ? "refuse" : "silence";
+  const script =
+    mode === "accept" ? SCRIPT_GOAL
+    : mode === "idle" ? SCRIPT_IDLE
+    : mode === "silence" ? SCRIPT_SILENCE
+    : index % 2 === 1 ? SCRIPT_GOAL : SCRIPT_REFUSE;
+  const scriptName =
+    script === SCRIPT_GOAL ? "goal" : script === SCRIPT_IDLE ? "idle" : script === SCRIPT_REFUSE ? "refuse" : "silence";
+  /** H7 — 대기 구간이 시작되는 사용자 발화 순번(1-기반). */
+  const idleStartUserTurn = SCRIPT_IDLE.length - IDLE_WAIT_LINES.length + 1;
 
   // ⭐ 운영과 같은 발급 — 기본 생성자(스위치 = 운영 상수) · 음성 채널 · 릴레이 없음.
   const provider = new GeminiRealtimeProvider(apiKey);
@@ -209,7 +227,7 @@ async function runSession(index, apiKey) {
   async function respondTools(fcs) {
     const responses = fcs.map((fc) => {
       if (fc.name !== "end_call") return { id: fc.id, name: fc.name ?? "unknown", response: { status: "unsupported" } };
-      if (mode === "accept") {
+      if (mode === "accept" || mode === "idle") {
         const status = hangupAccepted ? "already_accepted" : "accepted";
         hangupAccepted = true;
         return { id: fc.id, name: fc.name, response: { status, guidance: SCAMMER_HANGUP_ACCEPTED_GUIDANCE } };
@@ -244,10 +262,10 @@ async function runSession(index, apiKey) {
   while (!closed && userIdx < script.length) {
     if (calls.length > 0 && !firstCallSeen) {
       firstCallSeen = true;
-      if (mode === "accept") break;
+      if (mode === "accept" || mode === "idle") break;
     }
     // 거절 경로: 첫 거절 뒤 사용자 발화 2개까지만 더 보내고 끝낸다(H3 = 거절 뒤 다음 2턴).
-    if (mode !== "accept" && calls.length > 0 && afterReject === null) {
+    if (mode !== "accept" && mode !== "idle" && calls.length > 0 && afterReject === null) {
       afterReject = { scammerTurnsAtReject: turns.filter((x) => x.role === "scammer").length, userSentAfter: 0 };
     }
     if (afterReject && afterReject.userSentAfter >= 2) break;
@@ -259,7 +277,7 @@ async function runSession(index, apiKey) {
     await waitFor((e) => e.type === "turnComplete", 30000);
   }
   // 승인 경로: 첫 호출이 마지막 대기 안에서 왔을 수 있다 — 승인 응답 뒤 turnComplete까지 기다린다.
-  if (mode === "accept" && calls.length > 0) {
+  if ((mode === "accept" || mode === "idle") && calls.length > 0) {
     const firstCall = calls[0];
     // 응답이 아직 안 나갔으면 기다린다.
     if (lastResponseSentAt === null) await waitFor((e) => e.type === "toolResponse", 5000);
@@ -286,8 +304,17 @@ async function runSession(index, apiKey) {
     await sleep(10000);
     result.h5 = { audioChunksIn10s: audioChunksTotal - chunksBefore, newTurnsIn10s: turns.length - turnsBefore };
     result.firstCallReason = firstCall.reason;
+    // H7 — 첫 호출이 대기 구간(목적 달성 뒤 공회전 발화) 안이었는가.
+    if (mode === "idle") {
+      result.h7 = {
+        idleStartUserTurn,
+        firstCallUserTurn: firstCall.userTurnsSent,
+        inIdleSegment: firstCall.userTurnsSent >= idleStartUserTurn,
+        reason: firstCall.reason ?? null,
+      };
+    }
   }
-  if (mode !== "accept" && calls.length > 0) {
+  if (mode !== "accept" && mode !== "idle" && calls.length > 0) {
     // H3 — 첫 거절 응답 뒤: 그 턴의 남은 말 + 다음 2턴의 작별 어휘 · 대화 계속 여부.
     await waitFor((e) => e.type === "turnComplete", 8000);
     const firstRejectAt = calls[0].t;
@@ -329,7 +356,8 @@ async function main() {
     console.log(
       `[hangup-probe] #${i} script=${r.script ?? "-"} calls=${r.endCallCount ?? "-"} ` +
         `preFarewell=${(r.calls ?? []).map((c) => c.preCallFarewell.length).join("/") || "-"} ` +
-        `h2=${r.h2 ? `${r.h2.turnCompleteMs}ms/${r.h2.audioSec}s/${r.h2.sentences}문` : "-"} ` +
+        `h2=${r.h2 ? `${r.h2.turnCompleteMs}ms/응답뒤${r.h2.audioAfterResponseSec}s(턴${r.h2.audioSec}s)/${r.h2.sentences}문` : "-"} ` +
+        `h7=${r.h7 ? `${r.h7.inIdleSegment ? "대기구간" : "이전"}:${r.h7.reason}` : "-"} ` +
         `h5=${r.h5 ? r.h5.audioChunksIn10s : "-"} h3=${r.h3 ? `${r.h3.farewellHits.length}/${r.h3.continued}` : "-"}` +
         (r.error ? ` error=${r.error}` : ""),
     );
@@ -344,18 +372,20 @@ async function main() {
     sessionsWithEndCall: called.length,
     endCallTotal: allCalls.length,
     H1_preCallFarewell: { violations: allCalls.filter((c) => c.preCallFarewell.length > 0).length, calls: allCalls.length },
-    H2: mode === "accept"
+    H2: mode === "accept" || mode === "idle"
       ? {
           samples: called.filter((r) => r.h2?.turnCompleteMs != null).length,
           within8000: called.filter((r) => r.h2?.turnCompleteMs != null && r.h2.turnCompleteMs <= 8000).length,
-          audioLe6s: called.filter((r) => r.h2?.audioSec != null && r.h2.audioSec <= 6).length,
+          // ⭐ C6 — 판정은 응답 뒤 오디오만(`audioAfterResponseSec`). 턴 전체(`audioSec`)는 참고로만 남긴다.
+          audioLe6s: called.filter((r) => r.h2?.audioAfterResponseSec != null && r.h2.audioAfterResponseSec <= 6).length,
+          audioAfterResponseSec: called.map((r) => r.h2?.audioAfterResponseSec ?? null),
           sentencesLe2: called.filter((r) => r.h2?.sentences != null && r.h2.sentences <= 2).length,
           turnCompleteMs: called.map((r) => r.h2?.turnCompleteMs ?? null),
           audioSec: called.map((r) => r.h2?.audioSec ?? null),
           sentences: called.map((r) => r.h2?.sentences ?? null),
         }
       : undefined,
-    H3: mode !== "accept"
+    H3: mode !== "accept" && mode !== "idle"
       ? {
           samples: called.filter((r) => r.h3).length,
           farewellViolations: called.filter((r) => r.h3 && r.h3.farewellHits.length > 0).length,
@@ -363,11 +393,20 @@ async function main() {
         }
       : undefined,
     H4_recalls: results.map((r) => Math.max(0, (r.endCallCount ?? 0) - 1)),
-    H5: mode === "accept"
+    H5: mode === "accept" || mode === "idle"
       ? { samples: called.filter((r) => r.h5).length, zeroAudio: called.filter((r) => r.h5?.audioChunksIn10s === 0).length }
       : undefined,
+    H7: mode === "idle"
+      ? {
+          sessions: results.filter((r) => !r.error).length,
+          calledInIdleSegment: results.filter((r) => r.h7?.inIdleSegment).length,
+          calledBeforeIdleSegment: results.filter((r) => r.h7 && !r.h7.inIdleSegment).length,
+          notCalled: results.filter((r) => !r.error && (r.endCallCount ?? 0) === 0).length,
+          reasons: results.filter((r) => r.h7).map((r) => r.h7.reason),
+        }
+      : undefined,
     H6_callRateByScript: Object.fromEntries(
-      ["goal", "refuse", "silence"].map((s) => {
+      ["goal", "refuse", "silence", "idle"].map((s) => {
         const of = results.filter((r) => r.script === s);
         return [s, { sessions: of.length, called: of.filter((r) => (r.endCallCount ?? 0) > 0).length }];
       }),
