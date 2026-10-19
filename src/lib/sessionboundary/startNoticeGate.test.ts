@@ -267,12 +267,23 @@ function withCallComponentViolations(source: string): string[] {
   return out;
 }
 
-test("[T190-8a/G462 ①②] 시작 전 고지 변형 — 컴포넌트는 includesCall로만 고르고 페이지는 Boolean(scenario.escalation)을 넘긴다", () => {
+// ⚠️ T194-a(docs/Architecture.md §84.4.1 · G580 "대체" — X8: 같은 커밋에 대체 단언) — 아래 3개 테스트의 **리터럴**을 새 술어
+// 문자열로 바꿨다. 단언 내용("버튼 · 고지 · 서버 전이가 같은 술어")은 그대로다: 예전 술어는 시나리오 속성
+// (`scenario.escalation`)이었고, 이제 (시나리오 × 난이도) 세션 술어 `resolveSessionEscalation`이다(택배 문자는 고급 세션만 참 —
+// UX D-124 ② · PRD AC-106 (i)).
+const PAGE_PREDICATE_STATE = "resolveSessionEscalation(";
+const PAGE_NOTICE_PROP = "includesCall={sessionEscalates}";
+const PAGE_BUTTON_GUARD = "{sessionEscalates && !ended && (";
+
+test("[T190-8a/G462 ①②] 시작 전 고지 변형 — 컴포넌트는 includesCall로만 고르고 페이지는 '전화로 확인' 버튼과 같은 세션 술어 값을 넘긴다", () => {
   assert.deepEqual(withCallComponentViolations(read("src/components/MessengerStartNotice.tsx")), []);
-  assert.ok(
-    codeOnly(read(MESSENGER)).includes("includesCall={Boolean(scenario.escalation)}"),
-    "페이지가 '전화로 확인' 버튼과 같은 술어(scenario.escalation)를 넘겨야 한다",
-  );
+  const page = codeOnly(read(MESSENGER));
+  assert.ok(page.includes(PAGE_NOTICE_PROP), "페이지가 '전화로 확인' 버튼과 같은 술어 값(sessionEscalates)을 넘겨야 한다");
+  assert.ok(page.includes(PAGE_BUTTON_GUARD), "'전화로 확인' 버튼이 같은 값(sessionEscalates)으로 게이팅돼야 한다");
+  assert.ok(page.includes(PAGE_PREDICATE_STATE), "그 값은 세션 술어(resolveSessionEscalation)에서 와야 한다");
+  // 시나리오 속성 직접 읽기가 고지 · 버튼 자리에 남지 않았다(택배 초급 · 중급에 '전화' 예고 0 — UX-022 v1.33 (7) 원칙).
+  assert.equal(page.includes("Boolean(scenario.escalation)"), false);
+  assert.equal(/\{scenario\.escalation && !ended/.test(page), false);
 });
 
 test("[T190-8a/G462 ④ 역검증 — AC-091 (f)ⓓ] 조건을 true로 바꾼 사본 · 고지 ①-2를 조건 없이 그린 사본 · 페이지가 전화 고지를 끈 사본은 각각 실패한다", (t) => {
@@ -283,8 +294,8 @@ test("[T190-8a/G462 ④ 역검증 — AC-091 (f)ⓓ] 조건을 true로 바꾼 �
   assert.notEqual(unconditional, source, "오염 지점(고지 ①-2)을 찾지 못했다");
   const a = withCallComponentViolations(alwaysTrue);
   const b = withCallComponentViolations(unconditional);
-  const pageOff = codeOnly(read(MESSENGER)).replace("includesCall={Boolean(scenario.escalation)}", "includesCall={false}");
-  const c = pageOff.includes("includesCall={Boolean(scenario.escalation)}");
+  const pageOff = codeOnly(read(MESSENGER)).replace(PAGE_NOTICE_PROP, "includesCall={false}");
+  const c = pageOff.includes(PAGE_NOTICE_PROP);
   t.diagnostic(`[G462] 정상 0 / 조건 true ${JSON.stringify(a)} / ①-2 무조건 ${JSON.stringify(b)} / 페이지 끔 → 술어 존재 ${c}`);
   assert.equal(a.length, 1);
   assert.equal(b.length, 1);
@@ -294,14 +305,21 @@ test("[T190-8a/G462 ④ 역검증 — AC-091 (f)ⓓ] 조건을 true로 바꾼 �
 test("[T190-8a/G462 ⑤] 에스컬레이션 집합 = 서버 두 전이 경로의 술어 · 클라 보유 수 = 서버 보유 수", () => {
   const session = codeOnly(read("functions/src/session/index.ts"));
   const roleplay = codeOnly(read("functions/src/roleplay/index.ts"));
-  assert.ok(session.includes("!PUBLIC_SCENARIOS[session.scenarioId]?.escalation"), "requestEscalation이 같은 술어를 쓰지 않는다");
-  assert.ok(roleplay.includes("Boolean(PUBLIC_SCENARIOS[session.scenarioId]?.escalation)"), "sendMessage 자동 전이가 같은 술어를 쓰지 않는다");
+  assert.ok(session.includes("!resolveSessionEscalation(session, PUBLIC_SCENARIOS)"), "requestEscalation이 같은 술어를 쓰지 않는다");
+  assert.ok(roleplay.includes("resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined"), "sendMessage 자동 전이가 같은 술어를 쓰지 않는다");
   const serverCount = (codeOnly(read("functions/src/scenarios/publicMeta.ts")).match(/^\s*escalation:\s*\{/gm) ?? []).length;
   const clientCount = readdirSync("src/content/scenarios")
     .filter((f) => f.endsWith(".ts"))
     .filter((f) => /^\s*escalation:\s*\{/m.test(codeOnly(read(`src/content/scenarios/${f}`)))).length;
   assert.ok(serverCount >= 2, `서버 에스컬레이션 시나리오가 ${serverCount}개뿐이다 — 파서가 죽었다`);
   assert.equal(clientCount, serverCount, "클라 escalation 보유 수와 서버 PUBLIC_SCENARIOS 보유 수가 다르다 — 고지 문면이 갈라진다");
+  // T194-a — 고급 전용 전이 설정도 같은 방식으로 센다(값 대조는 src/content/scenarios/escalation.test.ts).
+  const serverAdvanced = (codeOnly(read("functions/src/scenarios/publicMeta.ts")).match(/^\s*advancedEscalation:\s*\{/gm) ?? []).length;
+  const clientAdvanced = readdirSync("src/content/scenarios")
+    .filter((f) => f.endsWith(".ts"))
+    .filter((f) => /^\s*advancedEscalation:\s*\{/m.test(codeOnly(read(`src/content/scenarios/${f}`)))).length;
+  assert.equal(serverAdvanced, 1, "고급 전용 전이 시나리오 = 택배 문자 1종(AC-106 · #162 이 시나리오 한정 예외)");
+  assert.equal(clientAdvanced, serverAdvanced);
 });
 
 // ── G463 — 통화 초기 phase 진리표(docs/Architecture.md §74.22 (3) · PRD AC-091 (b)(f)ⓑ · (g)) ──────────────────────────

@@ -40,6 +40,15 @@ import { VERIFY_INTERCEPT, type VerifyInterceptItem } from "../verifyIntercept";
 import { IN_CALL_SMS, type InCallSmsItem } from "../inCallSms";
 import { FLOW_VARIANTS, resolveVariantPrompt, type FlowVariant } from "../flowVariants";
 import type { ScenarioPromptDoc } from "../../shared/types";
+import {
+  PERSONA_CARD_FIXED_VALUES,
+  PERSONA_CARD_LABELS,
+  PERSONA_LOAN_PROMPT_VALUE,
+  PERSONA_NAME_POOL,
+  PERSONA_REGION_MASK_SUFFIX,
+  PERSONA_REGION_POOL,
+} from "../personaCardCatalog";
+import { PERSONA_CARD_BLOCK_HEAD, PERSONA_CARD_BLOCK_TAIL } from "../../roleplay/promptAssembly";
 
 // ── 필드 정책(타입 게이트 ①) ────────────────────────────────────────────────
 // `Record<keyof T, FieldPolicy>`이므로 항목 타입에 필드가 하나 늘면 **컴파일이 깨진다.**
@@ -65,6 +74,8 @@ const SCENARIO_META_FIELDS: Record<keyof ScenarioMeta, FieldPolicy> = {
   channel: { skip: "열거형 'voice'|'messenger'" },
   surface: { skip: "열거형 'kakao'|'sms'" },
   escalation: { skip: "열거형 조합 {toChannel,voiceMode} — 자유 문자열 없음" },
+  // T194-a(§84.4.1) — `escalation`과 같은 모양(고급 세션 전용 전이 설정).
+  advancedEscalation: { skip: "열거형 조합 {toChannel,voiceMode} — 자유 문자열 없음" },
   // T191 S5 — 리터럴 `true` 플래그 2종(UX 계약 C-1 · C-9). 자유 문자열이 아니다.
   advancedOnly: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
   preSessionBurdenNotice: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
@@ -143,6 +154,8 @@ const FLOW_VARIANT_FIELDS: Record<keyof FlowVariant, FieldPolicy> = {
   channels: { skip: "채널 열거값 목록" },
   demandStages: { skip: "숫자" },
   sources: { skip: "사례 ID 목록(C·S 번호)" },
+  // T194-a(§84.4.2 · AC-106 (i)) — 리터럴 `true` 플래그.
+  escalatesToVoice: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
 };
 
 // ── 표면 수집 ────────────────────────────────────────────────────────────────
@@ -263,8 +276,30 @@ function collectAllSurfaces(): Surface[] {
   for (const [field, text] of a1Instructions) {
     surfaces.push({ domain: "moduleConstant", itemId: "a1", field, text, profile: "modelInstruction" });
   }
+  // T194-b(§84.3.2 · §84.3.4 · G565) — 가상 신상 카드: 라벨 · 값 풀 · 가림 고정값은 화면과 프롬프트에 **그대로** 실리므로 실존 기관명
+  // 금지까지 받는 mockSurface로, [미리 확보한 상대 정보] 블록 문면은 모델 지시로 등록한다(값 풀이 늘면 표면도 같이 는다).
+  for (const surface of personaCardSurfaces()) surfaces.push(surface);
 
   return surfaces;
+}
+
+/** T194-b — 가상 신상 카드 도메인 표면(G565). 수집과 기대 수 계산이 같은 원천(카탈로그 상수)을 본다. */
+function personaCardSurfaces(): Surface[] {
+  const rows: Array<[string, string, ScanProfile]> = [
+    ...Object.entries(PERSONA_CARD_LABELS).map(([key, text]): [string, string, ScanProfile] => [`label:${key}`, text, "mockSurface"]),
+    ...PERSONA_NAME_POOL.map((text, i): [string, string, ScanProfile] => [`name[${i}]`, text, "mockSurface"]),
+    ...PERSONA_REGION_POOL.map((region, i): [string, string, ScanProfile] => [
+      `region[${i}]`,
+      `${region.name} ${PERSONA_REGION_MASK_SUFFIX}`,
+      "mockSurface",
+    ]),
+    ...Object.entries(PERSONA_CARD_FIXED_VALUES).map(([key, text]): [string, string, ScanProfile] => [`fixed:${key}`, text, "mockSurface"]),
+    // 리뷰 M1 — 프롬프트에만 실리는 대출 일반명.
+    ["PERSONA_LOAN_PROMPT_VALUE", PERSONA_LOAN_PROMPT_VALUE, "mockSurface"],
+    ["PERSONA_CARD_BLOCK_HEAD", PERSONA_CARD_BLOCK_HEAD, "modelInstruction"],
+    ["PERSONA_CARD_BLOCK_TAIL", PERSONA_CARD_BLOCK_TAIL, "modelInstruction"],
+  ];
+  return rows.map(([field, text, profile]) => ({ domain: "personaCard", itemId: "personaCardCatalog", field, text, profile }));
 }
 
 const ALL_SURFACES = collectAllSurfaces();
@@ -293,7 +328,7 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
   }
   assert.deepEqual(
     [...byDomain.keys()].sort(),
-    ["flowVariant", "inCallSms", "mockScreens", "moduleConstant", "publicMeta", "scenarioPrompt", "verifyIntercept"],
+    ["flowVariant", "inCallSms", "mockScreens", "moduleConstant", "personaCard", "publicMeta", "scenarioPrompt", "verifyIntercept"],
     "콘텐츠 도메인이 추가·삭제되면 이 목록을 갱신하고 표면 수집도 함께 넓혀야 한다",
   );
 
@@ -375,9 +410,19 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
   );
   assert.equal(byDomain.get("flowVariant"), expectedFlow, "T191 S5 흐름 변형 표면");
   t.diagnostic(`[AC-102 (a)] 흐름 변형 표면 after=${expectedFlow} (before=0 — 도메인 신설)`);
+  // T194-b(G565) — 가상 신상 카드: 라벨 + 이름 풀 + 지역 풀 + 가림 고정값 + 대출 프롬프트 일반명 + 블록 머리 · 꼬리(before=0 — 도메인 신설).
+  const expectedPersona =
+    Object.keys(PERSONA_CARD_LABELS).length +
+    PERSONA_NAME_POOL.length +
+    PERSONA_REGION_POOL.length +
+    Object.keys(PERSONA_CARD_FIXED_VALUES).length +
+    1 +
+    2;
+  assert.equal(byDomain.get("personaCard"), expectedPersona, "T194-b 가상 신상 카드 표면");
+  t.diagnostic(`[AC-104 G565] 가상 신상 카드 표면 after=${expectedPersona} (before=0 — 도메인 신설) · 총 표면 after=${ALL_SURFACES.length} · before=${ALL_SURFACES.length - expectedPersona}`);
   assert.equal(
     ALL_SURFACES.length,
-    expectedPrompt + expectedMeta + expectedVerify + expectedMock + expectedSms + 1 + 6 + expectedFlow,
+    expectedPrompt + expectedMeta + expectedVerify + expectedMock + expectedSms + 1 + 6 + expectedFlow + expectedPersona,
   );
   assert.ok(ALL_SURFACES.length >= 300, `총 검사 표면 수가 줄었다(현재 ${ALL_SURFACES.length})`);
 });
@@ -549,7 +594,8 @@ const SCENARIO_MODULE_INVENTORY: Record<string, string> = {
   "loanScam.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
   "messengerChildImpersonationKakao.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
   "messengerFriendLoanKakao.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
-  "messengerParcelSmishingSms.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
+  // T194-a — 고급 leg 페르소나 · 설치 수법 상수는 FLOW_VARIANTS(fv-g454의 legs · tactics) 경유로 스캔된다.
+  "messengerParcelSmishingSms.prompt.ts": "scanned (SCENARIO_PROMPTS 경유 + 고급 전용 상수는 FLOW_VARIANTS 경유)",
   "messengerSubsidySmishingSms.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
   "reputationBlackmailScam.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
   "taxRefundScam.prompt.ts": "scanned (SCENARIO_PROMPTS 경유)",
@@ -565,7 +611,13 @@ const SCENARIO_MODULE_INVENTORY: Record<string, string> = {
   "beginnerBriefing.ts": "파생 — weakenedTactics에서 만들어지므로 원본이 이미 스캔된다",
   "briefingTypes.ts": "콘텐츠 아님 — 타입 정의",
   "tacticFlavor.ts": "파생 — weakenedTactics 문자열을 자르는 순수 함수",
+  // T194-a(§84.4.1) — 메신저 → 통화 전이의 (시나리오 × 난이도) 술어. 문자열 콘텐츠 0.
+  "escalation.ts": "콘텐츠 아님 — 에스컬레이션 판정 순수 함수",
+  // T194-a G588(§84.13.2) — 세션 도달 가능 랜딩 집합(프롬프트 마커 · 선언 문자 파생). 문자열 콘텐츠 0.
+  "reachability.ts": "콘텐츠 아님 — 세션 도달 가능 랜딩 파생 순수 함수",
   "seed.ts": "콘텐츠 아님 — 시딩 스크립트(PUBLIC_SCENARIOS를 쓴다)",
+  // T194-b(§84.3.2 · G565) — 가상 신상 카드 값 풀 · 라벨 · 가림 고정값.
+  "personaCardCatalog.ts": "scanned (personaCard 도메인 — 라벨 · 이름 · 지역 · 가림 고정값)",
 };
 
 test("[T86/(c)] 신규 콘텐츠 카탈로그 파일이 등록 없이 추가되지 못한다(모듈 등록부 1:1)", () => {

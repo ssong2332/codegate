@@ -15,6 +15,7 @@ import { generateOpeningLine } from "../roleplay";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import { resolveScenarioEscalation, resolveSessionEscalation } from "../scenarios/escalation";
 import {
   CREATE_SESSION_WINDOW_MAX,
   MAX_SESSION_MS,
@@ -43,6 +44,7 @@ import type {
   UpdateMessengerSkinResponse,
 } from "./types";
 import { pickFictionalBankName } from "../shared/fictionalBank";
+import { resolveSessionPersonaCard } from "./personaCard";
 
 ensureFirebaseAdminApp();
 
@@ -112,9 +114,12 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     const resolvedDifficultyLevel = normalizeDifficultyLevel(difficultyLevel);
 
     // 교차채널 세션 총 한도(T30, Architecture.md §13.3, PoC 전 가정치) — 에스컬레이션 가능
-    // 시나리오(scenario.escalation 존재)는 두 채널을 합쳐도 기존 10턴 안에 다 담기 어려워
+    // 시나리오는 두 채널을 합쳐도 기존 10턴 안에 다 담기 어려워
     // maxUserTurns를 상향 발급한다.
-    const isEscalationCapable = Boolean(PUBLIC_SCENARIOS[scenarioId]?.escalation);
+    // ⭐ T194-a(§84.4.1 S-1) — "에스컬레이션 가능"은 (시나리오 × 난이도) 술어다(parcel은 고급만). 난이도는 위에서 이미 확정됐다.
+    // 이 콜러블은 자가 세션만 만든다(챌린지 수신자 세션은 consentChallenge가 만든다).
+    const isEscalationCapable =
+      resolveScenarioEscalation(PUBLIC_SCENARIOS[scenarioId], resolvedDifficultyLevel) !== undefined;
 
     // UX-025(§13.6) "남/여 기본 보이스" 폴백 — 클라는 실제 ElevenLabs voiceId를 모르므로(서버
     // 전용 설정), voiceSelectionSource로 요청하면 서버가 FALLBACK_VOICE_MALE_ID/FEMALE_ID로
@@ -191,13 +196,6 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       scenarioId,
       resolvedDifficultyLevel,
     );
-    const { message: openingMessage, isMock } = await generateOpeningLine(
-      scenarioId,
-      resolvedDifficultyLevel,
-      variantAssignment.flowVariantId,
-      fictionalBankName,
-    );
-
     // T4: sessionId(온보딩 "사전 세션 id")가 넘어오면 createVoiceClone이 만들어 둔 pending
     // sessions/{sid} 문서를 새로 만들지 않고 채택한다 — sessionId 불일치 갭 해소. 넘어오지 않으면
     // 기존과 동일하게 새 id를 발급한다(하위호환). ID 생성/채택 로직만 바꿨고, 그 외 인격유지·
@@ -224,6 +222,21 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       }
       sessionRef = candidateRef;
     }
+    // ⭐ T194-b(docs/Architecture.md §84.3.2 · PRD AC-104) — 훈련용 가상 신상 카드. 대상 술어는 **여기서 한 번만** 평가되고
+    // 결과는 세션 문서 `personaCard`의 존재/부재로만 남는다. 시드가 sessionId라 위에서 `sessionRef` id를 오프닝 **앞**으로 당겼다
+    // (write 시점은 그대로 아래 트랜잭션). 오프닝 대사도 카드를 알아야 한다(§81과 같은 이유) — 그래서 오프닝 앞이다.
+    // ⛔ 입력은 서버가 정한 값뿐이다(요청 구조분해에 카드 필드 0 — G564 · 계정 정보 0 — G566).
+    const personaCard = resolveSessionPersonaCard(
+      { scenarioId, difficultyLevel: resolvedDifficultyLevel, challengeId: undefined, channel },
+      { sessionId: sessionRef.id, scenarioId, fictionalBankName },
+    );
+    const { message: openingMessage, isMock } = await generateOpeningLine(
+      scenarioId,
+      resolvedDifficultyLevel,
+      variantAssignment.flowVariantId,
+      { fictionalBankName, challengeId: undefined, personaCard: personaCard?.items },
+    );
+
     const now = Timestamp.now();
 
     // NOTE(T3/T8 후속): identitySelfConfirmed는 CreateSessionRequest 계약에 없다(API.md). voiceId가
@@ -263,6 +276,8 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       // 여기 값은 미리보기이고, 아래 트랜잭션이 회전 문서를 다시 읽어 확정값으로 덮어 쓴다.
       // 응답에는 싣지 않는다(세션 전 화면에 변형 정보 0 — 아래 return 참고).
       flowVariantId: variantAssignment.flowVariantId,
+      // T194-b(§84.3.2) — 대상 세션에만 필드가 생긴다(대상 밖 = 부재 · 빈 값 0). 오프닝에 넘긴 것과 같은 객체다.
+      ...(personaCard ? { personaCard } : {}),
     };
     // merge:true — sessionId를 채택한 경우 pending 문서(createVoiceClone이 만든 voiceProvider 등
     // 부가 필드)를 지우지 않고 scenarioId/status 등을 덧씌운다. 새 문서인 경우는 기존과 동일.
@@ -462,7 +477,8 @@ export const requestEscalation = onCall<
   if (session.channel !== "messenger") {
     throw new HttpsError("failed-precondition", "메신저 채널 세션에서만 요청할 수 있습니다.");
   }
-  if (!PUBLIC_SCENARIOS[session.scenarioId]?.escalation) {
+  // T194-a(§84.4.1 S-2) — 세션 술어(sendMessage 자동 전이 · 클라 버튼 · 시작 고지 열과 같은 술어).
+  if (!resolveSessionEscalation(session, PUBLIC_SCENARIOS)) {
     throw new HttpsError("failed-precondition", "이 시나리오는 통화 전이를 지원하지 않습니다.");
   }
 

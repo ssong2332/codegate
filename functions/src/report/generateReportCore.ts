@@ -8,8 +8,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
-import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
-import { listAppInstallMockScreens, MOCK_SCREENS } from "../scenarios/mockScreens";
+import { MOCK_SCREENS } from "../scenarios/mockScreens";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import type {
@@ -39,10 +38,12 @@ import {
   applyMockScreens,
   deriveReportStages,
   mergePromotedTactics,
+  resolveSessionStageIntent,
   type MockScreenMessage,
   type MockScreenSource,
 } from "./mockScreenTimeline";
 import type { GenerateReportResponse } from "./types";
+import { buildPersonaBlock } from "./personaBlock";
 
 export async function generateReportForSession(sessionId: string): Promise<GenerateReportResponse> {
   const db = getFirestore();
@@ -233,7 +234,9 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   );
 
   // 단계 도달 판정(§15.9.5 e-3, OQ-U24) — 전부 파생이라 세션 문서에 신규 필드가 0건이다.
-  const installLandingIds = listAppInstallMockScreens(session.scenarioId).map((i) => i.landingId);
+  // ⭐ T194-a(§84.4.1 S-4 · G587) — 설치 · 통화 단계의 "의도됐는가"는 **세션 술어**다. parcel은 카탈로그에 설치 항목이 있어도
+  // 초급 · 중급 세션에서는 도달할 수 없으므로(`isMockScreenReachable`) 설치 단계 "미도달" 표기가 생기면 안 된다.
+  const { installLandingIds, voiceIntended } = resolveSessionStageIntent(session);
   const stages = deriveReportStages({
     ...(session.entryChannel ?? session.channel
       ? { entryChannel: session.entryChannel ?? session.channel }
@@ -241,7 +244,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     installIntended: installLandingIds.length > 0,
     reachedLandingIds: mockSources.map((d) => d.landingId),
     installLandingIds,
-    voiceIntended: Boolean(PUBLIC_SCENARIOS[session.scenarioId]?.escalation),
+    voiceIntended,
     voiceReached: (session.channelHistory ?? []).some(
       (entry) => entry.from === "messenger" && entry.to === "voice",
     ),
@@ -281,6 +284,11 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   // 추가 비용이 없다. **옵셔널 필드는 값이 있을 때만 넣는다** — Firestore는 `undefined` 필드 write를
   // 거부하고(Database.md Migration Policy의 "부재로 하위호환"과도 정합), §14.8.3의 "값이 없으면
   // 셀 자체가 비는" store-nothing 방어와 같은 형태다.
+  // ②-g T194-b(§84.3.6 · D-120) — "상대가 먼저 꺼낸 '내 정보'" 판정. 위에서 이미 읽은 `messages`(turnIndex 순 · notSpoken 표시 포함)와
+  // 세션 문서 카드만 쓴다(추가 read 0 · 통화 중 쓰기 0). 카드 없는 세션 = undefined = 필드 부재(R-4).
+  // ⚠️ `selfDialIntercepted`는 U2(T194-d · AC-105) 전이라 항상 false — R-3은 그 PR이 이 인자를 서버 기록으로 채울 때 열린다.
+  const personaBlock = buildPersonaBlock(session.personaCard, messages, false);
+
   const reportDoc: ReportDoc = {
     reportId: sessionId,
     sessionId,
@@ -322,6 +330,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     // T158(§48.2.1, AC-084) — 세션의 대사 축 강등 태그를 리포트로 역정규화(read 0회 추가,
     // `session`은 위에서 이미 읽었다). 순수 함수로 뽑아 단위 테스트한다(§reportLlmProvider.test.ts).
     ...deriveReportLlmProviderField(session),
+    // T194-b(§84.3.6) — 최초 생성 시 1회만 기록(멱등 early-return). 카드 없는 세션은 필드를 만들지 않는다(무백필).
+    ...(personaBlock ? { personaBlock } : {}),
   };
   await reportRef.set(reportDoc);
 

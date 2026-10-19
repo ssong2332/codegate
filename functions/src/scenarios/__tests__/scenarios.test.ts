@@ -15,6 +15,8 @@ import type { DifficultyLevel } from "../../shared/difficulty";
 import { OPENING_TURN_INSTRUCTION } from "../../roleplay/openingLine";
 import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL } from "../mockScreens";
 import { FLOW_VARIANTS } from "../flowVariants";
+import { PERSONA_CARD_SCENARIOS } from "../personaCardCatalog";
+import { buildPersonaCard } from "../../session/personaCard";
 import { sessionDeclaredSmsPurposes } from "../../inCallSms/smsGate";
 import { buildConfirmResultInstruction, buildLiveConfirmResultInstruction } from "../../inCallSms/confirmResult";
 import { ESCALATED_CALL_CONTEXT_INSTRUCTION } from "../../roleplay/escalatedCall";
@@ -1387,6 +1389,32 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
         }),
       });
     }
+  }
+  // T194-b(§84.3.4) — `personaCard`도 **세션 derive 값**이다(서버 `buildPersonaCard` — 수동 토글 축이 아니다). 곱하지 않고 더한다:
+  // 카드 대상 시나리오마다 고급 운영 조합(텍스트 경로 · Live 도구주도)으로, 세션 은행명 8개 각각의 카드로 한 번씩 — 카드 값 풀과
+  // [미리 확보한 상대 정보] 블록 문면이 조립 결과째로 아래 게이트들을 받는다.
+  for (const scenarioId of PERSONA_CARD_SCENARIOS) {
+    const speakerGender = speakerGenderFor(scenarioId);
+    const verifyInterceptEnabled = hasVerifyIntercept(scenarioId);
+    FICTIONAL_BANK_NAMES.forEach((fictionalBankName, i) => {
+      const personaCard = buildPersonaCard({ sessionId: `t113-persona-${i}`, scenarioId, fictionalBankName })!.items;
+      for (const toolDrivenTiming of [false, true]) {
+        out.push({
+          label: `${scenarioId}[advanced/카드:${fictionalBankName}${toolDrivenTiming ? "/도구주도" : ""}]`,
+          text: buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], {
+            difficultyLevel: "advanced",
+            inCallSmsEnabled: true,
+            verifyInterceptEnabled,
+            toolDrivenTiming,
+            identityCheckAllowed: asksIdentityCheck(scenarioId),
+            ...(speakerGender ? { speakerGender } : {}),
+            ...(verifyInterceptEnabled ? { offerToolDeclared: true } : {}),
+            fictionalBankName,
+            personaCard,
+          }),
+        });
+      }
+    });
   }
   // 턴 지시는 곱하지 않고 더한다(판정표 3행) — 값마다 **운영에서 실제로 성립하는 조합**에 한 번씩.
   // 확인 무력화는 `카탈로그 보유 && 고급`에서만 켜지므로(`roleplay/index.ts:186`) 그 조합을 쓴다.

@@ -37,6 +37,7 @@ import {
   replayNavEmptyText,
   TACTICS_NOT_FOUND_TEXT,
 } from "@/lib/report/reportTacticsCopy";
+import { PERSONA_REPLAY_NOTE, personaReplayAnchor, readPersonaBlock } from "@/lib/personacard/personaCard";
 
 type ReportSummary = {
   wasDeceived: boolean;
@@ -67,6 +68,8 @@ export default function ReplayPage() {
   const [deceivedMoments, setDeceivedMoments] = useState<ReplayDeceivedMomentSource[]>([]);
   const [scenarioTitle, setScenarioTitle] = useState<string | null>(null);
   const [callerLabel, setCallerLabel] = useState<string>("상대방");
+  // T194-b(UX-018 v1.38 ① · §84.3.7) — 사기범이 카드 값을 처음 말한 줄의 turnIndex(리포트 `personaBlock` 앵커 · 기록 없으면 null).
+  const [personaAnchor, setPersonaAnchor] = useState<number | null>(null);
   // 스텝 내비게이션(P-13) — 주석이 달린 항목 중 현재 위치(-1=아직 이동 안 함).
   const [stepPos, setStepPos] = useState(-1);
   const [stepAnnounce, setStepAnnounce] = useState("");
@@ -166,6 +169,7 @@ export default function ReplayPage() {
       scenarioTitle: scenario?.title ?? null,
       callerLabel: scenario?.callerLabel ?? "상대방",
       challenge: challengeContext,
+      personaAnchor: personaReplayAnchor(readPersonaBlock(reportData.personaBlock)),
     };
   }, []);
 
@@ -185,6 +189,7 @@ export default function ReplayPage() {
         setScenarioTitle(result.scenarioTitle);
         setCallerLabel(result.callerLabel);
         setChallenge(result.challenge);
+        setPersonaAnchor(result.personaAnchor);
         setStepPos(-1);
         setState("loaded");
       } catch {
@@ -212,9 +217,14 @@ export default function ReplayPage() {
   const annotatedTurnIndexes = getAnnotatedTurnIndexes(timeline);
   // T189(UX-008 v1.31 (2)) — 타임라인이 말풍선 주석 밖에 그리는 "여기가 신호였어요" 카드 수.
   // 모의 화면 판정은 렌더(ReplayMockScreenItem)와 같은 함수·같은 deceivedMoments로 한다.
-  const signalCardCount = countReplaySignalCards(timeline, (mockScreen) =>
-    resolveMockScreenCopy(mockScreen, deceivedMoments, "replay"),
-  );
+  // T194-b — "상대가 먼저 꺼낸 내 정보" 주석도 같은 소제목 카드라 함께 센다(렌더하는 카드 = 세는 카드 · TB 용어 정의 (2)).
+  // 그 앵커 줄이 타임라인의 사기범 메시지일 때만 그려지므로 같은 조건으로 센다.
+  const personaNoteRendered =
+    personaAnchor !== null &&
+    timeline.some((t) => t.kind === "message" && t.role === "scammer" && t.turnIndex === personaAnchor);
+  const signalCardCount =
+    countReplaySignalCards(timeline, (mockScreen) => resolveMockScreenCopy(mockScreen, deceivedMoments, "replay")) +
+    (personaNoteRendered ? 1 : 0);
 
   // T70(UX-028 진입점, AC-062/AC-042) — 이 화면은 2인 사용자2의 **강제 해설 단계 그 자체**이므로
   // 여기서부터는 되감기를 선택 단계로 노출해도 강제 순서를 앞지르지 않는다(afterForcedReplay).
@@ -284,6 +294,7 @@ export default function ReplayPage() {
         setScenarioTitle(result.scenarioTitle);
         setCallerLabel(result.callerLabel);
         setChallenge(result.challenge);
+        setPersonaAnchor(result.personaAnchor);
         setStepPos(-1);
         setState("loaded");
       })
@@ -533,6 +544,14 @@ export default function ReplayPage() {
                       이 순간 다시 해보기
                     </button>
                   )}
+                </div>
+              )}
+              {/* T194-b(UX-018 v1.38 ①) — R-1(기록 있음) 세션에서만 사기범이 카드 값을 처음 말한 줄에 기존 주석 형식으로 단다.
+                  기록이 없으면(R-2) 주석 0(근거 없는 지목 금지). 속은 순간이 아니므로 되감기 버튼 0(D-51). */}
+              {item.role === "scammer" && item.turnIndex === personaAnchor && (
+                <div role="note" className="ml-10 mt-2 rounded-[12px] border border-[#B96A1B]/30 bg-[#FBF3E8] p-3.5">
+                  <p className="mb-1.5 text-[13px] font-bold text-[#B96A1B]">⚠️ 여기가 신호였어요</p>
+                  <p className="text-[13px] leading-[1.6] text-[#22303A]">{PERSONA_REPLAY_NOTE}.</p>
                 </div>
               )}
             </li>

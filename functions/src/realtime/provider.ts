@@ -93,14 +93,27 @@ function readSecret(param: SecretParamLike): string {
  * session.voiceSelectionSource로부터 유추한 값을 넘기면 그 값을 우선 쓰고, 넘기지 않으면(기존
  * 순수 보이스 세션) 기존과 동일하게 PUBLIC_SCENARIOS를 그대로 참조한다(하위호환).
  */
+/**
+ * ⭐ T194-b(docs/Architecture.md §84.3.5 · J-4 · G567) — 이 세션이 **서버 프롬프트를 실을 수 있는 경로**를 요구하는가.
+ * ElevenLabs는 프롬프트가 에이전트 쪽에 저장되고 서명 URL에 서버 측 인자가 없어(§82.6.4) 세션마다 다른 서버 값(가상 신상 카드)을
+ * 실을 방법이 없다 — 그 경로로 보내면 "카드는 보이는데 사기범은 모르는" 세션이 된다(T194-C2 원자성 위반).
+ * 술어 = 세션 문서 `personaCard` 존재(설계의 릴레이 변형 · self-dial 항은 S7 · U2가 병합되면 **이 함수에** 더한다 — 두 목록 금지).
+ */
+export function requiresServerPromptProvider(session: { personaCard?: unknown }): boolean {
+  return session.personaCard !== undefined;
+}
+
 export function getRealtimeProvider(
   scenarioId: string,
   effectiveVoiceMode?: VoiceMode,
+  // T194-b(G567) — `requiresServerPromptProvider(session)`의 값. 참이면 ① ElevenLabs 분기를 건너뛴다(키 · 에이전트 맵이 있어도).
+  // 부재 = false = 오늘 동작 그대로.
+  requiresServerPrompt: boolean = false,
 ): RealtimeVoiceProvider {
   const voiceMode = effectiveVoiceMode ?? PUBLIC_SCENARIOS[scenarioId]?.voiceMode;
 
-  // ① ElevenLabs — 클론 가능 경로 우선.
-  const elevenLabsKey = readSecret(ELEVENLABS_API_KEY);
+  // ① ElevenLabs — 클론 가능 경로 우선. ⛔ 서버 프롬프트가 필요한 세션은 이 경로로 보내지 않는다(위 주석).
+  const elevenLabsKey = requiresServerPrompt ? "" : readSecret(ELEVENLABS_API_KEY);
   if (elevenLabsKey) {
     const agentMap = parseAgentMap(getElevenLabsAgentIds());
     if (agentMap[scenarioId]) {

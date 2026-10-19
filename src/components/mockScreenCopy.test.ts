@@ -709,7 +709,7 @@ function componentHosts(code: string): string[] {
 test("[T190/G453 클라] 컴포넌트의 가짜 호스트 전부(카탈로그 8 + 범용 폴백 1)가 .invalid 규칙을 지킨다", (t) => {
   const hosts = componentHosts(componentCode);
   t.diagnostic(`[G453 클라] 호스트 ${hosts.length}개: ${hosts.join(" · ")}`);
-  assert.equal(hosts.length, 9, "카탈로그 credential 7 + 설치 1 + 범용 폴백 1");
+  assert.equal(hosts.length, 10, "카탈로그 credential 7 + 설치 2(T194-a parcel-install) + 범용 폴백 1");
   assert.deepEqual(hosts.flatMap(clientHostViolations), []);
   // 범용 폴백 호스트는 카탈로그 호스트와 겹치지 않는다(겹치면 미스가 다른 사이트처럼 보인다).
   assert.equal(new Set(hosts).size, hosts.length);
@@ -754,4 +754,36 @@ test("[T190/D-93] 완료 복귀 문면은 진입 표면이 정한다 — 메신�
   assert.ok(componentCode.includes('messenger: "채팅으로 돌아가기"'));
   assert.ok(componentCode.includes('"in-call-sms": "문자로 돌아가기"'));
   assert.equal((componentCode.match(/^\s*\{returnLabel\}\s*$/gm) ?? []).length, 2, "두 kind의 완료 버튼이 모두 진입 표면 문면을 쓴다");
+});
+
+// ── T194-a(docs/Architecture.md §84.13.3 ③) — 설치 화면 상황별 표 `INSTALL_LANDING_COPY` ─────────────────────────────
+
+test("[T194-a §84.13.3 ③ ⓐ] 설치 문구 표의 키 집합 = 서버 카탈로그 app-install landingId 집합(양방향) · 값 리터럴은 G76 · 렌더 게이트가 대조", () => {
+  const start = componentCode.indexOf("const INSTALL_LANDING_COPY");
+  assert.ok(start > 0, "설치 문구 표가 있어야 한다");
+  const body = componentCode.slice(start, componentCode.indexOf("\n};", start));
+  const keys = [...body.matchAll(/^ {2}"([a-z0-9-]+)": \{/gm)].map((m) => m[1]).sort();
+  const installIds = catalogItems
+    .filter((item) => (item.fields.get("kind") ?? [])[0] === "app-install")
+    .map((item) => item.landingId)
+    .sort();
+  assert.deepEqual(keys, installIds, "표에만 있거나 카탈로그에만 있는 설치 항목이 있다");
+  assert.deepEqual(installIds, ["parcel-install", "subsidy-install"]);
+});
+
+test("[T194-a §84.13.3 ③ ⓑ] 표에 없는 id의 app-install은 설치 화면을 그리지 않는다 — 기본 문구 폴백 0(소스 구조) · 역방향", (t) => {
+  // 조회는 정확 일치 · 미스 = undefined(폴백 식 없음).
+  assert.match(componentCode, /function installCopyFor\(landingId\?: string\): InstallCopy \| undefined \{\s*return landingId \? INSTALL_LANDING_COPY\[landingId\] : undefined;\s*\}/);
+  // 상위 컴포넌트 · 서브 컴포넌트 둘 다 미스에서 null.
+  assert.ok(componentCode.includes('if (landingKind === "app-install" && installCopyFor(landingId) === undefined) return null;'));
+  assert.ok(componentCode.includes("if (!installCopy) return null;"));
+  // 역방향 — 지원금 문구 기본값으로 떨어지는 사본(옛 형태)은 위 단언에 걸린다.
+  const fallback = componentCode.replace(
+    "return landingId ? INSTALL_LANDING_COPY[landingId] : undefined;",
+    "return (landingId ? INSTALL_LANDING_COPY[landingId] : undefined) ?? INSTALL_LANDING_COPY[\"subsidy-install\"];",
+  );
+  const caught = !/return landingId \? INSTALL_LANDING_COPY\[landingId\] : undefined;\s*\}/.test(fallback);
+  t.diagnostic(`[③ ⓑ 역방향] 기본 문구 폴백 사본 → 검출 ${caught}`);
+  assert.notEqual(fallback, componentCode);
+  assert.equal(caught, true);
 });

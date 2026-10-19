@@ -21,7 +21,7 @@ import {
 } from "../scenarios/verifyIntercept";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import type { SessionDoc } from "../shared/types";
-import { getRealtimeProvider } from "../realtime/provider";
+import { getRealtimeProvider, requiresServerPromptProvider } from "../realtime/provider";
 // 에스컬레이션 세션의 "유효 voiceMode" 유추는 createRealtimeCall이 쓰는 것과 **같은 함수**를
 // 재사용한다(복제하면 게이트 판정이 두 곳에서 갈라진다 — §15.6 G7과 같은 판단).
 import { resolveEffectiveVoiceMode } from "../realtime";
@@ -82,7 +82,8 @@ async function loadOwnedActiveSession(sessionId: string, uid: string): Promise<S
  *   ① 세션 소유 ② `status:"active"`  ← loadOwnedActiveSession
  *   ③ 카탈로그 소속 ④ 난이도 advanced ⑤ 해석된 프로바이더가 elevenlabs가 아님(주입 지점 부재, G23)
  */
-function assertVerifyEligible(session: SessionDoc, offerId?: string) {
+// T194-b 리뷰 C1 — export는 G567 테스트(키 · 에이전트 맵이 있는 환경의 재검증 ⑤)용이다. 운영 호출부는 이 파일 안뿐이다.
+export function assertVerifyEligible(session: SessionDoc, offerId?: string) {
   const item = findVerifyInterceptItem(session.scenarioId, offerId);
   if (!item) {
     throw new HttpsError("invalid-argument", "이 시나리오의 확인 안내가 아닙니다.");
@@ -90,9 +91,12 @@ function assertVerifyEligible(session: SessionDoc, offerId?: string) {
   if (normalizeDifficultyLevel(session.difficultyLevel) !== "advanced") {
     throw new HttpsError("failed-precondition", "고급 난이도에서만 성립하는 흐름입니다.");
   }
+  // ⭐ T194-b 리뷰 C1(§84.3.5 · G567) — `createRealtimeCall`과 **같은 술어**로 프로바이더를 해석한다. 빠지면 ElevenLabs 키 · 맵이 있는
+  // 환경에서 카드 세션(Gemini · 폴백으로 통화 중)의 재검증 ⑤가 elevenlabs로 해석돼 확인 전화가 거절된다.
   const provider = getRealtimeProvider(
     session.scenarioId,
     resolveEffectiveVoiceMode(session.voiceSelectionSource),
+    requiresServerPromptProvider(session),
   );
   if (provider.providerName === "elevenlabs") {
     // G23 — 이 경로에는 지시 주입 지점 자체가 없다. 컨트롤만 뜨고 사기범이 아무 말도 하지 않는

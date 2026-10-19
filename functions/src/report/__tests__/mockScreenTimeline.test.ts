@@ -16,6 +16,7 @@ import {
   applyMockScreens,
   deriveReportStages,
   resolveMockScreenAnchor,
+  resolveSessionStageIntent,
   type MockScreenMessage,
   type MockScreenSource,
 } from "../mockScreenTimeline";
@@ -382,4 +383,52 @@ test("설치 카탈로그가 없고 escalation만 있으면 2행(messenger·voic
       { stage: "voice", reached: true },
     ],
   );
+});
+
+// ── T194-a G587 — 단계 파생의 "의도됐는가"가 세션 술어다 (docs/Architecture.md §84.4.1 S-4 · S-5 · PRD AC-106 (c)(f)) ──
+
+test("[T194-a G587] parcel 초급 · 중급 · 챌린지 세션 = 단계 행 0(설치 '미도달' 표기 0) · 고급 = 3단계 · 지원금은 현행 3단계", (t) => {
+  const PARCEL = "messenger-parcel-smishing-sms";
+  const SUBSIDY = "messenger-subsidy-smishing-sms";
+  const stagesFor = (session: Parameters<typeof resolveSessionStageIntent>[0], reachedLandingIds: string[] = []) => {
+    const intent = resolveSessionStageIntent(session);
+    return deriveReportStages({
+      entryChannel: "messenger",
+      installIntended: intent.installLandingIds.length > 0,
+      installLandingIds: intent.installLandingIds,
+      reachedLandingIds,
+      voiceIntended: intent.voiceIntended,
+      voiceReached: false,
+    });
+  };
+  const lines: string[] = [];
+  for (const [label, session] of [
+    ["parcel 초급", { scenarioId: PARCEL, difficultyLevel: "beginner" }],
+    ["parcel 중급", { scenarioId: PARCEL, difficultyLevel: "intermediate" }],
+    ["parcel 고급 챌린지", { scenarioId: PARCEL, difficultyLevel: "advanced", challengeId: "c1" }],
+  ] as const) {
+    // 재배송 폼(credential)을 열었어도 설치 단계는 이 세션에 없다.
+    const stages = stagesFor(session, ["parcel-redelivery"]);
+    lines.push(`${label}: ${JSON.stringify(stages)}`);
+    assert.deepEqual(resolveSessionStageIntent(session), { installLandingIds: [], voiceIntended: false }, label);
+    assert.deepEqual(stages, [], `${label}: 의도된 단계 1개(메신저) — 단계 행을 만들지 않는다(무백필 규칙 그대로)`);
+  }
+  const advanced = stagesFor({ scenarioId: PARCEL, difficultyLevel: "advanced", flowVariantId: "fv-g454" }, ["parcel-install"]);
+  lines.push(`parcel 고급: ${JSON.stringify(advanced)}`);
+  assert.deepEqual(resolveSessionStageIntent({ scenarioId: PARCEL, difficultyLevel: "advanced", flowVariantId: "fv-g454" }), {
+    installLandingIds: ["parcel-install"],
+    voiceIntended: true,
+  });
+  assert.deepEqual(advanced, [
+    { stage: "messenger", reached: true },
+    { stage: "mock_install", reached: true },
+    { stage: "voice", reached: false },
+  ]);
+  for (const level of ["beginner", "intermediate", "advanced"]) {
+    assert.deepEqual(resolveSessionStageIntent({ scenarioId: SUBSIDY, difficultyLevel: level }), {
+      installLandingIds: ["subsidy-install"],
+      voiceIntended: true,
+    }, `subsidy ${level}: 현행 무변경`);
+  }
+  t.diagnostic(`[G587] ${lines.join(" | ")}`);
 });

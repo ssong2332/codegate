@@ -39,6 +39,14 @@ export type SessionEndReason =
 // `kind`는 모델 판단의 기록일 뿐 판정에 쓰지 않는다(§79.2).
 export type ScammerHangupKind = "goal" | "give_up" | "unspecified";
 export type ScammerHangupPath = "realtime" | "fallback";
+
+// --- T194-b 훈련용 가상 신상 카드(Architecture.md §84.3.2 · PRD AC-104 · UX-014 v1.38 (1)(2)) ---
+// ⛔ 값은 전부 서버가 지은 가상 값이다(사용자 계정 정보 0 — AC-104 (e)). 라벨은 화면 · 프롬프트 공통.
+// ⚠️ `child`(자녀) 행은 만들지 않는다 — 2026-10-20 User 결정으로 kidnapping-threat가 대상에서 빠졌다(유일한 child 행 시나리오).
+export type PersonaCardKey = "name" | "birthYear" | "region" | "bank" | "card" | "loan";
+export type PersonaCardItem = { key: PersonaCardKey; label: string; value: string };
+export type PersonaCard = { v: 1; items: PersonaCardItem[] };
+
 export type ScammerHangupMarker = {
   acceptedAt: FirebaseFirestore.Timestamp;
   kind: ScammerHangupKind;
@@ -152,6 +160,10 @@ export type SessionDoc = {
   // (클라 write는 firestore.rules가 전부 거부). `endReason: "scammer_ended"`의 **서버측 근거**다 —
   // 이것 없이 온 `scammer_ended`는 `user_ended`로 기록된다(`session/endReason.ts`).
   scammerHangup?: ScammerHangupMarker;
+  // T194-b(Architecture.md §84.3.2 · PRD AC-104) — 훈련용 가상 신상 카드. 서버만 쓴다(`createSession`이 대상 세션에서 1회 생성 ·
+  // 클라 write 0 — firestore.rules). ⛔ 대상 밖 세션은 **필드 부재**(빈 객체 · null 0 — 부재와 빈 값을 같은 뜻으로 두지 않는다).
+  // 프롬프트 조립 3곳과 통화 화면 카드 · 리포트 대조가 **이 필드 하나**를 읽는다(원자성 — T194-C2).
+  personaCard?: PersonaCard;
 };
 
 // --- users/{uid}/voices/{voiceId} (P-8·AC-046, ADR-0005·Database.md 1:1) ---
@@ -468,6 +480,15 @@ export type DeceivedMoment = {
   // 참가자에게 "확인 전화를 걸라"고 답한다).
   afterVerifyReconnect?: true;
 };
+/**
+ * T194-b(§84.3.6 · §84.3.7) — 리포트의 카드 블록. `state`는 `report/personaBlock.ts` `resolvePersonaBlockState`가 정한다.
+ * `items`: R-1 = 사기범이 참가자보다 먼저 말한 항목만(`scammerTurnIndex` = 그 항목을 처음 말한 사기범 줄의 turnIndex —
+ * 리플레이 주석 앵커) · R-2 = 카드 항목 전부(`scammerTurnIndex` 없음) · R-3 = R-1/R-2 중 해당하는 쪽과 같은 모양.
+ */
+export type PersonaBlockState = "R-1" | "R-2" | "R-3";
+export type PersonaBlockItem = { key: PersonaCardKey; label: string; value: string; scammerTurnIndex?: number };
+export type PersonaBlock = { state: PersonaBlockState; items: PersonaBlockItem[] };
+
 export type ReportDoc = {
   reportId: string;
   sessionId: string;
@@ -518,6 +539,9 @@ export type ReportDoc = {
   // 참가자 문면(P-31 ⓖ)이 근거로 삼는다. 무백필 — 이 필드 신설 이전 리포트에는 값이 없고, 부재는
   // "정상이었다"는 긍정 표기로 렌더하지 않는다(§48.2.2 G274).
   llmProvider?: LlmProviderName;
+  // T194-b 추가(옵셔널, 하위호환 · 무백필 — Architecture.md §84.3.6 · UX-008 v1.38 (1) · D-120) — "상대가 먼저 꺼낸 '내 정보'"
+  // 블록의 상태와 항목. 카드 없는 세션 · 카드 도입 전 리포트 = 필드 부재(= R-4 · 블록 0). 최초 생성 시 1회만 기록된다.
+  personaBlock?: PersonaBlock;
 };
 
 // --- reports/{reportId}/rewindAttempts/{attemptId} (T70, UX-028/UF-009, §15.2.2, AC-062/063) ---

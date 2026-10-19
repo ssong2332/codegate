@@ -23,7 +23,14 @@
 //     §15.9.5 e-1. `correctAction`은 카탈로그가 저작한 문구를 그대로 쓴다)
 //   - 화면이 뜬 것·닫은 것의 승격 (D-51 ③ — **응낙만** 속은 순간이다, AC-062 불변식 보호)
 //   - 화면 콘텐츠 원문(headline/bodyLines/consentLabel)을 스냅샷에 싣기 (§15.9.5 e-4)
-import type { MockScreenItem, MockScreenKind } from "../scenarios/mockScreens";
+import {
+  isMockScreenReachable,
+  listAppInstallMockScreens,
+  type MockScreenItem,
+  type MockScreenKind,
+} from "../scenarios/mockScreens";
+import { resolveSessionEscalation, type EscalationSessionView } from "../scenarios/escalation";
+import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import type { DeceivedMomentResult } from "./analyzeConversation";
 import { resolveTacticCategory } from "./tacticCategory";
 import type { MockScreenTimelineEntry, ReportStage, ReportStageName } from "../shared/types";
@@ -262,17 +269,35 @@ export function mergePromotedTactics(
 export type StageDerivationInput = {
   /** `session.entryChannel`(부재 시 `session.channel` 폴백). */
   entryChannel?: "voice" | "messenger";
-  /** 이 시나리오 카탈로그에 `kind==="app-install"` 항목이 1개 이상 있는가. */
+  /** 이 **세션에서 도달 가능한** `kind==="app-install"` 항목이 1개 이상 있는가(T194-a — `resolveSessionStageIntent`). */
   installIntended: boolean;
   /** `sessions/{sid}/mockScreens`에 존재하는 문서의 landingId 집합. */
   reachedLandingIds: readonly string[];
-  /** 카탈로그의 `app-install` landingId 목록. */
+  /** 이 세션에서 도달 가능한 카탈로그 `app-install` landingId 목록. */
   installLandingIds: readonly string[];
-  /** `PUBLIC_SCENARIOS[scenarioId].escalation`이 존재하는가. */
+  /** 이 세션에 메신저 → 통화 단계가 있는가(T194-a — (시나리오 × 난이도) 세션 술어 `resolveSessionEscalation`). */
   voiceIntended: boolean;
   /** `session.channelHistory`에 `{from:"messenger", to:"voice"}` 항목이 1건 이상 있는가. */
   voiceReached: boolean;
 };
+
+/**
+ * ⭐ T194-a(docs/Architecture.md §84.4.1 S-4 · S-5 · G587) — 위 표의 "의도됐는가" 두 칸을 **세션 술어**로 푼다(리포트 단일 지점).
+ * - 설치: 카탈로그 `app-install` 중 **이 세션에서 도달 가능한** 항목(`isMockScreenReachable`) — parcel 초급 · 중급은 0개라 설치 단계
+ *   "미도달" 표기가 생기지 않는다(그 세션에는 애초에 설치 단계가 없다).
+ * - 통화: (시나리오 × 난이도) 세션 술어(`resolveSessionEscalation`) — 메신저 전이 판정(S-1~S-3)과 같은 술어.
+ */
+export function resolveSessionStageIntent(session: EscalationSessionView & { flowVariantId?: string }): {
+  installLandingIds: string[];
+  voiceIntended: boolean;
+} {
+  return {
+    installLandingIds: listAppInstallMockScreens(session.scenarioId)
+      .filter((item) => isMockScreenReachable(session, item))
+      .map((item) => item.landingId),
+    voiceIntended: resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined,
+  };
+}
 
 /**
  * 단계 도달 판정표(§15.9.5 e-3) — **임의 판단 금지**. 전부 파생이며 신규 세션 필드가 0건이다.
@@ -280,8 +305,8 @@ export type StageDerivationInput = {
  * | 단계 | 의도됐는가 | 도달했는가 |
  * |---|---|---|
  * | `messenger` | `entryChannel === "messenger"` | 의도됐으면 **항상 true**(메신저 세션은 채팅으로 시작한다) |
- * | `mock_install` | 카탈로그에 `app-install` 항목 ≥1 | `mockScreens`에 그 landingId 문서가 **존재** |
- * | `voice` | `PUBLIC_SCENARIOS[sid].escalation` 존재 | `channelHistory`에 messenger→voice 1건 이상 |
+ * | `mock_install` | 이 세션에서 도달 가능한 `app-install` 항목 ≥1(T194-a) | `mockScreens`에 그 landingId 문서가 **존재** |
+ * | `voice` | 이 세션에 전이가 있다(T194-a — 세션 술어) | `channelHistory`에 messenger→voice 1건 이상 |
  *
  * **미도달 단계도 `{reached:false}`로 싣는다**(OQ-U24 판정) — 데이터에서 빼면 "미도달"과 "그런
  * 단계가 애초에 없었다"를 영영 구분할 수 없다. 화면은 도달 단계만 그린다.
