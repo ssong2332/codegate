@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { HANGUP_RULE_NONE, HANGUP_RULE_SIGNAL, HANGUP_RULE_TOOL } from "../promptAssembly";
 
-// T192 C6-F · G562 — 끊기 시점 1문장(Architecture.md §79.20 (2) ④). 신고 "입금 확인 중" 공회전의 ⓒ(끊을 *때*를 말하지
+// T192 C6-F · G591 — 끊기 시점 1문장(Architecture.md §79.20 (2) ④). 신고 "입금 확인 중" 공회전의 ⓒ(끊을 *때*를 말하지
 // 않는다)를 닫는다. ⛔ 이유를 더하지 않는다(AC-103 (a) "이 둘뿐") — 첫째 경우의 **시점**이라 `kind = goal`.
 // ⓒ(F11 카운터 표현 = 기존 허용 목록과 정확 일치 · G130)는 `promptAssembly.test.ts` [T192/C2 G505 · G130]이 **허용 목록
 // 무변경 그대로** 새 TOOL · SIGNAL 상수를 다시 잰다 — 이 파일은 그 목록을 복제하지 않는다(한 곳에서만 고친다).
@@ -29,7 +29,7 @@ function sentenceViolations(text: string): string[] {
   return out;
 }
 
-test("[G562 ⓐ] TOOL · SIGNAL 공통 머리에 시점 문장 정확히 1회 — '…불러 주었다.' 뒤 · '둘째,' 앞", () => {
+test("[G591 ⓐ] TOOL · SIGNAL 공통 머리에 시점 문장 정확히 1회 — '…불러 주었다.' 뒤 · '둘째,' 앞", () => {
   assert.deepEqual(sentenceViolations(HANGUP_RULE_TOOL), [], "TOOL");
   assert.deepEqual(sentenceViolations(HANGUP_RULE_SIGNAL), [], "SIGNAL");
   // 상수 소스에서도 HANGUP_RULE_CASES 한 곳에만 있다(TOOL · SIGNAL은 그 상수를 펼친다 — 중복 저작 0).
@@ -39,12 +39,12 @@ test("[G562 ⓐ] TOOL · SIGNAL 공통 머리에 시점 문장 정확히 1회 �
   assert.ok(casesLine?.includes(SENTENCE), "문장이 HANGUP_RULE_CASES 밖에 있다");
 });
 
-test("[G562 ⓑ] NONE에는 없다(NONE 바이트 동일은 G505 원문 대조가 그대로 본다)", () => {
+test("[G591 ⓑ] NONE에는 없다(NONE 바이트 동일은 G505 원문 대조가 그대로 본다)", () => {
   assert.equal(HANGUP_RULE_NONE.includes(SENTENCE), false);
   assert.equal(HANGUP_RULE_NONE.includes("붙잡아 두지 말고"), false);
 });
 
-test("[G562 ⓓ · G130] 문장에 침묵 · 소강 · 기다림 · '확인 중' 어휘 0 · 숫자 · 서수 0", () => {
+test("[G591 ⓓ · G130] 문장에 침묵 · 소강 · 기다림 · '확인 중' 어휘 0 · 숫자 · 서수 0", () => {
   for (const word of ["침묵", "소강", "기다", "확인 중"]) {
     assert.equal(SENTENCE.includes(word), false, word);
   }
@@ -54,7 +54,7 @@ test("[G562 ⓓ · G130] 문장에 침묵 · 소강 · 기다림 · '확인 중'
   assert.ok(HANGUP_RULE_SIGNAL.includes("첫째 경우면 [[SIGNAL:END_CALL_GOAL]]"));
 });
 
-test("[G562 ⓔ 역검증] 문장을 뺀 사본 · 자리를 옮긴 사본 · '셋째'를 넣은 사본은 같은 판정식에 걸린다", () => {
+test("[G591 ⓔ 역검증] 문장을 뺀 사본 · 자리를 옮긴 사본 · '셋째'를 넣은 사본은 같은 판정식에 걸린다", () => {
   assert.notDeepEqual(sentenceViolations(HANGUP_RULE_TOOL.replace(`${SENTENCE} `, "")), []);
   const moved = HANGUP_RULE_TOOL.replace(`${SENTENCE} `, "").replace(AFTER, `${AFTER} ${SENTENCE}`);
   assert.notDeepEqual(sentenceViolations(moved), []);
