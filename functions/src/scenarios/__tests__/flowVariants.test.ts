@@ -38,6 +38,7 @@ import * as crypto from "node:crypto";
 import { isL3Procedural } from "../../roleplay/l3Depth";
 import { asksIdentityCheck } from "../../roleplay/personaAuthority";
 import { sessionDeclaresInCallSms } from "../../inCallSms/smsGate";
+import { CHILD_GENDER_UNSPECIFIED_RULE } from "../messengerChildImpersonationKakao.prompt";
 import { resolveSessionSpeakerGender, speakerGenderFor } from "../../realtime/scenarioVoice";
 import { pickGeminiVoiceName } from "../../realtime/geminiProvider";
 
@@ -671,8 +672,14 @@ test("[T194-a §84.13.3 ② · 리뷰 M2] 플래그만 더한 child-kakao · sub
     assert.ok(v && v.escalatesToVoice === true && v.scenarioId === row.scenarioId && v.level === row.level, row.variantId);
     const session = { scenarioId: row.scenarioId, difficultyLevel: row.level, flowVariantId: row.variantId };
     const speakerGender = resolveSessionSpeakerGender(session);
-    const prompt = resolveSessionScenarioPrompt(row.scenarioId, row.variantId);
-    assert.ok(prompt);
+    const currentPrompt = resolveSessionScenarioPrompt(row.scenarioId, row.variantId);
+    assert.ok(currentPrompt);
+    // PR-A3(감사 B 1일차 #7) — child-kakao 페르소나에 성별 얼버무림 금지 줄 1개를 **의도적으로** 더했다. 그 줄 **하나만** 뺀
+    // 조립이 변경 전 실측값과 같아야 한다(= 그 밖의 바이트 변경 0). 줄은 child-kakao 3벌에만 정확히 1번 있다.
+    const ruleLine = `${CHILD_GENDER_UNSPECIFIED_RULE}\n`;
+    const isChild = row.scenarioId === "messenger-child-impersonation-kakao";
+    assert.equal(currentPrompt.personaPrompt.split(ruleLine).length - 1, isChild ? 1 : 0, `${row.variantId}: 얼버무림 금지 줄 개수`);
+    const prompt = isChild ? { ...currentPrompt, personaPrompt: currentPrompt.personaPrompt.replace(ruleLine, "") } : currentPrompt;
     const assembled = buildSystemPrompt(prompt, {
       difficultyLevel: row.level,
       inCallSmsEnabled: sessionDeclaresInCallSms(row.scenarioId, row.variantId),

@@ -263,6 +263,8 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
         textMasked: openingMessage.text,
         turnIndex: 0,
         createdAt: now,
+        // PR-A3 — createSession과 같다(오프닝 링크 칩 저장 · 리포트 앵커). 칩이 없으면 필드 부재.
+        ...(openingMessage.attachments ? { attachments: openingMessage.attachments } : {}),
         ...(scenarioChannel === "messenger" ? { channel: "messenger" as const } : {}),
       } satisfies MessageDoc);
       return { action: "create" as const, sessionId: sessionRef.id };
