@@ -18,6 +18,8 @@ import {
   PARCEL_CONTROL_TOKEN_GUARD_ITEM,
 } from "../../scenarios/messengerParcelSmishingSms.prompt";
 import { PUBLIC_SCENARIOS } from "../../scenarios/publicMeta";
+import { isMockScreenReachable, listAppInstallMockScreens } from "../../scenarios/mockScreens";
+import { resolveSessionEscalation } from "../../scenarios/escalation";
 import { sessionDeclaresInCallSms } from "../../inCallSms/smsGate";
 import { resolveSessionSpeakerGender, speakerGenderFor } from "../../realtime/scenarioVoice";
 import { pickGeminiVoiceName } from "../../realtime/geminiProvider";
@@ -120,18 +122,46 @@ test("[T194-a G582] parcel 고급 프롬프트 — leg0 페르소나 · 설치 �
 });
 
 test("[T194-a G582 · §83.4.3] 화자 성별 세션 해석 — 표 값이 있으면 그대로 · parcel은 고급 자가만 변형 leg 성별 · 음성 풀도 같은 값", () => {
+  // ⭐ 리뷰 C1 — 표 값이 notApplicable인 시나리오도 **전부** 본다(예전 `if (!table) continue`가 child-kakao 누수를 가렸다).
+  // 기대값: 표 값이 있으면 그 값 · notApplicable이면 undefined — 단 택배 고급 자가 세션(advancedEscalation 전용)만 변형 leg 성별.
+  const notApplicableSeen: string[] = [];
   for (const id of Object.keys(PUBLIC_SCENARIOS)) {
     const table = speakerGenderFor(id);
-    if (!table) continue;
+    if (!table) notApplicableSeen.push(id);
     for (const level of DIFFICULTY_LEVELS) {
-      const [variant] = listFlowVariants(id, level);
-      assert.equal(
-        resolveSessionSpeakerGender({ scenarioId: id, difficultyLevel: level, flowVariantId: variant?.variantId }),
-        table,
-        `${id}/${level}: 표 값이 있는 시나리오는 표 값 그대로(오늘 동작 무변경)`,
-      );
+      for (const variant of listFlowVariants(id, level)) {
+        const expected = table ?? (variant.variantId === "fv-g454" ? "female" : undefined);
+        assert.equal(
+          resolveSessionSpeakerGender({ scenarioId: id, difficultyLevel: level, flowVariantId: variant.variantId }),
+          expected,
+          `${id}/${level}/${variant.variantId}: ${table ? "표 값 그대로(오늘 동작 무변경)" : "notApplicable은 undefined([화자] 블록 0)"}`,
+        );
+      }
     }
   }
+  assert.deepEqual(
+    notApplicableSeen.sort(),
+    [
+      "family-accident-deepvoice",
+      "grandchild-impersonation",
+      "messenger-child-impersonation-kakao",
+      "messenger-friend-loan-kakao",
+      "messenger-parcel-smishing-sms",
+    ],
+    "notApplicable 5종 전수를 봤다",
+  );
+  // 역방향 — 리뷰 C1 이전 구현(표 값 없음 ∧ 세션 전이 있음 ⇒ 변형 leg 성별)을 재현한 사본은 child-kakao에서 "female"을 내 위 단언에 걸린다.
+  const preFix = (id: string, level: DifficultyLevel, variantId: string) =>
+    speakerGenderFor(id) ??
+    (resolveSessionEscalation({ scenarioId: id, difficultyLevel: level }, PUBLIC_SCENARIOS)
+      ? listFlowVariants(id, level).find((v) => v.variantId === variantId)?.legs[0]?.speakerGender
+      : undefined);
+  const leaked = (["beginner", "intermediate", "advanced"] as const).map((level) => {
+    const [v] = listFlowVariants("messenger-child-impersonation-kakao", level);
+    return preFix("messenger-child-impersonation-kakao", level, v.variantId);
+  });
+  assert.deepEqual(leaked, ["female", "female", "female"], "역방향 샘플 — 옛 구현은 child-kakao 세 난이도에 성별을 부여한다");
+  for (const value of leaked) assert.notEqual(value, undefined, "옛 구현 값은 위 기대값(undefined)과 달라 실패한다");
   const advanced = listFlowVariants(PARCEL, "advanced")[0];
   assert.equal(resolveSessionSpeakerGender({ scenarioId: PARCEL, difficultyLevel: "advanced", flowVariantId: advanced.variantId }), "female");
   assert.equal(
@@ -162,5 +192,19 @@ test("[T194-a G582] 호출부 — 프롬프트 3곳이 세션 단위 성별을 �
   // 시나리오 단위 표만 읽는 옛 호출 형태가 프롬프트 호출부에 남지 않았다.
   for (const rel of ["roleplay/index.ts", "roleplay/openingLine.ts"]) {
     assert.equal(/speakerGender: speakerGenderFor\(/.test(read(rel)), false, `${rel}: 시나리오 단위 성별 직접 사용`);
+  }
+});
+
+test("[T194-a 리뷰 m1] sendMessage의 설치 응낙 읽기는 이 세션에서 도달 가능한 설치 항목이 있을 때만 — parcel 초급 · 중급 읽기 0 · 고급 · 지원금은 그대로", () => {
+  const code = fs.readFileSync(path.join(FUNCTIONS_SRC, "roleplay/index.ts"), "utf8").replace(/\/\/[^\n]*/g, "");
+  assert.match(code, /if \(listAppInstallMockScreens\(session\.scenarioId\)\.some\(\(item\) => isMockScreenReachable\(session, item\)\)\) \{/);
+  assert.equal(/hasAppInstallMockScreen\(session\.scenarioId\)/.test(code), false, "카탈로그 소속만 보는 옛 게이트가 남았다");
+  const readsFor = (scenarioId: string, difficultyLevel: string, flowVariantId: string | undefined) =>
+    listAppInstallMockScreens(scenarioId).some((item) => isMockScreenReachable({ scenarioId, difficultyLevel, flowVariantId }, item));
+  assert.equal(readsFor(PARCEL, "beginner", "fv-prr3"), false);
+  assert.equal(readsFor(PARCEL, "intermediate", "fv-tvq2"), false);
+  assert.equal(readsFor(PARCEL, "advanced", "fv-g454"), true);
+  for (const [level, v] of [["beginner", "fv-rizf"], ["intermediate", "fv-afbr"], ["advanced", "fv-hu8w"], ["intermediate", undefined]] as const) {
+    assert.equal(readsFor("messenger-subsidy-smishing-sms", level, v), true, `subsidy ${level}/${v ?? "변형 부재"}: 현행 그대로 읽는다`);
   }
 });

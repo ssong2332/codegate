@@ -34,6 +34,12 @@ import { l3DepthMode } from "../../roleplay/l3Depth";
 import { buildSystemPrompt } from "../../roleplay/promptAssembly";
 import { resolveTacticCategory } from "../../report/tacticCategory";
 import { DIFFICULTY_LEVELS, type DifficultyLevel } from "../../shared/difficulty";
+import * as crypto from "node:crypto";
+import { isL3Procedural } from "../../roleplay/l3Depth";
+import { asksIdentityCheck } from "../../roleplay/personaAuthority";
+import { sessionDeclaresInCallSms } from "../../inCallSms/smsGate";
+import { resolveSessionSpeakerGender, speakerGenderFor } from "../../realtime/scenarioVoice";
+import { pickGeminiVoiceName } from "../../realtime/geminiProvider";
 
 const SRC_ROOT = path.resolve(__dirname, "../../../../src");
 const FUNCTIONS_SRC = path.resolve(__dirname, "../../../src");
@@ -643,20 +649,51 @@ test("[T194-a §83.4.2] parcel 고급 변형 — authored · 3단계 이상 · �
   assert.deepEqual([...new Set(markers)], ["parcel-install"], "고급 세션이 내는 링크 마커는 parcel-install 하나다");
 });
 
-test("[T194-a §83.13.3 ②] escalatesToVoice는 프롬프트 조립에 영향 0 — child-kakao 3벌(플래그 1필드만 추가) 등 플래그 보유 변형 전부 플래그 제거본과 조립 바이트 동일", (t) => {
-  const flagged = FLOW_VARIANTS.filter((v) => v.escalatesToVoice === true);
-  const child = flagged.filter((v) => v.scenarioId === "messenger-child-impersonation-kakao").map((v) => v.variantId).sort();
-  assert.deepEqual(child, ["fv-34v5", "fv-tdgg", "fv-tpr3"]);
-  let compared = 0;
-  for (const v of flagged) {
-    const { escalatesToVoice: _flag, ...withoutFlag } = v;
-    const base = SCENARIO_PROMPTS[v.scenarioId];
-    for (const level of DIFFICULTY_LEVELS as readonly DifficultyLevel[]) {
-      const a = buildSystemPrompt(resolveVariantPrompt(base, v), { difficultyLevel: level });
-      const b = buildSystemPrompt(resolveVariantPrompt(base, withoutFlag as FlowVariant), { difficultyLevel: level });
-      assert.equal(a, b, `${v.variantId}/${level}: 플래그가 조립 바이트를 바꿨다`);
-      compared += 1;
+/**
+ * ⭐ 리뷰 M2 — **변경 전(base = 커밋 6c9548b 추출본 lib) 실측값 고정.** `escalatesToVoice`를 1필드만 더한 child-kakao 3벌 · subsidy 3벌의
+ * 조립 산출물이 T194-a 전후로 한 바이트도 바뀌지 않았음을 보인다(예전의 "플래그 제거본과 같다"는 같은 코드로 두 번 조립한 자기확증이라
+ * 화자 성별 누수(리뷰 C1)를 못 잡았다). 측정 옵션 = sendMessage 텍스트 경로와 같은 옵션(난이도 · 문자 술어 · L3 · 신원 확인 · 화자 성별 =
+ * base는 표 값 `speakerGenderFor` / 현재는 세션 해석 `resolveSessionSpeakerGender`). 측정 스크립트: base lib에 같은 옵션으로 조립.
+ */
+const BASE_FLAGGED_ASSEMBLY: readonly { scenarioId: string; level: DifficultyLevel; variantId: string; sha256: string; length: number }[] = [
+  { scenarioId: "messenger-child-impersonation-kakao", level: "beginner", variantId: "fv-34v5", sha256: "e66dbed0dcbeac2e6a30e373f8f0a1771233bd0f5b880c9f8b6b4b16d64e5887", length: 6187 },
+  { scenarioId: "messenger-child-impersonation-kakao", level: "intermediate", variantId: "fv-tpr3", sha256: "f0ef3fbea9bc090c548332b7dfcfb9d2c74ccfa041ba00992ad1b1e2a99aa105", length: 5422 },
+  { scenarioId: "messenger-child-impersonation-kakao", level: "advanced", variantId: "fv-tdgg", sha256: "738acd2b9b5902eb9cc4238cad27765920dcbbd533b8e0822604ab4273501a8c", length: 6885 },
+  { scenarioId: "messenger-subsidy-smishing-sms", level: "beginner", variantId: "fv-rizf", sha256: "865e82108f3880f75eecb17bf883035581f7b6654fe8d6660b2016b6e2f0f86b", length: 6827 },
+  { scenarioId: "messenger-subsidy-smishing-sms", level: "intermediate", variantId: "fv-afbr", sha256: "97b8e1cf66f1b2f6f8dba4b2980e53a53ee693313a2e3c847dff666d9be9b3e7", length: 6088 },
+  { scenarioId: "messenger-subsidy-smishing-sms", level: "advanced", variantId: "fv-hu8w", sha256: "c9c2d05539c4444370937674debe2dc8b7f29146ce47168b8a29a2a75d05095b", length: 8005 },
+];
+
+test("[T194-a §83.13.3 ② · 리뷰 M2] 플래그만 더한 child-kakao · subsidy 6벌 — 조립 바이트 = 변경 전 실측값 · child-kakao [화자] 블록 0 · Gemini 음성 풀 불변", (t) => {
+  const lines: string[] = [];
+  for (const row of BASE_FLAGGED_ASSEMBLY) {
+    const v = FLOW_VARIANTS.find((x) => x.variantId === row.variantId);
+    assert.ok(v && v.escalatesToVoice === true && v.scenarioId === row.scenarioId && v.level === row.level, row.variantId);
+    const session = { scenarioId: row.scenarioId, difficultyLevel: row.level, flowVariantId: row.variantId };
+    const speakerGender = resolveSessionSpeakerGender(session);
+    const prompt = resolveSessionScenarioPrompt(row.scenarioId, row.variantId);
+    assert.ok(prompt);
+    const assembled = buildSystemPrompt(prompt, {
+      difficultyLevel: row.level,
+      inCallSmsEnabled: sessionDeclaresInCallSms(row.scenarioId, row.variantId),
+      l3Procedural: isL3Procedural(row.scenarioId),
+      identityCheckAllowed: asksIdentityCheck(row.scenarioId),
+      speakerGender,
+    });
+    const hash = crypto.createHash("sha256").update(assembled).digest("hex");
+    lines.push(`${row.variantId} ${hash.slice(0, 12)}(${assembled.length}자) = 기준 ${row.sha256.slice(0, 12)}(${row.length}자)`);
+    assert.equal(assembled.length, row.length, `${row.variantId}: 길이가 변경 전과 다르다`);
+    assert.equal(hash, row.sha256, `${row.variantId}: 조립 바이트가 변경 전과 다르다`);
+    // 화자 성별 = 변경 전 표 값(child-kakao = notApplicable → undefined → [화자] 블록 0).
+    assert.equal(speakerGender, speakerGenderFor(row.scenarioId), `${row.variantId}: 화자 성별이 표 값과 다르다`);
+    if (row.scenarioId === "messenger-child-impersonation-kakao") {
+      assert.equal(assembled.includes("[화자"), false, `${row.variantId}: [화자] 블록이 생겼다(#162 · §83.4.6)`);
+    }
+    // Gemini 음성 풀 — 세션 성별을 넘긴 선택 = 변경 전(표만 보는) 선택.
+    for (let i = 0; i < 30; i += 1) {
+      const sid = `${row.variantId}-${i}`;
+      assert.equal(pickGeminiVoiceName(row.scenarioId, sid, speakerGender), pickGeminiVoiceName(row.scenarioId, sid), `${row.variantId}: 음성 풀이 바뀌었다`);
     }
   }
-  t.diagnostic(`[②] 플래그 보유 변형 ${flagged.length}벌 × 3난이도 = ${compared}건 바이트 동일`);
+  t.diagnostic(`[② 변경 전 대조] ${lines.join(" | ")}`);
 });

@@ -11,7 +11,7 @@
 // "정답을 미리 알려주지 않는다" 축 계승). 이 파일은 `functions/src/realtime/`(서버 전용) 밖으로
 // import되지 않는다 — `roleplay/index.ts`·`roleplay/openingLine.ts`가 읽는 것도 이 파일이 export한
 // **표의 값**뿐이고, 클라로 나가는 응답 어디에도 이 표는 실리지 않는다.
-import { resolveSessionEscalation, type EscalationSessionView } from "../scenarios/escalation";
+import { resolveScenarioEscalation, resolveSessionEscalation, type EscalationSessionView } from "../scenarios/escalation";
 import { findFlowVariant } from "../scenarios/flowVariants";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 
@@ -71,8 +71,16 @@ export function resolveSessionSpeakerGender(
 ): "male" | "female" | undefined {
   const fromTable = speakerGenderFor(session.scenarioId);
   if (fromTable) return fromTable;
+  // ⛔ 리뷰 C1 — 변형 leg 성별은 **`advancedEscalation`만 가진 시나리오**(택배 문자 — 고급만 통화)에서만 쓴다. `escalation`(세 난이도 ·
+  // 클론 — child-kakao)을 가진 notApplicable 시나리오에 leg 성별을 주면 [화자] 블록이 새로 생기고 Gemini 음성 풀이 줄어든다(#162 ·
+  // §83.4.6 위반). 판정은 메타 직접 읽기 대신 술어로 한다(G576): 중급 값 없음 ∧ 고급 값 있음 = advancedEscalation 전용.
+  const meta = PUBLIC_SCENARIOS[session.scenarioId];
+  const advancedOnlyEscalation =
+    resolveScenarioEscalation(meta, "intermediate") === undefined && resolveScenarioEscalation(meta, "advanced") !== undefined;
+  if (!advancedOnlyEscalation) return undefined;
   if (!resolveSessionEscalation(session, PUBLIC_SCENARIOS)) return undefined;
   const variant = findFlowVariant(session.flowVariantId);
-  if (!variant || variant.scenarioId !== session.scenarioId) return undefined;
+  // 통화 단계가 있는 변형(`escalatesToVoice`)의 leg만 — 수신자용 비에스컬레이션 변형(fv-k7qm 등)은 통화 경로가 없다.
+  if (!variant || variant.scenarioId !== session.scenarioId || !variant.escalatesToVoice) return undefined;
   return variant.legs[0]?.speakerGender;
 }

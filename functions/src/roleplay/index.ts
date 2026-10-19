@@ -17,7 +17,8 @@ import { triggerReportGeneration } from "../report";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import type { InCallSmsItem } from "../scenarios/inCallSms";
 import {
-  hasAppInstallMockScreen,
+  isMockScreenReachable,
+  listAppInstallMockScreens,
   MOCK_INSTALL_CONSENT_INSTRUCTION,
 } from "../scenarios/mockScreens";
 import { textPathAnchorScammerTurn } from "../inCallSms/buildDoc";
@@ -344,7 +345,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // ⚠️ 응낙이 **채널 전이를 유발하지 않는다**(§15.9.7 G54, AC-073) — 아래 ④-b 전이 판단은
     // 여전히 구조화 신호·max-turn 폴백만 본다.
     let mockConsentRef: FirebaseFirestore.DocumentReference | undefined;
-    if (hasAppInstallMockScreen(session.scenarioId)) {
+    // T194-a(리뷰 m1) — 카탈로그 소속이 아니라 **이 세션에서 도달 가능한** 설치 항목이 있을 때만 읽는다. 도달 불가 항목은
+    // `recordMockScreenEvent`가 응낙 문서를 만들지 않으므로(G584 · ⑤) 동작은 같고, parcel 초급 · 중급의 매 턴 읽기 1회가 사라진다.
+    if (listAppInstallMockScreens(session.scenarioId).some((item) => isMockScreenReachable(session, item))) {
       try {
         // 세션당 문서가 한 자릿수라(카탈로그 항목 수 상한) 전체를 읽고 메모리에서 고른다 —
         // 부등호 쿼리·복합 인덱스를 새로 만들지 않는다(Database.md 인덱스 표 무변경).
