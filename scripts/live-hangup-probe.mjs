@@ -12,7 +12,10 @@
 // ⛔ API 키는 functions/.secret.local 의 `GEMINI_API_KEY=`(첫 값)를 메모리에서만 쓴다 — 어떤 출력·파일에도 쓰지 않는다.
 //
 // 사용법(저장소 루트): npm --prefix functions run build 뒤
-//   node scripts/live-hangup-probe.mjs <accept|reject|silence|idle> <n> --out <저장소 밖 dir>
+//   node scripts/live-hangup-probe.mjs <accept|reject|silence|idle> <n> --out <저장소 밖 dir> [--start-index <k>]
+//     --start-index — 세션 번호를 k부터 매긴다(기본 1 · T192 C6-F2 §79.21 (10) ③). `reject 1`을 반복할 때 홀짝 대본 교대
+//                     (홀수 goal · 짝수 refuse)를 잇는다 · 출력 파일 이름도 이 번호를 따른다 · 요약에 대본 분포를 남긴다.
+//   ⭐ 시작 시 lib 문면 마커(TOOL 꼬리 · end_call 설명 — §79.21 (10) ① ②)가 없으면 실행을 거부한다(실호출 0 · 요약 `libMarkers`).
 //     accept  — 목적 달성 대본(ⓐ) · 첫 end_call에 accepted(재호출은 already_accepted) → H1 · H2 · H4 · H5 · H6ⓐ
 //     reject  — 홀수 회차 목적 달성 대본 · 짝수 회차 거절 반복 대본(ⓑ) · end_call마다 too_early → H1 · H3 · H4 · H6ⓐⓑ
 //     silence — 침묵 · 소강 대본(ⓒ) · end_call이 오면 too_early → H6ⓒ(호출 0이 정상)
@@ -39,7 +42,8 @@ const require = createRequire(path.join(fnRoot, "package.json"));
 
 const { GoogleGenAI, Modality } = require("@google/genai");
 const { GeminiRealtimeProvider } = require(path.join(fnRoot, "lib/realtime/geminiProvider.js"));
-const { END_CALL_LIVE_AVAILABLE } = require(path.join(fnRoot, "lib/realtime/liveTools.js"));
+const { END_CALL_LIVE_AVAILABLE, buildLiveToolDeclarations, LIVE_TOOL_END_CALL } = require(path.join(fnRoot, "lib/realtime/liveTools.js"));
+const { HANGUP_RULE_TOOL } = require(path.join(fnRoot, "lib/roleplay/promptAssembly.js"));
 /** T192 C6-F2 — 측정은 항상 `end_call` 켬으로 한다(운영 상수와 분리 · ⛔ 기본 생성자를 쓰지 않는다). */
 const END_CALL_LIVE_FORCED_ON = true;
 const { SCAMMER_HANGUP_ACCEPTED_GUIDANCE, SCAMMER_HANGUP_DECLINED_GUIDANCE } = require(
@@ -121,7 +125,7 @@ const argVal = (name, def) => {
   return i >= 0 && args[i + 1] ? args[i + 1] : def;
 };
 const USAGE =
-  "사용법: node scripts/live-hangup-probe.mjs <accept|reject|silence|idle> <1..10> --out <저장소 밖 디렉터리>" +
+  "사용법: node scripts/live-hangup-probe.mjs <accept|reject|silence|idle> <1..10> --out <저장소 밖 디렉터리> [--start-index <1 이상 정수>]" +
   ` (예: --out "${path.join(os.tmpdir(), "hangup-raw")}")`;
 if (!["accept", "reject", "silence", "idle"].includes(mode) || !Number.isInteger(n) || n < 1 || n > 10) {
   console.error(USAGE);
@@ -130,6 +134,11 @@ if (!["accept", "reject", "silence", "idle"].includes(mode) || !Number.isInteger
 // C6 리뷰 Minor 2 — 결과(대사 포함)를 저장소 안에 기본으로 쓰지 않는다. `--out` 필수 · 저장소 안 경로는 거부.
 const GAP_MS = Number(argVal("--gap-ms", "60000"));
 const outArg = argVal("--out", null);
+const START_INDEX = Number(argVal("--start-index", "1"));
+if (!Number.isInteger(START_INDEX) || START_INDEX < 1) {
+  console.error(`[hangup-probe] --start-index 는 1 이상 정수다(실호출 0). ${USAGE}`);
+  process.exit(2);
+}
 if (!outArg) {
   console.error(`[hangup-probe] --out 이 없어 실행하지 않는다(실호출 0). ${USAGE}`);
   process.exit(2);
@@ -137,6 +146,24 @@ if (!outArg) {
 const outDir = path.resolve(outArg);
 if (outDir === repoRoot || outDir.startsWith(repoRoot + path.sep)) {
   console.error(`[hangup-probe] --out 이 저장소 안이다 — 저장소 밖 경로를 쓴다(실호출 0). ${USAGE}`);
+  process.exit(2);
+}
+
+// T192 C6-F2(§79.21 (10)) — lib 문면 마커. 낡은 lib(옛 TOOL · 옛 설명)로 재측정하면 변수 자체가 틀리므로 키를 읽기 전에 거부한다.
+const LIB_MARKER_TOOL = "끊기로 한 그 응답에서는";
+const LIB_MARKER_DESCRIPTION = "그 응답에서는 어떤 말보다도 먼저 부른다";
+const libEndCallDescription =
+  buildLiveToolDeclarations(SCENARIO_ID, LEVEL, undefined, { channel: undefined, relay: undefined, liveAvailable: true })
+    .flatMap((t) => t.functionDeclarations ?? [])
+    .find((d) => d.name === LIVE_TOOL_END_CALL)?.description ?? "";
+const libMarkers = {
+  toolTail: HANGUP_RULE_TOOL.includes(LIB_MARKER_TOOL),
+  endCallDescription: libEndCallDescription.includes(LIB_MARKER_DESCRIPTION),
+};
+if (!libMarkers.toolTail || !libMarkers.endCallDescription) {
+  console.error(
+    `[hangup-probe] lib가 낡았다 — npm --prefix functions run build (실호출 0 · libMarkers ${JSON.stringify(libMarkers)})`,
+  );
   process.exit(2);
 }
 
@@ -178,7 +205,10 @@ async function runSession(index, apiKey) {
     channel: undefined,
     hangupRelay: undefined,
   });
-  if (creds.liveTools?.endCall !== "end_call") throw new Error("토큰에 end_call이 선언되지 않았다(운영 스위치 확인)");
+  if (creds.liveTools?.endCall !== "end_call") throw new Error(
+      "토큰에 end_call이 선언되지 않았다 — 켬 입력(END_CALL_LIVE_FORCED_ON)은 강제됐으므로 운영 스위치 원인이 아니다: " +
+        "lib가 낡았는지(npm --prefix functions run build) · 토큰 발급 응답의 liveTools를 확인",
+    );
 
   const events = [];
   const turns = [];
@@ -380,14 +410,15 @@ async function runSession(index, apiKey) {
 
 async function main() {
   console.log(
-    `[hangup-probe] mode=${mode} n=${n} endCallLiveForcedOn: ${END_CALL_LIVE_FORCED_ON} ` +
+    `[hangup-probe] mode=${mode} n=${n} startIndex=${START_INDEX} endCallLiveForcedOn: ${END_CALL_LIVE_FORCED_ON} ` +
       `END_CALL_LIVE_AVAILABLE(운영)=${END_CALL_LIVE_AVAILABLE}`,
   );
   const apiKey = readApiKey();
   mkdirSync(outDir, { recursive: true });
   const ts = Date.now();
   const results = [];
-  for (let i = 1; i <= n; i++) {
+  const lastIndex = START_INDEX + n - 1;
+  for (let i = START_INDEX; i <= lastIndex; i++) {
     let r;
     try {
       r = await runSession(i, apiKey);
@@ -401,7 +432,7 @@ async function main() {
       console.error(`[hangup-probe] #${i} 429/쿼터 오류 — 즉시 중단(남은 세션 실행 0)`);
       break;
     }
-    if (i < n) await sleep(GAP_MS);
+    if (i < lastIndex) await sleep(GAP_MS);
     console.log(maskSecrets(
       `[hangup-probe] #${i} script=${r.script ?? "-"} calls=${r.endCallCount ?? "-"} ` +
         `preFarewell=${(r.calls ?? []).map((c) => c.preCallFarewell.length).join("/") || "-"} ` +
@@ -419,6 +450,14 @@ async function main() {
     n,
     endCallLiveForcedOn: END_CALL_LIVE_FORCED_ON,
     endCallLiveAvailableProduction: END_CALL_LIVE_AVAILABLE,
+    libMarkers,
+    startIndex: START_INDEX,
+    sessionIndices: results.map((r) => r.index ?? null),
+    scriptDistribution: results.reduce((acc, r) => {
+      const key = r.script ?? "error";
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {}),
     sessionsWithError: results.filter((r) => r.error).length,
     sessionsWithEndCall: called.length,
     endCallTotal: allCalls.length,
