@@ -1,10 +1,11 @@
 // 서버 조립 프롬프트 + 사용자 입력 구분자 감싸기 (Track A, T7, ADR-0004/AC-013/AC-024).
 // 이 파일이 하는 일은 오직 "문자열 조립"이며 부수효과(Firestore/LLM 호출)는 없다 — sendMessage/
 // generateOpeningLine(index.ts)이 이 함수들의 결과를 LLM 어댑터에 전달한다.
-import type { ScenarioPromptDoc } from "../shared/types";
+import type { PersonaCardItem, ScenarioPromptDoc } from "../shared/types";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { LlmMessage } from "../llm";
 import type { SmsPurpose } from "../scenarios/flowVariants";
+import { personaCardPromptValue } from "../scenarios/personaCardCatalog";
 import { applyFictionalBank, EXAMPLE_ACCOUNT_NUMBER } from "../shared/fictionalBank";
 
 // 사용자 신고(2026-07-25) — "사람과 대화한다는 느낌이 안 든다", "대화가 자연스럽지 않다",
@@ -679,6 +680,26 @@ function buildDifficultyBlock(
 }
 
 /**
+ * ⭐ T194-b(docs/Architecture.md §84.3.4 · PRD AC-104 (c)) — [미리 확보한 상대 정보] 블록 정본(architect 소유 모델 대면
+ * 문자열 — ⛔ 의역 금지). 머리 2줄 · 꼬리 1줄 사이에 카드 행이 `- {label}: {value}`로 그대로 들어간다.
+ * ⭐ §84.14.4 갱신 정본 — 원래 꼬리 첫 문장이던 이름 단정 금지 **예외 문장은 삭제됐다**: 대상 4종은 전부 institution이라
+ * [진행 강제]에 그 금지 규칙이 없고, 예외 문장이 존재하지 않는 규칙을 가리키는 거짓 문장이 된다(kidnapping 제외 · DECISIONS #180).
+ * 대상에 비-institution 시나리오가 들어오면 G569 가드가 실패한다(그때 예외 문장 재판정 — OQ-A147 계보).
+ */
+export const PERSONA_CARD_BLOCK_HEAD = `[미리 확보한 상대 정보 — 이 통화에서만]
+너는 통화 전에 상대에 대해 아래 정보를 이미 확보해 두었다. 상대가 스스로 말하기 전에 이 가운데 한두 가지를 네가 먼저, 확인하듯 자연스럽게 꺼내 상대가 '이 사람은 나를 이미 알고 있다'고 느끼게 한다.`;
+export const PERSONA_CARD_BLOCK_TAIL = `목록에 없는 이름·나이·금액·금융사·주소는 지어내 말하지 않는다. '사는 곳'은 알고 있다는 확인에만 쓰고, 만날 곳·찾아갈 곳·돈을 건넬 곳을 정하는 데 쓰지 않는다. 이 정보를 어디서 얻었는지는 설명하지 않는다.`;
+
+/**
+ * 카드 행이 1개 이상일 때만 블록을 만든다(빈 배열 = 블록 0 — 부재와 같은 결과). 값은 프롬프트용 값(`personaCardPromptValue` —
+ * 리뷰 M1: 블록 안 "○○" 리터럴 0)이다.
+ */
+export function buildPersonaCardBlock(items: readonly PersonaCardItem[]): string | null {
+  if (items.length === 0) return null;
+  return [PERSONA_CARD_BLOCK_HEAD, ...items.map((item) => `- ${item.label}: ${personaCardPromptValue(item)}`), PERSONA_CARD_BLOCK_TAIL].join("\n");
+}
+
+/**
  * buildSystemPrompt 확장 옵션(T72, §15.5) — **호출부가 반환값 뒤에 문자열을 이어 붙이는 것을
  * 대체한다.** 추가 블록은 전부 이 옵션으로 넘겨야 guardrailPreamble 앞에 삽입된다.
  */
@@ -797,6 +818,14 @@ export type BuildSystemPromptOptions = {
    * `"tool"` + `verifyInterceptEnabled`면 확인 무력화 1문장이 TOOL 끝에 붙는다.
    */
   hangupMode?: HangupMode;
+  /**
+   * ⭐ T194-b(docs/Architecture.md §84.3.4 · PRD AC-104 (c)(d)) — 세션 문서 `personaCard.items` **그대로**(서버 원천만 ·
+   * 클라 값 0 — §84.0 X1). 값이 있으면 [미리 확보한 상대 정보] 블록이 [확인 안내] 뒤 · 난이도 앞에 들어간다.
+   * 부재 · 빈 배열 = 블록 0 = 조립 결과 바이트 동일(회귀 0).
+   * ⚠️ 호출부 3곳(sendMessage · 오프닝 · Gemini Live 토큰) 전부에 넘긴다(G568 — 한 곳이 빠지면 그 경로의 사기범만 카드를 모른다.
+   * 에러는 나지 않는다).
+   */
+  personaCard?: readonly PersonaCardItem[];
 };
 
 /**
@@ -814,7 +843,7 @@ export type BuildSystemPromptOptions = {
  *
  * 확정 순서: persona → weakenedTactics → [화자](§50.3.3, 조건형) → 대화 방식 → 진행 강제(문자
  * 카탈로그·페르소나 권한에 따라 조건형 대체됨, T68/§50.4.4) → 확인 안내 동기화(T83, 조건형) →
- * 난이도 → 턴 지시 → **가드레일**.
+ * [미리 확보한 상대 정보](T194-b §84.3.4, 조건형) → 난이도 → 턴 지시 → **가드레일**.
  */
 export function buildSystemPrompt(
   prompt: ScenarioPromptDoc,
@@ -834,6 +863,7 @@ export function buildSystemPrompt(
         identityCheckAllowed,
       })
     : null;
+  const personaCardBlock = opts.personaCard ? buildPersonaCardBlock(opts.personaCard) : null;
   const assembled = [
     prompt.personaPrompt,
     "",
@@ -868,6 +898,8 @@ export function buildSystemPrompt(
     ...(opts.verifyInterceptEnabled === true
       ? [buildVerifyInterceptRule(opts.toolDrivenTiming === true, opts.offerToolDeclared === true), ""]
       : []),
+    // T194-b(§84.3.4) — [미리 확보한 상대 정보](조건형). [진행 강제] 뒤라 예외 문장이 금지 규칙보다 **나중에** 읽힌다.
+    ...(personaCardBlock ? [personaCardBlock, ""] : []),
     ...(difficultyBlock ? [difficultyBlock, ""] : []),
     ...(opts.turnInstruction ? [opts.turnInstruction, ""] : []),
     prompt.guardrailPreamble,

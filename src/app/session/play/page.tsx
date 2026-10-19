@@ -154,6 +154,7 @@ import { foldDegraded, buildFallbackStatusLine } from "@/lib/report/degradedDisc
 // 벨 직전 고지(`pre-call-notice`)는 세션 전 컴포넌트 `CallStartNotice`가 그리고, 벨 화면(`incoming`)에는 문구가 0이다.
 import { decideInitialCallPhase, type CallPhase } from "@/lib/sessionboundary/startNoticeGate";
 import CallStartNotice from "@/components/CallStartNotice";
+import { personaEventLogLine, readSessionPersonaCard, type PersonaCardRow } from "@/lib/personacard/personaCard";
 import CallWaveform from "@/components/CallWaveform";
 import InCallSmsOverlay from "@/components/InCallSmsOverlay";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
@@ -252,6 +253,10 @@ export default function SessionCallPage() {
   // T72 — 이 통화의 난이도(세션 문서 기준). 배지 표기는 실시간 경로가 실제로 난이도를 반영할 때만
   // 한다(아래 difficultyApplied 참고, §15.6 G6 "근거 없는 표기 금지").
   const [difficultyLevel, setDifficultyLevel] = useState<DifficultyLevel | null>(null);
+  // T194-b(§84.3.3 ⓑ · UX-014 v1.38 (1)) — 세션 문서에 서버가 쓴 가상 신상 카드(아래 세션 read effect가 같은 스냅샷에서 읽는다 —
+  // 추가 read 0). `null` = 카드 블록 0. ⛔ 이 화면은 값을 만들거나 고치거나 서버로 보내지 않는다(AC-104 (d)).
+  const [personaCard, setPersonaCard] = useState<PersonaCardRow[] | null>(null);
+  const personaCardLoggedRef = useRef(false);
   // T158(§48.5.1, AC-084, P-31) — 대사 축 강등 관측. sticky OR-fold, false로 되돌리는 대입 0건
   // (G278). 마운트 시 `sessions/{sid}.llmProvider`(아래 세션 read effect) + 매 턴
   // `SendMessageResponse.isMock`(handleSend) + `realtime.isMock`(useRealtimeCall)의 합.
@@ -603,6 +608,8 @@ export default function SessionCallPage() {
         // T72(UX-014 v1.11 난이도 배지, P-22) — 세션 문서에 서버가 **실제로 기록한** 값을 읽는다
         // (sessionStorage 힌트가 아니라). 부재(난이도 도입 이전 세션)면 중급으로 정규화된다.
         setDifficultyLevel(normalizeDifficultyLevel(data.difficultyLevel));
+        // T194-b — 고급이 아닌 세션에 카드가 실려 와도 그리지 않는다(UF-014 Failure (c) 클라 방어 · 충족 수단은 서버 술어).
+        setPersonaCard(readSessionPersonaCard(data.personaCard, data.difficultyLevel));
         // T158(§48.5.1) — 마운트 시 관측(OR-fold의 첫 항). `foldDegraded`가 sticky를 보장한다.
         setDialogueDegraded((current) => foldDegraded(current, data.llmProvider === "mock"));
         // #4/#5 새로고침 복원: 이미 "받기"를 누른 세션(answered 플래그)이나 대화가 시작된 세션
@@ -1388,6 +1395,13 @@ export default function SessionCallPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageState, sessionId, phase, realtime.prefetch]);
 
+  // T194-b(T194-C10) — 카드가 그려진 벨 직전 고지 1회 = `persona_card_shown`(클라 구조화 로그 1줄 · 행 수만 — 카드 값 · 식별자 0).
+  useEffect(() => {
+    if (pageState !== "ready" || phase !== "pre-call-notice" || !personaCard || personaCardLoggedRef.current) return;
+    personaCardLoggedRef.current = true;
+    console.info(personaEventLogLine({ kind: "persona_card_shown", rows: personaCard.length }));
+  }, [pageState, phase, personaCard]);
+
   // ⭐ T190-4(UX D-97 · AC-093 (a)(b) · docs/Architecture.md §74.7 · G454) — 수신(`incoming`) 동안만 벨·진동.
   // effect **하나**에 시작·정지를 모은다: 받기(`connecting`으로 전이) · 거절(라우팅 언마운트) · 종료 · 페이지
   // 이탈이 전부 아래 cleanup 하나로 정지된다. 추가로 `pagehide`에서도 멈춘다(bfcache 이탈).
@@ -1877,6 +1891,7 @@ export default function SessionCallPage() {
         onConfirm={handleConfirmPreCallNotice}
         onEndTraining={() => void handleEndTraining()}
         skinPicker={{ value: deviceSkin.skin, source: deviceSkin.source, onChange: handleChooseCallSkin }}
+        personaCard={personaCard}
       />
     );
   }

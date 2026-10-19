@@ -183,12 +183,12 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
       resolved.difficultyLevel,
       resolved.challengeId,
     );
+    // T194-b(§84.3.1 · 2026-10-20 User 결정) — 챌린지 수신자 세션에는 가상 신상 카드가 없다(`personaCard: undefined` 명시).
     const { message: openingMessage, isMock } = await generateOpeningLine(
       scenarioId,
       resolved.difficultyLevel,
       flowVariantId,
-      fictionalBankName,
-      resolved.challengeId,
+      { fictionalBankName, challengeId: resolved.challengeId, personaCard: undefined },
     );
 
     const challengeRef = db.collection("challenges").doc(resolved.challengeId);

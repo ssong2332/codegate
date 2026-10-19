@@ -174,6 +174,8 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       hangupMode: declaresEndCall(input.scenarioId, endCallScope.channel, endCallScope.relay, endCallScope.liveAvailable)
         ? "tool"
         : "none",
+      // T194-b(§84.3.4 · G568 호출부 3곳 중 "Gemini Live 토큰") — 호출부가 세션 문서에서 읽은 값 그대로(부재 = 블록 0).
+      personaCard: input.personaCard,
     });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });

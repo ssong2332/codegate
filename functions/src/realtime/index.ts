@@ -14,7 +14,7 @@ import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { getVerifyOfferTrigger } from "../scenarios/verifyIntercept";
 import type { VoiceMode } from "../scenarios/publicMeta";
 import type { ChallengeDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
-import { getRealtimeProvider } from "./provider";
+import { getRealtimeProvider, requiresServerPromptProvider } from "./provider";
 import type { CreateRealtimeCallRequest, CreateRealtimeCallResponse } from "./callTypes";
 import type { RealtimeProviderName } from "./types";
 import { resolveFictionalBankName } from "../shared/fictionalBank";
@@ -138,7 +138,12 @@ export const createRealtimeCall = onCall<
   }
 
   const effectiveVoiceMode = resolveEffectiveVoiceMode(session.voiceSelectionSource);
-  const provider = getRealtimeProvider(session.scenarioId, effectiveVoiceMode);
+  // T194-b(§84.3.5 · G567) — 카드 세션은 서버 프롬프트를 실을 수 있는 경로(Gemini · 폴백)로만 보낸다.
+  const provider = getRealtimeProvider(
+    session.scenarioId,
+    effectiveVoiceMode,
+    requiresServerPromptProvider(session),
+  );
   // T68(§15.1.2) → ⭐ T191(문자 도달 조건) — 예전에는 카탈로그 트리거(`smsId` + `afterScammerTurns`)를 내려줘 클라가
   // 고정 턴에 발송을 요청했다. 이제 발송 판정은 전부 서버(`inCallSms/smsGate.ts`)이고, 클라에 내려가는 것은
   // **"이 세션은 문자 백스톱을 물어봐도 된다"는 표시 하나**다(목적 · 시점 · smsId 0 — 설계 금지 X1).
@@ -185,6 +190,8 @@ export const createRealtimeCall = onCall<
       hangupRelay: resolveHangupRelay(session),
       // T194-a(§84.4.3) — 세션 단위 화자 성별(표 값이 있으면 그대로 · parcel 고급만 변형 leg 성별). 여기서 **1회** 해석해 넘긴다.
       speakerGender: resolveSessionSpeakerGender(session),
+      // T194-b(§84.3.4 · G568) — 세션 문서 카드 행 그대로(클라 값 0). 부재 = 블록 0.
+      personaCard: session.personaCard?.items,
     });
     // T38 QA NO-GO 수정, architect 판정(ADR-0006 Addendum A2, 2026-07-24) — §14.2 "추출 차단"은
     // raw voiceId를 응답에 실어 보내는 모든 경로를 무조건 막지 않는다(ElevenLabs 프로토콜상

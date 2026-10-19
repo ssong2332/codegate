@@ -30,6 +30,14 @@ import {
   REPORT_DEGRADED_NOTICE,
   type LlmProviderName,
 } from "@/lib/report/degradedDisclosure";
+import {
+  MASK_ACCESSIBLE_NAME,
+  personaEventLogLine,
+  readPersonaBlock,
+  resolvePersonaBlockCopy,
+  splitMaskedValue,
+  type PersonaBlockView,
+} from "@/lib/personacard/personaCard";
 
 type DeceivedMoment = {
   turnIndex: number;
@@ -102,6 +110,8 @@ type ReportData = {
   // 대화 일부가 미리 준비된 대사로 진행됐음을 P-31 ⓖ 고지의 근거로 쓴다. 부재는 "강등 관측 없음"
   // 이며(무백필) 긍정 표기("실제 AI로 진행됐습니다")로 렌더하지 않는다(G274).
   llmProvider?: LlmProviderName;
+  // T194-b(§84.3.6 · UX-008 v1.38 (1) · D-120) — "상대가 먼저 꺼낸 '내 정보'" 블록. 부재 = R-4(블록 0 · 무백필).
+  personaBlock: PersonaBlockView | null;
 };
 
 type PageState = "no-session" | "loading" | "error" | "loaded";
@@ -149,6 +159,7 @@ export default function ReportPage() {
         data.llmProvider === "mock" || data.llmProvider === "claude" || data.llmProvider === "gemini"
           ? data.llmProvider
           : undefined,
+      personaBlock: readPersonaBlock(data.personaBlock),
     };
   }, []);
 
@@ -165,6 +176,16 @@ export default function ReportPage() {
         }
         setReport(data);
         setState("loaded");
+        // T194-b(T194-C10) — 블록이 그려지는 리포트 1회 = `persona_report_block_shown`(상태 · 행 수만 — 카드 값 · 식별자 0).
+        if (data.personaBlock) {
+          console.info(
+            personaEventLogLine({
+              kind: "persona_report_block_shown",
+              state: data.personaBlock.state,
+              rows: data.personaBlock.items.length,
+            }),
+          );
+        }
       } catch {
         if (!cancelled) setState("error");
       }
@@ -534,6 +555,10 @@ export default function ReportPage() {
           </section>
         )}
 
+        {/* T194-b(UX-008 v1.38 (1) · D-120) — "상대가 먼저 꺼낸 '내 정보'". 자리 = 속은 순간 카드들(타임라인) 아래 ·
+            "시도된 수법" 아코디언 위 · 접히지 않음. 속은 순간이 아니라 되감기 진입점 0(D-51). 부재 = R-4(블록 0). */}
+        {report.personaBlock && <ReportPersonaBlock block={report.personaBlock} />}
+
         <button
           type="button"
           onClick={() => toggleSection("tactics")}
@@ -810,5 +835,47 @@ function ReportVerifyTimelineItem({ verify }: { verify: VerifyTimelineEntry }) {
         </div>
       ))}
     </li>
+  );
+}
+
+/**
+ * T194-b(UX-008 v1.38 (1) · D-120 · §84.3.7) — "상대가 먼저 꺼낸 '내 정보'" 블록. 문면은 `resolvePersonaBlockCopy`(정본 글자 그대로)만
+ * 쓴다. 대처(크게 · 먼저) → 설명(짧게) 순서 · 공통 꼬리 1줄. 경고 표현은 기존 리포트 카드 톤을 넘지 않는다(새 색 0).
+ * ⚠️ 되감기 버튼을 달지 않는다 — 속은 순간이 아니다(AC-062 · D-51).
+ */
+function ReportPersonaBlock({ block }: { block: PersonaBlockView }) {
+  const copy = resolvePersonaBlockCopy(block);
+  return (
+    <section
+      aria-labelledby="persona-block-title"
+      className="flex flex-col gap-2.5 rounded-2xl border border-[#E2DDD3] bg-white p-[18px]"
+    >
+      <h2 id="persona-block-title" className="text-lg font-bold text-[#22303A]">
+        {copy.title}
+      </h2>
+      <p className="text-base leading-relaxed text-[#22303A]">{copy.fact}</p>
+      <dl className="flex flex-col gap-1.5 rounded-xl bg-[#FAF8F5] p-3">
+        {block.items.map((item) => (
+          <div key={item.label} className="flex flex-wrap gap-x-2">
+            <dt className="text-base text-[#6B655C]">{item.label}</dt>
+            <dd className="break-words text-base font-semibold text-[#22303A]">
+              {splitMaskedValue(item.value).map((segment, i) =>
+                segment.masked ? (
+                  <span key={i}>
+                    <span aria-hidden="true">{segment.text}</span>
+                    <span className="sr-only">{MASK_ACCESSIBLE_NAME}</span>
+                  </span>
+                ) : (
+                  <span key={i}>{segment.text}</span>
+                ),
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className="text-lg font-bold leading-relaxed text-[#0E6B62]">{copy.action}</p>
+      <p className="text-base leading-relaxed text-[#6B655C]">{copy.explanation}</p>
+      <p className="text-sm leading-relaxed text-[#6B655C]">{copy.tail}</p>
+    </section>
   );
 }

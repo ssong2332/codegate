@@ -22,7 +22,7 @@
 //   서명 URL만 발급한다. 클라가 보내는 오버라이드는 민감하지 않은 voice_id(본인 클론 id)뿐이다.
 
 import type { DifficultyLevel } from "../shared/difficulty";
-import type { MessengerChannel } from "../shared/types";
+import type { MessengerChannel, PersonaCardItem } from "../shared/types";
 import type { HangupRelayContext } from "../scammerHangup/decide";
 import type { LiveToolNames } from "./liveTools";
 
@@ -70,6 +70,12 @@ export type RealtimeCallInput = {
    * 유일한 운영 호출부 `createRealtimeCall`은 항상 넘긴다 — `promptAssembly.test.ts` 소스 스캔). ElevenLabs · Mock은 무시한다.
    */
   speakerGender?: "male" | "female";
+  /**
+   * T194-b(docs/Architecture.md §84.3.4 · §84.3.5) — 세션 문서 `personaCard.items` 그대로(호출부 `createRealtimeCall`이 읽는다 ·
+   * 클라 값 0). Gemini 경로는 [미리 확보한 상대 정보] 블록으로 프롬프트에 싣는다. ⚠️ ElevenLabs 경로는 실을 지점이 없어서
+   * 카드 세션은 그 경로로 **보내지 않는다**(`provider.ts` `requiresServerPromptProvider` — G567). Mock은 무시한다.
+   */
+  personaCard?: readonly PersonaCardItem[];
 };
 
 /**
