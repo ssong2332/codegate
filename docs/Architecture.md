@@ -20276,3 +20276,57 @@ architect가 진입 표면에 거는 **조건만**(UX 재판정의 입력):
 | `docs/Architecture.md` 헤더 `:5` | 버전 갭 — 이 패스 범위 밖 | architect |
 
 > **번호**: §83 · G559~G583 · OQ-A142~A147 · ADR-0022 — 이 트리 = 메인 체크아웃 최대 §82 · G558 · OQ-A141 · ADR-0021 다음. ⛔ 예약 아님 — 병합 순서로 확정.
+
+### 83.13 (T194-a 구현 중 블로커 판정 — 2026-10-19 · HEAD `6c9548b` · ⛔ 위 83.0~83.12 무수정 · 이 절이 우선) **G159 빨간불 + 구현 이탈 5건** — ⭐⭐ **G159의 단위 "시나리오"는 §35 당시 "한 세션이 볼 수 있는 프롬프트 집합"의 대리값이었다 — 흐름 변형이 들어온 뒤 그 등식이 깨졌다. 이것은 §35.6 표에 없는 케이스(G160 — 행 추가)이며, 판정은 ⓑ: 단위를 (시나리오 × 변형)으로 바꾸되 *그 단위가 런타임에서 참이 되도록* 기록 층 게이트를 같은 커밋에 둔다** / ⭐ **83.4.2의 `extraTactics`(지원금 수법 문구 차용)는 틀렸다 — 그 문구가 `[[LINK:subsidy-install]]`을 지시한다. 구현 이탈 ①이 정정이다**
+
+#### 83.13.1 G159 — 판정 근거
+
+| 질문 | 실측 · 판정 | 근거 |
+|---|---|---|
+| G159가 지키는 결함은 무엇인가 | **같은 사기범 메시지에 앵커된 서로 다른 두 랜딩 중 한쪽만 승격** → 다른 쪽 오분류(4중 연접 — 조건 1 · 2 · 3이 **한 세션 안**의 사건) | §35.3 · `functions/src/scenarios/__tests__/mockScreens.test.ts:619-623` 주석 |
+| 왜 시나리오 단위로 셌나 | 그때 한 시나리오의 세션은 전부 같은 프롬프트를 받았다 ⇒ "시나리오의 도달 가능 랜딩" = "세션의 도달 가능 랜딩". 계산도 원본 프롬프트만 읽는다(`:563-582` `reachableLandingKeys` — `SCENARIO_PROMPTS` · `IN_CALL_SMS`) | §35.2 (1) |
+| 지금도 같은가 | ⛔ **아니다.** T191 S5 이후 세션 프롬프트는 `resolveSessionScenarioPrompt(scenarioId, flowVariantId)`(`flowVariants.ts:1000-1015`)가 정한다. parcel 초급 · 중급 세션이 볼 수 있는 링크는 `parcel-redelivery` 1개, 고급 세션은 `parcel-install` 1개(아래 83.13.3 ⓐ 조건 충족 시) ⇒ **어느 세션에서도 조건 1이 거짓** | — |
+| ⓐ(T129 (b) 선행)를 고르면 | 오늘 **도달 0건**인 결함을 위해 영속 스키마(`DeceivedMoment.landingId`)를 늘린다 — §35.5 판정(*"옳지만 지금이 아니다"*)과 §18.1에 반한다. UX 쪽 제약(`docs/UX.md:2948` 금지 ② — D-61 설계 시 UX가 스스로 건 *"스키마 확장을 요구하지 않는다"*)과의 정리도 먼저 필요하다 | §35.4 (b) · §35.5 |
+| ⓑ가 "단언을 고쳐 통과"(§35.6 1행 ⛔)인가 | **아니다 — 조건이 런타임에서 실제로 성립하도록 만든 뒤 그 조건을 정확히 센다.** 단, 아래 G584(기록 층)가 **없으면** ⓑ는 숫자 고치기와 같다(세션에서 두 랜딩 문서가 생길 수 있으므로). 그래서 G584 · G585를 **같은 커밋**에 둔다 | §35.7 · G159 |
+
+⇒ **§35.6 표에 행을 더한다(G160 절차 — 이 절이 그 행이다)**:
+
+| 관측 | 처방 |
+|---|---|
+| ⭐ **G159 빨간불이 흐름 변형 때문이다** — 같은 시나리오의 서로 다른 랜딩이 **서로 다른 변형**에만 나타나고, 각 (시나리오 × 변형)의 도달 가능 랜딩은 1건 이하 | G159의 단위를 **(시나리오 × 변형 · 변형 없는 원본 포함)** 으로 바꾸고(G585), 기록 층이 세션의 도달 가능 집합 밖 랜딩을 거부하게 한다(G584) — **같은 커밋**. ⛔ 한 (시나리오 × 변형) 안에 2건이면 이 행이 아니라 §35.6 1행((b) 선행)이다 |
+
+#### 83.13.2 G584 · G585 — 구현 명세
+
+| G | 위치 | 내용 |
+|---|---|---|
+| **G584** | 소스 신규 순수 함수 `sessionReachableLandingIds(scenarioId, flowVariantId)`(`functions/src/scenarios/mockScreens.ts` 또는 신규 `reachability.ts`) | 입력 = `resolveSessionScenarioPrompt(scenarioId, flowVariantId)`의 persona · tactics · guardrail · suspicionKeywords + **모든 leg의 `personaPrompt`**(S7 대비) 속 `[[LINK:id]]` ∪ 그 변형이 **선언한** 문자(`resolveDeclaredSms` — `inCallSms/smsGate.ts:144-153`)의 `fakeLandingId`. 변형 없는 세션은 원본 프롬프트 마커만(선언 문자 0 — 같은 함수가 `no_variant`로 빈 선언을 준다). ⭐ `recordMockScreenEvent`(`functions/src/mockScreens/index.ts:76` 뒤)가 `landingId ∉ sessionReachableLandingIds(...)`면 `failed-precondition` — **`credential-form` 포함 전 kind**(83.4.4의 `isMockScreenReachable`은 이 함수를 쓰도록 흡수 · 통화 중 항목의 "문자 도착" 조건은 그대로 AND). ⇒ 세션의 `mockScreens` 문서 ⊆ 도달 가능 집합 = 조건 3이 세션 안에서 구조적으로 거짓. ⛔ `extractLinkMarker`는 **건드리지 않는다**(G161 — 다중 마커 능력 유지) |
+| **G585** | `mockScreens.test.ts` G159 블록 | ① **헬퍼 `findMultiLandingScenarios`(`:645-659`) · 처방 문구 `G159_PRESCRIPTION`(`:633-637`) · 기존 역검증(`:670-679`)은 바이트 무변경** ② 입력만 바꾼다: 신규 `reachableLandingKeysBySession()` = 전 시나리오 × (전 변형 ∪ `"base"`)마다 G584 함수를 불러 `"{scenarioId}#{variantId\|base}::{landingId}"` 키를 만든다(헬퍼가 `::` 앞을 단위로 묶으므로 그대로 동작) ③ **신규 역검증(같은 커밋)**: `[...reachableLandingKeysBySession(), "messenger-parcel-smishing-sms#fv-g454::parcel-redelivery"]` → `["messenger-parcel-smishing-sms#fv-g454"]` ④ **소스-테스트 단일 원천**: 테스트는 G584 함수를 import해 쓴다(자체 정규식 사본 0) ⑤ 기존 AC-078 (a) 단언(`:590-599`)의 도달 가능 집합 = **전 단위 합집합**(구현자가 넓힌 계산 그대로 — 수용) · 총계 숫자 갱신은 §35.6 6행 관례대로 허용 ⑥ 실패 메시지에 *"변형 단위로 2건 — §35.6 1행 (b) 선행"* 처방 유지 |
+| 기록 층 역검증 | `functions/src/mockScreens/__tests__`(또는 순수 판정 함수 테스트) | parcel 고급 세션 + `parcel-redelivery` 이벤트 → 거부 · parcel 초급 세션 + `parcel-install` → 거부 · 정상 2건 통과 — **같은 실행 출력** |
+
+⚠️ **T194-c(Q2)는 이 행으로 통과하지 못한다** — `card-company-impersonation` 고급 한 세션 안에 `card-relief-transfer`(이체 문자)와 설치 화면이 **둘 다** 도달 가능해진다(같은 변형). 그때는 §35.6 **1행**(T129 (b) 선행)이 정본이다. 다만 통화 중 랜딩은 마커가 아니라 문자 앵커로 붙고(`inCallSms/buildDoc.ts:69-78`), 문자 간격 하한(`smsGate.ts:35` `MIN_USER_TURNS_BETWEEN_SMS = 2`)이 두 문자의 같은 앵커를 막을 **가능성**이 있다(추정 — 응낙 앵커(83.5.3)와 이체 문자 앵커의 충돌 여부는 미판정) ⇒ **OQ-A148**: T194-c 착수 전 architect가 "통화 중 두 랜딩의 앵커 충돌 가능성"을 판정하고, 충돌 가능이면 (b) 선행 + `docs/UX.md:2948` 금지 ②의 ux-design 재확인을 받는다. ⛔ 지금 T194-a에 (b)를 넣지 않는다.
+
+#### 83.13.3 구현 이탈 5건 판정
+
+| # | 구현 | 판정 | 조건 · 처방 |
+|---|---|---|---|
+| ① | 택배 전용 설치 수법 `PARCEL_ADVANCED_INSTALL_TACTIC` 신규 | ⭐ **수용 — 83.4.2 정정** | 83.4.2의 `extraTactics: [{ from: "messenger-subsidy-smishing-sms", label: "앱 설치·권한 허용 유도" }]`는 그 문구가 `[[LINK:subsidy-install]]`을 지시한다(`messengerSubsidySmishingSms.prompt.ts:64`) — parcel 세션에 지원금 랜딩이 도달 가능해지고 `findMockScreenItem`(`mockScreens.ts:391-396`)은 그 id를 parcel에서 거부해 칩이 열리지 않는다. 조건: ⓐ 새 문구는 `[[LINK:parcel-install]]`만 지시 ⓑ **parcel 고급 변형의 tactics에서 원본 *"링크 클릭 유도"*(`[[LINK:parcel-redelivery]]` 지시 — `messengerParcelSmishingSms.prompt.ts:37`)를 뺀다**(`keepLabels` 또는 `dropLabels`) — 빼지 않으면 고급 세션에 랜딩 2건이 남아 G585가 정당하게 빨간불이 된다 ⓒ *"채널 전환 유도"* 차용(`:65`)은 `[[SIGNAL:ESCALATE_VOICE]]`만 담아 랜딩 무관 — 차용 유지 가능 ⓓ 무해화 · 마커 낱말 게이트 대상 등록 · 출처(N1 · N2 · C08) |
+| ② | `messenger-child-impersonation-kakao` 변형 3벌에 `escalatesToVoice` 부착 | **수용** | 그 시나리오는 세 난이도 모두 `escalation`(clone)을 가진다(`publicMeta.ts:206`) — 83.4.5 ② 메타 정합이 요구하는 데이터이고 83.4.2 표가 빠뜨린 행이다. 조건: 플래그 1필드만 · 그 3변형의 조립 프롬프트 바이트 무변경(`resolveVariantPrompt`는 이 플래그를 읽지 않는다 — 바이트 고정 테스트로 확인) |
+| ③ | `MessengerFakeLanding.tsx`에 `INSTALL_LANDING_COPY` 조회 표 | **조건부 수용** | 현행 설치 화면 문구는 지원금 1종 하드코딩 + 서버 카탈로그와 "같은 글자" 대조(`src/components/MessengerFakeLanding.tsx:26` · `:579-587` · G76)라 landingId 조회 표가 최소 변경이다. 조건: ⓐ 키 = `landingId` · 값 = 서버 카탈로그 해당 항목과 **바이트 동일**(기존 대조 테스트를 표 전체로 확장 — 서버 `listAppInstallMockScreens` 전 항목 ↔ 표 키 집합 양방향 일치) ⓑ **표에 없는 id의 `app-install`은 설치 화면을 그리지 않는다**(지원금 문구로 기본값 폴백 0 · `credential-form` 폴백 0 — R5) — UF-012 Failure (a)대로 생략 ⓒ 신규 kind · 컴포넌트 파일 0(AC-106 (a)) |
+| ④ | parcel 가드레일 보강 항을 끝에 (5)로 추가 — 세 난이도 모두 1항 증가 | **수용** | 83.4.2 ⚠️가 예고한 변경 그대로다. 끝에 붙여 기존 접두 바이트를 보존한 형태가 옳다. 조건: 초급 · 중급 바이트 기대값 갱신은 **같은 커밋 · 사유 주석**(G582) · 가드레일 최후미 불변 · 인젝션 레드팀 테스트(`llm/__tests__/injectionRedTeam.test.ts`) 무약화 |
+| ⑤ | `generateOpeningLine` 5번째 인자 `challengeId` | **조건부 수용** | `resolveSessionEscalation` · `resolveSessionSpeakerGender`(83.4.1 · 83.4.3)가 챌린지 여부를 입력으로 받으므로 오프닝도 같은 입력이 필요하다(J-1). 조건: ⓐ 호출부 전부(`session/index.ts:194-199` · `challenge/userAccess.ts` 오프닝 경로 · `consentChallenge` 재개 경로 — grep 전수)가 **명시로** 넘긴다(자가 = `undefined`) ⓑ 호출 모양을 고정한 정규식(`shared/__tests__/fictionalBank.test.ts:140`)은 5인자 형태로 갱신(완화 아님) ⓒ ⭐ **U1(T194-b)은 6번째 위치 인자를 더하지 않는다** — 그 PR에서 꼬리 인자(`fictionalBankName` · `challengeId` · `personaCard`)를 객체 1개로 묶는다(위치 인자 순서 실수 방지 · G564 소스 스캔 단순화) |
+
+#### 83.13.4 구현자 처방(이 순서대로)
+
+1. parcel 고급 변형 tactics에서 원본 *"링크 클릭 유도"* 제거 + `PARCEL_ADVANCED_INSTALL_TACTIC`만 설치 링크를 지시(① ⓑ).
+2. G584: `sessionReachableLandingIds` 소스 함수 + `recordMockScreenEvent` 거부 1줄 + 기록 층 역검증.
+3. G585: G159 입력을 (시나리오 × 변형) 단위로 · 헬퍼 · 처방 문구 · 기존 역검증 바이트 무변경 · 신규 역검증 1건 · 테스트는 소스 함수 import.
+4. 2와 3은 **같은 커밋**(어느 하나만 있으면 게이트를 잃는다 — 83.13.1 마지막 행).
+5. 이탈 ②~⑤는 위 조건대로 유지 · 바이트 기대값 갱신 커밋에 사유.
+6. 완료 보고에 *"G159를 고쳤다 / 오분류가 불가능해졌다"* 금지(§35.0 5) — 쓸 문장: *"G159 단위를 (시나리오 × 변형)으로 바꾸고, 세션 밖 랜딩 기록을 거부하는 게이트를 함께 넣었다. 한 변형 안 다중 랜딩은 여전히 §35.6 1행 대상이다."*
+
+| 신규 번호 | 내용 |
+|---|---|
+| G584 · G585 | 위 표 |
+| OQ-A148 | T194-c 착수 전 — 통화 중 두 랜딩(이체 · 설치)의 앵커 충돌 가능성 판정 → (b) 선행 여부(architect) · 필요 시 UX 금지 ② 재확인(ux-design) |
+
+> **번호**: §83.13 · G584~G585 · OQ-A148 — §83 직후 값. ⛔ 예약 아님.
