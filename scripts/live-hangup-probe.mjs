@@ -11,7 +11,7 @@
 // ⛔ API 키는 functions/.secret.local 의 `GEMINI_API_KEY=`(첫 값)를 메모리에서만 쓴다 — 어떤 출력·파일에도 쓰지 않는다.
 //
 // 사용법(저장소 루트): npm --prefix functions run build 뒤
-//   node scripts/live-hangup-probe.mjs <accept|reject|silence> <n> [--out <dir>]
+//   node scripts/live-hangup-probe.mjs <accept|reject|silence|idle> <n> --out <저장소 밖 dir>
 //     accept  — 목적 달성 대본(ⓐ) · 첫 end_call에 accepted(재호출은 already_accepted) → H1 · H2 · H4 · H5 · H6ⓐ
 //     reject  — 홀수 회차 목적 달성 대본 · 짝수 회차 거절 반복 대본(ⓑ) · end_call마다 too_early → H1 · H3 · H4 · H6ⓐⓑ
 //     silence — 침묵 · 소강 대본(ⓒ) · end_call이 오면 too_early → H6ⓒ(호출 0이 정상)
@@ -84,7 +84,7 @@ const GOAL_FULFILLMENT_USER_TURN = SCRIPT_GOAL.indexOf(GOAL_FULFILLMENT_LINE) + 
 export function maskSecrets(text) {
   return String(text)
     .replace(/AIza[0-9A-Za-z_\-]{20,}/g, "AIza***")
-    .replace(/([?&]key=)[^&\s"']+/gi, "$1***");
+    .replace(/([?&](?:key|access_token)=)[^&\s"']+/gi, "$1***");
 }
 const errText = (e, max = 300) => maskSecrets(String(e?.message ?? e)).slice(0, max);
 /** JSON 직렬화 결과도 한 번 더 가린다(대사 · 이벤트에 섞여 들어온 경우까지). */
