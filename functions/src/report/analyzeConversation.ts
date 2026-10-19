@@ -298,6 +298,8 @@ function isHandoffPromiseReply(scammerText: string, replyText: string): boolean 
  * ⚠️ 한계(투명 고지): 문구를 **바꿔 말하면** 여전히 못 찾는다 — 그 경우는 "모르는 것"이지 "없는 것"이
  * 아니다(표시 문면은 AC-083 (b) 소관). 정상 대사를 수법으로 잘못 잡지 않도록 범주 키워드 사전은
  * 넣지 않았다(회귀 테스트가 중립 대사 × 전 시나리오 0건을 고정한다).
+ * ⚠️ 예외(PR-A3): 요구 3종 한정 보정은 아래 `resolveDemandFallbackTactic` 판정표뿐이다 — 문구 키가 빈 경우만, 이미 속은 순간의
+ * **라벨에만**, 세션 목록 안 라벨만 쓴다(같은 중립 대사 × 전 시나리오에서 그 표도 0건 — `demandFallbackLabel.test.ts`).
  */
 type TacticMatcher = { tactic: string; phraseKeys: string[] };
 
@@ -351,6 +353,108 @@ function findMatchedTactics(scammerText: string, matchers: readonly TacticMatche
     .map((matcher) => matcher.tactic);
 }
 
+/**
+ * ⭐ PR-A3(2026-10-20, 감사 B 매트릭스 1일차 #3 · 2일차 #4) — **속은 순간 라벨 보정 표.** 문구 키 추정(위
+ * `findMatchedTactics`)은 실 LLM이 인용구를 바꿔 말하면 비어, 속은 순간 라벨이 폴백 `"약화된 사기 수법"`으로
+ * 쏠렸다(실측: 폴백 1일차 47/58 · 2일차 25/53 · Live 11/20). 문구 키가 **비었을 때만**, 바로 앞 사기범 대사가 아래
+ * **요구 어형**을 담으면 그 세션 `weakenedTactics` 안의 같은 범주 라벨로 부른다.
+ *
+ * | 순서 | 요구 어형(같은 문장 안) | 범주 | 같은 범주 라벨이 여럿이면 |
+ * |---|---|---|---|
+ * | 1 | 앱·어플·링크·프로그램 + 설치/깔아 + 시키는 어미 | link_or_install | 목록 첫 라벨 |
+ * | 2 | 링크·여기 + 눌러/클릭/접속/들어가 + 시키는 어미 | link_or_install | 목록 첫 라벨 |
+ * | 3 | 예금·자산·잔액·잔고 + 말씀/알려/불러 + 시키는 어미 | personal_info_demand | `자산`·`은행`이 든 라벨 우선 |
+ * | 4 | 카드번호·유효기간·CVC·보안코드 + 말씀/알려/불러/적어/입력 + 시키는 어미 | personal_info_demand | `카드`가 든 라벨 우선 |
+ * | 5 | 성함·이름·생년월일·주민번호·비밀번호·비번·인증번호·신분증·공인인증서·계좌번호 + **정보 제공 동사 필수**(말씀해/알려/불러/적어/찍어/찍어서 보내/입력해/전송해/"정보를·번호를") + 시키는 어미 | personal_info_demand | 목록 첫 라벨 |
+ * | (5 주) | 리뷰 Major 1 — 동사가 옵션이면 "이 계좌번호로 입금해 주세요"·"제 이름으로 보내 주세요"를 6행(송금)보다 먼저 가로챘다. 단독 "보내"는 6행 몫이다 | — | — |
+ * | 6 | 돈 맥락(금액 "N원" · 계좌 · 은행 · 금액 · 돈 · 계좌번호꼴) + 보내/입금해/이체해/송금해/빌려/옮겨/넣어/결제해 + 시키는 어미(또는 "보낼 수 있") | payment_demand | 목록 첫 라벨 |
+ * | 7 | 금액 "N원" 또는 계좌번호꼴 + 부탁(할게·해·드려·드릴게·드립니다·하면·좀) | payment_demand | 목록 첫 라벨 |
+ * | 8 | 대사 전체가 `HANDOFF_DEMAND`(인출 · 전달 · 보관 · 코인 요구 어형 — T191 J-2 그대로 재사용) | payment_demand | 목록 첫 라벨 |
+ * | — | 위 어느 행도 아님 · 맞은 행의 범주 라벨이 세션 목록에 없음 | — | 종전 폴백 `"약화된 사기 수법"` 그대로 |
+ *
+ * - **시키는 어미** = `주세요·주십시오·주시겠·주시면·주셔야·주실 수·주시고·주면·주라·줘(줘서 제외)·줄 수·줄래·달라`
+ *   (+ 6행만 `두셔야·두세요·두십시오·둬·놓으셔야`). ⛔ `주셔서·주신·준`(감사 · 확인 어형)은 열지 않는다 — "입금해 주신
+ *   금액 확인했습니다" 같은 **확인 대사**가 요구로 잡히지 않게.
+ * - 행은 위에서부터 보고, **맞았고 같은 범주 라벨이 세션 목록에 있는** 첫 행을 쓴다(맞았지만 라벨이 없으면 다음 행).
+ * - 후보 라벨에서 `부인 시 …`(부인 대응 수법) · `… 암시`(요구가 아니라 분위기)는 뺀다.
+ * ⛔ 범주는 **요구 3종**(링크·설치 / 개인정보 / 송금·인출)만이다 — 다급함 · 권위 · 정서처럼 어휘만으로는 가를 수 없는 범주는
+ * 표에 넣지 않았다(종전 "범주 키워드 사전은 넣지 않는다" 원칙의 이유 — 중립 대사 오탐 — 를 지키기 위한 범위 제한).
+ * ⛔ 판정(속았는가 · 순간 개수 · turnIndex)은 한 글자도 바뀌지 않는다 — 이미 속은 순간으로 정해진 짝의 **라벨만** 고친다.
+ * ⛔ 라벨은 **세션 목록 안의 저작 라벨**만 쓴다(새 라벨 발명 0). 고른 라벨은 AC-083 (a)(속은 순간이 부른 수법 = 수법 목록 안)를
+ * 지키도록 `tacticsUsed`에도 올린다.
+ */
+const SHORT_REQUEST_ENDING =
+  "(?:주(?:세요|십시오|시겠|시면|셔야|실\\s*수|시고|면|라)|줘(?!서)|줄\\s*(?:수|래)|달라)";
+const INSTALL_REQUEST = new RegExp(
+  `(?:앱|어플|링크|프로그램)[^.?!\\n]*?(?:설치|깔아)\\s*(?:좀\\s*)?(?:해\\s*)?(?:${SHORT_REQUEST_ENDING}|하셔야|하세요|하십시오|도와\\s*(?:주|줘))`,
+);
+const LINK_OPEN_REQUEST = new RegExp(
+  `(?:링크|여기)[^.?!\\n]{0,20}?(?:눌러|클릭해|접속해|들어가)\\s*(?:${SHORT_REQUEST_ENDING}|보세요|보십시오|하셔야)`,
+);
+const ASSET_INFO_REQUEST = new RegExp(
+  `(?:예금|자산|잔액|잔고)[^.?!\\n]{0,25}?(?:말씀해|알려|불러)\\s*${SHORT_REQUEST_ENDING}`,
+);
+const CARD_INFO_REQUEST = new RegExp(
+  `(?:카드\\s*번호|유효\\s*기간|CVC|cvc|보안\\s*코드)[^.?!\\n]{0,25}?(?:말씀해|알려|불러|적어|입력해)\\s*${SHORT_REQUEST_ENDING}`,
+);
+const IDENTITY_INFO_REQUEST = new RegExp(
+  `(?:성함|이름|생년월일|주민(?:등록)?\\s*번호|비밀\\s*번호|비번|인증\\s*번호|신분증|공인\\s*인증서?|계좌\\s*번호)[^.?!\\n]{0,25}?(?:말씀해|알려|불러|적어|찍어서\\s*보내|찍어|입력해|전송해|(?:정보|번호)(?:를|을))\\s*${SHORT_REQUEST_ENDING}`,
+);
+const MONEY_CONTEXT = /\d[\d,]*\s*(?:만|천|백)?\s*원|계좌|은행|금액|돈|\d{2,6}-\d{2,6}-\d{2,}/;
+const TRANSFER_REQUEST = new RegExp(
+  `(?:보내|입금해|이체해|송금해|빌려|옮겨|넣어|결제해)\\s*(?:${SHORT_REQUEST_ENDING}|두셔야|두세요|두십시오|둬|놓으셔야)|보낼\\s*수\\s*있`,
+);
+const AMOUNT_OR_ACCOUNT = /\d[\d,]*\s*(?:만|천|백)?\s*원|\d{2,6}-\d{2,6}-\d{2,}/;
+const FAVOR_REQUEST = /부탁\s*(?:할게|해|드려|드릴게|드립니다|하면|좀)/;
+
+type DemandRow = {
+  category: TacticCategory;
+  matches: (sentences: readonly string[], whole: string) => boolean;
+  prefer?: RegExp;
+};
+
+const anySentence = (pattern: RegExp) => (sentences: readonly string[]) => sentences.some((s) => pattern.test(s));
+
+const DEMAND_FALLBACK_ROWS: readonly DemandRow[] = [
+  { category: "link_or_install", matches: anySentence(INSTALL_REQUEST) },
+  { category: "link_or_install", matches: anySentence(LINK_OPEN_REQUEST) },
+  { category: "personal_info_demand", matches: anySentence(ASSET_INFO_REQUEST), prefer: /자산|은행/ },
+  { category: "personal_info_demand", matches: anySentence(CARD_INFO_REQUEST), prefer: /카드/ },
+  { category: "personal_info_demand", matches: anySentence(IDENTITY_INFO_REQUEST) },
+  {
+    category: "payment_demand",
+    matches: (sentences) => sentences.some((s) => MONEY_CONTEXT.test(s) && TRANSFER_REQUEST.test(s)),
+  },
+  {
+    category: "payment_demand",
+    matches: (sentences) => sentences.some((s) => AMOUNT_OR_ACCOUNT.test(s) && FAVOR_REQUEST.test(s)),
+  },
+  { category: "payment_demand", matches: (_sentences, whole) => HANDOFF_DEMAND.test(whole.replace(ATM_WORDS, "")) },
+];
+
+/** 보정 후보에서 빼는 라벨 — 부인 대응 수법 · 분위기 암시(요구가 아니다). */
+const NON_DEMAND_LABEL = /부인\s*시|암시/;
+
+/**
+ * 문구 키가 빈 사기범 대사의 **요구 어형**으로 세션 목록 안의 라벨을 고른다(위 표). 없으면 `undefined`(= 종전 폴백).
+ * export 이유: 표 행 단위 단위 테스트(`__tests__/demandFallbackLabel.test.ts`).
+ */
+export function resolveDemandFallbackTactic(
+  scammerText: string,
+  weakenedTactics: readonly string[],
+): string | undefined {
+  const sentences = scammerText.split(/[.?!\n]+/).filter((s) => s.trim().length > 0);
+  const labels = weakenedTactics.map(extractTacticLabel).filter((label) => !NON_DEMAND_LABEL.test(label));
+  for (const row of DEMAND_FALLBACK_ROWS) {
+    if (!row.matches(sentences, scammerText)) continue;
+    const candidates = labels.filter((label) => resolveTacticCategory(label) === row.category);
+    if (candidates.length === 0) continue;
+    const preferred = row.prefer ? candidates.find((label) => row.prefer!.test(label)) : undefined;
+    return preferred ?? candidates[0];
+  }
+  return undefined;
+}
+
 export function analyzeConversation(
   messages: AnalysisMessage[],
   sessionCreatedAtMs: number,
@@ -389,7 +493,11 @@ export function analyzeConversation(
       isHandoffPromiseReply(msg.textMasked, userReply.textMasked);
     if (resisted || !complied) continue;
 
-    const tactic = matchedTactic ? extractTacticLabel(matchedTactic) : "약화된 사기 수법";
+    // PR-A3 — 문구 키가 비면 요구 어형 표(`resolveDemandFallbackTactic`)로 세션 목록 안의 라벨을 고른다. 고른 라벨은
+    // AC-083 (a)를 지키려고 수법 목록에도 올린다(라벨이 정해지는 것은 이미 속은 순간으로 판정된 짝뿐이다).
+    const fallbackTactic = matchedTactic ? undefined : resolveDemandFallbackTactic(msg.textMasked, weakenedTactics);
+    if (fallbackTactic) tacticLabelsUsed.add(fallbackTactic);
+    const tactic = matchedTactic ? extractTacticLabel(matchedTactic) : (fallbackTactic ?? "약화된 사기 수법");
     // AC-026 예시("15초 시점에 속았습니다")를 그대로 따르기 위해 turnIndex가 아니라 실제 경과
     // 시간(초)을 라벨로 쓴다 — MessageDoc.createdAt이 이미 존재하므로 정확한 초 단위 계산이
     // 가능하다(구현 판단, Mock 단계라 정밀 음성 타이밍 데이터는 없지만 메시지 write 시각은 실측값).

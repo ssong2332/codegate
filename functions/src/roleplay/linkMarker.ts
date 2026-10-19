@@ -34,6 +34,11 @@ const LINK_LABELS: Record<string, string> = {
 };
 const DEFAULT_LINK_LABEL = "확인하기";
 
+/** 마커 자리 표식(PR-A3) — 정리 직후 전부 지워져 반환 텍스트에 남지 않는다. 모델 출력에 나올 수 없는 제어 문자다. */
+const MARKER_GAP = "\u0000";
+/** 마커 바로 뒤에 붙으면 앞 공백을 지우는 조사(PR-A3 · 리뷰 Minor 2). 조사 뒤에 한글이 더 붙으면 조사가 아니다("이용" · "가입"). */
+const MARKER_PARTICLE = "(?:에서|에게|으로|에|로|을|를|이|가|은|는|의|도|와|과|만)(?![가-힣])";
+
 /**
  * 어시스턴트 완성 텍스트에서 `[[LINK:id]]` 마커를 찾아 attachments로 변환하고, 텍스트에서는
  * 마커 자체를 제거한다(사용자는 마커 원문을 보지 않는다). 마커가 없으면 원문을 그대로 반환한다
@@ -67,7 +72,7 @@ export function extractLinkMarker(
       markerCount += 1;
       const fakeLandingId =
         scenarioId === undefined ? markerLandingId : reachableLandingIdFor(scenarioId, markerLandingId, session);
-      if (fakeLandingId === undefined) return "";
+      if (fakeLandingId === undefined) return MARKER_GAP;
       const landingKind =
         scenarioId === undefined
           ? DEFAULT_MOCK_SCREEN_KIND
@@ -79,8 +84,15 @@ export function extractLinkMarker(
         harmless: true,
         ...(landingKind === DEFAULT_MOCK_SCREEN_KIND ? {} : { landingKind }),
       });
-      return "";
+      return MARKER_GAP;
     })
+    // PR-A3(감사 B 1일차 #6 · #10) — 마커가 있던 **자리**에서만 생기는 잔재 2종을 지운다(자리 표식 MARKER_GAP 기준이라
+    // 마커가 없던 곳의 백틱 · 띄어쓰기는 건드리지 않는다). ① 모델이 마커를 백틱으로 감쌌으면("`[[LINK:id]]`") 빈 백틱 "``"이
+    // 남는다 → 백틱째 지운다. ② 마커 바로 뒤에 조사가 붙어 있으면("링크 [[LINK:id]]에") "링크 에"가 남는다 → 마커 앞 공백을 지운다.
+    .replace(new RegExp(`\`${MARKER_GAP}\``, "g"), MARKER_GAP)
+    // 리뷰 Minor 2 — 마커 뒤가 **조사 목록**(뒤에 한글이 더 붙지 않는 꼴)일 때만이다. "아래 [[LINK:x]]확인"은 "아래 확인"으로 둔다.
+    .replace(new RegExp(`[ \\t]*${MARKER_GAP}(?=${MARKER_PARTICLE})`, "g"), "")
+    .replace(new RegExp(MARKER_GAP, "g"), "")
     // 마커 제거로 생긴 연속 공백·구두점 앞 공백만 정리한다(문장 구조 자체는 건드리지 않음).
     // 마커가 문장 끝("...확인해 주세요 [[LINK:id]].")에 있으면 제거 후 "확인해 주세요 ."처럼
     // 구두점 앞에 공백이 남는데, 이걸 마저 지운다.
