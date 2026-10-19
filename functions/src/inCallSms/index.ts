@@ -14,7 +14,7 @@ import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { SMS_DECLINE_ALREADY, SMS_DECLINE_TOO_EARLY } from "../scenarios/inCallSms";
 import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import type { SessionDoc } from "../shared/types";
-import { buildInCallSmsResponse, realtimeAnchorScammerTurn } from "./buildDoc";
+import { buildConfirmResultField, buildInCallSmsResponse, realtimeAnchorScammerTurn } from "./buildDoc";
 import {
   MAX_CLAIMED_TURNS,
   SMS_DECLINE_NOT_ALLOWED,
@@ -209,7 +209,13 @@ export const deliverInCallSms = onCall<
   }
   const placed = await isVerifyOfferPlaced(db, sessionId, session.scenarioId);
   const item = result.item;
-  return { ...buildInCallSmsResponse(item, { placed, fictionalBankName }), status: "delivered" };
+  // A-1 ⑦ — 선언 항목을 넘겨 결과 신호(`confirmResultInstruction`, 필수 계좌·링크 문자만)를 응답에 싣는다. 클라 주입은 A-2.
+  const declaredItem = declared.find((d) => d.smsId === item.smsId);
+  return {
+    ...buildInCallSmsResponse(item, { placed, fictionalBankName }),
+    ...buildConfirmResultField({ placed }, declaredItem),
+    status: "delivered",
+  };
 });
 
 export const recordInCallSmsEvent = onCall<

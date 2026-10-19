@@ -16,7 +16,7 @@ import { asksIdentityCheck } from "../roleplay/personaAuthority";
 import { isL3Procedural } from "../roleplay/l3Depth";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
-import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
+import { sessionDeclaredSmsPurposes, sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import {
   buildLiveToolDeclarations,
@@ -143,6 +143,8 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       difficultyLevel: input.difficultyLevel,
       // ⭐ 리뷰 M2 — 도구 선언과 같은 단일 술어(변형 기준 · 변형 부재 = 종전 `hasInCallSms`).
       inCallSmsEnabled: sessionDeclaresInCallSms(input.scenarioId, input.flowVariantId),
+      // A-1 ② — 문자 예외 항목의 예시를 선언 목적만으로(호출부 3곳 같은 술어 · G63).
+      inCallSmsPurposes: sessionDeclaredSmsPurposes(input.scenarioId, input.flowVariantId),
       verifyInterceptEnabled:
         hasVerifyIntercept(input.scenarioId) && input.difficultyLevel === "advanced",
       l3Procedural: isL3Procedural(input.scenarioId),
