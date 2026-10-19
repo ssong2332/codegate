@@ -31,7 +31,7 @@ import { derivedExitBlock } from "./exitBlockLabelRules";
 import { REAL_WORLD_APP_NAMES, REAL_WORLD_HOTLINES } from "./harmlessnessPatterns";
 import { SESSION_MARKER_WORDS } from "./sessionMarkerWords";
 import { l3DepthMode } from "../../roleplay/l3Depth";
-import { buildSystemPrompt } from "../../roleplay/promptAssembly";
+import { buildSystemPrompt, REAL_COMPANY_PROMPT_SENTENCE } from "../../roleplay/promptAssembly";
 import { resolveTacticCategory } from "../../report/tacticCategory";
 import { DIFFICULTY_LEVELS, type DifficultyLevel } from "../../shared/difficulty";
 import * as crypto from "node:crypto";
@@ -655,16 +655,13 @@ test("[T194-a §84.4.2] parcel 고급 변형 — authored · 3단계 이상 · �
  * 화자 성별 누수(리뷰 C1)를 못 잡았다). 측정 옵션 = sendMessage 텍스트 경로와 같은 옵션(난이도 · 문자 술어 · L3 · 신원 확인 · 화자 성별 =
  * base는 표 값 `speakerGenderFor` / 현재는 세션 해석 `resolveSessionSpeakerGender`). 측정 스크립트: base lib에 같은 옵션으로 조립.
  */
-/**
- * 2026-10-20 재측정(Architecture §85 — 실존 회사명 금지 1문장 94자를 promptAssembly "페이로드는 가상값만" 줄에 덧붙임): 새 값에서 그 1문장을 걷어 내면 옛 값과 바이트까지 같다(스크립트 실측).
- */
 const BASE_FLAGGED_ASSEMBLY: readonly { scenarioId: string; level: DifficultyLevel; variantId: string; sha256: string; length: number }[] = [
-  { scenarioId: "messenger-child-impersonation-kakao", level: "beginner", variantId: "fv-34v5", sha256: "3d8dcbab3069213a1d8a428b3dbbeb83b0d6c48c8ccb46d474291edfe02ebed6", length: 6719 },
-  { scenarioId: "messenger-child-impersonation-kakao", level: "intermediate", variantId: "fv-tpr3", sha256: "c8dd252325681729a03549cd6bb7df41d360cce714100eeea05b66142b8e6080", length: 5954 },
-  { scenarioId: "messenger-child-impersonation-kakao", level: "advanced", variantId: "fv-tdgg", sha256: "75d6e3b81fe4707a782ae5afa50b61407c65b76c1f90164d16ba943f267ff93b", length: 7417 },
-  { scenarioId: "messenger-subsidy-smishing-sms", level: "beginner", variantId: "fv-rizf", sha256: "eaf874e0619785bdba89a5a37712c91c0b4dd1915c6e367ebf7ee4c1b0309e7e", length: 7359 },
-  { scenarioId: "messenger-subsidy-smishing-sms", level: "intermediate", variantId: "fv-afbr", sha256: "353b2f4bf3fb0143d7757aa1957dfc61921e1a1c5900e821759fba6fc44614a3", length: 6620 },
-  { scenarioId: "messenger-subsidy-smishing-sms", level: "advanced", variantId: "fv-hu8w", sha256: "61939a7ff0a775925ae17d2e1495782db44fc9a9f6d801f7290cb9b11fb412ca", length: 8537 },
+  { scenarioId: "messenger-child-impersonation-kakao", level: "beginner", variantId: "fv-34v5", sha256: "5d2ab0397bf0b43db0ba6dfdea2bea47ce420f2f038ef6f78881fce612fa2ebf", length: 6625 },
+  { scenarioId: "messenger-child-impersonation-kakao", level: "intermediate", variantId: "fv-tpr3", sha256: "43addc55a5e13b7074231e776ae80ea12bc07fa2e846f2e381db68b76ea33492", length: 5860 },
+  { scenarioId: "messenger-child-impersonation-kakao", level: "advanced", variantId: "fv-tdgg", sha256: "81f2ea3e212c1384f3bf077d43fb00c2bc547ff6a6c23c8f8c206d1d92c97436", length: 7323 },
+  { scenarioId: "messenger-subsidy-smishing-sms", level: "beginner", variantId: "fv-rizf", sha256: "a2e606c25ff5bfd88c95a1424c002a5e010cd149a30245e33e5528f35965e434", length: 7265 },
+  { scenarioId: "messenger-subsidy-smishing-sms", level: "intermediate", variantId: "fv-afbr", sha256: "67ab2d736788293f0978cc034b53ac74c85bd1d3397a607d70e5f0394f60fdad", length: 6526 },
+  { scenarioId: "messenger-subsidy-smishing-sms", level: "advanced", variantId: "fv-hu8w", sha256: "b29e4c651cda6960e4f9d5a28ab3f61165c6a97da68f78d6d34398e1d8e4de48", length: 8443 },
 ];
 
 test("[T194-a §84.13.3 ② · 리뷰 M2] 플래그만 더한 child-kakao · subsidy 6벌 — 조립 바이트 = 변경 전 실측값 · child-kakao [화자] 블록 0 · Gemini 음성 풀 불변", (t) => {
@@ -683,9 +680,13 @@ test("[T194-a §84.13.3 ② · 리뷰 M2] 플래그만 더한 child-kakao · sub
       identityCheckAllowed: asksIdentityCheck(row.scenarioId),
       speakerGender,
     });
-    const hash = crypto.createHash("sha256").update(assembled).digest("hex");
-    lines.push(`${row.variantId} ${hash.slice(0, 12)}(${assembled.length}자) = 기준 ${row.sha256.slice(0, 12)}(${row.length}자)`);
-    assert.equal(assembled.length, row.length, `${row.variantId}: 길이가 변경 전과 다르다`);
+    // §85(리뷰 M1) — 실존 회사명 금지 1문장은 의도된 변경이다. 정확히 1회 있고, 그것을 걷어 낸 바이트가 변경 전 실측값과 같아야 한다.
+    const companySentence = ` ${REAL_COMPANY_PROMPT_SENTENCE}`;
+    assert.equal(assembled.split(companySentence).length - 1, 1, `${row.variantId}: §85 금지 1문장이 정확히 1회 있어야 한다`);
+    const strippedAssembled = assembled.replace(companySentence, "");
+    const hash = crypto.createHash("sha256").update(strippedAssembled).digest("hex");
+    lines.push(`${row.variantId} ${hash.slice(0, 12)}(${strippedAssembled.length}자) = 기준 ${row.sha256.slice(0, 12)}(${row.length}자)`);
+    assert.equal(strippedAssembled.length, row.length, `${row.variantId}: 길이가 변경 전과 다르다`);
     assert.equal(hash, row.sha256, `${row.variantId}: 조립 바이트가 변경 전과 다르다`);
     // 화자 성별 = 변경 전 표 값(child-kakao = notApplicable → undefined → [화자] 블록 0).
     assert.equal(speakerGender, speakerGenderFor(row.scenarioId), `${row.variantId}: 화자 성별이 표 값과 다르다`);
