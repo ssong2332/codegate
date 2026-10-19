@@ -188,15 +188,15 @@ function* allInputs(relay: ScammerHangupInput["relay"]): Generator<ScammerHangup
         for (const verifyEnabled of bools)
           for (const transferPlaced of bools)
             for (const transferReachable of bools)
-            for (const userTurns of [0, 2, 3, 9])
-              for (const pendingInstruction of bools)
-                for (const smsAwaitingUser of bools)
-                  for (const limitReached of bools)
-                    for (const alreadyAccepted of bools)
-                      yield {
-                        status, channel, isMockTurn, verifyEnabled, transferPlaced, transferReachable, userTurns,
-                        pendingInstruction, smsAwaitingUser, limitReached, alreadyAccepted, relay,
-                      };
+              for (const userTurns of [0, 2, 3, 9])
+                for (const pendingInstruction of bools)
+                  for (const smsAwaitingUser of bools)
+                    for (const limitReached of bools)
+                      for (const alreadyAccepted of bools)
+                        yield {
+                          status, channel, isMockTurn, verifyEnabled, transferPlaced, transferReachable, userTurns,
+                          pendingInstruction, smsAwaitingUser, limitReached, alreadyAccepted, relay,
+                        };
 }
 
 const INPUT_COMBOS = 3 * 3 * 2 * 2 * 2 * 2 * 4 * 2 * 2 * 2 * 2;

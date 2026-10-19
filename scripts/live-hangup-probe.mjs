@@ -18,7 +18,8 @@
 //     idle    — (T192 C6 · §79.20 (8) H7) 목적 달성 대본 + 끝에 대기 발화 2개(공회전) · 첫 end_call에 accepted →
 //               대기 구간 안 end_call(goal) 호출률 · reason 분포(관측 — 하드 아님)
 // ⭐ T192 C6 재실측 준비(§79.20 (8)): 목적 달성 대본을 앞당기고 길게 했다(옛 대본은 승인 경로 호출 4/10 — 대본 끝에 닿아
-// 호출이 없던 세션 6) · H2 오디오 판정은 `audioAfterResponseSec`(응답 뒤 오디오만)로 한다(옛 판정은 턴 전체 — 호출 전 발화 포함).
+// 호출이 없던 세션 6) · H2 오디오 판정은 **그 턴 전체** `audioSec ≤ 6초`(정본 §79.4 H2 — 호출 전 발화 포함)로 하고, 집계는
+// accept 모드만이다. `audioAfterResponseSec`(응답 뒤 오디오만)는 판정에 쓰지 않는 참고값이다(summary `audioAfterResponseSecReference`).
 // 출력: <out>/hangup-<mode>-<i>-<ts>.json(세션별 원시) + <out>/hangup-<mode>-summary-<ts>.json
 //
 // 한계(보고서 기재): 사용자 발화는 오디오가 아니라 텍스트 턴이다 · 콜러블은 모사(서버 판정 0 — 하한 · 문자 대기 미적용) ·
