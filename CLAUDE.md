@@ -99,6 +99,7 @@ Record commands verbatim after the first success. Reuse without modification; if
 | Deploy (Firestore indexes) | `firebase deploy --only firestore:indexes` | §66 긴급 복구 때 성공(인수인계 기록). 라이브 인덱스 확인은 `firebase firestore:indexes` — 2026-09-30 선언 3 = 라이브 3 |
 | Deploy (hosting) | `firebase deploy --only hosting --project voicefishing-ff47f` | 2026-10-17 — `Deploy complete!`(T185, 브랜치 `fix/T185-anonymous-route-exit` = main `086287a` + 수정). ⚠️ 직전에 `npm run build`(운영 값 = `.env.production`) → `npm run verify:build` 통과 산출물(`out/`)이어야 한다. 복사한 env 파일은 배포 뒤 지운다(아래 ⛔ 참고) · 2026-10-17 — `release complete` · `Deploy complete!`(T186, main `a9cca63`). ⛔ **메인 체크아웃의 `.env`는 에뮬레이터용(`demo-test`)이다 — 복사하지 말 것.** 운영 빌드는 메인 체크아웃의 **`.env.production`만** 워크트리로 복사하고, `.next`·`out`을 지운 뒤 빌드한다(같은 날 `.env`로 빌드·배포해 라이브 로그인이 약 40분 장애 — 상위 세션 보고). 배포 직전 `grep -rho 'projectId:"[^"]*"' out/_next/static \| sort -u` = `voicefishing-ff47f` 하나 · `grep -rl demo-test out \| wc -l` = 0 확인. 라이브 확인은 `?nocache=1`(HTML `max-age=3600`) |
 | Runtime check (live) | `firebase functions:list` | 2026-09-30 — 26개, Runtime 열로 `nodejs22` 확인 |
+| Smoke (에뮬레이터 · 챌린지 받는 분 정보 §88) | `npm --prefix functions run build` 후 에뮬레이터(auth·firestore·functions · `demo-test`)가 떠 있는 상태에서 `node scripts/emulator-persona-challenge-smoke.mjs --out <파일>` (`--scenario <id>`로 대상 4종 중 선택, 기본 `card-company-impersonation`) | 2026-10-20 — **18/18 PASS × 4 시나리오**(card-company · institutional · loan-refinance · courier-customs, main `6156c95`, LLM 키 없음 = Mock). ⚠️ 에뮬레이터 포트 9099/8080/5001 고정 |
 
 ## Report Template
 ```
