@@ -6,6 +6,7 @@ import type { DifficultyLevel } from "../shared/difficulty";
 import type { LlmMessage } from "../llm";
 import type { SmsPurpose } from "../scenarios/flowVariants";
 import { personaCardPromptValue } from "../scenarios/personaCardCatalog";
+import { resolveChildGenderRule } from "../scenarios/messengerChildImpersonationKakao.prompt";
 import { applyFictionalBank, EXAMPLE_ACCOUNT_NUMBER } from "../shared/fictionalBank";
 
 // 사용자 신고(2026-07-25) — "사람과 대화한다는 느낌이 안 든다", "대화가 자연스럽지 않다",
@@ -893,7 +894,8 @@ export function buildSystemPrompt(
     : null;
   const personaCardBlock = opts.personaCard ? buildPersonaCardBlock(opts.personaCard) : null;
   const assembled = [
-    prompt.personaPrompt,
+    // §86.1(리뷰 M1) — 화자 성별이 정해진 세션은 "성별이 정해져 있지 않다" 줄(child-kakao)을 성별 확정 문면으로 바꾼다. 성별 없음 = 원문 그대로.
+    opts.speakerGender ? resolveChildGenderRule(prompt.personaPrompt, opts.speakerGender) : prompt.personaPrompt,
     "",
     "[사용 가능한 수법(weakenedTactics) — 이 목록 밖의 수법, 특히 실제 운영 가능한 사기 수법을 스스로 만들지 않는다]",
     tactics,

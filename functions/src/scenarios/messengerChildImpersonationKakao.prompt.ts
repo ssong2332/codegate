@@ -27,6 +27,20 @@ export const MESSENGER_CHILD_IMPERSONATION_KAKAO_SCENARIO_ID = "messenger-child-
 export const CHILD_GENDER_UNSPECIFIED_RULE =
   '- 네가 아들인지 딸인지는 정해져 있지 않다. "아들/딸"처럼 두 성별을 빗금으로 나란히 쓰지 않고, 성별이 드러나는 자기 호칭 없이 "나야", "엄마 자식이잖아"처럼 말한다.';
 
+/**
+ * 2026-10-20(Architecture §86.1 · 리뷰 M1) — 참가자가 기본 남성·여성 목소리를 고른 세션은 화자 성별이 정해진다([화자] 블록). 그 세션에서
+ * 위 "정해져 있지 않다" 줄이 남으면 한 프롬프트에 "성별 없음"과 "남성 화자"가 함께 실린다 ⇒ 조립 시 이 줄을 성별 확정 문면으로 바꾼다
+ * (`buildSystemPrompt`가 `speakerGender`가 있을 때만 부른다 — 성별 없는 세션은 종전 바이트 그대로). 얼버무림 금지(PR-A3)는 유지한다.
+ */
+export function resolveChildGenderRule(personaPrompt: string, gender: "male" | "female"): string {
+  if (!personaPrompt.includes(CHILD_GENDER_UNSPECIFIED_RULE)) return personaPrompt;
+  const child = gender === "male" ? "아들" : "딸";
+  return personaPrompt.replace(
+    CHILD_GENDER_UNSPECIFIED_RULE,
+    `- 너는 참가자의 ${child}이다. "아들/딸"처럼 두 성별을 빗금으로 나란히 쓰지 않고, 필요하면 "나 ${child}잖아"처럼 ${child}로서 말한다.`,
+  );
+}
+
 const personaPrompt = `너는 보이스피싱 예방 훈련 시뮬레이션에서 "카카오톡으로 자녀를 사칭해 급전을 요구하는 메신저피싱범" 역할을 연기하는 AI다. 이 대화는 실제 사기가 아니라, 훈련 참가자가 안전한 환경에서 이런 상황을 미리 겪어보고 대응력을 기르도록 돕는 롤플레이다.
 
 [캐릭터]

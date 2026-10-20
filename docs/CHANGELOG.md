@@ -4,6 +4,13 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-20 추가분, 브랜치 `fix/messenger-call-voice-channel`)**: 아직 main에 병합되지 않았고 배포 0회.
+
+### Fixed
+- **메신저 → 통화(Architecture §86 · DECISIONS #197)**:
+  - 통화용 목소리 선택에서 고른 기본 남성·여성 목소리가 실시간 통화 음성과 사기범 말투(아들·딸)에 반영된다. 예전에는 실시간 통화에서 약 50% 확률로 반대 성별 음성이 나왔다.
+  - 통화에서 메시지로 돌아왔을 때 통화 중 대화가 메시지 말풍선으로 보이지 않고 "📞 통화" 한 줄로 접힌다(통화 내용은 리포트에서 본다).
+
 > ⚠️ **이 블록(2026-10-20 추가분, 브랜치 `feat/real-company-names`)**: 아직 main에 병합되지 않았고 배포 0회.
 
 ### Added

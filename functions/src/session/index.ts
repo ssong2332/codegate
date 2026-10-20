@@ -234,7 +234,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       scenarioId,
       resolvedDifficultyLevel,
       variantAssignment.flowVariantId,
-      { fictionalBankName, challengeId: undefined, personaCard: personaCard?.items },
+      { fictionalBankName, challengeId: undefined, personaCard: personaCard?.items, voiceSelectionSource },
     );
 
     const now = Timestamp.now();

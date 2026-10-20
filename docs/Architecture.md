@@ -21475,3 +21475,39 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 | **OQ-A157** | 조사 보정 범위 — 이요·은요·이고요·이라도는 리뷰 반영으로 넣었다. "이니까"·"이지만" 같은 그 밖의 활용형은 고치지 않는다("택배사이니까"). 실측 빈도를 보고 넓힐지 판단 |
 
 - 배포는 하지 않았다.
+
+## 86. (Bug fix — 2026-10-20 · 브랜치 `fix/messenger-call-voice-channel` · 사용자 실기 신고 — 라이브 e9a4967 · messenger-child-impersonation-kakao) **메신저 → 통화: ① 고른 기본 목소리 성별이 통화 음성에 안 쓰임 ② 통화 발화가 메신저 대화창에 말풍선으로 남음** — implementer 기록
+
+> **번호**: §86 · G622~G623 · DECISIONS #197 — main `502c2f9` 최대 §85 · G621 · OQ-A159 · #196 다음. ⛔ 예약 아님.
+
+### 86.1 ① 목소리 성별
+
+| 항목 | 내용 |
+|---|---|
+| 증상 | 통화용 목소리 선택(UX-025)에서 "남성 음성"을 골랐는데 메신저 → 통화 전환 뒤 여성 음성 |
+| 원인 | 운영 `ELEVENLABS_AGENT_IDS` 비어 있음(오케스트레이터 확인) ⇒ 통화는 Gemini Live. Live 음성은 `pickGeminiVoiceName(scenarioId, sessionId, speakerGender)`(`realtime/geminiProvider.ts`)로 고르는데 child-kakao는 표가 `notApplicable`이고 `resolveSessionSpeakerGender`도 `undefined` ⇒ {Aoede(여) · Puck(남)} 풀에서 **sessionId 해시**로 골랐다(약 50%). 선택값(`voiceSelectionSource=fallback_male`)은 세션 문서에 있었지만 이 경로가 읽지 않았다. `FALLBACK_VOICE_MALE_ID`는 ElevenLabs·폴백 TTS(`session.voiceId`)에서만 쓰인다 |
+| 수정 | `resolveSessionSpeakerGender`가 표 값 다음으로 **`voiceSelectionSource` = fallback_male/female이면 그 성별**을 돌려준다(`realtime/scenarioVoice.ts` `voiceSelectionGender`). 단일 원천이라 Gemini 음성 풀과 프롬프트 [화자] 블록(텍스트 sendMessage · 오프닝 · Live)이 함께 따라간다 — 남성 음성인데 "딸"이라 말하지 않는다. 오프닝은 세션 문서 write 전이라 `OpeningSessionContext.voiceSelectionSource`(createSession 요청값)로 받는다 |
+| 폴백 TTS | 텍스트 폴백 통화(`roleplay/index.ts` synthesize)는 `session.voiceId`(createSession이 FALLBACK_VOICE_MALE_ID/FEMALE_ID로 해석)를 쓴다 ⇒ 같은 선택을 따른다(설정값이 있을 때 — 없으면 종전대로 generic 강등, 이번 범위 밖) |
+| 회귀 0 | 표 값이 있는 시나리오(표 우선) · 클론(recorded · reused) · 선택 부재 · 챌린지(`voiceSelectionSource: undefined`)는 종전 바이트 그대로. §84.4.6 "child-kakao [화자] 블록 0"은 **기본 목소리 세션에서만** 예외(목소리가 정해졌으니 페르소나 성별도 맞춘다 — 오케스트레이터 승인) |
+
+| 리뷰 M1 | child-kakao 페르소나의 "아들인지 딸인지는 정해져 있지 않다" 줄(`CHILD_GENDER_UNSPECIFIED_RULE`, PR-A3)이 [화자] 블록과 충돌한다 ⇒ 화자 성별이 있는 세션에서만 조립 시 "너는 참가자의 아들/딸이다"로 바꾼다(`resolveChildGenderRule` — `buildSystemPrompt`). 성별 없는 세션은 원문 바이트 그대로(T194-a 게이트 무변경). 얼버무림 금지는 유지 |
+| 리뷰 M2 | 목소리 선택 성별은 **이 세션에 통화 단계가 있을 때만**(`resolveSessionEscalation`) — createSession이 필드를 검증하지 않으므로, parcel 초급·중급에 클라가 직접 보내도 [화자] 블록이 생기지 않는다(AC-106 (f)) |
+| parcel 고급 | 목소리 선택이 있으면 변형 leg 성별(`flowVariants.ts`)보다 먼저 쓴다(음성과 말이 같은 성별) — 선택 없음 = leg 성별 종전 그대로 |
+
+### 86.2 ② 통화 발화가 메신저 대화창에 남음
+
+| 항목 | 내용 |
+|---|---|
+| 원인 | messages 컬렉션은 채널을 섞어 담는다(Live 전사 `channel:"voice"` — `realtime/submitTranscript.ts` · 폴백 통화 턴 — `roleplay/index.ts`). 메신저 화면(`src/app/session/messenger/page.tsx`)은 channel로 거르지 않고 전부 말풍선으로 그렸다 ⇒ 통화에서 "메시지로 전환"으로 돌아오면 통화 발화가 보낸 메시지처럼 보였다 |
+| 수정 | 연속한 통화 구간을 **시스템 줄 1개**("📞 통화 — 통화 내용은 리포트에서 볼 수 있어요")로 접는다(`src/lib/messenger/threadItems.ts` `foldCallSegments` — 오케스트레이터 승인 권장안 (a)). channel 부재 · messenger 문서는 말풍선 그대로 |
+| 예외(리뷰 Minor 3) | 링크 칩(attachments)이 붙은 통화 턴은 접지 않는다(누를 수 있던 링크 보존). 아이콘 📞은 `aria-hidden`으로 문구와 분리(Minor 2). channel 부재를 voice로 보지 않는 것은 메신저 화면이라서다(옛 메신저 세션 문서에 channel 없음 — 다시보기의 `?? "voice"`와 다른 이유, Minor 4) |
+| 회귀 확인 | 리포트 다시보기(`src/app/report/replay/page.tsx`)는 문서의 `channel`을 따로 읽어 "통화"/"메신저" 배지로 그린다 — 이번 변경과 무관(같은 컬렉션을 별도로 구독) |
+
+### 86.3 게이트
+
+| G | 내용 | 위치 |
+|---|---|---|
+| **G622** | ① 기본 남성/여성 선택 → 50개 세션 모두 Puck/Aoede(고치기 전 대조군은 두 성별 혼재) · 클론·부재·표 시나리오 회귀 0 · [화자] 블록 생성/미생성 · 배선 소스 스캔(createRealtimeCall · sendMessage · 오프닝 · 세션 문서) | `functions/src/realtime/__tests__/voiceSelectionGender.test.ts` |
+| **G623** | ② 통화 구간 접기(연속 · 분리 · 끝 구간) · channel 부재/messenger 무변경 · 메신저 화면 배선(channel 읽기 · `foldCallSegments` 렌더 · 옛 직접 렌더 0) | `src/lib/messenger/threadItems.test.ts` |
+
+- 배포는 하지 않았다.
