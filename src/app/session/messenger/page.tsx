@@ -17,7 +17,8 @@
 // 이동)를 배선한다(§13.2/13.3, P-18, AC-034/036/039).
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { collection, doc, getDoc, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, orderBy, query, type Timestamp } from "firebase/firestore";
+import { endsRun, formatChatTime, isUnreadByPeer, startsPeerRun } from "@/lib/messenger/chatPresentation";
 import { db } from "@/lib/firebase";
 import {
   getPendingSessionId,
@@ -46,7 +47,7 @@ import {
   serializeStoredDeviceSkin,
   type DeviceSkin,
 } from "@/lib/phone/deviceSkin";
-import { messengerSmsTokensFor, smsThreadTokensFor } from "@/lib/phone/skinTokens";
+import { MESSENGER_CHAT_TOKENS, messengerSmsTokensFor, smsThreadTokensFor } from "@/lib/phone/skinTokens";
 import PhoneIcon from "@/components/PhoneIcon";
 import EndTrainingButton from "@/components/EndTrainingButton";
 import MessengerFakeLanding from "@/components/MessengerFakeLanding";
@@ -72,16 +73,23 @@ type ChatMessage = {
   attachments?: MessengerAttachment[];
   // 2026-10-20 실기 신고 — 통화 구간(`"voice"`)은 말풍선이 아니라 통화 줄로 접는다(`lib/messenger/threadItems.ts`).
   channel?: string;
+  /** §89.5 ⓐ — 말풍선 옆 시각(문서 `createdAt`). 없으면 시각을 그리지 않는다. */
+  createdAtMs?: number;
 };
 
 // ⛔ T190-6b(UX D-100 · PRD AC-092 (d) · AC-031 읽기 고지) — 세션 중 스킨 전환 칩(`SKIN_CYCLE`/`SKIN_LABEL`)과
 // 감지 실패 안내 줄을 없앴다. 수동 선택은 **세션 전** `start-notice`의 화면 모양 줄(DeviceSkinPicker)이 맡는다.
 
-/** 카카오 표면 말풍선 색(정확 모사 — OQ-18 accepted risk · UX-022 v1.33 범위 밖이라 무변경). */
-function kakaoBubbleClass(role: "scammer" | "user") {
+/**
+ * §89.5 ⓐ(UX D-132 (5) ⓐ) — 메신저형(카카오 표면) 말풍선: 테두리 없음 · 상대 연속의 첫 말풍선만 왼쪽 위 꼬리 ·
+ * 내 연속의 첫 말풍선만 오른쪽 위 꼬리. 색 = `MESSENGER_CHAT_TOKENS`(추정값은 `ESTIMATED_DEVICE_COLORS` 한 곳).
+ */
+function kakaoBubbleStyle(role: "scammer" | "user", firstOfRun: boolean): React.CSSProperties {
+  const t = MESSENGER_CHAT_TOKENS;
+  const tail = firstOfRun ? 4 : 14;
   return role === "user"
-    ? "bg-[#FEE500] text-[#22303A]"
-    : "bg-white text-[#22303A] border border-[#E2DDD3]";
+    ? { backgroundColor: t.outgoingBg, color: t.outgoingText, borderRadius: `14px ${tail}px 14px 14px` }
+    : { backgroundColor: t.incomingBg, color: t.incomingText, borderRadius: `${tail}px 14px 14px 14px` };
 }
 
 /**
@@ -254,6 +262,7 @@ export default function MessengerSessionPage() {
             turnIndex: data.turnIndex as number,
             attachments: data.attachments as MessengerAttachment[] | undefined,
             channel: data.channel as string | undefined,
+            createdAtMs: (data.createdAt as Timestamp | undefined)?.toMillis?.(),
           };
         }),
       );
@@ -387,8 +396,8 @@ export default function MessengerSessionPage() {
           ? "선택된 메신저 시나리오 정보를 찾을 수 없습니다. 시나리오를 다시 선택해 주세요."
           : "채팅 정보를 불러오지 못했습니다. 다시 시도해 주세요.";
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-base text-danger">
           <span aria-hidden="true">⚠</span>
           <span>{message}</span>
         </p>
@@ -403,11 +412,11 @@ export default function MessengerSessionPage() {
 
   if (pageState !== "ready" || !scenario || startNotice === "pending") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-[#22303A]" role="status">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p className="flex items-center gap-2 text-lg text-ink" role="status">
           <span
             aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-transparent"
+            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
           />
           채팅을 불러오는 중입니다...
         </p>
@@ -420,6 +429,13 @@ export default function MessengerSessionPage() {
   const isSms = surface === "sms";
   const smsTokens = messengerSmsTokensFor(messengerSkin);
   const threadTokens = smsThreadTokensFor(messengerSkin);
+  // §89.5 ⓐ — 메신저형(카카오 표면) 색 · 표시 항목(통화 구간은 줄 1개로 접힌다).
+  const chatTokens = MESSENGER_CHAT_TOKENS;
+  const threadItems = foldCallSegments(messages);
+  const isSameRole = (i: number, role: "scammer" | "user") => {
+    const it = threadItems[i];
+    return it !== undefined && it.kind === "message" && it.message.role === role;
+  };
 
   // T187(§72.5 D2 · UX-022 `start-notice` N-1/N-3) — 세션 전 고지. 대화 목록·헤더를 그리지 않는다
   // (구독도 아직 0). ⛔ 아래 채팅 return 안에 고지·축약판을 두지 않는다(AC-088 (e) · G444 ③).
@@ -440,8 +456,8 @@ export default function MessengerSessionPage() {
   // ⛔ 대화 목록을 그리지 않는다(AC-088 (b)).
   if (startNotice === "ended-footer") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p className="text-base font-semibold text-[#22303A]" role="status">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p className="text-base font-semibold text-ink" role="status">
           대화가 종료되었습니다.
         </p>
         <div className="w-full max-w-xs">
@@ -457,12 +473,16 @@ export default function MessengerSessionPage() {
     // T190-6(UX-022 v1.33 (2)(5)) — 문자형 표면은 스킨이 **화면 문법**(바탕·헤더·말풍선 모양·입력 바)을 정하고 최대폭
     // 430px 가운데 정렬이다(바깥 #E5E7EA). 카카오형은 범위 밖이라 무변경.
     <div
-      className={isSms ? "flex min-h-screen flex-col" : "contents"}
-      style={isSms ? { backgroundColor: smsTokens.outerBg } : undefined}
+      className="flex min-h-screen flex-col"
+      style={{ backgroundColor: isSms ? smsTokens.outerBg : chatTokens.outerBg }}
     >
     <main
-      className={`font-phone flex min-h-screen flex-col ${isSms ? "mx-auto w-full max-w-[430px]" : "bg-[#FAF8F5]"}`}
-      style={isSms ? { backgroundColor: smsTokens.screenBg, fontFamily: "system-ui, sans-serif" } : undefined}
+      className="font-phone mx-auto flex min-h-screen w-full max-w-[430px] flex-col"
+      style={
+        isSms
+          ? { backgroundColor: smsTokens.screenBg, fontFamily: "system-ui, sans-serif" }
+          : { backgroundColor: chatTokens.screenBg }
+      }
     >
       {/* 상단 상시 고정 영역(스크롤 무관) — (문자형) 대화 헤더 · "전화로 확인" · "훈련 종료"(AC-006).
           T187(docs/Architecture.md §72 · PRD v1.18 AC-086 · UX D-81·D-82·M-13) — 이 화면은 세션
@@ -470,15 +490,25 @@ export default function MessengerSessionPage() {
           ⛔ 빈 자리를 채우지 않는다.
           ⛔ T190-6b(D-100 · AC-092 (d)) — 세션 중 스킨 전환 칩·감지 실패 안내 줄을 지웠다(세션 전 선택 줄이 대신한다). */}
       <div
-        className={`sticky top-0 z-20 flex flex-col border-b ${isSms ? "" : "border-[#E2DDD3] bg-white"}`}
-        style={isSms ? { backgroundColor: threadTokens.headerBg, borderColor: threadTokens.headerBorder } : undefined}
+        className={`sticky top-0 z-20 flex flex-col ${isSms ? "border-b" : ""}`}
+        style={
+          isSms
+            ? { backgroundColor: threadTokens.headerBg, borderColor: threadTokens.headerBorder }
+            : { backgroundColor: chatTokens.screenBg }
+        }
       >
-        <div className="flex min-h-[56px] flex-wrap items-center justify-between gap-2 px-4 py-2">
+        <div className="flex min-h-[56px] items-center justify-between gap-2 py-2 pl-4 pr-2">
           {/* ⭐ G449 — 왼쪽 래퍼는 비어도(카카오 표면) 남긴다. justify-between의 첫 자식으로 남아야
               오른쪽 그룹(전환 버튼·종료)이 오른쪽 끝에 그대로 있다.
               T190-6(UX-022 v1.33 (3) · D-89) — 문자형은 여기에 일반형 아바타 + 발신자(`callerLabel`)를 둔다.
               ⛔ 뒤로 셰브런은 그리지 않는다(돌아갈 대화 목록이 없다 — 동작 없는 버튼 금지). */}
-          <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            {/* §89.5 ⓐ — 메신저형 머리줄 = 방 이름(발신자). 뒤로 셰브런 · 검색 · 메뉴는 그리지 않는다(동작 없는 버튼 금지). */}
+            {!isSms && (
+              <span className="min-w-0 truncate text-[18px] font-bold" style={{ color: chatTokens.headerText }}>
+                {scenario.callerLabel}
+              </span>
+            )}
             {isSms && (
               <>
                 <span
@@ -494,7 +524,7 @@ export default function MessengerSessionPage() {
               </>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1">
             {/* 명시 전환 버튼(§13.3 — 1턴부터 상시, AC-034) — 에스컬레이션 가능 시나리오에서만.
                 T190-6(UX-022 v1.33 (3)) — 문자형은 수화기 단색 아이콘 + "전화로 확인"(📞 이모지 대체 · 48px).
                 카카오형은 무변경. */}
@@ -503,28 +533,19 @@ export default function MessengerSessionPage() {
                 type="button"
                 onClick={() => void handleRequestEscalation()}
                 disabled={escalating}
-                className={
-                  isSms
-                    ? "flex min-h-[48px] items-center gap-1.5 rounded-full px-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                    : "min-h-[40px] rounded-full bg-[#0E6B62] px-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#0B564F] disabled:cursor-not-allowed disabled:bg-[#F2EFE9] disabled:text-[#C9C2B6]"
-                }
-                style={isSms ? { color: threadTokens.link } : undefined}
+                className="flex min-h-[48px] items-center gap-1.5 rounded-full px-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                // §89.5 ⓐ — 메신저형도 수화기 단색 아이콘 + 글자(청록 알약 · 📞 이모지 대체). 글자는 어르신 이해를 위해 남긴다.
+                style={{ color: isSms ? threadTokens.link : chatTokens.headerIcon }}
               >
-                {isSms ? (
-                  <>
-                    <PhoneIcon name="accept-call" size={20} />
-                    전화로 확인
-                  </>
-                ) : (
-                  "📞 전화로 확인"
-                )}
+                <PhoneIcon name="accept-call" size={20} />
+                전화로 확인
               </button>
             )}
             <EndTrainingButton onClick={handleEndTraining} />
           </div>
         </div>
         {escalationError && (
-          <p role="alert" className="px-4 pb-2 text-xs leading-relaxed text-[#C6392F]">
+          <p role="alert" className="px-4 pb-2 text-xs leading-relaxed text-danger">
             {escalationError}
           </p>
         )}
@@ -532,15 +553,27 @@ export default function MessengerSessionPage() {
 
       {/* 대화 상단 맥락 — 발신자(사칭 대상)와 표면.
           ⚠️ T190-6 — UX-022 v1.33 (3)은 이 시스템 문구를 지우지 않는다(dubinsky OQ-U57 ② — User 결정 대상). 무변경. */}
-      <p className="px-4 pt-3 text-sm" style={{ color: isSms ? threadTokens.time : "#6B655C" }}>
-        {scenario.callerLabel}(으)로부터 {surface === "kakao" ? "카카오톡" : "문자"} 메시지가
-        도착했습니다.
-      </p>
+      {/* §89.5 ⓐ · 사용자 결정 ② — 메신저형은 첫 줄의 앱 이름 표기(종전 "…카카오톡 메시지가 도착했습니다")를 지우고 날짜 구분줄로 바꾼다.
+          문자형 문구는 그대로다. */}
+      {isSms ? (
+        <p className="px-4 pt-3 text-sm" style={{ color: threadTokens.time }}>
+          {scenario.callerLabel}(으)로부터 문자 메시지가 도착했습니다.
+        </p>
+      ) : (
+        <p className="flex justify-center pt-2">
+          <span
+            className="rounded-full px-3 py-0.5 text-[13px]"
+            style={{ backgroundColor: chatTokens.dateChipBg, color: chatTokens.time }}
+          >
+            오늘
+          </span>
+        </p>
+      )}
 
       {/* P-31 ⓔ(§48.5.1, AC-084 M-3/M-4) — 대화 영역 안의 비차단 고지 1줄. 말풍선으로 그리지
           않는다(P-31 (1) 금지). sticky — 한 번 뜨면 세션 동안 유지되고 재시도 버튼을 만들지 않는다. */}
       {dialogueDegraded && (
-        <p role="status" className="px-4 pt-2 text-sm leading-relaxed text-[#6B655C]">
+        <p role="status" className="px-4 pt-2 text-sm leading-relaxed" style={{ color: isSms ? threadTokens.time : chatTokens.time }}>
           {DIALOGUE_DEGRADED_NOTICE}
         </p>
       )}
@@ -551,15 +584,22 @@ export default function MessengerSessionPage() {
       <ul
         ref={messageListRef}
         tabIndex={-1}
-        className="flex flex-1 flex-col gap-3 px-4 py-4 outline-none"
+        className={`flex flex-1 flex-col px-4 py-4 outline-none ${isSms ? "gap-3" : "gap-1.5"}`}
         aria-live="polite"
       >
         {/* 2026-10-20 실기 신고 — 통화 전사(channel "voice")는 말풍선이 아니라 시스템 줄 1개로 접는다(누가 보낸 메시지가 아니다). */}
-        {foldCallSegments(messages).map((item) => {
+        {threadItems.map((item, index) => {
           if (item.kind === "call") {
             return (
-              <li key={item.id} className="flex justify-center">
-                <span className="rounded-full bg-[#F1EEE8] px-3 py-1 text-center text-sm text-[#6B655C]">
+              <li key={item.id} className="my-1.5 flex justify-center">
+                <span
+                  className="rounded-full px-3 py-1 text-center text-sm"
+                  style={
+                    isSms
+                      ? { backgroundColor: smsTokens.fieldBg, color: threadTokens.time }
+                      : { backgroundColor: chatTokens.systemLineBg, color: chatTokens.time }
+                  }
+                >
                   <span aria-hidden="true">{CALL_SEGMENT_ICON} </span>
                   {CALL_SEGMENT_LINE}
                 </span>
@@ -567,17 +607,38 @@ export default function MessengerSessionPage() {
             );
           }
           const message = item.message;
+          // §89.5 ⓐ — 메신저형 표시 규칙(`chatPresentation.ts` · G633): 이름 · 프로필은 상대 연속의 첫 말풍선만 ·
+          // 시각은 연속의 마지막만 · "1"은 상대가 아직 답하지 않은 내 메시지만.
+          const firstOfPeerRun = startsPeerRun(threadItems, index);
+          const firstOfRun = firstOfPeerRun || (message.role === "user" && index > 0 && !isSameRole(index - 1, "user"));
+          const timeLabel = !isSms && endsRun(threadItems, index) ? formatChatTime(message.createdAtMs) : "";
+          const unread = !isSms && isUnreadByPeer(threadItems, index);
           return (
           <li
             key={message.id}
-            className={`flex flex-col gap-1 ${message.role === "user" ? "items-end" : "items-start"}`}
+            className={`flex flex-col gap-1 ${message.role === "user" ? "items-end" : "items-start"} ${
+              !isSms && (firstOfPeerRun || firstOfRun) && index > 0 ? "mt-2" : ""
+            } ${!isSms && message.role === "scammer" && !firstOfPeerRun ? "pl-[42px]" : ""}`}
           >
             {isSms ? (
               <span className="sr-only">{message.role === "user" ? "나:" : `${scenario.callerLabel}:`}</span>
-            ) : (
-              <span className="text-xs font-semibold text-[#6B655C]">
-                {message.role === "user" ? "나" : scenario.callerLabel}
+            ) : message.role === "user" ? (
+              <span className="sr-only">나:</span>
+            ) : firstOfPeerRun ? (
+              <span className="flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className="flex h-[34px] w-[34px] shrink-0 items-end justify-center overflow-hidden rounded-[13px]"
+                  style={{ backgroundColor: chatTokens.profileBg, color: chatTokens.profileFg }}
+                >
+                  <PhoneIcon name="person" size={28} />
+                </span>
+                <span className="text-[14px]" style={{ color: chatTokens.senderName }}>
+                  {scenario.callerLabel}
+                </span>
               </span>
+            ) : (
+              <span className="sr-only">{`${scenario.callerLabel}:`}</span>
             )}
             {isSms ? (
               <span
@@ -588,9 +649,28 @@ export default function MessengerSessionPage() {
               </span>
             ) : (
               <span
-                className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-base leading-relaxed ${kakaoBubbleClass(message.role)}`}
+                className={`flex max-w-[86%] items-end gap-1 ${message.role === "user" ? "flex-row-reverse" : ""} ${
+                  firstOfPeerRun ? "pl-[42px]" : ""
+                }`}
               >
-                {message.text}
+                <span
+                  className="whitespace-pre-line break-words px-3 py-2 text-[17px] leading-[1.45]"
+                  style={kakaoBubbleStyle(message.role, firstOfRun)}
+                >
+                  {message.text}
+                </span>
+                {(timeLabel || unread) && (
+                  <span
+                    className={`flex shrink-0 flex-col text-[11px] leading-[1.25] ${message.role === "user" ? "items-end" : "items-start"}`}
+                  >
+                    {unread && (
+                      <span className="font-bold" style={{ color: chatTokens.unread }}>
+                        1<span className="sr-only">(읽지 않음)</span>
+                      </span>
+                    )}
+                    {timeLabel && <span style={{ color: chatTokens.time }}>{timeLabel}</span>}
+                  </span>
+                )}
               </span>
             )}
             {message.attachments?.map((attachment, i) =>
@@ -610,10 +690,27 @@ export default function MessengerSessionPage() {
                   }}
                   // T187(UX P-36 (4) A4) — 낱말만 뺐다. 기능 설명("링크")은 유지(AC-086 (c)).
                   aria-label={`링크: ${attachment.displayText}`}
-                  className="mt-1 flex min-h-[44px] items-center gap-2 rounded-xl border-2 border-[#0E6B62] bg-[#E4F0EC] px-4 py-2 text-sm font-bold text-[#0E6B62] underline decoration-2 underline-offset-2"
+                  className={
+                    isSms
+                      ? "mt-1 flex min-h-[44px] items-center gap-2 rounded-[8px] border-2 border-brand bg-brand-tint px-4 py-2 text-sm font-bold text-brand underline decoration-2 underline-offset-2"
+                      : `mt-1 flex w-[220px] flex-col overflow-hidden rounded-[12px] text-left ${message.role === "scammer" ? "ml-[42px]" : ""}`
+                  }
+                  style={isSms ? undefined : { backgroundColor: chatTokens.linkCardBg }}
                 >
-                  <span aria-hidden="true">🔗</span>
-                  {attachment.displayText}
+                  {isSms ? (
+                    <>
+                      <span aria-hidden="true">🔗</span>
+                      {attachment.displayText}
+                    </>
+                  ) : (
+                    // §89.5 ⓐ — 메신저형 링크 = 미리보기 카드(그림 자리는 무늬 없는 단색 · 실제 사이트 그림 · 로고 없음).
+                    <>
+                      <span aria-hidden="true" className="h-[72px] w-full" style={{ backgroundColor: chatTokens.linkCardThumb }} />
+                      <span className="px-3 py-2 text-[15px] font-semibold leading-snug" style={{ color: chatTokens.linkCardTitle }}>
+                        {attachment.displayText}
+                      </span>
+                    </>
+                  )}
                 </button>
               ) : null,
             )}
@@ -626,10 +723,9 @@ export default function MessengerSessionPage() {
             구현한다 — 상대가 실제로 답장을 쓰고 있는 것처럼 보이는 점 3개 애니메이션. */}
         {sending && (
           <li className="flex flex-col items-start gap-1" aria-hidden="true">
-            {!isSms && <span className="text-xs font-semibold text-[#6B655C]">{scenario.callerLabel}</span>}
             <span
-              className={`flex items-center gap-1 px-4 py-3 ${isSms ? "" : `rounded-2xl ${kakaoBubbleClass("scammer")}`}`}
-              style={isSms ? smsBubbleStyle("scammer", messengerSkin) : undefined}
+              className={`flex items-center gap-1 px-4 py-3 ${isSms ? "" : "ml-[42px]"}`}
+              style={isSms ? smsBubbleStyle("scammer", messengerSkin) : kakaoBubbleStyle("scammer", false)}
             >
               {[0, 1, 2].map((i) => (
                 <span
@@ -654,13 +750,13 @@ export default function MessengerSessionPage() {
           ⛔ 실제 앱의 ＋·카메라·이모지·음성 버튼은 그리지 않는다(동작 없는 버튼 금지 — P-37 R-6). */}
       <div
         className={`sticky bottom-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 ${
-          isSms ? "" : "border-t border-[#E2DDD3] bg-white"
+          ""
         }`}
-        style={isSms ? { backgroundColor: smsTokens.inputBarBg } : undefined}
+        style={{ backgroundColor: isSms ? smsTokens.inputBarBg : chatTokens.inputBarBg }}
       >
         {ended ? (
           <div className="flex flex-col gap-3 text-center">
-            <p className="text-base font-semibold text-[#22303A]" role="status">
+            <p className="text-base font-semibold text-ink" role="status">
               대화가 종료되었습니다.
             </p>
             <Button type="button" onClick={() => router.push("/session/end")}>
@@ -670,7 +766,7 @@ export default function MessengerSessionPage() {
         ) : (
           <>
             {sendError && (
-              <p role="alert" className="mb-2 flex items-center gap-2 text-sm text-[#C6392F]">
+              <p role="alert" className="mb-2 flex items-center gap-2 text-sm text-danger">
                 <span aria-hidden="true">⚠</span>
                 <span>{sendError}</span>
               </p>
@@ -695,14 +791,20 @@ export default function MessengerSessionPage() {
                   event.currentTarget.scrollIntoView({ behavior: "smooth", block: "center" })
                 }
                 disabled={sending}
-                placeholder={isSms ? "메시지" : "메시지를 입력하세요..."}
+                placeholder={isSms ? "메시지" : "메시지 입력"}
                 className={
                   isSms
                     ? "min-h-[48px] flex-1 px-4 py-2.5 text-[17px] placeholder:text-[var(--sms-placeholder)]"
-                    : "min-h-[50px] flex-1 rounded-full border-[1.5px] border-[#C9C2B6] px-[18px] py-3 text-lg text-[#22303A] placeholder:text-[#6B655C]"
+                    : "min-h-[48px] flex-1 rounded-full px-4 py-2.5 text-[17px] placeholder:text-[var(--sms-placeholder)]"
                 }
                 style={
-                  isSms
+                  !isSms
+                    ? ({
+                        backgroundColor: chatTokens.fieldBg,
+                        color: chatTokens.fieldText,
+                        "--sms-placeholder": chatTokens.placeholder,
+                      } as React.CSSProperties)
+                    : isSms
                     ? ({
                         backgroundColor: smsTokens.fieldBg,
                         color: smsTokens.fieldText,
@@ -720,19 +822,21 @@ export default function MessengerSessionPage() {
                 className={
                   isSms
                     ? "flex h-12 w-12 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
-                    : "flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-lg font-bold text-white disabled:opacity-50"
+                    : "flex h-12 w-12 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
                 }
-                style={isSms ? { backgroundColor: smsTokens.sendBg, color: smsTokens.sendIcon } : undefined}
+                style={
+                  isSms
+                    ? { backgroundColor: smsTokens.sendBg, color: smsTokens.sendIcon }
+                    : { backgroundColor: chatTokens.sendBg, color: chatTokens.sendIcon }
+                }
               >
                 {sending ? (
                   <span
                     aria-hidden="true"
-                    className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                    className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
                   />
-                ) : isSms ? (
-                  <PhoneIcon name="send-up" size={22} />
                 ) : (
-                  "↑"
+                  <PhoneIcon name="send-up" size={22} />
                 )}
               </button>
             </form>
@@ -774,21 +878,21 @@ export default function MessengerSessionPage() {
       {escalating && (
         <div
           role="status"
-          className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-[#22303A]/95 text-white"
+          className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-ink/95 text-white"
         >
           {/* T187(§72 · AC-086 (a) — 전이 연출도 세션 중) — 표식 칩 삭제. 벨 + 사건 문구만 남는다. */}
           <div className="relative flex items-center justify-center">
             <span
               aria-hidden="true"
-              className="call-ring-pulse absolute h-24 w-24 rounded-full bg-[#7CD9C2]/30"
+              className="call-ring-pulse absolute h-24 w-24 rounded-full bg-white/25"
             />
             <span
               aria-hidden="true"
-              className="call-ring-pulse absolute h-24 w-24 rounded-full bg-[#7CD9C2]/20"
+              className="call-ring-pulse absolute h-24 w-24 rounded-full bg-white/15"
               style={{ animationDelay: "0.7s" }}
             />
-            <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-[#41525E] text-4xl">
-              🔔
+            <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-avatar-bg text-white" aria-hidden="true">
+              <PhoneIcon name="accept-call" size={40} />
             </div>
           </div>
           <p className="text-xl font-bold">{scenario.callerLabel}(으)로부터 전화가 옵니다</p>

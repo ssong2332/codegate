@@ -145,10 +145,27 @@ body {
   animation: call-accept-pulse 1.8s ease-out infinite;
 }
 
+/* §89.5 ⓑ(UX D-132 (5) ⓑ) — 수신 벨 등장: 위에서 내려오며 커진다(1회). reduced-motion이면 정지(아래 블록 · G457). */
+@keyframes call-ring-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-28px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.call-ring-enter {
+  animation: call-ring-enter 0.45s cubic-bezier(0.22, 0.7, 0.3, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .call-ring-pulse,
   .call-wave-bar,
-  .call-accept-pulse {
+  .call-accept-pulse,
+  .call-ring-enter {
     animation: none;
   }
 }

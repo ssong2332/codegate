@@ -21562,7 +21562,9 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 |---|---|---|
 | **G630** | ⓐ globals.css `:root` hex = `SITE_TOKENS`(키 집합 · 값) ⓑ 사이트 대비 쌍 WCAG AA ⓒ 역검증(값 하나 바꾼 사본 실패) ⓓ 훈련 루트 `font-phone` | `src/lib/design/siteTokens.test.ts` |
 | **G631** | 사이트 화면(.tsx · 훈련 표면 제외)에 옛 팔레트 hex 유틸리티 0건 + 역검증 | `src/lib/design/siteTokens.test.ts` |
-| G632~G634 | P3에서 신설(아래 89.7에 기록) | — |
+| **G632** | 수신 벨 밀어서 받기 판정(48px · 방향 무관) + 받기 버튼에 누르기 · 밀기 두 경로 + 기기 테마 판정 | `src/lib/phone/swipeAnswer.test.ts` |
+| **G633** | 메신저형 표시 규칙(이름 = 상대 연속 첫 말풍선 · 시각 = 연속 마지막 · "1" = 상대 답 전) + 대화방 코드에 앱 이름 표기 0 | `src/lib/messenger/chatPresentation.test.ts` |
+| G456 확장 | 벨 그라데이션 두 끝 · 통화 셸 경고 문장 · 알약 · 입력칸 · One UI 라이트 통화 전체 · 메신저형 대화방 쌍 | `src/lib/phone/skinTokens.test.ts`(기존 테스트가 새 쌍을 수집) |
 
 ### 89.4 첫 화면(소개) 노출 — 판정
 현재 `/`는 `RouteGuard`의 `PUBLIC_PATHS`에 없어 비로그인 사용자는 소개 없이 `/login`으로 간다(시안 감사 1-1). 시안 A 1번 화면은 `/`를 공개 경로로 둬야 성립한다. **판정: P2에서 `/`를 `PUBLIC_PATHS`에 넣는다** — `/`는 읽기 전용 소개만 그리고 Firestore · Functions를 부르지 않는다(로그인 사용자의 게이트 조회는 `user`가 있을 때만 — 현행 코드). 익명 사용자(챌린지 수신자)는 현행과 같이 판정한다(§68 익명 게이트 불변 — `anonymousScope.test.ts`가 막는다).
@@ -21601,6 +21603,8 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 | 모서리 `rounded-[12/14/16/20px]` · `rounded-xl/2xl/3xl` | — | `rounded-[8px]` |
 | 글자 `text-[12~16px]` · `text-xs/sm/base` | — | +2px(`14~18px` · `sm/base/lg`) — 제목(17px 이상)은 그대로 |
 - **P2 리뷰 반영**(Reviewer: Critical 0 · Major 3 · Minor 7): ① 입력칸 · 보조 버튼 경계 `line` → `line-strong`(1.29 → 3.3:1) + `outline-none` → `focus-visible` 3px 윤곽(`challenge/create` · `challenge/join` · `report/rewind` · `onboarding/record` · 로그인 Google 버튼). ② 첫 화면 문구를 앱 안 체험임이 드러나게("앱 화면 안에서 전화와 문자를 재현합니다(진짜 전화 · 문자는 오지 않습니다)") · 칩 = "연습용 · 실제 돈은 오가지 않습니다"(검증 가능한 범위) · 제목 = 권유형("사기 전화, 미리 한 번 받아 보세요" — 효과 약속 삭제). ③ 11px 글자 → 13px(다시보기 · 되감기 · AI 합성 표식 박스 24px). ④ 대비 쌍 6개 추가(G630). ⑤ 익명 사용자는 첫 화면 게이트 조회를 하지 않는다. ⑥ README에 외부 글꼴 의존 기재.
+- **P3**(`claude/design-a-training`, P2 위): ⓐ 메신저형 대화방(카카오 표면만 — 문자형 무변경): 회청 바탕 · 머리줄 = 방 이름 + 수화기 아이콘 "전화로 확인" + 훈련 종료(1탭 유지) · 첫 줄 앱 이름 문장 → "오늘" 구분줄 · 둥근 사각 프로필(자체 실루엣) · 시각 · "1" · 링크 미리보기 카드(`aria-label="링크: …"` 유지) · 입력줄 "메시지 입력" + 노란 전송 원. 색 = `MESSENGER_CHAT_TOKENS`. ⓑ 수신 벨: `ringBgStops` 그라데이션 · 번호 +4px · `call-ring-enter` 등장(reduced-motion 블록 등록) · 받기 버튼 포인터 밀기(`isSwipeAccept`) + "밀거나 눌러서 받기" 안내. ⓒ 라이트 통화: `useDeviceTheme()`(OS `prefers-color-scheme`) + One UI형일 때 `ONE_UI_CALL_LIGHT` · 버튼 묶음 흰 판(`gridPanelBg`). 통화 셸 안 하드코딩 색(`text-white` · `#C9D4DB` · `#F0A79E` · `white/10` · `white/30`)을 `--call-*` CSS 변수(토큰)로 바꿨다. ⚠️ 종전 입력칸 경계 `white/30`은 약 2.7:1(3:1 미달)이라 0.45로 올렸다. 추정값 = `ESTIMATED_DEVICE_COLORS`(카톡형 바탕 · 노랑 · One UI 라이트 바탕 · 판). 훈련 화면 두 파일의 사이트형 로딩 · 오류 화면도 P2 판정표로 토큰화. 앵커만 바꾼 테스트: `skinPickerGate.test.ts`(둘째 인자 허용) · `threadItems.test.ts` · `startNoticeGate.test.ts`.
+  - ⚠️ 추정(확인 필요): Android Chrome · 삼성 인터넷이 `prefers-color-scheme`에 기기 테마를 넘긴다 — 실기에서 라이트 · 다크 각각 통화 화면을 열어 확인.
 
 ### 89.8 OQ
 | # | 질문 | 선택지 | 막힘 |

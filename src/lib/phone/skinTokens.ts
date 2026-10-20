@@ -45,6 +45,17 @@ export type CallSkinTokens = {
   keypadKeyBg: string;
   /** 울림 연출 — iOS형 = 받기 버튼 맥동 · One UI형 = 아바타 둘레 파동(현행 `call-ring-pulse` 재사용). */
   ringStyle: "accept-pulse" | "avatar-ripple";
+  /** §89.5(UX D-132 (5) ⓑ) 수신 벨 바탕 그라데이션의 위 · 아래 끝. 글자 대비는 두 끝 모두에서 잰다(G456). 근사. */
+  ringBgStops: readonly [string, string];
+  /** 통화 셸 안 오류 · 경고 문장(종전 `#F0A79E` 하드코딩을 토큰으로). */
+  alertText: string;
+  /** 통화 셸 안 알약 · 보조 버튼 바탕(반투명). */
+  chipBg: string;
+  /** 통화 셸 안 입력칸(글자 입력 모드) 바탕 · 경계. */
+  fieldBg: string;
+  fieldBorder: string;
+  /** §89.5 ⓒ 라이트 통화 화면의 버튼 묶음 판(One UI형 라이트만) — 없으면 null(셸 바탕 위에 바로). */
+  gridPanelBg: string | null;
 };
 
 export type BannerSkinTokens = {
@@ -61,6 +72,30 @@ export type BannerSkinTokens = {
 
 /** P-37 (4) 통화 표시줄 — 스킨과 무관하게 같다(연속성 앵커). 이 단계에선 대비 하한 검사 대상으로만 둔다. */
 export const CALL_BAR_TOKENS = { bg: "#17803A", text: "#FFFFFF" } as const;
+
+/**
+ * ⚠️ **추정값 모음(실기 측정 전) — UX D-132 · OQ-U100 · OQ-A98.** 공개 자료로 수치를 확인하지 못한 기기 화면 색을
+ * **이 한 곳**에 모았다. 실기 스포이트 측정값이 오면 이 블록의 값만 바꾼다(출처 주석도 *"실측: 기종 / OS / 화면"* 으로).
+ * 바꾼 값도 G456(`./skinTokens.test.ts`)이 WCAG 하한으로 막는다.
+ */
+export const ESTIMATED_DEVICE_COLORS = {
+  /** 메신저형 대화방 바탕(기본 테마 회청색) — 추정 범위 #B2C7D9~#BACEE0. */
+  messengerChatBg: "#BACEE0",
+  /** 메신저형 발신 말풍선 · 전송 버튼(노랑) — 근사. 앱 이름 · 로고와 함께 쓰지 않는다(감사 안전선). */
+  messengerOutgoingBg: "#FEE500",
+  /** One UI형 라이트 테마 통화 화면 바탕 · 버튼 판 — 추정. */
+  oneUiLightCallBg: "#F4F6F8",
+  oneUiLightCallPanel: "#FFFFFF",
+} as const;
+
+const DARK_CALL_EXTRAS = {
+  alertText: "#F0A79E",
+  chipBg: "rgba(255,255,255,0.10)",
+  fieldBg: "rgba(255,255,255,0.10)",
+  // 종전 `border-white/30`은 바탕 위 약 2.7:1(비텍스트 3:1 미달) — 토큰화하며 0.45로 올렸다(G456).
+  fieldBorder: "rgba(255,255,255,0.45)",
+  gridPanelBg: null,
+} as const;
 
 const ONE_UI_CALL: CallSkinTokens = {
   bg: "#101418",
@@ -83,6 +118,33 @@ const ONE_UI_CALL: CallSkinTokens = {
   badgeText: "#FFFFFF",
   keypadKeyBg: "rgba(255,255,255,0.12)",
   ringStyle: "avatar-ripple",
+  ringBgStops: ["#2E4257", "#101418"],
+  ...DARK_CALL_EXTRAS,
+};
+
+/**
+ * §89.5 ⓒ — One UI형 + 기기 라이트 테마일 때의 통화 화면(UX D-132 (5) ⓒ). 색 원천 = `ESTIMATED_DEVICE_COLORS`(추정).
+ * 받기 · 종료 원과 아이콘은 어두운 화면과 같다.
+ */
+const ONE_UI_CALL_LIGHT: CallSkinTokens = {
+  ...ONE_UI_CALL,
+  bg: ESTIMATED_DEVICE_COLORS.oneUiLightCallBg,
+  outerBg: "#E3E7EB",
+  textPrimary: "#14181D",
+  textSecondary: "#4B5563",
+  avatarBg: "#D5DCE3",
+  avatarFg: "#5A6675",
+  gridButtonBg: "rgba(255,255,255,0)",
+  gridButtonPressedBg: "#3A4350",
+  gridIcon: "#3A4350",
+  gridIconPressed: "#FFFFFF",
+  keypadKeyBg: "rgba(20,24,29,0.07)",
+  ringBgStops: ["#E9EEF3", "#F4F6F8"],
+  alertText: "#B3261E",
+  chipBg: "rgba(20,24,29,0.07)",
+  fieldBg: "#FFFFFF",
+  fieldBorder: "rgba(20,24,29,0.55)",
+  gridPanelBg: ESTIMATED_DEVICE_COLORS.oneUiLightCallPanel,
 };
 
 const CALL_TOKENS: Record<MessengerSkin, CallSkinTokens> = {
@@ -106,6 +168,8 @@ const CALL_TOKENS: Record<MessengerSkin, CallSkinTokens> = {
     badgeText: "#FFFFFF",
     keypadKeyBg: "rgba(255,255,255,0.16)",
     ringStyle: "accept-pulse",
+    ringBgStops: ["#3C4552", "#1C1C1E"],
+    ...DARK_CALL_EXTRAS,
   },
   samsung: ONE_UI_CALL,
   // 기본(감지 실패·데스크톱) = One UI형 골격(UX-014 v1.33 (5) 표 셋째 열 "One UI형과 같음").
@@ -139,8 +203,17 @@ const BANNER_TOKENS: Record<MessengerSkin, BannerSkinTokens> = {
   },
 };
 
-export function callTokensFor(skin: MessengerSkin): CallSkinTokens {
+/** 기기 테마(OS `prefers-color-scheme`) — 라이트 통화 화면은 One UI형에만 있다(§89.5 ⓒ · iOS형 · 기본은 늘 어둡다). */
+export type DeviceTheme = "dark" | "light";
+
+export function callTokensFor(skin: MessengerSkin, theme: DeviceTheme = "dark"): CallSkinTokens {
+  if (skin === "samsung" && theme === "light") return ONE_UI_CALL_LIGHT;
   return CALL_TOKENS[skin];
+}
+
+/** 수신 벨 바탕(CSS) — 위에서 아래로 흐려지는 그라데이션(§89.5 ⓑ). */
+export function ringBackground(call: CallSkinTokens): string {
+  return `radial-gradient(120% 70% at 50% 0%, ${call.ringBgStops[0]} 0%, ${call.ringBgStops[1]} 72%)`;
 }
 
 export function bannerTokensFor(skin: MessengerSkin): BannerSkinTokens {
@@ -359,6 +432,39 @@ export function messengerSmsTokensFor(skin: MessengerSkin): MessengerSmsSkinToke
   return MESSENGER_SMS_TOKENS[skin];
 }
 
+// ── §89.5 ⓐ — 메신저형 대화방(카카오 표면 · UX D-132 (5) ⓐ). 앱 이름 · 로고 · 기본 프로필 그림은 쓰지 않는다. ──────────
+
+export const MESSENGER_CHAT_TOKENS = {
+  screenBg: ESTIMATED_DEVICE_COLORS.messengerChatBg,
+  outerBg: "#A9BED1",
+  headerText: "#1B1B1F",
+  headerIcon: "#1B1B1F",
+  senderName: "#1B1B1F",
+  incomingBg: "#FFFFFF",
+  incomingText: "#1B1B1F",
+  outgoingBg: ESTIMATED_DEVICE_COLORS.messengerOutgoingBg,
+  outgoingText: "#1B1B1F",
+  /** 말풍선 옆 작은 시각 · 날짜 구분줄 글자 — 바탕 위. */
+  time: "#33404D",
+  /** 상대가 아직 답하지 않은 내 메시지 옆 숫자 "1" — 바탕 위 글자(4.5:1). 실제 앱의 노랑은 대비 미달이라 진한 황토로. */
+  unread: "#6B4E00",
+  dateChipBg: "rgba(0,0,0,0.10)",
+  /** 둥근 사각 프로필(자체 실루엣). */
+  profileBg: "#6F879E",
+  profileFg: "#FFFFFF",
+  linkCardBg: "#FFFFFF",
+  linkCardTitle: "#1B1B1F",
+  linkCardHost: "#5F6368",
+  linkCardThumb: "#C3D0DC",
+  inputBarBg: "#FFFFFF",
+  fieldBg: "#F2F3F5",
+  fieldText: "#1B1B1F",
+  placeholder: "#5F6368",
+  sendBg: ESTIMATED_DEVICE_COLORS.messengerOutgoingBg,
+  sendIcon: "#1B1B1F",
+  systemLineBg: "rgba(0,0,0,0.10)",
+} as const;
+
 // ── WCAG 대비 계산(G456) ────────────────────────────────────────────────────────────
 
 type Rgba = { r: number; g: number; b: number; a: number };
@@ -435,6 +541,69 @@ export function skinContrastPairs(skin: MessengerSkin): ContrastPair[] {
     { name: `${skin}.banner.appIcon`, fg: banner.appIconFg, bg: banner.appIconBg, kind: "nonText" },
     { name: "callBar.text", fg: CALL_BAR_TOKENS.text, bg: CALL_BAR_TOKENS.bg, kind: "text" },
     ...smsSurfacePairs(skin),
+    ...ringPairs(skin, call),
+    ...(skin === "samsung" ? lightCallPairs() : []),
+    ...messengerChatPairs(),
+  ];
+}
+
+/** §89.5 ⓑ — 수신 벨 그라데이션 두 끝 · 통화 셸 안 경고 문장 · 알약 · 입력칸(G456). */
+function ringPairs(skin: string, call: CallSkinTokens): ContrastPair[] {
+  const [top, bottom] = call.ringBgStops;
+  return [
+    { name: `${skin}.ring.number@top`, fg: call.textPrimary, bg: top, kind: "text" },
+    { name: `${skin}.ring.number@bottom`, fg: call.textPrimary, bg: bottom, kind: "text" },
+    { name: `${skin}.ring.textSecondary@top`, fg: call.textSecondary, bg: top, kind: "text" },
+    { name: `${skin}.ring.textSecondary@bottom`, fg: call.textSecondary, bg: bottom, kind: "text" },
+    { name: `${skin}.call.alertText`, fg: call.alertText, bg: call.bg, kind: "text" },
+    { name: `${skin}.call.chipText`, fg: call.textPrimary, bg: call.chipBg, base: call.bg, kind: "text" },
+    { name: `${skin}.call.fieldText`, fg: call.textPrimary, ...fieldBgPair(call), kind: "text" },
+    { name: `${skin}.call.fieldBorder`, fg: compositeHex(call.fieldBorder, call.bg), bg: call.bg, kind: "nonText" },
+  ];
+}
+
+function fieldBgPair(call: CallSkinTokens): { bg: string; base?: string } {
+  return parseColor(call.fieldBg).a === 1 ? { bg: call.fieldBg } : { bg: call.fieldBg, base: call.bg };
+}
+
+/** §89.5 ⓒ — One UI형 라이트 통화 화면 전체(셸 · 버튼 판 · 눌림). */
+export function lightCallPairs(): ContrastPair[] {
+  const call = ONE_UI_CALL_LIGHT;
+  const panel = call.gridPanelBg ?? call.bg;
+  return [
+    { name: "samsung-light.call.number", fg: call.textPrimary, bg: call.bg, kind: "text" },
+    { name: "samsung-light.call.textSecondary", fg: call.textSecondary, bg: call.bg, kind: "text" },
+    { name: "samsung-light.call.gridLabel", fg: call.textPrimary, bg: panel, kind: "text" },
+    { name: "samsung-light.call.gridIcon", fg: call.gridIcon, bg: panel, kind: "nonText" },
+    { name: "samsung-light.call.gridPressedIndicator", fg: call.gridButtonPressedBg, bg: panel, kind: "nonText" },
+    { name: "samsung-light.call.gridIconPressed", fg: call.gridIconPressed, bg: call.gridButtonPressedBg, kind: "nonText" },
+    { name: "samsung-light.call.avatarIcon", fg: call.avatarFg, bg: call.avatarBg, kind: "nonText" },
+    { name: "samsung-light.call.keypadKey", fg: call.textPrimary, bg: call.keypadKeyBg, base: call.bg, kind: "text" },
+    { name: "samsung-light.call.acceptIcon", fg: call.roundIcon, bg: call.accept, kind: "nonText" },
+    { name: "samsung-light.call.endIcon", fg: call.roundIcon, bg: call.end, kind: "nonText" },
+    ...ringPairs("samsung-light", call),
+  ];
+}
+
+/** §89.5 ⓐ — 메신저형 대화방(G456). */
+export function messengerChatPairs(): ContrastPair[] {
+  const t = MESSENGER_CHAT_TOKENS;
+  return [
+    { name: "chat.headerText", fg: t.headerText, bg: t.screenBg, kind: "text" },
+    { name: "chat.headerIcon", fg: t.headerIcon, bg: t.screenBg, kind: "nonText" },
+    { name: "chat.senderName", fg: t.senderName, bg: t.screenBg, kind: "text" },
+    { name: "chat.incoming", fg: t.incomingText, bg: t.incomingBg, kind: "text" },
+    { name: "chat.outgoing", fg: t.outgoingText, bg: t.outgoingBg, kind: "text" },
+    { name: "chat.time", fg: t.time, bg: t.screenBg, kind: "text" },
+    { name: "chat.unread", fg: t.unread, bg: t.screenBg, kind: "text" },
+    { name: "chat.dateChip", fg: t.time, bg: t.dateChipBg, base: t.screenBg, kind: "text" },
+    { name: "chat.systemLine", fg: t.time, bg: t.systemLineBg, base: t.screenBg, kind: "text" },
+    { name: "chat.profileIcon", fg: t.profileFg, bg: t.profileBg, kind: "nonText" },
+    { name: "chat.linkTitle", fg: t.linkCardTitle, bg: t.linkCardBg, kind: "text" },
+    { name: "chat.linkHost", fg: t.linkCardHost, bg: t.linkCardBg, kind: "text" },
+    { name: "chat.fieldText", fg: t.fieldText, bg: t.fieldBg, kind: "text" },
+    { name: "chat.placeholder", fg: t.placeholder, bg: t.fieldBg, kind: "text" },
+    { name: "chat.sendIcon", fg: t.sendIcon, bg: t.sendBg, kind: "nonText" },
   ];
 }
 

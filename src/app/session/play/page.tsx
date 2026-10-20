@@ -73,7 +73,9 @@ import {
   type DeviceSkin,
   type ResolvedDeviceSkin,
 } from "@/lib/phone/deviceSkin";
-import { bannerTokensFor, callTokensFor } from "@/lib/phone/skinTokens";
+import { bannerTokensFor, callTokensFor, ringBackground } from "@/lib/phone/skinTokens";
+import { useDeviceTheme } from "@/lib/phone/deviceTheme";
+import { isSwipeAccept } from "@/lib/phone/swipeAnswer";
 import {
   BANNER_VISIBLE_MS,
   ackOnOverlayClose,
@@ -289,6 +291,9 @@ export default function SessionCallPage() {
   // T190-3(§74.5 (2) · 표 K · AC-092 (b)) — 이 통화의 화면 모양. 세션 문서 1회 읽기에서 **한 번** 정하고 세션
   // 끝까지 바꾸지 않는다(D-100 (4)). 서버 쓰기 0(같은 기기에서 표 K가 결정론적이라 새로고침에도 같다).
   const [deviceSkin, setDeviceSkin] = useState<ResolvedDeviceSkin>({ skin: "default", source: "fallback" });
+  // §89.5 ⓒ — 기기 테마(OS 설정) · §89.5 ⓑ — 받기 버튼 밀기 시작점.
+  const deviceTheme = useDeviceTheme();
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   // T190-3(§74.3 표 S · UX D-98 · AC-093 (c)) — 스피커 버튼 = 통화 모드(0.6) ↔ 스피커 모드(1.0) **음량 전환**.
   // 웹은 Android에서 수화부↔스피커 실제 출력 전환을 할 수 없다(§74.2 ①-A) — iOS도 실기 프로브 전까지 같다.
   const [audioRoute, setAudioRoute] = useState<AudioRoute>("call");
@@ -1942,15 +1947,15 @@ export default function SessionCallPage() {
           ? "선택된 시나리오 정보를 찾을 수 없습니다. 시나리오를 다시 선택해 주세요."
           : "통화 정보를 불러오지 못했습니다. 다시 시도해 주세요.";
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-base text-danger">
           <span aria-hidden="true">⚠</span>
           <span>{message}</span>
         </p>
         <button
           type="button"
           onClick={() => router.push("/scenarios")}
-          className="min-h-[48px] rounded-[14px] border border-[#C9C2B6] px-6 py-3 text-lg font-bold text-[#22303A] hover:bg-white"
+          className="min-h-[48px] rounded-[8px] border-[1.5px] border-line-strong px-6 py-3 text-lg font-bold text-ink hover:bg-white"
         >
           시나리오 선택으로
         </button>
@@ -1960,11 +1965,11 @@ export default function SessionCallPage() {
 
   if (pageState !== "ready" || !scenario) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-[#22303A]" role="status">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p className="flex items-center gap-2 text-lg text-ink" role="status">
           <span
             aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-transparent"
+            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
           />
           통화 정보를 불러오는 중입니다...
         </p>
@@ -1984,7 +1989,7 @@ export default function SessionCallPage() {
         <main
           aria-busy="true"
           className="flex min-h-screen flex-col"
-          style={{ backgroundColor: callTokensFor(deviceSkin.skin).bg }}
+          style={{ backgroundColor: callTokensFor(deviceSkin.skin, deviceTheme).bg }}
         >
           <div className="flex justify-end px-4 py-2.5">
             <EndTrainingButton onClick={() => void handleEndTraining()} />
@@ -2031,7 +2036,17 @@ export default function SessionCallPage() {
   const showSmsBanner = bannerSmsId !== null && latestSms !== null && latestSms.smsId === bannerSmsId;
   // T190-3(§74.6 (2)(5)) — 스킨 토큰(UX v1.33 근사 — 실기 측정 전). 값은 인라인 style로만 쓴다(Tailwind는
   // 런타임에 조립한 클래스 이름을 생성하지 못한다).
-  const callTokens = callTokensFor(deviceSkin.skin);
+  // §89.5 ⓒ — One UI형 + 기기 라이트 테마면 라이트 통화 화면(그 밖은 종전 어두운 화면).
+  const callTokens = callTokensFor(deviceSkin.skin, deviceTheme);
+  // 통화 셸 안 하드코딩 색(흰 글 · 옅은 회청 · 경고 분홍)을 토큰 CSS 변수로 — 라이트 화면에서도 대비가 유지된다(G456).
+  const callShellVars = {
+    "--call-fg": callTokens.textPrimary,
+    "--call-fg-sub": callTokens.textSecondary,
+    "--call-alert": callTokens.alertText,
+    "--call-chip": callTokens.chipBg,
+    "--call-field-bg": callTokens.fieldBg,
+    "--call-field-border": callTokens.fieldBorder,
+  } as React.CSSProperties;
   const bannerTokens = bannerTokensFor(deviceSkin.skin);
   // D-103 — 음량을 바꿀 수 없는 경로(폴백 `<audio>` + 대입 미반영)에서만 스피커 칸이 비활성이다.
   const speakerDisabled = callMode === "fallback" && fallbackVolumeLocked;
@@ -2058,7 +2073,10 @@ export default function SessionCallPage() {
 
   return (
     // T190-3(UX-014 v1.33 (8) Responsive · W-D) — 최대폭 430px 가운데 정렬, 바깥은 `call.bg`보다 한 단계 어두운 단색.
-    <main className="font-phone flex min-h-screen flex-col text-white" style={{ backgroundColor: callTokens.outerBg }}>
+    <main
+      className="font-phone flex min-h-screen flex-col text-[var(--call-fg)]"
+      style={{ backgroundColor: callTokens.outerBg, ...callShellVars }}
+    >
       {/* 실시간 speech-to-speech 세션 — 서버가 자격증명을 준 경우에만 마운트된다(지연 로딩).
           화면 요소는 없고 SDK 세션 생명주기만 관리한다. */}
       {/* `?audiodebug=1`일 때만 그린다(없으면 DOM 0 — 컴포넌트 첫 분기). 관찰 전용 · 탭을 가로채지 않는다. */}
@@ -2134,7 +2152,8 @@ export default function SessionCallPage() {
       <div
         className="mx-auto flex min-h-screen w-full max-w-[430px] flex-1 flex-col"
         style={{
-          backgroundColor: callTokens.bg,
+          // §89.5 ⓑ — 수신 벨은 흐린 그라데이션 바탕(그 밖 phase는 단색 — 종전).
+          background: isRinging ? ringBackground(callTokens) : callTokens.bg,
           paddingTop: "calc(env(safe-area-inset-top) + 24px)",
         }}
       >
@@ -2199,7 +2218,7 @@ export default function SessionCallPage() {
         {smsUnreadCount > 0 ? `${latestSms?.senderLabel ?? ""}에서 문자가 왔습니다.` : ""}
       </p>
       {smsError && (
-        <p role="alert" className="px-4 pt-2 text-center text-xs text-[#F0A79E]">
+        <p role="alert" className="px-4 pt-2 text-center text-xs text-[var(--call-alert)]">
           {smsError}
         </p>
       )}
@@ -2210,7 +2229,8 @@ export default function SessionCallPage() {
         className="flex flex-1 flex-col items-center gap-5 px-6"
         style={{ paddingTop: callTokens.hasAvatar ? "max(0px, calc(18vh - 24px))" : "48px" }}
       >
-        <div className="flex w-full flex-col items-center text-center">
+        {/* §89.5 ⓑ — 벨 등장: 위에서 내려오며 커진다(`call-ring-enter` · reduced-motion이면 정지 — G457). */}
+        <div className={`flex w-full flex-col items-center text-center ${isRinging ? "call-ring-enter" : ""}`}>
           {callTokens.hasAvatar && (
             <div
               aria-hidden="true"
@@ -2221,9 +2241,9 @@ export default function SessionCallPage() {
                   통화 중 상대 발화 시의 파동(현행)도 유지한다. */}
               {(isRinging || agentSpeaking) && (
                 <>
-                  <span className="call-ring-pulse absolute h-[88px] w-[88px] rounded-full bg-[#C9D4DB]/25" />
+                  <span className="call-ring-pulse absolute h-[88px] w-[88px] rounded-full bg-[var(--call-fg-sub)]/25" />
                   <span
-                    className="call-ring-pulse absolute h-[88px] w-[88px] rounded-full bg-[#C9D4DB]/15"
+                    className="call-ring-pulse absolute h-[88px] w-[88px] rounded-full bg-[var(--call-fg-sub)]/15"
                     style={{ animationDelay: "0.7s" }}
                   />
                 </>
@@ -2234,7 +2254,8 @@ export default function SessionCallPage() {
           {/* T75 — 발신자는 번호만 보여 준다(사칭 표기 없음 · 정답을 미리 알려 주지 않는다). */}
           <p
             className="max-w-full truncate font-semibold leading-tight"
-            style={{ fontSize: callTokens.numberSizePx, color: callTokens.textPrimary }}
+            // §89.5 ⓑ — 벨에서는 번호가 화면 주인공(+4px).
+            style={{ fontSize: callTokens.numberSizePx + (isRinging ? 4 : 0), color: callTokens.textPrimary }}
           >
             {callerLabel}
           </p>
@@ -2338,7 +2359,7 @@ export default function SessionCallPage() {
           <button
             type="button"
             onClick={handleManualPlay}
-            className="flex min-h-[48px] items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white"
+            className="flex min-h-[48px] items-center gap-2 rounded-full bg-[var(--call-chip)] px-4 py-2 text-sm font-semibold text-[var(--call-fg)]"
           >
             <PhoneIcon name="speaker" size={18} />
             탭하여 듣기
@@ -2350,7 +2371,8 @@ export default function SessionCallPage() {
           T190-3(UX-014 v1.33 (4)(5) · D-87) — 받기 = `call.accept`(초록 — 앱 청록은 Superseded) · 원 76px · 탭만
           (스와이프 재현 0 — 어르신·접근성 · 키보드 도달). iOS형 울림 = 받기 버튼 맥동(`call-accept-pulse`). */}
       {phase === "incoming" ? (
-        <div className="flex justify-between px-14 pb-[calc(env(safe-area-inset-bottom)+56px)]">
+        <div className="flex flex-col pb-[calc(env(safe-area-inset-bottom)+40px)]">
+        <div className="flex justify-between px-14">
           <div className="flex flex-col items-center gap-2">
             <button
               type="button"
@@ -2370,6 +2392,23 @@ export default function SessionCallPage() {
               type="button"
               onClick={handleAnswer}
               aria-label="전화 받기"
+              // §89.5 ⓑ(UX D-132 (5) ⓑ) — 누르기(위 onClick)와 **밀기** 둘 다 받는다. 밀기 = 누른 채 48px 이상 이동.
+              onPointerDown={(event) => {
+                swipeStartRef.current = { x: event.clientX, y: event.clientY };
+                event.currentTarget.setPointerCapture?.(event.pointerId);
+              }}
+              onPointerMove={(event) => {
+                const start = swipeStartRef.current;
+                if (!start || !isSwipeAccept(event.clientX - start.x, event.clientY - start.y)) return;
+                swipeStartRef.current = null;
+                handleAnswer();
+              }}
+              onPointerUp={() => {
+                swipeStartRef.current = null;
+              }}
+              onPointerCancel={() => {
+                swipeStartRef.current = null;
+              }}
               className={`relative flex h-[76px] w-[76px] items-center justify-center rounded-full shadow-lg transition active:scale-95 ${
                 callTokens.ringStyle === "accept-pulse" ? "call-accept-pulse" : ""
               }`}
@@ -2382,6 +2421,10 @@ export default function SessionCallPage() {
             </span>
           </div>
         </div>
+        <p aria-hidden="true" className="mt-4 text-center text-[14px]" style={{ color: callTokens.textSecondary }}>
+          밀거나 눌러서 받기
+        </p>
+        </div>
       ) : phase === "ended" && !remoteHangup ? (
         <div className="flex flex-col gap-3 p-6 text-center">
           <p className="text-lg font-semibold" role="status">
@@ -2390,7 +2433,7 @@ export default function SessionCallPage() {
           <button
             type="button"
             onClick={() => void handleEndedShellProceed()}
-            className="min-h-[56px] rounded-[14px] bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white"
+            className="min-h-[56px] rounded-[8px] bg-brand px-6 py-3 text-lg font-bold text-white"
           >
             결과 확인하러 가기
           </button>
@@ -2417,11 +2460,11 @@ export default function SessionCallPage() {
                   전달된다(실시간이면 Live 세션, 폴백이면 sendMessage). */}
               <div className="mb-4">
                 <div
-                  className="mb-3 flex min-h-[44px] items-center justify-center px-4 text-[28px] tracking-[0.2em] text-white tabular-nums"
+                  className="mb-3 flex min-h-[44px] items-center justify-center px-4 text-[28px] tracking-[0.2em] text-[var(--call-fg)] tabular-nums"
                   aria-live="polite"
                   aria-label="입력한 번호"
                 >
-                  {dialpadValue || <span className="text-base tracking-normal text-[#C9D4DB]">번호를 누르세요</span>}
+                  {dialpadValue || <span className="text-base tracking-normal text-[var(--call-fg-sub)]">번호를 누르세요</span>}
                 </div>
                 <div className="grid grid-cols-[repeat(3,64px)] justify-center gap-x-6 gap-y-3">
                   {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((key) => (
@@ -2430,7 +2473,7 @@ export default function SessionCallPage() {
                       type="button"
                       onClick={() => setDialpadValue((v) => (v.length >= 32 ? v : v + key))}
                       aria-label={`${key} 누르기`}
-                      className="flex h-16 w-16 items-center justify-center rounded-full text-[28px] text-white transition active:scale-95"
+                      className="flex h-16 w-16 items-center justify-center rounded-full text-[28px] text-[var(--call-fg)] transition active:scale-95"
                       style={{ backgroundColor: callTokens.keypadKeyBg }}
                     >
                       {key}
@@ -2442,7 +2485,7 @@ export default function SessionCallPage() {
                     type="button"
                     onClick={() => setDialpadValue((v) => v.slice(0, -1))}
                     disabled={!dialpadValue}
-                    className="min-h-[48px] flex-1 rounded-xl bg-white/10 text-sm font-semibold text-[#C9D4DB] disabled:opacity-40"
+                    className="min-h-[48px] flex-1 rounded-xl bg-[var(--call-chip)] text-sm font-semibold text-[var(--call-fg-sub)] disabled:opacity-40"
                   >
                     ← 지우기
                   </button>
@@ -2454,7 +2497,7 @@ export default function SessionCallPage() {
                       setDialpadValue("");
                     }}
                     disabled={!dialpadValue}
-                    className="min-h-[48px] flex-1 rounded-xl bg-[#0E6B62] text-sm font-bold text-white disabled:opacity-40"
+                    className="min-h-[48px] flex-1 rounded-xl bg-brand text-sm font-bold text-white disabled:opacity-40"
                   >
                     번호 전송
                   </button>
@@ -2466,7 +2509,7 @@ export default function SessionCallPage() {
                   훈련·검증이 가능해진다(사용자 신고 2026-07-25). */}
               {callMode === "realtime" ? (
                 <>
-                  <p className="mb-3 text-center text-xs leading-relaxed text-[#C9D4DB]">
+                  <p className="mb-3 text-center text-xs leading-relaxed text-[var(--call-fg-sub)]">
                     마이크에 대고 말해도 되고, 아래에 입력해도 상대에게 그대로 전달됩니다.
                   </p>
                   <form
@@ -2488,13 +2531,13 @@ export default function SessionCallPage() {
                         event.currentTarget.scrollIntoView({ behavior: "smooth", block: "center" })
                       }
                       placeholder="하고 싶은 말을 입력하세요..."
-                      className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-white/30 bg-white/10 px-[18px] py-3 text-lg text-white placeholder:text-[#C9D4DB]"
+                      className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-[var(--call-field-border)] bg-[var(--call-field-bg)] px-[18px] py-3 text-lg text-[var(--call-fg)] placeholder:text-[var(--call-fg-sub)]"
                     />
                     <button
                       type="submit"
                       disabled={!input.trim()}
                       aria-label="전송"
-                      className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-lg font-bold text-white disabled:opacity-50"
+                      className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-brand text-lg font-bold text-white disabled:opacity-50"
                     >
                       ↑
                     </button>
@@ -2503,7 +2546,7 @@ export default function SessionCallPage() {
               ) : (
                 <>
                   {latestScammerLine && (
-                    <p className="mb-3 text-center text-base leading-relaxed text-white/85" aria-live="polite">
+                    <p className="mb-3 text-center text-base leading-relaxed text-[var(--call-fg)]" aria-live="polite">
                       &ldquo;{latestScammerLine}&rdquo;
                     </p>
                   )}
@@ -2513,7 +2556,7 @@ export default function SessionCallPage() {
                       role={sendError ? "alert" : "status"}
                       aria-live={sendError ? "assertive" : "polite"}
                       className={`mb-3 text-center text-xs leading-relaxed ${
-                        sendError ? "text-[#F0A79E]" : "text-[#C9D4DB]"
+                        sendError ? "text-[var(--call-alert)]" : "text-[var(--call-fg-sub)]"
                       }`}
                     >
                       {sendError ??
@@ -2550,13 +2593,13 @@ export default function SessionCallPage() {
                       }
                       disabled={sending}
                       placeholder="하고 싶은 말을 입력하세요..."
-                      className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-white/30 bg-white/10 px-[18px] py-3 text-lg text-white placeholder:text-[#C9D4DB]"
+                      className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-[var(--call-field-border)] bg-[var(--call-field-bg)] px-[18px] py-3 text-lg text-[var(--call-fg)] placeholder:text-[var(--call-fg-sub)]"
                     />
                     <button
                       type="submit"
                       disabled={sending || !input.trim()}
                       aria-label="전송"
-                      className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-lg font-bold text-white disabled:opacity-50"
+                      className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-brand text-lg font-bold text-white disabled:opacity-50"
                     >
                       {sending ? (
                         <span
@@ -2576,7 +2619,15 @@ export default function SessionCallPage() {
                1행 = 음소거 · 키패드 · 스피커 / 2행 = 메시지(문자 1건 도착 뒤 — 칸은 처음부터 예약) · 채팅으로(메신저
                채널만) · 빈 칸. 동작 없는 버튼을 채워 넣지 않는다 — 빈 칸은 자리만 차지한다(초점 대상 0).
                스크린리더 순서 = 1행 왼→오 · 2행 왼→오 · 종료. */
-            <div className="grid grid-cols-[repeat(3,72px)] justify-center gap-x-6 gap-y-5">
+            <div
+              className="grid grid-cols-[repeat(3,72px)] justify-center gap-x-6 gap-y-5"
+              // §89.5 ⓒ — 라이트 통화 화면(One UI형)은 버튼 묶음을 흰 판 위에 올린다(어두운 화면은 판 없음 — 종전).
+              style={
+                callTokens.gridPanelBg
+                  ? { backgroundColor: callTokens.gridPanelBg, borderRadius: 22, margin: "0 14px", padding: "16px 0" }
+                  : undefined
+              }
+            >
               <div className="flex min-h-[98px] flex-col items-center gap-1.5">
                 <button
                   type="button"
@@ -2720,7 +2771,7 @@ export default function SessionCallPage() {
               보이스로 정방향 에스컬레이션된 세션)에서만 위 버튼 자체가 보이므로, 이 오류 문구도
               같은 조건에서만 의미가 있다. */}
           {scenario.channel === "messenger" && switchError && (
-            <p role="alert" className="mt-3 px-6 text-center text-xs leading-relaxed text-[#F0A79E]">
+            <p role="alert" className="mt-3 px-6 text-center text-xs leading-relaxed text-[var(--call-alert)]">
               {switchError}
             </p>
           )}
@@ -2729,7 +2780,7 @@ export default function SessionCallPage() {
               Step 1 / P-32)은 완전히 삭제됐다. 게이트 도달은 이제 참가자 탭이 아니라 위 자동 전환
               effect가 대신 처리한다(계열 A·B 공통) — 참가자가 "선택"하는 행위 자체가 사라졌다. */}
           {verifyError && !verifyOverlayOpen && (
-            <p role="alert" className="mt-3 px-6 text-center text-xs leading-relaxed text-[#F0A79E]">
+            <p role="alert" className="mt-3 px-6 text-center text-xs leading-relaxed text-[var(--call-alert)]">
               {verifyError}
             </p>
           )}

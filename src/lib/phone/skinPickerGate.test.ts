@@ -80,7 +80,8 @@ test("[T190-6b 역검증 — AC-092 (g)ⓐ] 세션 중 채팅에 전환 칩을 �
 function sameSkinViolations(play: string): string[] {
   const code = codeOnly(play);
   const out: string[] = [];
-  if (!code.includes("callTokensFor(deviceSkin.skin)")) out.push("통화 셸이 deviceSkin.skin을 쓰지 않는다");
+  // §89.5 ⓒ — 둘째 인자(기기 테마)가 붙을 수 있다 — 스킨 인자가 deviceSkin.skin인지만 본다.
+  if (!/callTokensFor\(deviceSkin\.skin[,)]/.test(code)) out.push("통화 셸이 deviceSkin.skin을 쓰지 않는다");
   if (!code.includes("bannerTokensFor(deviceSkin.skin)")) out.push("배너가 deviceSkin.skin을 쓰지 않는다");
   if (!/<InCallSmsOverlay[\s\S]*?skin=\{deviceSkin\.skin\}/.test(code)) out.push("문자함이 통화 셸과 같은 스킨을 받지 않는다");
   // T190-8b(§74.12 (3) ⑥) — 정하는 지점 = 세션 로드 1곳 + 벨 직전 고지(세션 전)의 화면 모양 선택 1곳. 둘 외의 지점이
