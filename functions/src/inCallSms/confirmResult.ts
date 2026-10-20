@@ -39,9 +39,12 @@ function isConfirmPurpose(purpose: SmsPurpose): purpose is "transfer" | "link" {
 /**
  * 폴백 턴 지시 — 참가자가 **방금** 완료를 주장한 턴에 즉시 싣는다.
  * "마무리"는 [진행 강제]의 끊기 규칙(T192 슬롯)이 정한 방식을 따르게 가리키기만 한다(새 끊기 메커니즘 0).
+ * ⭐ R3-C ②-b · ②-c(2026-10-20 · 정본 Architecture §79.22 (6)) — "곧바로 다음 요구로 넘어가거나 … 마무리하라"를 남은 요구 유무 분기
+ * + "정한 대로 하라"로 바꿨다(끊어도 되는지는 끊기 슬롯이 정한다 — "마무리하라"는 끊기를 지시하는 것으로 읽혔다). 분기 구절은
+ * promptAssembly.ts NO_STALL_RULE과 바이트 동일하고 앞뒤 구절은 종전 그대로다(G625 단언).
  */
 export function buildConfirmResultInstruction(purpose: "transfer" | "link"): string {
-  return `(상대가 방금 문자 안내대로 마쳤다고 말했다. 이번 대답에서 ${RESULT_PHRASE[purpose]} 그럴듯하게 알려 주고, 곧바로 다음 요구로 넘어가거나 더 요구할 것이 없으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 마무리하라. 아직 확인 중이라거나 기다려 달라는 말은 하지 마라.)`;
+  return `(상대가 방금 문자 안내대로 마쳤다고 말했다. 이번 대답에서 ${RESULT_PHRASE[purpose]} 그럴듯하게 알려 주고, 상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라. 아직 확인 중이라거나 기다려 달라는 말은 하지 마라.)`;
 }
 
 /**
@@ -49,7 +52,7 @@ export function buildConfirmResultInstruction(purpose: "transfer" | "link"): str
  * **조건형**이다(클라가 언제 주입하든 "상대가 마쳤다고 말하면"에만 적용된다). ⚠️ 클라 배선은 이 변경에 없다(A-2).
  */
 export function buildLiveConfirmResultInstruction(purpose: "transfer" | "link"): string {
-  return `(상대가 이 문자 안내대로 마쳤다고 말하면, 그 말에 대답할 때 ${RESULT_PHRASE[purpose]} 그럴듯하게 알려 주고, 곧바로 다음 요구로 넘어가거나 더 요구할 것이 없으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 마무리하라. 확인 중이라거나 기다려 달라는 말은 하지 마라.)`;
+  return `(상대가 이 문자 안내대로 마쳤다고 말하면, 그 말에 대답할 때 ${RESULT_PHRASE[purpose]} 그럴듯하게 알려 주고, 상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라. 확인 중이라거나 기다려 달라는 말은 하지 마라.)`;
 }
 
 /**
