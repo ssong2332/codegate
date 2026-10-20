@@ -21621,6 +21621,7 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 | **G630** | ⓐ globals.css `:root` hex = `SITE_TOKENS`(키 집합 · 값) ⓑ 사이트 대비 쌍 WCAG AA ⓒ 역검증(값 하나 바꾼 사본 실패) ⓓ 훈련 루트 `font-phone` | `src/lib/design/siteTokens.test.ts` |
 | **G631** | 사이트 화면(.tsx · 훈련 표면 제외)에 옛 팔레트 hex 유틸리티 0건 + 역검증 | `src/lib/design/siteTokens.test.ts` |
 | **G632** | 수신 벨 밀어서 받기 판정(48px · 방향 무관) + 받기 버튼에 누르기 · 밀기 두 경로 + 기기 테마 판정 | `src/lib/phone/swipeAnswer.test.ts` |
+| **G634** | 매니페스트 = standalone · 시작 `/` · 아이콘 파일 존재 + 코드에 `requestFullscreen(` 0건(ⓑ 미채택 고정) | `src/lib/design/pwaManifest.test.ts` |
 | **G633** | 메신저형 표시 규칙(이름 = 상대 연속 첫 말풍선 · 시각 = 연속 마지막 · "1" = 상대 답 전) + 대화방 코드에 앱 이름 표기 0 | `src/lib/messenger/chatPresentation.test.ts` |
 | G456 확장 | 벨 그라데이션 두 끝 · 통화 셸 경고 문장 · 알약 · 입력칸 · One UI 라이트 통화 전체 · 메신저형 대화방 쌍 | `src/lib/phone/skinTokens.test.ts`(기존 테스트가 새 쌍을 수집) |
 
@@ -21638,7 +21639,7 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 ### 89.6 브라우저 주소창 숨김 — 판정(OQ-U99)
 | 방법 | 효과 | 판정 |
 |---|---|---|
-| ⓐ PWA 매니페스트(`display: standalone`) | 홈 화면에 추가한 사용자만 주소창 없음. 브라우저 동작 변화 0 | 권고 — 단 아이콘 PNG 자산 · 설치 안내 문구가 새로 필요해 **이번 단계에서 구현하지 않는다** |
+| ⓐ PWA 매니페스트(`display: standalone`) | 홈 화면에 추가한 사용자만 주소창 없음. 브라우저 동작 변화 0 | **채택 · 구현(P4)** — 사용자 결정 2026-10-20 원문 *"OQ-U99는 ⓐ(홈 화면 추가 시 주소창 없음)로 넣고"*. `src/app/manifest.ts` · 자체 아이콘 `public/icon-192.png` · `icon-512.png`(maskable 겸용) · `apple-touch-icon.png` · `appleWebApp` 메타. 설치 안내 문구는 넣지 않았다(새 문구는 별도 결정) |
 | ⓑ Fullscreen API(훈련 진입 탭) | Android Chrome · 삼성 인터넷에서 주소창 + 기기 상태바까지 숨김. iPhone Safari는 요소 전체화면 미지원(추정 — 확인: iPhone 실기에서 `document.documentElement.requestFullscreen` 존재 여부) | **사용자 승인 필요**(기기 동작을 바꾸는 정책 · P-37 R-1과 충돌) |
 | ⓒ 안 함 | — | 현행 |
 
@@ -21665,6 +21666,7 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
   - ⚠️ 추정(확인 필요): Android Chrome · 삼성 인터넷이 `prefers-color-scheme`에 기기 테마를 넘긴다 — 실기에서 라이트 · 다크 각각 통화 화면을 열어 확인.
   - **P3 리뷰 반영**(Reviewer: APPROVED · Critical 0 · Major 2 · Minor 7): ① `CallWaveform` 막대 · 라벨을 `--call-wave` · `--call-fg-sub`(토큰 `waveBar` — 라이트 `#1F6F66`)로 · G456 쌍 추가. ② 메신저형 입력칸 경계 `#7D8792`(흰 입력줄 위 3:1) · `chat.fieldBorder` 쌍 추가. ③ 받기 버튼 `touch-none`(G632 단언 추가) · 낡은 주석 정정 · 첫 메시지가 내 메시지일 때 꼬리 누락 수정.
   - 남긴 것(기록만): 메신저형도 문자형과 같이 최대폭 430px 가운데 정렬로 바뀌었다(데스크톱에서 폰 폭 — 두 표면 통일). 320px대 폭에서 머리줄 방 이름이 짧게 잘릴 수 있다(실기 확인). 세션 종료 뒤에도 마지막 내 메시지의 "1"이 남는다(설계 의도 — 상대가 답하지 않았다는 사실).
+- **P4**(`claude/design-a-pwa`, P3 위): OQ-U99 ⓐ(사용자 결정 2026-10-20) — 위 89.6 표. `theme_color` · `background_color` = 사이트 `page`(#F5F7FA). Firebase Hosting은 있는 파일을 rewrite보다 먼저 내주므로 `out/manifest.webmanifest`가 그대로 서빙된다(빌드 산출물 · `index.html`의 `<link rel="manifest">` 확인). 같은 결정에서 OQ-U101 = 현행 유지 · OQ-U100 = 나중에 실측(Open). ⚠️ 실기 확인 필요: Android Chrome · 삼성 인터넷 · iPhone Safari에서 "홈 화면에 추가" 뒤 주소창 없이 열리는지.
 
 ### 89.8 OQ
 | # | 질문 | 선택지 | 막힘 |
