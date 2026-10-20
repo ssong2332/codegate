@@ -42,11 +42,8 @@ import { IN_CALL_SMS, type InCallSmsItem } from "../inCallSms";
 import { FLOW_VARIANTS, resolveVariantPrompt, type FlowVariant } from "../flowVariants";
 import type { ScenarioPromptDoc } from "../../shared/types";
 import {
-  PERSONA_CARD_FIXED_VALUES,
   PERSONA_CARD_LABELS,
   PERSONA_LOAN_PROMPT_VALUE,
-  PERSONA_NAME_POOL,
-  PERSONA_REGION_MASK_SUFFIX,
   PERSONA_REGION_POOL,
 } from "../personaCardCatalog";
 import { PERSONA_CARD_BLOCK_HEAD, PERSONA_CARD_BLOCK_TAIL } from "../../roleplay/promptAssembly";
@@ -290,13 +287,8 @@ function collectAllSurfaces(): Surface[] {
 function personaCardSurfaces(): Surface[] {
   const rows: Array<[string, string, ScanProfile]> = [
     ...Object.entries(PERSONA_CARD_LABELS).map(([key, text]): [string, string, ScanProfile] => [`label:${key}`, text, "mockSurface"]),
-    ...PERSONA_NAME_POOL.map((text, i): [string, string, ScanProfile] => [`name[${i}]`, text, "mockSurface"]),
-    ...PERSONA_REGION_POOL.map((region, i): [string, string, ScanProfile] => [
-      `region[${i}]`,
-      `${region.name} ${PERSONA_REGION_MASK_SUFFIX}`,
-      "mockSurface",
-    ]),
-    ...Object.entries(PERSONA_CARD_FIXED_VALUES).map(([key, text]): [string, string, ScanProfile] => [`fixed:${key}`, text, "mockSurface"]),
+    // §88 — 이름 풀 · 가림 고정값은 폐지됐다(카드 값 = 사용자 입력). 사는 곳 선택지(시 · 도 17)는 카드 값 그대로 표면이다.
+    ...PERSONA_REGION_POOL.map((region, i): [string, string, ScanProfile] => [`region[${i}]`, region.name, "mockSurface"]),
     // 리뷰 M1 — 프롬프트에만 실리는 대출 일반명.
     ["PERSONA_LOAN_PROMPT_VALUE", PERSONA_LOAN_PROMPT_VALUE, "mockSurface"],
     ["PERSONA_CARD_BLOCK_HEAD", PERSONA_CARD_BLOCK_HEAD, "modelInstruction"],
@@ -414,12 +406,10 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
   );
   assert.equal(byDomain.get("flowVariant"), expectedFlow, "T191 S5 흐름 변형 표면");
   t.diagnostic(`[AC-102 (a)] 흐름 변형 표면 after=${expectedFlow} (before=0 — 도메인 신설)`);
-  // T194-b(G565) — 가상 신상 카드: 라벨 + 이름 풀 + 지역 풀 + 가림 고정값 + 대출 프롬프트 일반명 + 블록 머리 · 꼬리(before=0 — 도메인 신설).
+  // T194-b(G565) — 가상 신상 카드: 라벨 + 지역 선택지 + 대출 프롬프트 일반명 + 블록 머리 · 꼬리(§88 — 이름 풀 · 가림 고정값 폐지).
   const expectedPersona =
     Object.keys(PERSONA_CARD_LABELS).length +
-    PERSONA_NAME_POOL.length +
     PERSONA_REGION_POOL.length +
-    Object.keys(PERSONA_CARD_FIXED_VALUES).length +
     1 +
     2;
   assert.equal(byDomain.get("personaCard"), expectedPersona, "T194-b 가상 신상 카드 표면");
@@ -624,7 +614,7 @@ const SCENARIO_MODULE_INVENTORY: Record<string, string> = {
   "variantPool.ts": "콘텐츠 아님 — 배정 가능 풀 판정 순수 함수",
   "seed.ts": "콘텐츠 아님 — 시딩 스크립트(PUBLIC_SCENARIOS를 쓴다)",
   // T194-b(§84.3.2 · G565) — 가상 신상 카드 값 풀 · 라벨 · 가림 고정값.
-  "personaCardCatalog.ts": "scanned (personaCard 도메인 — 라벨 · 이름 · 지역 · 가림 고정값)",
+  "personaCardCatalog.ts": "scanned (personaCard 도메인 — 라벨 · 시 · 도 선택지 · 대출 프롬프트 일반명)",
 };
 
 test("[T86/(c)] 신규 콘텐츠 카탈로그 파일이 등록 없이 추가되지 못한다(모듈 등록부 1:1)", () => {

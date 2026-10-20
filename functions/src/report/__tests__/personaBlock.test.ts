@@ -31,7 +31,8 @@ const scammer = (turnIndex: number, textMasked: string, notSpoken?: true): Perso
 const user = (turnIndex: number, textMasked: string): PersonaTranscriptLine => ({ role: "user", turnIndex, textMasked });
 
 test("[G570] 대조 토큰 — 이름 전체 · 이름 2자 / 연도 4자리 · 두 자리 · 한글 읽기 / 도 이름 + 줄임말 / 은행명 / 가림 항목은 대조 제외", () => {
-  assert.deepEqual(personaMatchTokens(CARD.items[0]!), ["김영숙", "영숙"]);
+  // §88 — 사기범 쪽 이름 토큰은 성 뺀 이름에 호칭이 붙은 꼴만(일상어 거짓 양성 방지). 참가자 쪽은 성 뺀 이름 그대로도 센다.
+  assert.deepEqual(personaMatchTokens(CARD.items[0]!), ["김영숙", "영숙님", "영숙 님", "영숙씨", "영숙 씨"]);
   assert.deepEqual(personaMatchTokens(CARD.items[1]!), ["1961", "61년", "육십일년"]);
   assert.deepEqual(personaMatchTokens(CARD.items[2]!), ["경상남도", "경남"]);
   assert.deepEqual(personaMatchTokens(CARD.items[3]!), ["다온은행"]);
@@ -101,4 +102,34 @@ test("[G570 배선] 리포트 생성이 이미 읽은 messages 스냅샷과 세�
   assert.match(src, /\.\.\.\(data\.notSpoken === true \? \{ notSpoken: true as const \} : \{\}\),/);
   const setAt = src.indexOf("await reportRef.set(reportDoc);");
   assert.ok(src.indexOf("const personaBlock = buildPersonaBlock(") < setAt, "판정은 리포트 write 앞");
+});
+
+// ── §88(DECISIONS #199 · UX D-131) — 사용자 입력 카드(v2) ─────────────────────────────
+
+const INPUT_CARD: PersonaCard = {
+  v: 2,
+  inputBy: "sender",
+  items: [
+    { key: "name", label: "이름", value: "이하나" },
+    { key: "birthYear", label: "출생 연도", value: "1962년생" },
+    { key: "region", label: "사는 곳", value: "부산광역시" },
+  ],
+};
+
+test("[§88] v2 카드 — 시 · 도 정식 명칭 값도 줄임말로 대조되고, 블록에 inputBy가 실린다(v1은 부재)", () => {
+  assert.deepEqual(personaMatchTokens(INPUT_CARD.items[2]!), ["부산광역시", "부산"]);
+  const block = buildPersonaBlock(INPUT_CARD, [scammer(1, "부산 사시는 62년생 이하나 님 맞으시죠?"), user(2, "네")], false)!;
+  assert.equal(block.state, "R-1");
+  assert.equal(block.inputBy, "sender");
+  assert.deepEqual(block.items.map((i) => i.key), ["name", "birthYear", "region"]);
+  assert.equal(buildPersonaBlock(CARD, [user(1, "네")], false)!.inputBy, undefined);
+});
+
+test("[§88] 성 뺀 이름이 일상어와 겹쳐도(\"하나만 여쭤볼게요\") 사기범 '먼저 말함'으로 세지 않고, 참가자가 성 뺀 이름을 먼저 말하면 참가자 먼저로 본다", () => {
+  const nameOnly: PersonaCard = { v: 2, inputBy: "self", items: [INPUT_CARD.items[0]!] };
+  assert.deepEqual(resolvePersonaFirstMentions(nameOnly.items, [scammer(1, "하나만 여쭤볼게요"), user(2, "네")]), []);
+  assert.deepEqual(resolvePersonaFirstMentions(nameOnly.items, [user(1, "하나라고 해요"), scammer(2, "하나 님, 확인됐습니다")]), []);
+  assert.deepEqual(resolvePersonaFirstMentions(nameOnly.items, [scammer(1, "하나 님 맞으시죠?"), user(2, "네")]), [
+    { key: "name", scammerTurnIndex: 1 },
+  ]);
 });

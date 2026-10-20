@@ -12,6 +12,11 @@ export type CreateChallengeRequest = {
   scenarioId: string;
   displayName: string;
   difficultyLevel?: DifficultyLevel;
+  /**
+   * §88(DECISIONS #199 · UX D-131) — 발신자가 넣은 받는 분 정보 원값(선택 · 부재 = 카드 0). 서버가 검증해 챌린지 문서에 카드로
+   * 저장하고 `consentChallenge`가 수신자 세션에 복사한다. 랜딩 응답에는 싣지 않는다.
+   */
+  personaCardInput?: { name?: string; birthYear?: number; region?: string };
 };
 export type CreateChallengeResponse = {
   challengeId: string;

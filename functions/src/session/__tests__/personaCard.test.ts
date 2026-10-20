@@ -1,4 +1,5 @@
-// T194-b(docs/Architecture.md §84.3 · §84.8 G563 · G564 · G565 · G566 · PRD AC-104 (h) ⓐ~ⓓ) — 훈련용 가상 신상 카드.
+// T194-b(docs/Architecture.md §84.3 · §84.8 G563 · G565 · G566 · PRD AC-104 (h)) + §88(G626 · G627 · DECISIONS #199) — 훈련용 가상 신상 카드.
+// ⭐ §88 — 카드 값은 사용자가 **선택으로** 넣은 원값만으로 만든다(서버 임의 생성 폐지 · 비면 카드 0 · 자가 · 챌린지 모두).
 // ⭐ 역방향(AC-104 (h))은 **같은 실행 출력**에 정상 샘플 통과와 나란히 낸다: 각 검사 함수를 실제 값과 오염 사본에 둘 다 돌린다.
 // ⛔ 오염은 테스트 안의 사본에서만 한다(실제 소스 · 카탈로그는 건드리지 않는다 — harmlessnessGate.test.ts 관례).
 import { test } from "node:test";
@@ -7,23 +8,24 @@ import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import * as ts from "typescript";
 import {
+  PERSONA_CARD_INVALID_REASON,
+  PERSONA_CARD_NOT_APPLICABLE_REASON,
   buildPersonaCard,
+  personaBirthYearMax,
   personaCardEligible,
-  pickPersonaCardBank,
-  resolveSessionPersonaCard,
+  readPersonaCardInput,
+  readStoredPersonaCard,
+  resolvePersonaCardRequest,
   type PersonaCardEligibilityInput,
 } from "../personaCard";
 import {
-  PERSONA_CARD_FIXED_VALUES,
+  PERSONA_CARD_INPUT_KEYS,
   PERSONA_CARD_LABELS,
-  PERSONA_CARD_ROWS,
   PERSONA_CARD_SCENARIOS,
-  PERSONA_NAME_POOL,
-  PERSONA_REGION_MASK_SUFFIX,
   PERSONA_REGION_POOL,
 } from "../../scenarios/personaCardCatalog";
 import { SCENARIO_PROMPTS } from "../../scenarios";
-import { FICTIONAL_BANK_NAMES, hasBankPlaceholder } from "../../shared/fictionalBank";
+import { hasBankPlaceholder } from "../../shared/fictionalBank";
 import { replaceRealFinancialNames } from "../../guardrails/realFinancialNames";
 import type { DifficultyLevel } from "../../shared/difficulty";
 import type { PersonaCardItem } from "../../shared/types";
@@ -38,101 +40,225 @@ const EXPECTED_TARGETS = [
   "institutional-impersonation",
   "loan-refinance-scam",
 ];
+const NOW_YEAR = 2026;
 
-type SessionKind = "self-voice" | "self-messenger" | "challenge";
-function eligibilityInput(scenarioId: string, difficultyLevel: DifficultyLevel, kind: SessionKind): PersonaCardEligibilityInput {
-  return {
-    scenarioId,
-    difficultyLevel,
-    challengeId: kind === "challenge" ? "ch-1" : undefined,
-    channel: kind === "self-messenger" ? "messenger" : undefined,
-  };
-}
+// ── G563 대상 술어(§88 — 챌린지 축 삭제) ─────────────────────────────────────
 
-/** G563 진리표 위반 목록 — 술어를 인자로 받아 실제 술어와 오염 사본에 똑같이 돌린다. */
 function eligibilityViolations(pred: (input: PersonaCardEligibilityInput) => boolean): string[] {
   const out: string[] = [];
   for (const scenarioId of Object.keys(SCENARIO_PROMPTS)) {
     for (const level of LEVELS) {
-      for (const kind of ["self-voice", "self-messenger", "challenge"] as const) {
-        const expected = EXPECTED_TARGETS.includes(scenarioId) && level === "advanced" && kind === "self-voice";
-        const actual = pred(eligibilityInput(scenarioId, level, kind));
-        if (actual !== expected) out.push(`${scenarioId}/${level}/${kind}: ${actual} (기대 ${expected})`);
+      for (const channel of [undefined, "voice", "messenger"] as const) {
+        const expected = EXPECTED_TARGETS.includes(scenarioId) && level === "advanced" && channel !== "messenger";
+        const actual = pred({ scenarioId, difficultyLevel: level, channel });
+        if (actual !== expected) out.push(`${scenarioId}/${level}/${channel ?? "부재"}: ${actual} (기대 ${expected})`);
       }
     }
   }
   return out;
 }
 
-test("[G563] 대상 술어 진리표 — 전 시나리오 × 3난이도 × {자가 통화 · 자가 메신저 · 챌린지}에서 4종 × 고급 × 자가 통화만 참", (t) => {
+test("[G563 · §88] 대상 술어 진리표 — 전 시나리오 × 3난이도 × {부재 · voice · messenger}에서 4종 × 고급 × 통화만 참(자가 · 챌린지 공통)", (t) => {
   assert.deepEqual([...PERSONA_CARD_SCENARIOS].sort(), EXPECTED_TARGETS, "대상 상수가 User 결정(2026-10-20 · 4종)과 다르다");
   assert.equal(PERSONA_CARD_SCENARIOS.includes("kidnapping-threat"), false, "kidnapping-threat는 대상에서 빠졌다(User 결정)");
   assert.deepEqual(eligibilityViolations(personaCardEligible), []);
-  const cells = Object.keys(SCENARIO_PROMPTS).length * LEVELS.length * 3;
-  t.diagnostic(`[G563] 진리표 칸 ${cells}개 · 참 ${EXPECTED_TARGETS.length}개`);
+  t.diagnostic(`[G563] 진리표 칸 ${Object.keys(SCENARIO_PROMPTS).length * LEVELS.length * 3}개 · 위반 0`);
 });
 
-test("[G563 역방향 · AC-104 (h) ⓓ] 대상 밖에 카드가 붙는 사본 — 난이도를 안 보는 술어 · 챌린지를 안 보는 술어 · kidnapping을 넣은 술어는 진리표에서 실패한다", (t) => {
+test("[G563 역방향] 난이도를 안 보는 술어 · 메신저를 안 보는 술어 · kidnapping을 넣은 술어는 진리표에서 실패한다", (t) => {
   const ignoresLevel = (i: PersonaCardEligibilityInput) => personaCardEligible({ ...i, difficultyLevel: "advanced" });
-  const ignoresChallenge = (i: PersonaCardEligibilityInput) => personaCardEligible({ ...i, challengeId: undefined });
+  const ignoresChannel = (i: PersonaCardEligibilityInput) => personaCardEligible({ ...i, channel: undefined });
   const addsKidnapping = (i: PersonaCardEligibilityInput) =>
-    personaCardEligible(i) || (i.scenarioId === "kidnapping-threat" && i.difficultyLevel === "advanced" && !i.challengeId && !i.channel);
+    personaCardEligible(i) || (i.scenarioId === "kidnapping-threat" && i.difficultyLevel === "advanced" && i.channel !== "messenger");
   for (const [name, pred] of [
     ["난이도 무시", ignoresLevel],
-    ["챌린지 무시", ignoresChallenge],
+    ["채널 무시", ignoresChannel],
     ["kidnapping 포함", addsKidnapping],
   ] as const) {
     const violations = eligibilityViolations(pred);
     assert.ok(violations.length > 0, `${name} 사본이 진리표를 통과했다 — 검사가 무력하다`);
     t.diagnostic(`[G563 역방향] ${name} → 위반 ${violations.length}건(예: ${violations[0]}) — 실패 확인`);
   }
-  t.diagnostic(`[G563 정상] 실제 술어 → 위반 ${eligibilityViolations(personaCardEligible).length}건`);
 });
 
-test("[G563] createSession 조합 — 술어가 참일 때만 카드가 생기고, 생성이 throw하면 필드 부재로 진행한다(UF-014 Failure (a))", () => {
-  const build = { sessionId: "s-1", scenarioId: "institutional-impersonation", fictionalBankName: "한결은행" };
-  assert.ok(resolveSessionPersonaCard(eligibilityInput("institutional-impersonation", "advanced", "self-voice"), build));
-  assert.equal(resolveSessionPersonaCard(eligibilityInput("institutional-impersonation", "intermediate", "self-voice"), build), undefined);
-  assert.equal(resolveSessionPersonaCard(eligibilityInput("institutional-impersonation", "advanced", "challenge"), build), undefined);
-  const throwing = () => {
-    throw new Error("boom");
+// ── G626 입력 검증 ───────────────────────────────────────────────────────────
+
+/** [원값, 기대: 정리된 입력 | "invalid" | undefined(카드 0)] */
+const INPUT_CASES: Array<[string, unknown, Record<string, unknown> | "invalid" | undefined]> = [
+  ["부재", undefined, undefined],
+  ["null", null, undefined],
+  ["빈 객체", {}, undefined],
+  ["세 칸 모두 빈 값", { name: "", region: "" }, undefined],
+  ["이름 공백만", { name: "   " }, undefined],
+  ["전부", { name: "홍길동", birthYear: 1962, region: "경기도" }, { name: "홍길동", birthYear: 1962, region: "경기도" }],
+  ["이름만 · 앞뒤 공백 · 연속 공백 정리", { name: "  남궁  민수 " }, { name: "남궁 민수" }],
+  ["영문 이름", { name: "Kim Minsu" }, { name: "Kim Minsu" }],
+  ["이름 2자(하한)", { name: "이산" }, { name: "이산" }],
+  ["이름 10자(상한)", { name: "가나다라마바사아자차" }, { name: "가나다라마바사아자차" }],
+  ["출생 연도 하한", { birthYear: 1920 }, { birthYear: 1920 }],
+  ["출생 연도 상한(올해−14)", { birthYear: NOW_YEAR - 14 }, { birthYear: NOW_YEAR - 14 }],
+  ["사는 곳 광역시", { region: "부산광역시" }, { region: "부산광역시" }],
+  ["이름 1자", { name: "홍" }, "invalid"],
+  ["이름 11자", { name: "가나다라마바사아자차카" }, "invalid"],
+  ["이름에 숫자", { name: "홍길동1" }, "invalid"],
+  ["이름에 기호", { name: "홍길동!" }, "invalid"],
+  ["이름이 문자열 아님", { name: 3 }, "invalid"],
+  ["이름에 실존 은행명", { name: "국민은행" }, "invalid"],
+  ["출생 연도 하한 밖", { birthYear: 1919 }, "invalid"],
+  ["출생 연도 상한 밖", { birthYear: NOW_YEAR - 13 }, "invalid"],
+  ["출생 연도 소수", { birthYear: 1962.5 }, "invalid"],
+  ["출생 연도 문자열", { birthYear: "1962" }, "invalid"],
+  ["사는 곳 목록 밖", { region: "수원시" }, "invalid"],
+  ["사는 곳 옛 가림 형식", { region: "경기도 ○○시" }, "invalid"],
+  ["모르는 키(완성 카드 주입)", { name: "홍길동", items: [] }, "invalid"],
+  ["배열", [], "invalid"],
+  ["문자열", "홍길동", "invalid"],
+];
+
+/** 검증기 위반 목록 — 실제 검증기와 오염 사본에 똑같이 돌린다. */
+function inputViolations(reader: (raw: unknown) => ReturnType<typeof readPersonaCardInput>): string[] {
+  const out: string[] = [];
+  for (const [name, raw, expected] of INPUT_CASES) {
+    const result = reader(raw);
+    if (expected === "invalid") {
+      if (result.ok) out.push(`${name}: 통과했다(거부 기대)`);
+    } else if (!result.ok) {
+      out.push(`${name}: 거부됐다`);
+    } else if (JSON.stringify(result.input) !== JSON.stringify(expected)) {
+      out.push(`${name}: ${JSON.stringify(result.input)} (기대 ${JSON.stringify(expected)})`);
+    }
+  }
+  return out;
+}
+
+test("[G626] 입력 검증 진리표 — 정상 · 경계 · 빈 값(카드 0) · 거부", (t) => {
+  assert.deepEqual(inputViolations((raw) => readPersonaCardInput(raw, NOW_YEAR)), []);
+  assert.equal(personaBirthYearMax(NOW_YEAR), NOW_YEAR - 14);
+  t.diagnostic(`[G626 정상] ${INPUT_CASES.length}건 기대대로`);
+});
+
+test("[G626 역방향] 검증 없이 원값을 그대로 받는 사본 · 길이만 보는 사본은 진리표에서 실패한다", (t) => {
+  const passThrough = (raw: unknown) => ({ ok: true as const, input: raw as Record<string, never> | undefined });
+  const lengthOnly = (raw: unknown) => {
+    const r = raw as { name?: unknown } | undefined;
+    if (r && typeof r.name === "string" && r.name.length > 10) return { ok: false as const };
+    return readPersonaCardInput(raw && typeof raw === "object" && !Array.isArray(raw) ? { ...raw, name: undefined } : raw, NOW_YEAR);
   };
-  assert.equal(
-    resolveSessionPersonaCard(eligibilityInput("institutional-impersonation", "advanced", "self-voice"), build, throwing),
-    undefined,
-  );
+  for (const [name, reader] of [
+    ["검증 없음", passThrough],
+    ["이름 길이만", lengthOnly],
+  ] as const) {
+    const violations = inputViolations(reader);
+    assert.ok(violations.length > 0, `${name} 사본이 통과했다 — 검사가 무력하다`);
+    t.diagnostic(`[G626 역방향] ${name} → 위반 ${violations.length}건(예: ${violations[0]}) — 실패 확인`);
+  }
 });
 
-test("[G563 배선] createSession은 조합 함수 1곳에서 자가 세션(challengeId: undefined)으로 평가하고 대상일 때만 필드를 쓴다 · 챌린지 경로는 카드를 만들지 않는다(소스 스캔)", () => {
-  const session = readSrc("session/index.ts");
-  assert.match(
-    session,
-    /const personaCard = resolveSessionPersonaCard\(\n\s*\{ scenarioId, difficultyLevel: resolvedDifficultyLevel, challengeId: undefined, channel \},\n\s*\{ sessionId: sessionRef\.id, scenarioId, fictionalBankName \},\n\s*\);/,
-  );
-  assert.match(session, /\.\.\.\(personaCard \? \{ personaCard \} : \{\}\),/, "대상 밖 세션은 필드 부재여야 한다");
-  // 카드 생성(시드 = sessionRef.id)은 오프닝 호출보다 앞이고, sessionRef 확정은 그보다 앞이다.
-  const refAt = session.indexOf("let sessionRef = db.collection(\"sessions\").doc();");
-  const cardAt = session.indexOf("const personaCard = resolveSessionPersonaCard(");
-  const openingAt = session.indexOf("await generateOpeningLine(");
-  assert.ok(refAt > -1 && cardAt > refAt && openingAt > cardAt, `순서: sessionRef(${refAt}) → 카드(${cardAt}) → 오프닝(${openingAt})`);
-  const challenge = readSrc("challenge/userAccess.ts");
-  assert.equal(/resolveSessionPersonaCard|buildPersonaCard/.test(challenge), false, "챌린지 수신자 경로가 카드를 만든다");
-  // 2026-10-20 — 오프닝 컨텍스트에 voiceSelectionSource 키가 뒤에 붙었다(챌린지 = 선택 없음).
-  assert.match(challenge, /personaCard: undefined, voiceSelectionSource: undefined \}/, "챌린지 오프닝은 카드 없음을 명시로 넘긴다");
+test("[G626] 조합 — 입력 없음 = 카드 0(대상이어도) · 입력 + 대상 = v2 카드 · 입력 + 대상 밖 = not-applicable · 규칙 밖 = invalid", () => {
+  const target: PersonaCardEligibilityInput = { scenarioId: "loan-refinance-scam", difficultyLevel: "advanced", channel: undefined };
+  assert.deepEqual(resolvePersonaCardRequest(undefined, target, "self", NOW_YEAR), { ok: true, personaCard: undefined });
+  assert.deepEqual(resolvePersonaCardRequest({ name: "" }, { ...target, difficultyLevel: "beginner" }, "self", NOW_YEAR), {
+    ok: true,
+    personaCard: undefined,
+  });
+  assert.deepEqual(resolvePersonaCardRequest({ name: "홍길동", birthYear: 1962, region: "충청남도" }, target, "sender", NOW_YEAR), {
+    ok: true,
+    personaCard: {
+      v: 2,
+      inputBy: "sender",
+      items: [
+        { key: "name", label: "이름", value: "홍길동" },
+        { key: "birthYear", label: "출생 연도", value: "1962년생" },
+        { key: "region", label: "사는 곳", value: "충청남도" },
+      ],
+    },
+  });
+  assert.deepEqual(resolvePersonaCardRequest({ name: "홍길동" }, { ...target, difficultyLevel: "intermediate" }, "self", NOW_YEAR), {
+    ok: false,
+    reason: PERSONA_CARD_NOT_APPLICABLE_REASON,
+  });
+  assert.deepEqual(resolvePersonaCardRequest({ name: "홍길동" }, { ...target, channel: "messenger" }, "self", NOW_YEAR), {
+    ok: false,
+    reason: PERSONA_CARD_NOT_APPLICABLE_REASON,
+  });
+  assert.deepEqual(resolvePersonaCardRequest({ name: "홍" }, target, "self", NOW_YEAR), { ok: false, reason: PERSONA_CARD_INVALID_REASON });
+  // 넣은 항목만 · 순서 고정(이름 → 출생 연도 → 사는 곳).
+  const partial = buildPersonaCard({ input: { region: "제주특별자치도", birthYear: 1970 }, inputBy: "self" })!;
+  assert.deepEqual(partial.items.map((i) => i.key), ["birthYear", "region"]);
+  assert.equal(buildPersonaCard({ input: {}, inputBy: "self" }), undefined);
 });
 
-// ── G564 클라 입력 경로 0 ────────────────────────────────────────────────────
+test("[G626] 저장된 카드 읽기 — v2 모양만 통과(모양 이상 = 카드 0)", () => {
+  const card = buildPersonaCard({ input: { name: "홍길동" }, inputBy: "sender" });
+  assert.deepEqual(readStoredPersonaCard(card), card);
+  assert.equal(readStoredPersonaCard(undefined), undefined);
+  assert.equal(readStoredPersonaCard({ v: 1, items: card!.items }), undefined);
+  assert.equal(readStoredPersonaCard({ v: 2, inputBy: "other", items: card!.items }), undefined);
+  assert.equal(readStoredPersonaCard({ v: 2, inputBy: "sender", items: [] }), undefined);
+  assert.equal(readStoredPersonaCard({ v: 2, inputBy: "sender", items: [{ key: "evil", label: "x", value: "y" }] }), undefined);
+  // 리뷰 m4 — 프로토타입 키("constructor")도 거부한다.
+  assert.equal(readStoredPersonaCard({ v: 2, inputBy: "sender", items: [{ key: "constructor", label: "x", value: "y" }] }), undefined);
+});
 
-/** createSession 핸들러의 `request.data` 구조분해 바인딩 이름(AST). */
-function createSessionRequestBindings(source: string): string[] {
+// ── G565 값 무해화(§88 — 입력이 통과한 값) ─────────────────────────────────────
+
+function cardItemViolations(item: PersonaCardItem): string[] {
+  const out: string[] = [];
+  if (replaceRealFinancialNames(item.value).replacedCount > 0) out.push(`실존 금융사명: ${item.value}`);
+  if (hasBankPlaceholder(item.value)) out.push(`은행 자리표시자 패턴: ${item.value}`);
+  if (/\d{5,}/.test(item.value)) out.push(`5자리 이상 숫자열: ${item.value}`);
+  if (item.key === "region" && !PERSONA_REGION_POOL.some((r) => r.name === item.value)) out.push(`지역 형식: ${item.value}`);
+  if (!PERSONA_CARD_INPUT_KEYS.includes(item.key)) out.push(`입력 대상 밖 행: ${item.key}`);
+  if (item.label !== PERSONA_CARD_LABELS[item.key]) out.push(`라벨: ${item.label}`);
+  return out;
+}
+
+test("[G565 · §88] 입력이 통과한 카드 — 시 · 도 17 × 대표 입력 전부 위반 0 · 시 · 도 목록 자체가 실존 금융사명 · 자리표시자 0", (t) => {
+  assert.equal(PERSONA_REGION_POOL.length, 17);
+  assert.equal(new Set(PERSONA_REGION_POOL.map((r) => r.name)).size, 17, "시 · 도 중복");
+  const failures: string[] = [];
+  let cards = 0;
+  for (const region of PERSONA_REGION_POOL) {
+    assert.equal(replaceRealFinancialNames(region.name).replacedCount, 0, region.name);
+    assert.equal(hasBankPlaceholder(region.name), false, region.name);
+    for (const name of ["홍길동", "Kim Minsu", "남궁 민수"]) {
+      const read = readPersonaCardInput({ name, birthYear: 1962, region: region.name }, NOW_YEAR);
+      assert.ok(read.ok && read.input);
+      const card = buildPersonaCard({ input: read.input, inputBy: "self" })!;
+      cards += 1;
+      for (const item of card.items) failures.push(...cardItemViolations(item).map((v) => `${region.name}/${name}: ${v}`));
+    }
+  }
+  assert.deepEqual(failures, []);
+  t.diagnostic(`[G565 정상] 카드 ${cards}장 위반 0`);
+});
+
+test("[G565 역방향] 실존 은행 행 · 목록 밖 지역 · 긴 숫자열 · 입력 대상 밖 행이 든 카드 사본은 실패한다", (t) => {
+  const samples: Array<[string, PersonaCardItem]> = [
+    ["실존 은행명", { key: "bank", label: "거래 은행", value: "국민은행" }],
+    ["목록 밖 지역", { key: "region", label: "사는 곳", value: "경기도 수원시" }],
+    ["긴 숫자열", { key: "name", label: "이름", value: "홍길동12345" }],
+    ["입력 대상 밖 행", { key: "loan", label: "대출", value: "저축은행 대출 이용 중" }],
+  ];
+  for (const [name, item] of samples) {
+    const violations = cardItemViolations(item);
+    assert.ok(violations.length > 0, `${name} 샘플이 통과했다 — 검사가 무력하다`);
+    t.diagnostic(`[G565 역방향] ${name} → ${violations.join(" / ")} — 실패 확인`);
+  }
+});
+
+// ── G627 배선(소스 스캔) ───────────────────────────────────────────────────────
+
+/** 콜러블 핸들러의 `request.data` 구조분해 바인딩 이름(AST). */
+function requestBindings(source: string, callableName: string): string[] {
   const file = ts.createSourceFile("index.ts", source, ts.ScriptTarget.ES2020, true);
   const names: string[] = [];
   let found = 0;
-  const visit = (node: ts.Node, inCreateSession: boolean): void => {
-    let inside = inCreateSession;
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === "createSession") inside = true;
+  const visit = (node: ts.Node, inside: boolean): void => {
+    let within = inside;
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === callableName) within = true;
     if (
-      inside &&
+      within &&
       ts.isVariableDeclaration(node) &&
       ts.isObjectBindingPattern(node.name) &&
       node.initializer &&
@@ -141,124 +267,75 @@ function createSessionRequestBindings(source: string): string[] {
       found += 1;
       for (const element of node.name.elements) names.push((element.propertyName ?? element.name).getText(file));
     }
-    ts.forEachChild(node, (child) => visit(child, inside));
+    ts.forEachChild(node, (child) => visit(child, within));
   };
   visit(file, false);
-  assert.equal(found, 1, `createSession의 request.data 구조분해를 정확히 1개 찾아야 한다(찾음 ${found}) — 게이트가 죽었다`);
+  assert.equal(found, 1, `${callableName}의 request.data 구조분해를 정확히 1개 찾아야 한다(찾음 ${found}) — 게이트가 죽었다`);
   return names;
 }
 
-test("[G564 · AC-104 (h) ⓐ] createSession 요청 구조분해에 카드 필드가 없다(AST) — 요청에 카드를 실은 사본은 걸린다", (t) => {
-  const source = readSrc("session/index.ts");
-  const names = createSessionRequestBindings(source);
-  assert.ok(names.includes("scenarioId") && names.includes("difficultyLevel"), `파싱 확인: ${names.join(", ")}`);
-  assert.equal(names.includes("personaCard"), false, "createSession이 요청의 personaCard를 읽는다");
-  t.diagnostic(`[G564 정상] 요청 구조분해 = {${names.join(", ")}} — personaCard 없음`);
-  const poisoned = source.replace("      difficultyLevel,\n    } = request.data ?? {};", "      difficultyLevel,\n      personaCard,\n    } = request.data ?? {};");
-  assert.notEqual(poisoned, source, "오염 사본 생성 실패 — 앵커가 바뀌었다");
-  assert.equal(createSessionRequestBindings(poisoned).includes("personaCard"), true);
-  t.diagnostic("[G564 역방향] 요청 구조분해에 personaCard를 더한 사본 → 검출됨(실패 확인)");
-});
-
-test("[G564] 저장값 = 서버 빌더 값 — 조합 함수에는 요청 값이 들어갈 자리가 없고, 같은 입력이면 같은 카드다", () => {
-  const eligibility = eligibilityInput("loan-refinance-scam", "advanced", "self-voice");
-  const build = { sessionId: "sess-abc", scenarioId: "loan-refinance-scam", fictionalBankName: "다온은행" };
-  // 클라가 실어 보낸 것처럼 보이는 값을 섞어도(구조적 타이핑의 잉여 속성) 결과는 서버 빌더 값 그대로다.
-  const clientSent = { ...build, personaCard: { v: 1, items: [{ key: "name", label: "이름", value: "주입값" }] } };
-  assert.deepEqual(resolveSessionPersonaCard(eligibility, clientSent), buildPersonaCard(build));
-  assert.deepEqual(buildPersonaCard(build), buildPersonaCard(build), "결정적이어야 한다(같은 sessionId → 같은 카드)");
-});
-
-// ── G565 값 풀 무해화 ───────────────────────────────────────────────────────
-
-const REGION_FORMAT = new RegExp(`^(${PERSONA_REGION_POOL.map((r) => r.name).join("|")}) ○○시$`);
-
-/** 카드 항목 1개의 금지 위반(G565) — 실제 카드와 오염 사본에 똑같이 돌린다. */
-function cardItemViolations(item: PersonaCardItem, sessionBank: string): string[] {
+/** 요청 바인딩 위반 — 완성 카드(`personaCard`)를 읽거나 원값(`personaCardInput`)을 읽지 않으면 위반. */
+function bindingViolations(names: string[]): string[] {
   const out: string[] = [];
-  if (replaceRealFinancialNames(item.value).replacedCount > 0) out.push(`실존 금융사명: ${item.value}`);
-  if (hasBankPlaceholder(item.value)) out.push(`은행 자리표시자 패턴: ${item.value}`);
-  if (/\d{5,}/.test(item.value)) out.push(`5자리 이상 숫자열: ${item.value}`);
-  if (item.key === "region" && !REGION_FORMAT.test(item.value)) out.push(`지역 형식: ${item.value}`);
-  if (item.key === "bank" && item.value === sessionBank) out.push(`카드 은행 = 세션 은행: ${item.value}`);
-  if (item.key === "bank" && !FICTIONAL_BANK_NAMES.includes(item.value)) out.push(`가상 은행 목록 밖: ${item.value}`);
-  if (item.label !== PERSONA_CARD_LABELS[item.key]) out.push(`라벨: ${item.label}`);
+  if (names.includes("personaCard")) out.push("요청의 완성 카드(personaCard)를 읽는다");
+  if (!names.includes("personaCardInput")) out.push("요청의 원값(personaCardInput)을 읽지 않는다");
   return out;
 }
 
-const SEED_SAMPLES = Array.from({ length: 64 }, (_, i) => `seed-${i}-${(i * 2654435761) >>> 0}`);
-
-test("[G565] 카드 값 무해화 — 전 대상 시나리오 × 세션 은행 8 × 시드 64: 실존 금융사명 0 · 은행 자리표시자 불일치 · 5자리 이상 숫자열 0 · 지역 형식 · 카드 은행 ≠ 세션 은행", (t) => {
-  let cards = 0;
-  const failures: string[] = [];
-  for (const scenarioId of PERSONA_CARD_SCENARIOS) {
-    for (const sessionBank of FICTIONAL_BANK_NAMES) {
-      for (const sessionId of SEED_SAMPLES) {
-        const card = buildPersonaCard({ sessionId, scenarioId, fictionalBankName: sessionBank })!;
-        cards += 1;
-        assert.equal(card.v, 1);
-        assert.deepEqual(card.items.map((i) => i.key), PERSONA_CARD_ROWS[scenarioId]);
-        assert.ok(card.items.length >= 3 && card.items.length <= 5, "항목 3~5행(D-119)");
-        for (const item of card.items) failures.push(...cardItemViolations(item, sessionBank).map((v) => `${scenarioId}/${sessionBank}/${sessionId}: ${v}`));
-      }
-    }
+test("[G627] createSession · createChallenge 요청 구조분해 = 원값(personaCardInput) 1 · 완성 카드(personaCard) 0 — 완성 카드를 읽는 사본은 걸린다(AST)", (t) => {
+  const session = readSrc("session/index.ts");
+  const challenge = readSrc("challenge/index.ts");
+  for (const [name, source] of [
+    ["createSession", session],
+    ["createChallenge", challenge],
+  ] as const) {
+    const names = requestBindings(source, name);
+    assert.deepEqual(bindingViolations(names), [], name);
+    t.diagnostic(`[G627 정상] ${name} 요청 구조분해 = {${names.join(", ")}}`);
   }
-  assert.deepEqual(failures, []);
-  t.diagnostic(`[G565 정상] 카드 ${cards}장 위반 0`);
+  const poisoned = session.replace("      personaCardInput,\n    } = request.data ?? {};", "      personaCard,\n    } = request.data ?? {};");
+  assert.notEqual(poisoned, session, "오염 사본 생성 실패 — 앵커가 바뀌었다");
+  const violations = bindingViolations(requestBindings(poisoned, "createSession"));
+  assert.ok(violations.length === 2, violations.join(" / "));
+  t.diagnostic(`[G627 역방향] 완성 카드를 읽는 사본 → ${violations.join(" / ")} — 실패 확인`);
 });
 
-test("[G565] 값 풀 자체 — 이름 3자 8개 이상 · 지역 8개(시 · 군 · 구 이하 실제 지명 0) · 가림 고정값 · 출생 연도 범위 · 풀 전체가 실존 금융사명 · 은행 자리표시자 0", () => {
-  assert.ok(PERSONA_NAME_POOL.length >= 8);
-  for (const name of PERSONA_NAME_POOL) assert.match(name, /^[가-힣]{3}$/, name);
-  assert.equal(new Set(PERSONA_NAME_POOL).size, PERSONA_NAME_POOL.length, "이름 중복");
-  assert.equal(PERSONA_REGION_POOL.length, 8);
-  for (const region of PERSONA_REGION_POOL) assert.match(region.name, /(도|특별자치도)$/, `광역 도 이름만: ${region.name}`);
-  assert.equal(PERSONA_REGION_MASK_SUFFIX, "○○시");
-  const pool = [
-    ...PERSONA_NAME_POOL,
-    ...PERSONA_REGION_POOL.map((r) => `${r.name} ${PERSONA_REGION_MASK_SUFFIX}`),
-    ...Object.values(PERSONA_CARD_FIXED_VALUES),
-  ];
-  for (const value of pool) {
-    assert.equal(replaceRealFinancialNames(value).replacedCount, 0, value);
-    assert.equal(hasBankPlaceholder(value), false, value);
+test("[G627] 검증 위치 — 두 콜러블 모두 조합 함수 1곳 · 첫 Firestore 접근 앞 · 실패는 invalid-argument + reason으로 알린다", () => {
+  const session = readSrc("session/index.ts");
+  const challenge = readSrc("challenge/index.ts");
+  for (const [name, source, inputBy, firestoreMarker] of [
+    ["createSession", session, '"self"', "const db = getFirestore();"],
+    ["createChallenge", challenge, '"sender"', "const db = getFirestore();"],
+  ] as const) {
+    const resolveAt = source.indexOf("const personaCardResult = resolvePersonaCardRequest(");
+    assert.ok(resolveAt > -1, `${name}: 조합 함수 호출이 없다`);
+    assert.equal(source.split("resolvePersonaCardRequest(").length - 1, 1, `${name}: 조합 함수 호출이 정확히 1곳이어야 한다`);
+    assert.ok(source.slice(resolveAt, resolveAt + 400).includes(inputBy), `${name}: inputBy = ${inputBy}`);
+    const dbAt = source.indexOf(firestoreMarker, source.indexOf(`export const ${name}`));
+    assert.ok(dbAt > resolveAt, `${name}: 검증(${resolveAt})이 첫 Firestore(${dbAt})보다 앞이어야 한다`);
+    assert.match(source, /throw new HttpsError\("invalid-argument", "[^"]+", \{ reason: personaCardResult\.reason \}\);/, name);
   }
-  // 출생 연도는 1955~1975 · 연도만.
-  const years = new Set(SEED_SAMPLES.map((sid) => buildPersonaCard({ sessionId: sid, scenarioId: "courier-customs-scam", fictionalBankName: "한결은행" })!.items.find((i) => i.key === "birthYear")!.value));
-  for (const year of years) {
-    const m = /^(\d{4})년생$/.exec(year);
-    assert.ok(m && Number(m[1]) >= 1955 && Number(m[1]) <= 1975, year);
-  }
+  assert.match(session, /\.\.\.\(personaCard \? \{ personaCard \} : \{\}\),/, "createSession: 카드 없는 세션은 필드 부재");
+  assert.match(session, /personaCard: personaCard\?\.items, voiceSelectionSource \}/, "createSession: 오프닝에 같은 카드");
+  assert.match(challenge, /\.\.\.\(personaCard \? \{ personaCard \} : \{\}\),/, "createChallenge: 입력 없는 챌린지는 필드 부재");
 });
 
-test("[G565 역방향 · AC-104 (h) ⓑ] 실존 은행명 · 세션 은행과 같은 은행 · 실제 시 이름 · 긴 숫자열이 든 카드 사본은 실패한다", (t) => {
-  const samples: Array<[string, PersonaCardItem]> = [
-    ["실존 은행명", { key: "bank", label: "거래 은행", value: "국민은행" }],
-    ["세션 은행과 같음", { key: "bank", label: "거래 은행", value: "한결은행" }],
-    ["실제 시 이름", { key: "region", label: "사는 곳", value: "경기도 수원시" }],
-    ["긴 숫자열", { key: "loan", label: "대출", value: "대출 12345678원" }],
-    ["은행 자리표시자", { key: "loan", label: "대출", value: "○○은행 대출 이용 중" }],
-  ];
-  for (const [name, item] of samples) {
-    const violations = cardItemViolations(item, "한결은행");
-    assert.ok(violations.length > 0, `${name} 샘플이 통과했다 — 검사가 무력하다`);
-    t.diagnostic(`[G565 역방향] ${name} → ${violations.join(" / ")} — 실패 확인`);
-  }
-  const normal = buildPersonaCard({ sessionId: "s", scenarioId: "loan-refinance-scam", fictionalBankName: "한결은행" })!;
-  t.diagnostic(`[G565 정상] ${normal.items.map((i) => `${i.label}: ${i.value}`).join(" · ")} → 위반 ${normal.items.flatMap((i) => cardItemViolations(i, "한결은행")).length}건`);
-});
-
-test("[G565] 카드 은행 선택 — 세션 은행 8개 × 시드 mod 7 전 조합에서 다르고, 7개 다른 은행에 고르게 퍼진다", () => {
-  for (const sessionBank of FICTIONAL_BANK_NAMES) {
-    const seen = new Set<string>();
-    for (let seed = 0; seed < 7; seed += 1) {
-      const bank = pickPersonaCardBank(sessionBank, seed);
-      assert.notEqual(bank, sessionBank);
-      seen.add(bank);
-    }
-    assert.equal(seen.size, 7, `${sessionBank}: 다른 은행 7개를 모두 고를 수 있어야 한다`);
-  }
-  assert.ok(FICTIONAL_BANK_NAMES.includes(pickPersonaCardBank("목록밖은행", 3)), "목록 밖 세션 은행이어도 가상 은행 목록 안에서 고른다");
+test("[G627] consentChallenge — 챌린지 카드를 오프닝 · 수신자 세션에 같이 넘기고, 소모(같은 트랜잭션) · 폐기 때 챌린지 문서에서 지운다", () => {
+  const access = readSrc("challenge/userAccess.ts");
+  assert.match(access, /const personaCard = readStoredPersonaCard\(preChallenge\?\.personaCard\);/);
+  assert.match(access, /challengeId: resolved\.challengeId, personaCard: personaCard\?\.items, voiceSelectionSource: undefined \}/);
+  assert.match(access, /\.\.\.\(personaCard \? \{ personaCard \} : \{\}\),/);
+  const txAt = access.indexOf("const claim = await db.runTransaction(");
+  const consumeAt = access.indexOf("await markChallengeConsumed(resolved.challengeId, tx);");
+  const setAt = access.indexOf("tx.set(sessionRef, sessionDoc);");
+  assert.ok(txAt > -1 && consumeAt > txAt && setAt > consumeAt, "소모 · 세션 쓰기가 같은 트랜잭션 안");
+  const index = readSrc("challenge/index.ts");
+  const consumeFn = index.slice(index.indexOf("export async function markChallengeConsumed("));
+  assert.match(consumeFn.slice(0, 900), /personaCard: FieldValue\.delete\(\),/, "소모 쓰기가 카드를 지운다");
+  assert.match(index, /update\(\{ status: "deleted", personaCard: FieldValue\.delete\(\) \}\)/, "폐기가 카드를 지운다");
+  // 랜딩 응답(수신자 동의 전 화면)에는 카드가 없다.
+  const landing = access.slice(access.indexOf("export const getChallengeLanding"), access.indexOf("export const consentChallenge"));
+  assert.equal(/personaCard/.test(landing), false, "랜딩이 카드를 다룬다");
 });
 
 // ── G566 계정 정보 0 ────────────────────────────────────────────────────────
@@ -267,13 +344,12 @@ const ACCOUNT_IDENTIFIERS = /\b(auth|displayName|email|uid)\b/;
 function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
-/** G566 위반 — `BuildPersonaCardInput` 키 고정 + 계정 식별자 0. 실제 소스와 오염 사본에 똑같이 돌린다. */
 function accountInfoViolations(personaCardSource: string, catalogSource: string): string[] {
   const out: string[] = [];
   const block = /export type BuildPersonaCardInput = \{([\s\S]*?)\n\};/.exec(personaCardSource);
   if (!block) return ["BuildPersonaCardInput 정의를 못 찾았다(게이트가 죽었다)"];
   const keys = [...stripComments(block[1]!).matchAll(/^\s{2}(\w+)\??:/gm)].map((m) => m[1]);
-  if (JSON.stringify(keys) !== JSON.stringify(["sessionId", "scenarioId", "fictionalBankName"])) out.push(`매개변수 키: ${keys.join(", ")}`);
+  if (JSON.stringify(keys) !== JSON.stringify(["input", "inputBy"])) out.push(`매개변수 키: ${keys.join(", ")}`);
   for (const [file, source] of [
     ["personaCard.ts", personaCardSource],
     ["personaCardCatalog.ts", catalogSource],
@@ -284,11 +360,11 @@ function accountInfoViolations(personaCardSource: string, catalogSource: string)
   return out;
 }
 
-test("[G566 · AC-104 (h) ⓒ] 계정 정보 0 — 빌더 매개변수 키 = {sessionId, scenarioId, fictionalBankName} 고정 · 계정 식별자 0 / 표시 이름 매개변수를 더한 사본은 실패한다", (t) => {
+test("[G566 · AC-104 (h) ⓒ] 계정 정보 0 — 조립 매개변수 키 = {input, inputBy} 고정 · 계정 식별자 0 / 표시 이름 매개변수를 더한 사본은 실패한다", (t) => {
   const personaCardSource = readSrc("session/personaCard.ts");
   const catalogSource = readSrc("scenarios/personaCardCatalog.ts");
   assert.deepEqual(accountInfoViolations(personaCardSource, catalogSource), []);
-  t.diagnostic("[G566 정상] 매개변수 키 3개 · 계정 식별자 0");
+  t.diagnostic("[G566 정상] 매개변수 키 2개 · 계정 식별자 0");
   const poisoned = personaCardSource.replace(
     "export type BuildPersonaCardInput = {\n",
     "export type BuildPersonaCardInput = {\n  displayName: string;\n",

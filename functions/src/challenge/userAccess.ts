@@ -45,6 +45,7 @@ import type {
   SetChallengeResultSharingResponse,
 } from "./types";
 import { pickFictionalBankName } from "../shared/fictionalBank";
+import { readStoredPersonaCard } from "../session/personaCard";
 
 ensureFirebaseAdminApp();
 
@@ -183,12 +184,15 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
       resolved.difficultyLevel,
       resolved.challengeId,
     );
-    // T194-b(§84.3.1 · 2026-10-20 User 결정) — 챌린지 수신자 세션에는 가상 신상 카드가 없다(`personaCard: undefined` 명시).
+    // ⭐ §88(DECISIONS #199 · UX D-131) — 발신자가 넣은 받는 분 정보(챌린지 문서 카드 · `inputBy: "sender"`)를 수신자 세션에 적용한다
+    // (#168~#175 계열 "수신자 카드 없음" 대체). 위 사전 읽기 값 하나를 오프닝과 아래 세션 문서에 **같이** 쓴다 — 카드는 생성 뒤
+    // 바뀌지 않는다(지우기만 한다). 부재 · 모양 이상 = 카드 0(사기범은 성함 · 생년월일을 묻는다).
+    const personaCard = readStoredPersonaCard(preChallenge?.personaCard);
     const { message: openingMessage, isMock } = await generateOpeningLine(
       scenarioId,
       resolved.difficultyLevel,
       flowVariantId,
-      { fictionalBankName, challengeId: resolved.challengeId, personaCard: undefined, voiceSelectionSource: undefined },
+      { fictionalBankName, challengeId: resolved.challengeId, personaCard: personaCard?.items, voiceSelectionSource: undefined },
     );
 
     const challengeRef = db.collection("challenges").doc(resolved.challengeId);
@@ -251,11 +255,14 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
         // T191 S5 — 배정된 흐름 변형의 불투명 ID(일반 세션과 같은 필드 · 같은 해석 경로).
         flowVariantId,
         ...(isMock ? { llmProvider: "mock" as const } : {}),
+        // §88 — 오프닝에 넘긴 것과 같은 카드(부재 = 필드 부재). 수신자 화면은 `inputBy: "sender"` 카드를 통화 전에 그리지 않는다.
+        ...(personaCard ? { personaCard } : {}),
       };
       // T36 primitive 재사용(파일 상단 지시) — tx를 넘기면 즉시 write하지 않고 이 트랜잭션에
       // 큐잉만 한다(functions/src/challenge/index.ts 참고). QA 지적(2026-07-24): await 없이
       // fire-and-forget하면 tx.update()의 동기 throw가 unhandled rejection이 되어 트랜잭션이
       // 조용히 안 걸릴 수 있다 — await로 트랜잭션 콜백 안에서 실제로 완료·전파되게 한다.
+      // §88 — 소모 쓰기가 챌린지 문서의 받는 분 정보(카드)도 지운다(아래 세션 문서 복사와 같은 트랜잭션 커밋).
       await markChallengeConsumed(resolved.challengeId, tx);
       tx.set(sessionRef, sessionDoc);
       tx.set(sessionRef.collection("messages").doc(), {

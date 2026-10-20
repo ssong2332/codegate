@@ -29,7 +29,7 @@ function withElevenLabsConfigured<T>(fn: () => T): T {
 }
 
 test("[G567] 술어 — 세션 문서에 카드가 있으면 참, 없으면 거짓", () => {
-  const personaCard = buildPersonaCard({ sessionId: "s", scenarioId: SCENARIO, fictionalBankName: "한결은행" });
+  const personaCard = buildPersonaCard({ input: { name: "홍길동", birthYear: 1962 }, inputBy: "self" });
   // T194-c-1 G610 — 술어 입력에 세션 시나리오 · 변형이 더해졌다(Q2 항). 카드 항 판정은 그대로다.
   assert.equal(requiresServerPromptProvider({ personaCard, scenarioId: SCENARIO }), true);
   assert.equal(requiresServerPromptProvider({ scenarioId: SCENARIO }), false);
@@ -106,7 +106,7 @@ test("[G567 배선] createRealtimeCall이 세션 술어 값을 프로바이더 �
 // ── 리뷰 C1 — 확인 전화 재검증(assertVerifyEligible ⑤)도 같은 술어를 써야 한다 ─────────────────────────────
 
 function sessionFor(scenarioId: string, withCard: boolean): SessionDoc {
-  const personaCard = withCard ? buildPersonaCard({ sessionId: "c1-" + scenarioId, scenarioId, fictionalBankName: "한결은행" }) : undefined;
+  const personaCard = withCard ? buildPersonaCard({ input: { name: "홍길동", region: "경기도" }, inputBy: "sender" }) : undefined;
   return {
     sessionId: "c1-" + scenarioId,
     uid: "u",

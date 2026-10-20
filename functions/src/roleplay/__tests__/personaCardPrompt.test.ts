@@ -13,7 +13,8 @@ import {
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { PERSONA_CARD_SCENARIOS } from "../../scenarios/personaCardCatalog";
 import { hasVerifyIntercept } from "../../scenarios/verifyIntercept";
-import { buildPersonaCard } from "../../session/personaCard";
+import { buildPersonaCard, personaCardEligible } from "../../session/personaCard";
+import type { PersonaCardItem } from "../../shared/types";
 import { personaCardPromptValue, PERSONA_LOAN_PROMPT_VALUE } from "../../scenarios/personaCardCatalog";
 import { asksIdentityCheck } from "../personaAuthority";
 import { isL3Procedural } from "../l3Depth";
@@ -59,7 +60,8 @@ test("[G569] 위치 — [진행 강제] · [확인 안내] 뒤 · 난이도 앞 
   let checked = 0;
   for (const scenarioId of PERSONA_CARD_SCENARIOS) {
     for (const bank of FICTIONAL_BANK_NAMES) {
-      const card = buildPersonaCard({ sessionId: `pos-${bank}`, scenarioId, fictionalBankName: bank })!;
+      // §88 — 카드 값은 사용자 입력이다(대표 입력 — 세 칸 전부).
+      const card = buildPersonaCard({ input: { name: "홍길동", birthYear: 1962, region: "경상남도" }, inputBy: "self" })!;
       const prompt = buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], { ...operationalOpts(scenarioId, bank), personaCard: card.items });
       const at = prompt.indexOf(PERSONA_CARD_BLOCK_HEAD);
       assert.ok(at > prompt.indexOf("[진행 강제 — 반드시 지킨다]"), `${scenarioId}: [진행 강제] 뒤`);
@@ -99,7 +101,7 @@ function nonInstitutionTargets(targets: readonly string[]): string[] {
 
 test("[G569 가드 · §84.14.4] PERSONA_CARD_SCENARIOS ⊆ {s | asksIdentityCheck(s)} — kidnapping을 넣은 사본은 실패한다", (t) => {
   assert.deepEqual(nonInstitutionTargets(PERSONA_CARD_SCENARIOS), []);
-  assert.equal(buildPersonaCard({ sessionId: "s", scenarioId: "kidnapping-threat", fictionalBankName: "한결은행" }), undefined);
+  assert.equal(personaCardEligible({ scenarioId: "kidnapping-threat", difficultyLevel: "advanced", channel: undefined }), false);
   const poisoned = [...PERSONA_CARD_SCENARIOS, "kidnapping-threat"];
   assert.deepEqual(nonInstitutionTargets(poisoned), ["kidnapping-threat"], "가드가 kidnapping을 잡지 못했다 — 검사가 무력하다");
   t.diagnostic("[G569 가드] 정본 4종 → 위반 0 · kidnapping 추가 사본 → 위반 1(실패 확인)");
@@ -136,7 +138,13 @@ test("[G568] 호출부 전수 — 프롬프트 조립 3곳이 모두 카드를 �
 });
 
 test("[리뷰 M1] 대출 행은 프롬프트에 일반명으로 실린다(가상 이름 0 · '○○' 0) — 블록 생성기를 우회해 화면 값을 그대로 실은 사본은 걸린다", (t) => {
-  const card = buildPersonaCard({ sessionId: "m1", scenarioId: "loan-refinance-scam", fictionalBankName: "한결은행" })!;
+  // §88 — 대출 행은 이제 옛 v1 카드(서버 생성 · 폐지)에만 있다. 배포 직전에 만들어진 세션 문서를 계속 읽으므로 프롬프트 값 규칙은 유지한다.
+  const card: { items: PersonaCardItem[] } = {
+    items: [
+      { key: "name", label: "이름", value: "김영숙" },
+      { key: "loan", label: "대출", value: "○○저축은행 대출 이용 중" },
+    ],
+  };
   const loan = card.items.find((i) => i.key === "loan")!;
   assert.equal(loan.value, "○○저축은행 대출 이용 중", "화면 값은 그대로");
   assert.equal(PERSONA_LOAN_PROMPT_VALUE, "저축은행 대출 이용 중");
