@@ -26,6 +26,7 @@ export const PERSONA_CARD_SCENARIOS: readonly string[] = [
 export const PERSONA_CARD_LABELS: Readonly<Record<PersonaCardKey, string>> = {
   name: "이름",
   birthYear: "출생 연도",
+  birthDate: "생년월일",
   region: "사는 곳",
   bank: "거래 은행",
   card: "사용 카드",
@@ -37,7 +38,7 @@ export const PERSONA_CARD_LABELS: Readonly<Record<PersonaCardKey, string>> = {
  * 이름 풀 · 출생 연도 범위 · 카드 은행 · 가림 고정값)은 폐지됐다. 거래 은행 · 사용 카드 · 대출 행은 입력 대상이 아니다(실존 은행명을
  * 넣으면 사기범이 실존 금융사명을 말한다 — §81 · OQ-U96). `bank` · `card` · `loan` 키는 옛 카드(v1) 읽기 하위호환으로만 남는다.
  */
-export const PERSONA_CARD_INPUT_KEYS: readonly PersonaCardKey[] = ["name", "birthYear", "region"];
+export const PERSONA_CARD_INPUT_KEYS: readonly PersonaCardKey[] = ["name", "birthYear", "birthDate", "region"];
 
 /** 이름 입력 길이(공백 정리 뒤 · 문자 수). */
 export const PERSONA_NAME_MIN_LENGTH = 2;
@@ -84,6 +85,8 @@ export const PERSONA_LOAN_PROMPT_VALUE = "저축은행 대출 이용 중";
 /**
  * 카드 행의 **프롬프트용** 값(화면 값은 세션 문서 그대로). 블록 안 `"○○"` 리터럴 0이 목표다(리뷰 M1).
  * - loan: 일반명(`PERSONA_LOAN_PROMPT_VALUE` — 옛 v1 카드)
+ * - birthDate: 사기범이 줄여 말하는 꼴(`"65년 3월 2일생"`)을 앞에 두고 네 자리 연도를 괄호로 붙인다(§88 후속 — 사용자 요청
+ *   *"65년 3월 2일생"처럼 말함*). 저장 값 `"1965년 3월 2일생"` 꼴이 아니면 그대로
  * - region: 가림 꼬리(`" ○○시"` — 옛 v1 카드)가 있으면 떼고 시 · 도 이름만. 입력 카드(v2) 값은 시 · 도 이름 그대로라 무변경
  * - card: 그대로 — 조립 끝 `applyFictionalBank`가 `"○○카드"`를 세션 가상 카드사명으로 바꾼다(§83 · 열린 질문)
  * - 그 밖: 그대로(가림 표기 없음)
@@ -91,5 +94,9 @@ export const PERSONA_LOAN_PROMPT_VALUE = "저축은행 대출 이용 중";
 export function personaCardPromptValue(item: { key: PersonaCardKey; value: string }): string {
   if (item.key === "loan") return PERSONA_LOAN_PROMPT_VALUE;
   if (item.key === "region") return item.value.replace(` ${PERSONA_REGION_MASK_SUFFIX}`, "");
+  if (item.key === "birthDate") {
+    const match = /^(\d{4})년 (\d{1,2})월 (\d{1,2})일생$/.exec(item.value);
+    if (match) return `${match[1]!.slice(2)}년 ${match[2]}월 ${match[3]}일생(${match[1]}년)`;
+  }
   return item.value;
 }

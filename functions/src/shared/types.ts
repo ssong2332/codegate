@@ -43,7 +43,8 @@ export type ScammerHangupPath = "realtime" | "fallback";
 // --- T194-b 훈련용 가상 신상 카드(Architecture.md §84.3.2 · PRD AC-104 · UX-014 v1.38 (1)(2)) ---
 // ⛔ 값은 전부 서버가 지은 가상 값이다(사용자 계정 정보 0 — AC-104 (e)). 라벨은 화면 · 프롬프트 공통.
 // ⚠️ `child`(자녀) 행은 만들지 않는다 — 2026-10-20 User 결정으로 kidnapping-threat가 대상에서 빠졌다(유일한 child 행 시나리오).
-export type PersonaCardKey = "name" | "birthYear" | "region" | "bank" | "card" | "loan";
+// §88 후속(2026-10-20) — `birthDate`(생년월일 = 출생 연도 + 생일 월 · 일). 월 · 일을 넣었을 때 `birthYear` 행 **대신** 쓴다.
+export type PersonaCardKey = "name" | "birthYear" | "birthDate" | "region" | "bank" | "card" | "loan";
 export type PersonaCardItem = { key: PersonaCardKey; label: string; value: string };
 /**
  * §88(DECISIONS #199) — 카드를 넣은 사람. `self` = 자가 훈련 참가자 본인(`createSession`) · `sender` = 챌린지를 보낸 사람

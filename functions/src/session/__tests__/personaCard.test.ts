@@ -98,6 +98,11 @@ const INPUT_CASES: Array<[string, unknown, Record<string, unknown> | "invalid" |
   ["출생 연도 하한", { birthYear: 1920 }, { birthYear: 1920 }],
   ["출생 연도 상한(올해−14)", { birthYear: NOW_YEAR - 14 }, { birthYear: NOW_YEAR - 14 }],
   ["사는 곳 광역시", { region: "부산광역시" }, { region: "부산광역시" }],
+  // §88 후속(UX D-133) — 생일(월 · 일): 둘 다 · 출생 연도와 함께 · 실제 날짜일 때만.
+  ["생일 포함", { birthYear: 1965, birthMonth: 3, birthDay: 2 }, { birthYear: 1965, birthMonth: 3, birthDay: 2 }],
+  ["생일 null = 넣지 않음", { birthYear: 1965, birthMonth: null, birthDay: null }, { birthYear: 1965 }],
+  ["윤년 2월 29일", { birthYear: 1964, birthMonth: 2, birthDay: 29 }, { birthYear: 1964, birthMonth: 2, birthDay: 29 }],
+  ["12월 31일(상한)", { birthYear: 1970, birthMonth: 12, birthDay: 31 }, { birthYear: 1970, birthMonth: 12, birthDay: 31 }],
   ["이름 1자", { name: "홍" }, "invalid"],
   ["이름 11자", { name: "가나다라마바사아자차카" }, "invalid"],
   ["이름에 숫자", { name: "홍길동1" }, "invalid"],
@@ -109,6 +114,15 @@ const INPUT_CASES: Array<[string, unknown, Record<string, unknown> | "invalid" |
   ["출생 연도 소수", { birthYear: 1962.5 }, "invalid"],
   ["출생 연도 문자열", { birthYear: "1962" }, "invalid"],
   ["사는 곳 목록 밖", { region: "수원시" }, "invalid"],
+  ["생일 월만", { birthYear: 1965, birthMonth: 3 }, "invalid"],
+  ["생일 일만", { birthYear: 1965, birthDay: 2 }, "invalid"],
+  ["연도 없이 월 · 일(OQ-U102 권고안 = 거부)", { birthMonth: 3, birthDay: 2 }, "invalid"],
+  ["평년 2월 29일", { birthYear: 1965, birthMonth: 2, birthDay: 29 }, "invalid"],
+  ["4월 31일", { birthYear: 1965, birthMonth: 4, birthDay: 31 }, "invalid"],
+  ["13월", { birthYear: 1965, birthMonth: 13, birthDay: 1 }, "invalid"],
+  ["0일", { birthYear: 1965, birthMonth: 1, birthDay: 0 }, "invalid"],
+  ["월 문자열", { birthYear: 1965, birthMonth: "3", birthDay: 2 }, "invalid"],
+  ["일 소수", { birthYear: 1965, birthMonth: 3, birthDay: 2.5 }, "invalid"],
   ["사는 곳 옛 가림 형식", { region: "경기도 ○○시" }, "invalid"],
   ["모르는 키(완성 카드 주입)", { name: "홍길동", items: [] }, "invalid"],
   ["배열", [], "invalid"],
@@ -144,9 +158,16 @@ test("[G626 역방향] 검증 없이 원값을 그대로 받는 사본 · 길이
     if (r && typeof r.name === "string" && r.name.length > 10) return { ok: false as const };
     return readPersonaCardInput(raw && typeof raw === "object" && !Array.isArray(raw) ? { ...raw, name: undefined } : raw, NOW_YEAR);
   };
+  // §88 후속 — 생일 검사를 빼고(월 · 일을 지우고) 읽는 사본: 월만 · 연도 없이 · 없는 날짜가 통과해야 걸린다.
+  const ignoresBirthday = (raw: unknown) =>
+    readPersonaCardInput(
+      raw && typeof raw === "object" && !Array.isArray(raw) ? { ...raw, birthMonth: undefined, birthDay: undefined } : raw,
+      NOW_YEAR,
+    );
   for (const [name, reader] of [
     ["검증 없음", passThrough],
     ["이름 길이만", lengthOnly],
+    ["생일 무시", ignoresBirthday],
   ] as const) {
     const violations = inputViolations(reader);
     assert.ok(violations.length > 0, `${name} 사본이 통과했다 — 검사가 무력하다`);
@@ -186,6 +207,26 @@ test("[G626] 조합 — 입력 없음 = 카드 0(대상이어도) · 입력 + �
   const partial = buildPersonaCard({ input: { region: "제주특별자치도", birthYear: 1970 }, inputBy: "self" })!;
   assert.deepEqual(partial.items.map((i) => i.key), ["birthYear", "region"]);
   assert.equal(buildPersonaCard({ input: {}, inputBy: "self" }), undefined);
+  // §88 후속 — 생일이 있으면 출생 연도 행 대신 생년월일 행 1개(자리 = 출생 연도 자리).
+  assert.deepEqual(
+    resolvePersonaCardRequest({ name: "홍길동", birthYear: 1965, birthMonth: 3, birthDay: 2, region: "경기도" }, target, "self", NOW_YEAR),
+    {
+      ok: true,
+      personaCard: {
+        v: 2,
+        inputBy: "self",
+        items: [
+          { key: "name", label: "이름", value: "홍길동" },
+          { key: "birthDate", label: "생년월일", value: "1965년 3월 2일생" },
+          { key: "region", label: "사는 곳", value: "경기도" },
+        ],
+      },
+    },
+  );
+  assert.deepEqual(resolvePersonaCardRequest({ birthYear: 1965, birthMonth: 2, birthDay: 30 }, target, "self", NOW_YEAR), {
+    ok: false,
+    reason: PERSONA_CARD_INVALID_REASON,
+  });
 });
 
 test("[G626] 저장된 카드 읽기 — v2 모양만 통과(모양 이상 = 카드 0)", () => {
@@ -196,6 +237,12 @@ test("[G626] 저장된 카드 읽기 — v2 모양만 통과(모양 이상 = 카
   assert.equal(readStoredPersonaCard({ v: 2, inputBy: "other", items: card!.items }), undefined);
   assert.equal(readStoredPersonaCard({ v: 2, inputBy: "sender", items: [] }), undefined);
   assert.equal(readStoredPersonaCard({ v: 2, inputBy: "sender", items: [{ key: "evil", label: "x", value: "y" }] }), undefined);
+  // §88 후속 — 옛 카드(출생 연도 행) · 새 카드(생년월일 행) 둘 다 읽는다(하위호환).
+  const oldCard = buildPersonaCard({ input: { birthYear: 1962 }, inputBy: "self" });
+  const newCard = buildPersonaCard({ input: { birthYear: 1962, birthMonth: 11, birthDay: 5 }, inputBy: "sender" });
+  assert.deepEqual(readStoredPersonaCard(oldCard), oldCard);
+  assert.deepEqual(readStoredPersonaCard(newCard), newCard);
+  assert.deepEqual(newCard!.items.map((i) => i.key), ["birthDate"]);
   // 리뷰 m4 — 프로토타입 키("constructor")도 거부한다.
   assert.equal(readStoredPersonaCard({ v: 2, inputBy: "sender", items: [{ key: "constructor", label: "x", value: "y" }] }), undefined);
 });
@@ -221,8 +268,12 @@ test("[G565 · §88] 입력이 통과한 카드 — 시 · 도 17 × 대표 입�
   for (const region of PERSONA_REGION_POOL) {
     assert.equal(replaceRealFinancialNames(region.name).replacedCount, 0, region.name);
     assert.equal(hasBankPlaceholder(region.name), false, region.name);
-    for (const name of ["홍길동", "Kim Minsu", "남궁 민수"]) {
-      const read = readPersonaCardInput({ name, birthYear: 1962, region: region.name }, NOW_YEAR);
+    for (const [name, birthday] of [
+      ["홍길동", {}],
+      ["Kim Minsu", { birthMonth: 12, birthDay: 31 }],
+      ["남궁 민수", { birthMonth: 2, birthDay: 28 }],
+    ] as const) {
+      const read = readPersonaCardInput({ name, birthYear: 1962, ...birthday, region: region.name }, NOW_YEAR);
       assert.ok(read.ok && read.input);
       const card = buildPersonaCard({ input: read.input, inputBy: "self" })!;
       cards += 1;

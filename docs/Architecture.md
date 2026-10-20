@@ -21595,6 +21595,18 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 - 신고(`reported`)된 · 동의 없이 만료된 챌린지의 카드는 자동 폐기(`purgeExpiredChallenges` — 보존 만료) 때 지워진다(리뷰 m5 · 그 전까지 서버 전용 문서에 남는다).
 - OQ-U96 · OQ-U97 · OQ-U98(UX) · **OQ-A160**(세션 · 리포트 문서 안 카드 값 보존 기간 — ⭐ 종전 카드와 같은 수명 · 계정 기록 삭제 정책이 정해질 때 함께 / 리포트 생성 뒤 세션 필드 삭제)은 권고안을 기본값으로 구현했다(사용자 결정 대기).
 - 실 API(Gemini) 통화 실측은 하지 않았다(금지 — 메인 세션 요청 사항).
+### 88.6 후속 — 생일(월 · 일) 선택 칸 · 입력 블록 자동 스크롤 (2026-10-20 · 브랜치 `claude/persona-birthday-scroll` · 사용자 요청 · DECISIONS #202 · UX D-133 · PRD AC-104 갱신 고지 v1.31)
+| 항목 | 판정 |
+|---|---|
+| 원값 | `personaCardInput`에 `birthMonth` · `birthDay`(정수) 추가. `readPersonaCardInput`: 둘 다 있어야 하고 · `birthYear`가 있어야 하며(OQ-U102 권고안) · 월 1~12 · 일 1~31 · `Date.UTC`로 실제 날짜 확인. 하나라도 어긋나면 `persona-card-invalid`(조용한 폐기 0). ⚠️ 모르는 키는 거부하므로 **옛 서버 + 새 화면 = 생일 넣은 요청이 거부된다** ⇒ 배포 순서 Functions → Hosting(§88.5와 같다) |
+| 카드 v2 | 스키마 버전은 그대로 `v: 2`. 새 행 키 `birthDate`(라벨 *생년월일* · 값 `"1965년 3월 2일생"`)가 `birthYear` 행 **대신** 들어간다. 옛 카드(`birthYear` 행)는 `readStoredPersonaCard` · 화면 · 리포트가 그대로 읽는다(키 집합 = `PERSONA_CARD_LABELS`). |
+| 프롬프트 | `personaCardPromptValue` — `birthDate` = `"65년 3월 2일생(1965년)"`(사기범이 줄여 말하는 꼴 + 네 자리 연도). 블록 머리 · 꼬리 정본 무변경. |
+| 리포트 | `personaMatchTokens` — `birthDate` = 연도 토큰(`"1965"` · `"65년"` · `"육십오년"`) + `" 3월 2일생"` · `" 3월2일생"`(앞 공백 — `"2월 2일생"` ⊂ `"12월 2일생"` 부분 일치 방지 · 리뷰 Minor 1). ⚠️ 연도 토큰만 말해도 생년월일 행 전체가 "먼저 말함"으로 표시된다(birthYear와 같은 동작 · 리뷰 Minor 2 — 수용). 날짜만(`"3월 2일"`)은 세지 않는다(결제일 · 배송일 거짓 양성 방지). 문장 문면 무변경. |
+| 화면 | `PersonaCardInputFields` — 생일 두 선택 칸 + 안내 · 마운트 직후 1회 `personaRevealScroll`(블록 전체가 화면 안이면 이동 0 · reduced-motion = `"auto"` · 그 밖 `"smooth"`) → `scrollIntoView({block: "start"})` + `scroll-mt-28`. 포커스 이동 0 · 제목만 polite 알림. self(UX-029)는 고급 × 대상 선택으로 블록이 마운트될 때, send(UX-019)는 화면 진입 때 같은 동작. 버튼 잠금(끝까지 스크롤) 방식 0. |
+| 되짚어보기(범위 추가) | 사용자 원문 *"받는 사람의 '대화 되짚어보기' 화면에 '보낸 분이 넣은 정보' 블록을 추가해."* `src/app/report/replay/page.tsx`가 이미 읽는 세션 문서의 `personaCard`를 `readReplaySenderPersona(raw, challengeContext !== null)`로 한 번 판정 — 챌린지 수신 세션 × `v: 2` · `inputBy: "sender"`만 블록(리포트 R-2 제목 · `r2FactSender` · `tailSender` 재사용 · 행 = 세션 카드 전부). 추가 read 0. 카드 없음 · self · v1 = 블록 0. 되짚어보기는 세션 종료 뒤에만 열리므로 통화 전 숨김(G628)과 충돌하지 않는다. |
+| 게이트 | G626 확장(생일 진리표 정상 4 · 거부 9 + 역방향 "생일 무시" 사본) · G629 확장(D-133 정본 · 생일 폼 진리표 · 자동 스크롤 판정 · 배선: 포커스 0 · 버튼 잠금 0) · G570 확장(생년월일 토큰 · 날짜만 = R-2) · G569 확장(생년월일 프롬프트 값) · G628 확장(되짚어보기 sender 블록 진리표 · 배선: 두 로드 경로 · 화면 안 새 문장 0) |
+| 남은 것 | ⚠️ 롤백: Functions만 되돌리면 옛 `readStoredPersonaCard`가 `birthDate` 행이 든 챌린지 카드를 통째로 버린다(카드만 빠지고 훈련 진행 — UF-014 (a) 방향 · 리뷰 Minor 5). PR #344(에뮬레이터 스모크)가 이 브랜치 시작 시점 main(`6a312b8`)에 없어 월 · 일 단언은 추가하지 못했다 — #344 병합 뒤 `birthMonth` · `birthDay` 케이스를 더한다. 자동 스크롤은 실기(어르신 폰 · 삼성 인터넷)에서 확인 전. |
+
 ## 89. (UX → Architect → Implementer — 2026-10-20 · 브랜치 `claude/design-a-tokens` 외 단계별 · 사용자 결정 *"시안 A 공공 안심형으로 진행해 주세요."*) **시안 A "공공 안심형" 사이트 적용 + 훈련 화면 개선 4장** — architect 판정 · implementer 기록
 
 > **번호**: §89 · G630~G634 · DECISIONS #200 · UX D-132 · OQ-U99~U101 · OQ-A161. persona-input(§88 · #199 · D-131 · G626~G629 · OQ-U96~98 · OQ-A160) 다음. ⛔ 예약 아님 — 나중에 병합하는 쪽이 재번호.

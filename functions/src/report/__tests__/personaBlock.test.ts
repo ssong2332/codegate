@@ -39,6 +39,18 @@ test("[G570] 대조 토큰 — 이름 전체 · 이름 2자 / 연도 4자리 · 
   assert.deepEqual(personaMatchTokens(CARD.items[4]!), [], "○○카드는 고유 토큰이 없다");
   assert.deepEqual(personaMatchTokens({ key: "loan", label: "대출", value: "○○저축은행 대출 이용 중" }), []);
   assert.deepEqual(personaMatchTokens({ key: "birthYear", label: "출생 연도", value: "1970년생" }), ["1970", "70년", "칠십년"]);
+  // §88 후속 — 생년월일: 연도 토큰 + "월 일생"(끝 "생"까지 — 날짜만으로는 세지 않는다).
+  assert.deepEqual(personaMatchTokens({ key: "birthDate", label: "생년월일", value: "1965년 3월 2일생" }), [
+    "1965",
+    "65년",
+    "육십오년",
+    " 3월 2일생",
+    " 3월2일생",
+  ]);
+  // 리뷰 Minor 1 — "2월 2일생" 카드가 다른 날짜 "12월 2일생"에 부분 일치하지 않는다.
+  const feb2 = [{ key: "birthDate" as const, label: "생년월일", value: "1970년 2월 2일생" }];
+  assert.deepEqual(resolvePersonaFirstMentions(feb2, [scammer(1, "고객님 12월 2일생이라고 돼 있네요"), user(2, "네")]), []);
+  assert.deepEqual(resolvePersonaFirstMentions(feb2, [scammer(1, "고객님 2월 2일생 맞으시죠"), user(2, "네")]), [{ key: "birthDate", scammerTurnIndex: 1 }]);
 });
 
 test("[G570] 첫 언급 — 사기범이 먼저 말한 항목만 · 참가자가 먼저 말한 항목 제외 · notSpoken 줄 제외 · 가림 항목 제외", () => {
@@ -132,4 +144,13 @@ test("[§88] 성 뺀 이름이 일상어와 겹쳐도(\"하나만 여쭤볼게�
   assert.deepEqual(resolvePersonaFirstMentions(nameOnly.items, [scammer(1, "하나 님 맞으시죠?"), user(2, "네")]), [
     { key: "name", scammerTurnIndex: 1 },
   ]);
+});
+
+test("[§88 후속] 생년월일 행 — 사기범이 \"65년 3월 2일생\"으로 먼저 말하면 R-1 · 결제일로 \"3월 2일\"만 말하면 세지 않는다", () => {
+  const card: PersonaCard = { v: 2, inputBy: "self", items: [{ key: "birthDate", label: "생년월일", value: "1965년 3월 2일생" }] };
+  const block = buildPersonaBlock(card, [scammer(1, "고객님 65년 3월 2일생 맞으시죠?"), user(2, "네")], false)!;
+  assert.equal(block.state, "R-1");
+  assert.deepEqual(block.items, [{ key: "birthDate", label: "생년월일", value: "1965년 3월 2일생", scammerTurnIndex: 1 }]);
+  assert.deepEqual(resolvePersonaFirstMentions(card.items, [scammer(1, "3월 2일에 결제된 건이 있습니다"), user(2, "네")]), []);
+  assert.equal(buildPersonaBlock(card, [scammer(1, "3월 2일에 결제된 건이 있습니다"), user(2, "네")], false)!.state, "R-2");
 });

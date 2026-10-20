@@ -39,7 +39,7 @@ export type CreateSessionRequest = {
    * §88(DECISIONS #199 · UX D-131) — 참가자가 넣은 "이번 훈련 속 내 정보" 원값(선택 · 부재 = 카드 0). 서버 `readPersonaCardInput`이
    * 검증하고 카드로 만든다. 고급 × 대상 4종 × 통화가 아니면 입력이 있을 때 거부된다.
    */
-  personaCardInput?: { name?: string; birthYear?: number; region?: string };
+  personaCardInput?: { name?: string; birthYear?: number; birthMonth?: number; birthDay?: number; region?: string };
 };
 export type CreateSessionResponse = {
   sessionId: string;

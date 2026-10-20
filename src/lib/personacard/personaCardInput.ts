@@ -7,12 +7,12 @@
 // ⛔ 클라는 완성 카드(`personaCard`)를 만들어 보내지 않는다 — 원값(`personaCardInput`)만 보낸다.
 // ⛔ 문면은 `docs/UX.md` D-131 정본 글자 그대로(의역 금지).
 
-/** 요청 원값(서버 `PersonaCardInput`과 같은 모양). */
-export type PersonaCardInput = { name?: string; birthYear?: number; region?: string };
+/** 요청 원값(서버 `PersonaCardInput`과 같은 모양). 생일(월 · 일 — UX D-133)은 둘 다 · 출생 연도와 함께일 때만 싣는다. */
+export type PersonaCardInput = { name?: string; birthYear?: number; birthMonth?: number; birthDay?: number; region?: string };
 
-/** 입력 칸 상태(문자열 그대로 — 화면 상태). */
-export type PersonaCardForm = { name: string; birthYear: string; region: string };
-export const EMPTY_PERSONA_CARD_FORM: PersonaCardForm = { name: "", birthYear: "", region: "" };
+/** 입력 칸 상태(문자열 그대로 — 화면 상태). 월 · 일 = `""`(선택 안 함) 또는 `"1"`~`"12"` · `"1"`~`"31"`. */
+export type PersonaCardForm = { name: string; birthYear: string; birthMonth: string; birthDay: string; region: string };
+export const EMPTY_PERSONA_CARD_FORM: PersonaCardForm = { name: "", birthYear: "", birthMonth: "", birthDay: "", region: "" };
 
 /** 카드 대상 시나리오(서버 `PERSONA_CARD_SCENARIOS`와 같다). */
 export const PERSONA_CARD_SCENARIO_IDS: readonly string[] = [
@@ -52,15 +52,18 @@ export const PERSONA_BIRTH_YEAR_INPUT_MIN_AGE = 14;
 export const PERSONA_CARD_INVALID_REASON = "persona-card-invalid";
 export const PERSONA_CARD_NOT_APPLICABLE_REASON = "persona-card-not-applicable";
 
-/** UX D-131 (2)(3) 정본 문면. */
+/** UX D-131 (2)(3) 정본 문면 · `privacy` · `invalid` · `birthdayHint` = D-133 정본(§88 후속 — 생일 칸 · 가상 값 권고). */
 export const PERSONA_INPUT_COPY = {
   selfTitle: "이번 훈련 속 내 정보 (선택)",
   sendTitle: "받는 분 정보 (선택)",
   selfGuide: "넣으면 전화한 사람이 이 정보를 이미 알고 있는 것처럼 먼저 말합니다. 비워 두면 전화한 사람이 이름과 생년월일을 직접 물어봅니다.",
   sendGuide:
     "넣으면 전화한 사람이 이 정보를 이미 알고 있는 것처럼 먼저 말합니다. 받는 분에게는 통화가 끝날 때까지 보이지 않습니다. 비워 두면 전화한 사람이 이름과 생년월일을 직접 물어봅니다.",
-  privacy: "실제 정보 대신 비슷하게 지어낸 정보를 넣어도 훈련 효과는 같습니다. 넣은 정보는 이번 훈련과 그 결과 리포트에만 쓰입니다.",
-  invalid: "넣은 정보를 확인해 주세요. 이름은 한글이나 영문 2~10자, 출생 연도는 네 자리 숫자로 넣어 주세요.",
+  privacy:
+    "실제 정보 대신 가상의 값을 넣어 주세요. 비슷하게 지어낸 정보여도 훈련 효과는 같습니다. 넣은 정보는 이번 훈련과 그 결과 리포트에만 쓰입니다.",
+  invalid:
+    "넣은 정보를 확인해 주세요. 이름은 한글이나 영문 2~10자, 출생 연도는 네 자리 숫자로 넣어 주세요. 생일은 출생 연도와 함께 실제 있는 날짜로 월과 일을 모두 골라 주세요.",
+  birthdayHint: "출생 연도와 함께 월과 일을 모두 고르면 생년월일로 씁니다. 비워 두면 출생 연도만 씁니다.",
   notApplicable: "이 훈련에는 내 정보를 넣을 수 없습니다. 칸을 비우고 다시 시도해 주세요.",
 } as const;
 
@@ -68,8 +71,13 @@ export const PERSONA_INPUT_COPY = {
 export const PERSONA_INPUT_FIELDS = {
   name: { label: "이름", placeholder: "예: 홍길동" },
   birthYear: { label: "출생 연도", placeholder: "예: 1962" },
+  birthday: { label: "생일 (월 · 일)", monthLabel: "생일 월", dayLabel: "생일 일", monthNone: "월 선택", dayNone: "일 선택" },
   region: { label: "사는 곳", noneLabel: "선택 안 함" },
 } as const;
+
+/** 생일 선택지 — 월 1~12 · 일 1~31(달마다 다른 마지막 날은 제출 때 검증한다 — 서버와 같은 규칙). */
+export const PERSONA_BIRTH_MONTH_OPTIONS: readonly number[] = Array.from({ length: 12 }, (_, i) => i + 1);
+export const PERSONA_BIRTH_DAY_OPTIONS: readonly number[] = Array.from({ length: 31 }, (_, i) => i + 1);
 
 /** 입력 블록을 그릴지(UX D-131 (1)) — 대상 4종 × 고급 × 통화형(메신저 시나리오 0). */
 export function personaCardInputVisible(
@@ -108,11 +116,48 @@ export function readPersonaCardForm(form: PersonaCardForm, nowYear: number = new
     if (value < PERSONA_BIRTH_YEAR_INPUT_MIN || value > nowYear - PERSONA_BIRTH_YEAR_INPUT_MIN_AGE) return { ok: false };
     input.birthYear = value;
   }
+  // 생일(UX D-133) — 둘 다 · 출생 연도와 함께 · 실제 날짜일 때만(하나만 · 연도 없이 = 진행 안 함 — OQ-U102 권고안).
+  const month = form.birthMonth.trim();
+  const day = form.birthDay.trim();
+  if (month || day) {
+    if (!month || !day || input.birthYear === undefined) return { ok: false };
+    if (!/^\d{1,2}$/.test(month) || !/^\d{1,2}$/.test(day)) return { ok: false };
+    const m = Number(month);
+    const d = Number(day);
+    if (m < 1 || m > 12 || d < 1 || d > 31 || !isCalendarDate(input.birthYear, m, d)) return { ok: false };
+    input.birthMonth = m;
+    input.birthDay = d;
+  }
   if (form.region) {
     if (!PERSONA_REGION_OPTIONS.includes(form.region)) return { ok: false };
     input.region = form.region;
   }
   return { ok: true, input: Object.keys(input).length > 0 ? input : undefined };
+}
+
+/** 실제 달력 날짜인가(UTC — 서버 `isCalendarDate`와 같은 규칙). */
+function isCalendarDate(year: number, month: number, day: number): boolean {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+// ── 펼칠 때 자동 스크롤(UX D-133 (1) — 사용자 요청 2026-10-20 *"고급 난이도를 선택하면 … 자동으로 스크롤"*) ──
+
+/** 블록 위 여백(px) — 바로 위 맥락(고급 고지 · 표시 이름 칸)이 한 줄 남게 한다. 컴포넌트의 `scroll-mt-28`(7rem)과 같다. */
+export const PERSONA_REVEAL_SCROLL_MARGIN_PX = 112;
+
+/**
+ * 블록이 나타났을 때 스크롤할지 · 어떻게. 블록 전체가 이미 화면 안이면 `null`(움직이지 않는다). 그 밖이면
+ * reduced-motion = `"auto"`(즉시) · 그 밖 = `"smooth"`. ⛔ 포커스는 옮기지 않는다(어르신 기기에서 키보드가 바로 뜨지 않게).
+ */
+export function personaRevealScroll(
+  rect: { top: number; bottom: number },
+  viewportHeight: number,
+  reducedMotion: boolean,
+): ScrollBehavior | null {
+  const fullyVisible = rect.top >= 0 && rect.bottom <= viewportHeight;
+  if (fullyVisible) return null;
+  return reducedMotion ? "auto" : "smooth";
 }
 
 /** 서버 거부 사유 → 문면(이 기능의 사유가 아니면 `null` — 호출부의 기존 오류 처리로 넘긴다). */

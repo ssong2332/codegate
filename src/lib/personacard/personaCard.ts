@@ -95,6 +95,32 @@ export const PERSONA_REPORT_COPY = {
   tailSender: "위 정보는 이 훈련을 보낸 분이 넣은 정보입니다.",
 } as const;
 
+// ── 되짚어보기(UX-018) — 받는 사람 화면의 "보낸 분이 넣은 정보" 블록(D-131 (6) 갱신 · D-133 (5) · 사용자 요청 2026-10-20) ──
+
+/** 블록 문면 — 새 문장 0 · 리포트 R-2 제목 · `r2FactSender` · `tailSender` 재사용(UX D-133 (5)). */
+export type ReplaySenderPersonaView = { title: string; fact: string; rows: PersonaCardRow[]; tail: string };
+
+/**
+ * 세션 문서 `personaCard` → 되짚어보기 블록. 그릴 때만 값, 그 밖 `null`:
+ * - 챌린지 수신 세션(`session.challengeId` 있음)이고 카드가 `v: 2` · `inputBy: "sender"`일 때만
+ * - 카드 없음 · 모양 이상 · self 카드 · 옛 v1 카드 · 자가 세션 = `null`(self 되짚어보기는 무변경 — OQ-U103)
+ * 행은 **세션 문서의 카드 전부**다(리포트 R-1 블록은 먼저 말한 항목만 담아 "넣어 두었습니다" 문장과 어긋날 수 있다).
+ * ⭐ 이 화면은 통화가 끝난 뒤에만 열린다(되짚어보기 = 세션 종료 뒤) — 통화 전 숨김(D-131 (6) · G628)과 충돌하지 않는다.
+ */
+export function readReplaySenderPersona(raw: unknown, isChallengeSession: boolean): ReplaySenderPersonaView | null {
+  if (!isChallengeSession || !raw || typeof raw !== "object") return null;
+  const { v, inputBy, items } = raw as { v?: unknown; inputBy?: unknown; items?: unknown };
+  if (v !== 2 || inputBy !== "sender") return null;
+  const rows = readRows(items);
+  if (!rows) return null;
+  return {
+    title: PERSONA_REPORT_COPY.r2Title,
+    fact: PERSONA_REPORT_COPY.r2FactSender,
+    rows,
+    tail: PERSONA_REPORT_COPY.tailSender,
+  };
+}
+
 /** UX-018 v1.38 ① — R-1 세션에서 사기범이 카드 값을 처음 말한 줄의 주석. */
 export const PERSONA_REPLAY_NOTE = "이 말이 '상대가 먼저 꺼낸 내 정보' 신호였습니다";
 

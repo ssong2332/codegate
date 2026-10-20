@@ -38,8 +38,11 @@ export function personaCardEligible(input: PersonaCardEligibilityInput): boolean
   );
 }
 
-/** 클라 요청의 원값(UX D-131 (2)). 셋 다 선택 — 빈 문자열 · 부재 = 넣지 않음. */
-export type PersonaCardInput = { name?: string; birthYear?: number; region?: string };
+/**
+ * 클라 요청의 원값(UX D-131 (2) · D-133). 전부 선택 — 빈 문자열 · 부재 = 넣지 않음.
+ * `birthMonth` · `birthDay`(생일 — §88 후속)는 **둘 다 · 출생 연도와 함께**일 때만 받는다(OQ-U102 권고안).
+ */
+export type PersonaCardInput = { name?: string; birthYear?: number; birthMonth?: number; birthDay?: number; region?: string };
 
 /** 출생 연도 상한(올해 − 14). 테스트 재현을 위해 연도를 주입받는다. */
 export function personaBirthYearMax(nowYear: number): number {
@@ -62,12 +65,14 @@ export type PersonaCardInputReadResult =
  * 한 칸이라도 규칙 밖이면 `{ok: false}` — ⛔ 호출부는 조용히 버리지 않고 `invalid-argument`로 알린다.
  * - name: 문자열 · 정리 뒤 2~10자 · 한글/영문 + 단어 사이 공백 1개 · 실존 금융사명 · 은행 자리표시자 0
  * - birthYear: 정수 · 1920 ~ 올해−14
+ * - birthMonth · birthDay(§88 후속 · UX D-133): 정수 월 1~12 · 일 1~31 · **둘 다**(하나만 = 거부) · **출생 연도 필요**(연도 없이 = 거부 —
+ *   OQ-U102 권고안) · 연도와 합쳐 실제 날짜(예: 2월 30일 · 평년 2월 29일 = 거부)
  * - region: 시 · 도 17개 정식 명칭 중 하나
  */
 export function readPersonaCardInput(raw: unknown, nowYear: number = new Date().getFullYear()): PersonaCardInputReadResult {
   if (raw === undefined || raw === null) return { ok: true, input: undefined };
   if (typeof raw !== "object" || Array.isArray(raw)) return { ok: false };
-  const { name, birthYear, region, ...rest } = raw as Record<string, unknown>;
+  const { name, birthYear, birthMonth, birthDay, region, ...rest } = raw as Record<string, unknown>;
   if (Object.keys(rest).length > 0) return { ok: false };
   const input: PersonaCardInput = {};
 
@@ -89,6 +94,16 @@ export function readPersonaCardInput(raw: unknown, nowYear: number = new Date().
     input.birthYear = birthYear;
   }
 
+  const hasMonth = birthMonth !== undefined && birthMonth !== null;
+  const hasDay = birthDay !== undefined && birthDay !== null;
+  if (hasMonth || hasDay) {
+    if (!hasMonth || !hasDay || input.birthYear === undefined) return { ok: false };
+    if (!isIntegerIn(birthMonth, 1, 12) || !isIntegerIn(birthDay, 1, 31)) return { ok: false };
+    if (!isCalendarDate(input.birthYear, birthMonth, birthDay)) return { ok: false };
+    input.birthMonth = birthMonth;
+    input.birthDay = birthDay;
+  }
+
   if (region !== undefined && region !== null && region !== "") {
     if (typeof region !== "string" || !PERSONA_REGION_POOL.some((r) => r.name === region)) return { ok: false };
     input.region = region;
@@ -97,17 +112,36 @@ export function readPersonaCardInput(raw: unknown, nowYear: number = new Date().
   return { ok: true, input: Object.keys(input).length > 0 ? input : undefined };
 }
 
+function isIntegerIn(value: unknown, min: number, max: number): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
+}
+
+/** 실제 달력 날짜인가(UTC — 시간대 영향 0). */
+function isCalendarDate(year: number, month: number, day: number): boolean {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
 /** ⛔ 이 타입의 키가 곧 G566의 고정 목록이다 — 계정 정보 키를 더하면 G566이 실패한다. */
 export type BuildPersonaCardInput = {
   input: PersonaCardInput;
   inputBy: PersonaCardInputBy;
 };
 
-/** 검증된 원값 → 카드(v2). 넣은 항목만 · 순서 이름 → 출생 연도 → 사는 곳. 항목 0이면 `undefined`. */
+/**
+ * 검증된 원값 → 카드(v2). 넣은 항목만 · 순서 이름 → 출생 연도(또는 생년월일) → 사는 곳. 항목 0이면 `undefined`.
+ * 생일(월 · 일)이 있으면 `birthYear` 행 **대신** `birthDate` 행 하나(`"1965년 3월 2일생"`) — 옛 카드(월 · 일 없음)는 `birthYear` 그대로.
+ */
 export function buildPersonaCard({ input, inputBy }: BuildPersonaCardInput): PersonaCard | undefined {
   const items: PersonaCardItem[] = [];
   if (input.name) items.push({ key: "name", label: PERSONA_CARD_LABELS.name, value: input.name });
-  if (input.birthYear !== undefined) {
+  if (input.birthYear !== undefined && input.birthMonth !== undefined && input.birthDay !== undefined) {
+    items.push({
+      key: "birthDate",
+      label: PERSONA_CARD_LABELS.birthDate,
+      value: `${input.birthYear}년 ${input.birthMonth}월 ${input.birthDay}일생`,
+    });
+  } else if (input.birthYear !== undefined) {
     items.push({ key: "birthYear", label: PERSONA_CARD_LABELS.birthYear, value: `${input.birthYear}년생` });
   }
   if (input.region) items.push({ key: "region", label: PERSONA_CARD_LABELS.region, value: input.region });

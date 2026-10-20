@@ -37,7 +37,13 @@ import {
   replayNavEmptyText,
   TACTICS_NOT_FOUND_TEXT,
 } from "@/lib/report/reportTacticsCopy";
-import { PERSONA_REPLAY_NOTE, personaReplayAnchor, readPersonaBlock } from "@/lib/personacard/personaCard";
+import {
+  PERSONA_REPLAY_NOTE,
+  personaReplayAnchor,
+  readPersonaBlock,
+  readReplaySenderPersona,
+  type ReplaySenderPersonaView,
+} from "@/lib/personacard/personaCard";
 
 type ReportSummary = {
   wasDeceived: boolean;
@@ -70,6 +76,8 @@ export default function ReplayPage() {
   const [callerLabel, setCallerLabel] = useState<string>("상대방");
   // T194-b(UX-018 v1.38 ① · §84.3.7) — 사기범이 카드 값을 처음 말한 줄의 turnIndex(리포트 `personaBlock` 앵커 · 기록 없으면 null).
   const [personaAnchor, setPersonaAnchor] = useState<number | null>(null);
+  // UX D-133 (5) — 챌린지 수신 세션 + 보낸 분이 넣은 카드일 때만(통화 뒤라 숨길 이유가 없다 · 카드 없으면 null).
+  const [senderPersona, setSenderPersona] = useState<ReplaySenderPersonaView | null>(null);
   // 스텝 내비게이션(P-13) — 주석이 달린 항목 중 현재 위치(-1=아직 이동 안 함).
   const [stepPos, setStepPos] = useState(-1);
   const [stepAnnounce, setStepAnnounce] = useState("");
@@ -170,6 +178,7 @@ export default function ReplayPage() {
       callerLabel: scenario?.callerLabel ?? "상대방",
       challenge: challengeContext,
       personaAnchor: personaReplayAnchor(readPersonaBlock(reportData.personaBlock)),
+      senderPersona: readReplaySenderPersona(sessionData.personaCard, challengeContext !== null),
     };
   }, []);
 
@@ -190,6 +199,7 @@ export default function ReplayPage() {
         setCallerLabel(result.callerLabel);
         setChallenge(result.challenge);
         setPersonaAnchor(result.personaAnchor);
+        setSenderPersona(result.senderPersona);
         setStepPos(-1);
         setState("loaded");
       } catch {
@@ -295,6 +305,7 @@ export default function ReplayPage() {
         setCallerLabel(result.callerLabel);
         setChallenge(result.challenge);
         setPersonaAnchor(result.personaAnchor);
+        setSenderPersona(result.senderPersona);
         setStepPos(-1);
         setState("loaded");
       })
@@ -402,6 +413,29 @@ export default function ReplayPage() {
             <p className="mt-1.5 text-lg leading-relaxed text-ink-sub">{TACTICS_NOT_FOUND_TEXT}</p>
           )}
         </div>
+      )}
+
+      {/* UX D-133 (5) — 받는 사람에게 발신자가 넣은 카드 블록(챌린지 수신 세션 · `inputBy: "sender"` 카드만). 문면은 리포트 정본 재사용
+          (`readReplaySenderPersona`) · 새 색 0 · 되감기 버튼 0(속은 순간이 아니다). */}
+      {senderPersona && (
+        <section
+          aria-labelledby="replay-sender-persona-title"
+          className="mx-5 mt-4 flex flex-col gap-2.5 rounded-[8px] border border-line bg-white p-[18px]"
+        >
+          <h2 id="replay-sender-persona-title" className="text-lg font-bold text-ink">
+            {senderPersona.title}
+          </h2>
+          <p className="text-lg leading-relaxed text-ink">{senderPersona.fact}</p>
+          <dl className="flex flex-col gap-1.5 rounded-[8px] bg-page p-3">
+            {senderPersona.rows.map((row) => (
+              <div key={row.label} className="flex flex-wrap gap-x-2">
+                <dt className="text-lg text-ink-sub">{row.label}</dt>
+                <dd className="break-words text-lg font-semibold text-ink">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="text-base leading-relaxed text-ink-sub">{senderPersona.tail}</p>
+        </section>
       )}
 
       {/* 스텝 내비게이션(P-13) — 신호로 점프 + 순차 스크롤 병행. 큰 터치 타겟. */}
