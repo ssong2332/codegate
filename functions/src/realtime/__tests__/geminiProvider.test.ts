@@ -96,12 +96,15 @@ test("GeminiRealtimeProvider: 시스템 프롬프트를 토큰에 고정해 발�
         identityCheckAllowed: true,
         speakerGender: "female",
         toolDrivenTiming: true,
+        // §90 — Live 토큰만 [말투 — 실시간 음성 통화]를 받는다.
+        liveSpeechStyle: true,
         // T192 C3 — 음성 통화 토큰은 `end_call`을 선언하므로 TOOL 변형(§79.6 ①).
         hangupMode: "tool",
       }),
       "토큰 발급 시 systemInstruction이 서버에서 고정되어야 한다",
     );
     assert.ok(sentPrompt.includes("[화자"), "§50.3.3 — 화자 성별 블록이 조립돼야 한다");
+    assert.ok(sentPrompt.includes("[말투 — 실시간 음성 통화]"), "§90 — Live 토큰에는 말투 블록이 실려야 한다");
     assert.ok(
       sentPrompt.includes("문자로 도착한 것은 예외"),
       "문자 카탈로그가 있는 시나리오는 조건형 문구가 켜져야 한다(G1)",
@@ -479,6 +482,8 @@ test("GeminiRealtimeProvider: 토큰 발급 시 systemInstruction이 toolDrivenT
         identityCheckAllowed: true,
         speakerGender: "male",
         toolDrivenTiming: true,
+        // §90 — Live 토큰만 [말투 — 실시간 음성 통화]를 받는다.
+        liveSpeechStyle: true,
         // §61(OQ-A73 User 확정) — bank-security-verify-scam은 도구가 선언되므로(advanced)
         // offerToolDeclared:true라 TOOL_DRIVEN 문구가 실린다.
         offerToolDeclared: declaresOfferVerificationDesk("bank-security-verify-scam", "advanced"),
