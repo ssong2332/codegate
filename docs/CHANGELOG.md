@@ -4,6 +4,13 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-20 추가분, 브랜치 `claude/fix-self-mode-voice-select-d597c3`)**: 아직 main에 병합되지 않았고 배포 0회.
+
+### Changed
+- **메신저 자가 체험의 통화용 목소리 선택(Architecture §87 · DECISIONS #198 · UX D-130)**:
+  - "본인이 체험"으로 고른 메신저 시나리오(예: 자녀 사칭 카톡)의 목소리 선택 화면에 "지금 30초 녹음" · "저장된 내 목소리 사용"이 더는 나오지 않는다. 기본 남성 · 여성 목소리만 고른다.
+  - 서버도 자가 체험 세션을 본인 목소리(녹음 · 저장 목소리)로 만드는 요청을 거부한다.
+
 > ⚠️ **이 블록(2026-10-20 추가분, 브랜치 `fix/messenger-call-voice-channel`)**: 아직 main에 병합되지 않았고 배포 0회.
 
 ### Fixed
