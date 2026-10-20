@@ -20,7 +20,7 @@ const ROOT_SRC = path.resolve(__dirname, "../../../../src");
 const CANON: ReadonlyArray<readonly [string, string]> = [
   [
     "승인",
-    "(통화가 곧 끊긴다. 작별 인사를 아직 하지 않았다면 상황에 맞는 짧은 마무리 한마디만 하고 더는 말하지 마라. 이미 했다면 아무 말도 하지 마라.)",
+    "(통화가 곧 끊긴다. 작별 인사를 아직 하지 않았다면 상황에 맞는 짧은 마무리 한마디만 하고 거기서 말을 멈춰라. 그 한마디 앞뒤에 대답이나 설명, 당부, 새 요구를 붙이지 마라. 이미 했다면 아무 말도 하지 마라.)",
   ],
   ["거절(공통)", "(아직 통화를 끝낼 때가 아니다. 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어가라.)"],
   [
@@ -83,6 +83,34 @@ test("[G516] 각 문면은 functions/src에서 guidance.ts 1곳에만 있고 클
     assert.deepEqual(server, ["scammerHangup/guidance.ts"], `${label}: 서버 원천이 1곳이 아니다`);
     assert.deepEqual(filesContaining(clientFiles, text), [], `${label}: 클라가 모델 대면 문면을 저작했다(G386)`);
   }
+});
+
+// ── T192 C7 · G627(Architecture.md §79.22 (4) ② · (9)) — 승인 문면 1회 수정(79.14 #2) ─────────────────────────────
+/** C7 전 승인 문면(§79.5) — 역검증용. */
+const G627_OLD_ACCEPTED =
+  "(통화가 곧 끊긴다. 작별 인사를 아직 하지 않았다면 상황에 맞는 짧은 마무리 한마디만 하고 더는 말하지 마라. 이미 했다면 아무 말도 하지 마라.)";
+
+test("[G627] 승인 문면 = §79.22 (4) ② 정본 · '그 한마디 앞뒤에' 1회 · '한 문장' · '하나' · '첫' 0 · 거절 · 실패 3문면 무변경", () => {
+  assert.equal(SCAMMER_HANGUP_ACCEPTED_GUIDANCE, CANON[0]![1], "승인 문면이 §79.22 (4) ② 정본과 다르다");
+  assert.equal(SCAMMER_HANGUP_ACCEPTED_GUIDANCE.split("그 한마디 앞뒤에").length - 1, 1);
+  for (const w of ["한 문장", "하나", "첫"]) assert.equal(SCAMMER_HANGUP_ACCEPTED_GUIDANCE.includes(w), false, `"${w}"`);
+  // 첫 문장 · 끝 문장은 C7 전과 바이트 동일(바뀐 곳은 가운데뿐).
+  assert.ok(SCAMMER_HANGUP_ACCEPTED_GUIDANCE.startsWith("(통화가 곧 끊긴다. "));
+  assert.ok(SCAMMER_HANGUP_ACCEPTED_GUIDANCE.endsWith(" 이미 했다면 아무 말도 하지 마라.)"));
+  assert.deepEqual(
+    [SCAMMER_HANGUP_DECLINED_GUIDANCE, SCAMMER_HANGUP_BLOCKED_TRANSFER_GUIDANCE, SCAMMER_HANGUP_FAILURE_INSTRUCTION],
+    [
+      "(아직 통화를 끝낼 때가 아니다. 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어가라.)",
+      "(확인 부서로 통화를 넘기기 전에는 끝낼 수 없다. 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어가라.)",
+      "(지금은 통화를 끝낼 수 없다. 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어가라.)",
+    ],
+    "거절 · 실패 문면이 바뀌었다(⛔ §79.22 (0) 2)",
+  );
+});
+
+test("[G627 역검증] 옛 승인 문면 사본은 정확 일치 · '그 한마디 앞뒤에' 단언에 걸린다", () => {
+  assert.notEqual(G627_OLD_ACCEPTED, CANON[0]![1]);
+  assert.equal(G627_OLD_ACCEPTED.split("그 한마디 앞뒤에").length - 1, 0);
 });
 
 test("[G516 역검증] 스캔 함수는 문면을 품은 파일을 실제로 찾는다", () => {

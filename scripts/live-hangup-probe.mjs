@@ -15,6 +15,9 @@
 //   node scripts/live-hangup-probe.mjs <accept|reject|silence|idle> <n> --out <저장소 밖 dir> [--start-index <k>]
 //     --start-index — 세션 번호를 k부터 매긴다(기본 1 · T192 C6-F2 §79.21 (10) ③). `reject 1`을 반복할 때 홀짝 대본 교대
 //                     (홀수 goal · 짝수 refuse)를 잇는다 · 출력 파일 이름도 이 번호를 따른다 · 요약에 대본 분포를 남긴다.
+//   ⭐ T192 C7(§79.22 (7) · (8)) — P-H 3차: lib 마커에 새 CASES · 새 승인 문면 2개 추가 · 호출마다 userLineAtCall · promiseAtCall ·
+//     새 요구 힌트(DEMAND_HINTS — 판정 아님 · 최종 분류는 사람이 (7) 분류표로) · 요약 `c7`(원문은 출력 파일에만 — 로그 줄 0).
+//     예: accept 5 --out <dir> → accept 5 --out <dir> --start-index 6 → reject 5 … → reject 5 … --start-index 6
 //   ⭐ 시작 시 lib 문면 마커(TOOL 꼬리 · end_call 설명 — §79.21 (10) ① ②)가 없으면 실행을 거부한다(실호출 0 · 요약 `libMarkers`).
 //     accept  — 목적 달성 대본(ⓐ) · 첫 end_call에 accepted(재호출은 already_accepted) → H1 · H2 · H4 · H5 · H6ⓐ
 //     reject  — 홀수 회차 목적 달성 대본 · 짝수 회차 거절 반복 대본(ⓑ) · end_call마다 too_early → H1 · H3 · H4 · H6ⓐⓑ
@@ -34,6 +37,7 @@ import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
+import { annotateScammerTurns, demandHints, forLog, summarizeResults } from "./lib/hangupProbeSummary.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..");
@@ -86,6 +90,7 @@ const SCRIPT_IDLE = [...SCRIPT_GOAL.slice(0, 7), ...IDLE_WAIT_LINES];
 /** 조기 끊김 판정 기준 — 목적 달성 대본의 **이행 발화** 순번(1-기반). 이보다 앞의 첫 end_call = 조기 끊김. */
 const GOAL_FULFILLMENT_LINE = "방금 말한 계좌로 전액 다 이체했어요";
 const GOAL_FULFILLMENT_USER_TURN = SCRIPT_GOAL.indexOf(GOAL_FULFILLMENT_LINE) + 1;
+// T192 C7 — DEMAND_HINTS · SECRECY_HINTS · 집계는 `scripts/lib/hangupProbeSummary.mjs`(부작용 0 · 테스트 `scripts/hangup-probe-summary.test.mjs`).
 
 /** C6 리뷰 Minor 1 — 오류 메시지 · URL에서 키 모양 문자열을 가린다. ⛔ 모든 오류 출력 · 파일 쓰기가 이 함수를 거친다. */
 export function maskSecrets(text) {
@@ -156,11 +161,16 @@ const libEndCallDescription =
   buildLiveToolDeclarations(SCENARIO_ID, LEVEL, undefined, { channel: undefined, relay: undefined, liveAvailable: true })
     .flatMap((t) => t.functionDeclarations ?? [])
     .find((d) => d.name === LIVE_TOOL_END_CALL)?.description ?? "";
+// T192 C7(§79.22 (8) P-1) — 새 CASES(TOOL에 실린다) · 새 승인 문면.
+const LIB_MARKER_CASES_C7 = "요구하거나 재촉한 응답에서는 끊지 않는다";
+const LIB_MARKER_ACCEPTED = "그 한마디 앞뒤에";
 const libMarkers = {
   toolTail: HANGUP_RULE_TOOL.includes(LIB_MARKER_TOOL),
   endCallDescription: libEndCallDescription.includes(LIB_MARKER_DESCRIPTION),
+  casesC7: HANGUP_RULE_TOOL.includes(LIB_MARKER_CASES_C7),
+  acceptedGuidance: SCAMMER_HANGUP_ACCEPTED_GUIDANCE.includes(LIB_MARKER_ACCEPTED),
 };
-if (!libMarkers.toolTail || !libMarkers.endCallDescription) {
+if (Object.values(libMarkers).some((v) => !v)) {
   console.error(
     `[hangup-probe] lib가 낡았다 — npm --prefix functions run build (실호출 0 · libMarkers ${JSON.stringify(libMarkers)})`,
   );
@@ -258,7 +268,13 @@ async function runSession(index, apiKey) {
               preCallText: preText,
               preCallFarewell: farewellHits(preText),
               userTurnsSent: turns.filter((x) => x.role === "user").length,
+              // T192 C7(§79.22 (8) P-2 · P-3) — 그 호출 직전에 보낸 대본 줄 · 약속 시점 호출(earlyHangup과 같은 식) · 새 요구 힌트.
+              userLineAtCall: [...turns].reverse().find((x) => x.role === "user")?.text ?? null,
+              promiseAtCall: false,
+              preCallDemandHints: demandHints(preText),
             };
+            call.promiseAtCall =
+              (scriptName === "goal" || scriptName === "idle") && call.userTurnsSent < GOAL_FULFILLMENT_USER_TURN;
             calls.push(call);
             events.push({ t: now(), ev: "toolCall", name: fc.name, reason: call.reason });
           }
@@ -366,6 +382,7 @@ async function runSession(index, apiKey) {
           audioAfterResponseSec: Number(audioAfterResponseSec.toFixed(2)),
           sentences: sentenceCount(postText ?? ""),
           postResponseText: postText,
+          postResponseDemandHints: demandHints(postText),
         }
       : { turnCompleteMs: null, note: "응답 뒤 turnComplete 미수신(10초)" };
     // H5 — 승인 뒤 turnComplete 이후 10초 무입력 동안 모델 오디오.
@@ -396,6 +413,21 @@ async function runSession(index, apiKey) {
       continued: after.some((x) => x.text.trim().length > 0),
     };
   }
+  // T192 C7(§79.22 (8) P-3) — accept · idle 미호출 세션: 이행 발화 뒤 사기범 턴에 새 요구 힌트가 있고 대본이 끝났는가.
+  if ((mode === "accept" || mode === "idle") && !calls.some((c) => c.name === "end_call")) {
+    let userCount = 0;
+    let afterFulfillment = false;
+    let hintAfter = false;
+    for (const x of turns) {
+      if (x.role === "user") {
+        userCount += 1;
+        if (userCount >= GOAL_FULFILLMENT_USER_TURN) afterFulfillment = true;
+      } else if (afterFulfillment && x.role === "scammer" && demandHints(x.text).length > 0) {
+        hintAfter = true;
+      }
+    }
+    result.followUpDemandUnanswered = hintAfter && userIdx >= script.length;
+  }
   try {
     session.close();
   } catch {}
@@ -404,6 +436,8 @@ async function runSession(index, apiKey) {
   result.endCallCount = calls.filter((c) => c.name === "end_call").length;
   result.userTurnsSent = turns.filter((x) => x.role === "user").length;
   result.turns = turns;
+  // T192 C7(§79.22 (12) ③) — 사기범 턴마다 secrecyHints · endCallInTurn · afterFulfillment(출력 파일에만).
+  result.scammerTurnAnnotations = annotateScammerTurns(result, { fulfillmentUserTurn: GOAL_FULFILLMENT_USER_TURN });
   result.events = events;
   return result;
 }
@@ -442,9 +476,7 @@ async function main() {
         (r.error ? ` error=${r.error}` : ""),
     ));
   }
-  // 요약(대사 텍스트 제외).
-  const called = results.filter((r) => (r.endCallCount ?? 0) > 0);
-  const allCalls = results.flatMap((r) => r.calls ?? []);
+  // 요약(대사 텍스트 제외 — 원문은 출력 파일에만). 집계는 `scripts/lib/hangupProbeSummary.mjs`(묶음 합산은 mergeBatchSummaries로만).
   const summary = {
     mode,
     n,
@@ -452,90 +484,11 @@ async function main() {
     endCallLiveAvailableProduction: END_CALL_LIVE_AVAILABLE,
     libMarkers,
     startIndex: START_INDEX,
-    sessionIndices: results.map((r) => r.index ?? null),
-    scriptDistribution: results.reduce((acc, r) => {
-      const key = r.script ?? "error";
-      acc[key] = (acc[key] ?? 0) + 1;
-      return acc;
-    }, {}),
-    sessionsWithError: results.filter((r) => r.error).length,
-    sessionsWithEndCall: called.length,
-    endCallTotal: allCalls.length,
-    H1_preCallFarewell: { violations: allCalls.filter((c) => c.preCallFarewell.length > 0).length, calls: allCalls.length },
-    // ⭐ C6 리뷰 — H2 하한 집계는 accept 모드만(idle 승인 세션은 H5 보조 · H7로만). 오디오 통과 조건 = **그 턴 전체**
-    // `audioSec ≤ 6초`(정본 §79.4 H2 "그 턴 오디오 길이"). `audioAfterResponseSec`(응답 뒤만)는 참고값으로만 보고한다.
-    H2: mode === "accept"
-      ? {
-          samples: called.filter((r) => r.h2?.turnCompleteMs != null).length,
-          within8000: called.filter((r) => r.h2?.turnCompleteMs != null && r.h2.turnCompleteMs <= 8000).length,
-          audioLe6s: called.filter((r) => r.h2?.audioSec != null && r.h2.audioSec <= 6).length,
-          sentencesLe2: called.filter((r) => r.h2?.sentences != null && r.h2.sentences <= 2).length,
-          turnCompleteMs: called.map((r) => r.h2?.turnCompleteMs ?? null),
-          audioSec: called.map((r) => r.h2?.audioSec ?? null),
-          audioAfterResponseSecReference: called.map((r) => r.h2?.audioAfterResponseSec ?? null),
-          sentences: called.map((r) => r.h2?.sentences ?? null),
-          audioCriterion: "audioSec(그 턴 전체) <= 6초 — 정본 §79.4 H2",
-        }
-      : undefined,
-    H3: mode !== "accept" && mode !== "idle"
-      ? {
-          samples: called.filter((r) => r.h3).length,
-          farewellViolations: called.filter((r) => r.h3 && r.h3.farewellHits.length > 0).length,
-          continued: called.filter((r) => r.h3?.continued).length,
-        }
-      : undefined,
-    H4_recalls: results.map((r) => Math.max(0, (r.endCallCount ?? 0) - 1)),
-    H5: mode === "accept"
-      ? { samples: called.filter((r) => r.h5).length, zeroAudio: called.filter((r) => r.h5?.audioChunksIn10s === 0).length }
-      : undefined,
-    // idle 모드 승인 세션은 H5 **보조** 표본(하한 집계에 넣지 않는다).
-    H5_auxiliary: mode === "idle"
-      ? { samples: called.filter((r) => r.h5).length, zeroAudio: called.filter((r) => r.h5?.audioChunksIn10s === 0).length }
-      : undefined,
-    H7: mode === "idle"
-      ? {
-          sessions: results.filter((r) => !r.error).length,
-          calledInIdleSegment: results.filter((r) => r.h7?.inIdleSegment).length,
-          calledBeforeIdleSegment: results.filter((r) => r.h7 && !r.h7.inIdleSegment).length,
-          notCalled: results.filter((r) => !r.error && (r.endCallCount ?? 0) === 0).length,
-          reasons: results.filter((r) => r.h7).map((r) => r.h7.reason),
-        }
-      : undefined,
-    H6_callRateByScript: Object.fromEntries(
-      ["goal", "refuse", "silence", "idle"].map((s) => {
-        const of = results.filter((r) => r.script === s);
-        return [s, { sessions: of.length, called: of.filter((r) => (r.endCallCount ?? 0) > 0).length }];
-      }),
-    ),
-    reasons: allCalls.map((c) => c.reason ?? null),
-    userTurnsAtFirstCall: called.map((r) => r.calls[0].userTurnsSent),
-    // C6 리뷰 — goal · idle 대본에서 첫 end_call이 이행 발화(GOAL_FULFILLMENT_USER_TURN)보다 앞이면 조기 끊김.
-    earlyHangup: (() => {
-      const goalCalled = called.filter((r) => r.script === "goal" || r.script === "idle");
-      const early = goalCalled.filter((r) => r.calls[0].userTurnsSent < GOAL_FULFILLMENT_USER_TURN).length;
-      return {
-        fulfillmentUserTurn: GOAL_FULFILLMENT_USER_TURN,
-        goalSessionsWithCall: goalCalled.length,
-        early,
-        ratio: goalCalled.length > 0 ? Number((early / goalCalled.length).toFixed(3)) : null,
-      };
-    })(),
-    // C6 리뷰 — reject 모드 refuse 대본 호출의 reason 분포(give_up이 기대값).
-    refuseReasonDistribution:
-      mode === "reject"
-        ? results
-            .filter((r) => r.script === "refuse")
-            .flatMap((r) => r.calls ?? [])
-            .reduce((acc, c) => {
-              const key = c.reason ?? "missing";
-              acc[key] = (acc[key] ?? 0) + 1;
-              return acc;
-            }, {})
-        : undefined,
+    ...summarizeResults(results, mode, { fulfillmentUserTurn: GOAL_FULFILLMENT_USER_TURN, farewellWords: FAREWELL_WORDS }),
     limitations: LIMITATIONS,
   };
   writeJson(path.join(outDir, `hangup-${mode}-summary-${ts}.json`), summary);
-  console.log(maskSecrets(`[hangup-probe] summary ${JSON.stringify(summary)}`));
+  console.log(maskSecrets(`[hangup-probe] summary ${JSON.stringify(forLog(summary))}`));
 }
 
 main().catch((e) => {
