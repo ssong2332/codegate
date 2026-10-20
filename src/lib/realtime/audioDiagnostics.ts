@@ -30,6 +30,8 @@ type DiagState = {
   resumeRetries: number;
   /** 벨 컨텍스트를 실제로 닫은 시각(`performance.now()`) — 받기 기준 상대 ms로 보인다(M3 순서 판정용). */
   ringClosedAtMs: number | null;
+  /** 이 통화에서 받은 PCM 청크의 최대 절대 진폭(게인 적용 **전** · 0~1). 원본 레벨이 작은지 판정용(2026-10-20 음량 신고). */
+  pcmPeakMax: number | null;
 };
 
 const INITIAL: DiagState = {
@@ -44,6 +46,7 @@ const INITIAL: DiagState = {
   lastAudioError: null,
   resumeRetries: 0,
   ringClosedAtMs: null,
+  pcmPeakMax: null,
 };
 
 let state: DiagState = { ...INITIAL };
@@ -51,7 +54,9 @@ let state: DiagState = { ...INITIAL };
 let outputCtx: CtxLike | null = null;
 let inputCtx: CtxLike | null = null;
 let ringCtx: CtxLike | null = null;
-let outputGain: { gain: { value: number } } | null = null;
+// `context` — 게인 노드가 속한 컨텍스트(재생 소스가 붙는 컨텍스트와 같은 객체인지 패널이 비교한다 · `out.gainCtx`).
+type GainLike = { gain: { value: number }; context?: unknown };
+let outputGain: GainLike | null = null;
 let fallbackAudio: { volume: number; paused: boolean } | null = null;
 
 /** 받기 1회 = 통화 1건. 통화별 값을 비운다(벨 컨텍스트는 받기 전에 정해지므로 남긴다). */
@@ -78,7 +83,7 @@ export function registerCallAudio(input: {
   state = { ...state, outputOrigin: input.origin, outputCreatedAtMs: input.createdAtMs };
 }
 
-export function registerOutputGain(node: { gain: { value: number } } | null): void {
+export function registerOutputGain(node: GainLike | null): void {
   outputGain = node;
 }
 
@@ -90,8 +95,28 @@ export function registerFallbackAudio(el: { volume: number; paused: boolean } | 
   fallbackAudio = el;
 }
 
-export function noteChunkReceived(): void {
-  state = { ...state, chunksReceived: state.chunksReceived + 1 };
+/** 받은 청크 1개. `samples`(디코드한 PCM, -1~1)를 주면 최대 진폭도 갱신한다(게인 적용 전 원본 레벨). */
+export function noteChunkReceived(samples?: ArrayLike<number> | null): void {
+  const peak = samples ? peakOf(samples) : null;
+  const pcmPeakMax = peak === null ? state.pcmPeakMax : Math.max(state.pcmPeakMax ?? 0, peak);
+  state = { ...state, chunksReceived: state.chunksReceived + 1, pcmPeakMax };
+}
+
+/** 최대 절대 진폭(0~1 · 빈 배열 = 0). 청크당 수백~수천 샘플 1회 순회. */
+export function peakOf(samples: ArrayLike<number>): number {
+  let peak = 0;
+  for (let i = 0; i < samples.length; i += 1) {
+    const a = Math.abs(samples[i]);
+    if (a > peak) peak = a;
+  }
+  return peak;
+}
+
+/** 선형 진폭 → dBFS 한 자리(0 이하 = `-inf`). 패널 표시용. */
+export function formatDbfs(amplitude: number | null): string {
+  if (amplitude === null) return "-";
+  if (!(amplitude > 0)) return "-inf";
+  return (20 * Math.log10(amplitude)).toFixed(1);
 }
 
 export function noteChunkScheduled(nowMs: number): void {
@@ -125,6 +150,8 @@ export type AudioDiagSnapshot = DiagState & {
   input: CtxLike | null;
   ring: CtxLike | null;
   gain: number | null;
+  /** 게인 노드의 컨텍스트 === 등록된 출력 컨텍스트(재생 소스가 붙는 것)인가. 노드·컨텍스트가 없으면 null. */
+  gainCtxSame: boolean | null;
   fallback: { volume: number; paused: boolean } | null;
 };
 
@@ -135,6 +162,7 @@ export function readAudioDiag(): AudioDiagSnapshot {
     input: inputCtx,
     ring: ringCtx,
     gain: outputGain ? outputGain.gain.value : null,
+    gainCtxSame: outputGain && outputCtx && outputGain.context !== undefined ? outputGain.context === outputCtx : null,
     fallback: fallbackAudio ? { volume: fallbackAudio.volume, paused: fallbackAudio.paused } : null,
   };
 }
@@ -218,7 +246,9 @@ export const AUDIO_DIAG_KEYS = [
   "out.origin",
   "out.createdMs",
   "out.gain",
+  "out.gainCtx",
   "route",
+  "pcm.peakDb",
   "chunks.rx",
   "chunks.sched",
   "chunk.lastMs",
@@ -270,7 +300,9 @@ export function buildAudioDiagRows(input: {
     "out.origin": show(s.outputOrigin),
     "out.createdMs": rel(s.outputCreatedAtMs, s.acceptAtMs),
     "out.gain": s.gain === null ? "-" : s.gain.toFixed(2),
+    "out.gainCtx": s.gainCtxSame === null ? "-" : s.gainCtxSame ? "same" : "diff",
     route: input.audioRoute,
+    "pcm.peakDb": formatDbfs(s.pcmPeakMax),
     "chunks.rx": String(s.chunksReceived),
     "chunks.sched": String(s.chunksScheduled),
     "chunk.lastMs": rel(s.lastChunkAtMs, s.acceptAtMs),
