@@ -40,6 +40,11 @@ Cloud Functions 2nd gen / Firestore / Storage) + ElevenLabs + LLM(Claude|Gemini 
 배포: **Firebase Hosting**(Functions/Firestore/Storage rules와 `firebase deploy` 하나로 통합
 배포하기 위해 T2에서 택함 — docs/Architecture.md §1 "T2 스캐폴딩에서 팀 편의로 택1").
 
+디자인 토큰(시안 A "공공 안심형" — docs/Architecture.md §89): 사이트 색의 원천은 `src/lib/design/siteTokens.ts`이고
+`src/app/globals.css`가 같은 값을 CSS 변수 · Tailwind 유틸리티(`bg-page` · `text-ink` · `bg-brand` …)로 노출한다(G630이 일치를 검사).
+글꼴은 외부 CDN에서 불러온다(설치 단계 없음): 함렛 · IBM Plex Sans KR = Google Fonts, Pretendard = jsdelivr(훈련 화면).
+CDN이 막힌 환경에서는 시스템 글꼴로 대신 보인다(`display=swap`).
+
 ## Getting Started
 
 > **프로토타입 단계 안내(사용자 결정, 2026-07-21):** 지금은 실제 Firebase 콘솔 프로젝트 없이

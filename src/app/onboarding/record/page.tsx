@@ -268,7 +268,7 @@ export default function RecordPage() {
                 type="button"
                 onClick={handleStart}
                 disabled={!canRecord}
-                className="min-h-[52px] w-full rounded-[8px] border-[1.5px] border-line text-[18px] font-semibold text-ink transition-colors hover:border-line-strong disabled:cursor-not-allowed disabled:border-transparent disabled:bg-neutral-tint disabled:text-disabled-ink"
+                className="min-h-[52px] w-full rounded-[8px] border-[1.5px] border-line-strong bg-surface text-[18px] font-semibold text-ink transition-colors hover:bg-brand-tint disabled:cursor-not-allowed disabled:border-transparent disabled:bg-neutral-tint disabled:text-disabled-ink"
               >
                 다시 시도
               </button>

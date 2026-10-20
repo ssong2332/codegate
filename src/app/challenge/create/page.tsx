@@ -392,7 +392,7 @@ export default function ChallengeCreatePage() {
           onChange={(event) => setDisplayName(event.target.value)}
           placeholder="예: 민수"
           disabled={isSubmitting}
-          className="min-h-[52px] rounded-[8px] border-[1.5px] border-line bg-white px-4 py-3 text-[18px] text-ink outline-none focus:border-brand disabled:opacity-50"
+          className="min-h-[52px] rounded-[8px] border-[1.5px] border-line-strong bg-white px-4 py-3 text-[18px] text-ink focus:border-brand focus-visible:outline-[3px] focus-visible:outline-offset-1 focus-visible:outline-brand disabled:opacity-50"
         />
       </label>
 

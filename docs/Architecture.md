@@ -21600,6 +21600,7 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 | `#41525E` · `#C9D4DB` | 아바타 | `avatar-bg` · `avatar-fg`(같은 값) |
 | 모서리 `rounded-[12/14/16/20px]` · `rounded-xl/2xl/3xl` | — | `rounded-[8px]` |
 | 글자 `text-[12~16px]` · `text-xs/sm/base` | — | +2px(`14~18px` · `sm/base/lg`) — 제목(17px 이상)은 그대로 |
+- **P2 리뷰 반영**(Reviewer: Critical 0 · Major 3 · Minor 7): ① 입력칸 · 보조 버튼 경계 `line` → `line-strong`(1.29 → 3.3:1) + `outline-none` → `focus-visible` 3px 윤곽(`challenge/create` · `challenge/join` · `report/rewind` · `onboarding/record` · 로그인 Google 버튼). ② 첫 화면 문구를 앱 안 체험임이 드러나게("앱 화면 안에서 전화와 문자를 재현합니다(진짜 전화 · 문자는 오지 않습니다)") · 칩 = "연습용 · 실제 돈은 오가지 않습니다"(검증 가능한 범위) · 제목 = 권유형("사기 전화, 미리 한 번 받아 보세요" — 효과 약속 삭제). ③ 11px 글자 → 13px(다시보기 · 되감기 · AI 합성 표식 박스 24px). ④ 대비 쌍 6개 추가(G630). ⑤ 익명 사용자는 첫 화면 게이트 조회를 하지 않는다. ⑥ README에 외부 글꼴 의존 기재.
 
 ### 89.8 OQ
 | # | 질문 | 선택지 | 막힘 |

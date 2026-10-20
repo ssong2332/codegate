@@ -332,7 +332,7 @@ export default function ChallengeJoinPage() {
           {consentPoints.map((point) => (
             <div key={point} className="flex items-start gap-2.5">
               <svg
-                className="mt-[3px] shrink-0"
+                className="mt-[3px] shrink-0 text-brand"
                 width="14"
                 height="14"
                 viewBox="0 0 13 13"
@@ -415,7 +415,7 @@ export default function ChallengeJoinPage() {
               onChange={(event) => setReportNote(event.target.value)}
               disabled={reportState === "submitting"}
               rows={3}
-              className="rounded-[10px] border-[1.5px] border-line bg-white p-3 text-lg text-ink outline-none focus:border-brand"
+              className="rounded-[8px] border-[1.5px] border-line-strong bg-white p-3 text-lg text-ink focus:border-brand focus-visible:outline-[3px] focus-visible:outline-offset-1 focus-visible:outline-brand"
             />
           </label>
           {reportState === "error" && (

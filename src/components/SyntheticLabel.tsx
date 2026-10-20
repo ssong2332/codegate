@@ -19,7 +19,7 @@ export default function SyntheticLabel({
     >
       <span
         aria-hidden="true"
-        className="flex h-5 w-5 items-center justify-center rounded-[5px] bg-ai text-[11px] font-extrabold text-white"
+        className="flex h-6 w-6 items-center justify-center rounded-[6px] bg-ai text-[13px] font-extrabold text-white"
       >
         AI
       </span>

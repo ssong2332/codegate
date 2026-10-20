@@ -8,7 +8,8 @@ import { hasGrantedConsent } from "@/lib/consent";
 import { hasVerifiedAge } from "@/lib/age";
 import { Card, Chip, LineIcon } from "@/components/ui";
 
-const LANDING_STEPS = ["체험 고르기", "전화 · 문자 받기", "결과와 해설 보기"] as const;
+// 리뷰 Major 2 — "받기"가 진짜 전화 · 문자로 읽히지 않게 앱 안 체험임을 밝힌다(PSTN 없음 · 인앱 모의).
+const LANDING_STEPS = ["체험 고르기", "앱에서 전화 · 문자 체험하기", "결과와 해설 보기"] as const;
 
 // 루트 진입점. §89.4(시안 A)부터 "/"는 공개 경로다 — 비로그인 사용자에게 소개 화면을 그린다.
 // 로그인 사용자는 아래 effect가 게이트(동의 → 연령)를 조회해 다음 화면으로 보낸다(종전 그대로).
@@ -25,7 +26,8 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    if (loading || !user) return;
+    // 리뷰 Minor — 익명 사용자는 RouteGuard가 /login으로 보낸다(조회 낭비 방지).
+    if (loading || !user || user.isAnonymous) return;
     let cancelled = false;
     (async () => {
       try {
@@ -64,12 +66,12 @@ export default function Home() {
         <p className="text-[18px] font-bold text-ink">금융사기 예방 훈련</p>
       </header>
       <div className="flex flex-1 flex-col gap-5 px-5 pt-8">
-        <Chip className="self-start">실제 돈 · 정보 이동 없음</Chip>
+        <Chip className="self-start">연습용 · 실제 돈은 오가지 않습니다</Chip>
         <h1 className="text-[28px] font-bold leading-[1.35] text-ink">
-          사기 전화, 직접 받아 보면 다음엔 끊을 수 있습니다
+          사기 전화, 미리 한 번 받아 보세요
         </h1>
         <p className="text-[18px] leading-[1.65] text-ink-sub">
-          AI가 사기범 역할을 맡아 실제처럼 전화하고 문자를 보냅니다. 끝나면 어디서 속을 뻔했는지 짚어 드립니다.
+          AI가 사기범 역할을 맡아 앱 화면 안에서 전화와 문자를 재현합니다(진짜 전화 · 문자는 오지 않습니다). 끝나면 어디서 속을 뻔했는지 짚어 드립니다.
         </p>
         <Card title="훈련 순서">
           <ol className="flex flex-col gap-2">

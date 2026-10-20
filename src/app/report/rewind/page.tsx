@@ -303,7 +303,7 @@ export default function RewindPage() {
             <ol className="flex flex-col gap-2.5">
               {rewindContext.turns.map((turn) => (
                 <li key={turn.id}>
-                  <p className="mb-1 text-[11px] text-ink-sub">
+                  <p className="mb-1 text-[13px] text-ink-sub">
                     {turn.role === "user" ? "나" : context.callerLabel}
                     {turn.kind === "scammer-focus" && (
                       <span className="ml-1.5 font-bold text-caution">
@@ -363,7 +363,7 @@ export default function RewindPage() {
           maxLength={ANSWER_MAX_LENGTH}
           rows={3}
           disabled={answerState === "judging"}
-          className="w-full rounded-[8px] border border-line-strong bg-white p-4 text-lg leading-relaxed text-ink outline-none focus:border-brand"
+          className="w-full rounded-[8px] border border-line-strong bg-white p-4 text-lg leading-relaxed text-ink focus:border-brand focus-visible:outline-[3px] focus-visible:outline-offset-1 focus-visible:outline-brand"
           placeholder="예: 확인해 볼 테니 제가 아는 번호로 다시 걸겠습니다."
         />
         <p className="text-right text-sm text-ink-sub">

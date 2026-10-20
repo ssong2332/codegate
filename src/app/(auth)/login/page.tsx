@@ -145,7 +145,7 @@ export default function LoginPage() {
         disabled={isLoading}
         aria-label="Google 계정으로 로그인"
         aria-busy={isLoading}
-        className="flex min-h-[56px] w-full items-center justify-center gap-3 rounded-[8px] border-[1.5px] border-line bg-white text-[17px] font-semibold text-ink transition-colors hover:border-line-strong disabled:cursor-not-allowed disabled:border-transparent disabled:bg-neutral-tint disabled:text-ink-sub"
+        className="flex min-h-[56px] w-full items-center justify-center gap-3 rounded-[8px] border-[1.5px] border-line-strong bg-white text-[18px] font-semibold text-ink transition-colors hover:bg-brand-tint focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:border-transparent disabled:bg-neutral-tint disabled:text-ink-sub"
       >
         {isLoading ? (
           <span
@@ -174,8 +174,6 @@ export default function LoginPage() {
         )}
         {isLoading ? "로그인 처리 중..." : "Google로 로그인"}
       </button>
-
-
 
       {/* 개발 전용 — 실제 배포 빌드에는 이 블록 자체가 남지 않는다(DEV_AUTH_ENABLED 데드코드 제거).
           일반 사용자용 기능으로 오인되지 않도록 점선 테두리 + "개발 전용" 라벨로 명확히 구분한다. */}

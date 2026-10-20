@@ -485,7 +485,7 @@ export default function ReplayPage() {
                     <div className="rounded-[8px] rounded-br-[4px] bg-brand px-4 py-3">
                       <p className="text-[17px] leading-[1.55] text-white">{item.textMasked}</p>
                     </div>
-                    <p className="mr-1 mt-1 flex items-center justify-end gap-1.5 text-[11px] text-ink-sub">
+                    <p className="mr-1 mt-1 flex items-center justify-end gap-1.5 text-[13px] text-ink-sub">
                       나
                       {hasMultipleChannels && <Badge variant="neutral">{channelBadgeLabel}</Badge>}
                     </p>
@@ -500,7 +500,7 @@ export default function ReplayPage() {
                     <div className="h-[14px] w-[14px] rounded-full bg-avatar-fg" />
                   </div>
                   <div>
-                    <p className="mb-1 ml-1 flex items-center gap-1.5 text-[11px] text-ink-sub">
+                    <p className="mb-1 ml-1 flex items-center gap-1.5 text-[13px] text-ink-sub">
                       {callerLabel} <span className="font-semibold text-caution">(사칭)</span>
                       {hasMultipleChannels && <Badge variant="neutral">{channelBadgeLabel}</Badge>}
                     </p>
@@ -674,11 +674,11 @@ function ReplaySmsItem({ sms }: { sms: ReplaySmsSource }) {
           ✉
         </div>
         <div>
-          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-sub">
+          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[13px] text-ink-sub">
             {sms.senderLabel}
             <Badge variant="neutral">문자</Badge>
             {/* AC-022/032 계승 — 사후 화면에서도 모의 문자임을 표기한다. */}
-            <span className="rounded-full bg-ai-tint px-2 py-0.5 text-[11px] font-semibold text-ai-ink">
+            <span className="rounded-full bg-ai-tint px-2 py-0.5 text-[13px] font-semibold text-ai-ink">
               AI 훈련용 모의 문자
             </span>
           </p>
@@ -745,10 +745,10 @@ function ReplayVerifyItem({ verify }: { verify: ReplayVerifySource }) {
           ✆
         </div>
         <div>
-          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-sub">
+          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[13px] text-ink-sub">
             {verify.deskLabel}
             <Badge variant="neutral">확인 시도</Badge>
-            <span className="rounded-full bg-ai-tint px-2 py-0.5 text-[11px] font-semibold text-ai-ink">
+            <span className="rounded-full bg-ai-tint px-2 py-0.5 text-[13px] font-semibold text-ai-ink">
               AI 훈련용 모의 창구
             </span>
           </p>
@@ -842,9 +842,9 @@ function ReplayMockScreenItem({
           ▣
         </div>
         <div>
-          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-sub">
+          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[13px] text-ink-sub">
             <Badge variant="neutral">모의 화면</Badge>
-            <span className="rounded-full bg-ai-tint px-2 py-0.5 text-[11px] font-semibold text-ai-ink">
+            <span className="rounded-full bg-ai-tint px-2 py-0.5 text-[13px] font-semibold text-ai-ink">
               AI 훈련용 모의 화면
             </span>
           </p>
