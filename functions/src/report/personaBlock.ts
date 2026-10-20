@@ -29,12 +29,20 @@ function koreanTwoDigits(n: number): string {
 
 /**
  * 항목의 대조 토큰(서버 소유). 가림 값(`card` · `loan`)은 고유 토큰이 없어 **대조하지 않는다**(빈 배열).
- * - name: 전체 이름 · 이름 2자 / birthYear: "1961" · "61년" · "육십일년" / region: 도 이름 + 줄임말 / bank: 은행명 그대로
+ * - name: 전체 이름 · 성 뺀 이름(3자 이상일 때) / birthYear: "1961" · "61년" · "육십일년" / region: 시 · 도 이름 + 줄임말 / bank: 은행명 그대로
  */
 export function personaMatchTokens(item: PersonaCardItem): string[] {
   switch (item.key) {
-    case "name":
-      return item.value.length >= 3 ? [item.value, item.value.slice(1)] : [item.value];
+    case "name": {
+      // §88 — 이름은 이제 사용자가 넣는다(풀 밖). 성 뺀 이름 2자(예: "하나" · "보람")는 일상어와 겹쳐 사기범 쪽 거짓 양성
+      // (R-1 "먼저 말했습니다" 오단정)을 만든다 ⇒ 사기범 대조는 전체 이름 · 붙여 쓴 이름 · 호칭이 붙은 이름(님 · 씨)만.
+      // 참가자 쪽은 `personaUserMatchTokens`가 성 뺀 이름도 센다(넓게 = R-2 쪽 = 안전).
+      const compact = item.value.replace(/ /g, "");
+      const tokens = new Set([item.value, compact]);
+      const given = givenName(compact);
+      if (given) for (const suffix of ["님", " 님", "씨", " 씨"]) tokens.add(`${given}${suffix}`);
+      return [...tokens];
+    }
     case "birthYear": {
       const match = /^(\d{4})년생$/.exec(item.value);
       if (!match) return [];
@@ -42,7 +50,8 @@ export function personaMatchTokens(item: PersonaCardItem): string[] {
       return [match[1]!, `${String(yy).padStart(2, "0")}년`, `${koreanTwoDigits(yy)}년`];
     }
     case "region": {
-      const entry = PERSONA_REGION_POOL.find((r) => item.value.startsWith(`${r.name} `));
+      // §88 — 입력 카드(v2) 값 = 시 · 도 정식 명칭 그대로 · 옛 카드(v1) 값 = `"{도} ○○시"`. 둘 다 같은 목록으로 대조한다.
+      const entry = PERSONA_REGION_POOL.find((r) => item.value === r.name || item.value.startsWith(`${r.name} `));
       return entry ? [entry.name, ...entry.shortNames] : [];
     }
     case "bank":
@@ -51,6 +60,21 @@ export function personaMatchTokens(item: PersonaCardItem): string[] {
     case "loan":
       return [];
   }
+}
+
+/** 한글 3~4자 이름의 성 뺀 이름(그 밖 = `undefined`). */
+function givenName(compact: string): string | undefined {
+  return /^[가-힣]{3,4}$/.test(compact) ? compact.slice(1) : undefined;
+}
+
+/**
+ * 참가자 쪽 대조 토큰 — 사기범 토큰 + 성 뺀 이름 그대로. 참가자가 먼저 말했는지는 **넓게** 본다(오차 방향 = R-2 = 안전 · §84.3.6).
+ */
+export function personaUserMatchTokens(item: PersonaCardItem): string[] {
+  const tokens = personaMatchTokens(item);
+  if (item.key !== "name") return tokens;
+  const given = givenName(item.value.replace(/ /g, ""));
+  return given ? [...new Set([...tokens, given])] : tokens;
 }
 
 export type PersonaFirstMention = { key: PersonaCardItem["key"]; scammerTurnIndex: number };
@@ -65,8 +89,11 @@ export function resolvePersonaFirstMentions(
   for (const item of items) {
     const tokens = personaMatchTokens(item);
     if (tokens.length === 0) continue;
+    const userTokens = personaUserMatchTokens(item);
     const firstOf = (role: PersonaTranscriptLine["role"]): number | undefined =>
-      spoken.find((line) => line.role === role && tokens.some((token) => line.textMasked.includes(token)))?.turnIndex;
+      spoken.find(
+        (line) => line.role === role && (role === "user" ? userTokens : tokens).some((token) => line.textMasked.includes(token)),
+      )?.turnIndex;
     const s = firstOf("scammer");
     if (s === undefined) continue;
     const u = firstOf("user");
@@ -117,5 +144,6 @@ export function buildPersonaBlock(
           return { key: item.key, label: item.label, value: item.value, scammerTurnIndex: m.scammerTurnIndex };
         })
       : items.map((item) => ({ key: item.key, label: item.label, value: item.value }));
-  return { state, items: blockItems };
+  // §88 — 누가 넣은 카드인지(리포트 문면 분기 — UX D-131 (6)(7)). 옛 v1 카드 = 필드 부재(종전 문면).
+  return { state, items: blockItems, ...(personaCard?.v === 2 ? { inputBy: personaCard.inputBy } : {}) };
 }

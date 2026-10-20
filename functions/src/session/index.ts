@@ -45,7 +45,7 @@ import type {
   UpdateMessengerSkinResponse,
 } from "./types";
 import { pickFictionalBankName } from "../shared/fictionalBank";
-import { resolveSessionPersonaCard } from "./personaCard";
+import { resolvePersonaCardRequest } from "./personaCard";
 
 ensureFirebaseAdminApp();
 
@@ -96,6 +96,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       skinSource,
       voiceSelectionSource,
       difficultyLevel,
+      personaCardInput,
     } = request.data ?? {};
     if (!scenarioId || !voiceId) {
       throw new HttpsError("invalid-argument", "scenarioId와 voiceId가 필요합니다.");
@@ -116,6 +117,20 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     // 사실을 사용자에게 알릴 수 있게 한다. **난이도는 이 콜러블의 어떤 게이트(동의 확인·세션 한도·
     // 소유권 검증)도 바꾸지 않는다**(AC-065/D-42) — 아래 게이트들은 세 난이도에서 완전히 동일하다.
     const resolvedDifficultyLevel = normalizeDifficultyLevel(difficultyLevel);
+
+    // ⭐ §88(DECISIONS #199 · UX D-131) — 훈련용 가상 신상 카드는 참가자가 **선택으로** 넣은 원값으로만 만든다(비면 카드 0 — 사기범은
+    // 시나리오 프롬프트대로 성함 · 생년월일을 묻는다). 검증 실패 · 대상 밖 입력은 조용히 버리지 않고 거부한다. ⛔ 위치가 설계다:
+    // 난이도 확정 직후 · 어떤 Firestore 읽기 · 쓰기 · LLM 호출보다 앞(거부는 그 호출 0회로 일어난다). 결과는 세션 문서
+    // `personaCard`의 존재/부재로만 남는다(§84.3.1). ⛔ 요청의 완성 카드(`personaCard`)는 읽지 않는다(G627).
+    const personaCardResult = resolvePersonaCardRequest(
+      personaCardInput,
+      { scenarioId, difficultyLevel: resolvedDifficultyLevel, channel },
+      "self",
+    );
+    if (!personaCardResult.ok) {
+      throw new HttpsError("invalid-argument", "훈련 속 내 정보를 확인해 주세요.", { reason: personaCardResult.reason });
+    }
+    const personaCard = personaCardResult.personaCard;
 
     // 교차채널 세션 총 한도(T30, Architecture.md §13.3, PoC 전 가정치) — 에스컬레이션 가능
     // 시나리오는 두 채널을 합쳐도 기존 10턴 안에 다 담기 어려워
@@ -226,14 +241,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       }
       sessionRef = candidateRef;
     }
-    // ⭐ T194-b(docs/Architecture.md §84.3.2 · PRD AC-104) — 훈련용 가상 신상 카드. 대상 술어는 **여기서 한 번만** 평가되고
-    // 결과는 세션 문서 `personaCard`의 존재/부재로만 남는다. 시드가 sessionId라 위에서 `sessionRef` id를 오프닝 **앞**으로 당겼다
-    // (write 시점은 그대로 아래 트랜잭션). 오프닝 대사도 카드를 알아야 한다(§81과 같은 이유) — 그래서 오프닝 앞이다.
-    // ⛔ 입력은 서버가 정한 값뿐이다(요청 구조분해에 카드 필드 0 — G564 · 계정 정보 0 — G566).
-    const personaCard = resolveSessionPersonaCard(
-      { scenarioId, difficultyLevel: resolvedDifficultyLevel, challengeId: undefined, channel },
-      { sessionId: sessionRef.id, scenarioId, fictionalBankName },
-    );
+    // T194-b(§84.3.4) — 오프닝 대사도 카드를 알아야 한다(§81과 같은 이유). 카드는 위(§88)에서 이미 확정됐다.
     const { message: openingMessage, isMock } = await generateOpeningLine(
       scenarioId,
       resolvedDifficultyLevel,

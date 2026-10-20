@@ -39,6 +39,16 @@ import {
 } from "@/lib/difficulty";
 import { scenarios } from "@/content/scenarios";
 import { Button } from "@/components/ui";
+import PersonaCardInputFields from "@/components/PersonaCardInputFields";
+import {
+  EMPTY_PERSONA_CARD_FORM,
+  PERSONA_INPUT_COPY,
+  personaCardErrorLine,
+  personaCardInputVisible,
+  readPersonaCardForm,
+  type PersonaCardForm,
+  type PersonaCardInput,
+} from "@/lib/personacard/personaCardInput";
 
 type PageState =
   | "no-scenario"
@@ -49,7 +59,9 @@ type PageState =
   | "error-clone"
   | "error-escalation"
   | "error-advanced-only"
-  | "error-issue";
+  | "error-issue"
+  // §88(UX D-131 (3)) — 받는 분 정보 형식 오류(화면 사전 확인 · 서버 거부 공통). 폼은 그대로 두고 1줄만 얹는다.
+  | "error-persona";
 
 function getFunctionsErrorInfo(err: unknown): { code: string | null; reason: string | null } {
   if (!err || typeof err !== "object") return { code: null, reason: null };
@@ -110,17 +122,34 @@ export default function ChallengeCreatePage() {
   const [state, setState] = useState<PageState>(scenarioId ? "form" : "no-scenario");
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [copyLabel, setCopyLabel] = useState("복사");
+  // §88(UX D-131 (1)) — 받는 분 정보(선택 · 기본 비움). 고급 × 대상 4종일 때만 그린다.
+  const [personaForm, setPersonaForm] = useState<PersonaCardForm>(EMPTY_PERSONA_CARD_FORM);
+  const [personaError, setPersonaError] = useState<string | null>(null);
+  const showPersonaInput = personaCardInputVisible(scenarioId, difficultyLevel, scenario?.channel);
 
   const isSubmitting = state === "submitting";
 
   const handleCreate = async () => {
     if (!scenarioId || !displayName.trim() || isSubmitting) return;
+    // §88 — 입력 블록이 보일 때만 읽는다. 형식 오류면 만들지 않고 1줄로 알린다.
+    let personaCardInput: PersonaCardInput | undefined;
+    if (showPersonaInput) {
+      const read = readPersonaCardForm(personaForm);
+      if (!read.ok) {
+        setPersonaError(PERSONA_INPUT_COPY.invalid);
+        setState("error-persona");
+        return;
+      }
+      personaCardInput = read.input;
+    }
+    setPersonaError(null);
     setState("submitting");
     try {
       const result = await createChallenge({
         scenarioId,
         displayName: displayName.trim(),
         ...(difficultyLevel ? { difficultyLevel } : {}),
+        ...(personaCardInput ? { personaCardInput } : {}),
       });
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       // T37이 실제 사용자2 진입 화면(UX-021)을 이 경로에 만들 예정이다 — 지금은 토큰 발급/공유
@@ -130,7 +159,12 @@ export default function ChallengeCreatePage() {
       setState("success");
     } catch (err) {
       const { code, reason } = getFunctionsErrorInfo(err);
-      if (code === "functions/resource-exhausted") {
+      const personaLine = personaCardErrorLine(reason);
+      if (personaLine) {
+        // §88 — 서버의 받는 분 정보 거부(형식 · 대상 밖). 아래 failed-precondition 분기와 섞이지 않게 먼저 가른다.
+        setPersonaError(personaLine);
+        setState("error-persona");
+      } else if (code === "functions/resource-exhausted") {
         setState("error-cap");
       } else if (code === "functions/failed-precondition" && reason === "escalation_not_supported") {
         setState("error-escalation");
@@ -395,6 +429,18 @@ export default function ChallengeCreatePage() {
           className="min-h-[52px] rounded-[12px] border-[1.5px] border-[#E2DDD3] bg-white px-4 py-3 text-[16px] text-[#22303A] outline-none focus:border-[#0E6B62] disabled:opacity-50"
         />
       </label>
+
+      {/* §88(UX D-131 (1)) — 표시 이름 칸 아래. 처음부터 펼침 · 세 칸 모두 비움(선택). */}
+      {showPersonaInput && (
+        <PersonaCardInputFields mode="send" value={personaForm} onChange={setPersonaForm} disabled={isSubmitting} />
+      )}
+
+      {state === "error-persona" && personaError && (
+        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+          <span aria-hidden="true">⚠</span>
+          <span>{personaError}</span>
+        </p>
+      )}
 
       {state === "error-issue" && (
         <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">

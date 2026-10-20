@@ -2,7 +2,8 @@
 // 훈련용 가상 신상 카드 — 클라이언트 쪽 **표시 전용** 순수 함수 · 정본 문면.
 //
 // ⛔ 클라이언트는 카드 값을 만들거나 고치지 않는다(AC-104 (d)) — 세션 문서 · 리포트 문서에 서버가 쓴 값을 그대로 그린다.
-//    클라 → 서버로 카드 값을 보내는 경로 0(이 파일은 어떤 API도 부르지 않는다).
+//    클라 → 서버로 완성 카드를 보내는 경로 0(이 파일은 어떤 API도 부르지 않는다). §88 — 사용자가 넣는 원값은 `personaCardInput.ts`가
+//    다루고, 서버 검증기만 카드를 만든다.
 // ⛔ 문면은 `docs/UX.md` 정본 글자 그대로(`personaCard.test.ts`가 UX.md 원문과 대조한다). 의역 금지.
 
 /** 화면에 그리는 카드 행(라벨 · 값). 서버 `PersonaCardItem`의 표시 부분. */
@@ -14,7 +15,12 @@ export const PERSONA_CARD_COPY = {
   guide: "훈련하는 동안 아래 정보를 내 정보라고 생각해 주세요.",
   noticeVirtual: "모두 훈련을 위해 지어낸 가상 정보입니다. 내 실제 이름이나 계정 정보는 쓰지 않았습니다.",
   noticeNoRevisit: "통화가 시작되면 이 정보는 다시 볼 수 없습니다.",
+  /** §88(UX D-131 (5)) — 사용자가 넣은 카드(v2 · self)의 고지 ⓐ(`noticeVirtual` 대신). */
+  noticeInput: "훈련 시작 전에 직접 넣은 정보입니다.",
 } as const;
+
+/** 벨 직전 고지에 그릴 카드 — 행 + 고지 ⓐ 문면(v1 = 가상 정보 · v2 self = 직접 넣은 정보). */
+export type PersonaCardView = { rows: PersonaCardRow[]; notice: string };
 
 /** 항목 상한(D-119 — 5행 초과 0). */
 export const PERSONA_CARD_MAX_ROWS = 5;
@@ -32,16 +38,21 @@ function readRows(raw: unknown): PersonaCardRow[] | null {
 }
 
 /**
- * 세션 문서 `personaCard` → 그릴 행. 그리지 않을 때는 `null`:
+ * 세션 문서 `personaCard` → 그릴 카드. 그리지 않을 때는 `null`:
  * - 필드 부재 · 모양이 다름(UF-014 Failure (a) — 카드 블록만 빠지고 나머지 고지는 그대로)
  * - 세션 난이도가 고급이 아님(UF-014 Failure (c) 클라 방어 — ⛔ 충족 수단은 서버 술어다)
+ * - ⭐ §88(UX D-131 (6)) — 챌린지를 보낸 사람이 넣은 카드(`v: 2` · `inputBy: "sender"`) = 받는 사람 화면 · 통화 전 노출 0
  */
-export function readSessionPersonaCard(raw: unknown, difficultyLevel: unknown): PersonaCardRow[] | null {
+export function readSessionPersonaCard(raw: unknown, difficultyLevel: unknown): PersonaCardView | null {
   if (difficultyLevel !== "advanced") return null;
   if (!raw || typeof raw !== "object") return null;
-  const { v, items } = raw as { v?: unknown; items?: unknown };
-  if (v !== 1) return null;
-  return readRows(items);
+  const { v, inputBy, items } = raw as { v?: unknown; inputBy?: unknown; items?: unknown };
+  let notice: string;
+  if (v === 1) notice = PERSONA_CARD_COPY.noticeVirtual;
+  else if (v === 2 && inputBy === "self") notice = PERSONA_CARD_COPY.noticeInput;
+  else return null;
+  const rows = readRows(items);
+  return rows ? { rows, notice } : null;
 }
 
 /** 가림 표기("○○")를 화면용 조각으로 나눈다 — 화면에는 "○○", 스크린리더에는 "가려진 이름"(UX-014 v1.38 (3)). */
@@ -61,7 +72,8 @@ export function splitMaskedValue(value: string): MaskedSegment[] {
 
 export type PersonaBlockState = "R-1" | "R-2" | "R-3";
 export type PersonaBlockRow = PersonaCardRow & { scammerTurnIndex?: number };
-export type PersonaBlockView = { state: PersonaBlockState; items: PersonaBlockRow[] };
+/** §88 — `inputBy`: 사용자가 넣은 카드(v2)에서 온 블록이면 누가 넣었는지(문면 분기 · UX D-131 (6)(7)). 부재 = 옛 v1 카드. */
+export type PersonaBlockView = { state: PersonaBlockState; items: PersonaBlockRow[]; inputBy?: "self" | "sender" };
 
 /** UX-008 v1.38 (1) 정본 문면(글자 단위). */
 export const PERSONA_REPORT_COPY = {
@@ -76,6 +88,11 @@ export const PERSONA_REPORT_COPY = {
   action: "내 정보를 먼저 말하는 전화라도 일단 끊고, 내가 알고 있는 번호로 직접 확인하세요.",
   r3Action: "내 정보를 먼저 말하는 전화라도 일단 끊고, 다른 휴대폰이나 집 전화로 내가 알고 있는 번호에 직접 확인하세요.",
   tail: "위 정보는 훈련을 위해 지어낸 가상 정보입니다.",
+  // §88(UX D-131 (6)(7)) — 사용자가 넣은 카드(v2)의 R-2 사실 문장 · 꼬리. R-1 · R-3 제목 · 사실 · 대처 · 설명은 무변경.
+  r2FactSelfInput: "이번 훈련에서는 아래 정보를 내 정보로 정해 두었습니다.",
+  r2FactSender: "이번 훈련에서는 보낸 분이 아래 정보를 내 정보로 넣어 두었습니다.",
+  tailSelfInput: "위 정보는 훈련 시작 전에 직접 넣은 정보입니다.",
+  tailSender: "위 정보는 이 훈련을 보낸 분이 넣은 정보입니다.",
 } as const;
 
 /** UX-018 v1.38 ① — R-1 세션에서 사기범이 카드 값을 처음 말한 줄의 주석. */
@@ -84,7 +101,7 @@ export const PERSONA_REPLAY_NOTE = "이 말이 '상대가 먼저 꺼낸 내 정�
 /** 리포트 문서 `personaBlock` → 뷰(부재 · 모양이 다르면 `null` = R-4 · 블록 0). */
 export function readPersonaBlock(raw: unknown): PersonaBlockView | null {
   if (!raw || typeof raw !== "object") return null;
-  const { state, items } = raw as { state?: unknown; items?: unknown };
+  const { state, items, inputBy } = raw as { state?: unknown; items?: unknown; inputBy?: unknown };
   if (state !== "R-1" && state !== "R-2" && state !== "R-3") return null;
   const rows = readRows(items);
   if (!rows) return null;
@@ -92,7 +109,8 @@ export function readPersonaBlock(raw: unknown): PersonaBlockView | null {
     const anchor = (items as Array<{ scammerTurnIndex?: unknown }>)[i]!.scammerTurnIndex;
     return typeof anchor === "number" && Number.isInteger(anchor) && anchor >= 0 ? { ...row, scammerTurnIndex: anchor } : row;
   });
-  return { state, items: withAnchors };
+  // §88 — 모르는 값은 버린다(= 옛 v1 문면 — 사실과 다른 "넣은 정보" 문장을 만들지 않는 쪽).
+  return { state, items: withAnchors, ...(inputBy === "self" || inputBy === "sender" ? { inputBy } : {}) };
 }
 
 /** 이 블록에 "먼저 말한" 기록이 있는가(R-1, 또는 기록이 있는 R-3 — 서버가 앵커를 실은 항목만). */
@@ -109,12 +127,25 @@ export function resolvePersonaBlockCopy(block: PersonaBlockView): {
   tail: string;
 } {
   const mentioned = block.state === "R-1" || (block.state === "R-3" && hasFirstMentions(block));
+  // §88(UX D-131 (6)(7)) — 사용자가 넣은 카드면 R-2 사실 문장 · 꼬리만 갈린다(부재 = 옛 v1 문면 그대로).
+  const r2Fact =
+    block.inputBy === "sender"
+      ? PERSONA_REPORT_COPY.r2FactSender
+      : block.inputBy === "self"
+        ? PERSONA_REPORT_COPY.r2FactSelfInput
+        : PERSONA_REPORT_COPY.r2Fact;
+  const tail =
+    block.inputBy === "sender"
+      ? PERSONA_REPORT_COPY.tailSender
+      : block.inputBy === "self"
+        ? PERSONA_REPORT_COPY.tailSelfInput
+        : PERSONA_REPORT_COPY.tail;
   return {
     title: mentioned ? PERSONA_REPORT_COPY.r1Title : PERSONA_REPORT_COPY.r2Title,
-    fact: mentioned ? PERSONA_REPORT_COPY.r1Fact : PERSONA_REPORT_COPY.r2Fact,
+    fact: mentioned ? PERSONA_REPORT_COPY.r1Fact : r2Fact,
     action: block.state === "R-3" ? PERSONA_REPORT_COPY.r3Action : PERSONA_REPORT_COPY.action,
     explanation: mentioned ? PERSONA_REPORT_COPY.r1Explanation : PERSONA_REPORT_COPY.r2Explanation,
-    tail: PERSONA_REPORT_COPY.tail,
+    tail,
   };
 }
 
