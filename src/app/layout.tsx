@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   title: "안 당해본 사기는 못 막는다 — AI 금융사기 백신",
   description:
     "본인 목소리를 AI로 복제해 가족 사칭 딥보이스 사기를 미리 체험하고 대처법을 훈련하는 예방접종형 서비스",
+  // OQ-U99 ⓐ(§89.6) — iPhone 홈 화면 추가 시에도 주소창 없이 열린다. 매니페스트는 `manifest.ts`.
+  appleWebApp: { capable: true, title: "사기 예방 훈련", statusBarStyle: "default" },
+  icons: { icon: "/icon-192.png", apple: "/apple-touch-icon.png" },
 };
 
 // T190-1(docs/Architecture.md §74.11 · OQ-U65 · AC-095 (f) · G458) — 강제 다크(Chrome 자동 다크)로 색이
