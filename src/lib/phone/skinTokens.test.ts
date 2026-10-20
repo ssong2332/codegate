@@ -8,9 +8,11 @@ import {
   CONTRAST_MINIMUM,
   bannerTokensFor,
   callTokensFor,
+  compositeHex,
   compositeOver,
   contrastRatio,
   contrastViolations,
+  gridPressedPairs,
   pairContrast,
   parseColor,
   skinContrastPairs,
@@ -47,6 +49,45 @@ test("[T190/G456 역검증] iOS 발신 말풍선 옛 값 #0B84FF + 흰 글(UX �
   // 같은 함수로 비텍스트 하한도 실제로 일한다 — 받기 원 위 아이콘을 흐린 사본.
   const dimAccept: ContrastPair = { name: "accept-dim", fg: "#9BCFA9", bg: "#1E8E3E", kind: "nonText" };
   assert.equal(contrastViolations([dimAccept]).length, 1);
+});
+
+test("[UX D-129/G456] 그리드 눌림 원 — 세 스킨 모두 ⓐ 눌림 원(합성)↔call.bg · ⓑ 아이콘↔눌림 원(합성) 둘 다 3:1 이상", (t) => {
+  for (const skin of SKINS) {
+    const call = callTokensFor(skin);
+    const pairs = gridPressedPairs(skin, call);
+    assert.deepEqual(
+      pairs.map((p) => p.name),
+      [`${skin}.call.gridPressedIndicator`, `${skin}.call.gridIconPressed`],
+    );
+    // 본 게이트(skinContrastPairs)가 이 두 쌍을 실제로 수집한다 — 수집에서 빠지면 위 전수 테스트가 못 잡는다.
+    const collected = skinContrastPairs(skin).map((p) => p.name);
+    for (const p of pairs) assert.ok(collected.includes(p.name), `${p.name}이 G456 수집에서 빠졌다`);
+    t.diagnostic(
+      `[D-129] ${skin} 눌림 원 ${pairs[0].fg} ↔ ${call.bg} = ${pairContrast(pairs[0]).toFixed(2)}:1 · ` +
+        `아이콘 = ${pairContrast(pairs[1]).toFixed(2)}:1`,
+    );
+    assert.deepEqual(contrastViolations(pairs), []);
+  }
+  // One UI형 · 기본 = 0.40 (D-129 (1)) · iOS형 무변경.
+  assert.equal(callTokensFor("samsung").gridButtonPressedBg, "rgba(255,255,255,0.40)");
+  assert.equal(callTokensFor("ios").gridButtonPressedBg, "#FFFFFF");
+  assert.equal(callTokensFor("ios").gridIconPressed, "#1C1C1E");
+  assert.equal(compositeHex("rgba(255,255,255,0.40)", "#101418"), "#707274");
+});
+
+test("[UX D-129/G456 역검증] 옛 값 0.24 사본은 ⓐ 눌림 원↔바탕 쌍에서 실패한다(아이콘 쌍은 통과 — 옛 게이트가 못 잡은 이유)", (t) => {
+  const poisonedCall = { ...callTokensFor("samsung"), gridButtonPressedBg: "rgba(255,255,255,0.24)" };
+  const [indicator, icon] = gridPressedPairs("samsung", poisonedCall);
+  const violations = contrastViolations([indicator, icon]);
+  t.diagnostic(
+    `[D-129 역검증] 0.24 = ${indicator.fg} ↔ ${poisonedCall.bg} ${pairContrast(indicator).toFixed(2)}:1 · ` +
+      `아이콘 ${pairContrast(icon).toFixed(2)}:1 → 위반 ${violations.join(" | ")}`,
+  );
+  assert.equal(indicator.fg, "#494C4F");
+  assert.ok(pairContrast(indicator) < CONTRAST_MINIMUM.nonText);
+  assert.ok(pairContrast(icon) >= CONTRAST_MINIMUM.nonText);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /^samsung\.call\.gridPressedIndicator /);
 });
 
 test("[T190/UX-014 v1.33 (5)] 스킨 차이표 근사값 — 받기 초록 · 종료 빨강 · iOS형 아바타 없음 · 기본 = One UI형 골격", () => {

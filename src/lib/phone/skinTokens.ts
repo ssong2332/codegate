@@ -72,7 +72,8 @@ const ONE_UI_CALL: CallSkinTokens = {
   hasAvatar: true,
   numberSizePx: 30,
   gridButtonBg: "rgba(255,255,255,0)",
-  gridButtonPressedBg: "rgba(255,255,255,0.24)",
+  // UX D-129 — 0.24는 바탕 대비 약 2.14:1(비텍스트 3:1 미달). 0.40 = 바탕 약 3.83:1 · 흰 아이콘 약 4.83:1.
+  gridButtonPressedBg: "rgba(255,255,255,0.40)",
   gridIcon: "#FFFFFF",
   gridIconPressed: "#FFFFFF",
   accept: "#1E8E3E",
@@ -423,12 +424,7 @@ export function skinContrastPairs(skin: MessengerSkin): ContrastPair[] {
     { name: `${skin}.call.number`, fg: call.textPrimary, bg: call.bg, kind: "text" },
     { name: `${skin}.call.textSecondary`, fg: call.textSecondary, bg: call.bg, kind: "text" },
     { name: `${skin}.call.gridIcon`, fg: call.gridIcon, ...onCall(call.gridButtonBg), kind: "nonText" },
-    {
-      name: `${skin}.call.gridIconPressed`,
-      fg: call.gridIconPressed,
-      ...onCall(call.gridButtonPressedBg),
-      kind: "nonText",
-    },
+    ...gridPressedPairs(skin, call),
     { name: `${skin}.call.acceptIcon`, fg: call.roundIcon, bg: call.accept, kind: "nonText" },
     { name: `${skin}.call.endIcon`, fg: call.roundIcon, bg: call.end, kind: "nonText" },
     { name: `${skin}.call.avatarIcon`, fg: call.avatarFg, bg: call.avatarBg, kind: "nonText" },
@@ -439,6 +435,36 @@ export function skinContrastPairs(skin: MessengerSkin): ContrastPair[] {
     { name: `${skin}.banner.appIcon`, fg: banner.appIconFg, bg: banner.appIconBg, kind: "nonText" },
     { name: "callBar.text", fg: CALL_BAR_TOKENS.text, bg: CALL_BAR_TOKENS.bg, kind: "text" },
     ...smsSurfacePairs(skin),
+  ];
+}
+
+/** 반투명 색을 불투명 바탕 위에 합성한 결과를 `#RRGGBB`로 — 합성 색을 `ContrastPair.fg`(불투명 전용)로 쓰기 위함. */
+export function compositeHex(fg: string, base: string): string {
+  const c = compositeOver(fg, base);
+  return `#${[c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+}
+
+/**
+ * 그리드 버튼 **눌림(켜짐) 상태**의 대비 쌍 2개(UX D-129 (3) · D-96 (3)) — 토큰을 직접 받는 순수 함수라
+ * 역검증이 옛 값 사본을 같은 함수에 넣을 수 있다.
+ * ⓐ 눌림 원(`call.bg` 위 합성) ↔ `call.bg` — 상태 표시 자체의 비텍스트 대비(WCAG 1.4.11).
+ * ⓑ 눌림 아이콘 ↔ 눌림 원(합성).
+ */
+export function gridPressedPairs(skin: MessengerSkin, call: CallSkinTokens): ContrastPair[] {
+  return [
+    {
+      name: `${skin}.call.gridPressedIndicator`,
+      fg: compositeHex(call.gridButtonPressedBg, call.bg),
+      bg: call.bg,
+      kind: "nonText",
+    },
+    {
+      name: `${skin}.call.gridIconPressed`,
+      fg: call.gridIconPressed,
+      bg: call.gridButtonPressedBg,
+      base: call.bg,
+      kind: "nonText",
+    },
   ];
 }
 
