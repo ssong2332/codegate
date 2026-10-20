@@ -85,12 +85,12 @@ test("[G516] 각 문면은 functions/src에서 guidance.ts 1곳에만 있고 클
   }
 });
 
-// ── T192 C7 · G623(Architecture.md §79.22 (4) ② · (9)) — 승인 문면 1회 수정(79.14 #2) ─────────────────────────────
+// ── T192 C7 · G627(Architecture.md §79.22 (4) ② · (9)) — 승인 문면 1회 수정(79.14 #2) ─────────────────────────────
 /** C7 전 승인 문면(§79.5) — 역검증용. */
-const G623_OLD_ACCEPTED =
+const G627_OLD_ACCEPTED =
   "(통화가 곧 끊긴다. 작별 인사를 아직 하지 않았다면 상황에 맞는 짧은 마무리 한마디만 하고 더는 말하지 마라. 이미 했다면 아무 말도 하지 마라.)";
 
-test("[G623] 승인 문면 = §79.22 (4) ② 정본 · '그 한마디 앞뒤에' 1회 · '한 문장' · '하나' · '첫' 0 · 거절 · 실패 3문면 무변경", () => {
+test("[G627] 승인 문면 = §79.22 (4) ② 정본 · '그 한마디 앞뒤에' 1회 · '한 문장' · '하나' · '첫' 0 · 거절 · 실패 3문면 무변경", () => {
   assert.equal(SCAMMER_HANGUP_ACCEPTED_GUIDANCE, CANON[0]![1], "승인 문면이 §79.22 (4) ② 정본과 다르다");
   assert.equal(SCAMMER_HANGUP_ACCEPTED_GUIDANCE.split("그 한마디 앞뒤에").length - 1, 1);
   for (const w of ["한 문장", "하나", "첫"]) assert.equal(SCAMMER_HANGUP_ACCEPTED_GUIDANCE.includes(w), false, `"${w}"`);
@@ -108,9 +108,9 @@ test("[G623] 승인 문면 = §79.22 (4) ② 정본 · '그 한마디 앞뒤에'
   );
 });
 
-test("[G623 역검증] 옛 승인 문면 사본은 정확 일치 · '그 한마디 앞뒤에' 단언에 걸린다", () => {
-  assert.notEqual(G623_OLD_ACCEPTED, CANON[0]![1]);
-  assert.equal(G623_OLD_ACCEPTED.split("그 한마디 앞뒤에").length - 1, 0);
+test("[G627 역검증] 옛 승인 문면 사본은 정확 일치 · '그 한마디 앞뒤에' 단언에 걸린다", () => {
+  assert.notEqual(G627_OLD_ACCEPTED, CANON[0]![1]);
+  assert.equal(G627_OLD_ACCEPTED.split("그 한마디 앞뒤에").length - 1, 0);
 });
 
 test("[G516 역검증] 스캔 함수는 문면을 품은 파일을 실제로 찾는다", () => {

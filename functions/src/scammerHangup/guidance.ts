@@ -3,7 +3,7 @@
 // 잎 모듈(값 import 0) — C3의 `liveTools.ts`가 실패 문면을 여기서 가져갈 수 있게 분리했다.
 import type { ScammerHangupStatus } from "./decide";
 
-/** 승인(`accepted` · `already_accepted`). T192 C7(§79.22 (4) ② · G623 · 79.14 #2의 1회분) — 승인 뒤 말의 길이 · 내용. */
+/** 승인(`accepted` · `already_accepted`). T192 C7(§79.22 (4) ② · G627 · 79.14 #2의 1회분) — 승인 뒤 말의 길이 · 내용. */
 export const SCAMMER_HANGUP_ACCEPTED_GUIDANCE =
   "(통화가 곧 끊긴다. 작별 인사를 아직 하지 않았다면 상황에 맞는 짧은 마무리 한마디만 하고 거기서 말을 멈춰라. 그 한마디 앞뒤에 대답이나 설명, 당부, 새 요구를 붙이지 마라. 이미 했다면 아무 말도 하지 마라.)";
 

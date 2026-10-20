@@ -18525,7 +18525,7 @@ Live는 참가자 음성이 브라우저↔Google로 직접 가고 서버는 발
 - **(2026-10-20 T192 C6-F2 정정 — 79.21 (3) · 위 ① 코드 블록과 위 줄 원문 무수정 · 이 줄이 우선)** ① TOOL 정본은 **79.21 (3) 코드 블록 전문**이다. 위 ①에서 바뀐 곳은 공통 머리(위 줄의 C6-F 문장 포함) **뒤 꼬리 2곳뿐**: ⓐ *"끊기로 했으면 **작별 인사를 하기 전에** 먼저 \`end_call\` 도구를 부르고"* → *"끊기로 했으면 **그 응답에서는 어떤 말보다도** 먼저 \`end_call\` 도구를 부르고"* ⓑ 그 문장 바로 뒤에 1문장 삽입: `도구 결과를 받기 전에는 확인 결과를 알리는 말도, 끝내겠다는 말도, 작별 인사도 하지 않는다.` 원인 = P-H 재실측 H1 위반 1(79.20 (11) 끝 줄 · 79.21 (1) #5 범위 구멍). **② SIGNAL · NONE · 확인 무력화 1문장 · 공통 머리(`HANGUP_RULE_CASES`) = 무변경.** 좌표 갱신(위 줄의 `:205` · `:1713-1716`은 옛 열람값): 상수 `functions/src/roleplay/promptAssembly.ts:253` · 사본 `G505_TOOL_CANON` `promptAssembly.test.ts:1719-1720`(`b743d1e`). 79.14 #1의 **1회분을 쓴 것**이다 — 다시 실패하면 TOOL 문면 3번째 안 금지(79.21 (6) · OQ-A158). 결정 = DECISIONS #193.
 - **(2026-10-20 리뷰 보강 — 위 줄 원문 무수정 · 이 줄이 우선)** ① TOOL 최종 정본 = **79.21 (10) ① 코드 블록**(위 줄의 ⓑ 문장 머리에 범위 어구 *"끊기로 한 그 응답에서는"* 를 더하고 *"받기 전에는"* → *"받기 전에"*). 같은 1회분에 `end_call` 도구 설명(`liveTools.ts:172`)도 함께 바뀐다 = 79.21 (10) ②. 결정 = DECISIONS #194.
 - **(2026-10-20 T192 C7 — 79.22 (4) ① · 위 줄들 원문 무수정 · 이 줄이 우선)** ① TOOL · ② SIGNAL의 **공통 머리(`HANGUP_RULE_CASES`)에 2곳**이 더해진다: C7-a *"이체를 마쳤거나"* 바로 뒤 `(하겠다는 약속만 한 것은 마친 것이 아니다)` · C7-b CASES 끝 `네가 새 요구를 꺼내거나 결정을 재촉한 응답에서는 끊지 않는다 — 그 말에 대한 상대의 답을 들은 뒤에 끊을지 다시 판단한다.` ⇒ ① ②의 정본 = 머리를 79.22 (4) ① 블록으로 바꾸고 **꼬리는 각각 79.21 (10) ① · 위 ② 블록 그대로**(TOOL 꼬리 · SIGNAL 꼬리 · NONE · 확인 무력화 1문장 0글자). 결정 = DECISIONS #195.
-- **(2026-10-20 C7 리뷰 M1 정정 — 위 줄 원문 무수정 · 이 줄이 우선)** C7-b = `네가 상대에게 돈·정보·행동을 요구하거나 재촉한 응답에서는 끊지 않는다 — 그 말에 대한 상대의 답을 들은 뒤에 끊을지 다시 판단한다.` ⇒ 공통 머리 정본 = **79.22 (12) ① 블록**. 결정 = DECISIONS #197.
+- **(2026-10-20 C7 리뷰 M1 정정 — 위 줄 원문 무수정 · 이 줄이 우선)** C7-b = `네가 상대에게 돈·정보·행동을 요구하거나 재촉한 응답에서는 끊지 않는다 — 그 말에 대한 상대의 답을 들은 뒤에 끊을지 다시 판단한다.` ⇒ 공통 머리 정본 = **79.22 (12) ① 블록**. 결정 = DECISIONS #199.
 
 **(2) 14벌 끝 문장 교체**(⛔ 전건 · 각 파일 앞절은 무변경):
 `"… 네 쪽에서 대화를 마무리하지는 않는다."` → `"… 통화를 네 쪽에서 먼저 끝내는 것은 [진행 강제]의 끊기 규칙이 허락할 때뿐이다."`
@@ -19665,7 +19665,7 @@ export function isVerifyTransferReachable(input: {
 ### 79.22 (2026-10-20 신설 · T192 C7) 끊는 응답에 새 요구 · 결정 재촉을 섞지 않는다 + 약속은 달성이 아니다 + 승인 문면 1회(H2) — ⭐⭐ **C7은 공통 머리 `HANGUP_RULE_CASES`에 2곳을 더하는 문면안(ⓑ)으로 간다 — 두 경로에 같은 문장이 실린다(AC-103 (f)). TOOL 꼬리 · 도구 설명은 0글자** / ⭐⭐ **Live의 C7 관측 2건은 "도구 앞 발화"다 — TOOL 문장1(*"어떤 말보다도 먼저"*)이 이미 금지한 모양이라, TOOL을 다시 고치면 H1 계열 3번째 안이 된다. C7은 그 앞 단계(그 응답을 끊는 응답으로 삼을지)를 CASES에서 정한다** / ⭐ **H2 #11(6.83초)은 승인 문면이 아니라 도구 앞 발화 5.4초가 만들었다 — 승인 문면 수정은 #10(3문장)만 겨눈다** / ⭐ **서버 무시안(ⓐ)은 C7 문면이 실패했을 때의 층 변경으로 미리 등록한다(OQ-A161)**
 
 > **기준선**: 브랜치 `claude/t192-c7-demand-hangup` HEAD = `ea97aa0`(`C:\Projects\codegate\.git\refs\heads\claude\t192-c7-demand-hangup` 직접 판독) = `origin/main`(`.git/refs/remotes/origin/main` = `ea97aa0…` 직접 판독 · #332 C6-F2 병합분). 착수 시 작업 트리 clean(세션 시작 스냅샷) ⇒ 아래 좌표는 main 커밋 내용과 같다고 본다. 실행 0 · 테스트 0 · 프로브 0 · **셸 없음 — `git show origin/main:docs/…` 실행 불가**(번호 grep은 이 워크트리 = main 커밋 · 메인 체크아웃 `C:\Projects\codegate\docs` · 워크트리 11개 `docs`로 대신했다).
-> **번호(grep — 착수 시 실측)**: 이 트리 · 메인 체크아웃 최대 **G621 · OQ-A159 · DECISIONS #194** · `agitated-zhukovsky-f406bb` 최대 G615 · DECISIONS #192 · 나머지 워크트리 9개(`.git/worktrees/*` 목록)는 `G62[2-9]` · `OQ-A16x` · `| 19[5-9] |` · `79.22` **0건** ⇒ **§79.22 · G622~G625 · OQ-A160~A161 · DECISIONS #195**. ⛔ **예약 아님 — 병합 순서로 확정**(재번호 시 이 절 · #195 행 · 79.6 / 79.14 시점 부착 줄만 치환 — 전역 치환 금지).
+> **번호(grep — 착수 시 실측)**: 이 트리 · 메인 체크아웃 최대 **G621 · OQ-A159 · DECISIONS #194** · `agitated-zhukovsky-f406bb` 최대 G615 · DECISIONS #192 · 나머지 워크트리 9개(`.git/worktrees/*` 목록)는 `G62[2-9]` · `OQ-A16x` · `| 19[5-9] |` · `79.22` **0건** ⇒ **§79.22 · G626~G625 · OQ-A160~A161 · DECISIONS #195**. ⛔ **예약 아님 — 병합 순서로 확정**(재번호 시 이 절 · #195 행 · 79.6 / 79.14 시점 부착 줄만 치환 — 전역 치환 금지).
 > **⚠️ 버전 갭**: 헤더(`:5`) PRD v1.7.1 · UX 1.13 ↔ 현행 PRD **v1.28**(`docs/PRD.md:4`). 헤더 미전진(UpdateRequests #45 소관 — §79 머리와 같은 처분). 판정 입력 AC-103 (a) · (c) · (f)는 `docs/PRD.md:1072`에서 직접 읽었다 — (a)① *"가짜 이체 화면을 **제출했거나** … 불러 **주었다**"*(완료형) · (c) *"**끊는 그 응답에서만** 짧은 마무리 대사를 허용한다"*. ⇒ C7의 두 문장은 (a)·(c)의 **풀어 쓰기**이고 PRD 문면 변경은 필요 없다(planner 대조 권장 — 미요청).
 > **⛔ 이 절이 하지 않는 것**: 소스 · 테스트 · 스크립트 0줄 · 커밋 0 · P-H 실행 0 · `docs/Tasks.md` · `docs/API.md` · `docs/Database.md` 편집 0 · scenario-review 소유 문면(`NO_STALL_RULE` · `confirmResult.ts` · `SCENARIO_PROGRESSION_TEMPLATE`) 편집 0 — 그쪽 문면은 (6)의 **초안**만 낸다.
 
@@ -19741,7 +19741,7 @@ export function isVerifyTransferReachable(input: {
 | 위험 | ⚠️ **오탐 = ⑪ 재발**: 끊는 응답의 마무리 한마디는 흔히 당부(*"다른 사람에게는 절대 말하지 마세요"* — (1) #3)라 명령형 검출기가 그것을 요구로 잡으면 **작별 뒤 안 끊김**이 된다 · 미탐(우회 표현) · 새 감지기 = 새 메커니즘(79.20 (2) ① *"새 감지기"* 기각과 같은 결) | goal 호출률 하락 → **H2 승인 표본 미달 위험**((7) OQ-A160) · 준수율은 측정 전 미상 | ⓐ 위험 + ⓑ 위험 |
 | 비용 | 폴백: 순수 검출 모듈 + 판정표(행 추가 질문 규칙) + 효과 층 1줄 + 로그 행 + 테스트 / Live: + `requestScammerHangup` 요청 키 · `readScammerHangupRequest` 상한 · `GeminiVoiceSession.tsx` 편집(**C6/C7 파일 경계 밖** — 79.20 머리 · S3/S7 겹침) · API.md · **Hosting → Functions** 배포 | 상수 1개 + 정확 일치 사본 3개(G505 TOOL · SIGNAL · G616) + G617 단언 1줄(공통 머리 기준값 교체 — (10) C7-3) + 신설 테스트 1개 + 프로브 마커 1줄 · Functions 배포만 | 합 |
 | AC-103 (f) 대칭 | 폴백만이면 **비대칭**(79.20 (2) ③ 반복 감지기 기각과 같은 이유) · Live 클라 전사를 받으면 대칭이나 클라 주장값 | **대칭**(같은 상수가 TOOL · SIGNAL에 실린다 · G617) | **비대칭** |
-| G130 | 해당 없음(문면 0) | 새 문장 숫자 · 서수 0 · F11 허용 목록 무변경((4) 판독 — 실행 확인 G622) | 같음 |
+| G130 | 해당 없음(문면 0) | 새 문장 숫자 · 서수 0 · F11 허용 목록 무변경((4) 판독 — 실행 확인 G626) | 같음 |
 | G128 | 해당 없음 | 같은 프롬프트의 S3 *"응하면 다음 단계 요구로 이어가"* · NO_STALL *"남아 있으면 그 요구로"* 와 **같은 방향**(요구하면 그 응답은 끊는 응답이 아니다) — 정면 충돌 0((6)) | 같음 |
 | 하네스 인공물에 대한 민감도 | (1) #5의 *"계좌 문자 없이 이체 주장"* 은 그대로 둔 채 결과만 막는다 | 같음 — 원인 ①(하네스)은 B 3일차 대본이 고친다(scenario-review) | 같음 |
 
@@ -19761,12 +19761,12 @@ export function isVerifyTransferReachable(input: {
 | C7-a | *"…이체를 마쳤거나"* 바로 뒤 · *", 네가 요구한 정보"* 앞 | `(하겠다는 약속만 한 것은 마친 것이 아니다)` | (1) #3 — 약속 시점 goal. AC-103 (a)① 완료형의 풀어 쓰기. ⭐ G599의 앵커 *"네가 요구한 정보(…)를 불러 주었다."* 는 그대로라 C6-F 문장 인접 검사가 **무편집 통과**한다(`hangupRuleCases.test.ts:12` · `:25`) |
 | C7-b | CASES **끝**(제외 문장 *"…끊지 않는다."* 뒤 · 공백 1개) | `네가 새 요구를 꺼내거나 결정을 재촉한 응답에서는 끊지 않는다 — 그 말에 대한 상대의 답을 들은 뒤에 끊을지 다시 판단한다.` | (1) #1 · #2 · #5 — 요구 · 최후통첩과 끊기가 한 응답. AC-103 (c) *"끊는 그 응답에서만 짧은 마무리"* 의 풀어 쓰기. **이유를 더하지 않는다**(셋째 경우 0 — 막는 쪽 문장) · *"둘째"* 뒤에 두어 두 경우 **모두**에 걸린다(최후통첩 뒤 give_up 포함) |
 
-*제약 판독(⛔ 실행 확인은 G622)*
+*제약 판독(⛔ 실행 확인은 G626)*
 - 숫자 0 · F11 패턴: C7-a *"약속만"* — 패턴 ⑦ *"번만|차례만"* 비매치 · C7-b *"다시"* 는 반복 부사 목록(*"재차|거듭|누차|재삼"*) 밖 · *"이번" · "한 번" · "첫"* 0 ⇒ `tool` · `toolVerify` · `signal` 허용 목록 **무변경 예상**.
 - 표지: NONE 표지 · TOOL 표지 *"먼저 \`end_call\` 도구를 부르고"* · SIGNAL 표지 *"[[SIGNAL:END_CALL_GOAL]]"* 0(`promptAssembly.test.ts:1733-1737`) ⇒ G128 공존 계수 무변화.
 - 어휘: *"확인 중" · "기다" · "확인됐습니다" · "처리됐습니다"* 0 · *"셋째" · "세 경우"* 0(G599 ⓔ 패턴 `:28`).
 - 경로: CASES는 NONE에 실리지 않는다 ⇒ **NONE · 오프닝 · 메신저 · ElevenLabs clone 2종 대조값 무변경**.
-- **(2026-10-20 리뷰 APPROVED 뒤 M1 정정 — 위 ① 블록 · diff 표 C7-b 행 원문 무수정 · 이 줄이 우선)** C7-b는 **(12) ①** 문면으로 바뀐다(*"새 요구를 꺼내거나 결정을 재촉한"* → *"상대에게 돈·정보·행동을 요구하거나 재촉한"*) · CASES 정본 전문 = **(12) ① 블록** · C7-a · 그 밖 바이트 동일 · DECISIONS #197.
+- **(2026-10-20 리뷰 APPROVED 뒤 M1 정정 — 위 ① 블록 · diff 표 C7-b 행 원문 무수정 · 이 줄이 우선)** C7-b는 **(12) ①** 문면으로 바뀐다(*"새 요구를 꺼내거나 결정을 재촉한"* → *"상대에게 돈·정보·행동을 요구하거나 재촉한"*) · CASES 정본 전문 = **(12) ① 블록** · C7-a · 그 밖 바이트 동일 · DECISIONS #199.
 
 *② 승인 문면 (`SCAMMER_HANGUP_ACCEPTED_GUIDANCE` · `guidance.ts:7-8` — 79.14 #2의 1회분)*
 ```
@@ -19882,34 +19882,34 @@ export function isVerifyTransferReachable(input: {
 
 | ID | 내용 | 단언 자리 |
 |---|---|---|
-| **G622** | CASES = (4) ① 정본 **정확 일치**(사본 갱신: `G505_TOOL_CANON` · `G505_SIGNAL_CANON`(`promptAssembly.test.ts:1726-1730`) · `G616_TOOL_CANON`(`hangupToolFirst.test.ts:17-18`) — 소스 상수에서 읽지 않는다 · G617 `:114` 공통 머리 기준값 교체는 (10) C7-3) · C7-a가 *"이체를 마쳤거나"* 바로 뒤 · C7-b가 CASES 끝(제외 문장 뒤) · 각 1회 · **G599 무편집 통과** · TOOL 꼬리 · SIGNAL 꼬리가 C7 전과 **바이트 동일**(꼬리 부분 문자열 대조) · NONE 바이트 동일 · `G505_COUNTER_ALLOWED` **무편집 통과** · 두 문장에 숫자 · *"이번" · "한 번" · "첫" · "셋째" · "확인 중" · "기다" · "확인됐습니다" · "처리됐습니다"* 0 · 역검증(각 문장을 뺀 사본 · C7-b를 *"둘째,"* 앞으로 옮긴 사본이 실패) | 신설 `functions/src/roleplay/__tests__/hangupDemandTurn.test.ts` + 기존 G505 · G599 · G616 · G617 — C7 |
-| **G623** | 승인 문면 = (4) ② 정본 정확 일치(`guidance.test.ts:21-24` 사본 갱신) · 거절 · 실패 3문면 무편집 · 숫자 0(기존 `:61-63`) · *"한 문장" · "하나" · "첫"* 0 · *"그 한마디 앞뒤에"* 1회 · 역검증(옛 승인 문면 사본이 정확 일치에 실패) · 1곳 원천(기존 `:76-86` 그대로 통과) | `guidance.test.ts` — C7 |
-| **G624** | P-H 3차((7) 실행 계획 · 판정표 · 관측 ⓒ1 ⓒ2)를 **Live 재활성(`END_CALL_LIVE_AVAILABLE = true`) 게이트**로 — G603/G620과 **같은 하드 기준의 재실행** + C7 관측 동반 · 결과 1줄을 이 표 아래 시점 부착 · 프로브 P-1~P-4 반영 빌드여야 한다(`libMarkers` 4개 참) | 실행 보고 — C7 |
+| **G626** | CASES = (4) ① 정본 **정확 일치**(사본 갱신: `G505_TOOL_CANON` · `G505_SIGNAL_CANON`(`promptAssembly.test.ts:1726-1730`) · `G616_TOOL_CANON`(`hangupToolFirst.test.ts:17-18`) — 소스 상수에서 읽지 않는다 · G617 `:114` 공통 머리 기준값 교체는 (10) C7-3) · C7-a가 *"이체를 마쳤거나"* 바로 뒤 · C7-b가 CASES 끝(제외 문장 뒤) · 각 1회 · **G599 무편집 통과** · TOOL 꼬리 · SIGNAL 꼬리가 C7 전과 **바이트 동일**(꼬리 부분 문자열 대조) · NONE 바이트 동일 · `G505_COUNTER_ALLOWED` **무편집 통과** · 두 문장에 숫자 · *"이번" · "한 번" · "첫" · "셋째" · "확인 중" · "기다" · "확인됐습니다" · "처리됐습니다"* 0 · 역검증(각 문장을 뺀 사본 · C7-b를 *"둘째,"* 앞으로 옮긴 사본이 실패) | 신설 `functions/src/roleplay/__tests__/hangupDemandTurn.test.ts` + 기존 G505 · G599 · G616 · G617 — C7 |
+| **G627** | 승인 문면 = (4) ② 정본 정확 일치(`guidance.test.ts:21-24` 사본 갱신) · 거절 · 실패 3문면 무편집 · 숫자 0(기존 `:61-63`) · *"한 문장" · "하나" · "첫"* 0 · *"그 한마디 앞뒤에"* 1회 · 역검증(옛 승인 문면 사본이 정확 일치에 실패) · 1곳 원천(기존 `:76-86` 그대로 통과) | `guidance.test.ts` — C7 |
+| **G628** | P-H 3차((7) 실행 계획 · 판정표 · 관측 ⓒ1 ⓒ2)를 **Live 재활성(`END_CALL_LIVE_AVAILABLE = true`) 게이트**로 — G603/G620과 **같은 하드 기준의 재실행** + C7 관측 동반 · 결과 1줄을 이 표 아래 시점 부착 · 프로브 P-1~P-4 반영 빌드여야 한다(`libMarkers` 4개 참) | 실행 보고 — C7 |
 | **G625** | R3 경계(⛔ **번호만 — 단언 자리 · 실행 = scenario-review R3 owner** · C7 완료 조건 아님 · 참조 대상이 R3 PR에 온다): `NO_STALL_RULE` · `buildConfirmResultInstruction` · `buildLiveConfirmResultInstruction`에 ⓐ *"곧바로 다음 요구로"* 0 ⓑ *"더 요구할 것이 남지 않았으면"* 각 1회 ⓒ *"[이번 통화의 흐름]"* 0 ⓓ *"마무리하라"* 0(confirmResult) ⓔ 세 문면의 분기 구절(*"상대에게 더 요구할 것이 남아 있으면 … 정한 대로"*) 바이트 동일 · ⓕ CASES(`HANGUP_RULE_CASES`) 바이트를 R3가 바꾸지 않는다 | R3 테스트 |
 | **OQ-A160** | 상한 20에서 H2 · H3 하한 동시 충족이 어렵다((7) 기대 표본) — ⓐ 79.21 (10) ③ 규칙으로 **24**까지(공유 풀 +4 · accept 최대 +2) ⓑ 20 그대로 · 미달이면 판정표 #3 ⓒ 대본에 추가 요구 응답 줄 추가(측정 변수 증가 — 권고 아님) · **권고 ⓐ** | **오케스트레이터** · 실행 전 |
 | **OQ-A161** | 판정표 #6 · #7(C7 문면 1회분 소진) 시 층 — ⓐ1 **폴백만** 서버 무시(효과 층 `resolveFallbackHangupEffect` 한 자리 · OQ-A140 선례 · AC-103 (f) 비대칭) ⓐ2 **두 경로** — Live는 클라가 도구 앞 전사를 `requestScammerHangup`에 실어 같은 검출기를 쓴다(클라 주장값이지만 **막는 쪽으로만** · `GeminiVoiceSession.tsx` 편집 = C6/C7 경계 밖 새 PR · API.md · Hosting → Functions) ⓑ' Live off 유지(L5 · 폴백은 ⓐ1) · ⛔ 어느 쪽이든 검출기는 **당부 · 대기 지시(분류 (i))를 요구로 세지 않는다**가 첫 단언(오탐 = ⑪) · 기본 = 없음(결정 전 Live NO-GO 유지) | **User**(+ 오케스트레이터) · 3차 결과 뒤 |
 
 **(10) 착수 체크리스트 (implementer — ⛔ 각 항목은 심볼로 다시 찾는다 · 줄은 `ea97aa0` 열람값)**
 
-- C7-1 `functions/src/roleplay/promptAssembly.ts` `HANGUP_RULE_CASES`(`:258`)에 (4) ① C7-a · C7-b. JSDoc(`:253-257`)에 *"T192 C7 · §79.22 (4) · G622"* 1줄 가능. **`:265` TOOL · `:271` SIGNAL 리터럴 꼬리 · `:251` NONE · `:268` · `:287` NO_STALL · 템플릿 0줄.**
+- C7-1 `functions/src/roleplay/promptAssembly.ts` `HANGUP_RULE_CASES`(`:258`)에 (4) ① C7-a · C7-b. JSDoc(`:253-257`)에 *"T192 C7 · §79.22 (4) · G626"* 1줄 가능. **`:265` TOOL · `:271` SIGNAL 리터럴 꼬리 · `:251` NONE · `:268` · `:287` NO_STALL · 템플릿 0줄.**
 - C7-2 `functions/src/scammerHangup/guidance.ts` `SCAMMER_HANGUP_ACCEPTED_GUIDANCE`(`:7-8`)를 (4) ②로. 다른 3상수 · `scammerHangupGuidance` 0줄.
 - C7-3 테스트 사본: `promptAssembly.test.ts` `G505_TOOL_CANON` · `G505_SIGNAL_CANON` · `hangupToolFirst.test.ts` `G616_TOOL_CANON`(`:17-18`) · `guidance.test.ts` `CANON[0]` — **새 정본으로만**. ⭐ **기존 단언 의미 변경 1곳**: `hangupToolFirst.test.ts:114`(G617 — *"TOOL 공통 머리 = `G616_OLD_TOOL`의 머리"*, 즉 C6-F2가 CASES를 안 바꿨다는 고정)는 C7에서 **반드시 빨개진다**(의도된 변경) ⇒ 기준값을 **79.22 (4) ① CASES 정본 사본**으로 바꾼다(`:112` TOOL ↔ SIGNAL 머리 동일 단언은 그대로). `G505_NONE_ORIGINAL` · `G505_COUNTER_ALLOWED` · `G505_MARKERS` · `G616_OLD_TOOL` · `G616_PREV_TOOL`(역검증 사본 — 옛 CASES 그대로 두어야 역검증이 산다) · `hangupRuleCases.test.ts` **무편집**(그 밖에 바뀌어야 통과하는 곳이 나오면 멈추고 보고).
-- C7-4 신설 `functions/src/roleplay/__tests__/hangupDemandTurn.test.ts`(G622) · `guidance.test.ts` 증분(G623).
+- C7-4 신설 `functions/src/roleplay/__tests__/hangupDemandTurn.test.ts`(G626) · `guidance.test.ts` 증분(G627).
 - C7-5 `scripts/live-hangup-probe.mjs` (8) P-1~P-5.
-- C7-6 ⛔ C7-1 · C7-2 · C7-5는 **한 커밋 또는 한 PR**(재측정 빌드가 셋을 함께 가져야 한다 — G624 `libMarkers`).
+- C7-6 ⛔ C7-1 · C7-2 · C7-5는 **한 커밋 또는 한 PR**(재측정 빌드가 셋을 함께 가져야 한다 — G628 `libMarkers`).
 - C7-7 테스트 수 before/after 착수 시 재측정(⛔ 인용값 금지 · 같은 체크아웃 동시 실행 금지 — CLAUDE.md *Verified Commands* 원문).
-- C7-8 배포: **Functions만**(`createRealtimeCall` TOOL 토큰 · `sendMessage` SIGNAL · `requestScammerHangup` 승인 문면) — `firebase deploy --only functions` 전체(79.20 (9) 이유 그대로) · Hosting 불요(클라 0). ⚠️ `END_CALL_LIVE_AVAILABLE = false`인 동안에도 배포는 **폴백 SIGNAL에 즉시 효과**가 있다(CASES가 SIGNAL에 실린다) — Live 재활성과 별개로 배포해도 되는지는 오케스트레이터 판단(⚠️ 폴백 쪽 G624 같은 사전 측정은 없다 · B 3일차가 사후 관측).
+- C7-8 배포: **Functions만**(`createRealtimeCall` TOOL 토큰 · `sendMessage` SIGNAL · `requestScammerHangup` 승인 문면) — `firebase deploy --only functions` 전체(79.20 (9) 이유 그대로) · Hosting 불요(클라 0). ⚠️ `END_CALL_LIVE_AVAILABLE = false`인 동안에도 배포는 **폴백 SIGNAL에 즉시 효과**가 있다(CASES가 SIGNAL에 실린다) — Live 재활성과 별개로 배포해도 되는지는 오케스트레이터 판단(⚠️ 폴백 쪽 G628 같은 사전 측정은 없다 · B 3일차가 사후 관측).
 - C7-9 clone 2종 대조값 · `API.md` · `Database.md` 무변경(NONE 무변경 · 계약 0 변경).
 
 **(11) 이 패스의 편집 범위 · 닫지 못한 것**
 
 - 편집: 이 79.22 신설 · 79.6 (1) 끝 시점 부착 1줄 · 79.14 표 뒤 시점 부착 1줄 · `docs/DECISIONS.md` #195. 원문 삭제 · 수정 0. 코드 · 테스트 · 스크립트 · 커밋 · 프로브 0.
-- ⛔ 닫지 못한 것: ① C7 원인(하네스 인공물 ① vs C6-F 문장 ②)은 **미분리**(추정) — B 3일차가 ①을 고친 뒤 재발 여부로만 가를 수 있다 ② F11 검출기 실행 0(G622 판독 추정) ③ Live 클라 버퍼에 도구 앞 전사가 `toolCall` 시점에 도착해 있는가(OQ-A161 ⓐ2의 전제)는 미검증 ④ `git show origin/main` 미실행(셸 없음 — 번호 grep은 같은 커밋의 이 트리 · 메인 체크아웃 · 워크트리로 대신) ⑤ R3 PR 미존재 — (6)은 가정(오케스트레이터 전달 초안 기준) · A-1 카운터 테스트가 NO_STALL을 재는지 미확인((6) ✗행 ②) ⑥ `docs/Tasks.md` T192-C7 행 상태 갱신은 planner/오케스트레이터 몫(미편집) ⑦ UpdateRequests architect `open` 행은 이 범위 밖이라 flip하지 않았다.
+- ⛔ 닫지 못한 것: ① C7 원인(하네스 인공물 ① vs C6-F 문장 ②)은 **미분리**(추정) — B 3일차가 ①을 고친 뒤 재발 여부로만 가를 수 있다 ② F11 검출기 실행 0(G626 판독 추정) ③ Live 클라 버퍼에 도구 앞 전사가 `toolCall` 시점에 도착해 있는가(OQ-A161 ⓐ2의 전제)는 미검증 ④ `git show origin/main` 미실행(셸 없음 — 번호 grep은 같은 커밋의 이 트리 · 메인 체크아웃 · 워크트리로 대신) ⑤ R3 PR 미존재 — (6)은 가정(오케스트레이터 전달 초안 기준) · A-1 카운터 테스트가 NO_STALL을 재는지 미확인((6) ✗행 ②) ⑥ `docs/Tasks.md` T192-C7 행 상태 갱신은 planner/오케스트레이터 몫(미편집) ⑦ UpdateRequests architect `open` 행은 이 범위 밖이라 flip하지 않았다.
 
 **(12) (2026-10-20 리뷰 APPROVED(Critical 0) 뒤 정정 — M1(오케스트레이터 결정) · Minor 1 · 4 · 5 · 배포 비교 · 브랜치 `claude/t192-c7-demand-hangup` HEAD `4f047e2`(`.git/refs/heads/…` 직접 판독) · 위 (0) ~ (11) 원문 무수정 · ⛔ 이 (12)가 우선)**
 
-> **번호(착수 시 재grep)**: 메인 체크아웃 `C:\Projects\codegate\docs\DECISIONS.md:193` = **#196**(R3 — origin/main `502c2f9` · `.git/refs/remotes/origin/main` 직접 판독 · 이 브랜치의 #195와 다른 행) · 이 트리 최대 #195 · G 최대 G625 · OQ 최대 OQ-A161 · `agitated-zhukovsky-f406bb` 히트 0 ⇒ **DECISIONS #197 · OQ-A162**(G 신설 0 — 기존 G622 · G624 증분). ⛔ 예약 아님 — 병합 순서로 확정.
-> **현행 코드(열람)**: `4f047e2`에 C7이 구현돼 있다 — `promptAssembly.ts:259` CASES = 옛 C7-b · `hangupDemandTurn.test.ts:12` · `:18` · `hangupToolFirst.test.ts:29-31` `G622_CASES_CANON` · 프로브 `LIB_MARKER_CASES_C7`(`live-hangup-probe.mjs:166`) · `c7` 요약(`:569-590`). 아래는 그 위에 얹는 정정 사양이다(⛔ 이 패스 코드 0줄).
+> **번호(착수 시 재grep)**: 메인 체크아웃 `C:\Projects\codegate\docs\DECISIONS.md:193` = **#196**(R3 — origin/main `502c2f9` · `.git/refs/remotes/origin/main` 직접 판독 · 이 브랜치의 #195와 다른 행) · 이 트리 최대 #195 · G 최대 G625 · OQ 최대 OQ-A161 · `agitated-zhukovsky-f406bb` 히트 0 ⇒ **DECISIONS #199 · OQ-A162**(G 신설 0 — 기존 G626 · G628 증분). ⛔ 예약 아님 — 병합 순서로 확정.
+> **현행 코드(열람)**: `4f047e2`에 C7이 구현돼 있다 — `promptAssembly.ts:259` CASES = 옛 C7-b · `hangupDemandTurn.test.ts:12` · `:18` · `hangupToolFirst.test.ts:29-31` `G626_CASES_CANON` · 프로브 `LIB_MARKER_CASES_C7`(`live-hangup-probe.mjs:166`) · `c7` 요약(`:569-590`). 아래는 그 위에 얹는 정정 사양이다(⛔ 이 패스 코드 0줄).
 > **R3 병합 반영**: origin/main `502c2f9`의 `NO_STALL_RULE`(메인 체크아웃 `functions/src/roleplay/promptAssembly.ts:299`)은 (6) 초안 R3-a와 **같은 구절**이다(*"상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 바로 위 통화 끝내기 항목이 정한 대로 한다"* — 열람 · 작업 트리 = 커밋 동일성은 추정) ⇒ (6)의 *"R3 PR 미존재 — 가정"*((11) ⑤)은 NO_STALL에 한해 **해소**.
 
 *① M1 — C7-b 문면 교체 (⛔ 79.22 C7 계열 1회분 **안**의 정정 — 재측정 **전** · 같은 커밋이면 1회 · 79.21 (10) ② 판단과 같은 산정)*
@@ -19931,7 +19931,7 @@ export function isVerifyTransferReachable(input: {
 | ⚠️ M2 위험(추정) | [진행 강제] S3(`promptAssembly.ts:217`)가 *"다음 단계 요구로 이어가(추가 이체, 추가 정보, **비밀 유지 요구** 등)"* — 같은 프롬프트가 비밀 유지를 **"요구"** 로 부른다 · *"행동"* 은 넓은 낱말이라 *"말하지 않는 행동"* 으로 읽힐 수 있다 | 모델이 당부를 *"행동 요구"* 로 읽으면 **당부가 든 응답에서 끊지 않는다** → goal 호출률 하락 · *"당부 + 작별 같은 말 + 미호출"* 이면 ⑪ 재발 모양 ⇒ (12) ③ 관측 ⓒ3 |
 | 대안(보류) | C7-b에 *"(하지 말라는 당부는 여기에 들지 않는다)"* 괄호 | ⚠️ S3 *"비밀 유지 요구"* 와 **낱말이 정면으로 엇갈린다**(한쪽은 요구 · 한쪽은 요구 아님 — G128 비용) · 재측정 뒤에는 CASES 재수정 금지(1회분)라 넣으려면 **지금**이어야 한다 ⇒ **OQ-A162**(기본 = 넣지 않는다 · 오케스트레이터 M1 문면 그대로) |
 
-*G130 · G128 · F11 판독 (⛔ 추정 — 실행 확인은 G622)*
+*G130 · G128 · F11 판독 (⛔ 추정 — 실행 확인은 G626)*
 
 | 검사 | 새 앞절 *"네가 상대에게 돈·정보·행동을 요구하거나 재촉한 응답에서는"* | 판독 |
 |---|---|---|
@@ -19950,10 +19950,10 @@ export function isVerifyTransferReachable(input: {
 | # | 파일 | 변경 |
 |---|---|---|
 | M1-1 | `functions/src/roleplay/promptAssembly.ts:259` | C7-b 앞절을 ① 정본으로 |
-| M1-2 | 정확 일치 사본 | `promptAssembly.test.ts` `G505_TOOL_CANON` · `G505_SIGNAL_CANON` · `hangupToolFirst.test.ts` `G616_TOOL_CANON` · `G622_CASES_CANON` · `hangupDemandTurn.test.ts` `C7_B`(`:12`) · CASES 사본(`:18`) — 새 정본으로만. `G616_OLD_TOOL` · `G616_PREV_TOOL` · `G505_COUNTER_ALLOWED` · `hangupRuleCases.test.ts` 무편집 |
-| M1-3 | G622 증분 | 역검증 추가: **옛 C7-b(*"새 요구를 꺼내거나 결정을 재촉한"*) 사본이 정확 일치에 실패** · 새 앞절에 *"새 요구" · "결정을 재촉"* 0 · *"돈·정보·행동"* 정확히 1회 |
+| M1-2 | 정확 일치 사본 | `promptAssembly.test.ts` `G505_TOOL_CANON` · `G505_SIGNAL_CANON` · `hangupToolFirst.test.ts` `G616_TOOL_CANON` · `G626_CASES_CANON` · `hangupDemandTurn.test.ts` `C7_B`(`:12`) · CASES 사본(`:18`) — 새 정본으로만. `G616_OLD_TOOL` · `G616_PREV_TOOL` · `G505_COUNTER_ALLOWED` · `hangupRuleCases.test.ts` 무편집 |
+| M1-3 | G626 증분 | 역검증 추가: **옛 C7-b(*"새 요구를 꺼내거나 결정을 재촉한"*) 사본이 정확 일치에 실패** · 새 앞절에 *"새 요구" · "결정을 재촉"* 0 · *"돈·정보·행동"* 정확히 1회 |
 | M1-4 | 프로브 `LIB_MARKER_CASES_C7`(`live-hangup-probe.mjs:166`) | `"요구하거나 재촉한 응답에서는 끊지 않는다"` 로 교체(옛 마커가 남으면 새 빌드에서 실행이 거부된다 — 의도대로 · 교체 누락 = 실행 0) |
-| **Minor 1** | `hangupToolFirst.test.ts:28-31` | `:28` JSDoc(*"NONE · SIGNAL 사본 … 무변경 고정 G617"*)이 지금 `G622_CASES_CANON`(`:30`) 위에 붙어 있다 — **`const G617_NONE`(`:33`) 바로 위로 옮기고**, 그 파일에 SIGNAL 사본은 없으므로 문구를 *"NONE 사본(G505 `G505_NONE_ORIGINAL`과 같은 값 — 무변경 고정 G617)"* 으로 고친다. `:29` 주석은 `G622_CASES_CANON` 바로 위 그대로. 코드 동작 0 |
+| **Minor 1** | `hangupToolFirst.test.ts:28-31` | `:28` JSDoc(*"NONE · SIGNAL 사본 … 무변경 고정 G617"*)이 지금 `G626_CASES_CANON`(`:30`) 위에 붙어 있다 — **`const G617_NONE`(`:33`) 바로 위로 옮기고**, 그 파일에 SIGNAL 사본은 없으므로 문구를 *"NONE 사본(G505 `G505_NONE_ORIGINAL`과 같은 값 — 무변경 고정 G617)"* 으로 고친다. `:29` 주석은 `G626_CASES_CANON` 바로 위 그대로. 코드 동작 0 |
 | **Minor 5** | 프로브 집계 단위 확인 | `c7` 계산(`:569-590`)과 아래 ③ `secrecy` 계산을 **부작용 없는 모듈**로 뺀다: 신설 `scripts/lib/hangupProbeSummary.mjs` — `export DEMAND_HINTS · SECRECY_HINTS · demandHints · secrecyHints · summarizeC7(results, mode) · summarizeSecrecy(results) · mergeBatchSummaries(summaries)`(프로브 본체는 이것을 import — 프로브 파일을 테스트에서 직접 import하면 lib 로드 · argv 검사 · `main()`이 돈다). 신설 테스트 `scripts/hangup-probe-summary.test.mjs` — 가짜 `results` 3벌(ⓐ 도구 앞 요구 1 · 승인 뒤 당부 1 · 약속 시점 1 ⓑ 미호출 + 후속 요구 미응답 ⓒ 당부 + 작별 어휘 + 미호출)로 각 필드 기대값을 단언 + `mergeBatchSummaries` 합산(묶음 2개 → 합) · 루트 `package.json` `test` 목록에 등록(기존 `scripts/*.test.mjs` 2건과 같은 방식). ⛔ 실호출 0 · 키 0 |
 | **Minor 4** | 보고 템플릿 | 아래 ④ |
 
@@ -19987,15 +19987,15 @@ export function isVerifyTransferReachable(input: {
 
 *⑥ 가드 · 열린 질문 증분 (79.22 (9) 표 원문 무수정)*
 
-- **G622**(증분): ① 정본 정확 일치 · M1-3 역검증.
-- **G624**(증분): 3차 결과 1줄에 ⓒ3 · ⓒ3-b · 대조값 + ④ 합산 표 · `libMarkers`에 새 `casesC7` 마커 참 · 집계는 `mergeBatchSummaries` 결과여야 한다(Minor 5 테스트 통과 빌드).
+- **G626**(증분): ① 정본 정확 일치 · M1-3 역검증.
+- **G628**(증분): 3차 결과 1줄에 ⓒ3 · ⓒ3-b · 대조값 + ④ 합산 표 · `libMarkers`에 새 `casesC7` 마커 참 · 집계는 `mergeBatchSummaries` 결과여야 한다(Minor 5 테스트 통과 빌드).
 - **OQ-A162**(**오케스트레이터** · 구현 커밋 전): C7-b에 *"(하지 말라는 당부는 여기에 들지 않는다)"* 를 더할 것인가 — ⓐ 더하지 않는다(M1 그대로 · ⓒ3로 관측 · **기본 · 권고**) ⓑ 더한다(M2 완화 · ⚠️ S3 *"비밀 유지 요구"* 와 낱말 엇갈림 = G128 비용 · F11 영향 0 예상) · ⛔ 재측정 뒤에는 고를 수 없다(1회분).
 
 *⑦ 이 정정의 편집 범위*
 
-- 편집: 이 (12) 신설 · (4) ① 아래 시점 부착 1줄 · 79.6 (1) 끝 시점 부착 1줄 · `docs/DECISIONS.md` #197. 원문 삭제 · 수정 0 · 코드 · 테스트 · 스크립트 · 커밋 0.
+- 편집: 이 (12) 신설 · (4) ① 아래 시점 부착 1줄 · 79.6 (1) 끝 시점 부착 1줄 · `docs/DECISIONS.md` #199. 원문 삭제 · 수정 0 · 코드 · 테스트 · 스크립트 · 커밋 0.
 - ⛔ 닫지 못한 것: F11 · G599 실행 0(판독 추정) · M2는 추정(관측 0) · 메인 체크아웃 작업 트리 = `502c2f9` 동일성 미검증 · ⓒ3 기저 미집계.
-- **(2026-10-20 06:53Z C7 P-H 3차 결과 — G624 · 위 원문 무수정)** 21세션(accept 10 · reject 11 · 빌드 `a071450` · 새 1번 키 · 오류/429 0) ⇒ **판정표 #6 — C7 문면 1회분 소진 · #2(재활성화) 미충족**: H1 0/22 · H3 0/10 · H5 0/10 · H2 turnComplete 10/10 · 문장 10/10 충족 · **H2 오디오 9/10**(#10 — 도구 앞 대기 지시 발화 · #4 비해당 — 판정표에 행 없음) · **ⓒ1 1/22**(reject #2 — "지금 당장 … 돈 보내세요" 뒤 give_up) · ⓒ2 0 · ⓒ3-b 0. 다음 층 = OQ-A161. 상세 `docs/research/ph-hangup-probe-2026-10.md` 3차.
+- **(2026-10-20 06:53Z C7 P-H 3차 결과 — G628 · 위 원문 무수정)** 21세션(accept 10 · reject 11 · 빌드 `a071450` · 새 1번 키 · 오류/429 0) ⇒ **판정표 #6 — C7 문면 1회분 소진 · #2(재활성화) 미충족**: H1 0/22 · H3 0/10 · H5 0/10 · H2 turnComplete 10/10 · 문장 10/10 충족 · **H2 오디오 9/10**(#10 — 도구 앞 대기 지시 발화 · #4 비해당 — 판정표에 행 없음) · **ⓒ1 1/22**(reject #2 — "지금 당장 … 돈 보내세요" 뒤 give_up) · ⓒ2 0 · ⓒ3-b 0. 다음 층 = OQ-A161. 상세 `docs/research/ph-hangup-probe-2026-10.md` 3차.
 
 ## 80. (Bug fix — 2026-10-18 · 브랜치 `fix/otp-compare-live-miss`) **라이브에서 틀린 인증번호를 "확인되었습니다"로 넘긴 문제** — ⭐⭐ **판정은 정상(mismatch)이었고 지시도 실렸다. Gemini가 §78의 "(참고 — …)" 1줄을 무시했다(같은 조건 실호출 3/3)** ⇒ 결과 지시 문면 강화 + 판정 결과 로그 — implementer 기록
 
