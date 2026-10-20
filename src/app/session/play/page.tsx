@@ -75,7 +75,7 @@ import {
 } from "@/lib/phone/deviceSkin";
 import { bannerTokensFor, callTokensFor, ringBackground } from "@/lib/phone/skinTokens";
 import { useDeviceTheme } from "@/lib/phone/deviceTheme";
-import { isSwipeAccept } from "@/lib/phone/swipeAnswer";
+import { createSwipeAnswer } from "@/lib/phone/swipeAnswer";
 import {
   BANNER_VISIBLE_MS,
   ackOnOverlayClose,
@@ -293,7 +293,8 @@ export default function SessionCallPage() {
   const [deviceSkin, setDeviceSkin] = useState<ResolvedDeviceSkin>({ skin: "default", source: "fallback" });
   // §89.5 ⓒ — 기기 테마(OS 설정) · §89.5 ⓑ — 받기 버튼 밀기 시작점.
   const deviceTheme = useDeviceTheme();
-  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  // 독립 QA Major — move는 기록만, 받기는 pointerup(활성화 이벤트) 안에서 동기로 · 뒤따르는 click 1회 무시(`swipeAnswer.ts`).
+  const swipeAnswerRef = useRef(createSwipeAnswer());
   // T190-3(§74.3 표 S · UX D-98 · AC-093 (c)) — 스피커 버튼 = 통화 모드(0.6) ↔ 스피커 모드(1.0) **음량 전환**.
   // 웹은 Android에서 수화부↔스피커 실제 출력 전환을 할 수 없다(§74.2 ①-A) — iOS도 실기 프로브 전까지 같다.
   const [audioRoute, setAudioRoute] = useState<AudioRoute>("call");
@@ -2391,26 +2392,19 @@ export default function SessionCallPage() {
           <div className="flex flex-col items-center gap-2">
             <button
               type="button"
-              onClick={handleAnswer}
+              // 누르기 · 키보드(Enter/Space → click)는 종전대로 click에서 받는다. 바로 앞에서 밀기로 받았으면 그 click 1회만 무시.
+              onClick={() => swipeAnswerRef.current.click(handleAnswer)}
               aria-label="전화 받기"
-              // §89.5 ⓑ(UX D-132 (5) ⓑ) — 누르기(위 onClick)와 **밀기** 둘 다 받는다. 밀기 = 누른 채 48px 이상 이동.
-              // `touch-none` — 밀기 중 브라우저가 스크롤로 가져가지 않게(P3 리뷰 Minor).
+              // §89.5 ⓑ(UX D-132 (5) ⓑ) — **밀기**도 받는다. 밀기 = 누른 채 48px 이상 이동.
+              // ⭐ 독립 QA Major — pointermove는 사용자 활성화가 아니다. move에서는 판정만 하고, 받기(= 동기 오디오 prime ·
+              // resume)는 활성화 이벤트인 pointerup 안에서 한다. `touch-none` — 밀기 중 스크롤이 가져가지 않게.
               onPointerDown={(event) => {
-                swipeStartRef.current = { x: event.clientX, y: event.clientY };
+                swipeAnswerRef.current.down(event.clientX, event.clientY);
                 event.currentTarget.setPointerCapture?.(event.pointerId);
               }}
-              onPointerMove={(event) => {
-                const start = swipeStartRef.current;
-                if (!start || !isSwipeAccept(event.clientX - start.x, event.clientY - start.y)) return;
-                swipeStartRef.current = null;
-                handleAnswer();
-              }}
-              onPointerUp={() => {
-                swipeStartRef.current = null;
-              }}
-              onPointerCancel={() => {
-                swipeStartRef.current = null;
-              }}
+              onPointerMove={(event) => swipeAnswerRef.current.move(event.clientX, event.clientY)}
+              onPointerUp={() => swipeAnswerRef.current.up(handleAnswer)}
+              onPointerCancel={() => swipeAnswerRef.current.cancel()}
               className={`relative flex h-[76px] w-[76px] touch-none items-center justify-center rounded-full shadow-lg transition active:scale-95 ${
                 callTokens.ringStyle === "accept-pulse" ? "call-accept-pulse" : ""
               }`}
