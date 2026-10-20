@@ -5,20 +5,20 @@ import type { ReactNode } from "react";
 type BadgeVariant = "caution" | "success" | "neutral" | "danger";
 
 const VARIANT_CLASSES: Record<BadgeVariant, string> = {
-  caution: "bg-[#FBF3E8] text-[#B96A1B]",
-  success: "bg-[#E4F0EC] text-[#0E6B62]",
-  neutral: "bg-[#F2EFE9] text-[#6B655C]",
-  danger: "bg-[#C6392F] text-white",
+  caution: "bg-caution-tint text-caution",
+  success: "bg-success-tint text-success",
+  neutral: "bg-neutral-tint text-ink-sub",
+  danger: "bg-danger text-white",
 };
 
 function BadgeIcon({ variant }: { variant: BadgeVariant }) {
   if (variant === "caution") {
-    return <span className="w-1.5 h-1.5 rounded-full bg-[#B96A1B]" aria-hidden="true" />;
+    return <span className="w-1.5 h-1.5 rounded-full bg-caution" aria-hidden="true" />;
   }
   if (variant === "success") {
     return (
       <svg width="11" height="11" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-        <path d="M2.5 7L5.2 9.7L10.5 3.5" stroke="#0E6B62" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M2.5 7L5.2 9.7L10.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
@@ -36,7 +36,7 @@ export default function Badge({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full text-[13px] font-semibold px-3 py-1.5 ${VARIANT_CLASSES[variant]} ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-full text-[14px] font-semibold px-3 py-1.5 ${VARIANT_CLASSES[variant]} ${className}`}
     >
       <BadgeIcon variant={variant} />
       {children}

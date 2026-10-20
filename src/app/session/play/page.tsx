@@ -2058,7 +2058,7 @@ export default function SessionCallPage() {
 
   return (
     // T190-3(UX-014 v1.33 (8) Responsive · W-D) — 최대폭 430px 가운데 정렬, 바깥은 `call.bg`보다 한 단계 어두운 단색.
-    <main className="flex min-h-screen flex-col text-white" style={{ backgroundColor: callTokens.outerBg }}>
+    <main className="font-phone flex min-h-screen flex-col text-white" style={{ backgroundColor: callTokens.outerBg }}>
       {/* 실시간 speech-to-speech 세션 — 서버가 자격증명을 준 경우에만 마운트된다(지연 로딩).
           화면 요소는 없고 SDK 세션 생명주기만 관리한다. */}
       {/* `?audiodebug=1`일 때만 그린다(없으면 DOM 0 — 컴포넌트 첫 분기). 관찰 전용 · 탭을 가로채지 않는다. */}
