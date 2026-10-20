@@ -209,8 +209,8 @@ export default function DifficultySelectPage() {
   // 시나리오 맥락이 없으면(직접 URL 진입·세션스토리지 소실) 시나리오 선택부터 다시 시작한다.
   if (!scenarioId || !scenario) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>시나리오 정보를 찾을 수 없습니다. 시나리오 선택부터 다시 시작해 주세요.</span>
         </p>
@@ -234,33 +234,33 @@ export default function DifficultySelectPage() {
         <button
           type="button"
           onClick={() => router.back()}
-          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-base font-medium text-[#6B655C] hover:bg-[#F2EFE9]"
+          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-lg font-medium text-ink-sub hover:bg-neutral-tint"
         >
           <span aria-hidden="true">←</span> 뒤로
         </button>
         {/* 단계 표시(P-12 #2) — 지금까지의 선택 경로를 텍스트로 안내한다. */}
-        <p className="text-sm font-semibold text-[#0E6B62]" aria-current="step">
+        <p className="text-base font-semibold text-brand" aria-current="step">
           {typeLabel} › {modeLabel} › {scenario.title} › 난이도
         </p>
-        <h1 className="text-2xl font-bold text-[#22303A]">
+        <h1 className="text-2xl font-bold text-ink">
           {isSendMode ? "상대가 얼마나 세게 겪을까요?" : "얼마나 세게 겪어볼까요?"}
         </h1>
-        <p className="text-base leading-relaxed text-[#6B655C]">
+        <p className="text-lg leading-relaxed text-ink-sub">
           같은 상황을 어느 강도로 훈련할지 고릅니다. 어떤 난이도를 골라도{" "}
-          <strong className="font-semibold text-[#22303A]">
+          <strong className="font-semibold text-ink">
             사전 고지·동의·언제든 훈련 종료·끝난 뒤 &apos;훈련이었습니다&apos; 안내는 똑같이 적용
           </strong>
           됩니다.
         </p>
         {/* AC-067 — 시나리오의 기존 고정 문자열은 삭제하지 않고 "성향"으로 라벨을 바꿔 유지한다.
             "난이도"라는 단어는 아래 3단계에만 쓴다(한 화면에서 두 뜻으로 쓰이지 않게). */}
-        <p className="text-sm text-[#6B655C]">
+        <p className="text-base text-ink-sub">
           {SCENARIO_TRAIT_LABEL}: {scenario.difficulty}
         </p>
       </header>
 
       {/* T191 S5(UX-029 v1.34 (3)) — 고급 전용: 카드 위 1줄 · 고급 1장만(초급 · 중급 카드는 비활성 표시도 0). */}
-      {isAdvancedOnly && <p className="text-base font-semibold text-[#22303A]">{ADVANCED_ONLY_LINE}</p>}
+      {isAdvancedOnly && <p className="text-lg font-semibold text-ink">{ADVANCED_ONLY_LINE}</p>}
       <div className="flex flex-col gap-3 lg:grid lg:grid-cols-3">
         {selectableDifficultyLevels(scenario).map((level) => (
           <SelectableCard
@@ -293,13 +293,13 @@ export default function DifficultySelectPage() {
         {showBurdenNotice ? ` ${PRE_SESSION_BURDEN_NOTICE}` : ""}
       </p>
       {selected === "advanced" && (
-        <div className="rounded-[16px] border-[1.5px] border-[#E8C89A] bg-[#FBF3E8] p-4">
-          <p className="text-[15px] font-semibold leading-relaxed text-[#B96A1B]">
+        <div className="rounded-[8px] border-[1.5px] border-caution/40 bg-caution-tint p-4">
+          <p className="text-[17px] font-semibold leading-relaxed text-caution">
             <span aria-hidden="true">⚠ </span>
             {advancedNotice}
           </p>
           {/* 심리적 부담이 큰 시나리오는 기존 시나리오 설명의 경고를 함께 강조한다(UX-029 States). */}
-          <p className="mt-2 text-[14px] leading-relaxed text-[#6B655C]">
+          <p className="mt-2 text-[16px] leading-relaxed text-ink-sub">
             {SCENARIO_TRAIT_LABEL}: {scenario.difficulty}
           </p>
         </div>
@@ -307,7 +307,7 @@ export default function DifficultySelectPage() {
       {/* T191 S5(UX-029 v1.34 (5) · D-106) — 셀프 감금 부담 고지. 고급 고지와 같은 인라인 형식 · 다이얼로그 ·
           체크 · 추가 탭 0 · 경고 아이콘 · 경고색 0(안내다 — P-36). 낭독은 위 aria-live가 고급 고지에 이어 읽는다. */}
       {showBurdenNotice && (
-        <p className="rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4 text-[15px] leading-relaxed text-[#22303A]">
+        <p className="rounded-[8px] border-[1.5px] border-line bg-white p-4 text-[17px] leading-relaxed text-ink">
           {PRE_SESSION_BURDEN_NOTICE}
         </p>
       )}
@@ -325,12 +325,12 @@ export default function DifficultySelectPage() {
       {/* 초급 사전 브리핑(D-43/AC-066) — "이 대화에서 나올 수 있는 위험 신호 미리 보기". */}
       {/* T191 S5(UX 계약 C-3 · OQ-U72) — 서버가 공통 신호 0개(빈 배열)를 주면 진입 자체를 그리지 않는다. */}
       {selected === "beginner" && !(briefingSignals && briefingSignals.length === 0) && (
-        <div className="rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4">
+        <div className="rounded-[8px] border-[1.5px] border-line bg-white p-4">
           <button
             type="button"
             onClick={() => void handleToggleBriefing()}
             aria-expanded={briefingOpen}
-            className="flex min-h-[48px] w-full items-center justify-between gap-2 text-left text-[15px] font-semibold text-[#0E6B62]"
+            className="flex min-h-[48px] w-full items-center justify-between gap-2 text-left text-[17px] font-semibold text-brand"
           >
             <span>이 대화에서 나올 수 있는 위험 신호 미리 보기</span>
             <span aria-hidden="true">{briefingOpen ? "▲" : "▼"}</span>
@@ -338,12 +338,12 @@ export default function DifficultySelectPage() {
           {briefingOpen && (
             <div className="mt-2">
               {briefingError ? (
-                <p role="alert" className="text-[14px] text-[#C6392F]">
+                <p role="alert" className="text-[16px] text-danger">
                   위험 신호를 불러오지 못했습니다. 훈련은 그대로 시작할 수 있어요.
                 </p>
               ) : briefingSignals ? (
                 <>
-                  <p className="text-[14px] leading-relaxed text-[#22303A]">
+                  <p className="text-[16px] leading-relaxed text-ink">
                     이 대화에서는 아래와 같은 신호가 나옵니다. 대화 중에는 따로 알려주지 않으니
                     직접 알아채 보세요.
                   </p>
@@ -356,7 +356,7 @@ export default function DifficultySelectPage() {
                   </ul>
                 </>
               ) : (
-                <p role="status" className="text-[14px] text-[#6B655C]">
+                <p role="status" className="text-[16px] text-ink-sub">
                   불러오는 중입니다...
                 </p>
               )}
@@ -367,8 +367,8 @@ export default function DifficultySelectPage() {
 
       {/* 난이도 전달 실패 폴백 고지(AC-064 "침묵 실패 금지") — 조용히 다른 난이도로 넘어가지 않는다. */}
       {state === "difficulty-fallback" && appliedLevel && (
-        <div className="rounded-[16px] border-[1.5px] border-[#E8C89A] bg-[#FBF3E8] p-4">
-          <p role="alert" className="text-[15px] leading-relaxed text-[#B96A1B]">
+        <div className="rounded-[8px] border-[1.5px] border-caution/40 bg-caution-tint p-4">
+          <p role="alert" className="text-[17px] leading-relaxed text-caution">
             난이도가 제대로 전달되지 않아 <strong>{DIFFICULTY_LABEL[appliedLevel]}</strong>으로
             진행합니다.
           </p>
@@ -383,9 +383,9 @@ export default function DifficultySelectPage() {
         </div>
       )}
 
-      <div className="sticky bottom-0 -mx-6 -mb-28 border-t border-[#E2DDD3] bg-[#FAF8F5]/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur">
+      <div className="sticky bottom-0 -mx-6 -mb-28 border-t border-line bg-page/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur">
         {startError && (
-          <p role="alert" className="mb-3 flex items-center gap-2 text-base text-[#C6392F]">
+          <p role="alert" className="mb-3 flex items-center gap-2 text-lg text-danger">
             <span aria-hidden="true">⚠</span>
             <span>{startError}</span>
           </p>

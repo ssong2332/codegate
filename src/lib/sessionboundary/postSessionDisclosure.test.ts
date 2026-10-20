@@ -66,8 +66,8 @@ test("[T187/G445 역검증] `{state === \"ended\" && …}`로 감싼 사본은 �
   // 식이 바뀌어 단독 식별자 JSX 식이 0이 된다 — 1회 단언이 먼저 걸린다.
   assert.ok(disclosureRenderViolations(poisoned).length >= 1);
   const wrapped = source.replace(
-    '<p className="text-base leading-[1.7] text-[#6B655C]">{POST_SESSION_FACT_DISCLOSURE}</p>',
-    '{state === "ended" && <p className="text-base leading-[1.7] text-[#6B655C]">{POST_SESSION_FACT_DISCLOSURE}</p>}',
+    '<p className="text-lg leading-[1.7] text-ink-sub">{POST_SESSION_FACT_DISCLOSURE}</p>',
+    '{state === "ended" && <p className="text-lg leading-[1.7] text-ink-sub">{POST_SESSION_FACT_DISCLOSURE}</p>}',
   );
   assert.notEqual(wrapped, source, "오염 지점을 찾지 못했다");
   assert.ok(disclosureRenderViolations(wrapped).some((v) => v.includes("&&")));

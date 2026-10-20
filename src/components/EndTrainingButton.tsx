@@ -20,11 +20,11 @@ export default function EndTrainingButton({
       onClick={onClick}
       disabled={disabled}
       aria-label="훈련 즉시 종료"
-      className={`flex min-h-[48px] items-center justify-center gap-2 rounded-xl border-2 border-[#C6392F] px-4 py-2.5 text-base font-bold text-[#C6392F] disabled:opacity-50 ${
-        variant === "dark" ? "bg-white/95" : "bg-white hover:bg-[#FDF1F0]"
+      className={`flex min-h-[48px] items-center justify-center gap-2 rounded-[8px] border-2 border-danger px-4 py-2.5 text-lg font-bold text-danger disabled:opacity-50 ${
+        variant === "dark" ? "bg-white/95" : "bg-white hover:bg-danger-tint"
       }`}
     >
-      <span aria-hidden="true" className="h-[13px] w-[13px] rounded-[3px] bg-[#C6392F]" />
+      <span aria-hidden="true" className="h-[13px] w-[13px] rounded-[3px] bg-danger" />
       훈련 종료
     </button>
   );

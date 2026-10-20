@@ -86,10 +86,10 @@ export default function MessengerScenarioSelectPage() {
     return (
       <li key={scenarioId}>
         <label
-          className={`flex cursor-pointer gap-4 rounded-2xl border-2 p-4 transition ${
+          className={`flex cursor-pointer gap-4 rounded-[8px] border-2 p-4 transition ${
             selected
-              ? "border-[#0E6B62] bg-[#E4F0EC]"
-              : "border-[#E2DDD3] bg-white hover:border-[#C9C2B6]"
+              ? "border-brand bg-brand-tint"
+              : "border-line bg-white hover:border-line-strong"
           }`}
         >
           <input
@@ -105,7 +105,7 @@ export default function MessengerScenarioSelectPage() {
           <span
             aria-hidden="true"
             className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xl font-bold ${
-              selected ? "bg-[#0E6B62] text-white" : "bg-[#41525E] text-[#C9D4DB]"
+              selected ? "bg-brand text-white" : "bg-avatar-bg text-avatar-fg"
             }`}
           >
             {/* T75 — 발신자 표기가 번호로 바뀌어 첫 글자를 따면 "0"·"+"가 뜬다.
@@ -119,25 +119,25 @@ export default function MessengerScenarioSelectPage() {
                 {/* 표면 배지(AC-002/030) — 색 단독 표기 금지, 텍스트 라벨을 항상 함께 표기.
                     디자인 시스템 배지(중립) 재사용 — 메신저 플로우.dc.html의 채널 배지와 동일 톤. */}
                 <Badge variant="neutral">{surfaceLabel}</Badge>
-                <span className="text-lg font-bold text-[#22303A]">{scenario.title}</span>
+                <span className="text-lg font-bold text-ink">{scenario.title}</span>
               </span>
               {selected && (
                 <span
                   aria-hidden="true"
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-sm font-bold text-white"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-base font-bold text-white"
                 >
                   ✓
                 </span>
               )}
             </span>
 
-            <span className="text-sm text-[#6B655C]">
+            <span className="text-base text-ink-sub">
               {scenario.callerLabel}(으)로 {surfaceLabel} 메시지가 옵니다
             </span>
 
             <span
               id={`scenario-${scenarioId}-meta`}
-              className="flex flex-col gap-1.5 text-sm text-[#6B655C]"
+              className="flex flex-col gap-1.5 text-base text-ink-sub"
             >
               {/* 소요시간 배지(중립) — 메신저 플로우.dc.html의 "약 {time}" 배지와 동일 톤.
                   이 문자열은 자유서술문이라(예: "중간 — 정서적 압박과 채널 전환이 결합됩니다") 색상
@@ -162,23 +162,23 @@ export default function MessengerScenarioSelectPage() {
         <button
           type="button"
           onClick={() => router.back()}
-          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-base font-medium text-[#6B655C] hover:bg-[#F2EFE9]"
+          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-lg font-medium text-ink-sub hover:bg-neutral-tint"
         >
           <span aria-hidden="true">←</span> 뒤로
         </button>
         {/* 단계 표시(P-12 #2, T28 패턴 재사용) — 메신저는 방식 단계가 없어 유형→체험선택→시나리오
             3단계(v1.10 D-31로 체험 선택이 앞에 추가되며 ②→③으로 밀림). */}
-        <p className="text-sm font-semibold text-[#0E6B62]" aria-current="step">
+        <p className="text-base font-semibold text-brand" aria-current="step">
           메신저피싱 › ③ 시나리오
         </p>
-        <h1 className="text-2xl font-bold text-[#22303A]">어떤 메시지를 받아볼까요?</h1>
-        <p className="text-base leading-relaxed text-[#6B655C]">
+        <h1 className="text-2xl font-bold text-ink">어떤 메시지를 받아볼까요?</h1>
+        <p className="text-lg leading-relaxed text-ink-sub">
           실제 사기가 아니라 훈련용 시뮬레이션입니다. 하나를 고르면 마지막으로 난이도를 정합니다.
         </p>
       </header>
 
       {filteredEntries.length === 0 ? (
-        <p className="rounded-xl border border-[#E2DDD3] bg-white p-4 text-base text-[#6B655C]">
+        <p className="rounded-[8px] border border-line bg-white p-4 text-lg text-ink-sub">
           메신저 시나리오가 아직 없습니다.
         </p>
       ) : (
@@ -187,7 +187,7 @@ export default function MessengerScenarioSelectPage() {
         </ul>
       )}
 
-      <div className="sticky bottom-0 -mx-6 -mb-28 border-t border-[#E2DDD3] bg-[#FAF8F5]/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur">
+      <div className="sticky bottom-0 -mx-6 -mb-28 border-t border-line bg-page/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur">
         {/* T72(D-41) — 세션 생성은 난이도 선택(UX-029) 화면으로 이동했다. */}
         <Button type="button" onClick={handleStart} disabled={!selectedScenarioId}>
           다음 — 난이도 고르기

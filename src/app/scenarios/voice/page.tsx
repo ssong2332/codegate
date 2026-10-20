@@ -41,15 +41,15 @@ export default function ScenarioVoiceModeSelectPage() {
         <button
           type="button"
           onClick={() => router.back()}
-          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-base font-medium text-[#6B655C] hover:bg-[#F2EFE9]"
+          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-lg font-medium text-ink-sub hover:bg-neutral-tint"
         >
           <span aria-hidden="true">←</span> 뒤로
         </button>
-        <p className="text-sm font-semibold text-[#0E6B62]" aria-current="step">
+        <p className="text-base font-semibold text-brand" aria-current="step">
           보이스피싱 › ③ 방식
         </p>
-        <h1 className="text-2xl font-bold text-[#22303A]">지인에게 어떤 목소리로 보낼까요?</h1>
-        <p className="text-base leading-relaxed text-[#6B655C]">
+        <h1 className="text-2xl font-bold text-ink">지인에게 어떤 목소리로 보낼까요?</h1>
+        <p className="text-lg leading-relaxed text-ink-sub">
           내 목소리(딥보이스)로 보낼지, 기본 AI 음성으로 보낼지 골라주세요. 고르면 바로 다음
           단계로 넘어갑니다.
         </p>
@@ -57,14 +57,14 @@ export default function ScenarioVoiceModeSelectPage() {
 
       <div className="flex flex-col gap-3">
         <DrilldownOptionCard
-          icon="🎙"
+          icon="mic"
           title="내 목소리 복제"
           description="내 목소리 30초 녹음 후, 지인에게 그 목소리(딥보이스)로 걸려오는 전화를 보냅니다"
           selected={selected === "clone"}
           onClick={() => handleSelect("clone")}
         />
         <DrilldownOptionCard
-          icon="🔊"
+          icon="speaker"
           title="기본 AI 음성"
           description="녹음 없이, 지인에게 기본 AI 음성으로 걸려오는 전화를 보냅니다"
           selected={selected === "generic"}

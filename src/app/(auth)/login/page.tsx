@@ -4,6 +4,7 @@
 // Google 로그인 버튼 1개만 노출(OQ-U5 확정 — 이메일/비밀번호 폼 없음). 상태는 UX.md UX-013의
 // States/Failure 스펙을 그대로 따른다: Loading(버튼 비활성+스피너) / Error(취소·팝업차단·
 // 네트워크 구분 안내 + 다시 시도) / Success(RouteGuard가 다음 화면으로 이동).
+import { LineIcon } from "@/components/ui";
 import { useEffect, useRef, useState } from "react";
 import { getRedirectResult } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -93,7 +94,7 @@ export default function LoginPage() {
   const isLoading = viewState === "loading";
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] px-6 pb-10 pt-16">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-page px-6 pb-10 pt-16">
       {/* UX.md v1.18 P-30(세로 여백 상한) · D-62 · D-63 — 사용자 지적 "비율이 좀 별로야".
           기존 `justify-center` 한 개를 위·아래 두 개의 탄성 스페이서로 분해했다(중앙 정렬 =
           남는 높이를 위아래로 반씩 나눈 것과 산술적으로 동일하므로 짧은 화면 배치는 무변경).
@@ -103,29 +104,35 @@ export default function LoginPage() {
           ⛔ 뷰포트 높이에 대한 단일 규칙이다. sm:/md:/lg: 세로 분기 금지(D-57 ㄹ 계승). */}
       <div className="flex flex-1 flex-col items-center text-center">
         <div aria-hidden="true" className="max-h-[256px] flex-1" />
-        <div className="mb-6 flex h-[72px] w-[72px] items-center justify-center rounded-[20px] bg-[#E4F0EC]">
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <div className="mb-6 flex h-[72px] w-[72px] items-center justify-center rounded-[8px] bg-brand-tint">
+          <svg className="text-brand" width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
               d="M12 2L4 5.5V11C4 16 7.4 20.4 12 21.8C16.6 20.4 20 16 20 11V5.5L12 2Z"
-              stroke="#0E6B62"
+              stroke="currentColor"
               strokeWidth="1.8"
               strokeLinejoin="round"
             />
             <path
               d="M8.5 11.5L11 14L15.5 9"
-              stroke="#0E6B62"
+              stroke="currentColor"
               strokeWidth="1.8"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           </svg>
         </div>
-        <h1 className="text-[24px] font-bold leading-[1.35] text-[#22303A]">로그인</h1>
-        <p className="mt-4 max-w-sm text-[16px] leading-[1.65] text-[#6B655C]">
-          Google 계정으로 로그인하면 훈련 기록이 내 계정에 안전하게 저장됩니다.
-        </p>
+        {/* 시안 A 2번 화면(UX D-132 (4)) — 왜 로그인하는지를 제목으로, 무엇이 저장되는지를 체크 목록으로. 문장은 종전 두 문장을 나눈 것이다(새 약속 0). */}
+        <h1 className="text-[26px] font-bold leading-[1.35] text-ink">훈련 기록을 남기려면 로그인이 필요합니다</h1>
+        <ul className="mt-5 flex w-full max-w-sm flex-col gap-3 rounded-[8px] border border-line bg-surface p-4 text-left text-[17px] leading-[1.55] text-ink">
+          {["Google 계정으로 로그인하면 훈련 기록이 내 계정에 안전하게 저장됩니다.", "개인정보는 훈련 목적으로만 사용됩니다."].map((line) => (
+            <li key={line} className="flex items-start gap-2.5">
+              <LineIcon name="check" size={20} className="mt-[3px] shrink-0 text-success" />
+              {line}
+            </li>
+          ))}
+        </ul>
         {isAnonymousSession && (
-          <p role="status" className="mt-5 max-w-sm rounded-[12px] bg-[#E4F0EC] px-4 py-3 text-[15px] leading-[1.6] text-[#22303A]">
+          <p role="status" className="mt-5 max-w-sm rounded-[8px] bg-brand-tint px-4 py-3 text-[17px] leading-[1.6] text-ink">
             {ANONYMOUS_LOGIN_NOTICE}
           </p>
         )}
@@ -138,12 +145,12 @@ export default function LoginPage() {
         disabled={isLoading}
         aria-label="Google 계정으로 로그인"
         aria-busy={isLoading}
-        className="flex min-h-[56px] w-full items-center justify-center gap-3 rounded-[14px] border-[1.5px] border-[#E2DDD3] bg-white text-[17px] font-semibold text-[#22303A] transition-colors hover:border-[#C9C2B6] disabled:cursor-not-allowed disabled:border-transparent disabled:bg-[#F2EFE9] disabled:text-[#6B655C]"
+        className="flex min-h-[56px] w-full items-center justify-center gap-3 rounded-[8px] border-[1.5px] border-line-strong bg-white text-[18px] font-semibold text-ink transition-colors hover:bg-brand-tint focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:border-transparent disabled:bg-neutral-tint disabled:text-ink-sub"
       >
         {isLoading ? (
           <span
             aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-[2.5px] border-[#C9C2B6] border-t-[#0E6B62]"
+            className="h-5 w-5 animate-spin rounded-full border-[2.5px] border-line-strong border-t-brand"
           />
         ) : (
           <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
@@ -168,15 +175,11 @@ export default function LoginPage() {
         {isLoading ? "로그인 처리 중..." : "Google로 로그인"}
       </button>
 
-      <p className="mt-4 text-center text-[13px] leading-[1.6] text-[#6B655C]">
-        로그인 시 개인정보는 훈련 목적으로만 사용됩니다.
-      </p>
-
       {/* 개발 전용 — 실제 배포 빌드에는 이 블록 자체가 남지 않는다(DEV_AUTH_ENABLED 데드코드 제거).
           일반 사용자용 기능으로 오인되지 않도록 점선 테두리 + "개발 전용" 라벨로 명확히 구분한다. */}
       {process.env.NODE_ENV !== "production" && DEV_AUTH_ENABLED && (
-        <div className="mt-6 rounded-[14px] border border-dashed border-[#C9C2B6] p-3">
-          <p className="mb-2 text-center text-[12px] font-semibold text-[#B96A1B]">
+        <div className="mt-6 rounded-[8px] border border-dashed border-line-strong p-3">
+          <p className="mb-2 text-center text-[14px] font-semibold text-caution">
             개발 전용 · 배포 빌드에는 표시되지 않습니다
           </p>
           <button
@@ -184,7 +187,7 @@ export default function LoginPage() {
             onClick={handleDevSignIn}
             disabled={isLoading}
             aria-busy={isLoading}
-            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#41525E] text-[15px] font-semibold text-white disabled:opacity-50"
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-[8px] bg-avatar-bg text-[17px] font-semibold text-white disabled:opacity-50"
           >
             {/* reviewer Minor #4 — 기본 로그인 버튼은 로딩 중 스피너+문구로 바뀌는데 이 버튼만
                 아무 피드백이 없어 눌러도 변화가 안 보였다. 같은 패턴으로 맞춘다.
@@ -205,7 +208,7 @@ export default function LoginPage() {
           ref={errorRef}
           role="alert"
           tabIndex={-1}
-          className="mt-4 flex items-center justify-center gap-2 text-[15px] text-[#C6392F] outline-none"
+          className="mt-4 flex items-center justify-center gap-2 text-[17px] text-danger outline-none"
         >
           <svg
             aria-hidden="true"

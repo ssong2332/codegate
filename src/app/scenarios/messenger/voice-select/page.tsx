@@ -191,8 +191,8 @@ export default function MessengerVoiceSelectPage() {
 
   if (pageState === "no-scenario") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>선택한 시나리오 정보를 찾을 수 없습니다. 시나리오를 다시 선택해 주세요.</span>
         </p>
@@ -207,11 +207,11 @@ export default function MessengerVoiceSelectPage() {
 
   if (isReturningFlow && pageState !== "returning-error") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-[#22303A]" role="status">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p className="flex items-center gap-2 text-lg text-ink" role="status">
           <span
             aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-transparent"
+            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
           />
           목소리 클론이 준비됐습니다. 훈련을 시작하는 중입니다...
         </p>
@@ -221,8 +221,8 @@ export default function MessengerVoiceSelectPage() {
 
   if (pageState === "returning-error") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>목소리 클론을 확인하지 못했습니다. 다시 시도해 주세요.</span>
         </p>
@@ -241,18 +241,18 @@ export default function MessengerVoiceSelectPage() {
         <button
           type="button"
           onClick={() => router.push("/scenarios/messenger")}
-          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-base font-medium text-[#6B655C] hover:bg-[#F2EFE9]"
+          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-lg font-medium text-ink-sub hover:bg-neutral-tint"
         >
           <span aria-hidden="true">←</span> 뒤로
         </button>
         {/* 전이 플로우.dc.html "이 대화는 통화로 이어질 수 있어요" 배너 재사용(Banner 공용
             컴포넌트, sticky·닫기 불가 — AC-047과 동일한 상시 고지 원칙). */}
         <Banner variant="caution" sticky>
-          <span className="font-semibold text-[#B96A1B]">이 대화는 통화로 이어질 수 있어요.</span>{" "}
+          <span className="font-semibold text-caution">이 대화는 통화로 이어질 수 있어요.</span>{" "}
           상대가 메시지 도중 전화를 걸어올 수 있는 시나리오예요.
         </Banner>
-        <h1 className="text-2xl font-bold text-[#22303A]">통화용 목소리를 정해 주세요</h1>
-        <p className="text-base leading-relaxed text-[#6B655C]">
+        <h1 className="text-2xl font-bold text-ink">통화용 목소리를 정해 주세요</h1>
+        <p className="text-lg leading-relaxed text-ink-sub">
           이 시나리오는 통화로 이어질 수 있어 목소리가 필요할 수 있습니다. 지금 미리 정해 두면
           나중에 끊김 없이 전화로 넘어갑니다.
         </p>
@@ -269,22 +269,22 @@ export default function MessengerVoiceSelectPage() {
             type="button"
             onClick={handleStartRecording}
             disabled={starting}
-            className="flex min-h-[64px] flex-col items-start gap-2 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-5 text-left transition-colors hover:border-[#0E6B62] disabled:opacity-50"
+            className="flex min-h-[64px] flex-col items-start gap-2 rounded-[8px] border-[1.5px] border-line bg-white p-5 text-left transition-colors hover:border-brand disabled:opacity-50"
           >
             <span className="flex flex-wrap items-center gap-2">
-              <span className="text-[17px] font-bold text-[#22303A]">지금 30초 녹음</span>
+              <span className="text-[17px] font-bold text-ink">지금 30초 녹음</span>
               <Badge variant="caution">30초 소요</Badge>
             </span>
-            <span className="text-sm leading-relaxed text-[#6B655C]">
+            <span className="text-base leading-relaxed text-ink-sub">
               본인 목소리를 녹음해 통화에서 그대로 씁니다.
             </span>
           </button>
         )}
 
         {showCloneOptions && storedVoices.length > 0 && (
-          <div className="flex flex-col gap-3 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-5">
+          <div className="flex flex-col gap-3 rounded-[8px] border-[1.5px] border-line bg-white p-5">
             <span className="flex flex-wrap items-center gap-2">
-              <span className="text-[17px] font-bold text-[#22303A]">저장된 내 목소리 사용</span>
+              <span className="text-[17px] font-bold text-ink">저장된 내 목소리 사용</span>
               <Badge variant="success">보관된 목소리</Badge>
             </span>
             {/* reviewer 리뷰(디자인 시스템 롤아웃) — SelectableCard(button+aria-pressed)로 바꿨더니
@@ -298,10 +298,10 @@ export default function MessengerVoiceSelectPage() {
                 return (
                   <li key={voice.voiceId}>
                     <label
-                      className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-[16px] border-[1.5px] p-3 transition-colors ${
+                      className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-[8px] border-[1.5px] p-3 transition-colors ${
                         selected
-                          ? "border-[#0E6B62] bg-[#E4F0EC]"
-                          : "border-[#E2DDD3] bg-white hover:border-[#C9C2B6]"
+                          ? "border-brand bg-brand-tint"
+                          : "border-line bg-white hover:border-line-strong"
                       }`}
                     >
                       <input
@@ -310,9 +310,9 @@ export default function MessengerVoiceSelectPage() {
                         value={voice.voiceId}
                         checked={selected}
                         onChange={() => setSelectedVoiceId(voice.voiceId)}
-                        className="h-5 w-5 accent-[#0E6B62]"
+                        className="h-5 w-5 accent-brand"
                       />
-                      <span className="text-[16px] font-semibold text-[#22303A]">{voice.label}</span>
+                      <span className="text-[18px] font-semibold text-ink">{voice.label}</span>
                     </label>
                   </li>
                 );
@@ -328,12 +328,12 @@ export default function MessengerVoiceSelectPage() {
           </div>
         )}
 
-        <div className="flex flex-col gap-3 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-5">
+        <div className="flex flex-col gap-3 rounded-[8px] border-[1.5px] border-line bg-white p-5">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="text-[17px] font-bold text-[#22303A]">기본 남성·여성 목소리</span>
+            <span className="text-[17px] font-bold text-ink">기본 남성·여성 목소리</span>
             <Badge variant="neutral">녹음 없이 시작</Badge>
           </span>
-          <span className="text-sm leading-relaxed text-[#6B655C]">
+          <span className="text-base leading-relaxed text-ink-sub">
             본인 목소리가 아닌 기본 합성 음성입니다.
           </span>
           <div className="flex gap-3">
@@ -358,17 +358,17 @@ export default function MessengerVoiceSelectPage() {
       </div>
 
       {startError && (
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>{startError}</span>
         </p>
       )}
 
       {starting && (
-        <p className="flex items-center gap-2 text-base text-[#6B655C]" role="status">
+        <p className="flex items-center gap-2 text-lg text-ink-sub" role="status">
           <span
             aria-hidden="true"
-            className="h-4 w-4 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-transparent"
+            className="h-4 w-4 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
           />
           연결하는 중...
         </p>

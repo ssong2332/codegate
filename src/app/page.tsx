@@ -6,10 +6,13 @@ import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/auth";
 import { hasGrantedConsent } from "@/lib/consent";
 import { hasVerifiedAge } from "@/lib/age";
+import { Card, Chip, LineIcon } from "@/components/ui";
 
-// 루트 진입점. RouteGuard(lib/auth/RouteGuard.tsx)는 "/"가 PUBLIC_PATHS에 없어 비로그인
-// 사용자를 이 화면이 그려지기 전에 이미 /login으로 보낸다 — 즉 이 화면의 콘텐츠가 실제로
-// 렌더되는 것은 "로그인된 사용자가 '/'로 직접 이동한" 경우뿐이다.
+// 리뷰 Major 2 — "받기"가 진짜 전화 · 문자로 읽히지 않게 앱 안 체험임을 밝힌다(PSTN 없음 · 인앱 모의).
+const LANDING_STEPS = ["체험 고르기", "앱에서 전화 · 문자 체험하기", "결과와 해설 보기"] as const;
+
+// 루트 진입점. §89.4(시안 A)부터 "/"는 공개 경로다 — 비로그인 사용자에게 소개 화면을 그린다.
+// 로그인 사용자는 아래 effect가 게이트(동의 → 연령)를 조회해 다음 화면으로 보낸다(종전 그대로).
 //
 // 사용자 요청(2026-08-02) — 이미 온보딩(동의+연령 확인)을 마친 사용자는 유형 선택 화면
 // (`/scenarios`, "보이스피싱/메신저피싱 고르기")으로 바로 가야 한다. `/scenarios`는 자체
@@ -23,7 +26,8 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    if (loading || !user) return;
+    // 리뷰 Minor — 익명 사용자는 RouteGuard가 /login으로 보낸다(조회 낭비 방지).
+    if (loading || !user || user.isAnonymous) return;
     let cancelled = false;
     (async () => {
       try {
@@ -53,39 +57,44 @@ export default function Home() {
   // 도달하는 것은 로딩이 끝나고 비로그인일 때뿐이다.
   if (loading || user) return null;
 
+  // §89.4 · UX D-132 (4) — 시안 A 1번 화면(소개). "/"를 공개 경로로 두어 비로그인 사용자가 로그인 전에 무엇을 ·
+  // 어떻게 · 안전한지 세 가지를 먼저 본다. 읽기 전용 — Firestore · Functions 호출 0.
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[#FAF8F5] p-8 text-center">
-      <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[20px] bg-[#E4F0EC]">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M12 2L4 5.5V11C4 16 7.4 20.4 12 21.8C16.6 20.4 20 16 20 11V5.5L12 2Z"
-            stroke="#0E6B62"
-            strokeWidth="1.8"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M8.5 11.5L11 14L15.5 9"
-            stroke="#0E6B62"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </div>
-      <div className="flex flex-col gap-2">
-        <h1 className="text-[24px] font-bold leading-[1.35] text-[#22303A]">
-          안 당해본 사기는 못 막는다
+    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col bg-page">
+      <header className="flex min-h-[56px] items-center gap-2 border-b border-line bg-surface px-4">
+        <LineIcon name="shield" className="text-brand" />
+        <p className="text-[18px] font-bold text-ink">금융사기 예방 훈련</p>
+      </header>
+      <div className="flex flex-1 flex-col gap-5 px-5 pt-8">
+        <Chip className="self-start">연습용 · 실제 돈은 오가지 않습니다</Chip>
+        <h1 className="text-[28px] font-bold leading-[1.35] text-ink">
+          사기 전화, 미리 한 번 받아 보세요
         </h1>
-        <p className="text-[15px] leading-[1.6] text-[#6B655C]">
-          미리 겪어보고 대처법을 익히는 AI 금융사기 훈련
+        <p className="text-[18px] leading-[1.65] text-ink-sub">
+          AI가 사기범 역할을 맡아 앱 화면 안에서 전화와 문자를 재현합니다(진짜 전화 · 문자는 오지 않습니다). 끝나면 어디서 속을 뻔했는지 짚어 드립니다.
+        </p>
+        <Card title="훈련 순서">
+          <ol className="flex flex-col gap-2">
+            {LANDING_STEPS.map((step, i) => (
+              <li key={step} className="flex items-center gap-3">
+                <span className="w-5 font-bold text-brand">{i + 1}</span>
+                {step}
+              </li>
+            ))}
+          </ol>
+        </Card>
+      </div>
+      <div className="flex flex-col gap-3 px-5 pb-8 pt-6">
+        <Link
+          href="/login"
+          className="flex min-h-[56px] w-full items-center justify-center rounded-[8px] bg-brand px-6 text-[18px] font-semibold text-white transition-colors hover:bg-brand-hover"
+        >
+          훈련 시작하기
+        </Link>
+        <p className="text-center text-[16px] leading-[1.6] text-ink-sub">
+          가족에게 받은 훈련 링크가 있나요? 그 링크를 다시 눌러 주세요.
         </p>
       </div>
-      <Link
-        href="/login"
-        className="flex min-h-[56px] w-full max-w-xs items-center justify-center rounded-[14px] bg-[#0E6B62] px-6 text-[17px] font-semibold text-white transition-colors hover:bg-[#0B564F]"
-      >
-        로그인하고 시작하기
-      </Link>
     </main>
   );
 }

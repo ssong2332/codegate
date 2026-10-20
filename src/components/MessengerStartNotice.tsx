@@ -8,7 +8,7 @@
 // 충돌하지 않는다. 문면 정본은 `src/lib/sessionboundary/preSessionCopy.ts` 한 곳이다.
 //
 // ⛔ 형태 규칙(UX-022 v1.29 (2) 형태 · (5) 접근성):
-//   - 앱 기본 톤(#FAF8F5)으로 그린다 — 카카오/문자 스킨을 입히지 않는다(상대가 보낸 말처럼 읽히면 안 된다).
+//   - 앱 기본 톤(시안 A page 토큰)으로 그린다 — 카카오/문자 스킨을 입히지 않는다(상대가 보낸 말처럼 읽히면 안 된다).
 //   - 경고 표현 0(⚠·경고색·role="alert") · 자동 진행·타이머 0 · 노출 = 탭할 때까지.
 //   - props에 난이도·채널(자가/수신자) 입력이 **없다**(AC-065 · D-80 구조 보장) — 갈리는 것은 표면에
 //     따른 카카오 면책 1줄뿐이다(D-81).
@@ -56,7 +56,7 @@ export default function MessengerStartNotice({
   }, []);
 
   return (
-    <main className="flex min-h-screen flex-col bg-[#FAF8F5]">
+    <main className="flex min-h-screen flex-col bg-page">
       {/* 상단 바 — "훈련 종료"만(그 밖의 요소 0). G449: 오른쪽 끝 고정. */}
       <div className="flex justify-end px-4 py-2.5">
         <EndTrainingButton onClick={onEndTraining} />
@@ -69,24 +69,24 @@ export default function MessengerStartNotice({
         <h1
           ref={headingRef}
           tabIndex={-1}
-          className="text-[26px] font-bold leading-[1.35] text-[#22303A] outline-none"
+          className="text-[26px] font-bold leading-[1.35] text-ink outline-none"
         >
           {includesCall ? MESSENGER_START_NOTICE_WITH_CALL.title : MESSENGER_START_NOTICE.title}
         </h1>
-        <p className="text-base leading-[1.7] text-[#6B655C]">
+        <p className="text-lg leading-[1.7] text-ink-sub">
           {includesCall ? MESSENGER_START_NOTICE_WITH_CALL.notice : MESSENGER_START_NOTICE.notice}
         </p>
         {includesCall && (
-          <p className="text-base leading-[1.7] text-[#6B655C]">
+          <p className="text-lg leading-[1.7] text-ink-sub">
             {MESSENGER_START_NOTICE_WITH_CALL.callVoiceNotice}
           </p>
         )}
         {surface === "kakao" && (
-          <p className="text-base leading-[1.7] text-[#6B655C]">
+          <p className="text-lg leading-[1.7] text-ink-sub">
             {MESSENGER_START_NOTICE.kakaoDisclaimer}
           </p>
         )}
-        <p className="text-base leading-[1.7] text-[#6B655C]">{MESSENGER_START_NOTICE.stopHint}</p>
+        <p className="text-lg leading-[1.7] text-ink-sub">{MESSENGER_START_NOTICE.stopHint}</p>
         {surface === "sms" && skinPicker && (
           <DeviceSkinPicker value={skinPicker.value} source={skinPicker.source} onChange={skinPicker.onChange} />
         )}

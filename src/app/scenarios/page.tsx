@@ -59,30 +59,30 @@ export default function ScenarioTypeSelectPage() {
         <button
           type="button"
           onClick={() => router.back()}
-          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-base font-medium text-[#6B655C] hover:bg-[#F2EFE9]"
+          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-lg font-medium text-ink-sub hover:bg-neutral-tint"
         >
           <span aria-hidden="true">←</span> 뒤로
         </button>
         {/* 단계 표시(P-12 #2) — 색이 아니라 텍스트로 현재 위치를 알린다. */}
-        <p className="text-sm font-semibold text-[#0E6B62]" aria-current="step">
+        <p className="text-base font-semibold text-brand" aria-current="step">
           ① 유형
         </p>
-        <h1 className="text-2xl font-bold text-[#22303A]">어떤 사기를 훈련해볼까요?</h1>
-        <p className="text-base leading-relaxed text-[#6B655C]">
+        <h1 className="text-2xl font-bold text-ink">어떤 사기를 훈련해볼까요?</h1>
+        <p className="text-lg leading-relaxed text-ink-sub">
           훈련하고 싶은 사기 유형을 먼저 골라주세요. 고르면 바로 다음 단계로 넘어갑니다.
         </p>
       </header>
 
       <div className="flex flex-col gap-3">
         <DrilldownOptionCard
-          icon="📞"
+          icon="phone"
           title="보이스피싱"
           description="전화로 걸려오는 사기"
           selected={selected === "voice"}
           onClick={handleSelectVoice}
         />
         <DrilldownOptionCard
-          icon="💬"
+          icon="chat"
           title="메신저피싱"
           description="카카오톡·문자로 오는 사기"
           selected={selected === "messenger"}

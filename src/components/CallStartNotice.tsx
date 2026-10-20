@@ -8,7 +8,7 @@
 // 그 고지는 메신저 시작 전 고지가 "메시지와 전화"로 맡는다). 등록부: G436 `pre-session` · T86 `false`.
 //
 // ⛔ 형태 규칙(UX-014 v1.33 (11) ①):
-//   - **앱 기본 화면 톤**(#FAF8F5 · 앱 글꼴) — 통화 스킨을 입히지 않는다(스킨이 켜지는 순간 = `incoming` = 세션의 시작).
+//   - **앱 기본 화면 톤**(시안 A page 토큰 · 앱 글꼴) — 통화 스킨을 입히지 않는다(스킨이 켜지는 순간 = `incoming` = 세션의 시작).
 //   - 경고 표현 0(⚠·경고색·role="alert") · 점멸·자동 진행 0 · 노출 = 탭할 때까지.
 //   - 상단 바 = "훈련 종료"만(오른쪽 끝 · 확인 없이 즉시 UX-007 — AC-006 · AC-091 (e)). 발신자·번호·난이도·시나리오
 //     제목 없음(수신자 서프라이즈 AC-040).
@@ -55,42 +55,42 @@ export default function CallStartNotice({ onConfirm, onEndTraining, skinPicker, 
   }, []);
 
   return (
-    <main className="flex min-h-screen flex-col bg-[#FAF8F5]">
+    <main className="flex min-h-screen flex-col bg-page">
       {/* 상단 바 — "훈련 종료"만(그 밖의 요소 0). G449: 오른쪽 끝 고정. */}
       <div className="flex justify-end px-4 py-2.5">
         <EndTrainingButton onClick={onEndTraining} />
       </div>
 
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-        <span aria-hidden="true" className="text-[#41525E]">
+        <span aria-hidden="true" className="text-avatar-bg">
           <PhoneIcon name="accept-call" size={48} />
         </span>
         <h1
           ref={headingRef}
           tabIndex={-1}
-          className="text-[22px] font-bold leading-[1.35] text-[#22303A] outline-none"
+          className="text-[22px] font-bold leading-[1.35] text-ink outline-none"
         >
           {PRE_CALL_NOTICE.title}
         </h1>
-        <p className="text-[17px] leading-[1.7] text-[#6B655C]">{PREROLL_NOTICE}</p>
-        <p className="text-[17px] leading-[1.7] text-[#6B655C]">{PRE_CALL_NOTICE.stopHint}</p>
+        <p className="text-[17px] leading-[1.7] text-ink-sub">{PREROLL_NOTICE}</p>
+        <p className="text-[17px] leading-[1.7] text-ink-sub">{PRE_CALL_NOTICE.stopHint}</p>
         {/* T194-b(UX-014 v1.38 (1)) — 고지 ② 바로 아래 · 화면 모양 줄 위. 카드는 "상대가 알고 있다 · 말할 것이다"를 예고하지
             않는다(K-7). 경고 표현 · 점멸 · 포커스 대상 0(조작 요소 없음 — 진입 포커스는 기존대로 제목). 닫힘 = "준비됐어요". */}
         {personaCard && (
           <section
             aria-labelledby="persona-card-title"
-            className="w-full rounded-[12px] border border-[#E5E0D8] bg-white p-4 text-left"
+            className="w-full rounded-[8px] border border-line bg-surface p-4 text-left"
           >
-            <h2 id="persona-card-title" className="text-[17px] font-bold leading-[1.4] text-[#1F1B16]">
+            <h2 id="persona-card-title" className="text-[17px] font-bold leading-[1.4] text-ink">
               {PERSONA_CARD_COPY.title}
             </h2>
-            <p className="mt-1 text-[15px] leading-[1.6] text-[#6B655C]">{PERSONA_CARD_COPY.guide}</p>
+            <p className="mt-1 text-[17px] leading-[1.6] text-ink-sub">{PERSONA_CARD_COPY.guide}</p>
             <dl className="mt-3 flex flex-col gap-2">
               {personaCard.rows.map((row) => (
                 <div key={row.label}>
-                  <dt className="text-[15px] font-normal leading-[1.5] text-[#6B655C]">{row.label}</dt>
+                  <dt className="text-[17px] font-normal leading-[1.5] text-ink-sub">{row.label}</dt>
                   {/* 가림 "○○"은 화면에 그대로, 스크린리더에는 "가려진 이름"(UX-014 v1.38 (3)). 줄바꿈 허용 · 말줄임 0. */}
-                  <dd className="break-words text-[20px] font-bold leading-[1.4] text-[#1F1B16]">
+                  <dd className="break-words text-[20px] font-bold leading-[1.4] text-ink">
                     {splitMaskedValue(row.value).map((segment, i) =>
                       segment.masked ? (
                         <span key={i}>
@@ -106,8 +106,8 @@ export default function CallStartNotice({ onConfirm, onEndTraining, skinPicker, 
               ))}
             </dl>
             {/* §88(UX D-131 (5)) — 고지 ⓐ는 카드 출처로 갈린다(v1 = noticeVirtual · v2 self = noticeInput — readSessionPersonaCard가 고른다). */}
-            <p className="mt-3 text-[15px] leading-[1.6] text-[#6B655C]">{personaCard.notice}</p>
-            <p className="mt-1 text-[15px] leading-[1.6] text-[#6B655C]">{PERSONA_CARD_COPY.noticeNoRevisit}</p>
+            <p className="mt-3 text-[17px] leading-[1.6] text-ink-sub">{personaCard.notice}</p>
+            <p className="mt-1 text-[17px] leading-[1.6] text-ink-sub">{PERSONA_CARD_COPY.noticeNoRevisit}</p>
           </section>
         )}
         <DeviceSkinPicker value={skinPicker.value} source={skinPicker.source} onChange={skinPicker.onChange} />

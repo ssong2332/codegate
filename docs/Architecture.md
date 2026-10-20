@@ -21619,7 +21619,8 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 | G | 내용 | 파일 |
 |---|---|---|
 | **G630** | ⓐ globals.css `:root` hex = `SITE_TOKENS`(키 집합 · 값) ⓑ 사이트 대비 쌍 WCAG AA ⓒ 역검증(값 하나 바꾼 사본 실패) ⓓ 훈련 루트 `font-phone` | `src/lib/design/siteTokens.test.ts` |
-| G631~G634 | P2 · P3에서 신설(아래 89.7에 기록) | — |
+| **G631** | 사이트 화면(.tsx · 훈련 표면 제외)에 옛 팔레트 hex 유틸리티 0건 + 역검증 | `src/lib/design/siteTokens.test.ts` |
+| G632~G634 | P3에서 신설(아래 89.7에 기록) | — |
 
 ### 89.4 첫 화면(소개) 노출 — 판정
 현재 `/`는 `RouteGuard`의 `PUBLIC_PATHS`에 없어 비로그인 사용자는 소개 없이 `/login`으로 간다(시안 감사 1-1). 시안 A 1번 화면은 `/`를 공개 경로로 둬야 성립한다. **판정: P2에서 `/`를 `PUBLIC_PATHS`에 넣는다** — `/`는 읽기 전용 소개만 그리고 Firestore · Functions를 부르지 않는다(로그인 사용자의 게이트 조회는 `user`가 있을 때만 — 현행 코드). 익명 사용자(챌린지 수신자)는 현행과 같이 판정한다(§68 익명 게이트 불변 — `anonymousScope.test.ts`가 막는다).
@@ -21642,6 +21643,22 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 ### 89.7 구현 기록
 (단계별 PR이 이 아래에 추가한다.)
 - **P1**(`claude/design-a-tokens`): 89.1 P1 범위 · G630. 화면 hex 치환은 P2.
+- **P2**(`claude/design-a-screens`, P1 위): 아래 판정표대로 사이트 화면 32개 파일을 치환했다(색 651곳 + 속성 hex 14곳). 훈련 표면 7개 파일(`session/play` · `session/messenger` · `InCallSmsOverlay` · `MessengerFakeLanding` · `VerifyCallOverlay` · `CallWaveform` · `PhoneIcon`)은 제외(P3). `/` 공개 경로(89.4) · 첫 화면(소개) 신설 · 로그인 체크 목록 · 유형 카드 선 아이콘(`LineIcon` 신설 — 자체 도형) · 챌린지 링크 오류 안내 한 줄 · AgeGate · `(p1)` 화면의 기본 팔레트(gray/black) 제거. **G631**(`siteTokens.test.ts`) = 사이트 화면에 옛 팔레트 hex 유틸리티 0건 + 역검증. 소스 스캔 테스트 4개는 앵커 문자열만 새 클래스로 바꿨다(판정 무변경): `anonymousScope.test.ts`(PUBLIC_PATHS) · `voiceSelectOptions.test.ts` · `inSessionMarkers.test.ts` · `postSessionDisclosure.test.ts`.
+
+| 이전 | 역할 | → 토큰 |
+|---|---|---|
+| `#FAF8F5` · `#22303A` · `#6B655C` | 바탕 · 글자 · 보조 글자 | `page` · `ink` · `ink-sub` |
+| `#0E6B62` · `#0B564F` · `#E4F0EC` | 주조 · hover · 틴트 | `brand` · `brand-hover` · `brand-tint` |
+| `#E2DDD3` | 경계 | `line` |
+| `#C9C2B6` | 경계(border/ring) · 비활성 글자(text/bg) | `line-strong` · `disabled-ink` |
+| `#F2EFE9` · `#F1EEE8` · `#EFEBE3` | 중립 바탕 | `neutral-tint` |
+| `#C6392F` · `#A82F27` · `#FDF1F0` | 경고 · hover · 틴트 | `danger` · `danger-hover` · `danger-tint` |
+| `#B96A1B` · `#FBF3E8` | 주의 · 틴트 | `caution` · `caution-tint` |
+| `#5B4B9E` · `#EFEBF7` · `#463880` | AI 표식 | `ai` · `ai-tint` · `ai-ink` |
+| `#41525E` · `#C9D4DB` | 아바타 | `avatar-bg` · `avatar-fg`(같은 값) |
+| 모서리 `rounded-[12/14/16/20px]` · `rounded-xl/2xl/3xl` | — | `rounded-[8px]` |
+| 글자 `text-[12~16px]` · `text-xs/sm/base` | — | +2px(`14~18px` · `sm/base/lg`) — 제목(17px 이상)은 그대로 |
+- **P2 리뷰 반영**(Reviewer: Critical 0 · Major 3 · Minor 7): ① 입력칸 · 보조 버튼 경계 `line` → `line-strong`(1.29 → 3.3:1) + `outline-none` → `focus-visible` 3px 윤곽(`challenge/create` · `challenge/join` · `report/rewind` · `onboarding/record` · 로그인 Google 버튼). ② 첫 화면 문구를 앱 안 체험임이 드러나게("앱 화면 안에서 전화와 문자를 재현합니다(진짜 전화 · 문자는 오지 않습니다)") · 칩 = "연습용 · 실제 돈은 오가지 않습니다"(검증 가능한 범위) · 제목 = 권유형("사기 전화, 미리 한 번 받아 보세요" — 효과 약속 삭제). ③ 11px 글자 → 13px(다시보기 · 되감기 · AI 합성 표식 박스 24px). ④ 대비 쌍 6개 추가(G630). ⑤ 익명 사용자는 첫 화면 게이트 조회를 하지 않는다. ⑥ README에 외부 글꼴 의존 기재.
 
 ### 89.8 OQ
 | # | 질문 | 선택지 | 막힘 |

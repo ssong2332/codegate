@@ -18,26 +18,26 @@ export default function AuthInvalidationBanner({ state }: { state: AuthInvalidat
       <div
         role="status"
         aria-live="polite"
-        className="pointer-events-auto mx-auto max-w-[520px] rounded-[12px] border border-[#B96A1B]/30 bg-[#FBF3E8] px-4 py-3 shadow-[0_2px_10px_rgba(34,48,58,0.12)]"
+        className="pointer-events-auto mx-auto max-w-[520px] rounded-[8px] border border-caution/30 bg-caution-tint px-4 py-3 shadow-[0_2px_10px_rgba(34,48,58,0.12)]"
       >
         <div className="flex items-start gap-2.5">
           <span
-            className="mt-[3px] text-[15px] font-bold leading-none text-[#B96A1B]"
+            className="mt-[3px] text-[17px] font-bold leading-none text-caution"
             aria-hidden="true"
           >
             ⓘ
           </span>
           <div className="flex-1">
-            <p className="text-[13px] leading-[1.55] text-[#22303A]">{state.message}</p>
+            <p className="text-[15px] leading-[1.55] text-ink">{state.message}</p>
             {state.notice ? (
-              <p className="mt-1 text-[12px] leading-[1.55] text-[#6B7680]">{state.notice}</p>
+              <p className="mt-1 text-[14px] leading-[1.55] text-ink-sub">{state.notice}</p>
             ) : null}
           </div>
           <button
             type="button"
             onClick={state.onAction}
             disabled={state.busy}
-            className="shrink-0 rounded-[8px] bg-[#22303A] px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
+            className="shrink-0 rounded-[8px] bg-ink px-3 py-1.5 text-[14px] font-semibold text-white disabled:opacity-50"
           >
             {state.busy ? "진행 중…" : state.actionLabel}
           </button>

@@ -19,7 +19,7 @@ type PersonaCardInputFieldsProps = {
 };
 
 const FIELD_CLASS =
-  "min-h-[52px] rounded-[12px] border-[1.5px] border-[#E2DDD3] bg-white px-4 py-3 text-[16px] text-[#22303A] outline-none focus:border-[#0E6B62] disabled:opacity-50";
+  "min-h-[52px] rounded-[8px] border-[1.5px] border-line-strong bg-white px-4 py-3 text-[18px] text-ink focus:border-brand focus-visible:outline-[3px] focus-visible:outline-offset-1 focus-visible:outline-brand disabled:opacity-50";
 
 export default function PersonaCardInputFields({ mode, value, onChange, disabled }: PersonaCardInputFieldsProps) {
   const id = useId();
@@ -27,17 +27,17 @@ export default function PersonaCardInputFields({ mode, value, onChange, disabled
   return (
     <section
       aria-labelledby={titleId}
-      className="flex flex-col gap-3 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4"
+      className="flex flex-col gap-3 rounded-[8px] border-[1.5px] border-line bg-white p-4"
     >
-      <h2 id={titleId} className="text-[17px] font-bold leading-[1.4] text-[#22303A]">
+      <h2 id={titleId} className="text-[17px] font-bold leading-[1.4] text-ink">
         {mode === "self" ? PERSONA_INPUT_COPY.selfTitle : PERSONA_INPUT_COPY.sendTitle}
       </h2>
-      <p className="text-[15px] leading-relaxed text-[#6B655C]">
+      <p className="text-[17px] leading-relaxed text-ink-sub">
         {mode === "self" ? PERSONA_INPUT_COPY.selfGuide : PERSONA_INPUT_COPY.sendGuide}
       </p>
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-[13px] font-semibold text-[#22303A]">{PERSONA_INPUT_FIELDS.name.label}</span>
+        <span className="text-[15px] font-semibold text-ink">{PERSONA_INPUT_FIELDS.name.label}</span>
         <input
           type="text"
           autoComplete="off"
@@ -51,7 +51,7 @@ export default function PersonaCardInputFields({ mode, value, onChange, disabled
       </label>
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-[13px] font-semibold text-[#22303A]">{PERSONA_INPUT_FIELDS.birthYear.label}</span>
+        <span className="text-[15px] font-semibold text-ink">{PERSONA_INPUT_FIELDS.birthYear.label}</span>
         <input
           type="text"
           inputMode="numeric"
@@ -66,7 +66,7 @@ export default function PersonaCardInputFields({ mode, value, onChange, disabled
       </label>
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-[13px] font-semibold text-[#22303A]">{PERSONA_INPUT_FIELDS.region.label}</span>
+        <span className="text-[15px] font-semibold text-ink">{PERSONA_INPUT_FIELDS.region.label}</span>
         <select
           value={value.region}
           onChange={(event) => onChange({ ...value, region: event.target.value })}
@@ -82,7 +82,7 @@ export default function PersonaCardInputFields({ mode, value, onChange, disabled
         </select>
       </label>
 
-      <p className="text-[14px] leading-relaxed text-[#6B655C]">{PERSONA_INPUT_COPY.privacy}</p>
+      <p className="text-[16px] leading-relaxed text-ink-sub">{PERSONA_INPUT_COPY.privacy}</p>
     </section>
   );
 }

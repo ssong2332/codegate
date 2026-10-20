@@ -55,16 +55,16 @@ export default function DeviceSkinPicker({ value, source, onChange }: DeviceSkin
 
   if (!expanded && current) {
     return (
-      <div className="flex w-full items-center gap-3 rounded-[14px] border border-[#E2DDD3] bg-white px-4 py-2 text-left">
+      <div className="flex w-full items-center gap-3 rounded-[8px] border border-line bg-white px-4 py-2 text-left">
         <SkinThumbnail skin={current} />
-        <p className="min-w-0 flex-1 text-base text-[#22303A]">
+        <p className="min-w-0 flex-1 text-lg text-ink">
           {DEVICE_SKIN_PICKER_COPY.collapsedPrefix}
           {DEVICE_SKIN_CHOICE_LABELS[current]}
         </p>
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="min-h-[48px] shrink-0 px-2 text-base font-semibold text-[#0E6B62] underline underline-offset-2"
+          className="min-h-[48px] shrink-0 px-2 text-lg font-semibold text-brand underline underline-offset-2"
         >
           {DEVICE_SKIN_PICKER_COPY.changeLabel}
         </button>
@@ -73,17 +73,17 @@ export default function DeviceSkinPicker({ value, source, onChange }: DeviceSkin
   }
 
   return (
-    <fieldset className="flex w-full flex-col gap-2 rounded-[14px] border border-[#E2DDD3] bg-white px-4 py-3 text-left">
+    <fieldset className="flex w-full flex-col gap-2 rounded-[8px] border border-line bg-white px-4 py-3 text-left">
       <legend className="sr-only">{DEVICE_SKIN_PICKER_COPY.expandedPrompt}</legend>
-      <p aria-hidden="true" className="text-base text-[#22303A]">
+      <p aria-hidden="true" className="text-lg text-ink">
         {DEVICE_SKIN_PICKER_COPY.expandedPrompt}
       </p>
       <div className="flex gap-2">
         {CHOICES.map((skin) => (
           <label
             key={skin}
-            className="flex min-h-[56px] flex-1 cursor-pointer items-center gap-2.5 rounded-[12px] border px-3 py-2 text-base font-semibold text-[#22303A]"
-            style={{ borderColor: current === skin ? "#0E6B62" : "#C9C2B6" }}
+            className="flex min-h-[56px] flex-1 cursor-pointer items-center gap-2.5 rounded-[8px] border px-3 py-2 text-lg font-semibold text-ink"
+            style={{ borderColor: current === skin ? "var(--brand)" : "var(--line-strong)" }}
           >
             <input
               type="radio"
@@ -101,7 +101,7 @@ export default function DeviceSkinPicker({ value, source, onChange }: DeviceSkin
                 onChange(skin);
                 setExpanded(false);
               }}
-              className="h-5 w-5 accent-[#0E6B62]"
+              className="h-5 w-5 accent-brand"
             />
             <SkinThumbnail skin={skin} />
             {DEVICE_SKIN_CHOICE_LABELS[skin]}

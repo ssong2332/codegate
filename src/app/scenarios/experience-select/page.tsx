@@ -35,8 +35,8 @@ export default function ExperienceSelectPage() {
 
   if (!trainingType) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>훈련 유형을 먼저 선택해 주세요.</span>
         </p>
@@ -75,31 +75,31 @@ export default function ExperienceSelectPage() {
         <button
           type="button"
           onClick={() => router.back()}
-          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-base font-medium text-[#6B655C] hover:bg-[#F2EFE9]"
+          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-lg font-medium text-ink-sub hover:bg-neutral-tint"
         >
           <span aria-hidden="true">←</span> 뒤로
         </button>
         {/* 단계 표시(P-12 #2, 드릴다운 관례 계승) — 스크린리더가 현재 위치(유형)를 읽는다(UX-026
             Accessibility). 시나리오는 아직 미확정이라(v1.10) 유형만 맥락으로 표시한다. */}
-        <p className="text-sm font-semibold text-[#0E6B62]" aria-current="step">
+        <p className="text-base font-semibold text-brand" aria-current="step">
           {typeLabel} › ② 체험 선택
         </p>
-        <h1 className="text-2xl font-bold text-[#22303A]">이 유형, 어떻게 체험할까요?</h1>
-        <p className="text-base leading-relaxed text-[#6B655C]">
+        <h1 className="text-2xl font-bold text-ink">이 유형, 어떻게 체험할까요?</h1>
+        <p className="text-lg leading-relaxed text-ink-sub">
           직접 훈련해볼지, 지인에게 링크로 보내 테스트해볼지 골라주세요.
         </p>
       </header>
 
       <div className="flex flex-col gap-3">
         <DrilldownOptionCard
-          icon="🧑"
+          icon="user"
           title="본인이 체험"
           description="직접 훈련해봅니다"
           selected={selectedOption === "self"}
           onClick={handleSelfExperience}
         />
         <DrilldownOptionCard
-          icon="🎁"
+          icon="gift"
           title="지인에게 보내기"
           description="지인에게 링크로 보내 테스트합니다"
           selected={selectedOption === "send"}

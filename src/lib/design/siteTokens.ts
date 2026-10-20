@@ -67,6 +67,13 @@ export function siteContrastPairs(): ContrastPair[] {
     text("caution/caution-tint", "caution", "caution-tint"),
     text("caution/surface", "caution", "surface"),
     text("ai-ink/ai-tint", "ai-ink", "ai-tint"),
+    // 리뷰 Minor — 화면에 실제로 쓰이는 쌍 추가.
+    text("caution/page", "caution", "page"),
+    text("success/page", "success", "page"),
+    text("success/brand-tint", "success", "brand-tint"),
+    text("danger/caution-tint", "danger", "caution-tint"),
+    text("surface/ai", "surface", "ai"),
+    nonText("avatar-fg/avatar-bg", "avatar-fg", "avatar-bg"),
     nonText("line-strong/surface", "line-strong", "surface"),
     nonText("line-strong/page", "line-strong", "page"),
     nonText("brand(진행 막대)/line", "brand", "line"),

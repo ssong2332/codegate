@@ -58,7 +58,7 @@ export default function AgeGatePage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-8 p-8">
       {gateState === "check-error" && (
-        <p role="alert" className="flex items-center gap-2 text-base text-red-700">
+        <p role="alert" className="flex items-center gap-2 text-lg text-red-700">
           <span aria-hidden="true">⚠</span>
           <span>확인 상태를 불러오지 못했습니다. 페이지를 새로고침해 주세요.</span>
         </p>
