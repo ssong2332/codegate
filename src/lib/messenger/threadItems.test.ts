@@ -61,6 +61,7 @@ test("[리뷰 Minor 3] 링크 칩이 붙은 통화 턴은 접지 않는다(누�
 test("[배선] 메신저 화면이 channel을 읽고 foldCallSegments로 그린다(소스 스캔)", () => {
   const page = readFileSync(new URL("../../app/session/messenger/page.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   assert.match(page, /channel: data\.channel as string \| undefined/);
-  assert.match(page, /foldCallSegments\(messages\)\.map\(/);
+  // §89.5 ⓐ — 표시 규칙(이웃 항목 참조) 때문에 접힌 목록을 변수로 한 번 만든 뒤 그린다.
+  assert.match(page, /const threadItems = foldCallSegments\(messages\);[\s\S]*\{threadItems\.map\(/);
   assert.doesNotMatch(page, /\{messages\.map\(\(message\) =>/, "옛 직접 렌더가 남아 있으면 통화 전사가 다시 말풍선이 된다");
 });

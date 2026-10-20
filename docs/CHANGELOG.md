@@ -4,6 +4,18 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-20 추가분, 브랜치 `claude/design-a-tokens` → `claude/design-a-screens` → `claude/design-a-training` 단계 PR)**: 아직 main에 병합되지 않았고 배포 0회.
+
+### Changed
+- **사이트 디자인 = 시안 A "공공 안심형"(Architecture §89 · DECISIONS #200 · UX D-132)**:
+  - 남색 주 버튼 · 회청 바탕 · 제목 함렛 · 본문 IBM Plex Sans KR · 글자 2px 크게 · 모서리 8px. 색은 한 곳(`src/lib/design/siteTokens.ts`)에서 바꾼다.
+  - 첫 주소로 들어오면 로그인 전에 소개 화면이 먼저 나온다(무엇을 · 어떻게 · 실제 돈은 오가지 않는다).
+  - 로그인 화면이 무엇이 저장되는지 체크 목록으로 보여 준다. 체험 유형 카드는 그림 문자 대신 선 아이콘을 쓴다. 챌린지 링크 오류 화면에 "보낸 분께 새 링크를 부탁하세요" 안내가 붙는다.
+  - 입력칸 · 보조 버튼 경계가 더 진해졌다(대비 3:1).
+- **훈련 화면**:
+  - 메신저형 대화방이 실제 메신저에 가까워졌다: 회청 바탕 · 프로필 · 이름은 연속 메시지의 첫 말풍선에만 · 시각 · 상대가 아직 답하지 않은 내 메시지의 "1" · 링크 미리보기 카드. 첫 줄의 메신저 앱 이름 표기를 지웠다.
+  - 전화가 올 때 바탕이 그라데이션이 되고 번호가 커지며 위에서 내려온다. 받기는 누르기와 밀기 둘 다 된다.
+  - 삼성형 화면 + 휴대폰이 라이트 테마면 통화 화면도 밝게 나온다(색은 추정값 — 실기 측정 뒤 교체).
 > ⚠️ **이 블록(2026-10-20 추가분, 브랜치 `claude/persona-card-user-input-504a63`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 순서 = **Functions → Hosting**(붙여서 — Architecture §88.5).
 
 ### Changed
