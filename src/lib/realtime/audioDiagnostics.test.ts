@@ -12,8 +12,11 @@ import {
   noteChunkReceived,
   noteChunkScheduled,
   noteCredentialSource,
+  formatDbfs,
+  peakOf,
   readAudioDiag,
   registerCallAudio,
+  registerOutputGain,
   resetAudioDiagForTest,
   summarizeBrowser,
 } from "./audioDiagnostics.ts";
@@ -168,4 +171,41 @@ test("[diag] 통화 화면은 패널을 1곳에서만 그리고 세션 식별자
   const uses = play.match(/<AudioDebugPanel[\s\S]*?\/>/g) ?? [];
   assert.equal(uses.length, 1);
   assert.equal(/sessionId|uid|credentials=|token/i.test(uses[0]), false, uses[0]);
+});
+
+// ── 2026-10-20 음량 신고 — 게인 노드 컨텍스트 동일성(`out.gainCtx`) · 원본 PCM 최대 진폭(`pcm.peakDb`) ──────────────
+test("[diag 음량] out.gainCtx — 게인 노드 컨텍스트가 등록된 출력 컨텍스트와 같으면 same · 다르면 diff", () => {
+  resetAudioDiagForTest();
+  noteAccept(0);
+  const ctx = { state: "running", sampleRate: 24000, resume: () => Promise.resolve() };
+  const other = { state: "running", sampleRate: 24000, resume: () => Promise.resolve() };
+  const row = () => Object.fromEntries(buildAudioDiagRows({ ...dummyInput(), snapshot: readAudioDiag() }));
+  assert.equal(row()["out.gainCtx"], "-");
+  registerCallAudio({ output: ctx, input: null, origin: "primed", createdAtMs: 0 });
+  registerOutputGain({ gain: { value: 0.6 }, context: ctx });
+  assert.equal(row()["out.gainCtx"], "same");
+  assert.equal(row()["out.gain"], "0.60");
+  registerOutputGain({ gain: { value: 0.6 }, context: other });
+  assert.equal(row()["out.gainCtx"], "diff", "역검증 — 다른 컨텍스트의 노드는 diff");
+  resetAudioDiagForTest();
+});
+
+test("[diag 음량] pcm.peakDb — 통화 중 받은 청크의 최대 진폭(게인 전)을 dBFS로 · 받기마다 비운다", () => {
+  resetAudioDiagForTest();
+  noteAccept(0);
+  const row = () => Object.fromEntries(buildAudioDiagRows({ ...dummyInput(), snapshot: readAudioDiag() }));
+  assert.equal(row()["pcm.peakDb"], "-");
+  noteChunkReceived(new Float32Array([0, 0.1, -0.25]));
+  assert.equal(row()["pcm.peakDb"], "-12.0");
+  noteChunkReceived(new Float32Array([0.5, -0.05]));
+  noteChunkReceived(new Float32Array([0.2]));
+  assert.equal(row()["pcm.peakDb"], "-6.0", "최대값 유지");
+  noteChunkReceived();
+  assert.equal(row()["chunks.rx"], "4");
+  noteAccept(10);
+  assert.equal(row()["pcm.peakDb"], "-", "다음 통화에서 비운다");
+  assert.equal(peakOf([]), 0);
+  assert.equal(formatDbfs(0), "-inf");
+  assert.equal(formatDbfs(1), "0.0");
+  resetAudioDiagForTest();
 });
