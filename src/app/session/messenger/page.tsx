@@ -461,7 +461,7 @@ export default function MessengerSessionPage() {
       style={isSms ? { backgroundColor: smsTokens.outerBg } : undefined}
     >
     <main
-      className={`flex min-h-screen flex-col ${isSms ? "mx-auto w-full max-w-[430px]" : "bg-[#FAF8F5]"}`}
+      className={`font-phone flex min-h-screen flex-col ${isSms ? "mx-auto w-full max-w-[430px]" : "bg-[#FAF8F5]"}`}
       style={isSms ? { backgroundColor: smsTokens.screenBg, fontFamily: "system-ui, sans-serif" } : undefined}
     >
       {/* 상단 상시 고정 영역(스크롤 무관) — (문자형) 대화 헤더 · "전화로 확인" · "훈련 종료"(AC-006).

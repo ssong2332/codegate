@@ -21595,3 +21595,55 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 - 신고(`reported`)된 · 동의 없이 만료된 챌린지의 카드는 자동 폐기(`purgeExpiredChallenges` — 보존 만료) 때 지워진다(리뷰 m5 · 그 전까지 서버 전용 문서에 남는다).
 - OQ-U96 · OQ-U97 · OQ-U98(UX) · **OQ-A160**(세션 · 리포트 문서 안 카드 값 보존 기간 — ⭐ 종전 카드와 같은 수명 · 계정 기록 삭제 정책이 정해질 때 함께 / 리포트 생성 뒤 세션 필드 삭제)은 권고안을 기본값으로 구현했다(사용자 결정 대기).
 - 실 API(Gemini) 통화 실측은 하지 않았다(금지 — 메인 세션 요청 사항).
+## 89. (UX → Architect → Implementer — 2026-10-20 · 브랜치 `claude/design-a-tokens` 외 단계별 · 사용자 결정 *"시안 A 공공 안심형으로 진행해 주세요."*) **시안 A "공공 안심형" 사이트 적용 + 훈련 화면 개선 4장** — architect 판정 · implementer 기록
+
+> **번호**: §89 · G630~G634 · DECISIONS #200 · UX D-132 · OQ-U99~U101 · OQ-A161. persona-input(§88 · #199 · D-131 · G626~G629 · OQ-U96~98 · OQ-A160) 다음. ⛔ 예약 아님 — 나중에 병합하는 쪽이 재번호.
+
+### 89.1 단계(PR 분할)
+| 단계 | 범위 | 다른 세션과의 관계 |
+|---|---|---|
+| **P1 토큰 · 공통** | `globals.css` 토큰 · 글꼴 · `src/lib/design/siteTokens.ts`(원천) · `components/ui` 5종 갱신 + AppBar · Card · Chip · TextField 신설 · 훈련 루트 `font-phone` | ⭐ 먼저 병합 — persona-input의 "내 정보 입력" 화면은 이 토큰 · TextField만 쓰면 된다 |
+| **P2 사이트 화면** | 화면 hex → 토큰 유틸리티 치환 + 첫 화면 · 로그인 · 체험 유형 · 시나리오 · 난이도 · 리포트 · 챌린지 보내기 · 받기 레이아웃 | P1 위 |
+| **P3 훈련 화면 4장** | 메신저형 대화방 · 수신 벨 · 라이트 통화 · (이체 = OQ-U101 기본값) | P1 위 · P2와 파일 겹침 최소 |
+
+### 89.2 토큰 구조(판정)
+| 결정 | 내용 | 기각 |
+|---|---|---|
+| 원천 한 곳 | 사이트 색 = `src/lib/design/siteTokens.ts` `SITE_TOKENS`. `globals.css :root`는 사본이고 **G630**이 키 · 값 일치를 막는다 | CSS만 원천(대비를 테스트로 못 잰다) · TS에서 CSS 생성(빌드 단계 추가) |
+| 유틸리티 이름 | Tailwind v4 `@theme inline` — `bg-page` · `bg-surface` · `text-ink` · `text-ink-sub` · `bg-brand` · `hover:bg-brand-hover` · `bg-brand-tint` · `border-line` · `border-line-strong` · `text-danger` · `bg-success-tint` · `text-caution` … | 임의 hex(`bg-[#…]`) 계속 쓰기 — 화면마다 흩어져 바꿀 수 없다(감사 시점 약 700곳) |
+| 기기 재현 색 | 사이트 토큰과 **분리** — `src/lib/phone/skinTokens.ts`(G456 그대로). 추정값(카톡형 바탕 · One UI 라이트 통화)은 그 파일 `ESTIMATED_DEVICE_COLORS` 한 블록에 모으고 주석에 *추정 · 실측 시 교체* 를 남긴다(OQ-U100) | 사이트 토큰에 섞기(훈련 화면이 사이트 색을 따라가 실폰과 멀어진다) |
+| 글꼴 | 함렛 + IBM Plex Sans KR을 Google Fonts `@import`(기존 Pretendard CDN `@import`와 같은 방식 · `display=swap`). 훈련 화면 루트에 `font-phone`(Pretendard) — G630 ④가 두 루트를 막는다 | `next/font/google`(빌드 때 네트워크 필요 · 정적 export 영향 검증 비용) |
+| 대비 | 진한 경계 `#8593A3`(시안) → `#7B8999`(바탕 `#F5F7FA` 위 2.92 → 3.3:1). 주의 `#9A6400` → `#8A5A00` | — |
+
+### 89.3 게이트
+| G | 내용 | 파일 |
+|---|---|---|
+| **G630** | ⓐ globals.css `:root` hex = `SITE_TOKENS`(키 집합 · 값) ⓑ 사이트 대비 쌍 WCAG AA ⓒ 역검증(값 하나 바꾼 사본 실패) ⓓ 훈련 루트 `font-phone` | `src/lib/design/siteTokens.test.ts` |
+| G631~G634 | P2 · P3에서 신설(아래 89.7에 기록) | — |
+
+### 89.4 첫 화면(소개) 노출 — 판정
+현재 `/`는 `RouteGuard`의 `PUBLIC_PATHS`에 없어 비로그인 사용자는 소개 없이 `/login`으로 간다(시안 감사 1-1). 시안 A 1번 화면은 `/`를 공개 경로로 둬야 성립한다. **판정: P2에서 `/`를 `PUBLIC_PATHS`에 넣는다** — `/`는 읽기 전용 소개만 그리고 Firestore · Functions를 부르지 않는다(로그인 사용자의 게이트 조회는 `user`가 있을 때만 — 현행 코드). 익명 사용자(챌린지 수신자)는 현행과 같이 판정한다(§68 익명 게이트 불변 — `anonymousScope.test.ts`가 막는다).
+
+### 89.5 훈련 화면 4장 — 판정
+| 장 | 판정 | 안전 계약 |
+|---|---|---|
+| 메신저형 대화방 | 카카오 표면만 바꾼다(문자형 = T190-6 그대로). 시각 = 메시지 문서 시각이 있으면 표시, 없으면 생략. "1" = 내 메시지 뒤에 상대 메시지가 아직 없을 때만(화면 파생 — 저장 0). 링크 = 미리보기 카드(`aria-label="링크: …"` 유지 — inSessionMarkers A4) | AC-006 "훈련 종료" 1탭 유지 · 첫 줄 앱 이름 표기 삭제 |
+| 수신 벨 | 바탕 그라데이션(스킨 토큰) · 등장 키프레임 1개(`call-ring-enter` — reduced-motion 블록에 추가 · G457) · 받기 버튼에 포인터 끌기(48px 이상 이동) = 받기, 누르기 = 받기(현행) | 수신 phase 상태 전이 무변경 |
+| 라이트 통화 | One UI형 스킨 + `prefers-color-scheme: light`일 때만 라이트 통화 토큰. iOS형 · 기본은 현행 어두운 화면. 강제 다크 방지 선언(G458)은 그대로 — 이 미디어 쿼리는 OS 설정을 읽을 뿐 페이지 색 체계를 바꾸지 않는다 | G456이 라이트 토큰 쌍도 잰다 |
+| 앱형 이체 | OQ-U101 ⭐ — 현행 이체 랜딩 3종은 웹페이지 형식 유지(전제 = 링크로 연 가짜 웹페이지) | — |
+
+### 89.6 브라우저 주소창 숨김 — 판정(OQ-U99)
+| 방법 | 효과 | 판정 |
+|---|---|---|
+| ⓐ PWA 매니페스트(`display: standalone`) | 홈 화면에 추가한 사용자만 주소창 없음. 브라우저 동작 변화 0 | 권고 — 단 아이콘 PNG 자산 · 설치 안내 문구가 새로 필요해 **이번 단계에서 구현하지 않는다** |
+| ⓑ Fullscreen API(훈련 진입 탭) | Android Chrome · 삼성 인터넷에서 주소창 + 기기 상태바까지 숨김. iPhone Safari는 요소 전체화면 미지원(추정 — 확인: iPhone 실기에서 `document.documentElement.requestFullscreen` 존재 여부) | **사용자 승인 필요**(기기 동작을 바꾸는 정책 · P-37 R-1과 충돌) |
+| ⓒ 안 함 | — | 현행 |
+
+### 89.7 구현 기록
+(단계별 PR이 이 아래에 추가한다.)
+- **P1**(`claude/design-a-tokens`): 89.1 P1 범위 · G630. 화면 hex 치환은 P2.
+
+### 89.8 OQ
+| # | 질문 | 선택지 | 막힘 |
+|---|---|---|---|
+| **OQ-A161** | 글꼴 CDN 2곳(jsdelivr Pretendard · Google Fonts)의 첫 로딩 지연 · 차단 환경 | ⭐ 현행 유지(`display=swap` — 글꼴이 늦으면 시스템 글꼴로 먼저 그린다) / 자체 호스팅 | 없음 |
