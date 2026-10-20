@@ -30,6 +30,8 @@ function koreanTwoDigits(n: number): string {
 /**
  * 항목의 대조 토큰(서버 소유). 가림 값(`card` · `loan`)은 고유 토큰이 없어 **대조하지 않는다**(빈 배열).
  * - name: 전체 이름 · 성 뺀 이름(3자 이상일 때) / birthYear: "1961" · "61년" · "육십일년" / region: 시 · 도 이름 + 줄임말 / bank: 은행명 그대로
+ * - birthDate(§88 후속): 연도 토큰(birthYear와 같다) + `" 3월 2일생"` · `" 3월2일생"`(앞 공백 — 월 부분 일치 방지). ⚠️ `"3월 2일"`만으로는 세지 않는다 — 사기범이
+ *   결제일 · 배송일로 같은 날짜를 말하면 "먼저 말했다"(R-1) 오단정이 된다(거짓 양성 방지 · 끝 "생"까지 요구).
  */
 export function personaMatchTokens(item: PersonaCardItem): string[] {
   switch (item.key) {
@@ -45,9 +47,14 @@ export function personaMatchTokens(item: PersonaCardItem): string[] {
     }
     case "birthYear": {
       const match = /^(\d{4})년생$/.exec(item.value);
+      return match ? yearTokens(match[1]!) : [];
+    }
+    case "birthDate": {
+      const match = /^(\d{4})년 (\d{1,2})월 (\d{1,2})일생$/.exec(item.value);
       if (!match) return [];
-      const yy = Number(match[1]) % 100;
-      return [match[1]!, `${String(yy).padStart(2, "0")}년`, `${koreanTwoDigits(yy)}년`];
+      // 앞 공백을 붙인다 — `"2월 2일생"`이 `"12월 2일생"`에 부분 일치하는 거짓 양성 방지(리뷰 Minor 1). 줄 맨 앞 "3월 2일생"은
+      // 놓치지만(→ R-2 = 안전 쪽) 연도와 함께 말하면 연도 토큰이 잡는다.
+      return [...yearTokens(match[1]!), ` ${match[2]}월 ${match[3]}일생`, ` ${match[2]}월${match[3]}일생`];
     }
     case "region": {
       // §88 — 입력 카드(v2) 값 = 시 · 도 정식 명칭 그대로 · 옛 카드(v1) 값 = `"{도} ○○시"`. 둘 다 같은 목록으로 대조한다.
@@ -60,6 +67,12 @@ export function personaMatchTokens(item: PersonaCardItem): string[] {
     case "loan":
       return [];
   }
+}
+
+/** 네 자리 연도의 대조 토큰 — "1961" · "61년" · "육십일년". */
+function yearTokens(year: string): string[] {
+  const yy = Number(year) % 100;
+  return [year, `${String(yy).padStart(2, "0")}년`, `${koreanTwoDigits(yy)}년`];
 }
 
 /** 한글 3~4자 이름의 성 뺀 이름(그 밖 = `undefined`). */

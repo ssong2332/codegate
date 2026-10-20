@@ -13,6 +13,7 @@ import {
   readSessionPersonaCard,
   resolvePersonaBlockCopy,
   splitMaskedValue,
+  readReplaySenderPersona,
 } from "./personaCard.ts";
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8").replace(/\r\n/g, "\n");
@@ -181,4 +182,37 @@ test("[G628] 리포트 문면 — R-2 사실 · 꼬리가 inputBy로 갈리고(s
   );
   assert.equal(r1.fact, PERSONA_REPORT_COPY.r1Fact);
   assert.equal(r1.tail, PERSONA_REPORT_COPY.tailSender);
+});
+
+test("[UX D-133 (5)] 되짚어보기 '보낸 분이 넣은 정보' — 챌린지 수신 세션 × sender 카드만 · 문면 = 리포트 R-2 sender 재사용 · 카드 없음 · self · v1 = 블록 0", () => {
+  const sender = {
+    v: 2,
+    inputBy: "sender",
+    items: [
+      { key: "name", label: "이름", value: "홍길동" },
+      { key: "birthDate", label: "생년월일", value: "1965년 3월 2일생" },
+    ],
+  };
+  assert.deepEqual(readReplaySenderPersona(sender, true), {
+    title: PERSONA_REPORT_COPY.r2Title,
+    fact: PERSONA_REPORT_COPY.r2FactSender,
+    rows: [
+      { label: "이름", value: "홍길동" },
+      { label: "생년월일", value: "1965년 3월 2일생" },
+    ],
+    tail: PERSONA_REPORT_COPY.tailSender,
+  });
+  assert.equal(readReplaySenderPersona(undefined, true), null, "카드 없음 = 블록 0");
+  assert.equal(readReplaySenderPersona(sender, false), null, "자가 세션 = 블록 0(self 되짚어보기 무변경)");
+  assert.equal(readReplaySenderPersona({ ...sender, inputBy: "self" }, true), null);
+  assert.equal(readReplaySenderPersona({ v: 1, items: sender.items }, true), null);
+  assert.equal(readReplaySenderPersona({ ...sender, items: [] }, true), null);
+});
+
+test("[배선 · UX D-133 (5)] 되짚어보기 — 세션 문서 카드 + 챌린지 여부로 한 번 판정 · 두 로드 경로(마운트 · 재시도) 모두 반영 · 문면 함수 밖 새 문장 0", () => {
+  const replay = codeOnly("../../app/report/replay/page.tsx");
+  assert.match(replay, /senderPersona: readReplaySenderPersona\(sessionData\.personaCard, challengeContext !== null\),/);
+  assert.equal(replay.split("setSenderPersona(result.senderPersona);").length - 1, 2, "마운트 · 재시도 두 경로");
+  assert.match(replay, /\{senderPersona\.title\}[\s\S]*\{senderPersona\.fact\}[\s\S]*\{senderPersona\.tail\}/);
+  assert.equal(replay.includes("보낸 분이"), false, "문면은 personaCard.ts 정본에서만 온다");
 });

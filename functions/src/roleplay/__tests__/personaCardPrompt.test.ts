@@ -155,3 +155,15 @@ test("[리뷰 M1] 대출 행은 프롬프트에 일반명으로 실린다(가상
   assert.equal(naive.includes("○○"), true, "역방향 사본이 가림 리터럴을 싣지 않는다 — 검사가 무력하다");
   t.diagnostic("[M1] 정본 블록 '○○' 0 · 화면 값을 그대로 실은 사본 → '○○' 검출(실패 확인)");
 });
+
+test("[§88 후속] 생년월일 행은 프롬프트에 \"65년 3월 2일생(1965년)\"으로 실린다(사기범이 줄여 말하는 꼴) · 출생 연도 행은 그대로", () => {
+  const card = buildPersonaCard({ input: { name: "홍길동", birthYear: 1965, birthMonth: 3, birthDay: 2 }, inputBy: "self" })!;
+  const block = buildPersonaCardBlock(card.items)!;
+  assert.ok(block.includes("- 생년월일: 65년 3월 2일생(1965년)"), block);
+  assert.equal(block.includes("출생 연도"), false, "생일이 있으면 출생 연도 행은 따로 싣지 않는다");
+  assert.equal(personaCardPromptValue({ key: "birthDate", value: "2005년 12월 31일생" }), "05년 12월 31일생(2005년)");
+  assert.equal(personaCardPromptValue({ key: "birthYear", value: "1962년생" }), "1962년생");
+  // 옛 카드(생일 없음) = 출생 연도 행 그대로.
+  const old = buildPersonaCardBlock(buildPersonaCard({ input: { birthYear: 1962 }, inputBy: "self" })!.items)!;
+  assert.ok(old.includes("- 출생 연도: 1962년생"), old);
+});
