@@ -105,11 +105,11 @@ export default function ChallengeResultsPage() {
 
   if (state === "loading") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-[#22303A]" role="status">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p className="flex items-center gap-2 text-lg text-ink" role="status">
           <span
             aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-transparent"
+            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
           />
           내 챌린지를 불러오는 중입니다...
         </p>
@@ -119,8 +119,8 @@ export default function ChallengeResultsPage() {
 
   if (state === "error") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>내 챌린지를 불러오지 못했습니다. 다시 시도해 주세요.</span>
         </p>
@@ -135,9 +135,9 @@ export default function ChallengeResultsPage() {
 
   if (state === "empty") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <h1 className="text-2xl font-bold text-[#22303A]">내 챌린지</h1>
-        <p className="text-base text-[#6B655C]">아직 만든 챌린지가 없습니다.</p>
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <h1 className="text-2xl font-bold text-ink">내 챌린지</h1>
+        <p className="text-lg text-ink-sub">아직 만든 챌린지가 없습니다.</p>
         <div className="w-full max-w-xs">
           <Button type="button" onClick={() => router.push("/scenarios/voice")}>
             새 챌린지 만들기
@@ -148,16 +148,16 @@ export default function ChallengeResultsPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-[#FAF8F5] p-6 lg:max-w-3xl">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-page p-6 lg:max-w-3xl">
       <header className="flex flex-col gap-2 pt-2">
-        <h1 className="text-2xl font-bold text-[#22303A]">내 챌린지</h1>
-        <p className="text-sm leading-relaxed text-[#6B655C]">
+        <h1 className="text-2xl font-bold text-ink">내 챌린지</h1>
+        <p className="text-base leading-relaxed text-ink-sub">
           결과는 요약만 보여요. 대화 내용 전문은 본인만 볼 수 있어요.
         </p>
       </header>
 
       {deleteError && (
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>{deleteError}</span>
         </p>
@@ -173,25 +173,25 @@ export default function ChallengeResultsPage() {
           return (
             <li
               key={item.challengeId}
-              className="flex flex-col gap-2 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4"
+              className="flex flex-col gap-2 rounded-[8px] border-[1.5px] border-line bg-white p-4"
             >
               <div className="flex items-center gap-3">
                 <span
                   aria-hidden="true"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#41525E]"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-avatar-bg"
                 >
-                  <span className="h-[18px] w-[18px] rounded-full bg-[#C9D4DB]" />
+                  <span className="h-[18px] w-[18px] rounded-full bg-avatar-fg" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-bold text-[#22303A]">{item.displayName}</p>
-                  <p className="text-xs text-[#6B655C]">{item.dateLabel}</p>
+                  <p className="truncate text-lg font-bold text-ink">{item.displayName}</p>
+                  <p className="text-sm text-ink-sub">{item.dateLabel}</p>
                 </div>
                 {/* 상태는 색만이 아니라 배지 텍스트로도 구분한다(UX-020 Accessibility, Badge
                     컴포넌트가 아이콘도 병행). */}
                 <Badge variant={badge.variant}>{badge.text}</Badge>
               </div>
               {showDetail && (
-                <p className="border-t border-[#F2EFE9] pt-3 text-sm leading-relaxed text-[#22303A]">
+                <p className="border-t border-neutral-tint pt-3 text-base leading-relaxed text-ink">
                   {item.statusLabel}
                 </p>
               )}
@@ -199,7 +199,7 @@ export default function ChallengeResultsPage() {
                 type="button"
                 onClick={() => void handleDelete(item.challengeId)}
                 disabled={deletingId === item.challengeId}
-                className="min-h-[48px] w-fit self-start rounded-[10px] border-[1.5px] border-[#C6392F] px-4 py-2 text-sm font-semibold text-[#C6392F] transition-colors hover:bg-[#C6392F]/10 disabled:opacity-50"
+                className="min-h-[48px] w-fit self-start rounded-[10px] border-[1.5px] border-danger px-4 py-2 text-base font-semibold text-danger transition-colors hover:bg-danger/10 disabled:opacity-50"
               >
                 {deletingId === item.challengeId ? "삭제하는 중..." : "삭제"}
               </button>
@@ -208,8 +208,8 @@ export default function ChallengeResultsPage() {
         })}
       </ul>
 
-      <div className="rounded-[12px] bg-[#F2EFE9] px-4 py-3">
-        <p className="text-xs leading-relaxed text-[#6B655C]">
+      <div className="rounded-[8px] bg-neutral-tint px-4 py-3">
+        <p className="text-sm leading-relaxed text-ink-sub">
           만료된 챌린지는 링크가 비활성화되고 기록이 30일 후 삭제됩니다.
         </p>
       </div>

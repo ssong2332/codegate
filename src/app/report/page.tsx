@@ -238,15 +238,15 @@ export default function ReportPage() {
 
   if (state === "no-session") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>리포트를 찾을 세션 정보가 없습니다. 처음 화면으로 돌아가 다시 시작해 주세요.</span>
         </p>
         <button
           type="button"
           onClick={handleGoHome}
-          className="min-h-[48px] rounded-xl border border-[#C9C2B6] px-6 py-3 text-lg font-bold text-[#22303A] hover:bg-white"
+          className="min-h-[48px] rounded-[8px] border border-line-strong px-6 py-3 text-lg font-bold text-ink hover:bg-white"
         >
           처음으로
         </button>
@@ -256,11 +256,11 @@ export default function ReportPage() {
 
   if (state === "loading") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-[#22303A]" role="status">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p className="flex items-center gap-2 text-lg text-ink" role="status">
           <span
             aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-transparent"
+            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
           />
           취약점 리포트를 준비하는 중입니다...
         </p>
@@ -270,15 +270,15 @@ export default function ReportPage() {
 
   if (state === "error" || !report) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>리포트 생성에 실패했습니다. 다시 시도해 주세요.</span>
         </p>
         <button
           type="button"
           onClick={handleRetry}
-          className="min-h-[48px] rounded-xl bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white"
+          className="min-h-[48px] rounded-[8px] bg-brand px-6 py-3 text-lg font-bold text-white"
         >
           다시 시도
         </button>
@@ -363,16 +363,16 @@ export default function ReportPage() {
   );
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] pb-8 lg:max-w-3xl">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-page pb-8 lg:max-w-3xl">
       <div className="px-5 pt-[22px]">
         {/* T72(P-22) — 선택(UX-029)·세션 셸과 **같은 3단계 어휘**로 표기한다. 표기 전용이며
             아래 판정(속은 시점·수법·조언)은 난이도와 무관하게 같은 잣대로 산출됐다(§15.3.5). */}
-        <p className="text-[13px] font-semibold text-[#6B655C]">
+        <p className="text-[15px] font-semibold text-ink-sub">
           {[dateLabel, scenarioTitle, `난이도 ${DIFFICULTY_LABEL[report.difficultyLevel]}`]
             .filter(Boolean)
             .join(" · ")}
         </p>
-        <p className="mt-1.5 text-[24px] font-bold leading-[1.35] text-[#22303A]">
+        <p className="mt-1.5 text-[24px] font-bold leading-[1.35] text-ink">
           이번 훈련에서
           <br />
           확인된 것
@@ -382,20 +382,20 @@ export default function ReportPage() {
             드러나며, 이 줄이 그 예외 안이다. 미도달 단계는 아래 타임라인에 **빈 항목으로 그리지
             않고**, 데이터(`stages`)에만 `reached:false`로 남는다. */}
         {stageNotice && (
-          <p className="mt-2 text-base leading-relaxed text-[#6B655C]">{stageNotice}</p>
+          <p className="mt-2 text-lg leading-relaxed text-ink-sub">{stageNotice}</p>
         )}
       </div>
 
       {/* AC-009: 한 번도 속지 않은 경우 이를 명시(요약 카드 상단, 색이 아닌 텍스트로). */}
       {!report.wasDeceived && (
-        <p role="status" className="mx-5 mt-4 text-base font-semibold text-[#0E6B62]">
+        <p role="status" className="mx-5 mt-4 text-lg font-semibold text-brand">
           이번 훈련에서는 속지 않았습니다. 아래는 시도된 수법입니다.
         </p>
       )}
 
       {/* 요약 카드 — 개선 영역 / 잘 대처함 / 다음에 할 것, 3항목. */}
       <div
-        className={`mx-5 flex flex-col gap-3.5 rounded-2xl border border-[#E2DDD3] bg-white p-[18px] ${
+        className={`mx-5 flex flex-col gap-3.5 rounded-[8px] border border-line bg-white p-[18px] ${
           report.wasDeceived ? "mt-4" : "mt-3"
         }`}
       >
@@ -404,54 +404,54 @@ export default function ReportPage() {
           <>
             <div className="flex items-start gap-2.5">
               <svg width="20" height="20" viewBox="0 0 16 16" className="mt-0.5 shrink-0" aria-hidden="true">
-                <path d="M8 1 L15 14 H1 Z" fill="#B96A1B" />
+                <path d="M8 1 L15 14 H1 Z" fill="var(--caution)" />
               </svg>
               <div>
-                <p className="text-lg font-bold text-[#22303A]">
+                <p className="text-lg font-bold text-ink">
                   개선 영역 · {firstDeceivedMoment.tactic}
                 </p>
-                <p className="mt-0.5 text-base leading-relaxed text-[#6B655C]">
+                <p className="mt-0.5 text-lg leading-relaxed text-ink-sub">
                   {firstDeceivedMoment.timeLabel}에 속았습니다. {firstDeceivedMoment.correctAction}
                 </p>
               </div>
             </div>
-            <div className="h-px bg-[#EFEBE3]" />
+            <div className="h-px bg-neutral-tint" />
           </>
         )}
 
         <div className="flex items-start gap-2.5">
           {report.wasDeceived ? (
             <svg width="20" height="20" viewBox="0 0 16 16" className="mt-0.5 shrink-0" aria-hidden="true">
-              <path d="M8 1 L15 14 H1 Z" fill="#B96A1B" />
+              <path d="M8 1 L15 14 H1 Z" fill="var(--caution)" />
             </svg>
           ) : (
             <svg width="20" height="20" viewBox="0 0 16 16" className="mt-0.5 shrink-0" aria-hidden="true">
-              <circle cx="8" cy="8" r="7" fill="#0E6B62" />
+              <circle cx="8" cy="8" r="7" fill="var(--success)" />
             </svg>
           )}
           <div>
-            <p className="text-lg font-bold text-[#22303A]">
+            <p className="text-lg font-bold text-ink">
               {report.wasDeceived ? "개선 영역 · 요구에 응함" : "잘 대처함 · 요구에 응하지 않음"}
             </p>
-            <p className="mt-0.5 text-base leading-relaxed text-[#6B655C]">
+            <p className="mt-0.5 text-lg leading-relaxed text-ink-sub">
               {report.wasDeceived
                 ? "훈련 중 상대의 요구에 응한 순간이 있었습니다. 아래 타임라인에서 자세히 볼 수 있습니다."
                 : "이번 훈련에서는 상대의 요구에 응하지 않았습니다."}
             </p>
           </div>
         </div>
-        <div className="h-px bg-[#EFEBE3]" />
+        <div className="h-px bg-neutral-tint" />
 
         <div className="flex items-start gap-2.5">
           <span
             aria-hidden="true"
-            className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-[#0E6B62] text-xs font-extrabold text-white"
+            className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-brand text-sm font-extrabold text-white"
           >
             ✓
           </span>
           <div>
-            <p className="text-lg font-bold text-[#22303A]">다음에 해볼 것</p>
-            <p className="mt-0.5 text-base leading-relaxed text-[#6B655C]">
+            <p className="text-lg font-bold text-ink">다음에 해볼 것</p>
+            <p className="mt-0.5 text-lg leading-relaxed text-ink-sub">
               {report.preventionAdvice[0] ?? "다음에는 상대의 신원을 먼저 확인해 보세요."}
             </p>
           </div>
@@ -462,7 +462,7 @@ export default function ReportPage() {
           `report.llmProvider === "mock"` 조건자 하나만 쓴다(48.2.1 "화면 판정도 같은 조건자를
           쓴다"). 부재(undefined)는 아무 말도 하지 않는다 — 긍정 표기를 만들지 않는다(G274). */}
       {isReportDialogueDegraded(report.llmProvider) && (
-        <p role="status" className="mx-5 mt-3.5 text-base leading-relaxed text-[#6B655C]">
+        <p role="status" className="mx-5 mt-3.5 text-lg leading-relaxed text-ink-sub">
           {REPORT_DEGRADED_NOTICE}
         </p>
       )}
@@ -473,10 +473,10 @@ export default function ReportPage() {
           type="button"
           onClick={() => toggleSection("timeline")}
           aria-expanded={expandedSection === "timeline"}
-          className="flex min-h-[56px] items-center justify-between rounded-2xl border border-[#E2DDD3] bg-white px-[18px] text-lg font-semibold text-[#22303A]"
+          className="flex min-h-[56px] items-center justify-between rounded-[8px] border border-line bg-white px-[18px] text-lg font-semibold text-ink"
         >
           속은 시점 타임라인 보기
-          <span aria-hidden="true" className="text-[#6B655C]">
+          <span aria-hidden="true" className="text-ink-sub">
             {expandedSection === "timeline" ? "▴" : "▾"}
           </span>
         </button>
@@ -486,7 +486,7 @@ export default function ReportPage() {
                 통째로 사라진다**(AC-059 미충족). 속은 순간이 0건이어도 문자 이벤트가 있으면 목록을
                 낸다. 판정은 그대로다 — 문자는 wasDeceived를 뒤집지 않는다(§15.6 G22). */}
             {report.deceivedMoments.length === 0 && (
-              <p className="rounded-2xl border border-[#E2DDD3] bg-white p-4 text-base text-[#6B655C]">
+              <p className="rounded-[8px] border border-line bg-white p-4 text-lg text-ink-sub">
                 속은 시점이 없습니다 — 이번 훈련에서는 한 번도 속지 않았습니다.
                 {report.smsTimeline.length > 0 &&
                   " 아래는 훈련 중 도착한 문자에서 있었던 일입니다."}
@@ -508,16 +508,16 @@ export default function ReportPage() {
                   entry.kind === "moment" ? (
                     <li
                       key={`moment-${entry.moment.turnIndex}-${entry.moment.timeLabel}`}
-                      className="rounded-2xl border border-[#B96A1B]/30 bg-[#FBF3E8] p-4"
+                      className="rounded-[8px] border border-caution/30 bg-caution-tint p-4"
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-lg font-semibold text-[#B96A1B]">
+                        <p className="text-lg font-semibold text-caution">
                           <span aria-hidden="true">⚠ </span>
                           {entry.moment.timeLabel}에 속았습니다
                         </p>
                         <Badge variant="caution">{entry.moment.tactic}</Badge>
                       </div>
-                      <p className="mt-2 text-base text-[#22303A]">
+                      <p className="mt-2 text-lg text-ink">
                         <span className="font-semibold">이렇게 했어야 해요: </span>
                         {entry.moment.correctAction}
                       </p>
@@ -527,7 +527,7 @@ export default function ReportPage() {
                         <button
                           type="button"
                           onClick={() => goToRewind(entry.momentIndex)}
-                          className="mt-3 min-h-[48px] w-full rounded-xl border border-[#0E6B62] bg-white px-4 text-base font-semibold text-[#0E6B62]"
+                          className="mt-3 min-h-[48px] w-full rounded-[8px] border border-brand bg-white px-4 text-lg font-semibold text-brand"
                         >
                           이 순간 다시 해보기
                         </button>
@@ -563,17 +563,17 @@ export default function ReportPage() {
           type="button"
           onClick={() => toggleSection("tactics")}
           aria-expanded={expandedSection === "tactics"}
-          className="flex min-h-[56px] items-center justify-between rounded-2xl border border-[#E2DDD3] bg-white px-[18px] text-lg font-semibold text-[#22303A]"
+          className="flex min-h-[56px] items-center justify-between rounded-[8px] border border-line bg-white px-[18px] text-lg font-semibold text-ink"
         >
           {tacticsAccordionLabel(report.tacticsUsed.length)}
-          <span aria-hidden="true" className="text-[#6B655C]">
+          <span aria-hidden="true" className="text-ink-sub">
             {expandedSection === "tactics" ? "▴" : "▾"}
           </span>
         </button>
         {expandedSection === "tactics" && (
           <section aria-label="시도된 수법" className="px-1">
             {report.tacticsUsed.length > 0 ? (
-              <div className="flex flex-wrap gap-2 rounded-2xl border border-[#E2DDD3] bg-white p-4">
+              <div className="flex flex-wrap gap-2 rounded-[8px] border border-line bg-white p-4">
                 {report.tacticsUsed.map((tactic) => (
                   <Badge key={tactic} variant="neutral">
                     {tactic}
@@ -581,7 +581,7 @@ export default function ReportPage() {
                 ))}
               </div>
             ) : (
-              <p className="rounded-2xl border border-[#E2DDD3] bg-white p-4 text-base text-[#6B655C]">
+              <p className="rounded-[8px] border border-line bg-white p-4 text-lg text-ink-sub">
                 {TACTICS_NOT_FOUND_TEXT}
               </p>
             )}
@@ -592,10 +592,10 @@ export default function ReportPage() {
           type="button"
           onClick={() => toggleSection("advice")}
           aria-expanded={expandedSection === "advice"}
-          className="flex min-h-[56px] items-center justify-between rounded-2xl border border-[#E2DDD3] bg-white px-[18px] text-lg font-semibold text-[#22303A]"
+          className="flex min-h-[56px] items-center justify-between rounded-[8px] border border-line bg-white px-[18px] text-lg font-semibold text-ink"
         >
           상황별 대처법
-          <span aria-hidden="true" className="text-[#6B655C]">
+          <span aria-hidden="true" className="text-ink-sub">
             {expandedSection === "advice" ? "▴" : "▾"}
           </span>
         </button>
@@ -604,12 +604,12 @@ export default function ReportPage() {
             {report.preventionAdvice.map((advice) => (
               <div
                 key={advice}
-                className="flex items-start gap-2.5 rounded-xl border border-[#E2DDD3] bg-white p-4"
+                className="flex items-start gap-2.5 rounded-[8px] border border-line bg-white p-4"
               >
                 <svg width="18" height="18" viewBox="0 0 16 16" className="mt-0.5 shrink-0" aria-hidden="true">
-                  <path d="M8 1 L15 14 H1 Z" fill="#B96A1B" />
+                  <path d="M8 1 L15 14 H1 Z" fill="var(--caution)" />
                 </svg>
-                <p className="text-base leading-relaxed text-[#6B655C]">{advice}</p>
+                <p className="text-lg leading-relaxed text-ink-sub">{advice}</p>
               </div>
             ))}
           </section>
@@ -654,7 +654,7 @@ export default function ReportPage() {
         <button
           type="button"
           onClick={handleGoHome}
-          className="min-h-[48px] rounded-2xl px-6 py-3 text-base font-semibold text-[#6B655C]"
+          className="min-h-[48px] rounded-[8px] px-6 py-3 text-lg font-semibold text-ink-sub"
         >
           처음으로
         </button>
@@ -680,10 +680,10 @@ function ReportSmsTimelineItem({ sms }: { sms: SmsTimelineEntry }) {
       {sms.events.map((event) => (
         <div
           key={event.event}
-          className="rounded-2xl border border-[#B96A1B]/30 bg-[#FBF3E8] p-4"
+          className="rounded-[8px] border border-caution/30 bg-caution-tint p-4"
         >
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-lg font-semibold text-[#B96A1B]">
+            <p className="text-lg font-semibold text-caution">
               <span aria-hidden="true">⚠ </span>
               {sms.timeLabel ? `${sms.timeLabel}: ` : ""}
               {event.what}
@@ -692,24 +692,24 @@ function ReportSmsTimelineItem({ sms }: { sms: SmsTimelineEntry }) {
           </div>
           {/* 도착한 문자 원문 — 어떤 문자였는지 확인할 수 있어야 학습이 성립한다(모의 표식 유지). */}
           {event.event === "sms_received" && (
-            <p className="mt-2 whitespace-pre-line rounded-xl bg-white/70 p-3 text-base text-[#22303A]">
+            <p className="mt-2 whitespace-pre-line rounded-[8px] bg-white/70 p-3 text-lg text-ink">
               {sms.body}
               {sms.linkDisplayText && (
-                <span className="mt-1 block text-sm text-[#6B655C]">
+                <span className="mt-1 block text-base text-ink-sub">
                   문자 속 링크 표기: {sms.linkDisplayText}
                 </span>
               )}
             </p>
           )}
           {event.correctAction && (
-            <p className="mt-2 text-base text-[#22303A]">
+            <p className="mt-2 text-lg text-ink">
               <span className="font-semibold">이렇게 했어야 해요: </span>
               {event.correctAction}
             </p>
           )}
           {/* 앵커 미해결(§15.1.5 (4) 규칙 3) — 조용히 버리지 않고 정직하게 고지한다(P-4). */}
           {!sms.anchorResolved && event.event === "sms_received" && (
-            <p className="mt-2 text-sm text-[#6B655C]">
+            <p className="mt-2 text-base text-ink-sub">
               이 문자가 대화 중 어느 시점에 도착했는지는 확인하지 못했습니다.
             </p>
           )}
@@ -764,9 +764,9 @@ function ReportMockScreenTimelineItem({
   const copy = resolveMockScreenCopy(mockScreen, deceivedMoments, "report");
   return (
     <li className="flex flex-col gap-3">
-      <div className="rounded-2xl border border-[#B96A1B]/30 bg-[#FBF3E8] p-4">
+      <div className="rounded-[8px] border border-caution/30 bg-caution-tint p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-lg font-semibold text-[#B96A1B]">
+          <p className="text-lg font-semibold text-caution">
             <span aria-hidden="true">⚠ </span>
             {mockScreen.timeLabel ? `${mockScreen.timeLabel}: ` : ""}
             {what}
@@ -776,14 +776,14 @@ function ReportMockScreenTimelineItem({
         <p
           className={
             copy.tone === "praise"
-              ? "mt-2 text-base font-semibold text-[#0E6B62]"
-              : "mt-2 text-base text-[#22303A]"
+              ? "mt-2 text-lg font-semibold text-brand"
+              : "mt-2 text-lg text-ink"
           }
         >
           {copy.text}
         </p>
         {!mockScreen.anchorResolved && (
-          <p className="mt-2 text-sm text-[#6B655C]">
+          <p className="mt-2 text-base text-ink-sub">
             이 화면이 대화 중 어느 시점에 표시됐는지는 확인하지 못했습니다.
           </p>
         )}
@@ -796,9 +796,9 @@ function ReportVerifyTimelineItem({ verify }: { verify: VerifyTimelineEntry }) {
   return (
     <li className="flex flex-col gap-3">
       {verify.events.map((event) => (
-        <div key={event.event} className="rounded-2xl border border-[#B96A1B]/30 bg-[#FBF3E8] p-4">
+        <div key={event.event} className="rounded-[8px] border border-caution/30 bg-caution-tint p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-lg font-semibold text-[#B96A1B]">
+            <p className="text-lg font-semibold text-caution">
               <span aria-hidden="true">⚠ </span>
               {(event.event === "verify_reconnected"
                 ? verify.reconnectTimeLabel
@@ -812,12 +812,12 @@ function ReportVerifyTimelineItem({ verify }: { verify: VerifyTimelineEntry }) {
           {/* D-51 ⑤ — 걸었지만 응하지 않은 세션은 **잘 대응한 지점**으로 다룬다(AC-009/AC-038).
               과신 표현("이제 면역")은 쓰지 않고, 아래 유효 대처를 그대로 함께 제시한다. */}
           {event.event === "verify_reconnected" && verify.outcome === "placed_not_complied" && (
-            <p className="mt-2 text-base font-semibold text-[#0E6B62]">
+            <p className="mt-2 text-lg font-semibold text-brand">
               잘 대응한 지점입니다 — 확인 뒤에도 요구에 응하지 않았습니다.
             </p>
           )}
           {event.correctAction && (
-            <p className="mt-2 text-base text-[#22303A]">
+            <p className="mt-2 text-lg text-ink">
               <span className="font-semibold">이렇게 하시면 됩니다: </span>
               {event.correctAction}
             </p>
@@ -828,7 +828,7 @@ function ReportVerifyTimelineItem({ verify }: { verify: VerifyTimelineEntry }) {
               누락**된다(P-4 "조용히 버리지 않는다"). 과거 리포트(이벤트 2건 한 항목)에서는 두 카드에
               같은 고지가 붙는데, 그 항목의 `anchorResolved`가 실제로 둘 다에 적용되므로 맞다. */}
           {!verify.anchorResolved && (
-            <p className="mt-2 text-sm text-[#6B655C]">
+            <p className="mt-2 text-base text-ink-sub">
               이 안내가 대화 중 어느 시점에 있었는지는 확인하지 못했습니다.
             </p>
           )}
@@ -848,17 +848,17 @@ function ReportPersonaBlock({ block }: { block: PersonaBlockView }) {
   return (
     <section
       aria-labelledby="persona-block-title"
-      className="flex flex-col gap-2.5 rounded-2xl border border-[#E2DDD3] bg-white p-[18px]"
+      className="flex flex-col gap-2.5 rounded-[8px] border border-line bg-white p-[18px]"
     >
-      <h2 id="persona-block-title" className="text-lg font-bold text-[#22303A]">
+      <h2 id="persona-block-title" className="text-lg font-bold text-ink">
         {copy.title}
       </h2>
-      <p className="text-base leading-relaxed text-[#22303A]">{copy.fact}</p>
-      <dl className="flex flex-col gap-1.5 rounded-xl bg-[#FAF8F5] p-3">
+      <p className="text-lg leading-relaxed text-ink">{copy.fact}</p>
+      <dl className="flex flex-col gap-1.5 rounded-[8px] bg-page p-3">
         {block.items.map((item) => (
           <div key={item.label} className="flex flex-wrap gap-x-2">
-            <dt className="text-base text-[#6B655C]">{item.label}</dt>
-            <dd className="break-words text-base font-semibold text-[#22303A]">
+            <dt className="text-lg text-ink-sub">{item.label}</dt>
+            <dd className="break-words text-lg font-semibold text-ink">
               {splitMaskedValue(item.value).map((segment, i) =>
                 segment.masked ? (
                   <span key={i}>
@@ -873,9 +873,9 @@ function ReportPersonaBlock({ block }: { block: PersonaBlockView }) {
           </div>
         ))}
       </dl>
-      <p className="text-lg font-bold leading-relaxed text-[#0E6B62]">{copy.action}</p>
-      <p className="text-base leading-relaxed text-[#6B655C]">{copy.explanation}</p>
-      <p className="text-sm leading-relaxed text-[#6B655C]">{copy.tail}</p>
+      <p className="text-lg font-bold leading-relaxed text-brand">{copy.action}</p>
+      <p className="text-lg leading-relaxed text-ink-sub">{copy.explanation}</p>
+      <p className="text-base leading-relaxed text-ink-sub">{copy.tail}</p>
     </section>
   );
 }

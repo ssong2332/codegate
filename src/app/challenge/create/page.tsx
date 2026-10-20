@@ -179,8 +179,8 @@ export default function ChallengeCreatePage() {
 
   if (state === "no-scenario") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>시나리오 정보를 찾을 수 없습니다. 시나리오 선택부터 다시 시작해 주세요.</span>
         </p>
@@ -195,8 +195,8 @@ export default function ChallengeCreatePage() {
 
   if (state === "error-cap") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>
             동시에 만들 수 있는 챌린지 수를 초과했습니다. 기존 챌린지가 끝나거나 만료되면 다시
@@ -217,8 +217,8 @@ export default function ChallengeCreatePage() {
 
   if (state === "error-clone") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>먼저 본인 목소리 클론을 완료해 주세요.</span>
         </p>
@@ -233,8 +233,8 @@ export default function ChallengeCreatePage() {
 
   if (state === "error-advanced-only") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>{ADVANCED_ONLY_NOT_CHALLENGEABLE_LINE}</span>
         </p>
@@ -249,8 +249,8 @@ export default function ChallengeCreatePage() {
 
   if (state === "error-escalation") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>이 시나리오는 아직 지인에게 보내는 챌린지를 지원하지 않습니다. 다른 시나리오를 선택해 주세요.</span>
         </p>
@@ -267,10 +267,10 @@ export default function ChallengeCreatePage() {
     const canNativeShare = typeof navigator !== "undefined" && "share" in navigator;
     const isCopied = copyLabel === "복사됨";
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-[#FAF8F5] p-6">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-page p-6">
         <header className="flex flex-col gap-2 pt-2">
-          <h1 className="text-2xl font-bold text-[#22303A]">챌린지가 만들어졌습니다</h1>
-          <p className="text-base leading-relaxed text-[#6B655C]">
+          <h1 className="text-2xl font-bold text-ink">챌린지가 만들어졌습니다</h1>
+          <p className="text-lg leading-relaxed text-ink-sub">
             아래 링크를 카카오톡·문자로 직접 붙여넣어 지인에게 보내 주세요. 앱이 대신 전송하지
             않습니다.
           </p>
@@ -279,11 +279,11 @@ export default function ChallengeCreatePage() {
         {/* 링크 카드(챌린지 플로우.dc.html "화면 1" 재현). 발급된 링크는 스크린리더가 읽을 수
             있는 전체 텍스트로도 노출한다(아이콘 단독 금지) — 목업은 짧은 데모 id라 truncate를
             썼지만 실제 토큰은 길어서 break-all로 전체 노출을 유지한다(의도적 이탈). */}
-        <div className="rounded-[16px] border-[1.5px] border-[#0E6B62] bg-[#E4F0EC] p-4">
+        <div className="rounded-[8px] border-[1.5px] border-brand bg-brand-tint p-4">
           <div className="mb-2 flex items-center gap-2">
             <span
               aria-hidden="true"
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0E6B62]"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand"
             >
               <svg width="11" height="11" viewBox="0 0 13 13" fill="none">
                 <path
@@ -295,11 +295,11 @@ export default function ChallengeCreatePage() {
                 />
               </svg>
             </span>
-            <p className="text-sm font-bold text-[#0E6B62]">링크가 만들어졌어요</p>
+            <p className="text-base font-bold text-brand">링크가 만들어졌어요</p>
           </div>
           <p
             role="status"
-            className="break-all rounded-[10px] border border-[#E2DDD3] bg-white px-3.5 py-3 font-mono text-sm text-[#22303A]"
+            className="break-all rounded-[10px] border border-line bg-white px-3.5 py-3 font-mono text-base text-ink"
           >
             {shareUrl}
           </p>
@@ -307,7 +307,7 @@ export default function ChallengeCreatePage() {
             <button
               type="button"
               onClick={() => void handleCopy()}
-              className="min-h-[48px] flex-1 rounded-[12px] border-[1.5px] border-[#E2DDD3] bg-white px-4 text-[15px] font-semibold text-[#22303A] transition-colors hover:border-[#C9C2B6]"
+              className="min-h-[48px] flex-1 rounded-[8px] border-[1.5px] border-line bg-white px-4 text-[17px] font-semibold text-ink transition-colors hover:border-line-strong"
             >
               {copyLabel}
               {isCopied ? " ✓" : ""}
@@ -316,7 +316,7 @@ export default function ChallengeCreatePage() {
               <button
                 type="button"
                 onClick={() => void handleShare()}
-                className="min-h-[48px] flex-1 rounded-[12px] bg-[#0E6B62] px-4 text-[15px] font-semibold text-white transition-colors hover:bg-[#0B564F]"
+                className="min-h-[48px] flex-1 rounded-[8px] bg-brand px-4 text-[17px] font-semibold text-white transition-colors hover:bg-brand-hover"
               >
                 공유하기
               </button>
@@ -324,7 +324,7 @@ export default function ChallengeCreatePage() {
           </div>
           {/* AC-048/PRD.md — 무료 티어 링크 만료는 3일 확정치(functions/src/shared/constants.ts
               CHALLENGE_FREE_LINK_EXPIRY_MS). 목업 초안의 "7일"은 PRD 확정 전 값이라 반영하지 않음. */}
-          <p className="mt-3 text-xs leading-relaxed text-[#6B655C]">
+          <p className="mt-3 text-sm leading-relaxed text-ink-sub">
             링크는 3일 뒤 자동 만료돼요. 상대가 동의하기 전에는 아무 일도 일어나지 않아요.
           </p>
         </div>
@@ -336,7 +336,7 @@ export default function ChallengeCreatePage() {
           <button
             type="button"
             onClick={() => router.push("/")}
-            className="min-h-[48px] rounded-xl px-6 py-3 text-base font-semibold text-[#6B655C]"
+            className="min-h-[48px] rounded-[8px] px-6 py-3 text-lg font-semibold text-ink-sub"
           >
             처음으로
           </button>
@@ -348,24 +348,24 @@ export default function ChallengeCreatePage() {
   // "form"·"submitting"·"error-issue" 공통 화면 — 입력 폼은 항상 보여주고, 발급 실패는 폼 위에
   // 재시도 안내로 얹는다(P-4, ScenarioListView의 sticky CTA + 에러 문구 패턴과 동일).
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-[#FAF8F5] p-6">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-page p-6">
       <header className="flex flex-col gap-2 pt-2">
         <button
           type="button"
           onClick={() => router.back()}
-          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-base font-medium text-[#6B655C] hover:bg-[#F2EFE9]"
+          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-lg font-medium text-ink-sub hover:bg-neutral-tint"
         >
           <span aria-hidden="true">←</span> 뒤로
         </button>
-        <h1 className="text-2xl font-bold text-[#22303A]">챌린지 만들기</h1>
-        <p className="text-base leading-relaxed text-[#6B655C]">
+        <h1 className="text-2xl font-bold text-ink">챌린지 만들기</h1>
+        <p className="text-lg leading-relaxed text-ink-sub">
           지인에게 보일 표시 이름을 입력해 주세요. 「OOO님이 준비한{" "}
           {CHALLENGE_KIND_LABEL[challengeKind]}」 형태로 보이게 됩니다. 상대에게{" "}
           {CHALLENGE_KIND_SEND_DESCRIPTION[challengeKind]}.
         </p>
         {/* T72(UX-019 v1.11) — 발신자가 고른 난이도를 요약에 명시한다(P-22 동일 라벨). */}
         {difficultyLevel && (
-          <p className="text-base leading-relaxed text-[#22303A]">
+          <p className="text-lg leading-relaxed text-ink">
             {scenario?.title ? `${scenario.title} · ` : ""}
             <strong className="font-bold">{DIFFICULTY_LABEL[difficultyLevel]}</strong> —{" "}
             {DIFFICULTY_SEND_DESCRIPTION[difficultyLevel]}
@@ -376,8 +376,8 @@ export default function ChallengeCreatePage() {
       {/* 고급 사전 고지 — "만들기" 전에 알린다. 난이도가 안전장치를 바꾸지 않는다는 사실도 함께
           적어 발신자가 오해하지 않게 한다(D-42/AC-065). */}
       {difficultyLevel === "advanced" && (
-        <div className="rounded-[16px] border-[1.5px] border-[#E8C89A] bg-[#FBF3E8] p-4">
-          <p role="status" className="text-[15px] font-semibold leading-relaxed text-[#B96A1B]">
+        <div className="rounded-[8px] border-[1.5px] border-caution/40 bg-caution-tint p-4">
+          <p role="status" className="text-[17px] font-semibold leading-relaxed text-caution">
             <span aria-hidden="true">⚠ </span>
             {ADVANCED_SEND_NOTICE}
           </p>
@@ -385,19 +385,19 @@ export default function ChallengeCreatePage() {
       )}
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-[13px] font-semibold text-[#22303A]">표시 이름</span>
+        <span className="text-[15px] font-semibold text-ink">표시 이름</span>
         <input
           type="text"
           value={displayName}
           onChange={(event) => setDisplayName(event.target.value)}
           placeholder="예: 민수"
           disabled={isSubmitting}
-          className="min-h-[52px] rounded-[12px] border-[1.5px] border-[#E2DDD3] bg-white px-4 py-3 text-[16px] text-[#22303A] outline-none focus:border-[#0E6B62] disabled:opacity-50"
+          className="min-h-[52px] rounded-[8px] border-[1.5px] border-line bg-white px-4 py-3 text-[18px] text-ink outline-none focus:border-brand disabled:opacity-50"
         />
       </label>
 
       {state === "error-issue" && (
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>링크 발급에 실패했습니다. 다시 시도해 주세요.</span>
         </p>

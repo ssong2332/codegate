@@ -98,10 +98,10 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
     return (
       <li key={scenarioId}>
         <label
-          className={`flex cursor-pointer gap-4 rounded-2xl border-2 p-4 transition ${
+          className={`flex cursor-pointer gap-4 rounded-[8px] border-2 p-4 transition ${
             selected
-              ? "border-[#0E6B62] bg-[#E4F0EC]"
-              : "border-[#E2DDD3] bg-white hover:border-[#C9C2B6]"
+              ? "border-brand bg-brand-tint"
+              : "border-line bg-white hover:border-line-strong"
           }`}
         >
           <input
@@ -118,7 +118,7 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
           <span
             aria-hidden="true"
             className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xl font-bold ${
-              selected ? "bg-[#0E6B62] text-white" : "bg-[#41525E] text-[#C9D4DB]"
+              selected ? "bg-brand text-white" : "bg-avatar-bg text-avatar-fg"
             }`}
           >
             {/* T75 — 발신자 표기가 번호로 바뀌어 첫 글자를 따면 "0"·"+"가 뜬다.
@@ -129,10 +129,10 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
           <span className="flex min-w-0 flex-1 flex-col gap-1.5">
             <span className="flex items-start justify-between gap-2">
               <span className="flex flex-wrap items-center gap-2">
-                <span className="text-lg font-bold text-[#22303A]">{scenario.title}</span>
+                <span className="text-lg font-bold text-ink">{scenario.title}</span>
                 {/* T191 S5(D-104 (1)) — 텍스트 태그(테두리 칩 · 색 단독 금지, P-22). */}
                 {scenario.advancedOnly === true && (
-                  <span className="rounded-full border border-[#22303A] px-2 py-0.5 text-[13px] font-semibold text-[#22303A]">
+                  <span className="rounded-full border border-ink px-2 py-0.5 text-[15px] font-semibold text-ink">
                     {ADVANCED_ONLY_TAG}
                   </span>
                 )}
@@ -141,18 +141,18 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
               {selected && (
                 <span
                   aria-hidden="true"
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0E6B62] text-sm font-bold text-white"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-base font-bold text-white"
                 >
                   ✓
                 </span>
               )}
             </span>
 
-            <span className="text-sm text-[#6B655C]">{scenario.callerLabel}(으)로 전화가 옵니다</span>
+            <span className="text-base text-ink-sub">{scenario.callerLabel}(으)로 전화가 옵니다</span>
 
             <span
               id={`scenario-${scenarioId}-meta`}
-              className="flex flex-col gap-1.5 text-sm text-[#6B655C]"
+              className="flex flex-col gap-1.5 text-base text-ink-sub"
             >
               {/* 소요시간 배지(중립) — 훈련 플로우.dc.html의 "약 {time}" 배지와 동일 톤.
                   이 문자열은 자유서술문이라(예: "중간 — 감정적 압박이 강한 편입니다") 색상 등급
@@ -179,23 +179,23 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
         <button
           type="button"
           onClick={() => router.back()}
-          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-base font-medium text-[#6B655C] hover:bg-[#F2EFE9]"
+          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-lg font-medium text-ink-sub hover:bg-neutral-tint"
         >
           <span aria-hidden="true">←</span> 뒤로
         </button>
         {/* 단계 표시(P-12 #2) — 지금까지의 선택 경로를 맥락으로 표시(스크린리더가 현재 위치로 읽음). */}
-        <p className="text-sm font-semibold text-[#0E6B62]" aria-current="step">
+        <p className="text-base font-semibold text-brand" aria-current="step">
           보이스피싱 › {MODE_LABEL[mode]} › {experienceModeHint === "send" ? "④" : "③"} 시나리오
         </p>
-        <h1 className="text-2xl font-bold text-[#22303A]">어떤 전화를 받아볼까요?</h1>
-        <p className="text-base leading-relaxed text-[#6B655C]">
+        <h1 className="text-2xl font-bold text-ink">어떤 전화를 받아볼까요?</h1>
+        <p className="text-lg leading-relaxed text-ink-sub">
           실제 사기가 아니라 훈련용 시뮬레이션입니다. 하나를 고르면 마지막으로 난이도를 정합니다.
         </p>
       </header>
 
       {regularEntries.length + advancedOnlyEntries.length === 0 ? (
         // Empty 상태(UX-017 States) — 현재 데이터상 clone 2종·generic 7종 다 있어 실질 발생 안 함.
-        <p className="rounded-xl border border-[#E2DDD3] bg-white p-4 text-base text-[#6B655C]">
+        <p className="rounded-[8px] border border-line bg-white p-4 text-lg text-ink-sub">
           이 방식의 시나리오가 아직 없습니다.
         </p>
       ) : (
@@ -208,7 +208,7 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
           그리지 않는다(빈 묶음 제목 0 — (5)). 제목은 h2라 스크린리더 목록 탐색에서 구분된다. */}
       {advancedOnlyEntries.length > 0 && (
         <section className="flex flex-col gap-3" aria-labelledby="advanced-only-group-title">
-          <h2 id="advanced-only-group-title" className="text-lg font-bold text-[#22303A]">
+          <h2 id="advanced-only-group-title" className="text-lg font-bold text-ink">
             {ADVANCED_ONLY_GROUP_TITLE}
           </h2>
           <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2">
@@ -220,7 +220,7 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
       {/* 하단 고정 CTA(구 scenarios/page.tsx 관례 계승) — 목록이 뷰포트보다 길어질 수 있어 시작
           버튼을 화면 하단에 항상 떠 있게 한다. */}
       <div
-        className="sticky bottom-0 -mx-6 -mb-28 border-t border-[#E2DDD3] bg-[#FAF8F5]/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur"
+        className="sticky bottom-0 -mx-6 -mb-28 border-t border-line bg-page/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur"
       >
         {/* T72(D-41) — 이 단계의 CTA는 더 이상 통화를 시작하지 않고 난이도 선택으로 넘어간다.
             세션 생성 실패 표시도 그 화면이 담당한다(생성 지점이 그리로 이동했으므로). */}

@@ -201,7 +201,7 @@ export default function SessionEndPage() {
   if (state === "no-session") {
     body = (
       <>
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>
             진행 중인 훈련 세션 정보를 찾을 수 없습니다. 처음 화면으로 돌아가 다시 시작해
@@ -215,10 +215,10 @@ export default function SessionEndPage() {
     );
   } else if (state === "ending") {
     body = (
-      <p className="flex items-center gap-2 text-lg text-[#22303A]" role="status">
+      <p className="flex items-center gap-2 text-lg text-ink" role="status">
         <span
           aria-hidden="true"
-          className="h-5 w-5 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-transparent"
+          className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
         />
         훈련 자료를 정리하고 리포트를 준비하는 중입니다...
       </p>
@@ -226,7 +226,7 @@ export default function SessionEndPage() {
   } else if (state === "error") {
     body = (
       <>
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>훈련 종료 처리 중 문제가 발생했습니다. 다시 시도해 주세요.</span>
         </p>
@@ -238,7 +238,7 @@ export default function SessionEndPage() {
   } else {
     body = (
       <>
-        <p className="text-sm text-[#6B655C]" role="status">
+        <p className="text-base text-ink-sub" role="status">
           훈련 중 사용된 음성·합성 파일은 폐기 절차가 시작되었습니다.
         </p>
         <div className="flex flex-col gap-3">
@@ -260,7 +260,7 @@ export default function SessionEndPage() {
               <Button type="button" variant="secondary" disabled>
                 그 순간 다시 해보기
               </Button>
-              <p role="status" className="text-sm text-[#6B655C]">
+              <p role="status" className="text-base text-ink-sub">
                 리포트를 준비하고 있어요.
               </p>
             </>
@@ -279,16 +279,16 @@ export default function SessionEndPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center gap-6 bg-[#FAF8F5] px-6 py-10 text-center">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center gap-6 bg-page px-6 py-10 text-center">
       {/* AC-023: "이것은 훈련이었습니다" 명시 고지. 색이 아닌 아이콘+텍스트로 강조, 항상 노출. */}
       <div
         aria-hidden="true"
-        className="flex h-[88px] w-[88px] items-center justify-center rounded-full bg-[#E4F0EC]"
+        className="flex h-[88px] w-[88px] items-center justify-center rounded-full bg-brand-tint"
       >
-        <svg width="40" height="40" viewBox="0 0 13 13" fill="none">
+        <svg className="text-brand" width="40" height="40" viewBox="0 0 13 13" fill="none">
           <path
             d="M2.5 7L5.2 9.7L10.5 3.5"
-            stroke="#0E6B62"
+            stroke="currentColor"
             strokeWidth="1.6"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -298,7 +298,7 @@ export default function SessionEndPage() {
       <h1
         ref={headingRef}
         tabIndex={-1}
-        className="text-[26px] font-bold leading-[1.35] text-[#22303A] outline-none"
+        className="text-[26px] font-bold leading-[1.35] text-ink outline-none"
       >
         이것은 훈련이었습니다
       </h1>
@@ -306,7 +306,7 @@ export default function SessionEndPage() {
       {/* AC-015 디스컬레이션(안심) 메시지 — 완화 톤·큰 글씨. 2인(UF-005) 재사용 시 강제 정체
           공개 문구로 교체한다(Architecture.md §14 Business Rules "○○님이 준비한 훈련이었습니다.
           실제 상황이 아니었습니다" 문구를 그대로 쓴다, AC-042). */}
-      <p className="text-base leading-[1.7] text-[#6B655C]">
+      <p className="text-lg leading-[1.7] text-ink-sub">
         {challenge ? (
           <>
             {challenge.displayName}님이 준비한 훈련이었습니다. 실제 상황이 아니었습니다. 지금까지
@@ -326,7 +326,7 @@ export default function SessionEndPage() {
           세션 후 사실 공개 문장. 세션 중 화면에서 지운 부정 고지의 정본 자리다. ⛔ 페이지 상태·세션
           내용(채널·난이도·제출/설치 여부)으로 가르거나 숨기지 않는다 — 제목과 같은 조건(무조건)으로
           렌더한다(G445). 디스컬레이션 문단과 같은 크기·색 · 경고 표현 0. */}
-      <p className="text-base leading-[1.7] text-[#6B655C]">{POST_SESSION_FACT_DISCLOSURE}</p>
+      <p className="text-lg leading-[1.7] text-ink-sub">{POST_SESSION_FACT_DISCLOSURE}</p>
 
       <div className="flex w-full flex-col items-stretch gap-3">{body}</div>
     </main>

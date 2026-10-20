@@ -8,3 +8,5 @@ export { default as AppBar } from "./AppBar";
 export { default as Card } from "./Card";
 export { default as Chip } from "./Chip";
 export { default as TextField } from "./TextField";
+export { default as LineIcon } from "./LineIcon";
+export type { LineIconName } from "./LineIcon";

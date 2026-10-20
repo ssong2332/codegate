@@ -38,7 +38,7 @@ export default function SpoofImage({ src, alt = DEFAULT_ALT, onClose }: SpoofIma
     <div
       role="img"
       aria-label={alt}
-      className="relative mx-auto w-full max-w-xs overflow-hidden rounded-xl border border-gray-300 shadow-lg"
+      className="relative mx-auto w-full max-w-xs overflow-hidden rounded-[8px] border border-gray-300 shadow-lg"
     >
       {/* AC-022 합성 표식 — 화면 상시 라벨(카드 위 고정 오버레이). */}
       <div className="absolute right-2 top-2 z-10">
@@ -50,7 +50,7 @@ export default function SpoofImage({ src, alt = DEFAULT_ALT, onClose }: SpoofIma
           type="button"
           onClick={onClose}
           aria-label="사칭 이미지 닫기"
-          className="absolute left-2 top-2 z-10 flex min-h-[32px] min-w-[32px] items-center justify-center rounded-full bg-black/60 text-sm font-bold text-white hover:bg-black/80"
+          className="absolute left-2 top-2 z-10 flex min-h-[32px] min-w-[32px] items-center justify-center rounded-full bg-black/60 text-base font-bold text-white hover:bg-black/80"
         >
           <span aria-hidden="true">×</span>
         </button>
@@ -71,7 +71,7 @@ export default function SpoofImage({ src, alt = DEFAULT_ALT, onClose }: SpoofIma
         // 계좌번호·수취인·시각은 전부 가상 placeholder(AC-023 — 실제 송금·계좌 기능 아님을
         // 텍스트로도 명시).
         <div className="flex flex-col gap-4 bg-gradient-to-b from-sky-600 to-sky-700 p-6 text-white">
-          <p className="text-xs opacity-80">OO뱅크 (가상 은행 · 실제 존재하지 않음)</p>
+          <p className="text-sm opacity-80">OO뱅크 (가상 은행 · 실제 존재하지 않음)</p>
           <div className="flex flex-col items-center gap-2 py-4">
             <span aria-hidden="true" className="text-4xl">
               ✅
@@ -79,7 +79,7 @@ export default function SpoofImage({ src, alt = DEFAULT_ALT, onClose }: SpoofIma
             <p className="text-lg font-bold">송금완료</p>
             <p className="text-3xl font-extrabold">1,000,000원</p>
           </div>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg bg-white/10 p-4 text-sm">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg bg-white/10 p-4 text-base">
             <dt className="opacity-80">받는분</dt>
             <dd className="text-right font-semibold">홍길동(가상)</dd>
             <dt className="opacity-80">계좌번호</dt>
@@ -87,7 +87,7 @@ export default function SpoofImage({ src, alt = DEFAULT_ALT, onClose }: SpoofIma
             <dt className="opacity-80">거래시각</dt>
             <dd className="text-right">00:00:00 (가상)</dd>
           </dl>
-          <p className="text-center text-xs opacity-90">
+          <p className="text-center text-sm opacity-90">
             ※ 실제 송금이 아닙니다. AI 훈련용으로 합성된 화면입니다.
           </p>
         </div>

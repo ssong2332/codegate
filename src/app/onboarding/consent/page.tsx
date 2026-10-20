@@ -78,15 +78,15 @@ export default function ConsentPage() {
   if (userLoading || gateState === "checking" || gateState === "redirecting") return null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] px-6 pt-6">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-page px-6 pt-6">
       {/* AC-012 사전 고지 배너 — 상시 노출(닫기 불가), 아래 3개 포인트 카드를 보강하는 상단 요약. */}
       <Banner variant="caution" sticky>
-        <span className="font-semibold text-[#B96A1B]">모의 훈련입니다.</span>{" "}
+        <span className="font-semibold text-caution">모의 훈련입니다.</span>{" "}
         지금 보시는 내용은 실제 상황이 아닙니다.
       </Banner>
 
       <div className="flex flex-1 flex-col gap-8 pb-10 pt-8">
-        <h1 className="text-[24px] font-bold leading-[1.35] text-[#22303A]">
+        <h1 className="text-[24px] font-bold leading-[1.35] text-ink">
           시작하기 전에
           <br />
           꼭 알아두세요
@@ -96,15 +96,15 @@ export default function ConsentPage() {
           {NOTICE_POINTS.map((point, index) => (
             <div
               key={point}
-              className="flex items-start gap-3 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4"
+              className="flex items-start gap-3 rounded-[8px] border-[1.5px] border-line bg-white p-4"
             >
               <div
                 aria-hidden="true"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#E4F0EC] text-[15px] font-bold text-[#0E6B62]"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-tint text-[17px] font-bold text-brand"
               >
                 {index + 1}
               </div>
-              <p className="text-[16px] leading-[1.55] text-[#22303A]">{point}</p>
+              <p className="text-[18px] leading-[1.55] text-ink">{point}</p>
             </div>
           ))}
         </div>
@@ -119,12 +119,12 @@ export default function ConsentPage() {
             type="checkbox"
             checked={checked}
             onChange={(event) => setChecked(event.target.checked)}
-            className="mt-0.5 h-8 w-8 shrink-0 rounded-[10px] accent-[#0E6B62]"
+            className="mt-0.5 h-8 w-8 shrink-0 rounded-[10px] accent-brand"
             aria-describedby="consent-checkbox-label"
           />
           <span
             id="consent-checkbox-label"
-            className="text-[16px] font-semibold leading-[1.5] text-[#22303A]"
+            className="text-[18px] font-semibold leading-[1.5] text-ink"
           >
             위 내용을 모두 확인했으며, 이 훈련 시뮬레이션에 참여하는 것에 동의합니다.
           </span>
@@ -135,7 +135,7 @@ export default function ConsentPage() {
             ref={errorRef}
             role="alert"
             tabIndex={-1}
-            className="flex items-center gap-2 text-[15px] text-[#C6392F] outline-none"
+            className="flex items-center gap-2 text-[17px] text-danger outline-none"
           >
             <span aria-hidden="true">⚠</span>
             <span>{error}</span>

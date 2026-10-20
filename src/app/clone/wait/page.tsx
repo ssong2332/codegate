@@ -154,20 +154,20 @@ export default function CloneWaitPage() {
   ];
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-7 bg-[#FAF8F5] px-6 pb-10 pt-10">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-7 bg-page px-6 pb-10 pt-10">
       <ProgressSteps steps={ONBOARDING_STEPS} currentIndex={2} />
 
       <div className="flex flex-col gap-3">
-        <h1 className="text-[24px] font-bold leading-[1.35] text-[#22303A]">
+        <h1 className="text-[24px] font-bold leading-[1.35] text-ink">
           {isReady ? "가상 음성이 준비됐어요" : "가상 음성을 만들고 있어요"}
         </h1>
-        <p className="text-[15px] leading-[1.6] text-[#6B655C]">
+        <p className="text-[17px] leading-[1.6] text-ink-sub">
           잠시만 기다려 주세요. 훈련용 가상 음성을 준비하고 있어요.
         </p>
         {/* P-31 ⓕ(§48.3, AC-084) — 목소리 축 강등 고지. "준비 완료" 상태(isReady)에만 붙는다.
             부재/elevenlabs면 아무 말도 하지 않는다(긍정 표기 금지, G274와 같은 원칙). */}
         {isReady && isVoiceDegraded(voiceProvider) && (
-          <p role="status" className="text-[15px] leading-[1.6] text-[#6B655C]">
+          <p role="status" className="text-[17px] leading-[1.6] text-ink-sub">
             {VOICE_DEGRADED_NOTICE}
           </p>
         )}
@@ -181,13 +181,13 @@ export default function CloneWaitPage() {
            ⛔ 카드 폭·내부 여백·gap-7·pt-10/pb-10·로딩/오류 분기는 손대지 않았다. */
         <div className="flex flex-1 flex-col">
           <div aria-hidden="true" className="max-h-[256px] flex-1" />
-          <div className="flex flex-col gap-6 rounded-[20px] border-[1.5px] border-[#E2DDD3] bg-white p-6">
+          <div className="flex flex-col gap-6 rounded-[8px] border-[1.5px] border-line bg-white p-6">
             {steps.map((step) => (
               <div key={step.label} className="flex items-center gap-4">
                 <div
                   aria-hidden="true"
                   className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
-                    step.done ? "bg-[#0E6B62]" : "bg-[#E4F0EC]"
+                    step.done ? "bg-brand" : "bg-brand-tint"
                   }`}
                 >
                   {step.done ? (
@@ -201,21 +201,21 @@ export default function CloneWaitPage() {
                       />
                     </svg>
                   ) : (
-                    <span className="h-5 w-5 animate-spin rounded-full border-[2.5px] border-[#E4F0EC] border-t-[#0E6B62]" />
+                    <span className="h-5 w-5 animate-spin rounded-full border-[2.5px] border-brand-tint border-t-brand" />
                   )}
                 </div>
                 <div className="flex-1">
-                  <p className="text-[16px] font-semibold text-[#22303A]">{step.label}</p>
-                  <p className="mt-0.5 text-[13px] text-[#6B655C]">{step.sub}</p>
+                  <p className="text-[18px] font-semibold text-ink">{step.label}</p>
+                  <p className="mt-0.5 text-[15px] text-ink-sub">{step.sub}</p>
                 </div>
               </div>
             ))}
-            <div className="h-[6px] overflow-hidden rounded-full bg-[#F2EFE9]">
+            <div className="h-[6px] overflow-hidden rounded-full bg-neutral-tint">
               <div
                 className={`h-full rounded-full transition-all duration-700 ${!isReady ? "animate-pulse" : ""}`}
                 style={{
                   width: isReady ? "100%" : "55%",
-                  background: "linear-gradient(90deg, #0E6B62, #4FA398, #0E6B62)",
+                  background: "linear-gradient(90deg, var(--brand), #5C86C2, var(--brand))",
                 }}
               />
             </div>
@@ -225,20 +225,20 @@ export default function CloneWaitPage() {
       )}
 
       {isPending && (
-        <p className="flex items-center justify-center gap-2 text-[15px] text-[#6B655C]" role="status">
+        <p className="flex items-center justify-center gap-2 text-[17px] text-ink-sub" role="status">
           <span
             aria-hidden="true"
-            className="h-4 w-4 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-[#0E6B62]"
+            className="h-4 w-4 animate-spin rounded-full border-2 border-line-strong border-t-brand"
           />
           잠시만 기다려 주세요. 내 목소리로 클론을 만들고 있습니다...
         </p>
       )}
 
       {isReady && startState === "starting" && (
-        <p className="flex items-center justify-center gap-2 text-[15px] text-[#6B655C]" role="status">
+        <p className="flex items-center justify-center gap-2 text-[17px] text-ink-sub" role="status">
           <span
             aria-hidden="true"
-            className="h-4 w-4 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-[#0E6B62]"
+            className="h-4 w-4 animate-spin rounded-full border-2 border-line-strong border-t-brand"
           />
           목소리 클론이 준비됐습니다. 훈련을 시작하는 중입니다...
         </p>
@@ -246,7 +246,7 @@ export default function CloneWaitPage() {
 
       {isReady && startState === "start-error" && (
         <div className="flex flex-col items-center gap-3 text-center">
-          <p role="alert" className="flex items-center gap-2 text-[15px] text-[#C6392F]">
+          <p role="alert" className="flex items-center gap-2 text-[17px] text-danger">
             <span aria-hidden="true">⚠</span>
             <span>훈련을 시작하지 못했습니다. 다시 시도해 주세요.</span>
           </p>
@@ -258,7 +258,7 @@ export default function CloneWaitPage() {
 
       {isReady && startState === "no-scenario" && (
         <div className="flex flex-col items-center gap-3 text-center">
-          <p role="alert" className="flex items-center gap-2 text-[15px] text-[#C6392F]">
+          <p role="alert" className="flex items-center gap-2 text-[17px] text-danger">
             <span aria-hidden="true">⚠</span>
             <span>선택한 시나리오 정보를 찾을 수 없습니다. 시나리오를 다시 선택해 주세요.</span>
           </p>
@@ -270,7 +270,7 @@ export default function CloneWaitPage() {
 
       {(cloneState === "failed" || cloneState === "read-error" || cloneState === "no-session") && (
         <div className="flex flex-col items-center gap-3 text-center">
-          <p role="alert" className="flex items-center gap-2 text-[15px] text-[#C6392F]">
+          <p role="alert" className="flex items-center gap-2 text-[17px] text-danger">
             <span aria-hidden="true">⚠</span>
             <span>
               {cloneState === "no-session"

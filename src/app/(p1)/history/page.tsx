@@ -68,7 +68,7 @@ export default function HistoryPage() {
         <p className="flex items-center gap-2 text-lg" role="status">
           <span
             aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-gray-400 border-t-transparent"
+            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
           />
           히스토리를 불러오는 중입니다...
         </p>
@@ -79,14 +79,14 @@ export default function HistoryPage() {
   if (state === "error") {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-red-700">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>히스토리를 불러오지 못했습니다. 다시 시도해 주세요.</span>
         </p>
         <button
           type="button"
           onClick={handleRetry}
-          className="min-h-[48px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800"
+          className="min-h-[56px] rounded-[8px] bg-brand px-6 py-3 text-lg font-bold text-white hover:bg-brand-hover"
         >
           다시 시도
         </button>
@@ -98,7 +98,7 @@ export default function HistoryPage() {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 p-8 text-center">
         <h1 className="text-xl font-bold">세션/리포트 히스토리</h1>
-        <p className="text-base text-gray-600">아직 완료한 훈련 기록이 없습니다.</p>
+        <p className="text-lg text-ink-sub">아직 완료한 훈련 기록이 없습니다.</p>
       </main>
     );
   }
@@ -106,14 +106,14 @@ export default function HistoryPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-8 p-8 lg:max-w-3xl xl:max-w-5xl">
       <h1 className="text-2xl font-bold">세션/리포트 히스토리</h1>
-      <p className="text-base text-gray-600">지난 훈련 기록을 최신순으로 볼 수 있습니다.</p>
+      <p className="text-lg text-ink-sub">지난 훈련 기록을 최신순으로 볼 수 있습니다.</p>
 
       {/* UX-012 v1.11 갱신(D-44) — 이 화면은 여전히 **세션 단위** 목록이고, UX-030은 **속은 순간
           단위** 목록이다. 두 화면을 합치지 않고 진입점만 연결한다(T74/UF-010). */}
       <button
         type="button"
         onClick={() => router.push("/report/archive")}
-        className="min-h-[48px] rounded border border-gray-300 px-6 py-3 text-lg font-bold text-black hover:bg-gray-50"
+        className="min-h-[48px] rounded border border-line px-6 py-3 text-lg font-bold text-black hover:bg-gray-50"
       >
         내가 속았던 순간 모아보기
       </button>
@@ -124,10 +124,10 @@ export default function HistoryPage() {
             <button
               type="button"
               onClick={() => handleSelect(item)}
-              className="flex min-h-[56px] w-full flex-col items-start gap-1 rounded border border-gray-300 p-4 text-left text-lg hover:bg-gray-50"
+              className="flex min-h-[56px] w-full flex-col items-start gap-1 rounded border border-line p-4 text-left text-lg hover:bg-gray-50"
             >
               <span className="font-bold">{item.dateLabel}</span>
-              <span className="text-base text-gray-700">결과: {item.resultLabel}</span>
+              <span className="text-lg text-ink">결과: {item.resultLabel}</span>
             </button>
           </li>
         ))}

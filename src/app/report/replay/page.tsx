@@ -310,15 +310,15 @@ export default function ReplayPage() {
 
   if (state === "no-session") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>되짚어볼 대화를 찾을 세션 정보가 없습니다. 처음 화면으로 돌아가 다시 시작해 주세요.</span>
         </p>
         <button
           type="button"
           onClick={handleGoHome}
-          className="min-h-[48px] rounded-xl border border-[#C9C2B6] px-6 py-3 text-lg font-bold text-[#22303A] hover:bg-white"
+          className="min-h-[48px] rounded-[8px] border border-line-strong px-6 py-3 text-lg font-bold text-ink hover:bg-white"
         >
           처음으로
         </button>
@@ -328,11 +328,11 @@ export default function ReplayPage() {
 
   if (state === "loading") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-[#22303A]" role="status">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p className="flex items-center gap-2 text-lg text-ink" role="status">
           <span
             aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-transparent"
+            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
           />
           대화 되짚어보기를 준비하는 중입니다...
         </p>
@@ -342,15 +342,15 @@ export default function ReplayPage() {
 
   if (state === "error" || !report) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>대화 되짚어보기를 불러오지 못했습니다. 다시 시도해 주세요.</span>
         </p>
         <button
           type="button"
           onClick={handleRetry}
-          className="min-h-[48px] rounded-xl bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white"
+          className="min-h-[48px] rounded-[8px] bg-brand px-6 py-3 text-lg font-bold text-white"
         >
           다시 시도
         </button>
@@ -365,13 +365,13 @@ export default function ReplayPage() {
     : null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-[#FAF8F5] pb-8">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-page pb-8">
       <div className="px-5 pt-[22px]">
-        <p className="text-[13px] font-semibold text-[#6B655C]">
+        <p className="text-[15px] font-semibold text-ink-sub">
           {[dateLabel, scenarioTitle].filter(Boolean).join(" · ")}
         </p>
-        <p className="mt-1.5 text-[24px] font-bold leading-[1.35] text-[#22303A]">대화 되짚어보기</p>
-        <p className="mt-1 text-base leading-relaxed text-[#6B655C]">
+        <p className="mt-1.5 text-[24px] font-bold leading-[1.35] text-ink">대화 되짚어보기</p>
+        <p className="mt-1 text-lg leading-relaxed text-ink-sub">
           대화를 처음부터 순서대로 다시 보며, 사기 신호가 있었던 지점을 확인해 보세요.
         </p>
       </div>
@@ -379,16 +379,16 @@ export default function ReplayPage() {
       {/* Empty(AC-009 정합): 한 번도 속지 않은 경우 그 사실을 명시하고 시도된 수법을 나열한다.
           "면역됨/이제 안전"류 과신 표현은 쓰지 않는다(PRD Risk, P-8 "개선 영역" 프레임). */}
       {!report.wasDeceived && (
-        <div className="mx-5 mt-4 rounded-2xl border border-[#E2DDD3] bg-white p-[18px]">
-          <p role="status" className="text-base font-semibold text-[#0E6B62]">
+        <div className="mx-5 mt-4 rounded-[8px] border border-line bg-white p-[18px]">
+          <p role="status" className="text-lg font-semibold text-brand">
             이번 대화에서는 한 번도 속지 않았습니다.
           </p>
-          <p className="mt-1.5 text-base leading-relaxed text-[#6B655C]">
+          <p className="mt-1.5 text-lg leading-relaxed text-ink-sub">
             사기 수법은 계속 진화하므로, 오늘 시도된 수법을 다시 확인하고 대화 흐름 속에서 어떻게
             대응했는지 아래에서 되짚어 보세요. 이건 한 번에 끝나는 게 아니라 계속 유지해야 할 개선
             영역입니다.
           </p>
-          <p className="mt-3 text-sm font-semibold text-[#22303A]">시도된 수법</p>
+          <p className="mt-3 text-base font-semibold text-ink">시도된 수법</p>
           {report.tacticsUsed.length > 0 ? (
             <div className="mt-1.5 flex flex-wrap gap-2">
               {report.tacticsUsed.map((tactic) => (
@@ -399,31 +399,31 @@ export default function ReplayPage() {
             </div>
           ) : (
             // TB-7(UX-008 v1.31) — 리포트 TB-4와 같은 문장. role 없음(상자 첫 줄이 이미 status).
-            <p className="mt-1.5 text-base leading-relaxed text-[#6B655C]">{TACTICS_NOT_FOUND_TEXT}</p>
+            <p className="mt-1.5 text-lg leading-relaxed text-ink-sub">{TACTICS_NOT_FOUND_TEXT}</p>
           )}
         </div>
       )}
 
       {/* 스텝 내비게이션(P-13) — 신호로 점프 + 순차 스크롤 병행. 큰 터치 타겟. */}
-      <div className="mx-5 mt-4 flex items-center justify-between gap-2 rounded-2xl border border-[#E2DDD3] bg-white px-4 py-3">
+      <div className="mx-5 mt-4 flex items-center justify-between gap-2 rounded-[8px] border border-line bg-white px-4 py-3">
         {annotatedTurnIndexes.length > 0 ? (
           <>
             <button
               type="button"
               onClick={() => goToStep(stepPos - 1)}
               disabled={stepPos <= 0}
-              className="min-h-[48px] min-w-[96px] rounded-[14px] border border-[#C9C2B6] px-4 text-base font-bold text-[#22303A] disabled:opacity-40"
+              className="min-h-[48px] min-w-[96px] rounded-[8px] border border-line-strong px-4 text-lg font-bold text-ink disabled:opacity-40"
             >
               ◂ 이전 신호
             </button>
-            <p className="text-sm font-semibold text-[#6B655C]" aria-hidden="true">
+            <p className="text-base font-semibold text-ink-sub" aria-hidden="true">
               신호 {stepPos + 1 > 0 ? stepPos + 1 : "-"} / {annotatedTurnIndexes.length}
             </p>
             <button
               type="button"
               onClick={() => goToStep(stepPos + 1)}
               disabled={stepPos >= annotatedTurnIndexes.length - 1}
-              className="min-h-[48px] min-w-[96px] rounded-[14px] border border-[#C9C2B6] px-4 text-base font-bold text-[#22303A] disabled:opacity-40"
+              className="min-h-[48px] min-w-[96px] rounded-[8px] border border-line-strong px-4 text-lg font-bold text-ink disabled:opacity-40"
             >
               다음 신호 ▸
             </button>
@@ -431,7 +431,7 @@ export default function ReplayPage() {
         ) : (
           // Failure(UX-018): 이동할 속은 순간이 없으면 침묵하지 않고 명시한다 — 문면은 TB-9a~d
           // (UX-008 v1.31). 한 문단 두 문장, role="status" 유지.
-          <p className="text-base text-[#6B655C]" role="status">
+          <p className="text-lg text-ink-sub" role="status">
             {replayNavEmptyText(report.wasDeceived, signalCardCount)}
           </p>
         )}
@@ -482,10 +482,10 @@ export default function ReplayPage() {
               {item.role === "user" ? (
                 <div className="flex justify-end">
                   <div className="max-w-[85%]">
-                    <div className="rounded-[16px] rounded-br-[4px] bg-[#0E6B62] px-4 py-3">
-                      <p className="text-[15px] leading-[1.55] text-white">{item.textMasked}</p>
+                    <div className="rounded-[8px] rounded-br-[4px] bg-brand px-4 py-3">
+                      <p className="text-[17px] leading-[1.55] text-white">{item.textMasked}</p>
                     </div>
-                    <p className="mr-1 mt-1 flex items-center justify-end gap-1.5 text-[11px] text-[#6B655C]">
+                    <p className="mr-1 mt-1 flex items-center justify-end gap-1.5 text-[11px] text-ink-sub">
                       나
                       {hasMultipleChannels && <Badge variant="neutral">{channelBadgeLabel}</Badge>}
                     </p>
@@ -495,23 +495,23 @@ export default function ReplayPage() {
                 <div className="flex max-w-[85%] items-end gap-2">
                   <div
                     aria-hidden="true"
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#41525E]"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-avatar-bg"
                   >
-                    <div className="h-[14px] w-[14px] rounded-full bg-[#C9D4DB]" />
+                    <div className="h-[14px] w-[14px] rounded-full bg-avatar-fg" />
                   </div>
                   <div>
-                    <p className="mb-1 ml-1 flex items-center gap-1.5 text-[11px] text-[#6B655C]">
-                      {callerLabel} <span className="font-semibold text-[#B96A1B]">(사칭)</span>
+                    <p className="mb-1 ml-1 flex items-center gap-1.5 text-[11px] text-ink-sub">
+                      {callerLabel} <span className="font-semibold text-caution">(사칭)</span>
                       {hasMultipleChannels && <Badge variant="neutral">{channelBadgeLabel}</Badge>}
                     </p>
                     <div
-                      className={`rounded-[16px] rounded-bl-[4px] px-4 py-3 ${
+                      className={`rounded-[8px] rounded-bl-[4px] px-4 py-3 ${
                         item.annotation
-                          ? "border-[1.5px] border-[#B96A1B]/50 bg-[#FBF3E8]"
-                          : "border border-[#E2DDD3] bg-white"
+                          ? "border-[1.5px] border-caution/50 bg-caution-tint"
+                          : "border border-line bg-white"
                       }`}
                     >
-                      <p className="text-[15px] leading-[1.55] text-[#22303A]">{item.textMasked}</p>
+                      <p className="text-[17px] leading-[1.55] text-ink">{item.textMasked}</p>
                     </div>
                   </div>
                 </div>
@@ -522,24 +522,24 @@ export default function ReplayPage() {
               {item.annotation && (
                 <div
                   role="note"
-                  className={`mt-2 rounded-[12px] border border-[#B96A1B]/30 bg-[#FBF3E8] p-3.5 ${
+                  className={`mt-2 rounded-[8px] border border-caution/30 bg-caution-tint p-3.5 ${
                     item.role === "user" ? "" : "ml-10"
                   }`}
                 >
-                  <p className="mb-1.5 text-[13px] font-bold text-[#B96A1B]">⚠️ 여기가 신호였어요</p>
-                  <p className="text-[13px] leading-[1.6] text-[#22303A]">
+                  <p className="mb-1.5 text-[15px] font-bold text-caution">⚠️ 여기가 신호였어요</p>
+                  <p className="text-[15px] leading-[1.6] text-ink">
                     {item.annotation.timeLabel}: 이 말이 &apos;{item.annotation.tactic}&apos; 신호였습니다.
                   </p>
-                  <div className="my-2.5 h-px bg-[#B96A1B]/20" />
-                  <p className="mb-1.5 text-[13px] font-bold text-[#0E6B62]">이렇게 대응했어야</p>
-                  <p className="text-[13px] leading-[1.6] text-[#22303A]">{item.annotation.correctAction}</p>
+                  <div className="my-2.5 h-px bg-caution/20" />
+                  <p className="mb-1.5 text-[15px] font-bold text-brand">이렇게 대응했어야</p>
+                  <p className="text-[15px] leading-[1.6] text-ink">{item.annotation.correctAction}</p>
                   {/* T70(UX-028) — "읽는 복기"에서 "다시 해보기"로 이어지는 지점(UX-018 Entry).
                       순간 인덱스는 리포트 deceivedMoments 순서(=turnIndex 오름차순)와 같다. */}
                   {rewindEntry === "available" && (
                     <button
                       type="button"
                       onClick={() => goToRewind(annotatedTurnIndexes.indexOf(item.turnIndex))}
-                      className="mt-3 min-h-[48px] w-full rounded-xl border border-[#0E6B62] bg-white px-4 text-base font-semibold text-[#0E6B62]"
+                      className="mt-3 min-h-[48px] w-full rounded-[8px] border border-brand bg-white px-4 text-lg font-semibold text-brand"
                     >
                       이 순간 다시 해보기
                     </button>
@@ -549,9 +549,9 @@ export default function ReplayPage() {
               {/* T194-b(UX-018 v1.38 ①) — R-1(기록 있음) 세션에서만 사기범이 카드 값을 처음 말한 줄에 기존 주석 형식으로 단다.
                   기록이 없으면(R-2) 주석 0(근거 없는 지목 금지). 속은 순간이 아니므로 되감기 버튼 0(D-51). */}
               {item.role === "scammer" && item.turnIndex === personaAnchor && (
-                <div role="note" className="ml-10 mt-2 rounded-[12px] border border-[#B96A1B]/30 bg-[#FBF3E8] p-3.5">
-                  <p className="mb-1.5 text-[13px] font-bold text-[#B96A1B]">⚠️ 여기가 신호였어요</p>
-                  <p className="text-[13px] leading-[1.6] text-[#22303A]">{PERSONA_REPLAY_NOTE}.</p>
+                <div role="note" className="ml-10 mt-2 rounded-[8px] border border-caution/30 bg-caution-tint p-3.5">
+                  <p className="mb-1.5 text-[15px] font-bold text-caution">⚠️ 여기가 신호였어요</p>
+                  <p className="text-[15px] leading-[1.6] text-ink">{PERSONA_REPLAY_NOTE}.</p>
                 </div>
               )}
             </li>
@@ -561,8 +561,8 @@ export default function ReplayPage() {
 
       {/* 하단 고정 안내 — mockup(리포트 화면.dc.html) 고정 문구. "면역됐다" 류 과신 표현 대신
           "이번에 놓쳤을 수 있는 부분"으로 프레이밍한다(README "3. 리포트 화면" 명시 요구사항). */}
-      <div className="mx-5 mt-4 rounded-[12px] bg-[#F2EFE9] px-4 py-3">
-        <p className="text-[13px] leading-[1.6] text-[#6B655C]">
+      <div className="mx-5 mt-4 rounded-[8px] bg-neutral-tint px-4 py-3">
+        <p className="text-[15px] leading-[1.6] text-ink-sub">
           한 번의 훈련으로 끝이 아니에요. 이번에 놓쳤을 수 있는 부분은 다음 훈련에서 다시 연습할 수
           있어요.
         </p>
@@ -573,25 +573,25 @@ export default function ReplayPage() {
           되읽을 방법이 없다 — 그래서 서버 상태와 동기화된 "토글"이 아니라 액션 버튼 쌍 + 이번
           세션 동안의 로컬 확인 표시로 구현한다(1회성 결정이라도 여러 번 바꿔 누를 수는 있다). */}
       {challenge && (
-        <div className="mx-5 mt-4 flex flex-col gap-3 rounded-2xl border border-[#E2DDD3] bg-white p-[18px]">
-          <p className="text-base font-semibold text-[#22303A]">
+        <div className="mx-5 mt-4 flex flex-col gap-3 rounded-[8px] border border-line bg-white p-[18px]">
+          <p className="text-lg font-semibold text-ink">
             이 결과를 {challenge.displayName}님과 공유하시겠어요?
           </p>
-          <p className="text-sm leading-relaxed text-[#6B655C]">
+          <p className="text-base leading-relaxed text-ink-sub">
             동의하면 완료 여부만 {challenge.displayName}님에게 전달됩니다. 대화 내용은 전달되지
             않습니다(AC-043).
           </p>
 
           {!challengeToken ? (
-            <p role="status" className="text-sm text-[#6B655C]">
+            <p role="status" className="text-base text-ink-sub">
               결과 공유 동의는 이 훈련을 진행한 브라우저 탭에서만 가능합니다.
             </p>
           ) : shareState === "shared" ? (
-            <p role="status" className="text-sm font-semibold text-[#0E6B62]">
+            <p role="status" className="text-base font-semibold text-brand">
               공유하기로 했습니다.
             </p>
           ) : shareState === "declined" ? (
-            <p role="status" className="text-sm font-semibold text-[#6B655C]">
+            <p role="status" className="text-base font-semibold text-ink-sub">
               공유하지 않기로 했습니다.
             </p>
           ) : (
@@ -617,7 +617,7 @@ export default function ReplayPage() {
             </div>
           )}
           {shareState === "error" && (
-            <p role="alert" className="flex items-center gap-2 text-sm text-[#C6392F]">
+            <p role="alert" className="flex items-center gap-2 text-base text-danger">
               <span aria-hidden="true">⚠</span>
               <span>저장에 실패했습니다. 다시 시도해 주세요.</span>
             </p>
@@ -643,7 +643,7 @@ export default function ReplayPage() {
         <button
           type="button"
           onClick={handleGoHome}
-          className="min-h-[48px] rounded-2xl px-6 py-3 text-base font-semibold text-[#6B655C]"
+          className="min-h-[48px] rounded-[8px] px-6 py-3 text-lg font-semibold text-ink-sub"
         >
           처음으로
         </button>
@@ -669,25 +669,25 @@ function ReplaySmsItem({ sms }: { sms: ReplaySmsSource }) {
       <div className="flex max-w-[85%] items-end gap-2">
         <div
           aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#41525E] text-sm text-[#C9D4DB]"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-avatar-bg text-base text-avatar-fg"
         >
           ✉
         </div>
         <div>
-          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[#6B655C]">
+          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-sub">
             {sms.senderLabel}
             <Badge variant="neutral">문자</Badge>
             {/* AC-022/032 계승 — 사후 화면에서도 모의 문자임을 표기한다. */}
-            <span className="rounded-full bg-[#EFEBF7] px-2 py-0.5 text-[11px] font-semibold text-[#463880]">
+            <span className="rounded-full bg-ai-tint px-2 py-0.5 text-[11px] font-semibold text-ai-ink">
               AI 훈련용 모의 문자
             </span>
           </p>
-          <div className="rounded-[16px] rounded-bl-[4px] border border-[#E2DDD3] bg-white px-4 py-3">
-            <p className="whitespace-pre-line text-[15px] leading-[1.55] text-[#22303A]">
+          <div className="rounded-[8px] rounded-bl-[4px] border border-line bg-white px-4 py-3">
+            <p className="whitespace-pre-line text-[17px] leading-[1.55] text-ink">
               {sms.body}
             </p>
             {sms.linkDisplayText && (
-              <p className="mt-2 text-[13px] text-[#6B655C]">
+              <p className="mt-2 text-[15px] text-ink-sub">
                 <span className="font-semibold">문자 속 링크 표기: </span>
                 {sms.linkDisplayText}
               </p>
@@ -698,7 +698,7 @@ function ReplaySmsItem({ sms }: { sms: ReplaySmsSource }) {
 
       {/* 앵커 미해결 고지(§15.1.5 (4) 규칙 3) — 조용히 버리지 않고 위치를 모른다는 사실을 알린다. */}
       {!sms.anchorResolved && (
-        <p className="ml-10 mt-1.5 text-[13px] text-[#6B655C]" role="status">
+        <p className="ml-10 mt-1.5 text-[15px] text-ink-sub" role="status">
           이 문자가 대화 중 어느 시점에 도착했는지는 확인하지 못했습니다.
         </p>
       )}
@@ -707,18 +707,18 @@ function ReplaySmsItem({ sms }: { sms: ReplaySmsSource }) {
         <div
           key={event.event}
           role="note"
-          className="ml-10 mt-2 rounded-[12px] border border-[#B96A1B]/30 bg-[#FBF3E8] p-3.5"
+          className="ml-10 mt-2 rounded-[8px] border border-caution/30 bg-caution-tint p-3.5"
         >
-          <p className="mb-1.5 text-[13px] font-bold text-[#B96A1B]">⚠️ 여기가 신호였어요</p>
-          <p className="text-[13px] leading-[1.6] text-[#22303A]">
+          <p className="mb-1.5 text-[15px] font-bold text-caution">⚠️ 여기가 신호였어요</p>
+          <p className="text-[15px] leading-[1.6] text-ink">
             {sms.timeLabel ? `${sms.timeLabel}: ` : ""}
             {event.what}
           </p>
           {event.correctAction && (
             <>
-              <div className="my-2.5 h-px bg-[#B96A1B]/20" />
-              <p className="mb-1.5 text-[13px] font-bold text-[#0E6B62]">이렇게 대응했어야</p>
-              <p className="text-[13px] leading-[1.6] text-[#22303A]">{event.correctAction}</p>
+              <div className="my-2.5 h-px bg-caution/20" />
+              <p className="mb-1.5 text-[15px] font-bold text-brand">이렇게 대응했어야</p>
+              <p className="text-[15px] leading-[1.6] text-ink">{event.correctAction}</p>
             </>
           )}
         </div>
@@ -740,25 +740,25 @@ function ReplayVerifyItem({ verify }: { verify: ReplayVerifySource }) {
       <div className="flex max-w-[85%] items-end gap-2">
         <div
           aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#41525E] text-sm text-[#C9D4DB]"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-avatar-bg text-base text-avatar-fg"
         >
           ✆
         </div>
         <div>
-          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[#6B655C]">
+          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-sub">
             {verify.deskLabel}
             <Badge variant="neutral">확인 시도</Badge>
-            <span className="rounded-full bg-[#EFEBF7] px-2 py-0.5 text-[11px] font-semibold text-[#463880]">
+            <span className="rounded-full bg-ai-tint px-2 py-0.5 text-[11px] font-semibold text-ai-ink">
               AI 훈련용 모의 창구
             </span>
           </p>
           {/* ⭐ T110(§22.3) — `displayNumber`는 **과거 리포트에만** 있다(무백필). 값이 있으면 그때
               실제로 본 그대로 보여주고(정직), 호 전환 모델의 신규 리포트에서는 이 줄이 아예 없다. */}
-          <div className="rounded-[16px] rounded-bl-[4px] border border-[#E2DDD3] bg-white px-4 py-3">
+          <div className="rounded-[8px] rounded-bl-[4px] border border-line bg-white px-4 py-3">
             {/* ⭐⭐ §38.6 S2 — 종전에는 이 줄이 `displayNumber` 유무로만 갈라져 **참가자가 전환을
                 요청한 적 없는 세션에서도** *"통화를 넘겼습니다"* 를 단언했다(기록 무결성 위반).
                 판정은 `hasVerifyTransfer` 하나가 소유하고 화면은 새로 판정하지 않는다. */}
-            <p className="text-[15px] leading-[1.55] text-[#22303A]">
+            <p className="text-[17px] leading-[1.55] text-ink">
               {verify.displayNumber !== undefined ? (
                 <>
                   안내받은 번호: <span className="font-mono">{verify.displayNumber}</span>
@@ -774,7 +774,7 @@ function ReplayVerifyItem({ verify }: { verify: ReplayVerifySource }) {
       </div>
 
       {!verify.anchorResolved && (
-        <p className="ml-10 mt-1.5 text-[13px] text-[#6B655C]" role="status">
+        <p className="ml-10 mt-1.5 text-[15px] text-ink-sub" role="status">
           이 안내가 대화 중 어느 시점에 있었는지는 확인하지 못했습니다.
         </p>
       )}
@@ -783,10 +783,10 @@ function ReplayVerifyItem({ verify }: { verify: ReplayVerifySource }) {
         <div
           key={event.event}
           role="note"
-          className="ml-10 mt-2 rounded-[12px] border border-[#B96A1B]/30 bg-[#FBF3E8] p-3.5"
+          className="ml-10 mt-2 rounded-[8px] border border-caution/30 bg-caution-tint p-3.5"
         >
-          <p className="mb-1.5 text-[13px] font-bold text-[#B96A1B]">⚠️ 여기가 신호였어요</p>
-          <p className="text-[13px] leading-[1.6] text-[#22303A]">
+          <p className="mb-1.5 text-[15px] font-bold text-caution">⚠️ 여기가 신호였어요</p>
+          <p className="text-[15px] leading-[1.6] text-ink">
             {(event.event === "verify_reconnected" ? verify.reconnectTimeLabel : verify.timeLabel)
               ? `${event.event === "verify_reconnected" ? verify.reconnectTimeLabel : verify.timeLabel}: `
               : ""}
@@ -794,9 +794,9 @@ function ReplayVerifyItem({ verify }: { verify: ReplayVerifySource }) {
           </p>
           {event.correctAction && (
             <>
-              <div className="my-2.5 h-px bg-[#B96A1B]/20" />
-              <p className="mb-1.5 text-[13px] font-bold text-[#0E6B62]">이렇게 하시면 됩니다</p>
-              <p className="text-[13px] leading-[1.6] text-[#22303A]">{event.correctAction}</p>
+              <div className="my-2.5 h-px bg-caution/20" />
+              <p className="mb-1.5 text-[15px] font-bold text-brand">이렇게 하시면 됩니다</p>
+              <p className="text-[15px] leading-[1.6] text-ink">{event.correctAction}</p>
             </>
           )}
         </div>
@@ -837,19 +837,19 @@ function ReplayMockScreenItem({
       <div className="flex max-w-[85%] items-end gap-2">
         <div
           aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#41525E] text-sm text-[#C9D4DB]"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-avatar-bg text-base text-avatar-fg"
         >
           ▣
         </div>
         <div>
-          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[#6B655C]">
+          <p className="mb-1 ml-1 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-sub">
             <Badge variant="neutral">모의 화면</Badge>
-            <span className="rounded-full bg-[#EFEBF7] px-2 py-0.5 text-[11px] font-semibold text-[#463880]">
+            <span className="rounded-full bg-ai-tint px-2 py-0.5 text-[11px] font-semibold text-ai-ink">
               AI 훈련용 모의 화면
             </span>
           </p>
-          <div className="rounded-[16px] rounded-bl-[4px] border border-[#E2DDD3] bg-white px-4 py-3">
-            <p className="text-[15px] leading-[1.55] text-[#22303A]">
+          <div className="rounded-[8px] rounded-bl-[4px] border border-line bg-white px-4 py-3">
+            <p className="text-[17px] leading-[1.55] text-ink">
               {mockScreen.timeLabel ? `${mockScreen.timeLabel}: ` : ""}
               {what}
             </p>
@@ -858,24 +858,24 @@ function ReplayMockScreenItem({
       </div>
 
       {!mockScreen.anchorResolved && (
-        <p className="ml-10 mt-1.5 text-[13px] text-[#6B655C]" role="status">
+        <p className="ml-10 mt-1.5 text-[15px] text-ink-sub" role="status">
           이 화면이 대화 중 어느 시점에 표시됐는지는 확인하지 못했습니다.
         </p>
       )}
 
-      <div role="note" className="ml-10 mt-2 rounded-[12px] border border-[#B96A1B]/30 bg-[#FBF3E8] p-3.5">
+      <div role="note" className="ml-10 mt-2 rounded-[8px] border border-caution/30 bg-caution-tint p-3.5">
         {copy.heading && (
           <p
             className={
               copy.tone === "praise"
-                ? "mb-1.5 text-[13px] font-bold text-[#0E6B62]"
-                : "mb-1.5 text-[13px] font-bold text-[#B96A1B]"
+                ? "mb-1.5 text-[15px] font-bold text-brand"
+                : "mb-1.5 text-[15px] font-bold text-caution"
             }
           >
             {copy.heading}
           </p>
         )}
-        <p className="text-[13px] leading-[1.6] text-[#22303A]">{copy.text}</p>
+        <p className="text-[15px] leading-[1.6] text-ink">{copy.text}</p>
       </div>
     </li>
   );

@@ -15,11 +15,11 @@ export default function SyntheticLabel({
   return (
     <span
       role="status"
-      className={`inline-flex items-center gap-[7px] rounded-full border-[1.5px] border-[#5B4B9E] bg-[#EFEBF7] px-3.5 py-1.5 text-sm font-semibold text-[#463880] ${className}`}
+      className={`inline-flex items-center gap-[7px] rounded-full border-[1.5px] border-ai bg-ai-tint px-3.5 py-1.5 text-base font-semibold text-ai-ink ${className}`}
     >
       <span
         aria-hidden="true"
-        className="flex h-5 w-5 items-center justify-center rounded-[5px] bg-[#5B4B9E] text-[11px] font-extrabold text-white"
+        className="flex h-5 w-5 items-center justify-center rounded-[5px] bg-ai text-[11px] font-extrabold text-white"
       >
         AI
       </span>

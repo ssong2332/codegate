@@ -37,7 +37,7 @@ test("[D-130] 화면 — ①'지금 30초 녹음' · ②'저장된 내 목소리
     "② 블록이 showCloneOptions 조건 밖이다",
   );
   // ③은 조건 없이 늘 보인다 — ③ 라벨 직전 블록에 showCloneOptions가 없어야 한다.
-  const fallbackBlockStart = PAGE.lastIndexOf('<div className="flex flex-col gap-3 rounded-[16px]', fallbackLabel);
+  const fallbackBlockStart = PAGE.lastIndexOf('<div className="flex flex-col gap-3 rounded-[8px]', fallbackLabel);
   assert.ok(fallbackBlockStart > storedLabel, "③ 블록 위치가 예상과 다르다");
   assert.ok(!PAGE.slice(fallbackBlockStart - 80, fallbackLabel).includes("showCloneOptions"), "③이 모드에 묶였다");
 });

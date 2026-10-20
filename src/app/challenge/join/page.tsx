@@ -184,22 +184,24 @@ export default function ChallengeJoinPage() {
 
   if (state === "no-token") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>유효한 링크가 아닙니다. 받은 링크를 다시 확인해 주세요.</span>
         </p>
+        {/* 시안 A 8번(UX D-132 (4)) — 오류 화면에 "다음에 할 일" 한 줄. */}
+        <p className="text-[17px] leading-[1.6] text-ink-sub">링크가 열리지 않으면 보낸 분께 새 링크를 부탁하세요.</p>
       </main>
     );
   }
 
   if (state === "loading") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-[#22303A]" role="status">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p className="flex items-center gap-2 text-lg text-ink" role="status">
           <span
             aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-[#C9C2B6] border-t-transparent"
+            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
           />
           링크를 확인하는 중입니다...
         </p>
@@ -209,8 +211,8 @@ export default function ChallengeJoinPage() {
 
   if (state === "blocked") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>{blockedMessage}</span>
         </p>
@@ -225,15 +227,15 @@ export default function ChallengeJoinPage() {
   // 화면과 같은 가운데 정렬 단일 컬럼이다.
   if (state === "completed") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <div
           aria-hidden="true"
-          className="flex h-[88px] w-[88px] items-center justify-center rounded-full bg-[#E4F0EC]"
+          className="flex h-[88px] w-[88px] items-center justify-center rounded-full bg-brand-tint"
         >
-          <svg width="40" height="40" viewBox="0 0 13 13" fill="none">
+          <svg className="text-brand" width="40" height="40" viewBox="0 0 13 13" fill="none">
             <path
               d="M2.5 7L5.2 9.7L10.5 3.5"
-              stroke="#0E6B62"
+              stroke="currentColor"
               strokeWidth="1.6"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -243,13 +245,13 @@ export default function ChallengeJoinPage() {
         <h1
           ref={completedHeadingRef}
           tabIndex={-1}
-          className="text-[26px] font-bold leading-[1.35] text-[#22303A] outline-none"
+          className="text-[26px] font-bold leading-[1.35] text-ink outline-none"
         >
           {COMPLETED_LANDING_TITLE}
         </h1>
         <div className="flex flex-col gap-1">
           {COMPLETED_LANDING_BODY.map((sentence) => (
-            <p key={sentence} className="text-base leading-[1.7] text-[#6B655C]">
+            <p key={sentence} className="text-lg leading-[1.7] text-ink-sub">
               {sentence}
             </p>
           ))}
@@ -260,15 +262,15 @@ export default function ChallengeJoinPage() {
 
   if (state === "load-error") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-[#FAF8F5] p-8 text-center">
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>링크 정보를 불러오지 못했습니다. 다시 시도해 주세요.</span>
         </p>
         <button
           type="button"
           onClick={handleRetryLoad}
-          className="min-h-[48px] rounded-xl bg-[#0E6B62] px-6 py-3 text-lg font-bold text-white"
+          className="min-h-[48px] rounded-[8px] bg-brand px-6 py-3 text-lg font-bold text-white"
         >
           다시 시도
         </button>
@@ -297,17 +299,17 @@ export default function ChallengeJoinPage() {
         ];
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-[#FAF8F5] p-6">
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-page p-6">
       {/* 상시 노출 훈련 초대 배너 — 닫기 불가(Banner 컴포넌트 계약, README "Interactions &
           Behavior"). 동의 전 무동의 재생 없음(AC-040)을 화면 진입 즉시 재확인시킨다. */}
       <Banner variant="caution">
-        <span className="font-semibold text-[#B96A1B]">훈련 초대입니다.</span> 동의 전에는 아무것도
+        <span className="font-semibold text-caution">훈련 초대입니다.</span> 동의 전에는 아무것도
         시작되지 않아요.
       </Banner>
 
       <header className="flex flex-col gap-3">
-        <h1 className="text-2xl font-bold leading-relaxed text-[#22303A]">
-          <span className="text-[#0E6B62]">{displayName}</span>님이 보이스피싱 인식 테스트를
+        <h1 className="text-2xl font-bold leading-relaxed text-ink">
+          <span className="text-brand">{displayName}</span>님이 보이스피싱 인식 테스트를
           준비했어요
         </h1>
 
@@ -315,10 +317,10 @@ export default function ChallengeJoinPage() {
             압박이 이어질 수 있습니다"를 **동의 전에 명시**한다(정보량 증가 방향). 난이도는 동의
             게이트를 우회·완화·게이팅하지 않는다(D-42) — 아래 안내 3개·신고·차단은 전부 무변경. */}
         {difficultyLevel && (
-          <p className="text-[15px] leading-relaxed text-[#22303A]">
+          <p className="text-[17px] leading-relaxed text-ink">
             훈련 강도: <strong className="font-bold">{DIFFICULTY_LABEL[difficultyLevel]}</strong>
             {difficultyLevel === "advanced" && (
-              <span className="font-semibold text-[#B96A1B]">
+              <span className="font-semibold text-caution">
                 {" "}
                 — 실제와 가깝게 강한 압박이 이어질 수 있습니다.
               </span>
@@ -326,7 +328,7 @@ export default function ChallengeJoinPage() {
           </p>
         )}
 
-        <div className="flex flex-col gap-3 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4">
+        <div className="flex flex-col gap-3 rounded-[8px] border-[1.5px] border-line bg-white p-4">
           {consentPoints.map((point) => (
             <div key={point} className="flex items-start gap-2.5">
               <svg
@@ -339,20 +341,20 @@ export default function ChallengeJoinPage() {
               >
                 <path
                   d="M2.5 7L5.2 9.7L10.5 3.5"
-                  stroke="#0E6B62"
+                  stroke="currentColor"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               </svg>
-              <p className="text-[14px] leading-[1.55] text-[#22303A]">{point}</p>
+              <p className="text-[16px] leading-[1.55] text-ink">{point}</p>
             </div>
           ))}
         </div>
       </header>
 
       {consentError && (
-        <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+        <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>{consentError}</span>
         </p>
@@ -380,20 +382,20 @@ export default function ChallengeJoinPage() {
         <button
           type="button"
           onClick={() => setShowReportForm(true)}
-          className="min-h-[48px] w-fit rounded-lg px-2 text-center text-[13px] font-semibold text-[#C6392F] underline hover:bg-[#F2EFE9]"
+          className="min-h-[48px] w-fit rounded-lg px-2 text-center text-[15px] font-semibold text-danger underline hover:bg-neutral-tint"
         >
           원치 않는 챌린지인가요? 신고하기
         </button>
       ) : reportState === "submitted" ? (
-        <p role="status" className="text-base text-[#0E6B62]">
+        <p role="status" className="text-lg text-brand">
           신고가 접수되었습니다. 이 챌린지는 더 이상 재생되지 않습니다.
         </p>
       ) : (
-        <div className="flex flex-col gap-3 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4">
-          <p className="text-base font-semibold text-[#22303A]">신고 사유를 선택해 주세요</p>
+        <div className="flex flex-col gap-3 rounded-[8px] border-[1.5px] border-line bg-white p-4">
+          <p className="text-lg font-semibold text-ink">신고 사유를 선택해 주세요</p>
           <div className="flex flex-col gap-2">
             {REPORT_REASON_LABELS.map((option) => (
-              <label key={option.value} className="flex items-center gap-2 text-base text-[#22303A]">
+              <label key={option.value} className="flex items-center gap-2 text-lg text-ink">
                 <input
                   type="radio"
                   name="report-reason"
@@ -407,17 +409,17 @@ export default function ChallengeJoinPage() {
             ))}
           </div>
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-semibold text-[#6B655C]">추가 메모(선택)</span>
+            <span className="text-base font-semibold text-ink-sub">추가 메모(선택)</span>
             <textarea
               value={reportNote}
               onChange={(event) => setReportNote(event.target.value)}
               disabled={reportState === "submitting"}
               rows={3}
-              className="rounded-[10px] border-[1.5px] border-[#E2DDD3] bg-white p-3 text-base text-[#22303A] outline-none focus:border-[#0E6B62]"
+              className="rounded-[10px] border-[1.5px] border-line bg-white p-3 text-lg text-ink outline-none focus:border-brand"
             />
           </label>
           {reportState === "error" && (
-            <p role="alert" className="flex items-center gap-2 text-base text-[#C6392F]">
+            <p role="alert" className="flex items-center gap-2 text-lg text-danger">
               <span aria-hidden="true">⚠</span>
               <span>신고 접수에 실패했습니다. 다시 시도해 주세요.</span>
             </p>
@@ -427,7 +429,7 @@ export default function ChallengeJoinPage() {
               type="button"
               onClick={() => void handleSubmitReport()}
               disabled={reportState === "submitting"}
-              className="min-h-[48px] flex-1 rounded-[12px] bg-[#C6392F] px-4 py-2 text-base font-bold text-white transition-colors hover:bg-[#A82F27] disabled:opacity-50"
+              className="min-h-[48px] flex-1 rounded-[8px] bg-danger px-4 py-2 text-lg font-bold text-white transition-colors hover:bg-danger-hover disabled:opacity-50"
             >
               {reportState === "submitting" ? "접수하는 중..." : "신고하기"}
             </button>
@@ -435,7 +437,7 @@ export default function ChallengeJoinPage() {
               type="button"
               onClick={() => setShowReportForm(false)}
               disabled={reportState === "submitting"}
-              className="min-h-[48px] flex-1 rounded-[12px] border-[1.5px] border-[#E2DDD3] px-4 py-2 text-base font-semibold text-[#22303A] transition-colors hover:border-[#C9C2B6] disabled:opacity-50"
+              className="min-h-[48px] flex-1 rounded-[8px] border-[1.5px] border-line px-4 py-2 text-lg font-semibold text-ink transition-colors hover:border-line-strong disabled:opacity-50"
             >
               취소
             </button>

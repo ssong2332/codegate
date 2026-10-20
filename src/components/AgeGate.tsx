@@ -43,21 +43,21 @@ export default function AgeGate({ uid, onPass }: AgeGateProps) {
   // Error 상태(UX.md "기준 미달 시 차단 안내") — 접근을 제한하고 되돌릴 동작을 주지 않는다.
   if (status === "blocked") {
     return (
-      <div className="flex flex-col gap-4 rounded border border-gray-300 p-6 text-center">
+      <div className="flex flex-col gap-4 rounded-[8px] border border-line bg-surface p-6 text-center">
         <p
           role="alert"
-          className="flex items-center justify-center gap-2 text-lg font-semibold text-red-700"
+          className="flex items-center justify-center gap-2 text-lg font-semibold text-danger"
         >
           <span aria-hidden="true">⚠</span>
           <span>만 {MIN_AGE}세 미만은 이 훈련 서비스를 이용할 수 없습니다.</span>
         </p>
-        <p className="text-base text-gray-600">보호자와 함께 다른 안전 교육 자료를 확인해 주세요.</p>
+        <p className="text-lg text-ink-sub">보호자와 함께 다른 안전 교육 자료를 확인해 주세요.</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6 rounded border border-gray-300 p-6 text-center">
+    <div className="flex flex-col gap-6 rounded-[8px] border border-line bg-surface p-6 text-center">
       <h1 className="text-2xl font-bold">연령 확인</h1>
       <p className="text-lg leading-relaxed">
         이 훈련 서비스는 만 {MIN_AGE}세 이상만 이용할 수 있습니다.
@@ -65,7 +65,7 @@ export default function AgeGate({ uid, onPass }: AgeGateProps) {
       <p className="text-lg font-semibold">만 {MIN_AGE}세 이상이 맞습니까?</p>
 
       {status === "error" && (
-        <p role="alert" className="flex items-center justify-center gap-2 text-base text-red-700">
+        <p role="alert" className="flex items-center justify-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>확인 저장에 실패했습니다. 연결 상태를 확인하고 다시 시도해 주세요.</span>
         </p>
@@ -76,7 +76,7 @@ export default function AgeGate({ uid, onPass }: AgeGateProps) {
           type="button"
           onClick={handleConfirm}
           disabled={status === "saving"}
-          className="min-h-[48px] rounded bg-black px-6 py-3 text-lg font-bold text-white hover:bg-gray-800 disabled:opacity-50"
+          className="min-h-[56px] rounded-[8px] bg-brand px-6 py-3 text-lg font-bold text-white hover:bg-brand-hover disabled:opacity-50"
         >
           {status === "saving" ? "확인 중..." : `예, 만 ${MIN_AGE}세 이상입니다`}
         </button>
@@ -84,7 +84,7 @@ export default function AgeGate({ uid, onPass }: AgeGateProps) {
           type="button"
           onClick={handleDecline}
           disabled={status === "saving"}
-          className="min-h-[48px] rounded border border-gray-400 px-6 py-3 text-lg font-bold hover:bg-gray-100 disabled:opacity-50"
+          className="min-h-[56px] rounded-[8px] border-[1.5px] border-line-strong bg-surface px-6 py-3 text-lg font-bold text-ink hover:bg-brand-tint disabled:opacity-50"
         >
           아니오, 만 {MIN_AGE}세 미만입니다
         </button>

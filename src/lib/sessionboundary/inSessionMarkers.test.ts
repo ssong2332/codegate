@@ -399,7 +399,7 @@ test("[T190-8b/G438 역검증 — AC-091 (f)ⓐⓒ] play에 `<p>{PREROLL_NOTICE}
   assert.ok(c.length >= 1);
   // CallStartNotice 안에서 고지 ①을 조건 아래로 넣은 사본도 실패한다(④).
   const notice = read("src/components/CallStartNotice.tsx");
-  const conditional = notice.replace("<p className=\"text-[17px] leading-[1.7] text-[#6B655C]\">{PREROLL_NOTICE}</p>", "{false && <p>{PREROLL_NOTICE}</p>}");
+  const conditional = notice.replace("<p className=\"text-[17px] leading-[1.7] text-ink-sub\">{PREROLL_NOTICE}</p>", "{false && <p>{PREROLL_NOTICE}</p>}");
   assert.notEqual(conditional, notice, "오염 지점(CallStartNotice 고지 ①)을 찾지 못했다");
   assert.equal(prerollUsageViolations(conditional).length, 1);
 });
