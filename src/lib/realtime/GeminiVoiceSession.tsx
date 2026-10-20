@@ -1190,7 +1190,7 @@ export default function GeminiVoiceSession({
               const hasAudio = samples !== null && samples.length > 0;
               if (hasAudio && samples) {
                 audioSinceBoundary = true;
-                noteChunkReceived();
+                noteChunkReceived(samples); // 진단 — 원본 PCM 최대 진폭(`pcm.peakDb`)
                 const buffer = outputContext.createBuffer(
                   1,
                   samples.length,
