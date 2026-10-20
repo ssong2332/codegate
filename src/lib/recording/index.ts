@@ -50,6 +50,8 @@ export {
   getSelectedDifficultyLevel,
 } from "./pendingSession";
 export type { TrainingType, ExperienceMode } from "./pendingSession";
+// UX-025 경로 노출 규칙(D-130) — 녹음 · 저장 목소리 경로는 send 모드에서만.
+export { shouldShowCloneVoiceOptions } from "./voiceSelectOptions";
 // 실시간 음성 통화 전환(2026-07-22 사용자 결정, Phase A) — 브라우저 STT 래퍼.
 export { useSpeechRecognition } from "./useSpeechRecognition";
 export type { SpeechRecognitionStatus, SpeechRecognitionState, SpeechRecognitionControls } from "./useSpeechRecognition";

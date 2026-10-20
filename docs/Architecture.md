@@ -21511,3 +21511,28 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 | **G623** | ② 통화 구간 접기(연속 · 분리 · 끝 구간) · channel 부재/messenger 무변경 · 메신저 화면 배선(channel 읽기 · `foldCallSegments` 렌더 · 옛 직접 렌더 0) | `src/lib/messenger/threadItems.test.ts` |
 
 - 배포는 하지 않았다.
+
+## 87. (UX → Implementer — 2026-10-20 · 브랜치 `claude/fix-self-mode-voice-select-d597c3` · 사용자 신고) **메신저 자가 체험의 목소리 선택(UX-025)에서 본인 목소리 녹음 · 저장 목소리 경로 제거** — implementer 기록
+
+> **번호**: §87 · G624~G625 · DECISIONS #198 — main `a378442` 최대 §86 · G623 · #197 다음. ⛔ 예약 아님.
+
+### 87.1 현황(실측)
+| 항목 | 사실 | 근거 |
+|---|---|---|
+| send 모드가 UX-025에 오는가 | **안 온다** — UX-024가 send에서 에스컬레이션 시나리오를 숨기고, UX-029가 send를 `/challenge/create`로 보낸다 | `src/app/scenarios/messenger/page.tsx:22-31` · `src/app/scenarios/difficulty/page.tsx` `handleStart` (`isSendMode` 분기가 UX-025 분기보다 앞) |
+| `createSession`이 만드는 세션 | 자가 세션만(챌린지 수신자 세션은 `consentChallenge`) | `functions/src/session/index.ts` `isEscalationCapable` 주석 |
+| recorded · reused를 보내는 클라 | UX-025 한 곳(복귀 트립 · 저장 목소리) | `src/app/scenarios/messenger/voice-select/page.tsx` |
+
+### 87.2 변경
+| 층 | 변경 | 게이트 |
+|---|---|---|
+| 화면 | ①·② 렌더 · ① 핸들러 · 복귀 트립 처리 · 보관 목소리 조회를 `shouldShowCloneVoiceOptions(getExperienceMode())`(= send만 참)에 묶는다. self에서 남은 복귀 플래그는 `consumeMessengerVoiceSelectReturn()`으로 버린다 | **G624** `src/lib/recording/voiceSelectOptions.test.ts`(진리표 + 소스 스캔) |
+| 서버 | `assertVoiceSelectionSourceAllowed` — recorded · reused → `failed-precondition` · `reason: "self-clone-voice-not-allowed"`. 위치 = `assertDifficultyAllowed` 직후 · 첫 `getFirestore()` · `generateOpeningLine` 앞 | **G625** `functions/src/session/__tests__/voiceSelectionAllowance.test.ts`(진리표 + 순서 스캔) |
+
+### 87.3 §86(#197)과의 정합
+- §86은 fallback_male/female을 화자 성별 원천으로 삼고 클론(recorded · reused)은 *"성별 미정"* 으로 둔다. 이번 거부로 **자가 메신저 세션에는 클론 값이 들어오지 않는다** ⇒ 자가 세션은 늘 고른 성별로 말한다. `voiceSelectionGender` · `resolveEffectiveVoiceMode`의 recorded/reused 분기는 무수정(이미 저장된 옛 세션 문서 · 미래 send 경로용으로 남김).
+
+### 87.4 남은 것
+- **배포 순서**: Hosting → Functions(옛 캐시 화면 — HTML `max-age=3600` — 이 ①을 누르면 새 서버가 거부한다. 그 경우 화면은 일반 오류 *"목소리 클론을 확인하지 못했습니다"* 로 끝난다).
+- send가 UX-025를 쓰게 되면(#21 착수) 그 세션은 `createSession`이 아니라 챌린지 경로로 만든다 — 이 거부가 그 전제를 지킨다.
+- 배포는 하지 않았다.
