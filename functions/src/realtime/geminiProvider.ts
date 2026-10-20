@@ -177,6 +177,8 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
         : "none",
       // T194-b(§84.3.4 · G568 호출부 3곳 중 "Gemini Live 토큰") — 호출부가 세션 문서에서 읽은 값 그대로(부재 = 블록 0).
       personaCard: input.personaCard,
+      // §90 — [말투 — 실시간 음성 통화]는 이 호출부만 켠다(폴백 sendMessage · 오프닝은 글/폴백 TTS 경로라 받지 않는다).
+      liveSpeechStyle: true,
     });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });

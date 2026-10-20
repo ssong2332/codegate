@@ -1237,6 +1237,7 @@ function stackingDirectives(text: string): string[] {
 //   | `turnInstruction` | **곱하지 않고 더한다**(+22벌) | 이 옵션은 상수가 아니라 **호출부가 넘기는 문자열**이라 "축"이 아니라 **값의 집합**이다(실제 값 22종 — 아래 `turnInstructionSources`). 22를 곱하면 시나리오당 20 → 440(총 6,160)이 되는데, 두 게이트의 판정은 **인용구 단위 / 매치 지점 ±14자**라 곱해서 얻는 검출력이 없다. 각 값을 **자기 시나리오에 한 번씩** 얹어 스캔 목록에 넣는 것으로 같은 사각을 없앤다. |
 //   | `toolDrivenTiming`(§59 커밋 C 신설) | **곱한다**(2값) | `verifyInterceptEnabled`와 같은 이유 — `inCallSmsEnabled`/`verifyInterceptEnabled`와 **함께** 조립됐을 때만 보이는 대체 문구(`OFF_SCREEN_RULE_WITH_SMS`·`VERIFY_INTERCEPT_RULE`의 도구-주도 변형)가 있다. 시나리오당 20 → 40(총 조합 2배). ⚠️ 실측: 이 옵션의 두 변형(`SMS_METHOD_LINE_TOOL_DRIVEN`·`VERIFY_NAME_LINE_TOOL_DRIVEN`)은 **인용구를 새로 만들지 않는다**(따옴표 `"..."` 0건 신설) — `VERIFY_OFFER_LINE_TOOL_DRIVEN`만 기존과 동일한 인용구(`"잠시만요, 확인 부서를 연결해 드리겠습니다"`)를 재사용한다. 그래도 곱하는 이유는 T113 자기 고지(`stackingDirectives`의 14자 윈도가 블록 경계를 넘는다)가 이 축에도 적용되기 때문 — 문면이 바뀌면 창이 다르게 열린다. |
 //   | `hangupMode`(T192 C2 신설 · §79.6) | **운영 짝으로만 곱한다**(2값) — `toolDrivenTiming:true` → `none`·`tool` / `false` → `none`·`signal` | TOOL은 Gemini Live 토큰(= `toolDrivenTiming:true`의 유일한 호출부 `geminiProvider.ts`)에만, SIGNAL은 폴백 `sendMessage`(= `toolDrivenTiming` 미전달)에만 실린다(§79.6 표). 반대 짝(`tool`+`false` · `signal`+`true`)은 **운영에서 조립되지 않는다**(`l3Procedural`을 고급에만 곱한 것과 같은 판단). 슬롯은 [진행 강제] 안 `{{OFF_SCREEN_RULE}}` 바로 뒤라 `inCallSmsEnabled`·`toolDrivenTiming`이 바꾸는 이웃 문면과 **함께** 봐야 창이 맞다 → 나머지 축과는 곱한다. 시나리오당 40 → 80. 새 문면이 인용구 3개(*"그럼 통화 종료하겠습니다"* 등 — NONE과 같은 인용구)를 다시 쓰므로 무해화 · 요구몰림 스캔이 TOOL · SIGNAL 문면도 받게 된다. |
+//   | `liveSpeechStyle`(§90 신설) | **운영 짝으로만 곱한다**(추가 조합 0) — `toolDrivenTiming:true`일 때만 `true` | 넘기는 호출부가 Live 토큰(`geminiProvider.ts`) 1곳뿐이라 `toolDrivenTiming:true` 조립본과 운영 짝이 같다. 블록 안 인용구(추임새 예시)가 무해화 · 요구몰림 스캔을 받는다. |
 //
 // ⚠️ **남는 사각(자기 고지 — 이 태스크에서 닫지 않는다). 노출되는 게이트를 이름으로 적는다.**
 //
@@ -1359,6 +1360,8 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
                   ...(speakerGender ? { speakerGender } : {}),
                   ...(offerToolDeclared ? { offerToolDeclared } : {}),
                   ...(hangupMode === "none" ? {} : { hangupMode }),
+                  // §90 — [말투]는 Live 토큰(= toolDrivenTiming:true의 유일한 호출부)에만 실린다(운영 짝으로만 — 판정표 마지막 행).
+                  ...(toolDrivenTiming ? { liveSpeechStyle: true } : {}),
                 }),
               });
             }
@@ -1386,6 +1389,7 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
           identityCheckAllowed: asksIdentityCheck(flowVariant.scenarioId),
           ...(speakerGender ? { speakerGender } : {}),
           ...(verifyInterceptEnabled ? { offerToolDeclared: true } : {}),
+          ...(toolDrivenTiming ? { liveSpeechStyle: true } : {}),
         }),
       });
     }
@@ -1417,6 +1421,7 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
             ...(verifyInterceptEnabled ? { offerToolDeclared: true } : {}),
             fictionalBankName,
             personaCard,
+            ...(toolDrivenTiming ? { liveSpeechStyle: true } : {}),
           }),
         });
       }

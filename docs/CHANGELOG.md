@@ -4,6 +4,15 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-20 추가분, 브랜치 `claude/live-human-speech-style-3a77a4`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Functions만**.
+
+### Changed
+- **실시간 음성 통화의 사기범 말투를 사람답게(Architecture §90 · DECISIONS #201)**:
+  - 전화(실시간 음성)에서만 사기범이 낭독하듯 말하지 않고, 실제로 전화하는 사람처럼 문장 끝을 내리고 가끔 짧은 추임새를 섞는다. 기관 · 회사 사칭은 바쁜 사무실 직원 톤이고, 가족 사칭 · 협박범은 원래 성격을 따른다.
+  - 계좌번호 · 금액 · 인증번호는 전처럼 또박또박 부른다.
+  - 사기범이 상대 이름을 지어내 부르지 않는다 — "이번 훈련 속 내 정보"에 넣은 이름만 쓰고, 없으면 묻거나(기관 사칭) 호칭으로 부른다(가족 사칭 · 협박).
+  - 문자 · 메신저 대화와 실시간 음성이 아닌 예비(텍스트) 경로는 바뀌지 않는다.
+
 > ⚠️ **이 블록(2026-10-20 추가분, 브랜치 `claude/design-a-tokens` → `claude/design-a-screens` → `claude/design-a-training` 단계 PR)**: 아직 main에 병합되지 않았고 배포 0회.
 
 ### Changed

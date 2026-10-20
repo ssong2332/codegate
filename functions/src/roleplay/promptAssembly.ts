@@ -62,6 +62,37 @@ function buildSpeakerGenderBlock(gender: "male" | "female"): string {
   return SPEAKER_GENDER_BLOCK_TEMPLATE.replace("{{GENDER_WORD}}", gender === "male" ? "남성" : "여성");
 }
 
+// 2026-10-20(Architecture §90) — 사용자 신고 "Live 음성이 AI 같다". 프로토타입(같은 대사 20건, 지시 없음 vs 말투 지시)에서
+// 첫소리 중앙값 약 1.7초 → 약 1.1초, 한 턴 오디오 평균 9.6초 → 7.6초였고 청취 평가도 "좀 부드러워져서 그나마 낫다"였다.
+// ⭐ **실시간 음성(Gemini Live) 토큰에만 붙는다**(`liveSpeechStyle` — 호출부는 `realtime/geminiProvider.ts` 1곳). 텍스트 폴백·오프닝·
+// 메신저 경로는 글로 표시되거나 폴백 TTS가 읽으므로 받지 않는다 = 그 경로의 조립 결과 바이트 동일.
+// ⚠️ 측정 지시문의 "40대 사무실 직원" · "차분하지만 바쁜" 은 기관 담당자(institution)에게만 맞다 — 가족·지인 사칭·협박범은
+// 연령·톤 문장을 빼고 페르소나 설명을 따르게 한다(판별은 `identityCheckAllowed` = `asksIdentityCheck` — 같은 축, §50.4.4).
+// ⚠️ 측정 지시문의 "숫자는 흘려 말한다"는 [진행 강제]의 "숫자는 또박또박 부른다"(계좌 예시)와 정면 충돌해, 받아 적어야 하는
+// 숫자는 [진행 강제]를 따르도록 좁혔다. ⚠️ 측정에서 이 지시가 근거 없는 이름 호명("○○○ 명의")을 20건 중 3건 낳았다 —
+// 마지막 항목이 그 차단 문구다([미리 확보한 상대 정보] 블록 꼬리의 "목록에 없는 이름 … 지어내 말하지 않는다"와 같은 방향).
+// ⛔ 시스템 내부 사정(음성 이름 · 측정 수치)은 문면에 적지 않는다(G297과 같은 근거).
+const LIVE_SPEECH_STYLE_HEAD = `[말투 — 실시간 음성 통화]
+대본을 읽는 성우나 안내 방송처럼 말하지 말고, 실제로 전화를 거는 한국 사람처럼 말한다.`;
+const LIVE_SPEECH_STYLE_TONE_INSTITUTION = `- 사무실에서 업무 전화를 거는 직원처럼 말한다(위 페르소나에 나이가 정해져 있지 않으면 40대 정도). 감정은 차분하지만 약간 바쁜 느낌이다.`;
+const LIVE_SPEECH_STYLE_TONE_OTHER = `- 감정의 종류와 세기는 위 페르소나 설명을 그대로 따른다. 읽는 말투가 아니라 그 사람이 실제로 통화하는 말투로 한다.`;
+const LIVE_SPEECH_STYLE_COMMON = `- 문장 끝을 또박또박 올리지 말고 자연스럽게 내린다. 속도는 약간 빠르게, 단어 사이를 붙여서 말한다.
+- '아, 네', '그러니까', '음' 같은 짧은 추임새를 가끔 섞는다(한 번 말할 때 최대 1개).
+- 기관명이나 흔한 표현은 실제 사람처럼 흘려 말한다. 다만 계좌번호·금액·인증번호처럼 상대가 받아 적거나 따라 해야 하는 숫자는 [진행 강제]의 규칙대로 또박또박 부른다.
+- 나이·성별·성격·감정(다급함 포함)이 위 페르소나 설명이나 [화자]에 정해져 있으면 그것이 이 말투 항목보다 우선한다.`;
+const LIVE_SPEECH_STYLE_NAME_INSTITUTION = `- **상대의 이름·나이 같은 신상은 [미리 확보한 상대 정보 — 이 통화에서만]에 적혀 있거나 상대가 이 통화에서 직접 말한 것만 쓴다.** 그 밖의 이름은 지어내 부르지 않는다 — 아직 모르는 이름이 필요하면 상대에게 물어 확인한다.`;
+const LIVE_SPEECH_STYLE_NAME_OTHER = `- **상대의 이름·나이 같은 신상은 [미리 확보한 상대 정보 — 이 통화에서만]에 적혀 있거나 상대가 이 통화에서 직접 말한 것만 쓴다.** 그 밖의 이름은 지어내 부르지 않는다 — 이름 대신 상황에 맞는 호칭으로 부른다.`;
+
+/** Live 전용 [말투] 블록. `identityCheckAllowed`(institution 여부)로 연령·톤 줄과 이름 부재 시 처리만 갈린다. */
+export function buildLiveSpeechStyleBlock(identityCheckAllowed: boolean): string {
+  return [
+    LIVE_SPEECH_STYLE_HEAD,
+    identityCheckAllowed ? LIVE_SPEECH_STYLE_TONE_INSTITUTION : LIVE_SPEECH_STYLE_TONE_OTHER,
+    LIVE_SPEECH_STYLE_COMMON,
+    identityCheckAllowed ? LIVE_SPEECH_STYLE_NAME_INSTITUTION : LIVE_SPEECH_STYLE_NAME_OTHER,
+  ].join("\n");
+}
+
 // 사용자 신고(2026-07-25, 실사용 스크린샷 첨부) — "내가 사기를 당하려고 해도 실질적으로 나에게
 // 피해를 주려는 행동이 보이지 않는다". 실측 확인 결과 **12개 시나리오 전부**가 구조적으로 요구에
 // 도달할 수 없었다: weakenedTactics가 전부 분위기 조성(놀람·긴급성·확인차단·안심유도·끊기저지)뿐이고
@@ -855,6 +886,12 @@ export type BuildSystemPromptOptions = {
    * 에러는 나지 않는다).
    */
   personaCard?: readonly PersonaCardItem[];
+  /**
+   * ⭐ 2026-10-20(Architecture §90) — 실시간 음성(Gemini Live) 토큰 경로인가. `true`일 때만 [말투 — 실시간 음성 통화] 블록이
+   * [대화 방식] 바로 뒤에 들어간다. ⛔ **호출부는 `realtime/geminiProvider.ts` 1곳뿐이다** — 폴백 sendMessage · 오프닝은 넘기지
+   * 않는다(글/폴백 TTS 경로 · 조립 결과 바이트 동일). 부재 · `false` = 블록 0(회귀 0).
+   */
+  liveSpeechStyle?: boolean;
 };
 
 /**
@@ -873,6 +910,7 @@ export type BuildSystemPromptOptions = {
  * 확정 순서: persona → weakenedTactics → [화자](§50.3.3, 조건형) → 대화 방식 → 진행 강제(문자
  * 카탈로그·페르소나 권한에 따라 조건형 대체됨, T68/§50.4.4) → 확인 안내 동기화(T83, 조건형) →
  * [미리 확보한 상대 정보](T194-b §84.3.4, 조건형) → 난이도 → 턴 지시 → **가드레일**.
+ * §90 — [말투 — 실시간 음성 통화](`liveSpeechStyle`, Live 전용 조건형)는 [대화 방식] 바로 뒤 · [언어] 앞이다.
  */
 export function buildSystemPrompt(
   prompt: ScenarioPromptDoc,
@@ -905,6 +943,8 @@ export function buildSystemPrompt(
     ...(opts.speakerGender ? [buildSpeakerGenderBlock(opts.speakerGender), ""] : []),
     CONVERSATION_STYLE,
     "",
+    // §90 — Live 전용 [말투](조건형). 부재 = 블록 0 = 종전 바이트 동일.
+    ...(opts.liveSpeechStyle === true ? [buildLiveSpeechStyleBlock(identityCheckAllowed), ""] : []),
     // 2026-10-18 — 언어 고정(위 LANGUAGE_RULE 주석). 모든 경로 공통이라 조건 없이 항상 넣는다.
     LANGUAGE_RULE,
     "",
