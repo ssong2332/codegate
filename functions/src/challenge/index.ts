@@ -28,7 +28,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { denyAnonymous } from "../shared/anonymousGate";
@@ -36,6 +36,7 @@ import { voiceInputStoragePath } from "../voice";
 import { getVoiceProvider } from "../voice/provider";
 import { PUBLIC_SCENARIOS, isAdvancedOnlyScenario } from "../scenarios/publicMeta";
 import { assertDifficultyAllowed } from "../session/difficultyAllowance";
+import { resolvePersonaCardRequest } from "../session/personaCard";
 import type { VoiceMode } from "../scenarios/publicMeta";
 import {
   CHALLENGE_DEFAULT_RETENTION_MS,
@@ -69,7 +70,7 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     }
     denyAnonymous(request.auth);
-    const { scenarioId, displayName, difficultyLevel } = request.data ?? {};
+    const { scenarioId, displayName, difficultyLevel, personaCardInput } = request.data ?? {};
     if (!scenarioId || !displayName || !displayName.trim()) {
       throw new HttpsError("invalid-argument", "scenarioId와 displayName이 필요합니다.");
     }
@@ -123,6 +124,19 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
     // 활성 챌린지 상한(AC-049)·링크 만료(AC-048)·클론 보유 검증(AC-041)·채널/음성모드 분기는
     // 세 난이도에서 완전히 동일하게 적용된다(D-42). 난이도는 기록·전달만 되는 값이다.
     const resolvedDifficultyLevel = normalizeDifficultyLevel(difficultyLevel);
+
+    // ⭐ §88(DECISIONS #199 · UX D-131) — 발신자가 넣은 **받는 분 정보**(선택 · 비면 카드 0). `createSession`과 같은 조합 함수 ·
+    // 같은 술어(시나리오 채널로 판정)다. 카드는 챌린지 문서에만 두고 `consentChallenge`가 수신자 세션에 복사한다 — 받는 사람은
+    // 통화가 끝날 때까지 보지 못한다(랜딩 응답에 싣지 않는다). ⛔ 위치가 설계다: 어떤 Firestore 읽기 · 쓰기 · 음성 호출보다 앞.
+    const personaCardResult = resolvePersonaCardRequest(
+      personaCardInput,
+      { scenarioId, difficultyLevel: resolvedDifficultyLevel, channel: scenarioChannel },
+      "sender",
+    );
+    if (!personaCardResult.ok) {
+      throw new HttpsError("invalid-argument", "받는 분 정보를 확인해 주세요.", { reason: personaCardResult.reason });
+    }
+    const personaCard = personaCardResult.personaCard;
 
     const uid = request.auth.uid;
     const db = getFirestore();
@@ -236,6 +250,8 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
       // T72(§15.3.2/§15.6 G9) — 항상 확정값을 기록한다. consentChallenge가 이 값을 사용자2 체험
       // 세션에 복사하지 않으면 발신자가 고른 난이도가 수신자 통화에 전혀 반영되지 않는다.
       difficultyLevel: resolvedDifficultyLevel,
+      // §88 — 입력이 있을 때만 필드가 생긴다(부재 = 카드 0).
+      ...(personaCard ? { personaCard } : {}),
     };
     await challengeRef.set(challengeDoc);
 
@@ -345,7 +361,8 @@ async function purgeChallenge(
     overallResult,
   };
   await db.collection("deletionLogs").add(deletionLog);
-  await db.collection("challenges").doc(challengeId).update({ status: "deleted" });
+  // §88 — 받는 분 정보(카드)는 폐기와 함께 지운다(동의 전에 만료 · 삭제된 링크에 남지 않게). 없는 필드 삭제는 무해하다.
+  await db.collection("challenges").doc(challengeId).update({ status: "deleted", personaCard: FieldValue.delete() });
 }
 
 /**
@@ -450,7 +467,10 @@ export async function markChallengeConsumed(
   const payload = {
     linkConsumedAt: Timestamp.now(),
     status: "consented",
-  } satisfies Partial<ChallengeDoc>;
+    // §88(DECISIONS #199) — 받는 분 정보(카드)는 동의 = 수신자 세션 복사 순간에 챌린지 문서에서 지운다(호출부 트랜잭션이 세션
+    // 문서 쓰기와 함께 커밋한다). 없는 필드 삭제는 무해하다.
+    personaCard: FieldValue.delete(),
+  } satisfies { linkConsumedAt: Timestamp; status: ChallengeDoc["status"]; personaCard: FieldValue };
   if (tx) {
     tx.update(ref, payload);
     return;

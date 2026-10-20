@@ -2,6 +2,7 @@
 // 클라이언트(src/)와 Functions(functions/)가 이 시그니처에 맞춰 병렬 개발한다.
 // 계약 변경은 트랙 간 합의 후(Architecture.md §8).
 import type { DifficultyLevel } from "@/lib/difficulty";
+import type { PersonaCardInput } from "@/lib/personacard/personaCardInput";
 
 // 메신저 표면 요소(T29, Architecture.md §13.4, AC-032/045) — 실 URL 필드가 존재하지 않는다.
 // 링크는 displayText(모의 표기)·fakeLandingId(인앱 가짜 랜딩 참조)로만 표현된다.
@@ -63,6 +64,8 @@ export type CreateSessionRequest = {
   skinSource?: "auto" | "manual" | "fallback";
   voiceSelectionSource?: VoiceSelectionSource;
   difficultyLevel?: DifficultyLevel;
+  /** §88(UX D-131) — "이번 훈련 속 내 정보" 원값(선택 · 부재 = 카드 0). 서버가 검증해 카드로 만든다. */
+  personaCardInput?: PersonaCardInput;
 };
 // isMock(채팅 화면 구현 시 반영, 서버는 이미 반환 중 — functions/src/session/index.ts:96): 서버가
 // LLM 어댑터로 MockLlmClient를 썼다는 뜻(계약 드리프트 해소, API.md 갱신 권장).
@@ -420,6 +423,8 @@ export type CreateChallengeRequest = {
   scenarioId: string;
   displayName: string;
   difficultyLevel?: DifficultyLevel;
+  /** §88(UX D-131) — 발신자가 넣은 받는 분 정보 원값(선택 · 부재 = 카드 0). 받는 사람에게는 통화가 끝날 때까지 보이지 않는다. */
+  personaCardInput?: PersonaCardInput;
 };
 export type CreateChallengeResponse = {
   challengeId: string;
