@@ -117,7 +117,8 @@ test("[G563 배선] createSession은 조합 함수 1곳에서 자가 세션(chal
   assert.ok(refAt > -1 && cardAt > refAt && openingAt > cardAt, `순서: sessionRef(${refAt}) → 카드(${cardAt}) → 오프닝(${openingAt})`);
   const challenge = readSrc("challenge/userAccess.ts");
   assert.equal(/resolveSessionPersonaCard|buildPersonaCard/.test(challenge), false, "챌린지 수신자 경로가 카드를 만든다");
-  assert.match(challenge, /personaCard: undefined \}/, "챌린지 오프닝은 카드 없음을 명시로 넘긴다");
+  // 2026-10-20 — 오프닝 컨텍스트에 voiceSelectionSource 키가 뒤에 붙었다(챌린지 = 선택 없음).
+  assert.match(challenge, /personaCard: undefined, voiceSelectionSource: undefined \}/, "챌린지 오프닝은 카드 없음을 명시로 넘긴다");
 });
 
 // ── G564 클라 입력 경로 0 ────────────────────────────────────────────────────

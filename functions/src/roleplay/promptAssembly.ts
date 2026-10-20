@@ -6,6 +6,7 @@ import type { DifficultyLevel } from "../shared/difficulty";
 import type { LlmMessage } from "../llm";
 import type { SmsPurpose } from "../scenarios/flowVariants";
 import { personaCardPromptValue } from "../scenarios/personaCardCatalog";
+import { resolveChildGenderRule } from "../scenarios/messengerChildImpersonationKakao.prompt";
 import { applyFictionalBank, EXAMPLE_ACCOUNT_NUMBER } from "../shared/fictionalBank";
 
 // 사용자 신고(2026-07-25) — "사람과 대화한다는 느낌이 안 든다", "대화가 자연스럽지 않다",
@@ -124,6 +125,14 @@ const SMS_DEMAND_EXAMPLE: Record<SmsPurpose, string> = {
 };
 const SMS_KIND_ORDER: readonly SmsPurpose[] = ["transfer", "link", "identity"];
 const SMS_EXAMPLE_ORDER: readonly SmsPurpose[] = ["identity", "transfer", "link"];
+/**
+ * R3-C ①(2026-10-20 · 감사 A R3) — 미선언 금지 문장 꼬리. 모델이 문자 "종류" 이름을 피해 **다른 이름의 인증 · 확인 절차**
+ * (예: 본인확인 문자 · 확인 코드)를 휴대폰으로 보냈다거나 곧 보낸다고 지어내던 경로를 닫는다. 미선언 목적이 1개 이상일 때만
+ * 붙는다(= 위 문장과 같은 조건) — 목적 부재 · 빈 배열 · 세 목적 전부는 종전과 바이트 동일하다(`[A-1/② 회귀]`).
+ * ⛔ 숫자 · 횟수 표현을 넣지 않는다(끊기 슬롯 · NO_STALL_RULE과 겹치지 않게). R3-C ②(NO_STALL_RULE · confirmResult 분기 구절)는 아래 별도 주석.
+ */
+export const UNDECLARED_VERIFICATION_TAIL =
+  " 위 종류가 아닌 인증·확인 절차도 휴대폰으로 보냈다거나 곧 보낼 것이라고 하지 않는다.";
 
 /** 선언 목적 기준 문자 예외 항목(첫 줄). 세 목적 전부면 종전 템플릿 첫 줄과 바이트 동일하다. */
 function buildDeclaredSmsExceptionLine(purposes: readonly SmsPurpose[]): string {
@@ -133,7 +142,7 @@ function buildDeclaredSmsExceptionLine(purposes: readonly SmsPurpose[]): string 
   const undeclared = SMS_KIND_ORDER.filter((p) => !has(p)).map((p) => SMS_KIND_LABEL[p]);
   const onlyDeclared =
     undeclared.length > 0
-      ? ` 이 통화에서 네가 보내는 문자는 위 종류뿐이다 — ${undeclared.join("·")} 문자는 보낸 적이 없으니, 그런 문자를 보냈다고 말하거나 그 내용을 불러 달라고 하지 않는다.`
+      ? ` 이 통화에서 네가 보내는 문자는 위 종류뿐이다 — ${undeclared.join("·")} 문자는 보낸 적이 없으니, 그런 문자를 보냈다고 말하거나 그 내용을 불러 달라고 하지 않는다.${UNDECLARED_VERIFICATION_TAIL}`
       : "";
   return `- **참가자가 볼 수 없는 것은 가리키지 않는다. 단, 문자로 도착한 것은 예외다.** 이 훈련에서는 네가 통화 중에 보내는 문자(${kinds})가 **참가자 화면에 실제로 도착해 표시된다.** 따라서 ${examples}고 요구해도 된다 — 참가자는 화면에서 실제로 볼 수 있다. 반대로 문자로 도착하지 않은 것(방금 뜬 팝업, 설치된 앱 화면 등)은 여전히 가리키지 않는다.${onlyDeclared}`;
 }
@@ -285,7 +294,11 @@ export type HangupMode = "none" | "tool" | "signal";
 // ⭐ A-1 리뷰 Minor-2 — 끝 문장("별도의 결과 지시가 함께 오면 그 지시가 곧 확인 결과다")은 서버 결과 지시(인증번호 대조
 //    불일치 · 확인 결과 신호 등)와 "지어낸 결과"가 한 대답에서 부딪히지 않게 우선순위를 정한다.
 // ⚠️ 무조건부 블록이라 clone 2종(ElevenLabs) 조립 산출물도 바뀐다 → 두 프롬프트 파일 상단의 재생성 대기 기록 갱신.
-export const NO_STALL_RULE = `- **"확인 중"이라며 붙잡아 두지 않는다 — 확인하겠다고 했으면 결과를 내놓는다.** 입금·이체·조회·서류처럼 무언가를 확인하겠다고 말했으면, 같은 대답 안에서 또는 바로 다음 대답에서 그럴듯한 확인 결과를 지어내 알려 준다(예: "확인됐습니다", "처리됐습니다", "한 가지가 더 필요합니다"). 결과를 알린 뒤에는 곧바로 다음 요구로 넘어가고, 더 요구할 것이 없으면 바로 위 통화 끝내기 항목이 정한 대로 한다 — 끊어도 되는 경우면 그 방법으로 마무리하고, 아니면 비밀 유지 당부처럼 상황에 맞는 말로 대화를 이어 둔다. "확인 중입니다", "잠시만 기다려 주세요" 같은 대기 말을 한 다음 대답에서는 대기 말을 다시 하지 않는다. 지금 답할 차례에 앱이 알려 준 별도의 결과 지시가 함께 들어오면 그 지시가 곧 확인 결과다 — 결과를 지어내지 말고 그 지시대로 알린다.`;
+// ⭐ R3-C ②-a(2026-10-20 · 감사 A R3 · ux-real-phone C7과 조율 — 정본 Architecture §79.22 (6)) — 셋째 문장의 "곧바로 다음 요구로"를
+//    **남은 요구 유무 분기**("더 요구할 것이 남아 있으면 그 요구로 … 남지 않았으면 바로 위 통화 끝내기 항목이 정한 대로")로 바꿨다.
+//    "곧바로 다음 요구로"는 남은 요구가 없을 때도 다음 요구를 지어내게 밀었다(R3 — 없는 인증번호 문자 요구). 끊기 조건 자체는
+//    HANGUP_RULE_CASES(C7 소유 — ⛔ 이 변경은 손대지 않는다)만 말한다. 분기 구절은 confirmResult.ts 두 문면과 바이트 동일(G625 단언).
+export const NO_STALL_RULE = `- **"확인 중"이라며 붙잡아 두지 않는다 — 확인하겠다고 했으면 결과를 내놓는다.** 입금·이체·조회·서류처럼 무언가를 확인하겠다고 말했으면, 같은 대답 안에서 또는 바로 다음 대답에서 그럴듯한 확인 결과를 지어내 알려 준다(예: "확인됐습니다", "처리됐습니다", "한 가지가 더 필요합니다"). 결과를 알린 뒤에는, 상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 바로 위 통화 끝내기 항목이 정한 대로 한다 — 끊어도 되는 경우면 그 방법으로 마무리하고, 아니면 비밀 유지 당부처럼 상황에 맞는 말로 대화를 이어 둔다. "확인 중입니다", "잠시만 기다려 주세요" 같은 대기 말을 한 다음 대답에서는 대기 말을 다시 하지 않는다. 지금 답할 차례에 앱이 알려 준 별도의 결과 지시가 함께 들어오면 그 지시가 곧 확인 결과다 — 결과를 지어내지 말고 그 지시대로 알린다.`;
 
 /** 슬롯 값 — 알 수 없는 값·부재는 NONE(fail-closed: 끊기 허용 문면이 실수로 실리지 않는다). */
 function buildHangupRule(hangupMode: HangupMode, verifyInterceptEnabled: boolean): string {
@@ -882,7 +895,8 @@ export function buildSystemPrompt(
     : null;
   const personaCardBlock = opts.personaCard ? buildPersonaCardBlock(opts.personaCard) : null;
   const assembled = [
-    prompt.personaPrompt,
+    // §86.1(리뷰 M1) — 화자 성별이 정해진 세션은 "성별이 정해져 있지 않다" 줄(child-kakao)을 성별 확정 문면으로 바꾼다. 성별 없음 = 원문 그대로.
+    opts.speakerGender ? resolveChildGenderRule(prompt.personaPrompt, opts.speakerGender) : prompt.personaPrompt,
     "",
     "[사용 가능한 수법(weakenedTactics) — 이 목록 밖의 수법, 특히 실제 운영 가능한 사기 수법을 스스로 만들지 않는다]",
     tactics,

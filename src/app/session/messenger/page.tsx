@@ -53,6 +53,7 @@ import MessengerFakeLanding from "@/components/MessengerFakeLanding";
 import MessengerStartNotice from "@/components/MessengerStartNotice";
 import { Button } from "@/components/ui";
 import { foldDegraded, DIALOGUE_DEGRADED_NOTICE } from "@/lib/report/degradedDisclosure";
+import { CALL_SEGMENT_ICON, CALL_SEGMENT_LINE, foldCallSegments } from "@/lib/messenger/threadItems";
 import {
   decideMessengerStartNotice,
   type MessengerStartNoticeState,
@@ -69,6 +70,8 @@ type ChatMessage = {
   text: string;
   turnIndex: number;
   attachments?: MessengerAttachment[];
+  // 2026-10-20 실기 신고 — 통화 구간(`"voice"`)은 말풍선이 아니라 통화 줄로 접는다(`lib/messenger/threadItems.ts`).
+  channel?: string;
 };
 
 // ⛔ T190-6b(UX D-100 · PRD AC-092 (d) · AC-031 읽기 고지) — 세션 중 스킨 전환 칩(`SKIN_CYCLE`/`SKIN_LABEL`)과
@@ -250,6 +253,7 @@ export default function MessengerSessionPage() {
             text: data.textMasked as string,
             turnIndex: data.turnIndex as number,
             attachments: data.attachments as MessengerAttachment[] | undefined,
+            channel: data.channel as string | undefined,
           };
         }),
       );
@@ -550,7 +554,20 @@ export default function MessengerSessionPage() {
         className="flex flex-1 flex-col gap-3 px-4 py-4 outline-none"
         aria-live="polite"
       >
-        {messages.map((message) => (
+        {/* 2026-10-20 실기 신고 — 통화 전사(channel "voice")는 말풍선이 아니라 시스템 줄 1개로 접는다(누가 보낸 메시지가 아니다). */}
+        {foldCallSegments(messages).map((item) => {
+          if (item.kind === "call") {
+            return (
+              <li key={item.id} className="flex justify-center">
+                <span className="rounded-full bg-[#F1EEE8] px-3 py-1 text-center text-sm text-[#6B655C]">
+                  <span aria-hidden="true">{CALL_SEGMENT_ICON} </span>
+                  {CALL_SEGMENT_LINE}
+                </span>
+              </li>
+            );
+          }
+          const message = item.message;
+          return (
           <li
             key={message.id}
             className={`flex flex-col gap-1 ${message.role === "user" ? "items-end" : "items-start"}`}
@@ -601,7 +618,8 @@ export default function MessengerSessionPage() {
               ) : null,
             )}
           </li>
-        ))}
+          );
+        })}
         {/* 사용자 신고(2026-07-24) 반영 — 전송 후 응답을 기다리는 동안(실 LLM 연동 후 체감 지연이
             늘었다) 그냥 버튼 스피너만으로는 "보냈는데도 멈춘 것 같다"는 인상을 줬다. docs/UX.md
             P-4("AI 응답 대기 중... 타이핑 인디케이터 표시")가 이미 요구하던 패턴을 실제로

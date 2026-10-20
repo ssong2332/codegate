@@ -29,6 +29,7 @@ import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "./channelTransition";
 import { readEndSessionReason, resolveRecordedEndReason } from "./endReason";
 import { assertDifficultyAllowed } from "./difficultyAllowance";
+import { assertVoiceSelectionSourceAllowed } from "./voiceSelectionAllowance";
 import { assignFlowVariantForSession, commitSessionWithVariant } from "./variantAssignment";
 import type { MessageDoc, MessengerSkin, MessengerSkinSource, SessionDoc } from "../shared/types";
 import type {
@@ -106,6 +107,9 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     // 만드는 요청을 거부한다. ⛔ 위치가 설계다: 정규화(아래 normalizeDifficultyLevel) **전** 원값으로,
     // 어떤 Firestore 읽기 · 쓰기 · LLM · 음성 호출보다 앞(거부는 그 호출 0회로 일어난다).
     assertDifficultyAllowed(scenarioId, difficultyLevel);
+    // §87(DECISIONS #198 · UX D-130) — 이 콜러블은 자가 세션만 만든다. 자가 체험에서 사기범이 참가자 본인 목소리로
+    // 말하는 경로(recorded · reused)는 거부한다(UX-025 self 모드 화면 숨김의 2중 방어). 위치 = 위 난이도 게이트와 같은 이유.
+    assertVoiceSelectionSourceAllowed(voiceSelectionSource);
 
     // T72(§15.3.2, UX-029/AC-064) — 난이도는 enum 검증 후에만 기록한다. 부재·enum 밖이면 조용히
     // 임의 난이도로 진행하지 않고 "intermediate"로 확정하며, 응답에 그 확정값을 실어 클라가 폴백
@@ -234,7 +238,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       scenarioId,
       resolvedDifficultyLevel,
       variantAssignment.flowVariantId,
-      { fictionalBankName, challengeId: undefined, personaCard: personaCard?.items },
+      { fictionalBankName, challengeId: undefined, personaCard: personaCard?.items, voiceSelectionSource },
     );
 
     const now = Timestamp.now();

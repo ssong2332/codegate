@@ -55,9 +55,19 @@ export type OpeningSessionContext = {
    * 오프닝도 카드를 알아야 첫 마디에서 "이미 안다"를 꺼낼 수 있다. 카드 없는 세션 = `undefined`.
    */
   personaCard: readonly PersonaCardItem[] | undefined;
+  /**
+   * 2026-10-20 실기 신고 — 메신저 통화용 목소리 선택(UX-025)의 값(호출부 `createSession`이 요청값 그대로). 기본 남성·여성 목소리를
+   * 고른 세션은 오프닝부터 그 성별로 말한다(`resolveSessionSpeakerGender`). 챌린지 · 선택 없음 = `undefined`.
+   */
+  voiceSelectionSource: string | undefined;
 };
 
-const NO_SESSION_CONTEXT: OpeningSessionContext = { fictionalBankName: undefined, challengeId: undefined, personaCard: undefined };
+const NO_SESSION_CONTEXT: OpeningSessionContext = {
+  fictionalBankName: undefined,
+  challengeId: undefined,
+  personaCard: undefined,
+  voiceSelectionSource: undefined,
+};
 
 export type OpeningLineResult = {
   message: ScammerMessage;
@@ -103,13 +113,14 @@ export async function generateOpeningLine(
   // 필요한 것(TS1016)이고, 단위 테스트의 1인자 호출만 쓴다.
   sessionContext: OpeningSessionContext = NO_SESSION_CONTEXT,
 ): Promise<OpeningLineResult> {
-  const { fictionalBankName, challengeId, personaCard } = sessionContext;
+  const { fictionalBankName, challengeId, personaCard, voiceSelectionSource } = sessionContext;
   // 세션 문서가 아직 없으므로 세션 술어 입력을 호출부 값으로 조립한다(sendMessage는 세션 문서를 그대로 넘긴다).
   const sessionView = {
     scenarioId,
     difficultyLevel,
     ...(challengeId ? { challengeId } : {}),
     ...(flowVariantId ? { flowVariantId } : {}),
+    ...(voiceSelectionSource ? { voiceSelectionSource } : {}),
   };
   const scenarioPrompt = resolveSessionScenarioPrompt(scenarioId, flowVariantId);
   if (!scenarioPrompt) {

@@ -107,7 +107,8 @@ test("[T187/G444 ②③ 역검증 — AC-088 (f)] ⓐ 가드 없는 구독 사�
   assert.notEqual(unguarded, messenger, "오염 지점을 찾지 못했다");
   assert.equal(subscriptionGuarded(unguarded), false);
 
-  const anchor = messenger.lastIndexOf("{messages.map((message) => (");
+  // 2026-10-20 — 대화 목록은 통화 구간을 접는 `foldCallSegments(messages).map(`로 그린다(lib/messenger/threadItems.ts).
+  const anchor = messenger.lastIndexOf("{foldCallSegments(messages).map((item) => {");
   assert.ok(anchor > 0);
   const leaked =
     messenger.slice(0, anchor) + "<li>{MESSENGER_START_NOTICE.notice}</li>\n" + messenger.slice(anchor);

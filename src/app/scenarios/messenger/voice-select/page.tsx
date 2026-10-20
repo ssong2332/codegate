@@ -12,6 +12,11 @@
 // 세 경로(§13.6): ①즉시 녹음(UX-002/003 재사용 후 이 화면으로 복귀) ②기존 보관 목소리 재사용
 // (users/{uid}/voices에 항목이 있을 때만 노출 — 숨김이지 비활성이 아니다) ③남/여 기본 보이스
 // (FALLBACK_VOICE_MALE_ID/FEMALE_ID, 서버가 해석 — 본인 목소리 아님을 명시).
+//
+// ⭐ D-130(UX v1.42 · PRD AC-046 갱신 고지 v1.29 · Architecture §87 · DECISIONS #198) — ①·②는 **send 모드에서만**
+// 그린다(`shouldShowCloneVoiceOptions`). self(본인이 체험)에서 사기범이 내 목소리로 말하면 훈련 의미가 없다.
+// self에서는 녹음 복귀 트립도 만들지 않고(①의 핸들러 가드) 남은 복귀 플래그는 버린다. 서버 `createSession`도
+// recorded · reused를 거부한다(2중 방어). 오늘 send는 이 화면에 오지 않으므로 실제로는 ③만 보인다.
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { doc, getDoc } from "firebase/firestore";
@@ -31,6 +36,8 @@ import {
   // T72(UX-029) — 난이도는 이 화면보다 앞에서 확정되며, 여기서는 소비·보존만 한다.
   getSelectedDifficultyLevel,
   setSelectedDifficultyLevel,
+  getExperienceMode,
+  shouldShowCloneVoiceOptions,
 } from "@/lib/recording";
 import { fetchStoredVoices, type StoredVoiceSummary } from "@/lib/voices/fetchStoredVoices";
 import { scenarios, GENERIC_VOICE_ID, resolveScenarioEscalation } from "@/content/scenarios";
@@ -46,7 +53,10 @@ export default function MessengerVoiceSelectPage() {
   const scenario = scenarioId ? scenarios[scenarioId] : null;
   // hasMessengerVoiceSelectReturn을 peek만 해서 렌더 분기를 정하고, 실제 소비(consume)는 아래
   // effect에서 1회만 한다(react-hooks/set-state-in-effect 회피, 다른 화면과 동일 패턴).
-  const [isReturningFlow] = useState<boolean>(() => hasMessengerVoiceSelectReturn());
+  // D-130 — ①·② 노출 여부. 모드 힌트는 이 화면보다 앞(UX-026)에서 확정된다(부재 = self로 본다).
+  const [showCloneOptions] = useState<boolean>(() => shouldShowCloneVoiceOptions(getExperienceMode()));
+  // D-130 — self에서는 녹음 복귀 트립을 처리하지 않는다(recorded로 세션을 만들지 않는다).
+  const [isReturningFlow] = useState<boolean>(() => showCloneOptions && hasMessengerVoiceSelectReturn());
 
   const [pageState, setPageState] = useState<PageState>(() => {
     // T194-a(Architecture.md §84.4.1 C-4 · UX-025 v1.38) — 진입 가드도 (시나리오 × 난이도) 술어다. 난이도는 이 화면보다 앞(UX-029)에서
@@ -62,7 +72,8 @@ export default function MessengerVoiceSelectPage() {
   // 보관 목소리 조회(Empty면 ②를 숨긴다 — §13.6 "MVP는 ①+③로 성립"). 실패해도 ①·③은 그대로
   // 쓸 수 있어(P-4 비차단) 조용히 빈 목록으로 흡수한다.
   useEffect(() => {
-    if (!user) return;
+    // D-130 — ②를 그리지 않는 모드(self)에서는 보관 목소리를 조회하지 않는다.
+    if (!user || !showCloneOptions) return;
     let cancelled = false;
     (async () => {
       try {
@@ -75,7 +86,14 @@ export default function MessengerVoiceSelectPage() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, showCloneOptions]);
+
+  // D-130 — self에서 남은 녹음 복귀 플래그(예: 이 변경 전 탭에서 시작한 녹음)는 처리하지 않고 버린다.
+  // 플래그가 남으면 clone/wait가 계속 이 화면으로 되돌린다. 지우기만 하므로 Strict Mode 이중 호출에도 안전하다.
+  useEffect(() => {
+    if (showCloneOptions) return;
+    consumeMessengerVoiceSelectReturn();
+  }, [showCloneOptions]);
 
   // "즉시 녹음" 복귀 트립 처리 — clone/wait가 이 화면으로 돌려보낸 경우, pending 세션 문서의
   // cloneStatus/voiceId를 읽어 createSession을 마무리한다(D-25, §13.6). 인라인 async IIFE로 감싼다
@@ -156,7 +174,8 @@ export default function MessengerVoiceSelectPage() {
   };
 
   const handleStartRecording = () => {
-    if (!scenarioId || starting) return;
+    // D-130 — self에서는 녹음 복귀 트립을 만들지 않는다(①을 그리지 않지만 핸들러에도 같은 가드를 둔다).
+    if (!showCloneOptions || !scenarioId || starting) return;
     const difficultyLevel = getSelectedDifficultyLevel();
     clearPendingSession();
     // clearPendingSession이 방금 지운 선택 시나리오 id를 복원한다 — record→clone/wait 왕복 뒤
@@ -243,23 +262,26 @@ export default function MessengerVoiceSelectPage() {
         {/* "지금 30초 녹음"은 선택 후 별도 확정이 아니라 클릭 즉시 녹음 화면으로 이동하는
             단일 액션이라(D-25 기존 로직 무변경) SelectableCard(선택→별도 확정 버튼)의 상시
             "미선택" 원 어포던스를 그대로 쓰지 않고, 디자인 시스템의 카드 톤(테두리/라운드/배지)만
-            재사용한 커스텀 카드로 둔다 — 판단 근거는 팀 보고 참고. */}
-        <button
-          type="button"
-          onClick={handleStartRecording}
-          disabled={starting}
-          className="flex min-h-[64px] flex-col items-start gap-2 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-5 text-left transition-colors hover:border-[#0E6B62] disabled:opacity-50"
-        >
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="text-[17px] font-bold text-[#22303A]">지금 30초 녹음</span>
-            <Badge variant="caution">30초 소요</Badge>
-          </span>
-          <span className="text-sm leading-relaxed text-[#6B655C]">
-            본인 목소리를 녹음해 통화에서 그대로 씁니다.
-          </span>
-        </button>
+            재사용한 커스텀 카드로 둔다 — 판단 근거는 팀 보고 참고.
+            D-130 — ①·②는 send 모드에서만 그린다(self = ③만). */}
+        {showCloneOptions && (
+          <button
+            type="button"
+            onClick={handleStartRecording}
+            disabled={starting}
+            className="flex min-h-[64px] flex-col items-start gap-2 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-5 text-left transition-colors hover:border-[#0E6B62] disabled:opacity-50"
+          >
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="text-[17px] font-bold text-[#22303A]">지금 30초 녹음</span>
+              <Badge variant="caution">30초 소요</Badge>
+            </span>
+            <span className="text-sm leading-relaxed text-[#6B655C]">
+              본인 목소리를 녹음해 통화에서 그대로 씁니다.
+            </span>
+          </button>
+        )}
 
-        {storedVoices.length > 0 && (
+        {showCloneOptions && storedVoices.length > 0 && (
           <div className="flex flex-col gap-3 rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-5">
             <span className="flex flex-wrap items-center gap-2">
               <span className="text-[17px] font-bold text-[#22303A]">저장된 내 목소리 사용</span>

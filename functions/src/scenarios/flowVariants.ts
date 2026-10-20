@@ -169,9 +169,50 @@ const AGENCY_PROBE = { from: "card-delivery-call", label: "기관 조사 언급"
 const OTHER_NUMBER_PRETEXT =
   "채널 전환 유도 — '폰이 고장 나서 다른 번호로 걸었어, 원래 번호로는 연락이 안 돼' 처럼 다른 번호로 연락한 이유를 대고, 원래 번호로 확인해 보지 못하게 한다.";
 
+// ── R3-B(2026-10-20 · 감사 A R3) — 인증번호 문자를 선언하지 않은 카드 변형용 수법 문면 ─────────────────────────────────
+// 원본(`cardCompanyImpersonation.prompt.ts`)의 "카드정보 직접 요구" · "부인 시 명의 도용 암시" · "피해금 이관 요구"는 **문자를
+// 전제**한다('본인확인 문자 지금 갈 거예요, 오시면 그 번호 바로 불러주세요' · "계좌는 … 문자로 보낸 것을 확인하게 한다"). 그 원본은
+// identity · transfer 문자를 선언한 fv-35f2와 변형 없는 세션이 계속 쓰므로 건드리지 않고, 문자를 선언하지 않은 변형(fv-aqp6 ·
+// fv-akj5 · 그 스프레드 fv-x7ue)만 아래 문면을 쓴다. 고친 재현: fv-akj5 Live C8 "인증번호가 갈 텐데, 받으시는 대로 바로 불러주시겠어요?".
+// ⛔ **라벨(— 앞) 문자열은 원본과 한 글자도 다르지 않다** — 리포트 분류(`report/tacticCategory.ts`) · T92 게이트 · 브리핑 라벨이
+// 라벨로 묶인다. 바뀌는 것은 설명부뿐이다: 인증번호 인용 · 요구를 지우고 카드번호 · 유효기간 요구만 남긴다 / 계좌는 문자가 없으므로
+// 예시 계좌 낭독형(familyAccidentDeepvoice "합의금 송금 요구" · grandchildImpersonation "송금 직접 요구"와 같은 방식)으로 부른다.
+// 정합 단언: `__tests__/smsDeclarationConsistency.test.ts`.
+const CARD_INFO_DEMAND_NO_SMS =
+  "카드정보 직접 요구 — '결제 취소 처리하려면 카드번호 앞 8자리랑 유효기간 불러주세요' 처럼 카드번호·유효기간을 구체적으로 요구한다. 상대가 그 카드가 없다거나 그 카드사를 안 쓴다고 부인해도 '본인도 모르게 발급된 건일 수 있어요, 그럼 본인 확인부터 하겠습니다'라며 카드정보·신원 확인 요구를 다른 근거로 다시 꺼낸다. 실제 카드사명은 쓰지 않는다.";
+const CARD_DENIAL_PIVOT_NO_SMS =
+  "부인 시 명의 도용 암시 — 상대가 그 카드가 없다거나 그 카드사를 안 쓴다고 하면 그 말을 인정하고 '그래서 더 위험한 겁니다, 본인도 모르게 발급된 것으로 보여요'라며 명의 도용 확인 쪽으로 넘긴 뒤 위 카드정보 요구로 이어간다. 부인을 반박하거나 같은 질문을 되풀이하지 않는다.";
+const CARD_RELIEF_TRANSFER_READOUT =
+  "피해금 이관 요구 — '지금 결제 진행 중인 건 저희가 막을 수 있는데, 고객님 잔액을 이관 전용 계좌로 옮겨두셔야 해요, 계좌 불러드릴게요' 처럼 구체적 금액과 함께 이체를 요구한다. 계좌는 'OO은행 948-2716-5093-27' 처럼 이 예시 번호로만 부르고, 실존 은행명·실제 계좌는 쓰지 않는다.";
+// R3 리뷰 C1 — fv-x7ue(링크 문자만 선언) 전용. 그 조립에는 문자 예외 블록이 실려 SMS_METHOD_LINE("계좌번호의 구체적인 값을 네가 지어내
+// 읽어 주지도 않는다")과 A-1 미선언 금지 문장(계좌 안내 문자는 보낸 적 없음)이 함께 있다 → 낭독형도 "문자로 보낸 계좌"형도 모순이다.
+// 그래서 **값을 읽지도 문자를 가리키지도 않는** 형태로 두고, 계좌를 물으면 이 변형의 실제 흐름(Q2 보안 앱 설치 — 단계 2)으로 되돌린다.
+// ⚠️ 설치 화면(card-guard-app-install)에는 이체 입력이 없으므로 "앱에서 이관하라"고 가리키지 않는다 — "설치를 먼저 마쳐야 한다"까지만.
+// 라벨은 그대로(단계 5 · 결정 순간 "피해금 이관에 동의하는 순간"이 이 라벨을 가리킨다 — 라벨을 빼면 단계 · 결정 순간까지 고쳐야 해 더 침습적).
+const CARD_RELIEF_TRANSFER_NO_ACCOUNT =
+  "피해금 이관 요구 — '지금 결제 진행 중인 건 저희가 막을 수 있는데, 고객님 잔액을 이관 전용 계좌로 옮겨두셔야 해요' 처럼 구체적 금액과 함께 이체에 동의하라고 요구한다. 계좌번호는 네가 불러 주지 않고 문자로 보냈다고도 하지 않는다. 상대가 어디로 옮기느냐고 물으면 '보호 조치부터 끝나야 이관이 진행돼요'라며 보안 앱 설치 요구로 되돌린다.";
+const CARD_REASSURE = { from: "card-company-impersonation", label: "안심 유도" };
+/**
+ * fv-akj5 계열 수법 목록 — base main(ea97aa0)의 순서(놀람 · 긴급 · 카드정보 · 피해금 · 부인 · 안심 · 앱 설치 · 기관 조사)를 그대로 지킨다
+ * (R3 리뷰 M2). 원본에서 그대로 가져오는 라벨은 `{ from, label }` 참조(문구 사본 0)라 keepLabels 대신 여기서 순서를 정한다.
+ */
+const cardAdvancedExtras = (relief: string): VariantSpec["extraTactics"] => [
+  CARD_INFO_DEMAND_NO_SMS,
+  relief,
+  CARD_DENIAL_PIVOT_NO_SMS,
+  CARD_REASSURE,
+  APP_INSTALL,
+  AGENCY_PROBE,
+];
+
 // ── T194-c-1(docs/Architecture.md §84.16.2) — 챌린지 쪽에 **내용 무변경**으로 남는 기존 고급 변형 2벌. 자가 Q2 변형이 이 정의를
 // 스프레드한다(`variantId` · `sms`만 다르다). ⛔ 이 두 상수의 내용을 바꾸면 챌린지 수신자 선언(base `a376166` — #192)이 바뀐다 —
 // 조립 산출물 바이트 고정(`inCallSms/__tests__/smsGate.test.ts` T194-c-1 블록)이 잡는다.
+// ⚠️ R3-B(2026-10-20)가 fv-akj5의 수법 문면 3라벨을 의도적으로 바꿨다(문자 선언 · 단계 · 인원 무변경) — 바이트 고정 기준값은
+// "R3-B 변경분만 되돌리면 이전 기준값과 같다"는 증거와 함께 갱신했다(같은 테스트 블록 주석). 수법 순서는 base 그대로다(리뷰 M2).
+// fv-6s5p는 **이 파일의 데이터는 무변경**(문자 선언 · 단계 · 수법 그대로)이지만 조립 산출물은 바뀌었다 — R3-C ①(promptAssembly.ts
+// UNDECLARED_VERIFICATION_TAIL)이 미선언 금지 문장 뒤에 꼬리 한 문장을 붙이기 때문이다(문면만 · 선언 무변경). 같은 테스트가 "꼬리만 빼면
+// 이전 기준값"을 증명한다.
 const CARD_COMPANY_ADVANCED_FV_AKJ5: VariantSpec = {
   variantId: "fv-akj5",
   scenarioId: "card-company-impersonation",
@@ -184,8 +225,10 @@ const CARD_COMPANY_ADVANCED_FV_AKJ5: VariantSpec = {
     "확인하겠다는 상대를 막지 않고, 확인 뒤에도 같은 요구를 이어 간다.",
     "카드 정보와 피해금 이관을 요구한다.",
   ),
-  keepLabels: ["놀람 유발", "긴급성 조성", "카드정보 직접 요구", "피해금 이관 요구", "부인 시 명의 도용 암시", "안심 유도"],
-  extraTactics: [APP_INSTALL, AGENCY_PROBE],
+  // R3-B — 문자 의존 3라벨은 keepLabels에서 빼고 같은 라벨의 무문자 문면을 extraTactics로 넣는다(위 상수 주석). 순서는 base 그대로
+  // (cardAdvancedExtras — 리뷰 M2). 문자 선언 0이라 조립에 문자 예외 블록 · SMS_METHOD_LINE이 없어 낭독형이 모순되지 않는다.
+  keepLabels: ["놀람 유발", "긴급성 조성"],
+  extraTactics: cardAdvancedExtras(CARD_RELIEF_TRANSFER_READOUT),
   exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],
   sms: [],
   legs: [
@@ -325,7 +368,10 @@ const SPECS: VariantSpec[] = [
     level: "beginner",
     authoring: "authored",
     stages: st("해외 가맹점 고액 결제 시도가 있었다고 놀라게 한다.", "결제를 막아 주겠다며 카드 정보를 곧바로 요구한다."),
-    keepLabels: ["놀람 유발", "긴급성 조성", "카드정보 직접 요구", "부인 시 명의 도용 암시", "안심 유도"],
+    // R3-B — 문자 선언 0 변형이라 문자 의존 2라벨은 무문자 문면으로(위 CARD_INFO_DEMAND_NO_SMS 주석).
+    // 순서는 base 그대로(놀람 · 긴급 · 카드정보 · 부인 · 안심 — 초급 브리핑 라벨 순서가 이 순서다, 리뷰 M2).
+    keepLabels: ["놀람 유발", "긴급성 조성"],
+    extraTactics: [CARD_INFO_DEMAND_NO_SMS, CARD_DENIAL_PIVOT_NO_SMS, CARD_REASSURE],
     exitBlock: ["D0_none"],
     sms: [],
     legs: ONE_LEG("카드사 보안팀", "female"),
@@ -361,6 +407,8 @@ const SPECS: VariantSpec[] = [
     ...CARD_COMPANY_ADVANCED_FV_AKJ5,
     variantId: "fv-x7ue",
     sms: [{ purpose: "link", smsId: "card-guard-app-link", required: true, notBeforeUserTurns: 2 }],
+    // R3 리뷰 C1 — 링크 문자를 선언해 조립에 SMS_METHOD_LINE이 실리므로 계좌 낭독형 대신 무계좌형 피해금 문면(CARD_RELIEF_TRANSFER_NO_ACCOUNT).
+    extraTactics: cardAdvancedExtras(CARD_RELIEF_TRANSFER_NO_ACCOUNT),
     // T194-c-1 리뷰 Minor — 문자를 선언하므로 채널 메타에 "sms"를 더한다(fv-m3hd가 스프레드로 받는 값과 같은 꼴 · 프롬프트 바이트 무영향).
     channels: ["voice", "sms"],
   },

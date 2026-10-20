@@ -135,3 +135,49 @@ test("[T190/D-103 배선] 폴백 <audio>는 프로브로 판정하고, 잠기면
   assert.ok(block.includes('setAudioRoute("call");'), "잠길 때 모드를 통화로 되돌리지 않으면 aria-pressed가 실제와 어긋난다");
   assert.equal(code.includes("isVolumeApplied(requested, audio.volume)"), false, "요청값으로 재는 옛 판정이 남았다");
 });
+
+// ── 2026-10-20 실기 신고(S25 · Chrome/웨일 — "AI 음성이 작다 · 스피커 눌러도 변화 없다") ─────────────────────────────
+// 가설(오케스트레이터 · 추정): #301이 받기 탭에서 미리 만든 출력 컨텍스트와, 스피커 버튼이 갱신하는 게인 노드가 서로 다른
+// 그래프에 있어 스피커 전환이 재생에 닿지 않는다. 아래 판정은 그 사슬을 소스에서 한 고리씩 고정한다:
+// 빌린(또는 새) outputContext → 그 컨텍스트의 outputGain → 같은 노드를 ref에 담음 → 재생 소스가 같은 노드에 연결 →
+// outputVolume 변경 effect가 ref의 노드를 갱신.
+function gainIdentityViolations(geminiSource: string): string[] {
+  const c = geminiSource.split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n");
+  const out: string[] = [];
+  if (!/outputContext =\s*outputBorrowed && primedOutput \? primedOutput : new AudioContext\(/.test(c)) {
+    out.push("출력 컨텍스트가 미리 만든 컨텍스트를 빌리지 않는다");
+  }
+  if (!c.includes("outputGain = outputContext.createGain();")) out.push("게인 노드가 출력 컨텍스트에서 만들어지지 않는다");
+  const refAssigns = c.match(/outputGainNodeRef\.current = [^;]+;/g) ?? [];
+  const nonNull = refAssigns.filter((a) => !a.endsWith("= null;"));
+  if (nonNull.length !== 1 || nonNull[0] !== "outputGainNodeRef.current = outputGain;") {
+    out.push(`스피커 갱신용 ref가 재생 게인 노드와 다르다: ${JSON.stringify(nonNull)}`);
+  }
+  if (!c.includes("registerOutputGain(outputGain);")) out.push("진단에 재생 게인 노드를 등록하지 않는다");
+  if (!c.includes("const source = outputContext.createBufferSource();")) out.push("재생 소스가 출력 컨텍스트에서 만들어지지 않는다");
+  if (!c.includes("source.connect(outputGain ?? outputContext.destination)")) out.push("재생 소스가 게인 노드에 연결되지 않는다");
+  const eff = c.indexOf("const node = outputGainNodeRef.current;");
+  const effEnd = c.indexOf("}, [outputVolume]);", eff);
+  if (eff < 0 || effEnd < 0) {
+    out.push("outputVolume 변경 effect가 ref의 노드를 읽지 않는다");
+  } else if (!c.slice(eff, effEnd).includes("node.gain.setTargetAtTime(outputVolumeRef.current, node.context.currentTime")) {
+    out.push("outputVolume 변경 effect가 노드 게인을 바꾸지 않는다");
+  }
+  return out;
+}
+
+test("[2026-10-20 음량 신고] 스피커 갱신 노드 = 재생 소스가 붙는 게인 노드 = 미리 만든 컨텍스트의 노드", () => {
+  assert.deepEqual(gainIdentityViolations(session), []);
+});
+
+test("[2026-10-20 음량 신고 역검증] ref에 다른 노드를 담거나 · effect 의존성을 지우거나 · 빌리기를 끊으면 실패한다", (t) => {
+  const otherNode = session.replace("outputGainNodeRef.current = outputGain;", "outputGainNodeRef.current = outputContext.createGain();");
+  const noDeps = session.replace("}, [outputVolume]);", "}, []);");
+  const noPrime = session.replace("outputBorrowed && primedOutput ? primedOutput : new AudioContext(", "new AudioContext(");
+  for (const [name, poisoned] of [["otherNode", otherNode], ["noDeps", noDeps], ["noPrime", noPrime]] as const) {
+    assert.notEqual(poisoned, session, `${name}: 오염 지점을 찾지 못했다`);
+    const v = gainIdentityViolations(poisoned);
+    t.diagnostic(`[역검증 ${name}] ${JSON.stringify(v)}`);
+    assert.equal(v.length, 1, name);
+  }
+});

@@ -52,6 +52,13 @@ export const SCENARIO_SPEAKER_GENDER: Record<string, SpeakerGenderAssignment> = 
  * 프롬프트 [화자] 블록에 넘길 옵션값 — `notApplicable`이면 `undefined`(블록 자체를 내보내지
  * 않는다, `buildSystemPrompt`의 조건형 스프레드가 falsy 값을 그대로 걸러낸다).
  */
+/** UX-025 기본 목소리 선택(`voiceSelectionSource`)의 성별. 클론(recorded · reused) · 부재 = `undefined`. */
+export function voiceSelectionGender(voiceSelectionSource: string | undefined): "male" | "female" | undefined {
+  if (voiceSelectionSource === "fallback_male") return "male";
+  if (voiceSelectionSource === "fallback_female") return "female";
+  return undefined;
+}
+
 export function speakerGenderFor(scenarioId: string): "male" | "female" | undefined {
   const assignment = SCENARIO_SPEAKER_GENDER[scenarioId];
   return assignment === "male" || assignment === "female" ? assignment : undefined;
@@ -67,10 +74,18 @@ export function speakerGenderFor(scenarioId: string): "male" | "female" | undefi
  * 표에 값이 있는 시나리오는 **표 값 그대로**다(오늘 동작 바이트 동일).
  */
 export function resolveSessionSpeakerGender(
-  session: EscalationSessionView & { flowVariantId?: string },
+  session: EscalationSessionView & { flowVariantId?: string; voiceSelectionSource?: string },
 ): "male" | "female" | undefined {
   const fromTable = speakerGenderFor(session.scenarioId);
   if (fromTable) return fromTable;
+  // ⭐ 2026-10-20 실기 신고(child-kakao — "남성 음성"을 골랐는데 통화가 여성 음성) — 참가자가 메신저 통화용 목소리 선택(UX-025)에서
+  // **기본 남성·여성 목소리**를 고른 세션은 그 성별이 세션 화자 성별이다. 이 값 하나로 Gemini Live 음성 풀(`pickGeminiVoiceName`)과
+  // 프롬프트 [화자] 블록(텍스트 · 오프닝 · Live — 아들/딸)이 함께 따라간다. 폴백 TTS는 `session.voiceId`(createSession이
+  // FALLBACK_VOICE_MALE_ID/FEMALE_ID로 해석)를 쓰므로 같은 선택을 따른다. 클론(recorded · reused) · 선택 부재는 아래 종전 규칙 그대로(바이트 동일).
+  // ⛔ 리뷰 M2 — 이 세션에 통화 단계가 있을 때만(createSession은 필드를 검증하지 않는다 — parcel 초급 · 중급에 클라가 직접 보내도
+  // [화자] 블록이 생기지 않게, AC-106 (f) · §84.4.6). 판정은 전이 술어 하나(`resolveSessionEscalation`)로 한다.
+  const chosen = voiceSelectionGender(session.voiceSelectionSource);
+  if (chosen && resolveSessionEscalation(session, PUBLIC_SCENARIOS)) return chosen;
   // ⛔ 리뷰 C1 — 변형 leg 성별은 **`advancedEscalation`만 가진 시나리오**(택배 문자 — 고급만 통화)에서만 쓴다. `escalation`(세 난이도 ·
   // 클론 — child-kakao)을 가진 notApplicable 시나리오에 leg 성별을 주면 [화자] 블록이 새로 생기고 Gemini 음성 풀이 줄어든다(#162 ·
   // §84.4.6 위반). 판정은 메타 직접 읽기 대신 술어로 한다(G580): 중급 값 없음 ∧ 고급 값 있음 = advancedEscalation 전용.

@@ -92,6 +92,15 @@
 //  beginner len=6581 sha=cb89a9668aeae646 (직전 6143 · 621e9f0452d167e6) · intermediate len=5760 sha=300edf4134fd958c
 //  (직전 5322 · c4830f9bc792e7f8) · advanced len=6882 sha=7c4d8fb1edde41bc (직전 6444 · 3959ff484a8c6451).
 //  family-accident-deepvoice도 같은 항목으로 3/3 바뀌었다.)
+// (R3-C ②-a 2026-10-20 · 감사 A R3 · 정본 Architecture §79.22 (6): 공통 [진행 강제]의 **무조건부** NO_STALL_RULE 셋째 문장
+//  "결과를 알린 뒤에는 곧바로 다음 요구로 넘어가고, 더 요구할 것이 없으면" → "결과를 알린 뒤에는, 상대에게 더 요구할 것이 남아 있으면 그 요구로
+//  넘어가고, 더 요구할 것이 남지 않았으면"으로 바꿨다(+21자) → **조립 산출물이 바뀌었다 — 재생성 대기 중.** 실시간 통화(ElevenLabs clone)에는
+//  아직 반영되지 않았다. 재생성 완료 후에만 "재생성 완료"로 갱신할 것. 대조값 = `buildSystemPrompt(SCENARIO_PROMPTS[id], { difficultyLevel })`의
+//  sha256 앞 16자(빌드 산출물 `functions/lib` · 직전 값 = 같은 작업 트리(main ea97aa0 추출본)에서 이 교체 전 같은 방법 실측).
+//  ⚠️ 바로 위 A-1 기록의 값은 이번 직전 실측과 이미 달랐다 — 그 뒤 병합된 무조건부 변경(#329 실존 회사명 금지 1문장 등으로 추정, 미확정)이 기록을 갱신하지 않았다.
+//  beginner len=6696 sha=47439ced67bc513c (직전 6675 · ec3cb4932ec18731) · intermediate len=5875 sha=506e035fb62ae707
+//  (직전 5854 · c4db397942a90d5c) · advanced len=6997 sha=027daadab33af91c (직전 6976 · 76aade3d6c438a01).
+//  (A-1 기록값 6581 · cb89a9668aeae646 / 5760 · 300edf4134fd958c / 6882 · 7c4d8fb1edde41bc ≠ 직전 실측.) family-accident-deepvoice도 3/3 바뀌었다.)
 import type { ScenarioPromptDoc } from "../shared/types";
 
 // src/content/scenarios/grandchildImpersonation.ts의 상수와 동일한 문자열이어야 한다.
