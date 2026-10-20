@@ -17,12 +17,12 @@ export default function CallWaveform({ active, label }: CallWaveformProps) {
         {BAR_DELAYS_MS.map((delay, index) => (
           <span
             key={index}
-            className={`w-[4px] rounded-full bg-[#7CD9C2] ${active ? "call-wave-bar h-7" : "h-2 opacity-40"}`}
+            className={`w-[4px] rounded-full bg-[var(--call-wave,#7CD9C2)] ${active ? "call-wave-bar h-7" : "h-2 opacity-40"}`}
             style={active ? { animationDelay: `${delay}ms` } : undefined}
           />
         ))}
       </div>
-      <p className="text-base font-semibold text-[#9FB0BA]">{label}</p>
+      <p className="text-base font-semibold text-[var(--call-fg-sub,#9FB0BA)]">{label}</p>
     </div>
   );
 }

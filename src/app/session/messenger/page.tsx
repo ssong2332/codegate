@@ -610,7 +610,7 @@ export default function MessengerSessionPage() {
           // §89.5 ⓐ — 메신저형 표시 규칙(`chatPresentation.ts` · G633): 이름 · 프로필은 상대 연속의 첫 말풍선만 ·
           // 시각은 연속의 마지막만 · "1"은 상대가 아직 답하지 않은 내 메시지만.
           const firstOfPeerRun = startsPeerRun(threadItems, index);
-          const firstOfRun = firstOfPeerRun || (message.role === "user" && index > 0 && !isSameRole(index - 1, "user"));
+          const firstOfRun = firstOfPeerRun || (message.role === "user" && !isSameRole(index - 1, "user"));
           const timeLabel = !isSms && endsRun(threadItems, index) ? formatChatTime(message.createdAtMs) : "";
           const unread = !isSms && isUnreadByPeer(threadItems, index);
           return (
@@ -802,6 +802,7 @@ export default function MessengerSessionPage() {
                     ? ({
                         backgroundColor: chatTokens.fieldBg,
                         color: chatTokens.fieldText,
+                        border: `1px solid ${chatTokens.fieldBorder}`,
                         "--sms-placeholder": chatTokens.placeholder,
                       } as React.CSSProperties)
                     : isSms

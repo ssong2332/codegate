@@ -2046,6 +2046,7 @@ export default function SessionCallPage() {
     "--call-chip": callTokens.chipBg,
     "--call-field-bg": callTokens.fieldBg,
     "--call-field-border": callTokens.fieldBorder,
+    "--call-wave": callTokens.waveBar,
   } as React.CSSProperties;
   const bannerTokens = bannerTokensFor(deviceSkin.skin);
   // D-103 — 음량을 바꿀 수 없는 경로(폴백 `<audio>` + 대입 미반영)에서만 스피커 칸이 비활성이다.
@@ -2368,8 +2369,8 @@ export default function SessionCallPage() {
       </div>
 
       {/* 하단 컨트롤 — 실제 폰 통화 UI 관례(수신 화면은 거절/받기, 통화 중은 2×3 그리드 + 아래 가운데 종료).
-          T190-3(UX-014 v1.33 (4)(5) · D-87) — 받기 = `call.accept`(초록 — 앱 청록은 Superseded) · 원 76px · 탭만
-          (스와이프 재현 0 — 어르신·접근성 · 키보드 도달). iOS형 울림 = 받기 버튼 맥동(`call-accept-pulse`). */}
+          T190-3(UX-014 v1.33 (4)(5) · D-87) — 받기 = `call.accept`(초록 — 앱 청록은 Superseded) · 원 76px.
+          §89.5 ⓑ(UX D-132 (5) ⓑ) — 누르기는 그대로 두고 **밀기도** 받는다(어르신 · 키보드 도달 유지). iOS형 울림 = 받기 버튼 맥동. */}
       {phase === "incoming" ? (
         <div className="flex flex-col pb-[calc(env(safe-area-inset-bottom)+40px)]">
         <div className="flex justify-between px-14">
@@ -2393,6 +2394,7 @@ export default function SessionCallPage() {
               onClick={handleAnswer}
               aria-label="전화 받기"
               // §89.5 ⓑ(UX D-132 (5) ⓑ) — 누르기(위 onClick)와 **밀기** 둘 다 받는다. 밀기 = 누른 채 48px 이상 이동.
+              // `touch-none` — 밀기 중 브라우저가 스크롤로 가져가지 않게(P3 리뷰 Minor).
               onPointerDown={(event) => {
                 swipeStartRef.current = { x: event.clientX, y: event.clientY };
                 event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -2409,7 +2411,7 @@ export default function SessionCallPage() {
               onPointerCancel={() => {
                 swipeStartRef.current = null;
               }}
-              className={`relative flex h-[76px] w-[76px] items-center justify-center rounded-full shadow-lg transition active:scale-95 ${
+              className={`relative flex h-[76px] w-[76px] touch-none items-center justify-center rounded-full shadow-lg transition active:scale-95 ${
                 callTokens.ringStyle === "accept-pulse" ? "call-accept-pulse" : ""
               }`}
               style={{ backgroundColor: callTokens.accept, color: callTokens.roundIcon }}

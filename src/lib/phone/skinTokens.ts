@@ -56,6 +56,8 @@ export type CallSkinTokens = {
   fieldBorder: string;
   /** §89.5 ⓒ 라이트 통화 화면의 버튼 묶음 판(One UI형 라이트만) — 없으면 null(셸 바탕 위에 바로). */
   gridPanelBg: string | null;
+  /** 폴백 통화 발화 파형 막대(`CallWaveform` — P3 리뷰 Major 1: 라이트 화면에서 종전 #7CD9C2는 약 1.5:1). */
+  waveBar: string;
 };
 
 export type BannerSkinTokens = {
@@ -95,6 +97,7 @@ const DARK_CALL_EXTRAS = {
   // 종전 `border-white/30`은 바탕 위 약 2.7:1(비텍스트 3:1 미달) — 토큰화하며 0.45로 올렸다(G456).
   fieldBorder: "rgba(255,255,255,0.45)",
   gridPanelBg: null,
+  waveBar: "#7CD9C2",
 } as const;
 
 const ONE_UI_CALL: CallSkinTokens = {
@@ -145,6 +148,7 @@ const ONE_UI_CALL_LIGHT: CallSkinTokens = {
   fieldBg: "#FFFFFF",
   fieldBorder: "rgba(20,24,29,0.55)",
   gridPanelBg: ESTIMATED_DEVICE_COLORS.oneUiLightCallPanel,
+  waveBar: "#1F6F66",
 };
 
 const CALL_TOKENS: Record<MessengerSkin, CallSkinTokens> = {
@@ -458,6 +462,8 @@ export const MESSENGER_CHAT_TOKENS = {
   linkCardThumb: "#C3D0DC",
   inputBarBg: "#FFFFFF",
   fieldBg: "#F2F3F5",
+  /** P3 리뷰 Major 2 — 입력칸 경계(입력줄 흰 바탕 위 비텍스트 3:1). 바탕 차이만으로는 약 1.1:1이라 경계를 둔다. */
+  fieldBorder: "#7D8792",
   fieldText: "#1B1B1F",
   placeholder: "#5F6368",
   sendBg: ESTIMATED_DEVICE_COLORS.messengerOutgoingBg,
@@ -559,6 +565,7 @@ function ringPairs(skin: string, call: CallSkinTokens): ContrastPair[] {
     { name: `${skin}.call.chipText`, fg: call.textPrimary, bg: call.chipBg, base: call.bg, kind: "text" },
     { name: `${skin}.call.fieldText`, fg: call.textPrimary, ...fieldBgPair(call), kind: "text" },
     { name: `${skin}.call.fieldBorder`, fg: compositeHex(call.fieldBorder, call.bg), bg: call.bg, kind: "nonText" },
+    { name: `${skin}.call.waveBar`, fg: call.waveBar, bg: call.bg, kind: "nonText" },
   ];
 }
 
@@ -602,6 +609,7 @@ export function messengerChatPairs(): ContrastPair[] {
     { name: "chat.linkTitle", fg: t.linkCardTitle, bg: t.linkCardBg, kind: "text" },
     { name: "chat.linkHost", fg: t.linkCardHost, bg: t.linkCardBg, kind: "text" },
     { name: "chat.fieldText", fg: t.fieldText, bg: t.fieldBg, kind: "text" },
+    { name: "chat.fieldBorder", fg: t.fieldBorder, bg: t.inputBarBg, kind: "nonText" },
     { name: "chat.placeholder", fg: t.placeholder, bg: t.fieldBg, kind: "text" },
     { name: "chat.sendIcon", fg: t.sendIcon, bg: t.sendBg, kind: "nonText" },
   ];

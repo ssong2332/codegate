@@ -20,6 +20,7 @@ test("[G632] 받기 버튼은 누르기(onClick)와 밀기(pointer) 둘 다 hand
   const button = page.slice(page.lastIndexOf("<button", start), page.indexOf("</button>", start));
   assert.match(button, /onClick=\{handleAnswer\}/, "누르기 경로가 사라졌다");
   assert.match(button, /onPointerMove=/, "밀기 경로가 없다");
+  assert.match(button, /\btouch-none\b/, "밀기 중 스크롤이 가져가지 않게 touch-none이 있어야 한다");
   assert.ok(page.includes("isSwipeAccept("), "밀기 판정이 순수 함수를 쓰지 않는다");
 });
 
