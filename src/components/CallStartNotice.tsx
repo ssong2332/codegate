@@ -26,7 +26,7 @@ import {
   MASK_ACCESSIBLE_NAME,
   PERSONA_CARD_COPY,
   splitMaskedValue,
-  type PersonaCardRow,
+  type PersonaCardView,
 } from "@/lib/personacard/personaCard";
 
 type CallStartNoticeProps = {
@@ -42,8 +42,9 @@ type CallStartNoticeProps = {
   /**
    * T194-b(UX-014 v1.38 (1)(3) · D-118 · PRD AC-104 (b)) — 서버가 세션 문서에 쓴 가상 신상 카드 행(`readSessionPersonaCard` 결과).
    * `null` = 카드 블록 0(그 밖 세션의 이 화면은 v1.33 (11) ① 그대로). ⛔ 이 화면은 값을 만들거나 고치지 않는다.
+   * §88 — 챌린지를 보낸 사람이 넣은 카드는 `readSessionPersonaCard`가 `null`로 돌려 받는 사람에게 그리지 않는다.
    */
-  personaCard: PersonaCardRow[] | null;
+  personaCard: PersonaCardView | null;
 };
 
 export default function CallStartNotice({ onConfirm, onEndTraining, skinPicker, personaCard }: CallStartNoticeProps) {
@@ -85,7 +86,7 @@ export default function CallStartNotice({ onConfirm, onEndTraining, skinPicker, 
             </h2>
             <p className="mt-1 text-[15px] leading-[1.6] text-[#6B655C]">{PERSONA_CARD_COPY.guide}</p>
             <dl className="mt-3 flex flex-col gap-2">
-              {personaCard.map((row) => (
+              {personaCard.rows.map((row) => (
                 <div key={row.label}>
                   <dt className="text-[15px] font-normal leading-[1.5] text-[#6B655C]">{row.label}</dt>
                   {/* 가림 "○○"은 화면에 그대로, 스크린리더에는 "가려진 이름"(UX-014 v1.38 (3)). 줄바꿈 허용 · 말줄임 0. */}
@@ -104,7 +105,8 @@ export default function CallStartNotice({ onConfirm, onEndTraining, skinPicker, 
                 </div>
               ))}
             </dl>
-            <p className="mt-3 text-[15px] leading-[1.6] text-[#6B655C]">{PERSONA_CARD_COPY.noticeVirtual}</p>
+            {/* §88(UX D-131 (5)) — 고지 ⓐ는 카드 출처로 갈린다(v1 = noticeVirtual · v2 self = noticeInput — readSessionPersonaCard가 고른다). */}
+            <p className="mt-3 text-[15px] leading-[1.6] text-[#6B655C]">{personaCard.notice}</p>
             <p className="mt-1 text-[15px] leading-[1.6] text-[#6B655C]">{PERSONA_CARD_COPY.noticeNoRevisit}</p>
           </section>
         )}

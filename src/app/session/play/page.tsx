@@ -163,7 +163,7 @@ import { foldDegraded, buildFallbackStatusLine } from "@/lib/report/degradedDisc
 // 벨 직전 고지(`pre-call-notice`)는 세션 전 컴포넌트 `CallStartNotice`가 그리고, 벨 화면(`incoming`)에는 문구가 0이다.
 import { decideInitialCallPhase, type CallPhase } from "@/lib/sessionboundary/startNoticeGate";
 import CallStartNotice from "@/components/CallStartNotice";
-import { personaEventLogLine, readSessionPersonaCard, type PersonaCardRow } from "@/lib/personacard/personaCard";
+import { personaEventLogLine, readSessionPersonaCard, type PersonaCardView } from "@/lib/personacard/personaCard";
 import CallWaveform from "@/components/CallWaveform";
 import InCallSmsOverlay from "@/components/InCallSmsOverlay";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
@@ -264,7 +264,7 @@ export default function SessionCallPage() {
   const [difficultyLevel, setDifficultyLevel] = useState<DifficultyLevel | null>(null);
   // T194-b(§84.3.3 ⓑ · UX-014 v1.38 (1)) — 세션 문서에 서버가 쓴 가상 신상 카드(아래 세션 read effect가 같은 스냅샷에서 읽는다 —
   // 추가 read 0). `null` = 카드 블록 0. ⛔ 이 화면은 값을 만들거나 고치거나 서버로 보내지 않는다(AC-104 (d)).
-  const [personaCard, setPersonaCard] = useState<PersonaCardRow[] | null>(null);
+  const [personaCard, setPersonaCard] = useState<PersonaCardView | null>(null);
   const personaCardLoggedRef = useRef(false);
   // T158(§48.5.1, AC-084, P-31) — 대사 축 강등 관측. sticky OR-fold, false로 되돌리는 대입 0건
   // (G278). 마운트 시 `sessions/{sid}.llmProvider`(아래 세션 read effect) + 매 턴
@@ -1460,7 +1460,7 @@ export default function SessionCallPage() {
   useEffect(() => {
     if (pageState !== "ready" || phase !== "pre-call-notice" || !personaCard || personaCardLoggedRef.current) return;
     personaCardLoggedRef.current = true;
-    console.info(personaEventLogLine({ kind: "persona_card_shown", rows: personaCard.length }));
+    console.info(personaEventLogLine({ kind: "persona_card_shown", rows: personaCard.rows.length }));
   }, [pageState, phase, personaCard]);
 
   // ⭐ T190-4(UX D-97 · AC-093 (a)(b) · docs/Architecture.md §74.7 · G454) — 수신(`incoming`) 동안만 벨·진동.

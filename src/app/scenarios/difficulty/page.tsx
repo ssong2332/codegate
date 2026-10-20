@@ -50,6 +50,16 @@ import {
 } from "@/lib/difficulty";
 import { scenarios, GENERIC_VOICE_ID, resolveScenarioEscalation } from "@/content/scenarios";
 import { Badge, Button, SelectableCard } from "@/components/ui";
+import PersonaCardInputFields from "@/components/PersonaCardInputFields";
+import {
+  EMPTY_PERSONA_CARD_FORM,
+  PERSONA_INPUT_COPY,
+  personaCardErrorLine,
+  personaCardInputVisible,
+  readPersonaCardForm,
+  type PersonaCardForm,
+  type PersonaCardInput,
+} from "@/lib/personacard/personaCardInput";
 
 type PageState = "ready" | "starting" | "start-error" | "difficulty-fallback";
 
@@ -68,6 +78,8 @@ export default function DifficultySelectPage() {
   const [startError, setStartError] = useState<string | null>(null);
   const [appliedLevel, setAppliedLevel] = useState<DifficultyLevel | null>(null);
   const [pendingDestination, setPendingDestination] = useState<string | null>(null);
+  // §88(UX D-131 (1)) — "이번 훈련 속 내 정보"(선택 · 기본 비움). 고급 × 대상 4종 × self일 때만 그린다(send는 UX-019가 받는다).
+  const [personaForm, setPersonaForm] = useState<PersonaCardForm>(EMPTY_PERSONA_CARD_FORM);
 
   // 초급 사전 브리핑(D-43/AC-066) — **세션 시작 전**에만 보여준다. 대화 중 실시간 판정 표시가
   // 아니다(D-6 유지). 실패는 비차단(P-4): 브리핑을 못 받아도 난이도 선택·진행은 그대로 된다.
@@ -79,6 +91,8 @@ export default function DifficultySelectPage() {
   const isAdvancedOnly = scenario?.advancedOnly === true;
   // T191 S5(UX 계약 C-9 · D-106) — 부담 고지는 고급 고지 **바로 아래**(고급이 선택돼 있을 때만).
   const showBurdenNotice = scenario?.preSessionBurdenNotice === true && selected === "advanced";
+  // §88(UX D-131 (1)) — self 모드에서만(send의 받는 분 정보는 UX-019가 받는다).
+  const showPersonaInput = !isSendMode && personaCardInputVisible(scenarioId, selected, scenario?.channel);
   useEffect(() => {
     // UX 계약 C-10 — 이벤트는 종류만(시나리오 ID · 수법 0).
     if (showBurdenNotice) console.info(JSON.stringify({ event: "burden_notice_shown" }));
@@ -108,7 +122,7 @@ export default function DifficultySelectPage() {
   }, [scenarioId, briefingOpen, briefingSignals]);
 
   /** self·보이스 / self·메신저(비에스컬레이션)의 세션 생성 — 난이도만 추가된 기존 로직 그대로. */
-  const startSelfSession = async (level: DifficultyLevel, sid: string) => {
+  const startSelfSession = async (level: DifficultyLevel, sid: string, personaCardInput: PersonaCardInput | undefined) => {
     const isMessenger = scenario?.channel === "messenger";
     // "시작" = 새 훈련의 시작점. 직전 훈련을 "훈련 종료" 없이 빠져나온 경우 이전 사전 세션 id가
     // 남아 있을 수 있어 여기서 비우고 새 id를 발급한다(이관 전 ScenarioListView의 검증된 판단).
@@ -125,6 +139,8 @@ export default function DifficultySelectPage() {
       voiceId: GENERIC_VOICE_ID,
       difficultyLevel: level,
       ...(isMessenger ? { channel: "messenger" as const, surface: scenario?.surface } : {}),
+      // §88 — 넣은 칸이 있을 때만 싣는다(비면 필드 부재 = 카드 0 = 사기범이 이름 · 생년월일을 묻는다).
+      ...(personaCardInput ? { personaCardInput } : {}),
     });
     // 오프닝 재생 힌트는 보이스 경로에서만 쓴다(메신저는 텍스트 전용 — 이관 전 동작 그대로).
     if (!isMessenger) {
@@ -146,6 +162,16 @@ export default function DifficultySelectPage() {
 
   const handleStart = async () => {
     if (!selected || !scenarioId || state === "starting") return;
+    // §88(UX D-131 (3)) — 입력 블록이 보일 때만 읽는다(숨은 칸의 값은 보내지 않는다). 형식 오류면 진행하지 않고 1줄로 알린다.
+    let personaCardInput: PersonaCardInput | undefined;
+    if (showPersonaInput) {
+      const read = readPersonaCardForm(personaForm);
+      if (!read.ok) {
+        setStartError(PERSONA_INPUT_COPY.invalid);
+        return;
+      }
+      personaCardInput = read.input;
+    }
     setState("starting");
     setStartError(null);
     try {
@@ -165,14 +191,16 @@ export default function DifficultySelectPage() {
         router.push("/scenarios/messenger/voice-select");
         return;
       }
-      await startSelfSession(selected, scenarioId);
+      await startSelfSession(selected, scenarioId, personaCardInput);
     } catch (err) {
       // T191 S5(UX 계약 C-2 · UX-029 v1.34 (3)) — 서버의 고급 전용 거부는 같은 1줄로 알린다(⛔ 중급 폴백 0).
       // 재시도는 그대로 같은 버튼이다(P-4).
+      // §88 — 서버의 내 정보 거부(형식 · 대상 밖)는 D-131 (3) 문면으로 알린다.
+      const reason = readFunctionsErrorReason(err);
       setStartError(
-        readFunctionsErrorReason(err) === DIFFICULTY_NOT_ALLOWED_REASON
+        reason === DIFFICULTY_NOT_ALLOWED_REASON
           ? ADVANCED_ONLY_LINE
-          : "훈련을 시작하지 못했습니다. 다시 시도해 주세요.",
+          : (personaCardErrorLine(reason) ?? "훈련을 시작하지 못했습니다. 다시 시도해 주세요."),
       );
       setState("ready");
     }
@@ -282,6 +310,16 @@ export default function DifficultySelectPage() {
         <p className="rounded-[16px] border-[1.5px] border-[#E2DDD3] bg-white p-4 text-[15px] leading-relaxed text-[#22303A]">
           {PRE_SESSION_BURDEN_NOTICE}
         </p>
+      )}
+
+      {/* §88(UX D-131 (1)) — 고급 고지 · 부담 고지 아래. 처음부터 펼침 · 세 칸 모두 비움(선택). */}
+      {showPersonaInput && (
+        <PersonaCardInputFields
+          mode="self"
+          value={personaForm}
+          onChange={setPersonaForm}
+          disabled={state === "starting"}
+        />
       )}
 
       {/* 초급 사전 브리핑(D-43/AC-066) — "이 대화에서 나올 수 있는 위험 신호 미리 보기". */}

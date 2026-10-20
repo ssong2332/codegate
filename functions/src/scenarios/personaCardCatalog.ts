@@ -1,11 +1,11 @@
 // T194-b(docs/Architecture.md §84.3.1 · §84.3.2 · PRD AC-104 · UX-014 v1.38 (2)) — 훈련용 가상 신상 카드의 **데이터**.
+// ⭐ §88(DECISIONS #199) — 카드 값은 사용자가 넣는다(선택 · 기본 비움). 이 파일은 대상 · 라벨 · 입력 규칙 · 시 · 도 목록만 둔다.
 //
 // ⛔ 금지(§84.0 X2 · AC-104 (e)): 사용자 계정 정보(표시 이름 · 이메일 · 계정 식별자)는 이 파일 어디에도 들어오지 않는다.
-//    값은 전부 아래 풀에서 고른 **지어낸** 값이다. 실존 금융사 · 학교 · 학원 이름 0 · 시 · 군 · 구 이하 실제 지명 0.
-// ⭐ 대상 범위 = 2026-10-20 User 결정(설계 기본값 5종보다 우선): **고급 + 아래 4종 · 자가 훈련만**.
+//    실존 금융사 이름 0 · 시 · 군 · 구 이하 지명 0(사는 곳은 시 · 도까지만).
+// ⭐ 대상 범위 = 2026-10-20 User 결정(설계 기본값 5종보다 우선): **고급 + 아래 4종**(§88 — 자가 · 챌린지 모두 · 입력이 있을 때만).
 //    `kidnapping-threat`는 빠졌다 — 납치 고급의 "상대 이름을 먼저 말하지 않는다" 규칙(§50.4.4)에 예외를 만들지 않는다.
 //    그래서 자녀 행(`child`)도 만들지 않는다(그 행을 쓰는 시나리오가 kidnapping 하나뿐이었다).
-// ⭐ 주소 = 광역 도 이름 + "○○시"까지(User 결정). 특별 · 광역시는 "○○구" 꼴이 되므로 풀에 넣지 않았다.
 import type { PersonaCardKey } from "../shared/types";
 import {
   CARD_COMPANY_IMPERSONATION_SCENARIO_ID,
@@ -32,40 +32,34 @@ export const PERSONA_CARD_LABELS: Readonly<Record<PersonaCardKey, string>> = {
   loan: "대출",
 };
 
-/** 시나리오별 행 구성(공통 4행 + 추가 행 최대 1 — 5행 초과 0 · D-119). */
-export const PERSONA_CARD_ROWS: Readonly<Record<string, readonly PersonaCardKey[]>> = {
-  [INSTITUTIONAL_IMPERSONATION_SCENARIO_ID]: ["name", "birthYear", "region", "bank"],
-  [CARD_COMPANY_IMPERSONATION_SCENARIO_ID]: ["name", "birthYear", "region", "bank", "card"],
-  [LOAN_SCAM_SCENARIO_ID]: ["name", "birthYear", "region", "bank", "loan"],
-  [COURIER_CUSTOMS_SCAM_SCENARIO_ID]: ["name", "birthYear", "region", "bank"],
-};
-
 /**
- * 흔한 가상 이름(성 1 + 이름 2 · 3자). 순서가 곧 배정 순서다 — 바꾸면 같은 sessionId의 카드가 달라진다.
- * ⚠️ 실존 유명인 대조(#164 관례)는 이 구현 패스에서 **외부 검색으로 하지 못했다** — 작성자가 아는 유명인 이름만 뺐다(추정).
+ * ⭐ §88(DECISIONS #199 · 사용자 요청 2026-10-20) — 사용자가 넣을 수 있는 카드 행(순서 = 카드 행 순서). 서버 임의 생성(§84.3.2 —
+ * 이름 풀 · 출생 연도 범위 · 카드 은행 · 가림 고정값)은 폐지됐다. 거래 은행 · 사용 카드 · 대출 행은 입력 대상이 아니다(실존 은행명을
+ * 넣으면 사기범이 실존 금융사명을 말한다 — §81 · OQ-U96). `bank` · `card` · `loan` 키는 옛 카드(v1) 읽기 하위호환으로만 남는다.
  */
-export const PERSONA_NAME_POOL: readonly string[] = [
-  "김영숙",
-  "최명순",
-  "정옥희",
-  "조영순",
-  "윤정례",
-  "서경애",
-  "임춘자",
-  "오복희",
-  "박상만",
-  "송기철",
-];
+export const PERSONA_CARD_INPUT_KEYS: readonly PersonaCardKey[] = ["name", "birthYear", "region"];
 
-/** 출생 연도 범위(연도만 · 월일 0 — UX-014 v1.38 (2)). */
-export const PERSONA_BIRTH_YEAR_MIN = 1955;
-export const PERSONA_BIRTH_YEAR_MAX = 1975;
+/** 이름 입력 길이(공백 정리 뒤 · 문자 수). */
+export const PERSONA_NAME_MIN_LENGTH = 2;
+export const PERSONA_NAME_MAX_LENGTH = 10;
+
+/** 출생 연도 입력 하한 · 상한(상한 = 올해 − 14 — 서비스 연령 기준과 같은 방향의 보수값). */
+export const PERSONA_BIRTH_YEAR_INPUT_MIN = 1920;
+export const PERSONA_BIRTH_YEAR_INPUT_MIN_AGE = 14;
 
 /**
- * 사는 곳 — 광역 도 이름(8). 화면 값 = `"{name} ○○시"`. `shortNames`는 리포트 첫 언급 대조용 줄임말이다
- * (`경기`는 "경기가 안 좋아서" 같은 일상어와 겹쳐 넣지 않았다 — 거짓 양성 방지).
+ * 사는 곳 — 시 · 도 17개(정식 명칭 · 입력 선택지 = 카드 값). `shortNames`는 리포트 첫 언급 대조용 줄임말이다
+ * (`경기`는 "경기가 안 좋아서" 같은 일상어와 겹쳐 넣지 않았다 — 거짓 양성 방지). 옛 카드(v1) 값 `"{도} ○○시"`도 같은 목록으로 대조한다.
  */
 export const PERSONA_REGION_POOL: readonly { name: string; shortNames: readonly string[] }[] = [
+  { name: "서울특별시", shortNames: ["서울"] },
+  { name: "부산광역시", shortNames: ["부산"] },
+  { name: "대구광역시", shortNames: ["대구"] },
+  { name: "인천광역시", shortNames: ["인천"] },
+  { name: "광주광역시", shortNames: ["광주"] },
+  { name: "대전광역시", shortNames: ["대전"] },
+  { name: "울산광역시", shortNames: ["울산"] },
+  { name: "세종특별자치시", shortNames: ["세종시"] },
   { name: "경기도", shortNames: [] },
   { name: "강원특별자치도", shortNames: ["강원도", "강원"] },
   { name: "충청북도", shortNames: ["충북"] },
@@ -74,21 +68,11 @@ export const PERSONA_REGION_POOL: readonly { name: string; shortNames: readonly 
   { name: "전라남도", shortNames: ["전남"] },
   { name: "경상북도", shortNames: ["경북"] },
   { name: "경상남도", shortNames: ["경남"] },
+  { name: "제주특별자치도", shortNames: ["제주도", "제주"] },
 ];
 
-/** 지역 값의 가림 꼬리(시 · 군 · 구 이하 실제 지명 0). */
+/** 옛 카드(v1) 지역 값의 가림 꼬리(`"{도} ○○시"`) — 프롬프트 값 · 리포트 대조가 옛 값을 계속 읽도록 남긴다. */
 export const PERSONA_REGION_MASK_SUFFIX = "○○시";
-
-/**
- * 가림 고정 값. ⚠️ `card`의 `"○○카드"`는 §83 카드사 자리표시자 패턴(`shared/fictionalBank.ts` `CARD_PLACEHOLDER_PATTERN`)에
- * 걸린다 — 조립 끝의 `applyFictionalBank`가 **프롬프트 안에서만** 이 값을 세션 가상 카드사명으로 바꾼다(화면 값은 "○○카드" 그대로).
- * 설계 §84.3.2는 §83 이전에 쓰여 은행 패턴만 검토했다 — 구현 보고에 열린 질문으로 올렸다.
- * `loan`의 `"○○저축은행"`은 `○○` 바로 뒤가 `저`라 은행 자리표시자 패턴에 걸리지 않는다(G565가 전 풀로 단언).
- */
-export const PERSONA_CARD_FIXED_VALUES = {
-  card: "○○카드",
-  loan: "○○저축은행 대출 이용 중",
-} as const;
 
 /**
  * ⭐ T194-b 리뷰 M1 — 프롬프트에 싣는 대출 행 값. 화면 값 `"○○저축은행 대출 이용 중"`의 `"○○"`는 은행 자리표시자 패턴에 걸리지 않아
@@ -99,8 +83,8 @@ export const PERSONA_LOAN_PROMPT_VALUE = "저축은행 대출 이용 중";
 
 /**
  * 카드 행의 **프롬프트용** 값(화면 값은 세션 문서 그대로). 블록 안 `"○○"` 리터럴 0이 목표다(리뷰 M1).
- * - loan: 일반명(`PERSONA_LOAN_PROMPT_VALUE`)
- * - region: 가림 꼬리(`" ○○시"`)를 떼고 도 이름만 — 시 이하 지명은 모델도 모른다(장소 특정 금지와 같은 방향)
+ * - loan: 일반명(`PERSONA_LOAN_PROMPT_VALUE` — 옛 v1 카드)
+ * - region: 가림 꼬리(`" ○○시"` — 옛 v1 카드)가 있으면 떼고 시 · 도 이름만. 입력 카드(v2) 값은 시 · 도 이름 그대로라 무변경
  * - card: 그대로 — 조립 끝 `applyFictionalBank`가 `"○○카드"`를 세션 가상 카드사명으로 바꾼다(§83 · 열린 질문)
  * - 그 밖: 그대로(가림 표기 없음)
  */
