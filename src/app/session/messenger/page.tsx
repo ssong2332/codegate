@@ -53,7 +53,7 @@ import MessengerFakeLanding from "@/components/MessengerFakeLanding";
 import MessengerStartNotice from "@/components/MessengerStartNotice";
 import { Button } from "@/components/ui";
 import { foldDegraded, DIALOGUE_DEGRADED_NOTICE } from "@/lib/report/degradedDisclosure";
-import { CALL_SEGMENT_LINE, foldCallSegments } from "@/lib/messenger/threadItems";
+import { CALL_SEGMENT_ICON, CALL_SEGMENT_LINE, foldCallSegments } from "@/lib/messenger/threadItems";
 import {
   decideMessengerStartNotice,
   type MessengerStartNoticeState,
@@ -559,7 +559,10 @@ export default function MessengerSessionPage() {
           if (item.kind === "call") {
             return (
               <li key={item.id} className="flex justify-center">
-                <span className="rounded-full bg-[#F1EEE8] px-3 py-1 text-center text-sm text-[#6B655C]">{CALL_SEGMENT_LINE}</span>
+                <span className="rounded-full bg-[#F1EEE8] px-3 py-1 text-center text-sm text-[#6B655C]">
+                  <span aria-hidden="true">{CALL_SEGMENT_ICON} </span>
+                  {CALL_SEGMENT_LINE}
+                </span>
               </li>
             );
           }

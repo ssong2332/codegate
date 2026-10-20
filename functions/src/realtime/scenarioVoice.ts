@@ -82,8 +82,10 @@ export function resolveSessionSpeakerGender(
   // **기본 남성·여성 목소리**를 고른 세션은 그 성별이 세션 화자 성별이다. 이 값 하나로 Gemini Live 음성 풀(`pickGeminiVoiceName`)과
   // 프롬프트 [화자] 블록(텍스트 · 오프닝 · Live — 아들/딸)이 함께 따라간다. 폴백 TTS는 `session.voiceId`(createSession이
   // FALLBACK_VOICE_MALE_ID/FEMALE_ID로 해석)를 쓰므로 같은 선택을 따른다. 클론(recorded · reused) · 선택 부재는 아래 종전 규칙 그대로(바이트 동일).
+  // ⛔ 리뷰 M2 — 이 세션에 통화 단계가 있을 때만(createSession은 필드를 검증하지 않는다 — parcel 초급 · 중급에 클라가 직접 보내도
+  // [화자] 블록이 생기지 않게, AC-106 (f) · §84.4.6). 판정은 전이 술어 하나(`resolveSessionEscalation`)로 한다.
   const chosen = voiceSelectionGender(session.voiceSelectionSource);
-  if (chosen) return chosen;
+  if (chosen && resolveSessionEscalation(session, PUBLIC_SCENARIOS)) return chosen;
   // ⛔ 리뷰 C1 — 변형 leg 성별은 **`advancedEscalation`만 가진 시나리오**(택배 문자 — 고급만 통화)에서만 쓴다. `escalation`(세 난이도 ·
   // 클론 — child-kakao)을 가진 notApplicable 시나리오에 leg 성별을 주면 [화자] 블록이 새로 생기고 Gemini 음성 풀이 줄어든다(#162 ·
   // §84.4.6 위반). 판정은 메타 직접 읽기 대신 술어로 한다(G580): 중급 값 없음 ∧ 고급 값 있음 = advancedEscalation 전용.

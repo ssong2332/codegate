@@ -9,8 +9,11 @@ import { resolveSessionSpeakerGender, voiceSelectionGender } from "../scenarioVo
 import { pickGeminiVoiceName } from "../geminiProvider";
 import { buildSystemPrompt } from "../../roleplay/promptAssembly";
 import { SCENARIO_PROMPTS } from "../../scenarios";
+import { FLOW_VARIANTS } from "../../scenarios/flowVariants";
+import { CHILD_GENDER_UNSPECIFIED_RULE, resolveChildGenderRule } from "../../scenarios/messengerChildImpersonationKakao.prompt";
 
 const CHILD = "messenger-child-impersonation-kakao";
+const PARCEL = "messenger-parcel-smishing-sms";
 const src = (rel: string) => readFileSync(path.resolve(__dirname, "../../../src", rel), "utf8").replace(/\r\n/g, "\n");
 
 test("[신고 재현] child-kakao · 기본 남성 목소리 선택 → 세션 성별 male → Gemini 음성이 모든 세션에서 남성 풀", () => {
@@ -50,6 +53,35 @@ test("[프롬프트] 같은 성별이 [화자] 블록으로 — 남성 음성인
   const none = buildSystemPrompt(prompt, { difficultyLevel: "intermediate", speakerGender: resolveSessionSpeakerGender({ scenarioId: CHILD }) });
   assert.ok(male.includes("[화자"), "기본 남성 목소리 세션은 [화자] 블록이 생긴다");
   assert.ok(!none.includes("[화자"), "선택 없는 세션은 종전처럼 블록 0(§84.4.6)");
+  // 리뷰 M1 — "성별이 정해져 있지 않다" 줄이 [화자] 블록과 함께 실리지 않는다(성별 확정 문면으로 바뀐다).
+  assert.ok(!male.includes(CHILD_GENDER_UNSPECIFIED_RULE), "남성 세션에 '성별 미정' 줄이 남았다");
+  assert.ok(male.includes("너는 참가자의 아들이다."));
+  const female = buildSystemPrompt(prompt, { difficultyLevel: "intermediate", speakerGender: "female" });
+  assert.ok(female.includes("너는 참가자의 딸이다.") && !female.includes(CHILD_GENDER_UNSPECIFIED_RULE));
+  assert.ok(none.includes(CHILD_GENDER_UNSPECIFIED_RULE), "성별 없는 세션은 원문 그대로(바이트 동일)");
+  // 다른 시나리오는 이 치환과 무관(그 줄이 없다).
+  const other = SCENARIO_PROMPTS["prosecution-cooperation-call"];
+  assert.equal(resolveChildGenderRule(other.personaPrompt, "male"), other.personaPrompt);
+});
+
+test("[리뷰 M2] 통화 단계가 없는 세션(parcel 초급 · 중급)은 목소리 선택이 와도 성별 0 — AC-106 (f) · §84.4.6", () => {
+  for (const level of ["beginner", "intermediate"]) {
+    assert.equal(
+      resolveSessionSpeakerGender({ scenarioId: PARCEL, difficultyLevel: level, voiceSelectionSource: "fallback_male" }),
+      undefined,
+      level,
+    );
+  }
+});
+
+test("[리뷰 Minor 1] parcel 고급 · 목소리 선택 → 고른 성별이 변형 leg 성별보다 먼저(음성과 말이 같은 성별)", () => {
+  const variant = FLOW_VARIANTS.find((v) => v.scenarioId === PARCEL && v.level === "advanced" && v.escalatesToVoice)!;
+  assert.ok(variant, "parcel 고급 통화 변형 수집 실패 — 거짓 초록 방지");
+  const base = { scenarioId: PARCEL, difficultyLevel: "advanced", flowVariantId: variant.variantId };
+  const legGender = resolveSessionSpeakerGender(base);
+  assert.equal(legGender, variant.legs[0]!.speakerGender, "선택 없음 = 종전(leg 성별)");
+  const opposite = legGender === "male" ? "fallback_female" : "fallback_male";
+  assert.equal(resolveSessionSpeakerGender({ ...base, voiceSelectionSource: opposite }), legGender === "male" ? "female" : "male");
 });
 
 test("[배선] 세션 원천 하나 — createRealtimeCall · sendMessage는 세션 문서를, 오프닝은 createSession 요청값을 넘긴다(소스 스캔)", () => {

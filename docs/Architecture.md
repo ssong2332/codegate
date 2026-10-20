@@ -21490,12 +21490,17 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 | 폴백 TTS | 텍스트 폴백 통화(`roleplay/index.ts` synthesize)는 `session.voiceId`(createSession이 FALLBACK_VOICE_MALE_ID/FEMALE_ID로 해석)를 쓴다 ⇒ 같은 선택을 따른다(설정값이 있을 때 — 없으면 종전대로 generic 강등, 이번 범위 밖) |
 | 회귀 0 | 표 값이 있는 시나리오(표 우선) · 클론(recorded · reused) · 선택 부재 · 챌린지(`voiceSelectionSource: undefined`)는 종전 바이트 그대로. §84.4.6 "child-kakao [화자] 블록 0"은 **기본 목소리 세션에서만** 예외(목소리가 정해졌으니 페르소나 성별도 맞춘다 — 오케스트레이터 승인) |
 
+| 리뷰 M1 | child-kakao 페르소나의 "아들인지 딸인지는 정해져 있지 않다" 줄(`CHILD_GENDER_UNSPECIFIED_RULE`, PR-A3)이 [화자] 블록과 충돌한다 ⇒ 화자 성별이 있는 세션에서만 조립 시 "너는 참가자의 아들/딸이다"로 바꾼다(`resolveChildGenderRule` — `buildSystemPrompt`). 성별 없는 세션은 원문 바이트 그대로(T194-a 게이트 무변경). 얼버무림 금지는 유지 |
+| 리뷰 M2 | 목소리 선택 성별은 **이 세션에 통화 단계가 있을 때만**(`resolveSessionEscalation`) — createSession이 필드를 검증하지 않으므로, parcel 초급·중급에 클라가 직접 보내도 [화자] 블록이 생기지 않는다(AC-106 (f)) |
+| parcel 고급 | 목소리 선택이 있으면 변형 leg 성별(`flowVariants.ts`)보다 먼저 쓴다(음성과 말이 같은 성별) — 선택 없음 = leg 성별 종전 그대로 |
+
 ### 86.2 ② 통화 발화가 메신저 대화창에 남음
 
 | 항목 | 내용 |
 |---|---|
 | 원인 | messages 컬렉션은 채널을 섞어 담는다(Live 전사 `channel:"voice"` — `realtime/submitTranscript.ts` · 폴백 통화 턴 — `roleplay/index.ts`). 메신저 화면(`src/app/session/messenger/page.tsx`)은 channel로 거르지 않고 전부 말풍선으로 그렸다 ⇒ 통화에서 "메시지로 전환"으로 돌아오면 통화 발화가 보낸 메시지처럼 보였다 |
 | 수정 | 연속한 통화 구간을 **시스템 줄 1개**("📞 통화 — 통화 내용은 리포트에서 볼 수 있어요")로 접는다(`src/lib/messenger/threadItems.ts` `foldCallSegments` — 오케스트레이터 승인 권장안 (a)). channel 부재 · messenger 문서는 말풍선 그대로 |
+| 예외(리뷰 Minor 3) | 링크 칩(attachments)이 붙은 통화 턴은 접지 않는다(누를 수 있던 링크 보존). 아이콘 📞은 `aria-hidden`으로 문구와 분리(Minor 2). channel 부재를 voice로 보지 않는 것은 메신저 화면이라서다(옛 메신저 세션 문서에 channel 없음 — 다시보기의 `?? "voice"`와 다른 이유, Minor 4) |
 | 회귀 확인 | 리포트 다시보기(`src/app/report/replay/page.tsx`)는 문서의 `channel`을 따로 읽어 "통화"/"메신저" 배지로 그린다 — 이번 변경과 무관(같은 컬렉션을 별도로 구독) |
 
 ### 86.3 게이트
