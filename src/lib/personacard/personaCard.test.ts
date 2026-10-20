@@ -63,11 +63,15 @@ test("[G571] 상태 → 문면: R-1 단정 · R-2 조건문 · R-3 대처만 '�
 });
 
 test("[UF-014 Failure (a)(c) 클라 방어] 고급이 아닌 세션 · 모양이 다른 값 · 6행 이상은 그리지 않는다", () => {
-  assert.deepEqual(readSessionPersonaCard(CARD, "advanced"), CARD.items.map(({ label, value }) => ({ label, value })));
+  assert.deepEqual(readSessionPersonaCard(CARD, "advanced"), {
+    rows: CARD.items.map(({ label, value }) => ({ label, value })),
+    notice: PERSONA_CARD_COPY.noticeVirtual,
+  });
   assert.equal(readSessionPersonaCard(CARD, "intermediate"), null);
   assert.equal(readSessionPersonaCard(CARD, undefined), null);
   assert.equal(readSessionPersonaCard(undefined, "advanced"), null);
-  assert.equal(readSessionPersonaCard({ v: 2, items: CARD.items }, "advanced"), null);
+  assert.equal(readSessionPersonaCard({ v: 2, items: CARD.items }, "advanced"), null, "v2인데 inputBy 부재");
+  assert.equal(readSessionPersonaCard({ v: 3, inputBy: "self", items: CARD.items }, "advanced"), null);
   assert.equal(readSessionPersonaCard({ v: 1, items: [] }, "advanced"), null);
   assert.equal(readSessionPersonaCard({ v: 1, items: [...CARD.items, ...CARD.items] }, "advanced"), null);
   assert.equal(readSessionPersonaCard({ v: 1, items: [{ label: "이름", value: 3 }] }, "advanced"), null);
@@ -109,17 +113,20 @@ test("[배선 · AC-104 (d)] 통화 화면은 세션 문서 스냅샷에서만 �
   assert.match(play, /setPersonaCard\(readSessionPersonaCard\(data\.personaCard, data\.difficultyLevel\)\);/);
   assert.match(play, /<CallStartNotice[\s\S]*?personaCard=\{personaCard\}/);
   const notice = codeOnly("../../components/CallStartNotice.tsx");
-  for (const key of ["title", "guide", "noticeVirtual", "noticeNoRevisit"]) {
+  for (const key of ["title", "guide", "noticeNoRevisit"]) {
     assert.ok(notice.includes(`{PERSONA_CARD_COPY.${key}}`), `고지 화면이 ${key}를 그리지 않는다`);
   }
+  // §88 — 고지 ⓐ는 readSessionPersonaCard가 고른 문면(v1 noticeVirtual · v2 self noticeInput)을 그린다.
+  assert.ok(notice.includes("{personaCard.notice}"), "고지 화면이 고지 ⓐ를 그리지 않는다");
   // 카드 블록은 고지 ②(stopHint) 뒤 · 화면 모양 줄(DeviceSkinPicker) 앞.
   const hintAt = notice.indexOf("{PRE_CALL_NOTICE.stopHint}");
   const cardAt = notice.indexOf("{personaCard && (");
   const pickerAt = notice.indexOf("<DeviceSkinPicker");
   assert.ok(hintAt > -1 && cardAt > hintAt && pickerAt > cardAt, `순서: 고지② ${hintAt} → 카드 ${cardAt} → 화면 모양 ${pickerAt}`);
-  // 클라 API 래퍼 · 콜러블 요청 어디에도 카드 필드가 없다.
+  // 클라 API 래퍼 · 콜러블 요청 어디에도 **완성 카드** 필드가 없다(§88 — 원값 `personaCardInput`만 보낸다).
   const api = ["../api/createSession.ts", "../api/types.ts"].map((rel) => codeOnly(rel)).join("\n");
-  assert.equal(/personaCard/.test(api), false, "클라 API 층이 personaCard를 다룬다");
+  assert.equal(/\bpersonaCard\b/.test(api), false, "클라 API 층이 완성 카드(personaCard)를 다룬다");
+  assert.ok(/personaCardInput\?: PersonaCardInput;/.test(api), "요청 타입에 원값 필드가 있다");
 });
 
 test("[배선] 리포트는 블록을 문면 함수로만 그리고(자리: 타임라인 아래 · 시도된 수법 위), 리플레이는 같은 앵커로 주석 · 신호 카드 수에 넣는다", () => {
@@ -134,4 +141,44 @@ test("[배선] 리포트는 블록을 문면 함수로만 그리고(자리: 타�
   assert.match(replay, /personaAnchor: personaReplayAnchor\(readPersonaBlock\(reportData\.personaBlock\)\),/);
   assert.match(replay, /\{PERSONA_REPLAY_NOTE\}/);
   assert.match(replay, /\(personaNoteRendered \? 1 : 0\)/);
+});
+
+// ── §88 G628(docs/Architecture.md §88.4 · UX D-131 (5)~(7)) — 사용자가 넣은 카드(v2) ───────────────────────
+
+const INPUT_ITEMS = [
+  { key: "name", label: "이름", value: "홍길동" },
+  { key: "region", label: "사는 곳", value: "경기도" },
+];
+
+test("[G628] 벨 직전 고지 — self 입력 카드는 '직접 넣은 정보' 고지로 그리고, 보낸 사람이 넣은 카드는 받는 사람에게 그리지 않는다", (t) => {
+  assert.deepEqual(readSessionPersonaCard({ v: 2, inputBy: "self", items: INPUT_ITEMS }, "advanced"), {
+    rows: INPUT_ITEMS.map(({ label, value }) => ({ label, value })),
+    notice: PERSONA_CARD_COPY.noticeInput,
+  });
+  assert.equal(readSessionPersonaCard({ v: 2, inputBy: "sender", items: INPUT_ITEMS }, "advanced"), null);
+  t.diagnostic("[G628 정상] sender 카드 → null(수신자 노출 0)");
+  // 역방향 — inputBy를 안 보는 사본은 sender 카드를 그린다(= 검사가 그 차이를 잡는다).
+  const ignoresInputBy = (raw: { v: number; items: unknown }) => readSessionPersonaCard({ ...raw, v: 2, inputBy: "self" }, "advanced");
+  assert.notEqual(ignoresInputBy({ v: 2, items: INPUT_ITEMS }), null);
+  t.diagnostic("[G628 역방향] inputBy를 무시한 사본 → sender 카드를 그린다 — 실패 확인");
+});
+
+test("[G628] 리포트 문면 — R-2 사실 · 꼬리가 inputBy로 갈리고(self · sender), 부재 · 모르는 값은 옛 문면 · R-1 사실 문장은 무변경", () => {
+  const view = (inputBy: unknown) => readPersonaBlock({ state: "R-2", items: INPUT_ITEMS, inputBy })!;
+  const self = resolvePersonaBlockCopy(view("self"));
+  assert.equal(self.fact, PERSONA_REPORT_COPY.r2FactSelfInput);
+  assert.equal(self.tail, PERSONA_REPORT_COPY.tailSelfInput);
+  const sender = resolvePersonaBlockCopy(view("sender"));
+  assert.equal(sender.fact, PERSONA_REPORT_COPY.r2FactSender);
+  assert.equal(sender.tail, PERSONA_REPORT_COPY.tailSender);
+  for (const legacy of [undefined, "other"]) {
+    const copy = resolvePersonaBlockCopy(view(legacy));
+    assert.equal(copy.fact, PERSONA_REPORT_COPY.r2Fact);
+    assert.equal(copy.tail, PERSONA_REPORT_COPY.tail);
+  }
+  const r1 = resolvePersonaBlockCopy(
+    readPersonaBlock({ state: "R-1", items: [{ ...INPUT_ITEMS[0], scammerTurnIndex: 2 }], inputBy: "sender" })!,
+  );
+  assert.equal(r1.fact, PERSONA_REPORT_COPY.r1Fact);
+  assert.equal(r1.tail, PERSONA_REPORT_COPY.tailSender);
 });

@@ -21537,6 +21537,64 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 - send가 UX-025를 쓰게 되면(#21 착수) 그 세션은 `createSession`이 아니라 챌린지 경로로 만든다 — 이 거부가 그 전제를 지킨다.
 - 배포는 하지 않았다.
 
+## 88. (Feature — 2026-10-20 · 브랜치 `claude/persona-card-user-input-504a63` · 사용자 요청 · 오케스트레이터 지시) **가상 신상 카드(§84.3 · AC-104)를 서버 임의 생성 → 사용자 입력(선택 · 기본 비움)으로 전환 · send 모드 적용** — architect · implementer 기록
+
+> **번호**: §88 · G626~G629 · OQ-A160 · DECISIONS #199 · UX D-131 · PRD v1.30 — main `78bdb8a` 최대 §87 · G625 · #198 · D-130 · v1.29 다음. ⛔ 예약 아님(먼저 병합된 쪽이 있으면 나중 쪽이 다시 매긴다).
+> **사용자 요청 원문 요지**: ① 시작 전 *"이번 훈련 속 내 정보"* 를 수정할 수 있게 · 기본은 비우고 선택으로 추가 ② 다른 사람에게 보낼 때는 내가 입력해 보내면 적용되고, 받는 사람은 그 내용을 모른 채 진행 ③ 비어 있으면 종전처럼 성함 · 생년월일을 말하라며 정보를 수집.
+
+### 88.0 금지(이 절 전체)
+- ⛔ 입력이 비면 카드 0 — 서버가 대신 지어 넣는 경로 0(§84.3.2 임의 생성 **폐지**).
+- ⛔ 클라가 보낸 `personaCard`(완성 카드)를 읽는 경로 0 — 요청 필드는 `personaCardInput`(원값 3개)뿐이고, 서버 검증기 `readPersonaCardInput`만 카드를 만든다.
+- ⛔ 계정 정보(표시 이름 · 이메일 · uid · 챌린지 `displayName`)를 카드에 쓰는 경로 0(G566 승계).
+- ⛔ 수신자(챌린지 세션)에게 통화가 끝나기 전 카드 노출 0 — 랜딩 · 벨 직전 고지 · 통화 화면.
+- ⛔ 카드 값 로그 0(행 수 · 종류만 — T194-C10 승계).
+
+### 88.1 현황(실측 · main `78bdb8a`)
+| 항목 | 사실 | 근거 |
+|---|---|---|
+| 카드 생성 | `createSession`이 `resolveSessionPersonaCard`로 서버 풀(이름 10 · 1955~1975 · 도 8 · 가상 은행)에서 시드 생성 | `functions/src/session/personaCard.ts` · `functions/src/session/index.ts:229-237` |
+| 대상 술어 | 4종(기관 · 카드사 · 대출 · 택배) × 고급 × **자가** × 통화 시작 | `personaCardEligible` · `personaCardCatalog.ts` `PERSONA_CARD_SCENARIOS` |
+| 챌린지 수신자 | 카드 없음(`personaCard: undefined` 명시) | `functions/src/challenge/userAccess.ts:186-192` |
+| 프롬프트 주입 3경로 | 오프닝(`openingLine.ts`) · 텍스트 턴(`roleplay/index.ts`) · 실시간(`realtime/index.ts` → `geminiProvider.ts`) — 전부 세션 문서 `personaCard.items` | `buildPersonaCardBlock`(`promptAssembly.ts`) |
+| provider 강제 | `requiresServerPromptProvider` = `personaCard` 존재 → Gemini | `functions/src/realtime/provider.ts:111` |
+| 카드 없을 때 프롬프트 | 4종 시나리오 프롬프트가 이미 *"성함이랑 생년월일 불러주십시오"* 를 요구한다 | `institutionalImpersonation.prompt.ts:73` · `cardCompanyImpersonation.prompt.ts:74` · `loanScam.prompt.ts:70` · `courierCustomsScam.prompt.ts:52` |
+| 4종의 챌린지 가능 여부 | 가능(4종 모두 `advancedOnly` 아님 · generic 보이스) | `functions/src/scenarios/publicMeta.ts` |
+
+### 88.2 설계
+| 결정 | 내용 |
+|---|---|
+| 입력 필드 | **이름**(한글 · 영문 · 공백, 앞뒤 공백 제거 · 연속 공백 1개로 · 2~10자 · 실존 금융사명 · 은행 자리표시자 거부) · **출생 연도**(정수 1920 ~ 올해−14 · 값 `"{연도}년생"`) · **사는 곳**(시 · 도 17개 중 하나 · 값 = 정식 명칭 그대로). 셋 다 선택. 거래 은행 · 사용 카드 · 대출 행은 **입력 대상 아님**(실존 은행을 넣으면 사기범이 실존 금융사명을 말한다 — §81 원칙 · OQ-U96) |
+| 카드 형식 | `{ v: 2, inputBy: "self" \| "sender", items }` — 행 순서 이름 → 출생 연도 → 사는 곳, 넣은 항목만. `v: 1`(옛 서버 생성)은 읽기만 하위호환 |
+| 대상 술어 | 4종 × 고급 × 통화 시작(`channel` 부재 · voice). **자가 · 챌린지 둘 다**(챌린지 축 삭제). 입력이 비면 대상이어도 카드 0 |
+| 검증 실패 · 대상 밖 입력 | `invalid-argument` · `details.reason` = `persona-card-invalid` / `persona-card-not-applicable`. ⛔ 조용히 버리지 않는다. 위치 = 난이도 게이트 직후 · 첫 Firestore · LLM 호출 앞 |
+| self 경로 | `createSession` 요청 `personaCardInput` → 검증 → 카드(v2 · `self`) → 오프닝 · 세션 문서 `personaCard`(종전 필드 그대로) |
+| send 경로 | `createChallenge` 요청 `personaCardInput` → 검증 → 챌린지 문서 `personaCard`(v2 · `sender`). `consentChallenge`가 사전 읽기 값으로 오프닝에 넘기고, 같은 트랜잭션에서 수신자 세션 문서에 **복사** + 챌린지 문서 필드 **삭제**(`FieldValue.delete()`). 수동 · 자동 폐기(`purgeChallenge`)도 필드를 지운다 |
+| 하류(무수정) | 프롬프트 3경로 · provider 강제 · 리포트 판정은 세션 문서 `personaCard`만 읽으므로 챌린지 세션에도 그대로 적용된다 |
+| 수신자 노출 범위 | 랜딩(`getChallengeLanding`) 0 · 벨 직전 고지 0(`readSessionPersonaCard`가 `inputBy: "sender"`면 `null`) · 통화 중 0 · **리포트(통화 뒤) = 블록 표시 + 꼬리 "보낸 분이 넣은 정보"**(OQ-U97) · 발신자 결과 화면 무변경(카드 0). ⚠️ 수신자 세션 문서는 수신자 본인이 읽을 수 있어 개발자 도구로는 보인다 — 받는 사람 본인에 대한 정보라 개인정보 유출은 아니다(서프라이즈만 깨짐 · 화면 숨김으로 충분하다고 판정) |
+| 리포트 | `personaBlock.inputBy`(카드 v2에서 복사)로 R-2 사실 문장 · 꼬리 문장을 고른다. 부재(옛 v1) = 종전 문면. 지역 대조 토큰 = 정식 명칭 + 줄임말(17개로 확장) · 옛 `"{도} ○○시"` 값도 계속 맞는다 |
+| 보존 · 삭제 | 챌린지 문서: 수신자 동의 순간(복사 직후) 또는 챌린지 폐기 때 삭제. 세션 · 리포트 문서: 종전 카드와 같은 수명(별도 삭제 0 — OQ-A160) |
+
+### 88.3 변경 파일
+| 층 | 파일 |
+|---|---|
+| 서버 | `functions/src/session/personaCard.ts`(생성기 → 검증기 · 조합) · `functions/src/scenarios/personaCardCatalog.ts`(풀 삭제 · 시 · 도 17) · `functions/src/session/index.ts` · `functions/src/session/types.ts` · `functions/src/challenge/index.ts` · `functions/src/challenge/types.ts` · `functions/src/challenge/userAccess.ts` · `functions/src/report/personaBlock.ts` · `functions/src/shared/types.ts` |
+| 화면 | `src/lib/personacard/personaCardInput.ts`(신규 · 클라 검증 · 정본 문면) · `src/components/PersonaCardInputFields.tsx`(신규) · `src/app/scenarios/difficulty/page.tsx`(self) · `src/app/challenge/create/page.tsx`(send) · `src/lib/personacard/personaCard.ts` · `src/components/CallStartNotice.tsx` · `src/app/session/play/page.tsx` · `src/app/report/page.tsx` · `src/lib/api/types.ts` |
+
+### 88.4 게이트
+| G | 내용 | 파일 |
+|---|---|---|
+| G626 | 입력 검증 진리표(정상 · 경계 · 거부) + 역방향(검증 없는 사본은 실패) · 대상 술어(4종 × 고급 × 통화, 자가 · 챌린지 모두) · 빈 입력 = 카드 0 | `functions/src/session/__tests__/personaCard.test.ts` |
+| G627 | 배선 — `createSession` · `createChallenge` 요청 구조분해에 `personaCard` 0 · `personaCardInput` 1 · 검증이 첫 Firestore 앞 · `consentChallenge`가 챌린지 카드를 오프닝 · 세션에 넘기고 같은 트랜잭션에서 필드 삭제 · 폐기도 삭제 | 같은 파일(소스 스캔) |
+| G628 | 수신자 숨김 — `readSessionPersonaCard`가 `inputBy: "sender"`에 `null` · 고지 문면이 v1/v2에서 갈림 | `src/lib/personacard/personaCard.test.ts` |
+| G629 | 입력 · 고지 · 리포트 새 문면 = `docs/UX.md` 정본(굵게) · 클라 시 · 도 목록 · 대상 시나리오 = 서버 카탈로그 | `src/lib/personacard/personaCardInput.test.ts` |
+
+### 88.5 남은 것
+- **배포 순서: Functions → Hosting(붙여서) — CLAUDE.md의 "화면 + 서버 동시 변경은 Hosting 먼저" 규칙의 예외.** 새 서버 + 옛 화면 조합은 옛 화면이 입력을 보내지 않아 카드 0으로 진행한다(안전 쪽 — 종전 *"임의 카드"* 가 사라질 뿐 · 옛 HTML `max-age=3600` 동안 이 조합이 남아도 무해). 반대로 새 화면 + 옛 서버 조합은 옛 서버가 `personaCardInput`을 무시하고 임의 카드를 만들어 **사용자가 넣은 값과 다른 카드**가 고지에 나온다. ⇒ Functions를 먼저, 이어서 바로 Hosting(리뷰 M1).
+- **수신자 노출은 화면 수준 은닉이다(리뷰 M2 · 수용 한계).** 카드는 수신자 본인 세션 문서에 있고 소유자 읽기가 허용돼 있어 SDK · 개발자 도구로는 통화 전에 볼 수 있다. 받는 사람 본인에 대한 정보라 유출이 아니고 서프라이즈만 깨진다고 판정했다. 서버 전용 위치로 옮기는 것은 별도 설계 몫이다.
+- **동작 테스트 공백(리뷰 M3)**: 챌린지 문서 카드 삭제(동의 · 폐기)와 수신자 세션 복사는 소스 스캔(G627)으로만 고정했다. Firestore 에뮬레이터 스모크(동의 뒤 챌린지 문서 `personaCard` 없음 · 세션 문서 `inputBy: "sender"` 카드 있음 · 폐기 뒤 없음) 1회를 배포 전 QA 항목으로 둔다.
+- 신고(`reported`)된 · 동의 없이 만료된 챌린지의 카드는 자동 폐기(`purgeExpiredChallenges` — 보존 만료) 때 지워진다(리뷰 m5 · 그 전까지 서버 전용 문서에 남는다).
+- OQ-U96 · OQ-U97 · OQ-U98(UX) · **OQ-A160**(세션 · 리포트 문서 안 카드 값 보존 기간 — ⭐ 종전 카드와 같은 수명 · 계정 기록 삭제 정책이 정해질 때 함께 / 리포트 생성 뒤 세션 필드 삭제)은 권고안을 기본값으로 구현했다(사용자 결정 대기).
+- 실 API(Gemini) 통화 실측은 하지 않았다(금지 — 메인 세션 요청 사항).
 ## 89. (UX → Architect → Implementer — 2026-10-20 · 브랜치 `claude/design-a-tokens` 외 단계별 · 사용자 결정 *"시안 A 공공 안심형으로 진행해 주세요."*) **시안 A "공공 안심형" 사이트 적용 + 훈련 화면 개선 4장** — architect 판정 · implementer 기록
 
 > **번호**: §89 · G630~G634 · DECISIONS #200 · UX D-132 · OQ-U99~U101 · OQ-A161. persona-input(§88 · #199 · D-131 · G626~G629 · OQ-U96~98 · OQ-A160) 다음. ⛔ 예약 아님 — 나중에 병합하는 쪽이 재번호.

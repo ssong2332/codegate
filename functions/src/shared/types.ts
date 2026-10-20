@@ -45,7 +45,15 @@ export type ScammerHangupPath = "realtime" | "fallback";
 // ⚠️ `child`(자녀) 행은 만들지 않는다 — 2026-10-20 User 결정으로 kidnapping-threat가 대상에서 빠졌다(유일한 child 행 시나리오).
 export type PersonaCardKey = "name" | "birthYear" | "region" | "bank" | "card" | "loan";
 export type PersonaCardItem = { key: PersonaCardKey; label: string; value: string };
-export type PersonaCard = { v: 1; items: PersonaCardItem[] };
+/**
+ * §88(DECISIONS #199) — 카드를 넣은 사람. `self` = 자가 훈련 참가자 본인(`createSession`) · `sender` = 챌린지를 보낸 사람
+ * (`createChallenge` → 수신자 세션에 복사). 수신자 화면은 `sender` 카드를 통화가 끝날 때까지 그리지 않는다.
+ */
+export type PersonaCardInputBy = "self" | "sender";
+/**
+ * v1 = 옛 서버 임의 생성 카드(§84.3.2 — 폐지 · 읽기 하위호환만) · v2 = 사용자 입력 카드(§88).
+ */
+export type PersonaCard = { v: 1; items: PersonaCardItem[] } | { v: 2; inputBy: PersonaCardInputBy; items: PersonaCardItem[] };
 
 export type ScammerHangupMarker = {
   acceptedAt: FirebaseFirestore.Timestamp;
@@ -161,7 +169,8 @@ export type SessionDoc = {
   // 이것 없이 온 `scammer_ended`는 `user_ended`로 기록된다(`session/endReason.ts`).
   scammerHangup?: ScammerHangupMarker;
   // T194-b(Architecture.md §84.3.2 · PRD AC-104) — 훈련용 가상 신상 카드. 서버만 쓴다(`createSession`이 대상 세션에서 1회 생성 ·
-  // 클라 write 0 — firestore.rules). ⛔ 대상 밖 세션은 **필드 부재**(빈 객체 · null 0 — 부재와 빈 값을 같은 뜻으로 두지 않는다).
+  // 클라 write 0 — firestore.rules). §88 — 값은 사용자가 넣은 원값을 서버가 검증해 만든다(자가 = `createSession` · 챌린지 수신자 =
+  // `consentChallenge`가 챌린지 문서의 카드를 복사). 입력이 비면 필드 부재. ⛔ 대상 밖 세션은 **필드 부재**(빈 객체 · null 0 — 부재와 빈 값을 같은 뜻으로 두지 않는다).
   // 프롬프트 조립 3곳과 통화 화면 카드 · 리포트 대조가 **이 필드 하나**를 읽는다(원자성 — T194-C2).
   personaCard?: PersonaCard;
 };
@@ -491,7 +500,8 @@ export type DeceivedMoment = {
  */
 export type PersonaBlockState = "R-1" | "R-2" | "R-3";
 export type PersonaBlockItem = { key: PersonaCardKey; label: string; value: string; scammerTurnIndex?: number };
-export type PersonaBlock = { state: PersonaBlockState; items: PersonaBlockItem[] };
+/** §88 — `inputBy`: v2 카드에서 복사(리포트 문면 분기 — UX D-131 (6)(7)). 부재 = 옛 v1 카드(종전 문면). */
+export type PersonaBlock = { state: PersonaBlockState; items: PersonaBlockItem[]; inputBy?: PersonaCardInputBy };
 
 export type ReportDoc = {
   reportId: string;
@@ -643,5 +653,8 @@ export type ChallengeDoc = {
   // 난이도는 활성 챌린지 상한(AC-049)·링크 토큰(AC-048)·결과 열람 범위(AC-043/055) 등 **어떤 안전·
   // 정책 판정도 바꾸지 않는다**(D-42/AC-065).
   difficultyLevel?: DifficultyLevel;
+  // §88(DECISIONS #199 · UX D-131) — 발신자가 넣은 받는 분 정보로 서버가 만든 카드(v2 · `inputBy: "sender"`). 부재 = 입력 없음.
+  // `consentChallenge`가 수신자 세션에 복사하는 **같은 트랜잭션**에서 지운다 · 폐기(`purgeChallenge`)도 지운다.
+  personaCard?: PersonaCard;
   createdAt: FirebaseFirestore.Timestamp;
 };
