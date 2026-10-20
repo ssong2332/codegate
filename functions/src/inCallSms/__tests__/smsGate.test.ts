@@ -30,12 +30,14 @@ import { IN_CALL_SMS } from "../../scenarios/inCallSms";
 import type { InCallSmsDoc } from "../../shared/types";
 import { extractSmsMarker } from "../../roleplay/smsMarker";
 import { BANK_PLACEHOLDER, FICTIONAL_BANK_NAMES, extractAccountNumber } from "../../shared/fictionalBank";
-import { buildSystemPrompt, wrapUserInputAsData } from "../../roleplay/promptAssembly";
+import { buildSystemPrompt, UNDECLARED_VERIFICATION_TAIL, wrapUserInputAsData } from "../../roleplay/promptAssembly";
 import { buildLiveToolDeclarations, LIVE_TOOL_SEND_PREPARED_SMS } from "../../realtime/liveTools";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { hasInCallSms } from "../../scenarios/inCallSms";
 import { createHash } from "node:crypto";
-import { resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
+import { findFlowVariant, resolveSessionScenarioPrompt, resolveVariantPrompt } from "../../scenarios/flowVariants";
+import { extractTacticLabel } from "../../scenarios/tacticFlavor";
+import { revertR3C2 } from "../../roleplay/__tests__/r3NoStallDelta";
 import { hasVerifyIntercept } from "../../scenarios/verifyIntercept";
 import { sessionDeclaredSmsPurposes } from "../smsGate";
 
@@ -546,13 +548,29 @@ const BEFORE_T194C1 = {
   },
 } as const;
 
-test("[T194-c-1 단계 4] 챌린지 base 변형(fv-akj5 · fv-6s5p) 조립 산출물 · 도구 선언 = T194-c-1 이전과 바이트 동일 · 선언 · 도달 집합 무변경", (t) => {
+// ⚠️ **R3(2026-10-20 · 감사 A R3) — 의도된 변경 2건으로 챌린지 base 두 벌의 system 기준값을 갱신했다**(tools는 무변경 — 같은 값을 계속 단언).
+// 위 BEFORE_T194C1 값은 지우지 않는다 — 아래 두 테스트가 "이번 변경분만 되돌리면 그 값과 바이트 동일"을 매 실행 재증명한다.
+//   · fv-akj5 — R3-B 데이터: 문자 선언 0 변형인데 원본 카드 수법의 문자 의존 3라벨(카드정보 직접 요구 · 피해금 이관 요구 · 부인 시 명의
+//     도용 암시)을 복사하고 있었다 → 같은 라벨의 무문자 문면으로 교체(flowVariants.ts CARD_INFO_DEMAND_NO_SMS 주석). 문자 선언 · 단계 · 인원 ·
+//     수법 순서 무변경(리뷰 M2 — 첫 갱신값 c65e51c8…은 순서가 바뀐 상태였고 순서 복원 뒤 다시 쟀다 · R3-C ②-a 반영 뒤 한 번 더 쟀다).
+//   · fv-6s5p — R3-C ①: A-1 미선언 금지 문장 뒤에 "인증·확인 절차" 꼬리(promptAssembly.ts UNDECLARED_VERIFICATION_TAIL)가 붙는다.
+//     fv-6s5p는 link · transfer만 선언해 인증번호가 미선언이므로 꼬리가 실린다. ⛔ R3-B 데이터 변경은 fv-6s5p에 닿지 않는다(꼬리를 빼면 기준값).
+//   · 두 벌 공통 — R3-C ②-a: 무조건부 NO_STALL_RULE 셋째 문장(남은 요구 유무 분기 · 정본 Architecture §79.22 (6)) 교체.
+// 측정: r3 작업 트리(main ea97aa0 추출본) 빌드 산출물에서 같은 조립식(`assembled`) — 아래 두 테스트가 각 변경분을 되돌려 이전 값과 대조한다.
+const AFTER_R3 = {
+  "card-company-impersonation#fv-akj5": "d71550a8f6a7c5f24feabd9b7cc77e91639e3c8df66bff560ef6bbe42501c5ec",
+  "loan-refinance-scam#fv-6s5p": "5042029ff9960a6ff9f819be71a0aa67e98f4e0693169eabfeb87404a9127910",
+} as const;
+/** R3-B 이전 fv-akj5 수법 순서(base main ea97aa0의 keepLabels 6개 + extraTactics 2개). */
+const AKJ5_LABELS_BEFORE_R3B = ["놀람 유발", "긴급성 조성", "카드정보 직접 요구", "피해금 이관 요구", "부인 시 명의 도용 암시", "안심 유도"];
+
+test("[T194-c-1 단계 4 · R3 갱신] 챌린지 base 변형(fv-akj5 · fv-6s5p) 조립 산출물 = R3 기준값 · 도구 선언 = T194-c-1 이전과 바이트 동일 · 선언 · 도달 집합 무변경", (t) => {
   for (const [scenarioId, variantId] of [["card-company-impersonation", "fv-akj5"], ["loan-refinance-scam", "fv-6s5p"]] as const) {
-    const key = `${scenarioId}#${variantId}` as keyof typeof BEFORE_T194C1;
+    const key = `${scenarioId}#${variantId}` as keyof typeof BEFORE_T194C1 & keyof typeof AFTER_R3;
     const system = sha256(assembled(scenarioId, variantId));
     const tools = sha256(toolsOf(scenarioId, variantId));
-    t.diagnostic(`[단계 4] ${key} system ${system.slice(0, 16)} (기준 ${BEFORE_T194C1[key].system.slice(0, 16)}) · tools ${tools.slice(0, 16)} (기준 ${BEFORE_T194C1[key].tools.slice(0, 16)})`);
-    assert.equal(system, BEFORE_T194C1[key].system, `${key}: 조립 프롬프트가 바뀌었다 — 챌린지 수신자 선언이 흔들린다(#192)`);
+    t.diagnostic(`[단계 4] ${key} system ${system.slice(0, 16)} (R3 기준 ${AFTER_R3[key].slice(0, 16)} · 이전 ${BEFORE_T194C1[key].system.slice(0, 16)}) · tools ${tools.slice(0, 16)} (기준 ${BEFORE_T194C1[key].tools.slice(0, 16)})`);
+    assert.equal(system, AFTER_R3[key], `${key}: 조립 프롬프트가 바뀌었다 — 챌린지 수신자 선언이 흔들린다(#192)`);
     assert.equal(tools, BEFORE_T194C1[key].tools, `${key}: Live 도구 선언이 바뀌었다`);
   }
   assert.deepEqual(resolveDeclaredSms("card-company-impersonation", "fv-akj5").declared, []);
@@ -562,10 +580,44 @@ test("[T194-c-1 단계 4] 챌린지 base 변형(fv-akj5 · fv-6s5p) 조립 산�
   );
 });
 
+test("[R3 갱신 증거] fv-akj5 — R3-B 3라벨을 원본 문면 · 원래 순서로 되돌리면 이전 기준값과 바이트 동일 / fv-6s5p — R3-C ① 꼬리만 빼면 이전 기준값과 바이트 동일", (t) => {
+  // fv-akj5: 바뀐 것은 수법 3라벨의 설명부와 그 순서뿐이다.
+  const card = SCENARIO_PROMPTS["card-company-impersonation"];
+  const variant = findFlowVariant("fv-akj5");
+  assert.ok(variant);
+  const original = (label: string) => card.weakenedTactics.find((x) => extractTacticLabel(x) === label);
+  const current = (label: string) => variant.tactics.find((x) => extractTacticLabel(x) === label);
+  const reverted = [
+    ...AKJ5_LABELS_BEFORE_R3B.map((label) => original(label) ?? current(label)!),
+    ...variant.tactics.filter((x) => !AKJ5_LABELS_BEFORE_R3B.includes(extractTacticLabel(x))),
+  ];
+  assert.equal(reverted.length, variant.tactics.length, "되돌린 수법 수가 현재와 다르다 — 라벨이 사라졌거나 늘었다");
+  const revertedSystem = sha256(
+    revertR3C2(
+      buildSystemPrompt(resolveVariantPrompt(card, { ...variant, tactics: reverted }), {
+        difficultyLevel: "advanced",
+        inCallSmsEnabled: sessionDeclaresInCallSms("card-company-impersonation", "fv-akj5"),
+        inCallSmsPurposes: sessionDeclaredSmsPurposes("card-company-impersonation", "fv-akj5"),
+        verifyInterceptEnabled: hasVerifyIntercept("card-company-impersonation"),
+      }),
+    ),
+  );
+  t.diagnostic(`[R3] fv-akj5 되돌림 ${revertedSystem.slice(0, 16)} = 이전 ${BEFORE_T194C1["card-company-impersonation#fv-akj5"].system.slice(0, 16)}`);
+  assert.equal(revertedSystem, BEFORE_T194C1["card-company-impersonation#fv-akj5"].system);
+  assert.equal(assembled("card-company-impersonation", "fv-akj5").includes(UNDECLARED_VERIFICATION_TAIL), false, "문자 선언 0 변형에는 R3-C ① 꼬리가 닿지 않는다");
+  // fv-6s5p: 바뀐 것은 R3-C ① 꼬리 1곳뿐이다.
+  const loan = assembled("loan-refinance-scam", "fv-6s5p");
+  assert.equal(loan.split(UNDECLARED_VERIFICATION_TAIL).length - 1, 1, "꼬리는 정확히 1곳");
+  const tailRemoved = sha256(revertR3C2(loan.replace(UNDECLARED_VERIFICATION_TAIL, "")));
+  t.diagnostic(`[R3] fv-6s5p 꼬리 제거 ${tailRemoved.slice(0, 16)} = 이전 ${BEFORE_T194C1["loan-refinance-scam#fv-6s5p"].system.slice(0, 16)}`);
+  assert.equal(tailRemoved, BEFORE_T194C1["loan-refinance-scam#fv-6s5p"].system);
+});
+
 test("[T194-c-1 단계 4] 의도된 변경 — card-delivery-call 변형 없는 세션은 문자 플래그만 뒤집힌다(그 플래그를 끄면 기준값과 바이트 동일)", (t) => {
   const key = "card-delivery-call#base";
   const now = sha256(assembled("card-delivery-call", undefined));
-  const flagOff = sha256(assembled("card-delivery-call", undefined, false));
+  // R3-C ②-a(2026-10-20) — 무조건부 NO_STALL_RULE 셋째 문장 교체분도 되돌려 대조한다(r3NoStallDelta.ts).
+  const flagOff = sha256(revertR3C2(assembled("card-delivery-call", undefined, false)));
   t.diagnostic(`[단계 4] ${key} 지금 ${now.slice(0, 16)} ≠ 기준 ${BEFORE_T194C1[key].system.slice(0, 16)} · 플래그만 끈 조립 ${flagOff.slice(0, 16)} = 기준`);
   assert.equal(hasInCallSms("card-delivery-call"), true, "카탈로그 키 신설(Q2)");
   assert.equal(sessionDeclaresInCallSms("card-delivery-call", undefined), true, "무소급 분기 = 종전 hasInCallSms 그대로 따른다");

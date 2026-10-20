@@ -128,8 +128,11 @@ test("[A-1/⑦ 문면] 결과 신호 4종 — 숫자·따옴표 대사·재촉/�
     assert.equal(/["“”'‘’]/.test(text), false, `따옴표 대사 예시: ${text}`);
     assert.equal(/재촉|다급/.test(text), false, `재촉·다급: ${text}`);
     assert.ok(text.includes("끝났다고 그럴듯하게 알려 주고"), `결과 알림 없음: ${text}`);
-    assert.ok(text.includes("다음 요구로 넘어가거나"), `다음 요구 없음: ${text}`);
-    assert.ok(text.includes("[진행 강제]의 통화 끝내기 항목이 정한 대로 마무리하라"), `끊기 항목 위임 없음: ${text}`);
+    // R3-C ②-b · ②-c(2026-10-20 · 정본 Architecture §79.22 (6)) — "곧바로 다음 요구로 넘어가거나 … 정한 대로 마무리하라"를 남은 요구 유무
+    // 분기 + "정한 대로 하라"로 바꿨다(사유: 남은 요구가 없을 때도 다음 요구를 지어내게 밀었고, "마무리하라"는 끊기 지시로 읽혔다).
+    assert.ok(text.includes("상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면"), `남은 요구 분기 없음: ${text}`);
+    assert.ok(text.includes("[진행 강제]의 통화 끝내기 항목이 정한 대로 하라."), `끊기 항목 위임 없음: ${text}`);
+    assert.equal(text.includes("마무리하라"), false, `"마무리하라"가 남았다: ${text}`);
     assert.ok(/기다려 달라는 말은 하지 마라/.test(text), `대기 금지 없음: ${text}`);
   }
   assert.ok(buildLiveConfirmResultInstruction("transfer").includes("마쳤다고 말하면"), "Live 문면은 조건형이어야 한다(도착 시점에는 아직 답이 없다)");

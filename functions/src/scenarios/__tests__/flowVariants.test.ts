@@ -42,6 +42,7 @@ import { sessionDeclaresInCallSms } from "../../inCallSms/smsGate";
 import { CHILD_GENDER_UNSPECIFIED_RULE } from "../messengerChildImpersonationKakao.prompt";
 import { resolveSessionSpeakerGender, speakerGenderFor } from "../../realtime/scenarioVoice";
 import { pickGeminiVoiceName } from "../../realtime/geminiProvider";
+import { revertR3C2 } from "../../roleplay/__tests__/r3NoStallDelta";
 
 const SRC_ROOT = path.resolve(__dirname, "../../../../src");
 const FUNCTIONS_SRC = path.resolve(__dirname, "../../../src");
@@ -695,7 +696,8 @@ test("[T194-a §84.13.3 ② · 리뷰 M2] 플래그만 더한 child-kakao · sub
     // §85(리뷰 M1) — 실존 회사명 금지 1문장은 의도된 변경이다. 정확히 1회 있고, 그것을 걷어 낸 바이트가 변경 전 실측값과 같아야 한다.
     const companySentence = ` ${REAL_COMPANY_PROMPT_SENTENCE}`;
     assert.equal(assembled.split(companySentence).length - 1, 1, `${row.variantId}: §85 금지 1문장이 정확히 1회 있어야 한다`);
-    const strippedAssembled = assembled.replace(companySentence, "");
+    // R3-C ②-a(2026-10-20) — 무조건부 NO_STALL_RULE 셋째 문장 교체도 의도된 변경이다. 그 교체분만 되돌린다(r3NoStallDelta.ts).
+    const strippedAssembled = revertR3C2(assembled.replace(companySentence, ""));
     const hash = crypto.createHash("sha256").update(strippedAssembled).digest("hex");
     lines.push(`${row.variantId} ${hash.slice(0, 12)}(${strippedAssembled.length}자) = 기준 ${row.sha256.slice(0, 12)}(${row.length}자)`);
     assert.equal(strippedAssembled.length, row.length, `${row.variantId}: 길이가 변경 전과 다르다`);

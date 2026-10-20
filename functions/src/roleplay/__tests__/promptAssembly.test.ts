@@ -1,4 +1,6 @@
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
+import * as path from "node:path";
 import assert from "node:assert/strict";
 import {
   buildSystemPrompt,
@@ -8,6 +10,7 @@ import {
   HANGUP_RULE_TOOL_VERIFY_SUFFIX,
   NO_STALL_RULE,
   toLlmHistory,
+  UNDECLARED_VERIFICATION_TAIL,
   wrapUserInputAsData,
 } from "../promptAssembly";
 import { SCENARIO_PROMPTS, FAMILY_ACCIDENT_SCENARIO_ID } from "../../scenarios";
@@ -25,7 +28,7 @@ import { isL3Procedural } from "../l3Depth";
 import { FLOW_VARIANTS } from "../../scenarios/flowVariants";
 import type { SmsPurpose } from "../../scenarios/flowVariants";
 import { sessionDeclaredSmsPurposes } from "../../inCallSms/smsGate";
-import { buildConfirmResultInstruction } from "../../inCallSms/confirmResult";
+import { buildConfirmResultInstruction, buildLiveConfirmResultInstruction } from "../../inCallSms/confirmResult";
 import { ESCALATED_CALL_CONTEXT_INSTRUCTION } from "../escalatedCall";
 import { verifySeriesFor } from "../../realtime/liveTools";
 import { scanText } from "../../scenarios/__tests__/harmlessnessPatterns";
@@ -1920,13 +1923,68 @@ test("[A-1/① 순서형] 규칙 문면 — 횟수·서수·턴 번호·숫자 0
   for (const part of [
     "같은 대답 안에서 또는 바로 다음 대답에서", // 순서(결과 제시 시점)
     "확인 결과를 지어내 알려 준다", // 결과 제시
-    "곧바로 다음 요구로 넘어가고", // 다음 요구
+    "상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고", // 다음 요구 — R3-C ②-a: "곧바로 다음 요구로"를 남은 요구 유무 분기로(§79.22 (6))
     "바로 위 통화 끝내기 항목이 정한 대로 한다", // 남은 단계가 없을 때 = T192 슬롯에 위임(새 끊기 메커니즘 0)
     "대기 말을 한 다음 대답에서는 대기 말을 다시 하지 않는다", // 대기 연속 금지(순서형)
     "별도의 결과 지시가 함께 들어오면 그 지시가 곧 확인 결과다", // 리뷰 Minor-2 — 서버 결과 지시 우선(otpCheck 불일치 턴 충돌 방지)
   ]) {
     assert.ok(NO_STALL_RULE.includes(part), `'확인 중' 금지 규칙에 "${part}"가 없다`);
   }
+});
+
+// ── G625(번호는 C7 — Architecture §79.22 (6)) · R3-C ② — 남은 요구 유무 분기 3문면 ────────────────────────────────────────
+// 분담: 끊기 **조건**은 HANGUP_RULE_CASES(C7 소유)만 말한다 — R3는 NO_STALL_RULE · confirmResult 두 문면의 분기 구절만 바꿨다.
+const G625_BRANCH = "상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면";
+// ⚠️ CASES **내용**은 여기서 비교하지 않는다(C7과 병합 순서 충돌 방지 — 내용은 기존 G505 사본이 맡는다). 여기서는 구조만 본다.
+const PROMPT_ASSEMBLY_SRC = path.resolve(__dirname, "../../../src/roleplay/promptAssembly.ts");
+
+test("[G625 · R3-C ②] 세 문면(NO_STALL · 확인 결과 폴백 · 확인 결과 Live) — 분기 구절 각 1회 · 바이트 동일 · \"곧바로 다음 요구로\" 0 · \"[이번 통화의 흐름]\" 0 · 확인 결과 \"마무리하라\" 0 · CASES 정의 1개 · NO_STALL 앞", (t) => {
+  const texts: Array<[string, string]> = [
+    ["NO_STALL_RULE", NO_STALL_RULE],
+    ...(["transfer", "link"] as const).flatMap((p): Array<[string, string]> => [
+      [`confirm:${p}`, buildConfirmResultInstruction(p)],
+      [`confirmLive:${p}`, buildLiveConfirmResultInstruction(p)],
+    ]),
+  ];
+  for (const [label, text] of texts) {
+    assert.equal(text.split(G625_BRANCH).length - 1, 1, `${label}: 분기 구절이 1회가 아니다`);
+    assert.equal(text.split("더 요구할 것이 남지 않았으면").length - 1, 1, `${label}: "더 요구할 것이 남지 않았으면" 1회 아님`);
+    assert.equal(text.includes("곧바로 다음 요구로"), false, `${label}: "곧바로 다음 요구로"가 남았다`);
+    assert.equal(text.includes("[이번 통화의 흐름]"), false, `${label}: "[이번 통화의 흐름]"을 가리킨다(stages:[] 변형엔 그 블록이 없다)`);
+    if (label !== "NO_STALL_RULE") {
+      assert.equal(text.includes("마무리하라"), false, `${label}: "마무리하라"`);
+      assert.ok(text.includes(`그럴듯하게 알려 주고, ${G625_BRANCH} [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.`), `${label}: 분기 구절 앞뒤가 정본과 다르다`);
+    }
+  }
+  assert.ok(NO_STALL_RULE.includes(`결과를 알린 뒤에는, ${G625_BRANCH} 바로 위 통화 끝내기 항목이 정한 대로 한다 — 끊어도 되는 경우면 그 방법으로 마무리하고, 아니면 비밀 유지 당부처럼 상황에 맞는 말로 대화를 이어 둔다.`));
+  // 분기 구절 자체에 카운터 표현 0(F11/G130). ⚠️ 확인 결과 문면 전체는 대상이 아니다 — 종전부터 있던 "이번 대답에서"(R3 무변경 구간)가 걸린다.
+  assert.deepEqual(findCounterExpressions(G625_BRANCH), []);
+  // CASES 구조 — 정의가 promptAssembly.ts에 정확히 1개이고 NO_STALL_RULE 정의보다 앞에 있다(내용 비교는 G505 사본 소관).
+  const src = readFileSync(PROMPT_ASSEMBLY_SRC, "utf8");
+  const casesDefs = [...src.matchAll(/^const HANGUP_RULE_CASES\s*=/gm)];
+  assert.equal(casesDefs.length, 1, "HANGUP_RULE_CASES 정의가 정확히 1개가 아니다");
+  const noStallDef = src.search(/^export const NO_STALL_RULE\s*=/m);
+  assert.ok(noStallDef > 0 && (casesDefs[0].index ?? -1) < noStallDef, "HANGUP_RULE_CASES 정의가 NO_STALL_RULE보다 앞에 있지 않다");
+  // 조립 산출물 전수(시나리오 × 난이도 × 끊기 모드)에도 "곧바로 다음 요구로" 0.
+  let combos = 0;
+  for (const id of Object.keys(SCENARIO_PROMPTS)) {
+    for (const difficultyLevel of A1_LEVELS) {
+      for (const hangupMode of A1_HANGUP_MODES) {
+        const assembled = buildSystemPrompt(SCENARIO_PROMPTS[id], { ...realOptionsFor(id), difficultyLevel, hangupMode });
+        assert.equal(assembled.includes("곧바로 다음 요구로"), false, `${id}/${difficultyLevel}/${hangupMode}`);
+        combos += 1;
+      }
+    }
+  }
+  t.diagnostic(`G625: 문면 ${texts.length}개 · 조립 ${combos}조합`);
+});
+
+test("[G625 역방향] 종전 문면(main)은 위 검사에 걸린다", () => {
+  const legacy = NO_STALL_RULE.replace(`결과를 알린 뒤에는, ${G625_BRANCH}`, "결과를 알린 뒤에는 곧바로 다음 요구로 넘어가고, 더 요구할 것이 없으면");
+  assert.notEqual(legacy, NO_STALL_RULE, "역검증 전제 — 현행 문면에 분기 구절이 있어야 한다");
+  assert.ok(legacy.includes("곧바로 다음 요구로") && legacy.split(G625_BRANCH).length - 1 === 0);
+  const legacyConfirm = buildConfirmResultInstruction("transfer").replace(`${G625_BRANCH} [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.`, "곧바로 다음 요구로 넘어가거나 더 요구할 것이 없으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 마무리하라.");
+  assert.ok(legacyConfirm.includes("마무리하라") && legacyConfirm.includes("곧바로 다음 요구로"));
 });
 
 test("[A-1/① 역방향] 규칙을 뺀 옛 조립(b7fde97 형태)과 횟수형으로 쓴 사본은 각각 위 검사에 걸린다", () => {
@@ -1966,6 +2024,11 @@ test("[A-1/②] loan 3난이도 실제 변형 — 인증번호 예시·괄호가
       assert.equal(assembled.includes(A1_LEGACY_SMS_KINDS), false, `${variant.variantId}: 괄호에 인증번호가 남았다(R3)`);
       for (const p of purposes) assert.ok(assembled.includes(A1_SMS_EXAMPLE[p]), `${variant.variantId}: 선언 목적 ${p}의 예시가 없다`);
       assert.ok(assembled.includes("인증번호 문자는 보낸 적이 없으니"), `${variant.variantId}: 미선언 문자 금지 문장이 없다`);
+      // R3-C ①(2026-10-20) — 미선언 금지 문장 바로 뒤에 "다른 이름의 인증·확인 절차" 꼬리가 붙는다.
+      assert.ok(
+        assembled.includes(`그런 문자를 보냈다고 말하거나 그 내용을 불러 달라고 하지 않는다.${UNDECLARED_VERIFICATION_TAIL}`),
+        `${variant.variantId}: 미선언 금지 문장 뒤 인증·확인 절차 꼬리가 없다(R3-C ①)`,
+      );
     }
     t.diagnostic(`A-1 ② ${variant.variantId}(${variant.level}) 선언 목적 = ${purposes.join("·")}`);
   }
@@ -1985,6 +2048,9 @@ test("[A-1/② 전수] 문자를 선언한 변형 전부 — 미선언 목적 �
     for (const p of ["identity", "transfer", "link"] as const) {
       assert.equal(assembled.includes(A1_SMS_EXAMPLE[p]), purposes.includes(p), `${variant.variantId}: 목적 ${p} 예시 유무가 선언과 다르다`);
     }
+    // R3-C ① — 꼬리는 미선언 목적이 1개 이상일 때만(= 미선언 금지 문장과 같은 조건) 붙는다.
+    const hasUndeclared = (["identity", "transfer", "link"] as const).some((p) => !purposes.includes(p));
+    assert.equal(assembled.includes(UNDECLARED_VERIFICATION_TAIL), hasUndeclared, `${variant.variantId}: 꼬리 유무가 미선언 목적 유무와 다르다`);
     checked += 1;
   }
   assert.ok(checked > 0, "문자를 선언한 변형이 0개 — 검사가 아무것도 재지 않았다");
@@ -2004,6 +2070,19 @@ test("[A-1/② 회귀] 목적 부재(변형 없는 세션) · 빈 배열 · 세 
         legacy,
         `${id}: 세 목적 전부 ≠ 종전(순서 무관해야 한다)`,
       );
+    }
+  }
+});
+
+test("[R3-C ①] 인증·확인 절차 꼬리 — 숫자·횟수 표현 0 · 종전 템플릿(목적 부재·빈 배열·세 목적)에는 0건", () => {
+  assert.deepEqual(findCounterExpressions(UNDECLARED_VERIFICATION_TAIL), [], "꼬리에 카운터 표현이 있다(F11/G130)");
+  assert.equal(/[0-9０-９]|한\s*번|두\s*번|횟수/.test(UNDECLARED_VERIFICATION_TAIL), false, "꼬리에 숫자·횟수 표현이 있다");
+  assert.ok(UNDECLARED_VERIFICATION_TAIL.includes("인증·확인 절차") && UNDECLARED_VERIFICATION_TAIL.includes("휴대폰으로 보냈다거나"));
+  for (const id of Object.keys(SCENARIO_PROMPTS).filter((x) => hasInCallSms(x))) {
+    const base = { ...realOptionsFor(id), difficultyLevel: "advanced" as const, inCallSmsEnabled: true };
+    for (const inCallSmsPurposes of [undefined, [], ["identity", "transfer", "link"]] as const) {
+      const assembled = buildSystemPrompt(SCENARIO_PROMPTS[id], { ...base, inCallSmsPurposes: inCallSmsPurposes as SmsPurpose[] | undefined });
+      assert.equal(assembled.includes(UNDECLARED_VERIFICATION_TAIL), false, `${id}/${JSON.stringify(inCallSmsPurposes)}: 종전 템플릿에 꼬리가 실렸다`);
     }
   }
 });
