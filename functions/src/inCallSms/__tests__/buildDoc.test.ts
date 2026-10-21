@@ -35,7 +35,7 @@ test("[§53.6 (3) 역검증] `placed:false`에서는 응답이 오늘과 완전�
   for (const item of allItems) {
     assert.deepEqual(buildInCallSmsResponse(item, { placed: false }), {
       smsId: item.smsId,
-      // §99 추가 — 인증번호 문자만 실시간 대조 1줄이 뒤에 붙는다(`otpCheck.test.ts` §99 블록이 문면을 고정한다).
+      // §101 추가 — 인증번호 문자만 실시간 대조 1줄이 뒤에 붙는다(`otpCheck.test.ts` §101 블록이 문면을 고정한다).
       announceInstruction:
         item.kind === "otp" && item.otpCode
           ? `${item.announceInstruction} ${buildOtpLiveCompareLine(item.otpCode)}`

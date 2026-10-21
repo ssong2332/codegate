@@ -349,7 +349,7 @@ const RENDERED_FIELDS = [
 const REPORT_ONLY_FIELDS = ["momentTactic", "correctAction"];
 /** 식별자·열거형 — 문구가 아니다. */
 const NON_TEXT_FIELDS = ["landingId", "kind", "entrySurface"];
-/** §99 — 중첩 필드(여러 화면 사이트). 아래 §99 블록이 화면 문구(`stepScreens`)와 리포트 전용 문구(`progressMoments`)를 따로 대조한다. */
+/** §101 — 중첩 필드(여러 화면 사이트). 아래 §101 블록이 화면 문구(`stepScreens`)와 리포트 전용 문구(`progressMoments`)를 따로 대조한다. */
 const NESTED_FIELDS = ["stepScreens", "progressMoments"];
 
 const KNOWN_FIELDS = [...RENDERED_FIELDS, ...REPORT_ONLY_FIELDS, ...NON_TEXT_FIELDS, ...NESTED_FIELDS];
@@ -714,7 +714,7 @@ function componentHosts(code: string): string[] {
 test("[T190/G453 클라] 컴포넌트의 가짜 호스트 전부(카탈로그 8 + 범용 폴백 1)가 .invalid 규칙을 지킨다", (t) => {
   const hosts = componentHosts(componentCode);
   t.diagnostic(`[G453 클라] 호스트 ${hosts.length}개: ${hosts.join(" · ")}`);
-  assert.equal(hosts.length, 17, "카탈로그 credential 11 + 설치 5(T194-a parcel-install · T194-c-1 Q2 3종 · §92.3 credential 2 · §98 보관 지갑 1 · §99 자산 검수 사이트 1) + 범용 폴백 1");
+  assert.equal(hosts.length, 17, "카탈로그 credential 11 + 설치 5(T194-a parcel-install · T194-c-1 Q2 3종 · §92.3 credential 2 · §98 보관 지갑 1 · §101 자산 검수 사이트 1) + 범용 폴백 1");
   assert.deepEqual(hosts.flatMap(clientHostViolations), []);
   // 범용 폴백 호스트는 카탈로그 호스트와 겹치지 않는다(겹치면 미스가 다른 사이트처럼 보인다).
   assert.equal(new Set(hosts).size, hosts.length);
@@ -748,12 +748,12 @@ const NUMERIC_FIELD_LABELS = [
   "보관 신청 금액",
   // §98 — 검찰 보관 지갑 송금 화면의 금액 칸(지갑 번호 칸은 영문이 섞여 numeric이 아니다).
   "전송 금액",
-  // §99 — 검찰 자산 검수 사이트의 전환 금액 칸.
+  // §101 — 검찰 자산 검수 사이트의 전환 금액 칸.
   "전환 금액",
 ];
 
 test("[T190/D-93] 계좌번호·금액 칸에만 inputMode numeric — 검증(maxLength·pattern) 0 · type=text 유지", () => {
-  // §99 추가 — 숫자 칸에 `amount: true`(금액 검증 · 한글 표기) · `prefill: "account"`(D-115 미리 채움)가 뒤에 붙을 수 있다.
+  // §101 추가 — 숫자 칸에 `amount: true`(금액 검증 · 한글 표기) · `prefill: "account"`(D-115 미리 채움)가 뒤에 붙을 수 있다.
   const numeric = [...componentCode.matchAll(/\{ label: "([^"]+)", placeholder: "[^"]*", inputMode: "numeric"(?:, (?:amount: true|prefill: "account"))? \}/g)].map((m) => m[1]);
   assert.deepEqual(numeric.sort(), [...NUMERIC_FIELD_LABELS].sort());
   assert.ok(componentCode.includes("inputMode={field.inputMode}"), "입력 요소가 필드별 힌트를 받아야 한다");
@@ -801,7 +801,7 @@ test("[T194-a §84.13.3 ③ ⓑ] 표에 없는 id의 app-install은 설치 화�
   assert.equal(caught, true);
 });
 
-// ── §99(2026-10-21 사용자 요청) — 여러 화면 사이트(검찰 고급 자산 검수 사이트) ─────────────────────────────────
+// ── §101(2026-10-21 사용자 요청) — 여러 화면 사이트(검찰 고급 자산 검수 사이트) ─────────────────────────────────
 // ① 둘째 화면부터의 문구(`stepScreens`)도 서버 카탈로그와 글자 단위로 같다(G76 동형) ② 단계 문면(`progressMoments`)은 리포트 전용이라 화면에 없다
 // ③ 단계 콜백 `onLandingStep`은 고정 값(`STEP_FLOW_EVENTS[stepIndex]`)만 싣는다 — 입력값이 컴포넌트 밖으로 나가는 둘째 경로가 생기지 않는다(G138 동형)
 // ④ 그 고정 값 3종 = 서버 `InCallSmsEvent`의 단계 3값.
@@ -831,12 +831,12 @@ function nestedHas(landingId: string): boolean {
   return catalog.slice(start, next < 0 ? undefined : next).includes("    stepScreens: [");
 }
 
-test("[§99 ①②] 여러 화면 사이트 — 둘째 화면부터의 문구가 화면에 그대로 있고 · 단계 문면(리포트 전용)은 화면에 없다", (t) => {
+test("[§101 ①②] 여러 화면 사이트 — 둘째 화면부터의 문구가 화면에 그대로 있고 · 단계 문면(리포트 전용)은 화면에 없다", (t) => {
   assert.deepEqual(STEP_FLOW_LANDING_IDS, ["asset-check-site"], "여러 화면 사이트 등재(카탈로그에서 파생)");
   for (const landingId of STEP_FLOW_LANDING_IDS) {
     const screenTexts = nestedStrings(landingId, "stepScreens");
     const reportTexts = nestedStrings(landingId, "progressMoments");
-    t.diagnostic(`[§99] ${landingId}: 화면 문구 ${screenTexts.length}건 · 리포트 전용 ${reportTexts.length}건`);
+    t.diagnostic(`[§101] ${landingId}: 화면 문구 ${screenTexts.length}건 · 리포트 전용 ${reportTexts.length}건`);
     assert.ok(screenTexts.length >= 10, "화면 3장 문구를 다 읽었다");
     assert.deepEqual(screenTexts.filter((text) => !componentCode.includes(text)), [], "카탈로그 문구가 화면에 없다(드리프트)");
     assert.equal(reportTexts.length, 6, "단계 3 × (momentTactic · correctAction)");
@@ -853,7 +853,7 @@ function landingStepCallArgs(source: string): string[] {
   return [...source.matchAll(STEP_CALLBACK_CALL)].map((m) => m[1].trim());
 }
 
-test("[§99 ③] 단계 콜백은 고정 값만 싣는다 — 입력 state가 닿지 않는다(G138 동형)", () => {
+test("[§101 ③] 단계 콜백은 고정 값만 싣는다 — 입력 state가 닿지 않는다(G138 동형)", () => {
   assert.deepEqual(landingStepCallArgs(componentCode), ["STEP_FLOW_EVENTS[stepIndex]"]);
   assert.deepEqual(
     componentCode.split("\n").filter((line) => /onLandingStep\??\.?\(/.test(line) && /\bvalues\b|\bsetValues\b/.test(line)),
@@ -865,7 +865,7 @@ test("[§99 ③] 단계 콜백은 고정 값만 싣는다 — 입력 state가 �
   assert.notDeepEqual(landingStepCallArgs(poisoned), ["STEP_FLOW_EVENTS[stepIndex]"]);
 });
 
-test("[§99 ④] 단계 고정 값 3종 = 서버 InCallSmsEvent의 단계 값 · 클라 계약 타입도 같다", () => {
+test("[§101 ④] 단계 고정 값 3종 = 서버 InCallSmsEvent의 단계 값 · 클라 계약 타입도 같다", () => {
   const events = /STEP_FLOW_EVENTS: readonly LandingProgressEvent\[\] = \[([^\]]*)\]/.exec(componentCode);
   assert.ok(events, "STEP_FLOW_EVENTS 선언");
   const clientValues = [...events[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
@@ -877,11 +877,11 @@ test("[§99 ④] 단계 고정 값 3종 = 서버 InCallSmsEvent의 단계 값 ·
   }
 });
 
-// ── §99 추가(2026-10-21 사용자 실기 신고) — 수취 계좌 미리 채움(UX D-115) · 필수 입력 검증 · 금액 한글 표기 ─────────────────────────
+// ── §101 추가(2026-10-21 사용자 실기 신고) — 수취 계좌 미리 채움(UX D-115) · 필수 입력 검증 · 금액 한글 표기 ─────────────────────────
 // ① D-115 (1) — 미리 채우는 칸 = 이체형 3종의 사기 측 수취 계좌 칸뿐(참가자 본인 정보 칸 0) ② D-115 (4) 둘째 줄 정본 3줄
 // ③ 금액 칸 = 필드별 `amount: true`(라벨 추론 0) ④ 검증 통과 전에는 제출 · 단계 콜백이 불리지 않는다(구조) ⑤ 입력값 자동 서식 0(D-93).
 
-test("[§99 D-115 ①②] 미리 채움 칸 = 이체형 3종의 수취 계좌 칸뿐 · 둘째 줄 정본 · 읽기 전용", () => {
+test("[§101 D-115 ①②] 미리 채움 칸 = 이체형 3종의 수취 계좌 칸뿐 · 둘째 줄 정본 · 읽기 전용", () => {
   const prefilled = [...componentCode.matchAll(/\{ label: "([^"]+)", placeholder: "[^"]*", inputMode: "numeric", prefill: "account" \}/g)].map((m) => m[1]);
   assert.deepEqual(prefilled.sort(), ["안전계좌 번호", "보호계좌 번호", "이관 전용 계좌번호"].sort());
   for (const line of [
@@ -895,7 +895,7 @@ test("[§99 D-115 ①②] 미리 채움 칸 = 이체형 3종의 수취 계좌 �
   assert.ok(componentCode.includes("readOnly") && componentCode.includes('aria-readonly="true"'), "읽기 전용 칸");
 });
 
-test("[§99 ③④⑤] 금액 칸은 필드별 명시 · 검증 실패면 콜백 전에 돌아간다 · 입력값 자동 서식 0", () => {
+test("[§101 ③④⑤] 금액 칸은 필드별 명시 · 검증 실패면 콜백 전에 돌아간다 · 입력값 자동 서식 0", () => {
   const amounts = [...componentCode.matchAll(/\{ label: "([^"]+)", placeholder: "[^"]*", inputMode: "numeric", amount: true \}/g)].map((m) => m[1]);
   assert.deepEqual(amounts.sort(), ["보관 신청 금액", "전송 금액", "전환 금액", "이체 금액", "이관 금액", "옮길 금액"].sort());
   const submit = componentCode.slice(componentCode.indexOf("const handleSubmit"), componentCode.indexOf("const issuerBar"));

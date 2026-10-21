@@ -9,7 +9,7 @@
 // 사용자 발화는 텍스트 턴이다(음성 아님) — 참가자 말하는 시간은 보고서에서 글자 수로 추정해 더한다.
 //
 // node scripts/duration-probe.mjs --secret <path> [--key-var GEMINI_API_KEY2] [--out <dir>] [--max-sessions 30] [--only id:level,...]
-//   [--variant fv-xxxx] [--responder comply|refuse-coin|site]   (§98 — 변형 고정 · 코인 단계 거절 응답기 · §99 — 문자 사이트를 단계대로 진행하는 응답기)
+//   [--variant fv-xxxx] [--responder comply|refuse-coin|site]   (§98 — 변형 고정 · 코인 단계 거절 응답기 · §101 — 문자 사이트를 단계대로 진행하는 응답기)
 import { createRequire } from "node:module";
 import { readFileSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -70,7 +70,7 @@ const REFUSE_COIN = /(코인|가상\s?자산|거래소|지갑|전송|송금|이�
 const REFUSALS = ["코인은 못 사겠어요. 좀 이상해요.", "그건 안 할래요. 가족한테 먼저 물어볼게요.", "검찰이 왜 코인을 사라고 해요? 못 해요.", "싫어요, 안 보낼 거예요."];
 const responderMode = argVal("--responder", "comply");
 let refusalCount = 0;
-// §99(2026-10-21) — `--responder site`: 사이트 링크 문자(카탈로그 fakeLandingId가 있는 transfer 문자)가 도착한 뒤에는 사이트 · 화면 · 진행 질문에
+// §101(2026-10-21) — `--responder site`: 사이트 링크 문자(카탈로그 fakeLandingId가 있는 transfer 문자)가 도착한 뒤에는 사이트 · 화면 · 진행 질문에
 // 화면 순서대로 "어디까지 했다"만 답한다(실제 참가자가 앱 안 모의 사이트를 누르는 경로의 대리). 그 밖의 말은 comply와 같다.
 const SITE_ASK = /(링크|사이트|화면|접속|들어가|어디까지|본인\s?확인|전환|검수|금액|이체|진행|코인|지갑|다음)/;
 const SITE_PROGRESS = [
@@ -146,7 +146,7 @@ async function runOne(scenarioId, level) {
     difficultyLevel: level,
     inCallSmsEnabled: sessionDeclaresInCallSms(scenarioId, variantId),
     inCallSmsPurposes: sessionDeclaredSmsPurposes(scenarioId, variantId),
-    // §99 — 앱(geminiProvider)과 같은 술어(계좌 문자의 이체 링크 — 이전 실행에는 빠져 있었다).
+    // §101 — 앱(geminiProvider)과 같은 술어(계좌 문자의 이체 링크 — 이전 실행에는 빠져 있었다).
     transferSmsLink: sessionTransferSmsOpensLanding(scenarioId, variantId),
     verifyInterceptEnabled: verifyEnabled,
     l3Procedural: isL3Procedural(scenarioId),

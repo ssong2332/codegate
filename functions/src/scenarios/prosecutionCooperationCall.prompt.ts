@@ -96,7 +96,7 @@ export const PROSECUTION_WALLET_EXTRA_TACTICS: readonly string[] = [
   "거부 시 위협 격상 — 상대가 거부하거나 의심하면 '지금 중단하시면 수사 방해로 오늘 바로 구속영장이 집행됩니다', '계좌가 전부 동결되고 가족분들도 조사받게 됩니다' 처럼 위협을 한 단계 올리고, 그다음엔 '오늘 이것만 마치면 조용히 끝납니다', '일부라도 먼저 검수받으시죠' 처럼 회유로 바꿔 번갈아 쓴다. 구체적 폭력·신체 위해는 말하지 않는다.",
 ];
 
-// ⭐ §99(2026-10-21 사용자 요청 — "코인 전환 단계별로 안내하는 게 사용자가 실제로 해야 하는 것처럼 들린다 … 문자로 보내서 웹사이트에 접속해서
+// ⭐ §101(2026-10-21 사용자 요청 — "코인 전환 단계별로 안내하는 게 사용자가 실제로 해야 하는 것처럼 들린다 … 문자로 보내서 웹사이트에 접속해서
 // 진행하는 거로 가자") — 고급 변형 `fv-h3vn`만 쓰는 페르소나 · 수법 문면. 통화는 **"보낸 링크로 들어가 화면 안내대로만 하시라"** 와 진행 재촉만 하고,
 // 전환 · 이체는 앱 안의 모의 사이트(`asset-check-site` — 본인 확인 → 검수 대상 자산 → 코인 전환 → 금액 → 보관 지갑 이체)에서 참가자가 직접 누른다.
 // ⛔ 통화에서 거래소 가입 · 계좌 이동 · 코인 구매 · 지갑 송금 절차를 말로 설명하지 않는다(절차 매뉴얼처럼 들리지 않게 — 사용자 지적).
@@ -109,13 +109,13 @@ const SITE_CRYPTO_LINES = [
   "- \"검수에 며칠 걸리니 나중에 연락드리겠습니다\"처럼 요구 없이 통화를 정리하는 말로 끝내지 않는다. 사이트에서 이체를 마치면 [이번 통화의 흐름]의 이체 뒤 단계로 넘어간다.",
 ].join("\n");
 if (!PROSECUTION_CASE_LINK_PERSONA.includes(CASE_LINK_ONLY_SCREEN_LINE) || !PROSECUTION_CASE_LINK_PERSONA.includes(CRYPTO_NO_DETAIL_LINE)) {
-  throw new Error("prosecutionCooperationCall.prompt: 자산 검수 사이트 변형 페르소나의 원천 줄을 찾지 못했다(§99)");
+  throw new Error("prosecutionCooperationCall.prompt: 자산 검수 사이트 변형 페르소나의 원천 줄을 찾지 못했다(§101)");
 }
 export const PROSECUTION_SITE_PERSONA = PROSECUTION_CASE_LINK_PERSONA.replace(CASE_LINK_ONLY_SCREEN_LINE, SITE_SCREEN_LINE).replace(
   CRYPTO_NO_DETAIL_LINE,
   SITE_CRYPTO_LINES,
 );
-/** §99 — 원본 "코인 구매·송금 요구"를 대신한다(라벨 동일 — 판정 · 축 커버리지 라벨 유지). 절차 설명 대신 사이트로 보낸다. */
+/** §101 — 원본 "코인 구매·송금 요구"를 대신한다(라벨 동일 — 판정 · 축 커버리지 라벨 유지). 절차 설명 대신 사이트로 보낸다. */
 export const PROSECUTION_SITE_COIN_TACTIC =
   "코인 구매·송금 요구 — '자산이 범죄수익인지 검수하려면 안전 자산으로 바꿔 보관해 두셔야 합니다, 문자로 보내 드린 자산 검수 사이트에 들어가셔서 화면 안내대로만 진행하시면 됩니다' 처럼 사이트로 보낸다. 전환·이체의 순서나 방법은 말로 설명하지 않고, 거래소 이름·코인 종류·지갑 주소를 지어내 부르지 않는다. 보관 지갑 번호·이체 금액도 네가 부르지 않고 문자로 보낸 것을 확인하게 한다.";
 export const PROSECUTION_SITE_EXTRA_TACTICS: readonly string[] = [

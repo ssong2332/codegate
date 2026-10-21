@@ -297,7 +297,7 @@ export type InCallSmsDoc = {
   // ⛔ 저장되는 것은 **시각 하나뿐**이다: 참가자가 입력한 계좌번호·예금주명에 해당하는 필드는
   // 이 스키마에 **존재하지 않는다**(AC-045 구조적 금지 — `MockScreenDoc`과 같은 형태).
   landingSubmittedAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("landing_submitted")
-  // §99 — 여러 화면 사이트(`MockScreenItem.stepScreens`)의 이체 전 단계 버튼(최초 1회). 값은 시각뿐 — 입력값 0(AC-045).
+  // §101 — 여러 화면 사이트(`MockScreenItem.stepScreens`)의 이체 전 단계 버튼(최초 1회). 값은 시각뿐 — 입력값 0(AC-045).
   landingIdentityAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("landing_identity")
   landingConvertedAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("landing_converted")
   landingAmountAt?: FirebaseFirestore.Timestamp; // recordInCallSmsEvent("landing_amount")

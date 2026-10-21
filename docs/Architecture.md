@@ -22178,14 +22178,14 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 ¹ 이후 순응 1세션은 프로브 응답기가 링크 안내마다 "눌러서 설치했어요"만 답해 사건 조회 단계에서 19턴 내내 정정만 오갔다(응답기 한계 — 사기범은 "앱이 아니라 링크"로 바로잡았다). 제품 결함 아님.
 ⚠️ 지표는 키워드 정규식 계수다(의미 판정 아님). 응답기는 고정 대본(텍스트 턴)이라 실제 참가자 발화 분포가 아니다.
 
-## 99. (Feature change — 2026-10-21 · 브랜치 `claude/prosecution-coin-web-flow-39e435` · 사용자 요청 · 검찰 수사 협조 × 고급 + 같은 PR 범위 추가 2건) **검찰 고급: 코인 전환 · 이체를 문자 링크 모의 사이트에서 직접 진행 · 단계별 판정 / 이체 랜딩 수취 계좌 미리 채움 · 필수 입력 검증 · 금액 한글 표기 / Live 인증번호 불일치 되묻기** — implementer 기록
+## 101. (Feature change — 2026-10-21 · 브랜치 `claude/prosecution-coin-web-flow-39e435` · 사용자 요청 · 검찰 수사 협조 × 고급 + 같은 PR 범위 추가 2건) **검찰 고급: 코인 전환 · 이체를 문자 링크 모의 사이트에서 직접 진행 · 단계별 판정 / 이체 랜딩 수취 계좌 미리 채움 · 필수 입력 검증 · 금액 한글 표기 / Live 인증번호 불일치 되묻기** — implementer 기록
 
-### 99.0 금지 (먼저)
+### 101.0 금지 (먼저)
 - ⛔ 통화에서 거래소 가입 · 계좌 이동 · 코인 구매 · 지갑 송금의 순서 · 방법 · 버튼 이름을 말로 설명하지 않는다(사용자 원문 *"단계별로 안내하는 게 사용자가 실제로 해야 하는 것처럼 들리는데"*).
 - ⛔ 모의 사이트에 실제 조작 단계(거래소 가입 · 원화 입금 · 매수 · 출금 주소) 0 — 버튼 하나("안전 자산(코인)으로 전환하기")가 전환을 대신한다. 실존 거래소 · 코인 · 지갑 주소 형식 0 · `.invalid` 호스트 · 입력값 서버 미전송(AC-045).
 - ⛔ 옛 변형 `fv-c8wq` 내용 무변경(배정 은퇴만 — §84.16.2). 공용 `promptAssembly.ts` · `analyzeConversation.ts` 무변경(병렬 세션 충돌 회피).
 
-### 99.1 검찰 고급 `fv-h3vn`
+### 101.1 검찰 고급 `fv-h3vn`
 | 층 | 내용 | 위치 |
 |---|---|---|
 | 변형 | 새 고급 변형 `fv-h3vn`(fv-c8wq 은퇴). 단계: 연루 → 사건 조회 링크 → 혼자 → 끊지 말기 → 자산 진술 → **문자로 보낸 자산 검수 사이트에 들어가 화면 안내대로만** → **"지금 어느 화면까지 하셨어요?" 단계 확인 · 재촉** → 이체 뒤 추가 요구 → 거부 시 격상 | `flowVariants.ts` |
@@ -22193,7 +22193,7 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 | 문자 · 사이트 | `prosecution-asset-site-link`(account · transfer) → `asset-check-site`(credential-form · 새 kind 0). 화면 4: ① 본인 확인(성명 · 생년월일) ② 검수 대상 자산(예금 · 적금 · 대출 가능액 — 숫자 0) + "안전 자산(코인)으로 전환하기" ③ 전환 금액 + "다음" ④ 보관 지갑 `KW-7Q2X-4471` + "보관 지갑으로 이체하기". 카탈로그 `stepScreens` · `progressMoments`(새 옵셔널 필드) ↔ 클라 `STEP_FLOW_COPY` 글자 단위 대조 | `mockScreens.ts` · `inCallSms.ts` · `MessengerFakeLanding.tsx` |
 | 기록 | `recordInCallSmsEvent` 이벤트 3값 추가: `landing_identity` · `landing_converted` · `landing_amount`(문서 시각 필드 · 최초 1회 · 랜딩 문서에서만). 마지막 이체 확인 = 종전 `landing_submitted`. 컴포넌트 콜백 `onLandingStep`은 고정 값만(G138 동형 게이트) | `inCallSms/index.ts` · `InCallSmsOverlay.tsx` · `play/page.tsx` |
 
-#### 99.1.1 판정표(리포트 · 되짚어보기 — `report/smsTimeline.ts` `resolveLandingSubmitMomentItem`)
+#### 101.1.1 판정표(리포트 · 되짚어보기 — `report/smsTimeline.ts` `resolveLandingSubmitMomentItem`)
 | # | 사이트에서 마지막으로 한 동작 | 속은 순간 |
 |---|---|---|
 | 1 | ④ 이체 확인 | 1건 — 항목 본체 문면(신고처 112 · 1332 포함) |
@@ -22204,7 +22204,7 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 - 한 화면에서 **가장 깊은 단계 1건만** 승격한다(같은 앵커 turnIndex에 2건 이상이면 되감기 1:1 전제가 깨진다 — §15.6 G16). 단계 기록이 일부 유실돼도 더 깊은 쪽이 이긴다. 한 화면 폼(단계 문면 없음)은 단계 시각을 보지 않는다(종전 그대로).
 - 한 세션 화면 2건(사건 조회 + 자산 검수) — T129 (b) 등재 단위에 `fv-h3vn` 추가(§98과 같은 이유).
 
-### 99.2 범위 추가 1 — 이체 랜딩(메인 세션 전달 · 사용자 실기 신고 · 기관 사칭 고급 `jasan-boho-center.invalid`)
+### 101.2 범위 추가 1 — 이체 랜딩(메인 세션 전달 · 사용자 실기 신고 · 기관 사칭 고급 `jasan-boho-center.invalid`)
 | 신고(원문) | 처리 | 근거 |
 |---|---|---|
 | "내가 여기서 안전계좌 번호는 채워서 제공하라고 했지." | UX **D-115**(UX.md `### D-115`) 그대로 구현 — 이체형 3종(`safe-account-transfer` · `card-relief-transfer` · `protect-account-transfer`)의 수취 계좌 칸을 **그 문자의 계좌 줄**(서버 문서 `bankName` + `accountNumber` — 두 번째 리터럴 0)로 채운 **읽기 전용** 칸(연회색 · `readOnly` · placeholder 0). bodyLines 둘째 줄 = D-115 (4) 정본 3줄(서버 · 클라 동시). 검찰 사이트는 지갑 번호가 ④ 화면에 표시(입력 칸 없음) | D-115 · UX-023 v1.35 노트 |
@@ -22213,12 +22213,12 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 - ⭐ 리포트 "인증번호 전달" 판정 — 사용자 결정(2026-10-21 *"위험 신호로 (권장)"*): 인증번호를 요구받고 **정답과 다른 번호**를 댄 줄은 속음이 아니라 위험 신호 `fake_info`(가짜 정보와 같은 경로 · 문구 "가짜 정보로 맞대응했어요"). 판정표 W0~W4(`analyzeConversation.ts` `isWrongOtpReply`): 정답 목록 없음(인증번호 문자가 없는 시나리오 — 검찰 · 자산 보호 등) = 종전 판정 · 인증번호를 묻지 않은 대사 뒤 = 대조 안 함 · 같은 자릿수 후보가 정답이면 종전처럼 속음 · 모두 다르면 속음 아님 + `fake_info` · 같은 답의 실제 제공(H1 · H2)은 그대로 속음. 정답 = 시나리오 카탈로그(`listOtpItems` — Firestore 추가 read 0). 테스트 `report/__tests__/wrongOtpRiskSignal.test.ts`.
 - 메인 세션 지시 — 프로브에서 본 실존 기관명 노출: 검찰 · 자산 보호 원본 페르소나의 *"기관은 일반명으로만 말한다"* 를 *"기관 이름은 "OO지방검찰청"·"OO수사본부"(자산 보호: "OO자산보호센터")처럼 앞에 OO를 붙인 이름으로만"* 으로 바꿨다(두 시나리오의 전 변형이 이 원본에서 파생 — 문자열 · 테스트 `prosecutionSiteFlow.test.ts` S7로만 확인, 실 키 프로브 0). 원인은 **추정** — 금지만 있고 쓸 이름이 없었다.
 
-### 99.3 범위 추가 2 — 금액 한글 표기(사용자 원문 *"'47억 원'처럼 한글로도 표기돼서"*)
+### 101.3 범위 추가 2 — 금액 한글 표기(사용자 원문 *"'47억 원'처럼 한글로도 표기돼서"*)
 - 모든 금액 칸(보관 신청 · 이체 · 이관 · 옮길 · 전송 · 전환 금액) 아래에 입력 즉시 은행 앱 관례 표기: `4700000000` → **47억 원** · `12345000` → **1,234만 5,000원** · `30000` → **3만 원**(만 단위 묶음 + 묶음 안 천 단위 쉼표). 입력값 자체는 바꾸지 않는다(D-93 자동 서식 0) · 쉼표 · 공백 섞인 입력도 인정.
 - 순수 함수 `src/lib/landing/amountInput.ts`(`parseAmount` · `formatKoreanAmount` · `amountError` · `amountHint` · `requiredFieldError` — bigint로 큰 금액도 정확) · 단위 테스트 `amountInput.test.ts`. 서버 카탈로그 문구 변경 0(표기는 클라 보조 줄 — `mockScreenCopy.test.ts` 대조 대상 밖).
 - 새 토큰: `LANDING_PAGE_TOKENS.fieldReadonlyBg` · `errorText` · `hintText`(대비 쌍 등록).
 
-### 99.4 실 키 텍스트 프로브(GEMINI_API_KEY2 · 15세션 · 429 0회 · `scripts/duration-probe.mjs` — `--responder site` 추가 · 앱과 같은 `transferSmsLink` 술어 추가)
+### 101.4 실 키 텍스트 프로브(GEMINI_API_KEY2 · 15세션 · 429 0회 · `scripts/duration-probe.mjs` — `--responder site` 추가 · 앱과 같은 `transferSmsLink` 술어 추가)
 검찰 11세션(이전 fv-c8wq 순응 2 · 이후 fv-h3vn 사이트 진행 5 · 순응 2 · 거절 2) + 인증번호 4세션(기관 사칭 고급 — 응답기는 인증번호 요구에 늘 오답 382914, 정답 048231 · 수정 전 2 · 후 2).
 
 | 지표 | 이전 | 이후 | 근거 |
@@ -22235,5 +22235,5 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 ⚠️ 키워드 정규식 계수다(의미 판정 아님). 응답기는 고정 대본(텍스트 턴)이라 실제 참가자 발화 분포가 아니다. 표본이 작다(세션 2~5개).
 ⚠️ 관찰(이번 수정 범위 밖): 순응 1세션 첫 인사에 *"서울중앙지검 금융범죄수사부"*(실존 기관명 — 페르소나 금지 줄 위반)가 나왔다. 원본 페르소나 공통 줄이라 다른 변형에도 같은 가능성이 있다.
 
-### 99.5 배포 순서
+### 101.5 배포 순서
 **Hosting → Functions**(둘 다). 새 클라는 옛 서버와도 동작한다(새 이벤트 3값이 거절돼도 기록 실패는 조용히 흡수 · 옛 변형 화면 그대로). 반대로 Functions가 먼저면 새 서버가 `asset-check-site`를 보내는데 옛 클라는 표에 없는 id라 범용 본인확인 화면으로 떨어진다.

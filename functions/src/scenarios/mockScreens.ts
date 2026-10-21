@@ -82,7 +82,7 @@ export type MockScreenItem = {
    * 구조 설명은 뒤에 짧게, "소용없다"류 무력감 표현 금지). */
   correctAction: string;
   /**
-   * ⭐ §99(2026-10-21 사용자 요청 — 검찰 고급 자산 검수 사이트) — **여러 화면 사이트**(`credential-form` 전용 · 옵셔널 · 부재 = 종전 한 화면 폼).
+   * ⭐ §101(2026-10-21 사용자 요청 — 검찰 고급 자산 검수 사이트) — **여러 화면 사이트**(`credential-form` 전용 · 옵셔널 · 부재 = 종전 한 화면 폼).
    * 첫 화면은 위 `headline` · `bodyLines` · `fields` · `submitLabel`(본인 확인)이고, 그 뒤 화면이 이 배열 순서대로 이어진다.
    * 화면 i(0 = 본인 확인)의 버튼을 누르면 `LANDING_PROGRESS_EVENTS[i]`가 기록되고, 마지막 화면의 버튼은 종전 `landing_submitted`다.
    * ⛔ 입력값은 클라 로컬 state를 벗어나지 않는다(AC-045) — 기록되는 것은 "그 버튼을 눌렀다"는 사실(고정 enum)뿐이다.
@@ -90,13 +90,13 @@ export type MockScreenItem = {
    */
   stepScreens?: MockScreenStepScreen[];
   /**
-   * §99 — 이체(마지막 버튼) 전 단계까지만 누른 세션의 승격 문면. 키 = 그 단계(`LANDING_PROGRESS_STEPS`). 끝까지 누르면 위 `momentTactic` ·
-   * `correctAction`을 쓴다. 승격은 한 화면당 **가장 깊은 단계 1건**이다(`report/smsTimeline.ts` §99 판정표 — 되감기 1:1 전제 G16).
+   * §101 — 이체(마지막 버튼) 전 단계까지만 누른 세션의 승격 문면. 키 = 그 단계(`LANDING_PROGRESS_STEPS`). 끝까지 누르면 위 `momentTactic` ·
+   * `correctAction`을 쓴다. 승격은 한 화면당 **가장 깊은 단계 1건**이다(`report/smsTimeline.ts` §101 판정표 — 되감기 1:1 전제 G16).
    */
   progressMoments?: Record<LandingProgressStep, { momentTactic: string; correctAction: string }>;
 };
 
-/** §99 — 여러 화면 사이트의 둘째 화면부터(첫 화면 = 항목 본체). `items` = 화면에 나열만 하는 줄(입력 아님) · `fields` = 입력 칸 라벨. */
+/** §101 — 여러 화면 사이트의 둘째 화면부터(첫 화면 = 항목 본체). `items` = 화면에 나열만 하는 줄(입력 아님) · `fields` = 입력 칸 라벨. */
 export type MockScreenStepScreen = {
   headline: string;
   bodyLines: string[];
@@ -106,7 +106,7 @@ export type MockScreenStepScreen = {
 };
 
 /**
- * §99 — 이체 전 진행 단계(기록 이벤트 `landing_${step}` — `inCallSms/types.ts` `InCallSmsEvent`). 순서 = 화면 순서
+ * §101 — 이체 전 진행 단계(기록 이벤트 `landing_${step}` — `inCallSms/types.ts` `InCallSmsEvent`). 순서 = 화면 순서
  * (0 본인 확인 → 1 검수 대상 자산의 전환 버튼 → 2 전환 금액 입력 뒤 다음). 마지막 화면(이체 확인)은 종전 `landing_submitted`.
  */
 export const LANDING_PROGRESS_STEPS = ["identity", "converted", "amount"] as const;
@@ -238,7 +238,7 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `protect-account-transfer` | `scenarios/inCallSms.ts:173-175`(문자 본문·칩) | "아래에서 보호계좌로 옮기기를 진행해 주세요." | 링크에서 보호계좌로 옮기기 | "보호계좌로 옮기기가 아직 처리되지 않았습니다" | "보호계좌로 옮기기" |
 // | `asset-custody-apply` | `scenarios/inCallSms.ts` ASSET_PROTECTION_NOTICE_CALL(문자 본문·칩 — §92.3) | "아래에서 보관 신청서를 작성해 주세요." | 보관 신청서 작성 | "수사 종료 시까지 자산 보관 신청이 필요합니다" | "보관 신청하기" |
 // | `case-record-view` | `scenarios/inCallSms.ts` PROSECUTION_COOPERATION_CALL(문자 본문·칩 — §92.3) | "아래에서 본인 확인 후 사건 기록을 열람해 주세요." | 본인 확인 → 사건 기록 열람 | "사건 기록 열람 전 본인 확인이 필요합니다" | "사건 기록 열람하기" |
-// | `asset-check-site` | `scenarios/inCallSms.ts` PROSECUTION_COOPERATION_CALL(문자 본문·칩 — §99) | "아래 사이트에서 본인 확인 후 화면 안내대로 진행해 주세요." | 사이트에서 본인 확인 → 검수 진행 | "사건 관련 자산 검수를 위해 본인 확인이 필요합니다" | "본인 확인하기" |
+// | `asset-check-site` | `scenarios/inCallSms.ts` PROSECUTION_COOPERATION_CALL(문자 본문·칩 — §101) | "아래 사이트에서 본인 확인 후 화면 안내대로 진행해 주세요." | 사이트에서 본인 확인 → 검수 진행 | "사건 관련 자산 검수를 위해 본인 확인이 필요합니다" | "본인 확인하기" |
 // | `asset-check-wallet` | `scenarios/inCallSms.ts` PROSECUTION_COOPERATION_CALL(문자 본문·칩 — §98) | "아래에서 보관 지갑 전송을 진행해 주세요." | 링크에서 보관 지갑 전송 | "검수 전용 보관 지갑 전송이 아직 완료되지 않았습니다" | "보관 지갑으로 전송하기" |
 // | `card-delivery-app-install` | `scenarios/inCallSms.ts` CARD_DELIVERY_CALL(문자 본문·칩 — T194-c-1 Q2) | "아래에서 보안 점검 앱을 설치해 주세요." | 보안 점검 앱 설치 | "보안 점검 앱을 설치해야 사고 접수가 이어집니다" | "권한 허용하고 계속하기" |
 // | `card-guard-app-install` | `scenarios/inCallSms.ts` CARD_COMPANY_IMPERSONATION(문자 본문·칩 — T194-c-1 Q2) | "아래에서 피해 차단용 보안 앱을 설치해 주세요." | 피해 차단용 보안 앱 설치 | "피해 차단용 보안 앱을 설치해야 보호 조치가 시작됩니다" | "권한 허용하고 계속하기" |
@@ -552,7 +552,7 @@ const PROSECUTION_COOPERATION_CALL: MockScreenItem[] = [
     correctAction:
       "'자산을 검수해야 하니 코인으로 바꿔 지정 지갑으로 옮기라'고 하면 그 자리에서 멈추세요 — 검찰 · 경찰 · 금융감독원은 어떤 경우에도 돈을 코인으로 바꾸라고 하거나 '보관 지갑' · '안전계좌'로 옮기라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 문자 속 링크에 지갑 번호 · 금액을 넣지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 보냈다면 112(경찰) · 1332(금융감독원)에 바로 신고하고 이용한 거래소에도 알리기.",
   },
-  // ⭐ §99(2026-10-21 사용자 요청 — *"제공되는 웹사이트에서 코인 전환하고 이체하고 하는 거로 가자"*) — 검찰 고급 fv-h3vn의 둘째 화면:
+  // ⭐ §101(2026-10-21 사용자 요청 — *"제공되는 웹사이트에서 코인 전환하고 이체하고 하는 거로 가자"*) — 검찰 고급 fv-h3vn의 둘째 화면:
   // `prosecution-asset-site-link` 문자(자산 검수 안내)에서 열리는 **여러 화면 사이트**(본인 확인 → 검수 대상 자산 · 전환 버튼 → 전환 금액 → 보관 지갑 이체 확인).
   // kind는 그대로 `credential-form`(새 kind 0) · 한 세션 화면 2건은 T129 (b)가 판정 키를 landingId로 가른다(fv-c8wq와 같은 등재).
   // ⛔ 실제 거래소 · 코인 종류 · 지갑 주소 형식 0(§81) · 보관 지갑 번호는 모의 표기 · 입력값은 서버로 가지 않는다(AC-045) · 화면은 실제 절차 매뉴얼이 아니다

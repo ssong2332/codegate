@@ -238,7 +238,7 @@ const PROSECUTION_WALLET_STAGES_TAIL = [
   "상대가 거부하거나 의심하면 구속영장 집행 · 계좌 동결 · 가족 조사로 위협을 올리고, 오늘만 마치면 조용히 끝난다는 회유와 번갈아 쓴다.",
 ] as const;
 const PROSECUTION_WALLET_DECISION_MOMENT = "문자 링크로 연 보관 지갑 화면에서 지갑 번호와 금액을 넣고 전송하기를 누르는 순간";
-// §99(2026-10-21 사용자 요청) — 검찰 고급 fv-h3vn: 통화는 문자로 보낸 자산 검수 사이트로 보내고 진행만 재촉한다. 전환 · 이체 절차는 말로 설명하지 않고
+// §101(2026-10-21 사용자 요청) — 검찰 고급 fv-h3vn: 통화는 문자로 보낸 자산 검수 사이트로 보내고 진행만 재촉한다. 전환 · 이체 절차는 말로 설명하지 않고
 // 참가자가 모의 사이트(`asset-check-site`)에서 직접 누른다. 앞 2단계(자산 진술)와 끝 2단계(추가 요구 · 거부 시 격상)의 뜻은 fv-c8wq와 같다.
 const PROSECUTION_SITE_STAGES_TAIL = [
   PROSECUTION_WALLET_STAGES_TAIL[0],
@@ -1265,12 +1265,12 @@ const SPECS: VariantSpec[] = [
     demandStages: 3,
     decisionMoment: PROSECUTION_WALLET_DECISION_MOMENT,
     sources: PROSECUTION_SOURCES,
-    // §99 — 내용 무변경 · 배정 은퇴(옛 세션 · 리포트 해석용). 새 세션은 fv-h3vn.
+    // §101 — 내용 무변경 · 배정 은퇴(옛 세션 · 리포트 해석용). 새 세션은 fv-h3vn.
     retired: true,
   },
-  // ⭐ §99(2026-10-21 사용자 요청 — *"문자로 보내서 웹사이트에 접속해서 진행하는 거로 가자"*) — fv-c8wq의 둘째 문자(보관 지갑 안내 + 지갑 번호 · 금액 입력
+  // ⭐ §101(2026-10-21 사용자 요청 — *"문자로 보내서 웹사이트에 접속해서 진행하는 거로 가자"*) — fv-c8wq의 둘째 문자(보관 지갑 안내 + 지갑 번호 · 금액 입력
   // 화면)를 자산 검수 사이트(`prosecution-asset-site-link` → `asset-check-site` — 본인 확인 → 검수 대상 자산 → 코인 전환 → 금액 → 보관 지갑 이체)로 바꾸고,
-  // 통화는 사이트로 보내 진행만 재촉한다. 판정 = 사이트에서 누른 가장 깊은 단계 1건(§99 판정표 — `report/smsTimeline.ts`).
+  // 통화는 사이트로 보내 진행만 재촉한다. 판정 = 사이트에서 누른 가장 깊은 단계 1건(§101 판정표 — `report/smsTimeline.ts`).
   {
     variantId: "fv-h3vn",
     scenarioId: "prosecution-cooperation-call",

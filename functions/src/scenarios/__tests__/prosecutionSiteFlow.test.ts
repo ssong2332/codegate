@@ -1,6 +1,6 @@
-// §99(2026-10-21 사용자 요청 — 검찰 수사 협조 × 고급) — *"코인 전환 단계별로 안내하는 게 사용자가 실제로 해야 하는 것처럼 들리는데 … 문자로 보내서
+// §101(2026-10-21 사용자 요청 — 검찰 수사 협조 × 고급) — *"코인 전환 단계별로 안내하는 게 사용자가 실제로 해야 하는 것처럼 들리는데 … 문자로 보내서
 // 웹사이트에 접속해서 진행하는 거로 가자"*. 새 변형 fv-h3vn이 그 요구를 데이터 · 조립 산출물 · 리포트 판정 층에서 닫는지 고정한다
-// (모델 행동 자체는 실 키 텍스트 프로브 — docs/Architecture.md §99).
+// (모델 행동 자체는 실 키 텍스트 프로브 — docs/Architecture.md §101).
 //
 // | # | 무엇을 보나 | 기대 |
 // |---|---|---|
@@ -8,7 +8,7 @@
 // | S2 | 통화 문면 | 거래소 계좌 이동 · 코인 구매 · 지갑 번호 입력 같은 절차 설명 0 · "화면 안내대로만" · "어느 화면까지" 재촉 있음 |
 // | S3 | 문자 · 사이트 | 사건 조회(link) + 자산 검수(transfer) · 사이트 = 본인 확인 → 검수 대상 → 금액 → 이체 확인(화면 4) · 단계 문면 3 |
 // | S4 | 무해성 | 실존 거래소 · 코인 이름 0 · 지갑 주소 형식 0 · 8자리+ 숫자 0 · 거래소 가입 · 구매 조작 문구 0 |
-// | S5 | 리포트 판정(§99 판정표) | 가장 깊은 단계 1건 · 단계별 문면 · 열고 닫음 = 0건 · 한 화면 폼은 단계 시각을 보지 않는다 |
+// | S5 | 리포트 판정(§101 판정표) | 가장 깊은 단계 1건 · 단계별 문면 · 열고 닫음 = 0건 · 한 화면 폼은 단계 시각을 보지 않는다 |
 // | S6 | 기록 계약 | recordInCallSmsEvent가 단계 3값을 받고 문서 필드로 옮긴다 · 랜딩 없는 문서는 거절 |
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -27,7 +27,7 @@ import { promoteSmsLandingSubmits, type SmsTimelineMessage, type SmsTimelineSour
 const PROS = "prosecution-cooperation-call";
 const SITE = "asset-check-site";
 
-test("[§99 S1] 검찰 고급 새 세션 풀 = fv-h3vn · fv-c8wq는 은퇴(내용 무변경 — 보관 지갑 문자 · 원래 페르소나)", () => {
+test("[§101 S1] 검찰 고급 새 세션 풀 = fv-h3vn · fv-c8wq는 은퇴(내용 무변경 — 보관 지갑 문자 · 원래 페르소나)", () => {
   assert.deepEqual(listFlowVariants(PROS, "advanced").map((v) => v.variantId), ["fv-h3vn"]);
   assert.deepEqual(assignablePool(PROS, "advanced").map((v) => v.variantId), ["fv-h3vn"]);
   const old = findFlowVariant("fv-c8wq")!;
@@ -49,7 +49,7 @@ const PROCEDURE_PHRASES = [
   "한 단계씩 짚어",
 ];
 
-test("[§99 S2] 통화 문면 — 절차 설명 0 · 사이트로 보내기 · 단계 확인 재촉", () => {
+test("[§101 S2] 통화 문면 — 절차 설명 0 · 사이트로 보내기 · 단계 확인 재촉", () => {
   const prompt = resolveSessionScenarioPrompt(PROS, "fv-h3vn")!;
   const stages = findFlowVariant("fv-h3vn")!.stages.map((s) => s.summary);
   const text = [prompt.personaPrompt, ...prompt.weakenedTactics, ...stages].join("\n");
@@ -73,7 +73,7 @@ test("[§99 S2] 통화 문면 — 절차 설명 0 · 사이트로 보내기 · �
   assert.notEqual(resolveTacticCategory("진행 상황 확인 재촉"), "other");
 });
 
-test("[§99 S3] 문자 2건(사건 조회 link · 자산 검수 transfer) · 사이트 = 화면 4(본인 확인 → 검수 대상 → 금액 → 이체 확인) · 단계 문면 3", () => {
+test("[§101 S3] 문자 2건(사건 조회 link · 자산 검수 transfer) · 사이트 = 화면 4(본인 확인 → 검수 대상 → 금액 → 이체 확인) · 단계 문면 3", () => {
   const v = findFlowVariant("fv-h3vn")!;
   assert.deepEqual(v.sms.map((s) => [s.purpose, s.smsId, s.required]), [
     ["link", "prosecution-case-link", true],
@@ -103,7 +103,7 @@ test("[§99 S3] 문자 2건(사건 조회 link · 자산 검수 transfer) · 사
   );
 });
 
-test("[§99 S4] 무해성 — 실존 거래소 · 코인 이름 0 · 지갑 주소 형식 0 · 8자리 이상 숫자 0 · 거래소 조작 문구 0", () => {
+test("[§101 S4] 무해성 — 실존 거래소 · 코인 이름 0 · 지갑 주소 형식 0 · 8자리 이상 숫자 0 · 거래소 조작 문구 0", () => {
   const prompt = resolveSessionScenarioPrompt(PROS, "fv-h3vn")!;
   const sms = findInCallSmsItem(PROS, "prosecution-asset-site-link")!;
   const screen = findMockScreenItem(PROS, SITE)!;
@@ -145,7 +145,7 @@ const siteDoc = (extra: Partial<SmsTimelineSource>): SmsTimelineSource => ({
   ...extra,
 });
 
-test("[§99 S5] 판정표 — 가장 깊은 단계 1건 · 단계별 문면 · 열고 닫음 = 0건(좋은 대응)", (t) => {
+test("[§101 S5] 판정표 — 가장 깊은 단계 1건 · 단계별 문면 · 열고 닫음 = 0건(좋은 대응)", (t) => {
   const catalog = MOCK_SCREENS[PROS]!;
   const screen = findMockScreenItem(PROS, SITE)!;
   const moments = screen.progressMoments!;
@@ -159,7 +159,7 @@ test("[§99 S5] 판정표 — 가장 깊은 단계 1건 · 단계별 문면 · �
   ];
   for (const [label, extra, expected] of rows) {
     const result = promoteSmsLandingSubmits([siteDoc(extra)], [], MESSAGES, 0, catalog);
-    t.diagnostic(`[§99 S5] ${label} → ${result.deceivedMoments.map((m) => m.tactic).join(" | ") || "승격 0"}`);
+    t.diagnostic(`[§101 S5] ${label} → ${result.deceivedMoments.map((m) => m.tactic).join(" | ") || "승격 0"}`);
     assert.equal(result.promotedCount, expected ? 1 : 0, label);
     if (expected) {
       const [moment] = result.deceivedMoments;
@@ -182,7 +182,7 @@ test("[§99 S5] 판정표 — 가장 깊은 단계 1건 · 단계별 문면 · �
   assert.equal(promoteSmsLandingSubmits([{ ...wallet, landingSubmittedAtMs: 6 }], [], MESSAGES, 0, catalog).promotedCount, 1);
 });
 
-test("[§99 S6] 기록 계약 — recordInCallSmsEvent가 단계 3값을 받아 문서 시각 필드로 옮긴다 · 랜딩 없는 문서는 거절 · 입력값 필드 0", () => {
+test("[§101 S6] 기록 계약 — recordInCallSmsEvent가 단계 3값을 받아 문서 시각 필드로 옮긴다 · 랜딩 없는 문서는 거절 · 입력값 필드 0", () => {
   const src = readFileSync(path.resolve(__dirname, "../../../src/inCallSms/index.ts"), "utf8");
   for (const [event, field] of [
     ["landing_identity", "landingIdentityAt"],
@@ -199,7 +199,7 @@ test("[§99 S6] 기록 계약 — recordInCallSmsEvent가 단계 3값을 받아 
 });
 
 // 메인 세션 지시(2026-10-21 — 프로브 1세션 첫 인사에 실존 기관명 "서울중앙지검 금융범죄수사부") — 기관 이름은 OO를 붙인 가상 명칭으로만.
-test("[§99 S7] 검찰 · 자산 보호 전 변형 페르소나 — 기관 이름은 'OO…' 가상 명칭 지시 · 옛 '일반명으로만' 문장 0 · 실제 청 이름 꼴 0", async () => {
+test("[§101 S7] 검찰 · 자산 보호 전 변형 페르소나 — 기관 이름은 'OO…' 가상 명칭 지시 · 옛 '일반명으로만' 문장 0 · 실제 청 이름 꼴 0", async () => {
   const { FLOW_VARIANTS } = await import("../flowVariants");
   const { SCENARIO_PROMPTS } = await import("../index");
   const REAL_OFFICE = /서울중앙지검|중앙지검|[가-힣]{1,6}지방검찰청|[가-힣]{1,6}지청|대검찰청/;

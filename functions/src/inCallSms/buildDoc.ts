@@ -119,7 +119,7 @@ export function buildInCallSmsResponse(
   const announce = input.fictionalBankName
     ? applyFictionalBank(item.announceInstruction, input.fictionalBankName)
     : item.announceInstruction;
-  // ⭐ §99 추가(사용자 실기 신고 — Live에서 틀린 인증번호를 "확인됐다"고 넘김) — 위 ⛔(§78 · L1)를 바꾼다: 이 응답은 Live 경로(`deliverInCallSms`)만
+  // ⭐ §101 추가(사용자 실기 신고 — Live에서 틀린 인증번호를 "확인됐다"고 넘김) — 위 ⛔(§78 · L1)를 바꾼다: 이 응답은 Live 경로(`deliverInCallSms`)만
   // 받으므로 인증번호 문자에 한해 대조 1줄을 **도착 때 한 번** 덧붙인다. 텍스트 폴백은 이 함수를 거치지 않는다(서버 대조 `otpCheck.ts` 그대로).
   const announceInstruction =
     item.kind === "otp" && item.otpCode ? `${announce} ${buildOtpLiveCompareLine(item.otpCode)}` : announce;

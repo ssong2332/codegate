@@ -215,14 +215,14 @@ test("[OTP] QA M2 — 직전 사기범 발화가 인증번호를 묻지 않았�
 });
 
 // ── ⭐ 번호(정답)가 모델 입력에 0회 ─────────────────────────────────────────────────
-// ⭐ §99 추가(2026-10-21 사용자 실기 신고 — Live에서 틀린 번호를 "확인됐다") — 실시간 도착 응답(`buildInCallSmsResponse`)의 **인증번호 문자**만
+// ⭐ §101 추가(2026-10-21 사용자 실기 신고 — Live에서 틀린 번호를 "확인됐다") — 실시간 도착 응답(`buildInCallSmsResponse`)의 **인증번호 문자**만
 // 대조용 정답 1줄을 싣는다(§78.4 L1 → 정답 1회 제공). 텍스트 경로의 모델 입력(턴 지시 · 대조 결과 · 조립 프롬프트)에는 여전히 0이다.
 test("[OTP] ⭐ 번호 미노출 — 대조 결과 지시 2종·카탈로그 도착 지시·조립 프롬프트(텍스트 경로)·인증번호 아닌 문자의 실시간 응답 어디에도 인증번호가 없다(R8 회귀 ②)", async () => {
   assert.ok(ALL_OTP_CODES.length >= 2, "인증번호 카탈로그 수집 실패(거짓 초록 방지)");
   const modelInputs: string[] = [buildOtpCompareInstruction("match"), buildOtpCompareInstruction("mismatch")];
   for (const item of Object.values(IN_CALL_SMS).flat()) {
     modelInputs.push(item.announceInstruction);
-    if (item.kind === "otp") continue; // §99 — 아래 별도 테스트(실시간 대조 1줄)
+    if (item.kind === "otp") continue; // §101 — 아래 별도 테스트(실시간 대조 1줄)
     const res = buildInCallSmsResponse(item, { placed: false });
     if (res.announceInstruction) modelInputs.push(res.announceInstruction);
   }
@@ -260,7 +260,7 @@ test("[OTP] ⭐ 번호 미노출 — 대조 결과 지시 2종·카탈로그 도
   assert.match(buildOtpCompareInstruction("mismatch"), /번호가 안 맞는데요, 문자 다시 확인해서 불러 주세요/);
 });
 
-test("[OTP → §99] 실시간 도착 응답 — 인증번호 아닌 문자는 카탈로그 도착 지시 그대로 · 인증번호 문자만 대조 1줄(정답 1회 · 먼저 말하기 금지 · 불일치 되묻기)", () => {
+test("[OTP → §101] 실시간 도착 응답 — 인증번호 아닌 문자는 카탈로그 도착 지시 그대로 · 인증번호 문자만 대조 1줄(정답 1회 · 먼저 말하기 금지 · 불일치 되묻기)", () => {
   for (const item of Object.values(IN_CALL_SMS).flat()) {
     const res = buildInCallSmsResponse(item, { placed: false });
     if (item.kind === "otp" && item.otpCode) {

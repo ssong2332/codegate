@@ -136,7 +136,7 @@ test("[§92 B] 검찰 새 변형 — 사건 조회 문자 외 다른 화면 금�
 test("[§92 B · 무소급] 옛 변형 fv-bmiq · fv-nss6은 내용 무변경(문자 0 · 원본 수법 · 원본 페르소나) · 배정 은퇴 · 새 세션 풀은 새 변형뿐", () => {
   for (const [scenarioId, oldId, newId, oldTactic] of [
     ["asset-protection-notice-call", "fv-bmiq", "fv-k9ra", "보관 조치 접수번호를 남겨 드리고"],
-    // §98 — 검찰 새 세션 풀은 fv-c8wq(fv-p4hz도 배정 은퇴 — 아래 §98 테스트 파일). §99 — 다시 fv-h3vn(fv-c8wq 은퇴 — prosecutionSiteFlow.test.ts).
+    // §98 — 검찰 새 세션 풀은 fv-c8wq(fv-p4hz도 배정 은퇴 — 아래 §98 테스트 파일). §101 — 다시 fv-h3vn(fv-c8wq 은퇴 — prosecutionSiteFlow.test.ts).
     ["prosecution-cooperation-call", "fv-nss6", "fv-h3vn", "처럼 말로만 알리고, 서류나 사진을 보내겠다고 하지 않는다"],
   ] as const) {
     const old = findFlowVariant(oldId)!;

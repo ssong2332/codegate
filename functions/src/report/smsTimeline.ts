@@ -36,7 +36,7 @@ export type SmsTimelineSource = {
    */
   landingSubmittedAtMs?: number;
   /**
-   * §99 — 여러 화면 사이트(`MockScreenItem.stepScreens`)의 이체 전 단계 버튼을 누른 시각(부재 = 누르지 않음). 위 제출 시각과 같이
+   * §101 — 여러 화면 사이트(`MockScreenItem.stepScreens`)의 이체 전 단계 버튼을 누른 시각(부재 = 누르지 않음). 위 제출 시각과 같이
    * **승격 판정 입력 전용**이다(표시 이벤트 0 — G17).
    */
   landingIdentityAtMs?: number;
@@ -216,12 +216,12 @@ export type LandingSubmitCatalogItem = {
   landingId: string;
   momentTactic: string;
   correctAction: string;
-  /** §99 — 여러 화면 사이트의 이체 전 단계 문면(부재 = 한 화면 폼 — 단계 시각을 보지 않는다). */
+  /** §101 — 여러 화면 사이트의 이체 전 단계 문면(부재 = 한 화면 폼 — 단계 시각을 보지 않는다). */
   progressMoments?: Readonly<Record<LandingProgressStep, { momentTactic: string; correctAction: string }>>;
 };
 
 /**
- * ⭐ §99 판정표(2026-10-21 사용자 요청 — 자산 검수 사이트) — 한 문자 문서(= 한 화면)에서 **가장 깊은 단계 1건**만 고른다(위에서 첫 매치).
+ * ⭐ §101 판정표(2026-10-21 사용자 요청 — 자산 검수 사이트) — 한 문자 문서(= 한 화면)에서 **가장 깊은 단계 1건**만 고른다(위에서 첫 매치).
  *
  * | # | 조건 | 승격 문면 |
  * |---|---|---|
@@ -266,7 +266,7 @@ export type PromoteSmsLandingSubmitsResult = {
  *
  * | 조건 | 결과 |
  * |---|---|
- * | `landingSubmittedAtMs` 부재 | 승격 안 함(링크만 눌러 보고 닫은 세션 = 0건, AC-080 (b)) — ⭐ §99 예외: 여러 화면 사이트는 이체 전 단계 시각으로도 승격한다(위 `resolveLandingSubmitMomentItem` 표) |
+ * | `landingSubmittedAtMs` 부재 | 승격 안 함(링크만 눌러 보고 닫은 세션 = 0건, AC-080 (b)) — ⭐ §101 예외: 여러 화면 사이트는 이체 전 단계 시각으로도 승격한다(위 `resolveLandingSubmitMomentItem` 표) |
  * | `fakeLandingId`가 카탈로그에 없음 | 승격 안 함(문면 원천이 없으면 순간을 만들지 않는다) |
  * | 앵커 미해결 | 승격 안 함(§15.9.5 e-2 규칙 3과 동일 — 되감기 1:1 전제 보호) |
  * | ⭐ `anchorTurnIndex < 0` | **승격 안 함**(아래 G135) |
@@ -289,7 +289,7 @@ export function promoteSmsLandingSubmits(
   sessionCreatedAtMs: number,
   catalog: readonly LandingSubmitCatalogItem[] = [],
 ): PromoteSmsLandingSubmitsResult {
-  // §99 — 이체 전 단계 시각만 있는 문서도 후보다(승격 여부 · 문면은 아래 `resolveLandingSubmitMomentItem`이 카탈로그와 함께 정한다).
+  // §101 — 이체 전 단계 시각만 있는 문서도 후보다(승격 여부 · 문면은 아래 `resolveLandingSubmitMomentItem`이 카탈로그와 함께 정한다).
   const submitted = docs.filter(
     (doc) =>
       doc.landingSubmittedAtMs !== undefined ||

@@ -786,7 +786,7 @@ export default function SessionCallPage() {
             landingKind: data.landingKind as InCallSmsView["landingKind"],
             arrivedAtMs: arrivedAt?.toMillis?.() ?? 0,
             openedAtMs: openedAt?.toMillis?.(),
-            // §99 추가 · D-115 — 이체 랜딩 수취 계좌 미리 채움 원천(서버가 문자 계좌 줄에서 실은 값).
+            // §101 추가 · D-115 — 이체 랜딩 수취 계좌 미리 채움 원천(서버가 문자 계좌 줄에서 실은 값).
             bankName: data.bankName as string | undefined,
             accountNumber: data.accountNumber as string | undefined,
           };
@@ -3039,7 +3039,7 @@ export default function SessionCallPage() {
           // ⛔ 참가자가 입력한 값은 이 경로에 실리지 않는다(콜백이 무인자다 — G138/AC-045).
           // ⚠️ 위 `link_tapped`와 달리 이 이벤트만 리포트에서 "속은 순간"으로 승격된다(AC-080 (b)).
           onLandingSubmitted={(smsId) => handleRecordSmsEvent(smsId, "landing_submitted")}
-          // §99 — 자산 검수 사이트의 이체 전 단계(본인 확인 · 코인 전환 · 금액) — 같은 기록 경로 · 고정 값.
+          // §101 — 자산 검수 사이트의 이체 전 단계(본인 확인 · 코인 전환 · 금액) — 같은 기록 경로 · 고정 값.
           onLandingStep={(smsId, step) => handleRecordSmsEvent(smsId, step)}
           // T194-c-1(Q2) — 통화 중 문자로 연 설치 화면의 노출 · 응낙(기록만 — 실시간 언급 주입은 T194-c-2).
           onInstallShown={(landingId) => handleRecordInCallInstall(landingId, "shown")}

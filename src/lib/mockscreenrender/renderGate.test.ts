@@ -60,12 +60,12 @@ const NOT_REACHED_BY_INITIAL_RENDER: Record<string, string> = {
     "제출 후 상태(submitted=true)에서만 렌더된다 — 이벤트 시뮬레이션이 필요하고 그것은 신규 의존성이다. 여전히 G76(소스 텍스트 층)이 검사한다",
   consentLabel:
     'phase === "permission"에서만 렌더된다(초기값은 "intro") — 타이머 전이 이후 상태다. 여전히 G76이 검사한다',
-  // §99 — 여러 화면 사이트의 둘째 화면부터(본인 확인 버튼을 누른 뒤 상태). 소스 텍스트 층 대조는 `mockScreenCopy.test.ts` §99 블록이 한다.
+  // §101 — 여러 화면 사이트의 둘째 화면부터(본인 확인 버튼을 누른 뒤 상태). 소스 텍스트 층 대조는 `mockScreenCopy.test.ts` §101 블록이 한다.
   stepScreens:
-    "본인 확인 버튼을 누른 뒤(stepIndex ≥ 1)에만 렌더된다 — 이벤트 시뮬레이션이 필요하다. 여전히 mockScreenCopy.test.ts §99가 글자 단위로 검사한다",
+    "본인 확인 버튼을 누른 뒤(stepIndex ≥ 1)에만 렌더된다 — 이벤트 시뮬레이션이 필요하다. 여전히 mockScreenCopy.test.ts §101가 글자 단위로 검사한다",
 };
 /** 화면이 아니라 **리포트**로 가는 필드 — 화면에 있으면 오히려 위반이다(G76 `:377-391` 담당). */
-// §99 — `progressMoments`(이체 전 단계 승격 문면)도 리포트 전용이다.
+// §101 — `progressMoments`(이체 전 단계 승격 문면)도 리포트 전용이다.
 const REPORT_ONLY_FIELDS = ["momentTactic", "correctAction", "progressMoments"];
 /** 식별자·열거형 — 문구가 아니다. */
 const NON_TEXT_FIELDS = ["landingId", "kind", "entrySurface"];
@@ -173,7 +173,7 @@ function targetTexts(item: CatalogItem): Array<{ field: string; text: string }> 
 // ── ① 존재 대조(R-B) + 건수 단언(R-D) ────────────────────────────────────────────────
 
 test("[T116/렌더-존재] 카탈로그 **도달 가능 전수**의 초기 렌더 대상 문구가 실제 렌더 결과에 등장한다", (t) => {
-  assert.equal(catalogItems.length, 16, "도달 가능 랜딩은 16종이다(credential-form 11 + app-install 5, §53/§51 커밋 D · T194-a parcel-install · T194-c-1 Q2 3종 · §92.3 고급 전용 2종 · §98 검찰 보관 지갑 · §99 검찰 자산 검수 사이트)");
+  assert.equal(catalogItems.length, 16, "도달 가능 랜딩은 16종이다(credential-form 11 + app-install 5, §53/§51 커밋 D · T194-a parcel-install · T194-c-1 Q2 3종 · §92.3 고급 전용 2종 · §98 검찰 보관 지갑 · §101 검찰 자산 검수 사이트)");
 
   let compared = 0;
   const perItem: string[] = [];
@@ -415,7 +415,7 @@ test("[T116/역검증 ①] **필드 누락**(issuerLabel 렌더 지점 차단) �
 
 test("[T116/역검증 ②] **배열 누락**(bodyLines를 빈 배열로 순회) — 새 검사는 실패하고 G76·AC-079는 통과한다", (t) => {
   const { original, poisoned, overrides } = poisonedComponentSource(
-    // §99 — 렌더 대상이 `copy`에서 현재 화면 `screen`(첫 화면 = copy)으로 옮겨 오염 지점도 따라 옮겼다(검사 의미 무변경).
+    // §101 — 렌더 대상이 `copy`에서 현재 화면 `screen`(첫 화면 = copy)으로 옮겨 오염 지점도 따라 옮겼다(검사 의미 무변경).
     "screen.bodyLines.map(",
     "screen.bodyLines.slice(0, 0).map(",
   );

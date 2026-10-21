@@ -121,7 +121,7 @@ const MOCK_SCREEN_FIELDS: Record<keyof MockScreenItem, FieldPolicy> = {
   landingId: { skip: "식별자" },
   kind: { skip: "열거형 MockScreenKind — 아래 kind 게이트가 별도로 본다" },
   entrySurface: { skip: "열거형 MockScreenEntrySurface — 자유 문자열이 아니다(§19.2 (3))" },
-  // §99 — 여러 화면 사이트의 중첩 문구. 아래 `collectAllSurfaces`에서 화면 · 단계별 개별 표면으로 등록한다(같은 프로파일).
+  // §101 — 여러 화면 사이트의 중첩 문구. 아래 `collectAllSurfaces`에서 화면 · 단계별 개별 표면으로 등록한다(같은 프로파일).
   stepScreens: { skip: "아래에서 화면별 headline · bodyLines · items · fields · actionLabel 개별 표면으로 등록(mockSurface)" },
   progressMoments: { skip: "아래에서 단계별 momentTactic(mockSurface) · correctAction(correctiveGuidance) 개별 표면으로 등록" },
 };
@@ -223,7 +223,7 @@ function collectAllSurfaces(): Surface[] {
         MOCK_SCREEN_FIELDS,
         surfaces,
       );
-      // §99 — 중첩 문구(위 skip 행)를 개별 표면으로 펼친다. 빠지면 사이트 둘째 화면부터가 금지 패턴 검사 밖에 남는다.
+      // §101 — 중첩 문구(위 skip 행)를 개별 표면으로 펼친다. 빠지면 사이트 둘째 화면부터가 금지 패턴 검사 밖에 남는다.
       (item.stepScreens ?? []).forEach((screen, index) => {
         const where = `${scenarioId}/${item.landingId}#step${index + 1}`;
         for (const [field, value] of Object.entries(screen)) {
@@ -379,7 +379,7 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
         (i.fields?.length ?? 0) +
         (i.submitLabel === undefined ? 0 : 1) +
         (i.successHeadline === undefined ? 0 : 1) +
-        // §99 — 여러 화면 사이트의 중첩 표면(화면별 headline · actionLabel + bodyLines · items · fields · 단계별 문면 2).
+        // §101 — 여러 화면 사이트의 중첩 표면(화면별 headline · actionLabel + bodyLines · items · fields · 단계별 문면 2).
         (i.stepScreens ?? []).reduce(
           (m, sc) => m + 2 + sc.bodyLines.length + (sc.items?.length ?? 0) + (sc.fields?.length ?? 0),
           0,

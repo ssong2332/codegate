@@ -33,7 +33,7 @@ import { Button } from "./ui";
 // 이 파일을 불러와 `@/` 별칭을 풀지 못한다. 토큰 모듈은 값 import가 없는 잎 모듈이다.
 import { LANDING_PAGE_TOKENS, browserBarTokensFor } from "../lib/phone/skinTokens";
 import type { MessengerSkin } from "../lib/messenger/detectSkin";
-// §99 추가 — 금액 검증 · 한글 단위 표기 · 필수 칸 안내(잎 모듈 · 상대 경로 — 렌더 하네스 관례).
+// §101 추가 — 금액 검증 · 한글 단위 표기 · 필수 칸 안내(잎 모듈 · 상대 경로 — 렌더 하네스 관례).
 import { amountError, amountHint, requiredFieldError } from "../lib/landing/amountInput";
 
 /** UX-023의 목업 종류. 부재 → `credential-form`(하위호환 읽기 규칙, §15.9.1 R2). */
@@ -87,20 +87,20 @@ type MessengerFakeLandingProps = {
    */
   onCredentialSubmit?: () => void;
   /**
-   * ⭐ §99(검찰 고급 자산 검수 사이트) — 여러 화면 사이트(`STEP_FLOW_COPY`)에서 **이체 전 단계 버튼**을 누른 순간. 인자는
+   * ⭐ §101(검찰 고급 자산 검수 사이트) — 여러 화면 사이트(`STEP_FLOW_COPY`)에서 **이체 전 단계 버튼**을 누른 순간. 인자는
    * `STEP_FLOW_EVENTS`의 고정 값 하나뿐이다(본인 확인 · 코인 전환 · 금액 입력 뒤 다음). 마지막 이체 확인은 위 `onCredentialSubmit`.
-   * ⛔ 입력값(`values`)을 싣지 않는다(G138 동형 — `mockScreenCopy.test.ts` §99 블록). 이 컴포넌트는 네트워크 호출을 하지 않는다.
+   * ⛔ 입력값(`values`)을 싣지 않는다(G138 동형 — `mockScreenCopy.test.ts` §101 블록). 이 컴포넌트는 네트워크 호출을 하지 않는다.
    */
   onLandingStep?: (step: LandingProgressEvent) => void;
   /**
-   * ⭐ §99 추가 · UX D-115 — 이 랜딩을 연 문자의 **사기 측 수취 계좌**("{세션 은행명} {계좌번호}" — 서버 문자 문서 `bankName` · `accountNumber`).
+   * ⭐ §101 추가 · UX D-115 — 이 랜딩을 연 문자의 **사기 측 수취 계좌**("{세션 은행명} {계좌번호}" — 서버 문자 문서 `bankName` · `accountNumber`).
    * `prefill: "account"`인 칸을 이 값으로 채운 **읽기 전용** 칸으로 그린다. 부재(옛 문서 · 메신저 진입) = 종전 빈 입력 칸.
    * ⛔ 참가자 입력이 아니다(서버 카탈로그 · 문자에서 온 값) — 어떤 콜백에도 싣지 않는다.
    */
   prefilledAccount?: string;
 };
 
-/** §99 — 이체 전 단계 기록 이벤트(서버 `functions/src/inCallSms/types.ts` `InCallSmsEvent`의 같은 3값). */
+/** §101 — 이체 전 단계 기록 이벤트(서버 `functions/src/inCallSms/types.ts` `InCallSmsEvent`의 같은 3값). */
 export type LandingProgressEvent = "landing_identity" | "landing_converted" | "landing_amount";
 
 /** 완료 화면 복귀 버튼 문면(UX-023 v1.33 (5) · D-93) — 진입 표면이 정한다. 동작은 둘 다 `onClose`. */
@@ -306,9 +306,9 @@ type CredentialFieldCopy = {
    * ⛔ 검증이 아니다 — `type="text"` 유지 · maxlength·pattern·자동 서식·오류 문구 0.
    */
   inputMode?: "numeric";
-  /** §99 추가 — 금액 칸(숫자 · 0 초과 검증 + 칸 아래 한글 단위 표기 "47억 원"). 라벨로 추론하지 않고 필드별로 명시한다. */
+  /** §101 추가 — 금액 칸(숫자 · 0 초과 검증 + 칸 아래 한글 단위 표기 "47억 원"). 라벨로 추론하지 않고 필드별로 명시한다. */
   amount?: true;
-  /** §99 추가 · UX D-115 — 문자로 안내된 사기 측 수취 계좌로 미리 채우는 칸(값 = `prefilledAccount` · 읽기 전용). */
+  /** §101 추가 · UX D-115 — 문자로 안내된 사기 측 수취 계좌로 미리 채우는 칸(값 = `prefilledAccount` · 읽기 전용). */
   prefill?: "account";
 };
 type CredentialCopy = {
@@ -422,7 +422,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 사건조회 안내센터",
     mockHost: "case-view-center.invalid",
   },
-  // §99 — 검찰 고급 fv-h3vn 자산 검수 사이트의 첫 화면(본인 확인). 이어지는 화면은 아래 `STEP_FLOW_COPY`(서버 카탈로그와 글자 단위로 동일).
+  // §101 — 검찰 고급 fv-h3vn 자산 검수 사이트의 첫 화면(본인 확인). 이어지는 화면은 아래 `STEP_FLOW_COPY`(서버 카탈로그와 글자 단위로 동일).
   "asset-check-site": {
     headline: "사건 관련 자산 검수를 위해 본인 확인이 필요합니다",
     bodyLines: [
@@ -523,7 +523,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
   },
 };
 
-/** §99 — 여러 화면 사이트의 둘째 화면부터(서버 카탈로그 `MockScreenItem.stepScreens`와 1:1 · 글자 단위 동일). */
+/** §101 — 여러 화면 사이트의 둘째 화면부터(서버 카탈로그 `MockScreenItem.stepScreens`와 1:1 · 글자 단위 동일). */
 type StepScreenCopy = {
   headline: string;
   bodyLines: string[];
@@ -534,7 +534,7 @@ type StepScreenCopy = {
 };
 
 /**
- * ⭐ §99(2026-10-21 사용자 요청 — *"제공되는 웹사이트에서 코인 전환하고 이체하고 하는 거로 가자"*) — 여러 화면 사이트. 키 = landingId(정확 일치 — R8).
+ * ⭐ §101(2026-10-21 사용자 요청 — *"제공되는 웹사이트에서 코인 전환하고 이체하고 하는 거로 가자"*) — 여러 화면 사이트. 키 = landingId(정확 일치 — R8).
  * 첫 화면 = `CREDENTIAL_LANDING_COPY`의 같은 키(본인 확인), 그 뒤 = 이 배열 순서. 화면 i(0 = 본인 확인)의 버튼은 `STEP_FLOW_EVENTS[i]`를 올리고,
  * 마지막 화면의 버튼은 종전 제출(`onCredentialSubmit`)이다. ⛔ 거래소 가입 · 입금 · 매수 같은 실제 조작 단계는 화면에 없다(버튼 하나가 "전환"을 대신한다).
  */
@@ -566,7 +566,7 @@ const STEP_FLOW_COPY: Record<string, StepScreenCopy[]> = {
   ],
 };
 
-/** §99 — 화면 i(0 = 본인 확인)의 버튼이 올리는 고정 이벤트. 길이 = 마지막(이체 확인) 화면 앞까지. */
+/** §101 — 화면 i(0 = 본인 확인)의 버튼이 올리는 고정 이벤트. 길이 = 마지막(이체 확인) 화면 앞까지. */
 const STEP_FLOW_EVENTS: readonly LandingProgressEvent[] = ["landing_identity", "landing_converted", "landing_amount"];
 
 /**
@@ -608,9 +608,9 @@ function CredentialFormMockup({
   onClose: () => void;
   /** ⛔ 무인자 콜백이다 — 입력값은 아래 `values` state를 벗어나지 않는다(§31.6 G138/AC-045). */
   onCredentialSubmit?: () => void;
-  /** §99 — 여러 화면 사이트의 이체 전 단계(고정 이벤트 값만 — 입력값 0). */
+  /** §101 — 여러 화면 사이트의 이체 전 단계(고정 이벤트 값만 — 입력값 0). */
   onLandingStep?: (step: LandingProgressEvent) => void;
-  /** §99 추가 · D-115 — 수취 계좌 미리 채움 값(부재 = 빈 입력 칸). */
+  /** §101 추가 · D-115 — 수취 계좌 미리 채움 값(부재 = 빈 입력 칸). */
   prefilledAccount?: string;
   /** 완료 화면 복귀 버튼 문면(진입 표면이 정한다 — D-93). */
   returnLabel: string;
@@ -619,7 +619,7 @@ function CredentialFormMockup({
   const copy = (landingId ? CREDENTIAL_LANDING_COPY[landingId] : undefined) ?? GENERIC_CREDENTIAL_COPY;
   const [values, setValues] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
-  // §99 — 여러 화면 사이트의 현재 화면(0 = 본인 확인 = 위 `copy`). 한 화면 폼이면 늘 0이다.
+  // §101 — 여러 화면 사이트의 현재 화면(0 = 본인 확인 = 위 `copy`). 한 화면 폼이면 늘 0이다.
   const stepScreens = landingId ? STEP_FLOW_COPY[landingId] : undefined;
   const [stepIndex, setStepIndex] = useState(0);
   const screen: StepScreenCopy =
@@ -627,7 +627,7 @@ function CredentialFormMockup({
       ? stepScreens[stepIndex - 1]
       : { headline: copy.headline, bodyLines: copy.bodyLines, fields: copy.fields, actionLabel: copy.submitLabel };
   const page = LANDING_PAGE_TOKENS;
-  // §99 추가(사용자 실기 신고 — "공백으로 두고 이체를 누르면 넘어간다") — 칸별 안내 한 줄. 빈 칸 · 금액 오류면 제출 · 단계 진행 · 콜백 0
+  // §101 추가(사용자 실기 신고 — "공백으로 두고 이체를 누르면 넘어간다") — 칸별 안내 한 줄. 빈 칸 · 금액 오류면 제출 · 단계 진행 · 콜백 0
   // (속은 순간은 실제로 넘어간 제출에서만 잡힌다 — AC-080). 안내는 고정 문구이고 입력값을 싣지 않는다.
   const [errors, setErrors] = useState<Record<string, string>>({});
   const isPrefilled = (field: CredentialFieldCopy) => field.prefill === "account" && prefilledAccount !== undefined;
@@ -646,7 +646,7 @@ function CredentialFormMockup({
     }
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-    // §99 — 이체 확인 전 화면이면 "그 단계 버튼을 눌렀다"는 고정 값 하나만 올리고 다음 화면으로 넘어간다(입력값은 `values`에 남는다).
+    // §101 — 이체 확인 전 화면이면 "그 단계 버튼을 눌렀다"는 고정 값 하나만 올리고 다음 화면으로 넘어간다(입력값은 `values`에 남는다).
     if (stepScreens && stepIndex < stepScreens.length) {
       onLandingStep?.(STEP_FLOW_EVENTS[stepIndex]);
       setStepIndex(stepIndex + 1);
@@ -700,7 +700,7 @@ function CredentialFormMockup({
             {line}
           </p>
         ))}
-        {/* §99 — 검수 대상 자산 같은 나열 줄(입력 아님 · 숫자 0). */}
+        {/* §101 — 검수 대상 자산 같은 나열 줄(입력 아님 · 숫자 0). */}
         {screen.items && (
           <ul className="mt-1 flex flex-col gap-2">
             {screen.items.map((item) => (
@@ -740,7 +740,7 @@ function CredentialFormMockup({
                 />
               ) : (
                 // T190-5(D-93) — 숫자 칸은 숫자 자판 힌트만(`inputMode` — 필드별 명시). 입력값 자동 서식 0.
-                // §99 추가 — 제출 때 빈 칸 · 금액 오류를 칸 아래에 알린다(위 `errorFor`).
+                // §101 추가 — 제출 때 빈 칸 · 금액 오류를 칸 아래에 알린다(위 `errorFor`).
                 <input
                   type="text"
                   inputMode={field.inputMode}
@@ -758,7 +758,7 @@ function CredentialFormMockup({
                   style={{ borderColor: error ? page.errorText : page.inputBorder, backgroundColor: page.inputBg, color: page.inputText }}
                 />
               )}
-              {/* §99 추가 — 오류 안내가 우선, 없으면 금액 한글 단위 표기("47억 원"). */}
+              {/* §101 추가 — 오류 안내가 우선, 없으면 금액 한글 단위 표기("47억 원"). */}
               {error ? (
                 <span id={noteId} role="alert" className="text-[14px] font-normal" style={{ color: page.errorText }}>
                   {error}

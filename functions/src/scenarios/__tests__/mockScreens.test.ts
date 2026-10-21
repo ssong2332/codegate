@@ -715,7 +715,7 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
     "in-call-sms",
     // §98 — 검찰 고급 보관 지갑 송금 화면(통화 중 문자 표면).
     "in-call-sms",
-    // §99 — 검찰 고급 자산 검수 사이트(통화 중 문자 표면).
+    // §101 — 검찰 고급 자산 검수 사이트(통화 중 문자 표면).
     "in-call-sms",
     "messenger-link",
     "messenger-link",
@@ -966,7 +966,7 @@ test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **�
     false,
     "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
   );
-  assert.equal(reachableLandingKeysAllUnits().length, 16, "도달 가능 랜딩은 16종이다(§99 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(reachableLandingKeysAllUnits().length, 16, "도달 가능 랜딩은 16종이다(§101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
 });
 
 test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
@@ -1035,7 +1035,7 @@ function findMultiLandingScenarios(keys: readonly string[]): string[] {
  * ⛔ 새 단위를 여기 더하는 것은 "숫자를 고쳐 통과"가 아니라 **(b)가 살아 있음을 아래 단언이 확인한 상태에서의 명시 등재**다 —
  *    (b)를 되돌리면 아래 "(b) 생존" 단언이 먼저 빨간불이 된다.
  */
-// §99 — fv-h3vn(자산 검수 사이트)도 같은 구조(사건 조회 + 둘째 화면)라 같은 이유로 등재한다.
+// §101 — fv-h3vn(자산 검수 사이트)도 같은 구조(사건 조회 + 둘째 화면)라 같은 이유로 등재한다.
 const T129B_MULTI_LANDING_UNITS: readonly string[] = ["prosecution-cooperation-call#fv-c8wq", "prosecution-cooperation-call#fv-h3vn"];
 
 /** 등재 단위를 뺀 단위 키 — 역검증들의 기준 입력(등재 단위 때문에 기대 배열이 흔들리지 않게). */
@@ -1297,7 +1297,7 @@ function findFieldConvergence(
 
 test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
   const items = Object.values(MOCK_SCREENS).flat();
-  assert.equal(items.length, 16, "현행 비교 대상은 도달 가능 랜딩 16종이다(§99 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(items.length, 16, "현행 비교 대상은 도달 가능 랜딩 16종이다(§101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
   const stats = fieldDivergenceStats(items);
   for (const { field, compared, excluded, converged } of stats) {
     t.diagnostic(
@@ -1545,7 +1545,7 @@ const BAIT_TO_LANDING: {
   },
   {
     landingId: "asset-check-site",
-    baitSource: "scenarios/inCallSms.ts:PROSECUTION_COOPERATION_CALL (문자 본문·칩 — §99)",
+    baitSource: "scenarios/inCallSms.ts:PROSECUTION_COOPERATION_CALL (문자 본문·칩 — §101)",
     baitExcerpt: "아래 사이트에서 본인 확인 후 화면 안내대로 진행해 주세요.",
     headlineAnchors: ["본인 확인"],
     ctaAnchors: ["본인 확인"],

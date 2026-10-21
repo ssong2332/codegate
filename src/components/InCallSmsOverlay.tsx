@@ -73,7 +73,7 @@ type InCallSmsOverlayProps = {
    */
   onLandingSubmitted: (smsId: string) => void;
   /**
-   * §99 — 여러 화면 사이트에서 이체 전 단계 버튼을 누른 사실(인자 = 이 문자의 id + 고정 단계 값). 기록은 페이지가 한다.
+   * §101 — 여러 화면 사이트에서 이체 전 단계 버튼을 누른 사실(인자 = 이 문자의 id + 고정 단계 값). 기록은 페이지가 한다.
    * 부재 = 중계 0(종전 동작).
    */
   onLandingStep?: (smsId: string, step: LandingProgressEvent) => void;
@@ -150,7 +150,7 @@ export default function InCallSmsOverlay({
     displayText: string;
     landingId?: string;
     landingKind?: "credential-form" | "app-install";
-    /** §99 추가 · D-115 — 이 문자의 수취 계좌(랜딩 첫 칸 미리 채움). */
+    /** §101 추가 · D-115 — 이 문자의 수취 계좌(랜딩 첫 칸 미리 채움). */
     prefilledAccount?: string;
   } | null>(null);
   const [view, setView] = useState<"thread" | "landing">("thread");
@@ -604,9 +604,9 @@ export default function InCallSmsOverlay({
                 // T123/AC-080 — 제출 **사실 하나**를 페이지로 중계한다. 인자는 이 문자의 id뿐이고
                 // 참가자 입력값은 콜백 자체가 무인자라 여기까지 오지 않는다(G138).
                 onCredentialSubmit={() => onLandingSubmitted(landing.smsId)}
-                // §99 — 여러 화면 사이트의 단계 **사실 하나**(고정 값)를 페이지로 중계한다.
+                // §101 — 여러 화면 사이트의 단계 **사실 하나**(고정 값)를 페이지로 중계한다.
                 onLandingStep={(step) => onLandingStep?.(landing.smsId, step)}
-                // §99 추가 · D-115 — 이체 랜딩의 수취 계좌 칸(읽기 전용)을 이 문자의 계좌 줄로 채운다.
+                // §101 추가 · D-115 — 이체 랜딩의 수취 계좌 칸(읽기 전용)을 이 문자의 계좌 줄로 채운다.
                 prefilledAccount={landing.prefilledAccount}
                 // T194-c-1(Q2) — 가짜 "권한 허용" 응낙 **사실 하나**를 페이지로 중계한다(인자 = 랜딩 id뿐 · 이 파일은 콜러블을 부르지 않는다).
                 onInstallConsent={() => {

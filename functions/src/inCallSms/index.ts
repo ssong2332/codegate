@@ -219,7 +219,7 @@ export const deliverInCallSms = onCall<
   };
 });
 
-/** 이벤트 → 문서 시각 필드(최초 1회). §99 — 사이트 단계 3종은 랜딩이 있는 문서에서만(아래 가드). */
+/** 이벤트 → 문서 시각 필드(최초 1회). §101 — 사이트 단계 3종은 랜딩이 있는 문서에서만(아래 가드). */
 const EVENT_FIELD: Record<InCallSmsEvent, string> = {
   opened: "openedAt",
   link_tapped: "linkTappedAt",
@@ -242,7 +242,7 @@ export const recordInCallSmsEvent = onCall<
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
   const { sessionId, smsId, event } = request.data ?? {};
-  // ⛔ 고정 enum 값만 받는다 — 참가자 입력값을 담을 필드가 요청 타입에 **존재하지 않는다**(AC-045). §99 — 사이트 단계 3값 추가.
+  // ⛔ 고정 enum 값만 받는다 — 참가자 입력값을 담을 필드가 요청 타입에 **존재하지 않는다**(AC-045). §101 — 사이트 단계 3값 추가.
   if (!sessionId || !smsId || !isInCallSmsEvent(event)) {
     throw new HttpsError("invalid-argument", "sessionId·smsId·event가 필요합니다.");
   }

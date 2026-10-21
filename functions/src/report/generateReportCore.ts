@@ -155,7 +155,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       ...(data.landingSubmittedAt
         ? { landingSubmittedAtMs: data.landingSubmittedAt.toMillis() }
         : {}),
-      // §99 — 여러 화면 사이트의 이체 전 단계(승격 판정 입력 전용 — 스냅샷에 싣지 않는다).
+      // §101 — 여러 화면 사이트의 이체 전 단계(승격 판정 입력 전용 — 스냅샷에 싣지 않는다).
       ...(data.landingIdentityAt ? { landingIdentityAtMs: data.landingIdentityAt.toMillis() } : {}),
       ...(data.landingConvertedAt ? { landingConvertedAtMs: data.landingConvertedAt.toMillis() } : {}),
       ...(data.landingAmountAt ? { landingAmountAtMs: data.landingAmountAt.toMillis() } : {}),
