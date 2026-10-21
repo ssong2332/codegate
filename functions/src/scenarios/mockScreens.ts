@@ -209,6 +209,7 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `protect-account-transfer` | `scenarios/inCallSms.ts:173-175`(문자 본문·칩) | "아래에서 보호계좌로 옮기기를 진행해 주세요." | 링크에서 보호계좌로 옮기기 | "보호계좌로 옮기기가 아직 처리되지 않았습니다" | "보호계좌로 옮기기" |
 // | `asset-custody-apply` | `scenarios/inCallSms.ts` ASSET_PROTECTION_NOTICE_CALL(문자 본문·칩 — §92.3) | "아래에서 보관 신청서를 작성해 주세요." | 보관 신청서 작성 | "수사 종료 시까지 자산 보관 신청이 필요합니다" | "보관 신청하기" |
 // | `case-record-view` | `scenarios/inCallSms.ts` PROSECUTION_COOPERATION_CALL(문자 본문·칩 — §92.3) | "아래에서 본인 확인 후 사건 기록을 열람해 주세요." | 본인 확인 → 사건 기록 열람 | "사건 기록 열람 전 본인 확인이 필요합니다" | "사건 기록 열람하기" |
+// | `asset-check-wallet` | `scenarios/inCallSms.ts` PROSECUTION_COOPERATION_CALL(문자 본문·칩 — §95) | "아래에서 보관 지갑 전송을 진행해 주세요." | 링크에서 보관 지갑 전송 | "검수 전용 보관 지갑 전송이 아직 완료되지 않았습니다" | "보관 지갑으로 전송하기" |
 // | `card-delivery-app-install` | `scenarios/inCallSms.ts` CARD_DELIVERY_CALL(문자 본문·칩 — T194-c-1 Q2) | "아래에서 보안 점검 앱을 설치해 주세요." | 보안 점검 앱 설치 | "보안 점검 앱을 설치해야 사고 접수가 이어집니다" | "권한 허용하고 계속하기" |
 // | `card-guard-app-install` | `scenarios/inCallSms.ts` CARD_COMPANY_IMPERSONATION(문자 본문·칩 — T194-c-1 Q2) | "아래에서 피해 차단용 보안 앱을 설치해 주세요." | 피해 차단용 보안 앱 설치 | "피해 차단용 보안 앱을 설치해야 보호 조치가 시작됩니다" | "권한 허용하고 계속하기" |
 // | `loan-check-app-install` | `scenarios/inCallSms.ts` LOAN_SCAM(문자 본문·칩 — T194-c-1 Q2) | "아래에서 심사용 보안 점검 앱을 설치해 주세요." | 심사용 보안 점검 앱 설치 | "심사용 보안 점검 앱을 설치해야 대출 심사가 진행됩니다" | "권한 허용하고 계속하기" |
@@ -499,6 +500,27 @@ const PROSECUTION_COOPERATION_CALL: MockScreenItem[] = [
     momentTactic: "수사기관 사칭 사건 조회 사이트를 빌미로 한 본인 확인 정보 입력 유도",
     correctAction:
       "'문자 링크로 사건 기록을 확인하라'고 하면 그 자리에서 멈추세요 — 수사기관은 문자 링크로 영장이나 사건 기록을 보여 주지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 문자 속 링크에 이름 · 생년월일 · 전화번호를 넣지 않기 ③ 혼자 있으라거나 알리지 말라고 하면 오히려 가족에게 바로 알리기",
+  },
+  // ⭐ §95(2026-10-21 사용자 실기 신고) — 검찰 고급 fv-c8wq의 둘째 화면: `prosecution-wallet-link` 문자(검수 전용 보관 지갑 안내)에서 열리는
+  // 이체형 `credential-form`(safe-account-transfer와 같은 모양 — 새 kind 0). 한 세션 화면 2건은 T129 (b)(ad7e44a)가 판정 키를 landingId로 가른다.
+  // ⛔ 실제 지갑 주소 형식 · 거래소 이름 · 코인 종류 0(§81) — 입력값은 서버로 가지 않는다(AC-045).
+  {
+    landingId: "asset-check-wallet",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "검수 전용 보관 지갑 전송이 아직 완료되지 않았습니다",
+    bodyLines: [
+      "범죄수익 여부 검수가 끝날 때까지 코인으로 바꾼 자산을 보관 지갑에 맡겨 두셔야 합니다.",
+      "문자로 안내된 지갑 번호와 전송할 금액을 아래에 입력해 주세요.",
+    ],
+    issuerLabel: "ⓒ 사건자산 검수센터",
+    mockHost: "asset-check-wallet.invalid",
+    fields: ["보관 지갑 번호", "전송 금액"],
+    submitLabel: "보관 지갑으로 전송하기",
+    successHeadline: "보관 지갑 전송이 접수되었습니다.",
+    momentTactic: "자산 검수 명목의 코인 전환 · 보관 지갑 송금 유도",
+    correctAction:
+      "'자산을 검수해야 하니 코인으로 바꿔 지정 지갑으로 옮기라'고 하면 그 자리에서 멈추세요 — 검찰 · 경찰 · 금융감독원은 어떤 경우에도 돈을 코인으로 바꾸라고 하거나 '보관 지갑' · '안전계좌'로 옮기라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 문자 속 링크에 지갑 번호 · 금액을 넣지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 보냈다면 112(경찰) · 1332(금융감독원)에 바로 신고하고 이용한 거래소에도 알리기.",
   },
 ];
 

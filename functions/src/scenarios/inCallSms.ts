@@ -146,6 +146,21 @@ const PROSECUTION_COOPERATION_CALL: InCallSmsItem[] = [
     announceInstruction:
       "(참가자 휴대전화로 방금 사건 조회 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크에서 본인 확인 후 사건 기록을 직접 확인해 보라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 실제 주소·사건번호를 읽어 주지 마라.)",
   },
+  // ⭐ §95(2026-10-21 사용자 실기 신고) — 검찰 고급 fv-c8wq의 transfer 슬롯. 코인으로 바꾼 자산을 보낼 "검수 전용 보관 지갑" 안내 + 이체형 모의 화면.
+  // ⛔ 지갑 번호는 실제 지갑 주소 형식이 아닌 모의 표기(영문 · 숫자 4자 묶음 — 8자리+ 연속 숫자 0) · 거래소 · 코인 종류 0(§81).
+  // afterScammerTurns=6: 이 시나리오의 2와 겹치지 않는 값(발송 시점은 변형 선언 notBeforeUserTurns가 정한다).
+  {
+    smsId: "prosecution-wallet-link",
+    kind: "account",
+    senderLabel: "0000-0000 (자산검수 안내)",
+    body: "[자산검수] 검수 전용 보관 지갑 안내\n보관 지갑 번호: KW-7Q2X-4471\n검수가 끝나면 전액 반환됩니다.\n아래에서 보관 지갑 전송을 진행해 주세요.\n외부에 알리지 마십시오.",
+    linkDisplayText: "보관 지갑 전송 진행하기",
+    fakeLandingId: "asset-check-wallet",
+    linkAddress: "asset-check-wallet.invalid/send/Wk4p",
+    afterScammerTurns: 6,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 검수 전용 보관 지갑 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 코인으로 바꾼 금액을 문자 속 링크 화면에서 보관 지갑으로 전송해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 지갑 번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
 ];
 
 const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [

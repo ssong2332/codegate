@@ -712,7 +712,7 @@ function componentHosts(code: string): string[] {
 test("[T190/G453 클라] 컴포넌트의 가짜 호스트 전부(카탈로그 8 + 범용 폴백 1)가 .invalid 규칙을 지킨다", (t) => {
   const hosts = componentHosts(componentCode);
   t.diagnostic(`[G453 클라] 호스트 ${hosts.length}개: ${hosts.join(" · ")}`);
-  assert.equal(hosts.length, 15, "카탈로그 credential 9 + 설치 5(T194-a parcel-install · T194-c-1 Q2 3종 · §92.3 credential 2) + 범용 폴백 1");
+  assert.equal(hosts.length, 16, "카탈로그 credential 10 + 설치 5(T194-a parcel-install · T194-c-1 Q2 3종 · §92.3 credential 2 · §95 보관 지갑 1) + 범용 폴백 1");
   assert.deepEqual(hosts.flatMap(clientHostViolations), []);
   // 범용 폴백 호스트는 카탈로그 호스트와 겹치지 않는다(겹치면 미스가 다른 사이트처럼 보인다).
   assert.equal(new Set(hosts).size, hosts.length);
@@ -744,6 +744,8 @@ const NUMERIC_FIELD_LABELS = [
   "옮길 금액",
   // §92.3 — 자산 보관 신청서의 금액 칸.
   "보관 신청 금액",
+  // §95 — 검찰 보관 지갑 송금 화면의 금액 칸(지갑 번호 칸은 영문이 섞여 numeric이 아니다).
+  "전송 금액",
 ];
 
 test("[T190/D-93] 계좌번호·금액 칸에만 inputMode numeric — 검증(maxLength·pattern) 0 · type=text 유지", () => {

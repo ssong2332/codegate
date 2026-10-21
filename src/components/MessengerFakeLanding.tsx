@@ -397,6 +397,22 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 사건조회 안내센터",
     mockHost: "case-view-center.invalid",
   },
+  // §95 — 검찰 고급 fv-c8wq 둘째 화면(이체형 — 서버 카탈로그 mockScreens.ts와 글자 단위로 동일).
+  "asset-check-wallet": {
+    headline: "검수 전용 보관 지갑 전송이 아직 완료되지 않았습니다",
+    bodyLines: [
+      "범죄수익 여부 검수가 끝날 때까지 코인으로 바꾼 자산을 보관 지갑에 맡겨 두셔야 합니다.",
+      "문자로 안내된 지갑 번호와 전송할 금액을 아래에 입력해 주세요.",
+    ],
+    fields: [
+      { label: "보관 지갑 번호", placeholder: "문자로 받은 지갑 번호를 입력하세요" },
+      { label: "전송 금액", placeholder: "전송하실 금액을 입력하세요", inputMode: "numeric" },
+    ],
+    submitLabel: "보관 지갑으로 전송하기",
+    successHeadline: "보관 지갑 전송이 접수되었습니다.",
+    issuerLabel: "ⓒ 사건자산 검수센터",
+    mockHost: "asset-check-wallet.invalid",
+  },
   "courier-customs-check": {
     headline: "수취인 정보가 일치하지 않아 통관이 보류되었습니다",
     bodyLines: [
