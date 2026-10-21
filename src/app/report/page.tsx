@@ -417,7 +417,8 @@ export default function ReportPage() {
           <>
             <BigClock seconds={firstDeceivedSeconds} label="처음 속은 시각" className="mt-3 text-[88px] text-sand" />
             <p className="mt-2 text-[22px] font-bold leading-[1.35] [word-break:keep-all]">
-              이 순간 속았어요{firstDeceivedMoment.tactic ? ` · ${firstDeceivedMoment.tactic}` : ""}
+              {/* 리포트 검수(2026-10-22) A1 — 서버 폴백 라벨("약화된 사기 수법")은 그리지 않는다. */}
+              이 순간 속았어요{displayTactic(firstDeceivedMoment.tactic) ? ` · ${displayTactic(firstDeceivedMoment.tactic)}` : ""}
             </p>
           </>
         ) : !report.wasDeceived ? (
