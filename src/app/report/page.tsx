@@ -53,6 +53,8 @@ type DeceivedMoment = {
   timeLabel: string;
   tactic: string;
   correctAction: string;
+  /** T129 (b)(§98) — 모의 화면 승격 순간에만. 화면 항목 판정 키(`resolveMockScreenCopy`)로만 쓴다. */
+  landingId?: string;
 };
 
 // T89(§15.1.5, AC-059) — 리포트 문서 안의 **표시 전용** 문자 이벤트 스냅샷. 서버가 이미 최종 표시

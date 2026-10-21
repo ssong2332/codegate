@@ -39,7 +39,13 @@ import { SCENARIO_PROMPTS } from "./index";
 import { PARCEL_ADVANCED_INSTALL_TACTIC, PARCEL_ADVANCED_LEG_PERSONA } from "./messengerParcelSmishingSms.prompt";
 import { CARD_DELIVERY_PERSONA } from "./cardDeliveryCall.prompt";
 import { ASSET_CUSTODY_PROCEDURE_TACTIC } from "./assetProtectionNoticeCall.prompt";
-import { PROSECUTION_CASE_LINK_PERSONA, PROSECUTION_CASE_LINK_TACTIC } from "./prosecutionCooperationCall.prompt";
+import {
+  PROSECUTION_CASE_LINK_PERSONA,
+  PROSECUTION_CASE_LINK_TACTIC,
+  PROSECUTION_WALLET_COIN_TACTIC,
+  PROSECUTION_WALLET_EXTRA_TACTICS,
+  PROSECUTION_WALLET_PERSONA,
+} from "./prosecutionCooperationCall.prompt";
 import { extractTacticLabel } from "./tacticFlavor";
 import { hasVerifyIntercept } from "./verifyIntercept";
 
@@ -218,6 +224,17 @@ const PROSECUTION_STAGES = [
   "자산 검수를 위해 코인으로 바꿔 지정된 곳으로 옮기라고 요구한다.",
 ] as const;
 const PROSECUTION_DECISION_MOMENT = "코인 구매 · 송금 약속에 동의하는 순간";
+// §98(2026-10-21 사용자 실기 신고) — 검찰 고급 fv-c8wq: 코인 전환을 단계로 펼치고 보관 지갑 송금 화면 · 송금 뒤 추가 요구 · 거부 시 격상을 끝단에 둔다.
+const PROSECUTION_CASE_LINK_STAGE =
+  "영장이 청구됐다며 문자로 보낸 사건 조회 링크에서 본인 확인 뒤 사건 기록을 직접 확인하라고 한다.";
+const PROSECUTION_WALLET_STAGES_TAIL = [
+  "자산 검수 대상이라며 거래 은행과 예금 · 적금 규모를 묻고, 빠뜨리면 증거 은닉으로 본다고 압박한다.",
+  "예금을 본인 명의 OO거래소 계좌로 옮겨 코인으로 바꾸라고 한 단계씩 지시하고, 은행 · 거래소에서 이유를 물으면 개인 용도라고만 하라고 이른다. 앱의 버튼 · 메뉴 · 인증 절차는 설명하지 않는다.",
+  "바꾼 코인은 문자로 보낸 검수 전용 보관 지갑 안내의 링크 화면에서 지갑 번호와 금액을 넣어 전송하게 한다. 다른 곳으로 따로 보내라고 하지 않는다.",
+  "전송을 마치면 결과를 알린 뒤 곧바로 남은 예금 · 적금 · 대출 가능액도 검수 대상이라며 추가로 바꿔 보내라고 요구하고, 피해자로 확인되면 돌려준다고 안심시킨다. 검수 기간이나 나중에 연락하겠다는 말로 통화를 정리하지 않는다.",
+  "상대가 거부하거나 의심하면 구속영장 집행 · 계좌 동결 · 가족 조사로 위협을 올리고, 오늘만 마치면 조용히 끝난다는 회유와 번갈아 쓴다.",
+] as const;
+const PROSECUTION_WALLET_DECISION_MOMENT = "문자 링크로 연 보관 지갑 화면에서 지갑 번호와 금액을 넣고 전송하기를 누르는 순간";
 const PROSECUTION_SOURCES = ["C05", "C06", "C07", "C08", "S3", "S25", "S28"];
 
 // 음성 시나리오용 "다른 번호" 수법(가족 · 손주 고급 — §2.6.3 "딥보이스 + 다른 번호로 연락", 사례 S9 · C18).
@@ -1192,7 +1209,7 @@ const SPECS: VariantSpec[] = [
     authoring: "authored",
     stages: st(
       PROSECUTION_STAGES[0],
-      "영장이 청구됐다며 문자로 보낸 사건 조회 링크에서 본인 확인 뒤 사건 기록을 직접 확인하라고 한다.",
+      PROSECUTION_CASE_LINK_STAGE,
       ...PROSECUTION_STAGES.slice(1),
     ),
     dropLabels: ["수사 서류 언급"],
@@ -1206,6 +1223,34 @@ const SPECS: VariantSpec[] = [
     channels: ["voice", "sms"],
     demandStages: 2,
     decisionMoment: PROSECUTION_DECISION_MOMENT,
+    sources: PROSECUTION_SOURCES,
+    // §98 — 내용 무변경 · 배정 은퇴(옛 세션 · 리포트 해석용). 새 세션은 fv-c8wq.
+    retired: true,
+  },
+  // ⭐ §98(2026-10-21 사용자 실기 신고 — "코인 전환 절차 설명이 약하다" · "검수 수일 뒤 연락으로 흐지부지 끝난다") — 사건 조회(fv-p4hz 그대로) 뒤에
+  // 자산 진술 → 거래소 코인 전환(단계 지시 · 창구 확인 차단) → 문자 링크 보관 지갑 송금 화면 → 송금 뒤 추가 요구 · 거부 시 위협 격상.
+  // 문자 2건 = 사건 조회(link) · 보관 지갑(transfer) ⇒ 한 세션 모의 화면 2건(G159 → T129 (b) 선행 커밋 ad7e44a).
+  // 출처: docs/research/prosecution-crypto-tactics-2026-10.md(2024~2026 보도 — 자산 검수 명목 코인 구매 · 지정 지갑 전송 · 추가 송금 반복).
+  {
+    variantId: "fv-c8wq",
+    scenarioId: "prosecution-cooperation-call",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(PROSECUTION_STAGES[0], PROSECUTION_CASE_LINK_STAGE, PROSECUTION_STAGES[1], PROSECUTION_STAGES[2], ...PROSECUTION_WALLET_STAGES_TAIL),
+    dropLabels: ["수사 서류 언급", "코인 구매·송금 요구"],
+    extraTactics: [PROSECUTION_CASE_LINK_TACTIC, PROSECUTION_WALLET_COIN_TACTIC, ASSET_INFO, ...PROSECUTION_WALLET_EXTRA_TACTICS],
+    exitBlock: ["D2_secrecy", "D4_procedural_legitimacy", "D5_call_retention"],
+    sms: [
+      { purpose: "link", smsId: "prosecution-case-link", required: true, notBeforeUserTurns: 2 },
+      { purpose: "transfer", smsId: "prosecution-wallet-link", required: true, notBeforeUserTurns: 5 },
+    ],
+    legs: [
+      { callerLabel: "검찰 수사관", personaPrompt: PROSECUTION_WALLET_PERSONA, speakerGender: "male", minUserTurns: 0, maxUserTurns: 20 },
+    ],
+    ...ADVANCED,
+    channels: ["voice", "sms"],
+    demandStages: 3,
+    decisionMoment: PROSECUTION_WALLET_DECISION_MOMENT,
     sources: PROSECUTION_SOURCES,
   },
 ];
