@@ -22111,7 +22111,7 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 ### 97.7 P3 — 준비 화면 · 진입/종료 경계 판 (브랜치 `claude/e2-design-p3-boundary` · #364 위)
 | 화면 | 바뀐 것 | 그대로 둔 것 |
 |---|---|---|
-| 준비(난이도 화면 "이걸로 시작" 뒤 셀프 세션 생성 대기) | `TrainingPrepScreen` — 짙은 남색 · 모래 **큰 경과 초**(1초마다 · 낭독 0) · "보통 10~15초 걸려요" · 끝없이 흐르는 대기 막대(진행률 아님 · reduced-motion이면 멈춤) · 고른 난이도 설명 · 예방 요령 3개(5초마다) · 경과 시간 안심 문구(SESSION_PREP_HINTS) | 세션 생성 로직 · 오류 시 난이도 화면으로 복귀 · 보내기 · 통화로 이어지는 메신저(곧바로 다음 화면이라 준비 화면 없음) |
+| 준비(난이도 화면 "이걸로 시작" 뒤 셀프 세션 생성 대기) | ⚠️ **2026-10-22 §99로 교체**(경과 초 · "보통 10~15초" · 대기 막대 → 실제 준비 단계 체크). 아래는 §97.7 당시 기록. `TrainingPrepScreen` — 짙은 남색 · 모래 **큰 경과 초**(1초마다 · 낭독 0) · "보통 10~15초 걸려요" · 끝없이 흐르는 대기 막대(진행률 아님 · reduced-motion이면 멈춤) · 고른 난이도 설명 · 예방 요령 3개(5초마다) · 경과 시간 안심 문구(SESSION_PREP_HINTS) | 세션 생성 로직 · 오류 시 난이도 화면으로 복귀 · 보내기 · 통화로 이어지는 메신저(곧바로 다음 화면이라 준비 화면 없음) |
 | 진입 경계 판 | 세션이 만들어지면 남색 "지금부터 훈련" 판 1.2초 → 훈련 화면(누르면 바로). 난이도 폴백 "이대로 계속하기"도 같은 판을 거친다 | **훈련 화면 코드 무변경** — 통화 화면 안 "준비됐어요" · 받기 탭의 동기 오디오 잠금 해제(primeCallAudio)는 판보다 뒤 · 다른 화면이라 영향 0(G653이 play · messenger · CallStartNotice에 경계 판 0을 확인) |
 | 종료 경계 판 | 종료 화면(UX-007) 맨 위 모래 "끝." + "훈련이 끝났습니다. 여기부터는 실제 화면입니다." | 제목 "이것은 훈련이었습니다" · 안심 문단 · 사실 공개 문장(G445 — 조건 없이 1회) · 버튼 · 작은 화면 축소(`.end-compact > div:first-child` → `first-of-type`으로 바꿔 판이 첫 자식이어도 아이콘에 걸리게) |
 | 범위 밖 | 챌린지 받는 분 · 메신저 목소리 선택 · 되감기에서 시작하는 세션(각 화면이 따로 createSession — 준비 화면 · 진입 판 미적용) | — |
@@ -22177,3 +22177,45 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 | 거절 · 거절 뒤 회유 턴("조용히 · 오늘만 · 일부 · 돌려" 등) | 1 · 0 | 4 · 7 · 5 | 같은 정규식 |
 ¹ 이후 순응 1세션은 프로브 응답기가 링크 안내마다 "눌러서 설치했어요"만 답해 사건 조회 단계에서 19턴 내내 정정만 오갔다(응답기 한계 — 사기범은 "앱이 아니라 링크"로 바로잡았다). 제품 결함 아님.
 ⚠️ 지표는 키워드 정규식 계수다(의미 판정 아님). 응답기는 고정 대본(텍스트 턴)이라 실제 참가자 발화 분포가 아니다.
+
+## 99. (UX change — 2026-10-22 · 브랜치 `claude/prep-screen-real-stages-ab4f28` · 사용자 결정 원문 *"4번은 다른 방향으로 변경하자. 보통 10~15초가 나오는데, 다른 방식으로 전환"* → '실제 준비 단계 표시') **준비 화면: 서버가 실제로 끝낸 준비 단계만 체크 — createSession 스트리밍 신호** — architect 판정 · implementer 기록 (UX D-142 · DECISIONS #212)
+> ⚠️ 번호 §99 · #212 · D-142 · G700~G702는 병행 작업과 겹칠 수 있다 — 병합 때 확인.
+
+### 99.1 준비 대기 동안 실제로 일어나는 일 (분해)
+| 구간 | 하는 일 (`functions/src/session/index.ts` createSession) | 클라가 알 수 있는 신호 | 화면 단계 |
+|---|---|---|---|
+| ① 게이트 · 배정 | 요청 검증 · 난이도/병합/목소리 출처 게이트 · '내 정보' 카드 검증 · 동의 확인(Firestore 1읽기) · 생성 한도(1쿼리) · 흐름 변형 배정(회전 문서 1읽기) · 사전 세션 id 확인(1읽기) | 조각 `scenario` | 훈련 내용 |
+| ② 오프닝 | `generateOpeningLine` — LLM 1호출(대기의 대부분 — **추정**, 99.4 로그로 확인) | 조각 `opening` | 첫마디 / 첫 메시지 |
+| ③ 저장 | 세션 문서 + 회전 문서 트랜잭션 · 오프닝 메시지 쓰기 · (보이스) 오프닝 음성 합성 시도 — **Mock**(`voice/provider.ts`는 항상 MockVoiceProvider) | 조각 `saved` → 곧바로 최종 응답 | 훈련 열 준비 |
+| (이 화면 밖) | 진입 경계 판 1.2초 → 통화 화면 → 받기 탭 → 실시간 자격 증명 · 마이크 · 연결 | — | 넣지 않음(가짜가 된다) |
+
+### 99.2 신호 방식 판정
+| 후보 | 비용 | 지연 | 복잡도 · 충돌 | 판정 |
+|---|---|---|---|---|
+| ⓐ 스트리밍 콜러블 조각(`onCall` 둘째 인자 `response.sendChunk` · 클라 `httpsCallable(...).stream()` — firebase 12.16 · firebase-functions 7.3 지원) | 0 | 0 | 서버 3지점 + 클라 래퍼. 스키마 · 규칙 · 인덱스 0. 옛 클라(일반 호출)는 조각을 받지 않음 · 옛 서버에서 `.stream()`은 조각 0개 + 같은 최종 응답 | ⭐ 채택 |
+| ⓑ 세션 문서 `prepStage` 필드 + `onSnapshot` | 쓰기 +3/세션 · 구독 | 스냅샷 왕복 | 생성 전(없는) 문서 구독 · 보안 규칙 변경 · 세션 문서 스키마 변경(병행 세션 충돌) | 기각 |
+| ⓒ 콜러블을 단계별로 분리 | 호출 ×3 | 왕복 · 콜드 스타트 ×3 | createSession 게이트 순서 설계(G410 등) 재작성 | 기각 |
+
+### 99.3 구현
+| 파일 | 바뀐 것 |
+|---|---|
+| `functions/src/session/prepStages.ts`(신규) | 단계 이름 `scenario · opening · saved` · `emitPrepStage` — 조각엔 단계 이름만, 전송 실패는 삼킨다(P-4 비차단) |
+| `functions/src/session/index.ts` | createSession 3지점에서 조각 전송(모든 거부 게이트 뒤 · 해당 작업 바로 뒤) + 단계별 소요 로그 `[session-prep] createSession`(scenarioMs · openingMs · savedMs · totalMs · streaming · channel — ID · 내용 0). **반환값 · 문서 · 게이트 순서 무변경** |
+| `src/lib/api/callable.ts` | `callCallableStream` — U1 잠금 · `unauthenticated` 감지 단일 지점(G156 — 공용 `rethrowAfterSignal`로 모음) 그대로 · 일반 호출과 같은 70초 제한(AbortSignal) |
+| `src/lib/api/createSession.ts` | 둘째 인자 `onPrepStage`가 있을 때만 스트리밍. 다른 호출부(목소리 선택 · 클론 대기 · 메신저 · 통화) 무변경 |
+| `src/lib/design/e2Prep.ts` | 경과 초 · "보통 10~15초" 규칙 삭제 → 단계 문면 · `advancePrepDone`(모르는 값 무시 · 줄지 않음 · 뒤 신호 = 앞 단계 완료) · `prepStepState` · `prepAnnouncement` · `slowPrepHints` |
+| `src/components/TrainingPrepScreen.tsx` | 큰 경과 초 · 대기 막대 삭제 → 3줄 단계(완료 = 모래 원 + 체크 `check-pop` · 진행 = 모래 테두리 + 점 · 대기 = 옅은 테두리) · `role=status` 낭독 · 안심 문구는 8초 · 20초만 |
+| `src/app/scenarios/difficulty/page.tsx` | `prepDone` — 조각 · 최종 응답으로만 올림, 시작할 때 0 |
+| `src/app/motion.css` | 안 쓰게 된 `.e2-wait-bar` 삭제. 체크는 기존 `check-pop`(transform 잔류 0 · reduced-motion이면 끔) |
+| 테스트 | functions `prepStages.test.ts` 3건(G700 · G701) · root `e2Screens.test.ts` G652 재작성 + G702 신규 |
+
+**배포 순서**: 어느 쪽 먼저여도 안전하다(호환 양방향 — 99.2 ⓐ). 권장은 **Functions → Hosting**(Hosting만 먼저면 체크가 응답 때 한꺼번에 3개 켜진다 — 기능 손실 · 오류 0). Functions는 createSession 1개만 바뀐다(`firebase deploy --only functions:createSession` 가능 — 여러 함수가 함께 바뀌어야 하는 변경 아님).
+
+### 99.4 검증
+| 항목 | 결과 | 근거 |
+|---|---|---|
+| 에뮬레이터 실 SDK `.stream()` (Mock LLM · 이 작업 전용 별도 포트 19099/18080/15001 — 다른 세션 에뮬레이터 보호) | 보이스 · 메신저 모두 조각 `scenario → opening → saved` 순서 · 최종 응답 정상 | 스크래치 스모크 결과 JSON(커밋 0) |
+| 옛 방식 일반 호출 호환 | 응답 정상 · 로그 `streaming:false` | 같은 스모크 |
+| 거부(고급 전용 × 중급) | `failed-precondition` · 조각 0개 | 같은 스모크 |
+| 단계별 소요 | 에뮬레이터 웜: scenario 37~41ms · opening 1~5ms(Mock) · saved 27~49ms. **실 LLM 소요는 미측정**(실 키 승인 필요) — 배포 뒤 `[session-prep]` 로그로 본다 | Functions 에뮬레이터 로그 |
+| 화면(375×812 · 임시 미리 보기 페이지 — 커밋 0) | 대기/진행/완료 3상태 · 메신저 문면 · 가로 넘침 0 · reduced-motion 규칙에 `check-pop` 포함 | 브라우저 캡처 |

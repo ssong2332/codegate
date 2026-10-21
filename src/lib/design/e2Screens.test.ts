@@ -57,24 +57,78 @@ test("[G651] 난이도 — choose 판 + sticky 설명 시트 + '이걸로 시작
   for (const needle of ["{PRE_SESSION_BURDEN_NOTICE}", "<PersonaCardInputFields", "위험 신호 미리 보기", "<TrainingPrepScreen", "advancedNotice"]) {
     assert.ok(code.includes(needle), needle);
   }
-  // 대기 문구(D-134)는 준비 화면이 그린다.
-  assert.ok(codeOnly("src/components/TrainingPrepScreen.tsx").includes("useLoadingHint(SESSION_PREP_HINTS)"));
+  // 대기 문구(D-134)는 준비 화면이 그린다 — §99부터는 오래 걸릴 때의 안심 문구만(0초 문구는 단계 목록이 대신한다).
+  assert.ok(codeOnly("src/components/TrainingPrepScreen.tsx").includes("slowPrepHints(SESSION_PREP_HINTS)"));
 });
 
-// G652~G653 — P3 준비 화면 · 경계 판(§97.7 · OQ-U106 Resolved 2026-10-21).
-test("[G652] 준비 화면 — 큰 표시는 경과 초 · '보통 10~15초' · 진행률/단계 표기 0(D-134)", async () => {
-  const { formatElapsed, PREP_USUAL_LINE, PREP_TIPS, prepTipIndex, PREP_TIP_INTERVAL_MS } = await import("./e2Prep.ts");
-  assert.equal(formatElapsed(8400), "8초");
-  assert.equal(formatElapsed(0), "0초");
-  assert.equal(formatElapsed(-5), "0초");
-  assert.equal(formatElapsed(65000), "1분 5초");
-  assert.equal(formatElapsed(120000), "2분");
-  assert.equal(PREP_USUAL_LINE, "보통 10~15초 걸려요");
+// G652~G653 — P3 준비 화면 · 경계 판(§97.7). G652는 §99(UX D-142 · 2026-10-22)에서 "경과 초 · 보통 10~15초"를
+// "서버가 실제로 끝낸 준비 단계만 체크"로 바꿨다(사용자 원문 "보통 10~15초가 나오는데, 다른 방식으로 전환").
+test("[G652] 준비 화면 — 실제 준비 단계만 체크 · 경과 초 · 예상 시간 · 진행률 · 숫자 단계 표기 0(D-142 · D-134)", async () => {
+  const { prepStepsFor, PREP_STAGE_ORDER, PREP_ALL_DONE, advancePrepDone, prepStepState, prepAnnouncement, slowPrepHints, PREP_TIPS, prepTipIndex, PREP_TIP_INTERVAL_MS } =
+    await import("./e2Prep.ts");
+  const mod = await import("./e2Prep.ts");
+  assert.ok(!("formatElapsed" in mod) && !("PREP_USUAL_LINE" in mod), "경과 초 · '보통 10~15초' 규칙이 남았다");
+  // 단계 — 서버 순서 그대로 3개 · 채널마다 둘째 단계 말만 다르다.
+  assert.deepEqual([...PREP_STAGE_ORDER], ["scenario", "opening", "saved"]);
+  assert.equal(PREP_ALL_DONE, 3);
+  for (const channel of ["voice", "messenger"] as const) {
+    const steps = prepStepsFor(channel);
+    assert.deepEqual(steps.map((s) => s.stage), [...PREP_STAGE_ORDER], channel);
+    for (const s of steps) {
+      assert.match(s.active, /있어요$/, s.active);
+      assert.doesNotMatch(s.waiting, /있어요|했어요|끝났어요/, "대기 줄이 이미 하는 중 · 끝난 것처럼 읽힌다");
+      assert.doesNotMatch(`${s.waiting}${s.active}${s.done}`, /\d|초|%|단계/, "문면에 숫자 · 시간 · 단계 번호가 들어갔다");
+    }
+  }
+  assert.ok(prepStepsFor("voice")[1].active.includes("첫마디"));
+  assert.ok(prepStepsFor("messenger")[1].active.includes("첫 메시지"));
+  // 체크는 신호로만 오른다 — 모르는 값 무시 · 줄지 않음 · 뒤 단계 신호는 앞 단계도 끝났다는 뜻.
+  assert.equal(advancePrepDone(0, "scenario"), 1);
+  assert.equal(advancePrepDone(1, "opening"), 2);
+  assert.equal(advancePrepDone(0, "saved"), 3);
+  assert.equal(advancePrepDone(2, "scenario"), 2, "늦게 온 앞 단계 신호가 체크를 지웠다");
+  assert.equal(advancePrepDone(1, "bogus"), 1);
+  assert.equal(advancePrepDone(1, undefined), 1);
+  assert.deepEqual([0, 1, 2].map((i) => prepStepState(i, 1)), ["done", "active", "waiting"]);
+  assert.deepEqual([0, 1, 2].map((i) => prepStepState(i, 3)), ["done", "done", "done"]);
+  // 낭독 — 방금 끝난 단계 + 지금 하는 단계.
+  const voice = prepStepsFor("voice");
+  assert.equal(prepAnnouncement(voice, 0), "지금은 훈련 내용을 고르고 있어요.");
+  assert.equal(prepAnnouncement(voice, 1), "훈련 내용을 골랐어요. 지금은 상대가 할 첫마디를 만들고 있어요.");
+  assert.equal(prepAnnouncement(voice, 3), "훈련을 열 준비가 끝났어요.");
+  // 안심 문구는 오래 걸릴 때만.
+  assert.ok(slowPrepHints([{ afterMs: 0, text: "a" }, { afterMs: 8000, text: "b" }]).every((h) => h.afterMs > 0));
   assert.equal(prepTipIndex(0), 0);
   assert.equal(prepTipIndex(PREP_TIP_INTERVAL_MS * PREP_TIPS.length), 0, "요령은 돌아가며 보인다");
   const screen = codeOnly("src/components/TrainingPrepScreen.tsx");
-  for (const banned of [/\/3/, /단계 완료/, /%/, /진행률/]) assert.doesNotMatch(screen, banned, `준비 화면에 ${banned}`);
-  assert.match(screen, /aria-hidden="true" className="font-display text-\[96px\]/, "1초마다 바뀌는 큰 숫자는 낭독하지 않는다");
+  for (const banned of [/\/3/, /%/, /진행률/, /formatElapsed/, /PREP_USUAL_LINE/, /e2-wait-bar/, /text-\[96px\]/]) {
+    assert.doesNotMatch(screen, banned, `준비 화면에 ${banned}`);
+  }
+  assert.match(screen, /role="status" aria-live="polite" className="sr-only"/, "단계 변화를 낭독하는 라이브 영역이 없다");
+  assert.match(screen, /prepAnnouncement\(steps, doneCount\)/);
+  assert.match(screen, /prepStepState\(index, doneCount\)/, "체크는 서버 신호(doneCount)로만 정한다");
+  assert.match(screen, /state === "active" \? step\.active : step\.waiting/, "대기 줄에 '…하고 있어요'를 쓰면 하지 않는 일을 한다고 말한다");
+  assert.match(screen, /state === "active" \? step\.active : step\.waiting/, "대기 줄에 '…하고 있어요'를 쓰면 하지 않는 일을 한다고 말한다");
+});
+
+test("[G702] 난이도 화면 — 준비 단계는 createSession 스트리밍 신호와 최종 응답으로만 오른다(시간으로 올리지 않는다)", () => {
+  const code = codeOnly("src/app/scenarios/difficulty/page.tsx");
+  assert.match(code, /\(stage\) => setPrepDone\(\(done\) => advancePrepDone\(done, stage\)\)/);
+  assert.match(code, /setPrepDone\(PREP_ALL_DONE\);/);
+  assert.match(code, /setPrepDone\(0\);/, "다시 시작할 때 체크를 비운다");
+  const setters = code.match(/setPrepDone\(/g) ?? [];
+  assert.equal(setters.length, 3, "setPrepDone 호출이 늘었다 — 신호 아닌 곳에서 체크를 올리지 않는지 확인하라");
+  assert.doesNotMatch(code, /setInterval\([^)]*setPrepDone|setTimeout\([^)]*setPrepDone/, "시간으로 체크를 올린다");
+  assert.match(code, /doneCount=\{prepDone\}/);
+  // 클라 래퍼는 onPrepStage가 있을 때만 스트리밍으로 부르고, 단일 헬퍼(callable.ts)를 거친다(G155).
+  const wrapper = codeOnly("src/lib/api/createSession.ts");
+  assert.match(wrapper, /callCallableStream</);
+  const callable = codeOnly("src/lib/api/callable.ts");
+  assert.match(callable, /callable\.stream\(request, \{ signal: abort\.signal \}\)/);
+  assert.equal((callable.match(/rethrowAfterSignal\(err\)/g) ?? []).length, 2, "두 호출 모두 같은 감지 지점(G156)을 거친다");
+  // 서버 단계 이름과 클라 단계 이름이 같다(G700 짝).
+  const server = readFileSync("functions/src/session/prepStages.ts", "utf8");
+  assert.match(server, /CREATE_SESSION_PREP_STAGES = \["scenario", "opening", "saved"\] as const/);
 });
 
 test("[G653] 경계 판 — 진입은 세션 생성 뒤(훈련 화면 코드 무변경) · 종료는 사실 공개 문장과 함께", async () => {

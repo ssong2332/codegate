@@ -1,4 +1,4 @@
-import { callCallable } from "./callable";
+import { callCallable, callCallableStream } from "./callable";
 import type { CreateSessionRequest, CreateSessionResponse } from "./types";
 
 /**
@@ -9,6 +9,15 @@ import type { CreateSessionRequest, CreateSessionResponse } from "./types";
  */
 export async function createSession(
   request: CreateSessionRequest,
+  /** §99(UX D-142) — 넘기면 스트리밍으로 부르고, 서버가 실제로 끝낸 준비 단계 이름을 차례로 알린다(준비 화면 체크용). */
+  onPrepStage?: (stage: unknown) => void,
 ): Promise<CreateSessionResponse> {
+  if (onPrepStage) {
+    return callCallableStream<CreateSessionRequest, CreateSessionResponse, { stage?: unknown }>(
+      "createSession",
+      request,
+      (chunk) => onPrepStage(chunk?.stage),
+    );
+  }
   return callCallable<CreateSessionRequest, CreateSessionResponse>("createSession", request);
 }

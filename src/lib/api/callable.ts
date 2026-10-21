@@ -35,10 +35,56 @@ export async function callCallable<Req, Res>(name: string, request: Req): Promis
     const { data } = await callable(request);
     return data;
   } catch (err) {
-    if (isUnauthenticatedCallableError(err)) {
-      notifyUnauthenticatedCallable();
+    rethrowAfterSignal(err);
+  }
+}
+
+/** 감지(③)의 **유일한 발화 지점**(G156) — `callCallable` · `callCallableStream`이 함께 쓴다. 에러는 그대로 다시 던진다. */
+function rethrowAfterSignal(err: unknown): never {
+  if (isUnauthenticatedCallableError(err)) {
+    notifyUnauthenticatedCallable();
+  }
+  throw err;
+}
+
+/**
+ * §99(UX D-142) — 스트리밍 콜러블. 서버가 `response.sendChunk`로 보내는 조각을 `onChunk`로 넘기고, 최종 응답을 돌려준다.
+ * `callCallable`과 같은 두 가지(U1 잠금 · `functions/unauthenticated` 감지)를 그대로 한다 — 에러는 삼키지 않고 다시 던진다.
+ * ⭐ 조각을 보내지 않는 서버(옛 배포)에서도 최종 응답은 똑같이 온다(조각 0개) — 배포 순서와 무관하다.
+ * 일반 호출의 기본 제한 시간(70초 — `HttpsCallableOptions.timeout`)을 스트림에도 똑같이 건다(스트림에는 기본 제한이 없다).
+ */
+export const STREAM_CALLABLE_TIMEOUT_MS = 70_000;
+
+export async function callCallableStream<Req, Res, Chunk>(
+  name: string,
+  request: Req,
+  onChunk: (chunk: Chunk) => void,
+): Promise<Res> {
+  if (areCallablesBlocked()) {
+    throw new AuthInvalidationBlockedError(name);
+  }
+
+  const callable = httpsCallable<Req, Res, Chunk>(functionsClient, name);
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), STREAM_CALLABLE_TIMEOUT_MS);
+  try {
+    const { stream, data } = await callable.stream(request, { signal: abort.signal });
+    try {
+      for await (const chunk of stream) {
+        try {
+          onChunk(chunk);
+        } catch {
+          // 화면 표시 오류가 호출 결과를 바꾸지 않는다.
+        }
+      }
+    } catch {
+      // 스트림이 끊기면 `data`가 같은 오류로 거절된다 — 실패 처리는 아래 한 곳에서 한다.
     }
-    throw err;
+    return await data;
+  } catch (err) {
+    rethrowAfterSignal(err);
+  } finally {
+    clearTimeout(timer);
   }
 }
 

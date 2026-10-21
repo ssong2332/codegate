@@ -1,40 +1,57 @@
 "use client";
 
-// 시안 E2 준비 화면(UX D-141 (5) · OQ-U106 Resolved · §97.7) — 난이도 화면에서 "이걸로 시작"을 누른 뒤 세션이 만들어지는 동안
-// (createSession 대기 — 길게는 15초쯤) 화면 전체에 그린다. 세션 전 화면이다(훈련 화면 아님 — 통화 · 메신저는 무변경).
-// 짙은 남색 바탕 · 모래색 큰 **경과 초** · "보통 10~15초" · 끝없이 흐르는 대기 막대(진행률 아님) · 고른 난이도 설명 ·
-// 예방 요령(5초마다 교체) · 경과 시간 안심 문구(D-134 SESSION_PREP_HINTS).
-// ⛔ "1/3" · 단계 완료 · 퍼센트 표기 금지(D-134). 큰 숫자는 스크린리더에 읽히지 않는다(1초마다 바뀌어 소음이 된다).
+// 시안 E2 준비 화면(UX D-141 (5) · D-142 · §97.7 · §99) — 난이도 화면에서 "이걸로 시작"을 누른 뒤 세션이 만들어지는 동안
+// (createSession 대기) 화면 전체에 그린다. 세션 전 화면이다(훈련 화면 아님 — 통화 · 메신저는 무변경).
+// 짙은 남색 바탕 · **실제 준비 단계 3줄**(서버가 끝낸 단계만 체크 — 스트리밍 신호 · 최종 응답) · 고른 난이도 설명 ·
+// 예방 요령(5초마다 교체) · 오래 걸릴 때만 안심 문구(D-134 SESSION_PREP_HINTS).
+// ⛔ 경과 초 · 예상 시간 · 진행률 · 퍼센트 · "1/3" 표기 금지(D-142 · D-134). 시간이 지났다고 체크하지 않는다.
 import { useEffect, useRef, useState } from "react";
+import { LineIcon, LoadingDots } from "@/components/ui";
 import { useLoadingHint } from "@/components/ui/LoadingStatus";
 import { SESSION_PREP_HINTS } from "@/lib/motion/routeMotion";
-import { PREP_TIPS, PREP_USUAL_LINE, formatElapsed, prepTipIndex } from "@/lib/design/e2Prep";
+import {
+  PREP_TIPS,
+  prepAnnouncement,
+  prepStepState,
+  prepStepsFor,
+  prepTipIndex,
+  slowPrepHints,
+} from "@/lib/design/e2Prep";
+
+const SLOW_HINTS = slowPrepHints(SESSION_PREP_HINTS);
 
 export default function TrainingPrepScreen({
   meta,
+  channel,
+  doneCount,
   difficultyLabel,
   difficultyNote,
 }: {
   /** 유형 · 시나리오 · 난이도 한 줄 */
   meta: string;
+  channel: "voice" | "messenger";
+  /** 서버가 실제로 끝낸 준비 단계 수(앞에서부터 — `advancePrepDone`). */
+  doneCount: number;
   difficultyLabel: string;
   difficultyNote: string;
 }) {
-  const [elapsed, setElapsed] = useState(0);
-  const hint = useLoadingHint(SESSION_PREP_HINTS);
+  const [tipElapsed, setTipElapsed] = useState(0);
+  const hint = useLoadingHint(SLOW_HINTS);
   // 리뷰 Major — 누른 "이걸로 시작"이 사라져 포커스가 길을 잃지 않게 제목으로 옮긴다(낭독: "훈련을 준비하고 있어요").
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     headingRef.current?.focus();
   }, []);
 
+  // 예방 요령을 돌리는 데만 쓴다(화면에 시간을 그리지 않는다).
   useEffect(() => {
     const startedAt = Date.now();
-    const timer = window.setInterval(() => setElapsed(Date.now() - startedAt), 1000);
+    const timer = window.setInterval(() => setTipElapsed(Date.now() - startedAt), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
-  const tip = PREP_TIPS[prepTipIndex(elapsed)];
+  const steps = prepStepsFor(channel);
+  const tip = PREP_TIPS[prepTipIndex(tipElapsed)];
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-5 bg-deep px-[22px] pb-[calc(env(safe-area-inset-bottom)+24px)] pt-10 text-white">
@@ -42,22 +59,51 @@ export default function TrainingPrepScreen({
       <h1 ref={headingRef} tabIndex={-1} className="e2-rise font-display text-[30px] font-bold leading-[1.3] tracking-[-0.02em] outline-none [word-break:keep-all]">
         훈련을 준비하고 있어요
       </h1>
-      {/* 라이브 영역은 처음부터 두고 안쪽 문구만 바꿔 끼운다(경과 시간 안심 문구가 바뀔 때 읽힌다). */}
-      <p role="status" aria-live="polite" className="-mt-3 text-[17px] leading-[1.6] text-brand-tint [word-break:keep-all]">
+      {/* 단계 변화 낭독 — 라이브 영역은 처음부터 두고 안쪽 문구만 바꾼다(방금 끝난 단계 + 지금 하는 단계). */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {prepAnnouncement(steps, doneCount)}
+      </p>
+      <ol className="flex flex-col gap-4" aria-label="준비 단계">
+        {steps.map((step, index) => {
+          const state = prepStepState(index, doneCount);
+          return (
+            <li key={step.stage} className="flex min-h-[44px] items-center gap-3">
+              <span
+                aria-hidden="true"
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                  state === "done"
+                    ? "bg-sand text-deep"
+                    : state === "active"
+                      ? "border-2 border-sand text-sand"
+                      : "border-2 border-brand-tint/40"
+                }`}
+              >
+                {state === "done" ? (
+                  <LineIcon name="check" size={20} className="check-pop" />
+                ) : state === "active" ? (
+                  <LoadingDots />
+                ) : null}
+              </span>
+              <span
+                className={`text-[19px] leading-[1.5] [word-break:keep-all] ${
+                  state === "waiting" ? "text-brand-tint/70" : state === "active" ? "font-bold text-white" : "text-white"
+                }`}
+              >
+                {state === "done" ? step.done : state === "active" ? step.active : step.waiting}
+                <span className="sr-only">{state === "done" ? " — 끝남" : state === "active" ? " — 하는 중" : " — 기다리는 중"}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      {/* 오래 걸릴 때만(8초 · 20초) 안심 문구. */}
+      <p role="status" aria-live="polite" className="text-[17px] leading-[1.6] text-brand-tint [word-break:keep-all]">
         {hint && (
           <span key={hint} className="motion-reveal block">
             {hint}
           </span>
         )}
       </p>
-      <p aria-hidden="true" className="font-display text-[96px] font-bold leading-none tabular-nums text-sand">
-        {formatElapsed(elapsed)}
-      </p>
-      <p className="text-[19px] font-bold text-white">{PREP_USUAL_LINE}</p>
-      {/* 대기 막대 — 진행률이 아니라 "기다리는 중" 표시(끝없이 흐른다 · reduced-motion이면 멈춘 옅은 막대). */}
-      <div aria-hidden="true" className="relative h-[14px] w-full overflow-hidden bg-brand">
-        <span className="e2-wait-bar absolute inset-y-0 left-0 w-2/5 bg-sand" />
-      </div>
       <p className="border-l-[3px] border-sand pl-3 text-[19px] leading-[1.6] text-brand-tint [word-break:keep-all]">
         <b className="text-white">{difficultyLabel}</b>에서는 {difficultyNote}
       </p>

@@ -113,7 +113,7 @@ const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   "LegalLinks.tsx": false, // 법적 고지 하단 링크(2026-10-21) — 앱 자신의 고지 링크, 사기 표면 아님
   "MessengerStartNotice.tsx": false, // 세션 전 시작 고지(UX-022 start-notice, T187) — 앱 자신의 고지, 사기 표면 아님
   "ScenarioPanelGroups.tsx": false, // 시나리오 선택 판 묶음(UX D-141 · 시안 E2) — 앱 자신의 선택 UI, 사기 표면 아님
-  "TrainingPrepScreen.tsx": false, // 훈련 준비 대기 화면(UX D-141 · §97.7) — 세션 전 앱 안내(경과 초 · 예방 요령), 사기 표면 아님
+  "TrainingPrepScreen.tsx": false, // 훈련 준비 대기 화면(UX D-141 · §97.7) — 세션 전 앱 안내(실제 준비 단계 · 예방 요령), 사기 표면 아님
   "SelectScreenHeader.tsx": false, // 선택 화면 머리(UX D-141) — 뒤로 · 단계 표시 · 제목, 사기 표면 아님
   "PageToc.tsx": false, // 긴 페이지 "목록" 토글(UX D-140 · 2026-10-21) — 앱 자신의 탐색 UI, 사기 표면 아님(훈련 화면에는 두지 않는다 — G-TOC7)
   "PersonaCardInputFields.tsx": false, // §88 UX D-131 "내 정보" 선택 입력(세션 전 앱 화면) — 앱 자신의 안내 · 입력 칸, 사기 표면 아님
