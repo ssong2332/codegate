@@ -29,6 +29,7 @@ import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "./channelTransition";
 import { readEndSessionReason, resolveRecordedEndReason } from "./endReason";
 import { assertDifficultyAllowed } from "./difficultyAllowance";
+import { assertScenarioNotMerged } from "./mergedScenario";
 import { assertVoiceSelectionSourceAllowed } from "./voiceSelectionAllowance";
 import { assignFlowVariantForSession, commitSessionWithVariant } from "./variantAssignment";
 import type { MessageDoc, MessengerSkin, MessengerSkinSource, SessionDoc } from "../shared/types";
@@ -107,6 +108,8 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     // T191 S5(PRD AC-097 (b) · UX 계약 C-2) — 고급 전용 시나리오를 초급 · 중급 · **난이도 미전달**로
     // 만드는 요청을 거부한다. ⛔ 위치가 설계다: 정규화(아래 normalizeDifficultyLevel) **전** 원값으로,
     // 어떤 Firestore 읽기 · 쓰기 · LLM · 음성 호출보다 앞(거부는 그 호출 0회로 일어난다).
+    // §92(DECISIONS #206) — 합쳐진 시나리오(카드 배송)는 새 세션을 만들지 않는다(같은 자리 · 쓰기 · LLM 0회).
+    assertScenarioNotMerged(scenarioId);
     assertDifficultyAllowed(scenarioId, difficultyLevel);
     // §87(DECISIONS #198 · UX D-130) — 이 콜러블은 자가 세션만 만든다. 자가 체험에서 사기범이 참가자 본인 목소리로
     // 말하는 경로(recorded · reused)는 거부한다(UX-025 self 모드 화면 숨김의 2중 방어). 위치 = 위 난이도 게이트와 같은 이유.

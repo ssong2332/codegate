@@ -169,7 +169,7 @@ function targetTexts(item: CatalogItem): Array<{ field: string; text: string }> 
 // ── ① 존재 대조(R-B) + 건수 단언(R-D) ────────────────────────────────────────────────
 
 test("[T116/렌더-존재] 카탈로그 **도달 가능 전수**의 초기 렌더 대상 문구가 실제 렌더 결과에 등장한다", (t) => {
-  assert.equal(catalogItems.length, 12, "도달 가능 랜딩은 12종이다(credential-form 7 + app-install 5, §53/§51 커밋 D · T194-a parcel-install · T194-c-1 Q2 3종)");
+  assert.equal(catalogItems.length, 14, "도달 가능 랜딩은 14종이다(credential-form 9 + app-install 5, §53/§51 커밋 D · T194-a parcel-install · T194-c-1 Q2 3종 · §92.3 고급 전용 2종)");
 
   let compared = 0;
   const perItem: string[] = [];

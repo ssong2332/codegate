@@ -13,6 +13,9 @@ import {
   PRE_SESSION_BURDEN_NOTICE,
   partitionScenarioList,
   readFunctionsErrorReason,
+  resolveListedScenarioId,
+  SCENARIO_MERGED_LINE,
+  SCENARIO_MERGED_REASON,
   selectableDifficultyLevels,
   ADVANCED_SELF_NOTICE,
   ADVANCED_SEND_NOTICE,
@@ -148,4 +151,54 @@ test("[T191 S5 · D-107 · m6] UX-019는 고급 전용 챌린지 거부를 클�
   assert.ok(branch > 0 && branch < cloneFallback, "고급 전용 분기가 클론 미완료 분기보다 먼저여야 한다");
   assert.ok(page.includes("{ADVANCED_ONLY_NOT_CHALLENGEABLE_LINE}"));
   assert.match(ADVANCED_ONLY_NOT_CHALLENGEABLE_LINE, /챌린지를 지원하지 않습니다/);
+});
+
+// ── §92(docs/Architecture.md · DECISIONS #206 · UX D-135) — 카드 배송 흡수 · 우선순위 낮음 2종 ─────────────────────────────
+
+test("[§92 · D-135] 목록 분할 — 합쳐진 시나리오는 어느 묶음에도 없고, 우선순위 낮음은 일반 묶음 맨 뒤(안정 정렬 — 나머지 순서 무변경)", () => {
+  const entries = [
+    ["a", {}],
+    ["low1", { lowPriority: true as const }],
+    ["b", {}],
+    ["merged", { advancedOnly: true as const, mergedInto: "a" }],
+    ["low2", { lowPriority: true as const }],
+    ["x", { advancedOnly: true as const }],
+    ["c", {}],
+  ] as const;
+  const self = partitionScenarioList(entries, "self");
+  assert.deepEqual(self.regular.map(([id]) => id), ["a", "b", "c", "low1", "low2"]);
+  assert.deepEqual(self.advancedOnly.map(([id]) => id), ["x"]);
+  const send = partitionScenarioList(entries, "send");
+  assert.deepEqual(send.regular.map(([id]) => id), ["a", "b", "c", "low1", "low2"]);
+  assert.deepEqual(send.advancedOnly, []);
+  assert.equal(resolveListedScenarioId("merged", { mergedInto: "a" }), "a");
+  assert.equal(resolveListedScenarioId("b", {}), "b");
+  assert.equal(resolveListedScenarioId("ghost", undefined), "ghost");
+});
+
+test("[§92 · D-135] 실제 카탈로그 — 카드 배송 항목은 남고(제목 조회) 카드사로 합쳐지며, 우선순위 낮음은 환급금 · 택배 통관 2종뿐", () => {
+  // `src/content/scenarios`는 확장자 없는 import라 이 러너(strip-types)로 직접 로드할 수 없다 — 소스 리터럴로 대조한다.
+  const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../content/scenarios");
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"));
+  const read = (f: string) => fs.readFileSync(path.join(dir, f), "utf8");
+  const merged = files.filter((f) => /^  mergedInto: "/m.test(read(f)));
+  assert.deepEqual(merged, ["cardDeliveryCall.ts"]);
+  assert.ok(read("cardDeliveryCall.ts").includes('mergedInto: "card-company-impersonation"'));
+  assert.ok(read("cardDeliveryCall.ts").includes('title: "카드 배송 안내 전화"'), "옛 리포트 · 아카이브 제목 조회가 남는다");
+  const low = files.filter((f) => /^  lowPriority: true,/m.test(read(f))).sort();
+  assert.deepEqual(low, ["courierCustomsScam.ts", "taxRefundScam.ts"]);
+});
+
+test("[§92 · D-135] 병합 거부 사유 코드는 서버 리터럴과 같고, UX-029 · UX-017이 1줄 안내 · 프리셋 치환을 쓴다", () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+  const serverSource = fs.readFileSync(path.join(root, "functions/src/session/mergedScenario.ts"), "utf8");
+  const literal = serverSource.match(/export const SCENARIO_MERGED_REASON = "([^"]+)"/)?.[1];
+  assert.ok(literal, "서버 리터럴을 못 찾았다 — 조용한 건너뜀 금지");
+  assert.equal(SCENARIO_MERGED_REASON, literal);
+  assert.equal(/카드|배송|카드사/.test(SCENARIO_MERGED_LINE), false, "안내 1줄에 시나리오 이름 · 흐름 0");
+  const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const difficulty = strip(fs.readFileSync(path.join(root, "src/app/scenarios/difficulty/page.tsx"), "utf8"));
+  assert.ok(difficulty.includes("=== SCENARIO_MERGED_REASON"));
+  const list = strip(fs.readFileSync(path.join(root, "src/app/scenarios/voice/ScenarioListView.tsx"), "utf8"));
+  assert.ok(list.includes("resolveListedScenarioId(rawPreset, scenarios[rawPreset])"));
 });

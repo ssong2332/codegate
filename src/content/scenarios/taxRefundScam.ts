@@ -20,4 +20,6 @@ export const taxRefundScamScenario: ScenarioDoc = {
   deepvoiceLines,
   voiceMode: "generic",
   callerLabel: "02-3187-9041",
+  // §92.4(DECISIONS #206) — 보고서 R6 "유지(우선순위 낮음)": 목록 맨 뒤.
+  lowPriority: true,
 };
