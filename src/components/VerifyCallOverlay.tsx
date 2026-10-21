@@ -94,7 +94,7 @@ export default function VerifyCallOverlay({
         tabIndex={-1}
       />
 
-      <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#FAF8F5] sm:h-auto sm:max-h-[85vh] sm:max-w-md sm:rounded-[20px] sm:shadow-2xl">
+      <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#FAF8F5] sm:h-auto sm:max-h-[85dvh] sm:max-w-md sm:rounded-[20px] sm:shadow-2xl">
         {/* ── 통화 축소 바(P-20) — 오버레이가 열려 있어도 통화가 끊기지 않았음을 상시 보여준다. */}
         <div className="flex shrink-0 items-center justify-between gap-3 bg-[#22303A] px-4 py-2.5 text-white">
           <p className="min-w-0 text-sm leading-tight">

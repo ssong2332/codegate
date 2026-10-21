@@ -327,7 +327,7 @@ export default function ReplayPage() {
 
   if (state === "no-session") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>되짚어볼 대화를 찾을 세션 정보가 없습니다. 처음 화면으로 돌아가 다시 시작해 주세요.</span>
@@ -345,7 +345,7 @@ export default function ReplayPage() {
 
   if (state === "loading") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <LoadingStatus label="대화 되짚어보기를 준비하는 중입니다" />
       </main>
     );
@@ -353,7 +353,7 @@ export default function ReplayPage() {
 
   if (state === "error" || !report) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>대화 되짚어보기를 불러오지 못했습니다. 다시 시도해 주세요.</span>
@@ -376,7 +376,7 @@ export default function ReplayPage() {
     : null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-page pb-8">
+    <main className="mx-auto flex min-h-dvh max-w-xl flex-col bg-page pb-8">
       <div className="px-5 pt-[22px]">
         <p className="text-[15px] font-semibold text-ink-sub">
           {[dateLabel, scenarioTitle].filter(Boolean).join(" · ")}

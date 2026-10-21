@@ -22023,3 +22023,39 @@ G638(`replyChoreography.test.ts` — 고정 읽음 · 서버 지연 시 입력 �
 | 테스트 | G641 `webDarkNotice.test.ts` 3건 · 등록부 25(`WebDarkModeNotice` = pre-session) · 무해화 등재(false) |
 - 진단 근거: 사용자 실기 `?themedebug=1`(Chromium 138 / Whale 4 Android) — 기기 다크에서 CSS · SVG 색 변환 · canvas · img 원색 · computed 정상 · color-scheme 무시. 설정 끄면 정상(사용자 확인). §94 진단 패널은 유지.
 - 확장: 다른 브라우저는 실기로 반전이 확인되면 판정표 행의 `enabled` · 문면 · 경로만 채운다(G641이 켜진 행 = 웨일만임을 고정 — 켤 때 테스트도 함께 바꾼다).
+
+## 96. (UX fix — 2026-10-21 · 브랜치 `claude/viewport-scroll-and-toc-737f69` · 사용자 실기 신고 6 · 요청 13 · 갤럭시 S25 웨일 · 크롬 · 라이브 `eacf9af`) **주소창 두 상태에서 스크롤이 생겼다 없어졌다 하는 문제 · 긴 페이지 "목록" 토글** — implementer 기록 (UX D-140)
+
+### 96.1 금지 · 주의
+- 메신저 대화방(`src/app/session/messenger/page.tsx`)은 #360(§95)의 키보드 처리(fixed 상자 · visualViewport 높이 · 없으면 `100dvh`)를 그대로 둔다 — 이 PR은 그 파일의 오류 · 로딩 화면 3곳만 `min-h-screen → min-h-dvh`로 바꿨다(#360 병합 트리에서 확인 · G-VU1 예외 0건). 대화방은 템플릿 진입 모션 밖이라 `.page-enter { overflow: clip }`의 영향도 없다.
+- 실기 미검증. 측정은 로컬 dev(Next 16) + 크롬 기기 에뮬레이션(Android UA) + demo-test 에뮬레이터(Mock LLM)뿐이다.
+- 공용 레이아웃 변경: `globals.css`(`.page-enter { overflow: clip }` · `[data-toc-target]` · `.call-*` · `.end-compact`) · 전 화면 `min-h-screen → min-h-dvh`(29파일) · `template.tsx` 주석.
+
+### 96.2 원인
+모바일 크롬 · 웨일에서 `100vh` = 주소창이 **숨은** 높이(lvh). `min-h-screen`(=100vh) 화면은 주소창이 보이는 동안 그 높이만큼 길어 스크롤이 생기고, 스크롤하면 주소창이 숨어 다시 맞는다. 데스크톱 에뮬레이션에서는 vh = dvh라 재현되지 않으므로 **뷰포트 = 주소창 보임 높이 + `.min-h-*{min-height:<숨은 높이>px}` 주입**으로 옛 동작을 재현해 쟀다(주입 없음 = dvh 동작).
+부수 원인 3건: ① 통화 화면 상단 여백이 고정 `18vh - 24px` ② 키패드 영역 안 `sr-only` 라벨(absolute)이 스크롤 영역 밖에서 문서 높이를 +201px 늘림(기존 결함) ③ 페이지 진입 모션(6px 상승 · 드릴다운 12px 슬라이드)의 transform이 도는 동안 문서 밖으로 삐져나옴.
+
+### 96.3 실측 (전 = 100vh 재현 · 후 = 이 브랜치)
+| 화면 | 뷰포트(보임/숨음) | 전 넘침 | 후 넘침 | 비고 |
+|---|---|---|---|---|
+| 수신 벨(One UI형) | 360×650 / 740 | 90px(받기 · 거절 이름표 · 안내 줄 화면 밖) | 0 | 캡처 `ring-360x650-before/after` |
+| 벨 직전 고지 | 360×650 / 740 | 90 | 0 | |
+| 통화 중 | 360×650 / 740 | 146(종료 버튼 하단 738px) | 0(종료 버튼 608px) | 상단 여백 칸 109 → 7px |
+| 통화 중 · 키패드 열림 | 360×650 | 201 이상(dvh만 바꾼 상태에서) | 0(키패드 영역 247px 안에서 스크롤) | |
+| 종료 화면(리포트 준비 완료) | 360×650 / 740 | 90(dvh만 바꿔도 내용 자체로 75) | 0 | `end-compact` |
+| 시나리오 유형 · 히스토리 · 모아보기(빈 상태) · 챌린지 만들기 | 375×722 / 812 · 360×650 / 740 | 66~96 | 0 | |
+| 보이스피싱 시나리오 목록 · 메신저 목록 · 이용약관 | 360×650 | 내용이 김(자연 스크롤) | 자연 스크롤 유지 | 목록 토글 추가 |
+| `scrollbar-gutter: stable`(#355) | 360·375 모바일 에뮬레이션 | `clientWidth` = `innerWidth`(375 = 375) | 같음 | 겹침 스크롤바 — 모바일 영향 0 |
+
+### 96.4 구현
+- 단위: 전 화면 `min-h-dvh` · 통화 `max-h-[56dvh]` · 확인 오버레이 `sm:max-h-[85dvh]`.
+- 통화 셸: `<div class="call-top-slack" style="max-height: 18dvh-24px | 48px">`(flex `1000 1 0px` — 남는 높이를 먼저 받고 기준 0이라 최소 높이 계산에서 빠짐) · 키패드가 열렸을 때만 셸 `h-dvh flex-none` + 아래 묶음 `min-h-0`(키패드 영역이 줄어 스크롤) · `@media (max-height: 700px)` 간격만 축소.
+- 목록: `src/components/PageToc.tsx`(sticky 막대 · 펼침 목록 · Esc · 포커스 이동 · reduced-motion) + `src/lib/pagetoc/pageToc.ts`(판정 · 카테고리 표 · `groupInOrder`). 대상 5곳 — `ScenarioListView` · 메신저 목록 · 리포트 · 모아보기(수법별 · 묶음 2개 이상이면 묶음 머리줄 sticky를 `top-[56px]`로) · `LegalDocumentView`.
+
+### 96.5 테스트
+`viewportUnits.test.ts` 5건(G-VU1 100vh 계열 재유입 0 · G-VU2 예외 만료 · G-VU3 `.page-enter` clip · G-VU4 통화 여백 칸 · G-VU5 700px 축소에 글자 크기 없음) · `pageToc.test.ts` 8건(G-TOC1~8 — 판정 · reduced-motion · 순서 보존 · 보이스 시나리오 전부 카테고리 · scroll-margin = 상수 · 대상 화면 고정 · 훈련 화면 금지 · 접근성 배선) · 등록부 2벌 +1(`PageToc` — 사기 표면 아님 · 세션 밖).
+
+### 96.6 배포 · 남은 일
+- 배포 = **Hosting만**(functions 변경 0).
+- 실기 확인: S25 웨일 · 크롬에서 ① 수신 벨 이름표 · 안내 줄이 주소창이 보일 때도 보이는가 ② 첫 화면 · 시나리오 유형에서 스크롤이 생기지 않는가 ③ 통화 중 · 키패드 종료 버튼 ④ 목록 토글 이동.
+- #360과 통합: 대화방 오류 · 로딩 화면 3곳 `min-h-dvh` · G-VU1 예외 0건(완료).

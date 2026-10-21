@@ -58,7 +58,7 @@ export default function MessengerStartNotice({
   }, []);
 
   return (
-    <main className="flex min-h-screen flex-col bg-page">
+    <main className="flex min-h-dvh flex-col bg-page">
       {/* 상단 바 — "훈련 종료"만(그 밖의 요소 0). G449: 오른쪽 끝 고정. */}
       <div className="flex justify-end px-4 py-2.5">
         <EndTrainingButton onClick={onEndTraining} />

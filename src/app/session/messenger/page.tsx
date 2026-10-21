@@ -467,7 +467,7 @@ export default function MessengerSessionPage() {
           ? "선택된 메신저 시나리오 정보를 찾을 수 없습니다. 시나리오를 다시 선택해 주세요."
           : "채팅 정보를 불러오지 못했습니다. 다시 시도해 주세요.";
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-base text-danger">
           <span aria-hidden="true">⚠</span>
           <span>{message}</span>
@@ -483,7 +483,7 @@ export default function MessengerSessionPage() {
 
   if (pageState !== "ready" || !scenario || startNotice === "pending") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <LoadingStatus label="채팅을 불러오는 중입니다" />
       </main>
     );
@@ -534,7 +534,7 @@ export default function MessengerSessionPage() {
   // ⛔ 대화 목록을 그리지 않는다(AC-088 (b)).
   if (startNotice === "ended-footer") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p className="text-base font-semibold text-ink" role="status">
           대화가 종료되었습니다.
         </p>
