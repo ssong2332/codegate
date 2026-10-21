@@ -176,12 +176,26 @@ test("[2026-10-21 지역 부분 일치] 기관명 · 은행명 안의 지명은 
   assert.equal(block.state, "R-1");
   assert.deepEqual(block.items.map((i) => i.key), ["name"], "이름만 — 사는 곳은 기관명 안이라 제외");
 
-  for (const text of ["서울중앙지방검찰청", "서울경찰청", "부산은행 계좌", "서울특별시경찰청"]) {
-    assert.equal(personaMatchTokens(card.items[2]!).concat(["부산"]).some((tk) => regionMentioned(text, tk)), false, text);
+  const seoul = personaMatchTokens(card.items[2]!);
+  const seoulSays = (text: string) => seoul.some((tk) => regionMentioned(text, tk));
+  // 기관명 · 고유명사 안(붙여 씀 · 띄어 씀 — 리뷰 Major 1 · 2).
+  for (const text of [
+    "서울중앙지방검찰청", "서울경찰청", "서울특별시경찰청", "서울 중앙지방검찰청", "서울 경찰청", "서울 지방법원",
+    "서울은평경찰서", "서울도봉경찰서", "서울이랜드", "서울사이버대",
+  ]) {
+    assert.equal(seoulSays(text), false, text);
   }
-  for (const text of ["서울 사시죠?", "서울에 거주하시고요", "서울이시고", "지금 서울사시는", "서울특별시에 사시는", "서울, 맞으시죠", "서울시에 계시죠", "사시는 곳이 서울"]) {
-    assert.equal(personaMatchTokens(card.items[2]!).some((tk) => regionMentioned(text, tk)), true, text);
+  assert.equal(regionMentioned("부산은행 계좌로", "부산"), false, "은행명");
+  // 주소 문맥 · 줄 끝 · 문장부호.
+  for (const text of [
+    "서울 사시죠?", "서울에 거주하시고요", "서울이시고", "지금 서울사시는", "서울특별시에 사시는", "서울, 맞으시죠", "서울시에 계시죠",
+    "사시는 곳이 서울", "사시는 데가 서울시", "서울시?", "서울인데요", "서울 출신이시죠",
+  ]) {
+    assert.equal(seoulSays(text), true, text);
   }
+  assert.equal(regionMentioned("대전광역시 거주하시는", "대전광역시"), true);
+  assert.equal(regionMentioned("부산 쪽에 사시죠", "부산"), true);
+  assert.equal(regionMentioned("부산쪽이시죠", "부산"), true);
   // 주소 문맥으로 말하면 그대로 R-1에 든다.
   const said = buildPersonaBlock(card, [scammer(0, "서울에 사시는 홍길순 님 맞으시죠?"), user(1, "네")], false)!;
   assert.deepEqual(said.items.map((i) => i.key).sort(), ["name", "region"]);
