@@ -1,5 +1,5 @@
 // 카탈로그 항목 → Firestore 문서 변환 (T68). 부수효과 없는 순수 함수라 단위 테스트 대상이다.
-import type { InCallSmsItem } from "../scenarios/inCallSms";
+import { buildOtpLiveCompareLine, type InCallSmsItem } from "../scenarios/inCallSms";
 import type { FlowVariantSms } from "../scenarios/flowVariants";
 import { buildLiveConfirmResultInstruction, confirmResultPurposeFor } from "./confirmResult";
 import { DEFAULT_MOCK_SCREEN_KIND, resolveMockScreenKind } from "../scenarios/mockScreens";
@@ -116,9 +116,13 @@ export function buildInCallSmsResponse(
   // 위험을 만들었다(텍스트 폴백에서 3/7 실측). Live는 서버가 참가자 발화를 실시간으로 보지 못해 서버 대조도 할 수 없다
   // ⇒ 실시간 경로의 대조는 이번 수정에서 뺐다(대안 비교는 §78.4). 응답은 #300 이전과 같다.
   // §81 — 도착 지시에 자리표시자가 있으면 세션 은행명으로(실시간 경로는 이 문자열이 그대로 모델에 간다).
-  const announceInstruction = input.fictionalBankName
+  const announce = input.fictionalBankName
     ? applyFictionalBank(item.announceInstruction, input.fictionalBankName)
     : item.announceInstruction;
+  // ⭐ §101 추가(사용자 실기 신고 — Live에서 틀린 인증번호를 "확인됐다"고 넘김) — 위 ⛔(§78 · L1)를 바꾼다: 이 응답은 Live 경로(`deliverInCallSms`)만
+  // 받으므로 인증번호 문자에 한해 대조 1줄을 **도착 때 한 번** 덧붙인다. 텍스트 폴백은 이 함수를 거치지 않는다(서버 대조 `otpCheck.ts` 그대로).
+  const announceInstruction =
+    item.kind === "otp" && item.otpCode ? `${announce} ${buildOtpLiveCompareLine(item.otpCode)}` : announce;
   return { smsId: item.smsId, announceInstruction };
 }
 

@@ -11,6 +11,7 @@
 //   - `fakeLandingId`·`otpCode`·원시 타임스탬프를 스냅샷에 싣기 (§15.6 G19 — 사후 열람 화면에
 //     가짜 랜딩 재진입 컨트롤·복사 가능 필드를 만들 수 있다)
 import type { InCallSmsKind, SmsTimelineEntry, SmsTimelineEvent } from "../shared/types";
+import type { LandingProgressStep } from "../scenarios/mockScreens";
 // T123 — 승격 객체 조립은 **두 표면이 공유하는 단일 지점**이 소유한다(§31.6 G137). 여기서 다시
 // 조립하면 표면마다 "속은 순간"의 문면 규칙이 조용히 갈라진다.
 import type { DeceivedMomentResult } from "./analyzeConversation";
@@ -34,6 +35,13 @@ export type SmsTimelineSource = {
    * 함께 신설하면 같은 순간이 문자 항목과 순간 주석으로 **두 번 렌더**된다(§15.6 G17).
    */
   landingSubmittedAtMs?: number;
+  /**
+   * §101 — 여러 화면 사이트(`MockScreenItem.stepScreens`)의 이체 전 단계 버튼을 누른 시각(부재 = 누르지 않음). 위 제출 시각과 같이
+   * **승격 판정 입력 전용**이다(표시 이벤트 0 — G17).
+   */
+  landingIdentityAtMs?: number;
+  landingConvertedAtMs?: number;
+  landingAmountAtMs?: number;
   /**
    * T123 — 제출된 랜딩의 카탈로그 조회 키.
    * ⛔ **승격 판정 입력으로만 쓰고 `SmsTimelineEntry`(리포트 스냅샷)에는 절대 싣지 않는다** —
@@ -208,7 +216,43 @@ export type LandingSubmitCatalogItem = {
   landingId: string;
   momentTactic: string;
   correctAction: string;
+  /** §101 — 여러 화면 사이트의 이체 전 단계 문면(부재 = 한 화면 폼 — 단계 시각을 보지 않는다). */
+  progressMoments?: Readonly<Record<LandingProgressStep, { momentTactic: string; correctAction: string }>>;
 };
+
+/**
+ * ⭐ §101 판정표(2026-10-21 사용자 요청 — 자산 검수 사이트) — 한 문자 문서(= 한 화면)에서 **가장 깊은 단계 1건**만 고른다(위에서 첫 매치).
+ *
+ * | # | 조건 | 승격 문면 |
+ * |---|---|---|
+ * | 1 | `landingSubmittedAtMs` 있음(마지막 이체 확인) | 항목 본체 `momentTactic` · `correctAction`(종전과 같다) |
+ * | 2 | 항목에 `progressMoments` 있음 ∧ `landingAmountAtMs` 있음 | `progressMoments.amount` |
+ * | 3 | 〃 ∧ `landingConvertedAtMs` 있음 | `progressMoments.converted` |
+ * | 4 | 〃 ∧ `landingIdentityAtMs` 있음 | `progressMoments.identity` |
+ * | 5 | 그 외(링크만 열고 닫음 · 통화 종료 · 한 화면 폼의 단계 시각) | 승격 0 — 속지 않음(좋은 대응) |
+ *
+ * ⚠️ 1건만 내는 이유: 같은 앵커 turnIndex에 순간이 2건 이상이면 `deceivedMoments` ↔ 주석 메시지 1:1 전제가 깨진다(§15.6 G16).
+ * ⚠️ 단계 기록 일부가 유실돼도(예: identity 실패 · converted 성공) 더 깊은 쪽이 이긴다 — 순서 검증을 하지 않는다.
+ */
+export function resolveLandingSubmitMomentItem(
+  doc: Pick<SmsTimelineSource, "landingSubmittedAtMs" | "landingIdentityAtMs" | "landingConvertedAtMs" | "landingAmountAtMs">,
+  item: LandingSubmitCatalogItem,
+): { landingId: string; momentTactic: string; correctAction: string } | undefined {
+  if (doc.landingSubmittedAtMs !== undefined) {
+    return { landingId: item.landingId, momentTactic: item.momentTactic, correctAction: item.correctAction };
+  }
+  const moments = item.progressMoments;
+  if (!moments) return undefined;
+  const step: LandingProgressStep | undefined =
+    doc.landingAmountAtMs !== undefined
+      ? "amount"
+      : doc.landingConvertedAtMs !== undefined
+        ? "converted"
+        : doc.landingIdentityAtMs !== undefined
+          ? "identity"
+          : undefined;
+  return step ? { landingId: item.landingId, ...moments[step] } : undefined;
+}
 
 export type PromoteSmsLandingSubmitsResult = {
   /** 승격 항목이 병합된 순간 배열(정렬은 뒤이어 도는 `applyMockScreens`가 한 번에 끝낸다). */
@@ -222,7 +266,7 @@ export type PromoteSmsLandingSubmitsResult = {
  *
  * | 조건 | 결과 |
  * |---|---|
- * | `landingSubmittedAtMs` 부재 | 승격 안 함(링크만 눌러 보고 닫은 세션 = 0건, AC-080 (b)) |
+ * | `landingSubmittedAtMs` 부재 | 승격 안 함(링크만 눌러 보고 닫은 세션 = 0건, AC-080 (b)) — ⭐ §101 예외: 여러 화면 사이트는 이체 전 단계 시각으로도 승격한다(위 `resolveLandingSubmitMomentItem` 표) |
  * | `fakeLandingId`가 카탈로그에 없음 | 승격 안 함(문면 원천이 없으면 순간을 만들지 않는다) |
  * | 앵커 미해결 | 승격 안 함(§15.9.5 e-2 규칙 3과 동일 — 되감기 1:1 전제 보호) |
  * | ⭐ `anchorTurnIndex < 0` | **승격 안 함**(아래 G135) |
@@ -245,7 +289,14 @@ export function promoteSmsLandingSubmits(
   sessionCreatedAtMs: number,
   catalog: readonly LandingSubmitCatalogItem[] = [],
 ): PromoteSmsLandingSubmitsResult {
-  const submitted = docs.filter((doc) => doc.landingSubmittedAtMs !== undefined);
+  // §101 — 이체 전 단계 시각만 있는 문서도 후보다(승격 여부 · 문면은 아래 `resolveLandingSubmitMomentItem`이 카탈로그와 함께 정한다).
+  const submitted = docs.filter(
+    (doc) =>
+      doc.landingSubmittedAtMs !== undefined ||
+      doc.landingIdentityAtMs !== undefined ||
+      doc.landingConvertedAtMs !== undefined ||
+      doc.landingAmountAtMs !== undefined,
+  );
   if (submitted.length === 0) {
     return { deceivedMoments: [...deceivedMoments], promotedCount: 0 };
   }
@@ -253,9 +304,10 @@ export function promoteSmsLandingSubmits(
 
   const promoted: DeceivedMomentResult[] = [];
   for (const doc of submitted) {
-    const item = doc.fakeLandingId
+    const catalogItem = doc.fakeLandingId
       ? catalog.find((c) => c.landingId === doc.fakeLandingId)
       : undefined;
+    const item = catalogItem ? resolveLandingSubmitMomentItem(doc, catalogItem) : undefined;
     if (!item) continue;
     const anchor = resolveAnchor(doc.anchorScammerTurn, sortedMessages, sessionCreatedAtMs);
     // ⭐ G135 — 두 조건 **모두**여야 한다. `anchorResolved`만 보면 turnIndex -1이 통과한다.

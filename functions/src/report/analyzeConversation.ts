@@ -28,7 +28,7 @@ import {
 } from "../scenarios/tacticFlavor";
 import type { MessengerChannel, RiskSignal, RiskSignalKind } from "../shared/types";
 import { resolveTacticCategory, type TacticCategory } from "./tacticCategory";
-import { CODE_DIGITS_WITH_ENDING, CODE_HANGUL_DIGITS } from "../shared/spokenDigits";
+import { CODE_DIGITS_WITH_ENDING, CODE_HANGUL_DIGITS, extractSpokenCodes } from "../shared/spokenDigits";
 
 /** 대처법·예방 조언 문구를 고르는 채널. 부재는 "voice"다(`MessageDoc.channel` 하위호환 규칙과 같다). */
 export type AdviceChannel = MessengerChannel;
@@ -360,8 +360,28 @@ const SECRECY_PROMISE =
 const BANK_CONTEXT = /은행|거래/;
 const BANK_NAME = /[가-힣]{1,6}은행|농협|우체국|새마을\s*금고|신협|수협|[가-힣]{1,4}\s*뱅크/;
 
-function resolveRiskSignalKind(scammerText: string, replyText: string): RiskSignalKind | undefined {
+// ⭐ 사용자 결정 2026-10-21(§101.2 후속 — *"위험 신호로"*) — 인증번호를 요구받고 **문자 속 정답과 다른 번호**를 불러 준 줄은 속음이 아니라
+// 가짜 정보와 같은 위험 신호(`fake_info` — 문구 · 경로 재사용)다. 정답은 그 시나리오 카탈로그의 인증번호(`listOtpItems` — 호출부가 넘긴다).
+// | # | If | Then |
+// |---|---|---|
+// | W0 | 정답 목록이 비었다(인증번호 문자가 없는 시나리오 · 옛 호출부) | 대조 안 함 — 종전 판정 그대로 |
+// | W1 | 바로 앞 사기범 대사가 인증번호를 묻지 않았다(`OTP_ASKED` — `roleplay/otpCheck.ts`의 물음 · 되물음 어형과 같은 표) | 대조 안 함 |
+// | W2 | 답에서 뽑은 숫자열(`extractSpokenCodes` — 리포트 (D3) · (D4)와 같은 규칙) 중 정답과 자릿수가 같은 것이 없다 | 대조 안 함(전화 · 금액 등) |
+// | W3 | 같은 자릿수 후보 중 하나라도 정답과 같다 | 대조 결과 "정답" — 종전처럼 속음 |
+// | W4 | 같은 자릿수 후보가 있고 모두 정답과 다르다 | **오답** — 숫자 응답만으로는 속음이 아니다(H1 · H2 실제 제공은 그대로 속음) · 위험 신호 `fake_info` |
+const OTP_ASKED =
+  /인증\s*(?:번호|코드)|번호가[^.?!]{0,24}(?:안\s*맞|맞지\s*않|일치하지\s*않|틀|다르|다릅)|문자[^.?!]{0,20}다시[^.?!]{0,20}불러/;
+
+function isWrongOtpReply(scammerText: string, replyText: string, otpCodes: readonly string[]): boolean {
+  if (otpCodes.length === 0 || !OTP_ASKED.test(scammerText)) return false;
+  const lengths = new Set(otpCodes.map((code) => code.length));
+  const candidates = extractSpokenCodes(replyText).filter((code) => lengths.has(code.length));
+  return candidates.length > 0 && !candidates.some((code) => otpCodes.includes(code));
+}
+
+function resolveRiskSignalKind(scammerText: string, replyText: string, otpCodes: readonly string[] = []): RiskSignalKind | undefined {
   if (FAKE_INFO_MARKER.test(replyText)) return "fake_info";
+  if (isWrongOtpReply(scammerText, replyText, otpCodes)) return "fake_info";
   if (isResistanceForReport(replyText)) return undefined;
   if (SECRECY_PROMISE.test(replyText)) return "secrecy_promise";
   if (!REFUSAL_IN_ANSWER.test(replyText) && BANK_CONTEXT.test(scammerText) && BANK_NAME.test(replyText)) {
@@ -559,6 +579,8 @@ export function analyzeConversation(
   messages: AnalysisMessage[],
   sessionCreatedAtMs: number,
   weakenedTactics: string[],
+  /** 사용자 결정 2026-10-21 — 이 세션 시나리오의 인증번호 정답(카탈로그). 부재 · 빈 배열 = 대조 안 함(종전 판정 — 위 W0). */
+  otpCodes: readonly string[] = [],
 ): ConversationAnalysis {
   // ⭐ §55 D3 — **낭독되지 않은 문서는 분석에 넣지 않는다.** 넣으면 ⓐ 말한 적 없는 대사가
   // `tacticsUsed`("시도된 수법")에 오르고 ⓑ 바로 뒤 참가자 발화와 **짝지어져** 없는 "속은 순간"을
@@ -595,11 +617,13 @@ export function analyzeConversation(
       const reply = sorted[j];
       const fake = FAKE_INFO_MARKER.test(reply.textMasked);
       const resisted = isResistanceForReport(reply.textMasked);
+      // 사용자 결정 2026-10-21 — 인증번호 오답(위 W4)은 숫자 응답에서 오는 순응 판정을 끈다(실제 제공 H1 · H2는 그대로).
+      const wrongOtp = isWrongOtpReply(msg.textMasked, reply.textMasked, otpCodes);
       const complied =
         COMPLIANCE_PATTERN.test(reply.textMasked) ||
         isHandoffPromiseReply(msg.textMasked, reply.textMasked) ||
         isContextualCompliance(msg.textMasked, reply.textMasked);
-      if (!fake && (isHardDisclosure(msg.textMasked, reply.textMasked) || (!resisted && complied))) {
+      if (!fake && (isHardDisclosure(msg.textMasked, reply.textMasked) || (!resisted && complied && !wrongOtp))) {
         userReply = reply;
         break;
       }
@@ -607,7 +631,7 @@ export function analyzeConversation(
     for (let j = i + 1; j < sorted.length && sorted[j].role === "user"; j += 1) {
       const reply = sorted[j];
       if (reply === userReply) continue;
-      const kind = resolveRiskSignalKind(msg.textMasked, reply.textMasked);
+      const kind = resolveRiskSignalKind(msg.textMasked, reply.textMasked, otpCodes);
       if (kind) riskSignals.push({ turnIndex: reply.turnIndex, timeLabel: elapsedLabel(reply, sessionCreatedAtMs), kind });
     }
     if (!userReply) continue;

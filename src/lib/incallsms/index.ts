@@ -3,6 +3,7 @@ export {
   formatSmsClock,
   latestSmsId,
   needsTimeSeparator,
+  prefilledAccountOf,
   sortByArrival,
   spellOutOtp,
   splitBodyAtOtp,

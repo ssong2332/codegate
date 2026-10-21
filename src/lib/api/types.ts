@@ -223,7 +223,14 @@ export type DeliverInCallSmsResponse = {
 };
 // T123/AC-080 — `landing_submitted` = "그 문자가 연 가짜 랜딩의 폼을 제출했다"는 **사실 하나**.
 // ⛔ 참가자 입력값(계좌번호·예금주명)을 담을 필드가 아래 요청 타입에 **존재하지 않는다**(AC-045).
-export type InCallSmsEvent = "opened" | "link_tapped" | "landing_submitted";
+// §101 — 여러 화면 사이트(검찰 고급 자산 검수 사이트)의 이체 전 단계 버튼 3값(본인 확인 · 코인 전환 · 금액 입력 뒤 다음). 고정 값뿐이다.
+export type InCallSmsEvent =
+  | "opened"
+  | "link_tapped"
+  | "landing_submitted"
+  | "landing_identity"
+  | "landing_converted"
+  | "landing_amount";
 export type RecordInCallSmsEventRequest = {
   sessionId: string;
   smsId: string;

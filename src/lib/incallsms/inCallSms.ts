@@ -24,7 +24,18 @@ export type InCallSmsView = {
   /** 도착 순서 정렬용(ms). 서버 Timestamp가 아직 반영되기 전이면 0. */
   arrivedAtMs: number;
   openedAtMs?: number;
+  /**
+   * §101 추가 · UX D-115 — 문자 본문 계좌 줄의 세션 은행명 · 계좌번호(서버 `buildDoc.ts`가 실은 구조화 필드 — 둘 다 있을 때만 짝으로).
+   * 이 문자가 연 이체 랜딩의 수취 계좌 칸을 미리 채우는 원천이다(두 번째 리터럴 0).
+   */
+  bankName?: string;
+  accountNumber?: string;
 };
+
+/** §101 추가 · D-115 — 이 문자의 수취 계좌 표기("{은행명} {계좌번호}"). 둘 중 하나라도 없으면 미리 채우지 않는다. */
+export function prefilledAccountOf(sms: Pick<InCallSmsView, "bankName" | "accountNumber">): string | undefined {
+  return sms.bankName && sms.accountNumber ? `${sms.bankName} ${sms.accountNumber}` : undefined;
+}
 
 // ⛔ T191(문자 도달 조건 · PRD AC-099 (d)) — 예전 `pickDueInCallSms`(카탈로그 고정 턴 `afterScammerTurns <= 사기범 턴`
 // 이면 화면이 발송을 요청)는 폐기했다. 발송 판정은 전부 서버(`functions/src/inCallSms/smsGate.ts`)이고, 화면은 사용자

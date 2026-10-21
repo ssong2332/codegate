@@ -45,6 +45,9 @@ import {
   PROSECUTION_WALLET_COIN_TACTIC,
   PROSECUTION_WALLET_EXTRA_TACTICS,
   PROSECUTION_WALLET_PERSONA,
+  PROSECUTION_SITE_COIN_TACTIC,
+  PROSECUTION_SITE_EXTRA_TACTICS,
+  PROSECUTION_SITE_PERSONA,
 } from "./prosecutionCooperationCall.prompt";
 import { extractTacticLabel } from "./tacticFlavor";
 import { hasVerifyIntercept } from "./verifyIntercept";
@@ -235,6 +238,16 @@ const PROSECUTION_WALLET_STAGES_TAIL = [
   "상대가 거부하거나 의심하면 구속영장 집행 · 계좌 동결 · 가족 조사로 위협을 올리고, 오늘만 마치면 조용히 끝난다는 회유와 번갈아 쓴다.",
 ] as const;
 const PROSECUTION_WALLET_DECISION_MOMENT = "문자 링크로 연 보관 지갑 화면에서 지갑 번호와 금액을 넣고 전송하기를 누르는 순간";
+// §101(2026-10-21 사용자 요청) — 검찰 고급 fv-h3vn: 통화는 문자로 보낸 자산 검수 사이트로 보내고 진행만 재촉한다. 전환 · 이체 절차는 말로 설명하지 않고
+// 참가자가 모의 사이트(`asset-check-site`)에서 직접 누른다. 앞 2단계(자산 진술)와 끝 2단계(추가 요구 · 거부 시 격상)의 뜻은 fv-c8wq와 같다.
+const PROSECUTION_SITE_STAGES_TAIL = [
+  PROSECUTION_WALLET_STAGES_TAIL[0],
+  "문자로 보낸 자산 검수 링크로 사이트에 들어가 본인 확인부터 하고 화면 안내대로만 진행하라고 한다. 거래소 가입 · 계좌 이동 · 코인 구매 · 지갑 송금의 순서나 방법은 말로 설명하지 않는다.",
+  "사이트를 진행하는 동안 \"지금 어느 화면까지 하셨어요?\"처럼 한 단계마다 확인하고, 멈추면 오늘 안에 이체까지 끝내야 한다고 재촉한다. 막혔다고 하면 화면에 나온 대로 누르라고만 한다.",
+  "사이트에서 이체를 마치면 결과를 알린 뒤 곧바로 남은 예금 · 적금 · 대출 가능액도 검수 대상이라며 같은 사이트에서 추가로 진행하라고 요구하고, 피해자로 확인되면 돌려준다고 안심시킨다. 검수 기간이나 나중에 연락하겠다는 말로 통화를 정리하지 않는다.",
+  PROSECUTION_WALLET_STAGES_TAIL[4],
+] as const;
+const PROSECUTION_SITE_DECISION_MOMENT = "문자 링크로 연 자산 검수 사이트에서 본인 확인 · 코인 전환 · 금액 입력 · 보관 지갑 이체를 누르는 순간";
 const PROSECUTION_SOURCES = ["C05", "C06", "C07", "C08", "S3", "S25", "S28"];
 
 // 음성 시나리오용 "다른 번호" 수법(가족 · 손주 고급 — §2.6.3 "딥보이스 + 다른 번호로 연락", 사례 S9 · C18).
@@ -1251,6 +1264,33 @@ const SPECS: VariantSpec[] = [
     channels: ["voice", "sms"],
     demandStages: 3,
     decisionMoment: PROSECUTION_WALLET_DECISION_MOMENT,
+    sources: PROSECUTION_SOURCES,
+    // §101 — 내용 무변경 · 배정 은퇴(옛 세션 · 리포트 해석용). 새 세션은 fv-h3vn.
+    retired: true,
+  },
+  // ⭐ §101(2026-10-21 사용자 요청 — *"문자로 보내서 웹사이트에 접속해서 진행하는 거로 가자"*) — fv-c8wq의 둘째 문자(보관 지갑 안내 + 지갑 번호 · 금액 입력
+  // 화면)를 자산 검수 사이트(`prosecution-asset-site-link` → `asset-check-site` — 본인 확인 → 검수 대상 자산 → 코인 전환 → 금액 → 보관 지갑 이체)로 바꾸고,
+  // 통화는 사이트로 보내 진행만 재촉한다. 판정 = 사이트에서 누른 가장 깊은 단계 1건(§101 판정표 — `report/smsTimeline.ts`).
+  {
+    variantId: "fv-h3vn",
+    scenarioId: "prosecution-cooperation-call",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(PROSECUTION_STAGES[0], PROSECUTION_CASE_LINK_STAGE, PROSECUTION_STAGES[1], PROSECUTION_STAGES[2], ...PROSECUTION_SITE_STAGES_TAIL),
+    dropLabels: ["수사 서류 언급", "코인 구매·송금 요구"],
+    extraTactics: [PROSECUTION_CASE_LINK_TACTIC, PROSECUTION_SITE_COIN_TACTIC, ASSET_INFO, ...PROSECUTION_SITE_EXTRA_TACTICS],
+    exitBlock: ["D2_secrecy", "D4_procedural_legitimacy", "D5_call_retention"],
+    sms: [
+      { purpose: "link", smsId: "prosecution-case-link", required: true, notBeforeUserTurns: 2 },
+      { purpose: "transfer", smsId: "prosecution-asset-site-link", required: true, notBeforeUserTurns: 5 },
+    ],
+    legs: [
+      { callerLabel: "검찰 수사관", personaPrompt: PROSECUTION_SITE_PERSONA, speakerGender: "male", minUserTurns: 0, maxUserTurns: 20 },
+    ],
+    ...ADVANCED,
+    channels: ["voice", "sms"],
+    demandStages: 3,
+    decisionMoment: PROSECUTION_SITE_DECISION_MOMENT,
     sources: PROSECUTION_SOURCES,
   },
 ];
