@@ -42,9 +42,10 @@ import { Button, LoadingDots } from "@/components/ui";
 import PersonaCardInputFields from "@/components/PersonaCardInputFields";
 import {
   EMPTY_PERSONA_CARD_FORM,
-  PERSONA_INPUT_COPY,
   personaCardErrorLine,
   personaCardInputVisible,
+  personaCardKindFor,
+  personaInvalidLine,
   readPersonaCardForm,
   type PersonaCardForm,
   type PersonaCardInput,
@@ -126,6 +127,8 @@ export default function ChallengeCreatePage() {
   const [personaForm, setPersonaForm] = useState<PersonaCardForm>(EMPTY_PERSONA_CARD_FORM);
   const [personaError, setPersonaError] = useState<string | null>(null);
   const showPersonaInput = personaCardInputVisible(scenarioId, difficultyLevel, scenario?.channel);
+  // §92(UX D-135) — 시나리오 카드 종류가 칸 · 안내 · 오류 문면을 정한다(시나리오를 바꾸면 그 종류 칸만 보낸다).
+  const personaKind = personaCardKindFor(scenarioId);
 
   const isSubmitting = state === "submitting";
 
@@ -134,9 +137,9 @@ export default function ChallengeCreatePage() {
     // §88 — 입력 블록이 보일 때만 읽는다. 형식 오류면 만들지 않고 1줄로 알린다.
     let personaCardInput: PersonaCardInput | undefined;
     if (showPersonaInput) {
-      const read = readPersonaCardForm(personaForm);
+      const read = readPersonaCardForm(personaForm, undefined, personaKind ?? undefined);
       if (!read.ok) {
-        setPersonaError(PERSONA_INPUT_COPY.invalid);
+        setPersonaError(personaInvalidLine(personaKind));
         setState("error-persona");
         return;
       }
@@ -159,7 +162,7 @@ export default function ChallengeCreatePage() {
       setState("success");
     } catch (err) {
       const { code, reason } = getFunctionsErrorInfo(err);
-      const personaLine = personaCardErrorLine(reason);
+      const personaLine = personaCardErrorLine(reason, personaKind);
       if (personaLine) {
         // §88 — 서버의 받는 분 정보 거부(형식 · 대상 밖). 아래 failed-precondition 분기와 섞이지 않게 먼저 가른다.
         setPersonaError(personaLine);
@@ -432,7 +435,13 @@ export default function ChallengeCreatePage() {
 
       {/* §88(UX D-131 (1)) — 표시 이름 칸 아래. 처음부터 펼침 · 세 칸 모두 비움(선택). */}
       {showPersonaInput && (
-        <PersonaCardInputFields mode="send" value={personaForm} onChange={setPersonaForm} disabled={isSubmitting} />
+        <PersonaCardInputFields
+          mode="send"
+          kind={personaKind ?? undefined}
+          value={personaForm}
+          onChange={setPersonaForm}
+          disabled={isSubmitting}
+        />
       )}
 
       {state === "error-persona" && personaError && (

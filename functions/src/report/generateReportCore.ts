@@ -45,6 +45,7 @@ import {
 } from "./mockScreenTimeline";
 import type { GenerateReportResponse } from "./types";
 import { buildPersonaBlock } from "./personaBlock";
+import { personaCardKind } from "../scenarios/personaCardCatalog";
 
 export async function generateReportForSession(sessionId: string): Promise<GenerateReportResponse> {
   const db = getFirestore();
@@ -292,7 +293,14 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   // ②-g T194-b(§84.3.6 · D-120) — "상대가 먼저 꺼낸 '내 정보'" 판정. 위에서 이미 읽은 `messages`(turnIndex 순 · notSpoken 표시 포함)와
   // 세션 문서 카드만 쓴다(추가 read 0 · 통화 중 쓰기 0). 카드 없는 세션 = undefined = 필드 부재(R-4).
   // ⚠️ `selfDialIntercepted`는 U2(T194-d · AC-105) 전이라 항상 false — R-3은 그 PR이 이 인자를 서버 기록으로 채울 때 열린다.
-  const personaBlock = buildPersonaBlock(session.personaCard, messages, false);
+  // §92 — 협박형 시나리오의 카드면 교훈 문면 분기(context). 기관형 · 대상 밖 = 부재(종전 문면).
+  const personaKind = personaCardKind(session.scenarioId);
+  const personaBlock = buildPersonaBlock(
+    session.personaCard,
+    messages,
+    false,
+    personaKind === "child-threat" || personaKind === "self-threat" ? personaKind : undefined,
+  );
 
   const reportDoc: ReportDoc = {
     reportId: sessionId,

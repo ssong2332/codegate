@@ -773,6 +773,9 @@ function buildDifficultyBlock(
  * ⭐ §84.14.4 갱신 정본 — 원래 꼬리 첫 문장이던 이름 단정 금지 **예외 문장은 삭제됐다**: 대상 4종은 전부 institution이라
  * [진행 강제]에 그 금지 규칙이 없고, 예외 문장이 존재하지 않는 규칙을 가리키는 거짓 문장이 된다(kidnapping 제외 · DECISIONS #180).
  * 대상에 비-institution 시나리오가 들어오면 G569 가드가 실패한다(그때 예외 문장 재판정 — OQ-A147 계보).
+ * ⭐ §92 재판정(2026-10-21) — 협박형 2종(anonymous)을 대상에 넣었다. 그 둘은 이 정본이 아니라 아래 협박형 블록을 받고, 이름 단정 금지
+ * 문장은 `personaCardIdentity.ts`가 카드 있을 때만 "목록에 적힌 이름 말고는"으로 좁힌다. G569 가드는 "기관형 종류 ⇔ institution ·
+ * 협박형 종류 ⇒ anonymous"(카탈로그 `PERSONA_CARD_KIND`)로 바뀌었다 — acquaintance(가족 · 지인 사칭)는 여전히 대상이 될 수 없다.
  */
 export const PERSONA_CARD_BLOCK_HEAD = `[미리 확보한 상대 정보 — 이 통화에서만]
 너는 통화 전에 상대에 대해 아래 정보를 이미 확보해 두었다. 상대가 스스로 말하기 전에 이 가운데 한두 가지를 네가 먼저, 확인하듯 자연스럽게 꺼내 상대가 '이 사람은 나를 이미 알고 있다'고 느끼게 한다.`;
@@ -783,18 +786,28 @@ export const PERSONA_CARD_BLOCK_TAIL = `목록에 없는 이름·나이·금액�
 // 요구 예시 자체는 `personaCardIdentity.ts`가 조립 결과에서 확인형으로 바꾼다(결정적 층 — 이 줄은 모델 지시 층).
 export const PERSONA_CARD_BLOCK_ORDER = `**순서**: 첫 마디에서 신분과 전화한 이유를 밝히고, 늦어도 상대의 첫 대답을 받은 바로 다음 차례까지 이 정보 가운데 이름·생년월일(목록에 있는 것)을 네가 먼저 말하고 "맞으시죠?"로 확인만 받는다. 이 목록에 있는 항목은 상대에게 불러 달라고 요구하지 않는다 — 위 페르소나·수법의 신원 요구 예시보다 이 줄이 우선하고, 요구는 목록에 없는 항목에만 한다. 상대가 의심한 뒤에야 꺼내지 않는다.`;
 
+// §92(2026-10-21 · 대상 확대 — 협박형 2종) — 신원을 밝히지 않는 협박범(identityCheckAllowed === false)의 블록. 기관형 문면의
+// "확인하듯" · "맞으시죠?로 확인만 받는다"는 협박범 캐릭터를 깬다 ⇒ 머리 · 순서 · 꼬리를 협박형으로 둔다(기관형 정본은 바이트 무변경).
+// 순서 줄은 카드 행으로 갈린다: 자녀 행이 있으면 자녀용(자녀 납치) · 없으면 본인 신상용(불법업소 유포).
+// ⛔ 협박형도 위해 묘사 금지 · 대상 미특정 받아넘기기(시나리오 [캐릭터])는 그대로다 — 이 블록은 "누구를 아는지"만 바꾼다.
+export const PERSONA_CARD_BLOCK_HEAD_THREAT = `[미리 확보한 상대 정보 — 이 통화에서만]
+너는 통화 전에 상대에 대해 아래 정보를 이미 확보해 두었다. 상대가 스스로 말하기 전에 이 가운데 한두 가지를 네가 먼저 꺼내, 상대가 '이 사람은 우리에 대해 이미 다 알고 있다'고 느끼게 한다.`;
+export const PERSONA_CARD_BLOCK_ORDER_CHILD = `**순서**: 늦어도 상대의 첫 대답을 받은 바로 다음 차례까지 목록의 자녀 이름을 네가 먼저 대며 데리고 있다고 압박한다(목록에 학년·학원이 있으면 그중 하나를 곁들인다). 자녀 이름을 상대에게 묻거나 상대가 먼저 말하게 유도하지 않는다. 상대가 의심한 뒤에야 꺼내지 않는다. 상대 본인의 이름은 목록에 없으니 부르지 않는다. 상대가 그런 자녀가 없다고 부인하면 위 [캐릭터]대로 반박하지 않고 받아넘긴다.`;
+export const PERSONA_CARD_BLOCK_ORDER_SELF = `**순서**: 늦어도 상대의 첫 대답을 받은 바로 다음 차례까지 목록의 정보 가운데 한두 가지를 네가 먼저 대며 다 알고 있다고 압박한다. 맞는지 묻지 말고 이미 확인한 사실처럼 단정해 말한다. 목록에 있는 항목을 상대에게 불러 달라고 하지 않는다. 상대가 의심한 뒤에야 꺼내지 않는다.`;
+export const PERSONA_CARD_BLOCK_TAIL_THREAT = `목록에 없는 이름·나이·금액·금융사·주소는 지어내 말하지 않는다. 목록의 정보는 알고 있다는 압박에만 쓰고, 만날 곳·찾아갈 곳·돈을 건넬 곳이나 구체적인 장소·주소를 정하는 데 쓰지 않는다. 이 정보를 어디서 얻었는지는 설명하지 않는다.`;
+const CHILD_CARD_KEYS: readonly PersonaCardItem["key"][] = ["childName", "childGrade", "childAcademy"];
+
 /**
  * 카드 행이 1개 이상일 때만 블록을 만든다(빈 배열 = 블록 0 — 부재와 같은 결과). 값은 프롬프트용 값(`personaCardPromptValue` —
  * 리뷰 M1: 블록 안 "○○" 리터럴 0)이다.
+ * §92 — `identityCheckAllowed === false`(협박형 페르소나)면 협박형 머리 · 순서 · 꼬리. 부재 · true = 기관형 정본(바이트 무변경).
  */
-export function buildPersonaCardBlock(items: readonly PersonaCardItem[]): string | null {
+export function buildPersonaCardBlock(items: readonly PersonaCardItem[], identityCheckAllowed = true): string | null {
   if (items.length === 0) return null;
-  return [
-    PERSONA_CARD_BLOCK_HEAD,
-    ...items.map((item) => `- ${item.label}: ${personaCardPromptValue(item)}`),
-    PERSONA_CARD_BLOCK_ORDER,
-    PERSONA_CARD_BLOCK_TAIL,
-  ].join("\n");
+  const rows = items.map((item) => `- ${item.label}: ${personaCardPromptValue(item)}`);
+  if (identityCheckAllowed) return [PERSONA_CARD_BLOCK_HEAD, ...rows, PERSONA_CARD_BLOCK_ORDER, PERSONA_CARD_BLOCK_TAIL].join("\n");
+  const order = items.some((item) => CHILD_CARD_KEYS.includes(item.key)) ? PERSONA_CARD_BLOCK_ORDER_CHILD : PERSONA_CARD_BLOCK_ORDER_SELF;
+  return [PERSONA_CARD_BLOCK_HEAD_THREAT, ...rows, order, PERSONA_CARD_BLOCK_TAIL_THREAT].join("\n");
 }
 
 /**
@@ -975,7 +988,7 @@ export function buildSystemPrompt(
         identityCheckAllowed,
       })
     : null;
-  const personaCardBlock = opts.personaCard ? buildPersonaCardBlock(opts.personaCard) : null;
+  const personaCardBlock = opts.personaCard ? buildPersonaCardBlock(opts.personaCard, identityCheckAllowed) : null;
   const assembled = [
     // §86.1(리뷰 M1) — 화자 성별이 정해진 세션은 "성별이 정해져 있지 않다" 줄(child-kakao)을 성별 확정 문면으로 바꾼다. 성별 없음 = 원문 그대로.
     opts.speakerGender ? resolveChildGenderRule(prompt.personaPrompt, opts.speakerGender) : prompt.personaPrompt,

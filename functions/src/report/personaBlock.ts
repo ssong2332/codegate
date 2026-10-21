@@ -7,7 +7,14 @@
 // 오차 방향(§84.3.6): 거짓 음성(전사 오기 · 다른 표기) → R-2로 떨어진다 = 안전 쪽. 거짓 양성(사기범이 우연히 같은 지역명을 말함)이어도
 //    R-1 문면 "내가 말하기 전에 먼저 말했습니다"는 문자 그대로 참이다(근거 = `scammerTurnIndex`).
 import { PERSONA_REGION_POOL } from "../scenarios/personaCardCatalog";
-import type { PersonaBlock, PersonaBlockItem, PersonaBlockState, PersonaCard, PersonaCardItem } from "../shared/types";
+import type {
+  PersonaBlock,
+  PersonaBlockContext,
+  PersonaBlockItem,
+  PersonaBlockState,
+  PersonaCard,
+  PersonaCardItem,
+} from "../shared/types";
 
 /** 판정 입력 줄 — 리포트 생성이 이미 읽은 `messages` 스냅샷의 부분 뷰(추가 read 0). */
 export type PersonaTranscriptLine = {
@@ -66,7 +73,50 @@ export function personaMatchTokens(item: PersonaCardItem): string[] {
     case "card":
     case "loan":
       return [];
+    // §92 — 하는 일 · 학원 = 고정 선택지 값 그대로(일상어와 겹치지 않는 낱말만 선택지에 있다 — "회사"가 아니라 "회사원").
+    case "job":
+    case "childAcademy":
+      return [item.value, item.value.replace(/(학원|도장)$/, " $1")].filter((t, i, all) => all.indexOf(t) === i);
+    case "childGrade":
+      return childGradeTokens(item.value);
+    case "childName":
+      return childNameTokens(item.value);
   }
+}
+
+/**
+ * §92 — 자녀 학년 토큰. "초등학교 3학년" → 그대로 · "초등 3학년" · "초3" / "유치원생" → "유치원". ⚠️ "3학년"만으로는 세지 않는다
+ * (사기범이 다른 맥락에서 학년을 말할 여지는 작지만, 학교급 없이 맞혔다고 단정하지 않는 쪽 — 거짓 음성 = R-2 = 안전).
+ */
+function childGradeTokens(value: string): string[] {
+  if (value === "유치원생") return ["유치원"];
+  const match = /^(초등|중|고등)학교 (\d)학년$/.exec(value);
+  if (!match) return [value];
+  const short = match[1] === "초등" ? "초" : match[1] === "중" ? "중" : "고";
+  return [value, `${match[1]} ${match[2]}학년`, `${short}${match[2]}`];
+}
+
+// 리뷰 Major 1 · 2(2026-10-21) — 성 뺀 이름 + 조사("하나는" · "하나도" · "보람이")는 일상어와 겹쳐 R-1("먼저 말했습니다") 오단정을
+// 만든다 ⇒ 협박범이 아이를 부르는 꼴(프롬프트 `spokenChildName`과 같은 규칙 — 받침이면 "이")에 **뒤 낱말을 고정한** 앵커만 센다.
+// 프롬프트가 시키는 대사("'민준이 지금 여기 있습니다'" · "'지우 지금 여기 있습니다'")는 "{부르는 꼴} 지금"으로 잡힌다.
+const CHILD_CALL_NEXT_WORDS = ["지금", "여기", "데리고", "우리", "학원", "울고"] as const;
+const CHILD_CALL_PARTICLES = ["", "가", "를", "는", "도", "랑"] as const;
+
+/**
+ * §92 — 자녀 이름 토큰: 전체 이름 · 붙여 쓴 이름(한글 2자 = 일상어 겹침이라 제외) + 부르는 꼴(한글 3자 = 성 뗌 · 2자 = 그대로)
+ * × 조사(없음 · 가 · 를 · 는 · 도 · 랑) × 뒤 낱말(지금 · 여기 · 데리고 · 우리 · 학원 · 울고).
+ */
+function childNameTokens(value: string): string[] {
+  const compact = value.replace(/ /g, "");
+  const short = /^[가-힣]{2}$/.test(compact);
+  const tokens = new Set(short ? [] : [value, compact]);
+  const given = /^[가-힣]{3}$/.test(compact) ? compact.slice(1) : short ? compact : undefined;
+  if (given) {
+    const code = given.charCodeAt(given.length - 1) - 0xac00;
+    const call = code >= 0 && code <= 11171 && code % 28 !== 0 ? `${given}이` : given;
+    for (const particle of CHILD_CALL_PARTICLES) for (const word of CHILD_CALL_NEXT_WORDS) tokens.add(`${call}${particle} ${word}`);
+  }
+  return [...tokens];
 }
 
 /** 네 자리 연도의 대조 토큰 — "1961" · "61년" · "육십일년". */
@@ -85,8 +135,11 @@ function givenName(compact: string): string | undefined {
  */
 export function personaUserMatchTokens(item: PersonaCardItem): string[] {
   const tokens = personaMatchTokens(item);
-  if (item.key !== "name") return tokens;
-  const given = givenName(item.value.replace(/ /g, ""));
+  if (item.key !== "name" && item.key !== "childName") return tokens;
+  const compact = item.value.replace(/ /g, "");
+  // 자녀 이름 2자는 사기범 토큰에서 맨몸을 뺐다 — 참가자 쪽은 넓게(= R-2 = 안전) 맨몸 그대로 센다.
+  if (item.key === "childName" && /^[가-힣]{2}$/.test(compact)) return [...new Set([...tokens, compact])];
+  const given = item.key === "childName" ? (/^[가-힣]{3}$/.test(compact) ? compact.slice(1) : undefined) : givenName(compact);
   return given ? [...new Set([...tokens, given])] : tokens;
 }
 
@@ -179,6 +232,8 @@ export function buildPersonaBlock(
   personaCard: PersonaCard | undefined,
   lines: readonly PersonaTranscriptLine[],
   selfDialIntercepted: boolean,
+  /** §92 — 협박형 시나리오의 카드면 교훈 문면 분기(부재 = 기관형 · 종전 문면). 호출부가 카탈로그 종류에서 고른다. */
+  context?: PersonaBlockContext,
 ): PersonaBlock | undefined {
   const items = personaCard?.items ?? [];
   const mentions = resolvePersonaFirstMentions(items, lines);
@@ -196,5 +251,10 @@ export function buildPersonaBlock(
         })
       : items.map((item) => ({ key: item.key, label: item.label, value: item.value }));
   // §88 — 누가 넣은 카드인지(리포트 문면 분기 — UX D-131 (6)(7)). 옛 v1 카드 = 필드 부재(종전 문면).
-  return { state, items: blockItems, ...(personaCard?.v === 2 ? { inputBy: personaCard.inputBy } : {}) };
+  return {
+    state,
+    items: blockItems,
+    ...(personaCard?.v === 2 ? { inputBy: personaCard.inputBy } : {}),
+    ...(context ? { context } : {}),
+  };
 }

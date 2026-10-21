@@ -73,7 +73,14 @@ export function splitMaskedValue(value: string): MaskedSegment[] {
 export type PersonaBlockState = "R-1" | "R-2" | "R-3";
 export type PersonaBlockRow = PersonaCardRow & { scammerTurnIndex?: number };
 /** §88 — `inputBy`: 사용자가 넣은 카드(v2)에서 온 블록이면 누가 넣었는지(문면 분기 · UX D-131 (6)(7)). 부재 = 옛 v1 카드. */
-export type PersonaBlockView = { state: PersonaBlockState; items: PersonaBlockRow[]; inputBy?: "self" | "sender" };
+/** §92 — `context`: 협박형 시나리오의 카드(교훈 문면 분기 · UX D-135). 부재 = 기관형(종전 문면). */
+export type PersonaBlockContext = "child-threat" | "self-threat";
+export type PersonaBlockView = {
+  state: PersonaBlockState;
+  items: PersonaBlockRow[];
+  inputBy?: "self" | "sender";
+  context?: PersonaBlockContext;
+};
 
 /** UX-008 v1.38 (1) 정본 문면(글자 단위). */
 export const PERSONA_REPORT_COPY = {
@@ -93,6 +100,14 @@ export const PERSONA_REPORT_COPY = {
   r2FactSender: "이번 훈련에서는 보낸 분이 아래 정보를 내 정보로 넣어 두었습니다.",
   tailSelfInput: "위 정보는 훈련 시작 전에 직접 넣은 정보입니다.",
   tailSender: "위 정보는 이 훈련을 보낸 분이 넣은 정보입니다.",
+  // §92(UX D-135) — 협박형 2종의 설명 · 대처(제목 · 사실 · 꼬리는 위 문면 그대로). R-1 · R-2 공통.
+  childExplanation:
+    "상대가 자녀 이름·학년·학원을 안다고 해서 진짜 납치라는 증거가 되지는 않습니다. 이런 정보는 이미 다른 곳에서 새어 나갔을 수 있습니다.",
+  childAction:
+    "자녀가 위험하다는 전화를 받으면 돈을 보내지 말고 일단 끊은 뒤, 자녀나 학원·학교에 직접 전화해 안전을 확인하세요. 연락이 닿지 않으면 112에 신고하세요.",
+  selfThreatExplanation:
+    "상대가 내 이름·생일·사는 곳·하는 일을 안다고 해서 그 말이 사실이라는 증거가 되지는 않습니다. 이런 정보는 이미 다른 곳에서 새어 나갔을 수 있습니다.",
+  selfThreatAction: "신상을 대며 협박하는 전화라도 돈을 보내지 말고 일단 끊은 뒤, 112에 신고해 도움을 받으세요.",
 } as const;
 
 // ── 되짚어보기(UX-018) — 받는 사람 화면의 "보낸 분이 넣은 정보" 블록(D-131 (6) 갱신 · D-133 (5) · 사용자 요청 2026-10-20) ──
@@ -127,7 +142,7 @@ export const PERSONA_REPLAY_NOTE = "이 말이 '상대가 먼저 꺼낸 내 정�
 /** 리포트 문서 `personaBlock` → 뷰(부재 · 모양이 다르면 `null` = R-4 · 블록 0). */
 export function readPersonaBlock(raw: unknown): PersonaBlockView | null {
   if (!raw || typeof raw !== "object") return null;
-  const { state, items, inputBy } = raw as { state?: unknown; items?: unknown; inputBy?: unknown };
+  const { state, items, inputBy, context } = raw as { state?: unknown; items?: unknown; inputBy?: unknown; context?: unknown };
   if (state !== "R-1" && state !== "R-2" && state !== "R-3") return null;
   const rows = readRows(items);
   if (!rows) return null;
@@ -136,7 +151,13 @@ export function readPersonaBlock(raw: unknown): PersonaBlockView | null {
     return typeof anchor === "number" && Number.isInteger(anchor) && anchor >= 0 ? { ...row, scammerTurnIndex: anchor } : row;
   });
   // §88 — 모르는 값은 버린다(= 옛 v1 문면 — 사실과 다른 "넣은 정보" 문장을 만들지 않는 쪽).
-  return { state, items: withAnchors, ...(inputBy === "self" || inputBy === "sender" ? { inputBy } : {}) };
+  return {
+    state,
+    items: withAnchors,
+    ...(inputBy === "self" || inputBy === "sender" ? { inputBy } : {}),
+    // §92 — 모르는 값은 버린다(= 기관형 문면).
+    ...(context === "child-threat" || context === "self-threat" ? { context } : {}),
+  };
 }
 
 /** 이 블록에 "먼저 말한" 기록이 있는가(R-1, 또는 기록이 있는 R-3 — 서버가 앵커를 실은 항목만). */
@@ -166,6 +187,17 @@ export function resolvePersonaBlockCopy(block: PersonaBlockView): {
       : block.inputBy === "self"
         ? PERSONA_REPORT_COPY.tailSelfInput
         : PERSONA_REPORT_COPY.tail;
+  // §92(UX D-135) — 협박형은 설명 · 대처만 갈린다(기관 · 회사 이야기가 아니다 · 자녀 안전 확인 방법). 상태와 무관하게 같은 문면.
+  if (block.context === "child-threat" || block.context === "self-threat") {
+    const child = block.context === "child-threat";
+    return {
+      title: mentioned ? PERSONA_REPORT_COPY.r1Title : PERSONA_REPORT_COPY.r2Title,
+      fact: mentioned ? PERSONA_REPORT_COPY.r1Fact : r2Fact,
+      action: child ? PERSONA_REPORT_COPY.childAction : PERSONA_REPORT_COPY.selfThreatAction,
+      explanation: child ? PERSONA_REPORT_COPY.childExplanation : PERSONA_REPORT_COPY.selfThreatExplanation,
+      tail,
+    };
+  }
   return {
     title: mentioned ? PERSONA_REPORT_COPY.r1Title : PERSONA_REPORT_COPY.r2Title,
     fact: mentioned ? PERSONA_REPORT_COPY.r1Fact : r2Fact,
