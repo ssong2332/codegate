@@ -4,7 +4,7 @@
 // Google 로그인 버튼 1개만 노출(OQ-U5 확정 — 이메일/비밀번호 폼 없음). 상태는 UX.md UX-013의
 // States/Failure 스펙을 그대로 따른다: Loading(버튼 비활성+스피너) / Error(취소·팝업차단·
 // 네트워크 구분 안내 + 다시 시도) / Success(RouteGuard가 다음 화면으로 이동).
-import { LineIcon } from "@/components/ui";
+import { DisplayTitle, LineIcon } from "@/components/ui";
 import LegalLinks from "@/components/LegalLinks";
 import { useEffect, useRef, useState } from "react";
 import { getRedirectResult } from "firebase/auth";
@@ -103,7 +103,8 @@ export default function LoginPage() {
           긴 화면에서 콘텐츠가 아래로 밀려나는 것을 끊고, 상한을 넘긴 높이는 전부 하단
           스페이서(= 본문 ↔ 로그인 버튼 사이)에 쌓이게 한다(D-63 — 버튼의 하단 고정 유지).
           ⛔ 뷰포트 높이에 대한 단일 규칙이다. sm:/md:/lg: 세로 분기 금지(D-57 ㄹ 계승). */}
-      <div className="flex flex-1 flex-col items-center text-center">
+      {/* UX D-141(시안 E2) — 왼쪽 정렬 · 함렛 큰 제목. Google 버튼은 Google 표기 규정대로 흰 바탕 그대로 둔다. */}
+      <div className="flex flex-1 flex-col items-start text-left">
         <div aria-hidden="true" className="max-h-[256px] flex-1" />
         <div className="mb-6 flex h-[72px] w-[72px] items-center justify-center rounded-[8px] bg-brand-tint">
           <svg className="text-brand" width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -123,7 +124,7 @@ export default function LoginPage() {
           </svg>
         </div>
         {/* 시안 A 2번 화면(UX D-132 (4)) — 왜 로그인하는지를 제목으로, 무엇이 저장되는지를 체크 목록으로. 문장은 종전 두 문장을 나눈 것이다(새 약속 0). */}
-        <h1 className="text-[26px] font-bold leading-[1.35] text-ink">훈련 기록을 남기려면 로그인이 필요합니다</h1>
+        <DisplayTitle as="h1" size="xl" className="e2-rise text-ink">훈련 기록을 남기려면 로그인이 필요합니다</DisplayTitle>
         <ul className="mt-5 flex w-full max-w-sm flex-col gap-3 rounded-[8px] border border-line bg-surface p-4 text-left text-[17px] leading-[1.55] text-ink">
           {["Google 계정으로 로그인하면 훈련 기록이 내 계정에 안전하게 저장됩니다.", "개인정보는 훈련 목적으로만 사용됩니다."].map((line) => (
             <li key={line} className="flex items-start gap-2.5">

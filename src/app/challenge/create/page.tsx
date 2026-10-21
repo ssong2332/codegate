@@ -38,7 +38,7 @@ import {
   type DifficultyLevel,
 } from "@/lib/difficulty";
 import { scenarios } from "@/content/scenarios";
-import { Button, LoadingDots } from "@/components/ui";
+import { Button, DisplayTitle, LoadingDots } from "@/components/ui";
 import PersonaCardInputFields from "@/components/PersonaCardInputFields";
 import {
   EMPTY_PERSONA_CARD_FORM,
@@ -305,9 +305,14 @@ export default function ChallengeCreatePage() {
     const isCopied = copyLabel === "복사됨";
     return (
       <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-6 bg-page p-6">
-        <header className="flex flex-col gap-2 pt-2">
-          <h1 className="text-2xl font-bold text-ink">챌린지가 만들어졌습니다</h1>
-          <p className="text-lg leading-relaxed text-ink-sub">
+        {/* UX D-141(시안 E2) — 링크가 만들어지면 모래 판이 아래에서 위로 차오른다(motion.css `.e2-fill-up` · reduced-motion이면 0).
+            ⚠️ 앱은 링크를 만들 뿐 보내지 않는다 — 시안의 "보냈어요!" 대신 사실대로 "만들어졌습니다"를 쓴다. */}
+        <header className="e2-fill-up -mx-6 -mt-6 flex flex-col gap-3 bg-sand px-6 pb-6 pt-10 text-ink">
+          {/* 리뷰 Major — 48px에서는 "만들어졌습니다"(7음절)가 360폭 이하에서 넘친다(keep-all). 38px로 둔다. */}
+          <DisplayTitle as="h1" size="xl" className="e2-rise">
+            챌린지가 만들어졌습니다
+          </DisplayTitle>
+          <p className="e2-rise text-lg font-semibold leading-relaxed [word-break:keep-all]" style={{ ["--e2-i" as string]: 1 }}>
             아래 링크를 카카오톡·문자로 직접 붙여넣어 지인에게 보내 주세요. 앱이 대신 전송하지
             않습니다.
           </p>
@@ -395,7 +400,9 @@ export default function ChallengeCreatePage() {
         >
           <span aria-hidden="true">←</span> 뒤로
         </button>
-        <h1 className="text-2xl font-bold text-ink">챌린지 만들기</h1>
+        <DisplayTitle as="h1" size="lg" className="e2-rise text-ink">
+          챌린지 만들기
+        </DisplayTitle>
         <p className="text-lg leading-relaxed text-ink-sub">
           지인에게 보일 표시 이름을 입력해 주세요. 「OOO님이 준비한{" "}
           {CHALLENGE_KIND_LABEL[challengeKind]}」 형태로 보이게 됩니다. 상대에게{" "}

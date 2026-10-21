@@ -67,7 +67,9 @@ test("[D-140/G-TOC6] 판정표 (3)의 대상 화면에만 목록이 있고, 이�
   for (const file of TOC_PAGES) {
     const code = fs.readFileSync(file, "utf8");
     assert.ok(code.includes("<PageToc"), `${file}: 목록 없음`);
-    assert.ok(code.includes("data-toc-target"), `${file}: 이동 대상 표시(data-toc-target) 없음`);
+    // UX D-141(§97) — 시나리오 목록 2곳은 묶음 제목을 공용 ScenarioPanelGroups가 그린다(이동 대상 표시는 그 컴포넌트에 있다).
+    const marked = code.includes("data-toc-target") || (code.includes("<ScenarioPanelGroups") && fs.readFileSync("src/components/ScenarioPanelGroups.tsx", "utf8").includes("data-toc-target"));
+    assert.ok(marked, `${file}: 이동 대상 표시(data-toc-target) 없음`);
   }
   const users = fs
     .globSync(["src/**/*.tsx"])
