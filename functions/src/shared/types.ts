@@ -186,6 +186,9 @@ export type SessionDoc = {
   // `consentChallenge`가 챌린지 문서의 카드를 복사). 입력이 비면 필드 부재. ⛔ 대상 밖 세션은 **필드 부재**(빈 객체 · null 0 — 부재와 빈 값을 같은 뜻으로 두지 않는다).
   // 프롬프트 조립 3곳과 통화 화면 카드 · 리포트 대조가 **이 필드 하나**를 읽는다(원자성 — T194-C2).
   personaCard?: PersonaCard;
+  // 실기 신고 4(2026-10-21 · 옵셔널, 하위호환 · 무백필) — 통화로 이어지지 않는 카톡형 세션에서 참가자가 "보이스톡"을 건 횟수.
+  // 서버만 쓴다(`session/voiceTalkUnanswered.ts`). 부재 = 0회. 리포트 판정에는 아직 쓰지 않는다(기록만).
+  voiceTalkUnansweredCount?: number;
 };
 
 // --- users/{uid}/voices/{voiceId} (P-8·AC-046, ADR-0005·Database.md 1:1) ---

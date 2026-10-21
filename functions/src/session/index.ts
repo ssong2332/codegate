@@ -27,6 +27,7 @@ import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, LLM_TEXT_SECRETS } fr
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "./channelTransition";
+import { recordVoiceTalkUnanswered } from "./voiceTalkUnanswered";
 import { readEndSessionReason, resolveRecordedEndReason } from "./endReason";
 import { assertDifficultyAllowed } from "./difficultyAllowance";
 import { assertScenarioNotMerged } from "./mergedScenario";
@@ -473,7 +474,7 @@ export const requestEscalation = onCall<
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
-  const { sessionId } = request.data ?? {};
+  const { sessionId, via } = request.data ?? {};
   if (!sessionId) {
     throw new HttpsError("invalid-argument", "sessionId가 필요합니다.");
   }
@@ -497,6 +498,12 @@ export const requestEscalation = onCall<
   }
   // T194-a(§84.4.1 S-2) — 세션 술어(sendMessage 자동 전이 · 클라 버튼 · 시작 고지 열과 같은 술어).
   if (!resolveSessionEscalation(session, PUBLIC_SCENARIOS)) {
+    // 실기 신고 4(2026-10-21) — 카톡형 프로필 시트 "보이스톡"은 통화로 이어지지 않는 세션에도 있다. 사기범은 받지 않고
+    // 채팅으로 돌린다(`voiceTalkUnanswered.ts` 표 2행). 문자형 · `via` 없음은 종전대로 거부(3행).
+    if (via === "voice_talk" && PUBLIC_SCENARIOS[session.scenarioId]?.surface === "kakao") {
+      const turnIndex = await recordVoiceTalkUnanswered(db, sessionId);
+      return { voiceTalk: "unanswered", turnIndex };
+    }
     throw new HttpsError("failed-precondition", "이 시나리오는 통화 전이를 지원하지 않습니다.");
   }
 

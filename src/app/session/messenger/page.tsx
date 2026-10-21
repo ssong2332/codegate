@@ -126,6 +126,9 @@ function smsBubbleStyle(role: "scammer" | "user", skin: MessengerSkin): React.CS
  * 렌더 경로로 오인해 `Date.now()`를 막는다 — 렌더 중에는 부르지 않는다(처리기 · 타이머 · 구독 콜백 전용).
  */
 const wallClockMs = () => Date.now();
+// 실기 신고 4 — 보이스톡 응답 없음 연출 길이(훈련용으로 줄였다 — 실제 앱은 수십 초 울린다).
+const VOICE_TALK_RING_MS = 6000;
+const VOICE_TALK_UNANSWERED_MS = 2000;
 
 export default function MessengerSessionPage() {
   const router = useRouter();
@@ -165,6 +168,10 @@ export default function MessengerSessionPage() {
   const [escalationError, setEscalationError] = useState<string | null>(null);
   // §95(UX D-138) — 카톡형 상대 프로필 시트(이름 · 프로필 사진 탭). "보이스톡"(= 전화로 확인) · "훈련 종료"를 담는다.
   const [profileOpen, setProfileOpen] = useState(false);
+  // 실기 신고 4(2026-10-21) — 통화로 이어지지 않는 카톡형 세션의 "보이스톡": 신호음 → 응답 없음(사기범이 받지 않는다).
+  const [voiceTalkCall, setVoiceTalkCall] = useState<"ringing" | "unanswered" | null>(null);
+  // 응답 없음 메시지의 turnIndex — 다음 전송의 답장 기준점 하한(구독이 늦어도 이 메시지를 답장으로 오인하지 않는다).
+  const voiceTalkFloorRef = useRef(-1);
   const inputRef = useRef<HTMLInputElement | null>(null);
   // T187(UX-022 v1.29 노트 (5)) — "메시지 보기" 뒤 포커스는 대화 목록으로(입력창 자동 포커스 ⛔).
   const messageListRef = useRef<HTMLUListElement | null>(null);
@@ -350,6 +357,7 @@ export default function MessengerSessionPage() {
       baseTurnIndex: Math.max(
         messages.reduce((max, m) => Math.max(max, m.turnIndex), -1),
         pending?.serverDone ? pending.baseTurnIndex + ((pending.replyLength ?? 0) > 0 ? 2 : 1) : -1,
+        voiceTalkFloorRef.current,
       ),
     };
     setPending(turn);
@@ -377,9 +385,9 @@ export default function MessengerSessionPage() {
     } catch {
       setPending((current) => (current?.localId === turn.localId ? { ...current, failed: true } : current));
       setSendError("메시지를 보내지 못했습니다. 다시 시도해 주세요.");
-    } finally {
-      inputRef.current?.focus();
     }
+    // 실기 신고 5(2026-10-21) — 응답이 온 뒤 입력칸에 포커스를 되돌리지 않는다(키보드는 사용자가 입력칸을 눌렀을 때만 올라온다).
+    // 입력 중에 보낸 경우 키보드가 닫히지 않는 것은 전송 버튼의 `onPointerDown`(포커스를 옮기지 않음)이 맡는다.
   };
 
   // 명시 전환 버튼("전화로 확인", §13.3 — 1턴부터 상시). 서버가 즉시 transitionChannel(manual_button)
@@ -389,13 +397,38 @@ export default function MessengerSessionPage() {
     setEscalationError(null);
     try {
       const result = await requestEscalation({ sessionId });
-      if (result.escalation?.toChannel === "voice") {
+      if ("escalation" in result && result.escalation.toChannel === "voice") {
         setEscalating(true);
       }
     } catch {
       setEscalationError("통화 연결을 요청하지 못했습니다. 다시 시도해 주세요.");
     }
   };
+
+  // 실기 신고 4(2026-10-21) — 통화로 이어지지 않는 카톡형 세션의 "보이스톡". 실제 지인 사칭범처럼 받지 않는다:
+  // 신호음(VOICE_TALK_RING_MS) → "상대방이 응답하지 않습니다"(VOICE_TALK_UNANSWERED_MS) → 대화방. 응답 없음이 뜨는 순간 서버가
+  // 사기범 메시지 1건("지금 통화 못 받아, 톡으로 하자" 류)을 남긴다. 신호음 중 취소하면 아무것도 남기지 않는다.
+  const handleVoiceTalkUnanswered = () => {
+    if (!sessionId || chatEnded || voiceTalkCall !== null) return;
+    setEscalationError(null);
+    setVoiceTalkCall("ringing");
+  };
+  useEffect(() => {
+    if (voiceTalkCall === null || !sessionId) return;
+    if (voiceTalkCall === "ringing") {
+      const timer = setTimeout(() => {
+        setVoiceTalkCall("unanswered");
+        requestEscalation({ sessionId, via: "voice_talk" })
+          .then((result) => {
+            if ("voiceTalk" in result) voiceTalkFloorRef.current = Math.max(voiceTalkFloorRef.current, result.turnIndex);
+          })
+          .catch(() => setEscalationError("보이스톡을 걸지 못했습니다. 다시 시도해 주세요."));
+      }, VOICE_TALK_RING_MS);
+      return () => clearTimeout(timer);
+    }
+    const timer = setTimeout(() => setVoiceTalkCall(null), VOICE_TALK_UNANSWERED_MS);
+    return () => clearTimeout(timer);
+  }, [voiceTalkCall, sessionId]);
 
   // 전이 연출(P-18) — "사기범이 전화를 거는" 화면을 잠시 보여준 뒤 UX-014 수신 phase로 이음새
   // 없이 인계한다(/session/play는 이미 phase 기본값이 incoming이라 그대로 진입한다).
@@ -965,6 +998,9 @@ export default function MessengerSessionPage() {
               <button
                 type="submit"
                 disabled={turnLocked || !input.trim()}
+                // 실기 신고 5 — 누를 때 포커스를 버튼으로 옮기지 않는다: 입력칸이 열려 있었으면 키보드가 그대로 남고, 닫혀 있었으면
+                // 열지 않는다(자동 포커스 0). 키보드 Enter · 스크린리더 활성화는 click으로 그대로 동작한다.
+                onPointerDown={(event) => event.preventDefault()}
                 aria-label="전송"
                 className={
                   isSms
@@ -988,8 +1024,12 @@ export default function MessengerSessionPage() {
       {!isSms && profileOpen && (
         <MessengerProfileSheet
           name={peerName}
+          // 실기 신고 4 — 실제 메신저처럼 모든 카톡형 대화방에 보인다. 통화로 이어지는 세션 = 종전 전이(canVoiceTalk) ·
+          // 그 밖 = 응답 없음 연출. 대화가 끝났으면 그리지 않는다.
           voiceTalk={
-            canVoiceTalk
+            chatEnded
+              ? undefined
+              : canVoiceTalk
               ? {
                   onClick: () => {
                     setProfileOpen(false);
@@ -997,7 +1037,14 @@ export default function MessengerSessionPage() {
                   },
                   disabled: escalatingNow,
                 }
-              : undefined
+              : {
+                  onClick: () => {
+                    setProfileOpen(false);
+                    handleVoiceTalkUnanswered();
+                  },
+                  // 답장 생성 중에는 막는다(서버가 같은 turnIndex를 쓰지 않게 거부한다 — voiceTalkUnanswered.ts 4행).
+                  disabled: turnLocked || voiceTalkCall !== null,
+                }
           }
           onEndTraining={handleEndTraining}
           onClose={() => setProfileOpen(false)}
@@ -1056,6 +1103,40 @@ export default function MessengerSessionPage() {
             </div>
           </div>
           <p className="text-xl font-bold">{scenario.callerLabel}(으)로부터 전화가 옵니다</p>
+        </div>
+      )}
+
+      {/* 실기 신고 4 — 보이스톡 응답 없음 연출(통화로 이어지지 않는 카톡형 세션). 신호음 중에는 취소(빨간 버튼)로 대화방에 돌아간다 —
+          취소하면 서버에 아무것도 남기지 않는다. 응답 없음 뒤 2초면 저절로 닫힌다(대화 화면 상시 종료로 바로 돌아간다 — AC-006). */}
+      {voiceTalkCall !== null && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-0 z-30 flex flex-col items-center justify-between bg-ink/95 px-6 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-24 text-white"
+        >
+          <div className="flex flex-col items-center gap-4">
+            <span
+              aria-hidden="true"
+              className="flex h-[96px] w-[96px] items-end justify-center overflow-hidden rounded-[36px]"
+              style={{ backgroundColor: chatTokens.profileBg, color: chatTokens.profileFg }}
+            >
+              <PhoneIcon name="person" size={80} />
+            </span>
+            <p className="text-[22px] font-bold">{peerName}</p>
+            <p className="text-base text-white/80">
+              {voiceTalkCall === "ringing" ? "보이스톡 연결 중…" : "상대방이 응답하지 않습니다"}
+            </p>
+          </div>
+          {voiceTalkCall === "ringing" && (
+            <button
+              type="button"
+              onClick={() => setVoiceTalkCall(null)}
+              aria-label="보이스톡 취소"
+              className="flex h-16 w-16 items-center justify-center rounded-full bg-danger text-white"
+            >
+              <PhoneIcon name="end-call" size={30} />
+            </button>
+          )}
         </div>
       )}
     </main>

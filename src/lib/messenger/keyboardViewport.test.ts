@@ -85,7 +85,8 @@ test("[G640 · AC-006 R-4] 머리줄 '전화로 확인'은 문자형만 · 카�
   for (const needle of ['role="dialog"', 'aria-modal="true"', "보이스톡", "훈련 종료", '"Escape"', "opener.focus()"]) {
     assert.ok(sheet.includes(needle), `프로필 시트에 ${needle} 이 없다`);
   }
-  assert.match(sheet, /\{voiceTalk && \(/, "통화로 이어지지 않는 세션에 '보이스톡'(동작 없는 버튼)이 생긴다");
+  // 실기 신고 4(2026-10-21) — 페이지는 대화 종료 전이면 늘 넘긴다(통화 전이 또는 응답 없음 연출 — 동작 없는 버튼 0).
+  assert.match(sheet, /\{voiceTalk && \(/, "대화가 끝난 뒤에도 '보이스톡'(동작 없는 버튼)이 남는다");
   assert.doesNotMatch(codeOnly(sheet), /window\.confirm|확인하시겠/, "종료는 1탭 즉시(확인 대화상자 0)");
   const button = readFileSync("src/components/EndTrainingButton.tsx", "utf8");
   assert.equal((button.match(/aria-label="훈련 즉시 종료"/g) ?? []).length, 2, "작은 모양도 같은 이름");

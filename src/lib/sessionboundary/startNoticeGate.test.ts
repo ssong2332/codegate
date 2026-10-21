@@ -286,7 +286,8 @@ test("[T190-8a/G462 ①②] 시작 전 고지 변형 — 컴포넌트는 include
   assert.ok(page.includes(PAGE_BUTTON_GUARD), "'전화로 확인' 버튼이 같은 값(sessionEscalates)으로 게이팅돼야 한다");
   // 리뷰 M3(§95) — 두 사용처(문자형 머리줄 버튼 · 카톡형 프로필 시트 "보이스톡")가 모두 그 값 하나를 쓴다.
   assert.ok(page.includes("{isSms && canVoiceTalk && ("), "문자형 '전화로 확인'이 canVoiceTalk로 게이팅돼야 한다");
-  assert.match(page, /voiceTalk=\{\s*canVoiceTalk\s*\?/, "프로필 시트 '보이스톡'이 canVoiceTalk로 게이팅돼야 한다");
+  // 실기 신고 4(2026-10-21) — 시트 "보이스톡"은 모든 카톡형 세션에 보이고(대화 종료 전), **통화 전이**만 canVoiceTalk로 고른다.
+  assert.match(page, /voiceTalk=\{\s*chatEnded\s*\?\s*undefined\s*:\s*canVoiceTalk\s*\?/, "프로필 시트 '보이스톡'의 통화 전이가 canVoiceTalk로 게이팅돼야 한다");
   assert.ok(page.includes(PAGE_PREDICATE_STATE), "그 값은 세션 술어(resolveSessionEscalation)에서 와야 한다");
   // 시나리오 속성 직접 읽기가 고지 · 버튼 자리에 남지 않았다(택배 초급 · 중급에 '전화' 예고 0 — UX-022 v1.33 (7) 원칙).
   assert.equal(page.includes("Boolean(scenario.escalation)"), false);
