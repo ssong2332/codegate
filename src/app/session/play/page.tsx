@@ -92,6 +92,16 @@ import {
 import { gainFor, isVolumeSettable, type AudioRoute } from "@/lib/realtime/outputGain";
 import { GEMINI_OUTPUT_SAMPLE_RATE } from "@/lib/realtime/pcm";
 import {
+  SCREEN_OFF_COPY,
+  TRANSCRIPT_BACKUP_KEY,
+  buildResumeTurn,
+  decideReconnectBudget,
+  parseTranscriptBackup,
+  shouldShowReturnNotice,
+  serializeTranscriptBackup,
+} from "@/lib/realtime/backgroundCall";
+import { createScreenWakeLock, type WakeLockStatus } from "@/lib/realtime/screenWakeLock";
+import {
   RESUME_GESTURE_EVENTS,
   closePrimedCallAudio,
   primeCallAudio,
@@ -181,6 +191,45 @@ const RealtimeVoiceSession = dynamic(() => import("@/lib/realtime/RealtimeVoiceS
 });
 // Gemini Live(무료 경로) 세션도 같은 이유로 지연 로딩한다 — 오디오 컨텍스트/SDK를 실제로 쓸
 // 때만 불러온다.
+// §99 — 화면 꺼짐 안내 한 칸(문구 = `SCREEN_OFF_COPY`).
+function ScreenOffNotice({
+  reconnecting,
+  returned,
+  keepAwakeUnavailable,
+  onDismissReturned,
+}: {
+  reconnecting: boolean;
+  returned: boolean;
+  keepAwakeUnavailable: boolean;
+  onDismissReturned: () => void;
+}) {
+  const text = reconnecting
+    ? SCREEN_OFF_COPY.reconnecting
+    : returned
+      ? SCREEN_OFF_COPY.returned
+      : keepAwakeUnavailable
+        ? SCREEN_OFF_COPY.keepAwakeUnavailable
+        : null;
+  return (
+    <div role="status" aria-live="polite" className="px-4 pt-2">
+      {text && (
+        <div className="mx-auto flex max-w-[400px] items-center gap-3 rounded-xl bg-[var(--call-fg)]/10 px-4 py-3 text-[16px] leading-[1.5]">
+          <p className="flex-1">{text}</p>
+          {!reconnecting && returned && (
+            <button
+              type="button"
+              onClick={onDismissReturned}
+              className="min-h-[44px] shrink-0 rounded-lg bg-[var(--call-fg)]/15 px-4 text-[16px] font-semibold"
+            >
+              {SCREEN_OFF_COPY.returnedAction}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const GeminiVoiceSession = dynamic(() => import("@/lib/realtime/GeminiVoiceSession"), {
   ssr: false,
 });
@@ -579,6 +628,15 @@ export default function SessionCallPage() {
     const atMs =
       answeredAtMsRef.current !== null ? Date.now() - answeredAtMsRef.current : undefined;
     transcriptRef.current.push({ role, text, atMs });
+    // ⭐ §99 — 탭이 백그라운드에서 정리돼 새로고침되면 메모리의 전사가 사라진다. 같은 탭 sessionStorage에 같이 적어 두고
+    // 통화 복원(새로고침) 때 되살린다(아래 로드 effect). 쓰기 실패는 무시한다(비차단).
+    if (sessionId) {
+      try {
+        window.sessionStorage.setItem(TRANSCRIPT_BACKUP_KEY, serializeTranscriptBackup(sessionId, transcriptRef.current));
+      } catch {
+        // 저장소를 쓸 수 없으면 종전대로 메모리에만 남는다.
+      }
+    }
     // ⭐ §82.3.4(G539) — 계수는 비어 있지 않은 전사 flush 기준(빈 `turnComplete`는 여기까지 오지 않는다).
     turnCountersRef.current = countTranscriptFlush(turnCountersRef.current, role, text);
     if (role === "scammer") {
@@ -616,7 +674,7 @@ export default function SessionCallPage() {
     // ⛔ **사기범 턴만 그린다**(G79/G93). 참가자 턴을 그리면 참가자가 말한 계좌·생년월일이
     // 마스킹 없이 화면에 남는다 — 접근성 취향이 아니라 **안전 조건**이다(§19.6 (4)).
     if (role === "scammer") setLiveScammerCaption(text);
-  }, []);
+  }, [sessionId]);
 
   // 실시간 음성 통화 전사를 서버에 제출한다(finding #1). 종료 직전에 1회 호출. 실패해도 통화
   // 종료를 막지 않는다(리포트가 비는 건 통화를 못 끝내는 것보다 나은 실패) — 조용히 흡수.
@@ -635,6 +693,12 @@ export default function SessionCallPage() {
         openingNotSpoken: openingNotSpokenRef.current,
         answeredAtMs: answeredAtMsRef.current ?? undefined,
       });
+      // §99 — 제출에 **성공한** 전사만 백업에서 지운다(실패하면 남겨 둔다 — 복원 때 두 번 제출하지 않게, 성공 뒤에만).
+      try {
+        window.sessionStorage.removeItem(TRANSCRIPT_BACKUP_KEY);
+      } catch {
+        // 무시(비차단).
+      }
     } catch {
       // 무시 — 다음 단계(endSession→리포트)는 그대로 진행한다.
     }
@@ -719,6 +783,13 @@ export default function SessionCallPage() {
             (data.answeredAt as { toMillis?: () => number } | undefined)?.toMillis?.() ?? null;
           if (answeredAtMs) {
             setElapsedSec(Math.max(0, Math.floor((Date.now() - answeredAtMs) / 1000)));
+          }
+          // ⭐ §99 — 통화 중 새로고침(백그라운드에서 탭이 정리된 경우 포함) — 이 탭에 적어 둔 실시간 전사를 되살린다(종료 때 함께 제출).
+          try {
+            const restored = parseTranscriptBackup(window.sessionStorage.getItem(TRANSCRIPT_BACKUP_KEY), sessionId);
+            if (restored.length > 0 && transcriptRef.current.length === 0) transcriptRef.current = restored;
+          } catch {
+            // 저장소를 읽을 수 없으면 종전대로(복원 0).
           }
           setCallMode("fallback");
         }
@@ -1601,6 +1672,80 @@ export default function SessionCallPage() {
     };
   }, [phase, primedCallAudio]);
 
+  // ⭐⭐ §99(사용자 실기 신고 2026-10-21 · 갤럭시 S25 — 화면이 꺼지면 말이 전달되지 않는다) ─────────────────────────────
+  // ① 통화 중(연결 · 오프닝 · 대화) 화면 자동 꺼짐을 막는다(Screen Wake Lock — 실시간 · 텍스트 폴백 모두). 쓸 수 없으면 안내 문구.
+  // ② 화면이 가려진 동안 Live 소켓이 끊기면 통화를 끝내지 않고(종전: `endCall("remote")`) 화면에 돌아왔을 때 새 자격증명으로
+  //    다시 잇는다 — 지금까지의 대화를 첫 턴에 싣는다(`buildResumeTurn`). 한도(`MAX_BACKGROUND_RECONNECTS`)를 넘으면 텍스트로 이어간다.
+  // ③ 돌아오면 "말이 전달되지 않았을 수 있어요" 안내 + "계속하기"(탭 = iOS 소리 · 마이크 재개 제스처 — 위 안전망이 받는다).
+  const callOngoing = phase === "connecting" || phase === "opening" || phase === "live";
+  const [wakeLockStatus, setWakeLockStatus] = useState<WakeLockStatus>("idle");
+  useEffect(() => {
+    if (!callOngoing) return;
+    const lock = createScreenWakeLock({
+      nav: navigator as unknown as Parameters<typeof createScreenWakeLock>[0]["nav"],
+      doc: document,
+      onStatus: setWakeLockStatus,
+    });
+    lock.start();
+    return () => lock.stop();
+  }, [callOngoing]);
+
+  const [resumeTurn, setResumeTurn] = useState<string | null>(null);
+  const [showReturnNotice, setShowReturnNotice] = useState(false);
+  const reconnectCountRef = useRef(0);
+  const pendingReconnectRef = useRef(false);
+  // QA D1 — 통화가 아직 연결 전(connecting) · 이미 다시 잇는 중이면 재연결할 수 없다 → 종전 닫힘 처리(`handleEnded` —
+  // connecting/reconnecting은 `error` = 텍스트로 이어감)로 보낸다. 재연결 예산은 쓰지 않는다.
+  const realtimeStatusRef = useRef(realtime.status);
+  useEffect(() => {
+    realtimeStatusRef.current = realtime.status;
+  }, [realtime.status]);
+  const startReconnect = useCallback(() => {
+    if (!sessionId || isEndLatched(callEndingRef.current)) return;
+    pendingReconnectRef.current = false;
+    if (realtimeStatusRef.current !== "active") {
+      realtime.handleEnded();
+      return;
+    }
+    if (decideReconnectBudget(reconnectCountRef.current) === "fallback") {
+      // 한도 초과 — 끝내지 않고 종전 강등 경로(텍스트로 이어감)로 보낸다.
+      realtime.handleError();
+      return;
+    }
+    reconnectCountRef.current += 1;
+    // 세션 컴포넌트가 onclose에서 남은 전사를 이미 올렸다(`flushTranscript` → `handleTranscriptTurn`) — 그것까지 싣는다.
+    setResumeTurn(buildResumeTurn(transcriptRef.current));
+    void realtime.reconnect(sessionId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, realtime.reconnect, realtime.handleError, realtime.handleEnded]);
+  const handleConnectionLost = useCallback(() => {
+    // 화면이 아직 가려져 있으면 돌아올 때 잇는다(가려진 문서에서는 마이크 · 소리를 새로 열 수 없다 — iOS).
+    if (document.visibilityState === "hidden") {
+      pendingReconnectRef.current = true;
+      return;
+    }
+    startReconnect();
+  }, [startReconnect]);
+  useEffect(() => {
+    if (!callOngoing || callMode !== "realtime") return;
+    let hiddenAt: number | null = document.visibilityState === "hidden" ? performance.now() : null;
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = performance.now();
+        return;
+      }
+      if (hiddenAt === null) return;
+      const hiddenMs = performance.now() - hiddenAt;
+      hiddenAt = null;
+      if (isEndLatched(callEndingRef.current)) return;
+      // QA D8 — 아주 짧게 가린 경우(알림창 등)는 안내하지 않는다.
+      if (shouldShowReturnNotice({ hiddenMs, reconnectPending: pendingReconnectRef.current })) setShowReturnNotice(true);
+      if (pendingReconnectRef.current) startReconnect();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [callOngoing, callMode, startReconnect]);
+
   // T190-8b(UX-014 v1.33 (11) ① · §74.22 (3) · AC-087 (c)) — "준비됐어요". ① 이 세션의 고지 확인 기록(새로고침 생략)
   // ② **이 제스처 안에서** 벨 오디오를 준비(iOS 자동재생 — OQ-A95 ⓐ의 해제 지점) ③ 짧은 정적 뒤 벨(`incoming`).
   const handleConfirmPreCallNotice = () => {
@@ -2263,7 +2408,8 @@ export default function SessionCallPage() {
           onUserSpeakingChange={realtime.handleUserSpeakingChange}
         />
       )}
-      {realtime.credentials?.provider === "gemini" && (
+      {/* 리뷰 Major(§99) — 글 대화로 내려가면(callMode "fallback") Live 세션을 내린다(마이크 · 리스너 정리 — 언마운트 cleanup). */}
+      {callMode === "realtime" && realtime.credentials?.provider === "gemini" && (
         // ⭐ §59.6 ③(reviewer Critical #1) — GeminiVoiceSession의 `sessionId` prop은 Live 도구
         // 라우팅(deliverInCallSms/deliverVerifyOffer)이 소유권 재검증에 쓴다(G12/G24). 실제로는
         // 이 분기에 도달하는 시점에 `sessionId`가 이미 non-null이다(`handleAnswer`가 `!sessionId`면
@@ -2271,6 +2417,8 @@ export default function SessionCallPage() {
         // 표현할 뿐, 런타임에서 이 분기가 실제로 스킵되는 경우는 없다.
         sessionId && (
           <GeminiVoiceSession
+            // §99 — 다시 연결할 때마다 새 자격증명으로 새로 마운트한다(옛 세션은 언마운트 cleanup이 닫는다).
+            key={realtime.connectionSeq}
             credentials={realtime.credentials}
             sessionId={sessionId}
             stopSignal={realtime.stopSignal}
@@ -2300,6 +2448,8 @@ export default function SessionCallPage() {
             isHangupLatched={isHangupLatched}
             onScammerHangupAccepted={handleScammerHangupAccepted}
             onScammerHangupReady={handleScammerHangupReady}
+            resumeTurn={realtime.connectionSeq > 0 ? resumeTurn : null}
+            onConnectionLost={handleConnectionLost}
           />
         )
       )}
@@ -2383,6 +2533,16 @@ export default function SessionCallPage() {
         <p role="alert" className="px-4 pt-2 text-center text-xs text-[var(--call-alert)]">
           {smsError}
         </p>
+      )}
+      {/* ⭐ §99(UX D-142) — 화면 꺼짐 안내 한 칸(통화 셸 맨 위 · 흐름 안). 우선순위: 다시 연결 중 > 돌아옴 > 화면 켜짐 유지 불가.
+          경고색 · 점멸 0(`role="status"`). "계속하기" 탭은 iOS에서 소리 · 마이크를 다시 켜는 사용자 동작도 된다(위 탭 안전망). */}
+      {callMode === "realtime" && phase === "live" && (
+        <ScreenOffNotice
+          reconnecting={realtime.status === "reconnecting"}
+          returned={showReturnNotice}
+          keepAwakeUnavailable={wakeLockStatus === "unsupported" || wakeLockStatus === "denied"}
+          onDismissReturned={() => setShowReturnNotice(false)}
+        />
       )}
 
       {/* ① (One UI형만) 아바타 · ② 발신 번호 · ③ 번호 바로 아래 phase 줄 · ④ 전환 뒤 줄 · G288 줄(UX-014 v1.33 (2)).
