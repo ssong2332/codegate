@@ -385,8 +385,9 @@ export type UpdateMessengerSkinResponse = {
 
 // --- requestEscalation (T30 · UX-022 명시 "전화로 확인" 버튼 · §13.3/AC-034) ---
 // functions/src/session/types.ts와 1:1.
-export type RequestEscalationRequest = { sessionId: string };
-export type RequestEscalationResponse = { escalation: { toChannel: "voice" } };
+// 실기 신고 4(2026-10-21) — `via: "voice_talk"`: 통화로 이어지지 않는 카톡형 세션이면 `{ voiceTalk: "unanswered", turnIndex }`(남긴 사기범 메시지의 turnIndex).
+export type RequestEscalationRequest = { sessionId: string; via?: "voice_talk" };
+export type RequestEscalationResponse = { escalation: { toChannel: "voice" } } | { voiceTalk: "unanswered"; turnIndex: number };
 
 // --- requestReverseEscalation (T40 fast-follow · UX-014 명시 "메시지로 전환" 버튼 · §13.1/AC-039) ---
 // functions/src/session/types.ts와 1:1. requestEscalation과 반대 방향(보이스→메신저), 명시 버튼만
