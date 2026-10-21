@@ -32,6 +32,7 @@ import {
 } from "@/lib/replay/buildReplayTimeline";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
+import { displayTactic, formatMomentLabel, replayMomentNote } from "@/lib/report/reportSummaryCopy";
 import { readRiskSignals, riskSignalCopy, RISK_SIGNAL_HEADING, type RiskSignalView } from "@/lib/report/riskSignalCopy";
 import {
   countReplaySignalCards,
@@ -273,7 +274,7 @@ export default function ReplayPage() {
     const item = timeline.find((t) => t.kind === "message" && t.turnIndex === turnIndex);
     if (item?.kind === "message" && item.annotation) {
       setStepAnnounce(
-        `${nextPos + 1}번째 신호 / 총 ${annotatedTurnIndexes.length}개. ${item.annotation.timeLabel}: ${item.annotation.tactic} 신호.`,
+        `${nextPos + 1}번째 신호 / 총 ${annotatedTurnIndexes.length}개. ${formatMomentLabel(item.annotation.timeLabel)}: ${displayTactic(item.annotation.tactic) ?? "상대의 요구"}에 응함.`,
       );
     }
   };
@@ -562,7 +563,8 @@ export default function ReplayPage() {
                 >
                   <p className="mb-1.5 text-[15px] font-bold text-caution">⚠️ 여기가 신호였어요</p>
                   <p className="text-[15px] leading-[1.6] text-ink">
-                    {item.annotation.timeLabel}: 이 말이 &apos;{item.annotation.tactic}&apos; 신호였습니다.
+                    {/* 리포트 검수(2026-10-22) — 주석은 대개 내 답 말풍선에 달린다: 내 말을 수법으로 부르지 않고 응한 순간으로 부른다. */}
+                    {replayMomentNote(item.annotation.timeLabel, item.annotation.tactic)}
                   </p>
                   <div className="my-2.5 h-px bg-caution/20" />
                   <p className="mb-1.5 text-[15px] font-bold text-brand">이렇게 대응했어야</p>
@@ -603,7 +605,7 @@ export default function ReplayPage() {
                       >
                         <p className="mb-1.5 text-[15px] font-bold text-caution">{RISK_SIGNAL_HEADING}</p>
                         <p className="text-[15px] leading-[1.6] text-ink">
-                          {signal.timeLabel}: {copy.title}
+                          {formatMomentLabel(signal.timeLabel)}: {copy.title}
                         </p>
                         <p className="mt-1 text-[15px] leading-[1.6] text-ink-sub">{copy.explanation}</p>
                       </div>
@@ -633,8 +635,9 @@ export default function ReplayPage() {
             이 결과를 {challenge.displayName}님과 공유하시겠어요?
           </p>
           <p className="text-base leading-relaxed text-ink-sub">
+            {/* 리포트 검수(2026-10-22) — 내부 요구사항 번호("(AC-043)")가 화면에 그대로 나오던 것을 뺐다. */}
             동의하면 완료 여부만 {challenge.displayName}님에게 전달됩니다. 대화 내용은 전달되지
-            않습니다(AC-043).
+            않습니다.
           </p>
 
           {!challengeToken ? (
@@ -766,7 +769,7 @@ function ReplaySmsItem({ sms }: { sms: ReplaySmsSource }) {
         >
           <p className="mb-1.5 text-[15px] font-bold text-caution">⚠️ 여기가 신호였어요</p>
           <p className="text-[15px] leading-[1.6] text-ink">
-            {sms.timeLabel ? `${sms.timeLabel}: ` : ""}
+            {sms.timeLabel ? `${formatMomentLabel(sms.timeLabel)}: ` : ""}
             {event.what}
           </p>
           {event.correctAction && (
@@ -843,7 +846,7 @@ function ReplayVerifyItem({ verify }: { verify: ReplayVerifySource }) {
           <p className="mb-1.5 text-[15px] font-bold text-caution">⚠️ 여기가 신호였어요</p>
           <p className="text-[15px] leading-[1.6] text-ink">
             {(event.event === "verify_reconnected" ? verify.reconnectTimeLabel : verify.timeLabel)
-              ? `${event.event === "verify_reconnected" ? verify.reconnectTimeLabel : verify.timeLabel}: `
+              ? `${formatMomentLabel((event.event === "verify_reconnected" ? verify.reconnectTimeLabel : verify.timeLabel) ?? "")}: `
               : ""}
             {event.what}
           </p>
@@ -905,7 +908,7 @@ function ReplayMockScreenItem({
           </p>
           <div className="rounded-[8px] rounded-bl-[4px] border border-line bg-white px-4 py-3">
             <p className="text-[17px] leading-[1.55] text-ink">
-              {mockScreen.timeLabel ? `${mockScreen.timeLabel}: ` : ""}
+              {mockScreen.timeLabel ? `${formatMomentLabel(mockScreen.timeLabel)}: ` : ""}
               {what}
             </p>
           </div>

@@ -26,9 +26,16 @@ const STAGE_LABEL: Record<ReportStageName, string> = {
  * ⚠️ 배열 **순서 그대로** 잇는다(서버가 messenger → mock_install → voice 순서로 만든다). 화면이
  * 순서를 다시 해석하지 않는다(§15.1.5 (6)의 "스냅샷이 이미 최종 순서로 온다"와 같은 원칙).
  */
-export function buildStageNotice(stages: readonly ReportStage[]): string | null {
+export function buildStageNotice(
+  stages: readonly ReportStage[],
+  messengerSurface?: "kakao" | "sms",
+): string | null {
   if (stages.length < 2) return null;
-  const labels = stages.map((s) => STAGE_LABEL[s.stage]).filter(Boolean);
+  // 리포트 검수(2026-10-22) — 카카오톡형 메신저로 시작한 세션을 "문자"로 부르면 틀린 말이다. 표면을 알면 그 이름을 쓰고,
+  // 모르면(조회 실패 · 과거 데이터) 종전 표기("문자")를 그대로 둔다.
+  const label = (s: ReportStage) =>
+    s.stage === "messenger" && messengerSurface === "kakao" ? "메신저" : STAGE_LABEL[s.stage];
+  const labels = stages.map(label).filter(Boolean);
   if (labels.length < 2) return null;
   return `이번 훈련은 ${labels.join(" → ")}로 이어지는 수법이었습니다.`;
 }
