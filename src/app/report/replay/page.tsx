@@ -19,7 +19,7 @@ import { db } from "@/lib/firebase";
 import { scenarios } from "@/content/scenarios";
 import { setChallengeResultSharing } from "@/lib/api";
 import { getChallengeToken } from "@/lib/recording";
-import { Badge, Button } from "@/components/ui";
+import { Badge, Button, LoadingStatus } from "@/components/ui";
 import {
   buildReplayTimeline,
   getAnnotatedTurnIndexes,
@@ -340,13 +340,7 @@ export default function ReplayPage() {
   if (state === "loading") {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-ink" role="status">
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-          />
-          대화 되짚어보기를 준비하는 중입니다...
-        </p>
+        <LoadingStatus label="대화 되짚어보기를 준비하는 중입니다" />
       </main>
     );
   }

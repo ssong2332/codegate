@@ -41,7 +41,7 @@ import {
   resolveChallengeLandingView,
   resolveConsentFailureView,
 } from "@/lib/challenge";
-import { Banner, Button } from "@/components/ui";
+import { Banner, Button, LoadingDots, LoadingStatus } from "@/components/ui";
 
 // T181 C5(UX v1.27 D-75) — "completed" = UX-021 Error (c) 완료 안내(체험이 끝난 훈련의 링크 재진입).
 type PageState = "no-token" | "loading" | "blocked" | "load-error" | "ready" | "completed";
@@ -198,13 +198,7 @@ export default function ChallengeJoinPage() {
   if (state === "loading") {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-ink" role="status">
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-          />
-          링크를 확인하는 중입니다...
-        </p>
+        <LoadingStatus label="링크를 확인하는 중입니다" />
       </main>
     );
   }
@@ -364,11 +358,8 @@ export default function ChallengeJoinPage() {
       <Button type="button" onClick={() => void handleConsent()} disabled={consenting}>
         {consenting ? (
           <span className="flex items-center justify-center gap-2" role="status">
-            <span
-              aria-hidden="true"
-              className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"
-            />
-            시작하는 중...
+            <LoadingDots />
+            시작하는 중
           </span>
         ) : (
           "동의하고 시작"
@@ -391,7 +382,7 @@ export default function ChallengeJoinPage() {
           신고가 접수되었습니다. 이 챌린지는 더 이상 재생되지 않습니다.
         </p>
       ) : (
-        <div className="flex flex-col gap-3 rounded-[8px] border-[1.5px] border-line bg-white p-4">
+        <div className="motion-reveal flex flex-col gap-3 rounded-[8px] border-[1.5px] border-line bg-white p-4">
           <p className="text-lg font-semibold text-ink">신고 사유를 선택해 주세요</p>
           <div className="flex flex-col gap-2">
             {REPORT_REASON_LABELS.map((option) => (

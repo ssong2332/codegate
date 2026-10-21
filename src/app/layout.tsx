@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+// UX D-134 — 사이트 모션(페이지 진입 · 로딩 점 · 펼침). globals.css와 분리해 둔다(motion.css 머리말 참고).
+import "./motion.css";
 import { RouteGuard } from "@/lib/auth";
 
 // 전역 셸(인증 가드·전역 상시 "훈련 종료" 컨텍스트) — Architecture.md §2.
