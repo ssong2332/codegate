@@ -48,6 +48,7 @@ type SurfaceRole = "in-session" | "mixed" | "pre-session" | "post-session" | "re
 const SESSION_SURFACE_REGISTRY: Record<string, SurfaceRole> = {
   "src/components/AgeGate.tsx": "not-in-session", // 온보딩 연령 확인 — 세션 전 화면 부품
   "src/components/AudioDebugPanel.tsx": "in-session", // ?audiodebug=1 진단 패널(통화 화면 — 영문 키만 · 쿼리 없으면 DOM 0)
+  "src/components/ThemeDebugPanel.tsx": "in-session", // ?themedebug=1 색 진단 패널(훈련 화면 묶음 — 영문 키 · 색 견본만 · 쿼리 없으면 DOM 0)
   "src/components/AuthInvalidationBanner.tsx": "in-session", // 세션 중에도 뜰 수 있는 인증 무효 안내(T128)
   "src/components/CallStartNotice.tsx": "pre-session", // T190-8b UX-014 pre-call-notice(벨 직전 고지 — AC-091)
   "src/components/DeviceSkinPicker.tsx": "pre-session", // T190-6 세션 전 화면 모양 줄(start-notice 안 — AC-092 (d))
@@ -90,8 +91,9 @@ function registryMismatch(registry: Record<string, SurfaceRole>): { missing: str
 test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/session/*/page.tsx (등록 없이 우회 불가)", () => {
   assert.deepEqual(registryMismatch(SESSION_SURFACE_REGISTRY), { missing: [], stale: [] });
   // T190-1(docs/Architecture.md §74.22 (4) #21 단계별 누적) — 15 → 16(+PhoneIcon) → T190-6 17(+DeviceSkinPicker) →
-  // T190-8b 18(+CallStartNotice) → 2026-10-18 19(+AudioDebugPanel) → §88 20(+PersonaCardInputFields) → 2026-10-21 22(+LegalDocumentView · LegalLinks — 법적 고지).
-  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 22);
+  // T190-8b 18(+CallStartNotice) → 2026-10-18 19(+AudioDebugPanel) → §88 20(+PersonaCardInputFields) → 2026-10-21 22(+LegalDocumentView · LegalLinks — 법적 고지)
+  // → §94 23(+ThemeDebugPanel — ?themedebug=1).
+  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 23);
 });
 
 // ── G451 — 등록부 2벌(G436 · T86)이 최상위 `src/components/*.tsx`만 훑으므로, 하위 디렉터리에 컴포넌트를 두면
@@ -202,7 +204,7 @@ function allInSessionViolations(file: string, code: string): string[] {
 // ── G437 · G439 · G440 본 게이트 ───────────────────────────────────────────────────────────
 test("[T187/G437] 세션 중 파일·문면 모듈의 렌더 가능 텍스트에 표식 낱말 0 · 표식 컴포넌트 import 0", () => {
   const files = scopeFiles();
-  assert.equal(files.length, 14, "범위 = in-session 8(T190-1 +PhoneIcon · 2026-10-18 +AudioDebugPanel) + mixed 2 + 문면 모듈 4");
+  assert.equal(files.length, 15, "범위 = in-session 9(T190-1 +PhoneIcon · 2026-10-18 +AudioDebugPanel · §94 +ThemeDebugPanel) + mixed 2 + 문면 모듈 4");
   assert.deepEqual(files.flatMap((f) => markerViolations(f, read(f))), []);
 });
 

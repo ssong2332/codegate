@@ -113,6 +113,7 @@ const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   "PersonaCardInputFields.tsx": false, // §88 UX D-131 "내 정보" 선택 입력(세션 전 앱 화면) — 앱 자신의 안내 · 입력 칸, 사기 표면 아님
   "PhoneIcon.tsx": false, // T190-1 단색 라인 아이콘(장식 SVG · 텍스트 노드 0) — 문구가 없어 사기 표면이 아니다
   "SyntheticLabel.tsx": false, // 합성 음성 표식
+  "ThemeDebugPanel.tsx": false, // ?themedebug=1 화면 색 진단 패널(2026-10-21 웨일 다크) — 영문 키·색 견본만 그리는 앱 자신의 진단 부품, 사기 표면 아님
 };
 
 test("[T86/(c)] src/components에 화면이 추가되면 등록 없이 검사를 우회하지 못한다", () => {
