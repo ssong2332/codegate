@@ -154,7 +154,7 @@ export default function CloneWaitPage() {
   ];
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-7 bg-page px-6 pb-10 pt-10">
+    <main className="mx-auto flex min-h-dvh max-w-xl flex-col gap-7 bg-page px-6 pb-10 pt-10">
       <ProgressSteps steps={ONBOARDING_STEPS} currentIndex={2} />
 
       <div className="flex flex-col gap-3">

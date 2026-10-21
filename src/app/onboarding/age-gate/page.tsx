@@ -56,7 +56,7 @@ export default function AgeGatePage() {
   if (userLoading || gateState === "checking" || gateState === "redirecting") return null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-8 p-8">
+    <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center gap-8 p-8">
       {gateState === "check-error" && (
         <p role="alert" className="flex items-center gap-2 text-lg text-red-700">
           <span aria-hidden="true">⚠</span>

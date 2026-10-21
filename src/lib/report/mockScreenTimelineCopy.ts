@@ -24,7 +24,7 @@ export type MockScreenCopyEntry = {
   anchorTurnIndex: number;
   anchorResolved: boolean;
   consented: boolean;
-  /** T129 (b)(Architecture §35.6 · §95) — 판정 키의 둘째 성분. 리포트 스냅샷에 늘 있다(옵셔널은 픽스처 하위호환용). */
+  /** T129 (b)(Architecture §35.6 · §98) — 판정 키의 둘째 성분. 리포트 스냅샷에 늘 있다(옵셔널은 픽스처 하위호환용). */
   landingId?: string;
 };
 
@@ -35,7 +35,7 @@ export type MockScreenCopyEntry = {
 export type MockScreenCopyMoment = { turnIndex: number; landingId?: string };
 
 /**
- * T129 (b)(§35.6 1행 발동 · §95) — 같은 순간인가. turnIndex가 같고, **양쪽 모두 landingId를 가지면 그것도 같아야 한다.**
+ * T129 (b)(§35.6 1행 발동 · §98) — 같은 순간인가. turnIndex가 같고, **양쪽 모두 landingId를 가지면 그것도 같아야 한다.**
  * 한쪽이라도 없으면(과거 리포트 · 대화 추정 순간 · 옛 픽스처) 종전 키(turnIndex 하나)로 되돌아간다 — 오늘 동작 그대로.
  */
 function isSameMoment(entry: MockScreenCopyEntry, moment: MockScreenCopyMoment): boolean {

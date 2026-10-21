@@ -36,7 +36,7 @@ export default function ScenarioVoiceModeSelectPage() {
   };
 
   return (
-    <main className="drilldown-step mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-6">
+    <main className="drilldown-step mx-auto flex min-h-dvh max-w-xl flex-col gap-6 p-6">
       <header className="flex flex-col gap-2 pt-2">
         <button
           type="button"

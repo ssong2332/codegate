@@ -217,7 +217,7 @@ test("[OQ-U32] 승격된 순간의 turnIndex == 그 항목의 anchorTurnIndex (�
     "대조 키는 turnIndex↔anchorTurnIndex",
   );
   assert.equal(promotedMoment.timeLabel, entry.timeLabel, "timeLabel도 같은 앵커에서 온다(중복 확인)");
-  // ⭐ T129 (b) 발동(§35.6 1행 · §95) — 승격 순간이 이제 그 화면의 landingId를 싣는다(카탈로그 id — 참가자 입력 아님). 키 = turnIndex + landingId.
+  // ⭐ T129 (b) 발동(§35.6 1행 · §98) — 승격 순간이 이제 그 화면의 landingId를 싣는다(카탈로그 id — 참가자 입력 아님). 키 = turnIndex + landingId.
   assert.equal(promotedMoment.landingId, entry.landingId);
 });
 
@@ -452,7 +452,7 @@ const Q2_INSTALL = "card-guard-app-install";
  * anchorTurnIndex(OQ-U32 — 위 블록이 확정). 루트 모듈은 functions 테스트에서 import할 수 없어 같은 규칙을 그대로 옮긴다(규칙 원문 · 짝 테스트는
  * 루트 `mockScreenTimelineCopy.test.ts`).
  */
-// ⭐ T129 (b) 발동(Architecture §35.6 1행 · §95) — 키에 landingId가 더해졌다(양쪽 모두 있을 때만 비교 · 한쪽이라도 없으면 종전 키).
+// ⭐ T129 (b) 발동(Architecture §35.6 1행 · §98) — 키에 landingId가 더해졌다(양쪽 모두 있을 때만 비교 · 한쪽이라도 없으면 종전 키).
 function d61Branch(
   entry: { consented: boolean; anchorResolved: boolean; anchorTurnIndex: number; landingId?: string },
   moments: readonly { turnIndex: number; landingId?: string }[],

@@ -9,7 +9,7 @@
 // 사용자 발화는 텍스트 턴이다(음성 아님) — 참가자 말하는 시간은 보고서에서 글자 수로 추정해 더한다.
 //
 // node scripts/duration-probe.mjs --secret <path> [--key-var GEMINI_API_KEY2] [--out <dir>] [--max-sessions 30] [--only id:level,...]
-//   [--variant fv-xxxx] [--responder comply|refuse-coin]   (§95 — 변형 고정 · 코인 단계 거절 응답기)
+//   [--variant fv-xxxx] [--responder comply|refuse-coin]   (§98 — 변형 고정 · 코인 단계 거절 응답기)
 import { createRequire } from "node:module";
 import { readFileSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -65,7 +65,7 @@ const RESPONDER = [
 const FILLER = ["네? 무슨 일이죠?", "어머, 그래요? 어떻게 해야 돼요?", "네, 알겠어요.", "네, 말씀하세요.", "그 다음엔 어떻게 해요?"];
 const OPENING_REPLY = "여보세요, 네 누구세요?";
 const MAX_USER_TURNS = 18;
-// §95(2026-10-21) — `--responder refuse-coin`: 코인 · 지갑 · 송금 단계부터는 거절만 한다(거부 시 위협 · 회유 격상을 재는 경로).
+// §98(2026-10-21) — `--responder refuse-coin`: 코인 · 지갑 · 송금 단계부터는 거절만 한다(거부 시 위협 · 회유 격상을 재는 경로).
 const REFUSE_COIN = /(코인|가상\s?자산|거래소|지갑|전송|송금|이체|적금|대출|해지)/;
 const REFUSALS = ["코인은 못 사겠어요. 좀 이상해요.", "그건 안 할래요. 가족한테 먼저 물어볼게요.", "검찰이 왜 코인을 사라고 해요? 못 해요.", "싫어요, 안 보낼 거예요."];
 const responderMode = argVal("--responder", "comply");
@@ -119,7 +119,7 @@ function pcmSeconds(mimeType, bytes) {
 async function runOne(scenarioId, level) {
   const t0 = Date.now();
   const now = () => Date.now() - t0;
-  // §95 — `--variant fv-xxxx`: 그 시나리오 변형이면 배정 풀 대신 그 변형(은퇴 변형 포함 — 이전/이후 비교용).
+  // §98 — `--variant fv-xxxx`: 그 시나리오 변형이면 배정 풀 대신 그 변형(은퇴 변형 포함 — 이전/이후 비교용).
   const forced = argVal("--variant", "");
   const variantId = forced && findFlowVariant(forced)?.scenarioId === scenarioId ? forced : listFlowVariants(scenarioId, level)[0]?.variantId;
   const scenarioPrompt = resolveSessionScenarioPrompt(scenarioId, variantId);

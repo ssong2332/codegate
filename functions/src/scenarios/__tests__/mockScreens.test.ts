@@ -713,7 +713,7 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
     "in-call-sms",
     "in-call-sms",
     "in-call-sms",
-    // §95 — 검찰 고급 보관 지갑 송금 화면(통화 중 문자 표면).
+    // §98 — 검찰 고급 보관 지갑 송금 화면(통화 중 문자 표면).
     "in-call-sms",
     "messenger-link",
     "messenger-link",
@@ -964,7 +964,7 @@ test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **�
     false,
     "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
   );
-  assert.equal(reachableLandingKeysAllUnits().length, 15, "도달 가능 랜딩은 15종이다(§53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §95 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(reachableLandingKeysAllUnits().length, 15, "도달 가능 랜딩은 15종이다(§53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
 });
 
 test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
@@ -1028,7 +1028,7 @@ function findMultiLandingScenarios(keys: readonly string[]): string[] {
 }
 
 /**
- * ⭐ §95(2026-10-21) — §35.6 1행 발동: **T129 (b)가 선행 커밋(ad7e44a)으로 들어간 뒤** 2랜딩을 얹은 단위의 닫힌 목록.
+ * ⭐ §98(2026-10-21) — §35.6 1행 발동: **T129 (b)가 선행 커밋(ad7e44a)으로 들어간 뒤** 2랜딩을 얹은 단위의 닫힌 목록.
  * (b) = 승격 순간이 `landingId`를 싣고(`buildLandingSubmitMoment`) D-61 판정이 그 키로 가른다(`src/lib/report/mockScreenTimelineCopy.ts`).
  * ⛔ 새 단위를 여기 더하는 것은 "숫자를 고쳐 통과"가 아니라 **(b)가 살아 있음을 아래 단언이 확인한 상태에서의 명시 등재**다 —
  *    (b)를 되돌리면 아래 "(b) 생존" 단언이 먼저 빨간불이 된다.
@@ -1042,7 +1042,7 @@ function reachableLandingKeysOutsideT129B(): string[] {
 
 test("[G159 트립와이어] 한 시나리오에 도달 가능 랜딩이 2건 이상 들어오면 알린다(T129 §35.6)", () => {
   // ⭐ T194-a G589(§84.13.2) — 입력만 (시나리오 × 변형) 단위 키로 바꿨다(헬퍼 · 처방 문구 무변경).
-  // ⭐ §95 — (b) 발동 뒤: 2랜딩 단위 = 정확히 등재 목록(등재 밖 새 단위는 여전히 처방과 함께 빨간불 · 등재했는데 1랜딩이면 낡은 등재로 빨간불).
+  // ⭐ §98 — (b) 발동 뒤: 2랜딩 단위 = 정확히 등재 목록(등재 밖 새 단위는 여전히 처방과 함께 빨간불 · 등재했는데 1랜딩이면 낡은 등재로 빨간불).
   const offenders = findMultiLandingScenarios(reachableLandingKeysBySession());
   assert.deepEqual(
     offenders,
@@ -1051,7 +1051,7 @@ test("[G159 트립와이어] 한 시나리오에 도달 가능 랜딩이 2건 �
   );
 });
 
-test("[§95 · T129 (b) 생존] 등재 단위가 있으면 승격 순간이 landingId를 싣는다 — 이 단언이 깨지면 등재 단위의 D-61 판정이 종전 키로 돌아가 오분류된다", () => {
+test("[§98 · T129 (b) 생존] 등재 단위가 있으면 승격 순간이 landingId를 싣는다 — 이 단언이 깨지면 등재 단위의 D-61 판정이 종전 키로 돌아가 오분류된다", () => {
   assert.ok(T129B_MULTI_LANDING_UNITS.length > 0);
   const moment = buildLandingSubmitMoment(
     { landingId: "asset-check-wallet", momentTactic: "t", correctAction: "c" },
@@ -1109,7 +1109,7 @@ test("[T194-c-1 G604 · ⓚ(=R-a)] 자가 고급 Q2 3 단위 = 정확히 [설치
   const bySession = reachableLandingKeysBySession();
   const q2Units = bySession.filter((key) => IN_CALL_INSTALL_SCENARIOS.some((id) => key.startsWith(`${id}#`)));
   assert.deepEqual(findMultiLandingScenarios(q2Units), [], "Q2 시나리오의 어느 단위도 도달 랜딩 2건이 아니다(INV-1)");
-  // ⓚ = R-a — 대안 B 모양(loan 자가 단위에 loan-apply-link를 유지한 채 설치 문자 추가). §95 — 기준 입력은 T129 (b) 등재 단위를 뺀 키.
+  // ⓚ = R-a — 대안 B 모양(loan 자가 단위에 loan-apply-link를 유지한 채 설치 문자 추가). §98 — 기준 입력은 T129 (b) 등재 단위를 뺀 키.
   const polluted = [...reachableLandingKeysOutsideT129B(), "loan-refinance-scam#fv-m3hd::loan-refinance-apply"];
   t.diagnostic(
     `[G604] 자가 3 단위 ${JSON.stringify(Object.keys(expected).map((u) => `${u}=${sessionReachableLandingIds(u.split("#")[0], u.split("#")[1]).join(",")}`))} · Q2 단위 2랜딩 ${JSON.stringify(findMultiLandingScenarios(q2Units))} / ⓚ(R-a) 사본 → ${JSON.stringify(findMultiLandingScenarios(polluted))}`,
@@ -1294,7 +1294,7 @@ function findFieldConvergence(
 
 test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
   const items = Object.values(MOCK_SCREENS).flat();
-  assert.equal(items.length, 15, "현행 비교 대상은 도달 가능 랜딩 15종이다(§53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §95 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(items.length, 15, "현행 비교 대상은 도달 가능 랜딩 15종이다(§53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
   const stats = fieldDivergenceStats(items);
   for (const { field, compared, excluded, converged } of stats) {
     t.diagnostic(
@@ -1535,7 +1535,7 @@ const BAIT_TO_LANDING: {
   },
   {
     landingId: "asset-check-wallet",
-    baitSource: "scenarios/inCallSms.ts:PROSECUTION_COOPERATION_CALL (문자 본문·칩 — §95)",
+    baitSource: "scenarios/inCallSms.ts:PROSECUTION_COOPERATION_CALL (문자 본문·칩 — §98)",
     baitExcerpt: "아래에서 보관 지갑 전송을 진행해 주세요.",
     headlineAnchors: ["보관 지갑", "전송"],
     ctaAnchors: ["보관 지갑", "전송"],

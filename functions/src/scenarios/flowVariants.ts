@@ -224,7 +224,7 @@ const PROSECUTION_STAGES = [
   "자산 검수를 위해 코인으로 바꿔 지정된 곳으로 옮기라고 요구한다.",
 ] as const;
 const PROSECUTION_DECISION_MOMENT = "코인 구매 · 송금 약속에 동의하는 순간";
-// §95(2026-10-21 사용자 실기 신고) — 검찰 고급 fv-c8wq: 코인 전환을 단계로 펼치고 보관 지갑 송금 화면 · 송금 뒤 추가 요구 · 거부 시 격상을 끝단에 둔다.
+// §98(2026-10-21 사용자 실기 신고) — 검찰 고급 fv-c8wq: 코인 전환을 단계로 펼치고 보관 지갑 송금 화면 · 송금 뒤 추가 요구 · 거부 시 격상을 끝단에 둔다.
 const PROSECUTION_CASE_LINK_STAGE =
   "영장이 청구됐다며 문자로 보낸 사건 조회 링크에서 본인 확인 뒤 사건 기록을 직접 확인하라고 한다.";
 const PROSECUTION_WALLET_STAGES_TAIL = [
@@ -1224,10 +1224,10 @@ const SPECS: VariantSpec[] = [
     demandStages: 2,
     decisionMoment: PROSECUTION_DECISION_MOMENT,
     sources: PROSECUTION_SOURCES,
-    // §95 — 내용 무변경 · 배정 은퇴(옛 세션 · 리포트 해석용). 새 세션은 fv-c8wq.
+    // §98 — 내용 무변경 · 배정 은퇴(옛 세션 · 리포트 해석용). 새 세션은 fv-c8wq.
     retired: true,
   },
-  // ⭐ §95(2026-10-21 사용자 실기 신고 — "코인 전환 절차 설명이 약하다" · "검수 수일 뒤 연락으로 흐지부지 끝난다") — 사건 조회(fv-p4hz 그대로) 뒤에
+  // ⭐ §98(2026-10-21 사용자 실기 신고 — "코인 전환 절차 설명이 약하다" · "검수 수일 뒤 연락으로 흐지부지 끝난다") — 사건 조회(fv-p4hz 그대로) 뒤에
   // 자산 진술 → 거래소 코인 전환(단계 지시 · 창구 확인 차단) → 문자 링크 보관 지갑 송금 화면 → 송금 뒤 추가 요구 · 거부 시 위협 격상.
   // 문자 2건 = 사건 조회(link) · 보관 지갑(transfer) ⇒ 한 세션 모의 화면 2건(G159 → T129 (b) 선행 커밋 ad7e44a).
   // 출처: docs/research/prosecution-crypto-tactics-2026-10.md(2024~2026 보도 — 자산 검수 명목 코인 구매 · 지정 지갑 전송 · 추가 송금 반복).

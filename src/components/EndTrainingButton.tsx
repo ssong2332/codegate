@@ -7,13 +7,33 @@ type EndTrainingButtonProps = {
   onClick: () => void;
   disabled?: boolean;
   variant?: "light" | "dark";
+  /**
+   * §95(UX D-138) — 카톡형 대화방 머리줄용 작은 모양(실기 신고 11 *"상단의 훈련 종료가 카톡과 다르다"*). 상시 보임 · 1탭 즉시 ·
+   * 같은 접근 가능한 이름(AC-006 R-4)은 그대로 — 크기 · 강조만 줄인다(터치 영역 44px 유지). 부재 = 종전 모양.
+   */
+  compact?: boolean;
 };
 
 export default function EndTrainingButton({
   onClick,
   disabled = false,
   variant = "light",
+  compact = false,
 }: EndTrainingButtonProps) {
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label="훈련 즉시 종료"
+        className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-full bg-white px-3 text-[14px] font-semibold text-danger disabled:opacity-50"
+      >
+        <span aria-hidden="true" className="h-[10px] w-[10px] rounded-[2px] bg-danger" />
+        종료
+      </button>
+    );
+  }
   return (
     <button
       type="button"

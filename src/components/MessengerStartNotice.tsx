@@ -16,6 +16,8 @@
 import { useEffect, useRef } from "react";
 import EndTrainingButton from "./EndTrainingButton";
 import DeviceSkinPicker from "./DeviceSkinPicker";
+// §95.6(UX D-139) — 브라우저 다크 모드 안내(웨일 · 기기 다크일 때만 · 세션 전 화면에만).
+import WebDarkModeNotice from "./WebDarkModeNotice";
 import { Button } from "./ui";
 import { MESSENGER_START_NOTICE, MESSENGER_START_NOTICE_WITH_CALL } from "@/lib/sessionboundary/preSessionCopy";
 import type { DeviceSkin, DeviceSkinSource } from "@/lib/phone/deviceSkin";
@@ -56,7 +58,7 @@ export default function MessengerStartNotice({
   }, []);
 
   return (
-    <main className="flex min-h-screen flex-col bg-page">
+    <main className="flex min-h-dvh flex-col bg-page">
       {/* 상단 바 — "훈련 종료"만(그 밖의 요소 0). G449: 오른쪽 끝 고정. */}
       <div className="flex justify-end px-4 py-2.5">
         <EndTrainingButton onClick={onEndTraining} />
@@ -87,6 +89,7 @@ export default function MessengerStartNotice({
           </p>
         )}
         <p className="text-lg leading-[1.7] text-ink-sub">{MESSENGER_START_NOTICE.stopHint}</p>
+        <WebDarkModeNotice />
         {surface === "sms" && skinPicker && (
           <DeviceSkinPicker value={skinPicker.value} source={skinPicker.source} onChange={skinPicker.onChange} />
         )}

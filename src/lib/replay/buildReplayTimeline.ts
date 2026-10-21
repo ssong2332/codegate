@@ -30,7 +30,7 @@ export type ReplayDeceivedMomentSource = {
   timeLabel: string;
   tactic: string;
   correctAction: string;
-  /** T129 (b)(Architecture §95) — 모의 화면 승격 순간에만. 화면 주석 판정 키(`resolveMockScreenCopy`)로만 쓴다. */
+  /** T129 (b)(Architecture §98) — 모의 화면 승격 순간에만. 화면 주석 판정 키(`resolveMockScreenCopy`)로만 쓴다. */
   landingId?: string;
 };
 

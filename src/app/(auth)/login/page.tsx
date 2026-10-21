@@ -95,7 +95,7 @@ export default function LoginPage() {
   const isLoading = viewState === "loading";
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-page px-6 pb-10 pt-16">
+    <main className="mx-auto flex min-h-dvh max-w-xl flex-col bg-page px-6 pb-10 pt-16">
       {/* UX.md v1.18 P-30(세로 여백 상한) · D-62 · D-63 — 사용자 지적 "비율이 좀 별로야".
           기존 `justify-center` 한 개를 위·아래 두 개의 탄성 스페이서로 분해했다(중앙 정렬 =
           남는 높이를 위아래로 반씩 나눈 것과 산술적으로 동일하므로 짧은 화면 배치는 무변경).

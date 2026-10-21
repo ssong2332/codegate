@@ -55,7 +55,7 @@ export type DeceivedMomentResult = {
   // T74(§15.4.2/AC-068) — 실패 아카이브의 "수법별 묶기" 그룹 키. 판정 로직에는 전혀 관여하지
   // 않는다(wasDeceived·deceivedMoments 산출은 무변경) — 집계용 라벨 정규화일 뿐이다.
   tacticCategory: TacticCategory;
-  /** T129 (b)(§35.6 · §95) — 모의 화면 승격 순간에만(`buildLandingSubmitMoment`). 대화 추정 순간에는 없다. */
+  /** T129 (b)(§35.6 · §98) — 모의 화면 승격 순간에만(`buildLandingSubmitMoment`). 대화 추정 순간에는 없다. */
   landingId?: string;
 };
 
@@ -235,7 +235,7 @@ export const COMPLIANCE_PATTERN = new RegExp(
 // 셀프 감금의 인출 · 보관 · 코인 대사뿐) ② 5개 시나리오 계열의 **수동 작성** 상황 설명형 · 요구형 대사 표본
 // (`__tests__/handoffPromise.test.ts` M2)이다. **실제 LLM 변형 발화는 포함하지 않았다** — 표본 밖 어형은 열릴 수 있다.
 const ATM_WORDS = /(?:현금\s*)?(?:인출|지급)\s*기/g;
-// ⭐ §95(2026-10-21 · 검찰 고급 fv-c8wq — 코인 전환을 단계로 펼쳤다) — 새 단계의 요구 · 약속을 같은 J-2 갈래(리포트 전용 · 문맥형)에 더한다.
+// ⭐ §98(2026-10-21 · 검찰 고급 fv-c8wq — 코인 전환을 단계로 펼쳤다) — 새 단계의 요구 · 약속을 같은 J-2 갈래(리포트 전용 · 문맥형)에 더한다.
 // | # | If(바로 앞 사기범 대사 = 요구 어형) | And(참가자 답 — HOLD · REFUSAL 없음) | Then |
 // |---|---|---|---|
 // | X1 | 거래소 · 지갑 뒤 20자 안에 옮기/보내/전송/가입/바꾸 + 시키는 어미(주세요 · 하세요 · 하셔야 · 하십시오 · 해 주 등) | — | 요구 |
@@ -283,7 +283,7 @@ const HANDOFF_PROMISE = new RegExp(
     `은행[^.?!]{0,6}?다녀\\s*(?:올${PROMISE_END}|오겠)`,
   ].join("|"),
 );
-/** §95 X3 · X4 · X5(위 표) — 코인 전환 단계의 약속 · 이행 보고 · 진행 중. */
+/** §98 X3 · X4 · X5(위 표) — 코인 전환 단계의 약속 · 이행 보고 · 진행 중. */
 const HANDOFF_PROMISE_CRYPTO_STEPS = new RegExp(
   [
     `(?:전송|해지|가입)\\s*(?:할${PROMISE_END}|하겠)`,

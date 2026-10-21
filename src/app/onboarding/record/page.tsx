@@ -126,7 +126,7 @@ export default function RecordPage() {
 
   if (gateState !== "ok") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         {gateState === "checking" && (
           <p className="text-[18px] text-ink-sub" role="status">
             확인 중입니다...
@@ -150,7 +150,7 @@ export default function RecordPage() {
     uploadStatus !== "cloning";
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-7 bg-page px-6 pb-10 pt-10">
+    <main className="mx-auto flex min-h-dvh max-w-xl flex-col gap-7 bg-page px-6 pb-10 pt-10">
       <ProgressSteps steps={ONBOARDING_STEPS} currentIndex={1} />
 
       <div className="flex flex-col gap-3">

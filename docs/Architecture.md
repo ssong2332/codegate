@@ -21974,20 +21974,144 @@ G636(`replyChoreography.test.ts` 8건) · G637(`themeDiagnostics.test.ts` 5건) 
 - 실기: ① 카톡형 전송 순서(빠른 · 느린 응답) ② 문자형 ③ 실패 후 다시 보내기 ④ 통화 전환 직전 답장이 보이고 전환되는가 ⑤ One UI 통화가 기기 다크에서도 라이트인가 ⑥ **웨일 다크에서 `?themedebug=1` 캡처** — 견본 4행 중 원래 색이 남는 행 · `filter` · 낯선 시트 · html/body 속성.
 
 
-## 95. (Bug fix — 2026-10-21 · 브랜치 `claude/prosecution-advanced-depth-662cef` · 사용자 실기 신고 · 라이브 `eacf9af` · 검찰 수사 협조 × 고급) **검찰 고급: 코인 전환을 단계로 펼치고 송금 뒤 끝단(추가 요구 · 거부 시 격상)을 만든다 · T129 (b) 발동** — implementer 기록
+## 95. (UX fix — 2026-10-21 · 브랜치 `claude/kakao-keyboard-header-typing-05cb51` · 사용자 실기 신고 9 · 10 · 11 · 갤럭시 S25 · 라이브 `eacf9af`) **카톡형 대화방 — 키보드 위 고정 상자 · 입력 중 앞당김 · 상대 이름 머리줄 · 상대 프로필 시트** — implementer 기록
 
-### 95.0 금지 (먼저)
+> 관련: UX D-138 · OQ-U104(머리줄 상시 종료 처분 — User). 서버 변경 0 · 저장 0 · 안전 판정 0. 번호는 병행 작업과 겹칠 수 있다 — 병합 때 확인.
+
+### 95.1 원인
+| # | 신고 | 원인(근거) |
+|---|---|---|
+| 9 | 키보드를 열면 화면 전체가 올라간다 | 대화방이 문서 전체 스크롤(`min-h-screen` + sticky 머리줄 · 입력줄 — 종전 `messenger/page.tsx`)이었고, 입력칸 `onFocus`가 `scrollIntoView({block:"center"})`를 불렀다. 안드로이드 Chrome · 웨일 기본(`interactive-widget=resizes-visual`)은 보이는 영역만 줄인다 ⇒ 브라우저가 문서를 끌어올려 머리줄이 밀린다 |
+| 10 | 입력 중이 짧다 · 읽음 → 입력 중을 앞당겨 달라 | §94 판정표가 읽음 = `max(전송 + 0.7초, 답을 안 시각)` · 입력 중 = 답 × 45ms(0.9~2.8초)에서 서버 지연을 **뺐다** ⇒ 서버가 늦으면 "1"이 오래 남고 입력 중은 하한 0.9초(§94 A 표 — 콜드 턴 "1" 9.4초 · 입력 중 0.9초) |
+| 11 | 머리줄 번호 · "전화로 확인" · "훈련 종료"가 카톡과 다르다 | 머리줄이 `scenario.callerLabel`(번호)과 두 버튼을 그렸다 |
+
+### 95.2 수정
+| 파일 | 변경 |
+|---|---|
+| `src/lib/messenger/keyboardViewport.ts`(신규) · `useKeyboardViewport.ts`(신규) | 판정표(파일 머리). `useSyncExternalStore`로 `visualViewport` 높이 · offsetTop 구독 → 대화방 상자 `position:fixed; top:offsetTop; height:vv.height`(없으면 `100dvh`). 대화 화면일 때만 `html`/`body` `overflow:hidden` · `overscroll-behavior:none`(떠나면 원복). ⛔ transform 미사용(안쪽 fixed 오버레이 기준 상자 보존) |
+| `src/lib/messenger/replyChoreography.ts` | 판정표 교체 — readAt = 전송 + **900ms** · typingAt = readAt + **600ms**(서버 무관) · revealAt = max(typingAt + clamp(답 × **85ms**, **1800**, **6500**), 답을 안 시각). 답 0 = max(readAt, 안 시각). 실패 + 답 모름 = 연출 정지(미저장 unread · 저장 read · 입력 중 0), 늦게 답장 문서가 오면 정상 진행 |
+| `src/app/session/messenger/page.tsx` | 고정 상자 + 대화 목록 상자(`overflow-y-auto` · 유일한 스크롤) · sticky 2곳 · 입력칸 `scrollIntoView` · 목록 끝 sentinel 제거. 맨 아래 붙음(`isNearBottom` ≤ 80px)일 때만 따라 내려감 · 내가 보내면 맨 아래. 카톡형: 머리줄 = `peerName`(`chatDisplayName ?? callerLabel`) 버튼 → 프로필 시트 · 말풍선 프로필 사진도 버튼 · "전화로 확인"은 문자형만(`isSms && canVoiceTalk`) · 종료 = `EndTrainingButton compact` · 친구 아님 띠(`chatNonFriend`) |
+| `src/components/MessengerProfileSheet.tsx`(신규) | 전체 화면 대화상자(`role=dialog` · 포커스 트랩 · Esc · 연 요소로 복귀). 동작 = "보이스톡"(`handleRequestEscalation` · `canVoiceTalk`일 때만) · "훈련 종료"(`handleEndTraining` · 1탭) · 닫기 |
+| `src/components/EndTrainingButton.tsx` | `compact` prop — 흰 알약 "■ 종료" · 이름 "훈련 즉시 종료" 그대로 · 44px. 부재 = 종전 모양(다른 호출부 무변경) |
+| `src/content/scenarios/familyAccidentDeepvoice.ts`(타입) · 카톡형 2종 | `chatDisplayName`(자녀 사칭 *이지수* · 지인 사칭 *정민호*) · `chatNonFriend: true`. 통화 화면 · 전이 연출 · 문자형은 `callerLabel` 그대로 |
+| `src/lib/phone/skinTokens.ts` | `nonFriendBg/Text` · `profileSheetBg/Text` + 대비 행 2(G456) |
+| 서버 · 공용 레이아웃 · `globals.css` · viewport meta | 변경 0 |
+
+### 95.3 판단 기록
+| 질문 | 판단 | 근거 |
+|---|---|---|
+| AC-006과 "종료를 프로필 시트로" | 머리줄 상시 종료를 **작게 유지** + 시트에 추가 경로 | PRD AC-006 v1.22 R-4 *"메신저 대화 화면의 훈련 종료는 항상 보이고 1탭 즉시"* — 완전 제거는 AC 갱신이 필요한 User 결정(OQ-U104) |
+| 메시지 사이 입력 중 | 해당 없음 | 서버가 턴당 상대 문서 1건만 쓴다(`functions/src/roleplay/index.ts` sendMessage의 `messagesRef.add({ role: "scammer" …})` 1곳 — 편집 시점 `:650`) |
+| 문자형에도 키보드 상자 적용 | 적용 | 같은 화면 · 같은 문제. 문자형 외형 · 버튼은 무변경 |
+| viewport meta `interactive-widget` | 쓰지 않음 | 전역 설정(다른 작업 영역) · iOS 미지원 — visualViewport로 두 방식 모두 같은 결과 |
+
+### 95.4 테스트
+G638(`replyChoreography.test.ts` — 고정 읽음 · 서버 지연 시 입력 중 유지 · 길이 비례 · 실패 정지/복구, 9건으로 재작성) · G639 · G640(`keyboardViewport.test.ts` 신규 6건 — 스냅샷 · 붙음 판정 · 배선 · 역검증 · 이름 · AC-006 R-4 상시 종료 · 시트). 가드 갱신: `inSessionMarkers`(등록부 24 · 범위 16 · 종료 앵커 `compact={!isSms}`) · `skinPickerGate` 앵커 · `startNoticeGate` `PAGE_BUTTON_GUARD` = `canVoiceTalk` 정의 · `harmlessnessScreens` 등재.
+
+### 95.5 배포 · 충돌 · 실기 확인
+- 배포 = **Hosting만**(functions 변경 0).
+- 충돌 가능: viewport-scroll 작업이 `layout.tsx` viewport · `globals.css` html/body 높이 · `overflow`를 바꾸면 이 화면의 인라인 `overflow:hidden`(원복형)과 겹친다 — 인라인이 우선하므로 대화 화면 안에서는 이 처리가 이긴다. `interactive-widget=resizes-content`를 전역으로 켜도 vv.height = innerHeight라 결과 동일.
+- 실기: ① 갤럭시 크롬 · 웨일 · 삼성 인터넷에서 입력칸 탭 → 머리줄 고정 · 마지막 메시지 입력줄 바로 위 ② iPhone Safari 같은 확인(offsetTop) ③ 키보드 열린 채 보내기 → 1(0.9초) → 입력 중(1.5초부터) → 답장 ④ 콜드 서버(첫 턴)에서 입력 중이 끊기지 않는가 ⑤ 이름 · 사진 탭 → 프로필 시트 → 보이스톡(통화 전환) · 훈련 종료 ⑥ 머리줄 "■ 종료" 1탭.
+- 알려진 한계 · 실기 확인(리뷰 2026-10-21 · 추정 포함): **R1** 가짜 페이지(`MessengerFakeLanding` — `fixed inset-0`)의 입력칸에서 키보드가 열릴 때, 문서 스크롤 잠금 때문에 아래 입력칸 · 제출 버튼이 가려지는지(가려지면 오버레이에도 `chatBoxStyle(keyboardBox)` 적용) **R2** 핀치 줌 시 vv.height가 줄어 상자도 줄어든다(`vv.scale` 미반영) **R3** 안드로이드 뒤로가기는 프로필 시트만 닫지 않고 화면을 떠난다(history 항목 없음) **R4** 부드러운 스크롤 중 `onScroll`이 붙음 판정을 잠시 풀 수 있다(드묾) **R5** 챌린지에서 보낸 분이 자녀 이름을 넣었어도 머리줄은 시나리오 이름(*이지수*)이다.
+
+### 95.6 브라우저 다크 모드 안내(같은 PR · 메인 세션 추가 지시 · 사용자 결정 *"1번으로 가고"* · UX D-139)
+| 파일 | 변경 |
+|---|---|
+| `src/lib/phone/webDarkNotice.ts`(신규) | 브라우저 판정표 `WEB_DARK_BROWSERS`(웨일 켜짐 · 삼성 인터넷 꺼짐) · `decideWebDarkNotice({userAgent, prefersDark, dismissed})` |
+| `src/components/WebDarkModeNotice.tsx`(신규) | `useSyncExternalStore`(matchMedia change 구독) → 켜진 행이면 안내 상자 · "확인했어요" = `localStorage fv.webDarkNotice.v1.{id}` |
+| `MessengerStartNotice.tsx` · `CallStartNotice.tsx` | 종료 안내 줄 아래 `<WebDarkModeNotice />` 1줄(세션 전 화면만) |
+| 테스트 | G641 `webDarkNotice.test.ts` 3건 · 등록부 25(`WebDarkModeNotice` = pre-session) · 무해화 등재(false) |
+- 진단 근거: 사용자 실기 `?themedebug=1`(Chromium 138 / Whale 4 Android) — 기기 다크에서 CSS · SVG 색 변환 · canvas · img 원색 · computed 정상 · color-scheme 무시. 설정 끄면 정상(사용자 확인). §94 진단 패널은 유지.
+- 확장: 다른 브라우저는 실기로 반전이 확인되면 판정표 행의 `enabled` · 문면 · 경로만 채운다(G641이 켜진 행 = 웨일만임을 고정 — 켤 때 테스트도 함께 바꾼다).
+
+## 96. (UX fix — 2026-10-21 · 브랜치 `claude/viewport-scroll-and-toc-737f69` · 사용자 실기 신고 6 · 요청 13 · 갤럭시 S25 웨일 · 크롬 · 라이브 `eacf9af`) **주소창 두 상태에서 스크롤이 생겼다 없어졌다 하는 문제 · 긴 페이지 "목록" 토글** — implementer 기록 (UX D-140)
+
+### 96.1 금지 · 주의
+- 메신저 대화방(`src/app/session/messenger/page.tsx`)은 #360(§95)의 키보드 처리(fixed 상자 · visualViewport 높이 · 없으면 `100dvh`)를 그대로 둔다 — 이 PR은 그 파일의 오류 · 로딩 화면 3곳만 `min-h-screen → min-h-dvh`로 바꿨다(#360 병합 트리에서 확인 · G-VU1 예외 0건). 대화방은 템플릿 진입 모션 밖이라 `.page-enter { overflow: clip }`의 영향도 없다.
+- 실기 미검증. 측정은 로컬 dev(Next 16) + 크롬 기기 에뮬레이션(Android UA) + demo-test 에뮬레이터(Mock LLM)뿐이다.
+- 공용 레이아웃 변경: `globals.css`(`.page-enter { overflow: clip }` · `[data-toc-target]` · `.call-*` · `.end-compact`) · 전 화면 `min-h-screen → min-h-dvh`(29파일) · `template.tsx` 주석.
+
+### 96.2 원인
+모바일 크롬 · 웨일에서 `100vh` = 주소창이 **숨은** 높이(lvh). `min-h-screen`(=100vh) 화면은 주소창이 보이는 동안 그 높이만큼 길어 스크롤이 생기고, 스크롤하면 주소창이 숨어 다시 맞는다. 데스크톱 에뮬레이션에서는 vh = dvh라 재현되지 않으므로 **뷰포트 = 주소창 보임 높이 + `.min-h-*{min-height:<숨은 높이>px}` 주입**으로 옛 동작을 재현해 쟀다(주입 없음 = dvh 동작).
+부수 원인 3건: ① 통화 화면 상단 여백이 고정 `18vh - 24px` ② 키패드 영역 안 `sr-only` 라벨(absolute)이 스크롤 영역 밖에서 문서 높이를 +201px 늘림(기존 결함) ③ 페이지 진입 모션(6px 상승 · 드릴다운 12px 슬라이드)의 transform이 도는 동안 문서 밖으로 삐져나옴.
+
+### 96.3 실측 (전 = 100vh 재현 · 후 = 이 브랜치)
+| 화면 | 뷰포트(보임/숨음) | 전 넘침 | 후 넘침 | 비고 |
+|---|---|---|---|---|
+| 수신 벨(One UI형) | 360×650 / 740 | 90px(받기 · 거절 이름표 · 안내 줄 화면 밖) | 0 | 캡처 `ring-360x650-before/after` |
+| 벨 직전 고지 | 360×650 / 740 | 90 | 0 | |
+| 통화 중 | 360×650 / 740 | 146(종료 버튼 하단 738px) | 0(종료 버튼 608px) | 상단 여백 칸 109 → 7px |
+| 통화 중 · 키패드 열림 | 360×650 | 201 이상(dvh만 바꾼 상태에서) | 0(키패드 영역 247px 안에서 스크롤) | |
+| 종료 화면(리포트 준비 완료) | 360×650 / 740 | 90(dvh만 바꿔도 내용 자체로 75) | 0 | `end-compact` |
+| 시나리오 유형 · 히스토리 · 모아보기(빈 상태) · 챌린지 만들기 | 375×722 / 812 · 360×650 / 740 | 66~96 | 0 | |
+| 보이스피싱 시나리오 목록 · 메신저 목록 · 이용약관 | 360×650 | 내용이 김(자연 스크롤) | 자연 스크롤 유지 | 목록 토글 추가 |
+| `scrollbar-gutter: stable`(#355) | 360·375 모바일 에뮬레이션 | `clientWidth` = `innerWidth`(375 = 375) | 같음 | 겹침 스크롤바 — 모바일 영향 0 |
+
+### 96.4 구현
+- 단위: 전 화면 `min-h-dvh` · 통화 `max-h-[56dvh]` · 확인 오버레이 `sm:max-h-[85dvh]`.
+- 통화 셸: `<div class="call-top-slack" style="max-height: 18dvh-24px | 48px">`(flex `1000 1 0px` — 남는 높이를 먼저 받고 기준 0이라 최소 높이 계산에서 빠짐) · 키패드가 열렸을 때만 셸 `h-dvh flex-none` + 아래 묶음 `min-h-0`(키패드 영역이 줄어 스크롤) · `@media (max-height: 700px)` 간격만 축소.
+- 목록: `src/components/PageToc.tsx`(sticky 막대 · 펼침 목록 · Esc · 포커스 이동 · reduced-motion) + `src/lib/pagetoc/pageToc.ts`(판정 · 카테고리 표 · `groupInOrder`). 대상 5곳 — `ScenarioListView` · 메신저 목록 · 리포트 · 모아보기(수법별 · 묶음 2개 이상이면 묶음 머리줄 sticky를 `top-[56px]`로) · `LegalDocumentView`.
+
+### 96.5 테스트
+`viewportUnits.test.ts` 5건(G-VU1 100vh 계열 재유입 0 · G-VU2 예외 만료 · G-VU3 `.page-enter` clip · G-VU4 통화 여백 칸 · G-VU5 700px 축소에 글자 크기 없음) · `pageToc.test.ts` 8건(G-TOC1~8 — 판정 · reduced-motion · 순서 보존 · 보이스 시나리오 전부 카테고리 · scroll-margin = 상수 · 대상 화면 고정 · 훈련 화면 금지 · 접근성 배선) · 등록부 2벌 +1(`PageToc` — 사기 표면 아님 · 세션 밖).
+
+### 96.6 배포 · 남은 일
+- 배포 = **Hosting만**(functions 변경 0).
+- 실기 확인: S25 웨일 · 크롬에서 ① 수신 벨 이름표 · 안내 줄이 주소창이 보일 때도 보이는가 ② 첫 화면 · 시나리오 유형에서 스크롤이 생기지 않는가 ③ 통화 중 · 키패드 종료 버튼 ④ 목록 토글 이동.
+- #360과 통합: 대화방 오류 · 로딩 화면 3곳 `min-h-dvh` · G-VU1 예외 0건(완료).
+## 97. (UI 변경 — 2026-10-21 · 브랜치 `claude/e2-design-p1-tokens` 외 단계 PR · 사용자 결정 *"E2로 확정할게"*(시안 세션 design-motion-v2) · 메인 세션 구현 지시) **시안 E2 "큰 판 한 장씩" — 판 구조 · 판 확장 전환 · 경계 판 · 리포트 큰 시계** — architect 판정 · implementer 기록
+
+> 관련: UX D-141 · DECISIONS #210 · OQ-U106. 시안 원본: Artifact `9j4xmdGimgEAiLpm9f3wL4`(#pe2 · #ecmp). ⚠️ 번호(§97 · #210 · G645~ · D-141)는 병행 작업 번호를 비워 두고 잡았다 — 병합 때 확인.
+
+### 97.1 단계 PR
+| 단계 | 범위 | 화면 변화 |
+|---|---|---|
+| P1 | 토큰 5 · 공통 컴포넌트 6 · 판 확장 전환 · motion.css E2 절 · template 배선 · G645~G648 · 문서 | 없음(쓰는 화면 0 — 덮개 걷기 배선만) |
+| P2 | 유형 · 체험/보내기 · 방식 · 시나리오 · 난이도(시트) — viewport-scroll PR(dvh · 목록 토글) 병합 뒤 | 선택 화면 전부 |
+| P3 | 준비 화면(큰 경과 초 + "보통 10~15초" — OQ-U106 Resolved 2026-10-21 · D-134 유지) · 진입/종료 경계 판 | 준비 · 경계 |
+| P4 | 리포트 머리 · 큰 시계 · 사건 행 / 챌린지 / 랜딩 · 로그인 | 나머지 |
+
+### 97.2 P1 구성
+| 파일 | 역할 |
+|---|---|
+| `src/lib/design/siteTokens.ts` · `globals.css` | 토큰 5(`deep` · `panel-slate` · `panel-sand` · `sand` · `panel-line`) + 대비 쌍 17(그중 4쌍은 기존 쌍을 판 이름으로 다시 적은 것 — 새 조합 13 · G630 최저 `sand/brand` 5.85:1) |
+| `src/lib/design/e2Layout.ts` | 순수 규칙: 판 색 교차(`panelTone`) · 판 높이(`panelMinHeight` · `panelsFillHeight` — 5개부터 92px 스크롤) · 시계(`formatClock` · `clockEase`) · 모션 수치 원천 `E2_MOTION` |
+| `src/lib/motion/panelExpand.ts` | 판 확장: `expandPanelThen(판, 이동)` — 판 색 덮개(fixed · body)를 clip-path로 넓히며 **이동은 즉시**(이동이 `false`를 돌려주면 덮개 0 — 조건부 이동 · 같은 경로) · `releasePanelOverlay()` — 넓히기 끝난 뒤 220ms 걷기 · 안전 2.5초 · 전환 중 두 번째 탭 무시. 런타임 import 0(앱 · 단위 테스트 공용) |
+| `src/app/template.tsx` | 경로가 바뀔 때 `releasePanelOverlay()`(재마운트 없는 이동 포함) |
+| `src/components/ui/PanelList.tsx` | 판 목록 — `navigate`(밝기 교차 · 번호 · 42px 아이콘 · 확장 전환) / `choose`(옅은 판 · 고른 판만 남색 · 체크) |
+| `DisplayTitle` · `CtaPanel` · `BottomSheet` · `BoundaryPanel` · `BigClock` | 함렛 화면 제목(38/30/48 · keep-all) · 모래 CTA 판(76px · 안전 영역) · 설명 시트(비모달 · 설명 문단에 aria-live는 호출부) · 경계 판 · 큰 시계(`label` + 최종 m:ss만 읽힘) |
+| `src/app/motion.css` | E2 절 — `.e2-rise`(22px · 380ms · `--e2-i` × 50ms) · `.e2-sheet-in`(320ms). reduced-motion이면 0 |
+
+### 97.3 지킬 규칙(그대로)
+- transform 잔류 금지(CSS fill-mode backwards만 · 덮개는 clip-path/opacity만 — G647).
+- reduced-motion: CSS 모션 0(G457 — 새 클래스 2개 포함). **예외 1**: 판 확장 덮개는 위치 · 크기 변화 없이 불투명도만 160ms 페이드 인/아웃한다(motion.css 머리말 "전부 끈다"의 명시 예외 — 화면이 갑자기 바뀌는 것보다 덜 놀랍다).
+- 훈련 화면(통화 · 메신저 · 채팅 · 문자 · 이체)에는 판 · 전환 · 경계 판을 넣지 않는다.
+
+### 97.4 위험 · 대응
+| 위험 | 대응 |
+|---|---|
+| 받기 탭 동기 오디오 잠금 해제(primeCallAudio)가 전환 지연으로 깨짐 | 경계 판은 **준비 → 훈련 화면 이동 앞**과 **종료 뒤**에만 둔다. 받기 탭(훈련 화면 안)에는 덮개 · 지연 0. P3에서 배선 테스트로 고정 |
+| 이동이 실패 · 같은 경로면 덮개가 남아 화면을 막음 | 안전 시간 2.5초 뒤 자동 걷기(`OVERLAY_SAFETY_MS`) |
+| 전환이 선택을 늦춤 | 이동을 누르는 즉시 호출 — 덮개 아래에서 다음 화면이 그려진다 |
+| 판 5개 이상 | 92px 고정 높이로 쌓고 스크롤(G645) |
+
+### 97.5 검증(P1)
+root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `src/lib/design/e2Design.test.ts`(G645~G648, 9건 — 판 확장 상태 기계 가짜 DOM 1건 포함).
+
+## 98. (Bug fix — 2026-10-21 · 브랜치 `claude/prosecution-advanced-depth-662cef` · 사용자 실기 신고 · 라이브 `eacf9af` · 검찰 수사 협조 × 고급) **검찰 고급: 코인 전환을 단계로 펼치고 송금 뒤 끝단(추가 요구 · 거부 시 격상)을 만든다 · T129 (b) 발동** — implementer 기록
+
+### 98.0 금지 (먼저)
 - ⛔ 실존 거래소 · 코인 종류 · 실제 지갑 주소 형식 · 거래소 앱 조작(가입 인증 · 출금 버튼) 설명 0(§81 · AC-005). 거래소는 "OO거래소", 지갑 번호는 모의 표기 `KW-7Q2X-4471`(문자가 원천 — 모델이 부르지 않는다).
 - ⛔ 옛 변형 `fv-p4hz` 내용 무변경(배정 은퇴만 — 내용이 바뀌는 쪽이 새 ID, §84.16.2).
 - ⛔ 공유 판정 패턴(`COMPLIANCE_PATTERN` · `RESISTANCE_PATTERN` · `REFUSAL_IN_ANSWER`) 무변경 — 추가는 리포트 전용 J-2 갈래뿐.
 
-### 95.1 신고 → 원인
+### 98.1 신고 → 원인
 | 신고(원문) | 원인(코드) |
 |---|---|
 | "암호화폐로 환전해서 이체하라는데, 그 절차에 대한 설명이 상당히 약해." | `fv-p4hz` 페르소나가 *"코인 거래소·지갑 주소·코인 종류는 … 지어내 불러 주지도 않는다"* 로 절차 설명 자체를 막았고, 단계는 *"코인으로 바꿔 지정된 곳으로 옮기라"* 한 줄뿐(`flowVariants.ts` PROSECUTION_STAGES[3]) |
 | "검수까지 수일 걸리고 나중에 연락을 준대. 이렇게 마무리되는 게 맞아?" | 송금 뒤 단계 0 ⇒ "더 요구할 것이 남지 않은" 상태가 되어 NO_STALL · 끊기 규칙이 "결과 알림 → 마무리/대기"로 흘렀다. 실 키 이전 표본: 송금 직후 *"자산 검수 결과를 기다려 주시기 바랍니다"* · *"추가적인 요청이 있을 때까지 계속 대기해 주십시오"* |
 
-### 95.2 수정
+### 98.2 수정
 | 층 | 내용 | 위치 |
 |---|---|---|
 | 변형 | 새 고급 변형 `fv-c8wq`(`fv-p4hz` 은퇴). 단계 9: 연루 → 사건 조회 링크 → 혼자 → 끊지 말기 → **자산 진술** → **OO거래소 코인 전환(한 단계씩 · 창구 확인 차단)** → **문자 링크 보관 지갑 송금 화면** → **송금 뒤 추가 요구(적금 · 대출 · "피해자로 확인되면 돌려준다")** → **거부 시 위협 격상 ↔ 회유** | `flowVariants.ts` |
@@ -21996,20 +22120,20 @@ G636(`replyChoreography.test.ts` 8건) · G637(`themeDiagnostics.test.ts` 5건) 
 | 리포트 판정 | J-2 갈래에 X1~X5(거래소 · 지갑 · 해지 · 대출 요구 / 전송 · 해지 · 가입 · 대출 약속 / "보냈어요"류 이행 보고 / "바꾸고 있어요"류 진행 중) | `analyzeConversation.ts` |
 | T129 (b) | §35.6 1행 발동(한 세션 화면 2건) — `DeceivedMoment.landingId?` · `buildLandingSubmitMoment`가 싣고 D-61 판정 키 = turnIndex + landingId(한쪽이라도 없으면 종전 키). G159는 등재 단위 목록 + "(b) 생존" 단언으로 바꿨다 | 선행 커밋 `ad7e44a` · `mockScreens.test.ts` |
 
-### 95.3 판정 · 실 키 수치
+### 98.3 판정 · 실 키 수치
 - 판정 대본(`prosecutionWalletFlow.test.ts` P6): 새 단계 동의 32/32 속음 · 거절 오판 0/24. 이전 규칙: 같은 계열 56건 중 18건만 속음(스크래치 프로브).
-- 실 키 Live 프로브: §95.5(아래).
+- 실 키 Live 프로브: §98.5(아래).
 
-### 95.4 다른 시나리오의 "흐지부지 마무리" 점검(권고 — 이번 수정 범위 밖)
+### 98.4 다른 시나리오의 "흐지부지 마무리" 점검(권고 — 이번 수정 범위 밖)
 | 시나리오 × 고급 변형 | 실 키 1세션(순응 응답기) 송금 뒤 사기범 말 | 판정 | 권고 |
 |---|---|---|---|
-| 기관 사칭 `fv-c5fj` | "추후 추가 사항이 있으면 다시 연락드리겠습니다"(4턴 · 마지막 턴 포함) | 흐지부지 | §95와 같은 송금 뒤 단계(추가 계좌 · 대출 · "확인되면 돌려준다") |
+| 기관 사칭 `fv-c5fj` | "추후 추가 사항이 있으면 다시 연락드리겠습니다"(4턴 · 마지막 턴 포함) | 흐지부지 | §98와 같은 송금 뒤 단계(추가 계좌 · 대출 · "확인되면 돌려준다") |
 | 카드사 `fv-akj5` | "저희가 추후 연락드릴 때까지 대기해 주세요"(6턴 · 마지막 3턴 중 2) | 흐지부지 | 동일 |
 | 대출 `fv-6s5p` | "최종 심사 결과가 나오면 담당자가 다시 연락드릴 예정"(8턴 · 마지막 3턴 중 2) | 흐지부지 | 송금 뒤 "보증금 · 수수료 · 신용 점수 보정" 추가 요구 단계 |
 | 자산 보호 `fv-k9ra` | "다른 사람에게 알리지 마시고 대기해 주세요"(마지막 턴) | 흐지부지(약) | 인출 · 전달 뒤 추가 인출 요구 단계 |
 ⚠️ 각 1세션 표본이다(분포 아님). 수정은 하지 않았다(지시 — 검찰 우선 · 나머지 권고).
 
-### 95.5 실 키 Live 프로브(GEMINI_API_KEY2 · 16세션 · 429 0회 · `scripts/duration-probe.mjs --variant · --responder`)
+### 98.5 실 키 Live 프로브(GEMINI_API_KEY2 · 16세션 · 429 0회 · `scripts/duration-probe.mjs --variant · --responder`)
 | 지표 | 이전 fv-p4hz | 이후 fv-c8wq | 근거 |
 |---|---|---|---|
 | 순응 · 절차 단계 언급(거래소 · 코인 전환 · 지갑 · 전송 · 적금 해지 · 대출 — 6개 중) | 평균 1.7(2 · 1 · 2) | 평균 5.7(5 · 6 · 6) · 1세션 제외¹ | 스크래치 `analyze-probe.mjs` |

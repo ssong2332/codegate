@@ -1,4 +1,4 @@
-// §95(2026-10-21 사용자 실기 신고 — 검찰 수사 협조 × 고급) — "코인 전환 · 이체 절차 설명이 약하다" · "검수 수일 뒤 연락으로 흐지부지 끝난다".
+// §98(2026-10-21 사용자 실기 신고 — 검찰 수사 협조 × 고급) — "코인 전환 · 이체 절차 설명이 약하다" · "검수 수일 뒤 연락으로 흐지부지 끝난다".
 // 새 변형 fv-c8wq가 그 두 결함을 데이터 · 조립 산출물 층에서 닫는지 고정한다(모델 행동 자체는 실 키 프로브 — docs/research/prosecution-crypto-tactics-2026-10.md).
 //
 // | # | 무엇을 보나 | 기대 |
@@ -23,7 +23,7 @@ import { analyzeConversation, type AnalysisMessage } from "../../report/analyzeC
 
 const PROS = "prosecution-cooperation-call";
 
-test("[§95 P1] 검찰 고급 새 세션 풀 = fv-c8wq · fv-p4hz는 은퇴(내용 무변경 — 사건 조회 문자 1건 · 원래 페르소나)", () => {
+test("[§98 P1] 검찰 고급 새 세션 풀 = fv-c8wq · fv-p4hz는 은퇴(내용 무변경 — 사건 조회 문자 1건 · 원래 페르소나)", () => {
   assert.deepEqual(listFlowVariants(PROS, "advanced").map((v) => v.variantId), ["fv-c8wq"]);
   assert.deepEqual(assignablePool(PROS, "advanced").map((v) => v.variantId), ["fv-c8wq"]);
   const old = findFlowVariant("fv-p4hz")!;
@@ -33,7 +33,7 @@ test("[§95 P1] 검찰 고급 새 세션 풀 = fv-c8wq · fv-p4hz는 은퇴(내�
   assert.deepEqual(sessionReachableLandingIds(PROS, "fv-p4hz"), ["case-record-view"]);
 });
 
-test("[§95 P2 · P3] 흐름 끝단 — 코인 전환 → 보관 지갑 송금 화면 → 송금 뒤 추가 요구 → 거부 시 격상 · '나중에 연락' 정리 금지", () => {
+test("[§98 P2 · P3] 흐름 끝단 — 코인 전환 → 보관 지갑 송금 화면 → 송금 뒤 추가 요구 → 거부 시 격상 · '나중에 연락' 정리 금지", () => {
   const v = findFlowVariant("fv-c8wq")!;
   const stages = v.stages.map((s) => s.summary);
   const at = (needle: string) => stages.findIndex((s) => s.includes(needle));
@@ -54,7 +54,7 @@ test("[§95 P2 · P3] 흐름 끝단 — 코인 전환 → 보관 지갑 송금 �
   assert.ok(prompt.personaPrompt.includes("순서를 한 단계씩 짚어 재촉하되"));
 });
 
-test("[§95 P4] 문자 2건(사건 조회 link · 보관 지갑 transfer) · 도달 랜딩 2건 · 보관 지갑 화면은 이체형 credential-form", () => {
+test("[§98 P4] 문자 2건(사건 조회 link · 보관 지갑 transfer) · 도달 랜딩 2건 · 보관 지갑 화면은 이체형 credential-form", () => {
   const v = findFlowVariant("fv-c8wq")!;
   assert.deepEqual(v.sms.map((s) => [s.purpose, s.smsId, s.required]), [
     ["link", "prosecution-case-link", true],
@@ -71,7 +71,7 @@ test("[§95 P4] 문자 2건(사건 조회 link · 보관 지갑 transfer) · 도
   assert.deepEqual(sessionReachableLandingIds(PROS, "fv-c8wq").sort(), ["asset-check-wallet", "case-record-view"]);
 });
 
-test("[§95 P5] 무해성 — 실존 거래소 · 코인 이름 0 · 지갑 주소 형식 0 · 8자리 이상 숫자 0(프롬프트 · 문자 · 화면 전부)", () => {
+test("[§98 P5] 무해성 — 실존 거래소 · 코인 이름 0 · 지갑 주소 형식 0 · 8자리 이상 숫자 0(프롬프트 · 문자 · 화면 전부)", () => {
   const prompt = resolveSessionScenarioPrompt(PROS, "fv-c8wq")!;
   const sms = findInCallSmsItem(PROS, "prosecution-wallet-link")!;
   const screen = findMockScreenItem(PROS, "asset-check-wallet")!;
@@ -103,7 +103,7 @@ const msg = (role: "scammer" | "user", textMasked: string, turnIndex: number): A
   createdAtMs: 1000 * (turnIndex + 1),
 });
 
-test("[§95 P6] 리포트 판정 — 보관 지갑 화면 승격 = payment_demand · 새 단계 말 응답은 속음 · 거절 · 유보는 안 속음", (t) => {
+test("[§98 P6] 리포트 판정 — 보관 지갑 화면 승격 = payment_demand · 새 단계 말 응답은 속음 · 거절 · 유보는 안 속음", (t) => {
   assert.equal(resolveTacticCategory(findMockScreenItem(PROS, "asset-check-wallet")!.momentTactic), "payment_demand");
   const tactics = resolveSessionScenarioPrompt(PROS, "fv-c8wq")!.weakenedTactics;
   const demands = [
@@ -121,7 +121,7 @@ test("[§95 P6] 리포트 판정 — 보관 지갑 화면 승격 = payment_deman
     for (const u of agree) if (judge(s, u)) hit += 1;
     for (const u of refuse) if (judge(s, u)) false_ += 1;
   }
-  t.diagnostic(`[§95 P6] 동의 ${hit}/${demands.length * agree.length} 속음 · 거절 오판 ${false_}/${demands.length * refuse.length}`);
+  t.diagnostic(`[§98 P6] 동의 ${hit}/${demands.length * agree.length} 속음 · 거절 오판 ${false_}/${demands.length * refuse.length}`);
   assert.equal(hit, demands.length * agree.length);
   assert.equal(false_, 0);
   // 문맥 조건 유지 — 요구가 없는 사기범 대사 뒤의 같은 말은 새 갈래로 열리지 않는다.

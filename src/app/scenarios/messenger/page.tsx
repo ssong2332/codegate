@@ -39,10 +39,18 @@ import { getExperienceMode, setSelectedScenarioId as setPendingSelectedScenarioI
 import { SCENARIO_TRAIT_LABEL } from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc, type MessengerSurface } from "@/content/scenarios";
 import { Badge, Button } from "@/components/ui";
+import PageToc from "@/components/PageToc";
+import { groupInOrder } from "@/lib/pagetoc/pageToc";
 
 const SURFACE_LABEL: Record<MessengerSurface, string> = {
   kakao: "카카오톡",
   sms: "문자",
+};
+
+// UX D-140 (3) — 구역 제목(조사까지 고정 문자열로 둔다).
+const SURFACE_GROUP_LABEL: Record<MessengerSurface, string> = {
+  kakao: "카카오톡으로 오는 사기",
+  sms: "문자로 오는 사기",
 };
 
 export default function MessengerScenarioSelectPage() {
@@ -73,6 +81,14 @@ export default function MessengerScenarioSelectPage() {
   // 하류 분기(에스컬레이션 → UX-025 목소리 선택 / send → UX-019 / self → createSession)는 그
   // 화면이 그대로 넘겨받는다 — 난이도는 목소리 선택(UX-025)보다도 **앞**이다(UX-024 v1.11 갱신:
   // 난이도가 전이 도달 속도에 영향을 주므로 먼저 정해져야 한다). 분기 판정 규칙 자체는 무변경.
+  // UX D-140 (3) — 카카오톡 · 문자 구역으로 나눠 그리고, 위 "목록"에서 구역으로 바로 간다(순서는 원래 목록 순서 유지).
+  const surfaceGroups = groupInOrder(
+    filteredEntries,
+    ([, scenario]) => (scenario.surface ? SURFACE_GROUP_LABEL[scenario.surface] : "메신저로 오는 사기"),
+    "messenger-surface",
+  );
+  const tocSections = surfaceGroups.map((group) => ({ id: group.key, label: `${group.label} (${group.entries.length})` }));
+
   const handleStart = () => {
     if (!selectedScenarioId) return;
     if (!scenarios[selectedScenarioId]) return;
@@ -157,7 +173,8 @@ export default function MessengerScenarioSelectPage() {
   };
 
   return (
-    <main className="drilldown-step mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-6 pb-28 lg:max-w-3xl xl:max-w-5xl">
+    <main className="drilldown-step mx-auto flex min-h-dvh max-w-xl flex-col gap-6 p-6 pb-28 lg:max-w-3xl xl:max-w-5xl">
+      <PageToc sections={tocSections} className="-mx-6 -mt-6 -mb-4 px-6" />
       <header className="flex flex-col gap-2 pt-2">
         <button
           type="button"
@@ -182,9 +199,16 @@ export default function MessengerScenarioSelectPage() {
           메신저 시나리오가 아직 없습니다.
         </p>
       ) : (
-        <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2">
-          {filteredEntries.map(([scenarioId, scenario]) => renderScenarioCard(scenarioId, scenario))}
-        </ul>
+        surfaceGroups.map((group) => (
+          <section key={group.key} className="flex flex-col gap-3" aria-labelledby={group.key}>
+            <h2 id={group.key} data-toc-target className="text-lg font-bold text-ink">
+              {group.label}
+            </h2>
+            <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2">
+              {group.entries.map(([scenarioId, scenario]) => renderScenarioCard(scenarioId, scenario))}
+            </ul>
+          </section>
+        ))
       )}
 
       <div className="sticky bottom-0 -mx-6 -mb-28 border-t border-line bg-page/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur">

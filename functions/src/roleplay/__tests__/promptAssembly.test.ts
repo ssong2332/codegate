@@ -1702,7 +1702,7 @@ test("[2026-10-17 계좌 문자] 계좌형 문자가 있는 시나리오 전수(
     assert.ok(prompt, `${id}: IN_CALL_SMS에는 있는데 SCENARIO_PROMPTS에 없다`);
     const variantOnly = ACCOUNT_SMS_VARIANT_ONLY[id];
     if (variantOnly) {
-      // §95 — 계좌형 문자를 이 변형만 선언한다(변형 없는 세션 = 선언 0 · 다른 변형 = 계좌형 미선언) ⇒ 그 변형의 수법이 검사 대상이다.
+      // §98 — 계좌형 문자를 이 변형만 선언한다(변형 없는 세션 = 선언 0 · 다른 변형 = 계좌형 미선언) ⇒ 그 변형의 수법이 검사 대상이다.
       const declaring = FLOW_VARIANTS.filter(
         (v) => v.scenarioId === id && v.sms.some((d) => IN_CALL_SMS[id]!.find((item) => item.smsId === d.smsId)?.kind === "account"),
       ).map((v) => v.variantId);
@@ -1715,7 +1715,7 @@ test("[2026-10-17 계좌 문자] 계좌형 문자가 있는 시나리오 전수(
   }
 });
 
-/** §95 — 계좌형 문자를 **변형 하나만** 선언하는 시나리오(원본 수법은 옛 세션 해석용이라 바꾸지 않는다 — 내용이 바뀌는 쪽이 새 ID). */
+/** §98 — 계좌형 문자를 **변형 하나만** 선언하는 시나리오(원본 수법은 옛 세션 해석용이라 바꾸지 않는다 — 내용이 바뀌는 쪽이 새 ID). */
 const ACCOUNT_SMS_VARIANT_ONLY: Record<string, string> = { "prosecution-cooperation-call": "fv-c8wq" };
 
 test("[2026-10-17 계좌 문자 역검증] 옛 institutional 수법 문구를 끼운 오염본은 같은 판정식이 실패시킨다", () => {

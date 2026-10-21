@@ -35,6 +35,12 @@
   --avatar-bg: #41525e; /* 미선택 발신자 아바타(통화 셸과 동일 — 종전 유지) */
   --avatar-fg: #c9d4db;
   --canvas: #e9edf2; /* 데모 프레임 바깥(데스크톱 wrapper) */
+  /* 시안 E2 판 구조(UX D-141 · §97) */
+  --deep: #0e2a50; /* 짙은 남색 — 준비 화면 · 리포트 머리 · 랜딩 하단 */
+  --panel-slate: #3d5a80; /* 회청 판(흰 글자) */
+  --panel-sand: #f3ead2; /* 옅은 모래 판(진한 글자) */
+  --sand: #e9d29a; /* 하단 CTA 판 · 종료 판 · 큰 시계 */
+  --panel-line: #c9d3df; /* 옅은 판 경계 · 리포트 행 경계(장식) */
   --background: var(--page);
   --foreground: var(--ink);
 }
@@ -66,6 +72,11 @@
   --color-avatar-bg: var(--avatar-bg);
   --color-avatar-fg: var(--avatar-fg);
   --color-canvas: var(--canvas);
+  --color-deep: var(--deep);
+  --color-panel-slate: var(--panel-slate);
+  --color-panel-sand: var(--panel-sand);
+  --color-sand: var(--sand);
+  --color-panel-line: var(--panel-line);
   /* 글꼴 — 제목 함렛 · 본문 IBM Plex Sans KR(사이트) / 훈련 화면은 Pretendard(실제 폰 서체에 가장 가까운 무료 대안). */
   --font-display: "Hahmlet", "Noto Serif KR", serif;
   --font-body: "IBM Plex Sans KR", "Pretendard Variable", Pretendard, system-ui, sans-serif;
@@ -76,6 +87,55 @@
    정렬 내용이 옆으로 밀리지 않게 스크롤바 자리를 늘 비워 둔다. 모바일(겹침 스크롤바)에는 영향이 없다. */
 html {
   scrollbar-gutter: stable;
+}
+
+/* UX D-140 (1)(2) · 실기 신고(2026-10-21 · 갤럭시 S25 웨일·크롬) — 모바일에서 `100vh`는 **주소창이 숨은 높이**라 주소창이
+   보이는 동안 화면이 그 높이(약 56~96px)만큼 넘쳐 스크롤이 생겼다 없어졌다 했다. 화면 최소 높이는 `min-h-dvh`(지금 보이는
+   높이)로 쓴다(`viewportUnits.test.ts`가 `min-h-screen` · `100vh` 재유입을 막는다).
+   페이지 진입 모션(motion.css의 6px 상승 · 드릴다운 12px 슬라이드)이 도는 동안 transform이 문서 밖으로 삐져나와 잠깐 스크롤이
+   생기지 않게 껍데기에서 잘라 둔다. `clip`은 스크롤 상자를 만들지 않아 안쪽 `sticky`(하단 버튼 · 목록 막대)가 그대로 동작한다. */
+.page-enter {
+  overflow: clip;
+}
+
+/* UX D-140 (2) — 통화 화면(UX-014) 한 화면 고정. 상단 여백 칸은 남는 높이를 먼저 받아 max-height(종전 여백)까지 크고,
+   모자라면 0까지 줄어든다(기준 크기 0 — 화면 최소 높이 계산에서 빠진다). 높이 700px 이하(주소창이 보이는 작은 폰)에서는
+   간격만 조금 줄인다 — 버튼 · 글자 크기는 그대로다. 실측: 360×650에서 내용 687px → 643px(넘침 0). */
+.call-top-slack {
+  flex: 1000 1 0px;
+}
+
+@media (max-height: 700px) {
+  .call-compact-gap {
+    row-gap: 0.75rem;
+  }
+  .call-compact-avatar {
+    margin-bottom: 0.75rem;
+  }
+  .call-compact-end {
+    margin-top: 1rem;
+  }
+  .call-compact-bottom {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 16px);
+  }
+  /* 종료 화면(UX-007) — 문단 두 개는 같은 크기 · 색 그대로(G445), 행간만 같이 줄인다. */
+  .end-compact {
+    row-gap: 0.75rem;
+    padding-top: 1.25rem;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 1.25rem);
+  }
+  .end-compact > div:first-child {
+    width: 64px;
+    height: 64px;
+  }
+  .end-compact > p {
+    line-height: 1.55;
+  }
+}
+
+/* UX D-140 (4) — 목록에서 고른 구역의 제목이 위에 붙은 목록 막대(56px)에 가려지지 않게 한다(`TOC_SCROLL_MARGIN_PX`). */
+[data-toc-target] {
+  scroll-margin-top: 72px;
 }
 
 body {

@@ -397,7 +397,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 사건조회 안내센터",
     mockHost: "case-view-center.invalid",
   },
-  // §95 — 검찰 고급 fv-c8wq 둘째 화면(이체형 — 서버 카탈로그 mockScreens.ts와 글자 단위로 동일).
+  // §98 — 검찰 고급 fv-c8wq 둘째 화면(이체형 — 서버 카탈로그 mockScreens.ts와 글자 단위로 동일).
   "asset-check-wallet": {
     headline: "검수 전용 보관 지갑 전송이 아직 완료되지 않았습니다",
     bodyLines: [

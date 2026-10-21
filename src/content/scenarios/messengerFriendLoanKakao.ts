@@ -19,4 +19,7 @@ export const messengerFriendLoanKakaoScenario: ScenarioDoc = {
   callerLabel: "010-3320-7714",
   channel: "messenger",
   surface: "kakao",
+  // §95(UX D-138 · 실기 신고 11) — 카톡형 대화방에 번호 대신 보이는 상대 이름(친구 이름을 단 새 계정 근사). 실존 인물 아님.
+  chatDisplayName: "정민호",
+  chatNonFriend: true,
 };

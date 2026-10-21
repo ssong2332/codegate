@@ -184,7 +184,7 @@ export default function ChallengeJoinPage() {
 
   if (state === "no-token") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>유효한 링크가 아닙니다. 받은 링크를 다시 확인해 주세요.</span>
@@ -197,7 +197,7 @@ export default function ChallengeJoinPage() {
 
   if (state === "loading") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <LoadingStatus label="링크를 확인하는 중입니다" />
       </main>
     );
@@ -205,7 +205,7 @@ export default function ChallengeJoinPage() {
 
   if (state === "blocked") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>{blockedMessage}</span>
@@ -221,7 +221,7 @@ export default function ChallengeJoinPage() {
   // 화면과 같은 가운데 정렬 단일 컬럼이다.
   if (state === "completed") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <div
           aria-hidden="true"
           className="flex h-[88px] w-[88px] items-center justify-center rounded-full bg-brand-tint"
@@ -256,7 +256,7 @@ export default function ChallengeJoinPage() {
 
   if (state === "load-error") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>링크 정보를 불러오지 못했습니다. 다시 시도해 주세요.</span>
@@ -293,7 +293,7 @@ export default function ChallengeJoinPage() {
         ];
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-page p-6">
+    <main className="mx-auto flex min-h-dvh max-w-xl flex-col gap-6 bg-page p-6">
       {/* 상시 노출 훈련 초대 배너 — 닫기 불가(Banner 컴포넌트 계약, README "Interactions &
           Behavior"). 동의 전 무동의 재생 없음(AC-040)을 화면 진입 즉시 재확인시킨다. */}
       <Banner variant="caution">
