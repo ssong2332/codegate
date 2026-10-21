@@ -42,9 +42,21 @@ export type ScammerHangupPath = "realtime" | "fallback";
 
 // --- T194-b 훈련용 가상 신상 카드(Architecture.md §84.3.2 · PRD AC-104 · UX-014 v1.38 (1)(2)) ---
 // ⛔ 값은 전부 서버가 지은 가상 값이다(사용자 계정 정보 0 — AC-104 (e)). 라벨은 화면 · 프롬프트 공통.
-// ⚠️ `child`(자녀) 행은 만들지 않는다 — 2026-10-20 User 결정으로 kidnapping-threat가 대상에서 빠졌다(유일한 child 행 시나리오).
 // §88 후속(2026-10-20) — `birthDate`(생년월일 = 출생 연도 + 생일 월 · 일). 월 · 일을 넣었을 때 `birthYear` 행 **대신** 쓴다.
-export type PersonaCardKey = "name" | "birthYear" | "birthDate" | "region" | "bank" | "card" | "loan";
+// §93(2026-10-21 · 사용자 승인 — 대상 확대) — 협박형 2종용 행: `job`(하는 일 — 불법업소 유포 협박) · `childName` · `childGrade` ·
+// `childAcademy`(자녀 — 자녀 납치 협박). 값은 고정 선택지(하는 일 · 학년 · 학원 종류) 또는 이름 규칙을 통과한 입력뿐이다(실명 학교 · 학원 0).
+export type PersonaCardKey =
+  | "name"
+  | "birthYear"
+  | "birthDate"
+  | "region"
+  | "bank"
+  | "card"
+  | "loan"
+  | "job"
+  | "childName"
+  | "childGrade"
+  | "childAcademy";
 export type PersonaCardItem = { key: PersonaCardKey; label: string; value: string };
 /**
  * §88(DECISIONS #199) — 카드를 넣은 사람. `self` = 자가 훈련 참가자 본인(`createSession`) · `sender` = 챌린지를 보낸 사람
@@ -502,7 +514,17 @@ export type DeceivedMoment = {
 export type PersonaBlockState = "R-1" | "R-2" | "R-3";
 export type PersonaBlockItem = { key: PersonaCardKey; label: string; value: string; scammerTurnIndex?: number };
 /** §88 — `inputBy`: v2 카드에서 복사(리포트 문면 분기 — UX D-131 (6)(7)). 부재 = 옛 v1 카드(종전 문면). */
-export type PersonaBlock = { state: PersonaBlockState; items: PersonaBlockItem[]; inputBy?: PersonaCardInputBy };
+/**
+ * §93 — `context`: 협박형 시나리오의 카드면 교훈 문면 분기용(`child-threat` = 자녀 납치 협박 · `self-threat` = 불법업소 유포 협박).
+ * 부재 = 기관 사칭형(종전 문면 — 옛 리포트 포함).
+ */
+export type PersonaBlockContext = "child-threat" | "self-threat";
+export type PersonaBlock = {
+  state: PersonaBlockState;
+  items: PersonaBlockItem[];
+  inputBy?: PersonaCardInputBy;
+  context?: PersonaBlockContext;
+};
 
 /**
  * 사용자 결정 2026-10-21 ② — 속음은 아니지만 위험했던 참가자 줄(`report/analyzeConversation.ts` `resolveRiskSignalKind` 판정표).

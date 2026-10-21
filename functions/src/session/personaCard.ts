@@ -10,12 +10,17 @@
 import type { DifficultyLevel } from "../shared/difficulty";
 import { hasBankPlaceholder } from "../shared/fictionalBank";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
-import type { MessengerChannel, PersonaCard, PersonaCardInputBy, PersonaCardItem } from "../shared/types";
+import type { MessengerChannel, PersonaCard, PersonaCardInputBy, PersonaCardItem, PersonaCardKey } from "../shared/types";
 import {
+  personaCardKind,
   PERSONA_BIRTH_YEAR_INPUT_MIN,
   PERSONA_BIRTH_YEAR_INPUT_MIN_AGE,
+  PERSONA_CARD_INPUT_KEYS_BY_KIND,
   PERSONA_CARD_LABELS,
   PERSONA_CARD_SCENARIOS,
+  PERSONA_CHILD_ACADEMY_OPTIONS,
+  PERSONA_CHILD_GRADE_OPTIONS,
+  PERSONA_JOB_OPTIONS,
   PERSONA_NAME_MAX_LENGTH,
   PERSONA_NAME_MIN_LENGTH,
   PERSONA_REGION_POOL,
@@ -25,7 +30,7 @@ export type PersonaCardEligibilityInput = {
   scenarioId: string;
   /** 정규화(`normalizeDifficultyLevel`) 뒤 값. */
   difficultyLevel: DifficultyLevel;
-  /** 세션 시작 채널(부재 = voice). 대상 4종은 전부 통화형이라 메신저 시작은 대상 밖이다. 챌린지 = 시나리오 채널. */
+  /** 세션 시작 채널(부재 = voice). 대상 10종은 전부 통화형이라 메신저 시작은 대상 밖이다. 챌린지 = 시나리오 채널. */
   channel: MessengerChannel | undefined;
 };
 
@@ -39,10 +44,22 @@ export function personaCardEligible(input: PersonaCardEligibilityInput): boolean
 }
 
 /**
- * 클라 요청의 원값(UX D-131 (2) · D-133). 전부 선택 — 빈 문자열 · 부재 = 넣지 않음.
+ * 클라 요청의 원값(UX D-131 (2) · D-133 · D-136). 전부 선택 — 빈 문자열 · 부재 = 넣지 않음.
  * `birthMonth` · `birthDay`(생일 — §88 후속)는 **둘 다 · 출생 연도와 함께**일 때만 받는다(OQ-U102 권고안).
+ * §93 — `job`(하는 일) · `childName` · `childGrade` · `childAcademy`(자녀). 자녀 학년 · 학원은 **자녀 이름과 함께**일 때만 받는다
+ * (생일 ↔ 출생 연도와 같은 규칙 — 이름 없이 학년만으로는 "자녀를 안다"가 성립하지 않는다).
  */
-export type PersonaCardInput = { name?: string; birthYear?: number; birthMonth?: number; birthDay?: number; region?: string };
+export type PersonaCardInput = {
+  name?: string;
+  birthYear?: number;
+  birthMonth?: number;
+  birthDay?: number;
+  region?: string;
+  job?: string;
+  childName?: string;
+  childGrade?: string;
+  childAcademy?: string;
+};
 
 /** 출생 연도 상한(올해 − 14). 테스트 재현을 위해 연도를 주입받는다. */
 export function personaBirthYearMax(nowYear: number): number {
@@ -68,25 +85,20 @@ export type PersonaCardInputReadResult =
  * - birthMonth · birthDay(§88 후속 · UX D-133): 정수 월 1~12 · 일 1~31 · **둘 다**(하나만 = 거부) · **출생 연도 필요**(연도 없이 = 거부 —
  *   OQ-U102 권고안) · 연도와 합쳐 실제 날짜(예: 2월 30일 · 평년 2월 29일 = 거부)
  * - region: 시 · 도 17개 정식 명칭 중 하나
+ * - §93 job · childGrade · childAcademy: 고정 선택지 중 하나(정확 일치) / childName: name과 같은 규칙 / childGrade · childAcademy = childName 필요
+ * ⚠️ 이 함수는 시나리오를 모른다 — 그 시나리오 종류의 칸인지는 `resolvePersonaCardRequest`가 본다(`personaCardInputFitsScenario`).
  */
 export function readPersonaCardInput(raw: unknown, nowYear: number = new Date().getFullYear()): PersonaCardInputReadResult {
   if (raw === undefined || raw === null) return { ok: true, input: undefined };
   if (typeof raw !== "object" || Array.isArray(raw)) return { ok: false };
   const { name, birthYear, birthMonth, birthDay, region, ...rest } = raw as Record<string, unknown>;
-  if (Object.keys(rest).length > 0) return { ok: false };
+  const { job, childName, childGrade, childAcademy, ...unknownKeys } = rest;
+  if (Object.keys(unknownKeys).length > 0) return { ok: false };
   const input: PersonaCardInput = {};
 
-  if (name !== undefined && name !== null && name !== "") {
-    if (typeof name !== "string") return { ok: false };
-    const normalized = normalizeName(name);
-    if (normalized !== "") {
-      const length = [...normalized].length;
-      if (length < PERSONA_NAME_MIN_LENGTH || length > PERSONA_NAME_MAX_LENGTH) return { ok: false };
-      if (!NAME_PATTERN.test(normalized)) return { ok: false };
-      if (replaceRealFinancialNames(normalized).replacedCount > 0 || hasBankPlaceholder(normalized)) return { ok: false };
-      input.name = normalized;
-    }
-  }
+  const readName = readNameField(name);
+  if (readName === false) return { ok: false };
+  if (readName) input.name = readName;
 
   if (birthYear !== undefined && birthYear !== null) {
     if (typeof birthYear !== "number" || !Number.isInteger(birthYear)) return { ok: false };
@@ -109,7 +121,62 @@ export function readPersonaCardInput(raw: unknown, nowYear: number = new Date().
     input.region = region;
   }
 
+  // §93 — 하는 일 · 자녀(고정 선택지 · 이름 규칙). 학년 · 학원은 자녀 이름과 함께일 때만.
+  const readJob = readOptionField(job, PERSONA_JOB_OPTIONS);
+  if (readJob === false) return { ok: false };
+  if (readJob) input.job = readJob;
+  const readChildName = readNameField(childName);
+  if (readChildName === false) return { ok: false };
+  if (readChildName) input.childName = readChildName;
+  const readChildGrade = readOptionField(childGrade, PERSONA_CHILD_GRADE_OPTIONS);
+  const readChildAcademy = readOptionField(childAcademy, PERSONA_CHILD_ACADEMY_OPTIONS);
+  if (readChildGrade === false || readChildAcademy === false) return { ok: false };
+  if ((readChildGrade || readChildAcademy) && !input.childName) return { ok: false };
+  if (readChildGrade) input.childGrade = readChildGrade;
+  if (readChildAcademy) input.childAcademy = readChildAcademy;
+
   return { ok: true, input: Object.keys(input).length > 0 ? input : undefined };
+}
+
+/** 이름 칸(name · childName 공용) — 빈 값 = `undefined` · 규칙 밖 = `false`. */
+function readNameField(raw: unknown): string | undefined | false {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  if (typeof raw !== "string") return false;
+  const normalized = normalizeName(raw);
+  if (normalized === "") return undefined;
+  const length = [...normalized].length;
+  if (length < PERSONA_NAME_MIN_LENGTH || length > PERSONA_NAME_MAX_LENGTH) return false;
+  if (!NAME_PATTERN.test(normalized)) return false;
+  if (replaceRealFinancialNames(normalized).replacedCount > 0 || hasBankPlaceholder(normalized)) return false;
+  return normalized;
+}
+
+/** 고정 선택지 칸 — 빈 값 = `undefined` · 목록 밖 = `false`(정확 일치만 — 자유 입력 0). */
+function readOptionField(raw: unknown, options: readonly string[]): string | undefined | false {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  if (typeof raw !== "string" || !options.includes(raw)) return false;
+  return raw;
+}
+
+/** 원값의 칸 → 카드 행 키(생일은 출생 연도와 함께 `birthDate` 한 행 — `buildPersonaCard`와 같은 규칙). */
+function inputCardKeys(input: PersonaCardInput): PersonaCardKey[] {
+  const keys: PersonaCardKey[] = [];
+  if (input.name) keys.push("name");
+  if (input.birthYear !== undefined) keys.push(input.birthMonth !== undefined ? "birthDate" : "birthYear");
+  if (input.region) keys.push("region");
+  if (input.job) keys.push("job");
+  if (input.childName) keys.push("childName");
+  if (input.childGrade) keys.push("childGrade");
+  if (input.childAcademy) keys.push("childAcademy");
+  return keys;
+}
+
+/** §93 — 넣은 칸이 전부 이 시나리오 카드 종류의 칸인가(대상 밖 시나리오 = 거짓 · 판정표 = 카탈로그 `PERSONA_CARD_INPUT_KEYS_BY_KIND`). */
+export function personaCardInputFitsScenario(input: PersonaCardInput, scenarioId: string): boolean {
+  const kind = personaCardKind(scenarioId);
+  if (!kind) return false;
+  const allowed = PERSONA_CARD_INPUT_KEYS_BY_KIND[kind];
+  return inputCardKeys(input).every((key) => allowed.includes(key));
 }
 
 function isIntegerIn(value: unknown, min: number, max: number): value is number {
@@ -129,7 +196,8 @@ export type BuildPersonaCardInput = {
 };
 
 /**
- * 검증된 원값 → 카드(v2). 넣은 항목만 · 순서 이름 → 출생 연도(또는 생년월일) → 사는 곳. 항목 0이면 `undefined`.
+ * 검증된 원값 → 카드(v2). 넣은 항목만 · 순서 이름 → 출생 연도(또는 생년월일) → 사는 곳 → 하는 일 → 자녀 이름 → 학년 → 학원.
+ * 항목 0이면 `undefined`.
  * 생일(월 · 일)이 있으면 `birthYear` 행 **대신** `birthDate` 행 하나(`"1965년 3월 2일생"`) — 옛 카드(월 · 일 없음)는 `birthYear` 그대로.
  */
 export function buildPersonaCard({ input, inputBy }: BuildPersonaCardInput): PersonaCard | undefined {
@@ -145,6 +213,10 @@ export function buildPersonaCard({ input, inputBy }: BuildPersonaCardInput): Per
     items.push({ key: "birthYear", label: PERSONA_CARD_LABELS.birthYear, value: `${input.birthYear}년생` });
   }
   if (input.region) items.push({ key: "region", label: PERSONA_CARD_LABELS.region, value: input.region });
+  if (input.job) items.push({ key: "job", label: PERSONA_CARD_LABELS.job, value: input.job });
+  if (input.childName) items.push({ key: "childName", label: PERSONA_CARD_LABELS.childName, value: input.childName });
+  if (input.childGrade) items.push({ key: "childGrade", label: PERSONA_CARD_LABELS.childGrade, value: input.childGrade });
+  if (input.childAcademy) items.push({ key: "childAcademy", label: PERSONA_CARD_LABELS.childAcademy, value: input.childAcademy });
   return items.length > 0 ? { v: 2, inputBy, items } : undefined;
 }
 
@@ -169,7 +241,10 @@ export function resolvePersonaCardRequest(
   const read = readPersonaCardInput(raw, nowYear);
   if (!read.ok) return { ok: false, reason: PERSONA_CARD_INVALID_REASON };
   if (!read.input) return { ok: true, personaCard: undefined };
-  if (!personaCardEligible(eligibility)) return { ok: false, reason: PERSONA_CARD_NOT_APPLICABLE_REASON };
+  // §93 — 대상이어도 그 시나리오 종류에 없는 칸(예: 기관 사칭에 자녀 이름 · 납치 협박에 내 이름)이 있으면 not-applicable.
+  if (!personaCardEligible(eligibility) || !personaCardInputFitsScenario(read.input, eligibility.scenarioId)) {
+    return { ok: false, reason: PERSONA_CARD_NOT_APPLICABLE_REASON };
+  }
   return { ok: true, personaCard: buildPersonaCard({ input: read.input, inputBy }) };
 }
 

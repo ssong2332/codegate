@@ -3,15 +3,23 @@
 //
 // ⛔ 금지(§84.0 X2 · AC-104 (e)): 사용자 계정 정보(표시 이름 · 이메일 · 계정 식별자)는 이 파일 어디에도 들어오지 않는다.
 //    실존 금융사 이름 0 · 시 · 군 · 구 이하 지명 0(사는 곳은 시 · 도까지만).
-// ⭐ 대상 범위 = 2026-10-20 User 결정(설계 기본값 5종보다 우선): **고급 + 아래 4종**(§88 — 자가 · 챌린지 모두 · 입력이 있을 때만).
-//    `kidnapping-threat`는 빠졌다 — 납치 고급의 "상대 이름을 먼저 말하지 않는다" 규칙(§50.4.4)에 예외를 만들지 않는다.
-//    그래서 자녀 행(`child`)도 만들지 않는다(그 행을 쓰는 시나리오가 kidnapping 하나뿐이었다).
+// ⭐ 대상 범위 — 2026-10-20 User 결정(고급 + 기관형 4종) → **§93(2026-10-21 · 사용자 승인 "시나리오 결정 권고안대로 진행")로 확대**:
+//    기관형 8종 + 협박형 2종(자녀 납치 · 불법업소 유포). ⚠️ 카드 배송(card-delivery-call)은 넣지 않는다 — 카드사 고급의 흐름
+//    변형으로 흡수된다(advanced-catalog-impl · 2026-10-21 조기 통보). 카드사가 이미 대상이라 흡수 변형까지 덮는다. 고급 × 통화 시작 × 입력이 있을 때만은 그대로다.
+//    협박형은 신원을 밝히지 않는 협박범(anonymous)이라 본인확인형 문면이 맞지 않는다 ⇒ 시나리오마다 **카드 종류**(`PERSONA_CARD_KIND`)를
+//    두고, 종류가 입력 칸 · 프롬프트 블록 · 리포트 교훈을 정한다. 자녀 납치는 자녀 행(`childName` 등)만, 유포 협박은 신상 + 하는 일을 받는다.
 import type { PersonaCardKey } from "../shared/types";
 import {
+  ASSET_PROTECTION_NOTICE_CALL_SCENARIO_ID,
+  BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID,
   CARD_COMPANY_IMPERSONATION_SCENARIO_ID,
   COURIER_CUSTOMS_SCAM_SCENARIO_ID,
   INSTITUTIONAL_IMPERSONATION_SCENARIO_ID,
+  KIDNAPPING_THREAT_SCENARIO_ID,
   LOAN_SCAM_SCENARIO_ID,
+  PROSECUTION_COOPERATION_CALL_SCENARIO_ID,
+  REPUTATION_BLACKMAIL_SCAM_SCENARIO_ID,
+  TAX_REFUND_SCAM_SCENARIO_ID,
 } from "./publicMeta";
 
 /** 카드 대상 시나리오(데이터 상수 — 바꾸려면 planner/User 확인이 먼저다 · AC-104 (a)). */
@@ -20,9 +28,42 @@ export const PERSONA_CARD_SCENARIOS: readonly string[] = [
   CARD_COMPANY_IMPERSONATION_SCENARIO_ID,
   LOAN_SCAM_SCENARIO_ID,
   COURIER_CUSTOMS_SCAM_SCENARIO_ID,
+  TAX_REFUND_SCAM_SCENARIO_ID,
+  BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID,
+  ASSET_PROTECTION_NOTICE_CALL_SCENARIO_ID,
+  PROSECUTION_COOPERATION_CALL_SCENARIO_ID,
+  KIDNAPPING_THREAT_SCENARIO_ID,
+  REPUTATION_BLACKMAIL_SCAM_SCENARIO_ID,
 ];
 
-/** 라벨(화면 · 프롬프트 공통 — UX-014 v1.38 (2)). */
+/**
+ * §93 카드 종류 판정표(⛔ 이 표대로만 — G569 가드가 `roleplay/personaAuthority.ts`와 대조한다):
+ * | 종류 | 페르소나 권한 | 입력 칸 | 카드가 있을 때 사기범 |
+ * |---|---|---|---|
+ * | `identity` | institution | 이름 · 출생 연도 · 생일 · 사는 곳 | 신원 요구 대신 "○○ 님 본인 맞으시죠?"로 먼저 확인 |
+ * | `self-threat` | anonymous | 이름 · 출생 연도 · 생일 · 사는 곳 · 하는 일 | 신상을 먼저 대며 "다 알고 있다"고 협박 |
+ * | `child-threat` | anonymous | 자녀 이름 · 자녀 학년 · 자녀가 다니는 학원 | 자녀 이름을 먼저 대며 압박(부모 이름은 여전히 모른다) |
+ */
+export type PersonaCardKind = "identity" | "self-threat" | "child-threat";
+export const PERSONA_CARD_KIND: Readonly<Record<string, PersonaCardKind>> = {
+  [INSTITUTIONAL_IMPERSONATION_SCENARIO_ID]: "identity",
+  [CARD_COMPANY_IMPERSONATION_SCENARIO_ID]: "identity",
+  [LOAN_SCAM_SCENARIO_ID]: "identity",
+  [COURIER_CUSTOMS_SCAM_SCENARIO_ID]: "identity",
+  [TAX_REFUND_SCAM_SCENARIO_ID]: "identity",
+  [BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID]: "identity",
+  [ASSET_PROTECTION_NOTICE_CALL_SCENARIO_ID]: "identity",
+  [PROSECUTION_COOPERATION_CALL_SCENARIO_ID]: "identity",
+  [KIDNAPPING_THREAT_SCENARIO_ID]: "child-threat",
+  [REPUTATION_BLACKMAIL_SCAM_SCENARIO_ID]: "self-threat",
+};
+
+/** 대상 시나리오의 카드 종류(대상 밖 = `undefined`). */
+export function personaCardKind(scenarioId: string): PersonaCardKind | undefined {
+  return PERSONA_CARD_SCENARIOS.includes(scenarioId) ? PERSONA_CARD_KIND[scenarioId] : undefined;
+}
+
+/** 라벨(화면 · 프롬프트 공통 — UX-014 v1.38 (2) · §93 UX D-136). */
 export const PERSONA_CARD_LABELS: Readonly<Record<PersonaCardKey, string>> = {
   name: "이름",
   birthYear: "출생 연도",
@@ -31,14 +72,53 @@ export const PERSONA_CARD_LABELS: Readonly<Record<PersonaCardKey, string>> = {
   bank: "거래 은행",
   card: "사용 카드",
   loan: "대출",
+  job: "하는 일",
+  childName: "자녀 이름",
+  childGrade: "자녀 학년",
+  childAcademy: "자녀가 다니는 학원",
 };
 
 /**
  * ⭐ §88(DECISIONS #199 · 사용자 요청 2026-10-20) — 사용자가 넣을 수 있는 카드 행(순서 = 카드 행 순서). 서버 임의 생성(§84.3.2 —
  * 이름 풀 · 출생 연도 범위 · 카드 은행 · 가림 고정값)은 폐지됐다. 거래 은행 · 사용 카드 · 대출 행은 입력 대상이 아니다(실존 은행명을
  * 넣으면 사기범이 실존 금융사명을 말한다 — §81 · OQ-U96). `bank` · `card` · `loan` 키는 옛 카드(v1) 읽기 하위호환으로만 남는다.
+ * ⭐ §93 — 종류별 행(위 판정표). 종류에 없는 행을 보내면 서버가 `persona-card-not-applicable`로 거부한다(조용히 버리지 않는다).
  */
-export const PERSONA_CARD_INPUT_KEYS: readonly PersonaCardKey[] = ["name", "birthYear", "birthDate", "region"];
+export const PERSONA_CARD_INPUT_KEYS_BY_KIND: Readonly<Record<PersonaCardKind, readonly PersonaCardKey[]>> = {
+  identity: ["name", "birthYear", "birthDate", "region"],
+  "self-threat": ["name", "birthYear", "birthDate", "region", "job"],
+  "child-threat": ["childName", "childGrade", "childAcademy"],
+};
+
+/**
+ * §93 고정 선택지(UX D-136 — 자유 입력 0 = 실명 학교 · 학원 · 회사 0). 값이 곧 카드 값이고 프롬프트에도 그대로 실린다.
+ * ⚠️ 클라 `src/lib/personacard/personaCardInput.ts`의 같은 이름 목록과 같아야 한다(`personaCardInput.test.ts` 소스 대조).
+ */
+export const PERSONA_JOB_OPTIONS: readonly string[] = ["회사원", "공무원", "교사", "자영업자", "의료인", "군인", "프리랜서"];
+export const PERSONA_CHILD_GRADE_OPTIONS: readonly string[] = [
+  "유치원생",
+  "초등학교 1학년",
+  "초등학교 2학년",
+  "초등학교 3학년",
+  "초등학교 4학년",
+  "초등학교 5학년",
+  "초등학교 6학년",
+  "중학교 1학년",
+  "중학교 2학년",
+  "중학교 3학년",
+  "고등학교 1학년",
+  "고등학교 2학년",
+  "고등학교 3학년",
+];
+export const PERSONA_CHILD_ACADEMY_OPTIONS: readonly string[] = [
+  "영어학원",
+  "수학학원",
+  "논술학원",
+  "피아노학원",
+  "미술학원",
+  "태권도장",
+  "종합학원",
+];
 
 /** 이름 입력 길이(공백 정리 뒤 · 문자 수). */
 export const PERSONA_NAME_MIN_LENGTH = 2;

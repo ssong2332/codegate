@@ -16,9 +16,16 @@ import {
   PERSONA_BIRTH_DAY_OPTIONS,
   PERSONA_BIRTH_MONTH_OPTIONS,
   PERSONA_REVEAL_SCROLL_MARGIN_PX,
+  PERSONA_CARD_THREAT_KIND,
+  PERSONA_CHILD_ACADEMY_OPTIONS,
+  PERSONA_CHILD_GRADE_OPTIONS,
+  PERSONA_JOB_OPTIONS,
+  personaCardKindFor,
+  personaInputGuide,
+  personaInvalidLine,
   type PersonaCardForm,
 } from "./personaCardInput.ts";
-import { PERSONA_CARD_COPY, PERSONA_REPORT_COPY } from "./personaCard.ts";
+import { PERSONA_CARD_COPY, PERSONA_REPORT_COPY, readPersonaBlock, resolvePersonaBlockCopy } from "./personaCard.ts";
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const UX = read("../../../docs/UX.md");
@@ -41,6 +48,11 @@ test("[G629] 입력 · 고지 · 리포트 새 문면 = docs/UX.md D-131 · D-13
     PERSONA_REPORT_COPY.r2FactSender,
     PERSONA_REPORT_COPY.tailSelfInput,
     PERSONA_REPORT_COPY.tailSender,
+    // §93(UX D-136) — 협박형 교훈.
+    PERSONA_REPORT_COPY.childExplanation,
+    PERSONA_REPORT_COPY.childAction,
+    PERSONA_REPORT_COPY.selfThreatExplanation,
+    PERSONA_REPORT_COPY.selfThreatAction,
   ];
   for (const text of texts) assert.ok(UX.includes(`**${text}**`), `UX.md 정본에 없는 문면: ${text}`);
   t.diagnostic(`[G629] 정본 대조 ${texts.length}건 일치`);
@@ -59,17 +71,99 @@ test("[G629] 시 · 도 선택지 · 대상 시나리오 = 서버 카탈로그(�
     return id;
   });
   assert.deepEqual([...PERSONA_CARD_SCENARIO_IDS].sort(), ids.sort());
+  // §93 — 고정 선택지 3종 · 협박형 종류가 서버 카탈로그와 같다(소스 대조 — 한쪽만 고치면 서버가 목록 밖 값으로 거부한다).
+  const serverList = (name: string) => {
+    const body = new RegExp(`export const ${name}: readonly string\\[\\] = \\[([\\s\\S]*?)\\];`).exec(SERVER_CATALOG)?.[1];
+    assert.ok(body, `${name}을 서버 카탈로그에서 못 찾았다`);
+    return [...body.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  };
+  assert.deepEqual([...PERSONA_JOB_OPTIONS], serverList("PERSONA_JOB_OPTIONS"));
+  assert.deepEqual([...PERSONA_CHILD_GRADE_OPTIONS], serverList("PERSONA_CHILD_GRADE_OPTIONS"));
+  assert.deepEqual([...PERSONA_CHILD_ACADEMY_OPTIONS], serverList("PERSONA_CHILD_ACADEMY_OPTIONS"));
+  const kindBlock = /export const PERSONA_CARD_KIND: Readonly<Record<string, PersonaCardKind>> = \{([\s\S]*?)\};/.exec(SERVER_CATALOG)![1]!;
+  const serverThreat = [...kindBlock.matchAll(/\[(\w+_SCENARIO_ID)\]: "(child-threat|self-threat)"/g)].map((m) => [
+    new RegExp(`export const ${m[1]} = "([^"]+)";`).exec(SERVER_PUBLIC_META)![1],
+    m[2],
+  ]);
+  assert.deepEqual(Object.entries(PERSONA_CARD_THREAT_KIND).sort(), serverThreat.sort());
 });
 
-test("[UX D-131 (1)] 입력 블록 노출 — 대상 4종 × 고급 × 통화형만", () => {
+test("[UX D-131 (1) · D-136 (1)] 입력 블록 노출 — 대상 10종 × 고급 × 통화형만", () => {
+  assert.equal(PERSONA_CARD_SCENARIO_IDS.length, 10);
   for (const id of PERSONA_CARD_SCENARIO_IDS) {
     assert.equal(personaCardInputVisible(id, "advanced", undefined), true, id);
     assert.equal(personaCardInputVisible(id, "intermediate", undefined), false, id);
     assert.equal(personaCardInputVisible(id, null, undefined), false, id);
     assert.equal(personaCardInputVisible(id, "advanced", "messenger"), false, id);
   }
-  assert.equal(personaCardInputVisible("kidnapping-threat", "advanced", undefined), false);
+  // §93 — 자녀 납치 협박도 대상이다(자녀 칸). 가족 사칭은 여전히 대상 밖.
+  assert.equal(personaCardInputVisible("kidnapping-threat", "advanced", undefined), true);
+  assert.equal(personaCardInputVisible("family-accident-deepvoice", "advanced", undefined), false);
   assert.equal(personaCardInputVisible(null, "advanced", undefined), false);
+});
+
+test("[UX D-136 (2)] 칸 판정표 — 카드 종류 · 종류의 칸만 원값에 싣는다(다른 종류 칸에 남은 값은 버림) · 안내 · 오류 문면", () => {
+  assert.equal(personaCardKindFor("kidnapping-threat"), "child-threat");
+  assert.equal(personaCardKindFor("reputation-blackmail-scam"), "self-threat");
+  assert.equal(personaCardKindFor("tax-refund-scam"), "identity");
+  assert.equal(personaCardKindFor("family-accident-deepvoice"), null);
+  assert.equal(personaCardKindFor(null), null);
+  const filled = form({
+    name: "홍길동",
+    birthYear: "1962",
+    region: "경기도",
+    job: "교사",
+    childName: " 김민준 ",
+    childGrade: "초등학교 3학년",
+    childAcademy: "영어학원",
+  });
+  assert.deepEqual(readPersonaCardForm(filled, NOW_YEAR, "identity"), {
+    ok: true,
+    input: { name: "홍길동", birthYear: 1962, region: "경기도" },
+  });
+  assert.deepEqual(readPersonaCardForm(filled, NOW_YEAR, "self-threat"), {
+    ok: true,
+    input: { name: "홍길동", birthYear: 1962, region: "경기도", job: "교사" },
+  });
+  assert.deepEqual(readPersonaCardForm(filled, NOW_YEAR, "child-threat"), {
+    ok: true,
+    input: { childName: "김민준", childGrade: "초등학교 3학년", childAcademy: "영어학원" },
+  });
+  // 기본값(종류 미전달) = 기관형(종전 호출부 그대로).
+  assert.deepEqual(readPersonaCardForm(filled, NOW_YEAR), readPersonaCardForm(filled, NOW_YEAR, "identity"));
+  assert.deepEqual(readPersonaCardForm(EMPTY_PERSONA_CARD_FORM, NOW_YEAR, "child-threat"), { ok: true, input: undefined });
+  for (const bad of [
+    form({ childGrade: "중학교 1학년" }), // 이름 없이 학년
+    form({ childAcademy: "영어학원" }), // 이름 없이 학원
+    form({ childName: "준" }),
+    form({ childName: "김민준", childAcademy: "○○어학원" }),
+  ]) {
+    assert.deepEqual(readPersonaCardForm(bad, NOW_YEAR, "child-threat"), { ok: false }, JSON.stringify(bad));
+  }
+  assert.deepEqual(readPersonaCardForm(form({ job: "삼성전자" }), NOW_YEAR, "self-threat"), { ok: false });
+  assert.equal(personaInputGuide("self", "child-threat"), PERSONA_INPUT_COPY.selfGuideChild);
+  assert.equal(personaInputGuide("send", "self-threat"), PERSONA_INPUT_COPY.sendGuideThreat);
+  assert.equal(personaInputGuide("self", "identity"), PERSONA_INPUT_COPY.selfGuide);
+  assert.equal(personaInvalidLine("child-threat"), PERSONA_INPUT_COPY.invalidChild);
+  assert.equal(personaInvalidLine(null), PERSONA_INPUT_COPY.invalid);
+  assert.equal(personaCardErrorLine(PERSONA_CARD_INVALID_REASON, "child-threat"), PERSONA_INPUT_COPY.invalidChild);
+});
+
+test("[UX D-136 (5)] 리포트 협박형 교훈 — context로 설명 · 대처만 갈린다(제목 · 사실 · 꼬리 무변경) · 모르는 context = 기관형", () => {
+  const items = [{ label: "자녀 이름", value: "김민준", scammerTurnIndex: 0 }];
+  const child = readPersonaBlock({ state: "R-1", items, inputBy: "self", context: "child-threat" })!;
+  const copy = resolvePersonaBlockCopy(child);
+  assert.equal(copy.title, PERSONA_REPORT_COPY.r1Title);
+  assert.equal(copy.explanation, PERSONA_REPORT_COPY.childExplanation);
+  assert.equal(copy.action, PERSONA_REPORT_COPY.childAction);
+  assert.equal(copy.tail, PERSONA_REPORT_COPY.tailSelfInput);
+  const self = resolvePersonaBlockCopy(readPersonaBlock({ state: "R-2", items: [{ label: "이름", value: "홍길동" }], inputBy: "sender", context: "self-threat" })!);
+  assert.equal(self.fact, PERSONA_REPORT_COPY.r2FactSender);
+  assert.equal(self.explanation, PERSONA_REPORT_COPY.selfThreatExplanation);
+  assert.equal(self.action, PERSONA_REPORT_COPY.selfThreatAction);
+  const unknown = readPersonaBlock({ state: "R-1", items, context: "evil" })!;
+  assert.equal(unknown.context, undefined);
+  assert.equal(resolvePersonaBlockCopy(unknown).explanation, PERSONA_REPORT_COPY.r1Explanation);
 });
 
 test("[UX D-131 (3)(4)] 칸 상태 → 원값 — 비면 필드 부재 · 넣은 칸만 · 형식 오류는 진행 안 함", () => {
@@ -165,7 +259,13 @@ test("[배선 · UX D-131 (1)] self = 난이도 화면 · send = 챌린지 만�
   assert.match(difficulty, /\.\.\.\(personaCardInput \? \{ personaCardInput \} : \{\}\),/);
   const create = codeOnly("../../app/challenge/create/page.tsx");
   assert.match(create, /const showPersonaInput = personaCardInputVisible\(scenarioId, difficultyLevel, scenario\?\.channel\);/);
-  assert.match(create, /<PersonaCardInputFields mode="send"/);
+  assert.match(create, /<PersonaCardInputFields\s+mode="send"/);
+  // §93(UX D-136) — 두 화면 모두 시나리오 카드 종류를 칸 · 원값 읽기에 같은 값으로 넘긴다.
+  for (const source of [difficulty, create]) {
+    assert.match(source, /const personaKind = personaCardKindFor\(scenarioId\);/);
+    assert.match(source, /kind=\{personaKind \?\? undefined\}/);
+    assert.match(source, /readPersonaCardForm\(personaForm, undefined, personaKind \?\? undefined\)/);
+  }
   assert.match(create, /\.\.\.\(personaCardInput \? \{ personaCardInput \} : \{\}\),/);
   for (const source of [difficulty, create]) assert.equal(/\bpersonaCard:/.test(source), false, "화면이 완성 카드를 보낸다");
 });
