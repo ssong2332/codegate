@@ -65,7 +65,7 @@ export default function HistoryPage() {
 
   if (state === "loading") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 p-8 text-center">
         <LoadingStatus label="히스토리를 불러오는 중입니다" />
       </main>
     );
@@ -73,7 +73,7 @@ export default function HistoryPage() {
 
   if (state === "error") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>히스토리를 불러오지 못했습니다. 다시 시도해 주세요.</span>
@@ -91,7 +91,7 @@ export default function HistoryPage() {
 
   if (state === "empty") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 p-8 text-center">
         <h1 className="text-xl font-bold">세션/리포트 히스토리</h1>
         <p className="text-lg text-ink-sub">아직 완료한 훈련 기록이 없습니다.</p>
       </main>
@@ -99,7 +99,7 @@ export default function HistoryPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-8 p-8 lg:max-w-3xl xl:max-w-5xl">
+    <main className="mx-auto flex min-h-dvh max-w-xl flex-col gap-8 p-8 lg:max-w-3xl xl:max-w-5xl">
       <h1 className="text-2xl font-bold">세션/리포트 히스토리</h1>
       <p className="text-lg text-ink-sub">지난 훈련 기록을 최신순으로 볼 수 있습니다.</p>
 

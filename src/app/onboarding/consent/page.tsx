@@ -78,7 +78,7 @@ export default function ConsentPage() {
   if (userLoading || gateState === "checking" || gateState === "redirecting") return null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-page px-6 pt-6">
+    <main className="mx-auto flex min-h-dvh max-w-xl flex-col bg-page px-6 pt-6">
       {/* AC-012 사전 고지 배너 — 상시 노출(닫기 불가), 아래 3개 포인트 카드를 보강하는 상단 요약. */}
       <Banner variant="caution" sticky>
         <span className="font-semibold text-caution">모의 훈련입니다.</span>{" "}

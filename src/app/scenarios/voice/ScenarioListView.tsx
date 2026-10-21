@@ -36,6 +36,8 @@ import {
 } from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc, type VoiceMode } from "@/content/scenarios";
 import { Badge, Button } from "@/components/ui";
+import PageToc from "@/components/PageToc";
+import { groupInOrder, voiceScenarioCategory } from "@/lib/pagetoc/pageToc";
 
 const MODE_LABEL: Record<VoiceMode, string> = {
   clone: "내 목소리 복제",
@@ -77,6 +79,15 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
     filteredEntries,
     experienceModeHint === "send" ? "send" : "self",
   );
+
+  // UX D-138 (3) — 일반 묶음은 카테고리별 구역으로 나눠 그리고, 위 "목록"에서 구역으로 바로 간다(순서는 원래 목록 순서 유지).
+  const regularGroups = groupInOrder(regularEntries, ([scenarioId]) => voiceScenarioCategory(scenarioId), "voice-category");
+  const tocSections = [
+    ...regularGroups.map((group) => ({ id: group.key, label: `${group.label} (${group.entries.length})` })),
+    ...(advancedOnlyEntries.length > 0
+      ? [{ id: "advanced-only-group-title", label: `${ADVANCED_ONLY_GROUP_TITLE} (${advancedOnlyEntries.length})` }]
+      : []),
+  ];
 
   const handleSelectScenario = (scenarioId: string) => {
     setSelectedScenarioId(scenarioId);
@@ -180,7 +191,8 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
   };
 
   return (
-    <main className="drilldown-step mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-6 pb-28 lg:max-w-3xl xl:max-w-5xl">
+    <main className="drilldown-step mx-auto flex min-h-dvh max-w-xl flex-col gap-6 p-6 pb-28 lg:max-w-3xl xl:max-w-5xl">
+      <PageToc sections={tocSections} className="-mx-6 -mt-6 -mb-4 px-6" />
       <header className="flex flex-col gap-2 pt-2">
         <button
           type="button"
@@ -205,16 +217,23 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
           이 방식의 시나리오가 아직 없습니다.
         </p>
       ) : (
-        <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2">
-          {regularEntries.map(([scenarioId, scenario]) => renderScenarioCard(scenarioId, scenario))}
-        </ul>
+        regularGroups.map((group) => (
+          <section key={group.key} className="flex flex-col gap-3" aria-labelledby={group.key}>
+            <h2 id={group.key} data-toc-target className="text-lg font-bold text-ink">
+              {group.label}
+            </h2>
+            <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2">
+              {group.entries.map(([scenarioId, scenario]) => renderScenarioCard(scenarioId, scenario))}
+            </ul>
+          </section>
+        ))
       )}
 
       {/* T191 S5(UX-017 v1.34 (1) · D-104) — 고급 전용 묶음. 데이터가 없거나 send 모드면 묶음 자체를
           그리지 않는다(빈 묶음 제목 0 — (5)). 제목은 h2라 스크린리더 목록 탐색에서 구분된다. */}
       {advancedOnlyEntries.length > 0 && (
         <section className="flex flex-col gap-3" aria-labelledby="advanced-only-group-title">
-          <h2 id="advanced-only-group-title" className="text-lg font-bold text-ink">
+          <h2 id="advanced-only-group-title" data-toc-target className="text-lg font-bold text-ink">
             {ADVANCED_ONLY_GROUP_TITLE}
           </h2>
           <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2">

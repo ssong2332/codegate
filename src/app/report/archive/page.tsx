@@ -20,6 +20,7 @@ import { useCurrentUser } from "@/lib/auth";
 import { scenarios } from "@/content/scenarios";
 import { setExperienceMode, setSelectedTrainingType } from "@/lib/recording";
 import { Badge, Button, LoadingStatus } from "@/components/ui";
+import PageToc from "@/components/PageToc";
 import {
   fetchArchiveReportPage,
   groupArchiveItemsByTactic,
@@ -143,7 +144,7 @@ export default function FailureArchivePage() {
 
   if (state === "loading") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <LoadingStatus label="속았던 순간을 불러오는 중입니다" />
       </main>
     );
@@ -151,7 +152,7 @@ export default function FailureArchivePage() {
 
   if (state === "error") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>속았던 순간을 불러오지 못했습니다. 다시 시도해 주세요.</span>
@@ -168,7 +169,7 @@ export default function FailureArchivePage() {
   // Empty(A) — 훈련 이력 자체가 없음. Empty(B)와 **구분해서** 보여준다(UX-030 States).
   if (state === "empty-no-history") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <h1 className="text-xl font-bold text-ink">내가 속았던 순간</h1>
         <p role="status" className="text-lg leading-relaxed text-ink-sub">
           아직 훈련 기록이 없습니다. 훈련을 한 번 해보시면 여기에 되돌아볼 순간이 모입니다.
@@ -189,7 +190,7 @@ export default function FailureArchivePage() {
   // AC-009 정합) — 사실만 말하고 계속 훈련하도록 안내한다.
   if (state === "empty-never-deceived") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <h1 className="text-xl font-bold text-ink">내가 속았던 순간</h1>
         <p role="status" className="text-lg font-semibold text-brand">
           지금까지 넘어간 순간이 없습니다.
@@ -313,7 +314,7 @@ export default function FailureArchivePage() {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-page pb-8 lg:max-w-3xl xl:max-w-5xl">
+    <main className="mx-auto flex min-h-dvh max-w-xl flex-col bg-page pb-8 lg:max-w-3xl xl:max-w-5xl">
       <div className="px-5 pt-[22px]">
         <h1
           ref={headingRef}
@@ -365,16 +366,30 @@ export default function FailureArchivePage() {
         </p>
       )}
 
+      {/* UX D-138 (3) — "수법별로 묶기"일 때만 수법 묶음이 구역이 된다(최신순은 구역이 없어 목록을 그리지 않는다). */}
+      {sortMode === "tactic" && (
+        <PageToc
+          sections={groups.map((group, index) => ({ id: `archive-group-${index + 1}`, label: `${group.label} (${group.count}건)` }))}
+          className="mt-2 px-5"
+        />
+      )}
+
       {sortMode === "recent" ? (
         <ul className="mx-5 mt-4 flex flex-col gap-3 lg:grid lg:grid-cols-2">
           {items.map(renderCard)}
         </ul>
       ) : (
         <div className="mx-5 mt-4 flex flex-col gap-5">
-          {groups.map((group) => (
-            <section key={group.key} aria-label={`${group.label} — ${group.count}건`}>
-              {/* 그룹 헤더 — 반복 횟수를 **텍스트로** 명시해 스크린리더에도 전달한다(P-23). */}
-              <div className="sticky top-0 z-10 -mx-1 rounded-[8px] bg-page px-1 py-2">
+          {groups.map((group, index) => (
+            <section
+              key={group.key}
+              id={`archive-group-${index + 1}`}
+              data-toc-target
+              aria-label={`${group.label} — ${group.count}건`}
+            >
+              {/* 그룹 헤더 — 반복 횟수를 **텍스트로** 명시해 스크린리더에도 전달한다(P-23).
+                  UX D-138 — 묶음이 2개 이상이면 위에 목록 막대(56px)가 붙어 있으므로 그 아래에 붙는다. */}
+              <div className={`sticky ${groups.length >= 2 ? "top-[56px]" : "top-0"} z-10 -mx-1 rounded-[8px] bg-page px-1 py-2`}>
                 <p className="text-lg font-bold text-ink">
                   {group.label} — {group.count}건
                 </p>

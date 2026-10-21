@@ -21,6 +21,7 @@ import {
 } from "@/lib/difficulty";
 import { scenarios } from "@/content/scenarios";
 import { Badge, Button, LoadingStatus } from "@/components/ui";
+import PageToc, { type PageTocEntry } from "@/components/PageToc";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { buildStageNotice, type ReportStage } from "@/lib/report/stageNotice";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
@@ -248,7 +249,7 @@ export default function ReportPage() {
 
   if (state === "no-session") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>리포트를 찾을 세션 정보가 없습니다. 처음 화면으로 돌아가 다시 시작해 주세요.</span>
@@ -266,7 +267,7 @@ export default function ReportPage() {
 
   if (state === "loading") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <LoadingStatus label="취약점 리포트를 준비하는 중입니다" />
       </main>
     );
@@ -274,7 +275,7 @@ export default function ReportPage() {
 
   if (state === "error" || !report) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>리포트 생성에 실패했습니다. 다시 시도해 주세요.</span>
@@ -307,6 +308,17 @@ export default function ReportPage() {
   const toggleSection = (section: "timeline" | "tactics" | "advice") => {
     setExpandedSection((current) => (current === section ? null : section));
   };
+
+  // UX D-138 (3) — 리포트 목록. 접힌 구역(아코디언)은 고르면 펼친 뒤 그 제목으로 간다. 없는 블록은 목록에도 없다.
+  const tocSections: PageTocEntry[] = [
+    { id: "report-summary", label: "요약" },
+    { id: "report-timeline", label: "속은 시점 타임라인", onBeforeJump: () => setExpandedSection("timeline") },
+    ...(report.personaBlock ? [{ id: "persona-block-title", label: resolvePersonaBlockCopy(report.personaBlock).title }] : []),
+    ...(report.riskSignals.length > 0 ? [{ id: "risk-signal-title", label: RISK_SIGNAL_SECTION_TITLE }] : []),
+    { id: "report-tactics", label: "시도된 수법", onBeforeJump: () => setExpandedSection("tactics") },
+    { id: "report-advice", label: "상황별 대처법", onBeforeJump: () => setExpandedSection("advice") },
+    { id: "report-next", label: "다음에 할 일" },
+  ];
 
   // T70(UX-028 즉시 되감기 진입점, AC-062/D-39/D-40) — 속은 순간이 1건 이상일 때만 노출한다.
   // 이 화면은 리포트가 이미 로드된 상태에서만 여기까지 오므로 reportStatus는 "ready"다.
@@ -367,8 +379,9 @@ export default function ReportPage() {
   );
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-page pb-8 lg:max-w-3xl">
-      <div className="px-5 pt-[22px]">
+    <main className="mx-auto flex min-h-dvh max-w-xl flex-col bg-page pb-8 lg:max-w-3xl">
+      <PageToc sections={tocSections} className="px-5" />
+      <div className="px-5 pt-1.5">
         {/* T72(P-22) — 선택(UX-029)·세션 셸과 **같은 3단계 어휘**로 표기한다. 표기 전용이며
             아래 판정(속은 시점·수법·조언)은 난이도와 무관하게 같은 잣대로 산출됐다(§15.3.5). */}
         <p className="text-[15px] font-semibold text-ink-sub">
@@ -399,6 +412,8 @@ export default function ReportPage() {
 
       {/* 요약 카드 — 개선 영역 / 잘 대처함 / 다음에 할 것, 3항목. */}
       <div
+        id="report-summary"
+        data-toc-target
         className={`mx-5 flex flex-col gap-3.5 rounded-[8px] border border-line bg-white p-[18px] ${
           report.wasDeceived ? "mt-4" : "mt-3"
         }`}
@@ -474,6 +489,8 @@ export default function ReportPage() {
       {/* 아코디언 3종 — 타임라인/시도된 수법/대처법을 접어서 밀도를 낮춘다. */}
       <div className="mx-5 mt-3.5 flex flex-col gap-2.5">
         <button
+          id="report-timeline"
+          data-toc-target
           type="button"
           onClick={() => toggleSection("timeline")}
           aria-expanded={expandedSection === "timeline"}
@@ -571,6 +588,8 @@ export default function ReportPage() {
         {report.riskSignals.length > 0 && <ReportRiskSignals signals={report.riskSignals} />}
 
         <button
+          id="report-tactics"
+          data-toc-target
           type="button"
           onClick={() => toggleSection("tactics")}
           aria-expanded={expandedSection === "tactics"}
@@ -603,6 +622,8 @@ export default function ReportPage() {
         )}
 
         <button
+          id="report-advice"
+          data-toc-target
           type="button"
           onClick={() => toggleSection("advice")}
           aria-expanded={expandedSection === "advice"}
@@ -633,7 +654,7 @@ export default function ReportPage() {
         )}
       </div>
 
-      <div className="mx-5 mt-4 flex flex-col gap-2.5">
+      <div id="report-next" data-toc-target className="mx-5 mt-4 flex flex-col gap-2.5">
         {/* UX-028(즉시 되감기) 진입점 — 속은 순간이 1건 이상일 때만 노출한다(D-40: 안 속았으면
             띄우지 않고 리플레이 해설만 권한다). 2인 사용자2는 강제 해설 이후 화면에서만 보인다
             (AC-042, resolveRewindEntry). */}
@@ -862,7 +883,7 @@ function ReportRiskSignals({ signals }: { signals: RiskSignalView[] }) {
       aria-labelledby="risk-signal-title"
       className="flex flex-col gap-2.5 rounded-[8px] border border-caution/30 bg-caution-tint p-[18px]"
     >
-      <h2 id="risk-signal-title" className="text-lg font-bold text-ink">
+      <h2 id="risk-signal-title" data-toc-target className="text-lg font-bold text-ink">
         {RISK_SIGNAL_SECTION_TITLE}
       </h2>
       <ul className="flex flex-col gap-3">
@@ -895,7 +916,7 @@ function ReportPersonaBlock({ block }: { block: PersonaBlockView }) {
       aria-labelledby="persona-block-title"
       className="flex flex-col gap-2.5 rounded-[8px] border border-line bg-white p-[18px]"
     >
-      <h2 id="persona-block-title" className="text-lg font-bold text-ink">
+      <h2 id="persona-block-title" data-toc-target className="text-lg font-bold text-ink">
         {copy.title}
       </h2>
       <p className="text-lg leading-relaxed text-ink">{copy.fact}</p>

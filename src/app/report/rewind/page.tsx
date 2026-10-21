@@ -202,7 +202,7 @@ export default function RewindPage() {
 
   if (state === "no-report") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>되감을 리포트 정보가 없습니다. 처음 화면으로 돌아가 다시 시작해 주세요.</span>
@@ -216,7 +216,7 @@ export default function RewindPage() {
 
   if (state === "loading") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <LoadingStatus label="그 순간의 대화를 불러오는 중입니다" />
       </main>
     );
@@ -224,7 +224,7 @@ export default function RewindPage() {
 
   if (state === "error" || !context) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>그 순간의 대화를 불러오지 못했습니다. 다시 시도해 주세요.</span>
@@ -240,7 +240,7 @@ export default function RewindPage() {
   // 대비한다. 없는 순간(near-miss)을 발명하지 않고 리플레이 해설로 안내한다.
   if (!moment) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="status" className="text-lg font-semibold text-ink">
           이번 대화에서는 되감을 순간이 없습니다.
         </p>
@@ -264,7 +264,7 @@ export default function RewindPage() {
   const answerTooLong = answer.length > ANSWER_MAX_LENGTH;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col bg-page pb-8 lg:max-w-3xl">
+    <main className="mx-auto flex min-h-dvh max-w-xl flex-col bg-page pb-8 lg:max-w-3xl">
       <div className="px-5 pt-[22px]">
         <p className="text-[15px] font-semibold text-ink-sub">
           {[context.scenarioTitle, moment.timeLabel].filter(Boolean).join(" · ")}

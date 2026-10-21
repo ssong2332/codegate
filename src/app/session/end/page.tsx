@@ -278,7 +278,9 @@ export default function SessionEndPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center gap-6 bg-page px-6 py-10 text-center">
+    // UX D-138 (2) — 높이 700px 이하(주소창이 보이는 작은 폰)에서는 `end-compact`(globals.css)가 여백 · 간격 · 아이콘 · 행간만
+    // 줄여 한 화면에 든다(글자 크기 · 문면 무변경). 360×650 실측: 넘침 75 → 0.
+    <main className="end-compact mx-auto flex min-h-dvh max-w-xl flex-col items-center gap-6 bg-page px-6 py-10 text-center">
       {/* AC-023: "이것은 훈련이었습니다" 명시 고지. 색이 아닌 아이콘+텍스트로 강조, 항상 노출. */}
       <div
         aria-hidden="true"

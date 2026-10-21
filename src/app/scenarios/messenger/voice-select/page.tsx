@@ -192,7 +192,7 @@ export default function MessengerVoiceSelectPage() {
 
   if (pageState === "no-scenario") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>선택한 시나리오 정보를 찾을 수 없습니다. 시나리오를 다시 선택해 주세요.</span>
@@ -208,7 +208,7 @@ export default function MessengerVoiceSelectPage() {
 
   if (isReturningFlow && pageState !== "returning-error") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <LoadingStatus label="목소리 클론이 준비됐습니다. 훈련을 시작하는 중입니다" hints={SESSION_PREP_HINTS} />
       </main>
     );
@@ -216,7 +216,7 @@ export default function MessengerVoiceSelectPage() {
 
   if (pageState === "returning-error") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>목소리 클론을 확인하지 못했습니다. 다시 시도해 주세요.</span>
@@ -231,7 +231,7 @@ export default function MessengerVoiceSelectPage() {
   }
 
   return (
-    <main className="drilldown-step mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-6 pb-10">
+    <main className="drilldown-step mx-auto flex min-h-dvh max-w-xl flex-col gap-6 p-6 pb-10">
       <header className="flex flex-col gap-2 pt-2">
         <button
           type="button"

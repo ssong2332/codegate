@@ -6,7 +6,7 @@
 //    안쪽 main의 6px 상승은 페이지가 바뀌면 main이 새로 마운트되므로 CSS(motion.css)로 충분하다.
 // ⛔ 훈련 화면(통화 · 채팅 · 메신저)은 감싸기만 하고 모션을 주지 않는다 — 실제 폰에 없는 연출 금지이며,
 //    받기 탭의 동기 오디오 잠금 해제(primeCallAudio) 앞에 어떤 지연도 끼우지 않는다.
-// ⚠️ 래퍼는 body의 flex 열을 그대로 잇는다(`flex flex-1 flex-col`) — 안쪽 main의 `min-h-screen` · `flex-1`이 그대로 동작한다.
+// ⚠️ 래퍼는 body의 flex 열을 그대로 잇는다(`flex flex-1 flex-col`) — 안쪽 main의 `min-h-dvh` · `flex-1`이 그대로 동작한다.
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { isTrainingSurfacePath } from "@/lib/motion/routeMotion";

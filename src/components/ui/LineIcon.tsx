@@ -1,6 +1,6 @@
 // 공용 선 아이콘 (시안 A "공공 안심형" — UX D-132 (2)). 자체 도형만 쓴다(상표 · 플랫폼 아이콘 복제 금지 — 감사 안전선 표).
 // 색은 `currentColor` — 부모의 `text-*` 토큰을 따른다. 장식 아이콘이므로 늘 aria-hidden.
-export type LineIconName = "phone" | "chat" | "gift" | "shield" | "check" | "user" | "lock" | "clock" | "alert" | "mic" | "speaker";
+export type LineIconName = "phone" | "chat" | "gift" | "shield" | "check" | "user" | "lock" | "clock" | "alert" | "mic" | "speaker" | "list";
 
 const PATHS: Record<LineIconName, string> = {
   phone: "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2",
@@ -14,6 +14,7 @@ const PATHS: Record<LineIconName, string> = {
   alert: "M12 3l10 18H2z M12 10v5 M12 18v.5",
   mic: "M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z M5 11a7 7 0 0 0 14 0 M12 18v3",
   speaker: "M4 9h4l5-4v14l-5-4H4z M16.5 8.5a5 5 0 0 1 0 7 M19 6a8.5 8.5 0 0 1 0 12",
+  list: "M9 6h11 M9 12h11 M9 18h11 M4.5 6h.5 M4.5 12h.5 M4.5 18h.5",
 };
 
 export default function LineIcon({ name, size = 22, className = "" }: { name: LineIconName; size?: number; className?: string }) {

@@ -2001,7 +2001,7 @@ export default function SessionCallPage() {
           ? "선택된 시나리오 정보를 찾을 수 없습니다. 시나리오를 다시 선택해 주세요."
           : "통화 정보를 불러오지 못했습니다. 다시 시도해 주세요.";
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-base text-danger">
           <span aria-hidden="true">⚠</span>
           <span>{message}</span>
@@ -2019,7 +2019,7 @@ export default function SessionCallPage() {
 
   if (pageState !== "ready" || !scenario) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <LoadingStatus label="통화 정보를 불러오는 중입니다" />
       </main>
     );
@@ -2036,7 +2036,7 @@ export default function SessionCallPage() {
       return (
         <main
           aria-busy="true"
-          className="flex min-h-screen flex-col"
+          className="flex min-h-dvh flex-col"
           style={{ backgroundColor: callTokensFor(deviceSkin.skin, deviceTheme).bg }}
         >
           <div className="flex justify-end px-4 py-2.5">
@@ -2234,7 +2234,7 @@ export default function SessionCallPage() {
   return (
     // T190-3(UX-014 v1.33 (8) Responsive · W-D) — 최대폭 430px 가운데 정렬, 바깥은 `call.bg`보다 한 단계 어두운 단색.
     <main
-      className="font-phone flex min-h-screen flex-col text-[var(--call-fg)]"
+      className="font-phone flex min-h-dvh flex-col text-[var(--call-fg)]"
       style={{ backgroundColor: callTokens.outerBg, ...callShellVars }}
     >
       {/* 실시간 speech-to-speech 세션 — 서버가 자격증명을 준 경우에만 마운트된다(지연 로딩).
@@ -2309,8 +2309,10 @@ export default function SessionCallPage() {
           그 자리는 `env(safe-area-inset-top)` + 24px 여백이다. 경과 시간은 번호 바로 아래 한 줄 하나뿐이다(D-86).
           색·크기는 스킨 토큰(UX v1.33 근사 — 실기 측정 전, `@/lib/phone/skinTokens`)이며 대비 하한은 G456이 막는다.
           ⚠️ 이 래퍼는 표현 계층일 뿐이다 — 세션 컴포넌트(위)·오버레이(아래)는 여전히 `<main>`의 형제 노드다(G10). */}
+      {/* UX D-138 (2) — 키패드가 열려 있을 때만 셸을 화면 높이로 묶는다(키패드 영역이 남은 높이만큼 줄고 그 안에서 스크롤 ·
+          종료 버튼은 화면 안). 그 밖 상태는 최소 높이만 준다(내용이 그래도 넘치면 문서가 스크롤 — 잘리지 않는다). */}
       <div
-        className="mx-auto flex min-h-screen w-full max-w-[430px] flex-1 flex-col"
+        className={`mx-auto flex w-full max-w-[430px] flex-col ${showTextInput ? "h-dvh flex-none" : "min-h-dvh flex-1"}`}
         style={{
           // §89.5 ⓑ — 수신 벨은 흐린 그라데이션 바탕(그 밖 phase는 단색 — 종전).
           background: isRinging ? ringBackground(callTokens) : callTokens.bg,
@@ -2384,17 +2386,22 @@ export default function SessionCallPage() {
       )}
 
       {/* ① (One UI형만) 아바타 · ② 발신 번호 · ③ 번호 바로 아래 phase 줄 · ④ 전환 뒤 줄 · G288 줄(UX-014 v1.33 (2)).
-          상단 여백(근사): iOS형 safe-area+72px · One UI형 화면 높이 18% 지점. */}
+          상단 여백(근사): iOS형 safe-area+72px · One UI형 화면 높이 18% 지점.
+          ⭐ UX D-138 (2)(실기 신고 2026-10-21) — 상단 여백은 고정 padding이 아니라 **줄어드는 여백 칸**이다: 남는 높이가 있으면
+          종전 값(One UI형 `18dvh - 24px` · iOS형 48px)까지 크고, 주소창이 보여 높이가 모자라면 0까지 줄어 하단 버튼이 화면 안에
+          남는다. 칸의 기준 크기가 0이라 화면 최소 높이 계산에 들어가지 않는다(내용이 그래도 넘치면 그때만 스크롤). */}
       <div
-        className="flex flex-1 flex-col items-center gap-5 px-6"
-        style={{ paddingTop: callTokens.hasAvatar ? "max(0px, calc(18vh - 24px))" : "48px" }}
-      >
+        aria-hidden="true"
+        className="call-top-slack"
+        style={{ maxHeight: callTokens.hasAvatar ? "max(0px, calc(18dvh - 24px))" : "48px" }}
+      />
+      <div className="call-compact-gap flex flex-1 flex-col items-center gap-5 px-6">
         {/* §89.5 ⓑ — 벨 등장: 위에서 내려오며 커진다(`call-ring-enter` · reduced-motion이면 정지 — G457). */}
         <div className={`flex w-full flex-col items-center text-center ${isRinging ? "call-ring-enter" : ""}`}>
           {callTokens.hasAvatar && (
             <div
               aria-hidden="true"
-              className="relative mb-5 flex h-[88px] w-[88px] items-center justify-center rounded-full"
+              className="call-compact-avatar relative mb-5 flex h-[88px] w-[88px] items-center justify-center rounded-full"
               style={{ backgroundColor: callTokens.avatarBg, color: callTokens.avatarFg }}
             >
               {/* One UI형 울림 연출 = 아바타 둘레 파동(현행 `call-ring-pulse` 재사용 · reduced-motion이면 정지).
@@ -2601,7 +2608,7 @@ export default function SessionCallPage() {
           </button>
         </div>
       ) : (
-        <div className="flex flex-col pb-[calc(env(safe-area-inset-bottom)+32px)]">
+        <div className={`call-compact-bottom flex flex-col pb-[calc(env(safe-area-inset-bottom)+32px)] ${showTextInput ? "min-h-0" : ""}`}>
           {/* T190-3(UX-014 v1.33 (7)) — 키패드를 열면 **그리드 자리를 키패드가 대체**한다(실제 통화 앱처럼). 높이가
               모자라면 키패드 영역만 스크롤되고 종료 버튼은 아래 같은 자리에 고정이다(AC-006). 자막·안내·오류·
               텍스트 입력(두 `form` · `scrollIntoView`)은 예전 그대로 이 영역 안에 있다 — 문면 무변경. */}
@@ -2611,11 +2618,12 @@ export default function SessionCallPage() {
             ref={hangupDimRef}
             aria-disabled={remoteHangup ? true : undefined}
             inert={remoteHangup ? true : undefined}
-            className="transition-opacity duration-200 motion-reduce:transition-none"
+            className={`transition-opacity duration-200 motion-reduce:transition-none ${showTextInput ? "flex min-h-0 flex-col" : ""}`}
             style={remoteHangup ? { opacity: 0.4, pointerEvents: "none" } : undefined}
           >
           {showTextInput ? (
-            <div className="max-h-[56vh] overflow-y-auto px-6">
+            // UX D-138 — `relative`: 안쪽 `sr-only` 라벨(absolute)이 스크롤 영역 밖 문서 높이를 늘리지 않게 가둔다(360×650 실측 +201px).
+            <div className="relative max-h-[56dvh] min-h-0 overflow-y-auto px-6">
               {/* 실제 통화 키패드(사용자 신고 2026-07-25 — "키패드가 있는데 실제로 작동하지 않는다").
                   상대가 "인증번호 눌러주세요"류를 요구하는 시나리오에서 실제로 눌러 응답할 수 있다.
                   누른 숫자는 화면에 그대로 보이고, 전송하면 음성/텍스트와 동일한 경로로 상대에게
@@ -2974,7 +2982,7 @@ export default function SessionCallPage() {
               G441 — 이 리터럴은 이 파일에 둔다, §74.4 R-3). 키패드가 열려 있으면 오른쪽 아래 "숨기기"(48px)가
               그리드로 되돌린다. */}
           {/* 2026-10-21 — iOS형은 종료 원이 그리드 셋째 줄 가운데처럼 붙고(행 간격과 같게) · One UI형은 판 아래 띄운다. */}
-          <div className={`relative flex flex-col items-center gap-1.5 ${callTokens.layout === "ios" ? "mt-5" : "mt-7"}`}>
+          <div className={`call-compact-end relative flex flex-col items-center gap-1.5 ${callTokens.layout === "ios" ? "mt-5" : "mt-7"}`}>
             <button
               ref={endCallButtonRef}
               type="button"
