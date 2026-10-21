@@ -178,6 +178,7 @@ export function summarizeLatency(records: readonly LiveLatencyTurnRecord[]): Lat
 
 export type CallSetupMark =
   | "accept"
+  | "micGranted"
   | "credentialsReady"
   | "mount"
   | "micReady"
@@ -220,16 +221,22 @@ export type CallSetupRecord = {
   /** 자격증명 출처(종류 문자열 — 식별자 아님). `credentialsPrefetched`는 `settled`·`inflight`일 때 true다. */
   credentialSource: CredentialSourceTag | null;
   /**
-   * 받기 → 자격증명 준비(마이크 권한 확인 + 자격증명 확보).
-   * - `settled`: 마이크 확인만 — 발급 대기 0.
-   * - `inflight`: 마이크 확인 + **진행 중 미리 받기의 남은 시간**(0이 아닐 수 있다 — 2026-10-18 경합 수정 이후).
-   * - `mint`: 마이크 확인 + 발급 왕복 전체(콜드 스타트면 수 초).
+   * 받기 → 자격증명 준비. ⭐ 2026-10-21부터 마이크를 기다리지 않는다(마이크는 `acceptToMicMs`로 따로 잰다 — 예전 값은
+   * 마이크 권한 확인 + 자격증명이 직렬로 합쳐져 있었다).
+   * - `settled`: 발급 대기 0.
+   * - `inflight`: **진행 중 미리 받기의 남은 시간**(0이 아닐 수 있다 — 2026-10-18 경합 수정 이후).
+   * - `mint`: 발급 왕복 전체(콜드 스타트면 수 초).
+   * Gemini가 아닌 경로(폴백 · ElevenLabs)는 종전처럼 마이크 결과를 기다린 뒤 진행하지만, 이 표시는 그 전에 찍힌다.
    */
   acceptToCredentialsMs: number | null;
+  /** 받기 → 마이크 허용(받기 때 1회 연 getUserMedia가 끝난 시각 · 거부면 null). 자격증명 · Live 연결과 병렬이다. */
+  acceptToMicMs: number | null;
   credentialsToMountMs: number | null;
-  /** 마운트 → getUserMedia · AudioContext 준비. */
+  /** 마운트 → AudioContext 준비(⭐ 2026-10-21부터 마이크 획득을 포함하지 않는다 — `acceptToMicMs`). */
   mountToMicMs: number | null;
+  /** AudioContext 준비 → Live 연결 완료. */
   micToConnectMs: number | null;
+  /** Live 연결 완료 → 오프닝 지시 전송. 0이 아니면 마이크(권한 창 등)를 기다렸다는 뜻이다. */
   connectToOpeningSentMs: number | null;
   openingSentToFirstAudioMs: number | null;
   /** 받기 → 첫 오디오(받기가 없으면 마운트부터). */
@@ -253,6 +260,7 @@ export function buildCallSetupRecord(
     credentialsPrefetched: marks.credentialsPrefetched ?? null,
     credentialSource: marks.credentialSource ?? null,
     acceptToCredentialsMs: diff(marks.accept, marks.credentialsReady),
+    acceptToMicMs: diff(marks.accept, marks.micGranted),
     credentialsToMountMs: diff(marks.credentialsReady, marks.mount),
     mountToMicMs: diff(marks.mount, marks.micReady),
     micToConnectMs: diff(marks.micReady, marks.connectResolved),
