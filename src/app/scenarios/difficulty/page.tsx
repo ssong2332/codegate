@@ -54,7 +54,7 @@ import { scenarios, GENERIC_VOICE_ID, resolveScenarioEscalation } from "@/conten
 import { Badge, BottomSheet, BoundaryPanel, Button, CtaPanel, DisplayTitle, LoadingDots, PanelBadge, PanelList } from "@/components/ui";
 import SelectScreenHeader from "@/components/SelectScreenHeader";
 import TrainingPrepScreen from "@/components/TrainingPrepScreen";
-import { ENTRY_BOARD_MS, entryBoardCopy } from "@/lib/design/e2Prep";
+import { ENTRY_BOARD_MS, PREP_ALL_DONE, advancePrepDone, entryBoardCopy } from "@/lib/design/e2Prep";
 import PersonaCardInputFields from "@/components/PersonaCardInputFields";
 import {
   EMPTY_PERSONA_CARD_FORM,
@@ -92,6 +92,8 @@ export default function DifficultySelectPage() {
   // ⛔ 받기 탭의 동기 오디오 잠금 해제(primeCallAudio)는 통화 화면 안의 "준비됐어요" · 받기 탭에서 일어나므로 이 판과 무관하다
   //    (이 판은 그 전 화면에서 끝난다 — 훈련 화면 코드 무변경).
   const [entryBoardTo, setEntryBoardTo] = useState<string | null>(null);
+  // §100(UX D-143) — 서버가 실제로 끝낸 준비 단계 수(createSession 스트리밍 조각 · 최종 응답만 올린다 — 시간으로 올리지 않는다).
+  const [prepDone, setPrepDone] = useState(0);
   // 리뷰 Minor — "바로 시작"과 타이머가 겹쳐도 한 번만 간다.
   const enteredRef = useRef(false);
   const enterTraining = useCallback(
@@ -179,15 +181,20 @@ export default function DifficultySelectPage() {
     const sessionId = getOrCreatePendingSessionId();
     if (!sessionId) return;
 
-    const result = await createSession({
-      sessionId,
-      scenarioId: sid,
-      voiceId: GENERIC_VOICE_ID,
-      difficultyLevel: level,
-      ...(isMessenger ? { channel: "messenger" as const, surface: scenario?.surface } : {}),
-      // §88 — 넣은 칸이 있을 때만 싣는다(비면 필드 부재 = 카드 0 = 사기범이 이름 · 생년월일을 묻는다).
-      ...(personaCardInput ? { personaCardInput } : {}),
-    });
+    const result = await createSession(
+      {
+        sessionId,
+        scenarioId: sid,
+        voiceId: GENERIC_VOICE_ID,
+        difficultyLevel: level,
+        ...(isMessenger ? { channel: "messenger" as const, surface: scenario?.surface } : {}),
+        // §88 — 넣은 칸이 있을 때만 싣는다(비면 필드 부재 = 카드 0 = 사기범이 이름 · 생년월일을 묻는다).
+        ...(personaCardInput ? { personaCardInput } : {}),
+      },
+      (stage) => setPrepDone((done) => advancePrepDone(done, stage)),
+    );
+    // 응답이 왔다 = 모든 준비 단계가 끝났다(옛 서버처럼 조각이 0개여도 참).
+    setPrepDone(PREP_ALL_DONE);
     // 오프닝 재생 힌트는 보이스 경로에서만 쓴다(메신저는 텍스트 전용 — 이관 전 동작 그대로).
     if (!isMessenger) {
       if (result.openingAudioUrl) setOpeningAudioUrl(result.openingAudioUrl);
@@ -220,6 +227,7 @@ export default function DifficultySelectPage() {
     }
     setState("starting");
     setStartError(null);
+    setPrepDone(0);
     try {
       if (isSendMode) {
         // (send) UX-019 챌린지 만들기 — 그 화면이 난이도를 요약에 명시하고 createChallenge로 넘긴다.
@@ -310,12 +318,15 @@ export default function DifficultySelectPage() {
     );
   }
 
-  // UX D-141 (5) · OQ-U106 Resolved — 셀프 세션을 만드는 동안(대기 길게는 15초) 준비 화면을 화면 전체에 그린다.
-  // 큰 표시는 경과 초(진행률 · "1/3" 0 — D-134). 보내기 · 통화로 이어지는 메신저는 곧바로 다음 화면으로 가므로 그리지 않는다.
+  // UX D-141 (5) · D-143(§100) — 셀프 세션을 만드는 동안 준비 화면을 화면 전체에 그린다. 서버가 실제로 끝낸 준비 단계만
+  // 체크한다(경과 초 · 예상 시간 · 진행률 0 — D-134). 보내기 · 통화로 이어지는 메신저는 곧바로 다음 화면으로 가므로 그리지 않는다.
   if (state === "starting" && !isSendMode && selected && !resolveScenarioEscalation(scenario, selected)) {
     return (
       <TrainingPrepScreen
         meta={`${typeLabel} · ${scenario.title} · ${DIFFICULTY_LABEL[selected]}`}
+        scenarioId={scenarioId}
+        channel={isMessenger ? "messenger" : "voice"}
+        doneCount={prepDone}
         difficultyLabel={DIFFICULTY_LABEL[selected]}
         difficultyNote={DIFFICULTY_SELF_DESCRIPTION[selected]}
       />
