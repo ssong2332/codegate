@@ -14,6 +14,7 @@ import {
   contrastViolations,
   gridPressedPairs,
   pairContrast,
+  panelPairs,
   parseColor,
   skinContrastPairs,
   type ContrastPair,
@@ -102,4 +103,34 @@ test("[T190/UX-014 v1.33 (5)] 스킨 차이표 근사값 — 받기 초록 · �
   assert.deepEqual(callTokensFor("default"), callTokensFor("samsung"));
   assert.equal(bannerTokensFor("ios").radiusPx, 18);
   assert.equal(bannerTokensFor("samsung").radiusPx, 22);
+});
+
+// 2026-10-21 사용자 실기 신고 *"iOS형과 One UI형의 전화 화면이 차이가 없네"* — 색만이 아니라 화면 골격이 갈린다.
+test("[실기 신고 2026-10-21] 스킨 골격 — iOS형 = ios(판 없음 · 원 키패드) · One UI형 · 기본 = oneui(어두운 · 라이트 모두 판)", () => {
+  assert.equal(callTokensFor("ios").layout, "ios");
+  assert.equal(callTokensFor("ios").gridPanelBg, null);
+  for (const skin of ["samsung", "default"] as const) {
+    assert.equal(callTokensFor(skin).layout, "oneui");
+    assert.ok(callTokensFor(skin).gridPanelBg, `${skin} 어두운 화면에 버튼 판이 없다`);
+    assert.ok(callTokensFor(skin, "light").gridPanelBg, `${skin} 라이트 화면에 버튼 판이 없다`);
+  }
+  // iOS형 라이트 테마 요청도 어두운 iOS형 그대로(§89.5 ⓒ — 라이트 통화 화면은 One UI형에만).
+  assert.deepEqual(callTokensFor("ios", "light"), callTokensFor("ios"));
+});
+
+test("[실기 신고 2026-10-21 · G456] 판이 있는 스킨은 판 위 라벨 · 아이콘 · 눌림 쌍을 수집한다(판 없는 iOS형은 0쌍)", () => {
+  const names = (skin: (typeof SKINS)[number]) => skinContrastPairs(skin).map((p) => p.name);
+  for (const skin of ["samsung", "default"] as const) {
+    for (const suffix of ["panelLabel", "panelIcon", "panelPressedIndicator", "panelIconPressed", "keypadLetters"]) {
+      assert.ok(names(skin).includes(`${skin}.call.${suffix}`), `${skin}.call.${suffix}이 G456 수집에서 빠졌다`);
+    }
+  }
+  assert.equal(names("ios").some((n) => n.includes(".call.panel")), false);
+  assert.ok(names("ios").includes("ios.call.keypadLetters"));
+});
+
+test("[실기 신고 2026-10-21 · G456 역검증] 판을 바탕과 거의 같은 밝은 회색으로 바꾼 사본은 흰 라벨에서 실패한다", () => {
+  const poisoned = { ...callTokensFor("samsung"), gridPanelBg: "#C9D4DB" };
+  const violations = contrastViolations(panelPairs("samsung", poisoned));
+  assert.ok(violations.some((v) => v.startsWith("samsung.call.panelLabel ")), violations.join(" | "));
 });
