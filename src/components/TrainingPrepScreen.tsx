@@ -1,10 +1,10 @@
 "use client";
 
-// 시안 E2 준비 화면(UX D-141 (5) · D-142 · §97.7 · §99) — 난이도 화면에서 "이걸로 시작"을 누른 뒤 세션이 만들어지는 동안
+// 시안 E2 준비 화면(UX D-141 (5) · D-143 · §97.7 · §100) — 난이도 화면에서 "이걸로 시작"을 누른 뒤 세션이 만들어지는 동안
 // (createSession 대기) 화면 전체에 그린다. 세션 전 화면이다(훈련 화면 아님 — 통화 · 메신저는 무변경).
 // 짙은 남색 바탕 · **실제 준비 단계 3줄**(서버가 끝낸 단계만 체크 — 스트리밍 신호 · 최종 응답) · 고른 난이도 설명 ·
-// 시나리오 유형에 맞춘 예방 요령(5초마다 교체 · §99.5) · 오래 걸릴 때만 안심 문구(D-134 SESSION_PREP_HINTS).
-// ⛔ 경과 초 · 예상 시간 · 진행률 · 퍼센트 · "1/3" 표기 금지(D-142 · D-134). 시간이 지났다고 체크하지 않는다.
+// 시나리오 유형에 맞춘 예방 요령(5초마다 교체 · §100.5) · 오래 걸릴 때만 안심 문구(D-134 SESSION_PREP_HINTS).
+// ⛔ 경과 초 · 예상 시간 · 진행률 · 퍼센트 · "1/3" 표기 금지(D-143 · D-134). 시간이 지났다고 체크하지 않는다.
 import { useEffect, useRef, useState } from "react";
 import { LineIcon, LoadingDots } from "@/components/ui";
 import { useLoadingHint } from "@/components/ui/LoadingStatus";
@@ -30,7 +30,7 @@ export default function TrainingPrepScreen({
 }: {
   /** 유형 · 시나리오 · 난이도 한 줄 */
   meta: string;
-  /** 요령을 시나리오의 사칭 유형에 맞춰 고른다(§99.5). */
+  /** 요령을 시나리오의 사칭 유형에 맞춰 고른다(§100.5). */
   scenarioId: string;
   channel: "voice" | "messenger";
   /** 서버가 실제로 끝낸 준비 단계 수(앞에서부터 — `advancePrepDone`). */

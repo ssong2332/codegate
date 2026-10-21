@@ -92,7 +92,7 @@ export default function DifficultySelectPage() {
   // ⛔ 받기 탭의 동기 오디오 잠금 해제(primeCallAudio)는 통화 화면 안의 "준비됐어요" · 받기 탭에서 일어나므로 이 판과 무관하다
   //    (이 판은 그 전 화면에서 끝난다 — 훈련 화면 코드 무변경).
   const [entryBoardTo, setEntryBoardTo] = useState<string | null>(null);
-  // §99(UX D-142) — 서버가 실제로 끝낸 준비 단계 수(createSession 스트리밍 조각 · 최종 응답만 올린다 — 시간으로 올리지 않는다).
+  // §100(UX D-143) — 서버가 실제로 끝낸 준비 단계 수(createSession 스트리밍 조각 · 최종 응답만 올린다 — 시간으로 올리지 않는다).
   const [prepDone, setPrepDone] = useState(0);
   // 리뷰 Minor — "바로 시작"과 타이머가 겹쳐도 한 번만 간다.
   const enteredRef = useRef(false);
@@ -318,7 +318,7 @@ export default function DifficultySelectPage() {
     );
   }
 
-  // UX D-141 (5) · D-142(§99) — 셀프 세션을 만드는 동안 준비 화면을 화면 전체에 그린다. 서버가 실제로 끝낸 준비 단계만
+  // UX D-141 (5) · D-143(§100) — 셀프 세션을 만드는 동안 준비 화면을 화면 전체에 그린다. 서버가 실제로 끝낸 준비 단계만
   // 체크한다(경과 초 · 예상 시간 · 진행률 0 — D-134). 보내기 · 통화로 이어지는 메신저는 곧바로 다음 화면으로 가므로 그리지 않는다.
   if (state === "starting" && !isSendMode && selected && !resolveScenarioEscalation(scenario, selected)) {
     return (

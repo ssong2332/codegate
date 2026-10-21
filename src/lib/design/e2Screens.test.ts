@@ -57,13 +57,13 @@ test("[G651] 난이도 — choose 판 + sticky 설명 시트 + '이걸로 시작
   for (const needle of ["{PRE_SESSION_BURDEN_NOTICE}", "<PersonaCardInputFields", "위험 신호 미리 보기", "<TrainingPrepScreen", "advancedNotice"]) {
     assert.ok(code.includes(needle), needle);
   }
-  // 대기 문구(D-134)는 준비 화면이 그린다 — §99부터는 오래 걸릴 때의 안심 문구만(0초 문구는 단계 목록이 대신한다).
+  // 대기 문구(D-134)는 준비 화면이 그린다 — §100부터는 오래 걸릴 때의 안심 문구만(0초 문구는 단계 목록이 대신한다).
   assert.ok(codeOnly("src/components/TrainingPrepScreen.tsx").includes("slowPrepHints(SESSION_PREP_HINTS)"));
 });
 
-// G652~G653 — P3 준비 화면 · 경계 판(§97.7). G652는 §99(UX D-142 · 2026-10-22)에서 "경과 초 · 보통 10~15초"를
+// G652~G653 — P3 준비 화면 · 경계 판(§97.7). G652는 §100(UX D-143 · 2026-10-22)에서 "경과 초 · 보통 10~15초"를
 // "서버가 실제로 끝낸 준비 단계만 체크"로 바꿨다(사용자 원문 "보통 10~15초가 나오는데, 다른 방식으로 전환").
-test("[G652] 준비 화면 — 실제 준비 단계만 체크 · 경과 초 · 예상 시간 · 진행률 · 숫자 단계 표기 0(D-142 · D-134)", async () => {
+test("[G652] 준비 화면 — 실제 준비 단계만 체크 · 경과 초 · 예상 시간 · 진행률 · 숫자 단계 표기 0(D-143 · D-134)", async () => {
   const { prepStepsFor, PREP_STAGE_ORDER, PREP_ALL_DONE, advancePrepDone, prepStepState, prepAnnouncement, slowPrepHints, PREP_TIPS, prepTipIndex, PREP_TIP_INTERVAL_MS } =
     await import("./e2Prep.ts");
   const mod = await import("./e2Prep.ts");
@@ -132,7 +132,7 @@ test("[G702] 난이도 화면 — 준비 단계는 createSession 스트리밍 �
   assert.match(server, /CREATE_SESSION_PREP_STAGES = \["scenario", "opening", "saved"\] as const/);
 });
 
-// G703 — §99.5(2026-10-22 실기 신고: 카드사 부정결제 사칭 × 초급 준비 화면에 "검찰·경찰·금감원은…"이 먼저 나왔다).
+// G703 — §100.5(2026-10-22 실기 신고: 카드사 부정결제 사칭 × 초급 준비 화면에 "검찰·경찰·금감원은…"이 먼저 나왔다).
 test("[G703] 준비 화면 요령 — 시나리오 사칭 유형에 맞고 · 문장은 앱 안 기존 문구 그대로 · 메신저에 '전화를 끊' 0", async () => {
   const { prepTipsFor, PREP_TIP_KIND_BY_SCENARIO, PREP_TIPS } = await import("./e2Prep.ts");
   const report = readFileSync("functions/src/report/analyzeConversation.ts", "utf8");

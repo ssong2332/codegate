@@ -48,7 +48,7 @@ function rethrowAfterSignal(err: unknown): never {
 }
 
 /**
- * §99(UX D-142) — 스트리밍 콜러블. 서버가 `response.sendChunk`로 보내는 조각을 `onChunk`로 넘기고, 최종 응답을 돌려준다.
+ * §100(UX D-143) — 스트리밍 콜러블. 서버가 `response.sendChunk`로 보내는 조각을 `onChunk`로 넘기고, 최종 응답을 돌려준다.
  * `callCallable`과 같은 두 가지(U1 잠금 · `functions/unauthenticated` 감지)를 그대로 한다 — 에러는 삼키지 않고 다시 던진다.
  * ⭐ 조각을 보내지 않는 서버(옛 배포)에서도 최종 응답은 똑같이 온다(조각 0개) — 배포 순서와 무관하다.
  * 일반 호출의 기본 제한 시간(70초 — `HttpsCallableOptions.timeout`)을 스트림에도 똑같이 건다(스트림에는 기본 제한이 없다).

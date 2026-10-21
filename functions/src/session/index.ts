@@ -81,7 +81,7 @@ function readSkinSource(value: unknown): MessengerSkinSource {
 
 // GEMINI_API_KEY 선언(2026-07-24) — generateOpeningLine()이 getLlmClient()를 통해 실 Gemini로
 // 격상될 수 있어(llm/index.ts 참고) Functions v2가 배포 환경에서 이 secret을 주입하도록 명시한다.
-// §99(UX D-142) — 둘째 인자 `response`로 준비 단계 조각을 보낸다(prepStages.ts). 스트리밍을 받지 않는 호출에는 SDK가 보내지 않는다.
+// §100(UX D-143) — 둘째 인자 `response`로 준비 단계 조각을 보낸다(prepStages.ts). 스트리밍을 받지 않는 호출에는 SDK가 보내지 않는다.
 export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionResponse>, CreateSessionPrepChunk>(
   { secrets: [...LLM_TEXT_SECRETS] },
   async (request, response) => {
@@ -159,7 +159,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     }
 
     const db = getFirestore();
-    // §99 — 단계별 소요(ms) 로그. 다음 라이브 측정에서 준비 대기의 어느 구간이 긴지 가린다(ID · 내용 0).
+    // §100 — 단계별 소요(ms) 로그. 다음 라이브 측정에서 준비 대기의 어느 구간이 긴지 가린다(ID · 내용 0).
     const prepStartedAt = Date.now();
     const prepMs: Record<string, number> = {};
 
@@ -249,7 +249,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       }
       sessionRef = candidateRef;
     }
-    // §99 ① "훈련 내용" — 동의 · 한도 게이트 통과 + 흐름 변형 배정 + 사전 세션 id 확인이 끝났다.
+    // §100 ① "훈련 내용" — 동의 · 한도 게이트 통과 + 흐름 변형 배정 + 사전 세션 id 확인이 끝났다.
     prepMs.scenarioMs = Date.now() - prepStartedAt;
     await emitPrepStage(response, "scenario");
     // T194-b(§84.3.4) — 오프닝 대사도 카드를 알아야 한다(§81과 같은 이유). 카드는 위(§88)에서 이미 확정됐다.
@@ -259,7 +259,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       variantAssignment.flowVariantId,
       { fictionalBankName, challengeId: undefined, personaCard: personaCard?.items, voiceSelectionSource },
     );
-    // §99 ② "첫마디" — 오프닝 대사 생성(LLM)이 끝났다.
+    // §100 ② "첫마디" — 오프닝 대사 생성(LLM)이 끝났다.
     prepMs.openingMs = Date.now() - prepStartedAt - prepMs.scenarioMs;
     await emitPrepStage(response, "opening");
 
@@ -350,7 +350,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
         // 합성 실패는 무시 — 클라는 openingAudioUrl 없으면 텍스트만 표시(폴백).
       }
     }
-    // §99 ③ "저장" — 세션 문서 · 오프닝 메시지 커밋(+ 보이스면 오프닝 합성 시도)이 끝났다. 바로 아래가 응답이다.
+    // §100 ③ "저장" — 세션 문서 · 오프닝 메시지 커밋(+ 보이스면 오프닝 합성 시도)이 끝났다. 바로 아래가 응답이다.
     prepMs.savedMs = Date.now() - prepStartedAt - prepMs.scenarioMs - prepMs.openingMs;
     await emitPrepStage(response, "saved");
     logger.info("[session-prep] createSession", {

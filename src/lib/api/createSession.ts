@@ -9,7 +9,7 @@ import type { CreateSessionRequest, CreateSessionResponse } from "./types";
  */
 export async function createSession(
   request: CreateSessionRequest,
-  /** §99(UX D-142) — 넘기면 스트리밍으로 부르고, 서버가 실제로 끝낸 준비 단계 이름을 차례로 알린다(준비 화면 체크용). */
+  /** §100(UX D-143) — 넘기면 스트리밍으로 부르고, 서버가 실제로 끝낸 준비 단계 이름을 차례로 알린다(준비 화면 체크용). */
   onPrepStage?: (stage: unknown) => void,
 ): Promise<CreateSessionResponse> {
   if (onPrepStage) {

@@ -1,6 +1,6 @@
-// 시안 E2 준비 화면 · 경계 판(UX D-141 (5) · D-142 · docs/Architecture.md §97.7 · §99) — 순수 규칙(단위 테스트 대상).
+// 시안 E2 준비 화면 · 경계 판(UX D-141 (5) · D-143 · docs/Architecture.md §97.7 · §100) — 순수 규칙(단위 테스트 대상).
 //
-// ⭐ §99(UX D-142 · 2026-10-22) — 준비 화면은 **서버가 실제로 끝낸 준비 단계만** 하나씩 체크한다. 사용자 원문:
+// ⭐ §100(UX D-143 · 2026-10-22) — 준비 화면은 **서버가 실제로 끝낸 준비 단계만** 하나씩 체크한다. 사용자 원문:
 //    *"4번은 다른 방향으로 변경하자. 보통 10~15초가 나오는데, 다른 방식으로 전환"* → 선택지 중 '실제 준비 단계 표시'.
 //    신호는 createSession 스트리밍 조각(`functions/src/session/prepStages.ts`)과 최종 응답뿐이다 — 시간이 지났다고 체크하지 않는다.
 // ⛔ 진행률 · 퍼센트 · "1/3" 숫자 표기 · 경과 초 · 예상 시간 표기 금지(D-134 유지 — 체크는 실제 신호가 온 단계에만).
@@ -69,7 +69,7 @@ export const PREP_TIPS: readonly string[] = [
 ];
 
 /**
- * §99.5(2026-10-22 실기 신고 — 카드사 시나리오에 "검찰·경찰·금감원…" 요령이 먼저 나왔다) — 요령은 **시나리오의 사칭 유형**에 맞춰 고른다.
+ * §100.5(2026-10-22 실기 신고 — 카드사 시나리오에 "검찰·경찰·금감원…" 요령이 먼저 나왔다) — 요령은 **시나리오의 사칭 유형**에 맞춰 고른다.
  * ⛔ 새 안내를 지어내지 않는다: 문장은 위 PREP_TIPS 또는 리포트 대처법(`functions/src/report/analyzeConversation.ts`
  *    `pickCorrectAction`)의 문장을 **글자 그대로** 쓴다(G703이 원문에 있는지 본다). 채널(보이스/메신저) 변형도 그 함수 그대로다.
  */
@@ -86,7 +86,7 @@ const TIP = {
   commonMessenger: "대화를 멈추고 알고 있는 번호로 직접 연락해 사실을 확인하세요.",
 } as const;
 
-/** 사칭 유형 — 판정표(docs/Architecture.md §99.5). 시나리오가 늘면 여기 한 줄을 더한다(G703이 빠진 시나리오를 잡는다). */
+/** 사칭 유형 — 판정표(docs/Architecture.md §100.5). 시나리오가 늘면 여기 한 줄을 더한다(G703이 빠진 시나리오를 잡는다). */
 export type PrepTipKind = "institution" | "tax" | "finance" | "courier" | "family" | "threat" | "smishing";
 
 export const PREP_TIP_KIND_BY_SCENARIO: Readonly<Record<string, PrepTipKind>> = {

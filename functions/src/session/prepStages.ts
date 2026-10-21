@@ -1,4 +1,4 @@
-// §99(UX D-142 · DECISIONS #212) — createSession 준비 단계 신호. 준비 화면(src/components/TrainingPrepScreen.tsx)은
+// §100(UX D-143 · DECISIONS #213) — createSession 준비 단계 신호. 준비 화면(src/components/TrainingPrepScreen.tsx)은
 // **서버가 실제로 끝낸 단계만** 체크한다(D-134 "가짜 진행률 금지" 유지). 신호는 스트리밍 콜러블 조각(`response.sendChunk`)이다 —
 // Firestore 쓰기 · 세션 문서 필드 · 구독 0. 스트리밍을 받지 않는 호출(옛 클라 · 다른 화면)에는 SDK가 아무것도 보내지 않는다.
 //

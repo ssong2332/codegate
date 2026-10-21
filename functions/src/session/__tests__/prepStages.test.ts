@@ -1,4 +1,4 @@
-// §99(UX D-142 · DECISIONS #212) — createSession 준비 단계 신호. 준비 화면은 서버가 실제로 끝낸 단계만 체크한다(D-134 유지).
+// §100(UX D-143 · DECISIONS #213) — createSession 준비 단계 신호. 준비 화면은 서버가 실제로 끝낸 단계만 체크한다(D-134 유지).
 // `createSession`은 Firestore · 시크릿에 의존하는 `onCall` 핸들러라 유닛 계층에서 직접 실행할 수 없어(createSessionRateLimitOrdering.test.ts와
 // 같은 이유 · 같은 관례) 호출 위치는 소스 순서로 본다.
 import { test } from "node:test";
