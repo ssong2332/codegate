@@ -27,7 +27,8 @@
 // UX-026으로 간다 — 방식·시나리오·최종 목적지는 전부 UX-026 하류에서 갈린다.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { DrilldownOptionCard } from "@/components/DrilldownOptionCard";
+import { PanelBadge, PanelList } from "@/components/ui";
+import SelectScreenHeader from "@/components/SelectScreenHeader";
 import {
   getSelectedTrainingType,
   setSelectedTrainingType,
@@ -53,42 +54,21 @@ export default function ScenarioTypeSelectPage() {
     router.push("/scenarios/experience-select");
   };
 
+  // UX D-141(시안 E2) — 카드 2장 → 화면 가로 큰 판 2장. 판을 누르면 그 판이 화면 전체로 커지며 다음 단계로 간다.
+  // 뒤로가기로 돌아왔을 때 직전 선택은 판 제목 옆 표("지난번 선택")로 알린다(색만으로 구분 안 함).
+  const lastPick = (type: TrainingType) => (selected === type ? <PanelBadge>지난번 선택</PanelBadge> : undefined);
   return (
-    <main className="drilldown-step mx-auto flex min-h-dvh max-w-xl flex-col gap-6 p-6">
-      <header className="flex flex-col gap-2 pt-2">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-lg font-medium text-ink-sub hover:bg-neutral-tint"
-        >
-          <span aria-hidden="true">←</span> 뒤로
-        </button>
-        {/* 단계 표시(P-12 #2) — 색이 아니라 텍스트로 현재 위치를 알린다. */}
-        <p className="text-base font-semibold text-brand" aria-current="step">
-          ① 유형
-        </p>
-        <h1 className="text-2xl font-bold text-ink">어떤 사기를 훈련해볼까요?</h1>
-        <p className="text-lg leading-relaxed text-ink-sub">
-          훈련하고 싶은 사기 유형을 먼저 골라주세요. 고르면 바로 다음 단계로 넘어갑니다.
-        </p>
-      </header>
-
-      <div className="flex flex-col gap-3">
-        <DrilldownOptionCard
-          icon="phone"
-          title="보이스피싱"
-          description="전화로 걸려오는 사기"
-          selected={selected === "voice"}
-          onClick={handleSelectVoice}
-        />
-        <DrilldownOptionCard
-          icon="chat"
-          title="메신저피싱"
-          description="카카오톡·문자로 오는 사기"
-          selected={selected === "messenger"}
-          onClick={handleSelectMessenger}
-        />
-      </div>
+    <main className="drilldown-step mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-page">
+      <SelectScreenHeader step="① 유형" title={<>어떤 사기를<br />훈련해 볼까요?</>}>
+        <p>훈련하고 싶은 사기 유형을 먼저 골라주세요. 고르면 바로 다음 단계로 넘어갑니다.</p>
+      </SelectScreenHeader>
+      <PanelList
+        onSelect={(key) => (key === "voice" ? handleSelectVoice() : handleSelectMessenger())}
+        items={[
+          { key: "voice", icon: "phone", title: "보이스피싱", description: "전화로 걸려오는 사기", badge: lastPick("voice") },
+          { key: "messenger", icon: "chat", title: "메신저피싱", description: "카카오톡·문자로 오는 사기", badge: lastPick("messenger") },
+        ]}
+      />
     </main>
   );
 }

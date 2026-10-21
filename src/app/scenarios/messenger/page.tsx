@@ -38,7 +38,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { getExperienceMode, setSelectedScenarioId as setPendingSelectedScenarioId } from "@/lib/recording";
 import { SCENARIO_TRAIT_LABEL } from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc, type MessengerSurface } from "@/content/scenarios";
-import { Badge, Button } from "@/components/ui";
+import SelectScreenHeader from "@/components/SelectScreenHeader";
+import ScenarioPanelGroups, { scenarioPanelItem, type ScenarioPanelGroup } from "@/components/ScenarioPanelGroups";
 import PageToc from "@/components/PageToc";
 import { groupInOrder } from "@/lib/pagetoc/pageToc";
 
@@ -61,7 +62,7 @@ export default function MessengerScenarioSelectPage() {
   // escalation_not_supported로 독립 거부한다(2중 방어). 아카이브 진입은 항상
   // setExperienceMode("self")를 선호출해 send 모드가 되지 않는다.
   const searchParams = useSearchParams();
-  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(() => {
+  const [selectedScenarioId] = useState<string | null>(() => {
     const preset = searchParams.get("scenarioId");
     return preset && scenarios[preset]?.channel === "messenger" ? preset : null;
   });
@@ -89,134 +90,53 @@ export default function MessengerScenarioSelectPage() {
   );
   const tocSections = surfaceGroups.map((group) => ({ id: group.key, label: `${group.label} (${group.entries.length})` }));
 
-  const handleStart = () => {
-    if (!selectedScenarioId) return;
-    if (!scenarios[selectedScenarioId]) return;
-    setPendingSelectedScenarioId(selectedScenarioId);
+  // UX D-141(시안 E2) — 판을 누르면 그 시나리오로 확정하고 바로 난이도 선택으로 간다(종전 2탭 → 1탭).
+  // T72(D-41) — 세션 생성은 난이도 선택(UX-029) 화면이 한다.
+  // 리뷰 Minor — 이동하지 않으면 false(덮개 0). 지목 표("다시 훈련")는 프리셋에만 붙인다.
+  const handleSelectScenario = (scenarioId: string) => {
+    if (!scenarios[scenarioId]) return false;
+    setPendingSelectedScenarioId(scenarioId);
     router.push("/scenarios/difficulty");
   };
 
-  const renderScenarioCard = (scenarioId: string, scenario: ScenarioDoc) => {
-    const selected = selectedScenarioId === scenarioId;
+  // 판 한 장 — 이름 · 표(표면 · 다시 훈련 — 색 단독 표기 금지, AC-002/030) · 누가 보내는지 / 소요 시간 · 수법 / 성향.
+  // T72/AC-067 — 라벨은 "이 시나리오의 성향"(값은 무변경).
+  const toItem = ([scenarioId, scenario]: [string, ScenarioDoc]) => {
     const surfaceLabel = scenario.surface ? SURFACE_LABEL[scenario.surface] : "메신저";
-    return (
-      <li key={scenarioId}>
-        <label
-          className={`flex cursor-pointer gap-4 rounded-[8px] border-2 p-4 transition ${
-            selected
-              ? "border-brand bg-brand-tint"
-              : "border-line bg-white hover:border-line-strong"
-          }`}
-        >
-          <input
-            type="radio"
-            name="scenario"
-            value={scenarioId}
-            checked={selected}
-            onChange={() => setSelectedScenarioId(scenarioId)}
-            className="sr-only"
-            aria-describedby={`scenario-${scenarioId}-meta`}
-          />
-
-          <span
-            aria-hidden="true"
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xl font-bold ${
-              selected ? "bg-brand text-white" : "bg-avatar-bg text-avatar-fg"
-            }`}
-          >
-            {/* T75 — 발신자 표기가 번호로 바뀌어 첫 글자를 따면 "0"·"+"가 뜬다.
-                저장되지 않은 발신자용 일반 아이콘으로 대체한다. */}
-            <span aria-hidden="true">💬</span>
-          </span>
-
-          <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <span className="flex items-start justify-between gap-2">
-              <span className="flex flex-wrap items-center gap-2">
-                {/* 표면 배지(AC-002/030) — 색 단독 표기 금지, 텍스트 라벨을 항상 함께 표기.
-                    디자인 시스템 배지(중립) 재사용 — 메신저 플로우.dc.html의 채널 배지와 동일 톤. */}
-                <Badge variant="neutral">{surfaceLabel}</Badge>
-                <span className="text-lg font-bold text-ink">{scenario.title}</span>
-              </span>
-              {selected && (
-                <span
-                  aria-hidden="true"
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-base font-bold text-white"
-                >
-                  ✓
-                </span>
-              )}
-            </span>
-
-            <span className="text-base text-ink-sub">
-              {scenario.callerLabel}(으)로 {surfaceLabel} 메시지가 옵니다
-            </span>
-
-            <span
-              id={`scenario-${scenarioId}-meta`}
-              className="flex flex-col gap-1.5 text-base text-ink-sub"
-            >
-              {/* 소요시간 배지(중립) — 메신저 플로우.dc.html의 "약 {time}" 배지와 동일 톤.
-                  이 문자열은 자유서술문이라(예: "중간 — 정서적 압박과 채널 전환이 결합됩니다") 색상
-                  등급 배지로 단정 짓지 않고 서술 텍스트로 유지한다(임의 매핑 금지).
-                  T72/AC-067 — 라벨을 "난이도"에서 "이 시나리오의 성향"으로 바꾼다(값은 무변경). */}
-              <span className="flex flex-wrap items-center gap-2">
-                <Badge variant="neutral">{scenario.estimatedDuration}</Badge>
-              </span>
-              <span>
-                {scenario.fraudType} · {SCENARIO_TRAIT_LABEL}: {scenario.difficulty}
-              </span>
-            </span>
-          </span>
-        </label>
-      </li>
-    );
+    return scenarioPanelItem({
+      id: scenarioId,
+      icon: "chat",
+      title: scenario.title,
+      tags: [surfaceLabel, ...(selectedScenarioId === scenarioId ? ["다시 훈련"] : [])],
+      lines: [
+        `${scenario.callerLabel}(으)로 ${surfaceLabel} 메시지가 옵니다`,
+        `${scenario.estimatedDuration} · ${scenario.fraudType}`,
+        `${SCENARIO_TRAIT_LABEL}: ${scenario.difficulty}`,
+      ],
+    });
   };
+  const panelGroups: ScenarioPanelGroup[] = surfaceGroups.map((group) => ({
+    id: group.key,
+    label: group.label,
+    items: group.entries.map(toItem),
+  }));
 
   return (
-    <main className="drilldown-step mx-auto flex min-h-dvh max-w-xl flex-col gap-6 p-6 pb-28 lg:max-w-3xl xl:max-w-5xl">
-      <PageToc sections={tocSections} className="-mx-6 -mt-6 -mb-4 px-6" />
-      <header className="flex flex-col gap-2 pt-2">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-lg font-medium text-ink-sub hover:bg-neutral-tint"
-        >
-          <span aria-hidden="true">←</span> 뒤로
-        </button>
-        {/* 단계 표시(P-12 #2, T28 패턴 재사용) — 메신저는 방식 단계가 없어 유형→체험선택→시나리오
-            3단계(v1.10 D-31로 체험 선택이 앞에 추가되며 ②→③으로 밀림). */}
-        <p className="text-base font-semibold text-brand" aria-current="step">
-          메신저피싱 › ③ 시나리오
-        </p>
-        <h1 className="text-2xl font-bold text-ink">어떤 메시지를 받아볼까요?</h1>
-        <p className="text-lg leading-relaxed text-ink-sub">
-          실제 사기가 아니라 훈련용 시뮬레이션입니다. 하나를 고르면 마지막으로 난이도를 정합니다.
-        </p>
-      </header>
+    <main className="drilldown-step mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-page pb-[env(safe-area-inset-bottom)]">
+      <PageToc sections={tocSections} className="px-[22px]" />
+      {/* 단계 표시(P-12 #2, T28 패턴 재사용) — 메신저는 방식 단계가 없어 유형→체험선택→시나리오
+          3단계(v1.10 D-31로 체험 선택이 앞에 추가되며 ②→③으로 밀림). */}
+      <SelectScreenHeader step="메신저피싱 › ③ 시나리오" title={<>어떤 메시지를<br />받아볼까요?</>}>
+        <p>실제 사기가 아니라 훈련용 시뮬레이션입니다. 판을 누르면 마지막으로 난이도를 정합니다.</p>
+      </SelectScreenHeader>
 
       {filteredEntries.length === 0 ? (
-        <p className="rounded-[8px] border border-line bg-white p-4 text-lg text-ink-sub">
+        <p className="mx-[22px] rounded-[8px] border border-line bg-white p-4 text-lg text-ink-sub">
           메신저 시나리오가 아직 없습니다.
         </p>
       ) : (
-        surfaceGroups.map((group) => (
-          <section key={group.key} className="flex flex-col gap-3" aria-labelledby={group.key}>
-            <h2 id={group.key} data-toc-target className="text-lg font-bold text-ink">
-              {group.label}
-            </h2>
-            <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2">
-              {group.entries.map(([scenarioId, scenario]) => renderScenarioCard(scenarioId, scenario))}
-            </ul>
-          </section>
-        ))
+        <ScenarioPanelGroups groups={panelGroups} onSelect={handleSelectScenario} presetId={selectedScenarioId} />
       )}
-
-      <div className="sticky bottom-0 -mx-6 -mb-28 border-t border-line bg-page/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur">
-        {/* T72(D-41) — 세션 생성은 난이도 선택(UX-029) 화면으로 이동했다. */}
-        <Button type="button" onClick={handleStart} disabled={!selectedScenarioId}>
-          다음 — 난이도 고르기
-        </Button>
-      </div>
     </main>
   );
 }
