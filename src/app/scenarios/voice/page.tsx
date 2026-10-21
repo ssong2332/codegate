@@ -19,7 +19,8 @@
 // 뒤로가기는 UX-026(체험/발송 선택)으로 돌아간다(router.back(), 무변경).
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { DrilldownOptionCard } from "@/components/DrilldownOptionCard";
+import { PanelBadge, PanelList } from "@/components/ui";
+import SelectScreenHeader from "@/components/SelectScreenHeader";
 import { getSelectedVoiceModeChoice, setSelectedVoiceModeChoice } from "@/lib/recording";
 import type { VoiceMode } from "@/content/scenarios";
 
@@ -35,42 +36,32 @@ export default function ScenarioVoiceModeSelectPage() {
     router.push(`/scenarios/voice/${mode}`);
   };
 
+  // UX D-141(시안 E2) — 카드 2장 → 큰 판 2장. 직전 선택은 "지난번 선택" 표.
+  const lastPick = (mode: VoiceMode) => (selected === mode ? <PanelBadge>지난번 선택</PanelBadge> : undefined);
   return (
-    <main className="drilldown-step mx-auto flex min-h-dvh max-w-xl flex-col gap-6 p-6">
-      <header className="flex flex-col gap-2 pt-2">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-lg font-medium text-ink-sub hover:bg-neutral-tint"
-        >
-          <span aria-hidden="true">←</span> 뒤로
-        </button>
-        <p className="text-base font-semibold text-brand" aria-current="step">
-          보이스피싱 › ③ 방식
-        </p>
-        <h1 className="text-2xl font-bold text-ink">지인에게 어떤 목소리로 보낼까요?</h1>
-        <p className="text-lg leading-relaxed text-ink-sub">
-          내 목소리(딥보이스)로 보낼지, 기본 AI 음성으로 보낼지 골라주세요. 고르면 바로 다음
-          단계로 넘어갑니다.
-        </p>
-      </header>
-
-      <div className="flex flex-col gap-3">
-        <DrilldownOptionCard
-          icon="mic"
-          title="내 목소리 복제"
-          description="내 목소리 30초 녹음 후, 지인에게 그 목소리(딥보이스)로 걸려오는 전화를 보냅니다"
-          selected={selected === "clone"}
-          onClick={() => handleSelect("clone")}
-        />
-        <DrilldownOptionCard
-          icon="speaker"
-          title="기본 AI 음성"
-          description="녹음 없이, 지인에게 기본 AI 음성으로 걸려오는 전화를 보냅니다"
-          selected={selected === "generic"}
-          onClick={() => handleSelect("generic")}
-        />
-      </div>
+    <main className="drilldown-step mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-page">
+      <SelectScreenHeader step="보이스피싱 › ③ 방식" title={<>지인에게 어떤<br />목소리로 보낼까요?</>}>
+        <p>내 목소리(딥보이스)로 보낼지, 기본 AI 음성으로 보낼지 골라주세요. 고르면 바로 다음 단계로 넘어갑니다.</p>
+      </SelectScreenHeader>
+      <PanelList
+        onSelect={(key) => handleSelect(key as VoiceMode)}
+        items={[
+          {
+            key: "clone",
+            icon: "mic",
+            title: "내 목소리 복제",
+            description: "내 목소리 30초 녹음 후, 지인에게 그 목소리(딥보이스)로 걸려오는 전화를 보냅니다",
+            badge: lastPick("clone"),
+          },
+          {
+            key: "generic",
+            icon: "speaker",
+            title: "기본 AI 음성",
+            description: "녹음 없이, 지인에게 기본 AI 음성으로 걸려오는 전화를 보냅니다",
+            badge: lastPick("generic"),
+          },
+        ]}
+      />
     </main>
   );
 }
