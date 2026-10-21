@@ -38,6 +38,7 @@ import { createHash } from "node:crypto";
 import { findFlowVariant, resolveSessionScenarioPrompt, resolveVariantPrompt } from "../../scenarios/flowVariants";
 import { extractTacticLabel } from "../../scenarios/tacticFlavor";
 import { revertR3C2 } from "../../roleplay/__tests__/r3NoStallDelta";
+import { revertFullAudit } from "../../roleplay/__tests__/fullAuditDelta";
 import { hasVerifyIntercept } from "../../scenarios/verifyIntercept";
 import { sessionDeclaredSmsPurposes } from "../smsGate";
 
@@ -561,6 +562,7 @@ const BEFORE_T194C1 = {
 //     fv-6s5p는 link · transfer만 선언해 인증번호가 미선언이므로 꼬리가 실린다. ⛔ R3-B 데이터 변경은 fv-6s5p에 닿지 않는다(꼬리를 빼면 기준값).
 //   · 두 벌 공통 — R3-C ②-a: 무조건부 NO_STALL_RULE 셋째 문장(남은 요구 유무 분기 · 정본 Architecture §79.22 (6)) 교체.
 // 측정: r3 작업 트리(main ea97aa0 추출본) 빌드 산출물에서 같은 조립식(`assembled`) — 아래 두 테스트가 각 변경분을 되돌려 이전 값과 대조한다.
+// ⚠️ 2026-10-22(전수 검수) — 공통 [진행 강제] 두 곳 교체(roleplay/__tests__/fullAuditDelta.ts)는 무조건부라 아래 대조가 모두 그 교체분을 먼저 되돌린다(기준값 무변경).
 const AFTER_R3 = {
   "card-company-impersonation#fv-akj5": "d71550a8f6a7c5f24feabd9b7cc77e91639e3c8df66bff560ef6bbe42501c5ec",
   "loan-refinance-scam#fv-6s5p": "5042029ff9960a6ff9f819be71a0aa67e98f4e0693169eabfeb87404a9127910",
@@ -571,7 +573,7 @@ const AKJ5_LABELS_BEFORE_R3B = ["놀람 유발", "긴급성 조성", "카드정�
 test("[T194-c-1 단계 4 · R3 갱신] 챌린지 base 변형(fv-akj5 · fv-6s5p) 조립 산출물 = R3 기준값 · 도구 선언 = T194-c-1 이전과 바이트 동일 · 선언 · 도달 집합 무변경", (t) => {
   for (const [scenarioId, variantId] of [["card-company-impersonation", "fv-akj5"], ["loan-refinance-scam", "fv-6s5p"]] as const) {
     const key = `${scenarioId}#${variantId}` as keyof typeof BEFORE_T194C1 & keyof typeof AFTER_R3;
-    const system = sha256(assembled(scenarioId, variantId));
+    const system = sha256(revertFullAudit(assembled(scenarioId, variantId)));
     const tools = sha256(toolsOf(scenarioId, variantId));
     t.diagnostic(`[단계 4] ${key} system ${system.slice(0, 16)} (R3 기준 ${AFTER_R3[key].slice(0, 16)} · 이전 ${BEFORE_T194C1[key].system.slice(0, 16)}) · tools ${tools.slice(0, 16)} (기준 ${BEFORE_T194C1[key].tools.slice(0, 16)})`);
     assert.equal(system, AFTER_R3[key], `${key}: 조립 프롬프트가 바뀌었다 — 챌린지 수신자 선언이 흔들린다(#192)`);
@@ -597,14 +599,14 @@ test("[R3 갱신 증거] fv-akj5 — R3-B 3라벨을 원본 문면 · 원래 순
   ];
   assert.equal(reverted.length, variant.tactics.length, "되돌린 수법 수가 현재와 다르다 — 라벨이 사라졌거나 늘었다");
   const revertedSystem = sha256(
-    revertR3C2(
+    revertR3C2(revertFullAudit(
       buildSystemPrompt(resolveVariantPrompt(card, { ...variant, tactics: reverted }), {
         difficultyLevel: "advanced",
         inCallSmsEnabled: sessionDeclaresInCallSms("card-company-impersonation", "fv-akj5"),
         inCallSmsPurposes: sessionDeclaredSmsPurposes("card-company-impersonation", "fv-akj5"),
         verifyInterceptEnabled: hasVerifyIntercept("card-company-impersonation"),
       }),
-    ),
+    )),
   );
   t.diagnostic(`[R3] fv-akj5 되돌림 ${revertedSystem.slice(0, 16)} = 이전 ${BEFORE_T194C1["card-company-impersonation#fv-akj5"].system.slice(0, 16)}`);
   assert.equal(revertedSystem, BEFORE_T194C1["card-company-impersonation#fv-akj5"].system);
@@ -612,7 +614,7 @@ test("[R3 갱신 증거] fv-akj5 — R3-B 3라벨을 원본 문면 · 원래 순
   // fv-6s5p: 바뀐 것은 R3-C ① 꼬리 1곳뿐이다.
   const loan = assembled("loan-refinance-scam", "fv-6s5p");
   assert.equal(loan.split(UNDECLARED_VERIFICATION_TAIL).length - 1, 1, "꼬리는 정확히 1곳");
-  const tailRemoved = sha256(revertR3C2(loan.replace(UNDECLARED_VERIFICATION_TAIL, "")));
+  const tailRemoved = sha256(revertR3C2(revertFullAudit(loan).replace(UNDECLARED_VERIFICATION_TAIL, "")));
   t.diagnostic(`[R3] fv-6s5p 꼬리 제거 ${tailRemoved.slice(0, 16)} = 이전 ${BEFORE_T194C1["loan-refinance-scam#fv-6s5p"].system.slice(0, 16)}`);
   assert.equal(tailRemoved, BEFORE_T194C1["loan-refinance-scam#fv-6s5p"].system);
 });
@@ -621,7 +623,7 @@ test("[T194-c-1 단계 4] 의도된 변경 — card-delivery-call 변형 없는 
   const key = "card-delivery-call#base";
   const now = sha256(assembled("card-delivery-call", undefined));
   // R3-C ②-a(2026-10-20) — 무조건부 NO_STALL_RULE 셋째 문장 교체분도 되돌려 대조한다(r3NoStallDelta.ts).
-  const flagOff = sha256(revertR3C2(assembled("card-delivery-call", undefined, false)));
+  const flagOff = sha256(revertR3C2(revertFullAudit(assembled("card-delivery-call", undefined, false))));
   t.diagnostic(`[단계 4] ${key} 지금 ${now.slice(0, 16)} ≠ 기준 ${BEFORE_T194C1[key].system.slice(0, 16)} · 플래그만 끈 조립 ${flagOff.slice(0, 16)} = 기준`);
   assert.equal(hasInCallSms("card-delivery-call"), true, "카탈로그 키 신설(Q2)");
   assert.equal(sessionDeclaresInCallSms("card-delivery-call", undefined), true, "무소급 분기 = 종전 hasInCallSms 그대로 따른다");
