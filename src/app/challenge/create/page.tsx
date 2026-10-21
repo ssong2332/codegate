@@ -38,7 +38,7 @@ import {
   type DifficultyLevel,
 } from "@/lib/difficulty";
 import { scenarios } from "@/content/scenarios";
-import { Button } from "@/components/ui";
+import { Button, LoadingDots } from "@/components/ui";
 import PersonaCardInputFields from "@/components/PersonaCardInputFields";
 import {
   EMPTY_PERSONA_CARD_FORM,
@@ -313,7 +313,7 @@ export default function ChallengeCreatePage() {
         {/* 링크 카드(챌린지 플로우.dc.html "화면 1" 재현). 발급된 링크는 스크린리더가 읽을 수
             있는 전체 텍스트로도 노출한다(아이콘 단독 금지) — 목업은 짧은 데모 id라 truncate를
             썼지만 실제 토큰은 길어서 break-all로 전체 노출을 유지한다(의도적 이탈). */}
-        <div className="rounded-[8px] border-[1.5px] border-brand bg-brand-tint p-4">
+        <div className="motion-reveal rounded-[8px] border-[1.5px] border-brand bg-brand-tint p-4">
           <div className="mb-2 flex items-center gap-2">
             <span
               aria-hidden="true"
@@ -452,11 +452,8 @@ export default function ChallengeCreatePage() {
       <Button type="button" onClick={() => void handleCreate()} disabled={!displayName.trim() || isSubmitting}>
         {isSubmitting ? (
           <span className="flex items-center justify-center gap-2" role="status">
-            <span
-              aria-hidden="true"
-              className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"
-            />
-            챌린지를 만드는 중...
+            <LoadingDots />
+            챌린지를 만드는 중
           </span>
         ) : (
           "챌린지 만들기"

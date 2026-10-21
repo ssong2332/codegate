@@ -20,11 +20,18 @@ import {
   type DifficultyLevel,
 } from "@/lib/difficulty";
 import { scenarios } from "@/content/scenarios";
-import { Badge, Button } from "@/components/ui";
+import { Badge, Button, LoadingStatus } from "@/components/ui";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { buildStageNotice, type ReportStage } from "@/lib/report/stageNotice";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
 import { tacticsAccordionLabel, TACTICS_NOT_FOUND_TEXT } from "@/lib/report/reportTacticsCopy";
+import {
+  readRiskSignals,
+  riskSignalCopy,
+  RISK_SIGNAL_HEADING,
+  RISK_SIGNAL_SECTION_TITLE,
+  type RiskSignalView,
+} from "@/lib/report/riskSignalCopy";
 import {
   isReportDialogueDegraded,
   REPORT_DEGRADED_NOTICE,
@@ -112,6 +119,8 @@ type ReportData = {
   llmProvider?: LlmProviderName;
   // T194-b(§84.3.6 · UX-008 v1.38 (1) · D-120) — "상대가 먼저 꺼낸 '내 정보'" 블록. 부재 = R-4(블록 0 · 무백필).
   personaBlock: PersonaBlockView | null;
+  // 사용자 결정 2026-10-21 ② — 속음은 아니지만 위험했던 행동. 부재 = 빈 배열(무백필 · 블록 0).
+  riskSignals: RiskSignalView[];
 };
 
 type PageState = "no-session" | "loading" | "error" | "loaded";
@@ -160,6 +169,7 @@ export default function ReportPage() {
           ? data.llmProvider
           : undefined,
       personaBlock: readPersonaBlock(data.personaBlock),
+      riskSignals: readRiskSignals(data.riskSignals),
     };
   }, []);
 
@@ -257,13 +267,7 @@ export default function ReportPage() {
   if (state === "loading") {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-ink" role="status">
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-          />
-          취약점 리포트를 준비하는 중입니다...
-        </p>
+        <LoadingStatus label="취약점 리포트를 준비하는 중입니다" />
       </main>
     );
   }
@@ -476,12 +480,15 @@ export default function ReportPage() {
           className="flex min-h-[56px] items-center justify-between rounded-[8px] border border-line bg-white px-[18px] text-lg font-semibold text-ink"
         >
           속은 시점 타임라인 보기
-          <span aria-hidden="true" className="text-ink-sub">
-            {expandedSection === "timeline" ? "▴" : "▾"}
+          <span
+            aria-hidden="true"
+            className={`inline-block text-ink-sub transition-transform duration-200 motion-reduce:transition-none ${expandedSection === "timeline" ? "rotate-180" : ""}`}
+          >
+            ▾
           </span>
         </button>
         {expandedSection === "timeline" && (
-          <section aria-label="속은 시점 타임라인" className="flex flex-col gap-3 px-1">
+          <section aria-label="속은 시점 타임라인" className="motion-reveal flex flex-col gap-3 px-1">
             {/* ⚠️ §15.6 G18 — 이 조건을 `report.wasDeceived`로 두면 **안 속은 세션의 문자 이벤트가
                 통째로 사라진다**(AC-059 미충족). 속은 순간이 0건이어도 문자 이벤트가 있으면 목록을
                 낸다. 판정은 그대로다 — 문자는 wasDeceived를 뒤집지 않는다(§15.6 G22). */}
@@ -559,6 +566,10 @@ export default function ReportPage() {
             "시도된 수법" 아코디언 위 · 접히지 않음. 속은 순간이 아니라 되감기 진입점 0(D-51). 부재 = R-4(블록 0). */}
         {report.personaBlock && <ReportPersonaBlock block={report.personaBlock} />}
 
+        {/* 사용자 결정 2026-10-21 ② — 속음은 아니지만 위험했던 행동. 자리 = "내 정보" 블록 아래 · 아코디언 위 · 접히지 않음.
+            속은 순간이 아니므로 되감기 진입점 0(D-51). 0건이면 블록 0. */}
+        {report.riskSignals.length > 0 && <ReportRiskSignals signals={report.riskSignals} />}
+
         <button
           type="button"
           onClick={() => toggleSection("tactics")}
@@ -566,12 +577,15 @@ export default function ReportPage() {
           className="flex min-h-[56px] items-center justify-between rounded-[8px] border border-line bg-white px-[18px] text-lg font-semibold text-ink"
         >
           {tacticsAccordionLabel(report.tacticsUsed.length)}
-          <span aria-hidden="true" className="text-ink-sub">
-            {expandedSection === "tactics" ? "▴" : "▾"}
+          <span
+            aria-hidden="true"
+            className={`inline-block text-ink-sub transition-transform duration-200 motion-reduce:transition-none ${expandedSection === "tactics" ? "rotate-180" : ""}`}
+          >
+            ▾
           </span>
         </button>
         {expandedSection === "tactics" && (
-          <section aria-label="시도된 수법" className="px-1">
+          <section aria-label="시도된 수법" className="motion-reveal px-1">
             {report.tacticsUsed.length > 0 ? (
               <div className="flex flex-wrap gap-2 rounded-[8px] border border-line bg-white p-4">
                 {report.tacticsUsed.map((tactic) => (
@@ -595,12 +609,15 @@ export default function ReportPage() {
           className="flex min-h-[56px] items-center justify-between rounded-[8px] border border-line bg-white px-[18px] text-lg font-semibold text-ink"
         >
           상황별 대처법
-          <span aria-hidden="true" className="text-ink-sub">
-            {expandedSection === "advice" ? "▴" : "▾"}
+          <span
+            aria-hidden="true"
+            className={`inline-block text-ink-sub transition-transform duration-200 motion-reduce:transition-none ${expandedSection === "advice" ? "rotate-180" : ""}`}
+          >
+            ▾
           </span>
         </button>
         {expandedSection === "advice" && (
-          <section aria-label="개선 영역과 예방 조언" className="flex flex-col gap-2 px-1">
+          <section aria-label="개선 영역과 예방 조언" className="motion-reveal flex flex-col gap-2 px-1">
             {report.preventionAdvice.map((advice) => (
               <div
                 key={advice}
@@ -835,6 +852,34 @@ function ReportVerifyTimelineItem({ verify }: { verify: VerifyTimelineEntry }) {
         </div>
       ))}
     </li>
+  );
+}
+
+/** 사용자 결정 2026-10-21 ② — "속지는 않았지만 위험했던 행동" 블록(문면 = `riskSignalCopy` · 새 색 0 · 되감기 버튼 0). */
+function ReportRiskSignals({ signals }: { signals: RiskSignalView[] }) {
+  return (
+    <section
+      aria-labelledby="risk-signal-title"
+      className="flex flex-col gap-2.5 rounded-[8px] border border-caution/30 bg-caution-tint p-[18px]"
+    >
+      <h2 id="risk-signal-title" className="text-lg font-bold text-ink">
+        {RISK_SIGNAL_SECTION_TITLE}
+      </h2>
+      <ul className="flex flex-col gap-3">
+        {signals.map((signal) => {
+          const copy = riskSignalCopy(signal.kind);
+          return (
+            <li key={`${signal.turnIndex}-${signal.kind}`} className="flex flex-col gap-1">
+              <p className="text-[15px] font-bold text-caution">{RISK_SIGNAL_HEADING}</p>
+              <p className="text-lg font-semibold text-ink">
+                {signal.timeLabel} · {copy.title}
+              </p>
+              <p className="text-lg leading-relaxed text-ink-sub">{copy.explanation}</p>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

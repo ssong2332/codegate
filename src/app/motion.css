@@ -1,0 +1,93 @@
+/* --- 사이트 모션(UX D-134 · 2026-10-21) ---
+   ⭐ globals.css와 나눈 이유: 같은 시기에 다른 작업이 globals.css(색 · 폭)를 고치고 있어 충돌을 줄인다.
+   원칙 — 시안 A "공공 안심형"(차분함): 짧고(≤ 280ms) 작게(≤ 8px) 움직이고, 튀는 탄성 · 번쩍임은 쓰지 않는다.
+   ⛔ 훈련 화면(통화 · 문자 · 메신저 · 이체)에는 쓰지 않는다 — 실제 폰에 없는 연출 금지(`template.tsx`가 제외한다).
+   ⛔ `transform`을 남기지 않는다(fill-mode는 backwards만) — 끝난 뒤 transform이 남으면 `position: fixed` 자손의
+      기준이 바뀐다. reduced-motion이면 전부 끈다(G457 — `cssGuards.test.ts`가 이 파일도 검사한다). */
+
+/* 페이지 진입 — 바깥 껍데기(.page-enter)의 페이드는 template.tsx가 경로마다 Web Animations로 건다(재마운트가 없는
+   이동에서도 돌게 — reduced-motion이면 JS가 건너뛴다). 여기서는 안쪽 main이 6px 올라오는 것만 맡는다
+   (드릴다운 화면은 기존 좌우 슬라이드를 그대로 쓴다). */
+@keyframes page-rise-in {
+  from {
+    transform: translateY(6px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.page-enter > main:not(.drilldown-step) {
+  animation: page-rise-in 0.28s cubic-bezier(0.22, 0.7, 0.3, 1) backwards;
+}
+
+/* 로딩 점 3개 — 차례로 은은하게 밝아진다(크기 변화 작게). 스피너보다 덜 조급해 보인다. */
+@keyframes loading-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.85);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.loading-dot {
+  animation: loading-dot 1.4s ease-in-out infinite;
+}
+
+.loading-dot:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.loading-dot:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+/* 단계 안내 문구가 바뀔 때 · 펼침 블록 · 결과 카드 등장 — 위에서 살짝 내려오며 나타난다. */
+@keyframes reveal-down {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.motion-reveal {
+  animation: reveal-down 0.22s ease-out backwards;
+}
+
+/* 선택 카드 체크 표시 — 작게 시작해 제자리로(탄성 없음). */
+@keyframes check-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.check-pop {
+  animation: check-pop 0.18s cubic-bezier(0.22, 0.7, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter > main:not(.drilldown-step),
+  .loading-dot,
+  .motion-reveal,
+  .check-pop {
+    animation: none;
+  }
+
+  .loading-dot {
+    opacity: 0.7;
+  }
+}

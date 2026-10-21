@@ -24,7 +24,7 @@ import {
   getSelectedDifficultyLevel,
 } from "@/lib/recording";
 import { createSession } from "@/lib/api";
-import { Button, ProgressSteps, type ProgressStep } from "@/components/ui";
+import { Button, LoadingDots, ProgressSteps, type ProgressStep } from "@/components/ui";
 import {
   isVoiceDegraded,
   VOICE_DEGRADED_NOTICE,
@@ -225,22 +225,16 @@ export default function CloneWaitPage() {
       )}
 
       {isPending && (
-        <p className="flex items-center justify-center gap-2 text-[17px] text-ink-sub" role="status">
-          <span
-            aria-hidden="true"
-            className="h-4 w-4 animate-spin rounded-full border-2 border-line-strong border-t-brand"
-          />
-          잠시만 기다려 주세요. 내 목소리로 클론을 만들고 있습니다...
+        <p className="flex items-center justify-center gap-2.5 text-[17px] text-ink-sub" role="status">
+          <LoadingDots className="text-brand" />
+          잠시만 기다려 주세요. 내 목소리로 클론을 만들고 있습니다
         </p>
       )}
 
       {isReady && startState === "starting" && (
-        <p className="flex items-center justify-center gap-2 text-[17px] text-ink-sub" role="status">
-          <span
-            aria-hidden="true"
-            className="h-4 w-4 animate-spin rounded-full border-2 border-line-strong border-t-brand"
-          />
-          목소리 클론이 준비됐습니다. 훈련을 시작하는 중입니다...
+        <p className="flex items-center justify-center gap-2.5 text-[17px] text-ink-sub" role="status">
+          <LoadingDots className="text-brand" />
+          목소리 클론이 준비됐습니다. 훈련을 시작하는 중입니다
         </p>
       )}
 

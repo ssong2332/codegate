@@ -10,3 +10,4 @@ export { default as Chip } from "./Chip";
 export { default as TextField } from "./TextField";
 export { default as LineIcon } from "./LineIcon";
 export type { LineIconName } from "./LineIcon";
+export { default as LoadingStatus, LoadingDots, LoadingHintLine } from "./LoadingStatus";
