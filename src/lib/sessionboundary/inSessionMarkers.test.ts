@@ -61,6 +61,8 @@ const SESSION_SURFACE_REGISTRY: Record<string, SurfaceRole> = {
   "src/components/MessengerFakeLanding.tsx": "in-session", // UX-023 가짜 랜딩
   "src/components/MessengerProfileSheet.tsx": "in-session", // §95 카톡형 상대 프로필 시트(UX D-138)
   "src/components/MessengerStartNotice.tsx": "pre-session", // UX-022 start-notice(T187)
+  "src/components/ScenarioPanelGroups.tsx": "not-in-session", // 시나리오 선택 판 묶음(UX D-141) — 세션 전
+  "src/components/SelectScreenHeader.tsx": "not-in-session", // 선택 화면 머리(UX D-141) — 세션 전
   "src/components/PageToc.tsx": "not-in-session", // 긴 페이지 "목록" 토글(UX D-140) — 시나리오 선택 · 리포트 · 고지 화면(세션 밖). 훈련 화면 금지는 G-TOC7
   "src/components/PersonaCardInputFields.tsx": "not-in-session", // §88 UX D-131 "내 정보" 선택 입력(난이도 · 챌린지 만들기 — 세션 전)
   "src/components/PhoneIcon.tsx": "in-session", // T190-1 기기 재현 단색 아이콘(통화 셸 그리드 · 텍스트 노드 0)
@@ -96,8 +98,8 @@ test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/ses
   // T190-1(docs/Architecture.md §74.22 (4) #21 단계별 누적) — 15 → 16(+PhoneIcon) → T190-6 17(+DeviceSkinPicker) →
   // T190-8b 18(+CallStartNotice) → 2026-10-18 19(+AudioDebugPanel) → §88 20(+PersonaCardInputFields) → 2026-10-21 22(+LegalDocumentView · LegalLinks — 법적 고지)
   // → §94 23(+ThemeDebugPanel — ?themedebug=1) → §95 24(+MessengerProfileSheet — 카톡형 상대 프로필) → §95.6 25(+WebDarkModeNotice)
-  // → §96 26(+PageToc — 긴 페이지 목록).
-  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 26);
+  // → §96 26(+PageToc — 긴 페이지 목록) → §97 28(+ScenarioPanelGroups · SelectScreenHeader — 시안 E2 선택 화면).
+  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 28);
 });
 
 // ── G451 — 등록부 2벌(G436 · T86)이 최상위 `src/components/*.tsx`만 훑으므로, 하위 디렉터리에 컴포넌트를 두면

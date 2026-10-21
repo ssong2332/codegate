@@ -51,7 +51,8 @@ import {
   type DifficultyLevel,
 } from "@/lib/difficulty";
 import { scenarios, GENERIC_VOICE_ID, resolveScenarioEscalation } from "@/content/scenarios";
-import { Badge, Button, LoadingDots, LoadingHintLine, SelectableCard } from "@/components/ui";
+import { Badge, BottomSheet, Button, CtaPanel, DisplayTitle, LoadingDots, LoadingHintLine, PanelBadge, PanelList } from "@/components/ui";
+import SelectScreenHeader from "@/components/SelectScreenHeader";
 import { SESSION_PREP_HINTS } from "@/lib/motion/routeMotion";
 import PersonaCardInputFields from "@/components/PersonaCardInputFields";
 import {
@@ -84,6 +85,8 @@ export default function DifficultySelectPage() {
   const [pendingDestination, setPendingDestination] = useState<string | null>(null);
   // §88(UX D-131 (1)) — "이번 훈련 속 내 정보"(선택 · 기본 비움). 고급 × 대상 4종 × self일 때만 그린다(send는 UX-019가 받는다).
   const [personaForm, setPersonaForm] = useState<PersonaCardForm>(EMPTY_PERSONA_CARD_FORM);
+  // UX D-141 — 내 정보 칸에 입력 중이면 시트 설명을 숨긴다(키보드 위 공간).
+  const [typing, setTyping] = useState(false);
 
   // 초급 사전 브리핑(D-43/AC-066) — **세션 시작 전**에만 보여준다. 대화 중 실시간 판정 표시가
   // 아니다(D-6 유지). 실패는 비차단(P-4): 브리핑을 못 받아도 난이도 선택·진행은 그대로 된다.
@@ -103,6 +106,23 @@ export default function DifficultySelectPage() {
     // UX 계약 C-10 — 이벤트는 종류만(시나리오 ID · 수법 0).
     if (showBurdenNotice) console.info(JSON.stringify({ event: "burden_notice_shown" }));
   }, [showBurdenNotice]);
+
+  // UX D-141 (3) — 시트가 올라와 방금 고른 판을 가리면, 그 판이 시트 위로 보이게 그만큼만 내린다(시안 한계
+  // "390폭에서 시트가 3번째 판을 가림" 해소). 시트 등장(320ms)이 끝난 뒤 잰다. reduced-motion이면 즉시 이동.
+  useEffect(() => {
+    if (!selected) return;
+    const timer = window.setTimeout(() => {
+      const panel = document.querySelector<HTMLElement>(`[data-panel-key="${selected}"]`);
+      const sheet = document.querySelector<HTMLElement>("[data-bottom-sheet]");
+      if (!panel || !sheet) return;
+      const overlap = panel.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top;
+      if (overlap <= 0) return;
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      window.scrollBy({ top: overlap + 12, behavior: reduced ? "auto" : "smooth" });
+    }, 340);
+    return () => window.clearTimeout(timer);
+    // 오류 줄이 붙어 시트가 커질 때도 다시 잰다.
+  }, [selected, startError]);
 
   const handleSelect = (level: DifficultyLevel) => {
     setSelected(level);
@@ -237,26 +257,22 @@ export default function DifficultySelectPage() {
   const modeLabel = isSendMode ? "지인에게 보내기" : "본인이 체험";
   const advancedNotice = isSendMode ? ADVANCED_SEND_NOTICE : ADVANCED_SELF_NOTICE;
 
+  const description = (level: DifficultyLevel) =>
+    isSendMode ? DIFFICULTY_SEND_DESCRIPTION[level] : DIFFICULTY_SELF_DESCRIPTION[level];
+
+  // UX D-141 (3)(시안 E2) — 난이도 판은 이름 + 한 줄(요약)만. 고르면 아래에서 설명 시트가 올라오고 시트의
+  // "이걸로 시작"으로 진행한다(AC-064 — 고르기 전에는 진행 버튼 자체가 없다 = 사전 차단).
+  // 시트는 문서 흐름 끝에 붙는다(sticky) — 아래로 내리면 고급 고지 · 내 정보 칸 · 미리 보기가 시트에 가리지 않고 모두 보인다.
   return (
     // 실기 신고(2026-10-21) — `w-full`: body가 flex 열이라 `mx-auto`만 있으면 폭이 내용 길이를 따라간다. 난이도와
     // 펼침 블록(고급 고지 · 내 정보)에 상관없이 max-w 안에서 늘 같은 폭이 되게 고정한다(스크롤바 폭은 globals.css).
-    <main className="drilldown-step mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-6 p-6 pb-28 lg:max-w-3xl xl:max-w-5xl">
-      <header className="flex flex-col gap-2 pt-2">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-lg font-medium text-ink-sub hover:bg-neutral-tint"
-        >
-          <span aria-hidden="true">←</span> 뒤로
-        </button>
-        {/* 단계 표시(P-12 #2) — 지금까지의 선택 경로를 텍스트로 안내한다. */}
-        <p className="text-base font-semibold text-brand" aria-current="step">
-          {typeLabel} › {modeLabel} › {scenario.title} › 난이도
-        </p>
-        <h1 className="text-2xl font-bold text-ink">
-          {isSendMode ? "상대가 얼마나 세게 겪을까요?" : "얼마나 세게 겪어볼까요?"}
-        </h1>
-        <p className="text-lg leading-relaxed text-ink-sub">
+    <main className="drilldown-step mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-page">
+      {/* 단계 표시(P-12 #2) — 지금까지의 선택 경로를 텍스트로 안내한다. */}
+      <SelectScreenHeader
+        step={<>{typeLabel} › {modeLabel} › {scenario.title} › 난이도</>}
+        title={isSendMode ? <>상대가 얼마나<br />세게 겪을까요?</> : <>얼마나 세게<br />겪어볼까요?</>}
+      >
+        <p>
           같은 상황을 어느 강도로 훈련할지 고릅니다. 어떤 난이도를 골라도{" "}
           <strong className="font-semibold text-ink">
             사전 고지·동의·언제든 훈련 종료·끝난 뒤 &apos;훈련이었습니다&apos; 안내는 똑같이 적용
@@ -265,171 +281,181 @@ export default function DifficultySelectPage() {
         </p>
         {/* AC-067 — 시나리오의 기존 고정 문자열은 삭제하지 않고 "성향"으로 라벨을 바꿔 유지한다.
             "난이도"라는 단어는 아래 3단계에만 쓴다(한 화면에서 두 뜻으로 쓰이지 않게). */}
-        <p className="text-base text-ink-sub">
+        <p className="text-base">
           {SCENARIO_TRAIT_LABEL}: {scenario.difficulty}
         </p>
-      </header>
+      </SelectScreenHeader>
 
-      {/* T191 S5(UX-029 v1.34 (3)) — 고급 전용: 카드 위 1줄 · 고급 1장만(초급 · 중급 카드는 비활성 표시도 0). */}
-      {isAdvancedOnly && <p className="text-lg font-semibold text-ink">{ADVANCED_ONLY_LINE}</p>}
-      <div className="flex flex-col gap-3 lg:grid lg:grid-cols-3">
-        {selectableDifficultyLevels(scenario).map((level) => (
-          <SelectableCard
-            key={level}
-            className="min-h-[48px]"
-            selected={selected === level}
-            onClick={() => handleSelect(level)}
-            title={
-              <span className="flex flex-wrap items-center gap-2">
-                {/* 색 단독 표기 금지(P-22) — 항상 텍스트 라벨을 함께 쓴다. */}
-                <span>
-                  {DIFFICULTY_LABEL[level]} — {DIFFICULTY_SUMMARY[level]}
-                </span>
-                {level === RECOMMENDED_DIFFICULTY_LEVEL && (
-                  <Badge variant="neutral">추천</Badge>
-                )}
+      {/* T191 S5(UX-029 v1.34 (3)) — 고급 전용: 판 위 1줄 · 고급 1장만(초급 · 중급 판은 비활성 표시도 0). */}
+      {isAdvancedOnly && <p className="px-[22px] pb-3 text-lg font-semibold text-ink">{ADVANCED_ONLY_LINE}</p>}
+      <PanelList
+        mode="choose"
+        selectedKey={selected}
+        onSelect={(key) => handleSelect(key as DifficultyLevel)}
+        items={selectableDifficultyLevels(scenario).map((level) => ({
+          key: level,
+          // 색 단독 표기 금지(P-22) — 고른 판은 남색 채움 + 체크 + aria-pressed, 추천은 글자 표.
+          title: DIFFICULTY_LABEL[level],
+          badge: level === RECOMMENDED_DIFFICULTY_LEVEL ? <PanelBadge>추천</PanelBadge> : undefined,
+          description: DIFFICULTY_SUMMARY[level],
+        }))}
+      />
+
+      <div className="flex flex-col gap-4 px-[22px] py-5">
+        {/* 고급 고지(UX-029 States) — 확인 다이얼로그를 띄우지 않고(D-2/P-9) 선택 직후 인라인으로
+            알린다. aria-live로 스크린리더에도 즉시 전달된다. 고지가 늘어날 뿐 안전 컨트롤은 그대로다. */}
+        <p aria-live="polite" className="sr-only">
+          {/* 리뷰 Major — 시트는 고를 때 처음 생기므로 시트 안 문단은 첫 선택을 낭독하지 못한다. 처음부터 있는 이 영역이
+              고른 난이도 · 설명 · 시작 버튼 위치를 알린다. */}
+          {selected ? `${DIFFICULTY_LABEL[selected]}을 골랐습니다. ${description(selected)} 화면 아래 '이걸로 시작'을 누르면 시작합니다. ` : ""}
+          {selected === "advanced" ? advancedNotice : ""}
+          {showBurdenNotice ? ` ${PRE_SESSION_BURDEN_NOTICE}` : ""}
+        </p>
+        {selected === "advanced" && (
+          <div className="rounded-[8px] border-[1.5px] border-caution/40 bg-caution-tint p-4">
+            <p className="text-[17px] font-semibold leading-relaxed text-caution">
+              <span aria-hidden="true">⚠ </span>
+              {advancedNotice}
+            </p>
+            {/* 심리적 부담이 큰 시나리오는 기존 시나리오 설명의 경고를 함께 강조한다(UX-029 States). */}
+            <p className="mt-2 text-[16px] leading-relaxed text-ink-sub">
+              {SCENARIO_TRAIT_LABEL}: {scenario.difficulty}
+            </p>
+          </div>
+        )}
+        {/* T191 S5(UX-029 v1.34 (5) · D-106) — 셀프 감금 부담 고지. 고급 고지와 같은 인라인 형식 · 다이얼로그 ·
+            체크 · 추가 탭 0 · 경고 아이콘 · 경고색 0(안내다 — P-36). 낭독은 위 aria-live가 고급 고지에 이어 읽는다. */}
+        {showBurdenNotice && (
+          <p className="rounded-[8px] border-[1.5px] border-line bg-white p-4 text-[17px] leading-relaxed text-ink">
+            {PRE_SESSION_BURDEN_NOTICE}
+          </p>
+        )}
+
+        {/* §88(UX D-131 (1)) — 고급 고지 · 부담 고지 아래. 처음부터 펼침 · 세 칸 모두 비움(선택).
+            UX D-141 — 칸에 입력하는 동안은 시트 설명 문단을 숨겨 키보드 위 공간을 넓힌다. */}
+        {showPersonaInput && (
+          <div onFocusCapture={() => setTyping(true)} onBlurCapture={() => setTyping(false)}>
+            <PersonaCardInputFields
+              mode="self"
+              kind={personaKind ?? undefined}
+              value={personaForm}
+              onChange={setPersonaForm}
+              disabled={state === "starting"}
+            />
+          </div>
+        )}
+
+        {/* 초급 사전 브리핑(D-43/AC-066) — "이 대화에서 나올 수 있는 위험 신호 미리 보기". */}
+        {/* T191 S5(UX 계약 C-3 · OQ-U72) — 서버가 공통 신호 0개(빈 배열)를 주면 진입 자체를 그리지 않는다. */}
+        {selected === "beginner" && !(briefingSignals && briefingSignals.length === 0) && (
+          <div className="rounded-[8px] border-[1.5px] border-line bg-white p-4">
+            <button
+              type="button"
+              onClick={() => void handleToggleBriefing()}
+              aria-expanded={briefingOpen}
+              className="flex min-h-[48px] w-full items-center justify-between gap-2 text-left text-[17px] font-semibold text-brand"
+            >
+              <span>이 대화에서 나올 수 있는 위험 신호 미리 보기</span>
+              {/* UX D-134 — 화살표 하나를 돌린다(펼침 = 위). reduced-motion이면 즉시 바뀐다. */}
+              <span
+                aria-hidden="true"
+                className={`inline-block transition-transform duration-200 motion-reduce:transition-none ${briefingOpen ? "rotate-180" : ""}`}
+              >
+                ▼
               </span>
-            }
-            description={
-              isSendMode ? DIFFICULTY_SEND_DESCRIPTION[level] : DIFFICULTY_SELF_DESCRIPTION[level]
-            }
-          />
-        ))}
+            </button>
+            {briefingOpen && (
+              <div className="motion-reveal mt-2">
+                {briefingError ? (
+                  <p role="alert" className="text-[16px] text-danger">
+                    위험 신호를 불러오지 못했습니다. 훈련은 그대로 시작할 수 있어요.
+                  </p>
+                ) : briefingSignals ? (
+                  <>
+                    <p className="text-[16px] leading-relaxed text-ink">
+                      이 대화에서는 아래와 같은 신호가 나옵니다. 대화 중에는 따로 알려주지 않으니
+                      직접 알아채 보세요.
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {briefingSignals.map((signal) => (
+                        <li key={signal}>
+                          <Badge variant="caution">{signal}</Badge>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p role="status" className="flex items-center gap-2.5 text-[16px] text-ink-sub">
+                    <LoadingDots className="text-brand" />
+                    불러오는 중입니다
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 난이도 전달 실패 폴백 고지(AC-064 "침묵 실패 금지") — 조용히 다른 난이도로 넘어가지 않는다. */}
+        {state === "difficulty-fallback" && appliedLevel && (
+          <div className="rounded-[8px] border-[1.5px] border-caution/40 bg-caution-tint p-4">
+            <p role="alert" className="text-[17px] leading-relaxed text-caution">
+              난이도가 제대로 전달되지 않아 <strong>{DIFFICULTY_LABEL[appliedLevel]}</strong>으로
+              진행합니다.
+            </p>
+            <div className="mt-3">
+              <Button
+                type="button"
+                onClick={() => pendingDestination && router.push(pendingDestination)}
+              >
+                이대로 계속하기
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* 고급 고지(UX-029 States) — 확인 다이얼로그를 띄우지 않고(D-2/P-9) 선택 직후 인라인으로
-          알린다. aria-live로 스크린리더에도 즉시 전달된다. 고지가 늘어날 뿐 안전 컨트롤은 그대로다. */}
-      <p aria-live="polite" className="sr-only">
-        {selected === "advanced" ? advancedNotice : ""}
-        {showBurdenNotice ? ` ${PRE_SESSION_BURDEN_NOTICE}` : ""}
-      </p>
-      {selected === "advanced" && (
-        <div className="rounded-[8px] border-[1.5px] border-caution/40 bg-caution-tint p-4">
-          <p className="text-[17px] font-semibold leading-relaxed text-caution">
-            <span aria-hidden="true">⚠ </span>
-            {advancedNotice}
-          </p>
-          {/* 심리적 부담이 큰 시나리오는 기존 시나리오 설명의 경고를 함께 강조한다(UX-029 States). */}
-          <p className="mt-2 text-[16px] leading-relaxed text-ink-sub">
-            {SCENARIO_TRAIT_LABEL}: {scenario.difficulty}
-          </p>
-        </div>
-      )}
-      {/* T191 S5(UX-029 v1.34 (5) · D-106) — 셀프 감금 부담 고지. 고급 고지와 같은 인라인 형식 · 다이얼로그 ·
-          체크 · 추가 탭 0 · 경고 아이콘 · 경고색 0(안내다 — P-36). 낭독은 위 aria-live가 고급 고지에 이어 읽는다. */}
-      {showBurdenNotice && (
-        <p className="rounded-[8px] border-[1.5px] border-line bg-white p-4 text-[17px] leading-relaxed text-ink">
-          {PRE_SESSION_BURDEN_NOTICE}
-        </p>
-      )}
-
-      {/* §88(UX D-131 (1)) — 고급 고지 · 부담 고지 아래. 처음부터 펼침 · 세 칸 모두 비움(선택). */}
-      {showPersonaInput && (
-        <PersonaCardInputFields
-          mode="self"
-          kind={personaKind ?? undefined}
-          value={personaForm}
-          onChange={setPersonaForm}
-          disabled={state === "starting"}
-        />
-      )}
-
-      {/* 초급 사전 브리핑(D-43/AC-066) — "이 대화에서 나올 수 있는 위험 신호 미리 보기". */}
-      {/* T191 S5(UX 계약 C-3 · OQ-U72) — 서버가 공통 신호 0개(빈 배열)를 주면 진입 자체를 그리지 않는다. */}
-      {selected === "beginner" && !(briefingSignals && briefingSignals.length === 0) && (
-        <div className="rounded-[8px] border-[1.5px] border-line bg-white p-4">
-          <button
-            type="button"
-            onClick={() => void handleToggleBriefing()}
-            aria-expanded={briefingOpen}
-            className="flex min-h-[48px] w-full items-center justify-between gap-2 text-left text-[17px] font-semibold text-brand"
-          >
-            <span>이 대화에서 나올 수 있는 위험 신호 미리 보기</span>
-            {/* UX D-134 — 화살표 하나를 돌린다(펼침 = 위). reduced-motion이면 즉시 바뀐다. */}
-            <span
-              aria-hidden="true"
-              className={`inline-block transition-transform duration-200 motion-reduce:transition-none ${briefingOpen ? "rotate-180" : ""}`}
-            >
-              ▼
-            </span>
-          </button>
-          {briefingOpen && (
-            <div className="motion-reveal mt-2">
-              {briefingError ? (
-                <p role="alert" className="text-[16px] text-danger">
-                  위험 신호를 불러오지 못했습니다. 훈련은 그대로 시작할 수 있어요.
-                </p>
-              ) : briefingSignals ? (
-                <>
-                  <p className="text-[16px] leading-relaxed text-ink">
-                    이 대화에서는 아래와 같은 신호가 나옵니다. 대화 중에는 따로 알려주지 않으니
-                    직접 알아채 보세요.
-                  </p>
-                  <ul className="mt-2 flex flex-wrap gap-2">
-                    {briefingSignals.map((signal) => (
-                      <li key={signal}>
-                        <Badge variant="caution">{signal}</Badge>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
-                <p role="status" className="flex items-center gap-2.5 text-[16px] text-ink-sub">
-                  <LoadingDots className="text-brand" />
-                  불러오는 중입니다
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 난이도 전달 실패 폴백 고지(AC-064 "침묵 실패 금지") — 조용히 다른 난이도로 넘어가지 않는다. */}
-      {state === "difficulty-fallback" && appliedLevel && (
-        <div className="rounded-[8px] border-[1.5px] border-caution/40 bg-caution-tint p-4">
-          <p role="alert" className="text-[17px] leading-relaxed text-caution">
-            난이도가 제대로 전달되지 않아 <strong>{DIFFICULTY_LABEL[appliedLevel]}</strong>으로
-            진행합니다.
-          </p>
-          <div className="mt-3">
-            <Button
-              type="button"
-              onClick={() => pendingDestination && router.push(pendingDestination)}
-            >
-              이대로 계속하기
-            </Button>
+      <BottomSheet open={selected !== null} placement="sticky" label="고른 난이도">
+        {selected && (
+          <div className="flex flex-col gap-1 px-[22px] pt-4">
+            <span className="text-[15px] font-semibold text-ink-sub">고른 난이도</span>
+            <DisplayTitle as="h2" size="lg" className="text-ink">
+              {DIFFICULTY_LABEL[selected]}
+            </DisplayTitle>
+            {/* 입력 중에는 접어 둔다(언마운트하지 않는다 — 다시 펼칠 때 재낭독 · 레이아웃 튐 줄이기). */}
+            <p hidden={typing} className="text-[19px] leading-[1.6] text-ink [word-break:keep-all]">
+              {description(selected)}
+            </p>
           </div>
-        </div>
-      )}
-
-      <div className="sticky bottom-0 -mx-6 -mb-28 border-t border-line bg-page/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur">
+        )}
         {startError && (
-          <p role="alert" className="mb-3 flex items-center gap-2 text-lg text-danger">
+          <p role="alert" className="flex items-center gap-2 px-[22px] pt-2 text-lg text-danger">
             <span aria-hidden="true">⚠</span>
             <span>{startError}</span>
           </p>
         )}
-        {/* AC-064 — 난이도를 고르지 않으면 진행 버튼 비활성(제출 후 오류 대신 사전 차단, P-5). */}
-        <Button
-          type="button"
+        {/* AC-064 — 난이도를 고르지 않으면 진행 버튼이 없다(시트가 닫혀 있다 — 사전 차단, P-5). */}
+        <CtaPanel
+          className="mt-3"
           onClick={() => void handleStart()}
           disabled={!selected || state === "starting" || state === "difficulty-fallback"}
+          note={
+            /* UX D-134 — 세션 생성은 길게는 15초쯤 걸린다. 서버가 실제로 하는 일만 말하고, 경과 시간에 따라 안심 문구를
+               덧붙인다(⛔ 진행률 · 단계 완료 표시 없음). 마운트 = 대기 시작이라 매번 0초부터 잰다. */
+            state === "starting" && !isSendMode && selected && !resolveScenarioEscalation(scenario, selected) ? (
+              <LoadingHintLine hints={SESSION_PREP_HINTS} />
+            ) : undefined
+          }
         >
           {state === "starting" ? (
-            <span className="flex items-center justify-center gap-2.5">
+            <span className="flex items-center gap-2.5">
               <LoadingDots />
               준비하는 중
             </span>
           ) : (
-            "이 난이도로 시작"
+            "이걸로 시작"
           )}
-        </Button>
-        {/* UX D-134 — 세션 생성은 길게는 15초쯤 걸린다. 서버가 실제로 하는 일만 말하고, 경과 시간에 따라 안심 문구를 덧붙인다
-            (⛔ 진행률 · 단계 완료 표시 없음). 마운트 = 대기 시작이라 매번 0초부터 잰다. */}
-        {state === "starting" && !isSendMode && selected && !resolveScenarioEscalation(scenario, selected) && (
-          <LoadingHintLine hints={SESSION_PREP_HINTS} className="mt-2 text-center" />
-        )}
-      </div>
+        </CtaPanel>
+      </BottomSheet>
     </main>
   );
 }
