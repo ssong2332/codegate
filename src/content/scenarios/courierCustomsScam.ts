@@ -22,4 +22,6 @@ export const courierCustomsScamScenario: ScenarioDoc = {
   deepvoiceLines,
   voiceMode: "generic",
   callerLabel: "070-4218-9930",
+  // §92.4(DECISIONS #206) — 보고서 R6 "유지(우선순위 낮음)": 목록 맨 뒤.
+  lowPriority: true,
 };

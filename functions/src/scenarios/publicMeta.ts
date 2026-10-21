@@ -41,6 +41,11 @@ export type ScenarioMeta = {
   advancedOnly?: true;
   // T191 S5(UX 계약 C-9 · D-106) — 세션 전 부담 고지 대상(셀프 감금 1종). 부재 = 고지 없음.
   preSessionBurdenNotice?: true;
+  // §92(DECISIONS #206) — 합쳐진 시나리오의 흡수처 id. 있으면 `createSession`이 새 세션을 거부한다(`isMergedScenario`).
+  // 항목은 옛 세션 · 리포트 해석용으로 남는다(프롬프트 · 변형 · 문자 · 화면 무변경).
+  mergedInto?: string;
+  // §92.4 — 목록 맨 뒤(화면 표시값 · 클라 원본과 같은 값).
+  lowPriority?: true;
 };
 
 export const FAMILY_ACCIDENT_SCENARIO_ID = "family-accident-deepvoice";
@@ -122,6 +127,8 @@ export const taxRefundScamScenario: ScenarioMeta = {
   ],
   voiceMode: "generic",
   callerLabel: "국세청 환급팀 (사칭)",
+  // §92.4(DECISIONS #206) — 보고서 R6 "유지(우선순위 낮음)": 목록 맨 뒤.
+  lowPriority: true,
 };
 
 export const grandchildImpersonationScenario: ScenarioMeta = {
@@ -165,6 +172,8 @@ export const courierCustomsScamScenario: ScenarioMeta = {
   ],
   voiceMode: "generic",
   callerLabel: "택배 고객센터 (사칭)",
+  // §92.4(DECISIONS #206) — 보고서 R6 "유지(우선순위 낮음)": 목록 맨 뒤.
+  lowPriority: true,
 };
 
 export const kidnappingThreatScenario: ScenarioMeta = {
@@ -291,6 +300,8 @@ export const cardDeliveryCallScenario: ScenarioMeta = {
   voiceMode: "generic",
   callerLabel: "070-5217-3364",
   advancedOnly: true,
+  // §92(DECISIONS #206) — 카드사 부정결제 고급의 흐름 변형으로 흡수됐다(목록 제외 · 새 세션 거부 · 재훈련은 흡수처로).
+  mergedInto: "card-company-impersonation",
 };
 
 export const assetProtectionNoticeCallScenario: ScenarioMeta = {
@@ -346,4 +357,9 @@ export const PUBLIC_SCENARIOS: Record<string, ScenarioMeta> = {
 // 시작(`/` + `*`)으로 읽혀, 루트 소스 스캔(startNoticeGate.test.ts의 codeOnly)이 그 사이 코드를 통째로 지운다.
 export function isAdvancedOnlyScenario(scenarioId: string): boolean {
   return PUBLIC_SCENARIOS[scenarioId]?.advancedOnly === true;
+}
+
+// §92(DECISIONS #206) — 다른 시나리오로 합쳐져 새 세션을 만들 수 없는 시나리오인가(`session/mergedScenario.ts`가 쓴다).
+export function isMergedScenario(scenarioId: string): boolean {
+  return PUBLIC_SCENARIOS[scenarioId]?.mergedInto !== undefined;
 }

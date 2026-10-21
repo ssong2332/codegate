@@ -37,6 +37,7 @@ import type { ScenarioPromptDoc } from "../shared/types";
 import type { AxisExitBlock } from "./axes";
 import { SCENARIO_PROMPTS } from "./index";
 import { PARCEL_ADVANCED_INSTALL_TACTIC, PARCEL_ADVANCED_LEG_PERSONA } from "./messengerParcelSmishingSms.prompt";
+import { CARD_DELIVERY_PERSONA } from "./cardDeliveryCall.prompt";
 import { extractTacticLabel } from "./tacticFlavor";
 import { hasVerifyIntercept } from "./verifyIntercept";
 
@@ -179,6 +180,18 @@ const INSTITUTION_ADVANCED_SMS: FlowVariantSms[] = [
 const INSTITUTION_ADVANCED_DECISION_MOMENT = "문자 링크로 연 안전계좌 이체 화면에서 금액을 넣고 이체하기를 누르는 순간";
 const APP_INSTALL = { from: "card-delivery-call", label: "보안 점검 앱 설치 요구" };
 const AGENCY_PROBE = { from: "card-delivery-call", label: "기관 조사 언급" };
+// §92 — 카드 배송 흐름(fv-tvnj 원본 · 카드사 흡수 변형 fv-w3dq가 공유 — 문구 사본 0).
+const CARD_DELIVERY_STAGES = [
+  "카드 배송 일정을 안내하며 말을 건다.",
+  "카드를 신청하지 않았다면 명의 도용 사고라며 사고 접수로 넘긴다.",
+  "본인 확인 뒤 휴대폰 보안 점검 앱을 설치하라고 요구한다.",
+  "금융당국 조사가 시작됐다며 불안을 키우고, 확인하겠다는 상대를 막지 않는다.",
+  "조사가 끝날 때까지 자산을 보호 계좌로 옮기라고 요구한다.",
+] as const;
+const CARD_DELIVERY_DECISION_MOMENT = "보안 점검 앱 설치 또는 자산 보호 이체에 동의하는 순간";
+// §92 ③ — 원본(`cardDeliveryCall.prompt.ts`)과 라벨 · 뒷부분이 같고, 인용 예시만 카드사 요구 머리(*"성함부터 불러주세요"*)로 바꿨다.
+const CARD_DELIVERY_IDENTITY_DEMAND =
+  "본인확인 정보 직접 요구 — '사고 접수는 본인 확인부터라서요, 성함부터 불러주세요' 처럼 신원 정보를 직접 요구한다. 상대가 카드를 신청한 적 없다고 부인해도 '그러면 명의 도용 여부부터 확인해야 합니다' 라며 같은 요구를 다른 근거로 다시 꺼낸다 — 이 요구는 상대가 무엇을 부인하든 꺼낼 수 있다.";
 
 // 음성 시나리오용 "다른 번호" 수법(가족 · 손주 고급 — §2.6.3 "딥보이스 + 다른 번호로 연락", 사례 S9 · C18).
 const OTHER_NUMBER_PRETEXT =
@@ -437,6 +450,50 @@ const SPECS: VariantSpec[] = [
     extraTactics: cardAdvancedExtras(CARD_RELIEF_TRANSFER_NO_ACCOUNT),
     // T194-c-1 리뷰 Minor — 문자를 선언하므로 채널 메타에 "sms"를 더한다(fv-m3hd가 스프레드로 받는 값과 같은 꼴 · 프롬프트 바이트 무영향).
     channels: ["voice", "sms"],
+  },
+  // ⭐ §92(docs/Architecture.md · DECISIONS #206 · 사용자 승인 *"시나리오 결정 권고안대로 진행"*) — 고급 전용 `card-delivery-call`을 목록에서 빼고
+  // 그 흐름을 **카드사 고급의 변형**으로 흡수한다(보고서 R1 — 겹침 높음). 내용 = `fv-tvnj`(아래 · 무변경 — 옛 세션용)와 같은 단계 · 수법 ·
+  // 인원 · 결정 순간 · 출처. 다른 점 3가지:
+  //   ① 0번 화자 페르소나 = 카드 배송 상담원(`CARD_DELIVERY_PERSONA` — 시나리오 원본은 카드사 보안팀이라 첫 장면이 다르다).
+  //   ② 문자 = 카드사 카탈로그의 `card-guard-app-link`(설치 화면 `card-guard-app-install`) — 문자 · 화면 id는 시나리오 소속이라 옮기지 않고
+  //      같은 꼴(Q2 설치 · 필수 · 하한 2)의 카드사 문자를 쓴다(새 문자 · 새 화면 0).
+  //   ③ 신원 요구 예시 = 카드사 요구 머리 *"성함부터 불러주세요"* — 카드사 고급은 '내 정보' 카드 대상이라 확인형 치환표가 아는 문구여야
+  //      카드 세션에서 "먼저 말하지 않고 묻는" 결함(§91)이 재발하지 않는다(라벨 무변경).
+  // 배정: 자가 고급 풀 = fv-x7ue · fv-w3dq(둘 다 설치 문자 선언) · 챌린지 고급 = fv-akj5(무변경).
+  {
+    variantId: "fv-w3dq",
+    scenarioId: "card-company-impersonation",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(...CARD_DELIVERY_STAGES),
+    keepLabels: [],
+    extraTactics: [
+      { from: "card-delivery-call", label: "안심 유도" },
+      { from: "card-delivery-call", label: "부인 시 명의 도용 암시" },
+      CARD_DELIVERY_IDENTITY_DEMAND,
+      APP_INSTALL,
+      { from: "card-delivery-call", label: "확인 시도 무력화" },
+      AGENCY_PROBE,
+      { from: "card-delivery-call", label: "자산 보호 이체 요구" },
+      { from: "card-delivery-call", label: "긴급성 조성" },
+    ],
+    exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],
+    sms: [{ purpose: "link", smsId: "card-guard-app-link", required: true, notBeforeUserTurns: 2 }],
+    legs: [
+      {
+        callerLabel: "카드 배송 안내",
+        personaPrompt: CARD_DELIVERY_PERSONA,
+        speakerGender: "female",
+        minUserTurns: 3,
+        maxUserTurns: 8,
+      },
+      { callerLabel: "금융감독원 직원", speakerGender: "male", minUserTurns: 2, maxUserTurns: 10 },
+    ],
+    ...ADVANCED,
+    channels: ["voice", "sms"],
+    demandStages: 3,
+    decisionMoment: CARD_DELIVERY_DECISION_MOMENT,
+    sources: ["C03", "C04", "S4", "S22"],
   },
 
   // ── loan-refinance-scam (§2.6.3 3행 — S10 · S19) ─────────────────────────────────────────
@@ -1029,13 +1086,8 @@ const SPECS: VariantSpec[] = [
     scenarioId: "card-delivery-call",
     level: "advanced",
     authoring: "authored",
-    stages: st(
-      "카드 배송 일정을 안내하며 말을 건다.",
-      "카드를 신청하지 않았다면 명의 도용 사고라며 사고 접수로 넘긴다.",
-      "본인 확인 뒤 휴대폰 보안 점검 앱을 설치하라고 요구한다.",
-      "금융당국 조사가 시작됐다며 불안을 키우고, 확인하겠다는 상대를 막지 않는다.",
-      "조사가 끝날 때까지 자산을 보호 계좌로 옮기라고 요구한다.",
-    ),
+    // §92 — 시나리오가 목록에서 빠져 새 세션은 없다(서버 거부). 옛 세션 · 리포트 해석용으로 내용 무변경 유지(단계 문자열은 흡수 변형과 공유).
+    stages: st(...CARD_DELIVERY_STAGES),
     exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],
     // ⭐ T194-c-1(docs/Architecture.md §84.15.4 ① · §84.16.2) — 내용 교체(ID 유지 — 고급 전용 · 챌린지 불가라 받는 세션 종류가 하나).
     // Q2 설치 문자(단계 3 "보안 점검 앱 설치")를 백스톱 강제로 선언한다(#182). 단위 도달 랜딩 = [설치 화면] 1건(G604).
@@ -1048,7 +1100,7 @@ const SPECS: VariantSpec[] = [
     // T194-c-1 리뷰 Minor — 위 sms 선언과 맞춘다(채널 메타 · 프롬프트 바이트 무영향).
     channels: ["voice", "sms"],
     demandStages: 3,
-    decisionMoment: "보안 점검 앱 설치 또는 자산 보호 이체에 동의하는 순간",
+    decisionMoment: CARD_DELIVERY_DECISION_MOMENT,
     sources: ["C03", "C04", "S4", "S22"],
   },
   {
@@ -1060,13 +1112,14 @@ const SPECS: VariantSpec[] = [
       "본인 명의 계좌가 범죄에 쓰인 정황이 있다고 알린다.",
       "본인 확인 뒤 계좌번호보다 거래 은행과 자산 규모부터 묻는다.",
       "비공개 진행을 강조하고, 은행에서 이유를 물으면 그럴듯한 개인 용도로 둘러대라고 일러 준다. 구체적인 문장은 만들어 주지 않는다.",
-      "보관 조치 절차를 설명하며 돈을 찾아 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다.",
+      // §92.3(DECISIONS #206) — 고유 장치: 보관 신청 링크 문자 → 신청서 화면(E4를 눈앞의 화면으로).
+      "보관 조치 절차라며 문자로 보낸 링크에서 보관 신청서를 작성하게 하고, 돈을 찾아 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다.",
     ),
     exitBlock: ["D2_secrecy", "D4_procedural_legitimacy"],
-    sms: [],
+    sms: [{ purpose: "link", smsId: "asset-custody-link", required: true, notBeforeUserTurns: 3 }],
     legs: ONE_LEG("금융감독원 직원", "male"),
     ...ADVANCED,
-    channels: ["voice"],
+    channels: ["voice", "sms"],
     demandStages: 2,
     // PRD AC-097 (e) 확정 전 기본값 = 설계 초안 안(주소 발화는 조건이 아니다 — AC-024).
     decisionMoment: "인출 · 전달 약속에 동의하는 순간",
@@ -1079,16 +1132,17 @@ const SPECS: VariantSpec[] = [
     authoring: "authored",
     stages: st(
       "범죄 연루와 구속 가능성을 알린다.",
-      "영장이 청구됐다고 말로만 전한다.",
+      // §92.3(DECISIONS #206) — 고유 장치: "말로만" 전하던 영장을 사건 조회 링크 문자 → 본인 확인 화면으로(설계의 가짜 영장).
+      "영장이 청구됐다며 문자로 보낸 사건 조회 링크에서 본인 확인 뒤 사건 기록을 직접 확인하라고 한다.",
       "비공개 수사라며 주변에 알리지 말고 혼자 있으라고 요구한다. 어디로 가라 · 무엇을 마련하라는 말은 하지 않는다.",
       "끊지 말고 수시로 진행 상황을 알려 달라고 한다.",
       "자산 검수를 위해 코인으로 바꿔 지정된 곳으로 옮기라고 요구한다.",
     ),
     exitBlock: ["D2_secrecy", "D4_procedural_legitimacy", "D5_call_retention"],
-    sms: [],
+    sms: [{ purpose: "link", smsId: "prosecution-case-link", required: true, notBeforeUserTurns: 2 }],
     legs: ONE_LEG("검찰 수사관", "male"),
     ...ADVANCED,
-    channels: ["voice"],
+    channels: ["voice", "sms"],
     demandStages: 2,
     decisionMoment: "코인 구매 · 송금 약속에 동의하는 순간",
     sources: ["C05", "C06", "C07", "C08", "S3", "S25", "S28"],

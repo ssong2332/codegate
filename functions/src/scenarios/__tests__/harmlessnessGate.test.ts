@@ -77,6 +77,9 @@ const SCENARIO_META_FIELDS: Record<keyof ScenarioMeta, FieldPolicy> = {
   // T191 S5 — 리터럴 `true` 플래그 2종(UX 계약 C-1 · C-9). 자유 문자열이 아니다.
   advancedOnly: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
   preSessionBurdenNotice: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
+  // §92(DECISIONS #206) — 흡수처 시나리오 id(공개 id 문자열 — 자유 서술 아님) · 리터럴 true 플래그.
+  mergedInto: { skip: "다른 시나리오 id — 자유 문자열 없음(존재 단언은 flowVariants.test.ts §92 블록)" },
+  lowPriority: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
 };
 
 const VERIFY_INTERCEPT_FIELDS: Record<keyof VerifyInterceptItem, FieldPolicy> = {

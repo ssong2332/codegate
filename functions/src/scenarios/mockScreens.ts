@@ -207,6 +207,8 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `safe-account-transfer` | `scenarios/inCallSms.ts:87-91`(문자 본문·칩) | "아래에서 안전계좌 이체를 진행해 주세요." | 링크에서 안전계좌 이체 | "안전계좌 이체가 아직 완료되지 않았습니다" | "안전계좌로 이체하기" |
 // | `card-relief-transfer` | `scenarios/inCallSms.ts:117-119`(문자 본문·칩) | "아래에서 피해금 이관을 진행해 주세요." | 링크에서 피해금 이관 | "피해금 이관 신청이 완료되지 않았습니다" | "피해금 이관하기" |
 // | `protect-account-transfer` | `scenarios/inCallSms.ts:173-175`(문자 본문·칩) | "아래에서 보호계좌로 옮기기를 진행해 주세요." | 링크에서 보호계좌로 옮기기 | "보호계좌로 옮기기가 아직 처리되지 않았습니다" | "보호계좌로 옮기기" |
+// | `asset-custody-apply` | `scenarios/inCallSms.ts` ASSET_PROTECTION_NOTICE_CALL(문자 본문·칩 — §92.3) | "아래에서 보관 신청서를 작성해 주세요." | 보관 신청서 작성 | "수사 종료 시까지 자산 보관 신청이 필요합니다" | "보관 신청하기" |
+// | `case-record-view` | `scenarios/inCallSms.ts` PROSECUTION_COOPERATION_CALL(문자 본문·칩 — §92.3) | "아래에서 본인 확인 후 사건 기록을 열람해 주세요." | 본인 확인 → 사건 기록 열람 | "사건 기록 열람 전 본인 확인이 필요합니다" | "사건 기록 열람하기" |
 // | `card-delivery-app-install` | `scenarios/inCallSms.ts` CARD_DELIVERY_CALL(문자 본문·칩 — T194-c-1 Q2) | "아래에서 보안 점검 앱을 설치해 주세요." | 보안 점검 앱 설치 | "보안 점검 앱을 설치해야 사고 접수가 이어집니다" | "권한 허용하고 계속하기" |
 // | `card-guard-app-install` | `scenarios/inCallSms.ts` CARD_COMPANY_IMPERSONATION(문자 본문·칩 — T194-c-1 Q2) | "아래에서 피해 차단용 보안 앱을 설치해 주세요." | 피해 차단용 보안 앱 설치 | "피해 차단용 보안 앱을 설치해야 보호 조치가 시작됩니다" | "권한 허용하고 계속하기" |
 // | `loan-check-app-install` | `scenarios/inCallSms.ts` LOAN_SCAM(문자 본문·칩 — T194-c-1 Q2) | "아래에서 심사용 보안 점검 앱을 설치해 주세요." | 심사용 보안 점검 앱 설치 | "심사용 보안 점검 앱을 설치해야 대출 심사가 진행됩니다" | "권한 허용하고 계속하기" |
@@ -455,6 +457,51 @@ const CARD_DELIVERY_CALL: MockScreenItem[] = [
   },
 ];
 
+// ⭐ §92.3(docs/Architecture.md · DECISIONS #206) — 고급 전용 2종의 통화 중 문자에서 열리는 `credential-form` 각 1건(도달 가능 랜딩
+// 1건 — G159). 제목 · 발신 표기에 실존 기관명 0(`mockSurface`). 입력 칸 라벨에 숫자열 0.
+// 대조표 행은 위 AC-078 (c) 표에 있다(`asset-custody-apply` · `case-record-view`).
+const ASSET_PROTECTION_NOTICE_CALL: MockScreenItem[] = [
+  {
+    landingId: "asset-custody-apply",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "수사 종료 시까지 자산 보관 신청이 필요합니다",
+    bodyLines: [
+      "명의 도용 정황이 확인되어 보호 조치 대상으로 분류되었습니다.",
+      "신청서를 제출하시면 담당 직원이 보관 절차를 안내해 드립니다.",
+    ],
+    issuerLabel: "ⓒ 자산보호 보관접수 안내",
+    mockHost: "asset-custody-desk.invalid",
+    fields: ["보관 신청 금액", "돈을 찾을 은행", "찾는 방법(현금 또는 수표)"],
+    submitLabel: "보관 신청하기",
+    successHeadline: "보관 신청이 접수되었습니다.",
+    momentTactic: "자산 보호를 빌미로 한 현금 인출 · 전달 약속 유도",
+    correctAction:
+      "'돈을 찾아 맡기면 보관해 주겠다'고 하면 그 자리에서 멈추세요 — 어떤 기관도 수사를 이유로 현금을 받아 가거나 보관해 주지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 은행 창구에서 돈을 찾는 이유를 물으면 사실대로 말하고 도움을 청하기 ③ 이미 돈을 건넸다면 바로 경찰에 신고하기",
+  },
+];
+
+const PROSECUTION_COOPERATION_CALL: MockScreenItem[] = [
+  {
+    landingId: "case-record-view",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "사건 기록 열람 전 본인 확인이 필요합니다",
+    bodyLines: [
+      "고객님 명의가 관련된 사건이 접수되어 있습니다.",
+      "본인 확인이 끝나면 영장 사본과 사건 기록을 바로 열람하실 수 있습니다.",
+    ],
+    issuerLabel: "ⓒ 사건조회 안내센터",
+    mockHost: "case-view-center.invalid",
+    fields: ["성명", "생년월일", "휴대전화 번호"],
+    submitLabel: "사건 기록 열람하기",
+    successHeadline: "본인 확인이 완료되었습니다.",
+    momentTactic: "수사기관 사칭 사건 조회 사이트를 빌미로 한 본인정보 입력 유도",
+    correctAction:
+      "'문자 링크로 사건 기록을 확인하라'고 하면 그 자리에서 멈추세요 — 수사기관은 문자 링크로 영장이나 사건 기록을 보여 주지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 문자 속 링크에 이름 · 생년월일 · 전화번호를 넣지 않기 ③ 혼자 있으라거나 알리지 말라고 하면 오히려 가족에게 바로 알리기",
+  },
+];
+
 // UF-008 — `bank-protect-account` 문자(§53/§51 커밋 D)에서 열린다. §51.6 R10 — 신규
 // `InCallSmsKind`·`MockScreenKind` 0건.
 //
@@ -523,6 +570,9 @@ export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   "bank-security-verify-scam": BANK_SECURITY_VERIFY_SCAM,
   // T194-c-1(§84.5.2) — 카탈로그 신설(이 시나리오 첫 항목 · 통화 중 설치 화면 1건).
   "card-delivery-call": CARD_DELIVERY_CALL,
+  // §92.3(DECISIONS #206) — 고급 전용 2종 카탈로그 신설(각 `credential-form` 1건).
+  "asset-protection-notice-call": ASSET_PROTECTION_NOTICE_CALL,
+  "prosecution-cooperation-call": PROSECUTION_COOPERATION_CALL,
 };
 
 /**

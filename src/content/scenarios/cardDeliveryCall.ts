@@ -16,4 +16,6 @@ export const cardDeliveryCallScenario: ScenarioDoc = {
   voiceMode: "generic",
   callerLabel: "070-5217-3364",
   advancedOnly: true,
+  // §92(DECISIONS #206) — 카드사 부정결제 고급의 흐름 변형으로 흡수됐다(목록 제외 · 새 세션 거부 · 재훈련은 흡수처로).
+  mergedInto: "card-company-impersonation",
 };
