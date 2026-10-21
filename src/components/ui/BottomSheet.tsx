@@ -12,9 +12,13 @@ export default function BottomSheet({
   open,
   label,
   children,
+  placement = "fixed",
   className = "",
 }: {
   open: boolean;
+  /** fixed = 화면 아래 고정(내용 위에 뜬다) · sticky = 문서 흐름의 끝에 붙어 스크롤 중에는 아래에 머문다 —
+   *  목록 끝까지 내리면 가려졌던 판 · 안내가 모두 보인다(시트 아래 여백 계산 불필요 · 높이 650 폰에서도 안전). */
+  placement?: "fixed" | "sticky";
   /** 시트 이름(스크린리더) */
   label: string;
   children: ReactNode;
@@ -24,7 +28,7 @@ export default function BottomSheet({
   return (
     <section
       aria-label={label}
-      className={`e2-sheet-in fixed inset-x-0 bottom-0 z-40 mx-auto flex w-full max-w-xl flex-col border-t-[3px] border-brand bg-surface text-ink shadow-[0_-14px_30px_color-mix(in_srgb,var(--deep)_22%,transparent)] ${className}`}
+      className={`e2-sheet-in ${placement === "fixed" ? "fixed inset-x-0 bottom-0 mx-auto max-w-xl" : "sticky bottom-0"} z-40 flex w-full flex-col border-t-[3px] border-brand bg-surface text-ink shadow-[0_-14px_30px_color-mix(in_srgb,var(--deep)_22%,transparent)] ${className}`}
     >
       {children}
     </section>

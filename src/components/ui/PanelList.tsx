@@ -35,10 +35,12 @@ type Props = {
   selectedKey?: string | null;
   /** 판 번호 원을 그린다(기본 true) */
   numbered?: boolean;
+  /** 묶음으로 나눈 목록에서 번호 · 색 교차를 이어 가는 시작 순번(기본 0) */
+  startIndex?: number;
   className?: string;
 };
 
-export default function PanelList({ items, onSelect, mode = "navigate", selectedKey = null, numbered = true, className = "" }: Props) {
+export default function PanelList({ items, onSelect, mode = "navigate", selectedKey = null, numbered = true, startIndex = 0, className = "" }: Props) {
   // choose(난이도)는 채우지 않는다 — 설명 시트가 열리면 목록 아래 여백으로 마지막 판까지 보이게(D-141 (3)).
   const fill = mode === "navigate" && panelsFillHeight(items.length);
   const minHeight = panelMinHeight(items.length);
@@ -48,7 +50,7 @@ export default function PanelList({ items, onSelect, mode = "navigate", selected
         <li key={item.key} className={`flex flex-col ${fill ? "flex-1" : ""}`}>
           <Panel
             item={item}
-            index={i}
+            index={startIndex + i}
             mode={mode}
             selected={mode === "choose" && selectedKey === item.key}
             numbered={numbered}
@@ -104,7 +106,9 @@ function Panel({
       disabled={item.disabled}
       aria-pressed={mode === "choose" ? selected : undefined}
       aria-label={item["aria-label"]}
-      style={{ minHeight, ["--e2-i" as string]: index }}
+      data-panel-key={item.key}
+      /* 등장 순서는 6번째에서 멈춘다(긴 목록 아래쪽 판이 늦게 나타나지 않게). */
+      style={{ minHeight, ["--e2-i" as string]: Math.min(index, 6) }}
       className={`e2-rise relative flex w-full flex-1 text-left transition-colors duration-150 focus-visible:outline-[3px] focus-visible:-outline-offset-[6px] focus-visible:outline-current disabled:cursor-not-allowed disabled:opacity-60 ${tone.surface} ${
         mode === "choose" ? "items-center gap-4 py-4 pl-[22px] pr-[64px]" : "flex-col justify-end gap-1 px-[22px] pb-4 pt-[58px]"
       }`}

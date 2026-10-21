@@ -35,7 +35,8 @@ import {
   resolveListedScenarioId,
 } from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc, type VoiceMode } from "@/content/scenarios";
-import { Badge, Button } from "@/components/ui";
+import SelectScreenHeader from "@/components/SelectScreenHeader";
+import ScenarioPanelGroups, { scenarioPanelItem, type ScenarioPanelGroup } from "@/components/ScenarioPanelGroups";
 import PageToc from "@/components/PageToc";
 import { groupInOrder, voiceScenarioCategory } from "@/lib/pagetoc/pageToc";
 
@@ -89,170 +90,67 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
       : []),
   ];
 
+  // UX D-141(시안 E2) — 판을 누르면 그 시나리오로 확정하고 바로 난이도 선택(UX-029)으로 간다(종전 "고르고 → 아래 '다음'" 2탭 → 1탭).
+  // (T72, v1.11 D-41) — 이 화면은 **시나리오만 확정**하고 넘긴다. 세션/챌린지 생성 분기(send → UX-019, self·generic →
+  // createSession)는 난이도 화면이 그대로 넘겨받아 수행한다(판정 규칙 자체는 이관 전과 동일).
   const handleSelectScenario = (scenarioId: string) => {
+    if (!scenarios[scenarioId]) return;
     setSelectedScenarioId(scenarioId);
     // UX 계약 C-10 — 이벤트는 종류만(시나리오 ID · 수법 0).
     if (scenarios[scenarioId]?.advancedOnly === true) {
       console.info(JSON.stringify({ event: "advanced_only_scenario_selected" }));
     }
-  };
-
-  // (T72, v1.11 D-41) — 이 화면은 이제 **시나리오만 확정**하고 난이도 선택(UX-029)으로 넘긴다.
-  // 세션/챌린지 생성 분기(send → UX-019, self·generic → createSession)는 그 화면이 그대로 넘겨받아
-  // 수행한다 — 난이도가 "세션/챌린지 생성 직전" 단계라 생성 지점 자체를 그 뒤로 옮겨야 어느
-  // 경로에서도 난이도가 누락되지 않는다(판정 규칙 자체는 이관 전과 동일).
-  const handleStart = () => {
-    if (!selectedScenarioId) return;
-    if (!scenarios[selectedScenarioId]) return;
-    persistSelectedScenarioId(selectedScenarioId);
+    persistSelectedScenarioId(scenarioId);
     router.push("/scenarios/difficulty");
   };
 
-  const renderScenarioCard = (scenarioId: string, scenario: ScenarioDoc) => {
-    const selected = selectedScenarioId === scenarioId;
-    return (
-      <li key={scenarioId}>
-        <label
-          className={`flex cursor-pointer gap-4 rounded-[8px] border-2 p-4 transition ${
-            selected
-              ? "border-brand bg-brand-tint"
-              : "border-line bg-white hover:border-line-strong"
-          }`}
-        >
-          <input
-            type="radio"
-            name="scenario"
-            value={scenarioId}
-            checked={selected}
-            onChange={() => handleSelectScenario(scenarioId)}
-            className="sr-only"
-            aria-describedby={`scenario-${scenarioId}-meta`}
-          />
+  // 판 한 장 — 이름 · 표(고급 전용 · 다시 훈련) · 전화 오는 번호 / 소요 시간 · 수법 / 이 시나리오의 성향.
+  // T72/AC-067 — "난이도"라는 단어는 사용자가 고르는 3단계(UX-029)에만 쓰고, 여기서는 "이 시나리오의 성향"이다.
+  // 2026-10-21 시나리오 목록 검증 — "(으)로" 조사가 어색해 조사 없는 꼴("전화 오는 번호: …")을 쓴다.
+  const toItem = ([scenarioId, scenario]: [string, ScenarioDoc]) =>
+    scenarioPanelItem({
+      id: scenarioId,
+      icon: "phone",
+      title: scenario.title,
+      tags: [
+        // T191 S5(D-104 (1)) — 텍스트 태그(색 단독 금지, P-22).
+        ...(scenario.advancedOnly === true ? [ADVANCED_ONLY_TAG] : []),
+        ...(selectedScenarioId === scenarioId ? ["다시 훈련"] : []),
+      ],
+      lines: [
+        `전화 오는 번호: ${scenario.callerLabel}`,
+        `${scenario.estimatedDuration} · ${scenario.fraudType}`,
+        `${SCENARIO_TRAIT_LABEL}: ${scenario.difficulty}`,
+      ],
+    });
 
-          {/* 발신자 아바타 — 통화 화면의 아바타와 같은 형태라 "이 사람이 전화한다"가 바로 읽힌다. */}
-          <span
-            aria-hidden="true"
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xl font-bold ${
-              selected ? "bg-brand text-white" : "bg-avatar-bg text-avatar-fg"
-            }`}
-          >
-            {/* T75 — 발신자 표기가 번호로 바뀌어 첫 글자를 따면 "0"·"+"가 뜬다.
-                저장되지 않은 발신자용 일반 아이콘으로 대체한다. */}
-            <span aria-hidden="true">☎</span>
-          </span>
-
-          <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <span className="flex items-start justify-between gap-2">
-              <span className="flex flex-wrap items-center gap-2">
-                <span className="text-lg font-bold text-ink">{scenario.title}</span>
-                {/* T191 S5(D-104 (1)) — 텍스트 태그(테두리 칩 · 색 단독 금지, P-22). */}
-                {scenario.advancedOnly === true && (
-                  <span className="rounded-full border border-ink px-2 py-0.5 text-[15px] font-semibold text-ink">
-                    {ADVANCED_ONLY_TAG}
-                  </span>
-                )}
-              </span>
-              {/* 선택 표시는 색 단독이 아니라 아이콘 병행(접근성). */}
-              {selected && (
-                <span
-                  aria-hidden="true"
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-base font-bold text-white"
-                >
-                  ✓
-                </span>
-              )}
-            </span>
-
-            {/* 2026-10-21 시나리오 목록 검증 — "(으)로" 조사가 "발신번호 표시제한(으)로"처럼 어색해 조사 없는 꼴로 바꿨다. */}
-            <span className="text-base text-ink-sub">전화 오는 번호: {scenario.callerLabel}</span>
-
-            <span
-              id={`scenario-${scenarioId}-meta`}
-              className="flex flex-col gap-1.5 text-base text-ink-sub"
-            >
-              {/* 소요시간 배지(중립) — 훈련 플로우.dc.html의 "약 {time}" 배지와 동일 톤.
-                  이 문자열은 자유서술문이라(예: "중간 — 감정적 압박이 강한 편입니다") 색상 등급
-                  배지로 단정 짓지 않고 서술 텍스트로 유지한다(임의 매핑 금지, messenger/page.tsx와
-                  동일 판단).
-                  T72/AC-067 — 라벨을 "난이도"에서 "이 시나리오의 성향"으로 바꾼다. 삭제하지 않고
-                  유지하되(AC-002), "난이도"라는 단어는 사용자가 고르는 3단계(UX-029)에만 쓴다.
-                  소요 시간 값은 시나리오별 실측(docs/research/scenario-catalog-review-2026-10.md §5)이다. */}
-              <span className="flex flex-wrap items-center gap-2">
-                <Badge variant="neutral">{scenario.estimatedDuration}</Badge>
-              </span>
-              <span>
-                {scenario.fraudType} · {SCENARIO_TRAIT_LABEL}: {scenario.difficulty}
-              </span>
-            </span>
-          </span>
-        </label>
-      </li>
-    );
-  };
+  const panelGroups: ScenarioPanelGroup[] = [
+    ...regularGroups.map((group) => ({ id: group.key, label: group.label, items: group.entries.map(toItem) })),
+    // T191 S5(UX-017 v1.34 (1) · D-104) — 고급 전용 묶음. 데이터가 없거나 send 모드면 묶음 자체를 그리지 않는다(빈 묶음 제목 0).
+    ...(advancedOnlyEntries.length > 0
+      ? [{ id: "advanced-only-group-title", label: <>{ADVANCED_ONLY_GROUP_TITLE}</>, items: advancedOnlyEntries.map(toItem) }]
+      : []),
+  ];
 
   return (
-    <main className="drilldown-step mx-auto flex min-h-dvh max-w-xl flex-col gap-6 p-6 pb-28 lg:max-w-3xl xl:max-w-5xl">
-      <PageToc sections={tocSections} className="-mx-6 -mt-6 -mb-4 px-6" />
-      <header className="flex flex-col gap-2 pt-2">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-lg font-medium text-ink-sub hover:bg-neutral-tint"
-        >
-          <span aria-hidden="true">←</span> 뒤로
-        </button>
-        {/* 단계 표시(P-12 #2) — 지금까지의 선택 경로를 맥락으로 표시(스크린리더가 현재 위치로 읽음). */}
-        <p className="text-base font-semibold text-brand" aria-current="step">
-          보이스피싱 › {MODE_LABEL[mode]} › {experienceModeHint === "send" ? "④" : "③"} 시나리오
-        </p>
-        <h1 className="text-2xl font-bold text-ink">어떤 전화를 받아볼까요?</h1>
-        <p className="text-lg leading-relaxed text-ink-sub">
-          실제 사기가 아니라 훈련용 시뮬레이션입니다. 하나를 고르면 마지막으로 난이도를 정합니다.
-        </p>
-      </header>
+    <main className="drilldown-step mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-page pb-[env(safe-area-inset-bottom)]">
+      <PageToc sections={tocSections} className="px-[22px]" />
+      {/* 단계 표시(P-12 #2) — 지금까지의 선택 경로를 맥락으로 표시(스크린리더가 현재 위치로 읽음). */}
+      <SelectScreenHeader
+        step={<>보이스피싱 › {MODE_LABEL[mode]} › {experienceModeHint === "send" ? "④" : "③"} 시나리오</>}
+        title={<>어떤 전화를<br />받아볼까요?</>}
+      >
+        <p>실제 사기가 아니라 훈련용 시뮬레이션입니다. 판을 누르면 마지막으로 난이도를 정합니다.</p>
+      </SelectScreenHeader>
 
       {regularEntries.length + advancedOnlyEntries.length === 0 ? (
         // Empty 상태(UX-017 States) — 현재 데이터상 clone 2종·generic 7종 다 있어 실질 발생 안 함.
-        <p className="rounded-[8px] border border-line bg-white p-4 text-lg text-ink-sub">
+        <p className="mx-[22px] rounded-[8px] border border-line bg-white p-4 text-lg text-ink-sub">
           이 방식의 시나리오가 아직 없습니다.
         </p>
       ) : (
-        regularGroups.map((group) => (
-          <section key={group.key} className="flex flex-col gap-3" aria-labelledby={group.key}>
-            <h2 id={group.key} data-toc-target className="text-lg font-bold text-ink">
-              {group.label}
-            </h2>
-            <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2">
-              {group.entries.map(([scenarioId, scenario]) => renderScenarioCard(scenarioId, scenario))}
-            </ul>
-          </section>
-        ))
+        <ScenarioPanelGroups groups={panelGroups} onSelect={handleSelectScenario} presetId={selectedScenarioId} />
       )}
-
-      {/* T191 S5(UX-017 v1.34 (1) · D-104) — 고급 전용 묶음. 데이터가 없거나 send 모드면 묶음 자체를
-          그리지 않는다(빈 묶음 제목 0 — (5)). 제목은 h2라 스크린리더 목록 탐색에서 구분된다. */}
-      {advancedOnlyEntries.length > 0 && (
-        <section className="flex flex-col gap-3" aria-labelledby="advanced-only-group-title">
-          <h2 id="advanced-only-group-title" data-toc-target className="text-lg font-bold text-ink">
-            {ADVANCED_ONLY_GROUP_TITLE}
-          </h2>
-          <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2">
-            {advancedOnlyEntries.map(([scenarioId, scenario]) => renderScenarioCard(scenarioId, scenario))}
-          </ul>
-        </section>
-      )}
-
-      {/* 하단 고정 CTA(구 scenarios/page.tsx 관례 계승) — 목록이 뷰포트보다 길어질 수 있어 시작
-          버튼을 화면 하단에 항상 떠 있게 한다. */}
-      <div
-        className="sticky bottom-0 -mx-6 -mb-28 border-t border-line bg-page/95 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur"
-      >
-        {/* T72(D-41) — 이 단계의 CTA는 더 이상 통화를 시작하지 않고 난이도 선택으로 넘어간다.
-            세션 생성 실패 표시도 그 화면이 담당한다(생성 지점이 그리로 이동했으므로). */}
-        <Button type="button" onClick={handleStart} disabled={!selectedScenarioId}>
-          다음 — 난이도 고르기
-        </Button>
-      </div>
     </main>
   );
 }
