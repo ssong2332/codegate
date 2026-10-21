@@ -21,8 +21,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSelectedTrainingType, setExperienceMode, type TrainingType } from "@/lib/recording";
-import { Button } from "@/components/ui";
-import { DrilldownOptionCard } from "@/components/DrilldownOptionCard";
+import { Button, PanelList } from "@/components/ui";
+import SelectScreenHeader from "@/components/SelectScreenHeader";
 
 type SelectedOption = "self" | "send" | null;
 
@@ -31,7 +31,8 @@ export default function ExperienceSelectPage() {
   // sessionStorage 조회는 클라 전용이라 lazy 초기값으로 한 번만 읽는다(다른 드릴다운 화면과 동일
   // 관례). 유형 미확정(직접 URL 접근 등 방어적 상황)이면 invalid로 처리한다.
   const [trainingType] = useState<TrainingType | null>(() => getSelectedTrainingType());
-  const [selectedOption, setSelectedOption] = useState<SelectedOption>(null);
+  // UX D-141 — 판을 누르면 바로 다음 화면으로 가므로 선택 표시는 그리지 않는다(기록만 남긴다).
+  const [, setSelectedOption] = useState<SelectedOption>(null);
 
   if (!trainingType) {
     return (
@@ -69,43 +70,21 @@ export default function ExperienceSelectPage() {
     router.push(isMessenger ? "/scenarios/messenger" : "/scenarios/voice");
   };
 
+  // UX D-141(시안 E2) — 카드 2장 → 큰 판 2장(누르면 판 확장 전환 + 즉시 이동).
   return (
-    <main className="drilldown-step mx-auto flex min-h-dvh max-w-xl flex-col gap-6 p-6">
-      <header className="flex flex-col gap-2 pt-2">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="flex min-h-[48px] w-fit items-center gap-1 rounded-lg px-2 -ml-2 text-lg font-medium text-ink-sub hover:bg-neutral-tint"
-        >
-          <span aria-hidden="true">←</span> 뒤로
-        </button>
-        {/* 단계 표시(P-12 #2, 드릴다운 관례 계승) — 스크린리더가 현재 위치(유형)를 읽는다(UX-026
-            Accessibility). 시나리오는 아직 미확정이라(v1.10) 유형만 맥락으로 표시한다. */}
-        <p className="text-base font-semibold text-brand" aria-current="step">
-          {typeLabel} › ② 체험 선택
-        </p>
-        <h1 className="text-2xl font-bold text-ink">이 유형, 어떻게 체험할까요?</h1>
-        <p className="text-lg leading-relaxed text-ink-sub">
-          직접 훈련해볼지, 지인에게 링크로 보내 테스트해볼지 골라주세요.
-        </p>
-      </header>
-
-      <div className="flex flex-col gap-3">
-        <DrilldownOptionCard
-          icon="user"
-          title="본인이 체험"
-          description="직접 훈련해봅니다"
-          selected={selectedOption === "self"}
-          onClick={handleSelfExperience}
-        />
-        <DrilldownOptionCard
-          icon="gift"
-          title="지인에게 보내기"
-          description="지인에게 링크로 보내 테스트합니다"
-          selected={selectedOption === "send"}
-          onClick={handleSendToFriend}
-        />
-      </div>
+    <main className="drilldown-step mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-page">
+      {/* 단계 표시(P-12 #2, 드릴다운 관례 계승) — 스크린리더가 현재 위치(유형)를 읽는다(UX-026
+          Accessibility). 시나리오는 아직 미확정이라(v1.10) 유형만 맥락으로 표시한다. */}
+      <SelectScreenHeader step={<>{typeLabel} › ② 체험 선택</>} title={<>이 유형,<br />어떻게 체험할까요?</>}>
+        <p>직접 훈련해볼지, 지인에게 링크로 보내 테스트해볼지 골라주세요.</p>
+      </SelectScreenHeader>
+      <PanelList
+        onSelect={(key) => (key === "self" ? handleSelfExperience() : handleSendToFriend())}
+        items={[
+          { key: "self", icon: "user", title: "본인이 체험", description: "직접 훈련해봅니다" },
+          { key: "send", icon: "gift", title: "지인에게 보내기", description: "지인에게 링크로 보내 테스트합니다" },
+        ]}
+      />
     </main>
   );
 }

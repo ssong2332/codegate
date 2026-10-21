@@ -20,7 +20,8 @@ import {
   type DifficultyLevel,
 } from "@/lib/difficulty";
 import { scenarios } from "@/content/scenarios";
-import { Badge, Button, LoadingStatus } from "@/components/ui";
+import { Badge, BigClock, Button, LoadingStatus } from "@/components/ui";
+import { parseMomentSeconds } from "@/lib/design/e2Layout";
 import PageToc, { type PageTocEntry } from "@/components/PageToc";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { buildStageNotice, type ReportStage } from "@/lib/report/stageNotice";
@@ -301,6 +302,8 @@ export default function ReportPage() {
   // 이상하다며 되물었다" 같은 문장)이 없어 그 자리에 wasDeceived===false라는 실제로 검증된 사실만
   // 쓴다. "다음에 할 것"은 preventionAdvice[0]을 그대로 쓴다(없는 조언을 창작하지 않음).
   const firstDeceivedMoment = report.deceivedMoments[0] ?? null;
+  // UX D-141 (6) — 큰 시계 값(서버 표기 "N초 시점"을 읽은 초 · 다른 꼴이면 null = 시계 0).
+  const firstDeceivedSeconds = parseMomentSeconds(firstDeceivedMoment?.timeLabel);
   const dateLabel = report.createdAt
     ? new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "long", day: "numeric" }).format(
         report.createdAt.toDate(),
@@ -383,25 +386,38 @@ export default function ReportPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-xl flex-col bg-page pb-8 lg:max-w-3xl">
       <PageToc sections={tocSections} className="px-5" />
-      <div className="px-5 pt-1.5">
+      {/* UX D-141 (6)(시안 E2) — 짙은 남색 머리 + 모래색 큰 시계(0:00 → 처음 속은 시각, 1.2초). 시각은 서버 표기
+          ("N초 시점")를 그대로 읽은 값이고, 그 꼴이 아니면 시계를 그리지 않는다(지어내지 않음). 속지 않았으면 시계 대신
+          큰 글자로 "끝까지 지켰어요"(열린 항목 "안 속은 경우의 큰 시계 문구" 해소 — AC-009 문장은 아래 그대로). */}
+      <div className="bg-deep px-5 pb-6 pt-4 text-white">
         {/* T72(P-22) — 선택(UX-029)·세션 셸과 **같은 3단계 어휘**로 표기한다. 표기 전용이며
             아래 판정(속은 시점·수법·조언)은 난이도와 무관하게 같은 잣대로 산출됐다(§15.3.5). */}
-        <p className="text-[15px] font-semibold text-ink-sub">
+        <p className="text-[15px] font-semibold text-brand-tint">
           {[dateLabel, scenarioTitle, `난이도 ${DIFFICULTY_LABEL[report.difficultyLevel]}`]
             .filter(Boolean)
             .join(" · ")}
         </p>
-        <p className="mt-1.5 text-[24px] font-bold leading-[1.35] text-ink">
-          이번 훈련에서
-          <br />
-          확인된 것
+        <p className="mt-1.5 text-[20px] font-bold leading-[1.35] text-white">
+          이번 훈련에서 확인된 것
         </p>
+        {report.wasDeceived && firstDeceivedSeconds !== null && firstDeceivedMoment ? (
+          <>
+            <BigClock seconds={firstDeceivedSeconds} label="처음 속은 시각" className="mt-3 text-[88px] text-sand" />
+            <p className="mt-2 text-[22px] font-bold leading-[1.35] [word-break:keep-all]">
+              이 순간 속았어요{firstDeceivedMoment.tactic ? ` · ${firstDeceivedMoment.tactic}` : ""}
+            </p>
+          </>
+        ) : !report.wasDeceived ? (
+          <p className="mt-3 font-display text-[44px] font-bold leading-[1.15] tracking-[-0.02em] text-sand [word-break:keep-all]">
+            끝까지 지켰어요
+          </p>
+        ) : null}
         {/* T84(§15.9.5 e-3, OQ-U24 판정) — 여러 표면으로 이어지는 세션의 **구조 고지 1줄**.
             ⚠️ 세션 중에는 단계 카운터를 두지 않는다(D-50) — 단계 구분은 **종료 후 리포트에서만**
             드러나며, 이 줄이 그 예외 안이다. 미도달 단계는 아래 타임라인에 **빈 항목으로 그리지
             않고**, 데이터(`stages`)에만 `reached:false`로 남는다. */}
         {stageNotice && (
-          <p className="mt-2 text-lg leading-relaxed text-ink-sub">{stageNotice}</p>
+          <p className="mt-2 text-lg leading-relaxed text-brand-tint">{stageNotice}</p>
         )}
       </div>
 
