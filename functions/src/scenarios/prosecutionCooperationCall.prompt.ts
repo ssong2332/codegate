@@ -65,6 +65,37 @@ export const PROSECUTION_CASE_LINK_PERSONA = personaPrompt.replace(NO_OTHER_SCRE
 export const PROSECUTION_CASE_LINK_TACTIC =
   "수사 서류 언급 — '고객님 앞으로 영장이 청구된 상태입니다, 문자로 보내 드린 사건 조회에서 본인 확인하시면 직접 보실 수 있습니다' 처럼 알리고, 문자 속 링크에서 사건 기록을 확인하게 한다. 사건번호·주소를 지어내 불러 주지 않고, 그 밖의 서류나 사진은 보내겠다고 하지 않는다.";
 
+// ⭐ §98(2026-10-21 사용자 실기 신고 — "코인 전환·이체 절차 설명이 약하다" · "검수 수일 뒤 연락으로 흐지부지 끝난다") — 고급 변형 `fv-c8wq`만 쓰는
+// 페르소나 · 수법 문면. 실제 수법(docs/research/prosecution-crypto-tactics-2026-10.md — 자산 진술 → 예금 해지 · 대출 → 거래소에서 코인 구매 →
+// 지정 지갑 전송 → '피해자로 확인되면 돌려준다' → 추가 송금 반복 · 거부 시 협박)의 **경험**만 재현한다.
+// ⛔ 무해성 경계(§81 · AC-005): 거래소는 "OO거래소"라는 가상 이름 · 코인 종류 0 · 지갑 주소는 모델이 부르지 않는다(문자 · 모의 화면이 원천 —
+//    `inCallSms.ts` prosecution-wallet-link) · 거래소 앱의 버튼 · 메뉴 · 인증 · 출금 조작 설명 0. 둘러댈 구체 사연은 만들어 주지 않는다.
+// ⛔ 위 `PROSECUTION_CASE_LINK_PERSONA`(fv-p4hz — 배정 은퇴 · 옛 세션 해석용)는 바꾸지 않는다(내용이 바뀌는 쪽이 새 ID — §84.16.2).
+const CRYPTO_NO_DETAIL_LINE = "- 코인 거래소·지갑 주소·코인 종류는 실제 것을 쓰지 않고, 지어내 불러 주지도 않는다.";
+const WALLET_SCREEN_LINE =
+  "- 사건 조회 안내 문자와 검수 전용 보관 지갑 안내 문자 말고는 서류·사진·메신저 같은 다른 화면을 보내겠다고 하지 않는다. 그 밖에 필요한 것은 말로만 전한다.";
+const WALLET_CRYPTO_LINES = [
+  "- 코인을 사는 곳은 \"OO거래소\"라고만 부르고, 바꿀 것은 그냥 \"코인\"이라고만 한다. 실제 거래소 이름·코인 종류는 어떤 경우에도 쓰지 않는다. 송금할 보관 지갑 번호는 네가 부르지 않고, 문자로 보낸 보관 지갑 안내를 보라고만 한다.",
+  "- 코인으로 바꾸는 과정은 \"예금을 OO거래소 계좌로 옮기신다 → 거기서 코인으로 바꾸신다 → 문자 속 보관 지갑 화면에서 전송하신다\"처럼 순서를 한 단계씩 짚어 재촉하되, 거래소 앱의 버튼·메뉴·가입 인증·출금 조작은 하나하나 설명하지 않는다(\"앱에서 바꾸시면 됩니다\" 수준).",
+  "- \"검수에 며칠 걸리니 나중에 연락드리겠습니다\"처럼 요구 없이 통화를 정리하는 말로 끝내지 않는다. 보관 지갑 전송을 마치면 [이번 통화의 흐름]의 송금 뒤 단계로 넘어간다.",
+].join("\n");
+if (!PROSECUTION_CASE_LINK_PERSONA.includes(CASE_LINK_ONLY_SCREEN_LINE) || !PROSECUTION_CASE_LINK_PERSONA.includes(CRYPTO_NO_DETAIL_LINE)) {
+  throw new Error("prosecutionCooperationCall.prompt: 보관 지갑 변형 페르소나의 원천 줄을 찾지 못했다(§98)");
+}
+export const PROSECUTION_WALLET_PERSONA = PROSECUTION_CASE_LINK_PERSONA.replace(CASE_LINK_ONLY_SCREEN_LINE, WALLET_SCREEN_LINE).replace(
+  CRYPTO_NO_DETAIL_LINE,
+  WALLET_CRYPTO_LINES,
+);
+/** §98 — 원본 "코인 구매·송금 요구"를 대신한다(라벨 동일 — 판정 · 축 커버리지 라벨 유지). */
+export const PROSECUTION_WALLET_COIN_TACTIC =
+  "코인 구매·송금 요구 — '자산이 범죄수익인지 검수하려면 예금을 OO거래소 계좌로 옮겨 코인으로 바꾸셔야 합니다, 바꾸신 건 문자로 보내 드린 검수 전용 보관 지갑으로 옮기시면 됩니다' 처럼 한 단계씩 지시한다. 거래소는 'OO거래소'라고만 부르고, 코인 종류·지갑 주소를 지어내 부르지 않고, 송금할 지갑 번호는 문자로 보낸 것을 확인하게 한다. 앱의 버튼·메뉴·가입 절차는 설명하지 않는다.";
+export const PROSECUTION_WALLET_EXTRA_TACTICS: readonly string[] = [
+  "창구 확인 차단 — '은행이나 거래소에서 왜 그러냐고 물으면 개인적으로 쓸 데가 있다고만 하세요, 수사 얘기를 꺼내시면 공범의 방해로 일이 커집니다' 처럼 창구의 확인 질문을 막는다. 둘러댈 구체적인 사연은 만들어 주지 않는다.",
+  "보관 지갑 송금 화면 유도 — '문자로 보낸 보관 지갑 안내의 링크를 누르시고, 안내된 지갑 번호와 바꾸신 금액을 넣어 전송 누르시면 됩니다' 처럼 문자 속 링크 화면에서 전송하게 한다. 다른 곳으로 따로 보내라고 하지 않는다.",
+  "송금 뒤 추가 송금 요구 — 전송을 마치면 '확인됐습니다' 뒤 곧바로 '검수해 보니 적금이랑 다른 계좌도 같은 자금 흐름에 걸려 있습니다, 그것까지 검수해야 무혐의가 됩니다' 처럼 남은 예금·적금 해지·대출 가능액까지 추가로 바꿔 보내라고 요구하고, '피해자로 확인되면 전액 돌려드립니다' 로 안심시킨다. 검수 기간이나 나중에 연락하겠다는 말로 통화를 정리하지 않는다.",
+  "거부 시 위협 격상 — 상대가 거부하거나 의심하면 '지금 중단하시면 수사 방해로 오늘 바로 구속영장이 집행됩니다', '계좌가 전부 동결되고 가족분들도 조사받게 됩니다' 처럼 위협을 한 단계 올리고, 그다음엔 '오늘 이것만 마치면 조용히 끝납니다', '일부라도 먼저 검수받으시죠' 처럼 회유로 바꿔 번갈아 쓴다. 구체적 폭력·신체 위해는 말하지 않는다.",
+];
+
 export const prosecutionCooperationCallPrompt: ScenarioPromptDoc = {
   personaPrompt,
   weakenedTactics,

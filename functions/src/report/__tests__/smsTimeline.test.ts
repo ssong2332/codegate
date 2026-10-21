@@ -309,9 +309,11 @@ test("[AC-080/경로 A] 제출 1건이 속은 순간 1건으로 승격되고 앵
   assert.equal(moment.correctAction, CATALOG[0].correctAction);
   assert.deepEqual(
     Object.keys(moment).sort(),
-    ["correctAction", "tacticCategory", "tactic", "timeLabel", "turnIndex"].sort(),
+    // T129 (b)(§98) — `landingId`는 카탈로그 id다(참가자 입력 아님 — 아래 값 단언).
+    ["correctAction", "landingId", "tacticCategory", "tactic", "timeLabel", "turnIndex"].sort(),
     "순간 객체의 필드 집합이 고정이다 — 참가자 입력값을 담을 자리가 없다(AC-045)",
   );
+  assert.equal(moment.landingId, CATALOG[0].landingId);
 });
 
 test("[AC-080/경로 A 역검증] 제출 경로를 끊으면 승격이 사라진다(독립 샘플)", (t) => {

@@ -55,6 +55,8 @@ export type DeceivedMomentResult = {
   // T74(§15.4.2/AC-068) — 실패 아카이브의 "수법별 묶기" 그룹 키. 판정 로직에는 전혀 관여하지
   // 않는다(wasDeceived·deceivedMoments 산출은 무변경) — 집계용 라벨 정규화일 뿐이다.
   tacticCategory: TacticCategory;
+  /** T129 (b)(§35.6 · §98) — 모의 화면 승격 순간에만(`buildLandingSubmitMoment`). 대화 추정 순간에는 없다. */
+  landingId?: string;
 };
 
 export type ConversationAnalysis = {
@@ -233,6 +235,17 @@ export const COMPLIANCE_PATTERN = new RegExp(
 // 셀프 감금의 인출 · 보관 · 코인 대사뿐) ② 5개 시나리오 계열의 **수동 작성** 상황 설명형 · 요구형 대사 표본
 // (`__tests__/handoffPromise.test.ts` M2)이다. **실제 LLM 변형 발화는 포함하지 않았다** — 표본 밖 어형은 열릴 수 있다.
 const ATM_WORDS = /(?:현금\s*)?(?:인출|지급)\s*기/g;
+// ⭐ §98(2026-10-21 · 검찰 고급 fv-c8wq — 코인 전환을 단계로 펼쳤다) — 새 단계의 요구 · 약속을 같은 J-2 갈래(리포트 전용 · 문맥형)에 더한다.
+// | # | If(바로 앞 사기범 대사 = 요구 어형) | And(참가자 답 — HOLD · REFUSAL 없음) | Then |
+// |---|---|---|---|
+// | X1 | 거래소 · 지갑 뒤 20자 안에 옮기/보내/전송/가입/바꾸 + 시키는 어미(주세요 · 하세요 · 하셔야 · 하십시오 · 해 주 등) | — | 요구 |
+// | X2 | 적금 · 예금 · 보험 뒤 6자 안에 해지 + 시키는 어미 / 대출 뒤 6자 안에 받으셔 · 받으세요 · 받아서 · 받아 주 | — | 요구 |
+// | X3 | — | 전송 · 해지 · 가입 + 할게/하겠 · 대출 받을게/받겠/받아 볼게 | 속음(약속) |
+// | X4 | — | 보냈 · 전송했 · 옮겼 · 송금했 · 이체했 · 바꿨 · 해지했 + 어/습(마쳤다는 말) | 속음(이행 보고) |
+// | X5 | — | 바꾸 · 보내 · 옮기 · 전송하 · 가입하 + 고 있(진행 중) | 속음(이행 중) |
+// ⛔ 공유 패턴(COMPLIANCE · RESISTANCE · REFUSAL)은 무변경. ⛔ 표 밖 어형은 열지 않는다(행 추가는 표에 먼저).
+const HANDOFF_DEMAND_CRYPTO_STEPS =
+  /(?:거래소|지갑)[^.?!]{0,20}?(?:(?:옮겨|보내|전송해|가입해|바꿔)\s*(?:주|두)|(?:옮기|보내|전송하|가입하|바꾸)(?:세요|셔야|십시오|시면))|(?:적금|예금|보험)[^.?!]{0,6}?해지\s*(?:해\s*주|하셔|하세요|하십시오|하시면)|대출[^.?!]{0,6}?(?:받으셔|받으세요|받으십시오|받아\s*(?:서|주))/;
 const HANDOFF_DEMAND =
   /(?:인출|출금)\s*(?:해\s*(?:주|두|놓|오|다|서)|하셔|하세요|하십시오)|찾아\s*(?:두|놓|오)(?:세요|십시오|시|셔)|(?:현금|수표)(?:으로|로)?\s*(?:찾|인출|출금|뽑|준비|마련)|맡(?:기세요|기십시오|기셔|기시면|겨\s*(?:주|두))|보관\s*(?:해야|하셔야|해\s*두|조치\s*(?:하셔|해\s*주|를\s*받으셔|받으셔))|(?:전달|건네)\s*(?:해\s*주|주|하셔|하세요|하십시오)|받으러\s*(?:가|갈|갑|오|올|옵)|(?:코인|가상\s*(?:자산|화폐))(?:으로|로|을|를)?\s*(?:바꿔|바꾸|사서|사세요|사셔|사시|구매|구입|옮|보내|송금|전환)/;
 // ⭐ 약속 어형은 **허용 목록**이다(QA FAIL 2026-10-19 — 1 · 2차는 범용 "드릴게 · 드리겠"을 받고 앞말 제외 목록으로
@@ -270,16 +283,26 @@ const HANDOFF_PROMISE = new RegExp(
     `은행[^.?!]{0,6}?다녀\\s*(?:올${PROMISE_END}|오겠)`,
   ].join("|"),
 );
+/** §98 X3 · X4 · X5(위 표) — 코인 전환 단계의 약속 · 이행 보고 · 진행 중. */
+const HANDOFF_PROMISE_CRYPTO_STEPS = new RegExp(
+  [
+    `(?:전송|해지|가입)\\s*(?:할${PROMISE_END}|하겠)`,
+    `대출\\s*(?:받을${PROMISE_END}|받겠|받아\\s*볼${PROMISE_END})`,
+    `(?:보냈|전송했|옮겼|송금했|이체했|바꿨|해지했)(?:어|습)`,
+    `(?:바꾸|보내|옮기|전송하|가입하)고\\s*있`,
+  ].join("|"),
+);
 const HANDOFF_HOLD =
   /(?:안|못)\s|(?:안|못)(?:맡|찾|드리|드릴|인출|출금|사|살|바꾸|바꿀|보내|보낼|옮|넘|건네|구매|할|하겠|해)|않|없어|없습|없다|없는|싫|말게|말래|말까|상의|상담|고민|생각해\s*보|생각\s*좀|나중에|물어|여쭤|문의|회신|부탁|감사|확인|왜|이상|사기|수상|신고|경찰|모르/;
 
 /** 사기범이 인출 · 전달 · 코인을 요구한 바로 다음 답변이 그 약속에 동의하는가(T191 J-2 — 위 표). */
 function isHandoffPromiseReply(scammerText: string, replyText: string): boolean {
+  const demand = scammerText.replace(ATM_WORDS, "");
   return (
-    HANDOFF_DEMAND.test(scammerText.replace(ATM_WORDS, "")) &&
+    (HANDOFF_DEMAND.test(demand) || HANDOFF_DEMAND_CRYPTO_STEPS.test(demand)) &&
     !HANDOFF_HOLD.test(replyText) &&
     !REFUSAL_IN_ANSWER.test(replyText) &&
-    HANDOFF_PROMISE.test(replyText)
+    (HANDOFF_PROMISE.test(replyText) || HANDOFF_PROMISE_CRYPTO_STEPS.test(replyText))
   );
 }
 

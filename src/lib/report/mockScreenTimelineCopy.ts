@@ -24,10 +24,25 @@ export type MockScreenCopyEntry = {
   anchorTurnIndex: number;
   anchorResolved: boolean;
   consented: boolean;
+  /** T129 (b)(Architecture §35.6 · §98) — 판정 키의 둘째 성분. 리포트 스냅샷에 늘 있다(옵셔널은 픽스처 하위호환용). */
+  landingId?: string;
 };
 
-/** 승격 여부 대조에 쓰는 `deceivedMoments` 항목의 최소 모양. */
-export type MockScreenCopyMoment = { turnIndex: number };
+/**
+ * 승격 여부 대조에 쓰는 `deceivedMoments` 항목의 최소 모양.
+ * `landingId` — T129 (b): 모의 화면 승격 순간에만 있다(대화 추정 순간 · 과거 리포트 = 부재).
+ */
+export type MockScreenCopyMoment = { turnIndex: number; landingId?: string };
+
+/**
+ * T129 (b)(§35.6 1행 발동 · §98) — 같은 순간인가. turnIndex가 같고, **양쪽 모두 landingId를 가지면 그것도 같아야 한다.**
+ * 한쪽이라도 없으면(과거 리포트 · 대화 추정 순간 · 옛 픽스처) 종전 키(turnIndex 하나)로 되돌아간다 — 오늘 동작 그대로.
+ */
+function isSameMoment(entry: MockScreenCopyEntry, moment: MockScreenCopyMoment): boolean {
+  if (moment.turnIndex !== entry.anchorTurnIndex) return false;
+  if (moment.landingId === undefined || entry.landingId === undefined) return true;
+  return moment.landingId === entry.landingId;
+}
 
 /**
  * P-29 (8) 3분기.
@@ -70,7 +85,7 @@ export function resolveMockScreenBranch(
   if (entry.consented) return "consented";
   // 승격이 구조적으로 불가능한 경로 = 대조 불성립 → 안전 폴백(나).
   if (!entry.anchorResolved || entry.anchorTurnIndex < 0) return "submitted";
-  if (deceivedMoments.some((moment) => moment.turnIndex === entry.anchorTurnIndex)) {
+  if (deceivedMoments.some((moment) => isSameMoment(entry, moment))) {
     return "submitted";
   }
   return "declined";
