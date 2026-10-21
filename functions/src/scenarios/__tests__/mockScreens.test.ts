@@ -390,7 +390,8 @@ test("[§15.9.1 R6 → T194-c-1 G583] IN_CALL_SMS의 설치 랜딩 참조는 허
   assert.equal(intermediate.length, 1);
   // 실제로 설치 문자를 선언하는 변형이 있다(공회전 방지).
   const declaring = FLOW_VARIANTS.filter((v) => v.sms.some((s) => (IN_CALL_SMS[v.scenarioId] ?? []).some((i) => i.smsId === s.smsId && allItems.some((m) => m.kind === "app-install" && m.landingId === i.fakeLandingId))));
-  assert.deepEqual(declaring.map((v) => v.variantId).sort(), ["fv-m3hd", "fv-tvnj", "fv-x7ue"]);
+  // §92 — 카드사 흡수 변형 fv-w3dq가 같은 카드사 설치 문자(card-guard-app-link)를 선언한다.
+  assert.deepEqual(declaring.map((v) => v.variantId).sort(), ["fv-m3hd", "fv-tvnj", "fv-w3dq", "fv-x7ue"]);
 });
 
 // ── T104 신규 게이트 G-A~G-E (Architecture.md §19.5 · ADR-0012) ───────────────
@@ -667,6 +668,7 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
     // 등재된다(통화 채널, credential-form). §53(§51 커밋 D) — bank-security-verify-scam이
     // OQ-A31 (b) 집행으로 신규 등재된다.
     [
+      "asset-protection-notice-call",
       "bank-security-verify-scam",
       "card-company-impersonation",
       // T194-c-1(§84.5.2) — card-delivery-call 카탈로그 신설(통화 중 설치 화면 1건).
@@ -674,9 +676,11 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
       "courier-customs-scam",
       "institutional-impersonation",
       "loan-refinance-scam",
+      // §92.3 — 고급 전용 2종 카탈로그 신설(credential-form 각 1건).
+      "prosecution-cooperation-call",
       "tax-refund-scam",
     ],
-    "통화 채널 7종이 카탈로그에 없으면 정밀화가 아무것도 안 푼 것이다",
+    "통화 채널 9종이 카탈로그에 없으면 정밀화가 아무것도 안 푼 것이다",
   );
   // 그리고 **허용목록 밖** 통화 채널 시나리오는 app-install을 하나도 갖지 않는다(정밀화의 안전 전제 = M2 차단).
   // ⚠️ T194-c-1 허용목록 대체(§84.5.1 · G583 — X8): 허용목록 3종은 설치 항목을 갖되 **통화 중 문자 표면으로만** 갖는다.
@@ -695,6 +699,9 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
   assert.deepEqual(surfaces, [
     // §51 — institutional-impersonation·card-company-impersonation의 이체형 랜딩(in-call-sms)이
     // 추가됐다. §53(§51 커밋 D) — bank-security-verify-scam의 이체형 랜딩(in-call-sms)이 추가됐다.
+    // §92.3 — 고급 전용 2종 credential-form(in-call-sms) 2건.
+    "in-call-sms",
+    "in-call-sms",
     "in-call-sms",
     "in-call-sms",
     "in-call-sms",
@@ -954,7 +961,7 @@ test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **�
     false,
     "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
   );
-  assert.equal(reachableLandingKeysAllUnits().length, 12, "도달 가능 랜딩은 12종이다(§53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가)");
+  assert.equal(reachableLandingKeysAllUnits().length, 14, "도달 가능 랜딩은 14종이다(§53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가)");
 });
 
 test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
@@ -1062,6 +1069,8 @@ test("[T194-c-1 G604 · ⓚ(=R-a)] 자가 고급 Q2 3 단위 = 정확히 [설치
   const expected: Record<string, string[]> = {
     "card-delivery-call#fv-tvnj": ["card-delivery-app-install"],
     "card-company-impersonation#fv-x7ue": ["card-guard-app-install"],
+    // §92 — 카드사 흡수 변형(카드 배송 흐름)도 같은 카드사 설치 화면 1건뿐이다.
+    "card-company-impersonation#fv-w3dq": ["card-guard-app-install"],
     "loan-refinance-scam#fv-m3hd": ["loan-check-app-install"],
   };
   for (const [unit, landings] of Object.entries(expected)) {
@@ -1256,7 +1265,7 @@ function findFieldConvergence(
 
 test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
   const items = Object.values(MOCK_SCREENS).flat();
-  assert.equal(items.length, 12, "현행 비교 대상은 도달 가능 랜딩 12종이다(§53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가)");
+  assert.equal(items.length, 14, "현행 비교 대상은 도달 가능 랜딩 14종이다(§53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가)");
   const stats = fieldDivergenceStats(items);
   for (const { field, compared, excluded, converged } of stats) {
     t.diagnostic(
@@ -1479,6 +1488,21 @@ const BAIT_TO_LANDING: {
     baitExcerpt: "아래에서 보안 점검 앱을 설치해 주세요.",
     headlineAnchors: ["보안 점검", "앱", "설치"],
     ctaAnchors: [],
+  },
+  // §92.3 — 고급 전용 2종(credential-form — CTA가 미끼 행위를 그대로 반복해야 한다).
+  {
+    landingId: "asset-custody-apply",
+    baitSource: "scenarios/inCallSms.ts:ASSET_PROTECTION_NOTICE_CALL (문자 본문·칩)",
+    baitExcerpt: "아래에서 보관 신청서를 작성해 주세요.",
+    headlineAnchors: ["보관 신청"],
+    ctaAnchors: ["보관 신청"],
+  },
+  {
+    landingId: "case-record-view",
+    baitSource: "scenarios/inCallSms.ts:PROSECUTION_COOPERATION_CALL (문자 본문·칩)",
+    baitExcerpt: "아래에서 본인 확인 후 사건 기록을 열람해 주세요.",
+    headlineAnchors: ["사건 기록", "본인 확인"],
+    ctaAnchors: ["사건 기록", "열람"],
   },
   {
     landingId: "card-guard-app-install",

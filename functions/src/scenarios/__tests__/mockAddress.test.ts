@@ -63,7 +63,7 @@ const linkedSms = Object.values(IN_CALL_SMS)
   .filter((item) => item.linkAddress !== undefined);
 
 test("[T190/G453] 모든 mockHost가 .invalid 가짜 호스트 규칙을 지키고 서로 다르다", (t) => {
-  assert.equal(allScreens.length, 12, "도달 가능 랜딩은 12종이다(credential-form 7 + app-install 5 — T194-a parcel-install · T194-c-1 Q2 3종)");
+  assert.equal(allScreens.length, 14, "도달 가능 랜딩은 14종이다(credential-form 9 + app-install 5 — T194-a parcel-install · T194-c-1 Q2 3종 · §92.3 고급 전용 2종)");
   const violations = allScreens.flatMap((item) => mockHostViolations(item.mockHost));
   t.diagnostic(`[G453] 호스트 ${allScreens.length}개: ${allScreens.map((i) => i.mockHost).join(" · ")}`);
   assert.deepEqual(violations, []);

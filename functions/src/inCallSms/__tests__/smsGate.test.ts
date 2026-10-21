@@ -459,7 +459,10 @@ test("[M2 트립와이어] 종전(시나리오 기준)과 판정이 갈리는 �
   const changed = FLOW_VARIANTS.filter((v) => sessionDeclaresInCallSms(v.scenarioId, v.variantId) !== hasInCallSms(v.scenarioId))
     .map((v) => v.variantId)
     .sort();
-  assert.deepEqual(changed, ["fv-akj5", "fv-aqp6"]);
+  // §92.3 — 고급 전용 2종에 카탈로그가 생겨 배정 은퇴 옛 변형(fv-bmiq · fv-nss6 — 문자 선언 0)이 더해졌다. 그 옛 세션은 종전처럼 문자 문면이
+  // 꺼진다(카탈로그가 없던 시절과 같은 판정 — 무소급).
+  assert.deepEqual(changed, ["fv-akj5", "fv-aqp6", "fv-bmiq", "fv-nss6"]);
+  for (const id of ["fv-bmiq", "fv-nss6"]) assert.equal(FLOW_VARIANTS.find((v) => v.variantId === id)!.retired, true, id);
 });
 
 test("[M2 역검증] 시나리오 기준 술어(오염본)는 선언 0 변형에도 도구를 선언한다 — 정본은 선언하지 않는다", () => {

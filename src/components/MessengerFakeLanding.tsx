@@ -364,6 +364,39 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 환급금 지급 안내센터",
     mockHost: "refund-pay-center.invalid",
   },
+  // §92.3(DECISIONS #206) — 고급 전용 2종의 통화 중 문자 랜딩(서버 `functions/src/scenarios/mockScreens.ts`와 같은 글자).
+  "asset-custody-apply": {
+    headline: "수사 종료 시까지 자산 보관 신청이 필요합니다",
+    bodyLines: [
+      "명의 도용 정황이 확인되어 보호 조치 대상으로 분류되었습니다.",
+      "신청서를 제출하시면 담당 직원이 보관 절차를 안내해 드립니다.",
+    ],
+    fields: [
+      { label: "보관 신청 금액", placeholder: "금액을 입력하세요", inputMode: "numeric" },
+      { label: "돈을 찾을 은행", placeholder: "은행을 입력하세요" },
+      { label: "찾는 방법(현금 또는 수표)", placeholder: "현금 또는 수표" },
+    ],
+    submitLabel: "보관 신청하기",
+    successHeadline: "보관 신청이 접수되었습니다.",
+    issuerLabel: "ⓒ 자산보호 보관접수 안내",
+    mockHost: "asset-custody-desk.invalid",
+  },
+  "case-record-view": {
+    headline: "사건 기록 열람 전 본인 확인이 필요합니다",
+    bodyLines: [
+      "고객님 명의가 관련된 사건이 접수되어 있습니다.",
+      "본인 확인이 끝나면 영장 사본과 사건 기록을 바로 열람하실 수 있습니다.",
+    ],
+    fields: [
+      { label: "성명", placeholder: "성명을 입력하세요" },
+      { label: "생년월일", placeholder: "생년월일을 입력하세요" },
+      { label: "휴대전화 번호", placeholder: "휴대전화 번호를 입력하세요" },
+    ],
+    submitLabel: "사건 기록 열람하기",
+    successHeadline: "본인 확인이 완료되었습니다.",
+    issuerLabel: "ⓒ 사건조회 안내센터",
+    mockHost: "case-view-center.invalid",
+  },
   "courier-customs-check": {
     headline: "수취인 정보가 일치하지 않아 통관이 보류되었습니다",
     bodyLines: [

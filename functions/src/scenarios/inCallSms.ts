@@ -115,6 +115,39 @@ const CARD_DELIVERY_CALL: InCallSmsItem[] = [
   },
 ];
 
+// ⭐ §92.3(docs/Architecture.md · DECISIONS #206) — 고급 전용 2종의 첫 통화 중 문자(보고서 R2 "장치 0개 — 보강"). 기관 사칭 고급
+// (인증번호 → 안전계좌 이체 화면)과 겹치지 않게 각 시나리오의 **고유 요구**(E4 현금 인출 · 전달 / 셀프 감금의 가짜 사건 조회)를 화면으로 만든다.
+// 둘 다 `link` → `credential-form`(입력만 · 서버 미전송 — 새 kind 0). 발신 표기 · 본문에 실존 기관명 0(§81 · `mockSurface`).
+const ASSET_PROTECTION_NOTICE_CALL: InCallSmsItem[] = [
+  {
+    smsId: "asset-custody-link",
+    kind: "link",
+    senderLabel: "0000-0000 (자산보호 접수 안내)",
+    body: "[자산보호] 보관 조치 접수 안내\n수사 종료 시까지 자산 보관 신청이 필요합니다.\n아래에서 보관 신청서를 작성해 주세요.",
+    linkDisplayText: "자산 보관 신청서 작성하기",
+    fakeLandingId: "asset-custody-apply",
+    linkAddress: "asset-custody-desk.invalid/apply/Hc3v",
+    afterScammerTurns: 3,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 자산 보관 신청 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크에서 보관 신청서를 작성해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 실제 주소를 읽어 주지 말고, 만날 장소·시간은 정하지도 묻지도 마라.)",
+  },
+];
+
+const PROSECUTION_COOPERATION_CALL: InCallSmsItem[] = [
+  {
+    smsId: "prosecution-case-link",
+    kind: "link",
+    senderLabel: "0000-0000 (사건조회 안내)",
+    body: "[사건조회] 본인 관련 사건이 접수되어 있습니다.\n아래에서 본인 확인 후 사건 기록을 열람해 주세요.\n열람 내용은 외부에 알리지 마십시오.",
+    linkDisplayText: "사건 기록 열람하기",
+    fakeLandingId: "case-record-view",
+    linkAddress: "case-view-center.invalid/case/Qe7r",
+    afterScammerTurns: 2,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 사건 조회 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크에서 본인 확인 후 사건 기록을 직접 확인해 보라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 실제 주소·사건번호를 읽어 주지 마라.)",
+  },
+];
+
 const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [
   {
     smsId: "institution-otp",
@@ -293,6 +326,9 @@ export const IN_CALL_SMS: Record<string, InCallSmsItem[]> = {
   "bank-security-verify-scam": BANK_SECURITY_VERIFY_SCAM,
   // T194-c-1(§84.5.2) — 카탈로그 신설(이 시나리오 첫 항목 · Q2 설치 문자).
   "card-delivery-call": CARD_DELIVERY_CALL,
+  // §92.3(DECISIONS #206) — 고급 전용 2종 카탈로그 신설(각 1건 · `link` → `credential-form`).
+  "asset-protection-notice-call": ASSET_PROTECTION_NOTICE_CALL,
+  "prosecution-cooperation-call": PROSECUTION_COOPERATION_CALL,
 };
 
 // ── §59.6/§59.10 커밋 B — 모델 도구 경로의 거절 지시(서버 소유, G386) ─────────────────
