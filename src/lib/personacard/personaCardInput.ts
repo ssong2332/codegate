@@ -9,7 +9,7 @@
 
 /**
  * 요청 원값(서버 `PersonaCardInput`과 같은 모양). 생일(월 · 일 — UX D-133)은 둘 다 · 출생 연도와 함께일 때만 싣는다.
- * §92(UX D-135) — 하는 일 · 자녀 이름 · 자녀 학년 · 자녀가 다니는 학원(학년 · 학원은 자녀 이름과 함께일 때만).
+ * §93(UX D-136) — 하는 일 · 자녀 이름 · 자녀 학년 · 자녀가 다니는 학원(학년 · 학원은 자녀 이름과 함께일 때만).
  */
 export type PersonaCardInput = {
   name?: string;
@@ -62,7 +62,7 @@ export const PERSONA_CARD_SCENARIO_IDS: readonly string[] = [
 ];
 
 /**
- * §92 카드 종류(서버 `PERSONA_CARD_KIND`와 같다 — 소스 대조 테스트). 종류가 입력 칸을 정한다 — 기관형 = 이름 · 출생 연도 · 생일 ·
+ * §93 카드 종류(서버 `PERSONA_CARD_KIND`와 같다 — 소스 대조 테스트). 종류가 입력 칸을 정한다 — 기관형 = 이름 · 출생 연도 · 생일 ·
  * 사는 곳 / 본인 협박형 = 기관형 칸 + 하는 일 / 자녀 협박형 = 자녀 이름 · 자녀 학년 · 자녀가 다니는 학원만.
  */
 export type PersonaCardKind = "identity" | "self-threat" | "child-threat";
@@ -77,7 +77,7 @@ export function personaCardKindFor(scenarioId: string | null | undefined): Perso
   return PERSONA_CARD_THREAT_KIND[scenarioId] ?? "identity";
 }
 
-/** §92 고정 선택지(서버 `personaCardCatalog.ts`의 같은 이름 목록과 같다 — 소스 대조 테스트). */
+/** §93 고정 선택지(서버 `personaCardCatalog.ts`의 같은 이름 목록과 같다 — 소스 대조 테스트). */
 export const PERSONA_JOB_OPTIONS: readonly string[] = ["회사원", "공무원", "교사", "자영업자", "의료인", "군인", "프리랜서"];
 export const PERSONA_CHILD_GRADE_OPTIONS: readonly string[] = [
   "유치원생",
@@ -147,7 +147,7 @@ export const PERSONA_INPUT_COPY = {
     "넣은 정보를 확인해 주세요. 이름은 한글이나 영문 2~10자, 출생 연도는 네 자리 숫자로 넣어 주세요. 생일은 출생 연도와 함께 실제 있는 날짜로 월과 일을 모두 골라 주세요.",
   birthdayHint: "출생 연도와 함께 월과 일을 모두 고르면 생년월일로 씁니다. 비워 두면 출생 연도만 씁니다.",
   notApplicable: "이 훈련에는 내 정보를 넣을 수 없습니다. 칸을 비우고 다시 시도해 주세요.",
-  // §92(UX D-135) — 협박형 2종의 안내 · 자녀 칸 힌트 · 자녀 형식 오류(제목 · 고지 · 대상 밖 오류는 위 문면 그대로).
+  // §93(UX D-136) — 협박형 2종의 안내 · 자녀 칸 힌트 · 자녀 형식 오류(제목 · 고지 · 대상 밖 오류는 위 문면 그대로).
   selfGuideChild:
     "넣으면 전화한 사람이 자녀 정보를 이미 알고 있는 것처럼 먼저 말하며 협박합니다. 비워 두면 전화한 사람이 자녀 이름을 모르는 채로 내가 먼저 말하게 유도합니다.",
   sendGuideChild:
@@ -167,21 +167,21 @@ export const PERSONA_INPUT_FIELDS = {
   birthYear: { label: "출생 연도", placeholder: "예: 1962" },
   birthday: { label: "생일 (월 · 일)", monthLabel: "생일 월", dayLabel: "생일 일", monthNone: "월 선택", dayNone: "일 선택" },
   region: { label: "사는 곳", noneLabel: "선택 안 함" },
-  // §92(UX D-135) — 라벨 = 카드 라벨(서버 `PERSONA_CARD_LABELS`).
+  // §93(UX D-136) — 라벨 = 카드 라벨(서버 `PERSONA_CARD_LABELS`).
   job: { label: "하는 일", noneLabel: "선택 안 함" },
   childName: { label: "자녀 이름", placeholder: "예: 김민준" },
   childGrade: { label: "자녀 학년", noneLabel: "선택 안 함" },
   childAcademy: { label: "자녀가 다니는 학원", noneLabel: "선택 안 함" },
 } as const;
 
-/** §92 — 종류별 안내 문면(제목 · 고지는 종류와 무관). */
+/** §93 — 종류별 안내 문면(제목 · 고지는 종류와 무관). */
 export function personaInputGuide(mode: "self" | "send", kind: PersonaCardKind): string {
   if (kind === "child-threat") return mode === "self" ? PERSONA_INPUT_COPY.selfGuideChild : PERSONA_INPUT_COPY.sendGuideChild;
   if (kind === "self-threat") return mode === "self" ? PERSONA_INPUT_COPY.selfGuideThreat : PERSONA_INPUT_COPY.sendGuideThreat;
   return mode === "self" ? PERSONA_INPUT_COPY.selfGuide : PERSONA_INPUT_COPY.sendGuide;
 }
 
-/** §92 — 종류별 형식 오류 문면(자녀 협박형만 자녀 칸 문면 · 그 밖 = 종전 문면). */
+/** §93 — 종류별 형식 오류 문면(자녀 협박형만 자녀 칸 문면 · 그 밖 = 종전 문면). */
 export function personaInvalidLine(kind: PersonaCardKind | null): string {
   return kind === "child-threat" ? PERSONA_INPUT_COPY.invalidChild : PERSONA_INPUT_COPY.invalid;
 }
@@ -190,7 +190,7 @@ export function personaInvalidLine(kind: PersonaCardKind | null): string {
 export const PERSONA_BIRTH_MONTH_OPTIONS: readonly number[] = Array.from({ length: 12 }, (_, i) => i + 1);
 export const PERSONA_BIRTH_DAY_OPTIONS: readonly number[] = Array.from({ length: 31 }, (_, i) => i + 1);
 
-/** 입력 블록을 그릴지(UX D-131 (1)) — 대상 10종(§92) × 고급 × 통화형(메신저 시나리오 0). */
+/** 입력 블록을 그릴지(UX D-131 (1)) — 대상 10종(§93) × 고급 × 통화형(메신저 시나리오 0). */
 export function personaCardInputVisible(
   scenarioId: string | null | undefined,
   difficultyLevel: string | null | undefined,
@@ -220,7 +220,7 @@ function readNameValue(raw: string): string | null {
 /**
  * 칸 상태 → 요청 원값. 모든 칸이 비면 `{ok: true, input: undefined}`(요청에 싣지 않는다 = 카드 0). 규칙 밖이면 `{ok: false}`
  * (화면은 진행하지 않고 `personaInvalidLine(kind)`를 낸다). 실존 금융사명 거부는 서버만 한다(사전이 서버에 있다).
- * §92 — `kind`의 칸만 읽는다(다른 종류 칸에 남은 값은 싣지 않는다 — 챌린지 화면에서 시나리오를 바꿔도 안전). 부재 = 기관형.
+ * §93 — `kind`의 칸만 읽는다(다른 종류 칸에 남은 값은 싣지 않는다 — 챌린지 화면에서 시나리오를 바꿔도 안전). 부재 = 기관형.
  */
 export function readPersonaCardForm(
   form: PersonaCardForm,
@@ -299,7 +299,7 @@ export function personaRevealScroll(
   return reducedMotion ? "auto" : "smooth";
 }
 
-/** 서버 거부 사유 → 문면(이 기능의 사유가 아니면 `null` — 호출부의 기존 오류 처리로 넘긴다). §92 — 형식 오류는 종류별 문면. */
+/** 서버 거부 사유 → 문면(이 기능의 사유가 아니면 `null` — 호출부의 기존 오류 처리로 넘긴다). §93 — 형식 오류는 종류별 문면. */
 export function personaCardErrorLine(reason: string | null, kind: PersonaCardKind | null = null): string | null {
   if (reason === PERSONA_CARD_INVALID_REASON) return personaInvalidLine(kind);
   if (reason === PERSONA_CARD_NOT_APPLICABLE_REASON) return PERSONA_INPUT_COPY.notApplicable;

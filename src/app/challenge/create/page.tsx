@@ -127,7 +127,7 @@ export default function ChallengeCreatePage() {
   const [personaForm, setPersonaForm] = useState<PersonaCardForm>(EMPTY_PERSONA_CARD_FORM);
   const [personaError, setPersonaError] = useState<string | null>(null);
   const showPersonaInput = personaCardInputVisible(scenarioId, difficultyLevel, scenario?.channel);
-  // §92(UX D-135) — 시나리오 카드 종류가 칸 · 안내 · 오류 문면을 정한다(시나리오를 바꾸면 그 종류 칸만 보낸다).
+  // §93(UX D-136) — 시나리오 카드 종류가 칸 · 안내 · 오류 문면을 정한다(시나리오를 바꾸면 그 종류 칸만 보낸다).
   const personaKind = personaCardKindFor(scenarioId);
 
   const isSubmitting = state === "submitting";

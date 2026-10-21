@@ -41,7 +41,7 @@ const readSrc = (rel: string) => readFileSync(path.join(SRC, rel), "utf8").repla
 const LEVELS: readonly DifficultyLevel[] = ["beginner", "intermediate", "advanced"];
 /**
  * User 결정의 기대 대상 — 데이터 상수와 **따로** 적는다(상수만 고치면 여기서 걸린다).
- * 2026-10-20 기관형 4종 → §92(2026-10-21 · 사용자 승인 "시나리오 결정 권고안대로 진행") 기관형 8종 + 협박형 2종(카드 배송은 카드사 고급으로 흡수 — 대상 아님).
+ * 2026-10-20 기관형 4종 → §93(2026-10-21 · 사용자 승인 "시나리오 결정 권고안대로 진행") 기관형 8종 + 협박형 2종(카드 배송은 카드사 고급으로 흡수 — 대상 아님).
  */
 const EXPECTED_TARGETS = [
   "asset-protection-notice-call",
@@ -55,7 +55,7 @@ const EXPECTED_TARGETS = [
   "reputation-blackmail-scam",
   "tax-refund-scam",
 ];
-/** §92 — 입력 대상 행(세 종류의 합). 옛 v1 행(bank · card · loan)은 빠진다. */
+/** §93 — 입력 대상 행(세 종류의 합). 옛 v1 행(bank · card · loan)은 빠진다. */
 const INPUT_KEYS = new Set(Object.values(PERSONA_CARD_INPUT_KEYS_BY_KIND).flat());
 const NOW_YEAR = 2026;
 
@@ -75,9 +75,9 @@ function eligibilityViolations(pred: (input: PersonaCardEligibilityInput) => boo
   return out;
 }
 
-test("[G563 · §88 · §92] 대상 술어 진리표 — 전 시나리오 × 3난이도 × {부재 · voice · messenger}에서 10종 × 고급 × 통화만 참(자가 · 챌린지 공통)", (t) => {
-  assert.deepEqual([...PERSONA_CARD_SCENARIOS].sort(), EXPECTED_TARGETS, "대상 상수가 User 결정(§92 · 10종)과 다르다");
-  // §92 — 종류표는 대상과 1:1(빠진 대상 · 남는 키 0).
+test("[G563 · §88 · §93] 대상 술어 진리표 — 전 시나리오 × 3난이도 × {부재 · voice · messenger}에서 10종 × 고급 × 통화만 참(자가 · 챌린지 공통)", (t) => {
+  assert.deepEqual([...PERSONA_CARD_SCENARIOS].sort(), EXPECTED_TARGETS, "대상 상수가 User 결정(§93 · 10종)과 다르다");
+  // §93 — 종류표는 대상과 1:1(빠진 대상 · 남는 키 0).
   assert.deepEqual(Object.keys(PERSONA_CARD_KIND).sort(), EXPECTED_TARGETS);
   assert.equal(personaCardKind("kidnapping-threat"), "child-threat");
   assert.equal(personaCardKind("reputation-blackmail-scam"), "self-threat");
@@ -147,7 +147,7 @@ const INPUT_CASES: Array<[string, unknown, Record<string, unknown> | "invalid" |
   ["월 문자열", { birthYear: 1965, birthMonth: "3", birthDay: 2 }, "invalid"],
   ["일 소수", { birthYear: 1965, birthMonth: 3, birthDay: 2.5 }, "invalid"],
   ["사는 곳 옛 가림 형식", { region: "경기도 ○○시" }, "invalid"],
-  // §92(UX D-135) — 하는 일 · 자녀 칸(고정 선택지 · 이름 규칙 · 학년/학원 = 자녀 이름 필요). 시나리오 종류 판정은 이 표 밖(조합 테스트).
+  // §93(UX D-136) — 하는 일 · 자녀 칸(고정 선택지 · 이름 규칙 · 학년/학원 = 자녀 이름 필요). 시나리오 종류 판정은 이 표 밖(조합 테스트).
   ["하는 일", { name: "홍길동", job: "회사원" }, { name: "홍길동", job: "회사원" }],
   ["하는 일만", { job: "프리랜서" }, { job: "프리랜서" }],
   ["하는 일 빈 값", { job: "" }, undefined],
@@ -301,7 +301,7 @@ function cardItemViolations(item: PersonaCardItem): string[] {
   if (/\d{5,}/.test(item.value)) out.push(`5자리 이상 숫자열: ${item.value}`);
   if (item.key === "region" && !PERSONA_REGION_POOL.some((r) => r.name === item.value)) out.push(`지역 형식: ${item.value}`);
   if (!INPUT_KEYS.has(item.key)) out.push(`입력 대상 밖 행: ${item.key}`);
-  // §92 — 선택지 행은 목록 값만.
+  // §93 — 선택지 행은 목록 값만.
   if (item.key === "job" && !PERSONA_JOB_OPTIONS.includes(item.value)) out.push(`하는 일 형식: ${item.value}`);
   if (item.key === "childGrade" && !PERSONA_CHILD_GRADE_OPTIONS.includes(item.value)) out.push(`학년 형식: ${item.value}`);
   if (item.key === "childAcademy" && !PERSONA_CHILD_ACADEMY_OPTIONS.includes(item.value)) out.push(`학원 형식: ${item.value}`);
@@ -329,7 +329,7 @@ test("[G565 · §88] 입력이 통과한 카드 — 시 · 도 17 × 대표 입�
       for (const item of card.items) failures.push(...cardItemViolations(item).map((v) => `${region.name}/${name}: ${v}`));
     }
   }
-  // §92 — 선택지 목록 자체 · 협박형 카드(하는 일 × 학년 × 학원 전 조합)도 위반 0.
+  // §93 — 선택지 목록 자체 · 협박형 카드(하는 일 × 학년 × 학원 전 조합)도 위반 0.
   for (const option of [...PERSONA_JOB_OPTIONS, ...PERSONA_CHILD_GRADE_OPTIONS, ...PERSONA_CHILD_ACADEMY_OPTIONS]) {
     assert.equal(replaceRealFinancialNames(option).replacedCount, 0, option);
     assert.equal(hasBankPlaceholder(option), false, option);
@@ -354,7 +354,7 @@ test("[G565 · §88] 입력이 통과한 카드 — 시 · 도 17 × 대표 입�
   t.diagnostic(`[G565 정상] 카드 ${cards}장 위반 0`);
 });
 
-test("[§92] 카드 종류 맞춤 — 대상이어도 그 종류에 없는 칸은 not-applicable · 맞는 칸만이면 카드(순서 고정)", (t) => {
+test("[§93] 카드 종류 맞춤 — 대상이어도 그 종류에 없는 칸은 not-applicable · 맞는 칸만이면 카드(순서 고정)", (t) => {
   const at = (scenarioId: string): PersonaCardEligibilityInput => ({ scenarioId, difficultyLevel: "advanced", channel: undefined });
   const NA = { ok: false, reason: PERSONA_CARD_NOT_APPLICABLE_REASON };
   // 판정표 — [시나리오, 원값, 기대(카드 행 키 | "NA")].
@@ -390,7 +390,7 @@ test("[§92] 카드 종류 맞춤 — 대상이어도 그 종류에 없는 칸�
   };
   const leaked = cases.filter(([id, raw, exp]) => exp === "NA" && ignoresKind(raw, id) !== undefined);
   assert.ok(leaked.length > 0, "종류를 안 보는 사본이 판정표를 통과했다 — 검사가 무력하다");
-  t.diagnostic(`[§92] 판정표 ${cases.length}행 기대대로 · 종류 무시 사본 → 새는 행 ${leaked.length}건(실패 확인)`);
+  t.diagnostic(`[§93] 판정표 ${cases.length}행 기대대로 · 종류 무시 사본 → 새는 행 ${leaked.length}건(실패 확인)`);
 });
 
 test("[G565 역방향] 실존 은행 행 · 목록 밖 지역 · 긴 숫자열 · 입력 대상 밖 행이 든 카드 사본은 실패한다", (t) => {

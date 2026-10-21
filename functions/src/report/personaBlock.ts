@@ -73,7 +73,7 @@ export function personaMatchTokens(item: PersonaCardItem): string[] {
     case "card":
     case "loan":
       return [];
-    // §92 — 하는 일 · 학원 = 고정 선택지 값 그대로(일상어와 겹치지 않는 낱말만 선택지에 있다 — "회사"가 아니라 "회사원").
+    // §93 — 하는 일 · 학원 = 고정 선택지 값 그대로(일상어와 겹치지 않는 낱말만 선택지에 있다 — "회사"가 아니라 "회사원").
     case "job":
     case "childAcademy":
       return [item.value, item.value.replace(/(학원|도장)$/, " $1")].filter((t, i, all) => all.indexOf(t) === i);
@@ -85,7 +85,7 @@ export function personaMatchTokens(item: PersonaCardItem): string[] {
 }
 
 /**
- * §92 — 자녀 학년 토큰. "초등학교 3학년" → 그대로 · "초등 3학년" · "초3" / "유치원생" → "유치원". ⚠️ "3학년"만으로는 세지 않는다
+ * §93 — 자녀 학년 토큰. "초등학교 3학년" → 그대로 · "초등 3학년" · "초3" / "유치원생" → "유치원". ⚠️ "3학년"만으로는 세지 않는다
  * (사기범이 다른 맥락에서 학년을 말할 여지는 작지만, 학교급 없이 맞혔다고 단정하지 않는 쪽 — 거짓 음성 = R-2 = 안전).
  */
 function childGradeTokens(value: string): string[] {
@@ -103,7 +103,7 @@ const CHILD_CALL_NEXT_WORDS = ["지금", "여기", "데리고", "우리", "학�
 const CHILD_CALL_PARTICLES = ["", "가", "를", "는", "도", "랑"] as const;
 
 /**
- * §92 — 자녀 이름 토큰: 전체 이름 · 붙여 쓴 이름(한글 2자 = 일상어 겹침이라 제외) + 부르는 꼴(한글 3자 = 성 뗌 · 2자 = 그대로)
+ * §93 — 자녀 이름 토큰: 전체 이름 · 붙여 쓴 이름(한글 2자 = 일상어 겹침이라 제외) + 부르는 꼴(한글 3자 = 성 뗌 · 2자 = 그대로)
  * × 조사(없음 · 가 · 를 · 는 · 도 · 랑) × 뒤 낱말(지금 · 여기 · 데리고 · 우리 · 학원 · 울고).
  */
 function childNameTokens(value: string): string[] {
@@ -232,7 +232,7 @@ export function buildPersonaBlock(
   personaCard: PersonaCard | undefined,
   lines: readonly PersonaTranscriptLine[],
   selfDialIntercepted: boolean,
-  /** §92 — 협박형 시나리오의 카드면 교훈 문면 분기(부재 = 기관형 · 종전 문면). 호출부가 카탈로그 종류에서 고른다. */
+  /** §93 — 협박형 시나리오의 카드면 교훈 문면 분기(부재 = 기관형 · 종전 문면). 호출부가 카탈로그 종류에서 고른다. */
   context?: PersonaBlockContext,
 ): PersonaBlock | undefined {
   const items = personaCard?.items ?? [];

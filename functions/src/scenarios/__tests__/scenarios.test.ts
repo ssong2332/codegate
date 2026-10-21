@@ -1403,7 +1403,7 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
     const speakerGender = speakerGenderFor(scenarioId);
     const verifyInterceptEnabled = hasVerifyIntercept(scenarioId);
     FICTIONAL_BANK_NAMES.forEach((fictionalBankName, i) => {
-      // §92 — 협박형은 그 종류의 칸으로(자녀 납치 = 자녀 칸만 · 유포 협박 = 신상 + 하는 일). 서버가 다른 종류의 칸을 거부한다.
+      // §93 — 협박형은 그 종류의 칸으로(자녀 납치 = 자녀 칸만 · 유포 협박 = 신상 + 하는 일). 서버가 다른 종류의 칸을 거부한다.
       const kind = personaCardKind(scenarioId);
       const samples =
         kind === "child-threat"

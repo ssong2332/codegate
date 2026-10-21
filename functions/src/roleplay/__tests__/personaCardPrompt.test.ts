@@ -61,7 +61,7 @@ test("[G569] 블록 문면 = §84.14.4 갱신 정본(머리 · 꼬리 바이트 
   assert.equal(buildPersonaCardBlock([]), null, "빈 배열 = 블록 0");
 });
 
-/** §92 — 종류별 대표 입력(그 종류의 칸 전부). */
+/** §93 — 종류별 대표 입력(그 종류의 칸 전부). */
 const REPRESENTATIVE_INPUT: Record<PersonaCardKind, Parameters<typeof buildPersonaCard>[0]["input"]> = {
   identity: { name: "홍길동", birthYear: 1962, region: "경상남도" },
   "self-threat": { name: "홍길동", birthYear: 1962, region: "경상남도", job: "자영업자" },
@@ -75,7 +75,7 @@ test("[G569] 위치 — [진행 강제] · [확인 안내] 뒤 · 난이도 앞 
     const head = kind === "identity" ? PERSONA_CARD_BLOCK_HEAD : PERSONA_CARD_BLOCK_HEAD_THREAT;
     const tail = kind === "identity" ? PERSONA_CARD_BLOCK_TAIL : PERSONA_CARD_BLOCK_TAIL_THREAT;
     for (const bank of FICTIONAL_BANK_NAMES) {
-      // §88 — 카드 값은 사용자 입력이다(대표 입력 — 그 종류의 칸 전부 · §92).
+      // §88 — 카드 값은 사용자 입력이다(대표 입력 — 그 종류의 칸 전부 · §93).
       const card = buildPersonaCard({ input: REPRESENTATIVE_INPUT[kind], inputBy: "self" })!;
       const prompt = buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], { ...operationalOpts(scenarioId, bank), personaCard: card.items });
       const at = prompt.indexOf(head);
@@ -111,7 +111,7 @@ test("[G569] 부재 · 빈 배열이면 조립 결과가 카드 도입 전과 �
 });
 
 /**
- * G569 가드 위반(§92 재설계 — 옛 가드 "대상 ⊆ institution"을 대체). 판정표:
+ * G569 가드 위반(§93 재설계 — 옛 가드 "대상 ⊆ institution"을 대체). 판정표:
  * | 카드 종류 | 페르소나 권한이 반드시 | 이유 |
  * |---|---|---|
  * | identity | institution | 확인형 문면("○○ 님 본인 맞으시죠?") · 기관형 블록이 캐릭터와 맞는다 |
@@ -130,7 +130,7 @@ function kindAuthorityViolations(targets: readonly string[], kinds: Readonly<Rec
   return out;
 }
 
-test("[G569 가드 · §92 재설계] 카드 종류 ⇔ 페르소나 권한(identity = institution · 협박형 = anonymous) — 어긋난 사본은 실패한다", (t) => {
+test("[G569 가드 · §93 재설계] 카드 종류 ⇔ 페르소나 권한(identity = institution · 협박형 = anonymous) — 어긋난 사본은 실패한다", (t) => {
   assert.deepEqual(kindAuthorityViolations(PERSONA_CARD_SCENARIOS, PERSONA_CARD_KIND), []);
   assert.equal(personaCardEligible({ scenarioId: "kidnapping-threat", difficultyLevel: "advanced", channel: undefined }), true);
   // 역방향 3종 — 가족 사칭을 대상에 넣음 · 납치를 identity로 표기 · 기관 사칭을 협박형으로 표기.

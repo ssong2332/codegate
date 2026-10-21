@@ -109,7 +109,7 @@ test("[G570 역방향] 기록 없이 단정하는 사본(카드가 있으면 항
 
 test("[G570 배선] 리포트 생성이 이미 읽은 messages 스냅샷과 세션 카드로 1회 판정하고, 카드 없으면 필드를 만들지 않는다(소스 스캔)", () => {
   const src = readFileSync(path.resolve(__dirname, "../../../src/report/generateReportCore.ts"), "utf8").replace(/\r\n/g, "\n");
-  // §92 — 네 번째 인자 = 카탈로그 카드 종류에서 고른 협박형 context(기관형 · 대상 밖 = undefined).
+  // §93 — 네 번째 인자 = 카탈로그 카드 종류에서 고른 협박형 context(기관형 · 대상 밖 = undefined).
   assert.match(
     src,
     /const personaKind = personaCardKind\(session\.scenarioId\);\n\s*const personaBlock = buildPersonaBlock\(\n\s*session\.personaCard,\n\s*messages,\n\s*false,\n\s*personaKind === "child-threat" \|\| personaKind === "self-threat" \? personaKind : undefined,\n\s*\);/,
@@ -205,7 +205,7 @@ test("[2026-10-21 지역 부분 일치] 기관명 · 은행명 안의 지명은 
   assert.deepEqual(said.items.map((i) => i.key).sort(), ["name", "region"]);
 });
 
-// ── §92(2026-10-21 · 대상 확대 — 협박형 2종) — 새 행 토큰 · 협박형 context ──────────────────────────────
+// ── §93(2026-10-21 · 대상 확대 — 협박형 2종) — 새 행 토큰 · 협박형 context ──────────────────────────────
 
 const CHILD_CARD: PersonaCard = {
   v: 2,
@@ -217,7 +217,7 @@ const CHILD_CARD: PersonaCard = {
   ],
 };
 
-test("[§92 · 리뷰 Major 1 · 2] 자녀 행 토큰 — 부르는 꼴 + 뒤 낱말 앵커만(프롬프트 대사와 일치) · 일상어(하나는 · 보람이 있다) 0", () => {
+test("[§93 · 리뷰 Major 1 · 2] 자녀 행 토큰 — 부르는 꼴 + 뒤 낱말 앵커만(프롬프트 대사와 일치) · 일상어(하나는 · 보람이 있다) 0", () => {
   const [child, grade, academy] = CHILD_CARD.items;
   const tokens = personaMatchTokens(child!);
   for (const t of ["김민준", "민준이 지금", "민준이가 지금", "민준이를 데리고"]) assert.ok(tokens.includes(t), t);
@@ -244,7 +244,7 @@ test("[§92 · 리뷰 Major 1 · 2] 자녀 행 토큰 — 부르는 꼴 + 뒤 �
   assert.deepEqual(personaMatchTokens({ key: "job", label: "하는 일", value: "공무원" }), ["공무원"]);
 });
 
-test("[§92] 협박형 블록 — 협박범이 먼저 댄 자녀 정보 = R-1 · context가 실린다 · 참가자가 먼저 말한 이름은 세지 않는다 · 부재 = 기관형", () => {
+test("[§93] 협박형 블록 — 협박범이 먼저 댄 자녀 정보 = R-1 · context가 실린다 · 참가자가 먼저 말한 이름은 세지 않는다 · 부재 = 기관형", () => {
   const first = buildPersonaBlock(
     CHILD_CARD,
     [scammer(0, "민준이 지금 여기 있어요. 초3이죠? 영어학원 끝나고 데려왔어요."), user(1, "네? 우리 민준이요?")],

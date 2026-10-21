@@ -119,7 +119,7 @@ function sessionFor(scenarioId: string, withCard: boolean): SessionDoc {
 }
 
 test("[G567 · 리뷰 C1] 키 · 에이전트 맵이 있어도 카드 세션은 확인 전화 재검증을 통과하고, 카드 없는 세션은 기존대로 ElevenLabs 거절(대상 중 확인 안내 시나리오 전수)", (t) => {
-  // §92 — 대상이 10종으로 늘며 확인 안내(가로채기)가 없는 시나리오(자산 보호 · 검찰 · 협박형 등)가 들어왔다. 확인 전화 재검증은 확인 안내
+  // §93 — 대상이 10종으로 늘며 확인 안내(가로채기)가 없는 시나리오(자산 보호 · 검찰 · 협박형 등)가 들어왔다. 확인 전화 재검증은 확인 안내
   // 시나리오에서만 성립하므로(그 밖은 "이 시나리오의 확인 안내가 아닙니다"로 먼저 거절) 대상 ∩ 확인 안내만 돈다.
   const verifyTargets = PERSONA_CARD_SCENARIOS.filter(hasVerifyIntercept);
   assert.ok(verifyTargets.length >= 4, `확인 안내 대상이 줄었다: ${verifyTargets.join(", ")}`);

@@ -48,7 +48,7 @@ test("[G629] 입력 · 고지 · 리포트 새 문면 = docs/UX.md D-131 · D-13
     PERSONA_REPORT_COPY.r2FactSender,
     PERSONA_REPORT_COPY.tailSelfInput,
     PERSONA_REPORT_COPY.tailSender,
-    // §92(UX D-135) — 협박형 교훈.
+    // §93(UX D-136) — 협박형 교훈.
     PERSONA_REPORT_COPY.childExplanation,
     PERSONA_REPORT_COPY.childAction,
     PERSONA_REPORT_COPY.selfThreatExplanation,
@@ -71,7 +71,7 @@ test("[G629] 시 · 도 선택지 · 대상 시나리오 = 서버 카탈로그(�
     return id;
   });
   assert.deepEqual([...PERSONA_CARD_SCENARIO_IDS].sort(), ids.sort());
-  // §92 — 고정 선택지 3종 · 협박형 종류가 서버 카탈로그와 같다(소스 대조 — 한쪽만 고치면 서버가 목록 밖 값으로 거부한다).
+  // §93 — 고정 선택지 3종 · 협박형 종류가 서버 카탈로그와 같다(소스 대조 — 한쪽만 고치면 서버가 목록 밖 값으로 거부한다).
   const serverList = (name: string) => {
     const body = new RegExp(`export const ${name}: readonly string\\[\\] = \\[([\\s\\S]*?)\\];`).exec(SERVER_CATALOG)?.[1];
     assert.ok(body, `${name}을 서버 카탈로그에서 못 찾았다`);
@@ -88,7 +88,7 @@ test("[G629] 시 · 도 선택지 · 대상 시나리오 = 서버 카탈로그(�
   assert.deepEqual(Object.entries(PERSONA_CARD_THREAT_KIND).sort(), serverThreat.sort());
 });
 
-test("[UX D-131 (1) · D-135 (1)] 입력 블록 노출 — 대상 10종 × 고급 × 통화형만", () => {
+test("[UX D-131 (1) · D-136 (1)] 입력 블록 노출 — 대상 10종 × 고급 × 통화형만", () => {
   assert.equal(PERSONA_CARD_SCENARIO_IDS.length, 10);
   for (const id of PERSONA_CARD_SCENARIO_IDS) {
     assert.equal(personaCardInputVisible(id, "advanced", undefined), true, id);
@@ -96,13 +96,13 @@ test("[UX D-131 (1) · D-135 (1)] 입력 블록 노출 — 대상 10종 × 고�
     assert.equal(personaCardInputVisible(id, null, undefined), false, id);
     assert.equal(personaCardInputVisible(id, "advanced", "messenger"), false, id);
   }
-  // §92 — 자녀 납치 협박도 대상이다(자녀 칸). 가족 사칭은 여전히 대상 밖.
+  // §93 — 자녀 납치 협박도 대상이다(자녀 칸). 가족 사칭은 여전히 대상 밖.
   assert.equal(personaCardInputVisible("kidnapping-threat", "advanced", undefined), true);
   assert.equal(personaCardInputVisible("family-accident-deepvoice", "advanced", undefined), false);
   assert.equal(personaCardInputVisible(null, "advanced", undefined), false);
 });
 
-test("[UX D-135 (2)] 칸 판정표 — 카드 종류 · 종류의 칸만 원값에 싣는다(다른 종류 칸에 남은 값은 버림) · 안내 · 오류 문면", () => {
+test("[UX D-136 (2)] 칸 판정표 — 카드 종류 · 종류의 칸만 원값에 싣는다(다른 종류 칸에 남은 값은 버림) · 안내 · 오류 문면", () => {
   assert.equal(personaCardKindFor("kidnapping-threat"), "child-threat");
   assert.equal(personaCardKindFor("reputation-blackmail-scam"), "self-threat");
   assert.equal(personaCardKindFor("tax-refund-scam"), "identity");
@@ -149,7 +149,7 @@ test("[UX D-135 (2)] 칸 판정표 — 카드 종류 · 종류의 칸만 원값�
   assert.equal(personaCardErrorLine(PERSONA_CARD_INVALID_REASON, "child-threat"), PERSONA_INPUT_COPY.invalidChild);
 });
 
-test("[UX D-135 (5)] 리포트 협박형 교훈 — context로 설명 · 대처만 갈린다(제목 · 사실 · 꼬리 무변경) · 모르는 context = 기관형", () => {
+test("[UX D-136 (5)] 리포트 협박형 교훈 — context로 설명 · 대처만 갈린다(제목 · 사실 · 꼬리 무변경) · 모르는 context = 기관형", () => {
   const items = [{ label: "자녀 이름", value: "김민준", scammerTurnIndex: 0 }];
   const child = readPersonaBlock({ state: "R-1", items, inputBy: "self", context: "child-threat" })!;
   const copy = resolvePersonaBlockCopy(child);
@@ -260,7 +260,7 @@ test("[배선 · UX D-131 (1)] self = 난이도 화면 · send = 챌린지 만�
   const create = codeOnly("../../app/challenge/create/page.tsx");
   assert.match(create, /const showPersonaInput = personaCardInputVisible\(scenarioId, difficultyLevel, scenario\?\.channel\);/);
   assert.match(create, /<PersonaCardInputFields\s+mode="send"/);
-  // §92(UX D-135) — 두 화면 모두 시나리오 카드 종류를 칸 · 원값 읽기에 같은 값으로 넘긴다.
+  // §93(UX D-136) — 두 화면 모두 시나리오 카드 종류를 칸 · 원값 읽기에 같은 값으로 넘긴다.
   for (const source of [difficulty, create]) {
     assert.match(source, /const personaKind = personaCardKindFor\(scenarioId\);/);
     assert.match(source, /kind=\{personaKind \?\? undefined\}/);

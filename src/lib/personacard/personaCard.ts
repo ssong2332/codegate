@@ -73,7 +73,7 @@ export function splitMaskedValue(value: string): MaskedSegment[] {
 export type PersonaBlockState = "R-1" | "R-2" | "R-3";
 export type PersonaBlockRow = PersonaCardRow & { scammerTurnIndex?: number };
 /** §88 — `inputBy`: 사용자가 넣은 카드(v2)에서 온 블록이면 누가 넣었는지(문면 분기 · UX D-131 (6)(7)). 부재 = 옛 v1 카드. */
-/** §92 — `context`: 협박형 시나리오의 카드(교훈 문면 분기 · UX D-135). 부재 = 기관형(종전 문면). */
+/** §93 — `context`: 협박형 시나리오의 카드(교훈 문면 분기 · UX D-136). 부재 = 기관형(종전 문면). */
 export type PersonaBlockContext = "child-threat" | "self-threat";
 export type PersonaBlockView = {
   state: PersonaBlockState;
@@ -100,7 +100,7 @@ export const PERSONA_REPORT_COPY = {
   r2FactSender: "이번 훈련에서는 보낸 분이 아래 정보를 내 정보로 넣어 두었습니다.",
   tailSelfInput: "위 정보는 훈련 시작 전에 직접 넣은 정보입니다.",
   tailSender: "위 정보는 이 훈련을 보낸 분이 넣은 정보입니다.",
-  // §92(UX D-135) — 협박형 2종의 설명 · 대처(제목 · 사실 · 꼬리는 위 문면 그대로). R-1 · R-2 공통.
+  // §93(UX D-136) — 협박형 2종의 설명 · 대처(제목 · 사실 · 꼬리는 위 문면 그대로). R-1 · R-2 공통.
   childExplanation:
     "상대가 자녀 이름·학년·학원을 안다고 해서 진짜 납치라는 증거가 되지는 않습니다. 이런 정보는 이미 다른 곳에서 새어 나갔을 수 있습니다.",
   childAction:
@@ -155,7 +155,7 @@ export function readPersonaBlock(raw: unknown): PersonaBlockView | null {
     state,
     items: withAnchors,
     ...(inputBy === "self" || inputBy === "sender" ? { inputBy } : {}),
-    // §92 — 모르는 값은 버린다(= 기관형 문면).
+    // §93 — 모르는 값은 버린다(= 기관형 문면).
     ...(context === "child-threat" || context === "self-threat" ? { context } : {}),
   };
 }
@@ -187,7 +187,7 @@ export function resolvePersonaBlockCopy(block: PersonaBlockView): {
       : block.inputBy === "self"
         ? PERSONA_REPORT_COPY.tailSelfInput
         : PERSONA_REPORT_COPY.tail;
-  // §92(UX D-135) — 협박형은 설명 · 대처만 갈린다(기관 · 회사 이야기가 아니다 · 자녀 안전 확인 방법). 상태와 무관하게 같은 문면.
+  // §93(UX D-136) — 협박형은 설명 · 대처만 갈린다(기관 · 회사 이야기가 아니다 · 자녀 안전 확인 방법). 상태와 무관하게 같은 문면.
   if (block.context === "child-threat" || block.context === "self-threat") {
     const child = block.context === "child-threat";
     return {

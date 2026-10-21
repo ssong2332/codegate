@@ -44,9 +44,9 @@ export function personaCardEligible(input: PersonaCardEligibilityInput): boolean
 }
 
 /**
- * 클라 요청의 원값(UX D-131 (2) · D-133 · D-135). 전부 선택 — 빈 문자열 · 부재 = 넣지 않음.
+ * 클라 요청의 원값(UX D-131 (2) · D-133 · D-136). 전부 선택 — 빈 문자열 · 부재 = 넣지 않음.
  * `birthMonth` · `birthDay`(생일 — §88 후속)는 **둘 다 · 출생 연도와 함께**일 때만 받는다(OQ-U102 권고안).
- * §92 — `job`(하는 일) · `childName` · `childGrade` · `childAcademy`(자녀). 자녀 학년 · 학원은 **자녀 이름과 함께**일 때만 받는다
+ * §93 — `job`(하는 일) · `childName` · `childGrade` · `childAcademy`(자녀). 자녀 학년 · 학원은 **자녀 이름과 함께**일 때만 받는다
  * (생일 ↔ 출생 연도와 같은 규칙 — 이름 없이 학년만으로는 "자녀를 안다"가 성립하지 않는다).
  */
 export type PersonaCardInput = {
@@ -85,7 +85,7 @@ export type PersonaCardInputReadResult =
  * - birthMonth · birthDay(§88 후속 · UX D-133): 정수 월 1~12 · 일 1~31 · **둘 다**(하나만 = 거부) · **출생 연도 필요**(연도 없이 = 거부 —
  *   OQ-U102 권고안) · 연도와 합쳐 실제 날짜(예: 2월 30일 · 평년 2월 29일 = 거부)
  * - region: 시 · 도 17개 정식 명칭 중 하나
- * - §92 job · childGrade · childAcademy: 고정 선택지 중 하나(정확 일치) / childName: name과 같은 규칙 / childGrade · childAcademy = childName 필요
+ * - §93 job · childGrade · childAcademy: 고정 선택지 중 하나(정확 일치) / childName: name과 같은 규칙 / childGrade · childAcademy = childName 필요
  * ⚠️ 이 함수는 시나리오를 모른다 — 그 시나리오 종류의 칸인지는 `resolvePersonaCardRequest`가 본다(`personaCardInputFitsScenario`).
  */
 export function readPersonaCardInput(raw: unknown, nowYear: number = new Date().getFullYear()): PersonaCardInputReadResult {
@@ -121,7 +121,7 @@ export function readPersonaCardInput(raw: unknown, nowYear: number = new Date().
     input.region = region;
   }
 
-  // §92 — 하는 일 · 자녀(고정 선택지 · 이름 규칙). 학년 · 학원은 자녀 이름과 함께일 때만.
+  // §93 — 하는 일 · 자녀(고정 선택지 · 이름 규칙). 학년 · 학원은 자녀 이름과 함께일 때만.
   const readJob = readOptionField(job, PERSONA_JOB_OPTIONS);
   if (readJob === false) return { ok: false };
   if (readJob) input.job = readJob;
@@ -171,7 +171,7 @@ function inputCardKeys(input: PersonaCardInput): PersonaCardKey[] {
   return keys;
 }
 
-/** §92 — 넣은 칸이 전부 이 시나리오 카드 종류의 칸인가(대상 밖 시나리오 = 거짓 · 판정표 = 카탈로그 `PERSONA_CARD_INPUT_KEYS_BY_KIND`). */
+/** §93 — 넣은 칸이 전부 이 시나리오 카드 종류의 칸인가(대상 밖 시나리오 = 거짓 · 판정표 = 카탈로그 `PERSONA_CARD_INPUT_KEYS_BY_KIND`). */
 export function personaCardInputFitsScenario(input: PersonaCardInput, scenarioId: string): boolean {
   const kind = personaCardKind(scenarioId);
   if (!kind) return false;
@@ -241,7 +241,7 @@ export function resolvePersonaCardRequest(
   const read = readPersonaCardInput(raw, nowYear);
   if (!read.ok) return { ok: false, reason: PERSONA_CARD_INVALID_REASON };
   if (!read.input) return { ok: true, personaCard: undefined };
-  // §92 — 대상이어도 그 시나리오 종류에 없는 칸(예: 기관 사칭에 자녀 이름 · 납치 협박에 내 이름)이 있으면 not-applicable.
+  // §93 — 대상이어도 그 시나리오 종류에 없는 칸(예: 기관 사칭에 자녀 이름 · 납치 협박에 내 이름)이 있으면 not-applicable.
   if (!personaCardEligible(eligibility) || !personaCardInputFitsScenario(read.input, eligibility.scenarioId)) {
     return { ok: false, reason: PERSONA_CARD_NOT_APPLICABLE_REASON };
   }

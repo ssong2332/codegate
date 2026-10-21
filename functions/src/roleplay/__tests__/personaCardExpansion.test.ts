@@ -1,4 +1,4 @@
-// §92(2026-10-21 · 사용자 승인 "시나리오 결정 권고안대로 진행") — '내 정보' 카드 대상 확대(기관형 4종 + 협박형 2종) 조립 단언.
+// §93(2026-10-21 · 사용자 승인 "시나리오 결정 권고안대로 진행") — '내 정보' 카드 대상 확대(기관형 4종 + 협박형 2종) 조립 단언.
 // ⭐ #347(기관 사칭 고급 "카드 값 먼저 말하기")과 같은 보장을 새 대상 6종에 건다: 카드가 있으면 요구 예시 · 이름 단정 금지 원문이
 //    결정적으로 바뀌고, 순서 줄("늦어도 상대의 첫 대답을 받은 바로 다음 차례까지")이 실린다. 카드가 없으면 조립 결과가 바이트 동일하다.
 // ⛔ 이 파일은 모델 출력을 보지 않는다(실측 비율은 실 키 프로브 — 메인 세션 승인 범위).
@@ -87,7 +87,7 @@ function assembled(scenarioId: string, variantId: string, extra: BuildSystemProm
 /** 시나리오의 고급 변형 전부(고급 전용 3종 = 시나리오 자체가 변형 1개). */
 const advancedVariants = (scenarioId: string) => listFlowVariants(scenarioId, "advanced").map((v) => v.variantId);
 
-test("[§92 원천 존재] 새 기관형 4종의 요구 예시 · 납치 고급 되받기 지시 · 이름 단정 금지 원문이 그대로 있다(바뀌면 치환이 조용히 꺼진다)", () => {
+test("[§93 원천 존재] 새 기관형 4종의 요구 예시 · 납치 고급 되받기 지시 · 이름 단정 금지 원문이 그대로 있다(바뀌면 치환이 조용히 꺼진다)", () => {
   const text = (id: string) => [SCENARIO_PROMPTS[id]!.personaPrompt, ...SCENARIO_PROMPTS[id]!.weakenedTactics].join("\n");
   const count = (hay: string, needle: string) => hay.split(needle).length - 1;
   assert.equal(count(text("tax-refund-scam"), IDENTITY_DEMAND_PLAIN), 2, "tax 2곳([말투/톤] · 수법)");
@@ -110,7 +110,7 @@ test("[§92 원천 존재] 새 기관형 4종의 요구 예시 · 납치 고급 
   }
 });
 
-test("[§92 · #347 보장] 대상 10종 × 고급 변형 전부 × Live/텍스트 — 카드가 있으면 묻기 원천 0 · 종류별 블록 · 순서 줄 · 가드레일 최후미", (t) => {
+test("[§93 · #347 보장] 대상 10종 × 고급 변형 전부 × Live/텍스트 — 카드가 있으면 묻기 원천 0 · 종류별 블록 · 순서 줄 · 가드레일 최후미", (t) => {
   let checked = 0;
   for (const id of PERSONA_CARD_SCENARIOS) {
     const kind = personaCardKind(id)!;
@@ -139,10 +139,10 @@ test("[§92 · #347 보장] 대상 10종 × 고급 변형 전부 × Live/텍스�
       }
     }
   }
-  t.diagnostic(`[§92] 조립 ${checked}건 — 묻기 원천 0 · 블록 · 순서 줄 확인`);
+  t.diagnostic(`[§93] 조립 ${checked}건 — 묻기 원천 0 · 블록 · 순서 줄 확인`);
 });
 
-test("[§92] 새 기관형 4종 — 부분 카드는 없는 항목만 묻는다(어미는 원천 그대로)", () => {
+test("[§93] 새 기관형 4종 — 부분 카드는 없는 항목만 묻는다(어미는 원천 그대로)", () => {
   const name = CARDS.identity[0]!;
   const birth = { key: "birthYear", label: "출생 연도", value: "1971년생" } as const;
   assert.equal(applyPersonaCardIdentityConfirm(`'${IDENTITY_DEMAND_PLAIN}'`, [name]), "'김하늘 님, 생년월일 불러주세요'");
@@ -164,7 +164,7 @@ test("[§92] 새 기관형 4종 — 부분 카드는 없는 항목만 묻는다(
   assert.ok(tax.includes("[미리 확보한 상대 정보]에도 없는 정보는"));
 });
 
-test("[§92] 자녀 납치 협박 — 카드가 있으면 자녀 이름을 먼저 대고(부르는 꼴) · 학원은 카드 값만 · 카드 밖 이름은 여전히 지어내지 않는다", () => {
+test("[§93] 자녀 납치 협박 — 카드가 있으면 자녀 이름을 먼저 대고(부르는 꼴) · 학원은 카드 값만 · 카드 밖 이름은 여전히 지어내지 않는다", () => {
   const vid = advancedVariants(KIDNAPPING)[0]!;
   const text = assembled(KIDNAPPING, vid, { personaCard: CARDS["child-threat"] });
   assert.ok(text.includes("'민준이 지금 여기 있습니다'"), "부르는 꼴(받침 → 이)");
@@ -188,7 +188,7 @@ test("[§92] 자녀 납치 협박 — 카드가 있으면 자녀 이름을 먼�
   assert.equal(spokenChildName("남궁민준"), "남궁민준이", "4자는 성을 떼지 않는다(리뷰 Minor 4 · 받침 → 이)");
 });
 
-test("[§92] 카드 없음 · 빈 배열이면 새 대상 6종 조립이 바이트 동일하다(카드 없을 때 = 지금처럼 묻기 · 이름을 먼저 말하지 않고 유도)", () => {
+test("[§93] 카드 없음 · 빈 배열이면 새 대상 6종 조립이 바이트 동일하다(카드 없을 때 = 지금처럼 묻기 · 이름을 먼저 말하지 않고 유도)", () => {
   for (const id of [...NEW_INSTITUTION, KIDNAPPING, REPUTATION]) {
     for (const vid of advancedVariants(id)) {
       const base = assembled(id, vid);
@@ -200,7 +200,7 @@ test("[§92] 카드 없음 · 빈 배열이면 새 대상 6종 조립이 바이�
   }
 });
 
-test("[§92] 블록 생성 — 기관형 정본 바이트 무변경 · 협박형은 자녀 행 유무로 순서 줄이 갈린다 · 가림 리터럴 0", (t) => {
+test("[§93] 블록 생성 — 기관형 정본 바이트 무변경 · 협박형은 자녀 행 유무로 순서 줄이 갈린다 · 가림 리터럴 0", (t) => {
   const identity = buildPersonaCardBlock(CARDS.identity)!;
   assert.equal(buildPersonaCardBlock(CARDS.identity, true), identity, "기본값 = 기관형");
   assert.ok(identity.startsWith(PERSONA_CARD_BLOCK_HEAD) && identity.includes(PERSONA_CARD_BLOCK_ORDER));
@@ -218,10 +218,10 @@ test("[§92] 블록 생성 — 기관형 정본 바이트 무변경 · 협박형
   // 역방향 — 협박형 시나리오에 기관형 블록을 실은 사본은 "확인하듯" · "맞으시죠?로 확인만"을 싣는다(위 조립 단언이 그것을 잡는다).
   const naive = buildPersonaCardBlock(CARDS["child-threat"], true)!;
   assert.ok(naive.includes("확인하듯") && naive.includes("확인만 받는다"), "역방향 사본이 기관형 문면을 싣지 않는다 — 검사가 무력하다");
-  t.diagnostic("[§92] 협박형 블록 = 기관형 확인 문면 0 · 기관형 블록 사본 → 확인 문면 검출(실패 확인)");
+  t.diagnostic("[§93] 협박형 블록 = 기관형 확인 문면 0 · 기관형 블록 사본 → 확인 문면 검출(실패 확인)");
 });
 
-test("[§92 · 카드 배송 흡수] 카드사 고급 변형 전부(흡수될 카드 배송 변형 포함 — 목록에서 자동으로 잡힌다)에서 '성함부터 불러주세요'가 이름 카드로 치환된다", (t) => {
+test("[§93 · 카드 배송 흡수] 카드사 고급 변형 전부(흡수될 카드 배송 변형 포함 — 목록에서 자동으로 잡힌다)에서 '성함부터 불러주세요'가 이름 카드로 치환된다", (t) => {
   // advanced-catalog-impl(2026-10-21 조기 통보): card-delivery-call은 card-company-impersonation 고급의 새 흐름 변형으로 흡수되고,
   // 그 변형의 신원 요구는 치환표에 이미 있는 "성함부터 불러주세요"로 맞춘다. 이 테스트는 변형 목록을 하드코딩하지 않으므로
   // 흡수 변형이 들어오면 그대로 검사 대상이 된다(문구가 다르면 아래 단언 중 "원천 존재" 또는 "치환 후 0"이 실패한다).

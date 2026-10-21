@@ -5,7 +5,7 @@
 // ⭐ 처음부터 펼쳐져 있고 모든 칸이 비어 있다(접기 토글 0 — OQ-U98). 경고 표현 · 필수 표시 0(전부 선택).
 // ⭐ UX D-133 (1) — 블록이 나타나는 순간(고급 × 대상 시나리오 선택 · send 화면 진입) 블록으로 스크롤한다(reduced-motion = 즉시).
 //    포커스는 옮기지 않고(키보드 팝업 0) 제목만 스크린리더에 읽힌다. "끝까지 스크롤해야 버튼 활성화" 방식은 쓰지 않는다.
-// ⭐ §92(UX D-135) — 카드 종류(`kind`)가 칸을 정한다: 기관형 = 이름 · 출생 연도 · 생일 · 사는 곳 / 본인 협박형 = + 하는 일 /
+// ⭐ §93(UX D-136) — 카드 종류(`kind`)가 칸을 정한다: 기관형 = 이름 · 출생 연도 · 생일 · 사는 곳 / 본인 협박형 = + 하는 일 /
 //    자녀 협박형 = 자녀 이름 · 자녀 학년 · 자녀가 다니는 학원만(자녀 칸은 자녀 납치 협박에만).
 import { useEffect, useId, useRef, useState } from "react";
 import {
@@ -25,7 +25,7 @@ import {
 
 type PersonaCardInputFieldsProps = {
   mode: "self" | "send";
-  /** §92 — 부재 = 기관형(종전 칸). */
+  /** §93 — 부재 = 기관형(종전 칸). */
   kind?: PersonaCardKind;
   value: PersonaCardForm;
   onChange: (next: PersonaCardForm) => void;

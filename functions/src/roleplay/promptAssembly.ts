@@ -773,7 +773,7 @@ function buildDifficultyBlock(
  * ⭐ §84.14.4 갱신 정본 — 원래 꼬리 첫 문장이던 이름 단정 금지 **예외 문장은 삭제됐다**: 대상 4종은 전부 institution이라
  * [진행 강제]에 그 금지 규칙이 없고, 예외 문장이 존재하지 않는 규칙을 가리키는 거짓 문장이 된다(kidnapping 제외 · DECISIONS #180).
  * 대상에 비-institution 시나리오가 들어오면 G569 가드가 실패한다(그때 예외 문장 재판정 — OQ-A147 계보).
- * ⭐ §92 재판정(2026-10-21) — 협박형 2종(anonymous)을 대상에 넣었다. 그 둘은 이 정본이 아니라 아래 협박형 블록을 받고, 이름 단정 금지
+ * ⭐ §93 재판정(2026-10-21) — 협박형 2종(anonymous)을 대상에 넣었다. 그 둘은 이 정본이 아니라 아래 협박형 블록을 받고, 이름 단정 금지
  * 문장은 `personaCardIdentity.ts`가 카드 있을 때만 "목록에 적힌 이름 말고는"으로 좁힌다. G569 가드는 "기관형 종류 ⇔ institution ·
  * 협박형 종류 ⇒ anonymous"(카탈로그 `PERSONA_CARD_KIND`)로 바뀌었다 — acquaintance(가족 · 지인 사칭)는 여전히 대상이 될 수 없다.
  */
@@ -786,7 +786,7 @@ export const PERSONA_CARD_BLOCK_TAIL = `목록에 없는 이름·나이·금액�
 // 요구 예시 자체는 `personaCardIdentity.ts`가 조립 결과에서 확인형으로 바꾼다(결정적 층 — 이 줄은 모델 지시 층).
 export const PERSONA_CARD_BLOCK_ORDER = `**순서**: 첫 마디에서 신분과 전화한 이유를 밝히고, 늦어도 상대의 첫 대답을 받은 바로 다음 차례까지 이 정보 가운데 이름·생년월일(목록에 있는 것)을 네가 먼저 말하고 "맞으시죠?"로 확인만 받는다. 이 목록에 있는 항목은 상대에게 불러 달라고 요구하지 않는다 — 위 페르소나·수법의 신원 요구 예시보다 이 줄이 우선하고, 요구는 목록에 없는 항목에만 한다. 상대가 의심한 뒤에야 꺼내지 않는다.`;
 
-// §92(2026-10-21 · 대상 확대 — 협박형 2종) — 신원을 밝히지 않는 협박범(identityCheckAllowed === false)의 블록. 기관형 문면의
+// §93(2026-10-21 · 대상 확대 — 협박형 2종) — 신원을 밝히지 않는 협박범(identityCheckAllowed === false)의 블록. 기관형 문면의
 // "확인하듯" · "맞으시죠?로 확인만 받는다"는 협박범 캐릭터를 깬다 ⇒ 머리 · 순서 · 꼬리를 협박형으로 둔다(기관형 정본은 바이트 무변경).
 // 순서 줄은 카드 행으로 갈린다: 자녀 행이 있으면 자녀용(자녀 납치) · 없으면 본인 신상용(불법업소 유포).
 // ⛔ 협박형도 위해 묘사 금지 · 대상 미특정 받아넘기기(시나리오 [캐릭터])는 그대로다 — 이 블록은 "누구를 아는지"만 바꾼다.
@@ -800,7 +800,7 @@ const CHILD_CARD_KEYS: readonly PersonaCardItem["key"][] = ["childName", "childG
 /**
  * 카드 행이 1개 이상일 때만 블록을 만든다(빈 배열 = 블록 0 — 부재와 같은 결과). 값은 프롬프트용 값(`personaCardPromptValue` —
  * 리뷰 M1: 블록 안 "○○" 리터럴 0)이다.
- * §92 — `identityCheckAllowed === false`(협박형 페르소나)면 협박형 머리 · 순서 · 꼬리. 부재 · true = 기관형 정본(바이트 무변경).
+ * §93 — `identityCheckAllowed === false`(협박형 페르소나)면 협박형 머리 · 순서 · 꼬리. 부재 · true = 기관형 정본(바이트 무변경).
  */
 export function buildPersonaCardBlock(items: readonly PersonaCardItem[], identityCheckAllowed = true): string | null {
   if (items.length === 0) return null;

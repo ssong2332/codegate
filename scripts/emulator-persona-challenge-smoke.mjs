@@ -14,11 +14,11 @@
 // (B) 빈 카드 챌린지: 카드 필드 0(챌린지 · 세션 · 리포트) · 프롬프트에 카드 블록 0 · 시나리오 프롬프트의 성함 · 생년월일 요구 문면 존재
 // (C) 폐기: 카드 챌린지를 동의 전에 deleteChallenge → status deleted · 카드 삭제
 // (D) 거부: 중급 + 카드 = persona-card-not-applicable · 규칙 밖 이름 = persona-card-invalid · 챌린지 문서 0
-//     §92 — 다른 종류의 칸(기관형에 자녀 이름 · 협박형에 다른 칸) = persona-card-not-applicable
-// (E) §92 자가 세션: createSession(고급 + personaCardInput) → 세션 문서 카드(v2 · self) → 프롬프트(카드 종류별 블록 · 요구 예시 0)
+//     §93 — 다른 종류의 칸(기관형에 자녀 이름 · 협박형에 다른 칸) = persona-card-not-applicable
+// (E) §93 자가 세션: createSession(고급 + personaCardInput) → 세션 문서 카드(v2 · self) → 프롬프트(카드 종류별 블록 · 요구 예시 0)
 //     ⭐ 고급 전용 2종(asset-protection-notice-call · prosecution-cooperation-call)은 챌린지를 만들 수 없어
 //        (A)~(D)를 건너뛰고 (E)만 돈다.
-// §92 대상 확대 — 카드 종류(기관형 · 본인 협박형 · 자녀 협박형)마다 입력 · 기대 값이 다르다(아래 CARD_BY_KIND).
+// §93 대상 확대 — 카드 종류(기관형 · 본인 협박형 · 자녀 협박형)마다 입력 · 기대 값이 다르다(아래 CARD_BY_KIND).
 import { writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -149,14 +149,14 @@ const values = (card) => (card?.items ?? []).map((i) => i.value);
 const sameValues = (card) => JSON.stringify(values(card)) === JSON.stringify(CARD_VALUES);
 
 function assemble(items) {
-  // §92 — 운영 호출부와 같은 판별자(identityCheckAllowed = asksIdentityCheck)를 넘긴다(협박형 블록 · 이름 단정 원문이 여기로 갈린다).
+  // §93 — 운영 호출부와 같은 판별자(identityCheckAllowed = asksIdentityCheck)를 넘긴다(협박형 블록 · 이름 단정 원문이 여기로 갈린다).
   return buildSystemPrompt(SCENARIO_PROMPTS[SCENARIO_ID], {
     difficultyLevel: "advanced",
     identityCheckAllowed: IDENTITY,
     personaCard: items,
   });
 }
-/** §92 — 카드가 있는 조립에서 "먼저 말하지 않고 묻기"의 원천이 남았는가(기관형 = 성함 요구 · 협박형 = 이름 단정 금지 원문). */
+/** §93 — 카드가 있는 조립에서 "먼저 말하지 않고 묻기"의 원천이 남았는가(기관형 = 성함 요구 · 협박형 = 이름 단정 금지 원문). */
 const demandLeft = (prompt) => (IDENTITY ? DEMAND_PATTERN.test(prompt) : prompt.includes(ANONYMOUS_NAME_CLAUSE));
 
 async function partA() {
@@ -219,7 +219,7 @@ async function partA() {
     await call("generateReport", { sessionId }, receiver.idToken);
     report = await fsRead(`reports/${sessionId}`);
   }
-  // §92 — 협박형은 교훈 문면 분기용 context(= 카드 종류) · 기관형은 부재.
+  // §93 — 협박형은 교훈 문면 분기용 context(= 카드 종류) · 기관형은 부재.
   const expectContext = KIND === "identity" ? undefined : KIND;
   check(
     "A",
@@ -260,7 +260,7 @@ async function partB() {
     const asks = ["성함", "생년월일"].filter((w) => prompt.includes(w));
     check("B", "4 시나리오 프롬프트에 성함 · 생년월일 요구 문면 존재", asks.length === 2, { found: asks });
   } else {
-    // §92 — 협박형 빈 카드 = 종전 그대로 "상대 이름을 먼저 말하지 않는다"(자녀 납치 = 이름을 먼저 말하게 유도).
+    // §93 — 협박형 빈 카드 = 종전 그대로 "상대 이름을 먼저 말하지 않는다"(자녀 납치 = 이름을 먼저 말하게 유도).
     check("B", "4 협박형 빈 카드 = 이름 단정 금지 원문 그대로", prompt.includes(ANONYMOUS_NAME_CLAUSE), {});
   }
 
@@ -308,7 +308,7 @@ async function partD() {
     sender.idToken,
   );
   check("D", "2 규칙 밖 이름 = invalid-argument · persona-card-invalid", !r2.ok && r2.status === "INVALID_ARGUMENT" && r2.details?.reason === "persona-card-invalid", { r2 });
-  // §92 — 대상이어도 다른 종류의 칸이면 거부(조용히 버리지 않는다).
+  // §93 — 대상이어도 다른 종류의 칸이면 거부(조용히 버리지 않는다).
   const r3 = await call(
     "createChallenge",
     { scenarioId: SCENARIO_ID, displayName: "E2E 다른 종류 칸", difficultyLevel: "advanced", personaCardInput: WRONG_KIND_INPUT },
