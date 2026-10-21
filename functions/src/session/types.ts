@@ -91,8 +91,10 @@ export type UpdateMessengerSkinResponse = {
 // --- requestEscalation (T30 · UX-022 명시 "전화로 확인" 버튼 · §13.3/AC-034) ---
 // 사용자가 언제든(1턴부터) 수동으로 메신저→보이스 전이를 요청한다. endSession/updateMessengerSkin과
 // 동일한 인증·존재확인·소유uid·상태 검증 패턴을 따른다(functions/src/session/index.ts 참고).
-export type RequestEscalationRequest = { sessionId: string };
-export type RequestEscalationResponse = { escalation: { toChannel: "voice" } };
+// 실기 신고 4(2026-10-21) — `via: "voice_talk"`(카톡형 프로필 시트 보이스톡): 통화로 이어지지 않는 카톡형 세션이면 전이 대신
+// 응답 없음(`{ voiceTalk: "unanswered", turnIndex }` — 남긴 메시지의 turnIndex)을 돌려준다(`voiceTalkUnanswered.ts`). 그 밖은 종전과 같다.
+export type RequestEscalationRequest = { sessionId: string; via?: "voice_talk" };
+export type RequestEscalationResponse = { escalation: { toChannel: "voice" } } | { voiceTalk: "unanswered"; turnIndex: number };
 
 // --- requestReverseEscalation (T40 fast-follow · UX-014 명시 "메시지로 전환" 버튼 · §13.1/AC-039) ---
 // 통화 중 사용자가 언제든 수동으로 보이스→메신저 전이를 요청한다. requestEscalation과 동일한
