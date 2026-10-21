@@ -107,6 +107,22 @@ export default function DifficultySelectPage() {
     if (showBurdenNotice) console.info(JSON.stringify({ event: "burden_notice_shown" }));
   }, [showBurdenNotice]);
 
+  // UX D-141 (3) — 시트가 올라와 방금 고른 판을 가리면, 그 판이 시트 위로 보이게 그만큼만 내린다(시안 한계
+  // "390폭에서 시트가 3번째 판을 가림" 해소). 시트 등장(320ms)이 끝난 뒤 잰다. reduced-motion이면 즉시 이동.
+  useEffect(() => {
+    if (!selected) return;
+    const timer = window.setTimeout(() => {
+      const panel = document.querySelector<HTMLElement>(`[data-panel-key="${selected}"]`);
+      const sheet = document.querySelector<HTMLElement>('section[aria-label="고른 난이도"]');
+      if (!panel || !sheet) return;
+      const overlap = panel.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top;
+      if (overlap <= 0) return;
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      window.scrollBy({ top: overlap + 12, behavior: reduced ? "auto" : "smooth" });
+    }, 340);
+    return () => window.clearTimeout(timer);
+  }, [selected]);
+
   const handleSelect = (level: DifficultyLevel) => {
     setSelected(level);
     // 난이도를 바꾸면 열려 있던 초급 브리핑은 접는다(다른 난이도에는 해당 없는 정보).
