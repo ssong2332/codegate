@@ -107,6 +107,8 @@ const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   "DeviceSkinPicker.tsx": false, // T190-6 세션 전 화면 모양 선택 줄 — 앱 자신의 설정 부품, 사기 표면 아님
   "DrilldownOptionCard.tsx": false, // 드릴다운 선택 카드
   "EndTrainingButton.tsx": false, // 상시 종료 버튼
+  "LegalDocumentView.tsx": false, // 법적 고지 화면 틀(2026-10-21) — 앱 자신의 처리방침 · 약관, 사기 표면 아님
+  "LegalLinks.tsx": false, // 법적 고지 하단 링크(2026-10-21) — 앱 자신의 고지 링크, 사기 표면 아님
   "MessengerStartNotice.tsx": false, // 세션 전 시작 고지(UX-022 start-notice, T187) — 앱 자신의 고지, 사기 표면 아님
   "PersonaCardInputFields.tsx": false, // §88 UX D-131 "내 정보" 선택 입력(세션 전 앱 화면) — 앱 자신의 안내 · 입력 칸, 사기 표면 아님
   "PhoneIcon.tsx": false, // T190-1 단색 라인 아이콘(장식 SVG · 텍스트 노드 0) — 문구가 없어 사기 표면이 아니다

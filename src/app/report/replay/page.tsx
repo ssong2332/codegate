@@ -19,7 +19,7 @@ import { db } from "@/lib/firebase";
 import { scenarios } from "@/content/scenarios";
 import { setChallengeResultSharing } from "@/lib/api";
 import { getChallengeToken } from "@/lib/recording";
-import { Badge, Button } from "@/components/ui";
+import { Badge, Button, LoadingStatus } from "@/components/ui";
 import {
   buildReplayTimeline,
   getAnnotatedTurnIndexes,
@@ -32,6 +32,7 @@ import {
 } from "@/lib/replay/buildReplayTimeline";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
+import { readRiskSignals, riskSignalCopy, RISK_SIGNAL_HEADING, type RiskSignalView } from "@/lib/report/riskSignalCopy";
 import {
   countReplaySignalCards,
   replayNavEmptyText,
@@ -76,6 +77,8 @@ export default function ReplayPage() {
   const [callerLabel, setCallerLabel] = useState<string>("상대방");
   // T194-b(UX-018 v1.38 ① · §84.3.7) — 사기범이 카드 값을 처음 말한 줄의 turnIndex(리포트 `personaBlock` 앵커 · 기록 없으면 null).
   const [personaAnchor, setPersonaAnchor] = useState<number | null>(null);
+  // 사용자 결정 2026-10-21 ② — 위험 신호(참가자 줄 turnIndex → 항목). 부재 = 빈 배열.
+  const [riskSignals, setRiskSignals] = useState<RiskSignalView[]>([]);
   // UX D-133 (5) — 챌린지 수신 세션 + 보낸 분이 넣은 카드일 때만(통화 뒤라 숨길 이유가 없다 · 카드 없으면 null).
   const [senderPersona, setSenderPersona] = useState<ReplaySenderPersonaView | null>(null);
   // 스텝 내비게이션(P-13) — 주석이 달린 항목 중 현재 위치(-1=아직 이동 안 함).
@@ -178,6 +181,7 @@ export default function ReplayPage() {
       callerLabel: scenario?.callerLabel ?? "상대방",
       challenge: challengeContext,
       personaAnchor: personaReplayAnchor(readPersonaBlock(reportData.personaBlock)),
+      riskSignals: readRiskSignals(reportData.riskSignals),
       senderPersona: readReplaySenderPersona(sessionData.personaCard, challengeContext !== null),
     };
   }, []);
@@ -199,6 +203,7 @@ export default function ReplayPage() {
         setCallerLabel(result.callerLabel);
         setChallenge(result.challenge);
         setPersonaAnchor(result.personaAnchor);
+        setRiskSignals(result.riskSignals);
         setSenderPersona(result.senderPersona);
         setStepPos(-1);
         setState("loaded");
@@ -305,6 +310,7 @@ export default function ReplayPage() {
         setCallerLabel(result.callerLabel);
         setChallenge(result.challenge);
         setPersonaAnchor(result.personaAnchor);
+        setRiskSignals(result.riskSignals);
         setSenderPersona(result.senderPersona);
         setStepPos(-1);
         setState("loaded");
@@ -340,13 +346,7 @@ export default function ReplayPage() {
   if (state === "loading") {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-ink" role="status">
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-          />
-          대화 되짚어보기를 준비하는 중입니다...
-        </p>
+        <LoadingStatus label="대화 되짚어보기를 준비하는 중입니다" />
       </main>
     );
   }
@@ -588,6 +588,27 @@ export default function ReplayPage() {
                   <p className="text-[15px] leading-[1.6] text-ink">{PERSONA_REPLAY_NOTE}.</p>
                 </div>
               )}
+              {/* 사용자 결정 2026-10-21 ② — 속음은 아니지만 위험했던 참가자 줄. 소제목이 속은 순간 카드와 달라 카드 수(`countSignalCards`)에
+                  들지 않고, 속은 순간이 아니므로 되감기 버튼 0(D-51). */}
+              {item.role === "user" &&
+                riskSignals
+                  .filter((signal) => signal.turnIndex === item.turnIndex)
+                  .map((signal) => {
+                    const copy = riskSignalCopy(signal.kind);
+                    return (
+                      <div
+                        key={signal.kind}
+                        role="note"
+                        className="mt-2 rounded-[8px] border border-caution/30 bg-caution-tint p-3.5"
+                      >
+                        <p className="mb-1.5 text-[15px] font-bold text-caution">{RISK_SIGNAL_HEADING}</p>
+                        <p className="text-[15px] leading-[1.6] text-ink">
+                          {signal.timeLabel}: {copy.title}
+                        </p>
+                        <p className="mt-1 text-[15px] leading-[1.6] text-ink-sub">{copy.explanation}</p>
+                      </div>
+                    );
+                  })}
             </li>
           );
         })}

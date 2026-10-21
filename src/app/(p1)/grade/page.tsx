@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useCurrentUser } from "@/lib/auth";
+import { LoadingStatus } from "@/components/ui";
 
 type PageState = "loading" | "empty" | "error" | "success";
 
@@ -76,13 +77,7 @@ export default function GradePage() {
       <h1 className="text-2xl font-bold">방어 등급</h1>
 
       {state === "loading" && (
-        <p className="flex items-center gap-2 text-lg" role="status">
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-          />
-          등급을 불러오는 중입니다...
-        </p>
+        <LoadingStatus label="등급을 불러오는 중입니다" />
       )}
 
       {state === "empty" && (

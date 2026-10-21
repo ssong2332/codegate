@@ -52,6 +52,15 @@ test("[T190/G457] globals.css에서 animation을 가진 클래스는 전부 redu
   assert.deepEqual(reducedMotionViolations(css), []);
 });
 
+// UX D-134 — 사이트 모션은 globals.css와 나눈 motion.css에 있다. 같은 규칙(reduced-motion이면 0 모션)을 그 파일에도 건다.
+test("[D-134/G457] motion.css에서 animation을 가진 클래스도 전부 reduced-motion에서 꺼진다", (t) => {
+  const motionCss = readFileSync("src/app/motion.css", "utf8");
+  const animated = animatedClasses(motionCss);
+  t.diagnostic(`[G457 · motion.css] 애니메이션 클래스 ${animated.length}개: ${animated.join(", ")}`);
+  assert.ok(animated.includes("page-enter") && animated.includes("loading-dot") && animated.includes("check-pop"), "파서가 motion.css의 클래스를 못 찾았다");
+  assert.deepEqual(reducedMotionViolations(motionCss), []);
+});
+
 test("[T190/G457 역검증] reduced-motion 블록에 없는 새 애니메이션 클래스를 넣은 사본은 실패한다", () => {
   const poisoned = `${css}\n.zz-new-anim {\n  animation: call-ring-pulse 2s infinite;\n}\n`;
   assert.deepEqual(reducedMotionViolations(poisoned), ["zz-new-anim"]);

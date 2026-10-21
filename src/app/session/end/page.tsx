@@ -18,7 +18,7 @@ import { db } from "@/lib/firebase";
 import { endSession } from "@/lib/api";
 import type { EndSessionReason } from "@/lib/api/types";
 import { clearPendingEndReason, clearPendingSession, getPendingSessionId, peekPendingEndReason } from "@/lib/recording";
-import { Button } from "@/components/ui";
+import { Button, LoadingStatus } from "@/components/ui";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { POST_SESSION_FACT_DISCLOSURE } from "@/lib/sessionboundary/postSessionCopy";
 
@@ -215,13 +215,7 @@ export default function SessionEndPage() {
     );
   } else if (state === "ending") {
     body = (
-      <p className="flex items-center gap-2 text-lg text-ink" role="status">
-        <span
-          aria-hidden="true"
-          className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-        />
-        훈련 자료를 정리하고 리포트를 준비하는 중입니다...
-      </p>
+      <LoadingStatus label="훈련 자료를 정리하고 리포트를 준비하는 중입니다" />
     );
   } else if (state === "error") {
     body = (

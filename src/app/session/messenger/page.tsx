@@ -52,7 +52,7 @@ import PhoneIcon from "@/components/PhoneIcon";
 import EndTrainingButton from "@/components/EndTrainingButton";
 import MessengerFakeLanding from "@/components/MessengerFakeLanding";
 import MessengerStartNotice from "@/components/MessengerStartNotice";
-import { Button } from "@/components/ui";
+import { Button, LoadingStatus } from "@/components/ui";
 import { foldDegraded, DIALOGUE_DEGRADED_NOTICE } from "@/lib/report/degradedDisclosure";
 import { CALL_SEGMENT_ICON, CALL_SEGMENT_LINE, foldCallSegments } from "@/lib/messenger/threadItems";
 import {
@@ -413,13 +413,7 @@ export default function MessengerSessionPage() {
   if (pageState !== "ready" || !scenario || startNotice === "pending") {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-ink" role="status">
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-          />
-          채팅을 불러오는 중입니다...
-        </p>
+        <LoadingStatus label="채팅을 불러오는 중입니다" />
       </main>
     );
   }

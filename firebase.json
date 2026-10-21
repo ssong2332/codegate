@@ -6,6 +6,17 @@
     "trailingSlash": false,
     "headers": [
       {
+        "source": "**",
+        "headers": [
+          { "key": "X-Content-Type-Options", "value": "nosniff" },
+          { "key": "X-Frame-Options", "value": "DENY" },
+          { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+          { "key": "Permissions-Policy", "value": "microphone=(self), camera=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=(), browsing-topics=()" },
+          { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" },
+          { "key": "Content-Security-Policy-Report-Only", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https://*.googleusercontent.com https://firebasestorage.googleapis.com; media-src 'self' data: blob: https://firebasestorage.googleapis.com; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://apis.google.com https://firestore.googleapis.com https://firebasestorage.googleapis.com https://*.cloudfunctions.net https://*.run.app https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://*.elevenlabs.io wss://*.elevenlabs.io; frame-src 'self' https://voicefishing-ff47f.firebaseapp.com https://accounts.google.com https://apis.google.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" }
+        ]
+      },
+      {
         "source": "/",
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       },
@@ -20,12 +31,6 @@
       {
         "source": "/_next/static/**",
         "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
-      }
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/404.html"
       }
     ]
   },

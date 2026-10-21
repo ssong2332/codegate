@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/auth";
 import { fetchReportHistory, mapReportsToHistoryItems, type HistoryListItem } from "@/lib/history";
+import { LoadingStatus } from "@/components/ui";
 
 type PageState = "loading" | "error" | "empty" | "success";
 
@@ -65,13 +66,7 @@ export default function HistoryPage() {
   if (state === "loading") {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 p-8 text-center">
-        <p className="flex items-center gap-2 text-lg" role="status">
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-          />
-          히스토리를 불러오는 중입니다...
-        </p>
+        <LoadingStatus label="히스토리를 불러오는 중입니다" />
       </main>
     );
   }

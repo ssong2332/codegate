@@ -15,7 +15,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCurrentUser } from "./useCurrentUser";
-import { isAnonymousOutsideRecipientFlow } from "./anonymousScope";
+import { isAnonymousOutsideRecipientFlow, LEGAL_PATHS } from "./anonymousScope";
 import { useAuthInvalidation } from "@/lib/authinvalidation";
 import AuthInvalidationBanner from "@/components/AuthInvalidationBanner";
 
@@ -29,7 +29,8 @@ import AuthInvalidationBanner from "@/components/AuthInvalidationBanner";
 // 화면)에서는 /login으로 보낸다 — 서버가 익명을 거부하므로(T176) 그대로 두면 막다른 일반 오류가 된다.
 // 경로 목록·판정은 `anonymousScope.ts`에 있다.
 // §89.4(시안 A 1번 화면) — "/"는 읽기 전용 소개(Firestore · Functions 호출 0 — 게이트 조회는 로그인 사용자일 때만)라 공개한다.
-const PUBLIC_PATHS = ["/", "/login", "/challenge/join"];
+// 외부 점검 2026-10-21 — 법적 고지 화면(LEGAL_PATHS)도 공개한다(읽기 전용).
+const PUBLIC_PATHS = ["/", "/login", "/challenge/join", ...LEGAL_PATHS];
 // 재로그인(유효 세션 보유) 시 UX-013을 건너뛰고 다음 화면으로 직행(UX.md UX-013 Alternative Flow (a)).
 const POST_LOGIN_PATH = "/onboarding/consent";
 
