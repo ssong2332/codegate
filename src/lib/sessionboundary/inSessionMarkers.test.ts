@@ -55,6 +55,8 @@ const SESSION_SURFACE_REGISTRY: Record<string, SurfaceRole> = {
   "src/components/DrilldownOptionCard.tsx": "not-in-session", // 시나리오 드릴다운 카드(세션 전)
   "src/components/EndTrainingButton.tsx": "in-session", // 상시 종료(AC-006) — 세션 중 유일한 상시 요소
   "src/components/InCallSmsOverlay.tsx": "in-session", // UX-027 통화 중 문자함
+  "src/components/LegalDocumentView.tsx": "not-in-session", // 법적 고지 화면 틀(2026-10-21 — 세션 밖 공개 화면)
+  "src/components/LegalLinks.tsx": "not-in-session", // 첫 화면 · 로그인 · 고지 화면 하단 링크(세션 밖)
   "src/components/MessengerFakeLanding.tsx": "in-session", // UX-023 가짜 랜딩
   "src/components/MessengerStartNotice.tsx": "pre-session", // UX-022 start-notice(T187)
   "src/components/PersonaCardInputFields.tsx": "not-in-session", // §88 UX D-131 "내 정보" 선택 입력(난이도 · 챌린지 만들기 — 세션 전)
@@ -88,8 +90,8 @@ function registryMismatch(registry: Record<string, SurfaceRole>): { missing: str
 test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/session/*/page.tsx (등록 없이 우회 불가)", () => {
   assert.deepEqual(registryMismatch(SESSION_SURFACE_REGISTRY), { missing: [], stale: [] });
   // T190-1(docs/Architecture.md §74.22 (4) #21 단계별 누적) — 15 → 16(+PhoneIcon) → T190-6 17(+DeviceSkinPicker) →
-  // T190-8b 18(+CallStartNotice) → 2026-10-18 19(+AudioDebugPanel) → §88 20(+PersonaCardInputFields).
-  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 20);
+  // T190-8b 18(+CallStartNotice) → 2026-10-18 19(+AudioDebugPanel) → §88 20(+PersonaCardInputFields) → 2026-10-21 22(+LegalDocumentView · LegalLinks — 법적 고지).
+  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 22);
 });
 
 // ── G451 — 등록부 2벌(G436 · T86)이 최상위 `src/components/*.tsx`만 훑으므로, 하위 디렉터리에 컴포넌트를 두면
