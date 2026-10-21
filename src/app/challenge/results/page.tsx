@@ -105,7 +105,7 @@ export default function ChallengeResultsPage() {
 
   if (state === "loading") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <LoadingStatus label="내 챌린지를 불러오는 중입니다" />
       </main>
     );
@@ -113,7 +113,7 @@ export default function ChallengeResultsPage() {
 
   if (state === "error") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>내 챌린지를 불러오지 못했습니다. 다시 시도해 주세요.</span>
@@ -129,7 +129,7 @@ export default function ChallengeResultsPage() {
 
   if (state === "empty") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <h1 className="text-2xl font-bold text-ink">내 챌린지</h1>
         <p className="text-lg text-ink-sub">아직 만든 챌린지가 없습니다.</p>
         <div className="w-full max-w-xs">
@@ -142,7 +142,7 @@ export default function ChallengeResultsPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-page p-6 lg:max-w-3xl">
+    <main className="mx-auto flex min-h-dvh max-w-xl flex-col gap-6 bg-page p-6 lg:max-w-3xl">
       <header className="flex flex-col gap-2 pt-2">
         <h1 className="text-2xl font-bold text-ink">내 챌린지</h1>
         <p className="text-base leading-relaxed text-ink-sub">

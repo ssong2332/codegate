@@ -482,6 +482,12 @@ export const MESSENGER_CHAT_TOKENS = {
   sendBg: ESTIMATED_DEVICE_COLORS.messengerOutgoingBg,
   sendIcon: "#1B1B1F",
   systemLineBg: "rgba(0,0,0,0.10)",
+  /** §95(UX D-138) — 친구가 아닌 상대 안내 띠(대화 맨 위 · 실제 앱 요소 근사 — 문면 · 색 추정). */
+  nonFriendBg: "#FFFFFF",
+  nonFriendText: "#33404D",
+  /** §95 — 상대 프로필 시트(전체 화면 · 단색 바탕 · 자체 실루엣). */
+  profileSheetBg: "#56667A",
+  profileSheetText: "#FFFFFF",
 } as const;
 
 // ── WCAG 대비 계산(G456) ────────────────────────────────────────────────────────────
@@ -648,6 +654,8 @@ export function messengerChatPairs(): ContrastPair[] {
     { name: "chat.fieldBorder", fg: t.fieldBorder, bg: t.inputBarBg, kind: "nonText" },
     { name: "chat.placeholder", fg: t.placeholder, bg: t.fieldBg, kind: "text" },
     { name: "chat.sendIcon", fg: t.sendIcon, bg: t.sendBg, kind: "nonText" },
+    { name: "chat.nonFriend", fg: t.nonFriendText, bg: t.nonFriendBg, kind: "text" },
+    { name: "chat.profileSheet", fg: t.profileSheetText, bg: t.profileSheetBg, kind: "text" },
   ];
 }
 

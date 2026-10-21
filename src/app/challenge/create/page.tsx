@@ -216,7 +216,7 @@ export default function ChallengeCreatePage() {
 
   if (state === "no-scenario") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>시나리오 정보를 찾을 수 없습니다. 시나리오 선택부터 다시 시작해 주세요.</span>
@@ -232,7 +232,7 @@ export default function ChallengeCreatePage() {
 
   if (state === "error-cap") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>
@@ -254,7 +254,7 @@ export default function ChallengeCreatePage() {
 
   if (state === "error-clone") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>먼저 본인 목소리 클론을 완료해 주세요.</span>
@@ -270,7 +270,7 @@ export default function ChallengeCreatePage() {
 
   if (state === "error-advanced-only") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>{ADVANCED_ONLY_NOT_CHALLENGEABLE_LINE}</span>
@@ -286,7 +286,7 @@ export default function ChallengeCreatePage() {
 
   if (state === "error-escalation") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>이 시나리오는 아직 지인에게 보내는 챌린지를 지원하지 않습니다. 다른 시나리오를 선택해 주세요.</span>
@@ -304,7 +304,7 @@ export default function ChallengeCreatePage() {
     const canNativeShare = typeof navigator !== "undefined" && "share" in navigator;
     const isCopied = copyLabel === "복사됨";
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col gap-6 bg-page p-6">
+      <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-6 bg-page p-6">
         <header className="flex flex-col gap-2 pt-2">
           <h1 className="text-2xl font-bold text-ink">챌린지가 만들어졌습니다</h1>
           <p className="text-lg leading-relaxed text-ink-sub">
@@ -386,7 +386,7 @@ export default function ChallengeCreatePage() {
   // 재시도 안내로 얹는다(P-4, ScenarioListView의 sticky CTA + 에러 문구 패턴과 동일).
   // `w-full` — 난이도 화면과 같은 폭 규칙(내용 길이에 따라 폭이 바뀌지 않게, 2026-10-21 실기 신고).
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col gap-6 bg-page p-6">
+    <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-6 bg-page p-6">
       <header className="flex flex-col gap-2 pt-2">
         <button
           type="button"

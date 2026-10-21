@@ -21,5 +21,9 @@ export const messengerChildImpersonationKakaoScenario: ScenarioDoc = {
   callerLabel: "010-4471-2298",
   channel: "messenger",
   surface: "kakao",
+  // §95(UX D-138 · 실기 신고 11) — 카톡형 대화방에 번호 대신 보이는 상대 이름. "친구 폰을 빌려 보낸다"는 첫 말과 맞게
+  // 빌린 폰 주인의 이름처럼 보이는 평범한 이름(성별 단서 없음 — 이 시나리오는 아들/딸이 정해지지 않는다). 실존 인물 아님.
+  chatDisplayName: "이지수",
+  chatNonFriend: true,
   escalation: { toChannel: "voice", voiceMode: "clone" },
 };

@@ -73,7 +73,7 @@ export default function GradePage() {
   const handleRetrain = () => router.push("/scenarios");
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-6 p-8 text-center">
+    <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-6 p-8 text-center">
       <h1 className="text-2xl font-bold">방어 등급</h1>
 
       {state === "loading" && (

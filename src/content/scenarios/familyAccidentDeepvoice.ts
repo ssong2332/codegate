@@ -44,6 +44,11 @@ export type ScenarioDoc = {
   callerLabel: string;
   channel?: Channel; // 부재="voice"(하위호환)
   surface?: MessengerSurface; // channel="messenger"일 때만
+  // §95(UX D-138) — 카톡형(surface "kakao") 대화방 머리줄 · 말풍선 · 프로필 시트의 상대 이름. 부재 = callerLabel(번호).
+  // ⚠️ 통화 화면 · 전이 연출 · 문자형은 callerLabel 그대로다(전화는 번호로 온다).
+  chatDisplayName?: string;
+  // §95 — 상대가 내 친구 목록에 없다(대화 맨 위 안내 띠). 화면 표시값일 뿐 수법 · 판정에 쓰지 않는다.
+  chatNonFriend?: true;
   escalation?: EscalationConfig; // 메신저→보이스 전이 가능한 시나리오만(AC-046)
   // T194-a(Architecture.md §84.4.1 · PRD AC-106 (i)) — 고급 세션에서만 통화로 이어지는 시나리오의 전이 설정.
   // ⛔ 화면이 이 필드를 직접 읽지 않는다 — (시나리오 × 난이도) 술어 `resolveScenarioEscalation`(./escalation.ts)만 쓴다.

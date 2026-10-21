@@ -218,7 +218,7 @@ export default function DifficultySelectPage() {
   // 시나리오 맥락이 없으면(직접 URL 진입·세션스토리지 소실) 시나리오 선택부터 다시 시작한다.
   if (!scenarioId || !scenario) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>시나리오 정보를 찾을 수 없습니다. 시나리오 선택부터 다시 시작해 주세요.</span>
@@ -240,7 +240,7 @@ export default function DifficultySelectPage() {
   return (
     // 실기 신고(2026-10-21) — `w-full`: body가 flex 열이라 `mx-auto`만 있으면 폭이 내용 길이를 따라간다. 난이도와
     // 펼침 블록(고급 고지 · 내 정보)에 상관없이 max-w 안에서 늘 같은 폭이 되게 고정한다(스크롤바 폭은 globals.css).
-    <main className="drilldown-step mx-auto flex min-h-screen w-full max-w-xl flex-col gap-6 p-6 pb-28 lg:max-w-3xl xl:max-w-5xl">
+    <main className="drilldown-step mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-6 p-6 pb-28 lg:max-w-3xl xl:max-w-5xl">
       <header className="flex flex-col gap-2 pt-2">
         <button
           type="button"

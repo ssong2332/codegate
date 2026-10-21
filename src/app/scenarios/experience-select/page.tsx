@@ -35,7 +35,7 @@ export default function ExperienceSelectPage() {
 
   if (!trainingType) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+      <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">
           <span aria-hidden="true">⚠</span>
           <span>훈련 유형을 먼저 선택해 주세요.</span>
@@ -70,7 +70,7 @@ export default function ExperienceSelectPage() {
   };
 
   return (
-    <main className="drilldown-step mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-6">
+    <main className="drilldown-step mx-auto flex min-h-dvh max-w-xl flex-col gap-6 p-6">
       <header className="flex flex-col gap-2 pt-2">
         <button
           type="button"

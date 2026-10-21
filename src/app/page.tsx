@@ -61,7 +61,7 @@ export default function Home() {
   // §89.4 · UX D-132 (4) — 시안 A 1번 화면(소개). "/"를 공개 경로로 두어 비로그인 사용자가 로그인 전에 무엇을 ·
   // 어떻게 · 안전한지 세 가지를 먼저 본다. 읽기 전용 — Firestore · Functions 호출 0.
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col bg-page">
+    <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-page">
       <header className="flex min-h-[56px] items-center gap-2 border-b border-line bg-surface px-4">
         <LineIcon name="shield" className="text-brand" />
         <p className="text-[18px] font-bold text-ink">금융사기 예방 훈련</p>
