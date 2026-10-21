@@ -27,6 +27,12 @@ export const ANONYMOUS_RECIPIENT_PATHS = [
 ] as const;
 
 /**
+ * 법적 고지 화면(개인정보처리방침 · 이용약관 · 문의) — 외부 점검 2026-10-21 대응. 읽기 전용(Firestore · Functions 호출 0)이라
+ * 미인증 · 익명 · 로그인 사용자 누구나 열 수 있어야 한다(받는 분이 동의 전에 처리방침을 읽을 수 있어야 한다).
+ */
+export const LEGAL_PATHS = ["/privacy", "/terms", "/contact"] as const;
+
+/**
  * 익명 사용자가 /login에 왔을 때 보이는 안내(User 확정 문구 2026-10-17).
  * OQ-U53(User 결정 ⓑ, 2026-10-17) — 셋째 문장을 덧붙였다. Google 로그인은 익명 uid를 교체하므로
  * 방금 본 챌린지 리포트·리플레이·되감기에 다시 닿을 수 없다는 것을 로그인 **전에** 알린다.
@@ -41,5 +47,6 @@ export const ANONYMOUS_LOGIN_NOTICE =
 export function isAnonymousOutsideRecipientFlow(isAnonymous: boolean, pathname: string): boolean {
   if (!isAnonymous) return false;
   if (pathname === "/login") return false;
+  if ((LEGAL_PATHS as readonly string[]).includes(pathname)) return false;
   return !(ANONYMOUS_RECIPIENT_PATHS as readonly string[]).includes(pathname);
 }

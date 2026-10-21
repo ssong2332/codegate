@@ -5,6 +5,7 @@
 // States/Failure 스펙을 그대로 따른다: Loading(버튼 비활성+스피너) / Error(취소·팝업차단·
 // 네트워크 구분 안내 + 다시 시도) / Success(RouteGuard가 다음 화면으로 이동).
 import { LineIcon } from "@/components/ui";
+import LegalLinks from "@/components/LegalLinks";
 import { useEffect, useRef, useState } from "react";
 import { getRedirectResult } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -225,6 +226,8 @@ export default function LoginPage() {
           <span>{errorMessage}</span>
         </p>
       )}
+
+      <LegalLinks className="mt-6" />
     </main>
   );
 }
