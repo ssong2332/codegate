@@ -67,7 +67,7 @@ test("[T190-6b/AC-092 (d) · AC-031 읽기 고지] 세션 중 화면에 스킨 �
 
 test("[T190-6b 역검증 — AC-092 (g)ⓐ] 세션 중 채팅에 전환 칩을 되살린 사본은 실패한다", () => {
   const messenger = read(MESSENGER);
-  const anchor = messenger.lastIndexOf("<EndTrainingButton onClick={handleEndTraining} />");
+  const anchor = messenger.lastIndexOf("<EndTrainingButton onClick={handleEndTraining} compact={!isSms} />"); // §95 — 카톡형 작은 모양 prop
   assert.ok(anchor > 0, "오염 지점을 찾지 못했다");
   const poisoned =
     messenger.slice(0, anchor) +
