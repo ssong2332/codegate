@@ -60,7 +60,7 @@ import { transitionChannel } from "../session/channelTransition";
 import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
 import { wasTurnInstructionSpoken } from "./announceMarking";
 import { extractEscalationSignal } from "./escalationSignal";
-import { ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall } from "./escalatedCall";
+import { callPhaseMockTacticHints, ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall } from "./escalatedCall";
 import { isFirstUserTurn } from "./firstTurn";
 import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
@@ -530,7 +530,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         hangupMode,
       }),
       messages: llmHistory,
-      mockTacticHints: scenarioPrompt.weakenedTactics,
+      // 2026-10-21 — 에스컬레이션 뒤 통화에서는 채팅 단계 전용 수법("통화가 안 돼")을 Mock 대사 원천에서 뺀다(`escalatedCall.ts` 판정표).
+      mockTacticHints: callPhaseMockTacticHints(scenarioPrompt.weakenedTactics, escalatedCall),
     });
     // 몇 단계 공급자가 응답했는지(2026-10-18 Groq 3차 예비, Architecture.md §75.7) — 라이브 로그로
     // 1차 Gemini / 2차 Gemini 대체 / 3차 Groq / Mock 강등 비율을 읽는다. 숫자·ID·단계명만(G170).
