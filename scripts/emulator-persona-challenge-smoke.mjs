@@ -14,6 +14,11 @@
 // (B) 빈 카드 챌린지: 카드 필드 0(챌린지 · 세션 · 리포트) · 프롬프트에 카드 블록 0 · 시나리오 프롬프트의 성함 · 생년월일 요구 문면 존재
 // (C) 폐기: 카드 챌린지를 동의 전에 deleteChallenge → status deleted · 카드 삭제
 // (D) 거부: 중급 + 카드 = persona-card-not-applicable · 규칙 밖 이름 = persona-card-invalid · 챌린지 문서 0
+//     §93 — 다른 종류의 칸(기관형에 자녀 이름 · 협박형에 다른 칸) = persona-card-not-applicable
+// (E) §93 자가 세션: createSession(고급 + personaCardInput) → 세션 문서 카드(v2 · self) → 프롬프트(카드 종류별 블록 · 요구 예시 0)
+//     ⭐ 고급 전용 2종(asset-protection-notice-call · prosecution-cooperation-call)은 챌린지를 만들 수 없어
+//        (A)~(D)를 건너뛰고 (E)만 돈다.
+// §93 대상 확대 — 카드 종류(기관형 · 본인 협박형 · 자녀 협박형)마다 입력 · 기대 값이 다르다(아래 CARD_BY_KIND).
 import { writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -35,11 +40,34 @@ const SCENARIO_ID = argVal("--scenario", "card-company-impersonation");
 // 프롬프트 조립은 서버와 같은 컴파일 산출물을 쓴다(G568 — 텍스트 턴 호출부가 넘기는 값 = 세션 문서 personaCard.items).
 const require = createRequire(import.meta.url);
 const LIB = join(dirname(fileURLToPath(import.meta.url)), "..", "functions", "lib");
-const { buildSystemPrompt, PERSONA_CARD_BLOCK_HEAD } = require(join(LIB, "roleplay", "promptAssembly.js"));
+const { buildSystemPrompt, PERSONA_CARD_BLOCK_HEAD, PERSONA_CARD_BLOCK_HEAD_THREAT } = require(join(LIB, "roleplay", "promptAssembly.js"));
 const { SCENARIO_PROMPTS } = require(join(LIB, "scenarios", "index.js"));
+const { asksIdentityCheck } = require(join(LIB, "roleplay", "personaAuthority.js"));
+const { personaCardKind } = require(join(LIB, "scenarios", "personaCardCatalog.js"));
+const { ANONYMOUS_NAME_CLAUSE } = require(join(LIB, "roleplay", "personaCardIdentity.js"));
 
-const CARD_INPUT = { name: "김가상", birthYear: 1961, region: "부산광역시" };
-const CARD_VALUES = ["김가상", "1961년생", "부산광역시"];
+const KIND = personaCardKind(SCENARIO_ID);
+if (!KIND) throw new Error(`카드 대상 시나리오가 아니다: ${SCENARIO_ID}`);
+const ADVANCED_ONLY = ["card-delivery-call", "asset-protection-notice-call", "prosecution-cooperation-call"].includes(SCENARIO_ID);
+const IDENTITY = asksIdentityCheck(SCENARIO_ID);
+const CARD_BY_KIND = {
+  identity: { input: { name: "김가상", birthYear: 1961, region: "부산광역시" }, values: ["김가상", "1961년생", "부산광역시"] },
+  "self-threat": {
+    input: { name: "김가상", birthYear: 1961, region: "부산광역시", job: "회사원" },
+    values: ["김가상", "1961년생", "부산광역시", "회사원"],
+  },
+  "child-threat": {
+    input: { childName: "김민준", childGrade: "초등학교 3학년", childAcademy: "영어학원" },
+    values: ["김민준", "초등학교 3학년", "영어학원"],
+  },
+};
+const CARD_INPUT = CARD_BY_KIND[KIND].input;
+const CARD_VALUES = CARD_BY_KIND[KIND].values;
+/** 다른 종류의 칸(서버 = not-applicable). */
+const WRONG_KIND_INPUT = KIND === "child-threat" ? { name: "김가상" } : { childName: "김민준" };
+const BLOCK_HEAD = IDENTITY ? PERSONA_CARD_BLOCK_HEAD : PERSONA_CARD_BLOCK_HEAD_THREAT;
+/** 카드가 있으면 사라져야 하는 원천(기관형 = 성함 요구 예시 · 협박형 = 이름 단정 금지 원문). */
+const DEMAND_PATTERN = /성함(이랑 (생년월일|주소))?(부터)? 불러주/;
 
 async function signUp(body) {
   const res = await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key`, {
@@ -78,6 +106,22 @@ async function fsList(collectionPath) {
   const json = await res.json();
   return (json.documents ?? []).map((d) => Object.fromEntries(Object.entries(d.fields ?? {}).map(([k, v]) => [k, fromValue(v)])));
 }
+function toValue(v) {
+  if (v === null) return { nullValue: null };
+  if (v instanceof Date) return { timestampValue: v.toISOString() };
+  if (typeof v === "string") return { stringValue: v };
+  if (typeof v === "boolean") return { booleanValue: v };
+  if (typeof v === "number") return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+  throw new Error(`지원하지 않는 값: ${typeof v}`);
+}
+async function fsWrite(docPath, data) {
+  const res = await fetch(`${FS}/${docPath}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", Authorization: "Bearer owner" },
+    body: JSON.stringify({ fields: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, toValue(v)])) }),
+  });
+  if (!res.ok) throw new Error(`Firestore write 실패 ${docPath}: ${res.status}`);
+}
 async function call(fn, data, idToken) {
   const res = await fetch(`${FN}/${fn}`, {
     method: "POST",
@@ -94,7 +138,7 @@ async function mustCall(fn, data, idToken) {
   return r.result;
 }
 
-const results = { scenarioId: SCENARIO_ID, checks: [] };
+const results = { scenarioId: SCENARIO_ID, kind: KIND, checks: [] };
 let failCount = 0;
 function check(part, name, pass, detail = {}) {
   results.checks.push({ part, name, pass, ...detail });
@@ -105,8 +149,15 @@ const values = (card) => (card?.items ?? []).map((i) => i.value);
 const sameValues = (card) => JSON.stringify(values(card)) === JSON.stringify(CARD_VALUES);
 
 function assemble(items) {
-  return buildSystemPrompt(SCENARIO_PROMPTS[SCENARIO_ID], { difficultyLevel: "advanced", personaCard: items });
+  // §93 — 운영 호출부와 같은 판별자(identityCheckAllowed = asksIdentityCheck)를 넘긴다(협박형 블록 · 이름 단정 원문이 여기로 갈린다).
+  return buildSystemPrompt(SCENARIO_PROMPTS[SCENARIO_ID], {
+    difficultyLevel: "advanced",
+    identityCheckAllowed: IDENTITY,
+    personaCard: items,
+  });
 }
+/** §93 — 카드가 있는 조립에서 "먼저 말하지 않고 묻기"의 원천이 남았는가(기관형 = 성함 요구 · 협박형 = 이름 단정 금지 원문). */
+const demandLeft = (prompt) => (IDENTITY ? DEMAND_PATTERN.test(prompt) : prompt.includes(ANONYMOUS_NAME_CLAUSE));
 
 async function partA() {
   const sender = await signUpSender();
@@ -119,7 +170,7 @@ async function partA() {
   results.A = { challengeId };
 
   const ch1 = await fsRead(`challenges/${challengeId}`);
-  check("A", "1 챌린지 문서 카드 = v2 · sender · 입력 3항목", ch1?.personaCard?.v === 2 && ch1.personaCard.inputBy === "sender" && sameValues(ch1.personaCard), {
+  check("A", `1 챌린지 문서 카드 = v2 · sender · 입력 ${CARD_VALUES.length}항목`, ch1?.personaCard?.v === 2 && ch1.personaCard.inputBy === "sender" && sameValues(ch1.personaCard), {
     personaCard: ch1?.personaCard,
     status: ch1?.status,
   });
@@ -150,8 +201,9 @@ async function partA() {
   );
 
   const prompt = assemble(s1?.personaCard?.items);
-  check("A", "5 프롬프트 조립(텍스트 턴 호출부 입력)에 카드 블록 + 3값", prompt.includes(PERSONA_CARD_BLOCK_HEAD) && CARD_VALUES.every((v) => prompt.includes(v)), {
+  check("A", `5 프롬프트 조립(텍스트 턴 호출부 입력)에 카드 블록(${KIND}) + ${CARD_VALUES.length}값 · 요구 원천 0`, prompt.includes(BLOCK_HEAD) && CARD_VALUES.every((v) => prompt.includes(v)) && !demandLeft(prompt), {
     blockExcerpt: prompt.slice(prompt.indexOf("[미리 확보한 상대 정보"), prompt.indexOf("[미리 확보한 상대 정보") + 260),
+    demandLeft: demandLeft(prompt),
   });
 
   const opening = (await fsList(`sessions/${sessionId}/messages`)).find((m) => m.turnIndex === 0);
@@ -167,10 +219,14 @@ async function partA() {
     await call("generateReport", { sessionId }, receiver.idToken);
     report = await fsRead(`reports/${sessionId}`);
   }
+  // §93 — 협박형은 교훈 문면 분기용 context(= 카드 종류) · 기관형은 부재.
+  const expectContext = KIND === "identity" ? undefined : KIND;
   check(
     "A",
-    "8 리포트 personaBlock = inputBy sender · 3값",
-    report?.personaBlock?.inputBy === "sender" && JSON.stringify((report.personaBlock.items ?? []).map((i) => i.value).sort()) === JSON.stringify([...CARD_VALUES].sort()),
+    `8 리포트 personaBlock = inputBy sender · ${CARD_VALUES.length}값 · context ${expectContext ?? "부재"}`,
+    report?.personaBlock?.inputBy === "sender" &&
+      JSON.stringify((report.personaBlock.items ?? []).map((i) => i.value).sort()) === JSON.stringify([...CARD_VALUES].sort()) &&
+      report.personaBlock.context === expectContext,
     { personaBlock: report?.personaBlock },
   );
 
@@ -199,9 +255,14 @@ async function partB() {
   check("B", "2 수신자 세션에 카드 필드 0 · 고급", s && !("personaCard" in s) && s.difficultyLevel === "advanced", { difficultyLevel: s?.difficultyLevel });
 
   const prompt = assemble(s?.personaCard?.items);
-  check("B", "3 프롬프트에 카드 블록 0", !prompt.includes(PERSONA_CARD_BLOCK_HEAD), {});
-  const asks = ["성함", "생년월일"].filter((w) => prompt.includes(w));
-  check("B", "4 시나리오 프롬프트에 성함 · 생년월일 요구 문면 존재", asks.length === 2, { found: asks });
+  check("B", "3 프롬프트에 카드 블록 0", !prompt.includes("[미리 확보한 상대 정보"), {});
+  if (IDENTITY) {
+    const asks = ["성함", "생년월일"].filter((w) => prompt.includes(w));
+    check("B", "4 시나리오 프롬프트에 성함 · 생년월일 요구 문면 존재", asks.length === 2, { found: asks });
+  } else {
+    // §93 — 협박형 빈 카드 = 종전 그대로 "상대 이름을 먼저 말하지 않는다"(자녀 납치 = 이름을 먼저 말하게 유도).
+    check("B", "4 협박형 빈 카드 = 이름 단정 금지 원문 그대로", prompt.includes(ANONYMOUS_NAME_CLAUSE), {});
+  }
 
   const opening = (await fsList(`sessions/${sessionId}/messages`)).find((m) => m.turnIndex === 0);
   results.B.openingText = opening?.textMasked;
@@ -247,13 +308,47 @@ async function partD() {
     sender.idToken,
   );
   check("D", "2 규칙 밖 이름 = invalid-argument · persona-card-invalid", !r2.ok && r2.status === "INVALID_ARGUMENT" && r2.details?.reason === "persona-card-invalid", { r2 });
+  // §93 — 대상이어도 다른 종류의 칸이면 거부(조용히 버리지 않는다).
+  const r3 = await call(
+    "createChallenge",
+    { scenarioId: SCENARIO_ID, displayName: "E2E 다른 종류 칸", difficultyLevel: "advanced", personaCardInput: WRONG_KIND_INPUT },
+    sender.idToken,
+  );
+  check("D", "4 다른 종류의 칸 = invalid-argument · persona-card-not-applicable", !r3.ok && r3.status === "INVALID_ARGUMENT" && r3.details?.reason === "persona-card-not-applicable", { r3, sent: WRONG_KIND_INPUT });
   const mine = await mustCall("listMyChallenges", {}, sender.idToken);
   const count = (mine.challenges ?? mine.items ?? []).length;
   check("D", "3 거부된 요청은 챌린지 문서를 만들지 않는다", count === 0, { count });
 }
 
+async function partE() {
+  const user = await signUpSender();
+  await fsWrite(`users/${user.uid}/consents/c1`, { granted: true, createdAt: new Date() });
+  const created = await mustCall(
+    "createSession",
+    { scenarioId: SCENARIO_ID, voiceId: "generic-voice", difficultyLevel: "advanced", personaCardInput: CARD_INPUT },
+    user.idToken,
+  );
+  const sessionId = created.sessionId;
+  results.E = { sessionId };
+  const s = await fsRead(`sessions/${sessionId}`);
+  check("E", `1 자가 세션 카드 = v2 · self · 입력 ${CARD_VALUES.length}항목 · 고급`, s?.personaCard?.v === 2 && s.personaCard.inputBy === "self" && sameValues(s.personaCard) && s.difficultyLevel === "advanced", {
+    personaCard: s?.personaCard,
+  });
+  const prompt = assemble(s?.personaCard?.items);
+  check("E", `2 프롬프트에 카드 블록(${KIND}) · 요구 원천 0`, prompt.includes(BLOCK_HEAD) && !demandLeft(prompt), { demandLeft: demandLeft(prompt) });
+  const opening = (await fsList(`sessions/${sessionId}/messages`)).find((m) => m.turnIndex === 0);
+  results.E.openingText = opening?.textMasked;
+  const wrong = await call(
+    "createSession",
+    { scenarioId: SCENARIO_ID, voiceId: "generic-voice", difficultyLevel: "advanced", personaCardInput: WRONG_KIND_INPUT },
+    user.idToken,
+  );
+  check("E", "3 자가 세션 · 다른 종류의 칸 = persona-card-not-applicable", !wrong.ok && wrong.details?.reason === "persona-card-not-applicable", { wrong });
+}
+
 try {
-  for (const [name, fn] of [["A", partA], ["B", partB], ["C", partC], ["D", partD]]) {
+  const parts = ADVANCED_ONLY ? [["E", partE]] : [["A", partA], ["B", partB], ["C", partC], ["D", partD], ["E", partE]];
+  for (const [name, fn] of parts) {
     try {
       await fn();
     } catch (err) {

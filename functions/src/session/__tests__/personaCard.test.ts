@@ -13,15 +13,21 @@ import {
   buildPersonaCard,
   personaBirthYearMax,
   personaCardEligible,
+  personaCardInputFitsScenario,
   readPersonaCardInput,
   readStoredPersonaCard,
   resolvePersonaCardRequest,
   type PersonaCardEligibilityInput,
 } from "../personaCard";
 import {
-  PERSONA_CARD_INPUT_KEYS,
+  personaCardKind,
+  PERSONA_CARD_INPUT_KEYS_BY_KIND,
+  PERSONA_CARD_KIND,
   PERSONA_CARD_LABELS,
   PERSONA_CARD_SCENARIOS,
+  PERSONA_CHILD_ACADEMY_OPTIONS,
+  PERSONA_CHILD_GRADE_OPTIONS,
+  PERSONA_JOB_OPTIONS,
   PERSONA_REGION_POOL,
 } from "../../scenarios/personaCardCatalog";
 import { SCENARIO_PROMPTS } from "../../scenarios";
@@ -33,13 +39,24 @@ import type { PersonaCardItem } from "../../shared/types";
 const SRC = path.resolve(__dirname, "../../../src");
 const readSrc = (rel: string) => readFileSync(path.join(SRC, rel), "utf8").replace(/\r\n/g, "\n");
 const LEVELS: readonly DifficultyLevel[] = ["beginner", "intermediate", "advanced"];
-/** User 결정(2026-10-20)의 기대 대상 — 데이터 상수와 **따로** 적는다(상수만 고치면 여기서 걸린다). */
+/**
+ * User 결정의 기대 대상 — 데이터 상수와 **따로** 적는다(상수만 고치면 여기서 걸린다).
+ * 2026-10-20 기관형 4종 → §93(2026-10-21 · 사용자 승인 "시나리오 결정 권고안대로 진행") 기관형 8종 + 협박형 2종(카드 배송은 카드사 고급으로 흡수 — 대상 아님).
+ */
 const EXPECTED_TARGETS = [
+  "asset-protection-notice-call",
+  "bank-security-verify-scam",
   "card-company-impersonation",
   "courier-customs-scam",
   "institutional-impersonation",
+  "kidnapping-threat",
   "loan-refinance-scam",
+  "prosecution-cooperation-call",
+  "reputation-blackmail-scam",
+  "tax-refund-scam",
 ];
+/** §93 — 입력 대상 행(세 종류의 합). 옛 v1 행(bank · card · loan)은 빠진다. */
+const INPUT_KEYS = new Set(Object.values(PERSONA_CARD_INPUT_KEYS_BY_KIND).flat());
 const NOW_YEAR = 2026;
 
 // ── G563 대상 술어(§88 — 챌린지 축 삭제) ─────────────────────────────────────
@@ -58,22 +75,28 @@ function eligibilityViolations(pred: (input: PersonaCardEligibilityInput) => boo
   return out;
 }
 
-test("[G563 · §88] 대상 술어 진리표 — 전 시나리오 × 3난이도 × {부재 · voice · messenger}에서 4종 × 고급 × 통화만 참(자가 · 챌린지 공통)", (t) => {
-  assert.deepEqual([...PERSONA_CARD_SCENARIOS].sort(), EXPECTED_TARGETS, "대상 상수가 User 결정(2026-10-20 · 4종)과 다르다");
-  assert.equal(PERSONA_CARD_SCENARIOS.includes("kidnapping-threat"), false, "kidnapping-threat는 대상에서 빠졌다(User 결정)");
+test("[G563 · §88 · §93] 대상 술어 진리표 — 전 시나리오 × 3난이도 × {부재 · voice · messenger}에서 10종 × 고급 × 통화만 참(자가 · 챌린지 공통)", (t) => {
+  assert.deepEqual([...PERSONA_CARD_SCENARIOS].sort(), EXPECTED_TARGETS, "대상 상수가 User 결정(§93 · 10종)과 다르다");
+  // §93 — 종류표는 대상과 1:1(빠진 대상 · 남는 키 0).
+  assert.deepEqual(Object.keys(PERSONA_CARD_KIND).sort(), EXPECTED_TARGETS);
+  assert.equal(personaCardKind("kidnapping-threat"), "child-threat");
+  assert.equal(personaCardKind("reputation-blackmail-scam"), "self-threat");
+  assert.equal(personaCardKind("family-accident-deepvoice"), undefined);
   assert.deepEqual(eligibilityViolations(personaCardEligible), []);
   t.diagnostic(`[G563] 진리표 칸 ${Object.keys(SCENARIO_PROMPTS).length * LEVELS.length * 3}개 · 위반 0`);
 });
 
-test("[G563 역방향] 난이도를 안 보는 술어 · 메신저를 안 보는 술어 · kidnapping을 넣은 술어는 진리표에서 실패한다", (t) => {
+test("[G563 역방향] 난이도를 안 보는 술어 · 메신저를 안 보는 술어 · 가족 사칭을 넣은 술어 · kidnapping을 뺀 술어는 진리표에서 실패한다", (t) => {
   const ignoresLevel = (i: PersonaCardEligibilityInput) => personaCardEligible({ ...i, difficultyLevel: "advanced" });
   const ignoresChannel = (i: PersonaCardEligibilityInput) => personaCardEligible({ ...i, channel: undefined });
-  const addsKidnapping = (i: PersonaCardEligibilityInput) =>
-    personaCardEligible(i) || (i.scenarioId === "kidnapping-threat" && i.difficultyLevel === "advanced" && i.channel !== "messenger");
+  const addsFamily = (i: PersonaCardEligibilityInput) =>
+    personaCardEligible(i) || (i.scenarioId === "family-accident-deepvoice" && i.difficultyLevel === "advanced" && i.channel !== "messenger");
+  const dropsKidnapping = (i: PersonaCardEligibilityInput) => i.scenarioId !== "kidnapping-threat" && personaCardEligible(i);
   for (const [name, pred] of [
     ["난이도 무시", ignoresLevel],
     ["채널 무시", ignoresChannel],
-    ["kidnapping 포함", addsKidnapping],
+    ["가족 사칭 포함", addsFamily],
+    ["kidnapping 제외(옛 4종 계열)", dropsKidnapping],
   ] as const) {
     const violations = eligibilityViolations(pred);
     assert.ok(violations.length > 0, `${name} 사본이 진리표를 통과했다 — 검사가 무력하다`);
@@ -124,7 +147,29 @@ const INPUT_CASES: Array<[string, unknown, Record<string, unknown> | "invalid" |
   ["월 문자열", { birthYear: 1965, birthMonth: "3", birthDay: 2 }, "invalid"],
   ["일 소수", { birthYear: 1965, birthMonth: 3, birthDay: 2.5 }, "invalid"],
   ["사는 곳 옛 가림 형식", { region: "경기도 ○○시" }, "invalid"],
+  // §93(UX D-136) — 하는 일 · 자녀 칸(고정 선택지 · 이름 규칙 · 학년/학원 = 자녀 이름 필요). 시나리오 종류 판정은 이 표 밖(조합 테스트).
+  ["하는 일", { name: "홍길동", job: "회사원" }, { name: "홍길동", job: "회사원" }],
+  ["하는 일만", { job: "프리랜서" }, { job: "프리랜서" }],
+  ["하는 일 빈 값", { job: "" }, undefined],
+  [
+    "자녀 전부",
+    { childName: "김민준", childGrade: "초등학교 3학년", childAcademy: "영어학원" },
+    { childName: "김민준", childGrade: "초등학교 3학년", childAcademy: "영어학원" },
+  ],
+  ["자녀 이름만 · 공백 정리", { childName: "  김 지우 " }, { childName: "김 지우" }],
+  ["자녀 이름 + 학원", { childName: "지우", childAcademy: "태권도장" }, { childName: "지우", childAcademy: "태권도장" }],
+  ["하는 일 목록 밖(실명 회사)", { job: "삼성전자" }, "invalid"],
+  ["하는 일 문자열 아님", { job: 1 }, "invalid"],
+  ["자녀 이름 1자", { childName: "준" }, "invalid"],
+  ["자녀 이름에 숫자", { childName: "민준2" }, "invalid"],
+  ["자녀 이름에 실존 은행명", { childName: "신한은행" }, "invalid"],
+  ["자녀 학년만(이름 없이)", { childGrade: "중학교 1학년" }, "invalid"],
+  ["자녀 학원만(이름 없이)", { childAcademy: "영어학원" }, "invalid"],
+  ["자녀 학년 목록 밖", { childName: "김민준", childGrade: "초등학교 7학년" }, "invalid"],
+  ["자녀 학원 실명(목록 밖)", { childName: "김민준", childAcademy: "○○어학원" }, "invalid"],
+  ["자녀 학원 앞뒤 공백(정확 일치만)", { childName: "김민준", childAcademy: " 영어학원" }, "invalid"],
   ["모르는 키(완성 카드 주입)", { name: "홍길동", items: [] }, "invalid"],
+  ["모르는 키(자녀 학교 실명)", { childName: "김민준", childSchool: "○○초등학교" }, "invalid"],
   ["배열", [], "invalid"],
   ["문자열", "홍길동", "invalid"],
 ];
@@ -255,7 +300,11 @@ function cardItemViolations(item: PersonaCardItem): string[] {
   if (hasBankPlaceholder(item.value)) out.push(`은행 자리표시자 패턴: ${item.value}`);
   if (/\d{5,}/.test(item.value)) out.push(`5자리 이상 숫자열: ${item.value}`);
   if (item.key === "region" && !PERSONA_REGION_POOL.some((r) => r.name === item.value)) out.push(`지역 형식: ${item.value}`);
-  if (!PERSONA_CARD_INPUT_KEYS.includes(item.key)) out.push(`입력 대상 밖 행: ${item.key}`);
+  if (!INPUT_KEYS.has(item.key)) out.push(`입력 대상 밖 행: ${item.key}`);
+  // §93 — 선택지 행은 목록 값만.
+  if (item.key === "job" && !PERSONA_JOB_OPTIONS.includes(item.value)) out.push(`하는 일 형식: ${item.value}`);
+  if (item.key === "childGrade" && !PERSONA_CHILD_GRADE_OPTIONS.includes(item.value)) out.push(`학년 형식: ${item.value}`);
+  if (item.key === "childAcademy" && !PERSONA_CHILD_ACADEMY_OPTIONS.includes(item.value)) out.push(`학원 형식: ${item.value}`);
   if (item.label !== PERSONA_CARD_LABELS[item.key]) out.push(`라벨: ${item.label}`);
   return out;
 }
@@ -280,8 +329,68 @@ test("[G565 · §88] 입력이 통과한 카드 — 시 · 도 17 × 대표 입�
       for (const item of card.items) failures.push(...cardItemViolations(item).map((v) => `${region.name}/${name}: ${v}`));
     }
   }
+  // §93 — 선택지 목록 자체 · 협박형 카드(하는 일 × 학년 × 학원 전 조합)도 위반 0.
+  for (const option of [...PERSONA_JOB_OPTIONS, ...PERSONA_CHILD_GRADE_OPTIONS, ...PERSONA_CHILD_ACADEMY_OPTIONS]) {
+    assert.equal(replaceRealFinancialNames(option).replacedCount, 0, option);
+    assert.equal(hasBankPlaceholder(option), false, option);
+  }
+  for (const job of PERSONA_JOB_OPTIONS) {
+    const read = readPersonaCardInput({ name: "홍길동", birthYear: 1962, region: "경기도", job }, NOW_YEAR);
+    assert.ok(read.ok && read.input);
+    const card = buildPersonaCard({ input: read.input, inputBy: "self" })!;
+    cards += 1;
+    for (const item of card.items) failures.push(...cardItemViolations(item).map((v) => `${job}: ${v}`));
+  }
+  for (const childGrade of PERSONA_CHILD_GRADE_OPTIONS) {
+    for (const childAcademy of PERSONA_CHILD_ACADEMY_OPTIONS) {
+      const read = readPersonaCardInput({ childName: "김민준", childGrade, childAcademy }, NOW_YEAR);
+      assert.ok(read.ok && read.input);
+      const card = buildPersonaCard({ input: read.input, inputBy: "sender" })!;
+      cards += 1;
+      for (const item of card.items) failures.push(...cardItemViolations(item).map((v) => `${childGrade}/${childAcademy}: ${v}`));
+    }
+  }
   assert.deepEqual(failures, []);
   t.diagnostic(`[G565 정상] 카드 ${cards}장 위반 0`);
+});
+
+test("[§93] 카드 종류 맞춤 — 대상이어도 그 종류에 없는 칸은 not-applicable · 맞는 칸만이면 카드(순서 고정)", (t) => {
+  const at = (scenarioId: string): PersonaCardEligibilityInput => ({ scenarioId, difficultyLevel: "advanced", channel: undefined });
+  const NA = { ok: false, reason: PERSONA_CARD_NOT_APPLICABLE_REASON };
+  // 판정표 — [시나리오, 원값, 기대(카드 행 키 | "NA")].
+  const cases: Array<[string, Record<string, unknown>, string[] | "NA"]> = [
+    ["tax-refund-scam", { name: "홍길동", birthYear: 1962 }, ["name", "birthYear"]],
+    ["bank-security-verify-scam", { name: "홍길동", birthYear: 1965, birthMonth: 3, birthDay: 2 }, ["name", "birthDate"]],
+    ["asset-protection-notice-call", { region: "서울특별시" }, ["region"]],
+    ["prosecution-cooperation-call", { name: "홍길동" }, ["name"]],
+    ["institutional-impersonation", { name: "홍길동", job: "회사원" }, "NA"],
+    ["institutional-impersonation", { childName: "김민준" }, "NA"],
+    ["reputation-blackmail-scam", { name: "홍길동", birthYear: 1962, region: "경기도", job: "공무원" }, ["name", "birthYear", "region", "job"]],
+    ["reputation-blackmail-scam", { childName: "김민준" }, "NA"],
+    ["kidnapping-threat", { childName: "김민준", childGrade: "초등학교 3학년", childAcademy: "영어학원" }, ["childName", "childGrade", "childAcademy"]],
+    ["kidnapping-threat", { childName: "김민준", name: "홍길동" }, "NA"],
+    ["kidnapping-threat", { region: "경기도" }, "NA"],
+    ["kidnapping-threat", { job: "교사" }, "NA"],
+  ];
+  for (const [scenarioId, raw, expected] of cases) {
+    const result = resolvePersonaCardRequest(raw, at(scenarioId), "self", NOW_YEAR);
+    if (expected === "NA") assert.deepEqual(result, NA, `${scenarioId} ${JSON.stringify(raw)}`);
+    else {
+      assert.ok(result.ok && result.personaCard, `${scenarioId} ${JSON.stringify(raw)}`);
+      assert.deepEqual(result.personaCard.items.map((i) => i.key), expected, scenarioId);
+    }
+  }
+  // 대상 밖 시나리오 = 거짓(종류 없음) · 협박형 고급 전용 아님 — 중급이면 not-applicable(종류보다 술어가 먼저).
+  assert.equal(personaCardInputFitsScenario({ name: "홍길동" }, "family-accident-deepvoice"), false);
+  assert.deepEqual(resolvePersonaCardRequest({ childName: "김민준" }, { ...at("kidnapping-threat"), difficultyLevel: "intermediate" }, "self", NOW_YEAR), NA);
+  // 역방향 — 종류를 안 보는 사본(대상이면 어떤 칸이든 통과)은 이 판정표에서 걸린다.
+  const ignoresKind = (raw: Record<string, unknown>, scenarioId: string) => {
+    const read = readPersonaCardInput(raw, NOW_YEAR);
+    return read.ok && read.input && personaCardEligible(at(scenarioId)) ? buildPersonaCard({ input: read.input, inputBy: "self" }) : undefined;
+  };
+  const leaked = cases.filter(([id, raw, exp]) => exp === "NA" && ignoresKind(raw, id) !== undefined);
+  assert.ok(leaked.length > 0, "종류를 안 보는 사본이 판정표를 통과했다 — 검사가 무력하다");
+  t.diagnostic(`[§93] 판정표 ${cases.length}행 기대대로 · 종류 무시 사본 → 새는 행 ${leaked.length}건(실패 확인)`);
 });
 
 test("[G565 역방향] 실존 은행 행 · 목록 밖 지역 · 긴 숫자열 · 입력 대상 밖 행이 든 카드 사본은 실패한다", (t) => {
