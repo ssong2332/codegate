@@ -93,6 +93,7 @@ import {
   type LiveLatencyTurnRecord,
   type TurnEndReason,
 } from "./liveLatency";
+import { LIVE_MIC_CONSTRAINTS, liveMicHandoff, stopStream } from "./micHandoff";
 import { isUsableContext, type PrimedCallAudio } from "./callAudio";
 import type { LiveTurnPhase } from "@/lib/verifyintercept";
 import {
@@ -247,8 +248,10 @@ const CAPTURE_BUFFER_SIZE = 2048;
 // 사용자 신고(2026-07-25) — 오프닝이 다짜고짜 요구·압박부터 들어가 시나리오 배경이 없다는 피드백.
 // generateOpeningLine(functions/src/roleplay/openingLine.ts)의 OPENING_TURN_INSTRUCTION과 동일한
 // 취지를 트리거 문구에도 반영 — 신분·연락 이유를 먼저 밝히게 한다.
+// ⭐ 2026-10-21(라이브 실측 첫 턴 12.3초 · 기준 한 턴 6초 이하 P-H H2) — "설명한 뒤에 이어가라"가 첫 턴을 길게 늘였다.
+// 첫 마디는 짧게 하고 **멈춰서 상대 대답을 기다리게** 한다(설명은 다음 턴). 받은 사람이 첫마디를 놓쳐도 곧 되물을 수 있다.
 const OPENING_TRIGGER_TURN =
-  "(전화가 방금 연결됐다. 지금 막 전화를 받은 상대에게 캐릭터로서 자연스럽게 첫 마디를 건네라. 다짜고짜 요구나 압박부터 하지 말고, 먼저 신분(사칭 기관·관계)과 전화를 건 이유를 1~2문장으로 밝히며 상황을 설명한 뒤에 이어가라.)";
+  "(전화가 방금 연결됐다. 지금 막 전화를 받은 상대에게 캐릭터로서 자연스럽게 첫 마디를 건네라. 첫 마디는 짧게 — 신분(사칭 기관·관계)과 전화를 건 이유를 짧은 한두 문장(5초 안팎)으로만 밝히고, 멈춰서 상대의 대답을 기다려라. 다짜고짜 요구나 압박부터 하지 말고, 자세한 설명은 상대가 반응한 뒤 다음 턴에 이어가라.)";
 
 // 이름 있는 타입으로 분리한 이유 — `let session: T | null` 선언부에서 `T`를 인라인으로 쓰면
 // `session = (...) as unknown as typeof session`처럼 자기참조 캐스트를 할 때, 같은 표현식 안의
@@ -414,6 +417,8 @@ export default function GeminiVoiceSession({
   useEffect(() => {
     let cancelled = false;
     let stream: MediaStream | null = null;
+    // 받기 때 연 마이크 요청(연결과 병렬) — 연결이 실패하거나 취소돼 아직 `stream`에 담기 전이어도 cleanup이 닫는다.
+    let pendingMic: Promise<MediaStream | null> | null = null;
     let inputContext: AudioContext | null = null;
     let outputContext: AudioContext | null = null;
     // §71.7(G433) — AI 음성은 이 게인 노드를 거쳐 스피커로 나간다(예전엔 destination 직결 = 최대 음량).
@@ -989,6 +994,7 @@ export default function GeminiVoiceSession({
       if (userLevelRafId !== null) cancelAnimationFrame(userLevelRafId);
       processor?.disconnect();
       stream?.getTracks().forEach((track) => track.stop());
+      void pendingMic?.then(stopStream, () => {}); // 트랙 stop은 멱등 — 위와 같은 스트림이어도 무해하다
       // 수정안 A — 빌린 컨텍스트는 닫지 않는다(통화 화면이 닫는다). 대신 이 실행이 붙인 노드와 예약 재생을 뗀다.
       if (outputBorrowed) {
         stopAllPlayback();
@@ -1020,22 +1026,16 @@ export default function GeminiVoiceSession({
       try {
         // §71.6 P-0 — 준비 구간 표시(받기 · 자격증명 준비는 `useRealtimeCall`이 이미 찍었다).
         markCallSetup("mount", performance.now());
-        log("getUserMedia…");
-        // 에코 제거/잡음 억제/자동 게인을 명시적으로 켠다(2026-07-23). 노트북 스피커로 나온 AI
-        // 목소리가 마이크로 되돌아가면 Gemini가 그것을 사용자 발화로 오인해 자기 말에 끼어들거나
-        // 반응해 "화자가 여러 명"처럼 들린다. 브라우저 기본값이 켜져 있어도 명시해 확실히 한다
-        // (근본 해결은 헤드셋 사용).
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
+        // ⭐ 2026-10-21(받기→첫소리 10.2초) — 마이크는 받기 때 이미 열기 시작했다(`useRealtimeCall.start` → `micHandoff.ts`).
+        // 그 요청을 넘겨받아 **기다리지 않고** 오디오 컨텍스트 · Live 연결을 먼저 진행한다(예전: 여기서 마이크를 한 번 더
+        // 열고 기다린 뒤에야 연결했다). 넘겨받은 것이 없으면(재마운트 등) 같은 제약으로 직접 연다 — 실패는 종전처럼 아래 catch.
+        // 제약(에코 제거/잡음 억제/자동 게인)의 근거는 `LIVE_MIC_CONSTRAINTS` 주석.
+        const handedMic = liveMicHandoff.claim();
+        const micRequest: Promise<MediaStream | null> =
+          handedMic ?? navigator.mediaDevices.getUserMedia(LIVE_MIC_CONSTRAINTS);
+        // 연결 중 거부돼도 처리되지 않은 rejection이 남지 않게 한다(실제 처리는 아래 await).
+        micRequest.catch(() => {});
+        pendingMic = micRequest;
 
         // 수정안 A — 받기 탭 안에서 미리 깨운 컨텍스트가 살아 있으면 그것을 쓴다(없거나 닫혔으면 종전대로 만든다).
         const primedOutput = primedAudio?.output ?? null;
@@ -1063,6 +1063,7 @@ export default function GeminiVoiceSession({
         if (outputVolumeRef.current !== GEMINI_OUTPUT_GAIN) outputGain.gain.value = outputVolumeRef.current;
         outputGainNodeRef.current = outputGain;
         registerOutputGain(outputGain);
+        // `micReady` = 오디오 컨텍스트 준비(마이크 권한은 받기 때 병렬로 받는다 — `acceptToMicMs`).
         markCallSetup("micReady", performance.now());
         log("audio contexts ready; connecting… model=", credentials.geminiModel);
 
@@ -1307,6 +1308,16 @@ export default function GeminiVoiceSession({
           handlersRef.current.onContextTurnDelivered?.(pendingContext.seq);
         }
 
+        // 마이크가 준비된 뒤에만 오프닝을 보낸다 — 첫 사용자는 권한 창을 보는 중일 수 있다(그동안 사기범이 먼저 말하지
+        // 않게). 거부면(`null`) 받기 경로가 이 세션을 내리고 폴백으로 간다 — 여기서는 아무것도 보내지 않는다.
+        // 권한이 이미 있으면 마이크가 연결보다 먼저 끝나 기다림 0이다(`connectToOpeningSentMs`로 관찰).
+        const micStream = await micRequest;
+        if (cancelled || !micStream) {
+          stopStream(micStream);
+          return;
+        }
+        stream = micStream;
+
         // 사용자 신고(2026-07-24) — 연결 직후 캐릭터가 먼저 말을 걸도록 트리거를 보낸다. onopen
         // 콜백(위)이 아니라 connect()가 실제로 resolve된 직후에 보내는 이유: onopen은 소켓 이벤트라
         // connect()의 반환 Promise가 아직 resolve되기 전에 먼저 발화할 수 있어(session 변수가 아직
@@ -1322,7 +1333,7 @@ export default function GeminiVoiceSession({
 
         // 마이크 → PCM16 16kHz → 전송. ScriptProcessor는 구식이지만 AudioWorklet과 달리 별도
         // 워커 파일 없이 동작해, 정적 export 구성(next.config.ts)에서 추가 배포 산출물이 없다.
-        const micSource = inputContext.createMediaStreamSource(stream);
+        const micSource = inputContext.createMediaStreamSource(micStream);
         micSourceNode = micSource;
 
         // 사용자 발화 파형 인디케이터용 병렬 탭(2026-07-24, 사용자 신고 — "일단 잘 파악하는지

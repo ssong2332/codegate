@@ -5,6 +5,7 @@
 //
 // 소유권/상태 검증은 sendMessage·endSession과 동일한 패턴을 따른다(본인 세션 + active 상태).
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { logger } from "firebase-functions";
 import { getFirestore } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
@@ -20,6 +21,7 @@ import type { RealtimeProviderName } from "./types";
 import { resolveFictionalBankName } from "../shared/fictionalBank";
 import { resolveHangupRelay } from "../scammerHangup/relayContext";
 import { resolveSessionSpeakerGender } from "./scenarioVoice";
+import { REALTIME_SETUP_LOG_MESSAGE, startSetupTiming, takeColdStartFlag } from "./setupTiming";
 
 /**
  * 에스컬레이션된 세션(§13.6 통합 버그 수정)의 "유효 voiceMode" 유추 — session.voiceSelectionSource가
@@ -82,6 +84,8 @@ export const createRealtimeCall = onCall<
   CreateRealtimeCallRequest,
   Promise<CreateRealtimeCallResponse>
 >({ secrets: [ELEVENLABS_API_KEY, ...GEMINI_KEY_SECRETS] }, async (request) => {
+  // 2026-10-21 — 처리 시간 분해 1줄(숫자 · 종류만 — `setupTiming.ts`). 받기 때 미리 받기가 끝나지 않았으면 이 시간이 첫소리 지연에 더해진다.
+  const timing = startSetupTiming(() => Date.now(), takeColdStartFlag());
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
@@ -137,6 +141,7 @@ export const createRealtimeCall = onCall<
     effectiveVoiceId = challenge.voiceId ?? "";
   }
 
+  timing.mark("firestore");
   const effectiveVoiceMode = resolveEffectiveVoiceMode(session.voiceSelectionSource);
   // T194-b(§84.3.5 · G567) — 카드 세션은 서버 프롬프트를 실을 수 있는 경로(Gemini · 폴백)로만 보낸다.
   const provider = getRealtimeProvider(
@@ -193,6 +198,8 @@ export const createRealtimeCall = onCall<
       // T194-b(§84.3.4 · G568) — 세션 문서 카드 행 그대로(클라 값 0). 부재 = 블록 0.
       personaCard: session.personaCard?.items,
     });
+    timing.mark("credentials");
+    logger.info(REALTIME_SETUP_LOG_MESSAGE, timing.finish({ provider: credentials.provider, isMock: credentials.isMock }));
     // T38 QA NO-GO 수정, architect 판정(ADR-0006 Addendum A2, 2026-07-24) — §14.2 "추출 차단"은
     // raw voiceId를 응답에 실어 보내는 모든 경로를 무조건 막지 않는다(ElevenLabs 프로토콜상
     // 클라 개시 override로만 통화 중 voice를 지정할 수 있어, 동의를 마친 유일한 참가자에게
@@ -227,6 +234,7 @@ export const createRealtimeCall = onCall<
     // `difficultyApplied:true`라 확인 무력화가 성립한다).
     // 명시 타입 인자 — 제네릭 래퍼를 통과하면 객체 리터럴의 문자열 리터럴 타입이 넓어져
     // `provider: string`이 된다(실측 TS2345). 반환 계약을 그대로 고정한다.
+    logger.info(REALTIME_SETUP_LOG_MESSAGE, timing.finish({ provider: "none", isMock: true }));
     return withVerifyOffer<CreateRealtimeCallResponse>({
       provider: "none",
       signedUrl: "",

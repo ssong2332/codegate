@@ -15,6 +15,7 @@ import { createRealtimeCall } from "@/lib/api";
 import type { CreateRealtimeCallResponse } from "@/lib/api";
 import { createPrefetchSlot, type PrefetchSlot } from "./prefetchFreshness";
 import { toFallbackCredentials } from "./fallbackCredentials";
+import { LIVE_MIC_CONSTRAINTS, liveMicHandoff, requestMicrophone, stopStream } from "./micHandoff";
 import { markCallSetup, markCredentialsPrefetched, resetCallSetupMarks } from "./liveLatency";
 import { noteAccept, noteCredentialSource } from "./audioDiagnostics";
 
@@ -128,6 +129,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      liveMicHandoff.release(); // 세션이 가져가지 않은 받기 마이크는 닫는다(누수 0).
     };
   }, []);
 
@@ -191,20 +193,24 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     noteAccept(performance.now()); // 진단 패널(`?audiodebug=1`)의 통화별 값도 받기 시점에 비운다(관찰 전용).
     markCallSetup("accept", performance.now());
 
-    // ① 마이크 권한 — 실패하면 실시간 대화가 불가능하므로 즉시 폴백 안내로 전환한다.
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // 권한 확인용으로만 열었으므로 곧바로 닫는다 — 실제 캡처는 SDK가 자체적으로 다시 연다.
-      stream.getTracks().forEach((track) => track.stop());
-    } catch {
-      if (!mountedRef.current) return;
+    // ① 마이크 — 실패하면 실시간 대화가 불가능하므로 폴백 안내로 전환한다.
+    // ⭐ 2026-10-21(받기→첫소리 10.2초) — 예전엔 여기서 권한 확인용으로 열고 **기다려 닫은 뒤** 자격증명을 꺼냈고,
+    // Live 세션이 마이크를 한 번 더 열었다(장치 열기 2회 · 전부 직렬). 이제 Live 제약으로 **한 번만** 열고 기다리지
+    // 않는다 — 자격증명 꺼내기 · Live 연결과 겹친다. Gemini 경로는 이 요청을 세션에 넘긴다(`micHandoff.ts`).
+    const mic = requestMicrophone(() => navigator.mediaDevices.getUserMedia(LIVE_MIC_CONSTRAINTS));
+    void mic.then((stream) => {
+      if (stream) markCallSetup("micGranted", performance.now());
+    });
+    // 거부 처리 — 이미 받은 발급 응답이 있으면 낮춰 보관하고(재발급 0), 없으면 슬롯 · 새 발급으로 보관한다.
+    const denyMicrophone = (issuedSoFar: CreateRealtimeCallResponse | null) => {
+      liveMicHandoff.release();
       setStatus("permission-denied");
       setErrorMessage(
         "마이크 권한이 필요합니다. 브라우저 설정에서 허용한 뒤 다시 시도하거나 텍스트로 진행해 주세요.",
       );
-      void retainFallbackCredentials(sessionId); // E1 — 폴백 트리거 보관(D2/F1)
-      return;
-    }
+      if (issuedSoFar) setCredentials(toFallbackCredentials(issuedSoFar));
+      else void retainFallbackCredentials(sessionId); // E1 — 폴백 트리거 보관(D2/F1)
+    };
 
     // ② 서명 URL 발급(서버) — ElevenLabs API 키는 서버에만 남는다. 미리 받아 둔 신선한 자격증명이 있거나
     // 같은 세션 요청이 **진행 중이면 그것을 기다려** 쓰고(지연 단축 · 발급 1회), 없거나 실패·상했으면 지금 새로 받는다.
@@ -222,7 +228,14 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
       try {
         issued = await createRealtimeCall({ sessionId });
       } catch {
+        // 마이크 거부가 먼저다(종전 순서 — 거부면 권한 안내, 허용이면 발급 실패 안내).
+        const stream = await mic;
+        stopStream(stream);
         if (!mountedRef.current) return;
+        if (!stream) {
+          denyMicrophone(null);
+          return;
+        }
         setStatus("error");
         setErrorMessage("통화를 시작하지 못했습니다. 텍스트로 진행해 주세요.");
         return;
@@ -236,6 +249,18 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
       (issued.provider === "elevenlabs" && Boolean(issued.signedUrl)) ||
       (issued.provider === "gemini" && Boolean(issued.geminiToken));
     if (issued.isMock) setIsMock(true);
+    // Gemini Live만 마이크를 넘겨받고 연결과 겹친다. 나머지(폴백 · ElevenLabs — SDK가 스스로 연다)는 종전처럼
+    // 권한 결과를 기다린 뒤 진행하고, 연 스트림은 닫는다.
+    const handsOffMic = !issued.isMock && issued.provider === "gemini" && hasUsableCredentials;
+    if (!handsOffMic) {
+      const stream = await mic;
+      stopStream(stream);
+      if (!mountedRef.current) return;
+      if (!stream) {
+        denyMicrophone(issued);
+        return;
+      }
+    }
     if (issued.isMock || !hasUsableCredentials) {
       // E3 — 이미 받아 둔 값을 버리지 않는다(D2/F1, §54.9 (4) 1). 이 경로의 응답은 `provider:"none"`
       // 이므로(서버 실측: MockRealtimeProvider·발급 실패 분기 둘 다 "none") 낮춤은 무효과이고,
@@ -249,7 +274,14 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     //    그 컴포넌트가 실제 speech-to-speech 세션을 시작한 뒤 handleActive로 알려준다.
     // ⛔ 이 줄은 D2에서 **한 글자도 바뀌지 않았다**(§54.9 (4) 6 역검증) — 실시간 경로는 종전 그대로
     // 발급 응답을 낮추지 않고 그대로 세팅한다.
+    if (handsOffMic) liveMicHandoff.offer(mic);
     setCredentials(issued);
+    if (!handsOffMic) return;
+    // Live 연결이 진행되는 동안 권한 결과를 기다린다. 거부면 세션을 내리고(자격증명을 낮추면 마운트 조건이 풀린다) 폴백으로 간다.
+    // 이미 끝낸 통화(끊기 등)면 건드리지 않는다.
+    const stream = await mic;
+    if (stream || !mountedRef.current) return;
+    if (statusRef.current === "connecting" || statusRef.current === "active") denyMicrophone(issued);
   }, [retainFallbackCredentials, getPrefetchSlot]);
 
   const stop = useCallback(() => {

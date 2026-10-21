@@ -107,6 +107,7 @@ test("[§71.6 P-0] 준비 구간 레코드: 표시 순서대로 차이를 계산
   markCallSetup("accept", 0);
   markCredentialsPrefetched(true);
   markCallSetup("credentialsReady", 120);
+  markCallSetup("micGranted", 700); // 2026-10-21 — 마이크는 자격증명 · 연결과 병렬(순서 무관)
   markCallSetup("mount", 150);
   markCallSetup("micReady", 400);
   markCallSetup("connectResolved", 1900);
@@ -119,6 +120,7 @@ test("[§71.6 P-0] 준비 구간 레코드: 표시 순서대로 차이를 계산
     credentialsPrefetched: true,
     credentialSource: null, // 출처를 안 찍은 호출(1인자) — 종전 호출과 호환
     acceptToCredentialsMs: 120,
+    acceptToMicMs: 700,
     credentialsToMountMs: 30,
     mountToMicMs: 250,
     micToConnectMs: 1500,
