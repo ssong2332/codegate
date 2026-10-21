@@ -3036,6 +3036,8 @@ export default function SessionCallPage() {
           // ⛔ 참가자가 입력한 값은 이 경로에 실리지 않는다(콜백이 무인자다 — G138/AC-045).
           // ⚠️ 위 `link_tapped`와 달리 이 이벤트만 리포트에서 "속은 순간"으로 승격된다(AC-080 (b)).
           onLandingSubmitted={(smsId) => handleRecordSmsEvent(smsId, "landing_submitted")}
+          // §99 — 자산 검수 사이트의 이체 전 단계(본인 확인 · 코인 전환 · 금액) — 같은 기록 경로 · 고정 값.
+          onLandingStep={(smsId, step) => handleRecordSmsEvent(smsId, step)}
           // T194-c-1(Q2) — 통화 중 문자로 연 설치 화면의 노출 · 응낙(기록만 — 실시간 언급 주입은 T194-c-2).
           onInstallShown={(landingId) => handleRecordInCallInstall(landingId, "shown")}
           onInstallConsent={(landingId) => handleRecordInCallInstall(landingId, "consented")}

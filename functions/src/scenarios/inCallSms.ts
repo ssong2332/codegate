@@ -161,6 +161,21 @@ const PROSECUTION_COOPERATION_CALL: InCallSmsItem[] = [
     announceInstruction:
       "(참가자 휴대전화로 방금 검수 전용 보관 지갑 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 코인으로 바꾼 금액을 문자 속 링크 화면에서 보관 지갑으로 전송해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 지갑 번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
   },
+  // ⭐ §99(2026-10-21 사용자 요청) — 검찰 고급 fv-h3vn의 transfer 슬롯. 문자는 사이트로 보내기만 하고, 전환 · 이체는 모의 사이트(`asset-check-site`)에서
+  // 참가자가 직접 누른다(지갑 번호도 사이트 마지막 화면이 원천 — 문자 · 통화에는 0). ⛔ 거래소 · 코인 종류 · 실제 주소 형식 0(§81).
+  // afterScammerTurns=7: 이 시나리오의 2 · 6과 겹치지 않는 값(발송 시점은 변형 선언 notBeforeUserTurns가 정한다).
+  {
+    smsId: "prosecution-asset-site-link",
+    kind: "account",
+    senderLabel: "0000-0000 (자산검수 안내)",
+    body: "[자산검수] 사건 관련 자산 검수 안내\n검수 대상 자산은 안전 자산으로 전환해 보관하셔야 합니다.\n아래 사이트에서 본인 확인 후 화면 안내대로 진행해 주세요.\n검수가 끝나면 전액 반환됩니다.\n외부에 알리지 마십시오.",
+    linkDisplayText: "자산 검수 진행하기",
+    fakeLandingId: "asset-check-site",
+    linkAddress: "asset-review-desk.invalid/check/Rv5m",
+    afterScammerTurns: 7,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 자산 검수 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 들어가 본인 확인부터 하고 화면 안내대로 진행해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 화면의 순서·버튼·금액을 대신 불러 주지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
 ];
 
 const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [

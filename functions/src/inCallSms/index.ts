@@ -29,6 +29,7 @@ import type {
   DeliverInCallSmsRequest,
   DeliverInCallSmsResponse,
   DeliverInCallSmsTrigger,
+  InCallSmsEvent,
   RecordInCallSmsEventRequest,
   RecordInCallSmsEventResponse,
 } from "./types";
@@ -218,6 +219,21 @@ export const deliverInCallSms = onCall<
   };
 });
 
+/** 이벤트 → 문서 시각 필드(최초 1회). §99 — 사이트 단계 3종은 랜딩이 있는 문서에서만(아래 가드). */
+const EVENT_FIELD: Record<InCallSmsEvent, string> = {
+  opened: "openedAt",
+  link_tapped: "linkTappedAt",
+  landing_submitted: "landingSubmittedAt",
+  landing_identity: "landingIdentityAt",
+  landing_converted: "landingConvertedAt",
+  landing_amount: "landingAmountAt",
+};
+
+/** 자기 키만 본다(`in`은 `"constructor"` 같은 상속 키도 통과시킨다). */
+function isInCallSmsEvent(value: unknown): value is InCallSmsEvent {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(EVENT_FIELD, value);
+}
+
 export const recordInCallSmsEvent = onCall<
   RecordInCallSmsEventRequest,
   Promise<RecordInCallSmsEventResponse>
@@ -226,12 +242,8 @@ export const recordInCallSmsEvent = onCall<
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
   const { sessionId, smsId, event } = request.data ?? {};
-  // ⛔ 고정 enum 3값만 받는다 — 참가자 입력값을 담을 필드가 요청 타입에 **존재하지 않는다**(AC-045).
-  if (
-    !sessionId ||
-    !smsId ||
-    (event !== "opened" && event !== "link_tapped" && event !== "landing_submitted")
-  ) {
+  // ⛔ 고정 enum 값만 받는다 — 참가자 입력값을 담을 필드가 요청 타입에 **존재하지 않는다**(AC-045). §99 — 사이트 단계 3값 추가.
+  if (!sessionId || !smsId || !isInCallSmsEvent(event)) {
     throw new HttpsError("invalid-argument", "sessionId·smsId·event가 필요합니다.");
   }
 
@@ -262,12 +274,11 @@ export const recordInCallSmsEvent = onCall<
   // T123/AC-080 — 제출은 **링크형 문자가 연 랜딩**에서만 일어난다. `fakeLandingId`가 없는 문서에
   // 제출을 기록하면 리포트가 카탈로그 항목을 찾지 못해 승격이 조용히 0건이 되고, 그때 남는 것은
   // "기록은 됐는데 어디에도 안 보이는" 상태다(§15.6 G20이 막은 것과 같은 형태). 여기서 거절한다.
-  if (event === "landing_submitted" && !snap.get("fakeLandingId")) {
+  if (event !== "opened" && event !== "link_tapped" && !snap.get("fakeLandingId")) {
     throw new HttpsError("failed-precondition", "이 문자에는 가짜 랜딩이 없습니다.");
   }
 
-  const field =
-    event === "opened" ? "openedAt" : event === "link_tapped" ? "linkTappedAt" : "landingSubmittedAt";
+  const field = EVENT_FIELD[event];
   // 최초 1회만 세팅한다(§API.md) — 다시 열어봐도 "처음 열어본 시각"이 밀리지 않는다.
   if (!snap.get(field)) {
     await smsRef.update({ [field]: Timestamp.now() });

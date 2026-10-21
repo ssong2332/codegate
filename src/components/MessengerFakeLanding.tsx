@@ -84,7 +84,16 @@ type MessengerFakeLandingProps = {
    * ⚠️ 이 컴포넌트는 **네트워크 호출을 하지 않는다** — 기록은 페이지가 담당한다(§15.9.6).
    */
   onCredentialSubmit?: () => void;
+  /**
+   * ⭐ §99(검찰 고급 자산 검수 사이트) — 여러 화면 사이트(`STEP_FLOW_COPY`)에서 **이체 전 단계 버튼**을 누른 순간. 인자는
+   * `STEP_FLOW_EVENTS`의 고정 값 하나뿐이다(본인 확인 · 코인 전환 · 금액 입력 뒤 다음). 마지막 이체 확인은 위 `onCredentialSubmit`.
+   * ⛔ 입력값(`values`)을 싣지 않는다(G138 동형 — `mockScreenCopy.test.ts` §99 블록). 이 컴포넌트는 네트워크 호출을 하지 않는다.
+   */
+  onLandingStep?: (step: LandingProgressEvent) => void;
 };
+
+/** §99 — 이체 전 단계 기록 이벤트(서버 `functions/src/inCallSms/types.ts` `InCallSmsEvent`의 같은 3값). */
+export type LandingProgressEvent = "landing_identity" | "landing_converted" | "landing_amount";
 
 /** 완료 화면 복귀 버튼 문면(UX-023 v1.33 (5) · D-93) — 진입 표면이 정한다. 동작은 둘 다 `onClose`. */
 const RETURN_LABELS: Record<MessengerFakeLandingEntrySurface, string> = {
@@ -106,6 +115,7 @@ export default function MessengerFakeLanding({
   onHide,
   onInstallConsent,
   onCredentialSubmit,
+  onLandingStep,
 }: MessengerFakeLandingProps) {
   const bar = browserBarTokensFor(skin);
   const returnLabel = RETURN_LABELS[entrySurface];
@@ -233,6 +243,7 @@ export default function MessengerFakeLanding({
             landingId={landingId}
             onClose={onClose}
             onCredentialSubmit={onCredentialSubmit}
+            onLandingStep={onLandingStep}
             returnLabel={returnLabel}
           />
         )}
@@ -397,6 +408,22 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 사건조회 안내센터",
     mockHost: "case-view-center.invalid",
   },
+  // §99 — 검찰 고급 fv-h3vn 자산 검수 사이트의 첫 화면(본인 확인). 이어지는 화면은 아래 `STEP_FLOW_COPY`(서버 카탈로그와 글자 단위로 동일).
+  "asset-check-site": {
+    headline: "사건 관련 자산 검수를 위해 본인 확인이 필요합니다",
+    bodyLines: [
+      "고객님 명의 자산이 범죄수익 여부 검수 대상으로 분류되었습니다.",
+      "본인 확인이 끝나면 검수 대상 자산과 보관 절차가 안내됩니다.",
+    ],
+    fields: [
+      { label: "성명", placeholder: "성명을 입력하세요" },
+      { label: "생년월일", placeholder: "생년월일을 입력하세요" },
+    ],
+    submitLabel: "본인 확인하기",
+    successHeadline: "보관 지갑 이체가 접수되었습니다.",
+    issuerLabel: "ⓒ 사건자산 검수 안내센터",
+    mockHost: "asset-review-desk.invalid",
+  },
   // §98 — 검찰 고급 fv-c8wq 둘째 화면(이체형 — 서버 카탈로그 mockScreens.ts와 글자 단위로 동일).
   "asset-check-wallet": {
     headline: "검수 전용 보관 지갑 전송이 아직 완료되지 않았습니다",
@@ -482,6 +509,52 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
   },
 };
 
+/** §99 — 여러 화면 사이트의 둘째 화면부터(서버 카탈로그 `MockScreenItem.stepScreens`와 1:1 · 글자 단위 동일). */
+type StepScreenCopy = {
+  headline: string;
+  bodyLines: string[];
+  /** 화면에 나열만 하는 줄(입력 아님). */
+  items?: string[];
+  fields?: CredentialFieldCopy[];
+  actionLabel: string;
+};
+
+/**
+ * ⭐ §99(2026-10-21 사용자 요청 — *"제공되는 웹사이트에서 코인 전환하고 이체하고 하는 거로 가자"*) — 여러 화면 사이트. 키 = landingId(정확 일치 — R8).
+ * 첫 화면 = `CREDENTIAL_LANDING_COPY`의 같은 키(본인 확인), 그 뒤 = 이 배열 순서. 화면 i(0 = 본인 확인)의 버튼은 `STEP_FLOW_EVENTS[i]`를 올리고,
+ * 마지막 화면의 버튼은 종전 제출(`onCredentialSubmit`)이다. ⛔ 거래소 가입 · 입금 · 매수 같은 실제 조작 단계는 화면에 없다(버튼 하나가 "전환"을 대신한다).
+ */
+const STEP_FLOW_COPY: Record<string, StepScreenCopy[]> = {
+  "asset-check-site": [
+    {
+      headline: "검수 대상 자산이 확인되었습니다",
+      bodyLines: [
+        "아래 자산은 검수가 끝날 때까지 안전 자산(코인)으로 전환해 보관하셔야 합니다.",
+        "전환하지 않은 자산은 증거 보전을 위해 동결될 수 있습니다.",
+      ],
+      items: ["거래 은행 예금 · 검수 대상", "적금 · 검수 대상", "대출 가능액 · 검수 대상"],
+      actionLabel: "안전 자산(코인)으로 전환하기",
+    },
+    {
+      headline: "오늘 전환할 금액을 입력해 주세요",
+      bodyLines: [
+        "검수 대상 자산 가운데 오늘 전환할 금액을 입력해 주세요.",
+        "전환된 자산은 다음 화면에서 검수 전용 보관 지갑으로 옮겨집니다.",
+      ],
+      fields: [{ label: "전환 금액", placeholder: "전환하실 금액을 입력하세요", inputMode: "numeric" }],
+      actionLabel: "다음",
+    },
+    {
+      headline: "검수 전용 보관 지갑으로 이체합니다",
+      bodyLines: ["보관 지갑 번호: KW-7Q2X-4471", "검수가 끝나면 전액 반환됩니다. 아래에서 이체를 확인해 주세요."],
+      actionLabel: "보관 지갑으로 이체하기",
+    },
+  ],
+};
+
+/** §99 — 화면 i(0 = 본인 확인)의 버튼이 올리는 고정 이벤트. 길이 = 마지막(이체 확인) 화면 앞까지. */
+const STEP_FLOW_EVENTS: readonly LandingProgressEvent[] = ["landing_identity", "landing_converted", "landing_amount"];
+
 /**
  * 가짜 주소창에 보일 호스트(T190-2 · §74.9). ⚠️ kind가 **먼저** 갈린다(§19.4 R7) — `app-install`은 credential
  * 콘텐츠 표를 보지 않고 자기 상수만 쓴다(R5 폴백 금지 우회 경로 0). credential 쪽은 정확 일치 조회(R8) +
@@ -513,12 +586,15 @@ function CredentialFormMockup({
   landingId,
   onClose,
   onCredentialSubmit,
+  onLandingStep,
   returnLabel,
 }: {
   landingId?: string;
   onClose: () => void;
   /** ⛔ 무인자 콜백이다 — 입력값은 아래 `values` state를 벗어나지 않는다(§31.6 G138/AC-045). */
   onCredentialSubmit?: () => void;
+  /** §99 — 여러 화면 사이트의 이체 전 단계(고정 이벤트 값만 — 입력값 0). */
+  onLandingStep?: (step: LandingProgressEvent) => void;
   /** 완료 화면 복귀 버튼 문면(진입 표면이 정한다 — D-93). */
   returnLabel: string;
 }) {
@@ -526,10 +602,23 @@ function CredentialFormMockup({
   const copy = (landingId ? CREDENTIAL_LANDING_COPY[landingId] : undefined) ?? GENERIC_CREDENTIAL_COPY;
   const [values, setValues] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+  // §99 — 여러 화면 사이트의 현재 화면(0 = 본인 확인 = 위 `copy`). 한 화면 폼이면 늘 0이다.
+  const stepScreens = landingId ? STEP_FLOW_COPY[landingId] : undefined;
+  const [stepIndex, setStepIndex] = useState(0);
+  const screen: StepScreenCopy =
+    stepScreens && stepIndex > 0
+      ? stepScreens[stepIndex - 1]
+      : { headline: copy.headline, bodyLines: copy.bodyLines, fields: copy.fields, actionLabel: copy.submitLabel };
   const page = LANDING_PAGE_TOKENS;
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
+    // §99 — 이체 확인 전 화면이면 "그 단계 버튼을 눌렀다"는 고정 값 하나만 올리고 다음 화면으로 넘어간다(입력값은 `values`에 남는다).
+    if (stepScreens && stepIndex < stepScreens.length) {
+      onLandingStep?.(STEP_FLOW_EVENTS[stepIndex]);
+      setStepIndex(stepIndex + 1);
+      return;
+    }
     // AC-045 핵심 — 여기서 어떤 네트워크 호출도 하지 않는다. 로컬 state만 바꿔 가짜 피드백을 준다.
     setSubmitted(true);
     // T123/AC-080 — **"제출했다는 사실" 하나만** 위로 올린다. 기록은 페이지가 한다(§15.9.6).
@@ -571,17 +660,31 @@ function CredentialFormMockup({
       {issuerBar}
       <div className="flex flex-col gap-2.5 px-5 pt-4">
         <h1 className="text-xl font-bold leading-snug" style={{ color: page.headline }}>
-          {copy.headline}
+          {screen.headline}
         </h1>
-        {copy.bodyLines.map((line) => (
+        {screen.bodyLines.map((line) => (
           <p key={line} className="text-[15px] leading-relaxed" style={{ color: page.body }}>
             {line}
           </p>
         ))}
+        {/* §99 — 검수 대상 자산 같은 나열 줄(입력 아님 · 숫자 0). */}
+        {screen.items && (
+          <ul className="mt-1 flex flex-col gap-2">
+            {screen.items.map((item) => (
+              <li
+                key={item}
+                className="rounded-[10px] border px-3.5 py-3 text-[15px] font-semibold"
+                style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.headline }}
+              >
+                {item}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-5 pb-6 pt-4">
-        {copy.fields.map((field) => (
+      <form key={stepIndex} onSubmit={handleSubmit} className="flex flex-col gap-4 px-5 pb-6 pt-4">
+        {(screen.fields ?? []).map((field) => (
           <label
             key={field.label}
             className="flex flex-col gap-1.5 text-[15px] font-semibold"
@@ -612,7 +715,7 @@ function CredentialFormMockup({
           className="min-h-[52px] rounded-[10px] text-base font-semibold transition-colors"
           style={{ backgroundColor: page.submitBg, color: page.submitText }}
         >
-          {copy.submitLabel}
+          {screen.actionLabel}
         </button>
         <button
           type="button"

@@ -27,7 +27,7 @@
 // 호출부가 `setSmsOverlayOpen(false)`를 부르는 경로(한도 자동 종료·훈련 종료)는 이 상태를 거치지
 // 않고 **즉시 언마운트**된다(§23.6 A5).
 import { useCallback, useEffect, useRef, useState } from "react";
-import MessengerFakeLanding from "./MessengerFakeLanding";
+import MessengerFakeLanding, { type LandingProgressEvent } from "./MessengerFakeLanding";
 import PhoneIcon from "./PhoneIcon";
 import {
   formatSmsClock,
@@ -72,6 +72,11 @@ type InCallSmsOverlayProps = {
    */
   onLandingSubmitted: (smsId: string) => void;
   /**
+   * §99 — 여러 화면 사이트에서 이체 전 단계 버튼을 누른 사실(인자 = 이 문자의 id + 고정 단계 값). 기록은 페이지가 한다.
+   * 부재 = 중계 0(종전 동작).
+   */
+  onLandingStep?: (smsId: string, step: LandingProgressEvent) => void;
+  /**
    * T194-c-1(docs/Architecture.md §84.15.4 · §84.16.5 단계 6 · Q2) — 통화 중 문자가 연 **모의 설치 화면**(`landingKind === "app-install"`)이
    * 보였다 · 가짜 "권한 허용"에 응했다는 사실을 페이지로 중계한다(기록은 페이지 — `recordMockScreenEvent`). 인자는 랜딩 id뿐이다.
    * 부재 = 중계 0(종전 동작 — 이 표면의 설치 화면이 없는 세션).
@@ -105,6 +110,7 @@ export default function InCallSmsOverlay({
   onOpened,
   onLinkTapped,
   onLandingSubmitted,
+  onLandingStep,
   onInstallShown,
   onInstallConsent,
   skin = "default",
@@ -594,6 +600,8 @@ export default function InCallSmsOverlay({
                 // T123/AC-080 — 제출 **사실 하나**를 페이지로 중계한다. 인자는 이 문자의 id뿐이고
                 // 참가자 입력값은 콜백 자체가 무인자라 여기까지 오지 않는다(G138).
                 onCredentialSubmit={() => onLandingSubmitted(landing.smsId)}
+                // §99 — 여러 화면 사이트의 단계 **사실 하나**(고정 값)를 페이지로 중계한다.
+                onLandingStep={(step) => onLandingStep?.(landing.smsId, step)}
                 // T194-c-1(Q2) — 가짜 "권한 허용" 응낙 **사실 하나**를 페이지로 중계한다(인자 = 랜딩 id뿐 · 이 파일은 콜러블을 부르지 않는다).
                 onInstallConsent={() => {
                   if (landing.landingKind === "app-install" && landing.landingId) onInstallConsent?.(landing.landingId);
