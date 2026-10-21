@@ -123,9 +123,10 @@ export function resolveMockScreenAnchor(
  * - `tacticCategory`는 기존 고정 10종을 그대로 통과시킨다 — **신규 카테고리 0건**.
  */
 export function buildLandingSubmitMoment(
-  // 조립에 실제로 쓰는 두 필드만 받는다 — 경로 A(`smsTimeline.ts`)는 `MockScreenItem` 전체를
+  // 조립에 실제로 쓰는 필드만 받는다 — 경로 A(`smsTimeline.ts`)는 `MockScreenItem` 전체를
   // 넘기지만 이 함수가 그 이상을 보지 않는다는 것이 타입으로 고정된다.
-  item: Pick<MockScreenItem, "momentTactic" | "correctAction">,
+  // T129 (b)(§35.6 · §95) — `landingId`를 받아 순간에 싣는다(D-61 분기 판정이 같은 turnIndex의 다른 화면과 섞이지 않게).
+  item: Pick<MockScreenItem, "landingId" | "momentTactic" | "correctAction">,
   anchorTurnIndex: number,
   timeLabel?: string,
 ): DeceivedMomentResult {
@@ -135,6 +136,7 @@ export function buildLandingSubmitMoment(
     tactic: item.momentTactic,
     correctAction: item.correctAction,
     tacticCategory: resolveTacticCategory(item.momentTactic),
+    landingId: item.landingId,
   };
 }
 

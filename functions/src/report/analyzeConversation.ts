@@ -55,6 +55,8 @@ export type DeceivedMomentResult = {
   // T74(§15.4.2/AC-068) — 실패 아카이브의 "수법별 묶기" 그룹 키. 판정 로직에는 전혀 관여하지
   // 않는다(wasDeceived·deceivedMoments 산출은 무변경) — 집계용 라벨 정규화일 뿐이다.
   tacticCategory: TacticCategory;
+  /** T129 (b)(§35.6 · §95) — 모의 화면 승격 순간에만(`buildLandingSubmitMoment`). 대화 추정 순간에는 없다. */
+  landingId?: string;
 };
 
 export type ConversationAnalysis = {

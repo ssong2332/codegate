@@ -153,3 +153,16 @@ test("[AC-062 무회귀] 제출 0건·승격 0건 세션의 문구는 도입 전
     );
   }
 });
+
+// ⭐ T129 (b) 발동(docs/Architecture.md §35.6 1행 · §95) — 검찰 고급 변형이 한 세션에 모의 화면 2건(사건 기록 열람 · 보관 지갑 전송)을
+// 갖게 되어 매칭 키에 landingId를 더했다. §35.8 P-3 픽스처: 같은 앵커의 두 화면 중 A만 제출(승격) · B는 열고 닫음 ⇒ B는 '다'.
+test("[T129 (b)] 같은 turnIndex의 다른 화면 승격은 이 화면을 '나'로 만들지 않는다 · landingId가 한쪽이라도 없으면 종전 키(turnIndex)", () => {
+  const a: MockScreenCopyEntry = { anchorTurnIndex: 4, anchorResolved: true, consented: false, landingId: "case-record-view" };
+  const b: MockScreenCopyEntry = { anchorTurnIndex: 4, anchorResolved: true, consented: false, landingId: "asset-check-wallet" };
+  const moments = [{ turnIndex: 4, landingId: "case-record-view" }];
+  assert.equal(resolveMockScreenBranch(a, moments), "submitted");
+  assert.equal(resolveMockScreenBranch(b, moments), "declined");
+  // 과거 리포트(순간에 landingId 없음) · 옛 픽스처(항목에 landingId 없음) — 오늘 동작 그대로(안전 폴백 '나').
+  assert.equal(resolveMockScreenBranch(b, [{ turnIndex: 4 }]), "submitted");
+  assert.equal(resolveMockScreenBranch({ ...b, landingId: undefined }, moments), "submitted");
+});

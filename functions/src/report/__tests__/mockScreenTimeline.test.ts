@@ -217,8 +217,8 @@ test("[OQ-U32] 승격된 순간의 turnIndex == 그 항목의 anchorTurnIndex (�
     "대조 키는 turnIndex↔anchorTurnIndex",
   );
   assert.equal(promotedMoment.timeLabel, entry.timeLabel, "timeLabel도 같은 앵커에서 온다(중복 확인)");
-  // `landingId`는 순간 쪽 스키마에 존재하지 않는다 — 키 후보에서 구조적으로 탈락한다.
-  assert.equal("landingId" in promotedMoment, false);
+  // ⭐ T129 (b) 발동(§35.6 1행 · §95) — 승격 순간이 이제 그 화면의 landingId를 싣는다(카탈로그 id — 참가자 입력 아님). 키 = turnIndex + landingId.
+  assert.equal(promotedMoment.landingId, entry.landingId);
 });
 
 test("[OQ-U32 역검증] 제출이 없으면 그 앵커 턴에 순간이 없다(분기 '다'가 성립한다)", (t) => {
@@ -452,10 +452,20 @@ const Q2_INSTALL = "card-guard-app-install";
  * anchorTurnIndex(OQ-U32 — 위 블록이 확정). 루트 모듈은 functions 테스트에서 import할 수 없어 같은 규칙을 그대로 옮긴다(규칙 원문 · 짝 테스트는
  * 루트 `mockScreenTimelineCopy.test.ts`).
  */
-function d61Branch(entry: { consented: boolean; anchorResolved: boolean; anchorTurnIndex: number }, moments: readonly { turnIndex: number }[]) {
+// ⭐ T129 (b) 발동(Architecture §35.6 1행 · §95) — 키에 landingId가 더해졌다(양쪽 모두 있을 때만 비교 · 한쪽이라도 없으면 종전 키).
+function d61Branch(
+  entry: { consented: boolean; anchorResolved: boolean; anchorTurnIndex: number; landingId?: string },
+  moments: readonly { turnIndex: number; landingId?: string }[],
+) {
   if (entry.consented) return "consented";
   if (!entry.anchorResolved || entry.anchorTurnIndex < 0) return "submitted";
-  return moments.some((m) => m.turnIndex === entry.anchorTurnIndex) ? "submitted" : "declined";
+  return moments.some(
+    (m) =>
+      m.turnIndex === entry.anchorTurnIndex &&
+      (m.landingId === undefined || entry.landingId === undefined || m.landingId === entry.landingId),
+  )
+    ? "submitted"
+    : "declined";
 }
 
 test("[T194-c-1 G606] 통화 중 설치 문서 — 명시 앵커(문자 문서 값을 resolveAnchor로 푼 값)로 붙고 첨부 기반 리졸버를 타지 않는다 · 응낙 = 그 턴에 승격", (t) => {
@@ -492,7 +502,7 @@ test("[T194-c-1 G606] 통화 중 설치 문서 — 명시 앵커(문자 문서 �
   assert.equal(atStart.promotedCount, 0);
 });
 
-test("[T194-c-1 G605 ② · R-b] D-61 — Q2 1랜딩 세션에서 닫은 설치 화면은 '다' / 같은 앵커에 이체 랜딩 제출이 겹친 2랜딩 픽스처는 '나'(오분류 재현)", (t) => {
+test("[T194-c-1 G605 ② · R-b → T129 (b)] D-61 — Q2 1랜딩 세션에서 닫은 설치 화면은 '다' / 같은 앵커에 이체 랜딩 제출이 겹친 2랜딩도 이제 '다'(오분류 해소)", (t) => {
   const installShown: MockScreenSource = {
     landingId: Q2_INSTALL,
     kind: "app-install",
@@ -518,8 +528,15 @@ test("[T194-c-1 G605 ② · R-b] D-61 — Q2 1랜딩 세션에서 닫은 설치 
   const installEntry = twoLanding.mockScreenTimeline.find((e) => e.landingId === Q2_INSTALL);
   assert.ok(installEntry);
   const twoLandingBranch = d61Branch(installEntry, twoLanding.deceivedMoments);
-  t.diagnostic(`[G605 ②] 정상(1랜딩) 설치 항목 분기 = ${normalBranch} / R-b(2랜딩 · 같은 앵커 제출) 설치 항목 분기 = ${twoLandingBranch}(정답 '다' — 오분류)`);
+  // T129 (b) 회귀 기준선(§35.8 P-3) — 승격 순간이 landingId를 실으므로, 키에서 landingId를 걷어 내면 종전 오분류('나')가 그대로 재현된다(대조군).
+  const legacyBranch = d61Branch(
+    { ...installEntry, landingId: undefined },
+    twoLanding.deceivedMoments.map(({ turnIndex }) => ({ turnIndex })),
+  );
+  t.diagnostic(`[G605 ② · T129 (b)] 정상(1랜딩) = ${normalBranch} / 2랜딩 · 같은 앵커 제출: landingId 키 = ${twoLandingBranch} · 종전 키 = ${legacyBranch}`);
   assert.equal(normalBranch, "declined");
   assert.equal(promoted.promotedCount, 1, "R-b 전제 — 이체 랜딩 제출이 같은 앵커에 승격돼야 한다");
-  assert.equal(twoLandingBranch, "submitted", "R-b — 2랜딩이면 닫은 설치 항목이 '나'로 오분류된다(§35.8 P-3 모양)");
+  assert.equal(promoted.deceivedMoments[0]!.landingId, "card-relief-transfer", "T129 (b) — 승격 순간이 그 화면의 landingId를 싣는다");
+  assert.equal(twoLandingBranch, "declined", "T129 (b) — 닫은 설치 항목은 다른 화면의 제출과 섞이지 않는다");
+  assert.equal(legacyBranch, "submitted", "대조군 — landingId 없는 키는 종전처럼 '나'(과거 리포트 폴백 = 오늘 동작)");
 });
