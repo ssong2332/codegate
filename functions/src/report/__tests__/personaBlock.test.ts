@@ -109,7 +109,11 @@ test("[G570 역방향] 기록 없이 단정하는 사본(카드가 있으면 항
 
 test("[G570 배선] 리포트 생성이 이미 읽은 messages 스냅샷과 세션 카드로 1회 판정하고, 카드 없으면 필드를 만들지 않는다(소스 스캔)", () => {
   const src = readFileSync(path.resolve(__dirname, "../../../src/report/generateReportCore.ts"), "utf8").replace(/\r\n/g, "\n");
-  assert.match(src, /const personaBlock = buildPersonaBlock\(session\.personaCard, messages, false\);/);
+  // §93 — 네 번째 인자 = 카탈로그 카드 종류에서 고른 협박형 context(기관형 · 대상 밖 = undefined).
+  assert.match(
+    src,
+    /const personaKind = personaCardKind\(session\.scenarioId\);\n\s*const personaBlock = buildPersonaBlock\(\n\s*session\.personaCard,\n\s*messages,\n\s*false,\n\s*personaKind === "child-threat" \|\| personaKind === "self-threat" \? personaKind : undefined,\n\s*\);/,
+  );
   assert.match(src, /\.\.\.\(personaBlock \? \{ personaBlock \} : \{\}\),/);
   // messages 스냅샷이 notSpoken 표시를 싣는다(판정에서 빼기 위해).
   assert.match(src, /\.\.\.\(data\.notSpoken === true \? \{ notSpoken: true as const \} : \{\}\),/);
@@ -199,4 +203,70 @@ test("[2026-10-21 지역 부분 일치] 기관명 · 은행명 안의 지명은 
   // 주소 문맥으로 말하면 그대로 R-1에 든다.
   const said = buildPersonaBlock(card, [scammer(0, "서울에 사시는 홍길순 님 맞으시죠?"), user(1, "네")], false)!;
   assert.deepEqual(said.items.map((i) => i.key).sort(), ["name", "region"]);
+});
+
+// ── §93(2026-10-21 · 대상 확대 — 협박형 2종) — 새 행 토큰 · 협박형 context ──────────────────────────────
+
+const CHILD_CARD: PersonaCard = {
+  v: 2,
+  inputBy: "self",
+  items: [
+    { key: "childName", label: "자녀 이름", value: "김민준" },
+    { key: "childGrade", label: "자녀 학년", value: "초등학교 3학년" },
+    { key: "childAcademy", label: "자녀가 다니는 학원", value: "영어학원" },
+  ],
+};
+
+test("[§93 · 리뷰 Major 1 · 2] 자녀 행 토큰 — 부르는 꼴 + 뒤 낱말 앵커만(프롬프트 대사와 일치) · 일상어(하나는 · 보람이 있다) 0", () => {
+  const [child, grade, academy] = CHILD_CARD.items;
+  const tokens = personaMatchTokens(child!);
+  for (const t of ["김민준", "민준이 지금", "민준이가 지금", "민준이를 데리고"]) assert.ok(tokens.includes(t), t);
+  assert.equal(tokens.includes("민준"), false, "맨몸은 사기범 쪽 토큰이 아니다");
+  // 받침 없는 이름 — 프롬프트 대사 "'지우 지금 여기 있습니다'"가 잡혀야 한다(Major 1).
+  const jiwoo = { key: "childName", label: "자녀 이름", value: "이지우" } as const;
+  const said = buildPersonaBlock({ v: 2, inputBy: "self", items: [jiwoo] }, [scammer(0, "지우 지금 여기 있습니다."), user(1, "네?")], false, "child-threat")!;
+  assert.equal(said.state, "R-1");
+  // 일상어와 겹치는 이름 — 조사 꼴만으로는 세지 않는다(Major 2).
+  for (const [value, line] of [
+    ["김하나", "하나는 확실합니다. 하나도 못 건집니다."],
+    ["이보람", "협조하시면 보람이 있을 거예요."],
+    ["하늘", "하늘이 두 쪽 나도 오늘 안에 보내세요."],
+  ] as const) {
+    const card: PersonaCard = { v: 2, inputBy: "self", items: [{ key: "childName", label: "자녀 이름", value }] };
+    assert.equal(buildPersonaBlock(card, [scammer(0, line), user(1, "네")], false, "child-threat")!.state, "R-2", `${value}: ${line}`);
+  }
+  // 2자 이름도 부르는 꼴 앵커로는 센다.
+  const twoChar: PersonaCard = { v: 2, inputBy: "self", items: [{ key: "childName", label: "자녀 이름", value: "하늘" }] };
+  assert.equal(buildPersonaBlock(twoChar, [scammer(0, "하늘이 지금 여기 있어요."), user(1, "네?")], false, "child-threat")!.state, "R-1");
+  assert.deepEqual(personaMatchTokens(grade!), ["초등학교 3학년", "초등 3학년", "초3"]);
+  assert.deepEqual(personaMatchTokens({ key: "childGrade", label: "자녀 학년", value: "유치원생" }), ["유치원"]);
+  assert.deepEqual(personaMatchTokens(academy!), ["영어학원", "영어 학원"]);
+  assert.deepEqual(personaMatchTokens({ key: "job", label: "하는 일", value: "공무원" }), ["공무원"]);
+});
+
+test("[§93] 협박형 블록 — 협박범이 먼저 댄 자녀 정보 = R-1 · context가 실린다 · 참가자가 먼저 말한 이름은 세지 않는다 · 부재 = 기관형", () => {
+  const first = buildPersonaBlock(
+    CHILD_CARD,
+    [scammer(0, "민준이 지금 여기 있어요. 초3이죠? 영어학원 끝나고 데려왔어요."), user(1, "네? 우리 민준이요?")],
+    false,
+    "child-threat",
+  )!;
+  assert.equal(first.state, "R-1");
+  assert.equal(first.context, "child-threat");
+  assert.deepEqual(first.items.map((i) => i.key), ["childName", "childGrade", "childAcademy"]);
+  // 참가자가 먼저 이름을 말하고 협박범이 되받으면 "먼저 꺼냄"이 아니다(카드 없음 꼴과 같은 판정).
+  const echoed = buildPersonaBlock(CHILD_CARD, [scammer(0, "아이 데리고 있어요."), user(1, "민준이요?"), scammer(2, "네, 민준이 여기 있어요.")], false, "child-threat")!;
+  assert.equal(echoed.state, "R-2");
+  assert.equal(echoed.context, "child-threat");
+  // 기관형 = context 부재(종전 문면).
+  assert.equal(buildPersonaBlock(INPUT_CARD, [user(0, "네")], false)!.context, undefined);
+  const self = buildPersonaBlock(
+    { v: 2, inputBy: "sender", items: [{ key: "name", label: "이름", value: "이하나" }, { key: "job", label: "하는 일", value: "교사" }] },
+    [scammer(0, "이하나 씨, 교사시죠? 다 알고 있어요."), user(1, "누구세요")],
+    false,
+    "self-threat",
+  )!;
+  assert.equal(self.state, "R-1");
+  assert.equal(self.context, "self-threat");
+  assert.deepEqual(self.items.map((i) => i.key), ["name", "job"]);
 });

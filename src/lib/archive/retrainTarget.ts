@@ -10,6 +10,7 @@
 // | 조건(위에서부터 먼저 매치) | 목적지 |
 // |---|---|
 // | 시나리오 메타를 못 찾음 | 유형 선택(`/scenarios`)부터 — 없는 시나리오를 지목하지 않는다 |
+// | 합쳐진 시나리오(`mergedInto` — §92) | 아래 행들을 **흡수처 id**로 판정한다(흡수처는 같은 채널 · 음성 모드) |
 // | 메신저 시나리오 | `/scenarios/messenger?scenarioId=…` (self 모드) |
 // | 보이스 clone 시나리오 | 유형 선택(`/scenarios`) — clone 자기 체험은 AC-057로 배제돼 목록에 없다 |
 // | 그 외(보이스 generic) | `/scenarios/voice/generic?scenarioId=…` (self 모드) |
@@ -20,6 +21,8 @@ export type RetrainTrainingType = "voice" | "messenger";
 export type RetrainScenarioMeta = {
   channel?: "voice" | "messenger";
   voiceMode?: "clone" | "generic";
+  /** §92(DECISIONS #206) — 합쳐진 시나리오면 흡수처 id(목록에 없는 카드를 프리셋으로 지목하지 않는다). */
+  mergedInto?: string;
 };
 
 export type RetrainTarget = {
@@ -34,7 +37,7 @@ export function resolveRetrainTarget(
 ): RetrainTarget {
   if (!scenarioId || !meta) return { trainingType: null, path: "/scenarios" };
 
-  const preset = `scenarioId=${encodeURIComponent(scenarioId)}`;
+  const preset = `scenarioId=${encodeURIComponent(meta.mergedInto ?? scenarioId)}`;
   if (meta.channel === "messenger") {
     return { trainingType: "messenger", path: `/scenarios/messenger?${preset}` };
   }

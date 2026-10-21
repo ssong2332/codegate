@@ -103,8 +103,18 @@ export const PRE_SESSION_BURDEN_NOTICE =
 /** 서버가 고급 전용을 비고급으로 만들려는 요청을 거부할 때 싣는 사유 코드(C-2 — functions/src/session/difficultyAllowance.ts와 같은 문자열). */
 export const DIFFICULTY_NOT_ALLOWED_REASON = "difficulty-not-allowed";
 
+/** §92(DECISIONS #206) — 서버가 합쳐진 시나리오의 새 세션을 거부할 때 싣는 사유 코드(functions/src/session/mergedScenario.ts와 같은 문자열). */
+export const SCENARIO_MERGED_REASON = "scenario-merged";
+/** 그 거부의 오류 자리 1줄(UX D-135). */
+export const SCENARIO_MERGED_LINE = "이 훈련은 다른 훈련으로 합쳐졌습니다. 시나리오 목록에서 다시 골라 주세요.";
+
 /** 시나리오 메타 중 이 블록이 읽는 필드(구조 타입 — `@/content/scenarios`의 ScenarioDoc이 그대로 맞는다). */
-export type DifficultyAllowanceMeta = { advancedOnly?: true; preSessionBurdenNotice?: true };
+export type DifficultyAllowanceMeta = {
+  advancedOnly?: true;
+  preSessionBurdenNotice?: true;
+  mergedInto?: string;
+  lowPriority?: true;
+};
 
 /** UX-029가 그릴 난이도 카드 — 고급 전용이면 고급 1장만(비활성 표시 0 — D-40 · D-54), 아니면 3단계 전부(AC-064). */
 export function selectableDifficultyLevels(meta: DifficultyAllowanceMeta): readonly DifficultyLevel[] {
@@ -112,19 +122,28 @@ export function selectableDifficultyLevels(meta: DifficultyAllowanceMeta): reado
 }
 
 /**
- * UX-017 목록 분할 — 기존 카드(순서 무변경) + "고급 전용" 묶음. 지인에게 보내기(send) 목록에서는 고급 전용이
+ * UX-017 목록 분할 — 기존 카드 + "고급 전용" 묶음. 지인에게 보내기(send) 목록에서는 고급 전용이
  * **0건**이다(D-107 · AC-097 (g) — 묶음 제목도 없다).
+ * §92(UX D-135) — 합쳐진 시나리오(`mergedInto`)는 어느 묶음에도 없다 · 우선순위 낮음(`lowPriority`)은 일반 묶음 맨 뒤
+ * (안정 정렬 — 나머지 카드 순서 무변경).
  */
 export function partitionScenarioList<T extends DifficultyAllowanceMeta>(
   entries: readonly (readonly [string, T])[],
   mode: "self" | "send",
 ): { regular: [string, T][]; advancedOnly: [string, T][] } {
-  const regular = entries.filter(([, meta]) => meta.advancedOnly !== true).map(([id, meta]) => [id, meta] as [string, T]);
-  const advancedOnly =
-    mode === "send"
-      ? []
-      : entries.filter(([, meta]) => meta.advancedOnly === true).map(([id, meta]) => [id, meta] as [string, T]);
+  const listed = entries.filter(([, meta]) => meta.mergedInto === undefined).map(([id, meta]) => [id, meta] as [string, T]);
+  const nonAdvancedOnly = listed.filter(([, meta]) => meta.advancedOnly !== true);
+  const regular = [
+    ...nonAdvancedOnly.filter(([, meta]) => meta.lowPriority !== true),
+    ...nonAdvancedOnly.filter(([, meta]) => meta.lowPriority === true),
+  ];
+  const advancedOnly = mode === "send" ? [] : listed.filter(([, meta]) => meta.advancedOnly === true);
   return { regular, advancedOnly };
+}
+
+/** §92 — 합쳐진 시나리오 id를 흡수처 id로 바꾼다(프리셋 · 재훈련). 합쳐지지 않았으면 그대로. */
+export function resolveListedScenarioId(scenarioId: string, meta: Pick<DifficultyAllowanceMeta, "mergedInto"> | undefined): string {
+  return meta?.mergedInto ?? scenarioId;
 }
 
 /** Functions 콜러블 오류에서 `details.reason`을 읽는다(없으면 null) — C-2 거부를 일반 오류와 구분한다. */

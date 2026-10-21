@@ -15,7 +15,7 @@ import type { DifficultyLevel } from "../../shared/difficulty";
 import { OPENING_TURN_INSTRUCTION } from "../../roleplay/openingLine";
 import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL } from "../mockScreens";
 import { FLOW_VARIANTS } from "../flowVariants";
-import { PERSONA_CARD_SCENARIOS, PERSONA_REGION_POOL } from "../personaCardCatalog";
+import { personaCardKind, PERSONA_CARD_SCENARIOS, PERSONA_REGION_POOL } from "../personaCardCatalog";
 import { buildPersonaCard } from "../../session/personaCard";
 import { sessionDeclaredSmsPurposes, sessionTransferSmsOpensLanding } from "../../inCallSms/smsGate";
 import { buildConfirmResultInstruction, buildLiveConfirmResultInstruction } from "../../inCallSms/confirmResult";
@@ -1403,12 +1403,22 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
     const speakerGender = speakerGenderFor(scenarioId);
     const verifyInterceptEnabled = hasVerifyIntercept(scenarioId);
     FICTIONAL_BANK_NAMES.forEach((fictionalBankName, i) => {
-      const samples = [
-        { name: "홍길동", birthYear: 1962, region: PERSONA_REGION_POOL[i % PERSONA_REGION_POOL.length]!.name },
-        { name: "김민수" },
-        { birthYear: 1958, region: PERSONA_REGION_POOL[(i * 2 + 1) % PERSONA_REGION_POOL.length]!.name },
-        { name: "Kim Minsu", region: "서울특별시" },
-      ];
+      // §93 — 협박형은 그 종류의 칸으로(자녀 납치 = 자녀 칸만 · 유포 협박 = 신상 + 하는 일). 서버가 다른 종류의 칸을 거부한다.
+      const kind = personaCardKind(scenarioId);
+      const samples =
+        kind === "child-threat"
+          ? [
+              { childName: "김민준", childGrade: "초등학교 3학년", childAcademy: "영어학원" },
+              { childName: "이지우" },
+              { childName: "Ryan", childAcademy: "태권도장" },
+              { childName: "박서연", childGrade: "고등학교 1학년" },
+            ]
+          : [
+              { name: "홍길동", birthYear: 1962, region: PERSONA_REGION_POOL[i % PERSONA_REGION_POOL.length]!.name },
+              { name: "김민수", ...(kind === "self-threat" ? { job: "회사원" } : {}) },
+              { birthYear: 1958, region: PERSONA_REGION_POOL[(i * 2 + 1) % PERSONA_REGION_POOL.length]!.name },
+              { name: "Kim Minsu", region: "서울특별시" },
+            ];
       const personaCard = buildPersonaCard({ input: samples[i % samples.length]!, inputBy: i % 2 === 0 ? "self" : "sender" })!.items;
       for (const toolDrivenTiming of [false, true]) {
         out.push({

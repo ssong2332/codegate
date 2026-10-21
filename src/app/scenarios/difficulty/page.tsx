@@ -37,6 +37,8 @@ import {
   ADVANCED_SELF_NOTICE,
   ADVANCED_SEND_NOTICE,
   DIFFICULTY_NOT_ALLOWED_REASON,
+  SCENARIO_MERGED_LINE,
+  SCENARIO_MERGED_REASON,
   PRE_SESSION_BURDEN_NOTICE,
   DIFFICULTY_LABEL,
   DIFFICULTY_SELF_DESCRIPTION,
@@ -54,9 +56,10 @@ import { SESSION_PREP_HINTS } from "@/lib/motion/routeMotion";
 import PersonaCardInputFields from "@/components/PersonaCardInputFields";
 import {
   EMPTY_PERSONA_CARD_FORM,
-  PERSONA_INPUT_COPY,
   personaCardErrorLine,
   personaCardInputVisible,
+  personaCardKindFor,
+  personaInvalidLine,
   readPersonaCardForm,
   type PersonaCardForm,
   type PersonaCardInput,
@@ -94,6 +97,8 @@ export default function DifficultySelectPage() {
   const showBurdenNotice = scenario?.preSessionBurdenNotice === true && selected === "advanced";
   // §88(UX D-131 (1)) — self 모드에서만(send의 받는 분 정보는 UX-019가 받는다).
   const showPersonaInput = !isSendMode && personaCardInputVisible(scenarioId, selected, scenario?.channel);
+  // §93(UX D-136) — 시나리오 카드 종류가 칸 · 안내 · 오류 문면을 정한다(자녀 칸은 자녀 납치 협박에만).
+  const personaKind = personaCardKindFor(scenarioId);
   useEffect(() => {
     // UX 계약 C-10 — 이벤트는 종류만(시나리오 ID · 수법 0).
     if (showBurdenNotice) console.info(JSON.stringify({ event: "burden_notice_shown" }));
@@ -166,9 +171,9 @@ export default function DifficultySelectPage() {
     // §88(UX D-131 (3)) — 입력 블록이 보일 때만 읽는다(숨은 칸의 값은 보내지 않는다). 형식 오류면 진행하지 않고 1줄로 알린다.
     let personaCardInput: PersonaCardInput | undefined;
     if (showPersonaInput) {
-      const read = readPersonaCardForm(personaForm);
+      const read = readPersonaCardForm(personaForm, undefined, personaKind ?? undefined);
       if (!read.ok) {
-        setStartError(PERSONA_INPUT_COPY.invalid);
+        setStartError(personaInvalidLine(personaKind));
         return;
       }
       personaCardInput = read.input;
@@ -198,10 +203,13 @@ export default function DifficultySelectPage() {
       // 재시도는 그대로 같은 버튼이다(P-4).
       // §88 — 서버의 내 정보 거부(형식 · 대상 밖)는 D-131 (3) 문면으로 알린다.
       const reason = readFunctionsErrorReason(err);
+      // §92(UX D-135) — 합쳐진 시나리오(옛 화면 캐시에서 고른 경우)는 서버가 `scenario-merged`로 거부한다.
       setStartError(
         reason === DIFFICULTY_NOT_ALLOWED_REASON
           ? ADVANCED_ONLY_LINE
-          : (personaCardErrorLine(reason) ?? "훈련을 시작하지 못했습니다. 다시 시도해 주세요."),
+          : reason === SCENARIO_MERGED_REASON
+            ? SCENARIO_MERGED_LINE
+            : (personaCardErrorLine(reason, personaKind) ?? "훈련을 시작하지 못했습니다. 다시 시도해 주세요."),
       );
       setState("ready");
     }
@@ -319,6 +327,7 @@ export default function DifficultySelectPage() {
       {showPersonaInput && (
         <PersonaCardInputFields
           mode="self"
+          kind={personaKind ?? undefined}
           value={personaForm}
           onChange={setPersonaForm}
           disabled={state === "starting"}

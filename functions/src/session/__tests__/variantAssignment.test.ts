@@ -252,7 +252,7 @@ test("[T194-c-1 G611 · ⓙ] 챌린지 고급 card-company = [fv-akj5] 문자 0 
     "card-company-impersonation": ids(assignablePool("card-company-impersonation", "advanced")),
     "loan-refinance-scam": ids(assignablePool("loan-refinance-scam", "advanced")),
   };
-  assert.deepEqual(selfPools, { "card-delivery-call": ["fv-tvnj"], "card-company-impersonation": ["fv-x7ue"], "loan-refinance-scam": ["fv-m3hd"] });
+  assert.deepEqual(selfPools, { "card-delivery-call": ["fv-tvnj"], "card-company-impersonation": ["fv-x7ue", "fv-w3dq"], "loan-refinance-scam": ["fv-m3hd"] }); // §92 — 카드사 흡수 변형 fv-w3dq
   // 전 시나리오 챌린지 풀 변형의 설치 문자 선언 = 거짓.
   const challengeInstall: string[] = [];
   for (const id of Object.keys(PUBLIC_SCENARIOS)) {
@@ -267,7 +267,7 @@ test("[T194-c-1 G611 · ⓙ] 챌린지 고급 card-company = [fv-akj5] 문자 0 
   t.diagnostic(`[G611 정상] 챌린지 card-company ${JSON.stringify(ids(assignablePool("card-company-impersonation", "advanced", "c1")))} · loan ${JSON.stringify(ids(assignablePool("loan-refinance-scam", "advanced", "c1")))} · 자가 ${JSON.stringify(selfPools)} · 챌린지 Q2 누수 ${JSON.stringify(normalLeaks)}`);
   t.diagnostic(`[G611 ⓙ 역방향] 설치 항을 끈 사본 → 챌린지 Q2 누수 ${JSON.stringify(poisonedLeaks)} — 실패 재현`);
   assert.deepEqual(normalLeaks, []);
-  assert.deepEqual(poisonedLeaks, ["card-company-impersonation/챌린지/fv-x7ue", "loan-refinance-scam/챌린지/fv-m3hd"]);
+  assert.deepEqual(poisonedLeaks, ["card-company-impersonation/챌린지/fv-x7ue", "card-company-impersonation/챌린지/fv-w3dq", "loan-refinance-scam/챌린지/fv-m3hd"]); // §92 — fv-w3dq
 });
 
 test("[T194-c-1 G611] 수신자 배정 — 40개 챌린지 ID 전부 base 변형(fv-akj5 · fv-6s5p)만 · 자가 회전은 Q2 변형", async () => {

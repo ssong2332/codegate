@@ -143,7 +143,7 @@ export default function MessengerSessionPage() {
   const [ended, setEnded] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  // 실기 신고(2026-10-21 · UX D-135 · §92) — 보낸 한 턴의 연출 상태(낙관적 말풍선 · "1" · 입력 중 · 답장 공개 시각).
+  // 실기 신고(2026-10-21 · UX D-137 · §94) — 보낸 한 턴의 연출 상태(낙관적 말풍선 · "1" · 입력 중 · 답장 공개 시각).
   // 화면은 `viewReply(pending, messages, clock)` 결과만 그린다. `clock`은 단계가 바뀌는 시각에만 타이머가 올린다.
   const [pending, setPending] = useState<PendingTurn | null>(null);
   const [clock, setClock] = useState(0);
@@ -281,7 +281,7 @@ export default function MessengerSessionPage() {
           };
         });
       setMessages(next);
-      // §92 — 답장 문서가 서버 응답보다 먼저 올 수 있다. 처음 보인 시각을 "답을 안 시각"으로 적는다(공개는 연출 뒤).
+      // §94 — 답장 문서가 서버 응답보다 먼저 올 수 있다. 처음 보인 시각을 "답을 안 시각"으로 적는다(공개는 연출 뒤).
       setPending((current) => (current ? noteSnapshot(current, next, Date.now()) : current));
     });
     return unsubscribe;
@@ -294,7 +294,7 @@ export default function MessengerSessionPage() {
     messageListRef.current?.focus();
   }, [startNotice]);
 
-  // §92 — 연출 단계가 바뀌는 시각(읽음 · 입력 중 · 공개 · 문서 여유)에만 시계를 올린다(상시 폴링 0).
+  // §94 — 연출 단계가 바뀌는 시각(읽음 · 입력 중 · 공개 · 문서 여유)에만 시계를 올린다(상시 폴링 0).
   useEffect(() => {
     if (!pending) return;
     const at = nextChangeAt(pending, clock);
@@ -304,7 +304,7 @@ export default function MessengerSessionPage() {
   }, [pending, clock]);
 
   const replyView = viewReply(pending, messages, clock);
-  // §92 — 종료 · 통화 전환은 답장이 보인 **뒤에** 적용한다(답장 없이 화면이 바뀌지 않게).
+  // §94 — 종료 · 통화 전환은 답장이 보인 **뒤에** 적용한다(답장 없이 화면이 바뀌지 않게).
   // ⚠️ 불변식(리뷰 M3): 결과(outcome)가 있는 pending은 교체 · 삭제되지 않는다 — 새 전송은 `turnLocked`가 막고, "삭제"는 실패 말풍선
   // (서버 실패 = outcome 없음)에만 있다. 이 둘을 바꾸면 종료 · 통화 전환이 사라질 수 있다.
   const chatEnded = ended || (replyView.settled && pending?.outcome?.ended === true);
@@ -318,7 +318,7 @@ export default function MessengerSessionPage() {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, replyView.showOptimistic, replyView.showTyping, replyView.hideReply]);
 
-  // §92(UX D-135) — 전송 즉시 내 말풍선을 올린다(낙관적 표시 · "1"). 서버 응답을 기다리지 않는다.
+  // §94(UX D-137) — 전송 즉시 내 말풍선을 올린다(낙관적 표시 · "1"). 서버 응답을 기다리지 않는다.
   // ⚠️ 서버는 한 번에 한 턴만 처리한다(턴 확보 트랜잭션 — functions/src/roleplay/index.ts) ⇒ 서버 호출 중에는 전송 버튼만
   // 잠그고 입력칸은 열어 둔다(키보드가 닫히지 않게). 서버가 끝난 뒤 연출 중에 보내면 앞 답장은 바로 보인다.
   const handleSend = async (retryText?: string) => {
@@ -346,7 +346,7 @@ export default function MessengerSessionPage() {
       setDialogueDegraded((current) => foldDegraded(current, result.isMock));
       // T30(§13.2) — 자동 신호든 max-turn 폴백이든, 서버가 이미 transitionChannel을 마쳤다는
       // 뜻이다. 클라는 이 플래그만 보고 전이 연출로 넘어간다(자유텍스트 직접 분류 안 함).
-      // §92 — 적용 시점만 답장 공개 뒤로 미룬다(`escalatingNow` · `chatEnded`).
+      // §94 — 적용 시점만 답장 공개 뒤로 미룬다(`escalatingNow` · `chatEnded`).
       setPending((current) =>
         current?.localId === turn.localId
           ? noteServerDone(
@@ -480,7 +480,7 @@ export default function MessengerSessionPage() {
   const threadTokens = smsThreadTokensFor(messengerSkin);
   // §89.5 ⓐ — 메신저형(카카오 표면) 색 · 표시 항목(통화 구간은 줄 1개로 접힌다).
   const chatTokens = MESSENGER_CHAT_TOKENS;
-  // §92 — 표시 목록 = 구독 문서(이번 턴 답장은 공개 전까지 숨김) + 아직 서버 문서가 없는 내 말풍선(낙관적).
+  // §94 — 표시 목록 = 구독 문서(이번 턴 답장은 공개 전까지 숨김) + 아직 서버 문서가 없는 내 말풍선(낙관적).
   const visibleMessages =
     pending && replyView.hideReply
       ? messages.filter((m) => !(m.role === "scammer" && m.turnIndex > pending.baseTurnIndex))
@@ -671,7 +671,7 @@ export default function MessengerSessionPage() {
           const firstOfPeerRun = startsPeerRun(threadItems, index);
           const firstOfRun = firstOfPeerRun || (message.role === "user" && !isSameRole(index - 1, "user"));
           const timeLabel = !isSms && endsRun(threadItems, index) ? formatChatTime(message.createdAtMs) : "";
-          // §92 — "1"은 상대가 읽기 전(연출 unread 단계)까지만. 실패 말풍선에는 "1" 대신 실패 표시.
+          // §94 — "1"은 상대가 읽기 전(연출 unread 단계)까지만. 실패 말풍선에는 "1" 대신 실패 표시.
           const failed = message.id === failedId;
           const unread = !isSms && !failed && !replyView.peerHasRead && isUnreadByPeer(threadItems, index);
           return (
@@ -735,7 +735,7 @@ export default function MessengerSessionPage() {
               </span>
             )}
             {failed && (
-              // §92 — 전송 실패(서버에 저장 안 됨) — 실제 메신저처럼 말풍선에 실패 표시 + 다시 보내기 · 삭제.
+              // §94 — 전송 실패(서버에 저장 안 됨) — 실제 메신저처럼 말풍선에 실패 표시 + 다시 보내기 · 삭제.
               <span className="flex items-center gap-1 text-[13px]">
                 <span aria-hidden="true" className="flex h-5 w-5 items-center justify-center rounded-full bg-danger text-[12px] font-bold text-white">
                   !
@@ -810,7 +810,7 @@ export default function MessengerSessionPage() {
             늘었다) 그냥 버튼 스피너만으로는 "보냈는데도 멈춘 것 같다"는 인상을 줬다. docs/UX.md
             P-4("AI 응답 대기 중... 타이핑 인디케이터 표시")가 이미 요구하던 패턴을 실제로
             구현한다 — 상대가 실제로 답장을 쓰고 있는 것처럼 보이는 점 3개 애니메이션. */}
-        {/* §92(UX D-135) — 입력 중 점은 상대가 읽은 **뒤**(내 "1"이 사라진 뒤)에만 뜬다. 전송 순간에는 뜨지 않는다. */}
+        {/* §94(UX D-137) — 입력 중 점은 상대가 읽은 **뒤**(내 "1"이 사라진 뒤)에만 뜬다. 전송 순간에는 뜨지 않는다. */}
         {replyView.showTyping && (
           <li className="flex flex-col items-start gap-1" aria-hidden="true">
             <span
@@ -922,7 +922,7 @@ export default function MessengerSessionPage() {
                     : { backgroundColor: chatTokens.sendBg, color: chatTokens.sendIcon }
                 }
               >
-                {/* §92 — 회전 스피너 대신 말풍선이 바로 올라간다(실제 앱에 전송 스피너 없음). */}
+                {/* §94 — 회전 스피너 대신 말풍선이 바로 올라간다(실제 앱에 전송 스피너 없음). */}
                 <PhoneIcon name="send-up" size={22} />
               </button>
             </form>

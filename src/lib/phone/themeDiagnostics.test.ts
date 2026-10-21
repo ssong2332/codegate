@@ -1,4 +1,4 @@
-// G637 — `?themedebug=1` 색 진단 · 훈련 화면 라이트 고정(UX D-135 (B) · docs/Architecture.md §92 · 웨일 다크 실기 신고 2026-10-21).
+// G637 — `?themedebug=1` 색 진단 · 훈련 화면 라이트 고정(UX D-137 (B) · docs/Architecture.md §94 · 웨일 다크 실기 신고 2026-10-21).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

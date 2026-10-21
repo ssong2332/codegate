@@ -1,4 +1,4 @@
-// G636 — 메신저 대화방 "보냄 → 읽음(1 사라짐) → 입력 중 → 답장" 순서(UX D-135 · docs/Architecture.md §92 · 실기 신고 2026-10-21).
+// G636 — 메신저 대화방 "보냄 → 읽음(1 사라짐) → 입력 중 → 답장" 순서(UX D-137 · docs/Architecture.md §94 · 실기 신고 2026-10-21).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

@@ -32,6 +32,7 @@ import {
   ADVANCED_ONLY_TAG,
   SCENARIO_TRAIT_LABEL,
   partitionScenarioList,
+  resolveListedScenarioId,
 } from "@/lib/difficulty";
 import { scenarios, type ScenarioDoc, type VoiceMode } from "@/content/scenarios";
 import { Badge, Button } from "@/components/ui";
@@ -52,7 +53,9 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
   // 미리 선택한다(예: clone 시나리오를 generic 목록에 손으로 붙여 넣어도 무시된다).
   const searchParams = useSearchParams();
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(() => {
-    const preset = searchParams.get("scenarioId");
+    const rawPreset = searchParams.get("scenarioId");
+    // §92(UX D-135) — 합쳐진 시나리오를 지목한 옛 링크는 흡수처를 미리 고른다(목록에 없는 카드를 고르지 않는다).
+    const preset = rawPreset ? resolveListedScenarioId(rawPreset, scenarios[rawPreset]) : null;
     if (!preset || scenarios[preset]?.voiceMode !== mode) return null;
     // T191 S5(D-107) — 지인에게 보내기 목록에는 고급 전용이 없으므로 프리셋도 받지 않는다.
     if (scenarios[preset]?.advancedOnly === true && getExperienceMode() === "send") return null;
@@ -67,7 +70,8 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
   const filteredEntries = Object.entries(scenarios).filter(
     ([, scenario]) => scenario.voiceMode === mode,
   );
-  // T191 S5(UX-017 v1.34 · D-104 · D-107) — 기존 카드는 순서 무변경, 고급 전용 3종은 아래 별도 묶음.
+  // T191 S5(UX-017 v1.34 · D-104 · D-107) — 고급 전용은 아래 별도 묶음. §92(D-135) — 합쳐진 시나리오는 빠지고
+  // 우선순위 낮음 2종은 일반 묶음 맨 뒤.
   // send(챌린지) 목록에서는 고급 전용 0건 · 묶음 제목도 없다(AC-097 (g) · 서버 createChallenge도 거부).
   const { regular: regularEntries, advancedOnly: advancedOnlyEntries } = partitionScenarioList(
     filteredEntries,

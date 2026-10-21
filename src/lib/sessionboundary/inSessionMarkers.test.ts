@@ -92,7 +92,7 @@ test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/ses
   assert.deepEqual(registryMismatch(SESSION_SURFACE_REGISTRY), { missing: [], stale: [] });
   // T190-1(docs/Architecture.md §74.22 (4) #21 단계별 누적) — 15 → 16(+PhoneIcon) → T190-6 17(+DeviceSkinPicker) →
   // T190-8b 18(+CallStartNotice) → 2026-10-18 19(+AudioDebugPanel) → §88 20(+PersonaCardInputFields) → 2026-10-21 22(+LegalDocumentView · LegalLinks — 법적 고지)
-  // → §92 23(+ThemeDebugPanel — ?themedebug=1).
+  // → §94 23(+ThemeDebugPanel — ?themedebug=1).
   assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 23);
 });
 
@@ -204,7 +204,7 @@ function allInSessionViolations(file: string, code: string): string[] {
 // ── G437 · G439 · G440 본 게이트 ───────────────────────────────────────────────────────────
 test("[T187/G437] 세션 중 파일·문면 모듈의 렌더 가능 텍스트에 표식 낱말 0 · 표식 컴포넌트 import 0", () => {
   const files = scopeFiles();
-  assert.equal(files.length, 15, "범위 = in-session 9(T190-1 +PhoneIcon · 2026-10-18 +AudioDebugPanel · §92 +ThemeDebugPanel) + mixed 2 + 문면 모듈 4");
+  assert.equal(files.length, 15, "범위 = in-session 9(T190-1 +PhoneIcon · 2026-10-18 +AudioDebugPanel · §94 +ThemeDebugPanel) + mixed 2 + 문면 모듈 4");
   assert.deepEqual(files.flatMap((f) => markerViolations(f, read(f))), []);
 });
 

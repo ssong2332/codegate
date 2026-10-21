@@ -43,3 +43,10 @@ test("시나리오 id는 URL 인코딩된다", () => {
   const target = resolveRetrainTarget("a b&c", { channel: "messenger" });
   assert.equal(target.path, "/scenarios/messenger?scenarioId=a%20b%26c");
 });
+
+test("§92 — 합쳐진 시나리오(카드 배송)는 흡수처(카드사 부정결제)를 프리셋으로 지목한다(목록에 없는 카드를 고르지 않는다)", () => {
+  assert.deepEqual(
+    resolveRetrainTarget("card-delivery-call", { voiceMode: "generic", mergedInto: "card-company-impersonation" }),
+    { trainingType: "voice", path: "/scenarios/voice/generic?scenarioId=card-company-impersonation" },
+  );
+});

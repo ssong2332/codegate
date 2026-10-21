@@ -7,12 +7,15 @@ import {
   buildPersonaCardBlock,
   buildSystemPrompt,
   PERSONA_CARD_BLOCK_HEAD,
+  PERSONA_CARD_BLOCK_HEAD_THREAT,
   PERSONA_CARD_BLOCK_ORDER,
   PERSONA_CARD_BLOCK_TAIL,
+  PERSONA_CARD_BLOCK_TAIL_THREAT,
   type BuildSystemPromptOptions,
 } from "../promptAssembly";
 import { SCENARIO_PROMPTS } from "../../scenarios";
-import { PERSONA_CARD_SCENARIOS } from "../../scenarios/personaCardCatalog";
+import { PERSONA_CARD_KIND, PERSONA_CARD_SCENARIOS, type PersonaCardKind } from "../../scenarios/personaCardCatalog";
+import { PERSONA_AUTHORITY } from "../personaAuthority";
 import { hasVerifyIntercept } from "../../scenarios/verifyIntercept";
 import { buildPersonaCard, personaCardEligible } from "../../session/personaCard";
 import type { PersonaCardItem } from "../../shared/types";
@@ -58,14 +61,25 @@ test("[G569] 블록 문면 = §84.14.4 갱신 정본(머리 · 꼬리 바이트 
   assert.equal(buildPersonaCardBlock([]), null, "빈 배열 = 블록 0");
 });
 
-test("[G569] 위치 — [진행 강제] · [확인 안내] 뒤 · 난이도 앞 · 가드레일 최후미 불변 · 카드 행이 그대로 실린다(대상 4종 × 세션 은행 8)", (t) => {
+/** §93 — 종류별 대표 입력(그 종류의 칸 전부). */
+const REPRESENTATIVE_INPUT: Record<PersonaCardKind, Parameters<typeof buildPersonaCard>[0]["input"]> = {
+  identity: { name: "홍길동", birthYear: 1962, region: "경상남도" },
+  "self-threat": { name: "홍길동", birthYear: 1962, region: "경상남도", job: "자영업자" },
+  "child-threat": { childName: "홍민서", childGrade: "중학교 2학년", childAcademy: "수학학원" },
+};
+
+test("[G569] 위치 — [진행 강제] · [확인 안내] 뒤 · 난이도 앞 · 가드레일 최후미 불변 · 카드 행이 그대로 실린다(대상 11종 × 세션 은행 8)", (t) => {
   let checked = 0;
   for (const scenarioId of PERSONA_CARD_SCENARIOS) {
+    const kind = PERSONA_CARD_KIND[scenarioId]!;
+    const head = kind === "identity" ? PERSONA_CARD_BLOCK_HEAD : PERSONA_CARD_BLOCK_HEAD_THREAT;
+    const tail = kind === "identity" ? PERSONA_CARD_BLOCK_TAIL : PERSONA_CARD_BLOCK_TAIL_THREAT;
     for (const bank of FICTIONAL_BANK_NAMES) {
-      // §88 — 카드 값은 사용자 입력이다(대표 입력 — 세 칸 전부).
-      const card = buildPersonaCard({ input: { name: "홍길동", birthYear: 1962, region: "경상남도" }, inputBy: "self" })!;
+      // §88 — 카드 값은 사용자 입력이다(대표 입력 — 그 종류의 칸 전부 · §93).
+      const card = buildPersonaCard({ input: REPRESENTATIVE_INPUT[kind], inputBy: "self" })!;
       const prompt = buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], { ...operationalOpts(scenarioId, bank), personaCard: card.items });
-      const at = prompt.indexOf(PERSONA_CARD_BLOCK_HEAD);
+      const at = prompt.indexOf(head);
+      assert.ok(at >= 0, `${scenarioId}: 종류(${kind})에 맞는 블록 머리가 없다`);
       assert.ok(at > prompt.indexOf("[진행 강제 — 반드시 지킨다]"), `${scenarioId}: [진행 강제] 뒤`);
       if (hasVerifyIntercept(scenarioId)) assert.ok(at > prompt.indexOf("[확인 안내 — 이 훈련에서만 적용]"), `${scenarioId}: [확인 안내] 뒤`);
       assert.ok(at < prompt.indexOf("[난이도 — 고급: 실제처럼 정교하게]"), `${scenarioId}: 난이도 앞`);
@@ -77,8 +91,8 @@ test("[G569] 위치 — [진행 강제] · [확인 안내] 뒤 · 난이도 앞 
         assert.ok(prompt.includes(`- ${item.label}: ${shown}`), `${scenarioId}/${bank}: 카드 행 "${item.label}: ${shown}"이 없다`);
       }
       // 리뷰 M1 — 블록 구간(머리 ~ 꼬리)에 "○○" 리터럴 0.
-      const segment = prompt.slice(at, prompt.indexOf(PERSONA_CARD_BLOCK_TAIL, at) + PERSONA_CARD_BLOCK_TAIL.length);
-      assert.ok(segment.startsWith(PERSONA_CARD_BLOCK_HEAD) && segment.endsWith(PERSONA_CARD_BLOCK_TAIL), "블록 구간을 못 잘랐다");
+      const segment = prompt.slice(at, prompt.indexOf(tail, at) + tail.length);
+      assert.ok(segment.startsWith(head) && segment.endsWith(tail), "블록 구간을 못 잘랐다");
       assert.equal(/[○Oo]{2}/.test(segment), false, `${scenarioId}/${bank}: 블록에 가림 리터럴이 남았다 — ${segment}`);
       checked += 1;
     }
@@ -96,17 +110,41 @@ test("[G569] 부재 · 빈 배열이면 조립 결과가 카드 도입 전과 �
   }
 });
 
-/** G569 가드 위반 — 대상 중 asksIdentityCheck가 거짓인(= 이름 단정 금지 규칙이 실리는) 시나리오. */
-function nonInstitutionTargets(targets: readonly string[]): string[] {
-  return targets.filter((scenarioId) => !asksIdentityCheck(scenarioId));
+/**
+ * G569 가드 위반(§93 재설계 — 옛 가드 "대상 ⊆ institution"을 대체). 판정표:
+ * | 카드 종류 | 페르소나 권한이 반드시 | 이유 |
+ * |---|---|---|
+ * | identity | institution | 확인형 문면("○○ 님 본인 맞으시죠?") · 기관형 블록이 캐릭터와 맞는다 |
+ * | self-threat · child-threat | anonymous | 협박형 블록 · 이름 단정 금지 원문의 "목록 예외형" 치환이 이 권한의 문면을 전제한다 |
+ * | (종류 없음) | 대상이면 안 된다 | acquaintance(가족 · 지인 사칭)는 이미 아는 사이 — 카드가 캐릭터를 깬다 |
+ */
+function kindAuthorityViolations(targets: readonly string[], kinds: Readonly<Record<string, PersonaCardKind>>): string[] {
+  const out: string[] = [];
+  for (const scenarioId of targets) {
+    const kind = kinds[scenarioId];
+    const authority = PERSONA_AUTHORITY[scenarioId];
+    if (!kind) out.push(`${scenarioId}: 종류 없음`);
+    else if (kind === "identity" && !asksIdentityCheck(scenarioId)) out.push(`${scenarioId}: identity인데 ${authority}`);
+    else if (kind !== "identity" && authority !== "anonymous") out.push(`${scenarioId}: ${kind}인데 ${authority}`);
+  }
+  return out;
 }
 
-test("[G569 가드 · §84.14.4] PERSONA_CARD_SCENARIOS ⊆ {s | asksIdentityCheck(s)} — kidnapping을 넣은 사본은 실패한다", (t) => {
-  assert.deepEqual(nonInstitutionTargets(PERSONA_CARD_SCENARIOS), []);
-  assert.equal(personaCardEligible({ scenarioId: "kidnapping-threat", difficultyLevel: "advanced", channel: undefined }), false);
-  const poisoned = [...PERSONA_CARD_SCENARIOS, "kidnapping-threat"];
-  assert.deepEqual(nonInstitutionTargets(poisoned), ["kidnapping-threat"], "가드가 kidnapping을 잡지 못했다 — 검사가 무력하다");
-  t.diagnostic("[G569 가드] 정본 4종 → 위반 0 · kidnapping 추가 사본 → 위반 1(실패 확인)");
+test("[G569 가드 · §93 재설계] 카드 종류 ⇔ 페르소나 권한(identity = institution · 협박형 = anonymous) — 어긋난 사본은 실패한다", (t) => {
+  assert.deepEqual(kindAuthorityViolations(PERSONA_CARD_SCENARIOS, PERSONA_CARD_KIND), []);
+  assert.equal(personaCardEligible({ scenarioId: "kidnapping-threat", difficultyLevel: "advanced", channel: undefined }), true);
+  // 역방향 3종 — 가족 사칭을 대상에 넣음 · 납치를 identity로 표기 · 기관 사칭을 협박형으로 표기.
+  const poisons: Array<[string, readonly string[], Record<string, PersonaCardKind>]> = [
+    ["가족 사칭 추가", [...PERSONA_CARD_SCENARIOS, "family-accident-deepvoice"], { ...PERSONA_CARD_KIND }],
+    ["납치 = identity", PERSONA_CARD_SCENARIOS, { ...PERSONA_CARD_KIND, "kidnapping-threat": "identity" }],
+    ["기관 사칭 = self-threat", PERSONA_CARD_SCENARIOS, { ...PERSONA_CARD_KIND, "institutional-impersonation": "self-threat" }],
+  ];
+  for (const [name, targets, kinds] of poisons) {
+    const violations = kindAuthorityViolations(targets, kinds);
+    assert.ok(violations.length > 0, `${name} 사본이 가드를 통과했다 — 검사가 무력하다`);
+    t.diagnostic(`[G569 가드 역방향] ${name} → ${violations.join(" / ")} — 실패 확인`);
+  }
+  t.diagnostic(`[G569 가드] 정본 ${PERSONA_CARD_SCENARIOS.length}종 → 위반 0`);
 });
 
 test("[G568] 호출부 전수 — 프롬프트 조립 3곳이 모두 카드를 넘기고, 값은 세션 문서(또는 방금 만든 서버 값)에서만 온다(소스 스캔)", () => {

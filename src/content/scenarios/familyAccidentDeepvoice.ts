@@ -54,6 +54,11 @@ export type ScenarioDoc = {
   advancedOnly?: true;
   // T191 S5(UX 계약 C-9 · D-106) — 세션 전 부담 고지 대상(UX-029 고급 고지 바로 아래 1문단).
   preSessionBurdenNotice?: true;
+  // §92(2026-10-21 · DECISIONS #206) — 다른 시나리오로 합쳐진 시나리오. 목록에서 빠지고(UX-017), 프리셋 · 재훈련은 이 id로
+  // 바뀌며, 서버가 새 세션 생성을 `scenario-merged`로 거부한다. 항목 자체는 옛 세션 · 리포트의 제목 조회용으로 남는다.
+  mergedInto?: string;
+  // §92.4 — 보고서 R6 "유지(우선순위 낮음)". 목록의 일반 묶음 안에서 맨 뒤로 간다(삭제 · 묶음 0).
+  lowPriority?: true;
 };
 
 export const FAMILY_ACCIDENT_SCENARIO_ID = "family-accident-deepvoice";
