@@ -58,6 +58,14 @@ export function parseMomentSeconds(timeLabel: string | null | undefined): number
   return m ? Number(m[1]) : null;
 }
 
+/** 큰 시계 낭독용 — "1분 41초"("1:41"은 "1시 41분"으로 읽힐 수 있다). */
+export function formatClockSpoken(totalSeconds: number): string {
+  const s = Number.isFinite(totalSeconds) ? Math.max(0, Math.floor(totalSeconds)) : 0;
+  const m = Math.floor(s / 60);
+  const rest = s % 60;
+  return m === 0 ? `${rest}초` : rest === 0 ? `${m}분` : `${m}분 ${rest}초`;
+}
+
 /** 시계 굴리기 곡선(ease-out cubic) — 진행률 p(0~1) → 표시 값 비율. */
 export function clockEase(p: number): number {
   const t = Math.min(1, Math.max(0, p));

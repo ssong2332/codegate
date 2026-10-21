@@ -308,7 +308,8 @@ export default function ChallengeCreatePage() {
         {/* UX D-141(시안 E2) — 링크가 만들어지면 모래 판이 아래에서 위로 차오른다(motion.css `.e2-fill-up` · reduced-motion이면 0).
             ⚠️ 앱은 링크를 만들 뿐 보내지 않는다 — 시안의 "보냈어요!" 대신 사실대로 "만들어졌습니다"를 쓴다. */}
         <header className="e2-fill-up -mx-6 -mt-6 flex flex-col gap-3 bg-sand px-6 pb-6 pt-10 text-ink">
-          <DisplayTitle as="h1" size="board" className="e2-rise">
+          {/* 리뷰 Major — 48px에서는 "만들어졌습니다"(7음절)가 360폭 이하에서 넘친다(keep-all). 38px로 둔다. */}
+          <DisplayTitle as="h1" size="xl" className="e2-rise">
             챌린지가 만들어졌습니다
           </DisplayTitle>
           <p className="e2-rise text-lg font-semibold leading-relaxed [word-break:keep-all]" style={{ ["--e2-i" as string]: 1 }}>

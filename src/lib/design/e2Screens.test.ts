@@ -106,6 +106,10 @@ test("[G654] 리포트 큰 시계 — 서버 표기 'N초 시점'만 읽는다 �
   assert.equal(parseMomentSeconds(" 0초 시점 "), 0);
   assert.equal(parseMomentSeconds("1분 41초"), null);
   assert.equal(parseMomentSeconds(undefined), null);
+  const { formatClockSpoken } = await import("./e2Layout.ts");
+  assert.equal(formatClockSpoken(101), "1분 41초");
+  assert.equal(formatClockSpoken(45), "45초");
+  assert.equal(formatClockSpoken(120), "2분");
   const server = readFileSync("functions/src/report/analyzeConversation.ts", "utf8");
   assert.ok(server.includes("return `${elapsedSec}초 시점`;"), "서버 표기 꼴이 바뀌면 화면 파서도 같이 바꿀 것");
   const report = codeOnly("src/app/report/page.tsx");

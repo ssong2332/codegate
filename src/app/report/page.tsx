@@ -402,7 +402,7 @@ export default function ReportPage() {
           <>
             <BigClock seconds={firstDeceivedSeconds} label="처음 속은 시각" className="mt-3 text-[88px] text-sand" />
             <p className="mt-2 text-[22px] font-bold leading-[1.35] [word-break:keep-all]">
-              이 순간 속았어요 · {firstDeceivedMoment.tactic}
+              이 순간 속았어요{firstDeceivedMoment.tactic ? ` · ${firstDeceivedMoment.tactic}` : ""}
             </p>
           </>
         ) : !report.wasDeceived ? (
