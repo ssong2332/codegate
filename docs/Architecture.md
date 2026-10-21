@@ -21866,10 +21866,10 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 | 2 | Functions(전체) | `createSession` 병합 거부 · 새 변형 · 새 문자/화면 카탈로그. 옛 화면(HTML 캐시 ≤ 1시간)에서 카드 배송을 고르면 그동안 `scenario-merged` 1줄 안내 |
 - Firestore 시드: **런타임은 읽지 않는다**(서버는 코드 상수 `PUBLIC_SCENARIOS` · `SCENARIO_PROMPTS`를 쓴다 — `grep` 실측). 콘솔 데이터 정합만 원하면 선택 실행.
 
-### 92.8 테스트 · 검증 (2026-10-21 · 이 브랜치 = #354 `672930e` + main `7dcabcf` 병합 + §92)
+### 92.8 테스트 · 검증 (2026-10-21 · 이 브랜치 = main `f5af50a`(#354 · #355 포함) 병합 + §92)
 | 항목 | 결과 | 기준값 |
 |---|---|---|
 | `npm --prefix functions test` | 1590 pass / 0 fail(신규 `scenarios/__tests__/catalogConsolidation.test.ts` 13건 · 목록 · 개수 고정 테스트 11곳 갱신) | main 1498/0(#352 기준) + #354 · 병합분 |
-| `npm test` | 860 pass / 0 fail(신규 4건 — `difficulty.test.ts` 3 · `retrainTarget.test.ts` 1 · 개수 고정 3곳 갱신) | 845/0(#352 기준) |
+| `npm test` | 864 pass / 0 fail(신규 4건 — `difficulty.test.ts` 3 · `retrainTarget.test.ts` 1 · 개수 고정 3곳 갱신) | 845/0(#352 기준) |
 | lint 2종 | 오류 0(루트 경고 1건 = 기존 `scripts/live-turn-probe.mjs`) | — |
 | 실 키 프로브(92.3 · 92.5 효과) | **미실행** — 메인 세션 승인 필요 | 보고서 §5.5 F1 2/2 |
