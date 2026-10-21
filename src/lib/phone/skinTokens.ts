@@ -361,6 +361,8 @@ export const LANDING_PAGE_TOKENS = {
   headline: "#22303A",
   body: "#6B655C",
   inputBorder: "#8E8E93",
+  /** 입력칸 바탕 — 명시(2026-10-21): 훈련 화면이 `color-scheme: light dark`라 비워 두면 기기 다크에서 UA 어두운 바탕이 된다. */
+  inputBg: "#FFFFFF",
   inputText: "#22303A",
   submitBg: "#41525E",
   submitText: "#FFFFFF",
@@ -699,6 +701,7 @@ function smsSurfacePairs(skin: MessengerSkin): ContrastPair[] {
     { name: "landing.headline", fg: page.headline, bg: page.pageBg, kind: "text" },
     { name: "landing.body", fg: page.body, bg: page.pageBg, kind: "text" },
     { name: "landing.inputBorder", fg: page.inputBorder, bg: page.pageBg, kind: "nonText" },
+    { name: "landing.inputText", fg: page.inputText, bg: page.inputBg, kind: "text" },
     { name: "landing.submit", fg: page.submitText, bg: page.submitBg, kind: "text" },
     { name: "landing.issuerFooter", fg: page.issuerFooter, bg: page.pageBg, kind: "text" },
     { name: `${skin}.messenger.incoming`, fg: chat.incomingText, bg: chat.incomingBg, kind: "text" },

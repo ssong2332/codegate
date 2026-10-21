@@ -72,10 +72,25 @@
   --font-phone: "Pretendard Variable", Pretendard, system-ui, sans-serif;
 }
 
+/* 실기 신고(2026-10-21) — 데스크톱에서 고급 선택 등으로 세로 스크롤바가 새로 생길 때 화면 폭이 15px 줄며 가운데
+   정렬 내용이 옆으로 밀리지 않게 스크롤바 자리를 늘 비워 둔다. 모바일(겹침 스크롤바)에는 영향이 없다. */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-body);
+}
+
+/* 실기 신고(2026-10-21 · 갤럭시 S25 · 네이버 웨일 · 기기 다크) — 훈련 화면(`font-phone` 루트 = 통화 · 메신저)에서만
+   "이 페이지는 다크를 스스로 처리한다"고 선언해 브라우저의 자동 다크(색 반전)를 끈다. 웨일은 위 `only light`를 무시하고
+   카톡 노랑을 갈색으로 뒤집었다(라이브 캡처). Chromium 자동 다크는 루트 color-scheme에 dark가 있으면 반전하지 않는다
+   (데스크톱 Chrome · 웨일 Blink 실측). ⚠️ 웨일 안드로이드 다크 모드가 이 신호를 존중하는지는 실기 미검증이다.
+   화면 색은 그대로 skinTokens.ts 토큰이다(통화 One UI형만 기기 테마를 따른다 — §89.5 ⓒ). 사이트 화면은 `only light` 유지. */
+:root:has(.font-phone) {
+  color-scheme: light dark;
 }
 
 /* 제목은 함렛(시안 A). 훈련 화면(`font-phone` 루트) 안의 제목은 폰 서체를 그대로 따른다.

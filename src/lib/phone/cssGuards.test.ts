@@ -79,3 +79,52 @@ test("[T190/G458 역검증] 한쪽을 지운 사본은 각각 실패한다", () 
   assert.deepEqual(colorSchemeViolations(noLayout, css), ['layout.tsx viewport.colorScheme "only light" 없음']);
   assert.deepEqual(colorSchemeViolations(layout, noCss), ["globals.css :root color-scheme: only light 없음"]);
 });
+
+/**
+ * 실기 신고(2026-10-21 · S25 웨일 다크) — 훈련 화면(`font-phone` 루트)만 `color-scheme: light dark`를 선언해 브라우저 자동
+ * 다크(색 반전)를 끈다. 사이트 화면의 `only light`(G458)는 그대로다. 이 규칙이 사라지거나 사이트 전체(:root)로 번지면 실패한다.
+ */
+function phoneSurfaceSchemeViolations(cssSource: string): string[] {
+  const out: string[] = [];
+  const code = stripCssComments(cssSource);
+  const rule = /:root:has\(\.font-phone\)\s*\{([^}]*)\}/.exec(code)?.[1] ?? "";
+  if (!/color-scheme\s*:\s*light dark\s*;/.test(rule)) out.push(":root:has(.font-phone) color-scheme: light dark 없음");
+  const root = /:root\s*\{([^}]*)\}/.exec(code)?.[1] ?? "";
+  if (/color-scheme\s*:[^;]*dark/.test(root)) out.push(":root(사이트 전체)에 dark 선언");
+  return out;
+}
+
+test("[실기 2026-10-21] 훈련 화면만 color-scheme: light dark — 자동 다크 반전 차단 신호", () => {
+  assert.deepEqual(phoneSurfaceSchemeViolations(css), []);
+  for (const page of ["src/app/session/messenger/page.tsx", "src/app/session/play/page.tsx"]) {
+    assert.match(readFileSync(page, "utf8"), /className="[^"]*\bfont-phone\b/, `${page} 훈련 화면 루트에 font-phone이 없다 — 선택자가 비게 된다`);
+  }
+});
+
+test("[실기 2026-10-21 역검증] 규칙을 지우거나 사이트 :root를 dark로 바꾼 사본은 실패한다", () => {
+  const noRule = css.replace(/:root:has\(\.font-phone\)\s*\{[^}]*\}/, "");
+  assert.notEqual(noRule, css, "오염 지점(:has 규칙)을 찾지 못했다");
+  assert.deepEqual(phoneSurfaceSchemeViolations(noRule), [":root:has(.font-phone) color-scheme: light dark 없음"]);
+  const siteDark = css.replace("color-scheme: only light;", "color-scheme: light dark;");
+  assert.notEqual(siteDark, css, "오염 지점(:root)을 찾지 못했다");
+  assert.deepEqual(phoneSurfaceSchemeViolations(siteDark), [":root(사이트 전체)에 dark 선언"]);
+});
+
+/** 메신저 입력칸 두 클래스(문자형 · 카톡형) 중 `min-w-0`이 빠진 것. 구조를 못 찾으면 그 자체를 위반으로 낸다. */
+function chatInputMinWidthViolations(src: string): string[] {
+  const block = /id="messenger-chat-input"[\s\S]*?className=\{([\s\S]*?)\}\s*style=/.exec(src)?.[1] ?? "";
+  const classes = [...block.matchAll(/"([^"]*flex-1[^"]*)"/g)].map((m) => m[1]);
+  if (classes.length !== 2) return [`입력칸 클래스 ${classes.length}개(2개여야 함)`];
+  return classes.filter((c) => !/(^|\s)min-w-0(\s|$)/.test(c)).map((c) => `min-w-0 없음: ${c}`);
+}
+
+test("[실기 2026-10-21] 메신저 입력칸은 min-w-0 — 기기 글꼴로 기본 폭이 커져도 줄이 화면을 넘지 않는다", () => {
+  assert.deepEqual(chatInputMinWidthViolations(readFileSync("src/app/session/messenger/page.tsx", "utf8")), []);
+});
+
+test("[실기 2026-10-21 역검증] 카톡형 입력칸에서 min-w-0을 지운 사본은 실패한다", () => {
+  const src = readFileSync("src/app/session/messenger/page.tsx", "utf8");
+  const poisoned = src.replace("min-w-0 flex-1 rounded-full", "flex-1 rounded-full");
+  assert.notEqual(poisoned, src, "오염 지점을 찾지 못했다");
+  assert.equal(chatInputMinWidthViolations(poisoned).length, 1);
+});
