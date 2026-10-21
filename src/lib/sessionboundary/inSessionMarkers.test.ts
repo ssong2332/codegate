@@ -59,12 +59,14 @@ const SESSION_SURFACE_REGISTRY: Record<string, SurfaceRole> = {
   "src/components/LegalDocumentView.tsx": "not-in-session", // 법적 고지 화면 틀(2026-10-21 — 세션 밖 공개 화면)
   "src/components/LegalLinks.tsx": "not-in-session", // 첫 화면 · 로그인 · 고지 화면 하단 링크(세션 밖)
   "src/components/MessengerFakeLanding.tsx": "in-session", // UX-023 가짜 랜딩
+  "src/components/MessengerProfileSheet.tsx": "in-session", // §95 카톡형 상대 프로필 시트(UX D-138)
   "src/components/MessengerStartNotice.tsx": "pre-session", // UX-022 start-notice(T187)
   "src/components/PersonaCardInputFields.tsx": "not-in-session", // §88 UX D-131 "내 정보" 선택 입력(난이도 · 챌린지 만들기 — 세션 전)
   "src/components/PhoneIcon.tsx": "in-session", // T190-1 기기 재현 단색 아이콘(통화 셸 그리드 · 텍스트 노드 0)
   "src/components/SpoofImage.tsx": "not-in-session", // 렌더 사용처 0(M-12)
   "src/components/SyntheticLabel.tsx": "not-in-session", // 세션 중 사용처 0 — SpoofImage만 쓴다(M-12)
   "src/components/VerifyCallOverlay.tsx": "in-session", // UX-031 전환 시트
+  "src/components/WebDarkModeNotice.tsx": "pre-session", // §95.6 브라우저 다크 모드 안내(시작 고지 · 벨 직전 고지 안에만)
   "src/app/session/chat/page.tsx": "redirect", // return null 리다이렉트
   "src/app/session/end/page.tsx": "post-session", // UX-007 종료 고지
   "src/app/session/messenger/page.tsx": "mixed", // start-notice(세션 전) + chat(세션 중)
@@ -92,8 +94,8 @@ test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/ses
   assert.deepEqual(registryMismatch(SESSION_SURFACE_REGISTRY), { missing: [], stale: [] });
   // T190-1(docs/Architecture.md §74.22 (4) #21 단계별 누적) — 15 → 16(+PhoneIcon) → T190-6 17(+DeviceSkinPicker) →
   // T190-8b 18(+CallStartNotice) → 2026-10-18 19(+AudioDebugPanel) → §88 20(+PersonaCardInputFields) → 2026-10-21 22(+LegalDocumentView · LegalLinks — 법적 고지)
-  // → §94 23(+ThemeDebugPanel — ?themedebug=1).
-  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 23);
+  // → §94 23(+ThemeDebugPanel — ?themedebug=1) → §95 24(+MessengerProfileSheet — 카톡형 상대 프로필) → §95.6 25(+WebDarkModeNotice).
+  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 25);
 });
 
 // ── G451 — 등록부 2벌(G436 · T86)이 최상위 `src/components/*.tsx`만 훑으므로, 하위 디렉터리에 컴포넌트를 두면
@@ -204,7 +206,7 @@ function allInSessionViolations(file: string, code: string): string[] {
 // ── G437 · G439 · G440 본 게이트 ───────────────────────────────────────────────────────────
 test("[T187/G437] 세션 중 파일·문면 모듈의 렌더 가능 텍스트에 표식 낱말 0 · 표식 컴포넌트 import 0", () => {
   const files = scopeFiles();
-  assert.equal(files.length, 15, "범위 = in-session 9(T190-1 +PhoneIcon · 2026-10-18 +AudioDebugPanel · §94 +ThemeDebugPanel) + mixed 2 + 문면 모듈 4");
+  assert.equal(files.length, 16, "범위 = in-session 10(T190-1 +PhoneIcon · 2026-10-18 +AudioDebugPanel · §94 +ThemeDebugPanel · §95 +MessengerProfileSheet) + mixed 2 + 문면 모듈 4");
   assert.deepEqual(files.flatMap((f) => markerViolations(f, read(f))), []);
 });
 
@@ -391,7 +393,7 @@ test("[T190-8b/G438 역검증 — AC-091 (f)ⓐⓒ] play에 `<p>{PREROLL_NOTICE}
   const b = callStartNoticeUsageViolations(noticeInShell);
 
   const messenger = read("src/app/session/messenger/page.tsx");
-  const anchor = messenger.lastIndexOf("<EndTrainingButton onClick={handleEndTraining} />");
+  const anchor = messenger.lastIndexOf("<EndTrainingButton onClick={handleEndTraining} compact={!isSms} />");
   assert.ok(anchor > 0);
   const messengerPoisoned =
     messenger.slice(0, anchor) +
@@ -610,7 +612,7 @@ test("[사용자 결정 2026-10-18 역검증] 남겨야 할 종료 컨트롤을 
   const play = read("src/app/session/play/page.tsx");
   const messenger = read("src/app/session/messenger/page.tsx");
   const playPoisoned = play.split('"통화 종료 — 훈련 종료"').join('"통화 종료"');
-  const messengerPoisoned = messenger.split("<EndTrainingButton onClick={handleEndTraining} />").join("");
+  const messengerPoisoned = messenger.split("<EndTrainingButton onClick={handleEndTraining} compact={!isSms} />").join("");
   assert.notEqual(playPoisoned, play, "오염 지점(빨간 통화 종료 이름)을 찾지 못했다");
   assert.notEqual(messengerPoisoned, messenger, "오염 지점(대화 화면 종료 버튼)을 찾지 못했다");
   assert.deepEqual(retainedEndControlViolations(playPoisoned, messenger), ["통화 화면 빨간 통화 종료"]);

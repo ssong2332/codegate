@@ -95,6 +95,7 @@ const SCREEN_FORBIDDEN_PATTERNS: RegExp[] = [
 const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   // 참가자에게 "사기 상황"을 그리는 화면 — 전부 스캔 대상이다.
   "MessengerFakeLanding.tsx": true, // 가짜 랜딩 + 모의 앱 설치(UX-023, T84)
+  "MessengerProfileSheet.tsx": true, // 카톡형 상대 프로필 시트(§95 · UX D-138) — 사기범 이름을 그린다
   "InCallSmsOverlay.tsx": true, // 통화 중 문자 오버레이(UX-027, T68)
   "VerifyCallOverlay.tsx": true, // 확인 전화 오버레이(UX-031, T83)
   "SpoofImage.tsx": true, // 발신번호 위조 카드(T12)
@@ -107,6 +108,7 @@ const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   "DeviceSkinPicker.tsx": false, // T190-6 세션 전 화면 모양 선택 줄 — 앱 자신의 설정 부품, 사기 표면 아님
   "DrilldownOptionCard.tsx": false, // 드릴다운 선택 카드
   "EndTrainingButton.tsx": false, // 상시 종료 버튼
+  "WebDarkModeNotice.tsx": false, // 세션 전 브라우저 설정 안내(§95.6) — 사기 상황을 그리지 않는다
   "LegalDocumentView.tsx": false, // 법적 고지 화면 틀(2026-10-21) — 앱 자신의 처리방침 · 약관, 사기 표면 아님
   "LegalLinks.tsx": false, // 법적 고지 하단 링크(2026-10-21) — 앱 자신의 고지 링크, 사기 표면 아님
   "MessengerStartNotice.tsx": false, // 세션 전 시작 고지(UX-022 start-notice, T187) — 앱 자신의 고지, 사기 표면 아님

@@ -51,6 +51,7 @@ import { MESSENGER_CHAT_TOKENS, messengerSmsTokensFor, smsThreadTokensFor } from
 import PhoneIcon from "@/components/PhoneIcon";
 import EndTrainingButton from "@/components/EndTrainingButton";
 import MessengerFakeLanding from "@/components/MessengerFakeLanding";
+import MessengerProfileSheet from "@/components/MessengerProfileSheet";
 import MessengerStartNotice from "@/components/MessengerStartNotice";
 import { Button, LoadingStatus } from "@/components/ui";
 import { foldDegraded, DIALOGUE_DEGRADED_NOTICE } from "@/lib/report/degradedDisclosure";
@@ -62,6 +63,8 @@ import {
   viewReply,
   type PendingTurn,
 } from "@/lib/messenger/replyChoreography";
+import { chatBoxStyle, isNearBottom } from "@/lib/messenger/keyboardViewport";
+import { useKeyboardViewport } from "@/lib/messenger/useKeyboardViewport";
 import {
   decideMessengerStartNotice,
   type MessengerStartNoticeState,
@@ -160,13 +163,18 @@ export default function MessengerSessionPage() {
   // T30 — 에스컬레이션 전이 연출(P-18) 표시 중. true가 되면 잠시 후 /session/play로 이동한다.
   const [escalating, setEscalating] = useState(false);
   const [escalationError, setEscalationError] = useState<string | null>(null);
+  // §95(UX D-138) — 카톡형 상대 프로필 시트(이름 · 프로필 사진 탭). "보이스톡"(= 전화로 확인) · "훈련 종료"를 담는다.
+  const [profileOpen, setProfileOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  // 사용자 신고(2026-07-24) — 대화가 길어지면 자동으로 맨 아래로 스크롤되지 않던 문제. 목록 끝에
-  // 빈 sentinel을 두고 메시지 도착·전송 중(타이핑 인디케이터 노출) 시마다 그 지점으로 스크롤한다.
-  const scrollAnchorRef = useRef<HTMLLIElement | null>(null);
   // T187(UX-022 v1.29 노트 (5)) — "메시지 보기" 뒤 포커스는 대화 목록으로(입력창 자동 포커스 ⛔).
   const messageListRef = useRef<HTMLUListElement | null>(null);
   const focusListAfterNoticeRef = useRef(false);
+  // §95(UX D-138 · 실기 신고 9) — 대화방은 "보이는 영역"(키보드 위)을 꽉 채우는 고정 상자이고 대화 목록만 안에서 스크롤한다.
+  // 머리줄은 상자 맨 위에 남고, 키보드가 열리면 목록만 줄어든다(판정표 `lib/messenger/keyboardViewport.ts`).
+  const keyboardBox = useKeyboardViewport(pageState === "ready" && startNotice === "skip");
+  const scrollBoxRef = useRef<HTMLDivElement | null>(null);
+  // 사용자가 위로 올려 지난 대화를 읽는 중이면 끌어내리지 않는다(맨 아래 근처일 때만 따라 내려간다).
+  const stickToBottomRef = useRef(true);
 
   // 세션·시나리오 로드 + (문자형이면) 스킨 결정. session/play/page.tsx와 동일하게 인라인 async
   // IIFE로 감싼다(react-hooks/set-state-in-effect 회피 관례).
@@ -312,11 +320,19 @@ export default function MessengerSessionPage() {
   const turnLocked = replyView.inFlight || pending?.outcome?.ended === true || pending?.outcome?.escalate === true;
 
   // 사용자 신고(2026-07-24) — 새 메시지가 오거나(상대 응답) 내가 보내서 "입력 중" 표시가 뜰 때마다
-  // 맨 아래로 스크롤한다. scrollIntoView는 조상 스크롤 컨테이너가 없어도 안전(main 자체가 뷰포트
-  // 스크롤을 담당 — 이 화면은 별도 overflow 컨테이너를 쓰지 않는다).
+  // 맨 아래로 스크롤한다. §95 — 스크롤 주체는 문서가 아니라 대화 목록 상자다(scrollIntoView는 문서까지 끌어올릴 수 있어 쓰지 않는다).
+  // 내가 보낸 직후(낙관적 말풍선)는 위로 올려 둔 상태여도 맨 아래로 간다(실제 메신저와 같다).
   useEffect(() => {
-    scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (replyView.showOptimistic) stickToBottomRef.current = true;
+    const box = scrollBoxRef.current;
+    if (box && stickToBottomRef.current) box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
   }, [messages, replyView.showOptimistic, replyView.showTyping, replyView.hideReply]);
+
+  // §95 — 키보드가 열리고 닫혀 목록 높이가 바뀌면, 맨 아래에 붙어 있던 경우 마지막 메시지를 입력줄 바로 위에 다시 둔다(애니메이션 없이).
+  useEffect(() => {
+    const box = scrollBoxRef.current;
+    if (box && stickToBottomRef.current) box.scrollTop = box.scrollHeight;
+  }, [keyboardBox?.heightPx]);
 
   // §94(UX D-137) — 전송 즉시 내 말풍선을 올린다(낙관적 표시 · "1"). 서버 응답을 기다리지 않는다.
   // ⚠️ 서버는 한 번에 한 턴만 처리한다(턴 확보 트랜잭션 — functions/src/roleplay/index.ts) ⇒ 서버 호출 중에는 전송 버튼만
@@ -480,6 +496,9 @@ export default function MessengerSessionPage() {
   const threadTokens = smsThreadTokensFor(messengerSkin);
   // §89.5 ⓐ — 메신저형(카카오 표면) 색 · 표시 항목(통화 구간은 줄 1개로 접힌다).
   const chatTokens = MESSENGER_CHAT_TOKENS;
+  // §95(UX D-138 · 실기 신고 11) — 카톡형은 번호 대신 상대 이름(시나리오 `chatDisplayName` · 부재 = 번호). 문자형 · 통화는 번호 그대로.
+  const peerName = isSms ? scenario.callerLabel : (scenario.chatDisplayName ?? scenario.callerLabel);
+  const canVoiceTalk = sessionEscalates && !chatEnded;
   // §94 — 표시 목록 = 구독 문서(이번 턴 답장은 공개 전까지 숨김) + 아직 서버 문서가 없는 내 말풍선(낙관적).
   const visibleMessages =
     pending && replyView.hideReply
@@ -531,12 +550,14 @@ export default function MessengerSessionPage() {
   return (
     // T190-6(UX-022 v1.33 (2)(5)) — 문자형 표면은 스킨이 **화면 문법**(바탕·헤더·말풍선 모양·입력 바)을 정하고 최대폭
     // 430px 가운데 정렬이다(바깥 #E5E7EA). 카카오형은 범위 밖이라 무변경.
+    // §95(UX D-138 · 실기 신고 9) — 고정 상자 = 키보드 위 "보이는 영역". 문서는 스크롤하지 않고(`useKeyboardViewport`가 잠근다)
+    // 대화 목록 상자만 스크롤한다 ⇒ 키보드가 열려도 머리줄은 맨 위, 입력줄은 키보드 바로 위.
     <div
-      className="flex min-h-screen flex-col"
-      style={{ backgroundColor: isSms ? smsTokens.outerBg : chatTokens.outerBg }}
+      className="fixed inset-x-0 flex flex-col overflow-hidden"
+      style={{ backgroundColor: isSms ? smsTokens.outerBg : chatTokens.outerBg, ...chatBoxStyle(keyboardBox) }}
     >
     <main
-      className="font-phone mx-auto flex min-h-screen w-full max-w-[430px] flex-col"
+      className="font-phone relative mx-auto flex h-full min-h-0 w-full max-w-[430px] flex-col"
       style={
         isSms
           ? { backgroundColor: smsTokens.screenBg, fontFamily: "system-ui, sans-serif" }
@@ -549,7 +570,7 @@ export default function MessengerSessionPage() {
           ⛔ 빈 자리를 채우지 않는다.
           ⛔ T190-6b(D-100 · AC-092 (d)) — 세션 중 스킨 전환 칩·감지 실패 안내 줄을 지웠다(세션 전 선택 줄이 대신한다). */}
       <div
-        className={`sticky top-0 z-20 flex flex-col ${isSms ? "border-b" : ""}`}
+        className={`z-20 flex shrink-0 flex-col ${isSms ? "border-b" : ""}`}
         style={
           isSms
             ? { backgroundColor: threadTokens.headerBg, borderColor: threadTokens.headerBorder }
@@ -563,10 +584,17 @@ export default function MessengerSessionPage() {
               ⛔ 뒤로 셰브런은 그리지 않는다(돌아갈 대화 목록이 없다 — 동작 없는 버튼 금지). */}
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             {/* §89.5 ⓐ — 메신저형 머리줄 = 방 이름(발신자). 뒤로 셰브런 · 검색 · 메뉴는 그리지 않는다(동작 없는 버튼 금지). */}
+            {/* §95(UX D-138) — 이름을 누르면 상대 프로필 시트("보이스톡" · "훈련 종료"). */}
             {!isSms && (
-              <span className="min-w-0 truncate text-[18px] font-bold" style={{ color: chatTokens.headerText }}>
-                {scenario.callerLabel}
-              </span>
+              <button
+                type="button"
+                onClick={() => setProfileOpen(true)}
+                aria-haspopup="dialog"
+                className="min-h-[44px] min-w-0 truncate text-left text-[18px] font-bold"
+                style={{ color: chatTokens.headerText }}
+              >
+                {peerName}
+              </button>
             )}
             {isSms && (
               <>
@@ -587,7 +615,8 @@ export default function MessengerSessionPage() {
             {/* 명시 전환 버튼(§13.3 — 1턴부터 상시, AC-034) — 에스컬레이션 가능 시나리오에서만.
                 T190-6(UX-022 v1.33 (3)) — 문자형은 수화기 단색 아이콘 + "전화로 확인"(📞 이모지 대체 · 48px).
                 카카오형은 무변경. */}
-            {sessionEscalates && !chatEnded && (
+            {/* §95(UX D-138) — 카톡형은 머리줄에서 빼고 프로필 시트의 "보이스톡"으로 옮겼다(같은 처리기 · 같은 술어). */}
+            {isSms && canVoiceTalk && (
               <button
                 type="button"
                 onClick={() => void handleRequestEscalation()}
@@ -600,7 +629,8 @@ export default function MessengerSessionPage() {
                 전화로 확인
               </button>
             )}
-            <EndTrainingButton onClick={handleEndTraining} />
+            {/* AC-006 R-4 — 대화 화면의 종료는 항상 보이고 1탭 즉시다. §95 — 카톡형은 작은 모양(같은 이름 · 같은 처리기). */}
+            <EndTrainingButton onClick={handleEndTraining} compact={!isSms} />
           </div>
         </div>
         {escalationError && (
@@ -610,6 +640,26 @@ export default function MessengerSessionPage() {
         )}
       </div>
 
+      {/* §95(UX D-138) — 친구가 아닌 상대 안내 띠(실제 메신저에 있는 요소 · 문면 근사). 대화 목록 위에 고정 — 버튼 없음(동작 없는 버튼 금지). */}
+      {!isSms && scenario.chatNonFriend && (
+        <p
+          className="mx-3 mb-1 shrink-0 rounded-[10px] px-3 py-2 text-center text-[13px] leading-snug"
+          style={{ backgroundColor: chatTokens.nonFriendBg, color: chatTokens.nonFriendText }}
+        >
+          친구로 등록되지 않은 사용자입니다.
+          <br />
+          금전 요구나 개인정보 요청에 주의하세요.
+        </p>
+      )}
+
+      {/* §95 — 대화 목록 상자(이 화면의 유일한 스크롤). 키보드가 열리면 이 상자만 줄어든다. */}
+      <div
+        ref={scrollBoxRef}
+        onScroll={(event) => {
+          stickToBottomRef.current = isNearBottom(event.currentTarget);
+        }}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
+      >
       {/* 대화 상단 맥락 — 발신자(사칭 대상)와 표면.
           ⚠️ T190-6 — UX-022 v1.33 (3)은 이 시스템 문구를 지우지 않는다(dubinsky OQ-U57 ② — User 결정 대상). 무변경. */}
       {/* §89.5 ⓐ · 사용자 결정 ② — 메신저형은 첫 줄의 앱 이름 표기(종전 "…카카오톡 메시지가 도착했습니다")를 지우고 날짜 구분줄로 바꾼다.
@@ -687,19 +737,29 @@ export default function MessengerSessionPage() {
               <span className="sr-only">나:</span>
             ) : firstOfPeerRun ? (
               <span className="flex items-center gap-2">
-                <span
-                  aria-hidden="true"
-                  className="flex h-[34px] w-[34px] shrink-0 items-end justify-center overflow-hidden rounded-[13px]"
-                  style={{ backgroundColor: chatTokens.profileBg, color: chatTokens.profileFg }}
+                {/* §95 — 프로필 사진을 누르면 상대 프로필 시트(실제 메신저와 같다). 이름은 옆 글자가 말한다. */}
+                {/* 리뷰 M1 — 그림은 34px, 터치 영역은 44px(음수 여백으로 줄 배치 무변화). */}
+                <button
+                  type="button"
+                  onClick={() => setProfileOpen(true)}
+                  aria-haspopup="dialog"
+                  aria-label={`${peerName} 프로필 보기`}
+                  className="-m-[5px] flex h-[44px] w-[44px] shrink-0 items-center justify-center"
                 >
-                  <PhoneIcon name="person" size={28} />
-                </span>
+                  <span
+                    aria-hidden="true"
+                    className="flex h-[34px] w-[34px] items-end justify-center overflow-hidden rounded-[13px]"
+                    style={{ backgroundColor: chatTokens.profileBg, color: chatTokens.profileFg }}
+                  >
+                    <PhoneIcon name="person" size={28} />
+                  </span>
+                </button>
                 <span className="text-[14px]" style={{ color: chatTokens.senderName }}>
-                  {scenario.callerLabel}
+                  {peerName}
                 </span>
               </span>
             ) : (
-              <span className="sr-only">{`${scenario.callerLabel}:`}</span>
+              <span className="sr-only">{`${peerName}:`}</span>
             )}
             {isSms ? (
               <span
@@ -827,11 +887,11 @@ export default function MessengerSessionPage() {
             </span>
           </li>
         )}
-        <li ref={scrollAnchorRef} aria-hidden="true" className="h-px w-full shrink-0" />
       </ul>
+      </div>
       {replyView.showTyping && (
         <p role="status" className="sr-only">
-          {scenario.callerLabel}이(가) 입력 중입니다.
+          {peerName}이(가) 입력 중입니다.
         </p>
       )}
 
@@ -839,9 +899,7 @@ export default function MessengerSessionPage() {
           T190-6(UX-022 v1.33 (2)) — 문자형 입력 바: 높이 64px(필드 48px) · 스킨별 필드·전송 원 · placeholder "메시지".
           ⛔ 실제 앱의 ＋·카메라·이모지·음성 버튼은 그리지 않는다(동작 없는 버튼 금지 — P-37 R-6). */}
       <div
-        className={`sticky bottom-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 ${
-          ""
-        }`}
+        className="shrink-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3"
         style={{ backgroundColor: isSms ? smsTokens.inputBarBg : chatTokens.inputBarBg }}
       >
         {chatEnded ? (
@@ -879,9 +937,6 @@ export default function MessengerSessionPage() {
                 type="text"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                onFocus={(event) =>
-                  event.currentTarget.scrollIntoView({ behavior: "smooth", block: "center" })
-                }
                 placeholder={isSms ? "메시지" : "메시지 입력"}
                 className={
                   isSms
@@ -929,6 +984,25 @@ export default function MessengerSessionPage() {
           </>
         )}
       </div>
+
+      {!isSms && profileOpen && (
+        <MessengerProfileSheet
+          name={peerName}
+          voiceTalk={
+            canVoiceTalk
+              ? {
+                  onClick: () => {
+                    setProfileOpen(false);
+                    void handleRequestEscalation();
+                  },
+                  disabled: escalatingNow,
+                }
+              : undefined
+          }
+          onEndTraining={handleEndTraining}
+          onClose={() => setProfileOpen(false)}
+        />
+      )}
 
       {fakeLanding && (
         <MessengerFakeLanding
