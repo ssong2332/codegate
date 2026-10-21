@@ -775,6 +775,8 @@ export default function MessengerSessionPage() {
               <label htmlFor="messenger-chat-input" className="sr-only">
                 메시지 입력
               </label>
+              {/* 실기 신고(2026-10-21) — `min-w-0`: 입력칸의 기본 폭(size 20 × 글꼴 평균 글자폭)이 flex 최소폭이 되면 기기 글꼴에
+                  따라 줄이 화면보다 넓어져 페이지 전체가 축소되고 오른쪽에 바깥 바탕 띠가 생긴다(웨일 캡처 · 로컬 size 32 모의 445px). */}
               <input
                 id="messenger-chat-input"
                 ref={inputRef}
@@ -788,8 +790,8 @@ export default function MessengerSessionPage() {
                 placeholder={isSms ? "메시지" : "메시지 입력"}
                 className={
                   isSms
-                    ? "min-h-[48px] flex-1 px-4 py-2.5 text-[17px] placeholder:text-[var(--sms-placeholder)]"
-                    : "min-h-[48px] flex-1 rounded-full px-4 py-2.5 text-[17px] placeholder:text-[var(--sms-placeholder)]"
+                    ? "min-h-[48px] min-w-0 flex-1 px-4 py-2.5 text-[17px] placeholder:text-[var(--sms-placeholder)]"
+                    : "min-h-[48px] min-w-0 flex-1 rounded-full px-4 py-2.5 text-[17px] placeholder:text-[var(--sms-placeholder)]"
                 }
                 style={
                   !isSms

@@ -230,7 +230,9 @@ export default function DifficultySelectPage() {
   const advancedNotice = isSendMode ? ADVANCED_SEND_NOTICE : ADVANCED_SELF_NOTICE;
 
   return (
-    <main className="drilldown-step mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-6 pb-28 lg:max-w-3xl xl:max-w-5xl">
+    // 실기 신고(2026-10-21) — `w-full`: body가 flex 열이라 `mx-auto`만 있으면 폭이 내용 길이를 따라간다. 난이도와
+    // 펼침 블록(고급 고지 · 내 정보)에 상관없이 max-w 안에서 늘 같은 폭이 되게 고정한다(스크롤바 폭은 globals.css).
+    <main className="drilldown-step mx-auto flex min-h-screen w-full max-w-xl flex-col gap-6 p-6 pb-28 lg:max-w-3xl xl:max-w-5xl">
       <header className="flex flex-col gap-2 pt-2">
         <button
           type="button"

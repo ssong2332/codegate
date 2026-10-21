@@ -301,7 +301,7 @@ export default function ChallengeCreatePage() {
     const canNativeShare = typeof navigator !== "undefined" && "share" in navigator;
     const isCopied = copyLabel === "복사됨";
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-page p-6">
+      <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col gap-6 bg-page p-6">
         <header className="flex flex-col gap-2 pt-2">
           <h1 className="text-2xl font-bold text-ink">챌린지가 만들어졌습니다</h1>
           <p className="text-lg leading-relaxed text-ink-sub">
@@ -381,8 +381,9 @@ export default function ChallengeCreatePage() {
 
   // "form"·"submitting"·"error-issue" 공통 화면 — 입력 폼은 항상 보여주고, 발급 실패는 폼 위에
   // 재시도 안내로 얹는다(P-4, ScenarioListView의 sticky CTA + 에러 문구 패턴과 동일).
+  // `w-full` — 난이도 화면과 같은 폭 규칙(내용 길이에 따라 폭이 바뀌지 않게, 2026-10-21 실기 신고).
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 bg-page p-6">
+    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col gap-6 bg-page p-6">
       <header className="flex flex-col gap-2 pt-2">
         <button
           type="button"
