@@ -90,6 +90,31 @@ export function personaUserMatchTokens(item: PersonaCardItem): string[] {
   return given ? [...new Set([...tokens, given])] : tokens;
 }
 
+// 2026-10-21 메인 세션 라이브 실측 — 카드 사는 곳 "서울특별시", 사기범은 *"서울중앙지방검찰청"* 이라고만 말했는데 리포트가 "사는 곳: 서울특별시"를
+// "상대가 먼저 꺼낸 '내 정보'"(R-1)로 표시했다. 원인: 지역 토큰 "서울"을 줄 안 **어디에든** 부분 일치로 셌다(기관명 · 은행명 안의 지명 포함).
+// ⇒ 사기범 쪽 지역 대조만 **지명 낱말로 끝나는 자리**로 좁힌다(아래 판정표). 참가자 쪽은 종전대로 넓게 센다(오차 방향 = R-2 = 안전 · §84.3.6).
+// | 토큰 바로 뒤 | 셈 |
+// |---|---|
+// | 줄 끝 · 한글이 아닌 글자(공백 · 문장부호 · 숫자) | 센다("서울 사시죠" · "서울, 맞으시죠") |
+// | `은행`으로 시작 | 안 센다(부산은행 · 대구은행 같은 은행명 — "은" 조사보다 먼저 본다) |
+// | 조사 · 주소 문맥 낱말(`REGION_FOLLOWERS`)로 시작 | 센다("서울에" · "서울이시고" · "서울사시는" · "서울시에") |
+// | 그 밖의 한글(기관명 · 고유명사가 이어짐) | 안 센다("서울중앙지방검찰청" · "서울경찰청" · "충남대") |
+const REGION_FOLLOWERS = ["에", "이", "은", "는", "도", "쪽", "사", "살", "거주", "시 ", "시에", "시이", "시죠", "시고", "시,", "시."] as const;
+
+/** 사기범 줄에 지역 토큰이 **지명 낱말로서** 나오는가(위 판정표). */
+export function regionMentioned(text: string, token: string): boolean {
+  let from = 0;
+  for (;;) {
+    const at = text.indexOf(token, from);
+    if (at < 0) return false;
+    const rest = text.slice(at + token.length);
+    const next = rest.charAt(0);
+    if (next === "" || !/[가-힣]/.test(next)) return true;
+    if (!rest.startsWith("은행") && REGION_FOLLOWERS.some((f) => rest.startsWith(f) || (f.endsWith(" ") && rest === f.trimEnd()))) return true;
+    from = at + 1;
+  }
+}
+
 export type PersonaFirstMention = { key: PersonaCardItem["key"]; scammerTurnIndex: number };
 
 /** 항목별 첫 언급 대조 — 사기범 첫 언급 turnIndex < 참가자 첫 언급 turnIndex(없으면 ∞)인 항목만. */
@@ -103,9 +128,11 @@ export function resolvePersonaFirstMentions(
     const tokens = personaMatchTokens(item);
     if (tokens.length === 0) continue;
     const userTokens = personaUserMatchTokens(item);
+    const mentions = (role: PersonaTranscriptLine["role"], text: string, token: string): boolean =>
+      role === "scammer" && item.key === "region" ? regionMentioned(text, token) : text.includes(token);
     const firstOf = (role: PersonaTranscriptLine["role"]): number | undefined =>
       spoken.find(
-        (line) => line.role === role && (role === "user" ? userTokens : tokens).some((token) => line.textMasked.includes(token)),
+        (line) => line.role === role && (role === "user" ? userTokens : tokens).some((token) => mentions(role, line.textMasked, token)),
       )?.turnIndex;
     const s = firstOf("scammer");
     if (s === undefined) continue;
