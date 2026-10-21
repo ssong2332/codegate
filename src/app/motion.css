@@ -131,6 +131,20 @@
   animation: e2-wait-slide 1.6s ease-in-out infinite;
 }
 
+/* 챌린지 링크 완성 판 — 아래에서 위로 차오른다(clip-path · transform 0). 시안은 420ms였지만 문서화한 예외 상한(판 확장 380ms · DECISIONS #210) 안에 맞춘다. */
+@keyframes e2-fill-up-in {
+  from {
+    clip-path: inset(100% 0 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.e2-fill-up {
+  animation: e2-fill-up-in 0.38s cubic-bezier(0.32, 0.72, 0, 1) backwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .page-enter > main:not(.drilldown-step),
   .loading-dot,
@@ -138,7 +152,8 @@
   .check-pop,
   .e2-rise,
   .e2-sheet-in,
-  .e2-wait-bar {
+  .e2-wait-bar,
+  .e2-fill-up {
     animation: none;
   }
 
