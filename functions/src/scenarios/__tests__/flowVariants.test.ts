@@ -39,7 +39,7 @@ import * as crypto from "node:crypto";
 import { isL3Procedural } from "../../roleplay/l3Depth";
 import { asksIdentityCheck } from "../../roleplay/personaAuthority";
 import { sessionDeclaresInCallSms } from "../../inCallSms/smsGate";
-import { CHILD_GENDER_UNSPECIFIED_RULE } from "../messengerChildImpersonationKakao.prompt";
+import { CHILD_CALL_PHASE_RULE, CHILD_GENDER_UNSPECIFIED_RULE } from "../messengerChildImpersonationKakao.prompt";
 import { resolveSessionSpeakerGender, speakerGenderFor } from "../../realtime/scenarioVoice";
 import { pickGeminiVoiceName } from "../../realtime/geminiProvider";
 import { revertR3C2 } from "../../roleplay/__tests__/r3NoStallDelta";
@@ -685,7 +685,12 @@ test("[T194-a §84.13.3 ② · 리뷰 M2] 플래그만 더한 child-kakao · sub
     const ruleLine = `${CHILD_GENDER_UNSPECIFIED_RULE}\n`;
     const isChild = row.scenarioId === "messenger-child-impersonation-kakao";
     assert.equal(currentPrompt.personaPrompt.split(ruleLine).length - 1, isChild ? 1 : 0, `${row.variantId}: 얼버무림 금지 줄 개수`);
-    const prompt = isChild ? { ...currentPrompt, personaPrompt: currentPrompt.personaPrompt.replace(ruleLine, "") } : currentPrompt;
+    // 2026-10-21 — 통화 단계 규칙 블록(`CHILD_CALL_PHASE_RULE` · 앞 빈 줄 포함)도 의도된 추가다. child-kakao 3벌에만 정확히 1번 있고, 그것만 뺀다.
+    const callPhaseBlock = `\n\n${CHILD_CALL_PHASE_RULE}`;
+    assert.equal(currentPrompt.personaPrompt.split(callPhaseBlock).length - 1, isChild ? 1 : 0, `${row.variantId}: 통화 단계 규칙 블록 개수`);
+    const prompt = isChild
+      ? { ...currentPrompt, personaPrompt: currentPrompt.personaPrompt.replace(ruleLine, "").replace(callPhaseBlock, "") }
+      : currentPrompt;
     const assembled = buildSystemPrompt(prompt, {
       difficultyLevel: row.level,
       inCallSmsEnabled: sessionDeclaresInCallSms(row.scenarioId, row.variantId),
