@@ -94,7 +94,8 @@ import {
   type TurnEndReason,
 } from "./liveLatency";
 import { LIVE_MIC_CONSTRAINTS, liveMicHandoff, stopStream } from "./micHandoff";
-import { isUsableContext, type PrimedCallAudio } from "./callAudio";
+import { isUsableContext, resumeSuspendedContexts, type PrimedCallAudio } from "./callAudio";
+import { BACKGROUND_LOG_PREFIX, MIC_RECHECK_DELAY_MS, decideMicRecovery, decideSocketClose } from "./backgroundCall";
 import type { LiveTurnPhase } from "@/lib/verifyintercept";
 import {
   noteAudioError,
@@ -227,6 +228,16 @@ export type GeminiVoiceSessionProps = {
   onScammerHangupAccepted: () => void;
   /** R5 — 응답 뒤 첫 `turnComplete`(또는 끼어들기 · close · 상한) + 잔여 재생 + 꼬리가 지난 뒤 1회(부모: `endCall("scammer")`). */
   onScammerHangupReady: () => void;
+  /**
+   * ⭐ §99(화면 꺼짐 신고) — 다시 연결된 세션의 첫 턴. 있으면 오프닝 트리거 대신 이것을 보낸다(지금까지의 대화 맥락 ·
+   * `buildResumeTurn`). 부재 = 종전 오프닝. 전사에 기록하지 않는다(오프닝과 같은 오케스트레이션 신호).
+   */
+  resumeTurn?: string | null;
+  /**
+   * ⭐ §99 — 화면이 가려진 동안(또는 돌아온 직후) 소켓이 닫혔을 때 `onEnded` 대신 부른다(부모가 다시 연결한다 — 판정
+   * `decideSocketClose`). 부재 = 종전대로 `onEnded`. 사용자가 끊었거나 끊기 래치 뒤에는 부르지 않는다.
+   */
+  onConnectionLost?: () => void;
 };
 
 // 마이크 캡처 버퍼 크기 — 작을수록 지연이 낮지만 콜백이 잦다. 사용자 신고(2026-07-25, "내가 말하고
@@ -311,7 +322,13 @@ export default function GeminiVoiceSession({
   isHangupLatched,
   onScammerHangupAccepted,
   onScammerHangupReady,
+  resumeTurn,
+  onConnectionLost,
 }: GeminiVoiceSessionProps) {
+  // §99 — 마운트 시점 값만 쓴다(첫 턴은 연결 직후 1회).
+  const resumeTurnRef = useRef(resumeTurn ?? null);
+  // §99 — 부모의 종료 요청(`stopSignal`)으로 닫는 것인가. 이때의 close는 언제나 종전대로 `onEnded`다.
+  const stopRequestedRef = useRef(false);
   const handlersRef = useRef({
     onActive,
     onEnded,
@@ -331,6 +348,7 @@ export default function GeminiVoiceSession({
     isHangupLatched,
     onScammerHangupAccepted,
     onScammerHangupReady,
+    onConnectionLost,
   });
   const mutedRef = useRef(muted);
   // 정리 대상들 — 언마운트 시 전부 닫지 않으면 마이크가 계속 열려 있다.
@@ -373,6 +391,7 @@ export default function GeminiVoiceSession({
       isHangupLatched,
       onScammerHangupAccepted,
       onScammerHangupReady,
+      onConnectionLost,
     };
   }, [
     onActive,
@@ -393,6 +412,7 @@ export default function GeminiVoiceSession({
     isHangupLatched,
     onScammerHangupAccepted,
     onScammerHangupReady,
+    onConnectionLost,
   ]);
 
   useEffect(() => {
@@ -812,6 +832,13 @@ export default function GeminiVoiceSession({
       silenceNudgeTimer = null;
       // T192 C5(G510) — 승인 뒤 침묵 넛지 0(대기 자체를 끝낸다).
       if (handlersRef.current.isHangupLatched()) return;
+      // §99 — 화면이 가려진 동안의 침묵은 참가자의 침묵이 아니다(마이크가 무음) — 넛지를 미루고 다시 본다.
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        silenceNudgeTimer = setTimeout(() => {
+          if (!cancelled) runSilenceNudgeCheck();
+        }, SILENCE_NUDGE_RECHECK_MS);
+        return;
+      }
       const nowMs = performance.now();
       const armedAt = silenceNudgeState.armedAt;
       const step = stepSilenceNudge(silenceNudgeState, {
@@ -874,6 +901,13 @@ export default function GeminiVoiceSession({
       stallNudgeTimer = null;
       // G510 — 승인 · 종료 래치 뒤 넛지 0.
       if (handlersRef.current.isHangupLatched()) return;
+      // §99 — 가려진 동안에는 미룬다(위 침묵 넛지와 같은 이유).
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        stallNudgeTimer = setTimeout(() => {
+          if (!cancelled) runStallNudgeCheck();
+        }, SILENCE_NUDGE_RECHECK_MS);
+        return;
+      }
       const nowMs = performance.now();
       const armedAt = stallNudgeState.armedAt;
       const step = stepStallNudge(stallNudgeState, {
@@ -984,7 +1018,99 @@ export default function GeminiVoiceSession({
       scheduleGateClose({ remainingPlaybackMs: 0, turnInProgress: false });
     };
 
+    // ⭐ §99(화면 꺼짐 신고) — 화면이 가려졌다 돌아오면 오디오 컨텍스트를 다시 깨우고, 마이크 트랙이 끝났거나 음소거로 남았으면
+    // 다시 연다. 소켓이 그 사이 닫혔으면 아래 onclose가 `decideSocketClose`로 "다시 연결"을 고른다. 판정은 `backgroundCall.ts`.
+    // 숫자 · 상태값만 production 로그에 남긴다(실기 원격 디버깅 — 전사 텍스트 0).
+    let wasHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+    let hiddenAtMs: number | null = wasHidden ? performance.now() : null;
+    let lastVisibleAtMs: number | null = null;
+    let connectionLostReported = false;
+    let micRecheckTimer: ReturnType<typeof setTimeout> | null = null;
+    // 파이프라인이 붙은 뒤에 채워진다(아래 IIFE) — 마이크를 새 스트림으로 갈아 끼운다.
+    let replaceMicStream: ((next: MediaStream) => void) | null = null;
+    const isHiddenNow = () => typeof document !== "undefined" && document.visibilityState === "hidden";
+    const recheckMic = () => {
+      micRecheckTimer = null;
+      // 리뷰 Minor — 소켓이 이미 끊겨 부모가 다시 잇는 중이면 새 세션이 마이크를 연다(여기서 또 열지 않는다).
+      if (cancelled || !replaceMicStream || connectionLostReported) return;
+      const track = stream?.getAudioTracks()[0] ?? null;
+      const view = track ? { readyState: track.readyState, muted: track.muted } : null;
+      const decision = decideMicRecovery(view);
+      console.info(BACKGROUND_LOG_PREFIX, `mic=${view ? `${view.readyState}${view.muted ? "/muted" : ""}` : "none"} → ${decision}`);
+      if (decision !== "reacquire") return;
+      void navigator.mediaDevices
+        .getUserMedia(LIVE_MIC_CONSTRAINTS)
+        .then((next) => {
+          if (cancelled || !replaceMicStream) {
+            stopStream(next);
+            return;
+          }
+          try {
+            replaceMicStream(next);
+          } catch (e) {
+            // 리뷰 Minor — 갈아 끼우기 실패(컨텍스트가 닫힘 등)면 새 트랙을 닫는다(표시등 · 누수 0).
+            stopStream(next);
+            throw e;
+          }
+          console.info(BACKGROUND_LOG_PREFIX, "mic reacquired");
+        })
+        .catch((e: unknown) => {
+          noteAudioError(e instanceof Error ? e.name : "unknown");
+          console.info(BACKGROUND_LOG_PREFIX, `mic reacquire failed ${e instanceof Error ? e.name : "unknown"}`);
+        });
+    };
+    const handleVisibility = () => {
+      if (cancelled) return;
+      const nowMs = performance.now();
+      if (isHiddenNow()) {
+        wasHidden = true;
+        hiddenAtMs = nowMs;
+        // 돌아온 직후 다시 가려지면 예약된 마이크 재확인을 취소한다(가려진 문서에서 마이크를 열지 않는다).
+        if (micRecheckTimer) clearTimeout(micRecheckTimer);
+        micRecheckTimer = null;
+        console.info(BACKGROUND_LOG_PREFIX, `hidden socket=${session ? "open" : "none"}`);
+        return;
+      }
+      lastVisibleAtMs = nowMs;
+      const hiddenMs = hiddenAtMs !== null ? Math.round(nowMs - hiddenAtMs) : 0;
+      hiddenAtMs = null;
+      console.info(
+        BACKGROUND_LOG_PREFIX,
+        `visible hiddenMs=${hiddenMs} out=${outputContext?.state ?? "-"} in=${inputContext?.state ?? "-"} socket=${session ? "open" : "none"}`,
+      );
+      // 리뷰 Minor — 가려진 동안 미뤄 둔 침묵 · 대기 넛지는 돌아온 시점부터 다시 센다(복귀 직후 사기범이 바로 재촉하지 않게).
+      if (silenceNudgeState.armedAt !== null) silenceNudgeState = { ...silenceNudgeState, armedAt: nowMs };
+      if (stallNudgeState.armedAt !== null) stallNudgeState = { ...stallNudgeState, armedAt: nowMs };
+      // 컨텍스트가 suspended/interrupted면 다시 깨운다(iOS는 탭이 필요할 수 있다 — 화면의 탭 안전망이 이어받는다).
+      resumeSuspendedContexts([outputContext, inputContext], noteAudioError);
+      if (micRecheckTimer) clearTimeout(micRecheckTimer);
+      micRecheckTimer = setTimeout(recheckMic, MIC_RECHECK_DELAY_MS);
+    };
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", handleVisibility);
+    /** onclose · onerror 공통 — 다시 연결을 골랐으면 부모에 1회 알리고 `true`. */
+    const reportConnectionLostIfBackground = (): boolean => {
+      if (connectionLostReported) return true;
+      if (!handlersRef.current.onConnectionLost) return false;
+      const decision = decideSocketClose({
+        hiddenNow: isHiddenNow(),
+        lastVisibleAtMs,
+        wasHiddenBefore: wasHidden,
+        nowMs: performance.now(),
+        stopRequested: stopRequestedRef.current,
+        hangupLatched: handlersRef.current.isHangupLatched(),
+      });
+      console.info(BACKGROUND_LOG_PREFIX, `socket closed → ${decision}`);
+      if (decision !== "reconnect") return false;
+      connectionLostReported = true;
+      handlersRef.current.onConnectionLost();
+      return true;
+    };
+
     const cleanup = () => {
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", handleVisibility);
+      if (micRecheckTimer) clearTimeout(micRecheckTimer);
+      micRecheckTimer = null;
+      replaceMicStream = null;
       clearHangupTimers();
       if (speakingTimer) clearTimeout(speakingTimer);
       if (clientTurnTick) clearTimeout(clientTurnTick);
@@ -1273,13 +1399,17 @@ export default function GeminiVoiceSession({
             },
             onerror: (e: unknown) => {
               log("onerror", e);
-              if (!cancelled) handlersRef.current.onError();
+              // §99 — 화면이 가려진 동안의 소켓 오류는 텍스트 강등이 아니라 다시 연결로 보낸다(아래 onclose와 같은 판정 · 1회).
+              if (!cancelled && !reportConnectionLostIfBackground()) handlersRef.current.onError();
             },
             onclose: (e: unknown) => {
               log("onclose", e);
               if (!cancelled) {
                 flushTranscript();
                 logLatencySummary();
+                // §99 — 가려진 동안(또는 돌아온 직후) 닫혔으면 통화를 끝내지 않고 부모가 다시 연결한다(`decideSocketClose`).
+                // 사용자 종료(`stopSignal`) · 끊기 래치 뒤의 close는 언제나 종전대로 `onEnded`다.
+                if (reportConnectionLostIfBackground()) return;
                 handlersRef.current.onEnded();
                 // T192 C5(§79.8 R4 · §79.11 3행) — 끊기 대기 중 서버 close는 R4를 즉시 푼다(사유는 먼저 래치된 scammer).
                 beginHangupDrain();
@@ -1325,11 +1455,13 @@ export default function GeminiVoiceSession({
         // §71.5 — 오프닝도 보류 큐로 보낸다(이 시점엔 큐가 비어 즉시 나간다). 그래야 첫 응답이 오기 전에
         // 들어온 타이핑이 오프닝을 끊지 않는다. 전송 실패는 `sendClientTurn`이 삼킨다(P-4 — 사용자가 먼저
         // 말을 걸면 대화는 정상적으로 이어진다).
-        dispatchClientTurn({
-          type: "request",
-          turn: { kind: "opening", text: OPENING_TRIGGER_TURN },
-          nowMs: performance.now(),
-        });
+        // §99 — 다시 연결된 세션이면 오프닝 대신 지금까지의 대화 맥락을 첫 턴으로 보낸다(같은 보류 큐 · 같은 종류 — 미기록).
+        const resumeText = resumeTurnRef.current;
+        dispatchClientTurn(
+          resumeText
+            ? { type: "request", turn: { kind: "opening", text: resumeText }, nowMs: performance.now() }
+            : { type: "request", turn: { kind: "opening", text: OPENING_TRIGGER_TURN }, nowMs: performance.now() },
+        );
 
         // 마이크 → PCM16 16kHz → 전송. ScriptProcessor는 구식이지만 AudioWorklet과 달리 별도
         // 워커 파일 없이 동작해, 정적 export 구성(next.config.ts)에서 추가 배포 산출물이 없다.
@@ -1408,6 +1540,19 @@ export default function GeminiVoiceSession({
         processor.connect(silence);
         silence.connect(inputContext.destination);
         silenceNode = silence;
+        // §99 — 복귀 뒤 마이크를 다시 열었을 때 같은 분석 · 전송 노드에 새 소스를 붙인다(옛 트랙은 닫는다). 컨텍스트 · 노드는 그대로다.
+        const activeInput = inputContext;
+        const activeProcessor = processor;
+        replaceMicStream = (next: MediaStream) => {
+          const previous = stream;
+          micSourceNode?.disconnect();
+          const nextSource = activeInput.createMediaStreamSource(next);
+          nextSource.connect(userLevelAnalyser);
+          nextSource.connect(activeProcessor);
+          micSourceNode = nextSource;
+          stream = next;
+          if (previous && previous !== next) stopStream(previous);
+        };
         log("mic pipeline attached");
       } catch (err) {
         log("connect threw", err);
@@ -1429,6 +1574,8 @@ export default function GeminiVoiceSession({
   // 부모의 종료 요청(통화 종료 버튼) — 세션과 마이크를 즉시 닫는다.
   useEffect(() => {
     if (stopSignal <= 0) return;
+    // §99 — 이 close는 사용자 종료다(가려짐 재연결 판정에 걸리지 않게 먼저 표시한다).
+    stopRequestedRef.current = true;
     cleanupRef.current?.();
   }, [stopSignal]);
 
