@@ -324,6 +324,7 @@ export default function DifficultySelectPage() {
     return (
       <TrainingPrepScreen
         meta={`${typeLabel} · ${scenario.title} · ${DIFFICULTY_LABEL[selected]}`}
+        scenarioId={scenarioId}
         channel={isMessenger ? "messenger" : "voice"}
         doneCount={prepDone}
         difficultyLabel={DIFFICULTY_LABEL[selected]}

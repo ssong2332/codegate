@@ -60,7 +60,7 @@ export function slowPrepHints(hints: readonly LoadingHint[]): readonly LoadingHi
   return hints.filter((h) => h.afterMs > 0);
 }
 
-/** 대기 중 예방 요령(일반 원칙만 — 시나리오 흐름 · 수법 순서는 말하지 않는다). 시안 E2 TIPS 문면 그대로. */
+/** 대기 중 예방 요령 — 시안 E2 TIPS 문면 그대로(일반 원칙만 — 시나리오 흐름 · 수법 순서는 말하지 않는다). */
 export const PREP_TIPS: readonly string[] = [
   "검찰·경찰·금감원은 전화로 돈을 옮기라고 하지 않습니다.",
   "문자로 온 링크로 신분증·카드번호를 넣지 마세요.",
@@ -68,11 +68,77 @@ export const PREP_TIPS: readonly string[] = [
   "의심되면 멈추고, 내가 직접 찾은 대표번호로 확인하세요.",
 ];
 
+/**
+ * §99.5(2026-10-22 실기 신고 — 카드사 시나리오에 "검찰·경찰·금감원…" 요령이 먼저 나왔다) — 요령은 **시나리오의 사칭 유형**에 맞춰 고른다.
+ * ⛔ 새 안내를 지어내지 않는다: 문장은 위 PREP_TIPS 또는 리포트 대처법(`functions/src/report/analyzeConversation.ts`
+ *    `pickCorrectAction`)의 문장을 **글자 그대로** 쓴다(G703이 원문에 있는지 본다). 채널(보이스/메신저) 변형도 그 함수 그대로다.
+ */
+const TIP = {
+  institutionNoMoney: PREP_TIPS[0],
+  smsLink: PREP_TIPS[1],
+  authorityVoice: "전화로 신원(경찰·기관 등)을 주장해도 그 자리에서 믿지 말고, 공식 대표번호로 직접 걸어 확인하세요.",
+  verifyKnownNumber: "상대가 확인 전화를 막으려 해도 반드시 알고 있는 번호로 직접 전화해 사실을 확인하세요.",
+  moneyVoice: "계좌번호나 송금을 요구받으면 절대 응하지 말고, 전화를 끊은 뒤 112(경찰)나 가족에게 직접 확인하세요.",
+  moneyMessenger: "계좌번호나 송금을 요구받으면 절대 응하지 말고, 대화를 멈춘 뒤 112(경찰)나 가족에게 직접 확인하세요.",
+  urgencyVoice: "아무리 다급해 보여도 그 자리에서 결정하지 말고, 일단 전화를 끊고 잠시 시간을 두어 사실관계를 확인하세요.",
+  family: "감정이 흔들리더라도 실제 그 사람이 맞는지부터 다른 방법(직접 전화·영상통화)으로 확인하세요.",
+  commonVoice: "전화를 끊고 알고 있는 번호로 직접 다시 연락해 사실을 확인하세요.",
+  commonMessenger: "대화를 멈추고 알고 있는 번호로 직접 연락해 사실을 확인하세요.",
+} as const;
+
+/** 사칭 유형 — 판정표(docs/Architecture.md §99.5). 시나리오가 늘면 여기 한 줄을 더한다(G703이 빠진 시나리오를 잡는다). */
+export type PrepTipKind = "institution" | "tax" | "finance" | "courier" | "family" | "threat" | "smishing";
+
+export const PREP_TIP_KIND_BY_SCENARIO: Readonly<Record<string, PrepTipKind>> = {
+  "institutional-impersonation": "institution",
+  "prosecution-cooperation-call": "institution",
+  "asset-protection-notice-call": "institution",
+  "tax-refund-scam": "tax",
+  "card-company-impersonation": "finance",
+  "bank-security-verify-scam": "finance",
+  "loan-refinance-scam": "finance",
+  "card-delivery-call": "finance",
+  "courier-customs-scam": "courier",
+  "family-accident-deepvoice": "family",
+  "grandchild-impersonation": "family",
+  "kidnapping-threat": "family",
+  "messenger-child-impersonation-kakao": "family",
+  "messenger-friend-loan-kakao": "family",
+  "reputation-blackmail-scam": "threat",
+  "messenger-parcel-smishing-sms": "smishing",
+  "messenger-subsidy-smishing-sms": "smishing",
+};
+
+/** 유형 · 채널 → 요령(앞이 유형에 가장 맞는 것 · 마지막은 공통). 표에 없는 시나리오는 공통 요령만. */
+export function prepTipsFor(scenarioId: string | null | undefined, channel: "voice" | "messenger"): readonly string[] {
+  const m = channel === "messenger";
+  const money = m ? TIP.moneyMessenger : TIP.moneyVoice;
+  const common = m ? TIP.commonMessenger : TIP.commonVoice;
+  switch (scenarioId ? PREP_TIP_KIND_BY_SCENARIO[scenarioId] : undefined) {
+    case "institution":
+      return [TIP.institutionNoMoney, TIP.authorityVoice, common];
+    case "tax":
+      return [TIP.authorityVoice, money, common];
+    case "finance":
+      return [TIP.verifyKnownNumber, money, common];
+    case "courier":
+      return [TIP.verifyKnownNumber, money, common];
+    case "family":
+      return [TIP.family, money, common];
+    case "threat":
+      return [TIP.urgencyVoice, money, common];
+    case "smishing":
+      return [TIP.smsLink, TIP.verifyKnownNumber, common];
+    default:
+      return [common, PREP_TIPS[2]];
+  }
+}
+
 /** 예방 요령 바꾸는 간격(ms) — 한 문장을 천천히 두 번 읽을 시간. */
 export const PREP_TIP_INTERVAL_MS = 5000;
 
-export function prepTipIndex(elapsedMs: number): number {
-  const n = PREP_TIPS.length;
+export function prepTipIndex(elapsedMs: number, count: number = PREP_TIPS.length): number {
+  const n = Math.max(1, count);
   return Math.floor(Math.max(0, elapsedMs) / PREP_TIP_INTERVAL_MS) % n;
 }
 

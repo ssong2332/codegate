@@ -4,7 +4,7 @@
 //   G651 난이도 = choose 판 + 설명 시트(sticky) + "이걸로 시작" — 고르기 전 진행 버튼 0(AC-064) · 안전 고지 그대로
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 const codeOnly = (file: string) =>
   readFileSync(file, "utf8")
@@ -100,6 +100,7 @@ test("[G652] 준비 화면 — 실제 준비 단계만 체크 · 경과 초 · �
   assert.ok(slowPrepHints([{ afterMs: 0, text: "a" }, { afterMs: 8000, text: "b" }]).every((h) => h.afterMs > 0));
   assert.equal(prepTipIndex(0), 0);
   assert.equal(prepTipIndex(PREP_TIP_INTERVAL_MS * PREP_TIPS.length), 0, "요령은 돌아가며 보인다");
+  assert.equal(prepTipIndex(PREP_TIP_INTERVAL_MS * 2, 2), 0, "요령 개수만큼 돈다");
   const screen = codeOnly("src/components/TrainingPrepScreen.tsx");
   for (const banned of [/\/3/, /%/, /진행률/, /formatElapsed/, /PREP_USUAL_LINE/, /e2-wait-bar/, /text-\[96px\]/]) {
     assert.doesNotMatch(screen, banned, `준비 화면에 ${banned}`);
@@ -129,6 +130,44 @@ test("[G702] 난이도 화면 — 준비 단계는 createSession 스트리밍 �
   // 서버 단계 이름과 클라 단계 이름이 같다(G700 짝).
   const server = readFileSync("functions/src/session/prepStages.ts", "utf8");
   assert.match(server, /CREATE_SESSION_PREP_STAGES = \["scenario", "opening", "saved"\] as const/);
+});
+
+// G703 — §99.5(2026-10-22 실기 신고: 카드사 부정결제 사칭 × 초급 준비 화면에 "검찰·경찰·금감원은…"이 먼저 나왔다).
+test("[G703] 준비 화면 요령 — 시나리오 사칭 유형에 맞고 · 문장은 앱 안 기존 문구 그대로 · 메신저에 '전화를 끊' 0", async () => {
+  const { prepTipsFor, PREP_TIP_KIND_BY_SCENARIO, PREP_TIPS } = await import("./e2Prep.ts");
+  const report = readFileSync("functions/src/report/analyzeConversation.ts", "utf8");
+  const dir = "src/content/scenarios";
+  const ids: { id: string; channel: "voice" | "messenger" }[] = [];
+  for (const f of readdirSync(dir).filter((x) => x.endsWith(".ts") && !x.endsWith(".test.ts") && !["index.ts", "escalation.ts"].includes(x))) {
+    const src = readFileSync(`${dir}/${f}`, "utf8");
+    const id = src.match(/_SCENARIO_ID = "([^"]+)"/)?.[1];
+    if (id) ids.push({ id, channel: /channel: "messenger"/.test(src) ? "messenger" : "voice" });
+  }
+  assert.ok(ids.length >= 17, `시나리오가 ${ids.length}개뿐이다`);
+  const rows: string[] = [];
+  for (const { id, channel } of ids) {
+    assert.ok(PREP_TIP_KIND_BY_SCENARIO[id], `${id}: 요령 유형 판정표에 없다 — 판정표에 한 줄을 더할 것`);
+    const tips = prepTipsFor(id, channel);
+    assert.ok(tips.length >= 2, id);
+    for (const tip of tips) {
+      assert.ok(PREP_TIPS.includes(tip) || report.includes(`"${tip}"`), `${id}: 앱 안 기존 문구가 아닌 요령 — ${tip}`);
+      if (channel === "messenger") assert.ok(!tip.includes("전화를 끊"), `${id}: 메신저에 통화 전용 행동`);
+    }
+    const kind = PREP_TIP_KIND_BY_SCENARIO[id];
+    // 기관(검찰 · 경찰 · 금감원) 문장은 그 기관 사칭에만.
+    assert.equal(tips.includes(PREP_TIPS[0]), kind === "institution", `${id}: 기관 요령이 맞지 않는 시나리오에 나온다`);
+    if (kind === "family") assert.ok(tips[0].includes("그 사람이 맞는지"), id);
+    if (kind === "smishing") assert.equal(tips[0], PREP_TIPS[1], id);
+    rows.push(`${id} | ${kind} | ${tips[0]}`);
+  }
+  // 신고 재현 — 카드사 시나리오의 첫 요령은 기관 문장이 아니다.
+  assert.notEqual(prepTipsFor("card-company-impersonation", "voice")[0], PREP_TIPS[0]);
+  // 표에 없는 시나리오는 공통 요령만(기관 · 링크 문장 0).
+  assert.ok(!prepTipsFor("unknown-scenario", "voice").includes(PREP_TIPS[0]));
+  console.log(`[G703] 시나리오 ${ids.length}개\n${rows.join("\n")}`);
+  const screen = codeOnly("src/components/TrainingPrepScreen.tsx");
+  assert.match(screen, /prepTipsFor\(scenarioId, channel\)/, "준비 화면이 시나리오에 맞춘 요령을 쓰지 않는다");
+  assert.match(codeOnly("src/app/scenarios/difficulty/page.tsx"), /scenarioId=\{scenarioId\}/);
 });
 
 test("[G653] 경계 판 — 진입은 세션 생성 뒤(훈련 화면 코드 무변경) · 종료는 사실 공개 문장과 함께", async () => {

@@ -3,18 +3,18 @@
 // 시안 E2 준비 화면(UX D-141 (5) · D-142 · §97.7 · §99) — 난이도 화면에서 "이걸로 시작"을 누른 뒤 세션이 만들어지는 동안
 // (createSession 대기) 화면 전체에 그린다. 세션 전 화면이다(훈련 화면 아님 — 통화 · 메신저는 무변경).
 // 짙은 남색 바탕 · **실제 준비 단계 3줄**(서버가 끝낸 단계만 체크 — 스트리밍 신호 · 최종 응답) · 고른 난이도 설명 ·
-// 예방 요령(5초마다 교체) · 오래 걸릴 때만 안심 문구(D-134 SESSION_PREP_HINTS).
+// 시나리오 유형에 맞춘 예방 요령(5초마다 교체 · §99.5) · 오래 걸릴 때만 안심 문구(D-134 SESSION_PREP_HINTS).
 // ⛔ 경과 초 · 예상 시간 · 진행률 · 퍼센트 · "1/3" 표기 금지(D-142 · D-134). 시간이 지났다고 체크하지 않는다.
 import { useEffect, useRef, useState } from "react";
 import { LineIcon, LoadingDots } from "@/components/ui";
 import { useLoadingHint } from "@/components/ui/LoadingStatus";
 import { SESSION_PREP_HINTS } from "@/lib/motion/routeMotion";
 import {
-  PREP_TIPS,
   prepAnnouncement,
   prepStepState,
   prepStepsFor,
   prepTipIndex,
+  prepTipsFor,
   slowPrepHints,
 } from "@/lib/design/e2Prep";
 
@@ -22,6 +22,7 @@ const SLOW_HINTS = slowPrepHints(SESSION_PREP_HINTS);
 
 export default function TrainingPrepScreen({
   meta,
+  scenarioId,
   channel,
   doneCount,
   difficultyLabel,
@@ -29,6 +30,8 @@ export default function TrainingPrepScreen({
 }: {
   /** 유형 · 시나리오 · 난이도 한 줄 */
   meta: string;
+  /** 요령을 시나리오의 사칭 유형에 맞춰 고른다(§99.5). */
+  scenarioId: string;
   channel: "voice" | "messenger";
   /** 서버가 실제로 끝낸 준비 단계 수(앞에서부터 — `advancePrepDone`). */
   doneCount: number;
@@ -51,7 +54,8 @@ export default function TrainingPrepScreen({
   }, []);
 
   const steps = prepStepsFor(channel);
-  const tip = PREP_TIPS[prepTipIndex(tipElapsed)];
+  const tips = prepTipsFor(scenarioId, channel);
+  const tip = tips[prepTipIndex(tipElapsed, tips.length)];
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-5 bg-deep px-[22px] pb-[calc(env(safe-area-inset-bottom)+24px)] pt-10 text-white">

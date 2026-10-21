@@ -22219,3 +22219,21 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 | 거부(고급 전용 × 중급) | `failed-precondition` · 조각 0개 | 같은 스모크 |
 | 단계별 소요 | 에뮬레이터 웜: scenario 37~41ms · opening 1~5ms(Mock) · saved 27~49ms. **실 LLM 소요는 미측정**(실 키 승인 필요) — 배포 뒤 `[session-prep]` 로그로 본다 | Functions 에뮬레이터 로그 |
 | 화면(375×812 · 임시 미리 보기 페이지 — 커밋 0) | 대기/진행/완료 3상태 · 메신저 문면 · 가로 넘침 0 · reduced-motion 규칙에 `check-pop` 포함 | 브라우저 캡처 |
+
+### 99.5 준비 화면 요령을 시나리오 유형에 맞춤 (2026-10-22 실기 신고 · 메인 세션 추가 지시)
+**원인**: `src/lib/design/e2Prep.ts` `PREP_TIPS`는 고정 3문장이었다. 화면은 경과 시간으로 5초마다 돌렸고 **항상 0번("검찰·경찰·금감원은 전화로 돈을 옮기라고 하지 않습니다.")부터** 보였다. 시나리오 정보를 받지 않았기 때문에, 카드사 부정결제 사칭 × 초급(라이브 voicefishing-ff47f.web.app)에도 기관 문장이 먼저 나왔다.
+**고침**: `prepTipsFor(scenarioId, channel)`. 사칭 유형 판정표(`PREP_TIP_KIND_BY_SCENARIO`)로 유형에 가장 맞는 요령을 먼저 보이고, 마지막에 공통 요령을 둔다. ⛔ 새 안내는 만들지 않았다. 문장은 기존 PREP_TIPS 또는 리포트 대처법(`functions/src/report/analyzeConversation.ts` `pickCorrectAction`)을 글자 그대로 쓴다. G703이 원문에 있는지, 메신저에 "전화를 끊" 문장이 없는지, 판정표에 모든 시나리오가 있는지 확인한다.
+
+| 유형 | 판정 기준 | 시나리오 | 요령(순서) |
+|---|---|---|---|
+| institution | 검찰 · 경찰 · 금감원 사칭 | institutional-impersonation · prosecution-cooperation-call · asset-protection-notice-call | 기관은 돈을 옮기라 하지 않음 → 신원 주장 시 대표번호 → 공통 |
+| tax | 국세청 · 공단 환급 사칭 | tax-refund-scam | 신원 주장 시 대표번호 → 계좌 · 송금 거절 → 공통 |
+| finance | 은행 · 카드사 · 대출 상담원 사칭 | card-company-impersonation · bank-security-verify-scam · loan-refinance-scam · card-delivery-call | 알고 있는 번호로 직접 확인 → 계좌 · 송금 거절 → 공통 |
+| courier | 택배 고객센터 사칭(통화) | courier-customs-scam | 알고 있는 번호로 직접 확인 → 계좌 · 송금 거절 → 공통 |
+| family | 가족 · 자녀 · 지인 사칭 · 납치 협박 | family-accident-deepvoice · grandchild-impersonation · kidnapping-threat · messenger-child-impersonation-kakao · messenger-friend-loan-kakao | 그 사람이 맞는지 직접 전화 · 영상통화 → 계좌 · 송금 거절(채널별) → 공통(채널별) |
+| threat | 유포 협박 | reputation-blackmail-scam | 다급해도 결정 미루기 → 계좌 · 송금 거절 → 공통 |
+| smishing | 문자 링크 유도 | messenger-parcel-smishing-sms · messenger-subsidy-smishing-sms | 링크로 신분증 · 카드번호 넣지 않기 → 알고 있는 번호로 직접 확인 → 공통(메신저) |
+| (표에 없음) | 새 시나리오 | — | 공통 요령만(G703이 표 누락을 실패로 잡는다) |
+
+검증: root 932/0(+G703) · functions 1609/0.
+
