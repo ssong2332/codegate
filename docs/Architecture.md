@@ -21973,3 +21973,42 @@ G636(`replyChoreography.test.ts` 8건) · G637(`themeDiagnostics.test.ts` 5건) 
 - 배포 = **Hosting만**(functions 변경 0).
 - 실기: ① 카톡형 전송 순서(빠른 · 느린 응답) ② 문자형 ③ 실패 후 다시 보내기 ④ 통화 전환 직전 답장이 보이고 전환되는가 ⑤ One UI 통화가 기기 다크에서도 라이트인가 ⑥ **웨일 다크에서 `?themedebug=1` 캡처** — 견본 4행 중 원래 색이 남는 행 · `filter` · 낯선 시트 · html/body 속성.
 
+
+## 97. (UI 변경 — 2026-10-21 · 브랜치 `claude/e2-design-p1-tokens` 외 단계 PR · 사용자 결정 *"E2로 확정할게"*(시안 세션 design-motion-v2) · 메인 세션 구현 지시) **시안 E2 "큰 판 한 장씩" — 판 구조 · 판 확장 전환 · 경계 판 · 리포트 큰 시계** — architect 판정 · implementer 기록
+
+> 관련: UX D-141 · DECISIONS #210 · OQ-U106. 시안 원본: Artifact `9j4xmdGimgEAiLpm9f3wL4`(#pe2 · #ecmp). ⚠️ 번호(§97 · #210 · G645~ · D-141)는 병행 작업 번호를 비워 두고 잡았다 — 병합 때 확인.
+
+### 97.1 단계 PR
+| 단계 | 범위 | 화면 변화 |
+|---|---|---|
+| P1 | 토큰 5 · 공통 컴포넌트 6 · 판 확장 전환 · motion.css E2 절 · template 배선 · G645~G648 · 문서 | 없음(쓰는 화면 0 — 덮개 걷기 배선만) |
+| P2 | 유형 · 체험/보내기 · 방식 · 시나리오 · 난이도(시트) — viewport-scroll PR(dvh · 목록 토글) 병합 뒤 | 선택 화면 전부 |
+| P3 | 준비 화면 · 진입/종료 경계 판(OQ-U106 결정 뒤) | 준비 · 경계 |
+| P4 | 리포트 머리 · 큰 시계 · 사건 행 / 챌린지 / 랜딩 · 로그인 | 나머지 |
+
+### 97.2 P1 구성
+| 파일 | 역할 |
+|---|---|
+| `src/lib/design/siteTokens.ts` · `globals.css` | 토큰 5(`deep` · `panel-slate` · `panel-sand` · `sand` · `panel-line`) + 대비 쌍 17(그중 4쌍은 기존 쌍을 판 이름으로 다시 적은 것 — 새 조합 13 · G630 최저 `sand/brand` 5.85:1) |
+| `src/lib/design/e2Layout.ts` | 순수 규칙: 판 색 교차(`panelTone`) · 판 높이(`panelMinHeight` · `panelsFillHeight` — 5개부터 92px 스크롤) · 시계(`formatClock` · `clockEase`) · 모션 수치 원천 `E2_MOTION` |
+| `src/lib/motion/panelExpand.ts` | 판 확장: `expandPanelThen(판, 이동)` — 판 색 덮개(fixed · body)를 clip-path로 넓히며 **이동은 즉시**(이동이 `false`를 돌려주면 덮개 0 — 조건부 이동 · 같은 경로) · `releasePanelOverlay()` — 넓히기 끝난 뒤 220ms 걷기 · 안전 2.5초 · 전환 중 두 번째 탭 무시. 런타임 import 0(앱 · 단위 테스트 공용) |
+| `src/app/template.tsx` | 경로가 바뀔 때 `releasePanelOverlay()`(재마운트 없는 이동 포함) |
+| `src/components/ui/PanelList.tsx` | 판 목록 — `navigate`(밝기 교차 · 번호 · 42px 아이콘 · 확장 전환) / `choose`(옅은 판 · 고른 판만 남색 · 체크) |
+| `DisplayTitle` · `CtaPanel` · `BottomSheet` · `BoundaryPanel` · `BigClock` | 함렛 화면 제목(38/30/48 · keep-all) · 모래 CTA 판(76px · 안전 영역) · 설명 시트(비모달 · 설명 문단에 aria-live는 호출부) · 경계 판 · 큰 시계(`label` + 최종 m:ss만 읽힘) |
+| `src/app/motion.css` | E2 절 — `.e2-rise`(22px · 380ms · `--e2-i` × 50ms) · `.e2-sheet-in`(320ms). reduced-motion이면 0 |
+
+### 97.3 지킬 규칙(그대로)
+- transform 잔류 금지(CSS fill-mode backwards만 · 덮개는 clip-path/opacity만 — G647).
+- reduced-motion: CSS 모션 0(G457 — 새 클래스 2개 포함). **예외 1**: 판 확장 덮개는 위치 · 크기 변화 없이 불투명도만 160ms 페이드 인/아웃한다(motion.css 머리말 "전부 끈다"의 명시 예외 — 화면이 갑자기 바뀌는 것보다 덜 놀랍다).
+- 훈련 화면(통화 · 메신저 · 채팅 · 문자 · 이체)에는 판 · 전환 · 경계 판을 넣지 않는다.
+
+### 97.4 위험 · 대응
+| 위험 | 대응 |
+|---|---|
+| 받기 탭 동기 오디오 잠금 해제(primeCallAudio)가 전환 지연으로 깨짐 | 경계 판은 **준비 → 훈련 화면 이동 앞**과 **종료 뒤**에만 둔다. 받기 탭(훈련 화면 안)에는 덮개 · 지연 0. P3에서 배선 테스트로 고정 |
+| 이동이 실패 · 같은 경로면 덮개가 남아 화면을 막음 | 안전 시간 2.5초 뒤 자동 걷기(`OVERLAY_SAFETY_MS`) |
+| 전환이 선택을 늦춤 | 이동을 누르는 즉시 호출 — 덮개 아래에서 다음 화면이 그려진다 |
+| 판 5개 이상 | 92px 고정 높이로 쌓고 스크롤(G645) |
+
+### 97.5 검증(P1)
+root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `src/lib/design/e2Design.test.ts`(G645~G648, 9건 — 판 확장 상태 기계 가짜 DOM 1건 포함).
