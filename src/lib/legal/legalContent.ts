@@ -6,6 +6,16 @@
 //
 // 순수 모듈이다(React · Firebase import 0건) — 루트 테스트 러너가 그대로 읽는다.
 
+/**
+ * 법적 고지 링크 노출 스위치 — 사용자 결정 2026-10-21(DECISIONS #204): *"개인정보처리방침에 들어갈 내용은 현재는 보류로
+ * 놔두고 배포했다가 나중에 수정하자. 법적 페이지는 링크만 숨기자."* 내용(운영자 정보 등)이 확정되면 true로 바꾸고,
+ * 각 고지 화면의 `robots` noindex(LEGAL_ROBOTS)도 함께 푼다. 페이지 파일은 그대로 둔다(주소로는 열린다).
+ */
+export const SHOW_LEGAL_LINKS = false;
+
+/** 자리표시가 든 초안이 검색엔진에 노출되지 않게 — SHOW_LEGAL_LINKS가 false인 동안 고지 화면 3개에 건다. */
+export const LEGAL_ROBOTS = SHOW_LEGAL_LINKS ? undefined : { index: false, follow: false };
+
 export const PLACEHOLDER = {
   operator: "[운영자명]",
   email: "[문의 이메일]",

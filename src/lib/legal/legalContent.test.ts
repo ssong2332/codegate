@@ -8,7 +8,9 @@ import {
   CHALLENGE_RETENTION_DAYS,
   CONTACT_INFO,
   DRAFT_NOTICE,
+  LEGAL_ROBOTS,
   PLACEHOLDER,
+  SHOW_LEGAL_LINKS,
   PRIVACY_POLICY,
   TERMS_OF_SERVICE,
 } from "./legalContent.ts";
@@ -58,7 +60,18 @@ test("고지 화면은 공개 경로이고 익명 사용자도 /login으로 튕�
   assert.equal(isAnonymousOutsideRecipientFlow(true, "/scenarios"), true, "익명 범위 밖 판정이 느슨해졌다");
 });
 
-test("첫 화면 · 로그인 화면 하단에 고지 링크가 있다", () => {
+// 사용자 결정 2026-10-21(DECISIONS #204) — 내용 확정 전까지 링크를 숨기고 초안 화면은 noindex. 켜면 이 테스트를 함께 바꾼다.
+test("링크 보류 중 — LegalLinks는 스위치 한 곳으로 렌더하지 않고, 고지 화면 3개는 noindex다", () => {
+  assert.equal(SHOW_LEGAL_LINKS, false);
+  assert.deepEqual(LEGAL_ROBOTS, { index: false, follow: false });
+  const links = readFileSync("src/components/LegalLinks.tsx", "utf8");
+  assert.match(links, /if \(!SHOW_LEGAL_LINKS\) return null;/, "숨김 스위치가 LegalLinks에 없다");
+  for (const p of LEGAL_PATHS) {
+    assert.match(readFileSync(`src/app${p}/page.tsx`, "utf8"), /robots: LEGAL_ROBOTS/, `${p}에 noindex가 없다`);
+  }
+});
+
+test("첫 화면 · 로그인 화면 하단에 고지 링크 자리가 있다(스위치로 켜진다)", () => {
   for (const f of ["src/app/page.tsx", "src/app/(auth)/login/page.tsx"]) {
     assert.match(readFileSync(f, "utf8"), /<LegalLinks\b/, `${f}에 LegalLinks가 없다`);
   }
