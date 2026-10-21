@@ -3,11 +3,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  READ_MIN_MS,
+  READ_DELAY_MS,
   READ_TO_TYPING_MS,
   REVEAL_DOC_GRACE_MS,
   TYPING_MAX_MS,
   TYPING_MIN_MS,
+  TYPING_MS_PER_CHAR,
   nextChangeAt,
   noteServerDone,
   noteSnapshot,
@@ -22,8 +23,8 @@ const base: PendingTurn = { localId: "l1", text: "그래?", sentAtMs: 10_000, ba
 const userDoc = { role: "user" as const, turnIndex: 3, text: "그래?" };
 const replyDoc = { role: "scammer" as const, turnIndex: 4, text: "가".repeat(40) };
 
-test("[G636] 답을 모르는 동안 = 1 유지 · 입력 중 없음 · 낙관적 말풍선 · 전송 잠김(신고 ② — 1과 입력 중이 함께 뜨지 않는다)", () => {
-  for (const now of [10_000, 10_500, 30_000]) {
+test("[G636 · G638] 전송 직후 = 1 · 입력 중 없음 · 낙관적 말풍선 · 전송 잠김(1과 입력 중이 함께 뜨지 않는다)", () => {
+  for (const now of [10_000, 10_000 + READ_DELAY_MS - 1]) {
     const v = viewReply(base, [], now);
     assert.equal(v.phase, "unread");
     assert.equal(v.peerHasRead, false);
@@ -32,39 +33,56 @@ test("[G636] 답을 모르는 동안 = 1 유지 · 입력 중 없음 · 낙관�
     assert.equal(v.showOptimistic, true);
     assert.equal(v.inFlight, true);
   }
-  assert.equal(nextChangeAt(base, 10_000), null);
+  assert.equal(nextChangeAt(base, 10_000), 10_000 + READ_DELAY_MS);
 });
 
-test("[G636] 빠른 응답 — 1 최소 유지 뒤 읽음 → 간격 → 입력 중(길이 비례) → 답장", () => {
+test("[G638] 서버를 기다리지 않는다 — 답을 몰라도 고정 시각에 읽음 → 입력 중, 서버가 늦으면 입력 중을 계속 유지(신고 10)", () => {
+  const readAt = 10_000 + READ_DELAY_MS;
+  const typingAt = readAt + READ_TO_TYPING_MS;
+  assert.equal(viewReply(base, [], readAt).phase, "read");
+  assert.equal(viewReply(base, [], readAt).peerHasRead, true);
+  assert.equal(viewReply(base, [], readAt).showTyping, false, "읽은 직후 '판단하는' 틈");
+  for (const now of [typingAt, typingAt + 5_000, typingAt + 60_000]) {
+    const v = viewReply(base, [], now);
+    assert.deepEqual([v.phase, v.showTyping, v.hideReply], ["typing", true, true]);
+  }
+  assert.equal(nextChangeAt(base, typingAt), null, "답을 모르면 더 바뀔 시각이 없다(구독 · 서버 응답이 깨운다)");
+});
+
+test("[G636 · G638] 빠른 응답 — 입력 중 길이는 답 글자 수에 비례(하한 · 상한)하고 서버 응답 시각과 무관", () => {
   const p = noteSnapshot(base, [userDoc, replyDoc], 10_200); // 200ms 만에 답장 문서 도착
-  const t = replyTimeline(p)!;
-  assert.equal(t.readAt, 10_000 + READ_MIN_MS);
+  const t = replyTimeline(p);
+  assert.equal(t.readAt, 10_000 + READ_DELAY_MS);
   assert.equal(t.typingAt, t.readAt + READ_TO_TYPING_MS);
-  assert.equal(t.revealAt - t.typingAt, 40 * 45);
+  assert.equal(t.revealAt - t.typingAt, 40 * TYPING_MS_PER_CHAR);
   assert.equal(replyPhaseAt(p, t.readAt - 1), "unread");
   assert.equal(replyPhaseAt(p, t.readAt), "read");
   assert.equal(replyPhaseAt(p, t.typingAt), "typing");
   assert.equal(replyPhaseAt(p, t.revealAt), "revealed");
-  const reading = viewReply(p, [userDoc, replyDoc], t.readAt);
-  assert.deepEqual([reading.peerHasRead, reading.showTyping, reading.hideReply], [true, false, true]);
   const typing = viewReply(p, [userDoc, replyDoc], t.typingAt);
   assert.deepEqual([typing.peerHasRead, typing.showTyping, typing.hideReply], [true, true, true]);
   assert.equal(typing.showOptimistic, false, "서버 문서가 오면 낙관적 말풍선은 문서로 바뀐다");
+  assert.equal(typingDurationMs(5), TYPING_MIN_MS);
+  assert.equal(typingDurationMs(500), TYPING_MAX_MS);
+  assert.equal(typingDurationMs(0), 0);
+  assert.ok(typingDurationMs(80) > typingDurationMs(40), "긴 답일수록 오래 입력한다");
+  assert.ok(TYPING_MIN_MS >= 1500 && TYPING_MAX_MS >= 6000, "신고 10 — 종전(0.9~2.8초)보다 길다");
 });
 
-test("[G636] 늦은 응답 — 1을 단 채 기다리고, 늦은 만큼 입력 중을 줄인다(하한 유지)", () => {
-  const p = noteSnapshot(base, [userDoc, replyDoc], 15_000); // 5초 걸림
-  const t = replyTimeline(p)!;
-  assert.equal(t.readAt, 15_000, "답을 안 순간에야 읽음");
-  assert.equal(t.revealAt - t.typingAt, TYPING_MIN_MS);
-  assert.equal(typingDurationMs(10, 0), TYPING_MIN_MS);
-  assert.equal(typingDurationMs(500, 0), TYPING_MAX_MS);
-  assert.equal(typingDurationMs(0, 0), 0);
+test("[G638] 늦은 응답 — 입력 중은 답을 안 순간까지 이어지고 그 즉시 답장(입력 중을 줄여 덧붙이지 않는다)", () => {
+  const p = noteSnapshot(base, [userDoc, replyDoc], 25_000); // 15초 걸림
+  const t = replyTimeline(p);
+  assert.equal(t.readAt, 10_000 + READ_DELAY_MS, "읽음은 서버를 기다리지 않는다");
+  assert.equal(t.revealAt, 25_000);
+  assert.equal(replyPhaseAt(p, 24_999), "typing");
+  assert.equal(replyPhaseAt(p, 25_000), "revealed");
+  const mid = noteSnapshot(base, [userDoc, replyDoc], 12_500); // 입력 중 도중에 답 도착 → 길이 기준 끝까지 입력
+  assert.equal(replyTimeline(mid).revealAt, replyTimeline(mid).typingAt + 40 * TYPING_MS_PER_CHAR);
 });
 
 test("[G636] 서버 응답이 구독보다 먼저 와도 같은 순서 · 답장 문서가 늦으면 점을 유지(여유 뒤 결과 적용)", () => {
   const p = noteServerDone(base, "가".repeat(20), { escalate: true }, 10_300);
-  const t = replyTimeline(p)!;
+  const t = replyTimeline(p);
   const before = viewReply(p, [userDoc], t.revealAt);
   assert.equal(before.showTyping, true, "공개 시각인데 문서가 없으면 점 유지");
   assert.equal(before.settled, false, "문서가 없으면 통화 전환을 미룬다");
@@ -74,20 +92,26 @@ test("[G636] 서버 응답이 구독보다 먼저 와도 같은 순서 · 답장
   assert.equal(noteSnapshot(p, [userDoc, replyDoc], 12_000), p, "먼저 안 시각을 덮어쓰지 않는다");
 });
 
-test("[G636] 답 없이 끝남 — 입력 중 단계 없이 읽음과 동시에 정착", () => {
-  const p = noteServerDone(base, undefined, { ended: true }, 10_100);
-  const t = replyTimeline(p)!;
-  assert.equal(t.typingAt, t.readAt);
+test("[G636 · G638] 답 없이 끝남 — 입력 중 전에 알면 점 없이 정착, 입력 중 도중에 알면 그때 점이 멈춘다", () => {
+  const early = noteServerDone(base, undefined, { ended: true }, 10_100);
+  const t = replyTimeline(early);
   assert.equal(t.revealAt, t.readAt);
-  assert.equal(viewReply(p, [userDoc], t.readAt).settled, true);
+  assert.equal(t.typingAt, t.readAt, "입력 중 단계 없음");
+  assert.equal(viewReply(early, [userDoc], t.readAt).settled, true);
+  const lateEnd = noteServerDone(base, undefined, { ended: true }, 14_000);
+  assert.equal(replyPhaseAt(lateEnd, 13_999), "typing");
+  assert.equal(viewReply(lateEnd, [userDoc], 14_000).settled, true);
 });
 
-test("[G636] 실패 — 서버에 저장 안 됐으면 실패 말풍선 · 저장됐으면 문서 그대로 · 둘 다 전송 잠김 해제", () => {
+test("[G636 · G638] 실패 — 미저장이면 1 · 입력 중 없이 실패 말풍선, 저장됐으면 읽음까지만 · 둘 다 전송 잠김 해제", () => {
   const failed: PendingTurn = { ...base, failed: true };
   const notSaved = viewReply(failed, [], 20_000);
-  assert.deepEqual([notSaved.showOptimistic, notSaved.inFlight, notSaved.peerHasRead], [true, false, false]);
+  assert.deepEqual([notSaved.showOptimistic, notSaved.inFlight, notSaved.peerHasRead, notSaved.showTyping], [true, false, false, false]);
   const saved = viewReply(failed, [userDoc], 20_000);
-  assert.deepEqual([saved.showOptimistic, saved.inFlight], [false, false]);
+  assert.deepEqual([saved.showOptimistic, saved.inFlight, saved.showTyping, saved.phase], [false, false, false, "read"]);
+  assert.equal(nextChangeAt(failed, 10_000), null);
+  const recovered = noteSnapshot(failed, [userDoc, replyDoc], 21_000); // 클라 타임아웃 뒤 서버가 늦게 씀
+  assert.equal(viewReply(recovered, [userDoc, replyDoc], 21_000).phase, "revealed");
 });
 
 test("[G636] 대기 없음 — 모든 문서를 그대로 보인다", () => {

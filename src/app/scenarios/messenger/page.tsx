@@ -47,7 +47,7 @@ const SURFACE_LABEL: Record<MessengerSurface, string> = {
   sms: "문자",
 };
 
-// UX D-138 (3) — 구역 제목(조사까지 고정 문자열로 둔다).
+// UX D-140 (3) — 구역 제목(조사까지 고정 문자열로 둔다).
 const SURFACE_GROUP_LABEL: Record<MessengerSurface, string> = {
   kakao: "카카오톡으로 오는 사기",
   sms: "문자로 오는 사기",
@@ -81,7 +81,7 @@ export default function MessengerScenarioSelectPage() {
   // 하류 분기(에스컬레이션 → UX-025 목소리 선택 / send → UX-019 / self → createSession)는 그
   // 화면이 그대로 넘겨받는다 — 난이도는 목소리 선택(UX-025)보다도 **앞**이다(UX-024 v1.11 갱신:
   // 난이도가 전이 도달 속도에 영향을 주므로 먼저 정해져야 한다). 분기 판정 규칙 자체는 무변경.
-  // UX D-138 (3) — 카카오톡 · 문자 구역으로 나눠 그리고, 위 "목록"에서 구역으로 바로 간다(순서는 원래 목록 순서 유지).
+  // UX D-140 (3) — 카카오톡 · 문자 구역으로 나눠 그리고, 위 "목록"에서 구역으로 바로 간다(순서는 원래 목록 순서 유지).
   const surfaceGroups = groupInOrder(
     filteredEntries,
     ([, scenario]) => (scenario.surface ? SURFACE_GROUP_LABEL[scenario.surface] : "메신저로 오는 사기"),

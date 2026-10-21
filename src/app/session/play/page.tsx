@@ -2309,7 +2309,7 @@ export default function SessionCallPage() {
           그 자리는 `env(safe-area-inset-top)` + 24px 여백이다. 경과 시간은 번호 바로 아래 한 줄 하나뿐이다(D-86).
           색·크기는 스킨 토큰(UX v1.33 근사 — 실기 측정 전, `@/lib/phone/skinTokens`)이며 대비 하한은 G456이 막는다.
           ⚠️ 이 래퍼는 표현 계층일 뿐이다 — 세션 컴포넌트(위)·오버레이(아래)는 여전히 `<main>`의 형제 노드다(G10). */}
-      {/* UX D-138 (2) — 키패드가 열려 있을 때만 셸을 화면 높이로 묶는다(키패드 영역이 남은 높이만큼 줄고 그 안에서 스크롤 ·
+      {/* UX D-140 (2) — 키패드가 열려 있을 때만 셸을 화면 높이로 묶는다(키패드 영역이 남은 높이만큼 줄고 그 안에서 스크롤 ·
           종료 버튼은 화면 안). 그 밖 상태는 최소 높이만 준다(내용이 그래도 넘치면 문서가 스크롤 — 잘리지 않는다). */}
       <div
         className={`mx-auto flex w-full max-w-[430px] flex-col ${showTextInput ? "h-dvh flex-none" : "min-h-dvh flex-1"}`}
@@ -2387,7 +2387,7 @@ export default function SessionCallPage() {
 
       {/* ① (One UI형만) 아바타 · ② 발신 번호 · ③ 번호 바로 아래 phase 줄 · ④ 전환 뒤 줄 · G288 줄(UX-014 v1.33 (2)).
           상단 여백(근사): iOS형 safe-area+72px · One UI형 화면 높이 18% 지점.
-          ⭐ UX D-138 (2)(실기 신고 2026-10-21) — 상단 여백은 고정 padding이 아니라 **줄어드는 여백 칸**이다: 남는 높이가 있으면
+          ⭐ UX D-140 (2)(실기 신고 2026-10-21) — 상단 여백은 고정 padding이 아니라 **줄어드는 여백 칸**이다: 남는 높이가 있으면
           종전 값(One UI형 `18dvh - 24px` · iOS형 48px)까지 크고, 주소창이 보여 높이가 모자라면 0까지 줄어 하단 버튼이 화면 안에
           남는다. 칸의 기준 크기가 0이라 화면 최소 높이 계산에 들어가지 않는다(내용이 그래도 넘치면 그때만 스크롤). */}
       <div
@@ -2622,7 +2622,7 @@ export default function SessionCallPage() {
             style={remoteHangup ? { opacity: 0.4, pointerEvents: "none" } : undefined}
           >
           {showTextInput ? (
-            // UX D-138 — `relative`: 안쪽 `sr-only` 라벨(absolute)이 스크롤 영역 밖 문서 높이를 늘리지 않게 가둔다(360×650 실측 +201px).
+            // UX D-140 — `relative`: 안쪽 `sr-only` 라벨(absolute)이 스크롤 영역 밖 문서 높이를 늘리지 않게 가둔다(360×650 실측 +201px).
             <div className="relative max-h-[56dvh] min-h-0 overflow-y-auto px-6">
               {/* 실제 통화 키패드(사용자 신고 2026-07-25 — "키패드가 있는데 실제로 작동하지 않는다").
                   상대가 "인증번호 눌러주세요"류를 요구하는 시나리오에서 실제로 눌러 응답할 수 있다.

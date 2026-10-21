@@ -366,7 +366,7 @@ export default function FailureArchivePage() {
         </p>
       )}
 
-      {/* UX D-138 (3) — "수법별로 묶기"일 때만 수법 묶음이 구역이 된다(최신순은 구역이 없어 목록을 그리지 않는다). */}
+      {/* UX D-140 (3) — "수법별로 묶기"일 때만 수법 묶음이 구역이 된다(최신순은 구역이 없어 목록을 그리지 않는다). */}
       {sortMode === "tactic" && (
         <PageToc
           sections={groups.map((group, index) => ({ id: `archive-group-${index + 1}`, label: `${group.label} (${group.count}건)` }))}
@@ -388,7 +388,7 @@ export default function FailureArchivePage() {
               aria-label={`${group.label} — ${group.count}건`}
             >
               {/* 그룹 헤더 — 반복 횟수를 **텍스트로** 명시해 스크린리더에도 전달한다(P-23).
-                  UX D-138 — 묶음이 2개 이상이면 위에 목록 막대(56px)가 붙어 있으므로 그 아래에 붙는다. */}
+                  UX D-140 — 묶음이 2개 이상이면 위에 목록 막대(56px)가 붙어 있으므로 그 아래에 붙는다. */}
               <div className={`sticky ${groups.length >= 2 ? "top-[56px]" : "top-0"} z-10 -mx-1 rounded-[8px] bg-page px-1 py-2`}>
                 <p className="text-lg font-bold text-ink">
                   {group.label} — {group.count}건

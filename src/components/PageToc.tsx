@@ -1,6 +1,6 @@
 "use client";
 
-// 긴 페이지 상단 "목록" 토글(UX D-138 · docs/Architecture.md §95). 누르면 구역 목록이 펼쳐지고, 고르면 그 구역으로 이동한다.
+// 긴 페이지 상단 "목록" 토글(UX D-140 · docs/Architecture.md §96). 누르면 구역 목록이 펼쳐지고, 고르면 그 구역으로 이동한다.
 // 막대는 위에 붙어 있어(sticky) 스크롤 도중에도 1탭으로 다시 열 수 있다. 구역이 2개 미만이면 아무것도 그리지 않는다.
 // 접근성 — 펼침 버튼(aria-expanded · aria-controls) · Esc로 닫고 버튼으로 포커스 복귀 · 이동한 구역으로 포커스(preventScroll)
 // · reduced-motion이면 즉시 이동. ⛔ 훈련 화면(통화 · 문자 · 메신저 · 이체)에는 쓰지 않는다.

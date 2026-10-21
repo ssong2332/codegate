@@ -309,7 +309,7 @@ export default function ReportPage() {
     setExpandedSection((current) => (current === section ? null : section));
   };
 
-  // UX D-138 (3) — 리포트 목록. 접힌 구역(아코디언)은 고르면 펼친 뒤 그 제목으로 간다. 없는 블록은 목록에도 없다.
+  // UX D-140 (3) — 리포트 목록. 접힌 구역(아코디언)은 고르면 펼친 뒤 그 제목으로 간다. 없는 블록은 목록에도 없다.
   const tocSections: PageTocEntry[] = [
     { id: "report-summary", label: "요약" },
     { id: "report-timeline", label: "속은 시점 타임라인", onBeforeJump: () => setExpandedSection("timeline") },

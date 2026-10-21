@@ -17,6 +17,8 @@
 // ⭐ G438(재지정 ⓓ) — `{PREROLL_NOTICE}`는 이 파일에서 **정확히 1회 · 조건 없이** 그린다(화면 전체가 세션 전).
 import { useEffect, useRef } from "react";
 import DeviceSkinPicker from "./DeviceSkinPicker";
+// §95.6(UX D-139) — 브라우저 다크 모드 안내(웨일 · 기기 다크일 때만 · 벨 직전 고지에만 — 벨 · 통화 화면 0).
+import WebDarkModeNotice from "./WebDarkModeNotice";
 import EndTrainingButton from "./EndTrainingButton";
 import PhoneIcon from "./PhoneIcon";
 import { Button } from "./ui";
@@ -74,6 +76,7 @@ export default function CallStartNotice({ onConfirm, onEndTraining, skinPicker, 
         </h1>
         <p className="text-[17px] leading-[1.7] text-ink-sub">{PREROLL_NOTICE}</p>
         <p className="text-[17px] leading-[1.7] text-ink-sub">{PRE_CALL_NOTICE.stopHint}</p>
+        <WebDarkModeNotice />
         {/* T194-b(UX-014 v1.38 (1)) — 고지 ② 바로 아래 · 화면 모양 줄 위. 카드는 "상대가 알고 있다 · 말할 것이다"를 예고하지
             않는다(K-7). 경고 표현 · 점멸 · 포커스 대상 0(조작 요소 없음 — 진입 포커스는 기존대로 제목). 닫힘 = "준비됐어요". */}
         {personaCard && (

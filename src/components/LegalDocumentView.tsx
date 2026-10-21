@@ -7,7 +7,7 @@ import PageToc from "@/components/PageToc";
 import { DRAFT_NOTICE, type LegalDocument } from "@/lib/legal/legalContent";
 
 export default function LegalDocumentView({ doc }: { doc: LegalDocument }) {
-  // UX D-138 (3) — 조항 제목이 곧 목록이다.
+  // UX D-140 (3) — 조항 제목이 곧 목록이다.
   const tocSections = doc.sections.map((section, index) => ({ id: `legal-section-${index + 1}`, label: section.heading }));
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-page">

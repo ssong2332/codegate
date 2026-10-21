@@ -1,4 +1,4 @@
-// 긴 페이지 "목록" 토글(UX D-138 · docs/Architecture.md §95). 화면 · DOM과 무관한 순수 판정만 둔다(테스트 대상).
+// 긴 페이지 "목록" 토글(UX D-140 · docs/Architecture.md §96). 화면 · DOM과 무관한 순수 판정만 둔다(테스트 대상).
 // ⛔ 훈련 화면(통화 · 문자 · 메신저 · 이체)에는 두지 않는다 — 실제 폰에 없는 UI다(`isTrainingSurfacePath`).
 
 /** 목록에 보이는 한 칸 — `id`는 이동할 구역 요소의 id(같은 화면 안에서 고유). */
@@ -22,7 +22,7 @@ export function tocScrollBehavior(prefersReducedMotion: boolean): ScrollBehavior
   return prefersReducedMotion ? "auto" : "smooth";
 }
 
-/** 보이스피싱 시나리오 목록의 카테고리(UX D-138 (3)). 표에 없는 id는 `OTHER_CATEGORY`로 간다. */
+/** 보이스피싱 시나리오 목록의 카테고리(UX D-140 (3)). 표에 없는 id는 `OTHER_CATEGORY`로 간다. */
 export const VOICE_SCENARIO_CATEGORY: Readonly<Record<string, string>> = {
   "institutional-impersonation": "수사기관 · 금융기관 사칭",
   "bank-security-verify-scam": "수사기관 · 금융기관 사칭",

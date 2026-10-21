@@ -80,7 +80,7 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
     experienceModeHint === "send" ? "send" : "self",
   );
 
-  // UX D-138 (3) — 일반 묶음은 카테고리별 구역으로 나눠 그리고, 위 "목록"에서 구역으로 바로 간다(순서는 원래 목록 순서 유지).
+  // UX D-140 (3) — 일반 묶음은 카테고리별 구역으로 나눠 그리고, 위 "목록"에서 구역으로 바로 간다(순서는 원래 목록 순서 유지).
   const regularGroups = groupInOrder(regularEntries, ([scenarioId]) => voiceScenarioCategory(scenarioId), "voice-category");
   const tocSections = [
     ...regularGroups.map((group) => ({ id: group.key, label: `${group.label} (${group.entries.length})` })),
