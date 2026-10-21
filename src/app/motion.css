@@ -116,13 +116,29 @@
   animation: e2-sheet-up 0.32s cubic-bezier(0.32, 0.72, 0, 1) backwards;
 }
 
+/* 준비 화면 대기 막대(OQ-U106 · §97.7) — 진행률이 아니라 "기다리는 중" 표시. 모래 띠가 왼쪽에서 오른쪽으로 끝없이 흐른다
+   (반복 애니메이션이라 끝난 뒤 남는 transform이 없다). reduced-motion이면 멈춘다. */
+@keyframes e2-wait-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+.e2-wait-bar {
+  animation: e2-wait-slide 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .page-enter > main:not(.drilldown-step),
   .loading-dot,
   .motion-reveal,
   .check-pop,
   .e2-rise,
-  .e2-sheet-in {
+  .e2-sheet-in,
+  .e2-wait-bar {
     animation: none;
   }
 
