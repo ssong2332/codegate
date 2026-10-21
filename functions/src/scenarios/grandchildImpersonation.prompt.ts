@@ -101,6 +101,13 @@
 //  beginner len=6696 sha=47439ced67bc513c (직전 6675 · ec3cb4932ec18731) · intermediate len=5875 sha=506e035fb62ae707
 //  (직전 5854 · c4db397942a90d5c) · advanced len=6997 sha=027daadab33af91c (직전 6976 · 76aade3d6c438a01).
 //  (A-1 기록값 6581 · cb89a9668aeae646 / 5760 · 300edf4134fd958c / 6882 · 7c4d8fb1edde41bc ≠ 직전 실측.) family-accident-deepvoice도 3/3 바뀌었다.)
+// (전수 검수 2026-10-22 · docs/research/full-scenario-live-audit-2026-10.md: 공통 [진행 강제]의 **무조건부** 두 곳 — 페이로드 예시에서
+//  "국민안전지원센터" 제거 · "같은 압박을 반복하지 않는다" 끝에 거절된 요구를 같은 형태로 다시 꺼내지 않는다는 1문장 추가(+96자) →
+//  **조립 산출물이 바뀌었다 — 재생성 대기 중.** 실시간 통화(ElevenLabs clone)에는 아직 반영되지 않았다. 재생성 완료 후에만 "재생성 완료"로
+//  갱신할 것. 대조값 = `buildSystemPrompt(SCENARIO_PROMPTS[id], { difficultyLevel })`의 sha256 앞 16자(빌드 산출물 `functions/lib` ·
+//  직전 값 = 같은 산출물에서 두 교체분만 되돌린 값 — roleplay/__tests__/fullAuditDelta.ts):
+//  beginner len=6792 sha=3c22d53960ff5d0d (직전 6696 · 47439ced67bc513c) · intermediate len=5971 sha=74c2a3685ab49e05
+//  (직전 5875 · 506e035fb62ae707) · advanced len=7093 sha=d493f683a987663b (직전 6997 · 027daadab33af91c).)
 import type { ScenarioPromptDoc } from "../shared/types";
 
 // src/content/scenarios/grandchildImpersonation.ts의 상수와 동일한 문자열이어야 한다.
