@@ -505,6 +505,10 @@ export type DeceivedMoment = {
   // 요건**인 이유는 §16.4/G27 — `pickCorrectAction`의 첫 규칙이 방금 확인 전화가 소용없던
   // 참가자에게 "확인 전화를 걸라"고 답한다).
   afterVerifyReconnect?: true;
+  // T129 (b) 발동(Architecture §35.6 1행 · §98 — 검찰 고급 변형 fv-c8wq가 한 세션에 모의 화면 2건을 갖게 됐다): 이 순간이
+  // **모의 화면 제출 · 응낙의 승격**이면 그 화면의 landingId. `buildLandingSubmitMoment`만 채운다(대화 추정 순간 · 과거 리포트 = 부재).
+  // 화면 항목(`MockScreenTimelineEntry.landingId`)과 짝지어 D-61 분기 판정 키로만 쓴다 — 화면 콘텐츠 원문이 아니다(§15.9.5 e-4 무관).
+  landingId?: string;
 };
 /**
  * T194-b(§84.3.6 · §84.3.7) — 리포트의 카드 블록. `state`는 `report/personaBlock.ts` `resolvePersonaBlockState`가 정한다.
