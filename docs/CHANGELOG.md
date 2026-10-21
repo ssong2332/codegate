@@ -4,6 +4,15 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-21 추가분, 브랜치 `claude/kakao-chat-ux-and-dark-lock-437c6b` · PR #358)**: 아직 main에 병합되지 않았고 배포 0회. 배포 대상 = Hosting만.
+
+### Changed
+- **메신저 대화방(카톡형 · 문자형) 전송 순서(Architecture §94 · DECISIONS #208 · UX D-137)**: 보낸 글이 바로 올라가고, 상대가 읽기 전까지 "1"이 붙어 있다가 사라진 뒤 입력 중이 뜨고 답장이 온다. 전송 중에도 입력칸은 열려 있다. 보내기에 실패하면 말풍선에서 다시 보내기 · 삭제를 고를 수 있다.
+- **훈련 화면은 기기 다크 모드에서도 라이트**: One UI형 통화 화면이 기기 테마를 따르지 않는다.
+
+### Added
+- **`?themedebug=1` 화면 색 진단 패널**(훈련 화면 전체): 네이버 웨일 다크 모드 색 반전 원인 확인용. 주소에 쿼리가 없으면 아무것도 그리지 않는다.
+
 > ⚠️ **이 블록(2026-10-21 추가분, 브랜치 `claude/persona-card-expand-targets-390036`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Functions → Hosting**(붙여서).
 
 ### Added
