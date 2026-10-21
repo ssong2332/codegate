@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/auth";
 import { deleteChallenge } from "@/lib/api";
 import { fetchMyChallenges, mapChallengesToListItems, type ChallengeListItem } from "@/lib/challenge";
-import { Badge, Button } from "@/components/ui";
+import { Badge, Button, LoadingStatus } from "@/components/ui";
 
 type PageState = "loading" | "error" | "empty" | "success";
 
@@ -106,13 +106,7 @@ export default function ChallengeResultsPage() {
   if (state === "loading") {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-ink" role="status">
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-          />
-          내 챌린지를 불러오는 중입니다...
-        </p>
+        <LoadingStatus label="내 챌린지를 불러오는 중입니다" />
       </main>
     );
   }

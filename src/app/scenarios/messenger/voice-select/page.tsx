@@ -41,7 +41,8 @@ import {
 } from "@/lib/recording";
 import { fetchStoredVoices, type StoredVoiceSummary } from "@/lib/voices/fetchStoredVoices";
 import { scenarios, GENERIC_VOICE_ID, resolveScenarioEscalation } from "@/content/scenarios";
-import { Badge, Banner, Button } from "@/components/ui";
+import { Badge, Banner, Button, LoadingDots, LoadingHintLine, LoadingStatus } from "@/components/ui";
+import { SESSION_PREP_HINTS } from "@/lib/motion/routeMotion";
 
 type PageState = "no-scenario" | "returning-error" | "ready";
 
@@ -208,13 +209,7 @@ export default function MessengerVoiceSelectPage() {
   if (isReturningFlow && pageState !== "returning-error") {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-ink" role="status">
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-          />
-          목소리 클론이 준비됐습니다. 훈련을 시작하는 중입니다...
-        </p>
+        <LoadingStatus label="목소리 클론이 준비됐습니다. 훈련을 시작하는 중입니다" hints={SESSION_PREP_HINTS} />
       </main>
     );
   }
@@ -364,14 +359,15 @@ export default function MessengerVoiceSelectPage() {
         </p>
       )}
 
+      {/* UX D-134 — 세션 생성(createSession)은 길게는 15초쯤 걸린다. 경과 시간에 따라 안심 문구만 덧붙인다(진행률 없음). */}
       {starting && (
-        <p className="flex items-center gap-2 text-lg text-ink-sub" role="status">
-          <span
-            aria-hidden="true"
-            className="h-4 w-4 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-          />
-          연결하는 중...
-        </p>
+        <div className="flex flex-col gap-1">
+          <p className="flex items-center gap-2.5 text-lg text-ink-sub" role="status">
+            <LoadingDots className="text-brand" />
+            연결하는 중
+          </p>
+          <LoadingHintLine hints={SESSION_PREP_HINTS} />
+        </div>
       )}
     </main>
   );

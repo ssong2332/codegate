@@ -19,7 +19,7 @@ import type { DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
 import { useCurrentUser } from "@/lib/auth";
 import { scenarios } from "@/content/scenarios";
 import { setExperienceMode, setSelectedTrainingType } from "@/lib/recording";
-import { Badge, Button } from "@/components/ui";
+import { Badge, Button, LoadingStatus } from "@/components/ui";
 import {
   fetchArchiveReportPage,
   groupArchiveItemsByTactic,
@@ -144,13 +144,7 @@ export default function FailureArchivePage() {
   if (state === "loading") {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-ink" role="status">
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-          />
-          속았던 순간을 불러오는 중입니다...
-        </p>
+        <LoadingStatus label="속았던 순간을 불러오는 중입니다" />
       </main>
     );
   }
@@ -255,12 +249,15 @@ export default function FailureArchivePage() {
           className="mt-3 flex min-h-[48px] w-full items-center justify-between rounded-[8px] border border-line px-4 text-lg font-semibold text-ink"
         >
           그때 올바른 대처 보기
-          <span aria-hidden="true" className="text-ink-sub">
-            {expanded ? "▴" : "▾"}
+          <span
+            aria-hidden="true"
+            className={`inline-block text-ink-sub transition-transform duration-200 motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`}
+          >
+            ▾
           </span>
         </button>
         {expanded && (
-          <p className="mt-2 rounded-[8px] bg-brand-tint p-4 text-lg leading-relaxed text-ink">
+          <p className="motion-reveal mt-2 rounded-[8px] bg-brand-tint p-4 text-lg leading-relaxed text-ink">
             {item.correctAction}
           </p>
         )}
@@ -398,7 +395,7 @@ export default function FailureArchivePage() {
       {hasMore && (
         <div className="mx-5 mt-4">
           <Button type="button" variant="secondary" onClick={handleLoadMore} disabled={loadingMore}>
-            {loadingMore ? "불러오는 중입니다..." : "더 보기"}
+            {loadingMore ? "불러오는 중입니다" : "더 보기"}
           </Button>
         </div>
       )}
