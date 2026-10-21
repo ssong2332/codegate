@@ -27,6 +27,14 @@ import { buildStageNotice, type ReportStage } from "@/lib/report/stageNotice";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
 import { tacticsAccordionLabel, TACTICS_NOT_FOUND_TEXT } from "@/lib/report/reportTacticsCopy";
 import {
+  deceivedSummaryTitle,
+  displayTactic,
+  formatMomentLabel,
+  pickNextAction,
+  REAL_DAMAGE_STEPS,
+  REAL_DAMAGE_TITLE,
+} from "@/lib/report/reportSummaryCopy";
+import {
   readRiskSignals,
   riskSignalCopy,
   RISK_SIGNAL_HEADING,
@@ -138,6 +146,8 @@ export default function ReportPage() {
   // T70(UX-028 진입점 조건) — 2인 챌린지 체험 세션이면 되감기는 강제 해설(UX-018) 이후 단계로만
   // 노출된다(AC-042). 아래 세션 조회 effect가 함께 채운다.
   const [isChallengeSession, setIsChallengeSession] = useState(false);
+  // 리포트 검수(2026-10-22) — 구조 고지 1줄의 메신저 이름("메신저"/"문자"). 조회 실패 = undefined = 종전 표기.
+  const [messengerSurface, setMessengerSurface] = useState<"kakao" | "sms" | undefined>(undefined);
   const [expandedSection, setExpandedSection] = useState<
     "timeline" | "tactics" | "advice" | null
   >(null);
@@ -218,8 +228,10 @@ export default function ReportPage() {
         const snapshot = await getDoc(doc(db, "sessions", sessionId));
         const scenarioId = snapshot.data()?.scenarioId as string | undefined;
         const title = scenarioId ? scenarios[scenarioId]?.title : undefined;
+        const surface = scenarioId ? scenarios[scenarioId]?.surface : undefined;
         if (cancelled) return;
         if (title) setScenarioTitle(title);
+        if (surface) setMessengerSurface(surface);
         if (snapshot.data()?.challengeId) setIsChallengeSession(true);
       } catch {
         // 장식용 조회 실패는 무시 — 리포트 표시를 막지 않는다.
@@ -319,6 +331,7 @@ export default function ReportPage() {
     ...(report.riskSignals.length > 0 ? [{ id: "risk-signal-title", label: RISK_SIGNAL_SECTION_TITLE }] : []),
     { id: "report-tactics", label: "시도된 수법", onBeforeJump: () => setExpandedSection("tactics") },
     { id: "report-advice", label: "상황별 대처법", onBeforeJump: () => setExpandedSection("advice") },
+    { id: "report-real-damage", label: REAL_DAMAGE_TITLE },
     { id: "report-next", label: "다음에 할 일" },
   ];
 
@@ -331,7 +344,7 @@ export default function ReportPage() {
     afterForcedReplay: false,
   });
   // T84 — 의도된 단계가 2개 미만이면 null이라 기존 단일 표면 리포트는 한 글자도 바뀌지 않는다.
-  const stageNotice = buildStageNotice(report.stages);
+  const stageNotice = buildStageNotice(report.stages, messengerSurface);
   const goToRewind = (momentIndex: number) => {
     router.push(
       `/report/rewind?reportId=${encodeURIComponent(report.reportId)}&moment=${momentIndex}`,
@@ -428,11 +441,12 @@ export default function ReportPage() {
                 <path d="M8 1 L15 14 H1 Z" fill="var(--caution)" />
               </svg>
               <div>
+                {/* 리포트 검수(2026-10-22) A2 · A3 — 상대 수법이 내 약점처럼 읽히지 않게 "에 응함"으로, 서버 폴백 라벨은 그리지 않는다. */}
                 <p className="text-lg font-bold text-ink">
-                  개선 영역 · {firstDeceivedMoment.tactic}
+                  {deceivedSummaryTitle(firstDeceivedMoment.tactic)}
                 </p>
                 <p className="mt-0.5 text-lg leading-relaxed text-ink-sub">
-                  {firstDeceivedMoment.timeLabel}에 속았습니다. {firstDeceivedMoment.correctAction}
+                  {formatMomentLabel(firstDeceivedMoment.timeLabel)}에 속았습니다. {firstDeceivedMoment.correctAction}
                 </p>
               </div>
             </div>
@@ -440,28 +454,24 @@ export default function ReportPage() {
           </>
         )}
 
-        <div className="flex items-start gap-2.5">
-          {report.wasDeceived ? (
-            <svg width="20" height="20" viewBox="0 0 16 16" className="mt-0.5 shrink-0" aria-hidden="true">
-              <path d="M8 1 L15 14 H1 Z" fill="var(--caution)" />
-            </svg>
-          ) : (
-            <svg width="20" height="20" viewBox="0 0 16 16" className="mt-0.5 shrink-0" aria-hidden="true">
-              <circle cx="8" cy="8" r="7" fill="var(--success)" />
-            </svg>
-          )}
-          <div>
-            <p className="text-lg font-bold text-ink">
-              {report.wasDeceived ? "개선 영역 · 요구에 응함" : "잘 대처함 · 요구에 응하지 않음"}
-            </p>
-            <p className="mt-0.5 text-lg leading-relaxed text-ink-sub">
-              {report.wasDeceived
-                ? "훈련 중 상대의 요구에 응한 순간이 있었습니다. 아래 타임라인에서 자세히 볼 수 있습니다."
-                : "이번 훈련에서는 상대의 요구에 응하지 않았습니다."}
-            </p>
-          </div>
-        </div>
-        <div className="h-px bg-neutral-tint" />
+        {/* 리포트 검수(2026-10-22) — 속은 세션의 "개선 영역 · 요구에 응함" 줄은 바로 위 첫 줄(무엇에 · 언제 응했는가)과
+            머리(큰 시계)를 되풀이할 뿐이라 뺐다. 속지 않은 세션의 "잘 대처함" 줄은 그대로다(AC-009). */}
+        {!report.wasDeceived && (
+          <>
+            <div className="flex items-start gap-2.5">
+              <svg width="20" height="20" viewBox="0 0 16 16" className="mt-0.5 shrink-0" aria-hidden="true">
+                <circle cx="8" cy="8" r="7" fill="var(--success)" />
+              </svg>
+              <div>
+                <p className="text-lg font-bold text-ink">잘 대처함 · 요구에 응하지 않음</p>
+                <p className="mt-0.5 text-lg leading-relaxed text-ink-sub">
+                  이번 훈련에서는 상대의 요구에 응하지 않았습니다.
+                </p>
+              </div>
+            </div>
+            <div className="h-px bg-neutral-tint" />
+          </>
+        )}
 
         <div className="flex items-start gap-2.5">
           <span
@@ -473,7 +483,8 @@ export default function ReportPage() {
           <div>
             <p className="text-lg font-bold text-ink">다음에 해볼 것</p>
             <p className="mt-0.5 text-lg leading-relaxed text-ink-sub">
-              {report.preventionAdvice[0] ?? "다음에는 상대의 신원을 먼저 확인해 보세요."}
+              {/* 리포트 검수(2026-10-22) A4 · A5 — 첫 줄과 같은 문장 · 마무리 회고 문장은 건너뛴다. */}
+              {pickNextAction(report.preventionAdvice, firstDeceivedMoment?.correctAction)}
             </p>
           </div>
         </div>
@@ -539,9 +550,11 @@ export default function ReportPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-lg font-semibold text-caution">
                           <span aria-hidden="true">⚠ </span>
-                          {entry.moment.timeLabel}에 속았습니다
+                          {formatMomentLabel(entry.moment.timeLabel)}에 속았습니다
                         </p>
-                        <Badge variant="caution">{entry.moment.tactic}</Badge>
+                        {displayTactic(entry.moment.tactic) && (
+                          <Badge variant="caution">{displayTactic(entry.moment.tactic)}</Badge>
+                        )}
                       </div>
                       <p className="mt-2 text-lg text-ink">
                         <span className="font-semibold">이렇게 했어야 해요: </span>
@@ -656,6 +669,24 @@ export default function ReportPage() {
         )}
       </div>
 
+      {/* 리포트 검수(2026-10-22) — 누락 블록 보강: 훈련 밖 실제 피해 때 할 일(공식 창구 · 텍스트만 — 링크 · 전화 걸기 컨트롤 0).
+          속음 여부와 무관하게 늘 보인다(학습 목표 = 실제 대처 행동). 출처는 `reportSummaryCopy.ts` · 검수 보고서 §3. */}
+      <section
+        aria-labelledby="report-real-damage"
+        className="mx-5 mt-3.5 flex flex-col gap-2 rounded-[8px] border border-line bg-white p-[18px]"
+      >
+        <h2 id="report-real-damage" data-toc-target className="text-lg font-bold text-ink">
+          {REAL_DAMAGE_TITLE}
+        </h2>
+        <ol className="flex list-decimal flex-col gap-1.5 pl-6">
+          {REAL_DAMAGE_STEPS.map((step) => (
+            <li key={step} className="text-lg leading-relaxed text-ink-sub">
+              {step}
+            </li>
+          ))}
+        </ol>
+      </section>
+
       <div id="report-next" data-toc-target className="mx-5 mt-4 flex flex-col gap-2.5">
         {/* UX-028(즉시 되감기) 진입점 — 속은 순간이 1건 이상일 때만 노출한다(D-40: 안 속았으면
             띄우지 않고 리플레이 해설만 권한다). 2인 사용자2는 강제 해설 이후 화면에서만 보인다
@@ -725,7 +756,7 @@ function ReportSmsTimelineItem({ sms }: { sms: SmsTimelineEntry }) {
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-lg font-semibold text-caution">
               <span aria-hidden="true">⚠ </span>
-              {sms.timeLabel ? `${sms.timeLabel}: ` : ""}
+              {sms.timeLabel ? `${formatMomentLabel(sms.timeLabel)}: ` : ""}
               {event.what}
             </p>
             <Badge variant="neutral">문자</Badge>
@@ -808,7 +839,7 @@ function ReportMockScreenTimelineItem({
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-lg font-semibold text-caution">
             <span aria-hidden="true">⚠ </span>
-            {mockScreen.timeLabel ? `${mockScreen.timeLabel}: ` : ""}
+            {mockScreen.timeLabel ? `${formatMomentLabel(mockScreen.timeLabel)}: ` : ""}
             {what}
           </p>
           <Badge variant="neutral">모의 화면</Badge>
@@ -843,7 +874,7 @@ function ReportVerifyTimelineItem({ verify }: { verify: VerifyTimelineEntry }) {
               {(event.event === "verify_reconnected"
                 ? verify.reconnectTimeLabel
                 : verify.timeLabel)
-                ? `${event.event === "verify_reconnected" ? verify.reconnectTimeLabel : verify.timeLabel}: `
+                ? `${formatMomentLabel((event.event === "verify_reconnected" ? verify.reconnectTimeLabel : verify.timeLabel) ?? "")}: `
                 : ""}
               {event.what}
             </p>
@@ -895,7 +926,7 @@ function ReportRiskSignals({ signals }: { signals: RiskSignalView[] }) {
             <li key={`${signal.turnIndex}-${signal.kind}`} className="flex flex-col gap-1">
               <p className="text-[15px] font-bold text-caution">{RISK_SIGNAL_HEADING}</p>
               <p className="text-lg font-semibold text-ink">
-                {signal.timeLabel} · {copy.title}
+                {formatMomentLabel(signal.timeLabel)} · {copy.title}
               </p>
               <p className="text-lg leading-relaxed text-ink-sub">{copy.explanation}</p>
             </li>

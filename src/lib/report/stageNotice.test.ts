@@ -51,3 +51,13 @@ test("reachedStages: 화면은 도달 단계만 그린다(데이터에서는 빼
   );
   assert.equal(stages.length, 3, "원본 배열은 변형되지 않는다(미도달 단계가 데이터에 남는다)");
 });
+
+test("리포트 검수(2026-10-22) — 카카오톡형 메신저로 시작한 세션은 '메신저'로 부른다(문자 스미싱 · 표면 모름은 종전 '문자')", () => {
+  const twoStage: ReportStage[] = [
+    { stage: "messenger", reached: true },
+    { stage: "voice", reached: false },
+  ];
+  assert.equal(buildStageNotice(twoStage, "kakao"), "이번 훈련은 메신저 → 전화로 이어지는 수법이었습니다.");
+  assert.equal(buildStageNotice(twoStage, "sms"), "이번 훈련은 문자 → 전화로 이어지는 수법이었습니다.");
+  assert.equal(buildStageNotice(twoStage), "이번 훈련은 문자 → 전화로 이어지는 수법이었습니다.");
+});
