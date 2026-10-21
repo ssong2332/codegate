@@ -17,7 +17,7 @@ import { db } from "@/lib/firebase";
 import { judgeRewindAnswer } from "@/lib/api";
 import type { JudgeRewindAnswerResponse, RewindVerdict } from "@/lib/api";
 import { scenarios } from "@/content/scenarios";
-import { Badge, Button } from "@/components/ui";
+import { Badge, Button, LoadingStatus } from "@/components/ui";
 import {
   buildRewindContext,
   type RewindMessageSource,
@@ -217,13 +217,7 @@ export default function RewindPage() {
   if (state === "loading") {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-ink" role="status">
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-          />
-          그 순간의 대화를 불러오는 중입니다...
-        </p>
+        <LoadingStatus label="그 순간의 대화를 불러오는 중입니다" />
       </main>
     );
   }
@@ -387,13 +381,7 @@ export default function RewindPage() {
       {/* 판정 결과 — aria-live로 알린다(UX-028 Accessibility). 색 단독 표기 금지. */}
       <div aria-live="polite" className="mx-5 mt-4 flex flex-col gap-3">
         {answerState === "judging" && (
-          <p className="flex items-center gap-2 text-lg text-ink" role="status">
-            <span
-              aria-hidden="true"
-              className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-            />
-            답변을 살펴보는 중입니다...
-          </p>
+          <LoadingStatus label="답변을 살펴보는 중입니다" />
         )}
 
         {answerState === "judged" && judgement && verdictLabel && (

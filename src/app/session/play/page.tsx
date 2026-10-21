@@ -169,6 +169,7 @@ import { personaEventLogLine, readSessionPersonaCard, type PersonaCardView } fro
 import CallWaveform from "@/components/CallWaveform";
 import InCallSmsOverlay from "@/components/InCallSmsOverlay";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
+import { LoadingStatus } from "@/components/ui";
 
 // ⚠️ 지연 로딩 필수 — @elevenlabs/react가 끌어오는 livekit-client(WebRTC)를 이 화면 로드 시점에
 // 함께 불러오면 WebRTC를 못 쓰는 환경에서 렌더러가 통째로 죽는다(실측: 페이지 자체가 로드 실패).
@@ -2003,13 +2004,7 @@ export default function SessionCallPage() {
   if (pageState !== "ready" || !scenario) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-page p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-ink" role="status">
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-          />
-          통화 정보를 불러오는 중입니다...
-        </p>
+        <LoadingStatus label="통화 정보를 불러오는 중입니다" />
       </main>
     );
   }

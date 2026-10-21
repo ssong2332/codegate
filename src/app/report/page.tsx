@@ -20,7 +20,7 @@ import {
   type DifficultyLevel,
 } from "@/lib/difficulty";
 import { scenarios } from "@/content/scenarios";
-import { Badge, Button } from "@/components/ui";
+import { Badge, Button, LoadingStatus } from "@/components/ui";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { buildStageNotice, type ReportStage } from "@/lib/report/stageNotice";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
@@ -267,13 +267,7 @@ export default function ReportPage() {
   if (state === "loading") {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
-        <p className="flex items-center gap-2 text-lg text-ink" role="status">
-          <span
-            aria-hidden="true"
-            className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-transparent"
-          />
-          취약점 리포트를 준비하는 중입니다...
-        </p>
+        <LoadingStatus label="취약점 리포트를 준비하는 중입니다" />
       </main>
     );
   }
@@ -486,12 +480,15 @@ export default function ReportPage() {
           className="flex min-h-[56px] items-center justify-between rounded-[8px] border border-line bg-white px-[18px] text-lg font-semibold text-ink"
         >
           속은 시점 타임라인 보기
-          <span aria-hidden="true" className="text-ink-sub">
-            {expandedSection === "timeline" ? "▴" : "▾"}
+          <span
+            aria-hidden="true"
+            className={`inline-block text-ink-sub transition-transform duration-200 motion-reduce:transition-none ${expandedSection === "timeline" ? "rotate-180" : ""}`}
+          >
+            ▾
           </span>
         </button>
         {expandedSection === "timeline" && (
-          <section aria-label="속은 시점 타임라인" className="flex flex-col gap-3 px-1">
+          <section aria-label="속은 시점 타임라인" className="motion-reveal flex flex-col gap-3 px-1">
             {/* ⚠️ §15.6 G18 — 이 조건을 `report.wasDeceived`로 두면 **안 속은 세션의 문자 이벤트가
                 통째로 사라진다**(AC-059 미충족). 속은 순간이 0건이어도 문자 이벤트가 있으면 목록을
                 낸다. 판정은 그대로다 — 문자는 wasDeceived를 뒤집지 않는다(§15.6 G22). */}
@@ -580,12 +577,15 @@ export default function ReportPage() {
           className="flex min-h-[56px] items-center justify-between rounded-[8px] border border-line bg-white px-[18px] text-lg font-semibold text-ink"
         >
           {tacticsAccordionLabel(report.tacticsUsed.length)}
-          <span aria-hidden="true" className="text-ink-sub">
-            {expandedSection === "tactics" ? "▴" : "▾"}
+          <span
+            aria-hidden="true"
+            className={`inline-block text-ink-sub transition-transform duration-200 motion-reduce:transition-none ${expandedSection === "tactics" ? "rotate-180" : ""}`}
+          >
+            ▾
           </span>
         </button>
         {expandedSection === "tactics" && (
-          <section aria-label="시도된 수법" className="px-1">
+          <section aria-label="시도된 수법" className="motion-reveal px-1">
             {report.tacticsUsed.length > 0 ? (
               <div className="flex flex-wrap gap-2 rounded-[8px] border border-line bg-white p-4">
                 {report.tacticsUsed.map((tactic) => (
@@ -609,12 +609,15 @@ export default function ReportPage() {
           className="flex min-h-[56px] items-center justify-between rounded-[8px] border border-line bg-white px-[18px] text-lg font-semibold text-ink"
         >
           상황별 대처법
-          <span aria-hidden="true" className="text-ink-sub">
-            {expandedSection === "advice" ? "▴" : "▾"}
+          <span
+            aria-hidden="true"
+            className={`inline-block text-ink-sub transition-transform duration-200 motion-reduce:transition-none ${expandedSection === "advice" ? "rotate-180" : ""}`}
+          >
+            ▾
           </span>
         </button>
         {expandedSection === "advice" && (
-          <section aria-label="개선 영역과 예방 조언" className="flex flex-col gap-2 px-1">
+          <section aria-label="개선 영역과 예방 조언" className="motion-reveal flex flex-col gap-2 px-1">
             {report.preventionAdvice.map((advice) => (
               <div
                 key={advice}

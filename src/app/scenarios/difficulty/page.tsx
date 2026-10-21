@@ -49,7 +49,8 @@ import {
   type DifficultyLevel,
 } from "@/lib/difficulty";
 import { scenarios, GENERIC_VOICE_ID, resolveScenarioEscalation } from "@/content/scenarios";
-import { Badge, Button, SelectableCard } from "@/components/ui";
+import { Badge, Button, LoadingDots, LoadingHintLine, SelectableCard } from "@/components/ui";
+import { SESSION_PREP_HINTS } from "@/lib/motion/routeMotion";
 import PersonaCardInputFields from "@/components/PersonaCardInputFields";
 import {
   EMPTY_PERSONA_CARD_FORM,
@@ -333,10 +334,16 @@ export default function DifficultySelectPage() {
             className="flex min-h-[48px] w-full items-center justify-between gap-2 text-left text-[17px] font-semibold text-brand"
           >
             <span>이 대화에서 나올 수 있는 위험 신호 미리 보기</span>
-            <span aria-hidden="true">{briefingOpen ? "▲" : "▼"}</span>
+            {/* UX D-134 — 화살표 하나를 돌린다(펼침 = 위). reduced-motion이면 즉시 바뀐다. */}
+            <span
+              aria-hidden="true"
+              className={`inline-block transition-transform duration-200 motion-reduce:transition-none ${briefingOpen ? "rotate-180" : ""}`}
+            >
+              ▼
+            </span>
           </button>
           {briefingOpen && (
-            <div className="mt-2">
+            <div className="motion-reveal mt-2">
               {briefingError ? (
                 <p role="alert" className="text-[16px] text-danger">
                   위험 신호를 불러오지 못했습니다. 훈련은 그대로 시작할 수 있어요.
@@ -356,8 +363,9 @@ export default function DifficultySelectPage() {
                   </ul>
                 </>
               ) : (
-                <p role="status" className="text-[16px] text-ink-sub">
-                  불러오는 중입니다...
+                <p role="status" className="flex items-center gap-2.5 text-[16px] text-ink-sub">
+                  <LoadingDots className="text-brand" />
+                  불러오는 중입니다
                 </p>
               )}
             </div>
@@ -396,8 +404,20 @@ export default function DifficultySelectPage() {
           onClick={() => void handleStart()}
           disabled={!selected || state === "starting" || state === "difficulty-fallback"}
         >
-          {state === "starting" ? "준비하는 중..." : "이 난이도로 시작"}
+          {state === "starting" ? (
+            <span className="flex items-center justify-center gap-2.5">
+              <LoadingDots />
+              준비하는 중
+            </span>
+          ) : (
+            "이 난이도로 시작"
+          )}
         </Button>
+        {/* UX D-134 — 세션 생성은 길게는 15초쯤 걸린다. 서버가 실제로 하는 일만 말하고, 경과 시간에 따라 안심 문구를 덧붙인다
+            (⛔ 진행률 · 단계 완료 표시 없음). 마운트 = 대기 시작이라 매번 0초부터 잰다. */}
+        {state === "starting" && !isSendMode && selected && !resolveScenarioEscalation(scenario, selected) && (
+          <LoadingHintLine hints={SESSION_PREP_HINTS} className="mt-2 text-center" />
+        )}
       </div>
     </main>
   );

@@ -18,7 +18,7 @@ import {
   getOrCreatePendingSessionId,
   setIdentityConfirmed,
 } from "@/lib/recording";
-import { ProgressSteps, type ProgressStep } from "@/components/ui";
+import { LoadingDots, ProgressSteps, type ProgressStep } from "@/components/ui";
 
 // 지정 대본(약 30초 낭독 분량) — UX.md UX-002 "지정된 30초 한국어 대본". 정확 대사 일치 검증은
 // 하루 스코프 밖(UX.md Validation)이라 낭독 유도 목적의 고정 문구만 제공한다.
@@ -220,11 +220,8 @@ export default function RecordPage() {
 
         {recorder.status === "requesting-permission" && (
           <p className="flex items-center gap-2 text-[18px] text-ink" role="status">
-            <span
-              aria-hidden="true"
-              className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-brand"
-            />
-            마이크 권한을 요청하는 중입니다...
+            <LoadingDots className="text-brand" />
+            마이크 권한을 요청하는 중입니다
           </p>
         )}
 
