@@ -6,6 +6,7 @@ import * as path from "node:path";
 import {
   buildPersonaBlock,
   personaMatchTokens,
+  regionMentioned,
   resolvePersonaBlockState,
   resolvePersonaFirstMentions,
   type PersonaTranscriptLine,
@@ -153,4 +154,49 @@ test("[§88 후속] 생년월일 행 — 사기범이 \"65년 3월 2일생\"으�
   assert.deepEqual(block.items, [{ key: "birthDate", label: "생년월일", value: "1965년 3월 2일생", scammerTurnIndex: 1 }]);
   assert.deepEqual(resolvePersonaFirstMentions(card.items, [scammer(1, "3월 2일에 결제된 건이 있습니다"), user(2, "네")]), []);
   assert.equal(buildPersonaBlock(card, [scammer(1, "3월 2일에 결제된 건이 있습니다"), user(2, "네")], false)!.state, "R-2");
+});
+
+// 2026-10-21 메인 세션 라이브 실측 — 사기범이 "서울중앙지방검찰청"이라고만 말했는데 "사는 곳: 서울특별시"가 먼저 말한 정보로 표시됐다.
+test("[2026-10-21 지역 부분 일치] 기관명 · 은행명 안의 지명은 '사는 곳을 먼저 말함'으로 세지 않는다", () => {
+  const card: PersonaCard = {
+    v: 2,
+    inputBy: "self",
+    items: [
+      { key: "name", label: "이름", value: "홍길순" },
+      { key: "birthDate", label: "생년월일", value: "1962년 3월 2일생" },
+      { key: "region", label: "사는 곳", value: "서울특별시" },
+    ],
+  };
+  const lines = [
+    scammer(0, "홍길순 님 되시죠? 서울중앙지방검찰청 수사관입니다."),
+    user(1, "네 맞는데요"),
+    scammer(2, "서울경찰청과 공조 중인 사건이라 협조 부탁드립니다."),
+  ];
+  const block = buildPersonaBlock(card, lines, false)!;
+  assert.equal(block.state, "R-1");
+  assert.deepEqual(block.items.map((i) => i.key), ["name"], "이름만 — 사는 곳은 기관명 안이라 제외");
+
+  const seoul = personaMatchTokens(card.items[2]!);
+  const seoulSays = (text: string) => seoul.some((tk) => regionMentioned(text, tk));
+  // 기관명 · 고유명사 안(붙여 씀 · 띄어 씀 — 리뷰 Major 1 · 2).
+  for (const text of [
+    "서울중앙지방검찰청", "서울경찰청", "서울특별시경찰청", "서울 중앙지방검찰청", "서울 경찰청", "서울 지방법원",
+    "서울은평경찰서", "서울도봉경찰서", "서울이랜드", "서울사이버대",
+  ]) {
+    assert.equal(seoulSays(text), false, text);
+  }
+  assert.equal(regionMentioned("부산은행 계좌로", "부산"), false, "은행명");
+  // 주소 문맥 · 줄 끝 · 문장부호.
+  for (const text of [
+    "서울 사시죠?", "서울에 거주하시고요", "서울이시고", "지금 서울사시는", "서울특별시에 사시는", "서울, 맞으시죠", "서울시에 계시죠",
+    "사시는 곳이 서울", "사시는 데가 서울시", "서울시?", "서울인데요", "서울 출신이시죠",
+  ]) {
+    assert.equal(seoulSays(text), true, text);
+  }
+  assert.equal(regionMentioned("대전광역시 거주하시는", "대전광역시"), true);
+  assert.equal(regionMentioned("부산 쪽에 사시죠", "부산"), true);
+  assert.equal(regionMentioned("부산쪽이시죠", "부산"), true);
+  // 주소 문맥으로 말하면 그대로 R-1에 든다.
+  const said = buildPersonaBlock(card, [scammer(0, "서울에 사시는 홍길순 님 맞으시죠?"), user(1, "네")], false)!;
+  assert.deepEqual(said.items.map((i) => i.key).sort(), ["name", "region"]);
 });

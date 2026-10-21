@@ -8,6 +8,7 @@ import type { SmsPurpose } from "../scenarios/flowVariants";
 import { personaCardPromptValue } from "../scenarios/personaCardCatalog";
 import { resolveChildGenderRule } from "../scenarios/messengerChildImpersonationKakao.prompt";
 import { applyFictionalBank, EXAMPLE_ACCOUNT_NUMBER } from "../shared/fictionalBank";
+import { applyPersonaCardIdentityConfirm } from "./personaCardIdentity";
 
 // 사용자 신고(2026-07-25) — "사람과 대화한다는 느낌이 안 든다", "대화가 자연스럽지 않다",
 // "시나리오대로 유도하되 사용자의 말을 파악해서 흘러가야 한다". 기존 프롬프트는 페르소나(누구인가)와
@@ -72,12 +73,14 @@ function buildSpeakerGenderBlock(gender: "male" | "female"): string {
 // 숫자는 [진행 강제]를 따르도록 좁혔다. ⚠️ 측정에서 이 지시가 근거 없는 이름 호명("○○○ 명의")을 20건 중 3건 낳았다 —
 // 마지막 항목이 그 차단 문구다([미리 확보한 상대 정보] 블록 꼬리의 "목록에 없는 이름 … 지어내 말하지 않는다"와 같은 방향).
 // ⛔ 시스템 내부 사정(음성 이름 · 측정 수치)은 문면에 적지 않는다(G297과 같은 근거).
+// 2026-10-21 사용자 실기 신고 *"통화 말투가 '네'로 시작하는 건 있었어"* — 추임새 예시 첫머리가 '아, 네'였고 빈도 상한이 "한 번 말할 때
+// 최대 1개"뿐이라 매 턴 '네'로 여는 습관이 됐다. 예시에서 '네'를 빼고 빈도(서너 번에 한 번) · 연속 금지 · '네' 첫머리 금지를 적었다.
 const LIVE_SPEECH_STYLE_HEAD = `[말투 — 실시간 음성 통화]
 대본을 읽는 성우나 안내 방송처럼 말하지 말고, 실제로 전화를 거는 한국 사람처럼 말한다.`;
 const LIVE_SPEECH_STYLE_TONE_INSTITUTION = `- 사무실에서 업무 전화를 거는 직원처럼 말한다(위 페르소나에 나이가 정해져 있지 않으면 40대 정도). 감정은 차분하지만 약간 바쁜 느낌이다.`;
 const LIVE_SPEECH_STYLE_TONE_OTHER = `- 감정의 종류와 세기는 위 페르소나 설명을 그대로 따른다. 읽는 말투가 아니라 그 사람이 실제로 통화하는 말투로 한다.`;
 const LIVE_SPEECH_STYLE_COMMON = `- 문장 끝을 또박또박 올리지 말고 자연스럽게 내린다. 속도는 약간 빠르게, 단어 사이를 붙여서 말한다.
-- '아, 네', '그러니까', '음' 같은 짧은 추임새를 가끔 섞는다(한 번 말할 때 최대 1개).
+- '아', '그러니까', '음' 같은 짧은 추임새는 가끔만 섞는다(서너 번 말할 때 한 번 정도 · 한 번 말할 때 최대 1개). 대부분의 말은 추임새 없이 바로 내용으로 시작한다. 같은 추임새로 연달아 말을 시작하지 않고, 특히 매번 '네'나 '아, 네'로 말을 시작하지 않는다.
 - 기관명이나 흔한 표현은 실제 사람처럼 흘려 말한다. 다만 계좌번호·금액·인증번호처럼 상대가 받아 적거나 따라 해야 하는 숫자는 [진행 강제]의 규칙대로 또박또박 부른다.
 - 나이·성별·성격·감정(다급함 포함)이 위 페르소나 설명이나 [화자]에 정해져 있으면 그것이 이 말투 항목보다 우선한다.`;
 const LIVE_SPEECH_STYLE_NAME_INSTITUTION = `- **상대의 이름·나이 같은 신상은 [미리 확보한 상대 정보 — 이 통화에서만]에 적혀 있거나 상대가 이 통화에서 직접 말한 것만 쓴다.** 그 밖의 이름은 지어내 부르지 않는다 — 아직 모르는 이름이 필요하면 상대에게 물어 확인한다.`;
@@ -165,17 +168,40 @@ const SMS_EXAMPLE_ORDER: readonly SmsPurpose[] = ["identity", "transfer", "link"
 export const UNDECLARED_VERIFICATION_TAIL =
   " 위 종류가 아닌 인증·확인 절차도 휴대폰으로 보냈다거나 곧 보낼 것이라고 하지 않는다.";
 
-/** 선언 목적 기준 문자 예외 항목(첫 줄). 세 목적 전부면 종전 템플릿 첫 줄과 바이트 동일하다. */
-function buildDeclaredSmsExceptionLine(purposes: readonly SmsPurpose[]): string {
+// ── 2026-10-21(사용자 실기 신고 — 기관 사칭 고급 "내가 알아서 이체하는 것으로 됐다") — 계좌 문자에 이체 링크가 붙은 세션 ─────────
+// 계좌 안내 문자 중에는 이체 화면(UX-023 · D-115 — 계좌 미리 채움 · 금액 사용자 입력)을 여는 링크가 붙은 것이 있다(카탈로그
+// `fakeLandingId` — institution · card · bank). 위 계좌 예시 *"문자로 보낸 계좌로 보내 달라"* 는 은행 앱 · 창구에서 알아서 보내라는 말로
+// 읽히고, link 목적을 따로 선언하지 않은 세션에는 *"링크 문자는 보낸 적이 없으니"* 까지 붙어 문자 속 링크를 가리키지 못하게 했다
+// (그 문자의 도착 지시 `announceInstruction`은 *"문자 속 링크로 이체를 진행해 달라"* 를 말하라고 한다 — 정면 모순).
+// ⇒ 호출부가 `transferSmsLink`(= `sessionTransferSmsOpensLanding`)를 넘기면 계좌 종류 · 예시를 링크 화면 기준으로 바꾸고, 미선언 목록에서
+//    링크를 뺀다. 부재 · false = 종전 바이트 동일.
+const SMS_KIND_LABEL_TRANSFER_WITH_LINK = "계좌 안내(이체 링크 포함)";
+const SMS_DEMAND_EXAMPLE_TRANSFER_WITH_LINK = `"문자로 보낸 계좌 안내의 링크를 열어 그 화면에서 금액을 넣고 이체해 달라"`;
+export const TRANSFER_VIA_LINK_ONLY_SENTENCE =
+  " 계좌 안내 문자로 이체를 요구할 때는 그 문자 속 링크의 이체 화면에서 하게 하고, 은행 앱·창구·ATM에서 따로 보내라고 하지 않는다.";
+// 리뷰 M2 — link 목적을 선언하지 않은 세션에서 미선언 목록의 "링크 문자는 보낸 적이 없으니"를 빼면, 앱 설치 같은 **다른** 링크 문자를
+// 지어내는 것을 막던 문장도 함께 사라진다. 그 경우에만 "링크는 계좌 문자에 붙은 것 하나뿐"을 1구절 붙인다.
+export const TRANSFER_LINK_IS_ONLY_LINK_SENTENCE =
+  " 네가 보내는 링크는 그 계좌 안내 문자에 붙은 이체 링크 하나뿐이다 — 그 밖의 링크 문자(앱 설치 등)는 보낸 적이 없으니 보냈다고 말하지 않는다.";
+
+/** 선언 목적 기준 문자 예외 항목(첫 줄). 세 목적 전부 · `transferLink` 거짓이면 종전 템플릿 첫 줄과 바이트 동일하다. */
+function buildDeclaredSmsExceptionLine(purposes: readonly SmsPurpose[], transferLink = false): string {
   const has = (p: SmsPurpose) => purposes.includes(p);
-  const kinds = SMS_KIND_ORDER.filter(has).map((p) => SMS_KIND_LABEL[p]).join("·");
-  const examples = SMS_EXAMPLE_ORDER.filter(has).map((p) => SMS_DEMAND_EXAMPLE[p]).join(", ");
-  const undeclared = SMS_KIND_ORDER.filter((p) => !has(p)).map((p) => SMS_KIND_LABEL[p]);
+  const linked = transferLink && has("transfer");
+  const kindLabel = (p: SmsPurpose) => (linked && p === "transfer" ? SMS_KIND_LABEL_TRANSFER_WITH_LINK : SMS_KIND_LABEL[p]);
+  const example = (p: SmsPurpose) => (linked && p === "transfer" ? SMS_DEMAND_EXAMPLE_TRANSFER_WITH_LINK : SMS_DEMAND_EXAMPLE[p]);
+  const kinds = SMS_KIND_ORDER.filter(has).map(kindLabel).join("·");
+  const examples = SMS_EXAMPLE_ORDER.filter(has).map(example).join(", ");
+  // 링크는 계좌 문자에 실려 실제로 도착하므로 "링크 문자는 보낸 적이 없다"고 하지 않는다.
+  const undeclared = SMS_KIND_ORDER.filter((p) => !has(p) && !(linked && p === "link")).map((p) => SMS_KIND_LABEL[p]);
   const onlyDeclared =
     undeclared.length > 0
       ? ` 이 통화에서 네가 보내는 문자는 위 종류뿐이다 — ${undeclared.join("·")} 문자는 보낸 적이 없으니, 그런 문자를 보냈다고 말하거나 그 내용을 불러 달라고 하지 않는다.${UNDECLARED_VERIFICATION_TAIL}`
       : "";
-  return `- **참가자가 볼 수 없는 것은 가리키지 않는다. 단, 문자로 도착한 것은 예외다.** 이 훈련에서는 네가 통화 중에 보내는 문자(${kinds})가 **참가자 화면에 실제로 도착해 표시된다.** 따라서 ${examples}고 요구해도 된다 — 참가자는 화면에서 실제로 볼 수 있다. 반대로 문자로 도착하지 않은 것(방금 뜬 팝업, 설치된 앱 화면 등)은 여전히 가리키지 않는다.${onlyDeclared}`;
+  const viaLinkOnly = linked
+    ? `${TRANSFER_VIA_LINK_ONLY_SENTENCE}${has("link") ? "" : TRANSFER_LINK_IS_ONLY_LINK_SENTENCE}`
+    : "";
+  return `- **참가자가 볼 수 없는 것은 가리키지 않는다. 단, 문자로 도착한 것은 예외다.** 이 훈련에서는 네가 통화 중에 보내는 문자(${kinds})가 **참가자 화면에 실제로 도착해 표시된다.** 따라서 ${examples}고 요구해도 된다 — 참가자는 화면에서 실제로 볼 수 있다. 반대로 문자로 도착하지 않은 것(방금 뜬 팝업, 설치된 앱 화면 등)은 여전히 가리키지 않는다.${viaLinkOnly}${onlyDeclared}`;
 }
 
 /**
@@ -185,10 +211,11 @@ function buildDeclaredSmsExceptionLine(purposes: readonly SmsPurpose[]): string 
 function buildOffScreenRuleWithSms(
   toolDrivenTiming: boolean,
   declaredPurposes: readonly SmsPurpose[] | undefined,
+  transferLink: boolean,
 ): string {
   const template =
     declaredPurposes !== undefined && declaredPurposes.length > 0
-      ? `${buildDeclaredSmsExceptionLine(declaredPurposes)}\n{{SMS_METHOD_LINE}}`
+      ? `${buildDeclaredSmsExceptionLine(declaredPurposes, transferLink)}\n{{SMS_METHOD_LINE}}`
       : OFF_SCREEN_RULE_WITH_SMS_TEMPLATE;
   return template.replace(
     "{{SMS_METHOD_LINE}}",
@@ -358,6 +385,7 @@ function buildScenarioProgression(
   hangupMode: HangupMode,
   verifyInterceptEnabled: boolean,
   inCallSmsPurposes: readonly SmsPurpose[] | undefined,
+  transferSmsLink: boolean,
 ): string {
   return SCENARIO_PROGRESSION_TEMPLATE.replace(
     "{{IDENTITY_CHECK_HANDLING}}",
@@ -365,7 +393,7 @@ function buildScenarioProgression(
   ).replace(
     "{{OFF_SCREEN_RULE}}",
     inCallSmsEnabled
-      ? buildOffScreenRuleWithSms(toolDrivenTiming, inCallSmsPurposes)
+      ? buildOffScreenRuleWithSms(toolDrivenTiming, inCallSmsPurposes, transferSmsLink)
       : identityCheckAllowed
         ? OFF_SCREEN_RULE_DEFAULT_TRUE
         : OFF_SCREEN_RULE_DEFAULT_FALSE,
@@ -749,6 +777,11 @@ function buildDifficultyBlock(
 export const PERSONA_CARD_BLOCK_HEAD = `[미리 확보한 상대 정보 — 이 통화에서만]
 너는 통화 전에 상대에 대해 아래 정보를 이미 확보해 두었다. 상대가 스스로 말하기 전에 이 가운데 한두 가지를 네가 먼저, 확인하듯 자연스럽게 꺼내 상대가 '이 사람은 나를 이미 알고 있다'고 느끼게 한다.`;
 export const PERSONA_CARD_BLOCK_TAIL = `목록에 없는 이름·나이·금액·금융사·주소는 지어내 말하지 않는다. '사는 곳'은 알고 있다는 확인에만 쓰고, 만날 곳·찾아갈 곳·돈을 건넬 곳을 정하는 데 쓰지 않는다. 이 정보를 어디서 얻었는지는 설명하지 않는다.`;
+// 2026-10-21 사용자 실기 신고(기관 사칭 고급 · 생일 입력) — *"먼저 말하지는 않고 생년월일 말하라고 물어봤는데, 내가 의심하니까 먼저
+// 말했어"*. 머리 문장의 "상대가 스스로 말하기 전에"에는 **언제**가 없어, 모델이 페르소나의 요구 예시를 먼저 따르고 의심을 받은 뒤에야
+// 카드를 꺼냈다. 시점(첫 두 차례 안) · 요구 금지(목록 항목은 묻지 않는다) · 우선순위(위 요구 예시보다 이 블록)를 1줄로 못박는다.
+// 요구 예시 자체는 `personaCardIdentity.ts`가 조립 결과에서 확인형으로 바꾼다(결정적 층 — 이 줄은 모델 지시 층).
+export const PERSONA_CARD_BLOCK_ORDER = `**순서**: 첫 마디에서 신분과 전화한 이유를 밝히고, 늦어도 상대의 첫 대답을 받은 바로 다음 차례까지 이 정보 가운데 이름·생년월일(목록에 있는 것)을 네가 먼저 말하고 "맞으시죠?"로 확인만 받는다. 이 목록에 있는 항목은 상대에게 불러 달라고 요구하지 않는다 — 위 페르소나·수법의 신원 요구 예시보다 이 줄이 우선하고, 요구는 목록에 없는 항목에만 한다. 상대가 의심한 뒤에야 꺼내지 않는다.`;
 
 /**
  * 카드 행이 1개 이상일 때만 블록을 만든다(빈 배열 = 블록 0 — 부재와 같은 결과). 값은 프롬프트용 값(`personaCardPromptValue` —
@@ -756,7 +789,12 @@ export const PERSONA_CARD_BLOCK_TAIL = `목록에 없는 이름·나이·금액�
  */
 export function buildPersonaCardBlock(items: readonly PersonaCardItem[]): string | null {
   if (items.length === 0) return null;
-  return [PERSONA_CARD_BLOCK_HEAD, ...items.map((item) => `- ${item.label}: ${personaCardPromptValue(item)}`), PERSONA_CARD_BLOCK_TAIL].join("\n");
+  return [
+    PERSONA_CARD_BLOCK_HEAD,
+    ...items.map((item) => `- ${item.label}: ${personaCardPromptValue(item)}`),
+    PERSONA_CARD_BLOCK_ORDER,
+    PERSONA_CARD_BLOCK_TAIL,
+  ].join("\n");
 }
 
 /**
@@ -800,6 +838,13 @@ export type BuildSystemPromptOptions = {
    * 종전 예시가 실린다. 에러는 나지 않는다).
    */
   inCallSmsPurposes?: readonly SmsPurpose[];
+  /**
+   * 2026-10-21(사용자 실기 신고 — 기관 사칭 고급) — 이 세션이 선언한 계좌(transfer) 문자에 **이체 화면을 여는 링크**가 붙어 있는가
+   * (`inCallSms/smsGate.ts` `sessionTransferSmsOpensLanding`). 참이면 문자 예외 항목의 계좌 예시가 *"링크를 열어 그 화면에서 이체"* 로
+   * 바뀌고 *"링크 문자는 보낸 적이 없다"* 가 빠진다(`inCallSmsPurposes`가 있을 때만 의미가 있다). 부재 · false = 종전 바이트 동일.
+   * ⚠️ 호출부 3곳(sendMessage · 오프닝 · Gemini Live 토큰)에 같은 술어로 넘긴다(G63 — 한 곳이 빠지면 그 경로만 종전 예시).
+   */
+  transferSmsLink?: boolean;
   /**
    * T83(§16.1.4) — 이 세션에서 확인 시도 무력화가 성립하는가(카탈로그 보유 **&& 고급**).
    * true면 앱 오케스트레이션과의 동기화 블록이 삽입된다(게이트 이전에 창구를 먼저 부르지 않게).
@@ -960,6 +1005,8 @@ export function buildSystemPrompt(
       opts.verifyInterceptEnabled === true,
       // A-1 ② — 부재 = 종전 문자 예외 항목(바이트 동일).
       opts.inCallSmsPurposes,
+      // 2026-10-21 — 계좌 문자의 이체 링크(부재 = 종전 바이트 동일).
+      opts.transferSmsLink === true,
     ),
     "",
     // 아래 세 블록은 "있을 때만" 삽입된다 — intermediate(=블록 없음)·확인 무력화 미적용·턴 지시
@@ -974,7 +1021,9 @@ export function buildSystemPrompt(
     ...(opts.turnInstruction ? [opts.turnInstruction, ""] : []),
     prompt.guardrailPreamble,
   ].join("\n");
-  const withAccount = opts.sessionAccountNumber ? applySessionAccount(assembled, opts.sessionAccountNumber) : assembled;
+  // 2026-10-21 — 카드가 있으면 신원 요구 예시를 카드 값 확인형으로(`personaCardIdentity.ts` 판정표 · 블록 0 = 입력 그대로).
+  const withCard = personaCardBlock && opts.personaCard ? applyPersonaCardIdentityConfirm(assembled, opts.personaCard) : assembled;
+  const withAccount = opts.sessionAccountNumber ? applySessionAccount(withCard, opts.sessionAccountNumber) : withCard;
   return opts.fictionalBankName ? applyFictionalBank(withAccount, opts.fictionalBankName) : withAccount;
 }
 

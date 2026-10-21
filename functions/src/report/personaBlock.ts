@@ -90,6 +90,42 @@ export function personaUserMatchTokens(item: PersonaCardItem): string[] {
   return given ? [...new Set([...tokens, given])] : tokens;
 }
 
+// 2026-10-21 메인 세션 라이브 실측 — 카드 사는 곳 "서울특별시", 사기범은 *"서울중앙지방검찰청"* 이라고만 말했는데 리포트가 "사는 곳: 서울특별시"를
+// "상대가 먼저 꺼낸 '내 정보'"(R-1)로 표시했다. 원인: 지역 토큰 "서울"을 줄 안 **어디에든** 부분 일치로 셌다(기관명 · 은행명 안의 지명 포함).
+// ⇒ 사기범 쪽 지역 대조만 **지명 낱말로 끝나는 자리**로 좁힌다(아래 판정표). 참가자 쪽은 종전대로 넓게 센다(오차 방향 = R-2 = 안전 · §84.3.6).
+// | # | 토큰 뒤(위에서 첫 일치) | 셈 |
+// |---|---|---|
+// | 1 | (공백을 건너뛴) 다음 낱말이 기관 · 회사 낱말(`REGION_INSTITUTION_WORD` — 검찰청 · 경찰서 · 법원 · 은행 · 대학 …)로 끝난다 | 안 센다("서울중앙지방검찰청" · "서울 경찰청" · "부산은행" · "서울도봉경찰서") |
+// | 2 | 줄 끝 · 한글이 아닌 글자(공백 · 문장부호 · 숫자) | 센다("서울 사시죠" · "서울, 맞으시죠") |
+// | 3 | 조사 · 주소 문맥 꼴(`REGION_FOLLOWERS`, 꼴 뒤는 줄 끝 · 비한글이거나 그 꼴 자체가 낱말 앞부분) | 센다("서울에" · "서울이시고" · "서울사시는" · "서울시에") |
+// | 4 | 그 밖의 한글(고유명사가 이어짐) | 안 센다("서울이랜드" · "서울은평" · "서울사이버대" · "충남대") |
+// ⚠️ 남는 한계(리뷰 2026-10-21): 사건 발생지("서울에서 발생한")와 거주지를 구분하지 못한다 · 같은 이름의 다른 지명("경기 광주시")은 그 시 · 도로 센다.
+const REGION_INSTITUTION_WORD = /^\s*[가-힣]*(검찰청|지검|지청|경찰청|경찰서|법원|지법|고법|고검|시청|도청|구청|세무서|국세청|은행|대학교|대학|대|가스|공사)(?![가-힣])/;
+// 한 글자 조사는 **뒤가 줄 끝 · 비한글일 때만**("서울도봉"의 "도" · "서울은평"의 "은"을 막는다). 여러 글자 꼴은 낱말 앞부분이면 된다.
+const REGION_PARTICLES_1 = ["에", "이", "은", "는", "도", "로", "서", "과", "의", "시"] as const;
+const REGION_FOLLOWERS = [
+  "에서", "에도", "에는", "에요", "이시", "이세", "이신", "이고", "이요", "인데", "인가", "인지", "이죠", "은요", "는요", "도요", "로요",
+  "쪽", "사시", "사세", "사신", "사는", "살고", "살아", "살면", "거주", "출신",
+  "시에", "시이", "시죠", "시고", "시는", "시가", "시로", "시의", "시요",
+] as const;
+
+/** 사기범 줄에 지역 토큰이 **지명 낱말로서** 나오는가(위 판정표). */
+export function regionMentioned(text: string, token: string): boolean {
+  let from = 0;
+  for (;;) {
+    const at = text.indexOf(token, from);
+    if (at < 0) return false;
+    from = at + 1;
+    const rest = text.slice(at + token.length);
+    if (REGION_INSTITUTION_WORD.test(rest)) continue;
+    const next = rest.charAt(0);
+    if (next === "" || !/[가-힣]/.test(next)) return true;
+    const after = (n: number) => rest.charAt(n);
+    if (REGION_PARTICLES_1.some((p) => rest.startsWith(p) && (after(1) === "" || !/[가-힣]/.test(after(1))))) return true;
+    if (REGION_FOLLOWERS.some((f) => rest.startsWith(f))) return true;
+  }
+}
+
 export type PersonaFirstMention = { key: PersonaCardItem["key"]; scammerTurnIndex: number };
 
 /** 항목별 첫 언급 대조 — 사기범 첫 언급 turnIndex < 참가자 첫 언급 turnIndex(없으면 ∞)인 항목만. */
@@ -103,9 +139,11 @@ export function resolvePersonaFirstMentions(
     const tokens = personaMatchTokens(item);
     if (tokens.length === 0) continue;
     const userTokens = personaUserMatchTokens(item);
+    const mentions = (role: PersonaTranscriptLine["role"], text: string, token: string): boolean =>
+      role === "scammer" && item.key === "region" ? regionMentioned(text, token) : text.includes(token);
     const firstOf = (role: PersonaTranscriptLine["role"]): number | undefined =>
       spoken.find(
-        (line) => line.role === role && (role === "user" ? userTokens : tokens).some((token) => line.textMasked.includes(token)),
+        (line) => line.role === role && (role === "user" ? userTokens : tokens).some((token) => mentions(role, line.textMasked, token)),
       )?.turnIndex;
     const s = firstOf("scammer");
     if (s === undefined) continue;

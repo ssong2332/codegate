@@ -17,7 +17,7 @@ import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_INSTALL_CONSENT_INSTRUCTION_IN_C
 import { FLOW_VARIANTS } from "../flowVariants";
 import { PERSONA_CARD_SCENARIOS, PERSONA_REGION_POOL } from "../personaCardCatalog";
 import { buildPersonaCard } from "../../session/personaCard";
-import { sessionDeclaredSmsPurposes } from "../../inCallSms/smsGate";
+import { sessionDeclaredSmsPurposes, sessionTransferSmsOpensLanding } from "../../inCallSms/smsGate";
 import { buildConfirmResultInstruction, buildLiveConfirmResultInstruction } from "../../inCallSms/confirmResult";
 import { ESCALATED_CALL_CONTEXT_INSTRUCTION } from "../../roleplay/escalatedCall";
 import { VERIFY_INTERCEPT, hasVerifyIntercept } from "../verifyIntercept";
@@ -1384,6 +1384,8 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
           difficultyLevel: flowVariant.level,
           inCallSmsEnabled: true,
           inCallSmsPurposes,
+          // 2026-10-21 — 계좌 문자의 이체 링크도 변형 derive 값이다(호출부 3곳과 같은 술어).
+          transferSmsLink: sessionTransferSmsOpensLanding(flowVariant.scenarioId, flowVariant.variantId),
           verifyInterceptEnabled,
           toolDrivenTiming,
           identityCheckAllowed: asksIdentityCheck(flowVariant.scenarioId),

@@ -454,11 +454,12 @@ test("[M2] 변형 있는 세션 — 술어 = 변형 선언 수 > 0 · 도구 선
   }
 });
 
-test("[M2 트립와이어] 종전(시나리오 기준)과 판정이 갈리는 변형은 문자 선언 0인 4개뿐이다 — 이 4개만 프롬프트 문자 문면이 꺼진다", () => {
+// 2026-10-21 — 기관 사칭 고급 fv-c5fj · fv-pgqt가 인증번호 · 안전계좌 문자를 선언하게 되어(사용자 실기 신고) 목록에서 빠졌다(4 → 2).
+test("[M2 트립와이어] 종전(시나리오 기준)과 판정이 갈리는 변형은 문자 선언 0인 2개뿐이다 — 이 2개만 프롬프트 문자 문면이 꺼진다", () => {
   const changed = FLOW_VARIANTS.filter((v) => sessionDeclaresInCallSms(v.scenarioId, v.variantId) !== hasInCallSms(v.scenarioId))
     .map((v) => v.variantId)
     .sort();
-  assert.deepEqual(changed, ["fv-akj5", "fv-aqp6", "fv-c5fj", "fv-pgqt"]);
+  assert.deepEqual(changed, ["fv-akj5", "fv-aqp6"]);
 });
 
 test("[M2 역검증] 시나리오 기준 술어(오염본)는 선언 0 변형에도 도구를 선언한다 — 정본은 선언하지 않는다", () => {

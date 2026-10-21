@@ -195,6 +195,18 @@ export function sessionDeclaredSmsPurposes(
 }
 
 /**
+ * 2026-10-21(사용자 실기 신고 — 기관 사칭 고급 "내가 알아서 이체") — 이 세션이 선언한 계좌(transfer) 문자 중 **이체 화면을 여는 링크**
+ * (카탈로그 `fakeLandingId`)가 붙은 것이 있는가(`promptAssembly` `transferSmsLink`). 호출부 3곳이 `sessionDeclaredSmsPurposes`와
+ * 나란히 부른다. 변형 ID 부재 = 거짓(종전 템플릿 — 무소급).
+ */
+export function sessionTransferSmsOpensLanding(scenarioId: string, flowVariantId: string | undefined): boolean {
+  if (!flowVariantId) return false;
+  return resolveDeclaredSms(scenarioId, flowVariantId).declared.some(
+    (item) => item.purpose === "transfer" && findInCallSmsItem(scenarioId, item.smsId)?.fakeLandingId !== undefined,
+  );
+}
+
+/**
  * ⭐ 리뷰 M1 — 텍스트 폴백 판정에 쓰는 사용자 발화 수 = max(서버 `messages`의 user 수, 마지막 도착 문서의
  * `userTurnsAtArrival`). 실시간 통화가 도중에 폴백으로 강등되면 실시간 구간의 전사는 통화 종료 때에야 `messages`에
  * 올라가므로(`submitTranscript`) 서버 계수가 실시간 클라 계수보다 작다. 보정하지 않으면 실시간에서 받은 문자의

@@ -7,6 +7,7 @@ import {
   buildPersonaCardBlock,
   buildSystemPrompt,
   PERSONA_CARD_BLOCK_HEAD,
+  PERSONA_CARD_BLOCK_ORDER,
   PERSONA_CARD_BLOCK_TAIL,
   type BuildSystemPromptOptions,
 } from "../promptAssembly";
@@ -51,7 +52,8 @@ test("[G569] 블록 문면 = §84.14.4 갱신 정본(머리 · 꼬리 바이트 
   assert.ok(CANON_TAIL.includes("만날 곳·찾아갈 곳·돈을 건넬 곳을 정하는 데 쓰지 않는다"));
   assert.equal(
     buildPersonaCardBlock([{ key: "name", label: "이름", value: "김영숙" }]),
-    `${CANON_HEAD}\n- 이름: 김영숙\n${CANON_TAIL}`,
+    // 2026-10-21 — 카드 행과 꼬리 사이에 순서 줄(사용자 실기 신고 "먼저 말하지 않고 생년월일을 물어봤다").
+    `${CANON_HEAD}\n- 이름: 김영숙\n${PERSONA_CARD_BLOCK_ORDER}\n${CANON_TAIL}`,
   );
   assert.equal(buildPersonaCardBlock([]), null, "빈 배열 = 블록 0");
 });
