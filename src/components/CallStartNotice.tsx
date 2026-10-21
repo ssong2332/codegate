@@ -23,6 +23,7 @@ import EndTrainingButton from "./EndTrainingButton";
 import PhoneIcon from "./PhoneIcon";
 import { Button } from "./ui";
 import { PRE_CALL_NOTICE, PREROLL_NOTICE } from "@/lib/sessionboundary/preSessionCopy";
+import { SCREEN_OFF_COPY } from "@/lib/realtime/backgroundCall";
 import type { DeviceSkin, DeviceSkinSource } from "@/lib/phone/deviceSkin";
 import {
   MASK_ACCESSIBLE_NAME,
@@ -76,6 +77,8 @@ export default function CallStartNotice({ onConfirm, onEndTraining, skinPicker, 
         </h1>
         <p className="text-[17px] leading-[1.7] text-ink-sub">{PREROLL_NOTICE}</p>
         <p className="text-[17px] leading-[1.7] text-ink-sub">{PRE_CALL_NOTICE.stopHint}</p>
+        {/* §99(UX D-142) — 화면 꺼짐 · 귀에 대기 안내(세션 전 화면 · 경고 표현 0). 화면이 꺼지면 말이 전달되지 않는다. */}
+        <p className="text-[17px] leading-[1.7] text-ink-sub">{SCREEN_OFF_COPY.preCallHint}</p>
         <WebDarkModeNotice />
         {/* T194-b(UX-014 v1.38 (1)) — 고지 ② 바로 아래 · 화면 모양 줄 위. 카드는 "상대가 알고 있다 · 말할 것이다"를 예고하지
             않는다(K-7). 경고 표현 · 점멸 · 포커스 대상 0(조작 요소 없음 — 진입 포커스는 기존대로 제목). 닫힘 = "준비됐어요". */}

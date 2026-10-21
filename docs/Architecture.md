@@ -22177,3 +22177,70 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 | 거절 · 거절 뒤 회유 턴("조용히 · 오늘만 · 일부 · 돌려" 등) | 1 · 0 | 4 · 7 · 5 | 같은 정규식 |
 ¹ 이후 순응 1세션은 프로브 응답기가 링크 안내마다 "눌러서 설치했어요"만 답해 사건 조회 단계에서 19턴 내내 정정만 오갔다(응답기 한계 — 사기범은 "앱이 아니라 링크"로 바로잡았다). 제품 결함 아님.
 ⚠️ 지표는 키워드 정규식 계수다(의미 판정 아님). 응답기는 고정 대본(텍스트 턴)이라 실제 참가자 발화 분포가 아니다.
+
+
+## 99. (Bug fix — 2026-10-21 · 브랜치 `claude/call-screen-off-mic-a55f8e` · 사용자 실기 신고 · 갤럭시 S25 웨일 · 크롬 — *"핸드폰이 꺼지면 마이크를 통해서 웹사이트에 전달하지 못하는 거 같은데"*) **훈련 통화의 화면 꺼짐 · 백그라운드 대응 — 화면 켜짐 유지 · 복귀 시 재개 · 끊기면 맥락 유지 재연결 · 전사 백업** — implementer 기록
+
+> 조사 · 근거 · 실기 체크리스트: `docs/research/screen-off-call-2026-10.md`. UX D-142 · DECISIONS #212.
+
+### 99.1 금지
+- ⛔ 사용자 종료(`stopSignal`) · 끊기 승인 · 종료 래치(`isHangupLatched`) 뒤의 소켓 닫힘을 재연결로 돌리지 않는다(`decideSocketClose` 1행).
+- ⛔ 재연결 첫 턴(대화 맥락)을 전사에 기록하지 않는다 — 오프닝 트리거와 같은 오케스트레이션 신호다(G105와 같은 이유).
+- ⛔ `turnComplete:true` 전송 지점을 늘리지 않는다 — 재연결 첫 턴은 오프닝과 같은 `dispatchClientTurn({ type:"request", turn:{ kind:"opening" … } })` 보류 큐를 탄다(G431).
+- ⛔ 받기 탭 안 동기 오디오 준비(`primeCallAudio` · 수정안 A) · #350 마이크 병렬 경로(`liveMicHandoff`) · #359 종료 즉시성을 바꾸지 않는다. 재연결 세션은 넘겨받은 마이크가 없으므로 종전 "재마운트" 분기대로 스스로 연다.
+
+### 99.2 판정표 (`src/lib/realtime/backgroundCall.ts` — 위에서 첫 일치)
+
+**소켓 닫힘(`decideSocketClose`)**
+
+| 조건 | 결과 |
+|---|---|
+| 사용자 종료 요청 ∨ 끊기 래치 | `end`(종전 `onEnded`) |
+| 지금 가려짐 | `reconnect` |
+| 한 번이라도 가려졌고 돌아온 지 ≤ 5초(`RECENT_RETURN_WINDOW_MS`) | `reconnect` |
+| 그 밖 | `end`(종전) |
+
+**재연결 예산(`decideReconnectBudget`)**: 이 통화의 재연결 횟수 < 2(`MAX_BACKGROUND_RECONNECTS`) → 다시 연결 · 그 밖 → `handleError`(종전 텍스트 강등 — 통화는 끝나지 않는다).
+
+**마이크(`decideMicRecovery`, 복귀 0.7초 뒤)**: 트랙 없음 → 그대로 · `ended` → 다시 열기 · `muted` → 다시 열기 · 그 밖 → 그대로.
+
+**onerror**: 같은 판정이 `reconnect`면 텍스트 강등(`onError`) 대신 재연결(1회 — 이어지는 onclose는 중복 보고하지 않는다).
+
+### 99.3 흐름
+1. 통화 화면: `phase ∈ {connecting, opening, live}` 동안 `createScreenWakeLock().start()` · 벗어나면 `stop()`. 브라우저가 가려질 때 푼 잠금은 `visibilitychange(visible)`에서 다시 요청한다. 상태 `unsupported`/`denied`면 통화 셸 안내 1줄.
+2. `GeminiVoiceSession`: 가시성 리스너(effect 시작에 붙이고 cleanup에서 뗀다). 복귀 시 출력 · 입력 컨텍스트 `resumeSuspendedContexts` · 마이크 재확인 → 다시 열면 `replaceMicStream`이 같은 분석기 · 처리기에 새 소스를 붙이고 옛 트랙을 닫는다. 가려진 동안 침묵 · 대기 넛지는 미룬다.
+3. 소켓 닫힘 → `reportConnectionLostIfBackground()` → 부모 `handleConnectionLost`: 가려져 있으면 `pendingReconnectRef`(돌아올 때 시작) · 보이면 즉시 `startReconnect`.
+4. `startReconnect`: 예산 확인 → `setResumeTurn(buildResumeTurn(transcriptRef.current))`(onclose의 flush가 남은 전사를 이미 올렸다) → `realtime.reconnect(sessionId)`: 상태 `reconnecting` → `createRealtimeCall`(서버 가드 = 세션 `active` — 진행 중 세션에 새 토큰 발급, functions 변경 0) → 새 자격증명 + `connectionSeq+1` → 화면이 `key={connectionSeq}`로 세션을 새로 마운트 → 첫 턴 = 맥락. `reconnecting`은 12초 연결 타임아웃 · 닫힘 실패 처리(`handleEnded` → `error`)에 `connecting`과 같이 들어간다.
+5. 전사 백업: `handleTranscriptTurn`마다 탭 sessionStorage(`session.liveTranscriptBackup`)에 저장 · `flushTranscript`가 가져가면 삭제 · 통화 중 새로고침 복원(`initialPhase === "live"`) 때 비어 있으면 되살린다(종료 때 함께 제출 — 서버는 append).
+6. 로그: `[live-bg] hidden · visible hiddenMs=… out=… in=… socket=… · mic=… → … · socket closed → …`(숫자 · 상태값만).
+
+### 99.4 한계(알려진 것)
+- 새 Live 세션은 서버 측 대화 기억이 없다 — 최근 12턴 · 1600자 텍스트 맥락만 안다. 호 전환(확인 창구) 뒤의 화자 상태는 기존 전환 상태 단언(`personaStateTurn`)이 다음 턴 경계에 다시 넣는다.
+- 재연결 실패 → 종전 강등 경로는 G351에 따라 오프닝 오디오를 재생한다(통화 중간 강등 공통 · 권고 R4).
+- 안드로이드에서 화면이 꺼진 동안 마이크가 0 버퍼인지 · 소켓이 언제 끊기는지는 **실기 미확인**(체크리스트 §4).
+- 전원 버튼 · 앱 전환 · 근접 센서는 웹이 막을 수 없다. 근접 센서는 웹 페이지에서 화면을 끄지 않는 것으로 **추정**(볼 터치 위험 — 권고 R2).
+- 전사 백업은 서버 `maskPII`와 같은 정규식 4종으로 **가린 뒤** 같은 탭 sessionStorage에 남는다(드리프트 가드 테스트). 정규식이 못 잡는 말(숫자를 글자로 풀어 말함 등)은 서버와 같은 한계다.
+- 닫힘 통보 없이 죽은 소켓은 감지하지 않는다(QA D2 추정 · 권고 R5). 재연결 한도는 통화 전체 2회다(초기화 없음 · 권고 R6). 화면 켜짐 유지 불가 안내는 통화 내내 1줄로 남는다.
+
+### 99.4-1 리뷰 · QA 반영
+| 지적 | 처리 |
+|---|---|
+| 리뷰 Major — 글 대화로 내려가도 Live 세션 · 마이크가 남는다 | 세션 마운트 조건에 `callMode === "realtime"` 추가(언마운트 cleanup이 마이크 · 리스너 정리) |
+| 리뷰 Major — 전사 원문이 sessionStorage에 | 서버와 같은 규칙으로 가린 뒤 저장 |
+| QA D1 · 리뷰 — 연결 전 · 재연결 중 닫힘이 12초 정체 | `startReconnect`가 상태 `active`가 아니면 `handleEnded`(connecting/reconnecting → `error` 즉시) · 예산 미사용 |
+| QA D3 — "계속하기 = 마이크 재개" 문서 불일치 | 문서 정정(탭 = 소리 재개 · 마이크는 자동 재확인) |
+| QA D4 — 다시 가려져도 마이크 재확인 예약 유지 | 가려질 때 취소 |
+| QA D5 — 제출 실패 시 백업이 이미 지워짐 | 제출 성공 뒤에만 삭제 |
+| QA D8 · 리뷰 — 짧게 가려도 안내 | 3초 이상 또는 재연결 대기일 때만(`shouldShowReturnNotice`) |
+| 리뷰 Minor — `stop()` 직후 발급 완료 시 새 세션 마운트 | `stop()`이 상태 미러를 즉시 `ended`로 |
+| 리뷰 Minor — 끊긴 소켓에서도 마이크 재확인 · 갈아 끼우기 실패 시 트랙 누수 · 복귀 직후 넛지 즉시 발사 | 재확인 생략 · 새 트랙 닫기 · 넛지 대기 시각을 복귀 시점으로 |
+| 리뷰 Minor — 재연결 뒤 `openingNotSpokenRef` 재세팅 | 무변경(강등 분기가 false로 되돌린다 · 값 동일) |
+
+### 99.5 검증
+| 항목 | 결과 |
+|---|---|
+| 신규 `backgroundCall.test.ts` 20 · `screenWakeLock.test.ts` 5 | 25 pass |
+| `npm test` | 948 pass / 0 fail (기준 923 + 25) |
+| `npm --prefix functions test` | 1606 pass / 0 fail (functions 변경 0) |
+| lint 2종 | 루트 0 error(기존 경고 1 — `scripts/live-turn-probe.mjs`) · functions 0 |
+| 실기 | 미검증 — 체크리스트 A~E |

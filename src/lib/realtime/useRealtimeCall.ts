@@ -18,11 +18,14 @@ import { toFallbackCredentials } from "./fallbackCredentials";
 import { LIVE_MIC_CONSTRAINTS, liveMicHandoff, requestMicrophone, stopStream } from "./micHandoff";
 import { markCallSetup, markCredentialsPrefetched, resetCallSetupMarks } from "./liveLatency";
 import { noteAccept, noteCredentialSource } from "./audioDiagnostics";
+import { SCREEN_OFF_COPY } from "./backgroundCall";
 
 export type RealtimeCallStatus =
   | "idle"
   | "connecting"
   | "active"
+  // §99 — 화면이 가려진 동안 끊긴 Live 세션을 새 자격증명으로 다시 잇는 중(화면 phase는 그대로 `live`).
+  | "reconnecting"
   | "ended"
   | "fallback"
   | "permission-denied"
@@ -46,6 +49,8 @@ export type RealtimeCallState = {
    * (sticky OR — false로 되돌리는 대입 0건, G278). 이 저장소에서 `isMock`을 읽는 유일한 기존
    * 지점(아래 `start()` 안)의 결과를 그대로 밖으로 노출한다 — 신규 read 0건. */
   isMock: boolean;
+  /** §99 — 다시 연결할 때마다 1씩 오른다. 화면이 Live 세션 컴포넌트의 `key`로 써서 새 자격증명으로 새로 마운트한다. */
+  connectionSeq: number;
 };
 
 export type RealtimeCallControls = {
@@ -56,6 +61,11 @@ export type RealtimeCallControls = {
   start: (sessionId: string) => Promise<void>;
   /** 통화를 끊는다(훈련 종료·한도 도달 시). */
   stop: () => void;
+  /**
+   * §99 — 화면이 가려진 동안 끊긴 Live 세션을 다시 잇는다(새 자격증명 발급 → 세션 재마운트). 실패하면 `error`(텍스트로 이어감 —
+   * 종전 강등 경로). 통화 중(`active`)일 때만 동작한다.
+   */
+  reconnect: (sessionId: string) => Promise<void>;
   /** RealtimeVoiceSession이 올려주는 콜백들. */
   handleActive: () => void;
   handleEnded: () => void;
@@ -99,6 +109,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // T158 — sticky OR. 한 번 true가 되면 false로 되돌리지 않는다(48.5.1 sticky 규칙과 동형).
   const [isMock, setIsMock] = useState(false);
+  const [connectionSeq, setConnectionSeq] = useState(0);
   // 언마운트 후 늦게 도착한 비동기 결과가 setState를 호출하지 않도록 가드한다.
   const mountedRef = useRef(true);
   // 수신(전화 울림) 중 미리 받아 둔 자격증명 슬롯 — start()가 "받기" 시점에 신선하면 그대로 쓰고, 같은 세션 요청이
@@ -138,7 +149,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
   // 강제로 error로 떨어뜨려 텍스트 폴백으로 강등한다. Node 실측상 정상 연결은 ~2초면 setupComplete가
   // 오므로 12초는 충분히 여유 있는 상한이다.
   useEffect(() => {
-    if (!credentials || status !== "connecting") return;
+    if (!credentials || (status !== "connecting" && status !== "reconnecting")) return;
     const timer = setTimeout(() => {
       if (mountedRef.current) {
         setStatus("error");
@@ -286,7 +297,33 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
 
   const stop = useCallback(() => {
     setStopSignal((n) => n + 1);
-    setStatus((prev) => (prev === "active" ? "ended" : prev));
+    // 리뷰 Minor — 다시 잇는 발급이 렌더 전에 끝나도 새 세션을 붙이지 않게 미러를 먼저 내린다(`reconnect`의 확인과 짝).
+    if (statusRef.current === "active" || statusRef.current === "reconnecting") statusRef.current = "ended";
+    // §99 — 다시 잇는 중에 끊어도 정상 종료다.
+    setStatus((prev) => (prev === "active" || prev === "reconnecting" ? "ended" : prev));
+  }, []);
+
+  const reconnect = useCallback(async (sessionId: string) => {
+    if (statusRef.current !== "active") return;
+    statusRef.current = "reconnecting"; // 같은 렌더 안 두 번째 호출을 막는다(effect 미러보다 먼저).
+    setStatus("reconnecting");
+    try {
+      // 프리페치 슬롯은 쓰지 않는다(이미 소모됐다) — 서버는 진행 중 세션에 새 토큰을 발급한다(`createRealtimeCall` 가드 = 세션 active).
+      const issued = await createRealtimeCall({ sessionId });
+      if (!mountedRef.current || statusRef.current !== "reconnecting") return;
+      if (issued.isMock || issued.provider !== "gemini" || !issued.geminiToken) {
+        setCredentials(toFallbackCredentials(issued));
+        setStatus("error");
+        setErrorMessage(SCREEN_OFF_COPY.reconnectFailed);
+        return;
+      }
+      setCredentials(issued);
+      setConnectionSeq((n) => n + 1);
+    } catch {
+      if (!mountedRef.current || statusRef.current !== "reconnecting") return;
+      setStatus("error");
+      setErrorMessage(SCREEN_OFF_COPY.reconnectFailed);
+    }
   }, []);
 
   const handleActive = useCallback(() => {
@@ -301,7 +338,7 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     // 이제 error로 떨어뜨려 텍스트 폴백으로 강등한다.
     if (statusRef.current === "active") {
       setStatus("ended");
-    } else if (statusRef.current === "connecting") {
+    } else if (statusRef.current === "connecting" || statusRef.current === "reconnecting") {
       setStatus("error");
       setErrorMessage("통화가 연결되지 못해 텍스트로 진행합니다.");
     }
@@ -329,9 +366,11 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     stopSignal,
     errorMessage,
     isMock,
+    connectionSeq,
     prefetch,
     start,
     stop,
+    reconnect,
     handleActive,
     handleEnded,
     handleError,
