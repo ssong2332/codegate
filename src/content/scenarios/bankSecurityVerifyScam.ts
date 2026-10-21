@@ -26,9 +26,9 @@ const deepvoiceLines: DeepvoiceLine[] = [
 
 export const bankSecurityVerifyScamScenario: ScenarioDoc = {
   title: "직접 확인해 보라는 은행 사칭",
-  fraudType: "금융기관 사칭(확인 유도형)",
-  estimatedDuration: "약 5~8분",
-  difficulty: "높음 — 상대가 먼저 확인을 권해서 의심이 풀리기 쉽습니다",
+  fraudType: "은행 직원 사칭(직접 확인을 권함)",
+  estimatedDuration: "약 3~5분",
+  difficulty: "상대가 먼저 확인해 보라고 해서 의심이 풀리기 쉽습니다",
   deepvoiceLines,
   voiceMode: "generic",
   callerLabel: "070-4133-2085",

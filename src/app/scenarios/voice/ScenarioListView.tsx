@@ -148,7 +148,8 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
               )}
             </span>
 
-            <span className="text-base text-ink-sub">{scenario.callerLabel}(으)로 전화가 옵니다</span>
+            {/* 2026-10-21 시나리오 목록 검증 — "(으)로" 조사가 "발신번호 표시제한(으)로"처럼 어색해 조사 없는 꼴로 바꿨다. */}
+            <span className="text-base text-ink-sub">전화 오는 번호: {scenario.callerLabel}</span>
 
             <span
               id={`scenario-${scenarioId}-meta`}
@@ -159,7 +160,8 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
                   배지로 단정 짓지 않고 서술 텍스트로 유지한다(임의 매핑 금지, messenger/page.tsx와
                   동일 판단).
                   T72/AC-067 — 라벨을 "난이도"에서 "이 시나리오의 성향"으로 바꾼다. 삭제하지 않고
-                  유지하되(AC-002), "난이도"라는 단어는 사용자가 고르는 3단계(UX-029)에만 쓴다. */}
+                  유지하되(AC-002), "난이도"라는 단어는 사용자가 고르는 3단계(UX-029)에만 쓴다.
+                  소요 시간 값은 시나리오별 실측(docs/research/scenario-catalog-review-2026-10.md §5)이다. */}
               <span className="flex flex-wrap items-center gap-2">
                 <Badge variant="neutral">{scenario.estimatedDuration}</Badge>
               </span>

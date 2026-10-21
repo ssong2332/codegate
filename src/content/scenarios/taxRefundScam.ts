@@ -13,10 +13,10 @@ const deepvoiceLines: DeepvoiceLine[] = [
 ];
 
 export const taxRefundScamScenario: ScenarioDoc = {
-  title: "국세청 환급금 빙자",
-  fraudType: "환급금 사칭(국세청/공단)",
-  estimatedDuration: "약 5~8분",
-  difficulty: "중간 — 이익 유혹과 권위 소구가 결합됩니다",
+  title: "국세청 환급금 사칭",
+  fraudType: "국세청·공단 환급 담당자 사칭",
+  estimatedDuration: "약 2~5분",
+  difficulty: "돌려받을 돈이 있다는 말과 공공기관 이름으로 믿게 만드는 편입니다",
   deepvoiceLines,
   voiceMode: "generic",
   callerLabel: "02-3187-9041",

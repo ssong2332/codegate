@@ -550,7 +550,7 @@ function CredentialFormMockup({
               }
               placeholder={field.placeholder}
               className="min-h-[52px] rounded-[10px] border px-3.5 text-[17px] font-normal outline-none focus:border-2"
-              style={{ borderColor: page.inputBorder, color: page.inputText }}
+              style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.inputText }}
             />
           </label>
         ))}

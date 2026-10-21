@@ -12,9 +12,9 @@ export const INSTITUTIONAL_IMPERSONATION_SCENARIO_ID = "institutional-impersonat
 // 정보는 절대 포함하지 않는다(AC-005, PRD Constraints "법적/윤리").
 export const institutionalImpersonationScenario: ScenarioDoc = {
   title: "기관 사칭(검찰·금융감독원)",
-  fraudType: "수사기관/금융기관 사칭",
-  estimatedDuration: "약 5~8분",
-  difficulty: "중간 — 권위·공포 소구가 강한 편입니다",
+  fraudType: "검찰·금융감독원 직원 사칭",
+  estimatedDuration: "약 3~5분",
+  difficulty: "권위와 처벌 위협으로 겁을 주는 편입니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "안녕하십니까, 수사관입니다. 본인 명의 계좌가 범죄에 연루되어 확인이 필요합니다." },
     { lineId: "line-2", text: "지금 이 사안은 수사 기밀이라 유선으로만 안내됩니다. 침착하게 절차에 협조해 주십시오." },

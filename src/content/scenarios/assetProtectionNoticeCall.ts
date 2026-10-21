@@ -9,9 +9,9 @@ export const ASSET_PROTECTION_NOTICE_CALL_SCENARIO_ID = "asset-protection-notice
 
 export const assetProtectionNoticeCallScenario: ScenarioDoc = {
   title: "금융감독원 자산 보호 안내",
-  fraudType: "금융감독기관 사칭(자산 보호 명목)",
-  estimatedDuration: "약 5~8분",
-  difficulty: "높음 — 도와주겠다는 말로 신뢰를 얻어 의심이 풀리기 쉽습니다",
+  fraudType: "금융감독원 직원 사칭(자산 보호 안내)",
+  estimatedDuration: "약 3~5분",
+  difficulty: "도와주겠다는 말로 믿음을 얻어 의심이 풀리기 쉽습니다",
   deepvoiceLines: [{ lineId: "line-1", text: "안녕하십니까, 금융감독원입니다. 고객님 명의 계좌 관련해서 안내드릴 사항이 있어 연락드렸습니다." }],
   voiceMode: "generic",
   callerLabel: "070-8842-1907",
