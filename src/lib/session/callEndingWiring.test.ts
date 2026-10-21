@@ -111,9 +111,9 @@ test("[§79.9 E1~E7] 공통 종료 함수 순서 — 래치 → 오버레이 →
     "audioRef.current?.pause();",
     "realtime.stop();",
     'setCallEndedBy("scammer");',
-    "await flushTranscript();",
+    "const flushDone = flushTranscript();",
     "if (sessionId) setPendingEndReason(sessionId, ending.reason);",
-    "if (noticeWait) await noticeWait;",
+    "if (noticeWait) await Promise.all([flushDone, noticeWait]);",
     'router.push("/session/end");',
   ];
   let last = -1;
@@ -257,7 +257,7 @@ test("[C5 리뷰 m2 · m3] endCall — 타이머는 endTimeout 하나(언마운�
   assert.equal((body.match(/router\.push\(/g) ?? []).length, 1);
   assert.match(body, /\} finally \{\s*if \(endCallMountedRef\.current\) router\.push\("\/session\/end"\);\s*\}/);
   const tryAt = body.indexOf("try {");
-  assert.ok(tryAt >= 0 && tryAt < body.indexOf("await flushTranscript();"), "flush가 try 밖이다");
+  assert.ok(tryAt >= 0 && tryAt < body.indexOf("const flushDone = flushTranscript();"), "flush가 try 밖이다");
   // E3 대기 뒤 · E4 앞의 마운트 가드(대기 중 화면이 사라지면 아무것도 안 한다).
   const guardAt = body.indexOf("if (!endCallMountedRef.current) return;");
   assert.ok(guardAt > body.indexOf("await waitForEndStep(") && guardAt < body.indexOf("realtime.stop();"));

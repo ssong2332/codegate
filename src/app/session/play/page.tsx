@@ -44,6 +44,7 @@ import {
   type CallEndedBy,
   type CallEndingState,
 } from "@/lib/session/callEnding";
+import { handOffTranscriptFlush } from "@/lib/session/transcriptFlushHandoff";
 import {
   deliverInCallSms,
   deliverVerifyOffer,
@@ -410,6 +411,9 @@ export default function SessionCallPage() {
   const [callEndedBy, setCallEndedBy] = useState<CallEndedBy | null>(null);
   // 래치가 걸렸는가의 state 사본(효과 조건용 — 폴백 자동 청취 · 전송 차단). 값의 원천은 `callEndingRef`.
   const [endLatched, setEndLatched] = useState(false);
+  // 2026-10-21(실기 신고 "종료 버튼 반응이 느리다") — 참가자 · 한도 종료의 즉시 표시. 정지 직후 켜서 경과 시간 자리를
+  // "통화 종료"로 바꾼다(실제 통화 앱처럼 누르는 순간 끝난 것이 보인다). 사기범 끊기는 `remoteHangup`이 따로 그린다.
+  const [localHangup, setLocalHangup] = useState(false);
   // 진행 중인 종료 대기(E3 마지막 대사 · E7 끊김 표시)를 끊는 함수. 참가자 탭이 부른다(AC-006 즉시성 — D-114).
   const skipEndWaitRef = useRef<(() => void) | null>(null);
   // 참가자 탭이 끊기 대기를 끊었는가 — 그러면 끊김 표시 없이 바로 이동한다(UX-014 v1.35 (8) 2행).
@@ -433,6 +437,10 @@ export default function SessionCallPage() {
       skipEndWaitRef.current?.();
     };
   }, []);
+  // 2026-10-21 — 종료 화면 코드를 통화 중에 미리 받아 둔다(종료 탭 → 이동 사이의 청크 · 페이로드 왕복 제거).
+  useEffect(() => {
+    router.prefetch("/session/end");
+  }, [router]);
   /** 공통 종료 함수 전용 타이머 — 언마운트 시 일괄 정리된다. */
   const endTimeout = (fn: () => void, ms: number) => {
     const id = window.setTimeout(() => {
@@ -1281,15 +1289,21 @@ export default function SessionCallPage() {
       noticeWait = waitForEndStep((finish) => {
         endTimeout(finish, HANGUP_NOTICE_MS);
       });
+    } else {
+      // 2026-10-21 — 즉시 피드백(위 `localHangup` 주석). 오디오 · 마이크는 바로 위 E4에서 이미 멈췄다.
+      setLocalHangup(true);
     }
     // ⭐ C5 리뷰 m3 — E5~E7을 try/finally로 감싼다: 전사 제출이 던져도 종료 화면으로는 간다(AC-006 "종료는 항상 성공").
     try {
-      // E5 — 실시간 전사를 먼저 제출한다(/session/end가 endSession → 리포트 생성을 트리거하므로 그 전에 messages가 채워져야 한다).
-      await flushTranscript();
+      // E5 — 실시간 전사 제출을 **시작**한다(턴은 이 호출 안에서 동기로 떼어 간다). /session/end가 endSession → 리포트
+      // 생성을 트리거하므로 그 전에 messages가 채워져야 한다 — 2026-10-21부터 이 화면은 왕복을 기다리지 않고 종료 화면에
+      // 넘기며, 종료 화면이 endSession 전에 기다린다(`transcriptFlushHandoff.ts`). 예전엔 왕복 동안 화면이 그대로였다.
+      const flushDone = flushTranscript();
+      if (sessionId) handOffTranscriptFlush(sessionId, flushDone);
       // E6(사유) — 종료 화면이 읽는 1회성 힌트(C4 · 허용목록 밖이면 종료 화면이 `user_ended`). ⛔ 이 화면의 힌트 기록은 이 1곳뿐이다.
       if (sessionId) setPendingEndReason(sessionId, ending.reason);
-      // E7
-      if (noticeWait) await noticeWait;
+      // E7 — 끊기 표시만 max(표시 시간, 기록 완료) 뒤 이동한다(UX (11) ②). 상시 · 한도는 즉시.
+      if (noticeWait) await Promise.all([flushDone, noticeWait]);
     } finally {
       // m2 — 언마운트 뒤 이동 0회.
       if (endCallMountedRef.current) router.push("/session/end");
@@ -1310,7 +1324,9 @@ export default function SessionCallPage() {
       await endCall("user");
       return;
     }
-    await flushTranscript();
+    // 2026-10-21 — 상시 종료와 같이 제출은 종료 화면에 넘기고 곧바로 이동한다(`transcriptFlushHandoff.ts`).
+    const flushDone = flushTranscript();
+    if (sessionId) handOffTranscriptFlush(sessionId, flushDone);
     router.push("/session/end");
   };
 
@@ -2406,7 +2422,8 @@ export default function SessionCallPage() {
           {/* ③ UX-014 v1.33 (3) 정본 — ⛔ 이 표 밖의 문구를 두지 않는다. incoming = 비움(숨김 글) · connecting =
               "연결 중…" · opening/live = 경과 시간(`aria-live` 없음 — 숫자를 매초 읽지 않는다, 접근 이름으로 대신) ·
               ended = "통화 종료". 옛 문구("휴대전화 수신 중…"·"연결하는 중…"·"통화 중")는 Superseded(D-86). */}
-          {phase === "opening" || phase === "live" ? (
+          {/* 2026-10-21 — 참가자 · 한도 종료는 누른 순간 경과 시간 자리가 "통화 종료"로 바뀐다(`localHangup` — 아래 마지막 분기). */}
+          {(phase === "opening" || phase === "live") && !localHangup ? (
             <p
               role="timer"
               aria-label={spokenCallElapsed(elapsedSec)}
@@ -2419,7 +2436,7 @@ export default function SessionCallPage() {
             <p role="status" className="mt-1.5 min-h-[24px] text-[17px]" style={{ color: callTokens.textSecondary }}>
               {phase === "incoming" ? (
                 <span className="sr-only">전화가 오고 있습니다</span>
-              ) : phase === "connecting" ? (
+              ) : phase === "connecting" && !localHangup ? (
                 "연결 중…"
               ) : remoteHangup ? (
                 // T192 C5(UX-014 v1.35 (1) 정본 · D-110) — 사기범 종료일 때만 이 문구로 대체된다(기존 `role="status"` 1회 낭독).
@@ -2964,7 +2981,12 @@ export default function SessionCallPage() {
               onClick={() => void handleEndTraining()}
               aria-label="통화 종료 — 훈련 종료"
               className="flex h-[76px] w-[76px] items-center justify-center rounded-full shadow-lg transition active:scale-95"
-              style={{ backgroundColor: callTokens.end, color: callTokens.roundIcon }}
+              // 2026-10-21 — 누른 뒤에는 눌린 채로 옅게 남는다(이동 전 한 프레임이라도 "먹었다"가 보이게).
+              style={{
+                backgroundColor: callTokens.end,
+                color: callTokens.roundIcon,
+                ...(localHangup ? { opacity: 0.6, transform: "scale(0.95)" } : null),
+              }}
             >
               <PhoneIcon name="end-call" size={32} />
             </button>

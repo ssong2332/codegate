@@ -20,6 +20,7 @@ import type { EndSessionReason } from "@/lib/api/types";
 import { clearPendingEndReason, clearPendingSession, getPendingSessionId, peekPendingEndReason } from "@/lib/recording";
 import { Button, LoadingStatus } from "@/components/ui";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
+import { awaitTranscriptFlush } from "@/lib/session/transcriptFlushHandoff";
 import { POST_SESSION_FACT_DISCLOSURE } from "@/lib/sessionboundary/postSessionCopy";
 
 type PageState = "no-session" | "ending" | "ended" | "error";
@@ -83,6 +84,10 @@ export default function SessionEndPage() {
     let cancelled = false;
     (async () => {
       try {
+        // 2026-10-21 — 통화 화면은 전사 제출을 시작만 하고 곧바로 이 화면으로 온다. 리포트가 실제 대화를 분석하도록
+        // endSession 전에 그 제출을 기다린다(§79.9 E5 순서 유지 · 같은 탭 SPA 이동일 때만 — `transcriptFlushHandoff.ts`).
+        // 고지 문구는 이 기다림과 무관하게 이미 그려져 있다(UX-007 Failure 규칙).
+        await awaitTranscriptFlush(sessionId);
         await requestEndSession(sessionId, endReason);
         if (cancelled) return;
         const challengeContext = await fetchChallengeContext(sessionId);
