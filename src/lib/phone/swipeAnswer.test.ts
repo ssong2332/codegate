@@ -69,3 +69,40 @@ test("[G632] 기기 테마 — 라이트 일치일 때만 light, 모르면 dark(
   assert.equal(themeFromMatch(false), "dark");
   assert.equal(themeFromMatch(null), "dark");
 });
+
+// 2026-10-21 실측 — 밀기로 받은 뒤 브라우저의 click이 새로 그려진 음소거 버튼에 떨어졌다(받기 버튼은 이미 사라짐).
+test("[실기 신고 2026-10-21] 받기 · 거절 원 — 밀기 판정 뒤 click 1회를 문서 단위로 삼킨다(pointerup 캡처 단계) · 시한 해제", () => {
+  const page = readFileSync("src/app/session/play/page.tsx", "utf8");
+  for (const label of ['aria-label="전화 받기"', 'aria-label="전화 거절 — 훈련 종료"']) {
+    const start = page.indexOf(label);
+    assert.ok(start > 0, `${label} 버튼을 못 찾았다`);
+    const button = page.slice(page.lastIndexOf("<button", start), page.indexOf("</button>", start));
+    assert.match(button, /onPointerUpCapture=\{\(\) => swallowClickAfterSwipe\(swipe(Answer|Decline)Ref\.current\)\}/, label);
+  }
+  const helper = page.slice(page.indexOf("const swallowClickAfterSwipe"), page.indexOf("const endRingDrag"));
+  assert.match(helper, /controller\.isArmed\(\)/, "상태 기계와 같은 판정(이동 중 48px)에만 건다(누르기 click은 그대로)");
+  assert.match(helper, /controller\.click\(\(\) => \{\}\)/, "남은 무시 플래그를 비운다");
+  assert.match(helper, /capture: true, once: true/);
+  assert.match(
+    helper,
+    /setTimeout\(\(\) => \{\s*document\.removeEventListener\("click", block, \{ capture: true \}\);[\s\S]*?\}, 600\)/,
+    "터치 기기에서 다음 진짜 탭을 먹지 않게 시한 해제",
+  );
+});
+
+test("[리뷰 Major 2] isArmed — 이동 중 48px을 넘었다가 되돌아와도 판정은 유지(놓기 위치가 아니라 상태 기계 판정)", () => {
+  const c = createSwipeAnswer();
+  c.down(100, 400);
+  assert.equal(c.isArmed(), false);
+  c.move(160, 400); // 60px
+  c.move(110, 400); // 10px 지점으로 복귀
+  assert.equal(c.isArmed(), true);
+  const calls: string[] = [];
+  c.up(() => calls.push("up"));
+  assert.deepEqual(calls, ["up"]);
+  assert.equal(c.isArmed(), false, "놓은 뒤엔 판정이 풀린다");
+  // 문서 단위로 click을 삼킨 경우 화면이 빈 콜백으로 플래그를 비운다 → 다음 진짜 탭은 받는다.
+  c.click(() => calls.push("flag-drain"));
+  c.click(() => calls.push("next-tap"));
+  assert.deepEqual(calls, ["up", "next-tap"]);
+});

@@ -75,7 +75,7 @@ import {
 } from "@/lib/phone/deviceSkin";
 import { bannerTokensFor, callTokensFor, ringBackground } from "@/lib/phone/skinTokens";
 import { useDeviceTheme } from "@/lib/phone/deviceTheme";
-import { createSwipeAnswer } from "@/lib/phone/swipeAnswer";
+import { createSwipeAnswer, type SwipeAnswerController } from "@/lib/phone/swipeAnswer";
 import {
   BANNER_VISIBLE_MS,
   ackOnOverlayClose,
@@ -212,6 +212,37 @@ const VERIFY_DIALING_MS = 2500;
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+// 2026-10-21(실기 신고 — 두 스킨 통화 화면이 같아 보임) — 밀기 표시 상한(근사). iOS형 슬라이더 = 트랙(최대 340px · 안쪽
+// 여백 4px)에서 받기 원(76px)이 375px 화면 기준 끝까지 가는 거리. One UI형 = 원이 제자리에서 벗어나는 최대 거리.
+const IOS_SLIDE_MAX_PX = 243;
+const ONE_UI_RING_DRAG_MAX_PX = 56;
+
+// 키패드 숫자 아래 영문자(표준 전화 키패드 배열 — 특정 제조사 고유 디자인 아님). 장식이라 읽지 않는다.
+const KEYPAD_LETTERS: Record<string, string> = {
+  "2": "ABC",
+  "3": "DEF",
+  "4": "GHI",
+  "5": "JKL",
+  "6": "MNO",
+  "7": "PQRS",
+  "8": "TUV",
+  "9": "WXYZ",
+  "0": "+",
+};
+
+/** One UI형 수신 벨 — 원 바깥쪽 밀 방향 힌트(자체 도형 · 장식). */
+function SwipeHintChevrons({ direction, color }: { direction: "left" | "right"; color: string }) {
+  return (
+    <svg aria-hidden="true" width="18" height="16" viewBox="0 0 18 16" fill="none" stroke={color} strokeWidth="2">
+      {direction === "right" ? (
+        <path d="M3 3l5 5-5 5M10 3l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
+      ) : (
+        <path d="M15 3l-5 5 5 5M8 3L3 8l5 5" strokeLinecap="round" strokeLinejoin="round" />
+      )}
+    </svg>
+  );
+}
+
 // T190-3(§74.6 (3)) — 경과 시간 표기는 `@/lib/phone/callClock`(`mm:ss` · 1시간 이상 `h:mm:ss`)로 옮겼다.
 // 예전 지역 함수는 60분을 넘어도 `m:ss`였다.
 
@@ -295,6 +326,11 @@ export default function SessionCallPage() {
   const deviceTheme = useDeviceTheme();
   // 독립 QA Major — move는 기록만, 받기는 pointerup(활성화 이벤트) 안에서 동기로 · 뒤따르는 click 1회 무시(`swipeAnswer.ts`).
   const swipeAnswerRef = useRef(createSwipeAnswer());
+  // 2026-10-21(실기 신고 — 두 스킨 화면이 같아 보임) — 거절도 같은 상태 기계로 밀기·누르기 둘 다(One UI형 배치).
+  const swipeDeclineRef = useRef(createSwipeAnswer());
+  // 밀기 중 원(받기 · 거절)이 손가락을 따라오는 표시 전용 오프셋. 받기 판정은 위 상태 기계만 한다(표시 ≠ 판정).
+  const ringDragOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const [ringDrag, setRingDrag] = useState<{ target: "accept" | "decline"; dx: number; dy: number } | null>(null);
   // T190-3(§74.3 표 S · UX D-98 · AC-093 (c)) — 스피커 버튼 = 통화 모드(0.6) ↔ 스피커 모드(1.0) **음량 전환**.
   // 웹은 Android에서 수화부↔스피커 실제 출력 전환을 할 수 없다(§74.2 ①-A) — iOS도 실기 프로브 전까지 같다.
   const [audioRoute, setAudioRoute] = useState<AudioRoute>("call");
@@ -2050,6 +2086,8 @@ export default function SessionCallPage() {
     "--call-wave": callTokens.waveBar,
   } as React.CSSProperties;
   const bannerTokens = bannerTokensFor(deviceSkin.skin);
+  // 2026-10-21(실기 신고) — 통화 중 버튼 모양: iOS형 = 76px 원(반투명) · One UI형 = 판 위 64px 둥근 사각(눌림일 때만 채움).
+  const gridButtonShape = callTokens.layout === "ios" ? "h-[76px] w-[76px] rounded-full" : "h-16 w-16 rounded-[20px]";
   // D-103 — 음량을 바꿀 수 없는 경로(폴백 `<audio>` + 대입 미반영)에서만 스피커 칸이 비활성이다.
   const speakerDisabled = callMode === "fallback" && fallbackVolumeLocked;
   // ⛔ §49(V5, 2026-08-02 정정) — 상시 확인 컨트롤(과거 `showVerifyTrigger`가 표시 조건, 과거
@@ -2072,6 +2110,115 @@ export default function SessionCallPage() {
         : sending
           ? "보내는 중"
           : "말씀하세요";
+
+  // 2026-10-21(실기 신고) — 밀기 중 원이 손가락을 따라오는 표시. iOS형 = 받기 원이 트랙 안에서 오른쪽으로만 ·
+  // One UI형 = 두 원이 어느 방향이든 최대 56px. 판정(48px · pointerup에서 받기)은 `swipeAnswer.ts` 상태 기계만 한다.
+  const followRingDrag = (target: "accept" | "decline", x: number, y: number) => {
+    const origin = ringDragOriginRef.current;
+    if (!origin) return;
+    setRingDrag({ target, dx: x - origin.x, dy: y - origin.y });
+  };
+  // ⭐ 2026-10-21 실측(로컬 375×812 · 마우스 밀기) — 밀기로 받으면 pointerup 안에서 화면이 통화 중으로 바뀌어 받기 버튼이
+  // 사라지고, 브라우저가 뒤이어 보내는 click이 **새로 그려진 음소거 버튼**에 떨어졌다(로그: pointerdown·pointerup = 전화 받기 →
+  // click = 음소거). 상태 기계의 "다음 click 무시"는 받기 버튼에만 걸려 있어 못 막는다 ⇒ 밀기로 판정된 놓기 직후 click 1회를
+  // 문서 단위로 삼킨다. 터치 기기는 밀기 뒤 click을 보내지 않으므로 600ms 뒤 스스로 풀린다(다음 진짜 탭을 먹지 않게).
+  // 판정은 상태 기계의 것(`isArmed` — 이동 중 한 번이라도 48px)을 그대로 쓴다(리뷰 Major 2 — 놓은 위치만 보면 어긋난다).
+  // 삼킨 click · 시한 만료 어느 쪽이든 상태 기계의 "다음 click 무시" 플래그를 비운다(리뷰 Major 1 — 낡은 플래그가 다음 받기 탭을 먹지 않게).
+  const swallowClickAfterSwipe = (controller: SwipeAnswerController) => {
+    if (!controller.isArmed()) return;
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer); // click이 이벤트 루프 뒤에 와서 아래 const는 이미 초기화돼 있다.
+      controller.click(() => {}); // 밀기 뒤 남은 무시 플래그만 소비한다(받기 · 거절을 다시 부르지 않는다).
+      endRingDrag();
+    };
+    const block = (event: MouseEvent) => {
+      event.stopPropagation();
+      event.preventDefault();
+      settle();
+    };
+    document.addEventListener("click", block, { capture: true, once: true });
+    const timer = window.setTimeout(() => {
+      document.removeEventListener("click", block, { capture: true });
+      settle();
+    }, 600);
+  };
+  const endRingDrag = () => {
+    ringDragOriginRef.current = null;
+    setRingDrag(null);
+  };
+  const ringDragStyle = (target: "accept" | "decline"): React.CSSProperties | undefined => {
+    if (!ringDrag || ringDrag.target !== target) return undefined;
+    if (callTokens.layout === "ios") {
+      if (target !== "accept") return undefined;
+      // 좁은 화면(예: 320px)에선 트랙이 짧다 — 트랙 폭(최대 340 · 좌우 여백 48) − 안쪽 여백 8 − 원 76(리뷰 Minor 5).
+      const trackMax = typeof window === "undefined" ? IOS_SLIDE_MAX_PX : Math.min(340, window.innerWidth - 48) - 8 - 76;
+      const dx = Math.min(Math.max(ringDrag.dx, 0), Math.max(0, Math.min(IOS_SLIDE_MAX_PX, trackMax)));
+      return { transform: `translateX(${dx}px)`, transition: "none" };
+    }
+    const length = Math.hypot(ringDrag.dx, ringDrag.dy);
+    const k = length > ONE_UI_RING_DRAG_MAX_PX ? ONE_UI_RING_DRAG_MAX_PX / length : 1;
+    return { transform: `translate(${ringDrag.dx * k}px, ${ringDrag.dy * k}px)`, transition: "none" };
+  };
+  // 받기 · 거절 원 — 두 스킨이 **같은 버튼 하나씩**을 배치만 달리해 쓴다(배선 1벌 · G632가 받기 배선을 고정한다).
+  const declineButton = (
+    <button
+      type="button"
+      onClick={() => swipeDeclineRef.current.click(handleDecline)}
+      aria-label="전화 거절 — 훈련 종료"
+      onPointerDown={(event) => {
+        swipeDeclineRef.current.down(event.clientX, event.clientY);
+        ringDragOriginRef.current = { x: event.clientX, y: event.clientY };
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        swipeDeclineRef.current.move(event.clientX, event.clientY);
+        if (callTokens.layout === "oneui") followRingDrag("decline", event.clientX, event.clientY);
+      }}
+      onPointerUp={() => swipeDeclineRef.current.up(handleDecline)}
+      onPointerUpCapture={() => swallowClickAfterSwipe(swipeDeclineRef.current)}
+      onPointerCancel={() => swipeDeclineRef.current.cancel()}
+      onLostPointerCapture={endRingDrag}
+      className={`flex touch-none items-center justify-center rounded-full shadow-lg transition active:scale-95 ${
+        callTokens.layout === "ios" ? "h-[68px] w-[68px]" : "h-[76px] w-[76px]"
+      }`}
+      style={{ backgroundColor: callTokens.end, color: callTokens.roundIcon, ...ringDragStyle("decline") }}
+    >
+      <PhoneIcon name="end-call" size={callTokens.layout === "ios" ? 30 : 32} />
+    </button>
+  );
+  const acceptButton = (
+    <button
+      type="button"
+      // 누르기 · 키보드(Enter/Space → click)는 종전대로 click에서 받는다. 바로 앞에서 밀기로 받았으면 그 click 1회만 무시.
+      onClick={() => swipeAnswerRef.current.click(handleAnswer)}
+      aria-label="전화 받기"
+      // §89.5 ⓑ(UX D-132 (5) ⓑ) — **밀기**도 받는다. 밀기 = 누른 채 48px 이상 이동.
+      // ⭐ 독립 QA Major — pointermove는 사용자 활성화가 아니다. move에서는 판정만 하고, 받기(= 동기 오디오 prime ·
+      // resume)는 활성화 이벤트인 pointerup 안에서 한다. `touch-none` — 밀기 중 스크롤이 가져가지 않게.
+      onPointerDown={(event) => {
+        swipeAnswerRef.current.down(event.clientX, event.clientY);
+        ringDragOriginRef.current = { x: event.clientX, y: event.clientY };
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        swipeAnswerRef.current.move(event.clientX, event.clientY);
+        followRingDrag("accept", event.clientX, event.clientY);
+      }}
+      onPointerUp={() => swipeAnswerRef.current.up(handleAnswer)}
+      onPointerUpCapture={() => swallowClickAfterSwipe(swipeAnswerRef.current)}
+      onPointerCancel={() => swipeAnswerRef.current.cancel()}
+      onLostPointerCapture={endRingDrag}
+      className={`relative flex h-[76px] w-[76px] shrink-0 touch-none items-center justify-center rounded-full shadow-lg transition active:scale-95 ${
+        callTokens.ringStyle === "accept-pulse" ? "call-accept-pulse" : ""
+      }`}
+      style={{ backgroundColor: callTokens.accept, color: callTokens.roundIcon, ...ringDragStyle("accept") }}
+    >
+      <PhoneIcon name="accept-call" size={32} />
+    </button>
+  );
 
   return (
     // T190-3(UX-014 v1.33 (8) Responsive · W-D) — 최대폭 430px 가운데 정렬, 바깥은 `call.bg`보다 한 단계 어두운 단색.
@@ -2374,52 +2521,59 @@ export default function SessionCallPage() {
           §89.5 ⓑ(UX D-132 (5) ⓑ) — 누르기는 그대로 두고 **밀기도** 받는다(어르신 · 키보드 도달 유지). iOS형 울림 = 받기 버튼 맥동. */}
       {phase === "incoming" ? (
         <div className="flex flex-col pb-[calc(env(safe-area-inset-bottom)+40px)]">
-        <div className="flex justify-between px-14">
-          <div className="flex flex-col items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDecline}
-              aria-label="전화 거절 — 훈련 종료"
-              className="flex h-[76px] w-[76px] items-center justify-center rounded-full shadow-lg transition active:scale-95"
-              style={{ backgroundColor: callTokens.end, color: callTokens.roundIcon }}
-            >
-              <PhoneIcon name="end-call" size={32} />
-            </button>
-            <span className="text-[15px]" style={{ color: callTokens.textSecondary }}>
-              거절
-            </span>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <button
-              type="button"
-              // 누르기 · 키보드(Enter/Space → click)는 종전대로 click에서 받는다. 바로 앞에서 밀기로 받았으면 그 click 1회만 무시.
-              onClick={() => swipeAnswerRef.current.click(handleAnswer)}
-              aria-label="전화 받기"
-              // §89.5 ⓑ(UX D-132 (5) ⓑ) — **밀기**도 받는다. 밀기 = 누른 채 48px 이상 이동.
-              // ⭐ 독립 QA Major — pointermove는 사용자 활성화가 아니다. move에서는 판정만 하고, 받기(= 동기 오디오 prime ·
-              // resume)는 활성화 이벤트인 pointerup 안에서 한다. `touch-none` — 밀기 중 스크롤이 가져가지 않게.
-              onPointerDown={(event) => {
-                swipeAnswerRef.current.down(event.clientX, event.clientY);
-                event.currentTarget.setPointerCapture?.(event.pointerId);
-              }}
-              onPointerMove={(event) => swipeAnswerRef.current.move(event.clientX, event.clientY)}
-              onPointerUp={() => swipeAnswerRef.current.up(handleAnswer)}
-              onPointerCancel={() => swipeAnswerRef.current.cancel()}
-              className={`relative flex h-[76px] w-[76px] touch-none items-center justify-center rounded-full shadow-lg transition active:scale-95 ${
-                callTokens.ringStyle === "accept-pulse" ? "call-accept-pulse" : ""
-              }`}
-              style={{ backgroundColor: callTokens.accept, color: callTokens.roundIcon }}
-            >
-              <PhoneIcon name="accept-call" size={32} />
-            </button>
-            <span className="text-[15px]" style={{ color: callTokens.textSecondary }}>
-              받기
-            </span>
-          </div>
-        </div>
-        <p aria-hidden="true" className="mt-4 text-center text-[14px]" style={{ color: callTokens.textSecondary }}>
-          밀거나 눌러서 받기
-        </p>
+          {callTokens.layout === "ios" ? (
+            // 2026-10-21(실기 신고) iOS형 — 위 거절 원 하나 · 아래 **밀어서 받기 슬라이더**(받기 원이 트랙 왼쪽 끝에서 오른쪽으로).
+            // 대조표 수신 벨 · iOS 행(잠금 상태 "밀어서 응답" 슬라이더). 받기 원을 눌러도 받는다(어르신 접근성 · §89.5 ⓑ).
+            <div className="flex flex-col items-center gap-9 px-6">
+              <div className="flex flex-col items-center gap-2">
+                {declineButton}
+                <span className="text-[15px]" style={{ color: callTokens.textSecondary }}>
+                  거절
+                </span>
+              </div>
+              <div
+                className="relative flex h-[84px] w-full max-w-[340px] items-center rounded-full p-1"
+                style={{ backgroundColor: callTokens.chipBg }}
+              >
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center pl-16 text-[19px]"
+                  style={{ color: callTokens.textPrimary }}
+                >
+                  밀어서 받기
+                </span>
+                {acceptButton}
+              </div>
+            </div>
+          ) : (
+            // 2026-10-21(실기 신고) One UI형 · 기본 — **왼쪽 초록 받기 · 오른쪽 빨강 거절** 원(대조표 수신 벨 · One UI 행).
+            // 두 원 모두 밀어서(48px) 또는 눌러서 동작한다. 원 바깥쪽 화살표 = 밀 방향 힌트(장식).
+            <>
+              <div className="flex justify-between px-12">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    {acceptButton}
+                    <SwipeHintChevrons direction="right" color={callTokens.textSecondary} />
+                  </div>
+                  <span className="text-[15px]" style={{ color: callTokens.textSecondary }}>
+                    받기
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <SwipeHintChevrons direction="left" color={callTokens.textSecondary} />
+                    {declineButton}
+                  </div>
+                  <span className="text-[15px]" style={{ color: callTokens.textSecondary }}>
+                    거절
+                  </span>
+                </div>
+              </div>
+              <p aria-hidden="true" className="mt-4 text-center text-[14px]" style={{ color: callTokens.textSecondary }}>
+                밀거나 눌러서 받기
+              </p>
+            </>
+          )}
         </div>
       ) : phase === "ended" && !remoteHangup ? (
         <div className="flex flex-col gap-3 p-6 text-center">
@@ -2462,17 +2616,36 @@ export default function SessionCallPage() {
                 >
                   {dialpadValue || <span className="text-base tracking-normal text-[var(--call-fg-sub)]">번호를 누르세요</span>}
                 </div>
-                <div className="grid grid-cols-[repeat(3,64px)] justify-center gap-x-6 gap-y-3">
+                {/* 2026-10-21(실기 신고) — iOS형 = 큰 원 키(76px) · One UI형 = 원 없는 숫자(눌림만 옅은 판) · 둘 다 숫자 아래
+                    영문자(대조표 키패드 행). 키 이름(`${key} 누르기`)은 무변경 — 영문자는 장식이라 읽지 않는다. */}
+                <div
+                  className={`grid justify-center ${
+                    callTokens.layout === "ios"
+                      ? "grid-cols-[repeat(3,76px)] gap-x-5 gap-y-3"
+                      : "grid-cols-[repeat(3,88px)] gap-x-2 gap-y-1"
+                  }`}
+                >
                   {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((key) => (
                     <button
                       key={key}
                       type="button"
                       onClick={() => setDialpadValue((v) => (v.length >= 32 ? v : v + key))}
                       aria-label={`${key} 누르기`}
-                      className="flex h-16 w-16 items-center justify-center rounded-full text-[28px] text-[var(--call-fg)] transition active:scale-95"
+                      className={`flex flex-col items-center justify-center text-[var(--call-fg)] transition active:scale-95 ${
+                        callTokens.layout === "ios"
+                          ? "h-[76px] w-[76px] rounded-full text-[32px]"
+                          : "h-16 w-[88px] rounded-2xl text-[30px] active:bg-[var(--call-chip)]"
+                      }`}
                       style={{ backgroundColor: callTokens.keypadKeyBg }}
                     >
-                      {key}
+                      <span className="leading-none">{key}</span>
+                      <span
+                        aria-hidden="true"
+                        className="mt-0.5 min-h-[13px] text-[11px] font-semibold leading-none tracking-[0.12em]"
+                        style={{ color: callTokens.textSecondary }}
+                      >
+                        {KEYPAD_LETTERS[key] ?? ""}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -2616,11 +2789,14 @@ export default function SessionCallPage() {
                채널만) · 빈 칸. 동작 없는 버튼을 채워 넣지 않는다 — 빈 칸은 자리만 차지한다(초점 대상 0).
                스크린리더 순서 = 1행 왼→오 · 2행 왼→오 · 종료. */
             <div
-              className="grid grid-cols-[repeat(3,72px)] justify-center gap-x-6 gap-y-5"
-              // §89.5 ⓒ — 라이트 통화 화면(One UI형)은 버튼 묶음을 흰 판 위에 올린다(어두운 화면은 판 없음 — 종전).
+              className={`grid justify-center ${
+                callTokens.layout === "ios" ? "grid-cols-[repeat(3,76px)] gap-x-6 gap-y-5" : "grid-cols-[repeat(3,88px)] gap-x-3 gap-y-2"
+              }`}
+              // §89.5 ⓒ · 2026-10-21 — One UI형은 버튼 묶음을 판 위에 올린다(라이트 = 흰 판 · 어두운 = 한 단계 밝은 판).
+              // iOS형은 판 없이 셸 바탕 위 원형 버튼(대조표 통화 중 행).
               style={
                 callTokens.gridPanelBg
-                  ? { backgroundColor: callTokens.gridPanelBg, borderRadius: 22, margin: "0 14px", padding: "16px 0" }
+                  ? { backgroundColor: callTokens.gridPanelBg, borderRadius: 26, margin: "0 14px", padding: "18px 0" }
                   : undefined
               }
             >
@@ -2630,7 +2806,7 @@ export default function SessionCallPage() {
                   onClick={handleToggleMute}
                   aria-pressed={muted}
                   aria-label={muted ? "음소거 해제" : "음소거"}
-                  className="flex h-[72px] w-[72px] items-center justify-center rounded-full transition active:scale-95"
+                  className={`flex ${gridButtonShape} items-center justify-center transition active:scale-95`}
                   style={{
                     backgroundColor: muted ? callTokens.gridButtonPressedBg : callTokens.gridButtonBg,
                     color: muted ? callTokens.gridIconPressed : callTokens.gridIcon,
@@ -2649,7 +2825,7 @@ export default function SessionCallPage() {
                   onClick={() => setShowTextInput((v) => !v)}
                   aria-pressed={showTextInput}
                   aria-label="키패드 — 텍스트로 입력"
-                  className="flex h-[72px] w-[72px] items-center justify-center rounded-full transition active:scale-95"
+                  className={`flex ${gridButtonShape} items-center justify-center transition active:scale-95`}
                   style={{ backgroundColor: callTokens.gridButtonBg, color: callTokens.gridIcon }}
                 >
                   <PhoneIcon name="keypad" />
@@ -2672,7 +2848,7 @@ export default function SessionCallPage() {
                   aria-pressed={!speakerDisabled && audioRoute === "speaker"}
                   aria-disabled={speakerDisabled ? true : undefined}
                   aria-label="스피커"
-                  className={`flex h-[72px] w-[72px] items-center justify-center rounded-full transition ${
+                  className={`flex ${gridButtonShape} items-center justify-center transition ${
                     speakerDisabled ? "opacity-40" : "active:scale-95"
                   }`}
                   style={{
@@ -2704,7 +2880,7 @@ export default function SessionCallPage() {
                       type="button"
                       onClick={(event) => handleOpenSmsOverlay(event.currentTarget)}
                       aria-label={`메시지 — 도착 ${inCallSms.length}건, 미확인 ${smsUnreadCount}건`}
-                      className="relative flex h-[72px] w-[72px] items-center justify-center rounded-full transition active:scale-95"
+                      className={`relative flex ${gridButtonShape} items-center justify-center transition active:scale-95`}
                       style={{ backgroundColor: callTokens.gridButtonBg, color: callTokens.gridIcon }}
                     >
                       <PhoneIcon name="message" />
@@ -2737,7 +2913,7 @@ export default function SessionCallPage() {
                       onClick={() => void handleRequestReverseEscalation()}
                       disabled={switchingToMessenger}
                       aria-label="채팅으로 — 메시지 화면으로 전환"
-                      className="flex h-[72px] w-[72px] items-center justify-center rounded-full transition active:scale-95 disabled:opacity-50"
+                      className={`flex ${gridButtonShape} items-center justify-center transition active:scale-95 disabled:opacity-50`}
                       style={{ backgroundColor: callTokens.gridButtonBg, color: callTokens.gridIcon }}
                     >
                       {switchingToMessenger ? (
@@ -2785,7 +2961,8 @@ export default function SessionCallPage() {
               **어느 상태(키패드 열림 포함)에서도 이 자리 그대로**이고 이름 "통화 종료 — 훈련 종료"는 무변경(M-7 ·
               G441 — 이 리터럴은 이 파일에 둔다, §74.4 R-3). 키패드가 열려 있으면 오른쪽 아래 "숨기기"(48px)가
               그리드로 되돌린다. */}
-          <div className="relative mt-6 flex flex-col items-center gap-1.5">
+          {/* 2026-10-21 — iOS형은 종료 원이 그리드 셋째 줄 가운데처럼 붙고(행 간격과 같게) · One UI형은 판 아래 띄운다. */}
+          <div className={`relative flex flex-col items-center gap-1.5 ${callTokens.layout === "ios" ? "mt-5" : "mt-7"}`}>
             <button
               ref={endCallButtonRef}
               type="button"

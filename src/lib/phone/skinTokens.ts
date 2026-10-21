@@ -12,6 +12,12 @@
 import type { MessengerSkin } from "../messenger/detectSkin";
 
 export type CallSkinTokens = {
+  /**
+   * 화면 골격(2026-10-21 사용자 실기 신고 *"iOS형과 One UI형의 전화 화면이 차이가 없네"*). 색만이 아니라 배치가 갈린다 —
+   * `ios` = 밀어서 받기 슬라이더 · 원형 버튼 그리드 · 큰 원 키패드 / `oneui` = 받기(왼쪽)·거절(오른쪽) 원 밀기 · 판 위 버튼 묶음 ·
+   * 원 없는 키패드. 근거: 디자인 감사 대조표(2026-10-20 · 시안 페이지) 수신 벨 · 통화 중 · 키패드 행. 근사.
+   */
+  layout: "ios" | "oneui";
   /** 통화 셸 바탕 `call.bg`. 출처: UX v1.33 근사(UX-014 v1.33 (5)). */
   bg: string;
   /** 최대폭 430px 바깥(데스크톱) — `call.bg`보다 한 단계 어두운 단색(UX-014 v1.33 (8) Responsive). 근사. */
@@ -54,7 +60,7 @@ export type CallSkinTokens = {
   /** 통화 셸 안 입력칸(글자 입력 모드) 바탕 · 경계. */
   fieldBg: string;
   fieldBorder: string;
-  /** §89.5 ⓒ 라이트 통화 화면의 버튼 묶음 판(One UI형 라이트만) — 없으면 null(셸 바탕 위에 바로). */
+  /** 통화 중 버튼 묶음 판(One UI형 — 어두운 · 라이트 둘 다) — 없으면 null(셸 바탕 위에 바로 · iOS형). */
   gridPanelBg: string | null;
   /** 폴백 통화 발화 파형 막대(`CallWaveform` — P3 리뷰 Major 1: 라이트 화면에서 종전 #7CD9C2는 약 1.5:1). */
   waveBar: string;
@@ -96,11 +102,12 @@ const DARK_CALL_EXTRAS = {
   fieldBg: "rgba(255,255,255,0.10)",
   // 종전 `border-white/30`은 바탕 위 약 2.7:1(비텍스트 3:1 미달) — 토큰화하며 0.45로 올렸다(G456).
   fieldBorder: "rgba(255,255,255,0.45)",
-  gridPanelBg: null,
+  gridPanelBg: null as string | null,
   waveBar: "#7CD9C2",
-} as const;
+};
 
 const ONE_UI_CALL: CallSkinTokens = {
+  layout: "oneui",
   bg: "#101418",
   outerBg: "#07090B",
   textPrimary: "#FFFFFF",
@@ -119,10 +126,13 @@ const ONE_UI_CALL: CallSkinTokens = {
   roundIcon: "#FFFFFF",
   badgeBg: "#C6392F",
   badgeText: "#FFFFFF",
-  keypadKeyBg: "rgba(255,255,255,0.12)",
+  // One UI형 키패드는 원 없는 숫자(대조표 키패드 행) — 눌림만 `chipBg`.
+  keypadKeyBg: "rgba(255,255,255,0)",
   ringStyle: "avatar-ripple",
   ringBgStops: ["#2E4257", "#101418"],
   ...DARK_CALL_EXTRAS,
+  // 어두운 화면에도 버튼 묶음 판(One UI 8 "평평한 판 위 묶음" — 대조표 통화 중 행). 근사. 대비는 `panelPairs`(G456).
+  gridPanelBg: "#1E252C",
 };
 
 /**
@@ -141,7 +151,7 @@ const ONE_UI_CALL_LIGHT: CallSkinTokens = {
   gridButtonPressedBg: "#3A4350",
   gridIcon: "#3A4350",
   gridIconPressed: "#FFFFFF",
-  keypadKeyBg: "rgba(20,24,29,0.07)",
+  keypadKeyBg: "rgba(20,24,29,0)",
   ringBgStops: ["#E9EEF3", "#F4F6F8"],
   alertText: "#B3261E",
   chipBg: "rgba(20,24,29,0.07)",
@@ -153,6 +163,7 @@ const ONE_UI_CALL_LIGHT: CallSkinTokens = {
 
 const CALL_TOKENS: Record<MessengerSkin, CallSkinTokens> = {
   ios: {
+    layout: "ios",
     bg: "#1C1C1E",
     outerBg: "#000000",
     textPrimary: "#FFFFFF",
@@ -542,12 +553,14 @@ export function skinContrastPairs(skin: MessengerSkin): ContrastPair[] {
     { name: `${skin}.call.avatarIcon`, fg: call.avatarFg, bg: call.avatarBg, kind: "nonText" },
     { name: `${skin}.call.badge`, fg: call.badgeText, bg: call.badgeBg, kind: "text" },
     { name: `${skin}.call.keypadKey`, fg: call.textPrimary, ...onCall(call.keypadKeyBg), kind: "text" },
+    { name: `${skin}.call.keypadLetters`, fg: call.textSecondary, ...onCall(call.keypadKeyBg), kind: "text" },
     { name: `${skin}.banner.text`, fg: banner.text, ...onCall(banner.bg), kind: "text" },
     { name: `${skin}.banner.textSecondary`, fg: banner.textSecondary, ...onCall(banner.bg), kind: "text" },
     { name: `${skin}.banner.appIcon`, fg: banner.appIconFg, bg: banner.appIconBg, kind: "nonText" },
     { name: "callBar.text", fg: CALL_BAR_TOKENS.text, bg: CALL_BAR_TOKENS.bg, kind: "text" },
     ...smsSurfacePairs(skin),
     ...ringPairs(skin, call),
+    ...panelPairs(skin, call),
     ...(skin === "samsung" ? lightCallPairs() : []),
     ...messengerChatPairs(),
   ];
@@ -573,6 +586,26 @@ function fieldBgPair(call: CallSkinTokens): { bg: string; base?: string } {
   return parseColor(call.fieldBg).a === 1 ? { bg: call.fieldBg } : { bg: call.fieldBg, base: call.bg };
 }
 
+/**
+ * 버튼 묶음 판 위에 그리는 것(One UI형 어두운 화면 · 2026-10-21) — 라벨 · 아이콘 · 눌림 표시 · 눌림 아이콘 · 키패드 영문자.
+ * 판이 없는 스킨(iOS형)은 0쌍. 라이트 판은 `lightCallPairs`가 따로 잰다.
+ */
+export function panelPairs(skin: MessengerSkin, call: CallSkinTokens): ContrastPair[] {
+  const panel = call.gridPanelBg;
+  if (!panel) return [];
+  return [
+    { name: `${skin}.call.panelLabel`, fg: call.textPrimary, bg: panel, kind: "text" },
+    { name: `${skin}.call.panelIcon`, fg: call.gridIcon, bg: call.gridButtonBg, base: panel, kind: "nonText" },
+    {
+      name: `${skin}.call.panelPressedIndicator`,
+      fg: compositeHex(call.gridButtonPressedBg, panel),
+      bg: panel,
+      kind: "nonText",
+    },
+    { name: `${skin}.call.panelIconPressed`, fg: call.gridIconPressed, bg: call.gridButtonPressedBg, base: panel, kind: "nonText" },
+  ];
+}
+
 /** §89.5 ⓒ — One UI형 라이트 통화 화면 전체(셸 · 버튼 판 · 눌림). */
 export function lightCallPairs(): ContrastPair[] {
   const call = ONE_UI_CALL_LIGHT;
@@ -586,6 +619,7 @@ export function lightCallPairs(): ContrastPair[] {
     { name: "samsung-light.call.gridIconPressed", fg: call.gridIconPressed, bg: call.gridButtonPressedBg, kind: "nonText" },
     { name: "samsung-light.call.avatarIcon", fg: call.avatarFg, bg: call.avatarBg, kind: "nonText" },
     { name: "samsung-light.call.keypadKey", fg: call.textPrimary, bg: call.keypadKeyBg, base: call.bg, kind: "text" },
+    { name: "samsung-light.call.keypadLetters", fg: call.textSecondary, bg: call.keypadKeyBg, base: call.bg, kind: "text" },
     { name: "samsung-light.call.acceptIcon", fg: call.roundIcon, bg: call.accept, kind: "nonText" },
     { name: "samsung-light.call.endIcon", fg: call.roundIcon, bg: call.end, kind: "nonText" },
     ...ringPairs("samsung-light", call),

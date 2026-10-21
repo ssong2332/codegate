@@ -19,6 +19,8 @@ export type SwipeAnswerController = {
   /** 밀기가 판정됐으면 여기서(활성화 이벤트 안에서 동기로) 받는다. */
   up(answer: () => void): void;
   cancel(): void;
+  /** 지금 누른 채로 밀기 판정이 났는가(놓기 직전 캡처 단계에서 읽는다 — 화면의 click 삼키기가 같은 판정을 쓰게). */
+  isArmed(): boolean;
   /** 누르기 · 키보드. 바로 앞에서 밀기로 받았으면 그 click 1회는 무시한다. */
   click(answer: () => void): void;
 };
@@ -46,6 +48,9 @@ export function createSwipeAnswer(): SwipeAnswerController {
     cancel() {
       start = null;
       armed = false;
+    },
+    isArmed() {
+      return armed;
     },
     click(answer) {
       if (swallowNextClick) {
