@@ -9,9 +9,9 @@ export const CARD_DELIVERY_CALL_SCENARIO_ID = "card-delivery-call";
 
 export const cardDeliveryCallScenario: ScenarioDoc = {
   title: "카드 배송 안내 전화",
-  fraudType: "카드 배송 사칭",
-  estimatedDuration: "약 5~8분",
-  difficulty: "높음 — 친절한 안내처럼 시작해서 의심이 풀리기 쉽습니다",
+  fraudType: "카드 배송 담당자 사칭",
+  estimatedDuration: "약 2~5분",
+  difficulty: "친절한 배송 안내처럼 시작해서 의심이 풀리기 쉽습니다",
   deepvoiceLines: [{ lineId: "line-1", text: "안녕하세요, 고객님. 카드 배송 안내 드리려고 연락드렸습니다. 오늘 받으실 수 있으세요?" }],
   voiceMode: "generic",
   callerLabel: "070-5217-3364",

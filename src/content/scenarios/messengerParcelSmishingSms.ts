@@ -13,9 +13,9 @@ const deepvoiceLines: DeepvoiceLine[] = [
 
 export const messengerParcelSmishingSmsScenario: ScenarioDoc = {
   title: "택배 배송 실패 스미싱(문자)",
-  fraudType: "택배 사칭 스미싱(링크형)",
+  fraudType: "택배사 사칭 문자(링크 누르기 유도)",
   estimatedDuration: "약 3~5분",
-  difficulty: "쉬움 — 생활 밀착형 소재라 경계심이 낮은 편입니다",
+  difficulty: "늘 받는 택배 문자라 의심하기 어렵고, 고급에서는 상담원 전화로 이어집니다",
   deepvoiceLines,
   callerLabel: "070-7731-4408",
   channel: "messenger",

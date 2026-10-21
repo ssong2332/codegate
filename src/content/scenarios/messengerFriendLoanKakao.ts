@@ -12,9 +12,9 @@ const deepvoiceLines: DeepvoiceLine[] = [
 
 export const messengerFriendLoanKakaoScenario: ScenarioDoc = {
   title: "지인 사칭 급전 요청(카카오톡)",
-  fraudType: "지인 사칭(메신저 급전)",
+  fraudType: "지인 사칭(카카오톡 급전 부탁)",
   estimatedDuration: "약 5~8분",
-  difficulty: "쉬움~중간 — 친분을 이용한 부탁 형태라 경계심이 낮은 편입니다",
+  difficulty: "친한 사이의 부탁처럼 다가와 의심하기 어려운 편입니다",
   deepvoiceLines,
   callerLabel: "010-3320-7714",
   channel: "messenger",

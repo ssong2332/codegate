@@ -16,9 +16,9 @@ const deepvoiceLines: DeepvoiceLine[] = [
 
 export const courierCustomsScamScenario: ScenarioDoc = {
   title: "택배 통관 지연 사칭",
-  fraudType: "택배/통관 지연 빙자",
-  estimatedDuration: "약 5~8분",
-  difficulty: "쉬움 — 생활 밀착형 소재라 경계심이 낮은 편입니다",
+  fraudType: "택배 고객센터 사칭(해외 택배 통관)",
+  estimatedDuration: "약 3~5분",
+  difficulty: "늘 받는 택배 이야기라 의심하기 어려운 편입니다",
   deepvoiceLines,
   voiceMode: "generic",
   callerLabel: "070-4218-9930",

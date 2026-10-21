@@ -83,9 +83,9 @@ export const familyAccidentDeepvoiceScenario: ScenarioMeta = {
 
 export const institutionalImpersonationScenario: ScenarioMeta = {
   title: "기관 사칭(검찰·금융감독원)",
-  fraudType: "수사기관/금융기관 사칭",
-  estimatedDuration: "약 5~8분",
-  difficulty: "중간 — 권위·공포 소구가 강한 편입니다",
+  fraudType: "검찰·금융감독원 직원 사칭",
+  estimatedDuration: "약 3~5분",
+  difficulty: "권위와 처벌 위협으로 겁을 주는 편입니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "안녕하십니까, 수사관입니다. 본인 명의 계좌가 범죄에 연루되어 확인이 필요합니다." },
     { lineId: "line-2", text: "지금 이 사안은 수사 기밀이라 유선으로만 안내됩니다. 침착하게 절차에 협조해 주십시오." },
@@ -97,10 +97,10 @@ export const institutionalImpersonationScenario: ScenarioMeta = {
 
 // Phase 5(2026-07-22) 신규 시나리오 미러 — 클라 src/content/scenarios/*.ts와 필드 동일.
 export const loanScamScenario: ScenarioMeta = {
-  title: "저금리 대환대출 빙자",
-  fraudType: "대출 빙자(저금리 대환대출)",
-  estimatedDuration: "약 5~8분",
-  difficulty: "쉬움~중간 — 이익 유혹이 강한 편입니다",
+  title: "저금리 대환대출 사칭",
+  fraudType: "금융회사 대출 상담원 사칭",
+  estimatedDuration: "약 3~5분",
+  difficulty: "낮은 이자로 바꿔 준다는 이득으로 끌어들이는 편입니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "안녕하세요, 고객님. 정부 지원 저금리 대환대출 대상자로 확인되어 안내차 연락드렸습니다." },
     { lineId: "line-2", text: "오늘까지만 신청 가능하신데, 기존 대출을 먼저 정리하셔야 저금리 전환이 됩니다." },
@@ -111,10 +111,10 @@ export const loanScamScenario: ScenarioMeta = {
 };
 
 export const taxRefundScamScenario: ScenarioMeta = {
-  title: "국세청 환급금 빙자",
-  fraudType: "환급금 사칭(국세청/공단)",
-  estimatedDuration: "약 5~8분",
-  difficulty: "중간 — 이익 유혹과 권위 소구가 결합됩니다",
+  title: "국세청 환급금 사칭",
+  fraudType: "국세청·공단 환급 담당자 사칭",
+  estimatedDuration: "약 2~5분",
+  difficulty: "돌려받을 돈이 있다는 말과 공공기관 이름으로 믿게 만드는 편입니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "국세청 환급 담당입니다. 고객님 앞으로 미수령 환급금이 확인되어 안내드립니다." },
     { lineId: "line-2", text: "본인 확인만 되면 오늘 바로 환급이 가능하신데, 절차상 몇 가지 확인이 필요합니다." },
@@ -141,9 +141,9 @@ export const grandchildImpersonationScenario: ScenarioMeta = {
 // Phase 6(2026-07-23, 사용자 요청) 신규 시나리오 미러 — 클라 src/content/scenarios/*.ts와 필드 동일.
 export const cardCompanyImpersonationScenario: ScenarioMeta = {
   title: "카드사 부정결제 사칭",
-  fraudType: "카드사 부정결제 확인 사칭",
-  estimatedDuration: "약 5~8분",
-  difficulty: "쉬움~중간 — 놀람과 확인 압박을 이용합니다",
+  fraudType: "카드사 상담원 사칭(해외 결제 확인)",
+  estimatedDuration: "약 2~5분",
+  difficulty: "결제됐다는 말로 놀라게 한 뒤 빨리 확인하라고 재촉합니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "안녕하세요, 고객님. 카드사 보안팀입니다. 방금 해외 가맹점에서 고액 결제 시도가 확인되었습니다." },
     { lineId: "line-2", text: "본인이 하신 결제가 아니시면 지금 바로 확인해 드려야 추가 승인을 막을 수 있어요." },
@@ -155,9 +155,9 @@ export const cardCompanyImpersonationScenario: ScenarioMeta = {
 
 export const courierCustomsScamScenario: ScenarioMeta = {
   title: "택배 통관 지연 사칭",
-  fraudType: "택배/통관 지연 빙자",
-  estimatedDuration: "약 5~8분",
-  difficulty: "쉬움 — 생활 밀착형 소재라 경계심이 낮은 편입니다",
+  fraudType: "택배 고객센터 사칭(해외 택배 통관)",
+  estimatedDuration: "약 3~5분",
+  difficulty: "늘 받는 택배 이야기라 의심하기 어려운 편입니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "안녕하세요, 고객님. 택배 고객센터입니다. 고객님 명의 국제 택배가 통관에서 보류되어 연락드렸습니다." },
     { lineId: "line-2", text: "관세 미납 건으로 확인되는데, 본인 확인만 되면 바로 통관 처리해 드릴 수 있어요." },
@@ -169,9 +169,9 @@ export const courierCustomsScamScenario: ScenarioMeta = {
 
 export const kidnappingThreatScenario: ScenarioMeta = {
   title: "자녀 납치 협박",
-  fraudType: "납치·감금 협박(공포 소구)",
-  estimatedDuration: "약 5~8분",
-  difficulty: "높음 — 공포·협박이 강한 편이라 심리적 부담이 클 수 있습니다",
+  fraudType: "자녀를 데리고 있다는 협박",
+  estimatedDuration: "약 2~4분",
+  difficulty: "겁을 주는 말이 강해 마음의 부담이 클 수 있습니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "묻지 말고 들어요. 자녀분, 지금 우리 쪽에 있습니다." },
     { lineId: "line-2", text: "울거나 소리 지르지 마세요. 그런다고 달라지는 거 없습니다. 신고할 생각도 하지 마세요." },
@@ -183,9 +183,9 @@ export const kidnappingThreatScenario: ScenarioMeta = {
 
 export const reputationBlackmailScamScenario: ScenarioMeta = {
   title: "불법업소 방문 사실 유포 협박",
-  fraudType: "사생활 유포 협박(신용·평판 훼손 위협)",
-  estimatedDuration: "약 5~8분",
-  difficulty: "높음 — 수치심과 공포를 이용한 협박이라 심리적 부담이 클 수 있습니다",
+  fraudType: "불법업소 출입 기록을 퍼뜨리겠다는 협박",
+  estimatedDuration: "약 2~4분",
+  difficulty: "부끄러움과 두려움을 건드리는 협박이라 마음의 부담이 클 수 있습니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "고객님 명의로 불법 업소 출입 기록이 확인됐습니다. 설명은 됐고, 예 아니오로만 답하세요." },
     { lineId: "line-2", text: "믿고 안 믿고는 그쪽 사정이고요. 가족분들이나 회사에 알려지길 원치 않으시면 지금 확인 절차에 협조하세요." },
@@ -199,9 +199,9 @@ export const reputationBlackmailScamScenario: ScenarioMeta = {
 // escalation은 옵셔널 증분, Architecture.md §13.4).
 export const messengerChildImpersonationKakaoScenario: ScenarioMeta = {
   title: "자녀 사칭 급전 요청(카카오톡)",
-  fraudType: "가족 사칭(메신저)",
+  fraudType: "자녀 사칭(카카오톡)",
   estimatedDuration: "약 5~8분",
-  difficulty: "중간 — 정서적 압박과 채널 전환이 결합됩니다",
+  difficulty: "가족 걱정을 건드리고, 채팅하다가 전화로 이어집니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "엄마, 나야. 폰 액정 깨져서 친구 폰으로 톡 보내." },
   ],
@@ -213,9 +213,9 @@ export const messengerChildImpersonationKakaoScenario: ScenarioMeta = {
 
 export const messengerFriendLoanKakaoScenario: ScenarioMeta = {
   title: "지인 사칭 급전 요청(카카오톡)",
-  fraudType: "지인 사칭(메신저 급전)",
+  fraudType: "지인 사칭(카카오톡 급전 부탁)",
   estimatedDuration: "약 5~8분",
-  difficulty: "쉬움~중간 — 친분을 이용한 부탁 형태라 경계심이 낮은 편입니다",
+  difficulty: "친한 사이의 부탁처럼 다가와 의심하기 어려운 편입니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "야 오랜만이다ㅋㅋ 잘 지내지? 근데 미안한데 부탁이 있어서 톡 했어." },
   ],
@@ -226,9 +226,9 @@ export const messengerFriendLoanKakaoScenario: ScenarioMeta = {
 
 export const messengerParcelSmishingSmsScenario: ScenarioMeta = {
   title: "택배 배송 실패 스미싱(문자)",
-  fraudType: "택배 사칭 스미싱(링크형)",
+  fraudType: "택배사 사칭 문자(링크 누르기 유도)",
   estimatedDuration: "약 3~5분",
-  difficulty: "쉬움 — 생활 밀착형 소재라 경계심이 낮은 편입니다",
+  difficulty: "늘 받는 택배 문자라 의심하기 어렵고, 고급에서는 상담원 전화로 이어집니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "[국제택배] 고객님 물품이 주소지 오류로 배송이 보류되었습니다. 아래에서 주소를 확인해 주세요." },
   ],
@@ -241,9 +241,9 @@ export const messengerParcelSmishingSmsScenario: ScenarioMeta = {
 
 export const messengerSubsidySmishingSmsScenario: ScenarioMeta = {
   title: "정부지원금 안내 스미싱(문자)",
-  fraudType: "지원금 사칭 스미싱(링크형)",
+  fraudType: "정부지원금 안내 사칭 문자(링크 누르기 유도)",
   estimatedDuration: "약 5~8분",
-  difficulty: "중간 — 이익 유혹과 채널 전환이 결합됩니다",
+  difficulty: "받을 돈이 있다는 말로 끌어들이고, 문자하다가 전화로 이어집니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "[지원금 안내] 고객님은 정부 지원금 대상자로 확인되었습니다. 아래에서 신청 여부를 확인해 주세요." },
   ],
@@ -259,9 +259,9 @@ export const messengerSubsidySmishingSmsScenario: ScenarioMeta = {
 // 같은 드리프트를 반복하지 않는다. 원본은 src/content/scenarios/bankSecurityVerifyScam.ts다.
 export const bankSecurityVerifyScamScenario: ScenarioMeta = {
   title: "직접 확인해 보라는 은행 사칭",
-  fraudType: "금융기관 사칭(확인 유도형)",
-  estimatedDuration: "약 5~8분",
-  difficulty: "높음 — 상대가 먼저 확인을 권해서 의심이 풀리기 쉽습니다",
+  fraudType: "은행 직원 사칭(직접 확인을 권함)",
+  estimatedDuration: "약 3~5분",
+  difficulty: "상대가 먼저 확인해 보라고 해서 의심이 풀리기 쉽습니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "안녕하세요, 고객님. ○○은행 금융사고대응팀입니다. 고객님 계좌에서 비정상 출금 시도가 확인되어 연락드렸습니다." },
     { lineId: "line-2", text: "의심스러우신 게 당연합니다. 직접 확인해 보셔도 됩니다. 저는 끊지 않고 기다리겠습니다." },
@@ -282,9 +282,9 @@ export const PROSECUTION_COOPERATION_CALL_SCENARIO_ID = "prosecution-cooperation
 
 export const cardDeliveryCallScenario: ScenarioMeta = {
   title: "카드 배송 안내 전화",
-  fraudType: "카드 배송 사칭",
-  estimatedDuration: "약 5~8분",
-  difficulty: "높음 — 친절한 안내처럼 시작해서 의심이 풀리기 쉽습니다",
+  fraudType: "카드 배송 담당자 사칭",
+  estimatedDuration: "약 2~5분",
+  difficulty: "친절한 배송 안내처럼 시작해서 의심이 풀리기 쉽습니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "안녕하세요, 고객님. 카드 배송 안내 드리려고 연락드렸습니다. 오늘 받으실 수 있으세요?" },
   ],
@@ -295,9 +295,9 @@ export const cardDeliveryCallScenario: ScenarioMeta = {
 
 export const assetProtectionNoticeCallScenario: ScenarioMeta = {
   title: "금융감독원 자산 보호 안내",
-  fraudType: "금융감독기관 사칭(자산 보호 명목)",
-  estimatedDuration: "약 5~8분",
-  difficulty: "높음 — 도와주겠다는 말로 신뢰를 얻어 의심이 풀리기 쉽습니다",
+  fraudType: "금융감독원 직원 사칭(자산 보호 안내)",
+  estimatedDuration: "약 3~5분",
+  difficulty: "도와주겠다는 말로 믿음을 얻어 의심이 풀리기 쉽습니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "안녕하십니까, 금융감독원입니다. 고객님 명의 계좌 관련해서 안내드릴 사항이 있어 연락드렸습니다." },
   ],
@@ -308,9 +308,9 @@ export const assetProtectionNoticeCallScenario: ScenarioMeta = {
 
 export const prosecutionCooperationCallScenario: ScenarioMeta = {
   title: "검찰 수사 협조 요청",
-  fraudType: "수사기관 사칭(수사 협조 명목)",
-  estimatedDuration: "약 5~8분",
-  difficulty: "높음 — 처벌을 앞세운 압박이 이어져 심리적 부담이 큰 편입니다",
+  fraudType: "검찰 수사관 사칭(수사 협조 요청)",
+  estimatedDuration: "약 3~5분",
+  difficulty: "처벌을 앞세운 압박이 이어져 마음의 부담이 큰 편입니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "검찰 수사관입니다. 본인 명의 계좌 관련 사건으로 확인할 것이 있어 연락드렸습니다." },
   ],

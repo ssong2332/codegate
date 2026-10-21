@@ -14,10 +14,10 @@ const deepvoiceLines: DeepvoiceLine[] = [
 ];
 
 export const loanScamScenario: ScenarioDoc = {
-  title: "저금리 대환대출 빙자",
-  fraudType: "대출 빙자(저금리 대환대출)",
-  estimatedDuration: "약 5~8분",
-  difficulty: "쉬움~중간 — 이익 유혹이 강한 편입니다",
+  title: "저금리 대환대출 사칭",
+  fraudType: "금융회사 대출 상담원 사칭",
+  estimatedDuration: "약 3~5분",
+  difficulty: "낮은 이자로 바꿔 준다는 이득으로 끌어들이는 편입니다",
   deepvoiceLines,
   voiceMode: "generic",
   callerLabel: "070-8842-1176",
