@@ -33,6 +33,8 @@ import { Button } from "./ui";
 // 이 파일을 불러와 `@/` 별칭을 풀지 못한다. 토큰 모듈은 값 import가 없는 잎 모듈이다.
 import { LANDING_PAGE_TOKENS, browserBarTokensFor } from "../lib/phone/skinTokens";
 import type { MessengerSkin } from "../lib/messenger/detectSkin";
+// §101 추가 — 금액 검증 · 한글 단위 표기 · 필수 칸 안내(잎 모듈 · 상대 경로 — 렌더 하네스 관례).
+import { amountError, amountHint, requiredFieldError } from "../lib/landing/amountInput";
 
 /** UX-023의 목업 종류. 부재 → `credential-form`(하위호환 읽기 규칙, §15.9.1 R2). */
 export type MessengerFakeLandingKind = "credential-form" | "app-install";
@@ -84,7 +86,22 @@ type MessengerFakeLandingProps = {
    * ⚠️ 이 컴포넌트는 **네트워크 호출을 하지 않는다** — 기록은 페이지가 담당한다(§15.9.6).
    */
   onCredentialSubmit?: () => void;
+  /**
+   * ⭐ §101(검찰 고급 자산 검수 사이트) — 여러 화면 사이트(`STEP_FLOW_COPY`)에서 **이체 전 단계 버튼**을 누른 순간. 인자는
+   * `STEP_FLOW_EVENTS`의 고정 값 하나뿐이다(본인 확인 · 코인 전환 · 금액 입력 뒤 다음). 마지막 이체 확인은 위 `onCredentialSubmit`.
+   * ⛔ 입력값(`values`)을 싣지 않는다(G138 동형 — `mockScreenCopy.test.ts` §101 블록). 이 컴포넌트는 네트워크 호출을 하지 않는다.
+   */
+  onLandingStep?: (step: LandingProgressEvent) => void;
+  /**
+   * ⭐ §101 추가 · UX D-115 — 이 랜딩을 연 문자의 **사기 측 수취 계좌**("{세션 은행명} {계좌번호}" — 서버 문자 문서 `bankName` · `accountNumber`).
+   * `prefill: "account"`인 칸을 이 값으로 채운 **읽기 전용** 칸으로 그린다. 부재(옛 문서 · 메신저 진입) = 종전 빈 입력 칸.
+   * ⛔ 참가자 입력이 아니다(서버 카탈로그 · 문자에서 온 값) — 어떤 콜백에도 싣지 않는다.
+   */
+  prefilledAccount?: string;
 };
+
+/** §101 — 이체 전 단계 기록 이벤트(서버 `functions/src/inCallSms/types.ts` `InCallSmsEvent`의 같은 3값). */
+export type LandingProgressEvent = "landing_identity" | "landing_converted" | "landing_amount";
 
 /** 완료 화면 복귀 버튼 문면(UX-023 v1.33 (5) · D-93) — 진입 표면이 정한다. 동작은 둘 다 `onClose`. */
 const RETURN_LABELS: Record<MessengerFakeLandingEntrySurface, string> = {
@@ -106,6 +123,8 @@ export default function MessengerFakeLanding({
   onHide,
   onInstallConsent,
   onCredentialSubmit,
+  onLandingStep,
+  prefilledAccount,
 }: MessengerFakeLandingProps) {
   const bar = browserBarTokensFor(skin);
   const returnLabel = RETURN_LABELS[entrySurface];
@@ -233,6 +252,8 @@ export default function MessengerFakeLanding({
             landingId={landingId}
             onClose={onClose}
             onCredentialSubmit={onCredentialSubmit}
+            onLandingStep={onLandingStep}
+            prefilledAccount={prefilledAccount}
             returnLabel={returnLabel}
           />
         )}
@@ -285,6 +306,10 @@ type CredentialFieldCopy = {
    * ⛔ 검증이 아니다 — `type="text"` 유지 · maxlength·pattern·자동 서식·오류 문구 0.
    */
   inputMode?: "numeric";
+  /** §101 추가 — 금액 칸(숫자 · 0 초과 검증 + 칸 아래 한글 단위 표기 "47억 원"). 라벨로 추론하지 않고 필드별로 명시한다. */
+  amount?: true;
+  /** §101 추가 · UX D-115 — 문자로 안내된 사기 측 수취 계좌로 미리 채우는 칸(값 = `prefilledAccount` · 읽기 전용). */
+  prefill?: "account";
 };
 type CredentialCopy = {
   headline: string;
@@ -372,7 +397,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
       "신청서를 제출하시면 담당 직원이 보관 절차를 안내해 드립니다.",
     ],
     fields: [
-      { label: "보관 신청 금액", placeholder: "금액을 입력하세요", inputMode: "numeric" },
+      { label: "보관 신청 금액", placeholder: "금액을 입력하세요", inputMode: "numeric", amount: true },
       { label: "돈을 찾을 은행", placeholder: "은행을 입력하세요" },
       { label: "찾는 방법(현금 또는 수표)", placeholder: "현금 또는 수표" },
     ],
@@ -397,6 +422,22 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 사건조회 안내센터",
     mockHost: "case-view-center.invalid",
   },
+  // §101 — 검찰 고급 fv-h3vn 자산 검수 사이트의 첫 화면(본인 확인). 이어지는 화면은 아래 `STEP_FLOW_COPY`(서버 카탈로그와 글자 단위로 동일).
+  "asset-check-site": {
+    headline: "사건 관련 자산 검수를 위해 본인 확인이 필요합니다",
+    bodyLines: [
+      "고객님 명의 자산이 범죄수익 여부 검수 대상으로 분류되었습니다.",
+      "본인 확인이 끝나면 검수 대상 자산과 보관 절차가 안내됩니다.",
+    ],
+    fields: [
+      { label: "성명", placeholder: "성명을 입력하세요" },
+      { label: "생년월일", placeholder: "생년월일을 입력하세요" },
+    ],
+    submitLabel: "본인 확인하기",
+    successHeadline: "보관 지갑 이체가 접수되었습니다.",
+    issuerLabel: "ⓒ 사건자산 검수 안내센터",
+    mockHost: "asset-review-desk.invalid",
+  },
   // §98 — 검찰 고급 fv-c8wq 둘째 화면(이체형 — 서버 카탈로그 mockScreens.ts와 글자 단위로 동일).
   "asset-check-wallet": {
     headline: "검수 전용 보관 지갑 전송이 아직 완료되지 않았습니다",
@@ -406,7 +447,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     ],
     fields: [
       { label: "보관 지갑 번호", placeholder: "문자로 받은 지갑 번호를 입력하세요" },
-      { label: "전송 금액", placeholder: "전송하실 금액을 입력하세요", inputMode: "numeric" },
+      { label: "전송 금액", placeholder: "전송하실 금액을 입력하세요", inputMode: "numeric", amount: true },
     ],
     submitLabel: "보관 지갑으로 전송하기",
     successHeadline: "보관 지갑 전송이 접수되었습니다.",
@@ -435,11 +476,11 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     headline: "안전계좌 이체가 아직 완료되지 않았습니다",
     bodyLines: [
       "범죄 연루가 확인된 자금은 임시 안전계좌로 옮겨야 보호 조치가 적용됩니다.",
-      "문자로 안내된 계좌번호와 금액을 아래에 입력해 주세요.",
+      "이체하실 금액만 입력하시면 보호 조치가 바로 적용됩니다.",
     ],
     fields: [
-      { label: "안전계좌 번호", placeholder: "문자로 받은 계좌번호를 입력하세요", inputMode: "numeric" },
-      { label: "이체 금액", placeholder: "이체하실 금액을 입력하세요", inputMode: "numeric" },
+      { label: "안전계좌 번호", placeholder: "문자로 받은 계좌번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "이체 금액", placeholder: "이체하실 금액을 입력하세요", inputMode: "numeric", amount: true },
     ],
     submitLabel: "안전계좌로 이체하기",
     successHeadline: "안전계좌로 이체가 완료되었습니다.",
@@ -452,11 +493,11 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     headline: "피해금 이관 신청이 완료되지 않았습니다",
     bodyLines: [
       "진행 중인 해외 결제 승인을 막으려면 잔액을 이관 전용 계좌로 옮기셔야 합니다.",
-      "문자로 안내된 이관 계좌와 금액을 아래에 입력해 주세요.",
+      "이관하실 금액을 적고 아래 버튼을 눌러 주세요.",
     ],
     fields: [
-      { label: "이관 전용 계좌번호", placeholder: "문자로 받은 이관 계좌번호를 입력하세요", inputMode: "numeric" },
-      { label: "이관 금액", placeholder: "이관하실 금액을 입력하세요", inputMode: "numeric" },
+      { label: "이관 전용 계좌번호", placeholder: "문자로 받은 이관 계좌번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "이관 금액", placeholder: "이관하실 금액을 입력하세요", inputMode: "numeric", amount: true },
     ],
     submitLabel: "피해금 이관하기",
     successHeadline: "피해금 이관이 접수되었습니다.",
@@ -469,11 +510,11 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     headline: "보호계좌로 옮기기가 아직 처리되지 않았습니다",
     bodyLines: [
       "비정상 출금 시도가 확인되어 잔액을 옮겨 두셔야 출금이 막힙니다.",
-      "문자로 안내된 계좌번호와 옮기실 금액을 아래에 입력해 주세요.",
+      "옮겨 두실 금액을 입력하면 출금 차단이 시작됩니다.",
     ],
     fields: [
-      { label: "보호계좌 번호", placeholder: "문자로 받은 계좌번호를 입력하세요", inputMode: "numeric" },
-      { label: "옮길 금액", placeholder: "옮기실 금액을 입력하세요", inputMode: "numeric" },
+      { label: "보호계좌 번호", placeholder: "문자로 받은 계좌번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "옮길 금액", placeholder: "옮기실 금액을 입력하세요", inputMode: "numeric", amount: true },
     ],
     submitLabel: "보호계좌로 옮기기",
     successHeadline: "보호계좌로 옮기기가 처리되었습니다.",
@@ -481,6 +522,52 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     mockHost: "acct-protect-desk.invalid",
   },
 };
+
+/** §101 — 여러 화면 사이트의 둘째 화면부터(서버 카탈로그 `MockScreenItem.stepScreens`와 1:1 · 글자 단위 동일). */
+type StepScreenCopy = {
+  headline: string;
+  bodyLines: string[];
+  /** 화면에 나열만 하는 줄(입력 아님). */
+  items?: string[];
+  fields?: CredentialFieldCopy[];
+  actionLabel: string;
+};
+
+/**
+ * ⭐ §101(2026-10-21 사용자 요청 — *"제공되는 웹사이트에서 코인 전환하고 이체하고 하는 거로 가자"*) — 여러 화면 사이트. 키 = landingId(정확 일치 — R8).
+ * 첫 화면 = `CREDENTIAL_LANDING_COPY`의 같은 키(본인 확인), 그 뒤 = 이 배열 순서. 화면 i(0 = 본인 확인)의 버튼은 `STEP_FLOW_EVENTS[i]`를 올리고,
+ * 마지막 화면의 버튼은 종전 제출(`onCredentialSubmit`)이다. ⛔ 거래소 가입 · 입금 · 매수 같은 실제 조작 단계는 화면에 없다(버튼 하나가 "전환"을 대신한다).
+ */
+const STEP_FLOW_COPY: Record<string, StepScreenCopy[]> = {
+  "asset-check-site": [
+    {
+      headline: "검수 대상 자산이 확인되었습니다",
+      bodyLines: [
+        "아래 자산은 검수가 끝날 때까지 안전 자산(코인)으로 전환해 보관하셔야 합니다.",
+        "전환하지 않은 자산은 증거 보전을 위해 동결될 수 있습니다.",
+      ],
+      items: ["거래 은행 예금 · 검수 대상", "적금 · 검수 대상", "대출 가능액 · 검수 대상"],
+      actionLabel: "안전 자산(코인)으로 전환하기",
+    },
+    {
+      headline: "오늘 전환할 금액을 입력해 주세요",
+      bodyLines: [
+        "검수 대상 자산 가운데 오늘 전환할 금액을 입력해 주세요.",
+        "전환된 자산은 다음 화면에서 검수 전용 보관 지갑으로 옮겨집니다.",
+      ],
+      fields: [{ label: "전환 금액", placeholder: "전환하실 금액을 입력하세요", inputMode: "numeric", amount: true }],
+      actionLabel: "다음",
+    },
+    {
+      headline: "검수 전용 보관 지갑으로 이체합니다",
+      bodyLines: ["보관 지갑 번호: KW-7Q2X-4471", "검수가 끝나면 전액 반환됩니다. 아래에서 이체를 확인해 주세요."],
+      actionLabel: "보관 지갑으로 이체하기",
+    },
+  ],
+};
+
+/** §101 — 화면 i(0 = 본인 확인)의 버튼이 올리는 고정 이벤트. 길이 = 마지막(이체 확인) 화면 앞까지. */
+const STEP_FLOW_EVENTS: readonly LandingProgressEvent[] = ["landing_identity", "landing_converted", "landing_amount"];
 
 /**
  * 가짜 주소창에 보일 호스트(T190-2 · §74.9). ⚠️ kind가 **먼저** 갈린다(§19.4 R7) — `app-install`은 credential
@@ -513,12 +600,18 @@ function CredentialFormMockup({
   landingId,
   onClose,
   onCredentialSubmit,
+  onLandingStep,
+  prefilledAccount,
   returnLabel,
 }: {
   landingId?: string;
   onClose: () => void;
   /** ⛔ 무인자 콜백이다 — 입력값은 아래 `values` state를 벗어나지 않는다(§31.6 G138/AC-045). */
   onCredentialSubmit?: () => void;
+  /** §101 — 여러 화면 사이트의 이체 전 단계(고정 이벤트 값만 — 입력값 0). */
+  onLandingStep?: (step: LandingProgressEvent) => void;
+  /** §101 추가 · D-115 — 수취 계좌 미리 채움 값(부재 = 빈 입력 칸). */
+  prefilledAccount?: string;
   /** 완료 화면 복귀 버튼 문면(진입 표면이 정한다 — D-93). */
   returnLabel: string;
 }) {
@@ -526,10 +619,39 @@ function CredentialFormMockup({
   const copy = (landingId ? CREDENTIAL_LANDING_COPY[landingId] : undefined) ?? GENERIC_CREDENTIAL_COPY;
   const [values, setValues] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+  // §101 — 여러 화면 사이트의 현재 화면(0 = 본인 확인 = 위 `copy`). 한 화면 폼이면 늘 0이다.
+  const stepScreens = landingId ? STEP_FLOW_COPY[landingId] : undefined;
+  const [stepIndex, setStepIndex] = useState(0);
+  const screen: StepScreenCopy =
+    stepScreens && stepIndex > 0
+      ? stepScreens[stepIndex - 1]
+      : { headline: copy.headline, bodyLines: copy.bodyLines, fields: copy.fields, actionLabel: copy.submitLabel };
   const page = LANDING_PAGE_TOKENS;
+  // §101 추가(사용자 실기 신고 — "공백으로 두고 이체를 누르면 넘어간다") — 칸별 안내 한 줄. 빈 칸 · 금액 오류면 제출 · 단계 진행 · 콜백 0
+  // (속은 순간은 실제로 넘어간 제출에서만 잡힌다 — AC-080). 안내는 고정 문구이고 입력값을 싣지 않는다.
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const isPrefilled = (field: CredentialFieldCopy) => field.prefill === "account" && prefilledAccount !== undefined;
+  const errorFor = (field: CredentialFieldCopy): string | undefined => {
+    if (isPrefilled(field)) return undefined;
+    const raw = values[field.label] ?? "";
+    return field.amount ? amountError(raw) : requiredFieldError(field.label, raw);
+  };
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
+    const found: Record<string, string> = {};
+    for (const field of screen.fields ?? []) {
+      const message = errorFor(field);
+      if (message) found[field.label] = message;
+    }
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
+    // §101 — 이체 확인 전 화면이면 "그 단계 버튼을 눌렀다"는 고정 값 하나만 올리고 다음 화면으로 넘어간다(입력값은 `values`에 남는다).
+    if (stepScreens && stepIndex < stepScreens.length) {
+      onLandingStep?.(STEP_FLOW_EVENTS[stepIndex]);
+      setStepIndex(stepIndex + 1);
+      return;
+    }
     // AC-045 핵심 — 여기서 어떤 네트워크 호출도 하지 않는다. 로컬 state만 바꿔 가짜 피드백을 준다.
     setSubmitted(true);
     // T123/AC-080 — **"제출했다는 사실" 하나만** 위로 올린다. 기록은 페이지가 한다(§15.9.6).
@@ -571,38 +693,84 @@ function CredentialFormMockup({
       {issuerBar}
       <div className="flex flex-col gap-2.5 px-5 pt-4">
         <h1 className="text-xl font-bold leading-snug" style={{ color: page.headline }}>
-          {copy.headline}
+          {screen.headline}
         </h1>
-        {copy.bodyLines.map((line) => (
+        {screen.bodyLines.map((line) => (
           <p key={line} className="text-[15px] leading-relaxed" style={{ color: page.body }}>
             {line}
           </p>
         ))}
+        {/* §101 — 검수 대상 자산 같은 나열 줄(입력 아님 · 숫자 0). */}
+        {screen.items && (
+          <ul className="mt-1 flex flex-col gap-2">
+            {screen.items.map((item) => (
+              <li
+                key={item}
+                className="rounded-[10px] border px-3.5 py-3 text-[15px] font-semibold"
+                style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.headline }}
+              >
+                {item}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-5 pb-6 pt-4">
-        {copy.fields.map((field) => (
-          <label
-            key={field.label}
-            className="flex flex-col gap-1.5 text-[15px] font-semibold"
-            style={{ color: page.headline }}
-          >
-            {field.label}
-            {/* T190-5(D-93) — 숫자 칸은 숫자 자판 힌트만(`inputMode` — 필드별 명시). ⛔ 검증 0. */}
-            <input
-              type="text"
-              inputMode={field.inputMode}
-              autoComplete="off"
-              value={values[field.label] ?? ""}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, [field.label]: event.target.value }))
-              }
-              placeholder={field.placeholder}
-              className="min-h-[52px] rounded-[10px] border px-3.5 text-[17px] font-normal outline-none focus:border-2"
-              style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.inputText }}
-            />
-          </label>
-        ))}
+      <form key={stepIndex} onSubmit={handleSubmit} className="flex flex-col gap-4 px-5 pb-6 pt-4">
+        {(screen.fields ?? []).map((field) => {
+          const error = errors[field.label];
+          const hint = field.amount ? amountHint(values[field.label] ?? "") : undefined;
+          const noteId = `landing-note-${stepIndex}-${field.label}`;
+          return (
+            <label
+              key={field.label}
+              className="flex flex-col gap-1.5 text-[15px] font-semibold"
+              style={{ color: page.headline }}
+            >
+              {field.label}
+              {isPrefilled(field) ? (
+                // ⭐ D-115 (3) — 문자로 안내된 수취 계좌를 미리 채운 읽기 전용 칸(연회색 · 테두리 0 · 자판 0 · Tab 도달). placeholder 0.
+                <input
+                  type="text"
+                  readOnly
+                  aria-readonly="true"
+                  value={prefilledAccount}
+                  className="min-h-[52px] rounded-[10px] px-3.5 text-[17px] font-normal outline-none"
+                  style={{ backgroundColor: page.fieldReadonlyBg, color: page.inputText }}
+                />
+              ) : (
+                // T190-5(D-93) — 숫자 칸은 숫자 자판 힌트만(`inputMode` — 필드별 명시). 입력값 자동 서식 0.
+                // §101 추가 — 제출 때 빈 칸 · 금액 오류를 칸 아래에 알린다(위 `errorFor`).
+                <input
+                  type="text"
+                  inputMode={field.inputMode}
+                  autoComplete="off"
+                  value={values[field.label] ?? ""}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setValues((current) => ({ ...current, [field.label]: next }));
+                    if (error) setErrors((current) => ({ ...current, [field.label]: "" }));
+                  }}
+                  placeholder={field.placeholder}
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={error || hint ? noteId : undefined}
+                  className="min-h-[52px] rounded-[10px] border px-3.5 text-[17px] font-normal outline-none focus:border-2"
+                  style={{ borderColor: error ? page.errorText : page.inputBorder, backgroundColor: page.inputBg, color: page.inputText }}
+                />
+              )}
+              {/* §101 추가 — 오류 안내가 우선, 없으면 금액 한글 단위 표기("47억 원"). */}
+              {error ? (
+                <span id={noteId} role="alert" className="text-[14px] font-normal" style={{ color: page.errorText }}>
+                  {error}
+                </span>
+              ) : hint ? (
+                <span id={noteId} className="text-[15px] font-semibold" style={{ color: page.hintText }}>
+                  {hint}
+                </span>
+              ) : null}
+            </label>
+          );
+        })}
 
         {/* 제출 버튼은 일부러 앱 브랜드 청록(#0E6B62)이 아닌 중립 회색(#41525E)을 쓴다 —
             이 화면이 우리 앱의 정식 CTA가 아니라 "낯선 가짜 사이트"라는 느낌을 유지해 훈련
@@ -612,7 +780,7 @@ function CredentialFormMockup({
           className="min-h-[52px] rounded-[10px] text-base font-semibold transition-colors"
           style={{ backgroundColor: page.submitBg, color: page.submitText }}
         >
-          {copy.submitLabel}
+          {screen.actionLabel}
         </button>
         <button
           type="button"

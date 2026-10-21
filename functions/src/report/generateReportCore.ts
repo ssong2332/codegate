@@ -9,6 +9,7 @@ import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { MOCK_SCREENS } from "../scenarios/mockScreens";
+import { listOtpItems } from "../scenarios/inCallSms";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import type {
@@ -116,7 +117,13 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   // computeDefenseGrade의 시그니처는 무변경이다. 판정 기준이 난이도마다 달라지면 실패 아카이브의
   // 누적 비교("이 수법에 3번 넘어갔습니다")가 서로 다른 잣대의 합이 되어 무의미해지기 때문이다.
   // 난이도는 아래 리포트 문서에 **표기 전용**으로만 역정규화된다(P-22).
-  const analysis = analyzeConversation(messages, session.createdAt.toMillis(), weakenedTactics);
+  // 사용자 결정 2026-10-21 — 인증번호 오답은 속음이 아니라 위험 신호(analyzeConversation W0~W4). 정답은 카탈로그 값(추가 read 0).
+  const analysis = analyzeConversation(
+    messages,
+    session.createdAt.toMillis(),
+    weakenedTactics,
+    listOtpItems(session.scenarioId).map((item) => item.otpCode!),
+  );
 
   // ②-b 통화 중 문자 이벤트 스냅샷(T89, §15.1.5, AC-059) — `sessions/{sid}/inCallSms`를 **1회 추가
   // read**해 표시 전용 배열로 역정규화한다. 이 화면 데이터가 리포트 문서 안에 있으면 리플레이·리포트
@@ -148,6 +155,10 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       ...(data.landingSubmittedAt
         ? { landingSubmittedAtMs: data.landingSubmittedAt.toMillis() }
         : {}),
+      // §101 — 여러 화면 사이트의 이체 전 단계(승격 판정 입력 전용 — 스냅샷에 싣지 않는다).
+      ...(data.landingIdentityAt ? { landingIdentityAtMs: data.landingIdentityAt.toMillis() } : {}),
+      ...(data.landingConvertedAt ? { landingConvertedAtMs: data.landingConvertedAt.toMillis() } : {}),
+      ...(data.landingAmountAt ? { landingAmountAtMs: data.landingAmountAt.toMillis() } : {}),
       ...(data.fakeLandingId ? { fakeLandingId: data.fakeLandingId } : {}),
     };
   });
