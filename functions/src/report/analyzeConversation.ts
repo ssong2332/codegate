@@ -281,6 +281,38 @@ function isHandoffPromiseReply(scammerText: string, replyText: string): boolean 
   );
 }
 
+// ⭐ 판정 검수(2026-10-21, 시나리오 17종 × 대본 56건 — 오판 7건 중 아래 4부류를 리포트 전용 갈래로 닫는다).
+// 공유 패턴(`RESISTANCE_PATTERN` · `COMPLIANCE_PATTERN`)은 **바이트 무변경**이다(`handoffPromise.test.ts` 해시 고정 ·
+// 되감기 `rewind/judge.ts`와 공유). T191 J-2와 같은 방식 — 리포트 판정에서만 덧댄다.
+//
+// | # | If(참가자 답변 · 바로 앞 사기범 대사) | Then | 근거 대본 |
+// |---|---|---|---|
+// | V1 | 저항 어휘가 **되묻기**(`본인 확인이요?` · `경찰청이요?`)나 **부정**(`신고 안 할게요` · `의심 안 해요`)으로만 나온다 | 그 구간을 저항으로 세지 않는다(나머지 저항 어휘가 있으면 여전히 저항) | "본인 확인이요? [주민번호]" · "신고 안 할게요 보낼게요" |
+// | V2 | 사기범이 생년월일 · 생일을 물었고 답에 날짜(`N월 N일` — 뒤에 `에 · 까지 · 쯤 · 이후` 등 일정 조사가 오면 제외 · 숫자 6자리)가 있다 | 순응 | "61년 3월 2일이요" |
+// | V3 | 사기범이 보안코드 · CVC · 인증번호 · 비밀번호를 물었고 답에 2~6자리 숫자가 단위 없이 있다 | 순응 | "뒷면 번호 382요" |
+// | V4 | 답에 `입력했/입력할게/입력하겠/입력 완료`가 있다 | 순응 | "주소 입력했어요" |
+// | — | V2 · V3 · V4도 `REFUSAL_IN_ANSWER`(거절 · 의심 · 되묻기)가 있으면 열지 않는다 | — | — |
+// ⚠️ 한계(투명 고지): 되감기 규칙 폴백은 공유 패턴만 쓰므로 V1~V4 답변이 되감기에서는 다르게(중립 · 잘 대응함) 나올 수 있다(J-2와 같은 비대칭).
+const ECHOED_OR_NEGATED_RESISTANCE =
+  /(?:본인\s*확인|경찰[가-힣]{0,2}|신고)\s*(?:이요|요|이라고요|라고요|이라구요|라구요)\s*\?|(?:신고|의심|경찰에\s*연락|경찰에\s*말)\s*(?:은|는|도)?\s*(?:안\s*(?:할|하|해|합)|하지\s*않|않|못\s*(?:할|하|해))/g;
+const BIRTH_DATE_DEMAND = /생년\s*월일|생일|태어나/;
+const DATE_IN_ANSWER =
+  /\d{1,2}\s*월\s*\d{1,2}\s*일(?!\s*(?:에|까지|부터|쯤|날|정도|이후|전|후|마다))|(?<!\d)\d{6}(?!\d)/;
+const SECRET_CODE_DEMAND = /보안\s*코드|CVC|cvc|뒷면[^.?!]{0,8}(?:번호|숫자|자리)|인증\s*번호|비밀\s*번호/;
+const SHORT_CODE_IN_ANSWER = /(?<!\d)\d{2,6}(?!\d|\s*(?:원|만|천|년|월|일|시|분|호|번지|살|개|명|층|로|에))/;
+const ENTERED_IN_ANSWER = /입력\s*(?:했|할게|하겠|완료)/;
+
+function isResistanceForReport(replyText: string): boolean {
+  return RESISTANCE_PATTERN.test(replyText.replace(ECHOED_OR_NEGATED_RESISTANCE, " "));
+}
+
+function isContextualCompliance(scammerText: string, replyText: string): boolean {
+  if (REFUSAL_IN_ANSWER.test(replyText)) return false;
+  if (BIRTH_DATE_DEMAND.test(scammerText) && DATE_IN_ANSWER.test(replyText)) return true;
+  if (SECRET_CODE_DEMAND.test(scammerText) && SHORT_CODE_IN_ANSWER.test(replyText)) return true;
+  return ENTERED_IN_ANSWER.test(replyText);
+}
+
 /**
  * 사기범 발화 텍스트에 어떤 weakenedTactics의 저작 문구(flavor 인용구)가 남아 있는지 추정하기 위한
  * 수법별 키 묶음. 비교는 대사를 만드는 쪽(MockLlmClient)과 같은 `extractTacticFlavor` 산출을 기준으로 한다.
@@ -484,14 +516,24 @@ export function analyzeConversation(
     }
     const matchedTactic = matchedTactics[0];
 
-    const userReply = sorted[i + 1];
-    if (!userReply || userReply.role !== "user") continue;
-
-    const resisted = RESISTANCE_PATTERN.test(userReply.textMasked);
-    const complied =
-      COMPLIANCE_PATTERN.test(userReply.textMasked) ||
-      isHandoffPromiseReply(msg.textMasked, userReply.textMasked);
-    if (resisted || !complied) continue;
+    // 판정 검수(2026-10-21) — 사기범 대사 뒤 참가자 줄이 **연달아** 올 수 있다(실시간 통화에서 사기범 전사가 빈
+    // `turnComplete` · 끊긴 조각). 종전엔 첫 줄만 봐서 "잠깐만요" → "048231이요"의 둘째 줄이 판정되지 않았다.
+    // 다음 사기범 대사 전까지의 참가자 줄을 차례로 보고 **처음 응한 줄 하나**만 순간으로 잡는다(대사 1개당 순간 최대 1개 — 종전 불변식).
+    // 교대로 오가는 대화에서는 첫 줄만 보게 되므로 종전 판정과 같다.
+    let userReply: AnalysisMessage | undefined;
+    for (let j = i + 1; j < sorted.length && sorted[j].role === "user"; j += 1) {
+      const reply = sorted[j];
+      const resisted = isResistanceForReport(reply.textMasked);
+      const complied =
+        COMPLIANCE_PATTERN.test(reply.textMasked) ||
+        isHandoffPromiseReply(msg.textMasked, reply.textMasked) ||
+        isContextualCompliance(msg.textMasked, reply.textMasked);
+      if (!resisted && complied) {
+        userReply = reply;
+        break;
+      }
+    }
+    if (!userReply) continue;
 
     // PR-A3 — 문구 키가 비면 요구 어형 표(`resolveDemandFallbackTactic`)로 세션 목록 안의 라벨을 고른다. 고른 라벨은
     // AC-083 (a)를 지키려고 수법 목록에도 올린다(라벨이 정해지는 것은 이미 속은 순간으로 판정된 짝뿐이다).
