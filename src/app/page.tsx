@@ -7,6 +7,7 @@ import { useCurrentUser } from "@/lib/auth";
 import { hasGrantedConsent } from "@/lib/consent";
 import { hasVerifiedAge } from "@/lib/age";
 import { Card, Chip, LineIcon } from "@/components/ui";
+import LegalLinks from "@/components/LegalLinks";
 
 // 리뷰 Major 2 — "받기"가 진짜 전화 · 문자로 읽히지 않게 앱 안 체험임을 밝힌다(PSTN 없음 · 인앱 모의).
 const LANDING_STEPS = ["체험 고르기", "앱에서 전화 · 문자 체험하기", "결과와 해설 보기"] as const;
@@ -95,6 +96,7 @@ export default function Home() {
           가족에게 받은 훈련 링크가 있나요? 그 링크를 다시 눌러 주세요.
         </p>
       </div>
+      <LegalLinks className="pb-6" />
     </main>
   );
 }

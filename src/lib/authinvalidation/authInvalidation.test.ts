@@ -42,12 +42,14 @@ const ALL_ROUTES = [
   "/challenge/join",
   "/challenge/results",
   "/clone/wait",
+  "/contact",
   "/grade",
   "/history",
   "/login",
   "/onboarding/age-gate",
   "/onboarding/consent",
   "/onboarding/record",
+  "/privacy",
   "/report",
   "/report/archive",
   "/report/replay",
@@ -64,6 +66,7 @@ const ALL_ROUTES = [
   "/session/end",
   "/session/messenger",
   "/session/play",
+  "/terms",
 ];
 const NORMAL_SESSION_PATHS = ALL_ROUTES;
 
