@@ -18,7 +18,8 @@ export const PREP_USUAL_LINE = "보통 10~15초 걸려요";
 export const PREP_TIPS: readonly string[] = [
   "검찰·경찰·금감원은 전화로 돈을 옮기라고 하지 않습니다.",
   "문자로 온 링크로 신분증·카드번호를 넣지 마세요.",
-  "의심되면 끊고, 내가 찾은 대표번호로 다시 거세요.",
+  // 리뷰 Minor — 메신저 경로에서도 맞게 채널 중립(전화 · 메시지 둘 다).
+  "의심되면 멈추고, 내가 직접 찾은 대표번호로 확인하세요.",
 ];
 
 /** 예방 요령 바꾸는 간격(ms) — 한 문장을 천천히 두 번 읽을 시간. */
@@ -41,4 +42,5 @@ export function entryBoardCopy(channel: "voice" | "messenger"): { title: string;
 }
 
 /** 종료 경계 판 문면. */
-export const EXIT_BOARD = { title: "끝.", line: "훈련이 끝났습니다. 여기부터는 실제 화면입니다." } as const;
+// 줄은 짧게(작은 화면에서 한 줄 띠) — "훈련이 끝났다"는 바로 아래 제목 "이것은 훈련이었습니다"가 말한다.
+export const EXIT_BOARD = { title: "끝.", line: "여기부터는 실제 화면입니다." } as const;

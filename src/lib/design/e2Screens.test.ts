@@ -84,7 +84,11 @@ test("[G653] 경계 판 — 진입은 세션 생성 뒤(훈련 화면 코드 무
   assert.ok(ENTRY_BOARD_MS <= 1500, "진입 판이 너무 오래 머문다");
   const difficulty = codeOnly("src/app/scenarios/difficulty/page.tsx");
   assert.match(difficulty, /setEntryBoardTo\(destination\);/, "세션 생성 성공 뒤 판을 보인다");
-  assert.ok(!/router\.push\(destination\)/.test(difficulty), "판 없이 바로 가는 옛 경로가 남았다");
+  const startSelf = difficulty.slice(difficulty.indexOf("const startSelfSession"), difficulty.indexOf("const handleStart"));
+  assert.ok(!/router\.push\(/.test(startSelf), "판 없이 바로 가는 옛 경로가 남았다");
+  // 판은 "바로 시작"과 타이머가 겹쳐도 한 번만 이동한다 · 판으로 포커스를 옮긴다.
+  assert.match(difficulty, /if \(enteredRef\.current\) return;/);
+  assert.match(difficulty, /focusOnMount/);
   // 통화 · 메신저 화면에는 경계 판을 넣지 않는다(받기 탭 오디오 잠금 해제 경로 무변경).
   for (const f of ["src/app/session/play/page.tsx", "src/app/session/messenger/page.tsx", "src/components/CallStartNotice.tsx"]) {
     assert.ok(!readFileSync(f, "utf8").includes("BoundaryPanel"), f);

@@ -131,6 +131,22 @@ html {
   .end-compact > p {
     line-height: 1.55;
   }
+  /* UX D-141 (5) — 종료 경계 판(모래 "끝.")은 한 줄 띠로 줄이고(글자 크기는 그대로 — G-VU5), 체크를 띠 안에 넣어 아이콘 원을 대신한다(한 화면 유지 —
+     360×650 실측은 docs/Architecture.md §97.7). */
+  .end-compact > .end-board {
+    margin-top: -1.25rem;
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .end-compact .end-board-check {
+    display: block;
+  }
+  .end-compact > div:first-of-type {
+    display: none;
+  }
 }
 
 /* UX D-140 (4) — 목록에서 고른 구역의 제목이 위에 붙은 목록 막대(56px)에 가려지지 않게 한다(`TOC_SCROLL_MARGIN_PX`). */

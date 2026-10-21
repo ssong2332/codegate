@@ -19,7 +19,7 @@
 // createSession의 consents 확인)·상시 종료(AC-006)·합성/모의 표식(AC-022)·사전 고지(AC-012)·
 // 2인 안전제약(AC-040/042/043)은 세 난이도에서 완전히 동일하다. 고급 선택 시 **고지가 늘어날
 // 뿐**(아래 ADVANCED_*_NOTICE) 어떤 컨트롤도 숨기거나 완화하지 않는다.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSession, getBeginnerBriefing } from "@/lib/api";
 import {
@@ -92,11 +92,21 @@ export default function DifficultySelectPage() {
   // ⛔ 받기 탭의 동기 오디오 잠금 해제(primeCallAudio)는 통화 화면 안의 "준비됐어요" · 받기 탭에서 일어나므로 이 판과 무관하다
   //    (이 판은 그 전 화면에서 끝난다 — 훈련 화면 코드 무변경).
   const [entryBoardTo, setEntryBoardTo] = useState<string | null>(null);
+  // 리뷰 Minor — "바로 시작"과 타이머가 겹쳐도 한 번만 간다.
+  const enteredRef = useRef(false);
+  const enterTraining = useCallback(
+    (destination: string) => {
+      if (enteredRef.current) return;
+      enteredRef.current = true;
+      router.push(destination);
+    },
+    [router],
+  );
   useEffect(() => {
     if (!entryBoardTo) return;
-    const timer = window.setTimeout(() => router.push(entryBoardTo), ENTRY_BOARD_MS);
+    const timer = window.setTimeout(() => enterTraining(entryBoardTo), ENTRY_BOARD_MS);
     return () => window.clearTimeout(timer);
-  }, [entryBoardTo, router]);
+  }, [entryBoardTo, enterTraining]);
 
   // 초급 사전 브리핑(D-43/AC-066) — **세션 시작 전**에만 보여준다. 대화 중 실시간 판정 표시가
   // 아니다(D-6 유지). 실패는 비차단(P-4): 브리핑을 못 받아도 난이도 선택·진행은 그대로 된다.
@@ -275,15 +285,27 @@ export default function DifficultySelectPage() {
     const copy = entryBoardCopy(isMessenger ? "messenger" : "voice");
     return (
       <main className="mx-auto w-full max-w-xl">
-        <button type="button" onClick={() => router.push(entryBoardTo)} className="block w-full text-left" aria-label={`${copy.title}. ${copy.lines.join(" ")} 누르면 바로 시작합니다.`}>
-          <BoundaryPanel tone="enter" title={copy.title}>
-            {copy.lines.map((line) => (
-              <span key={line} className="block">
-                {line}
-              </span>
-            ))}
-          </BoundaryPanel>
-        </button>
+        {/* 리뷰 Major/Minor — 판으로 포커스를 옮겨 바로 읽히게 하고, 넘기기는 판 아래 버튼(버튼 안에 제목을 넣지 않는다). */}
+        <BoundaryPanel
+          tone="enter"
+          title={copy.title}
+          focusOnMount
+          footer={
+            <button
+              type="button"
+              onClick={() => enterTraining(entryBoardTo)}
+              className="mx-[26px] mb-[calc(env(safe-area-inset-bottom)+24px)] min-h-[56px] rounded-[8px] border-2 border-white/70 px-5 text-[18px] font-bold text-white"
+            >
+              바로 시작
+            </button>
+          }
+        >
+          {copy.lines.map((line) => (
+            <span key={line} className="block">
+              {line}
+            </span>
+          ))}
+        </BoundaryPanel>
       </main>
     );
   }

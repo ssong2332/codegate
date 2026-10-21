@@ -5,8 +5,7 @@
 // 짙은 남색 바탕 · 모래색 큰 **경과 초** · "보통 10~15초" · 끝없이 흐르는 대기 막대(진행률 아님) · 고른 난이도 설명 ·
 // 예방 요령(5초마다 교체) · 경과 시간 안심 문구(D-134 SESSION_PREP_HINTS).
 // ⛔ "1/3" · 단계 완료 · 퍼센트 표기 금지(D-134). 큰 숫자는 스크린리더에 읽히지 않는다(1초마다 바뀌어 소음이 된다).
-import { useEffect, useState } from "react";
-import { DisplayTitle } from "@/components/ui";
+import { useEffect, useRef, useState } from "react";
 import { useLoadingHint } from "@/components/ui/LoadingStatus";
 import { SESSION_PREP_HINTS } from "@/lib/motion/routeMotion";
 import { PREP_TIPS, PREP_USUAL_LINE, formatElapsed, prepTipIndex } from "@/lib/design/e2Prep";
@@ -23,6 +22,11 @@ export default function TrainingPrepScreen({
 }) {
   const [elapsed, setElapsed] = useState(0);
   const hint = useLoadingHint(SESSION_PREP_HINTS);
+  // 리뷰 Major — 누른 "이걸로 시작"이 사라져 포커스가 길을 잃지 않게 제목으로 옮긴다(낭독: "훈련을 준비하고 있어요").
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     const startedAt = Date.now();
@@ -35,16 +39,17 @@ export default function TrainingPrepScreen({
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-5 bg-deep px-[22px] pb-[calc(env(safe-area-inset-bottom)+24px)] pt-10 text-white">
       <p className="e2-rise text-[15px] font-bold text-brand-tint [word-break:keep-all]">{meta}</p>
-      <div role="status" aria-live="polite" className="flex flex-col gap-2">
-        <DisplayTitle as="h1" size="lg" className="e2-rise">
-          훈련을 준비하고 있어요
-        </DisplayTitle>
+      <h1 ref={headingRef} tabIndex={-1} className="e2-rise font-display text-[30px] font-bold leading-[1.3] tracking-[-0.02em] outline-none [word-break:keep-all]">
+        훈련을 준비하고 있어요
+      </h1>
+      {/* 라이브 영역은 처음부터 두고 안쪽 문구만 바꿔 끼운다(경과 시간 안심 문구가 바뀔 때 읽힌다). */}
+      <p role="status" aria-live="polite" className="-mt-3 text-[17px] leading-[1.6] text-brand-tint [word-break:keep-all]">
         {hint && (
-          <p key={hint} className="motion-reveal text-[17px] leading-[1.6] text-brand-tint [word-break:keep-all]">
+          <span key={hint} className="motion-reveal block">
             {hint}
-          </p>
+          </span>
         )}
-      </div>
+      </p>
       <p aria-hidden="true" className="font-display text-[96px] font-bold leading-none tabular-nums text-sand">
         {formatElapsed(elapsed)}
       </p>
