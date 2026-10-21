@@ -10,6 +10,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { buildSystemPrompt, REAL_COMPANY_PROMPT_SENTENCE } from "../promptAssembly";
 import { R3C2_LENGTH_DELTA, revertR3C2 } from "./r3NoStallDelta";
+import { FULL_AUDIT_LENGTH_DELTA, revertFullAudit } from "./fullAuditDelta";
 
 /** §85 — 조립 결과에 들어간 형태(앞 공백 포함). */
 const COMPANY_SENTENCE_WITH_SPACE = ` ${REAL_COMPANY_PROMPT_SENTENCE}`;
@@ -66,10 +67,12 @@ const BASE_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { varia
  * 위 변경 전 값과의 차이는 그 1항과 §85 실존 회사명 금지 1문장(2026-10-20 재측정)뿐이다(아래 테스트가 둘을 걷어 내 변경 전 값과 대조한다).
  * ⚠️ R3-C ②-a(2026-10-20 · 정본 Architecture §79.22 (6)) — 무조건부 NO_STALL_RULE 셋째 문장 교체로 다시 쟀다(직전 기대값
  * 초급 848274077c004992… 6221자 · 중급 88ee49b765f0164b… 5487자). 변경 전 값 대조는 그 교체분도 되돌려(`revertR3C2`) 한다.
+ * ⚠️ 2026-10-22(전수 검수 · fullAuditDelta.ts) — 공통 [진행 강제] 두 곳(페이로드 예시 · 거절 요구 반복 금지 1문장) 교체로 다시 쟀다(직전 기대값
+ * 초급 c287b4074dc0d4e3… 6242자 · 중급 fdb6ac8019a5c1be… 5508자). 변경 전 값 대조는 그 교체분도 되돌려(`revertFullAudit`) 한다.
  */
 const AFTER_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { sha256: string; length: number }>> = {
-  beginner: { sha256: "c287b4074dc0d4e38a7af30b98b06bf2752420a87ba79edc00def149b4bee996", length: 6242 },
-  intermediate: { sha256: "fdb6ac8019a5c1bef5ef69faba166db4adda95d80d900052bf6488e36fb807e2", length: 5508 },
+  beginner: { sha256: "164a5a1014aa4e3c67651f50e074322e2060cb9bfed9a4b0c70f54b8e2f41fd2", length: 6338 },
+  intermediate: { sha256: "9702c9aa64b0297773b336e97627d6b847c885f363fa455944e389adda845ef8", length: 5604 },
 };
 
 test("[T194-a G586 · §84.13.3 ④] parcel 초급 · 중급 조립 = 갱신 기대값(가드레일 (5)항 포함) · 가드레일 최후미", () => {
@@ -79,7 +82,7 @@ test("[T194-a G586 · §84.13.3 ④] parcel 초급 · 중급 조립 = 갱신 기
     assert.equal(assembled.length, AFTER_ASSEMBLY_SHA256[level].length, `${level}: 길이`);
     assert.equal(sha256(assembled), AFTER_ASSEMBLY_SHA256[level].sha256, `${level}: 바이트`);
     // §85 — 차이 = (5)항 + 실존 회사명 금지 1문장(앞 공백 포함).
-    assert.equal(assembled.length - BASE_ASSEMBLY_SHA256[level].length, PARCEL_CONTROL_TOKEN_GUARD_ITEM.length + COMPANY_SENTENCE_WITH_SPACE.length + R3C2_LENGTH_DELTA, `${level}: 차이 = (5)항 + §85 1문장 + R3-C ②-a 교체분 길이`);
+    assert.equal(assembled.length - BASE_ASSEMBLY_SHA256[level].length, PARCEL_CONTROL_TOKEN_GUARD_ITEM.length + COMPANY_SENTENCE_WITH_SPACE.length + R3C2_LENGTH_DELTA + FULL_AUDIT_LENGTH_DELTA, `${level}: 차이 = (5)항 + §85 1문장 + R3-C ②-a 교체분 + 전수 검수 교체분 길이`);
     const guard = SCENARIO_PROMPTS[PARCEL].guardrailPreamble;
     assert.ok(assembled.trimEnd().endsWith(guard.trimEnd()), `${level}: 가드레일 최후미`);
   }
@@ -97,9 +100,9 @@ test("[T194-a G586 · §84.4.6] parcel 초급 · 중급 조립 = 변경 전 바�
     assert.equal(assembled.includes("[화자"), false, `${level}: [화자] 블록이 생겼다`);
     assert.equal(assembled.split(PARCEL_CONTROL_TOKEN_GUARD_ITEM).length - 1, 1, `${level}: 가드레일 보강 항이 정확히 1회 있어야 한다`);
     assert.equal(assembled.split(COMPANY_SENTENCE_WITH_SPACE).length - 1, 1, `${level}: §85 금지 1문장이 정확히 1회 있어야 한다`);
-    const stripped = revertR3C2(assembled.replace(PARCEL_CONTROL_TOKEN_GUARD_ITEM, "").replace(COMPANY_SENTENCE_WITH_SPACE, ""));
+    const stripped = revertR3C2(revertFullAudit(assembled).replace(PARCEL_CONTROL_TOKEN_GUARD_ITEM, "").replace(COMPANY_SENTENCE_WITH_SPACE, ""));
     // 역방향 — 표 값을 "female"로 바꿨을 때(설계가 금지한 처방)의 산출물은 기준값과 달라진다.
-    const withSpeaker = revertR3C2(assembleFor(level, variant.variantId, "female").replace(PARCEL_CONTROL_TOKEN_GUARD_ITEM, "").replace(COMPANY_SENTENCE_WITH_SPACE, ""));
+    const withSpeaker = revertR3C2(revertFullAudit(assembleFor(level, variant.variantId, "female")).replace(PARCEL_CONTROL_TOKEN_GUARD_ITEM, "").replace(COMPANY_SENTENCE_WITH_SPACE, ""));
     lines.push(
       `${level}: 항 제거본 ${sha256(stripped).slice(0, 12)}(${stripped.length}자) = 기준 ${base.sha256.slice(0, 12)}(${base.length}자) · [화자] 넣은 샘플 ${sha256(withSpeaker).slice(0, 12)}(${withSpeaker.length}자)`,
     );
