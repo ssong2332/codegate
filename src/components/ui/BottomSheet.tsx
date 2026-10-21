@@ -28,6 +28,7 @@ export default function BottomSheet({
   return (
     <section
       aria-label={label}
+      data-bottom-sheet=""
       className={`e2-sheet-in ${placement === "fixed" ? "fixed inset-x-0 bottom-0 mx-auto max-w-xl" : "sticky bottom-0"} z-40 flex w-full flex-col border-t-[3px] border-brand bg-surface text-ink shadow-[0_-14px_30px_color-mix(in_srgb,var(--deep)_22%,transparent)] ${className}`}
     >
       {children}

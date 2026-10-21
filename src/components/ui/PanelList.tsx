@@ -41,7 +41,7 @@ type Props = {
 };
 
 export default function PanelList({ items, onSelect, mode = "navigate", selectedKey = null, numbered = true, startIndex = 0, className = "" }: Props) {
-  // choose(난이도)는 채우지 않는다 — 설명 시트가 열리면 목록 아래 여백으로 마지막 판까지 보이게(D-141 (3)).
+  // choose(난이도)는 채우지 않는다 — 설명 시트(sticky)는 문서 끝에 붙으므로 끝까지 내리면 마지막 판까지 보인다(D-141 (3)).
   const fill = mode === "navigate" && panelsFillHeight(items.length);
   const minHeight = panelMinHeight(items.length);
   return (
@@ -131,7 +131,8 @@ function Panel({
       <span className="flex min-w-0 flex-col gap-1">
         <span className="text-[25px] font-bold leading-[1.2] tracking-[-0.01em] [word-break:keep-all]">
           {item.title}
-          {item.badge && <span className="ml-2 align-middle">{item.badge}</span>}
+          {/* 낭독 때 제목과 표가 붙어 읽히지 않게 공백 문자를 둔다(리뷰 Minor). */}
+          {item.badge && <>{" "}<span className="ml-1 align-middle">{item.badge}</span></>}
         </span>
         {item.description && (
           <span className={`text-[17px] leading-[1.45] [word-break:keep-all] ${tone.sub}`}>{item.description}</span>

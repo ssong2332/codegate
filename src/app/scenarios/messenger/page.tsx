@@ -62,7 +62,7 @@ export default function MessengerScenarioSelectPage() {
   // escalation_not_supported로 독립 거부한다(2중 방어). 아카이브 진입은 항상
   // setExperienceMode("self")를 선호출해 send 모드가 되지 않는다.
   const searchParams = useSearchParams();
-  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(() => {
+  const [selectedScenarioId] = useState<string | null>(() => {
     const preset = searchParams.get("scenarioId");
     return preset && scenarios[preset]?.channel === "messenger" ? preset : null;
   });
@@ -92,9 +92,9 @@ export default function MessengerScenarioSelectPage() {
 
   // UX D-141(시안 E2) — 판을 누르면 그 시나리오로 확정하고 바로 난이도 선택으로 간다(종전 2탭 → 1탭).
   // T72(D-41) — 세션 생성은 난이도 선택(UX-029) 화면이 한다.
+  // 리뷰 Minor — 이동하지 않으면 false(덮개 0). 지목 표("다시 훈련")는 프리셋에만 붙인다.
   const handleSelectScenario = (scenarioId: string) => {
-    if (!scenarios[scenarioId]) return;
-    setSelectedScenarioId(scenarioId);
+    if (!scenarios[scenarioId]) return false;
     setPendingSelectedScenarioId(scenarioId);
     router.push("/scenarios/difficulty");
   };

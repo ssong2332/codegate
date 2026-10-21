@@ -55,7 +55,7 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
   // ⚠️ 노출 필터(AC-029/AC-057)를 프리셋이 우회하면 안 된다 — 이 목록에 실제로 보이는 시나리오만
   // 미리 선택한다(예: clone 시나리오를 generic 목록에 손으로 붙여 넣어도 무시된다).
   const searchParams = useSearchParams();
-  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(() => {
+  const [selectedScenarioId] = useState<string | null>(() => {
     const rawPreset = searchParams.get("scenarioId");
     // §92(UX D-135) — 합쳐진 시나리오를 지목한 옛 링크는 흡수처를 미리 고른다(목록에 없는 카드를 고르지 않는다).
     const preset = rawPreset ? resolveListedScenarioId(rawPreset, scenarios[rawPreset]) : null;
@@ -93,9 +93,9 @@ export function ScenarioListView({ mode }: { mode: VoiceMode }) {
   // UX D-141(시안 E2) — 판을 누르면 그 시나리오로 확정하고 바로 난이도 선택(UX-029)으로 간다(종전 "고르고 → 아래 '다음'" 2탭 → 1탭).
   // (T72, v1.11 D-41) — 이 화면은 **시나리오만 확정**하고 넘긴다. 세션/챌린지 생성 분기(send → UX-019, self·generic →
   // createSession)는 난이도 화면이 그대로 넘겨받아 수행한다(판정 규칙 자체는 이관 전과 동일).
+  // 리뷰 Minor — 이동하지 않으면 false(판 확장 덮개 0 — panelExpand.ts 계약). 지목 표("다시 훈련")는 프리셋에만 붙인다.
   const handleSelectScenario = (scenarioId: string) => {
-    if (!scenarios[scenarioId]) return;
-    setSelectedScenarioId(scenarioId);
+    if (!scenarios[scenarioId]) return false;
     // UX 계약 C-10 — 이벤트는 종류만(시나리오 ID · 수법 0).
     if (scenarios[scenarioId]?.advancedOnly === true) {
       console.info(JSON.stringify({ event: "advanced_only_scenario_selected" }));

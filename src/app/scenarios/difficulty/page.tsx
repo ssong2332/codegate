@@ -113,7 +113,7 @@ export default function DifficultySelectPage() {
     if (!selected) return;
     const timer = window.setTimeout(() => {
       const panel = document.querySelector<HTMLElement>(`[data-panel-key="${selected}"]`);
-      const sheet = document.querySelector<HTMLElement>('section[aria-label="고른 난이도"]');
+      const sheet = document.querySelector<HTMLElement>("[data-bottom-sheet]");
       if (!panel || !sheet) return;
       const overlap = panel.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top;
       if (overlap <= 0) return;
@@ -121,7 +121,8 @@ export default function DifficultySelectPage() {
       window.scrollBy({ top: overlap + 12, behavior: reduced ? "auto" : "smooth" });
     }, 340);
     return () => window.clearTimeout(timer);
-  }, [selected]);
+    // 오류 줄이 붙어 시트가 커질 때도 다시 잰다.
+  }, [selected, startError]);
 
   const handleSelect = (level: DifficultyLevel) => {
     setSelected(level);
@@ -304,6 +305,9 @@ export default function DifficultySelectPage() {
         {/* 고급 고지(UX-029 States) — 확인 다이얼로그를 띄우지 않고(D-2/P-9) 선택 직후 인라인으로
             알린다. aria-live로 스크린리더에도 즉시 전달된다. 고지가 늘어날 뿐 안전 컨트롤은 그대로다. */}
         <p aria-live="polite" className="sr-only">
+          {/* 리뷰 Major — 시트는 고를 때 처음 생기므로 시트 안 문단은 첫 선택을 낭독하지 못한다. 처음부터 있는 이 영역이
+              고른 난이도 · 설명 · 시작 버튼 위치를 알린다. */}
+          {selected ? `${DIFFICULTY_LABEL[selected]}을 골랐습니다. ${description(selected)} 화면 아래 '이걸로 시작'을 누르면 시작합니다. ` : ""}
           {selected === "advanced" ? advancedNotice : ""}
           {showBurdenNotice ? ` ${PRE_SESSION_BURDEN_NOTICE}` : ""}
         </p>
@@ -417,11 +421,10 @@ export default function DifficultySelectPage() {
             <DisplayTitle as="h2" size="lg" className="text-ink">
               {DIFFICULTY_LABEL[selected]}
             </DisplayTitle>
-            {!typing && (
-              <p aria-live="polite" className="text-[19px] leading-[1.6] text-ink [word-break:keep-all]">
-                {description(selected)}
-              </p>
-            )}
+            {/* 입력 중에는 접어 둔다(언마운트하지 않는다 — 다시 펼칠 때 재낭독 · 레이아웃 튐 줄이기). */}
+            <p hidden={typing} className="text-[19px] leading-[1.6] text-ink [word-break:keep-all]">
+              {description(selected)}
+            </p>
           </div>
         )}
         {startError && (

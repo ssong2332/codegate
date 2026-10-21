@@ -21,7 +21,8 @@ export default function ScenarioPanelGroups({
   presetId,
 }: {
   groups: readonly ScenarioPanelGroup[];
-  onSelect: (scenarioId: string) => void;
+  /** 이동하지 않으면 false(판 확장 덮개 0) */
+  onSelect: (scenarioId: string) => boolean | void;
   presetId: string | null;
 }) {
   useEffect(() => {
@@ -34,12 +35,12 @@ export default function ScenarioPanelGroups({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  let offset = 0;
+  // 묶음마다 번호 · 색 교차의 시작 순번(앞 묶음들의 판 수 합).
+  const starts = groups.map((_, i) => groups.slice(0, i).reduce((n, g) => n + g.items.length, 0));
   return (
     <>
-      {groups.map((group) => {
-        const startIndex = offset;
-        offset += group.items.length;
+      {groups.map((group, gi) => {
+        const startIndex = starts[gi];
         return (
           <section key={group.id} aria-labelledby={group.id} className="flex flex-col">
             <h2 id={group.id} data-toc-target className="px-[22px] pb-3 pt-5 text-[20px] font-bold text-ink [word-break:keep-all]">
