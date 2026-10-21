@@ -51,9 +51,10 @@ import {
   type DifficultyLevel,
 } from "@/lib/difficulty";
 import { scenarios, GENERIC_VOICE_ID, resolveScenarioEscalation } from "@/content/scenarios";
-import { Badge, BottomSheet, Button, CtaPanel, DisplayTitle, LoadingDots, LoadingHintLine, PanelBadge, PanelList } from "@/components/ui";
+import { Badge, BottomSheet, BoundaryPanel, Button, CtaPanel, DisplayTitle, LoadingDots, PanelBadge, PanelList } from "@/components/ui";
 import SelectScreenHeader from "@/components/SelectScreenHeader";
-import { SESSION_PREP_HINTS } from "@/lib/motion/routeMotion";
+import TrainingPrepScreen from "@/components/TrainingPrepScreen";
+import { ENTRY_BOARD_MS, entryBoardCopy } from "@/lib/design/e2Prep";
 import PersonaCardInputFields from "@/components/PersonaCardInputFields";
 import {
   EMPTY_PERSONA_CARD_FORM,
@@ -87,6 +88,15 @@ export default function DifficultySelectPage() {
   const [personaForm, setPersonaForm] = useState<PersonaCardForm>(EMPTY_PERSONA_CARD_FORM);
   // UX D-141 — 내 정보 칸에 입력 중이면 시트 설명을 숨긴다(키보드 위 공간).
   const [typing, setTyping] = useState(false);
+  // UX D-141 (5) — 세션이 만들어지면 훈련 화면으로 가기 전에 진입 경계 판("지금부터 훈련")을 잠깐(1.2초) 보인다.
+  // ⛔ 받기 탭의 동기 오디오 잠금 해제(primeCallAudio)는 통화 화면 안의 "준비됐어요" · 받기 탭에서 일어나므로 이 판과 무관하다
+  //    (이 판은 그 전 화면에서 끝난다 — 훈련 화면 코드 무변경).
+  const [entryBoardTo, setEntryBoardTo] = useState<string | null>(null);
+  useEffect(() => {
+    if (!entryBoardTo) return;
+    const timer = window.setTimeout(() => router.push(entryBoardTo), ENTRY_BOARD_MS);
+    return () => window.clearTimeout(timer);
+  }, [entryBoardTo, router]);
 
   // 초급 사전 브리핑(D-43/AC-066) — **세션 시작 전**에만 보여준다. 대화 중 실시간 판정 표시가
   // 아니다(D-6 유지). 실패는 비차단(P-4): 브리핑을 못 받아도 난이도 선택·진행은 그대로 된다.
@@ -183,7 +193,7 @@ export default function DifficultySelectPage() {
       setState("difficulty-fallback");
       return;
     }
-    router.push(destination);
+    setEntryBoardTo(destination);
   };
 
   const handleStart = async () => {
@@ -259,6 +269,36 @@ export default function DifficultySelectPage() {
 
   const description = (level: DifficultyLevel) =>
     isSendMode ? DIFFICULTY_SEND_DESCRIPTION[level] : DIFFICULTY_SELF_DESCRIPTION[level];
+
+  // UX D-141 (5) — 진입 경계 판. 판을 누르면 기다리지 않고 바로 간다.
+  if (entryBoardTo) {
+    const copy = entryBoardCopy(isMessenger ? "messenger" : "voice");
+    return (
+      <main className="mx-auto w-full max-w-xl">
+        <button type="button" onClick={() => router.push(entryBoardTo)} className="block w-full text-left" aria-label={`${copy.title}. ${copy.lines.join(" ")} 누르면 바로 시작합니다.`}>
+          <BoundaryPanel tone="enter" title={copy.title}>
+            {copy.lines.map((line) => (
+              <span key={line} className="block">
+                {line}
+              </span>
+            ))}
+          </BoundaryPanel>
+        </button>
+      </main>
+    );
+  }
+
+  // UX D-141 (5) · OQ-U106 Resolved — 셀프 세션을 만드는 동안(대기 길게는 15초) 준비 화면을 화면 전체에 그린다.
+  // 큰 표시는 경과 초(진행률 · "1/3" 0 — D-134). 보내기 · 통화로 이어지는 메신저는 곧바로 다음 화면으로 가므로 그리지 않는다.
+  if (state === "starting" && !isSendMode && selected && !resolveScenarioEscalation(scenario, selected)) {
+    return (
+      <TrainingPrepScreen
+        meta={`${typeLabel} · ${scenario.title} · ${DIFFICULTY_LABEL[selected]}`}
+        difficultyLabel={DIFFICULTY_LABEL[selected]}
+        difficultyNote={DIFFICULTY_SELF_DESCRIPTION[selected]}
+      />
+    );
+  }
 
   // UX D-141 (3)(시안 E2) — 난이도 판은 이름 + 한 줄(요약)만. 고르면 아래에서 설명 시트가 올라오고 시트의
   // "이걸로 시작"으로 진행한다(AC-064 — 고르기 전에는 진행 버튼 자체가 없다 = 사전 차단).
@@ -405,7 +445,7 @@ export default function DifficultySelectPage() {
             <div className="mt-3">
               <Button
                 type="button"
-                onClick={() => pendingDestination && router.push(pendingDestination)}
+                onClick={() => pendingDestination && setEntryBoardTo(pendingDestination)}
               >
                 이대로 계속하기
               </Button>
@@ -438,13 +478,7 @@ export default function DifficultySelectPage() {
           className="mt-3"
           onClick={() => void handleStart()}
           disabled={!selected || state === "starting" || state === "difficulty-fallback"}
-          note={
-            /* UX D-134 — 세션 생성은 길게는 15초쯤 걸린다. 서버가 실제로 하는 일만 말하고, 경과 시간에 따라 안심 문구를
-               덧붙인다(⛔ 진행률 · 단계 완료 표시 없음). 마운트 = 대기 시작이라 매번 0초부터 잰다. */
-            state === "starting" && !isSendMode && selected && !resolveScenarioEscalation(scenario, selected) ? (
-              <LoadingHintLine hints={SESSION_PREP_HINTS} />
-            ) : undefined
-          }
+          /* UX D-134 대기 문구(SESSION_PREP_HINTS)는 셀프 세션이면 준비 화면(TrainingPrepScreen)이 그린다(§97.7). */
         >
           {state === "starting" ? (
             <span className="flex items-center gap-2.5">

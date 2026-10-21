@@ -18,7 +18,8 @@ import { db } from "@/lib/firebase";
 import { endSession } from "@/lib/api";
 import type { EndSessionReason } from "@/lib/api/types";
 import { clearPendingEndReason, clearPendingSession, getPendingSessionId, peekPendingEndReason } from "@/lib/recording";
-import { Button, LoadingStatus } from "@/components/ui";
+import { Button, DisplayTitle, LoadingStatus } from "@/components/ui";
+import { EXIT_BOARD } from "@/lib/design/e2Prep";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { awaitTranscriptFlush } from "@/lib/session/transcriptFlushHandoff";
 import { POST_SESSION_FACT_DISCLOSURE } from "@/lib/sessionboundary/postSessionCopy";
@@ -281,6 +282,17 @@ export default function SessionEndPage() {
     // UX D-140 (2) — 높이 700px 이하(주소창이 보이는 작은 폰)에서는 `end-compact`(globals.css)가 여백 · 간격 · 아이콘 · 행간만
     // 줄여 한 화면에 든다(글자 크기 · 문면 무변경). 360×650 실측: 넘침 75 → 0.
     <main className="end-compact mx-auto flex min-h-dvh max-w-xl flex-col items-center gap-6 bg-page px-6 py-10 text-center">
+      {/* UX D-141 (5)(시안 E2) — 종료 경계 판(모래 "끝."). 여기부터 실제 화면임을 화면 가로 판 한 장으로 먼저 알린다.
+          아래 제목 · 안심 문단 · 사실 공개 문장(G445)은 그대로다. ⚠️ section이라 `.end-compact > div:first-of-type`
+          (작은 화면 아이콘 축소)은 아래 아이콘 div에 그대로 걸린다. */}
+      <section aria-label={EXIT_BOARD.title} className="-mx-6 -mt-10 flex w-[calc(100%+3rem)] flex-col gap-2 bg-sand px-[26px] pb-6 pt-10 text-left text-ink">
+        <DisplayTitle as="h2" size="board" className="e2-rise">
+          {EXIT_BOARD.title}
+        </DisplayTitle>
+        <p className="e2-rise text-[19px] font-bold leading-[1.55] [word-break:keep-all]" style={{ ["--e2-i" as string]: 1 }}>
+          {EXIT_BOARD.line}
+        </p>
+      </section>
       {/* AC-023: "이것은 훈련이었습니다" 명시 고지. 색이 아닌 아이콘+텍스트로 강조, 항상 노출. */}
       <div
         aria-hidden="true"

@@ -54,7 +54,43 @@ test("[G651] 난이도 — choose 판 + sticky 설명 시트 + '이걸로 시작
   assert.ok(!code.includes("이 난이도로 시작"), "옛 버튼 문구가 남았다");
   assert.match(code, /disabled=\{!selected \|\| state === "starting" \|\| state === "difficulty-fallback"\}/);
   // 안전 고지 · 내 정보 · 미리 보기 · 대기 문구(D-134)는 그대로 있다.
-  for (const needle of ["{PRE_SESSION_BURDEN_NOTICE}", "<PersonaCardInputFields", "위험 신호 미리 보기", "SESSION_PREP_HINTS", "advancedNotice"]) {
+  for (const needle of ["{PRE_SESSION_BURDEN_NOTICE}", "<PersonaCardInputFields", "위험 신호 미리 보기", "<TrainingPrepScreen", "advancedNotice"]) {
     assert.ok(code.includes(needle), needle);
   }
+  // 대기 문구(D-134)는 준비 화면이 그린다.
+  assert.ok(codeOnly("src/components/TrainingPrepScreen.tsx").includes("useLoadingHint(SESSION_PREP_HINTS)"));
+});
+
+// G652~G653 — P3 준비 화면 · 경계 판(§97.7 · OQ-U106 Resolved 2026-10-21).
+test("[G652] 준비 화면 — 큰 표시는 경과 초 · '보통 10~15초' · 진행률/단계 표기 0(D-134)", async () => {
+  const { formatElapsed, PREP_USUAL_LINE, PREP_TIPS, prepTipIndex, PREP_TIP_INTERVAL_MS } = await import("./e2Prep.ts");
+  assert.equal(formatElapsed(8400), "8초");
+  assert.equal(formatElapsed(0), "0초");
+  assert.equal(formatElapsed(-5), "0초");
+  assert.equal(formatElapsed(65000), "1분 5초");
+  assert.equal(formatElapsed(120000), "2분");
+  assert.equal(PREP_USUAL_LINE, "보통 10~15초 걸려요");
+  assert.equal(prepTipIndex(0), 0);
+  assert.equal(prepTipIndex(PREP_TIP_INTERVAL_MS * PREP_TIPS.length), 0, "요령은 돌아가며 보인다");
+  const screen = codeOnly("src/components/TrainingPrepScreen.tsx");
+  for (const banned of [/\/3/, /단계 완료/, /%/, /진행률/]) assert.doesNotMatch(screen, banned, `준비 화면에 ${banned}`);
+  assert.match(screen, /aria-hidden="true" className="font-display text-\[96px\]/, "1초마다 바뀌는 큰 숫자는 낭독하지 않는다");
+});
+
+test("[G653] 경계 판 — 진입은 세션 생성 뒤(훈련 화면 코드 무변경) · 종료는 사실 공개 문장과 함께", async () => {
+  const { entryBoardCopy, EXIT_BOARD, ENTRY_BOARD_MS } = await import("./e2Prep.ts");
+  assert.equal(entryBoardCopy("voice").title, "지금부터 훈련");
+  assert.ok(entryBoardCopy("messenger").lines[0].includes("메신저"));
+  assert.ok(ENTRY_BOARD_MS <= 1500, "진입 판이 너무 오래 머문다");
+  const difficulty = codeOnly("src/app/scenarios/difficulty/page.tsx");
+  assert.match(difficulty, /setEntryBoardTo\(destination\);/, "세션 생성 성공 뒤 판을 보인다");
+  assert.ok(!/router\.push\(destination\)/.test(difficulty), "판 없이 바로 가는 옛 경로가 남았다");
+  // 통화 · 메신저 화면에는 경계 판을 넣지 않는다(받기 탭 오디오 잠금 해제 경로 무변경).
+  for (const f of ["src/app/session/play/page.tsx", "src/app/session/messenger/page.tsx", "src/components/CallStartNotice.tsx"]) {
+    assert.ok(!readFileSync(f, "utf8").includes("BoundaryPanel"), f);
+  }
+  const end = readFileSync("src/app/session/end/page.tsx", "utf8");
+  assert.ok(end.includes("{EXIT_BOARD.title}") && end.includes("{POST_SESSION_FACT_DISCLOSURE}"));
+  assert.equal(EXIT_BOARD.title, "끝.");
+  assert.match(readFileSync("src/app/globals.css", "utf8"), /\.end-compact > div:first-of-type \{/, "종료 판이 첫 자식이어도 아이콘 축소가 아이콘에 걸린다");
 });

@@ -124,7 +124,7 @@ html {
     padding-top: 1.25rem;
     padding-bottom: calc(env(safe-area-inset-bottom) + 1.25rem);
   }
-  .end-compact > div:first-child {
+  .end-compact > div:first-of-type {
     width: 64px;
     height: 64px;
   }
