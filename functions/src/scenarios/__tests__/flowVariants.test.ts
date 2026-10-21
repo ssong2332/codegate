@@ -438,7 +438,11 @@ test("[T191 S5 고급 전용 · AC-097] 3종 — 고급 변형 1벌씩 · 결정
   const advancedOnly = Object.keys(PUBLIC_SCENARIOS).filter(isAdvancedOnlyScenario).sort();
   assert.deepEqual(advancedOnly, ["asset-protection-notice-call", "card-delivery-call", "prosecution-cooperation-call"]);
   for (const id of advancedOnly) {
-    const variants = FLOW_VARIANTS.filter((v) => v.scenarioId === id);
+    // §92.3 — 배정 은퇴 변형(옛 세션 해석용)은 세지 않는다. 은퇴 변형도 아래 필수 항목(결정 순간 · 출처)은 그대로 갖는다.
+    for (const r of FLOW_VARIANTS.filter((v) => v.scenarioId === id && v.retired === true)) {
+      assert.ok(r.decisionMoment && r.sources && r.sources.length > 0, `${r.variantId}: 은퇴 변형도 결정 순간 · 출처 유지`);
+    }
+    const variants = FLOW_VARIANTS.filter((v) => v.scenarioId === id && v.retired !== true);
     assert.equal(variants.length, 1, `${id}: 변형 수`);
     const [v] = variants;
     assert.equal(v.level, "advanced");

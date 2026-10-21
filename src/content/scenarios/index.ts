@@ -91,7 +91,7 @@ export const scenarios: Record<string, ScenarioDoc> = {
   // T95(MVP #29 잔여) — 확인 시도 무력화(D3) 전용 시나리오. voiceMode:"generic"이라 UX-017의
   // "기본 AI 음성" 목록에 자동으로 나타난다(화면 코드 변경 0건).
   [BANK_SECURITY_VERIFY_SCAM_SCENARIO_ID]: bankSecurityVerifyScamScenario,
-  // T191 S5 — 고급 전용 3종(PRD AC-097). `advancedOnly:true`라 화면이 "고급 전용" 묶음·고급 1장으로
+  // T191 S5 — 고급 전용 3종(PRD AC-097). §92(DECISIONS #206) — 카드 배송은 `mergedInto`로 목록에서 빠져 지금 보이는 고급 전용은 2종이다. `advancedOnly:true`라 화면이 "고급 전용" 묶음·고급 1장으로
   // 그리고 send(챌린지) 목록에서는 뺀다(UX D-104 · D-107). 서버도 같은 플래그로 거부한다.
   [CARD_DELIVERY_CALL_SCENARIO_ID]: cardDeliveryCallScenario,
   [ASSET_PROTECTION_NOTICE_CALL_SCENARIO_ID]: assetProtectionNoticeCallScenario,

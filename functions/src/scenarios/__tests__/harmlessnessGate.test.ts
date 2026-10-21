@@ -157,6 +157,8 @@ const FLOW_VARIANT_FIELDS: Record<keyof FlowVariant, FieldPolicy> = {
   sources: { skip: "사례 ID 목록(C·S 번호)" },
   // T194-a(§84.4.2 · AC-106 (i)) — 리터럴 `true` 플래그.
   escalatesToVoice: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
+  // §92.3 — 배정 은퇴 플래그(리터럴 true).
+  retired: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
 };
 
 // ── 표면 수집 ────────────────────────────────────────────────────────────────

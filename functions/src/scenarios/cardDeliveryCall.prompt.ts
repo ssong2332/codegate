@@ -13,8 +13,9 @@
 // 금지 패턴은 `__tests__/flowVariants.test.ts`의 AC-102 상수가 고정한다.
 // ⚠️ 릴레이(다른 목소리 재연결)는 S7 범위다 — 이 페르소나는 한 사람(첫 화자)이며, 흐름 변형의
 // 단계 요약이 S7 전까지의 진행 규칙을 따로 붙인다(flowVariants.ts).
-// ⚠️ 새 화면 0(AC-097 (d)) — 앱 설치·문자는 대사로만 언급한다(이 시나리오의 통화 중 문자 카탈로그는
-// S5b 범위라 아직 없다).
+// ⚠️ (옛 주석 정정) 통화 중 설치 문자 · 화면은 T194-c-1에서 생겼다(`inCallSms.ts` · `mockScreens.ts`의 card-delivery-call).
+// ⭐ §92(DECISIONS #206) — 이 시나리오는 목록에서 빠지고 카드사 고급 변형 `fv-w3dq`로 흡수됐다. 이 파일은 옛 세션 해석과
+// 흡수 변형의 0번 화자 페르소나(`CARD_DELIVERY_PERSONA`) 원천으로만 남는다.
 import type { ScenarioPromptDoc } from "../shared/types";
 
 // src/content/scenarios/cardDeliveryCall.ts와 같은 문자열 리터럴(Database.md "scenarios 1:1

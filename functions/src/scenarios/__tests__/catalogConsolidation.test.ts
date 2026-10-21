@@ -14,6 +14,7 @@ import { findMockScreenItem } from "../mockScreens";
 import { sessionReachableLandingIds } from "../reachability";
 import { extractTacticLabel } from "../tacticFlavor";
 import { assignablePool } from "../variantPool";
+import { resolveTacticCategory } from "../../report/tacticCategory";
 import { SCENARIO_MERGED_REASON, assertScenarioNotMerged } from "../../session/mergedScenario";
 import { INSTITUTION_IDENTITY_DEMAND, NAME_FIRST_DEMAND } from "../../roleplay/personaCardIdentity";
 
@@ -94,8 +95,8 @@ test("[§92 A ③] 흡수 변형의 신원 요구 예시는 '내 정보' 확인�
 
 test("[§92 B] 고급 전용 2종 — 고유 문자 1건(link · 필수) → credential-form 화면 1건 · 기관 사칭 고급 장치(인증번호 · 안전계좌)와 겹침 0", () => {
   const cases = [
-    { scenarioId: "asset-protection-notice-call", variantId: "fv-bmiq", smsId: "asset-custody-link", landingId: "asset-custody-apply" },
-    { scenarioId: "prosecution-cooperation-call", variantId: "fv-nss6", smsId: "prosecution-case-link", landingId: "case-record-view" },
+    { scenarioId: "asset-protection-notice-call", variantId: "fv-k9ra", smsId: "asset-custody-link", landingId: "asset-custody-apply" },
+    { scenarioId: "prosecution-cooperation-call", variantId: "fv-p4hz", smsId: "prosecution-case-link", landingId: "case-record-view" },
   ];
   for (const c of cases) {
     const v = findFlowVariant(c.variantId)!;
@@ -120,10 +121,41 @@ test("[§92 B] 자산 보호 화면 · 문자 · 단계 — 만날 장소 · 시
   assert.ok(sms.announceInstruction.includes("만날 장소·시간은 정하지도 묻지도 마라"), "도착 지시가 장소 · 시간 금지를 다시 말한다");
 });
 
-test("[§92 B] 검찰 페르소나 — 사건 조회 문자 외 다른 화면 금지는 유지 · 수사 서류 언급 라벨 무변경", () => {
-  const p = SCENARIO_PROMPTS["prosecution-cooperation-call"]!;
+test("[§92 B] 검찰 새 변형 — 사건 조회 문자 외 다른 화면 금지는 유지 · 수사 서류 언급 라벨 무변경 · 자산 보호 새 변형의 절차 문면", () => {
+  const p = resolveSessionScenarioPrompt("prosecution-cooperation-call", "fv-p4hz")!;
   assert.ok(p.personaPrompt.includes("사건 조회 안내 문자 말고는 서류·사진·메신저 같은 다른 화면을 보내겠다고 하지 않는다"));
+  assert.equal(p.personaPrompt.includes("- 서류·사진·메신저 같은 다른 화면을 보내겠다고 하지 않는다."), false);
   assert.ok(p.weakenedTactics.some((t) => extractTacticLabel(t) === "수사 서류 언급" && t.includes("사건 조회")));
+  assert.equal(p.weakenedTactics.filter((t) => extractTacticLabel(t) === "수사 서류 언급").length, 1, "옛 문면과 새 문면이 함께 실리지 않는다");
+  const a = resolveSessionScenarioPrompt("asset-protection-notice-call", "fv-k9ra")!;
+  const proc = a.weakenedTactics.filter((t) => extractTacticLabel(t) === "절차·서류 정당화");
+  assert.equal(proc.length, 1);
+  assert.ok(proc[0]!.includes("보관 신청서"));
+});
+
+test("[§92 B · 무소급] 옛 변형 fv-bmiq · fv-nss6은 내용 무변경(문자 0 · 원본 수법 · 원본 페르소나) · 배정 은퇴 · 새 세션 풀은 새 변형뿐", () => {
+  for (const [scenarioId, oldId, newId, oldTactic] of [
+    ["asset-protection-notice-call", "fv-bmiq", "fv-k9ra", "보관 조치 접수번호를 남겨 드리고"],
+    ["prosecution-cooperation-call", "fv-nss6", "fv-p4hz", "처럼 말로만 알리고, 서류나 사진을 보내겠다고 하지 않는다"],
+  ] as const) {
+    const old = findFlowVariant(oldId)!;
+    assert.equal(old.retired, true);
+    assert.deepEqual(old.sms, []);
+    assert.deepEqual(old.channels, ["voice"]);
+    const prompt = resolveSessionScenarioPrompt(scenarioId, oldId)!;
+    assert.ok(prompt.personaPrompt.startsWith(SCENARIO_PROMPTS[scenarioId]!.personaPrompt), `${oldId}: 원본 페르소나`);
+    assert.ok(prompt.weakenedTactics.some((t) => t.includes(oldTactic)), `${oldId}: 원본 수법 문면`);
+    assert.equal(prompt.personaPrompt.includes("문자로 보낸"), false, `${oldId}: 문자 언급 0`);
+    assert.deepEqual(sessionReachableLandingIds(scenarioId, oldId), [], `${oldId}: 도달 랜딩 0`);
+    assert.deepEqual(listFlowVariants(scenarioId, "advanced").map((v) => v.variantId), [newId]);
+    assert.deepEqual(assignablePool(scenarioId, "advanced").map((v) => v.variantId), [newId]);
+  }
+  assert.ok(SCENARIO_PROMPTS["prosecution-cooperation-call"]!.personaPrompt.includes("- 서류·사진·메신저 같은 다른 화면을 보내겠다고 하지 않는다. 필요한 것은 말로만 전한다."), "원본 프롬프트 무변경");
+});
+
+test("[§92 B] 새 화면 2종의 속은 순간 수법은 의도한 리포트 분류로 간다(검찰 = 개인정보 · 자산 보호 = 돈 요구)", () => {
+  assert.equal(resolveTacticCategory(findMockScreenItem("prosecution-cooperation-call", "case-record-view")!.momentTactic), "personal_info_demand");
+  assert.equal(resolveTacticCategory(findMockScreenItem("asset-protection-notice-call", "asset-custody-apply")!.momentTactic), "payment_demand");
 });
 
 test("[§92 D] 국세청 환급금 — [캐릭터]가 소속을 '국세청 환급 담당'으로 못 박는다", () => {

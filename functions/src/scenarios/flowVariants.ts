@@ -38,6 +38,8 @@ import type { AxisExitBlock } from "./axes";
 import { SCENARIO_PROMPTS } from "./index";
 import { PARCEL_ADVANCED_INSTALL_TACTIC, PARCEL_ADVANCED_LEG_PERSONA } from "./messengerParcelSmishingSms.prompt";
 import { CARD_DELIVERY_PERSONA } from "./cardDeliveryCall.prompt";
+import { ASSET_CUSTODY_PROCEDURE_TACTIC } from "./assetProtectionNoticeCall.prompt";
+import { PROSECUTION_CASE_LINK_PERSONA, PROSECUTION_CASE_LINK_TACTIC } from "./prosecutionCooperationCall.prompt";
 import { extractTacticLabel } from "./tacticFlavor";
 import { hasVerifyIntercept } from "./verifyIntercept";
 
@@ -96,6 +98,11 @@ export type FlowVariant = {
    * 그 술어가 한다(`scenarios/escalation.ts`).
    */
   escalatesToVoice?: true;
+  /**
+   * §92.3(DECISIONS #206) — **배정 은퇴**. 옛 세션 · 리포트 해석(`findFlowVariant` · `resolveSessionScenarioPrompt`)에는 그대로 쓰이지만
+   * `listFlowVariants`(= 배정 풀 · 브리핑 라벨의 입력)에서는 빠진다. ⛔ `false`를 쓰지 않는다 — 부재가 거짓이다.
+   */
+  retired?: true;
 };
 
 /** S7(릴레이 재연결) 구현 전에는 false — legs ≥ 2 변형도 한 화자로 진행한다. */
@@ -192,6 +199,26 @@ const CARD_DELIVERY_DECISION_MOMENT = "보안 점검 앱 설치 또는 자산 �
 // §92 ③ — 원본(`cardDeliveryCall.prompt.ts`)과 라벨 · 뒷부분이 같고, 인용 예시만 카드사 요구 머리(*"성함부터 불러주세요"*)로 바꿨다.
 const CARD_DELIVERY_IDENTITY_DEMAND =
   "본인확인 정보 직접 요구 — '사고 접수는 본인 확인부터라서요, 성함부터 불러주세요' 처럼 신원 정보를 직접 요구한다. 상대가 카드를 신청한 적 없다고 부인해도 '그러면 명의 도용 여부부터 확인해야 합니다' 라며 같은 요구를 다른 근거로 다시 꺼낸다 — 이 요구는 상대가 무엇을 부인하든 꺼낼 수 있다.";
+
+// §92.3 — 자산 보호 · 검찰 고급의 옛 변형(은퇴)과 새 변형이 공유하는 문구(사본 0 — 옛 변형 바이트 무변경).
+const ASSET_PROTECTION_STAGES_HEAD = [
+  "본인 명의 계좌가 범죄에 쓰인 정황이 있다고 알린다.",
+  "본인 확인 뒤 계좌번호보다 거래 은행과 자산 규모부터 묻는다.",
+  "비공개 진행을 강조하고, 은행에서 이유를 물으면 그럴듯한 개인 용도로 둘러대라고 일러 준다. 구체적인 문장은 만들어 주지 않는다.",
+] as const;
+const ASSET_PROTECTION_HANDOFF_STAGE =
+  "보관 조치 절차를 설명하며 돈을 찾아 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다.";
+const ASSET_PROTECTION_DECISION_MOMENT = "인출 · 전달 약속에 동의하는 순간";
+const ASSET_PROTECTION_SOURCES = ["C10", "C11", "C02", "S16", "S11"];
+/** 검찰 고급 단계 — 영장 단계(2번째)만 옛 · 새 변형이 다르다. */
+const PROSECUTION_STAGES = [
+  "범죄 연루와 구속 가능성을 알린다.",
+  "비공개 수사라며 주변에 알리지 말고 혼자 있으라고 요구한다. 어디로 가라 · 무엇을 마련하라는 말은 하지 않는다.",
+  "끊지 말고 수시로 진행 상황을 알려 달라고 한다.",
+  "자산 검수를 위해 코인으로 바꿔 지정된 곳으로 옮기라고 요구한다.",
+] as const;
+const PROSECUTION_DECISION_MOMENT = "코인 구매 · 송금 약속에 동의하는 순간";
+const PROSECUTION_SOURCES = ["C05", "C06", "C07", "C08", "S3", "S25", "S28"];
 
 // 음성 시나리오용 "다른 번호" 수법(가족 · 손주 고급 — §2.6.3 "딥보이스 + 다른 번호로 연락", 사례 S9 · C18).
 const OTHER_NUMBER_PRETEXT =
@@ -1103,49 +1130,83 @@ const SPECS: VariantSpec[] = [
     decisionMoment: CARD_DELIVERY_DECISION_MOMENT,
     sources: ["C03", "C04", "S4", "S22"],
   },
+  // ⭐ §92.3(docs/Architecture.md · DECISIONS #206) — 고급 전용 2종 보강. 옛 변형(fv-bmiq · fv-nss6)은 **내용 무변경 · 배정 은퇴**(`retired`)로
+  // 남아 옛 세션 · 리포트를 원본대로 해석하고, 새 세션은 문자 → 입력 화면을 선언한 새 ID(fv-k9ra · fv-p4hz)를 받는다(내용이 바뀌는 쪽이 새 ID — §84.16.2).
   {
     variantId: "fv-bmiq",
     scenarioId: "asset-protection-notice-call",
     level: "advanced",
     authoring: "authored",
+    stages: st(...ASSET_PROTECTION_STAGES_HEAD, ASSET_PROTECTION_HANDOFF_STAGE),
+    exitBlock: ["D2_secrecy", "D4_procedural_legitimacy"],
+    sms: [],
+    legs: ONE_LEG("금융감독원 직원", "male"),
+    ...ADVANCED,
+    channels: ["voice"],
+    demandStages: 2,
+    // PRD AC-097 (e) 확정 전 기본값 = 설계 초안 안(주소 발화는 조건이 아니다 — AC-024).
+    decisionMoment: ASSET_PROTECTION_DECISION_MOMENT,
+    sources: ASSET_PROTECTION_SOURCES,
+    retired: true,
+  },
+  {
+    variantId: "fv-k9ra",
+    scenarioId: "asset-protection-notice-call",
+    level: "advanced",
+    authoring: "authored",
     stages: st(
-      "본인 명의 계좌가 범죄에 쓰인 정황이 있다고 알린다.",
-      "본인 확인 뒤 계좌번호보다 거래 은행과 자산 규모부터 묻는다.",
-      "비공개 진행을 강조하고, 은행에서 이유를 물으면 그럴듯한 개인 용도로 둘러대라고 일러 준다. 구체적인 문장은 만들어 주지 않는다.",
-      // §92.3(DECISIONS #206) — 고유 장치: 보관 신청 링크 문자 → 신청서 화면(E4를 눈앞의 화면으로).
+      ...ASSET_PROTECTION_STAGES_HEAD,
       "보관 조치 절차라며 문자로 보낸 링크에서 보관 신청서를 작성하게 하고, 돈을 찾아 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다.",
     ),
+    dropLabels: ["절차·서류 정당화"],
+    extraTactics: [ASSET_CUSTODY_PROCEDURE_TACTIC],
     exitBlock: ["D2_secrecy", "D4_procedural_legitimacy"],
     sms: [{ purpose: "link", smsId: "asset-custody-link", required: true, notBeforeUserTurns: 3 }],
     legs: ONE_LEG("금융감독원 직원", "male"),
     ...ADVANCED,
     channels: ["voice", "sms"],
     demandStages: 2,
-    // PRD AC-097 (e) 확정 전 기본값 = 설계 초안 안(주소 발화는 조건이 아니다 — AC-024).
-    decisionMoment: "인출 · 전달 약속에 동의하는 순간",
-    sources: ["C10", "C11", "C02", "S16", "S11"],
+    decisionMoment: ASSET_PROTECTION_DECISION_MOMENT,
+    sources: ASSET_PROTECTION_SOURCES,
   },
   {
     variantId: "fv-nss6",
     scenarioId: "prosecution-cooperation-call",
     level: "advanced",
     authoring: "authored",
+    stages: st(PROSECUTION_STAGES[0], "영장이 청구됐다고 말로만 전한다.", ...PROSECUTION_STAGES.slice(1)),
+    exitBlock: ["D2_secrecy", "D4_procedural_legitimacy", "D5_call_retention"],
+    sms: [],
+    legs: ONE_LEG("검찰 수사관", "male"),
+    ...ADVANCED,
+    channels: ["voice"],
+    demandStages: 2,
+    decisionMoment: PROSECUTION_DECISION_MOMENT,
+    sources: PROSECUTION_SOURCES,
+    retired: true,
+  },
+  {
+    variantId: "fv-p4hz",
+    scenarioId: "prosecution-cooperation-call",
+    level: "advanced",
+    authoring: "authored",
     stages: st(
-      "범죄 연루와 구속 가능성을 알린다.",
-      // §92.3(DECISIONS #206) — 고유 장치: "말로만" 전하던 영장을 사건 조회 링크 문자 → 본인 확인 화면으로(설계의 가짜 영장).
+      PROSECUTION_STAGES[0],
       "영장이 청구됐다며 문자로 보낸 사건 조회 링크에서 본인 확인 뒤 사건 기록을 직접 확인하라고 한다.",
-      "비공개 수사라며 주변에 알리지 말고 혼자 있으라고 요구한다. 어디로 가라 · 무엇을 마련하라는 말은 하지 않는다.",
-      "끊지 말고 수시로 진행 상황을 알려 달라고 한다.",
-      "자산 검수를 위해 코인으로 바꿔 지정된 곳으로 옮기라고 요구한다.",
+      ...PROSECUTION_STAGES.slice(1),
     ),
+    dropLabels: ["수사 서류 언급"],
+    extraTactics: [PROSECUTION_CASE_LINK_TACTIC],
     exitBlock: ["D2_secrecy", "D4_procedural_legitimacy", "D5_call_retention"],
     sms: [{ purpose: "link", smsId: "prosecution-case-link", required: true, notBeforeUserTurns: 2 }],
-    legs: ONE_LEG("검찰 수사관", "male"),
+    legs: [
+      { callerLabel: "검찰 수사관", personaPrompt: PROSECUTION_CASE_LINK_PERSONA, speakerGender: "male", minUserTurns: 0, maxUserTurns: 20 },
+    ],
     ...ADVANCED,
     channels: ["voice", "sms"],
     demandStages: 2,
-    decisionMoment: "코인 구매 · 송금 약속에 동의하는 순간",
-    sources: ["C05", "C06", "C07", "C08", "S3", "S25", "S28"],
+    decisionMoment: PROSECUTION_DECISION_MOMENT,
+    sources: PROSECUTION_SOURCES,
   },
 ];
 
@@ -1155,9 +1216,10 @@ export const FLOW_VARIANTS: readonly FlowVariant[] = SPECS.map(compile);
 /** 저작 입력 — 테스트 전용 대조(keep/drop 라벨이 원천에 실재하는지 · "현행" 행 확인). */
 export const FLOW_VARIANT_SPECS: readonly Readonly<VariantSpec>[] = SPECS;
 
-/** 그 시나리오 · 난이도에 허용된 변형(회전 순서). */
+/** 그 시나리오 · 난이도에 허용된 변형(회전 순서 · 배정 은퇴 제외). */
 export function listFlowVariants(scenarioId: string, level: DifficultyLevel): FlowVariant[] {
-  return FLOW_VARIANTS.filter((v) => v.scenarioId === scenarioId && v.level === level);
+  // §92.3 — 배정 은퇴 변형은 새 세션 후보가 아니다(옛 세션 해석은 `findFlowVariant`가 한다).
+  return FLOW_VARIANTS.filter((v) => v.scenarioId === scenarioId && v.level === level && v.retired !== true);
 }
 
 // ⭐ T194-c-1(docs/Architecture.md §84.16.1 · G590 갱신) — 배정 가능 풀 `assignablePool`은 `scenarios/variantPool.ts`로 옮겼다. 판별에

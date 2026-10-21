@@ -280,7 +280,7 @@ export const bankSecurityVerifyScamScenario: ScenarioMeta = {
   callerLabel: "070-4133-2085",
 };
 
-// ── T191 S5 — 고급 전용 3종(PRD AC-097 (a) · D2) ─────────────────────────────
+// ── T191 S5 — 고급 전용 3종(PRD AC-097 (a) · D2) — §92 이후 목록에 보이는 것은 2종(카드 배송 = `mergedInto`) ──
 // 원본은 src/content/scenarios/{cardDeliveryCall,assetProtectionNoticeCall,prosecutionCooperationCall}.ts
 // 이며 **callerLabel까지 글자 그대로 같다**(T95 G38 관례 — scenarios.test.ts가 전 필드를 대조한다).
 // ⚠️ 카드 문면 규칙(UX D-104 (4)): 제목·유형·성향 문자열은 사칭 주체와 첫 상황까지만 쓴다 — 흐름·
