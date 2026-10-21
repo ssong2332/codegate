@@ -337,6 +337,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     ...deriveReportLlmProviderField(session),
     // T194-b(§84.3.6) — 최초 생성 시 1회만 기록(멱등 early-return). 카드 없는 세션은 필드를 만들지 않는다(무백필).
     ...(personaBlock ? { personaBlock } : {}),
+    // 사용자 결정 2026-10-21 ② — 위험 신호(표시 전용 · 판정 무관). 0건이면 필드를 만들지 않는다(무백필).
+    ...(analysis.riskSignals.length > 0 ? { riskSignals: analysis.riskSignals } : {}),
   };
   await reportRef.set(reportDoc);
 

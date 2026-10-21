@@ -230,7 +230,15 @@ test("[T191 J-2 · 회귀 0] 17개 시나리오 저작 대사 × 기존 테스�
     }
   }
   t.diagnostic(`비교 ${pairs}쌍(시나리오 ${lines.size} · 답변 ${answers.length}) · 판정이 바뀐 쌍 ${changed.length}`);
-  assert.deepEqual(changed, []);
+  // 사용자 결정 2026-10-21 ①(DECISIONS #204 — 말보다 행동): 의심 · 신고를 말하면서도 잔액 · 숫자를 넘긴 아래 두 답만 바뀐다(안 속음 → 속음).
+  // 그 밖의 답변 · 쌍은 여전히 base와 같아야 한다.
+  const DECISION_1_ANSWERS = [
+    "300만원 정도 있는데 의심스러워서 확인하고 다시 전화드릴게요", // 잔액 고지(H2)
+    "048231 이요 근데 경찰에 신고할게요", // 생년월일을 물은 대사 뒤 숫자 6자리(H2 · V2)
+  ];
+  const changedAnswers = new Set(changed.map((entry) => entry.split(" | ").at(-1)));
+  assert.deepEqual([...changedAnswers].sort(), [...DECISION_1_ANSWERS].sort());
+  for (const answer of DECISION_1_ANSWERS) assert.equal(baseDeceived(answer), false, "결정 ① 답변은 base에서 안 속음이었다");
 });
 
 // 2026-10-21 — 기관 사칭 고급이 현금 전달 요구(인출·전달) 대신 인증번호 → 안전계좌 링크 이체 화면으로 바뀌어 목록에서 빠졌다.
