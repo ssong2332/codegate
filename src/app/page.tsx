@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/auth";
 import { hasGrantedConsent } from "@/lib/consent";
 import { hasVerifiedAge } from "@/lib/age";
-import { Card, Chip, LineIcon } from "@/components/ui";
+import { CtaPanel, DisplayTitle, LineIcon } from "@/components/ui";
 import LegalLinks from "@/components/LegalLinks";
 
 // 리뷰 Major 2 — "받기"가 진짜 전화 · 문자로 읽히지 않게 앱 안 체험임을 밝힌다(PSTN 없음 · 인앱 모의).
@@ -60,43 +60,50 @@ export default function Home() {
 
   // §89.4 · UX D-132 (4) — 시안 A 1번 화면(소개). "/"를 공개 경로로 두어 비로그인 사용자가 로그인 전에 무엇을 ·
   // 어떻게 · 안전한지 세 가지를 먼저 본다. 읽기 전용 — Firestore · Functions 호출 0.
+  // UX D-141 (시안 E2) — 남색 전면 · 함렛 38px 제목 · 3단계 줄 목록 · 모래 CTA 판. 문면은 종전 그대로(새 약속 0).
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-page">
-      <header className="flex min-h-[56px] items-center gap-2 border-b border-line bg-surface px-4">
-        <LineIcon name="shield" className="text-brand" />
-        <p className="text-[18px] font-bold text-ink">금융사기 예방 훈련</p>
+    <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-brand text-white">
+      <header className="flex min-h-[56px] items-center gap-2 px-[22px]">
+        <LineIcon name="shield" className="text-white" />
+        <p className="text-[18px] font-bold">금융사기 예방 훈련</p>
       </header>
-      <div className="flex flex-1 flex-col gap-5 px-5 pt-8">
-        <Chip className="self-start">연습용 · 실제 돈은 오가지 않습니다</Chip>
-        <h1 className="text-[28px] font-bold leading-[1.35] text-ink">
-          사기 전화, 미리 한 번 받아 보세요
-        </h1>
-        <p className="text-[18px] leading-[1.65] text-ink-sub">
+      <div className="flex flex-1 flex-col gap-5 px-[22px] pt-4">
+        <span className="e2-rise self-start bg-sand px-[10px] py-1 text-[16px] font-bold text-ink">연습용 · 실제 돈은 오가지 않습니다</span>
+        <DisplayTitle as="h1" size="xl" className="e2-rise">
+          사기 전화,
+          <br />
+          미리 한 번
+          <br />
+          받아 보세요
+        </DisplayTitle>
+        <p className="e2-rise text-[18px] leading-[1.65] text-brand-tint [word-break:keep-all]">
           AI가 사기범 역할을 맡아 앱 화면 안에서 전화와 문자를 재현합니다(진짜 전화 · 문자는 오지 않습니다). 끝나면 어디서 속을 뻔했는지 짚어 드립니다.
         </p>
-        <Card title="훈련 순서">
-          <ol className="flex flex-col gap-2">
+        <section aria-labelledby="landing-steps-title" className="e2-rise">
+          <h2 id="landing-steps-title" className="sr-only">
+            훈련 순서
+          </h2>
+          <ol className="flex flex-col border-t-2 border-white/40">
             {LANDING_STEPS.map((step, i) => (
-              <li key={step} className="flex items-center gap-3">
-                <span className="w-5 font-bold text-brand">{i + 1}</span>
+              <li key={step} className="flex items-center gap-[14px] border-b-2 border-white/40 py-[10px] text-[18px] font-bold">
+                <span className="w-6 font-display text-[26px] font-bold text-sand">{i + 1}</span>
                 {step}
               </li>
             ))}
           </ol>
-        </Card>
+        </section>
       </div>
-      <div className="flex flex-col gap-3 px-5 pb-8 pt-6">
-        <Link
-          href="/login"
-          className="flex min-h-[56px] w-full items-center justify-center rounded-[8px] bg-brand px-6 text-[18px] font-semibold text-white transition-colors hover:bg-brand-hover"
-        >
-          훈련 시작하기
-        </Link>
-        <p className="text-center text-[16px] leading-[1.6] text-ink-sub">
-          가족에게 받은 훈련 링크가 있나요? 그 링크를 다시 눌러 주세요.
-        </p>
+      <CtaPanel
+        className="mt-6"
+        href="/login"
+        noteTone="deep"
+        note="가족에게 받은 훈련 링크가 있나요? 그 링크를 다시 눌러 주세요."
+      >
+        훈련 시작하기
+      </CtaPanel>
+      <div className="bg-deep">
+        <LegalLinks className="pb-6 [&_*]:text-brand-tint!" />
       </div>
-      <LegalLinks className="pb-6" />
     </main>
   );
 }

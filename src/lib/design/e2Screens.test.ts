@@ -98,3 +98,33 @@ test("[G653] 경계 판 — 진입은 세션 생성 뒤(훈련 화면 코드 무
   assert.equal(EXIT_BOARD.title, "끝.");
   assert.match(readFileSync("src/app/globals.css", "utf8"), /\.end-compact > div:first-of-type \{/, "종료 판이 첫 자식이어도 아이콘 축소가 아이콘에 걸린다");
 });
+
+// G654~G655 — P4 리포트 머리 · 랜딩 · 로그인 · 챌린지(§97.8).
+test("[G654] 리포트 큰 시계 — 서버 표기 'N초 시점'만 읽는다 · 다른 꼴이면 시계 0 · 안 속으면 '끝까지 지켰어요'", async () => {
+  const { parseMomentSeconds } = await import("./e2Layout.ts");
+  assert.equal(parseMomentSeconds("101초 시점"), 101);
+  assert.equal(parseMomentSeconds(" 0초 시점 "), 0);
+  assert.equal(parseMomentSeconds("1분 41초"), null);
+  assert.equal(parseMomentSeconds(undefined), null);
+  const server = readFileSync("functions/src/report/analyzeConversation.ts", "utf8");
+  assert.ok(server.includes("return `${elapsedSec}초 시점`;"), "서버 표기 꼴이 바뀌면 화면 파서도 같이 바꿀 것");
+  const report = codeOnly("src/app/report/page.tsx");
+  assert.match(report, /<BigClock seconds=\{firstDeceivedSeconds\}/);
+  assert.ok(report.includes("끝까지 지켰어요"));
+  // AC-009 · AC-008 문장은 그대로 있다.
+  assert.ok(report.includes("이번 훈련에서는 속지 않았습니다. 아래는 시도된 수법입니다."));
+  assert.ok(report.includes("에 속았습니다. {firstDeceivedMoment.correctAction}"));
+});
+
+test("[G655] 랜딩 · 로그인 · 챌린지 — 함렛 큰 제목 · 랜딩 CTA 판 · 법적 링크 스위치 유지 · Google 버튼은 흰 바탕", () => {
+  const landing = codeOnly("src/app/page.tsx");
+  assert.ok(landing.includes('<CtaPanel') && landing.includes('href="/login"'));
+  assert.ok(landing.includes("<LegalLinks"), "법적 링크 자리(SHOW_LEGAL_LINKS)가 빠졌다");
+  assert.ok(landing.includes("진짜 전화 · 문자는 오지 않습니다"), "앱 안 체험 고지가 빠졌다");
+  const login = codeOnly("src/app/(auth)/login/page.tsx");
+  assert.match(login, /<DisplayTitle as="h1" size="xl"[^>]*>훈련 기록을 남기려면 로그인이 필요합니다<\/DisplayTitle>/);
+  assert.ok(login.includes("bg-white") && login.includes("Google로 로그인"));
+  const challenge = codeOnly("src/app/challenge/create/page.tsx");
+  assert.ok(challenge.includes("e2-fill-up") && challenge.includes("챌린지가 만들어졌습니다"));
+  assert.ok(!challenge.includes("보냈어요"), "앱은 링크를 만들 뿐 보내지 않는다");
+});
