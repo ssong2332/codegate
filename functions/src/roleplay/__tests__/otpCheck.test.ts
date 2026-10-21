@@ -69,7 +69,8 @@ test("[OTP] 숫자 추출 — 번호가 아닌 숫자·일반 문장은 잡지 �
 
 test("[OTP] 리포트 판정과 같은 정규식을 쓴다 — analyzeConversation.ts가 shared/spokenDigits에서 import(사본 금지)", () => {
   const src = readFileSync(path.resolve(__dirname, "../../../src/report/analyzeConversation.ts"), "utf8");
-  assert.match(src, /import \{ CODE_DIGITS_WITH_ENDING, CODE_HANGUL_DIGITS \} from "\.\.\/shared\/spokenDigits";/);
+  // 사용자 결정 2026-10-21 — 인증번호 오답 판정(W0~W4)이 같은 모듈의 `extractSpokenCodes`를 함께 가져온다(대조 규칙도 사본 0).
+  assert.match(src, /import \{ CODE_DIGITS_WITH_ENDING, CODE_HANGUL_DIGITS(?:, extractSpokenCodes)? \} from "\.\.\/shared\/spokenDigits";/);
   assert.doesNotMatch(src, /const CODE_DIGITS_WITH_ENDING =/, "정규식 사본이 남으면 두 규칙이 갈라진다");
 });
 

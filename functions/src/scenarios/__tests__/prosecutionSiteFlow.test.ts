@@ -197,3 +197,32 @@ test("[§99 S6] 기록 계약 — recordInCallSmsEvent가 단계 3값을 받아 
   const request = types.slice(types.indexOf("export type RecordInCallSmsEventRequest"), types.indexOf("export type RecordInCallSmsEventResponse"));
   assert.deepEqual(request.match(/^\s+(\w+):/gm)!.map((s) => s.trim()), ["sessionId:", "smsId:", "event:"], "요청에 입력값을 담을 필드가 없다(AC-045)");
 });
+
+// 메인 세션 지시(2026-10-21 — 프로브 1세션 첫 인사에 실존 기관명 "서울중앙지검 금융범죄수사부") — 기관 이름은 OO를 붙인 가상 명칭으로만.
+test("[§99 S7] 검찰 · 자산 보호 전 변형 페르소나 — 기관 이름은 'OO…' 가상 명칭 지시 · 옛 '일반명으로만' 문장 0 · 실제 청 이름 꼴 0", async () => {
+  const { FLOW_VARIANTS } = await import("../flowVariants");
+  const { SCENARIO_PROMPTS } = await import("../index");
+  const REAL_OFFICE = /서울중앙지검|중앙지검|[가-힣]{1,6}지방검찰청|[가-힣]{1,6}지청|대검찰청/;
+  for (const [scenarioId, fictional] of [
+    [PROS, "\"OO지방검찰청\"·\"OO수사본부\"처럼 앞에 OO를 붙인 이름으로만 말한다"],
+    ["asset-protection-notice-call", "\"OO자산보호센터\"처럼 앞에 OO를 붙인 이름으로만 말한다"],
+  ] as const) {
+    const personas = [
+      SCENARIO_PROMPTS[scenarioId]!.personaPrompt,
+      ...FLOW_VARIANTS.filter((v) => v.scenarioId === scenarioId).flatMap((v) => [
+        resolveSessionScenarioPrompt(scenarioId, v.variantId)!.personaPrompt,
+        ...v.legs.map((leg) => leg.personaPrompt ?? ""),
+      ]),
+    ].filter(Boolean);
+    assert.ok(personas.length >= 3, scenarioId);
+    for (const persona of personas) {
+      assert.ok(persona.includes(fictional), `${scenarioId}: 가상 명칭 지시`);
+      assert.equal(persona.includes("기관은 일반명으로만 말한다"), false, `${scenarioId}: 옛 문장`);
+      assert.equal(REAL_OFFICE.test(persona), false, `${scenarioId}: 실제 청 이름 꼴`);
+    }
+  }
+  // 역검증 — 같은 검사식이 프로브에서 나온 실존 명칭을 잡는다 · 가상 명칭은 통과한다.
+  assert.equal(REAL_OFFICE_SAMPLE.test("서울중앙지검 금융범죄수사부의 김철수 수사관입니다"), true);
+  assert.equal(REAL_OFFICE_SAMPLE.test("OO지방검찰청 금융수사팀 김철수 수사관입니다"), false);
+});
+const REAL_OFFICE_SAMPLE = /서울중앙지검|중앙지검|[가-힣]{1,6}지방검찰청|[가-힣]{1,6}지청|대검찰청/;
