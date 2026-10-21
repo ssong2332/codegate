@@ -35,6 +35,12 @@
   --avatar-bg: #41525e; /* 미선택 발신자 아바타(통화 셸과 동일 — 종전 유지) */
   --avatar-fg: #c9d4db;
   --canvas: #e9edf2; /* 데모 프레임 바깥(데스크톱 wrapper) */
+  /* 시안 E2 판 구조(UX D-141 · §97) */
+  --deep: #0e2a50; /* 짙은 남색 — 준비 화면 · 리포트 머리 · 랜딩 하단 */
+  --panel-slate: #3d5a80; /* 회청 판(흰 글자) */
+  --panel-sand: #f3ead2; /* 옅은 모래 판(진한 글자) */
+  --sand: #e9d29a; /* 하단 CTA 판 · 종료 판 · 큰 시계 */
+  --panel-line: #c9d3df; /* 옅은 판 경계 · 리포트 행 경계(장식) */
   --background: var(--page);
   --foreground: var(--ink);
 }
@@ -66,6 +72,11 @@
   --color-avatar-bg: var(--avatar-bg);
   --color-avatar-fg: var(--avatar-fg);
   --color-canvas: var(--canvas);
+  --color-deep: var(--deep);
+  --color-panel-slate: var(--panel-slate);
+  --color-panel-sand: var(--panel-sand);
+  --color-sand: var(--sand);
+  --color-panel-line: var(--panel-line);
   /* 글꼴 — 제목 함렛 · 본문 IBM Plex Sans KR(사이트) / 훈련 화면은 Pretendard(실제 폰 서체에 가장 가까운 무료 대안). */
   --font-display: "Hahmlet", "Noto Serif KR", serif;
   --font-body: "IBM Plex Sans KR", "Pretendard Variable", Pretendard, system-ui, sans-serif;

@@ -31,6 +31,12 @@ export const SITE_TOKENS = {
   "avatar-bg": "#41525E",
   "avatar-fg": "#C9D4DB",
   canvas: "#E9EDF2",
+  // 시안 E2 판 구조(UX D-141 · §97) — 화면 가로 큰 판 · 경계 판 · 리포트 머리. 남색 계열(A)만 쓰고 채도는 낮게 둔다.
+  deep: "#0E2A50", // 짙은 남색 — 준비 화면 · 리포트 머리 · 랜딩 하단
+  "panel-slate": "#3D5A80", // 회청 판(흰 글자) — 밝기 교차의 세 번째 판
+  "panel-sand": "#F3EAD2", // 옅은 모래 판(진한 글자) — 밝기 교차의 네 번째 판
+  sand: "#E9D29A", // 모래 — 하단 CTA 판 · 종료 판 · 큰 시계 글자
+  "panel-line": "#C9D3DF", // 옅은 판 경계 · 리포트 사건 행 경계(장식)
 } as const;
 
 export type SiteToken = keyof typeof SITE_TOKENS;
@@ -78,5 +84,23 @@ export function siteContrastPairs(): ContrastPair[] {
     nonText("line-strong/page", "line-strong", "page"),
     nonText("brand(진행 막대)/line", "brand", "line"),
     nonText("brand(선택 경계)/surface", "brand", "surface"),
+    // UX D-141(E2 판 구조) — 판 위 글자 · 아이콘(42px는 비텍스트지만 제목과 같은 색이라 글자 기준으로 잰다).
+    text("surface/brand(판 1)", "surface", "brand"),
+    text("brand-tint/brand(판 1 보조)", "brand-tint", "brand"),
+    text("ink/brand-tint(판 2)", "ink", "brand-tint"),
+    text("brand/brand-tint(판 2 아이콘)", "brand", "brand-tint"),
+    text("surface/panel-slate(판 3)", "surface", "panel-slate"),
+    text("brand-tint/panel-slate(판 3 보조)", "brand-tint", "panel-slate"),
+    text("ink/panel-sand(판 4)", "ink", "panel-sand"),
+    text("ink-sub/panel-sand(판 4 보조)", "ink-sub", "panel-sand"),
+    text("brand/panel-sand(판 4 아이콘)", "brand", "panel-sand"),
+    text("ink/sand(CTA 판 · 종료 판)", "ink", "sand"),
+    text("surface/deep(준비 · 리포트 머리)", "surface", "deep"),
+    text("brand-tint/deep(보조 글자)", "brand-tint", "deep"),
+    text("sand/deep(큰 시계 · 큰 숫자)", "sand", "deep"),
+    text("sand/brand(랜딩 단계 번호)", "sand", "brand"),
+    text("ink-sub/surface(시트)", "ink-sub", "surface"),
+    nonText("sand(준비 막대)/deep", "sand", "deep"),
+    nonText("line-strong(난이도 빈 원)/brand-tint", "line-strong", "brand-tint"),
   ];
 }

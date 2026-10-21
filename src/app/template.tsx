@@ -10,11 +10,17 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { isTrainingSurfacePath } from "@/lib/motion/routeMotion";
+import { releasePanelOverlay } from "@/lib/motion/panelExpand";
 
 export default function Template({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const animate = !isTrainingSurfacePath(pathname);
   const ref = useRef<HTMLDivElement>(null);
+
+  // UX D-141 — 판 확장 전환(panelExpand.ts)의 덮개는 다음 화면이 그려진 뒤(경로가 바뀐 뒤) 걷는다.
+  useLayoutEffect(() => {
+    releasePanelOverlay();
+  }, [pathname]);
 
   useLayoutEffect(() => {
     const el = ref.current;
