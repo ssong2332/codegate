@@ -26,6 +26,8 @@ const CARD_DELIVERY = tacticsOf("card-delivery-call", "fv-tvnj");
 const BANK = tacticsOf("bank-security-verify-scam", "fv-62q8");
 const PARCEL_BEG = tacticsOf("messenger-parcel-smishing-sms", "fv-prr3");
 const LOAN_ADV = tacticsOf("loan-refinance-scam", "fv-6s5p");
+// 2026-10-21 — 기관 사칭 고급(fv-c5fj)에서 "인출·전달 요구"가 빠져(인증번호 → 안전계좌 링크 이체 화면) 8행은 그 수법의 원천 시나리오로 옮겼다.
+const ASSET_PROTECTION_ADV = tacticsOf("asset-protection-notice-call", "fv-bmiq");
 
 test("[PR-A3 정탐] 표의 각 행이 실제 LLM 요구 대사를 세션 목록 안의 같은 범주 라벨로 부른다", () => {
   const cases: ReadonlyArray<[row: string, line: string, tactics: string[], expected: string]> = [
@@ -81,7 +83,7 @@ test("[PR-A3 정탐] 표의 각 행이 실제 LLM 요구 대사를 세션 목록
     [
       "8 인출(HANDOFF_DEMAND 재사용)",
       "절차상 가장 안전한 방법은 예치금을 수표로 전액 인출해 주시는 겁니다.",
-      INSTITUTIONAL,
+      ASSET_PROTECTION_ADV,
       "인출·전달 요구",
     ],
   ];

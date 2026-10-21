@@ -34,6 +34,7 @@ import {
   resolveSmsGate,
   sessionDeclaredSmsPurposes,
   sessionDeclaresInCallSms,
+  sessionTransferSmsOpensLanding,
 } from "../inCallSms/smsGate";
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms } from "../inCallSms/smsDelivery";
@@ -515,6 +516,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         inCallSmsEnabled: sessionDeclaresInCallSms(session.scenarioId, session.flowVariantId),
         // A-1 ② — 문자 예외 항목의 예시를 선언 목적만으로(호출부 3곳 같은 술어 · G63).
         inCallSmsPurposes: sessionDeclaredSmsPurposes(session.scenarioId, session.flowVariantId),
+        // 2026-10-21 — 계좌 문자의 이체 링크(호출부 3곳 같은 술어 · G63).
+        transferSmsLink: sessionTransferSmsOpensLanding(session.scenarioId, session.flowVariantId),
         verifyInterceptEnabled: verifyEnabled,
         l3Procedural: isL3Procedural(session.scenarioId),
         identityCheckAllowed: asksIdentityCheck(session.scenarioId),

@@ -16,7 +16,7 @@ import { asksIdentityCheck } from "../roleplay/personaAuthority";
 import { isL3Procedural } from "../roleplay/l3Depth";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
-import { sessionDeclaredSmsPurposes, sessionDeclaresInCallSms } from "../inCallSms/smsGate";
+import { sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import {
   buildLiveToolDeclarations,
@@ -153,6 +153,8 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       inCallSmsEnabled: sessionDeclaresInCallSms(input.scenarioId, input.flowVariantId),
       // A-1 ② — 문자 예외 항목의 예시를 선언 목적만으로(호출부 3곳 같은 술어 · G63).
       inCallSmsPurposes: sessionDeclaredSmsPurposes(input.scenarioId, input.flowVariantId),
+      // 2026-10-21 — 계좌 문자의 이체 링크(호출부 3곳 같은 술어 · G63).
+      transferSmsLink: sessionTransferSmsOpensLanding(input.scenarioId, input.flowVariantId),
       verifyInterceptEnabled:
         hasVerifyIntercept(input.scenarioId) && input.difficultyLevel === "advanced",
       l3Procedural: isL3Procedural(input.scenarioId),

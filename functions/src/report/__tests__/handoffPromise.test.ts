@@ -233,13 +233,14 @@ test("[T191 J-2 · 회귀 0] 17개 시나리오 저작 대사 × 기존 테스�
   assert.deepEqual(changed, []);
 });
 
-test("[T191 J-2] 인출·전달 약속 갈래가 열리는 저작 대사는 기관 사칭(고급 변형 수법) · 대면 편취 · 셀프 감금뿐이다", () => {
+// 2026-10-21 — 기관 사칭 고급이 현금 전달 요구(인출·전달) 대신 인증번호 → 안전계좌 링크 이체 화면으로 바뀌어 목록에서 빠졌다.
+test("[T191 J-2] 인출·전달 약속 갈래가 열리는 저작 대사는 대면 편취 · 셀프 감금뿐이다", () => {
   const opened = new Set<string>();
   for (const [scenarioId, scenarioLines] of authoredLinesByScenario()) {
     // "드릴게요"는 base가 놓치고 이 갈래만 잡는 답 — 열리는지의 탐침으로 쓴다.
     if (scenarioLines.some((line) => nowDeceived(line, "직원분께 드릴게요"))) opened.add(scenarioId);
   }
-  assert.deepEqual([...opened].sort(), [ASSET_PROTECTION, "institutional-impersonation", PROSECUTION].sort());
+  assert.deepEqual([...opened].sort(), [ASSET_PROTECTION, PROSECUTION].sort());
 });
 
 // ── (7) 보류 표본 — 한계 고정 ─────────────────────────────────────────────────────────────────

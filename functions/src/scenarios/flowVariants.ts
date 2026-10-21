@@ -160,8 +160,23 @@ const st = (...summaries: string[]) =>
 
 // 다른 시나리오 수법 문구를 그대로 빌려 쓰는 참조(같은 원천 — 문구 사본 0).
 const ASSET_INFO = { from: "asset-protection-notice-call", label: "거래 은행·자산 정보 수집" };
-const CASH_HANDOFF = { from: "asset-protection-notice-call", label: "인출·전달 요구" };
-const COIN_TRANSFER = { from: "prosecution-cooperation-call", label: "코인 구매·송금 요구" };
+
+// ── 2026-10-21(사용자 실기 신고) — 기관 사칭 고급 공통: 인증번호 → 안전계좌 링크 이체 화면(아래 fv-c5fj 주석) ──────────────
+// ⛔ 이체는 **문자 링크로 연 이체 화면에서만** 하게 한다(UX-023 · D-115 — 계좌는 미리 채워져 있고 금액만 참가자가 넣는다). 은행 앱 ·
+//    창구 · ATM에서 "알아서" 이체하라는 말이 나오지 않게 단계 · 수법 문면 둘 다에 적는다. 계좌 · 금액 값은 문자 · 화면이 원천이다.
+const INSTITUTION_ADVANCED_OTP_STAGE =
+  "본인 확인 마지막 절차라며 문자로 간 인증번호를 불러 달라고 요구한다. 상대가 거부하면 불이익을 한 번 더 암시한 뒤 인증번호 없이 다음 단계로 넘어간다.";
+const INSTITUTION_ADVANCED_LINK_TRANSFER_STAGE =
+  "자산을 보호해야 한다며 문자로 보낸 안전계좌 안내의 링크를 열게 하고, 그 화면에서 금액을 직접 넣어 이체를 마치라고 요구한다. 은행 앱이나 창구에서 따로 이체하라고 하지 않는다.";
+const INSTITUTION_OTP_DEMAND =
+  "인증번호 요구 — '본인 확인 마지막 절차입니다, 방금 문자로 간 인증번호 여섯 자리 불러 주십시오' 처럼 문자로 도착한 인증번호를 불러 달라고 요구한다. 번호는 네가 지어내 말하지 않는다.";
+const INSTITUTION_LINK_TRANSFER =
+  "이체 화면 유도 — '문자로 보낸 안내의 링크를 눌러 보시면 안전계좌는 이미 들어가 있습니다, 금액만 넣고 이체 누르시면 됩니다' 처럼 문자 속 링크의 이체 화면에서 직접 이체하게 한다. 은행 앱·창구·ATM에서 따로 보내라고 하지 않는다.";
+const INSTITUTION_ADVANCED_SMS: FlowVariantSms[] = [
+  { purpose: "identity", smsId: "institution-otp", required: true, notBeforeUserTurns: 2 },
+  { purpose: "transfer", smsId: "institution-safe-account", required: true, notBeforeUserTurns: 4 },
+];
+const INSTITUTION_ADVANCED_DECISION_MOMENT = "문자 링크로 연 안전계좌 이체 화면에서 금액을 넣고 이체하기를 누르는 순간";
 const APP_INSTALL = { from: "card-delivery-call", label: "보안 점검 앱 설치 요구" };
 const AGENCY_PROBE = { from: "card-delivery-call", label: "기관 조사 언급" };
 
@@ -314,29 +329,38 @@ const SPECS: VariantSpec[] = [
     scenarioId: "institutional-impersonation",
     level: "advanced",
     authoring: "authored",
+    // ⭐ 2026-10-21 사용자 실기 신고(라이브 main 676eeb3 · 기관 사칭 × 고급 Live) — "인증번호를 요구하지 않았고, 이체도 웹사이트
+    // 형태가 아니라 내가 알아서 이체하는 것으로 됐다". 원인: 고급 2벌이 문자 선언 0(`sms: []`)이라 인증번호 문자 · 안전계좌 링크 문자 ·
+    // 이체 랜딩(UX-023 `safe-account-transfer` · D-115 계좌 미리 채움 + 금액 사용자 입력)이 **고급에서만** 도달 불가였고, 마지막 단계가
+    // 현금 전달(CASH_HANDOFF) · 코인(COIN_TRANSFER) 말 요구였다. 두 수법은 고급 전용 시나리오(`asset-protection-notice-call` fv-bmiq ·
+    // `prosecution-cooperation-call` fv-nss6)가 그대로 다룬다 — 여기서 빼도 수법 커버리지 손실 0.
+    // ⇒ 고급 2벌 모두 인증번호(identity · 필수) → 안전계좌 링크 문자(transfer · 필수 · 랜딩) 순서를 거친다. 필수 2개 선례 = loan fv-m3hd.
+    //    하한 2 · 4 — `planSmsBackstop`이 먼저 열리는 인증번호를 먼저 강제하고, 계좌 문자는 그 뒤 간격(2)을 지켜 열린다.
     stages: st(
       "검사라며 본인 명의가 범죄에 쓰였다고 알리고 구속 가능성을 비춘다.",
       "협조하면 조용히 끝난다며 안심시키고, 금융감독기관이 자산 보호를 돕는다고 말한다.",
       "계좌번호보다 거래 은행과 자산 규모부터 묻는다.",
-      "은행에서 이유를 물으면 그럴듯한 개인 용도로 둘러대라고 일러 준 뒤(구체적인 문장은 만들어 주지 않는다), 돈을 찾아 담당 직원에게 맡기겠다는 약속을 받아 내려 한다.",
+      INSTITUTION_ADVANCED_OTP_STAGE,
+      INSTITUTION_ADVANCED_LINK_TRANSFER_STAGE,
     ),
-    keepLabels: ["권위 암시", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "비밀 유지 요구", "전화 끊음 저지"],
+    keepLabels: ["권위 암시", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "안전계좌 이체 요구", "비밀 유지 요구", "전화 끊음 저지"],
     extraTactics: [
       ASSET_INFO,
-      CASH_HANDOFF,
+      INSTITUTION_OTP_DEMAND,
+      INSTITUTION_LINK_TRANSFER,
       "안심 유도 — '협조만 하시면 약식으로 조용히 끝납니다' 처럼 위협과 번갈아 안심시켜 경계를 낮춘다.",
     ],
     // D2 · D5(콘텐츠) + D3 · D4(고급 오버레이 — 확인 무력화 카탈로그 보유 → d3_and_d4)
     exitBlock: ["D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
-    sms: [],
+    sms: [...INSTITUTION_ADVANCED_SMS],
     legs: [
       { callerLabel: "검사", speakerGender: "male", minUserTurns: 3, maxUserTurns: 8 },
       { callerLabel: "금융감독원 직원", speakerGender: "female", minUserTurns: 2, maxUserTurns: 10 },
     ],
     ...ADVANCED,
-    channels: ["voice"],
-    demandStages: 2,
-    decisionMoment: "돈을 찾아 담당 직원에게 맡기겠다는 약속에 동의하는 순간",
+    channels: ["voice", "sms"],
+    demandStages: 3,
+    decisionMoment: INSTITUTION_ADVANCED_DECISION_MOMENT,
     sources: ["C10", "C11", "C01", "S16", "S11"],
   },
   {
@@ -344,20 +368,22 @@ const SPECS: VariantSpec[] = [
     scenarioId: "institutional-impersonation",
     level: "advanced",
     authoring: "authored",
+    // 2026-10-21 — 위 fv-c5fj 주석과 같은 수정(코인 요구 → 인증번호 → 안전계좌 링크 이체 화면).
     stages: st(
       "검사라며 본인 명의 계좌가 범죄에 쓰였다고 알린다.",
       "자산이 범죄수익인지 검수해야 한다며 거래 은행과 자산 규모를 묻는다.",
-      "검수를 위해 코인으로 바꿔 지정된 곳으로 옮기라고 요구한다.",
+      INSTITUTION_ADVANCED_OTP_STAGE,
+      INSTITUTION_ADVANCED_LINK_TRANSFER_STAGE,
     ),
-    keepLabels: ["권위 암시", "긴급성 조성", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "비밀 유지 요구", "전화 끊음 저지"],
-    extraTactics: [ASSET_INFO, COIN_TRANSFER],
+    keepLabels: ["권위 암시", "긴급성 조성", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "안전계좌 이체 요구", "비밀 유지 요구", "전화 끊음 저지"],
+    extraTactics: [ASSET_INFO, INSTITUTION_OTP_DEMAND, INSTITUTION_LINK_TRANSFER],
     exitBlock: ["D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
-    sms: [],
+    sms: [...INSTITUTION_ADVANCED_SMS],
     legs: ONE_LEG("검사", "male"),
     ...ADVANCED,
-    channels: ["voice"],
-    demandStages: 2,
-    decisionMoment: "코인 구매 · 송금 요구에 따르겠다고 하는 순간",
+    channels: ["voice", "sms"],
+    demandStages: 3,
+    decisionMoment: INSTITUTION_ADVANCED_DECISION_MOMENT,
     sources: ["C09", "S27"],
   },
 
