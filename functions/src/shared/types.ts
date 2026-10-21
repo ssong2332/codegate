@@ -504,6 +504,13 @@ export type PersonaBlockItem = { key: PersonaCardKey; label: string; value: stri
 /** §88 — `inputBy`: v2 카드에서 복사(리포트 문면 분기 — UX D-131 (6)(7)). 부재 = 옛 v1 카드(종전 문면). */
 export type PersonaBlock = { state: PersonaBlockState; items: PersonaBlockItem[]; inputBy?: PersonaCardInputBy };
 
+/**
+ * 사용자 결정 2026-10-21 ② — 속음은 아니지만 위험했던 참가자 줄(`report/analyzeConversation.ts` `resolveRiskSignalKind` 판정표).
+ * `turnIndex` = 그 참가자 줄 · `timeLabel` = 속은 순간과 같은 시간축. 문면은 클라가 `kind`로 고른다(서버 문면 0).
+ */
+export type RiskSignalKind = "secrecy_promise" | "bank_disclosed" | "fake_info";
+export type RiskSignal = { turnIndex: number; timeLabel: string; kind: RiskSignalKind };
+
 export type ReportDoc = {
   reportId: string;
   sessionId: string;
@@ -557,6 +564,9 @@ export type ReportDoc = {
   // T194-b 추가(옵셔널, 하위호환 · 무백필 — Architecture.md §84.3.6 · UX-008 v1.38 (1) · D-120) — "상대가 먼저 꺼낸 '내 정보'"
   // 블록의 상태와 항목. 카드 없는 세션 · 카드 도입 전 리포트 = 필드 부재(= R-4 · 블록 0). 최초 생성 시 1회만 기록된다.
   personaBlock?: PersonaBlock;
+  // 사용자 결정 2026-10-21 ②(옵셔널 · 무백필) — 속음은 아니지만 위험했던 행동(비밀 유지 약속 · 거래 은행명 · 가짜 정보). 0건 = 필드 부재.
+  // ⛔ 판정 입력이 아니다 — `wasDeceived` · `deceivedMoments` · 방어 등급 · 되감기 진입점과 무관하다.
+  riskSignals?: RiskSignal[];
 };
 
 // --- reports/{reportId}/rewindAttempts/{attemptId} (T70, UX-028/UF-009, §15.2.2, AC-062/063) ---
