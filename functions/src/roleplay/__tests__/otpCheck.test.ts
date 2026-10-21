@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import * as path from "node:path";
 import { logger } from "firebase-functions";
-import { buildOtpCompareInstruction, findInCallSmsItem, IN_CALL_SMS, listOtpItems } from "../../scenarios/inCallSms";
+import { buildOtpCompareInstruction, buildOtpLiveCompareLine, findInCallSmsItem, IN_CALL_SMS, listOtpItems } from "../../scenarios/inCallSms";
 import { buildInCallSmsResponse } from "../../inCallSms/buildDoc";
 import { buildSystemPrompt } from "../promptAssembly";
 import { SCENARIO_PROMPTS } from "../../scenarios";
@@ -214,11 +214,14 @@ test("[OTP] QA M2 — 직전 사기범 발화가 인증번호를 묻지 않았�
 });
 
 // ── ⭐ 번호(정답)가 모델 입력에 0회 ─────────────────────────────────────────────────
-test("[OTP] ⭐ 번호 미노출 — 대조 결과 지시 2종·도착 응답(실시간)·카탈로그 도착 지시·조립 프롬프트 어디에도 인증번호가 없다(R8 회귀 ②)", async () => {
+// ⭐ §99 추가(2026-10-21 사용자 실기 신고 — Live에서 틀린 번호를 "확인됐다") — 실시간 도착 응답(`buildInCallSmsResponse`)의 **인증번호 문자**만
+// 대조용 정답 1줄을 싣는다(§78.4 L1 → 정답 1회 제공). 텍스트 경로의 모델 입력(턴 지시 · 대조 결과 · 조립 프롬프트)에는 여전히 0이다.
+test("[OTP] ⭐ 번호 미노출 — 대조 결과 지시 2종·카탈로그 도착 지시·조립 프롬프트(텍스트 경로)·인증번호 아닌 문자의 실시간 응답 어디에도 인증번호가 없다(R8 회귀 ②)", async () => {
   assert.ok(ALL_OTP_CODES.length >= 2, "인증번호 카탈로그 수집 실패(거짓 초록 방지)");
   const modelInputs: string[] = [buildOtpCompareInstruction("match"), buildOtpCompareInstruction("mismatch")];
   for (const item of Object.values(IN_CALL_SMS).flat()) {
     modelInputs.push(item.announceInstruction);
+    if (item.kind === "otp") continue; // §99 — 아래 별도 테스트(실시간 대조 1줄)
     const res = buildInCallSmsResponse(item, { placed: false });
     if (res.announceInstruction) modelInputs.push(res.announceInstruction);
   }
@@ -256,9 +259,22 @@ test("[OTP] ⭐ 번호 미노출 — 대조 결과 지시 2종·도착 응답(�
   assert.match(buildOtpCompareInstruction("mismatch"), /번호가 안 맞는데요, 문자 다시 확인해서 불러 주세요/);
 });
 
-test("[OTP] 실시간 도착 응답은 #300 이전과 같다 — 카탈로그 도착 지시 그대로(전 항목)", () => {
+test("[OTP → §99] 실시간 도착 응답 — 인증번호 아닌 문자는 카탈로그 도착 지시 그대로 · 인증번호 문자만 대조 1줄(정답 1회 · 먼저 말하기 금지 · 불일치 되묻기)", () => {
   for (const item of Object.values(IN_CALL_SMS).flat()) {
-    assert.deepEqual(buildInCallSmsResponse(item, { placed: false }), { smsId: item.smsId, announceInstruction: item.announceInstruction });
+    const res = buildInCallSmsResponse(item, { placed: false });
+    if (item.kind === "otp" && item.otpCode) {
+      assert.equal(res.announceInstruction, `${item.announceInstruction} ${buildOtpLiveCompareLine(item.otpCode)}`);
+      const line = buildOtpLiveCompareLine(item.otpCode);
+      assert.ok(line.includes(item.otpCode.split("").join(" ")), "정답은 한 자씩 띄어 1회");
+      assert.equal(line.split(item.otpCode.split("").join(" ")).length, 2, "정답 등장 1회");
+      assert.ok(line.includes("이 번호를 네가 먼저 말하거나 일부라도 알려 주지 마라"));
+      assert.ok(line.includes("\"확인했습니다\"·\"확인됐습니다\"라고 말하지 말고"));
+      assert.ok(line.includes("번호가 다르네요, 문자 다시 확인해서 불러 주세요."));
+      // 전환 뒤(확인 데스크 화자)에는 대조 1줄도 함께 빠진다(§53.6 (3) 게이트).
+      assert.deepEqual(buildInCallSmsResponse(item, { placed: true }), { smsId: item.smsId });
+    } else {
+      assert.deepEqual(res, { smsId: item.smsId, announceInstruction: item.announceInstruction });
+    }
   }
   assert.equal(listOtpItems(SCENARIO).length, 1);
 });

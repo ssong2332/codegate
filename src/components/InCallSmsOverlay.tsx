@@ -32,6 +32,7 @@ import PhoneIcon from "./PhoneIcon";
 import {
   formatSmsClock,
   needsTimeSeparator,
+  prefilledAccountOf,
   sortByArrival,
   spellOutOtp,
   splitBodyAtOtp,
@@ -149,6 +150,8 @@ export default function InCallSmsOverlay({
     displayText: string;
     landingId?: string;
     landingKind?: "credential-form" | "app-install";
+    /** §99 추가 · D-115 — 이 문자의 수취 계좌(랜딩 첫 칸 미리 채움). */
+    prefilledAccount?: string;
   } | null>(null);
   const [view, setView] = useState<"thread" | "landing">("thread");
   // ⭐ reviewer Major(포커스) — 보기 전환 때 포커스가 `hidden`이 된 요소와 함께 body로 떨어지지 않게 한다.
@@ -317,6 +320,7 @@ export default function InCallSmsOverlay({
             displayText: sms.linkDisplayText ?? "",
             landingId: sms.fakeLandingId,
             landingKind: sms.landingKind,
+            prefilledAccount: prefilledAccountOf(sms),
           },
     );
     setView("landing");
@@ -602,6 +606,8 @@ export default function InCallSmsOverlay({
                 onCredentialSubmit={() => onLandingSubmitted(landing.smsId)}
                 // §99 — 여러 화면 사이트의 단계 **사실 하나**(고정 값)를 페이지로 중계한다.
                 onLandingStep={(step) => onLandingStep?.(landing.smsId, step)}
+                // §99 추가 · D-115 — 이체 랜딩의 수취 계좌 칸(읽기 전용)을 이 문자의 계좌 줄로 채운다.
+                prefilledAccount={landing.prefilledAccount}
                 // T194-c-1(Q2) — 가짜 "권한 허용" 응낙 **사실 하나**를 페이지로 중계한다(인자 = 랜딩 id뿐 · 이 파일은 콜러블을 부르지 않는다).
                 onInstallConsent={() => {
                   if (landing.landingKind === "app-install" && landing.landingId) onInstallConsent?.(landing.landingId);

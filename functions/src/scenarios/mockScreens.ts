@@ -404,7 +404,7 @@ const INSTITUTIONAL_IMPERSONATION: MockScreenItem[] = [
     headline: "안전계좌 이체가 아직 완료되지 않았습니다",
     bodyLines: [
       "범죄 연루가 확인된 자금은 임시 안전계좌로 옮겨야 보호 조치가 적용됩니다.",
-      "문자로 안내된 계좌번호와 금액을 아래에 입력해 주세요.",
+      "이체하실 금액만 입력하시면 보호 조치가 바로 적용됩니다.",
     ],
     // 문자 발신 라벨(`inCallSms.ts` INSTITUTIONAL_IMPERSONATION `institution-safe-account`
     // "(자산보호 안내)")과 일관되게 맞춘다(P-28 (6)).
@@ -432,7 +432,7 @@ const CARD_COMPANY_IMPERSONATION: MockScreenItem[] = [
     headline: "피해금 이관 신청이 완료되지 않았습니다",
     bodyLines: [
       "진행 중인 해외 결제 승인을 막으려면 잔액을 이관 전용 계좌로 옮기셔야 합니다.",
-      "문자로 안내된 이관 계좌와 금액을 아래에 입력해 주세요.",
+      "이관하실 금액을 적고 아래 버튼을 눌러 주세요.",
     ],
     // 문자 발신 라벨(`inCallSms.ts` CARD_COMPANY_IMPERSONATION `card-relief-account`
     // "(피해금 이관 안내)")과 일관되게 맞춘다(P-28 (6)).
@@ -632,7 +632,7 @@ const BANK_SECURITY_VERIFY_SCAM: MockScreenItem[] = [
     headline: "보호계좌로 옮기기가 아직 처리되지 않았습니다",
     bodyLines: [
       "비정상 출금 시도가 확인되어 잔액을 옮겨 두셔야 출금이 막힙니다.",
-      "문자로 안내된 계좌번호와 옮기실 금액을 아래에 입력해 주세요.",
+      "옮겨 두실 금액을 입력하면 출금 차단이 시작됩니다.",
     ],
     // 문자 발신 라벨(`inCallSms.ts` BANK_SECURITY_VERIFY_SCAM `bank-protect-account`
     // "(계좌보호 안내)")과 일관되게 맞춘다(P-28 (6)).

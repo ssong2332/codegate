@@ -367,6 +367,12 @@ export const LANDING_PAGE_TOKENS = {
   submitBg: "#41525E",
   submitText: "#FFFFFF",
   issuerFooter: "#6B655C",
+  /** §99 추가 · UX D-115 (3) — 문자로 안내된 수취 계좌를 미리 채운 **읽기 전용** 칸의 바탕(연회색 · 글자 대비 4.5:1 이상). */
+  fieldReadonlyBg: "#EEF0F2",
+  /** §99 추가 — 필수 입력 · 금액 검증 안내(칸 아래 한 줄 · 실제 은행 앱처럼 빨간 글자). */
+  errorText: "#C0262D",
+  /** §99 추가 — 금액 칸 아래 한글 단위 표기("47억 원"). */
+  hintText: "#1F3A5F",
 } as const;
 
 // ── T190-6 — 메신저 문자형(`surface="sms"`) 화면 문법(UX-022 v1.33 (2)) ──────────────────────────
@@ -712,6 +718,9 @@ function smsSurfacePairs(skin: MessengerSkin): ContrastPair[] {
     { name: "landing.inputText", fg: page.inputText, bg: page.inputBg, kind: "text" },
     { name: "landing.submit", fg: page.submitText, bg: page.submitBg, kind: "text" },
     { name: "landing.issuerFooter", fg: page.issuerFooter, bg: page.pageBg, kind: "text" },
+    { name: "landing.readonlyText", fg: page.inputText, bg: page.fieldReadonlyBg, kind: "text" },
+    { name: "landing.errorText", fg: page.errorText, bg: page.pageBg, kind: "text" },
+    { name: "landing.hintText", fg: page.hintText, bg: page.pageBg, kind: "text" },
     { name: `${skin}.messenger.incoming`, fg: chat.incomingText, bg: chat.incomingBg, kind: "text" },
     { name: `${skin}.messenger.outgoing`, fg: chat.outgoingText, bg: chat.outgoingBg, kind: "text" },
     { name: `${skin}.messenger.fieldText`, fg: chat.fieldText, bg: chat.fieldBg, kind: "text" },

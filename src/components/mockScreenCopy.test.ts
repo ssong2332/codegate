@@ -753,7 +753,8 @@ const NUMERIC_FIELD_LABELS = [
 ];
 
 test("[T190/D-93] 계좌번호·금액 칸에만 inputMode numeric — 검증(maxLength·pattern) 0 · type=text 유지", () => {
-  const numeric = [...componentCode.matchAll(/\{ label: "([^"]+)", placeholder: "[^"]*", inputMode: "numeric" \}/g)].map((m) => m[1]);
+  // §99 추가 — 숫자 칸에 `amount: true`(금액 검증 · 한글 표기) · `prefill: "account"`(D-115 미리 채움)가 뒤에 붙을 수 있다.
+  const numeric = [...componentCode.matchAll(/\{ label: "([^"]+)", placeholder: "[^"]*", inputMode: "numeric"(?:, (?:amount: true|prefill: "account"))? \}/g)].map((m) => m[1]);
   assert.deepEqual(numeric.sort(), [...NUMERIC_FIELD_LABELS].sort());
   assert.ok(componentCode.includes("inputMode={field.inputMode}"), "입력 요소가 필드별 힌트를 받아야 한다");
   for (const forbidden of ["maxLength", "pattern=", 'type="number"']) {
@@ -874,4 +875,34 @@ test("[§99 ④] 단계 고정 값 3종 = 서버 InCallSmsEvent의 단계 값 ·
     assert.ok(inCallSmsTypes.includes(`| "${value}"`), `서버 InCallSmsEvent에 ${value}`);
     assert.ok(apiTypes.includes(`| "${value}"`), `클라 InCallSmsEvent에 ${value}`);
   }
+});
+
+// ── §99 추가(2026-10-21 사용자 실기 신고) — 수취 계좌 미리 채움(UX D-115) · 필수 입력 검증 · 금액 한글 표기 ─────────────────────────
+// ① D-115 (1) — 미리 채우는 칸 = 이체형 3종의 사기 측 수취 계좌 칸뿐(참가자 본인 정보 칸 0) ② D-115 (4) 둘째 줄 정본 3줄
+// ③ 금액 칸 = 필드별 `amount: true`(라벨 추론 0) ④ 검증 통과 전에는 제출 · 단계 콜백이 불리지 않는다(구조) ⑤ 입력값 자동 서식 0(D-93).
+
+test("[§99 D-115 ①②] 미리 채움 칸 = 이체형 3종의 수취 계좌 칸뿐 · 둘째 줄 정본 · 읽기 전용", () => {
+  const prefilled = [...componentCode.matchAll(/\{ label: "([^"]+)", placeholder: "[^"]*", inputMode: "numeric", prefill: "account" \}/g)].map((m) => m[1]);
+  assert.deepEqual(prefilled.sort(), ["안전계좌 번호", "보호계좌 번호", "이관 전용 계좌번호"].sort());
+  for (const line of [
+    "이체하실 금액만 입력하시면 보호 조치가 바로 적용됩니다.",
+    "이관하실 금액을 적고 아래 버튼을 눌러 주세요.",
+    "옮겨 두실 금액을 입력하면 출금 차단이 시작됩니다.",
+  ]) {
+    assert.ok(componentCode.includes(`"${line}"`), line);
+    assert.ok(catalog.includes(`"${line}"`), `서버 카탈로그에도 같은 글자: ${line}`);
+  }
+  assert.ok(componentCode.includes("readOnly") && componentCode.includes('aria-readonly="true"'), "읽기 전용 칸");
+});
+
+test("[§99 ③④⑤] 금액 칸은 필드별 명시 · 검증 실패면 콜백 전에 돌아간다 · 입력값 자동 서식 0", () => {
+  const amounts = [...componentCode.matchAll(/\{ label: "([^"]+)", placeholder: "[^"]*", inputMode: "numeric", amount: true \}/g)].map((m) => m[1]);
+  assert.deepEqual(amounts.sort(), ["보관 신청 금액", "전송 금액", "전환 금액", "이체 금액", "이관 금액", "옮길 금액"].sort());
+  const submit = componentCode.slice(componentCode.indexOf("const handleSubmit"), componentCode.indexOf("const issuerBar"));
+  const guard = submit.indexOf("if (Object.keys(found).length > 0) return;");
+  assert.ok(guard > 0, "검증 실패 시 되돌아가는 줄");
+  assert.ok(guard < submit.indexOf("onLandingStep?.(") && guard < submit.indexOf("onCredentialSubmit?.()"), "검증이 콜백보다 먼저다");
+  // 값 그대로 저장(쉼표 · 단위를 넣어 바꾸지 않는다) — 표기는 칸 아래 보조 줄.
+  assert.ok(componentCode.includes("setValues((current) => ({ ...current, [field.label]: next }))"));
+  assert.ok(componentCode.includes('from "../lib/landing/amountInput"'), "변환 함수 원천 1곳");
 });

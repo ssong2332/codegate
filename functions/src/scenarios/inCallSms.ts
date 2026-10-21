@@ -410,6 +410,18 @@ export function buildOtpCompareInstruction(result: "match" | "mismatch", options
     : '(⚠️ 서버 확인 결과 — 상대가 방금 불러 준 번호는 문자 속 인증번호와 다르다. 이번 답변에서 "확인했습니다"·"확인됐습니다"라고 말하지 마라. 첫 문장에서 인증번호가 맞지 않는다고 말하고, 번호를 말하거나 힌트를 주지 말고 문자를 다시 보고 불러 달라고 한 번만 요구한다 — 예: "인증번호가 안 맞는데요, 문자 다시 확인해서 불러 주세요.")';
 }
 
+/**
+ * ⭐ §99 추가(2026-10-21 사용자 실기 신고 *"인증번호 다르게 이야기해도 확인되었다고 넘어가는데?"* — Architecture §78.4의 (L1)을 바꾼다) —
+ * **실시간(Live) 경로 전용** 대조 1줄. Live는 서버가 참가자 발화를 실시간으로 보지 못해 텍스트 폴백의 서버 대조(`roleplay/otpCheck.ts`)를 못 쓴다
+ * ⇒ 문자 도착 응답(`buildInCallSmsResponse` — 맥락 주입 · 도구 결과)에 정답을 **한 번만** 싣고 모델이 직접 비교하게 한다.
+ * ⛔ 정답을 먼저 말하거나 힌트를 주지 말 것을 첫 문장에 둔다(§78 — 텍스트 폴백에서 매 턴 정답을 실었을 때 모델이 번호를 먼저 말한 3/7).
+ * ⛔ 텍스트 폴백(`roleplay/index.ts` `turnInstruction`)은 이 함수를 쓰지 않는다 — 그쪽은 서버 대조가 그대로다.
+ */
+export function buildOtpLiveCompareLine(otpCode: string): string {
+  const spelled = otpCode.split("").join(" ");
+  return `(⚠️ 대조용 — 이 문자 속 인증번호는 ${spelled}이다. 이 번호를 네가 먼저 말하거나 일부라도 알려 주지 마라. 상대가 번호를 불러 주면 이 번호와 한 자리씩 비교해 모두 같을 때만 확인됐다고 하고 다음 단계로 넘어간다. 하나라도 다르면 "확인했습니다"·"확인됐습니다"라고 말하지 말고, 첫 문장에서 번호가 맞지 않는다고 말한 뒤 문자를 다시 보고 불러 달라고 한다 — 예: "번호가 다르네요, 문자 다시 확인해서 불러 주세요." 두 번 넘게 계속 다르면 불이익을 한 번 암시하고 인증번호 없이 다음 단계로 넘어간다.)`;
+}
+
 /** 이 시나리오의 인증번호 문자 항목(`kind==="otp"` · `otpCode` 있음). 없으면 빈 배열. */
 export function listOtpItems(scenarioId: string): InCallSmsItem[] {
   return (IN_CALL_SMS[scenarioId] ?? []).filter((item) => item.kind === "otp" && Boolean(item.otpCode));

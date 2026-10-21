@@ -786,6 +786,9 @@ export default function SessionCallPage() {
             landingKind: data.landingKind as InCallSmsView["landingKind"],
             arrivedAtMs: arrivedAt?.toMillis?.() ?? 0,
             openedAtMs: openedAt?.toMillis?.(),
+            // §99 추가 · D-115 — 이체 랜딩 수취 계좌 미리 채움 원천(서버가 문자 계좌 줄에서 실은 값).
+            bankName: data.bankName as string | undefined,
+            accountNumber: data.accountNumber as string | undefined,
           };
         }),
       );
