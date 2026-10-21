@@ -26,7 +26,7 @@ import {
   extractTacticLabel,
   STRUCTURED_MARKER_PATTERN,
 } from "../scenarios/tacticFlavor";
-import type { MessengerChannel } from "../shared/types";
+import type { MessengerChannel, RiskSignal, RiskSignalKind } from "../shared/types";
 import { resolveTacticCategory, type TacticCategory } from "./tacticCategory";
 import { CODE_DIGITS_WITH_ENDING, CODE_HANGUL_DIGITS } from "../shared/spokenDigits";
 
@@ -61,6 +61,8 @@ export type ConversationAnalysis = {
   wasDeceived: boolean;
   deceivedMoments: DeceivedMomentResult[];
   tacticsUsed: string[];
+  /** 사용자 결정 2026-10-21 ② — 속음은 아니지만 위험했던 참가자 줄(아래 `RISK_SIGNAL_ROWS`). 속은 순간과 겹치지 않는다. */
+  riskSignals: RiskSignal[];
 };
 
 // 사용자가 확인·의심·거절 신호를 보이면 그 순간은 "속지 않음"으로 판정한다(저항이 우선순위 높음
@@ -302,6 +304,49 @@ const SECRET_CODE_DEMAND = /보안\s*코드|CVC|cvc|뒷면[^.?!]{0,8}(?:번호|�
 const SHORT_CODE_IN_ANSWER = /(?<!\d)\d{2,6}(?!\d|\s*(?:원|만|천|년|월|일|시|분|호|번지|살|개|명|층|로|에))/;
 const ENTERED_IN_ANSWER = /입력\s*(?:했|할게|하겠|완료)/;
 
+// ⭐ 사용자 결정 2026-10-21 ① **말보다 행동** — 의심 · 거절 어휘가 있어도 실제로 정보를 넘겼으면 속음이다.
+// | # | If(참가자 답변) | Then |
+// |---|---|---|
+// | H1 | 마스킹 토큰 `[주민번호]` · `[계좌]` · `[이메일]`이 있다 — 단 뒤가 `로/에 + 전화 · 확인 · 연락`(대표번호로 확인)이거나
+// |    | `맞 · 뭐 · 무슨`, `?`(사기범이 준 번호를 되묻기)면 제외 | 저항 어휘와 무관하게 속음 |
+// | H2 | `REFUSAL_IN_ANSWER`(왜 물어 · 사기 · 이상 등)가 없고 생년월일(D5 · V2) 또는 잔액 고지(D5)가 있다 | 저항 어휘와 무관하게 속음 |
+// | — | 보안코드 · 인증번호(V3)는 H에 넣지 않는다 — "1588 맞죠? 확인해 볼게요"처럼 확인하려는 번호와 구별되지 않는다 | — |
+// ⛔ 가짜 정보 표지(아래 RS1)가 있으면 H보다 앞서 속음이 아니다(결정 ②).
+const HARD_DISCLOSURE_TOKEN =
+  /\[(?:주민번호|계좌|이메일)\](?!\s*(?:로|으로|에|번으로)\s*(?:다시\s*)?(?:전화|확인|연락|걸)|\s*(?:이|가|은|는)?\s*(?:맞|뭐|무슨|어디|누구)|\s*(?:이요|요)?\s*\?)/;
+
+function isHardDisclosure(scammerText: string, replyText: string): boolean {
+  if (HARD_DISCLOSURE_TOKEN.test(replyText)) return true;
+  if (REFUSAL_IN_ANSWER.test(replyText)) return false;
+  return (
+    BIRTH_DATE.test(replyText) ||
+    BALANCE_DISCLOSURE.test(replyText) ||
+    (BIRTH_DATE_DEMAND.test(scammerText) && DATE_IN_ANSWER.test(replyText))
+  );
+}
+
+// ⭐ 사용자 결정 2026-10-21 ② — **속음은 아니지만 위험 신호**. 속은 순간으로 잡힌 줄에는 달지 않는다(줄 하나 = 표기 하나 · 위에서 첫 일치).
+// | # | If(참가자 답변 · 바로 앞 사기범 대사) | kind |
+// |---|---|---|
+// | RS1 | 답에 가짜 표지(가짜로 · 가짜 번호/정보/이름 · 거짓으로 · 아무거나 · 아무 번호 · 지어서 · 엉터리) | `fake_info`(⭐ 이 줄은 순응 어휘가 있어도 속음이 아니다) |
+// | RS2 | 저항 어휘가 없고, 비밀 유지 약속(아무/누구한테도 … 말 · 얘기 안 · 비밀로 할게 · 비밀 지킬게 · 가족 · 은행 … 말 안 할게) | `secrecy_promise` |
+// | RS3 | 저항 어휘 · 거절이 없고, 사기범이 은행 · 거래를 언급했으며 답에 은행명(○○은행 · 농협 · 우체국 · 새마을금고 · 신협 · 수협 · ○○뱅크) | `bank_disclosed` |
+const FAKE_INFO_MARKER = /가짜로|가짜\s*(?:번호|정보|이름|계좌)|거짓(?:말)?로|아무거나|아무\s*번호|지어서|지어낸|엉터리/;
+const SECRECY_PROMISE =
+  /(?:아무|누구)\s*(?:한테|에게)?\s*도[^.?!]{0,8}?(?:말|얘기|이야기|알리)[^.?!]{0,3}?(?:안|않|하지\s*않)|비밀로\s*(?:할게|하겠|해\s*드릴|둘게|두겠)|비밀\s*(?:지킬게|지키겠|유지할게|유지하겠)|(?:가족|은행|남편|아내|아들|딸|자녀)[^.?!]{0,8}?(?:말|얘기|알리)[^.?!]{0,3}?안\s*(?:할|하겠|해)/;
+const BANK_CONTEXT = /은행|거래/;
+const BANK_NAME = /[가-힣]{1,6}은행|농협|우체국|새마을\s*금고|신협|수협|[가-힣]{1,4}\s*뱅크/;
+
+function resolveRiskSignalKind(scammerText: string, replyText: string): RiskSignalKind | undefined {
+  if (FAKE_INFO_MARKER.test(replyText)) return "fake_info";
+  if (isResistanceForReport(replyText)) return undefined;
+  if (SECRECY_PROMISE.test(replyText)) return "secrecy_promise";
+  if (!REFUSAL_IN_ANSWER.test(replyText) && BANK_CONTEXT.test(scammerText) && BANK_NAME.test(replyText)) {
+    return "bank_disclosed";
+  }
+  return undefined;
+}
+
 function isResistanceForReport(replyText: string): boolean {
   return RESISTANCE_PATTERN.test(replyText.replace(ECHOED_OR_NEGATED_RESISTANCE, " "));
 }
@@ -503,6 +548,7 @@ export function analyzeConversation(
   const deceivedMoments: DeceivedMomentResult[] = [];
   const tacticLabelsUsed = new Set<string>();
   const tacticMatchers = buildTacticMatchers(weakenedTactics);
+  const riskSignals: RiskSignal[] = [];
 
   for (let i = 0; i < sorted.length; i += 1) {
     const msg = sorted[i];
@@ -520,18 +566,26 @@ export function analyzeConversation(
     // `turnComplete` · 끊긴 조각). 종전엔 첫 줄만 봐서 "잠깐만요" → "048231이요"의 둘째 줄이 판정되지 않았다.
     // 다음 사기범 대사 전까지의 참가자 줄을 차례로 보고 **처음 응한 줄 하나**만 순간으로 잡는다(대사 1개당 순간 최대 1개 — 종전 불변식).
     // 교대로 오가는 대화에서는 첫 줄만 보게 되므로 종전 판정과 같다.
+    // 사용자 결정 2026-10-21 — ① 실제 제공(H1 · H2)은 저항 어휘보다 앞선다 ② 가짜 정보 표지가 있으면 속음이 아니라 위험 신호다.
     let userReply: AnalysisMessage | undefined;
     for (let j = i + 1; j < sorted.length && sorted[j].role === "user"; j += 1) {
       const reply = sorted[j];
+      const fake = FAKE_INFO_MARKER.test(reply.textMasked);
       const resisted = isResistanceForReport(reply.textMasked);
       const complied =
         COMPLIANCE_PATTERN.test(reply.textMasked) ||
         isHandoffPromiseReply(msg.textMasked, reply.textMasked) ||
         isContextualCompliance(msg.textMasked, reply.textMasked);
-      if (!resisted && complied) {
+      if (!fake && (isHardDisclosure(msg.textMasked, reply.textMasked) || (!resisted && complied))) {
         userReply = reply;
         break;
       }
+    }
+    for (let j = i + 1; j < sorted.length && sorted[j].role === "user"; j += 1) {
+      const reply = sorted[j];
+      if (reply === userReply) continue;
+      const kind = resolveRiskSignalKind(msg.textMasked, reply.textMasked);
+      if (kind) riskSignals.push({ turnIndex: reply.turnIndex, timeLabel: elapsedLabel(reply, sessionCreatedAtMs), kind });
     }
     if (!userReply) continue;
 
@@ -543,10 +597,9 @@ export function analyzeConversation(
     // AC-026 예시("15초 시점에 속았습니다")를 그대로 따르기 위해 turnIndex가 아니라 실제 경과
     // 시간(초)을 라벨로 쓴다 — MessageDoc.createdAt이 이미 존재하므로 정확한 초 단위 계산이
     // 가능하다(구현 판단, Mock 단계라 정밀 음성 타이밍 데이터는 없지만 메시지 write 시각은 실측값).
-    const elapsedSec = Math.max(0, Math.round((userReply.createdAtMs - sessionCreatedAtMs) / 1000));
     deceivedMoments.push({
       turnIndex: userReply.turnIndex,
-      timeLabel: `${elapsedSec}초 시점`,
+      timeLabel: elapsedLabel(userReply, sessionCreatedAtMs),
       tactic,
       correctAction: pickCorrectAction(tactic, userReply.channel ?? "voice"),
       tacticCategory: resolveTacticCategory(tactic),
@@ -557,7 +610,14 @@ export function analyzeConversation(
     wasDeceived: deceivedMoments.length > 0,
     deceivedMoments,
     tacticsUsed: Array.from(tacticLabelsUsed),
+    riskSignals,
   };
+}
+
+/** "N초 시점" — 속은 순간 · 위험 신호가 같은 시간축을 쓴다(AC-026). */
+function elapsedLabel(message: AnalysisMessage, sessionCreatedAtMs: number): string {
+  const elapsedSec = Math.max(0, Math.round((message.createdAtMs - sessionCreatedAtMs) / 1000));
+  return `${elapsedSec}초 시점`;
 }
 
 /** 수법 라벨 키워드로 올바른 대처법을 고른다(AC-026 "그 순간 취했어야 할 올바른 대처"). 특정

@@ -12,7 +12,10 @@
 // | C9 | 단독 "네 · 알겠습니다" | 안 속음 | BASE 주석(격식 어미 단독 제거) |
 // | C11 | 저항 어휘가 **되묻기 · 부정**으로만 나오고 정보 제공 · 동의가 함께 있다 | 속음 | 판정 검수 V1 |
 // | C12 | 사기범 대사 뒤 참가자 줄이 연달아 오고 둘째 줄에서 응했다 | 속음 | 판정 검수(연속 줄) |
-// | P* | 정책 미정 — 비밀 유지 약속(P6) · 거래 은행명만(P10) · 가짜 정보(P13) | **현행 고정** | 메인 세션 보고 대기 |
+// | C13 | 의심 · 거절을 말하면서도 실제로 정보를 넘겼다("의심스럽지만 [계좌]") | 속음 | **사용자 결정 2026-10-21 ①** 말보다 행동 |
+// | R6 | 비밀 유지 약속 | 안 속음 + 위험 신호 `secrecy_promise` | **사용자 결정 2026-10-21 ②** |
+// | R10 | 거래 은행명만 말함 | 안 속음 + 위험 신호 `bank_disclosed` | **사용자 결정 2026-10-21 ②** |
+// | R13 | 가짜 정보 제공(숫자를 불러도) | 안 속음 + 위험 신호 `fake_info` | **사용자 결정 2026-10-21 ②** |
 //
 // ⭐ 역방향 확인: 판정 검수로 고친 대본(`fixed: true`)은 **종전 규칙**(첫 참가자 줄 하나 · 공유 패턴만)으로는 기대와 다르게
 // 나옴을 같은 실행에 나란히 보인다. ⚠️ 사기범 대사는 합성 픽스처다(라이브 전사 복사 아님).
@@ -23,10 +26,10 @@ import { maskPII } from "../../guardrails";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 
 type Turn = ["scammer" | "user", string];
-type Case = { sc: string; id: string; kind: string; expect: boolean | null; turns: Turn[]; rule: string };
+type Case = { sc: string; id: string; kind: string; expect: boolean; turns: Turn[]; rule: string };
 const S = (t: string): Turn => ["scammer", t];
 const U = (t: string): Turn => ["user", t];
-const c = (sc: string, id: string, kind: string, expect: boolean | null, turns: Turn[], rule: string): Case => ({
+const c = (sc: string, id: string, kind: string, expect: boolean, turns: Turn[], rule: string): Case => ({
   sc,
   id,
   kind,
@@ -63,8 +66,8 @@ const CASES: Case[] = [
   c(INST, "inst-g1", "대응", false, [S("서울중앙지검 수사관입니다. 성함과 생년월일 불러 주십시오."), U("검찰이 전화로 그런 걸 묻지 않잖아요. 끊고 대표번호로 확인할게요")], "C7"),
   c(INST, "inst-e1", "경계-되묻기", false, [S("서울중앙지검 수사관입니다. 성함 말씀해 주십시오."), U("어느 검찰청이라고요? 사건번호가 뭐예요?")], "C8"),
   c(INST, "inst-e2", "경계-말만", false, [S("지금 바로 조치하셔야 합니다."), U("네 알겠습니다")], "C9"),
-  c(INST, "inst-e3", "경계-비밀유지", null, [S("수사 기밀이니 가족에게도 말씀하시면 안 됩니다."), U("네 아무한테도 말 안 할게요")], "P6"),
-  c(INST, "inst-e4", "경계-은행명", null, [S("거래하시는 은행이 어디십니까?"), U("국민은행이요")], "P10"),
+  c(INST, "inst-e3", "경계-비밀유지", false, [S("수사 기밀이니 가족에게도 말씀하시면 안 됩니다."), U("네 아무한테도 말 안 할게요")], "R6"),
+  c(INST, "inst-e4", "경계-은행명", false, [S("거래하시는 은행이 어디십니까?"), U("국민은행이요")], "R10"),
   // ── 대출
   c(LOAN, "loan-d1", "속는", true, [S("저금리 대환 승인 나셨습니다. 기존 대출 선상환금 300만원 입금해 주셔야 합니다."), U("네 입금할게요. 어디로 보내면 돼요?")], "C2"),
   c(LOAN, "loan-d2", "속는", true, [S("신청서 작성 도와드릴게요. 진행하시겠어요?"), U("네 진행해 주세요")], "C5"),
@@ -123,15 +126,40 @@ const CASES: Case[] = [
   // ── 구조: 연속 참가자 발화(Live에서 사기범 전사가 비어 user가 이어짐)
   c(INST, "struct-consec", "구조-연속발화", true, [S("인증번호 불러 주십시오."), U("잠깐만요"), U("048231이요")], "C12"),
   // ── 가짜 정보
-  c(INST, "inst-fake", "경계-가짜정보", null, [S("계좌번호 불러 주십시오."), U("가짜로 아무거나 말할게요 1111-2222-3333")], "P13"),
+  c(INST, "inst-fake", "경계-가짜정보", false, [S("계좌번호 불러 주십시오."), U("가짜로 아무거나 말할게요 1111-2222-3333")], "R13"),
   // ── 챌린지 2턴 끊음
   c(INST, "chal-2turn", "실측 재현", false, [S("서울중앙지검입니다. 홍길동 씨 되시죠?"), U("네 누구시죠?"), S("고객님 명의 통장이 범죄에 연루됐습니다."), U("네?")], "C8"),
+  // ── 사용자 결정 2026-10-21 ① 말보다 행동
+  c(INST, "act-doubt-acct", "결정①", true, [S("안전계좌 확인을 위해 계좌번호 불러 주십시오."), U("의심스럽긴 한데 110-234-567890 이요")], "C13"),
+  c(BANK, "act-scam-rrn", "결정①", true, [S("본인 확인 위해 주민번호 말씀해 주세요."), U("사기 아니죠? 800101-1234567이에요")], "C13"),
+  c(CARD, "act-hangup-acct", "결정①", true, [S("피해금 이관할 계좌 알려 주세요."), U("끊고 싶은데 무서워서요 1002-123-456789요")], "C13"),
+  c(ASSET, "act-doubt-balance", "결정①", true, [S("예금 잔액 말씀해 주세요."), U("의심되지만 3천만원 정도 있어요")], "C13"),
+  c(INST, "act-doubt-birth", "결정①", true, [S("생년월일 말씀해 주십시오."), U("의심스럽지만 61년 3월 2일이요")], "C13"),
+  c(MCHILD, "act-msg-doubt-acct", "결정①", true, [S("엄마 계좌번호 좀 보내줘 확인할게"), U("좀 이상하긴 한데 1002-123-456789")], "C13"),
+  c(INST, "act-callback", "결정① 반례", false, [S("계좌번호 불러 주십시오."), U("1588-1234로 다시 전화해 볼게요")], "C7"),
+  c(KID, "act-fake-send", "결정② 가짜", false, [S("계좌로 돈 보내."), U("가짜 번호 불러 줄게요 1111-2222-3333 보낼게요")], "R13"),
+  c(PROS, "risk-secret2", "결정② 비밀", false, [S("가족에게도 알리시면 수사에 방해됩니다."), U("네 비밀로 할게요")], "R6"),
+  c(BANK, "risk-bank2", "결정② 은행", false, [S("어느 은행 거래하세요?"), U("농협이랑 우체국 써요")], "R10"),
 ];
 
 /** 판정 검수로 고친 대본 — 종전 규칙으로는 기대와 달랐다(역방향 확인 대상). */
-const FIXED_IDS = new Set(["inst-d1", "inst-d2", "inst-d5", "card-d2", "kid-d2", "bank-d2", "mpa-d1", "struct-consec"]);
-/** 정책 미정 대본의 현행 판정(고정). 바꾸려면 기준표 P행을 먼저 확정한다. */
-const POLICY_CURRENT: Record<string, boolean> = { "inst-e3": false, "inst-e4": false, "inst-fake": true };
+const FIXED_IDS = new Set([
+  "act-doubt-acct",
+  "act-hangup-acct",
+  "act-doubt-balance",
+  "act-doubt-birth",
+  "inst-fake",
+  "act-fake-send",
+  "inst-d1", "inst-d2", "inst-d5", "card-d2", "kid-d2", "bank-d2", "mpa-d1", "struct-consec"]);
+/** 사용자 결정 2026-10-21 ② — 위험 신호 기대(대본 id → kind). 그 밖 대본은 위험 신호 0건. */
+const RISK_EXPECT: Record<string, string> = {
+  "inst-e3": "secrecy_promise",
+  "inst-e4": "bank_disclosed",
+  "inst-fake": "fake_info",
+  "act-fake-send": "fake_info",
+  "risk-secret2": "secrecy_promise",
+  "risk-bank2": "bank_disclosed",
+};
 
 function run(sc: string, turns: Turn[]) {
   const messages = turns.map(([role, text], i) => ({
@@ -160,11 +188,14 @@ test("[판정 검수] 대본은 시나리오 17종을 모두 덮는다", () => {
 
 for (const x of CASES) {
   test(`[판정 검수] ${x.sc} · ${x.id}(${x.kind} · ${x.rule})`, () => {
-    const actual = run(x.sc, x.turns).wasDeceived;
-    const expected = x.expect ?? POLICY_CURRENT[x.id];
-    assert.equal(typeof expected, "boolean", `기대값 없음: ${x.id}`);
-    assert.equal(actual, expected);
-    if (FIXED_IDS.has(x.id)) assert.notEqual(runBeforeAudit(x.turns), expected, `역방향 확인 실패: ${x.id}`);
+    const r = run(x.sc, x.turns);
+    assert.equal(r.wasDeceived, x.expect);
+    const want = RISK_EXPECT[x.id];
+    assert.deepEqual(
+      r.riskSignals.map((signal) => signal.kind),
+      want ? [want] : [],
+    );
+    if (FIXED_IDS.has(x.id)) assert.notEqual(runBeforeAudit(x.turns), x.expect, `역방향 확인 실패: ${x.id}`);
   });
 }
 

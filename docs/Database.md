@@ -416,6 +416,7 @@ match /users/{uid}/sessions/{sid}/{allPaths=**} {
 |---|---|---|---|
 | stages | array<ReportStage>? | | AC-073 "세 단계 구분"의 판정 근거. **의도된 단계가 2개 이상일 때만** 기록(그 외 필드 부재). `ReportStage = { stage: "messenger"\|"mock_install"\|"voice", reached: boolean }` — **미도달 단계도 `reached:false`로 싣는다**(OQ-U24 판정, §15.9.5 e-3) |
 | mockScreenTimeline | array<MockScreenTimelineEntry>? | | 표시 전용 스냅샷. `{ landingId, kind, anchorTurnIndex, anchorResolved, timeLabel?, consented }`. 리포트 생성 시 `sessions/{sid}/mockScreens` **1회 read**로 역정규화(dual write 금지 — §15.1.5 (1)과 동형) |
+| riskSignals | array<RiskSignal>? | kind ∈ `secrecy_promise`\|`bank_disclosed`\|`fake_info` | 사용자 결정 2026-10-21 ②(DECISIONS #204) — 속음은 아니지만 위험했던 참가자 줄 `{ turnIndex, timeLabel, kind }`. 리포트 생성 시 `analyzeConversation`이 산출(추가 read 0). 0건이면 필드 부재(무백필). ⛔ 판정 입력 아님 — `wasDeceived` · 방어 등급 · 되감기 · 아카이브와 무관. `firestore.rules` · 인덱스 변경 0 |
 
 - **`deceivedMoments` 증분 규칙(스키마 변경 없음, 생성 규칙만 추가):** `consented === true`인 항목 1건당 `DeceivedMoment` 1건을 **`analyzeConversation` 산출 뒤에 병합**하고 배열을 **`turnIndex` 오름차순으로 정렬**한다. `turnIndex` = 설치 링크를 실은 **사기범 메시지**의 turnIndex, `tactic`/`correctAction` = 카탈로그 저작값, `tacticCategory` = 기존 `resolveTacticCategory` 결과(→ `link_or_install`). **앵커 미해결이면 승격하지 않는다**(§15.9.5 e-2 인덱스 정합 보호). `wasDeceived`는 병합 후 배열 기준으로 재계산한다.
 - **스냅샷에 넣지 않는 것:** 목업 화면 콘텐츠 원문(`headline`/`bodyLines`/`consentLabel`) — 사후 열람 화면이 목업을 재구성·재진입할 수 있게 된다(§15.6 G19와 동형 취지). 원시 타임스탬프도 넣지 않는다(표시 축이 아니다).
