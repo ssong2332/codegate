@@ -9,7 +9,7 @@
 // 사용자 발화는 텍스트 턴이다(음성 아님) — 참가자 말하는 시간은 보고서에서 글자 수로 추정해 더한다.
 //
 // node scripts/duration-probe.mjs --secret <path> [--key-var GEMINI_API_KEY2] [--out <dir>] [--max-sessions 30] [--only id:level,...]
-//   [--variant fv-xxxx] [--responder comply|refuse-coin]   (§98 — 변형 고정 · 코인 단계 거절 응답기)
+//   [--variant fv-xxxx] [--responder comply|refuse-coin|site]   (§98 — 변형 고정 · 코인 단계 거절 응답기 · §99 — 문자 사이트를 단계대로 진행하는 응답기)
 import { createRequire } from "node:module";
 import { readFileSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -27,7 +27,7 @@ const L = (p) => require(path.join(libDir, p));
 const { GoogleGenAI, Modality, EndSensitivity, StartSensitivity } = require("@google/genai");
 const { buildSystemPrompt } = L("roleplay/promptAssembly.js");
 const { resolveSessionScenarioPrompt, listFlowVariants, findFlowVariant } = L("scenarios/flowVariants.js");
-const { sessionDeclaresInCallSms, sessionDeclaredSmsPurposes, resolveDeclaredSms, planSmsBackstop, resolveSmsGate, buildSmsNudgeInstruction } = L("inCallSms/smsGate.js");
+const { sessionDeclaresInCallSms, sessionDeclaredSmsPurposes, sessionTransferSmsOpensLanding, resolveDeclaredSms, planSmsBackstop, resolveSmsGate, buildSmsNudgeInstruction } = L("inCallSms/smsGate.js");
 const { findInCallSmsItem, SMS_DECLINE_TOO_EARLY, SMS_DECLINE_ALREADY } = L("scenarios/inCallSms.js");
 const { buildInCallSmsResponse } = L("inCallSms/buildDoc.js");
 const { hasVerifyIntercept, findVerifyInterceptItem, VERIFY_DECLINE_TOO_EARLY } = L("scenarios/verifyIntercept.js");
@@ -70,9 +70,22 @@ const REFUSE_COIN = /(코인|가상\s?자산|거래소|지갑|전송|송금|이�
 const REFUSALS = ["코인은 못 사겠어요. 좀 이상해요.", "그건 안 할래요. 가족한테 먼저 물어볼게요.", "검찰이 왜 코인을 사라고 해요? 못 해요.", "싫어요, 안 보낼 거예요."];
 const responderMode = argVal("--responder", "comply");
 let refusalCount = 0;
+// §99(2026-10-21) — `--responder site`: 사이트 링크 문자(카탈로그 fakeLandingId가 있는 transfer 문자)가 도착한 뒤에는 사이트 · 화면 · 진행 질문에
+// 화면 순서대로 "어디까지 했다"만 답한다(실제 참가자가 앱 안 모의 사이트를 누르는 경로의 대리). 그 밖의 말은 comply와 같다.
+const SITE_ASK = /(링크|사이트|화면|접속|들어가|어디까지|본인\s?확인|전환|검수|금액|이체|진행|코인|지갑|다음)/;
+const SITE_PROGRESS = [
+  "링크 들어가서 본인 확인 했어요.",
+  "검수 대상이라고 예금이랑 적금 나와요. 전환 버튼 눌렀어요.",
+  "금액 넣는 화면이에요. 삼천만 원 넣고 다음 눌렀어요.",
+  "보관 지갑으로 이체 눌렀어요. 접수됐다고 나와요.",
+];
+const probeState = { siteDelivered: false, siteStep: 0 };
 function respond(lastScammerText, userTurnIndex) {
   if (userTurnIndex === 0) return OPENING_REPLY;
   if (responderMode === "refuse-coin" && REFUSE_COIN.test(lastScammerText)) return REFUSALS[refusalCount++ % REFUSALS.length];
+  if (responderMode === "site" && probeState.siteDelivered && probeState.siteStep < SITE_PROGRESS.length && SITE_ASK.test(lastScammerText)) {
+    return SITE_PROGRESS[probeState.siteStep++];
+  }
   for (const [re, reply] of RESPONDER) if (re.test(lastScammerText)) return reply;
   return FILLER[userTurnIndex % FILLER.length];
 }
@@ -117,6 +130,8 @@ function pcmSeconds(mimeType, bytes) {
 }
 
 async function runOne(scenarioId, level) {
+  probeState.siteDelivered = false;
+  probeState.siteStep = 0;
   const t0 = Date.now();
   const now = () => Date.now() - t0;
   // §98 — `--variant fv-xxxx`: 그 시나리오 변형이면 배정 풀 대신 그 변형(은퇴 변형 포함 — 이전/이후 비교용).
@@ -131,6 +146,8 @@ async function runOne(scenarioId, level) {
     difficultyLevel: level,
     inCallSmsEnabled: sessionDeclaresInCallSms(scenarioId, variantId),
     inCallSmsPurposes: sessionDeclaredSmsPurposes(scenarioId, variantId),
+    // §99 — 앱(geminiProvider)과 같은 술어(계좌 문자의 이체 링크 — 이전 실행에는 빠져 있었다).
+    transferSmsLink: sessionTransferSmsOpensLanding(scenarioId, variantId),
     verifyInterceptEnabled: verifyEnabled,
     l3Procedural: isL3Procedural(scenarioId),
     identityCheckAllowed: asksIdentityCheck(scenarioId),
@@ -199,6 +216,7 @@ async function runOne(scenarioId, level) {
         if (g.status === "allowed") {
           const item = findInCallSmsItem(scenarioId, g.item.smsId);
           delivered.push({ smsId: item.smsId, userTurnsAtArrival: userTurns + 1, by: "model" });
+          if (item.kind === "account" && item.fakeLandingId) probeState.siteDelivered = true;
           status = "delivered";
           guidance = buildInCallSmsResponse(item, { placed: verifyPhase === "placed" }).announceInstruction;
         } else guidance = g.status === "already_delivered" ? SMS_DECLINE_ALREADY : SMS_DECLINE_TOO_EARLY;
@@ -247,6 +265,7 @@ async function runOne(scenarioId, level) {
         if (g.status === "allowed") {
           const item = findInCallSmsItem(scenarioId, g.item.smsId);
           delivered.push({ smsId: item.smsId, userTurnsAtArrival: userTurns, by: "backstop" });
+          if (item.kind === "account" && item.fakeLandingId) probeState.siteDelivered = true;
           sendText(buildInCallSmsResponse(item, { placed: verifyPhase === "placed" }).announceInstruction ?? item.announceInstruction, false, "sms_ctx");
         }
       } else if (p.action === "nudge") {
