@@ -14,9 +14,9 @@ const deepvoiceLines: DeepvoiceLine[] = [
 
 export const messengerChildImpersonationKakaoScenario: ScenarioDoc = {
   title: "자녀 사칭 급전 요청(카카오톡)",
-  fraudType: "가족 사칭(메신저)",
+  fraudType: "자녀 사칭(카카오톡)",
   estimatedDuration: "약 5~8분",
-  difficulty: "중간 — 정서적 압박과 채널 전환이 결합됩니다",
+  difficulty: "가족 걱정을 건드리고, 채팅하다가 전화로 이어집니다",
   deepvoiceLines,
   callerLabel: "010-4471-2298",
   channel: "messenger",

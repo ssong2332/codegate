@@ -18,9 +18,9 @@ const deepvoiceLines: DeepvoiceLine[] = [
 
 export const reputationBlackmailScamScenario: ScenarioDoc = {
   title: "불법업소 방문 사실 유포 협박",
-  fraudType: "사생활 유포 협박(신용·평판 훼손 위협)",
-  estimatedDuration: "약 5~8분",
-  difficulty: "높음 — 수치심과 공포를 이용한 협박이라 심리적 부담이 클 수 있습니다",
+  fraudType: "불법업소 출입 기록을 퍼뜨리겠다는 협박",
+  estimatedDuration: "약 2~4분",
+  difficulty: "부끄러움과 두려움을 건드리는 협박이라 마음의 부담이 클 수 있습니다",
   deepvoiceLines,
   voiceMode: "generic",
   callerLabel: "+86 131-8842-0067",

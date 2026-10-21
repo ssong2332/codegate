@@ -12,9 +12,9 @@ const deepvoiceLines: DeepvoiceLine[] = [
 
 export const messengerSubsidySmishingSmsScenario: ScenarioDoc = {
   title: "정부지원금 안내 스미싱(문자)",
-  fraudType: "지원금 사칭 스미싱(링크형)",
+  fraudType: "정부지원금 안내 사칭 문자(링크 누르기 유도)",
   estimatedDuration: "약 5~8분",
-  difficulty: "중간 — 이익 유혹과 채널 전환이 결합됩니다",
+  difficulty: "받을 돈이 있다는 말로 끌어들이고, 문자하다가 전화로 이어집니다",
   deepvoiceLines,
   callerLabel: "1666-3390",
   channel: "messenger",

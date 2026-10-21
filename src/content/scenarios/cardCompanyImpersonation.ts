@@ -16,9 +16,9 @@ const deepvoiceLines: DeepvoiceLine[] = [
 
 export const cardCompanyImpersonationScenario: ScenarioDoc = {
   title: "카드사 부정결제 사칭",
-  fraudType: "카드사 부정결제 확인 사칭",
-  estimatedDuration: "약 5~8분",
-  difficulty: "쉬움~중간 — 놀람과 확인 압박을 이용합니다",
+  fraudType: "카드사 상담원 사칭(해외 결제 확인)",
+  estimatedDuration: "약 2~5분",
+  difficulty: "결제됐다는 말로 놀라게 한 뒤 빨리 확인하라고 재촉합니다",
   deepvoiceLines,
   voiceMode: "generic",
   callerLabel: "1588-7742",

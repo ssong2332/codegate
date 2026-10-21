@@ -18,9 +18,9 @@ const deepvoiceLines: DeepvoiceLine[] = [
 
 export const kidnappingThreatScenario: ScenarioDoc = {
   title: "자녀 납치 협박",
-  fraudType: "납치·감금 협박(공포 소구)",
-  estimatedDuration: "약 5~8분",
-  difficulty: "높음 — 공포·협박이 강한 편이라 심리적 부담이 클 수 있습니다",
+  fraudType: "자녀를 데리고 있다는 협박",
+  estimatedDuration: "약 2~4분",
+  difficulty: "겁을 주는 말이 강해 마음의 부담이 클 수 있습니다",
   deepvoiceLines,
   voiceMode: "generic",
   callerLabel: "발신번호 표시제한",

@@ -9,9 +9,9 @@ export const PROSECUTION_COOPERATION_CALL_SCENARIO_ID = "prosecution-cooperation
 
 export const prosecutionCooperationCallScenario: ScenarioDoc = {
   title: "검찰 수사 협조 요청",
-  fraudType: "수사기관 사칭(수사 협조 명목)",
-  estimatedDuration: "약 5~8분",
-  difficulty: "높음 — 처벌을 앞세운 압박이 이어져 심리적 부담이 큰 편입니다",
+  fraudType: "검찰 수사관 사칭(수사 협조 요청)",
+  estimatedDuration: "약 3~5분",
+  difficulty: "처벌을 앞세운 압박이 이어져 마음의 부담이 큰 편입니다",
   deepvoiceLines: [{ lineId: "line-1", text: "검찰 수사관입니다. 본인 명의 계좌 관련 사건으로 확인할 것이 있어 연락드렸습니다." }],
   voiceMode: "generic",
   callerLabel: "070-3359-6610",
