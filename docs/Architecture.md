@@ -21798,3 +21798,38 @@ AC-105 갱신 고지 3 역방향 대응: ⓙ = G611 · ⓚ = G604(R-a).
 
 - 해석: ① · ②는 재현과 개선이 모두 수치로 확인됐다. ③은 '네' 첫머리가 줄었지만 연속 시작 쌍은 늘었다(표본 작음 · 5쌍 중 4쌍이 fv-pgqt) ⇒ **개선 미확인**. 전사 텍스트 기준이라 실제 음성의 추임새와 다를 수 있다(추정 — 실기 통화로 확인).
 - 키는 메인 체크아웃 `functions/.secret.local`에서 프로세스 메모리로만 읽었다(복사본 0 · 출력 0).
+
+## 92. (UX fix — 2026-10-21 · 브랜치 `claude/kakao-chat-ux-and-dark-lock-437c6b` · 사용자 실기 신고 · 갤럭시 S25 · 라이브 `f5af50a`) **메신저 대화방 전송 순서(1 → 읽음 → 입력 중 → 답장) · 훈련 화면 라이트 고정 · `?themedebug=1`** — implementer 기록
+
+### 92.1 원인
+| # | 증상 | 원인(근거) |
+|---|---|---|
+| A-1 | 보내도 지연 | 화면이 내 말풍선을 **서버가 쓴 문서**(sendMessage 턴 확보 트랜잭션 — `functions/src/roleplay/index.ts:168`)가 구독으로 올 때만 그렸다 |
+| A-2 | "1"과 입력 중이 함께 | 입력 중 점이 `sending`(전송 순간부터 서버 응답까지)으로 떴다. 서버는 내 문서를 먼저 쓰고 답장은 LLM 뒤에 쓴다 ⇒ 그 사이 "1" + 점 동시 |
+| A-3 | 전송 중 키보드 닫힘 | 입력칸 `disabled={sending}` |
+| B | 웨일 다크 반전 | §89.5 ⓒ에서 One UI 통화만 OS 테마를 따랐고, 웨일 안드로이드는 `color-scheme`(`only light` · `light dark` 둘 다)을 무시하고 자체 변환한다(실기 캡처 · 라이브 `f5af50a`). 공개 문서 · 옵트아웃 수단 검색 결과 0 |
+
+### 92.2 수정
+| 파일 | 변경 |
+|---|---|
+| `src/lib/messenger/replyChoreography.ts`(신규) | 순수 시간 함수 — 판정표는 파일 머리. `viewReply(pending, messages, now)` → 1 · 입력 중 · 답장 숨김 · 낙관적 말풍선 · 전송 잠김 · 결과 적용 가능 |
+| `src/app/session/messenger/page.tsx` | `sending` → `pending`(한 턴) + `clock`(단계 바뀔 때만 타이머). 구독 콜백 `noteSnapshot` · 서버 응답 `noteServerDone`. 종료 · 통화 전환 = 답장 공개 뒤(`chatEnded` · `escalatingNow`). 입력칸 잠금 제거 · 전송 스피너 제거 · 실패 말풍선(다시 보내기 · 삭제) |
+| `src/lib/phone/deviceTheme.ts` | `useDeviceTheme()` = `"light"` 고정(OS 테마 읽기 제거) — `play/page.tsx` 무변경 |
+| `src/lib/phone/themeDiagnostics.ts` · `src/components/ThemeDebugPanel.tsx` · `src/app/session/layout.tsx`(신규) | `?themedebug=1` — UA(웨일 주 버전) · 미디어 쿼리 · computed color-scheme/filter/배경 · html/body 속성 · 스타일 시트 목록 · 속성 변이 수 · 색 견본(css · svg · canvas · img × 카톡 노랑 · 바탕 · 흰색 · One UI 라이트 · 받기 녹색). 쿼리 없으면 DOM 0 · `pointer-events-none` |
+| 서버 | 변경 0(계약 그대로) |
+
+### 92.2.1 알려진 한계(리뷰 2026-10-21)
+| # | 상황 | 현재 동작 | 후속 |
+|---|---|---|---|
+| M1 | 서버가 내 메시지를 저장한 뒤 실패 | 말풍선은 실제 문서 · "1" 유지 · 오류 줄. 다시 보내기 버튼 없음(중복 턴 방지). 서버가 늦게라도 답을 쓰면 구독으로 받아 같은 순서로 보인다 | 같은 문장을 다시 입력하면 서버에 사용자 턴이 2개 — 서버 `clientMsgId` 멱등성(후속) |
+| M1' | 클라 타임아웃 뒤 서버가 늦게 저장 | 저장 문서가 오기 전에는 실패 말풍선(다시 보내기) — 누르면 중복 가능. 문서가 오면 실패 말풍선은 사라진다 | 위와 같음 |
+| R2 | 연출 중 새로고침 | 연출 상태는 저장하지 않는다 — 새로고침 뒤에는 문서를 그대로 그린다 | 없음(의도) |
+| R6 | 느린 서버 | 응답 뒤 최소 0.4초 + 0.9초를 더 기다린다 | 실기 체감으로 수치 조정 |
+
+### 92.3 테스트
+G636(`replyChoreography.test.ts` 8건) · G637(`themeDiagnostics.test.ts` 5건) · 소스 스캔 3건 갱신(`threadItems` 배선 · `startNoticeGate` 버튼 술어 `!chatEnded` · `inSessionMarkers` 등록부 23/15).
+
+### 92.4 배포 · 실기 확인
+- 배포 = **Hosting만**(functions 변경 0).
+- 실기: ① 카톡형 전송 순서(빠른 · 느린 응답) ② 문자형 ③ 실패 후 다시 보내기 ④ 통화 전환 직전 답장이 보이고 전환되는가 ⑤ One UI 통화가 기기 다크에서도 라이트인가 ⑥ **웨일 다크에서 `?themedebug=1` 캡처** — 견본 4행 중 원래 색이 남는 행 · `filter` · 낯선 시트 · html/body 속성.
+

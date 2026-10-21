@@ -275,7 +275,8 @@ function withCallComponentViolations(source: string): string[] {
 // UX D-124 ② · PRD AC-106 (i)).
 const PAGE_PREDICATE_STATE = "resolveSessionEscalation(";
 const PAGE_NOTICE_PROP = "includesCall={sessionEscalates}";
-const PAGE_BUTTON_GUARD = "{sessionEscalates && !ended && (";
+// §92 — 종료 판정이 답장 공개 뒤로 미뤄져 `chatEnded`(= ended ∨ 공개된 종료 결과)를 쓴다. 술어(sessionEscalates)는 같다.
+const PAGE_BUTTON_GUARD = "{sessionEscalates && !chatEnded && (";
 
 test("[T190-8a/G462 ①②] 시작 전 고지 변형 — 컴포넌트는 includesCall로만 고르고 페이지는 '전화로 확인' 버튼과 같은 세션 술어 값을 넘긴다", () => {
   assert.deepEqual(withCallComponentViolations(read("src/components/MessengerStartNotice.tsx")), []);

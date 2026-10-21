@@ -62,6 +62,8 @@ test("[배선] 메신저 화면이 channel을 읽고 foldCallSegments로 그린�
   const page = readFileSync(new URL("../../app/session/messenger/page.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   assert.match(page, /channel: data\.channel as string \| undefined/);
   // §89.5 ⓐ — 표시 규칙(이웃 항목 참조) 때문에 접힌 목록을 변수로 한 번 만든 뒤 그린다.
-  assert.match(page, /const threadItems = foldCallSegments\(messages\);[\s\S]*\{threadItems\.map\(/);
+  // §92 — 공개 전 답장을 숨긴 목록(+ 낙관적 내 말풍선)을 접는다. 원천은 여전히 구독 `messages`다.
+  assert.match(page, /const visibleMessages =[\s\S]*?: messages;/);
+  assert.match(page, /const threadItems = foldCallSegments\(optimistic \? \[\.\.\.visibleMessages, optimistic\] : visibleMessages\);[\s\S]*\{threadItems\.map\(/);
   assert.doesNotMatch(page, /\{messages\.map\(\(message\) =>/, "옛 직접 렌더가 남아 있으면 통화 전사가 다시 말풍선이 된다");
 });

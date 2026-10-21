@@ -1,28 +1,19 @@
-// §89.5 ⓒ(UX D-132 (5) ⓒ) — 기기 테마(OS `prefers-color-scheme`)를 읽는다. 페이지 색 체계는 바꾸지 않는다
-// (강제 다크 방지 G458 그대로 — 미디어 쿼리는 OS 설정을 읽을 뿐이다). 라이트 통화 화면은 One UI형에만 쓴다.
-// ⚠️ 추정: Android Chrome · 삼성 인터넷이 이 미디어 쿼리에 기기 테마를 그대로 넘긴다 — 실기 확인 필요(OQ-U100).
-import { useSyncExternalStore } from "react";
+// §89.5 ⓒ(UX D-132 (5) ⓒ) — 통화 화면의 테마. 라이트 통화 화면은 One UI형에만 쓴다.
+// ⭐ 사용자 결정(2026-10-21 · 실기 신고 "다크 모드에서도 변경되지 않고 유지") — 훈련 화면(카톡형 · One UI · iOS 통화)은 기기 다크 모드와
+// **관계없이** 실제 앱의 기본 색(라이트)으로 고정한다(UX D-135 (B) · docs/Architecture.md §92). 종전에는 OS `prefers-color-scheme`을 읽어
+// One UI형만 기기 테마를 따랐다 — 이제 OS 설정을 읽지 않는다(iOS형 · 기본 통화 화면은 원래 늘 어둡다 = 실제 앱 기본).
+// `themeFromMatch`는 진단 패널(`?themedebug=1`)이 OS 값을 보여 줄 때만 쓴다.
 import type { DeviceTheme } from "./skinTokens.ts";
 
-const QUERY = "(prefers-color-scheme: light)";
+/** 훈련 화면 테마 — 고정. */
+export const TRAINING_SCREEN_THEME: DeviceTheme = "light";
 
-/** matchMedia 결과 → 테마. 모르면(서버 · 미지원) 어두운 쪽(종전 화면). */
+/** matchMedia 결과 → 테마. 모르면(서버 · 미지원) 어두운 쪽. */
 export function themeFromMatch(matchesLight: boolean | null): DeviceTheme {
   return matchesLight === true ? "light" : "dark";
 }
 
-function subscribe(onChange: () => void): () => void {
-  if (typeof window === "undefined" || !window.matchMedia) return () => {};
-  const mql = window.matchMedia(QUERY);
-  mql.addEventListener("change", onChange);
-  return () => mql.removeEventListener("change", onChange);
-}
-
-function snapshot(): DeviceTheme {
-  if (typeof window === "undefined" || !window.matchMedia) return "dark";
-  return themeFromMatch(window.matchMedia(QUERY).matches);
-}
-
+/** 통화 화면이 쓰는 테마(호출부 무변경을 위해 훅 이름 유지 — 값은 고정). */
 export function useDeviceTheme(): DeviceTheme {
-  return useSyncExternalStore(subscribe, snapshot, () => "dark");
+  return TRAINING_SCREEN_THEME;
 }
