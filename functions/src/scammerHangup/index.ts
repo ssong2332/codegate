@@ -14,7 +14,7 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { findVerifyInterceptItem } from "../scenarios/verifyIntercept";
-import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
+import { resolveDeclaredSms, sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { readDeliveredSms } from "../inCallSms/smsDelivery";
 import type { SessionDoc } from "../shared/types";
 import { decideAndMarkRealtimeHangup, isVerifyInterceptSession } from "./commit";
@@ -64,7 +64,14 @@ export const requestScammerHangup = onCall<
   let goalActionDone = false;
   if (isVerifyInterceptSession(session)) {
     try {
-      goalActionDone = hasCompletedGoalAction({ delivered, mockScreens: await readMockScreenCompletion(sessionRef) });
+      const { declared, reason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId);
+      goalActionDone = hasCompletedGoalAction({
+        delivered,
+        mockScreens: await readMockScreenCompletion(sessionRef),
+        declared,
+        declaredKnown: reason === undefined,
+        userTurns,
+      });
     } catch {
       goalActionDone = false;
     }

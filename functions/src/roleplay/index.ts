@@ -342,6 +342,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         goalActionDone = hasCompletedGoalAction({
           delivered: smsDeliveredLoaded ? smsDelivered : [],
           mockScreens: await readMockScreenCompletion(sessionRef),
+          declared: smsDeclared,
+          declaredKnown: smsDeclaredReason === undefined,
+          userTurns: userTurnsNow,
         });
       } catch {
         goalActionDone = false;

@@ -22937,14 +22937,18 @@ GEMINI_API_KEY2 · 429 즉시 중단. 수정 전(main `77cddcc` lib)과 수정 �
 | 위치 | `src/lib/realtime/outputGain.ts` `liveStageFor` · `SPEAKER_COMPRESSOR` · `applySpeakerDynamics` · `GeminiVoiceSession.tsx` 출력단 |
 | 한계 | `<audio>`(폴백) · ElevenLabs 경로는 1.0 상한 그대로(§105와 같음). 휴대폰 스피커의 실제 체감은 실기 청취로만 확인 가능 |
 
-### 108.2 신고 2 *"AI가 통화를 안 끊어"* — 원인 · 수정(메인 세션 A안 · 사용자 결정 근거)
+### 108.2 신고 2 *"AI가 통화를 안 끊어"* — 원인 · 수정(메인 세션 A안 → A2안 · 사용자 결정 근거)
 | 항목 | 내용 |
 |---|---|
 | 근거 로그 | 운영 `firebase functions:log` 2026-10-22 14:19 UTC 세션 `1a54b807…`(`institutional-impersonation` · Live) — `requestScammerHangup` `{row:"4", status:"blocked_transfer", kind:"goal", userTurns:6}` 1회 뒤 재시도 0 · 이체 문자는 발화 10에 백스톱 도착 |
 | 원인 | 확인 무력화 7종(기관 · 카드사 · 대출 · 국세 · 택배 · 은행 보안 · 카드 배송) 고급은 호 전환(`placedAt`) 전 끊기를 4행이 막는다. 호 전환은 참가자가 확인하겠다고 할 때만 열려, 따르기만 하면 **끝까지** 못 끊는다(= OQ-A117 · OQ-A154의 그 칸). 검찰은 이 목록에 없어 끊긴다 — 사용자 관찰 *"검찰 고급형은 먼저 끊네"* 와 일치 |
-| 수정 | 4행 조건에 `∧ ¬goalActionDone` — 판정 입력 14번째 키(G600 갱신). `goalActionDone` = 서버 기록 C-1 문자 랜딩 제출(`landingSubmittedAt`) ∨ C-2 `mockScreens` 응낙 · 제출(`consentedAt` · `submittedAt`) — `scammerHangup/goalAction.ts` 하나를 실시간 콜러블 · 폴백이 같이 부른다 · 읽기 실패 = 거짓(fail-closed) · 클라 값 0 |
+| 수정 | 4행 조건에 `∧ ¬goalActionDone` — 판정 입력 14번째 키(G600 갱신). `scammerHangup/goalAction.ts` `hasCompletedGoalAction` 하나를 실시간 콜러블 · 폴백이 같이 부른다 · 읽기 실패 · 선언 해석 불가 = 거짓(fail-closed) · 클라가 보내는 완료 값 0(발화 수만 5행과 같은 값) |
+| A2 판정표 | **C-1** 문자 랜딩 제출(`landingSubmittedAt`) ∨ **C-2** `mockScreens` 응낙 · 제출 ∨ **C-3** 선언된 필수 문자 ≥ 1 ∧ 전부 도착 ∧ 마지막 도착 뒤 참가자 발화 ≥ 2 ∨ **C-4** 문자 선언 0 변형 ∧ 참가자 발화 ≥ 8 |
+| 값 근거 | C-3의 2 = **판단값** — 문자 백스톱 넛지 간격 · 문자 간 간격과 같은 단위(도착 뒤 첫 발화 = 확인 · 6행 해제, 둘째 = 행동 · 보고). C-4의 8 = **판단값** — `fv-akj5` 0번 화자 `maxUserTurns 8`(요구 3단계를 2~3턴 간격으로 꺼낼 시간) |
+| 문자 0 변형 점검 | 카드사 고급 `fv-akj5`(2인 챌린지 수신자 고급 풀 전용 · `sms: []`)는 C-3을 그대로 쓰면 "남은 필수 0"이 **처음부터 참**이 되어 4행이 꺼지고 하한 3만 남는다(너무 이름) ⇒ 그 경우만 C-4(발화 ≥ 8)로 분리. 릴레이 행 2-b는 런타임 꺼짐(`RELAY_RUNTIME_AVAILABLE = false`)이라 추가 하한 역할을 못 한다 |
+| 변형별(단위 테스트 고정) | 기관 `fv-c5fj` · `fv-pgqt` C-1(안전계좌 이체 화면) ∨ C-3 · 카드사 `fv-x7ue` · `fv-w3dq` C-2(설치 응낙) · `fv-akj5` C-4 · 대출 `fv-6s5p` C-3(계좌 문자) ∨ C-1(선택 신청 화면) · `fv-m3hd` C-2 ∨ C-3 · 국세 `fv-uk7m` C-1 ∨ C-3 · 택배 `fv-xpvu` C-3 ∨ C-1(선택 조회 화면) · 은행 보안 `fv-62q8` C-1 ∨ C-3 · 카드 배송 `fv-tvnj` C-2 ∨ C-3 — 전 변형에서 ⓐ 필수 문자 도착 전 발화 6 goal = `blocked_transfer` ⓑ 마친 뒤 `accepted`(`goalAction.test.ts`) |
 | 안 바뀐 것 | 이체 전 이른 끊기(로그의 발화 6 goal)는 계속 `blocked_transfer`(테스트 고정) · 하한 5 · 6 · 7행 · 끊을지 판단은 모델(H-1~H-5) |
-| 잔여 | 화면이 없는 흐름(계좌 문자만 받고 말로 "보냈다" · 카드사 고급의 문자 0 변형)은 서버가 이체 완료를 알 수 없어 종전처럼 호 전환 전 끊기 0. 보완안(남은 필수 문자 0 ∧ 마지막 도착 뒤 참가자 발화 ≥ 2를 대리 신호로)은 메인 세션 결정 대기 |
+| 잔여 · 관찰 | C-3 · C-4는 "이체했다"가 아니라 "할 일을 다 줬다"의 대리 신호다 — 참가자가 거절하는 중이어도 4행이 풀린다(끊을지는 모델 판단 · give_up은 H-2 그대로). C-2는 설치 응낙 직후(대출 `fv-m3hd`는 계좌 문자 전) 4행을 푼다. 실 키로 관측하지 않았다 |
 | 문서 | PRD AC-103 (b)① 갱신 · OQ-A117 · OQ-A154 해소 = DECISIONS #223 |
 
 ### 108.3 신고 3 *"문자 발송이 여전히 느리게 온다"* — 측정 · 수정
