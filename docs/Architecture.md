@@ -22473,6 +22473,27 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 
 남은 갈래(실기 값으로만 가린다): ⑥ 입력 컨텍스트 정지 / 마이크가 무음(`mic.peakDb` = -inf) / 서버가 못 알아들음(`sent`>0 · `asr.rx`=0) / 모델 무응답(`asr.rx`>0).
 
+#### 105.2.4 입력 전사 언어 힌트 ko-KR — **적용**(OQ-A105 해소 · 실 키 실측 2026-10-22 · 메인 승인 "3세션 (권장)")
+사용자 실기 리포트(검찰 고급)에서 사용자 발화가 "isso" · "un 그 보원 지갑과…" · "ascensor 15만 원까지…"로 전사됐다 ⇒ 입력 전사가 언어를 자동 감지한다(`inputAudioTranscription: {}`, #369~#373 무변경 · 마지막 변경 `5fd39e6`). 공식 문서([live-transcribe](https://ai.google.dev/gemini-api/docs/live-api/live-transcribe))는 `inputAudioTranscription.languageCodes`(인식 기울기 · 예시는 전사 전용 모델)를 안내하지만, SDK 2.13은 Developer API에서 그 필드를 거부하고 `languageHints.languageCodes`만 보낸다(§76.1 3행) ⇒ 실측으로 가렸다.
+
+측정: `scripts/live-asr-language-probe.mjs` · 모델 gemini-3.8-live · 앱과 같은 토큰 경로 · 앱과 같은 VAD · 같은 음성(Windows 한국어 TTS "Heami", 16kHz) 8문구 · GEMINI_API_KEY2 · 429 0회.
+
+| 문구 | 현행 `{}` | `languageHints ko-KR` | `customVocabulary`(13어) |
+|---|---|---|---|
+| 네 | (전사 0 · 응답 0) | (전사 0 · 응답 0) | (전사 0 · 응답 0) |
+| 응 | 응. | 응. | 응. |
+| 어 | (전사 0 · 응답 0) | (전사 0 · 응답 0) | (전사 0 · 응답 0) |
+| 그래요? | **creo** | **그래요.** | **creo** |
+| 아니요 | 아니요. | 아니요. | 아니요. |
+| 응, 그 보관 지갑으로 이체했다고요 | 그 보관 지갑으로 이체했다고요. | 같음 | 같음 |
+| 15만 원까지 했어요 | 15만 원까지 했어요. | 같음 | 같음 |
+| 누구세요? | 누구세요? | 같음 | 같음 |
+| 토큰 발급 · 연결 | 성공 · 성공 | 성공 · 성공 | 성공 · 성공 |
+
+⇒ `INPUT_TRANSCRIPTION_CONFIG = { languageHints: { languageCodes: ["ko-KR"] } }`를 토큰에 고정한다(`geminiProvider.ts` · 테스트 `[§105.2.4]`). 단어 목록은 효과 0이라 넣지 않는다. 표본이 TTS 1개 목소리 · 1회라 실제 어르신 목소리에서의 개선 폭은 미측정(추정).
+
+⚠️ **새로 확인된 사실 — 한 음절 발화("네" · "어")는 세 설정 모두 전사 0 · 응답 0**: 발화 시작 감지가 잡지 못했다(추정 원인 = §50.8 `START_SENSITIVITY_LOW` + `prefixPaddingMs: 300` — 그 결정 때 적어 둔 대가 *"짧고 조용한 발화가 안 잡힐 수 있다"*가 실측으로 나타났다). 참가자가 "네"라고만 답하면 모델이 듣지 못해 **묵묵부답**이 된다 — 신고 1의 유력한 갈래다. 처방(승인 대기 · 미구현): §50.8이 적어 둔 순서대로 `prefixPaddingMs` 300→150 먼저(LOW 유지), 같은 프로브로 "네" · "어" 감지 + 자기 끊김(에코) 회귀를 함께 본다(실 키 추가 세션 필요).
+
 ### 105.3 진단 계측 추가(제품 동작 무변경)
 | 값 | 뜻 | 판정 |
 |---|---|---|
@@ -22504,9 +22525,10 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 | 항목 | 결과 | 근거 |
 |---|---|---|
 | `npm test` | 983 pass / 0 fail (1차) → **988 pass / 0 fail**(완화 · Wake Lock 뒤) | 신규 `audioDiagnostics.test.ts` 3건 · `outputGain.test.ts` 4건 · `backgroundCall.test.ts` 2건 · `screenWakeLock.test.ts` 2건 |
-| `npm --prefix functions test` | 1642 pass / 0 fail | functions 변경 0건 |
+| `npm --prefix functions test` | 1642 → **1643 pass / 0 fail** | 신규 `[§105.2.4]` 1건(입력 전사 언어 힌트) |
+| 실 키 프로브(§105.2.4) | 3세션 · 429 0회 | 메인 승인 "3세션 (권장)" · GEMINI_API_KEY2 |
 | `npm run lint` · `npm --prefix functions run lint` | 오류 0(경고 1 = 기존 `scripts/live-turn-probe.mjs`) | — |
 | 실 키 측정 · 실기 | 0회 | 메인 승인 필요 · 실기는 사용자 |
 
 ### 105.6 배포
-**Hosting만**(functions 변경 0).
+**Functions(`createRealtimeCall` — 입력 전사 언어 힌트) + Hosting**. 순서 무관(토큰 설정은 서버만 · 화면 변경은 클라만 — 서로 호환).

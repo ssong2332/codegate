@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GeminiRealtimeProvider, GEMINI_LIVE_MODEL, pickGeminiVoiceName } from "../geminiProvider";
+import { GeminiRealtimeProvider, GEMINI_LIVE_MODEL, INPUT_TRANSCRIPTION_CONFIG, pickGeminiVoiceName } from "../geminiProvider";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import {
   buildSystemPrompt,
@@ -696,6 +696,21 @@ test("[M1 운영값 · P-H 전 off] 기본 생성자(운영) — 음성 세션�
       }
     }
     assert.ok(checked > 0);
+  } finally {
+    capture.restore();
+  }
+});
+
+// §105.2.4(OQ-A105) — 입력 전사 언어 힌트 ko-KR이 토큰에 실린다(실 키 실측: 토큰 · 연결 정상, "그래요?" 오인식 해소).
+test("[§105.2.4] Live 토큰: 입력 전사 언어 힌트 ko-KR(languageHints) · 출력 전사는 그대로 · languageCodes 직접 지정 0", async () => {
+  assert.deepEqual(INPUT_TRANSCRIPTION_CONFIG, { languageHints: { languageCodes: ["ko-KR"] } });
+  const capture = captureTokenRequest();
+  try {
+    const provider = new GeminiRealtimeProvider("test-key", ENDCALL_ON);
+    await provider.createCallCredentials({ ...VOICE_SCOPE, sessionId: "sess", scenarioId: "tax-refund-scam", voiceId: "x" });
+    const setup = (capture.bodies()[0] as { bidiGenerateContentSetup?: Record<string, unknown> }).bidiGenerateContentSetup ?? {};
+    assert.deepEqual(setup.inputAudioTranscription, { languageHints: { languageCodes: ["ko-KR"] } });
+    assert.deepEqual(setup.outputAudioTranscription, {});
   } finally {
     capture.restore();
   }
