@@ -194,6 +194,8 @@ export type DeliverInCallSmsRequest = {
   userTurns: number;
   scammerTranscriptTurns: number;
   trigger: DeliverInCallSmsTrigger;
+  /** §104 — 백스톱에서만: 사기범이 이미 "문자를 보냈다"고 말했다(`scammerClaimsSmsSent`). 서버는 게이트가 열린 순간 바로 보낸다. 부재 = 종전. */
+  smsClaimed?: boolean;
 };
 // ⭐ §53.6 (3)(T118/R-1과 동형) — 전환(호 전환)이 끝난 오퍼가 연 문자에는 `announceInstruction`이
 // 생략된다. 값이 없으면 클라는 주입하지 않는다.

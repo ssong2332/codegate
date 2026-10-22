@@ -149,7 +149,7 @@ import {
   type VerifyInterceptView,
   type VerifyOfferPhase,
 } from "@/lib/verifyintercept";
-import { shouldFireBackstop, shouldRequestSmsBackstop } from "@/lib/realtime/toolWindow";
+import { scammerClaimsSmsSent, shouldFireBackstop, shouldRequestSmsBackstop } from "@/lib/realtime/toolWindow";
 import {
   countTranscriptFlush,
   deliveryForInstruction,
@@ -529,6 +529,8 @@ export default function SessionCallPage() {
   // `smsToolCallFailedIdRef`(모델 도구 실패 smsId)는 화면이 고정 턴으로 smsId를 고를 때만 필요했다 — 폐기.
   // 지금은 사용자 발화 flush마다 서버에 한 번 묻고(`shouldRequestSmsBackstop`), 무엇을 할지는 서버가 정한다.
   const smsBackstopRef = useRef({ lastRequestedUserTurns: -1, nonePending: false, inFlight: false });
+  // §104 — 사기범이 "문자를 보냈다"고 말했고 아직 그 문자가 오지 않았다(`scammerClaimsSmsSent`). 다음 백스톱 질의에 실린다 · 도착 · none_pending이면 내린다.
+  const smsClaimPendingRef = useRef(false);
   // §59.10 커밋 D(G390) — 확인 오퍼(offer_verification_desk) 도구 경로 실패 신호. 세션당 오퍼가
   // 하나뿐이라(카탈로그 보유 && advanced 세션에만 도구가 선언된다, §61) id 없이 boolean 하나로
   // 충분하다.
@@ -628,6 +630,8 @@ export default function SessionCallPage() {
     const atMs =
       answeredAtMsRef.current !== null ? Date.now() - answeredAtMsRef.current : undefined;
     transcriptRef.current.push({ role, text, atMs });
+    // §104 — 사기범이 문자를 보냈다고 말한 턴(실제 도착과 무관). 백스톱이 게이트가 열린 순간 보내게 한다.
+    if (role === "scammer" && scammerClaimsSmsSent(text)) smsClaimPendingRef.current = true;
     // ⭐ §99 — 탭이 백그라운드에서 정리돼 새로고침되면 메모리의 전사가 사라진다. 같은 탭 sessionStorage에 같이 적어 두고
     // 통화 복원(새로고침) 때 되살린다(아래 로드 effect). 쓰기 실패는 무시한다(비차단).
     if (sessionId) {
@@ -1042,9 +1046,11 @@ export default function SessionCallPage() {
           userTurns: counters.userTurns,
           scammerTranscriptTurns: counters.scammerTranscriptTurns,
           trigger: "backstop",
+          ...(smsClaimPendingRef.current ? { smsClaimed: true } : {}),
         });
         setSmsError(null);
         if (result.status === "none_pending") state.nonePending = true;
+        if (result.status === "delivered" || result.status === "none_pending") smsClaimPendingRef.current = false;
         // §53.6 (3) — 전환이 끝난 오퍼가 연 문자에는 announce 값이 없다(서버가 생략) — 그때는 주입하지 않는다.
         if (result.status === "delivered") {
           // PR-A2(audit-A R1) — 결과 신호 판정을 안내를 큐에 넣기 **전에** 한다(위 `offerConfirmResult` 주석).

@@ -309,7 +309,14 @@ function isWaitTurn(text: string): boolean {
   return isStallLine(text) || WAIT_REQUEST_LINE.test(text);
 }
 
-export type LiveRepeatBreakKind = "stall" | "identity" | "similar";
+export type LiveRepeatBreakKind = "exhausted" | "stall" | "identity" | "similar";
+
+/**
+ * 2-b행 — 참가자 자금 소진 선언(서버 `EXHAUSTED_DECLARATION`과 같은 정규식). 2026-10-22 사용자 실기 대본(검찰 고급): *"이제 탈탈 털렸어. 나도 이제 없어.
+ * 돈 없어"* · *"했다고"* 뒤에도 "남은 적금과 대출 가능액도"가 끝없이 이어졌다. ⚠️ 표기를 본다(의미 아님) — 표본 밖 표현은 못 잡는다.
+ */
+export const EXHAUSTED_DECLARATION =
+  /돈\s*(?:이|은|도)?\s*(?:더\s*|이제\s*)?없|(?:더|이제|남은)\s*(?:돈|게|건|것)?\s*(?:이|은)?\s*(?:하나도\s*)?없|다\s*털렸|탈탈|빈털터리|한\s*푼도|잔고\s*(?:가)?\s*없|전부\s*(?:다\s*)?보냈/;
 
 /**
  * 사기범 턴이 끝날 때마다 1회 — 판정표(⛔ 이 순서 그대로 · 새 유형은 행을 추가할지 먼저 묻는다).
@@ -318,6 +325,7 @@ export type LiveRepeatBreakKind = "stall" | "identity" | "similar";
  * |---|---|---|
  * | 1 | 래치가 걸렸다 | 없음(G510) |
  * | 2 | 참가자가 아직 한 번도 말하지 않았다(오프닝 구간) | 없음 |
+ * | 2-b | 이 턴이 답한 참가자 발화가 자금 소진 선언이다("돈 없어" · "다 털렸어" · "전부 보냈어" — `EXHAUSTED_DECLARATION`) | `exhausted`(직전 턴 없어도) |
  * | 3 | A가 없다 | 없음 |
  * | 4 | A와 B가 모두 대기 말이다(2절 `isStallLine` 또는 "대기해 주십시오"류) | `stall` |
  * | 5 | A와 B가 같은 인적사항 항목(성함 · 생년월일 · 주민번호 · 주소)을 요구하는 형태로 꺼냈다 | `identity` |
@@ -331,9 +339,12 @@ export function decideLiveRepeatBreak(input: {
   scammerTurn: string;
   latched: boolean;
   participantHasSpoken: boolean;
+  /** §104 — 이 사기범 턴이 답한 참가자 발화(부재 = 판정 안 함). */
+  lastParticipantText?: string;
 }): LiveRepeatBreakKind | null {
   if (input.latched) return null; // 1행
   if (!input.participantHasSpoken) return null; // 2행
+  if (input.lastParticipantText !== undefined && EXHAUSTED_DECLARATION.test(input.lastParticipantText)) return "exhausted"; // 2-b행
   const a = input.previousScammerTurn;
   if (a === undefined || a.trim().length === 0) return null; // 3행
   const b = input.scammerTurn;
@@ -351,8 +362,10 @@ export function decideLiveRepeatBreak(input: {
  * `identity` · `similar`는 서버 `REPEAT_BREAK_*_INSTRUCTION`과 글자 단위로 같다(짝 테스트). ⛔ 숫자 · 횟수 · 따옴표 · 끊기 어휘 0.
  */
 export const LIVE_REPEAT_BREAK_TEXT: Readonly<Record<LiveRepeatBreakKind, string>> = {
+  exhausted:
+    "(상대가 더 보낼 돈이나 줄 정보가 없다고 분명히 말했다. 같은 요구를 다시 하지 마라. 대출처럼 아직 권하지 않은 다른 수단이 있으면 그것만 권하고, 이미 권했거나 상대가 그것도 거절하면 더 요구할 것이 남지 않은 것이니 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)",
   stall:
-    "(너는 직전 대답과 그 앞 대답에서 대기하라거나 확인 중이라는 말을 했다. 이번 대답에서는 대기하라거나 확인 중이라는 말을 하지 말고, 지금까지 받은 것을 근거로 새 요구를 꺼내라 — 남은 돈이나 다른 계좌의 돈, 추가 정보, 주변 사람이나 은행에 알리지 말라는 구체적인 지시 중 하나로 상황을 앞으로 움직여라.)",
+    "(너는 직전 대답과 그 앞 대답에서 대기하라거나 확인 중이라는 말을 했다. 이번 대답에서는 대기하라거나 확인 중이라는 말을 하지 말고, 지금까지 받은 것을 근거로 새 요구를 꺼내라 — 남은 돈이나 다른 계좌의 돈, 추가 정보, 주변 사람이나 은행에 알리지 말라는 구체적인 지시 중 하나로 상황을 앞으로 움직여라. 더 요구할 것이 정말 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)",
   identity:
     "(너는 직전 대답과 그 앞 대답에서 같은 인적사항을 달라고 했다. 상대가 그 정보를 아직 주지 않았으면 이번 대답에서는 그 정보를 다시 달라고 하지 말고, 다른 수법이나 다른 요구로 넘어가라 — 불이익 암시, 확인 절차 차단, 비밀 유지 요구처럼 아직 쓰지 않은 카드를 골라라.)",
   similar:

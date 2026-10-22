@@ -14,6 +14,7 @@ import {
   IDENTITY_ITEM_PATTERNS,
   IDENTITY_REQUEST_FORM,
   LIVE_REPEAT_BREAK_TEXT,
+  EXHAUSTED_DECLARATION,
   REPEAT_MIN_CHARS,
   REPEAT_SIMILARITY_THRESHOLD,
   decideLiveRepeatBreak,
@@ -503,7 +504,9 @@ test("[§104 문면] 주입 3종 — 괄호 한 덩어리 · 숫자 · 횟수 �
     assert.equal(/[0-9０-９]/.test(text), false, `숫자: ${text}`);
     assert.equal(/한\s*번|두\s*번|세\s*번|몇|횟수|번째|[일이삼사오]\s*회/.test(text), false, `횟수 표현: ${text}`);
     assert.equal(/["“”'‘’]/.test(text), false, `따옴표 대사: ${text}`);
-    assert.equal(/끊|마무리|종료|통화를\s*(?:마|끝)|끝내/.test(text), false, `끊기 어휘: ${text}`);
+    // §104 — 끊을지는 [진행 강제] 끊기 항목에 맡기는 위임 구절만 허용한다(직접 끊으라는 말 · 작별 어휘 0).
+    const withoutDelegate = text.replace("[진행 강제]의 통화 끝내기 항목이 정한 대로 하라", "");
+    assert.equal(/끊|마무리|종료|통화를\s*(?:마|끝)|끝내/.test(withoutDelegate), false, `끊기 어휘: ${text}`);
   }
   assert.equal(formatLiveRepeatBreakLog("identity"), 'cause:"repeat" kind:"identity"');
 });
@@ -523,7 +526,7 @@ test("[§104 짝] 클라 판정표 5 · 6행 = 서버 `repeatBreak.ts` 2 · 3행
 test("[§104 배선] 사기범 턴 경계(빈 마감 제외)마다 판정 → 맥락 주입(`repeatBreak`) · 침묵 넛지 대상 아님", () => {
   const src = codeOnly(readFileSync("src/lib/realtime/GeminiVoiceSession.tsx", "utf8"));
   const iStall = src.indexOf("if (!emptyTurn) noteScammerTurnForStallNudge(scammerTurnText);");
-  const iRepeat = src.indexOf("if (!emptyTurn) noteScammerTurnForRepeatBreak(scammerTurnText);");
+  const iRepeat = src.indexOf("if (!emptyTurn) noteScammerTurnForRepeatBreak(scammerTurnText, participantTurnText);");
   assert.ok(iStall > 0 && iRepeat > iStall, "같은 경계 · 넛지 판정 뒤");
   assert.ok(src.includes('if (kind && injectContext(LIVE_REPEAT_BREAK_TEXT[kind], "repeatBreak")) {'));
   assert.ok(src.includes("latched: handlersRef.current.isHangupLatched(),"));
@@ -541,4 +544,16 @@ test("[§104 프로브 미러] `scripts/full-audit-probe.mjs`의 Live 주입 미
   assert.ok(probe.includes(`const PROBE_STALL_VOCABULARY =\n  ${stallVocab};`), "대기 어휘");
   assert.ok(probe.includes(`const PROBE_WAIT_REQUEST_LINE = ${waitLine};`), "대기 요청");
   assert.ok(probe.includes(JSON.stringify(LIVE_REPEAT_BREAK_TEXT.stall)), "stall 문면");
+});
+
+test("[§104 자금 소진 · 대본] 이 턴이 답한 참가자 발화가 '돈 없어'면 직전 턴과 무관하게 exhausted · 끊기 항목 위임 · 서버와 같은 정규식 · 문면", () => {
+  const base = { previousScammerTurn: undefined, scammerTurn: "남은 적금과 대출 가능액도 같은 흐름에 걸려 있습니다.", latched: false, participantHasSpoken: true };
+  assert.equal(decideLiveRepeatBreak({ ...base, lastParticipantText: "15만 원까지 했어. 이제 탈탈 털렸어. 나도 이제 없어. 돈 없어." }), "exhausted");
+  assert.equal(decideLiveRepeatBreak({ ...base, lastParticipantText: "네, 보냈어요." }), null);
+  assert.equal(decideLiveRepeatBreak({ ...base, latched: true, lastParticipantText: "돈 없어요" }), null, "래치 뒤 0");
+  assert.ok(LIVE_REPEAT_BREAK_TEXT.exhausted.includes("[진행 강제]의 통화 끝내기 항목이 정한 대로 하라"));
+  assert.ok(LIVE_REPEAT_BREAK_TEXT.stall.includes("[진행 강제]의 통화 끝내기 항목이 정한 대로 하라"));
+  const server = readFileSync("functions/src/roleplay/repeatBreak.ts", "utf8");
+  assert.ok(server.includes(`export const EXHAUSTED_DECLARATION =\n  ${EXHAUSTED_DECLARATION.toString()};`.replace(/\n/, server.includes("\r\n") ? "\r\n" : "\n")), "정규식 짝");
+  assert.ok(server.includes(JSON.stringify(LIVE_REPEAT_BREAK_TEXT.exhausted)), "exhausted 문면 짝");
 });

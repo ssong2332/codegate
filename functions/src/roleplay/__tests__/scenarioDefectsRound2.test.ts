@@ -94,7 +94,7 @@ test("[§104 배선] sendMessage — 앱 진행 지시가 없는 턴에만 반�
   assert.match(src, /import \{ decideRepeatBreak, repeatBreakInstruction \} from "\.\/repeatBreak";/);
   assert.match(
     src,
-    /const repeatBreakKind =\n\s*turnChoice === "none" && !otpCheckInstruction && !confirmPlan\?\.instruction\n\s*\? decideRepeatBreak\(storedHistory\.filter\(\(m\) => m\.role === "scammer"\)\.map\(\(m\) => m\.textMasked\)\)\n\s*: null;/,
+    /const repeatBreakKind =\n\s*turnChoice === "none" && !otpCheckInstruction && !confirmPlan\?\.instruction\n\s*\? decideRepeatBreak\(storedHistory\.filter\(\(m\) => m\.role === "scammer"\)\.map\(\(m\) => m\.textMasked\), maskedUserText\)\n\s*: null;/,
   );
   const iKind = src.indexOf("const repeatBreakKind =");
   assert.ok(src.indexOf("const confirmPlan =") < iKind, "확인 결과 판정 뒤에 계산해야 한다");
@@ -236,4 +236,79 @@ test("[§104 결함8] 리포트 문서에 참가자 발화 수를 같은 스냅�
   assert.ok(src.includes('userTurnCount: messages.filter((message) => message.role === "user").length,'));
   const types = read("shared/types.ts");
   assert.ok(types.includes("userTurnCount?: number;"));
+});
+
+// ══ §104 2차 지시(2026-10-22 메인 세션 — 사용자 결정 "AI가 먼저 끊기" · 실기 대본 검찰 고급 · 문자 미도착 신고) ══════════════════
+import {
+  HANGUP_EXHAUSTED_SENTENCE,
+  HANGUP_NO_NEW_DEMAND_SENTENCE,
+  HANGUP_RULE_NONE,
+  HANGUP_RULE_SIGNAL,
+  HANGUP_RULE_TOOL,
+  OFF_TOPIC_REPLY_SENTENCE,
+} from "../promptAssembly";
+import { EXHAUSTED_DECLARATION, REPEAT_BREAK_EXHAUSTED_INSTRUCTION } from "../repeatBreak";
+import { planSmsBackstop } from "../../inCallSms/smsGate";
+import { resolveDeclaredSms } from "../../inCallSms/smsGate";
+
+// 사용자 실기 대본(검찰 고급 · 리포트 되짚어보기) — 참가자 발화.
+const PROSECUTION_EXHAUSTED_SCRIPT = [
+  "나은 자산이 얼마였는데 내가?",
+  "그래서 전환했다는 거나 2만 원밖에 없다니까.",
+  "15만 원까지 했어. 이제 탈탈 털렸어. 나도 이제 없어. 돈 없어.",
+];
+
+test("[§104 자금 소진 · 대본] 참가자가 돈이 더 없다고 분명히 말한 턴에 지시 1줄(사기범 대답 수와 무관) · 끊을지는 끊기 항목에 맡긴다", () => {
+  assert.equal(decideRepeatBreak([], PROSECUTION_EXHAUSTED_SCRIPT[0]), null);
+  assert.equal(decideRepeatBreak(["남은 예금 적금까지 검수해야 합니다."], PROSECUTION_EXHAUSTED_SCRIPT[2]), "exhausted");
+  for (const t of ["돈 없어요", "더 이상 보낼 돈이 없어요", "이제 없어", "남은 게 하나도 없어요", "잔고가 없어", "한 푼도 없어요", "전부 다 보냈어요"]) {
+    assert.ok(EXHAUSTED_DECLARATION.test(t), t);
+  }
+  // 오탐 0 — 순순히 따르는 답 · 수량 질문 · 일반 대화.
+  for (const t of ["네, 보냈어요.", "다 했어요", "설치 다 했어요", "얼마 있는지 볼게요", "없는 번호인데요?", "괜찮아요"]) {
+    assert.equal(EXHAUSTED_DECLARATION.test(t), false, t);
+  }
+  assert.equal(repeatBreakInstruction("exhausted"), REPEAT_BREAK_EXHAUSTED_INSTRUCTION);
+  assert.ok(REPEAT_BREAK_EXHAUSTED_INSTRUCTION.includes("대출처럼 아직 권하지 않은 다른 수단이 있으면 그것만 권하고"));
+  assert.ok(REPEAT_BREAK_EXHAUSTED_INSTRUCTION.includes("[진행 강제]의 통화 끝내기 항목이 정한 대로 하라"));
+  assert.equal(/[0-9]|["“”'‘’]/.test(REPEAT_BREAK_EXHAUSTED_INSTRUCTION), false);
+});
+
+test("[§104 끊기 조건] TOOL · SIGNAL 공통 머리 — 자금 소진 1문장 · 끊는 응답 새 요구 금지 1문장 · NONE에는 0 · 열거는 첫째 · 둘째 그대로", () => {
+  for (const [name, text] of [["TOOL", HANGUP_RULE_TOOL], ["SIGNAL", HANGUP_RULE_SIGNAL]] as const) {
+    assert.equal(text.split(HANGUP_EXHAUSTED_SENTENCE).length - 1, 1, name);
+    assert.equal(text.split(HANGUP_NO_NEW_DEMAND_SENTENCE).length - 1, 1, name);
+    assert.ok(text.indexOf("둘째,") < text.indexOf(HANGUP_EXHAUSTED_SENTENCE), `${name}: 두 경우 뒤`);
+    assert.equal((text.match(/첫째|둘째|셋째/g) ?? []).filter((w) => w === "셋째").length, 0, `${name}: 셋째 경우 0`);
+  }
+  assert.equal(HANGUP_RULE_NONE.includes(HANGUP_EXHAUSTED_SENTENCE), false);
+  assert.equal(HANGUP_RULE_NONE.includes(HANGUP_NO_NEW_DEMAND_SENTENCE), false);
+  for (const s of [HANGUP_EXHAUSTED_SENTENCE, HANGUP_NO_NEW_DEMAND_SENTENCE]) {
+    assert.equal(/[0-9]|한 번|번째/.test(s), false, s);
+  }
+});
+
+test("[§104 받아치기] [대화 방식] 주변 이야기 1문장 — 전 시나리오 · 전 경로 1회", () => {
+  for (const [id, prompt] of Object.entries(SCENARIO_PROMPTS)) {
+    for (const opts of [{ difficultyLevel: "beginner" as const }, { difficultyLevel: "advanced" as const, liveSpeechStyle: true }]) {
+      const assembled = buildSystemPrompt(prompt, opts);
+      assert.equal(assembled.split(OFF_TOPIC_REPLY_SENTENCE).length - 1, 1, id);
+      assert.ok(assembled.indexOf("[대화 방식") < assembled.indexOf(OFF_TOPIC_REPLY_SENTENCE), id);
+    }
+  }
+});
+
+test("[§104 문자 미도착] 사기범이 문자를 보냈다고 말했으면(claimed) 게이트가 열린 순간 보낸다 · 하한 전이면 여전히 대기 · 부재 = 종전", () => {
+  const variantId = listFlowVariants("prosecution-cooperation-call", "advanced")[0]!.variantId;
+  const { declared } = resolveDeclaredSms("prosecution-cooperation-call", variantId);
+  const caseLink = declared.find((d) => d.smsId === "prosecution-case-link")!;
+  const delivered = [{ smsId: caseLink.smsId, userTurnsAtArrival: 2 }];
+  // 자산 검수 문자: notBeforeUserTurns 5 · 앞 문자 뒤 간격 ⇒ 개방 5.
+  assert.equal(planSmsBackstop({ declared, delivered, userTurns: 4, claimed: true }).action, "wait", "하한 전에는 주장이 있어도 보내지 않는다");
+  assert.equal(planSmsBackstop({ declared, delivered, userTurns: 5, claimed: true }).action, "deliver", "개방 즉시 발송");
+  assert.equal(planSmsBackstop({ declared, delivered, userTurns: 5 }).action, "wait", "주장 없으면 종전(개방 + 넛지 + 발송)");
+  assert.equal(planSmsBackstop({ declared, delivered, userTurns: 9 }).action, "deliver", "종전 발송 시점 그대로");
+  const src = read("inCallSms/index.ts");
+  assert.ok(src.includes("const smsClaimed = request.data?.smsClaimed === true;"));
+  assert.ok(src.includes("planSmsBackstop({ declared, delivered: await readDeliveredSms(sessionRef), userTurns, claimed: smsClaimed })"));
 });

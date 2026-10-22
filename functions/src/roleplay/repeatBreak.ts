@@ -8,6 +8,7 @@
 // ── 판정표(⛔ 이 순서 그대로 — 위에서 첫 매치 · 새 유형은 행을 추가할지 먼저 묻는다) ─────────────────────
 // | # | If(직전 사기범 대답 A = 그 앞, B = 가장 최근) | Then |
 // |---|---|---|
+// | 1-b | 이번 참가자 발화가 자금 소진 선언("돈 없어" · "다 털렸어" · "전부 보냈어" — §104 사용자 실기 대본) | `exhausted`(사기범 대답 수와 무관) |
 // | 1 | 사기범 대답이 둘 미만 | 없음 |
 // | 2 | A와 B가 **같은 인적사항 항목**(성함 · 생년월일 · 주민번호 · 주소)을 요구하는 형태로 꺼냈다 | `identity` |
 // | 3 | A와 B의 글자 2-gram 유사도 ≥ `REPEAT_SIMILARITY_THRESHOLD`(둘 다 공백 · 문장부호를 뺀 길이 ≥ `REPEAT_MIN_CHARS`) | `similar` |
@@ -18,12 +19,16 @@
 //   두 파일의 정규식 · 임계값은 루트 테스트(`stallRecovery.test.ts` [§104 짝])가 글자 단위로 대조한다.
 // ⛔ 잎 모듈(import 0) · 문면에 숫자 · 횟수 · 따옴표 대사 예시 · 끊기 어휘 0(F11/G130 — `repeatBreak.test.ts`가 고정).
 
-export type RepeatBreakKind = "identity" | "similar";
+export type RepeatBreakKind = "exhausted" | "identity" | "similar";
 
 /** 3행 임계값 — 전수 검수 판정표 §1.1 ② 자동 후보 탐지 기준과 같은 값. */
 export const REPEAT_SIMILARITY_THRESHOLD = 0.6;
 /** 3행 — 너무 짧은 대답("네.")끼리의 우연한 일치를 거른다. */
 export const REPEAT_MIN_CHARS = 8;
+
+/** 1-b행 — 참가자 자금 소진 선언(클라 `EXHAUSTED_DECLARATION`과 같은 정규식). */
+export const EXHAUSTED_DECLARATION =
+  /돈\s*(?:이|은|도)?\s*(?:더\s*|이제\s*)?없|(?:더|이제|남은)\s*(?:돈|게|건|것)?\s*(?:이|은)?\s*(?:하나도\s*)?없|다\s*털렸|탈탈|빈털터리|한\s*푼도|잔고\s*(?:가)?\s*없|전부\s*(?:다\s*)?보냈/;
 
 /** 2행 — 인적사항 항목별 낱말. */
 export const IDENTITY_ITEM_PATTERNS: Readonly<Record<string, RegExp>> = {
@@ -63,8 +68,9 @@ export function bigramSimilarity(a: string, b: string): number {
   return (2 * shared) / (ga.size + gb.size);
 }
 
-/** 판정표 본체 — `scammerTexts`는 시간순 사기범 대답(마지막 = 가장 최근). */
-export function decideRepeatBreak(scammerTexts: readonly string[]): RepeatBreakKind | null {
+/** 판정표 본체 — `scammerTexts`는 시간순 사기범 대답(마지막 = 가장 최근) · `currentUserText` = 이번에 답할 참가자 발화(§104 · 부재 = 1-b행 안 봄). */
+export function decideRepeatBreak(scammerTexts: readonly string[], currentUserText?: string): RepeatBreakKind | null {
+  if (currentUserText !== undefined && EXHAUSTED_DECLARATION.test(currentUserText)) return "exhausted"; // 1-b행
   if (scammerTexts.length < 2) return null; // 1행
   const a = scammerTexts[scammerTexts.length - 2]!;
   const b = scammerTexts[scammerTexts.length - 1]!;
@@ -83,7 +89,12 @@ export const REPEAT_BREAK_IDENTITY_INSTRUCTION =
 export const REPEAT_BREAK_SIMILAR_INSTRUCTION =
   "(너는 직전 대답과 그 앞 대답에서 거의 같은 말을 했다. 이번 대답에서는 그 말을 되풀이하지 말고, 다른 수법이나 다른 요구, 다른 이유를 꺼내 상황을 앞으로 움직여라.)";
 
+/** 1-b행 지시(서버 소유 · 클라 `LIVE_REPEAT_BREAK_TEXT.exhausted`와 같은 글자). 끊을지는 [진행 강제] 끊기 항목에 맡긴다(NONE이면 이어 간다). */
+export const REPEAT_BREAK_EXHAUSTED_INSTRUCTION =
+  "(상대가 더 보낼 돈이나 줄 정보가 없다고 분명히 말했다. 같은 요구를 다시 하지 마라. 대출처럼 아직 권하지 않은 다른 수단이 있으면 그것만 권하고, 이미 권했거나 상대가 그것도 거절하면 더 요구할 것이 남지 않은 것이니 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
+
 export function repeatBreakInstruction(kind: RepeatBreakKind | null): string | undefined {
+  if (kind === "exhausted") return REPEAT_BREAK_EXHAUSTED_INSTRUCTION;
   if (kind === "identity") return REPEAT_BREAK_IDENTITY_INSTRUCTION;
   if (kind === "similar") return REPEAT_BREAK_SIMILAR_INSTRUCTION;
   return undefined;

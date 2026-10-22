@@ -498,7 +498,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 앱 진행 지시(문자 · 확인 · 응낙 · 인증번호 대조 · 확인 결과)가 있는 턴에는 싣지 않는다(G31 — 그 지시가 이미 다음 국면을 정한다).
     const repeatBreakKind =
       turnChoice === "none" && !otpCheckInstruction && !confirmPlan?.instruction
-        ? decideRepeatBreak(storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked))
+        ? decideRepeatBreak(storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked), maskedUserText)
         : null;
     if (repeatBreakKind) {
       // G170 — 판정 종류 · 턴 번호만(대사 0).

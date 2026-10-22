@@ -938,10 +938,12 @@ export default function GeminiVoiceSession({
     // ⭐ §104(전수 검수 2차 F4 · F11) — 직전 두 사기범 턴이 대기 말 · 같은 인적사항 요구 · 거의 같은 말이면 맥락 1줄(`turnComplete:false`).
     // 위 넛지는 참가자가 침묵할 때만 나가므로, 참가자가 말하는 사이사이 반복되는 "대기해 주십시오"는 이 판정이 맡는다(판정표 `stallRecovery.ts` §4).
     let previousScammerTurnText: string | undefined;
-    const noteScammerTurnForRepeatBreak = (scammerText: string) => {
+    const noteScammerTurnForRepeatBreak = (scammerText: string, participantText: string) => {
       const kind = decideLiveRepeatBreak({
         previousScammerTurn: previousScammerTurnText,
         scammerTurn: scammerText,
+        // §104 — 이 턴이 답한 참가자 발화(자금 소진 선언 2-b행). 비었으면 판정하지 않는다.
+        ...(participantText.trim() ? { lastParticipantText: participantText } : {}),
         latched: handlersRef.current.isHangupLatched(),
         participantHasSpoken: handlersRef.current.getSessionUserTurns() > 0,
       });
@@ -1393,6 +1395,8 @@ export default function GeminiVoiceSession({
                 scammerTextSinceBoundary = false;
                 // PR-A2(F6) — 이 턴의 사기범 전사(flush가 비우기 전에 읽는다). 대기 뒤 침묵 넛지 판정의 입력이다.
                 const scammerTurnText = scammerBuffer;
+                // §104 — 이 턴이 답한 참가자 발화(flush가 비우기 전에 읽는다). 자금 소진 선언 판정의 입력이다.
+                const participantTurnText = userBuffer;
                 flushTranscript();
                 // ⭐ §59.6 ③ → §82.3.4 — `modelToolScammerTurns`는 이제 위 `flushTranscript`/`flushScammerTurn`이
                 // 비어 있지 않은 사기범 전사를 내보낼 때 오른다(부모 `scammerTurnsRef`와 같은 지점 · 같은 정의).
@@ -1406,7 +1410,7 @@ export default function GeminiVoiceSession({
                 // PR-A2(F6) — 빈 마감은 사기범 턴 경계가 아니다(위와 같은 조건).
                 if (!emptyTurn) noteScammerTurnForStallNudge(scammerTurnText);
                 // §104 — 같은 경계(빈 마감 제외)에서 반복 · 대기 정체 판정.
-                if (!emptyTurn) noteScammerTurnForRepeatBreak(scammerTurnText);
+                if (!emptyTurn) noteScammerTurnForRepeatBreak(scammerTurnText, participantTurnText);
                 // §71.6 — 이 모델 턴의 지연 레코드를 닫는다. §71.5 — 턴이 끝났으니 보류분 1건을 보낸다
                 // (2.5가 서버에서 하던 순서와 같다). 전사 flush · 부모 경계 콜백 **뒤**에 둔다 — 보류됐던
                 // 타이핑은 여기서야 userBuffer에 적립돼 다음 턴의 사용자 발화로 기록된다.

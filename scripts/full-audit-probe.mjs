@@ -64,7 +64,7 @@ const PROBE_STALL_VOCABULARY =
   /확인\s*(?:하는\s*)?중|확인하고\s*있|확인\s*절차|처리\s*(?:하는\s*)?중|처리하고\s*있|조회\s*중|확인되는\s*대로|처리되는\s*대로|확인되면|기다려|기다리|대기\s*중|지연|잠시만/;
 const PROBE_WAIT_REQUEST_LINE = /대기(?:해|하여|하고)\s*(?:주|계|있어|있으)|대기\s*부탁/;
 const PROBE_LIVE_STALL_TEXT =
-  "(너는 직전 대답과 그 앞 대답에서 대기하라거나 확인 중이라는 말을 했다. 이번 대답에서는 대기하라거나 확인 중이라는 말을 하지 말고, 지금까지 받은 것을 근거로 새 요구를 꺼내라 — 남은 돈이나 다른 계좌의 돈, 추가 정보, 주변 사람이나 은행에 알리지 말라는 구체적인 지시 중 하나로 상황을 앞으로 움직여라.)";
+  "(너는 직전 대답과 그 앞 대답에서 대기하라거나 확인 중이라는 말을 했다. 이번 대답에서는 대기하라거나 확인 중이라는 말을 하지 말고, 지금까지 받은 것을 근거로 새 요구를 꺼내라 — 남은 돈이나 다른 계좌의 돈, 추가 정보, 주변 사람이나 은행에 알리지 말라는 구체적인 지시 중 하나로 상황을 앞으로 움직여라. 더 요구할 것이 정말 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
 function probeIsStallLine(text) {
   const t = text.trim();
   if (!t || t.endsWith("?")) return false;
@@ -79,8 +79,10 @@ function probeIsStallLine(text) {
   return PROBE_STALL_VOCABULARY.test(t);
 }
 const probeIsWaitTurn = (t) => probeIsStallLine(t) || PROBE_WAIT_REQUEST_LINE.test(t);
-function probeLiveRepeatBreak(prev, cur, participantHasSpoken) {
-  if (!repeatBreakLib || !participantHasSpoken || !prev || !prev.trim()) return null;
+function probeLiveRepeatBreak(prev, cur, participantHasSpoken, lastParticipantText) {
+  if (!repeatBreakLib || !participantHasSpoken) return null;
+  if (lastParticipantText !== undefined && repeatBreakLib.EXHAUSTED_DECLARATION?.test(lastParticipantText)) return { kind: "exhausted", text: repeatBreakLib.REPEAT_BREAK_EXHAUSTED_INSTRUCTION };
+  if (!prev || !prev.trim()) return null;
   if (probeIsWaitTurn(prev) && probeIsWaitTurn(cur)) return { kind: "stall", text: PROBE_LIVE_STALL_TEXT };
   const kind = repeatBreakLib.decideRepeatBreak([prev, cur]);
   return kind ? { kind, text: repeatBreakLib.repeatBreakInstruction(kind) } : null;
@@ -319,7 +321,8 @@ async function runVoice(scenarioId, level, persona, tag) {
     const lastScammer = [...turns].reverse().find((t) => t.role === "scammer")?.text ?? "";
     // §104 — 앱 클라처럼 직전 두 사기범 턴으로 반복 · 대기 정체를 판정해 맥락 주입(다음 응답에 실린다).
     const scammerTexts = turns.filter((t) => t.role === "scammer" && t.kind !== "interrupted").map((t) => t.text);
-    const rb = probeLiveRepeatBreak(scammerTexts[scammerTexts.length - 2], scammerTexts[scammerTexts.length - 1] ?? "", userTurns > 0);
+    const lastUserText = [...turns].reverse().find((t) => t.role === "user")?.text;
+    const rb = probeLiveRepeatBreak(scammerTexts[scammerTexts.length - 2], scammerTexts[scammerTexts.length - 1] ?? "", userTurns > 0, lastUserText);
     if (rb) { sendText(rb.text, false, "repeat_ctx"); events.push({ t: now(), ev: "repeatBreak", kind: rb.kind, scammerTurns, userTurns }); }
     const u = respond(lastScammer, i);
     userTurns += 1;
@@ -427,7 +430,7 @@ async function runMessenger(scenarioId, level, persona, tag) {
       : undefined;
     // §104 — 앱 `sendMessage`처럼 앱 진행 지시가 없는 턴에만 반복 차단 1줄(새 lib에만 있음).
     const rbKind = repeatBreakLib && choice === "none" && !confirmPlan?.instruction
-      ? repeatBreakLib.decideRepeatBreak(stored.filter((m) => m.role === "scammer").map((m) => m.textMasked))
+      ? repeatBreakLib.decideRepeatBreak(stored.filter((m) => m.role === "scammer").map((m) => m.textMasked), u)
       : null;
     if (rbKind) events.push({ ev: "repeatBreak", kind: rbKind, userTurns: userTurnsNow });
     const rbLine = rbKind ? repeatBreakLib.repeatBreakInstruction(rbKind) : undefined;
