@@ -116,6 +116,7 @@ import {
   noteFallbackPlay,
   noteResumeRetry,
   noteRingClosed,
+  noteWakeLock,
   readAudioDiag,
   registerCallAudio,
   registerFallbackAudio,
@@ -1687,7 +1688,11 @@ export default function SessionCallPage() {
     const lock = createScreenWakeLock({
       nav: navigator as unknown as Parameters<typeof createScreenWakeLock>[0]["nav"],
       doc: document,
-      onStatus: setWakeLockStatus,
+      // §105 — 진단 패널(`?audiodebug=1` wake.*)에도 적는다.
+      onStatus: (status) => {
+        setWakeLockStatus(status);
+        noteWakeLock(status);
+      },
     });
     lock.start();
     return () => lock.stop();

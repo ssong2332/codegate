@@ -60,13 +60,22 @@ export type MicTrackView = { readyState: string; muted: boolean } | null;
 
 /**
  * 화면에 돌아온 뒤(기다림 `MIC_RECHECK_DELAY_MS` 뒤) 마이크를 다시 열어야 하는가.
- * 끝난 트랙(ended) · 여전히 음소거(muted — iOS는 스스로 풀리지 않는 경우가 있다)면 다시 연다. 트랙이 없으면(아직 연결 전) 그대로.
+ * ⭐ §105 완화 (a)(메인 승인 2026-10-22) — **끝난 트랙(ended)만** 다시 연다. muted는 Android에서 OS가 스스로 푸는 일시 상태라
+ * 그대로 둔다(예전: muted도 다시 열어 옛 트랙을 닫았다 — 웨일 실기 "말해도 묵묵부답"의 후보 경로, 추정). iOS의 풀리지 않는 muted는
+ * 화면의 "계속하기" 탭(소리 · 마이크 재개 제스처)이 맡는다. 트랙이 없으면(아직 연결 전) 그대로.
  */
 export function decideMicRecovery(track: MicTrackView): "keep" | "reacquire" {
   if (!track) return "keep";
   if (track.readyState === "ended") return "reacquire";
-  if (track.muted) return "reacquire";
   return "keep";
+}
+
+/**
+ * ⭐ §105 완화 (b) — 새로 연 트랙으로 갈아 끼워도 되는가. **살아 있고(live) 음소거가 아닐 때만** 갈아 끼우고 옛 트랙을 닫는다.
+ * 아니면 새 트랙을 닫고 옛 트랙을 그대로 둔다(쓸 수 있는 입력을 쓸 수 없는 입력으로 바꾸지 않는다).
+ */
+export function isReplacementTrackUsable(track: MicTrackView): boolean {
+  return track !== null && track.readyState === "live" && !track.muted;
 }
 
 // ── 다시 연결할 때 넣는 맥락(새 Live 세션은 시스템 프롬프트만 안다 — 지금까지의 대화를 텍스트 턴으로 알려 준다) ──

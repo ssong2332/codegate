@@ -101,3 +101,46 @@ test("[§99] 요청이 끝나기 전에 stop → 받은 잠금을 바로 푼다(
   await tick();
   assert.equal(env.sentinels[0].releaseCalls, 1);
 });
+
+test("[§105] 보이는 채로 풀리면(절전 모드 등) 1초 뒤 다시 요청 → active · 한 번 보이는 동안 최대 3회", async () => {
+  const env = fakeEnv();
+  const statuses: WakeLockStatus[] = [];
+  const timers: { fn: () => void; ms: number }[] = [];
+  const lock = createScreenWakeLock({
+    nav: env.nav,
+    doc: env.doc,
+    onStatus: (s) => statuses.push(s),
+    schedule: (fn, ms) => timers.push({ fn, ms }),
+  });
+  lock.start();
+  await tick();
+  for (let i = 0; i < 4; i += 1) {
+    env.sentinels[env.sentinels.length - 1].fire();
+    const t = timers.shift();
+    if (t) {
+      assert.equal(t.ms, 1000);
+      t.fn();
+      await tick();
+    }
+  }
+  assert.equal(env.requests(), 4, "처음 1회 + 다시 요청 3회(4번째 풀림은 다시 요청하지 않는다)");
+  assert.deepEqual(statuses.slice(0, 3), ["active", "released", "active"]);
+  // 가려졌다 돌아오면 한도가 다시 찬다.
+  env.setVisibility("hidden");
+  env.setVisibility("visible");
+  await tick();
+  assert.equal(env.requests(), 5);
+  lock.stop();
+});
+
+test("[§105] 가려져서 풀린 것은 즉시 다시 요청하지 않는다(돌아올 때 요청 — 종전 동작)", async () => {
+  const env = fakeEnv();
+  const timers: unknown[] = [];
+  const lock = createScreenWakeLock({ nav: env.nav, doc: env.doc, schedule: (fn) => timers.push(fn) });
+  lock.start();
+  await tick();
+  env.doc.visibilityState = "hidden";
+  env.sentinels[0].fire();
+  assert.equal(timers.length, 0);
+  lock.stop();
+});

@@ -43,6 +43,9 @@ type DiagState = {
   micPeakMax: number | null;
   /** 서버가 돌려준 사용자 음성 인식 조각 수(`inputTranscription`) — 0이면 서버가 말을 듣지 못했다. */
   asrChunks: number;
+  /** §105 — 화면 켜짐 유지(Wake Lock) 마지막 상태(`screenWakeLock.ts` WakeLockStatus 문자열) · 이 통화에서 풀린 횟수. */
+  wakeLockStatus: string | null;
+  wakeLockReleases: number;
 };
 
 const INITIAL: DiagState = {
@@ -63,6 +66,8 @@ const INITIAL: DiagState = {
   micFramesDroppedMute: 0,
   micPeakMax: null,
   asrChunks: 0,
+  wakeLockStatus: null,
+  wakeLockReleases: 0,
 };
 
 let state: DiagState = { ...INITIAL };
@@ -79,7 +84,8 @@ let micTrack: TrackLike | null = null;
 
 /** 받기 1회 = 통화 1건. 통화별 값을 비운다(벨 컨텍스트는 받기 전에 정해지므로 남긴다). */
 export function noteAccept(nowMs: number): void {
-  state = { ...INITIAL, acceptAtMs: nowMs };
+  // §105 — 화면 켜짐 유지는 받기 전(연결 중)부터 걸려 있을 수 있어 상태만 이어받는다(풀린 횟수는 통화별로 비운다).
+  state = { ...INITIAL, acceptAtMs: nowMs, wakeLockStatus: state.wakeLockStatus };
   outputCtx = null;
   inputCtx = null;
   outputGain = null;
@@ -129,6 +135,15 @@ export function noteMicFrame(outcome: MicFrameOutcome, peak?: number): void {
   }
 }
 
+/** §105 — 화면 켜짐 유지 상태 변화(받기 전 상태도 남는다 — 받기 때 비우지 않게 `noteAccept`가 이어받는다). */
+export function noteWakeLock(status: string): void {
+  state = {
+    ...state,
+    wakeLockStatus: status,
+    wakeLockReleases: state.wakeLockReleases + (status === "released" ? 1 : 0),
+  };
+}
+
 /** §105 — 서버의 사용자 음성 인식 조각 1개(내용은 적지 않는다). */
 export function noteAsrChunk(): void {
   state = { ...state, asrChunks: state.asrChunks + 1 };
@@ -138,7 +153,7 @@ export function noteAsrChunk(): void {
 export function formatMicLine(): string {
   const s = state;
   const track = micTrack ? `${micTrack.readyState}${micTrack.muted ? "/muted" : ""}${micTrack.enabled ? "" : "/disabled"}` : "-";
-  return `[live-mic] sent=${s.micFramesSent} echo=${s.micFramesDroppedEcho} mute=${s.micFramesDroppedMute} peakDb=${formatDbfs(s.micPeakMax)} asr=${s.asrChunks} track=${track} in=${inputCtx?.state ?? "-"}`;
+  return `[live-mic] sent=${s.micFramesSent} echo=${s.micFramesDroppedEcho} mute=${s.micFramesDroppedMute} peakDb=${formatDbfs(s.micPeakMax)} asr=${s.asrChunks} track=${track} in=${inputCtx?.state ?? "-"} wake=${s.wakeLockStatus ?? "-"}/${s.wakeLockReleases}`;
 }
 
 export function registerFallbackAudio(el: { volume: number; paused: boolean } | null): void {
@@ -313,6 +328,8 @@ export const AUDIO_DIAG_KEYS = [
   "mic.dropMute",
   "mic.peakDb",
   "asr.rx",
+  "wake.state",
+  "wake.releases",
   "ring.state",
   "ring.closedMs",
   "fb.volume",
@@ -373,6 +390,8 @@ export function buildAudioDiagRows(input: {
     "mic.dropMute": String(s.micFramesDroppedMute),
     "mic.peakDb": formatDbfs(s.micPeakMax),
     "asr.rx": String(s.asrChunks),
+    "wake.state": show(s.wakeLockStatus),
+    "wake.releases": String(s.wakeLockReleases),
     "ring.state": show(s.ring?.state),
     "ring.closedMs": rel(s.ringClosedAtMs, s.acceptAtMs),
     "fb.volume": s.fallback ? s.fallback.volume.toFixed(2) : "-",

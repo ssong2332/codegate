@@ -95,7 +95,13 @@ import {
 } from "./liveLatency";
 import { LIVE_MIC_CONSTRAINTS, liveMicHandoff, stopStream } from "./micHandoff";
 import { isUsableContext, resumeSuspendedContexts, type PrimedCallAudio } from "./callAudio";
-import { BACKGROUND_LOG_PREFIX, MIC_RECHECK_DELAY_MS, decideMicRecovery, decideSocketClose } from "./backgroundCall";
+import {
+  BACKGROUND_LOG_PREFIX,
+  MIC_RECHECK_DELAY_MS,
+  decideMicRecovery,
+  decideSocketClose,
+  isReplacementTrackUsable,
+} from "./backgroundCall";
 import type { LiveTurnPhase } from "@/lib/verifyintercept";
 import {
   formatMicLine,
@@ -1053,6 +1059,17 @@ export default function GeminiVoiceSession({
         .then((next) => {
           if (cancelled || !replaceMicStream) {
             stopStream(next);
+            return;
+          }
+          // §105 완화 (b) — 새 트랙이 live · unmuted일 때만 갈아 끼운다(옛 트랙 stop은 그 뒤 `replaceMicStream` 안에서만).
+          const nextTrack = next.getAudioTracks()[0] ?? null;
+          const nextView = nextTrack ? { readyState: nextTrack.readyState, muted: nextTrack.muted } : null;
+          if (!isReplacementTrackUsable(nextView)) {
+            stopStream(next);
+            console.info(
+              BACKGROUND_LOG_PREFIX,
+              `mic reacquire unusable ${nextView ? `${nextView.readyState}${nextView.muted ? "/muted" : ""}` : "none"} → keep old`,
+            );
             return;
           }
           try {

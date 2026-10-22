@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import {
   formatMicLine,
   noteAsrChunk,
+  noteWakeLock,
   noteMicFrame,
   registerMicTrack,
   AUDIO_DIAG_KEYS,
@@ -231,7 +232,7 @@ test("[§105] 마이크 진단 — 보냄 · 반이중 · 음소거 · 최대 �
   assert.equal(s.micFramesDroppedMute, 2);
   assert.equal(s.micPeakMax, 0.5);
   assert.equal(s.asrChunks, 1);
-  assert.equal(formatMicLine(), "[live-mic] sent=2 echo=1 mute=2 peakDb=-6.0 asr=1 track=live/muted in=-");
+  assert.equal(formatMicLine(), "[live-mic] sent=2 echo=1 mute=2 peakDb=-6.0 asr=1 track=live/muted in=- wake=-/0");
   const rows = new Map(
     buildAudioDiagRows({
       snapshot: s,
@@ -262,4 +263,19 @@ test("[§105 배선] Gemini 세션이 프레임마다 결과를 적고 서버 �
   assert.ok(src.includes("noteAsrChunk();"));
   assert.ok((src.match(/registerMicTrack\(/g) ?? []).length >= 2, "처음 연 마이크 · 다시 연 마이크 둘 다");
   assert.ok(src.includes("console.info(formatMicLine());"));
+});
+
+test("[§105] 화면 켜짐 유지 진단 — 상태 · 풀린 횟수(받기 때 횟수만 비우고 상태는 이어받는다)", () => {
+  resetAudioDiagForTest();
+  noteWakeLock("active");
+  noteAccept(0);
+  assert.equal(readAudioDiag().wakeLockStatus, "active");
+  noteWakeLock("released");
+  noteWakeLock("active");
+  noteWakeLock("released");
+  assert.equal(readAudioDiag().wakeLockReleases, 2);
+  assert.ok(formatMicLine().endsWith("wake=released/2"));
+  noteAccept(5);
+  assert.equal(readAudioDiag().wakeLockReleases, 0);
+  assert.equal(readAudioDiag().wakeLockStatus, "released");
 });

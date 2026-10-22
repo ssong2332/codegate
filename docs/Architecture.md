@@ -22448,7 +22448,30 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 - 배너 조건 = `document.visibilityState`가 hidden으로 **3초 이상**(`RETURN_NOTICE_MIN_HIDDEN_MS`) 또는 숨김 중 소켓 close로 재연결 대기. blur · focus · pagehide · resize 리스너는 #369 전체에 0건, 앱 안 외부 이동(`tel:` · `_blank` · `window.open`)도 0건 ⇒ 배너는 **브라우저가 실제로 문서를 숨겼다**는 뜻이다(무엇이 숨겼는지는 미확정 — 화면 자동 꺼짐(Wake Lock 조용한 실패) · 전원 버튼 · 최근 앱 · 시스템 다이얼로그 후보, 추정).
 - '계속하기'는 배너만 닫는다 — 입력을 막지 않는다. 복귀 때 자동 동작: ① 컨텍스트 resume ② 0.7초 뒤 트랙이 ended/muted면 새 트랙으로 교체 후 옛 트랙 stop ③ 숨김 중 close였으면 새 자격증명으로 세션 재마운트.
 - ②③은 복귀 **뒤** 입력 단절을 만들 수 있는 유일한 #369 경로다(추정 · 웨일 실기 확인 필요). **"처음부터 · 발화 0건"은 시작 시점에 숨김이 없었다면 #369로 설명되지 않는다.** 시작 순서(받기 탭 → 컨텍스트 미리 생성 → 마이크 1회 획득(#350, 10-21) → 연결 → 마이크 대기 뒤 오프닝 → 파이프라인 부착)에서 오늘 바뀐 줄은 0이다.
-- 완화안(승인 대기 · 미구현): (a) ②를 `readyState === "ended"`일 때만 교체(muted는 Android에서 OS가 푸는 일시 상태) (b) 새 트랙이 live · unmuted인 것을 확인한 뒤에만 옛 트랙 stop.
+- 완화안 (a)(b) — **구현됨(메인 승인 2026-10-22)**: (a) `decideMicRecovery`는 `readyState === "ended"`일 때만 다시 연다(muted = 그대로) (b) `isReplacementTrackUsable` — 새 트랙이 live · unmuted일 때만 갈아 끼우고 옛 트랙을 닫는다. 아니면 새 트랙만 닫고 옛 트랙 유지(`[live-bg] mic reacquire unusable … → keep old`). 테스트 `backgroundCall.test.ts` 2건 신규 · 1건 갱신.
+
+#### 105.2.2 화면 켜짐 유지(Wake Lock) — 웨일에서 화면이 저절로 꺼졌을 가능성(메인 추정)
+| 항목 | 판독 | 근거 |
+|---|---|---|
+| 웨일 지원 | Chromium 계열이라 `navigator.wakeLock` 있음(추정 — 실기 `wake.state`로 확인) | Chrome 84+ API |
+| 실패 감지(종전) | 요청 거절 → `denied` → 화면 안내 "화면이 어두워지면 빈 곳을 한 번 눌러 주세요"(`keepAwakeUnavailable`) | `screenWakeLock.ts` · `ScreenOffNotice` |
+| 구멍(종전) | **화면이 보이는 채로** 브라우저 · OS가 잠금을 풀면(`release` 이벤트 — 절전 모드 전환 등) 다음 `visibilitychange`까지 다시 요청하지 않았다 → 그 사이 시간 초과로 꺼질 수 있다. 상태 `released`는 화면 안내 대상도 아니다 | 같은 파일 release 리스너 |
+| 수정 | 보이는 채로 풀리면 1초 뒤 다시 요청(한 번 보이는 동안 최대 3회 · 가려졌다 돌아오면 한도 초기화) | `WAKE_LOCK_REREQUEST_DELAY_MS` · `MAX_VISIBLE_REREQUESTS` · 테스트 2건 |
+| 진단 | `?audiodebug=1` `wake.state`(idle/active/released/denied/unsupported) · `wake.releases`(이 통화에서 풀린 횟수) · `[live-mic] … wake=상태/횟수` | `audioDiagnostics.ts` `noteWakeLock` |
+| 대체 수단(NoSleep식 무음 영상 반복 재생) | **보류 — 미구현.** 웨일에서 Wake Lock이 실제로 실패하는지(`wake.state`)가 먼저다. 무음 `<video>` 재생은 ① 통화 오디오 포커스 · 에코 제거 경로에 끼어들 수 있고(미검증) ② 영상 자산 · 자동재생 정책 처리가 늘며 ③ Chrome 84 이후 NoSleep 자체가 Wake Lock을 먼저 쓴다. 실기에서 `denied`/`unsupported`이거나 `released`가 반복되면 그때 제안한다 | 판단 |
+
+#### 105.2.3 시작 순서 경쟁 조건 판독(우선순위 1 · 메인 요청) — 결론: 코드상 확정 후보 0
+| 순서 | 동작 | 경쟁 가능성 | 판정 |
+|---|---|---|---|
+| ① 받기 탭 | 출력 · 입력 컨텍스트 미리 생성 + resume(`primeCallAudio`) | 탭 밖이면 suspended | 세션이 다시 `await resume()` — 진단 `in.state` |
+| ② `start()` | 마이크 1회 `getUserMedia` 시작(기다리지 않음) → 자격증명 → `liveMicHandoff.offer(mic)` → `setCredentials` | offer가 마운트보다 먼저(같은 동기 구간) | 순서 보장 |
+| ③ 세션 마운트 | `claim()` · 컨텍스트 빌림 · `connect()` | effect deps `[]` — 재실행 0 | 문제 없음 |
+| ④ connect 해결 | `await micRequest` → 오프닝 전송 → 같은 동기 구간에서 `micSource` → 분석기 · ScriptProcessor 부착 | 오프닝 뒤 마이크 부착까지 await 0 | 문제 없음 |
+| ⑤ 오프닝 재생 | 반이중 — 재생 + 250ms(턴 진행 중이면 +4초) 뒤 게이트 열림 | 출력 컨텍스트가 멈춰도 타이머는 흐른다(`setTimeout` 1회) | 게이트 영구 닫힘 0 |
+| ⑥ 프레임 | `inputContext`가 running이어야 `onaudioprocess`가 돈다 | **입력 컨텍스트가 시작 뒤 suspended/interrupted로 바뀌면 프레임 0**(추정 · Android 오디오 모드 전환) | 미확정 — `mic.sent`+`mic.dropEcho`+`mic.dropMute` = 0이고 `in.state`≠running이면 이것 |
+| 오늘 배포분이 ①~⑥에서 바꾼 줄 | 0(#369는 visibilitychange 경로 · 재연결 마운트만) | — | `72ee6ae..77cddcc` diff |
+
+남은 갈래(실기 값으로만 가린다): ⑥ 입력 컨텍스트 정지 / 마이크가 무음(`mic.peakDb` = -inf) / 서버가 못 알아들음(`sent`>0 · `asr.rx`=0) / 모델 무응답(`asr.rx`>0).
 
 ### 105.3 진단 계측 추가(제품 동작 무변경)
 | 값 | 뜻 | 판정 |
@@ -22480,7 +22503,7 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 ### 105.5 검증
 | 항목 | 결과 | 근거 |
 |---|---|---|
-| `npm test` | 983 pass / 0 fail | 신규 `audioDiagnostics.test.ts` 2건 · `outputGain.test.ts` 4건 |
+| `npm test` | 983 pass / 0 fail (1차) → **988 pass / 0 fail**(완화 · Wake Lock 뒤) | 신규 `audioDiagnostics.test.ts` 3건 · `outputGain.test.ts` 4건 · `backgroundCall.test.ts` 2건 · `screenWakeLock.test.ts` 2건 |
 | `npm --prefix functions test` | 1642 pass / 0 fail | functions 변경 0건 |
 | `npm run lint` · `npm --prefix functions run lint` | 오류 0(경고 1 = 기존 `scripts/live-turn-probe.mjs`) | — |
 | 실 키 측정 · 실기 | 0회 | 메인 승인 필요 · 실기는 사용자 |
