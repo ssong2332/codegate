@@ -42,6 +42,7 @@ import { ASSET_CUSTODY_PROCEDURE_TACTIC } from "./assetProtectionNoticeCall.prom
 import {
   PROSECUTION_CASE_LINK_PERSONA,
   PROSECUTION_CASE_LINK_TACTIC,
+  PROSECUTION_CASE_RECORD_AUTHORITY_TACTIC,
   PROSECUTION_CASE_RECORD_TACTIC,
   PROSECUTION_WALLET_COIN_TACTIC,
   PROSECUTION_WALLET_EXTRA_TACTICS,
@@ -1278,9 +1279,10 @@ const SPECS: VariantSpec[] = [
     level: "advanced",
     authoring: "authored",
     stages: st(PROSECUTION_STAGES[0], PROSECUTION_CASE_LINK_STAGE, PROSECUTION_STAGES[1], PROSECUTION_STAGES[2], ...PROSECUTION_SITE_STAGES_TAIL),
-    dropLabels: ["수사 서류 언급", "코인 구매·송금 요구"],
+    dropLabels: ["권위 암시", "수사 서류 언급", "코인 구매·송금 요구"],
     // §106 — 사건 기록 열람본을 근거로 압박하는 같은 라벨 문면(현행 변형만 · 은퇴 변형은 원문 유지).
-    extraTactics: [PROSECUTION_CASE_RECORD_TACTIC, PROSECUTION_SITE_COIN_TACTIC, ASSET_INFO, ...PROSECUTION_SITE_EXTRA_TACTICS],
+    // §109 — "권위 암시"도 열람본과 같은 가상 소속 · 이름으로 밝히는 같은 라벨 문면으로 바꾼다.
+    extraTactics: [PROSECUTION_CASE_RECORD_AUTHORITY_TACTIC, PROSECUTION_CASE_RECORD_TACTIC, PROSECUTION_SITE_COIN_TACTIC, ASSET_INFO, ...PROSECUTION_SITE_EXTRA_TACTICS],
     exitBlock: ["D2_secrecy", "D4_procedural_legitimacy", "D5_call_retention"],
     sms: [
       { purpose: "link", smsId: "prosecution-case-link", required: true, notBeforeUserTurns: 2 },

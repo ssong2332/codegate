@@ -9,15 +9,38 @@
 // | R3 | 판정(§101 판정표 6행) | 문서를 본 것은 새 순간 0 — 제출 시각이 있으면 항목 본체 1건 · 없으면 0건(링크만 열고 닫음과 같다) |
 // | R4 | 통화 문면 | fv-h3vn = 문서를 근거로 압박하는 같은 라벨 문면 · 은퇴 변형 fv-p4hz · fv-c8wq = 원문 그대로 |
 // | R5 | 대처 문구 | 이름이 찍힌 기록도 방금 넣은 정보로 만든 가짜라는 줄 |
+//
+// ⭐ §109(2026-10-22 사용자 실기 요청 — *"담당 부서나 담당 검사가 'OO수사본부'처럼 적혀 있는데 … 더 사실적인 문서로"*) — 가림 표시 → 가상 고유명.
+// | # | 무엇을 보나 | 기대 |
+// |---|---|---|
+// | N1 | 문서 = 통화 이름 | 문서 기관명 · 담당 부서 · 담당 검사 · 담당 수사관 · 결재 성 = `CASE_RECORD_NAMES` · 문서 문자열에 "OO" 0 |
+// | N2 | 실존과 겹침 0 | 가상 기관명의 지역 자리("한빛")가 실존 지방검찰청 · 지청 지역명 표에 없음 · 인물 이름이 알려진 실존 사례 표에 없음 |
+// | N3 | 허용 예외가 좁다 | 정확 일치 1벌만 가린다 — 다른 지역명 + "지방검찰청" · "검찰청" 단독은 그대로 걸린다(역검증) |
+// | N4 | 통화 문면 | 현행 fv-h3vn 조립 프롬프트 = 같은 이름 · "OO지방검찰청" 명칭 줄 0 · 같은 라벨 "권위 암시" 교체 · 은퇴 변형 · 다른 시나리오는 종전 OO 규칙 |
+// | N5 | 문서 칸 | 반 칸 라벨 ⊂ 입력 칸 · 발급 정보 라벨 3개 · 결재란 3칸 |
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findFlowVariant } from "../flowVariants";
+import { findFlowVariant, resolveSessionScenarioPrompt } from "../flowVariants";
 import { findMockScreenItem, MOCK_SCREENS } from "../mockScreens";
 import { sessionReachableLandingIds } from "../reachability";
 import { extractTacticLabel } from "../tacticFlavor";
-import { PROSECUTION_CASE_LINK_TACTIC, PROSECUTION_CASE_RECORD_TACTIC } from "../prosecutionCooperationCall.prompt";
+import {
+  CASE_RECORD_NAMES,
+  PROSECUTION_CASE_LINK_PERSONA,
+  PROSECUTION_CASE_LINK_TACTIC,
+  PROSECUTION_CASE_RECORD_AUTHORITY_TACTIC,
+  PROSECUTION_CASE_RECORD_TACTIC,
+  PROSECUTION_SITE_PERSONA,
+} from "../prosecutionCooperationCall.prompt";
 import { resolveLandingSubmitMomentItem } from "../../report/smsTimeline";
-import { LONG_DIGIT_SEQUENCE, REAL_WORLD_INSTITUTION_NAMES } from "./harmlessnessPatterns";
+import { buildSystemPrompt } from "../../roleplay/promptAssembly";
+import {
+  FICTIONAL_INSTITUTION_NAMES,
+  LONG_DIGIT_SEQUENCE,
+  maskFictionalInstitutionNames,
+  REAL_WORLD_INSTITUTION_NAMES,
+  scanText,
+} from "./harmlessnessPatterns";
 
 const PROS = "prosecution-cooperation-call";
 const LANDING = "case-record-view";
@@ -31,11 +54,16 @@ function item() {
 function documentTexts(): string[] {
   const doc = item().recordDocument!;
   return [
+    doc.issuer,
     doc.title,
+    doc.documentNumber,
     doc.subjectHeading,
     doc.stampLabel,
+    doc.sealLabel,
+    doc.footerNotice,
+    ...doc.issueLabels,
     ...doc.noticeLines,
-    ...[...doc.caseRows, ...doc.subjectRows].flatMap((row) => [row.label, row.value]),
+    ...[...doc.caseRows, ...doc.subjectRows, ...doc.approvalRows].flatMap((row) => [row.label, row.value]),
   ];
 }
 
@@ -56,19 +84,19 @@ test("[§106 R1] 열람본은 case-record-view 1건 · 입력 칸은 신원 칸�
 
 test("[§106 R2] 무해성 — 실존 기관명 · 긴 숫자열 0 · 공문서 칸 있음", () => {
   const texts = documentTexts();
+  // §109 — 허용 목록의 가상 기관명(정확 일치)만 가리고 본다(아래 N3이 예외의 폭을 고정한다).
   assert.deepEqual(
-    texts.filter((t) => REAL_WORLD_INSTITUTION_NAMES.some((name) => t.includes(name))),
+    texts.filter((t) => REAL_WORLD_INSTITUTION_NAMES.some((name) => maskFictionalInstitutionNames(t).includes(name))),
     [],
     "실존 기관명",
   );
+  assert.deepEqual(texts.flatMap((t) => scanText(t, "mockSurface")), [], "mockSurface 프로파일 전체");
   assert.deepEqual(texts.filter((t) => LONG_DIGIT_SEQUENCE.test(t)), [], "8자리 이상 연속 숫자");
   assert.deepEqual(texts.filter((t) => /https?:\/\/|www\.|\.(kr|com|go)\b/.test(t)), [], "주소 꼴");
   assert.deepEqual(
     item().recordDocument!.caseRows.map((row) => row.label),
-    ["사건번호", "죄명", "담당 부서", "담당 검사", "진행 상태"],
+    ["사건번호", "진행 상태", "죄명", "담당 부서", "담당 검사", "담당 수사관"],
   );
-  // 이름 칸은 가상 표기("OO")뿐 — 실존 인물 이름을 넣지 않는다.
-  assert.ok(item().recordDocument!.caseRows.find((r) => r.label === "담당 검사")!.value.includes("OOO"));
   // 역검증 — 같은 검사식이 실존 기관명을 실제로 잡는다.
   assert.ok(REAL_WORLD_INSTITUTION_NAMES.some((name) => "OO지방검찰청".includes(name)));
 });
@@ -99,4 +127,95 @@ test("[§106 R4] 통화 문면 — 현행 fv-h3vn만 열람본 근거 압박 · 
 
 test("[§106 R5] 대처 문구 — 이름이 찍힌 기록도 방금 넣은 정보로 만든 가짜", () => {
   assert.ok(item().correctAction.includes("방금 입력한 정보를 그대로 찍어 보여 준 가짜 문서"));
+});
+
+// ── §109 — 가상 고유명 · 공문서 양식 ─────────────────────────────────────────────────────────────
+
+/**
+ * 실존 지방검찰청 · 지청의 지역 자리(2026-10-22 기준 — 18개 지방검찰청과 그 지청).
+ * ⚠️ 2026-10-02 공소청 출범 보도로 기관 이름 체계가 바뀌는 중이다 — 이 표는 "옛 이름과도 겹치지 않음"을 보는 용도다.
+ */
+const REAL_PROSECUTION_OFFICE_REGIONS = [
+  "서울중앙", "서울동부", "서울남부", "서울북부", "서울서부", "의정부", "인천", "수원", "춘천", "대전", "청주", "대구", "부산", "울산",
+  "창원", "광주", "전주", "제주",
+  "고양", "남양주", "부천", "성남", "여주", "평택", "안산", "안양", "강릉", "원주", "속초", "영월", "홍성", "공주", "논산", "서산",
+  "천안", "충주", "제천", "영동", "안동", "경주", "포항", "김천", "상주", "의성", "영덕", "대구서부", "부산동부", "부산서부", "마산",
+  "진주", "통영", "밀양", "거창", "목포", "장흥", "순천", "해남", "군산", "정읍", "남원", "서울",
+];
+/** 웹 검색으로 같은 이름의 현직 검사가 나온 이름(2026-10-22 — 사용 금지 표 · 근거 docs/Architecture.md §109). */
+const KNOWN_REAL_PROSECUTOR_NAMES = ["김도윤"];
+
+test("[§109 N1] 문서의 기관명 · 담당 부서 · 담당 검사 · 담당 수사관 · 결재 성 = 통화 이름 상수 · 가림 표시 0", () => {
+  const doc = item().recordDocument!;
+  const value = (label: string) => doc.caseRows.find((row) => row.label === label)?.value;
+  assert.equal(doc.issuer, CASE_RECORD_NAMES.office);
+  assert.equal(value("담당 부서"), CASE_RECORD_NAMES.department);
+  assert.equal(value("담당 검사"), CASE_RECORD_NAMES.prosecutor);
+  assert.equal(value("담당 수사관"), CASE_RECORD_NAMES.investigator);
+  assert.deepEqual(
+    doc.approvalRows.map((row) => row.value),
+    [CASE_RECORD_NAMES.investigator[0], CASE_RECORD_NAMES.prosecutor[0], "전결"],
+  );
+  assert.deepEqual(documentTexts().filter((t) => /OO|○○/.test(t)), [], "가림 표시");
+});
+
+test("[§109 N2] 가상 이름이 실존 청 · 지청 · 알려진 실존 인물과 겹치지 않는다", () => {
+  assert.deepEqual(FICTIONAL_INSTITUTION_NAMES, [CASE_RECORD_NAMES.office]);
+  const region = CASE_RECORD_NAMES.office.replace("지방검찰청", "");
+  assert.equal(region, "한빛");
+  assert.equal(REAL_PROSECUTION_OFFICE_REGIONS.includes(region), false);
+  assert.deepEqual(REAL_PROSECUTION_OFFICE_REGIONS.filter((real) => CASE_RECORD_NAMES.office.startsWith(real)), []);
+  for (const name of [CASE_RECORD_NAMES.prosecutor, CASE_RECORD_NAMES.investigator]) {
+    assert.equal(KNOWN_REAL_PROSECUTOR_NAMES.includes(name), false, name);
+  }
+});
+
+test("[§109 N3] 허용 예외는 정확 일치 1벌 — 다른 지역명 + 지방검찰청 · 검찰청 단독은 그대로 걸린다(역검증)", () => {
+  // scenarioDefectsRound2.test.ts §104 결함7과 같은 정규식.
+  const REAL_INSTITUTION = /서울중앙지|중앙지검|대검찰청|[가-힣]{2}지방검찰청|[가-힣]{2}지검|금융범죄수사부|사이버수사대|[가-힣]{2}경찰서/;
+  assert.equal(maskFictionalInstitutionNames(`${CASE_RECORD_NAMES.office} ${CASE_RECORD_NAMES.department}`).match(REAL_INSTITUTION), null);
+  for (const real of ["부산지방검찰청", "한빛지검", "대검찰청"]) {
+    assert.notEqual(maskFictionalInstitutionNames(real).match(REAL_INSTITUTION), null, real);
+  }
+  assert.deepEqual(scanText(CASE_RECORD_NAMES.office, "mockSurface"), []);
+  assert.notDeepEqual(scanText("부산지방검찰청", "mockSurface"), [], "다른 지역명은 걸린다");
+  assert.notDeepEqual(scanText("검찰청 안내", "mockSurface"), [], "검찰청 단독은 걸린다");
+  // 가린 뒤에도 길이가 같다(발췌 위치 보존).
+  assert.equal(maskFictionalInstitutionNames(`가${CASE_RECORD_NAMES.office}나`).length, CASE_RECORD_NAMES.office.length + 2);
+});
+
+test("[§109 N4] 통화 문면 — 현행 fv-h3vn = 문서와 같은 이름 · 은퇴 변형과 다른 시나리오는 종전 OO 규칙", () => {
+  const ooLine = '기관 이름을 말할 때는 "OO지방검찰청"·"OO수사본부"처럼 앞에 OO를 붙인 이름으로만 말한다.';
+  assert.ok(PROSECUTION_CASE_LINK_PERSONA.includes(ooLine), "은퇴 변형 원천은 그대로");
+  assert.equal(PROSECUTION_SITE_PERSONA.includes(ooLine), false);
+  const self = `${CASE_RECORD_NAMES.office} ${CASE_RECORD_NAMES.department} ${CASE_RECORD_NAMES.investigator} 수사관`;
+  assert.ok(PROSECUTION_SITE_PERSONA.includes(self));
+  assert.ok(PROSECUTION_SITE_PERSONA.includes(`${CASE_RECORD_NAMES.prosecutor} 검사`));
+  assert.ok(PROSECUTION_CASE_RECORD_AUTHORITY_TACTIC.includes(self));
+  assert.equal(extractTacticLabel(PROSECUTION_CASE_RECORD_AUTHORITY_TACTIC), "권위 암시");
+  const current = findFlowVariant("fv-h3vn")!;
+  assert.ok(current.tactics.includes(PROSECUTION_CASE_RECORD_AUTHORITY_TACTIC));
+  assert.equal(current.tactics.filter((t) => extractTacticLabel(t) === "권위 암시").length, 1, "같은 라벨 1개");
+  const prompt = resolveSessionScenarioPrompt(PROS, "fv-h3vn");
+  assert.ok(prompt);
+  const assembled = buildSystemPrompt(prompt, { difficultyLevel: "advanced", liveSpeechStyle: true, toolDrivenTiming: true });
+  assert.ok(assembled.includes(self), "조립 프롬프트에 문서와 같은 이름");
+  for (const retired of ["fv-p4hz", "fv-c8wq"]) {
+    assert.equal(findFlowVariant(retired)!.tactics.includes(PROSECUTION_CASE_RECORD_AUTHORITY_TACTIC), false, retired);
+  }
+});
+
+test("[§109 N5] 문서 칸 — 반 칸 라벨 ⊂ 입력 칸 · 발급 정보 라벨 3개 · 결재란 3칸 · 반 칸은 둘씩 짝", () => {
+  const doc = item().recordDocument!;
+  assert.deepEqual(doc.subjectHalfLabels.filter((label) => !(item().fields ?? []).includes(label)), []);
+  assert.deepEqual(doc.issueLabels, ["열람 신청 번호", "발급 일시", "열람 만료"]);
+  assert.deepEqual(doc.approvalRows.map((row) => row.label), ["수사관", "검사", "부장검사"]);
+  assert.equal(doc.sealLabel.includes(CASE_RECORD_NAMES.office), false, "관인 안에 기관명(실제 관인 문안 꼴) 0");
+  const halves = doc.caseRows.map((row) => row.half === true);
+  for (let i = 0; i < halves.length; i += 1) {
+    if (halves[i]) {
+      assert.equal(halves[i + 1], true, `${doc.caseRows[i].label}의 짝`);
+      i += 1;
+    }
+  }
 });

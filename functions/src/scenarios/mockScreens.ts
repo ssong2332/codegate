@@ -104,13 +104,26 @@ export type MockScreenItem = {
   recordDocument?: MockScreenRecordDocument;
 };
 
-/** §106 — 가짜 사건 기록 열람본의 고정 문구(값 칸은 `label` · `value` 쌍 — 참가자 입력 칸은 여기 없다). */
+/** §106 — 가짜 사건 기록 열람본의 고정 문구(값 칸은 `label` · `value` 쌍 — 참가자 입력 칸은 여기 없다). `half` = 다른 반 칸과 한 줄(§109). */
 export type MockScreenRecordDocument = {
+  /** §109 — 문서 머리 기관명(가상 — 통화 페르소나와 같은 값 · `RECORD_FICTIONAL_NAMES.office`). */
+  issuer: string;
   title: string;
-  caseRows: { label: string; value: string }[];
+  /** §109 — 문서 머리 오른쪽 문서번호. */
+  documentNumber: string;
+  caseRows: { label: string; value: string; half?: boolean }[];
   subjectHeading: string;
+  /** §109 — 참가자 입력 칸 중 반 칸으로 그릴 라벨(`fields`의 부분 집합). */
+  subjectHalfLabels: string[];
   subjectRows: { label: string; value: string }[];
+  /** §109 — 결재란(직위 · 칸 안 글자 — 서명 대신 성 1글자 또는 "전결"). */
+  approvalRows: { label: string; value: string }[];
   noticeLines: string[];
+  /** §109 — 발급 정보 라벨 3개(순서 = 신청 번호 · 발급 일시 · 만료). 값은 클라가 제출 시각으로 만든다(`recordIssueInfo`). */
+  issueLabels: string[];
+  footerNotice: string;
+  /** §109 — 관인 자리의 가상 도형 안 글자(실존 관인 문안 아님). */
+  sealLabel: string;
   stampLabel: string;
 };
 
@@ -546,25 +559,39 @@ const PROSECUTION_COOPERATION_CALL: MockScreenItem[] = [
     submitLabel: "사건 기록 열람하기",
     successHeadline: "본인 확인이 완료되었습니다.",
     // ⭐ §106 — 제출 뒤 그리는 가짜 사건 기록 열람본. 피의자 칸의 성명 · 생년월일 · 휴대전화 번호 = 참가자가 방금 넣은 값(클라 로컬 · 서버 0).
-    // ⛔ "검찰청" 같은 실존 기관명 0(가상 "OO수사본부") · 실제 사건번호 체계 0 · 관인 이미지 0(글자 도장 "열람용"만).
+    // ⭐ §109(2026-10-22 사용자 실기 요청 — "OO" 가림 표시가 가짜처럼 보인다) — 가림 표시 대신 **가상 고유명** 1벌(`RECORD_FICTIONAL_NAMES` —
+    // 통화 페르소나 `prosecutionCooperationCall.prompt.ts`가 같은 상수를 쓴다) · 공문서 머리 · 결재란 · 발급 정보 칸.
+    // ⛔ 실존 청 · 지청 · 인물과 겹치지 않음은 `caseRecordDocument.test.ts` §109가 고정한다 · 관인 이미지 0(가상 도형 + 글자 "열람전용").
     recordDocument: {
-      title: "사건 기록 열람본",
+      issuer: "한빛지방검찰청",
+      title: "사건기록 열람본",
+      documentNumber: "제2026-금조-3318호",
       caseRows: [
-        { label: "사건번호", value: "2026형제 3318호" },
+        { label: "사건번호", value: "2026형제3318호", half: true },
+        { label: "진행 상태", value: "수사 중", half: true },
         { label: "죄명", value: "금융실명법 위반 · 명의 도용 계좌 연루" },
-        { label: "담당 부서", value: "OO수사본부 금융범죄 OO팀" },
-        { label: "담당 검사", value: "검사 OOO" },
-        { label: "진행 상태", value: "수사 진행 중 · 비공개" },
+        { label: "담당 부서", value: "금융범죄조사부" },
+        { label: "담당 검사", value: "윤서진", half: true },
+        { label: "담당 수사관", value: "정하람", half: true },
       ],
-      subjectHeading: "피의자 · 관련인 인적 사항",
+      subjectHeading: "피의자 인적 사항",
+      subjectHalfLabels: ["성명", "생년월일"],
       subjectRows: [
         { label: "구분", value: "피의자(명의 도용 피해 여부 조사 중)" },
+      ],
+      approvalRows: [
+        { label: "수사관", value: "정" },
+        { label: "검사", value: "윤" },
+        { label: "부장검사", value: "전결" },
       ],
       noticeLines: [
         "본인 명의 계좌 2건에서 범죄 자금 경유 정황이 확인되어 자산 검수 대상으로 분류되었습니다.",
         "검수 절차는 담당 수사관이 별도로 안내합니다. 안내에 따르지 않으면 계좌가 동결될 수 있습니다.",
         "본 기록은 비공개 수사 자료입니다. 외부에 알리면 수사 방해로 처리될 수 있습니다.",
       ],
+      issueLabels: ["열람 신청 번호", "발급 일시", "열람 만료"],
+      footerNotice: "본 열람본은 화면 열람 전용입니다. 출력 · 복제 · 화면 저장을 금합니다.",
+      sealLabel: "열람 전용",
       stampLabel: "열람용",
     },
     momentTactic: "수사기관 사칭 사건 조회 사이트를 빌미로 한 본인 확인 정보 입력 유도",
