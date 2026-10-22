@@ -29,6 +29,7 @@ import {
 import { SCENARIO_SPEAKER_GENDER, speakerGenderFor } from "./scenarioVoice";
 import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider } from "./types";
 import { resolveSessionAccountNumber } from "../shared/fictionalBank";
+import { resolveFamilyAddressPrompt } from "../scenarios/familyAddress";
 
 /**
  * 무료 티어에서 쓸 수 있는 실시간 음성 모델.
@@ -150,6 +151,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       input.flowVariantId,
       endCallScope,
     );
+    const familyAddressPrompt = resolveFamilyAddressPrompt(input.scenarioId, input.familyAddress);
     const systemPrompt = buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: input.difficultyLevel,
       // ⭐ 리뷰 M2 — 도구 선언과 같은 단일 술어(변형 기준 · 변형 부재 = 종전 `hasInCallSms`).
@@ -184,6 +186,10 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       personaCard: input.personaCard,
       // §90 — [말투 — 실시간 음성 통화]는 이 호출부만 켠다(폴백 sendMessage · 오프닝은 글/폴백 TTS 경로라 받지 않는다).
       liveSpeechStyle: true,
+      // §110.5 — 호칭(호출부 3곳 같은 값 · 부재 = 블록 0).
+      ...(familyAddressPrompt ? { familyAddress: familyAddressPrompt } : {}),
+      // §110.3 — 메신저에서 넘어온 통화의 앞선 대화. Live 토큰은 턴 지시를 따로 받지 않으므로 이 자리(가드레일 앞)를 쓴다.
+      ...(input.priorChatContext ? { turnInstruction: input.priorChatContext } : {}),
     });
 
     const client = new GoogleGenAI({ apiKey: this.apiKey });

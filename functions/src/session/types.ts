@@ -40,6 +40,11 @@ export type CreateSessionRequest = {
    * 검증하고 카드로 만든다. 고급 × 대상 4종 × 통화가 아니면 입력이 있을 때 거부된다.
    */
   personaCardInput?: { name?: string; birthYear?: number; birthMonth?: number; birthDay?: number; region?: string };
+  /**
+   * §110.5(실기 신고 14) — 가족 사칭 시나리오에서 사기범이 참가자를 부를 호칭(`scenarios/familyAddress.ts` 선택지). 부재 = 종전(프롬프트 원문
+   * 호칭). 선택지 밖 · 대상 밖 시나리오에 값이 있으면 `invalid-argument`(`details.reason = "family-address-invalid"`).
+   */
+  familyAddress?: string;
 };
 export type CreateSessionResponse = {
   sessionId: string;
@@ -101,5 +106,16 @@ export type RequestEscalationResponse = { escalation: { toChannel: "voice" } } |
 // 인증·존재확인·소유uid·상태 검증 패턴을 따르되, 방향이 반대다(functions/src/session/index.ts 참고).
 // **스코프(T40 판단, docs/Tasks.md T40 행 참고)**: 정방향(T30/T25/T26)과 달리 구조화 신호·max-turn
 // 폴백에 대응하는 UX/Architecture 설계 문서가 없어 명시 버튼만 지원한다.
-export type RequestReverseEscalationRequest = { sessionId: string };
-export type RequestReverseEscalationResponse = { escalation: { toChannel: "messenger" } };
+export type RequestReverseEscalationRequest = {
+  sessionId: string;
+  /**
+   * §110.4(실기 신고 13) — 참가자가 통화를 끊어 대화방으로 돌아가는 경우 `true`. 전이 뒤 사기범이 통화 내용을 반영한 메시지 1건을 먼저
+   * 보낸다(`roleplay/callReturnLine.ts`). 부재 = 종전(전이만 — "채팅으로" 버튼의 옛 클라).
+   */
+  followUp?: boolean;
+};
+export type RequestReverseEscalationResponse = {
+  escalation: { toChannel: "messenger" };
+  /** §110.4 — 복귀 메시지를 저장했으면 그 turnIndex(클라가 다음 전송의 답장 기준점 하한으로 쓴다). 저장 0 = 부재. */
+  followUpTurnIndex?: number;
+};

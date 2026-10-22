@@ -28,6 +28,7 @@ import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "./channelTransition";
 import { recordVoiceTalkUnanswered } from "./voiceTalkUnanswered";
+import { recordCallReturnLine } from "./callReturn";
 import { readEndSessionReason, resolveRecordedEndReason } from "./endReason";
 import { assertDifficultyAllowed } from "./difficultyAllowance";
 import { assertScenarioNotMerged } from "./mergedScenario";
@@ -48,6 +49,7 @@ import type {
 } from "./types";
 import { pickFictionalBankName } from "../shared/fictionalBank";
 import { resolvePersonaCardRequest } from "./personaCard";
+import { FAMILY_ADDRESS_INVALID_REASON, readFamilyAddress } from "../scenarios/familyAddress";
 import { emitPrepStage, type CreateSessionPrepChunk } from "./prepStages";
 
 ensureFirebaseAdminApp();
@@ -100,6 +102,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       skinSource,
       voiceSelectionSource,
       difficultyLevel,
+      familyAddress: familyAddressRaw,
       personaCardInput,
     } = request.data ?? {};
     if (!scenarioId || !voiceId) {
@@ -137,6 +140,12 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       throw new HttpsError("invalid-argument", "훈련 속 내 정보를 확인해 주세요.", { reason: personaCardResult.reason });
     }
     const personaCard = personaCardResult.personaCard;
+    // §110.5(실기 신고 14) — 호칭 선택(선택 · 부재 = 종전). 카드와 같은 자리 · 같은 원칙(거부는 쓰기 · LLM 0회로).
+    const familyAddressResult = readFamilyAddress(familyAddressRaw, scenarioId);
+    if (!familyAddressResult.ok) {
+      throw new HttpsError("invalid-argument", "부를 호칭을 다시 골라 주세요.", { reason: FAMILY_ADDRESS_INVALID_REASON });
+    }
+    const familyAddress = familyAddressResult.term;
 
     // 교차채널 세션 총 한도(T30, Architecture.md §13.3, PoC 전 가정치) — 에스컬레이션 가능
     // 시나리오는 두 채널을 합쳐도 기존 10턴 안에 다 담기 어려워
@@ -258,7 +267,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       scenarioId,
       resolvedDifficultyLevel,
       variantAssignment.flowVariantId,
-      { fictionalBankName, challengeId: undefined, personaCard: personaCard?.items, voiceSelectionSource },
+      { fictionalBankName, challengeId: undefined, personaCard: personaCard?.items, voiceSelectionSource, familyAddress },
     );
     // §100 ② "첫마디" — 오프닝 대사 생성(LLM)이 끝났다.
     prepMs.openingMs = Date.now() - prepStartedAt - prepMs.scenarioMs;
@@ -305,6 +314,8 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       flowVariantId: variantAssignment.flowVariantId,
       // T194-b(§84.3.2) — 대상 세션에만 필드가 생긴다(대상 밖 = 부재 · 빈 값 0). 오프닝에 넘긴 것과 같은 객체다.
       ...(personaCard ? { personaCard } : {}),
+      // §110.5 — 고른 경우에만(부재 = 종전 문면).
+      ...(familyAddress ? { familyAddress } : {}),
     };
     // merge:true — sessionId를 채택한 경우 pending 문서(createVoiceClone이 만든 voiceProvider 등
     // 부가 필드)를 지우지 않고 scenarioId/status 등을 덧씌운다. 새 문서인 경우는 기존과 동일.
@@ -584,5 +595,14 @@ export const requestReverseEscalation = onCall<
   // reviewer 리뷰 Major #2 수정 — 이 시점의 누적 turnCount를 기준점으로 함께 기록해, sendMessage의
   // max-turn 폴백이 "메신저 재진입 이후 턴 수"만 보게 한다(channelTransition.ts 헤더 주석 참고).
   await transitionChannel(sessionId, "voice", "messenger", "manual_button", session.turnCount);
+  // §110.4(실기 신고 13) — 통화를 끊고 돌아온 경우 사기범이 통화 내용을 반영해 먼저 메시지를 보낸다. 실패는 전환을 막지 않는다(P-4).
+  if (request.data?.followUp === true) {
+    try {
+      const followUpTurnIndex = await recordCallReturnLine(db, sessionId);
+      if (followUpTurnIndex !== undefined) return { escalation: { toChannel: "messenger" }, followUpTurnIndex };
+    } catch (err) {
+      logger.warn("통화 복귀 메시지 생성 실패(전환은 완료)", { sessionId, err: err instanceof Error ? err.message : "unknown" });
+    }
+  }
   return { escalation: { toChannel: "messenger" } };
 });

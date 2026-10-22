@@ -25,6 +25,7 @@ import type { DifficultyLevel } from "../shared/difficulty";
 import type { MessengerChannel, PersonaCardItem } from "../shared/types";
 import type { HangupRelayContext } from "../scammerHangup/decide";
 import type { LiveToolNames } from "./liveTools";
+import type { FamilyAddressTerm } from "../scenarios/familyAddress";
 
 export type RealtimeCallInput = {
   sessionId: string;
@@ -76,6 +77,13 @@ export type RealtimeCallInput = {
    * 카드 세션은 그 경로로 **보내지 않는다**(`provider.ts` `requiresServerPromptProvider` — G567). Mock은 무시한다.
    */
   personaCard?: readonly PersonaCardItem[];
+  /** §110.5(실기 신고 14) — 세션 문서 `familyAddress`(호출부가 검증해 읽은 값). 부재 = 원문 호칭. Gemini 경로만 반영한다. */
+  familyAddress?: FamilyAddressTerm;
+  /**
+   * §110.3(실기 신고 12) — 메신저에서 넘어온 통화의 앞선 대화 블록(`realtime/priorChatContext.ts` — 호출부가 `messages`를 읽어 1회 만든다).
+   * 부재 = 처음부터 통화인 세션(블록 0 · 바이트 동일). Gemini 경로만 반영한다.
+   */
+  priorChatContext?: string;
 };
 
 /**

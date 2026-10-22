@@ -31,6 +31,8 @@ const LINK_LABELS: Record<string, string> = {
   "subsidy-install": "지원금 신청 앱 설치하기",
   // T194-a(§84.4.3 · G53) — parcel 고급의 모의 앱 설치 칩.
   "parcel-install": "배송 확인 앱 설치하기",
+  // §110.2(실기 신고 10) — 자녀 사칭 카톡 고급의 모의 보험 접수 앱 설치 칩.
+  "child-insurance-install": "보험 접수 앱 설치하기",
 };
 const DEFAULT_LINK_LABEL = "확인하기";
 

@@ -144,7 +144,7 @@ test("[은행명] 배선 — 세션 생성 2곳이 저장·오프닝에 전달, 
     // 4인자 형태 + 객체의 세 키가 이 순서 · **명시**로 있어야 한다(완화 아님 — 키 하나라도 빠지면 실패). 은행명 키는 단축형 그대로다.
     assert.match(
       s,
-      /generateOpeningLine\(\n\s*scenarioId,\n\s*[\w.]+,\n\s*[\w.]+,\n\s*\{ fictionalBankName, challengeId: [\w.]+, personaCard: [\w.?]+, voiceSelectionSource(?:: [\w.]+)? \},\n\s*\)/,
+      /generateOpeningLine\(\n\s*scenarioId,\n\s*[\w.]+,\n\s*[\w.]+,\n\s*\{ fictionalBankName, challengeId: [\w.]+, personaCard: [\w.?]+, voiceSelectionSource(?:: [\w.]+)?, familyAddress(?:: [\w.]+)? \},\n\s*\)/,
       file,
     );
     // 세션 문서 객체 리터럴 안(difficultyLevel 바로 다음 줄)에 저장하는지 — 오프닝 호출 인자와 구별한다(리뷰 #2).

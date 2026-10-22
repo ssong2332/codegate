@@ -157,7 +157,7 @@ test("[G568] 호출부 전수 — 프롬프트 조립 3곳이 모두 카드를 �
   assert.match(readSrc("roleplay/openingLine.ts"), /\.\.\.\(personaCard \? \{ personaCard \} : \{\}\),/, "오프닝");
   assert.match(readSrc("realtime/geminiProvider.ts"), /\n\s*personaCard: input\.personaCard,\n/, "Gemini Live 토큰");
   // 오프닝 · Live 토큰의 원천: createSession(방금 만든 서버 값) · createRealtimeCall(세션 문서).
-  assert.match(readSrc("session/index.ts"), /\{ fictionalBankName, challengeId: undefined, personaCard: personaCard\?\.items, voiceSelectionSource \}/);
+  assert.match(readSrc("session/index.ts"), /\{ fictionalBankName, challengeId: undefined, personaCard: personaCard\?\.items, voiceSelectionSource, familyAddress \}/);
   assert.match(readSrc("realtime/index.ts"), /personaCard: session\.personaCard\?\.items,/);
   // 전수 — 운영 소스(테스트 · 주석 제외)에서 buildSystemPrompt를 부르는 파일은 위 3곳 + 정의 파일뿐이다. 새 조립 지점(S7 · U2 leg 발급
   // 등)이 생기면 여기서 걸린다 — 그 호출부에도 카드를 넘기고 목록에 더할 것.
@@ -174,7 +174,9 @@ test("[G568] 호출부 전수 — 프롬프트 조립 3곳이 모두 카드를 �
     }
   };
   walk(SRC);
-  assert.deepEqual(found.sort(), [...assemblyCallers, "roleplay/promptAssembly.ts"].sort());
+  // §110.4 — 통화 복귀 메시지(`callReturnLine.ts`)가 4번째 조립 지점이다. 세션 문서 카드를 그대로 넘긴다.
+  assert.match(readSrc("roleplay/callReturnLine.ts"), /\n\s*personaCard: session\.personaCard\?\.items,\n/, "통화 복귀 메시지");
+  assert.deepEqual(found.sort(), [...assemblyCallers, "roleplay/callReturnLine.ts", "roleplay/promptAssembly.ts"].sort());
 });
 
 test("[리뷰 M1] 대출 행은 프롬프트에 일반명으로 실린다(가상 이름 0 · '○○' 0) — 블록 생성기를 우회해 화면 값을 그대로 실은 사본은 걸린다", (t) => {

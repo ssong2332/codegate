@@ -172,7 +172,7 @@ export default function MessengerSessionPage() {
   const [voiceTalkCall, setVoiceTalkCall] = useState<"ringing" | "unanswered" | null>(null);
   // 응답 없음 메시지의 turnIndex — 다음 전송의 답장 기준점 하한(구독이 늦어도 이 메시지를 답장으로 오인하지 않는다).
   const voiceTalkFloorRef = useRef(-1);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   // T187(UX-022 v1.29 노트 (5)) — "메시지 보기" 뒤 포커스는 대화 목록으로(입력창 자동 포커스 ⛔).
   const messageListRef = useRef<HTMLUListElement | null>(null);
   const focusListAfterNoticeRef = useRef(false);
@@ -970,10 +970,20 @@ export default function MessengerSessionPage() {
               </label>
               {/* 실기 신고(2026-10-21) — `min-w-0`: 입력칸의 기본 폭(size 20 × 글꼴 평균 글자폭)이 flex 최소폭이 되면 기기 글꼴에
                   따라 줄이 화면보다 넓어져 페이지 전체가 축소되고 오른쪽에 바깥 바탕 띠가 생긴다(웨일 캡처 · 로컬 size 32 모의 445px). */}
-              <input
+              {/* §110.1(실기 신고 9 · UX D-150 (1)) — 입력칸이 `<input type="text">`면 안드로이드 Chromium(웨일 포함)이 키보드 위에 자동
+                  채우기 액세서리 줄(열쇠 = 저장 비밀번호 · 핀 = 저장 주소)을 띄운다. 이 줄은 autocomplete 값 · name · form 속성으로 끌 수 없고
+                  (칸 종류 판정이 그 속성을 보지 않는다), **textarea에서는 기본 설정에서 뜨지 않는다**(Chromium `manual_filling_controller_impl.cc`
+                  "don't show on textareas" — 조사 노트 keyboard-accessory-bar-research-2026-10-22.md). 한 줄 textarea + Enter = 전송(한글 조합 중 제외). */}
+              <textarea
                 id="messenger-chat-input"
                 ref={inputRef}
-                type="text"
+                rows={1}
+                onKeyDown={(event) => {
+                  // 한글 조합 중 Enter(keyCode 229)는 조합 확정이다 — 전송하지 않는다. Shift+Enter는 줄바꿈.
+                  if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || event.keyCode === 229) return;
+                  event.preventDefault();
+                  void handleSend();
+                }}
                 // UX D-144(§103 · 실기 신고 2026-10-22 — 삼성 키보드가 대화를 읽고 "그래 3만원 정도" 같은 답장 알약을 띄웠다) —
                 // 키보드 추천 · 자동 완성 · 자동 수정을 끈다. Chromium 안드로이드는 autocomplete="off"를 TYPE_TEXT_FLAG_NO_SUGGESTIONS로
                 // 넘긴다(ImeUtils.computeEditorInfo). 키보드가 이 신호를 지키는지는 키보드 몫이다(§103.5).
@@ -983,8 +993,8 @@ export default function MessengerSessionPage() {
                 placeholder={isSms ? "메시지" : "메시지 입력"}
                 className={
                   isSms
-                    ? "min-h-[48px] min-w-0 flex-1 px-4 py-2.5 text-[17px] placeholder:text-[var(--sms-placeholder)]"
-                    : "min-h-[48px] min-w-0 flex-1 rounded-full px-4 py-2.5 text-[17px] placeholder:text-[var(--sms-placeholder)]"
+                    ? "h-[48px] min-w-0 flex-1 resize-none overflow-y-auto px-4 py-[11px] text-[17px] leading-[1.5] placeholder:text-[var(--sms-placeholder)]"
+                    : "h-[48px] min-w-0 flex-1 rounded-full resize-none overflow-y-auto px-4 py-[11px] text-[17px] leading-[1.5] placeholder:text-[var(--sms-placeholder)]"
                 }
                 style={
                   !isSms

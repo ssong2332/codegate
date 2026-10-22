@@ -152,7 +152,8 @@ test("[§99] useRealtimeCall — reconnecting은 연결 타임아웃 · 닫힘 �
 test("[§99] 통화 화면 — 세션 key = connectionSeq · 재연결 콜백 · Wake Lock · 전사 백업 · 안내", () => {
   assert.match(play, /key=\{realtime\.connectionSeq\}/);
   assert.match(play, /onConnectionLost=\{handleConnectionLost\}/);
-  assert.match(play, /resumeTurn=\{realtime\.connectionSeq > 0 \? resumeTurn : null\}/);
+  // §110.3 — 첫 연결의 신호 선택은 `openingTurnFor`(재연결 = 종전 `resumeTurn` 그대로 · 메신저발 첫 연결만 이어받기 신호).
+  assert.match(play, /resumeTurn=\{openingTurnFor\(\{\s*connectionSeq: realtime\.connectionSeq,\s*resumeTurn,/);
   assert.match(play, /createScreenWakeLock\(/);
   assert.match(play, /lock\.stop\(\)/);
   assert.match(play, /serializeTranscriptBackup\(sessionId, transcriptRef\.current\)/);

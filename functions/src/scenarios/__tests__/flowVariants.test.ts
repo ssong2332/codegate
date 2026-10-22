@@ -667,6 +667,11 @@ test("[T194-a §84.4.2] parcel 고급 변형 — authored · 3단계 이상 · �
  * 화자 성별 누수(리뷰 C1)를 못 잡았다). 측정 옵션 = sendMessage 텍스트 경로와 같은 옵션(난이도 · 문자 술어 · L3 · 신원 확인 · 화자 성별 =
  * base는 표 값 `speakerGenderFor` / 현재는 세션 해석 `resolveSessionSpeakerGender`). 측정 스크립트: base lib에 같은 옵션으로 조립.
  */
+const CHILD_INSTALL_TACTIC_BEFORE_110 =
+  "보험 처리 앱 설치 요구 — '액정 보험 처리하려면 ○○보험접수 앱을 깔아야 한대' 처럼 이름만 대고 설치를 부탁한다. 설치 방법 · 경로 · 권한 설정은 설명하지 않는다.";
+const CHILD_INSTALL_TACTIC_110 =
+  "보험 처리 앱 설치 요구 — '액정 보험 처리하려면 이 앱 깔아야 한대, 여기서 받으면 돼' 처럼 자연스러운 문장과 함께 `[[LINK:child-insurance-install]]` 마커만 사용해 설치를 부탁한다. 실존 앱 이름 · 앱스토어 주소 · 실제 URL은 어떤 경우에도 출력하지 않고, 설치 방법 · 권한 설정은 설명하지 않는다.";
+
 const BASE_FLAGGED_ASSEMBLY: readonly { scenarioId: string; level: DifficultyLevel; variantId: string; sha256: string; length: number }[] = [
   { scenarioId: "messenger-child-impersonation-kakao", level: "beginner", variantId: "fv-34v5", sha256: "5d2ab0397bf0b43db0ba6dfdea2bea47ce420f2f038ef6f78881fce612fa2ebf", length: 6625 },
   { scenarioId: "messenger-child-impersonation-kakao", level: "intermediate", variantId: "fv-tpr3", sha256: "43addc55a5e13b7074231e776ae80ea12bc07fa2e846f2e381db68b76ea33492", length: 5860 },
@@ -693,8 +698,15 @@ test("[T194-a §84.13.3 ② · 리뷰 M2] 플래그만 더한 child-kakao · sub
     // 2026-10-21 — 통화 단계 규칙 블록(`CHILD_CALL_PHASE_RULE` · 앞 빈 줄 포함)도 의도된 추가다. child-kakao 3벌에만 정확히 1번 있고, 그것만 뺀다.
     const callPhaseBlock = `\n\n${CHILD_CALL_PHASE_RULE}`;
     assert.equal(currentPrompt.personaPrompt.split(callPhaseBlock).length - 1, isChild ? 1 : 0, `${row.variantId}: 통화 단계 규칙 블록 개수`);
+    // §110.2(실기 신고 10) — fv-tdgg 설치 수법 1줄을 링크 마커형으로 의도적으로 바꿨다. 그 줄만 옛 문면으로 되돌려 대조한다.
     const prompt = isChild
-      ? { ...currentPrompt, personaPrompt: currentPrompt.personaPrompt.replace(ruleLine, "").replace(callPhaseBlock, "") }
+      ? {
+          ...currentPrompt,
+          personaPrompt: currentPrompt.personaPrompt.replace(ruleLine, "").replace(callPhaseBlock, ""),
+          weakenedTactics: currentPrompt.weakenedTactics.map((tactic) =>
+            tactic === CHILD_INSTALL_TACTIC_110 ? CHILD_INSTALL_TACTIC_BEFORE_110 : tactic,
+          ),
+        }
       : currentPrompt;
     const assembled = buildSystemPrompt(prompt, {
       difficultyLevel: row.level,

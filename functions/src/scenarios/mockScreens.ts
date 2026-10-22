@@ -248,6 +248,7 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `parcel-redelivery` | `roleplay/linkMarker.ts:22`(칩 라벨) · `messengerParcelSmishingSms.prompt.ts:37` | "재배송 신청 확인하기" | 주소 확인 → 재배송 신청 | "주소가 확인되지 않아 배송이 보류되었습니다" | "재배송 신청하기" |
 // | `subsidy-install` | `roleplay/linkMarker.ts:24`(칩 라벨) · `messengerSubsidySmishingSms.prompt.ts:64` | "지원금 신청 앱 설치하기" | 확인 앱 설치 | "업무처리 확인 앱을 설치해야 진행됩니다" | "권한 허용하고 계속하기" |
 // | `parcel-install` | `roleplay/linkMarker.ts:25`(칩 라벨) · `messengerParcelSmishingSms.prompt.ts`(고급 leg 페르소나 · 설치 수법) | "배송 확인 앱 설치하기" | 배송 확인 앱 설치 | "배송 확인 앱을 설치해야 재배송이 접수됩니다" | "권한 허용하고 계속하기" |
+// | `child-insurance-install` | `roleplay/linkMarker.ts:35`(칩 라벨) · `flowVariants.ts` fv-tdgg(보험 처리 앱 설치 수법 — §110.2) | "보험 접수 앱 설치하기" | 보험 접수 앱 설치 | "휴대폰 보험 접수 앱을 설치해야 보험 처리가 됩니다" | "권한 허용하고 계속하기" |
 // | `loan-refinance-apply` | `scenarios/inCallSms.ts:57-58`(문자 본문·칩) | "아래에서 본인확인 후 신청을 완료해 주세요." | 링크에서 본인확인 → 신청 완료 | "전환 신청서 본인확인이 필요합니다" | "본인확인 완료하기" |
 // | `tax-refund-claim` | `scenarios/inCallSms.ts:106-107`(문자 본문·칩) | "아래에서 계좌를 등록하시면 당일 지급됩니다." | 수령 계좌 등록 → 당일 지급 | "환급금 받으실 계좌를 등록해 주세요" | "계좌 등록하기" |
 // | `courier-customs-check` | `scenarios/inCallSms.ts:120-121`(문자 본문·칩) | "수취인 정보 불일치로 통관이 보류되었습니다." | 수취인 정보 확인 → 통관 재개 | "수취인 정보가 일치하지 않아 통관이 보류되었습니다" | "수취인 정보 확인하기" |
@@ -716,9 +717,35 @@ const BANK_SECURITY_VERIFY_SCAM: MockScreenItem[] = [
  * `IN_CALL_SMS`의 `bank-protect-account`가 병기한 `fakeLandingId`를 가리킨다). 이 시나리오도
  * 도달 가능 랜딩은 **1건뿐**이다(G159).
  */
+// §110.2(실기 신고 10 · 2026-10-22) — 자녀 사칭 카톡 고급 변형(fv-tdgg)의 "보험 처리 앱 설치" 단계. 예전에는 사기범이 앱 이름만 말해
+// 참가자가 설치를 "말로만" 할 수 있었다(신고 원문: *"실제로는 존재하지 않는 앱이고 … 속았다는 판정을 그냥 말뿐으로 가져가야 하는데"*).
+// 이제 사기범이 `[[LINK:child-insurance-install]]` 링크를 보내고, 누르면 기존 모의 설치 화면(app-install — 신규 kind 0)이 열린다.
+// 권한 허용 = 속은 순간(D-51 ④ 그대로). 앱 이름은 가상 일반명(AC-072).
+const MESSENGER_CHILD_IMPERSONATION_KAKAO: MockScreenItem[] = [
+  {
+    landingId: "child-insurance-install",
+    kind: "app-install",
+    entrySurface: "messenger-link",
+    headline: "휴대폰 보험 접수 앱을 설치해야 보험 처리가 됩니다",
+    bodyLines: [
+      "파손 보험 접수에는 휴대폰 명의자 본인 확인이 필요합니다.",
+      "아래에서 보험 접수 앱 설치를 진행해 주세요.",
+      "설치 후 접근 권한을 허용하면 접수가 자동으로 이어집니다.",
+    ],
+    issuerLabel: "ⓒ 휴대폰 파손보험 접수센터",
+    mockHost: "phone-care-claim.invalid",
+    consentLabel: "권한 허용하고 계속하기",
+    momentTactic: "자녀 사칭 — 보험 접수 앱 설치·권한 허용 유도",
+    correctAction:
+      "가족이 다른 번호로 앱 설치를 부탁하면 그 자리에서 설치하거나 권한을 허용하지 말고 화면을 닫으세요. ① 원래 알고 있는 자녀 번호로 직접 전화해 확인하기 ② 폰이 고장 났다고 해도 다른 가족에게 먼저 확인하기 ③ 앱은 공식 앱 마켓에서도 모르는 사람의 부탁으로 설치하지 않기 ④ 이미 허용했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+];
+
 export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   "messenger-subsidy-smishing-sms": MESSENGER_SUBSIDY_SMISHING_SMS,
   "messenger-parcel-smishing-sms": MESSENGER_PARCEL_SMISHING_SMS,
+  // §110.2 — 자녀 사칭 카톡(고급 변형만 마커를 낸다 — 도달은 `sessionReachableLandingIds`가 변형 프롬프트로 거른다).
+  "messenger-child-impersonation-kakao": MESSENGER_CHILD_IMPERSONATION_KAKAO,
   "institutional-impersonation": INSTITUTIONAL_IMPERSONATION,
   "card-company-impersonation": CARD_COMPANY_IMPERSONATION,
   "loan-refinance-scam": LOAN_REFINANCE_SCAM,

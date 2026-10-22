@@ -22,6 +22,9 @@ import { resolveFictionalBankName } from "../shared/fictionalBank";
 import { resolveHangupRelay } from "../scammerHangup/relayContext";
 import { resolveSessionSpeakerGender } from "./scenarioVoice";
 import { REALTIME_SETUP_LOG_MESSAGE, startSetupTiming, takeColdStartFlag } from "./setupTiming";
+import { buildPriorChatContext, priorChatActions, type PriorChatMessage } from "./priorChatContext";
+import { isEscalatedVoiceCall } from "../roleplay/escalatedCall";
+import { sessionFamilyAddress } from "../scenarios/familyAddress";
 
 /**
  * 에스컬레이션된 세션(§13.6 통합 버그 수정)의 "유효 voiceMode" 유추 — session.voiceSelectionSource가
@@ -141,6 +144,25 @@ export const createRealtimeCall = onCall<
     effectiveVoiceId = challenge.voiceId ?? "";
   }
 
+  // §110.3(실기 신고 12) — 메신저→통화 전이 세션이면 지금까지의 대화(메시지 · 앞선 통화 전사)와 화면에서 한 일을 읽어 Live 프롬프트에 싣는다.
+  // 읽기 실패는 통화를 막지 않는다(블록 없이 진행 — P-4).
+  const familyAddress = sessionFamilyAddress(session);
+  let priorChatContext: string | undefined;
+  if (isEscalatedVoiceCall(session.channel, session.channelHistory)) {
+    try {
+      const sessionRef = db.collection("sessions").doc(sessionId);
+      const [messagesSnap, mockSnap] = await Promise.all([
+        sessionRef.collection("messages").orderBy("turnIndex", "asc").get(),
+        sessionRef.collection("mockScreens").get(),
+      ]);
+      priorChatContext = buildPriorChatContext(
+        messagesSnap.docs.map((d) => d.data() as PriorChatMessage),
+        priorChatActions(mockSnap.docs.map((d) => d.data())),
+      );
+    } catch {
+      priorChatContext = undefined;
+    }
+  }
   timing.mark("firestore");
   const effectiveVoiceMode = resolveEffectiveVoiceMode(session.voiceSelectionSource);
   // T194-b(§84.3.5 · G567) — 카드 세션은 서버 프롬프트를 실을 수 있는 경로(Gemini · 폴백)로만 보낸다.
@@ -197,6 +219,10 @@ export const createRealtimeCall = onCall<
       speakerGender: resolveSessionSpeakerGender(session),
       // T194-b(§84.3.4 · G568) — 세션 문서 카드 행 그대로(클라 값 0). 부재 = 블록 0.
       personaCard: session.personaCard?.items,
+      // §110.5 — 참가자가 고른 호칭(세션 문서 값 · 부재 = 원문 호칭).
+      ...(familyAddress ? { familyAddress } : {}),
+      // §110.3 — 메신저에서 넘어온 통화면 앞선 대화(부재 = 처음부터 통화 · 블록 0).
+      ...(priorChatContext ? { priorChatContext } : {}),
     });
     timing.mark("credentials");
     logger.info(REALTIME_SETUP_LOG_MESSAGE, timing.finish({ provider: credentials.provider, isMock: credentials.isMock }));

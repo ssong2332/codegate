@@ -7,6 +7,7 @@ import type { LlmMessage } from "../llm";
 import type { SmsPurpose } from "../scenarios/flowVariants";
 import { personaCardPromptValue } from "../scenarios/personaCardCatalog";
 import { resolveChildGenderRule } from "../scenarios/messengerChildImpersonationKakao.prompt";
+import { applyFamilyAddressText, buildFamilyAddressBlock, type FamilyAddressPrompt } from "../scenarios/familyAddress";
 import { applyFictionalBank, EXAMPLE_ACCOUNT_NUMBER } from "../shared/fictionalBank";
 import { applyPersonaCardIdentityConfirm } from "./personaCardIdentity";
 
@@ -988,6 +989,12 @@ export type BuildSystemPromptOptions = {
    * 않는다(글/폴백 TTS 경로 · 조립 결과 바이트 동일). 부재 · `false` = 블록 0(회귀 0).
    */
   liveSpeechStyle?: boolean;
+  /**
+   * ⭐ §110.5(실기 신고 14 · 2026-10-22) — 참가자가 고른 호칭(`scenarios/familyAddress.ts` `resolveFamilyAddressPrompt`로 호출부가 해석).
+   * 값이 있으면 [호칭] 블록이 [화자] 뒤 · [대화 방식] 앞에 들어가고, `swapWith`가 있으면 페르소나 · 수법 문면의 두 호칭을 맞바꾼다.
+   * 부재 = 블록 0 · 문면 그대로(조립 결과 바이트 동일). ⚠️ 호출부 3곳(sendMessage · 오프닝 · Gemini Live 토큰)에 같은 값으로 넘긴다.
+   */
+  familyAddress?: FamilyAddressPrompt;
 };
 
 /**
@@ -1012,7 +1019,10 @@ export function buildSystemPrompt(
   prompt: ScenarioPromptDoc,
   opts: BuildSystemPromptOptions = {},
 ): string {
-  const tactics = prompt.weakenedTactics.map((tactic, i) => `${i + 1}. ${tactic}`).join("\n");
+  // §110.5 — 호칭 맞바꾸기(부재 · 기본 호칭 = 입력 그대로).
+  const tactics = prompt.weakenedTactics
+    .map((tactic, i) => `${i + 1}. ${applyFamilyAddressText(tactic, opts.familyAddress)}`)
+    .join("\n");
   // §50.4.4 — 부재(기본)는 institution 취급(true)이다(다른 옵션과 반대 방향 기본값, 옵션 도입 전
   // 문자열이 전부 "본인확인이 캐릭터에 맞다"는 전제였기 때문 — BuildSystemPromptOptions 주석 참고).
   const identityCheckAllowed = opts.identityCheckAllowed !== false;
@@ -1029,7 +1039,10 @@ export function buildSystemPrompt(
   const personaCardBlock = opts.personaCard ? buildPersonaCardBlock(opts.personaCard, identityCheckAllowed) : null;
   const assembled = [
     // §86.1(리뷰 M1) — 화자 성별이 정해진 세션은 "성별이 정해져 있지 않다" 줄(child-kakao)을 성별 확정 문면으로 바꾼다. 성별 없음 = 원문 그대로.
-    opts.speakerGender ? resolveChildGenderRule(prompt.personaPrompt, opts.speakerGender) : prompt.personaPrompt,
+    applyFamilyAddressText(
+      opts.speakerGender ? resolveChildGenderRule(prompt.personaPrompt, opts.speakerGender) : prompt.personaPrompt,
+      opts.familyAddress,
+    ),
     "",
     "[사용 가능한 수법(weakenedTactics) — 이 목록 밖의 수법, 특히 실제 운영 가능한 사기 수법을 스스로 만들지 않는다]",
     tactics,
@@ -1037,6 +1050,8 @@ export function buildSystemPrompt(
     // §50.3.3 — 화자 성별(층 2). notApplicable/미전달이면 블록 자체가 빠져 문자열이 도입 전과
     // 완전히 동일하다(회귀 0). CONVERSATION_STYLE 바로 앞에 넣는다(확정 좌표).
     ...(opts.speakerGender ? [buildSpeakerGenderBlock(opts.speakerGender), ""] : []),
+    // §110.5 — [호칭](조건형). 부재 = 블록 0.
+    ...(opts.familyAddress ? [buildFamilyAddressBlock(opts.familyAddress.term), ""] : []),
     CONVERSATION_STYLE,
     "",
     // §90 — Live 전용 [말투](조건형). 부재 = 블록 0 = 종전 바이트 동일.

@@ -23,6 +23,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useCurrentUser } from "@/lib/auth";
 import { createSession } from "@/lib/api";
+import { familyAddressRequestField } from "@/lib/familyAddress";
 import type { VoiceSelectionSource } from "@/lib/api";
 import {
   clearPendingSession,
@@ -132,6 +133,8 @@ export default function MessengerVoiceSelectPage() {
           // 왕복(record→clone/wait) 동안에도 sessionStorage 힌트로 살아남아 여기서 소비된다.
           // 부재면 서버가 중급으로 확정한다(조용한 임의 난이도 진행 금지 — 서버 응답으로 확인 가능).
           ...(difficultyLevel ? { difficultyLevel } : {}),
+          // §110.5 — 난이도 화면에서 고른 호칭(이 탭 힌트 · 부재 = 종전 문면).
+          ...familyAddressRequestField(scenarioId),
         });
         void result;
         if (!cancelled) router.push("/session/messenger");
@@ -165,6 +168,8 @@ export default function MessengerVoiceSelectPage() {
         surface: scenario.surface,
         voiceSelectionSource,
         ...(difficultyLevel ? { difficultyLevel } : {}),
+        // §110.5 — 난이도 화면에서 고른 호칭(이 탭 힌트 · 부재 = 종전 문면).
+        ...familyAddressRequestField(scenarioId),
       });
       void result;
       router.push("/session/messenger");

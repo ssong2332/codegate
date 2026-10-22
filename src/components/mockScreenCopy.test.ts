@@ -714,7 +714,7 @@ function componentHosts(code: string): string[] {
 test("[T190/G453 클라] 컴포넌트의 가짜 호스트 전부(카탈로그 8 + 범용 폴백 1)가 .invalid 규칙을 지킨다", (t) => {
   const hosts = componentHosts(componentCode);
   t.diagnostic(`[G453 클라] 호스트 ${hosts.length}개: ${hosts.join(" · ")}`);
-  assert.equal(hosts.length, 17, "카탈로그 credential 11 + 설치 5(T194-a parcel-install · T194-c-1 Q2 3종 · §92.3 credential 2 · §98 보관 지갑 1 · §101 자산 검수 사이트 1) + 범용 폴백 1");
+  assert.equal(hosts.length, 18, "카탈로그 credential 11 + 설치 6(T194-a parcel-install · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱 1 · §92.3 credential 2 · §98 보관 지갑 1 · §101 자산 검수 사이트 1) + 범용 폴백 1");
   assert.deepEqual(hosts.flatMap(clientHostViolations), []);
   // 범용 폴백 호스트는 카탈로그 호스트와 겹치지 않는다(겹치면 미스가 다른 사이트처럼 보인다).
   assert.equal(new Set(hosts).size, hosts.length);
@@ -781,8 +781,8 @@ test("[T194-a §84.13.3 ③ ⓐ] 설치 문구 표의 키 집합 = 서버 카탈
     .map((item) => item.landingId)
     .sort();
   assert.deepEqual(keys, installIds, "표에만 있거나 카탈로그에만 있는 설치 항목이 있다");
-  // T194-c-1(§84.15.4) — Q2 통화 중 설치 화면 3종이 더해졌다.
-  assert.deepEqual(installIds, ["card-delivery-app-install", "card-guard-app-install", "loan-check-app-install", "parcel-install", "subsidy-install"]);
+  // T194-c-1(§84.15.4) — Q2 통화 중 설치 화면 3종이 더해졌다. §110.2 — 자녀 사칭 카톡 고급의 보험 접수 앱 1종.
+  assert.deepEqual(installIds, ["card-delivery-app-install", "card-guard-app-install", "child-insurance-install", "loan-check-app-install", "parcel-install", "subsidy-install"]);
 });
 
 test("[T194-a §84.13.3 ③ ⓑ] 표에 없는 id의 app-install은 설치 화면을 그리지 않는다 — 기본 문구 폴백 0(소스 구조) · 역방향", (t) => {

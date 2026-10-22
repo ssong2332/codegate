@@ -284,7 +284,7 @@ test("[§15.9.7 G55] **app-install 항목을 가진** 시나리오는 IN_CALL_SM
   // 허용목록 밖 · app-install 보유 시나리오가 실제로 남아 있다(공회전 방지 — 지원금 · 택배).
   assert.deepEqual(
     appInstallScenarioIds.filter((id) => !IN_CALL_INSTALL_SCENARIOS.includes(id)),
-    ["messenger-subsidy-smishing-sms", "messenger-parcel-smishing-sms"],
+    ["messenger-subsidy-smishing-sms", "messenger-parcel-smishing-sms", "messenger-child-impersonation-kakao"],
   );
 });
 
@@ -650,9 +650,11 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
   // G55·channel — app-install 판정 키가 실제 카탈로그에서 비어 있지 않다(공회전 방지).
   // T194-a(§84.4.3) — parcel(고급 세션 전용 `parcel-install`)이 더해졌다.
   // T194-c-1(§84.5.2 · G583) — Q2 3종(통화 중 문자 표면 설치 — 허용목록)이 더해졌다(카탈로그 순서).
+  // §110.2 — 자녀 사칭 카톡 고급의 보험 접수 앱(메신저 링크)이 더해졌다(카탈로그 순서).
   assert.deepEqual(appInstallScenarioIds, [
     "messenger-subsidy-smishing-sms",
     "messenger-parcel-smishing-sms",
+    "messenger-child-impersonation-kakao",
     "card-company-impersonation",
     "loan-refinance-scam",
     "card-delivery-call",
@@ -721,6 +723,8 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
     "messenger-link",
     // T194-a — parcel-install(메신저 링크 표면).
     "messenger-link",
+    // §110.2 — child-insurance-install(메신저 링크 표면).
+    "messenger-link",
   ]);
 });
 
@@ -742,7 +746,8 @@ test("landingId는 전역 유일하고, 카탈로그의 모든 scenarioId가 실
   const messengerInstallScenarioIds = appInstallScenarioIds.filter((scenarioId) =>
     listAppInstallMockScreens(scenarioId).some((item) => item.entrySurface === "messenger-link"),
   );
-  assert.deepEqual(messengerInstallScenarioIds, ["messenger-subsidy-smishing-sms", "messenger-parcel-smishing-sms"]);
+  // §110.2 — 자녀 사칭 카톡 고급의 보험 접수 앱(메신저 링크)이 더해졌다.
+  assert.deepEqual(messengerInstallScenarioIds, ["messenger-subsidy-smishing-sms", "messenger-parcel-smishing-sms", "messenger-child-impersonation-kakao"]);
   for (const scenarioId of messengerInstallScenarioIds) {
     assert.equal(
       PUBLIC_SCENARIOS[scenarioId].channel,
@@ -780,12 +785,13 @@ test("[AC-073] app-install 카탈로그를 가진 시나리오는 escalation 배
   assert.deepEqual(
     cells.sort(),
     [
+      "messenger-child-impersonation-kakao/advanced",
       "messenger-parcel-smishing-sms/advanced",
       "messenger-subsidy-smishing-sms/advanced",
       "messenger-subsidy-smishing-sms/beginner",
       "messenger-subsidy-smishing-sms/intermediate",
     ],
-    "설치 단계에 도달하는 칸 = 지원금 세 난이도 + 택배 고급(AC-106 (f) — 택배 초급 · 중급 0)",
+    "설치 단계에 도달하는 칸 = 지원금 세 난이도 + 택배 고급(AC-106 (f) — 택배 초급 · 중급 0) + 자녀 사칭 고급(§110.2)",
   );
 });
 
@@ -966,7 +972,7 @@ test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **�
     false,
     "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
   );
-  assert.equal(reachableLandingKeysAllUnits().length, 16, "도달 가능 랜딩은 16종이다(§101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(reachableLandingKeysAllUnits().length, 17, "도달 가능 랜딩은 17종이다(§110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
 });
 
 test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
@@ -1297,7 +1303,7 @@ function findFieldConvergence(
 
 test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
   const items = Object.values(MOCK_SCREENS).flat();
-  assert.equal(items.length, 16, "현행 비교 대상은 도달 가능 랜딩 16종이다(§101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(items.length, 17, "현행 비교 대상은 도달 가능 랜딩 17종이다(§110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
   const stats = fieldDivergenceStats(items);
   for (const { field, compared, excluded, converged } of stats) {
     t.diagnostic(
@@ -1407,11 +1413,11 @@ test("[AC-079 (b)] 옵셔널 필드가 **양쪽 다 부재인 쌍**은 비교에
   t.diagnostic(
     `현행 카탈로그 제외쌍: ${realStats.map((s) => `${s.field}=${s.excluded}`).join(" · ")}`,
   );
-  // T194-c-1 — Q2 설치 화면 3종이 더해져 app-install이 **5종**이 됐다 ⇒ 제외쌍 = C(5,2) = 10(fields · successHeadline 각각).
+  // T194-c-1 — Q2 설치 화면 3종이 더해져 app-install이 **5종** · §110.2 자녀 보험 접수 앱으로 **6종** ⇒ 제외쌍 = C(6,2) = 15.
   assert.deepEqual(
     realStats.map((s) => s.excluded),
-    [0, 10, 10, 0],
-    "app-install 5종(subsidy · parcel · Q2 3종) — fields · successHeadline에서 제외 규칙이 실제로 일한다",
+    [0, 15, 15, 0],
+    "app-install 6종(subsidy · parcel · Q2 3종 · 자녀 보험 접수 앱) — fields · successHeadline에서 제외 규칙이 실제로 일한다",
   );
   const oneSideAbsent = fieldDivergenceStats([
     twoInstalls[0],
@@ -1461,6 +1467,14 @@ const BAIT_TO_LANDING: {
     baitSource: "roleplay/linkMarker.ts:24 (칩 라벨) · messengerSubsidySmishingSms.prompt.ts:64",
     baitExcerpt: "지원금 신청 앱 설치하기",
     headlineAnchors: ["앱", "설치"],
+    ctaAnchors: [], // app-install — 위 주석의 예외(권한 허용 버튼)
+  },
+  {
+    // §110.2(실기 신고 10) — 자녀 사칭 카톡 고급의 보험 접수 앱 설치 화면. 미끼 = 칩 라벨 + fv-tdgg 설치 수법.
+    landingId: "child-insurance-install",
+    baitSource: "roleplay/linkMarker.ts:35 (칩 라벨) · flowVariants.ts fv-tdgg (보험 처리 앱 설치 요구)",
+    baitExcerpt: "보험 접수 앱 설치하기",
+    headlineAnchors: ["보험", "앱", "설치"],
     ctaAnchors: [], // app-install — 위 주석의 예외(권한 허용 버튼)
   },
   {

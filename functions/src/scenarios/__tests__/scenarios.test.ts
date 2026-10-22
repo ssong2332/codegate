@@ -29,6 +29,9 @@ import { scanText } from "./harmlessnessPatterns";
 // personaAuthority/scenarioVoice를 "단일 원천"으로 못박았다).
 import { PERSONA_AUTHORITY, asksIdentityCheck } from "../../roleplay/personaAuthority";
 import { speakerGenderFor } from "../../realtime/scenarioVoice";
+import { FAMILY_ADDRESS_SCENARIOS, resolveFamilyAddressPrompt } from "../familyAddress";
+import { CALL_RETURN_INSTRUCTION } from "../../roleplay/callReturnLine";
+import { buildPriorChatContext } from "../../realtime/priorChatContext";
 import { applyFictionalBank, FICTIONAL_BANK_NAMES, resolveSessionAccountNumber } from "../../shared/fictionalBank";
 
 // AC-005: 실제 운영 가능한 사기 정보(실계좌번호 패턴·실제 송금 절차 지시·실제 URL)가 절대
@@ -1303,6 +1306,16 @@ function turnInstructionSources(): Array<{ scenarioId?: string; label: string; v
     { label: "확인결과:link", value: buildConfirmResultInstruction("link") },
     { label: "확인결과Live:transfer", value: buildLiveConfirmResultInstruction("transfer") },
     { label: "확인결과Live:link", value: buildLiveConfirmResultInstruction("link") },
+    // §110.4 — 통화를 끊고 돌아온 대화방의 사기범 복귀 메시지 지시(`roleplay/callReturnLine.ts`).
+    { label: "통화복귀", value: CALL_RETURN_INSTRUCTION },
+    // §110.3 — 메신저에서 넘어온 Live 통화의 앞선 대화 블록(머리 지시 — 대화 줄은 참가자 데이터라 표본 2줄만).
+    {
+      label: "앞선대화",
+      value: buildPriorChatContext([
+        { role: "scammer", textMasked: "나야 폰 고장 났어", channel: "messenger" },
+        { role: "user", textMasked: "무슨 일이야", channel: "messenger" },
+      ]) ?? "",
+    },
   ];
   for (const [scenarioId, item] of Object.entries(VERIFY_INTERCEPT)) {
     out.push({ scenarioId, label: `확인안내:${item.offerId}`, value: item.announceInstruction });
@@ -1466,6 +1479,20 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
         turnInstruction: value,
       }),
     });
+  }
+  // §110.5 — `familyAddress`(참가자가 고른 호칭)는 대상 3종 × 선택지마다 한 번씩 더한다(곱하지 않는다 — [호칭] 블록 · 맞바꾼 문면 검사).
+  for (const [scenarioId, row] of Object.entries(FAMILY_ADDRESS_SCENARIOS)) {
+    for (const term of row.options) {
+      const familyAddress = resolveFamilyAddressPrompt(scenarioId, term);
+      out.push({
+        label: `${scenarioId}[호칭:${term}]`,
+        text: buildSystemPrompt(SCENARIO_PROMPTS[scenarioId], {
+          difficultyLevel: "advanced",
+          identityCheckAllowed: asksIdentityCheck(scenarioId),
+          ...(familyAddress ? { familyAddress } : {}),
+        }),
+      });
+    }
   }
   return out;
 }

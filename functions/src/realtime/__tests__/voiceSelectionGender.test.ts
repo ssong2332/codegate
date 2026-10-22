@@ -88,7 +88,7 @@ test("[배선] 세션 원천 하나 — createRealtimeCall · sendMessage는 세
   assert.match(src("realtime/index.ts"), /speakerGender: resolveSessionSpeakerGender\(session\),/);
   assert.match(src("realtime/geminiProvider.ts"), /voiceName: pickGeminiVoiceName\(input\.scenarioId, input\.sessionId, speakerGender\)/);
   assert.match(src("roleplay/index.ts"), /speakerGender: resolveSessionSpeakerGender\(session\),/);
-  assert.match(src("session/index.ts"), /personaCard: personaCard\?\.items, voiceSelectionSource \}/);
+  assert.match(src("session/index.ts"), /personaCard: personaCard\?\.items, voiceSelectionSource, familyAddress \}/);
   assert.match(src("session/index.ts"), /\.\.\.\(voiceSelectionSource \? \{ voiceSelectionSource \} : \{\}\),/, "세션 문서에도 같은 값을 저장한다");
   const opening = src("roleplay/openingLine.ts");
   assert.match(opening, /\.\.\.\(voiceSelectionSource \? \{ voiceSelectionSource \} : \{\}\),/);
