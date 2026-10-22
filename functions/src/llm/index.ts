@@ -102,7 +102,7 @@ export function getGroqApiKey(): string {
 let groqDisabledLogged = false;
 
 /**
- * 사기범 대사 체인에서 Gemini 2차에 남겨 두는 시간(ms, 2026-10-22 · §103) — Claude 1차 단계 상한은
+ * 사기범 대사 체인에서 Gemini 2차에 남겨 두는 시간(ms, 2026-10-22 · §107) — Claude 1차 단계 상한은
  * `geminiBudgetMs - 이 값`이다. 근거: 2차 gemini-3.5-flash-lite 실측 p95 1.86초(78호출).
  */
 export const CLAUDE_GEMINI_RESERVE_MS = 2000;
@@ -152,7 +152,7 @@ export function withTimeout(client: LlmClient, timeoutMs: number): LlmClient {
  * 같은 키로 이미 실시간 음성 경로에 쓰고 있는 것과 동일한 자격증명이다. 없으면(placeholder 포함)
  * MockLlmClient로 강등한다.
  *
- * ⭐ 2026-10-22(§103): `CLAUDE_API_KEY`가 있으면 **사기범 대사 경로(`purpose: "scammer-reply"`)만** 1차 Claude
+ * ⭐ 2026-10-22(§107): `CLAUDE_API_KEY`가 있으면 **사기범 대사 경로(`purpose: "scammer-reply"`)만** 1차 Claude
  * (claude-sonnet-5-5) → 2차 gemini-3.5-flash-lite → 3차 Groq로 보낸다(`buildScammerReplyChain`). 되감기 판정처럼
  * 용도가 없는 호출은 아래 기존 Gemini 체인 그대로다. `LLM_PROVIDER` 값은 여전히 읽지 않는다.
  *
@@ -160,7 +160,7 @@ export function withTimeout(client: LlmClient, timeoutMs: number): LlmClient {
  * onCall 핸들러는 `{ secrets: [...GEMINI_KEY_SECRETS] }`를 옵션에 선언해야 한다(realtime/index.ts의
  * createRealtimeCall과 동일한 이유 — Firebase Functions v2는 선언되지 않은 secret을 배포 환경에서
  * 런타임에 주입하지 않는다).
- * ⭐ 갱신(2026-10-22, §103): 지금 선언은 `LLM_TEXT_SECRETS`(Gemini 키 슬롯 + GROQ_API_KEY + CLAUDE_API_KEY)이고,
+ * ⭐ 갱신(2026-10-22, §107): 지금 선언은 `LLM_TEXT_SECRETS`(Gemini 키 슬롯 + GROQ_API_KEY + CLAUDE_API_KEY)이고,
  * 선언 정합은 secretDeclarationGate 테스트가 기계적으로 대조한다. 아래 목록은 T132 시점 이력이다.
  *
  * ⭐ 해당 핸들러는 **5곳**이다(T132에서 전수 grep으로 정정 — 이전 주석은 "3곳"이라 적어
@@ -217,7 +217,7 @@ export function getLlmClient(timeoutMs: number = LLM_TIMEOUT_MS): LlmClient {
         minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS,
       })
     : gemini;
-  // §103(2026-10-22) — 사기범 대사 경로만 1차 Claude → 2차 gemini-3.5-flash-lite → 3차 Groq. 그 밖(되감기 판정 등)은 위 체인 그대로.
+  // §107(2026-10-22) — 사기범 대사 경로만 1차 Claude → 2차 gemini-3.5-flash-lite → 3차 Groq. 그 밖(되감기 판정 등)은 위 체인 그대로.
   const scammerClient = buildScammerReplyChain(keys, groqKey, timeoutMs, geminiBudgetMs);
   const routed = scammerClient ? routeScammerReply(client, scammerClient) : client;
   // ⛔ withTimeout이 순환기·과부하 재시도·대체 모델·Groq **바깥**이다(§37.5 (1)) — 모든 시도의 **총합**이 timeoutMs로 갇힌다.
@@ -276,7 +276,7 @@ export async function completeWithFallback(
 }
 
 /**
- * 사기범 대사 체인(§103) — Claude 키와 Gemini 키가 **둘 다** 있을 때만 만든다(없으면 undefined = 기존 체인 그대로).
+ * 사기범 대사 체인(§107) — Claude 키와 Gemini 키가 **둘 다** 있을 때만 만든다(없으면 undefined = 기존 체인 그대로).
  *
  * 예산(일반 턴 10초 · Groq 있음): Claude ≤ 5초 → Gemini 2차 ≥ 2초 남김 → Groq 3초.
  *   - Claude 단계 상한 = `geminiBudgetMs - CLAUDE_GEMINI_RESERVE_MS`(일반 5초 · 첫 턴 15초 · Groq 없으면 8초).

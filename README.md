@@ -256,7 +256,7 @@ Gemini Live 경로의 모델은 `gemini-3.8-live`다(`functions/src/realtime/gem
 > 처리된다. 넘치면 Groq가 429를 돌려주고 그 턴은 목업으로 강등된다. Gemini가 오래 장애일 때의 대체재가 아니라
 > 짧은 순간 장애를 메우는 완충이다.
 
-##### 사기범 대사 1차 Claude (`CLAUDE_API_KEY`, 2026-10-22 · `docs/Architecture.md` §103)
+##### 사기범 대사 1차 Claude (`CLAUDE_API_KEY`, 2026-10-22 · `docs/Architecture.md` §107)
 
 사기범 대사(메신저 답장 · 오프닝 첫마디)는 **1차 `claude-sonnet-5-5` → 2차 `gemini-3.5-flash-lite` → 3차 Groq → 목업** 순서다
 (`functions/src/llm/claudeClient.ts` · `claudeFallback.ts`). 되감기 판정처럼 용도가 다른 호출은 위 Gemini 체인 그대로다.

@@ -1,4 +1,4 @@
-// 사기범 대사 1차 Claude(2026-10-22, Architecture.md §103) — 요청 형태 · 2차 전환 판정표 · 용도별 라우팅 · 예산 · 시크릿 선언.
+// 사기범 대사 1차 Claude(2026-10-22, Architecture.md §107) — 요청 형태 · 2차 전환 판정표 · 용도별 라우팅 · 예산 · 시크릿 선언.
 //
 // ⛔ 라이브 호출 0건 — Claude는 `messages.create` 주입으로, Gemini는 가짜 클라이언트로 흉내 낸다.
 // 실호출 근거는 scripts/messenger-model-compare-probe.mjs 측정(PR 본문)에 둔다.
@@ -63,7 +63,7 @@ function fake(result: LlmCompletionResult | Error, providerName: LlmClient["prov
 
 // ── 1. 요청 형태 ──────────────────────────────────────────────────────────────────────────────
 
-test("[§103] 요청 — 고정 모델 · 추론 끔(between_tools) · 사기범 경로 훈련 맥락 머리말 · 신호 전달", async () => {
+test("[§107] 요청 — 고정 모델 · 추론 끔(between_tools) · 사기범 경로 훈련 맥락 머리말 · 신호 전달", async () => {
   const { calls, client } = capture(message("오랜만이다ㅋㅋ"));
   const controller = new AbortController();
   const result = await client.complete({ ...SCAMMER, signal: controller.signal });
@@ -76,13 +76,13 @@ test("[§103] 요청 — 고정 모델 · 추론 끔(between_tools) · 사기범
   assert.equal(options.signal, controller.signal);
 });
 
-test("[§103] 용도가 없으면(되감기 판정 등) 머리말을 붙이지 않는다", async () => {
+test("[§107] 용도가 없으면(되감기 판정 등) 머리말을 붙이지 않는다", async () => {
   const { calls, client } = capture(message("{}"));
   await client.complete({ systemPrompt: "(judge)", messages: [{ role: "user", content: "답" }] });
   assert.equal(calls[0].params.system, "(judge)");
 });
 
-test("[§103] 오프닝(빈 이력)과 사기범 첫마디로 시작하는 이력 — user 트리거 턴을 앞에 둔다", async () => {
+test("[§107] 오프닝(빈 이력)과 사기범 첫마디로 시작하는 이력 — user 트리거 턴을 앞에 둔다", async () => {
   const { calls, client } = capture(message("안녕"));
   await client.complete({ ...SCAMMER, messages: [] });
   assert.deepEqual(calls[0].params.messages, [{ role: "user", content: OPENING_TRIGGER_TURN }]);
@@ -92,7 +92,7 @@ test("[§103] 오프닝(빈 이력)과 사기범 첫마디로 시작하는 이�
   assert.equal(calls[1].params.messages.length, 3);
 });
 
-test("[§103] 외부 공급자로 나가는 사용자 이름은 가명으로 바꾸고 응답에서 되돌린다", async () => {
+test("[§107] 외부 공급자로 나가는 사용자 이름은 가명으로 바꾸고 응답에서 되돌린다", async () => {
   const { calls, client } = capture(message("정하윤님 맞으시죠?"));
   const result = await client.complete({
     ...SCAMMER,
@@ -102,12 +102,12 @@ test("[§103] 외부 공급자로 나가는 사용자 이름은 가명으로 바
   assert.equal(result.text, "김철수님 맞으시죠?");
 });
 
-test("[§103] 거절(stop_reason refusal)·빈 응답은 ClaudeNoReplyError — 2차로 넘기는 신호", async () => {
+test("[§107] 거절(stop_reason refusal)·빈 응답은 ClaudeNoReplyError — 2차로 넘기는 신호", async () => {
   await assert.rejects(capture(message("", "refusal")).client.complete(SCAMMER), ClaudeNoReplyError);
   await assert.rejects(capture(message("   ")).client.complete(SCAMMER), ClaudeNoReplyError);
 });
 
-test("[§103] 이미 끊긴 신호면 요청을 시작하지 않는다", async () => {
+test("[§107] 이미 끊긴 신호면 요청을 시작하지 않는다", async () => {
   const { calls, client } = capture(message("x"));
   const controller = new AbortController();
   controller.abort();
@@ -120,7 +120,7 @@ test("[§103] 이미 끊긴 신호면 요청을 시작하지 않는다", async (
 const GEMINI_OK: LlmCompletionResult = { text: "Gemini 응답", isMock: false };
 const OPTS = { budgetMs: 7000, minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS };
 
-test("[§103 표] Claude 성공 → 2차 호출 없음", async () => {
+test("[§107 표] Claude 성공 → 2차 호출 없음", async () => {
   const gemini = fake(GEMINI_OK);
   const chain = withGeminiAfterClaude(fake({ text: "오랜만이다ㅋㅋ 잘 지냈어?", isMock: false }, "claude").client, gemini.client, OPTS);
   assert.equal((await chain.complete(SCAMMER)).text, "오랜만이다ㅋㅋ 잘 지냈어?");
@@ -135,7 +135,7 @@ for (const [label, error] of [
   ["네트워크 오류", new TypeError("fetch failed")],
   ["거절", new ClaudeNoReplyError("refusal")],
 ] as const) {
-  test(`[§103 표] Claude ${label} → Gemini 2차 1회`, async () => {
+  test(`[§107 표] Claude ${label} → Gemini 2차 1회`, async () => {
     const gemini = fake(GEMINI_OK);
     const chain = withGeminiAfterClaude(fake(error, "claude").client, gemini.client, OPTS);
     assert.equal((await chain.complete(SCAMMER)).text, "Gemini 응답");
@@ -143,14 +143,14 @@ for (const [label, error] of [
   });
 }
 
-test("[§103 표] Claude가 쓸 수 없는 대사(영어 거절문)를 내면 → Gemini 2차", async () => {
+test("[§107 표] Claude가 쓸 수 없는 대사(영어 거절문)를 내면 → Gemini 2차", async () => {
   const gemini = fake(GEMINI_OK);
   const claude = fake({ text: "I'm sorry, but I can't help with that.", isMock: false }, "claude");
   const chain = withGeminiAfterClaude(claude.client, gemini.client, OPTS);
   assert.equal((await chain.complete(SCAMMER)).text, "Gemini 응답");
 });
 
-test("[§103 표] 바깥 신호가 이미 끊겼으면 2차를 부르지 않는다", async () => {
+test("[§107 표] 바깥 신호가 이미 끊겼으면 2차를 부르지 않는다", async () => {
   const gemini = fake(GEMINI_OK);
   const controller = new AbortController();
   controller.abort();
@@ -159,7 +159,7 @@ test("[§103 표] 바깥 신호가 이미 끊겼으면 2차를 부르지 않는�
   assert.equal(gemini.inputs.length, 0);
 });
 
-test("[§103 표] 예산 부족(경과 + 최소 시도 > 예산)이면 2차를 부르지 않는다", async () => {
+test("[§107 표] 예산 부족(경과 + 최소 시도 > 예산)이면 2차를 부르지 않는다", async () => {
   let t = 0;
   const gemini = fake(GEMINI_OK);
   const slow: LlmClient = {
@@ -174,13 +174,13 @@ test("[§103 표] 예산 부족(경과 + 최소 시도 > 예산)이면 2차를 �
   assert.equal(gemini.inputs.length, 0);
 });
 
-test("[§103 표] Gemini 2차도 실패하면 그 에러를 던진다(3차 Groq 판정은 groqFallback이 한다)", async () => {
+test("[§107 표] Gemini 2차도 실패하면 그 에러를 던진다(3차 Groq 판정은 groqFallback이 한다)", async () => {
   const geminiError = Object.assign(new Error("503"), { status: 503 });
   const chain = withGeminiAfterClaude(fake(new Error("x"), "claude").client, fake(geminiError).client, OPTS);
   await assert.rejects(chain.complete(SCAMMER), (e) => e === geminiError);
 });
 
-test("[§103] Claude 단계 상한 — 응답이 늦으면 요청을 취소하고 2차가 답한다", async () => {
+test("[§107] Claude 단계 상한 — 응답이 늦으면 요청을 취소하고 2차가 답한다", async () => {
   let aborted = false;
   const hanging: LlmClient = {
     providerName: "claude",
@@ -203,7 +203,7 @@ test("[§103] Claude 단계 상한 — 응답이 늦으면 요청을 취소하�
   assert.ok(aborted, "늦은 Claude 요청은 취소된다(중복 생성 방지)");
 });
 
-test("[§103 사슬] Claude 실패 → Gemini 2차가 쓸 수 없는 대사 → 3차 Groq가 답한다(llm/index.ts와 같은 조립)", async () => {
+test("[§107 사슬] Claude 실패 → Gemini 2차가 쓸 수 없는 대사 → 3차 Groq가 답한다(llm/index.ts와 같은 조립)", async () => {
   const groq = fake({ text: "헐 내 번호 저장 안 했어?", isMock: false }, "groq");
   const firstTwo = withGeminiAfterClaude(
     fake(Object.assign(new Error("overloaded"), { status: 529 }), "claude").client,
@@ -218,7 +218,7 @@ test("[§103 사슬] Claude 실패 → Gemini 2차가 쓸 수 없는 대사 → 
 
 // ── 3. 용도별 라우팅 · 예산 · 시크릿 ──────────────────────────────────────────────────────────
 
-test("[§103] 라우팅 — 사기범 대사만 Claude 체인, 그 밖은 기존 체인 · providerName은 기존 체인 것(G176)", async () => {
+test("[§107] 라우팅 — 사기범 대사만 Claude 체인, 그 밖은 기존 체인 · providerName은 기존 체인 것(G176)", async () => {
   const legacy = fake({ text: "기존", isMock: false }, "gemini");
   const scammer = fake({ text: "사기범", isMock: false }, "claude");
   const routed = routeScammerReply(legacy.client, scammer.client);
@@ -229,14 +229,14 @@ test("[§103] 라우팅 — 사기범 대사만 Claude 체인, 그 밖은 기존
   assert.equal(legacy.inputs.length, 1);
 });
 
-test("[§103] 예산 — 일반 턴 Claude 5초 상한이 실측 p95(3.59초)보다 크고, 2차에 최소 시도 시간이 남는다", () => {
+test("[§107] 예산 — 일반 턴 Claude 5초 상한이 실측 p95(3.59초)보다 크고, 2차에 최소 시도 시간이 남는다", () => {
   const stageMs = LLM_TIMEOUT_MS - GROQ_RESERVE_MS - CLAUDE_GEMINI_RESERVE_MS;
   assert.equal(stageMs, 5000);
   assert.ok(stageMs > 3590);
   assert.ok(CLAUDE_GEMINI_RESERVE_MS >= LLM_OVERLOAD_MIN_ATTEMPT_MS, "2차 시도가 예산 부족으로 생략되지 않는다");
 });
 
-test("[§103] 시크릿 — LLM_TEXT_SECRETS에 CLAUDE_API_KEY가 있고, Gemini 키 순환 목록에는 섞이지 않는다", () => {
+test("[§107] 시크릿 — LLM_TEXT_SECRETS에 CLAUDE_API_KEY가 있고, Gemini 키 순환 목록에는 섞이지 않는다", () => {
   assert.ok(LLM_TEXT_SECRETS.includes(CLAUDE_API_KEY));
   assert.equal((GEMINI_KEY_SECRETS as readonly unknown[]).includes(CLAUDE_API_KEY), false);
   assert.equal(CLAUDE_API_KEY.name, "CLAUDE_API_KEY");

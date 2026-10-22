@@ -1,4 +1,4 @@
-// Claude 1차 → Gemini 2차 단계 (2026-10-22, §103 판정표가 정본). 사기범 대사 경로에만 쓴다(llm/index.ts).
+// Claude 1차 → Gemini 2차 단계 (2026-10-22, §107 판정표가 정본). 사기범 대사 경로에만 쓴다(llm/index.ts).
 //
 // 순서: 1차 Claude(claude-sonnet-5-5) → **2차 gemini-3.5-flash-lite** → 3차 Groq(groqFallback.ts) → Mock 강등.
 //

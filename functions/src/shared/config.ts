@@ -50,7 +50,7 @@ export const GEMINI_KEY_SECRETS = [GEMINI_API_KEY, GEMINI_API_KEY2] as const;
 export const GROQ_API_KEY = defineSecret("GROQ_API_KEY");
 
 /**
- * Claude API 키(2026-10-22, Architecture.md §103) — 사기범 대사 경로(`purpose: "scammer-reply"`)의 **1차** 공급자 전용.
+ * Claude API 키(2026-10-22, Architecture.md §107) — 사기범 대사 경로(`purpose: "scammer-reply"`)의 **1차** 공급자 전용.
  * 값이 없으면(미설정·`YOUR_` placeholder) 사기범 대사도 기존 Gemini 체인을 그대로 쓴다(llm/index.ts).
  * 이름은 로컬 `functions/.secret.local`에 이미 있던 `CLAUDE_API_KEY`를 따른다(prototypes/voice-cascade와 같은 이름).
  *

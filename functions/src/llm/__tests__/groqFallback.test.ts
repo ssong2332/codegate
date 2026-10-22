@@ -389,7 +389,7 @@ function groqWiringViolations(code: string): string[] {
     v.push("client = groqKey ? withGroqFallback(withStageDeadline(gemini, geminiBudgetMs), Groq, {budgetMs: timeoutMs…}) : gemini 이어야 한다");
   }
   if ((code.match(/withGroqFallback\(/g) ?? []).length !== 1) v.push("withGroqFallback은 1곳");
-  // §103 — 사기범 대사 라우팅(routed)도 withTimeout 안쪽이다. routed는 이 client(또는 그것을 기본으로 둔 라우터)다.
+  // §107 — 사기범 대사 라우팅(routed)도 withTimeout 안쪽이다. routed는 이 client(또는 그것을 기본으로 둔 라우터)다.
   if (!/const routed = scammerClient \? routeScammerReply\(client, scammerClient\) : client;/.test(code)) v.push("routed는 client를 기본 체인으로 둔다");
   if (!/return withTimeout\(routed, timeoutMs\);/.test(code)) v.push("withTimeout이 가장 바깥");
   return v;

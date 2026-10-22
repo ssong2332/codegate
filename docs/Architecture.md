@@ -22421,9 +22421,9 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 ### 102.6 배포
 **Functions만**(`createSession` · `sendMessage` · `consentChallenge`가 바뀐 `llm`·`roleplay`를 쓴다). 화면 변경 0.
 
-## 103. (Feature change — 2026-10-22 · 브랜치 `claude/messenger-model-eval-0ae53b` · 사용자 실기 신고 *"대화가 잘 안 통해 … 부자연스러워"* → 모델 비교 측정 → 사용자 결정 원문 *"sonnet으로 진행하고, groq을 3차로 하고, 지인 사칭 프롬프트도 진행해"*) **사기범 대사 1차 LLM을 Claude Sonnet 5.5로 · 지인 사칭 프롬프트의 이름 받아 쓰기 범위 축소** — implementer 기록 (DECISIONS #218)
+## 107. (Feature change — 2026-10-22 · 브랜치 `claude/messenger-model-eval-0ae53b` · 사용자 실기 신고 *"대화가 잘 안 통해 … 부자연스러워"* → 모델 비교 측정 → 사용자 결정 원문 *"sonnet으로 진행하고, groq을 3차로 하고, 지인 사칭 프롬프트도 진행해"*) **사기범 대사 1차 LLM을 Claude Sonnet 5.5로 · 지인 사칭 프롬프트의 이름 받아 쓰기 범위 축소** — implementer 기록 (DECISIONS #222)
 
-### 103.1 근거 — 모델 비교 실측(2026-10-22, `scripts/messenger-model-compare-probe.mjs`)
+### 107.1 근거 — 모델 비교 실측(2026-10-22, `scripts/messenger-model-compare-probe.mjs`)
 - 같은 프롬프트 조립(앱 함수 그대로) · 시나리오 3종(지인 사칭 · 자녀 사칭 · 지원금 스미싱) · 중급 · 사용자 발화 고정 대본 2종(신고 재현 `trickster` · `suspicious`).
 - | 모델 | 완료 세션 | 지연 p50 / p95 | 거절 | 앞 맥락 반영 | 세션당 |
   |---|---|---|---|---|---|
@@ -22435,7 +22435,7 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
   | **claude-sonnet-5-5** | **12/12** | **2.70초 / 3.59초** (최대 5.31초) | **0/132** | **6/6** | **$0.198** |
 - 총 측정 비용 $2.82(실 키 · 사용자 승인 범위 $5 이내). 원자료는 세션 공유 노트 `messenger-model-eval-stage2-2026-10-22.md`.
 
-### 103.2 사슬(사기범 대사 경로만, `purpose: "scammer-reply"`)
+### 107.2 사슬(사기범 대사 경로만, `purpose: "scammer-reply"`)
 `withTimeout( route( 기존 체인, withGroqFallback( withStageDeadline( withGeminiAfterClaude( withStageDeadline(Claude, geminiBudget − 2초), 2차 gemini-3.5-flash-lite ), geminiBudget ), 3차 Groq ) ), timeoutMs )`
 - 라우팅(`routeScammerReply`): 용도가 `scammer-reply`인 호출(sendMessage · 오프닝)만 이 사슬로. 되감기 판정 등은 기존 Gemini 체인(§75) 그대로. `providerName`은 기존 체인 것(G176).
 - 예산: 일반 턴 Claude ≤ 5초 → 2차 ≥ 2초 → Groq 3초. 첫 턴 Claude 15초. Groq 키 없으면 Claude 8초.
@@ -22444,11 +22444,13 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 - 서버 측 `fallbacks`(다른 Claude 모델로 재실행)는 쓰지 않는다 — 거절은 이 사슬이 다른 공급자(2차)로 받으며, 측정 거절률 0/132이고 재실행은 5초 상한을 넘길 수 있다.
 - 시크릿: `CLAUDE_API_KEY`(`LLM_TEXT_SECRETS`에 추가 · Gemini 키 순환 배열과 분리). ⛔ 배포 전 `firebase functions:secrets:set CLAUDE_API_KEY` 필수.
 
-### 103.3 지인 사칭 프롬프트 — 이름 받아 쓰기를 "상대가 너를 짐작해 댄 이름"으로 좁힘
+### 107.3 지인 사칭 프롬프트 — 이름 받아 쓰기를 "상대가 너를 짐작해 댄 이름"으로 좁힘
 - 증상(실기): 참가자 "거의 김성섭이야" → 사기범 "헐 성섭아, 너였구나!". 측정에서 **지인 사칭만** 6개 모델 전부 같은 혼동(자녀 사칭은 같은 대사에 0건).
 - 원인: [캐릭터] "상대가 이름이나 관계를 말하면 그 사람인 척 그대로 받아" · "이름은 상대가 먼저 말한 것만 쓰고"(§실기 신고 6 수정분)가 **상대가 자기를 다른 사람이라 하는 장난**까지 받아 쓰게 했다(추정 — 확인은 같은 대본 재측정).
 - 수정: 4곳을 "상대가 **너를** 짐작해 댄 이름"으로 좁히고, 자기를 다른 사람이라 하는 장난은 받아 쓰지 말고 웃어넘긴 뒤 부탁으로 돌아가라는 줄 1개 추가. 실기 원문 인용 0(`messengerFriendDialogue.test.ts`가 고정).
 
-### 103.4 남은 일
+### 107.4 남은 일
 - Claude 프롬프트 캐시 미적용 — 시스템 프롬프트가 턴마다 조금씩 바뀌어(턴 지시·끊기 모드) 효과 미측정. 비용 절감이 필요하면 별도 측정.
 - 배포: Functions만(화면 변경 0). ⛔ 시크릿 등록 → 배포 순서.
+- 키 상태 실측(2026-10-22): 운영 Secret Manager에 `CLAUDE_API_KEY` **없음**(`firebase functions:secrets:get` 404). 이 상태에서 `firebase deploy --only functions --dry-run --non-interactive` = **배포 실패**(`In non-interactive mode but have no value for the secret: CLAUDE_API_KEY`).
+- 키가 등록됐지만 값이 비었거나 `YOUR_` 자리표시면 → Claude 단계만 꺼지고 사기범 대사도 기존 Gemini 체인(로그 1줄, `readSecret`). 값이 틀려 401이면 → 판정표대로 Gemini 2차로 넘어간다(`claudeChain.test.ts`).

@@ -1,4 +1,4 @@
-// Claude 텍스트 LLM 구현체 — 사기범 대사 경로(`purpose: "scammer-reply"`)의 **1차** 공급자(2026-10-22, §103).
+// Claude 텍스트 LLM 구현체 — 사기범 대사 경로(`purpose: "scammer-reply"`)의 **1차** 공급자(2026-10-22, §107).
 //
 // 근거(실측, 2026-10-22 메신저 모델 비교 · scripts/messenger-model-compare-probe.mjs, 같은 대본 12세션):
 //   - claude-sonnet-5-5: 거절 0/132 · 지연 p50 2.70초 / p95 3.59초 · 앞 맥락 반영 6/6(후보 중 최고).
