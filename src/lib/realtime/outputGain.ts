@@ -61,3 +61,48 @@ export function isVolumeSettable(media: { volume: number }): boolean {
   media.volume = VOLUME_PROBE;
   return isVolumeApplied(VOLUME_PROBE, media.volume);
 }
+
+// ── §105(2026-10-22 실기 신고 — *"스피커 버튼 눌렀을 때도 변화가 없는데"* · 갤럭시 S25) ──────────────────────────────────
+// 0.6 → 1.0은 +4.4dB라 휴대폰 스피커에서 거의 구분되지 않았다. 웹은 Android에서 수화부(위) ↔ 스피커폰(아래) 출력 경로를 고를 수
+// 없다(§74.2 ①-A · §105 조사표 — `setSinkId`는 Android에서 제공되지 않고, `selectAudioOutput` · 오디오 세션 API도 Android 크롬 · 웨일에
+// 없다). 그래서 실시간(Gemini · Web Audio) 경로에서만 스피커 모드를 **1.0보다 크게 키우고**, 1.0을 넘는 소리는 아래 리미터 곡선으로
+// 부드럽게 눌러 클리핑을 막는다. `<audio>.volume` · ElevenLabs `volume`은 1.0을 넘길 수 없어 종전 `gainFor` 값 그대로다.
+
+/** 실시간(Web Audio) 스피커 모드 게인 — 통화 모드 0.6 대비 +9.5dB(판단값 · 실기 청취로 조정). 1.0 초과분은 리미터가 맡는다. */
+export const SPEAKER_BOOST_GAIN = 1.8;
+
+/** 리미터 곡선이 다루는 입력 진폭 상한(이 값까지 부드럽게 접고, 넘으면 1.0에 붙는다). `SPEAKER_BOOST_GAIN` 이상이어야 한다. */
+export const LIMITER_INPUT_RANGE = 2;
+
+/** 이 진폭까지는 곡선이 그대로 통과시킨다(통화 모드 0.6 · 원본 최대 1.0이면 리미터 영향 0). */
+export const LIMITER_KNEE = 0.7;
+
+/**
+ * Gemini 세션이 받은 `outputVolume`(= `gainFor(route)`)을 Web Audio 게인으로 바꾼다. 스피커 모드 값이면 증폭값, 그 밖은 그대로.
+ * (화면은 두 세션 컴포넌트에 같은 `gainFor` 값을 넘긴다 — G455 배선 고정. 증폭은 리미터가 있는 이 경로에서만 한다.)
+ */
+export function liveGainFor(outputVolume: number): number {
+  return outputVolume >= SPEAKER_MODE_GAIN ? SPEAKER_BOOST_GAIN : outputVolume;
+}
+
+/** 한 진폭(0 이상)에 대한 리미터 출력 — `knee`까지 선형, 그 위는 1.0에 점근(tanh). 출력은 언제나 1.0 미만. */
+export function softLimit(amplitude: number, knee = LIMITER_KNEE): number {
+  const a = Math.abs(amplitude);
+  const sign = amplitude < 0 ? -1 : 1;
+  if (a <= knee) return amplitude;
+  const room = 1 - knee;
+  return sign * (knee + room * Math.tanh((a - knee) / room));
+}
+
+/**
+ * `WaveShaperNode.curve` — 곡선의 입력 축 [-1, 1]은 실제 진폭 [-range, range]에 대응한다(앞단 게인 `1/range`와 짝).
+ * 짝수 길이 대신 홀수 길이를 써 0이 정확히 가운데 점에 오게 한다.
+ */
+export function buildLimiterCurve(points = 2049, range = LIMITER_INPUT_RANGE, knee = LIMITER_KNEE): Float32Array<ArrayBuffer> {
+  const curve = new Float32Array(new ArrayBuffer(points * 4));
+  for (let i = 0; i < points; i += 1) {
+    const u = (i / (points - 1)) * 2 - 1;
+    curve[i] = softLimit(u * range, knee);
+  }
+  return curve;
+}

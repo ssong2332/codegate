@@ -3049,7 +3049,8 @@ export default function SessionCallPage() {
                   className={`text-sm ${speakerDisabled ? "opacity-40" : ""}`}
                   style={{ color: callTokens.textPrimary }}
                 >
-                  스피커
+                  {/* §105(UX D-146) — 켜짐을 글자로도 보인다(색 차이만으로는 실기에서 구분이 어려웠다). */}
+                  {!speakerDisabled && audioRoute === "speaker" ? "스피커 켜짐" : "스피커"}
                 </span>
               </div>
 

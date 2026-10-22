@@ -22420,3 +22420,63 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 
 ### 102.6 배포
 **Functions만**(`createSession` · `sendMessage` · `consentChallenge`가 바뀐 `llm`·`roleplay`를 쓴다). 화면 변경 0.
+
+## 105. (Bug fix — 2026-10-22 · 브랜치 `claude/live-mic-regression-speaker-d82030` · 사용자 실기 신고 2건 · 갤럭시 S25 · 오늘 배포 뒤) **실시간 통화 "말해도 묵묵부답" 진단 계측 + 스피커 버튼 증폭(리미터)** — implementer 기록 (DECISIONS #220 · UX D-146)
+
+### 105.1 신고 원문
+1. *"직접 확인해 보라는 은행 시나리오인데 … 내가 말을 하고 대화가 전에는 좀 되었는데, 지금은 묵묵부답인 상황이야."* (= `bank-security-verify-scam` 추정)
+2. *"스피커 버튼 눌렀을 때도 변화가 없는데 … 스피커폰 사용을 누르면 위아래 스피커를 다 사용하고, 기본 소리를 키우는 거지."*
+
+### 105.2 회귀 조사 (1) — 결론: **오늘 배포분에서 '화면이 켜진 통화'의 입력 경로를 바꾼 코드는 찾지 못했다(원인 미확정)**
+`git diff 72ee6ae 77cddcc -- src/lib/realtime src/app/session/play` 전수 판독:
+
+| 변경(PR) | 화면이 켜진 통화에서 동작하는가 | 입력(마이크 → Live)에 닿는가 | 판정 |
+|---|---|---|---|
+| #369 `visibilitychange` 처리 · 마이크 재확인/다시 열기(`decideMicRecovery`) | 아니오 — 숨김→복귀가 있어야 발동 | 복귀 뒤 트랙 muted/ended면 새 트랙으로 교체 | 화면을 끄거나 앱을 바꾼 경우만 후보(추정 · 실기 로그 `[live-bg] mic=…` 로 확인) |
+| #369 소켓 close → 재연결(`decideSocketClose`) | 숨김 중/복귀 5초 안 close만 | 새 세션 재마운트 | 정상 통화 무영향 |
+| #369 침묵 · 대기 넛지 숨김 시 연기 | 숨김 중만 | 아니오(모델 쪽 재촉) | 무영향 |
+| #369 화면 켜짐 유지(Wake Lock) | 예 | 아니오 | 무영향(추정) |
+| #369 Live 세션 `key={connectionSeq}` · 마운트 조건 `callMode === "realtime"` | 예 | `callMode`는 받기 핸들러에서 `start()`와 같은 동기 구간에 `realtime` → 언마운트 0 | 무영향 |
+| #369 전사 sessionStorage 백업 | 예(턴마다) | 아니오 | 무영향 |
+| #372 공통 [진행 강제] 2구절(기관명 예시 · 거절 요구 반복 금지) | 예 | 아니오(프롬프트) | 모델 침묵 유발 근거 없음(추정 · 실 키로만 확인 가능) |
+| `bank-security-verify-scam` 프롬프트 · Live 설정(`functions/src/realtime`) | — | — | 이 범위에서 변경 0 |
+
+⇒ "서버에 말이 가지 않음"인지 "갔는데 모델이 대답하지 않음"인지를 **지금 로그로는 가릴 수 없었다**: 응답이 0턴이면 `[gemini-latency]` 요약(`logLatencySummary`)이 아예 찍히지 않고, 보낸 프레임 수 · 서버 인식 수가 어디에도 없었다.
+
+### 105.3 진단 계측 추가(제품 동작 무변경)
+| 값 | 뜻 | 판정 |
+|---|---|---|
+| `mic.sent` | 서버로 보낸 마이크 프레임 수 | 0 → 마이크 · 파이프라인 문제 |
+| `mic.dropEcho` | 사기범이 말하는 중(반이중)이라 안 보낸 수 | 이것만 늘면 게이트가 열리지 않는 문제 |
+| `mic.dropMute` | 음소거(버튼 · 직접 확인 화면 `verifyOverlayOpen`) | 확인 화면이 닫히지 않은 경우 |
+| `mic.peakDb` | 보낸 프레임 최대 레벨 | `-inf` → 마이크가 무음만 준다(Android 백그라운드 등) |
+| `asr.rx` | 서버가 돌려준 사용자 음성 인식 조각 수 | `sent`>0 · `asr`=0 → 서버가 말을 못 알아들음 / `asr`>0 · 응답 0 → **전달됐는데 모델이 대답하지 않음** |
+| `mic.track` | 트랙 `readyState`/`muted`/`disabled` | muted면 OS가 마이크를 막는 중 |
+
+보는 법: 통화 주소에 `?audiodebug=1`(진단 패널 — 휴대폰 화면에서 바로 읽힘) · production 콘솔 `[live-mic]` 한 줄(20초마다 + close 때 · 숫자 · 상태만). 코드: `audioDiagnostics.ts` `noteMicFrame` · `noteAsrChunk` · `registerMicTrack` · `formatMicLine`, 호출 = `GeminiVoiceSession.tsx` `onaudioprocess` · `inputTranscription` 분기.
+
+### 105.4 스피커 버튼 (2)
+**출력 경로 선택은 웹에서 불가(Android 크롬 · 웨일)**: `HTMLMediaElement.setSinkId`는 MDN 호환표에 "Not available due to a limitation in Android"(§74.2 ①-A와 같은 결론) · `selectAudioOutput`은 Android 미지원 · Audio Session API(`navigator.audioSession`)는 Safari 전용. ⇒ 수화부만 / 위아래 둘 다를 웹이 강제할 수 없다(어느 스피커로 나갈지는 OS · 브라우저가 정한다 — 마이크를 쓰는 동안 Android 크롬은 통화 모드 오디오로 내보낸다, 추정).
+
+대신 **음량 차이를 키운다**(실시간 Gemini 경로만):
+| 모드 | 이전 게인 | 이후 게인 | 통화 대비 |
+|---|---|---|---|
+| 스피커 끔(통화 모드) | 0.6 | 0.6(사용자 확정 OQ-A94 유지) | 0dB |
+| 스피커 켜짐 | 1.0(+4.4dB — 실기에서 구분 안 됨) | **1.8**(`SPEAKER_BOOST_GAIN`) | **+9.5dB** |
+
+- 클리핑 방지: 게인 → ×1/2 → `WaveShaperNode` 리미터 곡선(`buildLimiterCurve` — 진폭 0.7까지 그대로, 위는 tanh로 1.0에 점근) → 출력. 통화 모드(원본 최대 1.0 × 0.6 = 0.6)는 곡선 영향 0.
+- 오프라인 렌더 실측(Chromium · 440Hz 최대 크기 사인): 0.6 → 피크 0.6000 · RMS -7.45dB / 1.0 → 피크 0.9285 · RMS -3.30dB / **1.8 → 피크 0.9997(클리핑 0) · RMS -1.30dB**. 실제 Gemini 음성은 원본 피크가 1.0보다 작아(파고율 큼) 체감 상승은 사인보다 크다(추정 — 실기 `pcm.peakDb`로 확인).
+- 기본 음량이 너무 작은가: 원본 레벨 실측 0(실 키 없이 Gemini 음성을 받을 수 없음) ⇒ 판단 보류. 실기 `?audiodebug=1`의 `pcm.peakDb`가 -6dB보다 작으면 통화 모드 0.6을 올리는 안을 사용자에게 제시한다.
+- `<audio>.volume`(텍스트 폴백) · ElevenLabs `volume`은 1.0 상한이라 종전 `gainFor` 값 그대로(G455 유지).
+- 버튼 상태: 눌림 색(종전) + 라벨 **"스피커 켜짐"**(UX D-146).
+
+### 105.5 검증
+| 항목 | 결과 | 근거 |
+|---|---|---|
+| `npm test` | 983 pass / 0 fail | 신규 `audioDiagnostics.test.ts` 2건 · `outputGain.test.ts` 4건 |
+| `npm --prefix functions test` | 1642 pass / 0 fail | functions 변경 0건 |
+| `npm run lint` · `npm --prefix functions run lint` | 오류 0(경고 1 = 기존 `scripts/live-turn-probe.mjs`) | — |
+| 실 키 측정 · 실기 | 0회 | 메인 승인 필요 · 실기는 사용자 |
+
+### 105.6 배포
+**Hosting만**(functions 변경 0).

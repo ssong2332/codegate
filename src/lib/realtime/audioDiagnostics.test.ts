@@ -5,6 +5,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  formatMicLine,
+  noteAsrChunk,
+  noteMicFrame,
+  registerMicTrack,
   AUDIO_DIAG_KEYS,
   buildAudioDiagRows,
   isAudioDebugEnabled,
@@ -208,4 +212,54 @@ test("[diag 음량] pcm.peakDb — 통화 중 받은 청크의 최대 진폭(게
   assert.equal(formatDbfs(0), "-inf");
   assert.equal(formatDbfs(1), "0.0");
   resetAudioDiagForTest();
+});
+
+// ── §105 — "말해도 묵묵부답" 가리기: 보낸 프레임 · 반이중/음소거로 안 보낸 프레임 · 서버 인식 조각 ──
+test("[§105] 마이크 진단 — 보냄 · 반이중 · 음소거 · 최대 진폭 · 서버 인식 조각 · 트랙 상태(받기마다 비운다)", () => {
+  resetAudioDiagForTest();
+  noteAccept(0);
+  registerMicTrack({ readyState: "live", muted: true, enabled: true });
+  noteMicFrame("sent", 0.1);
+  noteMicFrame("sent", 0.5);
+  noteMicFrame("echo");
+  noteMicFrame("mute");
+  noteMicFrame("mute");
+  noteAsrChunk();
+  const s = readAudioDiag();
+  assert.equal(s.micFramesSent, 2);
+  assert.equal(s.micFramesDroppedEcho, 1);
+  assert.equal(s.micFramesDroppedMute, 2);
+  assert.equal(s.micPeakMax, 0.5);
+  assert.equal(s.asrChunks, 1);
+  assert.equal(formatMicLine(), "[live-mic] sent=2 echo=1 mute=2 peakDb=-6.0 asr=1 track=live/muted in=-");
+  const rows = new Map(
+    buildAudioDiagRows({
+      snapshot: s,
+      callMode: "realtime",
+      status: "active",
+      provider: "gemini",
+      audioRoute: "call",
+      credentialsPrefetched: null,
+      acceptToCredentialsMs: null,
+      userActivation: null,
+      browser: "x",
+      flags: { audioPrime: true, ringCloseImmediate: false },
+    }),
+  );
+  assert.equal(rows.get("mic.track"), "live/muted");
+  assert.equal(rows.get("mic.sent"), "2");
+  assert.equal(rows.get("asr.rx"), "1");
+  noteAccept(10);
+  assert.equal(readAudioDiag().micFramesSent, 0);
+  assert.equal(readAudioDiag().mic, null);
+});
+
+test("[§105 배선] Gemini 세션이 프레임마다 결과를 적고 서버 인식 조각 · 트랙을 등록하고 close에 한 줄 남긴다", () => {
+  const src = readLf("src/lib/realtime/GeminiVoiceSession.tsx");
+  assert.ok(src.includes('noteMicFrame("echo")'));
+  assert.ok(src.includes('noteMicFrame("mute")'));
+  assert.ok(src.includes('noteMicFrame("sent", peakOf(frame))'));
+  assert.ok(src.includes("noteAsrChunk();"));
+  assert.ok((src.match(/registerMicTrack\(/g) ?? []).length >= 2, "처음 연 마이크 · 다시 연 마이크 둘 다");
+  assert.ok(src.includes("console.info(formatMicLine());"));
 });
