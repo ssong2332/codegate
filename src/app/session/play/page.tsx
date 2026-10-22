@@ -100,6 +100,7 @@ import {
   shouldShowReturnNotice,
   serializeTranscriptBackup,
 } from "@/lib/realtime/backgroundCall";
+import { openingTurnFor } from "@/lib/realtime/escalatedOpening";
 import { createScreenWakeLock, type WakeLockStatus } from "@/lib/realtime/screenWakeLock";
 import {
   RESUME_GESTURE_EVENTS,
@@ -1411,6 +1412,18 @@ export default function SessionCallPage() {
     await endCall("user");
   };
 
+  // §110.4(실기 신고 13) — 통화 중 빨간 종료 버튼 · 수신 거절. 메신저에서 넘어온 통화(`scenario.channel === "messenger"`)면 대화방 복귀다.
+  // 훈련 종료는 대화방의 종료 버튼 · 사기범이 대화방을 나갔을 때 · 이 화면의 "훈련 종료"(벨 직전 고지 등)만. 한도 도달 · 사기범 끊기 ·
+  // 서버 close는 종전대로 훈련을 끝낸다. 처음부터 통화인 시나리오는 종전(훈련 종료).
+  const returnsToMessengerOnHangup = scenario?.channel === "messenger";
+  const handleHangup = async () => {
+    if (returnsToMessengerOnHangup && !isEndLatched(callEndingRef.current)) {
+      await handleRequestReverseEscalation("hangup");
+      return;
+    }
+    await endCall("user");
+  };
+
   // 기존 `ended` 셸("통화가 종료되었습니다." — 서버 close · 폴백 한도)의 "결과 확인하러 가기". 래치가 없으면(폴백 한도 —
   // 서버가 이미 끝냈다) 상시 종료와 같고, 서버 close 뒤면 정지는 이미 했으므로 flush → 이동만 한다(오늘 동작).
   const handleEndedShellProceed = async () => {
@@ -1883,6 +1896,11 @@ export default function SessionCallPage() {
   };
 
   const handleDecline = () => {
+    // §110.4 — 메신저에서 넘어온 전화를 거절하면 대화방으로 돌아간다(사기범이 받지 않은 것을 짚고 톡으로 이어간다).
+    if (returnsToMessengerOnHangup) {
+      void handleRequestReverseEscalation("hangup");
+      return;
+    }
     router.push("/session/end");
   };
 
@@ -2076,26 +2094,34 @@ export default function SessionCallPage() {
   // T40 fast-follow — 역방향 명시 전환 버튼("메시지로 전환", §13.1/AC-039). 명시 버튼만 지원(구조화
   // 신호·max-turn 폴백은 이 태스크 범위 밖 — docs/Tasks.md T40 행 참고). 서버가 시나리오 자격을
   // 다시 검증하므로(requestReverseEscalation) 실패 시 화면에 그대로 안내만 남긴다.
-  const handleRequestReverseEscalation = async () => {
+  // §110.4(실기 신고 13) — 통화를 끊어도(종료 버튼) 메신저에서 넘어온 통화면 훈련을 끝내지 않고 대화방으로 돌아간다. 순서: 정지 → 전사 제출
+  // (대화방 · 리포트가 통화 내용을 안다) → 전환 + 사기범 복귀 메시지(`followUp`) → 대화방. "채팅으로" 버튼도 같은 경로다.
+  // 전환이 실패하면 종전처럼 훈련을 끝낸다(AC-006 "종료는 항상 성공" — 끊기 버튼을 눌렀는데 아무 일도 없는 상태 0).
+  const handleRequestReverseEscalation = async (via: "chat_button" | "hangup" = "chat_button") => {
     if (!sessionId || switchingToMessenger) return;
     // T192 C5 — 끊기 · 종료 래치 뒤에는 채널 전환을 시작하지 않는다(종료가 먼저 래치됐다).
     if (isEndLatched(callEndingRef.current)) return;
     setSwitchError(null);
     setSwitchingToMessenger(true);
+    if (via === "hangup") setLocalHangup(true);
+    audioRef.current?.pause();
+    realtime.stop();
+    speech.stop();
     try {
-      const result = await requestReverseEscalation({ sessionId });
+      await flushTranscript();
+      const result = await requestReverseEscalation({ sessionId, followUp: true });
       if (result.escalation?.toChannel === "messenger") {
-        audioRef.current?.pause();
-        realtime.stop();
-        // 전사를 먼저 제출해 메신저 단계로 돌아간 뒤에도 리포트가 지금까지의 통화 내용을 분석할
-        // 수 있게 한다(handleEndTraining과 동일한 이유).
-        await flushTranscript();
         router.push("/session/messenger");
+        return;
       }
+      throw new Error("전환 응답 없음");
     } catch {
-      setSwitchError("메시지 화면으로 전환하지 못했습니다. 다시 시도해 주세요.");
-    } finally {
       setSwitchingToMessenger(false);
+      if (via === "hangup") {
+        await endCall("user");
+        return;
+      }
+      setSwitchError("메시지 화면으로 전환하지 못했습니다. 다시 시도해 주세요.");
     }
   };
 
@@ -2477,7 +2503,12 @@ export default function SessionCallPage() {
             isHangupLatched={isHangupLatched}
             onScammerHangupAccepted={handleScammerHangupAccepted}
             onScammerHangupReady={handleScammerHangupReady}
-            resumeTurn={realtime.connectionSeq > 0 ? resumeTurn : null}
+            // §110.3 — 메신저에서 넘어온 통화의 첫 연결은 대화를 이어받는 첫마디 신호(`escalatedOpening.ts` 판정표).
+            resumeTurn={openingTurnFor({
+              connectionSeq: realtime.connectionSeq,
+              resumeTurn,
+              escalatedFromMessenger: scenario.channel === "messenger",
+            })}
             onConnectionLost={handleConnectionLost}
           />
         )
@@ -3188,7 +3219,8 @@ export default function SessionCallPage() {
             <button
               ref={endCallButtonRef}
               type="button"
-              onClick={() => void handleEndTraining()}
+              onClick={() => void handleHangup()}
+              // ⚠️ §110.4 — 메신저발 통화에서는 대화방 복귀지만 이름은 G441 불변(사용자 결정 2026-10-18) 그대로 둔다(이름 변경은 UX 결정 대기).
               aria-label="통화 종료 — 훈련 종료"
               className="flex h-[76px] w-[76px] items-center justify-center rounded-full shadow-lg transition active:scale-95"
               // 2026-10-21 — 누른 뒤에는 눌린 채로 옅게 남는다(이동 전 한 프레임이라도 "먹었다"가 보이게).

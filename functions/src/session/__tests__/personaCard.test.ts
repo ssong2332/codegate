@@ -476,14 +476,14 @@ test("[G627] 검증 위치 — 두 콜러블 모두 조합 함수 1곳 · 첫 Fi
     assert.match(source, /throw new HttpsError\("invalid-argument", "[^"]+", \{ reason: personaCardResult\.reason \}\);/, name);
   }
   assert.match(session, /\.\.\.\(personaCard \? \{ personaCard \} : \{\}\),/, "createSession: 카드 없는 세션은 필드 부재");
-  assert.match(session, /personaCard: personaCard\?\.items, voiceSelectionSource \}/, "createSession: 오프닝에 같은 카드");
+  assert.match(session, /personaCard: personaCard\?\.items, voiceSelectionSource, familyAddress \}/, "createSession: 오프닝에 같은 카드");
   assert.match(challenge, /\.\.\.\(personaCard \? \{ personaCard \} : \{\}\),/, "createChallenge: 입력 없는 챌린지는 필드 부재");
 });
 
 test("[G627] consentChallenge — 챌린지 카드를 오프닝 · 수신자 세션에 같이 넘기고, 소모(같은 트랜잭션) · 폐기 때 챌린지 문서에서 지운다", () => {
   const access = readSrc("challenge/userAccess.ts");
   assert.match(access, /const personaCard = readStoredPersonaCard\(preChallenge\?\.personaCard\);/);
-  assert.match(access, /challengeId: resolved\.challengeId, personaCard: personaCard\?\.items, voiceSelectionSource: undefined \}/);
+  assert.match(access, /challengeId: resolved\.challengeId, personaCard: personaCard\?\.items, voiceSelectionSource: undefined, familyAddress: undefined \}/);
   assert.match(access, /\.\.\.\(personaCard \? \{ personaCard \} : \{\}\),/);
   const txAt = access.indexOf("const claim = await db.runTransaction(");
   const consumeAt = access.indexOf("await markChallengeConsumed(resolved.challengeId, tx);");

@@ -176,7 +176,7 @@ function targetTexts(item: CatalogItem): Array<{ field: string; text: string }> 
 // ── ① 존재 대조(R-B) + 건수 단언(R-D) ────────────────────────────────────────────────
 
 test("[T116/렌더-존재] 카탈로그 **도달 가능 전수**의 초기 렌더 대상 문구가 실제 렌더 결과에 등장한다", (t) => {
-  assert.equal(catalogItems.length, 16, "도달 가능 랜딩은 16종이다(credential-form 11 + app-install 5, §53/§51 커밋 D · T194-a parcel-install · T194-c-1 Q2 3종 · §92.3 고급 전용 2종 · §98 검찰 보관 지갑 · §101 검찰 자산 검수 사이트)");
+  assert.equal(catalogItems.length, 17, "도달 가능 랜딩은 17종이다(credential-form 11 + app-install 6, §53/§51 커밋 D · T194-a parcel-install · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱 · §92.3 고급 전용 2종 · §98 검찰 보관 지갑 · §101 검찰 자산 검수 사이트)");
 
   let compared = 0;
   const perItem: string[] = [];
@@ -600,7 +600,7 @@ test("[T190/UX-023 v1.33 (2)(3)] 주소창 ⚠·모노 글꼴·🔒 0 · 기관 
 
 test("[T194-a §84.13.3 ③] 설치 항목마다 자기 문구만 그린다(교차 0) · 표에 없는 id의 app-install은 아무것도 그리지 않는다(지원금 기본값 0)", (t) => {
   const installs = catalogItems.filter((item) => item.kind === "app-install");
-  assert.equal(installs.length, 5, "설치 항목 5종(subsidy · parcel · T194-c-1 Q2 3종)");
+  assert.equal(installs.length, 6, "설치 항목 6종(subsidy · parcel · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱)");
   const lines: string[] = [];
   for (const item of installs) {
     const { text } = renderLandingScreen(propsFor(item));

@@ -21,6 +21,7 @@ import type { DifficultyLevel } from "../shared/difficulty";
 import type { ScammerMessage } from "./types";
 import type { PersonaCardItem } from "../shared/types";
 import { applyFictionalBank, resolveSessionAccountNumber } from "../shared/fictionalBank";
+import { applyFamilyAddressText, resolveFamilyAddressPrompt, type FamilyAddressTerm } from "../scenarios/familyAddress";
 
 // 사용자 신고(2026-07-25) — 오프닝 대사가 다짜고짜 요구·압박부터 들어가 시나리오 배경이 없다는
 // 피드백. buildSystemPrompt는 모든 턴에 공통으로 쓰이므로(sendMessage도 재사용), "이번이 첫 마디다"
@@ -60,6 +61,8 @@ export type OpeningSessionContext = {
    * 고른 세션은 오프닝부터 그 성별로 말한다(`resolveSessionSpeakerGender`). 챌린지 · 선택 없음 = `undefined`.
    */
   voiceSelectionSource: string | undefined;
+  /** §110.5(실기 신고 14) — 참가자가 고른 호칭(호출부가 검증한 값). 고르지 않았거나 챌린지 = `undefined`(원문 호칭). */
+  familyAddress: FamilyAddressTerm | undefined;
 };
 
 const NO_SESSION_CONTEXT: OpeningSessionContext = {
@@ -67,6 +70,7 @@ const NO_SESSION_CONTEXT: OpeningSessionContext = {
   challengeId: undefined,
   personaCard: undefined,
   voiceSelectionSource: undefined,
+  familyAddress: undefined,
 };
 
 export type OpeningLineResult = {
@@ -113,7 +117,8 @@ export async function generateOpeningLine(
   // 필요한 것(TS1016)이고, 단위 테스트의 1인자 호출만 쓴다.
   sessionContext: OpeningSessionContext = NO_SESSION_CONTEXT,
 ): Promise<OpeningLineResult> {
-  const { fictionalBankName, challengeId, personaCard, voiceSelectionSource } = sessionContext;
+  const { fictionalBankName, challengeId, personaCard, voiceSelectionSource, familyAddress } = sessionContext;
+  const familyAddressPrompt = resolveFamilyAddressPrompt(scenarioId, familyAddress);
   // 세션 문서가 아직 없으므로 세션 술어 입력을 호출부 값으로 조립한다(sendMessage는 세션 문서를 그대로 넘긴다).
   const sessionView = {
     scenarioId,
@@ -156,9 +161,11 @@ export async function generateOpeningLine(
       sessionAccountNumber: resolveSessionAccountNumber(scenarioId),
       // T194-b(§84.3.4 · G568 호출부 3곳 중 "오프닝 대사") — 부재 = 블록 0(바이트 동일).
       ...(personaCard ? { personaCard } : {}),
+      // §110.5 — 호칭(호출부 3곳 같은 값 · 부재 = 블록 0).
+      ...(familyAddressPrompt ? { familyAddress: familyAddressPrompt } : {}),
     }),
     messages: [], // 오프닝 대사에는 아직 사용자 입력이 없다.
-    mockTacticHints: scenarioPrompt.weakenedTactics,
+    mockTacticHints: scenarioPrompt.weakenedTactics.map((tactic) => applyFamilyAddressText(tactic, familyAddressPrompt)),
     // §102 — 사기범 대사 경로: 영어 거절 등 쓸 수 없는 응답은 다음 단계(Groq → Mock)로 넘긴다.
     purpose: "scammer-reply",
   });

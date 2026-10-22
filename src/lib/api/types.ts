@@ -66,6 +66,8 @@ export type CreateSessionRequest = {
   difficultyLevel?: DifficultyLevel;
   /** §88(UX D-131) — "이번 훈련 속 내 정보" 원값(선택 · 부재 = 카드 0). 서버가 검증해 카드로 만든다. */
   personaCardInput?: PersonaCardInput;
+  /** §110.5(실기 신고 14) — 가족 사칭 시나리오에서 사기범이 참가자를 부를 호칭(`@/lib/familyAddress`). 부재 = 종전(원문 호칭). */
+  familyAddress?: string;
 };
 // isMock(채팅 화면 구현 시 반영, 서버는 이미 반환 중 — functions/src/session/index.ts:96): 서버가
 // LLM 어댑터로 MockLlmClient를 썼다는 뜻(계약 드리프트 해소, API.md 갱신 권장).
@@ -401,8 +403,9 @@ export type RequestEscalationResponse = { escalation: { toChannel: "voice" } } |
 // --- requestReverseEscalation (T40 fast-follow · UX-014 명시 "메시지로 전환" 버튼 · §13.1/AC-039) ---
 // functions/src/session/types.ts와 1:1. requestEscalation과 반대 방향(보이스→메신저), 명시 버튼만
 // 지원(구조화 신호·max-turn 폴백 없음 — T40 판단, docs/Tasks.md T40 행 참고).
-export type RequestReverseEscalationRequest = { sessionId: string };
-export type RequestReverseEscalationResponse = { escalation: { toChannel: "messenger" } };
+// §110.4(실기 신고 13) — `followUp: true` = 통화를 끊고 돌아가는 경우(사기범이 통화 내용을 반영한 메시지 1건을 먼저 보낸다).
+export type RequestReverseEscalationRequest = { sessionId: string; followUp?: boolean };
+export type RequestReverseEscalationResponse = { escalation: { toChannel: "messenger" }; followUpTurnIndex?: number };
 
 // --- generateReport (Track A · T9 · UX-008 · AC-008/AC-009/AC-026) ---
 export type GenerateReportRequest = { sessionId: string };

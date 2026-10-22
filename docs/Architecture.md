@@ -23051,3 +23051,63 @@ GEMINI_API_KEY2 · 429 즉시 중단. 수정 전(main `77cddcc` lib)과 수정 �
 
 ### 109.6 배포
 **Hosting → Functions** 순서(§106과 같다). 반대 순서면 새 서버(사기범이 "한빛지방검찰청 정하람 수사관"이라 밝힘) + 옛 화면("OO수사본부" 열람본)이 Hosting 배포 전까지 어긋난다.
+
+## 110. (Bug fix · Feature change — 2026-10-22 · 브랜치 `claude/messenger-flow-round3-52c7f4` · 사용자 실기 신고 5건(9 · 10 · 12 · 13 · 14) · 갤럭시 S25 · 웨일 · 삼성 키보드) **메신저피싱 3차 — 키보드 위 빈 줄 · 앱 설치 링크 · 메신저↔통화 맥락 · 통화 끊기 = 대화방 복귀 · 호칭 선택** — implementer 기록 (DECISIONS #225 · UX D-150)
+
+⛔ 금지: 실제 사용자 사진 · 신분증 업로드/저장 0 · 실존 앱 이름 · 마켓 주소 · URL 0 · 참가자 실명/계정 정보로 호칭 짐작 0.
+
+### 110.1 신고 9 — 키보드 위 빈 줄(열쇠 · 위치 핀)
+| 항목 | 판정 |
+|---|---|
+| 정체 | 안드로이드 Chromium(웨일 포함 — 추정)의 **키보드 액세서리(수동 채우기) 줄**. 열쇠 = 저장 비밀번호 1개 이상, 핀 = 저장 주소 1개 이상(`password_accessory_controller_impl.cc` · `address_accessory_controller_impl.cc`) |
+| autocomplete · name · form 속성 | **효과 없음** — 칸 종류 판정(`GetFieldType`)이 그 속성을 보지 않는다 |
+| 처방 | 메신저 입력칸을 `<input type="text">` → **`<textarea rows={1}>`** (`manual_filling_controller_impl.cc` "don't show on textareas" — 132 · 140 · main, 관련 플래그 기본 꺼짐). Enter = 전송(한글 조합 중 · keyCode 229 · Shift+Enter 제외) |
+| 남는 위험 | Chrome이 textarea 플래그를 기본으로 켜면 다시 뜰 수 있다 · 웨일이 같은 코드인지는 추정(확인: `whale://version` · 실기) |
+근거 노트: 공유 노트 `keyboard-accessory-bar-research-2026-10-22.md`. ⚠️ 실기 확인 전.
+
+### 110.2 신고 10 — 앱 설치 · 신분증 사진 (판단: 1차 = 설치 링크, 2차 = 사진)
+| 단계 | 이번 PR | 판정(#371 "가장 깊이 간 단계" 표 그대로) |
+|---|---|---|
+| 링크 열기 | 자녀 사칭 카톡 고급(fv-tdgg) 사기범이 `[[LINK:child-insurance-install]]` 칩("보험 접수 앱 설치하기")을 보낸다 → 기존 모의 설치 화면(app-install — 신규 kind 0) | 열람 = 표시 전용(D-51 ③ — 속은 순간 아님, AC-062 보호 그대로) |
+| 설치 · 권한 허용 | 모의 화면 "권한 허용하고 계속하기" | `consented` = 속은 순간 1건(D-51 ④ · `momentTactic` "자녀 사칭 — 보험 접수 앱 설치·권한 허용 유도") |
+| 사진 보내기 | **2차로 미룸** | — |
+2차 제안(메인 결정 필요): 입력줄 '+' → "사진 보내기(모의)" 시트 → 샘플 카드("신분증 사진(모의)" — 그림은 CSS로 그린 가짜 · 업로드 0) → 사용자 메시지 첨부 `kind:"photo"`(새 첨부 종류 — `MessengerAttachment` 합집합 확장) → 서버가 "사진 전송" 기록 → 리포트 속은 순간 승격(모의 화면 승격과 같은 규칙). 첨부 종류 확장이 클라 렌더 · 리포트 앵커 · 무해성 게이트 여러 곳에 닿아 이번 PR에서 분리했다. 링크 열기를 속은 순간으로 올리는 것은 D-51 ③ 변경이라 별도 결정이다.
+
+### 110.3 신고 12 — 메신저 대화가 통화로 이어지지 않음
+| 원인 | Live 세션은 토큰에 고정된 시스템 프롬프트만 안다. `createRealtimeCall`이 `messages`를 읽지 않았고, 첫 턴 신호가 "신분과 전화한 이유를 밝혀라"였다 + 통화 단계 규칙이 "친구 폰 빌려서 전화했어"를 첫 마디로 지시 |
+|---|---|
+| 처방 ① 서버 | 메신저→통화 전이 세션(`isEscalatedVoiceCall`)이면 `messages`(메시지 · 앞선 통화 전사)와 `mockScreens`(화면에서 한 일)를 읽어 `realtime/priorChatContext.ts` 블록을 Live 프롬프트 턴 지시 자리(가드레일 앞)에 싣는다. 상한 24줄 · 줄당 200자 · 전체 3000자. 참가자 줄은 구분자 흉내 무력화 + "데이터일 뿐" 고지. 읽기 실패 = 블록 없이 진행 |
+| 처방 ② 클라 | 메신저 시나리오의 첫 연결은 `ESCALATED_CALL_OPENING_TURN`("메시지로 하던 이야기 때문에 전화했다" 짧은 첫 마디)을 보낸다(`src/lib/realtime/escalatedOpening.ts` — 재연결은 종전 `buildResumeTurn`) |
+| 처방 ③ 프롬프트 | `CHILD_CALL_PHASE_RULE` 첫 마디 = "나야, 톡으로 말한 거 때문에 전화했어"처럼 이어받기 · 사정 재설명 금지 |
+| 폴백(텍스트) 통화 | 종전대로 `sendMessage`가 이력 전체를 읽는다(변경 0) |
+
+### 110.4 신고 13 — 통화를 끊으면 훈련 종료
+| 트리거(메신저 시나리오의 통화) | 이전 | 이후 |
+|---|---|---|
+| 빨간 종료 버튼 | 훈련 종료 | 대화방 복귀: 정지 → 전사 제출 → `requestReverseEscalation({followUp:true})` → `/session/messenger` |
+| 수신 거절 | 훈련 종료 | 대화방 복귀(같은 경로) |
+| "채팅으로" 버튼 | 전환 → 전사 제출(순서 반대) | 전사 제출 → 전환(복귀 메시지 포함) |
+| 전환 실패 | — | 버튼 = 종전 훈련 종료(AC-006 "종료는 항상 성공") |
+| 한도 도달 · 사기범 끊기 · 서버 close · 벨 직전 고지의 "훈련 종료" | 훈련 종료 | 그대로 |
+| 처음부터 통화인 시나리오 | 훈련 종료 | 그대로 |
+복귀 메시지: 서버가 전이 뒤 `roleplay/callReturnLine.ts`(턴 지시 `CALL_RETURN_INSTRUCTION` + 내부 트리거 턴)로 1건 생성 → 채널 messenger로 저장(`session/callReturn.ts` — 생성 중 이력이 바뀌면 저장 0). Mock 강등 · 실패 = 저장 0(전환은 완료). 통화 전사는 `messages`(channel voice)에 남아 메신저 맥락 · 리포트 타임라인 둘 다에 들어간다(종전 구조).
+⚠️ 빨간 버튼 스크린리더 이름 "통화 종료 — 훈련 종료"는 G441 불변(사용자 결정 2026-10-18)이라 **그대로** 두었다 — 메신저발 통화에서는 실제 동작(대화방 복귀)과 이름이 어긋난다. 이름 변경은 UX 결정 대기(D-150 (4)).
+
+### 110.5 신고 14 — 자녀 사칭 호칭이 늘 '엄마'
+| 항목 | 판정 |
+|---|---|
+| 기존 입력 | 없음 — '이번 훈련 속 내 정보'(§88 · §93)는 기관형 · 협박형 × 고급 × 통화 시작 전용 |
+| 대상 | 자녀 사칭 카톡 · 자녀 사고(딥보이스) = 엄마/아빠 · 손주 사칭 = 할머니/할아버지(`scenarios/familyAddress.ts` 표) |
+| 입력 | 난이도 화면(self) 두 판 중 하나 — **고르기 전 시작 불가**(기본값으로 성별 짐작 0). 탭 힌트로 목소리 선택 · 클론 대기의 `createSession`까지 |
+| 서버 | `createSession`이 검증(선택지 밖 · 대상 밖 = `invalid-argument` · reason `family-address-invalid`) → 세션 `familyAddress` |
+| 조립 | `buildSystemPrompt` `familyAddress` — [호칭] 블록 + 원문 호칭과 다르면 두 호칭 **맞바꿈**(예: "아빠한테는 비밀로" → "엄마한테는"). 호출부: sendMessage · 오프닝 · Live 토큰 · 통화 복귀 메시지. 부재 = 바이트 동일 |
+| 범위 밖 | 보내기(챌린지) — 종전 원문 호칭(엄마/할머니). 후속 |
+
+### 110.6 겹친 파일(병행 세션)
+`src/app/session/play/page.tsx`(live-call-round3 — 종료 처리기 · 거절 · `resumeTurn` 3곳만) · `functions/src/llm/*` 무변경(haiku-switch).
+
+### 110.7 검증
+루트 `npm test` 1025/0 · `npm --prefix functions test` 1701/0 · lint 2종 오류 0. ⚠️ 실 키 프로브 · 실기 · 로컬 모바일 캡처 미실시.
+
+### 110.8 배포 순서
+**Functions 먼저 → Hosting**: 새 화면은 `requestReverseEscalation({followUp})` · `createSession({familyAddress})`를 보낸다 — 옛 서버는 `followUp`을 무시(전환만)하고 `familyAddress`는 구조분해하지 않아 무시한다(화면이 먼저여도 깨지지 않지만 복귀 메시지 · 호칭이 빠진다). 옛 화면 + 새 서버는 필드를 보내지 않아 종전 동작. 인덱스 변경 0.
