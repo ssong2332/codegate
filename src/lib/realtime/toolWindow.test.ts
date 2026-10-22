@@ -181,10 +181,37 @@ test("[§104 문자 주장] 보냈다는 말은 잡고 · 보내겠다는 말 ·
 
 test("[§104 문자 주장 배선] 화면 — 사기범 전사에서 주장을 표시하고 다음 백스톱 질의에 싣는다 · 도착 · none_pending이면 내린다", () => {
   const page = readFileSync("src/app/session/play/page.tsx", "utf8").replace(/\r\n/g, "\n");
-  assert.ok(page.includes('if (role === "scammer" && scammerClaimsSmsSent(text)) smsClaimPendingRef.current = true;'));
+  // §108 — 블록 형태로 바뀌었다(주장 표시 + 즉시 질의 깨우기).
+  assert.match(page, /if \(role === "scammer" && scammerClaimsSmsSent\(text\)\) \{\n\s+smsClaimPendingRef\.current = true;/);
   assert.ok(page.includes("...(smsClaimPendingRef.current ? { smsClaimed: true } : {}),"));
   assert.ok(page.includes('if (result.status === "delivered" || result.status === "none_pending") smsClaimPendingRef.current = false;'));
   const types = readFileSync("src/lib/api/types.ts", "utf8");
   const serverTypes = readFileSync("functions/src/inCallSms/types.ts", "utf8");
   assert.ok(types.includes("smsClaimed?: boolean;") && serverTypes.includes("smsClaimed?: boolean;"), "요청 키가 클라 · 서버 타입에 같다");
+});
+
+// ── §108 — 주장이 생긴 사기범 턴에 바로 묻는다(실기 신고 "문자 발송이 여전히 느리게 온다") ─────────────────────────
+test("[§108 주장 즉시 질의] 같은 발화 수로 이미 물었어도 주장이 새로 생기면 한 번 더 묻는다 · 주장당 1회", () => {
+  const asked = { ...smsBase, lastRequestedUserTurns: 3 };
+  assert.equal(shouldRequestSmsBackstop(asked), false, "주장 없음 — 종전");
+  assert.equal(shouldRequestSmsBackstop({ ...asked, claimPending: true, lastClaimRequestedUserTurns: 2 }), true);
+  assert.equal(shouldRequestSmsBackstop({ ...asked, claimPending: true, lastClaimRequestedUserTurns: 3 }), false, "주장당 1회");
+  assert.equal(shouldRequestSmsBackstop({ ...asked, claimPending: true }), true, "부재 = -1");
+});
+
+test("[§108 주장 즉시 질의] 문자 선언 없음 · none_pending · 진행 중이면 주장이 있어도 묻지 않는다", () => {
+  const claim = { ...smsBase, lastRequestedUserTurns: 3, claimPending: true, lastClaimRequestedUserTurns: -1 };
+  assert.equal(shouldRequestSmsBackstop({ ...claim, enabled: false }), false);
+  assert.equal(shouldRequestSmsBackstop({ ...claim, nonePending: true }), false);
+  assert.equal(shouldRequestSmsBackstop({ ...claim, inFlight: true }), false);
+});
+
+test("[§108 배선] 통화 화면 — 사기범 주장 턴에서 깨우기 값이 오르고, 백스톱 effect가 그 값에 의존한다", () => {
+  const page = readFileSync("src/app/session/play/page.tsx", "utf8").replace(/\r\n/g, "\n");
+  const claimAt = page.indexOf("if (role === \"scammer\" && scammerClaimsSmsSent(text)) {");
+  assert.ok(claimAt > 0);
+  assert.ok(page.slice(claimAt, claimAt + 300).includes("setSmsClaimTick((n) => n + 1);"));
+  assert.ok(page.includes("claimPending: smsClaimPendingRef.current,"));
+  assert.ok(page.includes("if (smsClaimPendingRef.current) state.lastClaimRequestedUserTurns = userTurnCount;"));
+  assert.match(page, /userTurnCount,\n\s+smsClaimTick,\n\s+realtime\.credentials\?\.inCallSmsBackstop,/);
 });

@@ -49,6 +49,8 @@ export async function decideAndMarkRealtimeHangup<Ref>(
    */
   delivered: readonly DeliveredSmsRecord[],
   acceptedAt: FirebaseFirestore.Timestamp,
+  /** §108 — 4행 입력(`goalAction.ts` `hasCompletedGoalAction` · 핸들러가 트랜잭션 밖에서 읽어 넘긴다 · 읽기 실패 = false). */
+  goalActionDone: boolean,
 ): Promise<ScammerHangupDecision> {
   const smsAwaitingUser = isSmsAwaitingUser(delivered, claims.userTurns);
   const sessionSnap = await tx.get(refs.session);
@@ -63,6 +65,7 @@ export async function decideAndMarkRealtimeHangup<Ref>(
       transferPlaced: false,
       // 세션 부재 = 1행이 이긴다(값 무의미 · 막는 쪽).
       transferReachable: true,
+      goalActionDone: false,
       userTurns: claims.userTurns,
       pendingInstruction: claims.pendingInstruction,
       smsAwaitingUser,
@@ -91,6 +94,7 @@ export async function decideAndMarkRealtimeHangup<Ref>(
     transferPlaced,
     // T192 C6-R — 실시간 경로는 진리표 1행(항상 true · 동작 변화 0). 같은 함수를 부른다(판정 지점 하나 — G596).
     transferReachable: isVerifyTransferReachable({ path: "realtime", scenarioId: session.scenarioId, offerDoc }),
+    goalActionDone,
     userTurns: claims.userTurns,
     pendingInstruction: claims.pendingInstruction,
     smsAwaitingUser,

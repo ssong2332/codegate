@@ -38,6 +38,7 @@ import {
 } from "../inCallSms/smsGate";
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms } from "../inCallSms/smsDelivery";
+import { hasCompletedGoalAction, readMockScreenCompletion } from "../scammerHangup/goalAction";
 import type { SmsDeliveryInput } from "../inCallSms/smsDelivery";
 import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import {
@@ -334,6 +335,21 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // ②-c′ 사기범 끊기 **사전 판정**(T192 C3 · Architecture.md §79.7 · §79.19 (5) 10 · AC-103). LLM 호출 전에 아는 값만으로
     // 실시간 콜러블과 **같은 판정 함수**를 부른다(AC-103 (f)). `accepted`인 턴에만 [진행 강제] 끊기 규칙이 SIGNAL 변형으로
     // 실린다(그 밖 = NONE — 종전 문면). 신호를 실제로 받아들일지는 응답 뒤 사후 판정이 다시 정한다(Mock · 문자 마커).
+    // §108 — 4행 입력(목표 화면 행동 완료 · 실시간 콜러블과 같은 함수). 확인 무력화 세션에서만 읽는다 · 실패 = 미완료(fail-closed).
+    let goalActionDone = false;
+    if (verifyEnabled) {
+      try {
+        goalActionDone = hasCompletedGoalAction({
+          delivered: smsDeliveredLoaded ? smsDelivered : [],
+          mockScreens: await readMockScreenCompletion(sessionRef),
+          declared: smsDeclared,
+          declaredKnown: smsDeclaredReason === undefined,
+          userTurns: userTurnsNow,
+        });
+      } catch {
+        goalActionDone = false;
+      }
+    }
     const hangupFacts: FallbackHangupFacts = {
       status: session.status,
       channel: session.channel,
@@ -346,6 +362,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         scenarioId: session.scenarioId,
         offerDoc: verifyOfferDoc,
       }),
+      goalActionDone,
       userTurns: userTurnsNow,
       limitReached,
       alreadyAccepted: Boolean(session.scammerHangup),
