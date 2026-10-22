@@ -23,7 +23,8 @@ AI 사기범과 실제 전화·문자처럼 대화하며 보이스피싱·메신
 ```
 브라우저(Next.js 정적 페이지)
   ├─ 실시간 음성: Gemini Live(gemini-3.8-live) — 서버가 프롬프트를 고정한 단기 토큰만 발급
-  ├─ 텍스트 대사: Cloud Functions → gemini-3.1-flash-lite → (503) gemini-3.5-flash-lite → (429·5xx·시간 초과) Groq
+  ├─ 사기범 대사: Cloud Functions → claude-sonnet-5-5 → (실패·5초 초과) gemini-3.5-flash-lite → (429·5xx·시간 초과) Groq
+  ├─ 그 밖의 텍스트(되감기 판정 등): gemini-3.1-flash-lite → (503) gemini-3.5-flash-lite → Groq
   │              모두 실패하면 규칙 기반 목업으로 강등(대화는 끊기지 않는다)
   ├─ 딥보이스: ElevenLabs(목소리 클론·Agents)
   └─ 저장·인증: Firebase Auth(Google·익명) / Firestore / Storage
@@ -155,6 +156,7 @@ cp functions/.env.example functions/.env
 | `GEMINI_API_KEY` | **무료** 실시간 음성 통화(Gemini Live, generic 3종) + **텍스트 대화(사기범 역할극) LLM**(DECISIONS #29) — 아래 설명 참조 |
 | `GEMINI_API_KEY2` | (선택) 1번 키가 일일 할당량을 소진했을 때 넘어갈 **2번 키** — 아래 "키 순환" 참조. ⚠️ **반드시 다른 GCP 프로젝트의 키여야 한다** |
 | `GROQ_API_KEY` | (선택) 텍스트 대사 생성 **3차 예비**(Groq `openai/gpt-oss-120b`) — 아래 "3차 예비 Groq" 참조. 키는 **하나만**. 로컬은 `functions/.secret.local` 권장 |
+| `CLAUDE_API_KEY` | (선택) **사기범 대사 1차** LLM(Claude `claude-sonnet-5-5`) — 아래 "사기범 대사 1차 Claude" 참조. 없으면 사기범 대사도 Gemini 체인. 로컬은 `functions/.secret.local` 권장 |
 | `ELEVENLABS_API_KEY` | ElevenLabs Instant Voice Cloning + TTS + Agents(실시간 통화) API 키 |
 | `ELEVENLABS_AGENT_IDS` | 실시간 음성 통화용 `scenarioId:agentId` 매핑(쉼표 구분) — 아래 설명 참조 |
 | `LLM_API_KEY` | 사기범 역할극/리포트 생성용 LLM API 키 |
@@ -253,6 +255,20 @@ Gemini Live 경로의 모델은 `gemini-3.8-live`다(`functions/src/realtime/gem
 > 이 서비스의 요청 1건은 약 3,500~4,200토큰이라(2026-10-18 실측) **실제로는 분당 1~2건 · 하루 약 50건**까지만
 > 처리된다. 넘치면 Groq가 429를 돌려주고 그 턴은 목업으로 강등된다. Gemini가 오래 장애일 때의 대체재가 아니라
 > 짧은 순간 장애를 메우는 완충이다.
+
+##### 사기범 대사 1차 Claude (`CLAUDE_API_KEY`, 2026-10-22 · `docs/Architecture.md` §107)
+
+사기범 대사(메신저 답장 · 오프닝 첫마디)는 **1차 `claude-sonnet-5-5` → 2차 `gemini-3.5-flash-lite` → 3차 Groq → 목업** 순서다
+(`functions/src/llm/claudeClient.ts` · `claudeFallback.ts`). 되감기 판정처럼 용도가 다른 호출은 위 Gemini 체인 그대로다.
+
+- **넘어가는 조건**: Claude가 실패하면(오류 종류 무관) · 거절하면 · 쓸 수 없는 대사를 내면 · 5초(첫 턴 15초) 안에 끝나지 않으면 2차로 1회 넘어간다.
+- **시간 예산**: 전체 상한(10초 · 20초)은 그대로다. Claude 5초 → Gemini 2차에 2초 이상 → Groq 3초.
+- **개인정보**: Groq와 같이 이름·생년월일을 가명으로 바꿔 보내고 응답에서 되돌린다.
+- **비용**: 실측 세션당 약 $0.20(약 11호출 · 한국어 프롬프트 약 4,500토큰/호출) — 하루 50세션이면 월 약 $300.
+- **설정**: 로컬은 `functions/.secret.local`에 `CLAUDE_API_KEY=...`. 배포 전에는 `firebase functions:secrets:set CLAUDE_API_KEY`가
+  **먼저** 필요하다(등록하지 않고 배포하면 배포 분석 단계가 값을 요구하며 멈춘다). 키가 없으면
+  `Claude 1차 비활성 — CLAUDE_API_KEY 없음` 로그 1줄과 함께 사기범 대사도 Gemini 체인을 쓴다.
+- **확인**: `sendMessage LLM 응답 단계` 로그의 `servedBy`가 `claude-primary`면 1차가 답한 것이다.
 
 > 어느 키로 넘어갔는지는 **서버 로그에만** 남는다(`geminiKeySlot`·`geminiKeyIndex`·`quotaClass`).
 > ⛔ 키 값은 로그·응답·리포트 어디에도 기록하지 않는다.

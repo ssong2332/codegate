@@ -320,7 +320,7 @@ test("⑨ providerName을 그대로 위임한다(G176) — withTimeout으로 감
 // ⇒ 소스 스캔으로 배선을 못박고, 오염본으로 스캔이 실제로 가르는지 역검증한다.
 // 형태: `primary = keys.length > 0 ? withOverloadRetry(tagServedBy(createRotatingGeminiClient(keys), "gemini-primary"), {…budgetMs: geminiBudgetMs…}) : new MockLlmClient();`
 //       (2026-10-18 §75 — Groq 3차 예비로 예산이 `geminiBudgetMs = groqKey ? timeoutMs - GROQ_RESERVE_MS : timeoutMs`가 됐다)
-//       `return withTimeout(client, timeoutMs);` — withTimeout이 가장 바깥(firstTurnTimeout.test.ts의 기존 단언과 공존).
+//       `return withTimeout(routed, timeoutMs);` — withTimeout이 가장 바깥(firstTurnTimeout.test.ts의 기존 단언과 공존).
 const INDEX_SRC = path.resolve(__dirname, "../../../src/llm/index.ts");
 
 function getLlmClientBody(src: string): string {
@@ -351,7 +351,7 @@ function wiringViolations(body: string): string[] {
   }
   // 2026-10-18 Groq 3차 예비(Architecture.md §75) — Gemini 체인 예산은 인자 timeoutMs에서 파생한다(Groq 없으면 timeoutMs 그대로).
   if (!/const geminiBudgetMs = groqKey \? timeoutMs - GROQ_RESERVE_MS : timeoutMs;/.test(code)) violations.push("geminiBudgetMs가 timeoutMs에서 파생돼야 한다(상수화 금지)");
-  if (!/return withTimeout\(client, timeoutMs\);/.test(code)) violations.push("withTimeout(client, timeoutMs)가 가장 바깥이어야 한다");
+  if (!/return withTimeout\(routed, timeoutMs\);/.test(code)) violations.push("withTimeout(routed, timeoutMs)가 가장 바깥이어야 한다");
   if ((code.match(/withTimeout\(/g) ?? []).length !== 1) violations.push("withTimeout은 정확히 1번(가장 바깥)만 감싸야 한다");
   if ((code.match(/withOverloadRetry\(/g) ?? []).length !== 1) violations.push("withOverloadRetry는 정확히 1곳(실 Gemini)만 감싸야 한다");
   if (/withOverloadRetry\(\s*new MockLlmClient/.test(code)) violations.push("Mock에 과부하 재시도를 붙이면 안 된다");
@@ -371,7 +371,7 @@ test("⑩-역검증: 오염본(순서 뒤집기·Mock에 부착·재시도 누�
   const contaminated: Record<string, string> = {
     "순서 뒤집기(withTimeout이 안쪽)": body
       .replace(retryCall[0], "withTimeout(createRotatingGeminiClient(keys), timeoutMs)")
-      .replace("return withTimeout(client, timeoutMs);", `return withOverloadRetry(client, ${opts});`),
+      .replace("return withTimeout(routed, timeoutMs);", `return withOverloadRetry(routed, ${opts});`),
     "Mock에 부착": body.replace(": new MockLlmClient();", `: withOverloadRetry(new MockLlmClient(), ${opts});`),
     "재시도 누락": body.replace(retryCall[0], "createRotatingGeminiClient(keys)"),
     "예산 상수화": body.replace("budgetMs: geminiBudgetMs", "budgetMs: LLM_TIMEOUT_MS"),
