@@ -389,7 +389,9 @@ function groqWiringViolations(code: string): string[] {
     v.push("client = groqKey ? withGroqFallback(withStageDeadline(gemini, geminiBudgetMs), Groq, {budgetMs: timeoutMs…}) : gemini 이어야 한다");
   }
   if ((code.match(/withGroqFallback\(/g) ?? []).length !== 1) v.push("withGroqFallback은 1곳");
-  if (!/return withTimeout\(client, timeoutMs\);/.test(code)) v.push("withTimeout이 가장 바깥");
+  // §103 — 사기범 대사 라우팅(routed)도 withTimeout 안쪽이다. routed는 이 client(또는 그것을 기본으로 둔 라우터)다.
+  if (!/const routed = scammerClient \? routeScammerReply\(client, scammerClient\) : client;/.test(code)) v.push("routed는 client를 기본 체인으로 둔다");
+  if (!/return withTimeout\(routed, timeoutMs\);/.test(code)) v.push("withTimeout이 가장 바깥");
   return v;
 }
 
@@ -403,7 +405,7 @@ test("⑩-역검증: 오염본(단계 상한 누락·Groq 단독·예산 상수�
     "단계 상한 누락": code.replace("withStageDeadline(gemini, geminiBudgetMs)", "gemini"),
     "Groq 단독(키 무조건 읽기)": code.replace('keys.length > 0 ? getGroqApiKey() : ""', "getGroqApiKey()"),
     "예산 상수화": code.replace("budgetMs: timeoutMs,\n        minAttemptMs", "budgetMs: LLM_TIMEOUT_MS,\n        minAttemptMs"),
-    "Groq가 바깥 상한 밖": code.replace("return withTimeout(client, timeoutMs);", "return withGroqFallback(withTimeout(client, timeoutMs), x, y);"),
+    "Groq가 바깥 상한 밖": code.replace("return withTimeout(routed, timeoutMs);", "return withGroqFallback(withTimeout(routed, timeoutMs), x, y);"),
   };
   for (const [label, src] of Object.entries(contaminated)) {
     assert.notEqual(src, code, `${label}: 오염이 적용되지 않았다`);
@@ -420,6 +422,6 @@ test("⑪ 예산 상수: Groq 몫 3초 — 일반 턴 Gemini 7초 · 첫 턴 17�
 
 test("⑫ 시크릿: GROQ_API_KEY는 LLM_TEXT_SECRETS에만 있고 Gemini 키 순환 배열에는 없다(키 1개)", () => {
   assert.deepEqual(GEMINI_KEY_SECRETS.map((s) => s.name), ["GEMINI_API_KEY", "GEMINI_API_KEY2"]);
-  assert.deepEqual(LLM_TEXT_SECRETS.map((s) => s.name), ["GEMINI_API_KEY", "GEMINI_API_KEY2", "GROQ_API_KEY"]);
+  assert.deepEqual(LLM_TEXT_SECRETS.map((s) => s.name), ["GEMINI_API_KEY", "GEMINI_API_KEY2", "GROQ_API_KEY", "CLAUDE_API_KEY"]);
   assert.equal(LLM_TEXT_SECRETS.filter((s) => s.name.startsWith("GROQ")).length, 1, "Groq 키 순환 금지(한도는 조직 단위)");
 });

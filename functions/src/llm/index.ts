@@ -11,10 +11,13 @@ export type { LlmClient, LlmCompletionInput, LlmCompletionResult, LlmMessage, Ll
 export { MockLlmClient } from "./mockClient";
 export { GeminiLlmClient } from "./geminiClient";
 export { GroqLlmClient } from "./groqClient";
+export { ClaudeLlmClient } from "./claudeClient";
 
 import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
-import { GEMINI_KEY_SECRETS, GROQ_API_KEY } from "../shared/config";
+import { CLAUDE_API_KEY, GEMINI_KEY_SECRETS, GROQ_API_KEY } from "../shared/config";
+import { ClaudeLlmClient } from "./claudeClient";
+import { withGeminiAfterClaude } from "./claudeFallback";
 import { GEMINI_FALLBACK_TEXT_MODEL, GeminiLlmClient } from "./geminiClient";
 import { GroqLlmClient } from "./groqClient";
 import { assertUsableScammerReply, tagServedBy, withGroqFallback, withStageDeadline } from "./groqFallback";
@@ -99,6 +102,19 @@ export function getGroqApiKey(): string {
 let groqDisabledLogged = false;
 
 /**
+ * 사기범 대사 체인에서 Gemini 2차에 남겨 두는 시간(ms, 2026-10-22 · §103) — Claude 1차 단계 상한은
+ * `geminiBudgetMs - 이 값`이다. 근거: 2차 gemini-3.5-flash-lite 실측 p95 1.86초(78호출).
+ */
+export const CLAUDE_GEMINI_RESERVE_MS = 2000;
+
+/** Claude 키(하나만)를 읽는다 — 없거나 placeholder면 "". 값은 관측에 나가지 않는다(G170). */
+export function getClaudeApiKey(): string {
+  return readSecret(CLAUDE_API_KEY);
+}
+
+let claudeDisabledLogged = false;
+
+/**
  * LlmClient.complete()을 Promise.race로 감싸 LLM_TIMEOUT_MS 초과 시 `deadline-exceeded`
  * HttpsError를 던진다. getLlmClient()가 반환하는 모든 구현체(Mock이든 향후 Claude/Gemini든)에
  * 공통 적용되도록 팩토리 단계에서 감싼다 — 호출부(sendMessage/generateOpeningLine)가 각자
@@ -136,13 +152,16 @@ export function withTimeout(client: LlmClient, timeoutMs: number): LlmClient {
  * 같은 키로 이미 실시간 음성 경로에 쓰고 있는 것과 동일한 자격증명이다. 없으면(placeholder 포함)
  * MockLlmClient로 강등한다.
  *
- * TODO(LLM_API_KEY/ANTHROPIC 확보 후): LLM_PROVIDER==="claude"일 때 `ClaudeLlmClient` 분기를
- * 추가한다(DECISIONS #11). 지금은 LLM_API_KEY가 여전히 placeholder라 이 분기는 만들지 않는다.
+ * ⭐ 2026-10-22(§103): `CLAUDE_API_KEY`가 있으면 **사기범 대사 경로(`purpose: "scammer-reply"`)만** 1차 Claude
+ * (claude-sonnet-5-5) → 2차 gemini-3.5-flash-lite → 3차 Groq로 보낸다(`buildScammerReplyChain`). 되감기 판정처럼
+ * 용도가 없는 호출은 아래 기존 Gemini 체인 그대로다. `LLM_PROVIDER` 값은 여전히 읽지 않는다.
  *
  * ⚠️ 호출부 주의: 이 함수를 (직접 또는 generateOpeningLine/sendMessage를 통해 간접) 호출하는 모든
  * onCall 핸들러는 `{ secrets: [...GEMINI_KEY_SECRETS] }`를 옵션에 선언해야 한다(realtime/index.ts의
  * createRealtimeCall과 동일한 이유 — Firebase Functions v2는 선언되지 않은 secret을 배포 환경에서
  * 런타임에 주입하지 않는다).
+ * ⭐ 갱신(2026-10-22, §103): 지금 선언은 `LLM_TEXT_SECRETS`(Gemini 키 슬롯 + GROQ_API_KEY + CLAUDE_API_KEY)이고,
+ * 선언 정합은 secretDeclarationGate 테스트가 기계적으로 대조한다. 아래 목록은 T132 시점 이력이다.
  *
  * ⭐ 해당 핸들러는 **5곳**이다(T132에서 전수 grep으로 정정 — 이전 주석은 "3곳"이라 적어
  * rewind·realtime을 빠뜨리고 있었다. 목록을 손으로 유지하는 방식 자체가 그 드리프트를 낳았고,
@@ -198,12 +217,15 @@ export function getLlmClient(timeoutMs: number = LLM_TIMEOUT_MS): LlmClient {
         minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS,
       })
     : gemini;
+  // §103(2026-10-22) — 사기범 대사 경로만 1차 Claude → 2차 gemini-3.5-flash-lite → 3차 Groq. 그 밖(되감기 판정 등)은 위 체인 그대로.
+  const scammerClient = buildScammerReplyChain(keys, groqKey, timeoutMs, geminiBudgetMs);
+  const routed = scammerClient ? routeScammerReply(client, scammerClient) : client;
   // ⛔ withTimeout이 순환기·과부하 재시도·대체 모델·Groq **바깥**이다(§37.5 (1)) — 모든 시도의 **총합**이 timeoutMs로 갇힌다.
   // 뒤집으면 키마다 시간 제한이 걸려 2키에서 2배가 되어 AC-004 목표가 깨진다.
   // 예비 요청(withHedge, PR #289)은 2026-10-18 되돌렸다 — 배포 후 실측에서 예비 요청 승리 0/2,
   // 4초 초과 호출 3/3으로 Gemini 호출만 2배가 됐고, 첫 턴은 1차·예비 둘 다 10초를 넘겨 지연이
   // 요청 간 상관돼 있었다(예비 요청이 구조적으로 무효). 대신 첫 턴만 LLM_FIRST_TURN_TIMEOUT_MS를 쓴다.
-  return withTimeout(client, timeoutMs);
+  return withTimeout(routed, timeoutMs);
 }
 
 /**
@@ -251,4 +273,60 @@ export async function completeWithFallback(
     });
     return { ...(await new MockLlmClient().complete(input)), servedBy: "mock" };
   }
+}
+
+/**
+ * 사기범 대사 체인(§103) — Claude 키와 Gemini 키가 **둘 다** 있을 때만 만든다(없으면 undefined = 기존 체인 그대로).
+ *
+ * 예산(일반 턴 10초 · Groq 있음): Claude ≤ 5초 → Gemini 2차 ≥ 2초 남김 → Groq 3초.
+ *   - Claude 단계 상한 = `geminiBudgetMs - CLAUDE_GEMINI_RESERVE_MS`(일반 5초 · 첫 턴 15초 · Groq 없으면 8초).
+ *     근거: 실측 p95 3.59초 · 최대 5.31초(132호출) — 5초를 넘기는 드문 호출은 2차로 넘기는 편이 빠르다.
+ *   - 1·2차 합계는 기존 Gemini 체인과 같은 `geminiBudgetMs`(상한을 넘기면 Groq로).
+ * 2차는 대체 모델 순환기를 그대로 쓴다(429 키 전환 규칙 동일). 과부하 재시도는 두지 않는다 — 남은 시간이 2초 남짓이다.
+ */
+function buildScammerReplyChain(
+  keys: GeminiKeySlot[],
+  groqKey: string,
+  timeoutMs: number,
+  geminiBudgetMs: number,
+): LlmClient | undefined {
+  const claudeKey = keys.length > 0 ? getClaudeApiKey() : "";
+  if (!claudeKey) {
+    if (keys.length > 0 && !claudeDisabledLogged) {
+      claudeDisabledLogged = true;
+      logger.info("Claude 1차 비활성 — CLAUDE_API_KEY 없음(사기범 대사도 Gemini 체인)");
+    }
+    return undefined;
+  }
+  const claude = withStageDeadline(
+    tagServedBy(new ClaudeLlmClient(claudeKey), "claude-primary"),
+    geminiBudgetMs - CLAUDE_GEMINI_RESERVE_MS,
+  );
+  const geminiSecond = tagServedBy(
+    createRotatingGeminiClient(keys, (apiKey) => new GeminiLlmClient(apiKey, GEMINI_FALLBACK_TEXT_MODEL)),
+    "gemini-fallback",
+  );
+  const firstTwo = withGeminiAfterClaude(claude, geminiSecond, {
+    budgetMs: geminiBudgetMs,
+    minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS,
+  });
+  return groqKey
+    ? withGroqFallback(withStageDeadline(firstTwo, geminiBudgetMs), new GroqLlmClient(groqKey), {
+        budgetMs: timeoutMs,
+        minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS,
+      })
+    : firstTwo;
+}
+
+/**
+ * `purpose === "scammer-reply"`만 사기범 대사 체인으로 보내고 나머지는 기존 체인으로 보낸다.
+ * ⛔ `providerName`은 기존 체인 것을 그대로 쓴다(G176 — rewind/judge.ts가 `!== "mock"`으로 판정 진입을 가른다).
+ */
+export function routeScammerReply(defaultClient: LlmClient, scammerClient: LlmClient): LlmClient {
+  return {
+    providerName: defaultClient.providerName,
+    complete(input: LlmCompletionInput): Promise<LlmCompletionResult> {
+      return (input.purpose === "scammer-reply" ? scammerClient : defaultClient).complete(input);
+    },
+  };
 }

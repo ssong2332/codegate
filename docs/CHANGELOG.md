@@ -4,6 +4,14 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-22 추가분, 브랜치 `claude/messenger-model-eval-0ae53b`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Functions만**(화면 변경 0). ⛔ 배포 전에 `firebase functions:secrets:set CLAUDE_API_KEY` 등록 필요.
+
+### Changed
+- **사기범 대사 1차 모델을 Claude Sonnet 5.5로(Architecture §103 · DECISIONS #218)**: 메신저 답장과 오프닝 첫마디는 1차 `claude-sonnet-5-5` → 2차 `gemini-3.5-flash-lite` → 3차 Groq 순서로 만든다. 같은 대본 비교에서 맥락 유지가 가장 좋았다(거절 0/132 · 응답 p95 3.6초). 되감기 판정 등 그 밖의 호출은 그대로다.
+
+### Fixed
+- **지인 사칭에서 참가자의 이름 장난을 받아 상대를 그 이름으로 부르던 문제(§103.3)**: "나 사실 다른 사람이야" 같은 장난은 받아 쓰지 않고 웃어넘긴 뒤 부탁으로 돌아간다. 사기범이 누구인지 짐작해 댄 이름만 받아 쓴다.
+
 > ⚠️ **이 블록(2026-10-22 추가분, 브랜치 `claude/messenger-refusal-guard-4e41be`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Functions만**(화면 변경 0).
 
 ### Fixed

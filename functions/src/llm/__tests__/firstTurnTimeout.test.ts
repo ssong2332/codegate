@@ -18,7 +18,7 @@ test("[C] getLlmClient()의 기본 시간 제한은 LLM_TIMEOUT_MS이고 그 값
   const src = readFileSync(INDEX_SRC, "utf8");
   assert.match(src, /export function getLlmClient\(timeoutMs: number = LLM_TIMEOUT_MS\): LlmClient \{/);
   const body = src.slice(src.indexOf("export function getLlmClient("), src.indexOf("export async function completeWithFallback("));
-  assert.match(body, /return withTimeout\(client, timeoutMs\);/, "인자로 받은 timeoutMs가 withTimeout에 쓰여야 한다");
+  assert.match(body, /return withTimeout\(routed, timeoutMs\);/, "인자로 받은 timeoutMs가 withTimeout에 쓰여야 한다");
   assert.doesNotMatch(body, /withTimeout\([^)]*LLM_FIRST_TURN_TIMEOUT_MS/, "팩토리 안에서 20초를 고정하면 모든 호출부가 20초가 된다");
 });
 
