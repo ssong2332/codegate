@@ -251,3 +251,115 @@ export function planVerifyReconnectFailure(input: {
   if (input.callMode !== "realtime") return { action: "none" };
   return { action: "inject", text: VERIFY_RECONNECT_FAILED_TEXT };
 }
+
+// ── 4. 반복 · 대기 정체 차단(§104 — 전수 검수 2차 F4 · F11 · DECISIONS #219) ────────────────────────────
+// 재현(실 키 Live): ① 기관 사칭 중급 거절형 — 성함·생년월일 요구 3턴 연속(공통 [진행 강제] 1문장으로는 개선 없음) ② 요구를 다 쓴 뒤
+// "대기해 주십시오 · 잠시만요"가 참가자 발화 사이사이 6턴(끊기 도구는 사용자 결정으로 꺼져 있다 — DECISIONS #200 · `END_CALL_LIVE_AVAILABLE`).
+// 위 2절 넛지는 참가자가 **침묵할 때만** 나가므로 ②를 못 푼다. 이 절은 직전 두 사기범 턴을 보고, 반복이 **이미 일어난 뒤에만** 맥락 1줄을
+// 넣는다(`turnComplete:false` — 응답 유발 0 · 참가자의 다음 발화에 대한 응답에 실린다). ⛔ 끊기 경로에 기대지 않는다(이 절 입력에 끊기 0).
+// 텍스트 폴백의 짝은 서버 `functions/src/roleplay/repeatBreak.ts`(2 · 3행과 같은 정규식 · 임계값 — `stallRecovery.test.ts` [§104 짝]이 대조).
+
+/** 6행 임계값 — 서버 `REPEAT_SIMILARITY_THRESHOLD`와 같은 값. */
+export const REPEAT_SIMILARITY_THRESHOLD = 0.6;
+/** 6행 — 서버 `REPEAT_MIN_CHARS`와 같은 값. */
+export const REPEAT_MIN_CHARS = 8;
+/** 5행 — 서버 `IDENTITY_ITEM_PATTERNS`와 같은 정규식. */
+export const IDENTITY_ITEM_PATTERNS: Readonly<Record<string, RegExp>> = {
+  name: /성함|이름/,
+  birth: /생년월일|생일/,
+  rrn: /주민\s*(?:등록\s*)?번호|뒤\s*(?:7|일곱)\s*자리/,
+  address: /주소/,
+};
+/** 5행 — 서버 `IDENTITY_REQUEST_FORM`과 같은 정규식. */
+export const IDENTITY_REQUEST_FORM = /(?:불러|말씀해|말씀|말해|알려|읊어)\s*(?:주|줘|달)|부탁\s*(?:드|합)/;
+/**
+ * 4행 보강 — 2절 판정표 밖의 "대기해 주십시오"(2절 어휘는 "대기 중"만 본다 — "대기자" 오탐 회피). 이 절에서만 대기 말로 친다
+ * (⛔ 2절 넛지 판정 `isStallLine`은 바꾸지 않는다).
+ */
+const WAIT_REQUEST_LINE = /대기(?:해|하여|하고)\s*(?:주|계|있어|있으)|대기\s*부탁/;
+
+function requestedIdentityItems(text: string): Set<string> {
+  if (!IDENTITY_REQUEST_FORM.test(text)) return new Set();
+  return new Set(Object.keys(IDENTITY_ITEM_PATTERNS).filter((key) => IDENTITY_ITEM_PATTERNS[key]!.test(text)));
+}
+
+function normalizeForSimilarity(text: string): string {
+  return text.replace(/[\s.,!?~…·'"“”‘’()\-]/g, "");
+}
+
+function bigramSet(text: string): Set<string> {
+  const out = new Set<string>();
+  for (let i = 0; i < text.length - 1; i += 1) out.add(text.slice(i, i + 2));
+  return out;
+}
+
+/** 글자 2-gram Dice 유사도(서버 `bigramSimilarity`와 같은 정의). */
+export function bigramSimilarity(a: string, b: string): number {
+  const na = normalizeForSimilarity(a);
+  const nb = normalizeForSimilarity(b);
+  if (na.length < REPEAT_MIN_CHARS || nb.length < REPEAT_MIN_CHARS) return 0;
+  const ga = bigramSet(na);
+  const gb = bigramSet(nb);
+  let shared = 0;
+  for (const g of ga) if (gb.has(g)) shared += 1;
+  return (2 * shared) / (ga.size + gb.size);
+}
+
+function isWaitTurn(text: string): boolean {
+  return isStallLine(text) || WAIT_REQUEST_LINE.test(text);
+}
+
+export type LiveRepeatBreakKind = "stall" | "identity" | "similar";
+
+/**
+ * 사기범 턴이 끝날 때마다 1회 — 판정표(⛔ 이 순서 그대로 · 새 유형은 행을 추가할지 먼저 묻는다).
+ *
+ * | # | If(A = 직전 사기범 턴, B = 방금 끝난 사기범 턴) | Then |
+ * |---|---|---|
+ * | 1 | 래치가 걸렸다 | 없음(G510) |
+ * | 2 | 참가자가 아직 한 번도 말하지 않았다(오프닝 구간) | 없음 |
+ * | 3 | A가 없다 | 없음 |
+ * | 4 | A와 B가 모두 대기 말이다(2절 `isStallLine` 또는 "대기해 주십시오"류) | `stall` |
+ * | 5 | A와 B가 같은 인적사항 항목(성함 · 생년월일 · 주민번호 · 주소)을 요구하는 형태로 꺼냈다 | `identity` |
+ * | 6 | A와 B의 글자 2-gram 유사도 ≥ 0.6 | `similar` |
+ * | 7 | 그 외 | 없음 |
+ * - 5행이 "같은 항목"만 보는 이유: 순순히 따르는 참가자에게 성함 → 주민번호처럼 **다른** 항목을 잇는 것은 정상 진행이다.
+ * - 상태 저장 0 — 모델이 주입을 따르면 다음 경계에서 조건이 풀린다. 따르지 않고 또 반복하면 다시 넣는다(반복 1건당 1줄).
+ */
+export function decideLiveRepeatBreak(input: {
+  previousScammerTurn: string | undefined;
+  scammerTurn: string;
+  latched: boolean;
+  participantHasSpoken: boolean;
+}): LiveRepeatBreakKind | null {
+  if (input.latched) return null; // 1행
+  if (!input.participantHasSpoken) return null; // 2행
+  const a = input.previousScammerTurn;
+  if (a === undefined || a.trim().length === 0) return null; // 3행
+  const b = input.scammerTurn;
+  if (isWaitTurn(a) && isWaitTurn(b)) return "stall"; // 4행
+  const itemsA = requestedIdentityItems(a);
+  for (const item of requestedIdentityItems(b)) {
+    if (itemsA.has(item)) return "identity"; // 5행
+  }
+  if (bigramSimilarity(a, b) >= REPEAT_SIMILARITY_THRESHOLD) return "similar"; // 6행
+  return null; // 7행
+}
+
+/**
+ * 주입 문면 — 2절 `STALL_NUDGE_TEXT`와 같은 오케스트레이션 신호(클라 소유 · 낭독 대상 아님).
+ * `identity` · `similar`는 서버 `REPEAT_BREAK_*_INSTRUCTION`과 글자 단위로 같다(짝 테스트). ⛔ 숫자 · 횟수 · 따옴표 · 끊기 어휘 0.
+ */
+export const LIVE_REPEAT_BREAK_TEXT: Readonly<Record<LiveRepeatBreakKind, string>> = {
+  stall:
+    "(너는 직전 대답과 그 앞 대답에서 대기하라거나 확인 중이라는 말을 했다. 이번 대답에서는 대기하라거나 확인 중이라는 말을 하지 말고, 지금까지 받은 것을 근거로 새 요구를 꺼내라 — 남은 돈이나 다른 계좌의 돈, 추가 정보, 주변 사람이나 은행에 알리지 말라는 구체적인 지시 중 하나로 상황을 앞으로 움직여라.)",
+  identity:
+    "(너는 직전 대답과 그 앞 대답에서 같은 인적사항을 달라고 했다. 상대가 그 정보를 아직 주지 않았으면 이번 대답에서는 그 정보를 다시 달라고 하지 말고, 다른 수법이나 다른 요구로 넘어가라 — 불이익 암시, 확인 절차 차단, 비밀 유지 요구처럼 아직 쓰지 않은 카드를 골라라.)",
+  similar:
+    "(너는 직전 대답과 그 앞 대답에서 거의 같은 말을 했다. 이번 대답에서는 그 말을 되풀이하지 말고, 다른 수법이나 다른 요구, 다른 이유를 꺼내 상황을 앞으로 움직여라.)",
+};
+
+/** 주입 로그 1줄 — 종류만(대사 0 · G170). */
+export function formatLiveRepeatBreakLog(kind: LiveRepeatBreakKind): string {
+  return `cause:"repeat" kind:"${kind}"`;
+}

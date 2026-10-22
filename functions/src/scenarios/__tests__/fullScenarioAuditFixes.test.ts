@@ -40,8 +40,10 @@ test("[전수 검수 ②④] 유포 협박 — 보낸 뒤 송금 안내 되풀�
 });
 
 test("[전수 검수 ②] 공통 [진행 강제] — 거절된 요구를 같은 형태로 다시 꺼내지 않는다(전 시나리오 1회)", () => {
+  // §104(2026-10-22) — 문장을 "바로 다음 대답에서는 다시 꺼내지 않는다 · 다른 카드를 쓴 뒤에만"으로 바꿨다(옛 끝 "새 근거를 댄다"는 같은 요구를 다시 꺼내는 길이었다).
   for (const [id, prompt] of Object.entries(SCENARIO_PROMPTS)) {
     const assembled = buildSystemPrompt(prompt, { difficultyLevel: "intermediate" });
-    assert.equal(assembled.split("상대가 거절한 요구(예: 성함·생년월일)를 압박 문구만 바꿔 같은 형태로 다시 꺼내지 않는다").length - 1, 1, id);
+    assert.equal(assembled.split("상대가 거절한 요구(예: 성함·생년월일)는 압박 문구나 근거만 바꿔 바로 다음 대답에서 다시 꺼내지 않는다").length - 1, 1, id);
+    assert.equal(assembled.includes("그 요구가 왜 지금 필요한지 새 근거를 댄다"), false, `${id}: 옛 끝 구절이 남았다`);
   }
 });

@@ -71,8 +71,11 @@ import {
 } from "./contextInjection";
 import {
   INITIAL_STALL_NUDGE_STATE,
+  LIVE_REPEAT_BREAK_TEXT,
   STALL_NUDGE_TEXT,
   STALL_SILENCE_SEC,
+  decideLiveRepeatBreak,
+  formatLiveRepeatBreakLog,
   formatStallNudgeLog,
   isStallLine,
   stepStallNudge,
@@ -932,6 +935,21 @@ export default function GeminiVoiceSession({
         }, SILENCE_NUDGE_RECHECK_MS);
       }
     };
+    // ⭐ §104(전수 검수 2차 F4 · F11) — 직전 두 사기범 턴이 대기 말 · 같은 인적사항 요구 · 거의 같은 말이면 맥락 1줄(`turnComplete:false`).
+    // 위 넛지는 참가자가 침묵할 때만 나가므로, 참가자가 말하는 사이사이 반복되는 "대기해 주십시오"는 이 판정이 맡는다(판정표 `stallRecovery.ts` §4).
+    let previousScammerTurnText: string | undefined;
+    const noteScammerTurnForRepeatBreak = (scammerText: string) => {
+      const kind = decideLiveRepeatBreak({
+        previousScammerTurn: previousScammerTurnText,
+        scammerTurn: scammerText,
+        latched: handlersRef.current.isHangupLatched(),
+        participantHasSpoken: handlersRef.current.getSessionUserTurns() > 0,
+      });
+      previousScammerTurnText = scammerText;
+      if (kind && injectContext(LIVE_REPEAT_BREAK_TEXT[kind], "repeatBreak")) {
+        console.info(LIVE_TURN_LOG_PREFIX, formatLiveRepeatBreakLog(kind));
+      }
+    };
     /** 비어 있지 않은 사기범 턴 경계마다 1회(`turnComplete` 처리부) — 그 턴의 전사로 대기 여부를 정한다. */
     const noteScammerTurnForStallNudge = (scammerText: string) => {
       stallNudgeState = stepStallNudge(stallNudgeState, {
@@ -1387,6 +1405,8 @@ export default function GeminiVoiceSession({
                 if (!emptyTurn) handlersRef.current.onScammerTurnComplete?.();
                 // PR-A2(F6) — 빈 마감은 사기범 턴 경계가 아니다(위와 같은 조건).
                 if (!emptyTurn) noteScammerTurnForStallNudge(scammerTurnText);
+                // §104 — 같은 경계(빈 마감 제외)에서 반복 · 대기 정체 판정.
+                if (!emptyTurn) noteScammerTurnForRepeatBreak(scammerTurnText);
                 // §71.6 — 이 모델 턴의 지연 레코드를 닫는다. §71.5 — 턴이 끝났으니 보류분 1건을 보낸다
                 // (2.5가 서버에서 하던 순서와 같다). 전사 flush · 부모 경계 콜백 **뒤**에 둔다 — 보류됐던
                 // 타이핑은 여기서야 userBuffer에 적립돼 다음 턴의 사용자 발화로 기록된다.

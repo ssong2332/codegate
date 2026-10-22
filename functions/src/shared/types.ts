@@ -600,6 +600,9 @@ export type ReportDoc = {
   // 사용자 결정 2026-10-21 ②(옵셔널 · 무백필) — 속음은 아니지만 위험했던 행동(비밀 유지 약속 · 거래 은행명 · 가짜 정보). 0건 = 필드 부재.
   // ⛔ 판정 입력이 아니다 — `wasDeceived` · `deceivedMoments` · 방어 등급 · 되감기 진입점과 무관하다.
   riskSignals?: RiskSignal[];
+  // §104(옵셔널 · 무백필 · UX D-145) — 참가자 발화 수(messages 중 role "user" 문서 수 — 위 ① 스냅샷에서 센다 · 추가 read 0).
+  // 표시 전용: "속지 않음" 상태 줄이 대화 0턴(바로 끊음)과 그 밖을 가른다. ⛔ 판정 입력이 아니다. 부재 = 이 필드 이전 리포트(종전 문면 규칙).
+  userTurnCount?: number;
 };
 
 // --- reports/{reportId}/rewindAttempts/{attemptId} (T70, UX-028/UF-009, §15.2.2, AC-062/063) ---

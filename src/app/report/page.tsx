@@ -26,7 +26,7 @@ import PageToc, { type PageTocEntry } from "@/components/PageToc";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { buildStageNotice, type ReportStage } from "@/lib/report/stageNotice";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
-import { tacticsAccordionLabel, TACTICS_NOT_FOUND_TEXT } from "@/lib/report/reportTacticsCopy";
+import { notDeceivedStatusText, tacticsAccordionLabel, TACTICS_NOT_FOUND_TEXT } from "@/lib/report/reportTacticsCopy";
 import {
   deceivedSummaryTitle,
   displayTactic,
@@ -133,6 +133,8 @@ type ReportData = {
   personaBlock: PersonaBlockView | null;
   // 사용자 결정 2026-10-21 ② — 속음은 아니지만 위험했던 행동. 부재 = 빈 배열(무백필 · 블록 0).
   riskSignals: RiskSignalView[];
+  // §104(UX D-145) — 참가자 발화 수(표시 전용 · 부재 = 필드 이전 리포트 → NS-3).
+  userTurnCount: number | undefined;
 };
 
 type PageState = "no-session" | "loading" | "error" | "loaded";
@@ -184,6 +186,11 @@ export default function ReportPage() {
           : undefined,
       personaBlock: readPersonaBlock(data.personaBlock),
       riskSignals: readRiskSignals(data.riskSignals),
+      // §104 — 표시 전용 참가자 발화 수(부재 = 필드 이전 리포트).
+      userTurnCount:
+        typeof data.userTurnCount === "number" && Number.isInteger(data.userTurnCount) && data.userTurnCount >= 0
+          ? data.userTurnCount
+          : undefined,
     };
   }, []);
 
@@ -438,7 +445,8 @@ export default function ReportPage() {
       {/* AC-009: 한 번도 속지 않은 경우 이를 명시(요약 카드 상단, 색이 아닌 텍스트로). */}
       {!report.wasDeceived && (
         <p role="status" className="mx-5 mt-4 text-lg font-semibold text-brand">
-          이번 훈련에서는 속지 않았습니다. 아래는 시도된 수법입니다.
+          {/* §104 · UX D-145 — 둘째 문장은 수법 목록이 있을 때만(NS-1~NS-3). */}
+          {notDeceivedStatusText(report.tacticsUsed.length, report.userTurnCount)}
         </p>
       )}
 
