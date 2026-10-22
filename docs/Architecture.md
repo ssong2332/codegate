@@ -22918,3 +22918,33 @@ GEMINI_API_KEY2 · 429 즉시 중단. 수정 전(main `77cddcc` lib)과 수정 �
 | ⑧ | 기관 사칭 고급 · 따름(Live) | 신상 요구 연속 · 실존명 · `end_call` | 4 · 2 · — | **2** · **0** · `blocked_transfer` ×3(호 전환 전 하한이 막음 — 의도대로) | 개선 |
 - 측정 뒤 수정 2건(재측정 0 · 단위 테스트로 고정): ① 반복 차단 인적사항 판정을 **같은 문장** 기준으로(③ 세션의 "생년월일 확인 감사합니다 … 확인 부탁드립니다" 오탐 주입 1건) ② 목표 끊기 응답의 송금 밖 요청도 새 요구로 본다(⑥).
 - 남은 것: 도착 전 "보내 드린" 발화(④ 2 → 2) — 공통 문장으로는 이 표본에서 줄지 않았다. 대신 문자가 늦게 오는 피해는 주장 백스톱이 줄였다.
+
+## 111. (Feature change — 2026-10-22 · 브랜치 `claude/messenger-haiku-ef9163` · 사용자 결정 원문 *"소넷에서 하이쿠로 내리자"*) **사기범 대사 1차 LLM을 Claude Sonnet 5.5에서 Haiku 5.5로 · 추론 끄기 값 변경** — implementer 기록 (DECISIONS #226)
+
+### 111.0 금지 (이 절의 변경이 지키는 것)
+- 실 키 호출 없음(검증은 단위 테스트만). 2차·3차·넘어가는 조건·프롬프트·메신저 흐름은 손대지 않았다.
+
+### 111.1 변경
+| 항목 | 이전(§107) | 이후 | 근거 |
+|---|---|---|---|
+| 모델 ID (`claudeClient.ts` `CLAUDE_TEXT_MODEL`) | `claude-sonnet-5-5` | `claude-haiku-5-5` | 공식 Models overview(platform.claude.com/docs/en/about-claude/models/overview) · Haiku 5.5 모델 페이지 "Model ID: `claude-haiku-5-5`"(날짜 접미 · 별칭 없음) |
+| 추론 | `thinking: {type: "between_tools"}` | `thinking: {type: "disabled"}` | 공식 thinking 문서 모델별 표: Haiku 5.5 — `between_tools` **400 error**, `disabled` 허용(high effort 이하) · Sonnet 5.5는 반대. 기본 effort는 `medium`이라 `disabled`가 통한다 |
+| 샘플링 | 보내지 않음 | 보내지 않음 | Haiku 5.5 "Omit `temperature`, `top_p`, `top_k`" — 이미 해당 없음 |
+| `max_tokens` | 1024 | 1024 | `disabled`라 추론 토큰이 안 든다. 새 토크나이저(Claude 4.7 이후 공통)로 Sonnet 5.5와 같은 수 체계 — 대사 1~2문장에 충분 |
+| `stop_reason: refusal` · prefill | 처리됨 · 안 씀 | 같음 | 거절은 `ClaudeNoReplyError` → 2차(§107.2). 마지막 턴은 user로 시작하게 맞추고 assistant prefill은 안 쓴다(Haiku 5.5는 prefill 400) |
+
+### 111.2 비용 재계산 (월 1,500세션 = 하루 50세션)
+- 단가(공식 모델 페이지, 프롬프트 10만 토큰 이하): Haiku 입력 $0.10 · 출력 $0.50 / MTok, Sonnet 입력 $2 · 출력 $10 / MTok(20분의 1).
+- 실측(#378, 같은 대본 12세션 · 호출 132건 = 세션당 11호출): Haiku **$0.0099/세션** → 월 **$14.8**. Sonnet $0.1984/세션 → 월 $298(캐시 미적용).
+- 운영 입력 토큰 교차 검산: 호출당 입력 8,000~9,700 토큰 × 11호출 × $0.10/MTok = $0.0088~$0.0107, 출력을 호출당 약 100~150토큰으로 가정하면 +$0.0006~$0.0008 → 세션당 약 $0.0094~$0.0115 → 월 약 **$14~$17**. (출력 토큰은 이 환경에서 확인하지 못한 가정 — 확인: 운영 로그 `Claude 응답 수신`의 `outputTokens`.)
+- 가정의 한계: 호출 수(세션당 11)는 중급 3시나리오 대본 기준이라 실제 세션 길이에 따라 달라진다. 입력이 10만 토큰을 넘을 일은 없다(장기 단가 미적용).
+
+### 111.3 품질 감수 (정직 고지)
+- #378 실측: Haiku 앞 맥락 반영 4/6(Sonnet 6/6) · 지인 사칭에서 사용자 요청을 자기 빚 이야기로 잘못 받은 사례 2건. 반대로 인물 혼동 1/4(최저) · 금액 재요구 세션당 0.25(최저) · p95 3.07초.
+- 이 결정은 비용 때문이며, 품질 열세가 실기에서 드러나면 `CLAUDE_TEXT_MODEL`과 `thinking`을 함께 되돌려야 한다(둘은 한 쌍 — 모델만 되돌리면 Sonnet이 `disabled`를 400으로 거부한다).
+
+### 111.4 검증
+- `claudeChain.test.ts` — 모델 ID와 `thinking` 값을 고정하는 기존 테스트를 Haiku 값으로 갱신(`[§107] 요청 …`). 실 키 호출 0.
+
+### 111.5 배포
+- Functions만. `CLAUDE_API_KEY`는 운영에 등록돼 있다. 병합·배포는 사용자 승인 뒤.

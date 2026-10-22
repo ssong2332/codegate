@@ -153,7 +153,7 @@ export function withTimeout(client: LlmClient, timeoutMs: number): LlmClient {
  * MockLlmClient로 강등한다.
  *
  * ⭐ 2026-10-22(§107): `CLAUDE_API_KEY`가 있으면 **사기범 대사 경로(`purpose: "scammer-reply"`)만** 1차 Claude
- * (claude-sonnet-5-5) → 2차 gemini-3.5-flash-lite → 3차 Groq로 보낸다(`buildScammerReplyChain`). 되감기 판정처럼
+ * (claude-haiku-5-5) → 2차 gemini-3.5-flash-lite → 3차 Groq로 보낸다(`buildScammerReplyChain`). 되감기 판정처럼
  * 용도가 없는 호출은 아래 기존 Gemini 체인 그대로다. `LLM_PROVIDER` 값은 여전히 읽지 않는다.
  *
  * ⚠️ 호출부 주의: 이 함수를 (직접 또는 generateOpeningLine/sendMessage를 통해 간접) 호출하는 모든

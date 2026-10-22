@@ -63,14 +63,14 @@ function fake(result: LlmCompletionResult | Error, providerName: LlmClient["prov
 
 // ── 1. 요청 형태 ──────────────────────────────────────────────────────────────────────────────
 
-test("[§107] 요청 — 고정 모델 · 추론 끔(between_tools) · 사기범 경로 훈련 맥락 머리말 · 신호 전달", async () => {
+test("[§107] 요청 — 고정 모델 · 추론 끔(disabled — Haiku 5.5는 between_tools를 400으로 거부) · 사기범 경로 훈련 맥락 머리말 · 신호 전달", async () => {
   const { calls, client } = capture(message("오랜만이다ㅋㅋ"));
   const controller = new AbortController();
   const result = await client.complete({ ...SCAMMER, signal: controller.signal });
   assert.deepEqual(result, { text: "오랜만이다ㅋㅋ", isMock: false });
   const { params, options } = calls[0];
-  assert.equal(params.model, "claude-sonnet-5-5");
-  assert.deepEqual(params.thinking, { type: "between_tools" });
+  assert.equal(params.model, "claude-haiku-5-5");
+  assert.deepEqual(params.thinking, { type: "disabled" });
   assert.ok(String(params.system).startsWith(GROQ_TRAINING_CONTEXT_PREAMBLE), "측정과 같은 머리말");
   assert.ok(String(params.system).endsWith("(system)"), "조립된 프롬프트(가드레일 포함)는 뒤에 그대로");
   assert.equal(options.signal, controller.signal);
