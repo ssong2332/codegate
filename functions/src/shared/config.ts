@@ -50,12 +50,22 @@ export const GEMINI_KEY_SECRETS = [GEMINI_API_KEY, GEMINI_API_KEY2] as const;
 export const GROQ_API_KEY = defineSecret("GROQ_API_KEY");
 
 /**
+ * Claude API 키(2026-10-22, Architecture.md §107) — 사기범 대사 경로(`purpose: "scammer-reply"`)의 **1차** 공급자 전용.
+ * 값이 없으면(미설정·`YOUR_` placeholder) 사기범 대사도 기존 Gemini 체인을 그대로 쓴다(llm/index.ts).
+ * 이름은 로컬 `functions/.secret.local`에 이미 있던 `CLAUDE_API_KEY`를 따른다(prototypes/voice-cascade와 같은 이름).
+ *
+ * ⚠️ `GROQ_API_KEY`와 같은 함정 — 선언만 있어도 배포 분석 단계가 값을 요구한다. 소비처(`llm/index.ts getClaudeApiKey`)는
+ * 같은 커밋에 있지만, **배포 전에 `firebase functions:secrets:set CLAUDE_API_KEY` 등록이 먼저 필요하다**(사용자가 직접 입력).
+ */
+export const CLAUDE_API_KEY = defineSecret("CLAUDE_API_KEY");
+
+/**
  * ⭐ 텍스트 LLM 팩토리(`getLlmClient`)를 거치는 onCall이 선언하는 시크릿 묶음 — Gemini 키 슬롯 + Groq 키.
  *
  * ⛔ `GROQ_API_KEY`를 `GEMINI_KEY_SECRETS`에 섞지 말 것 — 그 배열은 `getGeminiApiKeys()`가 **Gemini 키
  * 순환 순서**로 순회한다(Groq 키가 Gemini 키 슬롯으로 쓰인다). 선언 정합은 secretDeclarationGate 테스트가 대조한다.
  */
-export const LLM_TEXT_SECRETS = [GEMINI_API_KEY, GEMINI_API_KEY2, GROQ_API_KEY] as const;
+export const LLM_TEXT_SECRETS = [GEMINI_API_KEY, GEMINI_API_KEY2, GROQ_API_KEY, CLAUDE_API_KEY] as const;
 
 /**
  * 실시간 음성 대화용 시나리오별 에이전트 매핑(2026-07-22) — `scenarioId:agentId` 쉼표 구분.

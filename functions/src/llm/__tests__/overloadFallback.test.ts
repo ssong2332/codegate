@@ -319,7 +319,7 @@ test("⑨ GeminiLlmClient: model 인자를 실제 요청과 성공 로그에 쓴
 // 형태: `primary = keys.length > 0 ? withOverloadRetry(rotating(keys), {…}) : new MockLlmClient();`
 //       `gemini = keys.length > 0 ? withOverloadFallback(primary, tagServedBy(rotating(keys, 대체 모델), "gemini-fallback"), {budgetMs: geminiBudgetMs…}) : primary;`
 //       (2026-10-18 §75 — 변수명이 client → gemini로 바뀌고 Groq 3차 예비가 그 바깥 `client`가 됐다)
-//       `return withTimeout(client, timeoutMs);` — overloadRetry.test.ts ⑩·firstTurnTimeout.test.ts의 기존 단언과 공존.
+//       `return withTimeout(routed, timeoutMs);` — overloadRetry.test.ts ⑩·firstTurnTimeout.test.ts의 기존 단언과 공존.
 const INDEX_SRC = path.resolve(__dirname, "../../../src/llm/index.ts");
 
 function getLlmClientBody(src: string): string {
@@ -352,7 +352,7 @@ function wiringViolations(body: string): string[] {
     if (!/budgetMs: geminiBudgetMs\b/.test(clientBranch[1])) violations.push("대체의 budgetMs가 Gemini 체인 예산 geminiBudgetMs여야 한다");
     if (!/minAttemptMs: LLM_OVERLOAD_MIN_ATTEMPT_MS\b/.test(clientBranch[1])) violations.push("대체의 minAttemptMs가 LLM_OVERLOAD_MIN_ATTEMPT_MS여야 한다");
   }
-  if (!/return withTimeout\(client, timeoutMs\);/.test(code)) violations.push("withTimeout(client, timeoutMs)가 가장 바깥이어야 한다");
+  if (!/return withTimeout\(routed, timeoutMs\);/.test(code)) violations.push("withTimeout(routed, timeoutMs)가 가장 바깥이어야 한다");
   if ((code.match(/withTimeout\(/g) ?? []).length !== 1) violations.push("withTimeout은 정확히 1번(가장 바깥)만 감싸야 한다");
   if ((code.match(/withOverloadFallback\(/g) ?? []).length !== 1) violations.push("withOverloadFallback은 정확히 1곳(실 Gemini)만 감싸야 한다");
   if (/withOverloadRetry\(\s*withOverloadFallback/.test(code)) violations.push("대체가 재시도 안쪽에 있으면 안 된다");

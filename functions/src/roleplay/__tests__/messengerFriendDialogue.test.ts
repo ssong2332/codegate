@@ -64,12 +64,15 @@ test("[실기 6] friend-loan 페르소나 — 종료 버튼 · '마무리된다'
   // 프로브(2026-10-22) — 금지 예로 실기 원문을 인용하자 초급에서 그 말을 그대로 했다 ⇒ 원문 인용 0(긍정 지시만).
   assert.equal(personaPrompt.includes("그냥 나라고"), false, "실기 원문 인용이 오히려 그 말을 유도한다");
   assert.ok(personaPrompt.includes("이름 자리를 OOO·000 같은 빈칸 표기로 채우지 않는다"), "프로브 — 이름 자리 '000'");
-  assert.ok(personaPrompt.includes("이름은 상대가 먼저 말한 것만 쓰고 네가 지어내지 않는다"), "N4(T92) 유지");
+  assert.ok(personaPrompt.includes("이름은 상대가 너를 짐작해 먼저 말한 것만 쓰고 네가 지어내지 않는다"), "N4(T92) 유지 · §107 짐작한 이름으로 좁힘");
+  // §107(2026-10-22 실기 신고) — 참가자가 자기를 다른 사람이라고 장난치면 그 이름을 받아 쓰지 않는다.
+  assert.ok(personaPrompt.includes("상대가 자기 자신을 다른 사람이라고 하거나 이름으로 장난을 치면 그 이름을 받아 쓰지 않는다"));
+  assert.equal(personaPrompt.includes("성섭"), false, "실기 원문 인용이 오히려 그 말을 유도한다(위 '그냥 나라고'와 같은 원칙)");
   assert.ok(personaPrompt.includes("의심을 받았다고 대화를 끝내지 않는다"));
   assert.ok(personaPrompt.includes("괄호 표시를 붙이지 않는다"));
   const pivot = weakenedTactics.filter((t) => t.startsWith("부인 시 친분 호소"));
   assert.equal(pivot.length, 1);
-  assert.ok(pivot[0].includes("상대가 이름을 대면 그 사람인 척 받아"));
+  assert.ok(pivot[0].includes("상대가 너를 짐작해 이름을 대면 그 사람인 척 받아"));
   assert.ok(pivot[0].includes("이름을 먼저 대지 않은 채"), "N4 유지");
 });
 
