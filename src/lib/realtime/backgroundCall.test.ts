@@ -16,6 +16,7 @@ import {
   decideMicRecovery,
   decideReconnectBudget,
   decideSocketClose,
+  isReplacementTrackUsable,
   maskBackupText,
   parseTranscriptBackup,
   serializeTranscriptBackup,
@@ -61,9 +62,10 @@ test("[§99] decideReconnectBudget — 한도까지 다시 연결, 넘으면 텍
   assert.equal(decideReconnectBudget(MAX_BACKGROUND_RECONNECTS), "fallback");
 });
 
-test("[§99] decideMicRecovery — ended · muted면 다시 열고, live면 그대로, 트랙 없으면 그대로", () => {
+test("[§99 · §105 (a)] decideMicRecovery — ended만 다시 열고, muted · live면 그대로, 트랙 없으면 그대로", () => {
   assert.equal(decideMicRecovery({ readyState: "ended", muted: false }), "reacquire");
-  assert.equal(decideMicRecovery({ readyState: "live", muted: true }), "reacquire");
+  assert.equal(decideMicRecovery({ readyState: "ended", muted: true }), "reacquire");
+  assert.equal(decideMicRecovery({ readyState: "live", muted: true }), "keep", "§105 (a) — muted는 OS가 푸는 일시 상태");
   assert.equal(decideMicRecovery({ readyState: "live", muted: false }), "keep");
   assert.equal(decideMicRecovery(null), "keep");
 });
@@ -206,4 +208,23 @@ test("[§99 QA D4 · 리뷰 Minor] 다시 가려지면 마이크 재확인 취�
   assert.match(hiddenBranch, /clearTimeout\(micRecheckTimer\)/);
   assert.match(session, /if \(cancelled \|\| !replaceMicStream \|\| connectionLostReported\) return;/);
   assert.match(session, /\} catch \(e\) \{\n(\s*\/\/.*\n)*\s*stopStream\(next\);/);
+});
+
+test("[§105 (b)] isReplacementTrackUsable — live · unmuted만 갈아 끼운다", () => {
+  assert.equal(isReplacementTrackUsable({ readyState: "live", muted: false }), true);
+  assert.equal(isReplacementTrackUsable({ readyState: "live", muted: true }), false);
+  assert.equal(isReplacementTrackUsable({ readyState: "ended", muted: false }), false);
+  assert.equal(isReplacementTrackUsable(null), false);
+});
+
+test("[§105 (b) 배선] 새 트랙 확인이 갈아 끼우기(옛 트랙 stop)보다 앞이고, 실패하면 새 트랙만 닫는다", () => {
+  const recheck = session.slice(session.indexOf("const recheckMic = () => {"), session.indexOf("const handleVisibility = () => {"));
+  const checkAt = recheck.indexOf("if (!isReplacementTrackUsable(nextView)) {");
+  const replaceAt = recheck.indexOf("replaceMicStream(next);");
+  assert.ok(checkAt >= 0 && replaceAt > checkAt, "확인 전에 갈아 끼운다");
+  const failBranch = recheck.slice(checkAt, replaceAt);
+  assert.ok(failBranch.includes("stopStream(next);"), "쓸 수 없는 새 트랙을 닫지 않는다");
+  assert.ok(!failBranch.includes("stopStream(previous)") && !failBranch.includes("stopStream(stream)"), "실패 분기에서 옛 트랙을 닫는다");
+  // 옛 트랙 stop은 replaceMicStream 안 한 곳뿐이다.
+  assert.equal((session.match(/if \(previous && previous !== next\) stopStream\(previous\);/g) ?? []).length, 1);
 });

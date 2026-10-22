@@ -8,6 +8,14 @@
 
 export type WakeLockStatus = "idle" | "unsupported" | "active" | "denied" | "released";
 
+/**
+ * ⭐ §105(2026-10-22 웨일 실기 — 화면을 끄지 않았다는데 §99 "화면이 꺼져 있던 동안" 배너가 떴다) — 화면이 보이는 채로 브라우저 · OS가
+ * 잠금을 풀면(절전 모드 전환 등 — 명세상 가능) 예전에는 다음 `visibilitychange`까지 다시 요청하지 않아, 그 사이 화면이 시간 초과로
+ * 꺼질 수 있었다(추정 경로). 이제 보이는 채로 풀리면 이 시간 뒤 다시 요청한다. 한 번 보이는 동안 최대 `MAX_VISIBLE_REREQUESTS`회(무한 반복 0).
+ */
+export const WAKE_LOCK_REREQUEST_DELAY_MS = 1000;
+export const MAX_VISIBLE_REREQUESTS = 3;
+
 type SentinelLike = {
   released?: boolean;
   release: () => Promise<void>;
@@ -22,6 +30,8 @@ export type WakeLockDeps = {
     removeEventListener: (type: "visibilitychange", listener: () => void) => void;
   };
   onStatus?: (status: WakeLockStatus) => void;
+  /** 테스트 주입용 타이머(기본 = `setTimeout`). */
+  schedule?: (fn: () => void, ms: number) => void;
 };
 
 export type ScreenWakeLock = { start: () => void; stop: () => void };
@@ -31,6 +41,8 @@ export function createScreenWakeLock(deps: WakeLockDeps): ScreenWakeLock {
   let sentinel: SentinelLike | null = null;
   let requesting = false;
   let status: WakeLockStatus = "idle";
+  let visibleRerequests = 0;
+  const schedule = deps.schedule ?? ((fn: () => void, ms: number) => void setTimeout(fn, ms));
   const setStatus = (next: WakeLockStatus) => {
     if (next === status) return;
     status = next;
@@ -58,7 +70,13 @@ export function createScreenWakeLock(deps: WakeLockDeps): ScreenWakeLock {
         sentinel = s;
         s.addEventListener?.("release", () => {
           if (sentinel === s) sentinel = null;
-          if (wanted) setStatus("released");
+          if (!wanted) return;
+          setStatus("released");
+          // §105 — 보이는 채로 풀렸으면 다시 요청한다(가려져서 풀린 것은 돌아올 때 `onVisibility`가 맡는다).
+          if (deps.doc.visibilityState === "visible" && visibleRerequests < MAX_VISIBLE_REREQUESTS) {
+            visibleRerequests += 1;
+            schedule(request, WAKE_LOCK_REREQUEST_DELAY_MS);
+          }
         });
         setStatus("active");
       })
@@ -70,7 +88,9 @@ export function createScreenWakeLock(deps: WakeLockDeps): ScreenWakeLock {
   };
 
   const onVisibility = () => {
-    if (deps.doc.visibilityState === "visible") request();
+    if (deps.doc.visibilityState !== "visible") return;
+    visibleRerequests = 0;
+    request();
   };
 
   return {

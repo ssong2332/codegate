@@ -43,6 +43,9 @@ import { resolveSessionAccountNumber } from "../shared/fictionalBank";
  */
 export const GEMINI_LIVE_MODEL = "gemini-3.8-live";
 
+/** §105.2.4 — Live 입력 전사 설정(언어 힌트 ko-KR). 토큰에 서버가 고정한다(클라는 바꿀 수 없다). */
+export const INPUT_TRANSCRIPTION_CONFIG = { languageHints: { languageCodes: ["ko-KR"] } };
+
 // 한국어 프리셋 음성 풀 — 성별 다양화(2026-07-25, 사용자 신고: generic 보이스피싱이 항상 여성
 // 음성으로만 나옴). Live API는 TTS 모델과 동일한 프리셋 음성을 그대로 쓸 수 있다(ai.google.dev/
 // gemini-api/docs/live-guide 실측: "Native audio output models support any of the voices available
@@ -208,7 +211,11 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
             },
             // 양쪽 발화의 텍스트 전사를 켠다(finding #1) — 실시간 음성 대화도 리포트가 분석할 수
             // 있도록 클라가 이 전사를 모아 종료 시 서버에 제출한다(submitRealtimeTranscript).
-            inputAudioTranscription: {},
+            // ⭐ §105.2.4(OQ-A105 해소 · 실 키 실측 2026-10-22, 메인 승인 3세션) — 입력 전사 언어 힌트 ko-KR. 비우면 언어를 자동
+            // 감지해 짧은 한국어 발화가 외국어로 전사됐다("그래요?" → "creo" — 같은 TTS 음성으로 현행 · 단어 목록 둘 다 재현, 힌트만
+            // "그래요."). SDK 2.13은 Developer API에서 `languageCodes` 직접 지정을 거부하고 이 형태(`languageHints`)만 보낸다 —
+            // gemini-3.8-live에서 토큰 발급 · 연결 · 전사 3/3 정상(`scripts/live-asr-language-probe.mjs`). 힌트는 강제가 아니라 기울기다.
+            inputAudioTranscription: INPUT_TRANSCRIPTION_CONFIG,
             outputAudioTranscription: {},
             // 응답 지연 튜닝(2026-07-23, 재검토 2026-07-24 — 사용자 신고 "지연이 길다") — 기본
             // 침묵 대기가 길어 "말하고 한참 뒤에야 응답"해서 실시간 느낌이 안 났다. 발화 종료를

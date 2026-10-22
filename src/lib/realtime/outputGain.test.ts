@@ -12,6 +12,12 @@ import {
   isVolumeApplied,
   isVolumeSettable,
   VOLUME_PROBE,
+  LIMITER_INPUT_RANGE,
+  LIMITER_KNEE,
+  SPEAKER_BOOST_GAIN,
+  buildLimiterCurve,
+  liveGainFor,
+  softLimit,
 } from "./outputGain.ts";
 
 const session = readFileSync("src/lib/realtime/GeminiVoiceSession.tsx", "utf8");
@@ -180,4 +186,50 @@ test("[2026-10-20 음량 신고 역검증] ref에 다른 노드를 담거나 · 
     t.diagnostic(`[역검증 ${name}] ${JSON.stringify(v)}`);
     assert.equal(v.length, 1, name);
   }
+});
+
+// ── §105 — 스피커 모드 증폭(실시간 Web Audio 경로) + 리미터 ─────────────────────────────────────────────
+test("[§105] 실시간 경로: 통화 모드는 그대로 · 스피커 모드는 1.0보다 키운다(통화 대비 +9dB 이상) · 리미터 범위 안", () => {
+  assert.equal(liveGainFor(gainFor("call")), CALL_MODE_GAIN);
+  assert.equal(liveGainFor(gainFor("speaker")), SPEAKER_BOOST_GAIN);
+  assert.ok(SPEAKER_BOOST_GAIN > 1.0);
+  assert.ok(20 * Math.log10(SPEAKER_BOOST_GAIN / CALL_MODE_GAIN) >= 9, "통화 ↔ 스피커 차이가 귀로 구분될 만큼(≥ 9dB)");
+  assert.ok(SPEAKER_BOOST_GAIN <= LIMITER_INPUT_RANGE, "증폭 최대치가 리미터 곡선 범위 안");
+  // 미디어 경로(`<audio>.volume` · ElevenLabs)는 1.0 상한 그대로(G455).
+  assert.equal(gainFor("speaker"), SPEAKER_MODE_GAIN);
+});
+
+test("[§105] 리미터: 무릎(0.7)까지 그대로 · 그 위는 단조 증가 · 출력 < 1.0(클리핑 0) · 이음매 연속", () => {
+  for (const a of [0, 0.1, 0.3, 0.6, LIMITER_KNEE]) assert.equal(softLimit(a), a);
+  assert.equal(softLimit(-0.5), -0.5);
+  let prev = softLimit(LIMITER_KNEE);
+  for (let a = LIMITER_KNEE; a <= LIMITER_INPUT_RANGE; a += 0.01) {
+    const y = softLimit(a);
+    assert.ok(y < 1, `${a} → ${y}`);
+    assert.ok(y >= prev - 1e-12, "단조");
+    prev = y;
+  }
+  assert.ok(Math.abs(softLimit(LIMITER_KNEE + 1e-6) - (LIMITER_KNEE + 1e-6)) < 1e-6, "무릎에서 끊김 0");
+  // 원본 최대(1.0) × 통화 모드(0.6) = 0.6 → 리미터 영향 0. 원본 1.0 × 스피커 1.8 → 1.0 미만으로 눌린다.
+  assert.equal(softLimit(1.0 * CALL_MODE_GAIN), CALL_MODE_GAIN);
+  assert.ok(softLimit(1.0 * SPEAKER_BOOST_GAIN) < 1);
+});
+
+test("[§105] 리미터 곡선: 가운데 = 0 · 양끝 = ±softLimit(범위) · 입력 축 [-1,1] ↔ 진폭 [-범위, 범위]", () => {
+  const curve = buildLimiterCurve();
+  const mid = (curve.length - 1) / 2;
+  assert.equal(curve[mid], 0);
+  assert.ok(Math.abs(curve[curve.length - 1] - softLimit(LIMITER_INPUT_RANGE)) < 1e-6);
+  assert.ok(Math.abs(curve[0] + softLimit(LIMITER_INPUT_RANGE)) < 1e-6);
+  // 진폭 0.5 지점(입력 축 0.25)은 그대로 0.5다.
+  const idx = Math.round(mid + 0.25 * mid);
+  assert.ok(Math.abs(curve[idx] - 0.5) < 1e-3);
+});
+
+test("[§105 배선] Gemini 세션: 게인 → 1/범위 → 곡선 → 출력 · prop 값은 liveGainFor를 거친다", () => {
+  assert.ok(code.includes("limiterScale.gain.value = 1 / LIMITER_INPUT_RANGE;"));
+  assert.ok(code.includes("limiter.curve = buildLimiterCurve();"));
+  assert.ok(code.includes("outputGain.connect(limiterScale);"));
+  assert.ok(code.includes("limiter.connect(outputContext.destination);"));
+  assert.ok(code.includes("outputVolumeRef.current = liveGainFor(outputVolume ?? GEMINI_OUTPUT_GAIN);"));
 });

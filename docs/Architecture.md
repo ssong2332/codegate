@@ -22420,3 +22420,150 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 
 ### 102.6 배포
 **Functions만**(`createSession` · `sendMessage` · `consentChallenge`가 바뀐 `llm`·`roleplay`를 쓴다). 화면 변경 0.
+
+## 105. (Bug fix — 2026-10-22 · 브랜치 `claude/live-mic-regression-speaker-d82030` · 사용자 실기 신고 2건 · 갤럭시 S25 · 오늘 배포 뒤) **실시간 통화 "말해도 묵묵부답" 진단 계측 + 스피커 버튼 증폭(리미터)** — implementer 기록 (DECISIONS #220 · UX D-146)
+
+### 105.1 신고 원문
+1. *"직접 확인해 보라는 은행 시나리오인데 … 내가 말을 하고 대화가 전에는 좀 되었는데, 지금은 묵묵부답인 상황이야."* (= `bank-security-verify-scam` 추정)
+2. *"스피커 버튼 눌렀을 때도 변화가 없는데 … 스피커폰 사용을 누르면 위아래 스피커를 다 사용하고, 기본 소리를 키우는 거지."*
+
+### 105.2 회귀 조사 (1) — 결론: **오늘 배포분에서 '화면이 켜진 통화'의 입력 경로를 바꾼 코드는 찾지 못했다(원인 미확정)**
+`git diff 72ee6ae 77cddcc -- src/lib/realtime src/app/session/play` 전수 판독:
+
+| 변경(PR) | 화면이 켜진 통화에서 동작하는가 | 입력(마이크 → Live)에 닿는가 | 판정 |
+|---|---|---|---|
+| #369 `visibilitychange` 처리 · 마이크 재확인/다시 열기(`decideMicRecovery`) | 아니오 — 숨김→복귀가 있어야 발동 | 복귀 뒤 트랙 muted/ended면 새 트랙으로 교체 | 화면을 끄거나 앱을 바꾼 경우만 후보(추정 · 실기 로그 `[live-bg] mic=…` 로 확인) |
+| #369 소켓 close → 재연결(`decideSocketClose`) | 숨김 중/복귀 5초 안 close만 | 새 세션 재마운트 | 정상 통화 무영향 |
+| #369 침묵 · 대기 넛지 숨김 시 연기 | 숨김 중만 | 아니오(모델 쪽 재촉) | 무영향 |
+| #369 화면 켜짐 유지(Wake Lock) | 예 | 아니오 | 무영향(추정) |
+| #369 Live 세션 `key={connectionSeq}` · 마운트 조건 `callMode === "realtime"` | 예 | `callMode`는 받기 핸들러에서 `start()`와 같은 동기 구간에 `realtime` → 언마운트 0 | 무영향 |
+| #369 전사 sessionStorage 백업 | 예(턴마다) | 아니오 | 무영향 |
+| #372 공통 [진행 강제] 2구절(기관명 예시 · 거절 요구 반복 금지) | 예 | 아니오(프롬프트) | 모델 침묵 유발 근거 없음(추정 · 실 키로만 확인 가능) |
+| `bank-security-verify-scam` 프롬프트 · Live 설정(`functions/src/realtime`) | — | — | 이 범위에서 변경 0 |
+
+⇒ "서버에 말이 가지 않음"인지 "갔는데 모델이 대답하지 않음"인지를 **지금 로그로는 가릴 수 없었다**: 응답이 0턴이면 `[gemini-latency]` 요약(`logLatencySummary`)이 아예 찍히지 않고, 보낸 프레임 수 · 서버 인식 수가 어디에도 없었다.
+
+#### 105.2.1 추가 재현 정보(메인 세션 전달 2026-10-22) 판독
+- 사용자: 웨일 · 화면 꺼짐/앱 전환 없음 · 마이크 표시 계속 켜짐 · **처음부터** 대답 없음 · 리포트 사용자 발화 0건 · 간헐적. 통화 04:44 화면에 §99 배너("화면이 꺼져 있던 동안에는…")가 떠 있었다.
+- 배너 조건 = `document.visibilityState`가 hidden으로 **3초 이상**(`RETURN_NOTICE_MIN_HIDDEN_MS`) 또는 숨김 중 소켓 close로 재연결 대기. blur · focus · pagehide · resize 리스너는 #369 전체에 0건, 앱 안 외부 이동(`tel:` · `_blank` · `window.open`)도 0건 ⇒ 배너는 **브라우저가 실제로 문서를 숨겼다**는 뜻이다(무엇이 숨겼는지는 미확정 — 화면 자동 꺼짐(Wake Lock 조용한 실패) · 전원 버튼 · 최근 앱 · 시스템 다이얼로그 후보, 추정).
+- '계속하기'는 배너만 닫는다 — 입력을 막지 않는다. 복귀 때 자동 동작: ① 컨텍스트 resume ② 0.7초 뒤 트랙이 ended/muted면 새 트랙으로 교체 후 옛 트랙 stop ③ 숨김 중 close였으면 새 자격증명으로 세션 재마운트.
+- ②③은 복귀 **뒤** 입력 단절을 만들 수 있는 유일한 #369 경로다(추정 · 웨일 실기 확인 필요). **"처음부터 · 발화 0건"은 시작 시점에 숨김이 없었다면 #369로 설명되지 않는다.** 시작 순서(받기 탭 → 컨텍스트 미리 생성 → 마이크 1회 획득(#350, 10-21) → 연결 → 마이크 대기 뒤 오프닝 → 파이프라인 부착)에서 오늘 바뀐 줄은 0이다.
+- 완화안 (a)(b) — **구현됨(메인 승인 2026-10-22)**: (a) `decideMicRecovery`는 `readyState === "ended"`일 때만 다시 연다(muted = 그대로) (b) `isReplacementTrackUsable` — 새 트랙이 live · unmuted일 때만 갈아 끼우고 옛 트랙을 닫는다. 아니면 새 트랙만 닫고 옛 트랙 유지(`[live-bg] mic reacquire unusable … → keep old`). 테스트 `backgroundCall.test.ts` 2건 신규 · 1건 갱신.
+
+#### 105.2.2 화면 켜짐 유지(Wake Lock) — 웨일에서 화면이 저절로 꺼졌을 가능성(메인 추정)
+| 항목 | 판독 | 근거 |
+|---|---|---|
+| 웨일 지원 | Chromium 계열이라 `navigator.wakeLock` 있음(추정 — 실기 `wake.state`로 확인) | Chrome 84+ API |
+| 실패 감지(종전) | 요청 거절 → `denied` → 화면 안내 "화면이 어두워지면 빈 곳을 한 번 눌러 주세요"(`keepAwakeUnavailable`) | `screenWakeLock.ts` · `ScreenOffNotice` |
+| 구멍(종전) | **화면이 보이는 채로** 브라우저 · OS가 잠금을 풀면(`release` 이벤트 — 절전 모드 전환 등) 다음 `visibilitychange`까지 다시 요청하지 않았다 → 그 사이 시간 초과로 꺼질 수 있다. 상태 `released`는 화면 안내 대상도 아니다 | 같은 파일 release 리스너 |
+| 수정 | 보이는 채로 풀리면 1초 뒤 다시 요청(한 번 보이는 동안 최대 3회 · 가려졌다 돌아오면 한도 초기화) | `WAKE_LOCK_REREQUEST_DELAY_MS` · `MAX_VISIBLE_REREQUESTS` · 테스트 2건 |
+| 진단 | `?audiodebug=1` `wake.state`(idle/active/released/denied/unsupported) · `wake.releases`(이 통화에서 풀린 횟수) · `[live-mic] … wake=상태/횟수` | `audioDiagnostics.ts` `noteWakeLock` |
+| 대체 수단(NoSleep식 무음 영상 반복 재생) | **보류 — 미구현.** 웨일에서 Wake Lock이 실제로 실패하는지(`wake.state`)가 먼저다. 무음 `<video>` 재생은 ① 통화 오디오 포커스 · 에코 제거 경로에 끼어들 수 있고(미검증) ② 영상 자산 · 자동재생 정책 처리가 늘며 ③ Chrome 84 이후 NoSleep 자체가 Wake Lock을 먼저 쓴다. 실기에서 `denied`/`unsupported`이거나 `released`가 반복되면 그때 제안한다 | 판단 |
+
+#### 105.2.3 시작 순서 경쟁 조건 판독(우선순위 1 · 메인 요청) — 결론: 코드상 확정 후보 0
+| 순서 | 동작 | 경쟁 가능성 | 판정 |
+|---|---|---|---|
+| ① 받기 탭 | 출력 · 입력 컨텍스트 미리 생성 + resume(`primeCallAudio`) | 탭 밖이면 suspended | 세션이 다시 `await resume()` — 진단 `in.state` |
+| ② `start()` | 마이크 1회 `getUserMedia` 시작(기다리지 않음) → 자격증명 → `liveMicHandoff.offer(mic)` → `setCredentials` | offer가 마운트보다 먼저(같은 동기 구간) | 순서 보장 |
+| ③ 세션 마운트 | `claim()` · 컨텍스트 빌림 · `connect()` | effect deps `[]` — 재실행 0 | 문제 없음 |
+| ④ connect 해결 | `await micRequest` → 오프닝 전송 → 같은 동기 구간에서 `micSource` → 분석기 · ScriptProcessor 부착 | 오프닝 뒤 마이크 부착까지 await 0 | 문제 없음 |
+| ⑤ 오프닝 재생 | 반이중 — 재생 + 250ms(턴 진행 중이면 +4초) 뒤 게이트 열림 | 출력 컨텍스트가 멈춰도 타이머는 흐른다(`setTimeout` 1회) | 게이트 영구 닫힘 0 |
+| ⑥ 프레임 | `inputContext`가 running이어야 `onaudioprocess`가 돈다 | **입력 컨텍스트가 시작 뒤 suspended/interrupted로 바뀌면 프레임 0**(추정 · Android 오디오 모드 전환) | 미확정 — `mic.sent`+`mic.dropEcho`+`mic.dropMute` = 0이고 `in.state`≠running이면 이것 |
+| 오늘 배포분이 ①~⑥에서 바꾼 줄 | 0(#369는 visibilitychange 경로 · 재연결 마운트만) | — | `72ee6ae..77cddcc` diff |
+
+남은 갈래(실기 값으로만 가린다): ⑥ 입력 컨텍스트 정지 / 마이크가 무음(`mic.peakDb` = -inf) / 서버가 못 알아들음(`sent`>0 · `asr.rx`=0) / 모델 무응답(`asr.rx`>0).
+
+#### 105.2.4 입력 전사 언어 힌트 ko-KR — **적용**(OQ-A105 해소 · 실 키 실측 2026-10-22 · 메인 승인 "3세션 (권장)")
+사용자 실기 리포트(검찰 고급)에서 사용자 발화가 "isso" · "un 그 보원 지갑과…" · "ascensor 15만 원까지…"로 전사됐다 ⇒ 입력 전사가 언어를 자동 감지한다(`inputAudioTranscription: {}`, #369~#373 무변경 · 마지막 변경 `5fd39e6`). 공식 문서([live-transcribe](https://ai.google.dev/gemini-api/docs/live-api/live-transcribe))는 `inputAudioTranscription.languageCodes`(인식 기울기 · 예시는 전사 전용 모델)를 안내하지만, SDK 2.13은 Developer API에서 그 필드를 거부하고 `languageHints.languageCodes`만 보낸다(§76.1 3행) ⇒ 실측으로 가렸다.
+
+측정: `scripts/live-asr-language-probe.mjs` · 모델 gemini-3.8-live · 앱과 같은 토큰 경로 · 앱과 같은 VAD · 같은 음성(Windows 한국어 TTS "Heami", 16kHz) 8문구 · GEMINI_API_KEY2 · 429 0회.
+
+| 문구 | 현행 `{}` | `languageHints ko-KR` | `customVocabulary`(13어) |
+|---|---|---|---|
+| 네 | (전사 0 · 응답 0) | (전사 0 · 응답 0) | (전사 0 · 응답 0) |
+| 응 | 응. | 응. | 응. |
+| 어 | (전사 0 · 응답 0) | (전사 0 · 응답 0) | (전사 0 · 응답 0) |
+| 그래요? | **creo** | **그래요.** | **creo** |
+| 아니요 | 아니요. | 아니요. | 아니요. |
+| 응, 그 보관 지갑으로 이체했다고요 | 그 보관 지갑으로 이체했다고요. | 같음 | 같음 |
+| 15만 원까지 했어요 | 15만 원까지 했어요. | 같음 | 같음 |
+| 누구세요? | 누구세요? | 같음 | 같음 |
+| 토큰 발급 · 연결 | 성공 · 성공 | 성공 · 성공 | 성공 · 성공 |
+
+⇒ `INPUT_TRANSCRIPTION_CONFIG = { languageHints: { languageCodes: ["ko-KR"] } }`를 토큰에 고정한다(`geminiProvider.ts` · 테스트 `[§105.2.4]`). 단어 목록은 효과 0이라 넣지 않는다. 표본이 TTS 1개 목소리 · 1회라 실제 어르신 목소리에서의 개선 폭은 미측정(추정).
+
+⚠️ **새로 확인된 사실 — 한 음절 발화("네" · "어")는 세 설정 모두 전사 0 · 응답 0**: 발화 시작 감지가 잡지 못했다(추정 원인 = §50.8 `START_SENSITIVITY_LOW` + `prefixPaddingMs: 300` — 그 결정 때 적어 둔 대가 *"짧고 조용한 발화가 안 잡힐 수 있다"*가 실측으로 나타났다). 참가자가 "네"라고만 답하면 모델이 듣지 못해 **묵묵부답**이 된다 — 신고 1의 유력한 갈래다. 처방(승인 대기 · 미구현): §50.8이 적어 둔 순서대로 `prefixPaddingMs` 300→150 먼저(LOW 유지), 같은 프로브로 "네" · "어" 감지 + 자기 끊김(에코) 회귀를 함께 본다(실 키 추가 세션 필요).
+
+#### 105.2.5 발화 시작 여유 `prefixPaddingMs` 300→150 — **반영 안 함**(실 키 3세션 · 메인 승인 "3세션 승인 (권장)" · 429 0회)
+조건: 언어 힌트 ko-KR(현행) · `START_SENSITIVITY_LOW` 유지. 에코 시험 = 모델이 5~6문장을 말하는 동안 모델 출력의 사본(-14dB · 120ms 지연) + 방 소음(약 -42dBFS)을 마이크로 계속 보낸다 — **앱의 반이중 게이트가 없다고 가정한 최악 조건**(실제 앱은 사기범이 말하는 동안 마이크를 보내지 않는다).
+
+| 시험 | prefix 300(현행) | prefix 150 |
+|---|---|---|
+| "네"(소리 0.13초) | 감지 0(§105.2.4 결과) | **감지 0** |
+| "어"(소리 0.09초) | 감지 0 | **감지 0** |
+| "응"(0.23초) · 나머지 5문구 | 6/6 감지 | 6/6 감지 |
+| 에코 · 소음 — 질문 3개 끊김(`interrupted`) 합 | **3**(1 · 1 · 1) | **6**(1 · 3 · 2) |
+| 에코가 사용자 발화로 전사됨 | 3턴 모두 | 3턴 모두 |
+
+⇒ 150은 짧은 발화 감지를 개선하지 못했고 에코 조건에서 끊김이 늘었다(표본 각 3턴 — 방향성만). **넣지 않는다.**
+- 한계: 시험 음성 "네" · "어"는 TTS라 소리 길이가 0.13 · 0.09초로 매우 짧다(감지된 "응" 0.23초). 실제 사람의 "네"가 이 문턱보다 긴지는 미측정 ⇒ 실기 "네" 미감지는 **추정**이다(확인 = 실기 `?audiodebug=1`에서 "네"만 말했을 때 `mic.sent`는 느는데 `asr.rx`가 그대로인지).
+- 다음 단계 안(승인 대기 · 미구현): ① 실기 확인 먼저(과금 0). ② 미감지가 확인되면 **화면 쪽 보완**: 마이크 레벨(이미 있는 `userSpeechLevel`)로 "말했다"가 감지됐는데 1.5초 안에 서버 인식(`inputTranscription`)이 0이면 짧은 맥락 줄("상대가 짧게 대답했다 — 맞장구로 보고 이어가라")을 넣는다 — 서버 VAD 설정을 건드리지 않아 자기 끊김 회귀 위험이 없다. ③ `START_SENSITIVITY_HIGH`(기본값) 재시험은 반이중 게이트를 흉내 낸 조건으로 해야 의미가 있다(이번 에코 시험은 게이트 없는 최악 조건이라 HIGH는 거의 확실히 더 끊긴다 — 추정).
+
+#### 105.2.6 "말했는데 서버가 못 들음" 화면 쪽 보완 — **구현**(메인 승인 2026-10-22 · 과금 0)
+이 기기의 마이크 레벨로는 참가자가 말했는데, 말이 끝나고 **1.5초** 안에 서버 입력 인식(`inputTranscription`)이 0이고 모델도 대답을 시작하지 않으면 → 모델에 한 줄을 넣는다: *"(상대가 방금 짧게 무슨 말을 한 것 같은데 잘 들리지 않았다. 잘 안 들렸다고 자연스럽게 되묻거나, 하던 이야기를 이어가라.)"* — 맞장구 · 긍정을 가정하지 않는다(참가자가 "어?"라고 되물었을 수도 있다). 전사에 기록되지 않는 `silence` 종류 클라 턴(보류 큐 경유 — 사기범 말을 끊지 않는다). 서버 발화 감지 설정 무변경.
+
+판정표(`src/lib/realtime/unheardReply.ts` · 위에서부터 먼저 맞는 행):
+| # | 조건 | 결과 |
+|---|---|---|
+| 1 | 막힘 — 사기범이 말하는 중(반이중 게이트 닫힘) · 모델 응답 대기/진행 · 도구 대기 · 음소거 · 끊기 래치 · 화면 가려짐 | 후보 버림 · 발동 0 |
+| 2 | 레벨 > 10(화면 "말하는 중" 문턱과 같음) | 후보 시작 · 소리 길이 누적 · 최대 레벨 갱신 |
+| 3 | 마지막 큰 소리 뒤 1.5초 전 | 기다림(단어 사이 쉼은 한 발화로 합친다) |
+| 4 | 그 사이 서버 인식 1조각 이상 | 버림(서버가 들었다) |
+| 5 | 소리 길이 < 120ms 또는 최대 레벨 < 14 | 버림(기침 · 탁 소리 · 작은 소음) |
+| 6 | 직전 발동 뒤 20초 안 | 버림(쿨다운) |
+| 7 | 이 통화 5회 도달 | 버림(상한) |
+| 8 | 그 밖 | **발동 1회** |
+
+- 진단: `?audiodebug=1` `unheard.fired` · `[live-mic] … unheard=N` · 발동 때 `[live-turn] unheard-reply fired n=N`.
+- 판단값(측정값 아님): 120ms · 레벨 14 · 쿨다운 20초 · 상한 5. 실기에서 오발동(기침에 되물음)이 보이면 120ms를 먼저 올린다.
+- 한계: 기침처럼 120ms를 넘는 소음은 거르지 못한다 — 문구가 "잘 안 들렸다"라 오발동해도 대화가 어색해지지 않게 했다. 테스트 `unheardReply.test.ts` 10건(판정표 1~8행 · 합치기 · 문구 중립 · 세션 배선).
+
+### 105.3 진단 계측 추가(제품 동작 무변경)
+| 값 | 뜻 | 판정 |
+|---|---|---|
+| `mic.sent` | 서버로 보낸 마이크 프레임 수 | 0 → 마이크 · 파이프라인 문제 |
+| `mic.dropEcho` | 사기범이 말하는 중(반이중)이라 안 보낸 수 | 이것만 늘면 게이트가 열리지 않는 문제 |
+| `mic.dropMute` | 음소거(버튼 · 직접 확인 화면 `verifyOverlayOpen`) | 확인 화면이 닫히지 않은 경우 |
+| `mic.peakDb` | 보낸 프레임 최대 레벨 | `-inf` → 마이크가 무음만 준다(Android 백그라운드 등) |
+| `asr.rx` | 서버가 돌려준 사용자 음성 인식 조각 수 | `sent`>0 · `asr`=0 → 서버가 말을 못 알아들음 / `asr`>0 · 응답 0 → **전달됐는데 모델이 대답하지 않음** |
+| `mic.track` | 트랙 `readyState`/`muted`/`disabled` | muted면 OS가 마이크를 막는 중 |
+
+보는 법: 통화 주소에 `?audiodebug=1`(진단 패널 — 휴대폰 화면에서 바로 읽힘) · production 콘솔 `[live-mic]` 한 줄(20초마다 + close 때 · 숫자 · 상태만). 코드: `audioDiagnostics.ts` `noteMicFrame` · `noteAsrChunk` · `registerMicTrack` · `formatMicLine`, 호출 = `GeminiVoiceSession.tsx` `onaudioprocess` · `inputTranscription` 분기.
+
+### 105.4 스피커 버튼 (2)
+**출력 경로 선택은 웹에서 불가(Android 크롬 · 웨일)**: `HTMLMediaElement.setSinkId`는 MDN 호환표에 "Not available due to a limitation in Android"(§74.2 ①-A와 같은 결론) · `selectAudioOutput`은 Android 미지원 · Audio Session API(`navigator.audioSession`)는 Safari 전용. ⇒ 수화부만 / 위아래 둘 다를 웹이 강제할 수 없다(어느 스피커로 나갈지는 OS · 브라우저가 정한다 — 마이크를 쓰는 동안 Android 크롬은 통화 모드 오디오로 내보낸다, 추정).
+
+대신 **음량 차이를 키운다**(실시간 Gemini 경로만):
+| 모드 | 이전 게인 | 이후 게인 | 통화 대비 |
+|---|---|---|---|
+| 스피커 끔(통화 모드) | 0.6 | 0.6(사용자 확정 OQ-A94 유지) | 0dB |
+| 스피커 켜짐 | 1.0(+4.4dB — 실기에서 구분 안 됨) | **1.8**(`SPEAKER_BOOST_GAIN`) | **+9.5dB** |
+
+- 클리핑 방지: 게인 → ×1/2 → `WaveShaperNode` 리미터 곡선(`buildLimiterCurve` — 진폭 0.7까지 그대로, 위는 tanh로 1.0에 점근) → 출력. 통화 모드(원본 최대 1.0 × 0.6 = 0.6)는 곡선 영향 0.
+- 오프라인 렌더 실측(Chromium · 440Hz 최대 크기 사인): 0.6 → 피크 0.6000 · RMS -7.45dB / 1.0 → 피크 0.9285 · RMS -3.30dB / **1.8 → 피크 0.9997(클리핑 0) · RMS -1.30dB**. 실제 Gemini 음성은 원본 피크가 1.0보다 작아(파고율 큼) 체감 상승은 사인보다 크다(추정 — 실기 `pcm.peakDb`로 확인).
+- 기본 음량이 너무 작은가: 원본 레벨 실측 0(실 키 없이 Gemini 음성을 받을 수 없음) ⇒ 판단 보류. 실기 `?audiodebug=1`의 `pcm.peakDb`가 -6dB보다 작으면 통화 모드 0.6을 올리는 안을 사용자에게 제시한다.
+- `<audio>.volume`(텍스트 폴백) · ElevenLabs `volume`은 1.0 상한이라 종전 `gainFor` 값 그대로(G455 유지).
+- 버튼 상태: 눌림 색(종전) + 라벨 **"스피커 켜짐"**(UX D-146).
+
+### 105.5 검증
+| 항목 | 결과 | 근거 |
+|---|---|---|
+| `npm test` | 983 pass / 0 fail (1차) → 988(완화 · Wake Lock 뒤) → **998 pass / 0 fail**(§105.2.6 뒤 · 신규 `unheardReply.test.ts` 10건) | 신규 `audioDiagnostics.test.ts` 3건 · `outputGain.test.ts` 4건 · `backgroundCall.test.ts` 2건 · `screenWakeLock.test.ts` 2건 |
+| `npm --prefix functions test` | 1642 → **1643 pass / 0 fail** | 신규 `[§105.2.4]` 1건(입력 전사 언어 힌트) |
+| 실 키 프로브(§105.2.4) | 3세션 · 429 0회 | 메인 승인 "3세션 (권장)" · GEMINI_API_KEY2 |
+| 실 키 프로브(§105.2.5) | 3세션 · 429 0회 · 반영 0 | 메인 승인 "3세션 승인 (권장)" · GEMINI_API_KEY2 |
+| `npm run lint` · `npm --prefix functions run lint` | 오류 0(경고 1 = 기존 `scripts/live-turn-probe.mjs`) | — |
+| 실 키 측정 · 실기 | 0회 | 메인 승인 필요 · 실기는 사용자 |
+
+### 105.6 배포
+**Functions(`createRealtimeCall` — 입력 전사 언어 힌트) + Hosting**. 순서 무관(토큰 설정은 서버만 · 화면 변경은 클라만 — 서로 호환).

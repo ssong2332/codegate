@@ -32,6 +32,22 @@ type DiagState = {
   ringClosedAtMs: number | null;
   /** 이 통화에서 받은 PCM 청크의 최대 절대 진폭(게인 적용 **전** · 0~1). 원본 레벨이 작은지 판정용(2026-10-20 음량 신고). */
   pcmPeakMax: number | null;
+  // ⭐ §105(2026-10-22 실기 신고 "말해도 묵묵부답") — 사용자 말이 서버까지 갔는지 가린다(숫자만).
+  /** 서버로 보낸 마이크 프레임 수. */
+  micFramesSent: number;
+  /** 반이중(사기범이 말하는 중)이라 보내지 않은 프레임 수. */
+  micFramesDroppedEcho: number;
+  /** 음소거(버튼 · 확인 화면)라 보내지 않은 프레임 수. */
+  micFramesDroppedMute: number;
+  /** 보낸 프레임의 최대 절대 진폭(0~1) — 마이크가 무음(0)만 주는지 판정. */
+  micPeakMax: number | null;
+  /** 서버가 돌려준 사용자 음성 인식 조각 수(`inputTranscription`) — 0이면 서버가 말을 듣지 못했다. */
+  asrChunks: number;
+  /** §105 — 화면 켜짐 유지(Wake Lock) 마지막 상태(`screenWakeLock.ts` WakeLockStatus 문자열) · 이 통화에서 풀린 횟수. */
+  wakeLockStatus: string | null;
+  wakeLockReleases: number;
+  /** §105.2.6 — "말했는데 서버가 못 들음" 보완("잘 안 들렸다" 한 줄)이 발동한 횟수. */
+  unheardReplyFired: number;
 };
 
 const INITIAL: DiagState = {
@@ -47,6 +63,14 @@ const INITIAL: DiagState = {
   resumeRetries: 0,
   ringClosedAtMs: null,
   pcmPeakMax: null,
+  micFramesSent: 0,
+  micFramesDroppedEcho: 0,
+  micFramesDroppedMute: 0,
+  micPeakMax: null,
+  asrChunks: 0,
+  wakeLockStatus: null,
+  wakeLockReleases: 0,
+  unheardReplyFired: 0,
 };
 
 let state: DiagState = { ...INITIAL };
@@ -58,13 +82,17 @@ let ringCtx: CtxLike | null = null;
 type GainLike = { gain: { value: number }; context?: unknown };
 let outputGain: GainLike | null = null;
 let fallbackAudio: { volume: number; paused: boolean } | null = null;
+type TrackLike = { readyState: string; muted: boolean; enabled: boolean };
+let micTrack: TrackLike | null = null;
 
 /** 받기 1회 = 통화 1건. 통화별 값을 비운다(벨 컨텍스트는 받기 전에 정해지므로 남긴다). */
 export function noteAccept(nowMs: number): void {
-  state = { ...INITIAL, acceptAtMs: nowMs };
+  // §105 — 화면 켜짐 유지는 받기 전(연결 중)부터 걸려 있을 수 있어 상태만 이어받는다(풀린 횟수는 통화별로 비운다).
+  state = { ...INITIAL, acceptAtMs: nowMs, wakeLockStatus: state.wakeLockStatus };
   outputCtx = null;
   inputCtx = null;
   outputGain = null;
+  micTrack = null;
 }
 
 export function noteCredentialSource(source: CredentialSourceTag): void {
@@ -89,6 +117,51 @@ export function registerOutputGain(node: GainLike | null): void {
 
 export function registerRingContext(ctx: CtxLike | null): void {
   ringCtx = ctx;
+}
+
+/** §105 — 지금 서버로 보내는 마이크 트랙(다시 열면 새 트랙으로 바꾼다). 패널이 readyState · muted를 실시간으로 읽는다. */
+export function registerMicTrack(track: TrackLike | null): void {
+  micTrack = track;
+}
+
+export type MicFrameOutcome = "sent" | "echo" | "mute";
+
+/** §105 — 마이크 프레임 1개의 처리 결과. `peak`는 보낸 프레임에서만 준다(0~1). */
+export function noteMicFrame(outcome: MicFrameOutcome, peak?: number): void {
+  if (outcome === "sent") {
+    const micPeakMax = peak === undefined ? state.micPeakMax : Math.max(state.micPeakMax ?? 0, peak);
+    state = { ...state, micFramesSent: state.micFramesSent + 1, micPeakMax };
+  } else if (outcome === "echo") {
+    state = { ...state, micFramesDroppedEcho: state.micFramesDroppedEcho + 1 };
+  } else {
+    state = { ...state, micFramesDroppedMute: state.micFramesDroppedMute + 1 };
+  }
+}
+
+/** §105 — 화면 켜짐 유지 상태 변화(받기 전 상태도 남는다 — 받기 때 비우지 않게 `noteAccept`가 이어받는다). */
+export function noteWakeLock(status: string): void {
+  state = {
+    ...state,
+    wakeLockStatus: status,
+    wakeLockReleases: state.wakeLockReleases + (status === "released" ? 1 : 0),
+  };
+}
+
+/** §105.2.6 — 화면 쪽 보완 1회 발동. */
+export function noteUnheardReplyFired(): void {
+  state = { ...state, unheardReplyFired: state.unheardReplyFired + 1 };
+}
+
+/** §105 — 서버의 사용자 음성 인식 조각 1개(내용은 적지 않는다). */
+export function noteAsrChunk(): void {
+  state = { ...state, asrChunks: state.asrChunks + 1 };
+}
+
+/** §105 — production 로그 한 줄(숫자 · 상태값만). 응답이 0턴이면 `[gemini-latency]` 요약이 찍히지 않아 따로 둔다. */
+export function formatMicLine(): string {
+  const s = state;
+  const track = micTrack ? `${micTrack.readyState}${micTrack.muted ? "/muted" : ""}${micTrack.enabled ? "" : "/disabled"}` : "-";
+  return `[live-mic] sent=${s.micFramesSent} echo=${s.micFramesDroppedEcho} mute=${s.micFramesDroppedMute} peakDb=${formatDbfs(s.micPeakMax)} asr=${s.asrChunks} track=${track} in=${inputCtx?.state ?? "-"} wake=${s.wakeLockStatus ?? "-"}/${s.wakeLockReleases} unheard=${s.unheardReplyFired}`;
 }
 
 export function registerFallbackAudio(el: { volume: number; paused: boolean } | null): void {
@@ -153,6 +226,7 @@ export type AudioDiagSnapshot = DiagState & {
   /** 게인 노드의 컨텍스트 === 등록된 출력 컨텍스트(재생 소스가 붙는 것)인가. 노드·컨텍스트가 없으면 null. */
   gainCtxSame: boolean | null;
   fallback: { volume: number; paused: boolean } | null;
+  mic: { readyState: string; muted: boolean; enabled: boolean } | null;
 };
 
 export function readAudioDiag(): AudioDiagSnapshot {
@@ -164,6 +238,7 @@ export function readAudioDiag(): AudioDiagSnapshot {
     gain: outputGain ? outputGain.gain.value : null,
     gainCtxSame: outputGain && outputCtx && outputGain.context !== undefined ? outputGain.context === outputCtx : null,
     fallback: fallbackAudio ? { volume: fallbackAudio.volume, paused: fallbackAudio.paused } : null,
+    mic: micTrack ? { readyState: micTrack.readyState, muted: micTrack.muted, enabled: micTrack.enabled } : null,
   };
 }
 
@@ -175,6 +250,7 @@ export function resetAudioDiagForTest(): void {
   ringCtx = null;
   outputGain = null;
   fallbackAudio = null;
+  micTrack = null;
 }
 
 // ── 순수 함수 ────────────────────────────────────────────────────────────────────────────────
@@ -254,6 +330,15 @@ export const AUDIO_DIAG_KEYS = [
   "chunk.lastMs",
   "in.state",
   "in.rate",
+  "mic.track",
+  "mic.sent",
+  "mic.dropEcho",
+  "mic.dropMute",
+  "mic.peakDb",
+  "asr.rx",
+  "wake.state",
+  "wake.releases",
+  "unheard.fired",
   "ring.state",
   "ring.closedMs",
   "fb.volume",
@@ -308,6 +393,15 @@ export function buildAudioDiagRows(input: {
     "chunk.lastMs": rel(s.lastChunkAtMs, s.acceptAtMs),
     "in.state": show(s.input?.state),
     "in.rate": show(s.input?.sampleRate),
+    "mic.track": s.mic ? `${s.mic.readyState}${s.mic.muted ? "/muted" : ""}${s.mic.enabled ? "" : "/disabled"}` : "-",
+    "mic.sent": String(s.micFramesSent),
+    "mic.dropEcho": String(s.micFramesDroppedEcho),
+    "mic.dropMute": String(s.micFramesDroppedMute),
+    "mic.peakDb": formatDbfs(s.micPeakMax),
+    "asr.rx": String(s.asrChunks),
+    "wake.state": show(s.wakeLockStatus),
+    "wake.releases": String(s.wakeLockReleases),
+    "unheard.fired": String(s.unheardReplyFired),
     "ring.state": show(s.ring?.state),
     "ring.closedMs": rel(s.ringClosedAtMs, s.acceptAtMs),
     "fb.volume": s.fallback ? s.fallback.volume.toFixed(2) : "-",

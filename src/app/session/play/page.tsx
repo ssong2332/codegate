@@ -116,6 +116,7 @@ import {
   noteFallbackPlay,
   noteResumeRetry,
   noteRingClosed,
+  noteWakeLock,
   readAudioDiag,
   registerCallAudio,
   registerFallbackAudio,
@@ -1687,7 +1688,11 @@ export default function SessionCallPage() {
     const lock = createScreenWakeLock({
       nav: navigator as unknown as Parameters<typeof createScreenWakeLock>[0]["nav"],
       doc: document,
-      onStatus: setWakeLockStatus,
+      // §105 — 진단 패널(`?audiodebug=1` wake.*)에도 적는다.
+      onStatus: (status) => {
+        setWakeLockStatus(status);
+        noteWakeLock(status);
+      },
     });
     lock.start();
     return () => lock.stop();
@@ -3049,7 +3054,8 @@ export default function SessionCallPage() {
                   className={`text-sm ${speakerDisabled ? "opacity-40" : ""}`}
                   style={{ color: callTokens.textPrimary }}
                 >
-                  스피커
+                  {/* §105(UX D-146) — 켜짐을 글자로도 보인다(색 차이만으로는 실기에서 구분이 어려웠다). */}
+                  {!speakerDisabled && audioRoute === "speaker" ? "스피커 켜짐" : "스피커"}
                 </span>
               </div>
 

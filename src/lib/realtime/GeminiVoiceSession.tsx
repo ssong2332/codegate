@@ -48,7 +48,8 @@ import {
   type LiveToolFunctionCall,
 } from "./liveToolResponse";
 import { HANGUP_DRAIN_CAP_MS, HANGUP_FINAL_TURN_CAP_MS, hangupDrainDelayMs } from "@/lib/session/callEnding";
-import { GEMINI_OUTPUT_GAIN } from "./outputGain";
+import { GEMINI_OUTPUT_GAIN, LIMITER_INPUT_RANGE, buildLimiterCurve, liveGainFor } from "./outputGain";
+import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } from "./unheardReply";
 import {
   AWAIT_RESPONSE_TIMEOUT_MS,
   INITIAL_CLIENT_TURN_QUEUE_STATE,
@@ -95,11 +96,23 @@ import {
 } from "./liveLatency";
 import { LIVE_MIC_CONSTRAINTS, liveMicHandoff, stopStream } from "./micHandoff";
 import { isUsableContext, resumeSuspendedContexts, type PrimedCallAudio } from "./callAudio";
-import { BACKGROUND_LOG_PREFIX, MIC_RECHECK_DELAY_MS, decideMicRecovery, decideSocketClose } from "./backgroundCall";
+import {
+  BACKGROUND_LOG_PREFIX,
+  MIC_RECHECK_DELAY_MS,
+  decideMicRecovery,
+  decideSocketClose,
+  isReplacementTrackUsable,
+} from "./backgroundCall";
 import type { LiveTurnPhase } from "@/lib/verifyintercept";
 import {
+  formatMicLine,
+  noteAsrChunk,
   noteAudioError,
   noteChunkReceived,
+  noteMicFrame,
+  noteUnheardReplyFired,
+  peakOf,
+  registerMicTrack,
   noteChunkScheduled,
   registerCallAudio,
   registerOutputGain,
@@ -239,6 +252,9 @@ export type GeminiVoiceSessionProps = {
    */
   onConnectionLost?: () => void;
 };
+
+// §105 — `[live-mic]` 진단 줄 주기(숫자만 · 판단값).
+const MIC_LOG_INTERVAL_MS = 20_000;
 
 // 마이크 캡처 버퍼 크기 — 작을수록 지연이 낮지만 콜백이 잦다. 사용자 신고(2026-07-25, "내가 말하고
 // ai가 말하는 데 걸리는 시간이 길다") 대응으로 4096→2048로 낮춘다. 48kHz 기준 한 콜백이 모으는
@@ -422,10 +438,11 @@ export default function GeminiVoiceSession({
   // ⭐ T190-3(G455) — 음량 모드 브리지. 메인 effect의 지역 게인 노드를 밖에서 볼 수 있게 ref로 올려 두고(연결 직후
   // 담는다), prop이 바뀌면 그 노드의 게인을 바꾼다. 초기화 줄(`outputGain.gain.value = GEMINI_OUTPUT_GAIN;` — G433)은
   // 그대로 두고, 연결 시점에 이미 다른 모드가 골라져 있으면 그 직후 이 ref 값으로 맞춘다.
-  const outputVolumeRef = useRef(outputVolume ?? GEMINI_OUTPUT_GAIN);
+  // §105 — 스피커 모드면 1.0보다 키운다(`liveGainFor` — 아래 리미터가 클리핑을 막는다).
+  const outputVolumeRef = useRef(liveGainFor(outputVolume ?? GEMINI_OUTPUT_GAIN));
   const outputGainNodeRef = useRef<GainNode | null>(null);
   useEffect(() => {
-    outputVolumeRef.current = outputVolume ?? GEMINI_OUTPUT_GAIN;
+    outputVolumeRef.current = liveGainFor(outputVolume ?? GEMINI_OUTPUT_GAIN);
     const node = outputGainNodeRef.current;
     if (node) node.gain.setTargetAtTime(outputVolumeRef.current, node.context.currentTime, 0.03);
   }, [outputVolume]);
@@ -443,6 +460,7 @@ export default function GeminiVoiceSession({
     let outputContext: AudioContext | null = null;
     // §71.7(G433) — AI 음성은 이 게인 노드를 거쳐 스피커로 나간다(예전엔 destination 직결 = 최대 음량).
     let outputGain: GainNode | null = null;
+    let limiterNodes: AudioNode[] = [];
     let processor: ScriptProcessorNode | null = null;
     // 수정안 A — 통화 화면에서 빌린 컨텍스트인가(빌린 것은 닫지 않고 우리가 붙인 노드만 뗀다).
     let outputBorrowed = false;
@@ -766,6 +784,8 @@ export default function GeminiVoiceSession({
     // 재현한다. ⛔ 이 파일에서 `turnComplete: true` 전송은 아래 `sendClientTurn` **한 곳뿐**이어야 한다
     // (`clientTurnQueueWiring.test.ts`가 소스로 고정한다).
     let clientTurnState = INITIAL_CLIENT_TURN_QUEUE_STATE;
+    // ⭐ §105.2.6 — "말했는데 서버가 못 들음" 화면 쪽 보완 상태(판정 = `unheardReply.ts` 판정표).
+    let unheardReplyState = INITIAL_UNHEARD_REPLY_STATE;
     // ⭐ 리뷰 M2 — 화면 소유 ref에 현재 턴 위상을 써 넣는다(큐 상태 · 사용자 버퍼가 바뀔 때마다).
     const reportTurnPhase = () => {
       if (!turnPhaseRef) return;
@@ -1045,6 +1065,17 @@ export default function GeminiVoiceSession({
             stopStream(next);
             return;
           }
+          // §105 완화 (b) — 새 트랙이 live · unmuted일 때만 갈아 끼운다(옛 트랙 stop은 그 뒤 `replaceMicStream` 안에서만).
+          const nextTrack = next.getAudioTracks()[0] ?? null;
+          const nextView = nextTrack ? { readyState: nextTrack.readyState, muted: nextTrack.muted } : null;
+          if (!isReplacementTrackUsable(nextView)) {
+            stopStream(next);
+            console.info(
+              BACKGROUND_LOG_PREFIX,
+              `mic reacquire unusable ${nextView ? `${nextView.readyState}${nextView.muted ? "/muted" : ""}` : "none"} → keep old`,
+            );
+            return;
+          }
           try {
             replaceMicStream(next);
           } catch (e) {
@@ -1106,7 +1137,10 @@ export default function GeminiVoiceSession({
       return true;
     };
 
+    let micLogTimer: ReturnType<typeof setInterval> | null = null;
     const cleanup = () => {
+      if (micLogTimer) clearInterval(micLogTimer);
+      micLogTimer = null;
       if (typeof document !== "undefined") document.removeEventListener("visibilitychange", handleVisibility);
       if (micRecheckTimer) clearTimeout(micRecheckTimer);
       micRecheckTimer = null;
@@ -1121,6 +1155,9 @@ export default function GeminiVoiceSession({
       processor?.disconnect();
       stream?.getTracks().forEach((track) => track.stop());
       void pendingMic?.then(stopStream, () => {}); // 트랙 stop은 멱등 — 위와 같은 스트림이어도 무해하다
+      // §105 — 리미터 노드도 뗀다(빌린 컨텍스트는 통화 화면이 닫는다 · 자기 것은 아래에서 닫힌다).
+      for (const node of limiterNodes) node.disconnect();
+      limiterNodes = [];
       // 수정안 A — 빌린 컨텍스트는 닫지 않는다(통화 화면이 닫는다). 대신 이 실행이 붙인 노드와 예약 재생을 뗀다.
       if (outputBorrowed) {
         stopAllPlayback();
@@ -1184,7 +1221,22 @@ export default function GeminiVoiceSession({
         // 노드에 연결한다(아래 onmessage).
         outputGain = outputContext.createGain();
         outputGain.gain.value = GEMINI_OUTPUT_GAIN;
-        outputGain.connect(outputContext.destination);
+        // ⭐ §105 — 스피커 모드 증폭(게인 > 1.0)이 깨지지 않게 리미터를 거친다: 게인 → 1/범위 축소 → 곡선(`buildLimiterCurve`) → 출력.
+        // 곡선은 진폭 0.7까지 그대로 통과시켜 통화 모드(0.6) 소리는 바뀌지 않는다. 만들 수 없으면(구형 브라우저) 종전대로 직결한다.
+        try {
+          const limiterScale = outputContext.createGain();
+          limiterScale.gain.value = 1 / LIMITER_INPUT_RANGE;
+          const limiter = outputContext.createWaveShaper();
+          limiter.curve = buildLimiterCurve();
+          limiter.oversample = "2x";
+          outputGain.connect(limiterScale);
+          limiterScale.connect(limiter);
+          limiter.connect(outputContext.destination);
+          limiterNodes = [limiterScale, limiter];
+        } catch (e) {
+          noteAudioError(e instanceof Error ? e.name : "unknown");
+          outputGain.connect(outputContext.destination);
+        }
         // T190-3(G455) — 스피커 버튼 음량 모드 반영(위 초기값 = 통화 모드 = 같은 값. 연결 전에 바뀌었으면 여기서 맞춘다).
         if (outputVolumeRef.current !== GEMINI_OUTPUT_GAIN) outputGain.gain.value = outputVolumeRef.current;
         outputGainNodeRef.current = outputGain;
@@ -1286,6 +1338,12 @@ export default function GeminiVoiceSession({
 
               // 전사 조각 누적(리포트 기록용). input=사용자 발화, output=사기범(모델) 발화.
               if (sc?.inputTranscription?.text) {
+                // §105 — 서버가 사용자 말을 들었다는 증거(내용은 적지 않는다 · 개수만).
+                noteAsrChunk();
+                // §105.2.6 — 서버가 들었다 → 화면 쪽 보완 후보를 버린다(판정표 4행).
+                if (sc.inputTranscription.text.trim()) {
+                  unheardReplyState = stepUnheardReply(unheardReplyState, { type: "asr" }).state;
+                }
                 appendUserBuffer(sc.inputTranscription.text);
                 // §82.4.2(G543) — 참가자가 말하기 시작했다 = 침묵 넛지 취소.
                 if (sc.inputTranscription.text.trim()) noteUserSpeechForNudge();
@@ -1407,6 +1465,7 @@ export default function GeminiVoiceSession({
               if (!cancelled) {
                 flushTranscript();
                 logLatencySummary();
+                console.info(formatMicLine());
                 // §99 — 가려진 동안(또는 돌아온 직후) 닫혔으면 통화를 끝내지 않고 부모가 다시 연결한다(`decideSocketClose`).
                 // 사용자 종료(`stopSignal`) · 끊기 래치 뒤의 close는 언제나 종전대로 `onEnded`다.
                 if (reportConnectionLostIfBackground()) return;
@@ -1447,6 +1506,11 @@ export default function GeminiVoiceSession({
           return;
         }
         stream = micStream;
+        registerMicTrack(micStream.getAudioTracks()[0] ?? null);
+        // §105 — 마이크 진단 한 줄을 20초마다 남긴다(응답 0턴이면 `[gemini-latency]` 요약이 없어 "말이 갔는가"를 가릴 수 없었다).
+        micLogTimer = setInterval(() => {
+          if (!cancelled) console.info(formatMicLine());
+        }, MIC_LOG_INTERVAL_MS);
 
         // 사용자 신고(2026-07-24) — 연결 직후 캐릭터가 먼저 말을 걸도록 트리거를 보낸다. onopen
         // 콜백(위)이 아니라 connect()가 실제로 resolve된 직후에 보내는 이유: onopen은 소켓 이벤트라
@@ -1505,6 +1569,28 @@ export default function GeminiVoiceSession({
           // 리뷰 M3 — 발화 시작(레벨 꺼짐→켜짐)도 사용자 발화로 본다(침묵 넛지 취소 — 전사는 발화 뒤에 온다).
           if (localSpeechStarted(userSpeechDebounceState.speaking, nextState.speaking)) noteUserSpeechForNudge();
           userSpeechDebounceState = nextState;
+          // ⭐ §105.2.6 — 이 기기 레벨로는 말했는데 서버 인식 0 · 모델 무응답이면 "잘 안 들렸다" 한 줄(판정표 `unheardReply.ts`).
+          // 막힘(1행) = 사기범이 말하는 중(반이중 게이트) · 모델 응답 대기/진행 · 도구 대기 · 음소거 · 끊기 래치 · 화면 가려짐.
+          const nowFrameMs = performance.now();
+          const unheard = stepUnheardReply(unheardReplyState, {
+            type: "frame",
+            nowMs: nowFrameMs,
+            level: rms,
+            blocked:
+              agentSpeaking ||
+              mutedRef.current ||
+              handlersRef.current.isHangupLatched() ||
+              clientTurnState.modelTurnActive ||
+              clientTurnState.awaitingSince !== null ||
+              clientTurnState.toolPending ||
+              (typeof document !== "undefined" && document.visibilityState === "hidden"),
+          });
+          unheardReplyState = unheard.state;
+          if (unheard.fire) {
+            noteUnheardReplyFired();
+            console.info(LIVE_TURN_LOG_PREFIX, `unheard-reply fired n=${unheardReplyState.fired}`);
+            dispatchClientTurn({ type: "request", turn: { kind: "silence", text: UNHEARD_REPLY_TEXT }, nowMs: nowFrameMs });
+          }
           userLevelRafId = requestAnimationFrame(sampleUserLevel);
         };
         userLevelRafId = requestAnimationFrame(sampleUserLevel);
@@ -1512,13 +1598,23 @@ export default function GeminiVoiceSession({
         processor = inputContext.createScriptProcessor(CAPTURE_BUFFER_SIZE, 1, 1);
         const inputRate = inputContext.sampleRate;
         processor.onaudioprocess = (event) => {
-          if (cancelled || !session || mutedRef.current) return;
+          if (cancelled || !session) return;
+          // §105 — 보내지 않은 이유를 센다(진단 패널 `mic.*` · `[live-mic]`).
+          if (mutedRef.current) {
+            noteMicFrame("mute");
+            return;
+          }
           // ⭐ T192 C5(§79.8 R2 ① · G510) — 승인 · 종료 래치 뒤에는 마이크 프레임을 보내지 않는다(마지막 대사가 끊기지 않게).
           if (handlersRef.current.isHangupLatched()) return;
           // 반이중: AI가 말하는 동안엔 마이크를 보내지 않아 에코가 AI를 끊지 못하게 한다.
-          if (agentSpeaking) return;
+          if (agentSpeaking) {
+            noteMicFrame("echo");
+            return;
+          }
+          const frame = event.inputBuffer.getChannelData(0);
+          noteMicFrame("sent", peakOf(frame));
           const pcm = floatToPcm16(
-            event.inputBuffer.getChannelData(0),
+            frame,
             inputRate,
             GEMINI_INPUT_SAMPLE_RATE,
           );
@@ -1551,6 +1647,7 @@ export default function GeminiVoiceSession({
           nextSource.connect(activeProcessor);
           micSourceNode = nextSource;
           stream = next;
+          registerMicTrack(next.getAudioTracks()[0] ?? null);
           if (previous && previous !== next) stopStream(previous);
         };
         log("mic pipeline attached");
