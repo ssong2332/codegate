@@ -36,7 +36,7 @@ import type { MessengerSkin } from "../lib/messenger/detectSkin";
 // §101 추가 — 금액 검증 · 한글 단위 표기 · 필수 칸 안내(잎 모듈 · 상대 경로 — 렌더 하네스 관례).
 import { amountError, amountHint, requiredFieldError } from "../lib/landing/amountInput";
 // §106 — 사건 기록 열람본의 피의자 칸 값(잎 모듈 · 상대 경로).
-import { recordSubjectRows, type RecordRow } from "../lib/landing/recordDocument";
+import { recordIssueInfo, recordSubjectRows, type RecordRow } from "../lib/landing/recordDocument";
 
 /** UX-023의 목업 종류. 부재 → `credential-form`(하위호환 읽기 규칙, §15.9.1 R2). */
 export type MessengerFakeLandingKind = "credential-form" | "app-install";
@@ -237,7 +237,7 @@ export default function MessengerFakeLanding({
         </div>
       </div>
 
-      <div className="mx-auto flex w-full max-w-sm flex-1 flex-col">
+      <div className="mx-auto flex min-h-0 w-full max-w-sm flex-1 flex-col">
         {/* ⚠️ **kind 분기가 먼저 끝난다**(§19.4 R7). 상황별 콘텐츠 조회는 선택된 서브 컴포넌트
             **안쪽**에서만 일어나며, 조회 결과가 kind를 바꾸는 경로는 존재하지 않는다. */}
         {/* ⚠️ T194-a — `app-install`도 상황별 콘텐츠를 갖게 됐다(`subsidy-install` · `parcel-install` 2종 — UF-012 v1.38
@@ -568,13 +568,20 @@ const STEP_FLOW_COPY: Record<string, StepScreenCopy[]> = {
   ],
 };
 
-/** §106 — 제출 뒤 가짜 사건 기록 열람본(서버 카탈로그 `MockScreenItem.recordDocument`와 1:1 · 글자 단위 동일). */
+/** §106 — 제출 뒤 가짜 사건 기록 열람본(서버 카탈로그 `MockScreenItem.recordDocument`와 1:1 · 글자 단위 동일). §109 — 공문서 머리 · 결재란 · 발급 정보. */
 type RecordDocumentCopy = {
+  issuer: string;
   title: string;
+  documentNumber: string;
   caseRows: RecordRow[];
   subjectHeading: string;
+  subjectHalfLabels: string[];
   subjectRows: RecordRow[];
+  approvalRows: RecordRow[];
   noticeLines: string[];
+  issueLabels: string[];
+  footerNotice: string;
+  sealLabel: string;
   stampLabel: string;
 };
 
@@ -582,29 +589,48 @@ type RecordDocumentCopy = {
  * ⭐ §106(2026-10-22 사용자 실기 요청 — *"사용자가 입력한 값대로 들어간 기록서가 있어야 할 거 같은데"*) — 키 = landingId(정확 일치 — R8).
  * 피의자 칸 앞쪽 = 본인 확인 칸 라벨 순서대로 방금 넣은 값(`values` — 이 컴포넌트 로컬 state), 뒤쪽 = 아래 `subjectRows`(고정).
  * ⛔ G255 좁은 예외(DECISIONS #221): 신원 칸(성명 · 생년월일 · 휴대전화 번호)만 · 계좌 · 금액 칸이 있는 랜딩에는 두지 않는다 · 값은 콜백에 싣지 않는다(G138).
+ * ⭐ §109(사용자 실기 요청 — *"OO수사본부처럼 적혀 있는데 … 더 사실적인 문서로"*) — "OO" 가림 표시 대신 가상 고유명(통화 페르소나와 같은 값).
  */
 const RECORD_DOCUMENT_COPY: Record<string, RecordDocumentCopy> = {
   "case-record-view": {
-    title: "사건 기록 열람본",
+    issuer: "한빛지방검찰청",
+    title: "사건기록 열람본",
+    documentNumber: "제2026-금조-3318호",
     caseRows: [
-      { label: "사건번호", value: "2026형제 3318호" },
+      { label: "사건번호", value: "2026형제3318호", half: true },
+      { label: "진행 상태", value: "수사 중", half: true },
       { label: "죄명", value: "금융실명법 위반 · 명의 도용 계좌 연루" },
-      { label: "담당 부서", value: "OO수사본부 금융범죄 OO팀" },
-      { label: "담당 검사", value: "검사 OOO" },
-      { label: "진행 상태", value: "수사 진행 중 · 비공개" },
+      { label: "담당 부서", value: "금융범죄조사부" },
+      { label: "담당 검사", value: "윤서진", half: true },
+      { label: "담당 수사관", value: "정하람", half: true },
     ],
-    subjectHeading: "피의자 · 관련인 인적 사항",
+    subjectHeading: "피의자 인적 사항",
+    subjectHalfLabels: ["성명", "생년월일"],
     subjectRows: [
       { label: "구분", value: "피의자(명의 도용 피해 여부 조사 중)" },
+    ],
+    approvalRows: [
+      { label: "수사관", value: "정" },
+      { label: "검사", value: "윤" },
+      { label: "부장검사", value: "전결" },
     ],
     noticeLines: [
       "본인 명의 계좌 2건에서 범죄 자금 경유 정황이 확인되어 자산 검수 대상으로 분류되었습니다.",
       "검수 절차는 담당 수사관이 별도로 안내합니다. 안내에 따르지 않으면 계좌가 동결될 수 있습니다.",
       "본 기록은 비공개 수사 자료입니다. 외부에 알리면 수사 방해로 처리될 수 있습니다.",
     ],
+    issueLabels: ["열람 신청 번호", "발급 일시", "열람 만료"],
+    footerNotice: "본 열람본은 화면 열람 전용입니다. 출력 · 복제 · 화면 저장을 금합니다.",
+    sealLabel: "열람 전용",
     stampLabel: "열람용",
   },
 };
+
+/** §109 — 공문서 본문 글꼴(바탕 · 명조 계열 → 기기 serif). 머리 띠 · 버튼은 종전 system-ui 그대로. */
+const RECORD_DOCUMENT_FONT = "'Nanum Myeongjo', 'Noto Serif KR', 'Noto Serif CJK KR', Batang, AppleMyungjo, serif";
+
+/** §109 — 문서 아래 바코드 장식의 막대 폭(px · 고정 배열 — 무작위 0 · 읽히는 부호 아님). */
+const RECORD_BARCODE_BARS: readonly number[] = [2, 1, 1, 3, 1, 2, 2, 1, 3, 1, 1, 2, 1, 3, 2, 1, 1, 2, 3, 1, 2, 1, 1, 3, 1, 2, 2, 1, 1, 3, 2, 1, 3, 1, 2, 1, 1, 2];
 
 /** §101 — 화면 i(0 = 본인 확인)의 버튼이 올리는 고정 이벤트. 길이 = 마지막(이체 확인) 화면 앞까지. */
 const STEP_FLOW_EVENTS: readonly LandingProgressEvent[] = ["landing_identity", "landing_converted", "landing_amount"];
@@ -659,6 +685,8 @@ function CredentialFormMockup({
   const copy = (landingId ? CREDENTIAL_LANDING_COPY[landingId] : undefined) ?? GENERIC_CREDENTIAL_COPY;
   const [values, setValues] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+  // §109 — 열람본 발급 정보의 기준 시각(제출 이벤트 시각 = `performance.timeOrigin + event.timeStamp` · 기기 시계). 입력값과 무관하다.
+  const [issuedAtMs, setIssuedAtMs] = useState(0);
   // §101 — 여러 화면 사이트의 현재 화면(0 = 본인 확인 = 위 `copy`). 한 화면 폼이면 늘 0이다.
   const stepScreens = landingId ? STEP_FLOW_COPY[landingId] : undefined;
   const [stepIndex, setStepIndex] = useState(0);
@@ -693,6 +721,7 @@ function CredentialFormMockup({
       return;
     }
     // AC-045 핵심 — 여기서 어떤 네트워크 호출도 하지 않는다. 로컬 state만 바꿔 가짜 피드백을 준다.
+    setIssuedAtMs(performance.timeOrigin + event.timeStamp);
     setSubmitted(true);
     // T123/AC-080 — **"제출했다는 사실" 하나만** 위로 올린다. 기록은 페이지가 한다(§15.9.6).
     // ⛔ `values`를 넘기지 않는다(G138) — 넘기는 순간 입력값이 이 파일을 벗어난다.
@@ -717,59 +746,165 @@ function CredentialFormMockup({
       copy.fields.map((field) => field.label),
       values,
       recordDocument.subjectRows,
+      recordDocument.subjectHalfLabels,
     );
-    const rowTable = (rows: RecordRow[]) => (
-      <dl className="grid grid-cols-[auto_1fr] border-t text-[14px] leading-snug" style={{ borderColor: page.inputBorder }}>
-        {rows.map((row) => (
-          <div key={row.label} className="contents">
-            <dt
-              className="whitespace-nowrap border-b px-2 py-1 font-semibold"
-              style={{ borderColor: page.inputBorder, backgroundColor: page.fieldReadonlyBg, color: page.headline }}
-            >
-              {row.label}
-            </dt>
-            <dd className="border-b px-2 py-1" style={{ borderColor: page.inputBorder, color: page.inputText }}>
-              {row.value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    );
+    const issue = recordIssueInfo(new Date(issuedAtMs));
+    const issueValues = [issue.requestNo, issue.issuedAt, issue.expiresAt];
+    const ink = page.headline;
+    const seal = page.errorText;
+    // §109 — 공문서 표: 연달은 반 칸(`half`) 두 개는 한 줄(라벨 · 값 · 라벨 · 값), 그 밖은 값이 나머지 3칸을 가로지른다.
+    const rowTable = (rows: RecordRow[]) => {
+      const lines: RecordRow[][] = [];
+      for (let i = 0; i < rows.length; i += 1) {
+        if (rows[i].half && rows[i + 1]?.half) {
+          lines.push([rows[i], rows[i + 1]]);
+          i += 1;
+        } else {
+          lines.push([rows[i]]);
+        }
+      }
+      const cell = (row: RecordRow, span: number) => [
+        <th
+          key={`${row.label}-l`}
+          scope="row"
+          className="whitespace-nowrap border px-1 py-[3px] text-center font-semibold"
+          style={{ borderColor: ink, backgroundColor: page.fieldReadonlyBg }}
+        >
+          {row.label}
+        </th>,
+        <td
+          key={`${row.label}-v`}
+          colSpan={span}
+          className={`${span === 1 ? "break-keep" : "break-all"} border px-1.5 py-[3px]`}
+          style={{ borderColor: ink, color: page.inputText }}
+        >
+          {row.value}
+        </td>,
+      ];
+      return (
+        <table className="w-full border-collapse text-left text-[13px] leading-[1.35]">
+          <tbody>
+            {lines.map((line) => (
+              <tr key={line[0].label}>{line.length === 2 ? [...cell(line[0], 1), ...cell(line[1], 1)] : cell(line[0], 3)}</tr>
+            ))}
+          </tbody>
+        </table>
+      );
+    };
     return (
       <>
         {issuerBar}
-        <div className="flex flex-col gap-2.5 px-4 pb-4 pt-2.5">
-          <p role="status" className="text-[15px] font-semibold" style={{ color: page.hintText }}>
+        {/* §109 — 문서만 스크롤한다(머리 띠 · 복귀 버튼은 늘 보인다 — 사용자 원칙 "스크롤 최소화"). */}
+        <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-3 pt-2">
+          <p role="status" className="shrink-0 text-[14px] font-semibold" style={{ color: page.hintText }}>
             {copy.successHeadline}
           </p>
-          <article className="relative flex flex-col gap-2.5 border px-3 py-3" style={{ borderColor: page.headline }}>
-            <h1 className="text-center text-[17px] font-bold tracking-[0.3em]" style={{ color: page.headline }}>
-              {recordDocument.title}
-            </h1>
+          <article
+            className="relative flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto border-[1.5px] px-3 pb-3 pt-2.5"
+            style={{ borderColor: ink, color: ink, fontFamily: RECORD_DOCUMENT_FONT }}
+          >
+            {/* 문서 머리 — 중립 엠블럼(가상 도형 · 실존 기관 문장 아님) · 기관명 · 문서번호 · 제목. */}
+            <header className="flex shrink-0 flex-col gap-1.5 border-b-2 pb-2" style={{ borderColor: ink }}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <svg aria-hidden="true" width="22" height="22" viewBox="0 0 22 22" className="shrink-0">
+                    <circle cx="11" cy="11" r="10" fill="none" stroke={ink} strokeWidth="1.4" />
+                    <circle cx="11" cy="11" r="6.5" fill="none" stroke={ink} strokeWidth="0.8" />
+                    <path d="M11 4.5 L15 11 L11 17.5 L7 11 Z" fill={ink} />
+                  </svg>
+                  <span className="truncate text-[14px] font-bold tracking-[0.08em]">{recordDocument.issuer}</span>
+                </div>
+                <span className="shrink-0 text-[11px]" style={{ color: page.body }}>
+                  {recordDocument.documentNumber}
+                </span>
+              </div>
+              <h1 className="text-center text-[19px] font-bold tracking-[0.3em]">{recordDocument.title}</h1>
+            </header>
             {/* 글자 도장(관인 이미지 아님) — 실제 공문서의 "열람용" 표시를 흉내 낸 테두리 글자. */}
             <span
               aria-hidden="true"
-              className="absolute right-3 top-3 rotate-[-8deg] rounded-[4px] border-2 px-1.5 py-0.5 text-[13px] font-bold"
-              style={{ borderColor: page.errorText, color: page.errorText }}
+              className="absolute right-2 top-[50px] rotate-[-8deg] rounded-[3px] border-2 px-1 py-px text-[12px] font-bold"
+              style={{ borderColor: seal, color: seal }}
             >
               {recordDocument.stampLabel}
             </span>
             {rowTable(recordDocument.caseRows)}
-            <h2 className="text-[15px] font-bold" style={{ color: page.headline }}>
-              {recordDocument.subjectHeading}
-            </h2>
+            <h2 className="shrink-0 text-[13px] font-bold">{recordDocument.subjectHeading}</h2>
             {rowTable(subjectRows)}
-            <div className="flex flex-col gap-0.5">
+            <div className="flex shrink-0 flex-col gap-0.5">
               {recordDocument.noticeLines.map((line) => (
-                <p key={line} className="text-[13px] leading-snug" style={{ color: page.body }}>
+                <p key={line} className="text-[12px] leading-snug" style={{ color: page.inputText }}>
                   {line}
                 </p>
               ))}
             </div>
+            {/* 관인 자리 · 결재란(한 줄) — 관인은 가상 도형 + 글자(실존 관인 문안 · 모양 아님). 결재 칸은 서명 대신 성 1글자(빨간 원) 또는 "전결". */}
+            <div className="flex shrink-0 items-end justify-between gap-2">
+              <div className="flex min-w-0 flex-col items-start gap-1.5">
+                <span className="text-[14px] font-bold tracking-[0.08em]">{recordDocument.issuer}</span>
+                <span
+                  aria-hidden="true"
+                  className="ml-1 flex h-10 w-10 shrink-0 items-center justify-center break-keep border-2 text-center text-[10px] font-bold leading-tight"
+                  style={{ borderColor: seal, color: seal, outline: `1px solid ${seal}`, outlineOffset: "2px" }}
+                >
+                  {recordDocument.sealLabel}
+                </span>
+              </div>
+              <table className="shrink-0 border-collapse text-center text-[11px]">
+                <tbody>
+                  <tr>
+                    {recordDocument.approvalRows.map((row) => (
+                      <th key={row.label} scope="col" className="w-12 whitespace-nowrap border px-0.5 py-0.5 font-semibold" style={{ borderColor: ink, backgroundColor: page.fieldReadonlyBg }}>
+                        {row.label}
+                      </th>
+                    ))}
+                  </tr>
+                  <tr>
+                    {recordDocument.approvalRows.map((row) => (
+                      <td key={row.label} className="h-8 border px-0.5" style={{ borderColor: ink }}>
+                        {row.value.length === 1 ? (
+                          <span
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-bold"
+                            style={{ borderColor: seal, color: seal }}
+                          >
+                            {row.value}
+                          </span>
+                        ) : (
+                          row.value
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            {/* 발급 정보 — 값은 제출 시각으로 만든다(`recordIssueInfo` · 입력값 0). 바코드는 읽히지 않는 장식(고정 막대 폭). */}
+            <footer className="flex shrink-0 flex-col gap-1 border-t pt-1.5 text-[11px]" style={{ borderColor: page.inputBorder, color: page.body }}>
+              <div className="flex items-end justify-between gap-2">
+                <dl className="grid grid-cols-[auto_1fr] gap-x-2">
+                  {recordDocument.issueLabels.map((label, index) => (
+                    <div key={label} className="contents">
+                      <dt>{label}</dt>
+                      <dd style={{ color: page.inputText }}>{issueValues[index]}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <svg aria-hidden="true" width="64" height="28" viewBox="0 0 64 28" className="shrink-0">
+                  {RECORD_BARCODE_BARS.map((width, index) =>
+                    index % 2 === 0 ? (
+                      <rect key={index} x={RECORD_BARCODE_BARS.slice(0, index).reduce((sum, w) => sum + w, 0)} y="0" width={width} height="28" fill={ink} />
+                    ) : null,
+                  )}
+                </svg>
+              </div>
+              <p>{recordDocument.footerNotice}</p>
+            </footer>
           </article>
-          <Button type="button" onClick={onClose}>
-            {returnLabel}
-          </Button>
+          <div className="shrink-0">
+            <Button type="button" onClick={onClose}>
+              {returnLabel}
+            </Button>
+          </div>
         </div>
       </>
     );
