@@ -17,7 +17,8 @@ import { findVerifyInterceptItem } from "../scenarios/verifyIntercept";
 import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { readDeliveredSms } from "../inCallSms/smsDelivery";
 import type { SessionDoc } from "../shared/types";
-import { decideAndMarkRealtimeHangup } from "./commit";
+import { decideAndMarkRealtimeHangup, isVerifyInterceptSession } from "./commit";
+import { hasCompletedGoalAction, readMockScreenCompletion } from "./goalAction";
 import { scammerHangupGuidance } from "./guidance";
 import { readScammerHangupRequest } from "./readRequest";
 import type { RequestScammerHangupRequest, RequestScammerHangupResponse } from "./types";
@@ -59,6 +60,15 @@ export const requestScammerHangup = onCall<
 
   const db = getFirestore();
   const sessionRef = db.collection("sessions").doc(sessionId);
+  // §108 — 4행 입력(목표 화면 행동 완료). 확인 무력화 세션에서만 읽는다(그 밖은 4행이 애초에 꺼져 있다) · 실패 = 미완료(fail-closed).
+  let goalActionDone = false;
+  if (isVerifyInterceptSession(session)) {
+    try {
+      goalActionDone = hasCompletedGoalAction({ delivered, mockScreens: await readMockScreenCompletion(sessionRef) });
+    } catch {
+      goalActionDone = false;
+    }
+  }
   const decision = await db.runTransaction((tx) =>
     decideAndMarkRealtimeHangup<FirebaseFirestore.DocumentReference>(
       tx,
@@ -72,6 +82,7 @@ export const requestScammerHangup = onCall<
       { userTurns, pendingInstruction, kind },
       delivered,
       Timestamp.now(),
+      goalActionDone,
     ),
   );
 
@@ -83,6 +94,7 @@ export const requestScammerHangup = onCall<
     row: decision.row,
     kind,
     userTurns,
+    goalActionDone,
   });
 
   return { status: decision.status, guidance: scammerHangupGuidance(decision.status) };

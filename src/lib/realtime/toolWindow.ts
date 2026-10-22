@@ -79,6 +79,10 @@ export type ShouldRequestSmsBackstopInput = {
   lastRequestedUserTurns: number;
   nonePending: boolean;
   inFlight: boolean;
+  /** §108 — 사기범이 "문자를 보냈다"고 말했고 아직 그 문자가 오지 않았다(`scammerClaimsSmsSent`). 부재 = 거짓(종전). */
+  claimPending?: boolean;
+  /** §108 — 주장을 싣고 마지막으로 물은 시점의 `userTurns`(아직 없으면 -1 · 부재 = -1). */
+  lastClaimRequestedUserTurns?: number;
 };
 
 // ── §104(2026-10-22 · 사용자 실기 신고 *"자산 검수 안내 등 문자를 보냈다고 하는데, 실제로는 안 와 있는"*) — 사기범 "보냈다" 주장 ──
@@ -92,9 +96,13 @@ export function scammerClaimsSmsSent(scammerText: string): boolean {
   return SMS_SENT_CLAIM.test(scammerText);
 }
 
+// ⭐ §108(2026-10-22 실기 신고 *"문자 발송이 여전히 느리게 온다"*) — 주장이 생긴 **그 사기범 턴에 바로** 묻는다(다음 사용자 발화를 기다리지 않는다).
+// 종전에는 주장이 다음 사용자 발화 flush의 질의에 실려, 참가자가 한 번 더 말한 뒤에야 도착했다. 아래 표의 마지막 행 앞에 한 행이 붙는다:
+// | 주장이 있고 · 이 사용자 발화 수로 아직 주장을 싣고 묻지 않았다 | 묻는다(같은 발화 수로 한 번 더 — 주장당 최대 1회) |
 export function shouldRequestSmsBackstop(input: ShouldRequestSmsBackstopInput): boolean {
   if (!input.enabled) return false;
   if (input.nonePending) return false;
   if (input.inFlight) return false;
+  if (input.claimPending === true && input.userTurns > (input.lastClaimRequestedUserTurns ?? -1)) return true;
   return input.userTurns > input.lastRequestedUserTurns;
 }

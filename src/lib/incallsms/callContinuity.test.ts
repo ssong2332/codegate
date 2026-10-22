@@ -747,3 +747,14 @@ test("[T190/reviewer Major 역검증] 포커스 이동·되돌리기·트랩 보
     assert.equal(viewFocusViolations(poisoned).length, 1, `${from} 를 지웠는데 잡히지 않았다`);
   }
 });
+
+// ── §108(UX D-148 · 실기 신고 "문자가 오기 전과 온 후에 화면이 달라") — 메시지 버튼은 처음부터 보이고 첫 문자 전에는 비활성 ──
+test("[§108 격자 고정] 메시지 버튼은 문자 도착 여부와 무관하게 그려지고, 도착 전에는 비활성 표현 · 탭 무반응", () => {
+  const at = page.indexOf('<PhoneIcon name="message" />');
+  assert.ok(at > 0);
+  const block = page.slice(page.lastIndexOf("<button", at), at);
+  assert.ok(!page.includes("{inCallSms.length > 0 && ("), "도착 전 버튼을 숨기는 조건 렌더 0");
+  assert.ok(block.includes("aria-disabled={inCallSms.length === 0 ? true : undefined}"));
+  assert.ok(block.includes("if (inCallSms.length === 0) return;"));
+  assert.ok(block.includes('inCallSms.length === 0 ? "opacity-40" : "active:scale-95"'));
+});

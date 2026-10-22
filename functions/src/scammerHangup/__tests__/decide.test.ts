@@ -27,6 +27,8 @@ const PASSING: ScammerHangupInput = {
   transferPlaced: false,
   // T192 C6-R — 기준 입력은 "전환이 이 경로에서 가능"(옛 판정과 같은 쪽).
   transferReachable: true,
+  // §108 — 기준 입력은 "목표 화면 행동 전"(옛 판정과 같은 쪽).
+  goalActionDone: false,
   userTurns: SCAMMER_HANGUP_MIN_USER_TURNS,
   pendingInstruction: false,
   smsAwaitingUser: false,
@@ -175,7 +177,7 @@ function nineRowStatusNewOrder(i: ScammerHangupInput): ScammerHangupStatus {
   if (i.channel === "messenger" && i.messengerStageAllowed !== true) return "wrong_channel";
   if (i.alreadyAccepted) return "already_accepted";
   if (i.isMockTurn) return "mock_turn";
-  if (i.verifyEnabled && !i.transferPlaced && i.transferReachable) return "blocked_transfer";
+  if (i.verifyEnabled && !i.transferPlaced && i.transferReachable && !i.goalActionDone) return "blocked_transfer";
   if (i.userTurns < SCAMMER_HANGUP_MIN_USER_TURNS) return "too_early";
   if (i.pendingInstruction || i.smsAwaitingUser) return "blocked_pending";
   if (i.limitReached) return "limit_reached";
@@ -190,18 +192,19 @@ function* allInputs(relay: ScammerHangupInput["relay"]): Generator<ScammerHangup
         for (const verifyEnabled of bools)
           for (const transferPlaced of bools)
             for (const transferReachable of bools)
+             for (const goalActionDone of bools)
               for (const userTurns of [0, 2, 3, 9])
                 for (const pendingInstruction of bools)
                   for (const smsAwaitingUser of bools)
                     for (const limitReached of bools)
                       for (const alreadyAccepted of bools)
                         yield {
-                          status, channel, isMockTurn, verifyEnabled, transferPlaced, transferReachable, userTurns,
+                          status, channel, isMockTurn, verifyEnabled, transferPlaced, transferReachable, goalActionDone, userTurns,
                           pendingInstruction, smsAwaitingUser, limitReached, alreadyAccepted, relay,
                         };
 }
 
-const INPUT_COMBOS = 3 * 3 * 2 * 2 * 2 * 2 * 4 * 2 * 2 * 2 * 2;
+const INPUT_COMBOS = 3 * 3 * 2 * 2 * 2 * 2 * 2 * 4 * 2 * 2 * 2 * 2;
 
 test("[G526 ⓐ] relay 부재 · 마지막 leg — 전 입력 조합에서 새 순서 9행 판정과 같다(회귀 0)", () => {
   let n = 0;
@@ -372,7 +375,7 @@ test("[G552 ⓓ 역검증] 옛 식별자를 끼운 요청 타입 사본은 같�
 // 사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 키가 들어오면 빨개진다. C6-R이 `transferReachable`(서버 값) 1키를 더했다.
 // §104.9 — 메신저 단계 경로 표시(`messengerStageAllowed` · 폴백만 참)가 13번째 키다(사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과는 여전히 0).
 const G600_KEYS = [
-  "alreadyAccepted", "channel", "isMockTurn", "limitReached", "messengerStageAllowed", "pendingInstruction", "relay",
+  "alreadyAccepted", "channel", "goalActionDone", "isMockTurn", "limitReached", "messengerStageAllowed", "pendingInstruction", "relay",
   "smsAwaitingUser", "status", "transferPlaced", "transferReachable", "userTurns", "verifyEnabled",
 ];
 
@@ -384,7 +387,8 @@ function inputTypeKeys(src: string): string[] {
   return [...body.matchAll(/^\s*(\w+)\??:/gm)].map((m) => m[1]!).sort();
 }
 
-test("[G600] ScammerHangupInput 키 집합 = 정확히 13키(§104.9 +1 · 사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 0)", () => {
+// §108(사용자 결정 · DECISIONS #223) — 목표 화면 행동 완료(`goalActionDone` — 랜딩 제출 · 앱 설치 응낙 · 서버 기록만)가 14번째 키다. 4행만 읽는다.
+test("[G600] ScammerHangupInput 키 집합 = 정확히 14키(§108 +1 · 사기범 턴 · 경과 시간 · 반복 · 확인 결과 0)", () => {
   const src = readFileSync(path.join(SRC_DIR, "decide.ts"), "utf8").replace(/\r\n/g, "\n");
   assert.deepEqual(inputTypeKeys(src), G600_KEYS);
   assert.deepEqual(Object.keys(PASSING).sort(), G600_KEYS, "기준 입력과 타입 키가 갈렸다");

@@ -48,7 +48,7 @@ import {
   type LiveToolFunctionCall,
 } from "./liveToolResponse";
 import { HANGUP_DRAIN_CAP_MS, HANGUP_FINAL_TURN_CAP_MS, hangupDrainDelayMs } from "@/lib/session/callEnding";
-import { GEMINI_OUTPUT_GAIN, LIMITER_INPUT_RANGE, buildLimiterCurve, liveGainFor } from "./outputGain";
+import { GEMINI_OUTPUT_GAIN, LIMITER_INPUT_RANGE, SPEAKER_COMPRESSOR, applySpeakerDynamics, buildLimiterCurve, liveStageFor } from "./outputGain";
 import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } from "./unheardReply";
 import {
   AWAIT_RESPONSE_TIMEOUT_MS,
@@ -441,13 +441,16 @@ export default function GeminiVoiceSession({
   // ⭐ T190-3(G455) — 음량 모드 브리지. 메인 effect의 지역 게인 노드를 밖에서 볼 수 있게 ref로 올려 두고(연결 직후
   // 담는다), prop이 바뀌면 그 노드의 게인을 바꾼다. 초기화 줄(`outputGain.gain.value = GEMINI_OUTPUT_GAIN;` — G433)은
   // 그대로 두고, 연결 시점에 이미 다른 모드가 골라져 있으면 그 직후 이 ref 값으로 맞춘다.
-  // §105 — 스피커 모드면 1.0보다 키운다(`liveGainFor` — 아래 리미터가 클리핑을 막는다).
-  const outputVolumeRef = useRef(liveGainFor(outputVolume ?? GEMINI_OUTPUT_GAIN));
+  // §105 · §108 — 스피커 모드면 압축 + 보정 게인으로 키운다(`liveStageFor` — 아래 리미터가 클리핑을 막는다).
+  const outputVolumeRef = useRef(liveStageFor(outputVolume ?? GEMINI_OUTPUT_GAIN));
   const outputGainNodeRef = useRef<GainNode | null>(null);
+  const speakerDynamicsRef = useRef<{ compressor: DynamicsCompressorNode; makeup: GainNode } | null>(null);
   useEffect(() => {
-    outputVolumeRef.current = liveGainFor(outputVolume ?? GEMINI_OUTPUT_GAIN);
+    outputVolumeRef.current = liveStageFor(outputVolume ?? GEMINI_OUTPUT_GAIN);
     const node = outputGainNodeRef.current;
-    if (node) node.gain.setTargetAtTime(outputVolumeRef.current, node.context.currentTime, 0.03);
+    if (node) node.gain.setTargetAtTime(outputVolumeRef.current.gain, node.context.currentTime, 0.03);
+    const dynamics = speakerDynamicsRef.current;
+    if (dynamics) applySpeakerDynamics(dynamics, outputVolumeRef.current);
   }, [outputVolume]);
 
   // startedRef로 재실행을 막지 않는다(2026-07-23) — React Strict Mode(dev)는 mount→cleanup→mount를
@@ -1178,6 +1181,7 @@ export default function GeminiVoiceSession({
       // §105 — 리미터 노드도 뗀다(빌린 컨텍스트는 통화 화면이 닫는다 · 자기 것은 아래에서 닫힌다).
       for (const node of limiterNodes) node.disconnect();
       limiterNodes = [];
+      speakerDynamicsRef.current = null;
       // 수정안 A — 빌린 컨텍스트는 닫지 않는다(통화 화면이 닫는다). 대신 이 실행이 붙인 노드와 예약 재생을 뗀다.
       if (outputBorrowed) {
         stopAllPlayback();
@@ -1244,21 +1248,32 @@ export default function GeminiVoiceSession({
         // ⭐ §105 — 스피커 모드 증폭(게인 > 1.0)이 깨지지 않게 리미터를 거친다: 게인 → 1/범위 축소 → 곡선(`buildLimiterCurve`) → 출력.
         // 곡선은 진폭 0.7까지 그대로 통과시켜 통화 모드(0.6) 소리는 바뀌지 않는다. 만들 수 없으면(구형 브라우저) 종전대로 직결한다.
         try {
+          // §108 — 게인과 리미터 사이에 컴프레서 → 보정 게인. 통화 모드는 비율 1 · 보정 1(소리 무변경 · `liveStageFor`).
+          const compressor = outputContext.createDynamicsCompressor();
+          compressor.threshold.value = SPEAKER_COMPRESSOR.threshold;
+          compressor.knee.value = SPEAKER_COMPRESSOR.knee;
+          compressor.attack.value = SPEAKER_COMPRESSOR.attack;
+          compressor.release.value = SPEAKER_COMPRESSOR.release;
+          const makeup = outputContext.createGain();
           const limiterScale = outputContext.createGain();
           limiterScale.gain.value = 1 / LIMITER_INPUT_RANGE;
           const limiter = outputContext.createWaveShaper();
           limiter.curve = buildLimiterCurve();
           limiter.oversample = "2x";
-          outputGain.connect(limiterScale);
+          outputGain.connect(compressor);
+          compressor.connect(makeup);
+          makeup.connect(limiterScale);
           limiterScale.connect(limiter);
           limiter.connect(outputContext.destination);
-          limiterNodes = [limiterScale, limiter];
+          limiterNodes = [compressor, makeup, limiterScale, limiter];
+          speakerDynamicsRef.current = { compressor, makeup };
+          applySpeakerDynamics(speakerDynamicsRef.current, outputVolumeRef.current, true);
         } catch (e) {
           noteAudioError(e instanceof Error ? e.name : "unknown");
           outputGain.connect(outputContext.destination);
         }
         // T190-3(G455) — 스피커 버튼 음량 모드 반영(위 초기값 = 통화 모드 = 같은 값. 연결 전에 바뀌었으면 여기서 맞춘다).
-        if (outputVolumeRef.current !== GEMINI_OUTPUT_GAIN) outputGain.gain.value = outputVolumeRef.current;
+        if (outputVolumeRef.current.gain !== GEMINI_OUTPUT_GAIN) outputGain.gain.value = outputVolumeRef.current.gain;
         outputGainNodeRef.current = outputGain;
         registerOutputGain(outputGain);
         // `micReady` = 오디오 컨텍스트 준비(마이크 권한은 받기 때 병렬로 받는다 — `acceptToMicMs`).

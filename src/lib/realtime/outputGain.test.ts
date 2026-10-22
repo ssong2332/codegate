@@ -16,7 +16,8 @@ import {
   LIMITER_KNEE,
   SPEAKER_BOOST_GAIN,
   buildLimiterCurve,
-  liveGainFor,
+  SPEAKER_COMPRESSOR,
+  liveStageFor,
   softLimit,
 } from "./outputGain.ts";
 
@@ -75,7 +76,7 @@ function gainWiringViolations(pageSource: string, geminiSource: string, elevenSo
   if ((page.match(/outputVolume=\{gainFor\(audioRoute\)\}/g) ?? []).length !== 2) out.push("play가 두 세션 컴포넌트에 outputVolume을 넘기지 않는다");
   if (!page.includes("audio.volume = requested;")) out.push("폴백 <audio> 음량 대입이 없다");
   if (!/outputVolume\?: number;/.test(strip(geminiSource))) out.push("GeminiVoiceSession이 outputVolume prop을 받지 않는다");
-  if (!strip(geminiSource).includes("node.gain.setTargetAtTime(outputVolumeRef.current")) out.push("Gemini 게인 노드 갱신이 없다");
+  if (!strip(geminiSource).includes("node.gain.setTargetAtTime(outputVolumeRef.current.gain")) out.push("Gemini 게인 노드 갱신이 없다");
   if (!/outputVolume\?: number;/.test(strip(elevenSource))) out.push("RealtimeVoiceSession이 outputVolume prop을 받지 않는다");
   if (!strip(elevenSource).includes("volume: outputVolume,")) out.push("ElevenLabs volume 옵션 배선이 없다");
   return out;
@@ -166,7 +167,7 @@ function gainIdentityViolations(geminiSource: string): string[] {
   const effEnd = c.indexOf("}, [outputVolume]);", eff);
   if (eff < 0 || effEnd < 0) {
     out.push("outputVolume 변경 effect가 ref의 노드를 읽지 않는다");
-  } else if (!c.slice(eff, effEnd).includes("node.gain.setTargetAtTime(outputVolumeRef.current, node.context.currentTime")) {
+  } else if (!c.slice(eff, effEnd).includes("node.gain.setTargetAtTime(outputVolumeRef.current.gain, node.context.currentTime")) {
     out.push("outputVolume 변경 effect가 노드 게인을 바꾸지 않는다");
   }
   return out;
@@ -189,12 +190,17 @@ test("[2026-10-20 음량 신고 역검증] ref에 다른 노드를 담거나 · 
 });
 
 // ── §105 — 스피커 모드 증폭(실시간 Web Audio 경로) + 리미터 ─────────────────────────────────────────────
-test("[§105] 실시간 경로: 통화 모드는 그대로 · 스피커 모드는 1.0보다 키운다(통화 대비 +9dB 이상) · 리미터 범위 안", () => {
-  assert.equal(liveGainFor(gainFor("call")), CALL_MODE_GAIN);
-  assert.equal(liveGainFor(gainFor("speaker")), SPEAKER_BOOST_GAIN);
-  assert.ok(SPEAKER_BOOST_GAIN > 1.0);
-  assert.ok(20 * Math.log10(SPEAKER_BOOST_GAIN / CALL_MODE_GAIN) >= 9, "통화 ↔ 스피커 차이가 귀로 구분될 만큼(≥ 9dB)");
-  assert.ok(SPEAKER_BOOST_GAIN <= LIMITER_INPUT_RANGE, "증폭 최대치가 리미터 곡선 범위 안");
+test("[§105 · §108] 실시간 경로: 통화 모드는 그대로(압축 0 · 보정 1) · 스피커 모드는 압축 + 보정 2.5(측정 상한)", () => {
+  assert.deepEqual(liveStageFor(gainFor("call")), { gain: CALL_MODE_GAIN, compressorRatio: 1, makeup: 1 });
+  assert.deepEqual(liveStageFor(gainFor("speaker")), {
+    gain: SPEAKER_MODE_GAIN,
+    compressorRatio: SPEAKER_COMPRESSOR.ratio,
+    makeup: SPEAKER_BOOST_GAIN,
+  });
+  // §108.1 측정 — 천장(1.0)에 닿는 샘플 0인 가장 큰 보정이 2.5였다(3.0부터 닿음). 값을 바꾸면 다시 재고 이 줄을 고친다.
+  assert.equal(SPEAKER_BOOST_GAIN, 2.5);
+  assert.deepEqual({ ...SPEAKER_COMPRESSOR }, { threshold: -24, knee: 6, ratio: 12, attack: 0.003, release: 0.15 });
+  assert.ok(SPEAKER_BOOST_GAIN <= LIMITER_INPUT_RANGE + 1, "보정 뒤 진폭은 압축 덕분에 리미터 범위 안(측정 꼭대기 −0.1dBFS)");
   // 미디어 경로(`<audio>.volume` · ElevenLabs)는 1.0 상한 그대로(G455).
   assert.equal(gainFor("speaker"), SPEAKER_MODE_GAIN);
 });
@@ -210,9 +216,9 @@ test("[§105] 리미터: 무릎(0.7)까지 그대로 · 그 위는 단조 증가
     prev = y;
   }
   assert.ok(Math.abs(softLimit(LIMITER_KNEE + 1e-6) - (LIMITER_KNEE + 1e-6)) < 1e-6, "무릎에서 끊김 0");
-  // 원본 최대(1.0) × 통화 모드(0.6) = 0.6 → 리미터 영향 0. 원본 1.0 × 스피커 1.8 → 1.0 미만으로 눌린다.
+  // 원본 최대(1.0) × 통화 모드(0.6) = 0.6 → 리미터 영향 0. 범위 끝까지 1.0 미만으로 눌린다.
   assert.equal(softLimit(1.0 * CALL_MODE_GAIN), CALL_MODE_GAIN);
-  assert.ok(softLimit(1.0 * SPEAKER_BOOST_GAIN) < 1);
+  assert.ok(softLimit(LIMITER_INPUT_RANGE) < 1);
 });
 
 test("[§105] 리미터 곡선: 가운데 = 0 · 양끝 = ±softLimit(범위) · 입력 축 [-1,1] ↔ 진폭 [-범위, 범위]", () => {
@@ -226,10 +232,14 @@ test("[§105] 리미터 곡선: 가운데 = 0 · 양끝 = ±softLimit(범위) ·
   assert.ok(Math.abs(curve[idx] - 0.5) < 1e-3);
 });
 
-test("[§105 배선] Gemini 세션: 게인 → 1/범위 → 곡선 → 출력 · prop 값은 liveGainFor를 거친다", () => {
+test("[§105 · §108 배선] Gemini 세션: 게인 → 컴프레서 → 보정 → 1/범위 → 곡선 → 출력 · prop 값은 liveStageFor를 거친다", () => {
   assert.ok(code.includes("limiterScale.gain.value = 1 / LIMITER_INPUT_RANGE;"));
   assert.ok(code.includes("limiter.curve = buildLimiterCurve();"));
-  assert.ok(code.includes("outputGain.connect(limiterScale);"));
+  assert.ok(code.includes("outputGain.connect(compressor);"));
+  assert.ok(code.includes("compressor.connect(makeup);"));
+  assert.ok(code.includes("makeup.connect(limiterScale);"));
+  assert.ok(!code.includes("outputGain.connect(limiterScale);"), "컴프레서를 건너뛰는 직결 0");
   assert.ok(code.includes("limiter.connect(outputContext.destination);"));
-  assert.ok(code.includes("outputVolumeRef.current = liveGainFor(outputVolume ?? GEMINI_OUTPUT_GAIN);"));
+  assert.ok(code.includes("outputVolumeRef.current = liveStageFor(outputVolume ?? GEMINI_OUTPUT_GAIN);"));
+  assert.ok(code.includes("applySpeakerDynamics(dynamics, outputVolumeRef.current);"), "모드 전환 때 압축 · 보정도 바뀐다");
 });
