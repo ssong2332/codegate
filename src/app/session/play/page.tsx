@@ -181,6 +181,7 @@ import CallWaveform from "@/components/CallWaveform";
 import InCallSmsOverlay from "@/components/InCallSmsOverlay";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
 import { LoadingStatus } from "@/components/ui";
+import { TRAINING_INPUT_NO_SUGGEST } from "@/lib/messenger/keyboardViewport";
 
 // ⚠️ 지연 로딩 필수 — @elevenlabs/react가 끌어오는 livekit-client(WebRTC)를 이 화면 로드 시점에
 // 함께 불러오면 WebRTC를 못 쓰는 환경에서 렌더러가 통째로 죽는다(실측: 페이지 자체가 로드 실패).
@@ -2877,6 +2878,8 @@ export default function SessionCallPage() {
                     <input
                       id="realtime-text-input"
                       type="text"
+                      // UX D-144(§103) — 키보드 추천 · 자동 완성 · 자동 수정 끔(메신저 입력칸과 같은 묶음).
+                      {...TRAINING_INPUT_NO_SUGGEST}
                       value={input}
                       onChange={(event) => setInput(event.target.value)}
                       onFocus={(event) =>
@@ -2936,6 +2939,8 @@ export default function SessionCallPage() {
                     <input
                       id="chat-input"
                       type="text"
+                      // UX D-144(§103) — 키보드 추천 · 자동 완성 · 자동 수정 끔(메신저 입력칸과 같은 묶음).
+                      {...TRAINING_INPUT_NO_SUGGEST}
                       value={input}
                       onChange={(event) => setInput(event.target.value)}
                       // 모바일 UX 개선(2026-07-23) — 입력창이 화면 하단 쪽이라 폰 키보드가 뜨면

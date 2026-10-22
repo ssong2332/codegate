@@ -22487,3 +22487,42 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 | `npm run lint` | 오류 0 · 경고 9(전부 변경 밖 — `.playwright-mcp/` 임시 스크립트 · `scripts/live-turn-probe.mjs`) |
 | `npm --prefix functions run lint` | 통과 |
 | 배포 | Hosting만(functions 변경 0) — 미배포 |
+
+### 103.5 훈련 대화 입력칸 키보드 추천 끄기(범위 추가 · 실기 신고 2026-10-22 · 갤럭시 S25 · 삼성 키보드)
+신고 원문 *"키보드 중간의 자동 완성 기능은 안 나오도록 할 수 있나?"* — 입력칸과 키보드 사이에 답장 알약 5개("보냈어 / 무슨 일이야 / 안되는데 / 싫어 / 그래 3만원 정도"). 앱 코드에 이 문구 0건 ⇒ 키보드가 만든 추천으로 판단(**추정** — 확인 방법은 아래 실기 항목 ①).
+
+| 속성 | 브라우저가 키보드에 넘기는 것 | 근거 | 채택 |
+|---|---|---|---|
+| `autocomplete="off"` | `EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS`(키보드 추천 후보를 보이지 말라는 안드로이드 표준 신호) | Chromium `content/.../input/ImeUtils.java` `computeEditorInfo` — `AUTOCOMPLETE_OFF`이면 `NO_SUGGESTIONS`를 더한다(2026-10-22 main 소스 확인) | ✅ |
+| `autocorrect="off"` | `TYPE_TEXT_FLAG_AUTO_CORRECT`를 빼서 보낸다 | 같은 함수 | ✅ |
+| `spellcheck="false"` · `autocapitalize="off"` | 맞춤법 밑줄 · 영문 첫 글자 대문자 끔(한글 무관) | 웹 표준 | ✅ |
+| `enterkeyhint="send"` · `inputmode="text"` | 엔터 자리 = 보내기 · 입력 형태 그대로 | 웹 표준 | ✅ |
+| `autocomplete="one-time-code"` | 인증번호 칸으로 알려진다 → 문자 인증번호 자동 채우기 제안이 뜰 수 있다 · 키보드에 따라 숫자 키보드 | — | ❌ 부작용 |
+| `type="password"` | 추천은 사라지지만 화면 가림 · **한글 입력 불가**(키보드가 영문 고정) | — | ❌ |
+| `contenteditable` 로 교체 | 폼 · 엔터 전송 · 한글 조합(IME) 처리를 새로 짜야 하고 Chromium은 같은 `autocomplete` 신호를 못 준다 | — | ❌ |
+| `data-*` 속성 | 키보드에 전달되지 않는다(브라우저가 IME로 넘기는 값 아님) | — | ❌ 효과 0 |
+
+- 적용: `TRAINING_INPUT_NO_SUGGEST`(`src/lib/messenger/keyboardViewport.ts`) — 메신저 `messenger-chat-input` · 통화 텍스트 `realtime-text-input` · `chat-input` 3곳(G707). 렌더 결과 `<input type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" inputMode="text" enterKeyHint="send">`(react-dom/server 확인).
+
+**웹에서 막을 수 없는 것**(판정):
+| 대상 | 판정 | 이유 |
+|---|---|---|
+| 키보드가 `NO_SUGGESTIONS`를 무시하는 경우 | 막을 수 없음 | 신호를 지킬지는 키보드 앱이 정한다(안드로이드 문서 표현: 키보드가 "보일 필요가 없다"는 **힌트**). 삼성 키보드가 지키는지는 미확인 |
+| 화면 내용을 읽는 AI 추천 답장(갤럭시 AI 등 — 이번 알약이 이것일 가능성) | 막을 수 없음(추정) | 입력칸 속성이 아니라 기기 기능이 화면 · 대화를 읽어 만든다. 웹 페이지가 끌 표준 신호가 없다 |
+| 처음 들어갈 때 키보드 자동 표시 | 막을 수 없음(브라우저 정책) | 모바일 브라우저는 사용자 터치 없이 코드로 포커스해도 키보드를 올리지 않는다 |
+
+사용자 안내(키보드 설정 경로 — One UI 버전마다 이름이 조금 다를 수 있음 · **실기 확인 필요**):
+- 설정 → 일반 → 삼성 키보드 설정 → **예측 텍스트** 끄기(단어 추천 줄).
+- 같은 화면 → **추천 답장 / 답장 제안**(있으면) 끄기.
+- 설정 → 갤럭시 AI(또는 "유용한 기능 → 고급 기능") → **채팅 어시스트 · 추천 답장** 끄기.
+
+실기 확인 항목(배포 뒤 갤럭시 S25 · 삼성 키보드):
+| # | 확인 | 기대 |
+|---|---|---|
+| ① | 메신저 대화방 입력칸을 눌렀을 때 답장 알약 5개가 보이는가 | 사라지면 `NO_SUGGESTIONS`로 해결 · 그대로면 기기 AI 추천(웹으로 막을 수 없음) |
+| ② | 글자를 치는 동안 단어 예측 줄이 보이는가 | 사라짐 |
+| ③ | 한글 입력 · 받침 조합 · 지우기 · 보내기가 정상인가 | 정상(엔터 자리 "보내기") |
+| ④ | 웨일 · 삼성 인터넷 · 크롬 셋에서 ①② 결과 | 브라우저별 차이 기록(셋 다 Chromium 계열 — 같을 것으로 추정) |
+| ⑤ | 통화 텍스트 입력(실시간 · 폴백)에서 ①~③ | 같음 |
+
+검증: `npm test` 981 / 0(G707 +1) · `npm --prefix functions test` 1642 / 0 · lint 오류 0. 키보드 동작 자체는 실기 미검증.

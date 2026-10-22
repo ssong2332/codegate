@@ -259,3 +259,24 @@ test("[G706] 시나리오 목록 묶음 제목 — 큰 글씨 · 모래색 막�
   assert.match(h2, /bg-sand/);
   assert.match(h2, /\{group\.items\.length\}개/);
 });
+
+// G707 — §103.5(실기 신고 2026-10-22 · 삼성 키보드 답장 알약). 훈련 대화 입력칸 3곳은 키보드 추천 끔 묶음을 쓴다.
+test("[G707] 훈련 대화 입력칸(메신저 · 통화 텍스트 2곳) — 키보드 추천 · 자동 완성 · 자동 수정 끔 · 우회 속성 0", async () => {
+  const { TRAINING_INPUT_NO_SUGGEST } = await import("../messenger/keyboardViewport.ts");
+  assert.equal(TRAINING_INPUT_NO_SUGGEST.autoComplete, "off", "Chromium이 NO_SUGGESTIONS로 넘기는 신호");
+  assert.equal(TRAINING_INPUT_NO_SUGGEST.autoCorrect, "off");
+  assert.equal(TRAINING_INPUT_NO_SUGGEST.spellCheck, false);
+  const cases: [string, string][] = [
+    ["src/app/session/messenger/page.tsx", "messenger-chat-input"],
+    ["src/app/session/play/page.tsx", "realtime-text-input"],
+    ["src/app/session/play/page.tsx", "chat-input"],
+  ];
+  for (const [file, id] of cases) {
+    const code = codeOnly(file);
+    const at = code.indexOf(`id="${id}"`);
+    assert.ok(at > -1, `${file} ${id} 없음`);
+    const tag = code.slice(at, code.indexOf("/>", at));
+    assert.ok(tag.includes("{...TRAINING_INPUT_NO_SUGGEST}"), `${id}: 키보드 추천 끔 묶음이 없다`);
+    assert.ok(!/one-time-code|type="password"|contentEditable/.test(tag), `${id}: 우회 속성`);
+  }
+});
