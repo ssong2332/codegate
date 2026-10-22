@@ -130,9 +130,23 @@
   animation: e2-fill-up-in 0.38s cubic-bezier(0.32, 0.72, 0, 1) backwards;
 }
 
+/* 준비 화면 "지금 하는 단계" 표시(UX D-144 · §103 — 2026-10-22 실기 피드백 "원 안의 점 세 개가 별로") — 옅은 원 위의 모래색
+   호가 돈다. 끝난 단계(모래색 채움 원 + 체크) · 기다리는 단계(옅은 빈 원)와 정지 화면에서도 모양으로 갈린다.
+   reduced-motion이면 돌지 않고 반쯤 그린 호로 멈춰 있다(모양 구분은 그대로). */
+@keyframes prep-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.prep-spin {
+  animation: prep-spin 0.9s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .page-enter > main:not(.drilldown-step),
   .loading-dot,
+  .prep-spin,
   .motion-reveal,
   .check-pop,
   .e2-rise,

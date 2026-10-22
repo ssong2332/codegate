@@ -225,3 +225,37 @@ test("[G655] 랜딩 · 로그인 · 챌린지 — 함렛 큰 제목 · 랜딩 CT
   assert.ok(challenge.includes("e2-fill-up") && challenge.includes("챌린지가 만들어졌습니다"));
   assert.ok(!challenge.includes("보냈어요"), "앱은 링크를 만들 뿐 보내지 않는다");
 });
+
+// G704~G706 — §103(UX D-144 · DECISIONS #218 · 2026-10-22 실기 피드백 3건). 화면은 이 러너에서 렌더할 수 없어 소스로 본다
+// (실측 표는 docs/Architecture.md §103).
+test("[G704] 준비 화면 — 지금 하는 단계는 도는 호(.prep-spin)이고 원 안의 점 세 개(LoadingDots)는 쓰지 않는다 · reduced-motion이면 멈춘다", () => {
+  const screen = codeOnly("src/components/TrainingPrepScreen.tsx");
+  assert.ok(!screen.includes("LoadingDots"), "진행 중 표시로 원 안의 점 세 개를 다시 쓴다");
+  assert.match(screen, /state === "active" \? \(\s*<span className="prep-spin /, "진행 중 단계에 도는 호가 없다");
+  const motion = readFileSync("src/app/motion.css", "utf8");
+  assert.match(motion, /\.prep-spin \{\s*animation: prep-spin [^;]*infinite;/);
+  const reduced = motion.slice(motion.indexOf("@media (prefers-reduced-motion: reduce)"));
+  assert.match(reduced, /\.prep-spin,/, "reduced-motion에서 호가 멈추지 않는다");
+});
+
+test("[G705] 통화 벨 직전 고지 — '준비됐어요'는 아래에 붙고(sticky) · 고지 ①②는 17px · 카드 항목은 라벨 · 값 한 줄", () => {
+  const notice = codeOnly("src/components/CallStartNotice.tsx");
+  assert.match(notice, /className="sticky bottom-0 [^"]*bg-page[^"]*">\s*<Button type="button" onClick=\{onConfirm\}>/, "주 버튼이 화면 밖으로 밀릴 수 있다");
+  assert.ok(notice.includes('<p className="text-[17px] leading-[1.55] text-ink-sub">{PREROLL_NOTICE}</p>'), "합성 음성 고지 크기가 줄었다");
+  assert.ok(notice.includes('<p className="text-[17px] leading-[1.55] text-ink-sub">{PRE_CALL_NOTICE.stopHint}</p>'), "종료 안내 크기가 줄었다");
+  assert.match(notice, /<div key=\{row\.label\} className="flex items-baseline gap-3">/);
+  // 글자 크기 하한 — 이 화면에 16px 미만 글씨 0.
+  for (const m of notice.matchAll(/text-\[(\d+)px\]/g)) assert.ok(Number(m[1]) >= 16, `16px 미만 글씨: ${m[0]}`);
+  // 장식 아이콘만 작은 화면에서 숨긴다(문면 숨김 0).
+  assert.match(readFileSync("src/app/globals.css", "utf8"), /@media \(max-height: 700px\) \{[\s\S]*?\.precall-icon \{\s*display: none;/);
+});
+
+test("[G706] 시나리오 목록 묶음 제목 — 큰 글씨 · 모래색 막대 · 판 수 · 아래 굵은 선(강한 색 판 사이에서 갈라 보이게)", () => {
+  const groups = codeOnly("src/components/ScenarioPanelGroups.tsx");
+  const h2 = groups.slice(groups.indexOf("<h2"), groups.indexOf("</h2>"));
+  assert.match(h2, /data-toc-target/, "목록 이동 대상 표시가 빠졌다");
+  assert.match(h2, /text-\[26px\] font-extrabold/);
+  assert.match(h2, /border-b-\[3px\] border-ink/);
+  assert.match(h2, /bg-sand/);
+  assert.match(h2, /\{group\.items\.length\}개/);
+});
