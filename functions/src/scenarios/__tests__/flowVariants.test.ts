@@ -29,7 +29,7 @@ import { IN_CALL_SMS } from "../inCallSms";
 import { extractTacticLabel } from "../tacticFlavor";
 import type { AxisExitBlock } from "../axes";
 import { derivedExitBlock } from "./exitBlockLabelRules";
-import { REAL_WORLD_APP_NAMES, REAL_WORLD_HOTLINES } from "./harmlessnessPatterns";
+import { maskFictionalInstitutionNames, REAL_WORLD_APP_NAMES, REAL_WORLD_HOTLINES } from "./harmlessnessPatterns";
 import { SESSION_MARKER_WORDS } from "./sessionMarkerWords";
 import { l3DepthMode } from "../../roleplay/l3Depth";
 import { buildSystemPrompt, REAL_COMPANY_PROMPT_SENTENCE } from "../../roleplay/promptAssembly";
@@ -385,7 +385,9 @@ const AC102_RULES: readonly { code: string; pattern: RegExp; sample: string }[] 
 ];
 
 function ac102Hits(text: string): string[] {
-  return AC102_RULES.filter((rule) => rule.pattern.test(text)).map((rule) => rule.code);
+  // §109(DECISIONS #224) — 허용 목록의 가상 기관명(정확 일치 1벌)만 가린다. 다른 지역명 + "지방검찰청"은 그대로 (c)에 걸린다(역방향 테스트).
+  const masked = maskFictionalInstitutionNames(text);
+  return AC102_RULES.filter((rule) => rule.pattern.test(masked)).map((rule) => rule.code);
 }
 
 /** 검사 대상 — 고급 전용 3종 콘텐츠 전부(프롬프트 · 공개 메타 · 클라 미러) + 변형이 들여오는 문면 전부(릴레이 leg 포함). */
@@ -413,6 +415,8 @@ test("[T191 S5 안전 역방향 · AC-102 (i)] 실존 앱명 · 실제 지청명
   const samples: [string, string][] = [
     ["(b) 실존 앱명", "팀뷰어를 설치해 주셔야 점검이 됩니다"],
     ["(c) 실제 부서·지청명", "서울중앙지검 금융범죄 담당 검사입니다"],
+    // §109 — 가상 기관명 허용은 정확 일치뿐: 지역 자리만 바꾼 사본은 걸린다.
+    ["(c) 실제 부서·지청명", "부산지방검찰청 금융범죄조사부 정하람 수사관입니다"],
     ["(c) 실제 대표번호", "1332로 걸어서 확인해 보세요"],
     ["(d) 역 · 보관함", "강남역 보관함에서 받아 가세요"],
     ["(e) 고립 상세", "근처 모텔에 혼자 들어가 계세요"],

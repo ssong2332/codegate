@@ -911,6 +911,9 @@ test("[§106 ②③] 입력값을 읽는 곳은 열람본 분기 1곳 · 종전 
   assert.ok(recordBranch.length > 0, "열람본 분기를 찾았다");
   assert.ok(/recordSubjectRows\(\s*copy\.fields\.map\(\(field\) => field\.label\),\s*values,/.test(recordBranch));
   assert.equal(/on(Credential|Landing|Install)\w*\??\.?\(/.test(recordBranch), false, "열람본 분기에서 콜백을 부른다");
+  // §109 — 발급 정보는 제출 시각만으로 만든다(입력값 0 · 무작위 0).
+  assert.ok(recordBranch.includes("recordIssueInfo(new Date(issuedAtMs))"), "발급 정보 = 제출 시각");
+  assert.equal(/recordIssueInfo\([^)]*values/.test(recordBranch), false, "발급 정보에 입력값");
   const doneStart = componentCode.search(DONE_BRANCH_AT);
   // 종전 완료 분기 = 그 `if` 부터 바깥 폼 `return (`(들여쓰기 2칸) 앞까지.
   const formReturn = componentCode.slice(doneStart).search(/^ {2}return \(\r?$/m);
