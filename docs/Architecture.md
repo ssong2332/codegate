@@ -22362,3 +22362,61 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 
 ### 101.5 배포 순서
 **Hosting → Functions**(둘 다). 새 클라는 옛 서버와도 동작한다(새 이벤트 3값이 거절돼도 기록 실패는 조용히 흡수 · 옛 변형 화면 그대로). 반대로 Functions가 먼저면 새 서버가 `asset-check-site`를 보내는데 옛 클라는 표에 없는 id라 범용 본인확인 화면으로 떨어진다.
+
+## 102. (Bug fix — 2026-10-22 · 브랜치 `claude/messenger-refusal-guard-4e41be` · 라이브 `7ba247c` 메인 세션 확인) **텍스트 LLM 예비 모델(Groq)의 거절문이 사기범 대사로 화면에 나가던 결함 — 쓸 수 없는 응답 판정 · 다음 단계 전환 · 예비 경로 훈련 맥락** — implementer 기록 (DECISIONS #217 · UX 변경 없음)
+
+### 102.1 증상 · 원인(코드로 확정)
+- 증상: 메신저피싱 › 지인 사칭 급전 요청(카카오톡) › 중급 첫 메시지 = `I'm sorry, but I can’t comply with that.`
+- 로그(메인 세션 실측): `2026-10-22T03:00:30` createsession `Groq 3차 예비 응답`(reason `stage-timeout`, model `openai/gpt-oss-120b`, completionTokens 40). 02:58 첫 시도는 `http-503` → Groq.
+- 대체 사슬(`functions/src/llm/index.ts` `getLlmClient`): `withTimeout( withGroqFallback( withStageDeadline( withOverloadFallback( withOverloadRetry(1차 gemini-3.1-flash-lite), 2차 gemini-3.5-flash-lite ), Gemini 예산 ), 3차 Groq ), timeoutMs )` → 바깥 `completeWithFallback`이 throw를 Mock으로 강등.
+
+| 단계 | 넘어가는 조건(정본) |
+|---|---|
+| 1차 → 1차 재시도 | 503 과부하, 최대 2회(`overloadRetry.ts`) |
+| 1차 → 2차 | 재시도 뒤에도 503(`overloadFallback.ts`) |
+| Gemini → 3차 Groq | 429 · 5xx · Gemini 단계 상한 초과(Groq 키가 있을 때만, `groqFallback.ts` §75.3) · **§102 추가: 사기범 대사 경로의 쓸 수 없는 응답** |
+| → Mock | 그 밖의 throw 전부(`completeWithFallback`) |
+
+- 원인: 사슬의 모든 단계가 **응답 내용을 보지 않았다**. 빈 문자열만 throw(`geminiClient.ts`·`groqClient.ts`)했고, 비어 있지 않은 거절문은 성공으로 반환 → `openingLine.ts`(createSession · consentChallenge) / `roleplay/index.ts`(sendMessage)가 손질(마커·실존명·문장 상한)만 하고 그대로 내보냈다. `functions/src`에 거절 감지 0건이었다.
+- 영향 범위(호출부 전수 grep): `completeWithFallback` 호출 2곳 = **오프닝(createSession · consentChallenge)** · **sendMessage(메신저 채팅 + 통화 텍스트 폴백 `src/app/session/play/page.tsx` 공통)**. `judgeRewindAnswer`(되감기 판정)는 같은 `getLlmClient`를 쓰지만 응답이 JSON 파싱 실패면 규칙 판정으로 내려가 화면 노출이 없다 → 판정 대상에서 뺐다(JSON 응답이 "한글 0자"로 오탐되기 때문). Live 음성 경로는 텍스트 LLM을 쓰지 않는다.
+
+### 102.2 판정표(정본 `functions/src/llm/replyUsability.ts`) — 마커 `[[…]]`·URL을 지운 본문 기준, 위에서부터
+| 순서 | 조건 | 판정 | 사유 |
+|---|---|---|---|
+| 1 | 원문이 공백뿐 | 불가 | `empty` |
+| 1-b | 마커·URL을 지우면 빈 문자열(링크만 보내는 응답) | 가능 | — |
+| 2 | 영어 거절·사과(`I'm sorry` · `sorry, but` · `I apologize` · `I can't/cannot/won't/am unable` · `can't comply/help/assist…` · `as an AI`, 아포스트로피 ' ’ 둘 다) | 불가 | `english-refusal` |
+| 3 | 한국어 AI 자기 지칭 거절(`AI로서`·`언어 모델로서` · `역할극/사기범 역할 … 할 수 없`) | 불가 | `korean-ai-refusal` |
+| 4 | 한글(음절·자모) 0자 | 불가 | `no-hangul` |
+| 5 | 라틴 문자 수 > 한글 수 × 2 | 불가 | `mostly-foreign` |
+| 6 | 그 밖 | 가능 | — |
+
+⛔ 한국어 사과("죄송합니다" · "미안해" · "죄송하지만 지점 방문은 어렵습니다")와 "그 요청은 도와드릴 수 없어요" · "불법적인 건 할 수 없죠" · "보호 역할을 할 수 없게" · "저는 OO은행 AI 상담원입니다"는 **통과**(오탐 테스트 16건으로 고정).
+
+### 102.3 처리 순서(사기범 대사 경로 = `LlmCompletionInput.purpose: "scammer-reply"`)
+| 상황 | 처리 |
+|---|---|
+| Gemini 체인 응답이 불가 · Groq 키 있음 · 예산 ≥ 2초 | Groq 1회(`UnusableReplyError` → `isGroqFallbackEligible` 예, 로그 reason `unusable-<사유>`) |
+| Groq 응답도 불가 | `UnusableReplyError` throw(= Groq 실패와 같은 취급, 로그 `Groq 3차 예비 실패` + `unusable`) → Mock 강등 |
+| Groq 키 없음 · 예산 부족 | `completeWithFallback`의 마지막 판정 → Mock 강등 |
+| Mock 강등 | 기존 `MockLlmClient` = 시나리오 `weakenedTactics` 인용구로 만든 대사(오프닝 `여보세요...? …`) — **"시나리오 고정 첫마디"는 저장소에 없다**(grep 0건) · Mock은 throw하지 않으므로 그다음 오류·재시도 처리는 발동하지 않는다 |
+| `purpose` 없음(되감기 판정 등) | 판정 0 · 머리말 0 — 종전과 바이트 동일 |
+
+- 1차 → 2차 Gemini 전환 조건(503)은 바꾸지 않았다 — 1차가 거절하면 2차를 건너 Groq로 간다(Gemini 거절은 관측 0건, 최소 변경).
+- 로그에는 사유 코드만(G170) — `UnusableReplyError` 메시지에 본문 없음(테스트 고정).
+
+### 102.4 예비 경로 거절 줄이기
+- `GROQ_TRAINING_CONTEXT_PREAMBLE`(`groqClient.ts`): 사기범 대사 경로의 **Groq 요청에만** 시스템 프롬프트 맨 앞에 "금융사기 예방 교육 모의 훈련 · 사기범 역할 연기 · 전부 가상 · 거절문/영어 없이 한국어 대사만"(한·영 2줄)을 붙인다. 조립된 시스템 프롬프트(가드레일 프리앰블 포함)는 뒤에 그대로 → 안전 지침이 뒤에 오는 순서 유지.
+- 1차 Gemini 프롬프트 무변경(Gemini 클라이언트는 `purpose`를 읽지 않는다).
+- ⚠️ 머리말의 효과(거절률 감소)는 **미측정 추정**이다 — 실 키 프로브는 과금이라 하지 않았다. 확인 방법: 배포 뒤 `firebase functions:log`에서 `Groq 3차 예비 실패` 중 `unusable` 필드 빈도, 또는 메인 승인 하에 Groq 강제 경로 프로브.
+
+### 102.5 검증
+| 항목 | 결과 | 근거 |
+|---|---|---|
+| `npm --prefix functions test` | 1642 pass / 0 fail | 신규 `llm/__tests__/replyUsability.test.ts` 10건 |
+| `npm test` | 977 pass / 0 fail | 루트 변경 0건 |
+| `npm --prefix functions run lint` | 오류 0 | — |
+| 실 키 프로브 | 0회 | 금지(메인 승인 필요) |
+
+### 102.6 배포
+**Functions만**(`createSession` · `sendMessage` · `consentChallenge`가 바뀐 `llm`·`roleplay`를 쓴다). 화면 변경 0.

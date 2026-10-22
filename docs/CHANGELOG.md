@@ -4,6 +4,12 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-22 추가분, 브랜치 `claude/messenger-refusal-guard-4e41be`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Functions만**(화면 변경 0).
+
+### Fixed
+- **사기범 대사에 영어 거절문이 나오던 결함(Architecture §102 · DECISIONS #217)**: 1차 Gemini가 503·시간 초과로 실패해 예비 모델(Groq)이 답할 때, 그 모델이 역할을 거절한 `I'm sorry, but I can’t comply with that.` 같은 문장이 메신저 첫 메시지·대화에 그대로 나왔다. 이제 화면에 내기 전에 영어 거절·사과, 한글이 거의 없는 응답, 빈 응답을 걸러 다음 예비 단계로 넘기고, 그래도 안 되면 시나리오 수법 문구로 만든 대체 대사를 쓴다. 한국어 사과("죄송합니다")는 정상 대사로 통과한다.
+- 예비 모델(Groq) 요청에만 "교육용 모의 훈련" 맥락을 앞에 붙여 거절 자체를 줄인다(효과는 미측정). 1차 Gemini 프롬프트는 그대로다.
+
 > ⚠️ **이 블록(2026-10-21 추가분, 브랜치 `claude/kakao-chat-ux-and-dark-lock-437c6b` · PR #358)**: 아직 main에 병합되지 않았고 배포 0회. 배포 대상 = Hosting만.
 
 ### Changed
