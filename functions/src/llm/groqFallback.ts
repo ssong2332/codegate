@@ -7,8 +7,11 @@
 // |----------------------------------------------------------------------------|-----------|
 // | 숫자 `status` 429 · 500~599 (본문 JSON `error.code`가 그 값인 경우 포함)     | 예, 1회   |
 // | Gemini 단계 시간 상한 초과(`GeminiStageTimeoutError`)                       | 예, 1회   |
+// | 사기범 대사 경로에서 Gemini 응답이 쓸 수 없는 응답(`UnusableReplyError`, §102) | 예, 1회   |
 // | 400·401·403·404 등 4xx 입력 오류 · 안전 차단/빈 응답 · 네트워크 오류 · 그 밖 | 아니요    |
 // Groq 호출이 실패하면(어떤 오류든) 그 에러를 던진다 — 재시도·추가 단계 없음(바깥 Mock 강등이 흡수).
+// §102 — 사기범 대사 경로(`input.purpose === "scammer-reply"`)에서는 Groq 응답도 같은 판정을 거친다.
+// 쓸 수 없으면 `UnusableReplyError`를 던진다(= Groq 실패와 같은 취급 → 바깥 Mock 강등). 용도가 없으면 판정 0.
 // `경과 + minAttemptMs > budgetMs`이면 Groq를 시도하지 않는다(잘릴 게 뻔한 호출을 만들지 않는다).
 //
 // ⭐ 단계 시간 상한: 바깥 `withTimeout`은 **가장 바깥**이라(§37.5 (1)) 그것이 터지면 Groq도 못 탄다.
@@ -26,7 +29,15 @@
 // ⛔ 로그는 숫자·단계 이름만(G170).
 import { logger } from "firebase-functions";
 import { GROQ_TEXT_MODEL } from "./groqClient";
+import { judgeScammerReplyUsability, UnusableReplyError } from "./replyUsability";
 import type { LlmClient, LlmCompletionInput, LlmCompletionResult } from "./types";
+
+/** 사기범 대사 경로면 판정하고 쓸 수 없으면 `UnusableReplyError`를 던진다. 용도가 없으면 그대로 둔다. */
+export function assertUsableScammerReply(input: LlmCompletionInput, result: LlmCompletionResult): void {
+  if (input.purpose !== "scammer-reply") return;
+  const reason = judgeScammerReplyUsability(result.text);
+  if (reason) throw new UnusableReplyError(reason);
+}
 
 /** Gemini 단계 시간 상한 초과 — Groq 단계로 넘어가는 신호다. */
 export class GeminiStageTimeoutError extends Error {
@@ -52,6 +63,7 @@ function readStatus(error: unknown): number | undefined {
 /** 판정표 "예" 행이면 true. 그 밖은 전부 false(⛔ 임의 확장 금지). */
 export function isGroqFallbackEligible(error: unknown): boolean {
   if (error instanceof GeminiStageTimeoutError) return true;
+  if (error instanceof UnusableReplyError) return true;
   const status = readStatus(error);
   if (status === undefined) return false;
   return status === 429 || (status >= 500 && status <= 599);
@@ -108,7 +120,9 @@ export function withGroqFallback(primary: LlmClient, groq: LlmClient, options: G
     async complete(input: LlmCompletionInput): Promise<LlmCompletionResult> {
       const startedAt = now();
       try {
-        return await primary.complete(input);
+        const primaryResult = await primary.complete(input);
+        assertUsableScammerReply(input, primaryResult);
+        return primaryResult;
       } catch (error) {
         if (!isGroqFallbackEligible(error)) throw error;
 
@@ -119,11 +133,17 @@ export function withGroqFallback(primary: LlmClient, groq: LlmClient, options: G
           throw error;
         }
 
-        const reason = error instanceof GeminiStageTimeoutError ? "stage-timeout" : `http-${readStatus(error)}`;
+        const reason =
+          error instanceof GeminiStageTimeoutError
+            ? "stage-timeout"
+            : error instanceof UnusableReplyError
+              ? `unusable-${error.reason}`
+              : `http-${readStatus(error)}`;
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), remainingMs);
         try {
           const result = await groq.complete({ ...input, signal: controller.signal });
+          assertUsableScammerReply(input, result);
           logger.info("Groq 3차 예비 응답", { model: GROQ_TEXT_MODEL, reason, elapsedMs: now() - startedAt });
           return { ...result, servedBy: "groq" };
         } catch (groqError) {
@@ -131,6 +151,7 @@ export function withGroqFallback(primary: LlmClient, groq: LlmClient, options: G
             model: GROQ_TEXT_MODEL,
             reason,
             status: readStatus(groqError),
+            ...(groqError instanceof UnusableReplyError ? { unusable: groqError.reason } : {}),
             elapsedMs: now() - startedAt,
           });
           throw groqError;

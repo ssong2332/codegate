@@ -535,6 +535,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       messages: llmHistory,
       // 2026-10-21 — 에스컬레이션 뒤 통화에서는 채팅 단계 전용 수법("통화가 안 돼")을 Mock 대사 원천에서 뺀다(`escalatedCall.ts` 판정표).
       mockTacticHints: callPhaseMockTacticHints(scenarioPrompt.weakenedTactics, escalatedCall),
+      // §102 — 사기범 대사 경로: 영어 거절 등 쓸 수 없는 응답은 다음 단계(Groq → Mock)로 넘긴다.
+      purpose: "scammer-reply",
     });
     // 몇 단계 공급자가 응답했는지(2026-10-18 Groq 3차 예비, Architecture.md §75.7) — 라이브 로그로
     // 1차 Gemini / 2차 Gemini 대체 / 3차 Groq / Mock 강등 비율을 읽는다. 숫자·ID·단계명만(G170).

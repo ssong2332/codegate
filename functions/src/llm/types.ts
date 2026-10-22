@@ -31,6 +31,12 @@ export type LlmCompletionInput = {
    * 없으면 지금까지와 완전히 같다. Mock은 무시한다.
    */
   signal?: AbortSignal;
+  /**
+   * 응답 용도(선택, 2026-10-22 · Architecture.md §102). `"scammer-reply"`면 사기범 대사 경로다 —
+   * (1) 쓸 수 없는 응답(영어 거절 등, `replyUsability.ts`)을 다음 단계로 넘기고, (2) Groq 예비 요청에만
+   * 훈련 맥락 머리말을 붙인다. 없으면(되감기 판정 등) 지금까지와 완전히 같다. Gemini·Mock은 이 값을 읽지 않는다.
+   */
+  purpose?: "scammer-reply";
 };
 
 export type LlmCompletionResult = {

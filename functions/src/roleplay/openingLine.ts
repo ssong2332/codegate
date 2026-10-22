@@ -159,6 +159,8 @@ export async function generateOpeningLine(
     }),
     messages: [], // 오프닝 대사에는 아직 사용자 입력이 없다.
     mockTacticHints: scenarioPrompt.weakenedTactics,
+    // §102 — 사기범 대사 경로: 영어 거절 등 쓸 수 없는 응답은 다음 단계(Groq → Mock)로 넘긴다.
+    purpose: "scammer-reply",
   });
 
   // 메신저 확장(T29) — 스미싱 링크 마커([[LINK:id]])를 텍스트에서 제거하고 attachments로 변환한다

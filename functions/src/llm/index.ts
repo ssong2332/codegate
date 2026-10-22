@@ -17,7 +17,7 @@ import { logger } from "firebase-functions";
 import { GEMINI_KEY_SECRETS, GROQ_API_KEY } from "../shared/config";
 import { GEMINI_FALLBACK_TEXT_MODEL, GeminiLlmClient } from "./geminiClient";
 import { GroqLlmClient } from "./groqClient";
-import { tagServedBy, withGroqFallback, withStageDeadline } from "./groqFallback";
+import { assertUsableScammerReply, tagServedBy, withGroqFallback, withStageDeadline } from "./groqFallback";
 import { MockLlmClient } from "./mockClient";
 import { withOverloadFallback } from "./overloadFallback";
 import { withOverloadRetry } from "./overloadRetry";
@@ -229,7 +229,11 @@ export async function completeWithFallback(
 ): Promise<LlmCompletionResult> {
   const startedAt = Date.now();
   try {
-    return await primary.complete(input);
+    const result = await primary.complete(input);
+    // §102 — 사기범 대사 경로의 마지막 그물. Groq 키가 없어 withGroqFallback을 거치지 않은 Gemini 응답도
+    // 여기서 판정한다(쓸 수 없으면 아래 catch로 → Mock 강등 = 시나리오 수법 문구로 만든 안전한 대사).
+    assertUsableScammerReply(input, result);
+    return result;
   } catch (error) {
     // T132 — `attemptedKeys`가 있어야 **전 키 소진으로 Mock에 도달한 것**과 **단일 키 실패로
     // 도달한 것**을 구분할 수 있다(§37.4). 없으면 "키를 늘렸는데 여전히 Mock"의 원인을 가릴 수 없다.
