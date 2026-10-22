@@ -66,7 +66,7 @@ export default function Home() {
         <LineIcon name="shield" className="text-white" />
         <p className="text-[18px] font-bold">금융사기 예방 훈련</p>
       </header>
-      <div className="flex flex-1 flex-col gap-5 px-[22px] pt-4">
+      <div className="flex flex-1 flex-col gap-5 px-[22px] pt-3">
         <span className="e2-rise self-start bg-sand px-[10px] py-1 text-[16px] font-bold text-ink">연습용 · 실제 돈은 오가지 않습니다</span>
         <DisplayTitle as="h1" size="xl" className="e2-rise">
           사기 전화,
@@ -92,8 +92,9 @@ export default function Home() {
           </ol>
         </section>
       </div>
+      {/* UX D-144(§103) — 412×780(주소창 보임)에서 법적 고지 줄까지 한 화면에 들게 위 여백을 조금 줄였다(넘침 9 → 0). */}
       <CtaPanel
-        className="mt-6"
+        className="mt-4"
         href="/login"
         noteTone="deep"
         note="가족에게 받은 훈련 링크가 있나요? 그 링크를 다시 눌러 주세요."

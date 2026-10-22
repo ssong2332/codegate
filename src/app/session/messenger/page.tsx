@@ -63,7 +63,7 @@ import {
   viewReply,
   type PendingTurn,
 } from "@/lib/messenger/replyChoreography";
-import { chatBoxStyle, isNearBottom } from "@/lib/messenger/keyboardViewport";
+import { chatBoxStyle, isNearBottom, TRAINING_INPUT_NO_SUGGEST } from "@/lib/messenger/keyboardViewport";
 import { useKeyboardViewport } from "@/lib/messenger/useKeyboardViewport";
 import {
   decideMessengerStartNotice,
@@ -968,6 +968,10 @@ export default function MessengerSessionPage() {
                 id="messenger-chat-input"
                 ref={inputRef}
                 type="text"
+                // UX D-144(§103 · 실기 신고 2026-10-22 — 삼성 키보드가 대화를 읽고 "그래 3만원 정도" 같은 답장 알약을 띄웠다) —
+                // 키보드 추천 · 자동 완성 · 자동 수정을 끈다. Chromium 안드로이드는 autocomplete="off"를 TYPE_TEXT_FLAG_NO_SUGGESTIONS로
+                // 넘긴다(ImeUtils.computeEditorInfo). 키보드가 이 신호를 지키는지는 키보드 몫이다(§103.5).
+                {...TRAINING_INPUT_NO_SUGGEST}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder={isSms ? "메시지" : "메시지 입력"}
