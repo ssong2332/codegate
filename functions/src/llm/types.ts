@@ -51,7 +51,7 @@ export type LlmCompletionResult = {
 };
 
 /** 응답 단계 — 1차 Gemini(3.1-flash-lite) · 2차 Gemini 대체(3.5-flash-lite) · 3차 Groq · Mock 강등.
- * 사기범 대사 경로(§107)는 1차가 `claude-primary`(claude-sonnet-5-5)이고 2차가 `gemini-fallback`이다. */
+ * 사기범 대사 경로(§107)는 1차가 `claude-primary`(claude-haiku-5-5)이고 2차가 `gemini-fallback`이다. */
 export type LlmServedBy = "claude-primary" | "gemini-primary" | "gemini-fallback" | "groq" | "mock";
 
 export interface LlmClient {
