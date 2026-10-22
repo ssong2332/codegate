@@ -63,6 +63,9 @@ const NOT_REACHED_BY_INITIAL_RENDER: Record<string, string> = {
   // §101 — 여러 화면 사이트의 둘째 화면부터(본인 확인 버튼을 누른 뒤 상태). 소스 텍스트 층 대조는 `mockScreenCopy.test.ts` §101 블록이 한다.
   stepScreens:
     "본인 확인 버튼을 누른 뒤(stepIndex ≥ 1)에만 렌더된다 — 이벤트 시뮬레이션이 필요하다. 여전히 mockScreenCopy.test.ts §101가 글자 단위로 검사한다",
+  // §106 — 제출 뒤 가짜 사건 기록 열람본(submitted=true에서만 렌더). 소스 텍스트 층 대조는 `mockScreenCopy.test.ts` §106 블록이 한다.
+  recordDocument:
+    "제출 후 상태(submitted=true)에서만 렌더된다 — 이벤트 시뮬레이션이 필요하다. 여전히 mockScreenCopy.test.ts §106가 글자 단위로 검사한다",
 };
 /** 화면이 아니라 **리포트**로 가는 필드 — 화면에 있으면 오히려 위반이다(G76 `:377-391` 담당). */
 // §101 — `progressMoments`(이체 전 단계 승격 문면)도 리포트 전용이다.

@@ -350,7 +350,7 @@ const REPORT_ONLY_FIELDS = ["momentTactic", "correctAction"];
 /** 식별자·열거형 — 문구가 아니다. */
 const NON_TEXT_FIELDS = ["landingId", "kind", "entrySurface"];
 /** §101 — 중첩 필드(여러 화면 사이트). 아래 §101 블록이 화면 문구(`stepScreens`)와 리포트 전용 문구(`progressMoments`)를 따로 대조한다. */
-const NESTED_FIELDS = ["stepScreens", "progressMoments"];
+const NESTED_FIELDS = ["stepScreens", "progressMoments", "recordDocument"];  // §106 — 사건 기록 열람본(아래 §106 블록이 대조한다)
 
 const KNOWN_FIELDS = [...RENDERED_FIELDS, ...REPORT_ONLY_FIELDS, ...NON_TEXT_FIELDS, ...NESTED_FIELDS];
 
@@ -765,7 +765,8 @@ test("[T190/D-93] 계좌번호·금액 칸에만 inputMode numeric — 검증(ma
 test("[T190/D-93] 완료 복귀 문면은 진입 표면이 정한다 — 메신저 '채팅으로' · 문자함 '문자로'", () => {
   assert.ok(componentCode.includes('messenger: "채팅으로 돌아가기"'));
   assert.ok(componentCode.includes('"in-call-sms": "문자로 돌아가기"'));
-  assert.equal((componentCode.match(/^\s*\{returnLabel\}\s*$/gm) ?? []).length, 2, "두 kind의 완료 버튼이 모두 진입 표면 문면을 쓴다");
+  // §106 — credential 완료 화면이 2벌(종전 완료 문구 · 사건 기록 열람본)이라 3이다.
+  assert.equal((componentCode.match(/^\s*\{returnLabel\}\s*$/gm) ?? []).length, 3, "두 kind의 완료 버튼(credential 2벌 · 설치 1)이 모두 진입 표면 문면을 쓴다");
 });
 
 // ── T194-a(docs/Architecture.md §84.13.3 ③) — 설치 화면 상황별 표 `INSTALL_LANDING_COPY` ─────────────────────────────
@@ -875,6 +876,52 @@ test("[§101 ④] 단계 고정 값 3종 = 서버 InCallSmsEvent의 단계 값 �
     assert.ok(inCallSmsTypes.includes(`| "${value}"`), `서버 InCallSmsEvent에 ${value}`);
     assert.ok(apiTypes.includes(`| "${value}"`), `클라 InCallSmsEvent에 ${value}`);
   }
+});
+
+// ── §106(2026-10-22 사용자 실기 요청) — 제출 뒤 가짜 사건 기록 열람본 ─────────────────────────────────
+// ① 열람본 문구(`recordDocument`)가 서버 카탈로그와 글자 단위로 같다(G76 동형) · 표 키 = 카탈로그에서 파생한 landingId
+// ② G255 좁은 예외(#221): 입력값을 읽는 곳은 열람본 분기의 `recordSubjectRows(…, values, …)` 1곳뿐 · 종전 완료 화면 분기는 여전히 `values`를 안 읽는다
+// ③ 열람본 분기에도 콜백 0(제출 콜백은 종전 handleSubmit의 무인자 1곳 — G138)
+const RECORD_DOC_LANDING_IDS = catalogItems
+  .filter((item) => {
+    const start = catalog.indexOf(`landingId: "${item.landingId}"`);
+    const next = catalog.indexOf('landingId: "', start + 1);
+    return catalog.slice(start, next < 0 ? undefined : next).includes("    recordDocument: {");
+  })
+  .map((i) => i.landingId);
+/** 컴포넌트 소스는 CRLF일 수 있다 — 분기 경계는 줄 끝 무관 정규식으로 찾는다. */
+const DONE_BRANCH_AT = /^ {2}if \(submitted\) \{\r?$/m;
+
+test("[§106 ①] 열람본 문구 = 서버 카탈로그(글자 단위) · 표 키 = 카탈로그 landingId", () => {
+  assert.deepEqual(RECORD_DOC_LANDING_IDS, ["case-record-view"]);
+  const table = componentCode.slice(componentCode.indexOf("const RECORD_DOCUMENT_COPY"), componentCode.indexOf("const STEP_FLOW_EVENTS"));
+  assert.deepEqual([...table.matchAll(/^\s{2}"([^"]+)": \{/gm)].map((m) => m[1]), RECORD_DOC_LANDING_IDS);
+  for (const landingId of RECORD_DOC_LANDING_IDS) {
+    const texts = nestedStrings(landingId, "recordDocument");
+    assert.ok(texts.length >= 15, `${landingId}: 열람본 문구를 다 읽었다(${texts.length})`);
+    assert.deepEqual(texts.filter((text) => !table.includes(`"${text}"`)), [], "카탈로그 문구가 화면 표에 없다(드리프트)");
+  }
+});
+
+test("[§106 ②③] 입력값을 읽는 곳은 열람본 분기 1곳 · 종전 완료 화면은 그대로 0 · 열람본 분기 콜백 0", () => {
+  const recordBranch = componentCode.slice(
+    componentCode.indexOf("if (submitted && recordDocument) {"),
+    componentCode.search(DONE_BRANCH_AT),
+  );
+  assert.ok(recordBranch.length > 0, "열람본 분기를 찾았다");
+  assert.ok(/recordSubjectRows\(\s*copy\.fields\.map\(\(field\) => field\.label\),\s*values,/.test(recordBranch));
+  assert.equal(/on(Credential|Landing|Install)\w*\??\.?\(/.test(recordBranch), false, "열람본 분기에서 콜백을 부른다");
+  const doneStart = componentCode.search(DONE_BRANCH_AT);
+  // 종전 완료 분기 = 그 `if` 부터 바깥 폼 `return (`(들여쓰기 2칸) 앞까지.
+  const formReturn = componentCode.slice(doneStart).search(/^ {2}return \(\r?$/m);
+  assert.ok(formReturn > 0, "완료 분기의 끝(폼 return)을 찾았다");
+  const doneBranch = componentCode.slice(doneStart, doneStart + formReturn);
+  assert.ok(doneBranch.includes("{copy.successHeadline}"), "완료 분기를 제대로 잘랐다");
+  assert.equal(/\bvalues\b/.test(doneBranch), false, "종전 완료 화면이 입력값을 읽는다(G255)");
+  // 역검증 — 완료 화면에 값을 되비춘 사본은 걸린다.
+  const poisoned = doneBranch.replace("{copy.successHeadline}", "{copy.successHeadline}{values.x}");
+  assert.notEqual(poisoned, doneBranch);
+  assert.equal(/\bvalues\b/.test(poisoned), true);
 });
 
 // ── §101 추가(2026-10-21 사용자 실기 신고) — 수취 계좌 미리 채움(UX D-115) · 필수 입력 검증 · 금액 한글 표기 ─────────────────────────

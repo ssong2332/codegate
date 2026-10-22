@@ -22672,3 +22672,43 @@ root `npm test` · functions test · lint 2종 — 수치는 PR 본문. 신규 `
 | ⑤ | 통화 텍스트 입력(실시간 · 폴백)에서 ①~③ | 같음 |
 
 검증: `npm test` 981 / 0(G707 +1) · `npm --prefix functions test` 1642 / 0 · lint 오류 0. 키보드 동작 자체는 실기 미검증.
+## 106. (Feature change — 2026-10-22 · 브랜치 `claude/prosecution-case-record-95b534` · 사용자 실기 요청 · 검찰 수사 협조 × 고급) **사건 조회 화면 제출 뒤 가짜 "사건 기록 열람본" — 입력한 신원 값이 피의자 칸에 찍힌다** — implementer 기록 (DECISIONS #221 · UX D-147)
+
+### 106.0 금지 (이 절의 변경이 지키는 것)
+- 입력값 서버 전송 · 저장 · 콜백 전달 0(AC-045 · G138) — 값은 `CredentialFormMockup` 로컬 `values` → `recordSubjectRows`(잎 모듈 · import 0) → 화면 문자열.
+- 실존 기관명("검찰청" 등) · 실제 사건번호 체계 · 관인 이미지 · 실존 인물 0 — 열람본 문자열 전부가 `harmlessnessGate` `mockSurface` 표면으로 등록된다.
+- G255 예외는 **이 1개 랜딩 · 신원 칸만**. 계좌 · 금액 · 지갑 칸이 있는 랜딩에 `recordDocument`를 두지 않는다(`caseRecordDocument.test.ts` R1).
+- 세션 중 표식 0(AC-086 — 세션 후 사실 공개가 맡는다).
+
+### 106.1 사용자 원문
+*"검찰에서 사건 조회 안내센터로 사건 기록 열람을 신청하는데, 해도 본인 확인이 완료되었다고 뜨는데, 이 경우는 실제 사건 기록을 사용자가 입력한 값대로 들어간 기록서가 있어야 할 거 같은데"*
+
+### 106.2 변경
+| 층 | 파일 | 내용 |
+|---|---|---|
+| 카탈로그(정본) | `functions/src/scenarios/mockScreens.ts` | `MockScreenItem.recordDocument?`(새 옵셔널 · 새 kind 0) · `case-record-view`에 열람본 문구(사건번호 "2026형제 3318호" · 죄명 · "OO수사본부 금융범죄 OO팀" · "검사 OOO" · 진행 상태 · 피의자 고정 칸 "구분" · 안내 3줄 · 도장 "열람용") · 대처 문구에 *"이름이 찍힌 기록도 방금 입력한 정보로 만든 가짜 문서"* 1문장 |
+| 화면 | `src/components/MessengerFakeLanding.tsx` | `RECORD_DOCUMENT_COPY`(카탈로그와 글자 단위 동일) · `submitted && recordDocument` 분기 = 완료 문구 1줄 + 열람본 + 복귀 버튼. 종전 완료 분기는 그대로(입력값 0) |
+| 순수 함수 | `src/lib/landing/recordDocument.ts` | `recordSubjectRows(라벨, values, 고정 칸)` — 라벨 순서 · 앞뒤 공백만 제거 · 빈 칸 "-" |
+| 통화 문면 | `prosecutionCooperationCall.prompt.ts` · `flowVariants.ts` | `PROSECUTION_CASE_RECORD_TACTIC`(라벨 "수사 서류 언급" 동일) — 기록을 봤다/이름이 나왔다고 하면 *"방금 보신 기록에 본인 명의로 올라가 있죠? 그 계좌들이 지금 검수 대상입니다"* 로 압박하고 자산 검수로 넘어감 · 기록 내용을 먼저 지어내 읽지 않음. `fv-h3vn`만 교체(은퇴 fv-p4hz · fv-c8wq 원문) |
+| 판정표 | `functions/src/report/smsTimeline.ts` | §101 판정표 6행(주석) — 코드 변경 0 |
+
+### 106.3 판정 (§101 판정표에 더한 행)
+| # | 조건 | 결과 | 근거 |
+|---|---|---|---|
+| 6 | 제출 뒤 열람본을 봄 | 새 기록 · 새 순간 · 위험 신호 0 — 1행(제출)이 곧 가장 깊은 단계 | 문서는 제출의 결과 화면이고 참가자의 새 행동이 없다(AC-080 (b) "화면 노출은 승격하지 않는다"). 열람본은 제출한 세션에서만 보이므로 "보고 멈춤"도 이미 제출 1건으로 잡힌다 |
+
+### 106.4 한계 (정직 고지)
+- Live 사기범은 제출 사실을 직접 알지 못한다(credential 랜딩은 턴 지시를 만들지 않는다 — §19.1). 문서를 근거로 한 압박은 **참가자가 말로 "봤다"고 할 때** 모델이 수법 문면대로 꺼내는 방식이다. 실 키 프로브는 하지 않았다(메인 승인 필요) — 실제 발화 빈도는 미측정.
+- 화면 캡처는 렌더 하네스(`renderToStaticMarkup`)로 제출 뒤 상태를 메모리 사본에서 그리고 Tailwind CDN으로 스타일을 입힌 근사다(앱의 `Button` 색 토큰은 빠져 보임). 실기 통화 화면(통화 표시줄 포함) 확인은 아직이다.
+- 변형 ID를 새로 내지 않았다(DECISIONS #221 — 추정 판단, 리뷰 대상).
+
+### 106.5 검증
+| 항목 | 결과 | 기준값 | 근거 |
+|---|---|---|---|
+| `npm test` | 982 pass / 0 fail | 977 / 0(§102 기록) | 신규 `recordDocument.test.ts` 3건 · `mockScreenCopy.test.ts` §106 2건 |
+| `npm --prefix functions test` | 1647 pass / 0 fail | 1642 / 0(§102 기록) | 신규 `caseRecordDocument.test.ts` 5건 · `harmlessnessGate` 표면 등록 |
+| lint 2종 | 오류 0(루트 경고 1 = 기존 `scripts/live-turn-probe.mjs`) | — | — |
+| 모바일 375×812 | 세로 스크롤 0(`scrollHeight 812 = clientHeight 812`) · 가로 넘침 0 | 1차 시안 915 | 렌더 하네스 근사 캡처 |
+
+### 106.6 배포
+**Hosting → Functions** 순서. 화면(열람본)은 Hosting, 통화 문면 · 카탈로그 · 대처 문구는 Functions(`createSession` · `sendMessage` · 리포트 생성). 반대 순서면 새 대처 문구가 옛 화면(열람본 없음) 세션 리포트에 실린다 — 문구가 "이름이 찍힌 기록"을 말하는데 화면에 없었던 상태(해롭지 않지만 어긋남).

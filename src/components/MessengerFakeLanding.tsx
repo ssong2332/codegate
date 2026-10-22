@@ -35,6 +35,8 @@ import { LANDING_PAGE_TOKENS, browserBarTokensFor } from "../lib/phone/skinToken
 import type { MessengerSkin } from "../lib/messenger/detectSkin";
 // §101 추가 — 금액 검증 · 한글 단위 표기 · 필수 칸 안내(잎 모듈 · 상대 경로 — 렌더 하네스 관례).
 import { amountError, amountHint, requiredFieldError } from "../lib/landing/amountInput";
+// §106 — 사건 기록 열람본의 피의자 칸 값(잎 모듈 · 상대 경로).
+import { recordSubjectRows, type RecordRow } from "../lib/landing/recordDocument";
 
 /** UX-023의 목업 종류. 부재 → `credential-form`(하위호환 읽기 규칙, §15.9.1 R2). */
 export type MessengerFakeLandingKind = "credential-form" | "app-install";
@@ -566,6 +568,44 @@ const STEP_FLOW_COPY: Record<string, StepScreenCopy[]> = {
   ],
 };
 
+/** §106 — 제출 뒤 가짜 사건 기록 열람본(서버 카탈로그 `MockScreenItem.recordDocument`와 1:1 · 글자 단위 동일). */
+type RecordDocumentCopy = {
+  title: string;
+  caseRows: RecordRow[];
+  subjectHeading: string;
+  subjectRows: RecordRow[];
+  noticeLines: string[];
+  stampLabel: string;
+};
+
+/**
+ * ⭐ §106(2026-10-22 사용자 실기 요청 — *"사용자가 입력한 값대로 들어간 기록서가 있어야 할 거 같은데"*) — 키 = landingId(정확 일치 — R8).
+ * 피의자 칸 앞쪽 = 본인 확인 칸 라벨 순서대로 방금 넣은 값(`values` — 이 컴포넌트 로컬 state), 뒤쪽 = 아래 `subjectRows`(고정).
+ * ⛔ G255 좁은 예외(DECISIONS #221): 신원 칸(성명 · 생년월일 · 휴대전화 번호)만 · 계좌 · 금액 칸이 있는 랜딩에는 두지 않는다 · 값은 콜백에 싣지 않는다(G138).
+ */
+const RECORD_DOCUMENT_COPY: Record<string, RecordDocumentCopy> = {
+  "case-record-view": {
+    title: "사건 기록 열람본",
+    caseRows: [
+      { label: "사건번호", value: "2026형제 3318호" },
+      { label: "죄명", value: "금융실명법 위반 · 명의 도용 계좌 연루" },
+      { label: "담당 부서", value: "OO수사본부 금융범죄 OO팀" },
+      { label: "담당 검사", value: "검사 OOO" },
+      { label: "진행 상태", value: "수사 진행 중 · 비공개" },
+    ],
+    subjectHeading: "피의자 · 관련인 인적 사항",
+    subjectRows: [
+      { label: "구분", value: "피의자(명의 도용 피해 여부 조사 중)" },
+    ],
+    noticeLines: [
+      "본인 명의 계좌 2건에서 범죄 자금 경유 정황이 확인되어 자산 검수 대상으로 분류되었습니다.",
+      "검수 절차는 담당 수사관이 별도로 안내합니다. 안내에 따르지 않으면 계좌가 동결될 수 있습니다.",
+      "본 기록은 비공개 수사 자료입니다. 외부에 알리면 수사 방해로 처리될 수 있습니다.",
+    ],
+    stampLabel: "열람용",
+  },
+};
+
 /** §101 — 화면 i(0 = 본인 확인)의 버튼이 올리는 고정 이벤트. 길이 = 마지막(이체 확인) 화면 앞까지. */
 const STEP_FLOW_EVENTS: readonly LandingProgressEvent[] = ["landing_identity", "landing_converted", "landing_amount"];
 
@@ -668,6 +708,72 @@ function CredentialFormMockup({
       <span className="truncate">{issuerNameOf(copy.issuerLabel)}</span>
     </div>
   );
+
+  // §106 — 제출 뒤 가짜 사건 기록 열람본(표에 있는 landingId만 · 정확 일치 R8). 없으면 종전 완료 화면.
+  const recordDocument = landingId ? RECORD_DOCUMENT_COPY[landingId] : undefined;
+  if (submitted && recordDocument) {
+    // ⛔ G255 좁은 예외(#221) — 피의자 칸에만 방금 넣은 신원 값을 찍는다. 값은 화면 문자열로만 쓰이고 콜백 · 네트워크에 실리지 않는다(G138).
+    const subjectRows = recordSubjectRows(
+      copy.fields.map((field) => field.label),
+      values,
+      recordDocument.subjectRows,
+    );
+    const rowTable = (rows: RecordRow[]) => (
+      <dl className="grid grid-cols-[auto_1fr] border-t text-[14px] leading-snug" style={{ borderColor: page.inputBorder }}>
+        {rows.map((row) => (
+          <div key={row.label} className="contents">
+            <dt
+              className="whitespace-nowrap border-b px-2 py-1 font-semibold"
+              style={{ borderColor: page.inputBorder, backgroundColor: page.fieldReadonlyBg, color: page.headline }}
+            >
+              {row.label}
+            </dt>
+            <dd className="border-b px-2 py-1" style={{ borderColor: page.inputBorder, color: page.inputText }}>
+              {row.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    );
+    return (
+      <>
+        {issuerBar}
+        <div className="flex flex-col gap-2.5 px-4 pb-4 pt-2.5">
+          <p role="status" className="text-[15px] font-semibold" style={{ color: page.hintText }}>
+            {copy.successHeadline}
+          </p>
+          <article className="relative flex flex-col gap-2.5 border px-3 py-3" style={{ borderColor: page.headline }}>
+            <h1 className="text-center text-[17px] font-bold tracking-[0.3em]" style={{ color: page.headline }}>
+              {recordDocument.title}
+            </h1>
+            {/* 글자 도장(관인 이미지 아님) — 실제 공문서의 "열람용" 표시를 흉내 낸 테두리 글자. */}
+            <span
+              aria-hidden="true"
+              className="absolute right-3 top-3 rotate-[-8deg] rounded-[4px] border-2 px-1.5 py-0.5 text-[13px] font-bold"
+              style={{ borderColor: page.errorText, color: page.errorText }}
+            >
+              {recordDocument.stampLabel}
+            </span>
+            {rowTable(recordDocument.caseRows)}
+            <h2 className="text-[15px] font-bold" style={{ color: page.headline }}>
+              {recordDocument.subjectHeading}
+            </h2>
+            {rowTable(subjectRows)}
+            <div className="flex flex-col gap-0.5">
+              {recordDocument.noticeLines.map((line) => (
+                <p key={line} className="text-[13px] leading-snug" style={{ color: page.body }}>
+                  {line}
+                </p>
+              ))}
+            </div>
+          </article>
+          <Button type="button" onClick={onClose}>
+            {returnLabel}
+          </Button>
+        </div>
+      </>
+    );
+  }
 
   if (submitted) {
     return (

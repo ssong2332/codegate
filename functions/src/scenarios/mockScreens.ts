@@ -94,6 +94,24 @@ export type MockScreenItem = {
    * `correctAction`을 쓴다. 승격은 한 화면당 **가장 깊은 단계 1건**이다(`report/smsTimeline.ts` §101 판정표 — 되감기 1:1 전제 G16).
    */
   progressMoments?: Record<LandingProgressStep, { momentTactic: string; correctAction: string }>;
+  /**
+   * ⭐ §106(2026-10-22 사용자 실기 요청 — *"사용자가 입력한 값대로 들어간 기록서가 있어야 할 거 같은데"*) — 제출 뒤 완료 화면 대신 그리는
+   * **가짜 사건 기록 열람본**(`credential-form` 전용 · 옵셔널 · 부재 = 종전 완료 문구만). 피의자 칸 = 위 `fields` 라벨 순서대로 참가자가 방금 넣은 값
+   * (클라 로컬 state — 서버로 가지 않는다 · AC-045) + 아래 `subjectRows`(고정 값). ⛔ G255(완료 화면 입력값 재표시 0)의 **좁은 예외**다
+   * (DECISIONS #221 — 신원 칸만 · 계좌 · 금액 칸이 있는 항목에는 두지 않는다). 실존 기관명 · 사건번호 형식 · 관인 이미지 0(`mockSurface` 스캔).
+   * 클라 렌더 정본은 `src/components/MessengerFakeLanding.tsx` `RECORD_DOCUMENT_COPY`(글자 단위 대조 — `mockScreenCopy.test.ts` §106).
+   */
+  recordDocument?: MockScreenRecordDocument;
+};
+
+/** §106 — 가짜 사건 기록 열람본의 고정 문구(값 칸은 `label` · `value` 쌍 — 참가자 입력 칸은 여기 없다). */
+export type MockScreenRecordDocument = {
+  title: string;
+  caseRows: { label: string; value: string }[];
+  subjectHeading: string;
+  subjectRows: { label: string; value: string }[];
+  noticeLines: string[];
+  stampLabel: string;
 };
 
 /** §101 — 여러 화면 사이트의 둘째 화면부터(첫 화면 = 항목 본체). `items` = 화면에 나열만 하는 줄(입력 아님) · `fields` = 입력 칸 라벨. */
@@ -527,9 +545,31 @@ const PROSECUTION_COOPERATION_CALL: MockScreenItem[] = [
     fields: ["성명", "생년월일", "휴대전화 번호"],
     submitLabel: "사건 기록 열람하기",
     successHeadline: "본인 확인이 완료되었습니다.",
+    // ⭐ §106 — 제출 뒤 그리는 가짜 사건 기록 열람본. 피의자 칸의 성명 · 생년월일 · 휴대전화 번호 = 참가자가 방금 넣은 값(클라 로컬 · 서버 0).
+    // ⛔ "검찰청" 같은 실존 기관명 0(가상 "OO수사본부") · 실제 사건번호 체계 0 · 관인 이미지 0(글자 도장 "열람용"만).
+    recordDocument: {
+      title: "사건 기록 열람본",
+      caseRows: [
+        { label: "사건번호", value: "2026형제 3318호" },
+        { label: "죄명", value: "금융실명법 위반 · 명의 도용 계좌 연루" },
+        { label: "담당 부서", value: "OO수사본부 금융범죄 OO팀" },
+        { label: "담당 검사", value: "검사 OOO" },
+        { label: "진행 상태", value: "수사 진행 중 · 비공개" },
+      ],
+      subjectHeading: "피의자 · 관련인 인적 사항",
+      subjectRows: [
+        { label: "구분", value: "피의자(명의 도용 피해 여부 조사 중)" },
+      ],
+      noticeLines: [
+        "본인 명의 계좌 2건에서 범죄 자금 경유 정황이 확인되어 자산 검수 대상으로 분류되었습니다.",
+        "검수 절차는 담당 수사관이 별도로 안내합니다. 안내에 따르지 않으면 계좌가 동결될 수 있습니다.",
+        "본 기록은 비공개 수사 자료입니다. 외부에 알리면 수사 방해로 처리될 수 있습니다.",
+      ],
+      stampLabel: "열람용",
+    },
     momentTactic: "수사기관 사칭 사건 조회 사이트를 빌미로 한 본인 확인 정보 입력 유도",
     correctAction:
-      "'문자 링크로 사건 기록을 확인하라'고 하면 그 자리에서 멈추세요 — 수사기관은 문자 링크로 영장이나 사건 기록을 보여 주지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 문자 속 링크에 이름 · 생년월일 · 전화번호를 넣지 않기 ③ 혼자 있으라거나 알리지 말라고 하면 오히려 가족에게 바로 알리기",
+      "'문자 링크로 사건 기록을 확인하라'고 하면 그 자리에서 멈추세요 — 수사기관은 문자 링크로 영장이나 사건 기록을 보여 주지 않습니다. 화면에 내 이름이 적힌 사건 기록이 떠도 그것은 방금 입력한 정보를 그대로 찍어 보여 준 가짜 문서입니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 문자 속 링크에 이름 · 생년월일 · 전화번호를 넣지 않기 ③ 혼자 있으라거나 알리지 말라고 하면 오히려 가족에게 바로 알리기",
   },
   // ⭐ §98(2026-10-21 사용자 실기 신고) — 검찰 고급 fv-c8wq의 둘째 화면: `prosecution-wallet-link` 문자(검수 전용 보관 지갑 안내)에서 열리는
   // 이체형 `credential-form`(safe-account-transfer와 같은 모양 — 새 kind 0). 한 세션 화면 2건은 T129 (b)(ad7e44a)가 판정 키를 landingId로 가른다.

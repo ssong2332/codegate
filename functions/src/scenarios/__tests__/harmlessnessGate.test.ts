@@ -124,7 +124,17 @@ const MOCK_SCREEN_FIELDS: Record<keyof MockScreenItem, FieldPolicy> = {
   // §101 — 여러 화면 사이트의 중첩 문구. 아래 `collectAllSurfaces`에서 화면 · 단계별 개별 표면으로 등록한다(같은 프로파일).
   stepScreens: { skip: "아래에서 화면별 headline · bodyLines · items · fields · actionLabel 개별 표면으로 등록(mockSurface)" },
   progressMoments: { skip: "아래에서 단계별 momentTactic(mockSurface) · correctAction(correctiveGuidance) 개별 표면으로 등록" },
+  // §106 — 가짜 사건 기록 열람본. 아래에서 제목 · 칸 라벨 · 칸 값 · 안내 줄 · 도장 글자를 개별 표면으로 등록한다(같은 프로파일).
+  recordDocument: { skip: "아래에서 title · caseRows · subjectHeading · subjectRows · noticeLines · stampLabel 개별 표면으로 등록(mockSurface)" },
 };
+
+/** §106 — 사건 기록 열람본의 화면 문자열 전부(칸은 라벨 · 값 둘 다). 아래 표면 수 단언은 이 함수와 따로 센다. */
+function recordDocumentTexts(item: MockScreenItem): string[] {
+  const doc = item.recordDocument;
+  if (!doc) return [];
+  const rows = [...doc.caseRows, ...doc.subjectRows].flatMap((row) => [row.label, row.value]);
+  return [doc.title, ...rows, doc.subjectHeading, ...doc.noticeLines, doc.stampLabel];
+}
 
 const IN_CALL_SMS_FIELDS: Record<keyof InCallSmsItem, FieldPolicy> = {
   senderLabel: { profile: "mockSurface" },
@@ -236,6 +246,9 @@ function collectAllSurfaces(): Surface[] {
         const where = `${scenarioId}/${item.landingId}#${step}`;
         surfaces.push({ domain: "mockScreens", itemId: where, field: "momentTactic", text: moment.momentTactic, profile: "mockSurface" });
         surfaces.push({ domain: "mockScreens", itemId: where, field: "correctAction", text: moment.correctAction, profile: "correctiveGuidance" });
+      }
+      for (const text of recordDocumentTexts(item)) {
+        surfaces.push({ domain: "mockScreens", itemId: `${scenarioId}/${item.landingId}#record`, field: "recordDocument", text, profile: "mockSurface" });
       }
     }
   }
@@ -384,7 +397,11 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
           (m, sc) => m + 2 + sc.bodyLines.length + (sc.items?.length ?? 0) + (sc.fields?.length ?? 0),
           0,
         ) +
-        Object.keys(i.progressMoments ?? {}).length * 2,
+        Object.keys(i.progressMoments ?? {}).length * 2 +
+        // §106 — 사건 기록 열람본(제목 · 소제목 · 도장 3 + 칸마다 라벨 · 값 2 + 안내 줄).
+        (i.recordDocument
+          ? 3 + (i.recordDocument.caseRows.length + i.recordDocument.subjectRows.length) * 2 + i.recordDocument.noticeLines.length
+          : 0),
       0,
     );
   // ⭐ T190-2(§74.9 ③ · AC-094 (d)) — 옵셔널 2 → 3(`linkAddress` — 링크 쌍과 함께만 존재, G111).
