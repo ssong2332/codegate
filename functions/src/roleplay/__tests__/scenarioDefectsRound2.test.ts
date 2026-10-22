@@ -343,3 +343,26 @@ test("[§104.9] 메신저 단계 — 폴백 경로(messengerStageAllowed)만 끝
   const index = read("roleplay/index.ts");
   assert.ok(index.includes("finalize.stillActive &&\n      !finalize.hangupEnded &&\n      session.channel === \"messenger\" &&"), "끝낸 턴에는 통화로 옮기지 않는다");
 });
+
+// ══ §104 실측(16세션) 반영 ══════════════════════════════════════════════════════════════════════════════════════════
+test("[§104 실측 ①] 인적사항 항목은 요구 형태가 있는 같은 문장에서만 센다 — 감사 인사 속 항목 낱말은 요구가 아니다", () => {
+  // 실측 대출 중급 따름형: 앞 턴 생년월일 요구 → 이번 턴 "생년월일 확인 감사합니다. … 몇 건인지 확인 부탁드립니다"(다른 요구).
+  assert.equal(
+    decideRepeatBreak([
+      "정확한 한도 조회를 위해 생년월일 여섯 자리도 말씀해 주시겠어요?",
+      "네, 생년월일 확인 감사합니다. 혹시 현재 이용 중이신 기존 대출이 몇 건이나 되시는지 확인 부탁드립니다.",
+    ]),
+    null,
+  );
+  // 같은 문장에서 다시 요구하면 그대로 잡는다(F4 대본).
+  assert.equal(decideRepeatBreak(["성함과 생년월일 불러주십시오.", "절차상 필요합니다. 성함과 생년월일 말씀해 주시겠습니까?"]), "identity");
+});
+
+test("[§104 실측 ②] 목표 끊기 신호 응답에 송금 밖 요청(화면 캡처 등)이 있어도 받아들이지 않는다 · '보내줘서 고마워'는 그대로", () => {
+  assert.deepEqual(
+    judgeEndCallSignal("goal", "아, 나머지는 이제 정리하면 될 것 같아. 혹시 지금 그 앱에서 결제 내역 화면 좀 캡처해서 보내줄 수 있어?"),
+    { endCall: undefined, dropped: "demand_in_goal_turn" },
+  );
+  assert.deepEqual(judgeEndCallSignal("goal", "보내줘서 고마워 엄마, 이만 들어가 볼게"), { endCall: "goal" });
+  assert.deepEqual(judgeEndCallSignal("goal", "이체 확인되었고, 대출 승인 절차 정상적으로 진행되었습니다."), { endCall: "goal" });
+});

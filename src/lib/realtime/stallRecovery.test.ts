@@ -557,3 +557,15 @@ test("[§104 자금 소진 · 대본] 이 턴이 답한 참가자 발화가 '돈
   assert.ok(server.includes(`export const EXHAUSTED_DECLARATION =\n  ${EXHAUSTED_DECLARATION.toString()};`.replace(/\n/, server.includes("\r\n") ? "\r\n" : "\n")), "정규식 짝");
   assert.ok(server.includes(JSON.stringify(LIVE_REPEAT_BREAK_TEXT.exhausted)), "exhausted 문면 짝");
 });
+
+test("[§104 실측 ①] Live — 인적사항 항목은 요구 형태가 있는 같은 문장에서만(감사 인사 속 낱말 오탐 0)", () => {
+  assert.equal(
+    decideLiveRepeatBreak({
+      previousScammerTurn: "정확한 한도 조회를 위해 생년월일 여섯 자리도 말씀해 주시겠어요?",
+      scammerTurn: "네, 생년월일 확인 감사합니다. 혹시 현재 이용 중이신 기존 대출이 몇 건이나 되시는지 확인 부탁드립니다.",
+      latched: false,
+      participantHasSpoken: true,
+    }),
+    null,
+  );
+});

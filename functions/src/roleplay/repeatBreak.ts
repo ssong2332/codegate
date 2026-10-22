@@ -42,8 +42,14 @@ export const IDENTITY_REQUEST_FORM = /(?:불러|말씀해|말씀|말해|알려|�
 
 /** 그 대답이 요구한 인적사항 항목들(요구 형태가 없으면 빈 집합). */
 export function requestedIdentityItems(text: string): Set<string> {
-  if (!IDENTITY_REQUEST_FORM.test(text)) return new Set();
-  return new Set(Object.keys(IDENTITY_ITEM_PATTERNS).filter((key) => IDENTITY_ITEM_PATTERNS[key]!.test(text)));
+  // §104 실측(2026-10-22 대출 중급 따름형) — "생년월일 확인 감사합니다. … 몇 건인지 확인 부탁드립니다"가 생년월일 요구로 잡혔다 ⇒ 항목 낱말과 요구 형태가
+  // **같은 문장**에 있을 때만 그 항목을 요구한 것으로 센다.
+  const out = new Set<string>();
+  for (const sentence of text.split(/(?<=[.?!])\s+|\n+/)) {
+    if (!IDENTITY_REQUEST_FORM.test(sentence)) continue;
+    for (const key of Object.keys(IDENTITY_ITEM_PATTERNS)) if (IDENTITY_ITEM_PATTERNS[key]!.test(sentence)) out.add(key);
+  }
+  return out;
 }
 
 function normalizeForSimilarity(text: string): string {

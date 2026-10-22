@@ -20,6 +20,7 @@
 // | # | If(신호를 실은 응답의 대사) | Then |
 // |---|---|---|
 // | B1 | 송금 · 이체 · 금액을 새로 요구하는 형태가 있다(`NEW_TRANSFER_DEMAND`) | **받아들이지 않는다**(`demand_in_goal_turn`) — 참가자가 그 요구에 답할 차례를 남긴다 |
+// | B1-b | 그 밖의 요청 형태(`~해 줘 · 줄 수 있어 · 주세요` — §104 실측 "결제 내역 화면 캡처해서 보내줄 수 있어?" + `END_CALL_GOAL`) | 같음 |
 // | B2 | 그 외 | 받아들인다(종전 동작) |
 // - `END_CALL_GIVEUP`(포기)은 대상이 아니다 — 포기하며 마지막으로 한 번 더 조르는 말은 끊기와 모순이 아니다.
 // ⛔ 잎 모듈(import 0) · 판정만 한다(효과 판정 `scammerHangup/fallback.ts` · 전이 `session/channelTransition.ts` 무변경).
@@ -36,6 +37,9 @@ export const CALL_UNAVAILABLE =
 export const NEW_TRANSFER_DEMAND =
   /(?:보내|이체해|송금해|입금해|넣어)\s*(?:줘|주세요|주십시오|주시면|주셔야|달라)(?!서)|만\s*원\s*만\s*더/;
 
+/** B1-b — 참가자에게 무언가를 해 달라는 요청 형태("보내줘서 고마워"처럼 `줘서`는 받은 것에 대한 인사라 뺀다). */
+export const NEW_REQUEST_FORM = /(?:줘|줄래|줄\s*수\s*있|주세요|주십시오|주시겠|주실\s*수|주시면)(?!서)/;
+
 export type EscalationConsistency = { accept: true } | { accept: false; reason: "contradicted" };
 
 /** 판정표 A. */
@@ -50,6 +54,6 @@ export type EndCallConsistency = { endCall: "goal" | "give_up" | undefined; drop
 
 /** 판정표 B — 받아들이지 않으면 신호를 없는 것으로 돌려준다(효과 판정 함수에는 `undefined`가 들어간다). */
 export function judgeEndCallSignal(endCall: "goal" | "give_up" | undefined, replyText: string): EndCallConsistency {
-  if (endCall === "goal" && NEW_TRANSFER_DEMAND.test(replyText)) return { endCall: undefined, dropped: "demand_in_goal_turn" }; // B1
+  if (endCall === "goal" && (NEW_TRANSFER_DEMAND.test(replyText) || NEW_REQUEST_FORM.test(replyText))) return { endCall: undefined, dropped: "demand_in_goal_turn" }; // B1 · B1-b
   return { endCall }; // B2
 }

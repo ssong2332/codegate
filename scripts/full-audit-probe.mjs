@@ -78,6 +78,9 @@ function probeIsStallLine(text) {
   if (result && !negated) return false;
   return PROBE_STALL_VOCABULARY.test(t);
 }
+// §104 — 클라 `scammerClaimsSmsSent`(`src/lib/realtime/toolWindow.ts` SMS_SENT_CLAIM)의 미러.
+const PROBE_SMS_SENT_CLAIM =
+  /문자(?:로)?\s*(?:를\s*)?(?:보내\s*드렸|보내드렸|보냈|보내\s*드린|보내드린|보낸|발송(?:해\s*드렸|했|됐|한|된))|(?:보내\s*드린|보내드린|보낸|발송한|발송된)\s*(?:문자|링크|안내|주소)/;
 const probeIsWaitTurn = (t) => probeIsStallLine(t) || PROBE_WAIT_REQUEST_LINE.test(t);
 function probeLiveRepeatBreak(prev, cur, participantHasSpoken, lastParticipantText) {
   if (!repeatBreakLib || !participantHasSpoken) return null;
@@ -329,7 +332,11 @@ async function runVoice(scenarioId, level, persona, tag) {
     sendText(u, true, "user");
     await waitTurn(45000);
     if (declared.length > 0 && !closed) {
-      const p = planSmsBackstop({ declared, delivered, userTurns });
+      // §104 — 앱 화면처럼 마지막 문자 도착 뒤 사기범이 "문자 보냈다"고 말했으면 백스톱에 주장을 싣는다(새 lib에서만 효과 — 옛 lib는 인자를 무시).
+      const lastSmsIdx = turns.map((t) => t.kind).lastIndexOf("sms_ctx");
+      const claimed = turns.slice(lastSmsIdx + 1).some((t) => t.role === "scammer" && PROBE_SMS_SENT_CLAIM.test(t.text ?? ""));
+      const p = planSmsBackstop({ declared, delivered, userTurns, claimed });
+      if (claimed) events.push({ t: now(), ev: "smsClaim", userTurns, action: p.action });
       if (p.action === "deliver") {
         const g = resolveSmsGate({ purpose: p.item.purpose, declared, delivered, userTurns });
         if (g.status === "allowed") {
