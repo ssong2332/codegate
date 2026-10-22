@@ -230,6 +230,7 @@ export type LandingSubmitCatalogItem = {
  * | 3 | 〃 ∧ `landingConvertedAtMs` 있음 | `progressMoments.converted` |
  * | 4 | 〃 ∧ `landingIdentityAtMs` 있음 | `progressMoments.identity` |
  * | 5 | 그 외(링크만 열고 닫음 · 통화 종료 · 한 화면 폼의 단계 시각) | 승격 0 — 속지 않음(좋은 대응) |
+ * | 6 | ⭐ §106 — 제출 뒤 가짜 사건 기록 열람본(`MockScreenItem.recordDocument`)을 봄 | **새 기록 · 새 순간 0** — 문서는 제출의 결과 화면이라 1행(제출)이 곧 가장 깊은 단계다. 문서를 본 것만으로는 참가자의 새 행동이 없어 속음도 위험 신호도 더하지 않는다(AC-080 (b) "화면 노출은 승격하지 않는다") |
  *
  * ⚠️ 1건만 내는 이유: 같은 앵커 turnIndex에 순간이 2건 이상이면 `deceivedMoments` ↔ 주석 메시지 1:1 전제가 깨진다(§15.6 G16).
  * ⚠️ 단계 기록 일부가 유실돼도(예: identity 실패 · converted 성공) 더 깊은 쪽이 이긴다 — 순서 검증을 하지 않는다.
