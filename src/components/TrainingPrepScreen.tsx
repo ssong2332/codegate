@@ -6,7 +6,7 @@
 // 시나리오 유형에 맞춘 예방 요령(5초마다 교체 · §100.5) · 오래 걸릴 때만 안심 문구(D-134 SESSION_PREP_HINTS).
 // ⛔ 경과 초 · 예상 시간 · 진행률 · 퍼센트 · "1/3" 표기 금지(D-143 · D-134). 시간이 지났다고 체크하지 않는다.
 import { useEffect, useRef, useState } from "react";
-import { LineIcon, LoadingDots } from "@/components/ui";
+import { LineIcon } from "@/components/ui";
 import { useLoadingHint } from "@/components/ui/LoadingStatus";
 import { SESSION_PREP_HINTS } from "@/lib/motion/routeMotion";
 import {
@@ -72,20 +72,21 @@ export default function TrainingPrepScreen({
           const state = prepStepState(index, doneCount);
           return (
             <li key={step.stage} className="flex min-h-[44px] items-center gap-3">
+              {/* UX D-144(§103) — 지금 하는 단계는 원 안의 점 세 개 대신 옅은 원 위를 도는 모래색 호(`.prep-spin` · motion.css). */}
               <span
                 aria-hidden="true"
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
                   state === "done"
                     ? "bg-sand text-deep"
                     : state === "active"
-                      ? "border-2 border-sand text-sand"
+                      ? "border-2 border-sand/40"
                       : "border-2 border-brand-tint/40"
                 }`}
               >
                 {state === "done" ? (
                   <LineIcon name="check" size={20} className="check-pop" />
                 ) : state === "active" ? (
-                  <LoadingDots />
+                  <span className="prep-spin absolute inset-[-2px] rounded-full border-2 border-transparent border-r-sand border-t-sand" />
                 ) : null}
               </span>
               <span

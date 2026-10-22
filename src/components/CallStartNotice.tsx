@@ -58,15 +58,19 @@ export default function CallStartNotice({ onConfirm, onEndTraining, skinPicker, 
   }, []);
 
   return (
+    // UX D-144(§103 · 2026-10-22 실기 피드백 "스크롤을 최대한 없애야") — 412×780(주소창 보임)에서 카드까지 한 화면에 든다.
+    // 문면 · 순서 · 글자 크기 하한(본문 16px · 고지 ①② 17px)은 그대로 두고 간격 · 행간 · 카드 배치만 줄였다. 그래도 넘치는
+    // 더 작은 화면에서는 "준비됐어요"가 아래에 붙어(sticky) 스크롤 없이 누를 수 있다.
     <main className="flex min-h-dvh flex-col bg-page">
       {/* 상단 바 — "훈련 종료"만(그 밖의 요소 0). G449: 오른쪽 끝 고정. */}
-      <div className="flex justify-end px-4 py-2.5">
+      <div className="flex justify-end px-4 py-2">
         <EndTrainingButton onClick={onEndTraining} />
       </div>
 
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-        <span aria-hidden="true" className="text-avatar-bg">
-          <PhoneIcon name="accept-call" size={48} />
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-3 px-5 text-center [word-break:keep-all]">
+        {/* 장식 아이콘 — 높이 700px 이하에서는 숨긴다(globals.css `.precall-icon`). */}
+        <span aria-hidden="true" className="precall-icon text-avatar-bg">
+          <PhoneIcon name="accept-call" size={36} />
         </span>
         <h1
           ref={headingRef}
@@ -75,28 +79,31 @@ export default function CallStartNotice({ onConfirm, onEndTraining, skinPicker, 
         >
           {PRE_CALL_NOTICE.title}
         </h1>
-        <p className="text-[17px] leading-[1.7] text-ink-sub">{PREROLL_NOTICE}</p>
-        <p className="text-[17px] leading-[1.7] text-ink-sub">{PRE_CALL_NOTICE.stopHint}</p>
-        {/* §99(UX D-142) — 화면 꺼짐 · 귀에 대기 안내(세션 전 화면 · 경고 표현 0). 화면이 꺼지면 말이 전달되지 않는다. */}
-        <p className="text-[17px] leading-[1.7] text-ink-sub">{SCREEN_OFF_COPY.preCallHint}</p>
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[17px] leading-[1.55] text-ink-sub">{PREROLL_NOTICE}</p>
+          <p className="text-[17px] leading-[1.55] text-ink-sub">{PRE_CALL_NOTICE.stopHint}</p>
+          {/* §99(UX D-142) — 화면 꺼짐 · 귀에 대기 안내(세션 전 화면 · 경고 표현 0). 화면이 꺼지면 말이 전달되지 않는다. */}
+          <p className="text-[16px] leading-[1.55] text-ink-sub">{SCREEN_OFF_COPY.preCallHint}</p>
+        </div>
         <WebDarkModeNotice />
         {/* T194-b(UX-014 v1.38 (1)) — 고지 ② 바로 아래 · 화면 모양 줄 위. 카드는 "상대가 알고 있다 · 말할 것이다"를 예고하지
-            않는다(K-7). 경고 표현 · 점멸 · 포커스 대상 0(조작 요소 없음 — 진입 포커스는 기존대로 제목). 닫힘 = "준비됐어요". */}
+            않는다(K-7). 경고 표현 · 점멸 · 포커스 대상 0(조작 요소 없음 — 진입 포커스는 기존대로 제목). 닫힘 = "준비됐어요".
+            D-144 — 항목은 라벨 · 값을 한 줄에 둔다(라벨 칸 고정 폭 · 값은 줄바꿈 허용 · 말줄임 0). */}
         {personaCard && (
           <section
             aria-labelledby="persona-card-title"
-            className="w-full rounded-[8px] border border-line bg-surface p-4 text-left"
+            className="w-full rounded-[8px] border border-line bg-surface px-4 py-3 text-left"
           >
             <h2 id="persona-card-title" className="text-[17px] font-bold leading-[1.4] text-ink">
               {PERSONA_CARD_COPY.title}
             </h2>
-            <p className="mt-1 text-[17px] leading-[1.6] text-ink-sub">{PERSONA_CARD_COPY.guide}</p>
-            <dl className="mt-3 flex flex-col gap-2">
+            <p className="mt-0.5 text-[16px] leading-[1.5] text-ink-sub">{PERSONA_CARD_COPY.guide}</p>
+            <dl className="mt-2 flex flex-col gap-1">
               {personaCard.rows.map((row) => (
-                <div key={row.label}>
-                  <dt className="text-[17px] font-normal leading-[1.5] text-ink-sub">{row.label}</dt>
+                <div key={row.label} className="flex items-baseline gap-3">
+                  <dt className="w-[5.5em] shrink-0 text-[16px] font-normal leading-[1.5] text-ink-sub">{row.label}</dt>
                   {/* 가림 "○○"은 화면에 그대로, 스크린리더에는 "가려진 이름"(UX-014 v1.38 (3)). 줄바꿈 허용 · 말줄임 0. */}
-                  <dd className="break-words text-[20px] font-bold leading-[1.4] text-ink">
+                  <dd className="min-w-0 flex-1 break-words text-[19px] font-bold leading-[1.4] text-ink">
                     {splitMaskedValue(row.value).map((segment, i) =>
                       segment.masked ? (
                         <span key={i}>
@@ -112,15 +119,15 @@ export default function CallStartNotice({ onConfirm, onEndTraining, skinPicker, 
               ))}
             </dl>
             {/* §88(UX D-131 (5)) — 고지 ⓐ는 카드 출처로 갈린다(v1 = noticeVirtual · v2 self = noticeInput — readSessionPersonaCard가 고른다). */}
-            <p className="mt-3 text-[17px] leading-[1.6] text-ink-sub">{personaCard.notice}</p>
-            <p className="mt-1 text-[17px] leading-[1.6] text-ink-sub">{PERSONA_CARD_COPY.noticeNoRevisit}</p>
+            <p className="mt-2 text-[16px] leading-[1.5] text-ink-sub">{personaCard.notice}</p>
+            <p className="mt-0.5 text-[16px] leading-[1.5] text-ink-sub">{PERSONA_CARD_COPY.noticeNoRevisit}</p>
           </section>
         )}
         <DeviceSkinPicker value={skinPicker.value} source={skinPicker.source} onChange={skinPicker.onChange} />
       </div>
 
-      {/* 주 버튼 — 화면 하단(엄지 도달 · P-30 (2)(3) · 52px · 폭 전체). */}
-      <div className="mx-auto w-full max-w-md px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4">
+      {/* 주 버튼 — 화면 하단(엄지 도달 · P-30 (2)(3) · 52px · 폭 전체). D-144 — 내용이 넘치는 작은 화면에서도 아래에 붙어 있다. */}
+      <div className="sticky bottom-0 mx-auto w-full max-w-md bg-page px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
         <Button type="button" onClick={onConfirm}>
           {PRE_CALL_NOTICE.confirmLabel}
         </Button>

@@ -43,8 +43,20 @@ export default function ScenarioPanelGroups({
         const startIndex = starts[gi];
         return (
           <section key={group.id} aria-labelledby={group.id} className="flex flex-col">
-            <h2 id={group.id} data-toc-target className="px-[22px] pb-3 pt-5 text-[20px] font-bold text-ink [word-break:keep-all]">
-              {group.label}
+            {/* UX D-144(§103 · 2026-10-22 실기 피드백 "분류가 눈에 잘 안 들어온다") — 묶음 제목을 강한 색 판 사이에서 갈라 보이게:
+                위 여백을 넓히고(앞 묶음과 끊기) · 큰 제목 글씨 + 모래색 막대 + 판 수 · 아래 굵은 선(첫 판과 한 묶음으로). */}
+            <h2
+              id={group.id}
+              data-toc-target
+              className="flex items-center gap-3 border-b-[3px] border-ink px-[22px] pb-3 pt-10 text-[26px] font-extrabold leading-[1.3] tracking-[-0.02em] text-ink [word-break:keep-all]"
+            >
+              <span aria-hidden="true" className="h-8 w-2 shrink-0 rounded-full bg-sand" />
+              <span className="min-w-0">
+                {group.label}
+                <span className="ml-2 whitespace-nowrap text-[17px] font-semibold tracking-normal text-ink-sub">
+                  {group.items.length}개
+                </span>
+              </span>
             </h2>
             <PanelList items={group.items} startIndex={startIndex} onSelect={onSelect} />
           </section>

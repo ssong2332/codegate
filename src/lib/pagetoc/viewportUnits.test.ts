@@ -56,9 +56,12 @@ test("[D-140/G-VU4] 통화 화면 상단 여백은 줄어드는 칸이다(기준
   assert.ok(play.includes('className="relative max-h-[56dvh] min-h-0 overflow-y-auto px-6"'));
 });
 
-test("[D-140/G-VU5] 짧은 화면 간격 축소는 높이 700px 이하에서만 · 글자 크기는 건드리지 않는다", () => {
+test("[D-140/G-VU5] 짧은 화면 간격 축소는 높이 700px(종료 화면은 860px — D-144) 이하에서만 · 글자 크기는 건드리지 않는다", () => {
   const css = fs.readFileSync("src/app/globals.css", "utf8");
   const block = css.match(/@media \(max-height: 700px\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
-  assert.ok(block.includes(".call-compact-gap") && block.includes(".end-compact"), "축소 규칙이 media 블록 밖으로 나갔다");
-  assert.ok(!/font-size/.test(block), "짧은 화면에서도 글자 크기는 줄이지 않는다(어르신 사용자)");
+  // UX D-144(§103) — 종료 화면 축소만 860px 이하로 넓혔다(412×780 주소창 보임 · 끝난 상태가 넘쳤다).
+  const endBlock = css.match(/@media \(max-height: 860px\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.ok(block.includes(".call-compact-gap") && endBlock.includes(".end-compact"), "축소 규칙이 media 블록 밖으로 나갔다");
+  assert.ok(!block.includes(".end-compact"), "종료 화면 축소 규칙이 두 곳에 있다");
+  for (const b of [block, endBlock]) assert.ok(!/font-size/.test(b), "짧은 화면에서도 글자 크기는 줄이지 않는다(어르신 사용자)");
 });

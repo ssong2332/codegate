@@ -45,3 +45,25 @@ export const STICK_TO_BOTTOM_PX = 80;
 export function isNearBottom(el: { scrollHeight: number; scrollTop: number; clientHeight: number }): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_TO_BOTTOM_PX;
 }
+
+/**
+ * UX D-144(docs/Architecture.md §103.5 · 실기 신고 2026-10-22 · 갤럭시 S25 삼성 키보드) — 훈련 대화 입력칸(메신저 · 통화 텍스트)에
+ * 붙이는 키보드 힌트. 키보드가 대화를 읽고 답장 알약("그래 3만원 정도")이나 예측 단어를 띄우면 참가자 스스로 판단하는 훈련이
+ * 흐려진다.
+ * - `autoComplete="off"` — Chromium 안드로이드가 `EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS`로 넘기는 **유일한** 웹 신호
+ *   (`ImeUtils.computeEditorInfo`). 브라우저 자동 채우기도 끈다.
+ * - `autoCorrect="off"` — 같은 함수가 `TYPE_TEXT_FLAG_AUTO_CORRECT`를 빼는 신호.
+ * - `spellCheck` · `autoCapitalize`(한글은 영향 없음) — 밑줄 · 영문 대문자 시작을 끈다.
+ * - `enterKeyHint="send"` — 엔터 자리를 "보내기"로(입력 형태는 그대로 `text`).
+ * ⛔ `autocomplete="one-time-code"` · `type="password"` 같은 우회는 쓰지 않는다 — 인증번호 칸 · 비밀번호 칸으로 알려져
+ *   키보드 모양 · 자동 채우기 제안이 바뀌고(문자 인증번호 제안 등), 비밀번호 칸은 한글 입력이 막힌다.
+ * ⚠️ 키보드가 이 신호를 지키는지는 키보드 몫이다(웹에서 강제 불가 — §103.5).
+ */
+export const TRAINING_INPUT_NO_SUGGEST = {
+  autoComplete: "off",
+  autoCorrect: "off",
+  autoCapitalize: "off",
+  spellCheck: false,
+  inputMode: "text",
+  enterKeyHint: "send",
+} as const;
