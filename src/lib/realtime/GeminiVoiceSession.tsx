@@ -49,6 +49,7 @@ import {
 } from "./liveToolResponse";
 import { HANGUP_DRAIN_CAP_MS, HANGUP_FINAL_TURN_CAP_MS, hangupDrainDelayMs } from "@/lib/session/callEnding";
 import { GEMINI_OUTPUT_GAIN, LIMITER_INPUT_RANGE, buildLimiterCurve, liveGainFor } from "./outputGain";
+import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } from "./unheardReply";
 import {
   AWAIT_RESPONSE_TIMEOUT_MS,
   INITIAL_CLIENT_TURN_QUEUE_STATE,
@@ -109,6 +110,7 @@ import {
   noteAudioError,
   noteChunkReceived,
   noteMicFrame,
+  noteUnheardReplyFired,
   peakOf,
   registerMicTrack,
   noteChunkScheduled,
@@ -782,6 +784,8 @@ export default function GeminiVoiceSession({
     // 재현한다. ⛔ 이 파일에서 `turnComplete: true` 전송은 아래 `sendClientTurn` **한 곳뿐**이어야 한다
     // (`clientTurnQueueWiring.test.ts`가 소스로 고정한다).
     let clientTurnState = INITIAL_CLIENT_TURN_QUEUE_STATE;
+    // ⭐ §105.2.6 — "말했는데 서버가 못 들음" 화면 쪽 보완 상태(판정 = `unheardReply.ts` 판정표).
+    let unheardReplyState = INITIAL_UNHEARD_REPLY_STATE;
     // ⭐ 리뷰 M2 — 화면 소유 ref에 현재 턴 위상을 써 넣는다(큐 상태 · 사용자 버퍼가 바뀔 때마다).
     const reportTurnPhase = () => {
       if (!turnPhaseRef) return;
@@ -1336,6 +1340,10 @@ export default function GeminiVoiceSession({
               if (sc?.inputTranscription?.text) {
                 // §105 — 서버가 사용자 말을 들었다는 증거(내용은 적지 않는다 · 개수만).
                 noteAsrChunk();
+                // §105.2.6 — 서버가 들었다 → 화면 쪽 보완 후보를 버린다(판정표 4행).
+                if (sc.inputTranscription.text.trim()) {
+                  unheardReplyState = stepUnheardReply(unheardReplyState, { type: "asr" }).state;
+                }
                 appendUserBuffer(sc.inputTranscription.text);
                 // §82.4.2(G543) — 참가자가 말하기 시작했다 = 침묵 넛지 취소.
                 if (sc.inputTranscription.text.trim()) noteUserSpeechForNudge();
@@ -1561,6 +1569,28 @@ export default function GeminiVoiceSession({
           // 리뷰 M3 — 발화 시작(레벨 꺼짐→켜짐)도 사용자 발화로 본다(침묵 넛지 취소 — 전사는 발화 뒤에 온다).
           if (localSpeechStarted(userSpeechDebounceState.speaking, nextState.speaking)) noteUserSpeechForNudge();
           userSpeechDebounceState = nextState;
+          // ⭐ §105.2.6 — 이 기기 레벨로는 말했는데 서버 인식 0 · 모델 무응답이면 "잘 안 들렸다" 한 줄(판정표 `unheardReply.ts`).
+          // 막힘(1행) = 사기범이 말하는 중(반이중 게이트) · 모델 응답 대기/진행 · 도구 대기 · 음소거 · 끊기 래치 · 화면 가려짐.
+          const nowFrameMs = performance.now();
+          const unheard = stepUnheardReply(unheardReplyState, {
+            type: "frame",
+            nowMs: nowFrameMs,
+            level: rms,
+            blocked:
+              agentSpeaking ||
+              mutedRef.current ||
+              handlersRef.current.isHangupLatched() ||
+              clientTurnState.modelTurnActive ||
+              clientTurnState.awaitingSince !== null ||
+              clientTurnState.toolPending ||
+              (typeof document !== "undefined" && document.visibilityState === "hidden"),
+          });
+          unheardReplyState = unheard.state;
+          if (unheard.fire) {
+            noteUnheardReplyFired();
+            console.info(LIVE_TURN_LOG_PREFIX, `unheard-reply fired n=${unheardReplyState.fired}`);
+            dispatchClientTurn({ type: "request", turn: { kind: "silence", text: UNHEARD_REPLY_TEXT }, nowMs: nowFrameMs });
+          }
           userLevelRafId = requestAnimationFrame(sampleUserLevel);
         };
         userLevelRafId = requestAnimationFrame(sampleUserLevel);

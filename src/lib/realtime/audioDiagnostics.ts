@@ -46,6 +46,8 @@ type DiagState = {
   /** §105 — 화면 켜짐 유지(Wake Lock) 마지막 상태(`screenWakeLock.ts` WakeLockStatus 문자열) · 이 통화에서 풀린 횟수. */
   wakeLockStatus: string | null;
   wakeLockReleases: number;
+  /** §105.2.6 — "말했는데 서버가 못 들음" 보완("잘 안 들렸다" 한 줄)이 발동한 횟수. */
+  unheardReplyFired: number;
 };
 
 const INITIAL: DiagState = {
@@ -68,6 +70,7 @@ const INITIAL: DiagState = {
   asrChunks: 0,
   wakeLockStatus: null,
   wakeLockReleases: 0,
+  unheardReplyFired: 0,
 };
 
 let state: DiagState = { ...INITIAL };
@@ -144,6 +147,11 @@ export function noteWakeLock(status: string): void {
   };
 }
 
+/** §105.2.6 — 화면 쪽 보완 1회 발동. */
+export function noteUnheardReplyFired(): void {
+  state = { ...state, unheardReplyFired: state.unheardReplyFired + 1 };
+}
+
 /** §105 — 서버의 사용자 음성 인식 조각 1개(내용은 적지 않는다). */
 export function noteAsrChunk(): void {
   state = { ...state, asrChunks: state.asrChunks + 1 };
@@ -153,7 +161,7 @@ export function noteAsrChunk(): void {
 export function formatMicLine(): string {
   const s = state;
   const track = micTrack ? `${micTrack.readyState}${micTrack.muted ? "/muted" : ""}${micTrack.enabled ? "" : "/disabled"}` : "-";
-  return `[live-mic] sent=${s.micFramesSent} echo=${s.micFramesDroppedEcho} mute=${s.micFramesDroppedMute} peakDb=${formatDbfs(s.micPeakMax)} asr=${s.asrChunks} track=${track} in=${inputCtx?.state ?? "-"} wake=${s.wakeLockStatus ?? "-"}/${s.wakeLockReleases}`;
+  return `[live-mic] sent=${s.micFramesSent} echo=${s.micFramesDroppedEcho} mute=${s.micFramesDroppedMute} peakDb=${formatDbfs(s.micPeakMax)} asr=${s.asrChunks} track=${track} in=${inputCtx?.state ?? "-"} wake=${s.wakeLockStatus ?? "-"}/${s.wakeLockReleases} unheard=${s.unheardReplyFired}`;
 }
 
 export function registerFallbackAudio(el: { volume: number; paused: boolean } | null): void {
@@ -330,6 +338,7 @@ export const AUDIO_DIAG_KEYS = [
   "asr.rx",
   "wake.state",
   "wake.releases",
+  "unheard.fired",
   "ring.state",
   "ring.closedMs",
   "fb.volume",
@@ -392,6 +401,7 @@ export function buildAudioDiagRows(input: {
     "asr.rx": String(s.asrChunks),
     "wake.state": show(s.wakeLockStatus),
     "wake.releases": String(s.wakeLockReleases),
+    "unheard.fired": String(s.unheardReplyFired),
     "ring.state": show(s.ring?.state),
     "ring.closedMs": rel(s.ringClosedAtMs, s.acceptAtMs),
     "fb.volume": s.fallback ? s.fallback.volume.toFixed(2) : "-",

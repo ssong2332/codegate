@@ -8,6 +8,7 @@ import {
   formatMicLine,
   noteAsrChunk,
   noteWakeLock,
+  noteUnheardReplyFired,
   noteMicFrame,
   registerMicTrack,
   AUDIO_DIAG_KEYS,
@@ -232,7 +233,7 @@ test("[§105] 마이크 진단 — 보냄 · 반이중 · 음소거 · 최대 �
   assert.equal(s.micFramesDroppedMute, 2);
   assert.equal(s.micPeakMax, 0.5);
   assert.equal(s.asrChunks, 1);
-  assert.equal(formatMicLine(), "[live-mic] sent=2 echo=1 mute=2 peakDb=-6.0 asr=1 track=live/muted in=- wake=-/0");
+  assert.equal(formatMicLine(), "[live-mic] sent=2 echo=1 mute=2 peakDb=-6.0 asr=1 track=live/muted in=- wake=-/0 unheard=0");
   const rows = new Map(
     buildAudioDiagRows({
       snapshot: s,
@@ -274,7 +275,9 @@ test("[§105] 화면 켜짐 유지 진단 — 상태 · 풀린 횟수(받기 때
   noteWakeLock("active");
   noteWakeLock("released");
   assert.equal(readAudioDiag().wakeLockReleases, 2);
-  assert.ok(formatMicLine().endsWith("wake=released/2"));
+  assert.ok(formatMicLine().endsWith("wake=released/2 unheard=0"));
+  noteUnheardReplyFired();
+  assert.equal(readAudioDiag().unheardReplyFired, 1);
   noteAccept(5);
   assert.equal(readAudioDiag().wakeLockReleases, 0);
   assert.equal(readAudioDiag().wakeLockStatus, "released");
