@@ -115,8 +115,13 @@ export function gateOpensAtUserTurns(
   return Math.max(earliestUserTurns(item), afterLast);
 }
 
-/** 백스톱 판정(위 머리 주석 두 번째 표). 발송 자체는 호출부가 `resolveSmsGate`를 다시 통과시켜 한다. */
-export function planSmsBackstop(input: Omit<SmsGateInput, "purpose">): SmsBackstopPlan {
+/**
+ * 백스톱 판정(위 머리 주석 두 번째 표). 발송 자체는 호출부가 `resolveSmsGate`를 다시 통과시켜 한다.
+ * ⭐ §104(2026-10-22 · 사용자 실기 신고 *"자산 검수 안내 등 문자를 보냈다고 하는데, 실제로는 안 와 있는"*) — `claimed`(사기범이 이미 "문자를 보냈다"고
+ * 말했다 — 실시간 클라 주장)면 넛지 · 대기 단계를 건너뛰고 **게이트가 열린 순간** 보낸다(`userTurns ≥ openAt`). 게이트 하한(`notBeforeUserTurns` ·
+ * 문자 간 간격)은 그대로다 — 하한 전이면 여전히 `wait`. 부재 · false = 종전 판정.
+ */
+export function planSmsBackstop(input: Omit<SmsGateInput, "purpose"> & { claimed?: boolean }): SmsBackstopPlan {
   const deliveredIds = new Set(input.delivered.map((d) => d.smsId));
   const pending = input.declared.filter((item) => item.required && !deliveredIds.has(item.smsId));
   if (pending.length === 0) return { action: "none_pending" };
@@ -130,6 +135,7 @@ export function planSmsBackstop(input: Omit<SmsGateInput, "purpose">): SmsBackst
       openAt = at;
     }
   }
+  if (input.claimed === true && input.userTurns >= openAt) return { action: "deliver", item: target };
   if (input.userTurns >= openAt + BACKSTOP_USER_TURNS * 2) return { action: "deliver", item: target };
   if (input.userTurns === openAt + BACKSTOP_USER_TURNS) return { action: "nudge", item: target, openAt };
   return { action: "wait" };

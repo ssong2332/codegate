@@ -74,6 +74,8 @@ import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAs
 import { evaluateOtpCheck, otpCheckInputsFromHistory } from "./otpCheck";
 import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
+import { decideRepeatBreak, repeatBreakInstruction } from "./repeatBreak";
+import { judgeEndCallSignal, judgeEscalationSignal } from "./signalConsistency";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
@@ -492,8 +494,20 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // A-1 ⑧ — 에스컬레이션 뒤 폴백 턴의 맥락 1줄(다른 턴 지시가 없는 턴에만 — G31).
     const escalatedCallInstruction =
       escalatedCall && turnChoice === "none" ? ESCALATED_CALL_CONTEXT_INSTRUCTION : undefined;
+    // §104(전수 검수 2차 F4 · M4) — 직전 두 사기범 대답이 같은 인적사항 요구 · 거의 같은 말이면 "다른 카드로" 1줄(`repeatBreak.ts` 판정표).
+    // 앱 진행 지시(문자 · 확인 · 응낙 · 인증번호 대조 · 확인 결과)가 있는 턴에는 싣지 않는다(G31 — 그 지시가 이미 다음 국면을 정한다).
+    const repeatBreakKind =
+      turnChoice === "none" && !otpCheckInstruction && !confirmPlan?.instruction
+        ? decideRepeatBreak(storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked), maskedUserText)
+        : null;
+    if (repeatBreakKind) {
+      // G170 — 판정 종류 · 턴 번호만(대사 0).
+      logger.info("[§104] sendMessage 반복 차단 지시", { sessionId, kind: repeatBreakKind, scammerTurnNumber });
+    }
     const promptTurnInstruction = [turnInstruction, otpCheckInstruction].filter(Boolean).join("\n") || undefined;
-    const confirmAndCallContext = [confirmPlan?.instruction, escalatedCallInstruction].filter(Boolean).join("\n") || undefined;
+    const confirmAndCallContext =
+      [confirmPlan?.instruction, escalatedCallInstruction, repeatBreakInstruction(repeatBreakKind)].filter(Boolean).join("\n") ||
+      undefined;
     const turnInstructionWithSms =
       [promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction].filter(Boolean).join("\n") ||
       undefined;
@@ -610,9 +624,23 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 어느 경우든 텍스트에서 지워진다). 효과는 아래 사후 판정이 정한다.
     const {
       text: signalFreeReplyText,
-      escalate: signalEscalate,
-      endCall: endCallSignal,
+      escalate: rawSignalEscalate,
+      endCall: rawEndCallSignal,
     } = extractEscalationSignal(smsMarkerFreeText);
+    // ③-b′ §104(전수 검수 2차 M1 · M2) — 신호가 같은 응답의 대사와 어긋나면 받아들이지 않는다(`signalConsistency.ts` 판정표 A · B).
+    // 통화가 안 된다고 말한 턴의 전화 전환 · 새 송금을 요구한 턴의 목표 끊기. 신호는 위에서 이미 텍스트에서 지워졌다.
+    const escalationCheck = rawSignalEscalate ? judgeEscalationSignal(signalFreeReplyText) : undefined;
+    const signalEscalate = rawSignalEscalate && escalationCheck?.accept === true;
+    const endCallCheck = judgeEndCallSignal(rawEndCallSignal, signalFreeReplyText);
+    const endCallSignal = endCallCheck.endCall;
+    if ((escalationCheck && !escalationCheck.accept) || endCallCheck.dropped) {
+      // G170 — 사유 코드만(대사 0).
+      logger.info("[§104] 대사와 어긋난 신호 무시", {
+        sessionId,
+        ...(escalationCheck && !escalationCheck.accept ? { escalate: escalationCheck.reason } : {}),
+        ...(endCallCheck.dropped ? { endCall: endCallCheck.dropped } : {}),
+      });
+    }
     // ③-c 사기범 대사 손질(2026-10-17 라이브 신고 — 실존 은행명 + 5~7문장 대사). 링크·신호 마커가 다
     // 빠진 텍스트에만 적용한다. (1) 실존 은행·카드사 이름 → OO은행/OO카드(숫자는 그대로 —
     // guardrails/realFinancialNames.ts 헤더). (2) 문장 수 상한(replyLength.ts) — ⛔ "예고 완료"를
@@ -770,8 +798,10 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 트랜잭션에서 이미 종료된 것으로 확인됐다면(stillActive=false) 이 턴이 전이를 일으키지 않는다.
     // ⭐ T194-a(§84.4.1 S-3) — "에스컬레이션 가능"은 (시나리오 × 난이도) 세션 술어다(parcel은 고급만). `requestEscalation`(S-2) ·
     // 클라 "전화로 확인" 버튼 · 시작 고지 열과 같은 술어다(startNoticeGate.test.ts G462 ⑤).
+    // §104.9 — 이 턴에 사기범이 메신저를 끝냈으면(같은 응답에 전화 전환 신호가 함께 와도) 전이하지 않는다 — 끝난 세션을 통화로 옮기지 않는다.
     const canEscalate =
       finalize.stillActive &&
+      !finalize.hangupEnded &&
       session.channel === "messenger" &&
       resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined;
     let escalationTrigger: ChannelTransitionTrigger | undefined;

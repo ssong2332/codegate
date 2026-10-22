@@ -6,7 +6,9 @@ import {
   TOOL_WINDOW_STALL_SEC,
   shouldFireBackstop,
   shouldRequestSmsBackstop,
+  scammerClaimsSmsSent,
 } from "./toolWindow.ts";
+import { readFileSync } from "node:fs";
 
 test("[상수] 판단값이 architect 원문과 같다(§59.8)", () => {
   assert.equal(TOOL_WINDOW_MAX_BOUNDARIES, 2);
@@ -159,4 +161,30 @@ test("[T191 백스톱 질의 역검증] 발화 수 비교를 지운 오염본은
     { poisoned: poisoned(sameTurn), canonical: shouldRequestSmsBackstop(sameTurn) },
     { poisoned: true, canonical: false },
   );
+});
+
+// ── §104 — 사기범 "문자 보냈다" 주장(사용자 실기 신고 "문자를 보냈다고 하는데, 실제로는 안 와 있는") ─────────────────────────
+test("[§104 문자 주장] 보냈다는 말은 잡고 · 보내겠다는 말 · 일반 언급은 잡지 않는다", () => {
+  for (const t of [
+    "문자로 보내드린 사건 조회 링크를 통해 확인하세요.",
+    "방금 문자 보내 드렸습니다.",
+    "보내 드린 링크 누르시고 본인 확인부터 하시면 됩니다.",
+    "자산 검수 안내 문자 발송했습니다.",
+    "보낸 문자 확인해 보세요.",
+  ]) {
+    assert.equal(scammerClaimsSmsSent(t), true, t);
+  }
+  for (const t of ["지금 문자로 보내 드리겠습니다.", "문자 오면 말씀해 주세요.", "곧 안내 문자가 갈 겁니다.", "계좌로 보내 주세요."]) {
+    assert.equal(scammerClaimsSmsSent(t), false, t);
+  }
+});
+
+test("[§104 문자 주장 배선] 화면 — 사기범 전사에서 주장을 표시하고 다음 백스톱 질의에 싣는다 · 도착 · none_pending이면 내린다", () => {
+  const page = readFileSync("src/app/session/play/page.tsx", "utf8").replace(/\r\n/g, "\n");
+  assert.ok(page.includes('if (role === "scammer" && scammerClaimsSmsSent(text)) smsClaimPendingRef.current = true;'));
+  assert.ok(page.includes("...(smsClaimPendingRef.current ? { smsClaimed: true } : {}),"));
+  assert.ok(page.includes('if (result.status === "delivered" || result.status === "none_pending") smsClaimPendingRef.current = false;'));
+  const types = readFileSync("src/lib/api/types.ts", "utf8");
+  const serverTypes = readFileSync("functions/src/inCallSms/types.ts", "utf8");
+  assert.ok(types.includes("smsClaimed?: boolean;") && serverTypes.includes("smsClaimed?: boolean;"), "요청 키가 클라 · 서버 타입에 같다");
 });

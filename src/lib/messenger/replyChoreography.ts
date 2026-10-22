@@ -51,7 +51,8 @@ export type PendingTurn = {
   /** 서버 호출이 실패했다. 내 메시지 문서가 구독에 없으면 실패 말풍선(다시 보내기 · 삭제)으로 그린다. */
   failed?: boolean;
   /** 공개가 끝난 뒤 적용할 결과 — 답장이 보인 다음에 종료 · 통화 전환으로 넘어간다. */
-  outcome?: { ended?: boolean; escalate?: boolean };
+  // §104.9 — `scammerEnded` = 서버 `endReason: "scammer_ended"`(사기범이 메신저 단계를 끝냈다 · 종료 문구 E-1/E-2).
+  outcome?: { ended?: boolean; escalate?: boolean; scammerEnded?: boolean };
 };
 
 export type ReplyTimeline = { readAt: number; typingAt: number; revealAt: number };

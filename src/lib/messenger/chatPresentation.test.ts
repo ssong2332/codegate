@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { endsRun, formatChatTime, isUnreadByPeer, startsPeerRun } from "./chatPresentation.ts";
+import { chatEndedNotice, endsRun, formatChatTime, isUnreadByPeer, startsPeerRun } from "./chatPresentation.ts";
 import type { ThreadItem, ThreadMessage } from "./threadItems.ts";
 
 const m = (id: string, role: "scammer" | "user"): ThreadItem<ThreadMessage> => ({
@@ -36,4 +36,18 @@ test("[G633] 대화방 화면에 메신저 앱 이름 표기가 없다(UX D-132 
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
   assert.ok(!code.includes("카카오톡"), "messenger/page.tsx 코드(주석 제외)에 앱 이름 표기가 남았다");
+});
+
+// §104.9 · UX D-145 (2) — 메신저 단계 사기범 종료 문구(E-1~E-3).
+test("[§104.9 · D-145 (2)] 종료 줄 — 사기범 종료면 카톡형 '나갔습니다' · 문자형 '답장하지 않습니다' · 그 밖은 종전", () => {
+  assert.equal(chatEndedNotice(true, "kakao"), "상대방이 채팅방을 나갔습니다.");
+  assert.equal(chatEndedNotice(true, "sms"), "상대가 더 이상 답장하지 않습니다.");
+  assert.equal(chatEndedNotice(false, "kakao"), "대화가 종료되었습니다.");
+  assert.equal(chatEndedNotice(false, "sms"), "대화가 종료되었습니다.");
+  for (const text of [chatEndedNotice(true, "kakao"), chatEndedNotice(true, "sms")]) {
+    assert.equal(/훈련|\[|\]/.test(text), false, "세션 표식 · 메타 표기 0");
+  }
+  const page = readFileSync("src/app/session/messenger/page.tsx", "utf8").replace(/\r\n/g, "\n");
+  assert.ok(page.includes('scammerEnded: result.ended === true && result.endReason === "scammer_ended",'), "서버 종료 사유를 결과에 싣는다");
+  assert.ok(page.includes('{chatEndedNotice(pending?.outcome?.scammerEnded === true, isSms ? "sms" : "kakao")}'), "종료 줄이 판정 함수를 쓴다");
 });

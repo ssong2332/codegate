@@ -27,7 +27,8 @@ const pageCode = codeOnly(page);
 const sessionCode = codeOnly(session);
 
 test("[§59.10 D → T191] play/page.tsx가 toolWindow의 shouldFireBackstop(오퍼) · shouldRequestSmsBackstop(문자)을 import한다", () => {
-  assert.match(page, /import \{ shouldFireBackstop, shouldRequestSmsBackstop \} from "@\/lib\/realtime\/toolWindow";/);
+  // §104 — 같은 import 줄에 사기범 문자 주장 판정(scammerClaimsSmsSent)이 더해졌다.
+  assert.match(page, /import \{ scammerClaimsSmsSent, shouldFireBackstop, shouldRequestSmsBackstop \} from "@\/lib\/realtime\/toolWindow";/);
 });
 
 // ⚠️ T191(문자 도달 조건) — 문자 효과는 고정 턴 지연 발동(`shouldFireBackstop`)을 더 이상 쓰지 않는다(사용자 발화 기준 ·

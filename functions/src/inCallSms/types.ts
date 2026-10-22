@@ -20,6 +20,8 @@ export type DeliverInCallSmsRequest = {
   /** 비어 있지 않은 사기범 전사 flush 수 — 앵커 = 1 + 이 값. */
   scammerTranscriptTurns?: number;
   trigger?: DeliverInCallSmsTrigger;
+  /** §104 — 백스톱에서만: 사기범이 이미 "문자를 보냈다"고 말했다(클라 주장 · 불리언 1개). 게이트가 열린 순간 바로 보낸다. 부재 = 종전. */
+  smsClaimed?: boolean;
   /**
    * @deprecated 이 계약 이전 클라(캐시된 화면)가 보내는 값. 서버는 **읽지 않는다** — `userTurns`가 없는 요청은
    * 문자를 보내지 않고 `not_allowed`로 응답한다(옛 화면은 그 응답에 오류를 띄우지 않는다).
