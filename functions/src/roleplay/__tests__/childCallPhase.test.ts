@@ -34,9 +34,11 @@ test("[통화 단계 규칙] child-kakao 원본 · 흐름 변형 전부에 정�
   }
 });
 
-test("[통화 단계 규칙] 문면 — 전화 건 이유(친구 폰)를 말하고, '통화가 안 된다'류와 채팅 전용 수법을 통화 중 금지한다", () => {
+test("[통화 단계 규칙] 문면 — 메시지 대화를 이어받아 첫마디를 하고(§110.3 · 신고 12), '통화가 안 된다'류와 채팅 전용 수법을 통화 중 금지한다", () => {
   assert.match(CHILD_CALL_PHASE_RULE, /네가 먼저 건 전화다/);
-  assert.match(CHILD_CALL_PHASE_RULE, /친구 폰 잠깐 빌려서 전화했어/);
+  assert.match(CHILD_CALL_PHASE_RULE, /톡으로 말한 거 때문에 전화했어/);
+  assert.match(CHILD_CALL_PHASE_RULE, /처음 말하듯 다시 설명하지 않고/);
+  assert.doesNotMatch(CHILD_CALL_PHASE_RULE, /친구 폰 잠깐 빌려서 전화했어/);
   assert.match(CHILD_CALL_PHASE_RULE, /통화가 불가능하다는 말을 하지 않는다/);
   for (const label of CHAT_ONLY_TACTIC_LABELS) {
     assert.ok(CHILD_CALL_PHASE_RULE.includes(label), `규칙이 채팅 전용 수법 '${label}'을 이름으로 가리켜야 한다`);
@@ -127,5 +129,5 @@ test("[Mock 강등 · 통화 중] 어떤 턴 수에서도 '통화가 안 돼'·'
 
 test("[배선] sendMessage는 에스컬레이션 판정값으로 Mock 대사 원천을 거른다", () => {
   const src = readFileSync(path.resolve(__dirname, "../../../src/roleplay/index.ts"), "utf8");
-  assert.match(src, /mockTacticHints: callPhaseMockTacticHints\(scenarioPrompt\.weakenedTactics, escalatedCall\),/);
+  assert.match(src, /mockTacticHints: callPhaseMockTacticHints\(scenarioPrompt\.weakenedTactics, escalatedCall\)\.map\(/);
 });

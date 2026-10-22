@@ -192,7 +192,7 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
       scenarioId,
       resolved.difficultyLevel,
       flowVariantId,
-      { fictionalBankName, challengeId: resolved.challengeId, personaCard: personaCard?.items, voiceSelectionSource: undefined },
+      { fictionalBankName, challengeId: resolved.challengeId, personaCard: personaCard?.items, voiceSelectionSource: undefined, familyAddress: undefined },
     );
 
     const challengeRef = db.collection("challenges").doc(resolved.challengeId);

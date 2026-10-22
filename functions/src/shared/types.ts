@@ -5,6 +5,7 @@ import type { VoiceMode } from "../scenarios/publicMeta";
 import type { MockScreenKind } from "../scenarios/mockScreens";
 import type { DifficultyLevel } from "./difficulty";
 import type { TacticCategory } from "../report/tacticCategory";
+import type { FamilyAddressTerm } from "../scenarios/familyAddress";
 
 // --- users/{uid} (UX-013, AC-027) ---
 export type UserDoc = {
@@ -189,6 +190,9 @@ export type SessionDoc = {
   // 실기 신고 4(2026-10-21 · 옵셔널, 하위호환 · 무백필) — 통화로 이어지지 않는 카톡형 세션에서 참가자가 "보이스톡"을 건 횟수.
   // 서버만 쓴다(`session/voiceTalkUnanswered.ts`). 부재 = 0회. 리포트 판정에는 아직 쓰지 않는다(기록만).
   voiceTalkUnansweredCount?: number;
+  // §110.5(실기 신고 14 · 2026-10-22 · 옵셔널, 하위호환 · 무백필) — 가족 사칭 시나리오에서 참가자가 고른 호칭(`scenarios/familyAddress.ts`).
+  // 서버만 쓴다(`createSession`이 검증 뒤 1회). 부재 = 프롬프트 원문 호칭(종전). 프롬프트 조립 3곳이 이 필드 하나를 읽는다.
+  familyAddress?: FamilyAddressTerm;
 };
 
 // --- users/{uid}/voices/{voiceId} (P-8·AC-046, ADR-0005·Database.md 1:1) ---

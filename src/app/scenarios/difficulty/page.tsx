@@ -66,6 +66,15 @@ import {
   type PersonaCardForm,
   type PersonaCardInput,
 } from "@/lib/personacard/personaCardInput";
+import {
+  FAMILY_ADDRESS_INVALID_LINE,
+  FAMILY_ADDRESS_INVALID_REASON,
+  FAMILY_ADDRESS_LABEL,
+  FAMILY_ADDRESS_REQUIRED_LINE,
+  familyAddressOptionsFor,
+  setSelectedFamilyAddress,
+  type FamilyAddressTerm,
+} from "@/lib/familyAddress";
 
 type PageState = "ready" | "starting" | "start-error" | "difficulty-fallback";
 
@@ -124,6 +133,9 @@ export default function DifficultySelectPage() {
   const showPersonaInput = !isSendMode && personaCardInputVisible(scenarioId, selected, scenario?.channel);
   // §93(UX D-136) — 시나리오 카드 종류가 칸 · 안내 · 오류 문면을 정한다(자녀 칸은 자녀 납치 협박에만).
   const personaKind = personaCardKindFor(scenarioId);
+  // §110.5(실기 신고 14 · UX D-150 (5)) — 가족 사칭 시나리오의 호칭(self만 · 고르기 전에는 시작 불가 — 성별을 짐작하지 않는다).
+  const familyAddressOptions = isSendMode ? undefined : familyAddressOptionsFor(scenarioId);
+  const [familyAddress, setFamilyAddress] = useState<FamilyAddressTerm | null>(null);
   useEffect(() => {
     // UX 계약 C-10 — 이벤트는 종류만(시나리오 ID · 수법 0).
     if (showBurdenNotice) console.info(JSON.stringify({ event: "burden_notice_shown" }));
@@ -190,6 +202,8 @@ export default function DifficultySelectPage() {
         ...(isMessenger ? { channel: "messenger" as const, surface: scenario?.surface } : {}),
         // §88 — 넣은 칸이 있을 때만 싣는다(비면 필드 부재 = 카드 0 = 사기범이 이름 · 생년월일을 묻는다).
         ...(personaCardInput ? { personaCardInput } : {}),
+        // §110.5 — 호칭(대상 시나리오만 · 부재 = 종전 문면).
+        ...(familyAddressOptions && familyAddress ? { familyAddress } : {}),
       },
       (stage) => setPrepDone((done) => advancePrepDone(done, stage)),
     );
@@ -225,6 +239,12 @@ export default function DifficultySelectPage() {
       }
       personaCardInput = read.input;
     }
+    if (familyAddressOptions && !familyAddress) {
+      setStartError(FAMILY_ADDRESS_REQUIRED_LINE);
+      return;
+    }
+    // 목소리 선택 · 클론 대기 화면이 세션을 만들 때 읽는다(대상 밖 = 지운다 — 다른 시나리오의 값이 남지 않게).
+    setSelectedFamilyAddress(familyAddressOptions ? familyAddress : null);
     setState("starting");
     setStartError(null);
     setPrepDone(0);
@@ -255,6 +275,8 @@ export default function DifficultySelectPage() {
       setStartError(
         reason === DIFFICULTY_NOT_ALLOWED_REASON
           ? ADVANCED_ONLY_LINE
+          : reason === FAMILY_ADDRESS_INVALID_REASON
+            ? FAMILY_ADDRESS_INVALID_LINE
           : reason === SCENARIO_MERGED_REASON
             ? SCENARIO_MERGED_LINE
             : (personaCardErrorLine(reason, personaKind) ?? "훈련을 시작하지 못했습니다. 다시 시도해 주세요."),
@@ -416,6 +438,33 @@ export default function DifficultySelectPage() {
               disabled={state === "starting"}
             />
           </div>
+        )}
+
+        {/* §110.5(UX D-150 (5)) — 가족 사칭 시나리오의 호칭. 두 판 중 하나(기본 선택 0 — 성별을 짐작하지 않는다). */}
+        {familyAddressOptions && selected && (
+          <fieldset className="rounded-[8px] border-[1.5px] border-line bg-white p-4">
+            <legend className="px-1 text-[17px] font-semibold text-ink">{FAMILY_ADDRESS_LABEL}</legend>
+            <div role="radiogroup" aria-label={FAMILY_ADDRESS_LABEL} className="mt-2 grid grid-cols-2 gap-2">
+              {familyAddressOptions.map((term) => (
+                <button
+                  key={term}
+                  type="button"
+                  role="radio"
+                  aria-checked={familyAddress === term}
+                  disabled={state === "starting"}
+                  onClick={() => {
+                    setFamilyAddress(term);
+                    setStartError((current) => (current === FAMILY_ADDRESS_REQUIRED_LINE ? null : current));
+                  }}
+                  className={`min-h-[52px] rounded-[8px] border-2 text-[18px] font-bold ${
+                    familyAddress === term ? "border-brand bg-brand-tint text-brand" : "border-line bg-white text-ink"
+                  }`}
+                >
+                  {term}
+                </button>
+              ))}
+            </div>
+          </fieldset>
         )}
 
         {/* 초급 사전 브리핑(D-43/AC-066) — "이 대화에서 나올 수 있는 위험 신호 미리 보기". */}

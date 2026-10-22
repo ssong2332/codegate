@@ -1089,6 +1089,18 @@ const INSTALL_LANDING_COPY: Record<string, InstallCopy> = {
     issuerLabel: "ⓒ 종합물류 배송확인센터",
     mockHost: "parcel-app-desk.invalid",
   },
+  // §110.2(실기 신고 10) — 자녀 사칭 카톡 고급의 보험 접수 앱(메신저 링크). 서버 카탈로그 항목과 바이트 동일(G76).
+  "child-insurance-install": {
+    headline: "휴대폰 보험 접수 앱을 설치해야 보험 처리가 됩니다",
+    bodyLines: [
+      "파손 보험 접수에는 휴대폰 명의자 본인 확인이 필요합니다.",
+      "아래에서 보험 접수 앱 설치를 진행해 주세요.",
+      "설치 후 접근 권한을 허용하면 접수가 자동으로 이어집니다.",
+    ],
+    consentLabel: "권한 허용하고 계속하기",
+    issuerLabel: "ⓒ 휴대폰 파손보험 접수센터",
+    mockHost: "phone-care-claim.invalid",
+  },
   // T194-c-1(docs/Architecture.md §84.15.4 · §84.16.5 단계 6) — Q2 통화 중 설치 화면 3종(문자함 안에서 열린다). 서버 카탈로그 항목과 바이트 동일(G76).
   "card-guard-app-install": {
     headline: "피해 차단용 보안 앱을 설치해야 보호 조치가 시작됩니다",

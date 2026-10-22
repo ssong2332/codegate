@@ -24,6 +24,7 @@ import {
   getSelectedDifficultyLevel,
 } from "@/lib/recording";
 import { createSession } from "@/lib/api";
+import { familyAddressRequestField } from "@/lib/familyAddress";
 import { Button, LoadingDots, ProgressSteps, type ProgressStep } from "@/components/ui";
 import {
   isVoiceDegraded,
@@ -113,6 +114,8 @@ export default function CloneWaitPage() {
           scenarioId,
           voiceId,
           ...(difficultyLevel ? { difficultyLevel } : {}),
+          // §110.5 — 난이도 화면에서 고른 호칭(이 탭 힌트 · 부재 = 종전 문면).
+          ...familyAddressRequestField(scenarioId),
         });
         if (cancelled) return;
         if (result.openingAudioUrl) setOpeningAudioUrl(result.openingAudioUrl);

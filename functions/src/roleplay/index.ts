@@ -69,6 +69,7 @@ import { extractLinkMarker } from "./linkMarker";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
+import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { asksIdentityCheck } from "./personaAuthority";
 import { extractSmsMarker } from "./smsMarker";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
@@ -534,6 +535,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 사용자는 문맥 없는 Mock 대사보다 더 기다리는 쪽을 골랐다. 20초는 onCall 기본 실행 제한(60초) 안이다.
     // storedHistory는 이번 사용자 메시지를 쓰기 **전**에 읽은 이력이다(위 턴 확보 트랜잭션).
     const llmClient = isFirstUserTurn(storedHistory) ? getLlmClient(LLM_FIRST_TURN_TIMEOUT_MS) : getLlmClient();
+    // §110.5(실기 신고 14) — 참가자가 고른 호칭(세션 문서 값 · 부재 = 원문 호칭).
+    const familyAddressPrompt = resolveFamilyAddressPrompt(session.scenarioId, sessionFamilyAddress(session));
     const completion = await completeWithFallback(llmClient, {
       // T85(§17.3 호출부 3곳 중 "텍스트 턴", G63) — 고급에서 D4(절차·서류 정당화) 블록을 얹을
       // 시나리오인지. 세 호출부가 같은 판정 함수를 쓰지 않으면 "텍스트 턴은 고급인데 오프닝만
@@ -560,12 +563,16 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         // T194-b(§84.3.4 · G568 호출부 3곳 중 "텍스트 턴") — 세션 문서 값 그대로(부재 = 블록 0 · 바이트 동일).
         // ⚠️ `hangupMode` 앞에 둔다 — G552 ⓒ 소스 스캔이 hangupMode를 옵션 마지막으로 고정한다.
         personaCard: session.personaCard?.items,
+        // §110.5 — 호칭(호출부 3곳 같은 값 · 부재 = 블록 0 · 바이트 동일).
+        ...(familyAddressPrompt ? { familyAddress: familyAddressPrompt } : {}),
         // T192 C3 — 사전 판정이 `accepted`인 턴만 "signal"(§79.6 ②). 그 밖 = "none"(종전 문면 바이트 동일 · G505).
         hangupMode,
       }),
       messages: llmHistory,
       // 2026-10-21 — 에스컬레이션 뒤 통화에서는 채팅 단계 전용 수법("통화가 안 돼")을 Mock 대사 원천에서 뺀다(`escalatedCall.ts` 판정표).
-      mockTacticHints: callPhaseMockTacticHints(scenarioPrompt.weakenedTactics, escalatedCall),
+      mockTacticHints: callPhaseMockTacticHints(scenarioPrompt.weakenedTactics, escalatedCall).map((tactic) =>
+        applyFamilyAddressText(tactic, familyAddressPrompt),
+      ),
       // §102 — 사기범 대사 경로: 영어 거절 등 쓸 수 없는 응답은 다음 단계(Groq → Mock)로 넘긴다.
       purpose: "scammer-reply",
     });
