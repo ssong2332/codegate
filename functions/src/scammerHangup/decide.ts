@@ -76,6 +76,12 @@ export type ScammerHangupInput = {
    * ⭐ 옵셔널(`?:`)이 아니라 **필수 키**다 — 호출부가 빠뜨리면 컴파일 오류(§79.18 (1) · S7 뒤 "말없이 릴레이 없음" 방지).
    */
   relay: HangupRelayContext | undefined;
+  /**
+   * ⭐ §104.9(2026-10-22 사용자 결정 *"끝내게 하기"* — 대안 A · DECISIONS #219) — 메신저 단계에서도 끝낼 수 있는 경로인가. 참이면 2행이
+   * 메신저를 막지 않는다(그 아래 하한 3 · 5 · 6 · 7행은 그대로 — 너무 이른 종료 방지). **폴백(`sendMessage`)만 참**이다 — 실시간 콜러블은
+   * 메신저 단계가 없어 넘기지 않는다. 부재 = 거짓 = 종전 판정(2행이 메신저를 막는다).
+   */
+  messengerStageAllowed?: boolean;
 };
 
 export type ScammerHangupRule = {
@@ -103,7 +109,8 @@ export function isNonLastRelayLeg(relay: HangupRelayContext | undefined): boolea
  */
 export const SCAMMER_HANGUP_RULES: readonly ScammerHangupRule[] = [
   { row: "1", status: "not_active", hangup: false, when: (i) => i.status !== "active" },
-  { row: "2", status: "wrong_channel", hangup: false, when: (i) => i.channel === "messenger" },
+  // §104.9 — 메신저 단계는 폴백 경로가 허용할 때(`messengerStageAllowed`)만 통과한다.
+  { row: "2", status: "wrong_channel", hangup: false, when: (i) => i.channel === "messenger" && i.messengerStageAllowed !== true },
   { row: "2-b", status: "not_last_leg", hangup: false, when: (i) => isNonLastRelayLeg(i.relay) },
   { row: "8", status: "already_accepted", hangup: true, when: (i) => i.alreadyAccepted },
   { row: "3", status: "mock_turn", hangup: false, when: (i) => i.isMockTurn },

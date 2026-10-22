@@ -312,3 +312,34 @@ test("[§104 문자 미도착] 사기범이 문자를 보냈다고 말했으면(
   assert.ok(src.includes("const smsClaimed = request.data?.smsClaimed === true;"));
   assert.ok(src.includes("planSmsBackstop({ declared, delivered: await readDeliveredSms(sessionRef), userTurns, claimed: smsClaimed })"));
 });
+
+// ══ §104.9 메신저 단계 사기범 종료(대안 A) ══════════════════════════════════════════════════════════════════════════
+import { decideScammerHangup, SCAMMER_HANGUP_MIN_USER_TURNS } from "../../scammerHangup/decide";
+
+test("[§104.9] 메신저 단계 — 폴백 경로(messengerStageAllowed)만 끝낼 수 있고, 너무 이른 종료 · 문자 대기 · 한도는 그대로 막는다", () => {
+  const base = {
+    status: "active" as const,
+    channel: "messenger" as const,
+    isMockTurn: false,
+    verifyEnabled: false,
+    transferPlaced: false,
+    transferReachable: true,
+    userTurns: SCAMMER_HANGUP_MIN_USER_TURNS,
+    pendingInstruction: false,
+    smsAwaitingUser: false,
+    limitReached: false,
+    alreadyAccepted: false,
+    relay: undefined,
+  };
+  assert.equal(decideScammerHangup(base).status, "wrong_channel", "실시간 콜러블(표시 없음) = 종전");
+  assert.equal(decideScammerHangup({ ...base, messengerStageAllowed: true }).status, "accepted");
+  assert.equal(decideScammerHangup({ ...base, messengerStageAllowed: true, userTurns: SCAMMER_HANGUP_MIN_USER_TURNS - 1 }).status, "too_early");
+  assert.equal(decideScammerHangup({ ...base, messengerStageAllowed: true, smsAwaitingUser: true }).status, "blocked_pending");
+  assert.equal(decideScammerHangup({ ...base, messengerStageAllowed: true, isMockTurn: true }).status, "mock_turn");
+  const fallbackSrc = read("scammerHangup/fallback.ts");
+  assert.ok(fallbackSrc.includes("messengerStageAllowed: true,"), "폴백이 메신저 단계 경로를 켠다");
+  const commitSrc = read("scammerHangup/commit.ts");
+  assert.equal(commitSrc.includes("messengerStageAllowed"), false, "실시간 콜러블은 켜지 않는다");
+  const index = read("roleplay/index.ts");
+  assert.ok(index.includes("finalize.stillActive &&\n      !finalize.hangupEnded &&\n      session.channel === \"messenger\" &&"), "끝낸 턴에는 통화로 옮기지 않는다");
+});

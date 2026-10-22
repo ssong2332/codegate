@@ -798,8 +798,10 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 트랜잭션에서 이미 종료된 것으로 확인됐다면(stillActive=false) 이 턴이 전이를 일으키지 않는다.
     // ⭐ T194-a(§84.4.1 S-3) — "에스컬레이션 가능"은 (시나리오 × 난이도) 세션 술어다(parcel은 고급만). `requestEscalation`(S-2) ·
     // 클라 "전화로 확인" 버튼 · 시작 고지 열과 같은 술어다(startNoticeGate.test.ts G462 ⑤).
+    // §104.9 — 이 턴에 사기범이 메신저를 끝냈으면(같은 응답에 전화 전환 신호가 함께 와도) 전이하지 않는다 — 끝난 세션을 통화로 옮기지 않는다.
     const canEscalate =
       finalize.stillActive &&
+      !finalize.hangupEnded &&
       session.channel === "messenger" &&
       resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined;
     let escalationTrigger: ChannelTransitionTrigger | undefined;

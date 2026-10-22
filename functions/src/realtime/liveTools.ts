@@ -82,8 +82,10 @@ export function declaresOfferVerificationDesk(
  * (`toolDeclarationUnchanged.test.ts` · `geminiProvider.test.ts` [운영값]). ⚠️ 배포 순서 = Hosting(클라) → Functions(§79.13).
  * ⛔ 환경 변수 · defineBoolean 아님(배포 설정으로 켜지지 않게). ⛔ 폴백 SIGNAL(`sendMessage`)은 이 값과 무관하다.
  * ⛔ P-H(G603) 통과 전 운영 off — 2026-10-19 재실측 H1 위반 1 · 통과 뒤 true로 되돌리는 PR
+ * ⭐ §104.8(2026-10-22 · DECISIONS #219) — 사용자 결정 *"이제 다시 ai가 전화를 먼저 끊는 것을 시도해야겠어 … 할 게 없어도 전화를 안 끊는
+ *    모습이 보여"* · 편집 승인(사용자 직접)으로 **켰다**(G603 미충족 상태 — 남은 위험과 막는 층은 Architecture §104.8.1). 작별 인사 없이 짧은 마무리만.
  */
-export const END_CALL_LIVE_AVAILABLE = false;
+export const END_CALL_LIVE_AVAILABLE = true;
 
 /**
  * T192 C3(§79.3 · §79.18 (1) · G502 · G527) — `end_call` **선언 자격**. ⛔ 이 술어가 유일한 원천이다: 도구 선언

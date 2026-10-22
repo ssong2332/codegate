@@ -663,10 +663,10 @@ test("[T192/C3 §79.6 ①] 확인 무력화 고급 세션의 TOOL 문면에만 '
   }
 });
 
-// ── T192 운영 off — 운영값(기본 생성자 = 끔): 음성 세션 setup · 프롬프트 · liveTools에 end_call 0 ──────────────────────
-// ⚠️ C5의 "켬 운영값" 단언을 P-H(G603) 통과 전 **끔**으로 되돌렸다(PR A `1040c97` 형태 · 상수와 함께). 켜는 PR이 함께 바꾼다.
-test("[M1 운영값 · P-H 전 off] 기본 생성자(운영) — 음성 세션의 tools · systemInstruction · liveTools가 end_call 거짓 입력(메신저 범위)과 바이트 동일", async () => {
-  assert.equal(END_CALL_LIVE_AVAILABLE, false, "⚠️ P-H 통과 뒤 켤 때 이 테스트를 함께 바꾼다");
+// ── §104(2026-10-22 사용자 결정 — DECISIONS #219) 운영 켬 — 운영값(기본 생성자 = 켬): 음성 세션 setup · 프롬프트 · liveTools가 명시적 켬과 같다 ──
+// ⚠️ 2026-10-20 P-H(G603) 미충족으로 끔(#326)이었다. 사용자 결정 *"이제 다시 ai가 전화를 먼저 끊는 것을 시도해야겠어"* 로 켰다(§104.8).
+test("[M1 운영값 · §104 켬] 기본 생성자(운영) — 음성 세션의 tools · systemInstruction · liveTools가 켬 입력과 바이트 동일 · 메신저 범위는 여전히 0", async () => {
+  assert.equal(END_CALL_LIVE_AVAILABLE, true, "§104 — 운영값은 켬이다(끄는 PR이 이 테스트를 함께 바꾼다)");
   const capture = captureTokenRequest();
   try {
     let checked = 0;
@@ -674,24 +674,20 @@ test("[M1 운영값 · P-H 전 off] 기본 생성자(운영) — 음성 세션�
       for (const difficultyLevel of [undefined, "beginner", "intermediate", "advanced"] as const) {
         const input = { sessionId: "sess", scenarioId, voiceId: "", ...(difficultyLevel ? { difficultyLevel } : {}) };
         const operational = await new GeminiRealtimeProvider("test-key").createCallCredentials({ ...VOICE_SCOPE, ...input });
-        const baseline = await new GeminiRealtimeProvider("test-key", ENDCALL_ON).createCallCredentials({ ...MESSENGER_SCOPE, ...input });
+        const explicitOn = await new GeminiRealtimeProvider("test-key", ENDCALL_ON).createCallCredentials({ ...VOICE_SCOPE, ...input });
         const bodies = capture.bodies();
-        const [opBody, baseBody] = [bodies[bodies.length - 2], bodies[bodies.length - 1]];
+        const [opBody, onBody] = [bodies[bodies.length - 2], bodies[bodies.length - 1]];
         const tag = `${scenarioId}/${difficultyLevel}`;
-        // 만료 시각(Date.now)은 호출마다 다르다 — 모델 · 도구 · 프롬프트가 실리는 setup 전체를 대조한다.
         const setupOf = (body: unknown) => JSON.stringify((body as { bidiGenerateContentSetup?: unknown }).bidiGenerateContentSetup);
-        assert.ok(setupOf(opBody) !== undefined && setupOf(opBody).length > 2, `${tag}: setup이 비었다`);
-        assert.equal(setupOf(opBody), setupOf(baseBody), `${tag}: 운영 setup(tools · systemInstruction 포함)이 S5b 판정과 다르다`);
-        assert.equal(JSON.stringify(operational.liveTools), JSON.stringify(baseline.liveTools), `${tag}: liveTools`);
-        assert.equal(operational.liveTools?.endCall, undefined, `${tag}: 운영 liveTools에 endCall이 샜다`);
-        const prompt = sentSystemPrompt(opBody);
-        assert.ok(prompt.includes(HANGUP_RULE_NONE) && !prompt.includes(HANGUP_RULE_TOOL), `${tag}: 운영 프롬프트가 NONE이 아니다`);
-        assert.equal(sentToolNames(opBody).includes("end_call"), false, `${tag}: 운영 선언에 end_call`);
-        // 대조군 — 같은 음성 입력을 켬으로 돌리면 end_call · TOOL이 실린다(위 단언이 공허하지 않다).
-        await new GeminiRealtimeProvider("test-key", ENDCALL_ON).createCallCredentials({ ...VOICE_SCOPE, ...input });
-        const onBody = capture.bodies()[capture.bodies().length - 1];
-        assert.equal(sentToolNames(onBody).includes("end_call"), true, `${tag}: 켬 대조군에 end_call이 없다`);
-        assert.ok(sentSystemPrompt(onBody).includes(HANGUP_RULE_TOOL), `${tag}: 켬 대조군이 TOOL이 아니다`);
+        assert.equal(setupOf(opBody), setupOf(onBody), `${tag}: 운영 setup이 켬 입력과 다르다`);
+        assert.equal(JSON.stringify(operational.liveTools), JSON.stringify(explicitOn.liveTools), `${tag}: liveTools`);
+        assert.equal(sentToolNames(opBody).includes("end_call"), true, `${tag}: 운영 선언에 end_call이 없다`);
+        assert.ok(sentSystemPrompt(opBody).includes(HANGUP_RULE_TOOL), `${tag}: 운영 프롬프트가 TOOL이 아니다`);
+        // 메신저 범위(에스컬레이션 전)는 켬이어도 end_call 0 — 판정표 2행과 같은 조건.
+        await new GeminiRealtimeProvider("test-key").createCallCredentials({ ...MESSENGER_SCOPE, ...input });
+        const msgBody = capture.bodies()[capture.bodies().length - 1];
+        assert.equal(sentToolNames(msgBody).includes("end_call"), false, `${tag}: 메신저 범위에 end_call`);
+        assert.ok(sentSystemPrompt(msgBody).includes(HANGUP_RULE_NONE), `${tag}: 메신저 범위가 NONE이 아니다`);
         checked += 1;
       }
     }
