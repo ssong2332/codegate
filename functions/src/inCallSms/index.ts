@@ -20,6 +20,7 @@ import {
   SMS_DECLINE_NOT_ALLOWED,
   alreadyNudged,
   buildSmsNudgeInstruction,
+  correctModelSmsPurpose,
   planSmsBackstop,
   resolveDeclaredSms,
 } from "./smsGate";
@@ -182,6 +183,14 @@ export const deliverInCallSms = onCall<
     }
     purpose = plan.item.purpose;
   }
+  // §108 — 모델 도구가 목적을 잘못 골랐는데 남은 필수 문자의 게이트가 열려 있으면 그 문자를 보낸다(판정표 `correctModelSmsPurpose`).
+  // 계획은 트랜잭션 밖 조회로 세우고, 발송은 아래 단일 통로가 같은 게이트를 다시 통과시킨다(백스톱과 같은 형태).
+  let purposeCorrectedFrom: string | undefined;
+  if (trigger !== "backstop") {
+    const corrected = correctModelSmsPurpose({ purpose, declared, delivered: await readDeliveredSms(sessionRef), userTurns });
+    purpose = corrected.purpose;
+    purposeCorrectedFrom = corrected.correctedFrom;
+  }
 
   // §81 — 세션 가상 은행명(문자 본문·도착 지시·대사가 같은 이름). 부재(옛 세션)는 sessionId 해시.
   const fictionalBankName = resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName });
@@ -205,6 +214,7 @@ export const deliverInCallSms = onCall<
     userTurns,
     scammerTranscriptTurns,
     ...(declaredReason ? { declaredReason } : {}),
+    ...(purposeCorrectedFrom ? { purposeCorrectedFrom } : {}),
   });
 
   if (result.status !== "delivered") {

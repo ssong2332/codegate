@@ -107,5 +107,10 @@ export async function readDeliveredSms(
 
 function toDeliveredRecord(doc: FirebaseFirestore.QueryDocumentSnapshot): DeliveredSmsRecord {
   const at = doc.get("userTurnsAtArrival");
-  return { smsId: doc.id, ...(typeof at === "number" ? { userTurnsAtArrival: at } : {}) };
+  return {
+    smsId: doc.id,
+    ...(typeof at === "number" ? { userTurnsAtArrival: at } : {}),
+    // §108 — 끊기 4행 입력(C-1). 게이트 판정은 이 필드를 보지 않는다.
+    ...(doc.get("landingSubmittedAt") ? { landingSubmitted: true as const } : {}),
+  };
 }

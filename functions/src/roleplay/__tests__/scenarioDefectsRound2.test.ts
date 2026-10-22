@@ -324,6 +324,7 @@ test("[§104.9] 메신저 단계 — 폴백 경로(messengerStageAllowed)만 끝
     verifyEnabled: false,
     transferPlaced: false,
     transferReachable: true,
+    goalActionDone: false,
     userTurns: SCAMMER_HANGUP_MIN_USER_TURNS,
     pendingInstruction: false,
     smsAwaitingUser: false,

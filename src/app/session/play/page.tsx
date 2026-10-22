@@ -530,9 +530,11 @@ export default function SessionCallPage() {
   // ⭐ T191(문자 도달 조건 · AC-099 (e)) — 문자 백스톱 질의 상태. 예전 `requestedSmsRef`(요청한 smsId 집합) ·
   // `smsToolCallFailedIdRef`(모델 도구 실패 smsId)는 화면이 고정 턴으로 smsId를 고를 때만 필요했다 — 폐기.
   // 지금은 사용자 발화 flush마다 서버에 한 번 묻고(`shouldRequestSmsBackstop`), 무엇을 할지는 서버가 정한다.
-  const smsBackstopRef = useRef({ lastRequestedUserTurns: -1, nonePending: false, inFlight: false });
+  const smsBackstopRef = useRef({ lastRequestedUserTurns: -1, lastClaimRequestedUserTurns: -1, nonePending: false, inFlight: false });
   // §104 — 사기범이 "문자를 보냈다"고 말했고 아직 그 문자가 오지 않았다(`scammerClaimsSmsSent`). 다음 백스톱 질의에 실린다 · 도착 · none_pending이면 내린다.
   const smsClaimPendingRef = useRef(false);
+  // §108 — 주장이 생긴 사기범 턴에 바로 백스톱을 묻게 하는 깨우기 값(값 자체는 쓰지 않는다).
+  const [smsClaimTick, setSmsClaimTick] = useState(0);
   // §59.10 커밋 D(G390) — 확인 오퍼(offer_verification_desk) 도구 경로 실패 신호. 세션당 오퍼가
   // 하나뿐이라(카탈로그 보유 && advanced 세션에만 도구가 선언된다, §61) id 없이 boolean 하나로
   // 충분하다.
@@ -633,7 +635,11 @@ export default function SessionCallPage() {
       answeredAtMsRef.current !== null ? Date.now() - answeredAtMsRef.current : undefined;
     transcriptRef.current.push({ role, text, atMs });
     // §104 — 사기범이 문자를 보냈다고 말한 턴(실제 도착과 무관). 백스톱이 게이트가 열린 순간 보내게 한다.
-    if (role === "scammer" && scammerClaimsSmsSent(text)) smsClaimPendingRef.current = true;
+    if (role === "scammer" && scammerClaimsSmsSent(text)) {
+      smsClaimPendingRef.current = true;
+      // §108 — 다음 사용자 발화를 기다리지 않고 지금 묻는다(아래 백스톱 effect의 의존성).
+      setSmsClaimTick((n) => n + 1);
+    }
     // ⭐ §99 — 탭이 백그라운드에서 정리돼 새로고침되면 메모리의 전사가 사라진다. 같은 탭 sessionStorage에 같이 적어 두고
     // 통화 복원(새로고침) 때 되살린다(아래 로드 effect). 쓰기 실패는 무시한다(비차단).
     if (sessionId) {
@@ -1034,11 +1040,14 @@ export default function SessionCallPage() {
         lastRequestedUserTurns: state.lastRequestedUserTurns,
         nonePending: state.nonePending,
         inFlight: state.inFlight,
+        claimPending: smsClaimPendingRef.current,
+        lastClaimRequestedUserTurns: state.lastClaimRequestedUserTurns,
       })
     ) {
       return;
     }
     state.lastRequestedUserTurns = userTurnCount;
+    if (smsClaimPendingRef.current) state.lastClaimRequestedUserTurns = userTurnCount;
     state.inFlight = true;
     const counters = turnCountersRef.current;
     (async () => {
@@ -1069,6 +1078,10 @@ export default function SessionCallPage() {
         setSmsError("문자를 받지 못했습니다. 통화는 계속됩니다.");
       } finally {
         state.inFlight = false;
+        // §108 — 질의 중에 새 주장이 생겼으면(이 발화 수로 주장을 아직 못 실었다) 한 번 더 깨운다.
+        if (smsClaimPendingRef.current && state.lastClaimRequestedUserTurns < turnCountersRef.current.userTurns) {
+          setSmsClaimTick((n) => n + 1);
+        }
       }
     })();
     // enqueueTurnInstruction은 안정 참조(useCallback, 의존성 없음)라 이 목록에 넣어도 effect가 추가로 재실행되지 않는다.
@@ -1077,6 +1090,7 @@ export default function SessionCallPage() {
     callMode,
     phase,
     userTurnCount,
+    smsClaimTick,
     realtime.credentials?.inCallSmsBackstop,
     enqueueTurnInstruction,
     offerConfirmResult,
@@ -2984,7 +2998,7 @@ export default function SessionCallPage() {
             </div>
           ) : (
             /* T190-3(UX-014 v1.33 (4) · D-87) — 3열×2행 그리드(72px 원 · 단색 아이콘 28px · 라벨 14px · ⛔ 이모지 0).
-               1행 = 음소거 · 키패드 · 스피커 / 2행 = 메시지(문자 1건 도착 뒤 — 칸은 처음부터 예약) · 채팅으로(메신저
+               1행 = 음소거 · 키패드 · 스피커 / 2행 = 메시지(처음부터 보임 · 첫 문자 전 비활성 — §108) · 채팅으로(메신저
                채널만) · 빈 칸. 동작 없는 버튼을 채워 넣지 않는다 — 빈 칸은 자리만 차지한다(초점 대상 0).
                스크린리더 순서 = 1행 왼→오 · 2행 왼→오 · 종료. */
             <div
@@ -3072,33 +3086,41 @@ export default function SessionCallPage() {
 
               {/* T68 — "메시지"(현행 "문자함" 라벨 대체 — UX-014 v1.33 (4)) 컨트롤. 문자가 1건 이상 도착한 뒤부터
                   남아 언제든 UX-027을 다시 연다(미확인 수 배지 — 숫자 텍스트). 라우팅 없음(D-35).
-                  ⭐ 칸은 처음부터 예약해 두어 등장 때 레이아웃이 밀리지 않는다. */}
+                  ⭐ §108(UX D-148 · 2026-10-22 실기 신고 *"문자가 오기 전과 온 후에 화면이 달라"*) — 버튼은 **처음부터 보인다**.
+                  첫 문자 전에는 스피커 비활성과 같은 표현(흐림 · `aria-disabled` · 탭 무반응)이고, 도착은 배지로만 알린다 —
+                  실제 휴대폰 통화 화면처럼 격자가 통화 내내 같다. */}
               <div className="flex min-h-[98px] flex-col items-center gap-1.5">
-                {inCallSms.length > 0 && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={(event) => handleOpenSmsOverlay(event.currentTarget)}
-                      aria-label={`메시지 — 도착 ${inCallSms.length}건, 미확인 ${smsUnreadCount}건`}
-                      className={`relative flex ${gridButtonShape} items-center justify-center transition active:scale-95`}
-                      style={{ backgroundColor: callTokens.gridButtonBg, color: callTokens.gridIcon }}
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    if (inCallSms.length === 0) return;
+                    handleOpenSmsOverlay(event.currentTarget);
+                  }}
+                  aria-disabled={inCallSms.length === 0 ? true : undefined}
+                  aria-label={
+                    inCallSms.length === 0
+                      ? "메시지 — 받은 문자 없음"
+                      : `메시지 — 도착 ${inCallSms.length}건, 미확인 ${smsUnreadCount}건`
+                  }
+                  className={`relative flex ${gridButtonShape} items-center justify-center transition ${
+                    inCallSms.length === 0 ? "opacity-40" : "active:scale-95"
+                  }`}
+                  style={{ backgroundColor: callTokens.gridButtonBg, color: callTokens.gridIcon }}
+                >
+                  <PhoneIcon name="message" />
+                  {smsUnreadCount > 0 && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute right-1.5 top-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-xs font-bold"
+                      style={{ backgroundColor: callTokens.badgeBg, color: callTokens.badgeText }}
                     >
-                      <PhoneIcon name="message" />
-                      {smsUnreadCount > 0 && (
-                        <span
-                          aria-hidden="true"
-                          className="absolute right-1.5 top-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-xs font-bold"
-                          style={{ backgroundColor: callTokens.badgeBg, color: callTokens.badgeText }}
-                        >
-                          {smsUnreadCount}
-                        </span>
-                      )}
-                    </button>
-                    <span className="text-sm" style={{ color: callTokens.textPrimary }}>
-                      메시지
+                      {smsUnreadCount}
                     </span>
-                  </>
-                )}
+                  )}
+                </button>
+                <span className={`text-sm ${inCallSms.length === 0 ? "opacity-40" : ""}`} style={{ color: callTokens.textPrimary }}>
+                  메시지
+                </span>
               </div>
 
               {/* T40 fast-follow — 역방향 명시 전환 버튼(§13.1/AC-039 · "채팅으로" — 현행 "메시지로" 대체, 2행 1의

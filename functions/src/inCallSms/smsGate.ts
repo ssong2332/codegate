@@ -52,6 +52,8 @@ export type DeliveredSmsRecord = {
    * 없다 — 그때는 0으로 본다(간격 판정이 가장 이른 쪽으로 기운다 · 무백필).
    */
   userTurnsAtArrival?: number;
+  /** §108 — 이 문자가 연 랜딩을 제출했다(`landingSubmittedAt` — 끊기 4행 `goalActionDone` C-1). 부재 = 제출 전 · 읽지 않음. */
+  landingSubmitted?: true;
 };
 
 export type SmsGateStatus = "allowed" | "not_allowed" | "already_delivered" | "too_early" | "too_soon";
@@ -139,6 +141,29 @@ export function planSmsBackstop(input: Omit<SmsGateInput, "purpose"> & { claimed
   if (input.userTurns >= openAt + BACKSTOP_USER_TURNS * 2) return { action: "deliver", item: target };
   if (input.userTurns === openAt + BACKSTOP_USER_TURNS) return { action: "nudge", item: target, openAt };
   return { action: "wait" };
+}
+
+/**
+ * ⭐ §108(2026-10-22 실기 신고 *"문자 발송이 여전히 느리게 온다"*) — 모델 도구(`send_prepared_sms`)의 **목적 보정**.
+ * 운영 로그(§108.3): 모델이 문자를 보내려고 도구를 불렀는데 목적을 잘못 골라(`link`가 없는 시나리오에서 `link` → `not_allowed` ·
+ * 이미 보낸 `link`를 다시 → `already_delivered`) 거절되고, 실제 문자는 2~3발화 뒤 백스톱으로만 왔다.
+ * 판정표(위에서부터 첫 행):
+ * | # | If | Then |
+ * |---|---|---|
+ * | P-1 | 요청 목적이 게이트를 통과한다(`allowed`) | 그대로 |
+ * | P-2 | 요청 목적이 `not_allowed` ∨ `already_delivered` ∧ 남은 필수 문자의 게이트가 **지금 열려 있다**(`planSmsBackstop` `claimed` = deliver) | 그 필수 문자의 목적으로 바꾼다 |
+ * | P-3 | 그 밖(`too_early` · `too_soon` — 하한 전 · 남은 필수 0 · 게이트 닫힘) | 그대로(거절 — 하한은 앞당기지 않는다) |
+ * 반환 = 실제로 게이트에 넘길 목적 · 바꿨으면 `correctedFrom`(로그용).
+ */
+export function correctModelSmsPurpose(input: SmsGateInput): { purpose: unknown; correctedFrom?: string } {
+  const gate = resolveSmsGate(input);
+  if (gate.status !== "not_allowed" && gate.status !== "already_delivered") return { purpose: input.purpose };
+  const plan = planSmsBackstop({ declared: input.declared, delivered: input.delivered, userTurns: input.userTurns, claimed: true });
+  if (plan.action !== "deliver") return { purpose: input.purpose };
+  return {
+    purpose: plan.item.purpose,
+    correctedFrom: typeof input.purpose === "string" ? input.purpose.slice(0, 32) : "invalid",
+  };
 }
 
 /**

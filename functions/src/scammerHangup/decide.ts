@@ -53,6 +53,13 @@ export type ScammerHangupInput = {
    */
   transferReachable: boolean;
   /**
+   * ⭐ §108(2026-10-22 사용자 결정 원문 *"이체할 거 다 하고, 했는데, 할 게 없어도 전화를 안 끊는 모습이 보여"* → 메인 세션 A안 · DECISIONS #223 ·
+   * OQ-A117 · OQ-A154 해소) — 참가자가 사기범이 노린 **화면 행동을 이미 마쳤는가**(서버 기록만 — `goalAction.ts` `hasCompletedGoalAction`).
+   * 참이면 4행(호 전환 전 금지)이 비켜선다 — 이체를 끝낸 참가자에게 확인 무력화를 보여 줄 수 없고, 막으면 통화가 끝나지 않는다.
+   * 그 아래 하한(5 · 6 · 7행)은 그대로다. ⭐ 옵셔널이 아니라 필수 키(빠뜨리면 컴파일 오류).
+   */
+  goalActionDone: boolean;
+  /**
    * 사용자 발화 수(이번에 답하려는 발화 포함). 폴백 = 서버 `userTurnsNow` · 실시간 = **클라 주장값**(OQ-A120 —
    * S5b `deliverInCallSms`와 같은 등급 · 같은 판독 규칙 `readScammerHangupRequest`).
    */
@@ -119,7 +126,8 @@ export const SCAMMER_HANGUP_RULES: readonly ScammerHangupRule[] = [
     status: "blocked_transfer",
     hangup: false,
     // T192 C6-R — 전환이 이 경로에서 가능한데 아직 안 됐을 때만 막는다(열릴 길이 0인 칸은 다음 행으로).
-    when: (i) => i.verifyEnabled && !i.transferPlaced && i.transferReachable,
+    // §108 — 참가자가 목표 화면 행동(이체 화면 제출 · 앱 설치 응낙)을 마쳤으면 막지 않는다(DECISIONS #223).
+    when: (i) => i.verifyEnabled && !i.transferPlaced && i.transferReachable && !i.goalActionDone,
   },
   {
     row: "5",

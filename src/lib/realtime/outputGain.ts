@@ -68,21 +68,60 @@ export function isVolumeSettable(media: { volume: number }): boolean {
 // 없다). 그래서 실시간(Gemini · Web Audio) 경로에서만 스피커 모드를 **1.0보다 크게 키우고**, 1.0을 넘는 소리는 아래 리미터 곡선으로
 // 부드럽게 눌러 클리핑을 막는다. `<audio>.volume` · ElevenLabs `volume`은 1.0을 넘길 수 없어 종전 `gainFor` 값 그대로다.
 
-/** 실시간(Web Audio) 스피커 모드 게인 — 통화 모드 0.6 대비 +9.5dB(판단값 · 실기 청취로 조정). 1.0 초과분은 리미터가 맡는다. */
-export const SPEAKER_BOOST_GAIN = 1.8;
+/**
+ * 실시간(Web Audio) 스피커 모드의 **컴프레서 뒤 보정 게인**.
+ * ⭐ §108(2026-10-22 실기 신고 *"스피커가 커지긴 한데 더 키울 수 있나?"*) — §105의 "게인 1.8 → 리미터"는 큰 소리만 눌러 평균 음량(RMS)이
+ * 통화 대비 +9.3dB에 그쳤다. 이제 컴프레서(`SPEAKER_COMPRESSOR`)로 말소리의 큰 부분을 먼저 고르게 누른 뒤 이 값으로 키우고, 마지막
+ * 리미터가 남은 꼭대기만 접는다. **측정값**(§108.1 — 한국어 TTS 음성 · 크롬 OfflineAudioContext · 원본 그대로 / 꼭대기 −1dBFS 정규화 두 입력):
+ * | 보정 | 통화 대비 RMS | 꼭대기 | 0.999 이상 샘플 | 리미터 SNR |
+ * | 현행 1.8(컴프레서 없음) | +9.3dB | −0.1 / −0.0dBFS | 0 | 34.7 / 28.8dB |
+ * | **2.5** | **+14.6 / +13.2dB** | −0.1 / −0.1dBFS | **0** | 31.0 / 29.1dB |
+ * | 3.0 | +15.9 / +14.5dB | +0.3 / +0.4dBFS | 1 / 11 | 22.9 / 21.8dB |
+ * ⇒ 천장(1.0)에 닿는 샘플이 0인 가장 큰 값 = 2.5(현행보다 +4~5dB). 3.0부터 천장에 닿고 왜곡 지표가 나빠진다.
+ */
+export const SPEAKER_BOOST_GAIN = 2.5;
 
-/** 리미터 곡선이 다루는 입력 진폭 상한(이 값까지 부드럽게 접고, 넘으면 1.0에 붙는다). `SPEAKER_BOOST_GAIN` 이상이어야 한다. */
+/** 스피커 모드 컴프레서 설정(위 측정의 조건 그대로 — 바꾸면 다시 잰다). 통화 모드는 `ratio` 1(= 압축 0)로 둔다. */
+export const SPEAKER_COMPRESSOR = { threshold: -24, knee: 6, ratio: 12, attack: 0.003, release: 0.15 } as const;
+
+/** 리미터 곡선이 다루는 입력 진폭 상한(이 값까지 부드럽게 접고, 넘으면 1.0에 붙는다). */
 export const LIMITER_INPUT_RANGE = 2;
 
 /** 이 진폭까지는 곡선이 그대로 통과시킨다(통화 모드 0.6 · 원본 최대 1.0이면 리미터 영향 0). */
 export const LIMITER_KNEE = 0.7;
 
+/** 실시간 출력단의 세 값 — 앞 게인 · 컴프레서 비율 · 컴프레서 뒤 보정 게인. */
+export type LiveOutputStage = { gain: number; compressorRatio: number; makeup: number };
+
 /**
- * Gemini 세션이 받은 `outputVolume`(= `gainFor(route)`)을 Web Audio 게인으로 바꾼다. 스피커 모드 값이면 증폭값, 그 밖은 그대로.
+ * Gemini 세션이 받은 `outputVolume`(= `gainFor(route)`)을 실시간 출력단 값으로 바꾼다. 스피커 모드 값이면 압축 + 보정, 그 밖은
+ * 앞 게인만(비율 1 · 보정 1 = 통화 모드 소리 무변경 — §108.1 실측 에너지 차 0.00dB).
  * (화면은 두 세션 컴포넌트에 같은 `gainFor` 값을 넘긴다 — G455 배선 고정. 증폭은 리미터가 있는 이 경로에서만 한다.)
  */
-export function liveGainFor(outputVolume: number): number {
-  return outputVolume >= SPEAKER_MODE_GAIN ? SPEAKER_BOOST_GAIN : outputVolume;
+export function liveStageFor(outputVolume: number): LiveOutputStage {
+  if (outputVolume >= SPEAKER_MODE_GAIN) {
+    return { gain: SPEAKER_MODE_GAIN, compressorRatio: SPEAKER_COMPRESSOR.ratio, makeup: SPEAKER_BOOST_GAIN };
+  }
+  return { gain: outputVolume, compressorRatio: 1, makeup: 1 };
+}
+
+/**
+ * 출력단 값을 컴프레서 · 보정 게인 노드에 반영한다. `immediate`(연결 직후)면 바로 대입하고, 모드 전환이면 30ms 시정수로 옮겨
+ * 딸깍 소리를 막는다(앞 게인과 같은 시정수).
+ */
+export function applySpeakerDynamics(
+  nodes: { compressor: DynamicsCompressorNode; makeup: GainNode },
+  stage: LiveOutputStage,
+  immediate = false,
+): void {
+  if (immediate) {
+    nodes.compressor.ratio.value = stage.compressorRatio;
+    nodes.makeup.gain.value = stage.makeup;
+    return;
+  }
+  const t = nodes.makeup.context.currentTime;
+  nodes.compressor.ratio.setTargetAtTime(stage.compressorRatio, t, 0.03);
+  nodes.makeup.gain.setTargetAtTime(stage.makeup, t, 0.03);
 }
 
 /** 한 진폭(0 이상)에 대한 리미터 출력 — `knee`까지 선형, 그 위는 1.0에 점근(tanh). 출력은 언제나 1.0 미만. */
