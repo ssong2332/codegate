@@ -209,7 +209,11 @@ test("[G654] 리포트 큰 시계 — 서버 표기 'N초 시점'만 읽는다 �
   assert.match(report, /<BigClock seconds=\{firstDeceivedSeconds\}/);
   assert.ok(report.includes("끝까지 지켰어요"));
   // AC-009 · AC-008 문장은 그대로 있다.
-  assert.ok(report.includes("이번 훈련에서는 속지 않았습니다. 아래는 시도된 수법입니다."));
+  // §104 · UX D-145 — AC-009 상태 줄은 판정표 함수(NS-1~NS-3)가 고른다. NS-1 문면은 종전 그대로다.
+  assert.ok(report.includes("{notDeceivedStatusText(report.tacticsUsed.length, report.userTurnCount)}"));
+  const tacticsCopy = readFileSync("src/lib/report/reportTacticsCopy.ts", "utf8");
+  assert.ok(tacticsCopy.includes("return `${NOT_DECEIVED_HEAD} 아래는 시도된 수법입니다.`;"));
+  assert.ok(tacticsCopy.includes('export const NOT_DECEIVED_HEAD = "이번 훈련에서는 속지 않았습니다.";'));
   assert.ok(report.includes("에 속았습니다. {firstDeceivedMoment.correctAction}"));
 });
 

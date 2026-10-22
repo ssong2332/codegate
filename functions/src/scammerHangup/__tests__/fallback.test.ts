@@ -69,8 +69,10 @@ test("[G554] 폴백 문자 대기 — 선언 0 → 거짓 · 기록 읽기 실�
 
 test("[§79.6 ②] 변형 선택 — 사전 판정 accepted만 SIGNAL · already_accepted 포함 그 밖은 NONE", () => {
   assert.equal(fallbackHangupMode(decideFallbackHangup(FACTS, [], false)), "signal");
+  // §104.9(대안 A) — 폴백은 메신저 단계에서도 같은 판정표로 끝낼 수 있다(하한 · 대기 행은 그대로 막는다).
+  assert.equal(fallbackHangupMode(decideFallbackHangup({ ...FACTS, channel: "messenger" }, [], false)), "signal", "메신저 단계");
+  assert.equal(fallbackHangupMode(decideFallbackHangup({ ...FACTS, channel: "messenger", userTurns: 2 }, [], false)), "none", "메신저 · 하한 미달");
   for (const [label, patch] of [
-    ["메신저", { channel: "messenger" }],
     ["하한 미달", { userTurns: 2 }],
     ["전환 전", { verifyEnabled: true }],
     ["한도", { limitReached: true }],

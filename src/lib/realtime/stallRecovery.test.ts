@@ -11,6 +11,14 @@ import {
   STALL_SILENCE_SEC,
   VERIFY_RECONNECT_FAILED_TEXT,
   VERIFY_RECONNECT_MAX_ATTEMPTS,
+  IDENTITY_ITEM_PATTERNS,
+  IDENTITY_REQUEST_FORM,
+  LIVE_REPEAT_BREAK_TEXT,
+  EXHAUSTED_DECLARATION,
+  REPEAT_MIN_CHARS,
+  REPEAT_SIMILARITY_THRESHOLD,
+  decideLiveRepeatBreak,
+  formatLiveRepeatBreakLog,
   formatStallNudgeLog,
   isStallLine,
   judgeStallLine,
@@ -429,4 +437,135 @@ test("[PR-A2 리뷰 Minor 1] 맥락 주입 슬롯은 실제로 보냈을 때만 
   assert.ok(push.includes("contextTurnSeqRef.current += 1;"));
   assert.equal(/prev\?\.seq \?\? 0\) \+ 1, delivery: "(?:confirmResult|verifyReconnectFailed)"/.test(pageCode), false, "prev 기반 seq가 남았다(비운 뒤 1로 되돌아간다)");
   assert.equal((pageCode.match(/setContextTurn\(/g) ?? []).length, 2, "슬롯 쓰기는 pushContextTurn · 전달 확인 두 곳뿐");
+});
+
+// ── §104 — 반복 · 대기 정체 차단(전수 검수 2차 F4 · F11 · DECISIONS #219) ─────────────────────────────────
+/** 대본을 한 턴씩 진행하며, 각 사기범 턴이 끝난 경계에서 주입 종류를 기록한다(참가자는 매 턴 말했다고 본다). */
+function repeatBreakMarks(turns: readonly string[]): (string | null)[] {
+  return turns.map((turn, i) =>
+    decideLiveRepeatBreak({ previousScammerTurn: turns[i - 1], scammerTurn: turn, latched: false, participantHasSpoken: true }),
+  );
+}
+
+// F11(실 키 Live · 따름형) — 요구를 다 쓴 뒤 참가자 발화 사이사이 대기 말 6턴.
+const F11_WAIT_SCRIPT = [
+  "확인됐습니다. 안전계좌로 이관 처리가 끝났습니다.",
+  "대기해 주십시오.",
+  "잠시만요, 대기해 주십시오.",
+  "추가 안내가 있을 때까지 계속 대기해 주십시오.",
+  "잠시만 기다려 주세요.",
+  "대기해 주십시오.",
+  "잠시만요.",
+];
+// F4(실 키 Live · 거절형) — 성함·생년월일 요구 3연속.
+const F4_IDENTITY_SCRIPT = [
+  "금융감독원입니다. 고객님 명의 계좌가 범죄에 연루돼 연락드렸습니다.",
+  "본인 확인이 먼저입니다. 성함과 생년월일 불러주십시오.",
+  "절차상 필요합니다. 성함과 생년월일 말씀해 주시겠습니까?",
+  "공범으로 분류될 수 있습니다. 성함과 생년월일 불러주셔야 합니다.",
+];
+
+test("[§104 F11 대본] 대기 말이 두 턴 이어지면 그 경계에서 주입 — 이전(주입 0) 6연속 → 이후 주입 없이 허용되는 대기 말 최대 2턴", () => {
+  const marks = repeatBreakMarks(F11_WAIT_SCRIPT);
+  assert.deepEqual(marks, [null, null, "stall", "stall", "stall", "stall", "stall"]);
+  const firstInjection = marks.indexOf("stall");
+  assert.equal(firstInjection, 2, "둘째 대기 말이 끝난 경계 = 셋째 대기 말 전에 주입");
+  // "대기해 주십시오"는 2절 넛지 판정(`isStallLine`)에서는 대기가 아니다 — 이 절이 따로 잡는다(2절 표 무변경).
+  assert.equal(isStallLine("대기해 주십시오."), false);
+  assert.ok(LIVE_REPEAT_BREAK_TEXT.stall.includes("새 요구를 꺼내라"));
+});
+
+test("[§104 F4 대본] 같은 인적사항 요구가 두 턴 이어지면 주입 · 순순히 따르는 흐름은 0", () => {
+  assert.deepEqual(repeatBreakMarks(F4_IDENTITY_SCRIPT), [null, null, "identity", "identity"]);
+  const comply = [
+    "본인 확인부터 하겠습니다. 성함과 생년월일 불러주십시오.",
+    "홍길동님 맞으시죠? 주민번호 뒤 7자리도 불러주셔야 조회가 됩니다.",
+    "확인됐습니다. 최근에 통장 개설하신 적 있으세요?",
+    "그 계좌가 범죄에 쓰였습니다. 문자로 보낸 안전계좌로 잔액을 옮기셔야 합니다.",
+  ];
+  assert.deepEqual(repeatBreakMarks(comply), [null, null, null, null]);
+  assert.equal(
+    decideLiveRepeatBreak({ previousScammerTurn: "네, 알겠습니다. 직접 확인해 보시지요.", scammerTurn: "네, 알겠습니다. 직접 확인해 보시지요.", latched: false, participantHasSpoken: true }),
+    "similar",
+  );
+});
+
+test("[§104 판정표 1~3행] 래치 · 오프닝 구간 · 직전 턴 없음 = 주입 0", () => {
+  const base = { previousScammerTurn: "대기해 주십시오.", scammerTurn: "대기해 주십시오." };
+  assert.equal(decideLiveRepeatBreak({ ...base, latched: true, participantHasSpoken: true }), null);
+  assert.equal(decideLiveRepeatBreak({ ...base, latched: false, participantHasSpoken: false }), null);
+  assert.equal(decideLiveRepeatBreak({ previousScammerTurn: undefined, scammerTurn: "대기해 주십시오.", latched: false, participantHasSpoken: true }), null);
+  assert.equal(decideLiveRepeatBreak({ ...base, latched: false, participantHasSpoken: true }), "stall");
+});
+
+test("[§104 문면] 주입 3종 — 괄호 한 덩어리 · 숫자 · 횟수 표현 · 따옴표 · 끊기 어휘 0", () => {
+  for (const text of Object.values(LIVE_REPEAT_BREAK_TEXT)) {
+    assert.ok(text.startsWith("(") && text.endsWith(")"), text);
+    assert.equal(/[0-9０-９]/.test(text), false, `숫자: ${text}`);
+    assert.equal(/한\s*번|두\s*번|세\s*번|몇|횟수|번째|[일이삼사오]\s*회/.test(text), false, `횟수 표현: ${text}`);
+    assert.equal(/["“”'‘’]/.test(text), false, `따옴표 대사: ${text}`);
+    // §104 — 끊을지는 [진행 강제] 끊기 항목에 맡기는 위임 구절만 허용한다(직접 끊으라는 말 · 작별 어휘 0).
+    const withoutDelegate = text.replace("[진행 강제]의 통화 끝내기 항목이 정한 대로 하라", "");
+    assert.equal(/끊|마무리|종료|통화를\s*(?:마|끝)|끝내/.test(withoutDelegate), false, `끊기 어휘: ${text}`);
+  }
+  assert.equal(formatLiveRepeatBreakLog("identity"), 'cause:"repeat" kind:"identity"');
+});
+
+test("[§104 짝] 클라 판정표 5 · 6행 = 서버 `repeatBreak.ts` 2 · 3행(정규식 · 임계값 · 지시 문면 글자 단위)", () => {
+  const server = readFileSync("functions/src/roleplay/repeatBreak.ts", "utf8");
+  assert.ok(server.includes(`export const REPEAT_SIMILARITY_THRESHOLD = ${REPEAT_SIMILARITY_THRESHOLD};`));
+  assert.ok(server.includes(`export const REPEAT_MIN_CHARS = ${REPEAT_MIN_CHARS};`));
+  assert.ok(server.includes(`export const IDENTITY_REQUEST_FORM = ${IDENTITY_REQUEST_FORM.toString()};`));
+  for (const [key, re] of Object.entries(IDENTITY_ITEM_PATTERNS)) {
+    assert.ok(server.includes(`${key}: ${re.toString()},`), `항목 ${key}`);
+  }
+  assert.ok(server.includes(JSON.stringify(LIVE_REPEAT_BREAK_TEXT.identity)), "identity 문면");
+  assert.ok(server.includes(JSON.stringify(LIVE_REPEAT_BREAK_TEXT.similar)), "similar 문면");
+});
+
+test("[§104 배선] 사기범 턴 경계(빈 마감 제외)마다 판정 → 맥락 주입(`repeatBreak`) · 침묵 넛지 대상 아님", () => {
+  const src = codeOnly(readFileSync("src/lib/realtime/GeminiVoiceSession.tsx", "utf8"));
+  const iStall = src.indexOf("if (!emptyTurn) noteScammerTurnForStallNudge(scammerTurnText);");
+  const iRepeat = src.indexOf("if (!emptyTurn) noteScammerTurnForRepeatBreak(scammerTurnText, participantTurnText);");
+  assert.ok(iStall > 0 && iRepeat > iStall, "같은 경계 · 넛지 판정 뒤");
+  assert.ok(src.includes('if (kind && injectContext(LIVE_REPEAT_BREAK_TEXT[kind], "repeatBreak")) {'));
+  assert.ok(src.includes("latched: handlersRef.current.isHangupLatched(),"));
+  assert.equal(sendsAsContextInjection("repeatBreak"), true, "turnComplete:false(응답 유발 0)");
+  const step = stepSilenceNudge(INITIAL_SILENCE_NUDGE_STATE, { type: "injected", delivery: "repeatBreak", nowMs: 1000 });
+  assert.equal(step.state.armedAt, null, "반복 차단 주입은 침묵 넛지를 걸지 않는다");
+});
+
+test("[§104 프로브 미러] `scripts/full-audit-probe.mjs`의 Live 주입 미러 = 클라 §4(대기 어휘 · 대기 요청 · stall 문면 글자 단위)", () => {
+  const probe = readFileSync("scripts/full-audit-probe.mjs", "utf8").replace(/\r\n/g, "\n");
+  const client = readFileSync("src/lib/realtime/stallRecovery.ts", "utf8").replace(/\r\n/g, "\n");
+  const stallVocab = client.match(/const STALL_VOCABULARY =\n {2}(\/.+\/);/)?.[1];
+  const waitLine = client.match(/const WAIT_REQUEST_LINE = (\/.+\/);/)?.[1];
+  assert.ok(stallVocab && waitLine, "클라 정규식 리터럴을 찾지 못했다");
+  assert.ok(probe.includes(`const PROBE_STALL_VOCABULARY =\n  ${stallVocab};`), "대기 어휘");
+  assert.ok(probe.includes(`const PROBE_WAIT_REQUEST_LINE = ${waitLine};`), "대기 요청");
+  assert.ok(probe.includes(JSON.stringify(LIVE_REPEAT_BREAK_TEXT.stall)), "stall 문면");
+});
+
+test("[§104 자금 소진 · 대본] 이 턴이 답한 참가자 발화가 '돈 없어'면 직전 턴과 무관하게 exhausted · 끊기 항목 위임 · 서버와 같은 정규식 · 문면", () => {
+  const base = { previousScammerTurn: undefined, scammerTurn: "남은 적금과 대출 가능액도 같은 흐름에 걸려 있습니다.", latched: false, participantHasSpoken: true };
+  assert.equal(decideLiveRepeatBreak({ ...base, lastParticipantText: "15만 원까지 했어. 이제 탈탈 털렸어. 나도 이제 없어. 돈 없어." }), "exhausted");
+  assert.equal(decideLiveRepeatBreak({ ...base, lastParticipantText: "네, 보냈어요." }), null);
+  assert.equal(decideLiveRepeatBreak({ ...base, latched: true, lastParticipantText: "돈 없어요" }), null, "래치 뒤 0");
+  assert.ok(LIVE_REPEAT_BREAK_TEXT.exhausted.includes("[진행 강제]의 통화 끝내기 항목이 정한 대로 하라"));
+  assert.ok(LIVE_REPEAT_BREAK_TEXT.stall.includes("[진행 강제]의 통화 끝내기 항목이 정한 대로 하라"));
+  const server = readFileSync("functions/src/roleplay/repeatBreak.ts", "utf8");
+  assert.ok(server.includes(`export const EXHAUSTED_DECLARATION =\n  ${EXHAUSTED_DECLARATION.toString()};`.replace(/\n/, server.includes("\r\n") ? "\r\n" : "\n")), "정규식 짝");
+  assert.ok(server.includes(JSON.stringify(LIVE_REPEAT_BREAK_TEXT.exhausted)), "exhausted 문면 짝");
+});
+
+test("[§104 실측 ①] Live — 인적사항 항목은 요구 형태가 있는 같은 문장에서만(감사 인사 속 낱말 오탐 0)", () => {
+  assert.equal(
+    decideLiveRepeatBreak({
+      previousScammerTurn: "정확한 한도 조회를 위해 생년월일 여섯 자리도 말씀해 주시겠어요?",
+      scammerTurn: "네, 생년월일 확인 감사합니다. 혹시 현재 이용 중이신 기존 대출이 몇 건이나 되시는지 확인 부탁드립니다.",
+      latched: false,
+      participantHasSpoken: true,
+    }),
+    null,
+  );
 });

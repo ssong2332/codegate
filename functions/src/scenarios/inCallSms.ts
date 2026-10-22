@@ -56,11 +56,29 @@ export type InCallSmsItem = {
   announceInstruction: string;
 };
 
+// ⭐ §104.10(2026-10-22 사용자 결정 "지금 전체 변경" — DECISIONS #219 · UX W-11 갱신) — 발신번호 자리표시 "0000-0000"을 시나리오별 **고정**
+// 가상 번호로 바꿨다(무작위 0 · 같은 시나리오의 문자는 같은 발신번호). 규칙 = **지역번호 · 070 뒤 국번 첫 자리가 0**: 국내 시내전화 국번은 2~9로
+// 시작하고 0 · 1로 시작하는 번호는 국번이 아니라 식별 · 특수번호로 쓰인다(⚠️ **추정** — 2차 자료(위키백과 "대한민국의 전화번호 체계")만 확인,
+// 전기통신번호관리세칙 원문 미확인. 확인 방법: 국가법령정보센터 세칙 별표 번호체계). 대표번호(15XX · 16XX · 18XX)는 실존과 겹칠 위험이 커 쓰지 않는다.
+// 기관 · 수사 = 서울 02 · 국세 = 세종 044 · 통관 = 인천 032 · 협박범 = 인터넷전화 070. 테스트 `smsSenderNumber.test.ts`가 국번 첫 자리 0을 고정한다.
+export const SMS_SENDER_NUMBER: Readonly<Record<string, string>> = {
+  "loan-refinance-scam": "02-0785-6043",
+  "card-delivery-call": "02-0768-1954",
+  "asset-protection-notice-call": "02-0748-2915",
+  "prosecution-cooperation-call": "02-0714-3826",
+  "institutional-impersonation": "02-0731-5402",
+  "card-company-impersonation": "02-0762-4180",
+  "tax-refund-scam": "044-0821-6390",
+  "reputation-blackmail-scam": "070-0438-9172",
+  "bank-security-verify-scam": "02-0753-8264",
+  "courier-customs-scam": "032-0617-4429",
+};
+
 const LOAN_SCAM: InCallSmsItem[] = [
   {
     smsId: "loan-account",
     kind: "account",
-    senderLabel: "0000-0000 (○○캐피탈 상담센터)",
+    senderLabel: `${SMS_SENDER_NUMBER["loan-refinance-scam"]} (○○캐피탈 상담센터)`,
     // A-1 ③(2026-10-19 · audit-A R1 ②) — 마지막 줄 "입금 확인 즉시 전환 승인 처리됩니다. (오늘 18시 마감)"이 "입금 확인을
     // 기다리는" 구도를 깔아 사기범이 "확인 중·기다려 주세요"로 버티는 재료가 됐다 → 마감만 남긴 요구 문장으로 바꿨다(계좌·금액 무변경).
     body: "[○○캐피탈] 저금리 전환 상환 전용 계좌 안내\n예금주: ○○캐피탈\nOO은행 352-0812-4471-63\n금액: 1,850,000원\n오늘 18시까지 입금해 주세요.",
@@ -71,7 +89,7 @@ const LOAN_SCAM: InCallSmsItem[] = [
   {
     smsId: "loan-apply-link",
     kind: "link",
-    senderLabel: "0000-0000 (○○캐피탈 상담센터)",
+    senderLabel: `${SMS_SENDER_NUMBER["loan-refinance-scam"]} (○○캐피탈 상담센터)`,
     body: "[○○캐피탈] 전환 신청서 서명이 남아 있습니다.\n아래에서 본인확인 후 신청을 완료해 주세요.",
     linkDisplayText: "대환대출 전환 신청하기",
     fakeLandingId: "loan-refinance-apply",
@@ -86,7 +104,7 @@ const LOAN_SCAM: InCallSmsItem[] = [
   {
     smsId: "loan-check-app-link",
     kind: "link",
-    senderLabel: "0000-0000 (○○캐피탈 상담센터)",
+    senderLabel: `${SMS_SENDER_NUMBER["loan-refinance-scam"]} (○○캐피탈 상담센터)`,
     body: "[○○캐피탈] 저금리 전환 심사 전 보안 점검 안내\n아래에서 심사용 보안 점검 앱을 설치해 주세요.",
     linkDisplayText: "심사용 보안 점검 앱 설치하기",
     fakeLandingId: "loan-check-app-install",
@@ -104,7 +122,7 @@ const CARD_DELIVERY_CALL: InCallSmsItem[] = [
   {
     smsId: "card-delivery-app-link",
     kind: "link",
-    senderLabel: "0000-0000 (카드 사고접수 안내)",
+    senderLabel: `${SMS_SENDER_NUMBER["card-delivery-call"]} (카드 사고접수 안내)`,
     body: "[명의도용 사고접수] 휴대폰 보안 점검이 필요합니다.\n아래에서 보안 점검 앱을 설치해 주세요.",
     linkDisplayText: "보안 점검 앱 설치하기",
     fakeLandingId: "card-delivery-app-install",
@@ -122,7 +140,7 @@ const ASSET_PROTECTION_NOTICE_CALL: InCallSmsItem[] = [
   {
     smsId: "asset-custody-link",
     kind: "link",
-    senderLabel: "0000-0000 (자산보호 접수 안내)",
+    senderLabel: `${SMS_SENDER_NUMBER["asset-protection-notice-call"]} (자산보호 접수 안내)`,
     body: "[자산보호] 보관 조치 접수 안내\n수사 종료 시까지 자산 보관 신청이 필요합니다.\n아래에서 보관 신청서를 작성해 주세요.",
     linkDisplayText: "자산 보관 신청서 작성하기",
     fakeLandingId: "asset-custody-apply",
@@ -137,7 +155,7 @@ const PROSECUTION_COOPERATION_CALL: InCallSmsItem[] = [
   {
     smsId: "prosecution-case-link",
     kind: "link",
-    senderLabel: "0000-0000 (사건조회 안내)",
+    senderLabel: `${SMS_SENDER_NUMBER["prosecution-cooperation-call"]} (사건조회 안내)`,
     body: "[사건조회] 본인 관련 사건이 접수되어 있습니다.\n아래에서 본인 확인 후 사건 기록을 열람해 주세요.\n열람 내용은 외부에 알리지 마십시오.",
     linkDisplayText: "사건 기록 열람하기",
     fakeLandingId: "case-record-view",
@@ -152,7 +170,7 @@ const PROSECUTION_COOPERATION_CALL: InCallSmsItem[] = [
   {
     smsId: "prosecution-wallet-link",
     kind: "account",
-    senderLabel: "0000-0000 (자산검수 안내)",
+    senderLabel: `${SMS_SENDER_NUMBER["prosecution-cooperation-call"]} (자산검수 안내)`,
     body: "[자산검수] 검수 전용 보관 지갑 안내\n보관 지갑 번호: KW-7Q2X-4471\n검수가 끝나면 전액 반환됩니다.\n아래에서 보관 지갑 전송을 진행해 주세요.\n외부에 알리지 마십시오.",
     linkDisplayText: "보관 지갑 전송 진행하기",
     fakeLandingId: "asset-check-wallet",
@@ -167,7 +185,7 @@ const PROSECUTION_COOPERATION_CALL: InCallSmsItem[] = [
   {
     smsId: "prosecution-asset-site-link",
     kind: "account",
-    senderLabel: "0000-0000 (자산검수 안내)",
+    senderLabel: `${SMS_SENDER_NUMBER["prosecution-cooperation-call"]} (자산검수 안내)`,
     body: "[자산검수] 사건 관련 자산 검수 안내\n검수 대상 자산은 안전 자산으로 전환해 보관하셔야 합니다.\n아래 사이트에서 본인 확인 후 화면 안내대로 진행해 주세요.\n검수가 끝나면 전액 반환됩니다.\n외부에 알리지 마십시오.",
     linkDisplayText: "자산 검수 진행하기",
     fakeLandingId: "asset-check-site",
@@ -182,7 +200,7 @@ const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [
   {
     smsId: "institution-otp",
     kind: "otp",
-    senderLabel: "0000-0000 (본인확인 안내)",
+    senderLabel: `${SMS_SENDER_NUMBER["institutional-impersonation"]} (본인확인 안내)`,
     body: "[본인확인] 인증번호 [048231]\n타인에게 절대 알려주지 마세요. 유출 시 금전 피해가 발생할 수 있습니다.",
     otpCode: "048231",
     afterScammerTurns: 3,
@@ -192,7 +210,7 @@ const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [
   {
     smsId: "institution-safe-account",
     kind: "account",
-    senderLabel: "0000-0000 (자산보호 안내)",
+    senderLabel: `${SMS_SENDER_NUMBER["institutional-impersonation"]} (자산보호 안내)`,
     // §51(사용자 라이브 신고 — §45 ⓐ 미집행) — 기존 4줄은 한 글자도 지우지 않고 예고 1줄을
     // 더했다(D-59 관례). 새 4번째 줄이 아래 `fakeLandingId`가 여는 이체 랜딩(UX-023
     // safe-account-transfer)을 예고한다.
@@ -212,7 +230,7 @@ const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
   {
     smsId: "card-otp",
     kind: "otp",
-    senderLabel: "0000-0000 (카드 승인취소 인증)",
+    senderLabel: `${SMS_SENDER_NUMBER["card-company-impersonation"]} (카드 승인취소 인증)`,
     body: "[승인취소] 인증번호 [739104]\n본인 외 타인에게 알려주지 마세요. 상담원도 요구하지 않습니다.",
     otpCode: "739104",
     afterScammerTurns: 3,
@@ -226,7 +244,7 @@ const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
   {
     smsId: "card-relief-account",
     kind: "account",
-    senderLabel: "0000-0000 (피해금 이관 안내)",
+    senderLabel: `${SMS_SENDER_NUMBER["card-company-impersonation"]} (피해금 이관 안내)`,
     body: "[승인취소 지원] 피해금 이관 전용 계좌 안내\n예금주: 카드피해대응지원센터\nOO은행 417-0625-3082-19\n금액: 2,340,000원\n아래에서 피해금 이관을 진행해 주세요.",
     linkDisplayText: "피해금 이관 진행하기",
     fakeLandingId: "card-relief-transfer",
@@ -240,7 +258,7 @@ const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
   {
     smsId: "card-guard-app-link",
     kind: "link",
-    senderLabel: "0000-0000 (카드 명의보호 안내)",
+    senderLabel: `${SMS_SENDER_NUMBER["card-company-impersonation"]} (카드 명의보호 안내)`,
     body: "[명의도용 피해예방] 다른 결제로 번지지 않게 보호 조치가 필요합니다.\n아래에서 피해 차단용 보안 앱을 설치해 주세요.",
     linkDisplayText: "피해 차단용 보안 앱 설치하기",
     fakeLandingId: "card-guard-app-install",
@@ -255,7 +273,7 @@ const TAX_REFUND_SCAM: InCallSmsItem[] = [
   {
     smsId: "tax-refund-link",
     kind: "link",
-    senderLabel: "0000-0000 (환급금 안내)",
+    senderLabel: `${SMS_SENDER_NUMBER["tax-refund-scam"]} (환급금 안내)`,
     body: "[환급안내] 미수령 환급금 조회 결과가 있습니다.\n아래에서 계좌를 등록하시면 당일 지급됩니다.",
     linkDisplayText: "환급금 수령 계좌 등록하기",
     fakeLandingId: "tax-refund-claim",
@@ -277,7 +295,7 @@ const REPUTATION_BLACKMAIL_SCAM: InCallSmsItem[] = [
   {
     smsId: "blackmail-hush-account",
     kind: "account",
-    senderLabel: "0000-0000",
+    senderLabel: `${SMS_SENDER_NUMBER["reputation-blackmail-scam"]}`,
     body: "예금주: 김민재\nOO은행 352-0812-4471-63\n금액: 3,000,000원\n오늘 안에 입금 확인되면 정리됩니다.",
     // afterScammerTurns=3 — 이 시나리오는 "5~8턴 내외"로 마무리되도록 지시받아(prompt.ts 진행
     // 방식) 기존 최빈값 3과 맞춘다(`:49`·`:73`·`:95`·`:109` 참고).
@@ -298,7 +316,7 @@ const BANK_SECURITY_VERIFY_SCAM: InCallSmsItem[] = [
   {
     smsId: "bank-protect-account",
     kind: "account",
-    senderLabel: "0000-0000 (계좌보호 안내)",
+    senderLabel: `${SMS_SENDER_NUMBER["bank-security-verify-scam"]} (계좌보호 안내)`,
     body: "[금융사고대응] 보호계좌 이체 안내\n예금주: 계좌보호대응센터\nOO은행 100-2043-7788-21\n금액: 4,120,000원\n아래에서 보호계좌로 옮기기를 진행해 주세요.",
     linkDisplayText: "보호계좌 이체 진행하기",
     fakeLandingId: "protect-account-transfer",
@@ -313,7 +331,7 @@ const COURIER_CUSTOMS_SCAM: InCallSmsItem[] = [
   {
     smsId: "courier-customs-link",
     kind: "link",
-    senderLabel: "0000-0000 (통관 안내)",
+    senderLabel: `${SMS_SENDER_NUMBER["courier-customs-scam"]} (통관 안내)`,
     body: "[통관보류] 수취인 정보 불일치로 통관이 보류되었습니다.\n아래에서 정보를 확인해 주세요.",
     linkDisplayText: "통관 정보 확인하기",
     fakeLandingId: "courier-customs-check",
@@ -325,7 +343,7 @@ const COURIER_CUSTOMS_SCAM: InCallSmsItem[] = [
   {
     smsId: "courier-customs-fee",
     kind: "account",
-    senderLabel: "0000-0000 (통관 안내)",
+    senderLabel: `${SMS_SENDER_NUMBER["courier-customs-scam"]} (통관 안내)`,
     body: "[통관수수료] 납부 계좌 안내\n예금주: 국제통관지원센터\nOO은행 604-2270-1183-91\n금액: 78,000원",
     afterScammerTurns: 5,
     announceInstruction:

@@ -358,6 +358,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     ...(personaBlock ? { personaBlock } : {}),
     // 사용자 결정 2026-10-21 ② — 위험 신호(표시 전용 · 판정 무관). 0건이면 필드를 만들지 않는다(무백필).
     ...(analysis.riskSignals.length > 0 ? { riskSignals: analysis.riskSignals } : {}),
+    // §104(UX D-145) — 참가자 발화 수(표시 전용 · 판정 무관). 위 ① 스냅샷에서 센다(추가 read 0).
+    userTurnCount: messages.filter((message) => message.role === "user").length,
   };
   await reportRef.set(reportDoc);
 

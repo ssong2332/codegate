@@ -33,6 +33,8 @@ const PASSING: ScammerHangupInput = {
   limitReached: false,
   alreadyAccepted: false,
   relay: undefined,
+  // §104.9 — 기준 입력은 실시간 콜러블과 같은 쪽(메신저 단계 경로 아님 · 2행이 메신저를 막는다).
+  messengerStageAllowed: false,
 };
 
 /** 표의 정본 사본 — 행 번호 · status · 끊기 여부 · **순서**(§79.19 (3) — 8행이 2-b 바로 뒤). */
@@ -170,7 +172,7 @@ test("[G526 ⓒ 역검증] not_last_leg 입력에서 legIndex만 마지막으로
  */
 function nineRowStatusNewOrder(i: ScammerHangupInput): ScammerHangupStatus {
   if (i.status !== "active") return "not_active";
-  if (i.channel === "messenger") return "wrong_channel";
+  if (i.channel === "messenger" && i.messengerStageAllowed !== true) return "wrong_channel";
   if (i.alreadyAccepted) return "already_accepted";
   if (i.isMockTurn) return "mock_turn";
   if (i.verifyEnabled && !i.transferPlaced && i.transferReachable) return "blocked_transfer";
@@ -368,8 +370,9 @@ test("[G552 ⓓ 역검증] 옛 식별자를 끼운 요청 타입 사본은 같�
 // ── T192 C6 · G600(Architecture.md §79.20 (11)) — 판정 입력 키 집합 정확 일치(C6-R 뒤 = 12키) ─────────────────────────
 // AC-103 (a) "시간 · 소강으로 끊지 않는다" · §79.20 (0) 6 "목적 달성 사실은 판정 입력 아님"을 기계로 고정한다 —
 // 사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 키가 들어오면 빨개진다. C6-R이 `transferReachable`(서버 값) 1키를 더했다.
+// §104.9 — 메신저 단계 경로 표시(`messengerStageAllowed` · 폴백만 참)가 13번째 키다(사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과는 여전히 0).
 const G600_KEYS = [
-  "alreadyAccepted", "channel", "isMockTurn", "limitReached", "pendingInstruction", "relay",
+  "alreadyAccepted", "channel", "isMockTurn", "limitReached", "messengerStageAllowed", "pendingInstruction", "relay",
   "smsAwaitingUser", "status", "transferPlaced", "transferReachable", "userTurns", "verifyEnabled",
 ];
 
@@ -381,7 +384,7 @@ function inputTypeKeys(src: string): string[] {
   return [...body.matchAll(/^\s*(\w+)\??:/gm)].map((m) => m[1]!).sort();
 }
 
-test("[G600] ScammerHangupInput 키 집합 = 정확히 12키(사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 0)", () => {
+test("[G600] ScammerHangupInput 키 집합 = 정확히 13키(§104.9 +1 · 사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 0)", () => {
   const src = readFileSync(path.join(SRC_DIR, "decide.ts"), "utf8").replace(/\r\n/g, "\n");
   assert.deepEqual(inputTypeKeys(src), G600_KEYS);
   assert.deepEqual(Object.keys(PASSING).sort(), G600_KEYS, "기준 입력과 타입 키가 갈렸다");

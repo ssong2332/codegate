@@ -52,6 +52,44 @@ const { decideFallbackHangup, fallbackHangupMode, resolveFallbackHangupEffect } 
 const { decideScammerHangup } = L("scammerHangup/decide.js");
 const { scammerHangupGuidance } = L("scammerHangup/guidance.js");
 const { isSmsAwaitingUser } = L("scammerHangup/smsWait.js");
+// §104(2026-10-22) — 새 서버 판정(반복 차단 · 신호↔대사). 옛 lib(수정 전 기준 측정)에는 없으므로 없으면 종전 동작(null).
+const optionalLib = (p) => { try { return L(p); } catch { return null; } };
+const repeatBreakLib = optionalLib("roleplay/repeatBreak.js");
+const signalConsistencyLib = optionalLib("roleplay/signalConsistency.js");
+
+// §104 — Live 클라 반복 · 대기 정체 주입(`src/lib/realtime/stallRecovery.ts` §4)의 미러. 클라 모듈은 TS라 여기서 못 불러 판정표를 옮겼다 —
+// 5 · 6행(인적사항 · 유사도)은 서버 lib `decideRepeatBreak`(클라와 같은 정규식 — 루트 `[§104 짝]` 테스트)를 쓰고, 4행(대기 말)만 옮긴다.
+// ⚠️ 문면 · 정규식이 클라와 다르면 루트 테스트 `[§104 프로브 미러]`가 실패한다. 서버 lib에 `repeatBreak`가 없으면(수정 전 lib) 주입 0.
+const PROBE_STALL_VOCABULARY =
+  /확인\s*(?:하는\s*)?중|확인하고\s*있|확인\s*절차|처리\s*(?:하는\s*)?중|처리하고\s*있|조회\s*중|확인되는\s*대로|처리되는\s*대로|확인되면|기다려|기다리|대기\s*중|지연|잠시만/;
+const PROBE_WAIT_REQUEST_LINE = /대기(?:해|하여|하고)\s*(?:주|계|있어|있으)|대기\s*부탁/;
+const PROBE_LIVE_STALL_TEXT =
+  "(너는 직전 대답과 그 앞 대답에서 대기하라거나 확인 중이라는 말을 했다. 이번 대답에서는 대기하라거나 확인 중이라는 말을 하지 말고, 지금까지 받은 것을 근거로 새 요구를 꺼내라 — 남은 돈이나 다른 계좌의 돈, 추가 정보, 주변 사람이나 은행에 알리지 말라는 구체적인 지시 중 하나로 상황을 앞으로 움직여라. 더 요구할 것이 정말 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
+function probeIsStallLine(text) {
+  const t = text.trim();
+  if (!t || t.endsWith("?")) return false;
+  const sentences = (t.match(/[^.?!\n]+[.?!]?/g) ?? []).map((x) => x.trim()).filter(Boolean);
+  let last = sentences[sentences.length - 1] ?? "";
+  for (let i = sentences.length - 1; i >= 0; i -= 1) if (/\s/.test(sentences[i])) { last = sentences[i]; break; }
+  if (last.endsWith("?")) return false;
+  for (const m of last.matchAll(/(\S+?)\s*주(?:세요|십시오|시면|시겠어요|시겠습니까|실래요)/g)) if (!/^(?:기다려|기다리|대기해|대기하)/.test(m[1])) return false;
+  const result = /(?:승인|완료|처리|확인|등록|접수)(?:\s*[이가])?\s*(?:(?:안|못)\s*)?(?:됐|되었|되셨|되지)/.test(last);
+  const negated = /(?:승인|완료|처리|확인|등록|접수)(?:\s*[이가])?\s*(?:안|못)\s*(?:됐|되었|되셨)|(?:승인|완료|처리|확인|등록|접수)되지\s*(?:않|못)/.test(last);
+  if (result && !negated) return false;
+  return PROBE_STALL_VOCABULARY.test(t);
+}
+// §104 — 클라 `scammerClaimsSmsSent`(`src/lib/realtime/toolWindow.ts` SMS_SENT_CLAIM)의 미러.
+const PROBE_SMS_SENT_CLAIM =
+  /문자(?:로)?\s*(?:를\s*)?(?:보내\s*드렸|보내드렸|보냈|보내\s*드린|보내드린|보낸|발송(?:해\s*드렸|했|됐|한|된))|(?:보내\s*드린|보내드린|보낸|발송한|발송된)\s*(?:문자|링크|안내|주소)/;
+const probeIsWaitTurn = (t) => probeIsStallLine(t) || PROBE_WAIT_REQUEST_LINE.test(t);
+function probeLiveRepeatBreak(prev, cur, participantHasSpoken, lastParticipantText) {
+  if (!repeatBreakLib || !participantHasSpoken) return null;
+  if (lastParticipantText !== undefined && repeatBreakLib.EXHAUSTED_DECLARATION?.test(lastParticipantText)) return { kind: "exhausted", text: repeatBreakLib.REPEAT_BREAK_EXHAUSTED_INSTRUCTION };
+  if (!prev || !prev.trim()) return null;
+  if (probeIsWaitTurn(prev) && probeIsWaitTurn(cur)) return { kind: "stall", text: PROBE_LIVE_STALL_TEXT };
+  const kind = repeatBreakLib.decideRepeatBreak([prev, cur]);
+  return kind ? { kind, text: repeatBreakLib.repeatBreakInstruction(kind) } : null;
+}
 
 const LIVE_OPENING_TRIGGER =
   "(전화가 방금 연결됐다. 지금 막 전화를 받은 상대에게 캐릭터로서 자연스럽게 첫 마디를 건네라. 다짜고짜 요구나 압박부터 하지 말고, 먼저 신분(사칭 기관·관계)과 전화를 건 이유를 1~2문장으로 밝히며 상황을 설명한 뒤에 이어가라.)";
@@ -284,12 +322,21 @@ async function runVoice(scenarioId, level, persona, tag) {
     }
     await sleep(700);
     const lastScammer = [...turns].reverse().find((t) => t.role === "scammer")?.text ?? "";
+    // §104 — 앱 클라처럼 직전 두 사기범 턴으로 반복 · 대기 정체를 판정해 맥락 주입(다음 응답에 실린다).
+    const scammerTexts = turns.filter((t) => t.role === "scammer" && t.kind !== "interrupted").map((t) => t.text);
+    const lastUserText = [...turns].reverse().find((t) => t.role === "user")?.text;
+    const rb = probeLiveRepeatBreak(scammerTexts[scammerTexts.length - 2], scammerTexts[scammerTexts.length - 1] ?? "", userTurns > 0, lastUserText);
+    if (rb) { sendText(rb.text, false, "repeat_ctx"); events.push({ t: now(), ev: "repeatBreak", kind: rb.kind, scammerTurns, userTurns }); }
     const u = respond(lastScammer, i);
     userTurns += 1;
     sendText(u, true, "user");
     await waitTurn(45000);
     if (declared.length > 0 && !closed) {
-      const p = planSmsBackstop({ declared, delivered, userTurns });
+      // §104 — 앱 화면처럼 마지막 문자 도착 뒤 사기범이 "문자 보냈다"고 말했으면 백스톱에 주장을 싣는다(새 lib에서만 효과 — 옛 lib는 인자를 무시).
+      const lastSmsIdx = turns.map((t) => t.kind).lastIndexOf("sms_ctx");
+      const claimed = turns.slice(lastSmsIdx + 1).some((t) => t.role === "scammer" && PROBE_SMS_SENT_CLAIM.test(t.text ?? ""));
+      const p = planSmsBackstop({ declared, delivered, userTurns, claimed });
+      if (claimed) events.push({ t: now(), ev: "smsClaim", userTurns, action: p.action });
       if (p.action === "deliver") {
         const g = resolveSmsGate({ purpose: p.item.purpose, declared, delivered, userTurns });
         if (g.status === "allowed") {
@@ -388,7 +435,13 @@ async function runMessenger(scenarioId, level, persona, tag) {
     const offer = declared.length > 0
       ? buildSmsMarkerOfferInstruction(declared.filter((it) => resolveSmsGate({ purpose: it.purpose, declared, delivered, userTurns: userTurnsNow }).status === "allowed").map((it) => it.purpose))
       : undefined;
-    const tiAll = [ti, confirmPlan?.instruction, nudge, offer].filter(Boolean).join("\n") || undefined;
+    // §104 — 앱 `sendMessage`처럼 앱 진행 지시가 없는 턴에만 반복 차단 1줄(새 lib에만 있음).
+    const rbKind = repeatBreakLib && choice === "none" && !confirmPlan?.instruction
+      ? repeatBreakLib.decideRepeatBreak(stored.filter((m) => m.role === "scammer").map((m) => m.textMasked), u)
+      : null;
+    if (rbKind) events.push({ ev: "repeatBreak", kind: rbKind, userTurns: userTurnsNow });
+    const rbLine = rbKind ? repeatBreakLib.repeatBreakInstruction(rbKind) : undefined;
+    const tiAll = [ti, confirmPlan?.instruction, rbLine, nudge, offer].filter(Boolean).join("\n") || undefined;
     const raw = await complete(buildSystemPrompt(scenarioPrompt, { ...baseOpts, ...(tiAll ? { turnInstruction: tiAll } : {}), hangupMode }), history);
     const mk = extractSmsMarker(raw);
     if (mk.markerCount > 0) {
@@ -396,7 +449,15 @@ async function runMessenger(scenarioId, level, persona, tag) {
       events.push({ ev: "smsMarker", purpose: mk.purpose, status: g.status, userTurns: userTurnsNow });
       if (g.status === "allowed") delivered.push({ smsId: g.item.smsId, userTurnsAtArrival: userTurnsNow });
     }
-    const sig = extractEscalationSignal(mk.text);
+    const sigRaw = extractEscalationSignal(mk.text);
+    // §104 — 앱처럼 신호를 같은 응답의 대사와 대조한다(새 lib에만 있음).
+    let sig = sigRaw;
+    if (signalConsistencyLib) {
+      const esc = sigRaw.escalate ? signalConsistencyLib.judgeEscalationSignal(sigRaw.text) : { accept: true };
+      const endc = signalConsistencyLib.judgeEndCallSignal(sigRaw.endCall, sigRaw.text);
+      if (!esc.accept || endc.dropped) events.push({ ev: "signalDropped", escalate: esc.accept ? undefined : esc.reason, endCall: endc.dropped, userTurns: userTurnsNow });
+      sig = { ...sigRaw, escalate: sigRaw.escalate && esc.accept, endCall: endc.endCall };
+    }
     if (sig.escalate && !escalated) { escalated = { userTurns: userTurnsNow }; events.push({ ev: "escalate", userTurns: userTurnsNow, signal: sig.escalate }); }
     const cleaned = cleanMessengerOutput(sig.text, scenarioId, variantId, level);
     const post = decideFallbackHangup(hangupFacts, delivered, false);

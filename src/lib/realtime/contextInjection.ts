@@ -23,9 +23,11 @@
  *
  * | `confirmResult` | PR-A2 — 확인 결과 신호(서버 `confirmResultInstruction`, 조건형 1줄 · 필수 계좌·링크 문자 도착 뒤 세션당 1회) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖**(`stallRecovery.ts` `planConfirmResultInjection`) · 침묵 넛지 대상 아님 |
  * | `verifyReconnectFailed` | PR-A2 — 자동 호 전환이 재시도까지 실패(`stallRecovery.ts` `VERIFY_RECONNECT_FAILED_TEXT`) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖** · 침묵 넛지 대상 아님 |
+ * | `repeatBreak` | §104 — 직전 두 사기범 턴이 대기 말 · 같은 인적사항 요구 · 거의 같은 말(`stallRecovery.ts` `decideLiveRepeatBreak`) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖** · 침묵 넛지 대상 아님 |
  *
  * ⛔ 표에 없는 지시가 생기면 행을 추가할지 먼저 묻는다(§82.4.2 머리말). ⚠️ 위 두 행(`confirmResult` ·
  * `verifyReconnectFailed`)은 PR-A2 지시(오케스트레이터 2026-10-20)로 추가했다 — 설계 표(§82.4.2) 반영은 architect 몫으로 남는다.
+ * `repeatBreak` 행은 §104(메인 세션 지시 — 전수 검수 2차 결함 수정)로 추가했다.
  */
 export type InstructionDelivery =
   | "smsAnnounce"
@@ -33,7 +35,8 @@ export type InstructionDelivery =
   | "speakerSwitch"
   | "smsNudge"
   | "confirmResult"
-  | "verifyReconnectFailed";
+  | "verifyReconnectFailed"
+  | "repeatBreak";
 
 /** G31 큐(`@/lib/verifyintercept` `PendingInstruction`) 항목 → 전달 방식. */
 export function deliveryForInstruction(item: {

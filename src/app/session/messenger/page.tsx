@@ -18,7 +18,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { collection, doc, getDoc, onSnapshot, orderBy, query, type Timestamp } from "firebase/firestore";
-import { endsRun, formatChatTime, isUnreadByPeer, startsPeerRun } from "@/lib/messenger/chatPresentation";
+import { chatEndedNotice, endsRun, formatChatTime, isUnreadByPeer, startsPeerRun } from "@/lib/messenger/chatPresentation";
 import { db } from "@/lib/firebase";
 import {
   getPendingSessionId,
@@ -376,7 +376,12 @@ export default function MessengerSessionPage() {
           ? noteServerDone(
               current,
               result.reply?.text,
-              { ended: result.ended, escalate: result.escalation?.toChannel === "voice" },
+              {
+                ended: result.ended,
+                escalate: result.escalation?.toChannel === "voice",
+                // §104.9 — 사기범이 메신저 단계를 끝냈다(종료 문구 E-1/E-2).
+                scammerEnded: result.ended === true && result.endReason === "scammer_ended",
+              },
               Date.now(),
             )
           : current,
@@ -938,7 +943,8 @@ export default function MessengerSessionPage() {
         {chatEnded ? (
           <div className="flex flex-col gap-3 text-center">
             <p className="text-base font-semibold text-ink" role="status">
-              대화가 종료되었습니다.
+              {/* §104.9 · UX D-145 (2) — 사기범이 끝냈으면 실제 앱 같은 시스템 줄(E-1 카톡형 · E-2 문자형), 그 밖은 종전 문구. */}
+              {chatEndedNotice(pending?.outcome?.scammerEnded === true, isSms ? "sms" : "kakao")}
             </p>
             <Button type="button" onClick={() => router.push("/session/end")}>
               결과 확인하러 가기

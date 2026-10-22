@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   countReplaySignalCards,
+  notDeceivedStatusText,
   replayNavEmptyText,
   SIGNAL_CARD_HEADING,
   TACTICS_NOT_FOUND_TEXT,
@@ -196,4 +197,27 @@ test("[소스] 페이지가 판정 함수를 호출한다(배선)", () => {
   assert.match(replay, /countReplaySignalCards\(timeline,/);
   assert.match(replay, /resolveMockScreenCopy\(mockScreen, deceivedMoments, "replay"\)/);
   assert.match(replay, /\{TACTICS_NOT_FOUND_TEXT\}/);
+});
+
+// ── §104 · UX D-145 — "속지 않음" 상태 줄 NS-1~NS-3(2026-10-22 라이브: 0턴 · 수법 0개에서 "아래는 시도된 수법입니다" ↔ TB-3 모순) ──
+test("[§104/NS] 속지 않음 상태 줄 — 수법이 있을 때만 '아래는 시도된 수법입니다'", () => {
+  const NS1 = "이번 훈련에서는 속지 않았습니다. 아래는 시도된 수법입니다.";
+  const NS2 = "이번 훈련에서는 속지 않았습니다. 상대의 말에 답하기 전에 대화를 마쳤습니다.";
+  const NS3 = "이번 훈련에서는 속지 않았습니다.";
+  // NS-1 — 무변경(발화 수와 무관).
+  assert.equal(notDeceivedStatusText(2, 5), NS1);
+  assert.equal(notDeceivedStatusText(1, 0), NS1);
+  assert.equal(notDeceivedStatusText(1, undefined), NS1);
+  // NS-2 — 라이브 신고 조합(0턴 · 수법 0개).
+  assert.equal(notDeceivedStatusText(0, 0), NS2);
+  // NS-3 — 대화는 있었지만 이름을 못 찾음 · 필드 이전 리포트.
+  assert.equal(notDeceivedStatusText(0, 4), NS3);
+  assert.equal(notDeceivedStatusText(0, undefined), NS3);
+  // 모순 0: 수법 0개면 "아래는 시도된 수법" 문장이 없고, TB 금지 문면도 없다.
+  for (const turns of [0, 1, undefined]) {
+    const text = notDeceivedStatusText(0, turns);
+    assert.equal(text.includes("아래는 시도된 수법"), false, text);
+    assertNoForbidden(text);
+    assert.equal(tacticsAccordionLabel(0), TB3);
+  }
 });

@@ -81,6 +81,17 @@ export type ShouldRequestSmsBackstopInput = {
   inFlight: boolean;
 };
 
+// ── §104(2026-10-22 · 사용자 실기 신고 *"자산 검수 안내 등 문자를 보냈다고 하는데, 실제로는 안 와 있는"*) — 사기범 "보냈다" 주장 ──
+// 원인: 모델이 도구를 안 부르거나(또는 거절된 뒤) "문자로 보내 드린 …"이라고 말해도, 백스톱은 게이트가 열린 뒤 넛지 → 발송까지 사용자 발화를
+// 더 기다렸다(`planSmsBackstop` — 개방 + 4발화). 통화가 그 전에 끝나면 문자는 끝내 오지 않는다. ⇒ 사기범 전사가 문자를 보냈다고 말하면 화면이
+// 그 사실(불리언 1개)을 다음 백스톱 질의에 싣고, 서버는 게이트가 열린 순간 바로 보낸다(하한은 그대로 — 일찍 열지는 않는다).
+// ⚠️ 표기를 본다(의미 아님). 오탐 비용 = 이미 열린 게이트의 필수 문자가 몇 발화 일찍 오는 것뿐이다(없는 문자를 만들지 않는다).
+export const SMS_SENT_CLAIM =
+  /문자(?:로)?\s*(?:를\s*)?(?:보내\s*드렸|보내드렸|보냈|보내\s*드린|보내드린|보낸|발송(?:해\s*드렸|했|됐|한|된))|(?:보내\s*드린|보내드린|보낸|발송한|발송된)\s*(?:문자|링크|안내|주소)/;
+export function scammerClaimsSmsSent(scammerText: string): boolean {
+  return SMS_SENT_CLAIM.test(scammerText);
+}
+
 export function shouldRequestSmsBackstop(input: ShouldRequestSmsBackstopInput): boolean {
   if (!input.enabled) return false;
   if (input.nonePending) return false;

@@ -163,7 +163,9 @@ export const deliverInCallSms = onCall<
   // 아래 단일 통로가 같은 게이트를 다시 통과시킨다.
   let purpose: unknown = request.data.purpose;
   if (trigger === "backstop") {
-    const plan = planSmsBackstop({ declared, delivered: await readDeliveredSms(sessionRef), userTurns });
+    // §104 — 사기범이 이미 "문자를 보냈다"고 말했다는 클라 주장(불리언 1개 · 부재 = 종전). 게이트 하한은 그대로라 앞당기는 것은 대기 단계뿐이다.
+    const smsClaimed = request.data?.smsClaimed === true;
+    const plan = planSmsBackstop({ declared, delivered: await readDeliveredSms(sessionRef), userTurns, claimed: smsClaimed });
     if (plan.action === "none_pending" || plan.action === "wait") {
       return { status: plan.action === "wait" ? "waiting" : "none_pending" };
     }

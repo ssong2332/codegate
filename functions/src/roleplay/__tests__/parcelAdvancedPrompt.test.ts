@@ -70,9 +70,11 @@ const BASE_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { varia
  * ⚠️ 2026-10-22(전수 검수 · fullAuditDelta.ts) — 공통 [진행 강제] 두 곳(페이로드 예시 · 거절 요구 반복 금지 1문장) 교체로 다시 쟀다(직전 기대값
  * 초급 c287b4074dc0d4e3… 6242자 · 중급 fdb6ac8019a5c1be… 5508자). 변경 전 값 대조는 그 교체분도 되돌려(`revertFullAudit`) 한다.
  */
+// §104(2026-10-22) — 공통 [진행 강제] 거절 요구 문장 교체(+67자) · [대화 방식] 주변 이야기 받아치기 1문장(+95자)으로 갱신. 직전 값: 초급 164a5a1014aa(6338자) · 중급 9702c9aa64b0(5604자).
+// 교체분만 되돌리면 기준값과 같음은 아래 [§84.4.6] 테스트가 `revertFullAudit`로 매 실행 재증명한다.
 const AFTER_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { sha256: string; length: number }>> = {
-  beginner: { sha256: "164a5a1014aa4e3c67651f50e074322e2060cb9bfed9a4b0c70f54b8e2f41fd2", length: 6338 },
-  intermediate: { sha256: "9702c9aa64b0297773b336e97627d6b847c885f363fa455944e389adda845ef8", length: 5604 },
+  beginner: { sha256: "aac610a5e388a7c92f33efaf0683d77074877dd2f118d17a080cfe2969f0e490", length: 6500 },
+  intermediate: { sha256: "44b6e585b4e4766943b2f4a6c974582088a6cca126cc1ca0483fdc63bdccf524", length: 5766 },
 };
 
 test("[T194-a G586 · §84.13.3 ④] parcel 초급 · 중급 조립 = 갱신 기대값(가드레일 (5)항 포함) · 가드레일 최후미", () => {

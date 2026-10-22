@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import * as path from "node:path";
-import { buildLiveSpeechStyleBlock, buildSystemPrompt, PERSONA_CARD_BLOCK_HEAD, LANGUAGE_RULE } from "../promptAssembly";
+import { buildLiveSpeechStyleBlock, buildSystemPrompt, PERSONA_CARD_BLOCK_HEAD, LANGUAGE_RULE, LIVE_NO_IDLE_RULE } from "../promptAssembly";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { asksIdentityCheck } from "../personaAuthority";
 import { SESSION_MARKER_WORDS } from "../../scenarios/__tests__/sessionMarkerWords";
@@ -35,9 +35,10 @@ test("§90 — true면 [대화 방식] 바로 뒤 · [언어] 앞에 들어가�
     assert.ok(live.includes(`${block}\n\n${LANGUAGE_RULE}`), `${id}: [언어] 바로 앞`);
     assert.ok(live.indexOf("[대화 방식") < live.indexOf(TITLE), `${id}: [대화 방식] 뒤`);
     assert.ok(live.trimEnd().endsWith(prompt.guardrailPreamble.trimEnd()), `${id}: 가드레일 최후미`);
-    // 블록만 뺀 나머지는 종전과 같다.
+    // 블록만 뺀 나머지는 종전과 같다. §104 — Live(끊기 슬롯 NONE)에만 붙는 "대기 말로 시간을 끌지 않는다" 1항도 함께 뺀다(정확히 1회).
+    assert.equal(live.split(LIVE_NO_IDLE_RULE).length - 1, 1, `${id}: §104 Live 1항 1회`);
     assert.equal(
-      live.replace(`${block}\n\n`, ""),
+      live.replace(`${block}\n\n`, "").replace(`\n${LIVE_NO_IDLE_RULE}`, ""),
       buildSystemPrompt(prompt, { difficultyLevel: "advanced", identityCheckAllowed }),
       `${id}: 블록 외 변화 0`,
     );

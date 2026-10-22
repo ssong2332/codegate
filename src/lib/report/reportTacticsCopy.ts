@@ -27,6 +27,26 @@ export function tacticsAccordionLabel(tacticCount: number): string {
 }
 
 /**
+ * §104 · UX D-145 — UX-008 "속지 않음" 상태 줄(AC-009, 요약 카드 위 `role="status"`). 2026-10-22 라이브: 대화 0턴(바로 끊음) ·
+ * 수법 0개 세션에서 *"아래는 시도된 수법입니다."* 바로 아래 아코디언이 TB-3 *"시도된 수법 · 이름을 찾지 못함"* 이라 앞뒤가 맞지 않았다.
+ * ⇒ 둘째 문장은 수법 목록이 실제로 있을 때만 붙인다(⛔ 이 표 밖 상태 줄 0 · `wasDeceived = true`면 호출하지 않는다).
+ *
+ * | # | `tacticCount` | `userTurnCount` | 문면 |
+ * |---|---|---|---|
+ * | NS-1 | ≥ 1 | (무관) | `이번 훈련에서는 속지 않았습니다. 아래는 시도된 수법입니다.` (**무변경**) |
+ * | NS-2 | 0 | 0 | `이번 훈련에서는 속지 않았습니다. 상대의 말에 답하기 전에 대화를 마쳤습니다.` |
+ * | NS-3 | 0 | ≥ 1 · 부재(필드 이전 리포트) | `이번 훈련에서는 속지 않았습니다.` |
+ * - ⛔ TB 금지 문면(*"0가지"* · *"없습니다"*)을 쓰지 않는다 — 수법을 이름으로 못 찾은 것이지 없었다는 뜻이 아니다(D-78).
+ * - "통화"가 아니라 "대화" — 메신저 세션에도 같은 줄이 나온다.
+ */
+export const NOT_DECEIVED_HEAD = "이번 훈련에서는 속지 않았습니다.";
+export function notDeceivedStatusText(tacticCount: number, userTurnCount: number | undefined): string {
+  if (tacticCount >= 1) return `${NOT_DECEIVED_HEAD} 아래는 시도된 수법입니다.`; // NS-1
+  if (userTurnCount === 0) return `${NOT_DECEIVED_HEAD} 상대의 말에 답하기 전에 대화를 마쳤습니다.`; // NS-2
+  return NOT_DECEIVED_HEAD; // NS-3
+}
+
+/**
  * 리플레이 타임라인에서 **말풍선 주석 밖**에 그려지는 "⚠️ 여기가 신호였어요" 카드 수
  * (UX-008 v1.31 (2) `신호카드수`). 렌더와 **같은 배열**에서 센다:
  * - `sms` 항목: `sms.events` 1건당 카드 1장(`ReplaySmsItem`이 events 전부를 카드로 그린다)

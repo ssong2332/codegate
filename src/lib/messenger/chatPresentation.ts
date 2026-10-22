@@ -32,6 +32,22 @@ export function isUnreadByPeer<M extends ThreadMessage>(items: readonly ThreadIt
 }
 
 /** "오후 2:14" 형식(기기 시간대). 시각이 없으면 빈 문자열 — 화면은 그리지 않는다. */
+/**
+ * §104.9 · UX D-145 (2) — 대화 종료 상태 줄(입력 바 자리 · `role="status"`). 사기범이 메신저 단계를 끝냈으면(서버 `endReason: "scammer_ended"`)
+ * 실제 앱처럼 보이는 시스템 줄, 그 밖(턴 한도 · 세션 시간)은 종전 문구.
+ * | # | 사기범 종료 | 표면 | 문구 |
+ * |---|---|---|---|
+ * | E-1 | 예 | 카톡형 | `상대방이 채팅방을 나갔습니다.` |
+ * | E-2 | 예 | 문자형 | `상대가 더 이상 답장하지 않습니다.` (문자에는 "나가기"가 없다 — 답장이 끊기는 것이 실제 모습) |
+ * | E-3 | 아니오 | (무관) | `대화가 종료되었습니다.` (**무변경**) |
+ * ⛔ 사기범 대사에 "[훈련 종료]" 같은 표식을 쓰지 않는다 — 종료는 서버 신호(`[[SIGNAL:END_CALL_*]]` → `scammer_ended`)로만 오고, 대사의
+ *    메타 표식은 서버가 지운다(#368 `replyMarkup.ts` 4행). 이 줄은 앱이 그리는 시스템 줄이다.
+ */
+export function chatEndedNotice(scammerEnded: boolean, surface: "kakao" | "sms"): string {
+  if (!scammerEnded) return "대화가 종료되었습니다."; // E-3
+  return surface === "sms" ? "상대가 더 이상 답장하지 않습니다." : "상대방이 채팅방을 나갔습니다."; // E-2 · E-1
+}
+
 export function formatChatTime(ms: number | undefined): string {
   if (ms === undefined || !Number.isFinite(ms)) return "";
   const d = new Date(ms);
