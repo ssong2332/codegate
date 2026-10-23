@@ -182,7 +182,7 @@ test("[T191 S5 인덱스 0 · 설계 금지 X6] 배정 모듈에 쿼리 0 · fir
   assert.ok(/randomInt\(maxExclusive\)/.test(code));
   assert.equal(/Math\.random\(/.test(code), false);
   // §119 D-11 — 기관 사칭 고급은 fv-pgqt 은퇴 뒤 1벌(옛 세션 해석은 유지).
-  assert.deepEqual(listFlowVariants("institutional-impersonation", "advanced").map((v) => v.variantId), ["fv-c5fj", "fv-q7cn", "fv-g2ld"]); // §122 새 루트 2
+  assert.deepEqual(listFlowVariants("institutional-impersonation", "advanced").map((v) => v.variantId), ["fv-c5fj", "fv-q7cn", "fv-g2ld"]); // §124 새 루트 2
   assert.equal(FLOW_VARIANTS.find((v) => v.variantId === "fv-pgqt")?.retired, true);
 });
 
@@ -313,7 +313,7 @@ test("[T194-c-1 G611 · ⓙ] 챌린지 고급 card-company = [fv-akj5] 문자 0 
     "card-company-impersonation": ids(assignablePool("card-company-impersonation", "advanced")),
     "loan-refinance-scam": ids(assignablePool("loan-refinance-scam", "advanced")),
   };
-  assert.deepEqual(selfPools, { "card-delivery-call": ["fv-tvnj", "fv-e5mv", "fv-u9fz"], "card-company-impersonation": ["fv-x7ue", "fv-w3dq"], "loan-refinance-scam": ["fv-m3hd", "fv-d8pw", "fv-r4hc"] }); // §92 — 카드사 흡수 변형 fv-w3dq · §122 새 루트
+  assert.deepEqual(selfPools, { "card-delivery-call": ["fv-tvnj", "fv-e5mv", "fv-u9fz"], "card-company-impersonation": ["fv-x7ue", "fv-w3dq"], "loan-refinance-scam": ["fv-m3hd", "fv-d8pw", "fv-r4hc"] }); // §92 — 카드사 흡수 변형 fv-w3dq · §124 새 루트
   // 전 시나리오 챌린지 풀 변형의 설치 문자 선언 = 거짓.
   const challengeInstall: string[] = [];
   for (const id of Object.keys(PUBLIC_SCENARIOS)) {
@@ -328,7 +328,7 @@ test("[T194-c-1 G611 · ⓙ] 챌린지 고급 card-company = [fv-akj5] 문자 0 
   t.diagnostic(`[G611 정상] 챌린지 card-company ${JSON.stringify(ids(assignablePool("card-company-impersonation", "advanced", "c1")))} · loan ${JSON.stringify(ids(assignablePool("loan-refinance-scam", "advanced", "c1")))} · 자가 ${JSON.stringify(selfPools)} · 챌린지 Q2 누수 ${JSON.stringify(normalLeaks)}`);
   t.diagnostic(`[G611 ⓙ 역방향] 설치 항을 끈 사본 → 챌린지 Q2 누수 ${JSON.stringify(poisonedLeaks)} — 실패 재현`);
   assert.deepEqual(normalLeaks, []);
-  assert.deepEqual(poisonedLeaks, ["card-company-impersonation/챌린지/fv-x7ue", "card-company-impersonation/챌린지/fv-w3dq", "loan-refinance-scam/챌린지/fv-m3hd", "loan-refinance-scam/챌린지/fv-d8pw", "loan-refinance-scam/챌린지/fv-r4hc"]); // §92 — fv-w3dq · §122
+  assert.deepEqual(poisonedLeaks, ["card-company-impersonation/챌린지/fv-x7ue", "card-company-impersonation/챌린지/fv-w3dq", "loan-refinance-scam/챌린지/fv-m3hd", "loan-refinance-scam/챌린지/fv-d8pw", "loan-refinance-scam/챌린지/fv-r4hc"]); // §92 — fv-w3dq · §124
 });
 
 test("[T194-c-1 G611] 수신자 배정 — 40개 챌린지 ID 전부 base 변형(fv-akj5 · fv-6s5p)만 · 자가 회전은 Q2 변형", async () => {

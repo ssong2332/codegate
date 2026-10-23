@@ -10,8 +10,8 @@
 // (A) 루트 2개 칸(카드사 고급 자가): createSession × N(매번 endSession) → 연속 같은 루트 0 · 두 세션(한 바퀴)마다 두 루트 모두 ·
 //     회전 문서 = { lastVariantId, deck: 문자열 배열 } · 세션 문서 flowVariantId = 회전 문서 lastVariantId
 // (B) 마지막 세션 리포트: sendMessage 1턴 → endSession → generateReport → reports.routeSummary = { 배정 변형의 루트 이름, 2 }
-// (C) 루트 1개 칸(국세청 환급금 고급 — §122 이후 기관 사칭 고급은 3루트): 회전 문서 0 · 리포트 routeSummary 부재
-// (E) §122 루트 3개 칸(기관 사칭 고급): 3세션(매번 endSession) = 세 루트가 한 번씩 · 은퇴 fv-pgqt 0 · 리포트 routeSummary 개수 3
+// (C) 루트 1개 칸(국세청 환급금 고급 — §124 이후 기관 사칭 고급은 3루트): 회전 문서 0 · 리포트 routeSummary 부재
+// (E) §124 루트 3개 칸(기관 사칭 고급): 3세션(매번 endSession) = 세 루트가 한 번씩 · 은퇴 fv-pgqt 0 · 리포트 routeSummary 개수 3
 // (D) 옛 회전 문서(lastVariantId만): 다른 루트로 배정 · 문서에 deck 생김
 import { writeFileSync } from "node:fs";
 import { createRequire } from "node:module";

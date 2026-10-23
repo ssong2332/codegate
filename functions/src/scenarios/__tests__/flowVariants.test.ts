@@ -439,7 +439,7 @@ test("[T191 S5 안전 역방향 · AC-102 (i)] 실존 앱명 · 실제 지청명
 
 const UX_D104_FORBIDDEN = /릴레이|연결해|확인\s*전화|가로채|대면|현금|수표|전달|직접\s*받으러|고립|혼자|셀프|감금|보안\s*앱|원격\s*앱|앱\s*설치/;
 
-test("[T191 S5 고급 전용 · AC-097 · §122] 3종 — 고급 변형 1벌 이상(다중 루트 #237) · 결정 순간 · 출처 · 메타 플래그 · 카드 문면 규칙(D-104)", () => {
+test("[T191 S5 고급 전용 · AC-097 · §124] 3종 — 고급 변형 1벌 이상(다중 루트 #239) · 결정 순간 · 출처 · 메타 플래그 · 카드 문면 규칙(D-104)", () => {
   const advancedOnly = Object.keys(PUBLIC_SCENARIOS).filter(isAdvancedOnlyScenario).sort();
   assert.deepEqual(advancedOnly, ["asset-protection-notice-call", "card-delivery-call", "prosecution-cooperation-call"]);
   for (const id of advancedOnly) {
@@ -448,7 +448,7 @@ test("[T191 S5 고급 전용 · AC-097 · §122] 3종 — 고급 변형 1벌 이
       assert.ok(r.decisionMoment && r.sources && r.sources.length > 0, `${r.variantId}: 은퇴 변형도 결정 순간 · 출처 유지`);
     }
     const variants = FLOW_VARIANTS.filter((v) => v.scenarioId === id && v.retired !== true);
-    // §122(DECISIONS #237 · PRD AC-097 갱신 고지) — 다중 루트로 고급 변형이 여러 벌일 수 있다. 각 루트가 아래 필수 항목을 갖는다.
+    // §124(DECISIONS #239 · PRD AC-097 갱신 고지) — 다중 루트로 고급 변형이 여러 벌일 수 있다. 각 루트가 아래 필수 항목을 갖는다.
     assert.ok(variants.length >= 1, `${id}: 변형 수`);
     for (const v of variants) {
       assert.equal(v.level, "advanced");
