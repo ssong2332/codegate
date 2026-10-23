@@ -82,7 +82,7 @@ test("[§119 D-3 b] 리포트 루트 줄 — 루트 2가지 이상인 칸만 · 
     undefined,
     "1루트 칸은 줄 0",
   );
-  // §122 — 은퇴 변형으로 진행한 옛 세션도 그 칸의 현재 결말 수로 줄을 만든다(이름은 그 변형의 루트 이름).
+  // §124 — 은퇴 변형으로 진행한 옛 세션도 그 칸의 현재 결말 수로 줄을 만든다(이름은 그 변형의 루트 이름).
   assert.deepEqual(
     resolveRouteSummary({ scenarioId: "institutional-impersonation", difficultyLevel: "advanced", flowVariantId: "fv-pgqt" }),
     { label: "안전계좌 이체형", routeCount: 3 },

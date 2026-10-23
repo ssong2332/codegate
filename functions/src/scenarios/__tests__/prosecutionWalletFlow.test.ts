@@ -25,8 +25,8 @@ const PROS = "prosecution-cooperation-call";
 
 // §101 — 새 세션 풀은 다시 fv-h3vn(자산 검수 사이트)으로 바뀌었다. fv-c8wq는 배정 은퇴 · 내용 무변경이라 아래 P2~P6은 그대로 옛 세션 해석을 고정한다.
 test("[§98 P1 → §101] 검찰 고급 새 세션 풀 = fv-h3vn · fv-c8wq · fv-p4hz는 은퇴(내용 무변경 — 사건 조회 문자 1건 · 원래 페르소나)", () => {
-  assert.deepEqual(listFlowVariants(PROS, "advanced").map((v) => v.variantId), ["fv-h3vn", "fv-v2mk", "fv-a6lq"]); // §123 새 루트 2
-  assert.deepEqual(assignablePool(PROS, "advanced").map((v) => v.variantId), ["fv-h3vn", "fv-v2mk", "fv-a6lq"]); // §123 새 루트 2
+  assert.deepEqual(listFlowVariants(PROS, "advanced").map((v) => v.variantId), ["fv-h3vn", "fv-v2mk", "fv-a6lq"]); // §125 새 루트 2
+  assert.deepEqual(assignablePool(PROS, "advanced").map((v) => v.variantId), ["fv-h3vn", "fv-v2mk", "fv-a6lq"]); // §125 새 루트 2
   assert.equal(findFlowVariant("fv-c8wq")!.retired, true);
   const old = findFlowVariant("fv-p4hz")!;
   assert.equal(old.retired, true);

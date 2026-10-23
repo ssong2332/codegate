@@ -29,8 +29,8 @@ const PROS = "prosecution-cooperation-call";
 const SITE = "asset-check-site";
 
 test("[§101 S1] 검찰 고급 새 세션 풀 = fv-h3vn · fv-c8wq는 은퇴(내용 무변경 — 보관 지갑 문자 · 원래 페르소나)", () => {
-  assert.deepEqual(listFlowVariants(PROS, "advanced").map((v) => v.variantId), ["fv-h3vn", "fv-v2mk", "fv-a6lq"]); // §123 새 루트 2
-  assert.deepEqual(assignablePool(PROS, "advanced").map((v) => v.variantId), ["fv-h3vn", "fv-v2mk", "fv-a6lq"]); // §123 새 루트 2
+  assert.deepEqual(listFlowVariants(PROS, "advanced").map((v) => v.variantId), ["fv-h3vn", "fv-v2mk", "fv-a6lq"]); // §125 새 루트 2
+  assert.deepEqual(assignablePool(PROS, "advanced").map((v) => v.variantId), ["fv-h3vn", "fv-v2mk", "fv-a6lq"]); // §125 새 루트 2
   const old = findFlowVariant("fv-c8wq")!;
   assert.equal(old.retired, true);
   assert.deepEqual(old.sms.map((s) => s.smsId), ["prosecution-case-link", "prosecution-wallet-link"]);

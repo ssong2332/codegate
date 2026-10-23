@@ -1,5 +1,5 @@
-// §123(DECISIONS #238) — 다중 루트 1b(확인 무력화 밖 고급 6종) · 사용자 실기 신고 (3) · (9) · (11) 반영 고정.
-// 설계: docs/research/scenario-multi-route-plan-2026-10.md §5(1차) · Architecture §123.
+// §125(DECISIONS #240) — 다중 루트 1b(확인 무력화 밖 고급 6종) · 사용자 실기 신고 (3) · (9) · (11) 반영 고정.
+// 설계: docs/research/scenario-multi-route-plan-2026-10.md §5(1차) · Architecture §125.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { findFlowVariant } from "../flowVariants";
@@ -8,7 +8,7 @@ import { CASE_RECORD_NAMES } from "../fictionalNames";
 
 const CALL_FIRST = /말보다 먼저 문자 보내기 도구를 불러 시작/;
 
-test("[§123 루트] 1b 자가 고급 배정 풀 — 납치 2 · 가족 사고 2 · 자산 보호 3 · 검찰 3 · 손주 · 유포 협박 1(근거 없음 · 약)", () => {
+test("[§125 루트] 1b 자가 고급 배정 풀 — 납치 2 · 가족 사고 2 · 자산 보호 3 · 검찰 3 · 손주 · 유포 협박 1(근거 없음 · 약)", () => {
   const keys = (id: string) => assignablePool(id, "advanced").map((v) => v.routeKey).sort();
   assert.deepEqual(keys("kidnapping-threat"), ["instant-transfer", "petty-dispute"]);
   assert.deepEqual(keys("family-accident-deepvoice"), ["settlement", "small-instant"]);
@@ -18,7 +18,7 @@ test("[§123 루트] 1b 자가 고급 배정 풀 — 납치 2 · 가족 사고 2
   assert.equal(assignablePool("reputation-blackmail-scam", "advanced").length, 1);
 });
 
-test("[§123 신고 (11)] 검찰 고급 추가 검수 — 이유(다른 계좌 · 적금 · 대출 한도로 같은 흐름)를 먼저 말하고 이유 없는 되풀이 금지 · 은퇴 fv-c8wq는 그대로", () => {
+test("[§125 신고 (11)] 검찰 고급 추가 검수 — 이유(다른 계좌 · 적금 · 대출 한도로 같은 흐름)를 먼저 말하고 이유 없는 되풀이 금지 · 은퇴 fv-c8wq는 그대로", () => {
   const h3vn = findFlowVariant("fv-h3vn")!;
   const follow = h3vn.stages.find((s) => s.summary.startsWith("사이트에서 이체를 마치면"))!;
   assert.ok(follow);
@@ -30,7 +30,7 @@ test("[§123 신고 (11)] 검찰 고급 추가 검수 — 이유(다른 계좌 �
   assert.ok(c8wq.sms.every((s) => s.backstopUserTurns === undefined));
 });
 
-test("[§123 신고 (3) · (9)] 수사기관 루트 첫 단계 내 정보 활용 · 문자 단계 도구 먼저 · 필수 문자 백스톱 간격 1", () => {
+test("[§125 신고 (3) · (9)] 수사기관 루트 첫 단계 내 정보 활용 · 문자 단계 도구 먼저 · 필수 문자 백스톱 간격 1", () => {
   for (const id of ["fv-h3vn", "fv-v2mk", "fv-a6lq", "fv-p3jx", "fv-t8ga"]) {
     const v = findFlowVariant(id)!;
     assert.match(v.stages[0]!.summary, /그 지역 관할로 사건이 넘어와/, id);
@@ -39,7 +39,7 @@ test("[§123 신고 (3) · (9)] 수사기관 루트 첫 단계 내 정보 활용
   }
 });
 
-test("[§123 페르소나] 새 결말 루트의 페르소나는 원본 결말 문장을 바꾸고 가상 고유명 · 만날 곳 금지는 그대로", () => {
+test("[§125 페르소나] 새 결말 루트의 페르소나는 원본 결말 문장을 바꾸고 가상 고유명 · 만날 곳 금지는 그대로", () => {
   const persona = (id: string) => findFlowVariant(id)!.legs[0]!.personaPrompt!;
   for (const id of ["fv-v2mk", "fv-a6lq"]) {
     const p = persona(id);
@@ -56,7 +56,7 @@ test("[§123 페르소나] 새 결말 루트의 페르소나는 원본 결말 �
   }
 });
 
-test("[§123 결말] 말로 끝나는 결말 — 결정 순간 · 출처(C · S) · 거절 시 마무리 · 장소 · 시간 0", () => {
+test("[§125 결말] 말로 끝나는 결말 — 결정 순간 · 출처(C · S) · 거절 시 마무리 · 장소 · 시간 0", () => {
   for (const id of ["fv-w7tb", "fv-h5sz", "fv-p3jx", "fv-t8ga", "fv-v2mk", "fv-a6lq"]) {
     const v = findFlowVariant(id)!;
     assert.ok(v.sources && v.sources.length > 0, id);

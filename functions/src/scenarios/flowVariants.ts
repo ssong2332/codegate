@@ -66,7 +66,7 @@ export type FlowVariantSms = {
   /** 사용자 발화 N회 전에는 보내지 않는다(S5b 도달 조건 입력 — 판단값). */
   notBeforeUserTurns: number;
   /**
-   * §122(DECISIONS #237 · 사용자 실기 신고 (9) *"여전히 문자가 좀 늦게 오는 경우가 존재해"* · PR #390 실측) — 모델이 도구를 부르지 않을 때
+   * §124(DECISIONS #239 · 사용자 실기 신고 (9) *"여전히 문자가 좀 늦게 오는 경우가 존재해"* · PR #390 실측) — 모델이 도구를 부르지 않을 때
    * 백스톱 간격(게이트가 열린 뒤 넛지까지 · 넛지에서 강제 발송까지의 사용자 발화 수). 부재 = `BACKSTOP_USER_TURNS`(2 — 열림 + 4에 강제).
    * ⚠️ 판단값. 하한(`notBeforeUserTurns` · 문자 간격)은 그대로다 — 앞당기는 것은 "열린 뒤 기다리는 시간"뿐이다.
    */
@@ -197,14 +197,14 @@ const R = {
   deliveryOpener: ["delivery-opener", "카드 배송 안내형"],
   prepay: ["prepay", "선입금 요구형"],
   repay: ["repay", "기존 대출 상환형"],
-  // §122 — 1a 새 결말
+  // §124 — 1a 새 결말
   gold: ["gold", "금 구매형"],
   deposit: ["deposit", "예치금 입금형"],
   cashRepay: ["cash-repay", "현금 상환형"],
   identityTheft: ["identity-theft", "명의 도용 이관형"],
   loanCash: ["loan-cash", "대출금 전달형"],
   leakOpener: ["leak-opener", "유출 사고 안내형"],
-  // §123 — 1b 새 결말
+  // §125 — 1b 새 결말
   pettyDispute: ["petty-dispute", "시비 합의금형"],
   smallInstant: ["small-instant", "소액 급전형"],
   courtDeposit: ["court-deposit", "공탁금 이체형"],
@@ -234,7 +234,7 @@ export const VARIANT_ROUTES: Readonly<Record<string, RouteEntry>> = {
   "fv-aqp6": R.cardInfo, "fv-35f2": R.reliefTransfer,
   "fv-akj5": R.remoteAppRelief, "fv-x7ue": R.remoteAppRelief, "fv-w3dq": R.deliveryOpener,
   // 저금리 대환대출
-  // §122 — 고급 fv-6s5p · fv-m3hd의 결말은 "기존 대출 상환 또는 선입금"이라 상환형(앱 설치는 진입 단계 — 결말이 아니다)
+  // §124 — 고급 fv-6s5p · fv-m3hd의 결말은 "기존 대출 상환 또는 선입금"이라 상환형(앱 설치는 진입 단계 — 결말이 아니다)
   "fv-bqr9": R.prepay, "fv-avap": R.repay, "fv-6s5p": R.repay, "fv-m3hd": R.repay,
   "fv-d8pw": R.deposit, "fv-r4hc": R.cashRepay,
   // 국세청 환급금
@@ -321,7 +321,7 @@ const INSTITUTION_LOAN_DEMAND =
 const INSTITUTION_ADVANCED_FOLLOW_UP_USER_TURNS = 3;
 const INSTITUTION_ADVANCED_DECISION_MOMENT = "문자 링크로 연 안전계좌 이체 화면에서 금액을 넣고 이체하기를 누르는 순간";
 
-// ── §122(DECISIONS #237 · 다중 루트 1a — 확인 무력화 고급 7종) ─────────────────────────────────────────────────────────────
+// ── §124(DECISIONS #239 · 다중 루트 1a — 확인 무력화 고급 7종) ─────────────────────────────────────────────────────────────
 // ⛔ 은퇴 변형(fv-pgqt)의 바이트는 바꾸지 않는다 — 위 §115 상수는 그 변형이 그대로 쓰고, 현행 · 새 변형은 아래 상수를 쓴다.
 //
 // (9) 사용자 실기 신고 *"여전히 문자가 좀 늦게 오는 경우가 존재해"* · PR #390 실측(모델이 도구 없이 "문자로 안내한 링크"라고 말만 함 → 계좌 문자
@@ -465,7 +465,7 @@ const PROSECUTION_SITE_STAGES_TAIL = [
 const PROSECUTION_SITE_DECISION_MOMENT = "문자 링크로 연 자산 검수 사이트에서 본인 확인 · 코인 전환 · 금액 입력 · 보관 지갑 이체를 누르는 순간";
 const PROSECUTION_SOURCES = ["C05", "C06", "C07", "C08", "S3", "S25", "S28"];
 
-// ── §123(DECISIONS #238 · 다중 루트 1b — 확인 무력화 밖 고급 6종) ─────────────────────────────────────────────────────────
+// ── §125(DECISIONS #240 · 다중 루트 1b — 확인 무력화 밖 고급 6종) ─────────────────────────────────────────────────────────
 // (11) 사용자 실기 신고 *"자산 검수를 하는데, 하면, 다른 것도 있다고 다시 해달라는데 이게 뭔지 모르겠어"* — 추가 검수를 꺼낼 때 실제 수법의 이유
 // (방금 검수한 자금이 다른 계좌 · 적금 · 대출 한도로도 같은 흐름으로 빠져나간 기록 — `PROSECUTION_SITE_EXTRA_TACTICS` "이체 뒤 추가 송금 요구"와 같은 논리,
 // 근거 docs/research/prosecution-crypto-tactics-2026-10.md)를 먼저 말하게 하고, 같은 요구를 이유 없이 되풀이하지 않게 한다. ⛔ 은퇴 fv-c8wq 문면은 그대로.
@@ -673,7 +673,7 @@ const SPECS: VariantSpec[] = [
     // `prosecution-cooperation-call` fv-nss6)가 그대로 다룬다 — 여기서 빼도 수법 커버리지 손실 0.
     // ⇒ 고급 2벌 모두 인증번호(identity · 필수) → 안전계좌 링크 문자(transfer · 필수 · 랜딩) 순서를 거친다. 필수 2개 선례 = loan fv-m3hd.
     //    하한 2 · 4 — `planSmsBackstop`이 먼저 열리는 인증번호를 먼저 강제하고, 계좌 문자는 그 뒤 간격(2)을 지켜 열린다.
-    // §122(#237) — 사용자 실기 신고 (2) 대출 단계 이유 · (3) 내 정보 활용 · (9) 문자 도구 먼저. 단계 순서 · 문자 선언 목적 · 결정 순간은 그대로.
+    // §124(#239) — 사용자 실기 신고 (2) 대출 단계 이유 · (3) 내 정보 활용 · (9) 문자 도구 먼저. 단계 순서 · 문자 선언 목적 · 결정 순간은 그대로.
     stages: st(...INSTITUTION_HEAD_STAGES, withSmsFirst(INSTITUTION_ADVANCED_LINK_TRANSFER_STAGE), INSTITUTION_ADVANCED_LOAN_STAGE_V2),
     keepLabels: ["권위 암시", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "안전계좌 이체 요구", "비밀 유지 요구", "전화 끊음 저지"],
     extraTactics: [
@@ -725,7 +725,7 @@ const SPECS: VariantSpec[] = [
     // 있으면 같은 결말이 2/n 확률로 나온다. 옛 세션 · 리포트 해석은 그대로(`findFlowVariant`).
     retired: true,
   },
-  // §122(#237) — 기관 사칭 고급 새 루트 2(상수 주석 참고). 앞 4단계는 fv-c5fj와 같고 결말만 다르다.
+  // §124(#239) — 기관 사칭 고급 새 루트 2(상수 주석 참고). 앞 4단계는 fv-c5fj와 같고 결말만 다르다.
   {
     variantId: "fv-q7cn",
     scenarioId: "institutional-impersonation",
@@ -915,7 +915,7 @@ const SPECS: VariantSpec[] = [
       { purpose: "transfer", smsId: "loan-account", required: true, notBeforeUserTurns: 3 },
     ],
   },
-  // §122(#237) — 대환대출 고급 새 루트 2(상수 주석 참고). 자가 고급 풀의 Q2 항 때문에 둘 다 점검 앱 설치 문자(필수)를 선언한다.
+  // §124(#239) — 대환대출 고급 새 루트 2(상수 주석 참고). 자가 고급 풀의 Q2 항 때문에 둘 다 점검 앱 설치 문자(필수)를 선언한다.
   {
     ...LOAN_ADVANCED_FV_6S5P,
     variantId: "fv-d8pw",
@@ -1061,7 +1061,7 @@ const SPECS: VariantSpec[] = [
     channels: ["voice", "sms"],
     demandStages: 3,
   },
-  // §122(#237) — 택배 통관 고급 ② 명의 도용 이관형(상수 주석 참고 — 새 문자 `courier-safe-account`).
+  // §124(#239) — 택배 통관 고급 ② 명의 도용 이관형(상수 주석 참고 — 새 문자 `courier-safe-account`).
   {
     variantId: "fv-y3ks",
     scenarioId: "courier-customs-scam",
@@ -1180,7 +1180,7 @@ const SPECS: VariantSpec[] = [
     demandStages: 2,
     sources: ["S26", "C16", "C17"],
   },
-  // §123(#238) — 자녀 납치 협박 고급 ② 시비 합의금형 — 근거 금감원 소비자경보 '주의'(이투데이 2026-02-01 · S26 · C16: 학원 시간대 · AI 울음소리 ·
+  // §125(#240) — 자녀 납치 협박 고급 ② 시비 합의금형 — 근거 금감원 소비자경보 '주의'(이투데이 2026-02-01 · S26 · C16: 학원 시간대 · AI 울음소리 ·
   // "아이가 욕했다 · 폰 액정 깼다" 같은 일상 핑계로 붙잡고 50만 원 안팎 즉시 이체). 결말(소액 즉시 이체)은 fv-k268과 같고 진입(납치 → 시비)만 다르다.
   {
     variantId: "fv-w7tb",
@@ -1253,7 +1253,7 @@ const SPECS: VariantSpec[] = [
     demandStages: 2,
     sources: ["S9", "C18"],
   },
-  // §123(#238) — 가족 사고 딥보이스 고급 ② 소액 급전형 — 근거 금감원 소비자경보 '주의'(이투데이 2026-02-01 · S26 · C16: 사고 · 술값 · 수리비 명목
+  // §125(#240) — 가족 사고 딥보이스 고급 ② 소액 급전형 — 근거 금감원 소비자경보 '주의'(이투데이 2026-02-01 · S26 · C16: 사고 · 술값 · 수리비 명목
   // 50만 원 안팎을 예금 해지 · 대출 없이 바로 이체). 결말이 fv-66hh(합의금 송금)보다 작고 빠르다.
   {
     variantId: "fv-h5sz",
@@ -1592,7 +1592,7 @@ const SPECS: VariantSpec[] = [
     decisionMoment: CARD_DELIVERY_DECISION_MOMENT,
     sources: ["C03", "C04", "S4", "S22"],
   },
-  // §122(#237) — 카드 배송 고급 새 루트 2(상수 주석 참고). 설치 문자는 Q2 필수 항이라 둘 다 선언한다.
+  // §124(#239) — 카드 배송 고급 새 루트 2(상수 주석 참고). 설치 문자는 Q2 필수 항이라 둘 다 선언한다.
   {
     variantId: "fv-e5mv",
     scenarioId: "card-delivery-call",
@@ -1667,7 +1667,7 @@ const SPECS: VariantSpec[] = [
     decisionMoment: ASSET_PROTECTION_DECISION_MOMENT,
     sources: ASSET_PROTECTION_SOURCES,
   },
-  // §123(#238) — 자산 보호 고급 새 루트 2(상수 주석 참고). 앞 3단계(범죄 정황 · 자산 파악 · 비공개)는 fv-k9ra와 같다.
+  // §125(#240) — 자산 보호 고급 새 루트 2(상수 주석 참고). 앞 3단계(범죄 정황 · 자산 파악 · 비공개)는 fv-k9ra와 같다.
   {
     variantId: "fv-p3jx",
     scenarioId: "asset-protection-notice-call",
@@ -1788,7 +1788,7 @@ const SPECS: VariantSpec[] = [
     scenarioId: "prosecution-cooperation-call",
     level: "advanced",
     authoring: "authored",
-    // §123(#238) — 신고 (3) 첫 단계 내 정보 활용 · (9) 문자 단계 도구 먼저 · (11) 추가 검수 이유 먼저 + 이유 없는 되풀이 금지. 단계 순서 · 문자 목적 · 결정 순간은 그대로.
+    // §125(#240) — 신고 (3) 첫 단계 내 정보 활용 · (9) 문자 단계 도구 먼저 · (11) 추가 검수 이유 먼저 + 이유 없는 되풀이 금지. 단계 순서 · 문자 목적 · 결정 순간은 그대로.
     stages: st(
       PROSECUTION_OPENING_V2,
       withSmsFirst(PROSECUTION_CASE_LINK_STAGE),
@@ -1818,7 +1818,7 @@ const SPECS: VariantSpec[] = [
     decisionMoment: PROSECUTION_SITE_DECISION_MOMENT,
     sources: PROSECUTION_SOURCES,
   },
-  // §123(#238) — 검찰 고급 새 루트 2(상수 주석 참고). 앞 5단계(구속 위협 · 사건 조회 문자 · 비공개 · 끊지 말 것 · 자산 파악)는 fv-h3vn과 같다.
+  // §125(#240) — 검찰 고급 새 루트 2(상수 주석 참고). 앞 5단계(구속 위협 · 사건 조회 문자 · 비공개 · 끊지 말 것 · 자산 파악)는 fv-h3vn과 같다.
   {
     variantId: "fv-v2mk",
     scenarioId: "prosecution-cooperation-call",

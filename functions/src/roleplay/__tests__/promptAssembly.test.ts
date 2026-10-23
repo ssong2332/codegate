@@ -1719,7 +1719,7 @@ test("[2026-10-17 계좌 문자] 계좌형 문자가 있는 시나리오 전수(
 
 /** §98 — 계좌형 문자를 **변형 하나만** 선언하는 시나리오(원본 수법은 옛 세션 해석용이라 바꾸지 않는다 — 내용이 바뀌는 쪽이 새 ID). */
 // §101 — fv-h3vn(자산 검수 사이트)이 더해졌다(fv-c8wq는 배정 은퇴 · 내용 무변경 — 둘 다 같은 검사를 받는다).
-// §123 — 자산 보호 고급 공탁금 이체형 fv-p3jx만 계좌형 문자(asset-deposit-account)를 선언한다.
+// §125 — 자산 보호 고급 공탁금 이체형 fv-p3jx만 계좌형 문자(asset-deposit-account)를 선언한다.
 const ACCOUNT_SMS_VARIANT_ONLY: Record<string, string[]> = { "prosecution-cooperation-call": ["fv-c8wq", "fv-h3vn"], "asset-protection-notice-call": ["fv-p3jx"] };
 
 test("[2026-10-17 계좌 문자 역검증] 옛 institutional 수법 문구를 끼운 오염본은 같은 판정식이 실패시킨다", () => {
