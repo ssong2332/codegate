@@ -38,7 +38,7 @@ import {
 } from "../inCallSms/smsGate";
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms } from "../inCallSms/smsDelivery";
-import { hasCompletedGoalAction, readMockScreenCompletion } from "../scammerHangup/goalAction";
+import { goalFollowUpFor, hasCompletedGoalAction, readMockScreenCompletion } from "../scammerHangup/goalAction";
 import type { SmsDeliveryInput } from "../inCallSms/smsDelivery";
 import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import {
@@ -346,6 +346,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
           declared: smsDeclared,
           declaredKnown: smsDeclaredReason === undefined,
           userTurns: userTurnsNow,
+          followUpUserTurns: goalFollowUpFor(session.scenarioId, session.flowVariantId), // §115 C-5
         });
       } catch {
         goalActionDone = false;

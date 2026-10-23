@@ -10,6 +10,7 @@ import { SCAMMER_HANGUP_MIN_USER_TURNS, decideScammerHangup, type ScammerHangupI
 import {
   GOAL_AFTER_LAST_SMS_USER_TURNS,
   GOAL_NO_SMS_MIN_USER_TURNS,
+  goalFollowUpFor,
   hasCompletedGoalAction,
   type GoalActionInput,
 } from "../goalAction";
@@ -128,7 +129,9 @@ test("[§108 7종] 확인 무력화 시나리오 × 고급 흐름 변형 전수 
     variants += 1;
     const declared = variant.sms;
     const label = `${variant.scenarioId} ${variant.variantId}`;
-    const base: GoalActionInput = { delivered: [], mockScreens: [], declared, declaredKnown: true, userTurns: 6 };
+    // §115 — 운영 경로와 같이 변형의 후속 단계 값을 넣는다(기관 사칭 고급 2벌만 값이 있다).
+    const followUp = goalFollowUpFor(variant.scenarioId, variant.variantId);
+    const base: GoalActionInput = { delivered: [], mockScreens: [], declared, declaredKnown: true, userTurns: 6, followUpUserTurns: followUp };
 
     // ⓐ 도착 전 발화 6 goal — 필수 문자 마지막 1건이 아직 안 왔다(선언 0이면 C-4 하한 전).
     const required = declared.filter((s) => s.required);
@@ -144,7 +147,11 @@ test("[§108 7종] 확인 무력화 시나리오 × 고급 흐름 변형 전수 
       const delivered = arrivals.some((a) => a.smsId === screenSms.smsId)
         ? arrivals.map((a) => (a.smsId === screenSms.smsId ? { ...a, landingSubmitted: true as const } : a))
         : [...arrivals, { smsId: screenSms.smsId, userTurnsAtArrival: last, landingSubmitted: true as const }];
-      done = { ...base, delivered, userTurns: last + 1 }; // 제출 직후 다음 발화
+      if (followUp !== undefined) {
+        // §115 C-5 — 제출 직후에는 아직(대출 실행 유도가 남았다) · 마지막 도착 뒤 발화 ≥ 후속 값이면 통과.
+        assert.deepEqual(decide({ ...base, delivered, userTurns: last + 1 }), { status: "blocked_transfer", hangup: false, row: "4" }, `${label} 제출 직후(후속 남음)`);
+      }
+      done = { ...base, delivered, userTurns: last + (followUp ?? 1) }; // 제출 직후 다음 발화(후속 단계가 있으면 그 몫까지)
     } else if (screenSms) {
       done = { ...base, delivered: arrivals, mockScreens: [{ consented: true, submitted: false }], userTurns: last + 1 };
     } else if (declared.length > 0) {
@@ -170,4 +177,60 @@ test("[§108 배선] 실시간 콜러블 · 텍스트 폴백이 같은 함수로
   assert.ok(!/request\.data[^;]*goalAction/.test(realtime), "클라 요청에서 완료 사실을 받는다");
   const delivery = readFileSync(path.join(SRC_ROOT, "inCallSms/smsDelivery.ts"), "utf8");
   assert.ok(delivery.includes('...(doc.get("landingSubmittedAt") ? { landingSubmitted: true as const } : {}),'));
+});
+
+// ── §115(DECISIONS #230 · 사용자 결정 *"실제 수법들과 비교해서 진행"*) — 기관 사칭 고급 2벌의 후속 단계(대출 실행 유도) C-5 ──────────
+test("[§115 C-5] 후속 단계가 있는 변형은 기관 사칭 고급 2벌뿐 · 값 4 · 다른 확인 무력화 고급 변형은 종전 판정 그대로", () => {
+  const withFollowUp = FLOW_VARIANTS.filter((v) => v.goalFollowUpUserTurns !== undefined).map((v) => v.variantId).sort();
+  assert.deepEqual(withFollowUp, ["fv-c5fj", "fv-pgqt"]);
+  for (const id of withFollowUp) assert.equal(goalFollowUpFor("institutional-impersonation", id), 4, id);
+  assert.equal(goalFollowUpFor("card-company-impersonation", "fv-c5fj"), undefined, "시나리오가 다르면 적용 안 함");
+  assert.equal(goalFollowUpFor("institutional-impersonation", undefined), undefined, "변형 없음 = 종전");
+  // 다른 확인 무력화 고급 6종(기관 사칭 밖) — 후속 값이 없으므로 같은 입력에 같은 판정(넣든 빼든)
+  let checked = 0;
+  for (const v of FLOW_VARIANTS) {
+    if (!VERIFY_INTERCEPT[v.scenarioId] || v.level !== "advanced" || v.scenarioId === "institutional-impersonation") continue;
+    const followUp = goalFollowUpFor(v.scenarioId, v.variantId);
+    assert.equal(followUp, undefined, v.variantId);
+    const required = v.sms.filter((x) => x.required);
+    for (let turns = 0; turns <= 14; turns += 1) {
+      for (const submitted of [false, true]) {
+        const delivered: DeliveredSmsRecord[] = required.map((x, k) => ({
+          smsId: x.smsId,
+          userTurnsAtArrival: 3 + 2 * k,
+          ...(submitted ? { landingSubmitted: true as const } : {}),
+        }));
+        const input: GoalActionInput = { delivered, mockScreens: [], declared: v.sms, declaredKnown: true, userTurns: turns };
+        assert.equal(hasCompletedGoalAction({ ...input, followUpUserTurns: followUp }), hasCompletedGoalAction(input), `${v.variantId} 발화 ${turns}`);
+      }
+    }
+    checked += 1;
+  }
+  assert.ok(checked >= 6, `기관 사칭 밖 확인 무력화 고급 변형 ${checked}개`);
+});
+
+test("[§115 로그 재현] b6dfcbcf — 기관 사칭 고급 · 계좌 문자 도착(발화 4) 뒤 이체 화면 제출 · 발화 5의 goal은 이제 막힌다 · 발화 8에서 통과", () => {
+  const declared = FLOW_VARIANTS.find((v) => v.variantId === "fv-pgqt")!.sms;
+  const delivered: DeliveredSmsRecord[] = [
+    { smsId: "institution-otp", userTurnsAtArrival: 2 },
+    { smsId: "institution-safe-account", userTurnsAtArrival: 4, landingSubmitted: true },
+  ];
+  const input: GoalActionInput = { delivered, mockScreens: [], declared, declaredKnown: true, userTurns: 5, followUpUserTurns: 4 };
+  assert.equal(hasCompletedGoalAction({ ...input, followUpUserTurns: undefined }), true, "종전(§108) — C-1로 발화 5에 통과했다(운영 로그 row 9)");
+  assert.deepEqual(decide(input), { status: "blocked_transfer", hangup: false, row: "4" }, "§115 — 대출 실행 유도가 남았다");
+  assert.deepEqual(decide({ ...input, userTurns: 7 }), { status: "blocked_transfer", hangup: false, row: "4" });
+  assert.deepEqual(decide({ ...input, userTurns: 8 }), { status: "accepted", hangup: true, row: "9" }, "후속 단계까지 마치면 끊는다");
+  // 제출하지 않고 거절만 해도 같은 시점에 끝난다 — 할 게 없으면 끊는다
+  const refused = delivered.map((d) => ({ smsId: d.smsId, userTurnsAtArrival: d.userTurnsAtArrival }));
+  assert.deepEqual(decide({ ...input, delivered: refused, userTurns: 8 }), { status: "accepted", hangup: true, row: "9" });
+  // 계좌 문자가 아직 안 왔으면 후속 값과 무관하게 막힌다
+  assert.equal(hasCompletedGoalAction({ ...input, delivered: delivered.slice(0, 1), userTurns: 20 }), false);
+  assert.equal(hasCompletedGoalAction({ ...input, declaredKnown: false, userTurns: 20 }), false, "선언 모름 = fail-closed");
+});
+
+test("[§115 배선] 두 경로가 같은 함수로 변형의 후속 값을 넘긴다", () => {
+  for (const file of ["scammerHangup/index.ts", "roleplay/index.ts"]) {
+    const src = readFileSync(path.join(SRC_ROOT, file), "utf8");
+    assert.ok(src.includes("followUpUserTurns: goalFollowUpFor(session.scenarioId, session.flowVariantId)"), file);
+  }
 });

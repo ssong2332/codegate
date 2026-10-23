@@ -167,6 +167,7 @@ const FLOW_VARIANT_FIELDS: Record<keyof FlowVariant, FieldPolicy> = {
   signal: { skip: "열거형" },
   channels: { skip: "채널 열거값 목록" },
   demandStages: { skip: "숫자" },
+  goalFollowUpUserTurns: { skip: "숫자(§115 끊기 C-5 발화 수)" },
   sources: { skip: "사례 ID 목록(C·S 번호)" },
   // T194-a(§84.4.2 · AC-106 (i)) — 리터럴 `true` 플래그.
   escalatesToVoice: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },

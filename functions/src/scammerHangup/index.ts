@@ -18,7 +18,7 @@ import { resolveDeclaredSms, sessionDeclaresInCallSms } from "../inCallSms/smsGa
 import { readDeliveredSms } from "../inCallSms/smsDelivery";
 import type { SessionDoc } from "../shared/types";
 import { decideAndMarkRealtimeHangup, isVerifyInterceptSession } from "./commit";
-import { hasCompletedGoalAction, readMockScreenCompletion } from "./goalAction";
+import { goalFollowUpFor, hasCompletedGoalAction, readMockScreenCompletion } from "./goalAction";
 import { scammerHangupGuidance } from "./guidance";
 import { readScammerHangupRequest } from "./readRequest";
 import type { RequestScammerHangupRequest, RequestScammerHangupResponse } from "./types";
@@ -71,6 +71,7 @@ export const requestScammerHangup = onCall<
         declared,
         declaredKnown: reason === undefined,
         userTurns,
+        followUpUserTurns: goalFollowUpFor(session.scenarioId, session.flowVariantId), // §115 C-5
       });
     } catch {
       goalActionDone = false;
