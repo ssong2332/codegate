@@ -62,7 +62,7 @@ Based on PRD Version: v1.1 · Based on UX Version: 1.7
 |---|---|---|---|
 | channel | string? | `messenger`\|`voice` | **현재 활성 채널**(방향 무관 상태값). 부재→`voice`. UX-014 내부 phase와 다른 층위(명명 충돌 회피로 `phase` 아닌 `channel`, DECISIONS #14) |
 | entryChannel | string? | `messenger`\|`voice` | 세션 시작 채널. 리포트 교차채널 판정(AC-037) |
-| channelHistory | array<{from,to,at,trigger,turnCountAtTransition?}>? | | 전이 이력. trigger=`structured_signal`\|`maxturn_fallback`\|`manual_button`(AC-035/037). `turnCountAtTransition?`는 **`to==="messenger"` 전이에만** 기록하는 전이 시점 누적 `turnCount` 기준점 — 메신저 max-turn 폴백의 핑퐁 방지(Architecture.md §13.8, DECISIONS #25) |
+| channelHistory | array<{from,to,at,trigger,turnCountAtTransition?,caller?}>? | | 전이 이력. §123 `caller?: "participant"` = 참가자가 건 통화(대화방 보이스톡 발신 · 부재 = 사기범 · 무백필 · 서버만 씀). trigger=`structured_signal`\|`maxturn_fallback`\|`manual_button`(AC-035/037). `turnCountAtTransition?`는 **`to==="messenger"` 전이에만** 기록하는 전이 시점 누적 `turnCount` 기준점 — 메신저 max-turn 폴백의 핑퐁 방지(Architecture.md §13.8, DECISIONS #25) |
 | messengerSkin | string? | `ios`\|`samsung`\|`default` | UA 자동 감지 결과(프레젠테이션 전용, 안전 미게이팅, §13.5) |
 | skinSource | string? | `auto`\|`manual`\|`fallback` | 스킨 결정 출처 |
 | voiceSelectionSource | string? | `recorded`\|`reused`\|`fallback_male`\|`fallback_female` | 조건부 clone/목소리 선택 결과(AC-046, §13.6). 결정된 voiceId는 기존 `voiceId` 필드 재사용 |

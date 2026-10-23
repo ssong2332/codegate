@@ -54,6 +54,7 @@ import PhoneIcon from "@/components/PhoneIcon";
 import EndTrainingButton from "@/components/EndTrainingButton";
 import MessengerFakeLanding from "@/components/MessengerFakeLanding";
 import MessengerProfileSheet from "@/components/MessengerProfileSheet";
+import VoiceTalkDialScreen from "@/components/VoiceTalkDialScreen";
 import MessengerStartNotice from "@/components/MessengerStartNotice";
 import { closePrimedCallAudio, primeCallAudio } from "@/lib/realtime/callAudio";
 import { GEMINI_OUTPUT_SAMPLE_RATE } from "@/lib/realtime/pcm";
@@ -542,7 +543,8 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
     stashVoiceTalkDial({ sessionId, audio, atMs: Date.now() });
     setDialingVoiceTalk(true);
     try {
-      const result = await requestEscalation({ sessionId });
+      // §123 — 참가자가 건 통화로 기록한다(통화 첫마디 · Live 맥락이 "네가 전화했다"고 말하지 않게).
+      const result = await requestEscalation({ sessionId, via: "voice_talk_dial" });
       if ("escalation" in result && result.escalation.toChannel === "voice") {
         router.push("/session/play");
         return;
@@ -1316,35 +1318,13 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
       {/* 실기 신고 4 — 보이스톡 응답 없음 연출(통화로 이어지지 않는 카톡형 세션). 신호음 중에는 취소(빨간 버튼)로 대화방에 돌아간다 —
           취소하면 서버에 아무것도 남기지 않는다. 응답 없음 뒤 2초면 저절로 닫힌다(대화 화면 상시 종료로 바로 돌아간다 — AC-006). */}
       {(voiceTalkCall !== null || dialingVoiceTalk) && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed inset-0 z-30 flex flex-col items-center justify-between bg-ink/95 px-6 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-24 text-white"
-        >
-          <div className="flex flex-col items-center gap-4">
-            <span
-              aria-hidden="true"
-              className="flex h-[96px] w-[96px] items-end justify-center overflow-hidden rounded-[36px]"
-              style={{ backgroundColor: chatTokens.profileBg, color: chatTokens.profileFg }}
-            >
-              <PhoneIcon name="person" size={80} />
-            </span>
-            <p className="text-[22px] font-bold">{peerName}</p>
-            <p className="text-base text-white/80">
-              {voiceTalkCall === "unanswered" ? "상대방이 응답하지 않습니다" : "보이스톡 연결 중…"}
-            </p>
-          </div>
-          {voiceTalkCall === "ringing" && (
-            <button
-              type="button"
-              onClick={() => setVoiceTalkCall(null)}
-              aria-label="보이스톡 취소"
-              className="flex h-16 w-16 items-center justify-center rounded-full bg-danger text-white"
-            >
-              <PhoneIcon name="end-call" size={30} />
-            </button>
-          )}
-        </div>
+        // §123(UX D-156) — 카톡형 보이스톡 발신 화면(공용 컴포넌트). 신호음 중에만 취소(빨간 버튼)가 대화방으로 돌린다 — 서버 기록 0.
+        // 전환 요청 중(발신 · 이어지는 세션)과 응답 없음 안내는 종료가 무반응이다(곧 통화 화면 · 대화방으로 넘어간다).
+        <VoiceTalkDialScreen
+          name={peerName}
+          status={voiceTalkCall === "unanswered" ? "상대방이 응답하지 않습니다" : "보이스톡 연결 중…"}
+          {...(voiceTalkCall === "ringing" ? { onEnd: () => setVoiceTalkCall(null) } : {})}
+        />
       )}
     </main>
     </div>

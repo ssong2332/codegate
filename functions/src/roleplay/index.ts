@@ -71,6 +71,7 @@ import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { PHOTO_TURN_TEXT, photoTurnInstruction } from "./photoTurn";
 import { replyChatDuringCall } from "./chatDuringCall";
+import { currentCallCaller, PARTICIPANT_CALLED_INSTRUCTION } from "./callCaller";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { asksIdentityCheck } from "./personaAuthority";
 import { extractSmsMarker } from "./smsMarker";
@@ -545,8 +546,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       [promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction].filter(Boolean).join("\n") ||
       undefined;
     // §120 — 사진 턴이면 캐릭터 유지형 반응 지시 1줄을 맨 뒤에 붙인다(`photoTurn.ts` 표 · 그 밖 턴 = 없음 · 문면 바이트 동일).
+    // §123 — 참가자가 건 통화(보이스톡 발신)면 "네가 전화한 게 아니다" 1줄(`callCaller.ts` · 사기범이 건 통화 = 없음).
+    const participantCalledInstruction =
+      escalatedCall && currentCallCaller(session.channelHistory) === "participant" ? PARTICIPANT_CALLED_INSTRUCTION : undefined;
     const turnInstructionWithPhoto =
-      [turnInstructionWithSms, photoTurnInstruction(isPhotoTurn)].filter(Boolean).join("\n") || undefined;
+      [turnInstructionWithSms, photoTurnInstruction(isPhotoTurn), participantCalledInstruction].filter(Boolean).join("\n") ||
+      undefined;
 
     // 첫 사용자 턴만 LLM 시간 제한 20초(2026-10-18, 사용자 결정 C — llm/index.ts LLM_FIRST_TURN_TIMEOUT_MS).
     // AC-004 목표(95% ≤10초)의 예외 1건 — 첫 턴은 Gemini 지연이 반복돼 10초에서 Mock으로 강등됐고,

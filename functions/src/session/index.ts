@@ -538,7 +538,15 @@ export const requestEscalation = onCall<
     throw new HttpsError("failed-precondition", "이 시나리오는 통화 전이를 지원하지 않습니다.");
   }
 
-  await transitionChannel(sessionId, "messenger", "voice", "manual_button");
+  // §123 — 대화방 보이스톡 발신이면 참가자가 건 통화로 기록한다(통화 첫마디 · Live 맥락이 본다).
+  await transitionChannel(
+    sessionId,
+    "messenger",
+    "voice",
+    "manual_button",
+    undefined,
+    via === "voice_talk_dial" ? { caller: "participant" } : undefined,
+  );
   return { escalation: { toChannel: "voice" } };
 });
 

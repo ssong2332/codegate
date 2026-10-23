@@ -494,7 +494,35 @@ export const MESSENGER_CHAT_TOKENS = {
   /** §95 — 상대 프로필 시트(전체 화면 · 단색 바탕 · 자체 실루엣). */
   profileSheetBg: "#56667A",
   profileSheetText: "#FFFFFF",
+  /**
+   * §123(UX D-156) — 보이스톡 발신 화면(실제 카톡 보이스톡 발신 화면 구성 근사 — 색 · 크기는 추정, 로고 · 상표 이미지 0).
+   * 전체 화면 어두운 세로 그라데이션 · 위 프로필 · 이름 · 상태 · 아래 둥근 버튼 줄(스피커 · 마이크 끄기) · 빨간 종료.
+   */
+  voiceTalkBgTop: "#3A4654",
+  voiceTalkBgBottom: "#1E2329",
+  voiceTalkName: "#FFFFFF",
+  voiceTalkStatus: "#C7D0DA",
+  voiceTalkButtonBg: "rgba(255,255,255,0.18)",
+  voiceTalkButtonIcon: "#FFFFFF",
+  voiceTalkButtonOnBg: "#FFFFFF",
+  voiceTalkButtonOnIcon: "#1B1B1F",
+  voiceTalkLabel: "#E1E7ED",
+  voiceTalkEndBg: "#D93A31",
+  voiceTalkEndIcon: "#FFFFFF",
 } as const;
+
+/** §123 — 보이스톡 발신 화면의 (글자/아이콘, 바탕) 쌍(G456과 같은 하한 · 바탕은 더 밝은 위쪽 색으로 보수적으로 잰다). */
+export function voiceTalkDialContrastPairs(): ContrastPair[] {
+  const t = MESSENGER_CHAT_TOKENS;
+  return [
+    { name: "voiceTalk.name", fg: t.voiceTalkName, bg: t.voiceTalkBgTop, kind: "text" },
+    { name: "voiceTalk.status", fg: t.voiceTalkStatus, bg: t.voiceTalkBgTop, kind: "text" },
+    { name: "voiceTalk.label", fg: t.voiceTalkLabel, bg: t.voiceTalkBgTop, kind: "text" },
+    { name: "voiceTalk.buttonIcon", fg: t.voiceTalkButtonIcon, bg: t.voiceTalkButtonBg, base: t.voiceTalkBgTop, kind: "nonText" },
+    { name: "voiceTalk.buttonOnIcon", fg: t.voiceTalkButtonOnIcon, bg: t.voiceTalkButtonOnBg, kind: "nonText" },
+    { name: "voiceTalk.endIcon", fg: t.voiceTalkEndIcon, bg: t.voiceTalkEndBg, kind: "nonText" },
+  ];
+}
 
 // ── WCAG 대비 계산(G456) ────────────────────────────────────────────────────────────
 
