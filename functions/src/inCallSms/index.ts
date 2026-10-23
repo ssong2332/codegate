@@ -26,6 +26,8 @@ import {
 } from "./smsGate";
 import type { SmsGateStatus } from "./smsGate";
 import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms } from "./smsDelivery";
+import { goalFollowUpFor, planGoalWrapUp } from "../scammerHangup/goalAction";
+import { GOAL_WRAP_UP_INSTRUCTION } from "../scammerHangup/guidance";
 import type {
   DeliverInCallSmsRequest,
   DeliverInCallSmsResponse,
@@ -166,9 +168,27 @@ export const deliverInCallSms = onCall<
   if (trigger === "backstop") {
     // §104 — 사기범이 이미 "문자를 보냈다"고 말했다는 클라 주장(불리언 1개 · 부재 = 종전). 게이트 하한은 그대로라 앞당기는 것은 대기 단계뿐이다.
     const smsClaimed = request.data?.smsClaimed === true;
-    const plan = planSmsBackstop({ declared, delivered: await readDeliveredSms(sessionRef), userTurns, claimed: smsClaimed });
-    if (plan.action === "none_pending" || plan.action === "wait") {
-      return { status: plan.action === "wait" ? "waiting" : "none_pending" };
+    const deliveredNow = await readDeliveredSms(sessionRef);
+    const plan = planSmsBackstop({ declared, delivered: deliveredNow, userTurns, claimed: smsClaimed });
+    if (plan.action === "wait") return { status: "waiting" };
+    if (plan.action === "none_pending") {
+      // §115 — 후속 단계 변형은 할 일을 마칠 때까지 계속 묻게 하고(`goal_pending`), 마친 첫 질의에 마무리 지시 1줄을 싣는다.
+      const followUpUserTurns = goalFollowUpFor(session.scenarioId, session.flowVariantId);
+      if (followUpUserTurns === undefined) return { status: "none_pending" };
+      const wrap = planGoalWrapUp({
+        delivered: deliveredNow,
+        declared,
+        declaredKnown: declaredReason === undefined,
+        userTurns,
+        followUpUserTurns,
+        placed: await isVerifyOfferPlaced(db, sessionId, session.scenarioId),
+      });
+      if (wrap === "pending") return { status: "goal_pending" };
+      if (wrap === "wrap_up") {
+        logger.info("[§115] 할 일 완료 — 마무리 지시", { sessionId, userTurns });
+        return { status: "none_pending", wrapUpInstruction: GOAL_WRAP_UP_INSTRUCTION };
+      }
+      return { status: "none_pending" };
     }
     if (plan.action === "nudge") {
       // 전환(호 전환) 뒤에는 원 사기범이 없다 — 넛지를 싣지 않는다(§53.6 (3)과 같은 판단). ⚠️ 리뷰 Minor ④ — 반면

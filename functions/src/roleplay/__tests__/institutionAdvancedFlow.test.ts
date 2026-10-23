@@ -79,9 +79,14 @@ test("[신고①] 고급 변형 수법 — 인증번호 요구 · 이체 화면 
       assert.ok(labels.includes(need), `${v.variantId}: ${need}`);
     }
     for (const gone of ["인출·전달 요구", "코인 구매·송금 요구"]) assert.ok(!labels.includes(gone), `${v.variantId}: ${gone} 제거`);
+    // §115 — 링크 이체 화면 뒤에 대출 실행 유도 단계가 하나 더 있다(마지막 단계).
+    const transfer = v.stages[v.stages.length - 2]!.summary;
+    assert.match(transfer, /링크/, `${v.variantId}: 끝에서 둘째 단계 = 링크 이체 화면`);
+    assert.match(transfer, /은행 앱이나 창구에서 따로 이체하라고 하지 않는다/, `${v.variantId}: "알아서 이체" 차단`);
     const last = v.stages[v.stages.length - 1]!.summary;
-    assert.match(last, /링크/, `${v.variantId}: 마지막 단계 = 링크 이체 화면`);
-    assert.match(last, /은행 앱이나 창구에서 따로 이체하라고 하지 않는다/, `${v.variantId}: "알아서 이체" 차단`);
+    assert.match(last, /대출을 받아 그 돈도 같은 안전계좌로/, `${v.variantId}: 마지막 단계 = 대출 실행 유도(§115)`);
+    assert.match(last, /더 조르지 않고 마무리한다/, `${v.variantId}: 거절 뒤 마무리 — 할 게 없으면 끊는다`);
+    assert.ok(labels.includes("대출금 이체 요구"), `${v.variantId}: 대출금 이체 요구 수법`);
     assert.match(v.decisionMoment ?? "", /이체 화면/, `${v.variantId}: 결정 순간`);
   }
 });
@@ -98,16 +103,18 @@ test("[신고①] 백스톱 — 모델이 안 불러도 인증번호 → 계좌 
   for (const v of ADVANCED) {
     const { declared } = resolveDeclaredSms(INSTITUTION, v.variantId);
     assert.deepEqual(planSmsBackstop({ declared, delivered: [], userTurns: 1 }), { action: "wait" });
-    const nudge = planSmsBackstop({ declared, delivered: [], userTurns: 4 });
+    // §115 B안 — 하한 3 · 6: 인증번호 넛지 5 · 강제 7, 계좌는 인증번호 도착(7) + 간격 2 = 9에서 열려 넛지 11 · 강제 13.
+    assert.equal(planSmsBackstop({ declared, delivered: [], userTurns: 2 }).action, "wait", `${v.variantId}: 2발화엔 아직(종전 하한 2)`);
+    const nudge = planSmsBackstop({ declared, delivered: [], userTurns: 5 });
     assert.equal(nudge.action, "nudge");
-    const first = planSmsBackstop({ declared, delivered: [], userTurns: 6 });
+    const first = planSmsBackstop({ declared, delivered: [], userTurns: 7 });
     assert.equal(first.action === "deliver" && first.item.smsId, "institution-otp", `${v.variantId}: 첫 강제 = 인증번호`);
-    const delivered = [{ smsId: "institution-otp", userTurnsAtArrival: 6 }];
-    assert.equal(planSmsBackstop({ declared, delivered, userTurns: 7 }).action, "wait");
-    const second = planSmsBackstop({ declared, delivered, userTurns: 12 });
+    const delivered = [{ smsId: "institution-otp", userTurnsAtArrival: 7 }];
+    assert.equal(planSmsBackstop({ declared, delivered, userTurns: 8 }).action, "wait");
+    const second = planSmsBackstop({ declared, delivered, userTurns: 13 });
     assert.equal(second.action === "deliver" && second.item.smsId, "institution-safe-account", `${v.variantId}: 둘째 = 계좌`);
     assert.equal(
-      planSmsBackstop({ declared, delivered: [...delivered, { smsId: "institution-safe-account", userTurnsAtArrival: 12 }], userTurns: 20 }).action,
+      planSmsBackstop({ declared, delivered: [...delivered, { smsId: "institution-safe-account", userTurnsAtArrival: 13 }], userTurns: 20 }).action,
       "none_pending",
     );
   }

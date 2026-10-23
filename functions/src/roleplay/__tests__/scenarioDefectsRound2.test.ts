@@ -312,7 +312,9 @@ test("[§104 문자 미도착] 사기범이 문자를 보냈다고 말했으면(
   assert.equal(planSmsBackstop({ declared, delivered, userTurns: 9 }).action, "deliver", "종전 발송 시점 그대로");
   const src = read("inCallSms/index.ts");
   assert.ok(src.includes("const smsClaimed = request.data?.smsClaimed === true;"));
-  assert.ok(src.includes("planSmsBackstop({ declared, delivered: await readDeliveredSms(sessionRef), userTurns, claimed: smsClaimed })"));
+  // §115 — 도착 기록을 한 번 읽어 백스톱 계획과 마무리 판정(`planGoalWrapUp`)이 같은 값을 쓴다.
+  assert.ok(src.includes("const deliveredNow = await readDeliveredSms(sessionRef);"));
+  assert.ok(src.includes("planSmsBackstop({ declared, delivered: deliveredNow, userTurns, claimed: smsClaimed })"));
 });
 
 // ══ §104.9 메신저 단계 사기범 종료(대안 A) ══════════════════════════════════════════════════════════════════════════

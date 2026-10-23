@@ -99,6 +99,12 @@ export type FlowVariant = {
   demandStages: number;
   /** 고급 전용 3종 필수(AC-097 (e)). */
   decisionMoment?: string;
+  /**
+   * §115(DECISIONS #230) — 이체 화면 뒤에 **말로 하는 후속 단계**(대출 실행 유도 등)가 있는 변형. 끊기 4행의 "할 일을 다 했다"
+   * (`scammerHangup/goalAction.ts`)를 필수 문자가 모두 도착한 뒤 참가자 발화 ≥ 이 값일 때로 늦춘다 — 후속 단계를 꺼내고 답을 들을 시간.
+   * ⚠️ 판단값. 부재 = 종전 판정(C-1 ~ C-4) 그대로.
+   */
+  goalFollowUpUserTurns?: number;
   /** 사례 C · S 번호(AC-097 (c) · 설계 금지 X4). */
   sources?: string[];
   /**
@@ -191,10 +197,21 @@ const INSTITUTION_OTP_DEMAND =
   "인증번호 요구 — '본인 확인 마지막 절차입니다, 방금 문자로 간 인증번호 여섯 자리 불러 주십시오' 처럼 문자로 도착한 인증번호를 불러 달라고 요구한다. 번호는 네가 지어내 말하지 않는다.";
 const INSTITUTION_LINK_TRANSFER =
   "이체 화면 유도 — '문자로 보낸 안내의 링크를 눌러 보시면 안전계좌는 이미 들어가 있습니다, 금액만 넣고 이체 누르시면 됩니다' 처럼 문자 속 링크의 이체 화면에서 직접 이체하게 한다. 은행 앱·창구·ATM에서 따로 보내라고 하지 않는다.";
+// §115(DECISIONS #230 · B안) — 하한 2 · 4 → 3 · 6: 운영 세션 b6dfcbcf에서 인증번호 문자가 2발화에 나가 앞 단계(안심 유도 · 자산 규모)가
+// 2발화 안에 압축됐다. 간격(2 이상)은 그대로 지킨다.
 const INSTITUTION_ADVANCED_SMS: FlowVariantSms[] = [
-  { purpose: "identity", smsId: "institution-otp", required: true, notBeforeUserTurns: 2 },
-  { purpose: "transfer", smsId: "institution-safe-account", required: true, notBeforeUserTurns: 4 },
+  { purpose: "identity", smsId: "institution-otp", required: true, notBeforeUserTurns: 3 },
+  { purpose: "transfer", smsId: "institution-safe-account", required: true, notBeforeUserTurns: 6 },
 ];
+// §115(DECISIONS #230 · A안 · 사용자 결정 *"실제 수법들과 비교해서 진행"*) — 이체 뒤 후속 단계. 실제 수법 근거: 금감원 소비자경보
+// 2024-35호(2024-12-10 — "범죄 연루 확인 · 정상 대출 입증"을 핑계로 대출을 받게 한 뒤 편취 · "국가기관은 대출을 권유하지 않는다") ·
+// 2025-1호(2025-02-13 — 가족 · 금융회사에 알리지 말라며 고립 · 금융회사 확인 거절 유도). Architecture §115 비교표.
+const INSTITUTION_ADVANCED_LOAN_STAGE =
+  "이체가 끝났다고 하면 '검수 과정에서 고객님 명의로 부정 대출 정황이 함께 나왔다, 정상 대출임을 입증해야 한다'며 금융회사에서 대출을 받아 그 돈도 같은 안전계좌로 옮기라고 요구한다. 은행 직원이 대출 용도를 물으면 생활비라고만 답하라고 시키고, 수사 기밀이라 가족 · 은행에 알리면 안 된다고 다시 다짐받는다. 상대가 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다.";
+const INSTITUTION_LOAN_DEMAND =
+  "대출금 이체 요구 — '부정 대출에 연루되셨습니다, 정상 대출인지 확인하려면 대출을 받아 그 돈도 안전계좌로 옮기셔야 합니다' 처럼 범죄 연루 확인을 핑계로 대출을 받게 하고, 은행 직원이 물으면 용도를 둘러대라고 시킨다. 실제 금융회사 이름 · 금액은 지어내 말하지 않는다.";
+/** §115 — 이체 문자 도착 뒤 후속 단계(대출 실행 유도)를 꺼내고 답을 들을 발화 수(판단값 — 이체 보고 1 · 대출 요구 응답 2 · 여유 1). */
+const INSTITUTION_ADVANCED_FOLLOW_UP_USER_TURNS = 4;
 const INSTITUTION_ADVANCED_DECISION_MOMENT = "문자 링크로 연 안전계좌 이체 화면에서 금액을 넣고 이체하기를 누르는 순간";
 const APP_INSTALL = { from: "card-delivery-call", label: "보안 점검 앱 설치 요구" };
 const AGENCY_PROBE = { from: "card-delivery-call", label: "기관 조사 언급" };
@@ -414,12 +431,14 @@ const SPECS: VariantSpec[] = [
       "계좌번호보다 거래 은행과 자산 규모부터 묻는다.",
       INSTITUTION_ADVANCED_OTP_STAGE,
       INSTITUTION_ADVANCED_LINK_TRANSFER_STAGE,
+      INSTITUTION_ADVANCED_LOAN_STAGE,
     ),
     keepLabels: ["권위 암시", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "안전계좌 이체 요구", "비밀 유지 요구", "전화 끊음 저지"],
     extraTactics: [
       ASSET_INFO,
       INSTITUTION_OTP_DEMAND,
       INSTITUTION_LINK_TRANSFER,
+      INSTITUTION_LOAN_DEMAND,
       "안심 유도 — '협조만 하시면 약식으로 조용히 끝납니다' 처럼 위협과 번갈아 안심시켜 경계를 낮춘다.",
     ],
     // D2 · D5(콘텐츠) + D3 · D4(고급 오버레이 — 확인 무력화 카탈로그 보유 → d3_and_d4)
@@ -431,8 +450,9 @@ const SPECS: VariantSpec[] = [
     ],
     ...ADVANCED,
     channels: ["voice", "sms"],
-    demandStages: 3,
+    demandStages: 4,
     decisionMoment: INSTITUTION_ADVANCED_DECISION_MOMENT,
+    goalFollowUpUserTurns: INSTITUTION_ADVANCED_FOLLOW_UP_USER_TURNS,
     sources: ["C10", "C11", "C01", "S16", "S11"],
   },
   {
@@ -446,16 +466,18 @@ const SPECS: VariantSpec[] = [
       "자산이 범죄수익인지 검수해야 한다며 거래 은행과 자산 규모를 묻는다.",
       INSTITUTION_ADVANCED_OTP_STAGE,
       INSTITUTION_ADVANCED_LINK_TRANSFER_STAGE,
+      INSTITUTION_ADVANCED_LOAN_STAGE,
     ),
     keepLabels: ["권위 암시", "긴급성 조성", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "안전계좌 이체 요구", "비밀 유지 요구", "전화 끊음 저지"],
-    extraTactics: [ASSET_INFO, INSTITUTION_OTP_DEMAND, INSTITUTION_LINK_TRANSFER],
+    extraTactics: [ASSET_INFO, INSTITUTION_OTP_DEMAND, INSTITUTION_LINK_TRANSFER, INSTITUTION_LOAN_DEMAND],
     exitBlock: ["D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
     sms: [...INSTITUTION_ADVANCED_SMS],
     legs: ONE_LEG("검사", "male"),
     ...ADVANCED,
     channels: ["voice", "sms"],
-    demandStages: 3,
+    demandStages: 4,
     decisionMoment: INSTITUTION_ADVANCED_DECISION_MOMENT,
+    goalFollowUpUserTurns: INSTITUTION_ADVANCED_FOLLOW_UP_USER_TURNS,
     sources: ["C09", "S27"],
   },
 

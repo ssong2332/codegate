@@ -212,7 +212,9 @@ export type DeliverInCallSmsStatus =
   | "not_allowed"
   | "nudge"
   | "waiting"
-  | "none_pending";
+  | "none_pending"
+  // §115 — 백스톱: 남은 필수 문자는 없지만 후속 단계(대출 실행 유도 등)가 남았다 — 클라는 다음 발화에 다시 묻는다.
+  | "goal_pending";
 export type DeliverInCallSmsResponse = {
   /** `status==="delivered"`일 때만. */
   smsId?: string;
@@ -222,6 +224,8 @@ export type DeliverInCallSmsResponse = {
   declineInstruction?: string;
   /** `status==="nudge"`에서만 — 백스톱 넛지 1줄(서버 소유 · 맥락 주입). */
   nudgeInstruction?: string;
+  /** §115 — `none_pending`에서 후속 단계까지 할 일을 마쳤을 때만 — 마무리 지시 1줄(서버 소유 · 맥락 주입 · 전사 0 · 1회). */
+  wrapUpInstruction?: string;
   /**
    * A-1 ⑦ — `delivered`이고 필수 계좌·링크 문자일 때만(전환 뒤 생략). 참가자가 문자대로 마쳤다고 말하면 결과를 알리고
    * 다음 단계로 넘어가게 하는 조건형 1줄(서버 소유). ⚠️ 아직 어디서도 주입하지 않는다(클라 배선은 A-2).
