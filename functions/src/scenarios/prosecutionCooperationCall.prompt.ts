@@ -153,6 +153,20 @@ export const PROSECUTION_SITE_EXTRA_TACTICS: readonly string[] = [
   PROSECUTION_WALLET_EXTRA_TACTICS[3]!,
 ];
 
+// ⭐ §125(DECISIONS #240 · 다중 루트 1b) — 코인 · 사이트가 아닌 결말의 검찰 고급 루트(상품권 · 대출금 전달)용 페르소나. 원본에서 결말 문장 2곳만 바꾼다:
+//    [캐릭터]의 "자산 검수 명목으로 코인 구매·송금을 요구하는 상황" · [진행 방식]의 코인 상세 금지 줄. 화면은 사건 조회 문자 1건만(fv-h3vn과 같은 문자).
+//    소속 · 이름은 원본 그대로 가상 고유명(§118). ⛔ 원본 · 은퇴 변형 페르소나는 바꾸지 않는다.
+const COIN_ENDING_CLAUSE = "자산 검수 명목으로 코인 구매·송금을 요구하는 상황을 연기한다.";
+if (!personaPrompt.includes(COIN_ENDING_CLAUSE) || !personaPrompt.includes(CRYPTO_NO_DETAIL_LINE)) {
+  throw new Error("prosecutionCooperationCall.prompt: 결말 문장의 원천 줄을 찾지 못했다(§125)");
+}
+export function prosecutionRoutePersona(endingClause: string, endingRule: string): string {
+  return personaPrompt
+    .replace(NO_OTHER_SCREEN_LINE, CASE_LINK_ONLY_SCREEN_LINE)
+    .replace(COIN_ENDING_CLAUSE, endingClause)
+    .replace(CRYPTO_NO_DETAIL_LINE, endingRule);
+}
+
 export const prosecutionCooperationCallPrompt: ScenarioPromptDoc = {
   personaPrompt,
   weakenedTactics,

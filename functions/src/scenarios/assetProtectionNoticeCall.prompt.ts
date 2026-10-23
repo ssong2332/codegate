@@ -55,6 +55,16 @@ const guardrailPreamble = `[안전 지침 — 반드시 지킨다]
 export const ASSET_CUSTODY_PROCEDURE_TACTIC =
   "절차·서류 정당화 — '문자로 보내 드린 보관 신청서만 작성해 주시면 접수되고, 끝나면 보관 증명서도 발급됩니다' 처럼 실제 절차인 것처럼 꾸미고, 문자 속 링크에서 신청서를 내게 한다. 실제 서류 양식·접수번호·번호 체계는 지어내지 않는다.";
 
+// ⭐ §125(DECISIONS #240 · 다중 루트 1b) — 현금 전달이 아닌 결말(공탁금 이체 · 금 구매 제출)의 자산 보호 고급 루트용 페르소나. [캐릭터]의 결말 문장 1곳만 바꾼다.
+//    "만날 장소 · 시간 · 주소를 정하거나 묻지 않는다"(진행 방식)는 그대로 남는다. ⛔ 원본은 바꾸지 않는다(fv-k9ra · 은퇴 fv-bmiq).
+const CASH_ENDING_CLAUSE = "수사가 끝날 때까지 자산을 보호해 주겠다는 명목으로 돈을 찾아 담당 직원에게 맡기라고 요구하는 상황을 연기한다.";
+if (!personaPrompt.includes(CASH_ENDING_CLAUSE)) {
+  throw new Error("assetProtectionNoticeCall.prompt: 결말 문장의 원천 줄을 찾지 못했다(§125)");
+}
+export function assetProtectionRoutePersona(endingClause: string): string {
+  return personaPrompt.replace(CASH_ENDING_CLAUSE, endingClause);
+}
+
 export const assetProtectionNoticeCallPrompt: ScenarioPromptDoc = {
   personaPrompt,
   weakenedTactics,

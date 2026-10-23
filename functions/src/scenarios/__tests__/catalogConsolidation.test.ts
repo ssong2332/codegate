@@ -148,8 +148,11 @@ test("[§92 B · 무소급] 옛 변형 fv-bmiq · fv-nss6은 내용 무변경(�
     assert.ok(prompt.weakenedTactics.some((t) => t.includes(oldTactic)), `${oldId}: 원본 수법 문면`);
     assert.equal(prompt.personaPrompt.includes("문자로 보낸"), false, `${oldId}: 문자 언급 0`);
     assert.deepEqual(sessionReachableLandingIds(scenarioId, oldId), [], `${oldId}: 도달 랜딩 0`);
-    assert.deepEqual(listFlowVariants(scenarioId, "advanced").map((v) => v.variantId), [newId]);
-    assert.deepEqual(assignablePool(scenarioId, "advanced").map((v) => v.variantId), [newId]);
+    // §125(#240) — 다중 루트 1b: 새 세션 풀 = 그 시나리오의 현행 루트들(첫 원소가 §92 · §101의 새 변형). 옛 변형은 여전히 0.
+    const pool = listFlowVariants(scenarioId, "advanced").map((v) => v.variantId);
+    assert.equal(pool[0], newId);
+    assert.equal(pool.includes(oldId), false);
+    assert.deepEqual(assignablePool(scenarioId, "advanced").map((v) => v.variantId), pool);
   }
   assert.ok(SCENARIO_PROMPTS["prosecution-cooperation-call"]!.personaPrompt.includes("- 서류·사진·메신저 같은 다른 화면을 보내겠다고 하지 않는다. 필요한 것은 말로만 전한다."), "원본 프롬프트 무변경");
 });

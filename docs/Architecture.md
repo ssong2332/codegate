@@ -23854,3 +23854,55 @@ D 판단값 근거(관측 5세션 — 운영 f7047187 + §115.5 · §115.6 실 �
 | fv-r4hc | comply | check-app-link@3(도구) | 1회(말 먼저 0 · 주장 0) | 예 | unspecified@발화8 | 속음(약화된 사기 수법) |
 
 두 루트 모두 결말 단계에 도달했다(fv-q7cn — 예탁 · 인출 약속 요구까지, fv-r4hc — 현금 상환 약속 요구까지). 1a 실측 합계 = 측정 18 + 진단 2 = **20세션**.
+
+## 125. (Feature change — 2026-10-23 · 브랜치 `claude/multi-route-1b` = `claude/multi-route-1a`(§124) + 변경 · 메인 세션 지시 다중 루트 1b + 사용자 실기 신고 (3) · (9) · (11)) **다중 루트 1b — 확인 무력화 밖 고급 새 루트 6 · 검찰 추가 검수 이유 · 내 정보 활용 · 문자 도구 먼저** — implementer 기록 (DECISIONS #240)
+
+### 125.0 금지 (먼저)
+§124.0과 같다. 은퇴 변형(fv-bmiq · fv-nss6 · fv-p4hz · fv-c8wq) 바이트 무변경 · 원본 페르소나 무변경(새 결말 루트는 결말 문장만 바꾼 사본을 `legs[0].personaPrompt`로 쓴다 — `prosecutionRoutePersona` · `assetProtectionRoutePersona`).
+
+### 125.1 루트 (자가 고급 배정 풀)
+| 시나리오 | 루트(키 · 이름) | 결말 | 출처 |
+|---|---|---|---|
+| 자녀 납치 협박 | `fv-k268` instant-transfer · **`fv-w7tb`** petty-dispute 시비 합의금형 | 같은 소액 즉시 이체 · 진입이 "납치" ↔ "아이가 물건을 깨고 욕해서 붙잡고 있다" | S26 · C16 |
+| 가족 사고 딥보이스 | `fv-66hh` settlement · **`fv-h5sz`** small-instant 소액 급전형 | 합의금 ↔ 술자리 수리비 소액 즉시 | S26 · C16 · C18 |
+| 금감원 자산 보호 | `fv-k9ra` cash-handoff · **`fv-p3jx`** court-deposit 공탁금 이체형 · **`fv-t8ga`** gold 금 구매형 | 현금 전달 ↔ 약식 처리 공탁금 계좌 문자(새 `asset-deposit-account`) ↔ 보관 신청서 뒤 금 구매 제출 약속 | S4 · C03 / S35 · C23 |
+| 검찰 수사 협조 | `fv-h3vn` coin-site(다시 씀) · **`fv-v2mk`** voucher 상품권 핀 번호형 · **`fv-a6lq`** loan-cash 대출금 전달형 | 자산 검수 사이트 ↔ 문화상품권 핀 번호 ↔ 정상 대출 입증 명목 대출금 직원 전달 약속 | §101 / S44 · C24 / S40 · S42 · C07 |
+| 손주 사칭 · 유포 협박 | 새 루트 0 | — | 손주 = 국내 근거 없음 · 유포 = 근거 '약'(D-7) |
+
+### 125.2 사용자 실기 신고 반영
+| 신고 | 처방 |
+|---|---|
+| (11) *"자산 검수를 하는데, 하면, 다른 것도 있다고 다시 해달라는데 이게 뭔지 모르겠어"* | `fv-h3vn` 추가 검수 단계가 이유부터 말한다("방금 검수한 자금이 다른 계좌 · 적금 · 대출 한도로도 같은 흐름으로 빠져나간 기록 → 그 자금까지 검수해야 무혐의") · 추가 요구는 한 번 · 이유 없는 되풀이 금지(`PROSECUTION_SITE_FOLLOW_UP_STAGE_V2`) |
+| (3) 가상 기관 + 지역 | 검찰 3 · 자산 보호 2 루트 첫 단계에 §124의 `INVESTIGATION_CARD_USE` |
+| (9) 문자 지연 | 문자 단계 "도구 먼저" + 필수 문자 `backstopUserTurns: 1`(fv-h3vn 포함) |
+
+### 125.3 검증 · 실측
+`npm --prefix functions test` · lint · 에뮬레이터 스모크(F — 1b 4칸 첫 바퀴) — 수치는 PR 본문.
+
+### 125.4 실 키 실측 (2026-10-23 · 사용자 승인 "14세션 승인 (권장)" · `GEMINI_API_KEY2` · 429 0회 · 1a와 같은 `--out`)
+`scripts/full-audit-probe.mjs`(voice · advanced · maxTurns 20 · 변형 고정) · 이 브랜치 lib(1a 실측 반영 포함). 열 정의는 §124.6과 같다.
+
+| 변형 | 참가자 | 문자 도착(발화·경로) | 문자 도구 호출 | 결말 도달 | 끊기 | 리포트 판정 |
+|---|---|---|---|---|---|---|
+| fv-p3jx | comply | deposit-account@7(도구) | 1회(말 먼저 0 · 주장 3) | 예 | unspecified@발화8 | 속음(수사 연루 통보) |
+| fv-t8ga | comply | custody-link@5(백스톱) | 1회(말 먼저 0 · 주장 13) | 예 | unspecified@발화18 | 속음(수사 연루 통보) |
+| fv-p3jx | refuse | deposit-account@6(도구) | 1회(말 먼저 0 · 주장 2) | 예 | unspecified@발화6 | 안 속음(위험 신호 0) |
+| fv-t8ga | refuse | custody-link@5(백스톱) | 0회(말 먼저 0 · 주장 0) | 아니오 | unspecified@발화8 | 안 속음(위험 신호 0) |
+| fv-h5sz | comply | 없음 | 0회(말 먼저 0 · 주장 0) | 예 | unspecified@발화3 | 속음(약화된 사기 수법) |
+| fv-h5sz | refuse | 없음 | 0회(말 먼저 0 · 주장 0) | 예 | unspecified@발화5 | 안 속음(위험 신호 0) |
+| fv-w7tb | comply | 없음 | 0회(말 먼저 0 · 주장 0) | 예 | unspecified@발화4 | 속음(명령조·단절적 어조) |
+| fv-w7tb | refuse | 없음 | 0회(말 먼저 0 · 주장 0) | 예 | unspecified@발화6 | 안 속음(위험 신호 0) |
+| fv-h3vn | comply | case-link@4(백스톱) asset-site-link@8(백스톱) | 6회(말 먼저 0 · 주장 0) | 아니오 | 없음(발화 20에서 상한) | 속음(권위 암시) |
+| fv-v2mk | comply | case-link@3(도구) | 1회(말 먼저 0 · 주장 19) | 예 | unspecified@발화20 | 속음(권위 암시) |
+| fv-a6lq | comply | case-link@3(도구) | 1회(말 먼저 0 · 주장 6) | 예 | unspecified@발화7 | 속음(권위 암시) |
+| fv-h3vn | refuse | case-link@3(도구) asset-site-link@5(백스톱) | 2회(말 먼저 1 · 주장 4) | 아니오 | unspecified@발화9 | 안 속음(위험 신호 0) |
+| fv-v2mk | refuse | case-link@4(백스톱) | 2회(말 먼저 0 · 주장 3) | 아니오 | unspecified@발화7 | 안 속음(위험 신호 0) |
+| fv-a6lq | refuse | case-link@4(백스톱) | 1회(말 먼저 0 · 주장 0) | 아니오 | unspecified@발화7 | 안 속음(위험 신호 0) |
+
+| 관찰 | 판정 | 처리 |
+|---|---|---|
+| 신고 (9) | 도구 호출 턴 말 먼저 1/14(fv-h3vn 거절 1) · 백스톱 도착은 게이트 열린 뒤 2발화 이내 | 유지 |
+| 신고 (11) `fv-h3vn` 순응 | 프로브 응답기가 사이트 단계를 진행하지 못해("눌러서 설치했어요"만 반복) 이체 · 추가 검수 단계 전 "어느 화면?" 확인이 상한(20)까지 이어졌다 — 추가 검수 이유 문면은 이 표본에서 관찰 불가. 사이트 진행 응답기(`duration-probe.mjs --responder site`)가 이 프로브에는 없다 | 실기 확인 권고(문면은 단위 테스트로 고정) |
+| `fv-t8ga` · `fv-v2mk` 순응 | 약속을 받은 뒤에도 같은 요구를 말만 바꿔 되풀이(문자 주장 13 · 19회) · 끊기 발화 18 · 20 | **수정**: 말로 끝나는 결말 4벌(v2mk · a6lq · t8ga · p3jx)에 "약속하면 되풀이 없이 마무리 · 답을 미루면 한 번만 다시"(`VERBAL_ENDING_WRAP`) — 재측정 전 |
+| 결말 도달 | 순응 7 중 6(fv-h3vn 제외) · 거절은 납치 · 가족 사고 · 공탁금이 결말까지 말한 뒤 마무리, 나머지 거절은 결말 전 마무리(발화 5 ~ 9) | — |
+| 리포트 | 순응 7 전부 속음 · 거절 7 전부 안 속음 | — |
