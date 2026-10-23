@@ -23359,6 +23359,92 @@ B안(문자 하한 3 · 6) 유지 판단: 4세션에서 효과는 관측되지 �
 ### 115.7 검증 · 배포
 검증 결과는 PR 본문. 배포 순서 **Functions → Hosting** 권고(어느 쪽이 먼저여도 안전: 옛 화면은 `goal_pending`을 모르는 값으로 보고 계속 묻기만 하고 `wrapUpInstruction`은 무시 · 새 화면 + 옛 서버는 마무리 지시가 오지 않을 뿐).
 
+## 117. (Bug fix — 2026-10-23 · 브랜치 `claude/live-double-speech-b7f83e` · 사용자 실기 신고 원문 *"중간에 ai 음성이 똑같진 않은데 유사한 내용을 2번씩 말하는 게 있었는데 대화 리포트에서는 안 보이네, 확인해보고, 전화 끊는 타이밍이 살짝 느렸어"* · 갤럭시 S25 · 기관 사칭 고급) **실시간 통화 이중 발화 · 리포트 전사 경계 · 끊기 지연** — implementer 기록 (DECISIONS #232 · UX D-153)
+
+### 117.1 운영 로그 시간순 (세션 `f7047187` · `institutional-impersonation` · advanced · 2026-10-23 11:56~11:59 KST · #386 배포 02:47 UTC 뒤)
+출처: `firebase functions:log --project voicefishing-ff47f --only <함수>`(createRealtimeCall · deliverInCallSms · requestScammerHangup · submitRealtimeTranscript · endSession). 브라우저 콘솔 로그는 없다 — 화면 쪽은 코드 경로로 판정했다.
+
+| UTC | 함수 | 판정 | 리포트 말풍선(사용자 스크린샷 판독) |
+|---|---|---|---|
+| 02:56:46 | createRealtimeCall | 통화 시작 | — |
+| 02:57:53 | deliverInCallSms | `model_tool` · identity · **delivered** · userTurns 4 | 사기범 1턴에 "…발송해 드린 인증번호 여섯 자리를 불러 주시기 바랍니다. **네, 문자로 발송해 드린 인증번호 여섯 자리를 불러주십시오.** …" — **같은 요구 2번** |
+| 02:58:12 | deliverInCallSms | `model_tool` · transfer · **too_early** · userTurns 5 | 사기범 1턴에 "문자로 보내 드린 안전계좌 링크를 열어 … 이체해 주십시오. **현재 전액이 … 안전계좌로 자금을 이관하셔야 합니다.** …" — **같은 요구 2번** · 다음 참가자 말 "문자가 아직 안 왔습니다" |
+| 02:58:32 | deliverInCallSms | `model_tool` · transfer · **delivered** · userTurns 6 | "금방 전송해 드렸으니 문자 확인 부탁드립니다 …" |
+| (발화 7 응답) | — | — | 대출 실행 유도 + 용도 코칭 |
+| (발화 8 응답) | — | — | "이 사항은 수사 기밀이니 … 업무 협조에 감사드립니다." — 작별 인사, `end_call` 호출 없음 |
+| 02:59:22 | requestScammerHangup | goal · **blocked_transfer**(4행) · userTurns 9 · goalActionDone false | 참가자 "전화 안 끊어?" |
+| 02:59:25 | requestScammerHangup | goal · **accepted**(9행) · userTurns 10 · goalActionDone true | 참가자 "여보세요." |
+| 02:59:27 | submitRealtimeTranscript | 전사 제출 | — |
+| 02:59:34 | endSession | scammerTurns 9 · 리포트 생성 | — |
+
+### 117.2 원인 판정
+| # | 의심 지점(메인 지시) | 판정 | 근거 |
+|---|---|---|---|
+| ① | 모델 도구(`send_prepared_sms`) 응답 | **원인(확정)** — 도구 호출 3회 중 3회가 같은 턴 이중 발화와 겹친다 | 모델이 도구를 부르기 **전에** "문자로 보내 드린 …"을 먼저 말했고(BLOCKING이라 결과를 기다리는 동안 소리가 멈춤), 결과의 `guidance`(도착 = `announceInstruction` "상대의 말에 대답할 때 그 대답 안에서 … 알려라" · 거부 = "하던 이야기를 그대로 이어가라")를 받은 뒤 같은 요구를 말만 바꿔 다시 말했다. 기존 문면은 다음 응답용 맥락 주입 문면이라 응답 도중에 돌아오는 도구 결과에서는 "지금 말하라"로 읽힌다. 프롬프트(`SMS_METHOD_LINE_TOOL_DRIVEN`)의 "도구가 결과를 돌려준 뒤에 알려라"는 지켜지지 않았다 |
+| ② | 리포트에서 안 보임 | **두 말이 한 말풍선에 공백 하나로 붙어 "한 번 길게 말한 것"처럼 보였다**(빠진 것은 아니다) | `GeminiVoiceSession.tsx` 출력 전사는 `turnComplete`까지 한 버퍼(`scammerBuffer`)에 모인다. 도구 호출은 턴을 끝내지 않는다(BLOCKING · §71.4). 제출(`submitTranscript.ts`) · 리포트 화면에 합치기 · 지우기 경로 0건(코드 확인) |
+| ③ | 문자 주장 백스톱(#376 · #380) · 마무리 지시(#386) | 원인 아님 | 둘 다 `turnComplete:false` 맥락 주입이고 사용자 발화 flush(= 모델 `turnComplete`) 뒤에 질의한다 — 새 응답 턴을 만들지 않는다. 마무리 지시는 이 세션에서 발화 10 질의 전에 통화가 끝났다(추정 — 화면 로그 없음) |
+| ④ | 침묵 넛지 · 대기 넛지 · '못 들음' 넛지(#374) · 클라 턴 보류 큐 | 원인 아님 | 모두 모델 유휴(`!modelTurnActive ∧ awaitingSince === null ∧ !toolPending`) · 반이중 게이트로 막힌다(`GeminiVoiceSession.tsx` 침묵 · 대기 넛지 점검부 · `unheardReply.ts` 1행). 발동해도 별도 턴이라 말풍선 2개가 된다 — 관측(한 말풍선)과 맞지 않는다 |
+| ⑤ | 끊기 지연 | **C-5 하한 4가 이 세션의 대화 길이보다 컸다 + 마무리 지시가 한 발화 늦게 계산됐다** | 이체 문자 도착 발화 6 → 대출 7 · 작별 인사 8인데 C-5 = 발화 10. 또 백스톱 질의의 `userTurns`는 **응답까지 끝난** 발화 수인데 마무리 지시는 **다음** 응답에 실리고 끊기 승인은 그 발화를 포함한 수(`claimedUserTurns` = flush + 응답 중 1)로 판정한다 — 지시가 승인 가능 시점보다 한 응답 늦게 붙었다 |
+
+### 117.3 변경
+| # | 내용 | 파일 |
+|---|---|---|
+| A | 모델 도구 경로(`trigger: "model_tool"`)의 문자 도구 응답(도착 · 거부 4종) 앞에 되풀이 금지 꼬리 `MODEL_TOOL_NO_REPEAT_LEAD` — "이미 한 말 · 요구는 말만 바꿔 다시 하지 마라 · 이미 문자 이야기를 했다면 곧바로 멈춰 대답을 기다려라 · 아직이면 아래 안내대로 짧게". 백스톱 · 옛 클라 · announce 없음(호 전환 뒤)은 그대로(판정표 = 파일 머리) | `functions/src/inCallSms/toolGuidance.ts`(신규) · `inCallSms/index.ts` |
+| B | `send_prepared_sms` 설명에 1문장 `SEND_PREPARED_SMS_CALL_FIRST_SENTENCE` — "문자 이야기를 꺼낼 응답에서는 어떤 말보다도 먼저 부르고, 결과를 받기 전에는 … 하지 않는다"(`end_call` 설명과 같은 형태) | `functions/src/realtime/liveTools.ts` |
+| C | 전사: 같은 턴 안 도구 호출 앞에 말이 있었으면 도구 뒤 첫 글자 조각 앞에 줄바꿈 1개 — **둘 다 남기고 같은 턴 안 두 문단**(판정표 아래 · 정본 `toolTurnTranscript.ts`). 되짚어보기 · 그 순간 다시 해보기 사기범 말풍선에 `whitespace-pre-line` | `src/lib/realtime/toolTurnTranscript.ts`(신규) · `GeminiVoiceSession.tsx`(117.4 겹침) · `src/app/report/replay/page.tsx` · `src/app/report/rewind/page.tsx` |
+| D | C-5 후속 발화 하한 `INSTITUTION_ADVANCED_FOLLOW_UP_USER_TURNS` 4 → 3(판단값 — 아래 표) | `functions/src/scenarios/flowVariants.ts` |
+| E | 마무리 지시 판정 `planGoalWrapUp`을 다음 발화 기준(`userTurns + 1`)으로 — 끊기 승인과 같은 발화에 맞춘다 | `functions/src/scammerHangup/goalAction.ts` |
+
+전사 판정표(C · 메인 지시 "둘 다 남기거나 정확히 하나로 합친다" → **둘 다 남긴다**):
+| # | If | Then |
+|---|---|---|
+| 1 | 도구 호출 시점에 이 턴의 사기범 전사가 비어 있다 | 표시 없음(종전과 바이트 동일) |
+| 2 | 도구 호출 시점에 전사가 있고 도구 뒤 글자 조각이 온다 | 그 조각 앞 줄바꿈 1개 — 문서 1개 · 사기범 턴 수 +1 그대로 |
+| 3 | 표시가 있는데 공백 조각만 온다 | 표시 유지 |
+| 4 | 도구 뒤 글자 없이 턴이 닫힌다(`turnComplete` · 끼어들기 · close) | 표시 버림(flush 두 곳에서 초기화) |
+
+왜 말풍선 2개(턴 2개)가 아닌가: 사기범 전사 flush 수가 문자 게이트(`scammerTranscriptTurns`) · 앵커 턴(G21) · 리포트 짝짓기의 단위다(§82.3.4 G539) — 한 턴을 둘로 세면 셋이 한 칸씩 밀린다. 왜 하나로 합치지(한쪽을 버리지) 않는가: 참가자는 실제로 두 번 들었다 — 리포트가 들린 것과 같아야 한다.
+
+D 판단값 근거(관측 5세션 — 운영 f7047187 + §115.5 · §115.6 실 키 4):
+| 값 | 끊기 승인 가능 발화(도착 뒤) | 대출 요구 유지 | 용도 코칭 · 비밀 유지 | f7047187에서 |
+|---|---|---|---|---|
+| 4(종전) | 4 | 5/5 | 5/5 | 9 막힘 → 10 수락(참가자 재촉 2번) |
+| **3(채택)** | 3 | 5/5(전부 도착 뒤 0~1발화 응답) | 5/5(그다음 응답까지) | 9 수락 · 마무리 지시는 발화 8 질의에서 실려 발화 9 응답에 붙는다 |
+| 2 | 2 | 5/5 | **3/5** — 코칭이 도착 뒤 2발화 응답에 온 2세션(§115.5 fv-c5fj · fv-pgqt)에서 마무리 지시가 먼저 붙는다 | 8 수락(작별 인사 자리) |
+
+⇒ 너무 이른 끊기 방지(하한)를 지키는 가장 작은 값 3. 남은 간격: f7047187은 작별 인사(발화 8 응답) 뒤 참가자가 한 번은 더 말해야 끊긴다(1발화 — 값 2면 0이지만 위 2/5 위험).
+⚠️ 실 키 4세션 결과는 117.6(표본이 작아 효과는 추정).
+
+### 117.4 겹침(다른 세션) · 다른 경로 영향
+- `GeminiVoiceSession.tsx` — '영어 사고 문장 노출 조사' 세션(local_ee4d111b)과 겹칠 수 있다. 바꾼 곳: import 1줄 · 상태 `scammerToolBoundary` 선언 · toolCall 분기 1줄 · 출력 전사 적립 1문장(`scammerBuffer +=` → `appendScammerChunk`) · flush 두 곳 초기화 1줄씩. 출력 전사를 거르는 수정이 들어오면 적립 문장 한 곳만 맞추면 된다.
+- ⭐ main `bb44a90`(#387 §116 사고 문장 필터) 병합 정합: 출력 전사는 `appendScammerChunk`로 쌓고(§117) 같은 조각을 사고 게이트(`stepThoughtLeakGate`)에도 넣는다 · flush 두 곳은 `stripLeakedThought(scammerBuffer)` 뒤 `scammerToolBoundary` 초기화. `stripLeakedThought`는 지운 것이 없으면 원문 그대로(문단 줄바꿈 유지)이고, 사고 문장을 지운 턴에서만 공백을 하나로 접어 그 턴의 문단 구분이 사라진다(이상 턴 한정 · `thoughtLeak.ts`는 서버 사본이라 손대지 않음).
+- `flowVariants.ts` — 시나리오 다중 루트 세션과 겹칠 수 있다. 바꾼 곳은 `INSTITUTION_ADVANCED_FOLLOW_UP_USER_TURNS` 값 · 주석 하나뿐.
+- 텍스트 폴백 · 메신저: 문자 도구가 없다(A · B 무영향). 다른 확인 무력화 고급 6종: 후속 값이 없어 D · E 무영향(`goalWrapUp.test.ts` "다른 6종 none" 그대로 통과).
+- Live 도구 선언 바이트: 문자를 선언하는 모든 세션의 `send_prepared_sms` 설명이 바뀐다(의도). `smsGate.test.ts` T194-c-1 해시 테스트는 B 문장만 되돌려 이전 값과 바이트 동일함을 매 실행 재증명한다.
+
+### 117.5 검증 · 실 키 · 배포
+- 테스트: functions 신규 `inCallSms/__tests__/toolGuidance.test.ts` 4건 · `goalAction.test.ts` [§117 로그 재현] 1건(+ 값 4 → 3 단언 갱신) · `goalWrapUp.test.ts` 판정표 갱신(운영 값 · 다음 발화 기준) · `confirmResult.test.ts` 응답 조립 소스 고정 갱신 · `smsGate.test.ts` 도구 해시 되돌림 대조. 루트 신규 `src/lib/realtime/toolTurnTranscript.test.ts` 5건(판정표 4 · 배선 1).
+- 실 키: 4세션 확인 — 117.6.
+- 배포 순서: **Functions → Hosting** 권고. 어느 쪽이 먼저여도 안전 — 옛 화면 + 새 서버 = 문면 · 판정값만 바뀜(전사 문단 구분만 없음) · 새 화면 + 옛 서버 = 전사 문단 구분만 생김.
+
+
+### 117.6 실 키 확인 (2026-10-23 · 사용자 승인 "4세션 승인 (권장)" · `GEMINI_API_KEY2` · 429 0회)
+`scripts/full-audit-probe.mjs`(voice · advanced · comply · `maxTurns` 20 · 변형 고정). 수정 전 = main `239a417` 별도 워크트리 lib(`--fn-root`), 수정 후 = 이 브랜치 lib. 프로브 보강 2개: ① 문자 도구 응답에 앱과 같은 `withModelToolNoRepeat`(옛 lib에는 없어 종전 문면) ② 도구 호출 시점의 같은 턴 앞 발화(`preToolText`)를 기록하고 전사에 `⟂` 표시.
+⚠️ 프로브의 `userTurns` 표기는 §115와 같은 프로브 관례(끊기 판정에는 `userTurns + 1`을 넣는다) — 아래 발화 번호는 수정 전 · 후 비교용이다.
+
+| 세션 | 문자 도구 호출 앞 발화 | 같은 턴 되풀이 | 계좌 문자 도착(발화) | 끊기 시도(발화 · 판정) | 끊긴 발화 | 대출 요구 · 용도 코칭 | 코칭 뒤 덧붙은 사기범 턴 |
+|---|---|---|---|---|---|---|---|
+| 수정 전 fv-c5fj | **있음** — "문자로 인증번호를 보내 드렸습니다 · 여섯 자리 불러주십시오" | **있음** — ⟂ 뒤 "방금 보내 드린 문자 확인하셔서 인증번호 여섯 자리 불러주십시오"(신고와 같은 모양) | 6(백스톱) | 8 막힘 → 11 수락 | 11 | ○ · ○ | 3(S10 ~ S12 — 같은 비밀 · 대출 안내) |
+| 수정 전 fv-pgqt | 없음 | 없음 | 8(백스톱) | 12 수락 | 12 | ○ · ○ | 0 |
+| 수정 후 fv-c5fj | 없음(도구 먼저) | 없음 | **10(백스톱)** | 8 · 11 막힘 → 13 수락 | 13 | ○ · ○(대출은 계좌 문자 도착 **전** S7에 나옴) | 4(S10 ~ S13 — 계좌 문자를 기다리며 비밀 · 이관 안내 되풀이) |
+| 수정 후 fv-pgqt | 없음(도구 먼저) | 없음 | 6(백스톱) | **8 수락** | 8 | ○ · ○ | 0(코칭 직후 끊음) |
+
+판정:
+- 이중 발화: 수정 전 문자 도구 호출 2회 중 1회 재현 → 수정 후 2회 중 0회(두 번 다 모델이 말하기 전에 도구를 불렀다 — B 문장의 효과로 보이나 **표본 2라 추정**). A(되풀이 금지 꼬리)는 앞 발화가 없어 이번 표본에서 발동 장면이 없었다.
+- 끊기: 수정 후 fv-pgqt는 계좌 문자 도착 뒤 대출 · 코칭이 끝난 응답에서 바로 끊겼다(같은 변형 수정 전은 도착 뒤 4발화). 대출 · 코칭은 4/4 유지.
+- 남은 문제(이번 범위 밖 · 별건): 수정 후 fv-c5fj는 모델이 계좌 문자 도구를 부르지 않고 "문자로 안내해 드린 링크를 열어"라고만 말해 계좌 문자가 백스톱으로 발화 10에야 도착했다. C-5는 도착 기준이라 그사이 대출 단계를 먼저 끝낸 모델이 같은 안내를 4턴 되풀이했다(§115.3 ⚠️ 한계와 같은 뿌리 — 문자 주장 백스톱 #376 · #380은 앱에만 있고 프로브 미러에는 없어 앱에서는 더 빨리 도착했을 수 있다 · 추정). 후보: 계좌 문자 도착 전에 대출 단계를 꺼내지 않게 단계 문면에 "이체가 끝났다고 하면"을 더 강하게 거는 것 — 시나리오 다중 루트 세션의 프롬프트 개편과 겹쳐 이 PR에서는 하지 않는다.
+- 응답기 한계: 인증번호를 늘 같은 오답("382914")으로 부른다(§115.6과 같음 · 앱 문제 아님).
+
 ## 120. (Bug fix — 2026-10-23 · 브랜치 `claude/photo-turn-training-meta` = main `239a417` + 변경 · 사용자 실기 신고 원문 *"사진 보내니까 바로 훈련 종료하는데, 이렇게 진행하는 게 맞아?"* · 크롬 · 자녀 사칭 카톡) **사진 턴에 사기범이 훈련 메타 고지를 말하던 결함 — 사진 턴 지시 · 쓸 수 없는 응답 `training-meta` 행** — implementer 기록 (DECISIONS #235)
 
 ### 120.1 관측(운영 로그 · 세션 `49216ffa`)

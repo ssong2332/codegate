@@ -28,6 +28,7 @@ import type { SmsGateStatus } from "./smsGate";
 import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms } from "./smsDelivery";
 import { goalFollowUpFor, planGoalWrapUp } from "../scammerHangup/goalAction";
 import { GOAL_WRAP_UP_INSTRUCTION } from "../scammerHangup/guidance";
+import { withModelToolNoRepeat } from "./toolGuidance";
 import type {
   DeliverInCallSmsRequest,
   DeliverInCallSmsResponse,
@@ -239,14 +240,19 @@ export const deliverInCallSms = onCall<
   });
 
   if (result.status !== "delivered") {
-    return { status: result.status, declineInstruction: declineInstructionFor(result.status) };
+    // §117 — 모델 도구 경로면 거부 문면 앞에 되풀이 금지 꼬리(`toolGuidance.ts` 판정표 2행).
+    return { status: result.status, declineInstruction: withModelToolNoRepeat(declineInstructionFor(result.status), trigger) };
   }
   const placed = await isVerifyOfferPlaced(db, sessionId, session.scenarioId);
   const item = result.item;
   // A-1 ⑦ — 선언 항목을 넘겨 결과 신호(`confirmResultInstruction`, 필수 계좌·링크 문자만)를 응답에 싣는다. 클라 주입은 A-2.
   const declaredItem = declared.find((d) => d.smsId === item.smsId);
+  // §117 — 모델 도구 경로면 announce 앞에 되풀이 금지 꼬리(판정표 1행). announce가 없으면(호 전환 뒤) 키도 없다.
+  const built = buildInCallSmsResponse(item, { placed, fictionalBankName });
+  const announceInstruction = withModelToolNoRepeat(built.announceInstruction, trigger);
   return {
-    ...buildInCallSmsResponse(item, { placed, fictionalBankName }),
+    ...built,
+    ...(announceInstruction !== undefined ? { announceInstruction } : {}),
     ...buildConfirmResultField({ placed, scenarioId: session.scenarioId }, declaredItem),
     status: "delivered",
   };

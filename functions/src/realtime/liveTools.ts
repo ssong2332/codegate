@@ -149,10 +149,18 @@ const SEND_PREPARED_SMS_PARAMETERS = {
  */
 const TOOL_BEHAVIOR = Behavior.BLOCKING;
 
+/**
+ * ⭐ §117(DECISIONS #232) — "어떤 말보다도 먼저 부르고 · 결과 전에는 말하지 않는다" 1문장(`end_call` 설명과 같은 형태). 운영 세션 f7047187에서
+ * 모델이 "문자로 보내 드린 인증번호"를 먼저 말하고 도구를 불러, 결과 안내를 받은 뒤 같은 요구를 한 번 더 말했다(도구 호출 3회 중 3회).
+ * 상수로 둔 이유: 도구 선언 바이트 고정 테스트(`smsGate.test.ts` T194-c-1)가 이 문장만 되돌려 이전 값과 대조한다.
+ */
+export const SEND_PREPARED_SMS_CALL_FIRST_SENTENCE =
+  "문자 이야기를 꺼낼 응답에서는 어떤 말보다도 먼저 부르고, 결과를 받기 전에는 문자를 보냈다는 말도 문자 속 번호 · 링크 이야기도 하지 않는다.";
+
 const SEND_PREPARED_SMS_DECLARATION: FunctionDeclaration = {
   name: LIVE_TOOL_SEND_PREPARED_SMS,
   description:
-    "지금 이 순간 상대의 휴대전화로 미리 준비된 안내 문자 한 통을 실제로 보낸다. 대화가 본인확인 · 이체 · 링크 진행 중 어느 단계에 이르렀는지 보고 purpose로 하나를 고른다. 문자 내용은 시스템이 정한다. 이 통화에서 쓸 수 없는 목적이거나 아직 이르면 거절될 수 있고, 그때는 문자를 보냈다고 말하지 말고 그냥 대화를 이어가면 된다.",
+    `지금 이 순간 상대의 휴대전화로 미리 준비된 안내 문자 한 통을 실제로 보낸다. 대화가 본인확인 · 이체 · 링크 진행 중 어느 단계에 이르렀는지 보고 purpose로 하나를 고른다. 문자 내용은 시스템이 정한다. ${SEND_PREPARED_SMS_CALL_FIRST_SENTENCE} 이 통화에서 쓸 수 없는 목적이거나 아직 이르면 거절될 수 있고, 그때는 문자를 보냈다고 말하지 말고 그냥 대화를 이어가면 된다.`,
   parameters: SEND_PREPARED_SMS_PARAMETERS,
   behavior: TOOL_BEHAVIOR,
 };
