@@ -105,7 +105,7 @@ function phoneSurfaceSchemeViolations(cssSource: string): string[] {
 
 test("[실기 2026-10-21] 훈련 화면만 color-scheme: light dark — 자동 다크 반전 차단 신호", () => {
   assert.deepEqual(phoneSurfaceSchemeViolations(css), []);
-  for (const page of ["src/app/session/messenger/page.tsx", "src/app/session/play/page.tsx"]) {
+  for (const page of ["src/components/MessengerChatRoom.tsx", "src/app/session/play/page.tsx"]) {
     assert.match(readFileSync(page, "utf8"), /className="[^"]*\bfont-phone\b/, `${page} 훈련 화면 루트에 font-phone이 없다 — 선택자가 비게 된다`);
   }
 });
@@ -128,11 +128,11 @@ function chatInputMinWidthViolations(src: string): string[] {
 }
 
 test("[실기 2026-10-21] 메신저 입력칸은 min-w-0 — 기기 글꼴로 기본 폭이 커져도 줄이 화면을 넘지 않는다", () => {
-  assert.deepEqual(chatInputMinWidthViolations(readFileSync("src/app/session/messenger/page.tsx", "utf8")), []);
+  assert.deepEqual(chatInputMinWidthViolations(readFileSync("src/components/MessengerChatRoom.tsx", "utf8")), []);
 });
 
 test("[실기 2026-10-21 역검증] 카톡형 입력칸에서 min-w-0을 지운 사본은 실패한다", () => {
-  const src = readFileSync("src/app/session/messenger/page.tsx", "utf8");
+  const src = readFileSync("src/components/MessengerChatRoom.tsx", "utf8");
   const poisoned = src.replace("min-w-0 flex-1 rounded-full", "flex-1 rounded-full");
   assert.notEqual(poisoned, src, "오염 지점을 찾지 못했다");
   assert.equal(chatInputMinWidthViolations(poisoned).length, 1);

@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const PAGE = "src/app/session/messenger/page.tsx";
+const PAGE = "src/components/MessengerChatRoom.tsx";
 const codeOnly = (src: string) => src.replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
 
 test("[실기 5] 대화방 입력칸에 자동 포커스 0 — 응답 뒤 focus() 호출이 없다", () => {

@@ -32,7 +32,7 @@ test("[G633] 시각 형식 — 오전/오후 12시간제 · 시각 없음이면 
 });
 
 test("[G633] 대화방 화면에 메신저 앱 이름 표기가 없다(UX D-132 (5) ⓐ · 사용자 결정 ②)", () => {
-  const code = readFileSync("src/app/session/messenger/page.tsx", "utf8")
+  const code = readFileSync("src/components/MessengerChatRoom.tsx", "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
   assert.ok(!code.includes("카카오톡"), "messenger/page.tsx 코드(주석 제외)에 앱 이름 표기가 남았다");
@@ -47,7 +47,7 @@ test("[§104.9 · D-145 (2)] 종료 줄 — 사기범 종료면 카톡형 '나�
   for (const text of [chatEndedNotice(true, "kakao"), chatEndedNotice(true, "sms")]) {
     assert.equal(/훈련|\[|\]/.test(text), false, "세션 표식 · 메타 표기 0");
   }
-  const page = readFileSync("src/app/session/messenger/page.tsx", "utf8").replace(/\r\n/g, "\n");
+  const page = readFileSync("src/components/MessengerChatRoom.tsx", "utf8").replace(/\r\n/g, "\n");
   assert.ok(page.includes('scammerEnded: result.ended === true && result.endReason === "scammer_ended",'), "서버 종료 사유를 결과에 싣는다");
   // §112 — 이미 끝난 세션(목표를 이루고 통화를 끊고 돌아옴)도 세션 endReason으로 같은 줄을 쓴다.
   assert.ok(page.includes('{chatEndedNotice(pending?.outcome?.scammerEnded === true || endedByScammer, isSms ? "sms" : "kakao")}'), "종료 줄이 판정 함수를 쓴다");

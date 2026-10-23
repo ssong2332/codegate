@@ -23590,6 +23590,14 @@ D 판단값 근거(관측 5세션 — 운영 f7047187 + §115.5 · §115.6 실 �
 ### 121.5 남은 것
 - ⚠️ 이미 받은 세션에 **사기범이 다시 거는** 통화도 `isSessionAnswered` 때문에 수신 화면 없이 통화 중으로 복원된다(이번 범위 밖 — 기존 동작 · 후속).
 - 통화 중 상단 이름은 여전히 번호(`callerLabel`) — 보이스톡이면 카톡 이름이 자연스럽다(후속 검토).
+### 121.6 PR-2 — 메신저 본문 컴포넌트 추출(2026-10-23 · 브랜치 `claude/messenger-chatroom-extract` · 동작 변경 0)
+| 항목 | 내용 |
+|---|---|
+| 이동 | `src/app/session/messenger/page.tsx` 본문 → `src/components/MessengerChatRoom.tsx`(함수 이름 `MessengerChatRoom` · 머리 주석 2줄 외 바이트 동일 — `diff` 확인). 라우트는 `<MessengerChatRoom />`만 그린다 |
+| 위치 | `src/components/` 바로 아래(G451 — 하위 폴더는 등록부를 우회하므로 금지) |
+| 게이트 | 경로를 읽던 루트 테스트 19개의 경로를 컴포넌트로 바꿨다(검사 내용 무변경). 등록부 2벌에 등재: G436 `SESSION_SURFACE_REGISTRY` 29 → 30(컴포넌트 · 라우트 둘 다 mixed — G437 범위 16 → 17) · T86 `CLIENT_SCREEN_INVENTORY`(true — 사기범 말풍선을 그린다) |
+| 다음 | PR-3 통화 화면 안 겹침 · 배너 — 이 컴포넌트에 `embedded`류 속성을 더한다 |
+
 ## 119. (Feature change — 2026-10-23 · 브랜치 `claude/multi-route-stage0` · 사용자 결정 원문 *"권장안 채택·시작 (권장)"* — `docs/research/scenario-multi-route-plan-2026-10.md` 6절 D-1~D-13 권장안) **다중 루트 0차: 루트 키 · 섞은 덱 배정 · 매핑 불변식 · 리포트 "이번 결말" 줄** — implementer 기록 (DECISIONS #234)
 
 ### 119.0 금지 (먼저)
