@@ -62,6 +62,8 @@ export const requestScammerHangup = onCall<
   const sessionRef = db.collection("sessions").doc(sessionId);
   // §108 — 4행 입력(목표 화면 행동 완료). 확인 무력화 세션에서만 읽는다(그 밖은 4행이 애초에 꺼져 있다) · 실패 = 미완료(fail-closed).
   let goalActionDone = false;
+  // §115 — 후속 단계 변형(기관 사칭 고급 2벌)만 값이 있다. 막힌 응답의 문면을 고르는 데도 쓴다.
+  const followUpUserTurns = goalFollowUpFor(session.scenarioId, session.flowVariantId);
   if (isVerifyInterceptSession(session)) {
     try {
       const { declared, reason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId);
@@ -71,7 +73,7 @@ export const requestScammerHangup = onCall<
         declared,
         declaredKnown: reason === undefined,
         userTurns,
-        followUpUserTurns: goalFollowUpFor(session.scenarioId, session.flowVariantId), // §115 C-5
+        followUpUserTurns, // §115 C-5
       });
     } catch {
       goalActionDone = false;
@@ -105,5 +107,7 @@ export const requestScammerHangup = onCall<
     goalActionDone,
   });
 
-  return { status: decision.status, guidance: scammerHangupGuidance(decision.status) };
+  // §115 — 후속 단계가 남아 막혔으면 되풀이 금지 문면(그 밖은 종전 문면).
+  const followUpPending = followUpUserTurns !== undefined && !goalActionDone;
+  return { status: decision.status, guidance: scammerHangupGuidance(decision.status, { followUpPending }) };
 });

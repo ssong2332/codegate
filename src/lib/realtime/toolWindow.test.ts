@@ -184,7 +184,8 @@ test("[§104 문자 주장 배선] 화면 — 사기범 전사에서 주장을 �
   // §108 — 블록 형태로 바뀌었다(주장 표시 + 즉시 질의 깨우기).
   assert.match(page, /if \(role === "scammer" && scammerClaimsSmsSent\(text\)\) \{\n\s+smsClaimPendingRef\.current = true;/);
   assert.ok(page.includes("...(smsClaimPendingRef.current ? { smsClaimed: true } : {}),"));
-  assert.ok(page.includes('if (result.status === "delivered" || result.status === "none_pending") smsClaimPendingRef.current = false;'));
+  // §115 — `goal_pending`(남은 필수 문자 없음 · 후속 단계 남음)도 주장을 내린다.
+  assert.ok(page.includes('if (result.status === "delivered" || result.status === "none_pending" || result.status === "goal_pending") smsClaimPendingRef.current = false;'));
   const types = readFileSync("src/lib/api/types.ts", "utf8");
   const serverTypes = readFileSync("functions/src/inCallSms/types.ts", "utf8");
   assert.ok(types.includes("smsClaimed?: boolean;") && serverTypes.includes("smsClaimed?: boolean;"), "요청 키가 클라 · 서버 타입에 같다");

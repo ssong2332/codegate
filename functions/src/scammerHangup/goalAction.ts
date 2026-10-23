@@ -74,6 +74,20 @@ function followUpDone(input: GoalActionInput, followUpUserTurns: number): boolea
   return input.userTurns - lastArrival >= followUpUserTurns;
 }
 
+/**
+ * ⭐ §115 — 문자 백스톱 질의(사용자 발화마다)에서 남은 필수 문자가 없을 때의 다음 행동. 후속 단계 변형만 대상이다.
+ * | If | Then |
+ * |---|---|
+ * | 후속 값 없음(그 밖 모든 변형 — 다른 확인 무력화 고급 포함) | `none` — 종전(`none_pending` · 클라는 더 묻지 않는다) |
+ * | 호 전환이 끝났다(확인 창구 화자) | `none` — 원 사기범이 없다(넛지와 같은 판단) |
+ * | C-5 아직 거짓 | `pending` — 클라가 다음 발화에 다시 묻는다(`goal_pending`) |
+ * | C-5 참 | `wrap_up` — 마무리 지시(`none_pending` + `wrapUpInstruction` — 클라는 그 뒤 더 묻지 않는다 = 1회) |
+ */
+export function planGoalWrapUp(input: Omit<GoalActionInput, "mockScreens"> & { placed: boolean }): "none" | "pending" | "wrap_up" {
+  if (input.followUpUserTurns === undefined || input.placed) return "none";
+  return followUpDone({ ...input, mockScreens: [] }, input.followUpUserTurns) ? "wrap_up" : "pending";
+}
+
 /** 세션의 `mockScreens` 문서를 읽어 판정 사실만 남긴다. 실패는 호출부가 잡는다(미완료로 본다). */
 export async function readMockScreenCompletion(
   sessionRef: FirebaseFirestore.DocumentReference,

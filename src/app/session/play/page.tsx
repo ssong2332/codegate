@@ -536,7 +536,8 @@ export default function SessionCallPage() {
   // ⭐ T191(문자 도달 조건 · AC-099 (e)) — 문자 백스톱 질의 상태. 예전 `requestedSmsRef`(요청한 smsId 집합) ·
   // `smsToolCallFailedIdRef`(모델 도구 실패 smsId)는 화면이 고정 턴으로 smsId를 고를 때만 필요했다 — 폐기.
   // 지금은 사용자 발화 flush마다 서버에 한 번 묻고(`shouldRequestSmsBackstop`), 무엇을 할지는 서버가 정한다.
-  const smsBackstopRef = useRef({ lastRequestedUserTurns: -1, lastClaimRequestedUserTurns: -1, nonePending: false, inFlight: false });
+  // §115 — `wrapUpSent`: 마무리 지시(할 일 완료)를 이미 맥락 주입했는가(1회).
+  const smsBackstopRef = useRef({ lastRequestedUserTurns: -1, lastClaimRequestedUserTurns: -1, nonePending: false, inFlight: false, wrapUpSent: false });
   // §104 — 사기범이 "문자를 보냈다"고 말했고 아직 그 문자가 오지 않았다(`scammerClaimsSmsSent`). 다음 백스톱 질의에 실린다 · 도착 · none_pending이면 내린다.
   const smsClaimPendingRef = useRef(false);
   // §108 — 주장이 생긴 사기범 턴에 바로 백스톱을 묻게 하는 깨우기 값(값 자체는 쓰지 않는다).
@@ -1067,7 +1068,8 @@ export default function SessionCallPage() {
         });
         setSmsError(null);
         if (result.status === "none_pending") state.nonePending = true;
-        if (result.status === "delivered" || result.status === "none_pending") smsClaimPendingRef.current = false;
+        // §115 — `goal_pending`도 남은 필수 문자가 없다는 뜻이라 "문자 보냈다" 주장을 내린다.
+        if (result.status === "delivered" || result.status === "none_pending" || result.status === "goal_pending") smsClaimPendingRef.current = false;
         // §53.6 (3) — 전환이 끝난 오퍼가 연 문자에는 announce 값이 없다(서버가 생략) — 그때는 주입하지 않는다.
         if (result.status === "delivered") {
           // PR-A2(audit-A R1) — 결과 신호 판정을 안내를 큐에 넣기 **전에** 한다(위 `offerConfirmResult` 주석).
@@ -1078,6 +1080,12 @@ export default function SessionCallPage() {
         }
         if (result.status === "nudge" && result.nudgeInstruction) {
           enqueueTurnInstruction(result.nudgeInstruction, "sms", { smsNudge: true });
+        }
+        // §115 — 후속 단계까지 할 일을 마쳤다는 서버 신호: 마무리 지시 1줄을 맥락 주입한다(전사 0). `none_pending`이라 이 뒤로는
+        // 더 묻지 않아 1회다(재마운트 대비로 ref 표시도 둔다). `goal_pending`은 아무것도 하지 않고 다음 발화에 다시 묻는다.
+        if (result.status === "none_pending" && result.wrapUpInstruction && !state.wrapUpSent) {
+          state.wrapUpSent = true;
+          enqueueTurnInstruction(result.wrapUpInstruction, "sms", { smsNudge: true });
         }
       } catch {
         // 같은 발화 수로는 다시 묻지 않는다 — 다음 사용자 발화에서 최신 값으로 다시 묻는다(발송 단계는 `>=`라 놓치지 않는다).

@@ -229,8 +229,9 @@ test("[§115 로그 재현] b6dfcbcf — 기관 사칭 고급 · 계좌 문자 �
 });
 
 test("[§115 배선] 두 경로가 같은 함수로 변형의 후속 값을 넘긴다", () => {
-  for (const file of ["scammerHangup/index.ts", "roleplay/index.ts"]) {
-    const src = readFileSync(path.join(SRC_ROOT, file), "utf8");
-    assert.ok(src.includes("followUpUserTurns: goalFollowUpFor(session.scenarioId, session.flowVariantId)"), file);
-  }
+  const realtime = readFileSync(path.join(SRC_ROOT, "scammerHangup/index.ts"), "utf8");
+  assert.ok(realtime.includes("const followUpUserTurns = goalFollowUpFor(session.scenarioId, session.flowVariantId);"), "realtime");
+  assert.ok(realtime.includes("followUpUserTurns, // §115 C-5"), "realtime 입력");
+  const fallback = readFileSync(path.join(SRC_ROOT, "roleplay/index.ts"), "utf8");
+  assert.ok(fallback.includes("followUpUserTurns: goalFollowUpFor(session.scenarioId, session.flowVariantId)"), "fallback");
 });

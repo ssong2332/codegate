@@ -60,6 +60,7 @@ const repeatBreakLib = optionalLib("roleplay/repeatBreak.js");
 const signalConsistencyLib = optionalLib("roleplay/signalConsistency.js");
 // §108 · §115 — 끊기 4행 입력(할 일 완료). 옛 lib에는 없을 수 있다(없으면 false — 종전 프로브 동작).
 const goalActionLib = optionalLib("scammerHangup/goalAction.js");
+const guidanceLib = optionalLib("scammerHangup/guidance.js");
 
 // §104 — Live 클라 반복 · 대기 정체 주입(`src/lib/realtime/stallRecovery.ts` §4)의 미러. 클라 모듈은 TS라 여기서 못 불러 판정표를 옮겼다 —
 // 5 · 6행(인적사항 · 유사도)은 서버 lib `decideRepeatBreak`(클라와 같은 정규식 — 루트 `[§104 짝]` 테스트)를 쓰고, 4행(대기 말)만 옮긴다.
@@ -217,7 +218,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
   const ai = new GoogleGenAI({ apiKey: API_KEY, httpOptions: { apiVersion: "v1alpha" } });
   const turns = [], events = [], delivered = [];
   let buf = "", scammerTurns = 0, userTurns = 0, closed = false, verifyPhase = "idle", announcedAtTurn = null, ended = null;
-  let pendingConfirm = null, confirmInjected = false;
+  let pendingConfirm = null, confirmInjected = false, wrapUpSent = false;
   let waiters = [];
   const notify = (ev) => { for (const w of [...waiters]) w(ev); };
   const session = await ai.live.connect({
@@ -291,8 +292,8 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
       if (c.name === LIVE_TOOL_END_CALL) {
         // §115 — 앱 콜러블처럼 4행 입력을 서버 기록(도착 · 제출 흉내)으로 계산한다. 새 lib면 변형의 후속 단계 값(C-5)도 넣는다.
         let goalActionDone = false;
+        const followUpUserTurns = goalActionLib?.goalFollowUpFor ? goalActionLib.goalFollowUpFor(scenarioId, variantId) : undefined;
         if (goalActionLib && verifyEnabled) {
-          const followUpUserTurns = goalActionLib.goalFollowUpFor ? goalActionLib.goalFollowUpFor(scenarioId, variantId) : undefined;
           goalActionDone = goalActionLib.hasCompletedGoalAction({ delivered, mockScreens: [], declared, declaredKnown: Boolean(variantId), userTurns: userTurns + 1, followUpUserTurns });
         }
         const d = decideScammerHangup({
@@ -303,7 +304,9 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
         });
         events.push({ t: now(), ev: "toolResult", name: c.name, status: d.status, row: d.row, kind: c.args?.kind, userTurns, goalActionDone });
         if (d.hangup && !ended) ended = { kind: c.args?.kind ?? "unspecified", userTurns, scammerTurns };
-        return { id: c.id, name: c.name, response: { status: d.status, guidance: scammerHangupGuidance(d.status) } };
+        // §115 — 앱 콜러블과 같이 후속 단계가 남아 막혔으면 되풀이 금지 문면(옛 lib는 두 번째 인자를 무시한다).
+        const followUpPending = followUpUserTurns !== undefined && !goalActionDone;
+        return { id: c.id, name: c.name, response: { status: d.status, guidance: scammerHangupGuidance(d.status, { followUpPending }) } };
       }
       return { id: c.id, name: c.name ?? "unknown", response: { status: "unsupported" } };
     });
@@ -371,6 +374,17 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
         }
       } else if (p.action === "nudge") {
         sendText(buildSmsNudgeInstruction(p.item.purpose), false, "sms_nudge_ctx");
+      } else if (p.action === "none_pending" && !wrapUpSent && goalActionLib?.planGoalWrapUp && guidanceLib?.GOAL_WRAP_UP_INSTRUCTION) {
+        // §115 — 앱 백스톱 질의와 같은 판정(`planGoalWrapUp`)으로 할 일 완료 시 마무리 지시 1회 맥락 주입.
+        const wrap = goalActionLib.planGoalWrapUp({
+          delivered, declared, declaredKnown: Boolean(variantId), userTurns,
+          followUpUserTurns: goalActionLib.goalFollowUpFor(scenarioId, variantId), placed: verifyPhase === "placed",
+        });
+        if (wrap === "wrap_up") {
+          wrapUpSent = true;
+          sendText(guidanceLib.GOAL_WRAP_UP_INSTRUCTION, false, "wrap_up_ctx");
+          events.push({ t: now(), ev: "wrapUp", userTurns });
+        }
       }
     }
   }
