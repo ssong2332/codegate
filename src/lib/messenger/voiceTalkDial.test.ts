@@ -64,5 +64,49 @@ test("[§121 통화 화면] 발신이면 벨 대신 연결음 · 시간 뒤 받�
   assert.match(cancel, /requestReverseEscalation\(\{ sessionId \}\)/);
   assert.ok(!cancel.includes("followUp"), "사용자가 건 전화를 스스로 끊었다 — 복귀 메시지 없음");
   assert.match(src, /\{voiceTalkDial && phase === "incoming" && \(/);
-  assert.match(src, /보이스톡 연결 중…/);
+  assert.match(src, /<VoiceTalkDialScreen\n\s*name=\{scenario\.chatDisplayName \?\? callerLabel\}\n\s*status="보이스톡 연결 중…"/);
+});
+
+// §123(실기 신고 *"내가 보이스톡을 했는데, AI가 전화를 본인이 했다고 이야기하는 것도 수정하자"*) — 통화를 건 쪽에 맞춘 첫 연결 신호.
+test("[§123 첫마디] 참가자가 건 보이스톡 = 받는 사람 첫마디 신호 · 사기범이 건 통화 = 종전 신호 · 재연결 = 종전", async () => {
+  const { openingTurnFor, callCallerFrom, ESCALATED_CALL_OPENING_TURN, PARTICIPANT_CALLED_OPENING_TURN } = await import(
+    "../realtime/escalatedOpening.ts"
+  );
+  assert.equal(openingTurnFor({ connectionSeq: 0, resumeTurn: null, escalatedFromMessenger: true, caller: "participant" }), PARTICIPANT_CALLED_OPENING_TURN);
+  assert.equal(openingTurnFor({ connectionSeq: 0, resumeTurn: null, escalatedFromMessenger: true, caller: "scammer" }), ESCALATED_CALL_OPENING_TURN);
+  assert.equal(openingTurnFor({ connectionSeq: 0, resumeTurn: null, escalatedFromMessenger: true }), ESCALATED_CALL_OPENING_TURN);
+  assert.equal(openingTurnFor({ connectionSeq: 1, resumeTurn: "R", escalatedFromMessenger: true, caller: "participant" }), "R");
+  assert.ok(PARTICIPANT_CALLED_OPENING_TURN.includes("네가 전화한 것이 아니다"));
+  assert.ok(PARTICIPANT_CALLED_OPENING_TURN.includes("어, 전화했네? 나 지금…"));
+  assert.ok(!PARTICIPANT_CALLED_OPENING_TURN.includes("네가 건 전화"));
+  assert.equal(callCallerFrom(undefined), "scammer");
+  assert.equal(callCallerFrom([{ from: "messenger", to: "voice", caller: "participant" }]), "participant");
+  assert.equal(
+    callCallerFrom([{ from: "messenger", to: "voice", caller: "participant" }, { from: "voice", to: "messenger" }, { from: "messenger", to: "voice" }]),
+    "scammer",
+  );
+  const room = read("src/components/MessengerChatRoom.tsx");
+  assert.match(room, /requestEscalation\(\{ sessionId, via: "voice_talk_dial" \}\)/);
+  const play = read("src/app/session/play/page.tsx");
+  assert.match(play, /if \(!voiceTalkDial\) setCallCaller\(callCallerFrom\(data\.channelHistory\)\);/);
+  assert.match(play, /escalatedFromMessenger: scenario\.channel === "messenger",\n\s*caller: callCaller,/);
+});
+
+// §123(UX D-156 · 실기 신고 *"보이스톡 연결되는 과정의 웹사이트도 실제 카카오톡에서 제공하는 것과 동일하게 디자인하자"*) — 발신 화면 구성.
+test("[§123 발신 화면] 전체 화면 그라데이션 · 위 프로필 · 이름 · 상태 · 아래 스피커 · 마이크 끄기 · 빨간 종료 · 로고 0 · 표식 문구 0 · 대비 하한", async () => {
+  const screen = read("src/components/VoiceTalkDialScreen.tsx");
+  assert.match(screen, /fixed inset-0 z-50/);
+  assert.match(screen, /linear-gradient\(180deg, \$\{t\.voiceTalkBgTop\} 0%, \$\{t\.voiceTalkBgBottom\} 100%\)/);
+  const order = ['name="person"', "{name}", "{status}", 'label="스피커"', 'label="마이크 끄기"', 'aria-label="보이스톡 취소"'].map((needle) => screen.indexOf(needle));
+  assert.ok(order.every((i, k) => i > 0 && (k === 0 || i > order[k - 1]!)), `배치 순서: ${order.join(",")}`);
+  const code = screen.replace(/\/\/.*$/gm, "");
+  assert.ok(!/kakao|카카오|<img|\.png|\.svg/i.test(code), "로고 · 상표 이미지 · 이름 0");
+  assert.ok(!/모의|훈련용|재현/.test(code), "세션 중 표식 문구 0(G437)");
+  // 통화 화면 발신 덮개는 스피커 · 마이크 끄기를 실제 통화 상태에 묶는다(받은 뒤에도 이어진다).
+  const play = read("src/app/session/play/page.tsx");
+  assert.match(play, /mute=\{\{ on: muted, onToggle: handleToggleMute \}\}/);
+  assert.match(play, /speaker=\{\{ on: audioRoute === "speaker", onToggle: \(\) => setAudioRoute\(/);
+  const { contrastViolations, voiceTalkDialContrastPairs } = await import("../phone/skinTokens.ts");
+  assert.equal(voiceTalkDialContrastPairs().length, 6);
+  assert.deepEqual(contrastViolations(voiceTalkDialContrastPairs()), []);
 });

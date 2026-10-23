@@ -42,6 +42,8 @@ export async function transitionChannel(
   trigger: ChannelTransitionTrigger,
   /** `to==="messenger"`일 때만 의미 있음 — 전이 시점의 세션 turnCount(위 헤더 주석 참고). */
   turnCountAtTransition?: number,
+  /** §123 — 참가자가 건 통화(보이스톡 발신)면 전환 기록에 남긴다(부재 = 종전 기록 바이트 동일). */
+  options?: { caller?: "participant" },
 ): Promise<void> {
   if (!isSupportedChannelTransition(from, to)) {
     throw new HttpsError("unimplemented", `지원하지 않는 채널 전이입니다: ${from} → ${to}`);
@@ -57,6 +59,7 @@ export async function transitionChannel(
     // Firestore admin SDK가 undefined 필드를 기본 거부하므로, 값이 있을 때만 키를 만든다(기존
     // 관례, functions/src/session/index.ts의 옵셔널 스프레드 패턴과 동일).
     ...(turnCountAtTransition !== undefined ? { turnCountAtTransition } : {}),
+    ...(options?.caller ? { caller: options.caller } : {}),
   };
 
   // T31 QA 잔여 관찰 반영(2026-07-24): sendMessage는 이 함수를 부르기 직전에 이미 트랜잭션으로

@@ -29,7 +29,10 @@ test("[실기 4] 프로필 시트 보이스톡 — 대화 종료 전이면 늘 �
   );
   assert.ok(code.includes('requestEscalation({ sessionId, via: "voice_talk" })'));
   assert.ok(code.includes('"보이스톡 연결 중…"') && code.includes('"상대방이 응답하지 않습니다"'));
-  assert.ok(code.includes('aria-label="보이스톡 취소"'));
+  // §123(UX D-156) — 발신 화면은 공용 컴포넌트가 그린다(신호음 중에만 취소 연결).
+  assert.ok(code.includes("<VoiceTalkDialScreen"));
+  assert.ok(code.includes('{...(voiceTalkCall === "ringing" ? { onEnd: () => setVoiceTalkCall(null) } : {})}'));
+  assert.ok(readFileSync("src/components/VoiceTalkDialScreen.tsx", "utf8").includes('aria-label="보이스톡 취소"'));
   // 응답 없음 메시지가 다음 전송의 답장으로 오인되지 않는다(기준점 하한).
   assert.match(code, /baseTurnIndex: Math\.max\([\s\S]*?voiceTalkFloorRef\.current,\s*\),/);
   // 종전 통화 전이 응답 판별은 합집합 타입에서 안전한 형태로.
@@ -40,7 +43,8 @@ test("[실기 4] 클라 · 서버 요청 · 응답 타입이 같은 모양이다
   const client = readFileSync("src/lib/api/types.ts", "utf8");
   const server = readFileSync("functions/src/session/types.ts", "utf8");
   for (const needle of [
-    'export type RequestEscalationRequest = { sessionId: string; via?: "voice_talk" };',
+    // §123 — 대화방 보이스톡 발신(`voice_talk_dial`)이 더해졌다.
+    'export type RequestEscalationRequest = { sessionId: string; via?: "voice_talk" | "voice_talk_dial" };',
     'export type RequestEscalationResponse = { escalation: { toChannel: "voice" } } | { voiceTalk: "unanswered"; turnIndex: number };',
   ]) {
     assert.ok(client.includes(needle), `클라: ${needle}`);
