@@ -473,6 +473,9 @@ const PROSECUTION_SOURCES = ["C05", "C06", "C07", "C08", "S3", "S25", "S28"];
 // 근거 docs/research/prosecution-crypto-tactics-2026-10.md)를 먼저 말하게 하고, 같은 요구를 이유 없이 되풀이하지 않게 한다. ⛔ 은퇴 fv-c8wq 문면은 그대로.
 const PROSECUTION_SITE_FOLLOW_UP_STAGE_V2 =
   "사이트에서 이체를 마치면 결과를 알린 뒤, '방금 검수한 자금이 고객님 다른 계좌 · 적금 · 대출 한도 쪽으로도 같은 흐름으로 빠져나간 기록이 함께 확인됐습니다, 그 자금까지 검수해야 무혐의 처리가 끝납니다'처럼 왜 추가 검수가 필요한지부터 분명히 설명하고, 같은 사이트에서 남은 예금 · 적금 · 대출 가능액도 진행하라고 한 번 요구한다. 피해자로 확인되면 돌려준다고 안심시킨다. 같은 추가 요구를 이유 없이 되풀이하지 않고, 검수 기간이나 나중에 연락하겠다는 말로 통화를 정리하지도 않는다.";
+// §125 실측(2026-10-23 · fv-t8ga · fv-v2mk 순응) — 약속을 받은 뒤에도 같은 요구를 말만 바꿔 10번 넘게 되풀이했다. 말로 끝나는 결말 끝에 붙인다.
+const VERBAL_ENDING_WRAP =
+  "상대가 하겠다고 약속하면 같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다. 상대가 답을 미루면 한 번만 다시 요구한 뒤 마무리한다.";
 const PROSECUTION_OPENING_V2 = `${PROSECUTION_STAGES[0]} ${INVESTIGATION_CARD_USE}`;
 
 // 검찰 고급 ② 상품권형 — 근거 경찰청(정책브리핑 2024-04-15 · 위조 우편물 → 검사 사칭 → "자금 검수" 명목 현금 · 문화상품권 · 가상자산 요구 — 사례 C24 · S44).
@@ -480,8 +483,9 @@ const PROSECUTION_VOUCHER_PERSONA = prosecutionRoutePersona(
   "자금 검수 명목으로 문화상품권을 사서 그 핀 번호를 불러 달라고 요구하는 상황을 연기한다.",
   "- 상품권은 '문화상품권'이라고만 하고 실제 판매처 · 발행사 · 매장 이름은 쓰지 않는다. 핀 번호는 네가 지어내 부르지 않고, 살 곳을 정해 주지도 않는다.",
 );
-const PROSECUTION_VOUCHER_STAGE =
+const PROSECUTION_VOUCHER_STAGE_BASE =
   "자금 검수를 해야 한다며 '계좌 자금이 범죄 수익과 섞였는지 확인하려면 계좌 거래 기록이 남지 않는 상품권으로 바꿔 그 핀 번호를 검수번호로 제출하셔야 합니다, 확인이 끝나면 같은 금액으로 돌려드립니다'처럼 이유부터 설명하고, 예금으로 문화상품권을 사서 핀 번호를 불러 달라고 요구한다. 살 곳 · 금액 단위는 정해 주지 않는다. 상대가 거절하거나 망설이면 구속 가능성을 한 번 더 비춘 뒤 더 조르지 않고 마무리한다.";
+const PROSECUTION_VOUCHER_STAGE = `${PROSECUTION_VOUCHER_STAGE_BASE} ${VERBAL_ENDING_WRAP}`;
 const PROSECUTION_VOUCHER_DEMAND =
   "상품권 핀 번호 요구 — '자금 검수라서 예금을 문화상품권으로 바꾸셔야 합니다, 사신 상품권 핀 번호를 불러 주시면 검수번호로 등록됩니다' 처럼 상품권을 사서 핀 번호를 불러 달라고 한다. 판매처 · 발행사 이름과 핀 번호를 지어내지 않는다.";
 // 검찰 고급 ③ 대출금 전달형 — 근거 전북일보 2025-08-21(검사 · 금감원 사칭 → 대출 실행 → 대출금 현금 전달 직전 저지 · S40) · C07(교사 · 6,000만 원 대출 지시)
@@ -490,7 +494,7 @@ const PROSECUTION_LOAN_PERSONA = prosecutionRoutePersona(
   "명의 도용 대출 여부를 입증한다는 명목으로 대출을 받게 하고 그 대출금을 담당 직원에게 맡기라고 요구하는 상황을 연기한다.",
   "- 실제 금융회사 이름 · 대출 상품 · 금액은 지어내 말하지 않는다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다.",
 );
-const PROSECUTION_LOAN_STAGE = `${LOAN_PROOF_REASON}. 그다음 금융회사에서 대출을 받아 그 대출금을 현금으로 찾아 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 은행 직원이 용도를 물으면 생활비라고만 하라고 시킨다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 구속 가능성을 한 번 더 비춘 뒤 더 조르지 않고 마무리한다.`;
+const PROSECUTION_LOAN_STAGE = `${LOAN_PROOF_REASON}. 그다음 금융회사에서 대출을 받아 그 대출금을 현금으로 찾아 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 은행 직원이 용도를 물으면 생활비라고만 하라고 시킨다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 구속 가능성을 한 번 더 비춘 뒤 더 조르지 않고 마무리한다. ${VERBAL_ENDING_WRAP}`;
 const PROSECUTION_LOAN_DEMAND =
   "대출금 현금 인출 요구 — '고객님 계좌가 부정 사기 대출에 연루돼 있어서 정상 절차로 대출을 받으셔야 명의 도용 여부가 입증됩니다, 받으신 대출금은 현금으로 찾아 담당 직원에게 맡겨 주세요' 처럼 입증을 이유로 대출을 받게 하고 대출금을 직원에게 맡기게 한다. 만날 곳 · 시간은 정하지 않는다.";
 const PROSECUTION_ROUTE_HEAD = [
@@ -1679,7 +1683,7 @@ const SPECS: VariantSpec[] = [
     stages: st(
       `${ASSET_PROTECTION_STAGES_HEAD[0]} ${INVESTIGATION_CARD_USE}`,
       ...ASSET_PROTECTION_STAGES_HEAD.slice(1),
-      withSmsFirst("정식 수사로 넘어가면 계좌가 전부 묶이니 약식으로 처리하려면 공탁금을 먼저 넣어 둬야 하고 수사가 끝나면 전액 돌려준다고 이유부터 설명한 뒤, 문자로 보낸 계좌에 공탁금을 넣으라고 요구한다. 상대가 거절하거나 망설이면 더 조르지 않고 마무리한다."),
+      withSmsFirst(`정식 수사로 넘어가면 계좌가 전부 묶이니 약식으로 처리하려면 공탁금을 먼저 넣어 둬야 하고 수사가 끝나면 전액 돌려준다고 이유부터 설명한 뒤, 문자로 보낸 계좌에 공탁금을 넣으라고 요구한다. 상대가 거절하거나 망설이면 더 조르지 않고 마무리한다. ${VERBAL_ENDING_WRAP}`),
     ),
     dropLabels: ["인출·전달 요구"],
     extraTactics: [ASSET_DEPOSIT_DEMAND],
@@ -1701,7 +1705,7 @@ const SPECS: VariantSpec[] = [
       `${ASSET_PROTECTION_STAGES_HEAD[0]} ${INVESTIGATION_CARD_USE}`,
       ...ASSET_PROTECTION_STAGES_HEAD.slice(1),
       withSmsFirst("보관 조치 절차라며 문자로 보낸 링크에서 보관 신청서를 먼저 작성하게 한다."),
-      INSTITUTION_GOLD_STAGE.replace("인증번호 단계가 끝나면 ", "신청서 단계가 끝나면 "),
+      `${INSTITUTION_GOLD_STAGE.replace("인증번호 단계가 끝나면 ", "신청서 단계가 끝나면 ")} ${VERBAL_ENDING_WRAP}`,
     ),
     dropLabels: ["절차·서류 정당화", "인출·전달 요구"],
     extraTactics: [ASSET_CUSTODY_PROCEDURE_TACTIC, INSTITUTION_GOLD_DEMAND],

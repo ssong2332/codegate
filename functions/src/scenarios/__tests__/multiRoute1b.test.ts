@@ -71,3 +71,12 @@ test("[§125 결말] 말로 끝나는 결말 — 결정 순간 · 출처(C · S)
     assert.match(findFlowVariant(id)!.stages.at(-1)!.summary, /장소 · 시간 · 주소[^.]*정하지도 묻지도 않는다/, id);
   }
 });
+
+test("[§125 실측 반영] 말로 끝나는 결말 4벌(상품권 · 대출금 · 금 · 공탁금) — 약속하면 되풀이 없이 마무리 · 답을 미루면 한 번만 다시", () => {
+  for (const id of ["fv-v2mk", "fv-a6lq", "fv-t8ga", "fv-p3jx"]) {
+    const v = findFlowVariant(id)!;
+    assert.ok(v.stages.some((s) => /같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)), id);
+  }
+  // 1a 기관 사칭 금 구매(fv-g2ld)는 같은 결말 문면을 공유하지만 이 줄은 자산 보호 쪽에서만 붙였다(1a 실측에서 되풀이 관측 0).
+  assert.ok(findFlowVariant("fv-g2ld")!.stages.every((s) => !/짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)));
+});
