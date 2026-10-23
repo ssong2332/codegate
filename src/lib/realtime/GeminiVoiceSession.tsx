@@ -51,6 +51,7 @@ import { HANGUP_DRAIN_CAP_MS, HANGUP_FINAL_TURN_CAP_MS, hangupDrainDelayMs } fro
 import { GEMINI_OUTPUT_GAIN, LIMITER_INPUT_RANGE, SPEAKER_COMPRESSOR, applySpeakerDynamics, buildLimiterCurve, liveStageFor } from "./outputGain";
 import { INITIAL_LOUDNESS_STATE, normalizeChunk, type LoudnessState } from "./loudnessNormalizer";
 import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } from "./unheardReply";
+import { INITIAL_THOUGHT_LEAK_GATE_STATE, pickLiveAudioData, stepThoughtLeakGate, stripLeakedThought, type LiveContentPart } from "./thoughtLeak";
 import {
   AWAIT_RESPONSE_TIMEOUT_MS,
   INITIAL_CLIENT_TURN_QUEUE_STATE,
@@ -508,6 +509,8 @@ export default function GeminiVoiceSession({
     // 전사(transcript)는 조각으로 스트리밍되므로 턴이 끝날 때(turnComplete)까지 모았다가 flush한다.
     let userBuffer = "";
     let scammerBuffer = "";
+    // §116 — 출력 전사에 모델의 영어 사고 문장이 섞이면 그 구간의 재생을 막는다(판정표 `thoughtLeak.ts` G1~G5 · 턴 경계에서 초기화).
+    let thoughtGate = INITIAL_THOUGHT_LEAK_GATE_STATE;
 
     // ⭐ §59.6(reviewer Critical #1) — Live 도구 라우팅이 쓰는 상태.
     // `modelToolScammerTurns`는 부모(session/play/page.tsx)의 `scammerTurnsRef`와 **같은 경계**
@@ -726,7 +729,8 @@ export default function GeminiVoiceSession({
 
     const flushTranscript = () => {
       const u = userBuffer.trim();
-      const s = scammerBuffer.trim();
+      // §116 — 사기범 전사만 사고 문장을 지운다(판정표 행 1~4 · 참가자 발화는 원문).
+      const s = stripLeakedThought(scammerBuffer).trim();
       if (u) {
         handlersRef.current.onTranscriptTurn("user", u);
       }
@@ -752,7 +756,7 @@ export default function GeminiVoiceSession({
     // 사기범의 잘린 턴보다 **앞에** 기록돼 시간 순서가 뒤집힌다. 사용자 조각은 그대로 두고 다음
     // turnComplete에서 정상적으로 flush되게 한다.
     const flushScammerTurn = () => {
-      const s = scammerBuffer.trim();
+      const s = stripLeakedThought(scammerBuffer).trim();
       if (s) {
         // §82.3.4 — 끊긴 조각 flush도 사기범 전사 턴이다(`messages`에 문서 1개로 남는다).
         modelToolScammerTurns += 1;
@@ -1304,6 +1308,8 @@ export default function GeminiVoiceSession({
                 turnComplete?: boolean;
                 inputTranscription?: { text?: string };
                 outputTranscription?: { text?: string };
+                // §116 — 재생할 오디오를 직접 고른다(사고 파트 제외 · SDK `data` 게터는 `thought`를 보지 않는다).
+                modelTurn?: { parts?: LiveContentPart[] };
               };
               // §59.2 ②(genai.d.ts:9262) — `toolCall?: LiveServerToolCall`.
               toolCall?: { functionCalls?: { id?: string; name?: string; args?: unknown }[] };
@@ -1389,10 +1395,18 @@ export default function GeminiVoiceSession({
               if (sc?.outputTranscription?.text) {
                 scammerBuffer += sc.outputTranscription.text;
                 if (sc.outputTranscription.text.trim()) scammerTextSinceBoundary = true;
+                // §116 — 사고 문장이 보이면 이미 예약된 재생을 끊고, 한국어 대사가 다시 올 때까지 오디오를 예약하지 않는다.
+                const gate = stepThoughtLeakGate(thoughtGate, { type: "transcript", text: sc.outputTranscription.text });
+                thoughtGate = gate.state;
+                if (gate.startSuppress) {
+                  stopAllPlayback();
+                  console.info("[gemini-thought-leak]", JSON.stringify({ suppressed: true }));
+                }
               }
 
               // 사용자가 말을 끊으면 예약된 재생을 전부 멈춰 새 응답과 겹치지 않게 한다.
               if (sc?.interrupted) {
+                thoughtGate = stepThoughtLeakGate(thoughtGate, { type: "boundary" }).state;
                 stopAllPlayback();
                 stopSpeaking();
                 // 잘린 사기범 발화를 여기서 내보낸다 — 안 하면 다음 말풍선 앞에 붙어 턴 경계가
@@ -1409,9 +1423,12 @@ export default function GeminiVoiceSession({
               // (2) 예전엔 turnComplete를 먼저 처리하고 그 뒤 markSpeaking()이 turnInProgress를
               //     되살려, 마지막 청크와 turnComplete가 같은 메시지로 오는 정상 케이스에서 4초
               //     대기가 걸렸다. 이제 순서와 무관하게 resolveTurnInProgress가 규칙으로 정한다.
-              const samples = message.data ? base64ToFloat32(message.data) : null;
+              // §116 — 사고 파트(`thought: true`)는 재생하지 않는다. 게이트가 막는 동안 온 오디오도 예약하지 않는다
+              // (`hasAudio`는 그대로 둔다 — 턴 진행 판정 · 게이트 계산은 서버가 말하는 중이라는 사실을 따라야 한다).
+              const audioData = pickLiveAudioData(sc?.modelTurn?.parts);
+              const samples = audioData ? base64ToFloat32(audioData) : null;
               const hasAudio = samples !== null && samples.length > 0;
-              if (hasAudio && samples) {
+              if (hasAudio && samples && !thoughtGate.suppressing) {
                 audioSinceBoundary = true;
                 noteChunkReceived(samples); // 진단 — 원본 PCM 최대 진폭(`pcm.peakDb`)
                 // §114 — 시나리오 · 세션마다 다른 원본 크기를 목표 말소리 RMS(기관 사칭 기준)로 맞춘 뒤 게인 노드로 보낸다.
@@ -1473,10 +1490,11 @@ export default function GeminiVoiceSession({
                 audioSinceBoundary = false;
                 scammerTextSinceBoundary = false;
                 // PR-A2(F6) — 이 턴의 사기범 전사(flush가 비우기 전에 읽는다). 대기 뒤 침묵 넛지 판정의 입력이다.
-                const scammerTurnText = scammerBuffer;
+                const scammerTurnText = stripLeakedThought(scammerBuffer);
                 // §104 — 이 턴이 답한 참가자 발화(flush가 비우기 전에 읽는다). 자금 소진 선언 판정의 입력이다.
                 const participantTurnText = userBuffer;
                 flushTranscript();
+                thoughtGate = stepThoughtLeakGate(thoughtGate, { type: "boundary" }).state;
                 // ⭐ §59.6 ③ → §82.3.4 — `modelToolScammerTurns`는 이제 위 `flushTranscript`/`flushScammerTurn`이
                 // 비어 있지 않은 사기범 전사를 내보낼 때 오른다(부모 `scammerTurnsRef`와 같은 지점 · 같은 정의).
                 // T68 — 사기범 발화 1턴 완료. 부모가 이 경계만 세어 통화 중 문자 도착을 판단한다

@@ -16,6 +16,7 @@ import { assertAnonymousChallengeScope, denyAnonymous } from "../shared/anonymou
 import { maskPII } from "../guardrails";
 import { findOpeningToMarkNotSpoken } from "./openingMark";
 import { resolveTurnCreatedAtMs } from "./transcriptTiming";
+import { stripLeakedThought } from "./thoughtLeak";
 import type { MessageDoc, SessionDoc } from "../shared/types";
 
 ensureFirebaseAdminApp();
@@ -109,7 +110,9 @@ export const submitRealtimeTranscript = onCall<
 
     turns.forEach((turn, i) => {
       const role = turn.role === "user" ? "user" : "scammer";
-      const raw = typeof turn.text === "string" ? turn.text.slice(0, MAX_TEXT_LEN) : "";
+      const submitted = typeof turn.text === "string" ? turn.text.slice(0, MAX_TEXT_LEN) : "";
+      // §116 — 사기범 전사의 영어 사고 문장을 지운다(옛 화면이 걸러내지 않고 보내도 저장 전에 막는다 · 참가자 발화는 원문).
+      const raw = role === "scammer" ? stripLeakedThought(submitted) : submitted;
       const masked = maskPII(raw).trim();
       if (!masked) return;
       // 전사에는 정확한 write 시각이 없으므로 제출 시각 기준으로 턴 간격을 근사한다(리포트

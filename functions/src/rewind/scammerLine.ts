@@ -4,6 +4,8 @@
 // **왜 별도 모듈인가**: `rewind/index.ts`는 `onCall`·firebase-admin에 의존해 node:test에서 부트스트랩
 // 없이 부를 수 없다. 이 선택 규칙은 **G57이 지적한 실제 결함 지점**이라 회귀 테스트로 고정해야
 // 하므로, 부수효과 없는 로직만 여기로 분리한다(judge.ts·sessionLimits.ts와 동일 관례).
+import { stripLeakedThought } from "../realtime/thoughtLeak";
+
 export type ScammerLineMessage = {
   role: "scammer" | "user";
   textMasked: string;
@@ -39,7 +41,8 @@ export function pickScammerLineForMoment(
   const position = visible.findIndex((m) => m.turnIndex === momentTurnIndex);
   if (position < 0) return "";
   for (let i = position; i >= 0; i -= 1) {
-    if (visible[i].role === "scammer") return visible[i].textMasked;
+    // §116 — 저장된 사기범 전사에 남은 영어 사고 문장은 되감기에 보이지 않는다(저장 문서는 고치지 않는다).
+    if (visible[i].role === "scammer") return stripLeakedThought(visible[i].textMasked);
   }
   return "";
 }
