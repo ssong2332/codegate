@@ -23358,3 +23358,47 @@ B안(문자 하한 3 · 6) 유지 판단: 4세션에서 효과는 관측되지 �
 
 ### 115.7 검증 · 배포
 검증 결과는 PR 본문. 배포 순서 **Functions → Hosting** 권고(어느 쪽이 먼저여도 안전: 옛 화면은 `goal_pending`을 모르는 값으로 보고 계속 묻기만 하고 `wrapUpInstruction`은 무시 · 새 화면 + 옛 서버는 마무리 지시가 오지 않을 뿐).
+
+## 116. (Bug fix — 2026-10-23 · 브랜치 `claude/gallant-kalam-14d92b` = main `239a417` + 변경 · PR #386 확인 프로브 관측) **실시간 통화 사기범 발화에 섞인 모델의 영어 사고 문장 차단** — implementer 기록 (DECISIONS #231)
+
+### 116.1 관측
+- PR #386 확인 ② 세션(`scripts/full-audit-probe.mjs` · gemini-3.8-live · `fv-c5fj` · 이 브랜치 프로브 6세션 중 1)의 사기범 3턴 출력 전사가 `thought\nThe user asked, "Oh, is that so? What should I do?" which means …(약 100단어)… asset size.협조해 주시면 약식으로 …` 였다. 영어 사고 문단 바로 뒤에 한국어 대사가 이어진다.
+- 원본: 그 세션 스크래치 `probe115/wrap/voice-institutional-impersonation-advanced-comply-2026-10-23T02-25-13-347Z.json` `turns[6]`. 프로브는 `outputTranscription.text`만 모은다(`full-audit-probe.mjs:238`). 모델 턴 파트는 기록하지 않았다.
+
+### 116.2 원인 판정
+| 가능성 | 판정 | 근거 |
+|---|---|---|
+| Live 설정의 사고 옵션이 켜져 있다 | ⛔ 해당 없음 · 끌 수도 없음 | 토큰(`geminiProvider.ts:205-`) · 프로브 둘 다 `thinkingConfig` 없음. 3.8 Live는 `thinkingLevel` · `thinkingConfig` 미지원 — 공식 모델 문서 *"Omit `thinking_level` (or `thinking_config`) from your session setup"*, capabilities 표 *"Supported (interleaved reasoning). `thinkingLevel` is not supported (omit from setup)."* (ai.google.dev/gemini-api/docs/models/gemini-3.8-live · /live-api/capabilities, 2026-10-23 확인) |
+| 클라가 `thought` 파트를 전사·재생한다 | ⛔ 전사는 아님 · 재생은 구멍 있었음 | 화면 · 프로브 모두 전사는 `outputTranscription`만 읽는다(파트 텍스트 0). 다만 재생은 SDK `message.data`를 썼고, 이 게터는 `thought`를 보지 않고 모든 `inlineData`를 잇는다(@google/genai 2.13.0 `dist/index.cjs` `LiveServerMessage.data`) |
+| 출력 전사에 사고가 섞인다 | ⭐ **확정(관측)** | 영어 문단이 `outputTranscription` 안에 있었다. 줄바꿈 · 따옴표 · `(step 2 & 3)` 같은 글 형식이 그대로라, 소리를 받아 적은 모양이 아니라 모델의 글 토큰이 전사 경로로 나온 모양이다 |
+| 모델이 사고를 소리로 읽었다 | ⚠️ **미확정(추정 — 가능성 있음)** | 문서상 출력 전사는 *"transcriptions of … the audio output"* 이다. 이 정의대로면 소리로도 나갔다. 프로브가 턴별 오디오 길이를 남기지 않아 확인하지 못했다. 확인 방법: 턴별 `inlineData` 바이트 수(초)를 함께 기록하는 프로브. 한국어 부분 약 80자는 10초 안팎이므로 40초 안팎이면 소리로 나간 것이다 |
+
+### 116.3 막는 장치
+| 층 | 위치 | 동작 |
+|---|---|---|
+| ① 사고 파트 재생 제외 | `src/lib/realtime/thoughtLeak.ts` `pickLiveAudioData` → `GeminiVoiceSession.tsx` | `modelTurn.parts`에서 `thought: true`를 빼고 `inlineData`만 잇는다(SDK `data` 게터 대신 · 잇는 방식은 같다) |
+| ② 재생 게이트 | 같은 파일 `stepThoughtLeakGate`(G1~G5) | 출력 전사가 `thought` 표지로 시작하거나 한글 없는 영어가 8단어에 이르면 예약 재생을 끊고(`stopAllPlayback`), 한국어 조각이 올 때까지 오디오를 예약하지 않는다. 턴 경계에서 초기화한다. `hasAudio`(턴 진행 판정)는 그대로 둔다. 발동 시 `console.info("[gemini-thought-leak]", {suppressed:true})` 1줄을 남긴다(본문 0) |
+| ③ 전사 필터 | `stripLeakedThought`(행 1~4) · 화면 flush 2곳 + 침묵 넛지 · 되풀이 판정 입력 | 사기범 턴 글에서 사고 문장을 지운다. 참가자 발화는 원문 그대로 둔다 |
+| ④ 저장 전 필터 | `functions/src/realtime/submitTranscript.ts` | 사기범 줄을 마스킹 전에 거른다. 옛 화면이 걸러내지 않고 보내도 막는다 |
+| ⑤ 이미 저장된 전사 | 리포트 판정 입력 `generateReportCore.ts` · 되감기 `rewind/scammerLine.ts` · 되짚어보기 `report/replay/page.tsx` · 되감기 화면 `report/rewind/page.tsx` | 읽을 때 거른다. 저장 문서는 고치지 않는다(운영 Firestore 쓰기 0). 리포트 문서는 사기범 원문을 복사해 두지 않으므로(판정 결과만 저장) 이미 만든 리포트에는 남은 사고 문장이 없다 |
+
+판정표 정본(`functions/src/realtime/thoughtLeak.ts` 머리 · 화면 사본과 글자까지 같음 — 루트 테스트가 대조):
+| 행 | 조건 | 처리 |
+|---|---|---|
+| 1 | 앞머리 `thought` 표지(대소문자 무관 · 앞 공백 · `*` 허용) | 표지 ~ 첫 한글 직전까지 지운다 |
+| 2 | 한글 없는 구간의 라틴 단어 ≥ 8(판단값) | 그 구간을 지운다(앞 문장부호는 남김) |
+| 3 | 그 밖(OTP · ATM · SMS · 숫자) | 원문 그대로(바이트 동일) |
+| 4 | 지운 뒤 남은 글 없음 | 빈 문자열 |
+
+### 116.4 대가 · 남은 한계
+- 사고 끄기: 3.8 Live에서는 불가(116.2 1행). 그래서 지연 · 품질 영향은 없다. 프롬프트로 "생각을 말하지 마라"를 넣는 안은 이번에 넣지 않았다. 효과를 실 키로 확인해야 하는 행동 변경이라 따로 승인받을 일이다.
+- 게이트는 전사 조각이 오디오보다 늦게 오면 그 앞의 소리를 되돌리지 못한다. 풀린 직후 한국어 첫 조각 오디오가 막힌 구간에 걸리면 앞머리가 잘릴 수 있다.
+- 행 1은 사고 문단 안의 한글 인용(예: `"네"`)부터 남긴다. 그 뒤의 영어는 행 2가 지운다(테스트로 고정).
+- 한 턴 전체가 사고뿐이면 전사는 비지만, 부모의 턴 경계 콜백(`onScammerTurnComplete`)은 원래 전사 기준으로 한 번 더 불린다.
+- 저장 문서에는 영어가 남는다. 새 읽기 경로를 추가할 때는 `stripLeakedThought` / `cleanStoredLine`을 거쳐야 한다.
+
+### 116.5 검증
+- `npm test` **1056/0**(기준 main `239a417` 1048 + 신규 `thoughtLeak.test.ts` 8) → `npm --prefix functions test` **1747/0**(기준 1739 + 신규 `thoughtLeak.test.ts` 8) · 차례로 실행
+- lint 2종 오류 0(루트 경고 1건은 변경 밖 `scripts/live-turn-probe.mjs`)
+- `npm run build`: `Finished TypeScript` 통과 뒤 `.env` 없음으로 `auth/invalid-api-key`(알려진 동작)
+- 실 키 확인 · 실기 확인은 하지 않았다
