@@ -120,6 +120,14 @@ export type FlowVariant = {
    * `listFlowVariants`(= 배정 풀 · 브리핑 라벨의 입력)에서는 빠진다. ⛔ `false`를 쓰지 않는다 — 부재가 거짓이다.
    */
   retired?: true;
+  /**
+   * §119(DECISIONS #234) — **루트 키**: 시나리오 안에서 결말(돈 · 정보가 빠지는 방식)의 이름. 난이도가 달라도 같은 결말이면 같은 키다
+   * (사용자 결정 D-6 "루트 = 결말 방식, 난이도 = 깊이"). 한 배정 풀 안에서는 서로 달라야 한다(D-11 — 테스트 고정).
+   * 값은 아래 `VARIANT_ROUTES` 표가 원천이다(저작 입력에 쓰지 않는다).
+   */
+  routeKey: string;
+  /** §119 — 리포트에 보일 루트 이름(D-3 b — **세션이 끝난 뒤 리포트에만** 나간다). 같은 (시나리오 × 루트 키)는 같은 이름. */
+  routeLabel: string;
 };
 
 /** S7(릴레이 재연결) 구현 전에는 false — legs ≥ 2 변형도 한 화자로 진행한다. */
@@ -127,7 +135,7 @@ export const RELAY_RUNTIME_AVAILABLE = false;
 
 // ── 저작 입력(내부) ───────────────────────────────────────────────────────────
 
-type VariantSpec = Omit<FlowVariant, "tactics"> & {
+type VariantSpec = Omit<FlowVariant, "tactics" | "routeKey" | "routeLabel"> & {
   /** authored — 기존 수법 중 남길 라벨(순서 유지). 부재면 기존 전부에서 `dropLabels`만 뺀다. */
   keepLabels?: string[];
   /** current(또는 keepLabels 부재 authored) — 기존 수법에서 뺄 라벨. */
@@ -167,9 +175,80 @@ function buildTactics(spec: VariantSpec): string[] {
   return [...kept, ...extras];
 }
 
+// ── §119 루트 표(DECISIONS #234) — 변형 ID → 루트 키 · 이름 ────────────────────────────────────────
+// 판정 규칙(이 표대로만): | If | Then |
+// | 결말(돈 · 정보가 빠지는 마지막 요구)이 같다 | 같은 키(난이도 무관) |
+// | 결말은 같고 진입(첫 마디)만 다르다 | 다른 키 — 다른 경험이다(카드사 고급 2벌) |
+// | 은퇴 변형 | 키를 그대로 단다(옛 리포트 해석) |
+// ⛔ 표에 없는 변형 ID는 `compile`이 던진다(조용한 누락 0). 루트 이름은 "~형"으로 끝낸다(리포트 문장 "이번 결말: ~형").
+type RouteEntry = readonly [routeKey: string, routeLabel: string];
+const R = {
+  safeAccount: ["safe-account", "안전계좌 이체형"],
+  cardInfo: ["card-info", "카드 정보 요구형"],
+  reliefTransfer: ["relief-transfer", "피해금 이관형"],
+  remoteAppRelief: ["remote-app-relief", "보안 앱 설치형"],
+  deliveryOpener: ["delivery-opener", "카드 배송 안내형"],
+  prepay: ["prepay", "선입금 요구형"],
+  repay: ["repay", "기존 대출 상환형"],
+  loanCheckApp: ["check-app", "보안 앱 설치형"],
+  refundLink: ["refund-link", "환급 신청 링크형"],
+  customsFee: ["customs-fee", "통관비 결제형"],
+  customsLink: ["customs-link", "통관 조회 링크형"],
+  protectAccount: ["protect-account", "보호계좌 이체형"],
+  instantTransfer: ["instant-transfer", "즉시 송금 요구형"],
+  settlement: ["settlement", "합의금 송금형"],
+  urgentTransfer: ["urgent-transfer", "급전 송금형"],
+  insuranceApp: ["insurance-app", "보험 앱 설치형"],
+  redeliveryLink: ["redelivery-link", "재배송 링크형"],
+  deliveryApp: ["delivery-app", "배송 앱 설치형"],
+  subsidyApp: ["subsidy-app", "지원금 앱 설치형"],
+  hushMoney: ["hush-money", "입막음 송금형"],
+  remoteAppProtect: ["remote-app-protect", "보안 앱 설치형"],
+  cashHandoff: ["cash-handoff", "현금 전달형"],
+  coinSite: ["coin-site", "코인 전환형"],
+} as const satisfies Record<string, RouteEntry>;
+
+export const VARIANT_ROUTES: Readonly<Record<string, RouteEntry>> = {
+  // 기관 사칭
+  "fv-5cn4": R.safeAccount, "fv-hktx": R.safeAccount, "fv-c5fj": R.safeAccount, "fv-pgqt": R.safeAccount,
+  // 카드사 — 초급은 카드 정보 직접 요구 · 중급은 피해금 이관 · 고급은 앱 설치(부정결제 진입) / 카드 배송 진입
+  "fv-aqp6": R.cardInfo, "fv-35f2": R.reliefTransfer,
+  "fv-akj5": R.remoteAppRelief, "fv-x7ue": R.remoteAppRelief, "fv-w3dq": R.deliveryOpener,
+  // 저금리 대환대출
+  "fv-bqr9": R.prepay, "fv-avap": R.repay, "fv-6s5p": R.loanCheckApp, "fv-m3hd": R.loanCheckApp,
+  // 국세청 환급금
+  "fv-vtq7": R.refundLink, "fv-aqx2": R.refundLink, "fv-uk7m": R.refundLink,
+  // 택배 통관
+  "fv-uaee": R.customsFee, "fv-62ak": R.customsLink, "fv-xpvu": R.customsLink,
+  // 직접 확인 은행 사칭
+  "fv-xuvu": R.protectAccount, "fv-mhnv": R.protectAccount, "fv-62q8": R.protectAccount,
+  // 자녀 납치 협박
+  "fv-c5ih": R.instantTransfer, "fv-dxwu": R.instantTransfer, "fv-k268": R.instantTransfer,
+  // 가족 사고 딥보이스
+  "fv-4dy4": R.settlement, "fv-krq3": R.settlement, "fv-66hh": R.settlement,
+  // 손주 사칭
+  "fv-brcb": R.urgentTransfer, "fv-mabg": R.urgentTransfer, "fv-cx5y": R.urgentTransfer,
+  // 자녀 사칭(카톡)
+  "fv-34v5": R.urgentTransfer, "fv-tpr3": R.urgentTransfer, "fv-tdgg": R.insuranceApp,
+  // 지인 사칭(카톡)
+  "fv-42wd": R.urgentTransfer, "fv-fvsc": R.urgentTransfer, "fv-bxvp": R.urgentTransfer,
+  // 택배 문자
+  "fv-prr3": R.redeliveryLink, "fv-tvq2": R.redeliveryLink, "fv-k7qm": R.redeliveryLink, "fv-g454": R.deliveryApp,
+  // 정부지원금 문자
+  "fv-rizf": R.subsidyApp, "fv-afbr": R.subsidyApp, "fv-hu8w": R.subsidyApp,
+  // 불법업소 유포 협박
+  "fv-9nx7": R.hushMoney, "fv-kwph": R.hushMoney, "fv-egum": R.hushMoney,
+  // 고급 전용 3종
+  "fv-tvnj": R.remoteAppProtect,
+  "fv-bmiq": R.cashHandoff, "fv-k9ra": R.cashHandoff,
+  "fv-nss6": R.coinSite, "fv-p4hz": R.coinSite, "fv-c8wq": R.coinSite, "fv-h3vn": R.coinSite,
+};
+
 function compile(spec: VariantSpec): FlowVariant {
   const { keepLabels: _keep, dropLabels: _drop, extraTactics: _extra, ...rest } = spec;
-  return { ...rest, tactics: buildTactics(spec) };
+  const route = VARIANT_ROUTES[spec.variantId];
+  if (!route) throw new Error(`${spec.variantId}: 루트 표(VARIANT_ROUTES)에 없다`);
+  return { ...rest, tactics: buildTactics(spec), routeKey: route[0], routeLabel: route[1] };
 }
 
 // ── 공통 값 ─────────────────────────────────────────────────────────────────
@@ -210,8 +289,14 @@ const INSTITUTION_ADVANCED_LOAN_STAGE =
   "이체가 끝났다고 하면 '검수 과정에서 고객님 명의로 부정 대출 정황이 함께 나왔다, 정상 대출임을 입증해야 한다'며 금융회사에서 대출을 받아 그 돈도 같은 안전계좌로 옮기라고 요구한다. 은행 직원이 대출 용도를 물으면 생활비라고만 답하라고 시키고, 수사 기밀이라 가족 · 은행에 알리면 안 된다고 다시 다짐받는다. 상대가 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다.";
 const INSTITUTION_LOAN_DEMAND =
   "대출금 이체 요구 — '부정 대출에 연루되셨습니다, 정상 대출인지 확인하려면 대출을 받아 그 돈도 안전계좌로 옮기셔야 합니다' 처럼 범죄 연루 확인을 핑계로 대출을 받게 하고, 은행 직원이 물으면 용도를 둘러대라고 시킨다. 실제 금융회사 이름 · 금액은 지어내 말하지 않는다.";
-/** §115 — 이체 문자 도착 뒤 후속 단계(대출 실행 유도)를 꺼내고 답을 들을 발화 수(판단값 — 이체 보고 1 · 대출 요구 응답 2 · 여유 1). */
-const INSTITUTION_ADVANCED_FOLLOW_UP_USER_TURNS = 4;
+/**
+ * §115 — 이체 문자 도착 뒤 후속 단계(대출 실행 유도)를 꺼내고 답을 들을 발화 수(판단값).
+ * ⭐ §117(DECISIONS #232 · 사용자 실기 신고 *"전화 끊는 타이밍이 살짝 느렸어"*) 4 → 3 = 이체 반응 1 · 대출 요구 응답 1 · 용도 코칭 · 비밀 1.
+ * 근거: 관측 5세션(운영 f7047187 + §115.5 · §115.6 실 키 4)에서 대출 요구는 전부 도착 뒤 0 ~ 1발화 응답에 나왔고 용도 코칭은 그다음 응답까지였다
+ * (5/5 — 3이면 대출 · 코칭이 모두 끝난 뒤). 운영 f7047187은 도착 6 · 대출 7 · 작별 인사 8인데 4라 발화 9 막힘 → 10 수락(참가자가 "전화 안 끊어?" ·
+ * "여보세요"로 두 번 재촉). 2로 내리면 코칭이 다음 응답에 오는 2/5에서 마무리 지시가 코칭보다 먼저 붙는다 — 하한으로 3을 둔다.
+ */
+const INSTITUTION_ADVANCED_FOLLOW_UP_USER_TURNS = 3;
 const INSTITUTION_ADVANCED_DECISION_MOMENT = "문자 링크로 연 안전계좌 이체 화면에서 금액을 넣고 이체하기를 누르는 순간";
 const APP_INSTALL = { from: "card-delivery-call", label: "보안 점검 앱 설치 요구" };
 const AGENCY_PROBE = { from: "card-delivery-call", label: "기관 조사 언급" };
@@ -479,6 +564,9 @@ const SPECS: VariantSpec[] = [
     decisionMoment: INSTITUTION_ADVANCED_DECISION_MOMENT,
     goalFollowUpUserTurns: INSTITUTION_ADVANCED_FOLLOW_UP_USER_TURNS,
     sources: ["C09", "S27"],
+    // §119(DECISIONS #234 · 사용자 결정 D-11) — 배정 은퇴. 결말(안전계좌 링크 이체 → 대출 실행 유도)이 fv-c5fj와 같아, 루트 덱에 두 벌이
+    // 있으면 같은 결말이 2/n 확률로 나온다. 옛 세션 · 리포트 해석은 그대로(`findFlowVariant`).
+    retired: true,
   },
 
   // ── card-company-impersonation (§2.6.3 2행 — C03 · C04, S4 · S22 · S14) ─────────────────

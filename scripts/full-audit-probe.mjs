@@ -61,6 +61,8 @@ const signalConsistencyLib = optionalLib("roleplay/signalConsistency.js");
 // §108 · §115 — 끊기 4행 입력(할 일 완료). 옛 lib에는 없을 수 있다(없으면 false — 종전 프로브 동작).
 const goalActionLib = optionalLib("scammerHangup/goalAction.js");
 const guidanceLib = optionalLib("scammerHangup/guidance.js");
+// §117 — 모델 도구 응답 되풀이 금지 꼬리(앱 `deliverInCallSms`의 model_tool 경로와 같은 함수). 옛 lib에는 없다(없으면 종전 문면).
+const toolGuidanceLib = optionalLib("inCallSms/toolGuidance.js");
 
 // §104 — Live 클라 반복 · 대기 정체 주입(`src/lib/realtime/stallRecovery.ts` §4)의 미러. 클라 모듈은 TS라 여기서 못 불러 판정표를 옮겼다 —
 // 5 · 6행(인적사항 · 유사도)은 서버 lib `decideRepeatBreak`(클라와 같은 정규식 — 루트 `[§104 짝]` 테스트)를 쓰고, 4행(대기 말)만 옮긴다.
@@ -236,7 +238,9 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
       onmessage: (m) => {
         if (m.toolCall) {
           const calls = m.toolCall.functionCalls ?? [];
-          events.push({ t: now(), ev: "toolCall", calls: calls.map((c) => ({ name: c.name, args: c.args })), scammerTurns, userTurns });
+          events.push({ t: now(), ev: "toolCall", calls: calls.map((c) => ({ name: c.name, args: c.args })), scammerTurns, userTurns, preToolText: buf });
+          // §117 — 같은 턴 안 도구 앞 발화가 있으면 전사에 경계 표시(앱은 줄바꿈 — 분석용으로 눈에 띄는 표식).
+          if (buf.trim()) buf = `${buf.trimEnd()} ⟂ `;
           void handleToolCalls(calls);
           return;
         }
@@ -276,6 +280,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
           guidance = r.announceInstruction;
           events.push({ t: now(), ev: "sms", by: "model", smsId: item.smsId, body: r.body });
         } else guidance = g.status === "already_delivered" ? SMS_DECLINE_ALREADY : SMS_DECLINE_TOO_EARLY;
+        if (toolGuidanceLib) guidance = toolGuidanceLib.withModelToolNoRepeat(guidance, "model_tool");
         events.push({ t: now(), ev: "toolResult", name: c.name, purpose: c.args?.purpose, status, userTurns });
         return { id: c.id, name: c.name, response: { status, guidance } };
       }
