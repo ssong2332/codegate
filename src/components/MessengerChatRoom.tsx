@@ -160,7 +160,26 @@ function PhotoBubble({ url }: { url: string | undefined }) {
 const VOICE_TALK_RING_MS = 6000;
 const VOICE_TALK_UNANSWERED_MS = 2000;
 
-export default function MessengerChatRoom() {
+/**
+ * §121.7 PR-3(메인 결정 ⓑ "채팅으로 = 통화 유지") — 통화 화면이 이 대화방을 통화 위에 겹쳐 그릴 때 넘기는 연결. 없으면 종전 라우트 화면.
+ * | 있음 | 동작 |
+ * |---|---|
+ * | 시작 고지 | 건너뜀(이미 대화 중) |
+ * | 맨 위 | "통화 중 00:42" 배너 — 누르면 통화 화면 |
+ * | 보내기 | 직전에 `beforeSend`(통화 전사 제출 — 새로 쓴 문서 수) → `sendMessage({ duringCall: true })` → `onChatTurn` |
+ * | 보이스톡 · "전화로 확인" | 숨김(이미 통화 중) |
+ * | 훈련 종료 | `onEndTraining`(통화 화면의 종료 순서 — 전사 제출 포함) |
+ */
+export type ChatRoomCallLink = {
+  elapsedLabel: string;
+  onBackToCall: () => void;
+  beforeSend: () => Promise<number>;
+  onChatTurn: (userText: string, replyText: string) => void;
+  onEndTraining: () => void;
+};
+
+export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoomCallLink } = {}) {
+  const inCall = duringCall !== undefined;
   const router = useRouter();
   const [sessionId] = useState<string | null>(() => getPendingSessionId());
   const [pageState, setPageState] = useState<PageState>(sessionId ? "checking" : "no-session");
@@ -261,7 +280,8 @@ export default function MessengerChatRoom() {
         // T187(§72.5 D2) — 시작 전 고지 판정. 확인 기록은 이 탭 sessionStorage(다른 키 — G450),
         // 통화 "받기" 기록은 **읽기만**(역방향 도착 N-2).
         setStartNotice(
-          decideMessengerStartNotice({
+          // §121.7 — 통화 위에 겹친 대화방은 이미 대화 중이다(고지 생략).
+          inCall ? "skip" : decideMessengerStartNotice({
             acknowledged: isStartNoticeAcknowledged(sessionId),
             answeredInThisTab: isSessionAnswered(sessionId),
             sessionEnded: data.status === "ended",
@@ -318,7 +338,7 @@ export default function MessengerChatRoom() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [sessionId, inCall]);
 
   // 대화 로그 구독 — T187(§72.5 D2 · AC-088 (b)) 시작 전 고지를 확인("skip")하기 전에는 구독하지
   // 않는다. 통화 화면의 "받기 전에는 구독하지 않는다"와 같은 규칙이다(오프닝 메시지는 createSession
@@ -425,9 +445,22 @@ export default function MessengerChatRoom() {
     setClock(now);
     setSendError(null);
     if (retryText === undefined && !photoUrl) setInput("");
-    if (photoUrl) photoQueueRef.current.push({ url: photoUrl, minTurnIndex: turn.baseTurnIndex + 1 });
     try {
-      const result = await sendMessage(photoUrl ? { sessionId, userText: "", photo: true } : { sessionId, userText: text });
+      // §121.7 — 통화 중이면 보내기 직전에 그때까지의 통화 전사를 먼저 제출한다(사기범이 통화 내용을 안다). 전사 문서는 이 턴의 내
+      // 글 앞에 붙으므로 기준점을 그만큼 올린다(전사를 답장으로 오인하지 않게).
+      const transcriptWritten = duringCall ? await duringCall.beforeSend().catch(() => 0) : 0;
+      const baseTurnIndex = turn.baseTurnIndex + transcriptWritten;
+      if (transcriptWritten > 0) {
+        setPending((current) => (current?.localId === turn.localId ? { ...current, baseTurnIndex } : current));
+      }
+      if (photoUrl) photoQueueRef.current.push({ url: photoUrl, minTurnIndex: baseTurnIndex + 1 });
+      const result = await sendMessage({
+        sessionId,
+        userText: photoUrl ? "" : text,
+        ...(photoUrl ? { photo: true } : {}),
+        ...(inCall ? { duringCall: true } : {}),
+      });
+      if (duringCall && result.reply?.text) duringCall.onChatTurn(text, result.reply.text);
       // T158(§48.5.1) — OR-fold 두 번째 항.
       setDialogueDegraded((current) => foldDegraded(current, result.isMock));
       // T30(§13.2) — 자동 신호든 max-turn 폴백이든, 서버가 이미 transitionChannel을 마쳤다는
@@ -547,6 +580,11 @@ export default function MessengerChatRoom() {
   };
 
   const handleEndTraining = () => {
+    // §121.7 — 통화 위 대화방이면 통화 화면의 종료 순서(전사 제출 → 종료)를 탄다.
+    if (duringCall) {
+      duringCall.onEndTraining();
+      return;
+    }
     router.push("/session/end");
   };
 
@@ -624,7 +662,8 @@ export default function MessengerChatRoom() {
   const chatTokens = MESSENGER_CHAT_TOKENS;
   // §95(UX D-138 · 실기 신고 11) — 카톡형은 번호 대신 상대 이름(시나리오 `chatDisplayName` · 부재 = 번호). 문자형 · 통화는 번호 그대로.
   const peerName = isSms ? scenario.callerLabel : (scenario.chatDisplayName ?? scenario.callerLabel);
-  const canVoiceTalk = sessionEscalates && !chatEnded;
+  // §121.7 — 통화 위 대화방에서는 이미 통화 중이라 보이스톡 · "전화로 확인"을 숨긴다.
+  const canVoiceTalk = sessionEscalates && !chatEnded && !inCall;
   // §94 — 표시 목록 = 구독 문서(이번 턴 답장은 공개 전까지 숨김) + 아직 서버 문서가 없는 내 말풍선(낙관적).
   const visibleMessages =
     pending && replyView.hideReply
@@ -687,7 +726,12 @@ export default function MessengerChatRoom() {
     // 대화 목록 상자만 스크롤한다 ⇒ 키보드가 열려도 머리줄은 맨 위, 입력줄은 키보드 바로 위.
     <div
       className="fixed inset-x-0 flex flex-col overflow-hidden"
-      style={{ backgroundColor: isSms ? smsTokens.outerBg : chatTokens.outerBg, ...chatBoxStyle(keyboardBox) }}
+      style={{
+        backgroundColor: isSms ? smsTokens.outerBg : chatTokens.outerBg,
+        ...chatBoxStyle(keyboardBox),
+        // §121.7 — 통화 위에 겹칠 때는 통화 화면보다 위(발신 덮개 z-50보다는 아래).
+        ...(inCall ? { zIndex: 40 } : {}),
+      }}
     >
     <main
       className="font-phone relative mx-auto flex h-full min-h-0 w-full max-w-[430px] flex-col"
@@ -702,6 +746,18 @@ export default function MessengerChatRoom() {
           중이라 카카오 면책 배너·합성 표식·난이도 배지를 지웠다(면책은 시작 전 고지 ②로 옮겼다).
           ⛔ 빈 자리를 채우지 않는다.
           ⛔ T190-6b(D-100 · AC-092 (d)) — 세션 중 스킨 전환 칩·감지 실패 안내 줄을 지웠다(세션 전 선택 줄이 대신한다). */}
+      {/* §121.7(UX D-157) — 통화 중 배너(실제 폰의 "통화 중" 띠). 누르면 통화 화면으로 돌아간다(통화는 계속 이어지고 있다). */}
+      {duringCall && (
+        <button
+          type="button"
+          onClick={duringCall.onBackToCall}
+          className="z-30 flex min-h-11 shrink-0 items-center justify-center gap-2 bg-[#2E9E5B] px-4 text-sm font-semibold text-white"
+          aria-label={`통화 중 ${duringCall.elapsedLabel} — 통화 화면으로 돌아가기`}
+        >
+          <PhoneIcon name="accept-call" size={16} />
+          <span>통화 중 {duringCall.elapsedLabel}</span>
+        </button>
+      )}
       <div
         className={`z-20 flex shrink-0 flex-col ${isSms ? "border-b" : ""}`}
         style={
@@ -1177,7 +1233,7 @@ export default function MessengerChatRoom() {
           // 실기 신고 4 — 실제 메신저처럼 모든 카톡형 대화방에 보인다. 통화로 이어지는 세션 = 종전 전이(canVoiceTalk) ·
           // 그 밖 = 응답 없음 연출. 대화가 끝났으면 그리지 않는다.
           voiceTalk={
-            chatEnded
+            chatEnded || inCall
               ? undefined
               : canVoiceTalk
               ? {

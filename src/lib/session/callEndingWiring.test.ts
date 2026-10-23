@@ -87,7 +87,8 @@ test("[§79.18 (2) · G528] 부모 — 동결 인터페이스 5종을 세션 컴
     assert.ok(pageCode.includes(prop), `세션 컴포넌트에 ${prop}가 없다`);
   }
   assert.match(pageCode, /const isRelaySwitchPending = useCallback\(\(\) => false, \[\]\);/);
-  assert.match(pageCode, /const getSessionUserTurns = useCallback\(\(\) => turnCountersRef\.current\.userTurns, \[\]\);/);
+  // §121.7 ⓒ — 통화 중 대화방 카톡을 더한다(메인 결정 '두 채널 발화 합산').
+  assert.match(pageCode, /const getSessionUserTurns = useCallback\(\(\) => turnCountersRef\.current\.userTurns \+ chatTurnsDuringCallRef\.current, \[\]\);/);
   const pending = slice(pageCode, "const getPendingInstruction = useCallback(", "const isHangupLatched = ");
   assert.match(pending, /instructionQueueRef\.current\.length > 0 \|\| instructionBusyRef\.current \|\| isRelaySwitchPending\(\)/);
   assert.equal(pending.includes("toolPending"), false, "부모 클라 항에 toolPending이 들어갔다(G555)");
