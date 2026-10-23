@@ -23612,6 +23612,8 @@ D 판단값 근거(관측 5세션 — 운영 f7047187 + §115.5 · §115.6 실 �
 
 갱신한 기존 게이트: `callEndingWiring.test.ts`(getSessionUserTurns 정의 — ⓒ) · `startNoticeGate.test.ts`(`canVoiceTalk`에 `!inCall`) · `voiceTalkKeyboard.test.ts` · `startNoticeGate.test.ts`(시트 `chatEnded || inCall`) · `photoSendAndFamilyScroll.test.ts`(전송 인자 형태) · `personaCardPrompt.test.ts` G568(조립 지점 5번째 `chatDuringCall.ts` — 카드를 넘긴다).
 
+배포: **Functions → Hosting 순서 필수**(새 화면 + 옛 서버면 통화 중 카톡이 일반 통화 턴으로 처리된다).
+
 실측(에뮬레이터 · Mock LLM · 브라우저 창 마이크 차단 = 폴백 통화): 보이스톡 → 통화(00:11) → "채팅으로" → 같은 `/session/play` 위 대화방 · 배너 "통화 중 00:14" · 고지 0 → 카톡 2회 전송 · 답장 말풍선(통화 시간 01:29까지 계속) → 배너 → 통화 화면(01:36) → 다시 열면 이력 유지 → 끊기 → 대화방(통화 중 카톡 2쌍 말풍선 유지). 첫 Mock 답장에 "통화가 안 돼"가 섞여 Mock 대사 원천을 통화 단계 수법으로 고쳤다. ⚠️ 실시간(Gemini Live) 경로의 전사 증분 제출 · 맥락 주입은 실기 · 실 키 확인 전.
 
 ## 119. (Feature change — 2026-10-23 · 브랜치 `claude/multi-route-stage0` · 사용자 결정 원문 *"권장안 채택·시작 (권장)"* — `docs/research/scenario-multi-route-plan-2026-10.md` 6절 D-1~D-13 권장안) **다중 루트 0차: 루트 키 · 섞은 덱 배정 · 매핑 불변식 · 리포트 "이번 결말" 줄** — implementer 기록 (DECISIONS #234)
