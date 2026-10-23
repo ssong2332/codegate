@@ -10,7 +10,8 @@
 // (A) 루트 2개 칸(카드사 고급 자가): createSession × N(매번 endSession) → 연속 같은 루트 0 · 두 세션(한 바퀴)마다 두 루트 모두 ·
 //     회전 문서 = { lastVariantId, deck: 문자열 배열 } · 세션 문서 flowVariantId = 회전 문서 lastVariantId
 // (B) 마지막 세션 리포트: sendMessage 1턴 → endSession → generateReport → reports.routeSummary = { 배정 변형의 루트 이름, 2 }
-// (C) 루트 1개 칸(기관 사칭 고급): fv-c5fj(은퇴 fv-pgqt 0) · 회전 문서 0 · 리포트 routeSummary 부재
+// (C) 루트 1개 칸(국세청 환급금 고급 — §122 이후 기관 사칭 고급은 3루트): 회전 문서 0 · 리포트 routeSummary 부재
+// (E) §122 루트 3개 칸(기관 사칭 고급): 3세션(매번 endSession) = 세 루트가 한 번씩 · 은퇴 fv-pgqt 0 · 리포트 routeSummary 개수 3
 // (D) 옛 회전 문서(lastVariantId만): 다른 루트로 배정 · 문서에 deck 생김
 import { writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -35,7 +36,8 @@ const LIB = join(dirname(fileURLToPath(import.meta.url)), "..", "functions", "li
 const { findFlowVariant } = require(join(LIB, "scenarios", "flowVariants.js"));
 
 const TWO_ROUTE = { scenarioId: "card-company-impersonation", level: "advanced", ids: ["fv-x7ue", "fv-w3dq"] };
-const ONE_ROUTE = { scenarioId: "institutional-impersonation", level: "advanced", id: "fv-c5fj" };
+const ONE_ROUTE = { scenarioId: "tax-refund-scam", level: "advanced", id: "fv-uk7m" };
+const THREE_ROUTE = { scenarioId: "institutional-impersonation", level: "advanced", ids: ["fv-c5fj", "fv-q7cn", "fv-g2ld"] };
 
 async function signUp() {
   const res = await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key`, {
@@ -149,7 +151,7 @@ async function partC() {
   const user = await newUser();
   const { sessionId, flowVariantId } = await startSession(user, ONE_ROUTE);
   const rotation = await fsRead(rotationPath(user.uid, ONE_ROUTE));
-  check("C", "1 루트 1개 칸 = fv-c5fj(은퇴 fv-pgqt 0)", flowVariantId === ONE_ROUTE.id, { flowVariantId });
+  check("C", "1 루트 1개 칸 = fv-uk7m", flowVariantId === ONE_ROUTE.id, { flowVariantId });
   check("C", "2 루트 1개 칸은 회전 문서 0", rotation === null);
   const report = await finishWithReport(user, sessionId);
   check("C", "3 리포트 routeSummary 부재", report !== null && report.routeSummary === undefined, { routeSummary: report?.routeSummary });
@@ -165,8 +167,25 @@ async function partD() {
   await call("endSession", { sessionId, endReason: "user_ended" }, user.idToken);
 }
 
+async function partE() {
+  const user = await newUser();
+  const seq = [];
+  let lastSessionId;
+  for (let i = 0; i < 3; i += 1) {
+    const { sessionId, flowVariantId } = await startSession(user, THREE_ROUTE);
+    seq.push(flowVariantId);
+    lastSessionId = sessionId;
+    if (i < 2) await call("endSession", { sessionId, endReason: "user_ended" }, user.idToken);
+  }
+  results.E = { seq };
+  check("E", "1 첫 바퀴 3세션 = 세 루트가 한 번씩(은퇴 fv-pgqt 0)", JSON.stringify([...seq].sort()) === JSON.stringify([...THREE_ROUTE.ids].sort()), { seq });
+  const report = await finishWithReport(user, lastSessionId);
+  const expected = { label: findFlowVariant(seq[2])?.routeLabel, routeCount: 3 };
+  check("E", "2 리포트 routeSummary = 배정 루트 이름 · 3", JSON.stringify(report?.routeSummary) === JSON.stringify(expected), { routeSummary: report?.routeSummary, expected });
+}
+
 try {
-  for (const [name, fn] of [["A·B", partAB], ["C", partC], ["D", partD]]) {
+  for (const [name, fn] of [["A·B", partAB], ["C", partC], ["D", partD], ["E", partE]]) {
     try {
       await fn();
     } catch (err) {

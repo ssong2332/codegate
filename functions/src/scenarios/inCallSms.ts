@@ -350,6 +350,17 @@ const COURIER_CUSTOMS_SCAM: InCallSmsItem[] = [
     announceInstruction:
       "(참가자 휴대전화로 방금 통관수수료 계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 오늘 안에 넣어 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호를 새로 지어내 말하지 말고 문자를 보라고만 하라.)",
   },
+  // §122(DECISIONS #237) — 택배 통관 고급 ② 명의 도용 이관형(fv-y3ks) 전용. 화면 없이 계좌 문자만(courier-customs-fee와 같은 모양).
+  // afterScammerTurns=7: 이 시나리오의 2 · 5와 겹치지 않는 값(발송 시점은 변형 선언 notBeforeUserTurns가 정한다).
+  {
+    smsId: "courier-safe-account",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["courier-customs-scam"]} (자산 보호 안내)`,
+    body: "[명의도용 피해조치] 국가 안전계좌 안내\n예금주: 자산보호관리센터\nOO은행 604-2270-1183-91\n수사 종료 시까지 보관 후 반환됩니다.",
+    afterScammerTurns: 7,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 국가 안전계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 수사가 끝날 때까지 그 계좌로 옮겨 두라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호를 새로 지어내 말하지 말고 문자를 보라고만 하라.)",
+  },
 ];
 
 /**

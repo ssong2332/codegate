@@ -52,7 +52,7 @@ test("[§119 D-11] 배정 풀 칸마다 루트 키가 서로 다르다(같은 �
   t.diagnostic(`[§119] 풀 ${cells}칸 · 루트 2개 이상 ${multi}칸`);
   assert.deepEqual(dupes, []);
   // 역방향 — 은퇴 전 기관 사칭 고급 풀(fv-c5fj · fv-pgqt)은 같은 키 2벌이다.
-  const before = FLOW_VARIANTS.filter((v) => v.scenarioId === "institutional-impersonation" && v.level === "advanced").map((v) => v.routeKey);
+  const before = FLOW_VARIANTS.filter((v) => v.variantId === "fv-c5fj" || v.variantId === "fv-pgqt").map((v) => v.routeKey);
   assert.equal(before.length, 2);
   assert.equal(new Set(before).size, 1, "역방향 표본 — 은퇴 전 풀은 루트 키가 겹쳤다");
 });
@@ -78,9 +78,14 @@ test("[§119 D-3 b] 리포트 루트 줄 — 루트 2가지 이상인 칸만 · 
   assert.equal(cc("fv-c5fj"), undefined, "다른 시나리오의 변형 ID");
   assert.equal(cc("fv-akj5", "c1"), undefined, "챌린지 고급 카드사 풀은 1루트");
   assert.equal(
-    resolveRouteSummary({ scenarioId: "institutional-impersonation", difficultyLevel: "advanced", flowVariantId: "fv-pgqt" }),
+    resolveRouteSummary({ scenarioId: "tax-refund-scam", difficultyLevel: "advanced", flowVariantId: "fv-uk7m" }),
     undefined,
-    "은퇴 변형으로 진행한 옛 세션도 그 칸이 1루트면 줄 0",
+    "1루트 칸은 줄 0",
+  );
+  // §122 — 은퇴 변형으로 진행한 옛 세션도 그 칸의 현재 결말 수로 줄을 만든다(이름은 그 변형의 루트 이름).
+  assert.deepEqual(
+    resolveRouteSummary({ scenarioId: "institutional-impersonation", difficultyLevel: "advanced", flowVariantId: "fv-pgqt" }),
+    { label: "안전계좌 이체형", routeCount: 3 },
   );
 });
 

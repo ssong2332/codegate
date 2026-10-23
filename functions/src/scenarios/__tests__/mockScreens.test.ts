@@ -392,7 +392,7 @@ test("[§15.9.1 R6 → T194-c-1 G583] IN_CALL_SMS의 설치 랜딩 참조는 허
   // 실제로 설치 문자를 선언하는 변형이 있다(공회전 방지).
   const declaring = FLOW_VARIANTS.filter((v) => v.sms.some((s) => (IN_CALL_SMS[v.scenarioId] ?? []).some((i) => i.smsId === s.smsId && allItems.some((m) => m.kind === "app-install" && m.landingId === i.fakeLandingId))));
   // §92 — 카드사 흡수 변형 fv-w3dq가 같은 카드사 설치 문자(card-guard-app-link)를 선언한다.
-  assert.deepEqual(declaring.map((v) => v.variantId).sort(), ["fv-m3hd", "fv-tvnj", "fv-w3dq", "fv-x7ue"]);
+  assert.deepEqual(declaring.map((v) => v.variantId).sort(), ["fv-d8pw", "fv-e5mv", "fv-m3hd", "fv-r4hc", "fv-tvnj", "fv-u9fz", "fv-w3dq", "fv-x7ue"]);
 });
 
 // ── T104 신규 게이트 G-A~G-E (Architecture.md §19.5 · ADR-0012) ───────────────

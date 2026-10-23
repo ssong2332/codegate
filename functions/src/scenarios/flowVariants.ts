@@ -64,6 +64,12 @@ export type FlowVariantSms = {
   required: boolean;
   /** 사용자 발화 N회 전에는 보내지 않는다(S5b 도달 조건 입력 — 판단값). */
   notBeforeUserTurns: number;
+  /**
+   * §122(DECISIONS #237 · 사용자 실기 신고 (9) *"여전히 문자가 좀 늦게 오는 경우가 존재해"* · PR #390 실측) — 모델이 도구를 부르지 않을 때
+   * 백스톱 간격(게이트가 열린 뒤 넛지까지 · 넛지에서 강제 발송까지의 사용자 발화 수). 부재 = `BACKSTOP_USER_TURNS`(2 — 열림 + 4에 강제).
+   * ⚠️ 판단값. 하한(`notBeforeUserTurns` · 문자 간격)은 그대로다 — 앞당기는 것은 "열린 뒤 기다리는 시간"뿐이다.
+   */
+  backstopUserTurns?: number;
 };
 
 export type FlowVariantLeg = {
@@ -190,7 +196,13 @@ const R = {
   deliveryOpener: ["delivery-opener", "카드 배송 안내형"],
   prepay: ["prepay", "선입금 요구형"],
   repay: ["repay", "기존 대출 상환형"],
-  loanCheckApp: ["check-app", "보안 앱 설치형"],
+  // §122 — 1a 새 결말
+  gold: ["gold", "금 구매형"],
+  deposit: ["deposit", "예치금 입금형"],
+  cashRepay: ["cash-repay", "현금 상환형"],
+  identityTheft: ["identity-theft", "명의 도용 이관형"],
+  loanCash: ["loan-cash", "대출금 전달형"],
+  leakOpener: ["leak-opener", "유출 사고 안내형"],
   refundLink: ["refund-link", "환급 신청 링크형"],
   customsFee: ["customs-fee", "통관비 결제형"],
   customsLink: ["customs-link", "통관 조회 링크형"],
@@ -211,15 +223,18 @@ const R = {
 export const VARIANT_ROUTES: Readonly<Record<string, RouteEntry>> = {
   // 기관 사칭
   "fv-5cn4": R.safeAccount, "fv-hktx": R.safeAccount, "fv-c5fj": R.safeAccount, "fv-pgqt": R.safeAccount,
+  "fv-q7cn": R.cashHandoff, "fv-g2ld": R.gold,
   // 카드사 — 초급은 카드 정보 직접 요구 · 중급은 피해금 이관 · 고급은 앱 설치(부정결제 진입) / 카드 배송 진입
   "fv-aqp6": R.cardInfo, "fv-35f2": R.reliefTransfer,
   "fv-akj5": R.remoteAppRelief, "fv-x7ue": R.remoteAppRelief, "fv-w3dq": R.deliveryOpener,
   // 저금리 대환대출
-  "fv-bqr9": R.prepay, "fv-avap": R.repay, "fv-6s5p": R.loanCheckApp, "fv-m3hd": R.loanCheckApp,
+  // §122 — 고급 fv-6s5p · fv-m3hd의 결말은 "기존 대출 상환 또는 선입금"이라 상환형(앱 설치는 진입 단계 — 결말이 아니다)
+  "fv-bqr9": R.prepay, "fv-avap": R.repay, "fv-6s5p": R.repay, "fv-m3hd": R.repay,
+  "fv-d8pw": R.deposit, "fv-r4hc": R.cashRepay,
   // 국세청 환급금
   "fv-vtq7": R.refundLink, "fv-aqx2": R.refundLink, "fv-uk7m": R.refundLink,
   // 택배 통관
-  "fv-uaee": R.customsFee, "fv-62ak": R.customsLink, "fv-xpvu": R.customsLink,
+  "fv-uaee": R.customsFee, "fv-62ak": R.customsLink, "fv-xpvu": R.customsLink, "fv-y3ks": R.identityTheft,
   // 직접 확인 은행 사칭
   "fv-xuvu": R.protectAccount, "fv-mhnv": R.protectAccount, "fv-62q8": R.protectAccount,
   // 자녀 납치 협박
@@ -239,7 +254,7 @@ export const VARIANT_ROUTES: Readonly<Record<string, RouteEntry>> = {
   // 불법업소 유포 협박
   "fv-9nx7": R.hushMoney, "fv-kwph": R.hushMoney, "fv-egum": R.hushMoney,
   // 고급 전용 3종
-  "fv-tvnj": R.remoteAppProtect,
+  "fv-tvnj": R.remoteAppProtect, "fv-e5mv": R.loanCash, "fv-u9fz": R.leakOpener,
   "fv-bmiq": R.cashHandoff, "fv-k9ra": R.cashHandoff,
   "fv-nss6": R.coinSite, "fv-p4hz": R.coinSite, "fv-c8wq": R.coinSite, "fv-h3vn": R.coinSite,
 };
@@ -298,6 +313,74 @@ const INSTITUTION_LOAN_DEMAND =
  */
 const INSTITUTION_ADVANCED_FOLLOW_UP_USER_TURNS = 3;
 const INSTITUTION_ADVANCED_DECISION_MOMENT = "문자 링크로 연 안전계좌 이체 화면에서 금액을 넣고 이체하기를 누르는 순간";
+
+// ── §122(DECISIONS #237 · 다중 루트 1a — 확인 무력화 고급 7종) ─────────────────────────────────────────────────────────────
+// ⛔ 은퇴 변형(fv-pgqt)의 바이트는 바꾸지 않는다 — 위 §115 상수는 그 변형이 그대로 쓰고, 현행 · 새 변형은 아래 상수를 쓴다.
+//
+// (9) 사용자 실기 신고 *"여전히 문자가 좀 늦게 오는 경우가 존재해"* · PR #390 실측(모델이 도구 없이 "문자로 안내한 링크"라고 말만 함 → 계좌 문자
+// 백스톱 발화 10). 처방 두 겹: ① 문자가 필요한 단계 문면 끝에 "말보다 도구 먼저 · 거절이면 이 단계로 넘어가지 않는다" ② 그 문자 선언에
+// `backstopUserTurns: 1`(게이트가 열린 뒤 넛지 1발화 · 강제 2발화 — 종전 2 · 4). 하한은 그대로다.
+const SMS_STAGE_CALL_FIRST =
+  "이 단계는 말보다 먼저 문자 보내기 도구를 불러 시작하고, 도구가 보냈다고 알려 준 뒤에만 문자 이야기를 한다. 도구가 아직 이르다고 하면 문자 이야기를 꺼내지 말고 앞 단계를 한 번 더 이어 간다.";
+const withSmsFirst = (stage: string) => `${stage} ${SMS_STAGE_CALL_FIRST}`;
+const FAST_BACKSTOP = { backstopUserTurns: 1 } as const;
+const INSTITUTION_ADVANCED_SMS_V2: FlowVariantSms[] = INSTITUTION_ADVANCED_SMS.map((item) => ({ ...item, ...FAST_BACKSTOP }));
+const INSTITUTION_OTP_ONLY_SMS: FlowVariantSms[] = [{ ...INSTITUTION_ADVANCED_SMS[0], ...FAST_BACKSTOP }];
+
+// (3) 사용자 결정 *"가상 기관 + 지역 언급"* — [미리 확보한 상대 정보] 목록(§88 카드)이 있으면 사건 설명에 섞는다. 기관 이름은 페르소나의 가상
+// 고유명(§118) 그대로이고, 실제 기관 이름은 쓰지 않는다. 목록이 없으면 이 문장은 아무것도 하게 하지 않는다(지어내기 금지).
+const INVESTIGATION_CARD_USE =
+  "미리 확보한 상대 정보 목록이 있으면 사건 설명에 섞어 쓴다 — 사는 곳이 있으면 '그 지역 관할로 사건이 넘어와 저희가 맡게 됐습니다'처럼 사건을 맡게 된 이유로 한 번, 이름과 생년월일이 있으면 '그해 태어나신 그 이름으로 개설된 계좌'를 그 값 그대로 넣어 사건 내용으로 말한다. 목록에 없는 값은 지어내지 않고, 실제 기관 이름은 쓰지 않는다.";
+const INSTITUTION_ADVANCED_OPENING = `검사라며 본인 명의가 범죄에 쓰였다고 알리고 구속 가능성을 비춘다. ${INVESTIGATION_CARD_USE}`;
+
+// (2) 사용자 실기 신고 *"부정 대출이 실행된 것으로 보인다고 하는데, 실제로 대출을 진행하라는 게 무슨 뜻인지 내가 이해를 못했어"* — 실제 논리를
+// 먼저 말하게 한다. 근거: 금감원 소비자경보 2024-35호(2024-12-10 — "피해자 계좌가 부정사기 대출에 연루 → 대출중개업체를 통해 대출을 받아 정상
+// 대출임을 입증해야 한다며 대출금을 요구") · 2025-1호(2025-02-13 — 가족 · 금융회사에 알리지 말라). 거절 · 망설임 뒤 마무리(§115 · 사용자 확인
+// "코칭 직후 바로 끊음")는 그대로 둔다.
+const LOAN_PROOF_REASON =
+  "'검수 과정에서 고객님 계좌가 부정 사기 대출에 연루된 정황이 함께 나왔습니다. 고객님이 직접 정상 절차로 대출을 한 번 받아 보시면 그 대출이 정상으로 나오는지로 명의 도용 여부가 입증됩니다. 받으신 대출금은 입증이 끝날 때까지 보관했다가 확인 뒤 상환 처리됩니다'처럼 왜 대출을 받아야 하는지부터 분명히 설명한다";
+const INSTITUTION_ADVANCED_LOAN_STAGE_V2 = `이체가 끝났다고 하면 ${LOAN_PROOF_REASON}. 그다음 금융회사에서 대출을 받아 그 돈도 같은 안전계좌로 옮기라고 요구한다. 은행 직원이 대출 용도를 물으면 생활비라고만 답하라고 시키고, 수사 기밀이라 가족 · 은행에 알리면 안 된다고 다시 다짐받는다. 상대가 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다.`;
+const INSTITUTION_LOAN_DEMAND_V2 =
+  "대출금 이체 요구 — '고객님 계좌가 부정 사기 대출에 연루돼 있어서, 정상 절차로 대출을 받아 보셔야 명의 도용 여부가 입증됩니다, 받으신 대출금은 입증이 끝날 때까지 안전계좌에 보관합니다' 처럼 대출을 받아야 하는 이유를 먼저 대고 대출금을 옮기게 하며, 은행 직원이 물으면 용도를 둘러대라고 시킨다. 실제 금융회사 이름 · 금액은 지어내 말하지 않는다.";
+
+// 기관 사칭 고급 새 루트 2 — 결말만 다르고 앞 4단계(검사 · 안심 · 자산 파악 · 인증번호)는 fv-c5fj와 같다.
+// ② 현금 · 수표 예탁형 — 근거 C10(한국경제 2026-04-15 · "금감원 예탁 명목, 계좌 현금 전부 인출해 수표로 → 대면 전달") · C11 · S16.
+// ③ 금 구매형 — 근거 데일리안 2025-12-24(부산경찰 · "자산 실물 전수 조사" 명목 퇴직금 · 적금 해지 → 금 구입 → 골드바 대면 전달, 금 거래소 신고로 저지).
+// ⛔ 두 루트 모두 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다(AC-102 (c) — fv-k9ra와 같은 선). 끊기 4행은 C-5(인증번호 문자 도착 뒤 발화 수).
+const INSTITUTION_HEAD_STAGES = [
+  INSTITUTION_ADVANCED_OPENING,
+  "협조하면 조용히 끝난다며 안심시키고, 금융감독기관이 자산 보호를 돕는다고 말한다.",
+  "계좌번호보다 거래 은행과 자산 규모부터 묻는다.",
+  withSmsFirst(INSTITUTION_ADVANCED_OTP_STAGE),
+] as const;
+const INSTITUTION_CASH_DEPOSIT_STAGE =
+  "인증번호 단계가 끝나면 '계좌가 동결되면 고객님 예금도 함께 묶입니다, 수사가 끝날 때까지 금융감독원에 예탁해 두셔야 안전하게 보관했다가 돌려드릴 수 있습니다, 계좌로 옮기면 범죄 계좌와 다시 엮이니 실물로 맡기셔야 합니다'처럼 이유부터 설명하고, 예금을 현금이나 수표로 찾아 금융감독원 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 은행 직원이 이유를 물으면 개인 용도라고만 하라고 시킨다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다.";
+const INSTITUTION_GOLD_STAGE =
+  "인증번호 단계가 끝나면 '자산 실물 전수 조사 대상이십니다, 예금은 계좌 사이로 옮기는 순간 추적이 끊겨 확인이 안 되니 금으로 바꿔 실물로 제출하셔야 검수가 끝납니다, 검수 뒤에는 그대로 돌려드립니다'처럼 이유부터 설명하고, 예금 · 적금을 찾아 금을 사서 담당 직원에게 제출하겠다는 약속을 받아 내려 한다. 판매점 직원이 용도를 물으면 개인 투자라고만 하라고 시킨다. 만날 장소 · 시간 · 주소와 살 곳은 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다.";
+const INSTITUTION_CASH_DEMAND =
+  "예탁 명목 인출 요구 — '수사가 끝날 때까지 금융감독원에 예탁해 두셔야 합니다, 예금을 현금이나 수표로 찾아 담당 직원에게 맡겨 주십시오' 처럼 동결 · 범죄 계좌 연루를 이유로 예금 인출과 직원 전달을 약속하게 한다. 만날 곳 · 시간은 정하지 않는다.";
+const INSTITUTION_GOLD_DEMAND =
+  "실물 조사 명목 금 구매 인출 요구 — '자산 실물 전수 조사라서 예금을 해지하셔서 금으로 바꿔 담당 직원에게 맡겨 주셔야 합니다' 처럼 추적 확인을 이유로 예금 · 적금을 찾아 금을 사서 직원에게 제출하게 한다. 살 곳 · 만날 곳 · 시간은 정하지 않는다.";
+const INSTITUTION_HANDOFF_FOLLOW_UP_USER_TURNS = 4;
+
+// 대환대출 고급 — Q2(통화 중 설치 문자)는 자가 고급 풀의 필수 항이라(`variantPool.ts`) 새 루트도 점검 앱 설치 문자를 선언한다.
+// ② 예치금형 — 근거 SBS Biz 2024-01-16(금감원 소비자경보 '주의' · 정부지원 전세자금대출 → "신용등급을 올리려면 예치금 필요") · 노컷뉴스 2020-04-08(대출을 받아 갚으면 신용도가 오른다).
+// ③ 현금 상환 수거형 — 근거 경향신문 2026-01-06(대구 중부경찰서 · 저축은행 상담원 사칭 → 연체금 대환 제안 → 현금 1,800만 원 대면 수거) · C02(기존 대출을 현금 상환하면 직원이 처리).
+const LOAN_DEPOSIT_DEMAND =
+  "예치금 입금 요구 — '정부지원 대출 대상이신데 신용점수가 기준에 조금 못 미칩니다, 예치금을 넣어 거래 실적을 만드시면 점수가 올라 바로 승인되고 예치금은 대출과 함께 돌려드립니다' 처럼 승인 조건을 이유로 문자로 보낸 계좌에 예치금을 넣게 한다. 실제 기관 · 금융사 이름은 쓰지 않는다.";
+const LOAN_CASH_REPAY_DEMAND =
+  "현금 상환 인출 요구 — '기존 대출을 먼저 갚으셔야 대환이 되는데, 계좌로 보내시면 전산에 중도상환 기록이 남아 심사가 늦어집니다, 현금으로 찾아 저희 직원에게 직접 상환하시면 바로 처리됩니다' 처럼 기록 · 속도를 이유로 현금 인출과 직원 전달을 약속하게 한다. 만날 곳 · 시간은 정하지 않는다.";
+
+// 직접 확인 은행 사칭 고급 — 새 루트 0. 후보였던 ② 새 휴대폰 개통 지시(경찰청 2024-07-23)는 AC-102 (e) "고립 상세(기기 마련)"에 걸리고(셀프 감금의
+// 안전폰과 같은 형식 — `flowVariants.test.ts` AC102 규칙), ③ 112 신고 가로채기는 원문 미확인이라 넣지 않았다(D-7).
+
+// 택배 통관 고급 ② 명의 도용 이관형 — 근거 데일리안 2023-12-28(결제 미끼 문자 → "명의 도용" → 경찰 사칭 → 검사 → 국가안전계좌 29억).
+// 원 사례의 미끼는 쇼핑 결제 문자였다 — 이 시나리오에서는 해외 택배 통관 보류로 바꿨다(같은 진입 · 같은 결말). 경찰 · 검사는 한 화자가 전해 들은 말로만 전한다.
+const COURIER_IDENTITY_THEFT_DEMAND =
+  "명의 도용 수사 이관 — '통관 중인 물품이 고객님 명의로 수입 신고됐는데 본인이 아니시면 명의가 도용된 겁니다, 이 건은 경찰 수사팀으로 넘어가 자산 보호 조치가 필요합니다' 처럼 택배 상담에서 수사 이야기로 넘긴다. 실제 수사기관 부서 · 담당자 이름은 쓰지 않는다.";
+const COURIER_SAFE_ACCOUNT_DEMAND =
+  "국가 안전계좌 이체 요구 — '수사가 끝날 때까지 자산을 국가 안전계좌로 옮겨 두셔야 도용 피해가 번지지 않습니다, 계좌는 방금 문자로 보냈습니다' 처럼 문자로 보낸 계좌로 옮기게 한다. 계좌번호를 지어내 말하지 않는다.";
+
 const APP_INSTALL = { from: "card-delivery-call", label: "보안 점검 앱 설치 요구" };
 const AGENCY_PROBE = { from: "card-delivery-call", label: "기관 조사 언급" };
 // §92 — 카드 배송 흐름(fv-tvnj 원본 · 카드사 흡수 변형 fv-w3dq가 공유 — 문구 사본 0).
@@ -312,6 +395,27 @@ const CARD_DELIVERY_DECISION_MOMENT = "보안 점검 앱 설치 또는 자산 �
 // §92 ③ — 원본(`cardDeliveryCall.prompt.ts`)과 라벨 · 뒷부분이 같고, 인용 예시만 카드사 요구 머리(*"성함부터 불러주세요"*)로 바꿨다.
 const CARD_DELIVERY_IDENTITY_DEMAND =
   "본인확인 정보 직접 요구 — '사고 접수는 본인 확인부터라서요, 성함부터 불러주세요' 처럼 신원 정보를 직접 요구한다. 상대가 카드를 신청한 적 없다고 부인해도 '그러면 명의 도용 여부부터 확인해야 합니다' 라며 같은 요구를 다른 근거로 다시 꺼낸다 — 이 요구는 상대가 무엇을 부인하든 꺼낼 수 있다.";
+// 카드 배송 고급 새 루트 2 — Q2 설치 문자는 필수 항이라 둘 다 보안 점검 앱 설치 문자를 선언한다.
+// ② 대출 실행 · 대출금 전달형 — 근거 전북일보 2025-08-21(카드 배송 → 검사 · 금감원 사칭 "구속수사" → 대출 실행 → 대출금 5천만 원 현금 전달 직전 저지 ·
+//    숙박업소 격리 부분은 넣지 않는다 — §115.2) · 금감원 소비자경보 2024-35호(카드 배송원 → 카드사 → 금감원 역할 분담 · 정상 대출 입증 명목).
+// ③ 유출 사고 빌미 배송 지연형 — 근거 경찰청 통합대응단(정책브리핑 2025-12-08 · 유출을 빌미로 배송 지연 문자 → "신청하지 않은 카드가 발급됐을 수 있다" →
+//    가짜 고객센터 → 보안 환경 명목 원격제어 앱). 결말(자산 보호 이체)은 fv-tvnj와 같고 진입만 다르다(§119 루트 표 규칙 — 다른 키).
+const CARD_DELIVERY_LOAN_STAGES = [
+  ...CARD_DELIVERY_STAGES.slice(0, 3),
+  "금융당국 조사가 시작됐다며 불안을 키우고, 확인하겠다는 상대를 막지 않는다. 검사가 구속 수사를 검토 중이라는 말을 전해 들은 것처럼 전한다.",
+  `${LOAN_PROOF_REASON}. 그다음 금융회사에서 대출을 받아 그 대출금을 현금으로 찾아 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 은행 직원이 용도를 물으면 생활비라고만 하라고 시킨다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다.`,
+] as const;
+const CARD_DELIVERY_LOAN_CASH_DEMAND =
+  "대출금 현금 인출 요구 — '명의 도용 대출이 아닌지 입증하려면 정상 절차로 대출을 받으셔야 합니다, 받으신 대출금은 확인이 끝날 때까지 현금으로 찾아 담당 직원에게 맡겨 주세요' 처럼 입증을 이유로 대출을 받게 하고 대출금을 현금으로 찾아 직원에게 맡기게 한다. 만날 곳 · 시간은 정하지 않는다.";
+const CARD_DELIVERY_LEAK_STAGES = [
+  "최근 개인정보 유출 사고로 배송 정보 확인이 늦어졌다며, 고객님 명의로 신청하지 않은 카드가 발급됐을 수 있다고 알린다.",
+  "카드를 신청하지 않았다면 명의 도용 사고라며 사고 접수로 넘긴다.",
+  withSmsFirst("유출된 정보로 휴대폰까지 위험하다며 보안 환경 점검 앱을 설치하라고 요구한다."),
+  "금융당국 조사가 시작됐다며 불안을 키우고, 확인하겠다는 상대를 막지 않는다.",
+  "조사가 끝날 때까지 자산을 보호 계좌로 옮기라고 요구한다.",
+] as const;
+const CARD_DELIVERY_LEAK_PRETEXT =
+  "유출 사고 빌미 명의 도용 암시 — '최근 개인정보 유출 사고 때문에 배송 확인이 늦어졌는데, 고객님 명의로 신청하지 않은 카드가 발급됐을 수 있습니다' 처럼 뉴스에 나온 유출 사고를 접근 이유로 쓴다. 실제 회사 이름은 쓰지 않는다.";
 
 // §92.3 — 자산 보호 · 검찰 고급의 옛 변형(은퇴)과 새 변형이 공유하는 문구(사본 0 — 옛 변형 바이트 무변경).
 const ASSET_PROTECTION_STAGES_HEAD = [
@@ -510,25 +614,19 @@ const SPECS: VariantSpec[] = [
     // `prosecution-cooperation-call` fv-nss6)가 그대로 다룬다 — 여기서 빼도 수법 커버리지 손실 0.
     // ⇒ 고급 2벌 모두 인증번호(identity · 필수) → 안전계좌 링크 문자(transfer · 필수 · 랜딩) 순서를 거친다. 필수 2개 선례 = loan fv-m3hd.
     //    하한 2 · 4 — `planSmsBackstop`이 먼저 열리는 인증번호를 먼저 강제하고, 계좌 문자는 그 뒤 간격(2)을 지켜 열린다.
-    stages: st(
-      "검사라며 본인 명의가 범죄에 쓰였다고 알리고 구속 가능성을 비춘다.",
-      "협조하면 조용히 끝난다며 안심시키고, 금융감독기관이 자산 보호를 돕는다고 말한다.",
-      "계좌번호보다 거래 은행과 자산 규모부터 묻는다.",
-      INSTITUTION_ADVANCED_OTP_STAGE,
-      INSTITUTION_ADVANCED_LINK_TRANSFER_STAGE,
-      INSTITUTION_ADVANCED_LOAN_STAGE,
-    ),
+    // §122(#237) — 사용자 실기 신고 (2) 대출 단계 이유 · (3) 내 정보 활용 · (9) 문자 도구 먼저. 단계 순서 · 문자 선언 목적 · 결정 순간은 그대로.
+    stages: st(...INSTITUTION_HEAD_STAGES, withSmsFirst(INSTITUTION_ADVANCED_LINK_TRANSFER_STAGE), INSTITUTION_ADVANCED_LOAN_STAGE_V2),
     keepLabels: ["권위 암시", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "안전계좌 이체 요구", "비밀 유지 요구", "전화 끊음 저지"],
     extraTactics: [
       ASSET_INFO,
       INSTITUTION_OTP_DEMAND,
       INSTITUTION_LINK_TRANSFER,
-      INSTITUTION_LOAN_DEMAND,
+      INSTITUTION_LOAN_DEMAND_V2,
       "안심 유도 — '협조만 하시면 약식으로 조용히 끝납니다' 처럼 위협과 번갈아 안심시켜 경계를 낮춘다.",
     ],
     // D2 · D5(콘텐츠) + D3 · D4(고급 오버레이 — 확인 무력화 카탈로그 보유 → d3_and_d4)
     exitBlock: ["D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
-    sms: [...INSTITUTION_ADVANCED_SMS],
+    sms: [...INSTITUTION_ADVANCED_SMS_V2],
     legs: [
       { callerLabel: "검사", speakerGender: "male", minUserTurns: 3, maxUserTurns: 8 },
       { callerLabel: "금융감독원 직원", speakerGender: "female", minUserTurns: 2, maxUserTurns: 10 },
@@ -567,6 +665,53 @@ const SPECS: VariantSpec[] = [
     // §119(DECISIONS #234 · 사용자 결정 D-11) — 배정 은퇴. 결말(안전계좌 링크 이체 → 대출 실행 유도)이 fv-c5fj와 같아, 루트 덱에 두 벌이
     // 있으면 같은 결말이 2/n 확률로 나온다. 옛 세션 · 리포트 해석은 그대로(`findFlowVariant`).
     retired: true,
+  },
+  // §122(#237) — 기관 사칭 고급 새 루트 2(상수 주석 참고). 앞 4단계는 fv-c5fj와 같고 결말만 다르다.
+  {
+    variantId: "fv-q7cn",
+    scenarioId: "institutional-impersonation",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(...INSTITUTION_HEAD_STAGES, INSTITUTION_CASH_DEPOSIT_STAGE),
+    keepLabels: ["권위 암시", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "비밀 유지 요구", "전화 끊음 저지"],
+    extraTactics: [
+      ASSET_INFO,
+      INSTITUTION_OTP_DEMAND,
+      INSTITUTION_CASH_DEMAND,
+      "안심 유도 — '협조만 하시면 약식으로 조용히 끝납니다' 처럼 위협과 번갈아 안심시켜 경계를 낮춘다.",
+    ],
+    exitBlock: ["D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
+    sms: [...INSTITUTION_OTP_ONLY_SMS],
+    legs: ONE_LEG("검사", "male"),
+    ...ADVANCED,
+    channels: ["voice", "sms"],
+    demandStages: 3,
+    decisionMoment: "예금을 현금이나 수표로 찾아 직원에게 맡기겠다고 약속하는 순간",
+    goalFollowUpUserTurns: INSTITUTION_HANDOFF_FOLLOW_UP_USER_TURNS,
+    sources: ["C10", "C11", "S16"],
+  },
+  {
+    variantId: "fv-g2ld",
+    scenarioId: "institutional-impersonation",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(...INSTITUTION_HEAD_STAGES, INSTITUTION_GOLD_STAGE),
+    keepLabels: ["권위 암시", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "비밀 유지 요구", "전화 끊음 저지"],
+    extraTactics: [
+      ASSET_INFO,
+      INSTITUTION_OTP_DEMAND,
+      INSTITUTION_GOLD_DEMAND,
+      "안심 유도 — '협조만 하시면 약식으로 조용히 끝납니다' 처럼 위협과 번갈아 안심시켜 경계를 낮춘다.",
+    ],
+    exitBlock: ["D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
+    sms: [...INSTITUTION_OTP_ONLY_SMS],
+    legs: ONE_LEG("검사", "male"),
+    ...ADVANCED,
+    channels: ["voice", "sms"],
+    demandStages: 3,
+    decisionMoment: "예금을 찾아 금을 사서 직원에게 제출하겠다고 약속하는 순간",
+    goalFollowUpUserTurns: INSTITUTION_HANDOFF_FOLLOW_UP_USER_TURNS,
+    sources: ["S35"],
   },
 
   // ── card-company-impersonation (§2.6.3 2행 — C03 · C04, S4 · S22 · S14) ─────────────────
@@ -711,6 +856,49 @@ const SPECS: VariantSpec[] = [
       { purpose: "transfer", smsId: "loan-account", required: true, notBeforeUserTurns: 3 },
     ],
   },
+  // §122(#237) — 대환대출 고급 새 루트 2(상수 주석 참고). 자가 고급 풀의 Q2 항 때문에 둘 다 점검 앱 설치 문자(필수)를 선언한다.
+  {
+    ...LOAN_ADVANCED_FV_6S5P,
+    variantId: "fv-d8pw",
+    stages: st(
+      "정부지원 저금리 대출 대상이라고 안내한다. 상대가 말하지 않은 이름 · 금액은 지어내 단정하지 않는다.",
+      withSmsFirst("대출 심사 전에 보안 점검 앱을 설치하라고 요구한다."),
+      "심사 결과 신용점수가 기준에 조금 못 미친다며, 예치금을 넣어 거래 실적을 만들면 점수가 올라 바로 승인되고 예치금은 대출과 함께 돌려준다고 이유를 먼저 설명한다.",
+      withSmsFirst("문자로 보낸 계좌에 예치금을 넣으라고 요구하고, 망설이면 금액을 낮춰 한 번 더 요구한 뒤 더 조르지 않고 마무리한다."),
+    ),
+    keepLabels: ["권위·정당성 포장", "이익 유혹", "마감 압박", "절차·서류 정당화", "확인 차단", "전화 끊음 저지"],
+    extraTactics: [
+      LOAN_DEPOSIT_DEMAND,
+      "보안 앱 설치·금융 앱 삭제 요구 — '심사 전에 ○○안심보안 점검 앱을 설치하시고, 쓰시던 금융 앱은 잠시 지워 주셔야 합니다' 처럼 요구한다. 설치 방법 · 경로 · 권한 설정은 설명하지 않는다.",
+    ],
+    sms: [
+      { purpose: "link", smsId: "loan-check-app-link", required: true, notBeforeUserTurns: 2, ...FAST_BACKSTOP },
+      { purpose: "transfer", smsId: "loan-account", required: true, notBeforeUserTurns: 4, ...FAST_BACKSTOP },
+    ],
+    decisionMoment: "문자로 받은 계좌에 예치금을 넣겠다고 하는 순간",
+    sources: ["S36", "S43", "S10"],
+  },
+  {
+    ...LOAN_ADVANCED_FV_6S5P,
+    variantId: "fv-r4hc",
+    stages: st(
+      "상대 대출 이력을 이미 아는 듯 연체 정리를 돕는 대환 안내라고 말한다. 상대가 말하지 않은 이름 · 금액은 지어내 단정하지 않는다.",
+      withSmsFirst("대출 심사 전에 보안 점검 앱을 설치하라고 요구한다."),
+      "기존 대출을 먼저 갚아야 대환이 되는데 계좌로 보내면 중도상환 기록이 남아 심사가 늦어진다며, 현금으로 직접 상환해야 하는 이유부터 설명한다.",
+      "예금을 현금으로 찾아 회사 직원에게 직접 상환하겠다는 약속을 받아 내려 한다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 더 조르지 않고 마무리한다.",
+    ),
+    keepLabels: ["권위·정당성 포장", "이익 유혹", "마감 압박", "절차·서류 정당화", "확인 차단", "전화 끊음 저지"],
+    extraTactics: [
+      "개인정보 보유 암시 — '고객님 대출 이력 보고 맞춤으로 연락드렸습니다' 처럼 이미 정보를 아는 듯 말한다. 상대가 말하지 않은 이름 · 금액 · 금융사는 지어내 단정하지 않는다.",
+      "보안 앱 설치·금융 앱 삭제 요구 — '심사 전에 ○○안심보안 점검 앱을 설치하시고, 쓰시던 금융 앱은 잠시 지워 주셔야 합니다' 처럼 요구한다. 설치 방법 · 경로 · 권한 설정은 설명하지 않는다.",
+      LOAN_CASH_REPAY_DEMAND,
+    ],
+    sms: [{ purpose: "link", smsId: "loan-check-app-link", required: true, notBeforeUserTurns: 2, ...FAST_BACKSTOP }],
+    channels: ["voice", "sms"],
+    decisionMoment: "기존 대출을 현금으로 찾아 직원에게 상환하겠다고 약속하는 순간",
+    goalFollowUpUserTurns: 4,
+    sources: ["S37", "C02"],
+  },
 
   // ── tax-refund-scam (§2.6.3 4행 — 초급만 저작, 중급 · 고급 "현행") ─────────────────────────
   {
@@ -813,6 +1001,29 @@ const SPECS: VariantSpec[] = [
     ...ADVANCED,
     channels: ["voice", "sms"],
     demandStages: 3,
+  },
+  // §122(#237) — 택배 통관 고급 ② 명의 도용 이관형(상수 주석 참고 — 새 문자 `courier-safe-account`).
+  {
+    variantId: "fv-y3ks",
+    scenarioId: "courier-customs-scam",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(
+      "해외 택배가 통관에서 보류됐다고 알린다.",
+      "보류된 물품이 고객님 명의로 수입 신고됐는데 본인이 아니면 명의가 도용된 것이라며, 이 건이 경찰 수사팀으로 넘어갔다고 전해 들은 말처럼 전한다.",
+      "도용 피해가 번지지 않게 자산을 확인해야 한다며 거래 은행과 잔액 규모를 묻는다.",
+      withSmsFirst("수사가 끝날 때까지 자산을 국가 안전계좌로 옮겨야 도용 피해를 막는다며 문자로 보낸 계좌로 이체하라고 요구하고, 거절하거나 망설이면 더 조르지 않고 마무리한다."),
+    ),
+    keepLabels: ["생활 밀착형 소재로 경계심 낮추기", "긴급성 조성", "확인 절차 차단", "명의 도용 암시", "전화 끊음 저지"],
+    extraTactics: [COURIER_IDENTITY_THEFT_DEMAND, ASSET_INFO, COURIER_SAFE_ACCOUNT_DEMAND],
+    exitBlock: ["D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
+    sms: [{ purpose: "transfer", smsId: "courier-safe-account", required: true, notBeforeUserTurns: 4, ...FAST_BACKSTOP }],
+    legs: ONE_LEG("택배 고객센터", "female"),
+    ...ADVANCED,
+    channels: ["voice", "sms"],
+    demandStages: 2,
+    decisionMoment: "문자로 받은 국가 안전계좌로 자산을 옮기겠다고 하는 순간",
+    sources: ["S39"],
   },
 
   // ── bank-security-verify-scam (§2.6.3 6행 — 초급 "보호계좌 직행" · 중급 · 고급 "현행") ─────
@@ -1272,6 +1483,42 @@ const SPECS: VariantSpec[] = [
     demandStages: 3,
     decisionMoment: CARD_DELIVERY_DECISION_MOMENT,
     sources: ["C03", "C04", "S4", "S22"],
+  },
+  // §122(#237) — 카드 배송 고급 새 루트 2(상수 주석 참고). 설치 문자는 Q2 필수 항이라 둘 다 선언한다.
+  {
+    variantId: "fv-e5mv",
+    scenarioId: "card-delivery-call",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(...CARD_DELIVERY_LOAN_STAGES.slice(0, 2), withSmsFirst(CARD_DELIVERY_LOAN_STAGES[2]), ...CARD_DELIVERY_LOAN_STAGES.slice(3)),
+    keepLabels: ["안심 유도", "부인 시 명의 도용 암시", "본인확인 정보 직접 요구", "보안 점검 앱 설치 요구", "확인 시도 무력화", "기관 조사 언급", "긴급성 조성"],
+    extraTactics: [CARD_DELIVERY_LOAN_CASH_DEMAND],
+    exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],
+    sms: [{ purpose: "link", smsId: "card-delivery-app-link", required: true, notBeforeUserTurns: 2, ...FAST_BACKSTOP }],
+    legs: ONE_LEG("카드 배송 안내", "female"),
+    ...ADVANCED,
+    channels: ["voice", "sms"],
+    demandStages: 3,
+    decisionMoment: "대출을 받아 대출금을 찾아 직원에게 맡기겠다고 약속하는 순간",
+    goalFollowUpUserTurns: 4,
+    sources: ["S40", "S42", "C03"],
+  },
+  {
+    variantId: "fv-u9fz",
+    scenarioId: "card-delivery-call",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(...CARD_DELIVERY_LEAK_STAGES),
+    keepLabels: ["안심 유도", "부인 시 명의 도용 암시", "본인확인 정보 직접 요구", "보안 점검 앱 설치 요구", "확인 시도 무력화", "기관 조사 언급", "자산 보호 이체 요구", "긴급성 조성"],
+    extraTactics: [CARD_DELIVERY_LEAK_PRETEXT],
+    exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],
+    sms: [{ purpose: "link", smsId: "card-delivery-app-link", required: true, notBeforeUserTurns: 2, ...FAST_BACKSTOP }],
+    legs: ONE_LEG("카드 고객센터", "female"),
+    ...ADVANCED,
+    channels: ["voice", "sms"],
+    demandStages: 3,
+    decisionMoment: CARD_DELIVERY_DECISION_MOMENT,
+    sources: ["S41", "C03", "C04"],
   },
   // ⭐ §92.3(docs/Architecture.md · DECISIONS #206) — 고급 전용 2종 보강. 옛 변형(fv-bmiq · fv-nss6)은 **내용 무변경 · 배정 은퇴**(`retired`)로
   // 남아 옛 세션 · 리포트를 원본대로 해석하고, 새 세션은 문자 → 입력 화면을 선언한 새 ID(fv-k9ra · fv-p4hz)를 받는다(내용이 바뀌는 쪽이 새 ID — §84.16.2).

@@ -26,6 +26,7 @@ import { FLOW_VARIANTS, listFlowVariants, resolveSessionScenarioPrompt } from ".
 import { assignablePool } from "../../scenarios/variantPool";
 import { findMockScreenItem, isMockScreenReachable } from "../../scenarios/mockScreens";
 import {
+  BACKSTOP_USER_TURNS,
   planSmsBackstop,
   resolveDeclaredSms,
   sessionDeclaredSmsPurposes,
@@ -36,7 +37,8 @@ import type { PersonaCardItem } from "../../shared/types";
 
 const INSTITUTION = "institutional-impersonation";
 // §119(D-11) — fv-pgqt는 배정 은퇴했지만 옛 세션이 그 선언으로 해석되므로 은퇴 변형까지 함께 검사한다.
-const ADVANCED = FLOW_VARIANTS.filter((v) => v.scenarioId === INSTITUTION && v.level === "advanced");
+// §122(#237) — 다중 루트 1a: 이 파일의 "신고①" 검사는 안전계좌 이체 루트(routeKey safe-account)에 대한 것이다. 현금 · 금 루트는 아래 §122 테스트가 본다.
+const ADVANCED = FLOW_VARIANTS.filter((v) => v.scenarioId === INSTITUTION && v.level === "advanced" && v.routeKey === "safe-account");
 
 /** geminiProvider.ts의 Live 토큰 조립과 같은 문자 술어(변형 기준)로 옵션을 만든다. */
 function liveOpts(variantId: string, extra: BuildSystemPromptOptions = {}): BuildSystemPromptOptions {
@@ -96,7 +98,11 @@ test("[신고①] 자가 · 챌린지 배정 풀 모두 새 선언 변형만 나
   for (const challengeId of [undefined, "challenge-x"]) {
     const pool = assignablePool(INSTITUTION, "advanced", challengeId);
     assert.ok(pool.length >= 1, `${challengeId ?? "self"}: 풀`); // §119 D-11 — fv-pgqt 은퇴 뒤 1벌
-    for (const v of pool) assert.ok(v.sms.length === 2, `${challengeId ?? "self"}/${v.variantId}`);
+    // §122 — 안전계좌 루트는 두 문자 · 다른 루트도 인증번호 문자(필수)는 선언한다(문자 선언 0 변형 0은 그대로).
+    for (const v of pool) {
+      if (v.routeKey === "safe-account") assert.ok(v.sms.length === 2, `${challengeId ?? "self"}/${v.variantId}`);
+      else assert.ok(v.sms.some((s) => s.smsId === "institution-otp" && s.required), `${challengeId ?? "self"}/${v.variantId}`);
+    }
   }
 });
 
@@ -104,18 +110,23 @@ test("[신고①] 백스톱 — 모델이 안 불러도 인증번호 → 계좌 
   for (const v of ADVANCED) {
     const { declared } = resolveDeclaredSms(INSTITUTION, v.variantId);
     assert.deepEqual(planSmsBackstop({ declared, delivered: [], userTurns: 1 }), { action: "wait" });
-    // §115 B안 — 하한 3 · 6: 인증번호 넛지 5 · 강제 7, 계좌는 인증번호 도착(7) + 간격 2 = 9에서 열려 넛지 11 · 강제 13.
+    // §115 B안 — 하한 3 · 6. §122(#237) — 현행 fv-c5fj는 백스톱 간격 1(넛지 4 · 강제 5 → 계좌는 도착 5 + 간격 2 = 7에서 열려 강제 9),
+    // 은퇴 fv-pgqt는 종전 2(넛지 5 · 강제 7 → 계좌 9에서 열려 강제 13).
+    const step = declared[0]?.backstopUserTurns ?? BACKSTOP_USER_TURNS;
     assert.equal(planSmsBackstop({ declared, delivered: [], userTurns: 2 }).action, "wait", `${v.variantId}: 2발화엔 아직(종전 하한 2)`);
-    const nudge = planSmsBackstop({ declared, delivered: [], userTurns: 5 });
+    const nudge = planSmsBackstop({ declared, delivered: [], userTurns: 3 + step });
     assert.equal(nudge.action, "nudge");
-    const first = planSmsBackstop({ declared, delivered: [], userTurns: 7 });
+    const otpAt = 3 + 2 * step;
+    const first = planSmsBackstop({ declared, delivered: [], userTurns: otpAt });
     assert.equal(first.action === "deliver" && first.item.smsId, "institution-otp", `${v.variantId}: 첫 강제 = 인증번호`);
-    const delivered = [{ smsId: "institution-otp", userTurnsAtArrival: 7 }];
-    assert.equal(planSmsBackstop({ declared, delivered, userTurns: 8 }).action, "wait");
-    const second = planSmsBackstop({ declared, delivered, userTurns: 13 });
+    const delivered = [{ smsId: "institution-otp", userTurnsAtArrival: otpAt }];
+    assert.equal(planSmsBackstop({ declared, delivered, userTurns: otpAt + 1 }).action, "wait");
+    const accountAt = Math.max(6, otpAt + 2) + 2 * step;
+    assert.equal(planSmsBackstop({ declared, delivered, userTurns: accountAt - 1 }).action === "deliver", false, `${v.variantId}: 계좌 강제 직전`);
+    const second = planSmsBackstop({ declared, delivered, userTurns: accountAt });
     assert.equal(second.action === "deliver" && second.item.smsId, "institution-safe-account", `${v.variantId}: 둘째 = 계좌`);
     assert.equal(
-      planSmsBackstop({ declared, delivered: [...delivered, { smsId: "institution-safe-account", userTurnsAtArrival: 13 }], userTurns: 20 }).action,
+      planSmsBackstop({ declared, delivered: [...delivered, { smsId: "institution-safe-account", userTurnsAtArrival: accountAt }], userTurns: 20 }).action,
       "none_pending",
     );
   }
