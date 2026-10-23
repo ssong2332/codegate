@@ -13,6 +13,7 @@
 //   - `url` / 실 URL 필드가 이 타입에 **존재하지 않는다.** 링크는 `linkDisplayText`(모의 표기) +
 //     `fakeLandingId`(기존 인앱 가짜 랜딩 참조)로만 표현한다(`MessengerAttachment`와 동형).
 //   - `otpCode`는 **콘텐츠에 고정된 리터럴**이다(런타임 난수 금지) — 결정론적 테스트 + "모의값" 불변식.
+//     ⭐ §114 — 참가자가 보는 번호는 이 리터럴을 세션 id 해시로 바꾼 값이다(`sessionOtp.ts` `withSessionOtp` · 난수 아님).
 //   - `senderLabel`·`body`의 기관명·계좌는 **실존하지 않는 값만** 쓴다(AC-005/013, `SCENARIO_PROGRESSION`의
 //     "페이로드는 가상값만"과 동일 기준). 문자 내용은 100% 이 파일에서만 나오며 LLM이 생성하지 않는다.
 //   - 이 파일은 **클라이언트에 원문 배포되지 않는다.** 본문·인증번호는 도착 시점에 서버가 Firestore에 쓴다.

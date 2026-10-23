@@ -69,7 +69,7 @@ test("[W 4 · 5] 실제 제공은 오답이어도 속음 · 인증번호를 묻�
   assert.deepEqual(birth.riskSignals, []);
 });
 
-test("[W 6] 배선 — 리포트 생성이 그 세션 시나리오의 카탈로그 정답을 넘긴다", () => {
+test("[W 6] 배선 — 리포트 생성이 그 세션 시나리오의 정답(§114 세션 번호)을 넘긴다", () => {
   const src = readFileSync(path.resolve(__dirname, "../../../src/report/generateReportCore.ts"), "utf8");
-  assert.ok(src.includes("listOtpItems(session.scenarioId).map((item) => item.otpCode!)"));
+  assert.ok(src.includes("listOtpItems(session.scenarioId).map((item) => withSessionOtp(item, sessionId).otpCode!)"));
 });

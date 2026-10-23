@@ -266,6 +266,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       scenarioId: session.scenarioId,
       declared: smsDeclared,
       fictionalBankName,
+      sessionId, // §114 — 세션별 인증번호
     };
     let smsDelivered: DeliveredSmsRecord[] = [];
     let smsDeliveredLoaded = false;
@@ -453,6 +454,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const otpCheck = await evaluateOtpCheck({
       scenarioId: session.scenarioId,
       userText,
+      sessionId, // §114 — 문자에 보인 세션 번호와 대조
       ...(otpInputs.lastScammerText !== undefined ? { lastScammerText: otpInputs.lastScammerText } : {}),
       scammerTurnNumber,
       ...(deliveredSmsId ? { deliveredThisTurn: deliveredSmsId } : {}),

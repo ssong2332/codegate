@@ -447,7 +447,7 @@ export default function InCallSmsOverlay({
               </h2>
 
               {sorted.length === 0 ? (
-                // Empty — 진입점이 없어 보통은 열리지 않지만, 예외적 진입 시 명시한다(UX-027 States).
+                // Empty — §114(UX D-152) 이후 메시지 버튼이 처음부터 활성이라 첫 문자 전에 누르면 이 상태가 보인다(UX-027 States).
                 <p role="status" className="rounded-[14px] bg-white p-5 text-base text-[#5F6368]">
                   아직 도착한 문자가 없습니다.
                 </p>
