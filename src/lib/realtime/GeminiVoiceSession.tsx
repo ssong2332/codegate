@@ -115,6 +115,7 @@ import {
   noteAsrChunk,
   noteAudioError,
   noteChunkReceived,
+  noteNormalizerGain,
   noteMicFrame,
   noteUnheardReplyFired,
   peakOf,
@@ -1445,6 +1446,7 @@ export default function GeminiVoiceSession({
                 // §114 — 시나리오 · 세션마다 다른 원본 크기를 목표 말소리 RMS(기관 사칭 기준)로 맞춘 뒤 게인 노드로 보낸다.
                 const normalized = normalizeChunk(samples, loudness);
                 loudness = normalized.state;
+                noteNormalizerGain(loudness.gain); // §122(8) 진단 — 정규화 게인(`norm.gainDb`)
                 const buffer = outputContext.createBuffer(
                   1,
                   samples.length,

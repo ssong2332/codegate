@@ -32,6 +32,8 @@ type DiagState = {
   ringClosedAtMs: number | null;
   /** 이 통화에서 받은 PCM 청크의 최대 절대 진폭(게인 적용 **전** · 0~1). 원본 레벨이 작은지 판정용(2026-10-20 음량 신고). */
   pcmPeakMax: number | null;
+  /** §122(8) — 라우드니스 정규화(§114)가 마지막 청크에 쓴 게인(선형). 시나리오 간 음량 차이가 앱 안에서 나는지 기기에서 가른다. */
+  normGain: number | null;
   // ⭐ §105(2026-10-22 실기 신고 "말해도 묵묵부답") — 사용자 말이 서버까지 갔는지 가린다(숫자만).
   /** 서버로 보낸 마이크 프레임 수. */
   micFramesSent: number;
@@ -63,6 +65,7 @@ const INITIAL: DiagState = {
   resumeRetries: 0,
   ringClosedAtMs: null,
   pcmPeakMax: null,
+  normGain: null,
   micFramesSent: 0,
   micFramesDroppedEcho: 0,
   micFramesDroppedMute: 0,
@@ -190,6 +193,11 @@ export function formatDbfs(amplitude: number | null): string {
   if (amplitude === null) return "-";
   if (!(amplitude > 0)) return "-inf";
   return (20 * Math.log10(amplitude)).toFixed(1);
+}
+
+/** §122(8) — 정규화가 이번 청크에 쓴 게인(선형 · `LoudnessState.gain`). */
+export function noteNormalizerGain(gain: number): void {
+  state = { ...state, normGain: gain };
 }
 
 export function noteChunkScheduled(nowMs: number): void {
@@ -325,6 +333,7 @@ export const AUDIO_DIAG_KEYS = [
   "out.gainCtx",
   "route",
   "pcm.peakDb",
+  "norm.gainDb",
   "chunks.rx",
   "chunks.sched",
   "chunk.lastMs",
@@ -388,6 +397,7 @@ export function buildAudioDiagRows(input: {
     "out.gainCtx": s.gainCtxSame === null ? "-" : s.gainCtxSame ? "same" : "diff",
     route: input.audioRoute,
     "pcm.peakDb": formatDbfs(s.pcmPeakMax),
+    "norm.gainDb": formatDbfs(s.normGain),
     "chunks.rx": String(s.chunksReceived),
     "chunks.sched": String(s.chunksScheduled),
     "chunk.lastMs": rel(s.lastChunkAtMs, s.acceptAtMs),
