@@ -202,6 +202,7 @@ export const deliverInCallSms = onCall<
     anchorScammerTurn: realtimeAnchorScammerTurn(scammerTranscriptTurns),
     trigger: trigger ?? "model_tool",
     fictionalBankName,
+    sessionId, // §114 — 세션별 인증번호(문서 본문 · Live 대조 1줄이 같은 값)
   });
 
   // 관측(§59.11 관례 · AC-099 (h)) — 도착 · 거부 모두 그 시점의 사용자 발화 수와 함께 1줄. 거부는 Firestore 델타 0.

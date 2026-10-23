@@ -9,6 +9,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import type { InCallSmsItem } from "../scenarios/inCallSms";
 import { findInCallSmsItem } from "../scenarios/inCallSms";
+import { withSessionOtp } from "../scenarios/sessionOtp";
 import type { FlowVariantSms } from "../scenarios/flowVariants";
 import type { InCallSmsDoc, InCallSmsTriggerKind } from "../shared/types";
 import { buildInCallSmsDoc } from "./buildDoc";
@@ -34,6 +35,8 @@ export type SmsDeliveryInput = {
   trigger: InCallSmsTriggerKind;
   /** §81 — 세션 가상 은행명(`resolveFictionalBankName`). 본문 자리표시자 치환 · `bankName`/`accountNumber` 필드의 원천. */
   fictionalBankName?: string;
+  /** §114 — 세션 id. 인증번호 문자의 번호를 세션별로 바꾼다(`withSessionOtp`). 부재면 카탈로그 번호(종전). */
+  sessionId?: string;
   /** 테스트 주입용(기본 `Timestamp.now()`). */
   now?: () => FirebaseFirestore.Timestamp;
 };
@@ -61,9 +64,11 @@ export async function deliverSmsThroughGate(
     if (gate.status !== "allowed") {
       return { status: gate.status, ...(gate.item ? { declared: gate.item } : {}) };
     }
-    const item = findInCallSmsItem(input.scenarioId, gate.item.smsId);
+    const catalogItem = findInCallSmsItem(input.scenarioId, gate.item.smsId);
     // 선언이 카탈로그에 없으면 `resolveDeclaredSms`가 이미 걸렀다 — 방어적으로 거부(문서 0).
-    if (!item) return { status: "not_allowed" };
+    if (!catalogItem) return { status: "not_allowed" };
+    // §114 — 문서 본문 · Live 대조 1줄(호출부가 돌려받은 item으로 만든다)이 같은 세션 번호를 쓴다.
+    const item = withSessionOtp(catalogItem, input.sessionId);
     const arrivedAt = (input.now ?? Timestamp.now)();
     tx.create(item.smsId, {
       ...buildInCallSmsDoc(item, arrivedAt, input.anchorScammerTurn, input.scenarioId, input.fictionalBankName),

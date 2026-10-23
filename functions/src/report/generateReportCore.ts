@@ -10,6 +10,7 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { MOCK_SCREENS } from "../scenarios/mockScreens";
 import { listOtpItems } from "../scenarios/inCallSms";
+import { withSessionOtp } from "../scenarios/sessionOtp";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import type {
@@ -122,7 +123,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     messages,
     session.createdAt.toMillis(),
     weakenedTactics,
-    listOtpItems(session.scenarioId).map((item) => item.otpCode!),
+    // §114 — 정답은 이 세션의 번호(문자에 보인 값과 같은 해시).
+    listOtpItems(session.scenarioId).map((item) => withSessionOtp(item, sessionId).otpCode!),
   );
 
   // ②-b 통화 중 문자 이벤트 스냅샷(T89, §15.1.5, AC-059) — `sessions/{sid}/inCallSms`를 **1회 추가

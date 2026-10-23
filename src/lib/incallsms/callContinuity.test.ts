@@ -748,13 +748,18 @@ test("[T190/reviewer Major 역검증] 포커스 이동·되돌리기·트랩 보
   }
 });
 
-// ── §108(UX D-148 · 실기 신고 "문자가 오기 전과 온 후에 화면이 달라") — 메시지 버튼은 처음부터 보이고 첫 문자 전에는 비활성 ──
-test("[§108 격자 고정] 메시지 버튼은 문자 도착 여부와 무관하게 그려지고, 도착 전에는 비활성 표현 · 탭 무반응", () => {
+// ── §108(UX D-148) → §114(UX D-152 · 실기 신고 "문자가 오기 전에는 비활성화되어 있는 것처럼 보여") — 메시지 버튼은 처음부터 보이고 **항상 활성** ──
+test("[§114 항상 활성] 메시지 버튼은 문자 도착 여부와 무관하게 그려지고, 도착 전에도 흐림 · aria-disabled · 탭 무반응 0", () => {
   const at = page.indexOf('<PhoneIcon name="message" />');
   assert.ok(at > 0);
   const block = page.slice(page.lastIndexOf("<button", at), at);
+  const label = page.slice(at, page.indexOf("</div>", at));
   assert.ok(!page.includes("{inCallSms.length > 0 && ("), "도착 전 버튼을 숨기는 조건 렌더 0");
-  assert.ok(block.includes("aria-disabled={inCallSms.length === 0 ? true : undefined}"));
-  assert.ok(block.includes("if (inCallSms.length === 0) return;"));
-  assert.ok(block.includes('inCallSms.length === 0 ? "opacity-40" : "active:scale-95"'));
+  assert.ok(!block.includes("aria-disabled"), "aria-disabled 0");
+  assert.ok(!block.includes("if (inCallSms.length === 0) return;"), "도착 전 탭 무반응 0");
+  assert.ok(!block.includes("opacity-40") && !label.includes("opacity-40"), "흐림 0(버튼 · 라벨)");
+  assert.ok(block.includes("onClick={(event) => handleOpenSmsOverlay(event.currentTarget)}"));
+  assert.ok(block.includes('"메시지 — 받은 문자 없음"'), "빈 상태 낭독 라벨 유지");
+  // 빈 문자함 상태(오버레이)가 있어야 도착 전 탭이 빈 화면이 아니라 안내를 보인다.
+  assert.ok(overlay.includes("아직 도착한 문자가 없습니다."));
 });

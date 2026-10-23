@@ -23111,3 +23111,84 @@ GEMINI_API_KEY2 · 429 즉시 중단. 수정 전(main `77cddcc` lib)과 수정 �
 
 ### 110.8 배포 순서
 **Functions 먼저 → Hosting**: 새 화면은 `requestReverseEscalation({followUp})` · `createSession({familyAddress})`를 보낸다 — 옛 서버는 `followUp`을 무시(전환만)하고 `familyAddress`는 구조분해하지 않아 무시한다(화면이 먼저여도 깨지지 않지만 복귀 메시지 · 호칭이 빠진다). 옛 화면 + 새 서버는 필드를 보내지 않아 종전 동작. 인덱스 변경 0.
+
+## 114. (Bug fix · Feature change — 2026-10-23 · 브랜치 `claude/call-polish-round4-d08099` · 사용자 실기 신고 5건 · 갤럭시 S25) **통화 시나리오 음량 맞춤 · 세션별 인증번호 · 기관 사칭 끊기 점검 · 메시지 버튼 항상 활성 · 신원 칸 형식 검증** — implementer 기록 (DECISIONS #229 · UX D-152)
+
+### 114.1 음량 — 라우드니스 정규화 (신고 1)
+원문: *"검찰(고급) 시나리오에서는 기본 음량도 되게 크네. 통화를 하는 시나리오 음량을 맞춰줘. 기관 사칭 정도 크기이면 괜찮은 거 같아."*
+
+| 후보 | 조사 결과 | 근거 |
+|---|---|---|
+| Live 음성 종류 | 원인 아님 — 기관 사칭 · 검찰 수사 협조 둘 다 남성 → `Puck` 하나(풀 1개) | `functions/src/realtime/scenarioVoice.ts` 표 · `geminiProvider.ts` `MALE_VOICES` |
+| 시나리오별 음성 설정 | 없음 — 시나리오가 바꾸는 것은 성별 · 말투 지시뿐 | 같은 파일 |
+| 클라 출력 게인 | 원인 아님 — 시나리오와 무관하게 통화 0.6 · 스피커 1.0 + 증폭(§108) | `src/lib/realtime/outputGain.ts` |
+| 원본 PCM 크기 | **추정 원인** — 말투 지시("딱딱하고 단호한")에 따라 모델이 더 크게 말한다고 본다. ⚠️ 실 키 측정 전(아래) | — |
+
+처방: `src/lib/realtime/loudnessNormalizer.ts` — 받은 PCM 청크를 20ms 프레임으로 재서 말소리(≥ −45dBFS)만 누적한 RMS를 목표 −20dBFS로 맞춘다(게인 −12 ~ +6dB · 꼭대기 0.98 · 청크 안 선형 이동). 배선 = `GeminiVoiceSession.tsx` `normalizeChunk` → 버퍼 → 기존 통화/스피커 게인 · 컴프레서 · 리미터(§108 순서 무변경 = 스피커 켜면 더 크게). 시나리오별 고정 보정값은 두지 않았다 — 같은 시나리오 안에서도 세션마다 다를 수 있어 재서 맞추는 쪽이 둘 다 잡는다.
+
+측정(Windows 한국어 TTS Heami · 24kHz · 14.7s · 960샘플 청크 · 스크래치 `measure.ts` — 앱과 같은 함수):
+
+| 가정한 원본 레벨 | 정규화 전 말소리 RMS | 정규화 뒤 RMS(전체) | 정규화 뒤 RMS(1초 뒤) | 정규화 뒤 꼭대기 |
+|---|---|---|---|---|
+| −28dBFS | −27.4 | −21.9 | −22.0 | −5.2dBFS |
+| −24dBFS | −23.7 | −20.8 | −20.8 | −3.8dBFS |
+| −20dBFS | −20.0 | −20.5 | −20.6 | −1.0dBFS |
+| −16dBFS | −16.1 | −20.4 | −20.5 | −0.3dBFS |
+| −12dBFS | −12.2 | −20.3 | −20.5 | −0.4dBFS |
+| −8dBFS | −8.9 | −20.0 | −20.3 | 0.0dBFS |
+
+⇒ 원본 폭 16dB(−24 ~ −8) → 정규화 뒤 폭 0.8dB. −28은 게인 상한(+6dB)에 걸린다(설계 — 아주 작은 소리를 과하게 키워 잡음이 커지지 않게).
+
+⚠️ 목표 −20dBFS는 **판단값**이다(기관 사칭의 실제 원본 레벨을 아직 재지 않았다). 실 키 프로브(시나리오별 원본 RMS) 승인이 나면 기관 사칭 측정값으로 바꾼다 — 바꿀 곳은 `TARGET_SPEECH_RMS_DBFS` 하나.
+범위 밖: ElevenLabs(클론 음성 — 가족 · 자녀 사칭) · 폴백 `<audio>` 경로는 받은 PCM을 손에 쥐지 않아 정규화하지 않는다. 메신저에서 넘어온 통화 중 Gemini 음성(지원금 스미싱 등)은 같은 세션 컴포넌트라 포함된다.
+
+### 114.2 세션별 인증번호 (신고 2)
+원문: *"본인확인 인증번호가 매번 똑같은데, 변수값으로 변경되게 하자"*. 카탈로그 리터럴(`048231` · `739104`)은 그대로 두고 `functions/src/scenarios/sessionOtp.ts`가 `FNV-1a(sessionId:smsId:salt) mod 10^6`(쉬운 번호 — 한 숫자 반복 · 오름 · 내림 연속 — 이면 salt+1)로 바꾼다. 난수가 아니라 해시라 저장 필드 없이 네 곳이 같은 값을 다시 계산한다:
+
+| 쓰는 곳 | 배선 |
+|---|---|
+| 문자 문서(본문 · `otpCode`) | `smsDelivery.ts` `deliverSmsThroughGate` — `SmsDeliveryInput.sessionId` |
+| Live 대조 1줄(사기범이 아는 번호) | 같은 함수가 돌려준 `item` → `buildInCallSmsResponse` |
+| 텍스트 폴백 서버 대조 | `otpCheck.ts` — `OtpCheckInput.sessionId` |
+| 리포트 오답 = 위험 신호(#216) | `generateReportCore.ts` |
+
+재발송 정책 판정표는 `sessionOtp.ts` 머리(같은 세션 · 같은 문자 = 같은 번호 · 다른 인증번호 문자 = 다른 번호 · 문서 id가 smsId라 재도착 0 · sessionId 없음 = 카탈로그 번호). ⚠️ 배포 순간 진행 중이던 세션은 문자가 옛 번호였는데 리포트가 새 번호로 대조할 수 있다(드묾 — 인증번호 오답 위험 신호 1건이 잘못 붙을 수 있음).
+
+### 114.3 기관 사칭 끊기 점검 (신고 3 — 코드 변경 0 · 개선안은 승인 대기)
+원문: *"기관 사칭에서도 AI가 먼저 끊네. 근데 시나리오가 이렇게 짧은 거 맞아? … 내가 순순히 따라와줘서 그런가?"*
+운영 로그(`firebase functions:log --project voicefishing-ff47f --only <함수>` — requestScammerHangup · deliverInCallSms · endSession) — 세션 `b6dfcbcf`(기관 사칭 · 고급 · 2026-10-23 09:01~09:02 KST):
+
+| 시각(UTC) | 함수 | 값 |
+|---|---|---|
+| 00:01:32 | deliverInCallSms | identity · delivered · userTurns 2 |
+| 00:01:50 | deliverInCallSms | link · not_allowed · userTurns 3 |
+| 00:02:11 | deliverInCallSms | transfer · delivered · userTurns 4(purposeCorrectedFrom link) |
+| 00:02:29 | requestScammerHangup | **row 9 accepted · goalActionDone true** · userTurns 5 · kind goal |
+| 00:02:41 | endSession | scammerTurns 6 · difficultyLevel advanced |
+
+판정: **판정표대로 정상** — C-3(마지막 문자 뒤 발화 ≥ 2)은 5 − 4 = 1이라 거짓, C-4는 문자 선언 2개라 해당 없음 ⇒ 4행을 푼 것은 C-1(이체 화면 제출)로 본다(⚠️ 추정 — 확인 방법: `sessions/b6dfcbcf…/inCallSms/institution-safe-account`의 `landingSubmittedAt` 읽기). 참가자가 순순히 따라 인증번호(2발화) → 이체 화면 제출(4~5발화)을 끝내자 "할 일 없음"으로 끊었다.
+깊이 문제: 고급 2벌(`fv-c5fj` · `fv-pgqt`)의 단계가 **이체 화면 제출에서 끝난다**(`flowVariants.ts` stages 마지막 = `INSTITUTION_ADVANCED_LINK_TRANSFER_STAGE`). 실제 수법의 이체 뒤 단계(추가 계좌 · 대출 실행 유도 · 재확인 압박)가 없고, 문자 하한(2 · 4)이 낮아 앞 단계(안심 유도 · 자산 규모)가 2발화 안에 압축될 수 있다. 개선안(메인 승인 전 미구현):
+
+| 안 | 내용 | 효과 · 위험 |
+|---|---|---|
+| A | 고급 2벌에 이체 뒤 단계 1개 추가("1차 이체 확인 → 다른 계좌 · 예적금도 검수 대상 → 추가 이체 또는 대출 실행 유도") + C-1을 "추가 단계 요구 뒤 발화 ≥ 2"로 늦춤 | 고급다운 길이 · 반복 이체 수법 학습. C-1 판정 변경이라 다른 확인 무력화 고급 6종 영향 점검 필요 |
+| B | 고급 문자 하한 상향(identity 2→3 · transfer 4→6) | 앞 단계 압축 방지 · 변경 작음. 끊기 시점도 약 2발화 늦어짐 |
+| C | 고급 끊기 하한(5행) 3 → 8 | 단순하지만 할 일 없는 대화를 억지로 끌 수 있음(사용자 의도 "할 게 없으면 끊는다"와 충돌) |
+
+권고: A + B. 같은 날 다른 세션 `d37fbb0d`(문자 link · transfer · userTurns 8 · goalActionDone false · row 9)는 4행 대상이 아닌 흐름이다(시나리오 미확인 — 검찰 수사 협조로 추정).
+
+### 114.4 '메시지' 버튼 항상 활성 (신고 4 · UX D-152)
+원문: *"문자가 오기 전에는 (메시지 버튼이) 비활성화되어 있는 것처럼 보여"* · 사용자 결정 "항상 활성처럼". §108(D-148)의 흐림 · `aria-disabled` · 탭 무반응을 되돌렸다(`src/app/session/play/page.tsx` 격자 2행 1칸). 문자 전에 누르면 빈 문자함("아직 도착한 문자가 없습니다." — `InCallSmsOverlay` 기존 빈 상태)이 열리고, 도착은 배지로 알린다. 접근성 이름 "메시지 — 받은 문자 없음" 유지 · '채팅으로' 칸 무변경.
+
+### 114.5 신원 칸 형식 (신고 5 · UX D-152)
+원문: *"생년월일과 전화번호를 양식에 맞출 수 있도록 하자. 지금은 무분별하게 작성 가능해"*. `src/lib/landing/identityInput.ts`(판정표는 파일 머리) + `MessengerFakeLanding.tsx` 필드별 `format`:
+
+| 형식 | 입력 중 | 자판 | 제출 검증 | 칸 아래 |
+|---|---|---|---|---|
+| `birthdate`(생년월일 4칸) | 숫자만 · 8자리에서 자름 | 숫자 | 6자리 YYMMDD(YY ≤ 올해 끝 두 자리면 20YY) · 8자리 YYYYMMDD · 월 · 일 · 윤년 · 미래 금지 | 오류 또는 "1990년 1월 1일" |
+| `mobile`(휴대전화 번호 1칸 · 연락처 4칸) | 숫자만 · 11자리 · 3-4-4 하이픈 | 전화 | 010으로 시작하는 11자리 | 오류 |
+
+금액 칸(§101)과 같은 방식(칸 아래 한 줄 · 제출 막음). D-93의 "검증 0"은 신원 칸에 한해 바뀌었다(`mockScreenCopy.test.ts` D-93 테스트 갱신 — maxLength는 형식 칸 한 곳). 열람본(§106)은 정리된 값을 그대로 보인다. 같은 패턴 점검: 모의 화면의 생년월일 · 전화 칸은 전부 이 컴포넌트 안이다(서버 카탈로그 `fields` 대조 — 생년월일 4 · 연락처 4 · 휴대전화 1). 앱 자체 화면인 받는 분 정보 카드(`PersonaCardInputFields`)는 모의 화면이 아니라 범위 밖.
+
+### 114.6 겹침 · 배포
+겹친 파일(messenger-flow 세션과): `src/app/session/play/page.tsx`(이 브랜치는 격자 '메시지' 버튼 한 블록만) · `package.json`(test 목록 끝에 2개 추가 — 같은 줄이라 병합 충돌 가능). 배포 순서: **Functions → Hosting** 권고(서로 독립 — 옛 화면 + 새 서버 = 세션 번호 문자, 새 화면 + 옛 서버 = 고정 번호 문자. 어느 조합도 깨지지 않는다).
