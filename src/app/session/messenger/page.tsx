@@ -85,6 +85,9 @@ type ChatMessage = {
   channel?: string;
   /** §89.5 ⓐ — 말풍선 옆 시각(문서 `createdAt`). 없으면 시각을 그리지 않는다. */
   createdAtMs?: number;
+  /** §113.2 — 사진 턴(서버 문서 `photo` · 낙관적 말풍선). 이미지는 `photoUrl`(이 화면 메모리의 objectURL)에만 있다. */
+  photo?: boolean;
+  photoUrl?: string;
 };
 
 // ⛔ T190-6b(UX D-100 · PRD AC-092 (d) · AC-031 읽기 고지) — 세션 중 스킨 전환 칩(`SKIN_CYCLE`/`SKIN_LABEL`)과
@@ -126,6 +129,28 @@ function smsBubbleStyle(role: "scammer" | "user", skin: MessengerSkin): React.CS
  * 렌더 경로로 오인해 `Date.now()`를 막는다 — 렌더 중에는 부르지 않는다(처리기 · 타이머 · 구독 콜백 전용).
  */
 const wallClockMs = () => Date.now();
+
+/** §113.2 — 사진 말풍선 대체 글(낙관적 턴의 `text` · 스크린리더). 서버 표기는 `PHOTO_TURN_TEXT`(functions). */
+const PHOTO_BUBBLE_LABEL = "사진";
+
+/**
+ * §113.2(UX D-151 (2)) — 사진 말풍선. 이미지는 이 화면 메모리(objectURL)에만 있다 — 새로고침 · 다시 들어오면 URL이 없어 빈 사진 칸을 그린다.
+ * ⛔ 안내 문구 0(사용자 결정).
+ */
+function PhotoBubble({ url }: { url: string | undefined }) {
+  return url ? (
+    // eslint-disable-next-line @next/next/no-img-element -- 기기 메모리 objectURL(정적 export · 최적화 대상 아님)
+    <img src={url} alt="보낸 사진" className="max-h-[260px] max-w-[220px] rounded-[12px] object-cover" />
+  ) : (
+    <span
+      role="img"
+      aria-label="보낸 사진"
+      className="flex h-[140px] w-[140px] items-center justify-center rounded-[12px] bg-black/10 text-[15px] text-black/50"
+    >
+      {PHOTO_BUBBLE_LABEL}
+    </span>
+  );
+}
 // 실기 신고 4 — 보이스톡 응답 없음 연출 길이(훈련용으로 줄였다 — 실제 앱은 수십 초 울린다).
 const VOICE_TALK_RING_MS = 6000;
 const VOICE_TALK_UNANSWERED_MS = 2000;
@@ -173,6 +198,18 @@ export default function MessengerSessionPage() {
   // 응답 없음 메시지의 turnIndex — 다음 전송의 답장 기준점 하한(구독이 늦어도 이 메시지를 답장으로 오인하지 않는다).
   const voiceTalkFloorRef = useRef(-1);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  // §113.2(실기 신고 9 · UX D-151 (2)) — 사진 보내기. ⛔ 이미지는 이 화면 메모리(objectURL)에만 둔다 — 서버 업로드 · Storage · Firestore ·
+  // 로그 0. 화면을 떠나면(훈련 종료 · 통화 전환) 전부 revoke한다. 서버에는 "사진을 보냈다"는 사실만 간다(`sendMessage({photo: true})`).
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const [photoUrls, setPhotoUrls] = useState<Record<number, string>>({});
+  const photoQueueRef = useRef<{ url: string; minTurnIndex: number }[]>([]);
+  const allPhotoUrlsRef = useRef<string[]>([]);
+  useEffect(() => {
+    const urls = allPhotoUrlsRef.current;
+    return () => {
+      for (const url of urls) URL.revokeObjectURL(url);
+    };
+  }, []);
   // T187(UX-022 v1.29 노트 (5)) — "메시지 보기" 뒤 포커스는 대화 목록으로(입력창 자동 포커스 ⛔).
   const messageListRef = useRef<HTMLUListElement | null>(null);
   const focusListAfterNoticeRef = useRef(false);
@@ -293,9 +330,23 @@ export default function MessengerSessionPage() {
             attachments: data.attachments as MessengerAttachment[] | undefined,
             channel: data.channel as string | undefined,
             createdAtMs: (data.createdAt as Timestamp | undefined)?.toMillis?.(),
+            photo: data.photo === true,
           };
         });
       setMessages(next);
+      // §113.2 — 이 화면에서 보낸 사진(objectURL)을 서버의 사진 턴 문서에 붙인다(보낸 순서 · 보낸 시점 이후 문서만 — 새로고침 전 사진 턴은 빈 칸).
+      const photoDocs = next.filter((m) => m.photo && m.role === "user");
+      setPhotoUrls((current) => {
+        let updated = current;
+        for (const doc of photoDocs) {
+          if (updated[doc.turnIndex]) continue;
+          const at = photoQueueRef.current.findIndex((entry) => doc.turnIndex >= entry.minTurnIndex);
+          if (at < 0) continue;
+          const [entry] = photoQueueRef.current.splice(at, 1);
+          updated = { ...updated, [doc.turnIndex]: entry.url };
+        }
+        return updated;
+      });
       // §94 — 답장 문서가 서버 응답보다 먼저 올 수 있다. 처음 보인 시각을 "답을 안 시각"으로 적는다(공개는 연출 뒤).
       setPending((current) => (current ? noteSnapshot(current, next, Date.now()) : current));
     });
@@ -344,8 +395,8 @@ export default function MessengerSessionPage() {
   // §94(UX D-137) — 전송 즉시 내 말풍선을 올린다(낙관적 표시 · "1"). 서버 응답을 기다리지 않는다.
   // ⚠️ 서버는 한 번에 한 턴만 처리한다(턴 확보 트랜잭션 — functions/src/roleplay/index.ts) ⇒ 서버 호출 중에는 전송 버튼만
   // 잠그고 입력칸은 열어 둔다(키보드가 닫히지 않게). 서버가 끝난 뒤 연출 중에 보내면 앞 답장은 바로 보인다.
-  const handleSend = async (retryText?: string) => {
-    const text = (retryText ?? input).trim();
+  const handleSend = async (retryText?: string, photoUrl?: string) => {
+    const text = photoUrl ? PHOTO_BUBBLE_LABEL : (retryText ?? input).trim();
     if (!sessionId || !text || turnLocked || chatEnded || escalatingNow) return;
     const now = wallClockMs();
     const turn: PendingTurn = {
@@ -360,12 +411,13 @@ export default function MessengerSessionPage() {
         voiceTalkFloorRef.current,
       ),
     };
-    setPending(turn);
+    setPending(photoUrl ? { ...turn, photoUrl } : turn);
     setClock(now);
     setSendError(null);
-    if (retryText === undefined) setInput("");
+    if (retryText === undefined && !photoUrl) setInput("");
+    if (photoUrl) photoQueueRef.current.push({ url: photoUrl, minTurnIndex: turn.baseTurnIndex + 1 });
     try {
-      const result = await sendMessage({ sessionId, userText: text });
+      const result = await sendMessage(photoUrl ? { sessionId, userText: "", photo: true } : { sessionId, userText: text });
       // T158(§48.5.1) — OR-fold 두 번째 항.
       setDialogueDegraded((current) => foldDegraded(current, result.isMock));
       // T30(§13.2) — 자동 신호든 max-turn 폴백이든, 서버가 이미 transitionChannel을 마쳤다는
@@ -388,6 +440,8 @@ export default function MessengerSessionPage() {
       );
       setClock(wallClockMs());
     } catch {
+      // §113.2 — 실패한 사진은 대기열에서 뺀다(다시 보내기가 같은 URL로 다시 넣는다).
+      if (photoUrl) photoQueueRef.current = photoQueueRef.current.filter((entry) => entry.url !== photoUrl);
       setPending((current) => (current?.localId === turn.localId ? { ...current, failed: true } : current));
       setSendError("메시지를 보내지 못했습니다. 다시 시도해 주세요.");
     }
@@ -544,7 +598,14 @@ export default function MessengerSessionPage() {
       : messages;
   const optimistic: ChatMessage | null =
     pending && replyView.showOptimistic
-      ? { id: pending.localId, role: "user", text: pending.text, turnIndex: pending.baseTurnIndex + 1, createdAtMs: pending.sentAtMs }
+      ? {
+          id: pending.localId,
+          role: "user",
+          text: pending.text,
+          turnIndex: pending.baseTurnIndex + 1,
+          createdAtMs: pending.sentAtMs,
+          ...(pending.photoUrl ? { photo: true, photoUrl: pending.photoUrl } : {}),
+        }
       : null;
   const failedId = optimistic && pending?.failed ? optimistic.id : null;
   const threadItems = foldCallSegments(optimistic ? [...visibleMessages, optimistic] : visibleMessages);
@@ -800,24 +861,32 @@ export default function MessengerSessionPage() {
               <span className="sr-only">{`${peerName}:`}</span>
             )}
             {isSms ? (
-              <span
-                className="max-w-[80%] whitespace-pre-line break-words px-[13px] py-[9px] text-[17px] leading-[1.45]"
-                style={smsBubbleStyle(message.role, messengerSkin)}
-              >
-                {message.text}
-              </span>
+              message.photo ? (
+                <PhotoBubble url={message.photoUrl ?? photoUrls[message.turnIndex]} />
+              ) : (
+                <span
+                  className="max-w-[80%] whitespace-pre-line break-words px-[13px] py-[9px] text-[17px] leading-[1.45]"
+                  style={smsBubbleStyle(message.role, messengerSkin)}
+                >
+                  {message.text}
+                </span>
+              )
             ) : (
               <span
                 className={`flex max-w-[86%] items-end gap-1 ${message.role === "user" ? "flex-row-reverse" : ""} ${
                   firstOfPeerRun ? "pl-[42px]" : ""
                 }`}
               >
-                <span
-                  className="whitespace-pre-line break-words px-3 py-2 text-[17px] leading-[1.45]"
-                  style={kakaoBubbleStyle(message.role, firstOfRun)}
-                >
-                  {message.text}
-                </span>
+                {message.photo ? (
+                  <PhotoBubble url={message.photoUrl ?? photoUrls[message.turnIndex]} />
+                ) : (
+                  <span
+                    className="whitespace-pre-line break-words px-3 py-2 text-[17px] leading-[1.45]"
+                    style={kakaoBubbleStyle(message.role, firstOfRun)}
+                  >
+                    {message.text}
+                  </span>
+                )}
                 {(timeLabel || unread) && (
                   <span
                     className={`flex shrink-0 flex-col text-[11px] leading-[1.25] ${message.role === "user" ? "items-end" : "items-start"}`}
@@ -841,7 +910,7 @@ export default function MessengerSessionPage() {
                 <span className="sr-only">전송 실패</span>
                 <button
                   type="button"
-                  onClick={() => void handleSend(message.text)}
+                  onClick={() => void handleSend(message.text, message.photoUrl)}
                   className="min-h-[44px] px-2 font-semibold underline underline-offset-2"
                   style={{ color: isSms ? threadTokens.link : chatTokens.headerIcon }}
                 >
@@ -965,6 +1034,33 @@ export default function MessengerSessionPage() {
               }}
               className="flex items-center gap-2.5"
             >
+              {/* §113.2(UX D-151 (2)) — '+' = 기기 사진 고르기(사진첩 · 카메라는 기기가 고른다). 안내 문구 0(사용자 결정). */}
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                tabIndex={-1}
+                aria-hidden="true"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file || !file.type.startsWith("image/")) return;
+                  const url = URL.createObjectURL(file);
+                  allPhotoUrlsRef.current.push(url);
+                  void handleSend(undefined, url);
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={turnLocked}
+                aria-label="사진 보내기"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
+                style={{ color: isSms ? threadTokens.link : chatTokens.headerIcon }}
+              >
+                <PhoneIcon name="plus" size={26} />
+              </button>
               <label htmlFor="messenger-chat-input" className="sr-only">
                 메시지 입력
               </label>

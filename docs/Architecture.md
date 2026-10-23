@@ -23111,3 +23111,32 @@ GEMINI_API_KEY2 · 429 즉시 중단. 수정 전(main `77cddcc` lib)과 수정 �
 
 ### 110.8 배포 순서
 **Functions 먼저 → Hosting**: 새 화면은 `requestReverseEscalation({followUp})` · `createSession({familyAddress})`를 보낸다 — 옛 서버는 `followUp`을 무시(전환만)하고 `familyAddress`는 구조분해하지 않아 무시한다(화면이 먼저여도 깨지지 않지만 복귀 메시지 · 호칭이 빠진다). 옛 화면 + 새 서버는 필드를 보내지 않아 종전 동작. 인덱스 변경 0.
+
+
+## 113. (Feature change — 2026-10-23 · 브랜치 `claude/family-scroll-and-photo-send` = main `4030d6e` + 변경 · 사용자 실기 신고 7 · 9 · 크롬 · 갤럭시 S25) **호칭 선택 뒤 자동 스크롤 · 대화방 사진 보내기(기기 사진 · 화면 메모리만)** — implementer 기록 (DECISIONS #228 · UX D-151)
+
+⛔ 금지(사용자 결정): 사진 서버 업로드 · Storage · Firestore 이미지 기록 · 로그 0 · 사기범 AI에 이미지 내용 0 · 대화방 안내 문구 0.
+
+### 113.1 신고 7 — 호칭 고를 때 자동 스크롤
+원문: *"가족 호칭 정할 때도 자동으로 난이도를 선택하면 스크롤이 되도록 하자"*.
+| 상황 | 기준 요소 | 동작 |
+|---|---|---|
+| 호칭 대상 시나리오 · 난이도 고름 | 호칭 칸(`[data-family-address]`) | 그 칸 아래끝이 시트("이걸로 시작") 위로 오도록 내린다(D-141 (3) 규칙 · 시트 등장 340ms 뒤 · reduced-motion 즉시) |
+| 호칭 대상 시나리오 · 호칭 고름 | 같은 칸 | 다시 잰다(가려져 있으면 내린다) |
+| 그 밖 시나리오 | 방금 고른 판 | 종전 |
+
+### 113.2 신고 9 — 사진 보내기(휴대폰 사진)
+원문: *"사진 보내기는 사용자 핸드폰 내 이미지를 보낼 수 있도록"* · 사용자 결정: 화면에만 표시 · 안내 메시지 0.
+| 층 | 정책 |
+|---|---|
+| 화면(`session/messenger/page.tsx`) | 입력줄 왼쪽 '+' → `<input type="file" accept="image/*">`(사진첩 · 카메라는 기기가 고른다) → `URL.createObjectURL` → 이미지 말풍선(카톡형 · 문자형). 화면을 떠나면(언마운트) 전부 `revokeObjectURL`. 새로고침 뒤 옛 사진 턴은 빈 사진 칸 |
+| 요청 | `sendMessage({sessionId, userText: "", photo: true})` — 이미지 · 파일명 · 크기 필드 0 |
+| 서버(`roleplay/index.ts` · `photoTurn.ts`) | 사용자 메시지 `textMasked = "(사진 1장을 보냈다)"` + `photo: true`. 사기범 AI는 이 문장을 참가자 데이터로 본다 |
+| 리포트(`analyzeConversation` H3) | 사진 턴이고 그 전에 사기범이 신분증 · 사진을 요구했다(`PHOTO_DEMAND`) → **속은 순간**(저항 어휘와 무관 — H1 · H2와 같은 등급). 라벨 = 요구한 대사의 수법. 요구 없이 보낸 사진 = 판정 0 |
+#371 판정표("가장 깊이 간 단계")에 더한 행: **메신저 · 사진 전송(요구 뒤) = 속음**. 링크 열기 · 설치 화면은 종전 그대로(D-51).
+
+### 113.3 검증
+루트 `npm test` 1033/0 · `npm --prefix functions test` 1721/0 · lint 2종 오류 0. 신규 `photoSendAndFamilyScroll.test.ts`(루트 2) · `report/__tests__/photoTurn.test.ts`(functions 3). ⚠️ 실기 · 실 키 미실시 — 갤럭시 크롬의 파일 선택 창(사진첩/카메라) 모양은 기기 몫.
+
+### 113.4 배포 순서
+**Functions → Hosting**. 옛 서버 + 새 화면: `photo`를 모르고 빈 `userText`라 `invalid-argument` → 사진 말풍선이 실패(다시 보내기)로 남는다. 새 서버 + 옛 화면: 변화 0. 인덱스 변경 0.

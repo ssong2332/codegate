@@ -10,7 +10,15 @@ export type ScammerMessage = {
 };
 export type UserMessage = { role: "user"; text: string };
 
-export type SendMessageRequest = { sessionId: string; userText: string };
+export type SendMessageRequest = {
+  sessionId: string;
+  userText: string;
+  /**
+   * §113.2(사용자 결정 2026-10-23) — 참가자가 기기 사진을 보냈다. ⛔ 이미지 · 파일명 · 크기 등 내용은 실리지 않는다(사실만).
+   * 참이면 `userText`는 무시되고 서버가 `PHOTO_TURN_TEXT`로 턴을 남긴다(`MessageDoc.photo`).
+   */
+  photo?: boolean;
+};
 export type SendMessageResponse = {
   reply: ScammerMessage;
   turnCount: number;

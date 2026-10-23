@@ -22,7 +22,9 @@ export type PhoneIconName =
   | "shield"
   | "send-up"
   // 사용자 결정(2026-10-18 · UX D-116) — 메신저에서 연 가짜 랜딩 브라우저 바 왼쪽 ✕(닫기).
-  | "close";
+  | "close"
+  // §113.2(UX D-151 (2)) — 대화방 입력줄 왼쪽 '+'(사진 보내기).
+  | "plus";
 
 type PhoneIconProps = {
   name: PhoneIconName;
@@ -129,6 +131,13 @@ function glyph(name: PhoneIconName) {
         <>
           <path d="M6 6l12 12" />
           <path d="M18 6L6 18" />
+        </>
+      );
+    case "plus":
+      return (
+        <>
+          <path d="M12 5v14" />
+          <path d="M5 12h14" />
         </>
       );
   }
