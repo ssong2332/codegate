@@ -20,7 +20,8 @@ import { findInCallSmsItem } from "../inCallSms";
 import { findMockScreenItem, LANDING_PROGRESS_STEPS, MOCK_SCREENS } from "../mockScreens";
 import { sessionReachableLandingIds } from "../reachability";
 import { extractTacticLabel } from "../tacticFlavor";
-import { PROSECUTION_WALLET_PERSONA } from "../prosecutionCooperationCall.prompt";
+import { CASE_RECORD_NAMES, PROSECUTION_WALLET_PERSONA } from "../prosecutionCooperationCall.prompt";
+import { maskFictionalInstitutionNames } from "./harmlessnessPatterns";
 import { resolveTacticCategory } from "../../report/tacticCategory";
 import { promoteSmsLandingSubmits, type SmsTimelineMessage, type SmsTimelineSource } from "../../report/smsTimeline";
 
@@ -216,9 +217,14 @@ test("[§101 S7] 검찰 · 자산 보호 전 변형 페르소나 — 기관 이�
     ].filter(Boolean);
     assert.ok(personas.length >= 3, scenarioId);
     for (const persona of personas) {
-      assert.ok(persona.includes(fictional), `${scenarioId}: 가상 명칭 지시`);
+      // §109(DECISIONS #224) — 현행 fv-h3vn만 열람본과 같은 가상 고유명 1벌로 밝힌다(그 밖 기관은 여전히 "OO" — 같은 줄의 뒷문장).
+      const namesCaseRecord = persona.includes(`${CASE_RECORD_NAMES.office} ${CASE_RECORD_NAMES.department}`);
+      assert.ok(
+        persona.includes(fictional) || (scenarioId === PROS && namesCaseRecord && persona.includes('"OO은행"처럼 앞에 OO를 붙인 이름으로만 말한다')),
+        `${scenarioId}: 가상 명칭 지시`,
+      );
       assert.equal(persona.includes("기관은 일반명으로만 말한다"), false, `${scenarioId}: 옛 문장`);
-      assert.equal(REAL_OFFICE.test(persona), false, `${scenarioId}: 실제 청 이름 꼴`);
+      assert.equal(REAL_OFFICE.test(maskFictionalInstitutionNames(persona)), false, `${scenarioId}: 실제 청 이름 꼴`);
     }
   }
   // 역검증 — 같은 검사식이 프로브에서 나온 실존 명칭을 잡는다 · 가상 명칭은 통과한다.

@@ -79,6 +79,18 @@ export const REAL_WORLD_INSTITUTION_NAMES: readonly string[] = [
 ];
 
 /**
+ * ⭐ §109(DECISIONS #224) — **가상 기관명 허용 목록(정확 일치 · 닫힌 열거)**. 이 문자열이 통째로 나온 자리만 `realInstitutionName`
+ * 검사에서 뺀다(예: "한빛지방검찰청" 안의 "검찰청"). 부분 일치 · 다른 지역명 + "지방검찰청"은 그대로 걸린다(역검증 — `caseRecordDocument.test.ts` §109).
+ * ⛔ 늘리려면 실존 청 · 지청과 겹치지 않음을 같은 테스트 표에 더하고 결정 기록을 남긴다.
+ */
+export const FICTIONAL_INSTITUTION_NAMES: readonly string[] = ["한빛지방검찰청"];
+
+/** 허용 목록의 가상 기관명을 같은 길이의 공백으로 가린다(위치 · 길이 보존 — 발췌 위치가 어긋나지 않게). */
+export function maskFictionalInstitutionNames(text: string): string {
+  return FICTIONAL_INSTITUTION_NAMES.reduce((masked, name) => masked.split(name).join(" ".repeat(name.length)), text);
+}
+
+/**
  * 기존 `verifyIntercept.test.ts`가 쓰던 목록의 정본(대표번호 ∪ 기관명). 그 파일은 이 배열을
  * `.includes()`로 쓰므로 문자열 배열 형태를 유지한다.
  */
@@ -355,9 +367,10 @@ export type Violation = { family: PatternFamily; label: string; excerpt: string 
 export function scanText(text: string, profile: ScanProfile): Violation[] {
   const families = SCAN_PROFILES[profile] as readonly PatternFamily[];
   const violations: Violation[] = [];
+  const institutionText = maskFictionalInstitutionNames(text);
   for (const rule of FORBIDDEN_RULES) {
     if (!families.includes(rule.family)) continue;
-    const match = rule.pattern.exec(text);
+    const match = rule.pattern.exec(rule.family === "realInstitutionName" ? institutionText : text);
     if (match === null) continue;
     const at = match.index;
     // 금지형 문맥 예외 — "…를 절대 말하지 않는다"는 무해화를 **강화**하는 문장이다(위 판정표).

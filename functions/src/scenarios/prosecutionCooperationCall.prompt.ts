@@ -121,10 +121,28 @@ const SITE_CRYPTO_LINES = [
 if (!PROSECUTION_CASE_LINK_PERSONA.includes(CASE_LINK_ONLY_SCREEN_LINE) || !PROSECUTION_CASE_LINK_PERSONA.includes(CRYPTO_NO_DETAIL_LINE)) {
   throw new Error("prosecutionCooperationCall.prompt: 자산 검수 사이트 변형 페르소나의 원천 줄을 찾지 못했다(§101)");
 }
-export const PROSECUTION_SITE_PERSONA = PROSECUTION_CASE_LINK_PERSONA.replace(CASE_LINK_ONLY_SCREEN_LINE, SITE_SCREEN_LINE).replace(
-  CRYPTO_NO_DETAIL_LINE,
-  SITE_CRYPTO_LINES,
-);
+// ⭐ §109(2026-10-22 사용자 실기 요청 — *"담당 부서나 담당 검사가 'OO수사본부'처럼 적혀 있는데 … 더 사실적인 문서로"*) — 사건 기록 열람본
+// (`mockScreens.ts` `case-record-view.recordDocument`)의 "OO" 가림 표시를 **가상 고유명 1벌**로 바꾸고, 현행 변형 fv-h3vn의 사기범이 **같은 이름**으로
+// 자신을 밝히게 한다(문서와 통화가 어긋나면 그것이 곧 가짜 신호가 된다). 카탈로그 · 화면 표는 이 값을 글자 그대로 쓴다(`caseRecordDocument.test.ts` §109).
+// ⛔ 실존 청 · 지청 · 인물과 겹치지 않는다(같은 테스트 — 실존 지방검찰청 · 지청 지역명 대조 · 웹 검색 근거는 docs/Architecture.md §109).
+// ⛔ 이 이름 **밖의** 기관 · 인물은 종전대로 "OO"를 붙인다 — 가상 이름 허용은 정확 일치 1벌뿐이다(DECISIONS #224).
+export const CASE_RECORD_NAMES = {
+  office: "한빛지방검찰청",
+  department: "금융범죄조사부",
+  prosecutor: "윤서진",
+  investigator: "정하람",
+} as const;
+const OO_NAMING_LINE =
+  '- 기관 이름을 말할 때는 "OO지방검찰청"·"OO수사본부"처럼 앞에 OO를 붙인 이름으로만 말한다. 실제로 있는 지역 이름이 들어간 청·지청·부서 이름, 실제 담당자 이름, 사건번호, 전화번호는 어떤 경우에도 말하지 않는다.';
+const CASE_RECORD_NAMING_LINE = `- 네 소속과 이름은 사건 기록 열람본에 적힌 그대로 "${CASE_RECORD_NAMES.office} ${CASE_RECORD_NAMES.department} ${CASE_RECORD_NAMES.investigator} 수사관"이고, 담당 검사는 "${CASE_RECORD_NAMES.prosecutor} 검사"다. 소속·이름을 밝히거나 담당 검사를 말할 때는 이 이름만 쓰고 바꾸지 않는다. 그 밖의 기관 이름을 말할 때는 "OO은행"처럼 앞에 OO를 붙인 이름으로만 말한다. 실제로 있는 지역 이름이 들어간 청·지청·부서 이름, 실제 담당자 이름, 사건번호, 전화번호는 어떤 경우에도 말하지 않는다.`;
+if (!PROSECUTION_CASE_LINK_PERSONA.includes(OO_NAMING_LINE)) {
+  throw new Error("prosecutionCooperationCall.prompt: OO 명칭 줄을 찾지 못했다(§109)");
+}
+export const PROSECUTION_SITE_PERSONA = PROSECUTION_CASE_LINK_PERSONA.replace(CASE_LINK_ONLY_SCREEN_LINE, SITE_SCREEN_LINE)
+  .replace(CRYPTO_NO_DETAIL_LINE, SITE_CRYPTO_LINES)
+  .replace(OO_NAMING_LINE, CASE_RECORD_NAMING_LINE);
+/** §109 — 원본 "권위 암시"(직함만 · 소속 0)를 fv-h3vn에서 대신한다(라벨 동일). 열람본과 같은 가상 소속 · 이름으로 자신을 밝힌다. */
+export const PROSECUTION_CASE_RECORD_AUTHORITY_TACTIC = `권위 암시 — '${CASE_RECORD_NAMES.office} ${CASE_RECORD_NAMES.department} ${CASE_RECORD_NAMES.investigator} 수사관입니다, ${CASE_RECORD_NAMES.prosecutor} 검사님 사건 때문에 연락드렸습니다' 처럼 사건 기록 열람본에 적힌 소속·이름으로 자신을 밝혀 신뢰를 유도한다. 이 이름 말고 다른 청·부서명·이름·전화번호는 말하지 않는다.`;
 /** §101 — 원본 "코인 구매·송금 요구"를 대신한다(라벨 동일 — 판정 · 축 커버리지 라벨 유지). 절차 설명 대신 사이트로 보낸다. */
 export const PROSECUTION_SITE_COIN_TACTIC =
   "코인 구매·송금 요구 — '자산이 범죄수익인지 검수하려면 안전 자산으로 바꿔 보관해 두셔야 합니다, 문자로 보내 드린 자산 검수 사이트에 들어가셔서 화면 안내대로만 진행하시면 됩니다' 처럼 사이트로 보낸다. 전환·이체의 순서나 방법은 말로 설명하지 않고, 거래소 이름·코인 종류·지갑 주소를 지어내 부르지 않는다. 보관 지갑 번호·이체 금액도 네가 부르지 않고 문자로 보낸 것을 확인하게 한다.";

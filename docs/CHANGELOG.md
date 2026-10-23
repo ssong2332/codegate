@@ -4,6 +4,12 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-22 추가분, 브랜치 `claude/messenger-haiku-ef9163`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Functions만**(화면 변경 0). 운영 시크릿 `CLAUDE_API_KEY`는 이미 등록돼 있다.
+
+### Changed
+- **사기범 대사 1차 모델을 Claude Sonnet 5.5에서 Haiku 5.5로 내림(Architecture §111 · DECISIONS #226)**: 1차 `claude-haiku-5-5` → 2차 `gemini-3.5-flash-lite` → 3차 Groq. 운영 로그의 입력이 호출당 약 8~9.7천 토큰이라 Sonnet은 월 약 $298이었고 Haiku는 약 $15다(응답 p50 1.76초 · 인물 혼동 최저). 2·3차와 넘어가는 조건은 그대로다.
+- **Claude 요청의 추론 끄기를 `between_tools` → `disabled`로**: Haiku 5.5는 `between_tools`를 400으로 거부한다(공식 thinking 문서). 이대로 모델만 바꿨다면 1차가 매번 실패해 2차로 넘어갔을 것이다.
+
 > ⚠️ **이 블록(2026-10-22 추가분, 브랜치 `claude/ui-prep-scroll-category-ac2270`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
 
 ### Changed

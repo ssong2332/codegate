@@ -18,6 +18,7 @@ import { buildSystemPrompt, LIVE_NO_IDLE_RULE, SMS_NOT_YET_SENT_SENTENCE } from 
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { listFlowVariants, resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
 import { DIFFICULTY_LEVELS } from "../../shared/difficulty";
+import { maskFictionalInstitutionNames } from "../../scenarios/__tests__/harmlessnessPatterns";
 
 const SRC = path.join(__dirname, "..", "..", "..", "src");
 // 작업 트리는 CRLF일 수 있다(core.autocrlf) — 소스 스캔 정규식은 LF 기준이라 줄바꿈을 맞춘다.
@@ -191,7 +192,8 @@ test("[§104 결함7] 실존 지역 · 부서 결합 기관명 0 — 전 시나�
         const prompt = resolveSessionScenarioPrompt(id, variant.variantId);
         assert.ok(prompt);
         const assembled = buildSystemPrompt(prompt, { difficultyLevel: level, liveSpeechStyle: true, toolDrivenTiming: true });
-        const hit = assembled.match(REAL_INSTITUTION);
+        // §109(DECISIONS #224) — 허용 목록의 가상 기관명(정확 일치)만 가리고 검사한다. 다른 지역명 + "지방검찰청"은 그대로 걸린다.
+        const hit = maskFictionalInstitutionNames(assembled).match(REAL_INSTITUTION);
         assert.equal(hit, null, `${id}/${variant.variantId}: ${hit?.[0]}`);
       }
     }
@@ -324,6 +326,7 @@ test("[§104.9] 메신저 단계 — 폴백 경로(messengerStageAllowed)만 끝
     verifyEnabled: false,
     transferPlaced: false,
     transferReachable: true,
+    goalActionDone: false,
     userTurns: SCAMMER_HANGUP_MIN_USER_TURNS,
     pendingInstruction: false,
     smsAwaitingUser: false,

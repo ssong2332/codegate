@@ -1,14 +1,17 @@
-// Claude 텍스트 LLM 구현체 — 사기범 대사 경로(`purpose: "scammer-reply"`)의 **1차** 공급자(2026-10-22, §107).
+// Claude 텍스트 LLM 구현체 — 사기범 대사 경로(`purpose: "scammer-reply"`)의 **1차** 공급자(2026-10-22, §107 · §111에서 Sonnet → Haiku).
 //
 // 근거(실측, 2026-10-22 메신저 모델 비교 · scripts/messenger-model-compare-probe.mjs, 같은 대본 12세션):
-//   - claude-sonnet-5-5: 거절 0/132 · 지연 p50 2.70초 / p95 3.59초 · 앞 맥락 반영 6/6(후보 중 최고).
+//   - claude-haiku-5-5: 거절 0/132 · 지연 p50 1.76초 / p95 3.07초 · 인물 혼동 1/4(최저) · 세션당 $0.0099.
+//   - claude-sonnet-5-5: 거절 0/132 · p50 2.70초 / p95 3.59초 · 앞 맥락 반영 6/6이나 세션당 $0.198(Haiku의 약 20배 · 월 약 $298).
 //   - 같은 시각 1차였던 gemini-3.1-flash-lite: p95 13.1초 · 503 12회 · 30초 초과 3건.
-//   사용자 결정(2026-10-22): 1차 Sonnet 5.5 · 2차 gemini-3.5-flash-lite · 3차 Groq.
+//   사용자 결정(2026-10-22): 처음 1차 Sonnet 5.5(§107) → 운영 비용을 보고 "소넷에서 하이쿠로 내리자"(§111). 2차 gemini-3.5-flash-lite · 3차 Groq는 그대로.
 //
 // groqClient.ts와 같은 원칙을 따른다 — 이미 조립된 systemPrompt/messages를 전달하는 얇은 transport다.
 //   - 사기범 대사 경로는 시스템 프롬프트 앞에 훈련 맥락 머리말을 붙인다(groqSystemPrompt — 측정도 이 형태로 했다).
 //   - 외부 공급자로 나가는 사용자 이름·생년월일은 가명으로 바꾸고 응답에서 되돌린다(piiPseudonymizer.ts).
-//   - 추론은 끈다(`thinking: between_tools`) — 대사 한두 문장에 추론 지연을 쓰지 않는다(측정 조건과 같다).
+//   - 추론은 끈다(`thinking: disabled`) — 대사 한두 문장에 추론 지연을 쓰지 않는다(측정 조건과 같다).
+//     ⚠️ Haiku 5.5는 `between_tools`를 400으로 거부하고 `disabled`만 받는다(Sonnet 5.5는 반대 — 공식 thinking 문서의 모델별 표).
+//     `temperature`·`top_p`·`top_k`는 Haiku 5.5에서 보내지 않는다(공식 모델 페이지 "Omit") — 이 클라이언트는 원래 보내지 않는다.
 //   - SDK 자체 재시도는 끈다(`maxRetries: 0`) — 실패하면 체인(claudeFallback.ts)이 2차로 넘긴다. 재시도가 예산을 먹으면 2·3차가 잘린다.
 // ⛔ 로그는 숫자·모델명만(G170) — 프롬프트·응답 본문·키를 싣지 않는다.
 import Anthropic from "@anthropic-ai/sdk";
@@ -19,7 +22,7 @@ import { pseudonymizeForGroq } from "./piiPseudonymizer";
 import type { LlmClient, LlmCompletionInput, LlmCompletionResult } from "./types";
 
 /** 고정 모델 ID — 별칭 금지 원칙(geminiClient.ts `GEMINI_TEXT_MODEL` 주석)과 같다. */
-export const CLAUDE_TEXT_MODEL = "claude-sonnet-5-5";
+export const CLAUDE_TEXT_MODEL = "claude-haiku-5-5";
 export const CLAUDE_MAX_TOKENS = 1024;
 
 /** Claude가 대사를 내지 않고 멈춘 경우(거절·빈 응답) — 체인이 2차로 넘기는 신호다. 메시지에 본문 없음(G170). */
@@ -62,7 +65,7 @@ export class ClaudeLlmClient implements LlmClient {
       {
         model: CLAUDE_TEXT_MODEL,
         max_tokens: CLAUDE_MAX_TOKENS,
-        thinking: { type: "between_tools" },
+        thinking: { type: "disabled" },
         system: groqSystemPrompt(input),
         messages,
       },
