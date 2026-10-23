@@ -9,6 +9,7 @@
 // ── 판정표 A: 전화 전환 신호(`ESCALATE_VOICE`) ──────────────────────────────────────────────
 // | # | If(신호를 실은 응답의 대사) | Then |
 // |---|---|---|
+// | A0 | §122(7) 전환 하한 — 메신저 진입 뒤 사용자 턴이 `ESCALATION_MIN_USER_TURNS`(2) 미만(첫 답장 · 오프닝) | **받아들이지 않는다**(`too_early`) — 대사와 무관 |
 // | A1 | 나중에 · 이따 연락하겠다는 말이 있다(`LATER_CONTACT` — "나중에 전화할게"도 지금 거는 말이 아니다) | **받아들이지 않는다**(`contradicted`) |
 // | A2 | 지금 전화를 걸겠다는 말이 있다(`CALL_NOW` — 전화할게 · 전화 걸게 · 전화드릴게/드리겠 · 통화하자 …) | 받아들인다 |
 // | A3 | 통화가 안 된다는 말이 있다(`CALL_UNAVAILABLE` — 통화가 안 돼 · 전화 못 해 · 소리가 깨져 · 고쳐서 연락) | **받아들이지 않는다**(`contradicted`) |
@@ -40,7 +41,24 @@ export const NEW_TRANSFER_DEMAND =
 /** B1-b — 참가자에게 무언가를 해 달라는 요청 형태("보내줘서 고마워"처럼 `줘서`는 받은 것에 대한 인사라 뺀다). */
 export const NEW_REQUEST_FORM = /(?:줘|줄래|줄\s*수\s*있|주세요|주십시오|주시겠|주실\s*수|주시면)(?!서)/;
 
-export type EscalationConsistency = { accept: true } | { accept: false; reason: "contradicted" };
+export type EscalationConsistency = { accept: true } | { accept: false; reason: "contradicted" | "too_early" };
+
+/**
+ * A0 — 전환 하한(§122(7) 실기 신고 2026-10-23: 자녀 사칭 카톡 첫 마디에 전화 전환 신호가 실려 나왔다). 메신저 진입 뒤 사용자 턴이
+ * 이 수 미만이면 신호를 받아들이지 않는다 — 참가자가 한 번은 더 답할 차례가 남는다. 오프닝(턴 0)은 애초에 판정하지 않고 지우기만 한다.
+ */
+export const ESCALATION_MIN_USER_TURNS = 2;
+
+/** 판정표 A0 — `turnsSinceEntry` = `turnsSinceMessengerEntry(turnCount, channelHistory)`(이번 사용자 턴 포함). */
+export function isEscalationTooEarly(turnsSinceEntry: number): boolean {
+  return turnsSinceEntry < ESCALATION_MIN_USER_TURNS;
+}
+
+/** 판정표 A0 → A1~A4 — sendMessage가 부르는 입구(A0 전환 하한을 먼저 본다). */
+export function judgeEscalationSignalAt(turnsSinceEntry: number, replyText: string): EscalationConsistency {
+  if (isEscalationTooEarly(turnsSinceEntry)) return { accept: false, reason: "too_early" }; // A0
+  return judgeEscalationSignal(replyText);
+}
 
 /** 판정표 A. */
 export function judgeEscalationSignal(replyText: string): EscalationConsistency {

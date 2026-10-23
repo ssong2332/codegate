@@ -101,7 +101,14 @@ import {
   type TurnEndReason,
 } from "./liveLatency";
 import { LIVE_MIC_CONSTRAINTS, liveMicHandoff, stopStream } from "./micHandoff";
-import { isUsableContext, resumeSuspendedContexts, type PrimedCallAudio } from "./callAudio";
+import {
+  FRESH_OUTPUT_RESUME_TIMEOUT_MS,
+  isUsableContext,
+  pickCallOutputPath,
+  readOutputAfterMicFlag,
+  resumeSuspendedContexts,
+  type PrimedCallAudio,
+} from "./callAudio";
 import {
   BACKGROUND_LOG_PREFIX,
   MIC_RECHECK_DELAY_MS,
@@ -115,6 +122,8 @@ import {
   noteAsrChunk,
   noteAudioError,
   noteChunkReceived,
+  noteNormalizerGain,
+  noteOutputPath,
   noteMicFrame,
   noteUnheardReplyFired,
   peakOf,
@@ -1239,10 +1248,40 @@ export default function GeminiVoiceSession({
         // 수정안 A — 받기 탭 안에서 미리 깨운 컨텍스트가 살아 있으면 그것을 쓴다(없거나 닫혔으면 종전대로 만든다).
         const primedOutput = primedAudio?.output ?? null;
         const primedInput = primedAudio?.input ?? null;
-        outputBorrowed = isUsableContext(primedOutput);
+        // ⭐ §122.2.2 — 볼륨 키가 '통화' 음량으로 소리를 조절하게, 마이크가 열린 **뒤** 출력 컨텍스트를 새로 만든다(`callAudio.ts` 표 O1~O4 ·
+        // Chromium은 출력 스트림 용도를 만들 때 정한다). 마이크는 받기 때 이미 열기 시작했다 — 대개 여기서는 이미 끝나 있다.
+        // 거부 · 실패는 아래 종전 자리(`await micRequest`)가 그대로 처리한다.
+        const outputAfterMicFlag = readOutputAfterMicFlag(window.location.search);
+        const micOpened = outputAfterMicFlag ? (await micRequest.catch(() => null)) !== null : false;
+        let freshOutput: AudioContext | null = null;
+        if (outputAfterMicFlag && micOpened && !cancelled) {
+          try {
+            freshOutput = new AudioContext({ sampleRate: GEMINI_OUTPUT_SAMPLE_RATE });
+            await Promise.race([
+              freshOutput.resume().catch(() => {}),
+              new Promise<void>((resolve) => setTimeout(resolve, FRESH_OUTPUT_RESUME_TIMEOUT_MS)),
+            ]);
+          } catch (e) {
+            noteAudioError(e instanceof Error ? e.name : "unknown");
+            freshOutput = null;
+          }
+        }
+        const outputPath = pickCallOutputPath({
+          flagOn: outputAfterMicFlag,
+          micOpened,
+          freshRunning: freshOutput?.state === "running",
+          primedUsable: isUsableContext(primedOutput),
+        });
+        if (outputPath === "fallback-primed" || cancelled) {
+          void freshOutput?.close().catch(() => {});
+          freshOutput = null;
+        }
+        noteOutputPath(outputPath);
+        outputBorrowed = freshOutput === null && isUsableContext(primedOutput);
         inputBorrowed = isUsableContext(primedInput);
         outputContext =
-          outputBorrowed && primedOutput ? primedOutput : new AudioContext({ sampleRate: GEMINI_OUTPUT_SAMPLE_RATE });
+          freshOutput ??
+          (outputBorrowed && primedOutput ? primedOutput : new AudioContext({ sampleRate: GEMINI_OUTPUT_SAMPLE_RATE }));
         inputContext = inputBorrowed && primedInput ? primedInput : new AudioContext();
         registerCallAudio({
           output: outputContext,
@@ -1445,6 +1484,7 @@ export default function GeminiVoiceSession({
                 // §114 — 시나리오 · 세션마다 다른 원본 크기를 목표 말소리 RMS(기관 사칭 기준)로 맞춘 뒤 게인 노드로 보낸다.
                 const normalized = normalizeChunk(samples, loudness);
                 loudness = normalized.state;
+                noteNormalizerGain(loudness.gain); // §122(8) 진단 — 정규화 게인(`norm.gainDb`)
                 const buffer = outputContext.createBuffer(
                   1,
                   samples.length,

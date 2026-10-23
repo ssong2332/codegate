@@ -151,7 +151,8 @@ test("[T190/D-103 배선] 폴백 <audio>는 프로브로 판정하고, 잠기면
 function gainIdentityViolations(geminiSource: string): string[] {
   const c = geminiSource.split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n");
   const out: string[] = [];
-  if (!/outputContext =\s*outputBorrowed && primedOutput \? primedOutput : new AudioContext\(/.test(c)) {
+  // §122.2.2 — 마이크 뒤 새 출력 컨텍스트(`freshOutput`)가 앞에 온다. 그것이 없을 때 빌리기는 종전 그대로.
+  if (!/outputContext =\s*freshOutput \?\?\s*\(outputBorrowed && primedOutput \? primedOutput : new AudioContext\(/.test(c)) {
     out.push("출력 컨텍스트가 미리 만든 컨텍스트를 빌리지 않는다");
   }
   if (!c.includes("outputGain = outputContext.createGain();")) out.push("게인 노드가 출력 컨텍스트에서 만들어지지 않는다");
