@@ -120,7 +120,7 @@ test("[G636] 대기 없음 — 모든 문서를 그대로 보인다", () => {
 });
 
 test("[G636] 대화방 화면 배선 — 전송 즉시 입력 중을 띄우던 `sending &&` 분기와 입력칸 잠금이 없다", () => {
-  const code = readFileSync("src/app/session/messenger/page.tsx", "utf8")
+  const code = readFileSync("src/components/MessengerChatRoom.tsx", "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
   assert.ok(code.includes("viewReply("), "화면이 순서 판정 함수를 쓰지 않는다");

@@ -24,7 +24,7 @@ import {
 const read = (file: string) => readFileSync(file, "utf8");
 /** 주석 제외 코드 — 이 저장소는 "왜 하지 않는가"를 주석에 적는다(그 서술이 금지 낱말을 담는다). */
 const codeOnly = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-const MESSENGER = "src/app/session/messenger/page.tsx";
+const MESSENGER = "src/components/MessengerChatRoom.tsx";
 const PLAY = "src/app/session/play/page.tsx";
 
 // ── G444 ① 진리표 N-1~N-4(입력 8조합 전수) ─────────────────────────────────────────────────
@@ -77,7 +77,7 @@ function lastReturnText(source: string): string {
   const sf = ts.createSourceFile("m.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let component: ts.FunctionDeclaration | undefined;
   sf.forEachChild((n) => {
-    if (ts.isFunctionDeclaration(n) && n.name?.text === "MessengerSessionPage") component = n;
+    if (ts.isFunctionDeclaration(n) && n.name?.text === "MessengerChatRoom") component = n;
   });
   const last = component?.body?.statements.filter(ts.isReturnStatement).at(-1);
   assert.ok(last, "채팅 화면의 마지막 return을 찾지 못했다");
@@ -277,7 +277,8 @@ const PAGE_PREDICATE_STATE = "resolveSessionEscalation(";
 const PAGE_NOTICE_PROP = "includesCall={sessionEscalates}";
 // §94 — 종료 판정이 답장 공개 뒤로 미뤄져 `chatEnded`(= ended ∨ 공개된 종료 결과)를 쓴다. 술어(sessionEscalates)는 같다.
 // §95(UX D-138) — 카톡형은 "전화로 확인"이 프로필 시트의 "보이스톡"으로 옮겨 갔다. 두 자리(문자형 머리줄 버튼 · 시트)가 같은 값 하나를 쓴다.
-const PAGE_BUTTON_GUARD = "const canVoiceTalk = sessionEscalates && !chatEnded;";
+// §121.7(메인 결정 ⓑ) — 통화 위에 겹친 대화방(`inCall`)은 이미 통화 중이라 두 자리를 함께 숨긴다(같은 값 하나 — 술어는 그대로).
+const PAGE_BUTTON_GUARD = "const canVoiceTalk = sessionEscalates && !chatEnded && !inCall;";
 
 test("[T190-8a/G462 ①②] 시작 전 고지 변형 — 컴포넌트는 includesCall로만 고르고 페이지는 '전화로 확인' 버튼과 같은 세션 술어 값을 넘긴다", () => {
   assert.deepEqual(withCallComponentViolations(read("src/components/MessengerStartNotice.tsx")), []);
@@ -287,7 +288,7 @@ test("[T190-8a/G462 ①②] 시작 전 고지 변형 — 컴포넌트는 include
   // 리뷰 M3(§95) — 두 사용처(문자형 머리줄 버튼 · 카톡형 프로필 시트 "보이스톡")가 모두 그 값 하나를 쓴다.
   assert.ok(page.includes("{isSms && canVoiceTalk && ("), "문자형 '전화로 확인'이 canVoiceTalk로 게이팅돼야 한다");
   // 실기 신고 4(2026-10-21) — 시트 "보이스톡"은 모든 카톡형 세션에 보이고(대화 종료 전), **통화 전이**만 canVoiceTalk로 고른다.
-  assert.match(page, /voiceTalk=\{\s*chatEnded\s*\?\s*undefined\s*:\s*canVoiceTalk\s*\?/, "프로필 시트 '보이스톡'의 통화 전이가 canVoiceTalk로 게이팅돼야 한다");
+  assert.match(page, /voiceTalk=\{\s*chatEnded(?: \|\| inCall)?\s*\?\s*undefined\s*:\s*canVoiceTalk\s*\?/, "프로필 시트 '보이스톡'의 통화 전이가 canVoiceTalk로 게이팅돼야 한다");
   assert.ok(page.includes(PAGE_PREDICATE_STATE), "그 값은 세션 술어(resolveSessionEscalation)에서 와야 한다");
   // 시나리오 속성 직접 읽기가 고지 · 버튼 자리에 남지 않았다(택배 초급 · 중급에 '전화' 예고 0 — UX-022 v1.33 (7) 원칙).
   assert.equal(page.includes("Boolean(scenario.escalation)"), false);

@@ -912,7 +912,9 @@ test("[§106 ②③] 입력값을 읽는 곳은 열람본 분기 1곳 · 종전 
     componentCode.search(DONE_BRANCH_AT),
   );
   assert.ok(recordBranch.length > 0, "열람본 분기를 찾았다");
-  assert.ok(/recordSubjectRows\(\s*copy\.fields\.map\(\(field\) => field\.label\),\s*values,/.test(recordBranch));
+  // §122(10) — 열람본은 입력값을 표시 모양(생년월일 `900101-1●●●●●●`)으로 바꾼 `displayValues`를 받는다(읽는 곳은 여전히 이 분기뿐).
+  assert.ok(/recordSubjectRows\(\s*copy\.fields\.map\(\(field\) => field\.label\),\s*displayValues,/.test(recordBranch));
+  assert.ok(recordBranch.includes('identityDisplayValue(field.format, values[field.label] ?? "")'), "표시값 = 입력값의 표시 모양");
   assert.equal(/on(Credential|Landing|Install)\w*\??\.?\(/.test(recordBranch), false, "열람본 분기에서 콜백을 부른다");
   // §109 — 발급 정보는 제출 시각만으로 만든다(입력값 0 · 무작위 0).
   assert.ok(recordBranch.includes("recordIssueInfo(new Date(issuedAtMs))"), "발급 정보 = 제출 시각");

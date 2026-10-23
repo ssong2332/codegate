@@ -32,6 +32,10 @@ type DiagState = {
   ringClosedAtMs: number | null;
   /** 이 통화에서 받은 PCM 청크의 최대 절대 진폭(게인 적용 **전** · 0~1). 원본 레벨이 작은지 판정용(2026-10-20 음량 신고). */
   pcmPeakMax: number | null;
+  /** §122(8) — 라우드니스 정규화(§114)가 마지막 청크에 쓴 게인(선형). 시나리오 간 음량 차이가 앱 안에서 나는지 기기에서 가른다. */
+  normGain: number | null;
+  /** §122.2.2 — 이번 통화의 출력 컨텍스트 경로(`callAudio.ts` `CallOutputPath`). `after-mic`이면 볼륨 키('통화')가 소리를 조절할 것으로 본다(실기 확인 전). */
+  outputPath: string | null;
   // ⭐ §105(2026-10-22 실기 신고 "말해도 묵묵부답") — 사용자 말이 서버까지 갔는지 가린다(숫자만).
   /** 서버로 보낸 마이크 프레임 수. */
   micFramesSent: number;
@@ -63,6 +67,8 @@ const INITIAL: DiagState = {
   resumeRetries: 0,
   ringClosedAtMs: null,
   pcmPeakMax: null,
+  normGain: null,
+  outputPath: null,
   micFramesSent: 0,
   micFramesDroppedEcho: 0,
   micFramesDroppedMute: 0,
@@ -190,6 +196,16 @@ export function formatDbfs(amplitude: number | null): string {
   if (amplitude === null) return "-";
   if (!(amplitude > 0)) return "-inf";
   return (20 * Math.log10(amplitude)).toFixed(1);
+}
+
+/** §122.2.2 — 출력 컨텍스트 경로(`after-mic` · `before-mic` · `fallback-primed`). */
+export function noteOutputPath(path: string): void {
+  state = { ...state, outputPath: path };
+}
+
+/** §122(8) — 정규화가 이번 청크에 쓴 게인(선형 · `LoudnessState.gain`). */
+export function noteNormalizerGain(gain: number): void {
+  state = { ...state, normGain: gain };
 }
 
 export function noteChunkScheduled(nowMs: number): void {
@@ -320,11 +336,13 @@ export const AUDIO_DIAG_KEYS = [
   "out.state",
   "out.rate",
   "out.origin",
+  "out.path",
   "out.createdMs",
   "out.gain",
   "out.gainCtx",
   "route",
   "pcm.peakDb",
+  "norm.gainDb",
   "chunks.rx",
   "chunks.sched",
   "chunk.lastMs",
@@ -383,11 +401,13 @@ export function buildAudioDiagRows(input: {
     "out.state": show(s.output?.state),
     "out.rate": show(s.output?.sampleRate),
     "out.origin": show(s.outputOrigin),
+    "out.path": show(s.outputPath),
     "out.createdMs": rel(s.outputCreatedAtMs, s.acceptAtMs),
     "out.gain": s.gain === null ? "-" : s.gain.toFixed(2),
     "out.gainCtx": s.gainCtxSame === null ? "-" : s.gainCtxSame ? "same" : "diff",
     route: input.audioRoute,
     "pcm.peakDb": formatDbfs(s.pcmPeakMax),
+    "norm.gainDb": formatDbfs(s.normGain),
     "chunks.rx": String(s.chunksReceived),
     "chunks.sched": String(s.chunksScheduled),
     "chunk.lastMs": rel(s.lastChunkAtMs, s.acceptAtMs),

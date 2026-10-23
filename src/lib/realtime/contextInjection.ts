@@ -28,6 +28,8 @@
  * ⛔ 표에 없는 지시가 생기면 행을 추가할지 먼저 묻는다(§82.4.2 머리말). ⚠️ 위 두 행(`confirmResult` ·
  * `verifyReconnectFailed`)은 PR-A2 지시(오케스트레이터 2026-10-20)로 추가했다 — 설계 표(§82.4.2) 반영은 architect 몫으로 남는다.
  * `repeatBreak` 행은 §104(메인 세션 지시 — 전수 검수 2차 결함 수정)로 추가했다.
+ * | `chatDuringCall` | §121.7 — 통화 중 대화방 카톡 1쌍(참가자 · 사기범 답장) 메모(`chatDuringCall.ts`) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖** · 침묵 넛지 대상 아님 |
+ * `chatDuringCall` 행은 §121.7(메인 결정 "두 채널 맥락" — 통화 · 메신저 동시 사용 PR-3)으로 추가했다.
  */
 export type InstructionDelivery =
   | "smsAnnounce"
@@ -36,7 +38,8 @@ export type InstructionDelivery =
   | "smsNudge"
   | "confirmResult"
   | "verifyReconnectFailed"
-  | "repeatBreak";
+  | "repeatBreak"
+  | "chatDuringCall";
 
 /** G31 큐(`@/lib/verifyintercept` `PendingInstruction`) 항목 → 전달 방식. */
 export function deliveryForInstruction(item: {

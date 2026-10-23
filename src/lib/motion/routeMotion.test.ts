@@ -52,7 +52,7 @@ test("[D-134] motion.css는 끝난 뒤 transform을 남기지 않는다(fill-mod
 });
 
 test("[D-134] 훈련 화면 파일에는 사이트 진입 모션 클래스를 쓰지 않는다", () => {
-  for (const f of ["src/app/session/play/page.tsx", "src/app/session/chat/page.tsx", "src/app/session/messenger/page.tsx"]) {
+  for (const f of ["src/app/session/play/page.tsx", "src/app/session/chat/page.tsx", "src/components/MessengerChatRoom.tsx"]) {
     const src = readFileSync(f, "utf8");
     assert.doesNotMatch(src, /page-enter|motion-reveal|check-pop/, f);
   }

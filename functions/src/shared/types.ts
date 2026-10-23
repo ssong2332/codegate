@@ -113,6 +113,11 @@ export type ChannelTransitionEntry = {
   // 참고) — 없으면 T40으로 보이스→메신저 복귀 직후 다음 메시지에서 누적 turnCount가 이미 6 이상인
   // 채로 즉시 재-에스컬레이션되는 "핑퐁" 버그가 생긴다(한 번이라도 6턴을 넘긴 세션은 이후 영원히).
   turnCountAtTransition?: number;
+  /**
+   * §123 — 이 메신저→통화 전환에서 **참가자가 건** 통화(대화방 보이스톡 발신)면 `"participant"`. 부재 = 사기범이 건 통화(종전 ·
+   * 무백필). 판정은 `roleplay/callCaller.ts` `currentCallCaller` 하나.
+   */
+  caller?: "participant";
 };
 // UX-025(§13.6) 목소리 결정 경로 — createSession 요청의 voiceSelectionSource와 1:1.
 export type VoiceSelectionSource = "recorded" | "reused" | "fallback_male" | "fallback_female";

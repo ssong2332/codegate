@@ -103,7 +103,7 @@ test("[T194-a G580] 클라 소스의 메타 전이 필드 직접 읽기는 허�
   const outside = clientHits(files);
   const tainted = clientHits({
     ...files,
-    "src/app/session/messenger/page.tsx": `${files["src/app/session/messenger/page.tsx"]}\nconst x = Boolean(scenario.escalation);`,
+    "src/components/MessengerChatRoom.tsx": `${files["src/components/MessengerChatRoom.tsx"]}\nconst x = Boolean(scenario.escalation);`,
   });
   t.diagnostic(`[G580 클라] 허용목록 밖 직접 읽기 ${outside.length}건 / 옛 C-2 형태를 되살린 샘플 → ${tainted.length}건`);
   assert.deepEqual(outside, [], "화면은 resolveScenarioEscalation · resolveSessionEscalation만 쓴다(G580)");
@@ -120,7 +120,7 @@ test("[T194-a G580] 화면 판정 지점 — C-1 난이도 화면 · C-4 목소�
     /!resolveScenarioEscalation\(scenario, getSelectedDifficultyLevel\(\)\)\) return "no-scenario"/,
   );
   assert.match(
-    read("src/app/session/messenger/page.tsx"),
+    read("src/components/MessengerChatRoom.tsx"),
     /resolveSessionEscalation\(\s*\{ scenarioId: scenarioId as string, difficultyLevel: data\.difficultyLevel, challengeId: data\.challengeId \},\s*scenarios,\s*\) !== undefined/,
   );
 });

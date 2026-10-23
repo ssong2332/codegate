@@ -171,7 +171,8 @@ function pageOwnershipViolations(code: string): string[] {
 /** 세션 쪽 빌려 쓰기 위반 — 살아 있으면 쓴다 · 빌린 것은 닫지 않는다 · 자기 것은 닫는다. */
 function sessionBorrowViolations(code: string): string[] {
   const out: string[] = [];
-  if (!code.includes("outputBorrowed = isUsableContext(primedOutput);")) out.push("출력 컨텍스트 빌림 판정이 없다");
+  // §122.2.2 — 마이크 뒤 새 출력 컨텍스트(`freshOutput`)를 쓰면 빌리지 않는다. 그 밖은 종전 판정 그대로.
+  if (!code.includes("outputBorrowed = freshOutput === null && isUsableContext(primedOutput);")) out.push("출력 컨텍스트 빌림 판정이 없다");
   if (!code.includes("outputBorrowed && primedOutput ? primedOutput : new AudioContext({ sampleRate: GEMINI_OUTPUT_SAMPLE_RATE })")) {
     out.push("넘겨받은 출력 컨텍스트를 쓰지 않는다");
   }
@@ -421,4 +422,34 @@ test("[M2/m2 역검증] audioprime 분기를 지운 사본 · 재진입 가드�
   t.diagnostic(`[M2/m2] 정상 0 / 플래그 삭제 ${JSON.stringify(noFlag)} / 가드 삭제 ${JSON.stringify(noGuard)}`);
   assert.deepEqual(noFlag, ["재진입 가드·audioprime 플래그 분기가 생성 앞에 없다"]);
   assert.deepEqual(noGuard, ["재진입 가드·audioprime 플래그 분기가 생성 앞에 없다"]);
+});
+
+// ── §122.2.2 — 볼륨 키가 먹게: 마이크가 열린 뒤 출력 컨텍스트를 새로 만든다(Chromium은 출력 스트림 용도를 만들 때 정한다) ─────────────
+import { FRESH_OUTPUT_RESUME_TIMEOUT_MS, pickCallOutputPath, readOutputAfterMicFlag } from "./callAudio.ts";
+
+test("[§122.2.2] pickCallOutputPath — 표 O1~O4", () => {
+  const base = { flagOn: true, micOpened: true, freshRunning: true, primedUsable: true };
+  assert.equal(pickCallOutputPath(base), "after-mic", "O2");
+  assert.equal(pickCallOutputPath({ ...base, flagOn: false }), "before-mic", "O1 플래그");
+  assert.equal(pickCallOutputPath({ ...base, micOpened: false }), "before-mic", "O1 마이크 실패");
+  assert.equal(pickCallOutputPath({ ...base, freshRunning: false }), "fallback-primed", "O3 소리 우선");
+  assert.equal(pickCallOutputPath({ ...base, freshRunning: false, primedUsable: false }), "after-mic", "O4");
+  assert.equal(FRESH_OUTPUT_RESUME_TIMEOUT_MS, 500);
+});
+
+test("[§122.2.2] readOutputAfterMicFlag — 기본 켬 · outaftermic=0만 끈다", () => {
+  assert.equal(readOutputAfterMicFlag(""), true);
+  assert.equal(readOutputAfterMicFlag("?audiodebug=1"), true);
+  assert.equal(readOutputAfterMicFlag("?outaftermic=0&audiodebug=1"), false);
+});
+
+test("[§122.2.2 배선] 세션이 마이크를 기다린 뒤 새 출력 컨텍스트를 만들고 경로를 진단에 남긴다", () => {
+  const src = readLf("src/lib/realtime/GeminiVoiceSession.tsx");
+  const micWait = src.indexOf("(await micRequest.catch(() => null)) !== null");
+  const fresh = src.indexOf("freshOutput = new AudioContext({ sampleRate: GEMINI_OUTPUT_SAMPLE_RATE });");
+  const pick = src.indexOf("const outputPath = pickCallOutputPath({");
+  const use = src.indexOf("freshOutput ??");
+  assert.ok(micWait > 0 && fresh > micWait && pick > fresh && use > pick, `${micWait} < ${fresh} < ${pick} < ${use}`);
+  assert.ok(src.includes("noteOutputPath(outputPath);"), "진단 out.path");
+  assert.ok(src.includes('if (outputPath === "fallback-primed" || cancelled) {'), "쓰지 않는 새 컨텍스트는 닫는다");
 });

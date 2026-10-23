@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { chatBoxStyle, isNearBottom, parseSnapshot, snapshotOf, STICK_TO_BOTTOM_PX } from "./keyboardViewport.ts";
 
-const PAGE = "src/app/session/messenger/page.tsx";
+const PAGE = "src/components/MessengerChatRoom.tsx";
 const codeOnly = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
 
 test("[G639] 보이는 영역 스냅샷 — 키보드가 열려 visualViewport가 줄면 상자도 그 높이 · 위치를 따른다", () => {

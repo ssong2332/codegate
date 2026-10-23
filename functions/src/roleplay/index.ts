@@ -70,6 +70,9 @@ import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { PHOTO_TURN_TEXT, photoTurnInstruction } from "./photoTurn";
+import { replyChatDuringCall } from "./chatDuringCall";
+import { currentCallCaller, PARTICIPANT_CALLED_INSTRUCTION } from "./callCaller";
+import { isGoalBeforePhotoFollowUp, sessionVariantStageSummaries } from "./photoFollowUp";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { asksIdentityCheck } from "./personaAuthority";
 import { extractSmsMarker } from "./smsMarker";
@@ -78,7 +81,7 @@ import { evaluateOtpCheck, otpCheckInputsFromHistory } from "./otpCheck";
 import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { decideRepeatBreak, repeatBreakInstruction } from "./repeatBreak";
-import { judgeEndCallSignal, judgeEscalationSignal } from "./signalConsistency";
+import { judgeEndCallSignal, judgeEscalationSignalAt } from "./signalConsistency";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
@@ -157,6 +160,10 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         "internal",
         `세션의 scenarioId에 해당하는 scenarioPrompts가 없습니다: ${session.scenarioId}`,
       );
+    }
+    // §121.7 PR-3 — 통화 중 대화방 카톡(메인 결정 ⓑⓒ). 문자 · 끊기 · 전환 판정을 타지 않는 별도 경로(`chatDuringCall.ts` 판정표).
+    if (request.data?.duringCall === true) {
+      return replyChatDuringCall({ db, sessionRef, sessionId, session, scenarioPrompt, userText, isPhotoTurn });
     }
 
     // ① PII 마스킹(guardrails, T11 실구현 — 전화/계좌/주민번호형/이메일 정규식 토큰화, guardrails/
@@ -540,8 +547,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       [promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction].filter(Boolean).join("\n") ||
       undefined;
     // §120 — 사진 턴이면 캐릭터 유지형 반응 지시 1줄을 맨 뒤에 붙인다(`photoTurn.ts` 표 · 그 밖 턴 = 없음 · 문면 바이트 동일).
+    // §123 — 참가자가 건 통화(보이스톡 발신)면 "네가 전화한 게 아니다" 1줄(`callCaller.ts` · 사기범이 건 통화 = 없음).
+    const participantCalledInstruction =
+      escalatedCall && currentCallCaller(session.channelHistory) === "participant" ? PARTICIPANT_CALLED_INSTRUCTION : undefined;
     const turnInstructionWithPhoto =
-      [turnInstructionWithSms, photoTurnInstruction(isPhotoTurn)].filter(Boolean).join("\n") || undefined;
+      [turnInstructionWithSms, photoTurnInstruction(isPhotoTurn), participantCalledInstruction].filter(Boolean).join("\n") ||
+      undefined;
 
     // 첫 사용자 턴만 LLM 시간 제한 20초(2026-10-18, 사용자 결정 C — llm/index.ts LLM_FIRST_TURN_TIMEOUT_MS).
     // AC-004 목표(95% ≤10초)의 예외 1건 — 첫 턴은 Gemini 지연이 반복돼 10초에서 Mock으로 강등됐고,
@@ -666,9 +677,22 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     } = extractEscalationSignal(smsMarkerFreeText);
     // ③-b′ §104(전수 검수 2차 M1 · M2) — 신호가 같은 응답의 대사와 어긋나면 받아들이지 않는다(`signalConsistency.ts` 판정표 A · B).
     // 통화가 안 된다고 말한 턴의 전화 전환 · 새 송금을 요구한 턴의 목표 끊기. 신호는 위에서 이미 텍스트에서 지워졌다.
-    const escalationCheck = rawSignalEscalate ? judgeEscalationSignal(signalFreeReplyText) : undefined;
+    // §122(7) 판정표 A0 — 전환 하한(메신저 진입 뒤 첫 답장의 전환 신호는 대사와 무관하게 받지 않는다).
+    const escalationCheck = rawSignalEscalate
+      ? judgeEscalationSignalAt(turnsSinceMessengerEntry(turnCount, session.channelHistory), signalFreeReplyText)
+      : undefined;
     const signalEscalate = rawSignalEscalate && escalationCheck?.accept === true;
-    const endCallCheck = judgeEndCallSignal(rawEndCallSignal, signalFreeReplyText);
+    const endCallConsistency = judgeEndCallSignal(rawEndCallSignal, signalFreeReplyText);
+    // §122(6) 판정표 P — 메신저 단계에서 사진 뒤 남은 단계(송금 등)를 꺼내기 전의 목표 끊기는 받지 않는다(`photoFollowUp.ts`).
+    const endCallCheck = isGoalBeforePhotoFollowUp({
+      channel: session.channel,
+      endCall: endCallConsistency.endCall,
+      stageSummaries: sessionVariantStageSummaries(session.scenarioId, session.flowVariantId),
+      history: storedHistory,
+      isPhotoTurn,
+    })
+      ? { endCall: undefined, dropped: "photo_followup_pending" as const }
+      : endCallConsistency;
     const endCallSignal = endCallCheck.endCall;
     if ((escalationCheck && !escalationCheck.accept) || endCallCheck.dropped) {
       // G170 — 사유 코드만(대사 0).

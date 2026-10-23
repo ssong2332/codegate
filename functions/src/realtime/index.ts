@@ -23,6 +23,7 @@ import { resolveHangupRelay } from "../scammerHangup/relayContext";
 import { resolveSessionSpeakerGender } from "./scenarioVoice";
 import { REALTIME_SETUP_LOG_MESSAGE, startSetupTiming, takeColdStartFlag } from "./setupTiming";
 import { buildPriorChatContext, priorChatActions, type PriorChatMessage } from "./priorChatContext";
+import { currentCallCaller } from "../roleplay/callCaller";
 import { isEscalatedVoiceCall } from "../roleplay/escalatedCall";
 import { sessionFamilyAddress } from "../scenarios/familyAddress";
 
@@ -158,6 +159,8 @@ export const createRealtimeCall = onCall<
       priorChatContext = buildPriorChatContext(
         messagesSnap.docs.map((d) => d.data() as PriorChatMessage),
         priorChatActions(mockSnap.docs.map((d) => d.data())),
+        // §123 — 누가 건 통화인가(대화방 보이스톡 발신 = 참가자).
+        currentCallCaller(session.channelHistory),
       );
     } catch {
       priorChatContext = undefined;

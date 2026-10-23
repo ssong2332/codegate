@@ -18,6 +18,11 @@ export type SendMessageRequest = {
    * 참이면 `userText`는 무시되고 서버가 `PHOTO_TURN_TEXT`로 턴을 남긴다(`MessageDoc.photo`).
    */
   photo?: boolean;
+  /**
+   * §121.7 PR-3 — 통화 중(메신저에서 넘어온 통화) 대화방에서 보낸 카톡이다. 참이면 `roleplay/chatDuringCall.ts` 경로 — 저장 채널
+   * `messenger` · 문자 · 끊기 · 전환 판정 0 · 음성 합성 0.
+   */
+  duringCall?: boolean;
 };
 export type SendMessageResponse = {
   reply: ScammerMessage;

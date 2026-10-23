@@ -82,7 +82,7 @@ test("[D-140/G-TOC7] 훈련 화면(통화 · 채팅 · 메신저 · 문자 · �
   const training = [
     "src/app/session/play/page.tsx",
     "src/app/session/chat/page.tsx",
-    "src/app/session/messenger/page.tsx",
+    "src/components/MessengerChatRoom.tsx",
     "src/components/InCallSmsOverlay.tsx",
     "src/components/VerifyCallOverlay.tsx",
     "src/components/MessengerFakeLanding.tsx",
