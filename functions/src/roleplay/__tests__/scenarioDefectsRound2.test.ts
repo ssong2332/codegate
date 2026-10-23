@@ -199,7 +199,11 @@ test("[§104 결함7] 실존 지역 · 부서 결합 기관명 0 — 전 시나�
     }
   }
   const persona = SCENARIO_PROMPTS["institutional-impersonation"]!.personaPrompt;
-  assert.ok(persona.includes('기관 이름을 말할 때는 "OO지방검찰청"·"금융감독원 OO팀"처럼 앞에 OO를 붙인 이름으로만 말한다.'));
+  // §118(DECISIONS #233) — 가림 "OO지방검찰청"·"금융감독원 OO팀" → 가상 고유명(검찰은 열람본과 같은 이름 · 금융감독원은 가상 팀 · 조사관).
+  assert.ok(persona.includes('"한빛지방검찰청 금융범죄조사부 정하람 수사관"'));
+  assert.ok(persona.includes('"금융감독원 계좌안전점검팀 권도하 조사관"'));
+  assert.equal(persona.includes('"OO지방검찰청"'), false);
+  assert.equal(persona.includes("금융감독원 OO팀"), false);
 });
 
 // ── 결함 2(F11) · 6(F7) — Live 전용 공통 항목 ───────────────────────────────────────────────────────

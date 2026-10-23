@@ -23359,6 +23359,112 @@ B안(문자 하한 3 · 6) 유지 판단: 4세션에서 효과는 관측되지 �
 ### 115.7 검증 · 배포
 검증 결과는 PR 본문. 배포 순서 **Functions → Hosting** 권고(어느 쪽이 먼저여도 안전: 옛 화면은 `goal_pending`을 모르는 값으로 보고 계속 묻기만 하고 `wrapUpInstruction`은 무시 · 새 화면 + 옛 서버는 마무리 지시가 오지 않을 뿐).
 
+## 120. (Bug fix — 2026-10-23 · 브랜치 `claude/photo-turn-training-meta` = main `239a417` + 변경 · 사용자 실기 신고 원문 *"사진 보내니까 바로 훈련 종료하는데, 이렇게 진행하는 게 맞아?"* · 크롬 · 자녀 사칭 카톡) **사진 턴에 사기범이 훈련 메타 고지를 말하던 결함 — 사진 턴 지시 · 쓸 수 없는 응답 `training-meta` 행** — implementer 기록 (DECISIONS #235)
+
+### 120.1 관측(운영 로그 · 세션 `49216ffa`)
+| 시각(UTC) | 사실 | 근거 |
+|---|---|---|
+| 03:10:09 | 사진 턴 — 끊기 사전 판정 행 9 · `signal` · Claude 1차(`claude-primary`)가 답함(출력 308토큰 · 문장 5 → 3) | `firebase functions:log` |
+| 03:10:13 | 화면에 *"[훈련 시뮬레이션 — 실제 신분증 사진은 받지 않습니다. 이 훈련은 여기서 종료됩니다.] 이 장면은 … 연습을 위해 마무리합니다."* | 사용자 스크린샷 |
+| 03:10:29 | 사용자 턴 1회 더 · 서버 종료 0 | 같은 로그 |
+| 03:10:41 | `endSession`(사용자 종료 버튼) → 리포트 생성 | 같은 로그 |
+⇒ **서버가 훈련을 끝낸 것은 아니다.** 사기범 대사가 "훈련은 종료됩니다"라고 말해 사용자가 종료를 눌렀다. 메타 문구가 종료를 일으키는 서버 경로는 없다(끊기 신호는 `[[SIGNAL:…]]` 마커로만 받는다 — `escalationSignal.ts`).
+
+### 120.2 원인(추정 — 확인 방법: 실 키로 같은 사진 턴 재현)
+사진 턴의 사용자 입력은 사실 문장 `(사진 1장을 보냈다)`뿐이고 반응 지시가 없었다(§113.2). 직전 대사가 신분증 사진 요구라, 모델이 "실제 신분증을 받는 상황"으로 읽고 안전 고지로 캐릭터를 벗어난 것으로 본다. `replyUsability`(§102)는 영어 거절 · "AI로서" 문형만 봐서 한국어 훈련 고지를 통과시켰다.
+
+### 120.3 수정
+| 층 | 변경 | 파일 |
+|---|---|---|
+| 지시 | 사진 턴에만 `PHOTO_TURN_INSTRUCTION` 1줄 — 받은 척 짧게 반응 → 요구 목적대로 다음 수법 · 사진 내용 지어내기 금지 · 훈련/시뮬레이션/대괄호 고지/스스로 마무리 금지. 그 밖 턴 문면 바이트 동일 | `roleplay/photoTurn.ts` · `roleplay/index.ts` |
+| 판정 | 행 3-b `training-meta` — `[훈련…` · "훈련/예방 시뮬레이션" · "이 훈련은" · "훈련 … 여기서 종료" · "연습을 위해" · "알아차리는 연습" · "이 장면은" · 역할극/롤플레이 · "훈련 참가자". 걸리면 기존 경로(Claude → Gemini 2차 → Groq → Mock, #373) | `llm/replyUsability.ts` |
+| 오탐 | 단독 "시뮬레이션"(대출 한도 시뮬레이션) · "예비군 훈련" · "훈련 끝나면" · `[OO은행]` · `[Web발신]` 머리말은 통과 | `llm/__tests__/trainingMetaReply.test.ts` |
+- 사진 턴 = 속은 순간(§113 H3)은 무변경. 이미지는 여전히 서버에 오지 않는다(§113 결정 유지).
+- 훈련 종료는 기존 끊기 판정표(#376 · §79)만 따른다 — 이번 변경은 종료 경로를 건드리지 않는다.
+
+### 120.4 남은 것
+- ⚠️ 실 키 재현 미실행(과금 — 메인 승인 필요). 지시가 효과가 있는지는 배포 뒤 실기 또는 승인된 1~2세션으로 확인한다. 지시가 안 먹어도 판정 행이 화면 노출을 막는다(대체 대사로 넘어감).
+- 배포: Functions만(`sendMessage`). 화면 변경 0.
+## 116. (Bug fix — 2026-10-23 · 브랜치 `claude/gallant-kalam-14d92b` = main `239a417` + 변경 · PR #386 확인 프로브 관측) **실시간 통화 사기범 발화에 섞인 모델의 영어 사고 문장 차단** — implementer 기록 (DECISIONS #231)
+
+### 116.1 관측
+- PR #386 확인 ② 세션(`scripts/full-audit-probe.mjs` · gemini-3.8-live · `fv-c5fj` · 이 브랜치 프로브 6세션 중 1)의 사기범 3턴 출력 전사가 `thought\nThe user asked, "Oh, is that so? What should I do?" which means …(약 100단어)… asset size.협조해 주시면 약식으로 …` 였다. 영어 사고 문단 바로 뒤에 한국어 대사가 이어진다.
+- 원본: 그 세션 스크래치 `probe115/wrap/voice-institutional-impersonation-advanced-comply-2026-10-23T02-25-13-347Z.json` `turns[6]`. 프로브는 `outputTranscription.text`만 모은다(`full-audit-probe.mjs:238`). 모델 턴 파트는 기록하지 않았다.
+
+### 116.2 원인 판정
+| 가능성 | 판정 | 근거 |
+|---|---|---|
+| Live 설정의 사고 옵션이 켜져 있다 | ⛔ 해당 없음 · 끌 수도 없음 | 토큰(`geminiProvider.ts:205-`) · 프로브 둘 다 `thinkingConfig` 없음. 3.8 Live는 `thinkingLevel` · `thinkingConfig` 미지원 — 공식 모델 문서 *"Omit `thinking_level` (or `thinking_config`) from your session setup"*, capabilities 표 *"Supported (interleaved reasoning). `thinkingLevel` is not supported (omit from setup)."* (ai.google.dev/gemini-api/docs/models/gemini-3.8-live · /live-api/capabilities, 2026-10-23 확인) |
+| 클라가 `thought` 파트를 전사·재생한다 | ⛔ 전사는 아님 · 재생은 구멍 있었음 | 화면 · 프로브 모두 전사는 `outputTranscription`만 읽는다(파트 텍스트 0). 다만 재생은 SDK `message.data`를 썼고, 이 게터는 `thought`를 보지 않고 모든 `inlineData`를 잇는다(@google/genai 2.13.0 `dist/index.cjs` `LiveServerMessage.data`) |
+| 출력 전사에 사고가 섞인다 | ⭐ **확정(관측)** | 영어 문단이 `outputTranscription` 안에 있었다. 줄바꿈 · 따옴표 · `(step 2 & 3)` 같은 글 형식이 그대로라, 소리를 받아 적은 모양이 아니라 모델의 글 토큰이 전사 경로로 나온 모양이다 |
+| 모델이 사고를 소리로 읽었다 | ⚠️ **미확정(추정 — 가능성 있음)** | 문서상 출력 전사는 *"transcriptions of … the audio output"* 이다. 이 정의대로면 소리로도 나갔다. 프로브가 턴별 오디오 길이를 남기지 않아 확인하지 못했다. 확인 방법: 턴별 `inlineData` 바이트 수(초)를 함께 기록하는 프로브. 한국어 부분 약 80자는 10초 안팎이므로 40초 안팎이면 소리로 나간 것이다 |
+
+### 116.3 막는 장치
+| 층 | 위치 | 동작 |
+|---|---|---|
+| ① 사고 파트 재생 제외 | `src/lib/realtime/thoughtLeak.ts` `pickLiveAudioData` → `GeminiVoiceSession.tsx` | `modelTurn.parts`에서 `thought: true`를 빼고 `inlineData`만 잇는다(SDK `data` 게터 대신 · 잇는 방식은 같다) |
+| ② 재생 게이트 | 같은 파일 `stepThoughtLeakGate`(G1~G5) | 출력 전사가 `thought` 표지로 시작하거나 한글 없는 영어가 8단어에 이르면 예약 재생을 끊고(`stopAllPlayback`), 한국어 조각이 올 때까지 오디오를 예약하지 않는다. 턴 경계에서 초기화한다. `hasAudio`(턴 진행 판정)는 그대로 둔다. 발동 시 `console.info("[gemini-thought-leak]", {suppressed:true})` 1줄을 남긴다(본문 0) |
+| ③ 전사 필터 | `stripLeakedThought`(행 1~4) · 화면 flush 2곳 + 침묵 넛지 · 되풀이 판정 입력 | 사기범 턴 글에서 사고 문장을 지운다. 참가자 발화는 원문 그대로 둔다 |
+| ④ 저장 전 필터 | `functions/src/realtime/submitTranscript.ts` | 사기범 줄을 마스킹 전에 거른다. 옛 화면이 걸러내지 않고 보내도 막는다 |
+| ⑤ 이미 저장된 전사 | 리포트 판정 입력 `generateReportCore.ts` · 되감기 `rewind/scammerLine.ts` · 되짚어보기 `report/replay/page.tsx` · 되감기 화면 `report/rewind/page.tsx` | 읽을 때 거른다. 저장 문서는 고치지 않는다(운영 Firestore 쓰기 0). 리포트 문서는 사기범 원문을 복사해 두지 않으므로(판정 결과만 저장) 이미 만든 리포트에는 남은 사고 문장이 없다 |
+
+판정표 정본(`functions/src/realtime/thoughtLeak.ts` 머리 · 화면 사본과 글자까지 같음 — 루트 테스트가 대조):
+| 행 | 조건 | 처리 |
+|---|---|---|
+| 1 | 앞머리 `thought` 표지(대소문자 무관 · 앞 공백 · `*` 허용) | 표지 ~ 첫 한글 직전까지 지운다 |
+| 2 | 한글 없는 구간의 라틴 단어 ≥ 8(판단값) | 그 구간을 지운다(앞 문장부호는 남김) |
+| 3 | 그 밖(OTP · ATM · SMS · 숫자) | 원문 그대로(바이트 동일) |
+| 4 | 지운 뒤 남은 글 없음 | 빈 문자열 |
+
+### 116.4 대가 · 남은 한계
+- 사고 끄기: 3.8 Live에서는 불가(116.2 1행). 그래서 지연 · 품질 영향은 없다. 프롬프트로 "생각을 말하지 마라"를 넣는 안은 이번에 넣지 않았다. 효과를 실 키로 확인해야 하는 행동 변경이라 따로 승인받을 일이다.
+- 게이트는 전사 조각이 오디오보다 늦게 오면 그 앞의 소리를 되돌리지 못한다. 풀린 직후 한국어 첫 조각 오디오가 막힌 구간에 걸리면 앞머리가 잘릴 수 있다.
+- 행 1은 사고 문단 안의 한글 인용(예: `"네"`)부터 남긴다. 그 뒤의 영어는 행 2가 지운다(테스트로 고정).
+- 한 턴 전체가 사고뿐이면 전사는 비지만, 부모의 턴 경계 콜백(`onScammerTurnComplete`)은 원래 전사 기준으로 한 번 더 불린다.
+- 저장 문서에는 영어가 남는다. 새 읽기 경로를 추가할 때는 `stripLeakedThought` / `cleanStoredLine`을 거쳐야 한다.
+
+### 116.5 검증
+- `npm test` **1056/0**(기준 main `239a417` 1048 + 신규 `thoughtLeak.test.ts` 8) → `npm --prefix functions test` **1747/0**(기준 1739 + 신규 `thoughtLeak.test.ts` 8) · 차례로 실행
+- lint 2종 오류 0(루트 경고 1건은 변경 밖 `scripts/live-turn-probe.mjs`)
+- `npm run build`: `Finished TypeScript` 통과 뒤 `.env` 없음으로 `auth/invalid-api-key`(알려진 동작)
+- 실 키 확인 · 실기 확인은 하지 않았다
+
+## 118. (Feature change — 2026-10-23 · 브랜치 `claude/fictional-institution-names-95ffe6` · 사용자 요청 원문 *"기관 사칭에서 OO지방검찰청 수사관이라고 밝히는데, 이것도 OO 말고 다른 명칭을 사용하도록 진행하자"*) **사기범 대사·프롬프트의 "OO" 가림 명칭 → 가상 고유명**
+
+### 118.0 금지
+- 실존 기관 · 인물과 겹치는 이름 0. 가상 이름은 정확 일치 닫힌 열거(`scenarios/fictionalNames.ts`)이고, 무해성 정규식 4곳은 바꾸지 않는다(#381과 같은 방식).
+- 은퇴 변형(fv-p4hz · fv-c8wq 등 `retired`)의 바이트는 바꾸지 않는다(옛 세션 · 리포트 해석용).
+- 정책 변경 0: "금융감독원" 등 실존 기관명은 **사칭 대상으로 페르소나에 쓰는 것이 콘텐츠**다(`harmlessnessPatterns.ts` REAL_WORLD_INSTITUTION_NAMES 주석 — 적용 대상은 모의 창구 · 모의 번호 · 모의 화면 문구뿐). 그래서 금융감독원 계열은 기관명은 그대로 두고 **팀 · 인물만** 가상으로 바꿨다.
+
+### 118.1 전수 grep 결과 (`OO`·`OOO` 단독 표기, 소스 전수)
+| 시나리오/위치 | 변경 전 | 변경 후 | 비고 |
+|---|---|---|---|
+| 기관 사칭 `institutionalImpersonation.prompt.ts` [캐릭터] | "OO지방검찰청"·"금융감독원 OO팀" | 검찰: "한빛지방검찰청 금융범죄조사부 정하람 수사관"(검사 "윤서진") · 금감원: "금융감독원 계좌안전점검팀 권도하 조사관" | 변경 |
+| 검찰 협조 `prosecutionCooperationCall.prompt.ts` 기본 페르소나(초급 · 중급) | "OO지방검찰청"·"OO수사본부" | 열람본 · fv-h3vn과 같은 "한빛지방검찰청 금융범죄조사부 정하람 수사관"(검사 "윤서진") | 변경 |
+| 자산 보호 `assetProtectionNoticeCall.prompt.ts` | "OO자산보호센터" | "새빛자산보호센터 권도하 담당관" | 변경 |
+| 검찰 은퇴 변형(`PROSECUTION_CASE_LINK_PERSONA` 계열 fv-p4hz · fv-c8wq) | "OO지방검찰청"·"OO수사본부" · "OO거래소" | 그대로 | **은퇴 — 무변경**(코드로 옛 줄을 되돌려 바이트 유지 · `fictionalNames.test.ts` N2) |
+| "OO거래소" (`prosecutionCooperationCall.prompt.ts` 88·89·101 · `flowVariants.ts` 254) | "OO거래소" | 그대로 | 전부 은퇴 변형 안 — 현행 fv-h3vn은 거래소 이름을 부르지 않는다 |
+| "OO은행"·"OO카드"·"OO캐피탈" (promptAssembly · 가드레일 · 문자 카탈로그 · 시나리오 수법) | 자리표시자 | 그대로 | §81 · §83이 세션마다 가상 은행 · 카드사 이름으로 치환(대사 · 문자 일치) — 이미 해결된 영역 |
+| 모의 화면 · 사건 기록 열람본 | — | 그대로 | §109에서 가상 고유명 적용 완료 |
+| 메신저 지인 `messengerFriendLoanKakao.prompt.ts:22` "OOO·000" | 빈칸 표기를 쓰지 말라는 **금지 문장** | 그대로 | 가림 표기 자체가 아님 |
+| `src/app/challenge/create/page.tsx:407` "OOO님이 준비한" | 입력 안내 예시 | 그대로 | 사기범 대사 아님(화면 안내 문구) — 필요하면 별건 |
+| `src/components/SpoofImage.tsx:74` "OO뱅크 (가상 은행 · 실제 존재하지 않음)" | 교육용 위장 이미지 설명 | 그대로 | 사기범 대사 아님 · "가상"을 명시한 교육 화면 — 필요하면 별건 |
+
+### 118.2 실존 여부 확인 (WebSearch · 2026-10-23 · 큰따옴표 정확 구문)
+| 이름 | 검색 | 결과 | 판정 |
+|---|---|---|---|
+| "새빛자산보호센터" | 정확 구문 | 해당 기관 0건(무관한 외국 사례 · 구인 공고만) | 사용 |
+| "다온거래소" (검토만 — 현행 변형은 거래소명을 부르지 않아 미사용) | 정확 구문 | 0건 | 미사용 |
+| 금융감독원 "계좌안전점검팀" | 정확 구문 | 0건. 금감원 실제 조직(민생침해대응총괄국 · 금융사기대응단 · 민생금융범죄정보분석팀 등)과 다름 | 사용 |
+| "권도하 조사관" (금융감독원 결합) | 정확 구문 | 0건 | 사용 |
+| "한서윤 조사관" | 동명이인 변호사 프로필 1건 | — | 미사용 |
+검색은 포털 전수가 아니라 상위 결과 확인이다 — 한계는 §109.2와 같다(추정). 재확인: 같은 정확 구문 검색. 금감원 공식 조직도 대조는 하지 않았다(추정 — 필요하면 금감원 조직도 PDF와 직접 대조).
+
+### 118.3 허용 목록
+검사 정규식은 "금융감독원"(허용)·"검찰청" 등만 걸고 새 이름("새빛자산보호센터" · "계좌안전점검팀" · "권도하")에는 걸리는 글자가 없어 `FICTIONAL_INSTITUTION_NAMES`는 늘리지 않았다 — 닫힌 열거 유지. `fictionalNames.test.ts` N5가 이를 못 박고 역검증(다른 지역명 + 지방검찰청은 걸린다)한다. 새 파일은 `harmlessnessGate.test.ts` 모듈 등록부에 사유와 함께 등재했다.
+
+### 118.4 검증 · 배포
+검증 결과는 PR 본문. ElevenLabs 에이전트 프롬프트(세션마다 바뀌지 않는 정적 프롬프트)와 Firestore `scenarioPrompts` seed가 있으면 재생성 · 재시드가 필요할 수 있다(미확인 — 배포 전 확인). 배포 순서 Functions → Hosting.
 ## 121. (Feature change — 2026-10-23 · 브랜치 `claude/voicetalk-dial` = main `239a417` + 변경 · 사용자 실기 신고 원문 *"보이스톡 페이지를 새롭게 만들어서 사용자가 보이스톡을 하고자 하는 경우는 통화를 걸고, 상대방이 받는 형태로"* · 메인 결정 ⓐⓑⓒ) **메신저↔통화 — (1) 사용자가 거는 보이스톡 = 발신 화면 구현 · (2) 통화·메신저 동시 사용 설계** — implementer 기록 (DECISIONS #236 · UX D-154)
 
 ⛔ 금지: 처음부터 통화인 시나리오 동작 변경 0 · 사기범이 거는 통화(수신 화면) 변경 0 · 끊기 · 복귀 판정(§112) 의미 변경 0.

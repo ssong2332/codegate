@@ -69,7 +69,7 @@ import { extractLinkMarker } from "./linkMarker";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
-import { PHOTO_TURN_TEXT } from "./photoTurn";
+import { PHOTO_TURN_TEXT, photoTurnInstruction } from "./photoTurn";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { asksIdentityCheck } from "./personaAuthority";
 import { extractSmsMarker } from "./smsMarker";
@@ -539,6 +539,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const turnInstructionWithSms =
       [promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction].filter(Boolean).join("\n") ||
       undefined;
+    // §120 — 사진 턴이면 캐릭터 유지형 반응 지시 1줄을 맨 뒤에 붙인다(`photoTurn.ts` 표 · 그 밖 턴 = 없음 · 문면 바이트 동일).
+    const turnInstructionWithPhoto =
+      [turnInstructionWithSms, photoTurnInstruction(isPhotoTurn)].filter(Boolean).join("\n") || undefined;
 
     // 첫 사용자 턴만 LLM 시간 제한 20초(2026-10-18, 사용자 결정 C — llm/index.ts LLM_FIRST_TURN_TIMEOUT_MS).
     // AC-004 목표(95% ≤10초)의 예외 1건 — 첫 턴은 Gemini 지연이 반복돼 10초에서 Mock으로 강등됐고,
@@ -567,7 +570,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         identityCheckAllowed: asksIdentityCheck(session.scenarioId),
         // T194-a(§84.4.3) — 세션 단위 해석(표 값이 있으면 그대로 · parcel 고급만 변형 leg 성별).
         speakerGender: resolveSessionSpeakerGender(session),
-        ...(turnInstructionWithSms ? { turnInstruction: turnInstructionWithSms } : {}),
+        ...(turnInstructionWithPhoto ? { turnInstruction: turnInstructionWithPhoto } : {}),
         fictionalBankName,
         sessionAccountNumber: resolveSessionAccountNumber(session.scenarioId),
         // T194-b(§84.3.4 · G568 호출부 3곳 중 "텍스트 턴") — 세션 문서 값 그대로(부재 = 블록 0 · 바이트 동일).
