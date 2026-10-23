@@ -48,6 +48,7 @@ import {
 import type { GenerateReportResponse } from "./types";
 import { buildPersonaBlock } from "./personaBlock";
 import { resolveRouteSummary } from "./routeSummary";
+import { stripLeakedThought } from "../realtime/thoughtLeak";
 import { personaCardKind } from "../scenarios/personaCardCatalog";
 
 export async function generateReportForSession(sessionId: string): Promise<GenerateReportResponse> {
@@ -79,7 +80,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     const data = doc.data() as MessageDoc;
     return {
       role: data.role,
-      textMasked: data.textMasked,
+      // §116 — 이미 저장된 사기범 전사에 남은 영어 사고 문장도 판정 입력에서 뺀다(저장 문서는 고치지 않는다).
+      textMasked: data.role === "scammer" ? stripLeakedThought(data.textMasked) : data.textMasked,
       turnIndex: data.turnIndex,
       createdAtMs: data.createdAt.toMillis(),
       // §55 D3 — 낭독되지 않은 문서 표시를 그대로 실어 준다(부재 = 도달함, 무백필).

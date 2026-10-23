@@ -13,16 +13,24 @@
 // 가짜 영장 이미지·보안 메신저 이동 같은 새 표면은 만들지 않는다(AC-097 (d) 기본값 — 대사로만).
 // ⚠️ 심리 부담이 큰 시나리오라 세션 전 부담 고지 대상이다(publicMeta `preSessionBurdenNotice` — UX D-106).
 import type { ScenarioPromptDoc } from "../shared/types";
+import { CASE_RECORD_NAMES } from "./fictionalNames";
+
+export { CASE_RECORD_NAMES };
 
 // src/content/scenarios/prosecutionCooperationCall.ts와 같은 문자열 리터럴.
 export const PROSECUTION_COOPERATION_CALL_SCENARIO_ID = "prosecution-cooperation-call";
 
+// ⭐ §118(DECISIONS #233, 2026-10-23 사용자 — *"OO지방검찰청 수사관이라고 밝히는데 OO 말고 다른 명칭을 사용"*) — 기본 페르소나(초급 · 중급)도 열람본과 같은 가상 고유명으로 밝힌다.
+//    은퇴 변형 fv-p4hz · fv-c8wq(`PROSECUTION_CASE_LINK_PERSONA` 계열)는 **옛 "OO" 줄을 그대로 되돌려** 바이트 무변경을 지킨다(옛 세션 · 리포트 해석용).
+const OO_NAMING_LINE =
+  '- 기관 이름을 말할 때는 "OO지방검찰청"·"OO수사본부"처럼 앞에 OO를 붙인 이름으로만 말한다. 실제로 있는 지역 이름이 들어간 청·지청·부서 이름, 실제 담당자 이름, 사건번호, 전화번호는 어떤 경우에도 말하지 않는다.';
+const CASE_RECORD_NAMING_LINE = `- 네 소속과 이름은 사건 기록 열람본에 적힌 그대로 "${CASE_RECORD_NAMES.office} ${CASE_RECORD_NAMES.department} ${CASE_RECORD_NAMES.investigator} 수사관"이고, 담당 검사는 "${CASE_RECORD_NAMES.prosecutor} 검사"다. 소속·이름을 밝히거나 담당 검사를 말할 때는 이 이름만 쓰고 바꾸지 않는다. 그 밖의 기관 이름을 말할 때는 "OO은행"처럼 앞에 OO를 붙인 이름으로만 말한다. 실제로 있는 지역 이름이 들어간 청·지청·부서 이름, 실제 담당자 이름, 사건번호, 전화번호는 어떤 경우에도 말하지 않는다.`;
 const personaPrompt = `너는 보이스피싱 예방 훈련 시뮬레이션에서 "검찰 수사관을 사칭하는 보이스피싱범" 역할을 연기하는 AI다. 이 대화는 실제 사기가 아니라, 훈련 참가자가 안전한 환경에서 이런 상황을 미리 겪어보고 대응력을 기르도록 돕는 롤플레이다.
 
 [캐릭터]
 - 너는 검찰 수사관을 사칭한다. voiceMode가 "generic"이라 본인 목소리 클론이 아닌 기본 합성 음성을 쓴다는 설정이다(가족을 사칭하지 않는다).
 - 참가자 명의 계좌가 범죄에 연루됐다며, 비공개 수사에 협조하지 않으면 처벌받을 수 있다고 압박하고, 주변과 떨어져 혼자 통화를 이어가게 한 뒤 자산 검수 명목으로 코인 구매·송금을 요구하는 상황을 연기한다.
-- 기관 이름을 말할 때는 "OO지방검찰청"·"OO수사본부"처럼 앞에 OO를 붙인 이름으로만 말한다. 실제로 있는 지역 이름이 들어간 청·지청·부서 이름, 실제 담당자 이름, 사건번호, 전화번호는 어떤 경우에도 말하지 않는다.
+${CASE_RECORD_NAMING_LINE}
 - 세션이 끝날 때까지("훈련 종료" 버튼으로 종료되기 전까지) 이 캐릭터를 벗어나지 않는다. guardrailPreamble의 요청을 받으면 캐릭터를 유지한 채 자연스럽게 회피한다.
 
 [말투/톤]
@@ -64,7 +72,7 @@ const CASE_LINK_ONLY_SCREEN_LINE =
 if (!personaPrompt.includes(NO_OTHER_SCREEN_LINE)) {
   throw new Error("prosecutionCooperationCall.prompt: 화면 금지 줄을 찾지 못했다(§92.3 변형 페르소나 원천)");
 }
-export const PROSECUTION_CASE_LINK_PERSONA = personaPrompt.replace(NO_OTHER_SCREEN_LINE, CASE_LINK_ONLY_SCREEN_LINE);
+export const PROSECUTION_CASE_LINK_PERSONA = personaPrompt.replace(NO_OTHER_SCREEN_LINE, CASE_LINK_ONLY_SCREEN_LINE).replace(CASE_RECORD_NAMING_LINE, OO_NAMING_LINE);
 export const PROSECUTION_CASE_LINK_TACTIC =
   "수사 서류 언급 — '고객님 앞으로 영장이 청구된 상태입니다, 문자로 보내 드린 사건 조회에서 본인 확인하시면 직접 보실 수 있습니다' 처럼 알리고, 문자 속 링크에서 사건 기록을 확인하게 한다. 사건번호·주소를 지어내 불러 주지 않고, 그 밖의 서류나 사진은 보내겠다고 하지 않는다.";
 
@@ -126,15 +134,6 @@ if (!PROSECUTION_CASE_LINK_PERSONA.includes(CASE_LINK_ONLY_SCREEN_LINE) || !PROS
 // 자신을 밝히게 한다(문서와 통화가 어긋나면 그것이 곧 가짜 신호가 된다). 카탈로그 · 화면 표는 이 값을 글자 그대로 쓴다(`caseRecordDocument.test.ts` §109).
 // ⛔ 실존 청 · 지청 · 인물과 겹치지 않는다(같은 테스트 — 실존 지방검찰청 · 지청 지역명 대조 · 웹 검색 근거는 docs/Architecture.md §109).
 // ⛔ 이 이름 **밖의** 기관 · 인물은 종전대로 "OO"를 붙인다 — 가상 이름 허용은 정확 일치 1벌뿐이다(DECISIONS #224).
-export const CASE_RECORD_NAMES = {
-  office: "한빛지방검찰청",
-  department: "금융범죄조사부",
-  prosecutor: "윤서진",
-  investigator: "정하람",
-} as const;
-const OO_NAMING_LINE =
-  '- 기관 이름을 말할 때는 "OO지방검찰청"·"OO수사본부"처럼 앞에 OO를 붙인 이름으로만 말한다. 실제로 있는 지역 이름이 들어간 청·지청·부서 이름, 실제 담당자 이름, 사건번호, 전화번호는 어떤 경우에도 말하지 않는다.';
-const CASE_RECORD_NAMING_LINE = `- 네 소속과 이름은 사건 기록 열람본에 적힌 그대로 "${CASE_RECORD_NAMES.office} ${CASE_RECORD_NAMES.department} ${CASE_RECORD_NAMES.investigator} 수사관"이고, 담당 검사는 "${CASE_RECORD_NAMES.prosecutor} 검사"다. 소속·이름을 밝히거나 담당 검사를 말할 때는 이 이름만 쓰고 바꾸지 않는다. 그 밖의 기관 이름을 말할 때는 "OO은행"처럼 앞에 OO를 붙인 이름으로만 말한다. 실제로 있는 지역 이름이 들어간 청·지청·부서 이름, 실제 담당자 이름, 사건번호, 전화번호는 어떤 경우에도 말하지 않는다.`;
 if (!PROSECUTION_CASE_LINK_PERSONA.includes(OO_NAMING_LINE)) {
   throw new Error("prosecutionCooperationCall.prompt: OO 명칭 줄을 찾지 못했다(§109)");
 }
