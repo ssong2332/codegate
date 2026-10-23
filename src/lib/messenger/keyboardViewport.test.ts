@@ -79,7 +79,7 @@ test("[G640 · AC-006 R-4] 머리줄 '전화로 확인'은 문자형만 · 카�
   const code = codeOnly(readFileSync(PAGE, "utf8"));
   assert.ok(code.includes("{isSms && canVoiceTalk && ("), "카톡형 머리줄에 '전화로 확인'이 남았다");
   assert.ok(code.includes("<EndTrainingButton onClick={handleEndTraining} compact={!isSms} />"), "대화 화면 상시 종료가 없다(AC-006 R-4)");
-  assert.match(code, /\{!isSms && profileOpen && \([\s\S]*?<MessengerProfileSheet[\s\S]*?canVoiceTalk[\s\S]*?void handleRequestEscalation\(\)[\s\S]*?onEndTraining=\{handleEndTraining\}/);
+  assert.match(code, /\{!isSms && profileOpen && \([\s\S]*?<MessengerProfileSheet[\s\S]*?canVoiceTalk[\s\S]*?void handleVoiceTalkDial\(\)[\s\S]*?onEndTraining=\{handleEndTraining\}/);
   assert.equal((code.match(/onClick=\{\(\) => setProfileOpen\(true\)\}/g) ?? []).length, 2, "이름 · 프로필 사진 두 곳에서 연다");
   const sheet = readFileSync("src/components/MessengerProfileSheet.tsx", "utf8");
   for (const needle of ['role="dialog"', 'aria-modal="true"', "보이스톡", "훈련 종료", '"Escape"', "opener.focus()"]) {

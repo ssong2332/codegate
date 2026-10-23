@@ -25,7 +25,7 @@ test("[실기 4] 프로필 시트 보이스톡 — 대화 종료 전이면 늘 �
   const code = codeOnly(readFileSync(PAGE, "utf8"));
   assert.match(
     code,
-    /voiceTalk=\{\s*chatEnded\s*\?\s*undefined\s*:\s*canVoiceTalk\s*\?\s*\{[\s\S]*?void handleRequestEscalation\(\);[\s\S]*?\}\s*:\s*\{[\s\S]*?handleVoiceTalkUnanswered\(\);[\s\S]*?disabled: turnLocked \|\| voiceTalkCall !== null,/,
+    /voiceTalk=\{\s*chatEnded\s*\?\s*undefined\s*:\s*canVoiceTalk\s*\?\s*\{[\s\S]*?void handleVoiceTalkDial\(\);[\s\S]*?\}\s*:\s*\{[\s\S]*?handleVoiceTalkUnanswered\(\);[\s\S]*?disabled: turnLocked \|\| voiceTalkCall !== null,/,
   );
   assert.ok(code.includes('requestEscalation({ sessionId, via: "voice_talk" })'));
   assert.ok(code.includes('"보이스톡 연결 중…"') && code.includes('"상대방이 응답하지 않습니다"'));
