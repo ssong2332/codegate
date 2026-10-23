@@ -23665,6 +23665,22 @@ D 판단값 근거(관측 5세션 — 운영 f7047187 + §115.5 · §115.6 실 �
 | 대안(제안 · 미구현) | 통화 화면 안 **음량 슬라이더**(앱 게인 0.2~1.0 + 스피커 증폭 유지). 볼륨 키와 무관하게 언제나 먹는다. 통화 그리드(`src/app/session/play/page.tsx`)를 바꾸므로 messenger-call-ux 작업과 겹친다 ⇒ 승인 뒤 별도 PR | — |
 | 재발 캡처 | `?audiodebug=1` 패널에 `out.origin` · `route` · `callMode` · `out.gain` · `pcm.peakDb` · `norm.gainDb`가 보인다(이번 PR에서 `norm.gainDb` 추가, 기존 항목 무변경) | `src/lib/realtime/audioDiagnostics.ts` `AUDIO_DIAG_KEYS` |
 
+#### 122.2.2 볼륨 키가 먹게 — 마이크가 열린 뒤 출력 컨텍스트를 만든다(사용자 결정 *"볼륨 버튼을 누르면 음량이 변하게 하자. 음량 슬라이드는 넣지 말고"*)
+근거(Chromium 소스 `media/audio/android/audio_manager_android.cc`, 2026-10-23 열람):
+- 마이크 입력 스트림을 효과(에코 제거 등)와 함께 만들면 `communication_mode_is_on_ = true` · `SetCommunicationAudioModeOn(true)`이 된다(`MakeAudioInputStream`). 이 상태에서 볼륨 키는 '통화' 음량을 조절한다.
+- 저지연 출력 스트림(`MakeLowLatencyOutputStream` — Web Audio · 미디어 요소 · WebRTC 수신 재생이 모두 이 경로)의 용도는 **만들 때** 정해진다: `communication_mode_is_on_ ? AAUDIO_USAGE_VOICE_COMMUNICATION : AAUDIO_USAGE_MEDIA`(OpenSL 대체 경로도 `SL_ANDROID_STREAM_VOICE` / `_MEDIA`).
+- 우리 통화 출력 컨텍스트는 받기 탭에서 **마이크보다 먼저** 만들어진다(§57 수정안 A — `primeCallAudio`). 그래서 '미디어' 용도로 남고, 볼륨 키('통화')를 눌러도 소리가 바뀌지 않는다. ⇒ 사용자 신고와 같은 증상이다. 세션마다 어느 쪽이 먼저 만들어지느냐가 달라지면 기본 크기가 크게 달라진다(통화 · 미디어 음량 값이 서로 다르다) — 이전의 간헐적인 큰 차이도 이것으로 설명될 수 있다(⚠️ 추정).
+
+| 후보(메인 세션 제시) | 판정 | 근거 |
+|---|---|---|
+| ① Web Audio → `MediaStreamAudioDestinationNode` → `<audio>` | 효과는 같지만 불필요하다 — 미디어 요소 재생도 같은 저지연 출력 경로라 용도가 만들 때 정해진다. 경로 하나를 더할 뿐이다 | 위 소스 |
+| ② RTCPeerConnection 루프백 | 기각 — 크롬의 WebRTC 수신 재생도 같은 출력 경로다(브라우저는 WebRTC Java `WebRtcAudioTrack`를 쓰지 않는다). 지연 · CPU · 연결 실패 위험만 늘어난다 | 위 소스 |
+| ③ **마이크가 열린 뒤 출력 컨텍스트를 새로 만든다** | **채택** — 바꾸는 곳이 가장 적고(세션 컴포넌트의 컨텍스트 생성 자리) 판정표 O1~O4로 소리가 안 나는 경우를 막는다 | `src/lib/realtime/callAudio.ts` 표 · `GeminiVoiceSession.tsx` |
+
+구현: 세션이 마이크 요청(받기 때 이미 시작)을 기다린 뒤 24kHz 출력 컨텍스트를 새로 만들어 `resume()`한다(최대 `FRESH_OUTPUT_RESUME_TIMEOUT_MS` 500ms). running이면 그것을 쓴다(`after-mic`). running이 아니면 받기 때 컨텍스트로 돌아가 소리를 지킨다(`fallback-primed` — §57 무음 결함 재발 방지). 실기 A/B · 되돌리기 플래그 `?outaftermic=0`(종전 경로 `before-mic`). 진단 `?audiodebug=1` 행 **`out.path`**가 이번 통화의 경로를 보인다.
+⚠️ 실기 확인 전이다. 확인할 것: ① `out.path = after-mic`일 때 볼륨 키로 소리가 바뀌는가 ② 기본 크기(통화 음량 값에 따라 달라진다) ③ 소리가 스피커가 아닌 수화부로 나가지 않는가 ④ 받기 → 첫소리 지연(마이크 권한을 처음 묻는 경우 연결이 승인까지 기다린다).
+⚠️ 받기 때 만든 출력 컨텍스트는 `after-mic`일 때 쓰이지 않고 통화 화면이 종전 시점에 닫는다(무음 상태로 열려 있다).
+
 ### 122.3 (6) 신분증 사진 직후 사기범이 다음 요구 없이 채팅방을 나감
 신고: 사진 → *"아빠 고마워, 잘 받았어. 확인해볼게. 지금 접수 처리 들어갔어."* → "상대방이 채팅방을 나갔습니다." (`fv-tdgg` — 단계: 액정 → 앱 설치 → **신분증 사진** → 급한 돈 송금)
 
