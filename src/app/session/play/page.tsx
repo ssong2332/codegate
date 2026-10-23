@@ -184,6 +184,8 @@ import InCallSmsOverlay from "@/components/InCallSmsOverlay";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
 import { LoadingStatus } from "@/components/ui";
 import { TRAINING_INPUT_NO_SUGGEST } from "@/lib/messenger/keyboardViewport";
+import { clearVoiceTalkDial, peekVoiceTalkDial, RINGBACK_TONE, VOICE_TALK_CONNECT_MS } from "@/lib/messenger/voiceTalkDial";
+import { startRingback } from "@/lib/phone/ringbackPlayer";
 
 // ⚠️ 지연 로딩 필수 — @elevenlabs/react가 끌어오는 livekit-client(WebRTC)를 이 화면 로드 시점에
 // 함께 불러오면 WebRTC를 못 쓰는 환경에서 렌더러가 통째로 죽는다(실측: 페이지 자체가 로드 실패).
@@ -366,6 +368,15 @@ export default function SessionCallPage() {
   // 결과 확인하러 가기"였다(그 버튼을 누르면 훈련 종료). 전환이 실패하면 거짓으로 되돌린다.
   const switchingToMessengerRef = useRef(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
+  // §121(1)(UX D-154) — 대화방에서 사용자가 건 보이스톡이면 그 탭에서 준비해 맡긴 통화 오디오(`voiceTalkDial.ts`). 있으면 벨 대신 발신
+  // 연출(연결음 · "보이스톡 연결 중…" · 취소) 뒤 저절로 받는다. 새로고침 등으로 맡긴 값이 없으면 종전 수신 화면이다.
+  const [voiceTalkDial] = useState(() =>
+    sessionId ? peekVoiceTalkDial<PrimedCallAudio>(sessionId, Date.now()) : null,
+  );
+  const voiceTalkDialAdoptedRef = useRef(false);
+  const ringbackStopRef = useRef<(() => void) | null>(null);
+  const [voiceTalkDialCancelling, setVoiceTalkDialCancelling] = useState(false);
+  const voiceTalkDialCancellingRef = useRef(false);
   // T68 통화 중 문자(UX-027/UF-008, AC-059/060/061) — 전부 **통화 셸 위에 얹히는 상태**다.
   // ⚠️ 이 값들은 타이머 effect(:phase만 의존)·한도 자동종료 effect·오디오 재생 어디에도 들어가지
   // 않는다(§15.1.1 — 넣으면 통화가 멈춰 이 기능의 존재 이유가 무너진다).
@@ -788,8 +799,10 @@ export default function SessionCallPage() {
         // **없다**(예전 "사전 고지 유지" 근거는 뒤집혔다). 그 통화의 사전 고지는 메신저 시작 전 고지가 "메시지와 전화"로
         // 맡는다(T190-8a). 에스컬레이션은 벨 직전 고지(`pre-call-notice`)도 거치지 않고 `incoming`으로 바로 간다.
         const isEscalated = data.entryChannel === "messenger";
+        // §121(1) — 방금 대화방에서 건 보이스톡은 새 통화다. 같은 세션에서 앞서 받은 통화 기록(`isSessionAnswered`)이 남아 있어도
+        // 통화 중으로 복원하지 않고 발신 연출(`incoming` + 발신 덮개)부터 시작한다(맡긴 값은 받는 순간 비워져 새로고침엔 종전대로).
         const answered =
-          isSessionAnswered(sessionId) || (!isEscalated && (data.turnCount as number) >= 1);
+          !voiceTalkDial && (isSessionAnswered(sessionId) || (!isEscalated && (data.turnCount as number) >= 1));
         // G463 — 초기 phase 진리표는 순수 함수 하나가 소유한다(이 자리에서 분기를 다시 짜지 않는다).
         const initialPhase = decideInitialCallPhase({
           status: data.status as string | undefined,
@@ -821,7 +834,7 @@ export default function SessionCallPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [sessionId, voiceTalkDial]);
 
   // 대화 로그 구독 — 폴백 경로의 자막/이력용. 실시간 경로는 음성이 주채널이라 자막이 없을 수 있다.
   // "받기" 전에는 구독하지 않아 아직 공개되지 않은 오프닝 텍스트가 미리 새지 않는다.
@@ -1672,6 +1685,8 @@ export default function SessionCallPage() {
   // (`pre-call-notice` 탭 — T190-8b)까지 무음일 수 있다(User 결정 OQ-A95 ⓐ — 그대로 둔다).
   useEffect(() => {
     if (pageState !== "ready" || phase !== "incoming") return;
+    // §121(1) — 사용자가 건 보이스톡은 벨이 아니라 연결음이다(아래 발신 effect).
+    if (voiceTalkDial) return;
     // T190-8b — "준비됐어요" 탭에서 미리 깨운 컨텍스트가 있으면 넘긴다(소유권 이전 — 알림이 stop에서 닫는다).
     const primedContext = primedAlertContextRef.current ?? undefined;
     primedAlertContextRef.current = null;
@@ -1684,7 +1699,35 @@ export default function SessionCallPage() {
       alert.stop();
       if (incomingAlertRef.current === alert) incomingAlertRef.current = null;
     };
-  }, [pageState, phase, deviceSkin.skin]);
+  }, [pageState, phase, deviceSkin.skin, voiceTalkDial]);
+
+  // §121(1)(UX D-154) — 보이스톡 발신 연출: 연결음(맡겨 받은 통화 출력 컨텍스트로) → `VOICE_TALK_CONNECT_MS` 뒤 상대가 받는다(= 받기와 같은
+  // 처리 — 이 화면에는 받기 탭이 없어 대화방 탭에서 준비한 오디오를 넘겨받는다). 취소 중이면 받지 않는다.
+  const answerRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (pageState !== "ready" || phase !== "incoming" || !voiceTalkDial) return;
+    const stop = startRingback(voiceTalkDial.audio.output, RINGBACK_TONE);
+    ringbackStopRef.current = stop;
+    const timer = setTimeout(() => {
+      if (!voiceTalkDialCancellingRef.current) answerRef.current();
+    }, VOICE_TALK_CONNECT_MS);
+    return () => {
+      clearTimeout(timer);
+      stop();
+      if (ringbackStopRef.current === stop) ringbackStopRef.current = null;
+    };
+  }, [pageState, phase, voiceTalkDial]);
+
+  // 넘겨받지 않은 채(취소 · 이탈) 화면을 떠나면 맡긴 오디오를 닫는다(누수 0 · 멱등).
+  useEffect(() => {
+    if (!voiceTalkDial) return;
+    return () => {
+      if (!voiceTalkDialAdoptedRef.current) {
+        closePrimedCallAudio(voiceTalkDial.audio);
+        clearVoiceTalkDial();
+      }
+    };
+  }, [voiceTalkDial]);
 
   // T190-3(UX D-91 · §74.6 (6)) — 떠 있는 배너의 6초 타이머. 포커스·호버 중에는 멈춘다(WCAG 2.2.1 — 재개 시
   // 처음부터 6초). ⛔ 새 setInterval을 만들지 않는다(`toolWindowWiring.test.ts` — 화면의 setInterval은 통화 경과
@@ -1889,6 +1932,14 @@ export default function SessionCallPage() {
     // 패턴). 예전엔 받기 뒤 비동기 effect에서 만들어, 탭과의 간격이 길면 일부 Android 브라우저에서 suspended로 남았다
     // (가설 — 실기 확인 대상). ⛔ 이 줄 앞에 await를 두지 않는다.
     // reviewer m2 — 이미 만들었으면 다시 만들지 않는다. `?audioprime=0`이면 만들지 않는다(종전 경로 — 세션이 직접 만든다).
+    // §121(1) — 보이스톡 발신이면 대화방 탭에서 준비해 맡긴 통화 오디오를 넘겨받는다(연결음은 여기서 끊는다).
+    ringbackStopRef.current?.();
+    if (voiceTalkDial && !primedCallAudioRef.current) {
+      voiceTalkDialAdoptedRef.current = true;
+      primedCallAudioRef.current = voiceTalkDial.audio;
+      setPrimedCallAudio(voiceTalkDial.audio);
+      clearVoiceTalkDial();
+    }
     let primedAudio = primedCallAudioRef.current;
     if (!primedAudio && audioFlags.audioPrime) {
       primedAudio = primeCallAudio(GEMINI_OUTPUT_SAMPLE_RATE, performance.now());
@@ -1936,6 +1987,33 @@ export default function SessionCallPage() {
       return;
     }
     router.push("/session/end");
+  };
+
+  // 발신 effect의 타이머가 최신 받기 처리를 부르게 한다(렌더 뒤 갱신).
+  useLayoutEffect(() => {
+    answerRef.current = handleAnswer;
+  });
+
+  // §121(1) — 연결음 중 취소: 통화를 시작하지 않고 대화방으로 돌아간다(역전환 · 사기범 복귀 메시지 없음 — 사용자가 건 전화를 스스로 끊었다).
+  // 역전환이 실패하면 종전 받기로 이어간다(취소를 눌렀는데 멈춘 화면에 남는 상태 0).
+  const handleCancelVoiceTalkDial = async () => {
+    if (!sessionId || voiceTalkDialCancellingRef.current) return;
+    voiceTalkDialCancellingRef.current = true;
+    setVoiceTalkDialCancelling(true);
+    ringbackStopRef.current?.();
+    try {
+      const result = await requestReverseEscalation({ sessionId });
+      if (result.escalation?.toChannel === "messenger") {
+        router.push("/session/messenger");
+        return;
+      }
+      throw new Error("전환 응답 없음");
+    } catch {
+      voiceTalkDialCancellingRef.current = false;
+      setVoiceTalkDialCancelling(false);
+      setSwitchError("보이스톡을 취소하지 못했습니다.");
+      answerRef.current();
+    }
   };
 
   // T68 — 오버레이 열기/닫기. **라우팅을 하지 않는다**(D-35 하드 요구): 상태만 바꾸므로
@@ -2485,6 +2563,34 @@ export default function SessionCallPage() {
       {/* 실시간 speech-to-speech 세션 — 서버가 자격증명을 준 경우에만 마운트된다(지연 로딩).
           화면 요소는 없고 SDK 세션 생명주기만 관리한다. */}
       {/* `?audiodebug=1`일 때만 그린다(없으면 DOM 0 — 컴포넌트 첫 분기). 관찰 전용 · 탭을 가로채지 않는다. */}
+      {/* §121(1)(UX D-154) — 보이스톡 발신 화면(카톡형). 수신 화면 위에 덮는다 — 받으면(`connecting`) 사라진다. */}
+      {voiceTalkDial && phase === "incoming" && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-ink px-6 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-24 text-white"
+        >
+          <div className="flex flex-col items-center gap-4">
+            <span
+              aria-hidden="true"
+              className="flex h-[96px] w-[96px] items-end justify-center overflow-hidden rounded-[36px] bg-avatar-bg text-white"
+            >
+              <PhoneIcon name="person" size={80} />
+            </span>
+            <p className="text-[22px] font-bold">{scenario.chatDisplayName ?? callerLabel}</p>
+            <p className="text-base text-white/80">보이스톡 연결 중…</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleCancelVoiceTalkDial()}
+            disabled={voiceTalkDialCancelling}
+            aria-label="보이스톡 취소"
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-danger text-white disabled:opacity-60"
+          >
+            <PhoneIcon name="end-call" size={30} />
+          </button>
+        </div>
+      )}
       <AudioDebugPanel
         callMode={callMode}
         status={realtime.status}
