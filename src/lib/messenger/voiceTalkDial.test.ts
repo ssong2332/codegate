@@ -33,7 +33,7 @@ test("[§121 인계] 같은 세션 · 유효 시간 안에서만 넘겨받는다
 });
 
 test("[§121 대화방] 보이스톡(이어지는 세션) = 발신 처리기 · 오디오 준비가 첫 await 앞 · 실패하면 닫고 비운다", () => {
-  const src = read("src/app/session/messenger/page.tsx");
+  const src = read("src/components/MessengerChatRoom.tsx");
   const body = src.slice(src.indexOf("const handleVoiceTalkDial = async () => {"), src.indexOf("// 전이 연출(P-18)"));
   assert.ok(body.length > 0);
   const prime = body.indexOf("primeCallAudio(GEMINI_OUTPUT_SAMPLE_RATE, performance.now())");

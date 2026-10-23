@@ -24,7 +24,7 @@ import {
 const read = (file: string) => readFileSync(file, "utf8");
 /** 주석 제외 코드 — 이 저장소는 "왜 하지 않는가"를 주석에 적는다(그 서술이 금지 낱말을 담는다). */
 const codeOnly = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-const MESSENGER = "src/app/session/messenger/page.tsx";
+const MESSENGER = "src/components/MessengerChatRoom.tsx";
 const PLAY = "src/app/session/play/page.tsx";
 
 // ── G444 ① 진리표 N-1~N-4(입력 8조합 전수) ─────────────────────────────────────────────────
@@ -77,7 +77,7 @@ function lastReturnText(source: string): string {
   const sf = ts.createSourceFile("m.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let component: ts.FunctionDeclaration | undefined;
   sf.forEachChild((n) => {
-    if (ts.isFunctionDeclaration(n) && n.name?.text === "MessengerSessionPage") component = n;
+    if (ts.isFunctionDeclaration(n) && n.name?.text === "MessengerChatRoom") component = n;
   });
   const last = component?.body?.statements.filter(ts.isReturnStatement).at(-1);
   assert.ok(last, "채팅 화면의 마지막 return을 찾지 못했다");

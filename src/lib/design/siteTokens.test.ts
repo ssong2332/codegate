@@ -33,7 +33,7 @@ test("[G630] 사이트 토큰의 모든 (글자/아이콘, 바탕) 쌍이 WCAG A
 });
 
 test("[G630] 훈련 화면 루트는 폰 서체(font-phone)를 쓴다 — 사이트 제목 서체(함렛)가 기기 재현 화면에 새지 않게", () => {
-  for (const file of ["src/app/session/play/page.tsx", "src/app/session/messenger/page.tsx"]) {
+  for (const file of ["src/app/session/play/page.tsx", "src/components/MessengerChatRoom.tsx"]) {
     assert.ok(readFileSync(file, "utf8").includes("font-phone"), `${file} 루트에 font-phone이 없다`);
   }
 });
@@ -42,7 +42,7 @@ test("[G630] 훈련 화면 루트는 폰 서체(font-phone)를 쓴다 — 사이
 // 훈련 표면(기기 재현 색 — skinTokens.ts · P3 개별 판단)은 제외한다.
 const TRAINING_SURFACE = [
   "src/app/session/play/page.tsx",
-  "src/app/session/messenger/page.tsx",
+  "src/components/MessengerChatRoom.tsx",
   "src/components/InCallSmsOverlay.tsx",
   "src/components/MessengerFakeLanding.tsx",
   "src/components/VerifyCallOverlay.tsx",

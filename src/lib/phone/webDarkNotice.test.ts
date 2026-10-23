@@ -35,7 +35,7 @@ test("[G641] 배선 — 세션 전 화면 2곳에만(메신저 시작 고지 · 
   const uses = (f: string) => readFileSync(f, "utf8").includes("<WebDarkModeNotice />");
   assert.ok(uses("src/components/MessengerStartNotice.tsx"));
   assert.ok(uses("src/components/CallStartNotice.tsx"));
-  for (const f of ["src/app/session/messenger/page.tsx", "src/app/session/play/page.tsx", "src/components/InCallSmsOverlay.tsx", "src/components/MessengerFakeLanding.tsx"]) {
+  for (const f of ["src/components/MessengerChatRoom.tsx", "src/app/session/play/page.tsx", "src/components/InCallSmsOverlay.tsx", "src/components/MessengerFakeLanding.tsx"]) {
     assert.equal(uses(f), false, `${f} — 세션 중 화면에 안내를 두지 않는다`);
   }
   const comp = readFileSync("src/components/WebDarkModeNotice.tsx", "utf8");
