@@ -27,7 +27,7 @@ test("[§112] 통화 화면 — 메신저발 통화의 사기범 끊기: 끊김 
 });
 
 test("[§112] 대화방 — 이미 끝난 세션이 사기범 종료면 '상대방이 채팅방을 나갔습니다'(카톡형) · '상대가 더 이상 답장하지 않습니다'(문자형)", () => {
-  const messenger = read("src/app/session/messenger/page.tsx");
+  const messenger = read("src/components/MessengerChatRoom.tsx");
   assert.match(messenger, /setEndedByScammer\(data\.endReason === "scammer_ended"\);/);
   assert.match(messenger, /chatEndedNotice\(pending\?\.outcome\?\.scammerEnded === true \|\| endedByScammer, isSms \? "sms" : "kakao"\)/);
   assert.equal(chatEndedNotice(true, "kakao"), "상대방이 채팅방을 나갔습니다.");

@@ -11,7 +11,7 @@ import { DEVICE_SKIN_CHOICE_LABELS, pickerStartsCollapsed } from "./deviceSkin.t
 
 const read = (file: string) => readFileSync(file, "utf8");
 const codeOnly = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-const MESSENGER = "src/app/session/messenger/page.tsx";
+const MESSENGER = "src/components/MessengerChatRoom.tsx";
 const PLAY = "src/app/session/play/page.tsx";
 const NOTICE = "src/components/MessengerStartNotice.tsx";
 
@@ -49,7 +49,7 @@ function lastReturnText(source: string, componentName: string): string {
 /** AC-092 (d) — 세션 중 화면(메신저 채팅 return · 통화 화면)에 스킨 전환 컨트롤·스킨 이름·감지 실패 안내 0. */
 function inSessionSkinControlViolations(messenger: string, play: string): string[] {
   const out: string[] = [];
-  const chat = codeOnly(lastReturnText(messenger, "MessengerSessionPage"));
+  const chat = codeOnly(lastReturnText(messenger, "MessengerChatRoom"));
   for (const token of ["DeviceSkinPicker", "handleToggleSkin", "handleChooseSkin", "SKIN_LABEL", "스킨:", "화면 모양", "iOS형", "One UI형", "자동 인식하지 못해"]) {
     if (chat.includes(token)) out.push(`메신저 채팅 return에 ${token}`);
   }

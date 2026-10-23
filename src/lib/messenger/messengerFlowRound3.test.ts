@@ -33,7 +33,7 @@ test("[§110.4] 통화 화면 — 빨간 종료 · 수신 거절은 메신저발
 
 // ── 신고 9 — 키보드 위 자동 채우기 줄 ──
 test("[§110.1] 메신저 입력칸은 한 줄 textarea(자동 채우기 액세서리 줄 회피) · Enter = 전송 · 한글 조합 중 Enter는 전송하지 않는다", () => {
-  const src = read("src/app/session/messenger/page.tsx");
+  const src = read("src/components/MessengerChatRoom.tsx");
   const at = src.indexOf('id="messenger-chat-input"');
   const tagStart = src.lastIndexOf("<", at);
   assert.equal(src.slice(tagStart, tagStart + 9), "<textarea");

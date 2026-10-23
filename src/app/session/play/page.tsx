@@ -100,7 +100,7 @@ import {
   shouldShowReturnNotice,
   serializeTranscriptBackup,
 } from "@/lib/realtime/backgroundCall";
-import { openingTurnFor } from "@/lib/realtime/escalatedOpening";
+import { callCallerFrom, openingTurnFor, type CallCaller } from "@/lib/realtime/escalatedOpening";
 import { createScreenWakeLock, type WakeLockStatus } from "@/lib/realtime/screenWakeLock";
 import {
   RESUME_GESTURE_EVENTS,
@@ -186,6 +186,9 @@ import { LoadingStatus } from "@/components/ui";
 import { TRAINING_INPUT_NO_SUGGEST } from "@/lib/messenger/keyboardViewport";
 import { clearVoiceTalkDial, peekVoiceTalkDial, RINGBACK_TONE, VOICE_TALK_CONNECT_MS } from "@/lib/messenger/voiceTalkDial";
 import { startRingback } from "@/lib/phone/ringbackPlayer";
+import MessengerChatRoom from "@/components/MessengerChatRoom";
+import VoiceTalkDialScreen from "@/components/VoiceTalkDialScreen";
+import { chatDuringCallContextText } from "@/lib/realtime/chatDuringCall";
 
 // ⚠️ 지연 로딩 필수 — @elevenlabs/react가 끌어오는 livekit-client(WebRTC)를 이 화면 로드 시점에
 // 함께 불러오면 WebRTC를 못 쓰는 환경에서 렌더러가 통째로 죽는다(실측: 페이지 자체가 로드 실패).
@@ -368,12 +371,16 @@ export default function SessionCallPage() {
   // 결과 확인하러 가기"였다(그 버튼을 누르면 훈련 종료). 전환이 실패하면 거짓으로 되돌린다.
   const switchingToMessengerRef = useRef(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
+  // §121.7 PR-3(메인 결정 ⓑ) — "채팅으로" = 통화를 유지한 채 대화방을 통화 위에 겹친다(라우팅 0 — Live 세션 · 마이크 · 재생 그대로).
+  const [chatOpen, setChatOpen] = useState(false);
   // §121(1)(UX D-154) — 대화방에서 사용자가 건 보이스톡이면 그 탭에서 준비해 맡긴 통화 오디오(`voiceTalkDial.ts`). 있으면 벨 대신 발신
   // 연출(연결음 · "보이스톡 연결 중…" · 취소) 뒤 저절로 받는다. 새로고침 등으로 맡긴 값이 없으면 종전 수신 화면이다.
   const [voiceTalkDial] = useState(() =>
     sessionId ? peekVoiceTalkDial<PrimedCallAudio>(sessionId, Date.now()) : null,
   );
   const voiceTalkDialAdoptedRef = useRef(false);
+  // §123 — 이 통화를 누가 걸었나(세션 전환 기록 · 방금 대화방에서 건 보이스톡이면 참가자). 첫 연결 신호가 본다.
+  const [callCaller, setCallCaller] = useState<CallCaller>(voiceTalkDial ? "participant" : "scammer");
   const ringbackStopRef = useRef<(() => void) | null>(null);
   const [voiceTalkDialCancelling, setVoiceTalkDialCancelling] = useState(false);
   const voiceTalkDialCancellingRef = useRef(false);
@@ -427,13 +434,13 @@ export default function SessionCallPage() {
   // ⭐ PR-A2(audit-A R1 · R8) — G31 큐 **밖** 맥락 주입 슬롯(확인 결과 신호 · 자동 호 전환 실패). 응답을 유발하지 않고 턴 슬롯을
   // 쓰지 않아 큐(참가자 발화 조건 · 턴 경계 대기)를 타지 않는다 — 전환 상태 단언(`personaStateTurn`)과 같은 이유의 별도 슬롯.
   const [contextTurn, setContextTurn] = useState<
-    { text: string; seq: number; delivery: "confirmResult" | "verifyReconnectFailed" } | null
+    { text: string; seq: number; delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" } | null
   >(null);
   // PR-A2 — 확인 결과 신호 주입 상태(세션당 1회 · 도착 안내 뒤 대기분). 판정은 순수 함수(`stallRecovery.ts`).
   const confirmResultInjectionRef = useRef<ConfirmResultInjectionState>(INITIAL_CONFIRM_RESULT_INJECTION_STATE);
   // PR-A2 리뷰 Minor 1 — 슬롯 seq는 단조 증가(전달 확인으로 슬롯을 비운 뒤에도 앞 seq를 재사용하지 않는다).
   const contextTurnSeqRef = useRef(0);
-  const pushContextTurn = useCallback((text: string, delivery: "confirmResult" | "verifyReconnectFailed") => {
+  const pushContextTurn = useCallback((text: string, delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall") => {
     contextTurnSeqRef.current += 1;
     setContextTurn({ text, seq: contextTurnSeqRef.current, delivery });
   }, []);
@@ -520,7 +527,9 @@ export default function SessionCallPage() {
   // ⛔ §79.18 (3) ⑤ — C5에서는 상수 `false`. S7이 교대 대기 읽기로 바꾼다(이 이름 · 이 자리 그대로).
   const isRelaySwitchPending = useCallback(() => false, []);
   // §79.18 (2) getter — 세션 누적 사용자 발화 수(갱신 지점 = `handleTranscriptTurn` 한 곳).
-  const getSessionUserTurns = useCallback(() => turnCountersRef.current.userTurns, []);
+  // §121.7 ⓒ(메인 결정 "두 채널 발화 합산") — 통화 중 대화방 카톡도 사용자 발화로 센다(끊기 · 문자 도구 판정 입력). 전사 계수는 그대로 두고 더한다.
+  const chatTurnsDuringCallRef = useRef(0);
+  const getSessionUserTurns = useCallback(() => turnCountersRef.current.userTurns + chatTurnsDuringCallRef.current, []);
   // §79.19 (3) — 부모 클라 항: 지시 큐 비어 있지 않음 ∨ 이번 턴 지시 처리 중 ∨ 교대 대기. ⛔ `toolPending`은 없다(G555).
   const getPendingInstruction = useCallback(
     () => instructionQueueRef.current.length > 0 || instructionBusyRef.current || isRelaySwitchPending(),
@@ -708,16 +717,17 @@ export default function SessionCallPage() {
 
   // 실시간 음성 통화 전사를 서버에 제출한다(finding #1). 종료 직전에 1회 호출. 실패해도 통화
   // 종료를 막지 않는다(리포트가 비는 건 통화를 못 끝내는 것보다 나은 실패) — 조용히 흡수.
-  const flushTranscript = useCallback(async () => {
+  // §121.7 — 새로 쓴 전사 문서 수를 돌려준다(통화 중 대화방이 보내기 직전에 부른다 — 기준점 보정용). 실패 · 빈 전사 = 0.
+  const flushTranscript = useCallback(async (): Promise<number> => {
     const turns = transcriptRef.current;
-    if (!sessionId || turns.length === 0) return;
+    if (!sessionId || turns.length === 0) return 0;
     transcriptRef.current = [];
     try {
       // §55 D3 — 3개 호출부 전부 **같은 값**을 싣는다(호출부별 분기 0건). 값은 위 래치 ref에서만
       // 온다(이 클로저에서 `callMode`·`realtime`을 읽으면 스테일이다).
       // §57.2 (6) 처방 D1 — `answeredAtMsRef`가 null이면(위 handleTranscriptTurn과 동일 사유로
       // "받기"를 누르지 않은 경로) 필드 자체를 생략한다 — 부재 = 서버 현행 합성 로직 그대로.
-      await submitRealtimeTranscript({
+      const result = await submitRealtimeTranscript({
         sessionId,
         turns,
         openingNotSpoken: openingNotSpokenRef.current,
@@ -729,8 +739,10 @@ export default function SessionCallPage() {
       } catch {
         // 무시(비차단).
       }
+      return result.written;
     } catch {
       // 무시 — 다음 단계(endSession→리포트)는 그대로 진행한다.
+      return 0;
     }
   }, [sessionId]);
 
@@ -799,6 +811,7 @@ export default function SessionCallPage() {
         // **없다**(예전 "사전 고지 유지" 근거는 뒤집혔다). 그 통화의 사전 고지는 메신저 시작 전 고지가 "메시지와 전화"로
         // 맡는다(T190-8a). 에스컬레이션은 벨 직전 고지(`pre-call-notice`)도 거치지 않고 `incoming`으로 바로 간다.
         const isEscalated = data.entryChannel === "messenger";
+        if (!voiceTalkDial) setCallCaller(callCallerFrom(data.channelHistory));
         // §121(1) — 방금 대화방에서 건 보이스톡은 새 통화다. 같은 세션에서 앞서 받은 통화 기록(`isSessionAnswered`)이 남아 있어도
         // 통화 중으로 복원하지 않고 발신 연출(`incoming` + 발신 덮개)부터 시작한다(맡긴 값은 받는 순간 비워져 새로고침엔 종전대로).
         const answered =
@@ -2242,6 +2255,20 @@ export default function SessionCallPage() {
     }
   };
 
+  // §121.7 — 통화 위 대화방 연결. 보내기 직전 전사 제출(실시간 경로만 — 폴백은 이미 `messages`에 있다) · 카톡 1쌍을 Live 맥락에 넣고
+  // 발화 수에 더한다(ⓒ).
+  const handleChatBeforeSend = useCallback(
+    async (): Promise<number> => (callMode === "realtime" ? flushTranscript() : 0),
+    [callMode, flushTranscript],
+  );
+  const handleChatTurnDuringCall = useCallback(
+    (userText: string, replyText: string) => {
+      chatTurnsDuringCallRef.current += 1;
+      if (callMode === "realtime") pushContextTurn(chatDuringCallContextText(userText, replyText), "chatDuringCall");
+    },
+    [callMode, pushContextTurn],
+  );
+
   const handleToggleMute = () => {
     setMuted((prev) => {
       const next = !prev;
@@ -2565,31 +2592,27 @@ export default function SessionCallPage() {
       {/* `?audiodebug=1`일 때만 그린다(없으면 DOM 0 — 컴포넌트 첫 분기). 관찰 전용 · 탭을 가로채지 않는다. */}
       {/* §121(1)(UX D-154) — 보이스톡 발신 화면(카톡형). 수신 화면 위에 덮는다 — 받으면(`connecting`) 사라진다. */}
       {voiceTalkDial && phase === "incoming" && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-ink px-6 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-24 text-white"
-        >
-          <div className="flex flex-col items-center gap-4">
-            <span
-              aria-hidden="true"
-              className="flex h-[96px] w-[96px] items-end justify-center overflow-hidden rounded-[36px] bg-avatar-bg text-white"
-            >
-              <PhoneIcon name="person" size={80} />
-            </span>
-            <p className="text-[22px] font-bold">{scenario.chatDisplayName ?? callerLabel}</p>
-            <p className="text-base text-white/80">보이스톡 연결 중…</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void handleCancelVoiceTalkDial()}
-            disabled={voiceTalkDialCancelling}
-            aria-label="보이스톡 취소"
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-danger text-white disabled:opacity-60"
-          >
-            <PhoneIcon name="end-call" size={30} />
-          </button>
-        </div>
+        <VoiceTalkDialScreen
+          name={scenario.chatDisplayName ?? callerLabel}
+          status="보이스톡 연결 중…"
+          // §123 — 발신 중 누른 스피커 · 마이크 끄기는 받은 뒤 통화에 그대로 이어진다(같은 상태).
+          speaker={{ on: audioRoute === "speaker", onToggle: () => setAudioRoute((route) => (route === "speaker" ? "call" : "speaker")) }}
+          mute={{ on: muted, onToggle: handleToggleMute }}
+          onEnd={() => void handleCancelVoiceTalkDial()}
+          endDisabled={voiceTalkDialCancelling}
+        />
+      )}
+      {/* §121.7 PR-3(UX D-157) — 통화를 유지한 채 대화방을 겹친다. 통화가 끝나거나(종료 · 끊김) 대화방 전환이 시작되면 내린다. */}
+      {chatOpen && phase !== "ended" && !switchingToMessenger && !localHangup && (
+        <MessengerChatRoom
+          duringCall={{
+            elapsedLabel: formatCallElapsed(elapsedSec),
+            onBackToCall: () => setChatOpen(false),
+            beforeSend: handleChatBeforeSend,
+            onChatTurn: handleChatTurnDuringCall,
+            onEndTraining: () => void handleEndTraining(),
+          }}
+        />
       )}
       <AudioDebugPanel
         callMode={callMode}
@@ -2659,6 +2682,7 @@ export default function SessionCallPage() {
               connectionSeq: realtime.connectionSeq,
               resumeTurn,
               escalatedFromMessenger: scenario.channel === "messenger",
+              caller: callCaller,
             })}
             onConnectionLost={handleConnectionLost}
           />
@@ -3309,9 +3333,9 @@ export default function SessionCallPage() {
                   <>
                     <button
                       type="button"
-                      onClick={() => void handleRequestReverseEscalation()}
+                      onClick={() => setChatOpen(true)}
                       disabled={switchingToMessenger}
-                      aria-label="채팅으로 — 메시지 화면으로 전환"
+                      aria-label="채팅으로 — 통화를 유지한 채 대화방 열기"
                       className={`flex ${gridButtonShape} items-center justify-center transition active:scale-95 disabled:opacity-50`}
                       style={{ backgroundColor: callTokens.gridButtonBg, color: callTokens.gridIcon }}
                     >

@@ -70,10 +70,12 @@ const SESSION_SURFACE_REGISTRY: Record<string, SurfaceRole> = {
   "src/components/SpoofImage.tsx": "not-in-session", // 렌더 사용처 0(M-12)
   "src/components/SyntheticLabel.tsx": "not-in-session", // 세션 중 사용처 0 — SpoofImage만 쓴다(M-12)
   "src/components/VerifyCallOverlay.tsx": "in-session", // UX-031 전환 시트
+  "src/components/VoiceTalkDialScreen.tsx": "in-session", // §123 보이스톡 발신 화면(UX D-156 — 대화방 · 통화 화면 공용)
   "src/components/WebDarkModeNotice.tsx": "pre-session", // §95.6 브라우저 다크 모드 안내(시작 고지 · 벨 직전 고지 안에만)
   "src/app/session/chat/page.tsx": "redirect", // return null 리다이렉트
   "src/app/session/end/page.tsx": "post-session", // UX-007 종료 고지
-  "src/app/session/messenger/page.tsx": "mixed", // start-notice(세션 전) + chat(세션 중)
+  "src/components/MessengerChatRoom.tsx": "mixed", // start-notice(세션 전) + chat(세션 중) — §121.4 PR-2로 라우트 본문을 옮겼다
+  "src/app/session/messenger/page.tsx": "mixed", // §121.4 PR-2 — MessengerChatRoom을 그리기만 하는 라우트(같은 범위로 스캔)
   "src/app/session/play/page.tsx": "mixed", // pre-call-notice(세션 전 — CallStartNotice) + 통화(세션 중)
 };
 
@@ -100,7 +102,8 @@ test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/ses
   // T190-8b 18(+CallStartNotice) → 2026-10-18 19(+AudioDebugPanel) → §88 20(+PersonaCardInputFields) → 2026-10-21 22(+LegalDocumentView · LegalLinks — 법적 고지)
   // → §94 23(+ThemeDebugPanel — ?themedebug=1) → §95 24(+MessengerProfileSheet — 카톡형 상대 프로필) → §95.6 25(+WebDarkModeNotice)
   // → §96 26(+PageToc — 긴 페이지 목록) → §97 28(+ScenarioPanelGroups · SelectScreenHeader — 시안 E2 선택 화면) → §97.7 29(+TrainingPrepScreen).
-  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 29);
+  // → §121.4 30(+MessengerChatRoom — 메신저 라우트 본문) → §123 31(+VoiceTalkDialScreen)
+  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 31);
 });
 
 // ── G451 — 등록부 2벌(G436 · T86)이 최상위 `src/components/*.tsx`만 훑으므로, 하위 디렉터리에 컴포넌트를 두면
@@ -211,7 +214,7 @@ function allInSessionViolations(file: string, code: string): string[] {
 // ── G437 · G439 · G440 본 게이트 ───────────────────────────────────────────────────────────
 test("[T187/G437] 세션 중 파일·문면 모듈의 렌더 가능 텍스트에 표식 낱말 0 · 표식 컴포넌트 import 0", () => {
   const files = scopeFiles();
-  assert.equal(files.length, 16, "범위 = in-session 10(T190-1 +PhoneIcon · 2026-10-18 +AudioDebugPanel · §94 +ThemeDebugPanel · §95 +MessengerProfileSheet) + mixed 2 + 문면 모듈 4");
+  assert.equal(files.length, 18, "범위 = in-session 11(T190-1 +PhoneIcon · 2026-10-18 +AudioDebugPanel · §94 +ThemeDebugPanel · §95 +MessengerProfileSheet · §123 +VoiceTalkDialScreen) + mixed 3(§121.4 +MessengerChatRoom) + 문면 모듈 4");
   assert.deepEqual(files.flatMap((f) => markerViolations(f, read(f))), []);
 });
 
@@ -342,7 +345,7 @@ function noticeElementViolations(
 
 /** messenger — `<MessengerStartNotice` 정확히 1회 · 조상 = `if (startNotice === "show")`의 return · 그 if가 마지막 return보다 앞. */
 function startNoticeUsageViolations(code: string): string[] {
-  return noticeElementViolations(code, "messenger.tsx", "MessengerStartNotice", 'startNotice === "show"', "MessengerSessionPage");
+  return noticeElementViolations(code, "messenger.tsx", "MessengerStartNotice", 'startNotice === "show"', "MessengerChatRoom");
 }
 
 /** play — `<CallStartNotice` 정확히 1회 · 조상 = `if (phase === "pre-call-notice")`의 return · 그 if가 마지막 return보다 앞(ⓓ ①). */
@@ -372,7 +375,7 @@ test("[T187/G438 → T190-8b 재지정 ⓓ] 세션 전 문면은 지정 사용�
   assert.deepEqual(callStartNoticeUsageViolations(play), []);
   // ② play는 세션 전 문면 모듈을 import하지 않고 PREROLL_NOTICE 식별자가 0이다(⇒ 벨 화면 프리롤 0).
   assert.deepEqual(playPrerollViolations(play), []);
-  const messenger = read("src/app/session/messenger/page.tsx");
+  const messenger = read("src/components/MessengerChatRoom.tsx");
   assert.deepEqual(startNoticeUsageViolations(messenger), []);
   assert.deepEqual(boundaryImportViolations("messenger", messenger, /preSessionCopy|postSessionCopy/), []);
   const inSession = Object.entries(SESSION_SURFACE_REGISTRY)
@@ -397,7 +400,7 @@ test("[T190-8b/G438 역검증 — AC-091 (f)ⓐⓒ] play에 `<p>{PREROLL_NOTICE}
   );
   const b = callStartNoticeUsageViolations(noticeInShell);
 
-  const messenger = read("src/app/session/messenger/page.tsx");
+  const messenger = read("src/components/MessengerChatRoom.tsx");
   const anchor = messenger.lastIndexOf("<EndTrainingButton onClick={handleEndTraining} compact={!isSms} />");
   assert.ok(anchor > 0);
   const messengerPoisoned =
@@ -450,7 +453,7 @@ function ariaLabelViolations(sources: Record<string, string>): string[] {
   if (!hasString("src/components/VerifyCallOverlay.tsx", "확인 부서 연결 화면")) out.push("A1");
   if (!hasString("src/components/InCallSmsOverlay.tsx", "통화 중 도착한 문자 — 문자함")) out.push("A2");
   if (!labels("src/components/InCallSmsOverlay.tsx").some((l) => l.kind === "template" && l.head === "링크: ")) out.push("A3");
-  if (!labels("src/app/session/messenger/page.tsx").some((l) => l.kind === "template" && l.head === "링크: ")) out.push("A4");
+  if (!labels("src/components/MessengerChatRoom.tsx").some((l) => l.kind === "template" && l.head === "링크: ")) out.push("A4");
   if (!labels("src/components/MessengerFakeLanding.tsx").some((l) => l.kind === "template" && l.tail === " 화면")) out.push("A5");
   if (!hasString("src/components/EndTrainingButton.tsx", "훈련 즉시 종료")) out.push("불변: 훈련 즉시 종료");
   if (!hasString("src/app/session/play/page.tsx", "통화 종료 — 훈련 종료")) out.push("불변: 통화 종료 — 훈련 종료");
@@ -466,7 +469,7 @@ const G441_FILES = [
   "src/components/InCallSmsOverlay.tsx",
   "src/components/MessengerFakeLanding.tsx",
   "src/components/EndTrainingButton.tsx",
-  "src/app/session/messenger/page.tsx",
+  "src/components/MessengerChatRoom.tsx",
   "src/app/session/play/page.tsx",
 ];
 const g441Sources = () => Object.fromEntries(G441_FILES.map((f) => [f, read(f)]));
@@ -501,7 +504,7 @@ function degradedRetentionViolations(messenger: string, play: string, disclosure
 test("[T187/G443] 강등 고지(AC-084) 값 무변경 · messenger·play가 계속 참조한다", () => {
   assert.deepEqual(
     degradedRetentionViolations(
-      read("src/app/session/messenger/page.tsx"),
+      read("src/components/MessengerChatRoom.tsx"),
       read("src/app/session/play/page.tsx"),
       read("src/lib/report/degradedDisclosure.ts"),
     ),
@@ -510,7 +513,7 @@ test("[T187/G443] 강등 고지(AC-084) 값 무변경 · messenger·play가 계�
 });
 
 test("[T187/G443 역검증] 참조를 지운 사본은 실패한다", () => {
-  const messenger = read("src/app/session/messenger/page.tsx").split("DIALOGUE_DEGRADED_NOTICE").join("REMOVED_NOTICE");
+  const messenger = read("src/components/MessengerChatRoom.tsx").split("DIALOGUE_DEGRADED_NOTICE").join("REMOVED_NOTICE");
   assert.deepEqual(
     degradedRetentionViolations(messenger, read("src/app/session/play/page.tsx"), read("src/lib/report/degradedDisclosure.ts")),
     ["messenger DIALOGUE_DEGRADED_NOTICE"],
@@ -568,7 +571,7 @@ function layoutViolations(sources: Record<string, string>): string[] {
     if (!c || !/\bjustify-end\b/.test(c.className)) out.push(`${file}: 상단 바 justify-end 아님`);
   }
   {
-    const file = "src/app/session/messenger/page.tsx";
+    const file = "src/components/MessengerChatRoom.tsx";
     const containers = endButtonContainers(file, sources[file]);
     const header = containers.find((c) => /\bjustify-between\b/.test(c.parentClassName));
     if (!header || header.parentDivChildren !== 2) out.push(`${file}: 헤더 행 자식 div가 2개가 아니다(왼쪽 래퍼 존속)`);
@@ -581,7 +584,7 @@ const G449_FILES = [
   "src/components/InCallSmsOverlay.tsx",
   "src/components/MessengerFakeLanding.tsx",
   "src/components/MessengerStartNotice.tsx",
-  "src/app/session/messenger/page.tsx",
+  "src/components/MessengerChatRoom.tsx",
 ];
 
 test("[T187/G449] '훈련 종료'가 오른쪽 끝에 남는 레이아웃 클래스(정적 — 실제 배치는 브라우저 B-5)", () => {
@@ -608,14 +611,14 @@ function retainedEndControlViolations(play: string, messenger: string): string[]
 
 test("[사용자 결정 2026-10-18] 통화 화면 빨간 통화 종료와 메신저 대화 화면 '훈련 종료'는 그대로 있다", () => {
   assert.deepEqual(
-    retainedEndControlViolations(read("src/app/session/play/page.tsx"), read("src/app/session/messenger/page.tsx")),
+    retainedEndControlViolations(read("src/app/session/play/page.tsx"), read("src/components/MessengerChatRoom.tsx")),
     [],
   );
 });
 
 test("[사용자 결정 2026-10-18 역검증] 남겨야 할 종료 컨트롤을 지운 사본은 각각 실패한다", () => {
   const play = read("src/app/session/play/page.tsx");
-  const messenger = read("src/app/session/messenger/page.tsx");
+  const messenger = read("src/components/MessengerChatRoom.tsx");
   const playPoisoned = play.split('"통화 종료 — 훈련 종료"').join('"통화 종료"');
   const messengerPoisoned = messenger.split("<EndTrainingButton onClick={handleEndTraining} compact={!isSms} />").join("");
   assert.notEqual(playPoisoned, play, "오염 지점(빨간 통화 종료 이름)을 찾지 못했다");

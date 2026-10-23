@@ -16,6 +16,7 @@ import {
   isAudioDebugEnabled,
   noteAccept,
   noteChunkReceived,
+  noteNormalizerGain,
   noteChunkScheduled,
   noteCredentialSource,
   formatDbfs,
@@ -281,4 +282,19 @@ test("[§105] 화면 켜짐 유지 진단 — 상태 · 풀린 횟수(받기 때
   noteAccept(5);
   assert.equal(readAudioDiag().wakeLockReleases, 0);
   assert.equal(readAudioDiag().wakeLockStatus, "released");
+});
+
+// ── §122(8) 2026-10-23 실기 신고 "검찰 고급 기본 음량이 기관 사칭 스피커 모드보다 커" — 정규화 게인을 기기에서 본다 ──────────────
+test("[diag 음량] norm.gainDb — 정규화(§114)가 마지막 청크에 쓴 게인을 dB로 · 받기마다 비운다", () => {
+  resetAudioDiagForTest();
+  noteAccept(0);
+  const row = () => Object.fromEntries(buildAudioDiagRows({ ...dummyInput(), snapshot: readAudioDiag() }));
+  assert.equal(row()["norm.gainDb"], "-");
+  noteNormalizerGain(2);
+  assert.equal(row()["norm.gainDb"], "6.0");
+  noteNormalizerGain(0.5);
+  assert.equal(row()["norm.gainDb"], "-6.0", "최대가 아니라 마지막 값");
+  noteAccept(10);
+  assert.equal(row()["norm.gainDb"], "-", "다음 통화에서 비운다");
+  resetAudioDiagForTest();
 });

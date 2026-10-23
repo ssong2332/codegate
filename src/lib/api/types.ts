@@ -86,7 +86,8 @@ export type CreateSessionResponse = {
 
 // --- sendMessage (Track A · T7 · UX-006 · AC-003~005/AC-013/AC-024/AC-007) ---
 // §113.2 — `photo: true` = 참가자가 기기 사진을 보냈다(사실만 — 이미지 · 파일 정보는 실리지 않는다 · `userText`는 서버가 무시).
-export type SendMessageRequest = { sessionId: string; userText: string; photo?: boolean };
+// §121.7 — `duringCall`: 통화 중 대화방에서 보낸 카톡(functions/src/roleplay/types.ts와 1:1).
+export type SendMessageRequest = { sessionId: string; userText: string; photo?: boolean; duringCall?: boolean };
 // isMock: 서버가 이미 반환 중이었으나(functions/src/roleplay/index.ts:137) 클라 타입에 누락돼
 // 있던 계약 드리프트를 채팅 화면 구현 시 해소.
 export type SendMessageResponse = {
@@ -404,7 +405,8 @@ export type UpdateMessengerSkinResponse = {
 // --- requestEscalation (T30 · UX-022 명시 "전화로 확인" 버튼 · §13.3/AC-034) ---
 // functions/src/session/types.ts와 1:1.
 // 실기 신고 4(2026-10-21) — `via: "voice_talk"`: 통화로 이어지지 않는 카톡형 세션이면 `{ voiceTalk: "unanswered", turnIndex }`(남긴 사기범 메시지의 turnIndex).
-export type RequestEscalationRequest = { sessionId: string; via?: "voice_talk" };
+// §123 — `voice_talk_dial` = 대화방 보이스톡 발신(참가자가 건 통화로 기록 · functions/src/session/types.ts와 1:1).
+export type RequestEscalationRequest = { sessionId: string; via?: "voice_talk" | "voice_talk_dial" };
 export type RequestEscalationResponse = { escalation: { toChannel: "voice" } } | { voiceTalk: "unanswered"; turnIndex: number };
 
 // --- requestReverseEscalation (T40 fast-follow · UX-014 명시 "메시지로 전환" 버튼 · §13.1/AC-039) ---

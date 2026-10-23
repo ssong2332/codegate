@@ -59,7 +59,7 @@ test("[리뷰 Minor 3] 링크 칩이 붙은 통화 턴은 접지 않는다(누�
 });
 
 test("[배선] 메신저 화면이 channel을 읽고 foldCallSegments로 그린다(소스 스캔)", () => {
-  const page = readFileSync(new URL("../../app/session/messenger/page.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const page = readFileSync(new URL("../../components/MessengerChatRoom.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   assert.match(page, /channel: data\.channel as string \| undefined/);
   // §89.5 ⓐ — 표시 규칙(이웃 항목 참조) 때문에 접힌 목록을 변수로 한 번 만든 뒤 그린다.
   // §94 — 공개 전 답장을 숨긴 목록(+ 낙관적 내 말풍선)을 접는다. 원천은 여전히 구독 `messages`다.

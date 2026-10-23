@@ -183,7 +183,7 @@ test("[G653] 경계 판 — 진입은 세션 생성 뒤(훈련 화면 코드 무
   assert.match(difficulty, /if \(enteredRef\.current\) return;/);
   assert.match(difficulty, /focusOnMount/);
   // 통화 · 메신저 화면에는 경계 판을 넣지 않는다(받기 탭 오디오 잠금 해제 경로 무변경).
-  for (const f of ["src/app/session/play/page.tsx", "src/app/session/messenger/page.tsx", "src/components/CallStartNotice.tsx"]) {
+  for (const f of ["src/app/session/play/page.tsx", "src/components/MessengerChatRoom.tsx", "src/components/CallStartNotice.tsx"]) {
     assert.ok(!readFileSync(f, "utf8").includes("BoundaryPanel"), f);
   }
   const end = readFileSync("src/app/session/end/page.tsx", "utf8");
@@ -271,7 +271,7 @@ test("[G707] 훈련 대화 입력칸(메신저 · 통화 텍스트 2곳) — 키
   assert.equal(TRAINING_INPUT_NO_SUGGEST.autoCorrect, "off");
   assert.equal(TRAINING_INPUT_NO_SUGGEST.spellCheck, false);
   const cases: [string, string][] = [
-    ["src/app/session/messenger/page.tsx", "messenger-chat-input"],
+    ["src/components/MessengerChatRoom.tsx", "messenger-chat-input"],
     ["src/app/session/play/page.tsx", "realtime-text-input"],
     ["src/app/session/play/page.tsx", "chat-input"],
   ];
