@@ -100,7 +100,7 @@ import {
   shouldShowReturnNotice,
   serializeTranscriptBackup,
 } from "@/lib/realtime/backgroundCall";
-import { openingTurnFor } from "@/lib/realtime/escalatedOpening";
+import { callCallerFrom, openingTurnFor, type CallCaller } from "@/lib/realtime/escalatedOpening";
 import { createScreenWakeLock, type WakeLockStatus } from "@/lib/realtime/screenWakeLock";
 import {
   RESUME_GESTURE_EVENTS,
@@ -187,6 +187,7 @@ import { TRAINING_INPUT_NO_SUGGEST } from "@/lib/messenger/keyboardViewport";
 import { clearVoiceTalkDial, peekVoiceTalkDial, RINGBACK_TONE, VOICE_TALK_CONNECT_MS } from "@/lib/messenger/voiceTalkDial";
 import { startRingback } from "@/lib/phone/ringbackPlayer";
 import MessengerChatRoom from "@/components/MessengerChatRoom";
+import VoiceTalkDialScreen from "@/components/VoiceTalkDialScreen";
 import { chatDuringCallContextText } from "@/lib/realtime/chatDuringCall";
 
 // ⚠️ 지연 로딩 필수 — @elevenlabs/react가 끌어오는 livekit-client(WebRTC)를 이 화면 로드 시점에
@@ -378,6 +379,8 @@ export default function SessionCallPage() {
     sessionId ? peekVoiceTalkDial<PrimedCallAudio>(sessionId, Date.now()) : null,
   );
   const voiceTalkDialAdoptedRef = useRef(false);
+  // §123 — 이 통화를 누가 걸었나(세션 전환 기록 · 방금 대화방에서 건 보이스톡이면 참가자). 첫 연결 신호가 본다.
+  const [callCaller, setCallCaller] = useState<CallCaller>(voiceTalkDial ? "participant" : "scammer");
   const ringbackStopRef = useRef<(() => void) | null>(null);
   const [voiceTalkDialCancelling, setVoiceTalkDialCancelling] = useState(false);
   const voiceTalkDialCancellingRef = useRef(false);
@@ -808,6 +811,7 @@ export default function SessionCallPage() {
         // **없다**(예전 "사전 고지 유지" 근거는 뒤집혔다). 그 통화의 사전 고지는 메신저 시작 전 고지가 "메시지와 전화"로
         // 맡는다(T190-8a). 에스컬레이션은 벨 직전 고지(`pre-call-notice`)도 거치지 않고 `incoming`으로 바로 간다.
         const isEscalated = data.entryChannel === "messenger";
+        if (!voiceTalkDial) setCallCaller(callCallerFrom(data.channelHistory));
         // §121(1) — 방금 대화방에서 건 보이스톡은 새 통화다. 같은 세션에서 앞서 받은 통화 기록(`isSessionAnswered`)이 남아 있어도
         // 통화 중으로 복원하지 않고 발신 연출(`incoming` + 발신 덮개)부터 시작한다(맡긴 값은 받는 순간 비워져 새로고침엔 종전대로).
         const answered =
@@ -2588,31 +2592,15 @@ export default function SessionCallPage() {
       {/* `?audiodebug=1`일 때만 그린다(없으면 DOM 0 — 컴포넌트 첫 분기). 관찰 전용 · 탭을 가로채지 않는다. */}
       {/* §121(1)(UX D-154) — 보이스톡 발신 화면(카톡형). 수신 화면 위에 덮는다 — 받으면(`connecting`) 사라진다. */}
       {voiceTalkDial && phase === "incoming" && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-ink px-6 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-24 text-white"
-        >
-          <div className="flex flex-col items-center gap-4">
-            <span
-              aria-hidden="true"
-              className="flex h-[96px] w-[96px] items-end justify-center overflow-hidden rounded-[36px] bg-avatar-bg text-white"
-            >
-              <PhoneIcon name="person" size={80} />
-            </span>
-            <p className="text-[22px] font-bold">{scenario.chatDisplayName ?? callerLabel}</p>
-            <p className="text-base text-white/80">보이스톡 연결 중…</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void handleCancelVoiceTalkDial()}
-            disabled={voiceTalkDialCancelling}
-            aria-label="보이스톡 취소"
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-danger text-white disabled:opacity-60"
-          >
-            <PhoneIcon name="end-call" size={30} />
-          </button>
-        </div>
+        <VoiceTalkDialScreen
+          name={scenario.chatDisplayName ?? callerLabel}
+          status="보이스톡 연결 중…"
+          // §123 — 발신 중 누른 스피커 · 마이크 끄기는 받은 뒤 통화에 그대로 이어진다(같은 상태).
+          speaker={{ on: audioRoute === "speaker", onToggle: () => setAudioRoute((route) => (route === "speaker" ? "call" : "speaker")) }}
+          mute={{ on: muted, onToggle: handleToggleMute }}
+          onEnd={() => void handleCancelVoiceTalkDial()}
+          endDisabled={voiceTalkDialCancelling}
+        />
       )}
       {/* §121.7 PR-3(UX D-157) — 통화를 유지한 채 대화방을 겹친다. 통화가 끝나거나(종료 · 끊김) 대화방 전환이 시작되면 내린다. */}
       {chatOpen && phase !== "ended" && !switchingToMessenger && !localHangup && (
@@ -2694,6 +2682,7 @@ export default function SessionCallPage() {
               connectionSeq: realtime.connectionSeq,
               resumeTurn,
               escalatedFromMessenger: scenario.channel === "messenger",
+              caller: callCaller,
             })}
             onConnectionLost={handleConnectionLost}
           />
