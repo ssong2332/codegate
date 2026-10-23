@@ -72,6 +72,7 @@ import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { PHOTO_TURN_TEXT, photoTurnInstruction } from "./photoTurn";
 import { replyChatDuringCall } from "./chatDuringCall";
 import { currentCallCaller, PARTICIPANT_CALLED_INSTRUCTION } from "./callCaller";
+import { isGoalBeforePhotoFollowUp, sessionVariantStageSummaries } from "./photoFollowUp";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { asksIdentityCheck } from "./personaAuthority";
 import { extractSmsMarker } from "./smsMarker";
@@ -80,7 +81,7 @@ import { evaluateOtpCheck, otpCheckInputsFromHistory } from "./otpCheck";
 import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { decideRepeatBreak, repeatBreakInstruction } from "./repeatBreak";
-import { judgeEndCallSignal, judgeEscalationSignal } from "./signalConsistency";
+import { judgeEndCallSignal, judgeEscalationSignalAt } from "./signalConsistency";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
@@ -676,9 +677,22 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     } = extractEscalationSignal(smsMarkerFreeText);
     // ③-b′ §104(전수 검수 2차 M1 · M2) — 신호가 같은 응답의 대사와 어긋나면 받아들이지 않는다(`signalConsistency.ts` 판정표 A · B).
     // 통화가 안 된다고 말한 턴의 전화 전환 · 새 송금을 요구한 턴의 목표 끊기. 신호는 위에서 이미 텍스트에서 지워졌다.
-    const escalationCheck = rawSignalEscalate ? judgeEscalationSignal(signalFreeReplyText) : undefined;
+    // §122(7) 판정표 A0 — 전환 하한(메신저 진입 뒤 첫 답장의 전환 신호는 대사와 무관하게 받지 않는다).
+    const escalationCheck = rawSignalEscalate
+      ? judgeEscalationSignalAt(turnsSinceMessengerEntry(turnCount, session.channelHistory), signalFreeReplyText)
+      : undefined;
     const signalEscalate = rawSignalEscalate && escalationCheck?.accept === true;
-    const endCallCheck = judgeEndCallSignal(rawEndCallSignal, signalFreeReplyText);
+    const endCallConsistency = judgeEndCallSignal(rawEndCallSignal, signalFreeReplyText);
+    // §122(6) 판정표 P — 메신저 단계에서 사진 뒤 남은 단계(송금 등)를 꺼내기 전의 목표 끊기는 받지 않는다(`photoFollowUp.ts`).
+    const endCallCheck = isGoalBeforePhotoFollowUp({
+      channel: session.channel,
+      endCall: endCallConsistency.endCall,
+      stageSummaries: sessionVariantStageSummaries(session.scenarioId, session.flowVariantId),
+      history: storedHistory,
+      isPhotoTurn,
+    })
+      ? { endCall: undefined, dropped: "photo_followup_pending" as const }
+      : endCallConsistency;
     const endCallSignal = endCallCheck.endCall;
     if ((escalationCheck && !escalationCheck.accept) || endCallCheck.dropped) {
       // G170 — 사유 코드만(대사 0).

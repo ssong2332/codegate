@@ -35,7 +35,15 @@ import { LANDING_PAGE_TOKENS, browserBarTokensFor } from "../lib/phone/skinToken
 import type { MessengerSkin } from "../lib/messenger/detectSkin";
 // §101 추가 — 금액 검증 · 한글 단위 표기 · 필수 칸 안내(잎 모듈 · 상대 경로 — 렌더 하네스 관례).
 import { amountError, amountHint, requiredFieldError } from "../lib/landing/amountInput";
-import { identityError, identityHint, identityMaxLength, sanitizeIdentityInput, type IdentityFormat } from "../lib/landing/identityInput";
+import {
+  BIRTHDATE_MASK,
+  identityDisplayValue,
+  identityError,
+  identityHint,
+  identityMaxLength,
+  sanitizeIdentityInput,
+  type IdentityFormat,
+} from "../lib/landing/identityInput";
 // §106 — 사건 기록 열람본의 피의자 칸 값(잎 모듈 · 상대 경로).
 import { recordIssueInfo, recordSubjectRows, type RecordRow } from "../lib/landing/recordDocument";
 
@@ -669,6 +677,38 @@ function issuerNameOf(issuerLabel: string): string {
  * T190-5(UX-023 v1.33 (1)(3)~(6)) — 배치 = ③ 기관 헤더 띠 → ④ 헤드라인·안내 → ⑤ 입력 → ⑥ 제출 → ⑦ 닫기 → ⑧ 발급처.
  * 🔒 원은 없앴다(Superseded). 본문 ③~⑧은 기관 페이지라 기기 스킨과 무관하게 같다(UX-023 v1.33 (8)).
  */
+/** §122(10) — 생년월일 칸 안내(숫자열 금지 — AC-005). 칸이 `900101-1` 너비라 짧게 두고, 형식은 칸 아래 안내 · 가림 표시가 보여 준다. */
+const BIRTHDATE_PLACEHOLDER = "생년월일";
+
+/**
+ * §122(10)(사용자 결정 "주민번호 앞자리형") — 생년월일 칸을 `900101-1●●●●●●` 모양으로 감싼다. 가림 표시 6칸은 입력 칸이 아니다
+ * (⛔ 뒷자리 첫 숫자 외에는 받지 않는다 — 개인정보 최소화). 다른 신원 칸은 감싸지 않는다(그대로 렌더).
+ */
+function IdentityBox({
+  masked,
+  error,
+  page,
+  children,
+}: {
+  masked: boolean;
+  error: boolean;
+  page: typeof LANDING_PAGE_TOKENS;
+  children: React.ReactElement;
+}) {
+  if (!masked) return children;
+  return (
+    <span
+      className="flex min-h-[52px] items-center gap-1 rounded-[10px] border px-3.5 focus-within:border-2"
+      style={{ borderColor: error ? page.errorText : page.inputBorder, backgroundColor: page.inputBg }}
+    >
+      {children}
+      <span aria-hidden="true" className="select-none text-[12px] font-normal tracking-[0.18em]" style={{ color: page.inputText }}>
+        {BIRTHDATE_MASK}
+      </span>
+    </span>
+  );
+}
+
 function CredentialFormMockup({
   landingId,
   onClose,
@@ -750,9 +790,13 @@ function CredentialFormMockup({
   const recordDocument = landingId ? RECORD_DOCUMENT_COPY[landingId] : undefined;
   if (submitted && recordDocument) {
     // ⛔ G255 좁은 예외(#221) — 피의자 칸에만 방금 넣은 신원 값을 찍는다. 값은 화면 문자열로만 쓰이고 콜백 · 네트워크에 실리지 않는다(G138).
+    // §122(10) — 열람본의 생년월일도 입력 칸과 같은 모양(`900101-1●●●●●●`)으로 보인다.
+    const displayValues = Object.fromEntries(
+      copy.fields.map((field) => [field.label, identityDisplayValue(field.format, values[field.label] ?? "")]),
+    );
     const subjectRows = recordSubjectRows(
       copy.fields.map((field) => field.label),
-      values,
+      displayValues,
       recordDocument.subjectRows,
       recordDocument.subjectHalfLabels,
     );
@@ -995,23 +1039,34 @@ function CredentialFormMockup({
                 // T190-5(D-93) — 숫자 칸은 숫자 자판 힌트만(`inputMode` — 필드별 명시). 입력값 자동 서식 0.
                 // §101 추가 — 제출 때 빈 칸 · 금액 오류를 칸 아래에 알린다(위 `errorFor`).
                 // §114 — 신원 칸(`format`)은 입력하는 동안 숫자만 남기고 자르며 휴대전화는 하이픈을 넣는다 · 자판도 형식이 정한다.
-                <input
-                  type="text"
-                  inputMode={field.format === "mobile" ? "tel" : field.format === "birthdate" ? "numeric" : field.inputMode}
-                  maxLength={field.format ? identityMaxLength(field.format) : undefined}
-                  autoComplete="off"
-                  value={values[field.label] ?? ""}
-                  onChange={(event) => {
-                    const next = field.format ? sanitizeIdentityInput(field.format, event.target.value) : event.target.value;
-                    setValues((current) => ({ ...current, [field.label]: next }));
-                    if (error) setErrors((current) => ({ ...current, [field.label]: "" }));
-                  }}
-                  placeholder={field.placeholder}
-                  aria-invalid={error ? true : undefined}
-                  aria-describedby={error || hint ? noteId : undefined}
-                  className="min-h-[52px] rounded-[10px] border px-3.5 text-[17px] font-normal outline-none focus:border-2"
-                  style={{ borderColor: error ? page.errorText : page.inputBorder, backgroundColor: page.inputBg, color: page.inputText }}
-                />
+                // §122(10) — 생년월일은 실제 본인확인 사이트 모양: 칸 안에 앞 6자리 + 뒷자리 첫 숫자(`900101-1`)를 받고 나머지 6칸은 가림 표시만.
+                <IdentityBox masked={field.format === "birthdate"} error={Boolean(error)} page={page}>
+                  <input
+                    type="text"
+                    inputMode={field.format === "mobile" ? "tel" : field.format === "birthdate" ? "numeric" : field.inputMode}
+                    maxLength={field.format ? identityMaxLength(field.format) : undefined}
+                    autoComplete="off"
+                    value={values[field.label] ?? ""}
+                    onChange={(event) => {
+                      const next = field.format ? sanitizeIdentityInput(field.format, event.target.value) : event.target.value;
+                      setValues((current) => ({ ...current, [field.label]: next }));
+                      if (error) setErrors((current) => ({ ...current, [field.label]: "" }));
+                    }}
+                    placeholder={field.format === "birthdate" ? BIRTHDATE_PLACEHOLDER : field.placeholder}
+                    aria-invalid={error ? true : undefined}
+                    aria-describedby={error || hint ? noteId : undefined}
+                    className={
+                      field.format === "birthdate"
+                        ? "min-h-[50px] w-[8.6ch] bg-transparent text-[17px] font-normal tracking-[0.06em] outline-none"
+                        : "min-h-[52px] rounded-[10px] border px-3.5 text-[17px] font-normal outline-none focus:border-2"
+                    }
+                    style={
+                      field.format === "birthdate"
+                        ? { color: page.inputText }
+                        : { borderColor: error ? page.errorText : page.inputBorder, backgroundColor: page.inputBg, color: page.inputText }
+                    }
+                  />
+                </IdentityBox>
               )}
               {/* §101 추가 — 오류 안내가 우선, 없으면 금액 한글 단위 표기("47억 원"). */}
               {error ? (
