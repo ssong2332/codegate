@@ -2614,7 +2614,7 @@ export default function SessionCallPage() {
           </button>
         </div>
       )}
-      {/* §121.7 PR-3(UX D-155) — 통화를 유지한 채 대화방을 겹친다. 통화가 끝나거나(종료 · 끊김) 대화방 전환이 시작되면 내린다. */}
+      {/* §121.7 PR-3(UX D-157) — 통화를 유지한 채 대화방을 겹친다. 통화가 끝나거나(종료 · 끊김) 대화방 전환이 시작되면 내린다. */}
       {chatOpen && phase !== "ended" && !switchingToMessenger && !localHangup && (
         <MessengerChatRoom
           duringCall={{

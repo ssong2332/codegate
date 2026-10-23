@@ -23640,3 +23640,99 @@ D 판단값 근거(관측 5세션 — 운영 f7047187 + §115.5 · §115.6 실 �
 
 ### 119.4 검증
 `npm --prefix functions test` · `npm test` · 두 lint · 에뮬레이터 스모크 `node scripts/emulator-route-deck-smoke.mjs` — 수치는 PR 본문. 배포 순서 **Functions → Hosting**(옛 화면은 `routeSummary`를 읽지 않을 뿐 — 어느 순서도 안전).
+
+## 122. (Bug fix — 2026-10-23 · 브랜치 `claude/urgent-regressions-b00fe3` = main `40575d5` + 변경 · 사용자 실기 신고 4건(배포 뒤 회귀 포함) · 갤럭시 S25 + 크롬) **오프닝 신호 마커 노출 · 시나리오 음량 차이 · 사진 직후 채팅방 나감 · 본인확인 생년월일 주민번호 앞자리형** — implementer 기록 (DECISIONS #237 · UX D-155)
+
+### 122.1 (7) [긴급] 메신저 첫 말풍선에 `[[SIGNAL:ESCALATE_VOICE]]` 노출
+신고: 자녀 사칭 카톡(아빠 호칭) 첫 말풍선 *"[[SIGNAL:ESCALATE_VOICE]]⏎⏎아빠, 나야. 폰 액정이 깨져서 지금 친구 폰으로 보내고 있어."*
+
+| 항목 | 결과 | 근거 |
+|---|---|---|
+| 원인 | 사기범 대사 LLM 경로 3곳 중 **오프닝만** 신호 · 문자 마커 추출(`extractEscalationSignal` · `extractSmsMarker`)을 거치지 않았다. sendMessage · 통화 복귀 메시지는 이미 지운다 | `functions/src/roleplay/openingLine.ts`(수정 전 링크 추출 → 표기 정리 직행) · `roleplay/index.ts` ③-b · `callReturnLine.ts` |
+| 수정 ① | 오프닝: 링크 → 문자 마커 → 신호 마커 제거 → 표기 정리. ⛔ 오프닝은 지우기만 한다(전환 · 끊기 · 문자 효과 0) | `openingLine.ts` |
+| 수정 ② 전환 하한(판정표 A0) | 메신저 진입(또는 통화→메신저 복귀) 뒤 사용자 턴 `< ESCALATION_MIN_USER_TURNS(2)`이면 전화 전환 신호를 받지 않는다(`too_early`) — 첫 답장에 바로 전화가 오지 않는다 | `signalConsistency.ts` `judgeEscalationSignalAt` · `index.ts` |
+| 수정 ③ 안전망 | 세 경로가 모두 마지막에 지나는 `finalizeScammerReplyText`가 남은 제어 마커 모양(`[[이름:…]]` · 전각 · 공백 · 소문자 변형)을 지운다. 마커가 없으면 바이트 그대로 | `scammerReplyMasking.ts` |
+| ⚠️ 지시와 다른 점 | 지시는 "마커가 남으면 `replyUsability`에서 걸러 낸다"였다. `replyUsability`는 LLM 단계 판정이라 **마커 추출 전 원문**(정상 마커가 있는 상태)을 본다 ⇒ "남은 마커"를 판정할 수 없다. 그래서 안전망을 추출 뒤 최종 손질 자리에 두었다 | `llm/replyUsability.ts` 머리 표 1-b |
+| 테스트 | `roleplay/__tests__/openingSignalLeak.test.ts` 7건 — 신고 원문 · 안전망 변형 · 바이트 보존 · A0 · **`purpose: "scammer-reply"` + `finalizeScammerReplyText`를 쓰는 모든 파일이 신호 추출을 부른다**(경로 누락 재발 방지 소스 스캔) | — |
+
+### 122.2 (8) [긴급] 시나리오별 음량 차이 — 앱 신호 사슬 오프라인 렌더(원인 미확정 · 기기 확인 대기)
+신고: *"검찰 고급 시작하니까 스피커 아니어도 소리가 ㅈㄴ 커. 기관 사칭 시나리오 스피커 모드보다 커"*
+
+오프라인 렌더(`scripts/loudness-offline-render.mjs` — §114.1 실측 원본 WAV 14세션 · Gemini Live 청크 7680샘플 · 앱 모듈 `loudnessNormalizer.ts` · `outputGain.ts` 그대로 · 실 키 0):
+
+| 세션 | 원본 말소리 RMS | 통화 최종 RMS | 통화 말소리 시작 3초 | 통화 최대 3초 창 | 첫 청크 게인 | 최대 게인 |
+|---|---|---|---|---|---|---|
+| 기관 사칭 ① | −18.99 | −22.08 | −23.97 | −20.31 | −2.85dB | +1.92dB |
+| 기관 사칭 ② | −17.16 | −21.92 | −23.86 | −18.56 | −4.91dB | +0.64dB |
+| **검찰 수사 협조** | −19.16 | **−22.41** | **−23.65** | −19.74 | −3.92dB | +2.13dB |
+| 14세션 범위 | −19.16 ~ −14.68 | **−22.46 ~ −21.70(폭 0.76dB)** | −23.97 ~ −22.12 | −20.78 ~ −18.56 | −5.47 ~ −0.45dB | ≤ +2.13dB |
+
+| 후보(지시) | 판정 | 근거 |
+|---|---|---|
+| 정규화가 일부 경로에서 빠짐 | 아님(Gemini 경로) — 받은 청크는 전부 `normalizeChunk`를 지난다. 범위 밖은 ElevenLabs · 폴백 `<audio>`(§114.1 그대로) | `GeminiVoiceSession.tsx` 청크 수신부(호출 1곳) |
+| 처음 +6dB로 시작 | 아님 — 첫 청크 게인 −5.47 ~ −0.45dB, 전체 최대 +2.13dB | 위 표 |
+| 스피커 증폭 뒤 중복 적용 | 아님 — 정규화 → 통화/스피커 게인 · 컴프레서 · 리미터 순서 1회 | 같은 파일 |
+| RMS 기준과 체감 차이 | 말소리 시작 3초 · 최대 3초 창도 검찰이 기관보다 크지 않다 | 위 표 |
+
+⇒ **앱 안의 소리 사슬로는 신고 크기 차이를 만들 수 없다.** 통화 모드 대비 스피커 모드는 +13~15dB(§108.1)이고 정규화 폭은 ±6dB(실측 ≤ +2.1dB)다. 앱 밖 원인(⚠️ **추정 · 미확인**): Android 출력 스트림이 세션마다 다르게 잡힐 수 있다(통화 음량 ↔ 미디어 음량 — 출력 컨텍스트를 받기 탭에서 만들었는지(`out.origin` primed/session)와 마이크를 연 순서에 따라 다를 수 있다). 앞선 실측에서 검찰 원본이 0.2~1.8dB 작았으므로 §114 정규화가 검찰을 약 +1.2dB 키웠다. 이것이 "#385 뒤 더 커졌다"는 체감과 방향이 맞다.
+확인 방법(실 키 0): 같은 기기에서 `?audiodebug=1`로 기관 사칭 고급 → 검찰 고급을 차례로 실행하고 `out.origin` · `route` · `callMode` · `out.gain` · `pcm.peakDb` · **`norm.gainDb`(이번에 추가)**를 비교한다. 통화 중 볼륨 키를 눌렀을 때 뜨는 슬라이더 이름(통화/미디어)도 함께 본다. 수정 방향은 이 결과로 정한다(메인 세션에 요청함).
+이번 변경: 진단 패널 `norm.gainDb`(정규화가 마지막 청크에 쓴 게인) — `audioDiagnostics.ts` · `GeminiVoiceSession.tsx` 1줄. 소리 처리 무변경.
+
+#### 122.2.1 기기 확인 결과(2026-10-23 · 갤럭시 S25 크롬 · 라이브) · 볼륨 키가 먹지 않는 원인
+사용자 원문: *"둘 다 통화였고, 이번에는 검찰 고급이 소리가 비슷해. 근데 실제로 볼륨 버튼을 눌러서 음량 조절을 하려고 해도 실제로 음량 조절이 되지는 않네"*
+
+| 항목 | 판정 | 근거 |
+|---|---|---|
+| 시나리오 간 큰 차이 | 이번에는 재현되지 않았다(두 시나리오 모두 볼륨 슬라이더가 '통화', 소리도 비슷). 재현 실패이지 해결은 아니다 — 간헐적인 경로 차이 가능성은 남는다 | 사용자 실기 |
+| 볼륨 키가 먹지 않음 | **Chromium 알려진 결함과 같은 증상이다**(⚠️ 이 기기에서 출력 스트림을 직접 확인한 것은 아니다). 오디오 입력(getUserMedia)을 에코 제거와 함께 열면 Android가 통신 모드로 바뀌어 볼륨 키가 '통화' 음량을 조절한다. 그런데 Web Audio 출력은 '미디어' 음량으로 재생되는 경우가 있어, 키를 눌러도 소리가 변하지 않는다. 웹에서 "미디어 모드로 마이크 열기"를 요청할 API는 없다 | [Chromium 443255997](https://issues.chromium.org/issues/443255997) · [Jitsi 포럼](https://community.jitsi.org/t/volume-control-hardware-keys-doesnt-work-on-chrome-on-android/113729) · 우리 마이크 제약 `echoCancellation: true`(`src/lib/realtime/micHandoff.ts:16`) |
+| 정규화 · 게인이 볼륨을 상쇄하는가 | 아니다 — 정규화는 받은 PCM의 크기만 맞추고(게인 상한 +6dB) 시스템 볼륨 값을 읽거나 되돌리지 않는다. 앱 게인은 스피커 버튼으로만 바뀐다 | `loudnessNormalizer.ts` · `outputGain.ts` |
+| 앱에서 고칠 수 있는가 | **볼륨 키 자체는 웹에서 고칠 수 없다**(위 근거 — 플랫폼 API 없음). 에코 제거를 끄면 키가 미디어 음량을 조절할 수 있다는 보고가 있으나 기기마다 다르다. 끄면 AI 목소리가 마이크로 되돌아가 Live가 자기 말을 사용자 발화로 오인한다(2026-07-23 결정 근거) ⇒ 권하지 않는다 | `micHandoff.ts:14-16` |
+| 지금 쓸 수 있는 우회(사용자 안내) | 볼륨 키를 눌러 뜬 패널을 펼쳐(⋯ 또는 아래 화살표) **'미디어' 슬라이더**를 조절한다(⚠️ 추정 — 실제 재생 스트림이 미디어일 때만 효과가 있다. 사용자 확인 필요) | — |
+| 대안(제안 · 미구현) | 통화 화면 안 **음량 슬라이더**(앱 게인 0.2~1.0 + 스피커 증폭 유지). 볼륨 키와 무관하게 언제나 먹는다. 통화 그리드(`src/app/session/play/page.tsx`)를 바꾸므로 messenger-call-ux 작업과 겹친다 ⇒ 승인 뒤 별도 PR | — |
+| 재발 캡처 | `?audiodebug=1` 패널에 `out.origin` · `route` · `callMode` · `out.gain` · `pcm.peakDb` · `norm.gainDb`가 보인다(이번 PR에서 `norm.gainDb` 추가, 기존 항목 무변경) | `src/lib/realtime/audioDiagnostics.ts` `AUDIO_DIAG_KEYS` |
+
+#### 122.2.2 볼륨 키가 먹게 — 마이크가 열린 뒤 출력 컨텍스트를 만든다(사용자 결정 *"볼륨 버튼을 누르면 음량이 변하게 하자. 음량 슬라이드는 넣지 말고"*)
+근거(Chromium 소스 `media/audio/android/audio_manager_android.cc`, 2026-10-23 열람):
+- 마이크 입력 스트림을 효과(에코 제거 등)와 함께 만들면 `communication_mode_is_on_ = true` · `SetCommunicationAudioModeOn(true)`이 된다(`MakeAudioInputStream`). 이 상태에서 볼륨 키는 '통화' 음량을 조절한다.
+- 저지연 출력 스트림(`MakeLowLatencyOutputStream` — Web Audio · 미디어 요소 · WebRTC 수신 재생이 모두 이 경로)의 용도는 **만들 때** 정해진다: `communication_mode_is_on_ ? AAUDIO_USAGE_VOICE_COMMUNICATION : AAUDIO_USAGE_MEDIA`(OpenSL 대체 경로도 `SL_ANDROID_STREAM_VOICE` / `_MEDIA`).
+- 우리 통화 출력 컨텍스트는 받기 탭에서 **마이크보다 먼저** 만들어진다(§57 수정안 A — `primeCallAudio`). 그래서 '미디어' 용도로 남고, 볼륨 키('통화')를 눌러도 소리가 바뀌지 않는다. ⇒ 사용자 신고와 같은 증상이다. 세션마다 어느 쪽이 먼저 만들어지느냐가 달라지면 기본 크기가 크게 달라진다(통화 · 미디어 음량 값이 서로 다르다) — 이전의 간헐적인 큰 차이도 이것으로 설명될 수 있다(⚠️ 추정).
+
+| 후보(메인 세션 제시) | 판정 | 근거 |
+|---|---|---|
+| ① Web Audio → `MediaStreamAudioDestinationNode` → `<audio>` | 효과는 같지만 불필요하다 — 미디어 요소 재생도 같은 저지연 출력 경로라 용도가 만들 때 정해진다. 경로 하나를 더할 뿐이다 | 위 소스 |
+| ② RTCPeerConnection 루프백 | 기각 — 크롬의 WebRTC 수신 재생도 같은 출력 경로다(브라우저는 WebRTC Java `WebRtcAudioTrack`를 쓰지 않는다). 지연 · CPU · 연결 실패 위험만 늘어난다 | 위 소스 |
+| ③ **마이크가 열린 뒤 출력 컨텍스트를 새로 만든다** | **채택** — 바꾸는 곳이 가장 적고(세션 컴포넌트의 컨텍스트 생성 자리) 판정표 O1~O4로 소리가 안 나는 경우를 막는다 | `src/lib/realtime/callAudio.ts` 표 · `GeminiVoiceSession.tsx` |
+
+구현: 세션이 마이크 요청(받기 때 이미 시작)을 기다린 뒤 24kHz 출력 컨텍스트를 새로 만들어 `resume()`한다(최대 `FRESH_OUTPUT_RESUME_TIMEOUT_MS` 500ms). running이면 그것을 쓴다(`after-mic`). running이 아니면 받기 때 컨텍스트로 돌아가 소리를 지킨다(`fallback-primed` — §57 무음 결함 재발 방지). 실기 A/B · 되돌리기 플래그 `?outaftermic=0`(종전 경로 `before-mic`). 진단 `?audiodebug=1` 행 **`out.path`**가 이번 통화의 경로를 보인다.
+⚠️ 실기 확인 전이다. 확인할 것: ① `out.path = after-mic`일 때 볼륨 키로 소리가 바뀌는가 ② 기본 크기(통화 음량 값에 따라 달라진다) ③ 소리가 스피커가 아닌 수화부로 나가지 않는가 ④ 받기 → 첫소리 지연(마이크 권한을 처음 묻는 경우 연결이 승인까지 기다린다).
+⚠️ 받기 때 만든 출력 컨텍스트는 `after-mic`일 때 쓰이지 않고 통화 화면이 종전 시점에 닫는다(무음 상태로 열려 있다).
+
+### 122.3 (6) 신분증 사진 직후 사기범이 다음 요구 없이 채팅방을 나감
+신고: 사진 → *"아빠 고마워, 잘 받았어. 확인해볼게. 지금 접수 처리 들어갔어."* → "상대방이 채팅방을 나갔습니다." (`fv-tdgg` — 단계: 액정 → 앱 설치 → **신분증 사진** → 급한 돈 송금)
+
+원인: 메신저 단계 끊기(§104.9 대안 A)는 판정표(`scammerHangup/decide.ts`)의 사용자 발화 하한(3)만 보고, 대사 판정표 B는 "이번 응답에 새 요구가 있는가"만 본다. 사진 뒤 송금 단계가 남아 있는지는 아무도 보지 않았다.
+
+판정표 P(`functions/src/roleplay/photoFollowUp.ts` — 텍스트 폴백 · 메신저 단계 `END_CALL_GOAL`만):
+
+| # | If | Then |
+|---|---|---|
+| P1 | 메신저 단계가 아니다 · 목표 끊기 신호가 아니다 | 종전 |
+| P2 | 세션 변형 단계에 사진 · 신분증 단계가 없다 · 그 단계가 마지막이다 | 종전 |
+| P3 | 대화에 사진 턴이 없다(이번 턴 포함) | 종전 |
+| P4 | 마지막 사진 턴 뒤 사기범 대사(이번 응답 제외)에 새 요구 형태가 있다 | 종전 |
+| P5 | 그 밖 | **받지 않는다**(`photo_followup_pending`) — 대화가 이어진다 |
+
+오늘 P2를 통과하는 변형 = `fv-tdgg` 1개뿐이다(전수 실행). 포기 끊기(`END_CALL_GIVEUP`) · 실시간 콜러블 판정 · 흐름 정의는 바꾸지 않았다(흐름 재설계 = multi-route 1차 범위). 테스트 `roleplay/__tests__/photoFollowUp.test.ts` 5건.
+⚠️ 범위 밖 관찰: 다른 메신저 변형 중 사진을 `extraTactics`로만 요구하고 단계(`stages`)에는 없는 변형은 P2에서 걸리지 않는다. 사진 뒤 단계를 흐름에 넣을지는 multi-route 1차에서 정할 일이다.
+
+### 122.4 (10) 본인확인 생년월일 — 주민번호 앞자리형(사용자 결정)
+- 칸 모양: `030609-4●●●●●●` — 앞 6자리 + 뒷자리 **첫 숫자 1칸**만 입력받는다. 가림 6칸은 입력 칸이 아닌 표시다. 숫자 자판 · 7자리에서 자름 · 6자리 뒤 하이픈 자동.
+- 검증: 7자리 · 뒷자리 첫 숫자 1~4(1 · 2 → 19YY, 3 · 4 → 20YY) · 날짜 · 윤년 · 미래 금지. ⛔ 주민번호 전체를 붙여넣어도 첫 숫자까지만 남는다(개인정보 최소화).
+- 적용: `format: "birthdate"` 칸 전부(모의 랜딩 4화면 — 같은 칸 렌더 하나를 쓴다) · 열람본(§106) 피의자 칸 표시도 같은 모양(`identityDisplayValue`).
+- 파일: `src/lib/landing/identityInput.ts` · `src/components/MessengerFakeLanding.tsx`(`IdentityBox` · 열람본 `displayValues`) · 테스트 `identityInput.test.ts` · `mockScreenCopy.test.ts` §106 게이트(표시값 기준으로 갱신).
+- 화면 확인: 정적 렌더(Playwright · 390px)로 칸 모양만 확인했다. 실기 확인은 하지 않았다.
+
+### 122.5 겹침 · 배포
+- messenger-call-ux 세션과 겹칠 수 있는 파일: `src/components/MessengerFakeLanding.tsx`(랜딩 — 대화방 컴포넌트 아님) · `src/lib/realtime/GeminiVoiceSession.tsx`(진단 1줄 + import 1줄). 메신저 대화방 화면 파일 변경 0.
+- multi-route 1차와 겹칠 수 있는 파일: `functions/src/roleplay/index.ts`(신호 판정 2곳) · 흐름 정의(`flowVariants.ts`) 변경 0.
+- 배포 순서: **Functions → Hosting**(서로 독립 — (7)(6)은 Functions, (10)과 진단은 Hosting).

@@ -34,6 +34,19 @@
 // `maskPII(...)`가 다시 이 자리에 끼어드는 것을 리뷰에서 눈에 띄게 하기 위해서다.
 // ⚠️ 2026-10-17에 더한 손질 단계(실존 금융회사명 치환 `guardrails/realFinancialNames.ts` · 문장 수 상한
 // `replyLength.ts`)도 마커 추출처럼 **호출부에서 이 함수 앞에** 온다 — 이 함수는 항등 그대로 둔다.
+//
+// ⭐ §122(7)(실기 신고 2026-10-23 — 오프닝 첫 말풍선에 "[[SIGNAL:ESCALATE_VOICE]]" 원문 노출) — 마커 제거는 호출부 몫이지만, 한 경로
+// (오프닝)에서 그 단계가 빠지자 원문이 그대로 나갔다. 그래서 **세 경로(sendMessage · 오프닝 · 통화 복귀)가 모두 마지막에 지나는 이 자리**에
+// 남은 제어 마커 모양(`[[이름:…]]` · 전각 `［［…］］`)을 지우는 안전망을 둔다. 효과(전환 · 끊기 · 문자 · 링크)는 만들지 않는다 — 지우기만.
+// ⚠️ `replyUsability`(LLM 단계 판정)는 마커 추출 **전** 원문을 본다(정상 마커가 있는 상태) — 그래서 "남은 마커" 판정은 거기가 아니라 여기다.
+// ⛔ PII 마스킹은 여전히 하지 않는다(위 근거 그대로) — 숫자 · 대사 본문은 바이트 그대로다.
+const RESIDUAL_CONTROL_MARKER = /[[［]{2}\s*[A-Za-z_]+\s*[:：][^\]］\n]*[\]］]{2}/g;
+
 export function finalizeScammerReplyText(text: string): string {
-  return text;
+  if (!new RegExp(RESIDUAL_CONTROL_MARKER.source).test(text)) return text;
+  return text
+    .replace(RESIDUAL_CONTROL_MARKER, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ ([.,!?])/g, "$1")
+    .trim();
 }

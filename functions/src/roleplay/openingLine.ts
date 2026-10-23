@@ -10,12 +10,14 @@ import { completeWithFallback, getLlmClient } from "../llm";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
 import { isL3Procedural } from "./l3Depth";
+import { extractEscalationSignal } from "./escalationSignal";
 import { extractLinkMarker } from "./linkMarker";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt } from "./promptAssembly";
 import { limitReplySentences } from "./replyLength";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
+import { extractSmsMarker } from "./smsMarker";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { ScammerMessage } from "./types";
@@ -177,11 +179,16 @@ export async function generateOpeningLine(
   // 갈라지면 "오프닝 링크만 kind가 없는" 비대칭이 생긴다 — §15.6 G5와 같은 이유).
   // T194-a(§84.4.4 · G582) — 세션 술어 입력을 넘겨 이 세션에서 도달 불가한 설치 마커를 강등한다.
   const { text: linkFreeText, attachments } = extractLinkMarker(completion.text, scenarioId, sessionView);
+  // §122(7) 실기 신고 2026-10-23 — 자녀 사칭 카톡 첫 말풍선이 "[[SIGNAL:ESCALATE_VOICE]] 아빠, 나야. …"로 나갔다.
+  // 이 경로만 신호 · 문자 마커 추출이 빠져 있었다(sendMessage · callReturnLine은 이미 지운다). ⛔ 오프닝은 지우기만 한다 —
+  // 첫 마디는 통화 전환 · 끊기 · 문자 발송을 일으키지 않는다(전환 하한 — 신호 판정은 `signalConsistency.ts` A0).
+  const { text: smsFreeText } = extractSmsMarker(linkFreeText);
+  const { text: signalFreeText } = extractEscalationSignal(smsFreeText);
   // 2026-10-17 라이브 신고(실존 은행명 + 5~7문장 대사) — sendMessage와 같은 순서로 손질한다:
   // (1) 실존 은행·카드사 이름 → OO은행/OO카드(숫자는 그대로), (2) 문장 수 상한은 **항상** 적용한다
   // — 오프닝 지시(OPENING_TURN_INSTRUCTION)는 예고 계열이 아니고 "예고 완료" 마킹도 없다.
   // PR-A3 — 모델 표기 잔재(굵게 별표 · 빈 백틱 · 지문 괄호) 정리. sendMessage와 같은 자리(마커 뒤 · 실존명 치환 앞).
-  const { text: markupFreeText } = tidyScammerReplyMarkup(linkFreeText);
+  const { text: markupFreeText } = tidyScammerReplyMarkup(signalFreeText);
   const { text: realNameReplacedText, replacedCount } = replaceRealFinancialNames(markupFreeText);
   // §81 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다.
   const realNameFreeText = fictionalBankName ? applyFictionalBank(realNameReplacedText, fictionalBankName) : realNameReplacedText;

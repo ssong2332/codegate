@@ -191,7 +191,8 @@ test("[PR-A3 배선] sendMessage — 칩 반복 정리는 마커 추출 뒤 · �
 test("[PR-A3 배선] 오프닝 — 표기 정리는 링크 추출 뒤 · 실존명 치환 앞이다", () => {
   const code = codeOnly(SRC("roleplay/openingLine.ts"));
   const link = code.indexOf("extractLinkMarker(completion.text, scenarioId, sessionView)");
-  const tidy = code.indexOf("tidyScammerReplyMarkup(linkFreeText)");
+  // §122(7) — 링크 추출과 표기 정리 사이에 문자 · 신호 마커 제거가 들어갔다(정리 입력 = 신호 제거 결과).
+  const tidy = code.indexOf("tidyScammerReplyMarkup(signalFreeText)");
   const realName = code.indexOf("replaceRealFinancialNames(markupFreeText)");
   assert.ok(link >= 0 && tidy > link && realName > tidy, `${link} < ${tidy} < ${realName}`);
 });

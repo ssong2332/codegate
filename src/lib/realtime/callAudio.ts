@@ -191,3 +191,42 @@ export function scheduleDeferredRingClose(
   check();
   return finish;
 }
+
+// ── §122.2.2(2026-10-23 사용자 결정 *"사용자가 볼륨 버튼을 누르면 음량이 변하게 하자. 음량 슬라이드는 넣지 말고"*) ──────────────
+// 원인(Chromium 소스 `media/audio/android/audio_manager_android.cc`): 마이크를 효과(에코 제거 등)와 함께 열면 `communication_mode_is_on_`이
+// 켜지고(볼륨 키 = '통화' 음량), 저지연 출력 스트림의 용도는 **스트림을 만들 때** `communication_mode_is_on_ ? VOICE_COMMUNICATION : MEDIA`로
+// 정해진다. 받기 탭에서 미리 깨운 출력 컨텍스트(수정안 A)는 마이크보다 **먼저** 만들어져 '미디어' 용도로 남는다 ⇒ 볼륨 키가 먹지 않는다.
+// 처방: 마이크가 열린 뒤 출력 컨텍스트를 새로 만들어 쓴다(그 스트림은 '통화' 용도 = 볼륨 키가 조절한다).
+// | # | If | Then |
+// |---|---|---|
+// | O1 | 플래그 `outaftermic=0` · 마이크가 열리지 않음 | 종전(받기 때 컨텍스트 · 없으면 새로) — `before-mic` |
+// | O2 | 마이크 뒤 새 컨텍스트가 `FRESH_OUTPUT_RESUME_TIMEOUT_MS` 안에 running | 새 컨텍스트 — `after-mic` |
+// | O3 | 새 컨텍스트가 running이 아니고 받기 때 컨텍스트가 살아 있음 | 새 것을 닫고 받기 때 것 — `fallback-primed`(소리 우선 — 무음 결함 §57 재발 방지) |
+// | O4 | 새 컨텍스트가 running이 아니고 받기 때 것도 없음 | 새 컨텍스트 그대로(종전에도 새로 만들었다) — `after-mic` |
+// ⚠️ 실기 확인 전이다(볼륨 키가 실제로 먹는지 · 기본 크기가 어떻게 바뀌는지). 진단 `out.path`가 이번 통화의 경로를 보인다.
+
+/** 마이크 뒤 새 출력 컨텍스트가 running이 되기를 기다리는 상한(판단값 — 넘으면 받기 때 컨텍스트로 소리를 지킨다). */
+export const FRESH_OUTPUT_RESUME_TIMEOUT_MS = 500;
+
+export type CallOutputPath = "after-mic" | "before-mic" | "fallback-primed";
+
+/** `outaftermic=0`이면 끈다(실기 A/B · 되돌리기용). 기본 = 켬. */
+export function readOutputAfterMicFlag(search: string): boolean {
+  try {
+    return new URLSearchParams(search).get("outaftermic") !== "0";
+  } catch {
+    return true;
+  }
+}
+
+/** 위 표 O1 ~ O4. */
+export function pickCallOutputPath(input: {
+  flagOn: boolean;
+  micOpened: boolean;
+  freshRunning: boolean;
+  primedUsable: boolean;
+}): CallOutputPath {
+  if (!input.flagOn || !input.micOpened) return "before-mic"; // O1
+  if (input.freshRunning) return "after-mic"; // O2
+  return input.primedUsable ? "fallback-primed" : "after-mic"; // O3 · O4
+}
