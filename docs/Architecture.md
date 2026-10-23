@@ -23136,6 +23136,17 @@ GEMINI_API_KEY2 · 429 즉시 중단. 수정 전(main `77cddcc` lib)과 수정 �
 | 역전환 실패(네트워크 · 세션 이미 종료) | — | 종전 종료(힌트 `scammer_ended` → 종료 화면). 전사는 이미 제출됐다 |
 | 이미 끝난 세션을 대화방에서 열 때 | 종료 줄 "대화가 종료되었습니다." | 세션 `endReason === "scammer_ended"`면 E-1 · E-2 줄 |
 
+### 112.5 실기 신고(2026-10-23 · 크롬 · 갤럭시 S25) — #382 배포 뒤에도 사용자가 끊으면 훈련이 끝남
+원문: *"메신저에서 통화로 넘어온 후 사용자가 전화 끊으니까 훈련이 종료되었어"*. 스크린샷의 "채팅으로" 버튼은 `scenario.channel === "messenger"`일 때만 그려지므로 `returnsToMessengerOnHangup`은 참이었다(가설 "통화 화면의 scenario 채널이 다르다"는 기각).
+| 단계 | 원인(코드 경로로 확정 · 실기 재현은 하지 않음) |
+|---|---|
+| ① 빨간 종료 → `handleHangup` → `handleRequestReverseEscalation("hangup")` | 정상 |
+| ② 그 안에서 종료 래치 없이 `realtime.stop()` | 실시간 상태가 `ended`가 된다 |
+| ③ 실시간 상태 effect의 `ended` 분기 | 래치가 없으니 서버 close로 읽어 `endCall("remote")` → 종료 셸 "통화가 종료되었습니다 · 결과 확인하러 가기" |
+| ④ 그동안 역전환은 복귀 메시지 생성(LLM 수 초)을 기다린다 | 화면은 이미 종료 셸 — 참가자가 버튼을 누르면 훈련 종료 |
+처방: 전환 표시 `switchingToMessengerRef`를 `realtime.stop()` **앞**에 세우고, `ended` 분기는 전환 중이면 아무것도 하지 않는다. 실패하면 표시를 되돌리고 끊기 = 종전 훈련 종료 · "채팅으로" = 안내 문구 + 종료 셸(통화는 이미 멈췄다). 사기범 끊기(§112.2)는 `endCall` 래치가 같은 effect를 막고, 서버 판정(`decideCallReturn`)은 두 경로가 같은 콜러블(`followUp`)로 공유한다. 고정: `src/lib/messenger/scammerHangupToMessenger.test.ts` §112.5 2건(경로 순서 + 가드를 지운 사본 역검증).
+검증(병합 트리 head = main `4030d6e` 병합 + 이 수정): 루트 1035/0 · functions 1722/0 · lint 2종 오류 0.
+
 ### 112.3 검증
 루트 `npm test` 1027/0 · `npm --prefix functions test` 1705/0 · lint 2종 오류 0. 신규 `scammerHangupToMessenger.test.ts`(루트 2 · functions 4). ⚠️ 실기 · 실 키 미실시.
 

@@ -360,6 +360,11 @@ export default function SessionCallPage() {
   // T40 fast-follow — 역방향 명시 전환 버튼("메시지로 전환") 상태. messenger/page.tsx의
   // escalating/escalationError와 동일한 패턴, 방향만 반대.
   const [switchingToMessenger, setSwitchingToMessenger] = useState(false);
+  // §112.5(실기 신고 2026-10-23 · 크롬 · 갤럭시 S25 *"메신저에서 통화로 넘어온 후 사용자가 전화 끊으니까 훈련이 종료되었어"*) — 대화방 전환이
+  // `realtime.stop()`을 부르는 순간부터 참. 아래 실시간 상태 effect가 이 값이 참이면 `ended`를 서버 close(`endCall("remote")` → 종료 셸)로
+  // 읽지 않는다. 예전에는 전환이 래치 없이 통화를 멈춰 그 effect가 종료 셸을 띄웠고, 복귀 메시지 생성(수 초) 동안 화면이 "통화가 종료되었습니다 ·
+  // 결과 확인하러 가기"였다(그 버튼을 누르면 훈련 종료). 전환이 실패하면 거짓으로 되돌린다.
+  const switchingToMessengerRef = useRef(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
   // T68 통화 중 문자(UX-027/UF-008, AC-059/060/061) — 전부 **통화 셸 위에 얹히는 상태**다.
   // ⚠️ 이 값들은 타이머 effect(:phase만 의존)·한도 자동종료 effect·오디오 재생 어디에도 들어가지
@@ -1521,6 +1526,8 @@ export default function SessionCallPage() {
       } else if (realtime.status === "ended") {
         // ⭐ T192 C5(§79.9 셸 `ended` 구분) — 서버 close = `remote`(오늘 동작: 기존 `ended` 셸 + 탭). 이 화면이 스스로
         // `realtime.stop()`한 뒤에도 이 분기가 오지만, 그때는 래치가 이미 `ending`이라 `endCall`이 무시한다(E1).
+        // §112.5 — 대화방 전환(`handleRequestReverseEscalation`)이 멈춘 통화는 래치가 없으므로 여기서 걸러야 한다(서버 close가 아니다).
+        if (switchingToMessengerRef.current) return;
         await endCall("remote");
       }
     })();
@@ -2123,6 +2130,8 @@ export default function SessionCallPage() {
     setSwitchError(null);
     setSwitchingToMessenger(true);
     if (via === "hangup") setLocalHangup(true);
+    // §112.5 — `realtime.stop()`보다 먼저(멈춤이 만든 `ended`를 상태 effect가 서버 close로 읽지 않게).
+    switchingToMessengerRef.current = true;
     audioRef.current?.pause();
     realtime.stop();
     speech.stop();
@@ -2135,12 +2144,15 @@ export default function SessionCallPage() {
       }
       throw new Error("전환 응답 없음");
     } catch {
+      switchingToMessengerRef.current = false;
       setSwitchingToMessenger(false);
       if (via === "hangup") {
         await endCall("user");
         return;
       }
+      // §112.5 — "채팅으로"도 통화를 이미 멈췄다(위). 멈춘 통화에 머물지 않고 종전 서버 close와 같은 종료 셸로 간다(안내 문구는 남긴다).
       setSwitchError("메시지 화면으로 전환하지 못했습니다. 다시 시도해 주세요.");
+      await endCall("remote");
     }
   };
 

@@ -33,3 +33,38 @@ test("[§112] 대화방 — 이미 끝난 세션이 사기범 종료면 '상대�
   assert.equal(chatEndedNotice(true, "kakao"), "상대방이 채팅방을 나갔습니다.");
   assert.equal(chatEndedNotice(true, "sms"), "상대가 더 이상 답장하지 않습니다.");
 });
+
+// §112.5(실기 신고 2026-10-23 · 크롬 · 갤럭시 S25 — *"메신저에서 통화로 넘어온 후 사용자가 전화 끊으니까 훈련이 종료되었어"*).
+// 화면 경로: 빨간 종료 → handleHangup → handleRequestReverseEscalation("hangup") → realtime.stop() → 실시간 상태 "ended" → 상태 effect.
+// 예전에는 그 effect가 래치 없는 "ended"를 서버 close로 읽어 endCall("remote")(종료 셸 "통화가 종료되었습니다 · 결과 확인하러 가기")로 갔다.
+function realtimeEndedBranch(play: string): string {
+  const at = play.indexOf('} else if (realtime.status === "ended") {');
+  assert.ok(at > 0, "실시간 상태 effect의 ended 분기를 못 찾았다");
+  return play.slice(at, play.indexOf("}", play.indexOf('await endCall("remote");', at)));
+}
+
+test("[§112.5] 사용자 끊기 → 대화방: 전환 표시가 realtime.stop()보다 먼저 서고, 상태 effect는 그때 endCall(remote)로 가지 않는다", () => {
+  const play = read("src/app/session/play/page.tsx");
+  // 1) 종료 버튼 → handleHangup → 메신저발이면 역전환(hangup).
+  assert.match(play, /onClick=\{\(\) => void handleHangup\(\)\}/);
+  const hangup = play.slice(play.indexOf("const handleHangup = async"), play.indexOf("const handleEndedShellProceed"));
+  assert.match(hangup, /if \(returnsToMessengerOnHangup && !isEndLatched\(callEndingRef\.current\)\) \{\s*await handleRequestReverseEscalation\("hangup"\);/);
+  // 2) 역전환은 전환 표시 → 멈춤 순서.
+  const reverse = play.slice(play.indexOf("const handleRequestReverseEscalation = async"), play.indexOf("const handleToggleMute"));
+  const flagAt = reverse.indexOf("switchingToMessengerRef.current = true;");
+  assert.ok(flagAt > 0 && flagAt < reverse.indexOf("realtime.stop();"), "전환 표시가 realtime.stop() 뒤다");
+  assert.match(reverse, /\} catch \{\s*switchingToMessengerRef\.current = false;/);
+  // 3) 상태 effect의 ended 분기는 전환 중이면 아무것도 하지 않는다.
+  const branch = realtimeEndedBranch(play);
+  assert.ok(branch.indexOf("if (switchingToMessengerRef.current) return;") >= 0);
+  assert.ok(branch.indexOf("if (switchingToMessengerRef.current) return;") < branch.indexOf('await endCall("remote");'));
+  // 4) 사기범 끊기(§112)는 endCall 래치로 같은 effect를 막는다 — 서버 판정(decideCallReturn)은 두 경로 공통(같은 콜러블 · followUp).
+  assert.match(play, /const result = await requestReverseEscalation\(\{ sessionId, followUp: true \}\);[\s\S]*const result = await requestReverseEscalation\(\{ sessionId, followUp: true \}\);/);
+});
+
+test("[§112.5 역검증] ended 분기의 전환 가드를 지운 사본은 위 검사식에 걸린다(그 사본이 신고 상태다)", () => {
+  const play = read("src/app/session/play/page.tsx");
+  const poisoned = play.replace("        if (switchingToMessengerRef.current) return;\n", "");
+  assert.notEqual(poisoned, play, "주입 앵커가 없다");
+  assert.equal(realtimeEndedBranch(poisoned).includes("if (switchingToMessengerRef.current) return;"), false);
+});
