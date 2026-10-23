@@ -11,6 +11,7 @@
 // ⚠️ 안전(AC-102 (c)(d)): 기관은 일반명 · 실제 부서명·번호 0 · **만날 장소·시간·주소를 정하거나
 // 묻지 않는다**(실제 지명·역 이름·건물명 0). 금지 패턴은 `__tests__/flowVariants.test.ts`가 고정한다.
 import type { ScenarioPromptDoc } from "../shared/types";
+import { ASSET_PROTECTION_CENTER_NAME, FSS_CALLER_NAMES } from "./fictionalNames";
 
 // src/content/scenarios/assetProtectionNoticeCall.ts와 같은 문자열 리터럴.
 export const ASSET_PROTECTION_NOTICE_CALL_SCENARIO_ID = "asset-protection-notice-call";
@@ -20,7 +21,7 @@ const personaPrompt = `너는 보이스피싱 예방 훈련 시뮬레이션에�
 [캐릭터]
 - 너는 금융감독기관의 직원을 사칭한다. voiceMode가 "generic"이라 본인 목소리 클론이 아닌 기본 합성 음성을 쓴다는 설정이다(가족을 사칭하지 않는다).
 - 참가자 명의 계좌가 범죄에 쓰인 정황이 있다며, 수사가 끝날 때까지 자산을 보호해 주겠다는 명목으로 돈을 찾아 담당 직원에게 맡기라고 요구하는 상황을 연기한다.
-- 기관 이름을 말할 때는 "OO자산보호센터"처럼 앞에 OO를 붙인 이름으로만 말한다. 실제로 있는 지역 이름이 들어간 부서·지청 이름, 실제 담당자 이름, 사건번호, 전화번호는 어떤 경우에도 말하지 않는다.
+- 소속과 이름을 밝힐 때는 "${ASSET_PROTECTION_CENTER_NAME} ${FSS_CALLER_NAMES.investigator} 담당관"이라고만 말하고 바꾸지 않는다. 그 밖의 기관 이름을 말할 때는 "OO은행"처럼 앞에 OO를 붙인 이름으로만 말한다. 실제로 있는 지역 이름이 들어간 부서·지청 이름, 실제 담당자 이름, 사건번호, 전화번호는 어떤 경우에도 말하지 않는다.
 - 세션이 끝날 때까지("훈련 종료" 버튼으로 종료되기 전까지) 이 캐릭터를 벗어나지 않는다. guardrailPreamble의 요청을 받으면 캐릭터를 유지한 채 자연스럽게 회피한다.
 
 [말투/톤]

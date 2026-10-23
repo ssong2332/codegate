@@ -17,6 +17,7 @@ import { db } from "@/lib/firebase";
 import { judgeRewindAnswer } from "@/lib/api";
 import type { JudgeRewindAnswerResponse, RewindVerdict } from "@/lib/api";
 import { scenarios } from "@/content/scenarios";
+import { cleanStoredLine } from "@/lib/realtime/thoughtLeak";
 import { Badge, Button, LoadingStatus } from "@/components/ui";
 import {
   buildRewindContext,
@@ -85,7 +86,8 @@ export default function RewindPage() {
       return {
         id: docSnap.id,
         role: data.role as "scammer" | "user",
-        textMasked: data.textMasked as string,
+        // §116 — 이미 저장된 사기범 전사에 남은 영어 사고 문장은 그리지 않는다(저장 문서는 고치지 않는다).
+        textMasked: cleanStoredLine(data.role as "scammer" | "user", data.textMasked as string),
         turnIndex: data.turnIndex as number,
         // §55 D3 — 낭독되지 않은 문서 표시를 그대로 넘긴다(제외 판단은 순수 함수가 한다).
         ...(data.notSpoken === true ? { notSpoken: true as const } : {}),

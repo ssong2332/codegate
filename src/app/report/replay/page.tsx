@@ -31,6 +31,7 @@ import {
   type ReplayVerifySource,
 } from "@/lib/replay/buildReplayTimeline";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
+import { cleanStoredLine } from "@/lib/realtime/thoughtLeak";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
 import { displayTactic, formatMomentLabel, replayMomentNote } from "@/lib/report/reportSummaryCopy";
 import { readRiskSignals, riskSignalCopy, RISK_SIGNAL_HEADING, type RiskSignalView } from "@/lib/report/riskSignalCopy";
@@ -120,7 +121,8 @@ export default function ReplayPage() {
       return {
         id: docSnap.id,
         role: data.role as "scammer" | "user",
-        textMasked: data.textMasked as string,
+        // §116 — 이미 저장된 사기범 전사에 남은 영어 사고 문장은 그리지 않는다(저장 문서는 고치지 않는다).
+        textMasked: cleanStoredLine(data.role as "scammer" | "user", data.textMasked as string),
         turnIndex: data.turnIndex as number,
         channel: data.channel as "voice" | "messenger" | undefined,
         // §55 D3 — 낭독되지 않은 문서 표시를 그대로 넘긴다(제외 판단은 순수 함수가 한다).
