@@ -47,8 +47,8 @@ function stream(samples: Float32Array, chunk = 960, start: LoudnessState = INITI
   return { out, state };
 }
 
-test("[§114 정규화] 원본 크기가 −26 ~ −8dBFS(게인 범위 안)로 달라도 정규화 뒤 말소리 RMS가 목표 ±1dB(첫 1초 뒤 구간)", () => {
-  for (const level of [-26, -23, -20, -14, -8]) {
+test("[§114 정규화] 원본 크기가 −24 ~ −7dBFS(게인 범위 안)로 달라도 정규화 뒤 말소리 RMS가 목표 ±1dB(첫 1초 뒤 구간)", () => {
+  for (const level of [-24, -21, -18, -12, -7]) {
     const input = speechLike(6, level, 7);
     const { out } = stream(input);
     const settled = out.subarray(RATE); // 첫 1초 이후
@@ -82,6 +82,15 @@ test("[§114 정규화] 게인 범위(−12 ~ +6dB) · 꼭대기 상한 · 무�
   spike[100] = 0.9;
   const protectedChunk = normalizeChunk(spike, { speechSumSquares: 1e-6 * 48000, speechSamples: 48000, gain: MAX_GAIN });
   assert.ok(protectedChunk.state.gain * spike[100]! <= PEAK_CEILING + 1e-9); // Float32 저장값 기준
+});
+
+test("[§114 정규화] 직전 게인이 큰 채로 꼭대기 큰 청크가 와도 이동 구간에서 꼭대기 상한을 넘지 않는다(실측 +0.08dBFS 회귀)", () => {
+  const chunk = new Float32Array(FRAME_SAMPLES * 4).fill(0.02);
+  chunk[10] = 0.95; // 청크 맨 앞 — 이동 시작 게인이 그대로 곱해지는 자리
+  const r = normalizeChunk(chunk, { speechSumSquares: 1e-4 * 96000, speechSamples: 96000, gain: MAX_GAIN });
+  let peak = 0;
+  for (const v of r.out) peak = Math.max(peak, Math.abs(v));
+  assert.ok(peak <= PEAK_CEILING + 1e-6, `꼭대기 ${peak}`);
 });
 
 test("[§114 정규화] 청크 사이 게인은 이어진다(직전 끝 게인에서 시작 — 딸깍 0) · 입력 배열은 바꾸지 않는다", () => {

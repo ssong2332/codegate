@@ -12,7 +12,7 @@
 // | 2. 말소리 판정 | 프레임 RMS ≥ `SPEECH_GATE_DBFS`(−45dBFS)만 말소리 — 숨 · 무음은 측정에서 뺀다 |
 // | 3. 누적 측정 | 이 통화의 말소리 프레임 **전부의 평균 제곱**(통합 라우드니스 — LUFS integrated와 같은 생각, K-가중 없음) |
 // | 4. 목표 게인 | `TARGET_SPEECH_RMS` ÷ 누적 RMS, [`MIN_GAIN`, `MAX_GAIN`]로 자른다 · 말소리가 `WARMUP_SPEECH_MS`만큼 쌓이기 전에는 그때까지 잰 값으로 |
-// | 5. 꼭대기 보호 | 이 청크 꼭대기 × 게인 ≤ `PEAK_CEILING`이 되게 게인을 낮춘다(스피커 경로 리미터 앞에서도 원본 1.0 초과 0) |
+// | 5. 꼭대기 보호 | 이 청크 꼭대기 × 게인 ≤ `PEAK_CEILING`이 되게 이번 게인과 이동 시작 게인을 둘 다 낮춘다(스피커 경로 리미터 앞에서도 원본 1.0 초과 0) |
 // | 6. 적용 | 직전 청크 게인 → 이번 게인으로 청크 안에서 선형으로 옮긴다(딸깍 0) |
 // | — | 말소리 프레임이 하나도 없는 청크 · 아직 잰 것이 없음 → 직전 게인 그대로(처음엔 1) |
 // 순서: 정규화(이 파일) → 통화/스피커 게인 · 컴프레서 · 리미터(`outputGain.ts` §108). 스피커 켜면 더 크게 들리는 동작은 그대로다.
@@ -28,9 +28,10 @@ export const SPEECH_GATE_DBFS = -45;
 
 /**
  * 목표 말소리 RMS(선형 · 원본 PCM 기준 · 출력 게인 0.6 적용 **전**). 기관 사칭 기준(사용자 *"기관 사칭 정도 크기이면 괜찮은"*).
- * ⚠️ 값의 근거는 Architecture §114.1 표(실측 또는 판단값 — 그 표가 정한다). 바꾸면 그 표를 다시 잰다.
+ * **측정값**: 기관 사칭 고급 2세션 원본 말소리 RMS −18.99 · −17.16dBFS의 파워 평균 −17.98 → −18(`scripts/live-loudness-probe.mjs` · Architecture §114.1 표).
+ * 바꾸면 그 표를 다시 잰다.
  */
-export const TARGET_SPEECH_RMS_DBFS = -20;
+export const TARGET_SPEECH_RMS_DBFS = -18;
 export const TARGET_SPEECH_RMS = 10 ** (TARGET_SPEECH_RMS_DBFS / 20);
 
 /** 게인 하한 · 상한(−12dB ~ +6dB). 아주 작게 말한 세션을 과하게 키워 잡음이 커지지 않게 상한을 낮게 둔다. */
@@ -104,7 +105,8 @@ export function normalizeChunk(samples: Float32Array, state: LoudnessState): { o
   }
   if (peak > 0 && peak * target > PEAK_CEILING) target = PEAK_CEILING / peak;
   const out = new Float32Array(samples.length);
-  const from = state.gain;
+  // 이동 시작 게인도 꼭대기 상한에 묶는다 — 직전 게인이 이번 청크 꼭대기에는 너무 크면 이동 구간에서 1.0을 넘는다(§114.1 실측 +0.08dBFS).
+  const from = peak > 0 ? Math.min(state.gain, PEAK_CEILING / peak) : state.gain;
   const n = samples.length;
   for (let i = 0; i < n; i += 1) {
     const g = n > 1 ? from + ((target - from) * i) / (n - 1) : target;
