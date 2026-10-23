@@ -30,7 +30,7 @@ import { scanText } from "./harmlessnessPatterns";
 import { PERSONA_AUTHORITY, asksIdentityCheck } from "../../roleplay/personaAuthority";
 import { speakerGenderFor } from "../../realtime/scenarioVoice";
 import { FAMILY_ADDRESS_SCENARIOS, resolveFamilyAddressPrompt } from "../familyAddress";
-import { CALL_RETURN_INSTRUCTION } from "../../roleplay/callReturnLine";
+import { CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION, CALL_RETURN_INSTRUCTION } from "../../roleplay/callReturnLine";
 import { buildPriorChatContext } from "../../realtime/priorChatContext";
 import { applyFictionalBank, FICTIONAL_BANK_NAMES, resolveSessionAccountNumber } from "../../shared/fictionalBank";
 
@@ -1308,6 +1308,8 @@ function turnInstructionSources(): Array<{ scenarioId?: string; label: string; v
     { label: "확인결과Live:link", value: buildLiveConfirmResultInstruction("link") },
     // §110.4 — 통화를 끊고 돌아온 대화방의 사기범 복귀 메시지 지시(`roleplay/callReturnLine.ts`).
     { label: "통화복귀", value: CALL_RETURN_INSTRUCTION },
+    // §112 — 사기범이 통화를 끊고 돌아온 대화방의 복귀 메시지 지시.
+    { label: "통화복귀(사기범 끊기)", value: CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION },
     // §110.3 — 메신저에서 넘어온 Live 통화의 앞선 대화 블록(머리 지시 — 대화 줄은 참가자 데이터라 표본 2줄만).
     {
       label: "앞선대화",

@@ -115,7 +115,7 @@ test("[§110.3] createRealtimeCall — 메신저→통화 전이 세션에서만
 test("[§110.4] 복귀 메시지 — followUp일 때만 · 전이 뒤 · 실패는 전환을 막지 않는다 · 지시 문면", () => {
   const session = readSrc("session/index.ts");
   const body = session.slice(session.indexOf("export const requestReverseEscalation"));
-  assert.ok(body.indexOf("await transitionChannel(") < body.indexOf("recordCallReturnLine(db, sessionId)"));
+  assert.ok(body.indexOf("await transitionChannel(") < body.indexOf("recordCallReturnLine(db, sessionId,"));
   assert.match(body, /if \(request\.data\?\.followUp === true\) \{\s*try \{/);
   assert.match(CALL_RETURN_INSTRUCTION, /메시지 대화방으로 돌아왔다/);
   assert.match(CALL_RETURN_INSTRUCTION, /다시 전화하겠다는 말로 끝내지 않는다/);

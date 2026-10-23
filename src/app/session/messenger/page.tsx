@@ -147,6 +147,8 @@ export default function MessengerSessionPage() {
   // (G278). 마운트 시 `sessions/{sid}.llmProvider` + 매 턴 `SendMessageResponse.isMock`의 합.
   const [dialogueDegraded, setDialogueDegraded] = useState(false);
   const [ended, setEnded] = useState(false);
+  // §112 — 이미 끝난 세션을 열었을 때 사기범이 끝낸 것인가(세션 `endReason === "scammer_ended"` — 예: 목표를 이루고 통화를 끊고 돌아옴).
+  const [endedByScammer, setEndedByScammer] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   // 실기 신고(2026-10-21 · UX D-137 · §94) — 보낸 한 턴의 연출 상태(낙관적 말풍선 · "1" · 입력 중 · 답장 공개 시각).
@@ -225,6 +227,7 @@ export default function MessengerSessionPage() {
         setDialogueDegraded((current) => foldDegraded(current, data.llmProvider === "mock"));
         if (data.status === "ended") {
           setEnded(true);
+          setEndedByScammer(data.endReason === "scammer_ended");
         }
 
         if (found.surface === "sms") {
@@ -944,7 +947,7 @@ export default function MessengerSessionPage() {
           <div className="flex flex-col gap-3 text-center">
             <p className="text-base font-semibold text-ink" role="status">
               {/* §104.9 · UX D-145 (2) — 사기범이 끝냈으면 실제 앱 같은 시스템 줄(E-1 카톡형 · E-2 문자형), 그 밖은 종전 문구. */}
-              {chatEndedNotice(pending?.outcome?.scammerEnded === true, isSms ? "sms" : "kakao")}
+              {chatEndedNotice(pending?.outcome?.scammerEnded === true || endedByScammer, isSms ? "sms" : "kakao")}
             </p>
             <Button type="button" onClick={() => router.push("/session/end")}>
               결과 확인하러 가기

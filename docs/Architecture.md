@@ -22979,3 +22979,33 @@ GEMINI_API_KEY2 · 429 즉시 중단. 수정 전(main `77cddcc` lib)과 수정 �
 
 ### 110.8 배포 순서
 **Functions 먼저 → Hosting**: 새 화면은 `requestReverseEscalation({followUp})` · `createSession({familyAddress})`를 보낸다 — 옛 서버는 `followUp`을 무시(전환만)하고 `familyAddress`는 구조분해하지 않아 무시한다(화면이 먼저여도 깨지지 않지만 복귀 메시지 · 호칭이 빠진다). 옛 화면 + 새 서버는 필드를 보내지 않아 종전 동작. 인덱스 변경 0.
+
+
+## 112. (Feature change — 2026-10-23 · 브랜치 `claude/scammer-hangup-to-messenger` · 사용자 결정 원문 *"ai가 먼저 끊는 경우도 메신저로 넘어가도록 수정하자"*) **메신저에서 넘어온 통화를 사기범이 먼저 끊어도 대화방으로 돌아간다** — implementer 기록 (DECISIONS #227)
+
+⛔ 금지: 역전환 실패 때 끊기 버튼이 아무 일도 안 하는 상태 0(종전 훈련 종료로 간다 — AC-006) · 처음부터 통화인 시나리오 동작 변경 0.
+
+### 112.1 판정표 — 대화방에서 무엇이 일어나는가(`functions/src/session/callReturn.ts` `decideCallReturn`)
+| 세션 끊기 표식(`scammerHangup`) | 뜻 | 대화방 |
+|---|---|---|
+| 없음 | 참가자가 끊었다 · 거절했다(§110.4) | 사기범이 통화 내용을 반영한 메시지 1건(`follow_up_user` — §110.4 그대로) |
+| `goal` | 원하던 것을 얻고 끊었다 — 더 진행할 것이 없다 | **"상대방이 채팅방을 나갔습니다"**(문자형 "상대가 더 이상 답장하지 않습니다" — §104.9 E-1 · E-2). 세션 종료 `scammer_ended`(표식 유지) · 리포트 트리거 · 복귀 메시지 0 |
+| `give_up` | 거절 · 의심이 되풀이돼 통화로는 진행할 수 없다 | 끊긴 것을 짚고 톡으로 한 번 더 붙잡는 메시지 1건(`follow_up_scammer` · 지시 `CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION`). 표식은 지운다 |
+| `unspecified` | 이유 미기재 | `give_up`과 같다 |
+- give_up을 바로 끝내지 않는 이유: 메신저발 사기는 통화가 막히면 채널을 바꿔 다시 붙잡는다(사용자 예 *"전화 끊겨서 톡으로 할게"*). 채팅에서도 거절이 이어지면 §104.9 메신저 단계 종료 판정(하한 · 거절 횟수)이 끝낸다.
+- give_up 표식을 지우는 이유: 남으면 끊기 판정 9행 `already_accepted`가 메신저 단계 종료를 영원히 막는다.
+
+### 112.2 경로
+| 경로 | 이전 | 이후 |
+|---|---|---|
+| 실시간(`end_call` 승인) | 마지막 대사 → 끊김 안내 → 전사 제출 → 종료 화면 | 마지막 대사 → 끊김 안내 → 전사 제출 → `requestReverseEscalation({followUp:true})` → 대화방(`play/page.tsx` `returnToMessengerAfterScammerHangup`) |
+| 폴백(`[[SIGNAL:END_CALL_*]]` 승인) | 서버가 같은 트랜잭션에서 세션 종료 → 화면 종료 | 메신저발 통화(`isEscalatedVoiceCall`)는 **표식만** 남기고 세션은 active · 응답 `scammerHungUp: true` → 위와 같은 화면 순서. 리포트 트리거는 세션을 끝낸 경우만(역전환의 goal 행이 트리거) |
+| 처음부터 통화 · 메신저 단계 끊기(§104.9) | — | 무변경 |
+| 역전환 실패(네트워크 · 세션 이미 종료) | — | 종전 종료(힌트 `scammer_ended` → 종료 화면). 전사는 이미 제출됐다 |
+| 이미 끝난 세션을 대화방에서 열 때 | 종료 줄 "대화가 종료되었습니다." | 세션 `endReason === "scammer_ended"`면 E-1 · E-2 줄 |
+
+### 112.3 검증
+루트 `npm test` 1027/0 · `npm --prefix functions test` 1705/0 · lint 2종 오류 0. 신규 `scammerHangupToMessenger.test.ts`(루트 2 · functions 4). ⚠️ 실기 · 실 키 미실시.
+
+### 112.4 배포 순서
+**Functions → Hosting**(§110과 같이). 새 서버 + 옛 화면: 폴백 끊기 응답 `scammerHungUp`을 옛 화면이 모르고(ended false) 통화가 계속되는 것처럼 보인다 — 짧게 두지 말 것. 새 화면 + 옛 서버: 역전환에 판정이 없어 goal도 톡으로 이어진다(치명 아님). ⇒ 두 배포 사이 간격을 짧게. 인덱스 변경 0. ⚠️ 이 브랜치는 #382(§110) 위에 쌓였다 — #382 병합 뒤 main으로 다시 맞춘다.

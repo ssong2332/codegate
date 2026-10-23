@@ -1376,6 +1376,9 @@ export default function SessionCallPage() {
       // 2026-10-21 — 즉시 피드백(위 `localHangup` 주석). 오디오 · 마이크는 바로 위 E4에서 이미 멈췄다.
       setLocalHangup(true);
     }
+    // §112(사용자 결정 2026-10-23 *"ai가 먼저 끊는 경우도 메신저로 넘어가도록"*) — 메신저에서 넘어온 통화를 사기범이 끊으면 끊김 안내 →
+    // 전사 제출 → 역전환(대화방 — `returnToMessengerAfterScammerHangup`). 실패하면 아래 종전 순서(훈련 종료)로 간다.
+    if (ending.endedBy === "scammer" && returnsToMessengerOnHangup && (await returnToMessengerAfterScammerHangup(noticeWait))) return;
     // ⭐ C5 리뷰 m3 — E5~E7을 try/finally로 감싼다: 전사 제출이 던져도 종료 화면으로는 간다(AC-006 "종료는 항상 성공").
     try {
       // E5 — 실시간 전사 제출을 **시작**한다(턴은 이 호출 안에서 동기로 떼어 간다). /session/end가 endSession → 리포트
@@ -1399,8 +1402,8 @@ export default function SessionCallPage() {
   };
 
   // §110.4(실기 신고 13) — 통화 중 빨간 종료 버튼 · 수신 거절. 메신저에서 넘어온 통화(`scenario.channel === "messenger"`)면 대화방 복귀다.
-  // 훈련 종료는 대화방의 종료 버튼 · 사기범이 대화방을 나갔을 때 · 이 화면의 "훈련 종료"(벨 직전 고지 등)만. 한도 도달 · 사기범 끊기 ·
-  // 서버 close는 종전대로 훈련을 끝낸다. 처음부터 통화인 시나리오는 종전(훈련 종료).
+  // 훈련 종료는 대화방의 종료 버튼 · 사기범이 대화방을 나갔을 때 · 이 화면의 "훈련 종료"(벨 직전 고지 등)만. 한도 도달 · 서버 close는
+  // 종전대로 훈련을 끝낸다. §112 — 사기범 끊기도 대화방 복귀다(`endCall`의 scammer 분기). 처음부터 통화인 시나리오는 종전(훈련 종료).
   const returnsToMessengerOnHangup = scenario?.channel === "messenger";
   const handleHangup = async () => {
     if (returnsToMessengerOnHangup && !isEndLatched(callEndingRef.current)) {
@@ -1423,6 +1426,22 @@ export default function SessionCallPage() {
     const flushDone = flushTranscript();
     if (sessionId) handOffTranscriptFlush(sessionId, flushDone);
     router.push("/session/end");
+  };
+
+  // §112 — 메신저발 통화의 사기범 끊기 뒤 대화방 복귀(`endCall` scammer 분기가 끊김 안내를 그린 뒤 부른다). 순서: 전사 제출 · 안내 시간 →
+  // `requestReverseEscalation({followUp})`(서버가 끊기 종류로 나감/이어감을 정한다 — `functions/src/session/callReturn.ts`) → 대화방.
+  // 실패 = `false`(호출부가 종전 종료로 간다 · 전사는 이미 제출돼 종전 경로의 제출은 빈 턴이다).
+  const returnToMessengerAfterScammerHangup = async (noticeWait: Promise<void> | null): Promise<boolean> => {
+    if (!sessionId) return false;
+    try {
+      await Promise.all([flushTranscript(), noticeWait ?? Promise.resolve()]);
+      const result = await requestReverseEscalation({ sessionId, followUp: true });
+      if (result.escalation?.toChannel !== "messenger") return false;
+      if (endCallMountedRef.current) router.push("/session/messenger");
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   // ⭐ T192 C5(§79.8 R2) — 실시간 끊기 승인. 래치만 건다(화면은 마지막 대사가 끝날 때까지 통화 중 그대로 — D-112 · 예고 0).
@@ -2146,6 +2165,12 @@ export default function SessionCallPage() {
       // ⭐ T192 C5(§79.7 6 · G515) — 폴백 끊기: 서버가 이미 세션을 끝냈다(`scammer_ended` · 표식). 마지막 대사를 끝까지
       // 재생한 **뒤에만** `ended`로 간다 — 재생은 아래와 같은 `<audio>`가 하고, 종료 순서는 그 `onEnded`를 기다린다(E3).
       if (result.ended && result.endReason === "scammer_ended") {
+        if (result.audioUrl) setPlaybackUrl(result.audioUrl);
+        void endCall("scammer", { fallbackLastLine: { hasAudio: Boolean(result.audioUrl) } });
+        return;
+      }
+      // §112 — 메신저에서 넘어온 통화의 폴백 끊기는 세션을 끝내지 않고 `scammerHungUp`만 온다(위와 같은 종료 순서 · 끝은 대화방 복귀).
+      if (result.scammerHungUp === true) {
         if (result.audioUrl) setPlaybackUrl(result.audioUrl);
         void endCall("scammer", { fallbackLastLine: { hasAudio: Boolean(result.audioUrl) } });
         return;
