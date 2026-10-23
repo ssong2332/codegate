@@ -176,7 +176,12 @@ test("[G568] 호출부 전수 — 프롬프트 조립 3곳이 모두 카드를 �
   walk(SRC);
   // §110.4 — 통화 복귀 메시지(`callReturnLine.ts`)가 4번째 조립 지점이다. 세션 문서 카드를 그대로 넘긴다.
   assert.match(readSrc("roleplay/callReturnLine.ts"), /\n\s*personaCard: session\.personaCard\?\.items,\n/, "통화 복귀 메시지");
-  assert.deepEqual(found.sort(), [...assemblyCallers, "roleplay/callReturnLine.ts", "roleplay/promptAssembly.ts"].sort());
+  // §121.7 — 통화 중 대화방 카톡(`chatDuringCall.ts`)이 5번째 조립 지점이다. 세션 문서 카드를 그대로 넘긴다.
+  assert.match(readSrc("roleplay/chatDuringCall.ts"), /\n\s*personaCard: session\.personaCard\?\.items,\n/, "통화 중 카톡");
+  assert.deepEqual(
+    found.sort(),
+    [...assemblyCallers, "roleplay/callReturnLine.ts", "roleplay/chatDuringCall.ts", "roleplay/promptAssembly.ts"].sort(),
+  );
 });
 
 test("[리뷰 M1] 대출 행은 프롬프트에 일반명으로 실린다(가상 이름 0 · '○○' 0) — 블록 생성기를 우회해 화면 값을 그대로 실은 사본은 걸린다", (t) => {
