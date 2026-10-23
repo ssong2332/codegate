@@ -184,8 +184,28 @@ async function partE() {
   check("E", "2 리포트 routeSummary = 배정 루트 이름 · 3", JSON.stringify(report?.routeSummary) === JSON.stringify(expected), { routeSummary: report?.routeSummary, expected });
 }
 
+// (F) §123 — 1b 다중 루트 칸: 첫 바퀴(루트 수만큼 세션)에 그 칸의 루트가 한 번씩 · 루트별 페르소나(legs) 경로로 세션 시작 성공.
+const FIRST_LAP_CELLS = [
+  { scenarioId: "prosecution-cooperation-call", level: "advanced", ids: ["fv-h3vn", "fv-v2mk", "fv-a6lq"] },
+  { scenarioId: "asset-protection-notice-call", level: "advanced", ids: ["fv-k9ra", "fv-p3jx", "fv-t8ga"] },
+  { scenarioId: "kidnapping-threat", level: "advanced", ids: ["fv-k268", "fv-w7tb"] },
+  { scenarioId: "family-accident-deepvoice", level: "advanced", ids: ["fv-66hh", "fv-h5sz"] },
+];
+async function partF() {
+  for (const cell of FIRST_LAP_CELLS) {
+    const user = await newUser();
+    const seq = [];
+    for (let i = 0; i < cell.ids.length; i += 1) {
+      const { sessionId, flowVariantId } = await startSession(user, cell);
+      seq.push(flowVariantId);
+      await call("endSession", { sessionId, endReason: "user_ended" }, user.idToken);
+    }
+    check("F", `${cell.scenarioId} 첫 바퀴 = 루트 ${cell.ids.length}개 한 번씩`, JSON.stringify([...seq].sort()) === JSON.stringify([...cell.ids].sort()), { seq });
+  }
+}
+
 try {
-  for (const [name, fn] of [["A·B", partAB], ["C", partC], ["D", partD], ["E", partE]]) {
+  for (const [name, fn] of [["A·B", partAB], ["C", partC], ["D", partD], ["E", partE], ["F", partF]]) {
     try {
       await fn();
     } catch (err) {

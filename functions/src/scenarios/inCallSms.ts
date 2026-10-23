@@ -150,6 +150,17 @@ const ASSET_PROTECTION_NOTICE_CALL: InCallSmsItem[] = [
     announceInstruction:
       "(참가자 휴대전화로 방금 자산 보관 신청 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크에서 보관 신청서를 작성해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 실제 주소를 읽어 주지 말고, 만날 장소·시간은 정하지도 묻지도 마라.)",
   },
+  // §123(DECISIONS #238) — 자산 보호 고급 ② 공탁금 이체형(fv-p3jx) 전용. 화면 없이 계좌 문자만(courier-customs-fee와 같은 모양).
+  // afterScammerTurns=5: 이 시나리오의 3과 겹치지 않는 값(발송 시점은 변형 선언 notBeforeUserTurns가 정한다).
+  {
+    smsId: "asset-deposit-account",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["asset-protection-notice-call"]} (공탁금 안내)`,
+    body: "[자산보호] 약식 처리 공탁금 안내\n예금주: 자산보호공탁관리\nOO은행 519-3306-7420-85\n수사 종료 후 전액 반환됩니다.",
+    afterScammerTurns: 5,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 공탁금 계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 약식 처리를 위해 그 계좌로 공탁금을 넣어 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호를 새로 지어내 말하지 말고 문자를 보라고만 하라.)",
+  },
 ];
 
 const PROSECUTION_COOPERATION_CALL: InCallSmsItem[] = [

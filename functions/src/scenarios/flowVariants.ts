@@ -38,7 +38,7 @@ import type { AxisExitBlock } from "./axes";
 import { SCENARIO_PROMPTS } from "./index";
 import { PARCEL_ADVANCED_INSTALL_TACTIC, PARCEL_ADVANCED_LEG_PERSONA } from "./messengerParcelSmishingSms.prompt";
 import { CARD_DELIVERY_PERSONA } from "./cardDeliveryCall.prompt";
-import { ASSET_CUSTODY_PROCEDURE_TACTIC } from "./assetProtectionNoticeCall.prompt";
+import { ASSET_CUSTODY_PROCEDURE_TACTIC, assetProtectionRoutePersona } from "./assetProtectionNoticeCall.prompt";
 import {
   PROSECUTION_CASE_LINK_PERSONA,
   PROSECUTION_CASE_LINK_TACTIC,
@@ -50,6 +50,7 @@ import {
   PROSECUTION_SITE_COIN_TACTIC,
   PROSECUTION_SITE_EXTRA_TACTICS,
   PROSECUTION_SITE_PERSONA,
+  prosecutionRoutePersona,
 } from "./prosecutionCooperationCall.prompt";
 import { extractTacticLabel } from "./tacticFlavor";
 import { hasVerifyIntercept } from "./verifyIntercept";
@@ -203,6 +204,11 @@ const R = {
   identityTheft: ["identity-theft", "명의 도용 이관형"],
   loanCash: ["loan-cash", "대출금 전달형"],
   leakOpener: ["leak-opener", "유출 사고 안내형"],
+  // §123 — 1b 새 결말
+  pettyDispute: ["petty-dispute", "시비 합의금형"],
+  smallInstant: ["small-instant", "소액 급전형"],
+  courtDeposit: ["court-deposit", "공탁금 이체형"],
+  voucher: ["voucher", "상품권 핀 번호형"],
   refundLink: ["refund-link", "환급 신청 링크형"],
   customsFee: ["customs-fee", "통관비 결제형"],
   customsLink: ["customs-link", "통관 조회 링크형"],
@@ -238,9 +244,9 @@ export const VARIANT_ROUTES: Readonly<Record<string, RouteEntry>> = {
   // 직접 확인 은행 사칭
   "fv-xuvu": R.protectAccount, "fv-mhnv": R.protectAccount, "fv-62q8": R.protectAccount,
   // 자녀 납치 협박
-  "fv-c5ih": R.instantTransfer, "fv-dxwu": R.instantTransfer, "fv-k268": R.instantTransfer,
+  "fv-c5ih": R.instantTransfer, "fv-dxwu": R.instantTransfer, "fv-k268": R.instantTransfer, "fv-w7tb": R.pettyDispute,
   // 가족 사고 딥보이스
-  "fv-4dy4": R.settlement, "fv-krq3": R.settlement, "fv-66hh": R.settlement,
+  "fv-4dy4": R.settlement, "fv-krq3": R.settlement, "fv-66hh": R.settlement, "fv-h5sz": R.smallInstant,
   // 손주 사칭
   "fv-brcb": R.urgentTransfer, "fv-mabg": R.urgentTransfer, "fv-cx5y": R.urgentTransfer,
   // 자녀 사칭(카톡)
@@ -255,8 +261,9 @@ export const VARIANT_ROUTES: Readonly<Record<string, RouteEntry>> = {
   "fv-9nx7": R.hushMoney, "fv-kwph": R.hushMoney, "fv-egum": R.hushMoney,
   // 고급 전용 3종
   "fv-tvnj": R.remoteAppProtect, "fv-e5mv": R.loanCash, "fv-u9fz": R.leakOpener,
-  "fv-bmiq": R.cashHandoff, "fv-k9ra": R.cashHandoff,
+  "fv-bmiq": R.cashHandoff, "fv-k9ra": R.cashHandoff, "fv-p3jx": R.courtDeposit, "fv-t8ga": R.gold,
   "fv-nss6": R.coinSite, "fv-p4hz": R.coinSite, "fv-c8wq": R.coinSite, "fv-h3vn": R.coinSite,
+  "fv-v2mk": R.voucher, "fv-a6lq": R.loanCash,
 };
 
 function compile(spec: VariantSpec): FlowVariant {
@@ -457,6 +464,58 @@ const PROSECUTION_SITE_STAGES_TAIL = [
 ] as const;
 const PROSECUTION_SITE_DECISION_MOMENT = "문자 링크로 연 자산 검수 사이트에서 본인 확인 · 코인 전환 · 금액 입력 · 보관 지갑 이체를 누르는 순간";
 const PROSECUTION_SOURCES = ["C05", "C06", "C07", "C08", "S3", "S25", "S28"];
+
+// ── §123(DECISIONS #238 · 다중 루트 1b — 확인 무력화 밖 고급 6종) ─────────────────────────────────────────────────────────
+// (11) 사용자 실기 신고 *"자산 검수를 하는데, 하면, 다른 것도 있다고 다시 해달라는데 이게 뭔지 모르겠어"* — 추가 검수를 꺼낼 때 실제 수법의 이유
+// (방금 검수한 자금이 다른 계좌 · 적금 · 대출 한도로도 같은 흐름으로 빠져나간 기록 — `PROSECUTION_SITE_EXTRA_TACTICS` "이체 뒤 추가 송금 요구"와 같은 논리,
+// 근거 docs/research/prosecution-crypto-tactics-2026-10.md)를 먼저 말하게 하고, 같은 요구를 이유 없이 되풀이하지 않게 한다. ⛔ 은퇴 fv-c8wq 문면은 그대로.
+const PROSECUTION_SITE_FOLLOW_UP_STAGE_V2 =
+  "사이트에서 이체를 마치면 결과를 알린 뒤, '방금 검수한 자금이 고객님 다른 계좌 · 적금 · 대출 한도 쪽으로도 같은 흐름으로 빠져나간 기록이 함께 확인됐습니다, 그 자금까지 검수해야 무혐의 처리가 끝납니다'처럼 왜 추가 검수가 필요한지부터 분명히 설명하고, 같은 사이트에서 남은 예금 · 적금 · 대출 가능액도 진행하라고 한 번 요구한다. 피해자로 확인되면 돌려준다고 안심시킨다. 같은 추가 요구를 이유 없이 되풀이하지 않고, 검수 기간이나 나중에 연락하겠다는 말로 통화를 정리하지도 않는다.";
+const PROSECUTION_OPENING_V2 = `${PROSECUTION_STAGES[0]} ${INVESTIGATION_CARD_USE}`;
+
+// 검찰 고급 ② 상품권형 — 근거 경찰청(정책브리핑 2024-04-15 · 위조 우편물 → 검사 사칭 → "자금 검수" 명목 현금 · 문화상품권 · 가상자산 요구 — 사례 C24 · S44).
+const PROSECUTION_VOUCHER_PERSONA = prosecutionRoutePersona(
+  "자금 검수 명목으로 문화상품권을 사서 그 핀 번호를 불러 달라고 요구하는 상황을 연기한다.",
+  "- 상품권은 '문화상품권'이라고만 하고 실제 판매처 · 발행사 · 매장 이름은 쓰지 않는다. 핀 번호는 네가 지어내 부르지 않고, 살 곳을 정해 주지도 않는다.",
+);
+const PROSECUTION_VOUCHER_STAGE =
+  "자금 검수를 해야 한다며 '계좌 자금이 범죄 수익과 섞였는지 확인하려면 계좌 거래 기록이 남지 않는 상품권으로 바꿔 그 핀 번호를 검수번호로 제출하셔야 합니다, 확인이 끝나면 같은 금액으로 돌려드립니다'처럼 이유부터 설명하고, 예금으로 문화상품권을 사서 핀 번호를 불러 달라고 요구한다. 살 곳 · 금액 단위는 정해 주지 않는다. 상대가 거절하거나 망설이면 구속 가능성을 한 번 더 비춘 뒤 더 조르지 않고 마무리한다.";
+const PROSECUTION_VOUCHER_DEMAND =
+  "상품권 핀 번호 요구 — '자금 검수라서 예금을 문화상품권으로 바꾸셔야 합니다, 사신 상품권 핀 번호를 불러 주시면 검수번호로 등록됩니다' 처럼 상품권을 사서 핀 번호를 불러 달라고 한다. 판매처 · 발행사 이름과 핀 번호를 지어내지 않는다.";
+// 검찰 고급 ③ 대출금 전달형 — 근거 전북일보 2025-08-21(검사 · 금감원 사칭 → 대출 실행 → 대출금 현금 전달 직전 저지 · S40) · C07(교사 · 6,000만 원 대출 지시)
+// · 금감원 소비자경보 2024-35호(정상 대출 입증 명목 · S42). 숙박업소 격리 부분은 넣지 않는다(§115.2).
+const PROSECUTION_LOAN_PERSONA = prosecutionRoutePersona(
+  "명의 도용 대출 여부를 입증한다는 명목으로 대출을 받게 하고 그 대출금을 담당 직원에게 맡기라고 요구하는 상황을 연기한다.",
+  "- 실제 금융회사 이름 · 대출 상품 · 금액은 지어내 말하지 않는다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다.",
+);
+const PROSECUTION_LOAN_STAGE = `${LOAN_PROOF_REASON}. 그다음 금융회사에서 대출을 받아 그 대출금을 현금으로 찾아 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 은행 직원이 용도를 물으면 생활비라고만 하라고 시킨다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 구속 가능성을 한 번 더 비춘 뒤 더 조르지 않고 마무리한다.`;
+const PROSECUTION_LOAN_DEMAND =
+  "대출금 현금 인출 요구 — '고객님 계좌가 부정 사기 대출에 연루돼 있어서 정상 절차로 대출을 받으셔야 명의 도용 여부가 입증됩니다, 받으신 대출금은 현금으로 찾아 담당 직원에게 맡겨 주세요' 처럼 입증을 이유로 대출을 받게 하고 대출금을 직원에게 맡기게 한다. 만날 곳 · 시간은 정하지 않는다.";
+const PROSECUTION_ROUTE_HEAD = [
+  PROSECUTION_OPENING_V2,
+  withSmsFirst(PROSECUTION_CASE_LINK_STAGE),
+  PROSECUTION_STAGES[1],
+  PROSECUTION_STAGES[2],
+  PROSECUTION_WALLET_STAGES_TAIL[0],
+] as const;
+const PROSECUTION_CASE_LINK_SMS: FlowVariantSms = {
+  purpose: "link",
+  smsId: "prosecution-case-link",
+  required: true,
+  notBeforeUserTurns: 2,
+  backstopUserTurns: 1,
+};
+
+// 자산 보호 고급 ② 공탁금 이체형 — 근거 금감원 소비자경보 2025-1호(S4 · 2025-02-13 — "자산보호, 약식기소 공탁금 등을 이유로 송금") · C03(카드 배송 70대 —
+// 자산보호 · 공탁금 명목 이체). ③ 금 구매형 — 근거 S35 · C23(부산경찰 · 자산 실물 전수 조사 명목 금 구입 → 대면 제출).
+const ASSET_DEPOSIT_PERSONA = assetProtectionRoutePersona(
+  "수사가 끝날 때까지 약식으로 처리해 주겠다는 명목으로 공탁금을 지정 계좌에 넣으라고 요구하는 상황을 연기한다.",
+);
+const ASSET_GOLD_PERSONA = assetProtectionRoutePersona(
+  "자산 실물 전수 조사 명목으로 예금을 금으로 바꿔 담당 직원에게 제출하라고 요구하는 상황을 연기한다.",
+);
+const ASSET_DEPOSIT_DEMAND =
+  "공탁금 이체 요구 — '정식 수사로 넘어가면 계좌가 전부 묶이는데, 약식으로 처리하려면 공탁금을 먼저 넣어 두셔야 합니다, 수사가 끝나면 전액 돌려드립니다' 처럼 약식 처리를 이유로 공탁금을 넣게 한다. 계좌번호는 지어내 말하지 않고 문자로 보낸 것을 확인하게 한다.";
 
 // 음성 시나리오용 "다른 번호" 수법(가족 · 손주 고급 — §2.6.3 "딥보이스 + 다른 번호로 연락", 사례 S9 · C18).
 const OTHER_NUMBER_PRETEXT =
@@ -1121,6 +1180,31 @@ const SPECS: VariantSpec[] = [
     demandStages: 2,
     sources: ["S26", "C16", "C17"],
   },
+  // §123(#238) — 자녀 납치 협박 고급 ② 시비 합의금형 — 근거 금감원 소비자경보 '주의'(이투데이 2026-02-01 · S26 · C16: 학원 시간대 · AI 울음소리 ·
+  // "아이가 욕했다 · 폰 액정 깼다" 같은 일상 핑계로 붙잡고 50만 원 안팎 즉시 이체). 결말(소액 즉시 이체)은 fv-k268과 같고 진입(납치 → 시비)만 다르다.
+  {
+    variantId: "fv-w7tb",
+    scenarioId: "kidnapping-threat",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(
+      "자녀가 자기 물건을 망가뜨리고 욕을 해서 지금 붙잡고 있다고 말하고, 아이가 울고 있다고 말로만 전한다.",
+      "상대가 먼저 말한 자녀 이름만 되받아 이미 다 알고 있는 척한다.",
+      "큰돈이 아니라 수리비 정도만 지금 바로 보내면 아이를 보내 주겠다며 소액 즉시 이체를 요구하고, 망설이면 금액을 조정해 한 번 더 요구한 뒤 더 조르지 않고 마무리한다.",
+    ),
+    extraTactics: [
+      "일상 시비 핑계 협박 — '댁 아이가 제 휴대폰 액정을 깨고 욕까지 해서 지금 데리고 있습니다' 처럼 납치가 아닌 일상 시비를 붙잡아 둔 이유로 댄다. 실제 장소 · 차량 · 신체 위해는 말하지 않는다.",
+      "가족 정보 언급 — 상대가 먼저 말한 자녀 이름만 되받아 '○○이 지금 여기 있습니다' 처럼 이미 다 아는 척한다. 학원 같은 장소는 '○○학원'처럼 가린 형태로만 말하고, 상대가 말하지 않은 이름은 지어내 단정하지 않는다.",
+      "울음 언급 협박 — '지금 옆에서 아이가 울고 있습니다' 처럼 말로만 전해 공포를 키운다. 우는 소리를 흉내 내거나 신체 위해를 묘사하지 않는다.",
+    ],
+    exitBlock: ["D2_secrecy", "D4_procedural_legitimacy", "D5_call_retention", "D6_report_blocking"],
+    sms: [],
+    legs: ONE_LEG("신원 불상", "male"),
+    ...ADVANCED,
+    channels: ["voice"],
+    demandStages: 2,
+    sources: ["S26", "C16"],
+  },
 
   // ── family-accident-deepvoice (§2.6.3 8행 — S9 · C18). ⚠️ clone = ElevenLabs 경로는 변형 미적용 ──
   {
@@ -1168,6 +1252,30 @@ const SPECS: VariantSpec[] = [
     channels: ["voice"],
     demandStages: 2,
     sources: ["S9", "C18"],
+  },
+  // §123(#238) — 가족 사고 딥보이스 고급 ② 소액 급전형 — 근거 금감원 소비자경보 '주의'(이투데이 2026-02-01 · S26 · C16: 사고 · 술값 · 수리비 명목
+  // 50만 원 안팎을 예금 해지 · 대출 없이 바로 이체). 결말이 fv-66hh(합의금 송금)보다 작고 빠르다.
+  {
+    variantId: "fv-h5sz",
+    scenarioId: "family-accident-deepvoice",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(
+      "작은 사고를 쳤다며 다른 번호로 연락한 이유를 댄다.",
+      "원래 번호로는 연락이 안 된다며 확인을 막는다.",
+      "큰돈은 아니고 술자리에서 남의 물건을 깨서 지금 수리비만 물어 주면 된다며, 바로 보낼 수 있는 소액을 지금 당장 보내 달라고 하고, 망설이면 더 조르지 않고 마무리한다.",
+    ),
+    extraTactics: [
+      OTHER_NUMBER_PRETEXT,
+      "소액 즉시 송금 요구 — '큰돈 아니야, 수리비만 지금 물어 주면 끝나, 바로 보내 줄 수 있지?' 처럼 부담 없는 금액이라며 지금 바로 이체하게 한다. 실제 금액 · 계좌는 지어내 단정하지 않고, 예시 계좌만 부른다.",
+    ],
+    exitBlock: ["D2_secrecy", "D5_call_retention"],
+    sms: [],
+    legs: ONE_LEG("가족", "female"),
+    ...ADVANCED,
+    channels: ["voice"],
+    demandStages: 2,
+    sources: ["S26", "C16", "C18"],
   },
 
   // ── grandchild-impersonation (§2.6.3 8행 — 같은 줄). ⚠️ clone — 위와 같다 ────────────────
@@ -1559,6 +1667,50 @@ const SPECS: VariantSpec[] = [
     decisionMoment: ASSET_PROTECTION_DECISION_MOMENT,
     sources: ASSET_PROTECTION_SOURCES,
   },
+  // §123(#238) — 자산 보호 고급 새 루트 2(상수 주석 참고). 앞 3단계(범죄 정황 · 자산 파악 · 비공개)는 fv-k9ra와 같다.
+  {
+    variantId: "fv-p3jx",
+    scenarioId: "asset-protection-notice-call",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(
+      `${ASSET_PROTECTION_STAGES_HEAD[0]} ${INVESTIGATION_CARD_USE}`,
+      ...ASSET_PROTECTION_STAGES_HEAD.slice(1),
+      withSmsFirst("정식 수사로 넘어가면 계좌가 전부 묶이니 약식으로 처리하려면 공탁금을 먼저 넣어 둬야 하고 수사가 끝나면 전액 돌려준다고 이유부터 설명한 뒤, 문자로 보낸 계좌에 공탁금을 넣으라고 요구한다. 상대가 거절하거나 망설이면 더 조르지 않고 마무리한다."),
+    ),
+    dropLabels: ["인출·전달 요구"],
+    extraTactics: [ASSET_DEPOSIT_DEMAND],
+    exitBlock: ["D2_secrecy", "D4_procedural_legitimacy"],
+    sms: [{ purpose: "transfer", smsId: "asset-deposit-account", required: true, notBeforeUserTurns: 4, ...FAST_BACKSTOP }],
+    legs: [{ callerLabel: "금융감독원 직원", personaPrompt: ASSET_DEPOSIT_PERSONA, speakerGender: "male", minUserTurns: 0, maxUserTurns: 20 }],
+    ...ADVANCED,
+    channels: ["voice", "sms"],
+    demandStages: 2,
+    decisionMoment: "문자로 받은 계좌에 공탁금을 넣겠다고 하는 순간",
+    sources: ["S4", "C03"],
+  },
+  {
+    variantId: "fv-t8ga",
+    scenarioId: "asset-protection-notice-call",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(
+      `${ASSET_PROTECTION_STAGES_HEAD[0]} ${INVESTIGATION_CARD_USE}`,
+      ...ASSET_PROTECTION_STAGES_HEAD.slice(1),
+      withSmsFirst("보관 조치 절차라며 문자로 보낸 링크에서 보관 신청서를 먼저 작성하게 한다."),
+      INSTITUTION_GOLD_STAGE.replace("인증번호 단계가 끝나면 ", "신청서 단계가 끝나면 "),
+    ),
+    dropLabels: ["절차·서류 정당화", "인출·전달 요구"],
+    extraTactics: [ASSET_CUSTODY_PROCEDURE_TACTIC, INSTITUTION_GOLD_DEMAND],
+    exitBlock: ["D2_secrecy", "D4_procedural_legitimacy"],
+    sms: [{ purpose: "link", smsId: "asset-custody-link", required: true, notBeforeUserTurns: 3, ...FAST_BACKSTOP }],
+    legs: [{ callerLabel: "금융감독원 직원", personaPrompt: ASSET_GOLD_PERSONA, speakerGender: "male", minUserTurns: 0, maxUserTurns: 20 }],
+    ...ADVANCED,
+    channels: ["voice", "sms"],
+    demandStages: 2,
+    decisionMoment: "예금을 찾아 금을 사서 직원에게 제출하겠다고 약속하는 순간",
+    sources: ["S35", "C23"],
+  },
   {
     variantId: "fv-nss6",
     scenarioId: "prosecution-cooperation-call",
@@ -1636,15 +1788,26 @@ const SPECS: VariantSpec[] = [
     scenarioId: "prosecution-cooperation-call",
     level: "advanced",
     authoring: "authored",
-    stages: st(PROSECUTION_STAGES[0], PROSECUTION_CASE_LINK_STAGE, PROSECUTION_STAGES[1], PROSECUTION_STAGES[2], ...PROSECUTION_SITE_STAGES_TAIL),
+    // §123(#238) — 신고 (3) 첫 단계 내 정보 활용 · (9) 문자 단계 도구 먼저 · (11) 추가 검수 이유 먼저 + 이유 없는 되풀이 금지. 단계 순서 · 문자 목적 · 결정 순간은 그대로.
+    stages: st(
+      PROSECUTION_OPENING_V2,
+      withSmsFirst(PROSECUTION_CASE_LINK_STAGE),
+      PROSECUTION_STAGES[1],
+      PROSECUTION_STAGES[2],
+      PROSECUTION_SITE_STAGES_TAIL[0],
+      withSmsFirst(PROSECUTION_SITE_STAGES_TAIL[1]),
+      PROSECUTION_SITE_STAGES_TAIL[2],
+      PROSECUTION_SITE_FOLLOW_UP_STAGE_V2,
+      PROSECUTION_SITE_STAGES_TAIL[4],
+    ),
     dropLabels: ["권위 암시", "수사 서류 언급", "코인 구매·송금 요구"],
     // §106 — 사건 기록 열람본을 근거로 압박하는 같은 라벨 문면(현행 변형만 · 은퇴 변형은 원문 유지).
     // §109 — "권위 암시"도 열람본과 같은 가상 소속 · 이름으로 밝히는 같은 라벨 문면으로 바꾼다.
     extraTactics: [PROSECUTION_CASE_RECORD_AUTHORITY_TACTIC, PROSECUTION_CASE_RECORD_TACTIC, PROSECUTION_SITE_COIN_TACTIC, ASSET_INFO, ...PROSECUTION_SITE_EXTRA_TACTICS],
     exitBlock: ["D2_secrecy", "D4_procedural_legitimacy", "D5_call_retention"],
     sms: [
-      { purpose: "link", smsId: "prosecution-case-link", required: true, notBeforeUserTurns: 2 },
-      { purpose: "transfer", smsId: "prosecution-asset-site-link", required: true, notBeforeUserTurns: 5 },
+      { ...PROSECUTION_CASE_LINK_SMS },
+      { purpose: "transfer", smsId: "prosecution-asset-site-link", required: true, notBeforeUserTurns: 5, ...FAST_BACKSTOP },
     ],
     legs: [
       { callerLabel: "검찰 수사관", personaPrompt: PROSECUTION_SITE_PERSONA, speakerGender: "male", minUserTurns: 0, maxUserTurns: 20 },
@@ -1654,6 +1817,41 @@ const SPECS: VariantSpec[] = [
     demandStages: 3,
     decisionMoment: PROSECUTION_SITE_DECISION_MOMENT,
     sources: PROSECUTION_SOURCES,
+  },
+  // §123(#238) — 검찰 고급 새 루트 2(상수 주석 참고). 앞 5단계(구속 위협 · 사건 조회 문자 · 비공개 · 끊지 말 것 · 자산 파악)는 fv-h3vn과 같다.
+  {
+    variantId: "fv-v2mk",
+    scenarioId: "prosecution-cooperation-call",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(...PROSECUTION_ROUTE_HEAD, PROSECUTION_VOUCHER_STAGE),
+    dropLabels: ["권위 암시", "수사 서류 언급", "코인 구매·송금 요구"],
+    extraTactics: [PROSECUTION_CASE_RECORD_AUTHORITY_TACTIC, PROSECUTION_CASE_RECORD_TACTIC, ASSET_INFO, PROSECUTION_VOUCHER_DEMAND, PROSECUTION_SITE_EXTRA_TACTICS[0]!],
+    exitBlock: ["D2_secrecy", "D4_procedural_legitimacy", "D5_call_retention"],
+    sms: [{ ...PROSECUTION_CASE_LINK_SMS }],
+    legs: [{ callerLabel: "검찰 수사관", personaPrompt: PROSECUTION_VOUCHER_PERSONA, speakerGender: "male", minUserTurns: 0, maxUserTurns: 20 }],
+    ...ADVANCED,
+    channels: ["voice", "sms"],
+    demandStages: 3,
+    decisionMoment: "상품권을 사서 핀 번호를 불러 주겠다고 하는 순간",
+    sources: ["S44", "C24"],
+  },
+  {
+    variantId: "fv-a6lq",
+    scenarioId: "prosecution-cooperation-call",
+    level: "advanced",
+    authoring: "authored",
+    stages: st(...PROSECUTION_ROUTE_HEAD, PROSECUTION_LOAN_STAGE),
+    dropLabels: ["권위 암시", "수사 서류 언급", "코인 구매·송금 요구"],
+    extraTactics: [PROSECUTION_CASE_RECORD_AUTHORITY_TACTIC, PROSECUTION_CASE_RECORD_TACTIC, ASSET_INFO, PROSECUTION_LOAN_DEMAND, PROSECUTION_SITE_EXTRA_TACTICS[0]!],
+    exitBlock: ["D2_secrecy", "D4_procedural_legitimacy", "D5_call_retention"],
+    sms: [{ ...PROSECUTION_CASE_LINK_SMS }],
+    legs: [{ callerLabel: "검찰 수사관", personaPrompt: PROSECUTION_LOAN_PERSONA, speakerGender: "male", minUserTurns: 0, maxUserTurns: 20 }],
+    ...ADVANCED,
+    channels: ["voice", "sms"],
+    demandStages: 3,
+    decisionMoment: "대출을 받아 대출금을 찾아 직원에게 맡기겠다고 약속하는 순간",
+    sources: ["S40", "S42", "C07"],
   },
 ];
 
