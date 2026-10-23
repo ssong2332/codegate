@@ -23598,6 +23598,22 @@ D 판단값 근거(관측 5세션 — 운영 f7047187 + §115.5 · §115.6 실 �
 | 게이트 | 경로를 읽던 루트 테스트 19개의 경로를 컴포넌트로 바꿨다(검사 내용 무변경). 등록부 2벌에 등재: G436 `SESSION_SURFACE_REGISTRY` 29 → 30(컴포넌트 · 라우트 둘 다 mixed — G437 범위 16 → 17) · T86 `CLIENT_SCREEN_INVENTORY`(true — 사기범 말풍선을 그린다) |
 | 다음 | PR-3 통화 화면 안 겹침 · 배너 — 이 컴포넌트에 `embedded`류 속성을 더한다 |
 
+### 121.7 PR-3 — 통화 중 대화방 겹침 · 두 채널 맥락(2026-10-23 · 브랜치 `claude/call-chat-overlay` = #393 head + 변경 · 메인 결정 ⓑⓒ)
+⛔ 금지: 빨간 종료(끊기) · 사기범 끊기의 대화방 복귀(§112) 의미 변경 0 · 처음부터 통화인 시나리오 변경 0 · 일반 `sendMessage` 경로 변경 0(새 분기는 `duringCall`일 때만).
+
+| 층 | 변경 | 파일 |
+|---|---|---|
+| "채팅으로" | 역전환 대신 **통화 위에 대화방을 겹친다**(라우팅 0 — Live 세션 · 마이크 · 재생 그대로). 통화가 끝나거나(ended · 끊기 · 대화방 전환 시작) 내린다 | `src/app/session/play/page.tsx` |
+| 대화방 통화 중 모드 | `MessengerChatRoom duringCall` — 시작 고지 생략 · 맨 위 "통화 중 00:42" 배너(누르면 통화 화면) · 보이스톡 · "전화로 확인" 숨김 · 훈련 종료는 통화 화면 종료 순서로 위임 · z-index 40(발신 덮개 50 아래) | `src/components/MessengerChatRoom.tsx` |
+| 보내기 | 직전에 실시간 통화 전사를 **증분 제출**(`flushTranscript` — 새 문서 수를 돌려줘 답장 기준점을 그만큼 올린다) → `sendMessage({ duringCall: true })` | 같은 두 파일 |
+| 서버 | `duringCall`이면 `roleplay/chatDuringCall.ts` — 메신저발 진행 중 통화에서만 · 사용자 · 사기범 둘 다 `messenger` 채널 · turnCount +1 · 지시 `CHAT_DURING_CALL_INSTRUCTION`(짧게 · 통화와 어긋나지 않게 · 끊자는 말 금지) · 문자 · 확인 · 응낙 · 끊기(`none`) · 전환 · 합성 0 · 한도로 세션을 끝내지 않음 · Mock 대사도 통화 단계 수법만 | `functions/src/roleplay/chatDuringCall.ts` · `index.ts` |
+| Live 맥락 | 카톡 1쌍을 맥락 주입(`turnComplete:false` · 새 전달 방식 `chatDuringCall` — `contextInjection.ts` 표 행 추가) · 참가자 글은 데이터 표기 + 구분자 흉내 무력화 · 각 200자 | `src/lib/realtime/chatDuringCall.ts` |
+| ⓒ 발화 합산 | 실시간: `getSessionUserTurns` = 전사 계수 + 통화 중 카톡 수(끊기 · 문자 도구 판정 입력). 폴백 · 서버: `messages`의 사용자 문서를 세므로 자동 합산 | `play/page.tsx` |
+
+갱신한 기존 게이트: `callEndingWiring.test.ts`(getSessionUserTurns 정의 — ⓒ) · `startNoticeGate.test.ts`(`canVoiceTalk`에 `!inCall`) · `voiceTalkKeyboard.test.ts` · `startNoticeGate.test.ts`(시트 `chatEnded || inCall`) · `photoSendAndFamilyScroll.test.ts`(전송 인자 형태) · `personaCardPrompt.test.ts` G568(조립 지점 5번째 `chatDuringCall.ts` — 카드를 넘긴다).
+
+실측(에뮬레이터 · Mock LLM · 브라우저 창 마이크 차단 = 폴백 통화): 보이스톡 → 통화(00:11) → "채팅으로" → 같은 `/session/play` 위 대화방 · 배너 "통화 중 00:14" · 고지 0 → 카톡 2회 전송 · 답장 말풍선(통화 시간 01:29까지 계속) → 배너 → 통화 화면(01:36) → 다시 열면 이력 유지 → 끊기 → 대화방(통화 중 카톡 2쌍 말풍선 유지). 첫 Mock 답장에 "통화가 안 돼"가 섞여 Mock 대사 원천을 통화 단계 수법으로 고쳤다. ⚠️ 실시간(Gemini Live) 경로의 전사 증분 제출 · 맥락 주입은 실기 · 실 키 확인 전.
+
 ## 119. (Feature change — 2026-10-23 · 브랜치 `claude/multi-route-stage0` · 사용자 결정 원문 *"권장안 채택·시작 (권장)"* — `docs/research/scenario-multi-route-plan-2026-10.md` 6절 D-1~D-13 권장안) **다중 루트 0차: 루트 키 · 섞은 덱 배정 · 매핑 불변식 · 리포트 "이번 결말" 줄** — implementer 기록 (DECISIONS #234)
 
 ### 119.0 금지 (먼저)

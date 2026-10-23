@@ -70,6 +70,7 @@ import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { PHOTO_TURN_TEXT, photoTurnInstruction } from "./photoTurn";
+import { replyChatDuringCall } from "./chatDuringCall";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { asksIdentityCheck } from "./personaAuthority";
 import { extractSmsMarker } from "./smsMarker";
@@ -157,6 +158,10 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         "internal",
         `세션의 scenarioId에 해당하는 scenarioPrompts가 없습니다: ${session.scenarioId}`,
       );
+    }
+    // §121.7 PR-3 — 통화 중 대화방 카톡(메인 결정 ⓑⓒ). 문자 · 끊기 · 전환 판정을 타지 않는 별도 경로(`chatDuringCall.ts` 판정표).
+    if (request.data?.duringCall === true) {
+      return replyChatDuringCall({ db, sessionRef, sessionId, session, scenarioPrompt, userText, isPhotoTurn });
     }
 
     // ① PII 마스킹(guardrails, T11 실구현 — 전화/계좌/주민번호형/이메일 정규식 토큰화, guardrails/
