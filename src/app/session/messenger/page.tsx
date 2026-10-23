@@ -53,6 +53,9 @@ import EndTrainingButton from "@/components/EndTrainingButton";
 import MessengerFakeLanding from "@/components/MessengerFakeLanding";
 import MessengerProfileSheet from "@/components/MessengerProfileSheet";
 import MessengerStartNotice from "@/components/MessengerStartNotice";
+import { closePrimedCallAudio, primeCallAudio } from "@/lib/realtime/callAudio";
+import { GEMINI_OUTPUT_SAMPLE_RATE } from "@/lib/realtime/pcm";
+import { clearVoiceTalkDial, stashVoiceTalkDial } from "@/lib/messenger/voiceTalkDial";
 import { Button, LoadingStatus } from "@/components/ui";
 import { foldDegraded, DIALOGUE_DEGRADED_NOTICE } from "@/lib/report/degradedDisclosure";
 import { CALL_SEGMENT_ICON, CALL_SEGMENT_LINE, foldCallSegments } from "@/lib/messenger/threadItems";
@@ -199,6 +202,8 @@ export default function MessengerSessionPage() {
   const [voiceTalkCall, setVoiceTalkCall] = useState<"ringing" | "unanswered" | null>(null);
   // 응답 없음 메시지의 turnIndex — 다음 전송의 답장 기준점 하한(구독이 늦어도 이 메시지를 답장으로 오인하지 않는다).
   const voiceTalkFloorRef = useRef(-1);
+  // §121(1) — 사용자가 보이스톡을 거는 중(통화로 이어지는 세션 · 전환 요청 → 통화 화면 발신 연출로 이동하기 전까지).
+  const [dialingVoiceTalk, setDialingVoiceTalk] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   // §113.2(실기 신고 9 · UX D-151 (2)) — 사진 보내기. ⛔ 이미지는 이 화면 메모리(objectURL)에만 둔다 — 서버 업로드 · Storage · Firestore ·
   // 로그 0. 화면을 떠나면(훈련 종료 · 통화 전환) 전부 revoke한다. 서버에는 "사진을 보냈다"는 사실만 간다(`sendMessage({photo: true})`).
@@ -491,6 +496,30 @@ export default function MessengerSessionPage() {
     const timer = setTimeout(() => setVoiceTalkCall(null), VOICE_TALK_UNANSWERED_MS);
     return () => clearTimeout(timer);
   }, [voiceTalkCall, sessionId]);
+
+  // §121(1)(UX D-154) — 사용자가 보이스톡을 거는 경우(통화로 이어지는 세션 · `voiceTalkDial.ts` 표 2행). ⭐ 통화 오디오를 **이 탭 안에서
+  // 동기로** 준비해 맡긴다(첫 await 앞 — 받기 탭과 같은 이유 · §57 수정안 A). 전환이 되면 곧바로 통화 화면으로 가고, 통화 화면이 발신 연출
+  // (연결음 · 취소) 뒤 "상대가 받음"으로 통화를 시작한다. "전화가 옵니다" 연출은 사기범이 거는 경우에만 남는다.
+  const handleVoiceTalkDial = async () => {
+    if (!sessionId || escalatingNow || chatEnded || dialingVoiceTalk) return;
+    setEscalationError(null);
+    const audio = primeCallAudio(GEMINI_OUTPUT_SAMPLE_RATE, performance.now());
+    stashVoiceTalkDial({ sessionId, audio, atMs: Date.now() });
+    setDialingVoiceTalk(true);
+    try {
+      const result = await requestEscalation({ sessionId });
+      if ("escalation" in result && result.escalation.toChannel === "voice") {
+        router.push("/session/play");
+        return;
+      }
+      throw new Error("전환 응답 없음");
+    } catch {
+      clearVoiceTalkDial();
+      closePrimedCallAudio(audio);
+      setDialingVoiceTalk(false);
+      setEscalationError("보이스톡을 걸지 못했습니다. 다시 시도해 주세요.");
+    }
+  };
 
   // 전이 연출(P-18) — "사기범이 전화를 거는" 화면을 잠시 보여준 뒤 UX-014 수신 phase로 이음새
   // 없이 인계한다(/session/play는 이미 phase 기본값이 incoming이라 그대로 진입한다).
@@ -1150,11 +1179,12 @@ export default function MessengerSessionPage() {
               ? undefined
               : canVoiceTalk
               ? {
+                  // §121(1) — 사용자가 거는 보이스톡 = 발신(상대가 받는다). ⛔ 프라이밍이 탭 안에서 일어나야 해 같은 틱에 부른다.
                   onClick: () => {
                     setProfileOpen(false);
-                    void handleRequestEscalation();
+                    void handleVoiceTalkDial();
                   },
-                  disabled: escalatingNow,
+                  disabled: escalatingNow || dialingVoiceTalk,
                 }
               : {
                   onClick: () => {
@@ -1227,7 +1257,7 @@ export default function MessengerSessionPage() {
 
       {/* 실기 신고 4 — 보이스톡 응답 없음 연출(통화로 이어지지 않는 카톡형 세션). 신호음 중에는 취소(빨간 버튼)로 대화방에 돌아간다 —
           취소하면 서버에 아무것도 남기지 않는다. 응답 없음 뒤 2초면 저절로 닫힌다(대화 화면 상시 종료로 바로 돌아간다 — AC-006). */}
-      {voiceTalkCall !== null && (
+      {(voiceTalkCall !== null || dialingVoiceTalk) && (
         <div
           role="status"
           aria-live="polite"
@@ -1243,7 +1273,7 @@ export default function MessengerSessionPage() {
             </span>
             <p className="text-[22px] font-bold">{peerName}</p>
             <p className="text-base text-white/80">
-              {voiceTalkCall === "ringing" ? "보이스톡 연결 중…" : "상대방이 응답하지 않습니다"}
+              {voiceTalkCall === "unanswered" ? "상대방이 응답하지 않습니다" : "보이스톡 연결 중…"}
             </p>
           </div>
           {voiceTalkCall === "ringing" && (
