@@ -7,7 +7,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { finalizeScammerReplyText } from "../scammerReplyMasking";
 import { extractEscalationSignal } from "../escalationSignal";
-import { ESCALATION_MIN_USER_TURNS, isEscalationTooEarly } from "../signalConsistency";
+import { ESCALATION_MIN_USER_TURNS, isEscalationTooEarly, judgeEscalationSignalAt } from "../signalConsistency";
 import { turnsSinceMessengerEntry } from "../messengerReentry";
 
 const SRC_ROOT = join(__dirname, "..", "..", "..", "src");
@@ -73,9 +73,10 @@ test("§122(7) 판정표 A0 전환 하한: 메신저 진입 뒤 첫 답장의 �
   assert.equal(isEscalationTooEarly(turnsSinceMessengerEntry(7, history)), false);
 });
 
-test("§122(7) sendMessage가 A0을 대사 판정보다 먼저 적용한다", () => {
+test("§122(7) sendMessage가 A0(전환 하한)을 대사 판정보다 먼저 적용하는 입구를 부른다", () => {
   const source = readSrc("roleplay/index.ts");
-  const a0 = source.indexOf("isEscalationTooEarly(turnsSinceMessengerEntry(turnCount, session.channelHistory))");
-  const a1 = source.indexOf("judgeEscalationSignal(signalFreeReplyText)");
-  assert.ok(a0 > 0 && a1 > a0);
+  assert.ok(source.includes("judgeEscalationSignalAt(turnsSinceMessengerEntry(turnCount, session.channelHistory), signalFreeReplyText)"));
+  assert.deepEqual(judgeEscalationSignalAt(1, "지금 전화할게"), { accept: false, reason: "too_early" }, "첫 답장 = A0");
+  assert.deepEqual(judgeEscalationSignalAt(2, "지금 전화할게"), { accept: true }, "둘째 답장부터 A2");
+  assert.deepEqual(judgeEscalationSignalAt(3, "나중에 전화할게"), { accept: false, reason: "contradicted" }, "A1 그대로");
 });

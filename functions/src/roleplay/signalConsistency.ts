@@ -54,6 +54,12 @@ export function isEscalationTooEarly(turnsSinceEntry: number): boolean {
   return turnsSinceEntry < ESCALATION_MIN_USER_TURNS;
 }
 
+/** 판정표 A0 → A1~A4 — sendMessage가 부르는 입구(A0 전환 하한을 먼저 본다). */
+export function judgeEscalationSignalAt(turnsSinceEntry: number, replyText: string): EscalationConsistency {
+  if (isEscalationTooEarly(turnsSinceEntry)) return { accept: false, reason: "too_early" }; // A0
+  return judgeEscalationSignal(replyText);
+}
+
 /** 판정표 A. */
 export function judgeEscalationSignal(replyText: string): EscalationConsistency {
   if (LATER_CONTACT.test(replyText)) return { accept: false, reason: "contradicted" }; // A1

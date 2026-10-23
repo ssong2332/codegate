@@ -79,7 +79,7 @@ import { evaluateOtpCheck, otpCheckInputsFromHistory } from "./otpCheck";
 import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { decideRepeatBreak, repeatBreakInstruction } from "./repeatBreak";
-import { isEscalationTooEarly, judgeEndCallSignal, judgeEscalationSignal } from "./signalConsistency";
+import { judgeEndCallSignal, judgeEscalationSignalAt } from "./signalConsistency";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
@@ -669,9 +669,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 통화가 안 된다고 말한 턴의 전화 전환 · 새 송금을 요구한 턴의 목표 끊기. 신호는 위에서 이미 텍스트에서 지워졌다.
     // §122(7) 판정표 A0 — 전환 하한(메신저 진입 뒤 첫 답장의 전환 신호는 대사와 무관하게 받지 않는다).
     const escalationCheck = rawSignalEscalate
-      ? isEscalationTooEarly(turnsSinceMessengerEntry(turnCount, session.channelHistory))
-        ? ({ accept: false, reason: "too_early" } as const)
-        : judgeEscalationSignal(signalFreeReplyText)
+      ? judgeEscalationSignalAt(turnsSinceMessengerEntry(turnCount, session.channelHistory), signalFreeReplyText)
       : undefined;
     const signalEscalate = rawSignalEscalate && escalationCheck?.accept === true;
     const endCallConsistency = judgeEndCallSignal(rawEndCallSignal, signalFreeReplyText);
