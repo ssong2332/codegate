@@ -23614,3 +23614,70 @@ D 판단값 근거(관측 5세션 — 운영 f7047187 + §115.5 · §115.6 실 �
 
 ### 119.4 검증
 `npm --prefix functions test` · `npm test` · 두 lint · 에뮬레이터 스모크 `node scripts/emulator-route-deck-smoke.mjs` — 수치는 PR 본문. 배포 순서 **Functions → Hosting**(옛 화면은 `routeSummary`를 읽지 않을 뿐 — 어느 순서도 안전).
+
+## 122. (Bug fix — 2026-10-23 · 브랜치 `claude/urgent-regressions-b00fe3` = main `40575d5` + 변경 · 사용자 실기 신고 4건(배포 뒤 회귀 포함) · 갤럭시 S25 + 크롬) **오프닝 신호 마커 노출 · 시나리오 음량 차이 · 사진 직후 채팅방 나감 · 본인확인 생년월일 주민번호 앞자리형** — implementer 기록 (DECISIONS #237 · UX D-155)
+
+### 122.1 (7) [긴급] 메신저 첫 말풍선에 `[[SIGNAL:ESCALATE_VOICE]]` 노출
+신고: 자녀 사칭 카톡(아빠 호칭) 첫 말풍선 *"[[SIGNAL:ESCALATE_VOICE]]⏎⏎아빠, 나야. 폰 액정이 깨져서 지금 친구 폰으로 보내고 있어."*
+
+| 항목 | 결과 | 근거 |
+|---|---|---|
+| 원인 | 사기범 대사 LLM 경로 3곳 중 **오프닝만** 신호 · 문자 마커 추출(`extractEscalationSignal` · `extractSmsMarker`)을 거치지 않았다. sendMessage · 통화 복귀 메시지는 이미 지운다 | `functions/src/roleplay/openingLine.ts`(수정 전 링크 추출 → 표기 정리 직행) · `roleplay/index.ts` ③-b · `callReturnLine.ts` |
+| 수정 ① | 오프닝: 링크 → 문자 마커 → 신호 마커 제거 → 표기 정리. ⛔ 오프닝은 지우기만 한다(전환 · 끊기 · 문자 효과 0) | `openingLine.ts` |
+| 수정 ② 전환 하한(판정표 A0) | 메신저 진입(또는 통화→메신저 복귀) 뒤 사용자 턴 `< ESCALATION_MIN_USER_TURNS(2)`이면 전화 전환 신호를 받지 않는다(`too_early`) — 첫 답장에 바로 전화가 오지 않는다 | `signalConsistency.ts` `judgeEscalationSignalAt` · `index.ts` |
+| 수정 ③ 안전망 | 세 경로가 모두 마지막에 지나는 `finalizeScammerReplyText`가 남은 제어 마커 모양(`[[이름:…]]` · 전각 · 공백 · 소문자 변형)을 지운다. 마커가 없으면 바이트 그대로 | `scammerReplyMasking.ts` |
+| ⚠️ 지시와 다른 점 | 지시는 "마커가 남으면 `replyUsability`에서 걸러 낸다"였다. `replyUsability`는 LLM 단계 판정이라 **마커 추출 전 원문**(정상 마커가 있는 상태)을 본다 ⇒ "남은 마커"를 판정할 수 없다. 그래서 안전망을 추출 뒤 최종 손질 자리에 두었다 | `llm/replyUsability.ts` 머리 표 1-b |
+| 테스트 | `roleplay/__tests__/openingSignalLeak.test.ts` 7건 — 신고 원문 · 안전망 변형 · 바이트 보존 · A0 · **`purpose: "scammer-reply"` + `finalizeScammerReplyText`를 쓰는 모든 파일이 신호 추출을 부른다**(경로 누락 재발 방지 소스 스캔) | — |
+
+### 122.2 (8) [긴급] 시나리오별 음량 차이 — 앱 신호 사슬 오프라인 렌더(원인 미확정 · 기기 확인 대기)
+신고: *"검찰 고급 시작하니까 스피커 아니어도 소리가 ㅈㄴ 커. 기관 사칭 시나리오 스피커 모드보다 커"*
+
+오프라인 렌더(`scripts/loudness-offline-render.mjs` — §114.1 실측 원본 WAV 14세션 · Gemini Live 청크 7680샘플 · 앱 모듈 `loudnessNormalizer.ts` · `outputGain.ts` 그대로 · 실 키 0):
+
+| 세션 | 원본 말소리 RMS | 통화 최종 RMS | 통화 말소리 시작 3초 | 통화 최대 3초 창 | 첫 청크 게인 | 최대 게인 |
+|---|---|---|---|---|---|---|
+| 기관 사칭 ① | −18.99 | −22.08 | −23.97 | −20.31 | −2.85dB | +1.92dB |
+| 기관 사칭 ② | −17.16 | −21.92 | −23.86 | −18.56 | −4.91dB | +0.64dB |
+| **검찰 수사 협조** | −19.16 | **−22.41** | **−23.65** | −19.74 | −3.92dB | +2.13dB |
+| 14세션 범위 | −19.16 ~ −14.68 | **−22.46 ~ −21.70(폭 0.76dB)** | −23.97 ~ −22.12 | −20.78 ~ −18.56 | −5.47 ~ −0.45dB | ≤ +2.13dB |
+
+| 후보(지시) | 판정 | 근거 |
+|---|---|---|
+| 정규화가 일부 경로에서 빠짐 | 아님(Gemini 경로) — 받은 청크는 전부 `normalizeChunk`를 지난다. 범위 밖은 ElevenLabs · 폴백 `<audio>`(§114.1 그대로) | `GeminiVoiceSession.tsx` 청크 수신부(호출 1곳) |
+| 처음 +6dB로 시작 | 아님 — 첫 청크 게인 −5.47 ~ −0.45dB, 전체 최대 +2.13dB | 위 표 |
+| 스피커 증폭 뒤 중복 적용 | 아님 — 정규화 → 통화/스피커 게인 · 컴프레서 · 리미터 순서 1회 | 같은 파일 |
+| RMS 기준과 체감 차이 | 말소리 시작 3초 · 최대 3초 창도 검찰이 기관보다 크지 않다 | 위 표 |
+
+⇒ **앱 안의 소리 사슬로는 신고 크기 차이를 만들 수 없다.** 통화 모드 대비 스피커 모드는 +13~15dB(§108.1)이고 정규화 폭은 ±6dB(실측 ≤ +2.1dB)다. 앱 밖 원인(⚠️ **추정 · 미확인**): Android 출력 스트림이 세션마다 다르게 잡힐 수 있다(통화 음량 ↔ 미디어 음량 — 출력 컨텍스트를 받기 탭에서 만들었는지(`out.origin` primed/session)와 마이크를 연 순서에 따라 다를 수 있다). 앞선 실측에서 검찰 원본이 0.2~1.8dB 작았으므로 §114 정규화가 검찰을 약 +1.2dB 키웠다. 이것이 "#385 뒤 더 커졌다"는 체감과 방향이 맞다.
+확인 방법(실 키 0): 같은 기기에서 `?audiodebug=1`로 기관 사칭 고급 → 검찰 고급을 차례로 실행하고 `out.origin` · `route` · `callMode` · `out.gain` · `pcm.peakDb` · **`norm.gainDb`(이번에 추가)**를 비교한다. 통화 중 볼륨 키를 눌렀을 때 뜨는 슬라이더 이름(통화/미디어)도 함께 본다. 수정 방향은 이 결과로 정한다(메인 세션에 요청함).
+이번 변경: 진단 패널 `norm.gainDb`(정규화가 마지막 청크에 쓴 게인) — `audioDiagnostics.ts` · `GeminiVoiceSession.tsx` 1줄. 소리 처리 무변경.
+
+### 122.3 (6) 신분증 사진 직후 사기범이 다음 요구 없이 채팅방을 나감
+신고: 사진 → *"아빠 고마워, 잘 받았어. 확인해볼게. 지금 접수 처리 들어갔어."* → "상대방이 채팅방을 나갔습니다." (`fv-tdgg` — 단계: 액정 → 앱 설치 → **신분증 사진** → 급한 돈 송금)
+
+원인: 메신저 단계 끊기(§104.9 대안 A)는 판정표(`scammerHangup/decide.ts`)의 사용자 발화 하한(3)만 보고, 대사 판정표 B는 "이번 응답에 새 요구가 있는가"만 본다. 사진 뒤 송금 단계가 남아 있는지는 아무도 보지 않았다.
+
+판정표 P(`functions/src/roleplay/photoFollowUp.ts` — 텍스트 폴백 · 메신저 단계 `END_CALL_GOAL`만):
+
+| # | If | Then |
+|---|---|---|
+| P1 | 메신저 단계가 아니다 · 목표 끊기 신호가 아니다 | 종전 |
+| P2 | 세션 변형 단계에 사진 · 신분증 단계가 없다 · 그 단계가 마지막이다 | 종전 |
+| P3 | 대화에 사진 턴이 없다(이번 턴 포함) | 종전 |
+| P4 | 마지막 사진 턴 뒤 사기범 대사(이번 응답 제외)에 새 요구 형태가 있다 | 종전 |
+| P5 | 그 밖 | **받지 않는다**(`photo_followup_pending`) — 대화가 이어진다 |
+
+오늘 P2를 통과하는 변형 = `fv-tdgg` 1개뿐이다(전수 실행). 포기 끊기(`END_CALL_GIVEUP`) · 실시간 콜러블 판정 · 흐름 정의는 바꾸지 않았다(흐름 재설계 = multi-route 1차 범위). 테스트 `roleplay/__tests__/photoFollowUp.test.ts` 5건.
+⚠️ 범위 밖 관찰: 다른 메신저 변형 중 사진을 `extraTactics`로만 요구하고 단계(`stages`)에는 없는 변형은 P2에서 걸리지 않는다. 사진 뒤 단계를 흐름에 넣을지는 multi-route 1차에서 정할 일이다.
+
+### 122.4 (10) 본인확인 생년월일 — 주민번호 앞자리형(사용자 결정)
+- 칸 모양: `030609-4●●●●●●` — 앞 6자리 + 뒷자리 **첫 숫자 1칸**만 입력받는다. 가림 6칸은 입력 칸이 아닌 표시다. 숫자 자판 · 7자리에서 자름 · 6자리 뒤 하이픈 자동.
+- 검증: 7자리 · 뒷자리 첫 숫자 1~4(1 · 2 → 19YY, 3 · 4 → 20YY) · 날짜 · 윤년 · 미래 금지. ⛔ 주민번호 전체를 붙여넣어도 첫 숫자까지만 남는다(개인정보 최소화).
+- 적용: `format: "birthdate"` 칸 전부(모의 랜딩 4화면 — 같은 칸 렌더 하나를 쓴다) · 열람본(§106) 피의자 칸 표시도 같은 모양(`identityDisplayValue`).
+- 파일: `src/lib/landing/identityInput.ts` · `src/components/MessengerFakeLanding.tsx`(`IdentityBox` · 열람본 `displayValues`) · 테스트 `identityInput.test.ts` · `mockScreenCopy.test.ts` §106 게이트(표시값 기준으로 갱신).
+- 화면 확인: 정적 렌더(Playwright · 390px)로 칸 모양만 확인했다. 실기 확인은 하지 않았다.
+
+### 122.5 겹침 · 배포
+- messenger-call-ux 세션과 겹칠 수 있는 파일: `src/components/MessengerFakeLanding.tsx`(랜딩 — 대화방 컴포넌트 아님) · `src/lib/realtime/GeminiVoiceSession.tsx`(진단 1줄 + import 1줄). 메신저 대화방 화면 파일 변경 0.
+- multi-route 1차와 겹칠 수 있는 파일: `functions/src/roleplay/index.ts`(신호 판정 2곳) · 흐름 정의(`flowVariants.ts`) 변경 0.
+- 배포 순서: **Functions → Hosting**(서로 독립 — (7)(6)은 Functions, (10)과 진단은 Hosting).
