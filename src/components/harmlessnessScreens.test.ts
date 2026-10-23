@@ -95,6 +95,7 @@ const SCREEN_FORBIDDEN_PATTERNS: RegExp[] = [
 const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   // 참가자에게 "사기 상황"을 그리는 화면 — 전부 스캔 대상이다.
   "MessengerFakeLanding.tsx": true, // 가짜 랜딩 + 모의 앱 설치(UX-023, T84)
+  "MessengerChatRoom.tsx": true, // 메신저 대화방(UX-022 · §121.4 PR-2로 라우트 본문을 옮김) — 사기범 말풍선 · 링크 칩을 그린다
   "MessengerProfileSheet.tsx": true, // 카톡형 상대 프로필 시트(§95 · UX D-138) — 사기범 이름을 그린다
   "InCallSmsOverlay.tsx": true, // 통화 중 문자 오버레이(UX-027, T68)
   "VerifyCallOverlay.tsx": true, // 확인 전화 오버레이(UX-031, T83)

@@ -15,7 +15,7 @@ test("[§113.1] 난이도 화면 — 호칭 칸이 있으면 그 칸을 기준�
 });
 
 test("[§113.2] 대화방 사진 — 기기 사진(accept image/*) · objectURL만 · 서버엔 photo 사실만 · 화면을 떠나면 revoke · 안내 문구 0", () => {
-  const src = read("src/app/session/messenger/page.tsx");
+  const src = read("src/components/MessengerChatRoom.tsx");
   assert.match(src, /type="file"\s*accept="image\/\*"/);
   assert.match(src, /const url = URL\.createObjectURL\(file\);/);
   assert.match(src, /for \(const url of urls\) URL\.revokeObjectURL\(url\);/);
