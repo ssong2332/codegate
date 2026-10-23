@@ -29,6 +29,7 @@ import {
 import type { MessengerChannel, RiskSignal, RiskSignalKind } from "../shared/types";
 import { resolveTacticCategory, type TacticCategory } from "./tacticCategory";
 import { CODE_DIGITS_WITH_ENDING, CODE_HANGUL_DIGITS, extractSpokenCodes } from "../shared/spokenDigits";
+import { PHOTO_DEMAND } from "../roleplay/photoTurn";
 
 /** 대처법·예방 조언 문구를 고르는 채널. 부재는 "voice"다(`MessageDoc.channel` 하위호환 규칙과 같다). */
 export type AdviceChannel = MessengerChannel;
@@ -45,6 +46,8 @@ export type AnalysisMessage = {
    * 그 답변이 오간 채널에 맞추는 데만 쓴다(2026-10-17 — 메신저 세션에도 "전화를 끊고"가 나왔다).
    */
   channel?: AdviceChannel;
+  /** §113.2 — 참가자가 기기 사진을 보낸 턴(서버 `MessageDoc.photo`). 판정 H3 입력. */
+  photo?: true;
 };
 
 export type DeceivedMomentResult = {
@@ -338,6 +341,13 @@ const ENTERED_IN_ANSWER = /입력\s*(?:했|할게|하겠|완료)/;
 const HARD_DISCLOSURE_TOKEN =
   /\[(?:주민번호|계좌|이메일)\](?!\s*(?:로|으로|에|번으로)\s*(?:다시\s*)?(?:전화|확인|연락|걸)|\s*(?:이|가|은|는)?\s*(?:맞|뭐|무슨|어디|누구)|\s*(?:이요|요)?\s*\?)/;
 
+// ⭐ §113.2(사용자 결정 2026-10-23) — H3: 참가자가 **사진을 보냈고**, 그 전에 사기범이 신분증 · 사진을 요구했다(이 대사까지의 사기범 대사 중
+// 하나라도 `PHOTO_DEMAND`) → 저항 어휘와 무관하게 속음(실제 제공 — H1 · H2와 같은 등급). 요구 없이 보낸 사진은 판정하지 않는다(종전 규칙만).
+// 속은 순간의 수법 라벨은 **요구한 대사**에서 고른다(사진 턴 바로 앞 대사가 재촉뿐이어도 "신원정보 직접 요구"류가 남게).
+function isPhotoAfterDemand(reply: AnalysisMessage, photoDemandSeen: boolean): boolean {
+  return reply.photo === true && photoDemandSeen;
+}
+
 function isHardDisclosure(scammerText: string, replyText: string): boolean {
   if (HARD_DISCLOSURE_TOKEN.test(replyText)) return true;
   if (REFUSAL_IN_ANSWER.test(replyText)) return false;
@@ -594,10 +604,13 @@ export function analyzeConversation(
   const tacticLabelsUsed = new Set<string>();
   const tacticMatchers = buildTacticMatchers(weakenedTactics);
   const riskSignals: RiskSignal[] = [];
+  // §113.2 H3 — 지금까지 사진 · 신분증을 요구한 가장 최근 사기범 대사(없으면 undefined).
+  let photoDemand: AnalysisMessage | undefined;
 
   for (let i = 0; i < sorted.length; i += 1) {
     const msg = sorted[i];
     if (msg.role !== "scammer") continue;
+    if (PHOTO_DEMAND.test(msg.textMasked)) photoDemand = msg;
 
     // 한 대사에 수법이 여럿이면 모두 "시도된 수법"에 올린다(2026-10-17). 속은 순간의 라벨은 종전처럼
     // 목록 순서상 **첫** 수법이다 — 라벨 규칙을 바꾸면 아카이브 묶기 키(T74)가 함께 흔들린다.
@@ -623,6 +636,10 @@ export function analyzeConversation(
         COMPLIANCE_PATTERN.test(reply.textMasked) ||
         isHandoffPromiseReply(msg.textMasked, reply.textMasked) ||
         isContextualCompliance(msg.textMasked, reply.textMasked);
+      if (isPhotoAfterDemand(reply, photoDemand !== undefined)) {
+        userReply = reply;
+        break;
+      }
       if (!fake && (isHardDisclosure(msg.textMasked, reply.textMasked) || (!resisted && complied && !wrongOtp))) {
         userReply = reply;
         break;
@@ -638,9 +655,12 @@ export function analyzeConversation(
 
     // PR-A3 — 문구 키가 비면 요구 어형 표(`resolveDemandFallbackTactic`)로 세션 목록 안의 라벨을 고른다. 고른 라벨은
     // AC-083 (a)를 지키려고 수법 목록에도 올린다(라벨이 정해지는 것은 이미 속은 순간으로 판정된 짝뿐이다).
-    const fallbackTactic = matchedTactic ? undefined : resolveDemandFallbackTactic(msg.textMasked, weakenedTactics);
+    // §113.2 H3 — 사진 턴이면 라벨은 요구한 대사에서 고른다.
+    const labelSource = userReply.photo === true && photoDemand ? photoDemand : msg;
+    const labelTactic = labelSource === msg ? matchedTactic : findMatchedTactics(labelSource.textMasked, tacticMatchers)[0];
+    const fallbackTactic = labelTactic ? undefined : resolveDemandFallbackTactic(labelSource.textMasked, weakenedTactics);
     if (fallbackTactic) tacticLabelsUsed.add(fallbackTactic);
-    const tactic = matchedTactic ? extractTacticLabel(matchedTactic) : (fallbackTactic ?? "약화된 사기 수법");
+    const tactic = labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? "약화된 사기 수법");
     // AC-026 예시("15초 시점에 속았습니다")를 그대로 따르기 위해 turnIndex가 아니라 실제 경과
     // 시간(초)을 라벨로 쓴다 — MessageDoc.createdAt이 이미 존재하므로 정확한 초 단위 계산이
     // 가능하다(구현 판단, Mock 단계라 정밀 음성 타이밍 데이터는 없지만 메시지 write 시각은 실측값).

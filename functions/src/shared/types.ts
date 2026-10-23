@@ -248,6 +248,8 @@ export type MessageDoc = {
   // **부재 = 도달함**(무백필). ⛔ `false`를 쓰지 말 것 — 부재와 `false`가 같은 뜻이면 판별자가
   // 둘이 된다(§14.9.1 오버로드 금지). ⛔ 이 필드를 앵커·문서 수 계산에 반영하지 말 것(G350).
   notSpoken?: true;
+  // §113.2(옵셔널 · 하위호환 · 무백필) — 참가자가 기기 사진을 보낸 턴(사실만 — 이미지 · 파일 정보 0). 부재 = 글 턴.
+  photo?: true;
 };
 
 // --- sessions/{sessionId}/artifacts/{artifactId} (AC-022, ADR-0003) ---
