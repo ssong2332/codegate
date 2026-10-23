@@ -35,6 +35,15 @@ import type { ScammerMessage } from "./types";
 export const CALL_RETURN_INSTRUCTION =
   "[통화 종료 뒤 메시지] 방금 상대가 통화를 끊었고, 대화는 다시 메시지 대화방으로 돌아왔다. 아직 상대는 새 메시지를 보내지 않았다. 지금까지의 메시지 대화와 통화에서 오간 내용을 이어받아, 네가 먼저 보내는 메시지 한 개(짧은 1~2문장)를 쓴다. 전화가 끊긴 것을 자연스럽게 짚고, 통화에서 멈춘 요청을 이어간다. 다시 전화하겠다는 말로 끝내지 않는다.";
 
+/**
+ * §112 — 사기범(네 쪽)이 통화를 끊고 대화방으로 돌아온 경우(끊기 종류 give_up · unspecified — `session/callReturn.ts` 판정표).
+ * 통화로는 막혔으니 메시지로 한 번 더 붙잡는다. export — 턴 지시 스캔 게이트 대상.
+ */
+export const CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION =
+  "[네가 통화를 끊은 뒤 메시지] 방금 네 쪽에서 통화를 끊었고, 대화는 다시 메시지 대화방으로 돌아왔다. 아직 상대는 새 메시지를 보내지 않았다. 통화가 끊긴 것을 자연스럽게 짚으며(전화 상태가 안 좋았다거나 오래 통화할 수 없었다는 식으로) 메시지로 이어서 하자고 하고, 통화에서 멈춘 요청을 한 번 더 짧게(1~2문장) 이어간다. 다시 전화하겠다는 말로 끝내지 않는다.";
+
+export type CallReturnBy = "user" | "scammer";
+
 /** 이력 끝에 붙이는 내부 트리거(화면 비노출 오케스트레이션 신호 — `OPENING_TRIGGER_TURN`과 같은 성격 · 참가자 데이터 아님). */
 export const CALL_RETURN_TRIGGER_TURN = "(통화가 끊겼다. 메시지 대화방에서 네가 먼저 보낼 메시지를 써라.)";
 
@@ -43,6 +52,7 @@ export type CallReturnLineResult = { message: ScammerMessage | undefined; isMock
 export async function generateCallReturnLine(
   session: SessionDoc,
   history: readonly Pick<MessageDoc, "role" | "textMasked">[],
+  by: CallReturnBy = "user",
 ): Promise<CallReturnLineResult> {
   const scenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId);
   if (!scenarioPrompt) return { message: undefined, isMock: false };
@@ -54,7 +64,7 @@ export async function generateCallReturnLine(
       l3Procedural: isL3Procedural(session.scenarioId),
       identityCheckAllowed: asksIdentityCheck(session.scenarioId),
       speakerGender: resolveSessionSpeakerGender(session),
-      turnInstruction: CALL_RETURN_INSTRUCTION,
+      turnInstruction: by === "scammer" ? CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION : CALL_RETURN_INSTRUCTION,
       fictionalBankName,
       sessionAccountNumber: resolveSessionAccountNumber(session.scenarioId),
       personaCard: session.personaCard?.items,

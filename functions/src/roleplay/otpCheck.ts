@@ -20,6 +20,7 @@
 // | 그 밖(같은 자릿수인데 다르다) | `buildOtpCompareInstruction("mismatch")` | 1 |
 import { logger } from "firebase-functions";
 import { buildOtpCompareInstruction, IN_CALL_SMS, listOtpItems } from "../scenarios/inCallSms";
+import { withSessionOtp } from "../scenarios/sessionOtp";
 import type { InCallSmsItem } from "../scenarios/inCallSms";
 import { extractSpokenCodes } from "../shared/spokenDigits";
 
@@ -79,6 +80,8 @@ export async function resolveOtpCheckInstruction(input: OtpCheckInput): Promise<
 
 type OtpCheckInput = {
   scenarioId: string;
+  /** §114 — 세션 id. 정답을 세션 번호(`withSessionOtp`)로 바꾼다. 부재면 카탈로그 번호(종전). */
+  sessionId?: string;
   /** 이번 턴 참가자 발화(마스킹 전 원문 — 6자리는 maskPII가 바꾸지 않지만 원문에서 뽑는 편이 확실하다). */
   userText: string;
   /** 지금 만들어질 사기범 응답이 몇 번째인가(roleplay/index.ts `scammerTurnNumber`). */
@@ -103,7 +106,7 @@ type OtpCheckInput = {
 /** 판정표(머리 주석)대로 평가하고, 빠진 행을 `reason`으로 돌려준다. */
 export async function evaluateOtpCheck(input: OtpCheckInput): Promise<OtpCheckResult> {
   const none = (reason: OtpCheckReason): OtpCheckResult => ({ outcome: "none", reason });
-  const otpItems = listOtpItems(input.scenarioId);
+  const otpItems = listOtpItems(input.scenarioId).map((item) => withSessionOtp(item, input.sessionId));
   if (otpItems.length === 0) return none("no-otp-scenario");
   const spoken = extractSpokenCodes(input.userText);
   if (spoken.length === 0) return none("no-digits");

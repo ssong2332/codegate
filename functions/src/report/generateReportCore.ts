@@ -10,6 +10,7 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { MOCK_SCREENS } from "../scenarios/mockScreens";
 import { listOtpItems } from "../scenarios/inCallSms";
+import { withSessionOtp } from "../scenarios/sessionOtp";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import type {
@@ -85,6 +86,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       // 2026-10-17 — 속은 순간의 대처법 문구를 그 답변이 오간 채널에 맞춘다(부재 = "voice", 무백필).
       // ⚠️ 판정 입력이 아니다 — `wasDeceived`·속은 순간의 개수·turnIndex는 이 값과 무관하다.
       ...(data.channel ? { channel: data.channel } : {}),
+      // §113.2 — 사진 보내기 턴(사실만 · 판정 H3 입력).
+      ...(data.photo === true ? { photo: true as const } : {}),
     };
   });
   // T84(§15.9.5 e-2) — 설치 순간의 앵커는 "N번째 사기범 턴"이 아니라 **그 링크를 실은 사기범
@@ -122,7 +125,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     messages,
     session.createdAt.toMillis(),
     weakenedTactics,
-    listOtpItems(session.scenarioId).map((item) => item.otpCode!),
+    // §114 — 정답은 이 세션의 번호(문자에 보인 값과 같은 해시).
+    listOtpItems(session.scenarioId).map((item) => withSessionOtp(item, sessionId).otpCode!),
   );
 
   // ②-b 통화 중 문자 이벤트 스냅샷(T89, §15.1.5, AC-059) — `sessions/{sid}/inCallSms`를 **1회 추가

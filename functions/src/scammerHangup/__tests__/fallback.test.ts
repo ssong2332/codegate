@@ -179,7 +179,8 @@ test("[G552 ⓒ · §79.19 (5) 10 배선] sendMessage — 입력은 userTurnsNow
     src.includes('update.scammerHangup = { acceptedAt: endedAt, kind: hangupEffect.kind, path: "fallback" };'),
     "폴백 승인 표식이 없다",
   );
-  assert.ok(src.includes("const hangupEnded = hangupEffect.end && stillActive && !limitReached;"), "한도가 이기지 않는다(7행)");
+  // §112 — 승인 조건은 그대로(한도가 이긴다) · 세션 종료는 메신저발 통화가 아닐 때만(`hangupEnded = hangupAccepted && !escalatedCall`).
+  assert.ok(src.includes("const hangupAccepted = hangupEffect.end && stillActive && !limitReached;"), "한도가 이기지 않는다(7행)");
   assert.ok(src.includes("if ((limitReached || finalize.hangupEnded) && finalize.stillActive) {"), "리포트 트리거 조건 확장 없음");
 });
 

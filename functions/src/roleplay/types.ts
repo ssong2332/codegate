@@ -10,13 +10,26 @@ export type ScammerMessage = {
 };
 export type UserMessage = { role: "user"; text: string };
 
-export type SendMessageRequest = { sessionId: string; userText: string };
+export type SendMessageRequest = {
+  sessionId: string;
+  userText: string;
+  /**
+   * §113.2(사용자 결정 2026-10-23) — 참가자가 기기 사진을 보냈다. ⛔ 이미지 · 파일명 · 크기 등 내용은 실리지 않는다(사실만).
+   * 참이면 `userText`는 무시되고 서버가 `PHOTO_TURN_TEXT`로 턴을 남긴다(`MessageDoc.photo`).
+   */
+  photo?: boolean;
+};
 export type SendMessageResponse = {
   reply: ScammerMessage;
   turnCount: number;
   ended: boolean;
   /** T192 C3(§79.5 · §79.19 (6) ⑧) — `scammer_ended` = 폴백 끊기 승인으로 이 턴이 세션을 끝냈다(서버 표식 있음). */
   endReason?: "limit_reached" | "scammer_ended";
+  /**
+   * §112 — 메신저에서 넘어온 통화에서 사기범이 끊었다(폴백 끊기 승인 · `ended`는 `false` — 세션은 active로 남고 표식만 있다).
+   * 화면은 마지막 대사 → 끊김 안내 → 전사 제출 → `requestReverseEscalation({followUp})`로 대화방에 돌아간다.
+   */
+  scammerHungUp?: true;
   /**
    * T7 추가(옵셔널, T19의 isMock 패턴과 동일) — true면 이번 응답이 MockLlmClient 산출물이라는 뜻
    * (LLM_API_KEY 미확보, PRD Risks급 고지). API.md에는 아직 명시 안 됨 — 클라(src/lib/api/types.ts)

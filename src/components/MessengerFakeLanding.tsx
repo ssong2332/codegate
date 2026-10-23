@@ -35,6 +35,7 @@ import { LANDING_PAGE_TOKENS, browserBarTokensFor } from "../lib/phone/skinToken
 import type { MessengerSkin } from "../lib/messenger/detectSkin";
 // §101 추가 — 금액 검증 · 한글 단위 표기 · 필수 칸 안내(잎 모듈 · 상대 경로 — 렌더 하네스 관례).
 import { amountError, amountHint, requiredFieldError } from "../lib/landing/amountInput";
+import { identityError, identityHint, identityMaxLength, sanitizeIdentityInput, type IdentityFormat } from "../lib/landing/identityInput";
 // §106 — 사건 기록 열람본의 피의자 칸 값(잎 모듈 · 상대 경로).
 import { recordIssueInfo, recordSubjectRows, type RecordRow } from "../lib/landing/recordDocument";
 
@@ -306,8 +307,14 @@ type CredentialFieldCopy = {
    * T190-5(UX-023 v1.33 (4) · D-93) — **클라 전용 자판 힌트**(`placeholder`와 같은 층 · 서버 카탈로그 필드 아님 —
    * 드리프트 대조 밖). 계좌번호·금액 칸에만 **필드별로 명시**한다(라벨로 추론하지 않는다 — §74.8).
    * ⛔ 검증이 아니다 — `type="text"` 유지 · maxlength·pattern·자동 서식·오류 문구 0.
+   * ⭐ §114(UX D-152) — 신원 칸은 아래 `format`이 자판(생년월일 숫자 · 휴대전화 전화 자판) · 정리 · 검증을 함께 정한다.
    */
   inputMode?: "numeric";
+  /**
+   * §114(UX D-152 · 2026-10-23 실기 신고 *"생년월일과 전화번호를 양식에 맞출 수 있도록 하자"*) — 신원 칸 형식. 라벨로 추론하지 않고
+   * 필드별로 명시한다. 생년월일 = 숫자 6 · 8자리 + 날짜 검사 · 휴대전화(연락처) = 010-XXXX-XXXX 자동 하이픈 + 11자리(`identityInput.ts` 표).
+   */
+  format?: IdentityFormat;
   /** §101 추가 — 금액 칸(숫자 · 0 초과 검증 + 칸 아래 한글 단위 표기 "47억 원"). 라벨로 추론하지 않고 필드별로 명시한다. */
   amount?: true;
   /** §101 추가 · UX D-115 — 문자로 안내된 사기 측 수취 계좌로 미리 채우는 칸(값 = `prefilledAccount` · 읽기 전용). */
@@ -332,7 +339,7 @@ const GENERIC_CREDENTIAL_COPY: CredentialCopy = {
   bodyLines: ["안전한 서비스 이용을 위해 아래 정보를 입력해 주세요."],
   fields: [
     { label: "이름", placeholder: "이름을 입력하세요" },
-    { label: "연락처", placeholder: "연락처를 입력하세요" },
+    { label: "연락처", placeholder: "연락처를 입력하세요", format: "mobile" },
   ],
   submitLabel: "확인",
   successHeadline: "입력되었습니다.",
@@ -351,7 +358,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     ],
     fields: [
       { label: "받는 분 성함", placeholder: "성함을 입력하세요" },
-      { label: "연락처", placeholder: "연락처를 입력하세요" },
+      { label: "연락처", placeholder: "연락처를 입력하세요", format: "mobile" },
       { label: "받으실 주소", placeholder: "주소를 입력하세요" },
     ],
     submitLabel: "재배송 신청하기",
@@ -367,8 +374,8 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     ],
     fields: [
       { label: "성함", placeholder: "성함을 입력하세요" },
-      { label: "생년월일", placeholder: "생년월일을 입력하세요" },
-      { label: "연락처", placeholder: "연락처를 입력하세요" },
+      { label: "생년월일", placeholder: "생년월일을 입력하세요", format: "birthdate" },
+      { label: "연락처", placeholder: "연락처를 입력하세요", format: "mobile" },
     ],
     submitLabel: "본인확인 완료하기",
     successHeadline: "본인확인이 완료되었습니다.",
@@ -416,8 +423,8 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     ],
     fields: [
       { label: "성명", placeholder: "성명을 입력하세요" },
-      { label: "생년월일", placeholder: "생년월일을 입력하세요" },
-      { label: "휴대전화 번호", placeholder: "휴대전화 번호를 입력하세요" },
+      { label: "생년월일", placeholder: "생년월일을 입력하세요", format: "birthdate" },
+      { label: "휴대전화 번호", placeholder: "휴대전화 번호를 입력하세요", format: "mobile" },
     ],
     submitLabel: "사건 기록 열람하기",
     successHeadline: "본인 확인이 완료되었습니다.",
@@ -433,7 +440,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     ],
     fields: [
       { label: "성명", placeholder: "성명을 입력하세요" },
-      { label: "생년월일", placeholder: "생년월일을 입력하세요" },
+      { label: "생년월일", placeholder: "생년월일을 입력하세요", format: "birthdate" },
     ],
     submitLabel: "본인 확인하기",
     successHeadline: "보관 지갑 이체가 접수되었습니다.",
@@ -464,8 +471,8 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     ],
     fields: [
       { label: "수취인 성함", placeholder: "성함을 입력하세요" },
-      { label: "연락처", placeholder: "연락처를 입력하세요" },
-      { label: "생년월일", placeholder: "생년월일을 입력하세요" },
+      { label: "연락처", placeholder: "연락처를 입력하세요", format: "mobile" },
+      { label: "생년월일", placeholder: "생년월일을 입력하세요", format: "birthdate" },
     ],
     submitLabel: "수취인 정보 확인하기",
     successHeadline: "수취인 정보가 확인되었습니다.",
@@ -702,6 +709,7 @@ function CredentialFormMockup({
   const errorFor = (field: CredentialFieldCopy): string | undefined => {
     if (isPrefilled(field)) return undefined;
     const raw = values[field.label] ?? "";
+    if (field.format) return identityError(field.format, field.label, raw); // §114
     return field.amount ? amountError(raw) : requiredFieldError(field.label, raw);
   };
 
@@ -960,7 +968,11 @@ function CredentialFormMockup({
       <form key={stepIndex} onSubmit={handleSubmit} className="flex flex-col gap-4 px-5 pb-6 pt-4">
         {(screen.fields ?? []).map((field) => {
           const error = errors[field.label];
-          const hint = field.amount ? amountHint(values[field.label] ?? "") : undefined;
+          const hint = field.amount
+            ? amountHint(values[field.label] ?? "")
+            : field.format
+              ? identityHint(field.format, values[field.label] ?? "")
+              : undefined;
           const noteId = `landing-note-${stepIndex}-${field.label}`;
           return (
             <label
@@ -982,13 +994,15 @@ function CredentialFormMockup({
               ) : (
                 // T190-5(D-93) — 숫자 칸은 숫자 자판 힌트만(`inputMode` — 필드별 명시). 입력값 자동 서식 0.
                 // §101 추가 — 제출 때 빈 칸 · 금액 오류를 칸 아래에 알린다(위 `errorFor`).
+                // §114 — 신원 칸(`format`)은 입력하는 동안 숫자만 남기고 자르며 휴대전화는 하이픈을 넣는다 · 자판도 형식이 정한다.
                 <input
                   type="text"
-                  inputMode={field.inputMode}
+                  inputMode={field.format === "mobile" ? "tel" : field.format === "birthdate" ? "numeric" : field.inputMode}
+                  maxLength={field.format ? identityMaxLength(field.format) : undefined}
                   autoComplete="off"
                   value={values[field.label] ?? ""}
                   onChange={(event) => {
-                    const next = event.target.value;
+                    const next = field.format ? sanitizeIdentityInput(field.format, event.target.value) : event.target.value;
                     setValues((current) => ({ ...current, [field.label]: next }));
                     if (error) setErrors((current) => ({ ...current, [field.label]: "" }));
                   }}

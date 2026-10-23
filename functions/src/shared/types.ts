@@ -248,6 +248,8 @@ export type MessageDoc = {
   // **부재 = 도달함**(무백필). ⛔ `false`를 쓰지 말 것 — 부재와 `false`가 같은 뜻이면 판별자가
   // 둘이 된다(§14.9.1 오버로드 금지). ⛔ 이 필드를 앵커·문서 수 계산에 반영하지 말 것(G350).
   notSpoken?: true;
+  // §113.2(옵셔널 · 하위호환 · 무백필) — 참가자가 기기 사진을 보낸 턴(사실만 — 이미지 · 파일 정보 0). 부재 = 글 턴.
+  photo?: true;
 };
 
 // --- sessions/{sessionId}/artifacts/{artifactId} (AC-022, ADR-0003) ---
@@ -280,7 +282,7 @@ export type InCallSmsDoc = {
   kind: InCallSmsKind;
   senderLabel: string; // 실존하지 않는 모의값(AC-005/013)
   body: string; // 서버 카탈로그가 원천 — 사용자·LLM 텍스트가 아니므로 PII 마스킹 대상이 아니다
-  otpCode?: string; // kind==="otp"일 때만. 콘텐츠 고정 리터럴(런타임 난수 금지)
+  otpCode?: string; // kind==="otp"일 때만. 카탈로그 리터럴의 세션 해시 값(§114 `withSessionOtp` — 런타임 난수 금지)
   linkDisplayText?: string; // kind==="link"일 때만
   fakeLandingId?: string; // kind==="link"일 때만. **url/실 URL 필드는 이 스키마에 존재하지 않는다**
   // T190-2(docs/Architecture.md §74.9 · D-101) — 말풍선 링크 줄의 **가짜 주소**(`.invalid` 호스트 + 경로 · 스킴 0).

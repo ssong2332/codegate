@@ -69,6 +69,7 @@ import { extractLinkMarker } from "./linkMarker";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
+import { PHOTO_TURN_TEXT } from "./photoTurn";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { asksIdentityCheck } from "./personaAuthority";
 import { extractSmsMarker } from "./smsMarker";
@@ -117,7 +118,11 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     }
-    const { sessionId, userText } = request.data ?? {};
+    const { sessionId, photo } = request.data ?? {};
+    // §113.2(실기 신고 9 · 사용자 결정 2026-10-23) — 사진 보내기 턴: 이미지는 서버에 오지 않는다(요청에 이미지 필드 0). 사실만 고정 문장으로
+    // 대화에 남긴다(`PHOTO_TURN_TEXT` — 사기범 AI · 리포트가 같은 문장을 본다). 사진 턴이면 클라 글자는 쓰지 않는다.
+    const isPhotoTurn = photo === true;
+    const userText = isPhotoTurn ? PHOTO_TURN_TEXT : request.data?.userText;
     if (!sessionId || !userText || !userText.trim()) {
       throw new HttpsError("invalid-argument", "sessionId와 userText가 필요합니다.");
     }
@@ -189,6 +194,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         createdAt: userWriteTime,
         // T30 추가(§13.1) — 교차채널 타임라인(AC-037)용 채널 표기.
         ...(fresh.channel ? { channel: fresh.channel } : {}),
+        // §113.2 — 사진 전송 사실(종류만 · 이미지 0).
+        ...(isPhotoTurn ? { photo: true as const } : {}),
       } satisfies MessageDoc);
       // answeredAt(통화 시작 기점, #6)은 첫 턴에만 설정한다 — 이후 턴은 기존 값을 유지한다.
       tx.update(sessionRef, {
@@ -259,6 +266,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       scenarioId: session.scenarioId,
       declared: smsDeclared,
       fictionalBankName,
+      sessionId, // §114 — 세션별 인증번호
     };
     let smsDelivered: DeliveredSmsRecord[] = [];
     let smsDeliveredLoaded = false;
@@ -447,6 +455,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const otpCheck = await evaluateOtpCheck({
       scenarioId: session.scenarioId,
       userText,
+      sessionId, // §114 — 문자에 보인 세션 번호와 대조
       ...(otpInputs.lastScammerText !== undefined ? { lastScammerText: otpInputs.lastScammerText } : {}),
       scammerTurnNumber,
       ...(deliveredSmsId ? { deliveredThisTurn: deliveredSmsId } : {}),
@@ -783,12 +792,19 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       }
       // T192 C3(§79.19 (5) 10) — 끊기 승인 = 같은 트랜잭션에서 종료 + 승인 표식(서버측 근거 · 리포트는 읽지 않는다 — G511).
       // 한도가 이긴다(7행 — `!limitReached`). 이미 끝난 세션은 건드리지 않는다(`stillActive`).
-      const hangupEnded = hangupEffect.end && stillActive && !limitReached;
-      if (hangupEffect.end && hangupEnded) {
+      const hangupAccepted = hangupEffect.end && stillActive && !limitReached;
+      // §112(사용자 결정 2026-10-23 *"ai가 먼저 끊는 경우도 메신저로 넘어가도록"*) — 메신저에서 넘어온 통화(`escalatedCall`)는 여기서 세션을
+      // 끝내지 않고 표식만 남긴다. 화면이 끊김 안내 → 전사 제출 → 역전환을 하고, 역전환이 표식의 종류로 끝낼지 이어갈지 정한다
+      // (`session/callReturn.ts` `decideCallReturn`). 처음부터 통화인 세션은 종전(같은 트랜잭션에서 종료).
+      const hangupEnded = hangupAccepted && !escalatedCall;
+      const hangupToMessenger = hangupAccepted && escalatedCall;
+      if (hangupEffect.end && hangupAccepted) {
         const endedAt = Timestamp.now();
-        update.status = "ended";
-        update.endReason = "scammer_ended";
-        update.endedAt = endedAt;
+        if (hangupEnded) {
+          update.status = "ended";
+          update.endReason = "scammer_ended";
+          update.endedAt = endedAt;
+        }
         update.scammerHangup = { acceptedAt: endedAt, kind: hangupEffect.kind, path: "fallback" };
       }
       // 2026-07-24 수정(실 Gemini 연동으로 처음 드러난 잠재 버그) — update가 llmProvider 태그도
@@ -800,7 +816,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       if (Object.keys(update).length > 0) {
         tx.update(sessionRef, update);
       }
-      return { stillActive, hangupEnded };
+      return { stillActive, hangupEnded, hangupToMessenger };
     });
 
     // T8 배선: 한도 도달로 이 턴이 세션을 자동 종료시켰다면(status=ended, endReason=limit_reached),
@@ -885,6 +901,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       ...(audioUrl ? { audioUrl } : {}),
       ...(escalationTrigger ? { escalation: { toChannel: "voice" as const } } : {}),
       ...(deliveredSmsId ? { sms: { smsId: deliveredSmsId } } : {}),
+      // §112 — 메신저에서 넘어온 통화의 폴백 끊기(세션은 아직 active · 화면이 끊김 안내 뒤 역전환).
+      ...(finalize.hangupToMessenger ? { scammerHungUp: true as const } : {}),
     };
   },
 );

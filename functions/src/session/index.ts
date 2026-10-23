@@ -28,7 +28,7 @@ import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "./channelTransition";
 import { recordVoiceTalkUnanswered } from "./voiceTalkUnanswered";
-import { recordCallReturnLine } from "./callReturn";
+import { applyCallReturnSessionUpdate, decideCallReturn, recordCallReturnLine } from "./callReturn";
 import { readEndSessionReason, resolveRecordedEndReason } from "./endReason";
 import { assertDifficultyAllowed } from "./difficultyAllowance";
 import { assertScenarioNotMerged } from "./mergedScenario";
@@ -595,10 +595,20 @@ export const requestReverseEscalation = onCall<
   // reviewer 리뷰 Major #2 수정 — 이 시점의 누적 turnCount를 기준점으로 함께 기록해, sendMessage의
   // max-turn 폴백이 "메신저 재진입 이후 턴 수"만 보게 한다(channelTransition.ts 헤더 주석 참고).
   await transitionChannel(sessionId, "voice", "messenger", "manual_button", session.turnCount);
+  // §112 — 사기범이 통화를 끊고 돌아온 경우(표식 있음)는 종류로 정한다(`callReturn.ts` `decideCallReturn` 판정표).
+  const callReturn = decideCallReturn(session.scammerHangup);
+  if (callReturn !== "follow_up_user") {
+    const endedNow = await applyCallReturnSessionUpdate(db, sessionId, callReturn);
+    if (callReturn === "scammer_left") {
+      // 목표 달성 끊기 — 대화방은 "상대방이 채팅방을 나갔습니다"로 끝난다. 이 경로가 세션을 끝냈으면 리포트 트리거(sendMessage 끊기와 같은 지점).
+      if (endedNow) await triggerReportGeneration(sessionId);
+      return { escalation: { toChannel: "messenger" }, scammerLeft: true };
+    }
+  }
   // §110.4(실기 신고 13) — 통화를 끊고 돌아온 경우 사기범이 통화 내용을 반영해 먼저 메시지를 보낸다. 실패는 전환을 막지 않는다(P-4).
   if (request.data?.followUp === true) {
     try {
-      const followUpTurnIndex = await recordCallReturnLine(db, sessionId);
+      const followUpTurnIndex = await recordCallReturnLine(db, sessionId, callReturn === "follow_up_scammer" ? "scammer" : "user");
       if (followUpTurnIndex !== undefined) return { escalation: { toChannel: "messenger" }, followUpTurnIndex };
     } catch (err) {
       logger.warn("통화 복귀 메시지 생성 실패(전환은 완료)", { sessionId, err: err instanceof Error ? err.message : "unknown" });

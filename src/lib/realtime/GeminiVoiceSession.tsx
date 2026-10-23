@@ -49,6 +49,7 @@ import {
 } from "./liveToolResponse";
 import { HANGUP_DRAIN_CAP_MS, HANGUP_FINAL_TURN_CAP_MS, hangupDrainDelayMs } from "@/lib/session/callEnding";
 import { GEMINI_OUTPUT_GAIN, LIMITER_INPUT_RANGE, SPEAKER_COMPRESSOR, applySpeakerDynamics, buildLimiterCurve, liveStageFor } from "./outputGain";
+import { INITIAL_LOUDNESS_STATE, normalizeChunk, type LoudnessState } from "./loudnessNormalizer";
 import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } from "./unheardReply";
 import {
   AWAIT_RESPONSE_TIMEOUT_MS,
@@ -466,6 +467,8 @@ export default function GeminiVoiceSession({
     let outputContext: AudioContext | null = null;
     // §71.7(G433) — AI 음성은 이 게인 노드를 거쳐 스피커로 나간다(예전엔 destination 직결 = 최대 음량).
     let outputGain: GainNode | null = null;
+    // §114 — 사기범 음성 라우드니스 정규화 상태(이 통화의 말소리 누적 측정 · 직전 게인). 출력 게인 · 스피커 증폭보다 **앞**이다.
+    let loudness: LoudnessState = INITIAL_LOUDNESS_STATE;
     let limiterNodes: AudioNode[] = [];
     let processor: ScriptProcessorNode | null = null;
     // 수정안 A — 통화 화면에서 빌린 컨텍스트인가(빌린 것은 닫지 않고 우리가 붙인 노드만 뗀다).
@@ -1411,12 +1414,15 @@ export default function GeminiVoiceSession({
               if (hasAudio && samples) {
                 audioSinceBoundary = true;
                 noteChunkReceived(samples); // 진단 — 원본 PCM 최대 진폭(`pcm.peakDb`)
+                // §114 — 시나리오 · 세션마다 다른 원본 크기를 목표 말소리 RMS(기관 사칭 기준)로 맞춘 뒤 게인 노드로 보낸다.
+                const normalized = normalizeChunk(samples, loudness);
+                loudness = normalized.state;
                 const buffer = outputContext.createBuffer(
                   1,
                   samples.length,
                   GEMINI_OUTPUT_SAMPLE_RATE,
                 );
-                buffer.copyToChannel(samples, 0);
+                buffer.copyToChannel(normalized.out, 0);
                 const source = outputContext.createBufferSource();
                 source.buffer = buffer;
                 source.connect(outputGain ?? outputContext.destination);
