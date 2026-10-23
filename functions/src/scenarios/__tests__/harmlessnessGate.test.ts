@@ -663,6 +663,7 @@ const SCENARIO_MODULE_INVENTORY: Record<string, string> = {
   // §110.5(실기 신고 14) — 호칭 선택지(엄마 · 아빠 · 할머니 · 할아버지)와 [호칭] 블록 1문장. 블록은 조립 결과로 스캔된다.
   "familyAddress.ts": "콘텐츠 아님 — 호칭 4종 선택지 · 맞바꾸기 순수 함수([호칭] 블록은 buildSystemPrompt 산출물로 스캔)",
   "sessionOtp.ts": "콘텐츠 아님 — 인증번호 문자의 번호를 세션 해시 숫자로 바꾸는 순수 함수(문면은 inCallSms.ts 카탈로그 그대로 · §114)",
+  "fictionalNames.ts": "콘텐츠 아님 — 사기범 페르소나가 밝히는 가상 고유명 상수(§109 · §118 · 이름은 조립된 프롬프트 · 모의 화면에서 스캔된다)",
   "personaCardCatalog.ts": "scanned (personaCard 도메인 — 라벨 · 시 · 도 선택지 · 대출 프롬프트 일반명)",
 };
 
