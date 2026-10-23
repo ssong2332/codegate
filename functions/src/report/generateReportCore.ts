@@ -47,6 +47,7 @@ import {
 } from "./mockScreenTimeline";
 import type { GenerateReportResponse } from "./types";
 import { buildPersonaBlock } from "./personaBlock";
+import { resolveRouteSummary } from "./routeSummary";
 import { stripLeakedThought } from "../realtime/thoughtLeak";
 import { personaCardKind } from "../scenarios/personaCardCatalog";
 
@@ -319,6 +320,12 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     personaKind === "child-threat" || personaKind === "self-threat" ? personaKind : undefined,
   );
 
+  const routeSummary = resolveRouteSummary({
+    scenarioId: session.scenarioId,
+    difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
+    flowVariantId: session.flowVariantId,
+    challengeId: session.challengeId,
+  });
   const reportDoc: ReportDoc = {
     reportId: sessionId,
     sessionId,
@@ -337,6 +344,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
     // T191 S5(AC-096 (f)) — 흐름 변형 불투명 ID 스냅샷(부재 세션이면 필드를 만들지 않는다 — 무소급).
     ...(session.flowVariantId ? { flowVariantId: session.flowVariantId } : {}),
+    // §119(D-3 b) — 이번 결말 이름 · 그 칸의 결말 수(루트가 2가지 이상인 칸만 — 부재 = 줄 0).
+    ...(routeSummary ? { routeSummary } : {}),
     createdAt: Timestamp.now(),
     scenarioId: session.scenarioId,
     channel: session.channel ?? "voice",

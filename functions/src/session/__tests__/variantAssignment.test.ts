@@ -9,10 +9,11 @@ import {
   assignFlowVariantForChallenge,
   assignFlowVariantForSession,
   commitSessionWithVariant,
-  settleRotation,
+  drawFromDeck,
   pickChallengeVariantId,
-  pickRotatedVariantId,
+  readDeckState,
   rotationDocKey,
+  settleDeck,
 } from "../variantAssignment";
 import { FLOW_VARIANTS, listFlowVariants, type FlowVariant } from "../../scenarios/flowVariants";
 // T194-c-1(§84.16.1 · G590 갱신) — 배정 풀은 `variantPool.ts`로 옮겼다(순환 회피) · 통화 중 설치 문자 항이 더해졌다.
@@ -46,35 +47,89 @@ function fakeDb(stored: Record<string, unknown> | undefined, opts: { failRead?: 
   return { db: { collection } as unknown as Firestore, calls };
 }
 
-test("[T191 S5 회전 · AC-096 (e)] 후보 2개 이상이면 직전과 같은 변형이 연속 배정되지 않는다 · 역방향 ⓒ", (t) => {
-  const candidates = listFlowVariants("institutional-impersonation", "advanced").map((v) => v.variantId);
-  assert.ok(candidates.length >= 2, "회전 표본 = 기관 사칭 고급 2벌");
-  let last: string | undefined;
-  const sequence: string[] = [];
-  for (let i = 0; i < 6; i += 1) {
-    const next = pickRotatedVariantId(candidates, last);
-    if (last !== undefined) assert.notEqual(next, last, "연속 같은 변형");
-    sequence.push(next);
-    last = next;
+/** 섞기가 순서를 바꾸지 않는 난수(Fisher-Yates에서 j = i) — 결정적 기대값용. */
+const keepOrder = (n: number) => n - 1;
+/** 시드 고정 의사 난수(mulberry32) — 분포 · 연속 검사용. */
+function seeded(seed: number) {
+  let a = seed >>> 0;
+  return (n: number) => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return Math.floor((((t ^ (t >>> 14)) >>> 0) / 4294967296) * n);
+  };
+}
+
+test("[§119 섞은 덱 · D-1 · AC-096 (e)] 후보 n개 — 연속 같은 루트 0 · 한 바퀴(n세션) 안 반복 0 · 순서가 고정되지 않는다 · 역방향 ⓒ", (t) => {
+  const c = ["fv-a", "fv-b", "fv-c"];
+  const orders = new Set<string>();
+  for (let seed = 1; seed <= 30; seed += 1) {
+    const rng = seeded(seed);
+    let state: { lastVariantId?: string; deck?: readonly string[] } = {};
+    const seq: string[] = [];
+    for (let i = 0; i < 12; i += 1) {
+      const { flowVariantId, deck } = drawFromDeck(c, state, rng);
+      if (state.lastVariantId !== undefined) assert.notEqual(flowVariantId, state.lastVariantId, `seed ${seed}: 연속 같은 루트`);
+      seq.push(flowVariantId);
+      state = { lastVariantId: flowVariantId, deck };
+    }
+    for (let k = 0; k < seq.length; k += 3) {
+      assert.equal(new Set(seq.slice(k, k + 3)).size, 3, `seed ${seed}: 한 바퀴 안에서 반복 ${seq.join("→")}`);
+    }
+    orders.add(seq.slice(0, 3).join("→"));
   }
-  // 역방향 ⓒ — 직전 값을 무시하는 잘못된 회전(항상 첫 번째)은 연속 배정을 만든다.
-  const broken = (c: readonly string[]) => c[0];
-  const brokenSeq = [broken(candidates), broken(candidates)];
-  t.diagnostic(`정상 회전 ${sequence.join("→")} / 고장난 회전 ${brokenSeq.join("→")}`);
-  assert.equal(brokenSeq[0], brokenSeq[1], "역방향 표본이 실제로 연속 배정을 만든다");
-  assert.notEqual(pickRotatedVariantId(candidates, brokenSeq[0]), brokenSeq[0]);
-  // 직전이 목록에 없으면(데이터 교체) 첫 번째로.
-  assert.equal(pickRotatedVariantId(candidates, "fv-gone"), candidates[0]);
-  assert.throws(() => pickRotatedVariantId([], undefined));
+  t.diagnostic(`[§119] 시드 30개의 첫 바퀴 순서 ${orders.size}가지`);
+  assert.ok(orders.size >= 4, "무작위가 아니다(첫 바퀴 순서가 거의 고정)");
+  // 역방향 ⓒ — 바퀴 경계에서 직전 검사를 빼면(새 덱을 섞기만 하면) 연속 배정이 생긴다.
+  const brokenNewDeck = (cands: readonly string[], rng: (n: number) => number) => {
+    const out = [...cands];
+    for (let i = out.length - 1; i > 0; i -= 1) {
+      const j = rng(i + 1);
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  };
+  let repeats = 0;
+  for (let seed = 1; seed <= 30; seed += 1) {
+    const rng = seeded(seed);
+    const firstLap = brokenNewDeck(c, rng);
+    const secondLap = brokenNewDeck(c, rng);
+    if (firstLap[firstLap.length - 1] === secondLap[0]) repeats += 1;
+  }
+  t.diagnostic(`[§119 역방향] 직전 검사 없는 덱 — 바퀴 경계 연속 ${repeats}/30`);
+  assert.ok(repeats > 0, "역방향 표본이 실제로 연속 배정을 만든다");
+  assert.notEqual(drawFromDeck(["fv-a", "fv-b"], { lastVariantId: "fv-a" }, () => 0).flowVariantId, "fv-a");
+  assert.throws(() => drawFromDeck([], {}, keepOrder));
+});
+
+test("[§119 섞은 덱] 옛 회전 문서(lastVariantId만) · 데이터에서 빠진 ID · 남은 덱 첫 장이 직전 — 모두 연속 0", () => {
+  const c = ["fv-a", "fv-b"];
+  // 옛 문서 — 덱 없음 → 새 덱, 첫 장이 직전이면 바꾼다.
+  assert.deepEqual(drawFromDeck(c, { lastVariantId: "fv-a" }, keepOrder), { flowVariantId: "fv-b", deck: ["fv-a"] });
+  // 은퇴 · 교체로 빠진 ID는 걸러 낸다(남은 덱 유지).
+  assert.deepEqual(drawFromDeck(c, { lastVariantId: "fv-a", deck: ["fv-gone", "fv-b"] }, keepOrder), { flowVariantId: "fv-b", deck: [] });
+  // 데이터 교체로만 생기는 모양 — 남은 덱 첫 장 = 직전.
+  assert.equal(drawFromDeck(["fv-a", "fv-b", "fv-c"], { lastVariantId: "fv-a", deck: ["fv-a", "fv-c"] }, keepOrder).flowVariantId, "fv-c");
+  assert.equal(drawFromDeck(c, { lastVariantId: "fv-a", deck: ["fv-a"] }, keepOrder).flowVariantId, "fv-b");
+  // 후보 1개 — 직전과 같아도 그것.
+  assert.equal(drawFromDeck(["fv-z"], { lastVariantId: "fv-z" }, keepOrder).flowVariantId, "fv-z");
+  // 문서 모양 해석 — 문자열 배열이 아니면 버린다.
+  const snap = (data: Record<string, unknown>) => ({ exists: true, get: (k: string) => data[k] });
+  assert.deepEqual(readDeckState(snap({ lastVariantId: "fv-a", deck: ["fv-b"] })), { lastVariantId: "fv-a", deck: ["fv-b"] });
+  assert.deepEqual(readDeckState(snap({ lastVariantId: 3, deck: [1] })), {});
+  assert.deepEqual(readDeckState({ exists: false, get: () => undefined }), {});
 });
 
 test("[T191 S5 회전] 세션 배정은 회전 문서 **키 조회 1건**(users/{uid}/variantRotation/{scenarioId}__{level}) · 후보 1개면 조회 0건", async () => {
-  const { db, calls } = fakeDb({ lastVariantId: "fv-c5fj" });
-  const result = await assignFlowVariantForSession(db, "u1", "institutional-impersonation", "advanced");
+  const { db, calls } = fakeDb({ lastVariantId: "fv-x7ue" });
+  const result = await assignFlowVariantForSession(db, "u1", "card-company-impersonation", "advanced", keepOrder);
   assert.equal(calls.get, 1);
-  assert.deepEqual(calls.paths, ["users/u1/variantRotation/institutional-impersonation__advanced"]);
-  assert.equal(result.flowVariantId, "fv-pgqt", "직전 fv-c5fj의 다음 순번");
+  assert.deepEqual(calls.paths, ["users/u1/variantRotation/card-company-impersonation__advanced"]);
+  assert.equal(result.flowVariantId, "fv-w3dq", "직전 fv-x7ue와 다른 루트");
   assert.ok(result.rotationRef, "후보 ≥ 2면 같은 배치에서 쓸 회전 문서 참조를 돌려준다");
+  assert.deepEqual(result.previewState, { lastVariantId: "fv-x7ue" });
+  assert.deepEqual(result.previewDeck, ["fv-x7ue"]);
   assert.equal(rotationDocKey("x", "beginner"), "x__beginner");
 
   const single = fakeDb(undefined);
@@ -84,10 +139,11 @@ test("[T191 S5 회전] 세션 배정은 회전 문서 **키 조회 1건**(users/
   assert.equal(one.flowVariantId, listFlowVariants("loan-refinance-scam", "beginner")[0].variantId);
 });
 
-test("[T191 S5 회전] 회전 문서 조회 실패 → 첫 순번으로 강등(통화를 막지 않는다 — P-4) · 0개 허용이면 failed-precondition", async () => {
+test("[T191 S5 회전] 회전 문서 조회 실패 → 빈 상태(새 덱)로 강등(통화를 막지 않는다 — P-4) · 0개 허용이면 failed-precondition", async () => {
   const { db } = fakeDb(undefined, { failRead: true });
-  const result = await assignFlowVariantForSession(db, "u1", "institutional-impersonation", "advanced");
-  assert.equal(result.flowVariantId, listFlowVariants("institutional-impersonation", "advanced")[0].variantId);
+  const result = await assignFlowVariantForSession(db, "u1", "card-company-impersonation", "advanced", keepOrder);
+  assert.equal(result.flowVariantId, assignablePool("card-company-impersonation", "advanced")[0].variantId);
+  assert.deepEqual(result.previewState, {});
   await assert.rejects(
     () => assignFlowVariantForSession(fakeDb(undefined).db, "u1", "card-delivery-call", "beginner"),
     (err: { code?: string; details?: { reason?: string } }) =>
@@ -97,11 +153,10 @@ test("[T191 S5 회전] 회전 문서 조회 실패 → 첫 순번으로 강등(�
 });
 
 test("[T191 S5 챌린지 수신자] 회전 문서 없이 challengeId 해시로 결정론 배정(같은 챌린지 = 같은 변형 · 후보 안)", () => {
-  const candidates = listFlowVariants("institutional-impersonation", "advanced").map((v) => v.variantId);
   const a = assignFlowVariantForChallenge("institutional-impersonation", "advanced", "challenge-abc");
   assert.equal(a, assignFlowVariantForChallenge("institutional-impersonation", "advanced", "challenge-abc"));
-  assert.ok(candidates.includes(a));
-  const spread = new Set(["c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8"].map((id) => pickChallengeVariantId(candidates, id)));
+  assert.ok(listFlowVariants("institutional-impersonation", "advanced").some((v) => v.variantId === a));
+  const spread = new Set(["c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8"].map((id) => pickChallengeVariantId(["fv-a", "fv-b"], id)));
   assert.equal(spread.size, 2, "해시가 한쪽으로만 쏠리지 않는다(8건 표본)");
 });
 
@@ -123,21 +178,26 @@ test("[T191 S5 인덱스 0 · 설계 금지 X6] 배정 모듈에 쿼리 0 · fir
   assert.equal(/sessionRef\.set\(sessionDoc|db\.batch\(\)/.test(handler), false, "세션 문서를 트랜잭션 밖에서 쓰는 옛 경로가 남았다");
   assert.ok(/db\.runTransaction\(/.test(code), "variantAssignment가 runTransaction을 쓰지 않는다");
   assert.ok(/tx\.get\(assignment\.rotationRef\)/.test(code), "트랜잭션 안에서 회전 문서를 다시 읽지 않는다");
-  // 변형 데이터 순서 = 회전 순서 — 표본 2벌의 순서를 못박는다.
-  assert.deepEqual(
-    FLOW_VARIANTS.filter((v) => v.scenarioId === "institutional-impersonation" && v.level === "advanced").map((v) => v.variantId),
-    ["fv-c5fj", "fv-pgqt"],
-  );
+  // §119 — 운영 난수는 서버 암호 난수다(Math.random 0).
+  assert.ok(/randomInt\(maxExclusive\)/.test(code));
+  assert.equal(/Math\.random\(/.test(code), false);
+  // §119 D-11 — 기관 사칭 고급은 fv-pgqt 은퇴 뒤 1벌(옛 세션 해석은 유지).
+  assert.deepEqual(listFlowVariants("institutional-impersonation", "advanced").map((v) => v.variantId), ["fv-c5fj"]);
+  assert.equal(FLOW_VARIANTS.find((v) => v.variantId === "fv-pgqt")?.retired, true);
 });
 
-test("[T191 S5 회전 경합 · M3] 트랜잭션 확정 순수 함수 — 다른 생성이 먼저 커밋한 직전값을 기준으로 다시 고른다(raced 표기)", () => {
+test("[§119 덱 경합 · M3] 트랜잭션 확정 순수 함수 — 상태가 미리보기 때와 같으면 미리보기 값 그대로 · 다르면 그 상태에서 다시 뽑는다(raced 표기)", () => {
   const c = ["fv-a", "fv-b"];
-  // 두 요청이 같은 직전값(fv-a)으로 미리보기 → 둘 다 fv-b. 먼저 커밋한 쪽이 fv-b를 쓰면 다음 쪽은 fv-a로 확정.
-  assert.deepEqual(settleRotation(c, "fv-a", "fv-b"), { flowVariantId: "fv-b", raced: false });
-  assert.deepEqual(settleRotation(c, "fv-b", "fv-b"), { flowVariantId: "fv-a", raced: true });
+  const preview = { flowVariantId: "fv-b", state: { lastVariantId: "fv-a" }, deck: ["fv-a"] };
+  // 무작위라도 경합이 없으면 오프닝(미리보기)과 확정이 같다.
+  assert.deepEqual(settleDeck(c, { lastVariantId: "fv-a" }, preview, () => 0), { flowVariantId: "fv-b", deck: ["fv-a"], raced: false });
+  // 다른 생성이 먼저 fv-b를 커밋 → 남은 덱 [fv-a]에서 fv-a.
+  assert.deepEqual(settleDeck(c, { lastVariantId: "fv-b", deck: ["fv-a"] }, preview, keepOrder), { flowVariantId: "fv-a", deck: [], raced: true });
   for (const last of [undefined, "fv-a", "fv-b"]) {
-    const { flowVariantId } = settleRotation(c, last, "fv-a");
-    if (last !== undefined) assert.notEqual(flowVariantId, last, "확정값은 트랜잭션이 읽은 직전값과 절대 같지 않다");
+    for (let seed = 1; seed <= 10; seed += 1) {
+      const { flowVariantId } = settleDeck(c, last ? { lastVariantId: last } : {}, preview, seeded(seed));
+      if (last !== undefined) assert.notEqual(flowVariantId, last, "확정값은 트랜잭션이 읽은 직전값과 절대 같지 않다");
+    }
   }
 });
 
@@ -165,19 +225,20 @@ function fakeTxDb() {
   return { db, store, ref };
 }
 
-test("[T191 S5 회전 경합 · M3] 같은 미리보기로 동시에 생성해도 두 세션이 다른 변형으로 확정되고 세션 · 회전 문서가 같은 트랜잭션으로 쓰인다", async () => {
+test("[§119 덱 경합 · M3] 같은 미리보기로 동시에 생성해도 두 세션이 다른 변형으로 확정되고 세션 · 회전 문서(직전 · 남은 덱)가 같은 트랜잭션으로 쓰인다", async () => {
   const { db, store, ref } = fakeTxDb();
   const rotationRef = ref("users/u1/variantRotation/k") as never;
   const candidates = ["fv-a", "fv-b"];
   store.set("users/u1/variantRotation/k", { lastVariantId: "fv-a" });
-  const preview = { flowVariantId: "fv-b", candidates, rotationRef };
-  const first = await commitSessionWithVariant(db, ref("sessions/s1") as never, { uid: "u1" }, preview, 1);
-  const second = await commitSessionWithVariant(db, ref("sessions/s2") as never, { uid: "u1" }, preview, 2);
+  const preview = { flowVariantId: "fv-b", candidates, rotationRef, previewState: { lastVariantId: "fv-a" }, previewDeck: ["fv-a"] };
+  const first = await commitSessionWithVariant(db, ref("sessions/s1") as never, { uid: "u1" }, preview, 1, keepOrder);
+  const second = await commitSessionWithVariant(db, ref("sessions/s2") as never, { uid: "u1" }, preview, 2, keepOrder);
   assert.equal(first, "fv-b");
   assert.equal(second, "fv-a", "경합에서 두 번째 세션은 직전(fv-b)과 다른 변형으로 확정된다");
   assert.equal(store.get("sessions/s1")?.flowVariantId, "fv-b");
   assert.equal(store.get("sessions/s2")?.flowVariantId, "fv-a");
   assert.equal(store.get("users/u1/variantRotation/k")?.lastVariantId, "fv-a");
+  assert.deepEqual(store.get("users/u1/variantRotation/k")?.deck, []);
   // 후보 1개 — 회전 문서를 읽지도 쓰지도 않고 세션만 쓴다.
   const one = await commitSessionWithVariant(db, ref("sessions/s3") as never, {}, { flowVariantId: "fv-z", candidates: ["fv-z"] }, 3);
   assert.equal(one, "fv-z");
@@ -277,7 +338,7 @@ test("[T194-c-1 G611] 수신자 배정 — 40개 챌린지 ID 전부 base 변형
     assert.deepEqual([...received], [expected], `${id}: 수신자는 현행 선언 변형만`);
   }
   const { db } = fakeDb(undefined);
-  assert.equal((await assignFlowVariantForSession(db, "u1", "card-company-impersonation", "advanced")).flowVariantId, "fv-x7ue");
+  assert.equal((await assignFlowVariantForSession(db, "u1", "card-company-impersonation", "advanced", keepOrder)).flowVariantId, "fv-x7ue");
   assert.equal((await assignFlowVariantForSession(db, "u1", "loan-refinance-scam", "advanced")).flowVariantId, "fv-m3hd");
 });
 

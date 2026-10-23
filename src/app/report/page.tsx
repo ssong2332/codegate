@@ -25,6 +25,7 @@ import { parseMomentSeconds } from "@/lib/design/e2Layout";
 import PageToc, { type PageTocEntry } from "@/components/PageToc";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { buildStageNotice, type ReportStage } from "@/lib/report/stageNotice";
+import { buildRouteSummaryLine, readRouteSummary, type RouteSummaryView } from "@/lib/report/routeSummaryCopy";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
 import { notDeceivedStatusText, tacticsAccordionLabel, TACTICS_NOT_FOUND_TEXT } from "@/lib/report/reportTacticsCopy";
 import {
@@ -135,6 +136,8 @@ type ReportData = {
   riskSignals: RiskSignalView[];
   // §104(UX D-145) — 참가자 발화 수(표시 전용 · 부재 = 필드 이전 리포트 → NS-3).
   userTurnCount: number | undefined;
+  // §119(D-3 b) — 이번 결말 이름 · 그 칸의 결말 수(결말 2가지 이상인 칸만 · 부재 = 줄 0).
+  routeSummary: RouteSummaryView | null;
 };
 
 type PageState = "no-session" | "loading" | "error" | "loaded";
@@ -191,6 +194,7 @@ export default function ReportPage() {
         typeof data.userTurnCount === "number" && Number.isInteger(data.userTurnCount) && data.userTurnCount >= 0
           ? data.userTurnCount
           : undefined,
+      routeSummary: readRouteSummary(data.routeSummary),
     };
   }, []);
 
@@ -417,6 +421,12 @@ export default function ReportPage() {
             .filter(Boolean)
             .join(" · ")}
         </p>
+        {/* §119(D-3 b) — 같은 시나리오 · 난이도라도 결말이 여러 갈래일 때만 1줄. 세션이 끝난 뒤 리포트에서만 알린다. */}
+        {report.routeSummary && (
+          <p className="mt-1 text-[14px] font-medium text-brand-tint [word-break:keep-all]">
+            {buildRouteSummaryLine(report.routeSummary)}
+          </p>
+        )}
         <p className="mt-1.5 text-[20px] font-bold leading-[1.35] text-white">
           이번 훈련에서 확인된 것
         </p>
