@@ -756,10 +756,13 @@ test("[T190/D-93] 계좌번호·금액 칸에만 inputMode numeric — 검증(ma
   // §101 추가 — 숫자 칸에 `amount: true`(금액 검증 · 한글 표기) · `prefill: "account"`(D-115 미리 채움)가 뒤에 붙을 수 있다.
   const numeric = [...componentCode.matchAll(/\{ label: "([^"]+)", placeholder: "[^"]*", inputMode: "numeric"(?:, (?:amount: true|prefill: "account"))? \}/g)].map((m) => m[1]);
   assert.deepEqual(numeric.sort(), [...NUMERIC_FIELD_LABELS].sort());
-  assert.ok(componentCode.includes("inputMode={field.inputMode}"), "입력 요소가 필드별 힌트를 받아야 한다");
-  for (const forbidden of ["maxLength", "pattern=", 'type="number"']) {
+  assert.ok(componentCode.includes(": field.inputMode}"), "입력 요소가 필드별 힌트를 받아야 한다");
+  for (const forbidden of ["pattern=", 'type="number"']) {
     assert.equal(componentCode.includes(forbidden), false, `입력 검증·숫자 타입 금지(D-93): ${forbidden}`);
   }
+  // §114(UX D-152)가 D-93을 신원 칸에 한해 바꿨다 — maxLength는 형식 있는 칸(생년월일 · 휴대전화)에만 · 한 곳뿐이다.
+  assert.equal((componentCode.match(/maxLength/g) ?? []).length, 1, "maxLength는 한 곳");
+  assert.ok(componentCode.includes("maxLength={field.format ? identityMaxLength(field.format) : undefined}"));
 });
 
 test("[T190/D-93] 완료 복귀 문면은 진입 표면이 정한다 — 메신저 '채팅으로' · 문자함 '문자로'", () => {

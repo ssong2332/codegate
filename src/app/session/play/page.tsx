@@ -3155,24 +3155,19 @@ export default function SessionCallPage() {
               {/* T68 — "메시지"(현행 "문자함" 라벨 대체 — UX-014 v1.33 (4)) 컨트롤. 문자가 1건 이상 도착한 뒤부터
                   남아 언제든 UX-027을 다시 연다(미확인 수 배지 — 숫자 텍스트). 라우팅 없음(D-35).
                   ⭐ §108(UX D-148 · 2026-10-22 실기 신고 *"문자가 오기 전과 온 후에 화면이 달라"*) — 버튼은 **처음부터 보인다**.
-                  첫 문자 전에는 스피커 비활성과 같은 표현(흐림 · `aria-disabled` · 탭 무반응)이고, 도착은 배지로만 알린다 —
-                  실제 휴대폰 통화 화면처럼 격자가 통화 내내 같다. */}
+                  ⭐ §114(UX D-152 · 2026-10-23 실기 신고 *"문자가 오기 전에는 비활성화되어 있는 것처럼 보여"* · 사용자 결정 "항상 활성처럼")
+                  — §108의 흐림 · `aria-disabled` · 탭 무반응을 되돌렸다. 처음부터 진하게(활성) 보이고, 문자 전에 누르면 빈 문자함
+                  ("아직 도착한 문자가 없습니다")이 열린다. 도착은 배지로 알린다 — 실제 휴대폰처럼 격자가 통화 내내 같다. */}
               <div className="flex min-h-[98px] flex-col items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={(event) => {
-                    if (inCallSms.length === 0) return;
-                    handleOpenSmsOverlay(event.currentTarget);
-                  }}
-                  aria-disabled={inCallSms.length === 0 ? true : undefined}
+                  onClick={(event) => handleOpenSmsOverlay(event.currentTarget)}
                   aria-label={
                     inCallSms.length === 0
                       ? "메시지 — 받은 문자 없음"
                       : `메시지 — 도착 ${inCallSms.length}건, 미확인 ${smsUnreadCount}건`
                   }
-                  className={`relative flex ${gridButtonShape} items-center justify-center transition ${
-                    inCallSms.length === 0 ? "opacity-40" : "active:scale-95"
-                  }`}
+                  className={`relative flex ${gridButtonShape} items-center justify-center transition active:scale-95`}
                   style={{ backgroundColor: callTokens.gridButtonBg, color: callTokens.gridIcon }}
                 >
                   <PhoneIcon name="message" />
@@ -3186,7 +3181,7 @@ export default function SessionCallPage() {
                     </span>
                   )}
                 </button>
-                <span className={`text-sm ${inCallSms.length === 0 ? "opacity-40" : ""}`} style={{ color: callTokens.textPrimary }}>
+                <span className="text-sm" style={{ color: callTokens.textPrimary }}>
                   메시지
                 </span>
               </div>
