@@ -70,6 +70,7 @@ import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { PHOTO_TURN_TEXT, photoTurnInstruction } from "./photoTurn";
+import { isGoalBeforePhotoFollowUp, sessionVariantStageSummaries } from "./photoFollowUp";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { asksIdentityCheck } from "./personaAuthority";
 import { extractSmsMarker } from "./smsMarker";
@@ -673,7 +674,17 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         : judgeEscalationSignal(signalFreeReplyText)
       : undefined;
     const signalEscalate = rawSignalEscalate && escalationCheck?.accept === true;
-    const endCallCheck = judgeEndCallSignal(rawEndCallSignal, signalFreeReplyText);
+    const endCallConsistency = judgeEndCallSignal(rawEndCallSignal, signalFreeReplyText);
+    // §122(6) 판정표 P — 메신저 단계에서 사진 뒤 남은 단계(송금 등)를 꺼내기 전의 목표 끊기는 받지 않는다(`photoFollowUp.ts`).
+    const endCallCheck = isGoalBeforePhotoFollowUp({
+      channel: session.channel,
+      endCall: endCallConsistency.endCall,
+      stageSummaries: sessionVariantStageSummaries(session.scenarioId, session.flowVariantId),
+      history: storedHistory,
+      isPhotoTurn,
+    })
+      ? { endCall: undefined, dropped: "photo_followup_pending" as const }
+      : endCallConsistency;
     const endCallSignal = endCallCheck.endCall;
     if ((escalationCheck && !escalationCheck.accept) || endCallCheck.dropped) {
       // G170 — 사유 코드만(대사 0).
