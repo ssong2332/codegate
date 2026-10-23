@@ -546,7 +546,7 @@ export default function ReplayPage() {
                           : "border border-line bg-white"
                       }`}
                     >
-                      <p className="text-[17px] leading-[1.55] text-ink">{item.textMasked}</p>
+                      <p className="whitespace-pre-line text-[17px] leading-[1.55] text-ink">{item.textMasked}</p>
                     </div>
                   </div>
                 </div>

@@ -51,6 +51,7 @@ import { HANGUP_DRAIN_CAP_MS, HANGUP_FINAL_TURN_CAP_MS, hangupDrainDelayMs } fro
 import { GEMINI_OUTPUT_GAIN, LIMITER_INPUT_RANGE, SPEAKER_COMPRESSOR, applySpeakerDynamics, buildLimiterCurve, liveStageFor } from "./outputGain";
 import { INITIAL_LOUDNESS_STATE, normalizeChunk, type LoudnessState } from "./loudnessNormalizer";
 import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } from "./unheardReply";
+import { appendScammerChunk, shouldMarkToolBoundary } from "./toolTurnTranscript";
 import {
   AWAIT_RESPONSE_TIMEOUT_MS,
   INITIAL_CLIENT_TURN_QUEUE_STATE,
@@ -508,6 +509,8 @@ export default function GeminiVoiceSession({
     // 전사(transcript)는 조각으로 스트리밍되므로 턴이 끝날 때(turnComplete)까지 모았다가 flush한다.
     let userBuffer = "";
     let scammerBuffer = "";
+    // ⭐ §117 — 같은 턴 안 도구 호출 앞뒤 두 발화를 문단으로 가른다(판정 = `toolTurnTranscript.ts`). flush마다 초기화.
+    let scammerToolBoundary = false;
 
     // ⭐ §59.6(reviewer Critical #1) — Live 도구 라우팅이 쓰는 상태.
     // `modelToolScammerTurns`는 부모(session/play/page.tsx)의 `scammerTurnsRef`와 **같은 경계**
@@ -737,6 +740,7 @@ export default function GeminiVoiceSession({
       }
       userBuffer = "";
       scammerBuffer = "";
+      scammerToolBoundary = false;
       reportTurnPhase();
     };
 
@@ -759,6 +763,7 @@ export default function GeminiVoiceSession({
         handlersRef.current.onTranscriptTurn("scammer", s);
       }
       scammerBuffer = "";
+      scammerToolBoundary = false;
     };
 
     // ⭐ §71.6 — 지연 계측 상태(순수 함수 `liveLatency.ts`가 전이를 소유한다). 모델 턴이 닫힐 때마다
@@ -1333,6 +1338,8 @@ export default function GeminiVoiceSession({
                 const calls = message.toolCall.functionCalls ?? [];
                 const activeSession = session;
                 if (calls.length > 0 && activeSession) {
+                  // §117 — 도구 앞에서 이미 말한 것이 있으면 도구 뒤 첫 전사 조각 앞에서 문단을 가른다.
+                  if (shouldMarkToolBoundary(scammerBuffer)) scammerToolBoundary = true;
                   // §71.6 — 도구 대기(콜러블 왕복)를 턴 지연과 따로 잰다.
                   latencyState = noteToolCall(latencyState, {
                     nowMs: performance.now(),
@@ -1387,7 +1394,11 @@ export default function GeminiVoiceSession({
                 if (sc.inputTranscription.text.trim()) noteUserSpeechForNudge();
               }
               if (sc?.outputTranscription?.text) {
-                scammerBuffer += sc.outputTranscription.text;
+                ({ buffer: scammerBuffer, boundaryPending: scammerToolBoundary } = appendScammerChunk(
+                  scammerBuffer,
+                  sc.outputTranscription.text,
+                  scammerToolBoundary,
+                ));
                 if (sc.outputTranscription.text.trim()) scammerTextSinceBoundary = true;
               }
 

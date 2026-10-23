@@ -180,7 +180,9 @@ test("[A-1/⑦ 배선] deliverInCallSms — 도착 응답에 선언 항목으로
   const src = read("inCallSms/index.ts");
   assert.match(src, /const declaredItem = declared\.find\(\(d\) => d\.smsId === item\.smsId\);/);
   // T194-c-1 G608 — 결과 신호 판별에 세션 시나리오를 함께 넘긴다(설치 문자 제외 — 폴백과 같은 함수).
-  assert.match(src, /\.\.\.buildInCallSmsResponse\(item, \{ placed, fictionalBankName \}\),\n\s*\.\.\.buildConfirmResultField\(\{ placed, scenarioId: session\.scenarioId \}, declaredItem\),/);
+  // §117 — 종전 응답 조립(`buildInCallSmsResponse`)은 그대로 펼치고, announce만 모델 도구 경로에서 되풀이 금지 꼬리를 붙여 덮는다(`toolGuidance.ts`).
+  assert.match(src, /const built = buildInCallSmsResponse\(item, \{ placed, fictionalBankName \}\);/);
+  assert.match(src, /\.\.\.built,\n\s*\.\.\.\(announceInstruction !== undefined \? \{ announceInstruction \} : \{\}\),\n\s*\.\.\.buildConfirmResultField\(\{ placed, scenarioId: session\.scenarioId \}, declaredItem\),/);
 });
 
 // ── A-1 리뷰 Major-2 — 송금·전송과 무관한 "~했어요" 오탐(허용목록 행 추가) ─────────────────────────

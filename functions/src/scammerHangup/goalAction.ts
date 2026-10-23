@@ -81,11 +81,14 @@ function followUpDone(input: GoalActionInput, followUpUserTurns: number): boolea
  * | 후속 값 없음(그 밖 모든 변형 — 다른 확인 무력화 고급 포함) | `none` — 종전(`none_pending` · 클라는 더 묻지 않는다) |
  * | 호 전환이 끝났다(확인 창구 화자) | `none` — 원 사기범이 없다(넛지와 같은 판단) |
  * | C-5 아직 거짓 | `pending` — 클라가 다음 발화에 다시 묻는다(`goal_pending`) |
- * | C-5 참 | `wrap_up` — 마무리 지시(`none_pending` + `wrapUpInstruction` — 클라는 그 뒤 더 묻지 않는다 = 1회) |
+ * | C-5 참(⭐ §117 — 다음 발화 기준 · 아래 주석) | `wrap_up` — 마무리 지시(`none_pending` + `wrapUpInstruction` — 클라는 그 뒤 더 묻지 않는다 = 1회) |
  */
 export function planGoalWrapUp(input: Omit<GoalActionInput, "mockScreens"> & { placed: boolean }): "none" | "pending" | "wrap_up" {
   if (input.followUpUserTurns === undefined || input.placed) return "none";
-  return followUpDone({ ...input, mockScreens: [] }, input.followUpUserTurns) ? "wrap_up" : "pending";
+  // ⭐ §117 — 백스톱 질의의 `userTurns`는 **응답까지 끝난** 발화 수다. 이 지시는 맥락 주입이라 **다음** 발화의 응답에 실리고, 끊기 승인은 그
+  // 발화를 포함한 수(클라 주장 = flush + 응답 중 1)로 판정한다 ⇒ 한 발화 앞당겨 맞춘다. 종전에는 C-5가 참이 된 발화에서 모델이 끊지 않으면
+  // 지시가 그다음 응답에야 붙어 한 응답 늦었다.
+  return followUpDone({ ...input, userTurns: input.userTurns + 1, mockScreens: [] }, input.followUpUserTurns) ? "wrap_up" : "pending";
 }
 
 /** 세션의 `mockScreens` 문서를 읽어 판정 사실만 남긴다. 실패는 호출부가 잡는다(미완료로 본다). */

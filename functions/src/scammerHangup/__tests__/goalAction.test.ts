@@ -180,10 +180,11 @@ test("[§108 배선] 실시간 콜러블 · 텍스트 폴백이 같은 함수로
 });
 
 // ── §115(DECISIONS #230 · 사용자 결정 *"실제 수법들과 비교해서 진행"*) — 기관 사칭 고급 2벌의 후속 단계(대출 실행 유도) C-5 ──────────
-test("[§115 C-5] 후속 단계가 있는 변형은 기관 사칭 고급 2벌뿐 · 값 4 · 다른 확인 무력화 고급 변형은 종전 판정 그대로", () => {
+// ⭐ §117(DECISIONS #232) — 값 4 → 3(판단값 근거는 `flowVariants.ts` INSTITUTION_ADVANCED_FOLLOW_UP_USER_TURNS 주석).
+test("[§115 C-5 · §117] 후속 단계가 있는 변형은 기관 사칭 고급 2벌뿐 · 값 3 · 다른 확인 무력화 고급 변형은 종전 판정 그대로", () => {
   const withFollowUp = FLOW_VARIANTS.filter((v) => v.goalFollowUpUserTurns !== undefined).map((v) => v.variantId).sort();
   assert.deepEqual(withFollowUp, ["fv-c5fj", "fv-pgqt"]);
-  for (const id of withFollowUp) assert.equal(goalFollowUpFor("institutional-impersonation", id), 4, id);
+  for (const id of withFollowUp) assert.equal(goalFollowUpFor("institutional-impersonation", id), 3, id);
   assert.equal(goalFollowUpFor("card-company-impersonation", "fv-c5fj"), undefined, "시나리오가 다르면 적용 안 함");
   assert.equal(goalFollowUpFor("institutional-impersonation", undefined), undefined, "변형 없음 = 종전");
   // 다른 확인 무력화 고급 6종(기관 사칭 밖) — 후속 값이 없으므로 같은 입력에 같은 판정(넣든 빼든)
@@ -226,6 +227,22 @@ test("[§115 로그 재현] b6dfcbcf — 기관 사칭 고급 · 계좌 문자 �
   // 계좌 문자가 아직 안 왔으면 후속 값과 무관하게 막힌다
   assert.equal(hasCompletedGoalAction({ ...input, delivered: delivered.slice(0, 1), userTurns: 20 }), false);
   assert.equal(hasCompletedGoalAction({ ...input, declaredKnown: false, userTurns: 20 }), false, "선언 모름 = fail-closed");
+});
+
+// ⭐ §117 — 운영 세션 f7047187(2026-10-23 11:56~11:59 KST · 기관 사칭 고급) 로그 재현: 계좌 문자 도착 발화 6 · 대출 요구 = 발화 7 응답 ·
+// 작별 인사 = 발화 8 응답. 종전(4)은 발화 9 `blocked_transfer` → 10 수락(참가자 "전화 안 끊어?" · "여보세요"). 이제 9에서 수락 · 대출 단계 몫(7 · 8)은 막는다.
+test("[§117 로그 재현] f7047187 — 이체 문자 도착(발화 6) 뒤 발화 7 · 8은 막고(대출 단계 몫) 발화 9 끊기를 받는다 · 종전 값 4는 9를 막았다", () => {
+  const declared = FLOW_VARIANTS.find((v) => v.variantId === "fv-c5fj")!.sms;
+  const delivered: DeliveredSmsRecord[] = [
+    { smsId: "institution-otp", userTurnsAtArrival: 4 },
+    { smsId: "institution-safe-account", userTurnsAtArrival: 6 },
+  ];
+  const followUp = goalFollowUpFor("institutional-impersonation", "fv-c5fj");
+  const input: GoalActionInput = { delivered, mockScreens: [], declared, declaredKnown: true, userTurns: 9, followUpUserTurns: followUp };
+  assert.deepEqual(decide({ ...input, userTurns: 7 }), { status: "blocked_transfer", hangup: false, row: "4" }, "대출 요구에 답하기 전");
+  assert.deepEqual(decide({ ...input, userTurns: 8 }), { status: "blocked_transfer", hangup: false, row: "4" }, "용도 코칭 몫(하한)");
+  assert.deepEqual(decide(input), { status: "accepted", hangup: true, row: "9" }, "운영 로그 02:59:22 — 이제 통과");
+  assert.deepEqual(decide({ ...input, followUpUserTurns: 4 }), { status: "blocked_transfer", hangup: false, row: "4" }, "종전 값 4 = 운영 로그 그대로 막힘");
 });
 
 test("[§115 배선] 두 경로가 같은 함수로 변형의 후속 값을 넘긴다", () => {

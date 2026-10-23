@@ -25,15 +25,18 @@ const BOTH: DeliveredSmsRecord[] = [
   { smsId: "institution-otp", userTurnsAtArrival: 4 },
   { smsId: "institution-safe-account", userTurnsAtArrival: 6, landingSubmitted: true },
 ];
-const base = { delivered: BOTH, declared: pgqt.sms, declaredKnown: true, followUpUserTurns: 4, placed: false };
+// §117 — 운영 값(`goalFollowUpFor` = 3)으로 돈다. 백스톱 질의의 `userTurns`는 응답까지 끝난 발화 수이고 지시는 **다음** 발화의 응답에 실린다 ⇒
+// 끊기 승인(그 발화 포함 수)과 같은 발화에 맞추려고 한 발화 앞당겨 판정한다.
+const base = { delivered: BOTH, declared: pgqt.sms, declaredKnown: true, followUpUserTurns: goalFollowUpFor(INSTITUTION, "fv-pgqt"), placed: false };
 
-test("[§115 마무리 지시] 판정표 — 할 일 미완 = pending · 완료 = wrap_up(그 발화부터) · 전환 뒤 · 후속 값 없음 = none", () => {
-  assert.equal(planGoalWrapUp({ ...base, userTurns: 7 }), "pending", "계좌 문자 뒤 발화 1");
-  assert.equal(planGoalWrapUp({ ...base, userTurns: 9 }), "pending", "발화 3 — 아직 대출 단계 몫");
-  assert.equal(planGoalWrapUp({ ...base, userTurns: 10 }), "wrap_up", "발화 4 — C-5 참");
+test("[§115 마무리 지시 · §117] 판정표 — 할 일 미완 = pending · 완료 = wrap_up(다음 발화 기준) · 전환 뒤 · 후속 값 없음 = none", () => {
+  assert.equal(base.followUpUserTurns, 3);
+  assert.equal(planGoalWrapUp({ ...base, userTurns: 6 }), "pending", "계좌 문자 도착 발화 — 다음 발화는 도착 뒤 1");
+  assert.equal(planGoalWrapUp({ ...base, userTurns: 7 }), "pending", "다음 발화 = 도착 뒤 2 — 아직 대출 단계 몫");
+  assert.equal(planGoalWrapUp({ ...base, userTurns: 8 }), "wrap_up", "다음 발화(9) = 도착 뒤 3 — 그 응답에서 끊기가 승인되는 발화와 같다");
   assert.equal(planGoalWrapUp({ ...base, userTurns: 14 }), "wrap_up", "늦게 물어도 놓치지 않는다(클라가 1회로 막는다)");
-  assert.equal(planGoalWrapUp({ ...base, userTurns: 10, placed: true }), "none", "호 전환 뒤엔 원 사기범이 없다");
-  assert.equal(planGoalWrapUp({ ...base, userTurns: 10, followUpUserTurns: undefined }), "none", "후속 값 없음 = 종전");
+  assert.equal(planGoalWrapUp({ ...base, userTurns: 8, placed: true }), "none", "호 전환 뒤엔 원 사기범이 없다");
+  assert.equal(planGoalWrapUp({ ...base, userTurns: 8, followUpUserTurns: undefined }), "none", "후속 값 없음 = 종전");
   assert.equal(planGoalWrapUp({ ...base, userTurns: 20, declaredKnown: false }), "pending", "선언 모름 = 완료로 보지 않는다(fail-closed)");
   assert.equal(planGoalWrapUp({ ...base, userTurns: 20, delivered: BOTH.slice(0, 1) }), "pending", "계좌 문자 미도착");
 });

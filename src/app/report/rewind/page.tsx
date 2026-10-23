@@ -311,7 +311,7 @@ export default function RewindPage() {
                     )}
                   </p>
                   <div
-                    className={`rounded-[8px] px-4 py-3 text-[17px] leading-[1.55] ${
+                    className={`whitespace-pre-line rounded-[8px] px-4 py-3 text-[17px] leading-[1.55] ${
                       turn.kind === "scammer-focus"
                         ? "border-[1.5px] border-caution/50 bg-caution-tint text-ink"
                         : turn.role === "user"
