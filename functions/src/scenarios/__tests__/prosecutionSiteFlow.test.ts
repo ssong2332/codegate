@@ -206,7 +206,7 @@ test("[§101 S7] 검찰 · 자산 보호 전 변형 페르소나 — 기관 이�
   const REAL_OFFICE = /서울중앙지검|중앙지검|[가-힣]{1,6}지방검찰청|[가-힣]{1,6}지청|대검찰청/;
   for (const [scenarioId, fictional] of [
     [PROS, "\"OO지방검찰청\"·\"OO수사본부\"처럼 앞에 OO를 붙인 이름으로만 말한다"],
-    ["asset-protection-notice-call", "\"OO자산보호센터\"처럼 앞에 OO를 붙인 이름으로만 말한다"],
+    ["asset-protection-notice-call", "\"새빛자산보호센터 권도하 담당관\"이라고만 말하고 바꾸지 않는다"], // §118(DECISIONS #233) — 가림 \"OO자산보호센터\" → 가상 센터
   ] as const) {
     const personas = [
       SCENARIO_PROMPTS[scenarioId]!.personaPrompt,

@@ -10,6 +10,7 @@
 // 설계 근거·태스크 번호·문서 절 번호 같은 내부 표기는 **`//` 주석에만** 적는다 — 템플릿 리터럴
 // 안에 적으면 사기범 페르소나 지시로 그대로 나간다(scenarios.test.ts `[T92/내부표기]` 게이트).
 import type { ScenarioPromptDoc } from "../shared/types";
+import { CASE_RECORD_NAMES, FSS_CALLER_NAMES } from "./fictionalNames";
 
 // src/content/scenarios/institutionalImpersonation.ts의 INSTITUTIONAL_IMPERSONATION_SCENARIO_ID와
 // 동일한 문자열 리터럴이어야 한다(Database.md "scenarios 1:1 scenarioPrompts, 같은 id").
@@ -23,6 +24,7 @@ export const INSTITUTIONAL_IMPERSONATION_SCENARIO_ID = "institutional-impersonat
 // scenarios.test.ts의 `DEMAND_KINDS` 표가 정본이고, **규칙 자체는 promptAssembly.ts의 [진행 강제]
 // 한 곳에만** 둔다 — 여기서는 규칙을 다시 적지 않고 예시만 규칙에 맞춘다.
 // [진행 방식]의 5~8분/5~8턴 = DECISIONS #10 데모 타겟과 정합.
+// ⭐ §118(DECISIONS #233, 2026-10-23) — [캐릭터] 기관 이름 줄의 "OO" 가림을 가상 고유명(`fictionalNames.ts`)으로 바꿨다 — 검찰은 열람본과 같은 이름, 금융감독원은 가상 팀 · 조사관.
 // ⭐ §104(2026-10-22 · 전수 검수 2차) — ① [말투/톤] "거절하면 바로 다음 차례에 다시 꺼내지 않는다" 1줄 + "신원정보 직접 요구" 끝 1문장(F4 —
 //    거절형 중급 신상 요구 최장 3연속 · #372 공통 1문장으로 개선 없음). ② [캐릭터] 기관 이름 OO 규칙 1줄 — 검찰 · 자산 보호(§101.2)와 같은 문면
 //    (F9 "금융감독원 금융범죄조사팀 수사관" · F8 "서울중앙지검 수사팀" 꼴 — 이 시나리오에만 쓸 이름이 없었다).
@@ -32,7 +34,7 @@ const personaPrompt = `너는 보이스피싱 예방 훈련 시뮬레이션에�
 [캐릭터]
 - 너는 수사기관 또는 금융감독기관의 직원을 사칭한다. 이 시나리오는 voiceMode가 "generic"이라 본인 목소리 클론이 아닌 기본 합성 음성을 쓴다는 설정이다(가족을 사칭하지 않는다).
 - 참가자의 계좌·개인정보가 범죄에 연루되었다는 명목으로 협조를 요구하는 상황을 연기한다.
-- 기관 이름을 말할 때는 "OO지방검찰청"·"금융감독원 OO팀"처럼 앞에 OO를 붙인 이름으로만 말한다. 실제로 있는 지역 이름이 들어간 청·지청·부서 이름, 실제 담당자 이름, 사건번호, 전화번호는 어떤 경우에도 말하지 않는다.
+- 소속과 이름을 밝힐 때는 검찰을 사칭하면 "${CASE_RECORD_NAMES.office} ${CASE_RECORD_NAMES.department} ${CASE_RECORD_NAMES.investigator} 수사관"(담당 검사는 "${CASE_RECORD_NAMES.prosecutor} 검사"), 금융감독원을 사칭하면 "금융감독원 ${FSS_CALLER_NAMES.team} ${FSS_CALLER_NAMES.investigator} 조사관"이라고만 말하고 바꾸지 않는다. 그 밖의 기관 이름을 말할 때는 "OO은행"처럼 앞에 OO를 붙인 이름으로만 말한다. 실제로 있는 지역 이름이 들어간 청·지청·부서 이름, 실제 담당자 이름, 사건번호, 전화번호는 어떤 경우에도 말하지 않는다.
 - **상대가 "계좌에 돈이 없다", "그 계좌 안 쓴다"고 하면 그 말을 인정하고 명의 도용 여부 확인(본인 확인)으로 갈아탄다.** 잔액 보유는 이 역할극의 전제가 아니다 — 이체할 돈이 없다고 해도 신원 확인 요구는 그대로 한다. **부인을 반박하거나 "정말 없으시냐"를 되풀이하지 않는다** — 그 자리에서 대화가 맴돌면 참가자가 결정할 순간에 도달하지 못해 훈련이 성립하지 않는다.
 - 세션이 끝날 때까지("훈련 종료" 버튼으로 세션이 종료되기 전까지) 이 캐릭터를 벗어나지 않는다. 다만 guardrailPreamble에 정의된 요청을 받으면 캐릭터를 유지한 채 자연스럽게 회피한다.
 
