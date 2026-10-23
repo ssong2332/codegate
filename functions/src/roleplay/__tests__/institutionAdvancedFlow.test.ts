@@ -22,7 +22,7 @@ import {
 } from "../personaCardIdentity";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { extractTacticLabel } from "../../scenarios/tacticFlavor";
-import { listFlowVariants, resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
+import { FLOW_VARIANTS, listFlowVariants, resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
 import { assignablePool } from "../../scenarios/variantPool";
 import { findMockScreenItem, isMockScreenReachable } from "../../scenarios/mockScreens";
 import {
@@ -35,7 +35,8 @@ import {
 import type { PersonaCardItem } from "../../shared/types";
 
 const INSTITUTION = "institutional-impersonation";
-const ADVANCED = listFlowVariants(INSTITUTION, "advanced");
+// §119(D-11) — fv-pgqt는 배정 은퇴했지만 옛 세션이 그 선언으로 해석되므로 은퇴 변형까지 함께 검사한다.
+const ADVANCED = FLOW_VARIANTS.filter((v) => v.scenarioId === INSTITUTION && v.level === "advanced");
 
 /** geminiProvider.ts의 Live 토큰 조립과 같은 문자 술어(변형 기준)로 옵션을 만든다. */
 function liveOpts(variantId: string, extra: BuildSystemPromptOptions = {}): BuildSystemPromptOptions {
@@ -94,7 +95,7 @@ test("[신고①] 고급 변형 수법 — 인증번호 요구 · 이체 화면 
 test("[신고①] 자가 · 챌린지 배정 풀 모두 새 선언 변형만 나온다(문자 선언 0 변형 0)", () => {
   for (const challengeId of [undefined, "challenge-x"]) {
     const pool = assignablePool(INSTITUTION, "advanced", challengeId);
-    assert.ok(pool.length >= 2, `${challengeId ?? "self"}: 풀`);
+    assert.ok(pool.length >= 1, `${challengeId ?? "self"}: 풀`); // §119 D-11 — fv-pgqt 은퇴 뒤 1벌
     for (const v of pool) assert.ok(v.sms.length === 2, `${challengeId ?? "self"}/${v.variantId}`);
   }
 });

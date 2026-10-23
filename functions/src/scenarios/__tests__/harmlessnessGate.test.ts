@@ -173,6 +173,9 @@ const FLOW_VARIANT_FIELDS: Record<keyof FlowVariant, FieldPolicy> = {
   escalatesToVoice: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
   // §92.3 — 배정 은퇴 플래그(리터럴 true).
   retired: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
+  // §119(#234) — 루트 키는 kebab 식별자, 루트 이름은 리포트에 보이는 문구라 콘텐츠와 같은 층으로 검사한다.
+  routeKey: { skip: "식별자(kebab 루트 키)" },
+  routeLabel: { profile: "scenarioContent" },
 };
 
 // ── 표면 수집 ────────────────────────────────────────────────────────────────
@@ -447,7 +450,8 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
       v.stages.length +
       v.legs.reduce((m, leg) => m + 1 + (leg.personaPrompt === undefined ? 0 : 1), 0) +
       (v.decisionMoment === undefined ? 0 : 1) +
-      (v.stages.length > 0 ? 1 : 0),
+      (v.stages.length > 0 ? 1 : 0) +
+      1, // §119 — 루트 이름(routeLabel)
     0,
   );
   assert.equal(byDomain.get("flowVariant"), expectedFlow, "T191 S5 흐름 변형 표면");
