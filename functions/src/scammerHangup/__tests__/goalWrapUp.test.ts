@@ -41,10 +41,11 @@ test("[§115 마무리 지시 · §117] 판정표 — 할 일 미완 = pending �
   assert.equal(planGoalWrapUp({ ...base, userTurns: 20, delivered: BOTH.slice(0, 1) }), "pending", "계좌 문자 미도착");
 });
 
-test("[§115 마무리 지시] 다른 확인 무력화 고급 변형(기관 사칭 밖)은 모두 none — 백스톱 응답이 종전 none_pending 그대로", () => {
+// §124(#239) — 후속 단계 변형이 기관 사칭 밖에도 생겼다(대출 fv-r4hc · 카드 배송 fv-e5mv) → "후속 값이 없는 변형"으로 대상을 고친다.
+test("[§115 마무리 지시] 후속 단계가 없는 확인 무력화 고급 변형은 모두 none — 백스톱 응답이 종전 none_pending 그대로", () => {
   let n = 0;
   for (const v of FLOW_VARIANTS) {
-    if (!VERIFY_INTERCEPT[v.scenarioId] || v.level !== "advanced" || v.scenarioId === INSTITUTION) continue;
+    if (!VERIFY_INTERCEPT[v.scenarioId] || v.level !== "advanced" || v.goalFollowUpUserTurns !== undefined) continue;
     const followUpUserTurns = goalFollowUpFor(v.scenarioId, v.variantId);
     for (const userTurns of [6, 10, 20]) {
       assert.equal(planGoalWrapUp({ delivered: [], declared: v.sms, declaredKnown: true, userTurns, followUpUserTurns, placed: false }), "none", v.variantId);

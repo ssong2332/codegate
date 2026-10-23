@@ -22,9 +22,10 @@
 // | If | Then |
 // |---|---|
 // | 아직 안 보낸 `required:true` 문자가 없다 | `none_pending`(백스톱 할 일 없음 — 선택 문자는 모델이 부를 때만 간다) |
-// | 그 문자의 게이트 3·4가 열린 시점(`openAt`) + `BACKSTOP_USER_TURNS` × 2 ≤ `userTurns` | `deliver`(게이트를 다시 통과시켜 발송) |
-// | `userTurns === openAt + BACKSTOP_USER_TURNS` | `nudge` 1회(정확히 그 발화에서만 — 상태 저장 없이 1회가 된다) |
+// | 그 문자의 게이트 3·4가 열린 시점(`openAt`) + 간격 × 2 ≤ `userTurns` | `deliver`(게이트를 다시 통과시켜 발송) |
+// | `userTurns === openAt + 간격` | `nudge` 1회(정확히 그 발화에서만 — 상태 저장 없이 1회가 된다) |
 // | 그 외 | `wait` |
+// 간격 = 그 문자 선언의 `backstopUserTurns`(§124 — 변형별) · 부재면 `BACKSTOP_USER_TURNS`.
 import type { FlowVariantSms, SmsPurpose } from "../scenarios/flowVariants";
 import { findFlowVariant } from "../scenarios/flowVariants";
 import { findInCallSmsItem, hasInCallSms } from "../scenarios/inCallSms";
@@ -138,8 +139,10 @@ export function planSmsBackstop(input: Omit<SmsGateInput, "purpose"> & { claimed
     }
   }
   if (input.claimed === true && input.userTurns >= openAt) return { action: "deliver", item: target };
-  if (input.userTurns >= openAt + BACKSTOP_USER_TURNS * 2) return { action: "deliver", item: target };
-  if (input.userTurns === openAt + BACKSTOP_USER_TURNS) return { action: "nudge", item: target, openAt };
+  // §124 — 변형이 문자마다 간격을 줄 수 있다(부재 = 종전 2).
+  const step = target.backstopUserTurns ?? BACKSTOP_USER_TURNS;
+  if (input.userTurns >= openAt + step * 2) return { action: "deliver", item: target };
+  if (input.userTurns === openAt + step) return { action: "nudge", item: target, openAt };
   return { action: "wait" };
 }
 

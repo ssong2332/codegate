@@ -153,9 +153,13 @@ test("[§108 7종] 확인 무력화 시나리오 × 고급 흐름 변형 전수 
       }
       done = { ...base, delivered, userTurns: last + (followUp ?? 1) }; // 제출 직후 다음 발화(후속 단계가 있으면 그 몫까지)
     } else if (screenSms) {
-      done = { ...base, delivered: arrivals, mockScreens: [{ consented: true, submitted: false }], userTurns: last + 1 };
+      // §124 — 후속 단계 변형(대출 fv-r4hc · 카드 배송 fv-e5mv)은 설치 응낙 뒤에도 후속 몫(C-5)까지 막힌다.
+      if (followUp !== undefined) {
+        assert.deepEqual(decide({ ...base, delivered: arrivals, mockScreens: [{ consented: true, submitted: false }], userTurns: last + 1 }), { status: "blocked_transfer", hangup: false, row: "4" }, `${label} 설치 직후(후속 남음)`);
+      }
+      done = { ...base, delivered: arrivals, mockScreens: [{ consented: true, submitted: false }], userTurns: last + (followUp ?? 1) };
     } else if (declared.length > 0) {
-      done = { ...base, delivered: arrivals, userTurns: last + GOAL_AFTER_LAST_SMS_USER_TURNS }; // C-3
+      done = { ...base, delivered: arrivals, userTurns: last + (followUp ?? GOAL_AFTER_LAST_SMS_USER_TURNS) }; // C-3 · §124 말로 끝나는 결말은 C-5
     } else {
       done = { ...base, userTurns: GOAL_NO_SMS_MIN_USER_TURNS }; // C-4
     }
@@ -181,16 +185,16 @@ test("[§108 배선] 실시간 콜러블 · 텍스트 폴백이 같은 함수로
 
 // ── §115(DECISIONS #230 · 사용자 결정 *"실제 수법들과 비교해서 진행"*) — 기관 사칭 고급 2벌의 후속 단계(대출 실행 유도) C-5 ──────────
 // ⭐ §117(DECISIONS #232) — 값 4 → 3(판단값 근거는 `flowVariants.ts` INSTITUTION_ADVANCED_FOLLOW_UP_USER_TURNS 주석).
-test("[§115 C-5 · §117] 후속 단계가 있는 변형은 기관 사칭 고급 2벌뿐 · 값 3 · 다른 확인 무력화 고급 변형은 종전 판정 그대로", () => {
-  const withFollowUp = FLOW_VARIANTS.filter((v) => v.goalFollowUpUserTurns !== undefined).map((v) => v.variantId).sort();
-  assert.deepEqual(withFollowUp, ["fv-c5fj", "fv-pgqt"]);
-  for (const id of withFollowUp) assert.equal(goalFollowUpFor("institutional-impersonation", id), 3, id);
+// §124(#239) — 말로 끝나는 결말(현금 · 금 · 대출금 전달 약속 · 현금 상환)의 새 루트 5벌이 후속 값 4를 갖는다.
+test("[§115 C-5 · §117 · §124] 후속 단계가 있는 변형 = 기관 사칭 고급 대출 유도 2벌(3) + 말로 끝나는 결말 5벌(4) · 나머지 확인 무력화 고급 변형은 종전 판정 그대로", () => {
+  const withFollowUp = Object.fromEntries(FLOW_VARIANTS.filter((v) => v.goalFollowUpUserTurns !== undefined).map((v) => [v.variantId, goalFollowUpFor(v.scenarioId, v.variantId)]));
+  assert.deepEqual(withFollowUp, { "fv-c5fj": 3, "fv-pgqt": 3, "fv-q7cn": 4, "fv-g2ld": 4, "fv-r4hc": 6, "fv-e5mv": 4 });
   assert.equal(goalFollowUpFor("card-company-impersonation", "fv-c5fj"), undefined, "시나리오가 다르면 적용 안 함");
   assert.equal(goalFollowUpFor("institutional-impersonation", undefined), undefined, "변형 없음 = 종전");
   // 다른 확인 무력화 고급 6종(기관 사칭 밖) — 후속 값이 없으므로 같은 입력에 같은 판정(넣든 빼든)
   let checked = 0;
   for (const v of FLOW_VARIANTS) {
-    if (!VERIFY_INTERCEPT[v.scenarioId] || v.level !== "advanced" || v.scenarioId === "institutional-impersonation") continue;
+    if (!VERIFY_INTERCEPT[v.scenarioId] || v.level !== "advanced" || v.goalFollowUpUserTurns !== undefined) continue;
     const followUp = goalFollowUpFor(v.scenarioId, v.variantId);
     assert.equal(followUp, undefined, v.variantId);
     const required = v.sms.filter((x) => x.required);
