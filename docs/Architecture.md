@@ -23358,3 +23358,28 @@ B안(문자 하한 3 · 6) 유지 판단: 4세션에서 효과는 관측되지 �
 
 ### 115.7 검증 · 배포
 검증 결과는 PR 본문. 배포 순서 **Functions → Hosting** 권고(어느 쪽이 먼저여도 안전: 옛 화면은 `goal_pending`을 모르는 값으로 보고 계속 묻기만 하고 `wrapUpInstruction`은 무시 · 새 화면 + 옛 서버는 마무리 지시가 오지 않을 뿐).
+
+## 119. (Feature change — 2026-10-23 · 브랜치 `claude/multi-route-stage0` · 사용자 결정 원문 *"권장안 채택·시작 (권장)"* — `docs/research/scenario-multi-route-plan-2026-10.md` 6절 D-1~D-13 권장안) **다중 루트 0차: 루트 키 · 섞은 덱 배정 · 매핑 불변식 · 리포트 "이번 결말" 줄** — implementer 기록 (DECISIONS #234)
+
+### 119.0 금지 (먼저)
+- 시나리오 프롬프트 · 단계 · 문자 · 화면 문면 변경 0(1차 이후 — fictional-names PR #388 병합 뒤). 실 키 호출 0.
+- 루트 정보는 **세션 중** 서버 밖으로 나가지 않는다 — `createSession` 응답 · 세션 중 화면 0. 리포트(세션 종료 뒤)에만 이름 · 개수.
+
+### 119.1 변경
+| 항목 | 내용 | 파일 |
+|---|---|---|
+| 루트 키 · 이름 | `FlowVariant.routeKey` · `routeLabel` 필수 필드. 원천은 표 `VARIANT_ROUTES`(변형 ID → [키, 이름]) 하나 — 표에 없는 ID는 `compile`이 던진다. 기존 변형 54개(은퇴 포함) 전부에 부여 | `functions/src/scenarios/flowVariants.ts` |
+| D-11 | `fv-pgqt` 배정 은퇴(`retired: true`) — 결말이 `fv-c5fj`와 같다. 옛 세션 · 리포트 해석은 그대로 | 같은 파일 |
+| 섞은 덱(D-1 · D-2) | 회전(직전 다음 순번) → 섞은 덱. 회전 문서 `users/{uid}/variantRotation/{시나리오}__{난이도}`에 `deck`(남은 ID) 필드 추가. 새 덱 첫 장 ≠ 직전 · 한 바퀴 안 반복 0 · 서버 `crypto.randomInt`. 트랜잭션은 상태가 미리보기 때와 같으면 미리보기 값 그대로(오프닝과 확정 루트 일치), 다르면 다시 뽑는다(`raced` 로그). 옛 문서(`lastVariantId`만) · 데이터에서 빠진 ID 처리 | `functions/src/session/variantAssignment.ts` |
+| 챌린지(D-5) | 무변경 — `hash(challengeId) mod n`(풀이 늘면 자동 적용) | — |
+| 리포트 줄(D-3 b) | `reports.routeSummary = { label, routeCount }` — 세션 종류의 배정 풀에 루트 키가 2가지 이상일 때만(부재 = 줄 0 · 무백필). 화면 머리에 "이번 결말: ~형 · 이 시나리오에는 결말이 N가지 있어요" | `functions/src/report/routeSummary.ts` · `generateReportCore.ts` · `shared/types.ts` · `src/lib/report/routeSummaryCopy.ts` · `src/app/report/page.tsx` |
+| 불변식 테스트 | 표 = 변형 1:1 · 키 kebab · 이름 '~형' · (시나리오 × 키) 이름 1개 · **풀 칸마다 루트 키 중복 0**(역방향: 은퇴 전 기관 사칭 고급) · **확인 무력화 고급 풀: 문자 선언 ≥ 1 ∧ 필수 0 금지**(4행 C-3 · C-5가 영영 안 열림) · 클라 소스에 `routeKey` · `VARIANT_ROUTES` 0 · `createSession` 응답에 루트 0 | `functions/src/scenarios/__tests__/variantRoutes.test.ts` · `session/__tests__/variantAssignment.test.ts` |
+
+### 119.2 지금 루트가 2개 이상인 칸 (0차 기준)
+자가 카드사 고급(`fv-x7ue` 보안 앱 설치형 · `fv-w3dq` 카드 배송 안내형) 1칸. 기관 사칭 고급은 D-11로 1칸 1루트가 됐다. 루트는 1차부터 늘린다(설계 문서 5절).
+
+### 119.3 설계 문서와 다른 점
+설계 3.6.5의 "0차에서 채널 꼬리표(`channel`) · 통화 시작 주체(`callInitiator`) 자리를 만든다"는 **3a로 미뤘다** — 값을 쓰는 곳이 없는 필드를 먼저 두지 않았고(쓰지 않는 코드 0), messenger-call-ux 세션의 실제 구조를 본 뒤 정하는 편이 맞다.
+
+### 119.4 검증
+`npm --prefix functions test` · `npm test` · 두 lint · 에뮬레이터 스모크 `node scripts/emulator-route-deck-smoke.mjs` — 수치는 PR 본문. 배포 순서 **Functions → Hosting**(옛 화면은 `routeSummary`를 읽지 않을 뿐 — 어느 순서도 안전).

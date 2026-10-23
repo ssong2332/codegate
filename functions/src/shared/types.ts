@@ -566,6 +566,9 @@ export type ReportDoc = {
   // 만든 세션의 흐름 변형 **불투명 ID**. 리플레이 · 되감기 · 실패 아카이브가 같은 변형으로 해석한다.
   // 부재 = 변형 도입 이전 리포트(기존 방식 그대로 표시 — AC-077).
   flowVariantId?: string;
+  // §119(DECISIONS #234 · D-3 b) — 이번 결말 이름 · 그 칸(시나리오 × 난이도 × 세션 종류)의 결말 수. 루트가 2가지 이상인 칸만
+  // 만든다(부재 = 줄 0 · 무백필). 변형 ID · 단계 문면은 싣지 않는다.
+  routeSummary?: { label: string; routeCount: number };
   createdAt: FirebaseFirestore.Timestamp;
   // T74 추가(전부 옵셔널, 하위호환 — §15.4.1 "아카이브 카드가 필요로 하는 세션 메타를 리포트에
   // 역정규화"). 없으면 아카이브가 카드 1장마다 세션 문서를 추가 read해야 한다(N+1, §15.6 G8).
