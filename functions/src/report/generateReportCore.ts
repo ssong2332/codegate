@@ -85,6 +85,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       // 2026-10-17 — 속은 순간의 대처법 문구를 그 답변이 오간 채널에 맞춘다(부재 = "voice", 무백필).
       // ⚠️ 판정 입력이 아니다 — `wasDeceived`·속은 순간의 개수·turnIndex는 이 값과 무관하다.
       ...(data.channel ? { channel: data.channel } : {}),
+      // §113.2 — 사진 보내기 턴(사실만 · 판정 H3 입력).
+      ...(data.photo === true ? { photo: true as const } : {}),
     };
   });
   // T84(§15.9.5 e-2) — 설치 순간의 앵커는 "N번째 사기범 턴"이 아니라 **그 링크를 실은 사기범

@@ -143,10 +143,15 @@ export default function DifficultySelectPage() {
 
   // UX D-141 (3) — 시트가 올라와 방금 고른 판을 가리면, 그 판이 시트 위로 보이게 그만큼만 내린다(시안 한계
   // "390폭에서 시트가 3번째 판을 가림" 해소). 시트 등장(320ms)이 끝난 뒤 잰다. reduced-motion이면 즉시 이동.
+  // §113.1(UX D-151 (1) · 실기 신고 7 *"가족 호칭 정할 때도 자동으로 난이도를 선택하면 스크롤이 되도록 하자"*) — 호칭을 고르는 시나리오는
+  // 기준을 판이 아니라 **호칭 칸**으로 둔다: 난이도를 고르면 다음 선택(호칭 칸)이, 호칭을 고르면 그 칸이 시트("이걸로 시작") 위로 보이게
+  // 같은 규칙으로 내린다. 그 밖 시나리오는 종전(방금 고른 판).
   useEffect(() => {
     if (!selected) return;
     const timer = window.setTimeout(() => {
-      const panel = document.querySelector<HTMLElement>(`[data-panel-key="${selected}"]`);
+      const panel =
+        document.querySelector<HTMLElement>("[data-family-address]") ??
+        document.querySelector<HTMLElement>(`[data-panel-key="${selected}"]`);
       const sheet = document.querySelector<HTMLElement>("[data-bottom-sheet]");
       if (!panel || !sheet) return;
       const overlap = panel.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top;
@@ -155,8 +160,8 @@ export default function DifficultySelectPage() {
       window.scrollBy({ top: overlap + 12, behavior: reduced ? "auto" : "smooth" });
     }, 340);
     return () => window.clearTimeout(timer);
-    // 오류 줄이 붙어 시트가 커질 때도 다시 잰다.
-  }, [selected, startError]);
+    // 오류 줄이 붙어 시트가 커질 때도 다시 잰다. §113.1 — 호칭을 골랐을 때도 다시 잰다.
+  }, [selected, startError, familyAddress]);
 
   const handleSelect = (level: DifficultyLevel) => {
     setSelected(level);
@@ -442,7 +447,7 @@ export default function DifficultySelectPage() {
 
         {/* §110.5(UX D-150 (5)) — 가족 사칭 시나리오의 호칭. 두 판 중 하나(기본 선택 0 — 성별을 짐작하지 않는다). */}
         {familyAddressOptions && selected && (
-          <fieldset className="rounded-[8px] border-[1.5px] border-line bg-white p-4">
+          <fieldset data-family-address className="rounded-[8px] border-[1.5px] border-line bg-white p-4">
             <legend className="px-1 text-[17px] font-semibold text-ink">{FAMILY_ADDRESS_LABEL}</legend>
             <div role="radiogroup" aria-label={FAMILY_ADDRESS_LABEL} className="mt-2 grid grid-cols-2 gap-2">
               {familyAddressOptions.map((term) => (

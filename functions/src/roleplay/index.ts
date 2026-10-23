@@ -69,6 +69,7 @@ import { extractLinkMarker } from "./linkMarker";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
+import { PHOTO_TURN_TEXT } from "./photoTurn";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { asksIdentityCheck } from "./personaAuthority";
 import { extractSmsMarker } from "./smsMarker";
@@ -117,7 +118,11 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     }
-    const { sessionId, userText } = request.data ?? {};
+    const { sessionId, photo } = request.data ?? {};
+    // §113.2(실기 신고 9 · 사용자 결정 2026-10-23) — 사진 보내기 턴: 이미지는 서버에 오지 않는다(요청에 이미지 필드 0). 사실만 고정 문장으로
+    // 대화에 남긴다(`PHOTO_TURN_TEXT` — 사기범 AI · 리포트가 같은 문장을 본다). 사진 턴이면 클라 글자는 쓰지 않는다.
+    const isPhotoTurn = photo === true;
+    const userText = isPhotoTurn ? PHOTO_TURN_TEXT : request.data?.userText;
     if (!sessionId || !userText || !userText.trim()) {
       throw new HttpsError("invalid-argument", "sessionId와 userText가 필요합니다.");
     }
@@ -189,6 +194,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         createdAt: userWriteTime,
         // T30 추가(§13.1) — 교차채널 타임라인(AC-037)용 채널 표기.
         ...(fresh.channel ? { channel: fresh.channel } : {}),
+        // §113.2 — 사진 전송 사실(종류만 · 이미지 0).
+        ...(isPhotoTurn ? { photo: true as const } : {}),
       } satisfies MessageDoc);
       // answeredAt(통화 시작 기점, #6)은 첫 턴에만 설정한다 — 이후 턴은 기존 값을 유지한다.
       tx.update(sessionRef, {
