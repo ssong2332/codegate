@@ -75,7 +75,8 @@ test("[§124 신고 (3)] 수사기관 사칭 루트 첫 단계 — 내 정보 �
 test("[§124 말로 끝나는 결말] 현금 · 금 · 대출금 전달 약속 · 현금 상환 루트 — 후속 값(C-5) · 결정 순간 '약속' · 장소 · 시간 0 문면", () => {
   for (const id of ["fv-q7cn", "fv-g2ld", "fv-r4hc", "fv-e5mv"]) {
     const v = findFlowVariant(id)!;
-    assert.equal(v.goalFollowUpUserTurns, 4, id);
+    // §124 실측 — 설치 문자가 결말보다 두 단계 앞인 fv-r4hc만 6.
+    assert.equal(v.goalFollowUpUserTurns, id === "fv-r4hc" ? 6 : 4, id);
     assert.match(v.decisionMoment ?? "", /약속/, id);
     const last = v.stages[v.stages.length - 1]!.summary;
     assert.match(last, /장소 · 시간 · 주소[^.]*정하지도 묻지도 않는다/, `${id}: 만날 곳 0(AC-102 (c))`);
@@ -85,4 +86,13 @@ test("[§124 말로 끝나는 결말] 현금 · 금 · 대출금 전달 약속 �
   for (const v of FLOW_VARIANTS.filter((x) => REWRITTEN.includes(x.variantId) && x.variantId !== "fv-c5fj")) {
     assert.ok(v.sources && v.sources.length > 0, v.variantId);
   }
+});
+
+test("[§124 실측 반영] 새 기관 사칭 루트의 인증번호 단계 — 틀린 번호는 한 번만 다시 묻고 넘어가며 그 이유로 통화를 끝내지 않는다 · 은퇴 fv-pgqt는 그대로", () => {
+  for (const id of ["fv-c5fj", "fv-q7cn", "fv-g2ld"]) {
+    const otp = findFlowVariant(id)!.stages.find((s) => s.summary.startsWith("본인 확인 마지막 절차"))!;
+    assert.match(otp.summary, /한 번만 다시 확인을 요청하고, 그래도 맞지 않으면 인증번호 없이 다음 단계로/, id);
+    assert.match(otp.summary, /번호가 틀렸다는 이유로 통화를 끝내지 않는다/, id);
+  }
+  assert.ok(findFlowVariant("fv-pgqt")!.stages.every((s) => !/번호가 틀렸다는 이유로/.test(s.summary)));
 });

@@ -354,11 +354,13 @@ const INSTITUTION_LOAN_DEMAND_V2 =
 // ② 현금 · 수표 예탁형 — 근거 C10(한국경제 2026-04-15 · "금감원 예탁 명목, 계좌 현금 전부 인출해 수표로 → 대면 전달") · C11 · S16.
 // ③ 금 구매형 — 근거 데일리안 2025-12-24(부산경찰 · "자산 실물 전수 조사" 명목 퇴직금 · 적금 해지 → 금 구입 → 골드바 대면 전달, 금 거래소 신고로 저지).
 // ⛔ 두 루트 모두 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다(AC-102 (c) — fv-k9ra와 같은 선). 끊기 4행은 C-5(인증번호 문자 도착 뒤 발화 수).
+// §124 실측(2026-10-23 · fv-q7cn 순응) — 인증번호가 맞지 않자 되묻기만 거듭하다 결말 단계 전에 통화를 끝냈다. 틀린 번호는 한 번만 다시 묻고 넘어가게 한다.
+const INSTITUTION_ADVANCED_OTP_STAGE_V2 = `${INSTITUTION_ADVANCED_OTP_STAGE} 불러 준 번호가 맞지 않으면 한 번만 다시 확인을 요청하고, 그래도 맞지 않으면 인증번호 없이 다음 단계로 넘어간다. 번호가 틀렸다는 이유로 통화를 끝내지 않는다.`;
 const INSTITUTION_HEAD_STAGES = [
   INSTITUTION_ADVANCED_OPENING,
   "협조하면 조용히 끝난다며 안심시키고, 금융감독기관이 자산 보호를 돕는다고 말한다.",
   "계좌번호보다 거래 은행과 자산 규모부터 묻는다.",
-  withSmsFirst(INSTITUTION_ADVANCED_OTP_STAGE),
+  withSmsFirst(INSTITUTION_ADVANCED_OTP_STAGE_V2),
 ] as const;
 const INSTITUTION_CASH_DEPOSIT_STAGE =
   "인증번호 단계가 끝나면 '계좌가 동결되면 고객님 예금도 함께 묶입니다, 수사가 끝날 때까지 금융감독원에 예탁해 두셔야 안전하게 보관했다가 돌려드릴 수 있습니다, 계좌로 옮기면 범죄 계좌와 다시 엮이니 실물로 맡기셔야 합니다'처럼 이유부터 설명하고, 예금을 현금이나 수표로 찾아 금융감독원 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 은행 직원이 이유를 물으면 개인 용도라고만 하라고 시킨다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다.";
@@ -955,7 +957,8 @@ const SPECS: VariantSpec[] = [
     sms: [{ purpose: "link", smsId: "loan-check-app-link", required: true, notBeforeUserTurns: 2, ...FAST_BACKSTOP }],
     channels: ["voice", "sms"],
     decisionMoment: "기존 대출을 현금으로 찾아 직원에게 상환하겠다고 약속하는 순간",
-    goalFollowUpUserTurns: 4,
+    // §124 실측(2026-10-23 · 순응) — 설치 문자(2단계)가 발화 4에 도착하고 4발화 뒤 끊겨 현금 상환 단계(4단계)에 닿지 못했다. 설치 문자부터 결말까지 두 단계가 남아 6.
+    goalFollowUpUserTurns: 6,
     sources: ["S37", "C02"],
   },
 
