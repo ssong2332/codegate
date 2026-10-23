@@ -94,6 +94,8 @@ export type SendMessageResponse = {
   ended: boolean;
   // T192 C3(Architecture.md §79.5 · §79.19 (6) ⑧) — functions/src/roleplay/types.ts와 1:1.
   endReason?: "limit_reached" | "scammer_ended";
+  /** §112 — 메신저에서 넘어온 통화에서 사기범이 끊었다(세션은 active · 화면이 끊김 안내 뒤 대화방으로 돌아간다). */
+  scammerHungUp?: true;
   isMock: boolean;
   // 실시간 음성 통화 전환(2026-07-22 사용자 결정) — 사기범 응답 합성 오디오(서버가 이미 반환 중,
   // functions/src/roleplay/types.ts와 1:1).
@@ -405,7 +407,12 @@ export type RequestEscalationResponse = { escalation: { toChannel: "voice" } } |
 // 지원(구조화 신호·max-turn 폴백 없음 — T40 판단, docs/Tasks.md T40 행 참고).
 // §110.4(실기 신고 13) — `followUp: true` = 통화를 끊고 돌아가는 경우(사기범이 통화 내용을 반영한 메시지 1건을 먼저 보낸다).
 export type RequestReverseEscalationRequest = { sessionId: string; followUp?: boolean };
-export type RequestReverseEscalationResponse = { escalation: { toChannel: "messenger" }; followUpTurnIndex?: number };
+// §112 — `scammerLeft` = 사기범이 목표를 이루고 통화를 끊어 세션이 끝났다(대화방은 "상대방이 채팅방을 나갔습니다").
+export type RequestReverseEscalationResponse = {
+  escalation: { toChannel: "messenger" };
+  followUpTurnIndex?: number;
+  scammerLeft?: true;
+};
 
 // --- generateReport (Track A · T9 · UX-008 · AC-008/AC-009/AC-026) ---
 export type GenerateReportRequest = { sessionId: string };

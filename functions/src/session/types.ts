@@ -118,4 +118,6 @@ export type RequestReverseEscalationResponse = {
   escalation: { toChannel: "messenger" };
   /** §110.4 — 복귀 메시지를 저장했으면 그 turnIndex(클라가 다음 전송의 답장 기준점 하한으로 쓴다). 저장 0 = 부재. */
   followUpTurnIndex?: number;
+  /** §112 — 사기범이 목표를 이루고 통화를 끊었다 → 세션 종료(`scammer_ended`). 대화방은 "상대방이 채팅방을 나갔습니다"로 끝난다. */
+  scammerLeft?: true;
 };

@@ -49,5 +49,6 @@ test("[§104.9 · D-145 (2)] 종료 줄 — 사기범 종료면 카톡형 '나�
   }
   const page = readFileSync("src/app/session/messenger/page.tsx", "utf8").replace(/\r\n/g, "\n");
   assert.ok(page.includes('scammerEnded: result.ended === true && result.endReason === "scammer_ended",'), "서버 종료 사유를 결과에 싣는다");
-  assert.ok(page.includes('{chatEndedNotice(pending?.outcome?.scammerEnded === true, isSms ? "sms" : "kakao")}'), "종료 줄이 판정 함수를 쓴다");
+  // §112 — 이미 끝난 세션(목표를 이루고 통화를 끊고 돌아옴)도 세션 endReason으로 같은 줄을 쓴다.
+  assert.ok(page.includes('{chatEndedNotice(pending?.outcome?.scammerEnded === true || endedByScammer, isSms ? "sms" : "kakao")}'), "종료 줄이 판정 함수를 쓴다");
 });
