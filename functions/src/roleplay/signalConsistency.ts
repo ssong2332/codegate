@@ -75,3 +75,42 @@ export function judgeEndCallSignal(endCall: "goal" | "give_up" | undefined, repl
   if (endCall === "goal" && (NEW_TRANSFER_DEMAND.test(replyText) || NEW_REQUEST_FORM.test(replyText))) return { endCall: undefined, dropped: "demand_in_goal_turn" }; // B1 · B1-b
   return { endCall }; // B2
 }
+
+// ── 판정표 C: 메신저 단계 끊기 포기 신호(`END_CALL_GIVEUP`)의 종류 보정(§129 D13 · 2026-10-24 실 키 회귀 프로브) ──────────────
+// 재현: 정부지원금 고급 순응(설치 · 권한 완료 뒤) · 지인 카톡 고급 순응(150만 원 송금 + 대출 동의 뒤) — 참가자가 *"그 다음엔 어떻게 해요?"* 라고
+// 따라오는 중인데 모델이 포기(`give_up`)로 끝냈다. 포기는 "상대가 거절이나 의심을 되풀이해 더는 진행할 수 없다"(끊기 규칙 둘째 경우)다.
+// | # | If | Then |
+// |---|---|---|
+// | C1 | 신호가 `give_up`이 아니다 · 메신저 단계가 아니다(통화 · 메신저발 통화의 텍스트 폴백 — `session/callReturn.ts`가 종류로 갈래를 가른다) | 그대로 |
+// | C2 | 이번 참가자 말에 거절 · 의심 · 끊기 기색(`PARTICIPANT_PUSHBACK`)이 있다 | 그대로(`give_up`) |
+// | C3 | 그 외 | `goal`로 기록한다(`reclassified: true`) — 끝내는 것 자체는 그대로다(B1 새 요구 판정은 다시 하지 않는다) |
+// ⛔ 리포트 판정 입력이 아니다(리포트는 표식 종류를 읽지 않는다 — G511). 메신저 단계 표식 종류를 읽는 화면도 없다(2026-10-24 grep).
+/** C2 — 참가자의 거절 · 의심 · 끊기 기색. 좁게 두지 않는다(포기로 남기는 쪽이 종전 동작이다). */
+export const PARTICIPANT_PUSHBACK =
+  /(?:안|못)\s*(?:할|해|하|보낼|보내|줄|드려|드릴|믿|알려|깔|설치|돼|되)|않|싫|그만|끊(?:을|겠|어|습|자)|사기|피싱|의심|수상|이상(?:해|하|한)|경찰|신고|직접\s*(?:확인|전화|연락)|확인(?:해\s*볼|하고)|필요\s*없|관심\s*없|누구세요|무슨\s*소리|모르는/;
+
+export type GiveUpReclassification = { endCall: "goal" | "give_up" | undefined; reclassified?: true };
+
+/** 판정표 C. `inMessengerStage` = 세션 `channel === "messenger"`(메신저 단계 — 통화로 넘어가지 않은 상태). */
+export function reclassifyMessengerGiveUp(
+  endCall: "goal" | "give_up" | undefined,
+  userText: string,
+  inMessengerStage: boolean,
+): GiveUpReclassification {
+  if (endCall !== "give_up" || !inMessengerStage) return { endCall }; // C1
+  if (PARTICIPANT_PUSHBACK.test(userText)) return { endCall }; // C2
+  return { endCall: "goal", reclassified: true }; // C3
+}
+
+// ── 판정표 D: 거절 중 통화 전환은 한 번만(§129 D14 · 사용자 결정 2026-10-24 ㉢ "1회만 허용") ─────────────────────────────
+// 재현(실 키 프로브): 거절 4세션 중 3세션이 거절 발화 뒤 `ESCALATE_VOICE` — 지원금 고급 거절은 u4 · u5 두 번. 실제 수법으로는 그럴듯해 첫 번째는 받는다.
+// | # | If | Then |
+// |---|---|---|
+// | D1 | 이번 참가자 말에 거절 · 의심 기색이 없다(`PARTICIPANT_PUSHBACK`) | 판정 안 함(종전 판정표 A) |
+// | D2 | 거절 중이고 이 세션이 아직 메신저 → 통화 전환을 한 적이 없다 | 받는다(판정표 A 그대로) |
+// | D3 | 거절 중이고 이미 한 번 이상 전환했다(`channelHistory` messenger → voice 항목 ≥ 1) | **받지 않는다**(`refusal_repeat`) |
+// ⛔ 받지 않은 신호는 이번 턴 전환만 막는다(신호는 이미 텍스트에서 지워졌다) · max-turn 폴백 전환은 이 표의 대상이 아니다.
+export function isRepeatEscalationDuringRefusal(userText: string, priorEscalationCount: number): boolean {
+  if (!PARTICIPANT_PUSHBACK.test(userText)) return false; // D1
+  return priorEscalationCount >= 1; // D3(그 밖 = D2)
+}

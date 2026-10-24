@@ -6,11 +6,13 @@
 //   ① "페이로드는 가상값만" 줄 기관명 예시에서 "국민안전지원센터" 제거(사기범 소속 · 예금주로 새어 나옴)
 //   ② "같은 압박을 반복하지 않는다" 항목 끝에 거절된 요구를 같은 형태로 다시 꺼내지 않는다는 1문장 추가
 import {
+  CLAIM_CONSISTENCY_RULE,
   HANGUP_EXHAUSTED_SENTENCE,
   HANGUP_NO_NEW_DEMAND_SENTENCE,
   LIVE_NO_IDLE_RULE,
   OFF_TOPIC_REPLY_SENTENCE,
   SMS_NOT_YET_SENT_SENTENCE,
+  SMS_TOOL_SPEECH_SENTENCE,
   USER_MENTIONED_FINANCIAL_SENTENCE,
 } from "../promptAssembly";
 
@@ -23,7 +25,9 @@ export const FULL_AUDIT_REPEAT_ADDED =
 /** 두 교체로 늘어난 글자 수. */
 // §104 — 전 경로 공통으로 늘 실리는 [대화 방식] 1문장(주변 이야기 받아치기)도 더한다(조건형 ③④는 NONE 조립에 없어 빼지 않는다).
 export const FULL_AUDIT_LENGTH_DELTA =
-  FULL_AUDIT_PAYLOAD_NEW.length - FULL_AUDIT_PAYLOAD_OLD.length + FULL_AUDIT_REPEAT_ADDED.length + OFF_TOPIC_REPLY_SENTENCE.length + USER_MENTIONED_FINANCIAL_SENTENCE.length;
+  FULL_AUDIT_PAYLOAD_NEW.length - FULL_AUDIT_PAYLOAD_OLD.length + FULL_AUDIT_REPEAT_ADDED.length + OFF_TOPIC_REPLY_SENTENCE.length + USER_MENTIONED_FINANCIAL_SENTENCE.length +
+  // §129 — NO_STALL_RULE 뒤 무조건부 1항(줄바꿈 포함).
+  1 + CLAIM_CONSISTENCY_RULE.length;
 
 function replaceOnce(text: string, from: string, to: string, label: string): string {
   const count = text.split(from).length - 1;
@@ -50,5 +54,31 @@ export function revertFullAudit(assembled: string): string {
   // ⑤ §104 — [대화 방식] 첫 항목 끝 1문장(주변 이야기 받아치기 — 전 경로 공통이라 정확히 1회).
   const offTopicReverted = replaceOnce(newDemandReverted, OFF_TOPIC_REPLY_SENTENCE, "", "주변 이야기 받아치기");
   // ⑥ §127 — "페이로드는 가상값만" 줄의 참가자 언급 은행 되받기 1문장(무조건부 — 정확히 1회).
-  return replaceOnce(offTopicReverted, USER_MENTIONED_FINANCIAL_SENTENCE, "", "참가자 언급 은행 되받기");
+  const userMentionedReverted = replaceOnce(offTopicReverted, USER_MENTIONED_FINANCIAL_SENTENCE, "", "참가자 언급 은행 되받기");
+  // ⑦ §129(DECISIONS #245) — NO_STALL_RULE 바로 뒤 "하지 않은 일을 확인됐다고 하지 않는다" 1항(무조건부 — 정확히 1회) ·
+  //    Live 문자 도구 줄 끝 "도구 이름 · 인자를 말하지 않는다" 1문장(조건형 — 0 또는 1회).
+  const claimReverted = replaceOnce(userMentionedReverted, `\n${CLAIM_CONSISTENCY_RULE}`, "", "하지 않은 일 확인 금지");
+  const toolSpeechReverted = removeAtMostOnce(claimReverted, SMS_TOOL_SPEECH_SENTENCE, "도구 이름 발화 금지");
+  // ⑧ §129 — 시나리오 문면 교체(그 시나리오 조립에만 있다 — 0 또는 1회): 금액 자리 "얼마만" → 구체 금액(D5) · 상담원 인용구 존댓말(에뮬 D13) ·
+  //    지인 카톡 "ㅇㅇ" 자리표시 금지 1문장(D10).
+  return PROBE_129_TEXT_CHANGES.reduce(
+    (text, [now, before]) => {
+      const count = text.split(now).length - 1;
+      if (count > 1) throw new Error(`§129 문면 "${now}"이 조립 산출물에 ${count}회 있다(0 또는 1회여야 한다)`);
+      return count === 1 ? text.replace(now, before) : text;
+    },
+    toolSpeechReverted,
+  );
 }
+
+/** ⑧ §129 시나리오 문면 교체 — [지금, 이전] 쌍. */
+export const PROBE_129_TEXT_CHANGES: readonly (readonly [string, string])[] = [
+  ["지금 300만 원만 바로 보내줘", "지금 얼마만 바로 보내줘"],
+  ["지금 50만 원만 좀 보내주시면", "지금 얼마만 좀 보내주시면"],
+  ["그 금액만 지금 넣어주세요", "얼마만 지금 넣어주세요"],
+  ["엄마 지금 200만 원만 급하게", "엄마 지금 얼마만 급하게"],
+  ["'150만 원만 좀 보내줄 수 있어?", "'얼마만 좀 보내줄 수 있어?"],
+  ["고액 결제 시도가 확인됐습니다'", "고액 결제 시도가 확인됐다'"],
+  ["정부 지원금 대상자로 확인됐습니다'", "정부 지원금 대상자로 확인됐다'"],
+  [' 자음 "ㅇㅇ"으로 채우지도 않는다.', ""],
+];

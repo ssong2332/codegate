@@ -30,6 +30,7 @@ import { transitionChannel } from "./channelTransition";
 import { recordVoiceTalkUnanswered } from "./voiceTalkUnanswered";
 import { applyCallReturnSessionUpdate, decideCallReturn, recordCallReturnLine } from "./callReturn";
 import { readEndSessionReason, resolveRecordedEndReason } from "./endReason";
+import { shouldMarkOpeningUnheard } from "./unheardOpening";
 import { assertDifficultyAllowed } from "./difficultyAllowance";
 import { assertScenarioNotMerged } from "./mergedScenario";
 import { assertVoiceSelectionSourceAllowed } from "./voiceSelectionAllowance";
@@ -439,6 +440,22 @@ export const endSession = onCall<EndSessionRequest, Promise<EndSessionResponse>>
         requested: requestedReason,
         recorded: recordedReason,
       });
+    }
+
+    // §129 에뮬 D1 — 받기 전에 끝난 통화의 오프닝은 들린 적이 없다(`unheardOpening.ts` 표). 리포트 트리거보다 **앞**에서 표시한다.
+    // 실패해도 종료는 막지 않는다(AC-006 "종료는 항상 성공").
+    try {
+      const userProbe = await sessionRef.collection("messages").where("role", "==", "user").limit(1).get();
+      if (shouldMarkOpeningUnheard(session, userProbe.size)) {
+        const openingSnap = await sessionRef.collection("messages").where("turnIndex", "==", 0).limit(1).get();
+        const opening = openingSnap.docs[0];
+        if (opening && (opening.data() as MessageDoc).role === "scammer" && (opening.data() as MessageDoc).notSpoken !== true) {
+          await opening.ref.update({ notSpoken: true });
+          logger.info("[§129] 받기 전 종료 — 오프닝 낭독 안 됨 표시", { sessionId });
+        }
+      }
+    } catch {
+      // 표시 실패는 리포트에 들린 적 없는 첫마디가 남는 정도의 열화다(종전 동작).
     }
 
     await sessionRef.update({

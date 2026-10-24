@@ -87,7 +87,14 @@ export type CreateSessionResponse = {
 // --- sendMessage (Track A · T7 · UX-006 · AC-003~005/AC-013/AC-024/AC-007) ---
 // §113.2 — `photo: true` = 참가자가 기기 사진을 보냈다(사실만 — 이미지 · 파일 정보는 실리지 않는다 · `userText`는 서버가 무시).
 // §121.7 — `duringCall`: 통화 중 대화방에서 보낸 카톡(functions/src/roleplay/types.ts와 1:1).
-export type SendMessageRequest = { sessionId: string; userText: string; photo?: boolean; duringCall?: boolean };
+export type SendMessageRequest = {
+  sessionId: string;
+  userText: string;
+  photo?: boolean;
+  duringCall?: boolean;
+  /** §129 에뮬 D2 — 이 탭에서 "받기" 뒤 지난 ms(`sendMessage` 래퍼가 채운다 · functions/src/roleplay/types.ts와 1:1). */
+  answeredElapsedMs?: number;
+};
 // isMock: 서버가 이미 반환 중이었으나(functions/src/roleplay/index.ts:137) 클라 타입에 누락돼
 // 있던 계약 드리프트를 채팅 화면 구현 시 해소.
 export type SendMessageResponse = {

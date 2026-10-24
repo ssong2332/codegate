@@ -270,9 +270,26 @@ export function getSelectedDifficultyLevel(): DifficultyLevel | null {
 // 진행 상태로 복원한다. (실시간 소켓은 새로고침으로 끊기므로 복원은 텍스트 폴백으로 이어진다.)
 const ANSWERED_SESSION_KEY = "session.answeredSessionId";
 
-export function markSessionAnswered(sessionId: string): void {
+// §129 에뮬 D2(사용자 결정 2026-10-24 ㉠ — 리포트 시각 기준 = 통화를 받은 시각) — "받기"를 누른 시각(이 기기 시계)도 함께 남긴다.
+// 텍스트 폴백의 첫 `sendMessage`가 "받은 뒤 지난 ms"(`answeredElapsedMs`)를 실어 서버가 받은 시각을 되짚는다(시계 차이 무관 — 상대값만 보낸다).
+const ANSWERED_AT_KEY = "session.answeredAt";
+
+export function markSessionAnswered(sessionId: string, nowMs: number = Date.now()): void {
   if (!hasSessionStorage()) return;
   window.sessionStorage.setItem(ANSWERED_SESSION_KEY, sessionId);
+  window.sessionStorage.setItem(ANSWERED_AT_KEY, `${sessionId}|${nowMs}`);
+}
+
+/** 이 탭에서 이 세션의 "받기" 뒤 지난 ms. 기록이 없거나 다른 세션 · 값이 이상하면 `undefined`. */
+export function readAnsweredElapsedMs(sessionId: string, nowMs: number = Date.now()): number | undefined {
+  if (!hasSessionStorage()) return undefined;
+  const raw = window.sessionStorage.getItem(ANSWERED_AT_KEY);
+  if (!raw) return undefined;
+  const sep = raw.lastIndexOf("|");
+  if (sep < 0 || raw.slice(0, sep) !== sessionId) return undefined;
+  const at = Number(raw.slice(sep + 1));
+  const elapsed = nowMs - at;
+  return Number.isFinite(at) && elapsed >= 0 ? elapsed : undefined;
 }
 
 export function isSessionAnswered(sessionId: string): boolean {

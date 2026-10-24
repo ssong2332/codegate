@@ -114,8 +114,10 @@ test("[2026-10-17 관측] 인증번호 제공(③)·이체 방법 문의(④)는
   assert.equal(result.wasDeceived, true, "관측 세션은 '속았습니다'여야 한다");
   assert.ok(momentTurns.includes(turnOf(2)), "③ 인증번호 '048231 이요'가 속은 순간이 아니다");
   assert.ok(momentTurns.includes(turnOf(3)), "④ '어떻게 옮기면 돼요'가 속은 순간이 아니다");
-  // ①(생년월일 제공)·②(지시 방법 문의)도 정보 제공·순응 신호다. ⑤는 문맥 없이는 모호해 잡지 않는다.
-  assert.deepEqual(momentTurns, [turnOf(0), turnOf(1), turnOf(2), turnOf(3)]);
+  // ①(생년월일 제공)은 정보 제공 신호다. ⑤는 문맥 없이는 모호해 잡지 않는다.
+  // ⚠️ §129 C4(사용자 결정 2026-10-24 "둘 다 빼기") — ②("어떻게 하면 되죠?")는 바로 앞 대사가 거래 은행을 **묻기만** 해(요구 어형 없음) 속은 순간에서 빠진다.
+  //    ④는 앞 대사가 "전액 이체해 주십시오"(요구)라 그대로다. 은행을 밝힌 ②는 위험 신호(`bank_disclosed`) 쪽이다.
+  assert.deepEqual(momentTurns, [turnOf(0), turnOf(2), turnOf(3)]);
   assert.notEqual(result.tacticsUsed.length, 0, "시도된 수법이 0가지로 나오지 않는다");
 });
 

@@ -63,6 +63,23 @@ const goalActionLib = optionalLib("scammerHangup/goalAction.js");
 const guidanceLib = optionalLib("scammerHangup/guidance.js");
 // §117 — 모델 도구 응답 되풀이 금지 꼬리(앱 `deliverInCallSms`의 model_tool 경로와 같은 함수). 옛 lib에는 없다(없으면 종전 문면).
 const toolGuidanceLib = optionalLib("inCallSms/toolGuidance.js");
+// 2026-10-24 회귀 프로브 — 루트 · 세션 인증번호 · 리포트 판정 · 메신저 앱 체인(Claude Haiku → Gemini 2차) · 앱 후처리 · 통화 전환 leg.
+const { findFlowVariant } = L("scenarios/flowVariants.js");
+const { listOtpItems } = L("scenarios/inCallSms.js");
+const sessionOtpLib = optionalLib("scenarios/sessionOtp.js");
+const { analyzeConversation } = L("report/analyzeConversation.js");
+const priorChatLib = optionalLib("realtime/priorChatContext.js");
+const escalatedCallLib = optionalLib("roleplay/escalatedCall.js");
+const replyMarkupLib = optionalLib("roleplay/replyMarkup.js");
+const replyLengthLib = optionalLib("roleplay/replyLength.js");
+const realNamesLib = optionalLib("guardrails/realFinancialNames.js");
+const otpCheckLib = optionalLib("roleplay/otpCheck.js");
+const messengerReentryLib = optionalLib("roleplay/messengerReentry.js");
+// 클라 `src/lib/realtime/escalatedOpening.ts` ESCALATED_CALL_OPENING_TURN의 미러(TS라 못 불러 문면을 옮겼다 — 사기범이 건 통화).
+const ESCALATED_CALL_OPENING_TURN =
+  "(방금 네가 건 전화가 연결됐다. 이 통화는 시스템 지시에 적힌 메시지 대화에 이어서 거는 전화다. 처음부터 다시 소개하거나 같은 사정을 다시 설명하지 말고, 메시지로 하던 이야기 때문에 전화했다는 짧은 첫 마디(5초 안팎)로 시작한 뒤 멈춰서 상대의 대답을 기다려라.)";
+const withOtp = (item, sid) => (sessionOtpLib && item ? sessionOtpLib.withSessionOtp(item, sid) : item);
+const sessionIdFor = (tag, scenarioId, level, persona) => `full-audit-${tag}-${scenarioId}-${level}-${persona}`;
 
 // §104 — Live 클라 반복 · 대기 정체 주입(`src/lib/realtime/stallRecovery.ts` §4)의 미러. 클라 모듈은 TS라 여기서 못 불러 판정표를 옮겼다 —
 // 5 · 6행(인적사항 · 유사도)은 서버 lib `decideRepeatBreak`(클라와 같은 정규식 — 루트 `[§104 짝]` 테스트)를 쓰고, 4행(대기 말)만 옮긴다.
@@ -140,10 +157,15 @@ const REFUSE_LINES = [
   "싫어요. 안 해요.",
 ];
 
-function makeResponder(persona) {
+// getOtp — 도착한 문자 속 인증번호(있으면 순응 참가자는 그 번호를 부른다 · 2026-10-24). 없으면 종전 고정값.
+function makeResponder(persona, getOtp = () => undefined) {
   let paid = false, lastReply = "";
   return function respond(lastScammerText, i) {
     if (i === 0) return "여보세요, 네 누구세요?";
+    if (persona !== "refuse" && /인증\s?번호|인증 코드|숫자 여섯|여섯 자리/.test(lastScammerText) && getOtp()) {
+      const r = `${persona === "suspicious" ? "음… 알겠어요. " : ""}${getOtp()}요.`;
+      if (r !== lastReply) return (lastReply = r);
+    }
     if (persona === "refuse") return i === 1 ? "네? 무슨 소리예요?" : REFUSE_LINES[(i - 2) % REFUSE_LINES.length];
     if (persona === "suspicious" && i <= SUSPICIOUS_OPEN.length) return SUSPICIOUS_OPEN[i - 1];
     const prefix = persona === "suspicious" ? "음… 알겠어요. " : "";
@@ -166,9 +188,8 @@ function makeResponder(persona) {
 const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9 };
 
 // ── 키 · 공통 ─────────────────────────────────────────────────────────────────────────────────
-function readApiKey() {
+function readApiKey(keyVar = argVal("--key-var", "GEMINI_API_KEY2")) {
   const secret = argVal("--secret", "");
-  const keyVar = argVal("--key-var", "GEMINI_API_KEY2");
   if (!secret) throw new Error("--secret <파일> 필요");
   const line = readFileSync(secret, "utf8").split(/\r?\n/).find((l) => l.startsWith(`${keyVar}=`));
   if (!line) throw new Error(`${keyVar} 줄 없음 — 다른 키로 대체하지 않고 멈춘다`);
@@ -177,6 +198,18 @@ function readApiKey() {
   return v.split(",")[0].trim();
 }
 const API_KEY = readApiKey();
+// 2026-10-24 — `--claude-key-var CLAUDE_API_KEY`가 있으면 메신저 대사를 앱과 같은 체인(`getLlmClient` → Claude Haiku 1차 · Gemini 2차)으로
+// 만든다. 키는 이 프로세스의 환경변수로만 넘긴다(앱 `readSecret`이 읽는 자리 — 출력 · 파일 기록 0). Groq 3차는 넣지 않는다(키 미설정).
+const CLAUDE_KEY_VAR = argVal("--claude-key-var", "");
+let appLlm = null;
+if (CLAUDE_KEY_VAR) {
+  process.env.CLAUDE_API_KEY = readApiKey(CLAUDE_KEY_VAR);
+  process.env[argVal("--key-var", "GEMINI_API_KEY2")] = API_KEY;
+  appLlm = L("llm/index.js");
+  if (!appLlm.getClaudeApiKey()) throw new Error("앱 체인이 Claude 키를 읽지 못함 — 멈춘다");
+}
+// 메신저 → 통화 전환 뒤 Live leg 수 상한(실 키 세션 예산에 포함). 0이면 전환 뒤에도 텍스트 폴백으로 잇는다.
+let liveLegBudget = Number(argVal("--live-leg-budget", "0"));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const scrub = (s) => String(s ?? "").replace(/key=[^&\s]+/gi, "key=***");
 
@@ -214,7 +247,11 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
     offerToolDeclared: declaresOfferVerificationDesk(scenarioId, level),
     hangupMode: declaresEnd ? "tool" : "none",
     liveSpeechStyle: true,
+    // 2026-10-24 — 메신저에서 넘어온 통화 leg면 앱(`geminiProvider.ts` §110.3)처럼 앞선 대화 블록을 턴 지시 자리에.
+    ...(job.priorChatContext ? { turnInstruction: job.priorChatContext } : {}),
   });
+  const sid = job.sessionId ?? sessionIdFor(tag, scenarioId, level, persona);
+  const otpOf = () => { for (const e of [...events].reverse()) { const m = e.ev === "sms" && /(?<!\d)(\d{6})(?!\d)/.exec(e.body ?? ""); if (m) return m[1]; } return undefined; };
   const tools = buildLiveToolDeclarations(scenarioId, level, variantId, endCallScope);
   const verifyItem = verifyEnabled ? findVerifyInterceptItem(scenarioId) : undefined;
   const ai = new GoogleGenAI({ apiKey: API_KEY, httpOptions: { apiVersion: "v1alpha" } });
@@ -261,11 +298,12 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
   });
   function smsResponse(item) {
     const placed = verifyPhase === "placed";
-    const r = buildInCallSmsResponse(item, { placed, fictionalBankName });
+    // 앱 `smsDelivery.ts`처럼 세션 번호로 바꾼 항목으로 응답(대조 1줄 · 본문)을 만든다 — 1차 실행은 본문만 세션 번호여서 Live가 맞는 번호를 "다르다"고 했다(프로브 결함).
+    const r = buildInCallSmsResponse(withOtp(item, sid), { placed, fictionalBankName });
     const declaredItem = declared.find((d) => d.smsId === item.smsId);
     const c = buildConfirmResultField({ placed, scenarioId }, declaredItem);
     if (c.confirmResultInstruction && !confirmInjected) pendingConfirm = c.confirmResultInstruction;
-    return { ...r, body: applyFictionalBank(item.body, fictionalBankName) };
+    return { ...r, body: applyFictionalBank(withOtp(item, sid).body, fictionalBankName) };
   }
   async function handleToolCalls(calls) {
     const responses = calls.map((c) => {
@@ -307,8 +345,8 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
           userTurns: userTurns + 1, pendingInstruction: false, smsAwaitingUser: isSmsAwaitingUser(delivered, userTurns + 1),
           limitReached: false, alreadyAccepted: Boolean(ended), relay: undefined,
         });
-        events.push({ t: now(), ev: "toolResult", name: c.name, status: d.status, row: d.row, kind: c.args?.kind, userTurns, goalActionDone });
-        if (d.hangup && !ended) ended = { kind: c.args?.kind ?? "unspecified", userTurns, scammerTurns };
+        events.push({ t: now(), ev: "toolResult", name: c.name, status: d.status, row: d.row, kind: c.args?.reason ?? c.args?.kind, userTurns, goalActionDone });
+        if (d.hangup && !ended) ended = { kind: c.args?.reason ?? c.args?.kind ?? "unspecified", userTurns, scammerTurns };
         // §115 — 앱 콜러블과 같이 후속 단계가 남아 막혔으면 되풀이 금지 문면(옛 lib는 두 번째 인자를 무시한다).
         const followUpPending = followUpUserTurns !== undefined && !goalActionDone;
         return { id: c.id, name: c.name, response: { status: d.status, guidance: scammerHangupGuidance(d.status, { followUpPending }) } };
@@ -329,10 +367,11 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
     turns.push({ role: kind === "user" ? "user" : "system", kind, n: kind === "user" ? userTurns : undefined, text });
     session.sendClientContent({ turns: [{ role: "user", parts: [{ text }] }], turnComplete });
   }
-  const respond = makeResponder(persona);
-  sendText(LIVE_OPENING_TRIGGER, true, "opening");
+  const respond = job.respond ?? makeResponder(persona, otpOf);
+  if (job.setOtpSource) job.setOtpSource(otpOf);
+  sendText(job.openingTrigger ?? LIVE_OPENING_TRIGGER, true, "opening");
   await waitTurn(45000);
-  for (let i = 0; i < (job.maxTurns ?? MAX_USER_TURNS[persona]); i += 1) {
+  for (let i = job.startIndex ?? 0; i < (job.startIndex ?? 0) + (job.maxTurns ?? MAX_USER_TURNS[persona]); i += 1) {
     if (closed) break;
     // §115 — 순응 참가자는 링크 이체 화면을 연 문자가 도착한 다음 발화에서 제출한다(앱의 landingSubmittedAt 흉내 · C-1 입력).
     if (persona === "comply") {
@@ -396,7 +435,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
   await sleep(800);
   try { session.close(); } catch {}
   await sleep(400);
-  return { model: GEMINI_LIVE_MODEL, variantId, fictionalBankName, tools: tools.flatMap((t) => (t.functionDeclarations ?? []).map((d) => d.name)), declaredSms: declared.map((d) => d.smsId), delivered, verifyPhase, ended, turns, events, wallMs: now() };
+  return { model: GEMINI_LIVE_MODEL, sessionId: sid, variantId, fictionalBankName, tools: tools.flatMap((t) => (t.functionDeclarations ?? []).map((d) => d.name)), declaredSms: declared.map((d) => d.smsId), delivered, verifyPhase, ended, turns, events, wallMs: now() };
 }
 
 // ── messenger(텍스트 · sendMessage 재현) ─────────────────────────────────────────────────────────
@@ -511,6 +550,162 @@ async function runMessenger(scenarioId, level, persona, tag) {
   void channel;
   return { model: GEMINI_TEXT_MODEL, variantId, fictionalBankName, declaredSms: declared.map((d) => d.smsId), delivered, ended, escalated, turns, events, wallMs: now() };
 }
+// ── messenger(앱 체인 · 2026-10-24) — `--claude-key-var`가 있을 때. sendMessage(`roleplay/index.ts`)의 턴 지시 조립 · 후처리 순서를 그대로 따른다.
+// 재현하지 않는 것: Firestore 상태(모의 화면 응낙 · 확인 무력화 — 메신저 4종에는 없다) · 사진 턴 · 링크 칩 중복 제거(표시 전용).
+// 429 감지: 앱 체인은 실패를 삼키고 다음 단계로 넘어가므로(`completeWithFallback`) 앱 로거 출력에서 429 문자열을 잡는다.
+let seen429 = null;
+for (const k of ["log", "warn", "error", "info"]) {
+  const orig = console[k].bind(console);
+  console[k] = (...a) => {
+    const s = a.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" ");
+    // 앱 로거의 경고 · 오류 줄만 본다(프로브 자신의 결과 줄 — 파일명 · 타임스탬프 — 을 읽어 오탐한 1차 실행 교훈).
+    if (!seen429 && /"severity":"(WARNING|ERROR)"/.test(s) && /(^|\D)429(\D|$)|RESOURCE_EXHAUSTED|rate_limit_error/i.test(s)) seen429 = scrub(s).slice(0, 200);
+    orig(...a);
+  };
+}
+async function runMessengerApp(scenarioId, level, persona, tag) {
+  const t0 = Date.now();
+  const now = () => Date.now() - t0;
+  const { variantId, scenarioPrompt, declared, verifyEnabled, fictionalBankName, baseOpts } = sessionSetup(scenarioId, level, tag);
+  const sid = sessionIdFor(tag, scenarioId, level, persona);
+  const stored = [], turns = [], events = [], delivered = [];
+  let lastCallAt = 0, ended = null, escalated = null, liveLeg = null;
+  async function complete(systemPrompt, messages, firstTurn) {
+    const wait = 3000 - (Date.now() - lastCallAt);
+    if (wait > 0) await sleep(wait);
+    lastCallAt = Date.now();
+    const client = firstTurn ? appLlm.getLlmClient(appLlm.LLM_FIRST_TURN_TIMEOUT_MS) : appLlm.getLlmClient();
+    const started = Date.now();
+    const res = await appLlm.completeWithFallback(client, { systemPrompt, messages, mockTacticHints: scenarioPrompt.weakenedTactics, purpose: "scammer-reply" });
+    events.push({ t: now(), ev: "llmCall", servedBy: res.servedBy ?? (res.isMock ? "mock" : "unknown"), ms: Date.now() - started });
+    if (seen429) throw new Error(`429 감지(앱 체인 로그): ${seen429}`);
+    return res;
+  }
+  // sendMessage 후처리(③ 순서) — 링크 → 문자 마커 → 신호 → 대사 대조 → 표기 정리 → 실존명 → 가상 은행 → 문장 상한.
+  function postProcess(rawText, turnChoice, userTurnsNow, isOpening) {
+    const link = cleanMessengerOutput(rawText, scenarioId, variantId, level);
+    const mk = extractSmsMarker(link.text);
+    const sig = extractEscalationSignal(mk.text);
+    let escalate = sig.escalate, endCall = sig.endCall, dropped;
+    if (!isOpening && signalConsistencyLib) {
+      if (escalate) {
+        const since = messengerReentryLib ? messengerReentryLib.turnsSinceMessengerEntry(userTurnsNow, undefined) : userTurnsNow;
+        const chk = signalConsistencyLib.judgeEscalationSignalAt ? signalConsistencyLib.judgeEscalationSignalAt(since, sig.text) : signalConsistencyLib.judgeEscalationSignal(sig.text);
+        if (!chk.accept) { dropped = { escalate: chk.reason }; escalate = false; }
+      }
+      const endc = signalConsistencyLib.judgeEndCallSignal(endCall, sig.text);
+      if (endc.dropped) dropped = { ...(dropped ?? {}), endCall: endc.dropped };
+      endCall = endc.endCall;
+    }
+    let text = sig.text;
+    if (replyMarkupLib) text = replyMarkupLib.tidyScammerReplyMarkup(text).text;
+    if (realNamesLib) text = realNamesLib.replaceRealFinancialNames(text).text;
+    text = applyFictionalBank(text, fictionalBankName);
+    if (replyLengthLib && !isOpening && replyLengthLib.shouldLimitReplySentences(turnChoice)) text = replyLengthLib.limitReplySentences(text).text;
+    return { text, attachments: link.attachments, smsMarker: mk.markerCount > 0 ? mk.purpose : undefined, escalate, endCall, dropped };
+  }
+  const opening = await complete(buildSystemPrompt(scenarioPrompt, { ...baseOpts, turnInstruction: OPENING_TURN_INSTRUCTION }), [], false);
+  const op = postProcess(opening.text, "none", 0, true);
+  stored.push({ role: "scammer", textMasked: op.text, channel: "messenger" });
+  turns.push({ role: "scammer", n: 1, servedBy: opening.servedBy, raw: opening.text, text: op.text, attachments: op.attachments });
+  const otpOf = () => { for (const e of [...events].reverse()) { const m = e.ev === "sms" && /(?<!\d)(\d{6})(?!\d)/.exec(e.body ?? ""); if (m) return m[1]; } return undefined; };
+  const respond = makeResponder(persona, otpOf);
+  for (let i = 1; i < MAX_USER_TURNS[persona] + 1; i += 1) {
+    if (ended) break;
+    const lastScammer = stored.at(-1)?.textMasked ?? "";
+    const u = respond(lastScammer, i);
+    const history = toLlmHistory(stored);
+    history.push({ role: "user", content: wrapUserInputAsData(u) });
+    const storedHistory = [...stored];
+    const userTurnsNow = Math.max(stored.filter((m) => m.role === "user").length + 1, ...delivered.map((d) => d.userTurnsAtArrival), 0);
+    stored.push({ role: "user", textMasked: u, channel: escalated ? "voice" : "messenger" });
+    turns.push({ role: "user", n: userTurnsNow, text: u });
+    const scammerTurnNumber = stored.filter((m) => m.role === "scammer").length + 1;
+    let deliveredSmsId, dueItem, nudge;
+    if (declared.length > 0) {
+      const plan = planSmsBackstop({ declared, delivered, userTurns: userTurnsNow });
+      if (plan.action === "deliver") {
+        const g = resolveSmsGate({ purpose: plan.item.purpose, declared, delivered, userTurns: userTurnsNow });
+        if (g.status === "allowed") {
+          dueItem = withOtp(findInCallSmsItem(scenarioId, g.item.smsId), sid);
+          deliveredSmsId = g.item.smsId;
+          delivered.push({ smsId: g.item.smsId, userTurnsAtArrival: userTurnsNow, by: "backstop" });
+          events.push({ ev: "sms", by: "backstop", smsId: deliveredSmsId, userTurns: userTurnsNow, body: applyFictionalBank(dueItem.body, fictionalBankName) });
+        }
+      } else if (plan.action === "nudge") nudge = buildSmsNudgeInstruction(plan.item.purpose);
+    }
+    const hangupFacts = {
+      status: "active", channel: escalated ? "voice" : "messenger", verifyEnabled, transferPlaced: false, transferReachable: true, userTurns: userTurnsNow,
+      limitReached: false, alreadyAccepted: false, relay: undefined, smsDeclared: declared.length > 0, smsDeliveredLoaded: true, goalActionDone: false,
+    };
+    const pre = decideFallbackHangup(hangupFacts, delivered, false);
+    const hangupMode = fallbackHangupMode(pre);
+    const choice = pickFallbackTurnInstruction({ smsDue: Boolean(deliveredSmsId), scammerDocCount: scammerTurnNumber - 1, installConsentDue: false });
+    const ti = choice === "sms_announce" ? dueItem?.announceInstruction : undefined;
+    // ②-f 인증번호 대조(앱과 같은 함수 · 도착 기록은 메모리).
+    let otpInstr;
+    if (otpCheckLib) {
+      const oi = otpCheckLib.otpCheckInputsFromHistory(storedHistory);
+      const oc = await otpCheckLib.evaluateOtpCheck({
+        scenarioId, userText: u, sessionId: sid, ...(oi.lastScammerText !== undefined ? { lastScammerText: oi.lastScammerText } : {}),
+        scammerTurnNumber, ...(deliveredSmsId ? { deliveredThisTurn: deliveredSmsId } : {}),
+        isDelivered: async (smsId) => delivered.some((d) => d.smsId === smsId), callTransferred: false, deliveredRecords: delivered,
+      });
+      otpInstr = oc.instruction;
+      if (oc.reason !== "no-digits" && oc.reason !== "no-otp-scenario") events.push({ ev: "otpCheck", outcome: oc.outcome, reason: oc.reason, userTurns: userTurnsNow });
+    }
+    const offer = declared.length > 0
+      ? buildSmsMarkerOfferInstruction(declared.filter((it) => resolveSmsGate({ purpose: it.purpose, declared, delivered, userTurns: userTurnsNow }).status === "allowed").map((it) => it.purpose))
+      : undefined;
+    const confirmPlan = choice === "none" && !otpInstr && !offer && !nudge
+      ? planConfirmResult({ scenarioId, declared, delivered, userTurns: userTurnsNow, currentUserText: u, priorUserTexts: storedHistory.filter((m) => m.role === "user").map((m) => m.textMasked) })
+      : undefined;
+    const escalatedInstr = escalated && choice === "none" && escalatedCallLib ? escalatedCallLib.ESCALATED_CALL_CONTEXT_INSTRUCTION : undefined;
+    const rbKind = repeatBreakLib && choice === "none" && !otpInstr && !confirmPlan?.instruction
+      ? repeatBreakLib.decideRepeatBreak(storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked), u)
+      : null;
+    if (rbKind) events.push({ ev: "repeatBreak", kind: rbKind, userTurns: userTurnsNow });
+    const tiAll = [ti, otpInstr, confirmPlan?.instruction, escalatedInstr, rbKind ? repeatBreakLib.repeatBreakInstruction(rbKind) : undefined, nudge, offer].filter(Boolean).join("\n") || undefined;
+    const firstUserTurn = storedHistory.filter((m) => m.role === "user").length === 0;
+    const res = await complete(buildSystemPrompt(scenarioPrompt, { ...baseOpts, ...(tiAll ? { turnInstruction: tiAll } : {}), hangupMode }), history, firstUserTurn);
+    const pp = postProcess(res.text, choice, userTurnsNow, false);
+    if (pp.smsMarker !== undefined) {
+      const g = resolveSmsGate({ purpose: pp.smsMarker, declared, delivered, userTurns: userTurnsNow });
+      events.push({ ev: "smsMarker", purpose: pp.smsMarker, status: g.status, userTurns: userTurnsNow });
+      if (g.status === "allowed") {
+        const item = withOtp(findInCallSmsItem(scenarioId, g.item.smsId), sid);
+        delivered.push({ smsId: g.item.smsId, userTurnsAtArrival: userTurnsNow, by: "marker" });
+        events.push({ ev: "sms", by: "marker", smsId: g.item.smsId, userTurns: userTurnsNow, body: applyFictionalBank(item.body, fictionalBankName) });
+      }
+    }
+    if (pp.dropped) events.push({ ev: "signalDropped", ...pp.dropped, userTurns: userTurnsNow });
+    const post = decideFallbackHangup(hangupFacts, delivered, false);
+    const effect = resolveFallbackHangupEffect({ endCall: pp.endCall, hangupMode, pre, post });
+    events.push({ ev: "hangup", mode: hangupMode, preRow: pre.row, postRow: post.row, endCall: pp.endCall ?? null, end: effect.end, userTurns: userTurnsNow });
+    if (effect.end) ended = { kind: effect.kind, userTurns: userTurnsNow, row: post.row };
+    stored.push({ role: "scammer", textMasked: pp.text, channel: escalated ? "voice" : "messenger" });
+    turns.push({ role: "scammer", n: scammerTurnNumber, servedBy: res.servedBy ?? (res.isMock ? "mock" : "unknown"), cause: [ti && "sms_announce", otpInstr && "otp_check", confirmPlan?.instruction && "confirm_result", rbKind && `repeat:${rbKind}`, nudge && "nudge", pp.escalate && "ESCALATE", effect.end && `ENDED:${effect.kind}`].filter(Boolean).join("+") || "user", raw: res.text, text: pp.text, attachments: pp.attachments });
+    if (pp.escalate && !escalated && !ended) {
+      escalated = { userTurns: userTurnsNow };
+      events.push({ ev: "escalate", userTurns: userTurnsNow });
+      // 통화 leg — 앱처럼 앞선 대화 블록을 실은 Live 세션(예산 안에서만). 예산이 없으면 텍스트 폴백(에스컬레이션 맥락 1줄)으로 잇는다.
+      if (liveLegBudget > 0 && priorChatLib) {
+        liveLegBudget -= 1;
+        const priorChatContext = priorChatLib.buildPriorChatContext(stored, [], "scammer");
+        const remaining = MAX_USER_TURNS[persona] - i;
+        if (remaining > 0) {
+          liveLeg = await runVoice(scenarioId, level, persona, tag, { variant: variantId, priorChatContext, openingTrigger: ESCALATED_CALL_OPENING_TURN, respond: (t, k) => respond(t, k), startIndex: i + 1, maxTurns: remaining, sessionId: sid });
+          for (const t of liveLeg.turns) turns.push({ ...t, leg: "live" });
+          for (const e of liveLeg.events) events.push({ ...e, leg: "live" });
+          for (const d of liveLeg.delivered) delivered.push({ ...d, leg: "live" });
+          if (liveLeg.ended) ended = { ...liveLeg.ended, leg: "live" };
+        }
+        break;
+      }
+    }
+  }
+  return { model: "app-chain(claude-haiku-5-5→gemini-fallback)", sessionId: sid, variantId, fictionalBankName, declaredSms: declared.map((d) => d.smsId), delivered, ended, escalated, liveLeg: liveLeg ? { model: liveLeg.model, ended: liveLeg.ended, tools: liveLeg.tools } : null, turns, events, wallMs: now() };
+}
 function cleanMessengerOutput(text, scenarioId, variantId, level) {
   try {
     const r = extractLinkMarker(text, scenarioId, { scenarioId, difficultyLevel: level, ...(variantId ? { flowVariantId: variantId } : {}) });
@@ -529,13 +724,26 @@ for (const job of plan) {
   const startedIso = new Date().toISOString();
   let result, error = null;
   try {
-    result = job.ch === "voice" ? await runVoice(job.id, job.level, job.persona, tag, job) : await runMessenger(job.id, job.level, job.persona, tag);
+    result = job.ch === "voice" ? await runVoice(job.id, job.level, job.persona, tag, job) : appLlm ? await runMessengerApp(job.id, job.level, job.persona, tag) : await runMessenger(job.id, job.level, job.persona, tag);
   } catch (e) { error = scrub(e?.stack ?? e); result = { turns: [], events: [] }; }
+  // 2026-10-24 — 루트 · 리포트 판정(앱 `analyzeConversation`과 같은 함수 · 인증번호 정답 = 이 세션 번호).
+  try {
+    const fv = findFlowVariant(result.variantId);
+    result.route = fv ? { flowVariantId: fv.variantId, routeKey: fv.routeKey, routeLabel: fv.routeLabel } : null;
+    const sid = result.sessionId ?? sessionIdFor(tag, job.id, job.level, job.persona);
+    const msgs = (result.turns ?? [])
+      .filter((t) => (t.role === "scammer" && t.kind !== "interrupted" && (t.n || t.leg)) || t.role === "user")
+      .filter((t) => (t.text ?? "").trim())
+      .map((t, k) => ({ role: t.role, textMasked: t.text, turnIndex: k, createdAtMs: k * 1000, channel: job.ch === "messenger" && !t.leg ? "messenger" : "voice" }));
+    const otpCodes = sessionOtpLib ? listOtpItems(job.id).map((it) => sessionOtpLib.withSessionOtp(it, sid).otpCode).filter(Boolean) : [];
+    const a = analyzeConversation(msgs, 0, resolveSessionScenarioPrompt(job.id, result.variantId)?.weakenedTactics ?? [], otpCodes);
+    result.verdict = { wasDeceived: a.wasDeceived, deceivedMoments: a.deceivedMoments.map((m) => ({ turnIndex: m.turnIndex, tactic: m.tactic ?? m.tacticLabel })), riskSignals: (a.riskSignals ?? []).length };
+  } catch (e) { result.verdictError = scrub(e?.message ?? e); }
   const errText = [error ?? "", ...(result.events ?? []).filter((e) => e.ev === "error" || e.ev === "close").map((e) => `${e.code ?? ""} ${e.msg ?? ""} ${e.reason ?? ""}`)].join(" ");
   const is429 = /(^|\D)429(\D|$)|RESOURCE_EXHAUSTED|quota/i.test(errText);
   const file = `${job.ch}-${job.id}-${job.level}-${job.persona}-${startedIso.replace(/[:.]/g, "-")}.json`;
   writeFileSync(path.join(outDir, file), JSON.stringify({ ...job, startedIso, error, is429, ...result }, null, 2), "utf8");
-  console.log(JSON.stringify({ ...job, file, error: error ? error.slice(0, 160) : null, is429, turns: result.turns?.length ?? 0, ended: result.ended ?? null }));
+  console.log(JSON.stringify({ ...job, file, error: error ? error.slice(0, 160) : null, is429, turns: result.turns?.length ?? 0, ended: result.ended ?? null, route: result.route?.routeKey, deceived: result.verdict?.wasDeceived, escalated: result.escalated ?? null }));
   if (is429) { writeFileSync(stopFile, `${job.id}:${job.level}:${job.persona}`); console.log("429 감지 — 중단"); break; }
   await sleep(4000);
 }

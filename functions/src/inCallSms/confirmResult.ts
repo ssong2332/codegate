@@ -48,11 +48,18 @@ export function buildConfirmResultInstruction(purpose: "transfer" | "link"): str
 }
 
 /**
+ * §129 D7(2026-10-24 실 키 회귀 프로브 — 은행 사칭 중급: 참가자는 *"그 다음엔 어떻게 해요?"* 라고만 했는데 *"네, 이체 확인되었습니다"* 후 목표 끊기).
+ * 조건형 지시를 무조건 지시로 읽었다(추정) ⇒ 조건이 아닐 때 할 일을 같은 지시 안에 붙인다. ⚠️ 모델 행동 완화(결정적 차단 아님).
+ */
+export const LIVE_CONFIRM_NOT_YET_SENTENCE =
+  " 상대가 마쳤다고 말하지 않고 묻거나 망설이기만 하면 끝났다고 알리지 말고, 문자 안내대로 진행해 달라고 다시 안내하라.";
+
+/**
  * Live 응답 필드(`deliverInCallSms` → `confirmResultInstruction`) — 문자 도착 응답 시점에는 참가자가 아직 답하지 않았으므로
  * **조건형**이다(클라가 언제 주입하든 "상대가 마쳤다고 말하면"에만 적용된다). ⚠️ 클라 배선은 이 변경에 없다(A-2).
  */
 export function buildLiveConfirmResultInstruction(purpose: "transfer" | "link"): string {
-  return `(상대가 이 문자 안내대로 마쳤다고 말하면, 그 말에 대답할 때 ${RESULT_PHRASE[purpose]} 그럴듯하게 알려 주고, 상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라. 확인 중이라거나 기다려 달라는 말은 하지 마라.)`;
+  return `(상대가 이 문자 안내대로 마쳤다고 말하면, 그 말에 대답할 때 ${RESULT_PHRASE[purpose]} 그럴듯하게 알려 주고, 상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라. 확인 중이라거나 기다려 달라는 말은 하지 마라.${LIVE_CONFIRM_NOT_YET_SENTENCE})`;
 }
 
 /**

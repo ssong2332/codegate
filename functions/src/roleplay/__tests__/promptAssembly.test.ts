@@ -4,6 +4,7 @@ import * as path from "node:path";
 import assert from "node:assert/strict";
 import {
   buildSystemPrompt,
+  CLAIM_CONSISTENCY_RULE,
   HANGUP_RULE_NONE,
   HANGUP_RULE_SIGNAL,
   HANGUP_RULE_TOOL,
@@ -1906,9 +1907,12 @@ function a1ExpectedHangupRule(mode: (typeof A1_HANGUP_MODES)[number], verifyEnab
   return HANGUP_RULE_NONE;
 }
 
-/** ① 판정 — 끊기 슬롯 문면(무변경) **바로 뒤**에 '확인 중 금지' 규칙이 있고 그 뒤가 페이로드 항목이다. */
+/**
+ * ① 판정 — 끊기 슬롯 문면(무변경) **바로 뒤**에 '확인 중 금지' 규칙이 있고 그 뒤가 페이로드 항목이다.
+ * §129(DECISIONS #245) — 둘 사이에 무조건부 1항(`CLAIM_CONSISTENCY_RULE`)이 끼었다(NO_STALL_RULE · 슬롯 문면은 무변경).
+ */
 function a1NoStallFollowsHangup(text: string, hangupRule: string): boolean {
-  return text.includes(`${hangupRule}\n${NO_STALL_RULE}\n${A1_PAYLOAD_HEAD}`);
+  return text.includes(`${hangupRule}\n${NO_STALL_RULE}\n${CLAIM_CONSISTENCY_RULE}\n${A1_PAYLOAD_HEAD}`);
 }
 
 test("[A-1/①] 전 시나리오 × 3난이도 × 끊기 변형 3종 — '확인 중' 금지 규칙이 끊기 슬롯 바로 뒤에 1회 실리고 슬롯 문면은 그대로다", (t) => {

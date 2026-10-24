@@ -137,7 +137,8 @@ test("analyzeConversation(): 격식체 '말씀하신 대로' 순응 표현도 �
   const messages = [
     {
       role: "scammer" as const,
-      textMasked: "잠시만요... 오늘까지만 신청 가능하세요, 지금 끊으시면 대상에서 빠져요.",
+      // §129 C5(사용자 결정 2026-10-24) — 따름 약속은 바로 앞 대사에 요구가 있을 때만 속음이다 ⇒ 요구 1문장을 더했다(이 테스트의 대상 = 격식체 감지).
+      textMasked: "잠시만요... 오늘까지만 신청 가능하세요, 지금 끊으시면 대상에서 빠져요. 지금 바로 신청해 주세요.",
       turnIndex: 0,
       createdAtMs: SESSION_START_MS,
     },
@@ -428,7 +429,8 @@ test("analyzeConversation(): 매치된 수법이 없으면 폴백 라벨과 함�
   const messages = [
     {
       role: "scammer" as const,
-      textMasked: "안녕하세요, 잠시 통화 괜찮으실까요?",
+      // §129 C5 — 따름 약속이 속음이 되려면 앞 대사에 요구가 있어야 한다(요구 1문장 — 수법 문구 키 · 요구 어형 표에는 맞지 않는 문장).
+      textMasked: "안녕하세요, 잠시 통화 괜찮으실까요? 지금 바로 신청해 주시겠어요?",
       turnIndex: 0,
       createdAtMs: SESSION_START_MS,
     },

@@ -236,9 +236,21 @@ test("[T191 J-2 · 회귀 0] 17개 시나리오 저작 대사 × 기존 테스�
     "300만원 정도 있는데 의심스러워서 확인하고 다시 전화드릴게요", // 잔액 고지(H2)
     "048231 이요 근데 경찰에 신고할게요", // 생년월일을 물은 대사 뒤 숫자 6자리(H2 · V2)
   ];
+  // §129 C4 · C5(사용자 결정 2026-10-24 "둘 다 빼기") — 요구 없는 저작 대사 뒤의 방법 질문 · 따름 약속은 속음이 아니다(속음 → 안 속음 방향만).
+  //   요구가 있는 저작 대사 뒤에서는 같은 답이 base 그대로다(이 아래 방향 단언이 고정한다).
+  const C4_C5_ANSWERS = [
+    "네, 말씀하신 대로 바로 처리하겠습니다.", // C5
+    "안전계좌 번호 불러드리겠습니다, 받아 적으십시오.", // 픽스처 속 사기범 대사 — "계좌" 명사 단독(C4 대상 명사)
+    "어떻게 하면 되니?", // C4
+    "혼자 있어요. 우리은행 통장 하나 쓰고 있어요. 어떻게 하면 되죠?", // C4
+  ];
   const changedAnswers = new Set(changed.map((entry) => entry.split(" | ").at(-1)));
-  assert.deepEqual([...changedAnswers].sort(), [...DECISION_1_ANSWERS].sort());
+  assert.deepEqual([...changedAnswers].sort(), [...DECISION_1_ANSWERS, ...C4_C5_ANSWERS].sort());
   for (const answer of DECISION_1_ANSWERS) assert.equal(baseDeceived(answer), false, "결정 ① 답변은 base에서 안 속음이었다");
+  for (const entry of changed.filter((e) => C4_C5_ANSWERS.includes(e.split(" | ").at(-1)!))) {
+    const answer = entry.split(" | ").at(-1)!;
+    assert.equal(baseDeceived(answer), true, `C4 · C5는 속음 → 안 속음 방향만이다 — ${entry}`);
+  }
 });
 
 // 2026-10-21 — 기관 사칭 고급이 현금 전달 요구(인출·전달) 대신 인증번호 → 안전계좌 링크 이체 화면으로 바뀌어 목록에서 빠졌다.

@@ -7,10 +7,12 @@
 // | 순서 | 조건(마커 `[[…]]`·URL을 지운 본문 기준)                                   | 판정 | 사유              |
 // |------|---------------------------------------------------------------------------|------|-------------------|
 // | 1    | 원문이 공백뿐                                                              | 불가 | `empty`           |
-// | 1-b  | 마커·URL을 지우면 빈 문자열(링크만 보내는 응답)                             | 가능 | —                 |
+// | 1-b  | 마커·URL을 지우면 빈 문자열이고 링크·문자 마커나 URL이 있다(링크만 보내는 응답) | 가능 | —                 |
+// | 1-c  | 마커·URL을 지우면 빈 문자열이고 신호 마커뿐이다 — §129 D1(빈 말풍선)         | 불가 | `empty`           |
 // | 2    | 영어 거절·사과 문구(`ENGLISH_REFUSAL_PATTERNS`)                             | 불가 | `english-refusal` |
 // | 3    | 한국어 AI 자기 지칭 거절(`KOREAN_AI_REFUSAL_PATTERNS` — "AI로서"·"역할극은 할 수 없") | 불가 | `korean-ai-refusal` |
-// | 3-b  | 훈련 메타 · 고지 문형(`TRAINING_META_PATTERNS` — "[훈련 …", "훈련 시뮬레이션", "이 훈련은", "연습을 위해", "이 장면은", 역할극 언급) — §120 | 불가 | `training-meta` |
+// | 3-b  | 훈련 메타 · 고지 문형(`TRAINING_META_PATTERNS` — "[훈련 …", "훈련 시뮬레이션", "이 훈련은", "연습을 위해", "이 장면은", 역할극 언급 · §129 "이 응답은" · "훈련에서는 여기서 멈추" · "실제 사기였다면") — §120 | 불가 | `training-meta` |
+// | 3-c  | 본문이 괄호 표기(지문 · 메타)뿐이고 링크·문자 마커가 없다 — §129 D1            | 불가 | `empty`           |
 // | 4    | 한글(음절·자모)이 0자                                                       | 불가 | `no-hangul`       |
 // | 5    | 라틴 문자 수 > 한글 수 × 2                                                  | 불가 | `mostly-foreign`  |
 // | 6    | 그 밖                                                                      | 가능 | —                 |
@@ -31,6 +33,8 @@ export type UnusableReplyReason =
 
 const MARKER_PATTERN = /\[\[[^\]]*\]\]/g;
 const URL_PATTERN = /https?:\/\/\S+/gi;
+/** `g` 없는 사본 — `.test()`가 lastIndex를 이어 쓰지 않게. */
+const HAS_URL = /https?:\/\/\S+/i;
 const HANGUL_PATTERN = /[가-힣ㄱ-ㆎ]/g;
 const LATIN_PATTERN = /[A-Za-z]/g;
 
@@ -58,21 +62,34 @@ export const KOREAN_AI_REFUSAL_PATTERNS: readonly RegExp[] = [
 export const TRAINING_META_PATTERNS: readonly RegExp[] = [
   /[\[［]\s*(?:훈련|시뮬레이션|모의\s*훈련|교육용|안내\s*[:：—-])/,
   /(?:훈련|예방|교육|모의)\s*(?:용\s*)?시뮬레이션|시뮬레이션\s*(?:훈련|상황|입니다|이며|이므로|이라서|을\s*(?:종료|마무리|마칩))/,
-  /(?:^|[^가-힣])(?:이|본)\s*훈련(?:은|을|이|에서|의)|훈련\s*(?:을|은|이)?\s*여기서\s*(?:종료|마무리|마칩|끝)|훈련\s*참가자/,
+  /(?:^|[^가-힣])(?:이|본)\s*훈련(?:은|을|이|에서|의)|훈련\s*(?:을|은|이|에서는?)?\s*여기서\s*(?:종료|마무리|마칩|끝|멈추|멈춥)|훈련\s*참가자/,
   /연습(?:을|하기)\s*위해|(?:알아차리|대응하|구별하|판단하|거절하)는\s*연습/,
   /이\s*장면은/,
   /역할\s*극|롤\s*플레이/,
+  // §129(프로브 2026-10-24 D1 · D2) — "(이 응답은 훈련을 마무리하는 내용입니다.)" · "실제 사기였다면 어떤 일이 벌어지는지 되짚어 보시면 됩니다".
+  /이\s*응답은/,
+  /실제\s*(?:사기|상황)(?:였|이었)다면/,
 ];
+
+/** §129 D1 — 화면에 무언가를 남기는 마커(링크 칩 · 문자). 신호(`[[SIGNAL:…]]`)만 있는 응답은 말풍선이 빈다. */
+const VISIBLE_MARKER_PATTERN = /\[\[(?:LINK|SMS):[^\]]*\]\]/;
+/** §129 D1 — 본문이 괄호 표기뿐인가(대사 없이 지문 · 메타 표기만 — 저장 전 `roleplay/replyMarkup.ts`가 지우면 말풍선이 빈다). 어휘를 가리지 않는 근사다. */
+const PAREN_ONLY_BODY = /^(?:\s*(?:\([^()\n]{0,40}\)|\[[^\[\]\n]{0,40}\]|【[^【】\n]{0,40}】))+\s*$/;
 
 /** 판정 결과 — 가능이면 `undefined`, 불가면 사유 코드. */
 export function judgeScammerReplyUsability(text: string): UnusableReplyReason | undefined {
   const body = text.replace(MARKER_PATTERN, " ").replace(URL_PATTERN, " ");
   if (text.trim() === "") return "empty";
   // 마커·URL만 있는 응답(예: 링크만 보내는 문자)은 행동으로서 정상이다 — 한글 행(4·5)을 적용하지 않는다.
-  if (body.trim() === "") return undefined;
+  // §129 D1 — 단, 보이는 것을 남기는 마커(링크 · 문자)나 URL이 없으면(신호만) 말풍선이 비므로 불가다.
+  if (body.trim() === "") {
+    return VISIBLE_MARKER_PATTERN.test(text) || HAS_URL.test(text) ? undefined : "empty";
+  }
   if (ENGLISH_REFUSAL_PATTERNS.some((pattern) => pattern.test(body))) return "english-refusal";
   if (KOREAN_AI_REFUSAL_PATTERNS.some((pattern) => pattern.test(body))) return "korean-ai-refusal";
   if (TRAINING_META_PATTERNS.some((pattern) => pattern.test(body))) return "training-meta";
+  // §129 D1 — 괄호 표기만 남은 본문("(잠시 침묵)")도 저장 전에 지워져 말풍선이 빈다(메타 문형은 바로 위 행이 먼저 잡는다).
+  if (PAREN_ONLY_BODY.test(body) && !VISIBLE_MARKER_PATTERN.test(text)) return "empty";
   const hangul = (body.match(HANGUL_PATTERN) ?? []).length;
   if (hangul === 0) return "no-hangul";
   const latin = (body.match(LATIN_PATTERN) ?? []).length;

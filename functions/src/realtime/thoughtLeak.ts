@@ -9,6 +9,7 @@
 // |----|-----------------------------------------------------------------------------|----------------------------------------|
 // | 1  | 앞머리가 `thought` 표지(대소문자 무관 · 앞 공백·`*` 허용 · 뒤가 공백·`:`·끝) | 표지 ~ 첫 한글 직전까지 지운다         |
 // | 2  | 한글이 없는 구간에 라틴 단어가 `THOUGHT_SPAN_MIN_WORDS`(8)개 이상            | 그 구간을 지운다(앞 문장부호는 남긴다) |
+// | 2-b| §129 D3 — 도구 호출 문자열(밑줄 식별자 + 괄호 인자 · 백틱 허용, 예: `send_prepared_sms(purpose="transfer")`) | 지운다(전사만 — 이미 나간 소리는 되돌릴 수 없다) |
 // | 3  | 그 밖(OTP · ATM · SMS 같은 짧은 영어 · 숫자)                                | 원문 그대로(바이트 동일)               |
 // | 4  | 지운 뒤 남은 글이 없다                                                      | 빈 문자열                              |
 //
@@ -29,6 +30,11 @@ const NON_HANGUL_SPAN = /[^가-힣ㄱ-ㆎ]+/g;
 const LATIN_WORD = /[A-Za-z]+(?:['’][A-Za-z]+)*/g;
 const THOUGHT_MARKER = /^[\s*]*thought(?=[\s:*]|$)[\s:*]*/i;
 const LEADING_PUNCT = /^[.,!?…~。]*/;
+/** 행 2-b(§129 D3) — 도구 호출 문자열(`send_prepared_sms(purpose="transfer")`처럼 밑줄 식별자 + 괄호 인자, 백틱 감싸기 허용). */
+const TOOL_CALL_TEXT = /`*\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\s*\([^()\n]{0,80}\)`*/g;
+
+/** 행 2-b(§129 (A)) — 대괄호 도구 · 시스템 서술("[문자 발송 도구 호출: …]" · "[시스템 메시지 …]"). */
+const BRACKET_TOOL_TEXT = /\[[^\[\]\n]{0,24}(?:도구\s*(?:호출|실행|사용)|시스템\s*(?:메시지|안내|호출|처리)|함수\s*호출)[^\[\]\n]{0,40}\]/g;
 
 function latinWordCount(text: string): number {
   return (text.match(LATIN_WORD) ?? []).length;
@@ -50,6 +56,14 @@ export function stripLeakedThought(text: string): string {
     rest = firstHangul < 0 ? "" : after.slice(firstHangul);
     stripped = true;
   }
+  rest = rest.replace(BRACKET_TOOL_TEXT, () => {
+    stripped = true;
+    return " ";
+  });
+  rest = rest.replace(TOOL_CALL_TEXT, () => {
+    stripped = true;
+    return " ";
+  });
   rest = rest.replace(NON_HANGUL_SPAN, (span) => {
     if (latinWordCount(span) < THOUGHT_SPAN_MIN_WORDS) return span;
     stripped = true;
