@@ -36,6 +36,10 @@ type DiagState = {
   normGain: number | null;
   /** §122.2.2 — 이번 통화의 출력 컨텍스트 경로(`callAudio.ts` `CallOutputPath`). `after-mic`이면 볼륨 키('통화')가 소리를 조절할 것으로 본다(실기 확인 전). */
   outputPath: string | null;
+  /** §126 — 마이크 뒤 새 출력 컨텍스트가 running이 되기까지 걸린 ms(넘으면 `timeout` · 만들지 않았으면 null). `fallback-primed` 원인 판정용. */
+  freshResume: string | null;
+  /** §126 — '통화' 스트림 통화 모드 추가 감쇠(선형 · `callStreamTrimFor`). */
+  streamTrim: number | null;
   // ⭐ §105(2026-10-22 실기 신고 "말해도 묵묵부답") — 사용자 말이 서버까지 갔는지 가린다(숫자만).
   /** 서버로 보낸 마이크 프레임 수. */
   micFramesSent: number;
@@ -69,6 +73,8 @@ const INITIAL: DiagState = {
   pcmPeakMax: null,
   normGain: null,
   outputPath: null,
+  freshResume: null,
+  streamTrim: null,
   micFramesSent: 0,
   micFramesDroppedEcho: 0,
   micFramesDroppedMute: 0,
@@ -201,6 +207,16 @@ export function formatDbfs(amplitude: number | null): string {
 /** §122.2.2 — 출력 컨텍스트 경로(`after-mic` · `before-mic` · `fallback-primed`). */
 export function noteOutputPath(path: string): void {
   state = { ...state, outputPath: path };
+}
+
+/** §126 — 새 출력 컨텍스트의 running 도달 ms(문자열) 또는 `timeout`. */
+export function noteFreshResume(value: string): void {
+  state = { ...state, freshResume: value };
+}
+
+/** §126 — '통화' 스트림 감쇠(선형). */
+export function noteStreamTrim(trim: number): void {
+  state = { ...state, streamTrim: trim };
 }
 
 /** §122(8) — 정규화가 이번 청크에 쓴 게인(선형 · `LoudnessState.gain`). */
@@ -337,6 +353,8 @@ export const AUDIO_DIAG_KEYS = [
   "out.rate",
   "out.origin",
   "out.path",
+  "out.freshMs",
+  "out.trimDb",
   "out.createdMs",
   "out.gain",
   "out.gainCtx",
@@ -402,6 +420,8 @@ export function buildAudioDiagRows(input: {
     "out.rate": show(s.output?.sampleRate),
     "out.origin": show(s.outputOrigin),
     "out.path": show(s.outputPath),
+    "out.freshMs": show(s.freshResume),
+    "out.trimDb": formatDbfs(s.streamTrim),
     "out.createdMs": rel(s.outputCreatedAtMs, s.acceptAtMs),
     "out.gain": s.gain === null ? "-" : s.gain.toFixed(2),
     "out.gainCtx": s.gainCtxSame === null ? "-" : s.gainCtxSame ? "same" : "diff",

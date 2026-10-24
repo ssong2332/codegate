@@ -15,7 +15,7 @@
 // | 1 | `purpose`가 변형 `sms` 선언에 없다(enum 밖 · 부재 포함) | `not_allowed`(쓰기 0) |
 // | 2 | 그 목적의 문자가 이미 도착 | `already_delivered`(쓰기 0) |
 // | 3 | `userTurns < max(item.notBeforeUserTurns, FIRST_SMS_MIN_USER_TURNS)` | `too_early` |
-// | 4 | 직전 문자 도착 이후 사용자 발화 `< MIN_USER_TURNS_BETWEEN_SMS` | `too_soon` |
+// | 4 | 직전 문자 도착 이후 사용자 발화 `< MIN_USER_TURNS_BETWEEN_SMS`(명시 요청이면 `MIN_USER_TURNS_BETWEEN_SMS_EXPLICIT` — §126) | `too_soon` |
 // | 5 | 그 외 | `allowed` |
 //
 // ── `planSmsBackstop` 판정표(필수 목적만 강제 · 선택 목적은 건너뛰기 — 설계 "백스톱" 표 · AC-099 (e)) ──
@@ -34,6 +34,13 @@ import { findInCallSmsItem, hasInCallSms } from "../scenarios/inCallSms";
 export const FIRST_SMS_MIN_USER_TURNS = 2;
 /** 서로 다른 두 문자 사이 최소 사용자 발화 수(AC-099 (c)). */
 export const MIN_USER_TURNS_BETWEEN_SMS = 2;
+/**
+ * ⭐ §126(2026-10-24 실기 신고 *"문자가 바로 오지는 않아"*) — **명시 요청**(모델 도구 호출 · 사기범이 "문자를 보냈다"고 말한 주장)의 간격.
+ * 운영 로그(세션 e2a5fd9b): 인증번호 문자 도착(발화 4) 다음 발화(5)에 모델이 계좌 문자를 부르자 간격 2에 막혀 거절됐고, 문자는 참가자가 한 번 더
+ * 말한 뒤(발화 6) 백스톱으로 왔다. 사기범이 이미 보냈다고 말하는 순간에는 말과 도착을 맞추는 쪽을 택한다 — 같은 발화 안 두 통만 막는다(1).
+ * 자동 백스톱(주장 없는 넛지 · 발송)의 간격은 종전 2 그대로다. ⚠️ AC-099 (c) "문자 사이 발화 ≥2"의 예외 — 사용자 승인 대상.
+ */
+export const MIN_USER_TURNS_BETWEEN_SMS_EXPLICIT = 1;
 /** 백스톱 단계 간격 — 게이트가 열린 뒤 이만큼 발화하면 넛지, 다시 이만큼이면 발송(설계 판단값). */
 export const BACKSTOP_USER_TURNS = 2;
 /** 클라 주장 카운터의 범위 검사 상한(설계 "서버는 범위만 검사"). */
@@ -71,7 +78,14 @@ export type SmsGateInput = {
   delivered: readonly DeliveredSmsRecord[];
   /** 지금까지의 사용자 발화 수(실시간 = 클라 카운터 · 폴백 = 서버 `messages` 계수). */
   userTurns: number;
+  /** §126 — 명시 요청(모델 도구 · 사기범 주장)이면 간격 `MIN_USER_TURNS_BETWEEN_SMS_EXPLICIT`. 부재 · false = 종전 2. */
+  explicit?: boolean;
 };
+
+/** §126 — 판정 4행의 간격. */
+export function smsSpacingFor(explicit: boolean | undefined): number {
+  return explicit === true ? MIN_USER_TURNS_BETWEEN_SMS_EXPLICIT : MIN_USER_TURNS_BETWEEN_SMS;
+}
 
 /** 직전 문자가 도착했을 때의 사용자 발화 수. 도착한 문자가 없으면 `undefined`. */
 export function lastArrivalUserTurns(delivered: readonly DeliveredSmsRecord[]): number | undefined {
@@ -93,7 +107,7 @@ export function resolveSmsGate(input: SmsGateInput): SmsGateResult {
   if (input.delivered.some((d) => d.smsId === item.smsId)) return { status: "already_delivered", item };
   if (input.userTurns < earliestUserTurns(item)) return { status: "too_early", item };
   const last = lastArrivalUserTurns(input.delivered);
-  if (last !== undefined && input.userTurns - last < MIN_USER_TURNS_BETWEEN_SMS) {
+  if (last !== undefined && input.userTurns - last < smsSpacingFor(input.explicit)) {
     return { status: "too_soon", item };
   }
   return { status: "allowed", item };
@@ -112,9 +126,10 @@ export type SmsBackstopPlan =
 export function gateOpensAtUserTurns(
   item: FlowVariantSms,
   delivered: readonly DeliveredSmsRecord[],
+  explicit?: boolean,
 ): number {
   const last = lastArrivalUserTurns(delivered);
-  const afterLast = last === undefined ? 0 : last + MIN_USER_TURNS_BETWEEN_SMS;
+  const afterLast = last === undefined ? 0 : last + smsSpacingFor(explicit);
   return Math.max(earliestUserTurns(item), afterLast);
 }
 
@@ -138,7 +153,13 @@ export function planSmsBackstop(input: Omit<SmsGateInput, "purpose"> & { claimed
       openAt = at;
     }
   }
-  if (input.claimed === true && input.userTurns >= openAt) return { action: "deliver", item: target };
+  // §126 — 주장이 있으면 명시 요청 간격(1)으로 연다(하한 `notBeforeUserTurns` · 첫 문자 하한은 그대로).
+  if (input.claimed === true) {
+    const claimedTarget = pending
+      .map((item) => ({ item, at: gateOpensAtUserTurns(item, input.delivered, true) }))
+      .reduce((best, cur) => (cur.at < best.at ? cur : best));
+    if (input.userTurns >= claimedTarget.at) return { action: "deliver", item: claimedTarget.item };
+  }
   // §124 — 변형이 문자마다 간격을 줄 수 있다(부재 = 종전 2).
   const step = target.backstopUserTurns ?? BACKSTOP_USER_TURNS;
   if (input.userTurns >= openAt + step * 2) return { action: "deliver", item: target };
@@ -159,7 +180,8 @@ export function planSmsBackstop(input: Omit<SmsGateInput, "purpose"> & { claimed
  * 반환 = 실제로 게이트에 넘길 목적 · 바꿨으면 `correctedFrom`(로그용).
  */
 export function correctModelSmsPurpose(input: SmsGateInput): { purpose: unknown; correctedFrom?: string } {
-  const gate = resolveSmsGate(input);
+  // §126 — 모델 도구 호출은 명시 요청이다(간격 1 · 발송 통로도 같은 값으로 다시 판정한다).
+  const gate = resolveSmsGate({ ...input, explicit: true });
   if (gate.status !== "not_allowed" && gate.status !== "already_delivered") return { purpose: input.purpose };
   const plan = planSmsBackstop({ declared: input.declared, delivered: input.delivered, userTurns: input.userTurns, claimed: true });
   if (plan.action !== "deliver") return { purpose: input.purpose };

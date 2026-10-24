@@ -124,6 +124,32 @@ export function applySpeakerDynamics(
   nodes.makeup.gain.setTargetAtTime(stage.makeup, t, 0.03);
 }
 
+// ── §126(2026-10-24 실기 신고 *"기본 음량이 커진 거 같고"* · 갤럭시 S25 크롬) — '통화' 스트림의 기준 레벨 ──────────────────────
+// §122.2.2(`after-mic`)로 출력이 Android '통화'(VOICE_COMMUNICATION) 스트림이 되면 시스템 음량 곡선이 바뀐다. AOSP 기본값(2026-10-24 열람 —
+// `frameworks/av/.../audio_policy_volumes.xml` · `default_volume_tables.xml` · `AudioSystem.DEFAULT_STREAM_VOLUME`):
+// | 스트림(스피커) | 기본 단계 | 곡선 위치 | 시스템 감쇠 |
+// |---|---|---|---|
+// | 통화 VOICE_CALL | 4 / 1~5 | 75% | 약 −5.9dB(곡선 0% −24 · 33% −16 · 66% −8 · 100% 0) |
+// | 미디어 MUSIC | 5 / 0~15 | 33% | 약 −32.5dB(곡선 1% −58 · 20% −40 · 60% −17 · 100% 0) |
+// | 미디어 MUSIC(사용자가 60%로 올린 경우) | 9 / 15 | 60% | 약 −17dB |
+// ⇒ 같은 앱 게인이면 '통화' 스트림이 미디어보다 기본 상태에서 약 11~27dB 크다(제조사 곡선은 다를 수 있다 — ⚠️ 갤럭시 실측 아님).
+// 기준 레벨(판단값): '통화' 스트림의 통화 모드 앱 게인을 −6dB 낮춘다(0.6 → 0.3). 통화 곡선의 최댓값이 기본보다 약 +6dB뿐이라
+// 그보다 크게 깎으면 볼륨 키를 끝까지 올려도 종전보다 작아질 수 있다 — 그래서 차이 전체가 아니라 키 여유만큼만 깎는다.
+// 스피커 모드(컴프레서 · 보정 · 리미터)는 그대로다. 되돌리기 · 실기 A/B = `?voicetrim=0`(`readVoiceTrimFlag`).
+
+/** '통화' 스트림(`after-mic`) 통화 모드의 추가 감쇠(선형 · 0.5 ≈ −6.0dB). 판단값 — 실기 청취로 확정한다. */
+export const VOICE_STREAM_CALL_TRIM = 0.5;
+
+/** 위 표 — 출력 경로 · 플래그 → 통화 모드 추가 감쇠. `after-mic`(통화 스트림으로 본다)일 때만 깎는다. */
+export function callStreamTrimFor(outputPath: string | null | undefined, flagOn: boolean): number {
+  return flagOn && outputPath === "after-mic" ? VOICE_STREAM_CALL_TRIM : 1;
+}
+
+/** 감쇠 노드에 실을 값 — 통화 모드(`compressorRatio` 1)에서만 깎고 스피커 모드는 1(소리 무변경). */
+export function trimGainFor(stage: LiveOutputStage, trim: number): number {
+  return stage.compressorRatio === 1 ? trim : 1;
+}
+
 /** 한 진폭(0 이상)에 대한 리미터 출력 — `knee`까지 선형, 그 위는 1.0에 점근(tanh). 출력은 언제나 1.0 미만. */
 export function softLimit(amplitude: number, knee = LIMITER_KNEE): number {
   const a = Math.abs(amplitude);

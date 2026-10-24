@@ -237,7 +237,9 @@ test("[§105 · §108 배선] Gemini 세션: 게인 → 컴프레서 → 보정 
   assert.ok(code.includes("limiterScale.gain.value = 1 / LIMITER_INPUT_RANGE;"));
   assert.ok(code.includes("limiter.curve = buildLimiterCurve();"));
   assert.ok(code.includes("outputGain.connect(compressor);"));
-  assert.ok(code.includes("compressor.connect(makeup);"));
+  // §126 — 컴프레서와 보정 사이에 '통화' 스트림 감쇠 노드(통화 모드에서만 1 미만).
+  assert.ok(code.includes("compressor.connect(streamTrim);"));
+  assert.ok(code.includes("streamTrim.connect(makeup);"));
   assert.ok(code.includes("makeup.connect(limiterScale);"));
   assert.ok(!code.includes("outputGain.connect(limiterScale);"), "컴프레서를 건너뛰는 직결 0");
   assert.ok(code.includes("limiter.connect(outputContext.destination);"));
