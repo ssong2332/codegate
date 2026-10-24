@@ -59,11 +59,12 @@ import VoiceTalkDialScreen from "@/components/VoiceTalkDialScreen";
 import MessengerStartNotice from "@/components/MessengerStartNotice";
 import { closePrimedCallAudio, primeCallAudio } from "@/lib/realtime/callAudio";
 import { GEMINI_OUTPUT_SAMPLE_RATE } from "@/lib/realtime/pcm";
-import { clearVoiceTalkDial, stashVoiceTalkDial } from "@/lib/messenger/voiceTalkDial";
+import { clearVoiceTalkDial, refreshVoiceTalkDial, stashVoiceTalkDial } from "@/lib/messenger/voiceTalkDial";
 import { attachQueuedPhotos, sessionPhotoStore } from "@/lib/messenger/sessionPhotos";
 import { Button, LoadingStatus } from "@/components/ui";
 import { foldDegraded, DIALOGUE_DEGRADED_NOTICE } from "@/lib/report/degradedDisclosure";
 import { chatInputHeight } from "@/lib/messenger/chatInputHeight";
+import { withJosa } from "@/lib/text/josa";
 import {
   CALL_SEGMENT_ICON,
   CALL_SEGMENT_LINE,
@@ -569,6 +570,8 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
       // §123 — 참가자가 건 통화로 기록한다(통화 첫마디 · Live 맥락이 "네가 전화했다"고 말하지 않게).
       const result = await requestEscalation({ sessionId, via: "voice_talk_dial" });
       if ("escalation" in result && result.escalation.toChannel === "voice") {
+        // §130.6(N1) — 유효 시간은 통화 화면으로 넘어가는 지금부터(전환 요청이 30초를 넘겨도 발신 화면이 이어진다).
+        refreshVoiceTalkDial(sessionId, Date.now());
         router.push("/session/play");
         return;
       }
@@ -935,7 +938,8 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
           문자형 문구는 그대로다. */}
       {isSms ? (
         <p className="px-4 pt-3 text-sm" style={{ color: threadTokens.time }}>
-          {scenario.callerLabel}(으)로부터 문자 메시지가 도착했습니다.
+          {/* §130.6(N5) — 조사는 받침에 맞춰(`josa.ts` 표). */}
+          {withJosa(scenario.callerLabel, "으로/로")}부터 문자 메시지가 도착했습니다.
         </p>
       ) : (
         <p className="flex justify-center pt-2">
@@ -1152,7 +1156,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
       </div>
       {replyView.showTyping && (
         <p role="status" className="sr-only">
-          {peerName}이(가) 입력 중입니다.
+          {withJosa(peerName, "이/가")} 입력 중입니다.
         </p>
       )}
 
@@ -1385,7 +1389,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
               <PhoneIcon name="accept-call" size={40} />
             </div>
           </div>
-          <p className="text-xl font-bold">{scenario.callerLabel}(으)로부터 전화가 옵니다</p>
+          <p className="text-xl font-bold">{withJosa(scenario.callerLabel, "으로/로")}부터 전화가 옵니다</p>
         </div>
       )}
 
