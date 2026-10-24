@@ -243,6 +243,12 @@ export function applyMockScreens(
     // §129.7 A1 · A2(사용자 승인 2026-10-24) — 실제 화면 행동(응낙 · 제출) 시각이 있으면 그 전에 링크를 실은 **마지막** 대사를 앵커로,
     // 시각 표기는 실제 행동 시각으로 한다(`resolveMockScreenActionAnchor`). 명시 앵커(통화 중 설치)는 위치를 바꾸지 않고 시각만 행동 시각으로.
     const actionAtMs = doc.consentedAtMs ?? doc.submittedAtMs;
+    // §129.8(사용자 결정 N3) — 표시 항목의 시각 = 실제로 일어난 시각(응낙 · 제출, 없으면 화면이 뜬 시각). 승격 순간은 아래 `anchor`(행동 시각)를 쓴다.
+    const entryAnchor = withActionTimeLabel(
+      doc.explicitAnchor ?? resolveMockScreenActionAnchor(doc.landingId, sortedMessages, sessionCreatedAtMs, actionAtMs ?? doc.shownAtMs),
+      actionAtMs ?? doc.shownAtMs,
+      sessionCreatedAtMs,
+    );
     const anchor = withActionTimeLabel(
       doc.explicitAnchor ?? resolveMockScreenActionAnchor(doc.landingId, sortedMessages, sessionCreatedAtMs, actionAtMs),
       actionAtMs,
@@ -265,9 +271,10 @@ export function applyMockScreens(
     entries.push({
       landingId: doc.landingId,
       kind: doc.kind,
-      anchorTurnIndex: anchor.anchorTurnIndex,
-      anchorResolved: anchor.anchorResolved,
-      ...(anchor.timeLabel ? { timeLabel: anchor.timeLabel } : {}),
+      // §129.8 — 표시 항목은 실제 시각 기준 앵커(행동이 있으면 승격 순간과 같은 위치 · 없으면 화면이 뜨기 전 마지막 링크 대사).
+      anchorTurnIndex: entryAnchor.anchorTurnIndex,
+      anchorResolved: entryAnchor.anchorResolved,
+      ...(entryAnchor.timeLabel ? { timeLabel: entryAnchor.timeLabel } : {}),
       // ⚠️ `consented`는 **"권한 허용 응낙"만** 뜻한다(스키마 무변경 — 늘리면 §18.1 죽은 필드).
       // 제출은 했지만 `consented:false`인 항목이 생긴다(표시 전용). 화면 문면이 그것을
       // "응하지 않음"으로 읽히게 그리면 참가자에게 거짓을 말한다 — 표시 카피는 ux-design 소관.

@@ -468,6 +468,8 @@ export type SmsTimelineEvent = {
   event: SmsTimelineEventKind;
   what: string;
   correctAction?: string; // 없는 이벤트는 화면이 카드 하단 블록만 생략한다(카드 형식은 동일)
+  /** §129.8 — 이 이벤트가 **실제로 일어난** 시각의 "N초 시점"(받은 시각 기준). 부재 = 옛 리포트 → 화면은 항목 `timeLabel`(앵커)을 쓴다. */
+  timeLabel?: string;
 };
 export type SmsTimelineEntry = {
   smsId: string;

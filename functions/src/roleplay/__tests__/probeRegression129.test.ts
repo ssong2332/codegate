@@ -13,6 +13,7 @@ import { SCENARIO_PROMPTS } from "../../scenarios";
 import { resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
 import { MOCK_SCREENS } from "../../scenarios/mockScreens";
 import { applyMockScreens } from "../../report/mockScreenTimeline";
+import { buildSmsTimeline } from "../../report/smsTimeline";
 import { buildSystemPrompt, CLAIM_CONSISTENCY_RULE, SMS_TOOL_SPEECH_SENTENCE } from "../promptAssembly";
 import { buildLiveConfirmResultInstruction, LIVE_CONFIRM_NOT_YET_SENTENCE } from "../../inCallSms/confirmResult";
 import { CHILD_GENDER_UNSPECIFIED_RULE } from "../../scenarios/messengerChildImpersonationKakao.prompt";
@@ -465,4 +466,53 @@ test("[§129.7 R1~R4] '제출해 주셔야' 뒤 따름 약속 · 금 전달 약�
 test("[§129.7 (a) ㉠] 리포트는 끊기 표식을 읽지 않는다(G511 유지 — G1 미적용)", () => {
   assert.equal(read("report/generateReportCore.ts").includes("scammerHangup"), false);
   assert.equal(read("report/analyzeConversation.ts").includes("goalHangup"), false);
+});
+
+// ── §129.8 (1) D4 — 재측정 프로브 2026-10-24b 대본(순응 4/22가 안 속음) ─────────────────────────────────────
+test("[§129.8 D4] 평서 해요체 '보내요' · 한글 금액 '오만 원' · '입금 부탁드릴게요' 요구 뒤 \"네, 보냈어요.\" = 속음", () => {
+  for (const [name, scammer] of [
+    ["자녀 납치 초급", "묻지 말고 들어요. 지금 당장 보담은행 948-2716-5093-27로 돈 보내요."],
+    ["자녀 납치 중급", "948-2716-5093-27, 이 계좌로 당장 천만 원만 보내요."],
+    ["택배 통관 초급", "관세 오만 원을 오늘 안으로 입금하셔야 합니다."],
+    ["대환대출 초급", "문자로 보내드린 계좌로 입금 부탁드릴게요."],
+  ] as const) {
+    assert.equal(analyzeConversation(dialogue([["scammer", scammer], ["user", "네, 보냈어요."]]), 0, []).wasDeceived, true, name);
+  }
+  // 경계 — 돈 · 계좌 문맥 없는 "보내요" · 부탁만은 요구로 보지 않는다(바뀐 판정 0 — 실 키 대본 134세션 대조는 §129.8 문서).
+  assert.equal(analyzeConversation(dialogue([["scammer", "사진 한 장 보내요."], ["user", "네, 보냈어요."]]), 0, []).wasDeceived, false);
+});
+
+// ── §129.8 (2) C2 — 되묻기(에뮬 재점검 N2) ───────────────────────────────────────────────────────────────
+test("[§129.8 C2] 질문만인 답의 명사 단독 순응('제 명의 계좌요? 무슨 일이에요?')은 속음 아님 · 질문 꼴이라도 번호를 불렀으면 속음", () => {
+  const tactics = SCENARIO_PROMPTS["institutional-impersonation"]!.weakenedTactics;
+  const ask = (s: string, u: string) => analyzeConversation(dialogue([["scammer", s], ["user", u]]), 0, tactics).wasDeceived;
+  assert.equal(ask("고객님 명의 계좌가 범죄에 연루돼 본인 확인이 필요합니다. 성함과 생년월일을 말씀해 주세요.", "제 명의 계좌요? 무슨 일이에요?"), false);
+  // ⚠️ "[계좌]요?"처럼 토큰 뒤 물음표는 H1이 의도적으로 되묻기로 본다(사기범이 준 번호를 되읽음) — 이 표본에서 뺀다.
+  assert.equal(ask("계좌 비밀번호를 불러 주세요.", "비밀번호요? 1234면 돼요?"), true, "숫자 제공(V3)");
+});
+
+// ── §129.8 (3) 사건 실제 시각(사용자 결정 N3) · 실시간 받은 시각(N9 확인 중 발견) ─────────────────────────────
+test("[§129.8 N3] 문자 이벤트마다 실제 시각 표기 · 위치(앵커 · 정렬)는 그대로 · 제출 승격 시각 = 실제 제출 시각", () => {
+  const base = 1_000_000;
+  const doc = {
+    smsId: "case-link",
+    kind: "link" as const,
+    senderLabel: "한빛지방검찰청",
+    body: "사건 조회",
+    anchorScammerTurn: 1,
+    arrivedAtMs: base + 30_000,
+    openedAtMs: base + 51_000,
+    linkTappedAtMs: base + 53_000,
+  };
+  const messages = [{ role: "scammer" as const, turnIndex: 0, createdAtMs: base + 22_000 }];
+  const [entry] = buildSmsTimeline([doc], messages, base);
+  assert.equal(entry.timeLabel, "22초 시점", "항목 앵커 시각(위치용 · 옛 화면 폴백)은 그대로");
+  assert.deepEqual(entry.events.map((e) => e.timeLabel), ["30초 시점", "51초 시점", "53초 시점"]);
+  assert.equal(entry.anchorTurnIndex, 0);
+});
+
+test("[§129.8 N9] 실시간 전사 제출이 받은 시각을 채울 때 클라 '받기' 시각을 쓴다(제출 시각 아님) · 세션 생성 ~ 제출 사이로 막는다", () => {
+  const src = read("realtime/submitTranscript.ts");
+  assert.match(src, /Math\.min\(baseTime, Math\.max\(sessionCreatedAtMs, answeredAtMs\)\)/);
+  assert.match(src, /tx\.update\(sessionRef, \{ answeredAt: Timestamp\.fromMillis\(clientAnswered\) \}\);/);
 });

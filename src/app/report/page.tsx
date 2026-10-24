@@ -85,7 +85,8 @@ type SmsTimelineEntry = {
   anchorTurnIndex: number;
   anchorResolved: boolean;
   timeLabel?: string;
-  events: { event: string; what: string; correctAction?: string }[];
+  // §129.8 — 이벤트별 실제 시각(부재 = 옛 리포트 → 항목 `timeLabel`).
+  events: { event: string; what: string; correctAction?: string; timeLabel?: string }[];
 };
 
 // T83(§16.3.1, AC-071) — 확인 시도 무력화의 **표시 전용** 스냅샷. 서버가 최종 표시 순서로 정렬해
@@ -802,7 +803,8 @@ function ReportSmsTimelineItem({ sms }: { sms: SmsTimelineEntry }) {
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-lg font-semibold text-caution">
               <span aria-hidden="true">⚠ </span>
-              {sms.timeLabel ? `${formatMomentLabel(sms.timeLabel)}: ` : ""}
+              {/* §129.8 — 이벤트가 실제로 일어난 시각(옛 리포트 = 항목 앵커 시각). */}
+              {(event.timeLabel ?? sms.timeLabel) ? `${formatMomentLabel(event.timeLabel ?? sms.timeLabel ?? "")}: ` : ""}
               {event.what}
             </p>
             <Badge variant="neutral">문자</Badge>

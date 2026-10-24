@@ -37,8 +37,12 @@ import { displayTactic, formatMomentLabel, replayMomentNote } from "@/lib/report
 import { readRiskSignals, riskSignalCopy, RISK_SIGNAL_HEADING, type RiskSignalView } from "@/lib/report/riskSignalCopy";
 import {
   countReplaySignalCards,
+  isUnansweredReport,
   replayNavEmptyText,
   TACTICS_NOT_FOUND_TEXT,
+  UNANSWERED_REPLAY_FOOTER,
+  UNANSWERED_REPLAY_INTRO,
+  UNANSWERED_REPLAY_STATUS,
 } from "@/lib/report/reportTacticsCopy";
 import {
   PERSONA_REPLAY_NOTE,
@@ -51,6 +55,8 @@ import {
 type ReportSummary = {
   wasDeceived: boolean;
   tacticsUsed: string[];
+  /** §129.8 — 참가자 발화 수(리포트 문서 값 · 부재 = 옛 리포트). 답 0 문면 판정에만 쓴다. */
+  userTurnCount: number | undefined;
   createdAt: Timestamp | null;
 };
 
@@ -172,6 +178,10 @@ export default function ReplayPage() {
       summary: {
         wasDeceived: Boolean(reportData.wasDeceived),
         tacticsUsed: Array.isArray(reportData.tacticsUsed) ? (reportData.tacticsUsed as string[]) : [],
+        userTurnCount:
+          typeof reportData.userTurnCount === "number" && Number.isInteger(reportData.userTurnCount) && reportData.userTurnCount >= 0
+            ? reportData.userTurnCount
+            : undefined,
         createdAt: reportData.createdAt instanceof Timestamp ? reportData.createdAt : null,
       } satisfies ReportSummary,
       timeline: buildReplayTimeline(
@@ -396,14 +406,26 @@ export default function ReplayPage() {
           "면역됨/이제 안전"류 과신 표현은 쓰지 않는다(PRD Risk, P-8 "개선 영역" 프레임). */}
       {!report.wasDeceived && (
         <div className="mx-5 mt-4 rounded-[8px] border border-line bg-white p-[18px]">
-          <p role="status" className="text-lg font-semibold text-brand">
-            이번 대화에서는 한 번도 속지 않았습니다.
-          </p>
-          <p className="mt-1.5 text-lg leading-relaxed text-ink-sub">
-            사기 수법은 계속 진화하므로, 오늘 시도된 수법을 다시 확인하고 대화 흐름 속에서 어떻게
-            대응했는지 아래에서 되짚어 보세요. 이건 한 번에 끝나는 게 아니라 계속 유지해야 할 개선
-            영역입니다.
-          </p>
+          {/* §129.8 · D-160 확장(N8) — 답 0이면 대화가 없었다는 사실을 말한다(리포트 NS-0 · NS-2와 같은 판정). */}
+          {isUnansweredReport(report.wasDeceived, report.userTurnCount) ? (
+            <>
+              <p role="status" className="text-lg font-semibold text-brand">
+                {UNANSWERED_REPLAY_STATUS}
+              </p>
+              <p className="mt-1.5 text-lg leading-relaxed text-ink-sub">{UNANSWERED_REPLAY_INTRO}</p>
+            </>
+          ) : (
+            <>
+              <p role="status" className="text-lg font-semibold text-brand">
+                이번 대화에서는 한 번도 속지 않았습니다.
+              </p>
+              <p className="mt-1.5 text-lg leading-relaxed text-ink-sub">
+                사기 수법은 계속 진화하므로, 오늘 시도된 수법을 다시 확인하고 대화 흐름 속에서 어떻게
+                대응했는지 아래에서 되짚어 보세요. 이건 한 번에 끝나는 게 아니라 계속 유지해야 할 개선
+                영역입니다.
+              </p>
+            </>
+          )}
           <p className="mt-3 text-base font-semibold text-ink">시도된 수법</p>
           {report.tacticsUsed.length > 0 ? (
             <div className="mt-1.5 flex flex-wrap gap-2">
@@ -637,8 +659,9 @@ export default function ReplayPage() {
           "이번에 놓쳤을 수 있는 부분"으로 프레이밍한다(README "3. 리포트 화면" 명시 요구사항). */}
       <div className="mx-5 mt-4 rounded-[8px] bg-neutral-tint px-4 py-3">
         <p className="text-[15px] leading-[1.6] text-ink-sub">
-          한 번의 훈련으로 끝이 아니에요. 이번에 놓쳤을 수 있는 부분은 다음 훈련에서 다시 연습할 수
-          있어요.
+          {isUnansweredReport(report.wasDeceived, report.userTurnCount)
+            ? UNANSWERED_REPLAY_FOOTER
+            : "한 번의 훈련으로 끝이 아니에요. 이번에 놓쳤을 수 있는 부분은 다음 훈련에서 다시 연습할 수 있어요."}
         </p>
       </div>
 
@@ -786,7 +809,8 @@ function ReplaySmsItem({ sms }: { sms: ReplaySmsSource }) {
         >
           <p className="mb-1.5 text-[15px] font-bold text-caution">⚠️ 여기가 신호였어요</p>
           <p className="text-[15px] leading-[1.6] text-ink">
-            {sms.timeLabel ? `${formatMomentLabel(sms.timeLabel)}: ` : ""}
+            {/* §129.8 — 이벤트가 실제로 일어난 시각(옛 리포트 = 항목 앵커 시각). */}
+            {(event.timeLabel ?? sms.timeLabel) ? `${formatMomentLabel(event.timeLabel ?? sms.timeLabel ?? "")}: ` : ""}
             {event.what}
           </p>
           {event.correctAction && (

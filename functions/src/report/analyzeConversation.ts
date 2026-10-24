@@ -404,10 +404,19 @@ const DENIAL_OR_UNKNOWN =
 const NOUN_ONLY_COMPLIANCE =
   /(?:계좌\s*(?:번호)?|카드\s*번호|비밀\s*번호|송금|이체|얼마(?:면|야)?)(?!\s*(?:했|할|하겠|해|받|드릴|드리겠|불러|알려|보내))/g;
 
-/** C1 — 부인 · 모름 답에서 명사 단독 항목만 순응으로 걸렸는가. */
+/**
+ * C1 — 부인 · 모름 답에서 명사 단독 항목만 순응으로 걸렸는가.
+ * §129.8 C2(사용자 승인 판정표 · 에뮬 재점검 2026-10-24b N2 — "제 명의 계좌요? 무슨 일이에요?"가 속음 · 신원정보 직접 요구) — 되묻기 · 질문만인 답(모든 문장이 `?`로 끝남)도 같다.
+ */
 function isNounOnlyDenial(replyText: string): boolean {
-  if (!DENIAL_OR_UNKNOWN.test(replyText)) return false;
+  if (!DENIAL_OR_UNKNOWN.test(replyText) && !isQuestionOnly(replyText)) return false;
   return !COMPLIANCE_PATTERN.test(replyText.replace(NOUN_ONLY_COMPLIANCE, " "));
+}
+
+/** C2 — 답의 모든 문장이 물음표로 끝나는 되묻기 · 질문인가. */
+function isQuestionOnly(replyText: string): boolean {
+  const sentences = replyText.match(/[^.?!\n]+[.?!]?/g)?.map((s) => s.trim()).filter((s) => s.length > 0) ?? [];
+  return sentences.length > 0 && sentences.every((s) => s.endsWith("?"));
 }
 
 // | C4 | 방법 질문(어떻게 해야 · 뭘 하면 돼요 · 어떻게 옮겨요)만 있고 바로 앞 사기범 대사에 요구 어형(`scammerHasDemand`)이 없다 | 속음 아님 |
@@ -684,12 +693,15 @@ const IDENTITY_INFO_REQUEST = new RegExp(
 const ID_PHOTO_SEND_REQUEST = new RegExp(
   `신분증[^.?!\\n]{0,25}?(?:보내|올려|첨부해)\\s*${SHORT_REQUEST_ENDING}`,
 );
-const MONEY_CONTEXT = /\d[\d,]*\s*(?:만|천|백)?\s*원|계좌|은행|금액|돈|\d{2,6}-\d{2,6}-\d{2,}/;
+// §129.8 D4(재측정 프로브 2026-10-24b — 택배 통관 초급 "관세 **오만 원**을 오늘 안으로 입금하셔야 합니다" → "네, 보냈어요." 안 속음) — 한글 숫자 금액("오만 원 · 천만 원 · 삼십만 원").
+const MONEY_CONTEXT = /\d[\d,]*\s*(?:만|천|백)?\s*원|[일이삼사오육칠팔구십백천]+\s*(?:억|만|천)\s*원|계좌|은행|금액|돈|\d{2,6}-\d{2,6}-\d{2,}/;
 // §129 D4(프로브 2026-10-24 — 납치 초급 "불러주는 계좌로 돈을 바로 보내세요" → "네, 보냈어요"가 안 속음) — 시키는 어형
 // "보내세요 · 입금하세요 · 입금하셔야 · 입금하실 수 · 납부해 주셔야"를 더한다. 같은 문장에 돈 · 계좌 문맥(MONEY_CONTEXT)이 있어야 하는 조건은 그대로다.
 const TRANSFER_REQUEST = new RegExp(
   `(?:보내|입금해|이체해|송금해|빌려|옮겨|넣어|결제해|납부해)\\s*(?:${SHORT_REQUEST_ENDING}|두셔야|두세요|두십시오|둬|놓으셔야)|보낼\\s*수\\s*있` +
-    `|(?:보내|입금하|이체하|송금하|납부하|넣으)(?:세요|십시오|셔야|실\\s*수)`,
+    `|(?:보내|입금하|이체하|송금하|납부하|넣으)(?:세요|십시오|셔야|실\\s*수)` +
+    // §129.8 D4 — 평서 해요체 요구 "…계좌로 돈 보내요"(자녀 납치 초급 · 중급) · "입금 부탁드릴게요"(대환대출 초급).
+    `|(?:보내|입금해|이체해|송금해|넣어)요(?![가-힣])|(?:입금|이체|송금|납부)\\s*(?:을|를|좀)?\\s*(?:꼭\\s*|바로\\s*)?부탁`,
 );
 const AMOUNT_OR_ACCOUNT = /\d[\d,]*\s*(?:만|천|백)?\s*원|\d{2,6}-\d{2,6}-\d{2,}/;
 const FAVOR_REQUEST = /부탁\s*(?:할게|해|드려|드릴게|드립니다|하면|좀)/;

@@ -91,7 +91,8 @@ test("[D-51 ③] 화면이 떴으나 닫으면 표시 항목만 생기고 **속�
   assert.equal(result.mockScreenTimeline.length, 1);
   assert.equal(result.mockScreenTimeline[0].consented, false);
   assert.equal(result.mockScreenTimeline[0].anchorTurnIndex, 0);
-  assert.equal(result.mockScreenTimeline[0].timeLabel, "5초 시점");
+  // §129.8(사용자 결정 N3) — 표시 항목 시각 = 화면이 실제로 뜬 시각(shownAtMs = 15초). 앵커 위치는 그대로다.
+  assert.equal(result.mockScreenTimeline[0].timeLabel, "15초 시점");
 });
 
 test("[D-51 ③ + AC-062] 속은 순간 0건 세션에서 화면만 뜨면 여전히 0건이다(되감기 진입점 미생성)", () => {

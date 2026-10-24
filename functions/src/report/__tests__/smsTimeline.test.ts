@@ -297,13 +297,14 @@ function submittedSms(overrides: Partial<SmsTimelineSource> = {}): SmsTimelineSo
 }
 
 test("[AC-080/경로 A] 제출 1건이 속은 순간 1건으로 승격되고 앵커 turnIndex가 붙는다", (t) => {
-  const result = promoteSmsLandingSubmits([submittedSms()], [], messages, SESSION_CREATED_MS, CATALOG);
+  // §129.8(사용자 결정 N3) — 시각 표기 = 실제 제출 시각(위치는 앵커 그대로). 실제 시각처럼 세션 기준 +7초로 둔다.
+  const result = promoteSmsLandingSubmits([submittedSms({ landingSubmittedAtMs: SESSION_CREATED_MS + 7_000 })], [], messages, SESSION_CREATED_MS, CATALOG);
   t.diagnostic(`승격=${result.promotedCount} / 순간=${JSON.stringify(result.deceivedMoments)}`);
   assert.equal(result.promotedCount, 1);
   assert.equal(result.deceivedMoments.length, 1);
   const [moment] = result.deceivedMoments;
   assert.equal(moment.turnIndex, 2, "앵커 = 사기범 #2의 turnIndex(되감기가 열 순간)");
-  assert.equal(moment.timeLabel, "3초 시점", "앵커 메시지의 경과 초 — deceivedMoments와 같은 시간축");
+  assert.equal(moment.timeLabel, "7초 시점", "§129.8 — 실제 제출 시각(같은 시간축 · 받은 시각 기준)");
   // AC-024/AC-026/AC-069 — 문면은 **서버 카탈로그 저작 문자열 그대로**다(참가자 입력 개입 0).
   assert.equal(moment.tactic, CATALOG[0].momentTactic);
   assert.equal(moment.correctAction, CATALOG[0].correctAction);

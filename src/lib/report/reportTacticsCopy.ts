@@ -66,6 +66,13 @@ export function isUnansweredReport(wasDeceived: boolean, userTurnCount: number |
 export const UNANSWERED_HEADLINE = "답하기 전에 마쳤어요";
 export const UNANSWERED_SUMMARY_TITLE = "대화 전에 마침";
 export const UNANSWERED_SUMMARY_BODY = "상대의 말에 답하기 전에 훈련을 마쳤습니다. 수상한 연락은 이렇게 바로 끊어도 됩니다.";
+/**
+ * §129.8 · D-160 확장(에뮬 재점검 2026-10-24b N8) — 되짚어보기(UX-018)의 답 0 문면. 종전 일반 문구("오늘 시도된 수법을 다시 확인하고 … 어떻게 대응했는지" ·
+ * "이번에 놓쳤을 수 있는 부분은 …")는 대화가 없는 세션에서 맞지 않는다. 판정은 리포트와 같은 `isUnansweredReport`.
+ */
+export const UNANSWERED_REPLAY_STATUS = `${NOT_DECEIVED_HEAD} ${NOT_ANSWERED_SENTENCE}`;
+export const UNANSWERED_REPLAY_INTRO = "아래에서 상대가 처음 보낸 말과 그 안에 담긴 수법을 확인해 보세요.";
+export const UNANSWERED_REPLAY_FOOTER = "답하기 전에 끝낸 훈련이에요. 다음 훈련에서는 상대가 어떤 말로 압박하는지 듣고, 어디가 수상한지 직접 찾아보세요.";
 
 /**
  * 리플레이 타임라인에서 **말풍선 주석 밖**에 그려지는 "⚠️ 여기가 신호였어요" 카드 수
