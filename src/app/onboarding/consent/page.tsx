@@ -85,7 +85,9 @@ export default function ConsentPage() {
         지금 보시는 내용은 실제 상황이 아닙니다.
       </Banner>
 
-      <div className="flex flex-1 flex-col gap-8 pb-10 pt-8">
+      {/* §130(UX D-161 (9)) — 간격만 줄인다(글자 크기 · 문면 무변경): 빈 칸 div를 지워 간격 한 칸을 덜고(체크 줄 `mt-auto`),
+          간격 32→24px · 위아래 여백을 줄였다(412×780 실측 94px 넘침). */}
+      <div className="flex flex-1 flex-col gap-6 pb-6 pt-6">
         <h1 className="text-[24px] font-bold leading-[1.35] text-ink">
           시작하기 전에
           <br />
@@ -96,7 +98,7 @@ export default function ConsentPage() {
           {NOTICE_POINTS.map((point, index) => (
             <div
               key={point}
-              className="flex items-start gap-3 rounded-[8px] border-[1.5px] border-line bg-white p-4"
+              className="flex items-start gap-3 rounded-[8px] border-[1.5px] border-line bg-white px-4 py-3.5"
             >
               <div
                 aria-hidden="true"
@@ -109,9 +111,7 @@ export default function ConsentPage() {
           ))}
         </div>
 
-        <div className="flex-1" />
-
-        <label className="flex cursor-pointer select-none items-start gap-3 py-3">
+        <label className="mt-auto flex cursor-pointer select-none items-start gap-3 py-2">
           {/* 체크박스 크기 확대(2026-07-23 모바일 UX 개선) — 32px, 디자인 시스템 토큰과 일치.
               접근성 보존을 위해 커스텀 div 대신 네이티브 checkbox를 그대로 유지(키보드/스크린리더
               시맨틱스). accent-color + rounded로 디자인 토큰에 최대한 근접시켰다. */}

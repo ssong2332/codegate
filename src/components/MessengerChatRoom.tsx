@@ -17,7 +17,7 @@
 // 생겨 그 2종도 이 화면까지 들어올 수 있으므로, ①명시 "전화로 확인" 버튼(scenario.escalation
 // 있을 때만, 1턴부터 상시)과 ②sendMessage 응답의 escalation 플래그 처리(전이 연출 후 /session/play
 // 이동)를 배선한다(§13.2/13.3, P-18, AC-034/036/039).
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { collection, doc, getDoc, onSnapshot, orderBy, query, type Timestamp } from "firebase/firestore";
 import { chatEndedNotice, endsRun, formatChatTime, isUnreadByPeer, startsPeerRun } from "@/lib/messenger/chatPresentation";
@@ -63,7 +63,14 @@ import { clearVoiceTalkDial, stashVoiceTalkDial } from "@/lib/messenger/voiceTal
 import { attachQueuedPhotos, sessionPhotoStore } from "@/lib/messenger/sessionPhotos";
 import { Button, LoadingStatus } from "@/components/ui";
 import { foldDegraded, DIALOGUE_DEGRADED_NOTICE } from "@/lib/report/degradedDisclosure";
-import { CALL_SEGMENT_ICON, CALL_SEGMENT_LINE, foldCallSegments } from "@/lib/messenger/threadItems";
+import { chatInputHeight } from "@/lib/messenger/chatInputHeight";
+import {
+  CALL_SEGMENT_ICON,
+  CALL_SEGMENT_LINE,
+  VOICE_TALK_RECORD_NOTE,
+  VOICE_TALK_RECORD_TITLE,
+  foldCallSegments,
+} from "@/lib/messenger/threadItems";
 import {
   nextChangeAt,
   noteServerDone,
@@ -234,6 +241,13 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
   // §121(1) — 사용자가 보이스톡을 거는 중(통화로 이어지는 세션 · 전환 요청 → 통화 화면 발신 연출로 이동하기 전까지).
   const [dialingVoiceTalk, setDialingVoiceTalk] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  // §130(UX D-161 (14)) — 입력칸은 한 줄(48px)로 시작해 내용만큼 늘고 4줄에서 멈춘다(chatInputHeight.ts 표). 높이를 `auto`로 되돌려 잰 뒤 정한다.
+  useLayoutEffect(() => {
+    const box = inputRef.current;
+    if (!box) return;
+    box.style.height = "auto";
+    box.style.height = `${chatInputHeight(box.scrollHeight)}px`;
+  }, [input]);
   // §113.2(실기 신고 9 · UX D-151 (2)) — 사진 보내기. ⛔ 이미지는 기기 메모리(objectURL)에만 둔다 — 서버 업로드 · Storage · Firestore ·
   // 로그 0. 서버에는 "사진을 보냈다"는 사실만 간다(`sendMessage({photo: true})`).
   // §128(6) — URL은 이 컴포넌트가 아니라 세션 단위 화면 메모리(`sessionPhotos.ts`)에 둔다: 통화 전환 · 통화 겹침으로 대화방이 다시 그려져도
@@ -953,6 +967,26 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
       >
         {/* 2026-10-20 실기 신고 — 통화 전사(channel "voice")는 말풍선이 아니라 시스템 줄 1개로 접는다(누가 보낸 메시지가 아니다). */}
         {threadItems.map((item, index) => {
+          if (item.kind === "call" && !isSms) {
+            // §130(UX D-161 (11)) — 카톡형: 통화 기록 말풍선(가운데 · 상대 말풍선 모양). 통화 시간은 적지 않는다(threadItems.ts).
+            return (
+              <li key={item.id} className="my-1.5 flex flex-col items-center">
+                <span className="flex items-center gap-2.5 px-3.5 py-2.5" style={kakaoBubbleStyle("scammer", true)}>
+                  <span aria-hidden="true" className="text-[18px]">
+                    {CALL_SEGMENT_ICON}
+                  </span>
+                  <span className="flex flex-col">
+                    <span className="text-[16px] font-semibold leading-[1.3]">{VOICE_TALK_RECORD_TITLE}</span>
+                    <span className="text-[13px] leading-[1.35]" style={{ color: chatTokens.time }}>
+                      {VOICE_TALK_RECORD_NOTE}
+                    </span>
+                  </span>
+                </span>
+                {/* §131(3) F2 — 카톡형 통화 기록 말풍선에도 그 턴의 링크만 남긴다(통합 병합 #404 × #405). */}
+                {item.attachments.map((attachment, i) => (attachment.kind === "link" ? renderLinkCard(attachment, i, false) : null))}
+              </li>
+            );
+          }
           if (item.kind === "call") {
             return (
               <li key={item.id} className="my-1.5 flex flex-col items-center">
@@ -1162,7 +1196,8 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
                 event.preventDefault();
                 void handleSend();
               }}
-              className="flex items-center gap-2.5"
+              // §130(UX D-161 (14)) — 입력칸이 여러 줄로 늘면 '+' · 전송은 아래 줄에 맞춘다(카톡과 같다).
+              className="flex items-end gap-2.5"
             >
               {/* §113.2(UX D-151 (2)) — '+' = 기기 사진 고르기(사진첩 · 카메라는 기기가 고른다). 안내 문구 0(사용자 결정). */}
               <input
@@ -1187,7 +1222,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
                 onClick={() => photoInputRef.current?.click()}
                 disabled={turnLocked}
                 aria-label="사진 보내기"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
+                className="mb-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
                 style={{ color: isSms ? threadTokens.link : chatTokens.headerIcon }}
               >
                 <PhoneIcon name="plus" size={26} />
@@ -1220,8 +1255,8 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
                 placeholder={isSms ? "메시지" : "메시지 입력"}
                 className={
                   isSms
-                    ? "h-[48px] min-w-0 flex-1 resize-none overflow-y-auto px-4 py-[11px] text-[17px] leading-[1.5] placeholder:text-[var(--sms-placeholder)]"
-                    : "h-[48px] min-w-0 flex-1 rounded-full resize-none overflow-y-auto px-4 py-[11px] text-[17px] leading-[1.5] placeholder:text-[var(--sms-placeholder)]"
+                    ? "min-h-[48px] min-w-0 flex-1 resize-none overflow-y-auto px-4 py-[11px] text-[17px] leading-[1.5] placeholder:text-[var(--sms-placeholder)]"
+                    : "min-h-[48px] min-w-0 flex-1 rounded-[24px] resize-none overflow-y-auto px-4 py-[11px] text-[17px] leading-[1.5] placeholder:text-[var(--sms-placeholder)]"
                 }
                 style={
                   !isSms
