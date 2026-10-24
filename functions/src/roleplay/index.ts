@@ -87,7 +87,7 @@ import { evaluateOtpCheck, otpCheckInputsFromHistory } from "./otpCheck";
 import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { decideRepeatBreak, repeatBreakInstruction } from "./repeatBreak";
-import { isEscalationTooEarly, judgeEndCallSignal, judgeEscalationSignalAt } from "./signalConsistency";
+import { isEscalationTooEarly, judgeEndCallSignal, judgeEscalationSignalAt, reclassifyMessengerGiveUp } from "./signalConsistency";
 import { decideCallAnnouncement } from "./callAnnouncement";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
@@ -713,7 +713,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     })
       ? { endCall: undefined, dropped: "photo_followup_pending" as const }
       : endCallConsistency;
-    const endCallSignal = endCallCheck.endCall;
+    // §129 D13 판정표 C — 메신저 단계의 포기 신호인데 참가자가 거절 · 의심 없이 따라오는 중이면 목표로 기록한다(끝내는 것은 그대로).
+    const giveUpCheck = reclassifyMessengerGiveUp(endCallCheck.endCall, maskedUserText, session.channel === "messenger");
+    const endCallSignal = giveUpCheck.endCall;
+    if (giveUpCheck.reclassified) {
+      // G170 — 사유 코드만(대사 0).
+      logger.info("[§129] 포기 신호를 목표로 기록", { sessionId });
+    }
     if ((escalationCheck && !escalationCheck.accept) || endCallCheck.dropped) {
       // G170 — 사유 코드만(대사 0).
       logger.info("[§104] 대사와 어긋난 신호 무시", {

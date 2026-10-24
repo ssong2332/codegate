@@ -26,6 +26,11 @@ export type LlmCompletionInput = {
    */
   mockTacticHints?: string[];
   /**
+   * Mock 구현체 전용 힌트(선택, §129 에뮬 D13) — 오프닝이 메신저 첫 말풍선이면 `"messenger"`(전화 인사 "여보세요"를 붙이지 않는다).
+   * 부재 = 통화(종전). 실 어댑터는 무시한다.
+   */
+  mockChannel?: "voice" | "messenger";
+  /**
    * 단계 시간 상한용 취소 신호(선택, 2026-10-18 Groq 3차 예비 — Architecture.md §75).
    * 주어지면 실 클라이언트는 진행 중 요청을 취소한다(Gemini SDK `abortSignal`, Groq `fetch`).
    * 없으면 지금까지와 완전히 같다. Mock은 무시한다.

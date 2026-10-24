@@ -28,7 +28,26 @@ const DEFLECTION_LINES = [
 // 튀어나와 대사가 어긋났다(실측 확인). 발신자 정체는 화면(callerLabel)과 대사 내용이 이미
 // 전달하므로 필러는 통화 도입/뜸 들이기 역할만 한다.
 const OPENING_FILLERS = ["여보세요...?", "여보세요, 들리세요?", "..."];
-const ESCALATION_FILLERS = ["...", "저기요...", "잠시만요..."];
+// §129 에뮬 D13(2026-10-24) — 매 턴 "잠시만요... / 저기요..." 접두가 붙어 어색했다. 뜸 들이기는 세 턴에 한 번만 남긴다(빈 문자열 = 접두 없음).
+const ESCALATION_FILLERS = ["", "", "저기요..."];
+
+/**
+ * §129 에뮬 D13 — 수법 인용구를 이은 문구(`extractTacticFlavor` — 인용구를 ", "로 잇는다)를 한 줄 대사로 다듬는다.
+ * | # | 대상 | 처리 |
+ * |---|---|---|
+ * | 1 | 문장부호 뒤에 붙은 잇기 쉼표("어디세요?, 예금은") | 쉼표를 지운다("어디세요? 예금은") |
+ * | 2 | 끝이 이미 문장부호(? ! . … ~) | 마침표를 더 붙이지 않는다("되세요?." 방지) |
+ * | 3 | 끝의 구조화 마커(`[[LINK:…]]` 등) | 마침표는 마커 앞 대사 끝에 붙이고 마커는 맨 뒤에 둔다 |
+ * ⛔ `extractTacticFlavor`(리포트 수법 키와 공유)는 바꾸지 않는다 — 다듬기는 Mock 대사 쪽에서만 한다.
+ */
+export function shapeMockLine(filler: string, flavor: string): string {
+  const markerMatch = flavor.match(/(?:\s*\[\[[^\]]+\]\])+\s*$/);
+  const markers = markerMatch ? markerMatch[0].trim() : "";
+  let body = (markerMatch ? flavor.slice(0, markerMatch.index) : flavor).trim();
+  body = body.replace(/([?!.…~])\s*,\s*/g, "$1 ");
+  if (!/[?!.…~]$/.test(body)) body = `${body}.`;
+  return [filler, body, markers].filter((part) => part.length > 0).join(" ");
+}
 
 /** weakenedTactics 항목은 "라벨 — 3인칭 설명(예: '...식으로 위협하되, 실제 법적 조치는 제시하지
  * 않는다')" 형식이다 — 실 LLM에게 줄 지침 문장이라 그대로 대사로 읽으면 캐릭터가 자기 수법을
@@ -61,7 +80,7 @@ export class MockLlmClient implements LlmClient {
     }
 
     if (input.messages.length === 0) {
-      return { text: this.craftOpeningLine(input.mockTacticHints), isMock: true };
+      return { text: this.craftOpeningLine(input.mockTacticHints, input.mockChannel), isMock: true };
     }
 
     return { text: this.craftEscalationLine(input.messages.length, input.mockTacticHints), isMock: true };
@@ -71,12 +90,13 @@ export class MockLlmClient implements LlmClient {
   // (사용자 실측 피드백, 2026-07-22) — 기관 사칭처럼 가족 관계가 아닌 시나리오에도 항상 붙어
   // 있어 내용상 맞지 않았다. 발신자 정체는 화면(callerLabel)이 이미 보여주므로, 대사 자체는
   // 시나리오를 가리지 않는 수법 문구만 전달한다.
-  private craftOpeningLine(tacticHints?: string[]): string {
-    const filler = OPENING_FILLERS[0];
+  // §129 에뮬 D13 — 메신저 첫 말풍선에는 전화 인사("여보세요...?")를 붙이지 않는다.
+  private craftOpeningLine(tacticHints?: string[], channel?: "voice" | "messenger"): string {
+    const filler = channel === "messenger" ? "" : OPENING_FILLERS[0];
     const flavor = tacticHints && tacticHints.length > 0
       ? extractTacticFlavor(tacticHints[0])
       : "확인하실 게 있어서 연락드렸습니다";
-    return `${filler} ${flavor}.`;
+    return shapeMockLine(filler, flavor);
   }
 
   // 예전엔 모든 응답 끝에 "지금 좀 도와줄 수 있어?"를 붙였다 — 가족 사칭에서만 성립하는 반말
@@ -88,7 +108,7 @@ export class MockLlmClient implements LlmClient {
     const flavor = hasHints
       ? extractTacticFlavor(tacticHints![turn % tacticHints!.length])
       : "지금 처리하지 않으면 곤란해집니다";
-    return `${filler} ${flavor}.`;
+    return shapeMockLine(filler, flavor);
   }
 }
 

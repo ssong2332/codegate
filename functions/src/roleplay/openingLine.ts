@@ -8,6 +8,7 @@ import { logger } from "firebase-functions";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
+import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
 import { isL3Procedural } from "./l3Depth";
 import { extractEscalationSignal } from "./escalationSignal";
@@ -168,6 +169,10 @@ export async function generateOpeningLine(
     }),
     messages: [], // 오프닝 대사에는 아직 사용자 입력이 없다.
     mockTacticHints: scenarioPrompt.weakenedTactics.map((tactic) => applyFamilyAddressText(tactic, familyAddressPrompt)),
+    // §129 에뮬 D13 — 메신저 첫 말풍선에는 전화 인사를 붙이지 않는다(Mock 전용 힌트).
+    ...(PUBLIC_SCENARIOS[scenarioId]?.channel === "messenger"
+      ? { mockChannel: "messenger" as const }
+      : {}),
     // §102 — 사기범 대사 경로: 영어 거절 등 쓸 수 없는 응답은 다음 단계(Groq → Mock)로 넘긴다.
     purpose: "scammer-reply",
   });

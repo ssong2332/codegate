@@ -24,6 +24,12 @@ import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { awaitTranscriptFlush } from "@/lib/session/transcriptFlushHandoff";
 import { releaseSessionPhotos } from "@/lib/messenger/sessionPhotos";
 import { POST_SESSION_FACT_DISCLOSURE } from "@/lib/sessionboundary/postSessionCopy";
+import {
+  isZeroTurnEnd,
+  ZERO_TURN_CHALLENGE_TAIL,
+  ZERO_TURN_DISPOSAL_STATUS,
+  ZERO_TURN_REASSURANCE,
+} from "@/lib/sessionboundary/zeroTurnEndCopy";
 
 type PageState = "no-session" | "ending" | "ended" | "error";
 
@@ -75,6 +81,7 @@ export default function SessionEndPage() {
     releaseSessionPhotos();
   }, []);
   const [deceivedMomentCount, setDeceivedMomentCount] = useState(0);
+  const [zeroTurn, setZeroTurn] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   // endReason: (T192 C4 정정) 옛 주석은 "유일한 실경로가 상시 종료라 user_ended 고정 · endSession 서버는 어떤
@@ -131,6 +138,8 @@ export default function SessionEndPage() {
         if (cancelled) return;
         if (data) {
           setDeceivedMomentCount(Array.isArray(data.deceivedMoments) ? data.deceivedMoments.length : 0);
+          // §129 · D-160 — 한마디도 하기 전에 끝난 훈련이면 안심 문단 · 폐기 줄을 0턴 문면으로(`zeroTurnEndCopy.ts` Z1).
+          setZeroTurn(isZeroTurnEnd(data.userTurnCount));
           setReportStatus("ready");
           return;
         }
@@ -245,7 +254,7 @@ export default function SessionEndPage() {
     body = (
       <>
         <p className="text-base text-ink-sub" role="status">
-          훈련 중 사용된 음성·합성 파일은 폐기 절차가 시작되었습니다.
+          {zeroTurn ? ZERO_TURN_DISPOSAL_STATUS : "훈련 중 사용된 음성·합성 파일은 폐기 절차가 시작되었습니다."}
         </p>
         <div className="flex flex-col gap-3">
           {challenge ? (
@@ -331,12 +340,18 @@ export default function SessionEndPage() {
           공개 문구로 교체한다(Architecture.md §14 Business Rules "○○님이 준비한 훈련이었습니다.
           실제 상황이 아니었습니다" 문구를 그대로 쓴다, AC-042). */}
       <p className="text-lg leading-[1.7] text-ink-sub">
-        {challenge ? (
+        {challenge && zeroTurn ? (
+          <>
+            {challenge.displayName}님이 준비한 훈련이었습니다. 실제 상황이 아니었습니다. {ZERO_TURN_CHALLENGE_TAIL}
+          </>
+        ) : challenge ? (
           <>
             {challenge.displayName}님이 준비한 훈련이었습니다. 실제 상황이 아니었습니다. 지금까지
             대화한 상대는 실제 사기범이 아니라 AI로 합성한 목소리였습니다. 실제로 돈이나
             개인정보가 오간 것은 없으니 안심하셔도 됩니다.
           </>
+        ) : zeroTurn ? (
+          <>{ZERO_TURN_REASSURANCE}</>
         ) : (
           <>
             지금까지 대화한 상대는 실제 사기범이 아니라 AI 훈련 프로그램이었습니다. 실제로 돈이나

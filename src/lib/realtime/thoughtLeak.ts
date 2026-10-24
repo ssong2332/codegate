@@ -26,6 +26,8 @@ const NON_HANGUL_SPAN = /[^가-힣ㄱ-ㆎ]+/g;
 const LATIN_WORD = /[A-Za-z]+(?:['’][A-Za-z]+)*/g;
 const THOUGHT_MARKER = /^[\s*]*thought(?=[\s:*]|$)[\s:*]*/i;
 const LEADING_PUNCT = /^[.,!?…~。]*/;
+/** 행 2-b(§129 D3) — 도구 호출 문자열(`send_prepared_sms(purpose="transfer")`처럼 밑줄 식별자 + 괄호 인자, 백틱 감싸기 허용). */
+const TOOL_CALL_TEXT = /`*\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\s*\([^()\n]{0,80}\)`*/g;
 
 function latinWordCount(text: string): number {
   return (text.match(LATIN_WORD) ?? []).length;
@@ -47,6 +49,10 @@ export function stripLeakedThought(text: string): string {
     rest = firstHangul < 0 ? "" : after.slice(firstHangul);
     stripped = true;
   }
+  rest = rest.replace(TOOL_CALL_TEXT, () => {
+    stripped = true;
+    return " ";
+  });
   rest = rest.replace(NON_HANGUL_SPAN, (span) => {
     if (latinWordCount(span) < THOUGHT_SPAN_MIN_WORDS) return span;
     stripped = true;

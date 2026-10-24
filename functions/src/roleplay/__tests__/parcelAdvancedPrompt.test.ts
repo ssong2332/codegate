@@ -74,8 +74,9 @@ const BASE_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { varia
 // 교체분만 되돌리면 기준값과 같음은 아래 [§84.4.6] 테스트가 `revertFullAudit`로 매 실행 재증명한다.
 const AFTER_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { sha256: string; length: number }>> = {
   // §127 — 페이로드 줄에 참가자 언급 은행 되받기 1문장(+60자 · `USER_MENTIONED_FINANCIAL_SENTENCE`)으로 갱신. 직전 값: 초급 aac610a5e388(6500자) · 중급 44b6e585b4e4(5766자).
-  beginner: { sha256: "8f837c0fad8dedfa7f62e62c3160c8158b98d3b85f37e5082ccf771b90542924", length: 6560 },
-  intermediate: { sha256: "b95c83661f25767fafea886df64dde00b8d172b01dcd2a13bb7fee0d15c7101a", length: 5826 },
+  // §129 — NO_STALL_RULE 뒤 무조건부 1항(+313자 · `CLAIM_CONSISTENCY_RULE` + 줄바꿈)으로 갱신. 직전 값: 초급 8f837c0fad8d(6560자) · 중급 b95c83661f25(5826자).
+  beginner: { sha256: "ae93113342a4b7cc9669480a39e6bad9daa62d5870b2c910c895b97e2d50cfd3", length: 6873 },
+  intermediate: { sha256: "8ad2cb971c2071bcb233db7384a82dc719762851bca23d26fd9f4c1d134c11c0", length: 6139 },
 };
 
 test("[T194-a G586 · §84.13.3 ④] parcel 초급 · 중급 조립 = 갱신 기대값(가드레일 (5)항 포함) · 가드레일 최후미", () => {

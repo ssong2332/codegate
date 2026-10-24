@@ -150,7 +150,11 @@ test("[§104 배선] sendMessage — 신호는 대사 판정을 거친 값만 �
   const src = read("roleplay/index.ts");
   assert.match(src, /escalate: rawSignalEscalate,\n\s*endCall: rawEndCallSignal,\n\s*\} = extractEscalationSignal\(smsMarkerFreeText\);/);
   assert.match(src, /const signalEscalate = rawSignalEscalate && escalationCheck\?\.accept === true;/);
-  assert.match(src, /const endCallSignal = endCallCheck\.endCall;/);
+  // §129 D13 — 판정된 끊기 신호(`endCallCheck`)는 포기 종류 보정(판정표 C — 종류만 바꾸고 끝내는 것은 그대로)을 한 번 더 거친다.
+  assert.match(
+    src,
+    /const giveUpCheck = reclassifyMessengerGiveUp\(endCallCheck\.endCall, [^\n]+\);\n\s*const endCallSignal = giveUpCheck\.endCall;/,
+  );
   // 날것 신호가 판정 밖에서 쓰이지 않는다(선언 1 + 판정 입력 1).
   assert.equal((src.match(/rawSignalEscalate/g) ?? []).length, 3);
   assert.equal((src.match(/rawEndCallSignal/g) ?? []).length, 2);

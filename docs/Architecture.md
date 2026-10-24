@@ -24059,3 +24059,44 @@ Chromium 소스(2026-10-24 열람 · `media/audio/android/audio_manager_android.
 
 ### 128.5 배포 순서
 Functions(`sendMessage` · 새 `requestScreenActionFollowUp` · 리포트) → Hosting. 화면만 먼저 나가면 새 콜러블이 없어 (7)이 조용히 0건(`catch` 무시)이고, 서버만 먼저 나가면 (3)의 서버 종료 뒤 옛 화면은 "결과 확인하러 가기" 버튼으로만 나간다(통화는 화면을 떠날 때 정리) — 둘 다 막힘은 없으나 Functions 먼저를 권장.
+
+## 129. (Bug fix — 2026-10-24 · 브랜치 `claude/infallible-heisenberg-d5f7fa` = main `6d6ffa2` + 변경 · 메인 세션 지시 — 실 키 회귀 프로브(`docs/research/regression-probe-2026-10-24.md` §3 D1~D13) · 에뮬레이터 점검(`ui-emulator-check-2026-10-24.md` §5 D1 · D13 · D18)) **프로브 · 에뮬 결함 수정 — 빈 말풍선 · 훈련 메타 · 도구 호출 발화 · "보냈어요" 판정 · 0턴 리포트 · Mock 대사** — implementer 기록 (DECISIONS #245 · UX D-160)
+
+### 129.1 결함 → 원인 → 수정
+| # | 결함 | 원인(파일) | 수정 | 결정성 |
+|---|---|---|---|---|
+| D1 | 메신저 빈 말풍선(오프닝 `[[SIGNAL:ESCALATE_VOICE]]`만 · 마지막 `(이 응답은 …)` + 끊기 신호) | `llm/replyUsability.ts` 1-b행이 "마커만 = 정상"으로 통과 → 신호 · 지문 제거 뒤 `""` 저장 | 1-c행(신호 마커뿐 = `empty`) · 3-c행(괄호 표기뿐 = `empty`). 링크 · 문자 마커 · URL만 있는 응답은 종전대로 가능 | 결정적(다음 단계 → Mock) |
+| D2 | "이번 훈련에서는 여기서 멈추고 · 실제 사기였다면" | `TRAINING_META_PATTERNS`가 "훈련에서는 · 멈추"를 못 잡음 | 3-b행에 "훈련(에서는)? 여기서 멈추" · "이 응답은" · "실제 사기/상황였다면" | 결정적 |
+| D3 | Live 출력 전사에 `send_prepared_sms(purpose="transfer")` | 모델 출력 · 전사 정리 장치 없음 | ① 전사 정리 행 2-b(밑줄 식별자 + 괄호 인자, 서버 · 화면 사본 `thoughtLeak.ts` 동일) ② Live 문자 줄 1문장(`SMS_TOOL_SPEECH_SENTENCE`) | 전사는 결정적 · **소리는 되돌릴 수 없다**(완화) |
+| D4 | 송금 요구 뒤 "네, 보냈어요."가 안 속음 | `report/analyzeConversation.ts` `TRANSFER_REQUEST`가 "보내세요 · 입금하실 수"를 요구로 못 봄 → H4(§128) 미발동 | 시키는 어형 `(보내\|입금하\|이체하\|송금하\|납부하\|넣으)(세요\|십시오\|셔야\|실 수)` · `납부해 주…` 추가(돈 · 계좌 문맥 조건 유지) | 결정적. 손주 초급은 main §128 H4로 이미 속음(이 PR 전 · "보내주시면") |
+| D5 | "지금 얼마만 보내주세요" | 수법 인용구 5곳의 금액 자리 | 구체 금액(300만 · 50만 · 200만 · 150만 원) · 대출은 "그 금액만"(문자 금액) | 프롬프트(완화) |
+| D6 | 지문 괄호 "(잠시 말이 없다가)" · "(잠깐 머뭇거리다)" | `roleplay/replyMarkup.ts` 허용 목록 밖 | 지문 어휘 5종 추가 | 결정적(목록 안) |
+| D7 | 참가자가 묻기만 했는데 "이체 확인되었습니다" + 목표 끊기 | 조건형 확인 지시를 무조건으로 읽음(추정) · 끊기 판정은 전사를 보지 않음 | ① 공통 [진행 강제] `CLAIM_CONSISTENCY_RULE`(NO_STALL_RULE 바로 뒤) ② Live 확인 지시에 "묻기만 하면 다시 안내" 1문장 | 완화(모델 행동) |
+| D8 | 계좌를 주기 전에 "보냈어요"를 "확인됐습니다"로 받음 | 같음 | `CLAIM_CONSISTENCY_RULE` 둘째 문장 | 완화 |
+| D9 | "우리 아들... 아니 우리 자식" | 성별 미정 줄이 고쳐 말하기를 막지 않음 | `CHILD_GENDER_UNSPECIFIED_RULE`에 1문장 | 완화 |
+| D10 | "나 ㅇㅇ이야" | 빈칸 표기 금지에 "ㅇㅇ" 없음 · 후처리 없음 | 페르소나 1문장 + `replyMarkup.ts` 4-b행(자기소개 어형만 "나야" — "ㅇㅇ 알겠어"는 그대로) | 후처리 결정적(어형 안) |
+| D11 | 받아 낸 인증번호를 "다른 사람에게 알려주지 마세요" | 모델 모순 발화 | `CLAIM_CONSISTENCY_RULE` 셋째 문장 | 완화 |
+| D12 | 같은 응답에서 "보냈으니" 말이 도구보다 먼저 | 모델 순서 | `SMS_TOOL_SPEECH_SENTENCE` 둘째 문장 | 완화(15건 중 1건) |
+| D13 | 순응 성공 뒤 끝맺음 종류가 give_up | 모델이 신호 종류를 고름 | `signalConsistency.ts` 판정표 C — 메신저 단계 포기 신호 ∧ 참가자 거절 · 의심 기색 0 → `goal`로 기록(끝내는 것은 그대로) | 결정적(기록 종류만) |
+| 에뮬 D1 | 벨 전 종료 0턴 리포트에 들린 적 없는 첫마디 · 수법 1가지 | 오프닝 `notSpoken`이 실시간 전사 제출에서만 붙음 | `session/unheardOpening.ts` U1~U4 — `endSession`이 상태 기록 · 리포트 트리거 **앞**에서 통화 · 받은 기록 0 · 참가자 0이면 오프닝에 `notSpoken` | 결정적. ⚠️ 폴백에서 받고 한마디도 안 한 통화도 U4에 든다(받은 시각은 클라만 안다) |
+| 에뮬 D13 | Mock "어디세요?, … 되세요?." · 매 턴 접두 · 카톡 "여보세요" · 카드사 반말 | `mockClient.ts` 조합 · 인용구 반말 | `shapeMockLine`(잇기 쉼표 · 겹친 마침표 · 마커 맨 뒤) · 접두 세 턴에 한 번 · `mockChannel: "messenger"`면 오프닝 인사 0 · 카드사 · 지원금 인용구 존댓말 | 결정적 |
+| 에뮬 D18 | 0턴 종료 화면 "지금까지 대화한 상대는 …" | 종료 화면 문면 고정 | `src/lib/sessionboundary/zeroTurnEndCopy.ts`(UX D-160) — 리포트 `userTurnCount === 0`이면 0턴 문면 | 결정적. 리포트 준비 전(수 초)은 종전 문면 |
+
+### 129.2 메인 결정 대기
+| 항목 | 상태 |
+|---|---|
+| 프로브 D14 — 거절 중 통화 전환 신호 | 메인에 질문함(2026-10-24). 답 전 변경 0 |
+| 에뮬 D2 — 리포트 "N분 N초" 기준 시각(세션 생성 → 받은 시각?) | 메인에 질문함(2026-10-24). 답 전 변경 0 |
+
+### 129.3 테스트 기준값 갱신(의도된 변경만)
+- `roleplay/__tests__/fullAuditDelta.ts` ⑦ `CLAIM_CONSISTENCY_RULE`(정확히 1회) · `SMS_TOOL_SPEECH_SENTENCE`(0 또는 1회) · ⑧ 시나리오 문면 8쌍(`PROBE_129_TEXT_CHANGES`)을 되돌리면 변경 전 기준값과 바이트 동일(smsGate · flowVariants · parcel 대조가 매 실행 재증명).
+- `parcelAdvancedPrompt.test.ts` 갱신 기대값(+313자) · `promptAssembly.test.ts` A-1/① 배치(NO_STALL_RULE 뒤 1항) · `scenarioDefectsRound2.test.ts` 배선 정규식.
+
+### 129.4 한계
+- D3 · D7 · D8 · D11 · D12는 모델 행동이다 — 프롬프트 완화만 했고 실 키 재측정 0. D3의 소리는 이미 재생된 뒤라 막지 못한다(화면 게이트 G1 · G2는 사고 문장만 본다).
+- D4 수정은 리포트 전용 패턴이다(되감기 규칙 폴백 · 공유 패턴 무변경 — J-2와 같은 비대칭).
+- 에뮬 D18 화면은 정적 렌더 · 단위 테스트만(개발 서버 미기동 — 이 워크트리에 `.env` 없음).
+- 프로브 보강 스크립트(`scripts/full-audit-probe.mjs` · `scripts/full-audit-session-table.mjs`)를 브랜치 `claude/probe-regression-1024-8ad07b`에서 가져왔다(main 쪽 `PROBE_SMS_SENT_CLAIM` 1줄 갱신은 유지).
+
+### 129.5 배포 순서
+Functions(`sendMessage` · `endSession` · 리포트 · 프롬프트) → Hosting(종료 화면 · 전사 정리 사본). 어느 쪽이 먼저여도 막힘은 없다(화면은 리포트 `userTurnCount`가 없으면 종전 문면).
