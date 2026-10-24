@@ -11,6 +11,8 @@ import { stripLeakedThought } from "../../realtime/thoughtLeak";
 import { analyzeConversation, type AnalysisMessage } from "../../report/analyzeConversation";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
+import { MOCK_SCREENS } from "../../scenarios/mockScreens";
+import { applyMockScreens } from "../../report/mockScreenTimeline";
 import { buildSystemPrompt, CLAIM_CONSISTENCY_RULE, SMS_TOOL_SPEECH_SENTENCE } from "../promptAssembly";
 import { buildLiveConfirmResultInstruction, LIVE_CONFIRM_NOT_YET_SENTENCE } from "../../inCallSms/confirmResult";
 import { CHILD_GENDER_UNSPECIFIED_RULE } from "../../scenarios/messengerChildImpersonationKakao.prompt";
@@ -402,4 +404,23 @@ test("[§129.6 ①] 설치를 꺼낸 대사 뒤 \"뭘 깔면 돼?\"(설치 방�
   assert.equal(moment?.tacticCategory, "link_or_install");
   const noVerb = analyzeConversation(dialogue([["scammer", S2], ["user", "알았어 어떻게 하면 돼?"]]), 0, tactics).deceivedMoments[0];
   assert.notEqual(noVerb?.tacticCategory, "link_or_install", "답에 설치 동사가 없으면 대사만으로 범주를 정하지 않는다");
+});
+
+// ── §129.6 ② 같은 설치 행동이 순간 2개 — 사용자 승인 M1 · M2 · ㉠(화면 순간만) ─────────────────────────────────────
+test("[§129.6 ② M1 · M2] 링크 대사 바로 앞의 같은 범주 채팅 순간은 화면 승격 순간 하나로 합친다 · 다른 범주(사진)는 그대로", () => {
+  const catalog = MOCK_SCREENS["messenger-child-impersonation-kakao"]!;
+  const item = catalog.find((c) => c.momentTactic === "자녀 사칭 — 보험 접수 앱 설치·권한 허용 유도")!;
+  assert.ok(item);
+  const messages = [
+    { role: "scammer" as const, turnIndex: 2, createdAtMs: 3_000 },
+    { role: "user" as const, turnIndex: 3, createdAtMs: 37_000 },
+    { role: "scammer" as const, turnIndex: 4, createdAtMs: 39_000, landingIds: [item.landingId] },
+  ];
+  const doc = { landingId: item.landingId, kind: item.kind, shownAtMs: 40_000, consentedAtMs: 45_000 };
+  const install = { turnIndex: 3, timeLabel: "37초 시점", tactic: "보험 처리 앱 설치 요구", correctAction: "", tacticCategory: "link_or_install" as const };
+  const merged = applyMockScreens([doc], [install], messages, 0, catalog);
+  assert.deepEqual(merged.deceivedMoments.map((m) => [m.turnIndex, m.tactic]), [[4, item.momentTactic]], "M1 ㉠ — 화면 순간만");
+  const photo = { ...install, tactic: "신원정보 직접 요구", tacticCategory: "personal_info_demand" as const };
+  const kept = applyMockScreens([doc], [photo], messages, 0, catalog);
+  assert.equal(kept.deceivedMoments.length, 2, "M2 — 범주가 다르면 둘 다");
 });
