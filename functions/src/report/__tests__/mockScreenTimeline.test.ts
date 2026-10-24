@@ -91,7 +91,8 @@ test("[D-51 ③] 화면이 떴으나 닫으면 표시 항목만 생기고 **속�
   assert.equal(result.mockScreenTimeline.length, 1);
   assert.equal(result.mockScreenTimeline[0].consented, false);
   assert.equal(result.mockScreenTimeline[0].anchorTurnIndex, 0);
-  assert.equal(result.mockScreenTimeline[0].timeLabel, "5초 시점");
+  // §129.8(사용자 결정 N3) — 표시 항목 시각 = 화면이 실제로 뜬 시각(shownAtMs = 15초). 앵커 위치는 그대로다.
+  assert.equal(result.mockScreenTimeline[0].timeLabel, "15초 시점");
 });
 
 test("[D-51 ③ + AC-062] 속은 순간 0건 세션에서 화면만 뜨면 여전히 0건이다(되감기 진입점 미생성)", () => {
@@ -106,7 +107,8 @@ test("[D-51 ④] 가짜 '권한 허용'에 응하면 순간 1건이 **사기범 
   assert.equal(result.deceivedMoments.length, 2);
   const promoted = result.deceivedMoments[0];
   assert.equal(promoted.turnIndex, 0, "앵커 = 설치 링크를 실은 사기범 메시지");
-  assert.equal(promoted.timeLabel, "5초 시점");
+  // §129.7 A2(사용자 승인 2026-10-24) — 시각 표기 = 실제 응낙 시각(consentedAtMs = 18초). 앵커 위치(turnIndex)는 종전 그대로다.
+  assert.equal(promoted.timeLabel, "18초 시점");
   assert.equal(promoted.tactic, CATALOG[0].momentTactic);
   assert.equal(promoted.correctAction, CATALOG[0].correctAction);
   assert.equal(

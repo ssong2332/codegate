@@ -13,6 +13,7 @@ import { SCENARIO_PROMPTS } from "../../scenarios";
 import { resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
 import { MOCK_SCREENS } from "../../scenarios/mockScreens";
 import { applyMockScreens } from "../../report/mockScreenTimeline";
+import { buildSmsTimeline } from "../../report/smsTimeline";
 import { buildSystemPrompt, CLAIM_CONSISTENCY_RULE, SMS_TOOL_SPEECH_SENTENCE } from "../promptAssembly";
 import { buildLiveConfirmResultInstruction, LIVE_CONFIRM_NOT_YET_SENTENCE } from "../../inCallSms/confirmResult";
 import { CHILD_GENDER_UNSPECIFIED_RULE } from "../../scenarios/messengerChildImpersonationKakao.prompt";
@@ -423,4 +424,95 @@ test("[§129.6 ② M1 · M2] 링크 대사 바로 앞의 같은 범주 채팅 �
   const photo = { ...install, tactic: "신원정보 직접 요구", tacticCategory: "personal_info_demand" as const };
   const kept = applyMockScreens([doc], [photo], messages, 0, catalog);
   assert.equal(kept.deceivedMoments.length, 2, "M2 — 범주가 다르면 둘 다");
+});
+
+// ── §129.7 A1 · A2 · A3(사용자 승인 2026-10-24) — 메인 라이브 재테스트 · 자녀 사칭 카톡 고급: 같은 링크가 S2(16초) · S3에 실리고 설치는 34초 답 뒤 ──
+test("[§129.7 A1 · A2 · A3] 화면 순간 앵커 = 행동 전 마지막 링크 대사(S3) · 시각 = 실제 응낙 시각 · 34초 채팅 순간과 하나로", () => {
+  const catalog = MOCK_SCREENS["messenger-child-impersonation-kakao"]!;
+  const item = catalog.find((c) => c.landingId === "child-insurance-install")!;
+  const messages = [
+    { role: "scammer" as const, turnIndex: 2, createdAtMs: 16_000, landingIds: [item.landingId] }, // S2 첫 링크
+    { role: "user" as const, turnIndex: 3, createdAtMs: 34_000 }, // "알았어 뭘 깔면 돼?"
+    { role: "scammer" as const, turnIndex: 4, createdAtMs: 37_000, landingIds: [item.landingId] }, // S3 같은 링크 다시
+  ];
+  const doc = { landingId: item.landingId, kind: item.kind, shownAtMs: 40_000, consentedAtMs: 52_000 };
+  const chat = { turnIndex: 3, timeLabel: "34초 시점", tactic: "보험 처리 앱 설치 요구", correctAction: "", tacticCategory: "link_or_install" as const };
+  const result = applyMockScreens([doc], [chat], messages, 0, catalog);
+  assert.deepEqual(
+    result.deceivedMoments.map((m) => [m.turnIndex, m.timeLabel, m.tactic]),
+    [[4, "52초 시점", item.momentTactic]],
+    "A1 앵커 S3 · A2 실제 응낙 시각 · A3 M1 합치기",
+  );
+  // 행동 시각보다 뒤에 실린 링크 대사는 앵커가 되지 않는다(A1 — 그 시각 이전만).
+  const early = applyMockScreens([{ ...doc, consentedAtMs: 20_000 }], [], messages, 0, catalog);
+  assert.equal(early.deceivedMoments[0]?.turnIndex, 2);
+});
+
+// ── §129.7 R1~R4(사용자 승인 2026-10-24 · (b) ㉠ 비행동 동사 제외 · (a) ㉠ G1 제외 — AC-103 (e) · G511 유지) — 라이브 금 구매형 ──
+test("[§129.7 R1~R4] '제출해 주셔야' 뒤 따름 약속 · 금 전달 약속 = 속음 · '들어주셔야 · 기다리셔야' 뒤는 C4 · C5 그대로 · '옮겨야 합니다'는 요구 아님", () => {
+  const tactics = G2LD_TACTICS();
+  const ask = (scammer: string, user: string) => analyzeConversation(dialogue([["scammer", scammer], ["user", user]]), 0, tactics);
+  const GOLD = "고객님, 자산 실물 전수 조사 대상이셔서 예금을 해지하신 뒤 금으로 바꾸셔서 담당 직원에게 실물로 제출해 주셔야 검수가 끝납니다.";
+  const follow = ask(GOLD, "알겠어요. 시키는 대로 할게요.");
+  assert.equal(follow.wasDeceived, true, "R1 — 라이브 대사");
+  assert.equal(follow.deceivedMoments[0]?.tactic, "실물 조사 명목 금 구매 인출 요구");
+  assert.equal(ask(GOLD, "알겠어요. 금으로 바꿔서 드릴게요.").wasDeceived, true, "R4 — J-2 약속");
+  assert.equal(ask("예금을 해지하셔야 합니다.", "네, 시키는 대로 할게요.").wasDeceived, true, "R2 — 청자 높임 당위");
+  assert.equal(ask("놀라셨을 텐데 차분히 들어주셔야 합니다.", "어떻게 해야 하나요?").wasDeceived, false, "(b) — 듣기는 행동 요구 아님");
+  assert.equal(ask("잠시만 기다리셔야 합니다.", "네, 말씀하신 대로 할게요.").wasDeceived, false, "(b) — 기다림은 행동 요구 아님");
+  assert.equal(ask("지금 고객님 예금이 범죄 자금과 섞이지 않도록 자산을 안전 계좌로 옮겨야 합니다.", "안전 계좌는 어떻게 옮겨요?").wasDeceived, false, "R3");
+});
+
+test("[§129.7 (a) ㉠] 리포트는 끊기 표식을 읽지 않는다(G511 유지 — G1 미적용)", () => {
+  assert.equal(read("report/generateReportCore.ts").includes("scammerHangup"), false);
+  assert.equal(read("report/analyzeConversation.ts").includes("goalHangup"), false);
+});
+
+// ── §129.8 (1) D4 — 재측정 프로브 2026-10-24b 대본(순응 4/22가 안 속음) ─────────────────────────────────────
+test("[§129.8 D4] 평서 해요체 '보내요' · 한글 금액 '오만 원' · '입금 부탁드릴게요' 요구 뒤 \"네, 보냈어요.\" = 속음", () => {
+  for (const [name, scammer] of [
+    ["자녀 납치 초급", "묻지 말고 들어요. 지금 당장 보담은행 948-2716-5093-27로 돈 보내요."],
+    ["자녀 납치 중급", "948-2716-5093-27, 이 계좌로 당장 천만 원만 보내요."],
+    ["택배 통관 초급", "관세 오만 원을 오늘 안으로 입금하셔야 합니다."],
+    ["대환대출 초급", "문자로 보내드린 계좌로 입금 부탁드릴게요."],
+  ] as const) {
+    assert.equal(analyzeConversation(dialogue([["scammer", scammer], ["user", "네, 보냈어요."]]), 0, []).wasDeceived, true, name);
+  }
+  // 경계 — 돈 · 계좌 문맥 없는 "보내요" · 부탁만은 요구로 보지 않는다(바뀐 판정 0 — 실 키 대본 134세션 대조는 §129.8 문서).
+  assert.equal(analyzeConversation(dialogue([["scammer", "사진 한 장 보내요."], ["user", "네, 보냈어요."]]), 0, []).wasDeceived, false);
+});
+
+// ── §129.8 (2) C2 — 되묻기(에뮬 재점검 N2) ───────────────────────────────────────────────────────────────
+test("[§129.8 C2] 질문만인 답의 명사 단독 순응('제 명의 계좌요? 무슨 일이에요?')은 속음 아님 · 질문 꼴이라도 번호를 불렀으면 속음", () => {
+  const tactics = SCENARIO_PROMPTS["institutional-impersonation"]!.weakenedTactics;
+  const ask = (s: string, u: string) => analyzeConversation(dialogue([["scammer", s], ["user", u]]), 0, tactics).wasDeceived;
+  assert.equal(ask("고객님 명의 계좌가 범죄에 연루돼 본인 확인이 필요합니다. 성함과 생년월일을 말씀해 주세요.", "제 명의 계좌요? 무슨 일이에요?"), false);
+  // ⚠️ "[계좌]요?"처럼 토큰 뒤 물음표는 H1이 의도적으로 되묻기로 본다(사기범이 준 번호를 되읽음) — 이 표본에서 뺀다.
+  assert.equal(ask("계좌 비밀번호를 불러 주세요.", "비밀번호요? 1234면 돼요?"), true, "숫자 제공(V3)");
+});
+
+// ── §129.8 (3) 사건 실제 시각(사용자 결정 N3) · 실시간 받은 시각(N9 확인 중 발견) ─────────────────────────────
+test("[§129.8 N3] 문자 이벤트마다 실제 시각 표기 · 위치(앵커 · 정렬)는 그대로 · 제출 승격 시각 = 실제 제출 시각", () => {
+  const base = 1_000_000;
+  const doc = {
+    smsId: "case-link",
+    kind: "link" as const,
+    senderLabel: "한빛지방검찰청",
+    body: "사건 조회",
+    anchorScammerTurn: 1,
+    arrivedAtMs: base + 30_000,
+    openedAtMs: base + 51_000,
+    linkTappedAtMs: base + 53_000,
+  };
+  const messages = [{ role: "scammer" as const, turnIndex: 0, createdAtMs: base + 22_000 }];
+  const [entry] = buildSmsTimeline([doc], messages, base);
+  assert.equal(entry.timeLabel, "22초 시점", "항목 앵커 시각(위치용 · 옛 화면 폴백)은 그대로");
+  assert.deepEqual(entry.events.map((e) => e.timeLabel), ["30초 시점", "51초 시점", "53초 시점"]);
+  assert.equal(entry.anchorTurnIndex, 0);
+});
+
+test("[§129.8 N9] 실시간 전사 제출이 받은 시각을 채울 때 클라 '받기' 시각을 쓴다(제출 시각 아님) · 세션 생성 ~ 제출 사이로 막는다", () => {
+  const src = read("realtime/submitTranscript.ts");
+  assert.match(src, /Math\.min\(baseTime, Math\.max\(sessionCreatedAtMs, answeredAtMs\)\)/);
+  assert.match(src, /tx\.update\(sessionRef, \{ answeredAt: Timestamp\.fromMillis\(clientAnswered\) \}\);/);
 });

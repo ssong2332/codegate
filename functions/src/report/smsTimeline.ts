@@ -73,31 +73,44 @@ export type SmsTimelineMessage = {
  *
  * 문구는 Architecture.md §15.1.5 (5)의 참고 문구를 그대로 쓴다(확정 카피는 OQ-A1 — ux-design).
  */
-export function deriveSmsEvents(doc: SmsTimelineSource): SmsTimelineEvent[] {
+/**
+ * §129.8(사용자 결정 2026-10-24 — 에뮬 재점검 N3 "사건 시각을 실제 시각으로 표시") — `baseMs`(리포트 시각 기준 = 받은 시각 · `session/answeredAt.ts` 표 A)를
+ * 받으면 각 이벤트에 **실제로 일어난 시각**(`arrivedAt` · `openedAt` · `linkTappedAt`)의 "N초 시점"을 싣는다(`timeLabel`). 부재 = 종전(이벤트 시각 0).
+ * ⚠️ 위치(정렬 · 앵커 turnIndex)는 그대로 턴 앵커다(G15의 병합 축 무변경) — 바뀌는 것은 **표시 시각**뿐이다. 원시 타임스탬프는 싣지 않는다(G19 유지 — 라벨 문자열만).
+ */
+export function deriveSmsEvents(doc: SmsTimelineSource, baseMs?: number): SmsTimelineEvent[] {
+  const at = (ms: number | undefined) => (baseMs === undefined || ms === undefined ? {} : { timeLabel: actualTimeLabel(ms, baseMs) });
   const events: SmsTimelineEvent[] = [
-    { event: "sms_received", what: `${doc.senderLabel}에서 문자가 도착했습니다.` },
+    { event: "sms_received", what: `${doc.senderLabel}에서 문자가 도착했습니다.`, ...at(doc.arrivedAtMs) },
   ];
   if (doc.openedAtMs !== undefined) {
     if (doc.kind === "otp") {
       events.push({
         event: "sms_otp_shown",
         what: "인증번호 문자를 열어 화면에 인증번호가 표시됐습니다.",
+        ...at(doc.openedAtMs),
         correctAction:
           "인증번호는 어떤 기관·상담원도 요구하지 않습니다. 요구받는 것 자체가 사기 신호이니 불러 주지 말고 전화를 끊으세요.",
       });
     } else {
-      events.push({ event: "sms_opened", what: "문자를 열어 확인했습니다." });
+      events.push({ event: "sms_opened", what: "문자를 열어 확인했습니다.", ...at(doc.openedAtMs) });
     }
   }
   if (doc.linkTappedAtMs !== undefined) {
     events.push({
       event: "sms_link_tapped",
       what: "문자 속 링크를 눌렀습니다.",
+      ...at(doc.linkTappedAtMs),
       correctAction:
         "문자 속 링크는 누르지 말고, 기관 공식 앱이나 알고 있는 대표번호로 직접 확인하세요.",
     });
   }
   return events;
+}
+
+/** §129.8 — 실제 시각 → "N초 시점"(기준 이전은 0초 · deceivedMoments와 같은 꼴). */
+export function actualTimeLabel(ms: number, baseMs: number): string {
+  return `${Math.max(0, Math.round((ms - baseMs) / 1000))}초 시점`;
 }
 
 type AnchorResolution = { anchorTurnIndex: number; anchorResolved: boolean; timeLabel?: string };
@@ -176,7 +189,7 @@ export function buildSmsTimeline(
         anchorTurnIndex: anchor.anchorTurnIndex,
         anchorResolved: anchor.anchorResolved,
         ...(anchor.timeLabel ? { timeLabel: anchor.timeLabel } : {}),
-        events: deriveSmsEvents(doc),
+        events: deriveSmsEvents(doc, sessionCreatedAtMs),
       } satisfies SmsTimelineEntry;
     })
     .sort(
@@ -313,7 +326,15 @@ export function promoteSmsLandingSubmits(
     const anchor = resolveAnchor(doc.anchorScammerTurn, sortedMessages, sessionCreatedAtMs);
     // ⭐ G135 — 두 조건 **모두**여야 한다. `anchorResolved`만 보면 turnIndex -1이 통과한다.
     if (!anchor.anchorResolved || anchor.anchorTurnIndex < 0) continue;
-    promoted.push(buildLandingSubmitMoment(item, anchor.anchorTurnIndex, anchor.timeLabel));
+    // §129.8 — 시각 표기 = 그 화면에서 가장 깊은 단계를 실제로 누른 시각(위치는 앵커 그대로).
+    const stepAtMs = doc.landingSubmittedAtMs ?? doc.landingAmountAtMs ?? doc.landingConvertedAtMs ?? doc.landingIdentityAtMs;
+    promoted.push(
+      buildLandingSubmitMoment(
+        item,
+        anchor.anchorTurnIndex,
+        stepAtMs !== undefined ? actualTimeLabel(stepAtMs, sessionCreatedAtMs) : anchor.timeLabel,
+      ),
+    );
   }
 
   return {

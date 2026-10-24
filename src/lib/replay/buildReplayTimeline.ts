@@ -47,7 +47,8 @@ export type ReplaySmsSource = {
   anchorTurnIndex: number;
   anchorResolved: boolean;
   timeLabel?: string;
-  events: { event: string; what: string; correctAction?: string }[];
+  // §129.8 — 이벤트별 실제 시각(부재 = 옛 리포트).
+  events: { event: string; what: string; correctAction?: string; timeLabel?: string }[];
 };
 
 export type ReplayTimelineMessageItem = ReplayMessageSource & {

@@ -143,8 +143,15 @@ export const submitRealtimeTranscript = onCall<
 
     // answeredAt이 없으면(실시간 경로는 sendMessage를 안 타 미설정) 첫 턴 기준으로 채워, 리포트
     // 타임라인 기점과 세션 시간축이 정합하도록 한다.
+    // ⭐ §129.8(N9 확인 중 발견) — §129 D2가 리포트 기준을 `answeredAt`으로 바꾼 뒤, 제출 시각(통화 끝 무렵일 수 있다)을 받은 시각으로 쓰면
+    // 리포트 시각이 0초 쪽으로 무너진다. 클라가 "받기" 시각(`answeredAtMs`)을 실었으면 그 값을 쓴다 — 위 턴 시각 합성과 **같은 축**이다
+    // (`resolveTurnCreatedAtMs`가 `answeredAtMs + atMs`를 쓴다). 세션 생성 ~ 제출 시각 밖은 막는다. 부재 = 종전(제출 시각).
     if (!session.answeredAt) {
-      tx.update(sessionRef, { answeredAt: Timestamp.fromMillis(baseTime) });
+      const clientAnswered =
+        typeof answeredAtMs === "number" && Number.isFinite(answeredAtMs)
+          ? Math.min(baseTime, Math.max(sessionCreatedAtMs, answeredAtMs))
+          : baseTime;
+      tx.update(sessionRef, { answeredAt: Timestamp.fromMillis(clientAnswered) });
     }
 
     return count;
