@@ -30,13 +30,27 @@ export const SCAMMER_HANGUP_FOLLOW_UP_PENDING_GUIDANCE =
 export const GOAL_WRAP_UP_INSTRUCTION =
   "(이번 통화에서 할 일은 모두 마쳤다. 지금까지 한 요구 · 안내를 다시 되풀이하지 말고 새 요구도 꺼내지 마라. 상대의 마지막 말에 짧게 답한 뒤 `end_call` 도구를 불러 통화를 끝내라.)";
 
+/**
+ * ⭐ §127(DECISIONS #243 · 2026-10-24 사용자 실기 — 운영 세션 243a51df · 기관 사칭 고급 현금 전달형 추정) — 할 일을 마친 뒤(4행 할 일 완료 참) 6행
+ * (지시 대기 · 문자 대기)에 막힌 경우. 종전 공통 문면 "아직 통화를 끝낼 때가 아니다 … 그대로 이어가라"를 받은 모델이 다시 끊지 않고 같은 안내를
+ * 되풀이했다(사용자가 "끝입니까?" · "안 끊습니까?"를 반복). 막힘은 잠시뿐이므로 다음 말에 짧게 답하고 **다시** 끊게 한다. ⛔ 횟수 · 턴 번호 0(G130)
+ * · 막힌 사유는 설명하지 않는다(머리 주석).
+ */
+export const SCAMMER_HANGUP_RETRY_AFTER_GOAL_GUIDANCE =
+  "(지금 바로는 끊을 수 없다. 새 요구나 같은 안내를 되풀이하지 말고, 상대의 다음 말에 짧게 답한 뒤 다시 `end_call` 도구를 불러 통화를 끝내라.)";
+
 /** 실패(콜러블 미도달) — `createRealtimeCall.liveTools.endCallFailureInstruction`의 원천(배선은 C3). */
 export const SCAMMER_HANGUP_FAILURE_INSTRUCTION =
   "(지금은 통화를 끝낼 수 없다. 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어가라.)";
 
 /** 판정 결과 → 모델에게 돌려줄 문면. */
-export function scammerHangupGuidance(status: ScammerHangupStatus, options: { followUpPending?: boolean } = {}): string {
+export function scammerHangupGuidance(
+  status: ScammerHangupStatus,
+  options: { followUpPending?: boolean; goalActionDone?: boolean } = {},
+): string {
   if (status === "accepted" || status === "already_accepted") return SCAMMER_HANGUP_ACCEPTED_GUIDANCE;
+  // §127 — 할 일을 마친 뒤 6행에 막히면 다시 끊게 한다(그 밖 6행 · 다른 status는 종전 문면).
+  if (status === "blocked_pending" && options.goalActionDone === true) return SCAMMER_HANGUP_RETRY_AFTER_GOAL_GUIDANCE;
   // §115 — 후속 단계가 남아 막힌 경우만 되풀이 금지 문면(그 밖 확인 무력화 세션은 종전 문면 그대로).
   if (status === "blocked_transfer" && options.followUpPending === true) return SCAMMER_HANGUP_FOLLOW_UP_PENDING_GUIDANCE;
   if (status === "blocked_transfer") return SCAMMER_HANGUP_BLOCKED_TRANSFER_GUIDANCE;

@@ -77,6 +77,6 @@ test("[§125 실측 반영] 말로 끝나는 결말 4벌(상품권 · 대출금 
     const v = findFlowVariant(id)!;
     assert.ok(v.stages.some((s) => /같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)), id);
   }
-  // 1a 기관 사칭 금 구매(fv-g2ld)는 같은 결말 문면을 공유하지만 이 줄은 자산 보호 쪽에서만 붙였다(1a 실측에서 되풀이 관측 0).
-  assert.ok(findFlowVariant("fv-g2ld")!.stages.every((s) => !/짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)));
+  // §127 — 1a 말로 끝나는 결말 4벌에도 붙였다(운영 243a51df 재현). 금 구매 결말을 공유하는 fv-t8ga에는 한 번만 붙는다(이중 0).
+  assert.equal(findFlowVariant("fv-t8ga")!.stages.filter((s) => /짧게 마무리한 뒤 통화를 끝낸다/.test(s.summary)).length, 1);
 });

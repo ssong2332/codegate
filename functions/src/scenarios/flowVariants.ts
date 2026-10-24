@@ -329,6 +329,10 @@ const INSTITUTION_ADVANCED_DECISION_MOMENT = "문자 링크로 연 안전계좌 
 // `backstopUserTurns: 1`(게이트가 열린 뒤 넛지 1발화 · 강제 2발화 — 종전 2 · 4). 하한은 그대로다.
 const SMS_STAGE_CALL_FIRST =
   "이 단계는 말보다 먼저 문자 보내기 도구를 불러 시작하고, 도구가 보냈다고 알려 준 뒤에만 문자 이야기를 한다. 도구가 아직 이르다고 하면 문자 이야기를 꺼내지 말고 앞 단계를 한 번 더 이어 간다.";
+// §125 실측(2026-10-23 · fv-t8ga · fv-v2mk 순응) — 약속을 받은 뒤에도 같은 요구를 말만 바꿔 10번 넘게 되풀이했다. 말로 끝나는 결말 끝에 붙인다.
+// §127(2026-10-24 사용자 실기 — 기관 사칭 고급 현금 전달형 추정 · 운영 세션 243a51df) — 1a의 말로 끝나는 결말 4벌에도 붙인다(되풀이 · 미종료 재현).
+const VERBAL_ENDING_WRAP =
+  "상대가 하겠다고 약속하면 같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다. 상대가 답을 미루면 한 번만 다시 요구한 뒤 마무리한다.";
 const withSmsFirst = (stage: string) => `${stage} ${SMS_STAGE_CALL_FIRST}`;
 const FAST_BACKSTOP = { backstopUserTurns: 1 } as const;
 const INSTITUTION_ADVANCED_SMS_V2: FlowVariantSms[] = INSTITUTION_ADVANCED_SMS.map((item) => ({ ...item, ...FAST_BACKSTOP }));
@@ -473,9 +477,6 @@ const PROSECUTION_SOURCES = ["C05", "C06", "C07", "C08", "S3", "S25", "S28"];
 // 근거 docs/research/prosecution-crypto-tactics-2026-10.md)를 먼저 말하게 하고, 같은 요구를 이유 없이 되풀이하지 않게 한다. ⛔ 은퇴 fv-c8wq 문면은 그대로.
 const PROSECUTION_SITE_FOLLOW_UP_STAGE_V2 =
   "사이트에서 이체를 마치면 결과를 알린 뒤, '방금 검수한 자금이 고객님 다른 계좌 · 적금 · 대출 한도 쪽으로도 같은 흐름으로 빠져나간 기록이 함께 확인됐습니다, 그 자금까지 검수해야 무혐의 처리가 끝납니다'처럼 왜 추가 검수가 필요한지부터 분명히 설명하고, 같은 사이트에서 남은 예금 · 적금 · 대출 가능액도 진행하라고 한 번 요구한다. 피해자로 확인되면 돌려준다고 안심시킨다. 같은 추가 요구를 이유 없이 되풀이하지 않고, 검수 기간이나 나중에 연락하겠다는 말로 통화를 정리하지도 않는다.";
-// §125 실측(2026-10-23 · fv-t8ga · fv-v2mk 순응) — 약속을 받은 뒤에도 같은 요구를 말만 바꿔 10번 넘게 되풀이했다. 말로 끝나는 결말 끝에 붙인다.
-const VERBAL_ENDING_WRAP =
-  "상대가 하겠다고 약속하면 같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다. 상대가 답을 미루면 한 번만 다시 요구한 뒤 마무리한다.";
 const PROSECUTION_OPENING_V2 = `${PROSECUTION_STAGES[0]} ${INVESTIGATION_CARD_USE}`;
 
 // 검찰 고급 ② 상품권형 — 근거 경찰청(정책브리핑 2024-04-15 · 위조 우편물 → 검사 사칭 → "자금 검수" 명목 현금 · 문화상품권 · 가상자산 요구 — 사례 C24 · S44).
@@ -737,7 +738,7 @@ const SPECS: VariantSpec[] = [
     scenarioId: "institutional-impersonation",
     level: "advanced",
     authoring: "authored",
-    stages: st(...INSTITUTION_HEAD_STAGES, INSTITUTION_CASH_DEPOSIT_STAGE),
+    stages: st(...INSTITUTION_HEAD_STAGES, `${INSTITUTION_CASH_DEPOSIT_STAGE} ${VERBAL_ENDING_WRAP}`),
     keepLabels: ["권위 암시", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "비밀 유지 요구", "전화 끊음 저지"],
     extraTactics: [
       ASSET_INFO,
@@ -760,7 +761,7 @@ const SPECS: VariantSpec[] = [
     scenarioId: "institutional-impersonation",
     level: "advanced",
     authoring: "authored",
-    stages: st(...INSTITUTION_HEAD_STAGES, INSTITUTION_GOLD_STAGE),
+    stages: st(...INSTITUTION_HEAD_STAGES, `${INSTITUTION_GOLD_STAGE} ${VERBAL_ENDING_WRAP}`),
     keepLabels: ["권위 암시", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "비밀 유지 요구", "전화 끊음 저지"],
     extraTactics: [
       ASSET_INFO,
@@ -950,7 +951,7 @@ const SPECS: VariantSpec[] = [
       "상대 대출 이력을 이미 아는 듯 연체 정리를 돕는 대환 안내라고 말한다. 상대가 말하지 않은 이름 · 금액은 지어내 단정하지 않는다.",
       withSmsFirst("대출 심사 전에 보안 점검 앱을 설치하라고 요구한다."),
       "기존 대출을 먼저 갚아야 대환이 되는데 계좌로 보내면 중도상환 기록이 남아 심사가 늦어진다며, 현금으로 직접 상환해야 하는 이유부터 설명한다.",
-      "예금을 현금으로 찾아 회사 직원에게 직접 상환하겠다는 약속을 받아 내려 한다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 더 조르지 않고 마무리한다.",
+      `예금을 현금으로 찾아 회사 직원에게 직접 상환하겠다는 약속을 받아 내려 한다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 더 조르지 않고 마무리한다. ${VERBAL_ENDING_WRAP}`,
     ),
     keepLabels: ["권위·정당성 포장", "이익 유혹", "마감 압박", "절차·서류 정당화", "확인 차단", "전화 끊음 저지"],
     extraTactics: [
@@ -1605,7 +1606,7 @@ const SPECS: VariantSpec[] = [
     scenarioId: "card-delivery-call",
     level: "advanced",
     authoring: "authored",
-    stages: st(...CARD_DELIVERY_LOAN_STAGES.slice(0, 2), withSmsFirst(CARD_DELIVERY_LOAN_STAGES[2]), ...CARD_DELIVERY_LOAN_STAGES.slice(3)),
+    stages: st(...CARD_DELIVERY_LOAN_STAGES.slice(0, 2), withSmsFirst(CARD_DELIVERY_LOAN_STAGES[2]), CARD_DELIVERY_LOAN_STAGES[3], `${CARD_DELIVERY_LOAN_STAGES[4]} ${VERBAL_ENDING_WRAP}`),
     keepLabels: ["안심 유도", "부인 시 명의 도용 암시", "본인확인 정보 직접 요구", "보안 점검 앱 설치 요구", "확인 시도 무력화", "기관 조사 언급", "긴급성 조성"],
     extraTactics: [CARD_DELIVERY_LOAN_CASH_DEMAND],
     exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],

@@ -109,5 +109,6 @@ export const requestScammerHangup = onCall<
 
   // §115 — 후속 단계가 남아 막혔으면 되풀이 금지 문면(그 밖은 종전 문면).
   const followUpPending = followUpUserTurns !== undefined && !goalActionDone;
-  return { status: decision.status, guidance: scammerHangupGuidance(decision.status, { followUpPending }) };
+  // §127 — 할 일을 마친 뒤 6행에 막혔으면 다시 끊으라는 문면.
+  return { status: decision.status, guidance: scammerHangupGuidance(decision.status, { followUpPending, goalActionDone }) };
 });
