@@ -516,3 +516,27 @@ test("[§129.8 N9] 실시간 전사 제출이 받은 시각을 채울 때 클라
   assert.match(src, /Math\.min\(baseTime, Math\.max\(sessionCreatedAtMs, answeredAtMs\)\)/);
   assert.match(src, /tx\.update\(sessionRef, \{ answeredAt: Timestamp\.fromMillis\(clientAnswered\) \}\);/);
 });
+
+// ── §129.9 메인 라이브 재테스트(빌드 cTcCpAsR · 자녀 납치 초급) — 듣기 명령 뒤 따름 약속 · 빈 라벨 ─────────────────────────
+test("[§129.9] 듣기 명령('잘 들으세요 · 제 말만 들으세요') 뒤 방법 질문 · 따름 약속 = 속음 아님 · '현금을 준비하세요' 뒤 '얼마요? 어디로 보내요?' = 속음 · 라벨 '즉시 송금 요구'", () => {
+  const tactics = resolveSessionScenarioPrompt("kidnapping-threat", "fv-c5ih")!.weakenedTactics;
+  const messages = dialogue([
+    ["scammer", "여보세요, 거기 혹시 ○○ 씨 본인 맞으세요? 저는 시내 ○○경찰서 수사과 소속입니다."],
+    ["user", "네 맞는데요, 무슨 일이세요?"],
+    ["scammer", "잘 들으세요. 지금 당신 자녀가 저희 쪽에 있습니다. 묻지 말고 제 말만 들으세요."],
+    ["user", "네? 어떻게 해야 돼요? 시키는 대로 할게요"],
+    ["scammer", "좋아요, 그렇게 나오셔야죠. 지금 바로 현금을 준비하세요."],
+    ["user", "얼마요? 어디로 보내요?"],
+    ["scammer", "300만 원 준비하세요. 지금 바로 새솔은행 948-2716-5093-27로 이체하세요. 예금주는 박정호입니다."],
+    ["user", "네, 보냈어요."],
+  ]);
+  const result = analyzeConversation(messages, 0, tactics);
+  assert.deepEqual(
+    result.deceivedMoments.map((m) => [m.turnIndex, m.tactic]),
+    [
+      [5, "즉시 송금 요구"],
+      [7, "즉시 송금 요구"],
+    ],
+    "U2(turnIndex 3)는 C4 · C5 — 듣기 명령은 요구가 아니다 · U3 · U4 라벨 빈칸 0",
+  );
+});
