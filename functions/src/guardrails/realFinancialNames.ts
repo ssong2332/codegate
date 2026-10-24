@@ -141,6 +141,8 @@ export function replaceRealFinancialNames(text: string): { text: string; replace
 /** §127 — 참가자가 먼저 말한 은행 · 카드사 이름을 사기범이 되받을 때 쓰는 중립 표현. */
 export const USER_MENTIONED_BANK = "말씀하신 은행";
 export const USER_MENTIONED_CARD = "말씀하신 카드사";
+/** §132 — 바로 앞이 이미 "말씀하신(·하셨던) (그)"로 끝나는지. */
+const ALREADY_USER_MENTIONED = /말씀\s*(?:하신|하셨던|주신)\s*(?:그\s*)?$/;
 
 /**
  * ⭐ §127(DECISIONS #243 · 메인 세션 라이브 확인 2026-10-24 — 참가자 "국민은행이고 예금은 3천만원" → 사기범 "보담은행에 3천만 원") — 참가자가
@@ -158,9 +160,12 @@ export function neutralizeUserMentionedFinancialNames(
     const probe = new RegExp(rule.pattern.source, rule.pattern.flags.replace("g", ""));
     if (!userTexts.some((t) => probe.test(t))) continue;
     const neutral = rule.replacement === FICTIONAL_CARD_NAME ? USER_MENTIONED_CARD : USER_MENTIONED_BANK;
-    current = current.replace(new RegExp(rule.pattern.source, rule.pattern.flags), () => {
+    current = current.replace(new RegExp(rule.pattern.source, rule.pattern.flags), (...args: unknown[]) => {
       replacedCount += 1;
-      return neutral;
+      // §132 — 모델이 이미 "말씀하신 국민은행"처럼 말했으면 "말씀하신"을 겹쳐 붙이지 않고 업종 이름만 남긴다.
+      const offset = args.find((a, i) => i > 0 && typeof a === "number") as number;
+      const before = current.slice(0, offset);
+      return ALREADY_USER_MENTIONED.test(before) ? neutral.replace(/^말씀하신\s*/, "") : neutral;
     });
   }
   return replacedCount === 0 ? { text: reply, replacedCount: 0 } : { text: current, replacedCount };
