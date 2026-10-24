@@ -101,3 +101,16 @@ export function reclassifyMessengerGiveUp(
   if (PARTICIPANT_PUSHBACK.test(userText)) return { endCall }; // C2
   return { endCall: "goal", reclassified: true }; // C3
 }
+
+// ── 판정표 D: 거절 중 통화 전환은 한 번만(§129 D14 · 사용자 결정 2026-10-24 ㉢ "1회만 허용") ─────────────────────────────
+// 재현(실 키 프로브): 거절 4세션 중 3세션이 거절 발화 뒤 `ESCALATE_VOICE` — 지원금 고급 거절은 u4 · u5 두 번. 실제 수법으로는 그럴듯해 첫 번째는 받는다.
+// | # | If | Then |
+// |---|---|---|
+// | D1 | 이번 참가자 말에 거절 · 의심 기색이 없다(`PARTICIPANT_PUSHBACK`) | 판정 안 함(종전 판정표 A) |
+// | D2 | 거절 중이고 이 세션이 아직 메신저 → 통화 전환을 한 적이 없다 | 받는다(판정표 A 그대로) |
+// | D3 | 거절 중이고 이미 한 번 이상 전환했다(`channelHistory` messenger → voice 항목 ≥ 1) | **받지 않는다**(`refusal_repeat`) |
+// ⛔ 받지 않은 신호는 이번 턴 전환만 막는다(신호는 이미 텍스트에서 지워졌다) · max-turn 폴백 전환은 이 표의 대상이 아니다.
+export function isRepeatEscalationDuringRefusal(userText: string, priorEscalationCount: number): boolean {
+  if (!PARTICIPANT_PUSHBACK.test(userText)) return false; // D1
+  return priorEscalationCount >= 1; // D3(그 밖 = D2)
+}

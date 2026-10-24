@@ -60,6 +60,7 @@ import { MESSENGER_ESCALATION_FALLBACK_TURNS, SEND_MESSAGE_MAX_LENGTH } from "..
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "../session/channelTransition";
+import { answeredAtFromClient } from "../session/answeredAt";
 import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
 import { wasTurnInstructionSpoken } from "./announceMarking";
 import { extractEscalationSignal } from "./escalationSignal";
@@ -87,7 +88,13 @@ import { evaluateOtpCheck, otpCheckInputsFromHistory } from "./otpCheck";
 import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { decideRepeatBreak, repeatBreakInstruction } from "./repeatBreak";
-import { isEscalationTooEarly, judgeEndCallSignal, judgeEscalationSignalAt, reclassifyMessengerGiveUp } from "./signalConsistency";
+import {
+  isEscalationTooEarly,
+  isRepeatEscalationDuringRefusal,
+  judgeEndCallSignal,
+  judgeEscalationSignalAt,
+  reclassifyMessengerGiveUp,
+} from "./signalConsistency";
 import { decideCallAnnouncement } from "./callAnnouncement";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
@@ -212,16 +219,22 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         ...(isPhotoTurn ? { photo: true as const } : {}),
       } satisfies MessageDoc);
       // answeredAt(통화 시작 기점, #6)은 첫 턴에만 설정한다 — 이후 턴은 기존 값을 유지한다.
+      // §129 에뮬 D2(사용자 결정 ㉠) — 처음부터 통화인 세션은 클라가 실은 "받기 뒤 지난 ms"로 실제 받은 시각을 되짚는다(`session/answeredAt.ts` 표 B).
+      const answeredAt =
+        fresh.answeredAt ??
+        Timestamp.fromMillis(
+          answeredAtFromClient(fresh, fresh.createdAt.toMillis(), userWriteTime.toMillis(), request.data?.answeredElapsedMs),
+        );
       tx.update(sessionRef, {
         turnCount: fresh.turnCount + 1,
-        ...(fresh.answeredAt ? {} : { answeredAt: userWriteTime }),
+        ...(fresh.answeredAt ? {} : { answeredAt }),
       });
 
       return {
         history,
         userIndex,
         turnCount: fresh.turnCount + 1,
-        answeredAt: fresh.answeredAt ?? userWriteTime,
+        answeredAt,
         maxUserTurns: fresh.maxUserTurns,
         maxSessionMs: fresh.maxSessionMs,
       };
@@ -701,7 +714,18 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const escalationCheck = rawSignalEscalate
       ? judgeEscalationSignalAt(turnsSinceMessengerEntry(turnCount, session.channelHistory), signalFreeReplyText)
       : undefined;
-    const signalEscalate = rawSignalEscalate && escalationCheck?.accept === true;
+    // §129 D14 판정표 D(사용자 결정 ㉢) — 거절 중 통화 전환은 한 번만(이미 전환한 세션에서 거절 중이면 신호 · 대사 예고 전환 둘 다 막는다).
+    const refusalRepeatBlocked =
+      session.channel === "messenger" &&
+      isRepeatEscalationDuringRefusal(
+        maskedUserText,
+        (session.channelHistory ?? []).filter((entry) => entry.from === "messenger" && entry.to === "voice").length,
+      );
+    const signalEscalate = rawSignalEscalate && escalationCheck?.accept === true && !refusalRepeatBlocked;
+    if (escalationCheck?.accept === true && refusalRepeatBlocked) {
+      // G170 — 사유 코드만(대사 0).
+      logger.info("[§129] 거절 중 두 번째 전환 신호 무시", { sessionId });
+    }
     const endCallConsistency = judgeEndCallSignal(rawEndCallSignal, signalFreeReplyText);
     // §122(6) 판정표 P — 메신저 단계에서 사진 뒤 남은 단계(송금 등)를 꺼내기 전의 목표 끊기는 받지 않는다(`photoFollowUp.ts`).
     const endCallCheck = isGoalBeforePhotoFollowUp({
@@ -745,6 +769,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
             signalAccepted: signalEscalate,
             canEscalateNow:
               !limitReached &&
+              !refusalRepeatBlocked &&
               endCallSignal === undefined &&
               resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined &&
               !isEscalationTooEarly(turnsSinceMessengerEntry(turnCount, session.channelHistory)),

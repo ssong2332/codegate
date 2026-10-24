@@ -49,6 +49,7 @@ import type { GenerateReportResponse } from "./types";
 import { buildPersonaBlock } from "./personaBlock";
 import { resolveRouteSummary } from "./routeSummary";
 import { stripLeakedThought } from "../realtime/thoughtLeak";
+import { resolveReportTimeBaseMs } from "../session/answeredAt";
 import { personaCardKind } from "../scenarios/personaCardCatalog";
 
 export async function generateReportForSession(sessionId: string): Promise<GenerateReportResponse> {
@@ -113,6 +114,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   // 세션의 flowVariantId(Gemini · 폴백 기준 배정값)로 해석한다. 변형 수법은 원본 수법의 부분집합 + 변형 전용
   // 수법이라, 원본으로 통화한 세션에서 변형 밖 수법이 나오면 그 수법은 리포트 추정에서 빠질 수 있다(OQ-A131
   // 기본값 — ElevenLabs 변형 적용은 User 결정 대기).
+  // §129 에뮬 D2(사용자 결정 ㉠) — "N분 N초 시점"의 기준 = 통화를 받은 시각(처음부터 통화인 세션 · `session/answeredAt.ts` 표 A). 그 밖 = 생성 시각(종전).
+  const reportTimeBaseMs = resolveReportTimeBaseMs(session);
   const scenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId);
   const weakenedTactics = scenarioPrompt?.weakenedTactics ?? [];
 
@@ -126,7 +129,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   // 사용자 결정 2026-10-21 — 인증번호 오답은 속음이 아니라 위험 신호(analyzeConversation W0~W4). 정답은 카탈로그 값(추가 read 0).
   const analysis = analyzeConversation(
     messages,
-    session.createdAt.toMillis(),
+    reportTimeBaseMs,
     weakenedTactics,
     // §114 — 정답은 이 세션의 번호(문자에 보인 값과 같은 해시).
     listOtpItems(session.scenarioId).map((item) => withSessionOtp(item, sessionId).otpCode!),
@@ -169,7 +172,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       ...(data.fakeLandingId ? { fakeLandingId: data.fakeLandingId } : {}),
     };
   });
-  const smsTimeline = buildSmsTimeline(smsSources, messages, session.createdAt.toMillis());
+  const smsTimeline = buildSmsTimeline(smsSources, messages, reportTimeBaseMs);
 
   // ②-c 확인 시도 무력화 스냅샷 + **기존 순간 주석**(T83, §16.3, ADR-0009, AC-071) —
   // `sessions/{sid}/verifyIntercept`를 **1회 추가 read**한다(위 문자 수집과 같은 지점).
@@ -203,7 +206,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     verifySources,
     analysis.deceivedMoments,
     messages,
-    session.createdAt.toMillis(),
+    reportTimeBaseMs,
   );
 
   // ②-c-2 통화 표면(경로 A)의 **가짜 랜딩 제출 승격**(T123, §31.6 (1), AC-080) —
@@ -218,7 +221,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     smsSources,
     verify.deceivedMoments,
     messages,
-    session.createdAt.toMillis(),
+    reportTimeBaseMs,
     MOCK_SCREENS[session.scenarioId] ?? [],
   );
 
@@ -243,7 +246,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       ...(data.submittedAt ? { submittedAtMs: data.submittedAt.toMillis() } : {}),
       // T194-c-1(§84.15.3 · G606) — 통화 중 설치 문서(Q2)는 문자와 **같은 리졸버**로 푼 명시 앵커를 넘긴다(시각 해결 0). 부재 = 메신저 경로.
       ...(typeof data.anchorScammerTurn === "number"
-        ? { explicitAnchor: resolveAnchor(data.anchorScammerTurn, messages, session.createdAt.toMillis()) }
+        ? { explicitAnchor: resolveAnchor(data.anchorScammerTurn, messages, reportTimeBaseMs) }
         : {}),
     };
   });
@@ -253,7 +256,7 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     // 동일한 값이라 이 기능 도입 전 산출과 한 바이트도 다르지 않다).
     smsLandingSubmits.deceivedMoments,
     mockScreenMessages,
-    session.createdAt.toMillis(),
+    reportTimeBaseMs,
     MOCK_SCREENS[session.scenarioId] ?? [],
   );
 

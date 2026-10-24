@@ -24082,11 +24082,12 @@ Functions(`sendMessage` · 새 `requestScreenActionFollowUp` · 리포트) → H
 | 에뮬 D13 | Mock "어디세요?, … 되세요?." · 매 턴 접두 · 카톡 "여보세요" · 카드사 반말 | `mockClient.ts` 조합 · 인용구 반말 | `shapeMockLine`(잇기 쉼표 · 겹친 마침표 · 마커 맨 뒤) · 접두 세 턴에 한 번 · `mockChannel: "messenger"`면 오프닝 인사 0 · 카드사 · 지원금 인용구 존댓말 | 결정적 |
 | 에뮬 D18 | 0턴 종료 화면 "지금까지 대화한 상대는 …" | 종료 화면 문면 고정 | `src/lib/sessionboundary/zeroTurnEndCopy.ts`(UX D-160) — 리포트 `userTurnCount === 0`이면 0턴 문면 | 결정적. 리포트 준비 전(수 초)은 종전 문면 |
 
-### 129.2 메인 결정 대기
-| 항목 | 상태 |
-|---|---|
-| 프로브 D14 — 거절 중 통화 전환 신호 | 메인에 질문함(2026-10-24). 답 전 변경 0 |
-| 에뮬 D2 — 리포트 "N분 N초" 기준 시각(세션 생성 → 받은 시각?) | 메인에 질문함(2026-10-24). 답 전 변경 0 |
+### 129.2 사용자 결정 반영(2026-10-24 · 메인 질문 창 "1회만 허용 (권장)" · "받은 시각 기준 (권장)")
+| # | 결함 | 수정 | 결정성 |
+|---|---|---|---|
+| D14 | 거절 중 통화 전환 신호(지원금 고급 거절은 2회) | `signalConsistency.ts` 판정표 D — 참가자 거절 · 의심 기색(`PARTICIPANT_PUSHBACK`) ∧ 이미 messenger → voice 전환 ≥ 1이면 신호 전환 · 대사 예고 전환(`canEscalateNow`) 둘 다 막는다. 첫 전환은 받는다 | 결정적 |
+| 에뮬 D2 | 리포트 "N분 N초"가 세션 생성 기준 · 폴백 `answeredAt` = 첫 발화 시각 | `session/answeredAt.ts` 표 A(처음부터 통화인 세션 = `answeredAt` 기준 · 메신저 · 넘어온 통화 = 생성 시각) · 표 B(화면이 "받기" 시각을 탭 저장소에 남기고 `sendMessage` 래퍼가 받은 뒤 지난 ms를 싣는다 → 서버 첫 턴 `answeredAt = 발화 − 경과`, 생성 시각 아래로 안 감). `generateReportCore` 시각 6곳이 표 A를 쓴다 | 결정적. ⚠️ 클라 상대값(시계 차이 무관) · 메신저 세션은 받는 개념이 없어 종전 기준 |
+| (A) | 폴백 대사 "“[문자 발송 도구 호출: …] 고객님, …”" | `replyMarkup.ts` 메타 표식 어휘에 도구 · 시스템 서술 · 4-c행(감싼 따옴표) · 전사 정리 사본에 대괄호 서술 행 | 결정적(어휘 안) |
 
 ### 129.3 테스트 기준값 갱신(의도된 변경만)
 - `roleplay/__tests__/fullAuditDelta.ts` ⑦ `CLAIM_CONSISTENCY_RULE`(정확히 1회) · `SMS_TOOL_SPEECH_SENTENCE`(0 또는 1회) · ⑧ 시나리오 문면 8쌍(`PROBE_129_TEXT_CHANGES`)을 되돌리면 변경 전 기준값과 바이트 동일(smsGate · flowVariants · parcel 대조가 매 실행 재증명).

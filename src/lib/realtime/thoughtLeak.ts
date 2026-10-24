@@ -29,6 +29,9 @@ const LEADING_PUNCT = /^[.,!?…~。]*/;
 /** 행 2-b(§129 D3) — 도구 호출 문자열(`send_prepared_sms(purpose="transfer")`처럼 밑줄 식별자 + 괄호 인자, 백틱 감싸기 허용). */
 const TOOL_CALL_TEXT = /`*\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\s*\([^()\n]{0,80}\)`*/g;
 
+/** 행 2-b(§129 (A)) — 대괄호 도구 · 시스템 서술("[문자 발송 도구 호출: …]" · "[시스템 메시지 …]"). */
+const BRACKET_TOOL_TEXT = /\[[^\[\]\n]{0,24}(?:도구\s*(?:호출|실행|사용)|시스템\s*(?:메시지|안내|호출|처리)|함수\s*호출)[^\[\]\n]{0,40}\]/g;
+
 function latinWordCount(text: string): number {
   return (text.match(LATIN_WORD) ?? []).length;
 }
@@ -49,6 +52,10 @@ export function stripLeakedThought(text: string): string {
     rest = firstHangul < 0 ? "" : after.slice(firstHangul);
     stripped = true;
   }
+  rest = rest.replace(BRACKET_TOOL_TEXT, () => {
+    stripped = true;
+    return " ";
+  });
   rest = rest.replace(TOOL_CALL_TEXT, () => {
     stripped = true;
     return " ";

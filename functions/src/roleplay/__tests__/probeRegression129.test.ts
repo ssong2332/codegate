@@ -13,7 +13,8 @@ import { SCENARIO_PROMPTS } from "../../scenarios";
 import { buildSystemPrompt, CLAIM_CONSISTENCY_RULE, SMS_TOOL_SPEECH_SENTENCE } from "../promptAssembly";
 import { buildLiveConfirmResultInstruction, LIVE_CONFIRM_NOT_YET_SENTENCE } from "../../inCallSms/confirmResult";
 import { CHILD_GENDER_UNSPECIFIED_RULE } from "../../scenarios/messengerChildImpersonationKakao.prompt";
-import { reclassifyMessengerGiveUp } from "../signalConsistency";
+import { isRepeatEscalationDuringRefusal, reclassifyMessengerGiveUp } from "../signalConsistency";
+import { answeredAtFromClient, resolveReportTimeBaseMs } from "../../session/answeredAt";
 import { shouldMarkOpeningUnheard } from "../../session/unheardOpening";
 import { MockLlmClient, shapeMockLine } from "../../llm/mockClient";
 
@@ -220,4 +221,56 @@ test("[§129 에뮬 D13] Mock 대사 — 잇기 쉼표 · 겹친 마침표 정�
   assert.ok(lines.filter((line) => /^(?:잠시만요|저기요)\.\.\./.test(line.text)).length <= 1, "뜸 들이기 접두는 세 턴에 한 번 이하");
   const card = SCENARIO_PROMPTS["card-company-impersonation"]!.weakenedTactics.join("\n");
   assert.ok(!card.includes("확인됐다'"), "카드사 상담원 인용구는 존댓말");
+});
+
+// ── D14 거절 중 전환 1회(사용자 결정 ㉢) ─────────────────────────────────────────────────────
+test("[§129 D14] 판정표 D — 거절 중이면 이미 한 번 전환한 세션의 전환 신호를 받지 않는다", () => {
+  assert.equal(isRepeatEscalationDuringRefusal("보이스피싱 같은데요. 경찰에 물어볼게요.", 0), false); // D2 첫 전환은 받는다
+  assert.equal(isRepeatEscalationDuringRefusal("보이스피싱 같은데요. 경찰에 물어볼게요.", 1), true); // D3
+  assert.equal(isRepeatEscalationDuringRefusal("네, 알겠어요.", 1), false); // D1 거절 아님
+  const index = read("roleplay/index.ts");
+  assert.match(index, /const signalEscalate = rawSignalEscalate && escalationCheck\?\.accept === true && !refusalRepeatBlocked;/);
+  assert.match(index, /canEscalateNow:\n\s*!limitReached &&\n\s*!refusalRepeatBlocked &&/, "대사 예고 전환도 같은 조건");
+});
+
+// ── 에뮬 D2 받은 시각 기준(사용자 결정 ㉠) ───────────────────────────────────────────────────
+const ts = (ms: number) => ({ toMillis: () => ms });
+test("[§129 에뮬 D2] 표 A — 처음부터 통화인 세션만 받은 시각 기준 · 메신저(·넘어온 통화)는 생성 시각", () => {
+  assert.equal(resolveReportTimeBaseMs({ channel: "voice", channelHistory: undefined, createdAt: ts(1000), answeredAt: ts(5000) }), 5000); // A1
+  assert.equal(resolveReportTimeBaseMs({ channel: undefined, channelHistory: [], createdAt: ts(1000), answeredAt: undefined }), 1000); // A2
+  assert.equal(resolveReportTimeBaseMs({ channel: "messenger", channelHistory: undefined, createdAt: ts(1000), answeredAt: ts(5000) }), 1000); // A2
+  assert.equal(
+    resolveReportTimeBaseMs({ channel: "voice", channelHistory: [{ from: "messenger", to: "voice" } as never], createdAt: ts(1000), answeredAt: ts(5000) }),
+    1000,
+  ); // A2
+  const core = read("report/generateReportCore.ts");
+  assert.equal(core.includes("session.createdAt.toMillis()"), false, "리포트 시각은 모두 표 A 기준을 쓴다");
+});
+
+test("[§129 에뮬 D2] 표 B — 폴백 첫 턴 받은 시각 = 발화 시각 − 클라 경과(생성 시각 아래로 안 감) · 그 밖은 발화 시각", () => {
+  const voice = { channel: "voice" as const, channelHistory: undefined };
+  assert.equal(answeredAtFromClient(voice, 1000, 100_000, 30_000), 70_000); // B4
+  assert.equal(answeredAtFromClient(voice, 1000, 100_000, 500_000), 1000); // B4 하한
+  assert.equal(answeredAtFromClient(voice, 1000, 100_000, undefined), 100_000); // B3
+  assert.equal(answeredAtFromClient(voice, 1000, 100_000, -5), 100_000); // B3
+  assert.equal(answeredAtFromClient(voice, 1000, 100_000, Number.NaN), 100_000); // B3
+  assert.equal(answeredAtFromClient({ channel: "messenger", channelHistory: undefined }, 1000, 100_000, 30_000), 100_000); // B2
+  const index = read("roleplay/index.ts");
+  assert.match(index, /answeredAtFromClient\(fresh, fresh\.createdAt\.toMillis\(\), userWriteTime\.toMillis\(\), request\.data\?\.answeredElapsedMs\)/);
+});
+
+// ── (A) 폴백 대사의 대괄호 도구 서술 ────────────────────────────────────────────────────────
+test("[§129 (A)] 폴백 대사 · 전사에서 대괄호 도구 · 시스템 서술과 감싼 따옴표를 지운다 · 문자 머리표는 그대로", () => {
+  const live = "“[문자 발송 도구 호출: 본인 확인용 인증번호 문자 발송] 고객님, 방금 휴대폰으로 본인 확인용 인증번호 문자를 보내 드렸습니다.”";
+  assert.equal(tidyScammerReplyMarkup(live).text, "고객님, 방금 휴대폰으로 본인 확인용 인증번호 문자를 보내 드렸습니다.");
+  assert.equal(
+    tidyScammerReplyMarkup("“[시스템 메시지: 문자 전송] 고객님, 문자 확인해 주세요").text,
+    "고객님, 문자 확인해 주세요",
+    "닫는 따옴표 없는 여는 따옴표",
+  );
+  assert.equal(stripLeakedThought("[문자 발송 도구 호출: 인증번호 문자 발송] 고객님, 문자 보내 드렸습니다."), "고객님, 문자 보내 드렸습니다.");
+  for (const keep of ["[지원금 안내] 신청 기한이 오늘까지입니다.", "고객님이 \"네\"라고 하셨잖아요."]) {
+    assert.equal(tidyScammerReplyMarkup(keep).text, keep);
+  }
+  assert.equal(judgeScammerReplyUsability("[문자 발송 도구 호출: 인증번호 문자 발송]"), "empty", "서술만 있는 응답은 쓸 수 없다");
 });

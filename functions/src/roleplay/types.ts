@@ -23,6 +23,11 @@ export type SendMessageRequest = {
    * `messenger` · 문자 · 끊기 · 전환 판정 0 · 음성 합성 0.
    */
   duringCall?: boolean;
+  /**
+   * §129 에뮬 D2(사용자 결정 2026-10-24 ㉠) — 이 탭에서 "받기"를 누른 뒤 지난 ms(클라 상대값 · 시계 차이 무관). 받은 시각이 아직 없는
+   * 통화 세션의 첫 턴에서만 `answeredAt = 이번 발화 시각 − 이 값`(세션 생성 시각 아래로는 내려가지 않음)으로 쓴다(`answeredAtFromClient`).
+   */
+  answeredElapsedMs?: number;
 };
 export type SendMessageResponse = {
   reply: ScammerMessage;
