@@ -541,9 +541,11 @@ export default function DifficultySelectPage() {
         )}
       </div>
 
-      <BottomSheet open={selected !== null} placement="sticky" label="고른 난이도">
+      {/* §130(UX D-161 (8)) — 시트 높이 상한 = 화면의 40%. 넘치면 설명 칸만 시트 안에서 스크롤되고 '이걸로 시작'은 늘 보인다
+          (360×640 시트 284px = 44% · 글자 200%에서 680px = 87% — 2026-10-24 실측). */}
+      <BottomSheet open={selected !== null} placement="sticky" label="고른 난이도" className="max-h-[40dvh]">
         {selected && (
-          <div className="flex flex-col gap-1 px-[22px] pt-4">
+          <div className="flex min-h-0 flex-col gap-1 overflow-y-auto px-[22px] pt-4">
             <span className="text-[15px] font-semibold text-ink-sub">고른 난이도</span>
             <DisplayTitle as="h2" size="lg" className="text-ink">
               {DIFFICULTY_LABEL[selected]}
@@ -562,7 +564,7 @@ export default function DifficultySelectPage() {
         )}
         {/* AC-064 — 난이도를 고르지 않으면 진행 버튼이 없다(시트가 닫혀 있다 — 사전 차단, P-5). */}
         <CtaPanel
-          className="mt-3"
+          className="mt-3 shrink-0"
           onClick={() => void handleStart()}
           disabled={!selected || state === "starting" || state === "difficulty-fallback"}
           /* UX D-134 대기 문구(SESSION_PREP_HINTS)는 셀프 세션이면 준비 화면(TrainingPrepScreen)이 그린다(§97.7). */

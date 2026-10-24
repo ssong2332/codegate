@@ -2080,7 +2080,8 @@ export default function SessionCallPage() {
     // T190-3(§74.6 (6)) — 닫는 순간의 최신 id까지 확인 처리(열려 있는 동안 도착한 건 포함 — 현행 의미 유지).
     setBannerAckSmsId((current) => ackOnOverlayClose(latestSmsId(inCallSms), current));
     // 직전 트리거(배너 또는 "문자함" 버튼)로 포커스 복귀(UX-027 Focus Order).
-    smsTriggerRef.current?.focus();
+    // §130 — 셸의 `inert`가 다음 그리기에서 풀린 뒤에 옮긴다(inert 안의 요소는 초점을 받지 못한다).
+    requestAnimationFrame(() => smsTriggerRef.current?.focus());
   };
 
   // T123 — enum을 여기서 다시 적지 않고 **계약 타입을 그대로 쓴다**. 값을 복제해 두면 서버가
@@ -2613,6 +2614,17 @@ export default function SessionCallPage() {
     </button>
   );
 
+  // 통화 셸 바탕(단색 또는 그라데이션). §130(UX D-161 (2)) — 아래에 붙는 하단 판도 같은 바탕을 칠한다: 그라데이션은 화면 높이(100dvh)
+  // 크기로 아래에 맞춰 셸 바탕과 이음매 없이 겹친다(그냥 이어받으면 판 안에서 그라데이션이 처음부터 다시 그려져 경계가 보였다).
+  const shellBackground = voiceTalkCall ? voiceTalkCallBackground() : isRinging ? ringBackground(callTokens) : callTokens.bg;
+  const bottomPanelBackground: React.CSSProperties = shellBackground.includes("gradient(")
+    ? { backgroundImage: shellBackground, backgroundSize: "100% 100dvh", backgroundPosition: "center bottom", backgroundRepeat: "no-repeat" }
+    : { backgroundColor: shellBackground };
+  // 키패드 영역 아래에 붙는 대화 묶음 — 키패드가 열리면 셸 = 화면 높이라, 화면 기준(`fixed`)으로 칠한 그라데이션이 셸과 같은 자리에 온다.
+  const keypadInputBackground: React.CSSProperties = shellBackground.includes("gradient(")
+    ? { ...bottomPanelBackground, backgroundAttachment: "fixed", backgroundPosition: "center top" }
+    : { backgroundColor: shellBackground };
+
   return (
     // T190-3(UX-014 v1.33 (8) Responsive · W-D) — 최대폭 430px 가운데 정렬, 바깥은 `call.bg`보다 한 단계 어두운 단색.
     <main
@@ -2731,11 +2743,14 @@ export default function SessionCallPage() {
           ⚠️ 이 래퍼는 표현 계층일 뿐이다 — 세션 컴포넌트(위)·오버레이(아래)는 여전히 `<main>`의 형제 노드다(G10). */}
       {/* UX D-140 (2) — 키패드가 열려 있을 때만 셸을 화면 높이로 묶는다(키패드 영역이 남은 높이만큼 줄고 그 안에서 스크롤 ·
           종료 버튼은 화면 안). 그 밖 상태는 최소 높이만 준다(내용이 그래도 넘치면 문서가 스크롤 — 잘리지 않는다). */}
+      {/* §130(UX D-161 (3)) — 문자함 · 대화방이 통화 화면을 덮는 동안 아래 통화 셸은 `inert`(초점 · 스크린리더 대상 밖). 셸은 그대로
+          마운트돼 있어 통화 · 타이머는 이어진다(G10 — 속성만 바뀐다). 확인 시트(UX-031)는 비모달이라 대상이 아니다. */}
       <div
+        inert={chatOpen || smsOverlayOpen ? true : undefined}
         className={`mx-auto flex w-full max-w-[430px] flex-col ${showTextInput ? "h-dvh flex-none" : "min-h-dvh flex-1"}`}
         style={{
           // §89.5 ⓑ — 수신 벨은 흐린 그라데이션 바탕(그 밖 phase는 단색 — 종전).
-          background: voiceTalkCall ? voiceTalkCallBackground() : isRinging ? ringBackground(callTokens) : callTokens.bg,
+          background: shellBackground,
           paddingTop: "calc(env(safe-area-inset-top) + 24px)",
         }}
       >
@@ -2823,12 +2838,13 @@ export default function SessionCallPage() {
       <div
         aria-hidden="true"
         className="call-top-slack"
-        style={{ maxHeight: callTokens.hasAvatar ? "max(0px, calc(18dvh - 24px))" : "48px" }}
+        // §130(UX D-161 (1)) — 키패드가 열리면 여백 · 아바타를 접어 그 높이를 키패드 영역에 준다(실제 통화 앱도 키패드에서는 이름 · 시간만 남는다).
+        style={{ maxHeight: showTextInput ? "0px" : callTokens.hasAvatar ? "max(0px, calc(18dvh - 24px))" : "48px" }}
       />
-      <div className="call-compact-gap flex flex-1 flex-col items-center gap-5 px-6">
+      <div className={`call-compact-gap flex ${showTextInput ? "flex-none" : "flex-1"} flex-col items-center gap-5 px-6`}>
         {/* §89.5 ⓑ — 벨 등장: 위에서 내려오며 커진다(`call-ring-enter` · reduced-motion이면 정지 — G457). */}
         <div className={`flex w-full flex-col items-center text-center ${isRinging ? "call-ring-enter" : ""}`}>
-          {callTokens.hasAvatar && (
+          {callTokens.hasAvatar && !showTextInput && (
             <div
               aria-hidden="true"
               className={`call-compact-avatar relative mb-5 flex h-[88px] w-[88px] items-center justify-center ${voiceTalkCall ? "overflow-hidden rounded-[34px]" : "rounded-full"}`}
@@ -3039,7 +3055,13 @@ export default function SessionCallPage() {
           </button>
         </div>
       ) : (
-        <div className={`call-compact-bottom flex flex-col pb-[calc(env(safe-area-inset-bottom)+32px)] ${showTextInput ? "min-h-0" : ""}`}>
+        // §130(UX D-161 (2)) — 하단 판은 화면 아래에 붙는다(`sticky`): 글자 크기 200%처럼 내용이 넘쳐도 빨간 통화 종료가 화면 밖으로
+        // 밀리지 않는다(AC-006 상시 보임). 넘치지 않으면 위치는 종전 그대로다. 바탕은 셸과 같은 바탕(`bottomPanelBackground`)이라 위 글자가 비치지 않는다.
+        // 키패드가 열리면 남은 높이를 모두 받는다(`flex-1` — 키패드 영역이 그 안에서 스크롤).
+        <div
+          className={`call-compact-bottom sticky bottom-0 z-10 flex flex-col pb-[calc(env(safe-area-inset-bottom)+32px)] ${showTextInput ? "min-h-0 flex-1" : ""}`}
+          style={bottomPanelBackground}
+        >
           {/* T190-3(UX-014 v1.33 (7)) — 키패드를 열면 **그리드 자리를 키패드가 대체**한다(실제 통화 앱처럼). 높이가
               모자라면 키패드 영역만 스크롤되고 종료 버튼은 아래 같은 자리에 고정이다(AC-006). 자막·안내·오류·
               텍스트 입력(두 `form` · `scrollIntoView`)은 예전 그대로 이 영역 안에 있다 — 문면 무변경. */}
@@ -3049,12 +3071,13 @@ export default function SessionCallPage() {
             ref={hangupDimRef}
             aria-disabled={remoteHangup ? true : undefined}
             inert={remoteHangup ? true : undefined}
-            className={`transition-opacity duration-200 motion-reduce:transition-none ${showTextInput ? "flex min-h-0 flex-col" : ""}`}
+            className={`transition-opacity duration-200 motion-reduce:transition-none ${showTextInput ? "flex min-h-0 flex-1 flex-col" : ""}`}
             style={remoteHangup ? { opacity: 0.4, pointerEvents: "none" } : undefined}
           >
           {showTextInput ? (
             // UX D-140 — `relative`: 안쪽 `sr-only` 라벨(absolute)이 스크롤 영역 밖 문서 높이를 늘리지 않게 가둔다(360×650 실측 +201px).
-            <div className="relative max-h-[56dvh] min-h-0 overflow-y-auto px-6">
+            // §130(UX D-161 (1)) — 높이 상한(56dvh) 대신 남은 높이를 모두 쓴다 · 대화 묶음은 영역 아래에 붙는다(아래 `sticky` div).
+            <div className="relative min-h-0 flex-1 overflow-y-auto px-6">
               {/* 실제 통화 키패드(사용자 신고 2026-07-25 — "키패드가 있는데 실제로 작동하지 않는다").
                   상대가 "인증번호 눌러주세요"류를 요구하는 시나리오에서 실제로 눌러 응답할 수 있다.
                   누른 숫자는 화면에 그대로 보이고, 전송하면 음성/텍스트와 동일한 경로로 상대에게
@@ -3127,8 +3150,10 @@ export default function SessionCallPage() {
                   sendMessage가 아니라 **같은 Live 세션**에 텍스트 턴으로 넣으므로(handleSend의
                   realtime 분기) 목소리가 겹치지 않는다. 마이크가 없거나 쓸 수 없는 환경에서도
                   훈련·검증이 가능해진다(사용자 신고 2026-07-25). */}
+              {/* §130(UX D-161 (1)) — 대화 묶음(안내 · 사기범 대사 · 상태 줄 · 입력줄)은 키패드 영역 아래에 붙어 늘 보인다
+                  (숫자 키는 그 위에서 스크롤된다 — 종전에는 412×915에서도 입력줄이 영역 밖으로 숨었다). */}
               {callMode === "realtime" ? (
-                <>
+                <div className="sticky bottom-0 pb-1 pt-2" style={keypadInputBackground}>
                   <p className="mb-3 text-center text-xs leading-relaxed text-[var(--call-fg-sub)]">
                     마이크에 대고 말해도 되고, 아래에 입력해도 상대에게 그대로 전달됩니다.
                   </p>
@@ -3153,7 +3178,7 @@ export default function SessionCallPage() {
                         event.currentTarget.scrollIntoView({ behavior: "smooth", block: "center" })
                       }
                       placeholder="하고 싶은 말을 입력하세요..."
-                      className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-[var(--call-field-border)] bg-[var(--call-field-bg)] px-[18px] py-3 text-lg text-[var(--call-fg)] placeholder:text-[var(--call-fg-sub)]"
+                      className="min-h-[50px] min-w-0 flex-1 rounded-full border-[1.5px] border-[var(--call-field-border)] bg-[var(--call-field-bg)] px-[18px] py-3 text-lg text-[var(--call-fg)] placeholder:text-[var(--call-fg-sub)]"
                     />
                     <button
                       type="submit"
@@ -3164,9 +3189,9 @@ export default function SessionCallPage() {
                       ↑
                     </button>
                   </form>
-                </>
+                </div>
               ) : (
-                <>
+                <div className="sticky bottom-0 pb-1 pt-2" style={keypadInputBackground}>
                   {latestScammerLine && (
                     <p className="mb-3 text-center text-base leading-relaxed text-[var(--call-fg)]" aria-live="polite">
                       &ldquo;{latestScammerLine}&rdquo;
@@ -3217,7 +3242,7 @@ export default function SessionCallPage() {
                       }
                       disabled={sending}
                       placeholder="하고 싶은 말을 입력하세요..."
-                      className="min-h-[50px] flex-1 rounded-full border-[1.5px] border-[var(--call-field-border)] bg-[var(--call-field-bg)] px-[18px] py-3 text-lg text-[var(--call-fg)] placeholder:text-[var(--call-fg-sub)]"
+                      className="min-h-[50px] min-w-0 flex-1 rounded-full border-[1.5px] border-[var(--call-field-border)] bg-[var(--call-field-bg)] px-[18px] py-3 text-lg text-[var(--call-fg)] placeholder:text-[var(--call-fg-sub)]"
                     />
                     <button
                       type="submit"
@@ -3235,7 +3260,7 @@ export default function SessionCallPage() {
                       )}
                     </button>
                   </form>
-                </>
+                </div>
               )}
             </div>
           ) : (

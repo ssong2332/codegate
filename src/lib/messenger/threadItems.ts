@@ -28,6 +28,13 @@ export const CALL_SEGMENT_ICON = "📞";
 /** 시스템 줄 문구(말풍선이 아니다 — 누가 보낸 메시지가 아님). */
 export const CALL_SEGMENT_LINE = "통화 — 통화 내용은 리포트에서 볼 수 있어요";
 
+/**
+ * §130(UX D-161 (11)) — 카톡형 대화방에서는 같은 통화 구간을 카톡의 통화 기록 말풍선("보이스톡")처럼 보인다(문자형은 위 시스템 줄 그대로).
+ * ⚠️ 통화 시간은 적지 않는다 — 화면이 아는 시각은 전사 문서 시각뿐이라 실제 통화 길이와 다르다(서버에 통화 끝 시각 칸이 없다).
+ */
+export const VOICE_TALK_RECORD_TITLE = "보이스톡";
+export const VOICE_TALK_RECORD_NOTE = "통화 내용은 리포트에서 볼 수 있어요";
+
 const hasAttachments = (message: ThreadMessage): boolean => (message.attachments?.length ?? 0) > 0;
 
 /** turnIndex 순으로 정렬된 메시지에서 연속한 `channel:"voice"` 구간을 통화 항목 1개로 접는다. */

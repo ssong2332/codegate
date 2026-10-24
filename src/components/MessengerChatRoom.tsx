@@ -63,7 +63,13 @@ import { clearVoiceTalkDial, stashVoiceTalkDial } from "@/lib/messenger/voiceTal
 import { attachQueuedPhotos, sessionPhotoStore } from "@/lib/messenger/sessionPhotos";
 import { Button, LoadingStatus } from "@/components/ui";
 import { foldDegraded, DIALOGUE_DEGRADED_NOTICE } from "@/lib/report/degradedDisclosure";
-import { CALL_SEGMENT_ICON, CALL_SEGMENT_LINE, foldCallSegments } from "@/lib/messenger/threadItems";
+import {
+  CALL_SEGMENT_ICON,
+  CALL_SEGMENT_LINE,
+  VOICE_TALK_RECORD_NOTE,
+  VOICE_TALK_RECORD_TITLE,
+  foldCallSegments,
+} from "@/lib/messenger/threadItems";
 import {
   nextChangeAt,
   noteServerDone,
@@ -913,6 +919,24 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
       >
         {/* 2026-10-20 실기 신고 — 통화 전사(channel "voice")는 말풍선이 아니라 시스템 줄 1개로 접는다(누가 보낸 메시지가 아니다). */}
         {threadItems.map((item, index) => {
+          if (item.kind === "call" && !isSms) {
+            // §130(UX D-161 (11)) — 카톡형: 통화 기록 말풍선(가운데 · 상대 말풍선 모양). 통화 시간은 적지 않는다(threadItems.ts).
+            return (
+              <li key={item.id} className="my-1.5 flex justify-center">
+                <span className="flex items-center gap-2.5 px-3.5 py-2.5" style={kakaoBubbleStyle("scammer", true)}>
+                  <span aria-hidden="true" className="text-[18px]">
+                    {CALL_SEGMENT_ICON}
+                  </span>
+                  <span className="flex flex-col">
+                    <span className="text-[16px] font-semibold leading-[1.3]">{VOICE_TALK_RECORD_TITLE}</span>
+                    <span className="text-[13px] leading-[1.35]" style={{ color: chatTokens.time }}>
+                      {VOICE_TALK_RECORD_NOTE}
+                    </span>
+                  </span>
+                </span>
+              </li>
+            );
+          }
           if (item.kind === "call") {
             return (
               <li key={item.id} className="my-1.5 flex justify-center">

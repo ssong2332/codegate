@@ -127,6 +127,8 @@ export default function ReplayPage() {
         channel: data.channel as "voice" | "messenger" | undefined,
         // §55 D3 — 낭독되지 않은 문서 표시를 그대로 넘긴다(제외 판단은 순수 함수가 한다).
         ...(data.notSpoken === true ? { notSpoken: true as const } : {}),
+        // §130(UX D-161 (10)) — 사진 턴 표시(이미지는 저장되지 않는다 — 사실만).
+        ...(data.photo === true ? { photo: true as const } : {}),
       };
     });
 
@@ -519,9 +521,22 @@ export default function ReplayPage() {
               {item.role === "user" ? (
                 <div className="flex justify-end">
                   <div className="max-w-[85%]">
-                    <div className="rounded-[8px] rounded-br-[4px] bg-brand px-4 py-3">
-                      <p className="text-[17px] leading-[1.55] text-white">{item.textMasked}</p>
-                    </div>
+                    {item.photo ? (
+                      // §130(UX D-161 (10)) — 사진 턴은 서술 문장("(사진 1장을 보냈다)") 대신 대화방과 같은 사진 칸으로 보인다.
+                      // 이미지는 기기 메모리에만 있었고 저장되지 않아(§113) 빈 사진 칸이다.
+                      <span
+                        role="img"
+                        aria-label="보낸 사진"
+                        className="ml-auto flex h-[120px] w-[120px] items-center justify-center rounded-[8px] rounded-br-[4px] bg-brand/15 text-[15px] font-semibold text-brand"
+                      >
+                        사진
+                      </span>
+                    ) : (
+                      <div className="rounded-[8px] rounded-br-[4px] bg-brand px-4 py-3">
+                        {/* §130(UX D-161 (10)) — 참가자가 넣은 줄바꿈을 그대로 보인다(사기범 말풍선과 같은 규칙). */}
+                        <p className="whitespace-pre-line text-[17px] leading-[1.55] text-white">{item.textMasked}</p>
+                      </div>
+                    )}
                     <p className="mr-1 mt-1 flex items-center justify-end gap-1.5 text-[13px] text-ink-sub">
                       나
                       {hasMultipleChannels && <Badge variant="neutral">{channelBadgeLabel}</Badge>}

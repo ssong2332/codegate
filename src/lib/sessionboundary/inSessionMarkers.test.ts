@@ -455,7 +455,8 @@ function ariaLabelViolations(sources: Record<string, string>): string[] {
   if (!labels("src/components/InCallSmsOverlay.tsx").some((l) => l.kind === "template" && l.head === "링크: ")) out.push("A3");
   if (!labels("src/components/MessengerChatRoom.tsx").some((l) => l.kind === "template" && l.head === "링크: ")) out.push("A4");
   if (!labels("src/components/MessengerFakeLanding.tsx").some((l) => l.kind === "template" && l.tail === " 화면")) out.push("A5");
-  if (!hasString("src/components/EndTrainingButton.tsx", "훈련 즉시 종료")) out.push("불변: 훈련 즉시 종료");
+  // §130(UX D-161 (4)) — 보이는 글자와 같은 이름(WCAG 2.5.3). 옛 이름 "훈련 즉시 종료"는 보이는 글자를 담지 못했다.
+  if (!hasString("src/components/EndTrainingButton.tsx", "훈련 종료")) out.push("불변: 훈련 종료");
   if (!hasString("src/app/session/play/page.tsx", "통화 종료 — 훈련 종료")) out.push("불변: 통화 종료 — 훈련 종료");
   if (!hasString("src/app/session/play/page.tsx", "전화 거절 — 훈련 종료")) out.push("불변: 전화 거절 — 훈련 종료");
   for (const file of Object.keys(sources)) {
