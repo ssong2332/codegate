@@ -55,7 +55,7 @@ test("[D-140/G-VU4] 통화 화면 상단 여백은 줄어드는 칸이다(기준
   // 키패드 영역 안 sr-only(absolute) 라벨이 문서 높이를 늘리지 않게 가둔다(실측 +201px).
   // §130(UX D-161 (1)) — 키패드 영역은 높이 상한 없이 남은 높이를 받는다 · 입력줄은 영역 아래에 붙는다.
   assert.ok(play.includes('className="relative min-h-0 flex-1 overflow-y-auto px-6"'));
-  assert.equal((play.match(/<div className="sticky bottom-0 pb-1 pt-2" style=\{keypadInputBackground\}>/g) ?? []).length, 2, "두 대화 묶음(실시간 · 폴백)이 붙는다");
+  assert.equal((play.match(/<div className="sticky bottom-0 pb-1 pt-1" style=\{keypadInputBackground\}>/g) ?? []).length, 2, "두 대화 묶음(실시간 · 폴백)이 붙는다");
 });
 
 test("[D-140/G-VU5] 짧은 화면 간격 축소는 높이 700px(종료 화면은 980px — D-144 · D-161) 이하에서만 · 글자 크기는 건드리지 않는다", () => {

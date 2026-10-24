@@ -75,6 +75,7 @@ import {
   type ResolvedDeviceSkin,
 } from "@/lib/phone/deviceSkin";
 import { bannerTokensFor, callTokensFor, ringBackground, voiceTalkCallBackground, voiceTalkCallTokens } from "@/lib/phone/skinTokens";
+import { shouldHideCallAvatar } from "@/lib/phone/callCrowding";
 import { useDeviceTheme } from "@/lib/phone/deviceTheme";
 import { createSwipeAnswer, type SwipeAnswerController } from "@/lib/phone/swipeAnswer";
 import {
@@ -539,6 +540,28 @@ export default function SessionCallPage() {
   // ⭐ T192 C5(UX-014 v1.35 `remote-hangup` — `ended` 안의 하위 상태 · 신규 phase 0) — 사기범이 먼저 끊은 종료 표시.
   const remoteHangup = phase === "ended" && callEndedBy === "scammer";
   const hangupDimRef = useRef<HTMLDivElement | null>(null);
+  // §130.6(N7 · UX D-161 (16)) — 번호 · 경과 시간 묶음이 화면 아래에 붙은 하단 판 밑으로 들어가면(글자 200% 등) 아바타를 접는다.
+  // 판정은 `callCrowding.ts` 표(실제 위치 · 왔다 갔다 0). 글자 100%에서는 겹치지 않아 종전 화면 그대로다.
+  const callInfoRef = useRef<HTMLDivElement | null>(null);
+  const bottomPanelRef = useRef<HTMLDivElement | null>(null);
+  const [avatarCrowded, setAvatarCrowded] = useState(false);
+  useLayoutEffect(() => {
+    if (showTextInput || phase === "incoming") return;
+    const check = () => {
+      const info = callInfoRef.current?.getBoundingClientRect();
+      const panel = bottomPanelRef.current?.getBoundingClientRect();
+      if (!info || !panel) return;
+      setAvatarCrowded((hidden) => shouldHideCallAvatar({ hidden, infoBottom: info.bottom, panelTop: panel.top }));
+    };
+    check();
+    window.addEventListener("resize", check);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(check);
+    if (observer && bottomPanelRef.current) observer.observe(bottomPanelRef.current);
+    return () => {
+      window.removeEventListener("resize", check);
+      observer?.disconnect();
+    };
+  }, [showTextInput, phase]);
   const endCallButtonRef = useRef<HTMLButtonElement | null>(null);
   // UX (9) ② — 초점이 흐려지는 요소(그리드 · 키패드 · 입력창) 위에 있었으면 통화 종료 버튼으로 옮긴다(그 밖이면 그대로).
   // C5 리뷰 m1 — 레이아웃 effect로 옮겼다(흐림 · `inert`가 칠해지기 전에 옮겨 초점 소실 프레임 0). React 19는 서버에서
@@ -2855,10 +2878,10 @@ export default function SessionCallPage() {
         // §130(UX D-161 (1)) — 키패드가 열리면 여백 · 아바타를 접어 그 높이를 키패드 영역에 준다(실제 통화 앱도 키패드에서는 이름 · 시간만 남는다).
         style={{ maxHeight: showTextInput ? "0px" : callTokens.hasAvatar ? "max(0px, calc(18dvh - 24px))" : "48px" }}
       />
-      <div className={`call-compact-gap flex ${showTextInput ? "flex-none" : "flex-1"} flex-col items-center gap-5 px-6`}>
+      <div className={`call-compact-gap flex ${showTextInput ? "flex-none gap-2" : "flex-1 gap-5"} flex-col items-center px-6`}>
         {/* §89.5 ⓑ — 벨 등장: 위에서 내려오며 커진다(`call-ring-enter` · reduced-motion이면 정지 — G457). */}
-        <div className={`flex w-full flex-col items-center text-center ${isRinging ? "call-ring-enter" : ""}`}>
-          {callTokens.hasAvatar && !showTextInput && (
+        <div ref={callInfoRef} className={`flex w-full flex-col items-center text-center ${isRinging ? "call-ring-enter" : ""}`}>
+          {callTokens.hasAvatar && !showTextInput && !avatarCrowded && (
             <div
               aria-hidden="true"
               className={`call-compact-avatar relative mb-5 flex h-[88px] w-[88px] items-center justify-center ${voiceTalkCall ? "overflow-hidden rounded-[34px]" : "rounded-full"}`}
@@ -2962,7 +2985,7 @@ export default function SessionCallPage() {
             지우지 않는다(G289) — "듣고 있어요"·"보내는 중" 자동 청취/전송 상태의 유일한 화면
             표시이고, 대체 표면인 키패드 패널은 기본 닫힘이라 없다(침묵 실패 금지). */}
         {(phase === "live" || phase === "opening") && callMode !== "realtime" && (
-          <CallWaveform active={agentSpeaking} label={waveLabel} />
+          <CallWaveform active={agentSpeaking} label={waveLabel} compact={showTextInput} />
         )}
 
         {/* §49.6(2026-08-02, 신고 7ⓑ) — 사용자 발화 파형 인디케이터(2026-07-24 신고, T51 ②)는
@@ -3073,6 +3096,7 @@ export default function SessionCallPage() {
         // 밀리지 않는다(AC-006 상시 보임). 넘치지 않으면 위치는 종전 그대로다. 바탕은 셸과 같은 바탕(`bottomPanelBackground`)이라 위 글자가 비치지 않는다.
         // 키패드가 열리면 남은 높이를 모두 받는다(`flex-1` — 키패드 영역이 그 안에서 스크롤).
         <div
+          ref={bottomPanelRef}
           className={`call-compact-bottom sticky bottom-0 z-10 flex flex-col pb-[calc(env(safe-area-inset-bottom)+32px)] ${showTextInput ? "min-h-0 flex-1" : ""}`}
           style={bottomPanelBackground}
         >
@@ -3096,13 +3120,37 @@ export default function SessionCallPage() {
                   상대가 "인증번호 눌러주세요"류를 요구하는 시나리오에서 실제로 눌러 응답할 수 있다.
                   누른 숫자는 화면에 그대로 보이고, 전송하면 음성/텍스트와 동일한 경로로 상대에게
                   전달된다(실시간이면 Live 세션, 폴백이면 sendMessage). */}
-              <div className="mb-4">
-                <div
-                  className="mb-3 flex min-h-[44px] items-center justify-center px-4 text-[28px] tracking-[0.2em] text-[var(--call-fg)] tabular-nums"
-                  aria-live="polite"
-                  aria-label="입력한 번호"
-                >
-                  {dialpadValue || <span className="text-base tracking-normal text-[var(--call-fg-sub)]">번호를 누르세요</span>}
+              <div className="mb-2">
+                {/* §130.6(N4 · UX D-161 (15)) — 번호 표시 줄 = [지우기] 누른 번호 [번호 전송](실제 키패드의 표시 줄 + 지우기 자리). 종전 별도
+                    줄을 합쳐 한 줄을 덜었다 — 높이 800px 이하에서도 입력줄 · 숫자 12개 · 번호 전송이 한 화면에 든다. `keypad-*`는 globals.css. */}
+                <div className="keypad-display mb-3 flex min-h-[44px] items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDialpadValue((v) => v.slice(0, -1))}
+                    disabled={!dialpadValue}
+                    className="min-h-[44px] w-[76px] shrink-0 rounded-xl bg-[var(--call-chip)] text-sm font-semibold text-[var(--call-fg-sub)] disabled:opacity-40"
+                  >
+                    ← 지우기
+                  </button>
+                  <div
+                    className="min-w-0 flex-1 truncate text-center text-[28px] tracking-[0.2em] text-[var(--call-fg)] tabular-nums"
+                    aria-live="polite"
+                    aria-label="입력한 번호"
+                  >
+                    {dialpadValue || <span className="text-base tracking-normal text-[var(--call-fg-sub)]">번호를 누르세요</span>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!dialpadValue) return;
+                      void handleSend(dialpadValue);
+                      setDialpadValue("");
+                    }}
+                    disabled={!dialpadValue}
+                    className="min-h-[44px] w-[76px] shrink-0 rounded-xl bg-brand text-sm font-bold text-white disabled:opacity-40"
+                  >
+                    번호 전송
+                  </button>
                 </div>
                 {/* 2026-10-21(실기 신고) — iOS형 = 큰 원 키(76px) · One UI형 = 원 없는 숫자(눌림만 옅은 판) · 둘 다 숫자 아래
                     영문자(대조표 키패드 행). 키 이름(`${key} 누르기`)은 무변경 — 영문자는 장식이라 읽지 않는다. */}
@@ -3119,7 +3167,7 @@ export default function SessionCallPage() {
                       type="button"
                       onClick={() => setDialpadValue((v) => (v.length >= 32 ? v : v + key))}
                       aria-label={`${key} 누르기`}
-                      className={`flex flex-col items-center justify-center text-[var(--call-fg)] transition active:scale-95 ${
+                      className={`keypad-key flex flex-col items-center justify-center text-[var(--call-fg)] transition active:scale-95 ${
                         callTokens.layout === "ios"
                           ? "h-[76px] w-[76px] rounded-full text-[32px]"
                           : "h-16 w-[88px] rounded-2xl text-[30px] active:bg-[var(--call-chip)]"
@@ -3137,28 +3185,6 @@ export default function SessionCallPage() {
                     </button>
                   ))}
                 </div>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDialpadValue((v) => v.slice(0, -1))}
-                    disabled={!dialpadValue}
-                    className="min-h-[48px] flex-1 rounded-xl bg-[var(--call-chip)] text-sm font-semibold text-[var(--call-fg-sub)] disabled:opacity-40"
-                  >
-                    ← 지우기
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!dialpadValue) return;
-                      void handleSend(dialpadValue);
-                      setDialpadValue("");
-                    }}
-                    disabled={!dialpadValue}
-                    className="min-h-[48px] flex-1 rounded-xl bg-brand text-sm font-bold text-white disabled:opacity-40"
-                  >
-                    번호 전송
-                  </button>
-                </div>
               </div>
               {/* finding #3(2026-07-25 갱신): 실시간 모드에서도 이제 타이핑할 수 있다 — 다만
                   sendMessage가 아니라 **같은 Live 세션**에 텍스트 턴으로 넣으므로(handleSend의
@@ -3167,7 +3193,7 @@ export default function SessionCallPage() {
               {/* §130(UX D-161 (1)) — 대화 묶음(안내 · 사기범 대사 · 상태 줄 · 입력줄)은 키패드 영역 아래에 붙어 늘 보인다
                   (숫자 키는 그 위에서 스크롤된다 — 종전에는 412×915에서도 입력줄이 영역 밖으로 숨었다). */}
               {callMode === "realtime" ? (
-                <div className="sticky bottom-0 pb-1 pt-2" style={keypadInputBackground}>
+                <div className="sticky bottom-0 pb-1 pt-1" style={keypadInputBackground}>
                   <p className="mb-3 text-center text-xs leading-relaxed text-[var(--call-fg-sub)]">
                     마이크에 대고 말해도 되고, 아래에 입력해도 상대에게 그대로 전달됩니다.
                   </p>
@@ -3205,30 +3231,35 @@ export default function SessionCallPage() {
                   </form>
                 </div>
               ) : (
-                <div className="sticky bottom-0 pb-1 pt-2" style={keypadInputBackground}>
+                <>
+                {/* §130.6(N4 · UX D-161 (15)) — 상태 줄은 붙은 묶음 밖(숫자판 아래 · 끝까지 내리면 보인다). 늘 같은 안내라 숫자판 자리를 먼저
+                    준다. 전송 오류(`alert`)만은 묶음 안에 남아 늘 보인다(아래). 문면 · 조건은 종전 그대로다. */}
+                {callMode === "fallback" && !sendError && (
+                  <p role="status" aria-live="polite" className="mb-3 text-center text-xs leading-relaxed text-[var(--call-fg-sub)]">
+                    {/* T158(P-31 ⓔ, §48.5.1, AC-084 M-2) — 기존 상태 1줄에 대사 출처 사실을 합친다(신규 요소 0건).
+                        dialogueIsDegraded가 아니면 기존 문구 그대로다. */}
+                    {`${buildFallbackStatusLine(
+                      "실시간 음성 통화를 사용할 수 없어 텍스트로 진행합니다.",
+                      dialogueIsDegraded,
+                    )}${realtime.errorMessage ? ` ${realtime.errorMessage}` : ""}`}
+                  </p>
+                )}
+                <div className="sticky bottom-0 pb-1 pt-1" style={keypadInputBackground}>
                   {latestScammerLine && (
-                    <p className="mb-3 text-center text-base leading-relaxed text-[var(--call-fg)]" aria-live="polite">
+                    <p className="mb-2 text-center text-base leading-snug text-[var(--call-fg)]" aria-live="polite">
                       &ldquo;{latestScammerLine}&rdquo;
                     </p>
                   )}
 
-                  {(callMode === "fallback" || sendError || speech.errorMessage) && (
+                  {(sendError || (callMode !== "fallback" && speech.errorMessage)) && (
                     <p
                       role={sendError ? "alert" : "status"}
                       aria-live={sendError ? "assertive" : "polite"}
-                      className={`mb-3 text-center text-xs leading-relaxed ${
+                      className={`mb-2 text-center text-xs leading-relaxed ${
                         sendError ? "text-[var(--call-alert)]" : "text-[var(--call-fg-sub)]"
                       }`}
                     >
-                      {sendError ??
-                        (callMode === "fallback"
-                          ? // T158(P-31 ⓔ, §48.5.1, AC-084 M-2) — 기존 상태 1줄에 대사 출처 사실을
-                            // 합친다(신규 요소 0건). dialogueIsDegraded가 아니면 기존 문구 그대로다.
-                            `${buildFallbackStatusLine(
-                              "실시간 음성 통화를 사용할 수 없어 텍스트로 진행합니다.",
-                              dialogueIsDegraded,
-                            )}${realtime.errorMessage ? ` ${realtime.errorMessage}` : ""}`
-                          : speech.errorMessage)}
+                      {sendError ?? speech.errorMessage}
                     </p>
                   )}
 
@@ -3275,6 +3306,7 @@ export default function SessionCallPage() {
                     </button>
                   </form>
                 </div>
+                </>
               )}
             </div>
           ) : (

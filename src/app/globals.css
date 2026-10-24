@@ -173,6 +173,24 @@ html {
   }
 }
 
+/* §130.6(N4 · UX D-161 (15) — 재측정 2026-10-24b: 입력줄을 붙인 뒤 360~412×780에서 숫자 4~# 줄 · 번호 전송이 숫자판 안쪽 스크롤 밑으로
+   숨었다. ARS · 인증번호처럼 숫자를 눌러야 하는 단계가 있어 숫자판도 늘 보여야 한다) — 키패드가 열린 화면(`keypad-*`는 그때만 있다)에서
+   높이 800px 이하면 숫자판 높이만 줄인다. 키 높이 64 → 44px(터치 영역 44px 하한 · iOS형 원 76 → 56px) · 번호 표시 줄 여백. 글자 크기는 그대로(G-VU5).
+   지우기 · 번호 전송은 번호 표시 줄에 합쳤다(play/page.tsx — 별도 줄 0). */
+@media (max-height: 800px) {
+  .keypad-display {
+    min-height: 36px;
+    margin-bottom: 0.25rem;
+  }
+  .keypad-key {
+    height: 44px;
+  }
+  .keypad-key.rounded-full {
+    width: 56px;
+    height: 56px;
+  }
+}
+
 /* UX D-140 (4) — 목록에서 고른 구역의 제목이 위에 붙은 목록 막대(56px)에 가려지지 않게 한다(`TOC_SCROLL_MARGIN_PX`). */
 [data-toc-target] {
   scroll-margin-top: 72px;

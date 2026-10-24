@@ -87,7 +87,7 @@ export default function ConsentPage() {
 
       {/* §130(UX D-161 (9)) — 간격만 줄인다(글자 크기 · 문면 무변경): 빈 칸 div를 지워 간격 한 칸을 덜고(체크 줄 `mt-auto`),
           간격 32→24px · 위아래 여백을 줄였다(412×780 실측 94px 넘침). */}
-      <div className="flex flex-1 flex-col gap-6 pb-6 pt-6">
+      <div className="flex flex-1 flex-col gap-6 pt-6">
         <h1 className="text-[24px] font-bold leading-[1.35] text-ink">
           시작하기 전에
           <br />
@@ -111,7 +111,10 @@ export default function ConsentPage() {
           ))}
         </div>
 
-        <label className="mt-auto flex cursor-pointer select-none items-start gap-3 py-2">
+        {/* §130.6(D16 남은 부분 · UX D-161 (17) — 재측정: 360 · 375에서 체크 · 버튼이 첫 화면 밖) — 동의 묶음(체크 · 오류 · 버튼)은 화면 아래에
+            붙는다(`sticky`). 넘치지 않는 화면에서는 종전처럼 맨 아래에 놓인다(`mt-auto`). 위 그림자는 "위에 내용이 더 있다"는 표시다. */}
+        <div className="sticky bottom-0 -mx-6 mt-auto flex flex-col gap-3 bg-page px-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-2 shadow-[0_-10px_16px_-12px_rgba(0,0,0,0.25)]">
+        <label className="flex cursor-pointer select-none items-start gap-3 py-2">
           {/* 체크박스 크기 확대(2026-07-23 모바일 UX 개선) — 32px, 디자인 시스템 토큰과 일치.
               접근성 보존을 위해 커스텀 div 대신 네이티브 checkbox를 그대로 유지(키보드/스크린리더
               시맨틱스). accent-color + rounded로 디자인 토큰에 최대한 근접시켰다. */}
@@ -145,6 +148,7 @@ export default function ConsentPage() {
         <Button type="button" onClick={handleSubmit} disabled={!checked || submitting || !user}>
           {submitting ? "저장 중..." : "동의하고 시작"}
         </Button>
+        </div>
       </div>
     </main>
   );

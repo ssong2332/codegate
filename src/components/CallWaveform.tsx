@@ -6,14 +6,16 @@ type CallWaveformProps = {
   /** true면 상대(사기범)가 말하는 중 — 파형이 움직인다. false면 정지(내 차례). */
   active: boolean;
   label: string;
+  /** §130.6(N4) — 키패드가 열려 자리가 모자랄 때 막대를 접는다. 상태 글(`label` — 폴백의 "듣고 있어요" · "보내는 중")은 그대로 남는다(G289). */
+  compact?: boolean;
 };
 
 const BAR_DELAYS_MS = [0, 150, 300, 450, 200];
 
-export default function CallWaveform({ active, label }: CallWaveformProps) {
+export default function CallWaveform({ active, label, compact = false }: CallWaveformProps) {
   return (
     <div className="flex flex-col items-center gap-2" role="status" aria-live="polite">
-      <div className="flex h-8 items-center justify-center gap-[5px]" aria-hidden="true">
+      <div className={`${compact ? "hidden" : "flex"} h-8 items-center justify-center gap-[5px]`} aria-hidden="true">
         {BAR_DELAYS_MS.map((delay, index) => (
           <span
             key={index}

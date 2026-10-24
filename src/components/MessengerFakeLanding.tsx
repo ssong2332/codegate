@@ -1013,8 +1013,9 @@ function CredentialFormMockup({
         <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
           {screen.headline}
         </h1>
+        {/* §130.6(D10 남은 부분) — 본문도 낱말 단위로만 줄을 바꾼다(360폭 "아래에서 이체 / 를 확인해 주세요"). */}
         {screen.bodyLines.map((line) => (
-          <p key={line} className="text-[15px] leading-relaxed" style={{ color: page.body }}>
+          <p key={line} className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
             {line}
           </p>
         ))}
