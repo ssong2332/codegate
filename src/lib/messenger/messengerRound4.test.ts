@@ -62,7 +62,9 @@ test("[§128(5) 배선] 참가자가 건 보이스톡 통화만 카톡 보이스
   const play = read("src/app/session/play/page.tsx");
   assert.match(play, /const voiceTalkCall = callCaller === "participant" && scenario\.channel === "messenger";/);
   assert.match(play, /voiceTalkCall \? voiceTalkCallTokens\(deviceSkin\.skin\) : callTokensFor\(deviceSkin\.skin, deviceTheme\)/);
-  assert.match(play, /background: voiceTalkCall \? voiceTalkCallBackground\(\) : isRinging \? ringBackground\(callTokens\) : callTokens\.bg,/);
+  // §130(UX D-161 (2)) — 같은 식을 `shellBackground`로 뽑아 하단 판도 같은 바탕을 칠한다.
+  assert.match(play, /const shellBackground = voiceTalkCall \? voiceTalkCallBackground\(\) : isRinging \? ringBackground\(callTokens\) : callTokens\.bg;/);
+  assert.match(play, /background: shellBackground,/);
   assert.match(play, /\{voiceTalkCall \? \(scenario\.chatDisplayName \?\? callerLabel\) : callerLabel\}/);
   assert.equal(/kakao|카카오/i.test(play.replace(/^\s*\/\/.*$/gm, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "")), false, "로고 · 상표 0");
 });

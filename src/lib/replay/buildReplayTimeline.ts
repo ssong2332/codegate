@@ -23,6 +23,8 @@ export type ReplayMessageSource = {
    * 안 된다.**
    */
   notSpoken?: true;
+  /** §130(UX D-161 (10)) — 참가자가 사진을 보낸 턴(서버 문서 `photo: true` · 부재 = 글 턴). 되짚어보기는 사진 칸으로 그린다. */
+  photo?: true;
 };
 
 export type ReplayDeceivedMomentSource = {

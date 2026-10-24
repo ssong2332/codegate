@@ -78,7 +78,9 @@ export default function Home() {
         <p className="e2-rise text-[18px] leading-[1.65] text-brand-tint [word-break:keep-all]">
           AI가 사기범 역할을 맡아 앱 화면 안에서 전화와 문자를 재현합니다(진짜 전화 · 문자는 오지 않습니다). 끝나면 어디서 속을 뻔했는지 짚어 드립니다.
         </p>
-        <section aria-labelledby="landing-steps-title" className="e2-rise">
+        {/* §130(UX D-161 (12) · 메인 결정 2026-10-24) — 높이 700px 이하(360×640 · 375×667)에서는 3단계 목록을 화면에서 숨겨 시작 버튼을
+            첫 화면에 둔다(`landing-steps` — globals.css). 문구는 그대로이고 스크린리더는 계속 읽는다(숨김 글 방식). */}
+        <section aria-labelledby="landing-steps-title" className="landing-steps e2-rise">
           <h2 id="landing-steps-title" className="sr-only">
             훈련 순서
           </h2>

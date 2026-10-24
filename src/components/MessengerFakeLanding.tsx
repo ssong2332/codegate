@@ -645,6 +645,25 @@ const RECORD_DOCUMENT_COPY: Record<string, RecordDocumentCopy> = {
 const RECORD_DOCUMENT_FONT = "'Nanum Myeongjo', 'Noto Serif KR', 'Noto Serif CJK KR', Batang, AppleMyungjo, serif";
 
 /** §109 — 문서 아래 바코드 장식의 막대 폭(px · 고정 배열 — 무작위 0 · 읽히는 부호 아님). */
+/**
+ * §130(UX D-161 (5)) — 열람본 칸 값. 생년월일 표시 모양(`030609-3●●●●●●`)은 하이픈에서 줄을 바꾸지 않고(줄 안 바뀜 하이픈 U+2011),
+ * 좁으면 가림 표시 앞에서만 바꾼다(`030609-3` / `●●●●●●`). 종전에는 `030609-` / `3●●●●●●`로 끊겼다. 그 밖 값은 그대로다.
+ */
+function recordValueNode(value: string): ReactNode {
+  const birthdate = /^(\d{6})-(\d)(●+)$/.exec(value);
+  if (!birthdate) return value;
+  // 한 줄 고정(nowrap)은 표 밖으로 넘쳤다(열람본 틀 폭은 화면 폭과 무관하게 같다 — 2026-10-24 실측).
+  return (
+    <>
+      {birthdate[1]}
+      {"\u2011"}
+      {birthdate[2]}
+      <wbr />
+      {birthdate[3]}
+    </>
+  );
+}
+
 const RECORD_BARCODE_BARS: readonly number[] = [2, 1, 1, 3, 1, 2, 2, 1, 3, 1, 1, 2, 1, 3, 2, 1, 1, 2, 3, 1, 2, 1, 1, 3, 1, 2, 2, 1, 1, 3, 2, 1, 3, 1, 2, 1, 1, 2];
 
 /** §101 — 화면 i(0 = 본인 확인)의 버튼이 올리는 고정 이벤트. 길이 = 마지막(이체 확인) 화면 앞까지. */
@@ -742,6 +761,11 @@ function CredentialFormMockup({
       ? stepScreens[stepIndex - 1]
       : { headline: copy.headline, bodyLines: copy.bodyLines, fields: copy.fields, actionLabel: copy.submitLabel };
   const page = LANDING_PAGE_TOKENS;
+  // §130(UX D-161 (6)) — 마지막 이체 확인 화면은 앞 화면에서 넣은 금액을 다시 보여 준다(실제 이체 앱의 확인 화면 모양). 제출 전 확인이라
+  // G255(완료 화면 되비추기 0)와 겹치지 않는다 — 완료 분기는 여전히 `values`를 읽지 않는다. 값은 이 화면 문자열로만 쓰인다(G138).
+  const amountField = stepScreens?.flatMap((step) => step.fields ?? []).find((field) => field.amount);
+  const confirmAmount =
+    stepScreens && stepIndex === stepScreens.length && amountField ? amountHint(values[amountField.label] ?? "") : undefined;
   // §101 추가(사용자 실기 신고 — "공백으로 두고 이체를 누르면 넘어간다") — 칸별 안내 한 줄. 빈 칸 · 금액 오류면 제출 · 단계 진행 · 콜백 0
   // (속은 순간은 실제로 넘어간 제출에서만 잡힌다 — AC-080). 안내는 고정 문구이고 입력값을 싣지 않는다.
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -830,7 +854,7 @@ function CredentialFormMockup({
           className={`${span === 1 ? "break-keep" : "break-all"} border px-1.5 py-[3px]`}
           style={{ borderColor: ink, color: page.inputText }}
         >
-          {row.value}
+          {recordValueNode(row.value)}
         </td>,
       ];
       return (
@@ -985,7 +1009,8 @@ function CredentialFormMockup({
     <>
       {issuerBar}
       <div className="flex flex-col gap-2.5 px-5 pt-4">
-        <h1 className="text-xl font-bold leading-snug" style={{ color: page.headline }}>
+        {/* §130(UX D-161 (6)) — 낱말 단위로만 줄을 바꾼다(360폭에서 "…이체합니 / 다" 한 글자 줄바꿈). */}
+        <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
           {screen.headline}
         </h1>
         {screen.bodyLines.map((line) => (
@@ -993,6 +1018,17 @@ function CredentialFormMockup({
             {line}
           </p>
         ))}
+        {confirmAmount && (
+          <p
+            className="mt-1 flex items-baseline justify-between gap-3 rounded-[10px] border px-3.5 py-3 text-[15px]"
+            style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.body }}
+          >
+            <span>이체 금액</span>
+            <span className="text-[18px] font-bold" style={{ color: page.headline }}>
+              {confirmAmount}
+            </span>
+          </p>
+        )}
         {/* §101 — 검수 대상 자산 같은 나열 줄(입력 아님 · 숫자 0). */}
         {screen.items && (
           <ul className="mt-1 flex flex-col gap-2">

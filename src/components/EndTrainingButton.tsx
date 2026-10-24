@@ -26,7 +26,7 @@ export default function EndTrainingButton({
         type="button"
         onClick={onClick}
         disabled={disabled}
-        aria-label="훈련 즉시 종료"
+        aria-label="훈련 종료"
         className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-full bg-white px-3 text-[14px] font-semibold text-danger disabled:opacity-50"
       >
         <span aria-hidden="true" className="h-[10px] w-[10px] rounded-[2px] bg-danger" />
@@ -39,7 +39,7 @@ export default function EndTrainingButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      aria-label="훈련 즉시 종료"
+      aria-label="훈련 종료"
       className={`flex min-h-[48px] items-center justify-center gap-2 rounded-[8px] border-2 border-danger px-4 py-2.5 text-lg font-bold text-danger disabled:opacity-50 ${
         variant === "dark" ? "bg-white/95" : "bg-white hover:bg-danger-tint"
       }`}
