@@ -67,6 +67,11 @@ export type DeliverInCallSmsResponse = {
   declineInstruction?: string;
   /** `status==="nudge"`에서만 — 서버 소유 넛지 1줄(맥락 주입 · 전환 뒤에는 `waiting`으로 대신한다). */
   nudgeInstruction?: string;
+  /**
+   * §132.9 — 백스톱 · `smsClaimed`(사기범이 이미 "문자를 보냈다"고 말함)인데 게이트 하한 전이라 `waiting`일 때만: "아직 안 갔다" 정정 1줄
+   * (서버 소유 · 맥락 주입). 클라는 주장 1건당 1회만 넣는다. 하한은 그대로다(문자는 게이트가 열리면 주장 간격으로 바로 간다).
+   */
+  claimNotYetInstruction?: string;
   /** §115 — `status==="none_pending"`이고 후속 단계까지 할 일을 마쳤을 때만(`planGoalWrapUp` = wrap_up). 마무리 지시 1줄(맥락 주입 · 1회). */
   wrapUpInstruction?: string;
   /**
@@ -95,4 +100,11 @@ export type RecordInCallSmsEventRequest = {
   smsId: string;
   event: InCallSmsEvent;
 };
-export type RecordInCallSmsEventResponse = { recorded: true };
+export type RecordInCallSmsEventResponse = {
+  recorded: true;
+  /**
+   * §132.7 — `landing_submitted`를 **처음** 기록했을 때만: 실시간 사기범에게 넣을 맥락 1줄(서버 소유 문면 · 클라 저작 0).
+   * 부재 = 넣을 것 없음(다른 이벤트 · 이미 기록됨). 폴백 경로는 쓰지 않는다.
+   */
+  contextInstruction?: string;
+};

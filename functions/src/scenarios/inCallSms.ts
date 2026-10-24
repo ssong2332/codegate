@@ -412,6 +412,9 @@ export const IN_CALL_SMS: Record<string, InCallSmsItem[]> = {
 // "사실을 알리고 상대의 반응을 기다려라"로 바꿨다(인증번호 2건과 `buildOtpCheckInstruction`은 무변경).
 export const SMS_DECLINE_TOO_EARLY =
   "(아직 그 안내를 보낼 단계가 아니다. 문자를 보냈다고 말하지 말고, 지금 하던 이야기를 그대로 이어가라. 조금 뒤에 다시 시도해도 된다.)";
+/** §132.9 — 사기범이 "문자를 보냈다"고 말했는데 아직 게이트 하한 전이라 문자가 가지 않았을 때의 정정(맥락 주입 · 주장 1건당 1회). */
+export const SMS_CLAIM_NOT_YET =
+  "(방금 문자를 보냈다고 했지만 문자는 아직 가지 않았다. 문자를 보냈다는 말을 되풀이하지 말고, 상대가 문자를 찾으면 곧 도착한다고만 짧게 답한 뒤 하던 이야기를 이어가라.)";
 export const SMS_DECLINE_ALREADY =
   "(그 안내는 이미 보냈다. 새로 보냈다고 말하지 말고, 이미 보낸 문자를 다시 언급하지도 말고 하던 요구 흐름을 이어가라.)";
 

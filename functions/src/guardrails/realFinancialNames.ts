@@ -143,6 +143,11 @@ export const USER_MENTIONED_BANK = "말씀하신 은행";
 export const USER_MENTIONED_CARD = "말씀하신 카드사";
 /** §132 — 바로 앞이 이미 "말씀하신(·하셨던) (그)"로 끝나는지. */
 const ALREADY_USER_MENTIONED = /말씀\s*(?:하신|하셨던|주신)\s*(?:그\s*)?$/;
+/**
+ * §132.10(메인 라이브 관찰 2026-10-24 — "말씀하신 은행 계좌라고 말씀하셨는데…") — 이름 뒤 같은 문장 안에서 이미 참가자 발언을 가리킨다
+ * ("…라고 말씀하셨는데" · "…이라고 하셨죠" · "…말씀하신 대로"). 그때는 "말씀하신" 대신 "그"로 받는다("그 은행 계좌라고 말씀하셨는데").
+ */
+const USER_ATTRIBUTION_AFTER = /^[^.?!\n]{0,16}?(?:말씀\s*하(?:셨|신|시)|(?:이)?라고\s*하(?:셨|신|시))/;
 
 /**
  * ⭐ §127(DECISIONS #243 · 메인 세션 라이브 확인 2026-10-24 — 참가자 "국민은행이고 예금은 3천만원" → 사기범 "보담은행에 3천만 원") — 참가자가
@@ -165,7 +170,9 @@ export function neutralizeUserMentionedFinancialNames(
       // §132 — 모델이 이미 "말씀하신 국민은행"처럼 말했으면 "말씀하신"을 겹쳐 붙이지 않고 업종 이름만 남긴다.
       const offset = args.find((a, i) => i > 0 && typeof a === "number") as number;
       const before = current.slice(0, offset);
-      return ALREADY_USER_MENTIONED.test(before) ? neutral.replace(/^말씀하신\s*/, "") : neutral;
+      if (ALREADY_USER_MENTIONED.test(before)) return neutral.replace(/^말씀하신\s*/, "");
+      const after = current.slice(offset + String(args[0]).length);
+      return USER_ATTRIBUTION_AFTER.test(after) ? neutral.replace(/^말씀하신/, "그") : neutral;
     });
   }
   return replacedCount === 0 ? { text: reply, replacedCount: 0 } : { text: current, replacedCount };

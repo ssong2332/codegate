@@ -38,7 +38,7 @@ test("[§121.7 맥락 · ⓒ] 보내기 직전 전사 제출(실시간만) · �
   assert.match(flush, /return result\.written;/);
   assert.match(flush, /return 0;/);
   const injection = read("src/lib/realtime/contextInjection.ts");
-  assert.match(injection, /\| "chatDuringCall";/);
+  assert.match(injection, /\| "chatDuringCall"(?:\n\s*\| "landingSubmitted")?;/); // §132.7 이체 화면 제출 행
 });
 
 test("[§121.7 대화방] 통화 중 모드 — 고지 생략 · 배너 · 보내기 전 전사 · duringCall 전송 · 보이스톡 숨김 · 종료 위임", () => {
