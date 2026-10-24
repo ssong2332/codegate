@@ -84,7 +84,12 @@ import { asksIdentityCheck } from "./personaAuthority";
 import { extractSmsMarker } from "./smsMarker";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
 import { evaluateOtpCheck, otpCheckInputsFromHistory } from "./otpCheck";
-import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
+import {
+  MAX_SCAMMER_REPLY_SENTENCES,
+  SMS_MENTION_SENTENCE,
+  limitReplySentences,
+  shouldLimitReplySentences,
+} from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { decideRepeatBreak, repeatBreakInstruction } from "./repeatBreak";
 import { isEscalationTooEarly, judgeEndCallSignal, judgeEscalationSignalAt } from "./signalConsistency";
@@ -760,8 +765,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       replaceRealFinancialNames(markupFreeReplyText);
     // §81 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다(문자 본문과 일치).
     const realNameFreeReplyText = applyFictionalBank(realNameReplacedText, fictionalBankName);
+    // §132 — 문자 도착 턴은 상한이 문자 언급 문장을 잘라 내지 않게 한다(`limitReplySentencesKeeping` 표).
     const lengthLimited = shouldLimitReplySentences(turnChoice)
-      ? limitReplySentences(realNameFreeReplyText)
+      ? limitReplySentences(
+          realNameFreeReplyText,
+          MAX_SCAMMER_REPLY_SENTENCES,
+          turnChoice === "sms_announce" ? SMS_MENTION_SENTENCE : undefined,
+        )
       : undefined;
     const limitedReplyText = lengthLimited ? lengthLimited.text : realNameFreeReplyText;
     // §128(4) — 참가자가 건 통화의 "전화 받아 줘서"류 교정(`callCaller.ts` 표 · 그 밖 턴 무변경).

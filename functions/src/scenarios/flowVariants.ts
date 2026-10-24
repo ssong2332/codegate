@@ -370,6 +370,18 @@ const INSTITUTION_HEAD_STAGES = [
   "계좌번호보다 거래 은행과 자산 규모부터 묻는다.",
   withSmsFirst(INSTITUTION_ADVANCED_OTP_STAGE_V2),
 ] as const;
+// §132(DECISIONS #248 · 메인 세션 라이브 확인 2026-10-24 · 금 구매형 · 텍스트 폴백) — 참가자가 "제 돈은 어떻게 지켜요?"라고 묻자 사기범이
+// "자산을 안전 계좌로 옮겨야 합니다"라고 한 뒤, 두 턴 뒤 결말에서 "계좌 사이로 옮기는 순간 추적이 끊긴다 · 금을 사서 제출"이라고 해 루트 안에서
+// 말이 어긋났다. 프롬프트(조립 결과)에는 안전계좌 문면이 0이라 모델이 이 수법의 흔한 형태(안전계좌 이체)를 끌어온 것으로 추정한다. 계좌 이체가
+// 결말이 아닌 두 루트(현금 예탁 · 금 구매)의 안심 단계에 금지 1문장을 붙인다. 안전계좌 이체형(fv-c5fj)은 그대로다.
+const NO_ACCOUNT_MOVE =
+  "이 통화에서는 돈을 다른 계좌로 옮기라는 말(안전계좌 · 보호 계좌 · 국가 계좌)을 어느 단계에서도 하지 않는다. 상대가 돈을 어떻게 지키느냐고 물으면 본인 확인이 끝나면 보호 절차를 안내하겠다고만 한다.";
+const INSTITUTION_HANDOFF_HEAD_STAGES = [
+  INSTITUTION_HEAD_STAGES[0],
+  `${INSTITUTION_HEAD_STAGES[1]} ${NO_ACCOUNT_MOVE}`,
+  INSTITUTION_HEAD_STAGES[2],
+  INSTITUTION_HEAD_STAGES[3],
+] as const;
 const INSTITUTION_CASH_DEPOSIT_STAGE =
   "인증번호 단계가 끝나면 '계좌가 동결되면 고객님 예금도 함께 묶입니다, 수사가 끝날 때까지 금융감독원에 예탁해 두셔야 안전하게 보관했다가 돌려드릴 수 있습니다, 계좌로 옮기면 범죄 계좌와 다시 엮이니 실물로 맡기셔야 합니다'처럼 이유부터 설명하고, 예금을 현금이나 수표로 찾아 금융감독원 담당 직원에게 맡기겠다는 약속을 받아 내려 한다. 은행 직원이 이유를 물으면 개인 용도라고만 하라고 시킨다. 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다. 상대가 거절하거나 망설이면 불이익을 한 번 암시한 뒤 더 조르지 않고 마무리한다.";
 const INSTITUTION_GOLD_STAGE =
@@ -742,7 +754,7 @@ const SPECS: VariantSpec[] = [
     scenarioId: "institutional-impersonation",
     level: "advanced",
     authoring: "authored",
-    stages: st(...INSTITUTION_HEAD_STAGES, `${INSTITUTION_CASH_DEPOSIT_STAGE} ${VERBAL_ENDING_WRAP}`),
+    stages: st(...INSTITUTION_HANDOFF_HEAD_STAGES, `${INSTITUTION_CASH_DEPOSIT_STAGE} ${VERBAL_ENDING_WRAP}`),
     keepLabels: ["권위 암시", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "비밀 유지 요구", "전화 끊음 저지"],
     extraTactics: [
       ASSET_INFO,
@@ -765,7 +777,7 @@ const SPECS: VariantSpec[] = [
     scenarioId: "institutional-impersonation",
     level: "advanced",
     authoring: "authored",
-    stages: st(...INSTITUTION_HEAD_STAGES, `${INSTITUTION_GOLD_STAGE} ${VERBAL_ENDING_WRAP}`),
+    stages: st(...INSTITUTION_HANDOFF_HEAD_STAGES, `${INSTITUTION_GOLD_STAGE} ${VERBAL_ENDING_WRAP}`),
     keepLabels: ["권위 암시", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "비밀 유지 요구", "전화 끊음 저지"],
     extraTactics: [
       ASSET_INFO,
