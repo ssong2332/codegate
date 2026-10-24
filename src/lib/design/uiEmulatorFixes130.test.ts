@@ -8,15 +8,18 @@ import { readFileSync } from "node:fs";
 import { VOICE_TALK_RECORD_NOTE, VOICE_TALK_RECORD_TITLE } from "../messenger/threadItems.ts";
 import { CHAT_INPUT_MAX_PX, CHAT_INPUT_MIN_PX, chatInputHeight } from "../messenger/chatInputHeight.ts";
 import { SCREEN_OFF_COPY } from "../realtime/backgroundCall.ts";
+import { josa, withJosa } from "../text/josa.ts";
+import { clearVoiceTalkDial, peekVoiceTalkDial, refreshVoiceTalkDial, stashVoiceTalkDial, VOICE_TALK_HANDOFF_TTL_MS } from "../messenger/voiceTalkDial.ts";
+import { AVATAR_BLOCK_PX, shouldHideCallAvatar } from "../phone/callCrowding.ts";
 
 const read = (file: string) => readFileSync(file, "utf8").replace(/\r\n/g, "\n");
 const play = read("src/app/session/play/page.tsx");
 
 test("[§130 D3] 키패드: 높이 상한 대신 남은 높이 · 아바타 · 여백 접기 · 대화 묶음은 영역 아래에 붙는다", () => {
   assert.ok(!play.includes("max-h-[56dvh]"), "키패드 영역 높이 상한(56dvh)이 되살아났다 — 412×915에서도 입력줄이 숨었다");
-  assert.ok(play.includes("{callTokens.hasAvatar && !showTextInput && ("), "키패드가 열려도 아바타가 자리를 차지한다");
+  assert.ok(play.includes("{callTokens.hasAvatar && !showTextInput && !avatarCrowded && ("), "키패드가 열려도 아바타가 자리를 차지한다");
   assert.ok(play.includes('maxHeight: showTextInput ? "0px"'), "키패드가 열려도 위 여백이 남는다");
-  assert.equal((play.match(/<div className="sticky bottom-0 pb-1 pt-2" style=\{keypadInputBackground\}>/g) ?? []).length, 2);
+  assert.equal((play.match(/<div className="sticky bottom-0 pb-1 pt-1" style=\{keypadInputBackground\}>/g) ?? []).length, 2);
   // 입력칸이 제 글자 폭(size=20)만큼 버티면 360폭에서 전송 버튼이 오른쪽 여백을 넘는다(실측).
   assert.equal((play.match(/className="min-h-\[50px\] min-w-0 flex-1 rounded-full/g) ?? []).length, 2);
 });
@@ -57,8 +60,10 @@ test("[§130 D7 · D8] 난이도 시트 높이 상한 40dvh · 설명만 시트 
 test("[§130 D16] 동의 화면: 빈 칸 div 대신 mt-auto · 간격 24px · 글자 크기 무변경", () => {
   const page = read("src/app/onboarding/consent/page.tsx");
   assert.ok(!page.includes('<div className="flex-1" />'));
-  assert.ok(page.includes('<label className="mt-auto flex cursor-pointer select-none items-start gap-3 py-2">'));
-  assert.ok(page.includes('className="flex flex-1 flex-col gap-6 pb-6 pt-6"'));
+  // §130.6(D16 남은 부분) — 동의 묶음은 화면 아래에 붙는다(360 · 375에서 체크 · 버튼이 첫 화면 안).
+  assert.ok(page.includes('<div className="sticky bottom-0 -mx-6 mt-auto flex flex-col gap-3 bg-page px-6'));
+  assert.ok(page.includes('<label className="flex cursor-pointer select-none items-start gap-3 py-2">'));
+  assert.ok(page.includes('className="flex flex-1 flex-col gap-6 pt-6"'));
   assert.ok(page.includes('<p className="text-[18px] leading-[1.55] text-ink">{point}</p>'), "카드 글자 크기는 그대로");
 });
 
@@ -127,4 +132,70 @@ test("[§130 D17] 통화 전 안내는 스피커를 선택으로 안내한다(�
   assert.equal(SCREEN_OFF_COPY.preCallHint, "통화하는 동안에는 화면을 켜 두세요. 필요하면 스피커를 켜 주세요.");
   assert.ok(!SCREEN_OFF_COPY.preCallHint.includes("스피커로 들어"));
   assert.ok(play.includes('const [audioRoute, setAudioRoute] = useState<AudioRoute>("call");'), "스피커 기본값 = 꺼짐(D-98)");
+});
+
+// ── §130.6(2026-10-24b 재측정 — docs/research/ui-emulator-check-2026-10-24b.md §4) ──
+
+test("[§130.6 N5 표] 조사 — 받침 · 숫자 읽기에 맞춘다 · 모르면 종전 괄호 표기", () => {
+  assert.equal(withJosa("이지수", "이/가"), "이지수가");
+  assert.equal(withJosa("한결", "이/가"), "한결이");
+  assert.equal(withJosa("010-4471-2298", "으로/로"), "010-4471-2298로", "8(팔) — ㄹ받침 → 로");
+  assert.equal(withJosa("1666-3390", "으로/로"), "1666-3390으로", "0(영) → 으로");
+  assert.equal(withJosa("070-7731-4401", "으로/로"), "070-7731-4401로", "1(일) — ㄹ받침 → 로");
+  assert.equal(withJosa("서울", "으로/로"), "서울로", "ㄹ받침 → 로");
+  assert.equal(withJosa("검찰청", "으로/로"), "검찰청으로");
+  assert.equal(josa("Kim", "이/가"), "이(가)");
+  assert.equal(josa("", "으로/로"), "(으)로");
+  const room = read("src/components/MessengerChatRoom.tsx");
+  assert.ok(room.includes('{withJosa(peerName, "이/가")} 입력 중입니다.'));
+  for (const file of ["src/components/MessengerChatRoom.tsx", "src/app/scenarios/messenger/page.tsx"]) {
+    assert.ok(!/\}\(으\)로|\}이\(가\)/.test(read(file)), `${file}: 변수 뒤 고정 괄호 조사가 남았다`);
+  }
+});
+
+test("[§130.6 N1] 보이스톡 맡김 유효 시간은 통화 화면으로 넘어가는 순간부터 — 전환 요청이 30초를 넘겨도 발신 화면", () => {
+  const audio = { tag: "a" };
+  stashVoiceTalkDial({ sessionId: "s1", audio, atMs: 0 });
+  const slow = VOICE_TALK_HANDOFF_TTL_MS + 5_000;
+  assert.equal(peekVoiceTalkDial("s1", slow), null, "수정 전 조건 — 탭 시각 기준이면 버려진다(재측정 N1)");
+  refreshVoiceTalkDial("s1", slow);
+  assert.equal(peekVoiceTalkDial("s1", slow + 1_000)?.audio, audio, "넘어가는 순간 다시 찍으면 이어진다");
+  refreshVoiceTalkDial("other", slow + 99_000);
+  assert.equal(peekVoiceTalkDial("s1", slow + 1_000)?.audio, audio, "다른 세션의 갱신은 무시");
+  clearVoiceTalkDial();
+  refreshVoiceTalkDial("s1", slow);
+  assert.equal(peekVoiceTalkDial("s1", slow), null, "맡긴 값이 없으면 갱신도 없다");
+  const room = read("src/components/MessengerChatRoom.tsx");
+  assert.match(room, /refreshVoiceTalkDial\(sessionId, Date\.now\(\)\);\s*router\.push\("\/session\/play"\);/);
+});
+
+test("[§130.6 N4] 키패드: 지우기 · 번호 전송은 번호 표시 줄 · 숫자판은 800px 이하에서 높이만 줄인다 · 상태 줄은 붙은 묶음 밖", () => {
+  assert.ok(!play.includes("keypad-actions"), "별도 지우기 · 전송 줄이 되살아났다");
+  const display = play.slice(play.indexOf('<div className="keypad-display'), play.indexOf("{/* 2026-10-21(실기 신고) — iOS형 = 큰 원 키"));
+  assert.ok(display.includes("← 지우기") && display.includes("번호 전송") && display.includes('aria-label="입력한 번호"'));
+  const css = read("src/app/globals.css");
+  const block = css.match(/@media \(max-height: 800px\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.match(block, /\.keypad-key \{\s*height: 44px;\s*\}/, "키 높이 44px(터치 하한)");
+  assert.ok(!/font-size/.test(block), "짧은 화면에서도 글자 크기는 줄이지 않는다(G-VU5)");
+  assert.ok(play.includes("compact={showTextInput}"), "키패드가 열리면 파형 막대만 접는다(상태 글은 그대로 — G289)");
+  // 늘 같은 폴백 안내는 묶음 밖 · 전송 오류는 묶음 안.
+  const fallbackInfo = play.indexOf('{callMode === "fallback" && !sendError && (');
+  const stickyFallback = play.indexOf('<div className="sticky bottom-0 pb-1 pt-1" style={keypadInputBackground}>', fallbackInfo);
+  assert.ok(fallbackInfo > 0 && stickyFallback > fallbackInfo, "폴백 안내가 붙은 묶음 앞(밖)에 있다");
+  assert.ok(play.includes("{(sendError || (callMode !== \"fallback\" && speech.errorMessage)) && ("));
+});
+
+test("[§130.6 N7 표] 번호 · 시간 묶음이 하단 판에 덮이면 아바타를 접는다 · 되돌려도 겹치지 않을 때만 다시 보인다", () => {
+  assert.equal(AVATAR_BLOCK_PX, 108);
+  assert.equal(shouldHideCallAvatar({ hidden: false, infoBottom: 300, panelTop: 400 }), false, "글자 100% — 종전 그대로");
+  assert.equal(shouldHideCallAvatar({ hidden: false, infoBottom: 434, panelTop: 400 }), true, "200% 360×640 — 34px 겹침");
+  assert.equal(shouldHideCallAvatar({ hidden: true, infoBottom: 326, panelTop: 400 }), true, "되돌리면 34px 겹침 — 접힌 채");
+  assert.equal(shouldHideCallAvatar({ hidden: true, infoBottom: 250, panelTop: 400 }), false, "충분히 넓어짐 — 다시 보인다");
+  assert.equal(shouldHideCallAvatar({ hidden: true, infoBottom: Number.NaN, panelTop: 400 }), true, "못 재면 그대로");
+  assert.ok(play.includes("shouldHideCallAvatar({ hidden, infoBottom: info.bottom, panelTop: panel.top })"));
+});
+
+test("[§130.6 D10 남은 부분] 사이트 본문도 낱말 단위 줄바꿈", () => {
+  const landing = read("src/components/MessengerFakeLanding.tsx");
+  assert.ok(landing.includes('<p key={line} className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>'));
 });

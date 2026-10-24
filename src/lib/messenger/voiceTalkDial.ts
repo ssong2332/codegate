@@ -50,6 +50,16 @@ export function peekVoiceTalkDial<Audio>(sessionId: string, nowMs: number): Voic
   return pending as VoiceTalkDialHandoff<Audio>;
 }
 
+/**
+ * §130.6(N1 — 재측정 2026-10-24b: 첫 발신에서 "보이스톡 연결 중…" 뒤 수신 화면이 떴다) — 전환 요청이 끝나 통화 화면으로 넘어가는 순간
+ * 맡긴 값의 시각을 지금으로 다시 찍는다. 유효 시간은 "통화 화면으로 넘어간 뒤"부터 세야 한다 — 탭 시각부터 세면 전환 요청이 느릴 때
+ * (함수 콜드 스타트 등 30초 이상) 통화 화면이 값을 버리고 종전 수신 화면("전화가 오고 있습니다")을 그린다.
+ * 같은 세션의 값이 없으면 아무것도 하지 않는다(취소 · 다른 세션).
+ */
+export function refreshVoiceTalkDial(sessionId: string, nowMs: number): void {
+  if (pending && pending.sessionId === sessionId) pending = { ...pending, atMs: nowMs };
+}
+
 /** 넘겨받았거나(받음 · 취소) 버릴 때 비운다(멱등). */
 export function clearVoiceTalkDial(): void {
   pending = null;

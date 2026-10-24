@@ -37,6 +37,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getExperienceMode, setSelectedScenarioId as setPendingSelectedScenarioId } from "@/lib/recording";
 import { SCENARIO_TRAIT_LABEL } from "@/lib/difficulty";
+import { withJosa } from "@/lib/text/josa";
 import { scenarios, type ScenarioDoc, type MessengerSurface } from "@/content/scenarios";
 import SelectScreenHeader from "@/components/SelectScreenHeader";
 import ScenarioPanelGroups, { scenarioPanelItem, type ScenarioPanelGroup } from "@/components/ScenarioPanelGroups";
@@ -109,7 +110,8 @@ export default function MessengerScenarioSelectPage() {
       title: scenario.title,
       tags: [surfaceLabel, ...(selectedScenarioId === scenarioId ? ["다시 훈련"] : [])],
       lines: [
-        `${scenario.callerLabel}(으)로 ${surfaceLabel} 메시지가 옵니다`,
+        // §130.6(N5) — 번호 끝 숫자의 읽기에 맞춘 조사(`josa.ts` 표 — 2298 → "로" · 3390 → "으로").
+        `${withJosa(scenario.callerLabel, "으로/로")} ${surfaceLabel} 메시지가 옵니다`,
         `${scenario.estimatedDuration} · ${scenario.fraudType}`,
         `${SCENARIO_TRAIT_LABEL}: ${scenario.difficulty}`,
       ],
