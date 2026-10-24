@@ -452,6 +452,10 @@ function isHowToOrFollowOnlyWithoutDemand(scammerText: string, replyText: string
   return !COMPLIANCE_PATTERN.test(replyText.replace(HOW_TO_OR_FOLLOW, " ").replace(NOUN_ONLY_COMPLIANCE, " "));
 }
 
+/** §129.6 ① — 사기범 대사가 앱 설치를 꺼냈다 · 참가자 답의 설치 의향 · 방법 질문("뭘 깔면 돼" · "설치할게" · "깔아 줄게"). */
+const INSTALL_TOPIC = /앱|어플|설치|깔/;
+const INSTALL_INTENT = /(?:깔|설치하)(?:면|아\s*줄게|아\s*줄께|아\s*볼게)|깔게|설치\s*(?:하면|할게|해\s*줄게|해\s*볼게)|(?:어떻게|뭘|뭐)\s*(?:깔|설치)/;
+
 /** L2 — 답의 내용 범주. 사진 턴은 판정하지 않는다(§131). */
 function answerContentCategory(scammerText: string, reply: AnalysisMessage): TacticCategory | undefined {
   if (reply.photo === true) return undefined;
@@ -463,6 +467,9 @@ function answerContentCategory(scammerText: string, reply: AnalysisMessage): Tac
   if (SECRET_CODE_DEMAND.test(scammerText) && SHORT_CODE_IN_ANSWER.test(text)) return "personal_info_demand";
   if (TRANSFER_DONE_REPORT.test(text) || BALANCE_DISCLOSURE.test(text)) return "payment_demand";
   if (/설치\s*(?:했|할게|하겠)|눌렀|깔았/.test(text)) return "link_or_install";
+  // §129.6 ①(메인 라이브 재테스트 2026-10-24 · 자녀 사칭 카톡 고급 — S2 "보험사에서 앱 깔아서 접수하래" → U2 "알았어 뭘 깔면 돼?" 라벨 빈칸) —
+  // 설치를 꺼낸 대사 뒤 설치 의향 · 방법 질문도 설치 범주다(답에 설치 동사가 있을 때만 — 범주를 대사만으로 정하지 않는다).
+  if (INSTALL_TOPIC.test(scammerText) && INSTALL_INTENT.test(text)) return "link_or_install";
   return undefined;
 }
 

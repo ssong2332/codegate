@@ -140,6 +140,35 @@ export function buildLandingSubmitMoment(
   };
 }
 
+/**
+ * §129.6 ②(메인 라이브 재테스트 2026-10-24 · 자녀 사칭 카톡 고급 — 37초 채팅 동의 "알았어 뭘 깔면 돼?" · 39초 설치 · 권한 허용이 순간 2개로 나뉘었다)
+ * — 사용자 승인 판정표 M1 · M2 · 합칠 때 ㉠(화면 순간만 남김).
+ * | # | If | Then |
+ * |---|---|---|
+ * | M1 | 화면 승격 순간의 앵커 대사(링크를 실은 사기범 대사) **바로 앞** 메시지가 참가자 답이고, 그 답이 이미 속은 순간이며, 그 순간의 범주가 화면 순간과 같거나 라벨이 폴백(`약화된 사기 수법`)이다 | 채팅 순간을 빼고 화면 순간 하나만 남긴다(시각 · 라벨 · 되감기 = 화면 순간) |
+ * | M2 | 그 밖(앞 메시지가 사기범 대사 · 범주가 다름 — 주민번호 · 사진 · 송금 같은 실제 제공은 개인정보 · 송금 범주라 여기에 든다) | 둘 다 그대로 |
+ * ⚠️ 실제 제공 여부는 순간의 **범주**로 가른다(이 함수는 메시지 본문을 받지 않는다) — 설치 범주로 잡힌 채팅 답은 설치 동의 · 방법 질문뿐이다.
+ */
+function dropChatMomentsMergedIntoScreen(
+  chatMoments: readonly DeceivedMomentResult[],
+  promoted: readonly DeceivedMomentResult[],
+  sortedMessages: readonly MockScreenMessage[],
+): DeceivedMomentResult[] {
+  const dropped = new Set<number>();
+  for (const screen of promoted) {
+    const anchorPos = sortedMessages.findIndex((m) => m.turnIndex === screen.turnIndex);
+    const before = anchorPos > 0 ? sortedMessages[anchorPos - 1] : undefined;
+    if (!before || before.role !== "user") continue; // M2
+    const chat = chatMoments.find((m) => m.turnIndex === before.turnIndex && m.landingId === undefined);
+    if (!chat) continue;
+    if (chat.tacticCategory === screen.tacticCategory || chat.tactic === FALLBACK_TACTIC_LABEL) dropped.add(chat.turnIndex); // M1
+  }
+  return chatMoments.filter((m) => !(m.landingId === undefined && dropped.has(m.turnIndex)));
+}
+
+/** 채팅 순간 라벨이 비었을 때의 폴백 문자열(`analyzeConversation.ts`와 같은 값). */
+const FALLBACK_TACTIC_LABEL = "약화된 사기 수법";
+
 export type ApplyMockScreensResult = {
   /** 표시 전용 스냅샷. 문서가 0건이면 빈 배열(호출부가 필드 자체를 만들지 않는다). */
   mockScreenTimeline: MockScreenTimelineEntry[];
@@ -217,7 +246,9 @@ export function applyMockScreens(
   // 메시지를 타임라인 순서(=turnIndex 오름차순)로 내므로, 저장되는 배열도 같은 순서여야
   // `indexOf`/되감기 딥링크가 올바른 순간을 연다(§15.9.5 e-2 규칙 2).
   // Array.prototype.sort는 안정 정렬이므로(ES2019+) 같은 turnIndex의 상대 순서는 보존된다.
-  const merged = [...deceivedMoments, ...promoted].sort((a, b) => a.turnIndex - b.turnIndex);
+  const merged = [...dropChatMomentsMergedIntoScreen(deceivedMoments, promoted, sortedMessages), ...promoted].sort(
+    (a, b) => a.turnIndex - b.turnIndex,
+  );
 
   return {
     mockScreenTimeline: entries.sort(

@@ -9,6 +9,10 @@ import {
   SIGNAL_CARD_HEADING,
   TACTICS_NOT_FOUND_TEXT,
   tacticsAccordionLabel,
+  isUnansweredReport,
+  UNANSWERED_HEADLINE,
+  UNANSWERED_SUMMARY_BODY,
+  UNANSWERED_SUMMARY_TITLE,
 } from "./reportTacticsCopy.ts";
 import { resolveMockScreenCopy } from "./mockScreenTimelineCopy.ts";
 import type {
@@ -204,10 +208,11 @@ test("[§104/NS] 속지 않음 상태 줄 — 수법이 있을 때만 '아래는
   const NS1 = "이번 훈련에서는 속지 않았습니다. 아래는 시도된 수법입니다.";
   const NS2 = "이번 훈련에서는 속지 않았습니다. 상대의 말에 답하기 전에 대화를 마쳤습니다.";
   const NS3 = "이번 훈련에서는 속지 않았습니다.";
-  // NS-1 — 무변경(발화 수와 무관).
+  // NS-1 — 수법이 있고 답이 있었거나 필드 이전 리포트.
   assert.equal(notDeceivedStatusText(2, 5), NS1);
-  assert.equal(notDeceivedStatusText(1, 0), NS1);
   assert.equal(notDeceivedStatusText(1, undefined), NS1);
+  // §129.6 NS-0(메인 라이브 확인 2026-10-24 — 메신저 첫 메시지만 받고 답 0) — 종전 NS-1에서 바뀌었다(D-160 확장).
+  assert.equal(notDeceivedStatusText(1, 0), "이번 훈련에서는 속지 않았습니다. 상대의 말에 답하기 전에 대화를 마쳤습니다. 아래는 시도된 수법입니다.");
   // NS-2 — 라이브 신고 조합(0턴 · 수법 0개).
   assert.equal(notDeceivedStatusText(0, 0), NS2);
   // NS-3 — 대화는 있었지만 이름을 못 찾음 · 필드 이전 리포트.
@@ -220,4 +225,19 @@ test("[§104/NS] 속지 않음 상태 줄 — 수법이 있을 때만 '아래는
     assertNoForbidden(text);
     assert.equal(tacticsAccordionLabel(0), TB3);
   }
+});
+
+// ── §129.6 · UX D-160 확장 — 답 0 리포트의 머리 · 요약 줄(통화 벨 전 · 메신저 첫 메시지만 공통) ──
+test("[§129.6 D-160] 속지 않음 ∧ 답 0일 때만 '답하기 전에 마쳤어요' · '대화 전에 마침' — 속은 세션 · 답 있음 · 필드 부재는 종전", () => {
+  assert.equal(isUnansweredReport(false, 0), true);
+  assert.equal(isUnansweredReport(true, 0), false, "답 없이 링크 화면에서 응낙한 메신저 세션은 속음 그대로");
+  assert.equal(isUnansweredReport(false, 3), false);
+  assert.equal(isUnansweredReport(false, undefined), false);
+  for (const text of [UNANSWERED_HEADLINE, UNANSWERED_SUMMARY_TITLE, UNANSWERED_SUMMARY_BODY]) {
+    assert.equal(/지켰|잘 대처|응하지 않/.test(text), false, text);
+  }
+  const page = readFileSync("src/app/report/page.tsx", "utf8").replace(/\r\n/g, "\n");
+  assert.match(page, /const unanswered = isUnansweredReport\(report\.wasDeceived, report\.userTurnCount\);/);
+  assert.match(page, /\{unanswered \? UNANSWERED_HEADLINE : "끝까지 지켰어요"\}/);
+  assert.match(page, /\{unanswered \? UNANSWERED_SUMMARY_TITLE : "잘 대처함 · 요구에 응하지 않음"\}/);
 });
