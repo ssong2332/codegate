@@ -29,7 +29,18 @@ const DEFLECTION_LINES = [
 // 전달하므로 필러는 통화 도입/뜸 들이기 역할만 한다.
 const OPENING_FILLERS = ["여보세요...?", "여보세요, 들리세요?", "..."];
 // §129 에뮬 D13(2026-10-24) — 매 턴 "잠시만요... / 저기요..." 접두가 붙어 어색했다. 뜸 들이기는 세 턴에 한 번만 남긴다(빈 문자열 = 접두 없음).
-const ESCALATION_FILLERS = ["", "", "저기요..."];
+// §131(15)(에뮬 재확인 2026-10-24b D13 — "저기요... 폰이 안 돼서 그래"가 여전히 섞였다) — 접두를 없앤다(시나리오를 가리지 않는 중립 접두가 없다).
+const ESCALATION_FILLERS = [""];
+
+/**
+ * §131(15)(에뮬 재확인 D13 — 기관 사칭에서 "수사관, 금융감독원." 같은 조각 대사가 단독 턴으로 반복) — 인용구가 낱말 나열뿐인 수법(예: "권위 암시 —
+ * '수사관', '금융감독원' 처럼")은 대사가 되지 못한다. 판정: 인용구를 이은 문구에 **띄어쓰기가 있는 조각이 하나도 없다** = 낱말 나열.
+ * 이런 수법은 건너뛰고 다음 수법을 쓴다(전부 낱말 나열이면 종전 그대로 — 대사 0보다 낫다).
+ */
+export function isFragmentFlavor(flavor: string): boolean {
+  const body = flavor.replace(/\[\[[^\]]+\]\]/g, "");
+  return body.split(/[,.?!…~]/).every((part) => !/\S\s+\S/.test(part.trim()));
+}
 
 /**
  * §129 에뮬 D13 — 수법 인용구를 이은 문구(`extractTacticFlavor` — 인용구를 ", "로 잇는다)를 한 줄 대사로 다듬는다.
@@ -105,9 +116,16 @@ export class MockLlmClient implements LlmClient {
   private craftEscalationLine(turn: number, tacticHints?: string[]): string {
     const filler = ESCALATION_FILLERS[turn % ESCALATION_FILLERS.length];
     const hasHints = tacticHints && tacticHints.length > 0;
-    const flavor = hasHints
-      ? extractTacticFlavor(tacticHints![turn % tacticHints!.length])
-      : "지금 처리하지 않으면 곤란해집니다";
+    // §131(15) — 낱말 나열뿐인 수법은 건너뛴다(위 `isFragmentFlavor`). 순서는 종전처럼 turn부터 돈다.
+    const pickFlavor = (): string => {
+      const hints = tacticHints!;
+      for (let k = 0; k < hints.length; k += 1) {
+        const candidate = extractTacticFlavor(hints[(turn + k) % hints.length]);
+        if (!isFragmentFlavor(candidate)) return candidate;
+      }
+      return extractTacticFlavor(hints[turn % hints.length]);
+    };
+    const flavor = hasHints ? pickFlavor() : "지금 처리하지 않으면 곤란해집니다";
     return shapeMockLine(filler, flavor);
   }
 }

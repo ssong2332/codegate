@@ -167,9 +167,10 @@ test("[A-1/⑦ 배선] sendMessage — 다른 턴 지시가 없는 턴에만 pla
   assert.match(src, /currentUserText: maskedUserText,/);
   // §104 — 같은 배열 끝에 반복 차단 1줄(`repeatBreak.ts` — 확인 결과 지시가 있는 턴에는 계산하지 않는다)이 붙었다.
   // §131(2) — 그 뒤에 통화 불가 핑계 연속성 1줄(`callAnnouncement.ts` 판정표 K — 다른 턴 지시가 없는 턴만)이 더 붙었다.
+  // §131(13) · (7) — 그 뒤에 송금 보고 뒤 재요구 금지 · 역할 고정 1줄이 더 붙었다(배열을 줄마다 쓴다).
   assert.match(
     src,
-    /\[confirmPlan\?\.instruction, escalatedCallInstruction, repeatBreakInstruction\(repeatBreakKind\), callAfterExcuseInstruction\]\s*\.filter\(Boolean\)/,
+    /\[\s*confirmPlan\?\.instruction,\s*escalatedCallInstruction,\s*repeatBreakInstruction\(repeatBreakKind\),\s*callAfterExcuseInstruction,\s*turnFacts\.transferReported \? TRANSFER_REPORTED_INSTRUCTION : undefined,\s*personaAnchorInstruction\(session\.scenarioId\),\s*\]\s*\.filter\(Boolean\)/,
   );
   assert.match(src, /\[promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction(?:, otpFollowUpInstruction)?\]/); // §132.6 인증번호 다시 요구
   // 계산 순서 — 인증번호 대조 · 문자 마커 제시 · 넛지가 정해진 뒤(리뷰 Minor-1 — 같은 턴 겹침 0), LLM 호출 앞.

@@ -70,11 +70,11 @@ test("[§132 ②] 문자 도착 턴 — 상한이 문자 언급 문장을 잘라
     limitReplySentencesKeeping("하나. 둘. 셋. 인증번호 문자 보냈습니다, 넷.", SMS_MENTION_SENTENCE).text,
     "하나. 둘. 인증번호 문자 보냈습니다.",
   );
-  // 배선 — sendMessage는 문자 도착 턴(`sms_announce`)에만 이 함수를 쓴다.
+  // 배선 — sendMessage는 문자 도착 턴(`sms_announce`)에는 문자 언급 문장을 지킨다. §131(8) — 그 밖 턴은 요구 문장(`DEMAND_SENTENCE`)을 지킨다.
   const src = readFileSync(path.join(SRC, "roleplay/index.ts"), "utf8");
   assert.match(
     src,
-    /shouldLimitReplySentences\(turnChoice\)\s*\?\s*limitReplySentences\(\s*realNameFreeReplyText,\s*MAX_SCAMMER_REPLY_SENTENCES,\s*turnChoice === "sms_announce" \? SMS_MENTION_SENTENCE : undefined,?\s*\)/,
+    /shouldLimitReplySentences\(turnChoice\)\s*\?\s*limitReplySentences\([\s\S]{0,200}?realNameFreeReplyText,\s*MAX_SCAMMER_REPLY_SENTENCES,[\s\S]{0,120}?turnChoice === "sms_announce" \? SMS_MENTION_SENTENCE : DEMAND_SENTENCE,?\s*\)/,
   );
   // 같은 결과 — 공개 함수의 keep 인자 = 전용 함수.
   assert.deepEqual(limitReplySentences(reply, 3, SMS_MENTION_SENTENCE), kept);

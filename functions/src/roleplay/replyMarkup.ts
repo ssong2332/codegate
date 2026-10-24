@@ -12,6 +12,8 @@
 // | 3 | 지문 괄호 — 괄호 안이 아래 지문 어휘로 **시작**하고(어휘 바로 뒤 = `)`·공백·쉼표·말줄임) 12자 이하 | 괄호째 지운다 | #8 subsidy 초급 S5 "(잠시 후) 여보세요?" |
 // | 4 | 메타 표식 — 대괄호 · 괄호 · 겹낫표 안이 아래 메타 어휘를 담은 짧은 표기("[훈련 종료]" · "(시뮬레이션 끝)") | 괄호째 지운다 | 2026-10-21 실기 신고 6 friend-loan "…보내줘.[훈련 종료]" |
 // | 4-b | §129 D10 자리표시 이름 — "나 ㅇㅇ이야"처럼 이름 자리를 자음 "ㅇㅇ"으로 채운 자기소개 | "나야"로 바꾼다(이름을 지어내지 않는다) | 프로브 2026-10-24 지인 카톡 고급 거절 S1 |
+// | 3-b | §131(9) 괄호 속 혼잣말 — 띄어쓰기 있는 한국어 문장 + 종결 어미로 끝나는 괄호(숫자 0) | 괄호째 지운다(지우면 빈 대사면 그대로) | 프로브 2026-10-24b D6 |
+// | 4-d | §131(10) 동그라미 자리표시 이름("○○님" · "상담원 ○○○입니다" · "나 ○○야") | "고객님" · 이름 삭제 · "나야" | 프로브 2026-10-24b D10 |
 // | 4-c | §129 (A) 대사 전체를 감싼 따옴표 · 닫는 짝 없는 맨 앞 여는 따옴표(메타 표식 4행은 "도구 호출 · 시스템 메시지" 어휘도 본다) | 따옴표만 지운다 | 메인 라이브 확인 2026-10-24 기관 사칭 고급 폴백 |
 // | 5 | 1~4로 생긴 연속 공백 · 줄머리 · 줄끝 공백 · 구두점 앞 공백 | 정리한다(줄바꿈은 그대로) | — |
 //
@@ -46,10 +48,18 @@ const STAGE_DIRECTION_HEADS = [
   "효과음",
 ];
 // 리뷰 Minor 1 — 지문 어휘 **바로 뒤**가 `)` · 공백 · 쉼표 · 말줄임일 때만 지문이다("(잠시만요 고객님)"·"(침묵을 지켜 주세요)"는 대사라 남긴다).
+// §131(9)(프로브 2026-10-24b D6 — "(잠시 침묵 후, 여전히 친절한 말투로)"가 남았다) — 머리 어휘가 맞으면 지문이므로 길이 상한을 12 → 30자로 넓힌다.
 const STAGE_DIRECTION = new RegExp(
-  `[ \\t]*\\((?=(?:${STAGE_DIRECTION_HEADS.join("|")})(?:\\)|[ \\t,…]|\\.\\.\\.))[^()\\n]{1,12}\\)`,
+  `[ \\t]*\\((?=(?:${STAGE_DIRECTION_HEADS.join("|")})(?:\\)|[ \\t,…]|\\.\\.\\.))[^()\\n]{1,30}\\)`,
   "g",
 );
+
+// 3-b행(§131(9) — 프로브 D6 "(잠깐 확인하는 중이라 답이 늦어졌어요ㅠ)" · "(그 이름은 제가 정확히 떠오르지 않네요ㅠ)") — 괄호 속 혼잣말.
+// 머리 어휘 목록으로는 잡히지 않는다. 괄호 안이 **띄어쓰기가 있는 한국어 문장**이고 **혼잣말 어미**(ㅠ · ㅜ로 끝남 · "-네요 · -군요 · -는데요 ·
+// -거든요" · 과거 "-었/였어요")로 끝나며 숫자가 없을 때만 지운다. ⛔ 시키는 말("(침묵을 지켜 주세요)" — PR-A3 리뷰 Minor 1)은 대사라 남긴다.
+// "(주)" · "(가상)" · "(1588-…)" · "(OO은행 고객센터)"도 남는다. 지우면 대사가 빈 경우는 지우지 않는다(아래).
+const PAREN_MONOLOGUE =
+  /[ \t]*\((?=[^()\n]*\s)(?:[^()\n\d]{4,60}?[ㅠㅜ]+|[^()\n\d]{4,60}?(?:네요|군요|는데요|거든요|[었였]어요|[었였]네)[ㅠㅜ]*)[.!?~…]*\)/g;
 
 // 4행 — 모델이 대사 밖 진행 표기(훈련 · 대화가 끝났다는 표시)를 대사에 붙인 것. 사기범 인물은 이런 표기를 할 이유가 없으므로
 // 메타 어휘가 들어간 짧은 괄호만 지운다. ⛔ "[지원금 안내]" 같은 문자 머리표는 메타 어휘가 없어 남는다.
@@ -66,6 +76,12 @@ const META_TAG = new RegExp(
 // 4-b행 — "ㅇㅇ"은 "응응"이라는 뜻으로도 쓰므로 **자기소개 어형**("(나) ㅇㅇ(이)야/이에요/예요")만 본다.
 const PLACEHOLDER_SELF_NAME = /(?:나\s*)?ㅇㅇ\s*(?:이)?(?:야|이에요|예요|에요)/g;
 
+// 4-d행(§131(10) — 프로브 D10 "혹시 ○○님 맞으시죠?" · "상담원 ○○○입니다.") — 이름 자리를 동그라미 기호로 채운 표기. ⛔ 라틴 "OO"(OO은행 —
+// 가상 표기)는 건드리지 않는다. 호칭형("○○님")은 "고객님"으로 · 자기소개형("상담원 ○○○입니다")은 이름만 뺀다 · 반말 자기소개("나 ○○야")는 "나야"로.
+const PLACEHOLDER_CIRCLE_HONORIFIC = /[○◯●]{2,3}\s*님/g;
+const PLACEHOLDER_CIRCLE_SELF = /\s*[○◯●]{2,3}\s*(?=입니다|이에요|예요|에요|이고|인데)/g;
+const PLACEHOLDER_CIRCLE_CASUAL = /(?:나\s*)?[○◯●]{2,3}\s*(?:이)?야/g;
+
 // 4-c행(§129 (A)) — 대사 전체를 감싼 따옴표(모델이 대사를 인용문처럼 낸 것). 안에 다른 따옴표가 없을 때만 벗긴다 · 닫는 따옴표 없이 맨 앞에만 있으면 그것만 지운다.
 const WRAPPING_QUOTE = /^\s*[“"]([^“”"]+)[”"]\s*$/;
 const LONE_OPENING_QUOTE = /^\s*“(?![^”]*”)/;
@@ -81,7 +97,11 @@ export function tidyScammerReplyMarkup(text: string): ReplyMarkupResult {
   const count = () => {
     removedCount += 1;
   };
-  const tidied = text
+  // 3-b행 — 괄호 속 혼잣말을 지워도 대사가 남을 때만 지운다(빈 말풍선 0 — §129 D1).
+  const withoutMonologue = text.replace(PAREN_MONOLOGUE, "");
+  const monologueFree = withoutMonologue !== text && withoutMonologue.trim().length > 0 ? withoutMonologue : text;
+  if (monologueFree !== text) count();
+  const tidied = monologueFree
     .replace(BOLD_PAIR, (_m, inner: string) => {
       count();
       return inner;
@@ -101,6 +121,18 @@ export function tidyScammerReplyMarkup(text: string): ReplyMarkupResult {
     .replace(PLACEHOLDER_SELF_NAME, () => {
       count();
       return "나야";
+    })
+    .replace(PLACEHOLDER_CIRCLE_HONORIFIC, () => {
+      count();
+      return "고객님";
+    })
+    .replace(PLACEHOLDER_CIRCLE_CASUAL, () => {
+      count();
+      return "나야";
+    })
+    .replace(PLACEHOLDER_CIRCLE_SELF, () => {
+      count();
+      return "";
     })
     .replace(WRAPPING_QUOTE, (_m, inner: string) => {
       count();

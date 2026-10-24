@@ -28,6 +28,26 @@ export function isEscalatedVoiceCall(
   return (channelHistory ?? []).some((entry) => entry.from === "messenger" && entry.to === "voice");
 }
 
+/**
+ * §131(14) — 메신저에서 넘어온 통화의 **통화 진입 뒤** 참가자 발화 수(이번 발화 포함 · 끊기 판정 5행 입력 `turnsSinceCallEntry`).
+ * 기준 = 가장 최근 `messenger → voice` 전환 시각. 그 뒤에 저장된 통화 채널 참가자 메시지 + 1(이번 발화).
+ * | If | Then |
+ * |---|---|
+ * | 메신저에서 넘어온 통화가 아니다(`isEscalatedVoiceCall` 거짓) | `undefined`(종전 — 세션 전체 발화만) |
+ * | 그 밖 | 위 개수 |
+ * ⚠️ 전환 기록에 턴 수가 없어(`turnCountAtTransition`은 메신저 복귀에만 기록) 시각으로 센다.
+ */
+export function userTurnsSinceCallEntry(
+  channel: MessengerChannel | undefined,
+  channelHistory: readonly ChannelTransitionEntry[] | undefined,
+  history: readonly { role: "scammer" | "user"; channel?: MessengerChannel; createdAt: { toMillis(): number } }[],
+): number | undefined {
+  if (!isEscalatedVoiceCall(channel, channelHistory)) return undefined;
+  const entries = (channelHistory ?? []).filter((entry) => entry.from === "messenger" && entry.to === "voice");
+  const since = entries[entries.length - 1].at.toMillis();
+  return history.filter((m) => m.role === "user" && m.channel === "voice" && m.createdAt.toMillis() >= since).length + 1;
+}
+
 /** 에스컬레이션 뒤 폴백 턴의 맥락 1줄(서버 소유 · 횟수 0 · 따옴표 대사 예시 0). */
 export const ESCALATED_CALL_CONTEXT_INSTRUCTION =
   "(이 대화는 이미 전화 통화로 넘어와 있다 — 지금 너는 상대와 통화하고 있다. 전화를 걸겠다거나 전화드리겠다거나 연결될 때까지 기다려 달라는 말을 다시 하지 말고, 이 통화 안에서 하던 안내를 바로 이어간다.)";

@@ -67,7 +67,7 @@ import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared
 import { wasTurnInstructionSpoken } from "./announceMarking";
 import { planOtpFollowUp } from "./otpFollowUp";
 import { extractEscalationSignal } from "./escalationSignal";
-import { callPhaseMockTacticHints, ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall } from "./escalatedCall";
+import { callPhaseMockTacticHints, ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall, userTurnsSinceCallEntry } from "./escalatedCall";
 import { isFirstUserTurn } from "./firstTurn";
 import { isL3Procedural } from "./l3Depth";
 import { extractLinkMarker } from "./linkMarker";
@@ -89,6 +89,7 @@ import { extractSmsMarker } from "./smsMarker";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
 import { evaluateOtpCheck, otpCheckInputsFromHistory } from "./otpCheck";
 import {
+  DEMAND_SENTENCE,
   MAX_SCAMMER_REPLY_SENTENCES,
   SMS_MENTION_SENTENCE,
   limitReplySentences,
@@ -104,6 +105,13 @@ import {
   reclassifyMessengerGiveUp,
 } from "./signalConsistency";
 import { CALL_AFTER_EXCUSE_INSTRUCTION, decideCallAnnouncement, saidCallUnavailableRecently } from "./callAnnouncement";
+import {
+  stripUnperformedAcknowledgement,
+  TRANSFER_REPORTED_INSTRUCTION,
+  userReportedTransfer,
+  userSentPhoto,
+} from "./actionAcknowledgement";
+import { fixMessengerCallWording, personaAnchorInstruction, personaGuardFor } from "./personaGuard";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
@@ -395,6 +403,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         goalActionDone = false;
       }
     }
+    const callEntryTurns = userTurnsSinceCallEntry(session.channel, session.channelHistory, storedHistory);
     const hangupFacts: FallbackHangupFacts = {
       status: session.status,
       channel: session.channel,
@@ -414,6 +423,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       relay: resolveHangupRelay(session),
       smsDeclared: smsSessionDeclared,
       smsDeliveredLoaded,
+      // §131(14) — 메신저에서 넘어온 통화는 5행 하한을 통화 진입 뒤 발화로도 본다(통화 첫 턴 끊기 방지 · 그 밖 = 키 0).
+      ...(callEntryTurns !== undefined ? { turnsSinceCallEntry: callEntryTurns } : {}),
     };
     const hangupPre = decideFallbackHangup(hangupFacts, smsDelivered, false);
     const hangupMode = fallbackHangupMode(hangupPre);
@@ -579,8 +590,21 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       saidCallUnavailableRecently(storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked))
         ? CALL_AFTER_EXCUSE_INSTRUCTION
         : undefined;
+    // §131(13) 판정표 R — 참가자가 이미 송금했다고 말했으면 같은 송금을 다시 요구하지 않게 1줄(`actionAcknowledgement.ts`).
+    // §131(7) 판정표 P — 지인 · 자녀 사칭 메신저는 역할 고정 1줄(`personaGuard.ts` · 그 밖 시나리오 = 없음).
+    const turnFacts = {
+      transferReported: userReportedTransfer(storedHistory, maskedUserText),
+      photoSent: userSentPhoto(storedHistory, isPhotoTurn),
+    };
     const confirmAndCallContext =
-      [confirmPlan?.instruction, escalatedCallInstruction, repeatBreakInstruction(repeatBreakKind), callAfterExcuseInstruction]
+      [
+        confirmPlan?.instruction,
+        escalatedCallInstruction,
+        repeatBreakInstruction(repeatBreakKind),
+        callAfterExcuseInstruction,
+        turnFacts.transferReported ? TRANSFER_REPORTED_INSTRUCTION : undefined,
+        personaAnchorInstruction(session.scenarioId),
+      ]
         .filter(Boolean)
         .join("\n") || undefined;
     // §132.6 — 인증번호 문자가 도착했는데 아직 번호를 묻지 않았으면 다음 턴(최대 2)에 1줄(`otpFollowUp.ts` 표). 다른 앱 진행 지시가 없는 턴만(G31).
@@ -672,6 +696,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       ),
       // §102 — 사기범 대사 경로: 영어 거절 등 쓸 수 없는 응답은 다음 단계(Groq → Mock)로 넘긴다.
       purpose: "scammer-reply",
+      // §131(7) — 지인 · 자녀 사칭 메신저의 역할 이탈(기관 직원 자기소개)도 쓸 수 없는 응답으로 본다(그 밖 = 키 0).
+      ...(personaGuardFor(session.scenarioId) ? { personaGuard: personaGuardFor(session.scenarioId) } : {}),
     });
     // 몇 단계 공급자가 응답했는지(2026-10-18 Groq 3차 예비, Architecture.md §75.7) — 라이브 로그로
     // 1차 Gemini / 2차 Gemini 대체 / 3차 Groq / Mock 강등 비율을 읽는다. 숫자·ID·단계명만(G170).
@@ -836,10 +862,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       ? limitReplySentences(
           realNameFreeReplyText,
           MAX_SCAMMER_REPLY_SENTENCES,
-          turnChoice === "sms_announce" ? SMS_MENTION_SENTENCE : undefined,
+          // §131(8) — 그 밖 턴은 요구 문장을 잘라 내지 않는다(`DEMAND_SENTENCE`).
+          turnChoice === "sms_announce" ? SMS_MENTION_SENTENCE : DEMAND_SENTENCE,
         )
       : undefined;
-    const limitedReplyText = lengthLimited ? lengthLimited.text : realNameFreeReplyText;
+    // §131(12) 판정표 A — 참가자가 하지 않은 송금 · 사진을 받았다는 문장을 지운다. §131(11) 판정표 W — 메신저 단계는 지금 대화를 통화라고 부르는 말을 고친다.
+    const factCheckedReplyText = stripUnperformedAcknowledgement(lengthLimited ? lengthLimited.text : realNameFreeReplyText, turnFacts);
+    const limitedReplyText = session.channel === "messenger" ? fixMessengerCallWording(factCheckedReplyText) : factCheckedReplyText;
     // §128(4) — 참가자가 건 통화의 "전화 받아 줘서"류 교정(`callCaller.ts` 표 · 그 밖 턴 무변경).
     const shapedReplyText = participantCalled ? fixParticipantCalledReply(limitedReplyText) : limitedReplyText;
     // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).
