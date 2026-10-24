@@ -11,7 +11,7 @@ import { logger } from "firebase-functions";
 import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
-import { SMS_DECLINE_ALREADY, SMS_DECLINE_TOO_EARLY } from "../scenarios/inCallSms";
+import { SMS_CLAIM_NOT_YET, SMS_DECLINE_ALREADY, SMS_DECLINE_TOO_EARLY } from "../scenarios/inCallSms";
 import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import type { SessionDoc } from "../shared/types";
 import { buildConfirmResultField, buildInCallSmsResponse, realtimeAnchorScammerTurn } from "./buildDoc";
@@ -29,6 +29,7 @@ import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms } from "./sm
 import { goalFollowUpFor, planGoalWrapUp } from "../scammerHangup/goalAction";
 import { GOAL_WRAP_UP_INSTRUCTION } from "../scammerHangup/guidance";
 import { withModelToolNoRepeat } from "./toolGuidance";
+import { LANDING_SUBMITTED_INSTRUCTION } from "./confirmResult";
 import type {
   DeliverInCallSmsRequest,
   DeliverInCallSmsResponse,
@@ -171,7 +172,8 @@ export const deliverInCallSms = onCall<
   if (trigger === "backstop") {
     const deliveredNow = await readDeliveredSms(sessionRef);
     const plan = planSmsBackstop({ declared, delivered: deliveredNow, userTurns, claimed: smsClaimed });
-    if (plan.action === "wait") return { status: "waiting" };
+    // §132.9 — "보냈다" 주장이 하한 전에 나왔으면 정정 1줄을 함께 돌려준다(클라 1회 주입 · 하한은 그대로).
+    if (plan.action === "wait") return smsClaimed ? { status: "waiting", claimNotYetInstruction: SMS_CLAIM_NOT_YET } : { status: "waiting" };
     if (plan.action === "none_pending") {
       // §115 — 후속 단계 변형은 할 일을 마칠 때까지 계속 묻게 하고(`goal_pending`), 마친 첫 질의에 마무리 지시 1줄을 싣는다.
       const followUpUserTurns = goalFollowUpFor(session.scenarioId, session.flowVariantId);
@@ -324,6 +326,8 @@ export const recordInCallSmsEvent = onCall<
   // 최초 1회만 세팅한다(§API.md) — 다시 열어봐도 "처음 열어본 시각"이 밀리지 않는다.
   if (!snap.get(field)) {
     await smsRef.update({ [field]: Timestamp.now() });
+    // §132.7 — 이체 화면 제출을 처음 기록한 순간에만 실시간 사기범용 맥락 1줄을 돌려준다(이미 기록됨 = 없음 · 중복 주입 0).
+    if (event === "landing_submitted") return { recorded: true, contextInstruction: LANDING_SUBMITTED_INSTRUCTION };
   }
   return { recorded: true };
 });

@@ -434,13 +434,13 @@ export default function SessionCallPage() {
   // ⭐ PR-A2(audit-A R1 · R8) — G31 큐 **밖** 맥락 주입 슬롯(확인 결과 신호 · 자동 호 전환 실패). 응답을 유발하지 않고 턴 슬롯을
   // 쓰지 않아 큐(참가자 발화 조건 · 턴 경계 대기)를 타지 않는다 — 전환 상태 단언(`personaStateTurn`)과 같은 이유의 별도 슬롯.
   const [contextTurn, setContextTurn] = useState<
-    { text: string; seq: number; delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" } | null
+    { text: string; seq: number; delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted" } | null
   >(null);
   // PR-A2 — 확인 결과 신호 주입 상태(세션당 1회 · 도착 안내 뒤 대기분). 판정은 순수 함수(`stallRecovery.ts`).
   const confirmResultInjectionRef = useRef<ConfirmResultInjectionState>(INITIAL_CONFIRM_RESULT_INJECTION_STATE);
   // PR-A2 리뷰 Minor 1 — 슬롯 seq는 단조 증가(전달 확인으로 슬롯을 비운 뒤에도 앞 seq를 재사용하지 않는다).
   const contextTurnSeqRef = useRef(0);
-  const pushContextTurn = useCallback((text: string, delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall") => {
+  const pushContextTurn = useCallback((text: string, delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted") => {
     contextTurnSeqRef.current += 1;
     setContextTurn({ text, seq: contextTurnSeqRef.current, delivery });
   }, []);
@@ -560,6 +560,8 @@ export default function SessionCallPage() {
   const smsBackstopRef = useRef({ lastRequestedUserTurns: -1, lastClaimRequestedUserTurns: -1, nonePending: false, inFlight: false, wrapUpSent: false });
   // §104 — 사기범이 "문자를 보냈다"고 말했고 아직 그 문자가 오지 않았다(`scammerClaimsSmsSent`). 다음 백스톱 질의에 실린다 · 도착 · none_pending이면 내린다.
   const smsClaimPendingRef = useRef(false);
+  // §132.9 — 하한 전 "보냈다" 주장에 정정 1줄을 이미 넣었는가(주장이 내려가면 초기화).
+  const smsClaimCorrectedRef = useRef(false);
   // §108 — 주장이 생긴 사기범 턴에 바로 백스톱을 묻게 하는 깨우기 값(값 자체는 쓰지 않는다).
   const [smsClaimTick, setSmsClaimTick] = useState(0);
   // ⭐ §126 — 사기범이 말하는 도중 주장이 보였을 때의 사용자 발화 수(응답 중인 발화 포함 · `claimedUserTurns`). 질의가 이 값과 flush 수 중 큰 쪽을 싣는다.
@@ -1105,6 +1107,8 @@ export default function SessionCallPage() {
         if (result.status === "none_pending") state.nonePending = true;
         // §115 — `goal_pending`도 남은 필수 문자가 없다는 뜻이라 "문자 보냈다" 주장을 내린다.
         if (result.status === "delivered" || result.status === "none_pending" || result.status === "goal_pending") smsClaimPendingRef.current = false;
+        // §132.9 — 주장이 내려가면 정정 1회 표시도 초기화(다음 주장에 다시 1회).
+        if (!smsClaimPendingRef.current) smsClaimCorrectedRef.current = false;
         // §53.6 (3) — 전환이 끝난 오퍼가 연 문자에는 announce 값이 없다(서버가 생략) — 그때는 주입하지 않는다.
         if (result.status === "delivered") {
           // PR-A2(audit-A R1) — 결과 신호 판정을 안내를 큐에 넣기 **전에** 한다(위 `offerConfirmResult` 주석).
@@ -1115,6 +1119,11 @@ export default function SessionCallPage() {
         }
         if (result.status === "nudge" && result.nudgeInstruction) {
           enqueueTurnInstruction(result.nudgeInstruction, "sms", { smsNudge: true });
+        }
+        // §132.9 — "보냈다" 주장이 하한 전이었다: 정정 1줄(주장 1건당 1회 — 주장이 내려가면 다시 열린다). 침묵 넛지 대상 아님.
+        if (result.status === "waiting" && result.claimNotYetInstruction && !smsClaimCorrectedRef.current) {
+          smsClaimCorrectedRef.current = true;
+          enqueueTurnInstruction(result.claimNotYetInstruction, "sms", { smsNudge: true });
         }
         // §115 — 후속 단계까지 할 일을 마쳤다는 서버 신호: 마무리 지시 1줄을 맥락 주입한다(전사 0). `none_pending`이라 이 뒤로는
         // 더 묻지 않아 1회다(재마운트 대비로 ref 표시도 둔다). `goal_pending`은 아무것도 하지 않고 다음 발화에 다시 묻는다.
@@ -2089,7 +2098,12 @@ export default function SessionCallPage() {
   const handleRecordSmsEvent = (smsId: string, event: InCallSmsEvent) => {
     if (!sessionId) return;
     // 기록 실패는 조용히 흡수한다 — 기록 때문에 훈련을 막지 않는다(API.md Errors).
-    void recordInCallSmsEvent({ sessionId, smsId, event }).catch(() => {});
+    // §132.7 — 이체 화면 제출을 처음 기록하면 서버가 실시간 사기범용 맥락 1줄을 돌려준다(폴백은 쓰지 않는다 — 실시간만 주입).
+    void recordInCallSmsEvent({ sessionId, smsId, event })
+      .then((res) => {
+        if (callMode === "realtime" && res.contextInstruction) pushContextTurn(res.contextInstruction, "landingSubmitted");
+      })
+      .catch(() => {});
   };
 
   // T194-c-1(docs/Architecture.md §84.5.3 · §84.15.3 · Q2) — 통화 중 문자가 연 모의 설치 화면의 노출 · 응낙 기록. `callMode`는 서버가 통화 중

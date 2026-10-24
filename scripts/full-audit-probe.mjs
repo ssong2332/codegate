@@ -50,6 +50,9 @@ const { extractSmsMarker } = L("roleplay/smsMarker.js");
 const { extractLinkMarker } = L("roleplay/linkMarker.js");
 const { extractEscalationSignal } = L("roleplay/escalationSignal.js");
 const { resolveSessionAccountNumber, resolveFictionalBankName, applyFictionalBank } = L("shared/fictionalBank.js");
+// §132.5 — 앱과 같이 루트가 선언한 문자로 계좌번호를 정한다(옛 lib = 시나리오 단위).
+const routeAccountNumber = (scenarioId, variantId) =>
+  L("inCallSms/smsGate.js").resolveRouteAccountNumber?.(scenarioId, variantId) ?? resolveSessionAccountNumber(scenarioId);
 const { decideFallbackHangup, fallbackHangupMode, resolveFallbackHangupEffect } = L("scammerHangup/fallback.js");
 const { decideScammerHangup } = L("scammerHangup/decide.js");
 const { scammerHangupGuidance } = L("scammerHangup/guidance.js");
@@ -229,7 +232,7 @@ function sessionSetup(scenarioId, level, tag, pinnedVariant) {
     identityCheckAllowed: asksIdentityCheck(scenarioId),
     speakerGender: speakerGenderFor(scenarioId),
     fictionalBankName,
-    sessionAccountNumber: resolveSessionAccountNumber(scenarioId),
+    sessionAccountNumber: routeAccountNumber(scenarioId, variantId),
   };
   return { variantId, scenarioPrompt, declared, verifyEnabled, fictionalBankName, baseOpts };
 }
@@ -379,6 +382,9 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
         if (!d.landingSubmitted && d.userTurnsAtArrival < userTurns && findInCallSmsItem(scenarioId, d.smsId)?.fakeLandingId) {
           d.landingSubmitted = true;
           events.push({ t: now(), ev: "landingSubmitted", smsId: d.smsId, userTurns });
+          // §132.7 — 앱처럼 제출 사실을 맥락 주입(새 lib에만 상수가 있다 — 옛 lib = 주입 0).
+          const landingText = optionalLib("inCallSms/confirmResult.js")?.LANDING_SUBMITTED_INSTRUCTION;
+          if (landingText) sendText(landingText, false, "landing_ctx");
         }
       }
     }
