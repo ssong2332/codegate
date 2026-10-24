@@ -45,6 +45,6 @@ test("[§123 배선] 보이스톡 발신 = 전환 기록 caller · Live 맥락 �
     roleplay,
     /escalatedCall && currentCallCaller\(session\.channelHistory\) === "participant" \? PARTICIPANT_CALLED_INSTRUCTION : undefined;/,
   );
-  assert.match(roleplay, /\[turnInstructionWithSms, photoTurnInstruction\(isPhotoTurn\), participantCalledInstruction\]/);
+  assert.match(roleplay, /\[turnInstructionWithSms, photoTurnInstruction\(isPhotoTurn\), participantCalledInstruction(?:, fallbackWrapUp)?\]/); // §127 폴백 마무리 지시
   assert.ok(PARTICIPANT_CALLED_INSTRUCTION.includes("네가 전화한 것이 아니다"));
 });

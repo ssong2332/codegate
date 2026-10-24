@@ -82,6 +82,6 @@ test("[§120 ④] 사진 턴 지시 — 사진 턴에만 1줄 · 캐릭터 유�
 
 test("[§120 ⑤] sendMessage가 사진 턴 지시를 턴 지시에 싣는다(소스 배선)", () => {
   const src = readFileSync(path.resolve(__dirname, "../../../src/roleplay/index.ts"), "utf8");
-  assert.match(src, /\[turnInstructionWithSms, photoTurnInstruction\(isPhotoTurn\)(?:, participantCalledInstruction)?\]\.filter\(Boolean\)/);
+  assert.match(src, /\[turnInstructionWithSms, photoTurnInstruction\(isPhotoTurn\)(?:, participantCalledInstruction)?(?:, fallbackWrapUp)?\]\.filter\(Boolean\)/); // §127 폴백 마무리 지시
   assert.match(src, /turnInstruction: turnInstructionWithPhoto/);
 });
