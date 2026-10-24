@@ -15,6 +15,7 @@ import { neutralizeUserMentionedFinancialNames, replaceRealFinancialNames } from
 import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from "../llm";
 import { triggerReportGeneration } from "../report";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
+import { findInCallSmsItem } from "../scenarios/inCallSms";
 import type { InCallSmsItem } from "../scenarios/inCallSms";
 import {
   findMockScreenItem,
@@ -31,6 +32,7 @@ import {
   planSmsBackstop,
   effectiveTextPathUserTurns,
   resolveDeclaredSms,
+  resolveRouteAccountNumber,
   resolveSmsGate,
   sessionDeclaredSmsPurposes,
   sessionDeclaresInCallSms,
@@ -63,6 +65,7 @@ import { transitionChannel } from "../session/channelTransition";
 import { answeredAtFromClient } from "../session/answeredAt";
 import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
 import { wasTurnInstructionSpoken } from "./announceMarking";
+import { planOtpFollowUp } from "./otpFollowUp";
 import { extractEscalationSignal } from "./escalationSignal";
 import { callPhaseMockTacticHints, ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall } from "./escalatedCall";
 import { isFirstUserTurn } from "./firstTurn";
@@ -104,7 +107,7 @@ import { CALL_AFTER_EXCUSE_INSTRUCTION, decideCallAnnouncement, saidCallUnavaila
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
-import { applyFictionalBank, resolveFictionalBankName, resolveSessionAccountNumber } from "../shared/fictionalBank";
+import { applyFictionalBank, resolveFictionalBankName } from "../shared/fictionalBank";
 
 export { generateOpeningLine } from "./openingLine";
 export type { OpeningLineResult } from "./openingLine";
@@ -580,9 +583,33 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       [confirmPlan?.instruction, escalatedCallInstruction, repeatBreakInstruction(repeatBreakKind), callAfterExcuseInstruction]
         .filter(Boolean)
         .join("\n") || undefined;
+    // §132.6 — 인증번호 문자가 도착했는데 아직 번호를 묻지 않았으면 다음 턴(최대 2)에 1줄(`otpFollowUp.ts` 표). 다른 앱 진행 지시가 없는 턴만(G31).
+    const otpArrival = smsDelivered.find((d) => findInCallSmsItem(session.scenarioId, d.smsId)?.kind === "otp");
+    const otpArrivedSince = otpArrival?.userTurnsAtArrival !== undefined ? userTurnsNow - otpArrival.userTurnsAtArrival : 0;
+    const priorUserTexts = storedHistory.filter((m) => m.role === "user").map((m) => m.textMasked);
+    const otpFollowUpInstruction =
+      turnChoice === "none" && !otpCheckInstruction && !confirmPlan?.instruction && verifyState?.placed !== true && otpArrivedSince > 0
+        ? planOtpFollowUp({
+            otpSmsIds: smsDeclared
+              .filter((item) => findInCallSmsItem(session.scenarioId, item.smsId)?.kind === "otp")
+              .map((item) => item.smsId),
+            delivered: smsDelivered,
+            userTurns: userTurnsNow,
+            scammerTextsSinceArrival: storedHistory
+              .filter((m) => m.role === "scammer")
+              .slice(-otpArrivedSince)
+              .map((m) => m.textMasked),
+            userTextsSinceArrival: [...priorUserTexts.slice(priorUserTexts.length - (otpArrivedSince - 1)), maskedUserText],
+          })
+        : undefined;
+    if (otpFollowUpInstruction) {
+      // G170 — 턴 번호만(대사 0).
+      logger.info("[§132] 인증번호 다시 요구 지시", { sessionId, userTurns: userTurnsNow, since: otpArrivedSince });
+    }
     const turnInstructionWithSms =
-      [promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction].filter(Boolean).join("\n") ||
-      undefined;
+      [promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction, otpFollowUpInstruction]
+        .filter(Boolean)
+        .join("\n") || undefined;
     // §120 — 사진 턴이면 캐릭터 유지형 반응 지시 1줄을 맨 뒤에 붙인다(`photoTurn.ts` 표 · 그 밖 턴 = 없음 · 문면 바이트 동일).
     // §123 — 참가자가 건 통화(보이스톡 발신)면 "네가 전화한 게 아니다" 1줄(`callCaller.ts` · 사기범이 건 통화 = 없음).
     const participantCalled = escalatedCall && currentCallCaller(session.channelHistory) === "participant";
@@ -629,7 +656,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         speakerGender: resolveSessionSpeakerGender(session),
         ...(turnInstructionWithPhoto ? { turnInstruction: turnInstructionWithPhoto } : {}),
         fictionalBankName,
-        sessionAccountNumber: resolveSessionAccountNumber(session.scenarioId),
+        sessionAccountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
         // T194-b(§84.3.4 · G568 호출부 3곳 중 "텍스트 턴") — 세션 문서 값 그대로(부재 = 블록 0 · 바이트 동일).
         // ⚠️ `hangupMode` 앞에 둔다 — G552 ⓒ 소스 스캔이 hangupMode를 옵션 마지막으로 고정한다.
         personaCard: session.personaCard?.items,

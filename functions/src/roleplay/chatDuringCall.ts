@@ -37,7 +37,8 @@ import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
-import { applyFictionalBank, resolveFictionalBankName, resolveSessionAccountNumber } from "../shared/fictionalBank";
+import { resolveRouteAccountNumber } from "../inCallSms/smsGate";
+import { applyFictionalBank, resolveFictionalBankName } from "../shared/fictionalBank";
 import type { MessageDoc, ScenarioPromptDoc, SessionDoc } from "../shared/types";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { triggerReportGeneration } from "../report";
@@ -155,7 +156,7 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
       speakerGender: resolveSessionSpeakerGender(session),
       turnInstruction,
       fictionalBankName,
-      sessionAccountNumber: resolveSessionAccountNumber(session.scenarioId),
+      sessionAccountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
       personaCard: session.personaCard?.items,
       ...(familyAddressPrompt ? { familyAddress: familyAddressPrompt } : {}),
       hangupMode,

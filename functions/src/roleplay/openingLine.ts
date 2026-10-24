@@ -9,7 +9,7 @@ import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
-import { sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
+import { resolveRouteAccountNumber, sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
 import { isL3Procedural } from "./l3Depth";
 import { extractEscalationSignal } from "./escalationSignal";
 import { extractLinkMarker } from "./linkMarker";
@@ -23,7 +23,7 @@ import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import type { DifficultyLevel } from "../shared/difficulty";
 import type { ScammerMessage } from "./types";
 import type { PersonaCardItem } from "../shared/types";
-import { applyFictionalBank, resolveSessionAccountNumber } from "../shared/fictionalBank";
+import { applyFictionalBank } from "../shared/fictionalBank";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, type FamilyAddressTerm } from "../scenarios/familyAddress";
 
 // 사용자 신고(2026-07-25) — 오프닝 대사가 다짜고짜 요구·압박부터 들어가 시나리오 배경이 없다는
@@ -183,7 +183,7 @@ export async function generateOpeningLine(
       speakerGender: resolveSessionSpeakerGender(sessionView),
       turnInstruction: isMessengerOpening ? MESSENGER_OPENING_TURN_INSTRUCTION : OPENING_TURN_INSTRUCTION,
       ...(fictionalBankName ? { fictionalBankName } : {}),
-      sessionAccountNumber: resolveSessionAccountNumber(scenarioId),
+      sessionAccountNumber: resolveRouteAccountNumber(scenarioId, flowVariantId),
       // T194-b(§84.3.4 · G568 호출부 3곳 중 "오프닝 대사") — 부재 = 블록 0(바이트 동일).
       ...(personaCard ? { personaCard } : {}),
       // §110.5 — 호칭(호출부 3곳 같은 값 · 부재 = 블록 0).

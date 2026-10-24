@@ -29,6 +29,7 @@
 import type { FlowVariantSms, SmsPurpose } from "../scenarios/flowVariants";
 import { findFlowVariant } from "../scenarios/flowVariants";
 import { findInCallSmsItem, hasInCallSms } from "../scenarios/inCallSms";
+import { resolveSessionAccountNumber } from "../shared/fictionalBank";
 
 /** 첫 문자 하한 — 오프닝 뒤 참가자가 두 번 말하기 전엔 문자 없음(설계 판단값 · AC-099 (b) "첫 문자의 하한"). */
 export const FIRST_SMS_MIN_USER_TURNS = 2;
@@ -206,6 +207,15 @@ export function resolveDeclaredSms(
   if (!variant) return { declared: [], reason: "unknown_variant" };
   if (variant.scenarioId !== scenarioId) return { declared: [], reason: "scenario_mismatch" };
   return { declared: variant.sms.filter((item) => findInCallSmsItem(scenarioId, item.smsId) !== undefined) };
+}
+
+/**
+ * ⭐ §132.5 — 세션 계좌번호(프롬프트 `sessionAccountNumber`)를 **그 변형이 선언한 문자**로만 정한다. 변형이 계좌 문자를 선언하지 않으면
+ * 예시 계좌(어떤 문자와도 같지 않은 번호)다. 변형 없는 세션 · 알 수 없는 변형은 종전대로 시나리오 전체(무소급).
+ */
+export function resolveRouteAccountNumber(scenarioId: string, flowVariantId: string | undefined): string {
+  const { declared, reason } = resolveDeclaredSms(scenarioId, flowVariantId);
+  return resolveSessionAccountNumber(scenarioId, reason === undefined ? declared.map((item) => item.smsId) : undefined);
 }
 
 /**

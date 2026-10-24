@@ -10,7 +10,11 @@ import {
   replaceRealFinancialNames,
 } from "../../guardrails/realFinancialNames";
 import { SMS_MENTION_SENTENCE, limitReplySentences, limitReplySentencesKeeping } from "../replyLength";
-import { findFlowVariant } from "../../scenarios/flowVariants";
+import { findFlowVariant, resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
+import { resolveRouteAccountNumber } from "../../inCallSms/smsGate";
+import { EXAMPLE_ACCOUNT_NUMBER } from "../../shared/fictionalBank";
+import { buildSystemPrompt } from "../promptAssembly";
+import { OTP_FOLLOW_UP_INSTRUCTION, planOtpFollowUp } from "../otpFollowUp";
 
 const SRC = path.resolve(__dirname, "../../../src");
 
@@ -90,4 +94,64 @@ test("[§132 ③] 현금 예탁형 · 금 구매형은 안심 단계에 계좌 �
   const c5fj = findFlowVariant("fv-c5fj")!;
   assert.ok(!c5fj.stages.some((s) => s.summary.includes(rule)), "안전계좌 이체형은 그대로");
   assert.equal(c5fj.stages[1].summary, "협조하면 조용히 끝난다며 안심시키고, 금융감독기관이 자산 보호를 돕는다고 말한다.");
+});
+
+// ── §132.5 · §132.6 — 2차 라이브 확인(운영 세션 659702ea · 현금 예탁형 · 텍스트 폴백) ──────────────────────────────
+
+test("[§132.5] 세션 계좌번호는 변형이 선언한 문자로만 — 현금 예탁 · 금 구매 루트 프롬프트에 안전계좌 문자 번호 0 · 안전계좌 이체형 · 변형 없는 세션은 종전", () => {
+  const SAFE = "210-3391-5540-08";
+  assert.equal(resolveRouteAccountNumber("institutional-impersonation", "fv-c5fj"), SAFE);
+  assert.equal(resolveRouteAccountNumber("institutional-impersonation", undefined), SAFE, "무소급");
+  assert.equal(resolveRouteAccountNumber("institutional-impersonation", "fv-nope"), SAFE, "알 수 없는 변형 = 종전");
+  for (const id of ["fv-q7cn", "fv-g2ld"]) {
+    assert.equal(resolveRouteAccountNumber("institutional-impersonation", id), EXAMPLE_ACCOUNT_NUMBER, id);
+    const prompt = buildSystemPrompt(resolveSessionScenarioPrompt("institutional-impersonation", id)!, {
+      fictionalBankName: "늘봄은행",
+      difficultyLevel: "advanced",
+      sessionAccountNumber: resolveRouteAccountNumber("institutional-impersonation", id),
+    });
+    assert.ok(!prompt.includes(SAFE), `${id}: 안전계좌 문자 번호 0`);
+  }
+  // 배선 — 프롬프트를 조립하는 6곳 전부 변형을 넘긴다(시나리오만 넘기는 호출 0).
+  for (const rel of [
+    "roleplay/index.ts",
+    "roleplay/openingLine.ts",
+    "roleplay/callReturnLine.ts",
+    "roleplay/chatDuringCall.ts",
+    "roleplay/screenActionFollowUp.ts",
+    "realtime/geminiProvider.ts",
+  ]) {
+    const src = readFileSync(path.join(SRC, rel), "utf8");
+    assert.ok(!src.includes("resolveSessionAccountNumber("), `${rel}: 시나리오 단위 호출 0`);
+    assert.match(src, /sessionAccountNumber: resolveRouteAccountNumber\([^,]+, [^)]*flowVariantId\)/, rel);
+  }
+});
+
+test("[§132.6] 인증번호 문자가 도착했는데 아직 묻지 않았으면 다음 턴(최대 2)에 다시 요구 1줄", () => {
+  const base = {
+    otpSmsIds: ["institution-otp"],
+    delivered: [{ smsId: "institution-otp", userTurnsAtArrival: 7 }],
+    userTurns: 8,
+    scammerTextsSinceArrival: ["(역할 이탈 해설)"],
+    userTextsSinceArrival: ["보냈어요. 이제 된 거죠?"],
+  };
+  // 라이브 재현 — 발화 7 도착 · 발화 8 응답 전.
+  assert.equal(planOtpFollowUp(base), OTP_FOLLOW_UP_INSTRUCTION);
+  assert.equal(planOtpFollowUp({ ...base, userTurns: 9, scammerTextsSinceArrival: ["a", "b"] }), OTP_FOLLOW_UP_INSTRUCTION, "2번째 턴까지");
+  assert.equal(planOtpFollowUp({ ...base, userTurns: 10 }), undefined, "3번째부터는 없음");
+  assert.equal(planOtpFollowUp({ ...base, userTurns: 7 }), undefined, "도착 턴은 도착 지시가 맡는다");
+  assert.equal(planOtpFollowUp({ ...base, scammerTextsSinceArrival: ["문자로 받은 인증번호 불러 주세요."] }), undefined, "이미 물었다");
+  assert.equal(planOtpFollowUp({ ...base, userTextsSinceArrival: ["253295요"] }), undefined, "이미 불렀다");
+  assert.equal(planOtpFollowUp({ ...base, delivered: [] }), undefined, "도착 전");
+  assert.equal(planOtpFollowUp({ ...base, otpSmsIds: [] }), undefined, "인증번호 문자 선언 없음");
+  assert.equal(
+    planOtpFollowUp({ ...base, delivered: [...base.delivered, { smsId: "institution-safe-account", userTurnsAtArrival: 8 }] }),
+    undefined,
+    "다음 문자가 왔다",
+  );
+  assert.ok(!/\d/.test(OTP_FOLLOW_UP_INSTRUCTION), "번호 0");
+  // 배선 — 앱 진행 지시가 없는 턴만 · 턴 지시 목록 끝.
+  const src = readFileSync(path.join(SRC, "roleplay/index.ts"), "utf8");
+  assert.ok(src.includes('turnChoice === "none" && !otpCheckInstruction && !confirmPlan?.instruction && verifyState?.placed !== true && otpArrivedSince > 0'));
+  assert.ok(src.includes("smsNudgeInstruction, smsOfferInstruction, otpFollowUpInstruction]"));
 });
