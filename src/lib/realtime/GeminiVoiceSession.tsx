@@ -48,7 +48,16 @@ import {
   type LiveToolFunctionCall,
 } from "./liveToolResponse";
 import { HANGUP_DRAIN_CAP_MS, HANGUP_FINAL_TURN_CAP_MS, hangupDrainDelayMs } from "@/lib/session/callEnding";
-import { GEMINI_OUTPUT_GAIN, LIMITER_INPUT_RANGE, SPEAKER_COMPRESSOR, applySpeakerDynamics, buildLimiterCurve, liveStageFor } from "./outputGain";
+import {
+  GEMINI_OUTPUT_GAIN,
+  LIMITER_INPUT_RANGE,
+  SPEAKER_COMPRESSOR,
+  applySpeakerDynamics,
+  buildLimiterCurve,
+  callStreamTrimFor,
+  liveStageFor,
+  trimGainFor,
+} from "./outputGain";
 import { INITIAL_LOUDNESS_STATE, normalizeChunk, type LoudnessState } from "./loudnessNormalizer";
 import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } from "./unheardReply";
 import { appendScammerChunk, shouldMarkToolBoundary } from "./toolTurnTranscript";
@@ -101,11 +110,13 @@ import {
   type TurnEndReason,
 } from "./liveLatency";
 import { LIVE_MIC_CONSTRAINTS, liveMicHandoff, stopStream } from "./micHandoff";
+import { scammerClaimsSmsSent } from "./toolWindow";
 import {
   FRESH_OUTPUT_RESUME_TIMEOUT_MS,
   isUsableContext,
   pickCallOutputPath,
   readOutputAfterMicFlag,
+  readVoiceTrimFlag,
   resumeSuspendedContexts,
   type PrimedCallAudio,
 } from "./callAudio";
@@ -123,7 +134,9 @@ import {
   noteAudioError,
   noteChunkReceived,
   noteNormalizerGain,
+  noteFreshResume,
   noteOutputPath,
+  noteStreamTrim,
   noteMicFrame,
   noteUnheardReplyFired,
   peakOf,
@@ -266,6 +279,11 @@ export type GeminiVoiceSessionProps = {
    * `decideSocketClose`). 부재 = 종전대로 `onEnded`. 사용자가 끊었거나 끊기 래치 뒤에는 부르지 않는다.
    */
   onConnectionLost?: () => void;
+  /**
+   * ⭐ §126(2026-10-24 실기 신고 *"문자가 바로 오지는 않아"*) — 사기범이 **말하는 도중** 출력 전사에 "문자를 보냈다"가 처음 보인 순간 1회(턴당).
+   * 인자 = 그 시점 사용자 발화 수(`claimedUserTurns` — 도구 경로와 같은 값). 부모가 즉시 주장 백스톱을 묻는다(종전: 턴 끝 flush에서만).
+   */
+  onScammerSmsClaim?: (userTurns: number) => void;
 };
 
 // §105 — `[live-mic]` 진단 줄 주기(숫자만 · 판단값).
@@ -355,6 +373,7 @@ export default function GeminiVoiceSession({
   onScammerHangupReady,
   resumeTurn,
   onConnectionLost,
+  onScammerSmsClaim,
 }: GeminiVoiceSessionProps) {
   // §99 — 마운트 시점 값만 쓴다(첫 턴은 연결 직후 1회).
   const resumeTurnRef = useRef(resumeTurn ?? null);
@@ -380,6 +399,7 @@ export default function GeminiVoiceSession({
     onScammerHangupAccepted,
     onScammerHangupReady,
     onConnectionLost,
+    onScammerSmsClaim,
   });
   const mutedRef = useRef(muted);
   // 정리 대상들 — 언마운트 시 전부 닫지 않으면 마이크가 계속 열려 있다.
@@ -423,6 +443,7 @@ export default function GeminiVoiceSession({
       onScammerHangupAccepted,
       onScammerHangupReady,
       onConnectionLost,
+      onScammerSmsClaim,
     };
   }, [
     onActive,
@@ -444,6 +465,7 @@ export default function GeminiVoiceSession({
     onScammerHangupAccepted,
     onScammerHangupReady,
     onConnectionLost,
+    onScammerSmsClaim,
   ]);
 
   useEffect(() => {
@@ -457,12 +479,19 @@ export default function GeminiVoiceSession({
   const outputVolumeRef = useRef(liveStageFor(outputVolume ?? GEMINI_OUTPUT_GAIN));
   const outputGainNodeRef = useRef<GainNode | null>(null);
   const speakerDynamicsRef = useRef<{ compressor: DynamicsCompressorNode; makeup: GainNode } | null>(null);
+  // §126 — '통화' 스트림 감쇠 노드와 이번 통화의 감쇠값(`callStreamTrimFor`). 통화 모드에서만 깎는다(`trimGainFor`).
+  const streamTrimNodeRef = useRef<GainNode | null>(null);
+  const streamTrimRef = useRef(1);
   useEffect(() => {
     outputVolumeRef.current = liveStageFor(outputVolume ?? GEMINI_OUTPUT_GAIN);
     const node = outputGainNodeRef.current;
     if (node) node.gain.setTargetAtTime(outputVolumeRef.current.gain, node.context.currentTime, 0.03);
     const dynamics = speakerDynamicsRef.current;
     if (dynamics) applySpeakerDynamics(dynamics, outputVolumeRef.current);
+    const trimNode = streamTrimNodeRef.current;
+    if (trimNode) {
+      trimNode.gain.setTargetAtTime(trimGainFor(outputVolumeRef.current, streamTrimRef.current), trimNode.context.currentTime, 0.03);
+    }
   }, [outputVolume]);
 
   // startedRef로 재실행을 막지 않는다(2026-07-23) — React Strict Mode(dev)는 mount→cleanup→mount를
@@ -521,6 +550,8 @@ export default function GeminiVoiceSession({
     let scammerBuffer = "";
     // ⭐ §117 — 같은 턴 안 도구 호출 앞뒤 두 발화를 문단으로 가른다(판정 = `toolTurnTranscript.ts`). flush마다 초기화.
     let scammerToolBoundary = false;
+    // §126 — 이번 사기범 턴에서 "문자를 보냈다" 주장을 이미 알렸는가(턴 경계에서 초기화 · 턴당 1회).
+    let smsClaimRaisedThisTurn = false;
     // §116 — 출력 전사에 모델의 영어 사고 문장이 섞이면 그 구간의 재생을 막는다(판정표 `thoughtLeak.ts` G1~G5 · 턴 경계에서 초기화).
     let thoughtGate = INITIAL_THOUGHT_LEAK_GATE_STATE;
 
@@ -754,6 +785,7 @@ export default function GeminiVoiceSession({
       userBuffer = "";
       scammerBuffer = "";
       scammerToolBoundary = false;
+      smsClaimRaisedThisTurn = false;
       reportTurnPhase();
     };
 
@@ -777,6 +809,7 @@ export default function GeminiVoiceSession({
       }
       scammerBuffer = "";
       scammerToolBoundary = false;
+      smsClaimRaisedThisTurn = false;
     };
 
     // ⭐ §71.6 — 지연 계측 상태(순수 함수 `liveLatency.ts`가 전이를 소유한다). 모델 턴이 닫힐 때마다
@@ -1203,6 +1236,7 @@ export default function GeminiVoiceSession({
       for (const node of limiterNodes) node.disconnect();
       limiterNodes = [];
       speakerDynamicsRef.current = null;
+      streamTrimNodeRef.current = null;
       // 수정안 A — 빌린 컨텍스트는 닫지 않는다(통화 화면이 닫는다). 대신 이 실행이 붙인 노드와 예약 재생을 뗀다.
       if (outputBorrowed) {
         stopAllPlayback();
@@ -1257,10 +1291,15 @@ export default function GeminiVoiceSession({
         if (outputAfterMicFlag && micOpened && !cancelled) {
           try {
             freshOutput = new AudioContext({ sampleRate: GEMINI_OUTPUT_SAMPLE_RATE });
+            const freshStartedAt = performance.now();
             await Promise.race([
               freshOutput.resume().catch(() => {}),
               new Promise<void>((resolve) => setTimeout(resolve, FRESH_OUTPUT_RESUME_TIMEOUT_MS)),
             ]);
+            // §126 — `fallback-primed`(볼륨 키가 안 먹는 경로)로 빠진 원인이 시간 초과인지 진단에 남긴다.
+            noteFreshResume(
+              freshOutput.state === "running" ? String(Math.round(performance.now() - freshStartedAt)) : "timeout",
+            );
           } catch (e) {
             noteAudioError(e instanceof Error ? e.name : "unknown");
             freshOutput = null;
@@ -1277,6 +1316,9 @@ export default function GeminiVoiceSession({
           freshOutput = null;
         }
         noteOutputPath(outputPath);
+        // §126 — '통화' 스트림이면 통화 모드 기준 레벨을 낮춘다(`outputGain.ts` 표 · `?voicetrim=0`이면 끔).
+        streamTrimRef.current = callStreamTrimFor(outputPath, readVoiceTrimFlag(window.location.search));
+        noteStreamTrim(streamTrimRef.current);
         outputBorrowed = freshOutput === null && isUsableContext(primedOutput);
         inputBorrowed = isUsableContext(primedInput);
         outputContext =
@@ -1306,17 +1348,22 @@ export default function GeminiVoiceSession({
           compressor.attack.value = SPEAKER_COMPRESSOR.attack;
           compressor.release.value = SPEAKER_COMPRESSOR.release;
           const makeup = outputContext.createGain();
+          // §126 — 컴프레서 뒤 · 보정 게인 앞의 '통화' 스트림 감쇠(통화 모드에서만 1 미만).
+          const streamTrim = outputContext.createGain();
+          streamTrim.gain.value = trimGainFor(outputVolumeRef.current, streamTrimRef.current);
           const limiterScale = outputContext.createGain();
           limiterScale.gain.value = 1 / LIMITER_INPUT_RANGE;
           const limiter = outputContext.createWaveShaper();
           limiter.curve = buildLimiterCurve();
           limiter.oversample = "2x";
           outputGain.connect(compressor);
-          compressor.connect(makeup);
+          compressor.connect(streamTrim);
+          streamTrim.connect(makeup);
           makeup.connect(limiterScale);
           limiterScale.connect(limiter);
           limiter.connect(outputContext.destination);
-          limiterNodes = [compressor, makeup, limiterScale, limiter];
+          limiterNodes = [compressor, streamTrim, makeup, limiterScale, limiter];
+          streamTrimNodeRef.current = streamTrim;
           speakerDynamicsRef.current = { compressor, makeup };
           applySpeakerDynamics(speakerDynamicsRef.current, outputVolumeRef.current, true);
         } catch (e) {
@@ -1445,6 +1492,11 @@ export default function GeminiVoiceSession({
                   scammerToolBoundary,
                 ));
                 if (sc.outputTranscription.text.trim()) scammerTextSinceBoundary = true;
+                // §126 — 말하는 도중 "문자를 보냈다"가 보이면 턴 끝을 기다리지 않고 부모에 알린다(문자가 말과 함께 도착).
+                if (!smsClaimRaisedThisTurn && scammerClaimsSmsSent(stripLeakedThought(scammerBuffer))) {
+                  smsClaimRaisedThisTurn = true;
+                  handlersRef.current.onScammerSmsClaim?.(claimedUserTurns());
+                }
                 // §116 — 사고 문장이 보이면 이미 예약된 재생을 끊고, 한국어 대사가 다시 올 때까지 오디오를 예약하지 않는다.
                 const gate = stepThoughtLeakGate(thoughtGate, { type: "transcript", text: sc.outputTranscription.text });
                 thoughtGate = gate.state;

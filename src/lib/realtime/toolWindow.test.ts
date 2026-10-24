@@ -171,6 +171,10 @@ test("[§104 문자 주장] 보냈다는 말은 잡고 · 보내겠다는 말 ·
     "보내 드린 링크 누르시고 본인 확인부터 하시면 됩니다.",
     "자산 검수 안내 문자 발송했습니다.",
     "보낸 문자 확인해 보세요.",
+    // §126 — 운영 실기 문장(2026-10-24 세션 243a51df 리포트).
+    "그럼 명의 도용 여부를 최종 확인하기 위해 방금 문자로 발송해 드린 인증번호 여섯 자리를 불러 주시겠습니까?",
+    "방금 휴대폰으로 발송해 드린 인증번호 여섯 자리를 불러 주십시오.",
+    "보내 드린 인증번호 불러 주세요.",
   ]) {
     assert.equal(scammerClaimsSmsSent(t), true, t);
   }
@@ -182,7 +186,8 @@ test("[§104 문자 주장] 보냈다는 말은 잡고 · 보내겠다는 말 ·
 test("[§104 문자 주장 배선] 화면 — 사기범 전사에서 주장을 표시하고 다음 백스톱 질의에 싣는다 · 도착 · none_pending이면 내린다", () => {
   const page = readFileSync("src/app/session/play/page.tsx", "utf8").replace(/\r\n/g, "\n");
   // §108 — 블록 형태로 바뀌었다(주장 표시 + 즉시 질의 깨우기).
-  assert.match(page, /if \(role === "scammer" && scammerClaimsSmsSent\(text\)\) \{\n\s+smsClaimPendingRef\.current = true;/);
+  // §126 — 말하는 도중 이미 올린 주장은 턴 끝에서 다시 세지 않는다(`claimRaisedMidTurn`).
+  assert.match(page, /if \(role === "scammer" && !claimRaisedMidTurn && scammerClaimsSmsSent\(text\)\) \{\n\s+smsClaimPendingRef\.current = true;/);
   assert.ok(page.includes("...(smsClaimPendingRef.current ? { smsClaimed: true } : {}),"));
   // §115 — `goal_pending`(남은 필수 문자 없음 · 후속 단계 남음)도 주장을 내린다.
   assert.ok(page.includes('if (result.status === "delivered" || result.status === "none_pending" || result.status === "goal_pending") smsClaimPendingRef.current = false;'));
@@ -209,10 +214,11 @@ test("[§108 주장 즉시 질의] 문자 선언 없음 · none_pending · 진�
 
 test("[§108 배선] 통화 화면 — 사기범 주장 턴에서 깨우기 값이 오르고, 백스톱 effect가 그 값에 의존한다", () => {
   const page = readFileSync("src/app/session/play/page.tsx", "utf8").replace(/\r\n/g, "\n");
-  const claimAt = page.indexOf("if (role === \"scammer\" && scammerClaimsSmsSent(text)) {");
+  const claimAt = page.indexOf("if (role === \"scammer\" && !claimRaisedMidTurn && scammerClaimsSmsSent(text)) {");
   assert.ok(claimAt > 0);
   assert.ok(page.slice(claimAt, claimAt + 300).includes("setSmsClaimTick((n) => n + 1);"));
   assert.ok(page.includes("claimPending: smsClaimPendingRef.current,"));
-  assert.ok(page.includes("if (smsClaimPendingRef.current) state.lastClaimRequestedUserTurns = userTurnCount;"));
+  // §126 — 주장 질의는 응답 중 발화까지 센 수(`claimUserTurns`)로 기록한다.
+  assert.ok(page.includes("if (smsClaimPendingRef.current) state.lastClaimRequestedUserTurns = claimUserTurns;"));
   assert.match(page, /userTurnCount,\n\s+smsClaimTick,\n\s+realtime\.credentials\?\.inCallSmsBackstop,/);
 });

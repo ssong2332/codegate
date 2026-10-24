@@ -315,7 +315,8 @@ test("[§104 문자 미도착] 사기범이 문자를 보냈다고 말했으면(
   assert.equal(planSmsBackstop({ declared, delivered, userTurns: 5 }).action, "wait", "주장 없으면 종전(개방 + 넛지 + 발송)");
   assert.equal(planSmsBackstop({ declared, delivered, userTurns: 9 }).action, "deliver", "종전 발송 시점 그대로");
   const src = read("inCallSms/index.ts");
-  assert.ok(src.includes("const smsClaimed = request.data?.smsClaimed === true;"));
+  // §126 — 주장은 백스톱 요청에서만 읽는다(발송 통로의 명시 요청 판정에도 쓴다).
+  assert.ok(src.includes('const smsClaimed = trigger === "backstop" && request.data?.smsClaimed === true;'));
   // §115 — 도착 기록을 한 번 읽어 백스톱 계획과 마무리 판정(`planGoalWrapUp`)이 같은 값을 쓴다.
   assert.ok(src.includes("const deliveredNow = await readDeliveredSms(sessionRef);"));
   assert.ok(src.includes("planSmsBackstop({ declared, delivered: deliveredNow, userTurns, claimed: smsClaimed })"));

@@ -166,9 +166,9 @@ export const deliverInCallSms = onCall<
   // 백스톱(목적 없음) — 필수 목적만 강제 · 선택 목적은 건너뛴다. 계획은 트랜잭션 밖 조회로 세우고, 발송은
   // 아래 단일 통로가 같은 게이트를 다시 통과시킨다.
   let purpose: unknown = request.data.purpose;
+  // §104 — 사기범이 이미 "문자를 보냈다"고 말했다는 클라 주장(불리언 1개 · 부재 = 종전). 게이트 하한은 그대로라 앞당기는 것은 대기 단계뿐이다.
+  const smsClaimed = trigger === "backstop" && request.data?.smsClaimed === true;
   if (trigger === "backstop") {
-    // §104 — 사기범이 이미 "문자를 보냈다"고 말했다는 클라 주장(불리언 1개 · 부재 = 종전). 게이트 하한은 그대로라 앞당기는 것은 대기 단계뿐이다.
-    const smsClaimed = request.data?.smsClaimed === true;
     const deliveredNow = await readDeliveredSms(sessionRef);
     const plan = planSmsBackstop({ declared, delivered: deliveredNow, userTurns, claimed: smsClaimed });
     if (plan.action === "wait") return { status: "waiting" };
@@ -222,6 +222,8 @@ export const deliverInCallSms = onCall<
     userTurns,
     anchorScammerTurn: realtimeAnchorScammerTurn(scammerTranscriptTurns),
     trigger: trigger ?? "model_tool",
+    // §126 — 모델 도구 호출 · 주장 백스톱은 명시 요청(문자 간 간격 1). 주장 없는 백스톱은 종전 2.
+    explicit: trigger !== "backstop" || smsClaimed,
     fictionalBankName,
     sessionId, // §114 — 세션별 인증번호(문서 본문 · Live 대조 1줄이 같은 값)
   });
@@ -237,6 +239,7 @@ export const deliverInCallSms = onCall<
     scammerTranscriptTurns,
     ...(declaredReason ? { declaredReason } : {}),
     ...(purposeCorrectedFrom ? { purposeCorrectedFrom } : {}),
+    ...(smsClaimed ? { smsClaimed } : {}),
   });
 
   if (result.status !== "delivered") {

@@ -41,8 +41,9 @@ test("[§108 P-3] 하한은 앞당기지 않는다 — 문자 간격(too_soon) �
   assert.deepEqual(correctModelSmsPurpose({ purpose: "transfer", declared: INSTITUTION, delivered: afterOtp, userTurns: 5 }), {
     purpose: "transfer",
   });
-  // 없는 목적 · 남은 필수의 게이트가 아직 닫힘(발화 5 < 열림 6) → 그대로(not_allowed).
-  assert.deepEqual(correctModelSmsPurpose({ purpose: "link", declared: INSTITUTION, delivered: afterOtp, userTurns: 5 }), {
+  // 없는 목적 · 남은 필수의 게이트가 아직 닫힘 → 그대로(not_allowed). ⭐ §126 — 모델 도구는 명시 요청이라 문자 간격이 1이다:
+  // 같은 발화(4)는 닫힘, 다음 발화(5)는 열림(아래 §126 파일이 운영 로그 e2a5fd9b를 재현한다).
+  assert.deepEqual(correctModelSmsPurpose({ purpose: "link", declared: INSTITUTION, delivered: afterOtp, userTurns: 4 }), {
     purpose: "link",
   });
   // 첫 문자 하한 전(발화 1) → 그대로.

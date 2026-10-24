@@ -219,6 +219,15 @@ export function readOutputAfterMicFlag(search: string): boolean {
   }
 }
 
+/** §126 — `voicetrim=0`이면 '통화' 스트림 감쇠(`outputGain.ts` `callStreamTrimFor`)를 끈다(실기 A/B · 되돌리기용). 기본 = 켬. */
+export function readVoiceTrimFlag(search: string): boolean {
+  try {
+    return new URLSearchParams(search).get("voicetrim") !== "0";
+  } catch {
+    return true;
+  }
+}
+
 /** 위 표 O1 ~ O4. */
 export function pickCallOutputPath(input: {
   flagOn: boolean;
