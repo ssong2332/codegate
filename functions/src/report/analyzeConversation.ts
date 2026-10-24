@@ -386,6 +386,49 @@ function isNounOnlyDenial(replyText: string): boolean {
   return !COMPLIANCE_PATTERN.test(replyText.replace(NOUN_ONLY_COMPLIANCE, " "));
 }
 
+// | C4 | 방법 질문(어떻게 해야 · 뭘 하면 돼요 · 어떻게 옮겨요)만 있고 바로 앞 사기범 대사에 요구 어형(`scammerHasDemand`)이 없다 | 속음 아님 |
+// | C5 | 따름 약속(시키는 · 말씀하신 대로 할게요)만 있고 바로 앞 대사에 요구 어형이 없다 | 속음 아님 |
+// - C4 · C5(사용자 결정 2026-10-24 "둘 다 빼기") — 방법 질문 · 따름 약속과 그 대상 명사(계좌 등)를 걷어 낸 답이 여전히 순응이면 그대로 속음이다.
+//   앞 대사에 요구가 있을 때의 방법 질문 · 따름 약속은 종전처럼 속음이다.
+const HOW_TO_OR_FOLLOW = new RegExp(
+  [
+    ASKS_HOW_TO_COMPLY.source,
+    ACTION_THEN_OK.source,
+    "어떻게\\s*(?:옮기|옮겨|보내|지키|지켜|해야|하면|해)[가-힣]*",
+    // C5 — 약속만("할게요 · 하겠습니다"). "알려주신 대로 했어요"(이행 보고)는 걷어 내지 않는다.
+    "(?:말씀하신|시키는|하라는|알려주신)\\s*대로\\s*(?:바로\\s*|다\\s*)?(?:할게요?|할께요?|하겠습니다|하겠어요|처리하겠습니다|따를게요?|따르겠습니다|해\\s*드릴게요?)",
+    "알겠어요|알겠습니다|알았어요",
+  ].join("|"),
+  "g",
+);
+
+/**
+ * C4 · C5 — 행동 동사 + 시키는 어미("이체해 주십시오" · "신청해 주세요" · "불러 주십시오" · "설치하세요"). "옮겨야 합니다"처럼 필요를 말하는
+ * 설명형은 요구로 보지 않는다(메인 라이브 S8 — 사용자가 순응으로 세지 않은 줄).
+ */
+const GENERIC_ACTION_REQUEST =
+  /(?:이체|송금|입금|납부|결제|신청|가입|설치|입력|인출|출금|해지|보내|옮겨|불러|알려|말씀해|눌러|찾아|준비해|찍어|적어)\s*(?:해\s*)?(?:주세요|주십시오|주시겠|주시면|주셔야|줘(?!서)|달라)|(?:이체|송금|입금|납부|신청|가입|설치|입력|인출|해지)\s*(?:하세요|하십시오|하셔야)|(?:보내|옮기|누르|찾으)(?:세요|십시오)|(?:옮기|보내|이체하|송금하|입금하|인출하|찾으|해지하|설치하|입력하)셔야|협조(?:해\s*주|하시겠|하셔야)|도와\s*(?:줘(?!서)|주세요|주십시오|주실\s*수)/;
+
+/** C4 · C5 — 바로 앞 사기범 대사가 무언가를 요구하는가(요구 어형 표 · 인출 · 코인 · 인증번호 · 비밀 코드 · 생년월일 · 사진 요구). */
+function scammerHasDemand(scammerText: string): boolean {
+  const sentences = scammerText.split(/[.?!\n]+/).filter((s) => s.trim().length > 0);
+  return (
+    sentences.some((s) => GENERIC_ACTION_REQUEST.test(s)) ||
+    DEMAND_FALLBACK_ROWS.some((row) => row.matches(sentences, scammerText)) ||
+    HANDOFF_DEMAND_CRYPTO_STEPS.test(scammerText) ||
+    OTP_ASKED.test(scammerText) ||
+    SECRET_CODE_DEMAND.test(scammerText) ||
+    BIRTH_DATE_DEMAND.test(scammerText) ||
+    PHOTO_DEMAND.test(scammerText)
+  );
+}
+
+/** C4 · C5 — 요구 없는 대사 뒤에서, 방법 질문 · 따름 약속(과 대상 명사)만으로 순응이 됐는가. */
+function isHowToOrFollowOnlyWithoutDemand(scammerText: string, replyText: string): boolean {
+  if (scammerHasDemand(scammerText)) return false;
+  return !COMPLIANCE_PATTERN.test(replyText.replace(HOW_TO_OR_FOLLOW, " ").replace(NOUN_ONLY_COMPLIANCE, " "));
+}
+
 /** L2 — 답의 내용 범주. 사진 턴은 판정하지 않는다(§131). */
 function answerContentCategory(scammerText: string, reply: AnalysisMessage): TacticCategory | undefined {
   if (reply.photo === true) return undefined;
@@ -713,7 +756,10 @@ export function analyzeConversation(
       const wrongOtp = isWrongOtpReply(msg.textMasked, reply.textMasked, otpCodes);
       const complied =
         // §129 C1 — 부인 · 모름 답의 명사 단독 순응은 끈다(공유 패턴 갈래만).
-        (COMPLIANCE_PATTERN.test(reply.textMasked) && !isNounOnlyDenial(reply.textMasked)) ||
+        // §129 C4 · C5 — 요구 없는 대사 뒤의 방법 질문 · 따름 약속만으로는 순응이 아니다.
+        (COMPLIANCE_PATTERN.test(reply.textMasked) &&
+          !isNounOnlyDenial(reply.textMasked) &&
+          !isHowToOrFollowOnlyWithoutDemand(msg.textMasked, reply.textMasked)) ||
         isHandoffPromiseReply(msg.textMasked, reply.textMasked) ||
         isContextualCompliance(msg.textMasked, reply.textMasked);
       if (isPhotoAfterDemand(reply, photoDemand !== undefined)) {
