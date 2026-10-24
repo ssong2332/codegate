@@ -22,6 +22,7 @@ import {
 import { scenarios } from "@/content/scenarios";
 import { Badge, BigClock, Button, LoadingStatus } from "@/components/ui";
 import { parseMomentSeconds } from "@/lib/design/e2Layout";
+import { compareTimelineEntries } from "@/lib/report/timelineOrder";
 import PageToc, { type PageTocEntry } from "@/components/PageToc";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { buildStageNotice, type ReportStage } from "@/lib/report/stageNotice";
@@ -385,12 +386,15 @@ export default function ReportPage() {
   const timelineEntries = [
     ...report.deceivedMoments.map((moment, momentIndex) => ({
       sortKey: [moment.turnIndex, 0, momentIndex] as const,
+      timeLabel: moment.timeLabel,
       kind: "moment" as const,
       moment,
       momentIndex,
     })),
     ...report.smsTimeline.map((sms, seq) => ({
       sortKey: [sms.anchorTurnIndex, 1, seq] as const,
+      // §129.10 — 문자 항목의 정렬 시각 = 첫 이벤트(도착)의 실제 시각(옛 리포트 = 앵커 시각).
+      timeLabel: sms.events[0]?.timeLabel ?? sms.timeLabel,
       kind: "sms" as const,
       sms,
     })),
@@ -399,6 +403,7 @@ export default function ReportPage() {
     // 순간**에는 원래대로 달리고(그 순간은 진짜 deceivedMoment다) 덮어쓴 correctAction을 쓴다.
     ...report.verifyTimeline.map((verify, seq) => ({
       sortKey: [verify.anchorTurnIndex, 2, seq] as const,
+      timeLabel: verify.timeLabel,
       kind: "verify" as const,
       verify,
     })),
@@ -410,13 +415,11 @@ export default function ReportPage() {
     // 달리고(그 순간이 진짜 속은 순간이다), 이 항목은 사실 1줄만 낸다(중복 카드 금지, e-4).
     ...report.mockScreenTimeline.map((mockScreen, seq) => ({
       sortKey: [mockScreen.anchorTurnIndex, 3, seq] as const,
+      timeLabel: mockScreen.timeLabel,
       kind: "mockScreen" as const,
       mockScreen,
     })),
-  ].sort(
-    (a, b) =>
-      a.sortKey[0] - b.sortKey[0] || a.sortKey[1] - b.sortKey[1] || a.sortKey[2] - b.sortKey[2],
-  );
+  ].sort(compareTimelineEntries); // §129.10 — 실제 시각 순(같은 초 · 시각 없음 = 종전 키 · `timelineOrder.ts` O1 · O2).
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-xl flex-col bg-page pb-8 lg:max-w-3xl">

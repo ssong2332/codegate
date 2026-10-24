@@ -497,6 +497,16 @@ function answerContentCategory(scammerText: string, reply: AnalysisMessage): Tac
   return undefined;
 }
 
+/**
+ * §129.10 최종 폴백 — 세션 목록에서 부인 대응 · 암시를 뺀 첫 **요구 범주**(송금 · 개인정보 · 링크 · 설치) 라벨, 없으면 그 밖의 첫 라벨.
+ * ⚠️ 그 순간에 맞춘 라벨이 아니라 시나리오 대표 수법이다 — 빈칸보다 낫다는 메인 제안(2026-10-24)이며 새 라벨 0. 목록이 비면 `undefined`(종전 폴백 문자열).
+ */
+function representativeTactic(weakenedTactics: readonly string[]): string | undefined {
+  const labels = weakenedTactics.map(extractTacticLabel).filter((label) => !NON_DEMAND_LABEL.test(label));
+  const demand = labels.find((label) => ["payment_demand", "personal_info_demand", "link_or_install"].includes(resolveTacticCategory(label)));
+  return demand ?? labels[0];
+}
+
 /** L2 — 범주에 맞는 세션 목록 안 라벨(부인 대응 · 암시 라벨 제외). */
 function resolveAnswerCategoryTactic(
   scammerText: string,
@@ -684,8 +694,9 @@ const INSTALL_REQUEST = new RegExp(
 const LINK_OPEN_REQUEST = new RegExp(
   `(?:링크|여기)[^.?!\\n]{0,20}?(?:눌러|클릭해|접속해|들어가)\\s*(?:${SHORT_REQUEST_ENDING}|보세요|보십시오|하셔야)`,
 );
+// §129.10(메인 라이브 재테스트 2026-10-24 · 기관 사칭 고급 "지금 거래하시는 은행이 어디인지 말씀해 주시겠어요?" 뒤 라벨 빈칸) — 거래 은행을 묻는 꼴.
 const ASSET_INFO_REQUEST = new RegExp(
-  `(?:예금|자산|잔액|잔고)[^.?!\\n]{0,25}?(?:말씀해|알려|불러)\\s*${SHORT_REQUEST_ENDING}`,
+  `(?:예금|자산|잔액|잔고|거래\\s*(?:하시는\\s*)?은행|은행이\\s*어디)[^.?!\\n]{0,25}?(?:말씀해|알려|불러)\\s*${SHORT_REQUEST_ENDING}`,
 );
 const CARD_INFO_REQUEST = new RegExp(
   `(?:카드\\s*번호|유효\\s*기간|CVC|cvc|보안\\s*코드)[^.?!\\n]{0,25}?(?:말씀해|알려|불러|적어|입력해)\\s*${SHORT_REQUEST_ENDING}`,
@@ -868,7 +879,10 @@ export function analyzeConversation(
         (userReply.photo === true && photoDemand ? resolvePhotoProvidedTactic(photoDemand.textMasked, weakenedTactics) : undefined) ??
         resolveAnswerCategoryTactic(labelSource.textMasked, userReply, weakenedTactics));
     if (fallbackTactic) tacticLabelsUsed.add(fallbackTactic);
-    const tactic = labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? "약화된 사기 수법");
+    // §129.10 최종 폴백(메인 제안 · 빈 라벨 0) — 문구 키 · 요구 어형 표 · 답 내용 범주가 모두 비면 세션 목록의 대표 요구 수법(`representativeTactic`).
+    const representative = labelTactic || fallbackTactic ? undefined : representativeTactic(weakenedTactics);
+    if (representative) tacticLabelsUsed.add(representative);
+    const tactic = labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? representative ?? "약화된 사기 수법");
     // AC-026 예시("15초 시점에 속았습니다")를 그대로 따르기 위해 turnIndex가 아니라 실제 경과
     // 시간(초)을 라벨로 쓴다 — MessageDoc.createdAt이 이미 존재하므로 정확한 초 단위 계산이
     // 가능하다(구현 판단, Mock 단계라 정밀 음성 타이밍 데이터는 없지만 메시지 write 시각은 실측값).

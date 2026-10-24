@@ -26,7 +26,13 @@ export default function BigClock({ seconds, label, className = "" }: { seconds: 
       if (p < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    // §129.10(메인 라이브 재테스트 2026-10-24 — 큰 숫자 "0:00" · 낭독 문구 "처음 속은 시각 36초") — 탭이 보이지 않거나 프레임이 멈추면
+    // requestAnimationFrame이 돌지 않아 숫자가 0에 머문다(추정). 굴리기 시간이 지나면 프레임과 무관하게 최종 값으로 맞춘다.
+    const settle = window.setTimeout(() => setShown(seconds), duration + 100);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(settle);
+    };
   }, [seconds]);
 
   return (

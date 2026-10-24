@@ -540,3 +540,18 @@ test("[§129.9] 듣기 명령('잘 들으세요 · 제 말만 들으세요') 뒤
     "U2(turnIndex 3)는 C4 · C5 — 듣기 명령은 요구가 아니다 · U3 · U4 라벨 빈칸 0",
   );
 });
+
+// ── §129.10 (2) 빈 라벨 0 — 메인 라이브 재테스트(빌드 cTcCpAsR · 기관 사칭 고급 안전계좌 이체형) ─────────────────────
+test("[§129.10 (2)] 거래 은행을 묻는 대사 뒤 따름 약속 = '거래 은행·자산 정보 수집' · 어떤 경로로도 비면 세션 대표 요구 수법", () => {
+  const S = "다음은 고객님 계좌가 범죄 수익으로 묶이기 전에 보호 조치를 하셔야 합니다. 지금 거래하시는 은행이 어디인지 말씀해 주시겠어요?";
+  for (const variant of ["fv-c5fj", "fv-q7cn", "fv-g2ld"]) {
+    const tactics = resolveSessionScenarioPrompt("institutional-impersonation", variant)!.weakenedTactics;
+    const moment = analyzeConversation(dialogue([["scammer", S], ["user", "네 알겠어요. 계속 말씀해 주세요."]]), 0, tactics).deceivedMoments[0];
+    assert.equal(moment?.tactic, "거래 은행·자산 정보 수집", variant);
+  }
+  // 최종 폴백 — 문구 키 · 요구 어형 · 답 범주가 모두 없어도 빈 라벨이 아니다(세션 목록 안 라벨 · 수법 목록에도 오른다).
+  const tactics = resolveSessionScenarioPrompt("kidnapping-threat", "fv-c5ih")!.weakenedTactics;
+  const result = analyzeConversation(dialogue([["scammer", "잠깐만요, 확인할 게 있습니다. 지금 바로 신청해 주세요."], ["user", "네, 말씀하신 대로 바로 처리하겠습니다."]]), 0, tactics);
+  assert.notEqual(result.deceivedMoments[0]?.tactic, "약화된 사기 수법");
+  assert.ok(result.tacticsUsed.includes(result.deceivedMoments[0]!.tactic), "AC-083 (a)");
+});
