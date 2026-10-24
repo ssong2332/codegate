@@ -12,7 +12,8 @@ test("[§112] 통화 화면 — 메신저발 통화의 사기범 끊기: 끊김 
   const play = read("src/app/session/play/page.tsx");
   const endCall = play.slice(play.indexOf("const endCall = async"), play.indexOf("const handleEndTraining"));
   const branchLine =
-    'if (ending.endedBy === "scammer" && returnsToMessengerOnHangup && (await returnToMessengerAfterScammerHangup(noticeWait))) return;';
+    // §128(3) — 서버가 이미 끝낸 세션(통화 중 카톡 포기)은 역전환하지 않는다(`sessionAlreadyEnded`).
+    'if (ending.endedBy === "scammer" && returnsToMessengerOnHangup && !opts?.sessionAlreadyEnded && (await returnToMessengerAfterScammerHangup(noticeWait))) return;';
   const branchAt = endCall.indexOf(branchLine);
   assert.ok(branchAt > 0, "사기범 끊기 대화방 분기가 없다");
   // 끊김 안내(noticeWait)가 분기보다 먼저 · 종전 종료 순서(전사 제출 try)가 뒤다(실패하면 그대로 종료).

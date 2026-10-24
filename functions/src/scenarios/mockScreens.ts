@@ -176,6 +176,18 @@ export const MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL =
 export const IN_CALL_INSTALL_CONSENT_INSTRUCTION =
   "(참가자가 방금 문자 속 링크에서 안내대로 앱 설치와 권한 허용을 마쳤다. 상대의 말에 대답할 때 그 대답 안에서 한두 문장으로 그 사실을 자연스럽게 확인하고 다음 요구로 이어가라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 설치 절차·권한의 구체적인 작동 방식은 설명하지 마라. 전화를 새로 걸겠다거나 다른 사람이 연락하겠다는 말은 하지 마라.)";
 
+/**
+ * §128(1)(2026-10-24 메인 세션 라이브 실측 — 자녀 사칭 카톡 고급 `fv-tdgg`) — 메신저 단계 응낙이지만 **설치 뒤 다음 단계가 통화가 아닌** 항목의 변형.
+ * 원문(`MOCK_INSTALL_CONSENT_INSTRUCTION`)의 *"이제 담당자가 전화로 이어서 안내하겠다고 말하라"* 를 따라 사기범이 *"보험 담당자가 전화로 이어서
+ * 안내해줄 거야. 담당자 연결되면 바로 받아줘"* 라고 했지만 전환 신호가 없어 전화가 오지 않았다(그 변형의 다음 단계는 신분증 사진 · 송금 — 통화 아님).
+ * ⛔ 원문 · 통화 중 변형은 바이트 동일(지원금 · 택배 설치는 설계상 설치 → 통화).
+ */
+export const MOCK_INSTALL_CONSENT_INSTRUCTION_NO_CALL =
+  "(참가자가 방금 안내대로 설치와 권한 허용을 마쳤다. 지금 캐릭터로서 한두 문장으로 그 사실을 자연스럽게 확인해 주고, 메시지 대화로 다음 요구를 이어가라. 전화를 걸겠다거나 담당자 · 다른 사람이 전화로 연락하겠다는 말은 하지 마라. 설치 절차·권한의 구체적인 작동 방식을 설명하지는 마라.)";
+
+/** §128(1) — 메신저 링크 설치 중 **설치 뒤 다음 단계가 통화가 아닌** 항목(변형 단계 순서 근거 — `flowVariants.ts` fv-tdgg: 설치 → 신분증 → 송금). */
+export const MESSENGER_INSTALL_WITHOUT_CALL_LANDINGS: readonly string[] = ["child-insurance-install"];
+
 /** 응낙 지시를 실을 경로 — 폴백(`sendMessage` 턴 지시) · 실시간(Live 맥락 주입 — c-2). */
 export type InstallConsentPath = "fallback" | "realtime";
 
@@ -186,7 +198,7 @@ export type InstallConsentPath = "fallback" | "realtime";
  *
  * | `entrySurface` | `escalatedCall` | `path` | `transferPlaced` | 결과 |
  * |---|---|---|---|---|
- * | `messenger-link` | false | fallback | — | `MOCK_INSTALL_CONSENT_INSTRUCTION`(현행) |
+ * | `messenger-link` | false | fallback | — | `MOCK_INSTALL_CONSENT_INSTRUCTION`(현행) — 단 §128(1) `landingId ∈ MESSENGER_INSTALL_WITHOUT_CALL_LANDINGS`면 `…_NO_CALL` |
  * | `messenger-link` | true | fallback | — | `MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL`(현행) |
  * | `in-call-sms` | 무관 | fallback | false | `MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL` 재사용(새 문면 0) |
  * | `in-call-sms` | 무관 | realtime | false | `IN_CALL_INSTALL_CONSENT_INSTRUCTION`(조건형 · 소비는 c-2) |
@@ -200,12 +212,17 @@ export function installConsentInstructionFor(input: {
   escalatedCall: boolean;
   path: InstallConsentPath;
   transferPlaced: boolean;
+  /** §128(1) — 응낙 항목 id(부재 = 종전 선택). */
+  landingId?: string;
 }): string | undefined {
   if (input.entrySurface === "in-call-sms") {
     if (input.transferPlaced) return undefined;
     return input.path === "realtime" ? IN_CALL_INSTALL_CONSENT_INSTRUCTION : MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL;
   }
-  return input.escalatedCall ? MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL : MOCK_INSTALL_CONSENT_INSTRUCTION;
+  if (input.escalatedCall) return MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL;
+  return input.landingId !== undefined && MESSENGER_INSTALL_WITHOUT_CALL_LANDINGS.includes(input.landingId)
+    ? MOCK_INSTALL_CONSENT_INSTRUCTION_NO_CALL
+    : MOCK_INSTALL_CONSENT_INSTRUCTION;
 }
 
 // UF-012 2단계 — 지원금 안내 문자(1단계)에서 이어지는 모의 앱 설치 화면.
