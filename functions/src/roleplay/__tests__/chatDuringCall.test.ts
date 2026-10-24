@@ -26,7 +26,7 @@ test("[§121.7 지시] 짧게 · 통화와 어긋나지 않게 · 끊자는 말 
   assert.equal(judgeScammerReplyUsability("응 아빠 통화하면서 톡도 볼게. 보증금 계좌 다시 보내줄게"), undefined);
 });
 
-test("[§121.7 배선] sendMessage는 duringCall이면 시나리오 확인 직후 별도 경로로 넘기고, 그 경로는 messenger 채널 · 끊기 none · 합성 0", () => {
+test("[§121.7 배선] sendMessage는 duringCall이면 시나리오 확인 직후 별도 경로로 넘기고, 그 경로는 messenger 채널 · 합성 0", () => {
   const index = read("index.ts");
   const route = index.indexOf("if (request.data?.duringCall === true) {");
   assert.ok(route > index.indexOf("const scenarioPrompt = resolveSessionScenarioPrompt("), "시나리오 프롬프트 확인 뒤");
@@ -35,11 +35,15 @@ test("[§121.7 배선] sendMessage는 duringCall이면 시나리오 확인 직�
 
   const chat = read("chatDuringCall.ts");
   assert.equal((chat.match(/channel: "messenger",/g) ?? []).length, 2, "사용자 · 사기범 둘 다 messenger");
-  assert.match(chat, /hangupMode: "none",/);
+  // §128(3) — 끊기 규칙은 사전 판정 값(G1 none · G2 signal)이다(고정 "none" 아님).
+  assert.match(chat, /const hangupMode = fallbackHangupMode\(hangupPre\);/);
+  assert.match(chat, /\n\s*hangupMode,\n/);
   assert.match(chat, /callPhaseMockTacticHints\(scenarioPrompt\.weakenedTactics, true\)/, "Mock 대사에도 '통화가 안 돼' 0");
   assert.match(chat, /tx\.update\(sessionRef, \{ turnCount: fresh\.turnCount \+ 1 \}\);/, "ⓒ 턴 수 합산");
   assert.ok(!chat.includes("getVoiceProvider"), "음성 합성 0");
   assert.ok(!chat.includes("transitionChannel"), "전환 0");
   assert.ok(!chat.includes("deliverSmsThroughGate"), "문자 0");
-  assert.ok(!/status: "ended"|endReason/.test(chat), "이 경로는 세션을 끝내지 않는다");
+  // §128(3) G3 — 세션을 끝내는 것은 포기 신호 · 사후 판정 accepted · 트랜잭션 재확인일 때뿐이다.
+  assert.match(chat, /const end = giveUp && fresh\?\.status === "active";/);
+  assert.match(chat, /endCall === "give_up" &&\n\s*hangupMode === "signal" &&\n\s*decideFallbackHangup\(hangupFacts, delivered, completion\.isMock\)\.status === "accepted"/);
 });

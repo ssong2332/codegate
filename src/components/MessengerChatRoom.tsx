@@ -30,6 +30,7 @@ import {
 } from "@/lib/recording";
 import {
   recordMockScreenEvent,
+  requestScreenActionFollowUp,
   requestEscalation,
   sendMessage,
   updateMessengerSkin,
@@ -59,6 +60,7 @@ import MessengerStartNotice from "@/components/MessengerStartNotice";
 import { closePrimedCallAudio, primeCallAudio } from "@/lib/realtime/callAudio";
 import { GEMINI_OUTPUT_SAMPLE_RATE } from "@/lib/realtime/pcm";
 import { clearVoiceTalkDial, stashVoiceTalkDial } from "@/lib/messenger/voiceTalkDial";
+import { attachQueuedPhotos, sessionPhotoStore } from "@/lib/messenger/sessionPhotos";
 import { Button, LoadingStatus } from "@/components/ui";
 import { foldDegraded, DIALOGUE_DEGRADED_NOTICE } from "@/lib/report/degradedDisclosure";
 import { CALL_SEGMENT_ICON, CALL_SEGMENT_LINE, foldCallSegments } from "@/lib/messenger/threadItems";
@@ -160,6 +162,8 @@ function PhotoBubble({ url }: { url: string | undefined }) {
 // 실기 신고 4 — 보이스톡 응답 없음 연출 길이(훈련용으로 줄였다 — 실제 앱은 수십 초 울린다).
 const VOICE_TALK_RING_MS = 6000;
 const VOICE_TALK_UNANSWERED_MS = 2000;
+// §128(3)(UX D-159) — 통화 중 대화방에서 사기범이 포기하고 나갔을 때 "나갔습니다"를 보여 주고 통화를 끝내기까지의 시간.
+const SCAMMER_LEFT_CALL_END_MS = 2500;
 
 /**
  * §121.7 PR-3(메인 결정 ⓑ "채팅으로 = 통화 유지") — 통화 화면이 이 대화방을 통화 위에 겹쳐 그릴 때 넘기는 연결. 없으면 종전 라우트 화면.
@@ -170,6 +174,7 @@ const VOICE_TALK_UNANSWERED_MS = 2000;
  * | 보내기 | 직전에 `beforeSend`(통화 전사 제출 — 새로 쓴 문서 수) → `sendMessage({ duringCall: true })` → `onChatTurn` |
  * | 보이스톡 · "전화로 확인" | 숨김(이미 통화 중) |
  * | 훈련 종료 | `onEndTraining`(통화 화면의 종료 순서 — 전사 제출 포함) |
+ * | 사기범이 포기하고 나감(§128(3) — 서버 `scammer_ended`) | "나갔습니다"를 보인 뒤 `SCAMMER_LEFT_CALL_END_MS`에 `onScammerLeft`(통화도 끊기고 결과로) |
  */
 export type ChatRoomCallLink = {
   elapsedLabel: string;
@@ -177,6 +182,8 @@ export type ChatRoomCallLink = {
   beforeSend: () => Promise<number>;
   onChatTurn: (userText: string, replyText: string) => void;
   onEndTraining: () => void;
+  /** §128(3) — 사기범이 통화 중 카톡에서 포기하고 나갔다(서버가 세션을 이미 끝냈다) — 통화를 끝내고 결과로 간다. */
+  onScammerLeft: () => void;
 };
 
 export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoomCallLink } = {}) {
@@ -227,18 +234,14 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
   // §121(1) — 사용자가 보이스톡을 거는 중(통화로 이어지는 세션 · 전환 요청 → 통화 화면 발신 연출로 이동하기 전까지).
   const [dialingVoiceTalk, setDialingVoiceTalk] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  // §113.2(실기 신고 9 · UX D-151 (2)) — 사진 보내기. ⛔ 이미지는 이 화면 메모리(objectURL)에만 둔다 — 서버 업로드 · Storage · Firestore ·
-  // 로그 0. 화면을 떠나면(훈련 종료 · 통화 전환) 전부 revoke한다. 서버에는 "사진을 보냈다"는 사실만 간다(`sendMessage({photo: true})`).
+  // §113.2(실기 신고 9 · UX D-151 (2)) — 사진 보내기. ⛔ 이미지는 기기 메모리(objectURL)에만 둔다 — 서버 업로드 · Storage · Firestore ·
+  // 로그 0. 서버에는 "사진을 보냈다"는 사실만 간다(`sendMessage({photo: true})`).
+  // §128(6) — URL은 이 컴포넌트가 아니라 세션 단위 화면 메모리(`sessionPhotos.ts`)에 둔다: 통화 전환 · 통화 겹침으로 대화방이 다시 그려져도
+  // 보낸 사진이 그대로 보인다. 정리(revoke)는 다른 세션을 열 때 · 훈련 종료 화면에서 한다(언마운트마다 하지 않는다).
   const photoInputRef = useRef<HTMLInputElement | null>(null);
-  const [photoUrls, setPhotoUrls] = useState<Record<number, string>>({});
-  const photoQueueRef = useRef<{ url: string; minTurnIndex: number }[]>([]);
-  const allPhotoUrlsRef = useRef<string[]>([]);
-  useEffect(() => {
-    const urls = allPhotoUrlsRef.current;
-    return () => {
-      for (const url of urls) URL.revokeObjectURL(url);
-    };
-  }, []);
+  const [photoUrls, setPhotoUrls] = useState<Record<number, string>>(() =>
+    sessionId ? { ...sessionPhotoStore(sessionId).byTurn } : {},
+  );
   // T187(UX-022 v1.29 노트 (5)) — "메시지 보기" 뒤 포커스는 대화 목록으로(입력창 자동 포커스 ⛔).
   const messageListRef = useRef<HTMLUListElement | null>(null);
   const focusListAfterNoticeRef = useRef(false);
@@ -366,18 +369,9 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
         });
       setMessages(next);
       // §113.2 — 이 화면에서 보낸 사진(objectURL)을 서버의 사진 턴 문서에 붙인다(보낸 순서 · 보낸 시점 이후 문서만 — 새로고침 전 사진 턴은 빈 칸).
-      const photoDocs = next.filter((m) => m.photo && m.role === "user");
-      setPhotoUrls((current) => {
-        let updated = current;
-        for (const doc of photoDocs) {
-          if (updated[doc.turnIndex]) continue;
-          const at = photoQueueRef.current.findIndex((entry) => doc.turnIndex >= entry.minTurnIndex);
-          if (at < 0) continue;
-          const [entry] = photoQueueRef.current.splice(at, 1);
-          updated = { ...updated, [doc.turnIndex]: entry.url };
-        }
-        return updated;
-      });
+      const store = sessionPhotoStore(sessionId);
+      const photoTurns = next.filter((m) => m.photo && m.role === "user").map((m) => m.turnIndex);
+      if (attachQueuedPhotos(store, photoTurns)) setPhotoUrls({ ...store.byTurn });
       // §94 — 답장 문서가 서버 응답보다 먼저 올 수 있다. 처음 보인 시각을 "답을 안 시각"으로 적는다(공개는 연출 뒤).
       setPending((current) => (current ? noteSnapshot(current, next, Date.now()) : current));
     });
@@ -405,6 +399,17 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
   // ⚠️ 불변식(리뷰 M3): 결과(outcome)가 있는 pending은 교체 · 삭제되지 않는다 — 새 전송은 `turnLocked`가 막고, "삭제"는 실패 말풍선
   // (서버 실패 = outcome 없음)에만 있다. 이 둘을 바꾸면 종료 · 통화 전환이 사라질 수 있다.
   const chatEnded = ended || (replyView.settled && pending?.outcome?.ended === true);
+  // §128(3) — 통화 위 대화방에서 사기범이 나갔다(답장 공개 뒤). 잠시 "나갔습니다"를 보인 뒤 통화 화면의 종료 순서로 넘긴다.
+  const scammerLeftDuringCall = inCall && chatEnded && pending?.outcome?.scammerEnded === true;
+  const duringCallRef = useRef(duringCall);
+  useEffect(() => {
+    duringCallRef.current = duringCall;
+  });
+  useEffect(() => {
+    if (!scammerLeftDuringCall) return;
+    const timer = setTimeout(() => duringCallRef.current?.onScammerLeft(), SCAMMER_LEFT_CALL_END_MS);
+    return () => clearTimeout(timer);
+  }, [scammerLeftDuringCall]);
   const escalatingNow = escalating || (replyView.settled && pending?.outcome?.escalate === true);
   const turnLocked = replyView.inFlight || pending?.outcome?.ended === true || pending?.outcome?.escalate === true;
 
@@ -454,7 +459,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
       if (transcriptWritten > 0) {
         setPending((current) => (current?.localId === turn.localId ? { ...current, baseTurnIndex } : current));
       }
-      if (photoUrl) photoQueueRef.current.push({ url: photoUrl, minTurnIndex: baseTurnIndex + 1 });
+      if (photoUrl) sessionPhotoStore(sessionId).queue.push({ url: photoUrl, minTurnIndex: baseTurnIndex + 1 });
       const result = await sendMessage({
         sessionId,
         userText: photoUrl ? "" : text,
@@ -485,7 +490,11 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
       setClock(wallClockMs());
     } catch {
       // §113.2 — 실패한 사진은 대기열에서 뺀다(다시 보내기가 같은 URL로 다시 넣는다).
-      if (photoUrl) photoQueueRef.current = photoQueueRef.current.filter((entry) => entry.url !== photoUrl);
+      if (photoUrl) {
+        const queue = sessionPhotoStore(sessionId).queue;
+        const at = queue.findIndex((entry) => entry.url === photoUrl);
+        if (at >= 0) queue.splice(at, 1);
+      }
       setPending((current) => (current?.localId === turn.localId ? { ...current, failed: true } : current));
       setSendError("메시지를 보내지 못했습니다. 다시 시도해 주세요.");
     }
@@ -604,14 +613,29 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
   // 되므로(AC-008/009 오판정), 1회 재시도하고 실패는 콘솔 경고로 남긴다.
   // ⚠️ 이 호출은 **페이지**가 한다 — `MessengerFakeLanding`은 콜백만 올린다(그 파일의 "네트워크
   // 경로 부재" 불변식 유지, AC-045/AC-072).
+  // §128(7) — 설치 응낙 · 입력 제출이 기록되면 사기범이 먼저 메시지 1건을 보낸다(서버 `screenActionFollowUp.ts` 판정표 — 메시지는 구독이
+  // 그린다). 통화 겹침 중에는 부르지 않는다(통화 쪽이 진행을 쥔다 — 서버도 메신저 단계가 아니면 저장 0). 실패는 조용히 넘긴다(다음 참가자
+  // 턴이 종전대로 응낙 지시를 싣는다). 대사가 전화를 예고해 서버가 전환했으면 "전화가 옵니다" 연출로 간다.
+  const requestFollowUpAfterScreen = (landingId: string) => {
+    if (!sessionId || inCall) return;
+    void requestScreenActionFollowUp({ sessionId, landingId })
+      .then((result) => {
+        if (result.turnIndex !== undefined) voiceTalkFloorRef.current = Math.max(voiceTalkFloorRef.current, result.turnIndex);
+        if (result.escalation?.toChannel === "voice") setEscalating(true);
+      })
+      .catch(() => {});
+  };
   const recordMockScreen = (landingId: string, event: MockScreenEvent) => {
     if (!sessionId) return;
+    const followUp = event === "consented" || event === "submitted";
     void (async () => {
       try {
         await recordMockScreenEvent({ sessionId, landingId, event });
+        if (followUp) requestFollowUpAfterScreen(landingId);
       } catch {
         try {
           await recordMockScreenEvent({ sessionId, landingId, event });
+          if (followUp) requestFollowUpAfterScreen(landingId);
         } catch (err) {
           // T187(G437) — 개발자 콘솔 문자열이지만 렌더 가능 리터럴 축은 호출 맥락을 가리지 않으므로
           // 표식 낱말을 쓰지 않는다("모의" → "목업"). 동작 변화 0.
@@ -1107,7 +1131,17 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
               {/* §104.9 · UX D-145 (2) — 사기범이 끝냈으면 실제 앱 같은 시스템 줄(E-1 카톡형 · E-2 문자형), 그 밖은 종전 문구. */}
               {chatEndedNotice(pending?.outcome?.scammerEnded === true || endedByScammer, isSms ? "sms" : "kakao")}
             </p>
-            <Button type="button" onClick={() => router.push("/session/end")}>
+            <Button
+              type="button"
+              onClick={() =>
+                // §128(3) — 통화 위 대화방이면 통화 화면의 종료 순서(통화를 끊고 결과로)를 탄다.
+                duringCall
+                  ? scammerLeftDuringCall
+                    ? duringCall.onScammerLeft()
+                    : duringCall.onEndTraining()
+                  : router.push("/session/end")
+              }
+            >
               결과 확인하러 가기
             </Button>
           </div>
@@ -1138,8 +1172,9 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
                   const file = event.target.files?.[0];
                   event.target.value = "";
                   if (!file || !file.type.startsWith("image/")) return;
+                  if (!sessionId) return;
                   const url = URL.createObjectURL(file);
-                  allPhotoUrlsRef.current.push(url);
+                  sessionPhotoStore(sessionId).all.push(url);
                   void handleSend(undefined, url);
                 }}
               />

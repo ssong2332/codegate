@@ -22,6 +22,7 @@ import { Button, LoadingStatus } from "@/components/ui";
 import { EXIT_BOARD } from "@/lib/design/e2Prep";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { awaitTranscriptFlush } from "@/lib/session/transcriptFlushHandoff";
+import { releaseSessionPhotos } from "@/lib/messenger/sessionPhotos";
 import { POST_SESSION_FACT_DISCLOSURE } from "@/lib/sessionboundary/postSessionCopy";
 
 type PageState = "no-session" | "ending" | "ended" | "error";
@@ -68,6 +69,11 @@ export default function SessionEndPage() {
   // 시점에 아직 없을 수 있다. 준비될 때까지 폴링하고, 그동안 버튼은 비활성 + "리포트를 준비하고
   // 있어요"로 알린다(UF-009 Failure (a) — 침묵 실패 금지).
   const [reportStatus, setReportStatus] = useState<"pending" | "ready" | "error">("pending");
+
+  // §128(6) — 훈련이 끝났다: 대화방에서 보낸 사진(기기 메모리 objectURL)을 정리한다(`sessionPhotos.ts` 표).
+  useEffect(() => {
+    releaseSessionPhotos();
+  }, []);
   const [deceivedMomentCount, setDeceivedMomentCount] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
 

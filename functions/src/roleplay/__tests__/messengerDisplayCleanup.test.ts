@@ -162,7 +162,8 @@ function sendMessageWiringOk(code: string): boolean {
   const link = at("extractLinkMarker(");
   const drop = at("dropRepeatedLinkChips(markerAttachments, linkFreeReplyText, storedHistory)");
   const signal = at("extractEscalationSignal(smsMarkerFreeText)");
-  const tidy = at("tidyScammerReplyMarkup(signalFreeReplyText)");
+  // §128(1) — 신호 없는 전화 예고 판정(예고 문장 제거)이 신호 추출과 표기 정리 사이에 들어갔다.
+  const tidy = at("tidyScammerReplyMarkup(announcementFreeReplyText)");
   const realName = at("replaceRealFinancialNames(markupFreeReplyText)");
   if ([link, drop, signal, tidy, realName].some((index) => index < 0)) return false;
   if (!(link < drop && signal < tidy && tidy < realName)) return false;

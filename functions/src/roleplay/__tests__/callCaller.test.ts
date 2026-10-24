@@ -43,7 +43,8 @@ test("[§123 배선] 보이스톡 발신 = 전환 기록 caller · Live 맥락 �
   const roleplay = read("roleplay/index.ts");
   assert.match(
     roleplay,
-    /escalatedCall && currentCallCaller\(session\.channelHistory\) === "participant" \? PARTICIPANT_CALLED_INSTRUCTION : undefined;/,
+    // §128(4) — 같은 판정을 변수로 뽑아 페르소나 교체 · 대사 교정이 함께 쓴다(문면 무변경).
+    /const participantCalled = escalatedCall && currentCallCaller\(session\.channelHistory\) === "participant";\n\s*const participantCalledInstruction = participantCalled \? PARTICIPANT_CALLED_INSTRUCTION : undefined;/,
   );
   assert.match(roleplay, /\[turnInstructionWithSms, photoTurnInstruction\(isPhotoTurn\), participantCalledInstruction(?:, fallbackWrapUp)?\]/); // §127 폴백 마무리 지시
   assert.ok(PARTICIPANT_CALLED_INSTRUCTION.includes("네가 전화한 것이 아니다"));

@@ -74,7 +74,7 @@ import {
   type DeviceSkin,
   type ResolvedDeviceSkin,
 } from "@/lib/phone/deviceSkin";
-import { bannerTokensFor, callTokensFor, ringBackground } from "@/lib/phone/skinTokens";
+import { bannerTokensFor, callTokensFor, ringBackground, voiceTalkCallBackground, voiceTalkCallTokens } from "@/lib/phone/skinTokens";
 import { useDeviceTheme } from "@/lib/phone/deviceTheme";
 import { createSwipeAnswer, type SwipeAnswerController } from "@/lib/phone/swipeAnswer";
 import {
@@ -1392,7 +1392,14 @@ export default function SessionCallPage() {
       start(finish);
     });
 
-  const endCall = async (by: CallEndedBy, opts?: { fallbackLastLine?: { hasAudio: boolean } }) => {
+  const endCall = async (
+    by: CallEndedBy,
+    opts?: {
+      fallbackLastLine?: { hasAudio: boolean };
+      /** §128(3) — 서버가 세션을 이미 끝냈다(통화 중 카톡에서 사기범 포기) — 대화방 복귀(§112) 없이 결과로 간다. */
+      sessionAlreadyEnded?: boolean;
+    },
+  ) => {
     // E1
     const step = beginCallEnding(callEndingRef.current, by);
     callEndingRef.current = step.next;
@@ -1452,7 +1459,8 @@ export default function SessionCallPage() {
     }
     // §112(사용자 결정 2026-10-23 *"ai가 먼저 끊는 경우도 메신저로 넘어가도록"*) — 메신저에서 넘어온 통화를 사기범이 끊으면 끊김 안내 →
     // 전사 제출 → 역전환(대화방 — `returnToMessengerAfterScammerHangup`). 실패하면 아래 종전 순서(훈련 종료)로 간다.
-    if (ending.endedBy === "scammer" && returnsToMessengerOnHangup && (await returnToMessengerAfterScammerHangup(noticeWait))) return;
+    // §128(3) — 서버가 이미 세션을 끝냈으면(통화 중 카톡 포기) 역전환하지 않고 종전 순서로 간다.
+    if (ending.endedBy === "scammer" && returnsToMessengerOnHangup && !opts?.sessionAlreadyEnded && (await returnToMessengerAfterScammerHangup(noticeWait))) return;
     // ⭐ C5 리뷰 m3 — E5~E7을 try/finally로 감싼다: 전사 제출이 던져도 종료 화면으로는 간다(AC-006 "종료는 항상 성공").
     try {
       // E5 — 실시간 전사 제출을 **시작**한다(턴은 이 호출 안에서 동기로 떼어 간다). /session/end가 endSession → 리포트
@@ -2456,7 +2464,10 @@ export default function SessionCallPage() {
   // T190-3(§74.6 (2)(5)) — 스킨 토큰(UX v1.33 근사 — 실기 측정 전). 값은 인라인 style로만 쓴다(Tailwind는
   // 런타임에 조립한 클래스 이름을 생성하지 못한다).
   // §89.5 ⓒ — One UI형 + 기기 라이트 테마면 라이트 통화 화면(그 밖은 종전 어두운 화면).
-  const callTokens = callTokensFor(deviceSkin.skin, deviceTheme);
+  // §128(5)(UX D-159) — 참가자가 대화방에서 건 보이스톡으로 연결된 통화는 카톡 보이스톡 통화 화면(그라데이션 바탕 · 둥근 사각 프로필 ·
+  // 대화방 이름)이다(`voiceTalkCallTokens` 표). 사기범이 건 전화 · 처음부터 통화인 시나리오는 종전 전화 화면.
+  const voiceTalkCall = callCaller === "participant" && scenario.channel === "messenger";
+  const callTokens = voiceTalkCall ? voiceTalkCallTokens(deviceSkin.skin) : callTokensFor(deviceSkin.skin, deviceTheme);
   // 통화 셸 안 하드코딩 색(흰 글 · 옅은 회청 · 경고 분홍)을 토큰 CSS 변수로 — 라이트 화면에서도 대비가 유지된다(G456).
   const callShellVars = {
     "--call-fg": callTokens.textPrimary,
@@ -2632,6 +2643,8 @@ export default function SessionCallPage() {
             beforeSend: handleChatBeforeSend,
             onChatTurn: handleChatTurnDuringCall,
             onEndTraining: () => void handleEndTraining(),
+            // §128(3) — 사기범이 통화 중 카톡에서 포기하고 나갔다: 끊김 안내 → 전사 제출 → 결과(대화방 복귀 없음).
+            onScammerLeft: () => void endCall("scammer", { sessionAlreadyEnded: true }),
           }}
         />
       )}
@@ -2722,7 +2735,7 @@ export default function SessionCallPage() {
         className={`mx-auto flex w-full max-w-[430px] flex-col ${showTextInput ? "h-dvh flex-none" : "min-h-dvh flex-1"}`}
         style={{
           // §89.5 ⓑ — 수신 벨은 흐린 그라데이션 바탕(그 밖 phase는 단색 — 종전).
-          background: isRinging ? ringBackground(callTokens) : callTokens.bg,
+          background: voiceTalkCall ? voiceTalkCallBackground() : isRinging ? ringBackground(callTokens) : callTokens.bg,
           paddingTop: "calc(env(safe-area-inset-top) + 24px)",
         }}
       >
@@ -2818,7 +2831,7 @@ export default function SessionCallPage() {
           {callTokens.hasAvatar && (
             <div
               aria-hidden="true"
-              className="call-compact-avatar relative mb-5 flex h-[88px] w-[88px] items-center justify-center rounded-full"
+              className={`call-compact-avatar relative mb-5 flex h-[88px] w-[88px] items-center justify-center ${voiceTalkCall ? "overflow-hidden rounded-[34px]" : "rounded-full"}`}
               style={{ backgroundColor: callTokens.avatarBg, color: callTokens.avatarFg }}
             >
               {/* One UI형 울림 연출 = 아바타 둘레 파동(현행 `call-ring-pulse` 재사용 · reduced-motion이면 정지).
@@ -2832,7 +2845,7 @@ export default function SessionCallPage() {
                   />
                 </>
               )}
-              <PhoneIcon name="person" size={44} className="relative" />
+              <PhoneIcon name="person" size={voiceTalkCall ? 72 : 44} className={voiceTalkCall ? "relative mt-auto" : "relative"} />
             </div>
           )}
           {/* T75 — 발신자는 번호만 보여 준다(사칭 표기 없음 · 정답을 미리 알려 주지 않는다). */}
@@ -2841,7 +2854,8 @@ export default function SessionCallPage() {
             // §89.5 ⓑ — 벨에서는 번호가 화면 주인공(+4px).
             style={{ fontSize: callTokens.numberSizePx + (isRinging ? 4 : 0), color: callTokens.textPrimary }}
           >
-            {callerLabel}
+            {/* §128(5) — 보이스톡 통화는 번호가 아니라 대화방 이름(발신 화면과 같은 이름). */}
+            {voiceTalkCall ? (scenario.chatDisplayName ?? callerLabel) : callerLabel}
           </p>
           {/* ③ UX-014 v1.33 (3) 정본 — ⛔ 이 표 밖의 문구를 두지 않는다. incoming = 비움(숨김 글) · connecting =
               "연결 중…" · opening/live = 경과 시간(`aria-live` 없음 — 숫자를 매초 읽지 않는다, 접근 이름으로 대신) ·

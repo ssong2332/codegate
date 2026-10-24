@@ -151,7 +151,8 @@ test("[G568] 호출부 전수 — 프롬프트 조립 3곳이 모두 카드를 �
   const assemblyCallers = ["roleplay/index.ts", "roleplay/openingLine.ts", "realtime/geminiProvider.ts"];
   for (const file of assemblyCallers) {
     const src = readSrc(file);
-    assert.equal((src.match(/buildSystemPrompt\(scenarioPrompt, \{/g) ?? []).length, 1, `${file}: 조립 호출 1곳`);
+    // §128(4) — 텍스트 턴은 참가자가 건 통화면 페르소나 문장만 바꾼 사본(`turnScenarioPrompt`)을 넘긴다.
+    assert.equal((src.match(/buildSystemPrompt\((?:scenarioPrompt|turnScenarioPrompt), \{/g) ?? []).length, 1, `${file}: 조립 호출 1곳`);
   }
   assert.match(readSrc("roleplay/index.ts"), /\n\s*personaCard: session\.personaCard\?\.items,\n/, "텍스트 턴");
   assert.match(readSrc("roleplay/openingLine.ts"), /\.\.\.\(personaCard \? \{ personaCard \} : \{\}\),/, "오프닝");
@@ -178,9 +179,17 @@ test("[G568] 호출부 전수 — 프롬프트 조립 3곳이 모두 카드를 �
   assert.match(readSrc("roleplay/callReturnLine.ts"), /\n\s*personaCard: session\.personaCard\?\.items,\n/, "통화 복귀 메시지");
   // §121.7 — 통화 중 대화방 카톡(`chatDuringCall.ts`)이 5번째 조립 지점이다. 세션 문서 카드를 그대로 넘긴다.
   assert.match(readSrc("roleplay/chatDuringCall.ts"), /\n\s*personaCard: session\.personaCard\?\.items,\n/, "통화 중 카톡");
+  // §128(7) — 화면 행동 뒤 먼저 보내는 메시지(`screenActionFollowUp.ts`)가 6번째 조립 지점이다. 세션 문서 카드를 그대로 넘긴다.
+  assert.match(readSrc("roleplay/screenActionFollowUp.ts"), /\n\s*personaCard: session\.personaCard\?\.items,\n/, "화면 행동 뒤");
   assert.deepEqual(
     found.sort(),
-    [...assemblyCallers, "roleplay/callReturnLine.ts", "roleplay/chatDuringCall.ts", "roleplay/promptAssembly.ts"].sort(),
+    [
+      ...assemblyCallers,
+      "roleplay/callReturnLine.ts",
+      "roleplay/chatDuringCall.ts",
+      "roleplay/screenActionFollowUp.ts",
+      "roleplay/promptAssembly.ts",
+    ].sort(),
   );
 });
 

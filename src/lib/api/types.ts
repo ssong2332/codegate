@@ -271,6 +271,16 @@ export type RecordMockScreenEventRequest = {
 };
 export type RecordMockScreenEventResponse = { ok: true };
 
+// §128(7) — 화면 행동(설치 응낙 · 입력 제출) 뒤 사기범이 먼저 보내는 메시지(functions/src/roleplay/screenActionFollowUp.ts와 1:1).
+// ⛔ 화면 입력값은 요청에 없다(AC-045 — 세션 id · 화면 id뿐).
+export type RequestScreenActionFollowUpRequest = { sessionId: string; landingId: string };
+export type RequestScreenActionFollowUpResponse = {
+  /** 저장한 사기범 메시지의 turnIndex(저장 0이면 없음). */
+  turnIndex?: number;
+  /** 대사가 전화를 예고했고 서버가 통화로 전환했다. */
+  escalation?: { toChannel: "voice" };
+};
+
 // --- deliverVerifyOffer / deliverVerifyReconnect (T83 · UX-031/UF-011 · AC-071/AC-019) ---
 // 확인 시도 무력화(모의 확인 전화). functions/src/verifyIntercept/types.ts와 1:1.
 //

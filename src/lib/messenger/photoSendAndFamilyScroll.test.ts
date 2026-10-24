@@ -18,7 +18,9 @@ test("[§113.2] 대화방 사진 — 기기 사진(accept image/*) · objectURL�
   const src = read("src/components/MessengerChatRoom.tsx");
   assert.match(src, /type="file"\s*accept="image\/\*"/);
   assert.match(src, /const url = URL\.createObjectURL\(file\);/);
-  assert.match(src, /for \(const url of urls\) URL\.revokeObjectURL\(url\);/);
+  // §128(6) — URL은 세션 보관소(`sessionPhotos.ts`)에 두고 다른 세션 · 훈련 종료에서 정리한다(대화방 언마운트 때 revoke하지 않는다).
+  assert.match(src, /sessionPhotoStore\(sessionId\)\.all\.push\(url\);/);
+  assert.match(read("src/lib/messenger/sessionPhotos.ts"), /for \(const url of store\.all\) revoke\(url\);/);
   // §121.7 — 통화 중 대화방이면 `duringCall`이 더 붙는다(사진은 여전히 사실만 · 글자 0).
   assert.match(src, /userText: photoUrl \? "" : text,\n\s*\.\.\.\(photoUrl \? \{ photo: true \} : \{\}\),/);
   // ⛔ 업로드 경로 0 — Storage · FormData · 파일 내용 읽기가 이 화면에 없다.
