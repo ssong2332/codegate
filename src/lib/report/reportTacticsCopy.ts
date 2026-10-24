@@ -40,11 +40,32 @@ export function tacticsAccordionLabel(tacticCount: number): string {
  * - "통화"가 아니라 "대화" — 메신저 세션에도 같은 줄이 나온다.
  */
 export const NOT_DECEIVED_HEAD = "이번 훈련에서는 속지 않았습니다.";
+/**
+ * §129.6 · UX D-160 확장(메인 라이브 확인 2026-10-24 — 지인 사칭 카톡 초급 · 첫 메시지만 받고 답 0으로 종료 → "끝까지 지켰어요 · 잘 대처함 · 시도된 수법 1가지").
+ * 메신저는 첫 말풍선이 보였으므로 수법이 1개 이상일 수 있다 ⇒ NS-0 행을 NS-1 앞에 둔다.
+ * | # | `tacticCount` | `userTurnCount` | 문면 |
+ * |---|---|---|---|
+ * | NS-0 | ≥ 1 | 0 | `이번 훈련에서는 속지 않았습니다. 상대의 말에 답하기 전에 대화를 마쳤습니다. 아래는 시도된 수법입니다.` |
+ */
+export const NOT_ANSWERED_SENTENCE = "상대의 말에 답하기 전에 대화를 마쳤습니다.";
 export function notDeceivedStatusText(tacticCount: number, userTurnCount: number | undefined): string {
+  if (tacticCount >= 1 && userTurnCount === 0) return `${NOT_DECEIVED_HEAD} ${NOT_ANSWERED_SENTENCE} 아래는 시도된 수법입니다.`; // NS-0
   if (tacticCount >= 1) return `${NOT_DECEIVED_HEAD} 아래는 시도된 수법입니다.`; // NS-1
-  if (userTurnCount === 0) return `${NOT_DECEIVED_HEAD} 상대의 말에 답하기 전에 대화를 마쳤습니다.`; // NS-2
+  if (userTurnCount === 0) return `${NOT_DECEIVED_HEAD} ${NOT_ANSWERED_SENTENCE}`; // NS-2
   return NOT_DECEIVED_HEAD; // NS-3
 }
+
+/**
+ * §129.6 · UX D-160 확장 — 속지 않았고 참가자 답이 0인 리포트의 머리 · 요약 줄(종료 화면 D-160 Z1과 같은 판정 — `userTurnCount === 0`).
+ * 통화(벨 전 종료 — 오프닝 `notSpoken`) · 메신저(첫 메시지만 받고 종료) 공통. 부재(옛 리포트) · 1 이상 = 종전 "끝까지 지켰어요 · 잘 대처함".
+ * ⛔ 속은 세션(`wasDeceived`)에는 쓰지 않는다 — 답 없이 링크 화면에서 응낙한 메신저 세션은 속음이다.
+ */
+export function isUnansweredReport(wasDeceived: boolean, userTurnCount: number | undefined): boolean {
+  return !wasDeceived && userTurnCount === 0;
+}
+export const UNANSWERED_HEADLINE = "답하기 전에 마쳤어요";
+export const UNANSWERED_SUMMARY_TITLE = "대화 전에 마침";
+export const UNANSWERED_SUMMARY_BODY = "상대의 말에 답하기 전에 훈련을 마쳤습니다. 수상한 연락은 이렇게 바로 끊어도 됩니다.";
 
 /**
  * 리플레이 타임라인에서 **말풍선 주석 밖**에 그려지는 "⚠️ 여기가 신호였어요" 카드 수

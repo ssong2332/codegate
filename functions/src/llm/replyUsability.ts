@@ -11,7 +11,8 @@
 // | 1-c  | 마커·URL을 지우면 빈 문자열이고 신호 마커뿐이다 — §129 D1(빈 말풍선)         | 불가 | `empty`           |
 // | 2    | 영어 거절·사과 문구(`ENGLISH_REFUSAL_PATTERNS`)                             | 불가 | `english-refusal` |
 // | 3    | 한국어 AI 자기 지칭 거절(`KOREAN_AI_REFUSAL_PATTERNS` — "AI로서"·"역할극은 할 수 없") | 불가 | `korean-ai-refusal` |
-// | 3-b  | 훈련 메타 · 고지 문형(`TRAINING_META_PATTERNS` — "[훈련 …", "훈련 시뮬레이션", "이 훈련은", "연습을 위해", "이 장면은", 역할극 언급 · §129 "이 응답은" · "훈련에서는 여기서 멈추" · "실제 사기였다면") — §120 | 불가 | `training-meta` |
+// | 3-b  | 훈련 메타 · 고지 문형(`TRAINING_META_PATTERNS` — "[훈련 …", "훈련 시뮬레이션", "이 훈련은", "연습을 위해", "이 장면은", 역할극 언급 · §129 "이 응답은" · "훈련에서는 여기서 멈추" · "실제 사기였다면" · §129.6 "훈련 장면" · "훈련을 종료하셔도" · "실제 보이스피싱에서 · 수법을 흉내" · "짚어 볼 점") — §120 | 불가 | `training-meta` |
+// | 3-b′ | §129.6 교육용 글머리 목록(`isEducationalBulletList` — 글머리표 줄 2개 이상 · 또는 경고형 1줄) | 불가 | `training-meta` |
 // | 3-c  | 본문이 괄호 표기(지문 · 메타)뿐이고 링크·문자 마커가 없다 — §129 D1            | 불가 | `empty`           |
 // | 4    | 한글(음절·자모)이 0자                                                       | 불가 | `no-hangul`       |
 // | 5    | 라틴 문자 수 > 한글 수 × 2                                                  | 불가 | `mostly-foreign`  |
@@ -69,7 +70,30 @@ export const TRAINING_META_PATTERNS: readonly RegExp[] = [
   // §129(프로브 2026-10-24 D1 · D2) — "(이 응답은 훈련을 마무리하는 내용입니다.)" · "실제 사기였다면 어떤 일이 벌어지는지 되짚어 보시면 됩니다".
   /이\s*응답은/,
   /실제\s*(?:사기|상황)(?:였|이었)다면/,
+  // §129.6(메인 라이브 재테스트 2026-10-24 · 기관 사칭 고급 폴백 — 사기범이 역할을 벗고 해설로 바뀌었다):
+  // "(잠깐, 이 훈련 장면은 여기서 멈춥니다. … 실제 보이스피싱에서 쓰는 수법을 그대로 흉내 낸 것이라, 더 진행하지 않겠습니다.)" ·
+  // "훈련을 종료하셔도 좋습니다" · "이 통화에서 짚어 볼 점을 정리하면 이렇습니다. - … 보이스피싱의 대표적인 신호입니다."
+  // ⛔ 단독 "보이스피싱"은 사기범 대사에 흔하다("보이스피싱 범죄에 이용된 정황") — 해설 결합형만 본다.
+  /훈련\s*(?:장면|상황|과정|내용|시나리오)/,
+  /훈련(?:을|은|이)?\s*(?:종료|마치|마무리|끝내)(?:하셔도|하셔|하시|셔도|해도|하겠|합니다|하세요|할게|됩니다)/,
+  /실제\s*보이스\s*피싱(?:에서|범들?이)|수법을\s*(?:그대로\s*)?(?:흉내|재현|따라)|보이스\s*피싱의\s*(?:대표적인\s*|전형적인\s*)?(?:신호|수법|특징)/,
+  /짚어\s*(?:볼|봐야\s*할)\s*(?:점|부분)|정리하면\s*(?:이렇습니다|다음과\s*같습니다)/,
 ];
+
+/**
+ * §129.6 — 교육용 글머리 목록("- 검찰·금융감독원은 전화로 … 묻지 않습니다"). 말(통화)로도 메신저 말풍선으로도 사기범이 쓸 형태가 아니다.
+ * | # | If | Then |
+ * |---|---|---|
+ * | M1 | 줄머리 글머리표(`-` · `•` · `·` · `*` + 공백) 줄이 2개 이상 | `training-meta` |
+ * | M2 | 글머리표 줄 1개 ∧ 그 줄이 "…하지 않습니다 · 묻지 않습니다 · 요구하지 않습니다" 경고형 | `training-meta` |
+ * ⛔ 실제 수법 "저희는 비밀번호를 묻지 않습니다"(신뢰 쌓기)는 글머리표 없는 대사라 걸리지 않는다.
+ */
+const BULLET_LINE = /^[ \t]*[-•·*][ \t]+\S/gm;
+const WARNING_BULLET = /^[ \t]*[-•·*][ \t]+[^\n]*(?:묻지|요구하지|요청하지|하지)\s*않습니다/m;
+function isEducationalBulletList(body: string): boolean {
+  const bullets = (body.match(BULLET_LINE) ?? []).length;
+  return bullets >= 2 || (bullets === 1 && WARNING_BULLET.test(body));
+}
 
 /** §129 D1 — 화면에 무언가를 남기는 마커(링크 칩 · 문자). 신호(`[[SIGNAL:…]]`)만 있는 응답은 말풍선이 빈다. */
 const VISIBLE_MARKER_PATTERN = /\[\[(?:LINK|SMS):[^\]]*\]\]/;
@@ -88,6 +112,7 @@ export function judgeScammerReplyUsability(text: string): UnusableReplyReason | 
   if (ENGLISH_REFUSAL_PATTERNS.some((pattern) => pattern.test(body))) return "english-refusal";
   if (KOREAN_AI_REFUSAL_PATTERNS.some((pattern) => pattern.test(body))) return "korean-ai-refusal";
   if (TRAINING_META_PATTERNS.some((pattern) => pattern.test(body))) return "training-meta";
+  if (isEducationalBulletList(body)) return "training-meta"; // §129.6 M1 · M2
   // §129 D1 — 괄호 표기만 남은 본문("(잠시 침묵)")도 저장 전에 지워져 말풍선이 빈다(메타 문형은 바로 위 행이 먼저 잡는다).
   if (PAREN_ONLY_BODY.test(body) && !VISIBLE_MARKER_PATTERN.test(text)) return "empty";
   const hangul = (body.match(HANGUL_PATTERN) ?? []).length;

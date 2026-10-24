@@ -27,7 +27,15 @@ import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
 import { buildStageNotice, type ReportStage } from "@/lib/report/stageNotice";
 import { buildRouteSummaryLine, readRouteSummary, type RouteSummaryView } from "@/lib/report/routeSummaryCopy";
 import { resolveMockScreenCopy } from "@/lib/report/mockScreenTimelineCopy";
-import { notDeceivedStatusText, tacticsAccordionLabel, TACTICS_NOT_FOUND_TEXT } from "@/lib/report/reportTacticsCopy";
+import {
+  isUnansweredReport,
+  notDeceivedStatusText,
+  tacticsAccordionLabel,
+  TACTICS_NOT_FOUND_TEXT,
+  UNANSWERED_HEADLINE,
+  UNANSWERED_SUMMARY_BODY,
+  UNANSWERED_SUMMARY_TITLE,
+} from "@/lib/report/reportTacticsCopy";
 import {
   deceivedSummaryTitle,
   displayTactic,
@@ -327,6 +335,8 @@ export default function ReportPage() {
   const firstDeceivedMoment = report.deceivedMoments[0] ?? null;
   // UX D-141 (6) — 큰 시계 값(서버 표기 "N초 시점"을 읽은 초 · 다른 꼴이면 null = 시계 0).
   const firstDeceivedSeconds = parseMomentSeconds(firstDeceivedMoment?.timeLabel);
+  // §129.6 · D-160 확장 — 속지 않았고 참가자 답이 0인 리포트(`reportTacticsCopy.ts` `isUnansweredReport`).
+  const unanswered = isUnansweredReport(report.wasDeceived, report.userTurnCount);
   const dateLabel = report.createdAt
     ? new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "long", day: "numeric" }).format(
         report.createdAt.toDate(),
@@ -440,7 +450,8 @@ export default function ReportPage() {
           </>
         ) : !report.wasDeceived ? (
           <p className="mt-3 font-display text-[44px] font-bold leading-[1.15] tracking-[-0.02em] text-sand [word-break:keep-all]">
-            끝까지 지켰어요
+            {/* §129.6 · D-160 확장 — 참가자 답 0(통화 벨 전 · 메신저 첫 메시지만)이면 "지켰다"고 하지 않는다. */}
+            {unanswered ? UNANSWERED_HEADLINE : "끝까지 지켰어요"}
           </p>
         ) : null}
         {/* T84(§15.9.5 e-3, OQ-U24 판정) — 여러 표면으로 이어지는 세션의 **구조 고지 1줄**.
@@ -498,9 +509,9 @@ export default function ReportPage() {
                 <circle cx="8" cy="8" r="7" fill="var(--success)" />
               </svg>
               <div>
-                <p className="text-lg font-bold text-ink">잘 대처함 · 요구에 응하지 않음</p>
+                <p className="text-lg font-bold text-ink">{unanswered ? UNANSWERED_SUMMARY_TITLE : "잘 대처함 · 요구에 응하지 않음"}</p>
                 <p className="mt-0.5 text-lg leading-relaxed text-ink-sub">
-                  이번 훈련에서는 상대의 요구에 응하지 않았습니다.
+                  {unanswered ? UNANSWERED_SUMMARY_BODY : "이번 훈련에서는 상대의 요구에 응하지 않았습니다."}
                 </p>
               </div>
             </div>

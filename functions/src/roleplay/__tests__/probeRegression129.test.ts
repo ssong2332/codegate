@@ -11,6 +11,8 @@ import { stripLeakedThought } from "../../realtime/thoughtLeak";
 import { analyzeConversation, type AnalysisMessage } from "../../report/analyzeConversation";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
+import { MOCK_SCREENS } from "../../scenarios/mockScreens";
+import { applyMockScreens } from "../../report/mockScreenTimeline";
 import { buildSystemPrompt, CLAIM_CONSISTENCY_RULE, SMS_TOOL_SPEECH_SENTENCE } from "../promptAssembly";
 import { buildLiveConfirmResultInstruction, LIVE_CONFIRM_NOT_YET_SENTENCE } from "../../inCallSms/confirmResult";
 import { CHILD_GENDER_UNSPECIFIED_RULE } from "../../scenarios/messengerChildImpersonationKakao.prompt";
@@ -359,4 +361,66 @@ test("[§129 C4 · C5 경계] 앞 대사에 요구가 있으면 방법 질문 ·
   assert.equal(ask("명의가 도용돼 개설된 것으로 보입니다.", "알겠어요. 시키는 대로 할게요"), false); // C5
   assert.equal(ask("자산 보호를 위해 안전계좌로 옮기셔야 합니다. 협조하시겠습니까?", "네 말씀하신 대로 할게요"), true); // 요구 있음
   assert.equal(ask("문자 안내 확인하셨습니까?", "네, 알려주신 대로 했어요."), true, "이행 보고는 약속이 아니다");
+});
+
+// ── §129.6 폴백 통화 역할 이탈(해설) — 메인 라이브 재테스트 2026-10-24 · 기관 사칭 고급 · 결말 현금 전달형 · 텍스트 폴백 ──────────
+// 사기범 대사 원문 그대로(메인 전달). 판정에 걸리면 같은 체인의 다음 단계(Claude → Gemini 2차 → Groq → Mock)로 넘어간다(`completeWithFallback`).
+const LIVE_BREAKOUT_LINES = [
+  '(잠깐, 이 훈련 장면은 여기서 멈춥니다. 방금 제가 그린 "안전계좌로 전액 이체하라"는 요구는 실제 보이스피싱에서 쓰는 수법을 그대로 흉내 낸 것이라, 더 진행하지 않겠습니다.)\n- 검찰·금융감독원은 전화로 계좌 비밀번호나 인증번호를 묻지 않습니다.',
+  "네, 정상적으로 확인됐습니다. 이제 모든 절차가 끝났습니다. 훈련을 종료하셔도 좋습니다.",
+  '이 통화에서 짚어 볼 점을 정리하면 이렇습니다.\n- 검찰·금융감독원·은행은 전화로 계좌 비밀번호, 인증번호, 주민번호를 묻지 않습니다.\n- "안전계좌로 옮기라"는 요구는 보이스피싱의 대표적인 신호입니다.',
+];
+
+test("[§129.6] 라이브 역할 이탈 대사 3줄은 사기범 대사로 쓸 수 없다(training-meta)", () => {
+  for (const line of LIVE_BREAKOUT_LINES) assert.equal(judgeScammerReplyUsability(line), "training-meta", line.slice(0, 30));
+});
+
+test("[§129.6 오탐] 정상 사기범 대사 — 보이스피싱 언급 · 신뢰 쌓기 '묻지 않습니다' · 단일 글머리 안내는 그대로 가능", () => {
+  for (const ok of [
+    "고객님 명의로 개설된 계좌 하나가 현재 보이스피싱 범죄에 이용된 정황이 확인돼서, 오늘 이렇게 연락드리게 됐습니다.",
+    "저희 검찰은 전화로 계좌 비밀번호를 묻지 않습니다. 그래서 문자로 보내 드린 절차대로만 진행하시면 됩니다.",
+    "엄마 나 이번 주에 예비군 훈련 끝나고 바로 연락할게ㅠ",
+    "- 신청 기한: 오늘 18시까지\n안내드린 링크에서 접수해 주세요.",
+  ]) {
+    assert.equal(judgeScammerReplyUsability(ok), undefined, ok.slice(0, 30));
+  }
+});
+
+test("[§129.6 배선] 통화 텍스트 폴백(sendMessage) · 통화 복귀 · 통화 중 카톡 · 화면 행동 뒤 · 오프닝이 모두 사기범 대사 판정 경로를 탄다", () => {
+  for (const file of ["roleplay/index.ts", "roleplay/callReturnLine.ts", "roleplay/chatDuringCall.ts", "roleplay/screenActionFollowUp.ts", "roleplay/openingLine.ts"]) {
+    const src = read(file);
+    assert.match(src, /completeWithFallback\(/, file);
+    assert.match(src, /purpose: "scammer-reply"/, file);
+  }
+  assert.match(read("llm/index.ts"), /assertUsableScammerReply\(input, result\);/, "마지막 그물(Mock 강등)도 같은 판정");
+});
+
+// ── §129.6 ① 메신저 첫 속은 순간 라벨 빈칸 — 메인 라이브 재테스트 2026-10-24 · 자녀 사칭 카톡 고급 fv-tdgg ──────────────
+test("[§129.6 ①] 설치를 꺼낸 대사 뒤 \"뭘 깔면 돼?\"(설치 방법 질문) 순간 = 설치 범주 세션 라벨 · 설치 동사 없는 답은 범주 0", () => {
+  const tactics = resolveSessionScenarioPrompt("messenger-child-impersonation-kakao", "fv-tdgg")!.weakenedTactics;
+  const S2 = "엄마, 지하철에서 떨어뜨렸는데 액정이 쫙 갈라졌어 ㅠㅠ 지금 보험 접수해야 되는데, 보험사에서 앱 깔아서 접수하래. 그거 깔아야 돼서 엄마한테 부탁하려고.";
+  const moment = analyzeConversation(dialogue([["scammer", S2], ["user", "알았어 뭘 깔면 돼?"]]), 0, tactics).deceivedMoments[0];
+  assert.equal(moment?.tactic, "보험 처리 앱 설치 요구");
+  assert.equal(moment?.tacticCategory, "link_or_install");
+  const noVerb = analyzeConversation(dialogue([["scammer", S2], ["user", "알았어 어떻게 하면 돼?"]]), 0, tactics).deceivedMoments[0];
+  assert.notEqual(noVerb?.tacticCategory, "link_or_install", "답에 설치 동사가 없으면 대사만으로 범주를 정하지 않는다");
+});
+
+// ── §129.6 ② 같은 설치 행동이 순간 2개 — 사용자 승인 M1 · M2 · ㉠(화면 순간만) ─────────────────────────────────────
+test("[§129.6 ② M1 · M2] 링크 대사 바로 앞의 같은 범주 채팅 순간은 화면 승격 순간 하나로 합친다 · 다른 범주(사진)는 그대로", () => {
+  const catalog = MOCK_SCREENS["messenger-child-impersonation-kakao"]!;
+  const item = catalog.find((c) => c.momentTactic === "자녀 사칭 — 보험 접수 앱 설치·권한 허용 유도")!;
+  assert.ok(item);
+  const messages = [
+    { role: "scammer" as const, turnIndex: 2, createdAtMs: 3_000 },
+    { role: "user" as const, turnIndex: 3, createdAtMs: 37_000 },
+    { role: "scammer" as const, turnIndex: 4, createdAtMs: 39_000, landingIds: [item.landingId] },
+  ];
+  const doc = { landingId: item.landingId, kind: item.kind, shownAtMs: 40_000, consentedAtMs: 45_000 };
+  const install = { turnIndex: 3, timeLabel: "37초 시점", tactic: "보험 처리 앱 설치 요구", correctAction: "", tacticCategory: "link_or_install" as const };
+  const merged = applyMockScreens([doc], [install], messages, 0, catalog);
+  assert.deepEqual(merged.deceivedMoments.map((m) => [m.turnIndex, m.tactic]), [[4, item.momentTactic]], "M1 ㉠ — 화면 순간만");
+  const photo = { ...install, tactic: "신원정보 직접 요구", tacticCategory: "personal_info_demand" as const };
+  const kept = applyMockScreens([doc], [photo], messages, 0, catalog);
+  assert.equal(kept.deceivedMoments.length, 2, "M2 — 범주가 다르면 둘 다");
 });
