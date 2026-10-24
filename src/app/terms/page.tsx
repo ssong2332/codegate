@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import LegalDocumentView from "@/components/LegalDocumentView";
 import { TERMS_OF_SERVICE, LEGAL_ROBOTS } from "@/lib/legal/legalContent";
+import { PUBLIC_PAGE_META } from "@/lib/seo/publicPages";
 
 // 법적 고지(초안) — 외부 점검 2026-10-21. 공개 경로(RouteGuard LEGAL_PATHS).
-export const metadata: Metadata = { title: "이용약관 — 금융사기 예방 훈련", robots: LEGAL_ROBOTS };
+// §133 — 제목 · 설명은 공개 페이지 단일 출처(@/lib/seo/publicPages).
+export const metadata: Metadata = { ...PUBLIC_PAGE_META["/terms"], robots: LEGAL_ROBOTS };
 
 export default function Page() {
   return <LegalDocumentView doc={TERMS_OF_SERVICE} />;

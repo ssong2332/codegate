@@ -32,6 +32,9 @@ export const ANONYMOUS_RECIPIENT_PATHS = [
  */
 export const LEGAL_PATHS = ["/privacy", "/terms", "/contact"] as const;
 
+/** §133 — 자주 묻는 질문(/faq)도 법적 고지와 같이 누구나 연다(읽기 전용 · 호출 0). */
+export const INFO_PATHS = ["/faq"] as const;
+
 /**
  * 익명 사용자가 /login에 왔을 때 보이는 안내(User 확정 문구 2026-10-17).
  * OQ-U53(User 결정 ⓑ, 2026-10-17) — 셋째 문장을 덧붙였다. Google 로그인은 익명 uid를 교체하므로
@@ -48,5 +51,6 @@ export function isAnonymousOutsideRecipientFlow(isAnonymous: boolean, pathname: 
   if (!isAnonymous) return false;
   if (pathname === "/login") return false;
   if ((LEGAL_PATHS as readonly string[]).includes(pathname)) return false;
+  if ((INFO_PATHS as readonly string[]).includes(pathname)) return false;
   return !(ANONYMOUS_RECIPIENT_PATHS as readonly string[]).includes(pathname);
 }

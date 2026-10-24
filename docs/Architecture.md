@@ -24257,3 +24257,43 @@ Functions(`sendMessage` · `endSession` · 리포트 · 프롬프트) → Hostin
 
 ### 130.5 배포 순서
 Hosting만(functions 변경 0).
+## 133. (Feature change — 2026-10-24 · 브랜치 `claude/site-essentials-audit-133` = main `6d6ffa2` + 변경 · 메인 세션 지시 — 사이트 기본 요소 점검 후속 4건) **robots.txt · sitemap · 한국어 404 · 공개 페이지 제목 · 설명 · 자주 묻는 질문** — implementer 기록 (DECISIONS #249 · UX D-162)
+
+점검 보고서: `docs/research/site-essentials-audit-2026-10-24.md`(라이브 실측 — robots · sitemap 404, 404 화면 Next 기본 영문 · canonical `/_not-found`, 제목 · 설명 전부 같음, FAQ 없음).
+
+### 133.1 바뀐 것
+| # | 항목 | 파일 | 내용 |
+|---|---|---|---|
+| 1 | robots.txt · sitemap | `src/app/robots.ts` · `src/app/sitemap.ts` · `src/lib/seo/publicPages.ts` | `force-static` → `out/robots.txt` · `out/sitemap.xml`. 앱 화면 9개 접두(`DISALLOW_PREFIXES`) 차단. sitemap = `/` · `/faq`(법적 고지는 `SHOW_LEGAL_LINKS`가 켜지면 함께) |
+| 2 | 한국어 404 | `src/app/not-found.tsx` · `src/lib/auth/RouteGuard.tsx` | 탭 제목 "페이지를 찾을 수 없습니다 — 금융사기 예방 훈련" · 28px 제목 · 18px 본문 · 56px "처음으로". `canonical: null` · noindex(Next가 404에 자동으로 붙임). **RouteGuard: 모르는 주소(`isKnownAppPath` false)는 공개 취급** — 종전에는 미인증 · 익명 사용자가 404 대신 /login으로 갔다(아래 판정표) |
+| 3 | 공개 페이지 제목 · 설명 | `src/app/(auth)/login/layout.tsx` · `src/app/challenge/join/layout.tsx` · 법적 고지 3 `page.tsx` · `faq/page.tsx` | 단일 출처 `PUBLIC_PAGE_META`. `/`는 루트 레이아웃 기본값이 곧 첫 화면 값(무변경). `/challenge/join`은 noindex(받는 사람마다 토큰) · 미리보기(openGraph)는 루트 값 유지 |
+| 4 | 자주 묻는 질문 | `src/app/faq/page.tsx` · `src/lib/faq/faqContent.ts` · `src/app/page.tsx`(머리줄 링크 1개) · `anonymousScope.ts`(INFO_PATHS) | 5문항 · 답 펼침 · 근거는 `faqContent.ts` 문항별 주석. 공개 경로 · 익명도 열림 |
+
+### 133.2 판정표 — RouteGuard 경로 분류(§133 이후)
+| If | Then |
+|---|---|
+| 경로가 APP_ROUTE_PATHS에 없다(모르는 주소) | 공개 — 404 화면을 그린다(미인증 · 익명 · 로그인 모두). 익명 범위 판정도 하지 않는다 |
+| PUBLIC_PATHS(`/` · `/login` · `/challenge/join` · 법적 고지 3 · `/faq`) | 공개(종전 + `/faq`) |
+| 그 밖의 있는 라우트 | 종전 그대로(미인증 → /login · 익명 수신 흐름 밖 → /login · §34.4 배너 보류) |
+
+⛔ APP_ROUTE_PATHS는 손으로 쓴 목록이다 — `siteEssentials.test.ts`가 `src/app/**/page.tsx`와 대조한다. 새 화면을 만들고 목록에 넣지 않으면 그 화면이 "모르는 주소"로 공개 취급되므로 테스트가 먼저 빨간불이 된다. 공개 취급돼도 화면은 보이지 않는다(정적 export에 그 경로 HTML이 있으면 Hosting이 그 HTML을 준다 — 이 경우 RouteGuard가 막지 않는다는 뜻이라 테스트를 지킬 것).
+
+### 133.4 실측 (2026-10-24 · 이 브랜치 `npm run build` 산출물 + Hosting 흉내 정적 서버 · 자리표시 Firebase 값(`.env.local`, 실측 뒤 삭제) · 비로그인)
+| 항목 | 결과 | 기준값 | 근거 |
+|---|---|---|---|
+| `out/robots.txt` | Allow `/` · Disallow 9개 · Sitemap 줄 | 라이브 `/robots.txt` 404 | 빌드 산출물 |
+| `out/sitemap.xml` | `/` · `/faq` 2개 | 라이브 404 | 빌드 산출물 |
+| `out/404.html` | 제목 "페이지를 찾을 수 없습니다 — …" · robots `noindex` 1개 · canonical 없음 | 라이브: 영문 "This page could not be found." · canonical `/_not-found` | 빌드 산출물 · 브라우저 |
+| 없는 주소(비로그인) | 한국어 404 화면 · "처음으로" 56px | 종전 코드: /login으로 이동 | 브라우저 412×915 |
+| 제목 | `/login` · `/challenge/join` · `/faq` · 고지 3 저마다 다름, `/` · 앱 화면은 루트 기본값 | 라이브: 고지 3 말고 전부 같음 | 빌드 산출물 |
+| `/faq` | 5문항 · 답 18px · 질문 20px · 버튼 56px · 가로 넘침 0(scrollWidth 412) | 없음 | 브라우저 412×915 |
+| 첫 화면 412×780 | 문서 높이 780(넘침 0) · 링크 48px · 머리줄 56px 유지 | 링크 전 780 · **아래 띠 한 줄 시안 825(45px 넘침)** | 브라우저 |
+| 첫 화면 360×640 | 문서 높이 777 = 링크 전 777(링크로 늘어난 높이 0). 넘침 137px은 이 변경 전부터 있음(CTA 아래 끝 698) — §130 몫 | 777 | 브라우저 · 링크 숨김 대조 |
+
+### 133.3 남은 것 · 한계
+| 항목 | 상태 |
+|---|---|
+| 정적 HTML 본문 | RouteGuard가 인증 판정 전 `return null`이라 `/` · `/faq`도 정적 HTML 본문이 비어 있다(제목 · 설명 · OG 메타는 있음). 이번 범위 밖 |
+| FAQPage JSON-LD | 넣지 않았다 — 권장 여부만 보고(DECISIONS #249) |
+| 개인정보처리방침 · GA | 손대지 않았다(운영자 정보 대기) |
+| `/challenge/join` robots | robots.txt에서 막지 않는다 — 미리보기 수집기가 robots.txt를 따르면 가족 링크 미리보기가 사라질 수 있어서(추정 — 수집기별 동작 미확인) |
