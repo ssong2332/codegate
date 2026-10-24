@@ -366,6 +366,53 @@ function isTransferDoneAfterDemand(reply: AnalysisMessage, transferDemandSeen: b
   return transferDemandSeen && TRANSFER_DONE_REPORT.test(reply.textMasked) && !REFUSAL_IN_ANSWER.test(reply.textMasked);
 }
 
+// ⭐ §129 (C)(메인 라이브 확인 2026-10-24 · 사용자 승인 판정표 C1 · L1 · L2 · L3 ㉠) — 속은 순간 과다 판정 · 빈 라벨.
+// | # | If | Then |
+// |---|---|---|
+// | C1 | 답에 부인 · 모름 어형(`DENIAL_OR_UNKNOWN`)이 있고, 순응 근거가 명사 단독 항목(계좌 · 카드번호 · 비밀번호 · 송금 · 이체 · 얼마 — 뒤에 행동 어미 없음)뿐 | 그 답은 순응이 아니다(`COMPLIANCE_PATTERN` 갈래만 끈다) |
+// | C3 | 실제 제공(H1 · H2) · 사진(H3) · 이행 보고(H4) · J-2 약속 · 문맥 순응(V2~V4) | C1과 무관 — 종전대로 |
+// | L1 | 속은 순간 라벨 — 바로 앞 사기범 대사에서 고르되 `부인 시 …` · `… 암시`(`NON_DEMAND_LABEL`)는 빼고 다음 일치를 쓴다 | 시도된 수법 목록은 무변경 |
+// | L2 | 문구 키도 요구 어형도 없으면 답의 내용 범주(인증번호 · 신원 · 송금 · 설치)로 세션 목록 안 라벨을 고른다(새 라벨 0 · 사진 턴 제외 — §131 소관) | — |
+// | L3 | 인증번호를 불러 준 순간 = 개인정보 범주 라벨(기관 사칭 = '신원정보 직접 요구') | 사용자 결정 ㉠ |
+// ⛔ 공유 패턴(`COMPLIANCE_PATTERN` · `RESISTANCE_PATTERN` · `REFUSAL_IN_ANSWER`)은 바이트 무변경 — 되감기 규칙 폴백과 다를 수 있다(J-2와 같은 비대칭).
+const DENIAL_OR_UNKNOWN =
+  /몰라|모르|없어요|없습니다|없는데|만든\s*적\s*(?:이\s*)?없|한\s*적\s*(?:이\s*)?없|안\s*했|제\s*(?:것|거)\s*(?:가\s*)?아니|아니라|아닌데/;
+const NOUN_ONLY_COMPLIANCE =
+  /(?:계좌\s*(?:번호)?|카드\s*번호|비밀\s*번호|송금|이체|얼마(?:면|야)?)(?!\s*(?:했|할|하겠|해|받|드릴|드리겠|불러|알려|보내))/g;
+
+/** C1 — 부인 · 모름 답에서 명사 단독 항목만 순응으로 걸렸는가. */
+function isNounOnlyDenial(replyText: string): boolean {
+  if (!DENIAL_OR_UNKNOWN.test(replyText)) return false;
+  return !COMPLIANCE_PATTERN.test(replyText.replace(NOUN_ONLY_COMPLIANCE, " "));
+}
+
+/** L2 — 답의 내용 범주. 사진 턴은 판정하지 않는다(§131). */
+function answerContentCategory(scammerText: string, reply: AnalysisMessage): TacticCategory | undefined {
+  if (reply.photo === true) return undefined;
+  const text = reply.textMasked;
+  if (OTP_ASKED.test(scammerText) && extractSpokenCodes(text).length > 0) return "personal_info_demand"; // L3
+  if (HARD_DISCLOSURE_TOKEN.test(text) || BIRTH_DATE.test(text) || (BIRTH_DATE_DEMAND.test(scammerText) && DATE_IN_ANSWER.test(text))) {
+    return "personal_info_demand";
+  }
+  if (SECRET_CODE_DEMAND.test(scammerText) && SHORT_CODE_IN_ANSWER.test(text)) return "personal_info_demand";
+  if (TRANSFER_DONE_REPORT.test(text) || BALANCE_DISCLOSURE.test(text)) return "payment_demand";
+  if (/설치\s*(?:했|할게|하겠)|눌렀|깔았/.test(text)) return "link_or_install";
+  return undefined;
+}
+
+/** L2 — 범주에 맞는 세션 목록 안 라벨(부인 대응 · 암시 라벨 제외). */
+function resolveAnswerCategoryTactic(
+  scammerText: string,
+  reply: AnalysisMessage,
+  weakenedTactics: readonly string[],
+): string | undefined {
+  const category = answerContentCategory(scammerText, reply);
+  if (!category) return undefined;
+  return weakenedTactics
+    .map(extractTacticLabel)
+    .find((label) => !NON_DEMAND_LABEL.test(label) && resolveTacticCategory(label) === category);
+}
+
 function isHardDisclosure(scammerText: string, replyText: string): boolean {
   if (HARD_DISCLOSURE_TOKEN.test(replyText)) return true;
   if (REFUSAL_IN_ANSWER.test(replyText)) return false;
@@ -640,6 +687,7 @@ export function analyzeConversation(
 
     // 한 대사에 수법이 여럿이면 모두 "시도된 수법"에 올린다(2026-10-17). 속은 순간의 라벨은 종전처럼
     // 목록 순서상 **첫** 수법이다 — 라벨 규칙을 바꾸면 아카이브 묶기 키(T74)가 함께 흔들린다.
+    // ⚠️ §129 L1(사용자 승인 2026-10-24) — 단, 부인 대응 · 암시 라벨은 건너뛴 첫 수법이다(아래 라벨 고르기).
     const matchedTactics = findMatchedTactics(msg.textMasked, tacticMatchers);
     for (const matched of matchedTactics) {
       tacticLabelsUsed.add(extractTacticLabel(matched));
@@ -650,7 +698,6 @@ export function analyzeConversation(
       const demandLabel = resolveDemandFallbackTactic(msg.textMasked, weakenedTactics);
       if (demandLabel) tacticLabelsUsed.add(demandLabel);
     }
-    const matchedTactic = matchedTactics[0];
 
     // 판정 검수(2026-10-21) — 사기범 대사 뒤 참가자 줄이 **연달아** 올 수 있다(실시간 통화에서 사기범 전사가 빈
     // `turnComplete` · 끊긴 조각). 종전엔 첫 줄만 봐서 "잠깐만요" → "048231이요"의 둘째 줄이 판정되지 않았다.
@@ -665,7 +712,8 @@ export function analyzeConversation(
       // 사용자 결정 2026-10-21 — 인증번호 오답(위 W4)은 숫자 응답에서 오는 순응 판정을 끈다(실제 제공 H1 · H2는 그대로).
       const wrongOtp = isWrongOtpReply(msg.textMasked, reply.textMasked, otpCodes);
       const complied =
-        COMPLIANCE_PATTERN.test(reply.textMasked) ||
+        // §129 C1 — 부인 · 모름 답의 명사 단독 순응은 끈다(공유 패턴 갈래만).
+        (COMPLIANCE_PATTERN.test(reply.textMasked) && !isNounOnlyDenial(reply.textMasked)) ||
         isHandoffPromiseReply(msg.textMasked, reply.textMasked) ||
         isContextualCompliance(msg.textMasked, reply.textMasked);
       if (isPhotoAfterDemand(reply, photoDemand !== undefined)) {
@@ -699,8 +747,15 @@ export function analyzeConversation(
         : transferDemand && msg !== transferDemand && isTransferDoneAfterDemand(userReply, true) && !isTransferDemand(msg.textMasked)
           ? transferDemand
           : msg;
-    const labelTactic = labelSource === msg ? matchedTactic : findMatchedTactics(labelSource.textMasked, tacticMatchers)[0];
-    const fallbackTactic = labelTactic ? undefined : resolveDemandFallbackTactic(labelSource.textMasked, weakenedTactics);
+    // §129 L1 — 속은 순간 라벨에서는 부인 대응 · 암시 라벨을 빼고 다음 일치를 쓴다(시도된 수법 목록은 위에서 이미 올렸다 · 무변경).
+    const labelTactic = (labelSource === msg ? matchedTactics : findMatchedTactics(labelSource.textMasked, tacticMatchers)).find(
+      (tactic) => !NON_DEMAND_LABEL.test(extractTacticLabel(tactic)),
+    );
+    // §129 L2 — 요구 어형 표도 비면 답의 내용 범주로(사진 턴 제외).
+    const fallbackTactic = labelTactic
+      ? undefined
+      : (resolveDemandFallbackTactic(labelSource.textMasked, weakenedTactics) ??
+        resolveAnswerCategoryTactic(labelSource.textMasked, userReply, weakenedTactics));
     if (fallbackTactic) tacticLabelsUsed.add(fallbackTactic);
     const tactic = labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? "약화된 사기 수법");
     // AC-026 예시("15초 시점에 속았습니다")를 그대로 따르기 위해 turnIndex가 아니라 실제 경과

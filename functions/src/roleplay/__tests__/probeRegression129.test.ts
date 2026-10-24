@@ -10,6 +10,7 @@ import { tidyScammerReplyMarkup } from "../replyMarkup";
 import { stripLeakedThought } from "../../realtime/thoughtLeak";
 import { analyzeConversation, type AnalysisMessage } from "../../report/analyzeConversation";
 import { SCENARIO_PROMPTS } from "../../scenarios";
+import { resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
 import { buildSystemPrompt, CLAIM_CONSISTENCY_RULE, SMS_TOOL_SPEECH_SENTENCE } from "../promptAssembly";
 import { buildLiveConfirmResultInstruction, LIVE_CONFIRM_NOT_YET_SENTENCE } from "../../inCallSms/confirmResult";
 import { CHILD_GENDER_UNSPECIFIED_RULE } from "../../scenarios/messengerChildImpersonationKakao.prompt";
@@ -273,4 +274,40 @@ test("[§129 (A)] 폴백 대사 · 전사에서 대괄호 도구 · 시스템 �
     assert.equal(tidyScammerReplyMarkup(keep).text, keep);
   }
   assert.equal(judgeScammerReplyUsability("[문자 발송 도구 호출: 인증번호 문자 발송]"), "empty", "서술만 있는 응답은 쓸 수 없다");
+});
+
+// ── (C) 속은 순간 판정 · 라벨(사용자 승인 C1 · L1 · L2 · L3 ㉠ — 메인 라이브 대본 기관 사칭 고급 fv-g2ld) ───────────────
+const G2LD_TACTICS = () => resolveSessionScenarioPrompt("institutional-impersonation", "fv-g2ld")!.weakenedTactics;
+test("[§129 C1] 부인 · 모름 답의 명사 단독 순응(계좌 · 비밀번호)은 속음이 아니다 · 실제 제공은 그대로 속음", () => {
+  const denial = dialogue([
+    ["scammer", "확인됐습니다, 고객님. 다음으로 해담은행 계좌 조회를 위해 계좌 비밀번호 여섯 자리를 불러 주십시오."],
+    ["user", "그 계좌는 제가 만든 게 아니라 비밀번호를 몰라요. 국민은행 걸 말씀하시는 거예요?"],
+  ]);
+  assert.equal(analyzeConversation(denial, 0, G2LD_TACTICS()).wasDeceived, false);
+  const given = dialogue([
+    ["scammer", "계좌 비밀번호 여섯 자리를 불러 주십시오."],
+    ["user", "비밀번호 몰라서 생일로 했어요, 600101이에요"],
+  ]);
+  assert.equal(analyzeConversation(given, 0, G2LD_TACTICS()).wasDeceived, true, "숫자를 불러 줬으면 속음(V3)");
+});
+
+test("[§129 L1 · L2 · L3] 생년 · 인증번호 순간 라벨 = '신원정보 직접 요구'(부인 대응 라벨 0 · 빈 라벨 0)", () => {
+  const birth = dialogue([
+    ["scammer", "고객님, 만든 적이 없으시다니 오히려 명의가 도용됐을 가능성이 큽니다. 그래서 더 빨리 확인해야 합니다. 먼저 본인 확인부터 하겠습니다."],
+    ["user", "네, 확인해 주세요. 홍길동이고 1960년생이에요."],
+  ]);
+  assert.equal(analyzeConversation(birth, 0, G2LD_TACTICS()).deceivedMoments[0]?.tactic, "신원정보 직접 요구");
+  const otp = dialogue([
+    ["scammer", "고객님, 방금 휴대폰으로 본인 확인용 인증번호 문자를 보내 드렸습니다. 화면에 도착한 여섯 자리 숫자를 지금 바로 불러 주십시오."],
+    ["user", "277758이요"],
+  ]);
+  const result = analyzeConversation(otp, 0, G2LD_TACTICS(), ["277758"]);
+  assert.equal(result.deceivedMoments[0]?.tactic, "신원정보 직접 요구");
+  assert.ok(result.tacticsUsed.includes("신원정보 직접 요구"), "AC-083 (a) — 속은 순간 라벨은 수법 목록 안");
+});
+
+test("[§129 L2] 사진 턴은 내용 범주 라벨 판정에서 뺀다(사진 순간 라벨은 §131 소관 — 그쪽 수정과 겹치지 않게 소스로만 고정)", () => {
+  const src = read("report/analyzeConversation.ts");
+  const body = src.slice(src.indexOf("function answerContentCategory("), src.indexOf("function resolveAnswerCategoryTactic("));
+  assert.match(body, /if \(reply\.photo === true\) return undefined;/);
 });
