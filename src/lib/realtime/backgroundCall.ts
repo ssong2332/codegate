@@ -173,7 +173,8 @@ export function parseTranscriptBackup(raw: string | null, sessionId: string): Ba
 
 export const SCREEN_OFF_COPY = {
   /** 통화 벨 직전 고지(세션 전 화면)의 한 줄. */
-  preCallHint: "통화하는 동안에는 화면을 켜 두고, 휴대폰을 귀에 대지 말고 스피커로 들어 주세요.",
+  // §130(UX D-161 (13) · 메인 결정 2026-10-24) — 스피커 기본값은 꺼짐(D-98)이라 "스피커로 들어 주세요"와 어긋났다. 켜는 것은 선택으로 안내한다.
+  preCallHint: "통화하는 동안에는 화면을 켜 두세요. 필요하면 스피커를 켜 주세요.",
   /** 다시 연결하는 중(자동). */
   reconnecting: "통화를 다시 연결하고 있어요…",
   /**

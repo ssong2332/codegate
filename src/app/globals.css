@@ -118,6 +118,18 @@ html {
   .call-compact-bottom {
     padding-bottom: calc(env(safe-area-inset-bottom) + 16px);
   }
+  /* §130(UX D-161 (12)) — 랜딩 3단계 목록은 작은 화면에서 보이지 않게만 한다(스크린리더는 읽는다 — sr-only와 같은 방식 · 문면 무변경). */
+  .landing-steps {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
   /* UX D-144(§103) — 통화 벨 직전 고지(CallStartNotice)의 장식 전화 아이콘은 작은 화면에서 뺀다(문면 · 글자 크기 무변경). */
   .precall-icon {
     display: none;

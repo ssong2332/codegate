@@ -6,6 +6,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { VOICE_TALK_RECORD_NOTE, VOICE_TALK_RECORD_TITLE } from "../messenger/threadItems.ts";
+import { CHAT_INPUT_MAX_PX, CHAT_INPUT_MIN_PX, chatInputHeight } from "../messenger/chatInputHeight.ts";
+import { SCREEN_OFF_COPY } from "../realtime/backgroundCall.ts";
 
 const read = (file: string) => readFileSync(file, "utf8").replace(/\r\n/g, "\n");
 const play = read("src/app/session/play/page.tsx");
@@ -89,4 +91,40 @@ test("[§130 D19] 카톡형 대화방의 통화 구간 = '보이스톡' 통화 �
   assert.ok(room.includes('if (item.kind === "call" && !isSms) {'));
   assert.ok(room.includes("{VOICE_TALK_RECORD_TITLE}") && room.includes("{CALL_SEGMENT_LINE}"));
   assert.ok(!/보이스톡 \d+:\d{2}/.test(room), "근거 없는 통화 시간을 지어 쓰지 않는다");
+});
+
+test("[§130 D4 표] 메신저 입력칸 높이 — 한 줄 48px에서 시작 · 내용만큼 · 4줄(126px)에서 멈춤", () => {
+  assert.equal(CHAT_INPUT_MIN_PX, 48);
+  assert.equal(CHAT_INPUT_MAX_PX, 126);
+  assert.equal(chatInputHeight(30), 48, "한 줄보다 작게 재도 48px");
+  assert.equal(chatInputHeight(48), 48);
+  assert.equal(chatInputHeight(73.5), 74, "두 줄 = 내용 높이(올림)");
+  assert.equal(chatInputHeight(400), 126, "5줄 이상은 4줄에서 멈춘다");
+  assert.equal(chatInputHeight(Number.NaN), 48);
+});
+
+test("[§130 D4 배선] 한 줄 textarea(§110.1)는 그대로 · 높이 고정 대신 자동 높이 · 버튼은 아래 줄에 맞춘다", () => {
+  const room = read("src/components/MessengerChatRoom.tsx");
+  const tag = room.slice(room.indexOf('id="messenger-chat-input"'), room.indexOf("/>", room.indexOf('id="messenger-chat-input"')));
+  assert.ok(tag.includes("rows={1}"));
+  assert.ok(!tag.includes('"h-[48px]'), "높이 고정이 되살아났다 — 긴 글의 윗줄이 잘린다");
+  assert.equal(tag.split('"min-h-[48px] min-w-0 flex-1').length - 1, 2);
+  assert.ok(room.includes("box.style.height = `${chatInputHeight(box.scrollHeight)}px`;"));
+  assert.ok(room.includes('className="flex items-end gap-2.5"'));
+});
+
+test("[§130 D15] 랜딩 3단계 목록은 높이 700px 이하에서만 화면에서 숨긴다 · 문면 · 스크린리더는 그대로", () => {
+  const page = read("src/app/page.tsx");
+  assert.ok(page.includes('className="landing-steps e2-rise"'));
+  const css = read("src/app/globals.css");
+  const block = css.match(/@media \(max-height: 700px\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.match(block, /\.landing-steps \{[^}]*clip: rect\(0, 0, 0, 0\);/);
+  assert.ok(!/\.landing-steps \{[^}]*display: none/.test(css), "display:none이면 스크린리더도 못 읽는다");
+  assert.ok(!/^\.landing-steps/m.test(css), "700px 밖에서도 숨는다");
+});
+
+test("[§130 D17] 통화 전 안내는 스피커를 선택으로 안내한다(기본값 꺼짐 D-98과 맞춤)", () => {
+  assert.equal(SCREEN_OFF_COPY.preCallHint, "통화하는 동안에는 화면을 켜 두세요. 필요하면 스피커를 켜 주세요.");
+  assert.ok(!SCREEN_OFF_COPY.preCallHint.includes("스피커로 들어"));
+  assert.ok(play.includes('const [audioRoute, setAudioRoute] = useState<AudioRoute>("call");'), "스피커 기본값 = 꺼짐(D-98)");
 });

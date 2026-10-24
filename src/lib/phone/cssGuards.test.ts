@@ -133,7 +133,8 @@ test("[실기 2026-10-21] 메신저 입력칸은 min-w-0 — 기기 글꼴로 �
 
 test("[실기 2026-10-21 역검증] 카톡형 입력칸에서 min-w-0을 지운 사본은 실패한다", () => {
   const src = readFileSync("src/components/MessengerChatRoom.tsx", "utf8");
-  const poisoned = src.replace("min-w-0 flex-1 rounded-full", "flex-1 rounded-full");
+  // §130(UX D-161 (14)) — 여러 줄로 늘어나는 카톡형 칸은 `rounded-full` 대신 `rounded-[24px]`(한 줄 모양은 같다).
+  const poisoned = src.replace("min-w-0 flex-1 rounded-[24px]", "flex-1 rounded-[24px]");
   assert.notEqual(poisoned, src, "오염 지점을 찾지 못했다");
   assert.equal(chatInputMinWidthViolations(poisoned).length, 1);
 });
