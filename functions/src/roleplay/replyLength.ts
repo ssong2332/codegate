@@ -152,6 +152,15 @@ export function countSentences(text: string): number {
 export function limitReplySentences(
   text: string,
   maxSentences: number = MAX_SCAMMER_REPLY_SENTENCES,
+  keep?: RegExp,
+): { text: string; originalSentences: number; keptSentences: number; trimmed: boolean } {
+  // §132 — `keep`이 있으면 그 문장을 잘라 내지 않는다(`limitReplySentencesKeeping` 표). 없으면 종전과 바이트 동일.
+  return keep ? limitReplySentencesKeeping(text, keep, maxSentences) : cutReplySentences(text, maxSentences);
+}
+
+function cutReplySentences(
+  text: string,
+  maxSentences: number,
 ): { text: string; originalSentences: number; keptSentences: number; trimmed: boolean } {
   if (!Number.isInteger(maxSentences) || maxSentences < 1) {
     throw new RangeError(`maxSentences는 1 이상의 정수여야 한다: ${maxSentences}`);
@@ -168,4 +177,43 @@ export function limitReplySentences(
     keptSentences: maxSentences,
     trimmed: true,
   };
+}
+
+/** §132 — 문자 도착 턴(`sms_announce`)에 상한이 잘라 내면 안 되는 문자 언급 문장. */
+export const SMS_MENTION_SENTENCE = /문자|인증\s*번호|메시지/;
+
+/**
+ * ⭐ §132(DECISIONS #248 · 메인 세션 라이브 확인 2026-10-24 — 기관 사칭 고급 · 텍스트 폴백) — 문자 백스톱이 도착한 턴의 대사가
+ * 5문장이라 상한이 3문장으로 자르면서, 4번째 이후에 있던 "방금 인증번호 문자를 보내 드렸습니다"가 빠졌다(운영 로그: 같은 턴
+ * `문자 판정 delivered` → `문장 상한 적용 5→3`). 그 문장은 다음 턴에야 나와 문자가 말보다 한 턴 먼저 온 것처럼 보였다.
+ *
+ * | 경우 | 결과 |
+ * |---|---|
+ * | 상한 이하 | 입력 그대로(`limitReplySentences`와 같음) |
+ * | 남는 앞 문장에 `keep` 문장이 이미 있다 | `limitReplySentences`와 같음 |
+ * | 잘리는 쪽에만 `keep` 문장이 있다 | 앞 `maxSentences - 1`문장 + 그 첫 `keep` 문장(문장 수는 그대로 상한) |
+ * | 어디에도 없다 | `limitReplySentences`와 같음(지어내지 않는다) |
+ */
+export function limitReplySentencesKeeping(
+  text: string,
+  keep: RegExp,
+  maxSentences: number = MAX_SCAMMER_REPLY_SENTENCES,
+): { text: string; originalSentences: number; keptSentences: number; trimmed: boolean } {
+  const base = cutReplySentences(text, maxSentences);
+  if (!base.trimmed) return base;
+  const ends = sentenceEnds(text);
+  const sentence = (i: number): string => text.slice(i === 0 ? 0 : ends[i - 1].end, ends[i].end).trim();
+  for (let i = 0; i < maxSentences; i += 1) if (keep.test(sentence(i))) return base;
+  let found = -1;
+  for (let i = maxSentences; i < ends.length; i += 1) {
+    if (keep.test(sentence(i))) {
+      found = i;
+      break;
+    }
+  }
+  if (found < 0) return base;
+  const raw = sentence(found);
+  const tail = ends[found].comma ? `${raw.slice(0, -1)}.` : raw;
+  const head = maxSentences > 1 ? cutReplySentences(text, maxSentences - 1).text : "";
+  return { ...base, text: head ? `${head} ${tail}` : tail };
 }
