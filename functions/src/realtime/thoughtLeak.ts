@@ -11,6 +11,7 @@
 // | 2  | 한글이 없는 구간에 라틴 단어가 `THOUGHT_SPAN_MIN_WORDS`(8)개 이상            | 그 구간을 지운다(앞 문장부호는 남긴다) |
 // | 2-b| §129 D3 — 도구 호출 문자열(밑줄 식별자 + 괄호 인자 · 백틱 허용, 예: `send_prepared_sms(purpose="transfer")`) | 지운다(전사만 — 이미 나간 소리는 되돌릴 수 없다) |
 // | 2-c| §132.8 — 한국어 대사에 없는 문자 체계(데바나가리 · 키릴 · 태국 · 아랍 · 가나 등 — `FOREIGN_SCRIPT`)    | 그 글자만 지운다(전사 · 자막만 — 소리는 되돌릴 수 없다) |
+// | 2-d| §132.12 — 동그라미 자리표시("○○님" · "○○ 씨" · "○○경찰서")                                         | "고객님" · 자리표시만 지운다            |
 // | 3  | 그 밖(OTP · ATM · SMS 같은 짧은 영어 · 숫자)                                | 원문 그대로(바이트 동일)               |
 // | 4  | 지운 뒤 남은 글이 없다                                                      | 빈 문자열                              |
 //
@@ -45,6 +46,14 @@ const BRACKET_TOOL_TEXT = /\[[^\[\]\n]{0,24}(?:도구\s*(?:호출|실행|사용)
 const FOREIGN_SCRIPT =
   /[\u0370-\u03FF\u0400-\u04FF\u0530-\u058F\u0590-\u05FF\u0600-\u06FF\u0900-\u0DFF\u0E00-\u0EFF\u1000-\u109F\u10A0-\u10FF\u1200-\u137F\u1780-\u17FF\u3040-\u30FF]+/g;
 
+/**
+ * 행 2-d(§132.12 · 메인 라이브 2026-10-24 자녀 납치 초급 "거기 혹시 ○○ 씨 본인 맞으세요? 저는 시내 ○○경찰서 …") — 이름 · 기관 자리를 동그라미로 채운
+ * 자리표시. 폴백 대사는 `replyMarkup.ts` 4-d · 4-e가 정리한다 — 여기는 실시간 전사 · 자막. "○○님" = "고객님" · "씨" · 기관 이름 · 직함 앞 = 자리표시만 지운다("○○학원" 같은 가린 표기는 그대로 — 4-e와 같은 목록).
+ */
+const CIRCLE_HONORIFIC = /[○◯●]{2,3}\s*님/g;
+const CIRCLE_PLACEHOLDER =
+  /[○◯●]{2,3}\s*씨\s*|[○◯●]{2,3}\s*(?=(?:지방)?(?:경찰서|경찰청|검찰청|지검|지청|법원|은행|카드|병원|구청|시청|군청|센터|본부|금융감독원|금감원))|[○◯●]{2,3}\s*(?=(?:수사관|검사|형사|팀장|과장|대리|주임|경위|경사|경장|순경|변호사|실장|부장))/g;
+
 function latinWordCount(text: string): number {
   return (text.match(LATIN_WORD) ?? []).length;
 }
@@ -74,6 +83,14 @@ export function stripLeakedThought(text: string): string {
     return " ";
   });
   rest = rest.replace(FOREIGN_SCRIPT, () => {
+    stripped = true;
+    return "";
+  });
+  rest = rest.replace(CIRCLE_HONORIFIC, () => {
+    stripped = true;
+    return "고객님";
+  });
+  rest = rest.replace(CIRCLE_PLACEHOLDER, () => {
     stripped = true;
     return "";
   });

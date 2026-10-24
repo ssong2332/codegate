@@ -40,6 +40,14 @@ const BRACKET_TOOL_TEXT = /\[[^\[\]\n]{0,24}(?:도구\s*(?:호출|실행|사용)
 const FOREIGN_SCRIPT =
   /[\u0370-\u03FF\u0400-\u04FF\u0530-\u058F\u0590-\u05FF\u0600-\u06FF\u0900-\u0DFF\u0E00-\u0EFF\u1000-\u109F\u10A0-\u10FF\u1200-\u137F\u1780-\u17FF\u3040-\u30FF]+/g;
 
+/**
+ * 행 2-d(§132.12 · 메인 라이브 2026-10-24 자녀 납치 초급 "거기 혹시 ○○ 씨 본인 맞으세요? 저는 시내 ○○경찰서 …") — 이름 · 기관 자리를 동그라미로 채운
+ * 자리표시. 폴백 대사는 `replyMarkup.ts` 4-d · 4-e가 정리한다 — 여기는 실시간 전사 · 자막. "○○님" = "고객님" · "씨" · 기관 이름 · 직함 앞 = 자리표시만 지운다("○○학원" 같은 가린 표기는 그대로 — 4-e와 같은 목록).
+ */
+const CIRCLE_HONORIFIC = /[○◯●]{2,3}\s*님/g;
+const CIRCLE_PLACEHOLDER =
+  /[○◯●]{2,3}\s*씨\s*|[○◯●]{2,3}\s*(?=(?:지방)?(?:경찰서|경찰청|검찰청|지검|지청|법원|은행|카드|병원|구청|시청|군청|센터|본부|금융감독원|금감원))|[○◯●]{2,3}\s*(?=(?:수사관|검사|형사|팀장|과장|대리|주임|경위|경사|경장|순경|변호사|실장|부장))/g;
+
 function latinWordCount(text: string): number {
   return (text.match(LATIN_WORD) ?? []).length;
 }
@@ -69,6 +77,14 @@ export function stripLeakedThought(text: string): string {
     return " ";
   });
   rest = rest.replace(FOREIGN_SCRIPT, () => {
+    stripped = true;
+    return "";
+  });
+  rest = rest.replace(CIRCLE_HONORIFIC, () => {
+    stripped = true;
+    return "고객님";
+  });
+  rest = rest.replace(CIRCLE_PLACEHOLDER, () => {
     stripped = true;
     return "";
   });

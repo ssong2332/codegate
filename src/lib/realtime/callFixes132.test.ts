@@ -33,3 +33,11 @@ test("[§132.9 D12] 하한 전 '보냈다' 주장 — 서버 정정 1줄을 주�
   assert.match(page, /result\.status === "waiting" && result\.claimNotYetInstruction && !smsClaimCorrectedRef\.current/);
   assert.ok(page.includes("if (!smsClaimPendingRef.current) smsClaimCorrectedRef.current = false;"));
 });
+
+test("[§132.12] Live 자막 — 동그라미 자리표시('○○ 씨' · '○○경찰서')만 지우고 가린 학원 표기는 그대로", () => {
+  assert.equal(
+    stripLeakedThought("거기 혹시 ○○ 씨 본인 맞으세요? 저는 시내 ○○경찰서 수사과 소속입니다."),
+    "거기 혹시 본인 맞으세요? 저는 시내 경찰서 수사과 소속입니다.",
+  );
+  assert.equal(stripLeakedThought("○○학원 앞이에요."), "○○학원 앞이에요.");
+});
