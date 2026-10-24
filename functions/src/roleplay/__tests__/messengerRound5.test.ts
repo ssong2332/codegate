@@ -19,6 +19,7 @@ import {
   CALL_RETURN_AFTER_SCAMMER_HANGUP_TRIGGER_TURN,
   stripSelfDroppedCallSentences,
 } from "../callReturnLine";
+import { MESSENGER_OPENING_TURN_INSTRUCTION, OPENING_TURN_INSTRUCTION, stripPhoneGreeting } from "../openingLine";
 
 const SRC = path.resolve(__dirname, "../../../src");
 const readSrc = (rel: string) => readFileSync(path.join(SRC, rel), "utf8").replace(/\r\n/g, "\n");
@@ -111,4 +112,18 @@ test("[§131(2) 판정표 K] 직전 사기범 메시지의 통화 불가 핑계 
     /session\.channel === "messenger" &&\n\s*turnChoice === "none" &&\n\s*saidCallUnavailableRecently\(storedHistory\.filter\(\(m\) => m\.role === "scammer"\)\.map\(\(m\) => m\.textMasked\)\)\n\s*\? CALL_AFTER_EXCUSE_INSTRUCTION/,
   );
   assert.match(index, /repeatBreakInstruction\(repeatBreakKind\), callAfterExcuseInstruction\]/);
+});
+
+test("[§131(4) 판정표 O] 메신저 첫 메시지 — 전용 지시(전화 인사말 금지) · 맨 앞 '여보세요' 삭제 · 통화 시나리오 지시는 종전 그대로", () => {
+  assert.match(MESSENGER_OPENING_TURN_INSTRUCTION, /메시지 대화의 첫 메시지다/);
+  assert.ok(MESSENGER_OPENING_TURN_INSTRUCTION.includes("전화 인사말(여보세요 등)로 시작하지 않는다"));
+  assert.ok(OPENING_TURN_INSTRUCTION.startsWith("[오프닝 지침] 지금이 이 통화/대화의 첫 마디다."), "통화 시나리오 지시 종전 그대로");
+  assert.equal(stripPhoneGreeting("여보세요? 엄마, 나야. 나 지금 친구 폰으로 연락하는 거야."), "엄마, 나야. 나 지금 친구 폰으로 연락하는 거야.");
+  assert.equal(stripPhoneGreeting("여보세요, 엄마 나야"), "엄마 나야");
+  assert.equal(stripPhoneGreeting("엄마 나야. 여보세요 하고 전화하려다 톡해"), "엄마 나야. 여보세요 하고 전화하려다 톡해", "맨 앞만");
+  assert.equal(stripPhoneGreeting("여보세요?"), "여보세요?", "지우면 빈 메시지면 원문");
+  const src = readSrc("roleplay/openingLine.ts");
+  assert.ok(src.includes('const isMessengerOpening = PUBLIC_SCENARIOS[scenarioId]?.channel === "messenger";'));
+  assert.ok(src.includes("turnInstruction: isMessengerOpening ? MESSENGER_OPENING_TURN_INSTRUCTION : OPENING_TURN_INSTRUCTION,"));
+  assert.ok(src.includes("const lengthLimited = limitReplySentences(isMessengerOpening ? stripPhoneGreeting(realNameFreeText) : realNameFreeText);"));
 });

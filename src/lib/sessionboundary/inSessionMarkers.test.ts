@@ -437,6 +437,10 @@ function ariaLabelsOf(file: string, code: string): AriaLabel[] {
     if (ts.isJsxExpression(init) && init.expression) {
       const e = init.expression;
       if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) return [{ kind: "string" as const, text: e.text }];
+      // §131(5) — 조건식 이름(메신저발 통화 "통화 종료" · 통화 시나리오 "통화 종료 — 훈련 종료")은 두 갈래 문자열을 각각 이름으로 본다.
+      if (ts.isConditionalExpression(e)) {
+        return [e.whenTrue, e.whenFalse].flatMap((branch) => (ts.isStringLiteral(branch) ? [{ kind: "string" as const, text: branch.text }] : []));
+      }
       if (ts.isTemplateExpression(e)) {
         const tail = e.templateSpans.at(-1)?.literal.text ?? "";
         return [{ kind: "template" as const, text: e.getText(sf), head: e.head.text, tail }];

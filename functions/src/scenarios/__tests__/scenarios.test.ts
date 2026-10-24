@@ -12,7 +12,7 @@ import { buildSystemPrompt } from "../../roleplay/promptAssembly";
 import type { DifficultyLevel } from "../../shared/difficulty";
 // T113 — `turnInstruction`으로 조립에 들어오는 문자열의 **원본 4곳**. 이 값들은 조립 산출물의
 // 일부인데도 종전 축(난이도 × 문자)이 순회하지 않아 요구몰림 게이트의 스캔 대상 밖이었다.
-import { OPENING_TURN_INSTRUCTION } from "../../roleplay/openingLine";
+import { MESSENGER_OPENING_TURN_INSTRUCTION, OPENING_TURN_INSTRUCTION } from "../../roleplay/openingLine";
 import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL } from "../mockScreens";
 import { FLOW_VARIANTS } from "../flowVariants";
 import { personaCardKind, PERSONA_CARD_SCENARIOS, PERSONA_REGION_POOL } from "../personaCardCatalog";
@@ -1298,6 +1298,8 @@ const ASSEMBLY_LEVEL_VARIANTS: ReadonlyArray<{
 function turnInstructionSources(): Array<{ scenarioId?: string; label: string; value: string }> {
   const out: Array<{ scenarioId?: string; label: string; value: string }> = [
     { label: "오프닝", value: OPENING_TURN_INSTRUCTION },
+    // §131(4) — 메신저 첫 메시지 전용 오프닝 지시(roleplay/openingLine.ts 판정표 O).
+    { label: "오프닝(메신저)", value: MESSENGER_OPENING_TURN_INSTRUCTION },
     { label: "모의설치응낙", value: MOCK_INSTALL_CONSENT_INSTRUCTION },
     // A-1 ⑧ — 에스컬레이션 뒤 폴백 턴의 응낙 변형 · 맥락 1줄(roleplay/index.ts ②-h).
     { label: "모의설치응낙(통화중)", value: MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL },

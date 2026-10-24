@@ -8,6 +8,7 @@ import { logger } from "firebase-functions";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
+import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
 import { isL3Procedural } from "./l3Depth";
 import { extractEscalationSignal } from "./escalationSignal";
@@ -40,6 +41,26 @@ import { applyFamilyAddressText, resolveFamilyAddressPrompt, type FamilyAddressT
 // 모듈 지역 상수로 두면 게이트가 이 자리를 볼 수 없다 — 그것이 T113이 없앤 사각의 형태다.
 export const OPENING_TURN_INSTRUCTION =
   "[오프닝 지침] 지금이 이 통화/대화의 첫 마디다. 다짜고짜 요구나 압박부터 하지 말고, 먼저 신분(사칭 기관·관계)과 연락한 이유(어떤 사건·문제 때문인지)를 1~2문장으로 밝혀 상황을 설명한 뒤에 이어간다.";
+
+/**
+ * §131(4)(메인 세션 라이브 확인 2026-10-24 — 자녀 사칭 카톡 고급) — 카톡 첫 메시지가 *"여보세요? 엄마, 나야. …"* 였다. 오프닝 지시가 통화 · 메신저 공통
+ * ("통화/대화의 첫 마디")이고 트리거 줄도 "통화/대화가 막 연결됐다"라 전화 인사말이 나왔다(추정 — 확인: 같은 프롬프트로 메신저 오프닝 재생성).
+ * 판정표 O(시나리오 공개 메타 `channel`):
+ * | # | If | Then |
+ * |---|---|---|
+ * | O1 | `channel === "messenger"` | `MESSENGER_OPENING_TURN_INSTRUCTION` + 맨 앞 전화 인사말 문장(`stripPhoneGreeting`) 삭제 |
+ * | O2 | 그 밖(통화 · 부재) | 종전 `OPENING_TURN_INSTRUCTION` · 무변경(바이트 동일) |
+ * export — 턴 지시 스캔 게이트 대상(T113).
+ */
+export const MESSENGER_OPENING_TURN_INSTRUCTION =
+  "[오프닝 지침] 지금이 이 메시지 대화의 첫 메시지다. 전화가 아니라 글로 보내는 메시지이므로 전화 인사말(여보세요 등)로 시작하지 않는다. 다짜고짜 요구나 압박부터 하지 말고, 먼저 신분(사칭 기관·관계)과 연락한 이유(어떤 사건·문제 때문인지)를 1~2문장으로 밝혀 상황을 설명한 뒤에 이어간다.";
+
+/** O1 — 첫 문장 앞머리의 전화 인사말("여보세요?" · "여보세요," …)을 지운다. 남는 글이 없으면 원문 그대로(빈 첫 메시지 0). */
+const PHONE_GREETING_PREFIX = /^\s*여보세요\s*[?？!.,~…]*\s*/;
+export function stripPhoneGreeting(text: string): string {
+  const stripped = text.replace(PHONE_GREETING_PREFIX, "");
+  return stripped.trim().length > 0 ? stripped : text;
+}
 
 /**
  * `generateOpeningLine`의 세션 문맥(세션 문서 write 전이라 세션에서 읽을 수 없는 값들 — 호출부가 방금 정한 값을 넘긴다).
@@ -130,6 +151,8 @@ export async function generateOpeningLine(
     ...(voiceSelectionSource ? { voiceSelectionSource } : {}),
   };
   const scenarioPrompt = resolveSessionScenarioPrompt(scenarioId, flowVariantId);
+  // §131(4) 판정표 O — 메신저로 시작하는 시나리오의 첫 메시지(통화 · 부재 = 종전).
+  const isMessengerOpening = PUBLIC_SCENARIOS[scenarioId]?.channel === "messenger";
   if (!scenarioPrompt) {
     throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
   }
@@ -158,7 +181,7 @@ export async function generateOpeningLine(
       identityCheckAllowed: asksIdentityCheck(scenarioId),
       // T194-a(§84.4.3) — 세션 단위 해석(표 값이 있으면 그대로 · parcel 고급만 변형 leg 성별).
       speakerGender: resolveSessionSpeakerGender(sessionView),
-      turnInstruction: OPENING_TURN_INSTRUCTION,
+      turnInstruction: isMessengerOpening ? MESSENGER_OPENING_TURN_INSTRUCTION : OPENING_TURN_INSTRUCTION,
       ...(fictionalBankName ? { fictionalBankName } : {}),
       sessionAccountNumber: resolveSessionAccountNumber(scenarioId),
       // T194-b(§84.3.4 · G568 호출부 3곳 중 "오프닝 대사") — 부재 = 블록 0(바이트 동일).
@@ -192,7 +215,8 @@ export async function generateOpeningLine(
   const { text: realNameReplacedText, replacedCount } = replaceRealFinancialNames(markupFreeText);
   // §81 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다.
   const realNameFreeText = fictionalBankName ? applyFictionalBank(realNameReplacedText, fictionalBankName) : realNameReplacedText;
-  const lengthLimited = limitReplySentences(realNameFreeText);
+  // §131(4) O1 — 메신저 첫 메시지의 맨 앞 전화 인사말은 문장 상한 앞에서 지운다(지운 뒤 문장 수로 자른다).
+  const lengthLimited = limitReplySentences(isMessengerOpening ? stripPhoneGreeting(realNameFreeText) : realNameFreeText);
   // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).
   if (replacedCount > 0) {
     logger.info("사기범 대사 실존 금융회사명 치환", { path: "openingLine", scenarioId, replacedCount });
