@@ -74,7 +74,8 @@ test("[백스톱 발동 · T191] 문자 백스톱 호출은 trigger:\"backstop\"
   assert.ok(start > -1, "문자 백스톱 호출을 찾지 못했다");
   const call = pageCode.slice(start, pageCode.indexOf("});", start));
   assert.match(call, /trigger: "backstop",/);
-  assert.match(call, /userTurns: counters\.userTurns,/);
+  // §126 — 주장 질의면 말하는 도중 센 발화 수(응답 중 발화 포함)와 flush 수 중 큰 쪽.
+  assert.match(call, /userTurns: smsClaimPendingRef\.current \? Math\.max\(counters\.userTurns, smsClaimUserTurnsRef\.current\) : counters\.userTurns,/);
   assert.match(call, /scammerTranscriptTurns: counters\.scammerTranscriptTurns,/);
   assert.equal(/smsId|purpose/.test(call), false, "화면이 문자 id · 목적을 고르면 안 된다(설계 금지 X1 · X4)");
 });

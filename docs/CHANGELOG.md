@@ -4,6 +4,12 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-24 추가분, 브랜치 `claude/audio-sms-round2-134d10`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting → Functions**.
+
+### Fixed
+- **통화 중 문자가 사기범 말과 함께 오게(Architecture §126 · DECISIONS #242)**: 모델 도구 호출 · "문자 보냈다" 주장의 문자 간격 2 → 1(자동 백스톱 · 폴백은 2 그대로), 사기범이 말하는 도중 주장을 잡아 바로 묻는다, 주장 판정이 "문자로 발송해 드린 인증번호"를 놓치던 것 수정. ⚠️ AC-099 (c) 예외 — 승인 대상.
+- **'통화' 스트림 기본 음량**: `after-mic` 경로의 통화 모드 앱 게인 −6dB(`?voicetrim=0`로 끔) · 진단 `out.freshMs` · `out.trimDb`.
+
 > ⚠️ **이 블록(2026-10-22 추가분, 브랜치 `claude/messenger-haiku-ef9163`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Functions만**(화면 변경 0). 운영 시크릿 `CLAUDE_API_KEY`는 이미 등록돼 있다.
 
 ### Changed

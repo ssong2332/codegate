@@ -562,6 +562,10 @@ export default function SessionCallPage() {
   const smsClaimPendingRef = useRef(false);
   // §108 — 주장이 생긴 사기범 턴에 바로 백스톱을 묻게 하는 깨우기 값(값 자체는 쓰지 않는다).
   const [smsClaimTick, setSmsClaimTick] = useState(0);
+  // ⭐ §126 — 사기범이 말하는 도중 주장이 보였을 때의 사용자 발화 수(응답 중인 발화 포함 · `claimedUserTurns`). 질의가 이 값과 flush 수 중 큰 쪽을 싣는다.
+  const smsClaimUserTurnsRef = useRef(0);
+  // §126 — 이번 사기범 턴의 주장을 말하는 도중 이미 올렸다(턴 끝 전사에서 같은 주장을 다시 세지 않는다 — 다음 문자를 주장 없이 앞당기지 않게).
+  const smsClaimRaisedMidTurnRef = useRef(false);
   // §59.10 커밋 D(G390) — 확인 오퍼(offer_verification_desk) 도구 경로 실패 신호. 세션당 오퍼가
   // 하나뿐이라(카탈로그 보유 && advanced 세션에만 도구가 선언된다, §61) id 없이 boolean 하나로
   // 충분하다.
@@ -662,7 +666,10 @@ export default function SessionCallPage() {
       answeredAtMsRef.current !== null ? Date.now() - answeredAtMsRef.current : undefined;
     transcriptRef.current.push({ role, text, atMs });
     // §104 — 사기범이 문자를 보냈다고 말한 턴(실제 도착과 무관). 백스톱이 게이트가 열린 순간 보내게 한다.
-    if (role === "scammer" && scammerClaimsSmsSent(text)) {
+    // §126 — 말하는 도중 이미 올린 주장이면 턴 끝에서 다시 올리지 않는다(그 사이 도착했으면 주장이 남아 다음 문자를 당기게 된다).
+    const claimRaisedMidTurn = role === "scammer" && smsClaimRaisedMidTurnRef.current;
+    if (role === "scammer") smsClaimRaisedMidTurnRef.current = false;
+    if (role === "scammer" && !claimRaisedMidTurn && scammerClaimsSmsSent(text)) {
       smsClaimPendingRef.current = true;
       // §108 — 다음 사용자 발화를 기다리지 않고 지금 묻는다(아래 백스톱 effect의 의존성).
       setSmsClaimTick((n) => n + 1);
@@ -1066,10 +1073,12 @@ export default function SessionCallPage() {
     // T192 C5(§79.9 E2) — 래치 뒤 문자 백스톱 동결.
     if (isEndLatched(callEndingRef.current)) return;
     const state = smsBackstopRef.current;
+    // §126 — 말하는 도중의 주장이면 응답 중인 사용자 발화까지 센다(모델 도구 경로 `claimedUserTurns`와 같은 값).
+    const claimUserTurns = smsClaimPendingRef.current ? Math.max(userTurnCount, smsClaimUserTurnsRef.current) : userTurnCount;
     if (
       !shouldRequestSmsBackstop({
         enabled: realtime.credentials?.inCallSmsBackstop === true,
-        userTurns: userTurnCount,
+        userTurns: claimUserTurns,
         lastRequestedUserTurns: state.lastRequestedUserTurns,
         nonePending: state.nonePending,
         inFlight: state.inFlight,
@@ -1080,14 +1089,14 @@ export default function SessionCallPage() {
       return;
     }
     state.lastRequestedUserTurns = userTurnCount;
-    if (smsClaimPendingRef.current) state.lastClaimRequestedUserTurns = userTurnCount;
+    if (smsClaimPendingRef.current) state.lastClaimRequestedUserTurns = claimUserTurns;
     state.inFlight = true;
     const counters = turnCountersRef.current;
     (async () => {
       try {
         const result = await deliverInCallSms({
           sessionId,
-          userTurns: counters.userTurns,
+          userTurns: smsClaimPendingRef.current ? Math.max(counters.userTurns, smsClaimUserTurnsRef.current) : counters.userTurns,
           scammerTranscriptTurns: counters.scammerTranscriptTurns,
           trigger: "backstop",
           ...(smsClaimPendingRef.current ? { smsClaimed: true } : {}),
@@ -1119,7 +1128,10 @@ export default function SessionCallPage() {
       } finally {
         state.inFlight = false;
         // §108 — 질의 중에 새 주장이 생겼으면(이 발화 수로 주장을 아직 못 실었다) 한 번 더 깨운다.
-        if (smsClaimPendingRef.current && state.lastClaimRequestedUserTurns < turnCountersRef.current.userTurns) {
+        if (
+          smsClaimPendingRef.current &&
+          state.lastClaimRequestedUserTurns < Math.max(turnCountersRef.current.userTurns, smsClaimUserTurnsRef.current)
+        ) {
           setSmsClaimTick((n) => n + 1);
         }
       }
@@ -1135,6 +1147,15 @@ export default function SessionCallPage() {
     enqueueTurnInstruction,
     offerConfirmResult,
   ]);
+
+  // ⭐ §126 — 사기범이 말하는 도중 "문자를 보냈다"가 보였다(`GeminiVoiceSession` 출력 전사 · 턴당 1회). 턴 끝 flush를 기다리지 않고
+  // 위 백스톱 effect를 깨워 주장 질의를 보낸다 — 게이트가 열려 있으면 문자가 그 말과 함께 도착한다.
+  const handleScammerSmsClaim = useCallback((claimedUserTurns: number) => {
+    smsClaimRaisedMidTurnRef.current = true;
+    smsClaimPendingRef.current = true;
+    smsClaimUserTurnsRef.current = Math.max(smsClaimUserTurnsRef.current, claimedUserTurns);
+    setSmsClaimTick((n) => n + 1);
+  }, []);
 
   // §47.3 C2/§47.6 P-5 — 계열 판별은 이 한 곳에서만 한다(클라·서버 복제 금지, G84). scenarioId가
   // 아직 없으면(로드 전) 계열 B로 취급된다 — 참가자 조건이 걸리는 쪽이 더 안전한 기본값이다.
@@ -2685,6 +2706,7 @@ export default function SessionCallPage() {
               caller: callCaller,
             })}
             onConnectionLost={handleConnectionLost}
+            onScammerSmsClaim={handleScammerSmsClaim}
           />
         )
       )}

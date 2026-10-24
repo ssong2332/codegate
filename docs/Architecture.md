@@ -23942,3 +23942,78 @@ D 판단값 근거(관측 5세션 — 운영 f7047187 + §115.5 · §115.6 실 �
 
 ### 127.5 검증
 `npm --prefix functions test` **1806 pass / 0 fail**(main `112389e` 1799 + `routeEndingHangup.test.ts` 3 + `liveCheckFixes127.test.ts` 4) · `npm test` **1078 / 0** · functions lint 오류 0. 실 키 0 — 실기 재확인 권고(기관 사칭 고급 현금 전달형 · 실시간과 폴백 각 1회 · 은행명을 말하고 끝까지 따르기). 배포는 Functions만(화면 변경 0).
+## 126. (Bug fix — 2026-10-24 · 브랜치 `claude/audio-sms-round2-134d10` = main `112389e` + 변경 · 사용자 실기 신고 원문 *"기본 음량이 커진 거 같고, 여전히 볼륨 조절이 안 되고, 문자가 바로 오지는 않아"* · 갤럭시 S25 크롬 · 기관 사칭 고급 3회) **배포 뒤 남은 통화 문제 3건 — 문자 말과 동시 도착 · '통화' 스트림 기준 레벨 · 볼륨 키 진단** — implementer 기록 (DECISIONS #242)
+
+### 126.1 (3) 문자가 바로 오지 않음 — 원인 확정
+운영 로그(`firebase functions:log --project voicefishing-ff47f` · 2026-10-24 KST 11:10~11:20 · `deliverInCallSms` · `requestScammerHangup`):
+
+| 세션 | 문자 | 발화 | 경로 · 상태 |
+|---|---|---|---|
+| d1caa73f | 인증번호 | 3 | model_tool · delivered |
+| e2a5fd9b | 인증번호 | 4 | model_tool · delivered |
+| e2a5fd9b | (link) | 5 | model_tool · **not_allowed**(선언 없는 목적 · `purposeCorrectedFrom` 없음) |
+| e2a5fd9b | 계좌 | **6** | **backstop** · delivered(사기범 전사 7 — 주장 백스톱) |
+| 243a51df | 인증번호 | 4 | model_tool · delivered |
+
+| 지연 후보(지시) | 판정 | 근거 |
+|---|---|---|
+| 모델 도구 호출 지연 | 아님 — 인증번호 3건 모두 그 발화에 모델 도구로 도착 | 위 표 |
+| **서버 문자 간격 규칙** | **원인** — e2a5fd9b: 인증번호 도착(4) 다음 발화(5)에 모델이 문자를 불렀지만 `MIN_USER_TURNS_BETWEEN_SMS`=2로 남은 필수(계좌)의 게이트가 닫혀 목적 보정(§108 P-2)도 못 하고 거절됐다 | `smsGate.ts` 판정 4행 |
+| **백스톱이 턴 끝에서만 묻는 구조** | **원인** — 주장("문자로 보냈다")은 사기범 턴 끝 flush(`turnComplete`)에서야 잡힌다. 사용자 전사도 같은 flush에서 오르므로, 게이트가 닫혀 `wait`이면 참가자가 한 번 더 말하고 사기범 답이 끝난 뒤(발화 6 · 사기범 전사 7)에야 도착한다 | `GeminiVoiceSession.tsx` `flushTranscript` · `page.tsx` 백스톱 effect |
+| 서버 처리 | 아님 — 콜러블 1회 · 도착은 문서 구독 즉시 | — |
+| 화면 오버레이 표시 조건 | 아님 — 배너는 최신 문서를 바로 그린다(`bannerState.ts` `visibleBannerSmsId`) | — |
+
+### 126.2 (3) 수정 — 명시 요청 간격 1 · 말하는 도중 주장
+| # | If | Then |
+|---|---|---|
+| S-1 | 모델 도구 호출(`model_tool`) | 문자 간격 `MIN_USER_TURNS_BETWEEN_SMS_EXPLICIT`=1(같은 발화 안 두 통만 막는다) — 목적 보정(§108 P-2)도 같은 간격 |
+| S-2 | 주장 백스톱(`smsClaimed`) | 게이트 개방을 간격 1로 계산해 열리면 발송 |
+| S-3 | 주장 없는 백스톱 · 텍스트 폴백 | 종전 간격 2(넛지 · 강제 발송 시점 무변경) |
+| S-4 | 사기범이 **말하는 도중** 출력 전사에 주장이 보임 | 세션이 턴당 1회 `onScammerSmsClaim(claimedUserTurns)` → 화면이 즉시 주장 질의(응답 중 발화 포함 수) · 턴 끝 전사에서는 같은 주장을 다시 세지 않는다(다음 문자를 주장 없이 앞당기지 않게) |
+| S-5 | 하한(`notBeforeUserTurns` · 첫 문자 하한 2) | 그대로 |
+
+e2a5fd9b 재현: 발화 5 `link` → `transfer`로 보정 · 그 자리 발송(종전: 거절 → 발화 6 백스톱). ⚠️ **AC-099 (c)("문자 사이 사용자 발화 ≥2")의 예외**다 — 명시 요청에서 1. 병합 전 사용자 승인 대상.
+
+### 126.3 (1) 기본 음량이 커짐 — '통화' 스트림 기준 레벨
+§122.2.2(`after-mic`)로 출력이 '통화'(VOICE_COMMUNICATION) 스트림이 되면 시스템 음량 곡선이 바뀐다. AOSP 기본값(2026-10-24 열람 — `frameworks/av/services/audiopolicy/config/audio_policy_volumes.xml` · `default_volume_tables.xml` · `AudioSystem.DEFAULT_STREAM_VOLUME`):
+
+| 스트림(스피커) | 기본 단계 | 곡선 위치 | 시스템 감쇠 |
+|---|---|---|---|
+| 통화 | 4 / 1~5 | 75% | 약 −5.9dB(곡선 −24 ~ 0dB) |
+| 미디어 | 5 / 0~15 | 33% | 약 −32.5dB |
+| 미디어(60%로 올린 경우) | 9 / 15 | 60% | 약 −17dB |
+
+⇒ 같은 앱 게인이면 '통화' 스트림이 약 11~27dB 크다(⚠️ 추정 — 삼성 곡선은 실측 아님). 신고 "기본 음량이 커짐"과 방향이 맞다 — 적어도 일부 통화는 `after-mic`로 '통화' 스트림이 됐다는 간접 증거(⚠️ 추정 · 진단 캡처로 확인).
+
+경로별 최종 게인(통화 모드 · 앱 안 · 정규화 목표는 §114 그대로):
+
+| 경로 | 앱 게인 | 추가 감쇠 | 앱 최종 | 시스템(기본 단계) |
+|---|---|---|---|---|
+| `before-mic` · `fallback-primed`(미디어) | 0.6(−4.4dB) | 0dB | −4.4dB | 미디어 곡선 |
+| **`after-mic`('통화')** | 0.6 | **−6.0dB(`VOICE_STREAM_CALL_TRIM` 0.5)** | **−10.5dB** | 통화 곡선(기본 −5.9 · 최대 0) |
+| 스피커 모드(모든 경로) | 1.0 → 컴프레서 → 보정 2.5 → 리미터 | 0dB | 종전 | — |
+
+기준 레벨 선택 이유: 통화 곡선은 기본 단계에서 최대까지 약 +6dB 여유뿐이다. 차이 전체(11~27dB)를 깎으면 볼륨 키를 끝까지 올려도 종전보다 작아질 수 있어, **키 여유만큼(−6dB)만** 깎는다(판단값 · 실기 청취로 확정). 감쇠 노드는 컴프레서와 보정 게인 사이에 있고 통화 모드에서만 1 미만이다(`trimGainFor`). 되돌리기 · A/B = `?voicetrim=0`.
+
+### 126.4 (2) 볼륨 키가 여전히 안 먹음 — 코드 경로 재확인 · 원인 미확정
+Chromium 소스(2026-10-24 열람 · `media/audio/android/audio_manager_android.cc` · `media/audio/audio_output_dispatcher_impl.cc` · `media/audio/audio_manager_base.cc` · `content/renderer/media/renderer_webaudiodevice_impl.cc`):
+
+| 확인 항목 | 결과 |
+|---|---|
+| 통신 모드가 켜지는 조건 | 첫 입력 스트림을 만들 때 `params.effects() != NO_EFFECTS`(에코 제거 등)이면 켠다. 입력 스트림이 이미 있으면 바꾸지 않는다. 데스크톱 전용 `AAudioPerStreamDeviceSelection`이면 켜지 않는다(휴대폰 해당 없음) |
+| 출력 스트림 용도 | 저지연 출력은 **만들 때** `communication_mode_is_on_ ? VOICE_COMMUNICATION : MEDIA`. ⚠️ 선형(고지연) 출력은 언제나 MEDIA |
+| 출력 스트림 재사용 | 브라우저는 같은 파라미터(표본율 · 채널 · 버퍼 크기 · 효과)의 출력 스트림을 **재사용**한다 — 멈춘/닫힌 스트림 1개를 닫기 타이머(5초 · 활동마다 재시작) 동안 남겨 두고 다음 열기에 준다. 마이크 전 '미디어'로 열린 스트림이 남아 있으면 새 컨텍스트도 '미디어'가 될 수 있다(⚠️ 이번 흐름에서 그런 스트림이 남는지는 미확인 — 받기 때 컨텍스트 · 벨 컨텍스트는 그 시점에 열려 있다) |
+| Web Audio 싱크 표본율 | `WebAudioRemoveAudioDestinationResampler`가 켜져 있으면 컨텍스트 표본율(24kHz) 그대로 — 24kHz 컨텍스트끼리만 같은 묶음 |
+
+| 가능 원인 | 가르는 값 | 이번 PR |
+|---|---|---|
+| ① `fallback-primed`(새 컨텍스트가 500ms 안에 running이 아님) | `out.path` · **`out.freshMs`(신규 — ms 또는 `timeout`)** | 진단 추가 |
+| ② `after-mic`인데 재사용된 '미디어' 스트림 | `out.path=after-mic` + 키를 내려도 소리 불변 + '미디어' 슬라이더로는 변함 | 진단으로 판정 뒤 처방(후보: 새 컨텍스트에 다른 `latencyHint`를 줘 묶음을 가르기 — 미구현) |
+| ③ '통화' 스트림이고 키도 먹지만 곡선 폭이 좁아(−24 ~ 0dB) 체감이 작음 | 키를 끝까지 내렸을 때 작아지는가 | 위 기준 레벨로 기본을 낮춤 |
+
+기기 캡처 절차(메인 세션에 전달함 — 2026-10-24): ① `?audiodebug=1`로 기관 사칭 고급 → 첫 음성 뒤 패널(`out.path` · `out.freshMs` · `out.trimDb` · `out.state` · `out.origin` · `route` · `out.gain` · `norm.gainDb`) ② 볼륨 키 아래 끝까지 — 슬라이더 이름 · 소리 변화 ③ 패널을 펼쳐 '미디어' 0 — 소리 변화 ④ `?audiodebug=1&outaftermic=0`으로 반복해 기본 크기 비교.
+
+### 126.5 검증 · 배포
+- 테스트: 신규 `functions/src/inCallSms/__tests__/smsExplicitSpacing.test.ts` · `src/lib/realtime/audioSmsRound2.test.ts` · `smsPurposeCorrection.test.ts` P-3 1줄(발화 5 → 4 — 의도된 동작 변경).
+- 배포 순서: **Hosting → Functions**(화면 · 서버 둘 다 바뀜). 옛 화면 + 새 서버 = 모델 도구 간격만 1로 바뀌고 말하는 도중 주장은 없음(안전). 새 화면 + 옛 서버 = 말하는 도중 주장 질의가 종전 간격 2로 판정(안전 · 효과 일부).
+- 실 키 실측 0회(과금 0).

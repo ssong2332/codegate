@@ -87,7 +87,7 @@ function probeIsStallLine(text) {
 }
 // §104 — 클라 `scammerClaimsSmsSent`(`src/lib/realtime/toolWindow.ts` SMS_SENT_CLAIM)의 미러.
 const PROBE_SMS_SENT_CLAIM =
-  /문자(?:로)?\s*(?:를\s*)?(?:보내\s*드렸|보내드렸|보냈|보내\s*드린|보내드린|보낸|발송(?:해\s*드렸|했|됐|한|된))|(?:보내\s*드린|보내드린|보낸|발송한|발송된)\s*(?:문자|링크|안내|주소)/;
+  /문자(?:로)?\s*(?:를\s*)?(?:보내\s*드렸|보내드렸|보냈|보내\s*드린|보내드린|보낸|발송(?:해\s*드렸|해\s*드린|했|됐|한|된))|(?:보내\s*드린|보내드린|보낸|발송한|발송된|발송해\s*드린)\s*(?:문자|링크|안내|주소|인증\s*번호)/;
 const probeIsWaitTurn = (t) => probeIsStallLine(t) || PROBE_WAIT_REQUEST_LINE.test(t);
 function probeLiveRepeatBreak(prev, cur, participantHasSpoken, lastParticipantText) {
   if (!repeatBreakLib || !participantHasSpoken) return null;
