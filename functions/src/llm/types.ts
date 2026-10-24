@@ -42,6 +42,11 @@ export type LlmCompletionInput = {
    * 훈련 맥락 머리말을 붙인다. 없으면(되감기 판정 등) 지금까지와 완전히 같다. Gemini·Mock은 이 값을 읽지 않는다.
    */
   purpose?: "scammer-reply";
+  /**
+   * §131(7)(선택) — `purpose: "scammer-reply"`일 때 응답이 이 패턴에 맞으면 시나리오 역할을 벗어난 것으로 보고 다음 단계로 넘긴다
+   * (`roleplay/personaGuard.ts` — 지인 · 자녀 사칭 메신저의 기관 직원 자기소개 등). 부재 = 검사 0. Mock은 무시한다(수법 문구라 이탈 0).
+   */
+  personaGuard?: RegExp;
 };
 
 export type LlmCompletionResult = {

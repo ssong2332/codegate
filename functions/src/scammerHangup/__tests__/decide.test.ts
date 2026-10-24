@@ -37,6 +37,8 @@ const PASSING: ScammerHangupInput = {
   relay: undefined,
   // §104.9 — 기준 입력은 실시간 콜러블과 같은 쪽(메신저 단계 경로 아님 · 2행이 메신저를 막는다).
   messengerStageAllowed: false,
+  // §131(14) — 기준 입력은 처음부터 통화인 세션(통화 진입 기준 없음 · 종전 판정).
+  turnsSinceCallEntry: undefined,
 };
 
 /** 표의 정본 사본 — 행 번호 · status · 끊기 여부 · **순서**(§79.19 (3) — 8행이 2-b 바로 뒤). */
@@ -376,7 +378,7 @@ test("[G552 ⓓ 역검증] 옛 식별자를 끼운 요청 타입 사본은 같�
 // §104.9 — 메신저 단계 경로 표시(`messengerStageAllowed` · 폴백만 참)가 13번째 키다(사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과는 여전히 0).
 const G600_KEYS = [
   "alreadyAccepted", "channel", "goalActionDone", "isMockTurn", "limitReached", "messengerStageAllowed", "pendingInstruction", "relay",
-  "smsAwaitingUser", "status", "transferPlaced", "transferReachable", "userTurns", "verifyEnabled",
+  "smsAwaitingUser", "status", "transferPlaced", "transferReachable", "turnsSinceCallEntry", "userTurns", "verifyEnabled",
 ];
 
 /** `export type ScammerHangupInput = { … };` 블록의 최상위 키(주석 제거). */
@@ -388,7 +390,8 @@ function inputTypeKeys(src: string): string[] {
 }
 
 // §108(사용자 결정 · DECISIONS #223) — 목표 화면 행동 완료(`goalActionDone` — 랜딩 제출 · 앱 설치 응낙 · 서버 기록만)가 14번째 키다. 4행만 읽는다.
-test("[G600] ScammerHangupInput 키 집합 = 정확히 14키(§108 +1 · 사기범 턴 · 경과 시간 · 반복 · 확인 결과 0)", () => {
+// §131(14) — 메신저에서 넘어온 통화의 통화 진입 뒤 **참가자** 발화 수(`turnsSinceCallEntry` — `userTurns`와 같은 종류 · 5행만 읽는다)가 15번째 키다.
+test("[G600] ScammerHangupInput 키 집합 = 정확히 15키(§108 +1 · §131 +1 · 사기범 턴 · 경과 시간 · 반복 · 확인 결과 0)", () => {
   const src = readFileSync(path.join(SRC_DIR, "decide.ts"), "utf8").replace(/\r\n/g, "\n");
   assert.deepEqual(inputTypeKeys(src), G600_KEYS);
   assert.deepEqual(Object.keys(PASSING).sort(), G600_KEYS, "기준 입력과 타입 키가 갈렸다");

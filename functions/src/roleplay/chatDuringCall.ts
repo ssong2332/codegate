@@ -55,7 +55,9 @@ import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { asksIdentityCheck } from "./personaAuthority";
 import { photoTurnInstruction } from "./photoTurn";
 import { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } from "./promptAssembly";
-import { limitReplySentences } from "./replyLength";
+import { DEMAND_SENTENCE, limitReplySentences, MAX_SCAMMER_REPLY_SENTENCES } from "./replyLength";
+import { stripUnperformedAcknowledgement, TRANSFER_REPORTED_INSTRUCTION, userReportedTransfer, userSentPhoto } from "./actionAcknowledgement";
+import { personaAnchorInstruction, personaGuardFor } from "./personaGuard";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { extractSmsMarker } from "./smsMarker";
@@ -147,7 +149,19 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
   const hangupPre = decideFallbackHangup(hangupFacts, delivered, false);
   const hangupMode = fallbackHangupMode(hangupPre);
   const chatInstruction = hangupMode === "signal" ? CHAT_DURING_CALL_GIVEUP_INSTRUCTION : CHAT_DURING_CALL_INSTRUCTION;
-  const turnInstruction = [chatInstruction, photoTurnInstruction(isPhotoTurn)].filter(Boolean).join("\n");
+  // §131(13) 판정표 R · §131(7) 판정표 P — 이미 송금했다고 말했으면 재요구 금지 · 지인 · 자녀 사칭 역할 고정(그 밖 = 없음).
+  const turnFacts = {
+    transferReported: userReportedTransfer(claim.history, maskedUserText),
+    photoSent: userSentPhoto(claim.history, isPhotoTurn === true),
+  };
+  const turnInstruction = [
+    chatInstruction,
+    photoTurnInstruction(isPhotoTurn),
+    turnFacts.transferReported ? TRANSFER_REPORTED_INSTRUCTION : undefined,
+    personaAnchorInstruction(session.scenarioId),
+  ]
+    .filter(Boolean)
+    .join("\n");
   const completion = await completeWithFallback(getLlmClient(), {
     systemPrompt: buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
@@ -167,6 +181,7 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
       applyFamilyAddressText(tactic, familyAddressPrompt),
     ),
     purpose: "scammer-reply",
+    ...(personaGuardFor(session.scenarioId) ? { personaGuard: personaGuardFor(session.scenarioId) } : {}),
   });
   logger.info("[§121.7] 통화 중 카톡 응답", {
     scenarioId: session.scenarioId,
@@ -181,8 +196,9 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
   const { text: signalFreeText, endCall } = extractEscalationSignal(smsFreeText);
   const { text: tidyText } = tidyScammerReplyMarkup(signalFreeText);
   const { text: realNameFree } = replaceRealFinancialNames(tidyText);
-  const shaped = limitReplySentences(applyFictionalBank(realNameFree, fictionalBankName)).text;
-  const finalReplyText = finalizeScammerReplyText(shaped);
+  const shaped = limitReplySentences(applyFictionalBank(realNameFree, fictionalBankName), MAX_SCAMMER_REPLY_SENTENCES, DEMAND_SENTENCE).text;
+  // §131(12) 판정표 A — 하지 않은 송금 · 사진 확인 문장 삭제(통화 중 대화방은 "통화" 표현을 고치지 않는다 — 실제 통화가 있다).
+  const finalReplyText = finalizeScammerReplyText(stripUnperformedAcknowledgement(shaped, turnFacts));
   await messagesRef.add({
     role: "scammer",
     textMasked: finalReplyText,

@@ -26,8 +26,10 @@ import { extractLinkMarker } from "./linkMarker";
 import { isL3Procedural } from "./l3Depth";
 import { asksIdentityCheck } from "./personaAuthority";
 import { splitSentences } from "./callAnnouncement";
+import { stripUnperformedAcknowledgement, TRANSFER_REPORTED_INSTRUCTION, userReportedTransfer, userSentPhoto } from "./actionAcknowledgement";
+import { fixMessengerCallWording, personaAnchorInstruction, personaGuardFor } from "./personaGuard";
 import { buildSystemPrompt, toLlmHistory } from "./promptAssembly";
-import { limitReplySentences } from "./replyLength";
+import { DEMAND_SENTENCE, limitReplySentences, MAX_SCAMMER_REPLY_SENTENCES } from "./replyLength";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { extractSmsMarker } from "./smsMarker";
@@ -73,20 +75,28 @@ export type CallReturnLineResult = { message: ScammerMessage | undefined; isMock
 
 export async function generateCallReturnLine(
   session: SessionDoc,
-  history: readonly Pick<MessageDoc, "role" | "textMasked">[],
+  history: readonly Pick<MessageDoc, "role" | "textMasked" | "photo">[],
   by: CallReturnBy = "user",
 ): Promise<CallReturnLineResult> {
   const scenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId);
   if (!scenarioPrompt) return { message: undefined, isMock: false };
   const fictionalBankName = resolveFictionalBankName({ sessionId: session.sessionId, fictionalBankName: session.fictionalBankName });
   const familyAddress = resolveFamilyAddressPrompt(session.scenarioId, sessionFamilyAddress(session));
+  const turnFacts = { transferReported: userReportedTransfer(history), photoSent: userSentPhoto(history) };
   const completion = await completeWithFallback(getLlmClient(), {
     systemPrompt: buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
       l3Procedural: isL3Procedural(session.scenarioId),
       identityCheckAllowed: asksIdentityCheck(session.scenarioId),
       speakerGender: resolveSessionSpeakerGender(session),
-      turnInstruction: by === "scammer" ? CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION : CALL_RETURN_INSTRUCTION,
+      // §131(13) 판정표 R · §131(7) 판정표 P — 이미 송금했다고 말했으면 재요구 금지 1줄 · 지인 · 자녀 사칭 역할 고정 1줄(그 밖 = 종전 문면).
+      turnInstruction: [
+        by === "scammer" ? CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION : CALL_RETURN_INSTRUCTION,
+        turnFacts.transferReported ? TRANSFER_REPORTED_INSTRUCTION : undefined,
+        personaAnchorInstruction(session.scenarioId),
+      ]
+        .filter(Boolean)
+        .join("\n"),
       fictionalBankName,
       sessionAccountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
       personaCard: session.personaCard?.items,
@@ -98,6 +108,7 @@ export async function generateCallReturnLine(
     ],
     mockTacticHints: scenarioPrompt.weakenedTactics,
     purpose: "scammer-reply",
+    ...(personaGuardFor(session.scenarioId) ? { personaGuard: personaGuardFor(session.scenarioId) } : {}),
   });
   // 문맥 없는 Mock 대사는 저장하지 않는다(판정표 2행).
   if (completion.isMock) return { message: undefined, isMock: true };
@@ -106,8 +117,10 @@ export async function generateCallReturnLine(
   const { text: signalFreeText } = extractEscalationSignal(smsFreeText);
   const { text: markupFreeText } = tidyScammerReplyMarkup(signalFreeText);
   const { text: realNameReplaced, replacedCount } = replaceRealFinancialNames(markupFreeText);
-  const shaped = limitReplySentences(applyFictionalBank(realNameReplaced, fictionalBankName)).text;
-  const text = stripSelfDroppedCallSentences(finalizeScammerReplyText(shaped), by).trim();
+  const shaped = limitReplySentences(applyFictionalBank(realNameReplaced, fictionalBankName), MAX_SCAMMER_REPLY_SENTENCES, DEMAND_SENTENCE).text;
+  // §131(12) 판정표 A · §131(11) 판정표 W — 하지 않은 송금 · 사진 확인 문장 삭제 · 대화방 메시지를 통화라고 부르는 말 교정.
+  const factChecked = fixMessengerCallWording(stripUnperformedAcknowledgement(shaped, turnFacts));
+  const text = stripSelfDroppedCallSentences(finalizeScammerReplyText(factChecked), by).trim();
   if (replacedCount > 0) logger.info("사기범 대사 실존 금융회사명 치환", { path: "callReturn", scenarioId: session.scenarioId, replacedCount });
   if (!text) return { message: undefined, isMock: false };
   return { message: { role: "scammer", text, ...(attachments ? { attachments } : {}) }, isMock: false };

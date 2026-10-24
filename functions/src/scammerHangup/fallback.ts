@@ -34,6 +34,8 @@ export type FallbackHangupFacts = {
   smsDeclared: boolean;
   /** 도착 기록을 읽었는가(`smsDeliveredLoaded`). */
   smsDeliveredLoaded: boolean;
+  /** §131(14) — 메신저에서 넘어온 통화면 통화 진입 뒤 참가자 발화 수(`userTurnsSinceCallEntry`) · 그 밖 = 부재(종전). */
+  turnsSinceCallEntry?: number;
 };
 
 /**
@@ -84,6 +86,7 @@ export function decideFallbackHangup(
     relay: facts.relay,
     // §104.9 — 폴백은 메신저 단계에서도 같은 판정표로 끝낼 수 있다(대안 A). 하한(3 · 5 · 6 · 7행)은 그대로다.
     messengerStageAllowed: true,
+    ...(facts.turnsSinceCallEntry !== undefined ? { turnsSinceCallEntry: facts.turnsSinceCallEntry } : {}),
   });
 }
 

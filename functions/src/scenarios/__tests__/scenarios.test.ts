@@ -32,6 +32,8 @@ import { speakerGenderFor } from "../../realtime/scenarioVoice";
 import { FAMILY_ADDRESS_SCENARIOS, resolveFamilyAddressPrompt } from "../familyAddress";
 import { CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION, CALL_RETURN_INSTRUCTION } from "../../roleplay/callReturnLine";
 import { CALL_AFTER_EXCUSE_INSTRUCTION } from "../../roleplay/callAnnouncement";
+import { TRANSFER_REPORTED_INSTRUCTION } from "../../roleplay/actionAcknowledgement";
+import { personaAnchorInstruction } from "../../roleplay/personaGuard";
 import { buildPriorChatContext } from "../../realtime/priorChatContext";
 import { applyFictionalBank, FICTIONAL_BANK_NAMES, resolveSessionAccountNumber } from "../../shared/fictionalBank";
 
@@ -1315,6 +1317,10 @@ function turnInstructionSources(): Array<{ scenarioId?: string; label: string; v
     { label: "통화복귀(사기범 끊기)", value: CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION },
     // §131(2) — 통화 불가 핑계 직후 전화로 넘어갈 때의 연속성 1줄(`roleplay/callAnnouncement.ts` 판정표 K).
     { label: "통화불가핑계뒤전환", value: CALL_AFTER_EXCUSE_INSTRUCTION },
+    // §131(13) — 참가자가 송금했다고 말한 뒤 재요구 금지 · §131(7) — 지인 · 자녀 사칭 메신저 역할 고정(`roleplay/actionAcknowledgement.ts` · `personaGuard.ts`).
+    { label: "송금보고뒤", value: TRANSFER_REPORTED_INSTRUCTION },
+    { label: "역할고정(지인)", value: personaAnchorInstruction("messenger-friend-loan-kakao")! },
+    { label: "역할고정(자녀)", value: personaAnchorInstruction("messenger-child-impersonation-kakao")! },
     // §110.3 — 메신저에서 넘어온 Live 통화의 앞선 대화 블록(머리 지시 — 대화 줄은 참가자 데이터라 표본 2줄만).
     {
       label: "앞선대화",
