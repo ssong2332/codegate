@@ -9,6 +9,7 @@ import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import { fixMessengerCallWording, personaAnchorInstruction, personaGuardFor } from "./personaGuard";
 import { resolveRouteAccountNumber, sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
 import { isL3Procedural } from "./l3Depth";
 import { extractEscalationSignal } from "./escalationSignal";
@@ -181,7 +182,10 @@ export async function generateOpeningLine(
       identityCheckAllowed: asksIdentityCheck(scenarioId),
       // T194-a(§84.4.3) — 세션 단위 해석(표 값이 있으면 그대로 · parcel 고급만 변형 leg 성별).
       speakerGender: resolveSessionSpeakerGender(sessionView),
-      turnInstruction: isMessengerOpening ? MESSENGER_OPENING_TURN_INSTRUCTION : OPENING_TURN_INSTRUCTION,
+      // §131(7) 판정표 P — 지인 · 자녀 사칭 메신저는 역할 고정 1줄을 덧붙인다(그 밖 = 종전 문면 바이트 동일).
+      turnInstruction: [isMessengerOpening ? MESSENGER_OPENING_TURN_INSTRUCTION : OPENING_TURN_INSTRUCTION, personaAnchorInstruction(scenarioId)]
+        .filter(Boolean)
+        .join("\n"),
       ...(fictionalBankName ? { fictionalBankName } : {}),
       sessionAccountNumber: resolveRouteAccountNumber(scenarioId, flowVariantId),
       // T194-b(§84.3.4 · G568 호출부 3곳 중 "오프닝 대사") — 부재 = 블록 0(바이트 동일).
@@ -197,6 +201,7 @@ export async function generateOpeningLine(
       : {}),
     // §102 — 사기범 대사 경로: 영어 거절 등 쓸 수 없는 응답은 다음 단계(Groq → Mock)로 넘긴다.
     purpose: "scammer-reply",
+    ...(personaGuardFor(scenarioId) ? { personaGuard: personaGuardFor(scenarioId) } : {}),
   });
 
   // 메신저 확장(T29) — 스미싱 링크 마커([[LINK:id]])를 텍스트에서 제거하고 attachments로 변환한다
@@ -220,7 +225,8 @@ export async function generateOpeningLine(
   // §81 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다.
   const realNameFreeText = fictionalBankName ? applyFictionalBank(realNameReplacedText, fictionalBankName) : realNameReplacedText;
   // §131(4) O1 — 메신저 첫 메시지의 맨 앞 전화 인사말은 문장 상한 앞에서 지운다(지운 뒤 문장 수로 자른다).
-  const lengthLimited = limitReplySentences(isMessengerOpening ? stripPhoneGreeting(realNameFreeText) : realNameFreeText);
+  // §131(11) 판정표 W — 메신저 첫 메시지는 본문 전체의 통화 표현도 고친다(맨 앞 "여보세요"는 위 O1).
+  const lengthLimited = limitReplySentences(isMessengerOpening ? fixMessengerCallWording(stripPhoneGreeting(realNameFreeText)) : realNameFreeText);
   // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).
   if (replacedCount > 0) {
     logger.info("사기범 대사 실존 금융회사명 치환", { path: "openingLine", scenarioId, replacedCount });

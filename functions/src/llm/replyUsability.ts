@@ -17,6 +17,7 @@
 // | 4    | 한글(음절·자모)이 0자                                                       | 불가 | `no-hangul`       |
 // | 5    | 라틴 문자 수 > 한글 수 × 2                                                  | 불가 | `mostly-foreign`  |
 // | 6    | 그 밖                                                                      | 가능 | —                 |
+// | (7)  | §131(7) 호출부가 넘긴 `personaGuard`에 맞음(지인 · 자녀 사칭 메신저의 기관 직원 자기소개) — `assertUsableScammerReply`가 이 표 뒤에 본다 | 불가 | `persona-drift` |
 //
 // ⛔ 한국어 사과("죄송합니다"·"미안해")는 **정상**이다 — 사기범 대사에 흔히 나온다. 한국어 행(3)은 모델이
 //    자신을 AI·언어 모델로 지칭하거나 역할극 자체를 거절하는 문형만 본다("저는 OO은행 AI 상담원입니다"는 통과).
@@ -30,7 +31,9 @@ export type UnusableReplyReason =
   | "korean-ai-refusal"
   | "training-meta"
   | "no-hangul"
-  | "mostly-foreign";
+  | "mostly-foreign"
+  /** §131(7) — 시나리오 역할을 벗어난 대사(호출부가 넘긴 `personaGuard` — 예: 지인 사칭인데 은행 직원 자기소개). */
+  | "persona-drift";
 
 const MARKER_PATTERN = /\[\[[^\]]*\]\]/g;
 const URL_PATTERN = /https?:\/\/\S+/gi;

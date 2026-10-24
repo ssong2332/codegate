@@ -25,7 +25,8 @@ test("[§112] 사기범 끊기 뒤 복귀 지시 — 끊긴 것을 짚고 톡으
   assert.notEqual(CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION, CALL_RETURN_INSTRUCTION);
   assert.match(
     readSrc("roleplay/callReturnLine.ts"),
-    /turnInstruction: by === "scammer" \? CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION : CALL_RETURN_INSTRUCTION,/,
+    // §131(13) · (7) — 같은 지시를 배열 맨 앞에 두고 뒤에 재요구 금지 · 역할 고정 줄을 잇는다.
+    /turnInstruction: \[\s*by === "scammer" \? CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION : CALL_RETURN_INSTRUCTION,/,
   );
 });
 

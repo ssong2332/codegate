@@ -89,6 +89,12 @@ export type ScammerHangupInput = {
    * 메신저 단계가 없어 넘기지 않는다. 부재 = 거짓 = 종전 판정(2행이 메신저를 막는다).
    */
   messengerStageAllowed?: boolean;
+  /**
+   * ⭐ §131(14)(메인 세션 라이브 확인 2026-10-24 — 자녀 사칭 카톡 · 사기범이 건 통화에서 참가자 첫 텍스트 턴에 끊었다) — 메신저에서 넘어온 통화의
+   * **통화 진입 뒤** 참가자 발화 수. `userTurns`는 세션 전체 발화라 메신저 단계 턴이 쌓여 5행 하한이 통화 첫 턴부터 넘어가 있었다. 값이 있으면
+   * 5행은 두 값 모두 하한 이상이어야 통과한다. 부재 = 종전(`userTurns`만 — 처음부터 통화인 세션 · 실시간 콜러블).
+   */
+  turnsSinceCallEntry?: number;
 };
 
 export type ScammerHangupRule = {
@@ -134,7 +140,9 @@ export const SCAMMER_HANGUP_RULES: readonly ScammerHangupRule[] = [
     status: "too_early",
     hangup: false,
     // `!(x >= 하한)` — 정본 `x < 하한`과 유한값에서 같고, 비유한값(NaN)은 막는 쪽으로 떨어진다(fail-closed).
-    when: (i) => !(i.userTurns >= SCAMMER_HANGUP_MIN_USER_TURNS),
+    when: (i) =>
+      !(i.userTurns >= SCAMMER_HANGUP_MIN_USER_TURNS) ||
+      (i.turnsSinceCallEntry !== undefined && !(i.turnsSinceCallEntry >= SCAMMER_HANGUP_MIN_USER_TURNS)),
   },
   {
     row: "6",

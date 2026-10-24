@@ -88,7 +88,8 @@ test("[§131(2) 복귀] 사기범이 끊은 뒤 복귀 지시 · 트리거 — �
   assert.equal(/끊겼/.test(CALL_RETURN_AFTER_SCAMMER_HANGUP_TRIGGER_TURN), false);
   const src = readSrc("roleplay/callReturnLine.ts");
   assert.match(src, /content: by === "scammer" \? CALL_RETURN_AFTER_SCAMMER_HANGUP_TRIGGER_TURN : CALL_RETURN_TRIGGER_TURN/);
-  assert.match(src, /const text = stripSelfDroppedCallSentences\(finalizeScammerReplyText\(shaped\), by\)\.trim\(\);/);
+  // §131(11)(12) — 그 앞에 하지 않은 일 확인 · 통화 표현 손질(`factChecked`)이 들어왔다.
+  assert.match(src, /const text = stripSelfDroppedCallSentences\(finalizeScammerReplyText\(factChecked\), by\)\.trim\(\);/);
 });
 
 test("[§131(2) 복귀 손질 표] 사기범 끊기면 '끊겼다 · 전화 상태 안 좋다' 문장만 지운다 · 참가자 끊기는 무변경 · 다 지워지면 빈 문자열", () => {
@@ -111,7 +112,7 @@ test("[§131(2) 판정표 K] 직전 사기범 메시지의 통화 불가 핑계 
     index,
     /session\.channel === "messenger" &&\n\s*turnChoice === "none" &&\n\s*saidCallUnavailableRecently\(storedHistory\.filter\(\(m\) => m\.role === "scammer"\)\.map\(\(m\) => m\.textMasked\)\)\n\s*\? CALL_AFTER_EXCUSE_INSTRUCTION/,
   );
-  assert.match(index, /repeatBreakInstruction\(repeatBreakKind\), callAfterExcuseInstruction\]/);
+  assert.match(index, /repeatBreakInstruction\(repeatBreakKind\),\s*callAfterExcuseInstruction,/);
 });
 
 test("[§131(4) 판정표 O] 메신저 첫 메시지 — 전용 지시(전화 인사말 금지) · 맨 앞 '여보세요' 삭제 · 통화 시나리오 지시는 종전 그대로", () => {
@@ -124,6 +125,7 @@ test("[§131(4) 판정표 O] 메신저 첫 메시지 — 전용 지시(전화 �
   assert.equal(stripPhoneGreeting("여보세요?"), "여보세요?", "지우면 빈 메시지면 원문");
   const src = readSrc("roleplay/openingLine.ts");
   assert.ok(src.includes('const isMessengerOpening = PUBLIC_SCENARIOS[scenarioId]?.channel === "messenger";'));
-  assert.ok(src.includes("turnInstruction: isMessengerOpening ? MESSENGER_OPENING_TURN_INSTRUCTION : OPENING_TURN_INSTRUCTION,"));
-  assert.ok(src.includes("const lengthLimited = limitReplySentences(isMessengerOpening ? stripPhoneGreeting(realNameFreeText) : realNameFreeText);"));
+  // §131(7)(11) — 역할 고정 줄을 잇고 · 메신저 첫 메시지 본문 통화 표현도 고친다.
+  assert.ok(src.includes("turnInstruction: [isMessengerOpening ? MESSENGER_OPENING_TURN_INSTRUCTION : OPENING_TURN_INSTRUCTION, personaAnchorInstruction(scenarioId)]"));
+  assert.ok(src.includes("const lengthLimited = limitReplySentences(isMessengerOpening ? fixMessengerCallWording(stripPhoneGreeting(realNameFreeText)) : realNameFreeText);"));
 });

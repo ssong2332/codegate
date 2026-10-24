@@ -48,7 +48,9 @@ import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt, toLlmHistory } from "./promptAssembly";
-import { limitReplySentences } from "./replyLength";
+import { DEMAND_SENTENCE, limitReplySentences, MAX_SCAMMER_REPLY_SENTENCES } from "./replyLength";
+import { stripUnperformedAcknowledgement, userReportedTransfer, userSentPhoto } from "./actionAcknowledgement";
+import { fixMessengerCallWording, personaGuardFor } from "./personaGuard";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { isEscalationTooEarly } from "./signalConsistency";
@@ -144,6 +146,7 @@ export const requestScreenActionFollowUp = onCall<RequestScreenActionFollowUpReq
       messages: [...toLlmHistory(history), { role: "user", content: SCREEN_ACTION_TRIGGER_TURN }],
       mockTacticHints: scenarioPrompt.weakenedTactics,
       purpose: "scammer-reply",
+      ...(personaGuardFor(session.scenarioId) ? { personaGuard: personaGuardFor(session.scenarioId) } : {}),
     });
     logger.info("[§128] 화면 행동 뒤 먼저 보내는 메시지 생성", {
       sessionId,
@@ -163,7 +166,12 @@ export const requestScreenActionFollowUp = onCall<RequestScreenActionFollowUpReq
     const announcementFree = announcement.action === "strip" ? announcement.text : signalFreeText;
     const { text: tidyText } = tidyScammerReplyMarkup(announcementFree);
     const { text: realNameFree } = replaceRealFinancialNames(tidyText);
-    const text = finalizeScammerReplyText(limitReplySentences(applyFictionalBank(realNameFree, fictionalBankName)).text).trim();
+    // §131(12) 판정표 A · §131(11) 판정표 W — 하지 않은 송금 · 사진 확인 문장 삭제 · 대화방 메시지를 통화라고 부르는 말 교정.
+    const shaped = limitReplySentences(applyFictionalBank(realNameFree, fictionalBankName), MAX_SCAMMER_REPLY_SENTENCES, DEMAND_SENTENCE).text;
+    const factChecked = fixMessengerCallWording(
+      stripUnperformedAcknowledgement(shaped, { transferReported: userReportedTransfer(history), photoSent: userSentPhoto(history) }),
+    );
+    const text = finalizeScammerReplyText(factChecked).trim();
     if (!text) return {}; // S4
 
     const turnIndex = await db.runTransaction(async (tx) => {

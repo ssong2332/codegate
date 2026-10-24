@@ -37,6 +37,8 @@ export function assertUsableScammerReply(input: LlmCompletionInput, result: LlmC
   if (input.purpose !== "scammer-reply") return;
   const reason = judgeScammerReplyUsability(result.text);
   if (reason) throw new UnusableReplyError(reason);
+  // §131(7) — 시나리오 역할 이탈(호출부가 넘긴 패턴 · 부재 = 검사 0). 쓸 수 없는 응답과 같이 다음 단계로 넘긴다(끝은 Mock — 수법 문구 대사).
+  if (input.personaGuard?.test(result.text)) throw new UnusableReplyError("persona-drift");
 }
 
 /** Gemini 단계 시간 상한 초과 — Groq 단계로 넘어가는 신호다. */
