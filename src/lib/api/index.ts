@@ -13,6 +13,7 @@ export { judgeRewindAnswer } from "./judgeRewindAnswer";
 export { deliverInCallSms } from "./deliverInCallSms";
 export { recordInCallSmsEvent } from "./recordInCallSmsEvent";
 export { recordMockScreenEvent } from "./recordMockScreenEvent";
+export { requestScreenActionFollowUp } from "./requestScreenActionFollowUp";
 export { deliverVerifyOffer } from "./deliverVerifyOffer";
 export { deliverVerifyReconnect } from "./deliverVerifyReconnect";
 export { requestScammerHangup } from "./requestScammerHangup";

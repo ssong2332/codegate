@@ -71,7 +71,12 @@ import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { PHOTO_TURN_TEXT, photoTurnInstruction } from "./photoTurn";
 import { replyChatDuringCall } from "./chatDuringCall";
-import { currentCallCaller, PARTICIPANT_CALLED_INSTRUCTION } from "./callCaller";
+import {
+  currentCallCaller,
+  fixParticipantCalledReply,
+  PARTICIPANT_CALLED_INSTRUCTION,
+  resolveParticipantCalledPersona,
+} from "./callCaller";
 import { isGoalBeforePhotoFollowUp, sessionVariantStageSummaries } from "./photoFollowUp";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { asksIdentityCheck } from "./personaAuthority";
@@ -81,7 +86,8 @@ import { evaluateOtpCheck, otpCheckInputsFromHistory } from "./otpCheck";
 import { limitReplySentences, shouldLimitReplySentences } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { decideRepeatBreak, repeatBreakInstruction } from "./repeatBreak";
-import { judgeEndCallSignal, judgeEscalationSignalAt } from "./signalConsistency";
+import { isEscalationTooEarly, judgeEndCallSignal, judgeEscalationSignalAt } from "./signalConsistency";
+import { decideCallAnnouncement } from "./callAnnouncement";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
@@ -404,6 +410,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     let mockConsentRef: FirebaseFirestore.DocumentReference | undefined;
     // T194-c-1 G607 — 그 응낙 항목의 진입 표면(메신저 링크 · 통화 중 문자). 응낙 지시 선택 함수의 입력이다(문서 id = landingId).
     let mockConsentSurface: MockScreenEntrySurface | undefined;
+    // §128(1) — 응낙 항목 id(설치 뒤 통화가 아닌 항목이면 전화 예고 없는 응낙 지시).
+    let mockConsentLandingId: string | undefined;
     // T194-a(리뷰 m1) — 카탈로그 소속이 아니라 **이 세션에서 도달 가능한** 설치 항목이 있을 때만 읽는다. 도달 불가 항목은
     // `recordMockScreenEvent`가 응낙 문서를 만들지 않으므로(G588 · ⑤) 동작은 같고, parcel 초급 · 중급의 매 턴 읽기 1회가 사라진다.
     if (listAppInstallMockScreens(session.scenarioId).some((item) => isMockScreenReachable(session, item))) {
@@ -417,6 +425,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         if (pending) {
           mockConsentRef = pending.ref;
           mockConsentSurface = findMockScreenItem(session.scenarioId, pending.id)?.entrySurface;
+          mockConsentLandingId = pending.id;
         }
       } catch {
         // 조회 실패가 대화를 막지 않는다(P-4 핵심 루프 비차단) — 이번 턴은 지시 없이 진행한다.
@@ -446,6 +455,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         escalatedCall,
         path: "fallback",
         transferPlaced: verifyState?.placed === true,
+        ...(mockConsentLandingId !== undefined ? { landingId: mockConsentLandingId } : {}),
       });
     } else if (turnChoice === "verify_reconnect") {
       turnInstruction = verifyItem?.reconnectInstruction;
@@ -548,8 +558,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       undefined;
     // §120 — 사진 턴이면 캐릭터 유지형 반응 지시 1줄을 맨 뒤에 붙인다(`photoTurn.ts` 표 · 그 밖 턴 = 없음 · 문면 바이트 동일).
     // §123 — 참가자가 건 통화(보이스톡 발신)면 "네가 전화한 게 아니다" 1줄(`callCaller.ts` · 사기범이 건 통화 = 없음).
-    const participantCalledInstruction =
-      escalatedCall && currentCallCaller(session.channelHistory) === "participant" ? PARTICIPANT_CALLED_INSTRUCTION : undefined;
+    const participantCalled = escalatedCall && currentCallCaller(session.channelHistory) === "participant";
+    const participantCalledInstruction = participantCalled ? PARTICIPANT_CALLED_INSTRUCTION : undefined;
     const turnInstructionWithPhoto =
       [turnInstructionWithSms, photoTurnInstruction(isPhotoTurn), participantCalledInstruction].filter(Boolean).join("\n") ||
       undefined;
@@ -561,6 +571,10 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const llmClient = isFirstUserTurn(storedHistory) ? getLlmClient(LLM_FIRST_TURN_TIMEOUT_MS) : getLlmClient();
     // §110.5(실기 신고 14) — 참가자가 고른 호칭(세션 문서 값 · 부재 = 원문 호칭).
     const familyAddressPrompt = resolveFamilyAddressPrompt(session.scenarioId, sessionFamilyAddress(session));
+    // §128(4) — 참가자가 건 통화면 페르소나의 "네가 먼저 건 전화" 문장을 바꾼다(그 밖 = 같은 객체 · 바이트 동일).
+    const turnScenarioPrompt = participantCalled
+      ? { ...scenarioPrompt, personaPrompt: resolveParticipantCalledPersona(scenarioPrompt.personaPrompt) }
+      : scenarioPrompt;
     const completion = await completeWithFallback(llmClient, {
       // T85(§17.3 호출부 3곳 중 "텍스트 턴", G63) — 고급에서 D4(절차·서류 정당화) 블록을 얹을
       // 시나리오인지. 세 호출부가 같은 판정 함수를 쓰지 않으면 "텍스트 턴은 고급인데 오프닝만
@@ -568,7 +582,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       // §50.4.4/§50.3.3(G298 호출부 3곳 중 "텍스트 턴") — identityCheckAllowed·speakerGender도
       // 표에서 파생해 항상 넘긴다(기본값이 관대한 쪽/미출력이라 빠뜨려도 에러는 안 나지만 조용히
       // 축소되거나 목소리·말이 어긋난다).
-      systemPrompt: buildSystemPrompt(scenarioPrompt, {
+      systemPrompt: buildSystemPrompt(turnScenarioPrompt, {
         difficultyLevel,
         // ⭐ 리뷰 M2 — 세 호출부 · 도구 선언과 같은 단일 술어(변형 기준 · 변형 부재 = 종전).
         inCallSmsEnabled: sessionDeclaresInCallSms(session.scenarioId, session.flowVariantId),
@@ -709,8 +723,28 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 잘려도 위 ②-e가 (실 LLM 턴이면) 마킹했으므로 "말하지 않은 예고" 결함(G343)이 재발한다.
     // 마킹이 없는 `sms_announce`·`verify_reconnect`는 잘려도 상태 기록이 틀어지지 않아 적용한다
     // (2026-10-18 문자 도착 턴 5문장 신고 · 한계는 `shouldLimitReplySentences` 주석).
+    // ③-b″ §128(1) — 신호 없이 대사로 전화를 예고한 턴(`callAnnouncement.ts` 판정표). 지금 전환할 수 있으면 아래 ④-b가 전환하고,
+    // 없으면 예고 문장을 지운다(걸려 오지 않을 전화를 약속하지 않는다). "지금 전환할 수 있다" = ④-b `canEscalate`와 같은 조건 중
+    // 저장 전에 아는 것(세션 종료 재확인은 ④-b가 그대로 한다) + 전환 하한(§122(7) A0) + 같은 응답의 끊기 신호 없음.
+    const announcement =
+      session.channel === "messenger"
+        ? decideCallAnnouncement({
+            replyText: signalFreeReplyText,
+            signalAccepted: signalEscalate,
+            canEscalateNow:
+              !limitReached &&
+              endCallSignal === undefined &&
+              resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined &&
+              !isEscalationTooEarly(turnsSinceMessengerEntry(turnCount, session.channelHistory)),
+          })
+        : ({ action: "none" } as const);
+    if (announcement.action !== "none") {
+      // G170 — 판정 종류만(대사 0).
+      logger.info("[§128] 신호 없는 전화 예고", { sessionId, action: announcement.action });
+    }
+    const announcementFreeReplyText = announcement.action === "strip" ? announcement.text : signalFreeReplyText;
     // ③-c′ PR-A3 — 모델 표기 잔재(굵게 별표 · 빈 백틱 · 지문 괄호)를 지운다(replyMarkup.ts 표). 마커가 다 빠진 뒤 · 문장 상한 앞.
-    const { text: markupFreeReplyText } = tidyScammerReplyMarkup(signalFreeReplyText);
+    const { text: markupFreeReplyText } = tidyScammerReplyMarkup(announcementFreeReplyText);
     const { text: realNameReplacedText, replacedCount: realNameReplacedCount } =
       replaceRealFinancialNames(markupFreeReplyText);
     // §81 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다(문자 본문과 일치).
@@ -718,7 +752,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const lengthLimited = shouldLimitReplySentences(turnChoice)
       ? limitReplySentences(realNameFreeReplyText)
       : undefined;
-    const shapedReplyText = lengthLimited ? lengthLimited.text : realNameFreeReplyText;
+    const limitedReplyText = lengthLimited ? lengthLimited.text : realNameFreeReplyText;
+    // §128(4) — 참가자가 건 통화의 "전화 받아 줘서"류 교정(`callCaller.ts` 표 · 그 밖 턴 무변경).
+    const shapedReplyText = participantCalled ? fixParticipantCalledReply(limitedReplyText) : limitedReplyText;
     // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).
     if (realNameReplacedCount > 0) {
       logger.info("사기범 대사 실존 금융회사명 치환", {
@@ -876,6 +912,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     if (canEscalate && !limitReached) {
       if (signalEscalate) {
         escalationTrigger = "structured_signal";
+      } else if (announcement.action === "escalate") {
+        // §128(1) C1 — 대사가 이미 전화를 예고했다(신호 누락) — 약속대로 전화가 걸려 온다.
+        escalationTrigger = "announced_call";
       } else if (
         // reviewer 리뷰 Major #2 수정 — 세션 누적 turnCount가 아니라 "가장 최근 메신저 재진입
         // 이후" 턴 수를 본다(messengerReentry.ts). T40으로 보이스→메신저 복귀 후 첫 메시지에서

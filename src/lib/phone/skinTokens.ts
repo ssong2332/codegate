@@ -524,6 +524,57 @@ export function voiceTalkDialContrastPairs(): ContrastPair[] {
   ];
 }
 
+/**
+ * §128(5)(2026-10-24 메인 세션 라이브 실측 · UX D-159) — **보이스톡으로 연결된 통화**(참가자가 대화방 프로필에서 건 보이스톡)의 통화 셸 토큰.
+ * 재현: 발신 화면은 카톡형인데 연결된 통화 화면은 일반 전화(010 번호 · 전화 앱 바탕)였다. 카톡 보이스톡 통화 중 화면 근사(배치는 앱 화면 구성 기준 추정 ·
+ * 색은 발신 화면 `voiceTalk*` 추정값 재사용):
+ * | 자리 | 보이스톡 통화 | 일반 통화(종전) |
+ * |---|---|---|
+ * | 바탕 | 발신 화면과 같은 어두운 세로 그라데이션(`voiceTalkCallBackground`) | 스킨 `call.bg` |
+ * | 위 | 둥근 사각 프로필 · 대화방 이름(번호 0) · 경과 시간 | (One UI형만) 원형 아바타 · 발신 번호 · 경과 시간 |
+ * | 버튼 골격 · 버튼 색 | 기기 스킨의 **어두운** 통화 토큰 그대로(라이트 One UI여도 바탕이 어둡다) | 스킨 · 기기 테마 |
+ * ⛔ 카카오 로고 · 상표 이미지 0. 대비는 그라데이션의 **밝은 위쪽 끝**으로 보수적으로 잰다(`voiceTalkCallPairs` — G456과 같은 하한).
+ */
+export function voiceTalkCallTokens(skin: MessengerSkin): CallSkinTokens {
+  const t = MESSENGER_CHAT_TOKENS;
+  return {
+    ...callTokensFor(skin, "dark"),
+    bg: t.voiceTalkBgTop,
+    outerBg: t.voiceTalkBgBottom,
+    textPrimary: t.voiceTalkName,
+    textSecondary: t.voiceTalkStatus,
+    hasAvatar: true,
+    avatarBg: t.profileBg,
+    avatarFg: t.profileFg,
+  };
+}
+
+/** §128(5) — 보이스톡 통화 셸 바탕(발신 화면과 같은 그라데이션). */
+export function voiceTalkCallBackground(): string {
+  const t = MESSENGER_CHAT_TOKENS;
+  return `linear-gradient(180deg, ${t.voiceTalkBgTop} 0%, ${t.voiceTalkBgBottom} 100%)`;
+}
+
+/** §128(5) — 보이스톡 통화 셸의 (글자/아이콘, 바탕) 쌍 — 바탕은 그라데이션 위쪽(밝은 쪽) 끝. */
+export function voiceTalkCallPairs(skin: MessengerSkin): ContrastPair[] {
+  const call = voiceTalkCallTokens(skin);
+  const bottom = MESSENGER_CHAT_TOKENS.voiceTalkBgBottom;
+  return [
+    { name: `${skin}.voiceTalkCall.name`, fg: call.textPrimary, bg: call.bg, kind: "text" },
+    { name: `${skin}.voiceTalkCall.textSecondary@top`, fg: call.textSecondary, bg: call.bg, kind: "text" },
+    { name: `${skin}.voiceTalkCall.textSecondary@bottom`, fg: call.textSecondary, bg: bottom, kind: "text" },
+    { name: `${skin}.voiceTalkCall.gridIcon`, fg: call.gridIcon, bg: call.gridButtonBg, base: call.bg, kind: "nonText" },
+    // 버튼 판이 있는 스킨(One UI형)은 눌림 표시가 판 위에 그려진다 — 판 위 쌍(`panelPairs`)이 잰다.
+    ...(call.gridPanelBg ? [] : gridPressedPairs(skin, call)),
+    { name: `${skin}.voiceTalkCall.avatarIcon`, fg: call.avatarFg, bg: call.avatarBg, kind: "nonText" },
+    { name: `${skin}.voiceTalkCall.endIcon`, fg: call.roundIcon, bg: call.end, kind: "nonText" },
+    { name: `${skin}.voiceTalkCall.alertText`, fg: call.alertText, bg: call.bg, kind: "text" },
+    { name: `${skin}.voiceTalkCall.chipText`, fg: call.textPrimary, bg: call.chipBg, base: call.bg, kind: "text" },
+    { name: `${skin}.voiceTalkCall.waveBar`, fg: call.waveBar, bg: call.bg, kind: "nonText" },
+    ...panelPairs(skin, call),
+  ];
+}
+
 // ── WCAG 대비 계산(G456) ────────────────────────────────────────────────────────────
 
 type Rgba = { r: number; g: number; b: number; a: number };

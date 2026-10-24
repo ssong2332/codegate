@@ -11,6 +11,8 @@ export { createSession, endSession, updateMessengerSkin, requestEscalation } fro
 // export만 추가한다(기존 줄은 건드리지 않음, 다른 태스크와의 diff 충돌 회피).
 export { requestReverseEscalation } from "./session";
 export { sendMessage } from "./roleplay";
+// §128(7) — 대화방 링크 화면에서 설치 · 제출을 마치면 사기범이 먼저 메시지 1건을 보낸다(`roleplay/screenActionFollowUp.ts` 판정표).
+export { requestScreenActionFollowUp } from "./roleplay/screenActionFollowUp";
 // 실시간 음성 통화 자격증명 발급(2026-07-22) — 브라우저가 ElevenLabs Agents와 직접 speech-to-speech
 // 대화를 하되 API 키는 서버에만 두기 위한 서명 URL 발급 지점.
 export { createRealtimeCall } from "./realtime";

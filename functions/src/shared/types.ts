@@ -101,7 +101,8 @@ export type MessengerSkinSource = "auto" | "manual" | "fallback";
 export type ChannelTransitionTrigger =
   | "structured_signal" // [[SIGNAL:ESCALATE_VOICE]] 감지(§13.2)
   | "maxturn_fallback" // 메신저 단계 max-turn 자동 전이(§13.3, PoC 전 가정치)
-  | "manual_button"; // 사용자의 명시 "전화로 확인" 버튼(§13.3)
+  | "manual_button" // 사용자의 명시 "전화로 확인" 버튼(§13.3)
+  | "announced_call"; // §128(1) 신호 없이 대사로 전화를 예고했고 지금 전환할 수 있다(`roleplay/callAnnouncement.ts`)
 export type ChannelTransitionEntry = {
   from: MessengerChannel;
   to: MessengerChannel;
@@ -428,6 +429,8 @@ export type MockScreenDoc = {
   // ⛔ `consentedAt`(가짜 "권한 허용")과 **다른 필드다** — 같은 값을 재사용하면 과거 리포트의
   // 의미가 소급해 갈라진다. 저장되는 것은 **시각 하나뿐**이고 입력값 필드는 존재하지 않는다.
   submittedAt?: FirebaseFirestore.Timestamp;
+  // §128(7) — 화면 행동(응낙 · 제출) 뒤 사기범이 먼저 보낸 메시지를 남긴 시각(`roleplay/screenActionFollowUp.ts` — 1회 보장). 부재 = 아직 없음(무백필).
+  screenFollowUpAt?: FirebaseFirestore.Timestamp;
 };
 
 // --- reports/{reportId}.stages / .mockScreenTimeline (T84, §15.9.5, AC-073) ---

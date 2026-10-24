@@ -15721,6 +15721,7 @@ function hasSurvivingMatch(patterns: readonly RegExp[], text: string): boolean {
 | 25 | `onSessionEnded` | X | Firestore 트리거 `functions/src/index.ts:51` | — | (서버 내부) |
 | 26 | `purgeExpiredChallenges` | X | 스케줄 `index.ts:54` | — | — |
 | 27 | `requestScammerHangup` | S | (2026-10-19 추가 · T192 C1 커밋 `5fbe4d0` · §79.5) 소유 `functions/src/scammerHangup/index.ts:26-36`(`loadOwnedSession` — `inCallSms`의 같은 이름 헬퍼와 같은 규칙, **active 검사 없음** ⇒ M-1형 예외 아님. 비활성 세션은 판정표 1행 `not_active`로 **throw 없이** 응답 `decide.ts:72`) · export `functions/src/index.ts:37` | `scammerHangup/index.ts:69`(⭐ 구현됨 — 게이트 줄 `:70`, 트랜잭션 `:74` **앞**. 인자 판독 `:61-67`은 그보다 앞이라 잘못된 인자는 익명이어도 `invalid-argument`가 먼저 — §68.5와 같은 순서) | 0 — 래퍼 `src/lib/api/requestScammerHangup.ts:11`만 있고 화면 호출 0(배선은 C5 `GeminiVoiceSession.tsx` — §79.13). C5 뒤 ✅ UX-014 예정 |
+| 28 | `requestScreenActionFollowUp` | S | (2026-10-24 추가 · §128(7)) 소유 · 익명 범위 `functions/src/roleplay/screenActionFollowUp.ts`(세션 문서 `uid` 대조 → `assertAnonymousChallengeScope` — LLM 호출 **앞**) · export `functions/src/index.ts` | 같은 파일(게이트 줄은 세션 read 직후 · active/메신저 단계가 아니면 저장 0으로 응답) | 대화방 `MessengerChatRoom.tsx` `recordMockScreen`(응낙 · 제출 기록 성공 뒤 · 통화 겹침 중 0) |
 
 **변경 대상 함수 = 20개**(D 6 + S 13 + R 1). E·N·X 6개는 **0줄**이다.
 
@@ -23906,3 +23907,45 @@ D 판단값 근거(관측 5세션 — 운영 f7047187 + §115.5 · §115.6 실 �
 | `fv-t8ga` · `fv-v2mk` 순응 | 약속을 받은 뒤에도 같은 요구를 말만 바꿔 되풀이(문자 주장 13 · 19회) · 끊기 발화 18 · 20 | **수정**: 말로 끝나는 결말 4벌(v2mk · a6lq · t8ga · p3jx)에 "약속하면 되풀이 없이 마무리 · 답을 미루면 한 번만 다시"(`VERBAL_ENDING_WRAP`) — 재측정 전 |
 | 결말 도달 | 순응 7 중 6(fv-h3vn 제외) · 거절은 납치 · 가족 사고 · 공탁금이 결말까지 말한 뒤 마무리, 나머지 거절은 결말 전 마무리(발화 5 ~ 9) | — |
 | 리포트 | 순응 7 전부 속음 · 거절 7 전부 안 속음 | — |
+
+## 128. (Bug fix — 2026-10-24 · 브랜치 `claude/messenger-fixes-round4-5c3369` = main `112389e` + 변경 · 메인 세션 라이브 실측(자녀 사칭 카톡 · 고급 · 아빠 호칭 · 마이크 차단 = 텍스트 폴백)) **메신저 결함 7건 — 통화 예고 · 리포트 누락 · 겹침 중 포기 · 발신자 혼동 · 보이스톡 화면 · 사진 미리보기 · 설치 뒤 무반응** — implementer 기록 (DECISIONS #244 · UX D-159)
+
+### ⛔ 금지 · 전제
+- 사용자 사진은 서버로 보내지 않는다(§113 유지 — 이 절의 (6)도 기기 메모리만).
+- 처음부터 통화인 시나리오 · 사기범이 건 통화의 문면은 바이트 동일(아래 각 표의 "종전" 행).
+- 실 키 확인 0회(이 절의 판정은 단위 테스트 · 소스 스캔으로만 고정 — 라이브 확인은 배포 뒤 메인 세션 몫).
+
+### 128.1 결함별 원인 · 수정
+| # | 결함 | 원인(파일:줄 — 수정 전 main `112389e`) | 수정 |
+|---|---|---|---|
+| 1 | 사기범이 "보험 담당자가 전화로 이어서 안내해줄 거야"라고 했는데 전화가 오지 않음 | 메신저 단계 응낙 지시 `MOCK_INSTALL_CONSENT_INSTRUCTION`(`functions/src/scenarios/mockScreens.ts:160`)이 *"이제 담당자가 전화로 이어서 안내하겠다고 말하라"* 를 싣지만 전환 신호는 모델 몫이라, 신호 없는 예고가 그대로 나갔다. fv-tdgg의 다음 단계는 신분증 · 송금(통화 아님) | ① 설치 뒤 통화가 아닌 항목(`MESSENGER_INSTALL_WITHOUT_CALL_LANDINGS` = child-insurance-install)은 전화 예고 없는 응낙 지시 ② 신호 없는 예고 판정표 C(`roleplay/callAnnouncement.ts`) — 지금 전환할 수 있으면 전환(트리거 `announced_call`), 없으면 예고 문장을 지운다 |
+| 2 | 리포트에 앱 설치만 · 시도된 수법 2개 | ⓐ 이행 보고 *"방금 50만원 보냈어"* — 순응 패턴은 약속형만, 이행 보고는 코인 문맥(§98 X4)에서만(`report/analyzeConversation.ts:140` · `:290`) ⓑ 시도된 수법 보정(`resolveDemandFallbackTactic`)은 속은 짝에만 적용(`:661`) — 거절한 요구가 목록에서 빠짐 ⓒ 사진 턴: **같은 대화를 넣으면 H3로 판정된다(재현 안 됨)** — 실측 세션 문서 확인 필요(128.4) | H4(이행 보고 — 앞선 송금 요구가 있으면 바로 앞 대사가 통화 대사여도) · T-1(문구 키가 빈 대사도 요구 어형 표로 목록에 올림 — 판정 · 라벨 무변경) |
+| 3 | 통화 겹침 중 카톡에서 사기범이 "그럼 그렇게 해" 뒤 나가지 않음 | 통화 중 카톡 경로가 끊기 규칙 `none` 고정 + "끝내자는 말 금지"(`roleplay/chatDuringCall.ts:46` · `:109`) — 포기 신호를 낼 길이 없음 | 판정표 G — 폴백과 같은 `decideFallbackHangup` 사전 판정이 accepted면 포기 허용 지시 + `signal`, 포기 신호 · 사후 accepted면 세션 종료(`scammer_ended` · 표식 give_up) · 리포트 트리거. 화면은 "나갔습니다" 2.5초 뒤 통화 종료 → 결과(대화방 복귀 없음 — `sessionAlreadyEnded`) |
+| 4 | 사용자가 보이스톡을 걸었는데 폴백 사기범이 "전화 받아줘서 고마워" | §123 턴 지시 1줄은 실려 있었으나 같은 프롬프트의 페르소나(`CHILD_CALL_PHASE_RULE` — *"통화는 네가 먼저 건 전화다"*, `messengerChildImpersonationKakao.prompt.ts:53`)가 반대로 말함(추정 — 확인: 같은 이력 폴백 1턴 재생성) | 참가자가 건 통화의 폴백 턴만 ① 페르소나의 그 문장을 "참가자가 건 보이스톡을 받았다"로 교체 ② "전화 받아 줘서/주셔서/줬네" → "전화해 줘서/주셔서/줬네" 교정(`roleplay/callCaller.ts`) |
+| 5 | 보이스톡 발신은 카톡형인데 연결된 통화는 일반 전화(010 번호) | 통화 셸이 건 쪽과 무관하게 스킨 전화 토큰 · `callerLabel`(번호)을 씀(`src/app/session/play/page.tsx:2418` · `:2438`) | 참가자가 건 보이스톡 통화만 `voiceTalkCallTokens`(발신 화면 그라데이션 · 둥근 사각 프로필 · 기기 스킨의 어두운 버튼 토큰) + 대화방 이름. 대비 쌍 `voiceTalkCallPairs` 세 스킨 위반 0. 로고 0 |
+| 6 | 대화방을 나갔다 돌아오면 보낸 사진이 회색 '사진' | objectURL을 대화방 컴포넌트 상태에만 두고 언마운트 때 revoke(`src/components/MessengerChatRoom.tsx:233-241`) — 라우트 대화방 · 통화 위 대화방은 다른 인스턴스 | 세션 단위 화면 메모리 `src/lib/messenger/sessionPhotos.ts` — 다른 세션을 열 때 · 훈련 종료 화면에서만 정리. 서버 · 저장소 0 |
+| 7 | 설치 · 권한 허용 뒤 사기범이 먼저 말하지 않음 | 응낙 사실은 다음 참가자 턴의 지시로만 전달(`roleplay/index.ts` ②-d) — 먼저 보내는 경로가 없음 | 새 콜러블 `requestScreenActionFollowUp`(판정표 S — 응낙 · 제출 · 메신저 링크 · 1회) — 생성 중 참가자 메시지가 먼저 오면 저장 0. 응낙 언급 시각도 함께 기록(다음 턴 중복 0). 전화 예고는 판정표 C와 같은 규칙 |
+
+### 128.2 판정표 C — 신호 없는 전화 예고(`roleplay/callAnnouncement.ts`)
+| # | If | Then |
+|---|---|---|
+| C0 | 이번 턴 전환 신호가 받아들여졌다 | 종전(신호가 전환) |
+| C1 | 곧 걸려 올 전화 예고(`CALL_ANNOUNCE` ∨ `CALL_NOW`) · 나중 · 불가 표현 없음 ∧ 지금 전환 가능(메신저 단계 · 통화 단계 있는 세션 · 한도 아님 · §122(7) 하한 통과 · 같은 응답 끊기 신호 없음) | 전환 `announced_call` |
+| C2 | 예고는 있는데 지금 전환 불가 | 예고 문장 삭제(남는 문장 0이면 그대로) |
+| C3 | 예고 없음 | 종전 |
+
+### 128.3 판정표 G · S
+- G(통화 중 카톡 끊기) · S(화면 행동 뒤 먼저 보내기)는 각 파일 머리 표가 정본이다(`roleplay/chatDuringCall.ts` · `roleplay/screenActionFollowUp.ts`).
+- §68.3 분류표: #28 `requestScreenActionFollowUp` = **S**(세션 소유 + `assertAnonymousChallengeScope` — sendMessage와 같은 클래스). 서버 진입점 28개.
+
+### 128.4 남은 것 · 한계
+| 항목 | 상태 |
+|---|---|
+| 결함 2 ⓒ 사진 턴 누락 | 코드 경로로 재현 안 됨(같은 대화 = H3 속음). 추정 원인 후보: 리포트가 사진 턴 전에 생성됨 · 메시지 순서 · 문서 필드 — 실측 세션의 `messages`(turnIndex · photo) · `reports` 생성 시각 확인 필요 |
+| (3) 포기 신호 | 모델이 G2 지시를 따라 `END_CALL_GIVEUP`을 내야 끝난다(신호 없는 "그럼 그렇게 해"를 정규식으로 끝내지 않는다 — 오탐 위험). 실 키 확인 전 |
+| (4) Live 경로 | Live는 §123 맥락(`priorChatContext`)이 이미 참가자 발신을 알린다 — 이 절은 폴백만 고쳤다. Live 시스템 프롬프트의 페르소나 문장은 그대로(실측 신고 없음) |
+| (5) 화면 | 정적 렌더 · 실기 눈 확인 전(이 워크트리에 `.env` 없음 — 개발 서버 미기동) |
+| (7) 화면 행동 | 링크 화면이 열린 채로 메시지가 도착할 수 있다(닫으면 보인다). 통화 겹침 중에는 부르지 않는다 |
+
+### 128.5 배포 순서
+Functions(`sendMessage` · 새 `requestScreenActionFollowUp` · 리포트) → Hosting. 화면만 먼저 나가면 새 콜러블이 없어 (7)이 조용히 0건(`catch` 무시)이고, 서버만 먼저 나가면 (3)의 서버 종료 뒤 옛 화면은 "결과 확인하러 가기" 버튼으로만 나간다(통화는 화면을 떠날 때 정리) — 둘 다 막힘은 없으나 Functions 먼저를 권장.

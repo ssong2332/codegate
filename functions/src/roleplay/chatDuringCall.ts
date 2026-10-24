@@ -12,9 +12,22 @@
 // | 저장 채널 | 사용자 · 사기범 둘 다 `messenger` | 세션 채널(`voice`)을 쓰지 않는다 — 대화방에 말풍선으로 남고 리포트 타임라인에 카톡으로 보인다 |
 // | 턴 수(`turnCount`) | +1(같은 트랜잭션) | ⓒ 두 채널 발화를 합산한다. 폴백 끊기 · 문자 판정은 `messages`의 사용자 문서를 세므로 자동 합산된다 |
 // | 맥락 | 저장된 이력 전체(화면이 보내기 직전에 통화 전사를 먼저 제출한다) + `CHAT_DURING_CALL_INSTRUCTION` | 사기범 한 사람이 두 채널을 본다 |
-// | 문자 · 확인 전화 · 앱 설치 응낙 · 끊기 · 전환 판정 | 하지 않는다(통화 쪽이 진행을 쥔다) · 끊기 규칙 문면 `none` | 마커가 와도 지우고 효과 0 |
+// | 문자 · 확인 전화 · 앱 설치 응낙 · 전환 판정 | 하지 않는다(통화 쪽이 진행을 쥔다) | 마커가 와도 지우고 효과 0 |
+// | 끊기(§128(3)) | 사기범 **포기**만 받는다 — 아래 판정표 G | 목표 끊기 신호는 지우고 효과 0(통화 쪽 판정) |
 // | 한도 도달 | 이 턴은 세션을 끝내지 않는다(통화가 진행 중 — 종료는 통화 쪽 판정 · 사용자 종료) | — |
 // | 음성 합성 | 0 | — |
+//
+// §128(3)(2026-10-24 메인 세션 라이브 실측 — 통화 겹침 중 카톡에서 거절 · 의심이 이어지자 사기범이 *"그럼 그렇게 해"* 라고 사실상 포기했지만
+// 20초 넘게 대화방 나감도 통화 끊기도 없었다). 원인: 이 경로가 끊기 규칙 문면을 `none`으로 고정하고 "끝내자는 말을 하지 말라"고 지시해 포기 신호를
+// 낼 길이 없었다. 판정표 G(포기 — 폴백 끊기 판정과 **같은 함수** `decideFallbackHangup`):
+// | # | If | Then |
+// |---|---|---|
+// | G1 | 사전 판정(LLM 전)이 `accepted` 아님(이른 턴 · 문자 대기 · 확인 무력화 전환 전 · 이미 표식 등) | 끊기 규칙 `none` · 지시 종전 문면(바이트 동일) |
+// | G2 | 사전 판정 `accepted` | 끊기 규칙 `signal` + 포기 허용 지시(`CHAT_DURING_CALL_GIVEUP_INSTRUCTION`) |
+// | G3 | G2 ∧ 응답에 `END_CALL_GIVEUP` ∧ 사후 판정(Mock 강등 포함) `accepted` ∧ 세션 아직 active | 세션 종료(`scammer_ended` · 표식 `give_up`) · 리포트 트리거 · 응답 `ended` — 화면이 대화방 "나갔습니다" → 통화 종료 → 결과 |
+// | G4 | 그 밖(목표 신호 · 신호 없음) | 효과 0 |
+// - 포기면 바로 끝내는 이유: 메신저발 통화의 포기 끊기는 "톡으로 한 번 더 붙잡기"(`session/callReturn.ts` give_up)로 이어지는데, 지금은 이미 그 톡
+//   대화방에서 포기했다 — 더 붙잡을 채널이 없다.
 // ⛔ 로그는 숫자 · 단계명만(G170).
 import { logger } from "firebase-functions";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -27,6 +40,12 @@ import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { applyFictionalBank, resolveFictionalBankName, resolveSessionAccountNumber } from "../shared/fictionalBank";
 import type { MessageDoc, ScenarioPromptDoc, SessionDoc } from "../shared/types";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
+import { triggerReportGeneration } from "../report";
+import { readDeliveredSms } from "../inCallSms/smsDelivery";
+import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
+import { decideFallbackHangup, fallbackHangupMode, fallbackSmsDeclaredFor, type FallbackHangupFacts } from "../scammerHangup/fallback";
+import { resolveHangupRelay } from "../scammerHangup/relayContext";
+import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { extractEscalationSignal } from "./escalationSignal";
 import { callPhaseMockTacticHints, isEscalatedVoiceCall } from "./escalatedCall";
 import { isL3Procedural } from "./l3Depth";
@@ -44,6 +63,10 @@ import type { SendMessageResponse } from "./types";
 /** 통화 중 카톡 턴 지시(서버 소유 · 따옴표 대사 예시 0). */
 export const CHAT_DURING_CALL_INSTRUCTION =
   "[통화 중 카톡] 지금 너는 참가자와 전화 통화가 연결된 채로 있고, 참가자가 같은 대화방으로 카톡을 보냈다. 같은 사람으로서 카톡으로 짧게(1~2문장) 답한다. 통화에서 이미 한 말과 어긋나지 않게 하고, 통화로 하던 요구를 카톡에서도 이어 간다. 전화를 끊자거나 끝내자는 말, 통화가 안 된다는 말은 하지 않는다.";
+
+/** §128(3) G2 — 끊기 사전 판정이 `accepted`인 턴의 지시(포기 신호를 낼 수 있다 · 목표 끊기는 통화 쪽 몫). */
+export const CHAT_DURING_CALL_GIVEUP_INSTRUCTION =
+  "[통화 중 카톡] 지금 너는 참가자와 전화 통화가 연결된 채로 있고, 참가자가 같은 대화방으로 카톡을 보냈다. 같은 사람으로서 카톡으로 짧게(1~2문장) 답한다. 통화에서 이미 한 말과 어긋나지 않게 하고, 통화로 하던 요구를 카톡에서도 이어 간다. 통화가 안 된다는 말은 하지 않는다. 참가자가 거절 · 의심을 되풀이해 더는 진행할 수 없다고 판단했을 때만 [진행 강제]의 끊기 규칙대로 짧은 마무리 한마디와 포기 신호를 붙인다 — 그러면 통화와 대화방을 함께 떠난다. 목표 달성 신호는 이 카톡에서 쓰지 않는다.";
 
 /** 통화 중 카톡을 받을 수 있는 세션인가(위 판정표 1행). */
 export function canChatDuringCall(session: Pick<SessionDoc, "status" | "channel" | "channelHistory">): boolean {
@@ -94,7 +117,36 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
   llmHistory.push({ role: "user", content: wrapUserInputAsData(maskedUserText) });
   const fictionalBankName = resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName });
   const familyAddressPrompt = resolveFamilyAddressPrompt(session.scenarioId, sessionFamilyAddress(session));
-  const turnInstruction = [CHAT_DURING_CALL_INSTRUCTION, photoTurnInstruction(isPhotoTurn)].filter(Boolean).join("\n");
+  // §128(3) 판정표 G — 끊기(포기) 사전 판정. 폴백과 같은 함수 · 확인 무력화 세션은 전환 전으로 본다(4행 fail-closed — 추가 read 0).
+  const smsDeclared = fallbackSmsDeclaredFor(session.scenarioId, session.flowVariantId);
+  let delivered: DeliveredSmsRecord[] = [];
+  let smsDeliveredLoaded = false;
+  if (smsDeclared) {
+    try {
+      delivered = await readDeliveredSms(sessionRef);
+      smsDeliveredLoaded = true;
+    } catch {
+      // 못 읽으면 문자 대기로 본다(fail-closed — 그 턴만 끊기 0).
+    }
+  }
+  const hangupFacts: FallbackHangupFacts = {
+    status: session.status,
+    channel: session.channel,
+    verifyEnabled: hasVerifyIntercept(session.scenarioId) && normalizeDifficultyLevel(session.difficultyLevel) === "advanced",
+    transferPlaced: false,
+    transferReachable: true,
+    goalActionDone: false,
+    userTurns: claim.history.filter((m) => m.role === "user").length + 1,
+    limitReached: false,
+    alreadyAccepted: Boolean(session.scammerHangup),
+    relay: resolveHangupRelay(session),
+    smsDeclared,
+    smsDeliveredLoaded,
+  };
+  const hangupPre = decideFallbackHangup(hangupFacts, delivered, false);
+  const hangupMode = fallbackHangupMode(hangupPre);
+  const chatInstruction = hangupMode === "signal" ? CHAT_DURING_CALL_GIVEUP_INSTRUCTION : CHAT_DURING_CALL_INSTRUCTION;
+  const turnInstruction = [chatInstruction, photoTurnInstruction(isPhotoTurn)].filter(Boolean).join("\n");
   const completion = await completeWithFallback(getLlmClient(), {
     systemPrompt: buildSystemPrompt(scenarioPrompt, {
       difficultyLevel: normalizeDifficultyLevel(session.difficultyLevel),
@@ -106,7 +158,7 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
       sessionAccountNumber: resolveSessionAccountNumber(session.scenarioId),
       personaCard: session.personaCard?.items,
       ...(familyAddressPrompt ? { familyAddress: familyAddressPrompt } : {}),
-      hangupMode: "none",
+      hangupMode,
     }),
     messages: llmHistory,
     // 통화가 이어지는 중이라 Mock 대사 원천에서도 채팅 단계 전용 수법("통화가 안 돼")을 뺀다(에뮬레이터 실측 · `escalatedCall.ts` 표).
@@ -125,7 +177,7 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
   const { text: linkFreeText, attachments: markerAttachments } = extractLinkMarker(completion.text, session.scenarioId, session);
   const attachments = dropRepeatedLinkChips(markerAttachments, linkFreeText, claim.history);
   const { text: smsFreeText } = extractSmsMarker(linkFreeText);
-  const { text: signalFreeText } = extractEscalationSignal(smsFreeText);
+  const { text: signalFreeText, endCall } = extractEscalationSignal(smsFreeText);
   const { text: tidyText } = tidyScammerReplyMarkup(signalFreeText);
   const { text: realNameFree } = replaceRealFinancialNames(tidyText);
   const shaped = limitReplySentences(applyFictionalBank(realNameFree, fictionalBankName)).text;
@@ -138,17 +190,45 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
     ...(attachments ? { attachments } : {}),
     channel: "messenger",
   } satisfies MessageDoc);
-  if (completion.isMock) {
+  // §128(3) G3 — 포기 신호 · 사후 판정 accepted면 이 턴에 세션을 끝낸다(트랜잭션 재확인 · 이미 끝난 세션은 건드리지 않는다).
+  const giveUp =
+    endCall === "give_up" &&
+    hangupMode === "signal" &&
+    decideFallbackHangup(hangupFacts, delivered, completion.isMock).status === "accepted";
+  if (endCall !== undefined && !giveUp) {
+    // G170 — 종류 · 행만(대사 0).
+    logger.info("[§128] 통화 중 카톡 끊기 신호 무시", { sessionId, kind: endCall, row: hangupPre.row, mode: hangupMode });
+  }
+  let ended = false;
+  if (completion.isMock || giveUp) {
     try {
-      await sessionRef.update({ llmProvider: "mock" });
+      ended = await db.runTransaction(async (tx) => {
+        const fresh = (await tx.get(sessionRef)).data() as SessionDoc | undefined;
+        const update: Partial<SessionDoc> = completion.isMock ? { llmProvider: "mock" as const } : {};
+        const end = giveUp && fresh?.status === "active";
+        if (end) {
+          const endedAt = Timestamp.now();
+          update.status = "ended";
+          update.endReason = "scammer_ended";
+          update.endedAt = endedAt;
+          update.scammerHangup = { acceptedAt: endedAt, kind: "give_up", path: "fallback" };
+        }
+        if (Object.keys(update).length > 0) tx.update(sessionRef, update);
+        return end;
+      });
     } catch {
-      // 표식 실패는 대화를 막지 않는다.
+      // 표식 · 종료 반영 실패는 대화를 막지 않는다(답장은 이미 저장됐다 — 종료는 다음 턴 · 사용자 종료가 맡는다).
     }
+  }
+  if (ended) {
+    logger.info("[§128] 통화 중 카톡 사기범 포기 — 세션 종료", { sessionId, userTurns: hangupFacts.userTurns });
+    await triggerReportGeneration(sessionId);
   }
   return {
     reply: { role: "scammer", text: finalReplyText, ...(attachments ? { attachments } : {}) },
     turnCount: claim.turnCount,
-    ended: false,
+    ended,
+    ...(ended ? { endReason: "scammer_ended" as const } : {}),
     isMock: completion.isMock,
   };
 }

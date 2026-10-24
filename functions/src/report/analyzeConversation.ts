@@ -348,6 +348,24 @@ function isPhotoAfterDemand(reply: AnalysisMessage, photoDemandSeen: boolean): b
   return reply.photo === true && photoDemandSeen;
 }
 
+// ⭐ §128(2)(2026-10-24 메인 세션 라이브 실측 — 자녀 사칭 카톡 고급 · 통화 겹침 중 카톡 *"방금 50만원 보냈어"* 가 속은 순간에서 빠졌다).
+// 원인: 순응 패턴은 약속형(보낼게 · 보내드릴게 · 송금 · 이체)만 보고 **이행 보고**(보냈어)는 코인 단계(§98 X4 — 인출 · 코인 요구 문맥)에서만
+// 잡았다. 메신저 송금 요구 뒤 "보냈어"는 문맥이 송금 요구라 X4가 열리지 않았다. H4(리포트 전용 · 공유 패턴 무변경):
+// | # | If | Then |
+// |---|---|---|
+// | H4 | 이 대사까지의 사기범 대사 중 하나라도 송금 요구(`isTransferDemand` — 돈 · 계좌 문맥 + 보내 · 이체 · 송금 요구 어형) ∧ 참가자 답에 이행 보고
+// |    | (`TRANSFER_DONE_REPORT` — 보냈 · 송금했 · 이체했 · 입금했 · 부쳤 + 어미, 앞에 안 · 못 없음) ∧ `REFUSAL_IN_ANSWER` 없음 | 속음 · 라벨은 요구한 대사에서 |
+// - 바로 앞 대사가 아니어도 되는 이유: 통화 중 카톡은 통화 쪽 요구(다른 채널)에 대한 이행 보고라 turnIndex 순 바로 앞 대사가 요구가 아닐 수 있다(H3과 같은 방식).
+const TRANSFER_DONE_REPORT = /(?<!(?:안|못)\s?)(?:보냈|송금했|이체했|입금했|부쳤)(?:어|습|다|는데|고|지)/;
+
+function isTransferDemand(scammerText: string): boolean {
+  return scammerText.split(/[.?!\n]+/).some((s) => MONEY_CONTEXT.test(s) && TRANSFER_REQUEST.test(s));
+}
+
+function isTransferDoneAfterDemand(reply: AnalysisMessage, transferDemandSeen: boolean): boolean {
+  return transferDemandSeen && TRANSFER_DONE_REPORT.test(reply.textMasked) && !REFUSAL_IN_ANSWER.test(reply.textMasked);
+}
+
 function isHardDisclosure(scammerText: string, replyText: string): boolean {
   if (HARD_DISCLOSURE_TOKEN.test(replyText)) return true;
   if (REFUSAL_IN_ANSWER.test(replyText)) return false;
@@ -606,17 +624,26 @@ export function analyzeConversation(
   const riskSignals: RiskSignal[] = [];
   // §113.2 H3 — 지금까지 사진 · 신분증을 요구한 가장 최근 사기범 대사(없으면 undefined).
   let photoDemand: AnalysisMessage | undefined;
+  // §128(2) H4 — 지금까지 송금을 요구한 가장 최근 사기범 대사(없으면 undefined).
+  let transferDemand: AnalysisMessage | undefined;
 
   for (let i = 0; i < sorted.length; i += 1) {
     const msg = sorted[i];
     if (msg.role !== "scammer") continue;
     if (PHOTO_DEMAND.test(msg.textMasked)) photoDemand = msg;
+    if (isTransferDemand(msg.textMasked)) transferDemand = msg;
 
     // 한 대사에 수법이 여럿이면 모두 "시도된 수법"에 올린다(2026-10-17). 속은 순간의 라벨은 종전처럼
     // 목록 순서상 **첫** 수법이다 — 라벨 규칙을 바꾸면 아카이브 묶기 키(T74)가 함께 흔들린다.
     const matchedTactics = findMatchedTactics(msg.textMasked, tacticMatchers);
     for (const matched of matchedTactics) {
       tacticLabelsUsed.add(extractTacticLabel(matched));
+    }
+    // §128(2) T-1 — 문구 키가 빈 대사도 요구 어형 표(`resolveDemandFallbackTactic` — 세션 목록 안 라벨만)로 "시도된 수법"에 올린다.
+    // 종전에는 속은 순간으로 판정된 짝에서만 보정해, 거절한 요구(추가 송금 · 비밀번호 등)가 목록에서 빠졌다. 속은 순간 판정 · 라벨은 무변경.
+    if (matchedTactics.length === 0) {
+      const demandLabel = resolveDemandFallbackTactic(msg.textMasked, weakenedTactics);
+      if (demandLabel) tacticLabelsUsed.add(demandLabel);
     }
     const matchedTactic = matchedTactics[0];
 
@@ -640,6 +667,10 @@ export function analyzeConversation(
         userReply = reply;
         break;
       }
+      if (isTransferDoneAfterDemand(reply, transferDemand !== undefined)) {
+        userReply = reply;
+        break;
+      }
       if (!fake && (isHardDisclosure(msg.textMasked, reply.textMasked) || (!resisted && complied && !wrongOtp))) {
         userReply = reply;
         break;
@@ -656,7 +687,13 @@ export function analyzeConversation(
     // PR-A3 — 문구 키가 비면 요구 어형 표(`resolveDemandFallbackTactic`)로 세션 목록 안의 라벨을 고른다. 고른 라벨은
     // AC-083 (a)를 지키려고 수법 목록에도 올린다(라벨이 정해지는 것은 이미 속은 순간으로 판정된 짝뿐이다).
     // §113.2 H3 — 사진 턴이면 라벨은 요구한 대사에서 고른다.
-    const labelSource = userReply.photo === true && photoDemand ? photoDemand : msg;
+    // §128(2) H4 — 이행 보고면 라벨은 송금을 요구한 대사에서 고른다(바로 앞 대사가 요구가 아닐 수 있다).
+    const labelSource =
+      userReply.photo === true && photoDemand
+        ? photoDemand
+        : transferDemand && msg !== transferDemand && isTransferDoneAfterDemand(userReply, true) && !isTransferDemand(msg.textMasked)
+          ? transferDemand
+          : msg;
     const labelTactic = labelSource === msg ? matchedTactic : findMatchedTactics(labelSource.textMasked, tacticMatchers)[0];
     const fallbackTactic = labelTactic ? undefined : resolveDemandFallbackTactic(labelSource.textMasked, weakenedTactics);
     if (fallbackTactic) tacticLabelsUsed.add(fallbackTactic);

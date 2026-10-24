@@ -56,7 +56,7 @@ test("[A-1/⑧ 배선] sendMessage — 응낙 지시를 통화 중 변형으로 
   // 메신저 행의 값은 그대로다(아래 G607 진리표 1 · 2행이 고정). 함수가 `escalatedCall`을 그대로 받는지까지 여기서 본다.
   assert.match(
     src,
-    /turnInstruction = installConsentInstructionFor\(\{\n\s*entrySurface: mockConsentSurface \?\? "messenger-link",\n\s*escalatedCall,\n\s*path: "fallback",\n\s*transferPlaced: verifyState\?\.placed === true,\n\s*\}\);/,
+    /turnInstruction = installConsentInstructionFor\(\{\n\s*entrySurface: mockConsentSurface \?\? "messenger-link",\n\s*escalatedCall,\n\s*path: "fallback",\n\s*transferPlaced: verifyState\?\.placed === true,\n\s*\.\.\.\(mockConsentLandingId !== undefined \? \{ landingId: mockConsentLandingId \} : \{\}\),\n\s*\}\);/,
   );
   assert.match(src, /escalatedCall && turnChoice === "none" \? ESCALATED_CALL_CONTEXT_INSTRUCTION : undefined;/);
   // 채널 전이 판정(구조화 신호 · max-turn 폴백)은 무접촉 — 기존 조건식이 그대로 있다.
