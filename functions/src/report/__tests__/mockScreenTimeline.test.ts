@@ -106,7 +106,8 @@ test("[D-51 ④] 가짜 '권한 허용'에 응하면 순간 1건이 **사기범 
   assert.equal(result.deceivedMoments.length, 2);
   const promoted = result.deceivedMoments[0];
   assert.equal(promoted.turnIndex, 0, "앵커 = 설치 링크를 실은 사기범 메시지");
-  assert.equal(promoted.timeLabel, "5초 시점");
+  // §129.7 A2(사용자 승인 2026-10-24) — 시각 표기 = 실제 응낙 시각(consentedAtMs = 18초). 앵커 위치(turnIndex)는 종전 그대로다.
+  assert.equal(promoted.timeLabel, "18초 시점");
   assert.equal(promoted.tactic, CATALOG[0].momentTactic);
   assert.equal(promoted.correctAction, CATALOG[0].correctAction);
   assert.equal(

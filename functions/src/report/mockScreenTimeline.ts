@@ -110,6 +110,36 @@ export function resolveMockScreenAnchor(
 }
 
 /**
+ * §129.7 A1(사용자 승인 2026-10-24 — 라이브 자녀 사칭 카톡 고급: 링크가 16초 S2 · 다시 S3에 실렸고 실제 설치는 34초 답 뒤였는데 화면 순간이 16초 · S2에 찍혀
+ * 순서가 뒤집히고 M1 합치기가 안 됐다).
+ * | # | If | 앵커 |
+ * |---|---|---|
+ * | A1 | 실제 화면 행동 시각(`actionAtMs`)이 있고, 그 시각 이전에 이 링크를 실은 사기범 대사가 있다 | 그중 **마지막** 대사 |
+ * | — | 행동 시각 없음 · 그 이전 대사 없음 | 종전(`resolveMockScreenAnchor` — 첫 대사 · 미해결 규칙 그대로) |
+ */
+export function resolveMockScreenActionAnchor(
+  landingId: string,
+  sortedMessages: readonly MockScreenMessage[],
+  sessionCreatedAtMs: number,
+  actionAtMs: number | undefined,
+): MockScreenAnchor {
+  if (actionAtMs === undefined) return resolveMockScreenAnchor(landingId, sortedMessages, sessionCreatedAtMs);
+  const carriers = sortedMessages.filter(
+    (m) => m.role === "scammer" && (m.landingIds ?? []).includes(landingId) && m.createdAtMs <= actionAtMs,
+  );
+  const last = carriers[carriers.length - 1];
+  if (!last) return resolveMockScreenAnchor(landingId, sortedMessages, sessionCreatedAtMs);
+  const elapsedSec = Math.max(0, Math.round((last.createdAtMs - sessionCreatedAtMs) / 1000));
+  return { anchorTurnIndex: last.turnIndex, anchorResolved: true, timeLabel: `${elapsedSec}초 시점` };
+}
+
+/** §129.7 A2 — 해결된 앵커의 시각 표기를 실제 화면 행동 시각으로(행동 시각 없음 · 미해결 = 그대로). 같은 시간축(세션 기준 ms)이다. */
+function withActionTimeLabel(anchor: MockScreenAnchor, actionAtMs: number | undefined, sessionCreatedAtMs: number): MockScreenAnchor {
+  if (actionAtMs === undefined || !anchor.anchorResolved) return anchor;
+  return { ...anchor, timeLabel: `${Math.max(0, Math.round((actionAtMs - sessionCreatedAtMs) / 1000))}초 시점` };
+}
+
+/**
  * 가짜 랜딩 응낙 1건 → **속은 순간 1건**(T84 설치 응낙 · T123 폼 제출 공용).
  *
  * ⭐ **두 경로가 같은 승격 규칙을 쓰게 하는 단일 지점이다**(§31.6 G137). 표면마다 조립을 복제하면
@@ -210,7 +240,14 @@ export function applyMockScreens(
 
   for (const doc of docs) {
     // T194-c-1(§84.15.3 · G606) — 통화 중 설치 문서는 명시 앵커(호출부가 `resolveAnchor`로 푼 값) · 그 밖은 첨부 기반 리졸버(종전).
-    const anchor = doc.explicitAnchor ?? resolveMockScreenAnchor(doc.landingId, sortedMessages, sessionCreatedAtMs);
+    // §129.7 A1 · A2(사용자 승인 2026-10-24) — 실제 화면 행동(응낙 · 제출) 시각이 있으면 그 전에 링크를 실은 **마지막** 대사를 앵커로,
+    // 시각 표기는 실제 행동 시각으로 한다(`resolveMockScreenActionAnchor`). 명시 앵커(통화 중 설치)는 위치를 바꾸지 않고 시각만 행동 시각으로.
+    const actionAtMs = doc.consentedAtMs ?? doc.submittedAtMs;
+    const anchor = withActionTimeLabel(
+      doc.explicitAnchor ?? resolveMockScreenActionAnchor(doc.landingId, sortedMessages, sessionCreatedAtMs, actionAtMs),
+      actionAtMs,
+      sessionCreatedAtMs,
+    );
     const item = catalog.find((c) => c.landingId === doc.landingId);
     // T194-c-1(§84.15.3 "승격 조건 G135 그대로") — `anchorTurnIndex >= 0`을 응낙에도 함께 본다. 첨부 기반 리졸버는 해결 시 항상 실제 메시지
     // turnIndex(≥ 0)라 메신저 경로는 동작 무변경이고, 명시 앵커(`resolveAnchor` 규칙 1 = 대화 맨 앞 -1)만 이 조건에 걸린다.

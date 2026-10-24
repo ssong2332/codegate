@@ -424,3 +424,45 @@ test("[§129.6 ② M1 · M2] 링크 대사 바로 앞의 같은 범주 채팅 �
   const kept = applyMockScreens([doc], [photo], messages, 0, catalog);
   assert.equal(kept.deceivedMoments.length, 2, "M2 — 범주가 다르면 둘 다");
 });
+
+// ── §129.7 A1 · A2 · A3(사용자 승인 2026-10-24) — 메인 라이브 재테스트 · 자녀 사칭 카톡 고급: 같은 링크가 S2(16초) · S3에 실리고 설치는 34초 답 뒤 ──
+test("[§129.7 A1 · A2 · A3] 화면 순간 앵커 = 행동 전 마지막 링크 대사(S3) · 시각 = 실제 응낙 시각 · 34초 채팅 순간과 하나로", () => {
+  const catalog = MOCK_SCREENS["messenger-child-impersonation-kakao"]!;
+  const item = catalog.find((c) => c.landingId === "child-insurance-install")!;
+  const messages = [
+    { role: "scammer" as const, turnIndex: 2, createdAtMs: 16_000, landingIds: [item.landingId] }, // S2 첫 링크
+    { role: "user" as const, turnIndex: 3, createdAtMs: 34_000 }, // "알았어 뭘 깔면 돼?"
+    { role: "scammer" as const, turnIndex: 4, createdAtMs: 37_000, landingIds: [item.landingId] }, // S3 같은 링크 다시
+  ];
+  const doc = { landingId: item.landingId, kind: item.kind, shownAtMs: 40_000, consentedAtMs: 52_000 };
+  const chat = { turnIndex: 3, timeLabel: "34초 시점", tactic: "보험 처리 앱 설치 요구", correctAction: "", tacticCategory: "link_or_install" as const };
+  const result = applyMockScreens([doc], [chat], messages, 0, catalog);
+  assert.deepEqual(
+    result.deceivedMoments.map((m) => [m.turnIndex, m.timeLabel, m.tactic]),
+    [[4, "52초 시점", item.momentTactic]],
+    "A1 앵커 S3 · A2 실제 응낙 시각 · A3 M1 합치기",
+  );
+  // 행동 시각보다 뒤에 실린 링크 대사는 앵커가 되지 않는다(A1 — 그 시각 이전만).
+  const early = applyMockScreens([{ ...doc, consentedAtMs: 20_000 }], [], messages, 0, catalog);
+  assert.equal(early.deceivedMoments[0]?.turnIndex, 2);
+});
+
+// ── §129.7 R1~R4(사용자 승인 2026-10-24 · (b) ㉠ 비행동 동사 제외 · (a) ㉠ G1 제외 — AC-103 (e) · G511 유지) — 라이브 금 구매형 ──
+test("[§129.7 R1~R4] '제출해 주셔야' 뒤 따름 약속 · 금 전달 약속 = 속음 · '들어주셔야 · 기다리셔야' 뒤는 C4 · C5 그대로 · '옮겨야 합니다'는 요구 아님", () => {
+  const tactics = G2LD_TACTICS();
+  const ask = (scammer: string, user: string) => analyzeConversation(dialogue([["scammer", scammer], ["user", user]]), 0, tactics);
+  const GOLD = "고객님, 자산 실물 전수 조사 대상이셔서 예금을 해지하신 뒤 금으로 바꾸셔서 담당 직원에게 실물로 제출해 주셔야 검수가 끝납니다.";
+  const follow = ask(GOLD, "알겠어요. 시키는 대로 할게요.");
+  assert.equal(follow.wasDeceived, true, "R1 — 라이브 대사");
+  assert.equal(follow.deceivedMoments[0]?.tactic, "실물 조사 명목 금 구매 인출 요구");
+  assert.equal(ask(GOLD, "알겠어요. 금으로 바꿔서 드릴게요.").wasDeceived, true, "R4 — J-2 약속");
+  assert.equal(ask("예금을 해지하셔야 합니다.", "네, 시키는 대로 할게요.").wasDeceived, true, "R2 — 청자 높임 당위");
+  assert.equal(ask("놀라셨을 텐데 차분히 들어주셔야 합니다.", "어떻게 해야 하나요?").wasDeceived, false, "(b) — 듣기는 행동 요구 아님");
+  assert.equal(ask("잠시만 기다리셔야 합니다.", "네, 말씀하신 대로 할게요.").wasDeceived, false, "(b) — 기다림은 행동 요구 아님");
+  assert.equal(ask("지금 고객님 예금이 범죄 자금과 섞이지 않도록 자산을 안전 계좌로 옮겨야 합니다.", "안전 계좌는 어떻게 옮겨요?").wasDeceived, false, "R3");
+});
+
+test("[§129.7 (a) ㉠] 리포트는 끊기 표식을 읽지 않는다(G511 유지 — G1 미적용)", () => {
+  assert.equal(read("report/generateReportCore.ts").includes("scammerHangup"), false);
+  assert.equal(read("report/analyzeConversation.ts").includes("goalHangup"), false);
+});
