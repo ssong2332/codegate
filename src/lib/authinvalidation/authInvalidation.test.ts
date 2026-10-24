@@ -43,6 +43,7 @@ const ALL_ROUTES = [
   "/challenge/results",
   "/clone/wait",
   "/contact",
+  "/faq", // §133 자주 묻는 질문
   "/grade",
   "/history",
   "/login",

@@ -15,7 +15,8 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCurrentUser } from "./useCurrentUser";
-import { isAnonymousOutsideRecipientFlow, LEGAL_PATHS } from "./anonymousScope";
+import { INFO_PATHS, isAnonymousOutsideRecipientFlow, LEGAL_PATHS } from "./anonymousScope";
+import { isKnownAppPath } from "@/lib/seo/publicPages";
 import { useAuthInvalidation } from "@/lib/authinvalidation";
 import AuthInvalidationBanner from "@/components/AuthInvalidationBanner";
 
@@ -30,7 +31,8 @@ import AuthInvalidationBanner from "@/components/AuthInvalidationBanner";
 // 경로 목록·판정은 `anonymousScope.ts`에 있다.
 // §89.4(시안 A 1번 화면) — "/"는 읽기 전용 소개(Firestore · Functions 호출 0 — 게이트 조회는 로그인 사용자일 때만)라 공개한다.
 // 외부 점검 2026-10-21 — 법적 고지 화면(LEGAL_PATHS)도 공개한다(읽기 전용).
-const PUBLIC_PATHS = ["/", "/login", "/challenge/join", ...LEGAL_PATHS];
+// §133 — 자주 묻는 질문(INFO_PATHS)도 공개한다(읽기 전용).
+const PUBLIC_PATHS = ["/", "/login", "/challenge/join", ...LEGAL_PATHS, ...INFO_PATHS];
 // 재로그인(유효 세션 보유) 시 UX-013을 건너뛰고 다음 화면으로 직행(UX.md UX-013 Alternative Flow (a)).
 const POST_LOGIN_PATH = "/onboarding/consent";
 
@@ -38,13 +40,16 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
   const { user, loading } = useCurrentUser();
   const pathname = usePathname();
   const router = useRouter();
-  const isPublicPath = PUBLIC_PATHS.includes(pathname);
+  // §133 — 없는 주소(isKnownAppPath false)는 404 화면(not-found.tsx)만 그리므로 공개로 둔다. 종전에는 미인증 · 익명 사용자가
+  // 404 대신 /login으로 보내졌다(라이브는 로그인 사용자만 404를 봤다). 있는 라우트의 판정은 그대로다.
+  const isUnknownPath = !isKnownAppPath(pathname);
+  const isPublicPath = PUBLIC_PATHS.includes(pathname) || isUnknownPath;
   const invalidation = useAuthInvalidation({ user, loading, pathname });
   // 배너가 떠 있는 동안에만 "지금 열려 있는 그 화면"을 붙잡는다. 라우트가 바뀌면 mode가 그 즉시
   // "none"으로 돌아가 현행 규칙이 복귀한다(§34.4 U3 — 예외는 이동에는 붙지 않는다).
   const holdCurrentScreen = invalidation.mode !== "none";
   const anonymousOutOfScope =
-    user !== null && isAnonymousOutsideRecipientFlow(user.isAnonymous, pathname);
+    user !== null && !isUnknownPath && isAnonymousOutsideRecipientFlow(user.isAnonymous, pathname);
 
   useEffect(() => {
     if (loading) return;

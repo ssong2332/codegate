@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   ANONYMOUS_LOGIN_NOTICE,
   ANONYMOUS_RECIPIENT_PATHS,
+  INFO_PATHS,
   LEGAL_PATHS,
   isAnonymousOutsideRecipientFlow,
 } from "./anonymousScope.ts";
@@ -37,7 +38,8 @@ const SELF_TRAINING_PATHS = ALL_ROUTES.filter(
   (r) =>
     r !== "/login" &&
     !(ANONYMOUS_RECIPIENT_PATHS as readonly string[]).includes(r) &&
-    !(LEGAL_PATHS as readonly string[]).includes(r),
+    !(LEGAL_PATHS as readonly string[]).includes(r) &&
+    !(INFO_PATHS as readonly string[]).includes(r),
 );
 
 test("라우트 열거가 실제로 동작한다(공회전 방지) — 난이도 화면·홈·로그인이 보인다", () => {
@@ -155,7 +157,7 @@ test("AC-090 (b) — 익명 안내 블록은 role=\"status\"로 렌더된다", (
 // 배너 보류 중이면 보류. 안내 문구는 익명일 때만이라 미인증에는 뜨지 않는다.
 test("AC-090 (e) — 미인증 사용자 경로는 무변경(공개 경로 밖 → /login, 배너 보류 존중, 안내 없음)", () => {
   const code = readFileSync(ROUTE_GUARD, "utf8").replace(/\/\/[^\n]*/g, "");
-  assert.match(code, /const PUBLIC_PATHS = \["\/", "\/login", "\/challenge\/join", \.\.\.LEGAL_PATHS\]/, "공개 경로 목록이 바뀌었다(마지막 변경 = 2026-10-21 법적 고지 LEGAL_PATHS 추가)");
+  assert.match(code, /const PUBLIC_PATHS = \["\/", "\/login", "\/challenge\/join", \.\.\.LEGAL_PATHS, \.\.\.INFO_PATHS\]/, "공개 경로 목록이 바뀌었다(마지막 변경 = 2026-10-24 §133 자주 묻는 질문 INFO_PATHS 추가)");
   const unauth = code.match(/!user && !isPublicPath && !holdCurrentScreen/g) ?? [];
   assert.equal(unauth.length, 2, "미인증 가드(리다이렉트·언마운트) 2곳이 그대로가 아니다");
   assert.match(code, /if \(!user && !isPublicPath && !holdCurrentScreen\) \{\s*router\.replace\("\/login"\)/, "미인증 → /login 리다이렉트가 없다");

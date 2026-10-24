@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/auth";
 import { hasGrantedConsent } from "@/lib/consent";
@@ -65,6 +66,10 @@ export default function Home() {
       <header className="flex min-h-[56px] items-center gap-2 px-[22px]">
         <LineIcon name="shield" className="text-white" />
         <p className="text-[18px] font-bold">금융사기 예방 훈련</p>
+        {/* §133 · UX D-162 — 자주 묻는 질문 링크는 머리줄 오른쪽(높이 0 추가). 아래 띠에 한 줄로 두면 412×780에서 45px 넘쳤다(실측). */}
+        <Link href="/faq" className="ml-auto inline-flex min-h-[48px] shrink-0 items-center px-1 text-[16px] font-semibold whitespace-nowrap text-white underline underline-offset-4">
+          자주 묻는 질문
+        </Link>
       </header>
       <div className="flex flex-1 flex-col gap-5 px-[22px] pt-3">
         <span className="e2-rise self-start bg-sand px-[10px] py-1 text-[16px] font-bold text-ink">연습용 · 실제 돈은 오가지 않습니다</span>
