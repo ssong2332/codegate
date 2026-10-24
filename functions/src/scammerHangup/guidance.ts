@@ -39,6 +39,14 @@ export const GOAL_WRAP_UP_INSTRUCTION =
 export const SCAMMER_HANGUP_RETRY_AFTER_GOAL_GUIDANCE =
   "(지금 바로는 끊을 수 없다. 새 요구나 같은 안내를 되풀이하지 말고, 상대의 다음 말에 짧게 답한 뒤 다시 `end_call` 도구를 불러 통화를 끝내라.)";
 
+/**
+ * ⭐ §127(메인 세션 라이브 확인 2026-10-24 · 텍스트 폴백 · 기관 사칭 고급 현금 전달형) — 폴백 경로판 마무리 지시. 실시간은 클라가 `GOAL_WRAP_UP_INSTRUCTION`을
+ * 1회 맥락 주입하지만 폴백에는 그 지시가 없어 "찾으시면 다시 연락 주세요" 뒤에도 끊지 않았다. 폴백 끊기는 응답 끝 신호(`HANGUP_RULE_SIGNAL`)라
+ * 도구 대신 신호를 붙이게 한다. 사전 판정이 승인(신호 모드)이고 후속 단계 변형의 할 일이 끝난 턴에만 실린다(`roleplay/index.ts`).
+ */
+export const FALLBACK_GOAL_WRAP_UP_INSTRUCTION =
+  "(이번 통화에서 할 일은 모두 마쳤다. 지금까지 한 요구 · 안내를 다시 되풀이하지 말고 새 요구도 꺼내지 마라. 상대의 마지막 말에 짧게 답한 뒤 응답 맨 끝에 [[SIGNAL:END_CALL_GOAL]]을 붙여 통화를 끝내라.)";
+
 /** 실패(콜러블 미도달) — `createRealtimeCall.liveTools.endCallFailureInstruction`의 원천(배선은 C3). */
 export const SCAMMER_HANGUP_FAILURE_INSTRUCTION =
   "(지금은 통화를 끝낼 수 없다. 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어가라.)";

@@ -11,6 +11,7 @@ import {
   LIVE_NO_IDLE_RULE,
   OFF_TOPIC_REPLY_SENTENCE,
   SMS_NOT_YET_SENT_SENTENCE,
+  USER_MENTIONED_FINANCIAL_SENTENCE,
 } from "../promptAssembly";
 
 export const FULL_AUDIT_PAYLOAD_NEW = '**실존하지 않는 기관명**을 쓰되(예: "OO은행"), 숫자는';
@@ -22,7 +23,7 @@ export const FULL_AUDIT_REPEAT_ADDED =
 /** 두 교체로 늘어난 글자 수. */
 // §104 — 전 경로 공통으로 늘 실리는 [대화 방식] 1문장(주변 이야기 받아치기)도 더한다(조건형 ③④는 NONE 조립에 없어 빼지 않는다).
 export const FULL_AUDIT_LENGTH_DELTA =
-  FULL_AUDIT_PAYLOAD_NEW.length - FULL_AUDIT_PAYLOAD_OLD.length + FULL_AUDIT_REPEAT_ADDED.length + OFF_TOPIC_REPLY_SENTENCE.length;
+  FULL_AUDIT_PAYLOAD_NEW.length - FULL_AUDIT_PAYLOAD_OLD.length + FULL_AUDIT_REPEAT_ADDED.length + OFF_TOPIC_REPLY_SENTENCE.length + USER_MENTIONED_FINANCIAL_SENTENCE.length;
 
 function replaceOnce(text: string, from: string, to: string, label: string): string {
   const count = text.split(from).length - 1;
@@ -47,5 +48,7 @@ export function revertFullAudit(assembled: string): string {
   const exhaustReverted = removeAtMostOnce(idleReverted, HANGUP_EXHAUSTED_SENTENCE, "자금 소진 끊기");
   const newDemandReverted = removeAtMostOnce(exhaustReverted, HANGUP_NO_NEW_DEMAND_SENTENCE, "끊는 응답 새 요구 금지");
   // ⑤ §104 — [대화 방식] 첫 항목 끝 1문장(주변 이야기 받아치기 — 전 경로 공통이라 정확히 1회).
-  return replaceOnce(newDemandReverted, OFF_TOPIC_REPLY_SENTENCE, "", "주변 이야기 받아치기");
+  const offTopicReverted = replaceOnce(newDemandReverted, OFF_TOPIC_REPLY_SENTENCE, "", "주변 이야기 받아치기");
+  // ⑥ §127 — "페이로드는 가상값만" 줄의 참가자 언급 은행 되받기 1문장(무조건부 — 정확히 1회).
+  return replaceOnce(offTopicReverted, USER_MENTIONED_FINANCIAL_SENTENCE, "", "참가자 언급 은행 되받기");
 }

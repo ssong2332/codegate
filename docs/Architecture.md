@@ -23931,5 +23931,14 @@ D 판단값 근거(관측 5세션 — 운영 f7047187 + §115.5 · §115.6 실 �
 | 마무리 줄 | `VERBAL_ENDING_WRAP`을 1a 4벌 결말 단계에도(금 구매 결말을 공유하는 fv-t8ga는 한 번만) | `scenarios/flowVariants.ts` |
 | 전수 테스트 | 새 루트 13벌: 결말을 마치면 끊기 통과 · 확인 무력화 고급은 결말 전 4행 막힘 · 로그 재현(발화 7 4행 → 8 6행 + 재시도 문면 → 9 통과) · 말로 끝나는 결말 8벌 마무리 줄 1번 | `scammerHangup/__tests__/routeEndingHangup.test.ts` |
 
-### 127.4 검증
-`npm --prefix functions test` **1802 pass / 0 fail**(main 1799 + 신규 3) · `npm test` **1078 / 0** · functions lint 오류 0. 실 키 0(실기 재확인 권고 — 기관 사칭 고급 현금 전달형 · 순응 끝까지). 배포는 Functions만(화면 변경 0).
+### 127.4 메인 세션 라이브 확인 4건 (2026-10-24 · main `112389e` · 기관 사칭 고급 · 텍스트 폴백 · 결말 "현금 전달형 · 결말이 3가지")
+정상: 첫마디 가상 고유명 · 현금으로 맡겨야 하는 이유 · 은행 질문 코칭 · 비밀 유지 · 리포트 결말 줄.
+| # | 결함 | 원인 | 처리 | 경로 |
+|---|---|---|---|---|
+| 1 | [상] "찾으시면 다시 연락 주세요" · "은행 다녀올게요" 뒤에도 끊지 않음 | 폴백에는 실시간의 마무리 지시(`GOAL_WRAP_UP_INSTRUCTION` · 클라 1회 주입)가 없다. 사전 판정이 승인(신호 모드)이어도 모델이 신호를 붙이지 않으면 끝나지 않는다 | `FALLBACK_GOAL_WRAP_UP_INSTRUCTION` — 신호 모드 ∧ 할 일 완료 ∧ 후속 단계 변형인 턴의 턴 지시 끝에 "짧게 답한 뒤 [[SIGNAL:END_CALL_GOAL]]" (`roleplay/index.ts` · `scammerHangup/guidance.ts`) | 폴백. 실시간은 127.3 재시도 문면 |
+| 2 | [중] 인증번호 문자가 발화 4(신원 정보를 말한 턴)에 말없이 도착 · 번호 요구 0 | §124에서 백스톱 간격을 1로 줄이자 인증번호 문자(하한 3)가 흐름의 인증번호 단계(4단계 — 자산 질문 뒤)보다 먼저 왔고, 모델은 흐름 순서대로 자산 질문을 이어 갔다 | 다시 쓴 3루트(c5fj · q7cn · g2ld) 인증번호 하한 3 → 5(강제 도착 7 — 1a 이전 시점) + 인증번호 단계에 "도착 안내를 받으면 하던 질문보다 먼저 번호를 불러 달라" (`flowVariants.ts` `INSTITUTION_OTP_V2` · `INSTITUTION_ADVANCED_OTP_STAGE_V2`). 은퇴 fv-pgqt 무변경 | 두 경로(같은 문자 게이트) |
+| 3 | [중] 참가자 "국민은행이고 예금은 3천만원" → 사기범 "보담은행에 3천만 원" | 폴백 출력 후처리가 실존 은행명을 무조건 `OO은행` → 세션 가상 은행명으로 바꿨다(사기범이 지어낸 실존명 차단 · §81 · 2026-10-17) — 참가자가 말한 이름을 되받는 경우까지 | ① 텍스트: `neutralizeUserMentionedFinancialNames` — 참가자 발화(저장 이력 + 이번 발화)에 나온 실존 은행 · 카드사는 사기범 대사에서 "말씀하신 은행 · 카드사"로, 그 밖은 종전 치환 (`guardrails/realFinancialNames.ts` · `roleplay/index.ts`) ② Live(오디오라 후처리 불가): 공통 [진행 강제] 페이로드 줄에 1문장 `USER_MENTIONED_FINANCIAL_SENTENCE` — 조립 바이트 고정 테스트는 `fullAuditDelta.ts` `revertFullAudit` ⑥이 이 문장만 걷어 내 이전 기준값과 대조 · parcel 갱신 기대값 +60자 | 두 경로. ⚠️ 메신저 중 통화 대화(`chatDuringCall.ts`) · 복귀 메시지(`callReturnLine.ts`)는 종전 치환 그대로(참가자 발화 입력이 없다 — 범위 밖) |
+| 4 | [하] 리포트 "이 순간 속았어요"(1:33)에 수법 이름 없음 | 속은 순간 라벨 보정표 5행(신원 요구)이 "말씀해 · 알려 · 불러 …"만 받아 "… 확인 부탁드립니다" · "확인해 주시겠습니까" · "뒷자리"를 놓쳤다(추정 — 그 순간의 사기범 대사는 직접 보지 않았다. 확인: 라이브 세션 `messages` 1:33 직전 사기범 대사) | 5행에 "확인해 + 시키는 어미" · "말씀 · 확인 부탁드립니다" · 명사 "뒷자리" 추가 — 신원 명사가 같은 문장에 있어야 하는 조건은 그대로 (`report/analyzeConversation.ts`) | 두 경로(같은 분석기) |
+
+### 127.5 검증
+`npm --prefix functions test` **1806 pass / 0 fail**(main `112389e` 1799 + `routeEndingHangup.test.ts` 3 + `liveCheckFixes127.test.ts` 4) · `npm test` **1078 / 0** · functions lint 오류 0. 실 키 0 — 실기 재확인 권고(기관 사칭 고급 현금 전달형 · 실시간과 폴백 각 1회 · 은행명을 말하고 끝까지 따르기). 배포는 Functions만(화면 변경 0).

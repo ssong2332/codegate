@@ -11,7 +11,7 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { maskPII } from "../guardrails";
-import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
+import { neutralizeUserMentionedFinancialNames, replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from "../llm";
 import { triggerReportGeneration } from "../report";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
@@ -39,6 +39,7 @@ import {
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms } from "../inCallSms/smsDelivery";
 import { goalFollowUpFor, hasCompletedGoalAction, readMockScreenCompletion } from "../scammerHangup/goalAction";
+import { FALLBACK_GOAL_WRAP_UP_INSTRUCTION } from "../scammerHangup/guidance";
 import type { SmsDeliveryInput } from "../inCallSms/smsDelivery";
 import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import {
@@ -550,8 +551,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // §123 — 참가자가 건 통화(보이스톡 발신)면 "네가 전화한 게 아니다" 1줄(`callCaller.ts` · 사기범이 건 통화 = 없음).
     const participantCalledInstruction =
       escalatedCall && currentCallCaller(session.channelHistory) === "participant" ? PARTICIPANT_CALLED_INSTRUCTION : undefined;
+    // §127 — 폴백판 마무리 지시: 사전 판정 승인(신호 모드) ∧ 후속 단계 변형의 할 일 완료(실시간 `GOAL_WRAP_UP_INSTRUCTION`과 같은 조건 · 그 밖 = 없음).
+    const fallbackWrapUp =
+      hangupMode === "signal" && goalActionDone && goalFollowUpFor(session.scenarioId, session.flowVariantId) !== undefined
+        ? FALLBACK_GOAL_WRAP_UP_INSTRUCTION
+        : undefined;
     const turnInstructionWithPhoto =
-      [turnInstructionWithSms, photoTurnInstruction(isPhotoTurn), participantCalledInstruction].filter(Boolean).join("\n") ||
+      [turnInstructionWithSms, photoTurnInstruction(isPhotoTurn), participantCalledInstruction, fallbackWrapUp].filter(Boolean).join("\n") ||
       undefined;
 
     // 첫 사용자 턴만 LLM 시간 제한 20초(2026-10-18, 사용자 결정 C — llm/index.ts LLM_FIRST_TURN_TIMEOUT_MS).
@@ -710,7 +716,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 마킹이 없는 `sms_announce`·`verify_reconnect`는 잘려도 상태 기록이 틀어지지 않아 적용한다
     // (2026-10-18 문자 도착 턴 5문장 신고 · 한계는 `shouldLimitReplySentences` 주석).
     // ③-c′ PR-A3 — 모델 표기 잔재(굵게 별표 · 빈 백틱 · 지문 괄호)를 지운다(replyMarkup.ts 표). 마커가 다 빠진 뒤 · 문장 상한 앞.
-    const { text: markupFreeReplyText } = tidyScammerReplyMarkup(signalFreeReplyText);
+    const { text: markupTidyReplyText } = tidyScammerReplyMarkup(signalFreeReplyText);
+    // §127 — 참가자가 먼저 말한 실존 은행 · 카드사 이름의 되받기는 "말씀하신 은행"으로(가상 은행명으로 바꾸지 않는다) · 사기범이 스스로 꺼낸 이름만 아래 치환.
+    const { text: markupFreeReplyText } = neutralizeUserMentionedFinancialNames(markupTidyReplyText, [
+      ...storedHistory.filter((m) => m.role === "user").map((m) => m.textMasked),
+      maskedUserText,
+    ]);
     const { text: realNameReplacedText, replacedCount: realNameReplacedCount } =
       replaceRealFinancialNames(markupFreeReplyText);
     // §81 — 실존명 치환 결과("OO은행")와 모델이 그대로 말한 자리표시자를 세션 가상 은행명으로 맞춘다(문자 본문과 일치).

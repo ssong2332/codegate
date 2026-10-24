@@ -137,3 +137,31 @@ export function replaceRealFinancialNames(text: string): { text: string; replace
   }
   return replacedCount === 0 ? { text, replacedCount: 0 } : { text: current, replacedCount };
 }
+
+/** §127 — 참가자가 먼저 말한 은행 · 카드사 이름을 사기범이 되받을 때 쓰는 중립 표현. */
+export const USER_MENTIONED_BANK = "말씀하신 은행";
+export const USER_MENTIONED_CARD = "말씀하신 카드사";
+
+/**
+ * ⭐ §127(DECISIONS #243 · 메인 세션 라이브 확인 2026-10-24 — 참가자 "국민은행이고 예금은 3천만원" → 사기범 "보담은행에 3천만 원") — 참가자가
+ * **먼저 말한** 실존 은행 · 카드사 이름을 사기범이 되받으면, 가상 은행명(`replaceRealFinancialNames` → `applyFictionalBank`)이 아니라 중립 표현
+ * ("말씀하신 은행")으로 바꾼다. 다른 이름으로 바꾸면 참가자가 말한 사실을 사기범이 틀리게 받아 대화가 어긋난다. 사기범이 **스스로 꺼낸** 실존명은
+ * 그대로 종전 치환을 받는다(이 함수 다음에 `replaceRealFinancialNames`가 돈다). 순수 함수 · 치환 0이면 입력 그대로.
+ */
+export function neutralizeUserMentionedFinancialNames(
+  reply: string,
+  userTexts: readonly string[],
+): { text: string; replacedCount: number } {
+  let replacedCount = 0;
+  let current = reply;
+  for (const rule of REAL_FINANCIAL_NAME_RULES) {
+    const probe = new RegExp(rule.pattern.source, rule.pattern.flags.replace("g", ""));
+    if (!userTexts.some((t) => probe.test(t))) continue;
+    const neutral = rule.replacement === FICTIONAL_CARD_NAME ? USER_MENTIONED_CARD : USER_MENTIONED_BANK;
+    current = current.replace(new RegExp(rule.pattern.source, rule.pattern.flags), () => {
+      replacedCount += 1;
+      return neutral;
+    });
+  }
+  return replacedCount === 0 ? { text: reply, replacedCount: 0 } : { text: current, replacedCount };
+}

@@ -113,10 +113,12 @@ test("[신고①] 백스톱 — 모델이 안 불러도 인증번호 → 계좌 
     // §115 B안 — 하한 3 · 6. §124(#239) — 현행 fv-c5fj는 백스톱 간격 1(넛지 4 · 강제 5 → 계좌는 도착 5 + 간격 2 = 7에서 열려 강제 9),
     // 은퇴 fv-pgqt는 종전 2(넛지 5 · 강제 7 → 계좌 9에서 열려 강제 13).
     const step = declared[0]?.backstopUserTurns ?? BACKSTOP_USER_TURNS;
+    // §127 — 현행 fv-c5fj 인증번호 하한 5(라이브 확인 — 흐름보다 먼저 도착 방지) · 은퇴 fv-pgqt 3.
+    const otpOpen = declared[0]?.notBeforeUserTurns ?? 3;
     assert.equal(planSmsBackstop({ declared, delivered: [], userTurns: 2 }).action, "wait", `${v.variantId}: 2발화엔 아직(종전 하한 2)`);
-    const nudge = planSmsBackstop({ declared, delivered: [], userTurns: 3 + step });
+    const nudge = planSmsBackstop({ declared, delivered: [], userTurns: otpOpen + step });
     assert.equal(nudge.action, "nudge");
-    const otpAt = 3 + 2 * step;
+    const otpAt = otpOpen + 2 * step;
     const first = planSmsBackstop({ declared, delivered: [], userTurns: otpAt });
     assert.equal(first.action === "deliver" && first.item.smsId, "institution-otp", `${v.variantId}: 첫 강제 = 인증번호`);
     const delivered = [{ smsId: "institution-otp", userTurnsAtArrival: otpAt }];

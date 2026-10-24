@@ -335,8 +335,12 @@ const VERBAL_ENDING_WRAP =
   "상대가 하겠다고 약속하면 같은 요구를 말만 바꿔 되풀이하지 말고 짧게 마무리한 뒤 통화를 끝낸다. 상대가 답을 미루면 한 번만 다시 요구한 뒤 마무리한다.";
 const withSmsFirst = (stage: string) => `${stage} ${SMS_STAGE_CALL_FIRST}`;
 const FAST_BACKSTOP = { backstopUserTurns: 1 } as const;
-const INSTITUTION_ADVANCED_SMS_V2: FlowVariantSms[] = INSTITUTION_ADVANCED_SMS.map((item) => ({ ...item, ...FAST_BACKSTOP }));
-const INSTITUTION_OTP_ONLY_SMS: FlowVariantSms[] = [{ ...INSTITUTION_ADVANCED_SMS[0], ...FAST_BACKSTOP }];
+// §127(메인 세션 라이브 확인 2026-10-24 · 텍스트 폴백) — 백스톱 간격을 1로 줄이자 인증번호 문자가 흐름의 인증번호 단계(4단계 — 자산 질문 뒤)보다 먼저
+// 발화 4에 도착했고, 사기범은 흐름 순서대로 자산 질문을 이어 가 문자를 언급하지도 번호를 묻지도 않았다. 인증번호 하한을 3 → 5로 올려 강제 도착을
+// 발화 7(1a 이전과 같은 시점)로 되돌리고, 계좌 문자는 그대로 6(인증번호 도착 + 간격 2가 먼저 걸린다). 백스톱 간격 1은 유지한다(도구가 늦을 때만 작동).
+const INSTITUTION_OTP_V2: FlowVariantSms = { ...INSTITUTION_ADVANCED_SMS[0], notBeforeUserTurns: 5, ...FAST_BACKSTOP };
+const INSTITUTION_ADVANCED_SMS_V2: FlowVariantSms[] = [INSTITUTION_OTP_V2, { ...INSTITUTION_ADVANCED_SMS[1], ...FAST_BACKSTOP }];
+const INSTITUTION_OTP_ONLY_SMS: FlowVariantSms[] = [INSTITUTION_OTP_V2];
 
 // (3) 사용자 결정 *"가상 기관 + 지역 언급"* — [미리 확보한 상대 정보] 목록(§88 카드)이 있으면 사건 설명에 섞는다. 기관 이름은 페르소나의 가상
 // 고유명(§118) 그대로이고, 실제 기관 이름은 쓰지 않는다. 목록이 없으면 이 문장은 아무것도 하게 하지 않는다(지어내기 금지).
@@ -359,7 +363,7 @@ const INSTITUTION_LOAN_DEMAND_V2 =
 // ③ 금 구매형 — 근거 데일리안 2025-12-24(부산경찰 · "자산 실물 전수 조사" 명목 퇴직금 · 적금 해지 → 금 구입 → 골드바 대면 전달, 금 거래소 신고로 저지).
 // ⛔ 두 루트 모두 만날 장소 · 시간 · 주소는 정하지도 묻지도 않는다(AC-102 (c) — fv-k9ra와 같은 선). 끊기 4행은 C-5(인증번호 문자 도착 뒤 발화 수).
 // §124 실측(2026-10-23 · fv-q7cn 순응) — 인증번호가 맞지 않자 되묻기만 거듭하다 결말 단계 전에 통화를 끝냈다. 틀린 번호는 한 번만 다시 묻고 넘어가게 한다.
-const INSTITUTION_ADVANCED_OTP_STAGE_V2 = `${INSTITUTION_ADVANCED_OTP_STAGE} 불러 준 번호가 맞지 않으면 한 번만 다시 확인을 요청하고, 그래도 맞지 않으면 인증번호 없이 다음 단계로 넘어간다. 번호가 틀렸다는 이유로 통화를 끝내지 않는다.`;
+const INSTITUTION_ADVANCED_OTP_STAGE_V2 = `${INSTITUTION_ADVANCED_OTP_STAGE} 인증번호 문자가 도착했다는 안내를 받으면 하던 질문보다 먼저 그 응답에서 번호를 불러 달라고 요구한다. 불러 준 번호가 맞지 않으면 한 번만 다시 확인을 요청하고, 그래도 맞지 않으면 인증번호 없이 다음 단계로 넘어간다. 번호가 틀렸다는 이유로 통화를 끝내지 않는다.`;
 const INSTITUTION_HEAD_STAGES = [
   INSTITUTION_ADVANCED_OPENING,
   "협조하면 조용히 끝난다며 안심시키고, 금융감독기관이 자산 보호를 돕는다고 말한다.",
