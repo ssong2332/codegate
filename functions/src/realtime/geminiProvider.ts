@@ -16,7 +16,7 @@ import { asksIdentityCheck } from "../roleplay/personaAuthority";
 import { isL3Procedural } from "../roleplay/l3Depth";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
-import { sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
+import { resolveRouteAccountNumber, sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
 import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import {
   buildLiveToolDeclarations,
@@ -28,7 +28,6 @@ import {
 } from "./liveTools";
 import { SCENARIO_SPEAKER_GENDER, speakerGenderFor } from "./scenarioVoice";
 import type { RealtimeCallCredentials, RealtimeCallInput, RealtimeVoiceProvider } from "./types";
-import { resolveSessionAccountNumber } from "../shared/fictionalBank";
 import { resolveFamilyAddressPrompt } from "../scenarios/familyAddress";
 
 /**
@@ -176,7 +175,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       offerToolDeclared: declaresOfferVerificationDesk(input.scenarioId, input.difficultyLevel),
       // §81 — 세션 가상 은행명(문자 본문과 같은 이름). 부재면 종전 문자열("OO은행").
       ...(input.fictionalBankName ? { fictionalBankName: input.fictionalBankName } : {}),
-      sessionAccountNumber: resolveSessionAccountNumber(input.scenarioId),
+      sessionAccountNumber: resolveRouteAccountNumber(input.scenarioId, input.flowVariantId),
       // ⭐ T192 C3(§79.6 ① · §79.19 (5) 9 · G502) — `end_call`을 선언한 토큰에만 TOOL 변형(같은 술어 3번째 호출부).
       // 확인 무력화 1문장은 위 `verifyInterceptEnabled`로 조립 함수가 붙인다. 그 밖 = NONE(종전 문면 바이트 동일).
       hangupMode: declaresEndCall(input.scenarioId, endCallScope.channel, endCallScope.relay, endCallScope.liveAvailable)

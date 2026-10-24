@@ -34,7 +34,7 @@ type OtpDeliveredRecord = { smsId: string; userTurnsAtArrival?: number };
  */
 /** 직전 사기범 발화가 **틀린 번호에 되물은 말**인가 — 그 뒤 숫자가 또 다르면 재시도용 문면을 쓴다(QA §80 재시도 0/4 → 4/4). */
 const REASKED_OTP = /번호가[^.?!]{0,24}(?:안\s*맞|맞지\s*않|일치하지\s*않|틀)/;
-const ASKED_FOR_OTP =
+export const ASKED_FOR_OTP =
   /인증\s*(?:번호|코드)|번호가[^.?!]{0,24}(?:안\s*맞|맞지\s*않|일치하지\s*않|틀)|문자[^.?!]{0,20}다시[^.?!]{0,20}불러/;
 /** 이번 참가자 발화가 생년월일·생일 답인가. */
 const BIRTHDATE_CUE = /생년월일|생일|년생|\d{2,4}\s*년\s*\d{1,2}\s*월/;

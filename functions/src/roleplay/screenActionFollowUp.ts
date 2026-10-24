@@ -36,7 +36,8 @@ import { transitionChannel } from "../session/channelTransition";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { LLM_TEXT_SECRETS } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
-import { applyFictionalBank, resolveFictionalBankName, resolveSessionAccountNumber } from "../shared/fictionalBank";
+import { resolveRouteAccountNumber } from "../inCallSms/smsGate";
+import { applyFictionalBank, resolveFictionalBankName } from "../shared/fictionalBank";
 import type { MessageDoc, MockScreenDoc, SessionDoc } from "../shared/types";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { decideCallAnnouncement } from "./callAnnouncement";
@@ -136,7 +137,7 @@ export const requestScreenActionFollowUp = onCall<RequestScreenActionFollowUpReq
         speakerGender: resolveSessionSpeakerGender(session),
         turnInstruction: screenFollowUpInstruction(kind, landingId, canEscalateNow),
         fictionalBankName,
-        sessionAccountNumber: resolveSessionAccountNumber(session.scenarioId),
+        sessionAccountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
         personaCard: session.personaCard?.items,
         ...(familyAddress ? { familyAddress } : {}),
       }),

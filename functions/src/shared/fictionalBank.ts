@@ -141,10 +141,15 @@ export function extractAccountNumber(body: string): string | undefined {
 
 /**
  * 이 시나리오의 세션 계좌번호 — **계좌 문자가 있으면 그 문자 속 계좌**(대사와 문자가 같은 번호), 없으면 예시 계좌.
+ * 변형 세션은 `resolveRouteAccountNumber`(`inCallSms/smsGate.ts`)로 부른다 — 그 변형이 선언한 문자만 본다.
  * 프롬프트(`buildSystemPrompt` `sessionAccountNumber`)와 문자 문서(`accountNumber`)가 같은 값을 쓴다.
  */
-export function resolveSessionAccountNumber(scenarioId: string): string {
+export function resolveSessionAccountNumber(scenarioId: string, declaredSmsIds?: readonly string[]): string {
+  // §132.5 — 변형(루트)이 선언한 문자만 본다(`declaredSmsIds`). 현금 예탁 · 금 구매 루트는 계좌 문자를 선언하지 않는데도 시나리오의
+  // 안전계좌 문자 번호가 공통 규칙에 "이 번호를 그대로 쓴다"로 실려, 사기범이 그 계좌로 전액 이체를 요구했다(메인 라이브 확인 2026-10-24).
+  // 부재 = 변형 없는 세션(무소급) = 종전대로 시나리오 전체.
   for (const item of IN_CALL_SMS[scenarioId] ?? []) {
+    if (declaredSmsIds && !declaredSmsIds.includes(item.smsId)) continue;
     const found = extractAccountNumber(item.body);
     if (found) return found;
   }

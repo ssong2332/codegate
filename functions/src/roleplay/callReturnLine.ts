@@ -17,7 +17,8 @@ import { completeWithFallback, getLlmClient } from "../llm";
 import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
-import { applyFictionalBank, resolveFictionalBankName, resolveSessionAccountNumber } from "../shared/fictionalBank";
+import { resolveRouteAccountNumber } from "../inCallSms/smsGate";
+import { applyFictionalBank, resolveFictionalBankName } from "../shared/fictionalBank";
 import type { MessageDoc, SessionDoc } from "../shared/types";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { extractEscalationSignal } from "./escalationSignal";
@@ -87,7 +88,7 @@ export async function generateCallReturnLine(
       speakerGender: resolveSessionSpeakerGender(session),
       turnInstruction: by === "scammer" ? CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION : CALL_RETURN_INSTRUCTION,
       fictionalBankName,
-      sessionAccountNumber: resolveSessionAccountNumber(session.scenarioId),
+      sessionAccountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
       personaCard: session.personaCard?.items,
       ...(familyAddress ? { familyAddress } : {}),
     }),
