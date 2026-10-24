@@ -392,3 +392,14 @@ test("[§129.6 배선] 통화 텍스트 폴백(sendMessage) · 통화 복귀 · 
   }
   assert.match(read("llm/index.ts"), /assertUsableScammerReply\(input, result\);/, "마지막 그물(Mock 강등)도 같은 판정");
 });
+
+// ── §129.6 ① 메신저 첫 속은 순간 라벨 빈칸 — 메인 라이브 재테스트 2026-10-24 · 자녀 사칭 카톡 고급 fv-tdgg ──────────────
+test("[§129.6 ①] 설치를 꺼낸 대사 뒤 \"뭘 깔면 돼?\"(설치 방법 질문) 순간 = 설치 범주 세션 라벨 · 설치 동사 없는 답은 범주 0", () => {
+  const tactics = resolveSessionScenarioPrompt("messenger-child-impersonation-kakao", "fv-tdgg")!.weakenedTactics;
+  const S2 = "엄마, 지하철에서 떨어뜨렸는데 액정이 쫙 갈라졌어 ㅠㅠ 지금 보험 접수해야 되는데, 보험사에서 앱 깔아서 접수하래. 그거 깔아야 돼서 엄마한테 부탁하려고.";
+  const moment = analyzeConversation(dialogue([["scammer", S2], ["user", "알았어 뭘 깔면 돼?"]]), 0, tactics).deceivedMoments[0];
+  assert.equal(moment?.tactic, "보험 처리 앱 설치 요구");
+  assert.equal(moment?.tacticCategory, "link_or_install");
+  const noVerb = analyzeConversation(dialogue([["scammer", S2], ["user", "알았어 어떻게 하면 돼?"]]), 0, tactics).deceivedMoments[0];
+  assert.notEqual(noVerb?.tacticCategory, "link_or_install", "답에 설치 동사가 없으면 대사만으로 범주를 정하지 않는다");
+});
