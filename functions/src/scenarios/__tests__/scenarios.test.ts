@@ -12,7 +12,7 @@ import { buildSystemPrompt } from "../../roleplay/promptAssembly";
 import type { DifficultyLevel } from "../../shared/difficulty";
 // T113 — `turnInstruction`으로 조립에 들어오는 문자열의 **원본 4곳**. 이 값들은 조립 산출물의
 // 일부인데도 종전 축(난이도 × 문자)이 순회하지 않아 요구몰림 게이트의 스캔 대상 밖이었다.
-import { OPENING_TURN_INSTRUCTION } from "../../roleplay/openingLine";
+import { MESSENGER_OPENING_TURN_INSTRUCTION, OPENING_TURN_INSTRUCTION } from "../../roleplay/openingLine";
 import { MOCK_INSTALL_CONSENT_INSTRUCTION, MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL } from "../mockScreens";
 import { FLOW_VARIANTS } from "../flowVariants";
 import { personaCardKind, PERSONA_CARD_SCENARIOS, PERSONA_REGION_POOL } from "../personaCardCatalog";
@@ -31,6 +31,7 @@ import { PERSONA_AUTHORITY, asksIdentityCheck } from "../../roleplay/personaAuth
 import { speakerGenderFor } from "../../realtime/scenarioVoice";
 import { FAMILY_ADDRESS_SCENARIOS, resolveFamilyAddressPrompt } from "../familyAddress";
 import { CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION, CALL_RETURN_INSTRUCTION } from "../../roleplay/callReturnLine";
+import { CALL_AFTER_EXCUSE_INSTRUCTION } from "../../roleplay/callAnnouncement";
 import { buildPriorChatContext } from "../../realtime/priorChatContext";
 import { applyFictionalBank, FICTIONAL_BANK_NAMES, resolveSessionAccountNumber } from "../../shared/fictionalBank";
 
@@ -1297,6 +1298,8 @@ const ASSEMBLY_LEVEL_VARIANTS: ReadonlyArray<{
 function turnInstructionSources(): Array<{ scenarioId?: string; label: string; value: string }> {
   const out: Array<{ scenarioId?: string; label: string; value: string }> = [
     { label: "오프닝", value: OPENING_TURN_INSTRUCTION },
+    // §131(4) — 메신저 첫 메시지 전용 오프닝 지시(roleplay/openingLine.ts 판정표 O).
+    { label: "오프닝(메신저)", value: MESSENGER_OPENING_TURN_INSTRUCTION },
     { label: "모의설치응낙", value: MOCK_INSTALL_CONSENT_INSTRUCTION },
     // A-1 ⑧ — 에스컬레이션 뒤 폴백 턴의 응낙 변형 · 맥락 1줄(roleplay/index.ts ②-h).
     { label: "모의설치응낙(통화중)", value: MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL },
@@ -1310,6 +1313,8 @@ function turnInstructionSources(): Array<{ scenarioId?: string; label: string; v
     { label: "통화복귀", value: CALL_RETURN_INSTRUCTION },
     // §112 — 사기범이 통화를 끊고 돌아온 대화방의 복귀 메시지 지시.
     { label: "통화복귀(사기범 끊기)", value: CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION },
+    // §131(2) — 통화 불가 핑계 직후 전화로 넘어갈 때의 연속성 1줄(`roleplay/callAnnouncement.ts` 판정표 K).
+    { label: "통화불가핑계뒤전환", value: CALL_AFTER_EXCUSE_INSTRUCTION },
     // §110.3 — 메신저에서 넘어온 Live 통화의 앞선 대화 블록(머리 지시 — 대화 줄은 참가자 데이터라 표본 2줄만).
     {
       label: "앞선대화",

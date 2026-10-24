@@ -24,8 +24,8 @@ export function announcesIncomingCall(text: string): boolean {
 
 export type CallAnnouncementDecision = { action: "none" } | { action: "escalate" } | { action: "strip"; text: string };
 
-/** 문장 단위로 나눈다(끝 문장부호 · 줄바꿈 뒤). */
-function splitSentences(text: string): string[] {
+/** 문장 단위로 나눈다(끝 문장부호 · 줄바꿈 뒤). export — §131(2) 복귀 메시지 손질(`callReturnLine.ts`)이 같은 분할을 쓴다. */
+export function splitSentences(text: string): string[] {
   return text
     .split(/(?<=[.?!~…])\s+|\n+/)
     .map((sentence) => sentence.trim())
@@ -44,4 +44,22 @@ export function decideCallAnnouncement(input: {
   if (input.canEscalateNow) return { action: "escalate" }; // C1
   const kept = splitSentences(input.replyText).filter((sentence) => !announcesIncomingCall(sentence));
   return kept.length > 0 ? { action: "strip", text: kept.join(" ") } : { action: "none" }; // C2
+}
+
+// §131(2)(메인 세션 라이브 확인 2026-10-24 — 자녀 사칭 카톡 고급 · 텍스트 폴백) — 사기범이 *"폰 액정이 깨져서 통화가 안 돼, 톡으로만 말해줘"* 직후 턴에
+// *"그럼 내가 지금 전화할게"* 로 전화를 걸었다. 같은 응답 안의 모순은 판정표 A3(`signalConsistency.ts`) · 위 C1이 이미 막지만, **앞 턴의 통화 불가 핑계**는
+// 보지 않았다. 판정표 K(메신저 단계 `sendMessage` · 다른 턴 지시가 없는 턴 — G31):
+// | # | If | Then |
+// |---|---|---|
+// | K1 | 직전 사기범 메시지 `CALL_EXCUSE_LOOKBACK`개 안에 통화 불가 핑계(`CALL_UNAVAILABLE`)가 있다 | `CALL_AFTER_EXCUSE_INSTRUCTION` 1줄 — 이번에 전화로 넘어가면 지금은 걸 수 있는 이유를 함께 말한다 |
+// | K2 | 그 밖 | 없음(종전 문면 바이트 동일) |
+// ⛔ 전환 판정(신호 · C1 · 하한)은 무변경 — 이 줄은 문면만 맞춘다(전환을 막지도 일으키지도 않는다).
+export const CALL_EXCUSE_LOOKBACK = 3;
+
+/** K1 지시(따옴표 대사 예시 0 · 턴 지시 스캔 게이트 대상). */
+export const CALL_AFTER_EXCUSE_INSTRUCTION =
+  "(앞에서 너는 통화가 안 된다고 말했다. 이번 메시지에서 전화로 넘어간다면 통화가 안 된다는 말을 되풀이하지 말고, 지금은 걸 수 있게 된 이유(다른 폰을 잠깐 빌렸다는 식)를 같은 메시지에서 짧게 함께 말한다. 전화로 넘어가지 않는다면 이 지시는 무시한다.)";
+
+export function saidCallUnavailableRecently(scammerTexts: readonly string[]): boolean {
+  return scammerTexts.slice(-CALL_EXCUSE_LOOKBACK).some((text) => CALL_UNAVAILABLE.test(text));
 }

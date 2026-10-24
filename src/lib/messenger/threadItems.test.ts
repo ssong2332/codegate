@@ -48,14 +48,35 @@ test("[문구] 통화 줄은 말풍선이 아닌 시스템 문구 · 리포트 �
   assert.doesNotMatch(CALL_SEGMENT_LINE, /📞/);
 });
 
-test("[리뷰 Minor 3] 링크 칩이 붙은 통화 턴은 접지 않는다(누를 수 있던 링크 보존) · 앞뒤 통화 구간은 각각 접힌다", () => {
-  const link = { ...m("c", 2, "voice"), attachments: [{ kind: "link" }] };
+// §131(3)(메인 세션 라이브 확인 2026-10-24) — 종전 리뷰 Minor 3(링크 붙은 통화 턴은 접지 않는다)은 대사를 말풍선으로 복제했다 → 판정표 F.
+test("[§131(3) F1 · F2] 링크가 붙은 통화 턴도 접는다 — 대사는 말풍선 0 · 링크만 통화 줄 아래에 남는다", () => {
+  const link = { ...m("c", 2, "voice"), attachments: [{ kind: "link", fakeLandingId: "child-insurance-install" }] };
   const items = foldCallSegments([m("b", 1, "voice"), link, m("d", 3, "voice")]);
   assert.deepEqual(
-    items.map((i) => (i.kind === "message" ? i.message.id : `call:${i.id}:${i.turnCount}`)),
-    ["call:b:1", "c", "call:d:1"],
+    items.map((i) => (i.kind === "message" ? i.message.id : `call:${i.id}:${i.turnCount}:${i.attachments.length}`)),
+    ["call:b:3:1"],
   );
   assert.equal(foldCallSegments([{ ...m("e", 0, "voice"), attachments: [] }])[0]!.kind, "call", "빈 첨부는 접는다");
+});
+
+test("[§131(3) F3 · 신고 재현] 대화방 복귀 메시지가 같은 링크를 다시 붙이면 통화 줄 쪽 링크는 뺀다(링크 한 번만) · 다른 링크는 남는다", () => {
+  const inCall = { ...m("c", 2, "voice"), attachments: [{ kind: "link", fakeLandingId: "child-insurance-install" }] };
+  const back = { ...m("f", 4, "messenger"), attachments: [{ kind: "link", fakeLandingId: "child-insurance-install" }] };
+  const items = foldCallSegments([m("a", 1, "messenger"), inCall, m("d", 3, "voice", "user"), back]);
+  assert.deepEqual(
+    items.map((i) => (i.kind === "message" ? i.message.id : `call:${i.id}:${i.turnCount}:${i.attachments.length}`)),
+    ["a", "call:c:2:0", "f"],
+  );
+  const other = { ...back, attachments: [{ kind: "link", fakeLandingId: "other-landing" }] };
+  const kept = foldCallSegments([inCall, other])[0]!;
+  assert.ok(kept.kind === "call" && kept.attachments.length === 1, "다른 링크면 통화 줄 링크 유지");
+});
+
+test("[§131(3) 배선] 통화 줄 아래 링크 카드 · 말풍선 링크 카드가 같은 함수(renderLinkCard)", () => {
+  const page = readFileSync(new URL("../../components/MessengerChatRoom.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  assert.match(page, /\{item\.attachments\.map\(\(attachment, i\) => \(attachment\.kind === "link" \? renderLinkCard\(attachment, i, false\) : null\)\)\}/);
+  assert.match(page, /attachment\.kind === "link" \? renderLinkCard\(attachment, i, message\.role === "scammer"\) : null,/);
+  assert.equal((page.match(/recordMockScreen\(attachment\.fakeLandingId, "shown"\)/g) ?? []).length, 1);
 });
 
 test("[배선] 메신저 화면이 channel을 읽고 foldCallSegments로 그린다(소스 스캔)", () => {
