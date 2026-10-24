@@ -3426,8 +3426,9 @@ export default function SessionCallPage() {
               ref={endCallButtonRef}
               type="button"
               onClick={() => void handleHangup()}
-              // ⚠️ §110.4 — 메신저발 통화에서는 대화방 복귀지만 이름은 G441 불변(사용자 결정 2026-10-18) 그대로 둔다(이름 변경은 UX 결정 대기).
-              aria-label="통화 종료 — 훈련 종료"
+              // §110.4 — 메신저발 통화는 끊으면 대화방으로 돌아간다. §131(5)(메인 세션 라이브 확인 2026-10-24 — 메인 지시 *"메신저에서 이어진 통화는
+              // '통화 종료'로"*) — 그 통화만 이름에서 "훈련 종료"를 뺀다(훈련이 끝나지 않는다). 통화 시나리오는 G441 이름 그대로.
+              aria-label={returnsToMessengerOnHangup ? "통화 종료" : "통화 종료 — 훈련 종료"}
               className="flex h-[76px] w-[76px] items-center justify-center rounded-full shadow-lg transition active:scale-95"
               // 2026-10-21 — 누른 뒤에는 눌린 채로 옅게 남는다(이동 전 한 프레임이라도 "먹었다"가 보이게).
               style={{

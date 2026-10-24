@@ -348,6 +348,29 @@ function isPhotoAfterDemand(reply: AnalysisMessage, photoDemandSeen: boolean): b
   return reply.photo === true && photoDemandSeen;
 }
 
+// ⭐ §131(1)(메인 세션 라이브 확인 2026-10-24 — 자녀 사칭 카톡 고급 · 사진 순간 카드에 수법 라벨 줄이 없었다) — H3 사진 순간의 라벨 표.
+// 요구 대사를 모델이 바꿔 말하면 문구 키 · 요구 어형 표가 모두 비어 숨김 폴백(`"약화된 사기 수법"` — 화면 A1)이 됐다. 사진을 **실제로 보냈다**는
+// 사건은 판정이 이미 확정했으므로(H3), 그 사건에서 라벨을 정한다.
+// | 순서 | If | 라벨 |
+// |---|---|---|
+// | 1 | 요구 대사 문구 키 일치 | 그 수법(종전) |
+// | 2 | 요구 어형 표(5 · 5b행 포함) 일치 | 그 라벨(종전 + 5b) |
+// | 3 | 위 둘 다 없음 ∧ 세션 목록에 **사진을 요구하는 수법**(저작 문면이 `PHOTO_DEMAND`)이 있다 | 요구 대사와 같은 대상(신분증 · 상품권)을 말하는 수법 우선, 없으면 첫 수법 |
+// | 4 | 3도 없음 ∧ 세션 목록에 개인정보 요구 범주 라벨이 있다 | 그 라벨(`신원 · 신분` 든 라벨 우선) |
+// | 5 | 그 밖 | 종전 폴백 |
+// - 3행이 범주보다 먼저인 이유: 손주 사칭은 상품권 뒷면 번호 **사진**(송금 대체)이고 자녀 사칭은 신분증 사진(개인정보)이다 — 사진이라고 한 범주로 묶을 수 없다.
+// ⛔ 세션 목록 안의 저작 라벨만(새 라벨 0) · 판정(속음 · 순간 수 · turnIndex) 무변경 · 사진 턴 밖 순간 무변경.
+const PHOTO_SUBJECTS = [/신분증/, /상품권/];
+function resolvePhotoProvidedTactic(demandText: string, weakenedTactics: readonly string[]): string | undefined {
+  const demands = weakenedTactics.filter((tactic) => !NON_DEMAND_LABEL.test(extractTacticLabel(tactic)));
+  const photoTactics = demands.filter((tactic) => PHOTO_DEMAND.test(tactic));
+  const sameSubject = photoTactics.find((tactic) => PHOTO_SUBJECTS.some((subject) => subject.test(tactic) && subject.test(demandText)));
+  const photoTactic = sameSubject ?? photoTactics[0];
+  if (photoTactic) return extractTacticLabel(photoTactic);
+  const infoLabels = demands.map(extractTacticLabel).filter((label) => resolveTacticCategory(label) === "personal_info_demand");
+  return infoLabels.find((label) => /신원|신분/.test(label)) ?? infoLabels[0];
+}
+
 // ⭐ §128(2)(2026-10-24 메인 세션 라이브 실측 — 자녀 사칭 카톡 고급 · 통화 겹침 중 카톡 *"방금 50만원 보냈어"* 가 속은 순간에서 빠졌다).
 // 원인: 순응 패턴은 약속형(보낼게 · 보내드릴게 · 송금 · 이체)만 보고 **이행 보고**(보냈어)는 코인 단계(§98 X4 — 인출 · 코인 요구 문맥)에서만
 // 잡았다. 메신저 송금 요구 뒤 "보냈어"는 문맥이 송금 요구라 X4가 열리지 않았다. H4(리포트 전용 · 공유 패턴 무변경):
@@ -604,6 +627,7 @@ function findMatchedTactics(scammerText: string, matchers: readonly TacticMatche
  * | 3 | 예금·자산·잔액·잔고 + 말씀/알려/불러 + 시키는 어미 | personal_info_demand | `자산`·`은행`이 든 라벨 우선 |
  * | 4 | 카드번호·유효기간·CVC·보안코드 + 말씀/알려/불러/적어/입력 + 시키는 어미 | personal_info_demand | `카드`가 든 라벨 우선 |
  * | 5 | 성함·이름·생년월일·주민번호·비밀번호·비번·인증번호·신분증·공인인증서·계좌번호 + **정보 제공 동사 필수**(말씀해/알려/불러/적어/찍어/찍어서 보내/입력해/전송해/확인해(§127)/"정보를·번호를") + 시키는 어미 | personal_info_demand | 목록 첫 라벨 |
+ * | 5b | §131(1) — 신분증 + 보내/올려/첨부해 + 시키는 어미("신분증 사진 한 장만 보내줘") | personal_info_demand | 목록 첫 라벨 |
  * | (5 주) | 리뷰 Major 1 — 동사가 옵션이면 "이 계좌번호로 입금해 주세요"·"제 이름으로 보내 주세요"를 6행(송금)보다 먼저 가로챘다. 단독 "보내"는 6행 몫이다 | — | — |
  * | 6 | 돈 맥락(금액 "N원" · 계좌 · 은행 · 금액 · 돈 · 계좌번호꼴) + 보내/입금해/이체해/송금해/빌려/옮겨/넣어/결제해 + 시키는 어미(또는 "보낼 수 있") | payment_demand | 목록 첫 라벨 |
  * | 7 | 금액 "N원" 또는 계좌번호꼴 + 부탁(할게·해·드려·드릴게·드립니다·하면·좀) | payment_demand | 목록 첫 라벨 |
@@ -640,6 +664,11 @@ const CARD_INFO_REQUEST = new RegExp(
 const IDENTITY_INFO_REQUEST = new RegExp(
   `(?:성함|이름|생년월일|주민(?:등록)?\\s*번호|뒷\\s*자리|비밀\\s*번호|비번|인증\\s*번호|신분증|공인\\s*인증서?|계좌\\s*번호)[^.?!\\n]{0,25}?(?:(?:말씀해|알려|불러|적어|찍어서\\s*보내|찍어|입력해|전송해|확인해|(?:정보|번호)(?:를|을))\\s*${SHORT_REQUEST_ENDING}|(?:말씀|확인)\\s*부탁\\s*(?:드립니다|드려요|드릴게요|합니다))`,
 );
+// §131(1)(메인 세션 라이브 확인 2026-10-24 — 자녀 사칭 카톡 고급 · 신분증 사진을 보낸 순간의 수법 라벨이 비었다) — 5행은 "찍어서 보내"만 받아
+// "신분증 사진 한 장만 보내줘"처럼 **보내기만 요구하는** 어형이 빠졌다. 명사를 신분증으로 좁혀 단독 "보내"를 받는다(돈 맥락 "보내"는 6행 몫 그대로).
+const ID_PHOTO_SEND_REQUEST = new RegExp(
+  `신분증[^.?!\\n]{0,25}?(?:보내|올려|첨부해)\\s*${SHORT_REQUEST_ENDING}`,
+);
 const MONEY_CONTEXT = /\d[\d,]*\s*(?:만|천|백)?\s*원|계좌|은행|금액|돈|\d{2,6}-\d{2,6}-\d{2,}/;
 // §129 D4(프로브 2026-10-24 — 납치 초급 "불러주는 계좌로 돈을 바로 보내세요" → "네, 보냈어요"가 안 속음) — 시키는 어형
 // "보내세요 · 입금하세요 · 입금하셔야 · 입금하실 수 · 납부해 주셔야"를 더한다. 같은 문장에 돈 · 계좌 문맥(MONEY_CONTEXT)이 있어야 하는 조건은 그대로다.
@@ -664,6 +693,7 @@ const DEMAND_FALLBACK_ROWS: readonly DemandRow[] = [
   { category: "personal_info_demand", matches: anySentence(ASSET_INFO_REQUEST), prefer: /자산|은행/ },
   { category: "personal_info_demand", matches: anySentence(CARD_INFO_REQUEST), prefer: /카드/ },
   { category: "personal_info_demand", matches: anySentence(IDENTITY_INFO_REQUEST) },
+  { category: "personal_info_demand", matches: anySentence(ID_PHOTO_SEND_REQUEST) },
   {
     category: "payment_demand",
     matches: (sentences) => sentences.some((s) => MONEY_CONTEXT.test(s) && TRANSFER_REQUEST.test(s)),
@@ -801,6 +831,7 @@ export function analyzeConversation(
     const fallbackTactic = labelTactic
       ? undefined
       : (resolveDemandFallbackTactic(labelSource.textMasked, weakenedTactics) ??
+        (userReply.photo === true && photoDemand ? resolvePhotoProvidedTactic(photoDemand.textMasked, weakenedTactics) : undefined) ??
         resolveAnswerCategoryTactic(labelSource.textMasked, userReply, weakenedTactics));
     if (fallbackTactic) tacticLabelsUsed.add(fallbackTactic);
     const tactic = labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? "약화된 사기 수법");

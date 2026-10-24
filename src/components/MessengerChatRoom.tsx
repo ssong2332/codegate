@@ -707,6 +707,46 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
         }
       : null;
   const failedId = optimistic && pending?.failed ? optimistic.id : null;
+  // §131(3) — 링크 카드 한 벌(말풍선 아래 · 접힌 통화 줄 아래 — `threadItems.ts` 판정표 F2)이 같은 모양 · 같은 기록을 쓰게 한 곳에 둔다.
+  const renderLinkCard = (attachment: MessengerAttachment, key: number, indent: boolean) => (
+    <button
+      key={key}
+      type="button"
+      onClick={() => {
+        setFakeLanding({
+          fakeLandingId: attachment.fakeLandingId,
+          displayText: attachment.displayText,
+          ...(attachment.landingKind ? { landingKind: attachment.landingKind } : {}),
+        });
+        // 목업이 열린 사실만 남긴다 — **이것은 속은 순간이 아니다**(D-51 ③,
+        // AC-062 보호). 승격되는 것은 아래 onInstallConsent뿐이다.
+        recordMockScreen(attachment.fakeLandingId, "shown");
+      }}
+      // T187(UX P-36 (4) A4) — 낱말만 뺐다. 기능 설명("링크")은 유지(AC-086 (c)).
+      aria-label={`링크: ${attachment.displayText}`}
+      className={
+        isSms
+          ? "mt-1 flex min-h-[44px] items-center gap-2 rounded-[8px] border-2 border-brand bg-brand-tint px-4 py-2 text-sm font-bold text-brand underline decoration-2 underline-offset-2"
+          : `mt-1 flex w-[220px] flex-col overflow-hidden rounded-[12px] text-left ${indent ? "ml-[42px]" : ""}`
+      }
+      style={isSms ? undefined : { backgroundColor: chatTokens.linkCardBg }}
+    >
+      {isSms ? (
+        <>
+          <span aria-hidden="true">🔗</span>
+          {attachment.displayText}
+        </>
+      ) : (
+        // §89.5 ⓐ — 메신저형 링크 = 미리보기 카드(그림 자리는 무늬 없는 단색 · 실제 사이트 그림 · 로고 없음).
+        <>
+          <span aria-hidden="true" className="h-[72px] w-full" style={{ backgroundColor: chatTokens.linkCardThumb }} />
+          <span className="px-3 py-2 text-[15px] font-semibold leading-snug" style={{ color: chatTokens.linkCardTitle }}>
+            {attachment.displayText}
+          </span>
+        </>
+      )}
+    </button>
+  );
   const threadItems = foldCallSegments(optimistic ? [...visibleMessages, optimistic] : visibleMessages);
   const isSameRole = (i: number, role: "scammer" | "user") => {
     const it = threadItems[i];
@@ -915,7 +955,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
         {threadItems.map((item, index) => {
           if (item.kind === "call") {
             return (
-              <li key={item.id} className="my-1.5 flex justify-center">
+              <li key={item.id} className="my-1.5 flex flex-col items-center">
                 <span
                   className="rounded-full px-3 py-1 text-center text-sm"
                   style={
@@ -927,6 +967,8 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
                   <span aria-hidden="true">{CALL_SEGMENT_ICON} </span>
                   {CALL_SEGMENT_LINE}
                 </span>
+                {/* §131(3) F2 — 통화 대사는 접고, 그 턴의 링크만 남긴다(뒤 메시지에 같은 링크가 있으면 빠져 있다 — F3). */}
+                {item.attachments.map((attachment, i) => (attachment.kind === "link" ? renderLinkCard(attachment, i, false) : null))}
               </li>
             );
           }
@@ -1046,45 +1088,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
               </span>
             )}
             {message.attachments?.map((attachment, i) =>
-              attachment.kind === "link" ? (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => {
-                    setFakeLanding({
-                      fakeLandingId: attachment.fakeLandingId,
-                      displayText: attachment.displayText,
-                      ...(attachment.landingKind ? { landingKind: attachment.landingKind } : {}),
-                    });
-                    // 목업이 열린 사실만 남긴다 — **이것은 속은 순간이 아니다**(D-51 ③,
-                    // AC-062 보호). 승격되는 것은 아래 onInstallConsent뿐이다.
-                    recordMockScreen(attachment.fakeLandingId, "shown");
-                  }}
-                  // T187(UX P-36 (4) A4) — 낱말만 뺐다. 기능 설명("링크")은 유지(AC-086 (c)).
-                  aria-label={`링크: ${attachment.displayText}`}
-                  className={
-                    isSms
-                      ? "mt-1 flex min-h-[44px] items-center gap-2 rounded-[8px] border-2 border-brand bg-brand-tint px-4 py-2 text-sm font-bold text-brand underline decoration-2 underline-offset-2"
-                      : `mt-1 flex w-[220px] flex-col overflow-hidden rounded-[12px] text-left ${message.role === "scammer" ? "ml-[42px]" : ""}`
-                  }
-                  style={isSms ? undefined : { backgroundColor: chatTokens.linkCardBg }}
-                >
-                  {isSms ? (
-                    <>
-                      <span aria-hidden="true">🔗</span>
-                      {attachment.displayText}
-                    </>
-                  ) : (
-                    // §89.5 ⓐ — 메신저형 링크 = 미리보기 카드(그림 자리는 무늬 없는 단색 · 실제 사이트 그림 · 로고 없음).
-                    <>
-                      <span aria-hidden="true" className="h-[72px] w-full" style={{ backgroundColor: chatTokens.linkCardThumb }} />
-                      <span className="px-3 py-2 text-[15px] font-semibold leading-snug" style={{ color: chatTokens.linkCardTitle }}>
-                        {attachment.displayText}
-                      </span>
-                    </>
-                  )}
-                </button>
-              ) : null,
+              attachment.kind === "link" ? renderLinkCard(attachment, i, message.role === "scammer") : null,
             )}
           </li>
           );

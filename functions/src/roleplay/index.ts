@@ -100,7 +100,7 @@ import {
   judgeEscalationSignalAt,
   reclassifyMessengerGiveUp,
 } from "./signalConsistency";
-import { decideCallAnnouncement } from "./callAnnouncement";
+import { CALL_AFTER_EXCUSE_INSTRUCTION, decideCallAnnouncement, saidCallUnavailableRecently } from "./callAnnouncement";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
@@ -569,9 +569,17 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       logger.info("[§104] sendMessage 반복 차단 지시", { sessionId, kind: repeatBreakKind, scammerTurnNumber });
     }
     const promptTurnInstruction = [turnInstruction, otpCheckInstruction].filter(Boolean).join("\n") || undefined;
+    // §131(2) 판정표 K — 메신저 단계에서 직전 사기범 메시지가 통화 불가 핑계를 댔으면 "전화로 넘어간다면 걸 수 있게 된 이유를 함께" 1줄(`callAnnouncement.ts`).
+    const callAfterExcuseInstruction =
+      session.channel === "messenger" &&
+      turnChoice === "none" &&
+      saidCallUnavailableRecently(storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked))
+        ? CALL_AFTER_EXCUSE_INSTRUCTION
+        : undefined;
     const confirmAndCallContext =
-      [confirmPlan?.instruction, escalatedCallInstruction, repeatBreakInstruction(repeatBreakKind)].filter(Boolean).join("\n") ||
-      undefined;
+      [confirmPlan?.instruction, escalatedCallInstruction, repeatBreakInstruction(repeatBreakKind), callAfterExcuseInstruction]
+        .filter(Boolean)
+        .join("\n") || undefined;
     const turnInstructionWithSms =
       [promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction].filter(Boolean).join("\n") ||
       undefined;
