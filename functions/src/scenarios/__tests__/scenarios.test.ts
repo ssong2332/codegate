@@ -31,6 +31,7 @@ import { PERSONA_AUTHORITY, asksIdentityCheck } from "../../roleplay/personaAuth
 import { speakerGenderFor } from "../../realtime/scenarioVoice";
 import { FAMILY_ADDRESS_SCENARIOS, resolveFamilyAddressPrompt } from "../familyAddress";
 import { CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION, CALL_RETURN_INSTRUCTION } from "../../roleplay/callReturnLine";
+import { CALL_AFTER_EXCUSE_INSTRUCTION } from "../../roleplay/callAnnouncement";
 import { buildPriorChatContext } from "../../realtime/priorChatContext";
 import { applyFictionalBank, FICTIONAL_BANK_NAMES, resolveSessionAccountNumber } from "../../shared/fictionalBank";
 
@@ -1310,6 +1311,8 @@ function turnInstructionSources(): Array<{ scenarioId?: string; label: string; v
     { label: "통화복귀", value: CALL_RETURN_INSTRUCTION },
     // §112 — 사기범이 통화를 끊고 돌아온 대화방의 복귀 메시지 지시.
     { label: "통화복귀(사기범 끊기)", value: CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION },
+    // §131(2) — 통화 불가 핑계 직후 전화로 넘어갈 때의 연속성 1줄(`roleplay/callAnnouncement.ts` 판정표 K).
+    { label: "통화불가핑계뒤전환", value: CALL_AFTER_EXCUSE_INSTRUCTION },
     // §110.3 — 메신저에서 넘어온 Live 통화의 앞선 대화 블록(머리 지시 — 대화 줄은 참가자 데이터라 표본 2줄만).
     {
       label: "앞선대화",
