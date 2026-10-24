@@ -13,7 +13,8 @@ import { SCENARIO_PROMPTS } from "../../scenarios";
 import { resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
 import { MOCK_SCREENS } from "../../scenarios/mockScreens";
 import { applyMockScreens } from "../../report/mockScreenTimeline";
-import { buildSmsTimeline } from "../../report/smsTimeline";
+import { buildSmsTimeline, promoteSmsLandingSubmits } from "../../report/smsTimeline";
+import { resolveTacticCategory } from "../../report/tacticCategory";
 import { buildSystemPrompt, CLAIM_CONSISTENCY_RULE, SMS_TOOL_SPEECH_SENTENCE } from "../promptAssembly";
 import { buildLiveConfirmResultInstruction, LIVE_CONFIRM_NOT_YET_SENTENCE } from "../../inCallSms/confirmResult";
 import { CHILD_GENDER_UNSPECIFIED_RULE } from "../../scenarios/messengerChildImpersonationKakao.prompt";
@@ -582,4 +583,31 @@ test("[§129.11] 자녀 납치 초 · 중 · 고급 변형 모두 '자녀 인질
   const tactics = resolveSessionScenarioPrompt("kidnapping-threat", "fv-c5ih")!.weakenedTactics;
   const used = analyzeConversation(dialogue([["scammer", HOSTAGE_LINES[0]], ["user", "네? 어떻게 해야 돼요?"]]), 0, tactics).tacticsUsed;
   assert.ok(used.includes("자녀 인질 협박"));
+});
+
+// ── §129.10 (3) 화면 제출 + 직후 이행 보고 = 순간 하나(사용자 결정 T1 · T2 · ㉠ 화면 순간만) ─────────────────────────
+test("[§129.10 (3)] 이체 화면 제출 뒤 2분 안 · 사이 사기범 대사 1개 이하의 같은 송금 범주 이행 보고는 화면 순간에 합친다(T1) · 그 밖은 둘 다(T2)", () => {
+  const base = 1_000_000;
+  const catalog = [{ landingId: "safe-site", momentTactic: "안전계좌 이체 유도 — 임시 계좌로 옮기라고 요구", correctAction: "끊고 대표번호로 확인하세요." }];
+  const doc = (submitAt: number) => ({
+    smsId: "s1", kind: "link" as const, senderLabel: "한빛지방검찰청", body: "안내", fakeLandingId: "safe-site",
+    anchorScammerTurn: 1, arrivedAtMs: base + 200_000, openedAtMs: base + 250_000, linkTappedAtMs: base + 260_000, landingSubmittedAtMs: submitAt,
+  });
+  const msgs = (t: number[]) => t.map((ms, turnIndex) => ({ role: (turnIndex % 2 === 0 ? "scammer" : "user") as "scammer" | "user", turnIndex, createdAtMs: base + ms }));
+  const chat = (turnIndex: number, tactic = "즉시 송금 요구") => ({ turnIndex, timeLabel: "", tactic, correctAction: "", tacticCategory: resolveTacticCategory(tactic) });
+  // 메인 라이브: 4분 45초 제출 · 4분 51초 "이체했어요"(사이 사기범 대사 0) → 화면 순간 하나(T1 · ㉠).
+  const live = promoteSmsLandingSubmits([doc(base + 285_000)], [chat(3)], msgs([100_000, 200_000, 270_000, 291_000]), base, catalog);
+  assert.deepEqual(live.deceivedMoments.map((m) => [m.turnIndex, m.timeLabel, m.landingId ?? "chat"]), [[0, "285초 시점", "safe-site"]]);
+  // 사이 사기범 대사 1개까지 T1.
+  const oneBetween = promoteSmsLandingSubmits([doc(base + 285_000)], [chat(5)], msgs([100_000, 200_000, 270_000, 280_000, 295_000, 300_000]), base, catalog);
+  assert.equal(oneBetween.deceivedMoments.filter((m) => m.landingId === undefined).length, 0);
+  // T2 — 2분 넘음 · 사이 대사 2개 · 범주 다름 · 제출 전 답.
+  const late = promoteSmsLandingSubmits([doc(base + 285_000)], [chat(3)], msgs([100_000, 200_000, 270_000, 410_000]), base, catalog);
+  const twoBetween = promoteSmsLandingSubmits([doc(base + 285_000)], [chat(7)], msgs([100_000, 200_000, 270_000, 280_000, 290_000, 300_000, 310_000, 320_000]), base, catalog);
+  const otherCategory = promoteSmsLandingSubmits([doc(base + 285_000)], [chat(3, "개인정보 직접 요구")], msgs([100_000, 200_000, 270_000, 291_000]), base, catalog);
+  const before = promoteSmsLandingSubmits([doc(base + 285_000)], [chat(1)], msgs([100_000, 200_000, 270_000, 291_000]), base, catalog);
+  for (const [name, r] of [["2분 넘음", late], ["사이 대사 2개", twoBetween], ["범주 다름", otherCategory], ["제출 전 답", before]] as const) {
+    assert.equal(r.deceivedMoments.filter((m) => m.landingId === undefined).length, 1, name);
+    assert.equal(r.deceivedMoments.filter((m) => m.landingId === "safe-site").length, 1, name);
+  }
 });

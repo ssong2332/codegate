@@ -276,6 +276,39 @@ export type PromoteSmsLandingSubmitsResult = {
 };
 
 /**
+ * §129.10 (3)(메인 라이브 재테스트 2026-10-24 · 기관 사칭 고급 — 4분 45초 이체 화면 제출 · 4분 51초 "이체했어요"가 순간 2개로 나뉘었다)
+ * — 사용자 결정 T1 · T2 · 합칠 때 ㉠(화면 제출 순간만 남김). 메신저 M1(`mockScreenTimeline.ts`)과 같은 결이다.
+ * | # | If | Then |
+ * |---|---|---|
+ * | T1 | 제출 승격 순간 **뒤**의 참가자 답이 이미 속은 순간이고, 범주가 화면 순간과 같으며(송금 화면 → 송금 범주), 그 답이 제출 시각부터 **2분 이내**이고, 제출 시각과 그 답 사이 사기범 대사가 **1개 이하**다 | 채팅 순간을 빼고 화면 순간 하나만 남긴다(시각 · 라벨 · 되감기 = 화면 순간) |
+ * | T2 | 그 밖(범주가 다름 · 2분 넘음 · 사이 대사 2개 이상 · 제출 시각 없음) | 둘 다 그대로 |
+ * ⚠️ 한 화면 순간에 합치는 채팅 순간은 **가장 이른 하나**뿐이다(되풀이된 이행 보고까지 지우지 않는다).
+ */
+const SUBMIT_REPORT_MERGE_WINDOW_MS = 120_000;
+const SUBMIT_REPORT_MAX_SCAMMER_BETWEEN = 1;
+
+function findChatReportMergedIntoSubmit(
+  screen: DeceivedMomentResult,
+  stepAtMs: number,
+  chatMoments: readonly DeceivedMomentResult[],
+  sortedMessages: readonly SmsTimelineMessage[],
+): number | undefined {
+  for (const message of sortedMessages) {
+    if (message.createdAtMs < stepAtMs) continue;
+    if (message.createdAtMs - stepAtMs > SUBMIT_REPORT_MERGE_WINDOW_MS) return undefined; // T2 — 2분 넘음
+    if (message.role !== "user") continue;
+    const scammerBetween = sortedMessages.filter(
+      (m) => m.role === "scammer" && m.createdAtMs >= stepAtMs && m.turnIndex < message.turnIndex,
+    ).length;
+    if (scammerBetween > SUBMIT_REPORT_MAX_SCAMMER_BETWEEN) return undefined; // T2
+    const chat = chatMoments.find((m) => m.turnIndex === message.turnIndex && m.landingId === undefined);
+    if (!chat) continue;
+    return chat.tacticCategory === screen.tacticCategory ? chat.turnIndex : undefined; // T1 · T2(범주 다름)
+  }
+  return undefined;
+}
+
+/**
  * 통화 중 문자가 연 가짜 랜딩의 **제출 문서 → 속은 순간** 승격(§31.6 (1)).
  *
  * | 조건 | 결과 |
@@ -317,6 +350,7 @@ export function promoteSmsLandingSubmits(
   const sortedMessages = [...messages].sort((a, b) => a.turnIndex - b.turnIndex);
 
   const promoted: DeceivedMomentResult[] = [];
+  const dropped = new Set<number>();
   for (const doc of submitted) {
     const catalogItem = doc.fakeLandingId
       ? catalog.find((c) => c.landingId === doc.fakeLandingId)
@@ -328,17 +362,18 @@ export function promoteSmsLandingSubmits(
     if (!anchor.anchorResolved || anchor.anchorTurnIndex < 0) continue;
     // §129.8 — 시각 표기 = 그 화면에서 가장 깊은 단계를 실제로 누른 시각(위치는 앵커 그대로).
     const stepAtMs = doc.landingSubmittedAtMs ?? doc.landingAmountAtMs ?? doc.landingConvertedAtMs ?? doc.landingIdentityAtMs;
-    promoted.push(
-      buildLandingSubmitMoment(
-        item,
-        anchor.anchorTurnIndex,
-        stepAtMs !== undefined ? actualTimeLabel(stepAtMs, sessionCreatedAtMs) : anchor.timeLabel,
-      ),
+    const moment = buildLandingSubmitMoment(
+      item,
+      anchor.anchorTurnIndex,
+      stepAtMs !== undefined ? actualTimeLabel(stepAtMs, sessionCreatedAtMs) : anchor.timeLabel,
     );
+    promoted.push(moment);
+    const merged = stepAtMs !== undefined ? findChatReportMergedIntoSubmit(moment, stepAtMs, deceivedMoments, sortedMessages) : undefined;
+    if (merged !== undefined) dropped.add(merged);
   }
 
   return {
-    deceivedMoments: [...deceivedMoments, ...promoted],
+    deceivedMoments: [...deceivedMoments.filter((m) => !(m.landingId === undefined && dropped.has(m.turnIndex))), ...promoted],
     promotedCount: promoted.length,
   };
 }
