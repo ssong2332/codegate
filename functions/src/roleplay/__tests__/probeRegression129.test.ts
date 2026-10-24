@@ -360,3 +360,35 @@ test("[§129 C4 · C5 경계] 앞 대사에 요구가 있으면 방법 질문 ·
   assert.equal(ask("자산 보호를 위해 안전계좌로 옮기셔야 합니다. 협조하시겠습니까?", "네 말씀하신 대로 할게요"), true); // 요구 있음
   assert.equal(ask("문자 안내 확인하셨습니까?", "네, 알려주신 대로 했어요."), true, "이행 보고는 약속이 아니다");
 });
+
+// ── §129.6 폴백 통화 역할 이탈(해설) — 메인 라이브 재테스트 2026-10-24 · 기관 사칭 고급 · 결말 현금 전달형 · 텍스트 폴백 ──────────
+// 사기범 대사 원문 그대로(메인 전달). 판정에 걸리면 같은 체인의 다음 단계(Claude → Gemini 2차 → Groq → Mock)로 넘어간다(`completeWithFallback`).
+const LIVE_BREAKOUT_LINES = [
+  '(잠깐, 이 훈련 장면은 여기서 멈춥니다. 방금 제가 그린 "안전계좌로 전액 이체하라"는 요구는 실제 보이스피싱에서 쓰는 수법을 그대로 흉내 낸 것이라, 더 진행하지 않겠습니다.)\n- 검찰·금융감독원은 전화로 계좌 비밀번호나 인증번호를 묻지 않습니다.',
+  "네, 정상적으로 확인됐습니다. 이제 모든 절차가 끝났습니다. 훈련을 종료하셔도 좋습니다.",
+  '이 통화에서 짚어 볼 점을 정리하면 이렇습니다.\n- 검찰·금융감독원·은행은 전화로 계좌 비밀번호, 인증번호, 주민번호를 묻지 않습니다.\n- "안전계좌로 옮기라"는 요구는 보이스피싱의 대표적인 신호입니다.',
+];
+
+test("[§129.6] 라이브 역할 이탈 대사 3줄은 사기범 대사로 쓸 수 없다(training-meta)", () => {
+  for (const line of LIVE_BREAKOUT_LINES) assert.equal(judgeScammerReplyUsability(line), "training-meta", line.slice(0, 30));
+});
+
+test("[§129.6 오탐] 정상 사기범 대사 — 보이스피싱 언급 · 신뢰 쌓기 '묻지 않습니다' · 단일 글머리 안내는 그대로 가능", () => {
+  for (const ok of [
+    "고객님 명의로 개설된 계좌 하나가 현재 보이스피싱 범죄에 이용된 정황이 확인돼서, 오늘 이렇게 연락드리게 됐습니다.",
+    "저희 검찰은 전화로 계좌 비밀번호를 묻지 않습니다. 그래서 문자로 보내 드린 절차대로만 진행하시면 됩니다.",
+    "엄마 나 이번 주에 예비군 훈련 끝나고 바로 연락할게ㅠ",
+    "- 신청 기한: 오늘 18시까지\n안내드린 링크에서 접수해 주세요.",
+  ]) {
+    assert.equal(judgeScammerReplyUsability(ok), undefined, ok.slice(0, 30));
+  }
+});
+
+test("[§129.6 배선] 통화 텍스트 폴백(sendMessage) · 통화 복귀 · 통화 중 카톡 · 화면 행동 뒤 · 오프닝이 모두 사기범 대사 판정 경로를 탄다", () => {
+  for (const file of ["roleplay/index.ts", "roleplay/callReturnLine.ts", "roleplay/chatDuringCall.ts", "roleplay/screenActionFollowUp.ts", "roleplay/openingLine.ts"]) {
+    const src = read(file);
+    assert.match(src, /completeWithFallback\(/, file);
+    assert.match(src, /purpose: "scammer-reply"/, file);
+  }
+  assert.match(read("llm/index.ts"), /assertUsableScammerReply\(input, result\);/, "마지막 그물(Mock 강등)도 같은 판정");
+});
