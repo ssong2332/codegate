@@ -60,8 +60,8 @@ test("[G537] 단일 통로 — smsDelivery.ts만 resolveSmsGate를 부른 뒤 �
 test("[G537] 세 호출부(실시간 도구 · 폴백 마커 · 백스톱)가 전부 deliverSmsThroughGate를 지난다", () => {
   // 실시간 콜러블: model_tool과 backstop이 같은 호출 1곳을 공유한다(purpose만 다르다).
   assert.equal(CALLABLE.split("deliverSmsThroughGate(").length - 1, 1, "콜러블의 발송 호출은 1곳");
-  // 폴백: 백스톱(응답 전) 1곳 + 마커(응답 저장 뒤) 1곳.
-  assert.equal(FALLBACK.split("deliverSmsThroughGate(").length - 1, 2, "sendMessage의 발송 호출은 2곳");
+  // 폴백: 백스톱(응답 전) 1곳 + 마커(응답 저장 뒤) 1곳 + §132.13 대사 주장 백스톱(응답 저장 뒤 · 마커 없는 턴) 1곳. 셋 다 같은 단일 통로다.
+  assert.equal(FALLBACK.split("deliverSmsThroughGate(").length - 1, 3, "sendMessage의 발송 호출은 3곳");
   assert.match(FALLBACK, /trigger: "backstop"/);
   assert.match(FALLBACK, /trigger: "model_marker"/);
 });
