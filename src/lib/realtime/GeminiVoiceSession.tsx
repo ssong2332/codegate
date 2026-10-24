@@ -203,7 +203,7 @@ export type GeminiVoiceSessionProps = {
    * `personaStateTurn`과 같은 이유로 별도 슬롯). 확인 결과 신호(`confirmResult`)와 자동 호 전환 실패(`verifyReconnectFailed`)만
    * 싣는다. 판정은 부모가 순수 함수(`stallRecovery.ts`)로 한다. ⚠️ 전사에 기록하지 않는다(G105).
    */
-  contextTurn?: { text: string; seq: number; delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" } | null;
+  contextTurn?: { text: string; seq: number; delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted" } | null;
   /**
    * PR-A2(audit-A R1) — 모델 도구 `send_prepared_sms`가 도착시킨 문자의 서버 결과 신호(`confirmResultInstruction`). 도구 응답을
    * **보낸 뒤에** 부른다(도착 안내보다 먼저 가지 않게). 세션당 1회 판정은 부모(`planConfirmResultInjection`)가 한다.
@@ -419,7 +419,7 @@ export default function GeminiVoiceSession({
   const pendingContextTurnRef = useRef<{
     text: string;
     seq: number;
-    delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall";
+    delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted";
   } | null>(null);
 
   useEffect(() => {

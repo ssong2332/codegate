@@ -30,6 +30,8 @@
  * `repeatBreak` 행은 §104(메인 세션 지시 — 전수 검수 2차 결함 수정)로 추가했다.
  * | `chatDuringCall` | §121.7 — 통화 중 대화방 카톡 1쌍(참가자 · 사기범 답장) 메모(`chatDuringCall.ts`) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖** · 침묵 넛지 대상 아님 |
  * `chatDuringCall` 행은 §121.7(메인 결정 "두 채널 맥락" — 통화 · 메신저 동시 사용 PR-3)으로 추가했다.
+ * | `landingSubmitted` | §132.7 — 참가자가 문자 링크의 이체 화면을 처음 제출했다(서버 `recordInCallSmsEvent` 응답 `contextInstruction`) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖** · 침묵 넛지 대상 아님 |
+ * `landingSubmitted` 행은 §132.7(메인 세션 지시 — 실 키 회귀 프로브 N4)로 추가했다.
  */
 export type InstructionDelivery =
   | "smsAnnounce"
@@ -39,7 +41,8 @@ export type InstructionDelivery =
   | "confirmResult"
   | "verifyReconnectFailed"
   | "repeatBreak"
-  | "chatDuringCall";
+  | "chatDuringCall"
+  | "landingSubmitted";
 
 /** G31 큐(`@/lib/verifyintercept` `PendingInstruction`) 항목 → 전달 방식. */
 export function deliveryForInstruction(item: {
