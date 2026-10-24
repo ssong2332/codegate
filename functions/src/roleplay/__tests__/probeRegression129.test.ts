@@ -555,3 +555,31 @@ test("[§129.10 (2)] 거래 은행을 묻는 대사 뒤 따름 약속 = '거래 
   assert.notEqual(result.deceivedMoments[0]?.tactic, "약화된 사기 수법");
   assert.ok(result.tacticsUsed.includes(result.deceivedMoments[0]!.tactic), "AC-083 (a)");
 });
+
+// ── §129.11 자녀 납치 '자녀 인질 협박' 라벨(DECISIONS #245 ⑲ · 메인 결정 ③ ㉢) ─────────────────────────────────────
+test("[§129.11] 자녀 납치 초 · 중 · 고급 변형 모두 '자녀 인질 협박'을 수법 목록에 갖고, 바꿔 말한 인질 대사(실 키 프로브 대본)가 이 라벨에 걸린다", () => {
+  const HOSTAGE_LINES = [
+    "잘 들으세요. 지금 당신 자녀가 저희 쪽에 있습니다. 묻지 말고 제 말만 들으세요.", // 메인 라이브 재테스트 원문
+    "자녀를 저희가 데리고 있습니다.",
+    "당신 자녀를 데리고 있습니다. 상황 파악하려면 다른 데 신경 쓰지 말고 제 말부터 들으세요.",
+    "당신 아이 지금 제 쪽에 있습니다. 옆에서 울고 있으니까 다른 소리 말고 들어요.",
+    "지금 당신 자녀가 제 옆에 있습니다. 아이가 울고 있으니까 묻지 말고 제 말 들으세요.",
+    "자녀분 지금 제가 데리고 있습니다. 다른 생각 말고 제 말에만 집중해요.",
+    "묻지 말고 들어요. 자녀 데리고 있으니까, 당장 시키는 대로만 합니다.",
+  ];
+  for (const variant of ["fv-c5ih", "fv-dxwu", "fv-k268", "fv-w7tb"]) {
+    const tactics = resolveSessionScenarioPrompt("kidnapping-threat", variant)!.weakenedTactics;
+    assert.ok(tactics.some((t) => t.startsWith("자녀 인질 협박 — ")), variant);
+    for (const line of HOSTAGE_LINES) {
+      const used = analyzeConversation(dialogue([["scammer", line]]), 0, tactics).tacticsUsed;
+      assert.ok(used.includes("자녀 인질 협박"), `${variant}: ${line}`);
+    }
+    // 돈 · 경고 대사는 이 라벨이 아니다(정상 대사를 인질 협박으로 잡지 않음).
+    const neutral = analyzeConversation(dialogue([["scammer", "지금 바로 새솔은행 계좌로 300만 원 보내세요. 늦으면 후회할 수도 있어요."]]), 0, tactics).tacticsUsed;
+    assert.ok(!neutral.includes("자녀 인질 협박"), variant);
+  }
+  // §129.9 대본 — 수법 목록에 인질 협박이 오른다(라이브 '시도된 수법 1가지'의 원인).
+  const tactics = resolveSessionScenarioPrompt("kidnapping-threat", "fv-c5ih")!.weakenedTactics;
+  const used = analyzeConversation(dialogue([["scammer", HOSTAGE_LINES[0]], ["user", "네? 어떻게 해야 돼요?"]]), 0, tactics).tacticsUsed;
+  assert.ok(used.includes("자녀 인질 협박"));
+});
