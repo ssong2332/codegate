@@ -24,3 +24,10 @@ test("[§129.10 (1) · (4) 배선] 리포트가 실제 시각 비교로 정렬�
   assert.ok(clock.includes("window.setTimeout(() => setShown(seconds), duration + 100)"));
   assert.ok(clock.includes("window.clearTimeout(settle)"));
 });
+
+test("[§129.10 (4) 미러] timelineOrder는 값 import 없는 잎 모듈이고, 시각 파싱이 e2Layout과 같다", () => {
+  const src = read("src/lib/report/timelineOrder.ts");
+  assert.ok(!/^import (?!type )/m.test(src), "값 import 0건(앱 빌드 · strip-types 러너 둘 다 통과)");
+  const body = (s: string) => s.slice(s.indexOf("parseMomentSeconds(timeLabel"), s.indexOf("return m ? Number(m[1]) : null;"));
+  assert.equal(body(src), body(read("src/lib/design/e2Layout.ts")));
+});
