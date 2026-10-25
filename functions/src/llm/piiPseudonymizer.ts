@@ -175,10 +175,59 @@ export function pseudonymizeForGroq(messages: readonly LlmMessage[]): Pseudonymi
   // maskPII 이후에 바꾸면 6자리 생년월일은 maskPII(8자리 이상만 계좌)와 겹치지 않는다. 바꾼 순서는
   // 가명 처리 → maskPII가 아니라 maskPII → 가명이라, 가명 날짜("1971년 3월 14일")가 maskPII에 걸릴 일도 없다.
   const reverse = pairs.map(([original, pseudonym]) => [pseudonym, original] as const);
+  const yearPairs = birthdateYearPairs(pairs, birthdates, corpus);
   return {
     messages: out,
-    restore: (text: string) => replaceAll(text, reverse),
+    restore: (text: string) => restoreYears(replaceAll(text, reverse), yearPairs),
     nameCount: names.length,
     birthdateCount: birthdates.length,
   };
+}
+
+// ── §132.13(DECISIONS #248 ⑮ · 메인 라이브 2026-10-25 · 기관 사칭 고급 — 참가자 "1970년생" → 사기범 "1971년생이시네요") ────────────────────
+// 모델은 가명 날짜("1971년 3월 14일")를 받아 연도만 되받을 수 있다("1971년생" · "71년생"). 위 `restore`는 날짜 전체만 되돌려 가명 연도가 화면에 남았다.
+// | # | If(응답 · 날짜 전체 복원 뒤) | Then |
+// |---|---|---|
+// | Y1 | 가명 연도 4자리 + "년"(바로 뒤가 "M월"이 아님) | 원래 연도 4자리 |
+// | Y2 | 가명 연도 끝 2자리 + "년생" (앞이 숫자가 아님) | 원래 연도 끝 2자리 |
+// | — | 원래 값에서 연도를 알 수 없음 · 가명 연도가 원래 대화에 이미 있음 | 바꾸지 않는다(뜻이 바뀔 수 있다) |
+// 원래 연도: "YYYY년 …" · "YYYY.MM.DD" = 그 4자리 · "YY년 …" · 6자리 = 끝 2자리만(세기는 모른다 — Y2만 · Y1은 끝 2자리가 같은 앞 2자리를 가명 쪽에서 쓴다 — 추정).
+type YearPair = { pseudoFull: string; pseudoShort: string; originalFull: string; originalShort: string };
+
+function originalYearOf(original: string): { full?: string; short: string } | undefined {
+  const four = /^\s*((?:19|20)\d{2})/.exec(original);
+  if (four) return { full: four[1], short: four[1].slice(2) };
+  const two = /^\s*(\d{2})(?:\s*년|\d{4}$)/.exec(original);
+  return two ? { short: two[1] } : undefined;
+}
+
+function birthdateYearPairs(
+  pairs: ReadonlyArray<readonly [string, string]>,
+  birthdates: readonly string[],
+  corpus: string,
+): YearPair[] {
+  const out: YearPair[] = [];
+  for (const [original, pseudonym] of pairs) {
+    if (!birthdates.includes(original)) continue;
+    const pseudoFull = pseudonym.slice(0, 4);
+    const year = originalYearOf(original);
+    if (!year || corpus.includes(`${pseudoFull}년`) || corpus.includes(`${pseudoFull.slice(2)}년생`)) continue;
+    out.push({
+      pseudoFull,
+      pseudoShort: pseudoFull.slice(2),
+      originalFull: year.full ?? `${pseudoFull.slice(0, 2)}${year.short}`,
+      originalShort: year.short,
+    });
+  }
+  return out;
+}
+
+function restoreYears(text: string, pairs: readonly YearPair[]): string {
+  let out = text;
+  for (const pair of pairs) {
+    out = out
+      .replace(new RegExp(`(?<!\\d)${pair.pseudoFull}(?=\\s*년(?!\\s*\\d{1,2}\\s*월))`, "g"), pair.originalFull)
+      .replace(new RegExp(`(?<!\\d)${pair.pseudoShort}(?=\\s*년생)`, "g"), pair.originalShort);
+  }
+  return out;
 }

@@ -37,7 +37,8 @@ import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
-import { resolveRouteAccountNumber } from "../inCallSms/smsGate";
+import { resolveDeclaredSms, resolveRouteAccountNumber } from "../inCallSms/smsGate";
+import { goalFollowUpFor, hasCompletedGoalAction } from "../scammerHangup/goalAction";
 import { applyFictionalBank, resolveFictionalBankName } from "../shared/fictionalBank";
 import type { MessageDoc, ScenarioPromptDoc, SessionDoc } from "../shared/types";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
@@ -139,6 +140,8 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
     transferPlaced: false,
     transferReachable: true,
     goalActionDone: false,
+    // §132.13 — 4-b행 입력. C-5는 선언 · 도착 기록 · 발화 수만 본다(화면 기록 read 0). 도착 기록을 못 읽었으면 미충족(막는 쪽).
+    followUpPending: chatFollowUpPending(session.scenarioId, session.flowVariantId, smsDeliveredLoaded ? delivered : [], claim.history.filter((m) => m.role === "user").length + 1),
     userTurns: claim.history.filter((m) => m.role === "user").length + 1,
     limitReached: false,
     alreadyAccepted: Boolean(session.scammerHangup),
@@ -248,4 +251,17 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
     ...(ended ? { endReason: "scammer_ended" as const } : {}),
     isMock: completion.isMock,
   };
+}
+
+/** §132.13 — 통화 중 카톡의 4-b행 입력(C-5만 · 화면 기록 read 0 — 후속 단계 변형의 완료 판정은 C-5 하나다). */
+function chatFollowUpPending(
+  scenarioId: string,
+  flowVariantId: string | undefined,
+  delivered: readonly DeliveredSmsRecord[],
+  userTurns: number,
+): boolean {
+  const followUpUserTurns = goalFollowUpFor(scenarioId, flowVariantId);
+  if (followUpUserTurns === undefined) return false;
+  const { declared, reason } = resolveDeclaredSms(scenarioId, flowVariantId);
+  return !hasCompletedGoalAction({ delivered, mockScreens: [], declared, declaredKnown: reason === undefined, userTurns, followUpUserTurns });
 }

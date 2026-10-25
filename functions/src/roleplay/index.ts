@@ -14,7 +14,7 @@ import { maskPII } from "../guardrails";
 import { neutralizeUserMentionedFinancialNames, replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from "../llm";
 import { triggerReportGeneration } from "../report";
-import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
+import { findFlowVariant, resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { findInCallSmsItem } from "../scenarios/inCallSms";
 import type { InCallSmsItem } from "../scenarios/inCallSms";
 import {
@@ -26,7 +26,7 @@ import {
 } from "../scenarios/mockScreens";
 import { textPathAnchorScammerTurn } from "../inCallSms/buildDoc";
 import { planConfirmResult } from "../inCallSms/confirmResult";
-import { buildConfirmResultInstruction, isCompletionClaim } from "../inCallSms/confirmResult";
+import { buildNoSmsTransferClaimInstruction, isCompletionClaim, transferClaimsReachDemandStages } from "../inCallSms/confirmResult";
 import {
   buildSmsMarkerOfferInstruction,
   buildSmsNudgeInstruction,
@@ -391,7 +391,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 실린다(그 밖 = NONE — 종전 문면). 신호를 실제로 받아들일지는 응답 뒤 사후 판정이 다시 정한다(Mock · 문자 마커).
     // §108 — 4행 입력(목표 화면 행동 완료 · 실시간 콜러블과 같은 함수). 확인 무력화 세션에서만 읽는다 · 실패 = 미완료(fail-closed).
     let goalActionDone = false;
-    if (verifyEnabled) {
+    // §132.13 — 후속 단계 변형은 확인 무력화 세션이 아니어도 C-5를 계산한다(4-b행 입력 · 실시간과 같은 계산).
+    const followUpUserTurns = goalFollowUpFor(session.scenarioId, session.flowVariantId);
+    if (verifyEnabled || followUpUserTurns !== undefined) {
       try {
         goalActionDone = hasCompletedGoalAction({
           delivered: smsDeliveredLoaded ? smsDelivered : [],
@@ -399,7 +401,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
           declared: smsDeclared,
           declaredKnown: smsDeclaredReason === undefined,
           userTurns: userTurnsNow,
-          followUpUserTurns: goalFollowUpFor(session.scenarioId, session.flowVariantId), // §115 C-5
+          followUpUserTurns, // §115 C-5
         });
       } catch {
         goalActionDone = false;
@@ -419,6 +421,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         offerDoc: verifyOfferDoc,
       }),
       goalActionDone,
+      followUpPending: followUpUserTurns !== undefined && !goalActionDone,
       userTurns: userTurnsNow,
       limitReached,
       alreadyAccepted: Boolean(session.scammerHangup),
@@ -643,6 +646,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // §127 — 폴백판 마무리 지시: 사전 판정 승인(신호 모드) ∧ 후속 단계 변형의 할 일 완료(실시간 `GOAL_WRAP_UP_INSTRUCTION`과 같은 조건 · 그 밖 = 없음).
     // §132.11 — 문자 선언이 없는 변형(확인 결과 지시 A-1 ⑦이 닿지 않는다)에서 참가자가 방금 송금을 마쳤다고 하면, 신호 모드 턴에 같은
     // 확인 결과 지시를 싣는다("남은 요구가 없으면 끝내기 항목대로"). 다른 앱 진행 지시가 있는 턴 · 후속 단계 마무리 지시가 있는 턴 = 없음.
+    // §132.13 — 문면은 문자 없는 통화용(`buildNoSmsTransferClaimInstruction` 판정표): 송금 완료 주장 수가 변형의 요구 단계 수에 닿았으면 이번 대답에서 끝낸다.
     const claimWrapUp =
       hangupMode === "signal" &&
       smsDeclared.length === 0 &&
@@ -650,7 +654,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       !otpCheckInstruction &&
       !confirmPlan?.instruction &&
       isCompletionClaim(maskedUserText, "transfer")
-        ? buildConfirmResultInstruction("transfer")
+        ? buildNoSmsTransferClaimInstruction(
+            transferClaimsReachDemandStages(
+              [...priorUserTexts, maskedUserText],
+              findFlowVariant(session.flowVariantId)?.demandStages,
+            ),
+          )
         : undefined;
     const fallbackWrapUp =
       hangupMode === "signal" && goalActionDone && goalFollowUpFor(session.scenarioId, session.flowVariantId) !== undefined

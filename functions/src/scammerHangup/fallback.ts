@@ -22,6 +22,8 @@ export type FallbackHangupFacts = {
   transferReachable: boolean;
   /** §108 — 목표 화면 행동 완료(`hasCompletedGoalAction` · 실시간과 같은 함수 · 읽기 실패 = false). */
   goalActionDone: boolean;
+  /** §132.13 — 후속 단계 변형 ∧ C-5 미충족(4-b행 · 실시간과 같은 계산). */
+  followUpPending: boolean;
   /** `userTurnsNow`(S5b 문자 게이트와 같은 변수 — G552 ⓒ). */
   userTurns: number;
   /** 턴 확보 트랜잭션 값으로 LLM 전에 계산한 한도(§79.19 (5) 10 — 옛 79.7 1의 `limitReached:false` 정정). */
@@ -78,6 +80,7 @@ export function decideFallbackHangup(
     transferPlaced: facts.transferPlaced,
     transferReachable: facts.transferReachable,
     goalActionDone: facts.goalActionDone,
+    followUpPending: facts.followUpPending,
     userTurns: facts.userTurns,
     pendingInstruction: false,
     smsAwaitingUser: fallbackSmsAwaitingUser(facts, delivered),

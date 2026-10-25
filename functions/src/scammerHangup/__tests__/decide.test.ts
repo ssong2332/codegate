@@ -29,6 +29,7 @@ const PASSING: ScammerHangupInput = {
   transferReachable: true,
   // §108 — 기준 입력은 "목표 화면 행동 전"(옛 판정과 같은 쪽).
   goalActionDone: false,
+  followUpPending: false,
   userTurns: SCAMMER_HANGUP_MIN_USER_TURNS,
   pendingInstruction: false,
   smsAwaitingUser: false,
@@ -49,6 +50,8 @@ const EXPECTED_TABLE: ReadonlyArray<readonly [string, ScammerHangupStatus, boole
   ["8", "already_accepted", true],
   ["3", "mock_turn", false],
   ["4", "blocked_transfer", false],
+  // §132.13 — 4-b(후속 단계가 남음 · 경로 무관).
+  ["4-b", "blocked_follow_up", false],
   ["5", "too_early", false],
   ["6", "blocked_pending", false],
   ["7", "limit_reached", false],
@@ -180,6 +183,7 @@ function nineRowStatusNewOrder(i: ScammerHangupInput): ScammerHangupStatus {
   if (i.alreadyAccepted) return "already_accepted";
   if (i.isMockTurn) return "mock_turn";
   if (i.verifyEnabled && !i.transferPlaced && i.transferReachable && !i.goalActionDone) return "blocked_transfer";
+  if (i.followUpPending) return "blocked_follow_up";
   if (i.userTurns < SCAMMER_HANGUP_MIN_USER_TURNS) return "too_early";
   if (i.pendingInstruction || i.smsAwaitingUser) return "blocked_pending";
   if (i.limitReached) return "limit_reached";
@@ -201,7 +205,7 @@ function* allInputs(relay: ScammerHangupInput["relay"]): Generator<ScammerHangup
                     for (const limitReached of bools)
                       for (const alreadyAccepted of bools)
                         yield {
-                          status, channel, isMockTurn, verifyEnabled, transferPlaced, transferReachable, goalActionDone, userTurns,
+                          status, channel, isMockTurn, verifyEnabled, transferPlaced, transferReachable, goalActionDone, followUpPending: false, userTurns,
                           pendingInstruction, smsAwaitingUser, limitReached, alreadyAccepted, relay,
                         };
 }
@@ -377,7 +381,7 @@ test("[G552 ⓓ 역검증] 옛 식별자를 끼운 요청 타입 사본은 같�
 // 사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 키가 들어오면 빨개진다. C6-R이 `transferReachable`(서버 값) 1키를 더했다.
 // §104.9 — 메신저 단계 경로 표시(`messengerStageAllowed` · 폴백만 참)가 13번째 키다(사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과는 여전히 0).
 const G600_KEYS = [
-  "alreadyAccepted", "channel", "goalActionDone", "isMockTurn", "limitReached", "messengerStageAllowed", "pendingInstruction", "relay",
+  "alreadyAccepted", "channel", "followUpPending", "goalActionDone", "isMockTurn", "limitReached", "messengerStageAllowed", "pendingInstruction", "relay",
   "smsAwaitingUser", "status", "transferPlaced", "transferReachable", "turnsSinceCallEntry", "userTurns", "verifyEnabled",
 ];
 
@@ -391,7 +395,7 @@ function inputTypeKeys(src: string): string[] {
 
 // §108(사용자 결정 · DECISIONS #223) — 목표 화면 행동 완료(`goalActionDone` — 랜딩 제출 · 앱 설치 응낙 · 서버 기록만)가 14번째 키다. 4행만 읽는다.
 // §131(14) — 메신저에서 넘어온 통화의 통화 진입 뒤 **참가자** 발화 수(`turnsSinceCallEntry` — `userTurns`와 같은 종류 · 5행만 읽는다)가 15번째 키다.
-test("[G600] ScammerHangupInput 키 집합 = 정확히 15키(§108 +1 · §131 +1 · 사기범 턴 · 경과 시간 · 반복 · 확인 결과 0)", () => {
+test("[G600] ScammerHangupInput 키 집합 = 정확히 16키(§108 +1 · §131 +1 · §132.13 +1 · 사기범 턴 · 경과 시간 · 반복 · 확인 결과 0)", () => {
   const src = readFileSync(path.join(SRC_DIR, "decide.ts"), "utf8").replace(/\r\n/g, "\n");
   assert.deepEqual(inputTypeKeys(src), G600_KEYS);
   assert.deepEqual(Object.keys(PASSING).sort(), G600_KEYS, "기준 입력과 타입 키가 갈렸다");

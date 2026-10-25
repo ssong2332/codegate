@@ -32,6 +32,7 @@ const VERIFY_ADVANCED: ScammerHangupInput = {
   transferPlaced: false,
   transferReachable: true,
   goalActionDone: false,
+  followUpPending: false,
   userTurns: 12,
   pendingInstruction: false,
   smsAwaitingUser: false,
@@ -254,5 +255,5 @@ test("[§115 배선] 두 경로가 같은 함수로 변형의 후속 값을 넘�
   assert.ok(realtime.includes("const followUpUserTurns = goalFollowUpFor(session.scenarioId, session.flowVariantId);"), "realtime");
   assert.ok(realtime.includes("followUpUserTurns, // §115 C-5"), "realtime 입력");
   const fallback = readFileSync(path.join(SRC_ROOT, "roleplay/index.ts"), "utf8");
-  assert.ok(fallback.includes("followUpUserTurns: goalFollowUpFor(session.scenarioId, session.flowVariantId)"), "fallback");
+  assert.ok(fallback.includes("const followUpUserTurns = goalFollowUpFor(session.scenarioId, session.flowVariantId);") && fallback.includes("followUpUserTurns, // §115 C-5"), "fallback"); // §132.14 — 4-b행 입력과 같은 변수
 });

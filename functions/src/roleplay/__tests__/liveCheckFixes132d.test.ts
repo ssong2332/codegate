@@ -33,13 +33,14 @@ test("[§132.12] 동그라미 자리표시 — 라이브 오프닝 재현 · '�
 test("[§132.11] 납치 협박 — 돈을 받은 뒤 '기다려라'로 붙잡지 않고 끝내기 항목대로 · 폴백은 송금 완료 주장 턴에 확인 결과 지시(문자 선언 없는 변형만)", () => {
   const prompt = resolveSessionScenarioPrompt(KIDNAPPING_THREAT_SCENARIO_ID, "fv-c5ih")!;
   assert.ok(!prompt.personaPrompt.includes("이 통화를 끊지 말고 시키는 대로 기다리라는 지시로 넘어간다"), "종전 문장 0");
-  assert.ok(prompt.personaPrompt.includes("신고 차단 지시를 한 번 짧게 한 뒤 [진행 강제]의 통화 끝내기 항목이 정한 대로 통화를 끝낸다."));
+  // §132.13 — 같은 문장을 "확인하는 그 대답 안에서 … 같은 대답에서 끝낸다"로 다시 고쳤다(liveCheckFixes132f).
+  assert.ok(prompt.personaPrompt.includes("같은 대답에서 [진행 강제]의 통화 끝내기 항목이 정한 대로 통화를 끝낸다."));
   assert.ok(isCompletionClaim("네, 보냈어요.", "transfer"), "라이브 발화");
   assert.ok(!isCompletionClaim("보내야 하나요?", "transfer"));
   const src = read("roleplay/index.ts");
   assert.ok(
     src.includes(
-      'hangupMode === "signal" &&\n      smsDeclared.length === 0 &&\n      turnChoice === "none" &&\n      !otpCheckInstruction &&\n      !confirmPlan?.instruction &&\n      isCompletionClaim(maskedUserText, "transfer")\n        ? buildConfirmResultInstruction("transfer")',
+      'hangupMode === "signal" &&\n      smsDeclared.length === 0 &&\n      turnChoice === "none" &&\n      !otpCheckInstruction &&\n      !confirmPlan?.instruction &&\n      isCompletionClaim(maskedUserText, "transfer")\n        ? buildNoSmsTransferClaimInstruction(',
     ),
   );
   // 후속 단계 마무리 지시가 우선 · 없으면 이 지시(같은 자리 1개).

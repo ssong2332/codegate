@@ -22,6 +22,7 @@ export type ScammerHangupStatus =
   | "not_last_leg"
   | "mock_turn"
   | "blocked_transfer"
+  | "blocked_follow_up"
   | "too_early"
   | "blocked_pending"
   | "limit_reached"
@@ -59,6 +60,12 @@ export type ScammerHangupInput = {
    * 그 아래 하한(5 · 6 · 7행)은 그대로다. ⭐ 옵셔널이 아니라 필수 키(빠뜨리면 컴파일 오류).
    */
   goalActionDone: boolean;
+  /**
+   * ⭐ §132.13(DECISIONS #248 ⑮ · 사용자 결정 2026-10-25 "끊기 판정으로 막기") — 변형에 후속 단계(`goalFollowUpUserTurns`)가 있는데 C-5(필수 문자 전부
+   * 도착 + 그 뒤 발화 몫)가 아직 거짓인가(`goalAction.ts` `hasCompletedGoalAction` — 호출부가 확인 무력화 여부와 무관하게 계산). 참이면 4-b행이 막는다 —
+   * 4행이 꺼진 경로(폴백 · 전환 도달 불가)에서도 실시간과 같게 결말 단계 전 끊기를 막는다. ⭐ 옵셔널이 아니라 필수 키.
+   */
+  followUpPending: boolean;
   /**
    * 사용자 발화 수(이번에 답하려는 발화 포함). 폴백 = 서버 `userTurnsNow` · 실시간 = **클라 주장값**(OQ-A120 —
    * S5b `deliverInCallSms`와 같은 등급 · 같은 판독 규칙 `readScammerHangupRequest`).
@@ -135,6 +142,8 @@ export const SCAMMER_HANGUP_RULES: readonly ScammerHangupRule[] = [
     // §108 — 참가자가 목표 화면 행동(이체 화면 제출 · 앱 설치 응낙)을 마쳤으면 막지 않는다(DECISIONS #223).
     when: (i) => i.verifyEnabled && !i.transferPlaced && i.transferReachable && !i.goalActionDone,
   },
+  // §132.13 — 후속 단계 변형의 결말 단계가 남았으면 막는다(경로 무관 · 거절 끊기 포함 — 사용자 결정 2026-10-25 · 실시간은 종전에도 4행이 같은 칸을 막았다).
+  { row: "4-b", status: "blocked_follow_up", hangup: false, when: (i) => i.followUpPending },
   {
     row: "5",
     status: "too_early",

@@ -140,7 +140,7 @@ test("[§131(14) (b)] 메신저에서 넘어온 통화 — 통화 진입 뒤 발
   assert.equal(userTurnsSinceCallEntry("messenger", channelHistory as never, history), undefined);
   const base: ScammerHangupInput = {
     status: "active", channel: "voice", isMockTurn: false, verifyEnabled: false, transferPlaced: false, transferReachable: true,
-    goalActionDone: false, userTurns: 9, pendingInstruction: false, smsAwaitingUser: false, limitReached: false, alreadyAccepted: false,
+    goalActionDone: false, followUpPending: false, userTurns: 9, pendingInstruction: false, smsAwaitingUser: false, limitReached: false, alreadyAccepted: false,
     relay: undefined,
   };
   assert.equal(decideScammerHangup({ ...base, turnsSinceCallEntry: 1 }).status, "too_early");
