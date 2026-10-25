@@ -44,9 +44,22 @@ const FOREIGN_SCRIPT =
  * 행 2-d(§132.12 · 메인 라이브 2026-10-24 자녀 납치 초급 "거기 혹시 ○○ 씨 본인 맞으세요? 저는 시내 ○○경찰서 …") — 이름 · 기관 자리를 동그라미로 채운
  * 자리표시. 폴백 대사는 `replyMarkup.ts` 4-d · 4-e가 정리한다 — 여기는 실시간 전사 · 자막. "○○님" = "고객님" · "씨" · 기관 이름 · 직함 앞 = 자리표시만 지운다("○○학원" 같은 가린 표기는 그대로 — 4-e와 같은 목록).
  */
-const CIRCLE_HONORIFIC = /[○◯●]{2,3}\s*님/g;
-const CIRCLE_PLACEHOLDER =
-  /[○◯●]{2,3}\s*씨\s*|[○◯●]{2,3}\s*(?=(?:지방)?(?:경찰서|경찰청|검찰청|지검|지청|법원|은행|카드|병원|구청|시청|군청|센터|본부|금융감독원|금감원))|[○◯●]{2,3}\s*(?=(?:수사관|검사|형사|팀장|과장|대리|주임|경위|경사|경장|순경|변호사|실장|부장))/g;
+/**
+ * 행 2-e(§132.14 · 메인 라이브 2026-10-25 "거기 혹시 김맞으세요?") — 한 글자 성 + 자리표시("김○○ 씨" · "김○○님" · "김○○ 수사관"). 성 바로 뒤에 공백 없이 동그라미가
+ * 붙고 성 앞 글자가 한글이 아닐 때만 성으로 본다. "씨" = 성째 "본인"(뒤 "본인"은 하나만 · 조사는 받침에 맞춘다) · "님" = 성째 "고객님" · 직함 앞 = 성만 남긴다("김 수사관").
+ * 폴백 `replyMarkup.ts` 4-f와 같은 성 목록이다.
+ */
+const CIRCLE_SURNAME =
+  "김|이|박|최|정|강|조|윤|장|임|한|오|서|신|권|황|안|송|류|유|홍|전|고|문|양|손|배|백|허|남|심|노|하|곽|성|차|주|우|구|민|진|나|지|엄|채|원|천|방|공|현|함|변|염|여|추|도|소|석|선|설|마|길|연|위|표|명|기|반|왕|금|옥|육|맹|제|모|탁|국|어|편|용|예|봉|경";
+const CIRCLE_LEAD_SURNAME = `(?:(^|[^가-힣])(?:${CIRCLE_SURNAME})(?=[○◯●]))?`;
+const CIRCLE_HONORIFIC = new RegExp(`${CIRCLE_LEAD_SURNAME}[○◯●]{2,3}\\s*님`, "g");
+const CIRCLE_SSI = new RegExp(`${CIRCLE_LEAD_SURNAME}[○◯●]{2,3}\\s*씨(는|가|를)?\\s*(?:본인\\s*)?`, "g");
+const CIRCLE_SSI_PARTICLE: Record<string, string> = { 는: "은", 가: "이", 를: "을" };
+const CIRCLE_ORG = /[○◯●]{2,3}\s*(?=(?:지방)?(?:경찰서|경찰청|검찰청|지검|지청|법원|은행|카드|병원|구청|시청|군청|센터|본부|금융감독원|금감원))/g;
+const CIRCLE_TITLE = new RegExp(
+  `(?:(${CIRCLE_SURNAME})(?=[○◯●]))?[○◯●]{2,3}\\s*(?=(?:수사관|검사|형사|팀장|과장|대리|주임|경위|경사|경장|순경|변호사|실장|부장))`,
+  "g",
+);
 
 function latinWordCount(text: string): number {
   return (text.match(LATIN_WORD) ?? []).length;
@@ -80,13 +93,21 @@ export function stripLeakedThought(text: string): string {
     stripped = true;
     return "";
   });
-  rest = rest.replace(CIRCLE_HONORIFIC, () => {
+  rest = rest.replace(CIRCLE_HONORIFIC, (_m, lead: string | undefined) => {
     stripped = true;
-    return "고객님";
+    return `${lead ?? ""}고객님`;
   });
-  rest = rest.replace(CIRCLE_PLACEHOLDER, () => {
+  rest = rest.replace(CIRCLE_SSI, (_m, lead: string | undefined, particle: string | undefined) => {
+    stripped = true;
+    return `${lead ?? ""}본인${particle ? CIRCLE_SSI_PARTICLE[particle] : ""} `;
+  });
+  rest = rest.replace(CIRCLE_ORG, () => {
     stripped = true;
     return "";
+  });
+  rest = rest.replace(CIRCLE_TITLE, (_m, surname: string | undefined) => {
+    stripped = true;
+    return surname ? `${surname} ` : "";
   });
   rest = rest.replace(NON_HANGUL_SPAN, (span) => {
     if (latinWordCount(span) < THOUGHT_SPAN_MIN_WORDS) return span;
