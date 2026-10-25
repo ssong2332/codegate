@@ -184,6 +184,8 @@ export type SessionDoc = {
   // **불투명 ID**(`fv-xxxx`). 수법 · 단계 · 인원은 `functions/src/scenarios/flowVariants.ts`(서버 전용)에만
   // 있다(D-46 · ADR-0004). 부재 = 변형 도입 이전 세션 → 원본 시나리오 프롬프트로 해석(무소급).
   flowVariantId?: string;
+  // 개발 단계 루트 강제 지정(`session/devRouteOverride.ts` F4) — 요청 `forceVariantId`로 변형을 정했을 때만 `"forced"`. 부재 = 회전 덱 배정.
+  routeOverride?: "forced";
   // T192 C1 추가(옵셔널, 하위호환 · 무백필 — Architecture.md §79.5) — 사기범 끊기 승인 표식. 서버만 쓴다
   // (클라 write는 firestore.rules가 전부 거부). `endReason: "scammer_ended"`의 **서버측 근거**다 —
   // 이것 없이 온 `scammer_ended`는 `user_ended`로 기록된다(`session/endReason.ts`).
