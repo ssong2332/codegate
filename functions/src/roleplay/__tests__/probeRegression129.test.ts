@@ -8,7 +8,7 @@ import path from "node:path";
 import { judgeScammerReplyUsability } from "../../llm/replyUsability";
 import { tidyScammerReplyMarkup } from "../replyMarkup";
 import { stripLeakedThought } from "../../realtime/thoughtLeak";
-import { analyzeConversation, type AnalysisMessage } from "../../report/analyzeConversation";
+import { analyzeConversation, resolveDemandFallbackTactic, type AnalysisMessage } from "../../report/analyzeConversation";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
 import { MOCK_SCREENS } from "../../scenarios/mockScreens";
@@ -610,4 +610,100 @@ test("[§129.10 (3)] 이체 화면 제출 뒤 2분 안 · 사이 사기범 대�
     assert.equal(r.deceivedMoments.filter((m) => m.landingId === undefined).length, 1, name);
     assert.equal(r.deceivedMoments.filter((m) => m.landingId === "safe-site").length, 1, name);
   }
+});
+
+// ── §129.13 기관 사칭 고급 금 구매형 라이브(메인 2026-10-25 · main `3343b1d`) — 리포트 판정 · 라벨 · Mock 문면 ─────────────────
+const GOLD_LIVE: readonly [string, string][] = [
+  ["여보세요, 한빛지방검찰청 금융범죄조사부 정하람 수사관입니다. 지금 통화 가능하신지 여쭤봐도 될까요?", "네 통화 가능합니다. 무슨 일이시죠?"],
+  ["다름이 아니라 선생님 명의로 개설된 계좌 하나가 타인의 범죄 자금을 받는 데 사용된 정황이 확인돼서 연락드렸습니다.", "네? 제 명의요? 어떻게 해야 하나요?"],
+  ["놀라셨을 줄 압니다. 본인 확인부터 하겠습니다. 성함이랑 생년월일 불러 주십시오.", "홍길동이고 1970년 3월 5일생이에요"],
+  ["확인 감사합니다. 주민등록번호 뒤 일곱 자리도 말씀해 주시고, 주로 쓰시는 거래 은행도 알려 주십시오.", "뒷자리는 1234567이고 가온은행 써요"],
+  ["네, 지금 본인 인증 문자를 보내 드렸으니 문자로 받으신 인증번호 여섯 자리를 바로 불러 주십시오.", "문자가 아직 안 왔는데요"],
+  ["조금 기다려 주십시오. 문자가 늦어지면 확인 절차가 지연돼 선생님께 불리해질 수 있습니다.", "네 기다릴게요"],
+  ["네, 문자가 도착하면 바로 인증번호 여섯 자리를 불러 주십시오. 그리고 이 사건은 수사 기밀이라서 가족이나 은행 직원에게는 말씀하시면 안 됩니다.", "인증번호 128139 왔어요"],
+  ["확인됐습니다. 선생님은 자산 실물 전수 조사 대상이십니다. 예금을 인출하셔서 금으로 바꿔 담당 직원에게 제출하셔야 검수가 끝납니다.", "알겠습니다. 어떻게 하면 되나요?"],
+];
+
+test("[§129.13 (a)(b)] 금 구매형 — 요구 없는 대사 뒤 방법 질문은 속음 아님(C4) · 인증번호를 불러 준 순간은 비밀 유지가 함께 걸려도 L3 라벨", () => {
+  const tactics = resolveSessionScenarioPrompt("institutional-impersonation", "fv-g2ld")!.weakenedTactics;
+  const result = analyzeConversation(dialogue(GOLD_LIVE.flatMap(([s, u]) => [["scammer", s], ["user", u]] as const)), 0, tactics);
+  const moments = result.deceivedMoments.map((m) => [m.turnIndex, m.tactic]);
+  assert.ok(!moments.some(([turn]) => turn === 3), "(a) 2번 답 '어떻게 해야 하나요?'는 C4");
+  // (b) 종전: [13, "비밀 유지 요구"] — 7번 대사의 문구 키는 '비밀 유지 요구'만 걸린다.
+  assert.deepEqual(moments.find(([turn]) => turn === 13), [13, "신원정보 직접 요구"]);
+  assert.deepEqual(moments.find(([turn]) => turn === 5), [5, "신원정보 직접 요구"]);
+});
+
+test("[§129.13 (b) 경계] 인증번호를 언급만 한 대사('더 이상 필요 없습니다 … 이체해 주십시오') 뒤 숫자 답은 종전 L1 라벨 그대로", () => {
+  const tactics = resolveSessionScenarioPrompt("institutional-impersonation", "fv-hktx")!.weakenedTactics;
+  const before = analyzeConversation(
+    dialogue([
+      ["scammer", "더 이상 인증번호는 필요 없습니다. 해당 통장이 범죄에 연루되어 자금이 위험하니, 방금 문자 보내드린 안전계좌로 전액 이체해 주십시오."],
+      ["user", "382914요."],
+    ]),
+    0,
+    tactics,
+  ).deceivedMoments.map((m) => m.tactic);
+  assert.deepEqual(before, ["안전계좌 이체 요구"]);
+});
+
+test("[§129.13 (d)] 기관 사칭 '불이익 암시' 인용구(Mock 강등 시 그대로 대사)는 존댓말 · 리포트 키는 종전 대사도 그대로 잡는다", () => {
+  const tactics = resolveSessionScenarioPrompt("institutional-impersonation", "fv-g2ld")!.weakenedTactics;
+  const penalty = tactics.find((t) => t.startsWith("불이익 암시 — "))!;
+  assert.ok(penalty.includes("'협조하지 않으시면 불이익이 있을 수 있습니다'"));
+  assert.ok(!/있을 수 있다'/.test(penalty), "반말 평서 인용구 0");
+  for (const line of ["협조하지 않으면 불이익이 있을 수 있다.", "협조하지 않으시면 불이익이 있을 수 있습니다."]) {
+    assert.ok(analyzeConversation(dialogue([["scammer", line]]), 0, tactics).tacticsUsed.includes("불이익 암시"), line);
+  }
+});
+
+test("[§129.13 (c) L4 · 9행] 확인 차단 키 라벨(비밀 유지)보다 요구 범주 — 금 구매 약속 순간 = '실물 조사 명목 금 구매 인출 요구'", () => {
+  const tactics = resolveSessionScenarioPrompt("institutional-impersonation", "fv-g2ld")!.weakenedTactics;
+  const lines: [role: "scammer" | "user", text: string][] = [
+    ...GOLD_LIVE.flatMap(([s, u]): [role: "scammer" | "user", text: string][] => [["scammer", s], ["user", u]]),
+    ["scammer", "협조하지 않으면 불이익이 있을 수 있다."],
+    ["user", "협조할게요. 금은 어디서 사서 어떻게 드리면 되죠?"],
+    ["scammer", "예금을 해지하셔서 금을 구입하시고, 수사 기밀이니 가족이나 은행 직원에게는 개인 투자라고만 하세요."],
+    ["user", "네 그렇게 할게요. 연락 기다리겠습니다"],
+  ];
+  const moments = analyzeConversation(dialogue(lines), 0, tactics).deceivedMoments.map((m) => [m.turnIndex, m.tactic]);
+  // 종전: [19, "비밀 유지 요구"] — 금 구매 키가 대사에 안 걸리고 요구 어형 표에 금 구매 행이 없었다.
+  assert.deepEqual(moments.find(([turn]) => turn === 19), [19, "실물 조사 명목 금 구매 인출 요구"]);
+  // 9행 경계 — '예금' · '적금' 안의 '금'은 금이 아니다 · 금 구입 동사가 있어야 한다.
+  assert.equal(resolveDemandFallbackTactic("예금을 해지하셔서 금을 구입해 주십시오.", tactics), "실물 조사 명목 금 구매 인출 요구");
+  assert.equal(resolveDemandFallbackTactic("예금을 인출하셔서 금으로 바꿔 오셔야 합니다.", tactics), "실물 조사 명목 금 구매 인출 요구");
+  assert.equal(resolveDemandFallbackTactic("적금을 해지하시면 이자가 줄어드니 예금 금리를 확인해 보세요.", tactics), undefined);
+});
+
+test("[§129.13 (c) C5] '그렇게 할게요'는 따름 약속 — 요구 없는 대사 뒤는 속음 아님 · 요구 대사 뒤는 종전대로 속음", () => {
+  const tactics = resolveSessionScenarioPrompt("institutional-impersonation", "fv-g2ld")!.weakenedTactics;
+  const noDemand = analyzeConversation(dialogue([["scammer", "선생님 계좌가 범죄에 연루된 정황이 있습니다."], ["user", "네 그렇게 할게요"]]), 0, tactics);
+  assert.equal(noDemand.deceivedMoments.length, 0);
+  const afterDemand = analyzeConversation(dialogue([["scammer", "예금을 해지하셔서 금을 구입해 주십시오."], ["user", "네 그렇게 할게요"]]), 0, tactics);
+  assert.equal(afterDemand.deceivedMoments.length, 1);
+});
+
+test("[§129.13 (e)] 안전계좌 이체형 — 화면 제출 직후 '이체 완료했어요'는 송금 범주 이행 보고 → 화면 순간 하나(T1 · ㉠) · (a) 부인 + 방법 질문은 속음 아님", () => {
+  const tactics = resolveSessionScenarioPrompt("institutional-impersonation", "fv-c5fj")!.weakenedTactics;
+  const lines: [role: "scammer" | "user", text: string][] = [
+    ["scammer", "여보세요, 고객님 맞으시죠? 저는 한빛지방검찰청 금융범죄수사팀 수사관입니다."],
+    ["user", "네 맞는데요, 무슨 일이세요?"],
+    ["scammer", "고객님 명의 계좌 하나가 금융사기 사건에 연루된 정황이 확인됐습니다. 혹시 최근에 통장을 새로 만드셨거나, 타인에게 명의를 빌려주신 적 있으세요?"],
+    ["user", "아니요 그런 적 없어요. 어떻게 해야 하나요?"],
+    ["scammer", "확인됐습니다. 문자의 안내 링크를 눌러 주십시오."],
+    ["user", "이체 완료했어요"],
+  ];
+  const chat = analyzeConversation(dialogue(lines), 0, tactics).deceivedMoments;
+  assert.ok(!chat.some((m) => m.turnIndex === 3), "(a) C1 · C4");
+  // 종전: [5, "신원정보 직접 요구"](이행 보고로 안 잡혀 대표 라벨) → 화면 순간과 범주가 달라 T2(둘 다 남음).
+  assert.deepEqual(chat.map((m) => [m.turnIndex, m.tactic, m.tacticCategory]), [[5, "안전계좌 이체 요구", "payment_demand"]]);
+  const base = 1_000_000;
+  const catalog = [{ landingId: "safe-site", momentTactic: "안전계좌 이체 유도 — 임시 계좌로 옮기라고 요구", correctAction: "끊고 대표번호로 확인하세요." }];
+  const doc = {
+    smsId: "s1", kind: "link" as const, senderLabel: "한빛지방검찰청", body: "안내", fakeLandingId: "safe-site",
+    anchorScammerTurn: 3, arrivedAtMs: base + 150_000, openedAtMs: base + 160_000, linkTappedAtMs: base + 165_000, landingSubmittedAtMs: base + 185_000,
+  };
+  const msgs = [0, 20_000, 40_000, 60_000, 170_000, 194_000].map((ms, turnIndex) => ({ role: (turnIndex % 2 === 0 ? "scammer" : "user") as "scammer" | "user", turnIndex, createdAtMs: base + ms }));
+  const merged = promoteSmsLandingSubmits([doc], chat, msgs, base, catalog);
+  assert.deepEqual(merged.deceivedMoments.map((m) => m.landingId ?? "chat"), ["safe-site"]);
 });

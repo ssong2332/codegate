@@ -33,7 +33,8 @@ const OPENING_TEXT = "여보세요...? 나야... 지금은 정신없어서 계�
  */
 const REALTIME_MESSAGES: AnalysisMessage[] = [
   { role: "scammer", textMasked: OPENING_TEXT, turnIndex: 0, createdAtMs: SESSION_START_MS, notSpoken: true },
-  { role: "user", textMasked: "네 알겠습니다, 그렇게 할게요.", turnIndex: 1, createdAtMs: SESSION_START_MS + 5_000 },
+  // §129.13 (c)(사용자 결정 2026-10-25) — "그렇게 할게요"는 요구 없는 대사 뒤 따름 약속(C5 · 속음 아님)이 돼, 순응 답을 "바로 보낼게요"로 바꿨다(ⓕ의 "종전대로 판정"이 성립하는 답).
+  { role: "user", textMasked: "네 알겠습니다, 바로 보낼게요.", turnIndex: 1, createdAtMs: SESSION_START_MS + 5_000 },
   { role: "scammer", textMasked: "네 고객님, 확인 도와드리겠습니다.", turnIndex: 2, createdAtMs: SESSION_START_MS + 9_000 },
 ];
 

@@ -381,7 +381,10 @@ function resolvePhotoProvidedTactic(demandText: string, weakenedTactics: readonl
 // | H4 | 이 대사까지의 사기범 대사 중 하나라도 송금 요구(`isTransferDemand` — 돈 · 계좌 문맥 + 보내 · 이체 · 송금 요구 어형) ∧ 참가자 답에 이행 보고
 // |    | (`TRANSFER_DONE_REPORT` — 보냈 · 송금했 · 이체했 · 입금했 · 부쳤 + 어미, 앞에 안 · 못 없음) ∧ `REFUSAL_IN_ANSWER` 없음 | 속음 · 라벨은 요구한 대사에서 |
 // - 바로 앞 대사가 아니어도 되는 이유: 통화 중 카톡은 통화 쪽 요구(다른 채널)에 대한 이행 보고라 turnIndex 순 바로 앞 대사가 요구가 아닐 수 있다(H3과 같은 방식).
-const TRANSFER_DONE_REPORT = /(?<!(?:안|못)\s?)(?:보냈|송금했|이체했|입금했|부쳤)(?:어|습|다|는데|고|지)/;
+// §129.13 (e)(메인 라이브 2026-10-25 · 안전계좌 이체형 — 화면 제출 직후 "이체 완료했어요"가 이행 보고로 안 잡혀 대표 라벨 · 화면 순간과 안 합쳐짐) —
+// "이체 · 송금 · 입금 완료했 · 완료됐"도 이행 보고다.
+const TRANSFER_DONE_REPORT =
+  /(?<!(?:안|못)\s?)(?:보냈|송금했|이체했|입금했|부쳤)(?:어|습|다|는데|고|지)|(?:이체|송금|입금)\s*(?:를\s*|은\s*|는\s*)?(?:다\s*)?완료\s*(?:했|됐|되었|하였)/;
 
 function isTransferDemand(scammerText: string): boolean {
   return scammerText.split(/[.?!\n]+/).some((s) => MONEY_CONTEXT.test(s) && TRANSFER_REQUEST.test(s));
@@ -432,6 +435,8 @@ const HOW_TO_OR_FOLLOW = new RegExp(
     // C5 — 약속만("할게요 · 하겠습니다"). "알려주신 대로 했어요"(이행 보고)는 걷어 내지 않는다.
     "(?:말씀하신|시키는|하라는|알려주신)\\s*대로\\s*(?:바로\\s*|다\\s*)?(?:할게요?|할께요?|하겠습니다|하겠어요|처리하겠습니다|따를게요?|따르겠습니다|해\\s*드릴게요?)",
     "알겠어요|알겠습니다|알았어요",
+    // §129.13 (c)(사용자 결정 2026-10-25 "추가 (권장)") — "그렇게 할게요"도 따름 약속(요구 없는 대사 뒤에서만 속음 아님 · 요구 뒤는 종전대로 속음).
+    "그렇게\\s*(?:할게요?|할께요?|하겠습니다|하겠어요)",
   ].join("|"),
   "g",
 );
@@ -478,6 +483,11 @@ const SEND_WHERE_OR_HOW_MUCH = /(?:어디로|어느\s*계좌로?|어떻게)\s*(?
 const INSTALL_TOPIC = /앱|어플|설치|깔/;
 const INSTALL_INTENT = /(?:깔|설치하)(?:면|아\s*줄게|아\s*줄께|아\s*볼게)|깔게|설치\s*(?:하면|할게|해\s*줄게|해\s*볼게)|(?:어떻게|뭘|뭐)\s*(?:깔|설치)/;
 
+/** §129.13 (b) — 같은 문장에서 인증번호를 불러 · 말해 · 알려 · 입력해 달라고 요구한다(언급만 한 대사 제외). */
+const OTP_REQUESTED = /인증\s*(?:번호|코드)[^.?!\n]{0,30}?(?:불러|말씀해|알려|입력해|읽어)/;
+/** §129.13 (b) — 답의 4~8자리 숫자열("인증번호 128139 왔어요" — 숫자 뒤가 어미가 아니라 `extractSpokenCodes`는 못 뽑는다 · 그쪽은 무변경). */
+const OTP_DIGIT_RUN = /(?<![\d-])\d{4,8}(?![\d-])/;
+
 /** L2 — 답의 내용 범주. 사진 턴은 판정하지 않는다(§131). */
 function answerContentCategory(scammerText: string, reply: AnalysisMessage): TacticCategory | undefined {
   if (reply.photo === true) return undefined;
@@ -496,6 +506,9 @@ function answerContentCategory(scammerText: string, reply: AnalysisMessage): Tac
   if (MONEY_TOPIC.test(scammerText) && SEND_WHERE_OR_HOW_MUCH.test(text)) return "payment_demand";
   return undefined;
 }
+
+/** §129.13 L4 — 요구 범주(송금 · 개인정보 · 링크 · 설치). §129.10 최종 폴백과 같은 범주다. */
+const DEMAND_CATEGORIES: readonly TacticCategory[] = ["payment_demand", "personal_info_demand", "link_or_install"];
 
 /**
  * §129.10 최종 폴백 — 세션 목록에서 부인 대응 · 암시를 뺀 첫 **요구 범주**(송금 · 개인정보 · 링크 · 설치) 라벨, 없으면 그 밖의 첫 라벨.
@@ -673,6 +686,7 @@ function findMatchedTactics(scammerText: string, matchers: readonly TacticMatche
  * | 6 | 돈 맥락(금액 "N원" · 계좌 · 은행 · 금액 · 돈 · 계좌번호꼴) + 보내/입금해/이체해/송금해/빌려/옮겨/넣어/결제해 + 시키는 어미(또는 "보낼 수 있") | payment_demand | 목록 첫 라벨 |
  * | 7 | 금액 "N원" 또는 계좌번호꼴 + 부탁(할게·해·드려·드릴게·드립니다·하면·좀) | payment_demand | 목록 첫 라벨 |
  * | 8 | 대사 전체가 `HANDOFF_DEMAND`(인출 · 전달 · 보관 · 코인 요구 어형 — T191 J-2 그대로 재사용) | payment_demand | 목록 첫 라벨 |
+ * | 9 | §129.13 (c)(사용자 결정 2026-10-25 ㉠) 예금 · 적금 + 해지/찾아/인출 + 금 + 구입/사/바꿔(같은 문장 · 순서대로) | payment_demand | `금`이 든 라벨 우선 |
  * | — | 위 어느 행도 아님 · 맞은 행의 범주 라벨이 세션 목록에 없음 | — | 종전 폴백 `"약화된 사기 수법"` 그대로 |
  *
  * - **시키는 어미** = `주세요·주십시오·주시겠·주시면·주셔야·주실 수·주시고·주면·주라·줘(줘서 제외)·줄 수·줄래·달라`
@@ -730,6 +744,10 @@ type DemandRow = {
   prefer?: RegExp;
 };
 
+/** 9행 — "예금"·"적금"·"현금" 안의 '금'은 금이 아니다(앞 글자 제외). */
+const GOLD_PURCHASE_REQUEST =
+  /(?:예금|적금)[^.?!\n]*?(?:해지|찾아|찾으|인출)[^.?!\n]*?(?<![예적현입출요세벌자송기상])금(?:을|으로)?\s*(?:구입|구매|사|바꿔|바꾸)/;
+
 const anySentence = (pattern: RegExp) => (sentences: readonly string[]) => sentences.some((s) => pattern.test(s));
 
 const DEMAND_FALLBACK_ROWS: readonly DemandRow[] = [
@@ -748,6 +766,8 @@ const DEMAND_FALLBACK_ROWS: readonly DemandRow[] = [
     matches: (sentences) => sentences.some((s) => AMOUNT_OR_ACCOUNT.test(s) && FAVOR_REQUEST.test(s)),
   },
   { category: "payment_demand", matches: (_sentences, whole) => HANDOFF_DEMAND.test(whole.replace(ATM_WORDS, "")) },
+  // 9 — §129.13 (c)(사용자 결정 2026-10-25 ㉠) 금 구매 인출: 같은 문장에 예금 · 적금 + 해지 · 찾아 · 인출 + 금 + 구입 · 사 · 바꿔(순서대로).
+  { category: "payment_demand", matches: anySentence(GOLD_PURCHASE_REQUEST), prefer: /금\s*구매|금/ },
 ];
 
 /** 보정 후보에서 빼는 라벨 — 부인 대응 수법 · 분위기 암시(요구가 아니다). */
@@ -869,13 +889,42 @@ export function analyzeConversation(
           ? transferDemand
           : msg;
     // §129 L1 — 속은 순간 라벨에서는 부인 대응 · 암시 라벨을 빼고 다음 일치를 쓴다(시도된 수법 목록은 위에서 이미 올렸다 · 무변경).
-    const labelTactic = (labelSource === msg ? matchedTactics : findMatchedTactics(labelSource.textMasked, tacticMatchers)).find(
+    const keyTactics = (labelSource === msg ? matchedTactics : findMatchedTactics(labelSource.textMasked, tacticMatchers)).filter(
       (tactic) => !NON_DEMAND_LABEL.test(extractTacticLabel(tactic)),
     );
+    // §129.13 (b)(메인 라이브 2026-10-25 · 금 구매형 — "인증번호 … 불러 주십시오. 그리고 … 수사 기밀이라서 …" → "인증번호 128139 왔어요"가
+    // '비밀 유지 요구') — L3(인증번호를 불러 준 순간 = 개인정보 범주 라벨)은 문구 키보다 앞선다. 키 라벨 중 개인정보 범주가 있으면 그것,
+    // 없으면 세션 목록의 첫 개인정보 범주 라벨. 조건은 좁게: 같은 문장에서 인증번호를 **불러 달라고 요구**한 대사(`OTP_REQUESTED`)
+    // 뒤 답에 4~8자리 숫자열 — "인증번호는 더 이상 필요 없습니다 … 이체해 주십시오"처럼 번호를 언급만 한 대사는 종전 L1 그대로(대본 214세션 대조).
+    const otpGiven = userReply.photo !== true && OTP_REQUESTED.test(labelSource.textMasked) && OTP_DIGIT_RUN.test(userReply.textMasked);
+    const otpKeyTactic = otpGiven
+      ? keyTactics.find((tactic) => resolveTacticCategory(extractTacticLabel(tactic)) === "personal_info_demand")
+      : undefined;
+    const otpCategoryTactic =
+      otpGiven && !otpKeyTactic
+        ? weakenedTactics
+            .map(extractTacticLabel)
+            .find((label) => !NON_DEMAND_LABEL.test(label) && resolveTacticCategory(label) === "personal_info_demand")
+        : undefined;
+    // §129.13 (c) L4(사용자 결정 2026-10-25 ㉠ "요구 범주 우선") — 키 라벨이 확인 차단 범주(비밀 유지 · 전화 끊음 저지)면, 같은 대사의 요구 범주
+    // (송금 · 개인정보 · 링크 · 설치) 키 라벨, 없으면 요구 어형 표(9행 금 구매 포함)의 라벨이 앞선다. 둘 다 없으면 종전 키 라벨.
+    const firstKeyTactic = keyTactics[0];
+    const keyIsVerificationBlock =
+      !otpKeyTactic && !otpCategoryTactic && firstKeyTactic !== undefined &&
+      resolveTacticCategory(extractTacticLabel(firstKeyTactic)) === "verification_block";
+    const l4KeyTactic = keyIsVerificationBlock
+      ? keyTactics.find((tactic) => DEMAND_CATEGORIES.includes(resolveTacticCategory(extractTacticLabel(tactic))))
+      : undefined;
+    const l4DemandLabel =
+      keyIsVerificationBlock && !l4KeyTactic ? resolveDemandFallbackTactic(labelSource.textMasked, weakenedTactics) : undefined;
+    const labelTactic =
+      otpKeyTactic ?? l4KeyTactic ?? (otpCategoryTactic || l4DemandLabel ? undefined : firstKeyTactic);
     // §129 L2 — 요구 어형 표도 비면 답의 내용 범주로(사진 턴 제외).
     const fallbackTactic = labelTactic
       ? undefined
-      : (resolveDemandFallbackTactic(labelSource.textMasked, weakenedTactics) ??
+      : (otpCategoryTactic ??
+        l4DemandLabel ??
+        resolveDemandFallbackTactic(labelSource.textMasked, weakenedTactics) ??
         (userReply.photo === true && photoDemand ? resolvePhotoProvidedTactic(photoDemand.textMasked, weakenedTactics) : undefined) ??
         resolveAnswerCategoryTactic(labelSource.textMasked, userReply, weakenedTactics));
     if (fallbackTactic) tacticLabelsUsed.add(fallbackTactic);
