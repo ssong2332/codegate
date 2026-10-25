@@ -585,6 +585,36 @@ test("[§129.11] 자녀 납치 초 · 중 · 고급 변형 모두 '자녀 인질
   assert.ok(used.includes("자녀 인질 협박"));
 });
 
+// ── §129.12 '자녀 인질 협박' — 주어 · 부사가 앞에 붙은 바꿔 말하기(메인 라이브 재테스트 2026-10-25 · 자녀 납치 초급) ──────────
+test("[§129.12] '당신 자녀분이 지금 저희 쪽에 있어요' · '… 데리고 있습니다' 꼴도 '자녀 인질 협박'에 걸리고, 라이브 대본의 첫 속은 순간 라벨이 된다", () => {
+  const PARAPHRASED = [
+    "아, 지금 바로 확인 좀 하셔야 됩니다. 당신 자녀분이 지금 저희 쪽에 있어요. 묻지 말고 제 말만 들으세요.", // 라이브 원문
+    "자녀분 데리고 있습니다. 다치지 않게 하려면 제가 시키는 대로 해야 할 겁니다.", // 실 키 프로브 대본
+    "지금 당신 자녀를 제가 데리고 있습니다. 다른 생각 하지 말고 제 말 잘 들으세요.", // 실 키 프로브 대본
+  ];
+  for (const variant of ["fv-c5ih", "fv-dxwu", "fv-k268", "fv-w7tb"]) {
+    const tactics = resolveSessionScenarioPrompt("kidnapping-threat", variant)!.weakenedTactics;
+    for (const line of PARAPHRASED) {
+      const used = analyzeConversation(dialogue([["scammer", line]]), 0, tactics).tacticsUsed;
+      assert.ok(used.includes("자녀 인질 협박"), `${variant}: ${line}`);
+    }
+  }
+  // 라이브 대본 그대로 — 종전 리포트: 1:00 즉시 송금 요구 · 1:16 냉담한 반응 · 1:35 즉시 송금 요구(인질 협박 0).
+  const tactics = resolveSessionScenarioPrompt("kidnapping-threat", "fv-c5ih")!.weakenedTactics;
+  const live = analyzeConversation(dialogue([
+    ["scammer", "여보세요, 거기 혹시 김맞으세요? 저는 시내 경찰서 사이버수사팀 담당자입니다."],
+    ["user", "네 맞는데요, 무슨 일이세요?"],
+    ["scammer", PARAPHRASED[0]],
+    ["user", "네? 우리 애가요? 어떻게 해야 돼요?"],
+    ["scammer", "지금 제가 시키는 대로만 하세요. 울어도 소용없고 시간 없어요. 지금 바로 준비할 수 있는 돈이 얼마나 되는지 말씀하세요."],
+    ["user", "알겠어요, 시키는 대로 할게요. 얼마를 어디로 보내요?"],
+    ["scammer", "가온은행 948-2716-5093-27, 예금주는 박정호입니다. 지금 바로 천만 원 이체하세요. 끊지 말고 대기하세요."],
+    ["user", "보냈어요"],
+  ]), 0, tactics);
+  assert.deepEqual(live.deceivedMoments.map((m) => [m.turnIndex, m.tactic]), [[3, "자녀 인질 협박"], [5, "냉담한 반응"], [7, "즉시 송금 요구"]]);
+  assert.ok(live.tacticsUsed.includes("자녀 인질 협박"));
+});
+
 // ── §129.10 (3) 화면 제출 + 직후 이행 보고 = 순간 하나(사용자 결정 T1 · T2 · ㉠ 화면 순간만) ─────────────────────────
 test("[§129.10 (3)] 이체 화면 제출 뒤 2분 안 · 사이 사기범 대사 1개 이하의 같은 송금 범주 이행 보고는 화면 순간에 합친다(T1) · 그 밖은 둘 다(T2)", () => {
   const base = 1_000_000;
