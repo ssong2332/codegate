@@ -478,6 +478,11 @@ const SEND_WHERE_OR_HOW_MUCH = /(?:어디로|어느\s*계좌로?|어떻게)\s*(?
 const INSTALL_TOPIC = /앱|어플|설치|깔/;
 const INSTALL_INTENT = /(?:깔|설치하)(?:면|아\s*줄게|아\s*줄께|아\s*볼게)|깔게|설치\s*(?:하면|할게|해\s*줄게|해\s*볼게)|(?:어떻게|뭘|뭐)\s*(?:깔|설치)/;
 
+/** §129.13 (b) — 같은 문장에서 인증번호를 불러 · 말해 · 알려 · 입력해 달라고 요구한다(언급만 한 대사 제외). */
+const OTP_REQUESTED = /인증\s*(?:번호|코드)[^.?!\n]{0,30}?(?:불러|말씀해|알려|입력해|읽어)/;
+/** §129.13 (b) — 답의 4~8자리 숫자열("인증번호 128139 왔어요" — 숫자 뒤가 어미가 아니라 `extractSpokenCodes`는 못 뽑는다 · 그쪽은 무변경). */
+const OTP_DIGIT_RUN = /(?<![\d-])\d{4,8}(?![\d-])/;
+
 /** L2 — 답의 내용 범주. 사진 턴은 판정하지 않는다(§131). */
 function answerContentCategory(scammerText: string, reply: AnalysisMessage): TacticCategory | undefined {
   if (reply.photo === true) return undefined;
@@ -869,13 +874,29 @@ export function analyzeConversation(
           ? transferDemand
           : msg;
     // §129 L1 — 속은 순간 라벨에서는 부인 대응 · 암시 라벨을 빼고 다음 일치를 쓴다(시도된 수법 목록은 위에서 이미 올렸다 · 무변경).
-    const labelTactic = (labelSource === msg ? matchedTactics : findMatchedTactics(labelSource.textMasked, tacticMatchers)).find(
+    const keyTactics = (labelSource === msg ? matchedTactics : findMatchedTactics(labelSource.textMasked, tacticMatchers)).filter(
       (tactic) => !NON_DEMAND_LABEL.test(extractTacticLabel(tactic)),
     );
+    // §129.13 (b)(메인 라이브 2026-10-25 · 금 구매형 — "인증번호 … 불러 주십시오. 그리고 … 수사 기밀이라서 …" → "인증번호 128139 왔어요"가
+    // '비밀 유지 요구') — L3(인증번호를 불러 준 순간 = 개인정보 범주 라벨)은 문구 키보다 앞선다. 키 라벨 중 개인정보 범주가 있으면 그것,
+    // 없으면 세션 목록의 첫 개인정보 범주 라벨. 조건은 좁게: 같은 문장에서 인증번호를 **불러 달라고 요구**한 대사(`OTP_REQUESTED`)
+    // 뒤 답에 4~8자리 숫자열 — "인증번호는 더 이상 필요 없습니다 … 이체해 주십시오"처럼 번호를 언급만 한 대사는 종전 L1 그대로(대본 214세션 대조).
+    const otpGiven = userReply.photo !== true && OTP_REQUESTED.test(labelSource.textMasked) && OTP_DIGIT_RUN.test(userReply.textMasked);
+    const otpKeyTactic = otpGiven
+      ? keyTactics.find((tactic) => resolveTacticCategory(extractTacticLabel(tactic)) === "personal_info_demand")
+      : undefined;
+    const otpCategoryTactic =
+      otpGiven && !otpKeyTactic
+        ? weakenedTactics
+            .map(extractTacticLabel)
+            .find((label) => !NON_DEMAND_LABEL.test(label) && resolveTacticCategory(label) === "personal_info_demand")
+        : undefined;
+    const labelTactic = otpKeyTactic ?? (otpCategoryTactic ? undefined : keyTactics[0]);
     // §129 L2 — 요구 어형 표도 비면 답의 내용 범주로(사진 턴 제외).
     const fallbackTactic = labelTactic
       ? undefined
-      : (resolveDemandFallbackTactic(labelSource.textMasked, weakenedTactics) ??
+      : (otpCategoryTactic ??
+        resolveDemandFallbackTactic(labelSource.textMasked, weakenedTactics) ??
         (userReply.photo === true && photoDemand ? resolvePhotoProvidedTactic(photoDemand.textMasked, weakenedTactics) : undefined) ??
         resolveAnswerCategoryTactic(labelSource.textMasked, userReply, weakenedTactics));
     if (fallbackTactic) tacticLabelsUsed.add(fallbackTactic);
