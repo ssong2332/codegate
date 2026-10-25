@@ -36,6 +36,8 @@ type DiagState = {
   normGain: number | null;
   /** §122.2.2 — 이번 통화의 출력 컨텍스트 경로(`callAudio.ts` `CallOutputPath`). `after-mic`이면 볼륨 키('통화')가 소리를 조절할 것으로 본다(실기 확인 전). */
   outputPath: string | null;
+  /** §137 — 이번 통화의 최종 출력 싱크(`callAudio.ts` `OutputSink` · 표 E1~E4). */
+  outputSink: string | null;
   /** §126 — 마이크 뒤 새 출력 컨텍스트가 running이 되기까지 걸린 ms(넘으면 `timeout` · 만들지 않았으면 null). `fallback-primed` 원인 판정용. */
   freshResume: string | null;
   /** §126 — '통화' 스트림 통화 모드 추가 감쇠(선형 · `callStreamTrimFor`). */
@@ -85,6 +87,7 @@ const INITIAL: DiagState = {
   pcmPeakMax: null,
   normGain: null,
   outputPath: null,
+  outputSink: null,
   freshResume: null,
   streamTrim: null,
   micFramesSent: 0,
@@ -237,6 +240,11 @@ export function formatDbfs(amplitude: number | null): string {
 /** §122.2.2 — 출력 컨텍스트 경로(`after-mic` · `before-mic` · `fallback-primed`). */
 export function noteOutputPath(path: string): void {
   state = { ...state, outputPath: path };
+}
+
+/** §137 — 출력 싱크(`element` · `context` · `element-failed`). */
+export function noteOutputSink(sink: string): void {
+  state = { ...state, outputSink: sink };
 }
 
 /** §126 — 새 출력 컨텍스트의 running 도달 ms(문자열) 또는 `timeout`. */
@@ -416,6 +424,7 @@ export const AUDIO_DIAG_KEYS = [
   "flag.ringclose",
   "flag.outaftermic",
   "flag.voicetrim",
+  "flag.outelement",
   "flag.saved",
   "callMode",
   "rt.status",
@@ -429,6 +438,7 @@ export const AUDIO_DIAG_KEYS = [
   "out.path",
   "out.freshMs",
   "out.trimDb",
+  "out.sink",
   "out.createdMs",
   "out.gain",
   "out.gainCtx",
@@ -485,9 +495,16 @@ export function buildAudioDiagRows(input: {
   browser: string;
   /**
    * 실기 A/B 플래그(`callAudio.ts` `readAudioFlags`) — 주소 쿼리 + 탭 저장 값(§134 `debugFlags.ts`)에서 읽은 현재 값.
-   * §134 — `outputAfterMic` · `voiceTrim` · `saved`(저장된 키=값 목록) 부재면 "-".
+   * §134 — `outputAfterMic` · `voiceTrim` · `saved`(저장된 키=값 목록) 부재면 "-". §137 `outputElement`도 같다.
    */
-  flags: { audioPrime: boolean; ringCloseImmediate: boolean; outputAfterMic?: boolean; voiceTrim?: boolean; saved?: string };
+  flags: {
+    audioPrime: boolean;
+    ringCloseImmediate: boolean;
+    outputAfterMic?: boolean;
+    voiceTrim?: boolean;
+    outputElement?: boolean;
+    saved?: string;
+  };
 }): Array<[AudioDiagKey, string]> {
   const s = input.snapshot;
   const values: Record<AudioDiagKey, string> = {
@@ -495,6 +512,7 @@ export function buildAudioDiagRows(input: {
     "flag.ringclose": input.flags.ringCloseImmediate ? "immediate" : "deferred",
     "flag.outaftermic": input.flags.outputAfterMic === undefined ? "-" : input.flags.outputAfterMic ? "on" : "off",
     "flag.voicetrim": input.flags.voiceTrim === undefined ? "-" : input.flags.voiceTrim ? "on" : "off",
+    "flag.outelement": input.flags.outputElement === undefined ? "-" : input.flags.outputElement ? "on" : "off",
     "flag.saved": show(input.flags.saved),
     callMode: input.callMode,
     "rt.status": input.status,
@@ -508,6 +526,7 @@ export function buildAudioDiagRows(input: {
     "out.path": show(s.outputPath),
     "out.freshMs": show(s.freshResume),
     "out.trimDb": formatDbfs(s.streamTrim),
+    "out.sink": show(s.outputSink),
     "out.createdMs": rel(s.outputCreatedAtMs, s.acceptAtMs),
     "out.gain": s.gain === null ? "-" : s.gain.toFixed(2),
     "out.gainCtx": s.gainCtxSame === null ? "-" : s.gainCtxSame ? "same" : "diff",

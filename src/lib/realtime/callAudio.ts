@@ -239,3 +239,164 @@ export function pickCallOutputPath(input: {
   if (input.freshRunning) return "after-mic"; // O2
   return input.primedUsable ? "fallback-primed" : "after-mic"; // O3 · O4
 }
+
+// ── §137 출력 싱크 A/B(2026-10-26 실기 신고 — 안드로이드 Chrome 155 · 라이브 main 203578f) ───────────────────────────────
+// 신고: 볼륨 키를 누르면 전화기 아이콘이 뜨지만 소리가 안 바뀌고 미디어 볼륨이 바꾼다(#425 때는 볼륨 키가 먹었다). 진단 수치
+// (`out.path=after-mic` · `trimDb` · `out.gain` · `route`)는 같은데 날마다 귀에 들리는 크기가 다르다.
+// 가설(추정 — 실기 확인 전): Web Audio `ctx.destination` 출력이 때로는 '통화', 때로는 '미디어' 스트림으로 나간다. 최종 노드를
+// `MediaStreamAudioDestinationNode` → 숨긴 `<audio>`(WebRTC 재생 경로)로 내보내면 '통화' 스트림에 고정될 수 있다.
+// ⇒ `?outelement=1`일 때만 켜는 실험(기본 = 끔 · 탭 안 유지 = `debugFlags.ts` F1~F5).
+// | # | If | Then |
+// |---|---|---|
+// | E1 | 플래그 꺼짐(`outelement` 없음 · `1` 밖) | 종전 그대로 `ctx.destination` — `context`(요소 0 · 이 함수들을 부르지 않는다) |
+// | E2 | 플래그 켬 · 스트림 목적지나 `<audio>`를 만들 수 없음 | `ctx.destination` — `element-failed` |
+// | E3 | 플래그 켬 · `play()`가 `OUTPUT_ELEMENT_PLAY_TIMEOUT_MS` 안에 resolve | `<audio>` — `element` |
+// | E4 | 플래그 켬 · `play()` reject · 상한 초과 · 재생 중 요소 `error` | 즉시 `ctx.destination`으로 되돌림 — `element-failed`(무음 결함 §57 재발 방지) |
+// 정리(끊기 · 통화 종료 · 재연결 · 새로고침 뒤 다시 열기 #426): 세션 effect cleanup이 `release()` — 요소 정지 · `srcObject` 해제 · DOM 제거 ·
+// 스트림 목적지 분리. 스피커 모드는 앞단 게인 · 컴프레서만 바꾸므로 싱크와 무관하게 같은 규칙이다.
+
+export type OutputSink = "element" | "context" | "element-failed";
+
+/** `<audio>` `play()`를 기다리는 상한(판단값 — 넘으면 E4로 되돌린다). */
+export const OUTPUT_ELEMENT_PLAY_TIMEOUT_MS = 1500;
+
+/** `outelement=1`이면 켠다(실험 · 기본 = 끔). */
+export function readOutputElementFlag(search: string): boolean {
+  try {
+    return new URLSearchParams(search).get("outelement") === "1";
+  } catch {
+    return false;
+  }
+}
+
+export type OutputElementPlay = "ok" | "rejected" | "timeout" | "error";
+
+/** 위 표 E1 ~ E4(순수 함수). */
+export function pickOutputSink(input: { flagOn: boolean; created: boolean; play: OutputElementPlay | null }): OutputSink {
+  if (!input.flagOn) return "context"; // E1
+  if (!input.created) return "element-failed"; // E2
+  return input.play === "ok" ? "element" : "element-failed"; // E3 · E4
+}
+
+type SinkNodeLike = { connect(destination: never): unknown; disconnect(destination?: never): void };
+type StreamDestinationLike = SinkNodeLike & { stream: unknown };
+export type OutputElementLike = {
+  srcObject: unknown;
+  play(): Promise<void>;
+  pause(): void;
+  addEventListener(type: "error", listener: () => void): void;
+  remove?: () => void;
+};
+
+/** 숨긴 `<audio>`(autoplay · playsinline)를 만들어 문서에 붙인다. 만들 수 없으면 null(E2). */
+export function createHiddenOutputElement(): OutputElementLike | null {
+  if (typeof document === "undefined" || !document.body) return null;
+  try {
+    const el = document.createElement("audio");
+    el.autoplay = true;
+    el.setAttribute("playsinline", "");
+    el.hidden = true;
+    document.body.appendChild(el);
+    return el;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 플래그가 켜졌을 때만(E2 ~ E4) 최종 노드를 `<audio>`로 내보낸다. `onSink`는 판정이 날 때마다 부른다(진단 `out.sink`).
+ * 반환 `release()`는 멱등이다 — 요소 정지 · `srcObject` 해제 · 제거 · 스트림 목적지 분리(최종 노드 자체의 분리는 호출부 몫).
+ */
+export function connectOutputElementSink(input: {
+  source: SinkNodeLike;
+  context: { destination: unknown; createMediaStreamDestination?: () => StreamDestinationLike };
+  createElement: () => OutputElementLike | null;
+  onSink: (sink: OutputSink) => void;
+  setTimer?: (fn: () => void, ms: number) => unknown;
+  clearTimer?: (handle: unknown) => void;
+}): { release: () => void } {
+  const setTimer = input.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
+  const clearTimer = input.clearTimer ?? ((handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>));
+  const toContext = () => input.source.connect(input.context.destination as never);
+  let streamDest: StreamDestinationLike | null = null;
+  let element: OutputElementLike | null = null;
+  try {
+    streamDest = input.context.createMediaStreamDestination?.() ?? null;
+    element = streamDest ? input.createElement() : null;
+  } catch {
+    streamDest = null;
+    element = null;
+  }
+  let released = false;
+  let settled = false;
+  let timer: unknown = null;
+  const dropElement = () => {
+    if (timer !== null) clearTimer(timer);
+    timer = null;
+    if (element) {
+      try {
+        element.pause();
+      } catch {
+        // 이미 멈췄으면 무시.
+      }
+      element.srcObject = null;
+      element.remove?.();
+    }
+    element = null;
+    if (streamDest) {
+      try {
+        input.source.disconnect(streamDest as never);
+      } catch {
+        // 연결되지 않았으면 무시.
+      }
+      streamDest.disconnect();
+    }
+    streamDest = null;
+  };
+  // E4 — 소리 우선: 요소를 버리고 컨텍스트 출력으로 즉시 되돌린다.
+  const revert = (play: OutputElementPlay) => {
+    if (released || (settled && play !== "error")) return;
+    settled = true;
+    dropElement();
+    toContext();
+    input.onSink(pickOutputSink({ flagOn: true, created: true, play }));
+  };
+  if (!streamDest || !element) {
+    dropElement();
+    toContext();
+    input.onSink(pickOutputSink({ flagOn: true, created: false, play: null })); // E2
+    return { release: () => {} };
+  }
+  input.source.connect(streamDest as never);
+  element.srcObject = streamDest.stream;
+  element.addEventListener("error", () => {
+    if (element) revert("error");
+  });
+  timer = setTimer(() => {
+    timer = null;
+    revert("timeout");
+  }, OUTPUT_ELEMENT_PLAY_TIMEOUT_MS);
+  let playing: Promise<void>;
+  try {
+    playing = element.play();
+  } catch {
+    playing = Promise.reject(new Error("play"));
+  }
+  playing.then(
+    () => {
+      if (released || settled) return;
+      settled = true;
+      if (timer !== null) clearTimer(timer);
+      timer = null;
+      input.onSink(pickOutputSink({ flagOn: true, created: true, play: "ok" })); // E3
+    },
+    () => revert("rejected"),
+  );
+  return {
+    release: () => {
+      if (released) return;
+      released = true;
+      dropElement();
+    },
+  };
+}
