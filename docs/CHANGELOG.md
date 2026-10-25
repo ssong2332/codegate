@@ -4,6 +4,11 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-25 추가분, 브랜치 `claude/audio-volume-dropouts`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
+
+### Added
+- **말 끊김 · 통화별 음량 진단(Architecture §135 · DECISIONS #251)**: 진단 패널(`?audiodebug=1`)에 `play.gaps` · `play.gapMaxMs`(재생 공백) · `cut.int`(서버 끼어들기 전체/재생 중) · `cut.thought`(사고 문장 게이트) · `cut.ctx`(말하는 중 주입) · `hist`(같은 탭 앞 통화 4건 요약) 행을 추가했다. 소리 동작 변경 0.
+
 > ⚠️ **이 블록(2026-10-25 추가분, 브랜치 `claude/debug-flags-persist`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
 
 ### Fixed

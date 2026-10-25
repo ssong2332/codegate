@@ -139,6 +139,11 @@ import {
   noteOutputPath,
   noteStreamTrim,
   noteMicFrame,
+  noteContextWhileSpeaking,
+  noteInterrupt,
+  notePlayGap,
+  noteThoughtCut,
+  playGapMs,
   noteUnheardReplyFired,
   peakOf,
   registerMicTrack,
@@ -483,6 +488,8 @@ export default function GeminiVoiceSession({
   // §126 — '통화' 스트림 감쇠 노드와 이번 통화의 감쇠값(`callStreamTrimFor`). 통화 모드에서만 깎는다(`trimGainFor`).
   const streamTrimNodeRef = useRef<GainNode | null>(null);
   const streamTrimRef = useRef(1);
+  // §135 진단 — 사기범이 말하는 중인가(반이중 게이트 값의 사본). effect 밖의 상태 단언 전송이 `cut.ctx`를 세는 데만 읽는다.
+  const agentSpeakingRef = useRef(false);
   useEffect(() => {
     outputVolumeRef.current = liveStageFor(outputVolume ?? GEMINI_OUTPUT_GAIN);
     const node = outputGainNodeRef.current;
@@ -539,6 +546,7 @@ export default function GeminiVoiceSession({
     // 민감한 VAD에 사용자 발화로 오인돼 AI가 자기 말을 끊는 것을 막는 핵심 장치(에코 제거만으론
     // 노트북 스피커에서 부족). AI 발화가 끝나면(turnComplete/침묵) 다시 열린다.
     let agentSpeaking = false;
+    agentSpeakingRef.current = false;
     // 사용자 발화 파형 인디케이터(2026-07-24, 사용자 신고 — "일단 잘 파악하는지 보고 싶다") 상태.
     // cleanup()이 async IIFE 밖에서 정의되므로, raf 핸들을 여기 바깥 스코프에 미리 선언해 둔다
     // (session/processor와 동일한 패턴 — 안에서 값만 대입). RMS 계산·문턱값·off-디바운스 자체는
@@ -949,6 +957,7 @@ export default function GeminiVoiceSession({
       const activeSession = session;
       if (!activeSession) return false;
       try {
+        if (agentSpeaking) noteContextWhileSpeaking(); // §135 진단
         activeSession.sendClientContent({ turns: text, turnComplete: false });
       } catch {
         // 무시 — 통화는 계속된다(P-4 비차단). 문자 자체는 이미 화면에 도착해 있다(D-109).
@@ -1066,6 +1075,7 @@ export default function GeminiVoiceSession({
     let turnInProgress = false;
     const markSpeaking = () => {
       agentSpeaking = true;
+      agentSpeakingRef.current = true;
       handlersRef.current.onSpeakingChange(true);
     };
 
@@ -1094,6 +1104,7 @@ export default function GeminiVoiceSession({
         // 큐와 지연 계측도 이 턴을 끝난 것으로 본다(안 그러면 보류분이 다음 turnComplete까지 갇힌다).
         const stalled = turnInProgress;
         agentSpeaking = false;
+        agentSpeakingRef.current = false;
         turnInProgress = false;
         handlersRef.current.onSpeakingChange(false);
         if (stalled && !cancelled) {
@@ -1502,6 +1513,7 @@ export default function GeminiVoiceSession({
                 const gate = stepThoughtLeakGate(thoughtGate, { type: "transcript", text: sc.outputTranscription.text });
                 thoughtGate = gate.state;
                 if (gate.startSuppress) {
+                  noteThoughtCut(); // §135 진단 — 앱이 지운 끊김
                   stopAllPlayback();
                   console.info("[gemini-thought-leak]", JSON.stringify({ suppressed: true }));
                 }
@@ -1509,6 +1521,8 @@ export default function GeminiVoiceSession({
 
               // 사용자가 말을 끊으면 예약된 재생을 전부 멈춰 새 응답과 겹치지 않게 한다.
               if (sc?.interrupted) {
+                // §135 진단 — 예약 재생이 남아 있었으면 말이 잘린 끼어들기다(stopAllPlayback이 nextPlayTime을 0으로 되돌리기 전에 잰다).
+                noteInterrupt(outputContext ? nextPlayTime - outputContext.currentTime > 0 : false);
                 thoughtGate = stepThoughtLeakGate(thoughtGate, { type: "boundary" }).state;
                 stopAllPlayback();
                 stopSpeaking();
@@ -1547,6 +1561,8 @@ export default function GeminiVoiceSession({
                 const source = outputContext.createBufferSource();
                 source.buffer = buffer;
                 source.connect(outputGain ?? outputContext.destination);
+                // §135 진단 — 턴 진행 중인데 앞 청크가 이미 다 재생됐으면 그 사이 소리가 비었다(`play.gaps`).
+                notePlayGap(playGapMs({ turnInProgress, nextPlayTime, currentTime: outputContext.currentTime }));
                 // 이전 청크가 끝나는 시점에 이어붙인다(겹침·끊김 방지).
                 const startAt = Math.max(outputContext.currentTime, nextPlayTime);
                 source.start(startAt);
@@ -1910,6 +1926,7 @@ export default function GeminiVoiceSession({
     const session = liveSessionRef.current;
     if (!session) return;
     try {
+      if (agentSpeakingRef.current) noteContextWhileSpeaking(); // §135 진단
       session.sendClientContent({ turns: personaStateTurn.text, turnComplete: false });
       log("personaStateTurn", personaStateTurn.seq, personaStateTurn.text.slice(0, 12));
     } catch {

@@ -24586,3 +24586,40 @@ Hosting만(functions 변경 0).
 | `npm --prefix functions test` | 1922 pass / 0 fail(functions 변경 0) | main 1922 |
 | `npm run lint` | 오류 0 · 경고 1(변경 밖 `scripts/live-turn-probe.mjs`) | — |
 - 실기 확인 0 — 배포 뒤 확인. 배포: Hosting만.
+
+## 135. (Investigation + 진단 — 2026-10-25 · 브랜치 `claude/audio-volume-dropouts` = main `c85ab95` + 변경 · 메인 세션 지시 — 실기 신고 3건 · 갤럭시 Chrome 155 · Hosting `nKFNkqwzMtxPoxWRzeHak`) **볼륨 키 · 통화별 음량 차이 · 말 끊김 진단** — implementer 기록 (DECISIONS #251)
+
+제품 동작은 바꾸지 않았다. 원인을 실기에서 가를 진단 행만 더했다.
+
+### 135.1 신고 1 — 볼륨 키가 사기범 소리를 바꾸지 않음(`out.path=after-mic` · `route=speaker`)
+| 구분 | 내용 |
+|---|---|
+| 확인(코드) | `after-mic`는 "마이크가 열린 뒤 새 출력 컨텍스트가 500ms 안에 running"일 뿐이다(`callAudio.ts` O2). 그 스트림이 Android '통화' 용도가 됐는지는 웹에서 읽을 수 없다. 이 판정은 Chromium 소스 열람(§122.2.2)에 기댄 것이고, 실기에서 확인한 적은 없다 |
+| 확인(코드) | 받기 때 만든 출력 컨텍스트(`primedAudio.output`)는 `after-mic`에서도 닫지 않는다. 출력 스트림이 둘 살아 있다 |
+| 추정 A | 새 컨텍스트도 '미디어' 용도로 만들어졌는데, 볼륨 키는 '통화'를 조절한다(또는 그 반대). 이유 후보: Chrome이 자체 에코 제거를 쓰면 통신 모드가 켜지지 않는다, 출력 스트림을 재사용한다(모두 미확인) |
+| 추정 B | 스피커 모드(압축 비율 12 · 보정 2.5 · 리미터)는 출력 꼭대기를 0dBFS 가까이 누른다. 그래도 시스템 음량은 그 뒤에 걸리므로 이것만으로 "안 변함"을 설명하기는 어렵다 |
+| 실기로 가르기 | 통화 중 볼륨 키를 누르면 뜨는 막대의 아이콘(전화기 = 통화 음량, 음표 = 미디어 음량)을 보고, 기본값과 `?outaftermic=0`을 비교한다(절차는 PR 본문) |
+
+### 135.2 신고 2 — 통화마다 크기가 다름
+| 구분 | 내용 |
+|---|---|
+| 확인(코드) | 출력 경로가 통화마다 달라질 수 있다: `after-mic` · `fallback-primed`(새 컨텍스트가 500ms 안에 running이 아님) · `before-mic`. 경로가 바뀌면 Android 스트림(곡선 차 11~27dB 추정, §126 표)과 앱 감쇠(−6dB는 `after-mic`에서만)가 함께 바뀐다 |
+| 확인(코드) | 정규화(§114)는 통화마다 처음부터 다시 잰다(첫 청크 게인 1 → 누적 측정). 같은 통화 안에서는 −12~+6dB로 맞춘다 |
+| 진단 | `hist` 행: 같은 탭의 앞 통화 4건 요약 `경로 f새컨텍스트ms n정규화dB t감쇠dB g공백수 i끼어들기수`. 새로고침하면 비워진다 |
+
+### 135.3 신고 3 — 말이 중간중간 끊김(기관 사칭 중급)
+| 갈래 | 판정 행 | 뜻 |
+|---|---|---|
+| 재생 공백 | `play.gaps` · `play.gapMaxMs` | 턴 진행 중, 앞 청크 재생이 끝난 뒤 다음 청크가 와서 소리가 빈 횟수(20ms 이상)와 최대 길이. 네트워크 지연 · 도구 호출 대기도 여기에 들어간다 |
+| 서버 끼어들기 | `cut.int` = 전체/재생 중 | 서버 `interrupted` 수. 뒤 숫자는 예약 재생이 남아 있던 경우(= 말이 실제로 잘린 경우) |
+| 앱이 지움 | `cut.thought` | 영어 사고 문장 게이트(§116)가 재생을 지운 수 |
+| 말하는 중 주입 | `cut.ctx` | 사기범이 말하는 중에 보낸 `turnComplete:false` 맥락 주입 · 상태 단언 수(§71.5 주석상 생성을 끊지 않는다고 했지만 실기 대조용) |
+- `mic.peakDb=0.0`: 보낸 프레임의 최대값이다. 반이중 게이트가 말하는 동안 마이크를 보내지 않으므로(`mic.dropEcho`) 이 값만으로 끼어들기라고 볼 수 없다(확인: `GeminiVoiceSession.tsx` 반이중 분기). 게이트가 열리는 경우는 turnComplete 뒤 꼬리 250ms, 턴 진행 중 재생이 4초 넘게 비었을 때(stall)뿐이다.
+
+### 135.4 검증
+| 항목 | 결과 | 기준 |
+|---|---|---|
+| `npm test` | 1151 pass / 0 fail(신규 `audioCutDiagnostics.test.ts` 6건 · `thoughtLeak.test.ts` 배선 정규식 1곳 완화) | main `c85ab95` 1145 |
+| `npm --prefix functions test` | 1922 pass / 0 fail(functions 변경 0) | 1922 |
+| `npm run lint` | 오류 0 · 경고 1(변경 밖 `scripts/live-turn-probe.mjs`) | — |
+- 실 키 프로브 0 · 실기 확인 0. 배포: Hosting만.
