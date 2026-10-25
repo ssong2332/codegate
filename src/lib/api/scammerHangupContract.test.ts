@@ -118,7 +118,7 @@ test("[G557] 서버 · 클라 계약 리터럴 4종이 양방향으로 같다(�
   assertContract(client);
   const c = contract(client);
   // 공허 통과 방지 — 각 집합이 실제로 채워져 있다(스캔이 0을 0과 비교하지 않게).
-  assert.equal(c.statusServer.length, 10, "ⓐ 판정 status는 10종");
+  assert.equal(c.statusServer.length, 11, "ⓐ 판정 status는 11종(§132.13 blocked_follow_up +1)");
   assert.deepEqual(c.endReasonServer, ["limit_reached", "scammer_ended", "user_ended"]);
   assert.deepEqual(c.requestKeysServer, ["kind", "pendingInstruction", "sessionId", "userTurns"]);
   assert.deepEqual(c.sendEndServer, ["limit_reached", "scammer_ended"]);

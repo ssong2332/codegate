@@ -64,7 +64,8 @@ export const requestScammerHangup = onCall<
   let goalActionDone = false;
   // §115 — 후속 단계 변형(기관 사칭 고급 2벌)만 값이 있다. 막힌 응답의 문면을 고르는 데도 쓴다.
   const followUpUserTurns = goalFollowUpFor(session.scenarioId, session.flowVariantId);
-  if (isVerifyInterceptSession(session)) {
+  // §132.13 — 후속 단계 변형은 확인 무력화 세션이 아니어도 C-5를 계산한다(4-b행 입력).
+  if (isVerifyInterceptSession(session) || followUpUserTurns !== undefined) {
     try {
       const { declared, reason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId);
       goalActionDone = hasCompletedGoalAction({
@@ -93,6 +94,7 @@ export const requestScammerHangup = onCall<
       delivered,
       Timestamp.now(),
       goalActionDone,
+      followUpUserTurns !== undefined && !goalActionDone,
     ),
   );
 

@@ -25,12 +25,32 @@ export const INSTITUTION_PERSONA = new RegExp(
     `|고객님`,
 );
 
+// ── §132.13(DECISIONS #248 ⑮ · 메인 라이브 2026-10-25 main `e5fcadd` · 자녀 납치 협박 초급 폴백) — 첫마디 "저는 지금 경찰청 사이버수사대 소속입니다".
+// 페르소나는 "신원을 밝히지 않는 협박범"이고 경찰 사칭 루트는 0개다(모델 창작 — 직전 라이브도 "시내 경찰서 사이버수사팀"). 판정표 P를 협박범 시나리오로 넓힌다:
+// | # | If | Then |
+// |---|---|---|
+// | K1 | 대상(`IDENTITY_HIDDEN_SCENARIOS`) · 사기범 대사 경로 | 역할 고정 1줄(`personaAnchorInstruction`) · LLM 요청에 `personaGuard`(`INSTITUTION_SELF_INTRO`) |
+// | K2 | 응답이 기관 · 수사기관 직원 자기소개(P2의 앞 두 꼴 · "소속" 포함) | 쓸 수 없는 응답(`persona-drift`) → 다음 단계 모델 → 끝은 Mock(수법 문구) |
+// ⛔ "고객님"은 K2에 넣지 않는다(협박범 대사의 표기 정리가 "○○님"을 "고객님"으로 바꾼다 — §132.11 · 검사는 정리 전 원문이지만 범위를 좁혀 둔다).
+// ⛔ "경찰에 신고하면"처럼 남을 말하는 문장은 자기소개 어미 · "저는/제가" 없이는 걸리지 않는다.
+export const IDENTITY_HIDDEN_SCENARIOS: readonly string[] = ["kidnapping-threat"];
+const SELF_INTRO_ROLE = "직원|팀장|과장|대리|주임|담당자?|상담원|소속|수사관|형사";
+/** K2 — 기관 · 수사기관 직원 자기소개(호칭 꼴 제외). */
+export const INSTITUTION_SELF_INTRO = new RegExp(
+  `(?:저는|제가|여기는)\\s*[^.?!\\n]{0,20}(?:${INSTITUTION_NOUNS}|사이버\\s*수사|수사\\s*(?:팀|과|대))[^.?!\\n]{0,15}(?:${SELF_INTRO_ROLE}|입니다|이에요|예요|인데요)` +
+    `|(?:${INSTITUTION_NOUNS})[^.?!\\n]{0,12}(?:${SELF_INTRO_ROLE})\\s*(?:인데요|입니다|이에요|예요)`,
+);
+
 export function personaGuardFor(scenarioId: string): RegExp | undefined {
+  if (IDENTITY_HIDDEN_SCENARIOS.includes(scenarioId)) return INSTITUTION_SELF_INTRO;
   return scenarioId in PERSONA_GUARDED_SCENARIOS ? INSTITUTION_PERSONA : undefined;
 }
 
 /** P1 — 역할 고정 1줄(따옴표 대사 예시 0 · 턴 지시 스캔 게이트 대상). */
 export function personaAnchorInstruction(scenarioId: string): string | undefined {
+  if (IDENTITY_HIDDEN_SCENARIOS.includes(scenarioId)) {
+    return "[역할 고정] 너는 처음부터 끝까지 신원을 밝히지 않는 협박범이다. 경찰 · 수사기관 · 금융기관의 직원이나 소속이라고 자기를 소개하지 않고, 이름도 소속도 밝히지 않는다.";
+  }
   const relation = PERSONA_GUARDED_SCENARIOS[scenarioId];
   if (!relation) return undefined;
   return `[역할 고정] 너는 처음부터 끝까지 참가자의 ${relation}다. 대화가 대출 · 계좌 · 보험 이야기로 흘러도 은행 · 카드사 · 수사기관 직원이나 상담원으로 자기를 소개하지 않고, 상대를 고객님이라고 부르지 않는다.`;

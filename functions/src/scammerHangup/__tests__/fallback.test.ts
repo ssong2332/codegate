@@ -47,6 +47,7 @@ const FACTS: FallbackHangupFacts = {
   transferPlaced: false,
   transferReachable: true,
   goalActionDone: false,
+  followUpPending: false,
   userTurns: 4,
   limitReached: false,
   alreadyAccepted: false,

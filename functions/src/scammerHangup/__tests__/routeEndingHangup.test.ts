@@ -27,6 +27,7 @@ function input(over: Partial<ScammerHangupInput>): ScammerHangupInput {
     transferPlaced: false,
     transferReachable: true,
     goalActionDone: false,
+    followUpPending: false,
     userTurns: 3,
     pendingInstruction: false,
     smsAwaitingUser: false,

@@ -400,6 +400,7 @@ export type ScammerHangupStatus =
   | "not_last_leg"
   | "mock_turn"
   | "blocked_transfer"
+  | "blocked_follow_up"
   | "too_early"
   | "blocked_pending"
   | "limit_reached"

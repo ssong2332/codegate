@@ -7,6 +7,7 @@ import {
   SCAMMER_HANGUP_BLOCKED_TRANSFER_GUIDANCE,
   SCAMMER_HANGUP_DECLINED_GUIDANCE,
   SCAMMER_HANGUP_FAILURE_INSTRUCTION,
+  SCAMMER_HANGUP_FOLLOW_UP_PENDING_GUIDANCE,
   scammerHangupGuidance,
 } from "../guidance";
 import { SCAMMER_HANGUP_RULES } from "../decide";
@@ -68,7 +69,9 @@ test("[G516] 판정 status 전수 → 문면 매핑(승인 2 · 전환 전 1 · 
       ? SCAMMER_HANGUP_ACCEPTED_GUIDANCE
       : rule.status === "blocked_transfer"
         ? SCAMMER_HANGUP_BLOCKED_TRANSFER_GUIDANCE
-        : SCAMMER_HANGUP_DECLINED_GUIDANCE;
+        : rule.status === "blocked_follow_up" // §132.13 — 4-b행 = 후속 단계 문면
+          ? SCAMMER_HANGUP_FOLLOW_UP_PENDING_GUIDANCE
+          : SCAMMER_HANGUP_DECLINED_GUIDANCE;
     assert.equal(scammerHangupGuidance(rule.status), expected, rule.status);
   }
 });

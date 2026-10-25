@@ -60,6 +60,8 @@ export function scammerHangupGuidance(
   // §127 — 할 일을 마친 뒤 6행에 막히면 다시 끊게 한다(그 밖 6행 · 다른 status는 종전 문면).
   if (status === "blocked_pending" && options.goalActionDone === true) return SCAMMER_HANGUP_RETRY_AFTER_GOAL_GUIDANCE;
   // §115 — 후속 단계가 남아 막힌 경우만 되풀이 금지 문면(그 밖 확인 무력화 세션은 종전 문면 그대로).
+  // §132.13 — 4-b행(후속 단계가 남음)도 같은 문면.
+  if (status === "blocked_follow_up") return SCAMMER_HANGUP_FOLLOW_UP_PENDING_GUIDANCE;
   if (status === "blocked_transfer" && options.followUpPending === true) return SCAMMER_HANGUP_FOLLOW_UP_PENDING_GUIDANCE;
   if (status === "blocked_transfer") return SCAMMER_HANGUP_BLOCKED_TRANSFER_GUIDANCE;
   return SCAMMER_HANGUP_DECLINED_GUIDANCE;

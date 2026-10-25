@@ -48,6 +48,31 @@ export function buildConfirmResultInstruction(purpose: "transfer" | "link"): str
 }
 
 /**
+ * ⭐ §132.13(DECISIONS #248 ⑮ · 메인 라이브 2026-10-25 main `e5fcadd` · 자녀 납치 협박 초급 fv-c5ih · 폴백 세션 e76d6616) — 문자 선언이 없는 변형에서
+ * 참가자가 송금을 마쳤다고 한 신호 모드 턴의 지시. 종전(§132.11)은 위 `buildConfirmResultInstruction("transfer")`를 그대로 실었는데, 그 문면의
+ * "문자 안내대로 마쳤다"는 문자가 없는 통화와 맞지 않고, 가리키는 끝내기 항목의 첫째 경우("문자로 온 이체 화면에서 이체를 마쳤거나 …")에도 말로 한
+ * 송금이 없다 — 모델이 "들어왔네요" 뒤 "이제 끊지 말고 제 말만 들어요"로 붙잡고 두 턴을 더 끌었다(발화 3 · 4 · 5 모두 사전 판정 9행 승인).
+ * 판정표(⛔ 위에서 첫 매치):
+ * | # | If | Then |
+ * |---|---|---|
+ * | 1 | 이번 발화까지의 송금 완료 주장 수 ≥ 변형의 요구 단계 수(`demandStages`) | 마무리 지시 — 확인 한마디 · 붙잡는 말 금지 · 응답 끝 [[SIGNAL:END_CALL_GOAL]] |
+ * | 2 | 그 밖(요구 단계가 남음 · 변형 부재) | 확인 결과 지시 — 남은 요구 유무 분기(G625 분기 구절 그대로) |
+ * ⛔ 횟수 · 턴 번호 0(G130) · 따옴표 대사 예시 0.
+ */
+export function buildNoSmsTransferClaimInstruction(final: boolean): string {
+  if (final) {
+    return "(상대가 방금 돈을 보냈다고 말했고, 이 통화에서 받아 낼 돈은 다 받았다. 이번 대답에서 돈이 들어왔다고 짧게 확인하고, 누구에게도 알리지 말라는 말은 한 문장까지만 덧붙여라. 통화를 끊지 말라거나 기다리라거나 네 말만 들으라는 말은 하지 말고, 새 요구도 꺼내지 마라. 응답 맨 끝에 [[SIGNAL:END_CALL_GOAL]]을 붙여 이번 대답에서 통화를 끝내라.)";
+  }
+  return "(상대가 방금 돈을 보냈다고 말했다. 이번 대답에서 돈이 들어왔다고 그럴듯하게 알려 주고, 상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라. 아직 확인 중이라거나 기다려 달라는 말은 하지 마라.)";
+}
+
+/** §132.13 판정표 1행 — 발화들(이번 발화 포함) 중 송금 완료 주장 수가 요구 단계 수 이상인가. 단계 수 부재 · 0 이하 = 거짓(2행). */
+export function transferClaimsReachDemandStages(userTexts: readonly string[], demandStages: number | undefined): boolean {
+  if (demandStages === undefined || !(demandStages > 0)) return false;
+  return userTexts.filter((text) => isCompletionClaim(text, "transfer")).length >= demandStages;
+}
+
+/**
  * ⭐ §132.7(DECISIONS #248 · 실 키 회귀 프로브 2026-10-24b N4 — 카드사 중급 재측정) — 참가자가 문자 링크의 이체 화면을 **제출**했는데 실시간
  * 사기범은 그 사실을 몰랐다(앱이 기록만 하고 모델에는 아무것도 넣지 않았다). 참가자가 머뭇거리자 "아직 이체가 완료되지 않은 것으로 확인됩니다"
  * 뒤 이체 재촉 12턴 · 끊기 없음. 앱이 확인한 사실이라 조건형이 아니다(참가자 말과 무관). 마무리 분기는 위 `buildConfirmResultInstruction`과 같은 구절.
