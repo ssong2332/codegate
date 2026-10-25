@@ -1160,7 +1160,7 @@ const SPECS: VariantSpec[] = [
     level: "beginner",
     authoring: "authored",
     stages: st("자녀가 자기 쪽에 있다고 위협한다.", "곧바로 송금을 요구한다."),
-    keepLabels: ["명령조·단절적 어조", "냉담한 반응", "여지를 남긴 경고", "즉시 송금 요구", "부인 시 냉담한 떠넘기기", "촉박한 결정 압박"],
+    keepLabels: ["자녀 인질 협박", "명령조·단절적 어조", "냉담한 반응", "여지를 남긴 경고", "즉시 송금 요구", "부인 시 냉담한 떠넘기기", "촉박한 결정 압박"],
     exitBlock: ["D0_none"],
     sms: [],
     legs: ONE_LEG("신원 불상", "male"),

@@ -57,9 +57,12 @@ test("[§131(1)] 사진 순간 — 보내기만 요구한 어형(찍어 없음)�
 test("[§131(1) 3행] 요구 대사가 어형 표에도 안 걸리게 바꿔 말해도 사진을 보냈으면 세션 목록의 개인정보 요구 라벨", () => {
   const { moment } = photoMoment("보험 처리하려면 아빠 신분증이 꼭 있어야 한대ㅠㅠ 사진으로 부탁해");
   assert.equal(moment?.tactic, "신원정보 직접 요구");
-  // 세션 목록에 개인정보 요구 범주가 없으면 새 라벨을 만들지 않는다(종전 폴백).
+  // 세션 목록에 개인정보 요구 범주가 없으면 새 라벨을 만들지 않는다 — §129.10 (2)(메인 결정 · 최종 폴백) 이후로는 빈 라벨 대신
+  // 세션 목록 안의 대표 요구 수법이다(목록 밖 라벨 0 · 종전 "약화된 사기 수법" 아님).
   const noInfo = tactics.filter((t) => resolveTacticCategory(extractTacticLabel(t)) !== "personal_info_demand");
-  assert.equal(photoMoment("보험 처리하려면 아빠 신분증이 꼭 있어야 한대ㅠㅠ 사진으로 부탁해", noInfo).moment?.tactic, FALLBACK_TACTIC_LABEL);
+  const fallback = photoMoment("보험 처리하려면 아빠 신분증이 꼭 있어야 한대ㅠㅠ 사진으로 부탁해", noInfo).moment?.tactic;
+  assert.notEqual(fallback, FALLBACK_TACTIC_LABEL);
+  assert.ok(noInfo.map(extractTacticLabel).includes(fallback!), String(fallback));
 });
 
 test("[§131(1) 오탐] 5b행은 신분증 + 보내기 요구에만 — 받았다는 말 · 사진 일반 · 돈 송금은 열지 않는다", () => {

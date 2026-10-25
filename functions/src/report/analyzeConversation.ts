@@ -250,7 +250,8 @@ const ATM_WORDS = /(?:현금\s*)?(?:인출|지급)\s*기/g;
 const HANDOFF_DEMAND_CRYPTO_STEPS =
   /(?:거래소|지갑)[^.?!]{0,20}?(?:(?:옮겨|보내|전송해|가입해|바꿔)\s*(?:주|두)|(?:옮기|보내|전송하|가입하|바꾸)(?:세요|셔야|십시오|시면))|(?:적금|예금|보험)[^.?!]{0,6}?해지\s*(?:해\s*주|하셔|하세요|하십시오|하시면)|대출[^.?!]{0,6}?(?:받으셔|받으세요|받으십시오|받아\s*(?:서|주))/;
 const HANDOFF_DEMAND =
-  /(?:인출|출금)\s*(?:해\s*(?:주|두|놓|오|다|서)|하셔|하세요|하십시오)|찾아\s*(?:두|놓|오)(?:세요|십시오|시|셔)|(?:현금|수표)(?:으로|로)?\s*(?:찾|인출|출금|뽑|준비|마련)|맡(?:기세요|기십시오|기셔|기시면|겨\s*(?:주|두))|보관\s*(?:해야|하셔야|해\s*두|조치\s*(?:하셔|해\s*주|를\s*받으셔|받으셔))|(?:전달|건네)\s*(?:해\s*주|주|하셔|하세요|하십시오)|받으러\s*(?:가|갈|갑|오|올|옵)|(?:코인|가상\s*(?:자산|화폐))(?:으로|로|을|를)?\s*(?:바꿔|바꾸|사서|사세요|사셔|사시|구매|구입|옮|보내|송금|전환)|제출\s*(?:해\s*주|하셔|하세요|하십시오)|금(?:으로)?\s*(?:바꿔\s*(?:주|오|두)|바꾸셔|바꾸세요|바꾸십시오|사셔서|사서\s*(?:주|제출|맡))/;
+  /(?:인출|출금)\s*(?:해\s*(?:주|두|놓|오|다|서)|하셔|하세요|하십시오)|찾아\s*(?:두|놓|오)(?:세요|십시오|시|셔)|(?:현금|수표)(?:으로|로|을|를)?\s*(?:찾|인출|출금|뽑|준비|마련)|맡(?:기세요|기십시오|기셔|기시면|겨\s*(?:주|두))|보관\s*(?:해야|하셔야|해\s*두|조치\s*(?:하셔|해\s*주|를\s*받으셔|받으셔))|(?:전달|건네)\s*(?:해\s*주|주|하셔|하세요|하십시오)|받으러\s*(?:가|갈|갑|오|올|옵)|(?:코인|가상\s*(?:자산|화폐))(?:으로|로|을|를)?\s*(?:바꿔|바꾸|사서|사세요|사셔|사시|구매|구입|옮|보내|송금|전환)|제출\s*(?:해\s*주|하셔|하세요|하십시오)|금(?:으로)?\s*(?:바꿔\s*(?:주|오|두)|바꾸셔|바꾸세요|바꾸십시오|사셔서|사서\s*(?:주|제출|맡))/;
+// ⬆ §129.9(메인 라이브 재테스트 2026-10-24 · 자녀 납치 초급 "지금 바로 현금을 준비하세요") — 현금 · 수표 뒤 목적격 조사(을 · 를)도 받는다.
 // ⬆ §129.7 R4(사용자 승인 2026-10-24) — 금 구매형 "실물로 제출해 주셔야" · "금으로 바꾸셔서" 뒤 "금으로 바꿔서 드릴게요"도 J-2 약속으로 연다.
 // ⭐ 약속 어형은 **허용 목록**이다(QA FAIL 2026-10-19 — 1 · 2차는 범용 "드릴게 · 드리겠"을 받고 앞말 제외 목록으로
 // 막는 구조라 "설명드리겠습니다" · "안내드릴게요" · "도와드릴게요" · "3분 드릴게요"가 계속 샜다). 이제 답변이 인출 · 보관 ·
@@ -469,6 +470,10 @@ function isHowToOrFollowOnlyWithoutDemand(scammerText: string, replyText: string
   return !COMPLIANCE_PATTERN.test(replyText.replace(HOW_TO_OR_FOLLOW, " ").replace(NOUN_ONLY_COMPLIANCE, " "));
 }
 
+/** §129.9 — 대사가 돈 · 송금을 꺼냈다 · 답이 보낼 곳 · 금액을 묻는다. */
+const MONEY_TOPIC = /현금|돈|송금|이체|입금|계좌|\d[\d,]*\s*(?:만|천)?\s*원|[일이삼사오육칠팔구십백천]+\s*(?:억|만|천)\s*원/;
+const SEND_WHERE_OR_HOW_MUCH = /(?:어디로|어느\s*계좌로?|어떻게)\s*(?:보내|입금|이체|송금|넣)|얼마(?:요|를|나|면|예요)/;
+
 /** §129.6 ① — 사기범 대사가 앱 설치를 꺼냈다 · 참가자 답의 설치 의향 · 방법 질문("뭘 깔면 돼" · "설치할게" · "깔아 줄게"). */
 const INSTALL_TOPIC = /앱|어플|설치|깔/;
 const INSTALL_INTENT = /(?:깔|설치하)(?:면|아\s*줄게|아\s*줄께|아\s*볼게)|깔게|설치\s*(?:하면|할게|해\s*줄게|해\s*볼게)|(?:어떻게|뭘|뭐)\s*(?:깔|설치)/;
@@ -487,7 +492,19 @@ function answerContentCategory(scammerText: string, reply: AnalysisMessage): Tac
   // §129.6 ①(메인 라이브 재테스트 2026-10-24 · 자녀 사칭 카톡 고급 — S2 "보험사에서 앱 깔아서 접수하래" → U2 "알았어 뭘 깔면 돼?" 라벨 빈칸) —
   // 설치를 꺼낸 대사 뒤 설치 의향 · 방법 질문도 설치 범주다(답에 설치 동사가 있을 때만 — 범주를 대사만으로 정하지 않는다).
   if (INSTALL_TOPIC.test(scammerText) && INSTALL_INTENT.test(text)) return "link_or_install";
+  // §129.9 — 돈을 꺼낸 대사 뒤 "얼마요? 어디로 보내요?"(보낼 곳 · 금액을 묻는 답)는 송금 범주다.
+  if (MONEY_TOPIC.test(scammerText) && SEND_WHERE_OR_HOW_MUCH.test(text)) return "payment_demand";
   return undefined;
+}
+
+/**
+ * §129.10 최종 폴백 — 세션 목록에서 부인 대응 · 암시를 뺀 첫 **요구 범주**(송금 · 개인정보 · 링크 · 설치) 라벨, 없으면 그 밖의 첫 라벨.
+ * ⚠️ 그 순간에 맞춘 라벨이 아니라 시나리오 대표 수법이다 — 빈칸보다 낫다는 메인 제안(2026-10-24)이며 새 라벨 0. 목록이 비면 `undefined`(종전 폴백 문자열).
+ */
+function representativeTactic(weakenedTactics: readonly string[]): string | undefined {
+  const labels = weakenedTactics.map(extractTacticLabel).filter((label) => !NON_DEMAND_LABEL.test(label));
+  const demand = labels.find((label) => ["payment_demand", "personal_info_demand", "link_or_install"].includes(resolveTacticCategory(label)));
+  return demand ?? labels[0];
 }
 
 /** L2 — 범주에 맞는 세션 목록 안 라벨(부인 대응 · 암시 라벨 제외). */
@@ -677,8 +694,9 @@ const INSTALL_REQUEST = new RegExp(
 const LINK_OPEN_REQUEST = new RegExp(
   `(?:링크|여기)[^.?!\\n]{0,20}?(?:눌러|클릭해|접속해|들어가)\\s*(?:${SHORT_REQUEST_ENDING}|보세요|보십시오|하셔야)`,
 );
+// §129.10(메인 라이브 재테스트 2026-10-24 · 기관 사칭 고급 "지금 거래하시는 은행이 어디인지 말씀해 주시겠어요?" 뒤 라벨 빈칸) — 거래 은행을 묻는 꼴.
 const ASSET_INFO_REQUEST = new RegExp(
-  `(?:예금|자산|잔액|잔고)[^.?!\\n]{0,25}?(?:말씀해|알려|불러)\\s*${SHORT_REQUEST_ENDING}`,
+  `(?:예금|자산|잔액|잔고|거래\\s*(?:하시는\\s*)?은행|은행이\\s*어디)[^.?!\\n]{0,25}?(?:말씀해|알려|불러)\\s*${SHORT_REQUEST_ENDING}`,
 );
 const CARD_INFO_REQUEST = new RegExp(
   `(?:카드\\s*번호|유효\\s*기간|CVC|cvc|보안\\s*코드)[^.?!\\n]{0,25}?(?:말씀해|알려|불러|적어|입력해)\\s*${SHORT_REQUEST_ENDING}`,
@@ -861,7 +879,10 @@ export function analyzeConversation(
         (userReply.photo === true && photoDemand ? resolvePhotoProvidedTactic(photoDemand.textMasked, weakenedTactics) : undefined) ??
         resolveAnswerCategoryTactic(labelSource.textMasked, userReply, weakenedTactics));
     if (fallbackTactic) tacticLabelsUsed.add(fallbackTactic);
-    const tactic = labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? "약화된 사기 수법");
+    // §129.10 최종 폴백(메인 제안 · 빈 라벨 0) — 문구 키 · 요구 어형 표 · 답 내용 범주가 모두 비면 세션 목록의 대표 요구 수법(`representativeTactic`).
+    const representative = labelTactic || fallbackTactic ? undefined : representativeTactic(weakenedTactics);
+    if (representative) tacticLabelsUsed.add(representative);
+    const tactic = labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? representative ?? "약화된 사기 수법");
     // AC-026 예시("15초 시점에 속았습니다")를 그대로 따르기 위해 turnIndex가 아니라 실제 경과
     // 시간(초)을 라벨로 쓴다 — MessageDoc.createdAt이 이미 존재하므로 정확한 초 단위 계산이
     // 가능하다(구현 판단, Mock 단계라 정밀 음성 타이밍 데이터는 없지만 메시지 write 시각은 실측값).

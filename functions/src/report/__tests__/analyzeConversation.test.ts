@@ -442,11 +442,14 @@ test("analyzeConversation(): 매치된 수법이 없으면 폴백 라벨과 함�
     },
   ];
 
-  const result = analyzeConversation(messages, SESSION_START_MS, WEAKENED_TACTICS);
+  // §129.10(메인 제안 · 빈 라벨 0) — 수법 목록이 있으면 대표 요구 수법(목록 안 라벨 — 발명 0), 목록이 비면 종전 폴백 문자열 · other.
+  const result = analyzeConversation(messages, SESSION_START_MS, []);
 
   assert.equal(result.deceivedMoments.length, 1);
   assert.equal(result.deceivedMoments[0].tactic, "약화된 사기 수법");
   assert.equal(result.deceivedMoments[0].tacticCategory, "other");
+  const withList = analyzeConversation(messages, SESSION_START_MS, WEAKENED_TACTICS);
+  assert.ok(withList.tacticsUsed.includes(withList.deceivedMoments[0].tactic), "대표 수법은 세션 목록 안 라벨이고 수법 목록에도 오른다");
 });
 
 // ── T90(2026-07-25) 하류 커버리지 공백 메우기 ────────────────────────────────

@@ -13,7 +13,8 @@ import { SCENARIO_PROMPTS } from "../../scenarios";
 import { resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
 import { MOCK_SCREENS } from "../../scenarios/mockScreens";
 import { applyMockScreens } from "../../report/mockScreenTimeline";
-import { buildSmsTimeline } from "../../report/smsTimeline";
+import { buildSmsTimeline, promoteSmsLandingSubmits } from "../../report/smsTimeline";
+import { resolveTacticCategory } from "../../report/tacticCategory";
 import { buildSystemPrompt, CLAIM_CONSISTENCY_RULE, SMS_TOOL_SPEECH_SENTENCE } from "../promptAssembly";
 import { buildLiveConfirmResultInstruction, LIVE_CONFIRM_NOT_YET_SENTENCE } from "../../inCallSms/confirmResult";
 import { CHILD_GENDER_UNSPECIFIED_RULE } from "../../scenarios/messengerChildImpersonationKakao.prompt";
@@ -515,4 +516,98 @@ test("[§129.8 N9] 실시간 전사 제출이 받은 시각을 채울 때 클라
   const src = read("realtime/submitTranscript.ts");
   assert.match(src, /Math\.min\(baseTime, Math\.max\(sessionCreatedAtMs, answeredAtMs\)\)/);
   assert.match(src, /tx\.update\(sessionRef, \{ answeredAt: Timestamp\.fromMillis\(clientAnswered\) \}\);/);
+});
+
+// ── §129.9 메인 라이브 재테스트(빌드 cTcCpAsR · 자녀 납치 초급) — 듣기 명령 뒤 따름 약속 · 빈 라벨 ─────────────────────────
+test("[§129.9] 듣기 명령('잘 들으세요 · 제 말만 들으세요') 뒤 방법 질문 · 따름 약속 = 속음 아님 · '현금을 준비하세요' 뒤 '얼마요? 어디로 보내요?' = 속음 · 라벨 '즉시 송금 요구'", () => {
+  const tactics = resolveSessionScenarioPrompt("kidnapping-threat", "fv-c5ih")!.weakenedTactics;
+  const messages = dialogue([
+    ["scammer", "여보세요, 거기 혹시 ○○ 씨 본인 맞으세요? 저는 시내 ○○경찰서 수사과 소속입니다."],
+    ["user", "네 맞는데요, 무슨 일이세요?"],
+    ["scammer", "잘 들으세요. 지금 당신 자녀가 저희 쪽에 있습니다. 묻지 말고 제 말만 들으세요."],
+    ["user", "네? 어떻게 해야 돼요? 시키는 대로 할게요"],
+    ["scammer", "좋아요, 그렇게 나오셔야죠. 지금 바로 현금을 준비하세요."],
+    ["user", "얼마요? 어디로 보내요?"],
+    ["scammer", "300만 원 준비하세요. 지금 바로 새솔은행 948-2716-5093-27로 이체하세요. 예금주는 박정호입니다."],
+    ["user", "네, 보냈어요."],
+  ]);
+  const result = analyzeConversation(messages, 0, tactics);
+  assert.deepEqual(
+    result.deceivedMoments.map((m) => [m.turnIndex, m.tactic]),
+    [
+      [5, "즉시 송금 요구"],
+      [7, "즉시 송금 요구"],
+    ],
+    "U2(turnIndex 3)는 C4 · C5 — 듣기 명령은 요구가 아니다 · U3 · U4 라벨 빈칸 0",
+  );
+});
+
+// ── §129.10 (2) 빈 라벨 0 — 메인 라이브 재테스트(빌드 cTcCpAsR · 기관 사칭 고급 안전계좌 이체형) ─────────────────────
+test("[§129.10 (2)] 거래 은행을 묻는 대사 뒤 따름 약속 = '거래 은행·자산 정보 수집' · 어떤 경로로도 비면 세션 대표 요구 수법", () => {
+  const S = "다음은 고객님 계좌가 범죄 수익으로 묶이기 전에 보호 조치를 하셔야 합니다. 지금 거래하시는 은행이 어디인지 말씀해 주시겠어요?";
+  for (const variant of ["fv-c5fj", "fv-q7cn", "fv-g2ld"]) {
+    const tactics = resolveSessionScenarioPrompt("institutional-impersonation", variant)!.weakenedTactics;
+    const moment = analyzeConversation(dialogue([["scammer", S], ["user", "네 알겠어요. 계속 말씀해 주세요."]]), 0, tactics).deceivedMoments[0];
+    assert.equal(moment?.tactic, "거래 은행·자산 정보 수집", variant);
+  }
+  // 최종 폴백 — 문구 키 · 요구 어형 · 답 범주가 모두 없어도 빈 라벨이 아니다(세션 목록 안 라벨 · 수법 목록에도 오른다).
+  const tactics = resolveSessionScenarioPrompt("kidnapping-threat", "fv-c5ih")!.weakenedTactics;
+  const result = analyzeConversation(dialogue([["scammer", "잠깐만요, 확인할 게 있습니다. 지금 바로 신청해 주세요."], ["user", "네, 말씀하신 대로 바로 처리하겠습니다."]]), 0, tactics);
+  assert.notEqual(result.deceivedMoments[0]?.tactic, "약화된 사기 수법");
+  assert.ok(result.tacticsUsed.includes(result.deceivedMoments[0]!.tactic), "AC-083 (a)");
+});
+
+// ── §129.11 자녀 납치 '자녀 인질 협박' 라벨(DECISIONS #245 ⑲ · 메인 결정 ③ ㉢) ─────────────────────────────────────
+test("[§129.11] 자녀 납치 초 · 중 · 고급 변형 모두 '자녀 인질 협박'을 수법 목록에 갖고, 바꿔 말한 인질 대사(실 키 프로브 대본)가 이 라벨에 걸린다", () => {
+  const HOSTAGE_LINES = [
+    "잘 들으세요. 지금 당신 자녀가 저희 쪽에 있습니다. 묻지 말고 제 말만 들으세요.", // 메인 라이브 재테스트 원문
+    "자녀를 저희가 데리고 있습니다.",
+    "당신 자녀를 데리고 있습니다. 상황 파악하려면 다른 데 신경 쓰지 말고 제 말부터 들으세요.",
+    "당신 아이 지금 제 쪽에 있습니다. 옆에서 울고 있으니까 다른 소리 말고 들어요.",
+    "지금 당신 자녀가 제 옆에 있습니다. 아이가 울고 있으니까 묻지 말고 제 말 들으세요.",
+    "자녀분 지금 제가 데리고 있습니다. 다른 생각 말고 제 말에만 집중해요.",
+    "묻지 말고 들어요. 자녀 데리고 있으니까, 당장 시키는 대로만 합니다.",
+  ];
+  for (const variant of ["fv-c5ih", "fv-dxwu", "fv-k268", "fv-w7tb"]) {
+    const tactics = resolveSessionScenarioPrompt("kidnapping-threat", variant)!.weakenedTactics;
+    assert.ok(tactics.some((t) => t.startsWith("자녀 인질 협박 — ")), variant);
+    for (const line of HOSTAGE_LINES) {
+      const used = analyzeConversation(dialogue([["scammer", line]]), 0, tactics).tacticsUsed;
+      assert.ok(used.includes("자녀 인질 협박"), `${variant}: ${line}`);
+    }
+    // 돈 · 경고 대사는 이 라벨이 아니다(정상 대사를 인질 협박으로 잡지 않음).
+    const neutral = analyzeConversation(dialogue([["scammer", "지금 바로 새솔은행 계좌로 300만 원 보내세요. 늦으면 후회할 수도 있어요."]]), 0, tactics).tacticsUsed;
+    assert.ok(!neutral.includes("자녀 인질 협박"), variant);
+  }
+  // §129.9 대본 — 수법 목록에 인질 협박이 오른다(라이브 '시도된 수법 1가지'의 원인).
+  const tactics = resolveSessionScenarioPrompt("kidnapping-threat", "fv-c5ih")!.weakenedTactics;
+  const used = analyzeConversation(dialogue([["scammer", HOSTAGE_LINES[0]], ["user", "네? 어떻게 해야 돼요?"]]), 0, tactics).tacticsUsed;
+  assert.ok(used.includes("자녀 인질 협박"));
+});
+
+// ── §129.10 (3) 화면 제출 + 직후 이행 보고 = 순간 하나(사용자 결정 T1 · T2 · ㉠ 화면 순간만) ─────────────────────────
+test("[§129.10 (3)] 이체 화면 제출 뒤 2분 안 · 사이 사기범 대사 1개 이하의 같은 송금 범주 이행 보고는 화면 순간에 합친다(T1) · 그 밖은 둘 다(T2)", () => {
+  const base = 1_000_000;
+  const catalog = [{ landingId: "safe-site", momentTactic: "안전계좌 이체 유도 — 임시 계좌로 옮기라고 요구", correctAction: "끊고 대표번호로 확인하세요." }];
+  const doc = (submitAt: number) => ({
+    smsId: "s1", kind: "link" as const, senderLabel: "한빛지방검찰청", body: "안내", fakeLandingId: "safe-site",
+    anchorScammerTurn: 1, arrivedAtMs: base + 200_000, openedAtMs: base + 250_000, linkTappedAtMs: base + 260_000, landingSubmittedAtMs: submitAt,
+  });
+  const msgs = (t: number[]) => t.map((ms, turnIndex) => ({ role: (turnIndex % 2 === 0 ? "scammer" : "user") as "scammer" | "user", turnIndex, createdAtMs: base + ms }));
+  const chat = (turnIndex: number, tactic = "즉시 송금 요구") => ({ turnIndex, timeLabel: "", tactic, correctAction: "", tacticCategory: resolveTacticCategory(tactic) });
+  // 메인 라이브: 4분 45초 제출 · 4분 51초 "이체했어요"(사이 사기범 대사 0) → 화면 순간 하나(T1 · ㉠).
+  const live = promoteSmsLandingSubmits([doc(base + 285_000)], [chat(3)], msgs([100_000, 200_000, 270_000, 291_000]), base, catalog);
+  assert.deepEqual(live.deceivedMoments.map((m) => [m.turnIndex, m.timeLabel, m.landingId ?? "chat"]), [[0, "285초 시점", "safe-site"]]);
+  // 사이 사기범 대사 1개까지 T1.
+  const oneBetween = promoteSmsLandingSubmits([doc(base + 285_000)], [chat(5)], msgs([100_000, 200_000, 270_000, 280_000, 295_000, 300_000]), base, catalog);
+  assert.equal(oneBetween.deceivedMoments.filter((m) => m.landingId === undefined).length, 0);
+  // T2 — 2분 넘음 · 사이 대사 2개 · 범주 다름 · 제출 전 답.
+  const late = promoteSmsLandingSubmits([doc(base + 285_000)], [chat(3)], msgs([100_000, 200_000, 270_000, 410_000]), base, catalog);
+  const twoBetween = promoteSmsLandingSubmits([doc(base + 285_000)], [chat(7)], msgs([100_000, 200_000, 270_000, 280_000, 290_000, 300_000, 310_000, 320_000]), base, catalog);
+  const otherCategory = promoteSmsLandingSubmits([doc(base + 285_000)], [chat(3, "개인정보 직접 요구")], msgs([100_000, 200_000, 270_000, 291_000]), base, catalog);
+  const before = promoteSmsLandingSubmits([doc(base + 285_000)], [chat(1)], msgs([100_000, 200_000, 270_000, 291_000]), base, catalog);
+  for (const [name, r] of [["2분 넘음", late], ["사이 대사 2개", twoBetween], ["범주 다름", otherCategory], ["제출 전 답", before]] as const) {
+    assert.equal(r.deceivedMoments.filter((m) => m.landingId === undefined).length, 1, name);
+    assert.equal(r.deceivedMoments.filter((m) => m.landingId === "safe-site").length, 1, name);
+  }
 });

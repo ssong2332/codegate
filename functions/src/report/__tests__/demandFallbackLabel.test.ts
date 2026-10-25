@@ -151,8 +151,8 @@ test("[PR-A3 판정 무변경] 보정은 라벨만 바꾼다 — 속았는가 ·
   );
   assert.deepEqual(
     withTable.deceivedMoments.map((m) => m.tactic),
-    ["송금 직접 요구", "약화된 사기 수법"],
-    "요구 대사 뒤 순간만 이름이 붙고, 감사 대사 뒤 순간은 폴백 그대로다",
+    ["송금 직접 요구", "송금 직접 요구"],
+    "요구 대사 뒤 순간은 표 라벨 · 감사 대사 뒤 순간은 §129.10 최종 폴백(세션 대표 요구 수법 — 빈 라벨 0)",
   );
   assert.equal(withTable.deceivedMoments[0].tacticCategory, resolveTacticCategory("송금 직접 요구"));
   assert.deepEqual(control.deceivedMoments.map((m) => m.tactic), ["약화된 사기 수법", "약화된 사기 수법"]);
