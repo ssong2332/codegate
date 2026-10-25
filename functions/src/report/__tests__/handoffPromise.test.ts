@@ -243,6 +243,8 @@ test("[T191 J-2 · 회귀 0] 17개 시나리오 저작 대사 × 기존 테스�
     "안전계좌 번호 불러드리겠습니다, 받아 적으십시오.", // 픽스처 속 사기범 대사 — "계좌" 명사 단독(C4 대상 명사)
     "어떻게 하면 되니?", // C4
     "혼자 있어요. 우리은행 통장 하나 쓰고 있어요. 어떻게 하면 되죠?", // C4
+    // §129.13 (c)(사용자 결정 2026-10-25 "추가 (권장)") — C5 따름 약속에 "그렇게 할게요".
+    "네 그렇게 할게요.",
   ];
   const changedAnswers = new Set(changed.map((entry) => entry.split(" | ").at(-1)));
   assert.deepEqual([...changedAnswers].sort(), [...DECISION_1_ANSWERS, ...C4_C5_ANSWERS].sort());

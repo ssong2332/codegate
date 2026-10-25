@@ -8,7 +8,7 @@ import path from "node:path";
 import { judgeScammerReplyUsability } from "../../llm/replyUsability";
 import { tidyScammerReplyMarkup } from "../replyMarkup";
 import { stripLeakedThought } from "../../realtime/thoughtLeak";
-import { analyzeConversation, type AnalysisMessage } from "../../report/analyzeConversation";
+import { analyzeConversation, resolveDemandFallbackTactic, type AnalysisMessage } from "../../report/analyzeConversation";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
 import { MOCK_SCREENS } from "../../scenarios/mockScreens";
@@ -655,4 +655,55 @@ test("[§129.13 (d)] 기관 사칭 '불이익 암시' 인용구(Mock 강등 시 
   for (const line of ["협조하지 않으면 불이익이 있을 수 있다.", "협조하지 않으시면 불이익이 있을 수 있습니다."]) {
     assert.ok(analyzeConversation(dialogue([["scammer", line]]), 0, tactics).tacticsUsed.includes("불이익 암시"), line);
   }
+});
+
+test("[§129.13 (c) L4 · 9행] 확인 차단 키 라벨(비밀 유지)보다 요구 범주 — 금 구매 약속 순간 = '실물 조사 명목 금 구매 인출 요구'", () => {
+  const tactics = resolveSessionScenarioPrompt("institutional-impersonation", "fv-g2ld")!.weakenedTactics;
+  const lines: [role: "scammer" | "user", text: string][] = [
+    ...GOLD_LIVE.flatMap(([s, u]): [role: "scammer" | "user", text: string][] => [["scammer", s], ["user", u]]),
+    ["scammer", "협조하지 않으면 불이익이 있을 수 있다."],
+    ["user", "협조할게요. 금은 어디서 사서 어떻게 드리면 되죠?"],
+    ["scammer", "예금을 해지하셔서 금을 구입하시고, 수사 기밀이니 가족이나 은행 직원에게는 개인 투자라고만 하세요."],
+    ["user", "네 그렇게 할게요. 연락 기다리겠습니다"],
+  ];
+  const moments = analyzeConversation(dialogue(lines), 0, tactics).deceivedMoments.map((m) => [m.turnIndex, m.tactic]);
+  // 종전: [19, "비밀 유지 요구"] — 금 구매 키가 대사에 안 걸리고 요구 어형 표에 금 구매 행이 없었다.
+  assert.deepEqual(moments.find(([turn]) => turn === 19), [19, "실물 조사 명목 금 구매 인출 요구"]);
+  // 9행 경계 — '예금' · '적금' 안의 '금'은 금이 아니다 · 금 구입 동사가 있어야 한다.
+  assert.equal(resolveDemandFallbackTactic("예금을 해지하셔서 금을 구입해 주십시오.", tactics), "실물 조사 명목 금 구매 인출 요구");
+  assert.equal(resolveDemandFallbackTactic("예금을 인출하셔서 금으로 바꿔 오셔야 합니다.", tactics), "실물 조사 명목 금 구매 인출 요구");
+  assert.equal(resolveDemandFallbackTactic("적금을 해지하시면 이자가 줄어드니 예금 금리를 확인해 보세요.", tactics), undefined);
+});
+
+test("[§129.13 (c) C5] '그렇게 할게요'는 따름 약속 — 요구 없는 대사 뒤는 속음 아님 · 요구 대사 뒤는 종전대로 속음", () => {
+  const tactics = resolveSessionScenarioPrompt("institutional-impersonation", "fv-g2ld")!.weakenedTactics;
+  const noDemand = analyzeConversation(dialogue([["scammer", "선생님 계좌가 범죄에 연루된 정황이 있습니다."], ["user", "네 그렇게 할게요"]]), 0, tactics);
+  assert.equal(noDemand.deceivedMoments.length, 0);
+  const afterDemand = analyzeConversation(dialogue([["scammer", "예금을 해지하셔서 금을 구입해 주십시오."], ["user", "네 그렇게 할게요"]]), 0, tactics);
+  assert.equal(afterDemand.deceivedMoments.length, 1);
+});
+
+test("[§129.13 (e)] 안전계좌 이체형 — 화면 제출 직후 '이체 완료했어요'는 송금 범주 이행 보고 → 화면 순간 하나(T1 · ㉠) · (a) 부인 + 방법 질문은 속음 아님", () => {
+  const tactics = resolveSessionScenarioPrompt("institutional-impersonation", "fv-c5fj")!.weakenedTactics;
+  const lines: [role: "scammer" | "user", text: string][] = [
+    ["scammer", "여보세요, 고객님 맞으시죠? 저는 한빛지방검찰청 금융범죄수사팀 수사관입니다."],
+    ["user", "네 맞는데요, 무슨 일이세요?"],
+    ["scammer", "고객님 명의 계좌 하나가 금융사기 사건에 연루된 정황이 확인됐습니다. 혹시 최근에 통장을 새로 만드셨거나, 타인에게 명의를 빌려주신 적 있으세요?"],
+    ["user", "아니요 그런 적 없어요. 어떻게 해야 하나요?"],
+    ["scammer", "확인됐습니다. 문자의 안내 링크를 눌러 주십시오."],
+    ["user", "이체 완료했어요"],
+  ];
+  const chat = analyzeConversation(dialogue(lines), 0, tactics).deceivedMoments;
+  assert.ok(!chat.some((m) => m.turnIndex === 3), "(a) C1 · C4");
+  // 종전: [5, "신원정보 직접 요구"](이행 보고로 안 잡혀 대표 라벨) → 화면 순간과 범주가 달라 T2(둘 다 남음).
+  assert.deepEqual(chat.map((m) => [m.turnIndex, m.tactic, m.tacticCategory]), [[5, "안전계좌 이체 요구", "payment_demand"]]);
+  const base = 1_000_000;
+  const catalog = [{ landingId: "safe-site", momentTactic: "안전계좌 이체 유도 — 임시 계좌로 옮기라고 요구", correctAction: "끊고 대표번호로 확인하세요." }];
+  const doc = {
+    smsId: "s1", kind: "link" as const, senderLabel: "한빛지방검찰청", body: "안내", fakeLandingId: "safe-site",
+    anchorScammerTurn: 3, arrivedAtMs: base + 150_000, openedAtMs: base + 160_000, linkTappedAtMs: base + 165_000, landingSubmittedAtMs: base + 185_000,
+  };
+  const msgs = [0, 20_000, 40_000, 60_000, 170_000, 194_000].map((ms, turnIndex) => ({ role: (turnIndex % 2 === 0 ? "scammer" : "user") as "scammer" | "user", turnIndex, createdAtMs: base + ms }));
+  const merged = promoteSmsLandingSubmits([doc], chat, msgs, base, catalog);
+  assert.deepEqual(merged.deceivedMoments.map((m) => m.landingId ?? "chat"), ["safe-site"]);
 });
