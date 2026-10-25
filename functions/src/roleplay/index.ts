@@ -67,7 +67,7 @@ import { answeredAtFromClient } from "../session/answeredAt";
 import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
 import { wasTurnInstructionSpoken } from "./announceMarking";
 import { planOtpFollowUp } from "./otpFollowUp";
-import { claimMatchesPurpose, replyClaimsSmsSent } from "./smsClaim";
+import { claimMatchesPurpose, combineReplyGuards, otpDemandGuardFor, replyClaimsSmsSent } from "./smsClaim";
 import { extractEscalationSignal } from "./escalationSignal";
 import { callPhaseMockTacticHints, ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall, userTurnsSinceCallEntry } from "./escalatedCall";
 import { isFirstUserTurn } from "./firstTurn";
@@ -350,6 +350,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         // 넣지 않는다 — "말은 했는데 문자가 없는" 불일치(UF-008 Failure (a))를 만들지 않기 위해서다.
       }
     }
+
+    // §132.17 O2(`smsClaim.ts` 판정표 O) — 도착 기록을 읽은 턴만. 위 백스톱이 이번 발화에 보냈으면 `smsDelivered`에 이미 들어 있다(가드 0).
+    const replyGuard = combineReplyGuards(
+      personaGuardFor(session.scenarioId),
+      smsDeliveredLoaded ? otpDemandGuardFor({ declared: smsDeclared, delivered: smsDelivered, userTurns: userTurnsNow }) : undefined,
+    );
 
     // ②-c 확인 시도 무력화의 **폴백 경로 대사 주입**(T83, §16.1.3/§16.2/§16.6 G31). 실시간
     // 경로에서는 클라가 콜러블 응답을 Live 세션에 즉시 주입하지만, 이 텍스트 경로는 매 턴 서버가
@@ -719,7 +725,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       // §102 — 사기범 대사 경로: 영어 거절 등 쓸 수 없는 응답은 다음 단계(Groq → Mock)로 넘긴다.
       purpose: "scammer-reply",
       // §131(7) — 지인 · 자녀 사칭 메신저의 역할 이탈(기관 직원 자기소개)도 쓸 수 없는 응답으로 본다(그 밖 = 키 0).
-      ...(personaGuardFor(session.scenarioId) ? { personaGuard: personaGuardFor(session.scenarioId) } : {}),
+      // §132.17 O2 — 인증번호 문자를 이번 발화에 보낼 수 없으면 인증번호 요구 대사도 쓸 수 없는 응답(그 밖 = 종전 그대로).
+      ...(replyGuard ? { personaGuard: replyGuard } : {}),
     });
     // 몇 단계 공급자가 응답했는지(2026-10-18 Groq 3차 예비, Architecture.md §75.7) — 라이브 로그로
     // 1차 Gemini / 2차 Gemini 대체 / 3차 Groq / Mock 강등 비율을 읽는다. 숫자·ID·단계명만(G170).
