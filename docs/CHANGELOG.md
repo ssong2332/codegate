@@ -4,6 +4,11 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-25 추가분, 브랜치 `claude/refresh-resume-audio`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
+
+### Fixed
+- **통화 중 새로고침 뒤 소리 복구(Architecture §136 · DECISIONS #252)**: "이어서 통화하기"가 이제 실시간 통화를 다시 연다(지금까지의 대화를 이어서). 종전엔 글 대화로 이어져 상대 음성이 무음 목업이었다. 버튼은 스크롤 없이 첫 화면에 보이고, 버튼이 떠 있는 동안 "말씀하세요" · 파형을 표시하지 않는다.
+
 > ⚠️ **이 블록(2026-10-25 추가분, 브랜치 `claude/audio-volume-dropouts`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
 
 ### Added

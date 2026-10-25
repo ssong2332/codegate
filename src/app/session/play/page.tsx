@@ -26,6 +26,7 @@ import {
   getPendingSessionId,
   isPreCallNoticeSeen,
   isSessionAnswered,
+  readAnsweredElapsedMs,
   markPreCallNoticeSeen,
   markSessionAnswered,
   setPendingEndReason,
@@ -45,7 +46,7 @@ import {
   type CallEndingState,
 } from "@/lib/session/callEnding";
 import { handOffTranscriptFlush } from "@/lib/session/transcriptFlushHandoff";
-import { RESUME_TAP_COPY, needsResumeTap } from "@/lib/session/resumeGate";
+import { RESUME_TAP_COPY, needsResumeTap, showsCallWaveform } from "@/lib/session/resumeGate";
 import {
   deliverInCallSms,
   deliverVerifyOffer,
@@ -339,6 +340,10 @@ export default function SessionCallPage() {
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
   // §134 — 새로고침 복원 뒤 사용자 활성화가 없으면 "이어서 통화하기"를 누를 때까지 자동 청취를 열지 않는다(`resumeGate.ts` R3).
   const [resumeTapNeeded, setResumeTapNeeded] = useState(false);
+  // §136 — 통화 중 새로고침으로 복원된 통화인가(한 번 세우면 그대로) · 실시간 다시 열기가 아직 남았는가(한 번만 연다).
+  const restoredCallRef = useRef(false);
+  const [restoredCall, setRestoredCall] = useState(false); // 렌더용 사본(위 ref는 effect · 핸들러용)
+  const restoredResumePendingRef = useRef(false);
   const [elapsedSec, setElapsedSec] = useState(0);
   // Action Item 1 — `drainInstructionQueue`(deps `[]`)가 `elapsedSec` state를 리렌더 없이
   // 최신값으로 읽기 위한 사본. 갱신 지점은 아래 통화 경과 타이머 effect **한 곳**뿐이다.
@@ -872,6 +877,14 @@ export default function SessionCallPage() {
             // 저장소를 읽을 수 없으면 종전대로(복원 0).
           }
           setCallMode("fallback");
+          // §136 — 글 대화는 실시간을 다시 열 때까지의 자리다(`resumeGate.ts` S1 · S2). 받기 시각도 이 탭 기록으로 되살린다(전사 시각 축 유지).
+          restoredCallRef.current = true;
+          restoredResumePendingRef.current = true;
+          setRestoredCall(true);
+          const answeredElapsedMs = readAnsweredElapsedMs(sessionId);
+          if (answeredElapsedMs !== undefined && answeredAtMsRef.current === null) {
+            answeredAtMsRef.current = Date.now() - answeredElapsedMs;
+          }
           setResumeTapNeeded(
             needsResumeTap({
               restored: true,
@@ -1620,7 +1633,8 @@ export default function SessionCallPage() {
         openingNotSpokenRef.current = false;
         // 실시간 불가 — 기존 텍스트/STT 경로로 강등한다. 오프닝 오디오가 있으면 그것부터 재생.
         setCallMode("fallback");
-        const audio = consumeOpeningAudioUrl();
+        // §136 S3 — 새로고침 뒤 다시 열기가 실패했으면 오프닝 음성을 다시 틀지 않는다(이미 지난 통화다).
+        const audio = restoredCallRef.current ? null : consumeOpeningAudioUrl();
         if (audio) {
           setPlaybackUrl(audio);
           setPhase("opening");
@@ -1700,13 +1714,6 @@ export default function SessionCallPage() {
         setPlaybackBlocked(false);
       })
       .catch((err: unknown) => noteFallbackPlay(err instanceof Error ? err.name : "unknown"));
-  };
-
-  // §134 — "이어서 통화하기"(`resumeGate.ts` R3). 탭 자체가 사용자 활성화다 — 막혔던 상대 음성이 있으면 다시 재생하고,
-  // 자동 청취는 위 #7 effect가 `resumeTapNeeded` 해제로 다시 연다.
-  const handleResumeTap = () => {
-    setResumeTapNeeded(false);
-    if (playbackBlocked) handleManualPlay();
   };
 
   const maybeStartListening = useCallback(() => {
@@ -1929,6 +1936,48 @@ export default function SessionCallPage() {
     void realtime.reconnect(sessionId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, realtime.reconnect, realtime.handleError, realtime.handleEnded]);
+  // ⭐ §136 — 새로고침 복원 뒤 실시간 통화를 다시 연다(`resumeGate.ts` S1 · S2). 받기(`handleAnswer`)와 같은 순서: 통화 오디오를
+  // **이 호출 안에서 동기로** 준비 → `realtime` 모드 → 발급 · 연결. 첫 턴은 되살린 대화 맥락(§99 `buildResumeTurn` — 없으면 종전 오프닝).
+  // 실패하면 위 강등 effect가 글 대화로 되돌린다(S3). ⛔ 이 줄들 앞에 await를 두지 않는다(R3에서는 탭 핸들러 안이다).
+  const resumeRestoredCall = () => {
+    if (!sessionId || !restoredResumePendingRef.current) return;
+    restoredResumePendingRef.current = false;
+    if (isEndLatched(callEndingRef.current)) return;
+    // 받기와 같은 준비(재진입 가드 · `?audioprime=0`이면 만들지 않는다). 이 화면의 두 번째이자 마지막 `primeCallAudio` 호출이다(`callAudio.test.ts`).
+    let resumedAudio = primedCallAudioRef.current;
+    if (!resumedAudio && readAudioFlags(window.location.search).audioPrime) {
+      resumedAudio = primeCallAudio(GEMINI_OUTPUT_SAMPLE_RATE, performance.now());
+      primedCallAudioRef.current = resumedAudio;
+      setPrimedCallAudio(resumedAudio);
+    }
+    if (speech.status === "listening") speech.stop();
+    setResumeTurn(buildResumeTurn(transcriptRef.current));
+    setCallMode("realtime");
+    void realtime.start(sessionId);
+    if (resumedAudio) {
+      registerCallAudio({
+        output: resumedAudio.output,
+        input: resumedAudio.input,
+        origin: "primed",
+        createdAtMs: resumedAudio.createdAtMs,
+      });
+    }
+  };
+  // §134 · §136 S2 — "이어서 통화하기"(`resumeGate.ts` R3). 탭 자체가 사용자 활성화다 — 그 안에서 실시간을 다시 연다.
+  const handleResumeTap = () => {
+    setResumeTapNeeded(false);
+    resumeRestoredCall();
+  };
+  // §136 S1 — 활성화가 이미 있는 복원(R2)은 버튼 없이 곧바로 다시 연다.
+  useEffect(() => {
+    if (pageState !== "ready" || phase !== "live" || callMode !== "fallback" || resumeTapNeeded) return;
+    if (!restoredResumePendingRef.current) return;
+    // 인라인 async IIFE(react-hooks/set-state-in-effect 회피 — 이 화면의 다른 effect들과 같은 관례).
+    (async () => {
+      resumeRestoredCall();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageState, phase, callMode, resumeTapNeeded]);
   const handleConnectionLost = useCallback(() => {
     // 화면이 아직 가려져 있으면 돌아올 때 잇는다(가려진 문서에서는 마이크 · 소리를 새로 열 수 없다 — iOS).
     if (document.visibilityState === "hidden") {
@@ -2784,6 +2833,8 @@ export default function SessionCallPage() {
               resumeTurn,
               escalatedFromMessenger: scenario.channel === "messenger",
               caller: callCaller,
+              // §136 — 새로고침 뒤 다시 연 통화는 첫 연결부터 되살린 대화 맥락으로 시작한다.
+              restoredResumeTurn: restoredCall ? resumeTurn : null,
             })}
             onConnectionLost={handleConnectionLost}
             onScammerSmsClaim={handleScammerSmsClaim}
@@ -3002,7 +3053,8 @@ export default function SessionCallPage() {
             발화는 오디오로 즉시 들리고 턴 잡기는 모델이 한다(대체 표면 성립). ⛔ 폴백 경로에서는
             지우지 않는다(G289) — "듣고 있어요"·"보내는 중" 자동 청취/전송 상태의 유일한 화면
             표시이고, 대체 표면인 키패드 패널은 기본 닫힘이라 없다(침묵 실패 금지). */}
-        {(phase === "live" || phase === "opening") && callMode !== "realtime" && (
+        {/* §136 W1 — "이어서 통화하기"가 떠 있는 동안(마이크 · 소리 멈춤)은 파형 · "말씀하세요"를 그리지 않는다. */}
+        {showsCallWaveform({ phaseShowsWave: phase === "live" || phase === "opening", callMode, resumeTapNeeded }) && (
           <CallWaveform active={agentSpeaking} label={waveLabel} compact={showTextInput} />
         )}
 
@@ -3026,8 +3078,14 @@ export default function SessionCallPage() {
         {/* 자동재생이 막힌 경우에만 노출 — 이건 누르지 않으면 통화가 진행되지 않아 화면에 남긴다.
             T190-3(P-37 (3)) — 이모지(🔊) 대신 자체 제작 단색 아이콘. */}
         {/* §134 — 새로고침 복원 · 활성화 없음(`resumeGate.ts` R3). 이 탭이 활성화가 되고, 막혀 있던 상대 음성도 다시 재생한다. */}
+        {/* §136 — 첫 화면 안에 늘 보이게 화면에 고정한다(종전엔 셸 흐름 안이라 스크롤해야 보였다). 바깥은 눌림이 통과한다(종료 버튼 유지). */}
         {resumeTapNeeded && phase === "live" && (
-          <div role="status" className="flex flex-col items-center gap-3 px-6 text-center text-[var(--call-fg)]">
+          <div className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+30dvh)] z-30 flex justify-center px-4">
+          <div
+            role="status"
+            className="pointer-events-auto flex max-w-sm flex-col items-center gap-3 rounded-3xl border border-[var(--call-field-border)] px-6 py-5 text-center text-[var(--call-fg)] shadow-xl"
+            style={{ background: callTokens.bg }}
+          >
             <p className="text-base font-semibold">{RESUME_TAP_COPY.title}</p>
             <p className="text-sm opacity-80">{RESUME_TAP_COPY.body}</p>
             <button
@@ -3038,6 +3096,7 @@ export default function SessionCallPage() {
               <PhoneIcon name="speaker" size={18} />
               {RESUME_TAP_COPY.action}
             </button>
+          </div>
           </div>
         )}
         {playbackBlocked && !resumeTapNeeded && (

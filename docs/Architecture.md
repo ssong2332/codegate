@@ -24623,3 +24623,46 @@ Hosting만(functions 변경 0).
 | `npm --prefix functions test` | 1922 pass / 0 fail(functions 변경 0) | 1922 |
 | `npm run lint` | 오류 0 · 경고 1(변경 밖 `scripts/live-turn-probe.mjs`) | — |
 - 실 키 프로브 0 · 실기 확인 0. 배포: Hosting만.
+
+## 136. (Bug fix — 2026-10-25 · 브랜치 `claude/refresh-resume-audio` · 메인 세션 지시 · 실기 신고 — 갤럭시 Chrome 155 · main `8dc8e7d` · *"음성은 들어가는 거 같고 ai가 말하는 거 같은데 들을 수 없어"*) **통화 중 새로고침 → "이어서 통화하기"가 실시간 통화를 다시 연다 · 버튼 화면 고정 · 버튼 중 파형 0** — implementer 기록
+
+> 판정표: `src/lib/session/resumeGate.ts`(S1 ~ S3 · W1) · `src/lib/realtime/escalatedOpening.ts`(복원 첫 연결 행). DECISIONS #252.
+
+### 136.1 금지
+- ⛔ functions 변경 0 — 서버 `createRealtimeCall`은 이미 진행 중(`active`) 세션에 새 토큰을 발급한다(§99와 같은 가드).
+- ⛔ R3에서 실시간 다시 열기 앞에 await를 두지 않는다 — 통화 오디오 준비(`primeCallAudio`)가 탭 활성화 안에서 동기로 일어나야 한다(받기와 같은 이유).
+- ⛔ 다시 열기 실패 뒤 글 대화로 내려갈 때 오프닝 음성을 다시 틀지 않는다(이미 지난 통화다).
+
+### 136.2 원인 — 확인된 것 · 추정
+| 신고 | 확인된 것(코드) | 추정 |
+|---|---|---|
+| 새로고침 뒤 fallback | 설계대로다. §99 이후 복원 분기는 `setCallMode("fallback")` 고정이었다("실시간 소켓은 새로고침으로 끊기므로 복원은 텍스트 폴백" — `page.tsx` 복원 분기 주석). §134 버튼은 자동 청취만 막았다 | — |
+| `fb.play=ok`인데 무음 | 글 대화 경로의 상대 음성 = 서버 `sendMessage` → `getVoiceProvider().synthesize()` → **늘 `MockVoiceProvider`**(`functions/src/voice/provider.ts`) → `buildMockSilentWavDataUri()` 무음 WAV. 재생은 성공(`ok`)하지만 소리가 없다. 화면은 `playbackUrl`이 있으면 "상대방이 말하는 중"으로 그린다 | — |
+| 버튼이 스크롤해야 보임 | 버튼이 통화 셸 흐름(발신자 · 파형 아래) 안에 있었다 | — |
+| 마이크 없이 "말씀하세요" | 파형 조건이 `resumeTapNeeded`를 보지 않았다 | — |
+| 키패드 + "실시간 음성 통화를 사용할 수 없어 텍스트로 진행합니다" | 글 대화 경로의 상태 줄(종전 문면) | — |
+
+### 136.3 변경
+| # | 변경 | 위치 |
+|---|---|---|
+| 1 | 복원 분기에서 "실시간 다시 열기 예약"(`restoredResumePendingRef`) · 받기 시각을 이 탭 기록(`readAnsweredElapsedMs`)으로 되살림(전사 `atMs` 축 유지) | `page.tsx` 복원 분기 |
+| 2 | `resumeRestoredCall()` — 받기와 같은 순서: 통화 오디오 동기 준비 → `setResumeTurn(buildResumeTurn(전사))` → `realtime` 모드 → `realtime.start`. R3 = 버튼 탭 · R2 = 화면이 열리면 곧바로 | `page.tsx` |
+| 3 | 첫 턴: 복원된 통화는 되살린 대화 맥락(§99와 같은 문면). 맥락이 없으면 종전 판정(오프닝 · 메신저발 신호) | `escalatedOpening.ts` |
+| 4 | 실패(발급 실패 · 마이크 거부 등) → 종전 강등 effect가 글 대화로. 복원된 통화면 오프닝 음성 재생 0 | `page.tsx` 강등 분기 |
+| 5 | 버튼 카드를 화면에 고정(`fixed` · 위에서 30vh · 바깥 눌림 통과 — 종료 버튼 유지) · 바탕 = 통화 셸 바탕 토큰 | `page.tsx` |
+| 6 | 버튼이 떠 있는 동안 파형 · "말씀하세요" 0(`showsCallWaveform` W1) | `resumeGate.ts` · `page.tsx` |
+
+### 136.4 한계(알려진 것)
+- 실시간 다시 열기 · 버튼 위치는 **실기 미확인**. 실 키 프로브 0 · 브라우저 미리보기 0(Live 연결은 실 키가 있어야 한다).
+- 새 Live 세션은 서버 측 대화 기억이 없다 — 되살린 전사(최근 12턴 · 1600자)만 안다(§99.4와 같다). 대화방 전환 등으로 이미 제출된 전사는 맥락에 없다.
+- 글 대화 경로의 상대 음성이 무음인 것 자체(`MockVoiceProvider`)는 고치지 않았다 — 다시 열기가 실패하면 여전히 무음 글 대화다. 실제 합성(예: 보류 중인 Chirp 혼합안)을 붙일지는 별도 결정이다.
+- 경과 시간 표시는 이 수정 범위 밖(새로고침 뒤 0부터 다시 셀 수 있다 — 신고 화면 00:09 → 00:04).
+
+### 136.5 검증
+| 항목 | 결과 | 기준 |
+|---|---|---|
+| `npm test` | 1156 pass / 0 fail(신규 `refreshResume136.test.ts` 5건 · `debugFlagsResume.test.ts` 배선 단언 2곳 · `callAudio.test.ts` "`primeCallAudio` 1회" 게이트를 "받기 1 + `resumeRestoredCall` 1"로) | main `8dc8e7d` 1151 |
+| `npm --prefix functions test` | 1922 pass / 0 fail(functions 변경 0) | 1922 |
+| 바뀐 파일 eslint · tsc(테스트 제외) | 오류 0 | — |
+- 첫 전체 실행 1156 중 4 실패 → 고친 뒤 0: `30vh`(dvh 규칙 G-VU1 → `30dvh`) · `primeCallAudio` 호출 수 게이트 3건.
+- 실 키 프로브 0 · 실기 확인 0 · 브라우저 미리보기 0. 배포: Hosting만.

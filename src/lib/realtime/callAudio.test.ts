@@ -152,8 +152,10 @@ function answerPrimeViolations(code: string): string[] {
   if (guard < 0 || (prime >= 0 && guard > prime)) out.push("재진입 가드·audioprime 플래그 분기가 생성 앞에 없다");
   if (!body.includes("let primedAudio = primedCallAudioRef.current;")) out.push("재진입 가드가 ref를 보지 않는다");
   if (!body.includes("primedCallAudioRef.current = primedAudio;")) out.push("만든 컨텍스트를 ref에 기록하지 않는다");
-  // 다른 곳(effect 등)에서 만들면 안 된다 — 정확히 1회.
-  if ((code.match(/primeCallAudio\(/g) ?? []).length !== 1) out.push("primeCallAudio 호출이 정확히 1회가 아니다");
+  // 다른 곳(effect 등)에서 만들면 안 된다 — 받기 1회 + §136 새로고침 뒤 다시 열기(`resumeRestoredCall`) 1회뿐.
+  const resume = sliceBetween(code, "const resumeRestoredCall = () => {", "const handleResumeTap");
+  const inResume = (resume.match(/primeCallAudio\(/g) ?? []).length;
+  if ((code.match(/primeCallAudio\(/g) ?? []).length - inResume !== 1 || inResume > 1) out.push("primeCallAudio 호출이 정확히 1회가 아니다");
   return out;
 }
 
