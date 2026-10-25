@@ -14,7 +14,7 @@ import { maskPII } from "../guardrails";
 import { neutralizeUserMentionedFinancialNames, replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from "../llm";
 import { triggerReportGeneration } from "../report";
-import { findFlowVariant, resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
+import { findFlowVariant, resolveSessionScenarioPrompt, routeEndsWithoutAccount } from "../scenarios/flowVariants";
 import { findInCallSmsItem } from "../scenarios/inCallSms";
 import type { InCallSmsItem } from "../scenarios/inCallSms";
 import {
@@ -67,7 +67,7 @@ import { answeredAtFromClient } from "../session/answeredAt";
 import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
 import { wasTurnInstructionSpoken } from "./announceMarking";
 import { planOtpFollowUp } from "./otpFollowUp";
-import { claimMatchesPurpose, combineReplyGuards, otpDemandGuardFor, replyClaimsSmsSent } from "./smsClaim";
+import { OTP_HOLD_INSTRUCTION, claimMatchesPurpose, combineReplyGuards, otpDemandGuardFor, replyClaimsSmsSent } from "./smsClaim";
 import { extractEscalationSignal } from "./escalationSignal";
 import { callPhaseMockTacticHints, ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall, userTurnsSinceCallEntry } from "./escalatedCall";
 import { isFirstUserTurn } from "./firstTurn";
@@ -352,10 +352,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     }
 
     // §132.17 O2(`smsClaim.ts` 판정표 O) — 도착 기록을 읽은 턴만. 위 백스톱이 이번 발화에 보냈으면 `smsDelivered`에 이미 들어 있다(가드 0).
-    const replyGuard = combineReplyGuards(
-      personaGuardFor(session.scenarioId),
-      smsDeliveredLoaded ? otpDemandGuardFor({ declared: smsDeclared, delivered: smsDelivered, userTurns: userTurnsNow }) : undefined,
-    );
+    const otpDemandGuard = smsDeliveredLoaded
+      ? otpDemandGuardFor({ declared: smsDeclared, delivered: smsDelivered, userTurns: userTurnsNow })
+      : undefined;
+    const replyGuard = combineReplyGuards(personaGuardFor(session.scenarioId), otpDemandGuard);
+    // §132.19 판정표 B — 같은 발화에 앞 단계를 붙잡는 턴 지시 1줄(가드가 없는 발화 = 없음 · 문면 바이트 동일).
+    const otpHoldInstruction = otpDemandGuard ? OTP_HOLD_INSTRUCTION : undefined;
 
     // ②-c 확인 시도 무력화의 **폴백 경로 대사 주입**(T83, §16.1.3/§16.2/§16.6 G31). 실시간
     // 경로에서는 클라가 콜러블 응답을 Live 세션에 즉시 주입하지만, 이 텍스트 경로는 매 턴 서버가
@@ -642,7 +644,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       logger.info("[§132] 인증번호 다시 요구 지시", { sessionId, userTurns: userTurnsNow, since: otpArrivedSince });
     }
     const turnInstructionWithSms =
-      [promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction, otpFollowUpInstruction]
+      [promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction, otpFollowUpInstruction, otpHoldInstruction]
         .filter(Boolean)
         .join("\n") || undefined;
     // §120 — 사진 턴이면 캐릭터 유지형 반응 지시 1줄을 맨 뒤에 붙인다(`photoTurn.ts` 표 · 그 밖 턴 = 없음 · 문면 바이트 동일).
@@ -709,6 +711,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         ...(turnInstructionWithPhoto ? { turnInstruction: turnInstructionWithPhoto } : {}),
         fictionalBankName,
         sessionAccountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
+        // §132.19 판정표 A — 결말이 계좌 이체가 아닌 루트는 계좌 예시 · 번호 문장 대신 금지 1문장(호출부 6곳 같은 술어).
+        noAccountEnding: routeEndsWithoutAccount(session.scenarioId, session.flowVariantId),
         // T194-b(§84.3.4 · G568 호출부 3곳 중 "텍스트 턴") — 세션 문서 값 그대로(부재 = 블록 0 · 바이트 동일).
         // ⚠️ `hangupMode` 앞에 둔다 — G552 ⓒ 소스 스캔이 hangupMode를 옵션 마지막으로 고정한다.
         personaCard: session.personaCard?.items,

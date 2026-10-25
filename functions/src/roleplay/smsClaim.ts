@@ -52,6 +52,15 @@ export function otpDemandGuardFor(input: {
   return input.userTurns >= gateOpensAtUserTurns(otp, input.delivered, true) ? undefined : SMS_OTP_DEMAND;
 }
 
+/**
+ * §132.19 판정표 B(메인 라이브 2026-10-25 · fv-g2ld 2세션 — 발화 4에 거래 은행 · 자산 답을 받은 뒤 인증번호 단계 대신 "임시 이체" · "주민번호 뒤
+ * 일곱 자리 · 인터넷뱅킹 비밀번호"를 요구했다. 인증번호 문자 하한(5)보다 흐름의 인증번호 단계가 먼저 왔고, O2 가드가 인증번호 요구만 막아 다른 요구로
+ * 새 나갔다). O2 가드가 걸리는 발화(인증번호 문자가 남았고 이번 발화에 보낼 수 없음)에는 턴 지시 1줄로 앞 단계를 붙잡는다. 단계 순서는 흐름이 정한다
+ * (거래 은행 · 자산 → 인증번호 → 결말) — 인증번호 단계는 반드시 거친다(답을 거부하면 번호 없이 넘어가는 것은 단계 문면 그대로).
+ */
+export const OTP_HOLD_INSTRUCTION =
+  "(아직 인증번호 문자를 보낼 차례가 아니다. 이번 대답에서는 인증번호 · 비밀번호 · 계좌번호를 묻거나 이체 · 송금 · 인출을 요구하지 말고, 이번 통화의 흐름에서 인증번호 단계 앞의 단계를 이어 간다. 그 단계를 이미 마쳤으면 거래 은행이나 예금 · 적금 구성을 하나 더 구체적으로 묻거나 안심시키는 말을 한다.)";
+
 /** 가드 둘을 하나로(둘 중 하나에 맞으면 쓸 수 없는 응답). */
 export function combineReplyGuards(...guards: ReadonlyArray<RegExp | undefined>): RegExp | undefined {
   const present = guards.filter((g): g is RegExp => g !== undefined);

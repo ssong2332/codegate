@@ -14,7 +14,7 @@
 import { logger } from "firebase-functions";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
-import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
+import { resolveSessionScenarioPrompt, routeEndsWithoutAccount } from "../scenarios/flowVariants";
 import { resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { resolveRouteAccountNumber } from "../inCallSms/smsGate";
@@ -99,6 +99,8 @@ export async function generateCallReturnLine(
         .join("\n"),
       fictionalBankName,
       sessionAccountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
+      // §132.19 판정표 A — 결말이 계좌 이체가 아닌 루트는 계좌 예시 · 번호 문장 대신 금지 1문장(호출부 6곳 같은 술어).
+      noAccountEnding: routeEndsWithoutAccount(session.scenarioId, session.flowVariantId),
       personaCard: session.personaCard?.items,
       ...(familyAddress ? { familyAddress } : {}),
     }),

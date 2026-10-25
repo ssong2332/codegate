@@ -66,8 +66,9 @@ test("[§132.17] 가드 합치기 — 하나면 그대로 · 둘이면 어느 �
 test("[§132.17] 배선 — sendMessage 생성 요청의 가드 = 역할 가드 + 인증번호 요구 가드(도착 기록을 읽은 턴만)", () => {
   const src = readFileSync(path.resolve(__dirname, "../../../src/roleplay/index.ts"), "utf8").replace(/\r\n/g, "\n");
   assert.ok(
+    // §132.19 — 가드 값을 턴 지시(판정표 B)와 함께 쓰려고 변수로 뺐다(liveCheckFixes132i).
     src.includes(
-      "const replyGuard = combineReplyGuards(\n      personaGuardFor(session.scenarioId),\n      smsDeliveredLoaded ? otpDemandGuardFor({ declared: smsDeclared, delivered: smsDelivered, userTurns: userTurnsNow }) : undefined,\n    );",
+      "const otpDemandGuard = smsDeliveredLoaded\n      ? otpDemandGuardFor({ declared: smsDeclared, delivered: smsDelivered, userTurns: userTurnsNow })\n      : undefined;\n    const replyGuard = combineReplyGuards(personaGuardFor(session.scenarioId), otpDemandGuard);",
     ),
   );
   assert.ok(src.includes("...(replyGuard ? { personaGuard: replyGuard } : {}),"));

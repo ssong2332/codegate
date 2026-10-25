@@ -891,6 +891,11 @@ export type BuildSystemPromptOptions = {
    * 쓴다" 1문장을 붙인다 — 계좌 문자가 있는 시나리오는 문자 속 계좌와 같은 번호가 된다. 부재면 종전 문자열.
    */
   sessionAccountNumber?: string;
+  /**
+   * §132.19 판정표 A(`flowVariants.ts` `routeEndsWithoutAccount`) — 결말이 계좌 이체가 아닌 루트. 참이면 [진행 강제] 가상값 줄의 예시 계좌와
+   * "이 번호를 그대로 쓴다" 문장 대신 "계좌번호를 불러 주거나 이체 · 송금을 요구하지 않는다"를 싣는다(`sessionAccountNumber`보다 앞선다). 부재 = 종전.
+   */
+  noAccountEnding?: boolean;
   /** UX-029에서 사용자가 고른 강도. 부재·intermediate면 블록을 내보내지 않는다(기준선). */
   difficultyLevel?: DifficultyLevel;
   /**
@@ -1116,7 +1121,11 @@ export function buildSystemPrompt(
   ].join("\n");
   // 2026-10-21 — 카드가 있으면 신원 요구 예시를 카드 값 확인형으로(`personaCardIdentity.ts` 판정표 · 블록 0 = 입력 그대로).
   const withCard = personaCardBlock && opts.personaCard ? applyPersonaCardIdentityConfirm(assembled, opts.personaCard) : assembled;
-  const withAccount = opts.sessionAccountNumber ? applySessionAccount(withCard, opts.sessionAccountNumber) : withCard;
+  const withAccount = opts.noAccountEnding
+    ? applyNoAccountEnding(withCard)
+    : opts.sessionAccountNumber
+      ? applySessionAccount(withCard, opts.sessionAccountNumber)
+      : withCard;
   return opts.fictionalBankName ? applyFictionalBank(withAccount, opts.fictionalBankName) : withAccount;
 }
 
@@ -1175,6 +1184,12 @@ export function toLlmHistory(
 
 /** §81.6 — 예시 계좌를 세션 계좌로 바꾸고, 그 번호만 쓰라는 1문장을 [진행 강제] 가상값 줄에 붙인다. */
 const ACCOUNT_RULE_ANCHOR = `숫자는 실제처럼 들리는 형식으로 또박또박 부른다(예: "OO은행 ${EXAMPLE_ACCOUNT_NUMBER}").`;
+/** §132.19 판정표 A — 문장이 앵커 자리에 들어간다(앵커가 없으면 입력 그대로). */
+export const NO_ACCOUNT_ENDING_SENTENCE =
+  "숫자는 실제처럼 들리는 형식으로 또박또박 부른다. **이 통화의 결말은 계좌 이체가 아니다 — 계좌번호를 불러 주거나 어느 계좌로든 이체 · 송금하라고 요구하지 않는다.** 상대가 이체를 꺼내도 계좌로 옮기면 안 되는 이유를 짧게 말하고 [이번 통화의 흐름]의 다음 단계로 돌아간다.";
+function applyNoAccountEnding(text: string): string {
+  return text.includes(ACCOUNT_RULE_ANCHOR) ? text.replace(ACCOUNT_RULE_ANCHOR, NO_ACCOUNT_ENDING_SENTENCE) : text;
+}
 function applySessionAccount(text: string, accountNumber: string): string {
   const withRule = text.includes(ACCOUNT_RULE_ANCHOR)
     ? text.replace(
