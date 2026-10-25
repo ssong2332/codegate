@@ -162,6 +162,7 @@ cp functions/.env.example functions/.env
 | `LLM_API_KEY` | 사기범 역할극/리포트 생성용 LLM API 키 |
 | `LLM_PROVIDER` | `claude` 또는 `gemini` (DECISIONS #11 어댑터 선택) |
 | `FALLBACK_VOICE_ID` | 클론/합성 타임아웃 시 폴백용 사전 준비 voiceId(OQ-U3, DECISIONS #9) |
+| `DEV_ROUTE_OVERRIDE` | 개발 단계 루트 강제 지정 — `true`면 시나리오 화면 주소에 `?route=fv-xxxx`를 붙여 그 루트로 세션을 만든다(그 시나리오 · 난이도 후보에 있을 때만 · 아니면 무시 + 경고 로그 `flow_variant_force_ignored`). 적용된 세션은 문서에 `routeOverride: "forced"`, 로그에 `flow_variant_forced`. `?route=off`로 해제. 기본 `false`. ⛔ **출시 전 반드시 `false`로 되돌릴 것** |
 
 프로덕션 배포 시에는 `functions/.env` 파일 대신 `firebase functions:secrets:set <NAME>`로
 시크릿을 설정하는 것을 권장한다(파일을 배포 서버에 올리지 않음).

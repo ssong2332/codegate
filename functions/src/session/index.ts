@@ -23,7 +23,7 @@ import {
   MESSENGER_ESCALATION_MAX_USER_TURNS,
 } from "../shared/constants";
 import { isCreateSessionRateLimited } from "./rateLimit";
-import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, LLM_TEXT_SECRETS } from "../shared/config";
+import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, LLM_TEXT_SECRETS, isDevRouteOverrideEnabled } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
 import { transitionChannel } from "./channelTransition";
@@ -35,6 +35,7 @@ import { assertDifficultyAllowed } from "./difficultyAllowance";
 import { assertScenarioNotMerged } from "./mergedScenario";
 import { assertVoiceSelectionSourceAllowed } from "./voiceSelectionAllowance";
 import { assignFlowVariantForSession, commitSessionWithVariant } from "./variantAssignment";
+import { resolveDevRouteOverride } from "./devRouteOverride";
 import type { MessageDoc, MessengerSkin, MessengerSkinSource, SessionDoc } from "../shared/types";
 import type {
   CreateSessionRequest,
@@ -104,6 +105,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       voiceSelectionSource,
       difficultyLevel,
       familyAddress: familyAddressRaw,
+      forceVariantId,
       personaCardInput,
     } = request.data ?? {};
     if (!scenarioId || !voiceId) {
@@ -228,12 +230,16 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     // T191 S5(PRD AC-096 (e) · D6) — 흐름 변형 배정. 오프닝 대사도 배정된 변형으로 조립해야 하므로
     // generateOpeningLine 앞이다. Firestore 접근은 회전 문서 키 조회 1건뿐(인덱스 0 — 설계 금지 X6).
     // 동의 · 한도 게이트 뒤라 거절된 시도는 회전 문서를 읽지도 쓰지도 않는다.
-    const variantAssignment = await assignFlowVariantForSession(
-      db,
-      request.auth.uid,
+    // 개발 단계 루트 강제 지정(`devRouteOverride.ts` 판정표) — 적용되면 회전 덱을 읽지도 쓰지도 않는다(후보 1개 = 회전 문서 0).
+    const routeOverride = resolveDevRouteOverride({
+      enabled: isDevRouteOverrideEnabled(),
+      requested: forceVariantId,
       scenarioId,
-      resolvedDifficultyLevel,
-    );
+      level: resolvedDifficultyLevel,
+    });
+    const variantAssignment = routeOverride.applied
+      ? { flowVariantId: routeOverride.variantId, candidates: [routeOverride.variantId] }
+      : await assignFlowVariantForSession(db, request.auth.uid, scenarioId, resolvedDifficultyLevel);
     // T4: sessionId(온보딩 "사전 세션 id")가 넘어오면 createVoiceClone이 만들어 둔 pending
     // sessions/{sid} 문서를 새로 만들지 않고 채택한다 — sessionId 불일치 갭 해소. 넘어오지 않으면
     // 기존과 동일하게 새 id를 발급한다(하위호환). ID 생성/채택 로직만 바꿨고, 그 외 인격유지·
@@ -313,6 +319,7 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       // 여기 값은 미리보기이고, 아래 트랜잭션이 회전 문서를 다시 읽어 확정값으로 덮어 쓴다.
       // 응답에는 싣지 않는다(세션 전 화면에 변형 정보 0 — 아래 return 참고).
       flowVariantId: variantAssignment.flowVariantId,
+      ...(routeOverride.applied ? { routeOverride: "forced" as const } : {}),
       // T194-b(§84.3.2) — 대상 세션에만 필드가 생긴다(대상 밖 = 부재 · 빈 값 0). 오프닝에 넘긴 것과 같은 객체다.
       ...(personaCard ? { personaCard } : {}),
       // §110.5 — 고른 경우에만(부재 = 종전 문면).

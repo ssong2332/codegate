@@ -103,3 +103,19 @@ export const FALLBACK_VOICE_ID = defineString("FALLBACK_VOICE_ID");
  */
 export const FALLBACK_VOICE_MALE_ID = defineString("FALLBACK_VOICE_MALE_ID");
 export const FALLBACK_VOICE_FEMALE_ID = defineString("FALLBACK_VOICE_FEMALE_ID");
+
+/**
+ * 개발 단계 루트 강제 지정(2026-10-25 · 사용자 지시 "개발 중이니까 다중 루트 강제화 해서 테스트") — `"true"`일 때만
+ * `createSession`이 요청의 `forceVariantId`를 받는다(`session/devRouteOverride.ts` 판정표). 기본 `"false"`.
+ * ⛔ 출시 전 반드시 `"false"`로 되돌린다 — 켜 두면 참가자가 URL로 루트를 고를 수 있다(AC-096 (e) "참가자는 변형을 고르지 않는다").
+ */
+export const DEV_ROUTE_OVERRIDE = defineString("DEV_ROUTE_OVERRIDE", { default: "false" });
+
+/** 위 파라미터가 정확히 `"true"`인가. 바인딩되지 않은 컨텍스트(단위 테스트)에서 throw하면 꺼짐으로 본다. */
+export function isDevRouteOverrideEnabled(): boolean {
+  try {
+    return DEV_ROUTE_OVERRIDE.value().trim() === "true";
+  } catch {
+    return false;
+  }
+}
