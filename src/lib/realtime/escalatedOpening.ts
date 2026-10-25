@@ -8,6 +8,7 @@
 // | If | Then |
 // |---|---|
 // | 다시 연결(connectionSeq > 0) | 종전 재연결 맥락(`buildResumeTurn`) |
+// | §136 통화 중 새로고침 뒤 다시 연 첫 연결 · 되살린 대화 있음 | 그 재연결 맥락(`restoredResumeTurn`) |
 // | 메신저 시나리오(= 메신저에서 넘어온 통화)의 첫 연결 | 이 신호 |
 // | 그 밖 | `null`(종전 오프닝 트리거) |
 
@@ -41,8 +42,11 @@ export function openingTurnFor(input: {
   escalatedFromMessenger: boolean;
   /** §123 — 부재 = 사기범(종전). */
   caller?: CallCaller;
+  /** §136 — 새로고침 복원 뒤 실시간으로 다시 연 통화의 재연결 맥락(되살린 전사가 없으면 `null` — 아래 종전 판정). */
+  restoredResumeTurn?: string | null;
 }): string | null {
   if (input.connectionSeq > 0) return input.resumeTurn;
+  if (input.restoredResumeTurn) return input.restoredResumeTurn;
   if (!input.escalatedFromMessenger) return null;
   return input.caller === "participant" ? PARTICIPANT_CALLED_OPENING_TURN : ESCALATED_CALL_OPENING_TURN;
 }

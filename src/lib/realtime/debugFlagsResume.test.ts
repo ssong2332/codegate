@@ -72,8 +72,10 @@ test("[§134 이어서] R1 ~ R3 — 새로고침 복원 · 활성화 없음(또�
 
 test("[§134 이어서] 배선 — 복원 분기에서만 판정 · 누르기 전 자동 청취 0 · 버튼이 해제 · 막힌 재생을 다시 튼다", () => {
   const page = read("../../app/session/play/page.tsx");
-  const restore = page.indexOf('setCallMode("fallback");\n          setResumeTapNeeded(');
-  assert.ok(restore > 0, "새로고침 복원 분기 바로 뒤에서 판정한다");
+  // §136 — 복원 분기의 글 대화 전환과 판정 사이에 실시간 다시 열기 준비(ref · 받기 시각)가 들어갔다.
+  const fallbackAt = page.indexOf('setCallMode("fallback");\n          // §136');
+  const restore = page.indexOf("setResumeTapNeeded(\n            needsResumeTap({\n              restored: true,", fallbackAt);
+  assert.ok(fallbackAt > 0 && restore > fallbackAt, "새로고침 복원 분기 안에서 판정한다");
   assert.equal(page.split("setResumeTapNeeded(").length - 1, 2, "판정 1곳 + 버튼 해제 1곳뿐");
   const effect = page.indexOf('if (callMode !== "fallback" || phase !== "live" || verifyOverlayOpen) return;');
   const gate = page.indexOf("if (resumeTapNeeded) return;", effect);
@@ -81,5 +83,6 @@ test("[§134 이어서] 배선 — 복원 분기에서만 판정 · 누르기 �
   assert.ok(effect > 0 && gate > effect && gate < start, "자동 청취 effect가 speech.start 전에 막는다");
   assert.ok(page.includes("verifyOverlayOpen, endLatched, resumeTapNeeded]);"));
   assert.ok(page.includes("onClick={handleResumeTap}"));
-  assert.ok(/const handleResumeTap = \(\) => \{\n\s+setResumeTapNeeded\(false\);\n\s+if \(playbackBlocked\) handleManualPlay\(\);/.test(page));
+  // §136 S2 — 탭은 막힌 글 대화 재생이 아니라 실시간 다시 열기를 부른다(`refreshResume136.test.ts`).
+  assert.ok(/const handleResumeTap = \(\) => \{\n\s+setResumeTapNeeded\(false\);\n\s+resumeRestoredCall\(\);/.test(page));
 });
