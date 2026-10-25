@@ -8,7 +8,13 @@
 // ⚠️ 한쪽만 시각이 있을 때 종전 키로 가르는 것은 전순서를 깨지 않기 위해서다 — 시각 없는 항목(앵커 미해결 · 옛 리포트)은
 //    종전 위치를 지키고, 시각 있는 항목끼리만 시각 순으로 맞춘다. 실제 표에서는 대부분 모두 시각이 있다.
 // ⛔ 되감기 딥링크는 항목 순서가 아니라 원래 `deceivedMoments` 인덱스를 쓴다(이 정렬과 무관).
-import { parseMomentSeconds } from "../design/e2Layout.ts";
+// ⚠️ 값 import 없는 잎 모듈로 둔다(`detectSkin.ts` 머리말과 같은 판단) — 앱 빌드(`tsc`)는 `.ts` 확장자 값 import를
+//    거부하고(`allowImportingTsExtensions` 꺼짐), 루트 테스트 러너(`node --experimental-strip-types`)는 확장자 없는
+//    상대 import를 풀지 못한다. ⇒ `../design/e2Layout.ts`의 `parseMomentSeconds`를 미러링한다(일치는 테스트가 지킨다).
+function parseMomentSeconds(timeLabel: string | null | undefined): number | null {
+  const m = typeof timeLabel === "string" ? timeLabel.trim().match(/^(\d+)초 시점$/) : null;
+  return m ? Number(m[1]) : null;
+}
 
 export type TimelineSortable = {
   /** 표시 시각("N초 시점") — 부재 = 시각 없음. */
