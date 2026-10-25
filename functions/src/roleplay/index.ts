@@ -26,6 +26,7 @@ import {
 } from "../scenarios/mockScreens";
 import { textPathAnchorScammerTurn } from "../inCallSms/buildDoc";
 import { planConfirmResult } from "../inCallSms/confirmResult";
+import { buildConfirmResultInstruction, isCompletionClaim } from "../inCallSms/confirmResult";
 import {
   buildSmsMarkerOfferInstruction,
   buildSmsNudgeInstruction,
@@ -66,6 +67,7 @@ import { answeredAtFromClient } from "../session/answeredAt";
 import type { ChannelTransitionTrigger, MessageDoc, SessionDoc } from "../shared/types";
 import { wasTurnInstructionSpoken } from "./announceMarking";
 import { planOtpFollowUp } from "./otpFollowUp";
+import { claimMatchesPurpose, replyClaimsSmsSent } from "./smsClaim";
 import { extractEscalationSignal } from "./escalationSignal";
 import { callPhaseMockTacticHints, ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall, userTurnsSinceCallEntry } from "./escalatedCall";
 import { isFirstUserTurn } from "./firstTurn";
@@ -639,10 +641,21 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const participantCalled = escalatedCall && currentCallCaller(session.channelHistory) === "participant";
     const participantCalledInstruction = participantCalled ? PARTICIPANT_CALLED_INSTRUCTION : undefined;
     // §127 — 폴백판 마무리 지시: 사전 판정 승인(신호 모드) ∧ 후속 단계 변형의 할 일 완료(실시간 `GOAL_WRAP_UP_INSTRUCTION`과 같은 조건 · 그 밖 = 없음).
+    // §132.11 — 문자 선언이 없는 변형(확인 결과 지시 A-1 ⑦이 닿지 않는다)에서 참가자가 방금 송금을 마쳤다고 하면, 신호 모드 턴에 같은
+    // 확인 결과 지시를 싣는다("남은 요구가 없으면 끝내기 항목대로"). 다른 앱 진행 지시가 있는 턴 · 후속 단계 마무리 지시가 있는 턴 = 없음.
+    const claimWrapUp =
+      hangupMode === "signal" &&
+      smsDeclared.length === 0 &&
+      turnChoice === "none" &&
+      !otpCheckInstruction &&
+      !confirmPlan?.instruction &&
+      isCompletionClaim(maskedUserText, "transfer")
+        ? buildConfirmResultInstruction("transfer")
+        : undefined;
     const fallbackWrapUp =
       hangupMode === "signal" && goalActionDone && goalFollowUpFor(session.scenarioId, session.flowVariantId) !== undefined
         ? FALLBACK_GOAL_WRAP_UP_INSTRUCTION
-        : undefined;
+        : claimWrapUp;
     const turnInstructionWithPhoto =
       [turnInstructionWithSms, photoTurnInstruction(isPhotoTurn), participantCalledInstruction, fallbackWrapUp].filter(Boolean).join("\n") ||
       undefined;
@@ -924,6 +937,35 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         // P-4 — 문자 도착 실패가 대화를 막지 않는다(응답은 이미 저장됐다).
         // T192 C3 — 도착 여부를 모르는 턴은 끊기 쪽에서 문자 대기로 본다(fail-closed · 그 턴만 끊기 0).
         smsMarkerDeliveryFailed = true;
+      }
+    } else if (
+      smsDeliveredLoaded &&
+      smsDeclared.length > 0 &&
+      verifyState?.placed !== true &&
+      replyClaimsSmsSent(finalReplyText)
+    ) {
+      // §132.13 — 마커 없이 "문자 속 링크" · "보내 드린 문자"라고 말했다: 실시간 주장 백스톱과 같은 판정(하한 그대로 · 간격 1)으로 남은 필수 문자를 이 응답에.
+      const claimPlan = planSmsBackstop({ declared: smsDeclared, delivered: smsDelivered, userTurns: userTurnsNow, claimed: true });
+      if (claimPlan.action === "deliver" && claimMatchesPurpose(finalReplyText, claimPlan.item.purpose)) {
+        try {
+          const result = await deliverSmsThroughGate(smsStore, {
+            ...smsDeliveryBase,
+            userTurns: userTurnsNow,
+            purpose: claimPlan.item.purpose,
+            anchorScammerTurn: textPathAnchorScammerTurn(scammerTurnNumber),
+            trigger: "backstop",
+            explicit: true,
+          });
+          logSmsGate(sessionId, "backstop", claimPlan.item.purpose, result.status, userTurnsNow);
+          // G170 — 사유 · 상태만(대사 0).
+          logger.info("[§132] 폴백 대사 주장 백스톱", { sessionId, status: result.status, userTurns: userTurnsNow });
+          if (result.status === "delivered") {
+            if (!deliveredSmsId) deliveredSmsId = result.item.smsId;
+            smsDeliveredAfterReply = [...smsDeliveredAfterReply, { smsId: result.item.smsId, userTurnsAtArrival: userTurnsNow }];
+          }
+        } catch {
+          smsMarkerDeliveryFailed = true;
+        }
       }
     }
 
