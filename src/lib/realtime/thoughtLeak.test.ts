@@ -85,7 +85,8 @@ test("[§116 배선] 통화 컴포넌트 — 전사 flush · 판정 입력은 �
   assert.match(s, /const audioData = pickLiveAudioData\(sc\?\.modelTurn\?\.parts\);/);
   assert.equal(/message\.data\b/.test(s), false, "SDK data 게터(사고 파트 포함)를 쓰지 않는다");
   assert.match(s, /if \(hasAudio && samples && !thoughtGate\.suppressing\) \{/);
-  assert.match(s, /if \(gate\.startSuppress\) \{\s*stopAllPlayback\(\);/);
+  // §135 — 재생 정지 바로 앞에 진단 1줄(`noteThoughtCut`)만 허용한다.
+  assert.match(s, /if \(gate\.startSuppress\) \{\s*(noteThoughtCut\(\);[^\n]*\s*)?stopAllPlayback\(\);/);
   // 경계 초기화 2곳(interrupted · turnComplete).
   assert.equal((s.match(/thoughtGate = stepThoughtLeakGate\(thoughtGate, \{ type: "boundary" \}\)\.state;/g) ?? []).length, 2);
 });

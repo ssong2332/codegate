@@ -56,6 +56,18 @@ type DiagState = {
   wakeLockReleases: number;
   /** §105.2.6 — "말했는데 서버가 못 들음" 보완("잘 안 들렸다" 한 줄)이 발동한 횟수. */
   unheardReplyFired: number;
+  // ⭐ §135(2026-10-25 실기 신고 *"사기범 말이 중간중간 끊긴다"*) — 끊김이 재생 공백인지 · 서버 끼어들기인지 · 앱이 지운 것인지 가른다(숫자만).
+  /** 턴 진행 중 다음 청크가 예약 재생이 다 끝난 뒤 도착해 소리가 빈 횟수(`PLAY_GAP_MIN_MS` 이상만). */
+  playGaps: number;
+  /** 그 공백의 최대 길이(ms). */
+  playGapMaxMs: number;
+  /** 서버 `interrupted` 수신 횟수 · 그중 예약 재생이 남아 있던(= 말이 잘린) 횟수. */
+  interrupts: number;
+  interruptsWhilePlaying: number;
+  /** 영어 사고 문장 게이트(§116)가 재생을 지운 횟수. */
+  thoughtCuts: number;
+  /** 사기범이 말하는 중에 보낸 `turnComplete:false` 맥락 주입 · 상태 단언 횟수. */
+  contextWhileSpeaking: number;
 };
 
 const INITIAL: DiagState = {
@@ -83,6 +95,12 @@ const INITIAL: DiagState = {
   wakeLockStatus: null,
   wakeLockReleases: 0,
   unheardReplyFired: 0,
+  playGaps: 0,
+  playGapMaxMs: 0,
+  interrupts: 0,
+  interruptsWhilePlaying: 0,
+  thoughtCuts: 0,
+  contextWhileSpeaking: 0,
 };
 
 let state: DiagState = { ...INITIAL };
@@ -96,9 +114,21 @@ let outputGain: GainLike | null = null;
 let fallbackAudio: { volume: number; paused: boolean } | null = null;
 type TrackLike = { readyState: string; muted: boolean; enabled: boolean };
 let micTrack: TrackLike | null = null;
+/** §135 — 같은 탭에서 앞서 끝난 통화들의 한 줄 요약(최근 것이 앞 · `CALL_HISTORY_MAX`건). 새로고침하면 비워진다. */
+let callHistory: string[] = [];
+
+/** §135 — 통화마다 크기가 다르다는 신고를 가르는 요약 개수. */
+export const CALL_HISTORY_MAX = 4;
+
+/** §135 — 한 통화의 요약(경로 · 새 컨텍스트 ms · 정규화 게인 · 감쇠 · 재생 공백 · 끼어들기). */
+export function summarizeCall(s: Pick<DiagState, "outputPath" | "freshResume" | "normGain" | "streamTrim" | "playGaps" | "interruptsWhilePlaying">): string {
+  return `${s.outputPath ?? "-"} f${s.freshResume ?? "-"} n${formatDbfs(s.normGain)} t${formatDbfs(s.streamTrim)} g${s.playGaps} i${s.interruptsWhilePlaying}`;
+}
 
 /** 받기 1회 = 통화 1건. 통화별 값을 비운다(벨 컨텍스트는 받기 전에 정해지므로 남긴다). */
 export function noteAccept(nowMs: number): void {
+  // §135 — 앞 통화(받기를 거친 것)를 요약에 남긴다.
+  if (state.acceptAtMs !== null) callHistory = [summarizeCall(state), ...callHistory].slice(0, CALL_HISTORY_MAX);
   // §105 — 화면 켜짐 유지는 받기 전(연결 중)부터 걸려 있을 수 있어 상태만 이어받는다(풀린 횟수는 통화별로 비운다).
   state = { ...INITIAL, acceptAtMs: nowMs, wakeLockStatus: state.wakeLockStatus };
   outputCtx = null;
@@ -224,6 +254,43 @@ export function noteNormalizerGain(gain: number): void {
   state = { ...state, normGain: gain };
 }
 
+/** §135 — 사람이 끊김으로 느끼기 시작하는 공백 하한(판단값 · ms). 이보다 짧은 공백은 세지 않는다. */
+export const PLAY_GAP_MIN_MS = 20;
+
+/** §135 — 턴 진행 중 재생 공백 1건(ms). 하한 미만은 버린다. */
+export function notePlayGap(gapMs: number): void {
+  if (!(gapMs >= PLAY_GAP_MIN_MS)) return;
+  state = { ...state, playGaps: state.playGaps + 1, playGapMaxMs: Math.max(state.playGapMaxMs, Math.round(gapMs)) };
+}
+
+/** §135 — 서버 `interrupted` 1건. `whilePlaying` = 예약 재생이 남아 있었다(말이 잘렸다). */
+export function noteInterrupt(whilePlaying: boolean): void {
+  state = {
+    ...state,
+    interrupts: state.interrupts + 1,
+    interruptsWhilePlaying: state.interruptsWhilePlaying + (whilePlaying ? 1 : 0),
+  };
+}
+
+/** §135 — 사고 문장 게이트가 재생을 지운 1건. */
+export function noteThoughtCut(): void {
+  state = { ...state, thoughtCuts: state.thoughtCuts + 1 };
+}
+
+/** §135 — 사기범이 말하는 중의 `turnComplete:false` 전송 1건. */
+export function noteContextWhileSpeaking(): void {
+  state = { ...state, contextWhileSpeaking: state.contextWhileSpeaking + 1 };
+}
+
+/**
+ * §135 — 청크를 예약하기 직전에 부른다. 턴이 이미 진행 중(`turnInProgress`)이고 직전 예약의 끝(`nextPlayTime` > 0)이
+ * 지금보다 앞이면 그 차이만큼 소리가 비었다(초 → ms). 그 밖(턴 첫 청크 · 끊긴 뒤 0으로 되돌린 시각)은 공백이 아니다(0).
+ */
+export function playGapMs(input: { turnInProgress: boolean; nextPlayTime: number; currentTime: number }): number {
+  if (!input.turnInProgress || !(input.nextPlayTime > 0)) return 0;
+  return Math.max(0, (input.currentTime - input.nextPlayTime) * 1000);
+}
+
 export function noteChunkScheduled(nowMs: number): void {
   state = { ...state, chunksScheduled: state.chunksScheduled + 1, lastChunkAtMs: nowMs };
 }
@@ -251,6 +318,8 @@ export function registeredCallContexts(): Array<CtxLike | null> {
 }
 
 export type AudioDiagSnapshot = DiagState & {
+  /** §135 — 앞서 끝난 통화 요약(최근 것이 앞). */
+  history: string[];
   output: CtxLike | null;
   input: CtxLike | null;
   ring: CtxLike | null;
@@ -264,6 +333,7 @@ export type AudioDiagSnapshot = DiagState & {
 export function readAudioDiag(): AudioDiagSnapshot {
   return {
     ...state,
+    history: callHistory,
     output: outputCtx,
     input: inputCtx,
     ring: ringCtx,
@@ -277,6 +347,7 @@ export function readAudioDiag(): AudioDiagSnapshot {
 /** 테스트 전용 초기화. */
 export function resetAudioDiagForTest(): void {
   state = { ...INITIAL };
+  callHistory = [];
   outputCtx = null;
   inputCtx = null;
   ringCtx = null;
@@ -367,6 +438,11 @@ export const AUDIO_DIAG_KEYS = [
   "chunks.rx",
   "chunks.sched",
   "chunk.lastMs",
+  "play.gaps",
+  "play.gapMaxMs",
+  "cut.int",
+  "cut.thought",
+  "cut.ctx",
   "in.state",
   "in.rate",
   "mic.track",
@@ -387,6 +463,7 @@ export const AUDIO_DIAG_KEYS = [
   "act.isActive",
   "resume.retry",
   "err.last",
+  "hist",
   "browser",
 ] as const;
 
@@ -440,6 +517,11 @@ export function buildAudioDiagRows(input: {
     "chunks.rx": String(s.chunksReceived),
     "chunks.sched": String(s.chunksScheduled),
     "chunk.lastMs": rel(s.lastChunkAtMs, s.acceptAtMs),
+    "play.gaps": String(s.playGaps),
+    "play.gapMaxMs": String(s.playGapMaxMs),
+    "cut.int": `${s.interrupts}/${s.interruptsWhilePlaying}`,
+    "cut.thought": String(s.thoughtCuts),
+    "cut.ctx": String(s.contextWhileSpeaking),
     "in.state": show(s.input?.state),
     "in.rate": show(s.input?.sampleRate),
     "mic.track": s.mic ? `${s.mic.readyState}${s.mic.muted ? "/muted" : ""}${s.mic.enabled ? "" : "/disabled"}` : "-",
@@ -460,6 +542,7 @@ export function buildAudioDiagRows(input: {
     "act.isActive": input.userActivation ? String(input.userActivation.isActive) : "-",
     "resume.retry": String(s.resumeRetries),
     "err.last": show(s.lastAudioError),
+    hist: s.history.length > 0 ? s.history.join(" | ") : "-",
     browser: input.browser,
   };
   return AUDIO_DIAG_KEYS.map((key) => [key, values[key]]);
