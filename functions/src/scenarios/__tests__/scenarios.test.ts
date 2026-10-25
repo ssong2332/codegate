@@ -34,6 +34,7 @@ import { CALL_RETURN_AFTER_SCAMMER_HANGUP_INSTRUCTION, CALL_RETURN_INSTRUCTION }
 import { CALL_AFTER_EXCUSE_INSTRUCTION } from "../../roleplay/callAnnouncement";
 import { TRANSFER_REPORTED_INSTRUCTION } from "../../roleplay/actionAcknowledgement";
 import { personaAnchorInstruction } from "../../roleplay/personaGuard";
+import { OTP_HOLD_INSTRUCTION } from "../../roleplay/smsClaim";
 import { buildPriorChatContext } from "../../realtime/priorChatContext";
 import { applyFictionalBank, FICTIONAL_BANK_NAMES, resolveSessionAccountNumber } from "../../shared/fictionalBank";
 
@@ -1321,6 +1322,8 @@ function turnInstructionSources(): Array<{ scenarioId?: string; label: string; v
     { label: "송금보고뒤", value: TRANSFER_REPORTED_INSTRUCTION },
     { label: "역할고정(지인)", value: personaAnchorInstruction("messenger-friend-loan-kakao")! },
     { label: "역할고정(자녀)", value: personaAnchorInstruction("messenger-child-impersonation-kakao")! },
+    // §132.19 판정표 B — 인증번호 문자 하한 전 앞 단계 붙잡기.
+    { scenarioId: "institutional-impersonation", label: "인증번호전붙잡기", value: OTP_HOLD_INSTRUCTION },
     // §110.3 — 메신저에서 넘어온 Live 통화의 앞선 대화 블록(머리 지시 — 대화 줄은 참가자 데이터라 표본 2줄만).
     {
       label: "앞선대화",
@@ -1482,6 +1485,8 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
         fictionalBankName,
         // §81.6 — 세션 계좌번호 축(계좌 문자 시나리오는 그 문자 속 계좌).
         sessionAccountNumber: resolveSessionAccountNumber(targetId),
+        // §132.19 판정표 A — 계좌 없는 결말 문장 축도 번갈아 켠다(바뀐 가상값 줄도 무해화 스캔을 받게).
+        ...(bankIndex % 2 === 0 ? { noAccountEnding: true } : {}),
         difficultyLevel: "advanced",
         l3Procedural: true,
         inCallSmsEnabled: true,

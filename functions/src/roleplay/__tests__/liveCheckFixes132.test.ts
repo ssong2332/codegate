@@ -153,5 +153,5 @@ test("[§132.6] 인증번호 문자가 도착했는데 아직 묻지 않았으�
   // 배선 — 앱 진행 지시가 없는 턴만 · 턴 지시 목록 끝.
   const src = readFileSync(path.join(SRC, "roleplay/index.ts"), "utf8");
   assert.ok(src.includes('turnChoice === "none" && !otpCheckInstruction && !confirmPlan?.instruction && verifyState?.placed !== true && otpArrivedSince > 0'));
-  assert.ok(src.includes("smsNudgeInstruction, smsOfferInstruction, otpFollowUpInstruction]"));
+  assert.ok(src.includes("smsNudgeInstruction, smsOfferInstruction, otpFollowUpInstruction, otpHoldInstruction]") /* §132.19 판정표 B가 뒤에 붙었다 */);
 });

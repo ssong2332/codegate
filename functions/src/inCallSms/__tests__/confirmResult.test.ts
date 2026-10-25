@@ -172,7 +172,7 @@ test("[A-1/⑦ 배선] sendMessage — 다른 턴 지시가 없는 턴에만 pla
     src,
     /\[\s*confirmPlan\?\.instruction,\s*escalatedCallInstruction,\s*repeatBreakInstruction\(repeatBreakKind\),\s*callAfterExcuseInstruction,\s*turnFacts\.transferReported \? TRANSFER_REPORTED_INSTRUCTION : undefined,\s*personaAnchorInstruction\(session\.scenarioId\),\s*\]\s*\.filter\(Boolean\)/,
   );
-  assert.match(src, /\[promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction(?:, otpFollowUpInstruction)?\]/); // §132.6 인증번호 다시 요구
+  assert.match(src, /\[promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction(?:, otpFollowUpInstruction)?(?:, otpHoldInstruction)?\]/); // §132.6 인증번호 다시 요구
   // 계산 순서 — 인증번호 대조 · 문자 마커 제시 · 넛지가 정해진 뒤(리뷰 Minor-1 — 같은 턴 겹침 0), LLM 호출 앞.
   assert.ok(src.indexOf("const smsOfferInstruction =") < src.indexOf("const confirmPlan ="), "문자 마커 제시가 정해진 뒤에 판정해야 한다");
   assert.ok(src.indexOf("let smsNudgeInstruction") < src.indexOf("const confirmPlan ="), "넛지가 정해진 뒤에 판정해야 한다");

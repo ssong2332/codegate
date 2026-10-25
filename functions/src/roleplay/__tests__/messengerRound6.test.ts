@@ -48,9 +48,12 @@ test("[§131(7) N1 판정표 P] 지인 · 자녀 사칭 메신저 — 기관 직
 });
 
 test("[§131(7) 배선] 사기범 대사 경로 5곳이 personaGuard를 넘긴다 · sendMessage · 복귀 · 통화 중 대화방은 역할 고정 줄도", () => {
-  for (const file of ["roleplay/index.ts", "roleplay/callReturnLine.ts", "roleplay/chatDuringCall.ts", "roleplay/screenActionFollowUp.ts"]) {
+  for (const file of ["roleplay/callReturnLine.ts", "roleplay/chatDuringCall.ts", "roleplay/screenActionFollowUp.ts"]) {
     assert.ok(readSrc(file).includes("...(personaGuardFor(session.scenarioId) ? { personaGuard: personaGuardFor(session.scenarioId) } : {}),"), file);
   }
+  // §132.17 — sendMessage는 역할 가드와 인증번호 요구 가드를 합쳐 넘긴다(liveCheckFixes132h).
+  assert.ok(readSrc("roleplay/index.ts").includes("combineReplyGuards(personaGuardFor(session.scenarioId), otpDemandGuard)"), "roleplay/index.ts");
+  assert.ok(readSrc("roleplay/index.ts").includes("...(replyGuard ? { personaGuard: replyGuard } : {}),"), "roleplay/index.ts");
   assert.ok(readSrc("roleplay/openingLine.ts").includes("...(personaGuardFor(scenarioId) ? { personaGuard: personaGuardFor(scenarioId) } : {}),"));
   for (const file of ["roleplay/index.ts", "roleplay/callReturnLine.ts", "roleplay/chatDuringCall.ts"]) {
     assert.ok(readSrc(file).includes("personaAnchorInstruction(session.scenarioId),"), file);

@@ -12,13 +12,60 @@
 //
 // ⛔ 아래 첫 정규식은 `src/lib/realtime/toolWindow.ts` `SMS_SENT_CLAIM`과 글자까지 같다(빌드 루트가 달라 import로 공유하지 않는다 —
 // `liveCheckFixes132d.test.ts`가 두 파일을 대조한다).
+import { gateOpensAtUserTurns, type DeliveredSmsRecord } from "../inCallSms/smsGate";
+import type { FlowVariantSms } from "../scenarios/flowVariants";
+
 export const SMS_SENT_CLAIM =
   /문자(?:로)?\s*(?:를\s*)?(?:보내\s*드렸|보내드렸|보냈|보내\s*드린|보내드린|보낸|발송(?:해\s*드렸|해\s*드린|했|됐|한|된))|(?:보내\s*드린|보내드린|보낸|발송한|발송된|발송해\s*드린)\s*(?:문자|링크|안내|주소|인증\s*번호)/;
 /** 문자 속 내용을 이미 있는 것으로 가리키는 꼴. */
-export const SMS_CONTENT_REFERENCE = /문자\s*(?:속|안|에\s*있는|에\s*온|로\s*온|로\s*받으신|에\s*받으신)\s*(?:의\s*)?(?:링크|주소|안내|계좌)/;
+export const SMS_CONTENT_REFERENCE =
+  /문자\s*(?:속|안|에\s*있는|에\s*온|에\s*적힌|에\s*찍힌|로\s*온|로\s*받으신|에\s*받으신)\s*(?:의\s*)?(?:링크|주소|안내|계좌|인증\s*(?:번호|코드))/;
+
+// ── §132.17(메인 라이브 2026-10-25 main `faa38dc` · 기관 사칭 고급 금 구매형 fv-g2ld · 텍스트 대체 · 세션 2ea4c42f) ─────────────
+// 발화 5에 사기범이 마커 없이 "문자에 적힌 인증번호 여섯 자리를 지금 불러 주시겠습니까?"라고 했다. 인증번호 문자 게이트는 이미 열려 있었지만
+// (하한 5 · 06:24:34Z 판정 로그 0건) 위 두 꼴 어디에도 맞지 않아 주장 백스톱이 돌지 않았고, 문자는 참가자가 "아직 안 왔는데요"라고 한 발화 6에
+// 마커로 왔다. ⇒ 판정표 O(인증번호 요구 = 이미 보냈다는 주장):
+// | # | If(마커 없는 응답) | Then |
+// |---|---|---|
+// | O1 | 인증번호를 불러 · 알려 · 말해 · 읽어 달라는 꼴(`SMS_OTP_DEMAND`) ∨ "문자에 적힌 인증번호" | 주장으로 본다 → 게이트가 열렸으면 인증번호 문자를 그 응답에(하한 그대로) |
+// | O2 | 인증번호 문자가 남았고 이번 발화에 게이트가 닫혀 있다(하한 전) | 응답 생성에 `SMS_OTP_DEMAND` 가드 — 요구 대사는 쓸 수 없는 응답 → 다음 단계 모델(`otpDemandGuardFor`) |
+// | O3 | 인증번호 문자가 이미 도착 · 변형이 인증번호 문자를 선언하지 않음 | 가드 0(종전) |
+// ⛔ 게이트 규칙(`smsGate.ts` 하한 · 간격)은 바꾸지 않는다 — 열린 게이트를 이 응답에서 쓰게 할 뿐이다.
+/** 인증번호를 불러 달라는 요구(인증번호 뒤 같은 문장 20자 안). */
+export const SMS_OTP_DEMAND = /인증\s*(?:번호|코드)[^.?!\n]{0,20}?(?:불러|알려|말씀해|말해|읽어)/;
 
 export function replyClaimsSmsSent(reply: string): boolean {
-  return SMS_SENT_CLAIM.test(reply) || SMS_CONTENT_REFERENCE.test(reply);
+  return SMS_SENT_CLAIM.test(reply) || SMS_CONTENT_REFERENCE.test(reply) || SMS_OTP_DEMAND.test(reply);
+}
+
+/**
+ * O2 — 이번 발화에 인증번호 문자를 보낼 수 없으면(하한 전 · 간격 전) 인증번호 요구 대사를 막는 가드. 그 밖(O3) = `undefined`.
+ * 열림 판정은 주장 백스톱과 같은 계산(`gateOpensAtUserTurns` · 명시 간격)이다 — 두 계산이 갈라지면 열린 게이트에서 요구를 막는다.
+ */
+export function otpDemandGuardFor(input: {
+  declared: readonly FlowVariantSms[];
+  delivered: readonly DeliveredSmsRecord[];
+  userTurns: number;
+}): RegExp | undefined {
+  const otp = input.declared.find((item) => item.purpose === "identity" && item.required);
+  if (!otp || input.delivered.some((d) => d.smsId === otp.smsId)) return undefined;
+  return input.userTurns >= gateOpensAtUserTurns(otp, input.delivered, true) ? undefined : SMS_OTP_DEMAND;
+}
+
+/**
+ * §132.19 판정표 B(메인 라이브 2026-10-25 · fv-g2ld 2세션 — 발화 4에 거래 은행 · 자산 답을 받은 뒤 인증번호 단계 대신 "임시 이체" · "주민번호 뒤
+ * 일곱 자리 · 인터넷뱅킹 비밀번호"를 요구했다. 인증번호 문자 하한(5)보다 흐름의 인증번호 단계가 먼저 왔고, O2 가드가 인증번호 요구만 막아 다른 요구로
+ * 새 나갔다). O2 가드가 걸리는 발화(인증번호 문자가 남았고 이번 발화에 보낼 수 없음)에는 턴 지시 1줄로 앞 단계를 붙잡는다. 단계 순서는 흐름이 정한다
+ * (거래 은행 · 자산 → 인증번호 → 결말) — 인증번호 단계는 반드시 거친다(답을 거부하면 번호 없이 넘어가는 것은 단계 문면 그대로).
+ */
+export const OTP_HOLD_INSTRUCTION =
+  "(아직 인증번호 문자를 보낼 차례가 아니다. 이번 대답에서는 인증번호 · 비밀번호 · 계좌번호를 묻거나 이체 · 송금 · 인출을 요구하지 말고, 이번 통화의 흐름에서 인증번호 단계 앞의 단계를 이어 간다. 그 단계를 이미 마쳤으면 거래 은행이나 예금 · 적금 구성을 하나 더 구체적으로 묻거나 안심시키는 말을 한다.)";
+
+/** 가드 둘을 하나로(둘 중 하나에 맞으면 쓸 수 없는 응답). */
+export function combineReplyGuards(...guards: ReadonlyArray<RegExp | undefined>): RegExp | undefined {
+  const present = guards.filter((g): g is RegExp => g !== undefined);
+  if (present.length <= 1) return present[0];
+  return new RegExp(present.map((g) => `(?:${g.source})`).join("|"));
 }
 
 /**
@@ -30,5 +77,6 @@ export function replyClaimsSmsSent(reply: string): boolean {
  */
 export function claimMatchesPurpose(reply: string, purpose: string): boolean {
   if (purpose === "identity") return /인증\s*(?:번호|코드)/.test(reply);
-  return /링크|주소|계좌|사이트|앱/.test(reply);
+  // §132.17 O1 — 인증번호 요구만으로는 다른 목적의 문자를 보내지 않는다(이미 보냈다는 꼴이 있어야 한다).
+  return (SMS_SENT_CLAIM.test(reply) || SMS_CONTENT_REFERENCE.test(reply)) && /링크|주소|계좌|사이트|앱/.test(reply);
 }

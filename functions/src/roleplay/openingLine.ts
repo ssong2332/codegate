@@ -7,7 +7,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
-import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
+import { resolveSessionScenarioPrompt, routeEndsWithoutAccount } from "../scenarios/flowVariants";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { fixMessengerCallWording, personaAnchorInstruction, personaGuardFor } from "./personaGuard";
 import { resolveRouteAccountNumber, sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
@@ -188,6 +188,8 @@ export async function generateOpeningLine(
         .join("\n"),
       ...(fictionalBankName ? { fictionalBankName } : {}),
       sessionAccountNumber: resolveRouteAccountNumber(scenarioId, flowVariantId),
+      // §132.19 판정표 A — 결말이 계좌 이체가 아닌 루트는 계좌 예시 · 번호 문장 대신 금지 1문장(호출부 6곳 같은 술어).
+      noAccountEnding: routeEndsWithoutAccount(scenarioId, flowVariantId),
       // T194-b(§84.3.4 · G568 호출부 3곳 중 "오프닝 대사") — 부재 = 블록 0(바이트 동일).
       ...(personaCard ? { personaCard } : {}),
       // §110.5 — 호칭(호출부 3곳 같은 값 · 부재 = 블록 0).

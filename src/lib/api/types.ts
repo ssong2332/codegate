@@ -68,6 +68,8 @@ export type CreateSessionRequest = {
   personaCardInput?: PersonaCardInput;
   /** §110.5(실기 신고 14) — 가족 사칭 시나리오에서 사기범이 참가자를 부를 호칭(`@/lib/familyAddress`). 부재 = 종전(원문 호칭). */
   familyAddress?: string;
+  /** 개발 단계 루트 강제 지정(`@/lib/devroute/devRouteOverride`) — 서버 `DEV_ROUTE_OVERRIDE=true` ∧ 풀에 있을 때만 적용. */
+  forceVariantId?: string;
 };
 // isMock(채팅 화면 구현 시 반영, 서버는 이미 반환 중 — functions/src/session/index.ts:96): 서버가
 // LLM 어댑터로 MockLlmClient를 썼다는 뜻(계약 드리프트 해소, API.md 갱신 권장).

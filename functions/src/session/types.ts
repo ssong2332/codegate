@@ -45,6 +45,11 @@ export type CreateSessionRequest = {
    * 호칭). 선택지 밖 · 대상 밖 시나리오에 값이 있으면 `invalid-argument`(`details.reason = "family-address-invalid"`).
    */
   familyAddress?: string;
+  /**
+   * 개발 단계 루트 강제 지정(`devRouteOverride.ts`) — 화면 URL `?route=fv-xxxx`. 서버 파라미터 `DEV_ROUTE_OVERRIDE=true` ∧ 이 시나리오 · 난이도 풀에
+   * 있을 때만 쓰고, 그 밖에는 무시한다(에러 0 · 경고 로그 1줄).
+   */
+  forceVariantId?: string;
 };
 export type CreateSessionResponse = {
   sessionId: string;

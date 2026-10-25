@@ -1899,6 +1899,25 @@ export function findFlowVariant(variantId: string | undefined): FlowVariant | un
   return FLOW_VARIANTS.find((v) => v.variantId === variantId);
 }
 
+// §132.19(메인 라이브 2026-10-25 main `1072133` · 기관 사칭 고급 금 구매형 `?route=fv-g2ld` · 텍스트 대체) — 발화 4에 사기범이
+// "제가 불러드리는 미르은행 948-2716-5093-27 계좌로 전액을 임시 이체해 주십시오"라고 했다. 이 번호는 공통 [진행 강제]의 예시 계좌이고,
+// 조립 프롬프트는 이 루트에도 "이 대화에서 계좌번호를 불러 줄 때는 이 번호를 그대로 쓴다"를 실었다(안심 단계 금지문과 충돌).
+// 판정표 A — 결말이 계좌 이체가 아닌 루트(아래 루트 키)는 그 문장과 예시 계좌 대신 "계좌번호를 불러 주거나 이체를 요구하지 않는다"를 싣는다.
+// | 루트 키 | 결말 |
+// |---|---|
+// | gold | 예금을 찾아 금을 사서 직원에게 제출 |
+// | cash-handoff | 현금 · 수표를 직원에게 전달 |
+// | cash-repay | 기존 대출을 현금으로 직접 상환 |
+// | loan-cash | 대출금을 현금으로 찾아 직원에게 전달 |
+// | voucher | 상품권 핀 번호를 불러 줌 |
+const NO_ACCOUNT_ROUTE_KEYS: ReadonlySet<string> = new Set(["gold", "cash-handoff", "cash-repay", "loan-cash", "voucher"]);
+
+/** 판정표 A — 이 세션의 루트 결말이 계좌 이체가 아닌가(변형 부재 · 다른 시나리오의 ID = 거짓 · 종전 문면). */
+export function routeEndsWithoutAccount(scenarioId: string, flowVariantId: string | undefined): boolean {
+  const variant = findFlowVariant(flowVariantId);
+  return variant !== undefined && variant.scenarioId === scenarioId && NO_ACCOUNT_ROUTE_KEYS.has(variant.routeKey);
+}
+
 // ── 프롬프트 합성 — buildSystemPrompt 시그니처 무변경(ScenarioPromptDoc 모양을 돌려준다) ───────
 
 const FLOW_BLOCK_HEADER = "[이번 통화의 흐름]";
