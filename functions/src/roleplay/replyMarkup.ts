@@ -15,6 +15,7 @@
 // | 3-b | §131(9) 괄호 속 혼잣말 — 띄어쓰기 있는 한국어 문장 + 종결 어미로 끝나는 괄호(숫자 0) | 괄호째 지운다(지우면 빈 대사면 그대로) | 프로브 2026-10-24b D6 |
 // | 4-d | §131(10) 동그라미 자리표시 이름("○○님" · "상담원 ○○○입니다" · "나 ○○야") | "고객님" · 이름 삭제 · "나야" | 프로브 2026-10-24b D10 |
 // | 4-e | §132.12 동그라미 자리표시 — "○○ 씨" · 기관 이름 앞("○○경찰서") · 직함 앞("○○○ 수사관") | 자리표시만 지운다("본인 맞으세요" · "경찰서" · "수사관") | 메인 라이브 2026-10-24 자녀 납치 초급 폴백 오프닝 |
+// | 4-f | §132.14 한 글자 성 + 동그라미("김○○ 씨" · "김○○님" · "저는 김○○입니다" · "김○○ 수사관") | 성째 "본인" · "고객님" · "저는 담당자입니다" · 성만 남겨 "김 수사관" | 메인 라이브 2026-10-25 자녀 납치 초급 폴백 오프닝("거기 혹시 김맞으세요?") |
 // | 4-c | §129 (A) 대사 전체를 감싼 따옴표 · 닫는 짝 없는 맨 앞 여는 따옴표(메타 표식 4행은 "도구 호출 · 시스템 메시지" 어휘도 본다) | 따옴표만 지운다 | 메인 라이브 확인 2026-10-24 기관 사칭 고급 폴백 |
 // | 5 | 1~4로 생긴 연속 공백 · 줄머리 · 줄끝 공백 · 구두점 앞 공백 | 정리한다(줄바꿈은 그대로) | — |
 //
@@ -79,14 +80,25 @@ const PLACEHOLDER_SELF_NAME = /(?:나\s*)?ㅇㅇ\s*(?:이)?(?:야|이에요|예�
 
 // 4-d행(§131(10) — 프로브 D10 "혹시 ○○님 맞으시죠?" · "상담원 ○○○입니다.") — 이름 자리를 동그라미 기호로 채운 표기. ⛔ 라틴 "OO"(OO은행 —
 // 가상 표기)는 건드리지 않는다. 호칭형("○○님")은 "고객님"으로 · 자기소개형("상담원 ○○○입니다")은 이름만 뺀다 · 반말 자기소개("나 ○○야")는 "나야"로.
-const PLACEHOLDER_CIRCLE_HONORIFIC = /[○◯●]{2,3}\s*님/g;
-const PLACEHOLDER_CIRCLE_SELF = /\s*[○◯●]{2,3}\s*(?=입니다|이에요|예요|에요|이고|인데)/g;
-const PLACEHOLDER_CIRCLE_CASUAL = /(?:나\s*)?[○◯●]{2,3}\s*(?:이)?야/g;
+// 4-f행(§132.14 — 메인 라이브 2026-10-25 자녀 납치 초급 폴백 오프닝 "거기 혹시 김맞으세요?") — 모델이 "김○○ 씨"처럼 **한 글자 성 + 자리표시**로 쓰면
+// 4-e가 "○○ 씨"만 지워 성이 남았다. 성은 자리표시와 한 덩어리로 본다(성 바로 뒤에 공백 없이 동그라미가 붙을 때만 — 앞 글자가 한글이면 성이 아니다).
+// 호칭 · "씨"는 성째 바꾸고, 직함 앞은 성을 남겨 "김 수사관"으로, 주어 자기소개("저는 김○○입니다")는 "저는 담당자입니다"로 한다(이름을 지어내지 않는다).
+const SURNAME =
+  "김|이|박|최|정|강|조|윤|장|임|한|오|서|신|권|황|안|송|류|유|홍|전|고|문|양|손|배|백|허|남|심|노|하|곽|성|차|주|우|구|민|진|나|지|엄|채|원|천|방|공|현|함|변|염|여|추|도|소|석|선|설|마|길|연|위|표|명|기|반|왕|금|옥|육|맹|제|모|탁|국|어|편|용|예|봉|경";
+const PLACEHOLDER_CIRCLE_HONORIFIC = new RegExp(`(?:(^|[^가-힣])(?:${SURNAME})(?=[○◯●]))?[○◯●]{2,3}\\s*님`, "g");
+const PLACEHOLDER_CIRCLE_SUBJECT_SELF = new RegExp(`(저는|전)\\s+(?:(?:${SURNAME})(?=[○◯●]))?[○◯●]{2,3}\\s*(?=입니다|이에요|예요|에요)`, "g");
+const PLACEHOLDER_CIRCLE_SELF = new RegExp(`\\s*(?:(?:${SURNAME})(?=[○◯●]))?[○◯●]{2,3}\\s*(?=입니다|이에요|예요|에요|이고|인데)`, "g");
+const PLACEHOLDER_CIRCLE_CASUAL = new RegExp(`(?:나\\s*)?(?:(?:${SURNAME})(?=[○◯●]))?[○◯●]{2,3}\\s*(?:이)?야`, "g");
 // 4-e행(§132.12 — 메인 라이브 "거기 혹시 ○○ 씨 본인 맞으세요? 저는 시내 ○○경찰서 수사과 소속입니다.") — "씨" 호칭 · 기관 이름 · 직함 앞의 자리표시.
 // ⛔ "○○학원" · "○○이 지금 여기 있습니다"(납치 고급 수법이 정한 가린 표기 · 되받기 틀)는 대상이 아니다 — 학원 · 학교는 목록에 넣지 않는다.
-const PLACEHOLDER_CIRCLE_SSI = /[○◯●]{2,3}\s*씨\s*/g;
+// 4-f — "씨" 호칭은 성째 "본인"으로 바꾼다(뒤에 "본인"이 이미 있으면 그것 하나만 · 조사는 받침에 맞춘다 — "김○○ 씨는" → "본인은").
+const PLACEHOLDER_CIRCLE_SSI = new RegExp(`(?:(^|[^가-힣])(?:${SURNAME})(?=[○◯●]))?[○◯●]{2,3}\\s*씨(는|가|를)?\\s*(?:본인\\s*)?`, "g");
+const SSI_PARTICLE: Record<string, string> = { 는: "은", 가: "이", 를: "을" };
 const PLACEHOLDER_CIRCLE_ORG = /[○◯●]{2,3}\s*(?=(?:지방)?(?:경찰서|경찰청|검찰청|지검|지청|법원|은행|카드|병원|구청|시청|군청|센터|본부|금융감독원|금감원))/g;
-const PLACEHOLDER_CIRCLE_TITLE = /\s*[○◯●]{2,3}\s*(?=(?:수사관|검사|형사|팀장|과장|대리|주임|경위|경사|경장|순경|변호사|실장|부장))/g;
+const PLACEHOLDER_CIRCLE_TITLE = new RegExp(
+  `(\\s*)(?:(${SURNAME})(?=[○◯●]))?[○◯●]{2,3}\\s*(?=(?:수사관|검사|형사|팀장|과장|대리|주임|경위|경사|경장|순경|변호사|실장|부장))`,
+  "g",
+);
 
 // 4-c행(§129 (A)) — 대사 전체를 감싼 따옴표(모델이 대사를 인용문처럼 낸 것). 안에 다른 따옴표가 없을 때만 벗긴다 · 닫는 따옴표 없이 맨 앞에만 있으면 그것만 지운다.
 const WRAPPING_QUOTE = /^\s*[“"]([^“”"]+)[”"]\s*$/;
@@ -128,9 +140,13 @@ export function tidyScammerReplyMarkup(text: string): ReplyMarkupResult {
       count();
       return "나야";
     })
-    .replace(PLACEHOLDER_CIRCLE_HONORIFIC, () => {
+    .replace(PLACEHOLDER_CIRCLE_HONORIFIC, (_m, lead: string | undefined) => {
       count();
-      return "고객님";
+      return `${lead ?? ""}고객님`;
+    })
+    .replace(PLACEHOLDER_CIRCLE_SUBJECT_SELF, (_m, subject: string) => {
+      count();
+      return `${subject} 담당자`;
     })
     .replace(PLACEHOLDER_CIRCLE_CASUAL, () => {
       count();
@@ -140,17 +156,18 @@ export function tidyScammerReplyMarkup(text: string): ReplyMarkupResult {
       count();
       return "";
     })
-    .replace(PLACEHOLDER_CIRCLE_SSI, () => {
+    .replace(PLACEHOLDER_CIRCLE_SSI, (_m, lead: string | undefined, particle: string | undefined) => {
       count();
-      return "";
+      return `${lead ?? ""}본인${particle ? SSI_PARTICLE[particle] : ""} `;
     })
     .replace(PLACEHOLDER_CIRCLE_ORG, () => {
       count();
       return "";
     })
-    .replace(PLACEHOLDER_CIRCLE_TITLE, (m) => {
+    .replace(PLACEHOLDER_CIRCLE_TITLE, (_m, space: string, surname: string | undefined) => {
       count();
-      return m.startsWith(" ") ? " " : "";
+      // 4-f — 성이 있으면 "김 수사관"으로 남긴다.
+      return surname ? `${space}${surname} ` : space.length > 0 ? " " : "";
     })
     .replace(WRAPPING_QUOTE, (_m, inner: string) => {
       count();
