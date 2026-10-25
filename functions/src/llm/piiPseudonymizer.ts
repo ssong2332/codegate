@@ -39,9 +39,19 @@ export const GROQ_BIRTHDATE_PSEUDONYMS: readonly string[] = [
 //   ① 단서는 "이름/성함 + 은·는·:"만(질문은 보통 "이름이 …?"라 `이`를 뺐다)
 //   ② 첫 글자가 한국 성씨(SURNAMES)여야 한다
 //   ③ 그 절(쉼표·마침표 전까지)에 물음표가 있으면 버리고, 흔한 말 목록(NOT_A_NAME)도 버린다.
-const NAME_SUFFIX = "(?=이에요|에요|예요|입니다|이고|이구요|이요|요|이라고|라고|이며|[\\s.,!~]|$)";
-const NAME_CUE_RE = new RegExp(`(?:이름|성함)\\s*(?:은|는|:)\\s*([가-힣]{2,4}?)${NAME_SUFFIX}`, "g");
-const LEADING_NAME_RE = new RegExp(`^\\s*(?:네[,\\s]*)?([가-힣]{2,4}?)${NAME_SUFFIX}`);
+//
+// §132.15(메인 라이브 2026-10-25 main `454a927` · 기관 사칭 고급 · 텍스트 대체) — "김민수고요 …" → 사기범 "김민수고 고객님".
+// 어미 목록에 "고요"가 없어 짧은 쪽부터 찾던 이름이 "김민수고"(+요)로 잡혔고, 가명 "정하윤"을 되부른 응답이 "김민수고"로 복원됐다.
+// | # | If(이름 뒤 어미) | Then |
+// |---|---|---|
+// | N1 | 고요 · 구요 · 인데요 · 인데 · 거든요 · 라구요(이 붙은 꼴 포함) | 어미로 본다(종전: 고요 · 구요는 이름에 붙음 · 인데요는 이름을 못 잡음) |
+// | N2 | 후보 길이 | 3글자 → 2글자 → 4글자 순("박정구요"가 "박정"+"구요"로 잘리지 않게) · 3글자 후보의 끝이 "요"면 버린다("김구요" = 김구+요) |
+// ⚠️ 한계: "김구고요"처럼 2글자 이름 + 고요 · 구요는 3글자("김구고")로 잡힌다 — 흔한 3글자 이름을 우선했다.
+const NAME_SUFFIX =
+  "(?=이에요|에요|예요|입니다|이고|이구요|이요|요|이라고|라고|이라구요|라구요|이며|고요|구요|인데요|인데|이거든요|거든요|[\\s.,!~]|$)";
+const NAME_BODY = "([가-힣]{2}(?!요)[가-힣]|[가-힣]{2}|[가-힣]{4})";
+const NAME_CUE_RE = new RegExp(`(?:이름|성함)\\s*(?:은|는|:)\\s*${NAME_BODY}${NAME_SUFFIX}`, "g");
+const LEADING_NAME_RE = new RegExp(`^\\s*(?:네[,\\s]*)?${NAME_BODY}${NAME_SUFFIX}`);
 const ASKS_NAME_RE = /이름|성함/;
 const ASKS_BIRTHDATE_RE = /생년월일|생일/;
 /** 흔한 한국 성씨(1글자). 첫 글자가 여기 없으면 이름으로 보지 않는다. */
@@ -60,6 +70,8 @@ const NOT_A_NAME = new Set([
 
 function isNameCandidate(value: string | undefined, clause: string): value is string {
   if (!value || NOT_A_NAME.has(value)) return false;
+  // N2 보완 — 3글자 우선 탓에 "한번이요"가 "한번이"(+요)로 잡히지 않게: 앞 2글자가 흔한 말이고 끝 글자가 어미 첫 글자면 버린다.
+  if (value.length === 3 && NOT_A_NAME.has(value.slice(0, 2)) && /[이고구인거라]$/.test(value)) return false;
   if (!SURNAMES.has(value[0])) return false;
   return !clause.includes("?");
 }
