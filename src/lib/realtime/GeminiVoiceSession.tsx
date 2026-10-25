@@ -120,6 +120,7 @@ import {
   resumeSuspendedContexts,
   type PrimedCallAudio,
 } from "./callAudio";
+import { readDebugFlagSearch } from "./debugFlags";
 import {
   BACKGROUND_LOG_PREFIX,
   MIC_RECHECK_DELAY_MS,
@@ -1285,7 +1286,7 @@ export default function GeminiVoiceSession({
         // ⭐ §122.2.2 — 볼륨 키가 '통화' 음량으로 소리를 조절하게, 마이크가 열린 **뒤** 출력 컨텍스트를 새로 만든다(`callAudio.ts` 표 O1~O4 ·
         // Chromium은 출력 스트림 용도를 만들 때 정한다). 마이크는 받기 때 이미 열기 시작했다 — 대개 여기서는 이미 끝나 있다.
         // 거부 · 실패는 아래 종전 자리(`await micRequest`)가 그대로 처리한다.
-        const outputAfterMicFlag = readOutputAfterMicFlag(window.location.search);
+        const outputAfterMicFlag = readOutputAfterMicFlag(readDebugFlagSearch());
         const micOpened = outputAfterMicFlag ? (await micRequest.catch(() => null)) !== null : false;
         let freshOutput: AudioContext | null = null;
         if (outputAfterMicFlag && micOpened && !cancelled) {
@@ -1317,7 +1318,7 @@ export default function GeminiVoiceSession({
         }
         noteOutputPath(outputPath);
         // §126 — '통화' 스트림이면 통화 모드 기준 레벨을 낮춘다(`outputGain.ts` 표 · `?voicetrim=0`이면 끔).
-        streamTrimRef.current = callStreamTrimFor(outputPath, readVoiceTrimFlag(window.location.search));
+        streamTrimRef.current = callStreamTrimFor(outputPath, readVoiceTrimFlag(readDebugFlagSearch()));
         noteStreamTrim(streamTrimRef.current);
         outputBorrowed = freshOutput === null && isUsableContext(primedOutput);
         inputBorrowed = isUsableContext(primedInput);

@@ -4,6 +4,12 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-25 추가분, 브랜치 `claude/debug-flags-persist`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
+
+### Fixed
+- **진단 플래그가 통화 화면까지 유지(Architecture §134 · DECISIONS #250)**: `?audiodebug=1` · `?outaftermic=0` · `?voicetrim=0`을 어느 페이지에서든 한 번 붙이면 같은 탭에서 유지된다. `=off`로 하나, `?debugflags=off`로 전부 지운다. 진단 패널에 `flag.outaftermic` · `flag.voicetrim` · `flag.saved` 행 추가.
+- **새로고침된 통화 화면이 반쯤 살아 있던 것**: 사용자 활성화 없이 복원되면 "이어서 통화하기" 버튼을 누르기 전까지 음성 인식 자동 재시작(주기적 알림음의 원인으로 추정)을 멈춘다.
+
 > ⚠️ **이 블록(2026-10-24 추가분, 브랜치 `claude/audio-sms-round2-134d10`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting → Functions**.
 
 ### Fixed

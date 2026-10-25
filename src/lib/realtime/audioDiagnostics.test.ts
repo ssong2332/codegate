@@ -142,9 +142,10 @@ function panelViolations(code: string): string[] {
   const firstJsx = code.indexOf("return (\n");
   if (gate < 0) out.push("쿼리가 없을 때 null을 돌려주는 분기가 없다");
   else if (firstJsx >= 0 && firstJsx < gate) out.push("null 분기보다 먼저 JSX를 돌려준다");
-  if (!code.includes("isAudioDebugEnabled(window.location.search)")) out.push("쿼리로 켜지 않는다");
+  // §134 — 주소 쿼리 + 탭 저장 값(`debugFlags.ts`)으로 켠다.
+  if (!code.includes("isAudioDebugEnabled(readDebugFlagSearch())")) out.push("쿼리로 켜지 않는다");
   if (!code.includes("pointer-events-none")) out.push("패널이 탭을 가로챈다(AC-006)");
-  if (!code.includes("flags: readAudioFlags(window.location.search)")) out.push("패널이 적용 중인 플래그를 보이지 않는다");
+  if (!code.includes("...readAudioFlags(debugSearch),")) out.push("패널이 적용 중인 플래그를 보이지 않는다");
   // 관찰 전용 — 저장소에 적는 함수(note*/register*) · 제품 상태 변경 호출 0.
   if (/\b(note[A-Z]\w*|register[A-Z]\w*|reset[A-Z]\w*)\(/.test(code)) out.push("패널이 진단 저장소에 적는다(읽기 전용이어야 한다)");
   if (/\.(resume|close|play|pause)\(/.test(code)) out.push("패널이 오디오를 조작한다(관찰 전용이어야 한다)");

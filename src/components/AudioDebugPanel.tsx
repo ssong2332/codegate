@@ -14,7 +14,8 @@ import {
   summarizeBrowser,
 } from "@/lib/realtime/audioDiagnostics";
 import { buildCallSetupRecord, readCallSetupMarks } from "@/lib/realtime/liveLatency";
-import { readAudioFlags } from "@/lib/realtime/callAudio";
+import { readAudioFlags, readOutputAfterMicFlag, readVoiceTrimFlag } from "@/lib/realtime/callAudio";
+import { describeStoredDebugFlags, readDebugFlagSearch, readStoredDebugFlags } from "@/lib/realtime/debugFlags";
 
 export type AudioDebugPanelProps = {
   callMode: string;
@@ -26,7 +27,8 @@ export type AudioDebugPanelProps = {
 const POLL_MS = 500;
 
 const noopSubscribe = () => () => {};
-const readEnabled = () => isAudioDebugEnabled(window.location.search);
+// §134 — 주소 쿼리 + 탭에 저장된 플래그(`debugFlags.ts`) — 앞 화면에서 한 번 붙인 `audiodebug=1`도 켠다.
+const readEnabled = () => isAudioDebugEnabled(readDebugFlagSearch());
 const readEnabledOnServer = () => false;
 
 type NavigatorWithExtras = Navigator & {
@@ -47,6 +49,7 @@ export default function AudioDebugPanel(props: AudioDebugPanelProps) {
   if (!enabled) return null;
 
   const nav = navigator as NavigatorWithExtras;
+  const debugSearch = readDebugFlagSearch();
   const record = buildCallSetupRecord(readCallSetupMarks(), {});
   const rows = buildAudioDiagRows({
     snapshot: readAudioDiag(),
@@ -64,7 +67,12 @@ export default function AudioDebugPanel(props: AudioDebugPanelProps) {
       platform: nav.userAgentData?.platform ?? null,
       userAgent: nav.userAgent,
     }),
-    flags: readAudioFlags(window.location.search),
+    flags: {
+      ...readAudioFlags(debugSearch),
+      outputAfterMic: readOutputAfterMicFlag(debugSearch),
+      voiceTrim: readVoiceTrimFlag(debugSearch),
+      saved: describeStoredDebugFlags(readStoredDebugFlags()),
+    },
   });
 
   return (

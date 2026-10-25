@@ -3,6 +3,7 @@ import "./globals.css";
 // UX D-134 — 사이트 모션(페이지 진입 · 로딩 점 · 펼침). globals.css와 분리해 둔다(motion.css 머리말 참고).
 import "./motion.css";
 import { RouteGuard } from "@/lib/auth";
+import DebugFlagCapture from "@/components/DebugFlagCapture";
 import { DevRouteCapture } from "@/lib/devroute/DevRouteCapture";
 
 // 전역 셸(인증 가드·전역 상시 "훈련 종료" 컨텍스트) — Architecture.md §2.
@@ -53,6 +54,8 @@ export default function RootLayout({
   return (
     <html lang="ko" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
+        {/* §134 — 주소에 붙인 진단 플래그를 탭에 남긴다(DOM 0 · `debugFlags.ts`). */}
+        <DebugFlagCapture />
         <DevRouteCapture />
         <RouteGuard>{children}</RouteGuard>
       </body>

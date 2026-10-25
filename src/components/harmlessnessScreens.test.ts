@@ -107,6 +107,7 @@ const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   "AuthInvalidationBanner.tsx": false, // 인증 무효화 안내 배너(T128) — 앱 자신의 고지이지 사기 표면이 아니다
   "CallStartNotice.tsx": false, // T190-8b 통화 벨 직전 고지(UX-014 pre-call-notice) — 앱 자신의 세션 전 고지, 사기 표면 아님
   "CallWaveform.tsx": false, // 통화 파형 시각화
+  "DebugFlagCapture.tsx": false, // §134 전역 셸의 진단 플래그 저장 — 그리는 것 0, 사기 표면 아님
   "DeviceSkinPicker.tsx": false, // T190-6 세션 전 화면 모양 선택 줄 — 앱 자신의 설정 부품, 사기 표면 아님
   "DrilldownOptionCard.tsx": false, // 드릴다운 선택 카드
   "EndTrainingButton.tsx": false, // 상시 종료 버튼

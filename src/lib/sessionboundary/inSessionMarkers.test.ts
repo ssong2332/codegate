@@ -51,6 +51,7 @@ const SESSION_SURFACE_REGISTRY: Record<string, SurfaceRole> = {
   "src/components/ThemeDebugPanel.tsx": "in-session", // ?themedebug=1 색 진단 패널(훈련 화면 묶음 — 영문 키 · 색 견본만 · 쿼리 없으면 DOM 0)
   "src/components/AuthInvalidationBanner.tsx": "in-session", // 세션 중에도 뜰 수 있는 인증 무효 안내(T128)
   "src/components/CallStartNotice.tsx": "pre-session", // T190-8b UX-014 pre-call-notice(벨 직전 고지 — AC-091)
+  "src/components/DebugFlagCapture.tsx": "not-in-session", // §134 전역 셸의 진단 플래그 저장 — 그리는 것 0
   "src/components/DeviceSkinPicker.tsx": "pre-session", // T190-6 세션 전 화면 모양 줄(start-notice 안 — AC-092 (d))
   "src/components/CallWaveform.tsx": "in-session", // 통화 중 파형
   "src/components/DrilldownOptionCard.tsx": "not-in-session", // 시나리오 드릴다운 카드(세션 전)
@@ -102,8 +103,8 @@ test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/ses
   // T190-8b 18(+CallStartNotice) → 2026-10-18 19(+AudioDebugPanel) → §88 20(+PersonaCardInputFields) → 2026-10-21 22(+LegalDocumentView · LegalLinks — 법적 고지)
   // → §94 23(+ThemeDebugPanel — ?themedebug=1) → §95 24(+MessengerProfileSheet — 카톡형 상대 프로필) → §95.6 25(+WebDarkModeNotice)
   // → §96 26(+PageToc — 긴 페이지 목록) → §97 28(+ScenarioPanelGroups · SelectScreenHeader — 시안 E2 선택 화면) → §97.7 29(+TrainingPrepScreen).
-  // → §121.4 30(+MessengerChatRoom — 메신저 라우트 본문) → §123 31(+VoiceTalkDialScreen)
-  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 31);
+  // → §121.4 30(+MessengerChatRoom — 메신저 라우트 본문) → §123 31(+VoiceTalkDialScreen) → §134 32(+DebugFlagCapture — DOM 0)
+  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 32);
 });
 
 // ── G451 — 등록부 2벌(G436 · T86)이 최상위 `src/components/*.tsx`만 훑으므로, 하위 디렉터리에 컴포넌트를 두면
