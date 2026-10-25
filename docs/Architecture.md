@@ -24528,3 +24528,33 @@ Hosting만(functions 변경 0).
 - 실 키 확인 0 — (7) 이탈률 · (11)(12)(13) 문면은 라이브 확인 전. (14)는 실시간(Live) 콜러블에는 넣지 않았다(키 부재 = 종전).
 - 남은 것: D4(리포트 송금 요구 어형) · D12 · D14 · N3 · N4 · N6은 이번 범위 밖.
 - 배포: Functions만.
+
+## 134. (Bug fix — 2026-10-25 · 브랜치 `claude/debug-flags-persist` = main `d208d27` + 변경 · 메인 세션 지시 — 실기 신고: 통화 중 주소에 `?audiodebug=1`을 붙여 다시 열었더니 통화가 깨짐 · Chrome 155 Android) **진단 플래그 유지 · 새로고침 복원 "이어서 통화하기"** — implementer 기록 (DECISIONS #250)
+
+### 134.1 진단 플래그 유지(`src/lib/realtime/debugFlags.ts` · 전역 셸 `DebugFlagCapture`)
+| # | If (주소 쿼리) | Then |
+|---|---|---|
+| F1 | `debugflags=off` | 저장된 플래그 전부 지움 |
+| F2 | `<키>=off` · 허용 밖 값 | 그 키를 지움(= 기본값) |
+| F3 | `<키>=<값>` | 탭 sessionStorage(`debug.flags`)에 저장 · 이번 판정에 씀 |
+| F4 | 키 없음 | 저장 값 사용 |
+| F5 | 저장소 사용 불가 · 값 깨짐 | 주소 쿼리만(종전) |
+- 키: `audiodebug` · `outaftermic` · `voicetrim`만. 값은 영문 · 숫자 16자 이내. 운영 빌드도 같은 규칙.
+- 판독 지점(진단 패널 · `GeminiVoiceSession` 출력 경로 · 감쇠)은 `readDebugFlagSearch()`의 결과를 기존 판독 함수에 넘긴다.
+- 진단 패널 새 행: `flag.outaftermic` · `flag.voicetrim` · `flag.saved`(저장된 키=값 목록, 없으면 `-`).
+
+### 134.2 새로고침 복원 판정(`src/lib/session/resumeGate.ts`)
+| # | If | Then |
+|---|---|---|
+| R1 | 복원 아님 | 버튼 없음(종전) |
+| R2 | 복원 · `navigator.userActivation.hasBeenActive` true | 버튼 없음(종전) |
+| R3 | 복원 · 사용자 활성화 없음 · API 없음 | "이어서 통화하기" 안내 + 버튼, 누르기 전 자동 듣기 정지 |
+- 주기적 알림음(추정): 복원 시 `callMode = fallback` → 자동 듣기 effect가 idle마다 400ms 뒤 `SpeechRecognition.start()`를 다시 부르고, Android는 시작마다 시스템 효과음을 낸다. 사용자 활성화가 없어 TTS 재생도 막힌다. 확인 방법: 이 변경 뒤 복원 화면에서 버튼을 누르기 전 알림음이 멈추는지 실기에서 본다.
+
+### 134.3 검증
+| 항목 | 결과 | 기준 |
+|---|---|---|
+| `npm test` | 1143 pass / 0 fail(신규 `debugFlagsResume.test.ts` 6건 · 등록부 2곳 +1) | — |
+| `npm --prefix functions test` | 1910 pass / 0 fail(functions 변경 0) | — |
+| `npm run lint` | 오류 0 · 경고 1(변경 밖 `scripts/live-turn-probe.mjs`) | — |
+- 실기 확인 0 — 배포 뒤 확인. 배포: Hosting만.

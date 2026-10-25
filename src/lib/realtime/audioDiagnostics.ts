@@ -287,7 +287,7 @@ export function resetAudioDiagForTest(): void {
 
 // ── 순수 함수 ────────────────────────────────────────────────────────────────────────────────
 
-/** 주소 쿼리에 `audiodebug=1`이 정확히 있을 때만 켠다. */
+/** 쿼리에 `audiodebug=1`이 정확히 있을 때만 켠다. §134 — 호출부는 탭 저장 값을 얹은 쿼리(`readDebugFlagSearch`)를 넘긴다. */
 export function isAudioDebugEnabled(search: string): boolean {
   try {
     return new URLSearchParams(search).get("audiodebug") === "1";
@@ -343,6 +343,9 @@ export function summarizeBrowser(input: {
 export const AUDIO_DIAG_KEYS = [
   "flag.audioprime",
   "flag.ringclose",
+  "flag.outaftermic",
+  "flag.voicetrim",
+  "flag.saved",
   "callMode",
   "rt.status",
   "provider",
@@ -403,13 +406,19 @@ export function buildAudioDiagRows(input: {
   acceptToCredentialsMs: number | null;
   userActivation: { hasBeenActive: boolean; isActive: boolean } | null;
   browser: string;
-  /** 실기 A/B 플래그(`callAudio.ts` `readAudioFlags`) — 주소 쿼리에서 읽은 현재 값. */
-  flags: { audioPrime: boolean; ringCloseImmediate: boolean };
+  /**
+   * 실기 A/B 플래그(`callAudio.ts` `readAudioFlags`) — 주소 쿼리 + 탭 저장 값(§134 `debugFlags.ts`)에서 읽은 현재 값.
+   * §134 — `outputAfterMic` · `voiceTrim` · `saved`(저장된 키=값 목록) 부재면 "-".
+   */
+  flags: { audioPrime: boolean; ringCloseImmediate: boolean; outputAfterMic?: boolean; voiceTrim?: boolean; saved?: string };
 }): Array<[AudioDiagKey, string]> {
   const s = input.snapshot;
   const values: Record<AudioDiagKey, string> = {
     "flag.audioprime": input.flags.audioPrime ? "on" : "off",
     "flag.ringclose": input.flags.ringCloseImmediate ? "immediate" : "deferred",
+    "flag.outaftermic": input.flags.outputAfterMic === undefined ? "-" : input.flags.outputAfterMic ? "on" : "off",
+    "flag.voicetrim": input.flags.voiceTrim === undefined ? "-" : input.flags.voiceTrim ? "on" : "off",
+    "flag.saved": show(input.flags.saved),
     callMode: input.callMode,
     "rt.status": input.status,
     provider: input.provider,

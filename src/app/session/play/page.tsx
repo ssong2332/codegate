@@ -45,6 +45,7 @@ import {
   type CallEndingState,
 } from "@/lib/session/callEnding";
 import { handOffTranscriptFlush } from "@/lib/session/transcriptFlushHandoff";
+import { RESUME_TAP_COPY, needsResumeTap } from "@/lib/session/resumeGate";
 import {
   deliverInCallSms,
   deliverVerifyOffer,
@@ -336,6 +337,8 @@ export default function SessionCallPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
+  // §134 — 새로고침 복원 뒤 사용자 활성화가 없으면 "이어서 통화하기"를 누를 때까지 자동 청취를 열지 않는다(`resumeGate.ts` R3).
+  const [resumeTapNeeded, setResumeTapNeeded] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
   // Action Item 1 — `drainInstructionQueue`(deps `[]`)가 `elapsedSec` state를 리렌더 없이
   // 최신값으로 읽기 위한 사본. 갱신 지점은 아래 통화 경과 타이머 effect **한 곳**뿐이다.
@@ -869,6 +872,12 @@ export default function SessionCallPage() {
             // 저장소를 읽을 수 없으면 종전대로(복원 0).
           }
           setCallMode("fallback");
+          setResumeTapNeeded(
+            needsResumeTap({
+              restored: true,
+              userActivation: (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation,
+            }),
+          );
         }
         setPhase(initialPhase);
         setPageState("ready");
@@ -1693,6 +1702,13 @@ export default function SessionCallPage() {
       .catch((err: unknown) => noteFallbackPlay(err instanceof Error ? err.name : "unknown"));
   };
 
+  // §134 — "이어서 통화하기"(`resumeGate.ts` R3). 탭 자체가 사용자 활성화다 — 막혔던 상대 음성이 있으면 다시 재생하고,
+  // 자동 청취는 위 #7 effect가 `resumeTapNeeded` 해제로 다시 연다.
+  const handleResumeTap = () => {
+    setResumeTapNeeded(false);
+    if (playbackBlocked) handleManualPlay();
+  };
+
   const maybeStartListening = useCallback(() => {
     if (speech.status === "unsupported" || speech.status === "listening") return;
     speech.start();
@@ -1714,12 +1730,14 @@ export default function SessionCallPage() {
     if (callMode !== "fallback" || phase !== "live" || verifyOverlayOpen) return;
     // T192 C5(§79.9 E2) — 끊기 · 종료 래치 뒤에는 자동 청취를 다시 열지 않는다.
     if (endLatched) return;
+    // §134 — 새로고침 복원 뒤 "이어서 통화하기"를 누르기 전에는 열지 않는다(Android 인식 알림음 반복 · `resumeGate.ts` R3).
+    if (resumeTapNeeded) return;
     if (speech.status !== "idle") return;
     if (sending || playbackUrl) return;
     const timer = setTimeout(() => speech.start(), 400);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callMode, phase, speech.status, sending, playbackUrl, verifyOverlayOpen, endLatched]);
+  }, [callMode, phase, speech.status, sending, playbackUrl, verifyOverlayOpen, endLatched, resumeTapNeeded]);
 
   // P-11 이음새 없는 전환 — 오프닝 재생이 끝나면 확인 버튼 없이 곧바로 실시간 청취로 넘어간다.
   const handlePlaybackEnded = () => {
@@ -3007,7 +3025,22 @@ export default function SessionCallPage() {
         )}
         {/* 자동재생이 막힌 경우에만 노출 — 이건 누르지 않으면 통화가 진행되지 않아 화면에 남긴다.
             T190-3(P-37 (3)) — 이모지(🔊) 대신 자체 제작 단색 아이콘. */}
-        {playbackBlocked && (
+        {/* §134 — 새로고침 복원 · 활성화 없음(`resumeGate.ts` R3). 이 탭이 활성화가 되고, 막혀 있던 상대 음성도 다시 재생한다. */}
+        {resumeTapNeeded && phase === "live" && (
+          <div role="status" className="flex flex-col items-center gap-3 px-6 text-center text-[var(--call-fg)]">
+            <p className="text-base font-semibold">{RESUME_TAP_COPY.title}</p>
+            <p className="text-sm opacity-80">{RESUME_TAP_COPY.body}</p>
+            <button
+              type="button"
+              onClick={handleResumeTap}
+              className="flex min-h-[48px] items-center gap-2 rounded-full bg-[var(--call-chip)] px-5 py-2 text-base font-semibold text-[var(--call-fg)]"
+            >
+              <PhoneIcon name="speaker" size={18} />
+              {RESUME_TAP_COPY.action}
+            </button>
+          </div>
+        )}
+        {playbackBlocked && !resumeTapNeeded && (
           <button
             type="button"
             onClick={handleManualPlay}
