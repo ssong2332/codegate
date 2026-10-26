@@ -34,6 +34,9 @@ export type PhoneIconName =
   | "caption"
   | "pause"
   | "contact"
+  | "screen-share"
+  | "waveform"
+  | "more-horizontal"
   | "send-message";
 
 type PhoneIconProps = {
@@ -206,6 +209,32 @@ function glyph(name: PhoneIconName) {
         <>
           <circle cx="12" cy="8" r="3.5" />
           <path d="M5.5 20a6.5 6.5 0 0 1 13 0z" />
+        </>
+      );
+    case "screen-share":
+      return (
+        <>
+          <rect x="4.5" y="2.5" width="15" height="19" rx="3" />
+          <path d="M12 15V8" />
+          <path d="M9 10.5L12 7.5l3 3" />
+        </>
+      );
+    case "more-horizontal":
+      return (
+        <>
+          <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+          <circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none" />
+        </>
+      );
+    case "waveform":
+      return (
+        <>
+          <path d="M4 10v4" />
+          <path d="M8 7v10" />
+          <path d="M12 4v16" />
+          <path d="M16 7v10" />
+          <path d="M20 10v4" />
         </>
       );
     case "send-message":

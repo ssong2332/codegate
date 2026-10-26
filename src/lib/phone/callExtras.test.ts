@@ -6,6 +6,8 @@ import { CALL_EXTRA_COPY, captionLine, recordingElapsedSec } from "./callExtras.
 
 const play = readFileSync("src/app/session/play/page.tsx", "utf8");
 const controls = readFileSync("src/components/OneUiCallControls.tsx", "utf8");
+const sheets = readFileSync("src/components/CallExtraSheets.tsx", "utf8");
+const ios = readFileSync("src/components/IosCallControls.tsx", "utf8");
 const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 
 test("[통화 부가 기능] 녹음 경과 · 자막 줄 — 순수 함수", () => {
@@ -24,13 +26,19 @@ test("[통화 부가 기능] 판정표 배선 — 자막은 사기범 대사(pil
   assert.match(play, /onToggleRecording=\{\(\) => setRecordingStartedAt\(\(at\) => \(at === null \? elapsedSec : null\)\)\}/);
   assert.match(play, /onClick=\{\(\) => setCallToast\(CALL_EXTRA_COPY\.videoUnavailable\)\}/);
   // 통화 대기는 구현하지 않는다(토스트만) — 음소거 · 출력 음량 · 세션을 건드리지 않는다.
-  assert.match(controls, /onClick=\{\(\) => toast\(COPY\.holdUnavailable\)\}/);
-  assert.match(controls, /onClick=\{\(\) => toast\(COPY\.translateUnavailable\)\}/);
+  assert.match(sheets, /toastItem\("pause", "통화 대기", COPY\.holdUnavailable\)/);
+  assert.match(sheets, /toastItem\("pause", "통화 대기 지원", COPY\.holdAssistUnavailable\)/);
+  assert.match(sheets, /toastItem\("globe", COPY\.assistTranslate, COPY\.translateUnavailable\)/);
+  // 두 스킨이 같은 시트(같은 판정표)를 쓴다.
+  assert.match(controls, /<CallExtraSheets\s+variant="oneui"/);
+  assert.match(ios, /<CallExtraSheets\s+variant="ios"/);
 });
 
 test("[통화 부가 기능] 개인정보 · 녹음 파일 · 외부 전송 0 — 새 표면에 저장소 · 네트워크 · 미디어 녹음 API 없음", () => {
   for (const [name, src] of [
     ["OneUiCallControls.tsx", strip(controls)],
+    ["CallExtraSheets.tsx", strip(sheets)],
+    ["IosCallControls.tsx", strip(ios)],
     ["callExtras.ts", strip(readFileSync("src/lib/phone/callExtras.ts", "utf8"))],
   ] as const) {
     for (const api of ["localStorage", "sessionStorage", "indexedDB", "fetch(", "MediaRecorder", "getUserMedia", "sendBeacon", "httpsCallable"]) {

@@ -130,6 +130,7 @@ import {
 import AudioDebugPanel from "@/components/AudioDebugPanel";
 import PhoneIcon from "@/components/PhoneIcon";
 import OneUiCallControls from "@/components/OneUiCallControls";
+import IosCallControls from "@/components/IosCallControls";
 import { oneUi9CallerSubtitle } from "@/lib/phone/oneUi9Call";
 import { CALL_EXTRA_COPY, CALL_EXTRA_TOAST_MS, captionLine, recordingElapsedSec, type CallExtraPanel } from "@/lib/phone/callExtras";
 import EndTrainingButton from "@/components/EndTrainingButton";
@@ -2604,6 +2605,9 @@ export default function SessionCallPage() {
   // 2026-10-27(사용자 요청 — One UI 9 실기 스크린샷 재현) — `samsung` 스킨 통화 화면: 맨 위 상태 줄 · 큰 이름 + 부제 · 둥근 사각 버튼 ·
   // '더 보기' 시트(`OneUiCallControls`). 보이스톡 통화 · iOS형 · 기본은 classic(종전 화면).
   const oneUi9 = callTokens.controls === "oneui9";
+  // 2026-10-27(사용자 지시 — iOS 26 통화 화면) — `ios` 스킨 통화 중 화면(`IosCallControls`). 부가 기능은 One UI형과 같은 판정표(`callExtras`).
+  const ios26 = callTokens.controls === "ios26";
+  const callExtras = oneUi9 || ios26;
   const oneUi9Subtitle = oneUi9 ? oneUi9CallerSubtitle(callerLabel) : null;
   // 2026-10-21(실기 신고) — 통화 중 버튼 모양: iOS형 = 76px 원(반투명) · One UI형 = 판 위 64px 둥근 사각(눌림일 때만 채움).
   const gridButtonShape = callTokens.layout === "ios" ? "h-[76px] w-[76px] rounded-full" : "h-16 w-16 rounded-[20px]";
@@ -2878,7 +2882,7 @@ export default function SessionCallPage() {
           마운트돼 있어 통화 · 타이머는 이어진다(G10 — 속성만 바뀐다). 확인 시트(UX-031)는 비모달이라 대상이 아니다. */}
       <div
         inert={chatOpen || smsOverlayOpen ? true : undefined}
-        className={`mx-auto flex w-full max-w-[430px] flex-col ${showTextInput ? "h-dvh flex-none" : "min-h-dvh flex-1"} ${oneUi9 ? "relative" : ""}`}
+        className={`mx-auto flex w-full max-w-[430px] flex-col ${showTextInput ? "h-dvh flex-none" : "min-h-dvh flex-1"} ${callExtras ? "relative" : ""}`}
         style={{
           // §89.5 ⓑ — 수신 벨은 흐린 그라데이션 바탕(그 밖 phase는 단색 — 종전).
           background: shellBackground,
@@ -2895,6 +2899,23 @@ export default function SessionCallPage() {
           style={{ top: "calc(env(safe-area-inset-top) + 14px)", color: callTokens.textPrimary }}
         >
           <PhoneIcon name="video" size={26} />
+        </button>
+      )}
+      {/* 2026-10-27 — iOS형 녹음 버튼(iOS 18.1~ 통화 화면 왼쪽 위 · 파형 아이콘). One UI형과 같은 규칙(표시만 — 파일 · 저장 · 전송 0). */}
+      {ios26 && (phase === "opening" || phase === "live") && !localHangup && (
+        <button
+          type="button"
+          onClick={() => setRecordingStartedAt((at) => (at === null ? elapsedSec : null))}
+          aria-pressed={recordingStartedAt !== null}
+          aria-label={recordingStartedAt !== null ? "녹음 중지" : "녹음"}
+          className="absolute left-4 flex h-11 w-11 items-center justify-center rounded-full border border-white/20 backdrop-blur-xl"
+          style={{
+            top: "calc(env(safe-area-inset-top) + 14px)",
+            backgroundColor: recordingStartedAt !== null ? "#FF3B30" : callTokens.gridButtonBg,
+            color: callTokens.textPrimary,
+          }}
+        >
+          <PhoneIcon name="waveform" size={22} />
         </button>
       )}
       {/* 2026-10-27 — 통화 화면 토스트(영상통화 · 통화 대기 · 실시간 통역 — 쓸 수 없는 기능 안내). 흐름 밖 · 탭을 가로채지 않는다. */}
@@ -3022,7 +3043,7 @@ export default function SessionCallPage() {
             style={{
               fontSize: callTokens.numberSizePx + (isRinging ? 4 : 0),
               color: callTokens.textPrimary,
-              opacity: oneUi9 && callPanel ? 0.3 : undefined,
+              opacity: callExtras && callPanel ? 0.3 : undefined,
             }}
           >
             {/* §128(5) — 보이스톡 통화는 번호가 아니라 대화방 이름(발신 화면과 같은 이름). */}
@@ -3074,8 +3095,11 @@ export default function SessionCallPage() {
             </p>
           )}
           {/* 2026-10-27 — 녹음 표시(실기 상태 줄 아래 보조 줄 자리). 표시만 — 파일 · 저장 · 전송 0. */}
-          {oneUi9 && recordingStartedAt !== null && (phase === "opening" || phase === "live") && !localHangup && (
-            <p className="order-first mb-6 inline-flex items-center gap-1.5 text-[15px]" style={{ color: callTokens.textPrimary }}>
+          {callExtras && recordingStartedAt !== null && (phase === "opening" || phase === "live") && !localHangup && (
+            <p
+              className={`${oneUi9 ? "order-first mb-6" : "mt-1"} inline-flex items-center gap-1.5 text-[15px]`}
+              style={{ color: callTokens.textPrimary }}
+            >
               <span aria-hidden="true" className="h-2 w-2 rounded-full bg-[#FF4D4D]" />
               {`${CALL_EXTRA_COPY.recording} ${formatCallElapsed(recordingElapsedSec(recordingStartedAt, elapsedSec) ?? 0)}`}
             </p>
@@ -3129,7 +3153,7 @@ export default function SessionCallPage() {
             표시이고, 대체 표면인 키패드 패널은 기본 닫힘이라 없다(침묵 실패 금지). */}
         {/* §136 W1 — "이어서 통화하기"가 떠 있는 동안(마이크 · 소리 멈춤)은 파형 · "말씀하세요"를 그리지 않는다. */}
         {/* 2026-10-27 — 통화 자막(`callExtras` 판정표). ⛔ 사기범 대사만(`pillCaption` — G79/G93 · 참가자 말은 그리지 않는다). */}
-        {oneUi9 && captionsOn && !showTextInput && (phase === "live" || phase === "opening") && (
+        {callExtras && captionsOn && !showTextInput && (phase === "live" || phase === "opening") && (
           <div
             className="w-full max-w-[340px] rounded-2xl px-4 py-3 text-left"
             style={{ backgroundColor: callTokens.sheetBg ?? callTokens.chipBg, color: callTokens.textPrimary }}
@@ -3512,6 +3536,29 @@ export default function SessionCallPage() {
               callerLabel={callerLabel}
               callerSubtitle={oneUi9Subtitle}
             />
+          ) : ios26 ? (
+            <IosCallControls
+              tokens={callTokens}
+              muted={muted}
+              onToggleMute={handleToggleMute}
+              onOpenKeypad={() => setShowTextInput(true)}
+              speaker={{
+                on: audioRoute === "speaker",
+                disabled: speakerDisabled,
+                onToggle: () => setAudioRoute((route) => (route === "speaker" ? "call" : "speaker")),
+              }}
+              smsUnread={smsUnreadCount}
+              smsCount={inCallSms.length}
+              onOpenMessages={handleOpenSmsOverlay}
+              chat={scenario.channel === "messenger" ? { onOpen: () => setChatOpen(true), busy: switchingToMessenger } : null}
+              panel={callPanel}
+              onPanelChange={setCallPanel}
+              captionsOn={captionsOn}
+              onToggleCaptions={() => setCaptionsOn((on) => !on)}
+              onToast={setCallToast}
+              callerLabel={callerLabel}
+              callerSubtitle={oneUi9CallerSubtitle(callerLabel)}
+            />
           ) : (
             /* T190-3(UX-014 v1.33 (4) · D-87) — 3열×2행 그리드(72px 원 · 단색 아이콘 28px · 라벨 14px · ⛔ 이모지 0).
                1행 = 음소거 · 키패드 · 스피커 / 2행 = 메시지(처음부터 보임 · 첫 문자 전 비활성 — §108) · 채팅으로(메신저
@@ -3695,7 +3742,12 @@ export default function SessionCallPage() {
               G441 — 이 리터럴은 이 파일에 둔다, §74.4 R-3). 키패드가 열려 있으면 오른쪽 아래 "숨기기"(48px)가
               그리드로 되돌린다. */}
           {/* 2026-10-21 — iOS형은 종료 원이 그리드 셋째 줄 가운데처럼 붙고(행 간격과 같게) · One UI형은 판 아래 띄운다. */}
-          <div className={`call-compact-end relative flex flex-col items-center gap-1.5 ${callTokens.layout === "ios" || oneUi9 ? "mt-5" : "mt-7"}`}>
+          {/* iOS 26 — 종료 원은 버튼 묶음 아래 줄 가운데 칸(비워 둔 자리)로 끌어올린다. 키패드 · 시트가 열리면 종전 자리(아래). */}
+          <div
+            className={`call-compact-end relative flex flex-col items-center gap-1.5 ${
+              ios26 && !showTextInput && !callPanel ? "mt-[-102px]" : callTokens.layout === "ios" || oneUi9 ? "mt-5" : "mt-7"
+            }`}
+          >
             <button
               ref={endCallButtonRef}
               type="button"
