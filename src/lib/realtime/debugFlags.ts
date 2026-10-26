@@ -11,8 +11,8 @@
 // | F5 | 저장소를 읽거나 쓸 수 없음 · 저장 값이 깨짐 | 주소 쿼리만 쓴다(종전) |
 // ⛔ 여기 적힌 키 밖의 쿼리는 저장하지 않는다. 값은 짧은 영문 · 숫자만 받는다(비밀값 · 식별자가 섞일 자리가 없다).
 
-/** 저장해 유지하는 키 — 진단 패널 · 출력 컨텍스트 A/B · '통화' 스트림 감쇠 A/B. */
-export const PERSISTED_DEBUG_FLAGS = ["audiodebug", "outaftermic", "voicetrim"] as const;
+/** 저장해 유지하는 키 — 진단 패널 · 출력 컨텍스트 A/B · '통화' 스트림 감쇠 A/B · §137 출력 싱크 A/B(`callAudio.ts` E1~E4). */
+export const PERSISTED_DEBUG_FLAGS = ["audiodebug", "outaftermic", "voicetrim", "outelement"] as const;
 export type PersistedDebugFlag = (typeof PERSISTED_DEBUG_FLAGS)[number];
 
 export const DEBUG_FLAGS_STORAGE_KEY = "debug.flags";

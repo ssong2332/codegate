@@ -4,6 +4,11 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-26 추가분, 브랜치 `claude/output-element-ab`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
+
+### Added
+- **통화 출력 싱크 A/B 플래그(Architecture §137 · DECISIONS #253)**: `?outelement=1`을 붙이면 통화 음성을 숨긴 `<audio>`로 재생한다(볼륨 키 · 음량 차이 신고 실험). 기본은 꺼져 있고 플래그가 없으면 종전과 같다. 재생이 안 되면 즉시 종전 출력으로 되돌린다. 진단 패널에 `flag.outelement` · `out.sink` 행.
+
 > ⚠️ **이 블록(2026-10-25 추가분, 브랜치 `claude/refresh-resume-audio`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
 
 ### Fixed

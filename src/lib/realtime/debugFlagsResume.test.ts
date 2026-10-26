@@ -60,7 +60,8 @@ test("[§134 플래그] 배선 — 전역 셸이 남기고 · 패널 · 출력 �
   assert.ok(live.includes("readVoiceTrimFlag(readDebugFlagSearch())"));
   assert.equal(/read(OutputAfterMic|VoiceTrim)Flag\(window\.location\.search\)/.test(live), false);
   const i = AUDIO_DIAG_KEYS.indexOf("flag.ringclose");
-  assert.deepEqual(AUDIO_DIAG_KEYS.slice(i, i + 4), ["flag.ringclose", "flag.outaftermic", "flag.voicetrim", "flag.saved"]);
+  // §137 — `flag.voicetrim` 뒤에 출력 싱크 A/B `flag.outelement`가 들어갔다(`outputElementSink.test.ts`).
+  assert.deepEqual(AUDIO_DIAG_KEYS.slice(i, i + 5), ["flag.ringclose", "flag.outaftermic", "flag.voicetrim", "flag.outelement", "flag.saved"]);
 });
 
 test("[§134 이어서] R1 ~ R3 — 새로고침 복원 · 활성화 없음(또는 판별 불가)일 때만 버튼", () => {

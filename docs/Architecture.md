@@ -24666,3 +24666,38 @@ Hosting만(functions 변경 0).
 | 바뀐 파일 eslint · tsc(테스트 제외) | 오류 0 | — |
 - 첫 전체 실행 1156 중 4 실패 → 고친 뒤 0: `30vh`(dvh 규칙 G-VU1 → `30dvh`) · `primeCallAudio` 호출 수 게이트 3건.
 - 실 키 프로브 0 · 실기 확인 0 · 브라우저 미리보기 0. 배포: Hosting만.
+
+## 137. (Experiment — 2026-10-26 · 브랜치 `claude/output-element-ab` · 메인 세션 지시(사용자 승인) · 실기 신고 — 안드로이드 Chrome 155 · 라이브 main `203578f`) **통화 출력 싱크 A/B `?outelement=1` — 최종 노드를 숨긴 `<audio>`로 재생** — implementer 기록
+
+### 137.1 금지
+- 플래그가 없으면 종전 동작과 같아야 한다 — 꺼진 분기는 종전 줄(`limiter.connect(outputContext.destination)` · `outputGain.connect(outputContext.destination)`)을 그대로 쓴다.
+- 무음 결함(§57) 재발 금지 — `<audio>` 재생이 실패하면 즉시 `ctx.destination`으로 되돌린다.
+- 실 키 프로브 · 배포 · 운영 Firestore 쓰기 0.
+
+### 137.2 신고 · 가설
+| 항목 | 내용 | 확정 여부 |
+|---|---|---|
+| 신고 | 볼륨 키를 누르면 전화기 아이콘이 뜨지만 음량이 안 바뀐다 · 미디어 볼륨이 바꾼다(#425 때는 볼륨 키가 먹었다) · 진단 수치(`out.path=after-mic` · `trimDb=-6.0` · `out.gain=0.60` · `route=call`)는 같은데 날마다 크기가 다르다 | 사용자 실기 |
+| 가설 | Web Audio `ctx.destination` 출력이 때로는 '통화', 때로는 '미디어' 스트림으로 나간다. `MediaStreamAudioDestinationNode` → `<audio>.srcObject`(WebRTC 재생 경로)면 '통화'에 고정될 수 있다 | **추정** — 실기 A/B로 가른다 |
+
+### 137.3 판정표(`src/lib/realtime/callAudio.ts` E1 ~ E4)
+| # | If | Then |
+|---|---|---|
+| E1 | 플래그 꺼짐 | 종전 `ctx.destination` — `out.sink=context` |
+| E2 | 켬 · 스트림 목적지나 `<audio>`를 만들 수 없음 | `ctx.destination` — `element-failed` |
+| E3 | 켬 · `play()`가 1500ms(`OUTPUT_ELEMENT_PLAY_TIMEOUT_MS`, 판단값) 안에 resolve | `<audio>` — `element` |
+| E4 | 켬 · `play()` reject · 상한 초과 · 재생 중 `error` | 즉시 `ctx.destination` — `element-failed` |
+
+### 137.4 변경
+| 파일 | 변경 |
+|---|---|
+| `src/lib/realtime/callAudio.ts` | 표 E1~E4 · `readOutputElementFlag` · `pickOutputSink` · `connectOutputElementSink`(연결 · 되돌림 · 멱등 `release`) · `createHiddenOutputElement`(autoplay · playsinline · hidden) |
+| `src/lib/realtime/debugFlags.ts` | `PERSISTED_DEBUG_FLAGS`에 `outelement` — 탭 안 유지 · `?outelement=off` · `?debugflags=off`(F1~F5 그대로) |
+| `src/lib/realtime/GeminiVoiceSession.tsx` | 켜졌을 때만 리미터(리미터를 못 만들면 출력 게인)를 요소로 · effect cleanup에서 `release()`(끊기 · 통화 종료 · 재연결 · #426 다시 열기 모두 같은 effect) · 취소된 실행은 요소를 만들지 않는다 |
+| `audioDiagnostics.ts` · `AudioDebugPanel.tsx` | 행 `flag.outelement=on\|off` · `out.sink=element\|context\|element-failed` |
+| 테스트 | 신규 `outputElementSink.test.ts` 8건 · `debugFlagsResume.test.ts` 행 순서 단언 1곳 |
+
+### 137.5 한계
+- 실기 확인 0 — 볼륨 키가 실제로 '통화' 음량을 바꾸는지, 크기가 날마다 같아지는지는 모른다.
+- `play()`가 resolve됐는데 실제로는 소리가 안 나는 경우는 감지하지 못한다(진단 `out.sink=element` + 귀로 판단).
+- 스피커 모드는 앞단 게인 · 컴프레서만 바꾸므로 싱크와 무관하다(요소 볼륨은 1 고정).

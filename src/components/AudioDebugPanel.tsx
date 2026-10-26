@@ -14,7 +14,7 @@ import {
   summarizeBrowser,
 } from "@/lib/realtime/audioDiagnostics";
 import { buildCallSetupRecord, readCallSetupMarks } from "@/lib/realtime/liveLatency";
-import { readAudioFlags, readOutputAfterMicFlag, readVoiceTrimFlag } from "@/lib/realtime/callAudio";
+import { readAudioFlags, readOutputAfterMicFlag, readOutputElementFlag, readVoiceTrimFlag } from "@/lib/realtime/callAudio";
 import { describeStoredDebugFlags, readDebugFlagSearch, readStoredDebugFlags } from "@/lib/realtime/debugFlags";
 
 export type AudioDebugPanelProps = {
@@ -71,6 +71,7 @@ export default function AudioDebugPanel(props: AudioDebugPanelProps) {
       ...readAudioFlags(debugSearch),
       outputAfterMic: readOutputAfterMicFlag(debugSearch),
       voiceTrim: readVoiceTrimFlag(debugSearch),
+      outputElement: readOutputElementFlag(debugSearch),
       saved: describeStoredDebugFlags(readStoredDebugFlags()),
     },
   });

@@ -113,9 +113,12 @@ import { LIVE_MIC_CONSTRAINTS, liveMicHandoff, stopStream } from "./micHandoff";
 import { scammerClaimsSmsSent } from "./toolWindow";
 import {
   FRESH_OUTPUT_RESUME_TIMEOUT_MS,
+  connectOutputElementSink,
+  createHiddenOutputElement,
   isUsableContext,
   pickCallOutputPath,
   readOutputAfterMicFlag,
+  readOutputElementFlag,
   readVoiceTrimFlag,
   resumeSuspendedContexts,
   type PrimedCallAudio,
@@ -137,6 +140,7 @@ import {
   noteNormalizerGain,
   noteFreshResume,
   noteOutputPath,
+  noteOutputSink,
   noteStreamTrim,
   noteMicFrame,
   noteContextWhileSpeaking,
@@ -518,6 +522,8 @@ export default function GeminiVoiceSession({
     // §114 — 사기범 음성 라우드니스 정규화 상태(이 통화의 말소리 누적 측정 · 직전 게인). 출력 게인 · 스피커 증폭보다 **앞**이다.
     let loudness: LoudnessState = INITIAL_LOUDNESS_STATE;
     let limiterNodes: AudioNode[] = [];
+    // §137 — `?outelement=1`일 때만 최종 노드를 숨긴 `<audio>`로 내보낸다(`callAudio.ts` 표 E1~E4). 꺼져 있으면 null(종전).
+    let outputSink: { release: () => void } | null = null;
     let processor: ScriptProcessorNode | null = null;
     // 수정안 A — 통화 화면에서 빌린 컨텍스트인가(빌린 것은 닫지 않고 우리가 붙인 노드만 뗀다).
     let outputBorrowed = false;
@@ -540,6 +546,23 @@ export default function GeminiVoiceSession({
       });
       scheduledSources.clear();
       nextPlayTime = 0;
+    };
+    // §137 E2 ~ E4 — 최종 노드 → 스트림 목적지 → 숨긴 `<audio>`. 재생 실패 · 상한 초과면 함수 안에서 즉시 `ctx.destination`으로 되돌린다.
+    // 이미 정리된 실행(취소)이면 요소를 만들지 않는다(정리 뒤에 붙은 요소가 문서에 남지 않게).
+    const connectFinalToElement = (ctx: AudioContext, finalNode: AudioNode): { release: () => void } | null => {
+      if (cancelled) {
+        finalNode.connect(ctx.destination);
+        return null;
+      }
+      return connectOutputElementSink({
+        source: finalNode,
+        context: ctx,
+        createElement: createHiddenOutputElement,
+        onSink: (sink) => {
+          noteOutputSink(sink);
+          log("output sink:", sink);
+        },
+      });
     };
     let speakingTimer: ReturnType<typeof setTimeout> | null = null;
     // 반이중(half-duplex): AI가 말하는 동안엔 마이크 프레임을 보내지 않는다. 스피커→마이크 에코가
@@ -1247,6 +1270,8 @@ export default function GeminiVoiceSession({
       // §105 — 리미터 노드도 뗀다(빌린 컨텍스트는 통화 화면이 닫는다 · 자기 것은 아래에서 닫힌다).
       for (const node of limiterNodes) node.disconnect();
       limiterNodes = [];
+      outputSink?.release(); // §137 — 요소 정지 · srcObject 해제 · 제거(멱등)
+      outputSink = null;
       speakerDynamicsRef.current = null;
       streamTrimNodeRef.current = null;
       // 수정안 A — 빌린 컨텍스트는 닫지 않는다(통화 화면이 닫는다). 대신 이 실행이 붙인 노드와 예약 재생을 뗀다.
@@ -1298,6 +1323,8 @@ export default function GeminiVoiceSession({
         // Chromium은 출력 스트림 용도를 만들 때 정한다). 마이크는 받기 때 이미 열기 시작했다 — 대개 여기서는 이미 끝나 있다.
         // 거부 · 실패는 아래 종전 자리(`await micRequest`)가 그대로 처리한다.
         const outputAfterMicFlag = readOutputAfterMicFlag(readDebugFlagSearch());
+        // §137 — 출력 싱크 A/B(기본 = 끔 · 꺼져 있으면 아래 연결은 종전 `ctx.destination` 그대로 — 표 E1).
+        const outputElementFlag = readOutputElementFlag(readDebugFlagSearch());
         const micOpened = outputAfterMicFlag ? (await micRequest.catch(() => null)) !== null : false;
         let freshOutput: AudioContext | null = null;
         if (outputAfterMicFlag && micOpened && !cancelled) {
@@ -1373,15 +1400,20 @@ export default function GeminiVoiceSession({
           streamTrim.connect(makeup);
           makeup.connect(limiterScale);
           limiterScale.connect(limiter);
-          limiter.connect(outputContext.destination);
+          if (outputElementFlag) outputSink = connectFinalToElement(outputContext, limiter);
+          else limiter.connect(outputContext.destination);
           limiterNodes = [compressor, streamTrim, makeup, limiterScale, limiter];
           streamTrimNodeRef.current = streamTrim;
           speakerDynamicsRef.current = { compressor, makeup };
           applySpeakerDynamics(speakerDynamicsRef.current, outputVolumeRef.current, true);
         } catch (e) {
           noteAudioError(e instanceof Error ? e.name : "unknown");
-          outputGain.connect(outputContext.destination);
+          outputSink?.release();
+          outputSink = null;
+          if (outputElementFlag) outputSink = connectFinalToElement(outputContext, outputGain);
+          else outputGain.connect(outputContext.destination);
         }
+        if (!outputElementFlag) noteOutputSink("context"); // §137 E1
         // T190-3(G455) — 스피커 버튼 음량 모드 반영(위 초기값 = 통화 모드 = 같은 값. 연결 전에 바뀌었으면 여기서 맞춘다).
         if (outputVolumeRef.current.gain !== GEMINI_OUTPUT_GAIN) outputGain.gain.value = outputVolumeRef.current.gain;
         outputGainNodeRef.current = outputGain;
