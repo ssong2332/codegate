@@ -63,7 +63,8 @@ test("[§128(5) 배선] 참가자가 건 보이스톡 통화만 카톡 보이스
   assert.match(play, /const voiceTalkCall = callCaller === "participant" && scenario\.channel === "messenger";/);
   assert.match(play, /voiceTalkCall \? voiceTalkCallTokens\(deviceSkin\.skin\) : callTokensFor\(deviceSkin\.skin, deviceTheme\)/);
   // §130(UX D-161 (2)) — 같은 식을 `shellBackground`로 뽑아 하단 판도 같은 바탕을 칠한다.
-  assert.match(play, /const shellBackground = voiceTalkCall \? voiceTalkCallBackground\(\) : isRinging \? ringBackground\(callTokens\) : callTokens\.bg;/);
+  // 2026-10-27 — 통화 중 바탕은 스킨 그라데이션(One UI 9)이 있으면 그것, 없으면 단색(종전).
+  assert.match(play, /const shellBackground = voiceTalkCall\s*\? voiceTalkCallBackground\(\)\s*: isRinging\s*\? ringBackground\(callTokens\)\s*: callTokens\.shellGradient \?\? callTokens\.bg;/);
   assert.match(play, /background: shellBackground,/);
   assert.match(play, /\{voiceTalkCall \? \(scenario\.chatDisplayName \?\? callerLabel\) : callerLabel\}/);
   assert.equal(/kakao|카카오/i.test(play.replace(/^\s*\/\/.*$/gm, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "")), false, "로고 · 상표 0");

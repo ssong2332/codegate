@@ -64,6 +64,21 @@ export type CallSkinTokens = {
   gridPanelBg: string | null;
   /** 폴백 통화 발화 파형 막대(`CallWaveform` — P3 리뷰 Major 1: 라이트 화면에서 종전 #7CD9C2는 약 1.5:1). */
   waveBar: string;
+  /**
+   * 통화 화면 구성(2026-10-27 사용자 요청 — One UI 9 실기 스크린샷 재현). `classic` = 종전 화면(번호 아래 경과 시간 · 그리드 ·
+   * "종료" 글자) / `oneui9` = 위 상태 줄 · 큰 이름 + 부제 · 둥근 사각 3×2(녹음 · 내 소리 차단 · 블루투스 / 스피커 · 키패드 · 더 보기)
+   * · '더 보기' 시트 · 글자 없는 종료 원. `samsung` 스킨만 `oneui9`다(`ios` · `default` 무변경).
+   */
+  controls: "classic" | "oneui9";
+  /** 셸 바탕 그라데이션(CSS) — 있으면 단색 `bg` 대신 칠한다(`oneui9`의 블러 그라데이션). 없으면 null(종전). */
+  shellGradient: string | null;
+  /**
+   * 버튼 묶음이 놓이는 아래 띠의 [가장 어두운 · 가장 밝은] 바탕(그라데이션이라 한 색이 아니다). 대비는 두 끝에서 잰다(`oneUi9Pairs`) —
+   * 흰 라벨은 밝은 끝에서 4.5:1 · 어두운 눌림 채움은 어두운 끝에서 3:1. 없으면 null(버튼이 `bg` 또는 판 위).
+   */
+  gridBandStops: readonly [string, string] | null;
+  /** `oneui9` '더 보기' 시트 바탕(반투명 — 띠 위에 합성). classic은 쓰지 않는다(null). */
+  sheetBg: string | null;
 };
 
 export type BannerSkinTokens = {
@@ -91,9 +106,6 @@ export const ESTIMATED_DEVICE_COLORS = {
   messengerChatBg: "#BACEE0",
   /** 메신저형 발신 말풍선 · 전송 버튼(노랑) — 근사. 앱 이름 · 로고와 함께 쓰지 않는다(감사 안전선). */
   messengerOutgoingBg: "#FEE500",
-  /** One UI형 라이트 테마 통화 화면 바탕 · 버튼 판 — 추정. */
-  oneUiLightCallBg: "#F4F6F8",
-  oneUiLightCallPanel: "#FFFFFF",
 } as const;
 
 const DARK_CALL_EXTRAS = {
@@ -104,6 +116,10 @@ const DARK_CALL_EXTRAS = {
   fieldBorder: "rgba(255,255,255,0.45)",
   gridPanelBg: null as string | null,
   waveBar: "#7CD9C2",
+  controls: "classic" as CallSkinTokens["controls"],
+  shellGradient: null as string | null,
+  gridBandStops: null as CallSkinTokens["gridBandStops"],
+  sheetBg: null as string | null,
 };
 
 const ONE_UI_CALL: CallSkinTokens = {
@@ -136,29 +152,40 @@ const ONE_UI_CALL: CallSkinTokens = {
 };
 
 /**
- * §89.5 ⓒ — One UI형 + 기기 라이트 테마일 때의 통화 화면(UX D-132 (5) ⓒ). 색 원천 = `ESTIMATED_DEVICE_COLORS`(추정).
- * 받기 · 종료 원과 아이콘은 어두운 화면과 같다.
+ * 2026-10-27(사용자 요청 — 갤럭시 One UI 9 실기 통화 화면 스크린샷 2장 재현) — `samsung` 스킨 통화 화면. 기기 테마와 관계없이
+ * 이 화면 하나다(실기도 라이트 모드에서 어두운 블러 그라데이션이다 — 종전 §89.5 ⓒ 라이트 통화 화면은 이 화면으로 대체).
+ * 색 출처: 실기 스크린샷 스포이트(963×2000 · 위 #0F0E16 · 가운데 왼쪽 남색 #3B477B · 오른쪽 자주 #562636 · 아래 회보라 #78798D)를
+ * **근사**하되, 아래 띠는 흰 라벨 4.5:1 · 어두운 눌림 채움 3:1이 둘 다 서도록 실기보다 조금 어둡게 잡았다(D-96 (3) — 하한 우선).
+ * 버튼 띠는 화면 아래에서 430px(그라데이션을 아래 기준 px로 그려 화면 높이와 무관하게 버튼 뒤가 같은 띠다).
  */
-const ONE_UI_CALL_LIGHT: CallSkinTokens = {
+const ONE_UI_9_BAND_STOPS = ["#5C5E7A", "#6A6C84"] as const;
+const ONE_UI_9_CALL: CallSkinTokens = {
   ...ONE_UI_CALL,
-  bg: ESTIMATED_DEVICE_COLORS.oneUiLightCallBg,
-  outerBg: "#E3E7EB",
-  textPrimary: "#14181D",
-  textSecondary: "#4B5563",
-  avatarBg: "#D5DCE3",
-  avatarFg: "#5A6675",
-  gridButtonBg: "rgba(255,255,255,0)",
-  gridButtonPressedBg: "#3A4350",
-  gridIcon: "#3A4350",
+  bg: "#0E0D15",
+  outerBg: "#07060A",
+  hasAvatar: false,
+  numberSizePx: 36,
+  // 실기 = 바탕보다 한 단계 어두운 반투명 둥근 사각.
+  gridButtonBg: "rgba(20,20,36,0.30)",
+  // 실기 = 켜진 버튼은 어두운 채움(블루투스 연결 칸). 띠 어두운 끝 대비 3:1(`oneUi9Pairs`).
+  gridButtonPressedBg: "#0E0D11",
+  gridIcon: "#FFFFFF",
   gridIconPressed: "#FFFFFF",
-  keypadKeyBg: "rgba(20,24,29,0)",
-  ringBgStops: ["#E9EEF3", "#F4F6F8"],
-  alertText: "#B3261E",
-  chipBg: "rgba(20,24,29,0.07)",
-  fieldBg: "#FFFFFF",
-  fieldBorder: "rgba(20,24,29,0.55)",
-  gridPanelBg: ESTIMATED_DEVICE_COLORS.oneUiLightCallPanel,
-  waveBar: "#1F6F66",
+  // 실기 종료 원 스포이트 #DB3D34(종전 공통 #C6392F보다 밝은 빨강). 흰 아이콘 비텍스트 3:1 이상(G456).
+  end: "#DB3D34",
+  // 실기 수신 화면 자료가 없다 — 아바타가 없어 울림 연출은 받기 맥동(iOS형과 같은 연출)으로 둔다(추정).
+  ringStyle: "accept-pulse",
+  ringBgStops: ["#14121B", "#0E0D15"],
+  gridPanelBg: null,
+  controls: "oneui9",
+  shellGradient: [
+    "radial-gradient(70% 22% at 0% 47%, rgba(64,78,150,0.70) 0%, rgba(64,78,150,0) 100%)",
+    "radial-gradient(75% 26% at 100% 36%, rgba(112,36,58,0.75) 0%, rgba(112,36,58,0) 100%)",
+    "radial-gradient(38% 22% at 100% 60%, rgba(150,104,78,0.55) 0%, rgba(150,104,78,0) 100%)",
+    `linear-gradient(0deg, ${ONE_UI_9_BAND_STOPS[1]} 0px, ${ONE_UI_9_BAND_STOPS[0]} 430px, #2C2840 62%, #17141F 80%, #0E0D15 100%)`,
+  ].join(", "),
+  gridBandStops: ONE_UI_9_BAND_STOPS,
+  sheetBg: "rgba(40,40,52,0.74)",
 };
 
 const CALL_TOKENS: Record<MessengerSkin, CallSkinTokens> = {
@@ -221,13 +248,16 @@ const BANNER_TOKENS: Record<MessengerSkin, BannerSkinTokens> = {
 /** 기기 테마(OS `prefers-color-scheme`) — 라이트 통화 화면은 One UI형에만 있다(§89.5 ⓒ · iOS형 · 기본은 늘 어둡다). */
 export type DeviceTheme = "dark" | "light";
 
+// `theme`은 호출부 호환으로만 받는다 — 2026-10-27 이후 어느 스킨도 기기 테마로 갈리지 않는다(One UI형 = `ONE_UI_9_CALL` 하나).
 export function callTokensFor(skin: MessengerSkin, theme: DeviceTheme = "dark"): CallSkinTokens {
-  if (skin === "samsung" && theme === "light") return ONE_UI_CALL_LIGHT;
+  void theme;
+  if (skin === "samsung") return ONE_UI_9_CALL;
   return CALL_TOKENS[skin];
 }
 
 /** 수신 벨 바탕(CSS) — 위에서 아래로 흐려지는 그라데이션(§89.5 ⓑ). */
 export function ringBackground(call: CallSkinTokens): string {
+  if (call.shellGradient) return call.shellGradient;
   return `radial-gradient(120% 70% at 50% 0%, ${call.ringBgStops[0]} 0%, ${call.ringBgStops[1]} 72%)`;
 }
 
@@ -538,7 +568,8 @@ export function voiceTalkDialContrastPairs(): ContrastPair[] {
 export function voiceTalkCallTokens(skin: MessengerSkin): CallSkinTokens {
   const t = MESSENGER_CHAT_TOKENS;
   return {
-    ...callTokensFor(skin, "dark"),
+    // 2026-10-27 — 보이스톡 통화는 종전 골격 그대로다(One UI 9 화면은 전화 통화에만 — `CALL_TOKENS`는 종전 값).
+    ...CALL_TOKENS[skin],
     bg: t.voiceTalkBgTop,
     outerBg: t.voiceTalkBgBottom,
     textPrimary: t.voiceTalkName,
@@ -654,7 +685,7 @@ export function skinContrastPairs(skin: MessengerSkin): ContrastPair[] {
     ...smsSurfacePairs(skin),
     ...ringPairs(skin, call),
     ...panelPairs(skin, call),
-    ...(skin === "samsung" ? lightCallPairs() : []),
+    ...oneUi9Pairs(skin, call),
     ...messengerChatPairs(),
   ];
 }
@@ -699,23 +730,23 @@ export function panelPairs(skin: MessengerSkin, call: CallSkinTokens): ContrastP
   ];
 }
 
-/** §89.5 ⓒ — One UI형 라이트 통화 화면 전체(셸 · 버튼 판 · 눌림). */
-export function lightCallPairs(): ContrastPair[] {
-  const call = ONE_UI_CALL_LIGHT;
-  const panel = call.gridPanelBg ?? call.bg;
+/**
+ * 2026-10-27 — One UI 9 통화 화면(`controls: "oneui9"`)의 아래 띠 위 쌍. 띠는 그라데이션이라 두 끝에서 잰다:
+ * 흰 라벨 · 버튼 아이콘 · 시트 글자 = 밝은 끝(최악) · 어두운 눌림 채움 = 어두운 끝(최악). classic은 0쌍.
+ */
+export function oneUi9Pairs(skin: MessengerSkin, call: CallSkinTokens): ContrastPair[] {
+  if (call.controls !== "oneui9" || !call.gridBandStops) return [];
+  const [dark, light] = call.gridBandStops;
+  const sheet = call.sheetBg ?? call.bg;
   return [
-    { name: "samsung-light.call.number", fg: call.textPrimary, bg: call.bg, kind: "text" },
-    { name: "samsung-light.call.textSecondary", fg: call.textSecondary, bg: call.bg, kind: "text" },
-    { name: "samsung-light.call.gridLabel", fg: call.textPrimary, bg: panel, kind: "text" },
-    { name: "samsung-light.call.gridIcon", fg: call.gridIcon, bg: panel, kind: "nonText" },
-    { name: "samsung-light.call.gridPressedIndicator", fg: call.gridButtonPressedBg, bg: panel, kind: "nonText" },
-    { name: "samsung-light.call.gridIconPressed", fg: call.gridIconPressed, bg: call.gridButtonPressedBg, kind: "nonText" },
-    { name: "samsung-light.call.avatarIcon", fg: call.avatarFg, bg: call.avatarBg, kind: "nonText" },
-    { name: "samsung-light.call.keypadKey", fg: call.textPrimary, bg: call.keypadKeyBg, base: call.bg, kind: "text" },
-    { name: "samsung-light.call.keypadLetters", fg: call.textSecondary, bg: call.keypadKeyBg, base: call.bg, kind: "text" },
-    { name: "samsung-light.call.acceptIcon", fg: call.roundIcon, bg: call.accept, kind: "nonText" },
-    { name: "samsung-light.call.endIcon", fg: call.roundIcon, bg: call.end, kind: "nonText" },
-    ...ringPairs("samsung-light", call),
+    { name: `${skin}.call9.label@light`, fg: call.textPrimary, bg: light, kind: "text" },
+    { name: `${skin}.call9.label@dark`, fg: call.textPrimary, bg: dark, kind: "text" },
+    { name: `${skin}.call9.gridIcon@light`, fg: call.gridIcon, bg: call.gridButtonBg, base: light, kind: "nonText" },
+    { name: `${skin}.call9.pressedIndicator@dark`, fg: compositeHex(call.gridButtonPressedBg, dark), bg: dark, kind: "nonText" },
+    { name: `${skin}.call9.pressedIndicator@light`, fg: compositeHex(call.gridButtonPressedBg, light), bg: light, kind: "nonText" },
+    { name: `${skin}.call9.gridIconPressed`, fg: call.gridIconPressed, bg: call.gridButtonPressedBg, base: dark, kind: "nonText" },
+    { name: `${skin}.call9.sheetText@light`, fg: call.textPrimary, bg: sheet, base: light, kind: "text" },
+    { name: `${skin}.call9.badge`, fg: call.badgeText, bg: call.badgeBg, kind: "text" },
   ];
 }
 
@@ -757,18 +788,20 @@ export function compositeHex(fg: string, base: string): string {
  * ⓑ 눌림 아이콘 ↔ 눌림 원(합성).
  */
 export function gridPressedPairs(skin: MessengerSkin, call: CallSkinTokens): ContrastPair[] {
+  // 버튼이 그라데이션 띠 위에 있으면(One UI 9) 띠의 어두운 끝이 어두운 눌림 채움의 최악 바탕이다.
+  const base = call.gridBandStops?.[0] ?? call.bg;
   return [
     {
       name: `${skin}.call.gridPressedIndicator`,
-      fg: compositeHex(call.gridButtonPressedBg, call.bg),
-      bg: call.bg,
+      fg: compositeHex(call.gridButtonPressedBg, base),
+      bg: base,
       kind: "nonText",
     },
     {
       name: `${skin}.call.gridIconPressed`,
       fg: call.gridIconPressed,
       bg: call.gridButtonPressedBg,
-      base: call.bg,
+      base,
       kind: "nonText",
     },
   ];

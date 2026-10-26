@@ -129,6 +129,8 @@ import {
 } from "@/lib/realtime/audioDiagnostics";
 import AudioDebugPanel from "@/components/AudioDebugPanel";
 import PhoneIcon from "@/components/PhoneIcon";
+import OneUiCallControls from "@/components/OneUiCallControls";
+import { oneUi9CallerSubtitle } from "@/lib/phone/oneUi9Call";
 import EndTrainingButton from "@/components/EndTrainingButton";
 import {
   announceTurnsOnInstructionDispatch,
@@ -349,6 +351,8 @@ export default function SessionCallPage() {
   // 최신값으로 읽기 위한 사본. 갱신 지점은 아래 통화 경과 타이머 effect **한 곳**뿐이다.
   const elapsedSecRef = useRef(0);
   const [muted, setMuted] = useState(false);
+  // 2026-10-27 — One UI 9 통화 화면(`samsung` 스킨)의 '더 보기' 시트.
+  const [moreSheetOpen, setMoreSheetOpen] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -2584,6 +2588,10 @@ export default function SessionCallPage() {
     "--call-wave": callTokens.waveBar,
   } as React.CSSProperties;
   const bannerTokens = bannerTokensFor(deviceSkin.skin);
+  // 2026-10-27(사용자 요청 — One UI 9 실기 스크린샷 재현) — `samsung` 스킨 통화 화면: 맨 위 상태 줄 · 큰 이름 + 부제 · 둥근 사각 버튼 ·
+  // '더 보기' 시트(`OneUiCallControls`). 보이스톡 통화 · iOS형 · 기본은 classic(종전 화면).
+  const oneUi9 = callTokens.controls === "oneui9";
+  const oneUi9Subtitle = oneUi9 ? oneUi9CallerSubtitle(callerLabel) : null;
   // 2026-10-21(실기 신고) — 통화 중 버튼 모양: iOS형 = 76px 원(반투명) · One UI형 = 판 위 64px 둥근 사각(눌림일 때만 채움).
   const gridButtonShape = callTokens.layout === "ios" ? "h-[76px] w-[76px] rounded-full" : "h-16 w-16 rounded-[20px]";
   // D-103 — 음량을 바꿀 수 없는 경로(폴백 `<audio>` + 대입 미반영)에서만 스피커 칸이 비활성이다.
@@ -2720,7 +2728,11 @@ export default function SessionCallPage() {
 
   // 통화 셸 바탕(단색 또는 그라데이션). §130(UX D-161 (2)) — 아래에 붙는 하단 판도 같은 바탕을 칠한다: 그라데이션은 화면 높이(100dvh)
   // 크기로 아래에 맞춰 셸 바탕과 이음매 없이 겹친다(그냥 이어받으면 판 안에서 그라데이션이 처음부터 다시 그려져 경계가 보였다).
-  const shellBackground = voiceTalkCall ? voiceTalkCallBackground() : isRinging ? ringBackground(callTokens) : callTokens.bg;
+  const shellBackground = voiceTalkCall
+    ? voiceTalkCallBackground()
+    : isRinging
+      ? ringBackground(callTokens)
+      : callTokens.shellGradient ?? callTokens.bg;
   const bottomPanelBackground: React.CSSProperties = shellBackground.includes("gradient(")
     ? { backgroundImage: shellBackground, backgroundSize: "100% 100dvh", backgroundPosition: "center bottom", backgroundRepeat: "no-repeat" }
     : { backgroundColor: shellBackground };
@@ -2853,13 +2865,23 @@ export default function SessionCallPage() {
           마운트돼 있어 통화 · 타이머는 이어진다(G10 — 속성만 바뀐다). 확인 시트(UX-031)는 비모달이라 대상이 아니다. */}
       <div
         inert={chatOpen || smsOverlayOpen ? true : undefined}
-        className={`mx-auto flex w-full max-w-[430px] flex-col ${showTextInput ? "h-dvh flex-none" : "min-h-dvh flex-1"}`}
+        className={`mx-auto flex w-full max-w-[430px] flex-col ${showTextInput ? "h-dvh flex-none" : "min-h-dvh flex-1"} ${oneUi9 ? "relative" : ""}`}
         style={{
           // §89.5 ⓑ — 수신 벨은 흐린 그라데이션 바탕(그 밖 phase는 단색 — 종전).
           background: shellBackground,
           paddingTop: "calc(env(safe-area-inset-top) + 24px)",
         }}
       >
+      {/* One UI 9 — 오른쪽 위 영상통화 아이콘(장식 · 앱에 없는 기능 · 누름 무반응). */}
+      {oneUi9 && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute right-6 opacity-90"
+          style={{ top: "calc(env(safe-area-inset-top) + 22px)", color: callTokens.textPrimary }}
+        >
+          <PhoneIcon name="video" size={26} />
+        </span>
+      )}
       {/* T68 문자 도착 배너(UX-014 `sms-arrived` state / UF-008 Step 2) — 통화는 그대로 진행 중이다.
           시각 배너와 **aria-live 알림을 동시에** 제공한다(P-20 (6) — 시각에만 의존하지 않는다).
           탭하면 오버레이가 열릴 뿐 **라우팅이 일어나지 않는다**(D-35).
@@ -2945,7 +2967,7 @@ export default function SessionCallPage() {
         aria-hidden="true"
         className="call-top-slack"
         // §130(UX D-161 (1)) — 키패드가 열리면 여백 · 아바타를 접어 그 높이를 키패드 영역에 준다(실제 통화 앱도 키패드에서는 이름 · 시간만 남는다).
-        style={{ maxHeight: showTextInput ? "0px" : callTokens.hasAvatar ? "max(0px, calc(18dvh - 24px))" : "48px" }}
+        style={{ maxHeight: showTextInput ? "0px" : oneUi9 ? "0px" : callTokens.hasAvatar ? "max(0px, calc(18dvh - 24px))" : "48px" }}
       />
       <div className={`call-compact-gap flex ${showTextInput ? "flex-none gap-2" : "flex-1 gap-5"} flex-col items-center px-6`}>
         {/* §89.5 ⓑ — 벨 등장: 위에서 내려오며 커진다(`call-ring-enter` · reduced-motion이면 정지 — G457). */}
@@ -2972,13 +2994,25 @@ export default function SessionCallPage() {
           )}
           {/* T75 — 발신자는 번호만 보여 준다(사칭 표기 없음 · 정답을 미리 알려 주지 않는다). */}
           <p
-            className="max-w-full truncate font-semibold leading-tight"
-            // §89.5 ⓑ — 벨에서는 번호가 화면 주인공(+4px).
-            style={{ fontSize: callTokens.numberSizePx + (isRinging ? 4 : 0), color: callTokens.textPrimary }}
+            className={`max-w-full truncate leading-tight ${oneUi9 ? "font-bold tracking-tight transition-opacity" : "font-semibold"}`}
+            // §89.5 ⓑ — 벨에서는 번호가 화면 주인공(+4px). One UI 9 — '더 보기' 시트가 열리면 이름 · 부제가 흐려진다(실기).
+            style={{
+              fontSize: callTokens.numberSizePx + (isRinging ? 4 : 0),
+              color: callTokens.textPrimary,
+              opacity: oneUi9 && moreSheetOpen ? 0.3 : undefined,
+            }}
           >
             {/* §128(5) — 보이스톡 통화는 번호가 아니라 대화방 이름(발신 화면과 같은 이름). */}
             {voiceTalkCall ? (scenario.chatDisplayName ?? callerLabel) : callerLabel}
           </p>
+          {oneUi9Subtitle && (
+            <p
+              className="mt-1 text-[16px] transition-opacity"
+              style={{ color: callTokens.textPrimary, opacity: moreSheetOpen ? 0.3 : 0.92 }}
+            >
+              {oneUi9Subtitle}
+            </p>
+          )}
           {/* ③ UX-014 v1.33 (3) 정본 — ⛔ 이 표 밖의 문구를 두지 않는다. incoming = 비움(숨김 글) · connecting =
               "연결 중…" · opening/live = 경과 시간(`aria-live` 없음 — 숫자를 매초 읽지 않는다, 접근 이름으로 대신) ·
               ended = "통화 종료". 옛 문구("휴대전화 수신 중…"·"연결하는 중…"·"통화 중")는 Superseded(D-86). */}
@@ -2987,13 +3021,23 @@ export default function SessionCallPage() {
             <p
               role="timer"
               aria-label={spokenCallElapsed(elapsedSec)}
-              className="mt-1.5 min-h-[24px] text-[17px] tabular-nums"
-              style={{ color: callTokens.textSecondary }}
+              className={
+                oneUi9
+                  ? "order-first mb-7 inline-flex min-h-[28px] items-center gap-2 text-[20px] font-medium tabular-nums"
+                  : "mt-1.5 min-h-[24px] text-[17px] tabular-nums"
+              }
+              // One UI 9 — 경과 시간은 화면 맨 위 상태 줄(전화 아이콘 + 시간 · 실기). 그 밖은 번호 바로 아래(종전).
+              style={{ color: oneUi9 ? callTokens.textPrimary : callTokens.textSecondary }}
             >
+              {oneUi9 && <PhoneIcon name="accept-call" size={20} />}
               {formatCallElapsed(elapsedSec)}
             </p>
           ) : (
-            <p role="status" className="mt-1.5 min-h-[24px] text-[17px]" style={{ color: callTokens.textSecondary }}>
+            <p
+              role="status"
+              className={oneUi9 ? "order-first mb-7 min-h-[28px] text-[17px]" : "mt-1.5 min-h-[24px] text-[17px]"}
+              style={{ color: oneUi9 ? callTokens.textPrimary : callTokens.textSecondary }}
+            >
               {phase === "incoming" ? (
                 <span className="sr-only">전화가 오고 있습니다</span>
               ) : phase === "connecting" && !localHangup ? (
@@ -3189,7 +3233,7 @@ export default function SessionCallPage() {
         // 키패드가 열리면 남은 높이를 모두 받는다(`flex-1` — 키패드 영역이 그 안에서 스크롤).
         <div
           ref={bottomPanelRef}
-          className={`call-compact-bottom sticky bottom-0 z-10 flex flex-col pb-[calc(env(safe-area-inset-bottom)+32px)] ${showTextInput ? "min-h-0 flex-1" : ""}`}
+          className={`call-compact-bottom sticky bottom-0 z-10 flex flex-col ${oneUi9 ? "pb-[calc(env(safe-area-inset-bottom)+52px)]" : "pb-[calc(env(safe-area-inset-bottom)+32px)]"} ${showTextInput ? "min-h-0 flex-1" : ""}`}
           style={bottomPanelBackground}
         >
           {/* T190-3(UX-014 v1.33 (7)) — 키패드를 열면 **그리드 자리를 키패드가 대체**한다(실제 통화 앱처럼). 높이가
@@ -3401,6 +3445,24 @@ export default function SessionCallPage() {
                 </>
               )}
             </div>
+          ) : oneUi9 ? (
+            <OneUiCallControls
+              tokens={callTokens}
+              muted={muted}
+              onToggleMute={handleToggleMute}
+              onOpenKeypad={() => setShowTextInput(true)}
+              speaker={{
+                on: audioRoute === "speaker",
+                disabled: speakerDisabled,
+                onToggle: () => setAudioRoute((route) => (route === "speaker" ? "call" : "speaker")),
+              }}
+              smsUnread={smsUnreadCount}
+              smsCount={inCallSms.length}
+              onOpenMessages={handleOpenSmsOverlay}
+              chat={scenario.channel === "messenger" ? { onOpen: () => setChatOpen(true), busy: switchingToMessenger } : null}
+              sheetOpen={moreSheetOpen}
+              onSheetOpenChange={setMoreSheetOpen}
+            />
           ) : (
             /* T190-3(UX-014 v1.33 (4) · D-87) — 3열×2행 그리드(72px 원 · 단색 아이콘 28px · 라벨 14px · ⛔ 이모지 0).
                1행 = 음소거 · 키패드 · 스피커 / 2행 = 메시지(처음부터 보임 · 첫 문자 전 비활성 — §108) · 채팅으로(메신저
@@ -3584,7 +3646,7 @@ export default function SessionCallPage() {
               G441 — 이 리터럴은 이 파일에 둔다, §74.4 R-3). 키패드가 열려 있으면 오른쪽 아래 "숨기기"(48px)가
               그리드로 되돌린다. */}
           {/* 2026-10-21 — iOS형은 종료 원이 그리드 셋째 줄 가운데처럼 붙고(행 간격과 같게) · One UI형은 판 아래 띄운다. */}
-          <div className={`call-compact-end relative flex flex-col items-center gap-1.5 ${callTokens.layout === "ios" ? "mt-5" : "mt-7"}`}>
+          <div className={`call-compact-end relative flex flex-col items-center gap-1.5 ${callTokens.layout === "ios" || oneUi9 ? "mt-5" : "mt-7"}`}>
             <button
               ref={endCallButtonRef}
               type="button"
@@ -3592,7 +3654,7 @@ export default function SessionCallPage() {
               // §110.4 — 메신저발 통화는 끊으면 대화방으로 돌아간다. §131(5)(메인 세션 라이브 확인 2026-10-24 — 메인 지시 *"메신저에서 이어진 통화는
               // '통화 종료'로"*) — 그 통화만 이름에서 "훈련 종료"를 뺀다(훈련이 끝나지 않는다). 통화 시나리오는 G441 이름 그대로.
               aria-label={returnsToMessengerOnHangup ? "통화 종료" : "통화 종료 — 훈련 종료"}
-              className="flex h-[76px] w-[76px] items-center justify-center rounded-full shadow-lg transition active:scale-95"
+              className={`flex items-center justify-center rounded-full shadow-lg transition active:scale-95 ${oneUi9 ? "h-16 w-16" : "h-[76px] w-[76px]"}`}
               // 2026-10-21 — 누른 뒤에는 눌린 채로 옅게 남는다(이동 전 한 프레임이라도 "먹었다"가 보이게).
               style={{
                 backgroundColor: callTokens.end,
@@ -3602,7 +3664,8 @@ export default function SessionCallPage() {
             >
               <PhoneIcon name="end-call" size={32} />
             </button>
-            <span className="text-sm" style={{ color: callTokens.textPrimary }}>
+            <span className="text-sm" hidden={oneUi9} style={{ color: callTokens.textPrimary }}>
+              {/* One UI 9 — 종료 원 아래 글자 없음(실기 · 이름은 aria-label · `hidden`). */}
               종료
             </span>
             {showTextInput && (
