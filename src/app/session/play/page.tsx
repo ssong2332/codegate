@@ -131,6 +131,7 @@ import AudioDebugPanel from "@/components/AudioDebugPanel";
 import PhoneIcon from "@/components/PhoneIcon";
 import OneUiCallControls from "@/components/OneUiCallControls";
 import { oneUi9CallerSubtitle } from "@/lib/phone/oneUi9Call";
+import { CALL_EXTRA_COPY, CALL_EXTRA_TOAST_MS, captionLine, recordingElapsedSec, type CallExtraPanel } from "@/lib/phone/callExtras";
 import EndTrainingButton from "@/components/EndTrainingButton";
 import {
   announceTurnsOnInstructionDispatch,
@@ -351,8 +352,13 @@ export default function SessionCallPage() {
   // 최신값으로 읽기 위한 사본. 갱신 지점은 아래 통화 경과 타이머 effect **한 곳**뿐이다.
   const elapsedSecRef = useRef(0);
   const [muted, setMuted] = useState(false);
-  // 2026-10-27 — One UI 9 통화 화면(`samsung` 스킨)의 '더 보기' 시트.
-  const [moreSheetOpen, setMoreSheetOpen] = useState(false);
+  // 2026-10-27 — One UI 9 통화 화면(`samsung` 스킨)의 시트(더 보기 · 오디오 기기 · 연락처 · 통화 어시스트).
+  const [callPanel, setCallPanel] = useState<CallExtraPanel | null>(null);
+  // 2026-10-27(사용자 지시 — `@/lib/phone/callExtras` 판정표) — 통화 자막 · 녹음 표시 · 토스트. 메모리 상태만(저장 · 전송 0).
+  const [captionsOn, setCaptionsOn] = useState(false);
+  // 녹음을 누른 순간의 통화 경과 초(렌더 중 시계를 읽지 않는다 — 매초 오는 `elapsedSec`로 잰다).
+  const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
+  const [callToast, setCallToast] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -2043,6 +2049,13 @@ export default function SessionCallPage() {
 
   // T190-8b(§74.12 (3) ⑥ · D-100 (2)) — 통화 경로의 세션 전 화면 모양 선택. 서버 쓰기 0(§74.5 (2) — 같은 기기에서
   // 표 K가 결정론적이다) · 기기 저장(`fv.deviceSkin.v1` — 새로고침·다음 세션의 K-2). ⛔ 세션 중(벨 이후)에는 부르는 곳 0.
+  // 2026-10-27 — 통화 화면 토스트는 잠깐 뒤 사라진다.
+  useEffect(() => {
+    if (!callToast) return;
+    const timer = window.setTimeout(() => setCallToast(null), CALL_EXTRA_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [callToast]);
+
   const handleChooseCallSkin = (next: "ios" | "samsung") => {
     setDeviceSkin({ skin: next, source: "manual" });
     try {
@@ -2872,15 +2885,25 @@ export default function SessionCallPage() {
           paddingTop: "calc(env(safe-area-inset-top) + 24px)",
         }}
       >
-      {/* One UI 9 — 오른쪽 위 영상통화 아이콘(장식 · 앱에 없는 기능 · 누름 무반응). */}
+      {/* One UI 9 — 오른쪽 위 영상통화 아이콘. 영상통화는 없다 — 상대가 받을 수 없다는 토스트(`callExtras` 판정표). */}
       {oneUi9 && (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute right-6 opacity-90"
-          style={{ top: "calc(env(safe-area-inset-top) + 22px)", color: callTokens.textPrimary }}
+        <button
+          type="button"
+          onClick={() => setCallToast(CALL_EXTRA_COPY.videoUnavailable)}
+          aria-label="영상통화"
+          className="absolute right-3 flex h-11 w-11 items-center justify-center opacity-90"
+          style={{ top: "calc(env(safe-area-inset-top) + 14px)", color: callTokens.textPrimary }}
         >
           <PhoneIcon name="video" size={26} />
-        </span>
+        </button>
+      )}
+      {/* 2026-10-27 — 통화 화면 토스트(영상통화 · 통화 대기 · 실시간 통역 — 쓸 수 없는 기능 안내). 흐름 밖 · 탭을 가로채지 않는다. */}
+      {callToast && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+410px)] z-30 flex justify-center px-6">
+          <p role="status" className="rounded-full bg-black/75 px-4 py-2.5 text-center text-[14px] text-white shadow-lg">
+            {callToast}
+          </p>
+        </div>
       )}
       {/* T68 문자 도착 배너(UX-014 `sms-arrived` state / UF-008 Step 2) — 통화는 그대로 진행 중이다.
           시각 배너와 **aria-live 알림을 동시에** 제공한다(P-20 (6) — 시각에만 의존하지 않는다).
@@ -2999,7 +3022,7 @@ export default function SessionCallPage() {
             style={{
               fontSize: callTokens.numberSizePx + (isRinging ? 4 : 0),
               color: callTokens.textPrimary,
-              opacity: oneUi9 && moreSheetOpen ? 0.3 : undefined,
+              opacity: oneUi9 && callPanel ? 0.3 : undefined,
             }}
           >
             {/* §128(5) — 보이스톡 통화는 번호가 아니라 대화방 이름(발신 화면과 같은 이름). */}
@@ -3008,7 +3031,7 @@ export default function SessionCallPage() {
           {oneUi9Subtitle && (
             <p
               className="mt-1 text-[16px] transition-opacity"
-              style={{ color: callTokens.textPrimary, opacity: moreSheetOpen ? 0.3 : 0.92 }}
+              style={{ color: callTokens.textPrimary, opacity: callPanel ? 0.3 : 0.92 }}
             >
               {oneUi9Subtitle}
             </p>
@@ -3023,7 +3046,7 @@ export default function SessionCallPage() {
               aria-label={spokenCallElapsed(elapsedSec)}
               className={
                 oneUi9
-                  ? "order-first mb-7 inline-flex min-h-[28px] items-center gap-2 text-[20px] font-medium tabular-nums"
+                  ? `order-first ${recordingStartedAt !== null ? "mb-1" : "mb-7"} inline-flex min-h-[28px] items-center gap-2 text-[20px] font-medium tabular-nums`
                   : "mt-1.5 min-h-[24px] text-[17px] tabular-nums"
               }
               // One UI 9 — 경과 시간은 화면 맨 위 상태 줄(전화 아이콘 + 시간 · 실기). 그 밖은 번호 바로 아래(종전).
@@ -3048,6 +3071,13 @@ export default function SessionCallPage() {
               ) : (
                 "통화 종료"
               )}
+            </p>
+          )}
+          {/* 2026-10-27 — 녹음 표시(실기 상태 줄 아래 보조 줄 자리). 표시만 — 파일 · 저장 · 전송 0. */}
+          {oneUi9 && recordingStartedAt !== null && (phase === "opening" || phase === "live") && !localHangup && (
+            <p className="order-first mb-6 inline-flex items-center gap-1.5 text-[15px]" style={{ color: callTokens.textPrimary }}>
+              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-[#FF4D4D]" />
+              {`${CALL_EXTRA_COPY.recording} ${formatCallElapsed(recordingElapsedSec(recordingStartedAt, elapsedSec) ?? 0)}`}
             </p>
           )}
           {/* T192 C5(UX-014 v1.35 (3)) — One UI형 · 기본은 정지된 통화 시간을 남긴다(iOS형은 숨김 — 추정 근사). */}
@@ -3098,6 +3128,18 @@ export default function SessionCallPage() {
             지우지 않는다(G289) — "듣고 있어요"·"보내는 중" 자동 청취/전송 상태의 유일한 화면
             표시이고, 대체 표면인 키패드 패널은 기본 닫힘이라 없다(침묵 실패 금지). */}
         {/* §136 W1 — "이어서 통화하기"가 떠 있는 동안(마이크 · 소리 멈춤)은 파형 · "말씀하세요"를 그리지 않는다. */}
+        {/* 2026-10-27 — 통화 자막(`callExtras` 판정표). ⛔ 사기범 대사만(`pillCaption` — G79/G93 · 참가자 말은 그리지 않는다). */}
+        {oneUi9 && captionsOn && !showTextInput && (phase === "live" || phase === "opening") && (
+          <div
+            className="w-full max-w-[340px] rounded-2xl px-4 py-3 text-left"
+            style={{ backgroundColor: callTokens.sheetBg ?? callTokens.chipBg, color: callTokens.textPrimary }}
+          >
+            <p className="text-[12px] font-semibold opacity-80">{`${CALL_EXTRA_COPY.captionsTitle} · ${CALL_EXTRA_COPY.captionsSpeaker}`}</p>
+            <p className="mt-1 line-clamp-4 text-[16px] leading-snug">
+              {captionLine(pillCaption) ?? <span className="opacity-70">{CALL_EXTRA_COPY.captionsWaiting}</span>}
+            </p>
+          </div>
+        )}
         {showsCallWaveform({ phaseShowsWave: phase === "live" || phase === "opening", callMode, resumeTapNeeded }) && (
           <CallWaveform active={agentSpeaking} label={waveLabel} compact={showTextInput} />
         )}
@@ -3460,8 +3502,15 @@ export default function SessionCallPage() {
               smsCount={inCallSms.length}
               onOpenMessages={handleOpenSmsOverlay}
               chat={scenario.channel === "messenger" ? { onOpen: () => setChatOpen(true), busy: switchingToMessenger } : null}
-              sheetOpen={moreSheetOpen}
-              onSheetOpenChange={setMoreSheetOpen}
+              panel={callPanel}
+              onPanelChange={setCallPanel}
+              recording={recordingStartedAt !== null}
+              onToggleRecording={() => setRecordingStartedAt((at) => (at === null ? elapsedSec : null))}
+              captionsOn={captionsOn}
+              onToggleCaptions={() => setCaptionsOn((on) => !on)}
+              onToast={setCallToast}
+              callerLabel={callerLabel}
+              callerSubtitle={oneUi9Subtitle}
             />
           ) : (
             /* T190-3(UX-014 v1.33 (4) · D-87) — 3열×2행 그리드(72px 원 · 단색 아이콘 28px · 라벨 14px · ⛔ 이모지 0).
