@@ -136,9 +136,12 @@ export function applySpeakerDynamics(
 // 기준 레벨(판단값): '통화' 스트림의 통화 모드 앱 게인을 −6dB 낮춘다(0.6 → 0.3). 통화 곡선의 최댓값이 기본보다 약 +6dB뿐이라
 // 그보다 크게 깎으면 볼륨 키를 끝까지 올려도 종전보다 작아질 수 있다 — 그래서 차이 전체가 아니라 키 여유만큼만 깎는다.
 // 스피커 모드(컴프레서 · 보정 · 리미터)는 그대로다. 되돌리기 · 실기 A/B = `?voicetrim=0`(`readVoiceTrimFlag`).
+// §138(2026-10-27 실기 신고 *"기본 음량이 좀 커"* · 갤럭시 Chrome 155 · `out.sink=context`·`element` 모두 '통화' 음량으로 조절됨) — 위 −6dB에서 −3dB 더 깎아
+// 0.5 → 0.35(약 −9.1dB · 통화 모드 최종 0.6 × 0.35 = 0.21)로 한다. 볼륨 키 여유(통화 곡선 최댓값 ≈ 기본 +6dB)는 아직 +3dB 남아 키를 끝까지 올리면
+// 종전 기본보다 크다. 판단값 — 실기 청취로 확정한다.
 
-/** '통화' 스트림(`after-mic`) 통화 모드의 추가 감쇠(선형 · 0.5 ≈ −6.0dB). 판단값 — 실기 청취로 확정한다. */
-export const VOICE_STREAM_CALL_TRIM = 0.5;
+/** '통화' 스트림(`after-mic`) 통화 모드의 추가 감쇠(선형 · 0.35 ≈ −9.1dB · §138). 판단값 — 실기 청취로 확정한다. */
+export const VOICE_STREAM_CALL_TRIM = 0.35;
 
 /** 위 표 — 출력 경로 · 플래그 → 통화 모드 추가 감쇠. `after-mic`(통화 스트림으로 본다)일 때만 깎는다. */
 export function callStreamTrimFor(outputPath: string | null | undefined, flagOn: boolean): number {
