@@ -47,7 +47,7 @@ test("[One UI 9] 배선 — 통화 셸이 oneui9일 때만 새 버튼 묶음 · 
   // 종료 버튼 이름(G441)은 그대로 — 스킨과 무관하게 한 버튼.
   assert.equal(play.split('aria-label={returnsToMessengerOnHangup ? "통화 종료" : "통화 종료 — 훈련 종료"}').length, 2);
   const controls = readFileSync("src/components/OneUiCallControls.tsx", "utf8");
-  for (const word of ["녹음", "블루투스", "통화 자막", "통화 대기", "연락처 보기"]) assert.ok(controls.includes(word), word);
-  assert.match(controls, /const decorative = [\s\S]*?<div aria-hidden="true"/);
+  for (const word of ["녹음", "블루투스", "통화 대기", "연락처 보기", "COPY.captionsTitle"]) assert.ok(controls.includes(word), word);
+  // 2026-10-27 — 장식이던 버튼에 대략적인 기능이 붙었다(`callExtras.test.ts`가 판정표를 고정한다).
   assert.ok(!/samsung|galaxy|갤럭시|삼성/i.test(controls.replace(/\/\/.*$/gm, "")), "상표 표기 0");
 });
