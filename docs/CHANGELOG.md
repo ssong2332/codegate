@@ -4,6 +4,11 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-27 추가분, 브랜치 `claude/output-element-default`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
+
+### Changed
+- **통화 출력 `<audio>` 재생을 기본으로(§139)**: 실기 결과 `out.sink=element`는 볼륨 키가 4/4 '통화' 음량을 조절했고 `context`는 '통화'와 '미디어'가 섞였다(사용자 결정 "변경해"). 이제 플래그 없이 숨긴 `<audio>`로 재생한다. 되돌리기 = `?outelement=0`(탭 안 유지) · 재생 실패 시 즉시 종전 `ctx.destination`(표 E4). 수화부↔스피커 선택은 바뀌지 않는다.
+
 > ⚠️ **이 블록(2026-10-27 추가분, 브랜치 `claude/call-volume-lower`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
 
 ### Changed
