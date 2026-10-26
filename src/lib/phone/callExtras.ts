@@ -29,6 +29,10 @@ export type CallExtraPanel = "more" | "audio" | "contact" | "assist";
 export const CALL_EXTRA_COPY = {
   videoUnavailable: "상대방이 영상통화를 받을 수 없습니다",
   holdUnavailable: "지금은 통화 대기를 사용할 수 없습니다",
+  // iOS형 '더 보기'(추정 구성) — 통화 대기 지원 · 실시간 번역 · 화면 공유.
+  holdAssistUnavailable: "지금은 통화 대기 지원을 사용할 수 없습니다",
+  screenShareUnavailable: "상대방이 화면 공유를 받을 수 없습니다",
+  iosTranslate: "실시간 번역",
   translateUnavailable: "이 통화에서는 실시간 통역을 사용할 수 없습니다",
   recording: "녹음 중",
   captionsTitle: "통화 자막",

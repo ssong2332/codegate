@@ -67,6 +67,8 @@ const SESSION_SURFACE_REGISTRY: Record<string, SurfaceRole> = {
   "src/components/SelectScreenHeader.tsx": "not-in-session", // 선택 화면 머리(UX D-141) — 세션 전
   "src/components/PageToc.tsx": "not-in-session", // 긴 페이지 "목록" 토글(UX D-140) — 시나리오 선택 · 리포트 · 고지 화면(세션 밖). 훈련 화면 금지는 G-TOC7
   "src/components/PersonaCardInputFields.tsx": "not-in-session", // §88 UX D-131 "내 정보" 선택 입력(난이도 · 챌린지 만들기 — 세션 전)
+  "src/components/CallExtraSheets.tsx": "in-session", // 2026-10-27 통화 부가 기능 시트(통화 셸)
+  "src/components/IosCallControls.tsx": "in-session", // 2026-10-27 iOS 26 통화 버튼 묶음(통화 셸)
   "src/components/OneUiCallControls.tsx": "in-session", // 2026-10-27 One UI 9 통화 버튼 묶음 · 더 보기 시트(통화 셸)
   "src/components/PhoneIcon.tsx": "in-session", // T190-1 기기 재현 단색 아이콘(통화 셸 그리드 · 텍스트 노드 0)
   "src/components/SpoofImage.tsx": "not-in-session", // 렌더 사용처 0(M-12)
@@ -105,8 +107,8 @@ test("[T187/G436] 세션 표면 등록부 = src/components/*.tsx ∪ src/app/ses
   // → §94 23(+ThemeDebugPanel — ?themedebug=1) → §95 24(+MessengerProfileSheet — 카톡형 상대 프로필) → §95.6 25(+WebDarkModeNotice)
   // → §96 26(+PageToc — 긴 페이지 목록) → §97 28(+ScenarioPanelGroups · SelectScreenHeader — 시안 E2 선택 화면) → §97.7 29(+TrainingPrepScreen).
   // → §121.4 30(+MessengerChatRoom — 메신저 라우트 본문) → §123 31(+VoiceTalkDialScreen) → §134 32(+DebugFlagCapture — DOM 0)
-  // → 2026-10-27 33(+OneUiCallControls — One UI 9 통화 버튼 묶음)
-  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 33);
+  // → 2026-10-27 33(+OneUiCallControls — One UI 9 통화 버튼 묶음) → 35(+CallExtraSheets · IosCallControls — 통화 부가 기능 · iOS 26)
+  assert.equal(Object.keys(SESSION_SURFACE_REGISTRY).length, 35);
 });
 
 // ── G451 — 등록부 2벌(G436 · T86)이 최상위 `src/components/*.tsx`만 훑으므로, 하위 디렉터리에 컴포넌트를 두면
@@ -217,7 +219,7 @@ function allInSessionViolations(file: string, code: string): string[] {
 // ── G437 · G439 · G440 본 게이트 ───────────────────────────────────────────────────────────
 test("[T187/G437] 세션 중 파일·문면 모듈의 렌더 가능 텍스트에 표식 낱말 0 · 표식 컴포넌트 import 0", () => {
   const files = scopeFiles();
-  assert.equal(files.length, 19, "범위 = in-session 12(T190-1 +PhoneIcon · 2026-10-18 +AudioDebugPanel · §94 +ThemeDebugPanel · §95 +MessengerProfileSheet · §123 +VoiceTalkDialScreen · 2026-10-27 +OneUiCallControls) + mixed 3(§121.4 +MessengerChatRoom) + 문면 모듈 4");
+  assert.equal(files.length, 21, "범위 = in-session 14(+CallExtraSheets · IosCallControls 2026-10-27 · T190-1 +PhoneIcon · 2026-10-18 +AudioDebugPanel · §94 +ThemeDebugPanel · §95 +MessengerProfileSheet · §123 +VoiceTalkDialScreen · 2026-10-27 +OneUiCallControls) + mixed 3(§121.4 +MessengerChatRoom) + 문면 모듈 4");
   assert.deepEqual(files.flatMap((f) => markerViolations(f, read(f))), []);
 });
 

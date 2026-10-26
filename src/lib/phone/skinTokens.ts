@@ -69,7 +69,7 @@ export type CallSkinTokens = {
    * "종료" 글자) / `oneui9` = 위 상태 줄 · 큰 이름 + 부제 · 둥근 사각 3×2(녹음 · 내 소리 차단 · 블루투스 / 스피커 · 키패드 · 더 보기)
    * · '더 보기' 시트 · 글자 없는 종료 원. `samsung` 스킨만 `oneui9`다(`ios` · `default` 무변경).
    */
-  controls: "classic" | "oneui9";
+  controls: "classic" | "oneui9" | "ios26";
   /** 셸 바탕 그라데이션(CSS) — 있으면 단색 `bg` 대신 칠한다(`oneui9`의 블러 그라데이션). 없으면 null(종전). */
   shellGradient: string | null;
   /**
@@ -248,10 +248,27 @@ const BANNER_TOKENS: Record<MessengerSkin, BannerSkinTokens> = {
 /** 기기 테마(OS `prefers-color-scheme`) — 라이트 통화 화면은 One UI형에만 있다(§89.5 ⓒ · iOS형 · 기본은 늘 어둡다). */
 export type DeviceTheme = "dark" | "light";
 
+/**
+ * 2026-10-27(사용자 지시 — iOS 26 통화 화면 재현 · 실기 스크린샷 없음) — `ios` 스킨 통화 중 화면. 근거 = 공개 자료(배치: iOS 17 이후 6개 버튼 묶음
+ * · 종료가 아래 줄 가운데 · 키패드 오른쪽 아래 — AppleInsider 2023-08-16 · 녹음 버튼 왼쪽 위 — iOS 18.1 안내 기사 · 버튼 재질 = 반투명 유리
+ * "Liquid Glass" — iOS 26 발표 보도). 색 · 크기는 **추정**(실기 스포이트 없음). 종전 iOS형 값(바탕 #1C1C1E · 눌림 흰 원)은 유지하고
+ * 위에서 아래로 어두워지는 바탕 · 유리 버튼 · 시트만 더했다. 보이스톡 통화는 종전 그대로(`CALL_TOKENS.ios`).
+ */
+const IOS_26_TOP = "#34343A";
+const IOS_26_CALL: CallSkinTokens = {
+  ...CALL_TOKENS.ios,
+  controls: "ios26",
+  // iOS 시스템 빨강(공개 색 값 #FF3B30) — 종전 공통 #C6392F보다 밝다. 흰 아이콘 비텍스트 3:1 이상(G456).
+  end: "#FF3B30",
+  shellGradient: `linear-gradient(180deg, ${IOS_26_TOP} 0%, #1C1C1E 55%, #121214 100%)`,
+  sheetBg: "rgba(44,44,48,0.88)",
+};
+
 // `theme`은 호출부 호환으로만 받는다 — 2026-10-27 이후 어느 스킨도 기기 테마로 갈리지 않는다(One UI형 = `ONE_UI_9_CALL` 하나).
 export function callTokensFor(skin: MessengerSkin, theme: DeviceTheme = "dark"): CallSkinTokens {
   void theme;
   if (skin === "samsung") return ONE_UI_9_CALL;
+  if (skin === "ios") return IOS_26_CALL;
   return CALL_TOKENS[skin];
 }
 
@@ -686,6 +703,7 @@ export function skinContrastPairs(skin: MessengerSkin): ContrastPair[] {
     ...ringPairs(skin, call),
     ...panelPairs(skin, call),
     ...oneUi9Pairs(skin, call),
+    ...ios26Pairs(skin, call),
     ...messengerChatPairs(),
   ];
 }
@@ -747,6 +765,18 @@ export function oneUi9Pairs(skin: MessengerSkin, call: CallSkinTokens): Contrast
     { name: `${skin}.call9.gridIconPressed`, fg: call.gridIconPressed, bg: call.gridButtonPressedBg, base: dark, kind: "nonText" },
     { name: `${skin}.call9.sheetText@light`, fg: call.textPrimary, bg: sheet, base: light, kind: "text" },
     { name: `${skin}.call9.badge`, fg: call.badgeText, bg: call.badgeBg, kind: "text" },
+  ];
+}
+
+/** 2026-10-27 — iOS 26 통화 화면(`controls: "ios26"`): 그라데이션 위 끝(가장 밝은 바탕)의 글자 · 유리 버튼 아이콘 · 시트 글자. classic은 0쌍. */
+export function ios26Pairs(skin: MessengerSkin, call: CallSkinTokens): ContrastPair[] {
+  if (call.controls !== "ios26") return [];
+  const top = IOS_26_TOP;
+  return [
+    { name: `${skin}.call26.number@top`, fg: call.textPrimary, bg: top, kind: "text" },
+    { name: `${skin}.call26.textSecondary@top`, fg: call.textSecondary, bg: top, kind: "text" },
+    { name: `${skin}.call26.gridIcon@top`, fg: call.gridIcon, bg: call.gridButtonBg, base: top, kind: "nonText" },
+    { name: `${skin}.call26.sheetText`, fg: call.textPrimary, bg: call.sheetBg ?? call.bg, base: top, kind: "text" },
   ];
 }
 

@@ -97,7 +97,8 @@ test("[T190/UX-014 v1.33 (5)] 스킨 차이표 근사값 — 받기 초록 · �
   for (const skin of SKINS) {
     assert.equal(callTokensFor(skin).accept, "#1E8E3E", "받기 = call.accept(앱 청록 #0E6B62는 Superseded)");
     // 2026-10-27 — One UI형(One UI 9 화면)만 실기 종료 원 색 #DB3D34. iOS형 · 기본은 #C6392F 유지.
-    assert.equal(callTokensFor(skin).end, skin === "samsung" ? "#DB3D34" : "#C6392F");
+    // 2026-10-27 — iOS형(iOS 26 화면)은 시스템 빨강 #FF3B30.
+    assert.equal(callTokensFor(skin).end, skin === "samsung" ? "#DB3D34" : skin === "ios" ? "#FF3B30" : "#C6392F");
     assert.equal(callTokensFor(skin).textSecondary, "#C9D4DB");
   }
   assert.equal(callTokensFor("ios").hasAvatar, false);
