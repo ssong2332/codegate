@@ -4,6 +4,11 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-27 추가분, 브랜치 `claude/call-volume-lower`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
+
+### Changed
+- **통화 모드 기본 음량 −3dB(§138)**: 실기 신고("기본 음량이 좀 커")에 따라 '통화' 스트림(`after-mic`) 통화 모드 추가 감쇠를 0.5(−6.0dB) → 0.35(−9.1dB)로 낮췄다(`VOICE_STREAM_CALL_TRIM`). 스피커 모드는 그대로다. 되돌리기 A/B = `?voicetrim=0`(감쇠 0).
+
 > ⚠️ **이 블록(2026-10-26 추가분, 브랜치 `claude/output-element-ab`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
 
 ### Added

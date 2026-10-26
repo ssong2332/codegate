@@ -20,10 +20,10 @@ import { scammerClaimsSmsSent, shouldRequestSmsBackstop } from "./toolWindow.ts"
 
 const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 
-test("[§126 음량] '통화' 스트림 감쇠 — after-mic만 −6dB · 그 밖 · 플래그 끔은 1", () => {
-  assert.equal(VOICE_STREAM_CALL_TRIM, 0.5);
-  assert.equal(formatDbfs(VOICE_STREAM_CALL_TRIM), "-6.0");
-  assert.equal(callStreamTrimFor("after-mic", true), 0.5);
+test("[§126 · §138 음량] '통화' 스트림 감쇠 — after-mic만 −9.1dB · 그 밖 · 플래그 끔은 1", () => {
+  assert.equal(VOICE_STREAM_CALL_TRIM, 0.35);
+  assert.equal(formatDbfs(VOICE_STREAM_CALL_TRIM), "-9.1");
+  assert.equal(callStreamTrimFor("after-mic", true), 0.35);
   assert.equal(callStreamTrimFor("after-mic", false), 1);
   assert.equal(callStreamTrimFor("before-mic", true), 1);
   assert.equal(callStreamTrimFor("fallback-primed", true), 1);
