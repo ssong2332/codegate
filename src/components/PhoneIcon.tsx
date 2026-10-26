@@ -24,7 +24,17 @@ export type PhoneIconName =
   // 사용자 결정(2026-10-18 · UX D-116) — 메신저에서 연 가짜 랜딩 브라우저 바 왼쪽 ✕(닫기).
   | "close"
   // §113.2(UX D-151 (2)) — 대화방 입력줄 왼쪽 '+'(사진 보내기).
-  | "plus";
+  | "plus"
+  // 2026-10-27 — One UI 9 통화 화면(`OneUiCallControls`) 재현용. 녹음 · 블루투스 · 반짝이 · 영상 · 자막 · 대기는 장식(동작 없음).
+  | "record"
+  | "bluetooth"
+  | "more"
+  | "sparkle"
+  | "video"
+  | "caption"
+  | "pause"
+  | "contact"
+  | "send-message";
 
 type PhoneIconProps = {
   name: PhoneIconName;
@@ -138,6 +148,71 @@ function glyph(name: PhoneIconName) {
         <>
           <path d="M12 5v14" />
           <path d="M5 12h14" />
+        </>
+      );
+    case "record":
+      return (
+        <>
+          <path d="M14 18H5.5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v3" />
+          <circle cx="7.6" cy="9.8" r="1.8" />
+          <circle cx="12.4" cy="9.8" r="1.8" />
+          <path d="M7.6 11.6h4.8" />
+          <path d="M15 14h6.5" />
+          <path d="M18.2 14v7" />
+        </>
+      );
+    case "bluetooth":
+      return <path d="M7 7.5l10 9-5 4.5V3l5 4.5-10 9" />;
+    case "more":
+      return (
+        <>
+          <circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none" />
+        </>
+      );
+    case "sparkle":
+      return (
+        <g fill="currentColor" stroke="none">
+          <path d="M10 6l1.6 4.4L16 12l-4.4 1.6L10 18l-1.6-4.4L4 12l4.4-1.6z" />
+          <path d="M17 3l.7 1.8 1.8.7-1.8.7L17 8l-.7-1.8-1.8-.7 1.8-.7z" />
+          <path d="M18 15.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" />
+        </g>
+      );
+    case "video":
+      return (
+        <g fill="currentColor" stroke="none">
+          <rect x="2" y="6" width="14" height="12" rx="2.5" />
+          <path d="M17 10.5l5-3v9l-5-3z" />
+        </g>
+      );
+    case "caption":
+      return (
+        <>
+          <path d="M12 3.5a8.5 8.5 0 0 1 0 17H4.5l1.6-2.6A8.5 8.5 0 0 1 12 3.5z" />
+          <path d="M10.6 10.3a2 2 0 1 0 0 3.4" />
+          <path d="M15.6 10.3a2 2 0 1 0 0 3.4" />
+        </>
+      );
+    case "pause":
+      return (
+        <>
+          <path d="M9 5v14" />
+          <path d="M15 5v14" />
+        </>
+      );
+    case "contact":
+      return (
+        <>
+          <circle cx="12" cy="8" r="3.5" />
+          <path d="M5.5 20a6.5 6.5 0 0 1 13 0z" />
+        </>
+      );
+    case "send-message":
+      return (
+        <>
+          <path d="M12 3.5a8.5 8.5 0 0 1 0 17H4.5l1.6-2.6A8.5 8.5 0 0 1 12 3.5z" />
+          <path d="M8.5 12.5l7-3.5-2.5 7-1.5-2.5z" />
         </>
       );
   }
