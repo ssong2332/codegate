@@ -246,9 +246,11 @@ export function pickCallOutputPath(input: {
 // 가설(추정 — 실기 확인 전): Web Audio `ctx.destination` 출력이 때로는 '통화', 때로는 '미디어' 스트림으로 나간다. 최종 노드를
 // `MediaStreamAudioDestinationNode` → 숨긴 `<audio>`(WebRTC 재생 경로)로 내보내면 '통화' 스트림에 고정될 수 있다.
 // ⇒ `?outelement=1`일 때만 켜는 실험(기본 = 끔 · 탭 안 유지 = `debugFlags.ts` F1~F5).
+// §139(2026-10-27 사용자 결정 "변경해") — 실기 결과 `element` 4/4 '통화' 음량 · `context`는 '통화' 1회 · '미디어' 2회 이상 ⇒ **기본 = 켬**.
+// 끄기(되돌리기 · A/B) = `?outelement=0`(탭 안 유지). `?outelement=off`는 저장 값을 지워 기본(켬)으로 돌아간다(F2).
 // | # | If | Then |
 // |---|---|---|
-// | E1 | 플래그 꺼짐(`outelement` 없음 · `1` 밖) | 종전 그대로 `ctx.destination` — `context`(요소 0 · 이 함수들을 부르지 않는다) |
+// | E1 | 플래그 꺼짐(`outelement=0`) | 종전 그대로 `ctx.destination` — `context`(요소 0 · 이 함수들을 부르지 않는다) |
 // | E2 | 플래그 켬 · 스트림 목적지나 `<audio>`를 만들 수 없음 | `ctx.destination` — `element-failed` |
 // | E3 | 플래그 켬 · `play()`가 `OUTPUT_ELEMENT_PLAY_TIMEOUT_MS` 안에 resolve | `<audio>` — `element` |
 // | E4 | 플래그 켬 · `play()` reject · 상한 초과 · 재생 중 요소 `error` | 즉시 `ctx.destination`으로 되돌림 — `element-failed`(무음 결함 §57 재발 방지) |
@@ -260,12 +262,12 @@ export type OutputSink = "element" | "context" | "element-failed";
 /** `<audio>` `play()`를 기다리는 상한(판단값 — 넘으면 E4로 되돌린다). */
 export const OUTPUT_ELEMENT_PLAY_TIMEOUT_MS = 1500;
 
-/** `outelement=1`이면 켠다(실험 · 기본 = 끔). */
+/** §139 — 기본 = 켬. `outelement=0`이면 끈다(되돌리기 · A/B). */
 export function readOutputElementFlag(search: string): boolean {
   try {
-    return new URLSearchParams(search).get("outelement") === "1";
+    return new URLSearchParams(search).get("outelement") !== "0";
   } catch {
-    return false;
+    return true;
   }
 }
 

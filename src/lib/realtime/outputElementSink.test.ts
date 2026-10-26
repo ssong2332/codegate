@@ -95,18 +95,18 @@ function setup(opts: { streamDest?: boolean; element?: boolean; playThrows?: boo
 
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-test("[§137 플래그] `outelement=1`만 켠다 · 기본 끔 · 탭 안 유지(F3 · F4) · `=off`(F2) · `debugflags=off`(F1)", () => {
-  assert.equal(readOutputElementFlag(""), false);
-  assert.equal(readOutputElementFlag("?outelement=0"), false);
-  assert.equal(readOutputElementFlag("?outelement=true"), false);
+test("[§139 플래그] 기본 켬 · `outelement=0`만 끈다 · 탭 안 유지(F3 · F4) · `=off`(F2) · `debugflags=off`(F1)는 기본(켬)으로", () => {
+  assert.equal(readOutputElementFlag(""), true);
   assert.equal(readOutputElementFlag("?outelement=1"), true);
-  const first = resolveDebugFlags("?outelement=1", null);
-  assert.deepEqual(first.stored, { outelement: "1" });
-  assert.equal(readOutputElementFlag(resolveDebugFlags("", JSON.stringify(first.stored)).effectiveSearch), true);
+  assert.equal(readOutputElementFlag("?outelement=true"), true);
+  assert.equal(readOutputElementFlag("?outelement=0"), false);
+  const first = resolveDebugFlags("?outelement=0", null);
+  assert.deepEqual(first.stored, { outelement: "0" });
+  assert.equal(readOutputElementFlag(resolveDebugFlags("", JSON.stringify(first.stored)).effectiveSearch), false);
   const off = resolveDebugFlags("?outelement=off", JSON.stringify(first.stored));
   assert.deepEqual(off.stored, {});
-  assert.equal(readOutputElementFlag(off.effectiveSearch), false);
-  assert.equal(readOutputElementFlag(resolveDebugFlags("?debugflags=off", JSON.stringify(first.stored)).effectiveSearch), false);
+  assert.equal(readOutputElementFlag(off.effectiveSearch), true);
+  assert.equal(readOutputElementFlag(resolveDebugFlags("?debugflags=off", JSON.stringify(first.stored)).effectiveSearch), true);
 });
 
 test("[§137 E1 ~ E4] 판정 순수 함수", () => {

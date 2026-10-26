@@ -522,7 +522,7 @@ export default function GeminiVoiceSession({
     // §114 — 사기범 음성 라우드니스 정규화 상태(이 통화의 말소리 누적 측정 · 직전 게인). 출력 게인 · 스피커 증폭보다 **앞**이다.
     let loudness: LoudnessState = INITIAL_LOUDNESS_STATE;
     let limiterNodes: AudioNode[] = [];
-    // §137 — `?outelement=1`일 때만 최종 노드를 숨긴 `<audio>`로 내보낸다(`callAudio.ts` 표 E1~E4). 꺼져 있으면 null(종전).
+    // §137 · §139 — 기본으로 최종 노드를 숨긴 `<audio>`로 내보낸다(`callAudio.ts` 표 E1~E4). `?outelement=0`이면 null(종전 `ctx.destination`).
     let outputSink: { release: () => void } | null = null;
     let processor: ScriptProcessorNode | null = null;
     // 수정안 A — 통화 화면에서 빌린 컨텍스트인가(빌린 것은 닫지 않고 우리가 붙인 노드만 뗀다).
