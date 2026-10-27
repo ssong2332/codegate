@@ -234,7 +234,10 @@ export type CallSetupRecord = {
   credentialsToMountMs: number | null;
   /** 마운트 → AudioContext 준비(⭐ 2026-10-21부터 마이크 획득을 포함하지 않는다 — `acceptToMicMs`). */
   mountToMicMs: number | null;
-  /** AudioContext 준비 → Live 연결 완료. */
+  /**
+   * AudioContext 준비 → Live 연결 완료. ⭐ 2026-10-27부터 둘은 병렬이다(출력 준비 = 마이크 대기 포함) — 음수면 연결이 먼저 끝났다.
+   * 이때 남은 출력 준비 시간은 `connectToOpeningSentMs`에 들어간다.
+   */
   micToConnectMs: number | null;
   /** Live 연결 완료 → 오프닝 지시 전송. 0이 아니면 마이크(권한 창 등)를 기다렸다는 뜻이다. */
   connectToOpeningSentMs: number | null;

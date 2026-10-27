@@ -59,6 +59,7 @@ import {
   trimGainFor,
 } from "./outputGain";
 import { INITIAL_LOUDNESS_STATE, normalizeChunk, type LoudnessState } from "./loudnessNormalizer";
+import { createEarlyMessageGate } from "./earlyMessageGate";
 import { INITIAL_UNHEARD_REPLY_STATE, UNHEARD_REPLY_TEXT, stepUnheardReply } from "./unheardReply";
 import { appendScammerChunk, shouldMarkToolBoundary } from "./toolTurnTranscript";
 import { INITIAL_THOUGHT_LEAK_GATE_STATE, pickLiveAudioData, stepThoughtLeakGate, stripLeakedThought, type LiveContentPart } from "./thoughtLeak";
@@ -1302,6 +1303,8 @@ export default function GeminiVoiceSession({
     cleanupRef.current = cleanup;
 
     (async () => {
+      // 아래 출력 준비(마이크 → 통화 출력 컨텍스트) — Live 연결과 병렬. 연결 실패 시 catch가 이것이 끝난 뒤에 정리한다.
+      let outputReady: Promise<void> | null = null;
       try {
         // §71.6 P-0 — 준비 구간 표시(받기 · 자격증명 준비는 `useRealtimeCall`이 이미 찍었다).
         markCallSetup("mount", performance.now());
@@ -1316,111 +1319,366 @@ export default function GeminiVoiceSession({
         micRequest.catch(() => {});
         pendingMic = micRequest;
 
-        // 수정안 A — 받기 탭 안에서 미리 깨운 컨텍스트가 살아 있으면 그것을 쓴다(없거나 닫혔으면 종전대로 만든다).
-        const primedOutput = primedAudio?.output ?? null;
-        const primedInput = primedAudio?.input ?? null;
-        // ⭐ §122.2.2 — 볼륨 키가 '통화' 음량으로 소리를 조절하게, 마이크가 열린 **뒤** 출력 컨텍스트를 새로 만든다(`callAudio.ts` 표 O1~O4 ·
-        // Chromium은 출력 스트림 용도를 만들 때 정한다). 마이크는 받기 때 이미 열기 시작했다 — 대개 여기서는 이미 끝나 있다.
-        // 거부 · 실패는 아래 종전 자리(`await micRequest`)가 그대로 처리한다.
-        const outputAfterMicFlag = readOutputAfterMicFlag(readDebugFlagSearch());
-        // §137 — 출력 싱크 A/B(기본 = 끔 · 꺼져 있으면 아래 연결은 종전 `ctx.destination` 그대로 — 표 E1).
-        const outputElementFlag = readOutputElementFlag(readDebugFlagSearch());
-        const micOpened = outputAfterMicFlag ? (await micRequest.catch(() => null)) !== null : false;
-        let freshOutput: AudioContext | null = null;
-        if (outputAfterMicFlag && micOpened && !cancelled) {
-          try {
-            freshOutput = new AudioContext({ sampleRate: GEMINI_OUTPUT_SAMPLE_RATE });
-            const freshStartedAt = performance.now();
-            await Promise.race([
-              freshOutput.resume().catch(() => {}),
-              new Promise<void>((resolve) => setTimeout(resolve, FRESH_OUTPUT_RESUME_TIMEOUT_MS)),
-            ]);
-            // §126 — `fallback-primed`(볼륨 키가 안 먹는 경로)로 빠진 원인이 시간 초과인지 진단에 남긴다.
-            noteFreshResume(
-              freshOutput.state === "running" ? String(Math.round(performance.now() - freshStartedAt)) : "timeout",
-            );
-          } catch (e) {
-            noteAudioError(e instanceof Error ? e.name : "unknown");
-            freshOutput = null;
+        // 서버 메시지 1건의 모양(아래 `handleLiveMessage` · 연결 콜백이 함께 쓴다).
+        type LiveServerMessageLike = {
+        data?: string;
+        serverContent?: {
+          interrupted?: boolean;
+          turnComplete?: boolean;
+          inputTranscription?: { text?: string };
+          outputTranscription?: { text?: string };
+          // §116 — 재생할 오디오를 직접 고른다(사고 파트 제외 · SDK `data` 게터는 `thought`를 보지 않는다).
+          modelTurn?: { parts?: LiveContentPart[] };
+        };
+        // §59.2 ②(genai.d.ts:9262) — `toolCall?: LiveServerToolCall`.
+        toolCall?: { functionCalls?: { id?: string; name?: string; args?: unknown }[] };
+        // §59.2 ②(genai.d.ts:9264) — `toolCallCancellation?: LiveServerToolCallCancellation`.
+        toolCallCancellation?: { ids?: string[] };
+        };
+        // ⭐ 2026-10-27(실기 신고 — 첫 발화까지 17초) — §122.2.2가 통화 출력 컨텍스트를 마이크 **뒤에** 만들면서, 이 자리에서 마이크를
+        // 기다린 다음에야 Live 연결을 시작했다(2026-10-21 받기→첫소리 병렬화가 다시 직렬이 됨). 이제 출력 준비(마이크 대기 → 새 출력
+        // 컨텍스트 → 노드 사슬)만 `setupCallOutput`으로 따로 돌리고, Live 연결은 그것을 기다리지 않는다. 볼륨 키 의도(§122.2.2)는 그대로다 —
+        // 출력 컨텍스트는 여전히 마이크가 열린 뒤에 만든다. 출력 준비 전에 온 서버 메시지는 버리지 않고 받은 순서대로 쌓았다가,
+        // 준비가 끝나는 같은 동기 구간에서 그대로 처리한다(그 뒤 메시지는 바로 처리 — 순서가 뒤바뀌지 않는다). 오프닝은 아래에서 출력 준비 ·
+        // 마이크를 모두 기다린 뒤에 나가므로 첫 오디오가 출력보다 먼저 오는 일은 대개 없지만, 맥락 주입 등 예외 경로도 이 큐가 받는다.
+        const handleLiveMessage = (message: LiveServerMessageLike): void => {
+        if (cancelled) return;
+
+        // ⭐ §59.10 커밋 A + reviewer Critical #1 수정(G383/G385/G386/G390) — 도구가 실제로
+        // 선언되는 세션(SMS 카탈로그 보유 시나리오 대부분 · 확인 무력화 카탈로그 보유 6종의
+        // advanced, §61)에서는 이제 이 분기가 **도달 가능**하다(`credentials.liveTools`, §59.6 ②).
+        // `dispatchToolCall`(위, 이 effect 스코프)이 이름을 실제 콜러블로 라우팅하고 결과를
+        // `{status, guidance}`로 돌려준다 — 미선언 세션·알 수 없는 이름은 여전히
+        // `buildUnsupportedToolResponses`(unsupported)로 안전하게 떨어진다. `BLOCKING` 도구는
+        // 응답이 없으면 통화가 멈추므로(§59.0 1) **어떤 경로에서도 응답을 생략하지 않는다**
+        // (G390 — `dispatchToolCall`의 모든 분기가 값을 반환하고, 콜러블이 던져도
+        // `failureResponse()`로 대체한다).
+        // ⭐ reviewer APPROVED Major #1 수정 — `dispatchToolCall`이 값을 반환하는 것은 "오늘
+        // 이 파일의 모든 분기가 우연히 안 던진다"는 사실에 기댄 것이지, 구조적 보장이 아니었다.
+        // `collectToolResponses`(`liveToolResponse.ts`, 순수 함수·테스트로 고정)가 그 구조적
+        // 보장이다: `dispatchToolCall`이 무엇을 던지든(내부 헬퍼가 나중에 수정되며 throw
+        // 경로가 생기는 경우 포함) 절대 throw하지 않고 `buildUnsupportedToolResponses(calls)`
+        // 폴백을 돌려줘 아래 `sendToolResponse` 호출까지 반드시 도달한다 — "무엇이 잘못되든
+        // 이 함수가 끝나기 전에 sendToolResponse가 최소 한 번은 불린다"가 이제 코드 구조
+        // 자체에서 나온다(안쪽 try/catch — 콜러블별 실패 처리 — 와 겹치는 이중 방어).
+        if (message.toolCall) {
+          const calls = message.toolCall.functionCalls ?? [];
+          const activeSession = session;
+          if (calls.length > 0 && activeSession) {
+            // §117 — 도구 앞에서 이미 말한 것이 있으면 도구 뒤 첫 전사 조각 앞에서 문단을 가른다.
+            if (shouldMarkToolBoundary(scammerBuffer)) scammerToolBoundary = true;
+            // §71.6 — 도구 대기(콜러블 왕복)를 턴 지연과 따로 잰다.
+            latencyState = noteToolCall(latencyState, {
+              nowMs: performance.now(),
+              lastLoudAt: userSpeechDebounceState.lastLoudAt,
+            });
+            // reviewer M2 — 도구 결과를 기다리는 동안 보류 큐가 텍스트 턴을 내보내지 않게 한다.
+            dispatchClientTurn({ type: "toolCall", nowMs: performance.now() });
+            void (async () => {
+              const responses = await collectToolResponses(calls, (call) => dispatchToolCall(call, calls));
+              // 대기 중 언마운트되거나 세션이 교체됐으면 죽은 소켓에 쓰지 않는다.
+              if (cancelled || !session) return;
+              try {
+                session.sendToolResponse({ functionResponses: responses });
+                latencyState = noteToolResponseSent(latencyState, performance.now());
+              } catch {
+                // G390 — 전송 실패도 통화를 막지 않는다(P-4 비차단). 무응답만은 피하는 것이
+                // 이 배선의 목적이지만, 소켓 자체가 끊긴 경우까지 되살릴 수는 없다.
+              }
+              // ⭐ T192 C5(§79.8 R4) — 승인 응답을 보낸 **뒤** 첫 turnComplete를 기다리기 시작한다(래치는 R2에서 이미 걸렸다).
+              // 전송이 실패해도 건다 — 상한이 준비 신호를 낸다(끊기 승인 뒤 통화가 끝나지 않는 상태 0).
+              if (armDrainAfterSend) {
+                armDrainAfterSend = false;
+                armHangupDrain();
+              }
+              // PR-A2(audit-A R1) — 도착 안내(도구 응답)가 나간 **뒤** 결과 신호를 부모에 넘긴다(세션당 1회 판정 · 래치는 부모).
+              const confirmText = confirmResultAfterToolResponse;
+              confirmResultAfterToolResponse = null;
+              if (confirmText) handlersRef.current.onConfirmResultInstruction?.(confirmText);
+              // 성공 · 실패 무관 — 큐의 도구 대기를 푼다(턴 자체는 turnComplete에서 끝난다).
+              dispatchClientTurn({ type: "toolResponseSent", nowMs: performance.now() });
+            })();
+          }
+          return;
+        }
+        // §59.13 (5) — 취소 통보 처리 규약은 미실측(도구를 아직 부르지 않아 되돌릴 것이
+        // 없다). 오늘은 안전하게 무시한다.
+        if (message.toolCallCancellation) return;
+
+        if (!outputContext) return;
+        const sc = message.serverContent;
+
+        // 전사 조각 누적(리포트 기록용). input=사용자 발화, output=사기범(모델) 발화.
+        if (sc?.inputTranscription?.text) {
+          // §105 — 서버가 사용자 말을 들었다는 증거(내용은 적지 않는다 · 개수만).
+          noteAsrChunk();
+          // §105.2.6 — 서버가 들었다 → 화면 쪽 보완 후보를 버린다(판정표 4행).
+          if (sc.inputTranscription.text.trim()) {
+            unheardReplyState = stepUnheardReply(unheardReplyState, { type: "asr" }).state;
+          }
+          appendUserBuffer(sc.inputTranscription.text);
+          // §82.4.2(G543) — 참가자가 말하기 시작했다 = 침묵 넛지 취소.
+          if (sc.inputTranscription.text.trim()) noteUserSpeechForNudge();
+        }
+        if (sc?.outputTranscription?.text) {
+          ({ buffer: scammerBuffer, boundaryPending: scammerToolBoundary } = appendScammerChunk(
+            scammerBuffer,
+            sc.outputTranscription.text,
+            scammerToolBoundary,
+          ));
+          if (sc.outputTranscription.text.trim()) scammerTextSinceBoundary = true;
+          // §126 — 말하는 도중 "문자를 보냈다"가 보이면 턴 끝을 기다리지 않고 부모에 알린다(문자가 말과 함께 도착).
+          if (!smsClaimRaisedThisTurn && scammerClaimsSmsSent(stripLeakedThought(scammerBuffer))) {
+            smsClaimRaisedThisTurn = true;
+            handlersRef.current.onScammerSmsClaim?.(claimedUserTurns());
+          }
+          // §116 — 사고 문장이 보이면 이미 예약된 재생을 끊고, 한국어 대사가 다시 올 때까지 오디오를 예약하지 않는다.
+          const gate = stepThoughtLeakGate(thoughtGate, { type: "transcript", text: sc.outputTranscription.text });
+          thoughtGate = gate.state;
+          if (gate.startSuppress) {
+            noteThoughtCut(); // §135 진단 — 앱이 지운 끊김
+            stopAllPlayback();
+            console.info("[gemini-thought-leak]", JSON.stringify({ suppressed: true }));
           }
         }
-        const outputPath = pickCallOutputPath({
-          flagOn: outputAfterMicFlag,
-          micOpened,
-          freshRunning: freshOutput?.state === "running",
-          primedUsable: isUsableContext(primedOutput),
-        });
-        if (outputPath === "fallback-primed" || cancelled) {
-          void freshOutput?.close().catch(() => {});
-          freshOutput = null;
+
+        // 사용자가 말을 끊으면 예약된 재생을 전부 멈춰 새 응답과 겹치지 않게 한다.
+        if (sc?.interrupted) {
+          // §135 진단 — 예약 재생이 남아 있었으면 말이 잘린 끼어들기다(stopAllPlayback이 nextPlayTime을 0으로 되돌리기 전에 잰다).
+          noteInterrupt(outputContext ? nextPlayTime - outputContext.currentTime > 0 : false);
+          thoughtGate = stepThoughtLeakGate(thoughtGate, { type: "boundary" }).state;
+          stopAllPlayback();
+          stopSpeaking();
+          // 잘린 사기범 발화를 여기서 내보낸다 — 안 하면 다음 말풍선 앞에 붙어 턴 경계가
+          // 밀리고 리포트의 속은-순간 판정이 어긋난다(flushScammerTurn 주석 참고).
+          flushScammerTurn();
+          closeLatencyTurn("interrupted");
+          dispatchClientTurn({ type: "interrupted", nowMs: performance.now() });
+          // T192 C5(§79.8 R4) — 끼어들기도 마지막 응답의 끝으로 본다.
+          beginHangupDrain();
+          return;
         }
-        noteOutputPath(outputPath);
-        // §126 — '통화' 스트림이면 통화 모드 기준 레벨을 낮춘다(`outputGain.ts` 표 · `?voicetrim=0`이면 끔).
-        streamTrimRef.current = callStreamTrimFor(outputPath, readVoiceTrimFlag(readDebugFlagSearch()));
-        noteStreamTrim(streamTrimRef.current);
-        outputBorrowed = freshOutput === null && isUsableContext(primedOutput);
-        inputBorrowed = isUsableContext(primedInput);
-        outputContext =
-          freshOutput ??
-          (outputBorrowed && primedOutput ? primedOutput : new AudioContext({ sampleRate: GEMINI_OUTPUT_SAMPLE_RATE }));
-        inputContext = inputBorrowed && primedInput ? primedInput : new AudioContext();
-        registerCallAudio({
-          output: outputContext,
-          input: inputContext,
-          origin: outputBorrowed ? "primed" : "session",
-          createdAtMs: outputBorrowed && primedAudio ? primedAudio.createdAtMs : performance.now(),
-        });
-        // 비동기 effect에서 만든 컨텍스트는 suspended로 시작할 수 있다 — 명시적으로 깨운다(빌린 것도 한 번 더 요청한다).
-        await outputContext.resume().catch((e: unknown) => noteAudioError(e instanceof Error ? e.name : "unknown"));
-        await inputContext.resume().catch((e: unknown) => noteAudioError(e instanceof Error ? e.name : "unknown"));
-        // §71.7(G433) — 기본 음량은 `GEMINI_OUTPUT_GAIN`(판단값 · OQ-A89). 받은 오디오 소스는 전부 이
-        // 노드에 연결한다(아래 onmessage).
-        outputGain = outputContext.createGain();
-        outputGain.gain.value = GEMINI_OUTPUT_GAIN;
-        // ⭐ §105 — 스피커 모드 증폭(게인 > 1.0)이 깨지지 않게 리미터를 거친다: 게인 → 1/범위 축소 → 곡선(`buildLimiterCurve`) → 출력.
-        // 곡선은 진폭 0.7까지 그대로 통과시켜 통화 모드(0.6) 소리는 바뀌지 않는다. 만들 수 없으면(구형 브라우저) 종전대로 직결한다.
-        try {
-          // §108 — 게인과 리미터 사이에 컴프레서 → 보정 게인. 통화 모드는 비율 1 · 보정 1(소리 무변경 · `liveStageFor`).
-          const compressor = outputContext.createDynamicsCompressor();
-          compressor.threshold.value = SPEAKER_COMPRESSOR.threshold;
-          compressor.knee.value = SPEAKER_COMPRESSOR.knee;
-          compressor.attack.value = SPEAKER_COMPRESSOR.attack;
-          compressor.release.value = SPEAKER_COMPRESSOR.release;
-          const makeup = outputContext.createGain();
-          // §126 — 컴프레서 뒤 · 보정 게인 앞의 '통화' 스트림 감쇠(통화 모드에서만 1 미만).
-          const streamTrim = outputContext.createGain();
-          streamTrim.gain.value = trimGainFor(outputVolumeRef.current, streamTrimRef.current);
-          const limiterScale = outputContext.createGain();
-          limiterScale.gain.value = 1 / LIMITER_INPUT_RANGE;
-          const limiter = outputContext.createWaveShaper();
-          limiter.curve = buildLimiterCurve();
-          limiter.oversample = "2x";
-          outputGain.connect(compressor);
-          compressor.connect(streamTrim);
-          streamTrim.connect(makeup);
-          makeup.connect(limiterScale);
-          limiterScale.connect(limiter);
-          if (outputElementFlag) outputSink = connectFinalToElement(outputContext, limiter);
-          else limiter.connect(outputContext.destination);
-          limiterNodes = [compressor, streamTrim, makeup, limiterScale, limiter];
-          streamTrimNodeRef.current = streamTrim;
-          speakerDynamicsRef.current = { compressor, makeup };
-          applySpeakerDynamics(speakerDynamicsRef.current, outputVolumeRef.current, true);
-        } catch (e) {
-          noteAudioError(e instanceof Error ? e.name : "unknown");
-          outputSink?.release();
-          outputSink = null;
-          if (outputElementFlag) outputSink = connectFinalToElement(outputContext, outputGain);
-          else outputGain.connect(outputContext.destination);
+        // **오디오를 먼저 예약한다**(reviewer Critical 수정). 두 가지 이유:
+        // (1) nextPlayTime이 갱신된 뒤에 게이트 대기 시간을 계산해야 잔여 재생이 정확히 반영된다.
+        // (2) 예전엔 turnComplete를 먼저 처리하고 그 뒤 markSpeaking()이 turnInProgress를
+        //     되살려, 마지막 청크와 turnComplete가 같은 메시지로 오는 정상 케이스에서 4초
+        //     대기가 걸렸다. 이제 순서와 무관하게 resolveTurnInProgress가 규칙으로 정한다.
+        // §116 — 사고 파트(`thought: true`)는 재생하지 않는다. 게이트가 막는 동안 온 오디오도 예약하지 않는다
+        // (`hasAudio`는 그대로 둔다 — 턴 진행 판정 · 게이트 계산은 서버가 말하는 중이라는 사실을 따라야 한다).
+        const audioData = pickLiveAudioData(sc?.modelTurn?.parts);
+        const samples = audioData ? base64ToFloat32(audioData) : null;
+        const hasAudio = samples !== null && samples.length > 0;
+        if (hasAudio && samples && !thoughtGate.suppressing) {
+          audioSinceBoundary = true;
+          noteChunkReceived(samples); // 진단 — 원본 PCM 최대 진폭(`pcm.peakDb`)
+          // §114 — 시나리오 · 세션마다 다른 원본 크기를 목표 말소리 RMS(기관 사칭 기준)로 맞춘 뒤 게인 노드로 보낸다.
+          const normalized = normalizeChunk(samples, loudness);
+          loudness = normalized.state;
+          noteNormalizerGain(loudness.gain); // §122(8) 진단 — 정규화 게인(`norm.gainDb`)
+          const buffer = outputContext.createBuffer(
+            1,
+            samples.length,
+            GEMINI_OUTPUT_SAMPLE_RATE,
+          );
+          buffer.copyToChannel(normalized.out, 0);
+          const source = outputContext.createBufferSource();
+          source.buffer = buffer;
+          source.connect(outputGain ?? outputContext.destination);
+          // §135 진단 — 턴 진행 중인데 앞 청크가 이미 다 재생됐으면 그 사이 소리가 비었다(`play.gaps`).
+          notePlayGap(playGapMs({ turnInProgress, nextPlayTime, currentTime: outputContext.currentTime }));
+          // 이전 청크가 끝나는 시점에 이어붙인다(겹침·끊김 방지).
+          const startAt = Math.max(outputContext.currentTime, nextPlayTime);
+          source.start(startAt);
+          noteChunkScheduled(performance.now());
+          nextPlayTime = startAt + buffer.duration;
+          scheduledSources.add(source);
+          source.onended = () => scheduledSources.delete(source);
+          markSpeaking();
+          // §71.6 — 첫 청크 도착 시각(앵커 → 첫 오디오). 반이중 억제 때문에 이 시점의 `lastLoudAt`은
+          // 응답 직전 참가자 발화 끝이다.
+          const nowMs = performance.now();
+          if (markOpeningFirstAudio(nowMs)) {
+            logLatency(
+              formatLatencyLine(
+                credentials.geminiModel,
+                buildCallSetupRecord(readCallSetupMarks(), {
+                  baseLatencySec: outputContext.baseLatency,
+                  outputLatencySec: (outputContext as AudioContext & { outputLatency?: number }).outputLatency,
+                }),
+              ),
+            );
+          }
+          latencyState = noteModelAudio(latencyState, {
+            nowMs,
+            audioMs: buffer.duration * 1000,
+            lastLoudAt: userSpeechDebounceState.lastLoudAt,
+          });
+          dispatchClientTurn({ type: "modelAudio", nowMs });
         }
-        if (!outputElementFlag) noteOutputSink("context"); // §137 E1
-        // T190-3(G455) — 스피커 버튼 음량 모드 반영(위 초기값 = 통화 모드 = 같은 값. 연결 전에 바뀌었으면 여기서 맞춘다).
-        if (outputVolumeRef.current.gain !== GEMINI_OUTPUT_GAIN) outputGain.gain.value = outputVolumeRef.current.gain;
-        outputGainNodeRef.current = outputGain;
-        registerOutputGain(outputGain);
-        // `micReady` = 오디오 컨텍스트 준비(마이크 권한은 받기 때 병렬로 받는다 — `acceptToMicMs`).
-        markCallSetup("micReady", performance.now());
-        log("audio contexts ready; connecting… model=", credentials.geminiModel);
+
+        const hasTurnComplete = Boolean(sc?.turnComplete);
+        turnInProgress = resolveTurnInProgress({
+          current: turnInProgress,
+          hasAudio,
+          hasTurnComplete,
+          hasInterrupted: false, // interrupted는 위에서 이미 return했다.
+        });
+
+        // 게이트를 **즉시 닫지 않는다** — turnComplete 시점에도 재생될 오디오가 남아 있을 수
+        // 있다. 실제 개방 시각은 항상 잔여 재생 기준으로 다시 잡는다.
+        if (hasAudio || hasTurnComplete) scheduleGateClose();
+        if (hasTurnComplete) {
+          // ⭐ §82.3.4 N1(G539) — 판정은 flush **전에** 경계 이후 신호로 한다. 빈 마감이면 경계 콜백을 부르지 않는다.
+          const emptyTurn = isEmptyTurnComplete({ audioSinceBoundary, scammerTextSinceBoundary });
+          audioSinceBoundary = false;
+          scammerTextSinceBoundary = false;
+          // PR-A2(F6) — 이 턴의 사기범 전사(flush가 비우기 전에 읽는다). 대기 뒤 침묵 넛지 판정의 입력이다.
+          const scammerTurnText = stripLeakedThought(scammerBuffer);
+          // §104 — 이 턴이 답한 참가자 발화(flush가 비우기 전에 읽는다). 자금 소진 선언 판정의 입력이다.
+          const participantTurnText = userBuffer;
+          flushTranscript();
+          thoughtGate = stepThoughtLeakGate(thoughtGate, { type: "boundary" }).state;
+          // ⭐ §59.6 ③ → §82.3.4 — `modelToolScammerTurns`는 이제 위 `flushTranscript`/`flushScammerTurn`이
+          // 비어 있지 않은 사기범 전사를 내보낼 때 오른다(부모 `scammerTurnsRef`와 같은 지점 · 같은 정의).
+          // T68 — 사기범 발화 1턴 완료. 부모가 이 경계만 세어 통화 중 문자 도착을 판단한다
+          // (§15.1.2 "앱 오케스트레이션"). 세션 자체에는 아무 영향이 없다.
+          // ⚠️ 병합 정합(T90+T68, 2026-07-26): T90이 핸들러를 "오디오 먼저 → 게이트 계산
+          // 나중"으로 재정렬하면서 turnComplete 처리 위치가 바뀌었다. 이 콜백은 **전사 flush
+          // 직후**라는 원래 순서를 그대로 유지한다 — 문자 도착 판단이 전사보다 앞서면
+          // 앵커 턴 계산(§15.1.5 G21)이 한 턴 어긋난다.
+          if (!emptyTurn) handlersRef.current.onScammerTurnComplete?.();
+          // PR-A2(F6) — 빈 마감은 사기범 턴 경계가 아니다(위와 같은 조건).
+          if (!emptyTurn) noteScammerTurnForStallNudge(scammerTurnText);
+          // §104 — 같은 경계(빈 마감 제외)에서 반복 · 대기 정체 판정.
+          if (!emptyTurn) noteScammerTurnForRepeatBreak(scammerTurnText, participantTurnText);
+          // §71.6 — 이 모델 턴의 지연 레코드를 닫는다. §71.5 — 턴이 끝났으니 보류분 1건을 보낸다
+          // (2.5가 서버에서 하던 순서와 같다). 전사 flush · 부모 경계 콜백 **뒤**에 둔다 — 보류됐던
+          // 타이핑은 여기서야 userBuffer에 적립돼 다음 턴의 사용자 발화로 기록된다.
+          closeLatencyTurn("turnComplete");
+          dispatchClientTurn({ type: "turnComplete", nowMs: performance.now() });
+          // T192 C5(§79.8 R4) — 승인 응답 뒤 첫 turnComplete = 마지막 대사가 다 왔다 → 잔여 재생을 기다린다(R5).
+          // 오디오를 먼저 예약했으므로(위) `nextPlayTime`에 이 턴의 마지막 청크까지 들어 있다.
+          beginHangupDrain();
+        }
+        };
+        // 표 G1~G4는 `earlyMessageGate.ts`.
+        const liveMessageGate = createEarlyMessageGate(handleLiveMessage);
+        const setupCallOutput = async (): Promise<void> => {
+          // 수정안 A — 받기 탭 안에서 미리 깨운 컨텍스트가 살아 있으면 그것을 쓴다(없거나 닫혔으면 종전대로 만든다).
+          const primedOutput = primedAudio?.output ?? null;
+          const primedInput = primedAudio?.input ?? null;
+          // ⭐ §122.2.2 — 볼륨 키가 '통화' 음량으로 소리를 조절하게, 마이크가 열린 **뒤** 출력 컨텍스트를 새로 만든다(`callAudio.ts` 표 O1~O4 ·
+          // Chromium은 출력 스트림 용도를 만들 때 정한다). 마이크는 받기 때 이미 열기 시작했다 — 대개 여기서는 이미 끝나 있다.
+          // 거부 · 실패는 아래 종전 자리(`await micRequest`)가 그대로 처리한다.
+          const outputAfterMicFlag = readOutputAfterMicFlag(readDebugFlagSearch());
+          // §137 — 출력 싱크 A/B(기본 = 끔 · 꺼져 있으면 아래 연결은 종전 `ctx.destination` 그대로 — 표 E1).
+          const outputElementFlag = readOutputElementFlag(readDebugFlagSearch());
+          const micOpened = outputAfterMicFlag ? (await micRequest.catch(() => null)) !== null : false;
+          let freshOutput: AudioContext | null = null;
+          if (outputAfterMicFlag && micOpened && !cancelled) {
+            try {
+              freshOutput = new AudioContext({ sampleRate: GEMINI_OUTPUT_SAMPLE_RATE });
+              const freshStartedAt = performance.now();
+              await Promise.race([
+                freshOutput.resume().catch(() => {}),
+                new Promise<void>((resolve) => setTimeout(resolve, FRESH_OUTPUT_RESUME_TIMEOUT_MS)),
+              ]);
+              // §126 — `fallback-primed`(볼륨 키가 안 먹는 경로)로 빠진 원인이 시간 초과인지 진단에 남긴다.
+              noteFreshResume(
+                freshOutput.state === "running" ? String(Math.round(performance.now() - freshStartedAt)) : "timeout",
+              );
+            } catch (e) {
+              noteAudioError(e instanceof Error ? e.name : "unknown");
+              freshOutput = null;
+            }
+          }
+          const outputPath = pickCallOutputPath({
+            flagOn: outputAfterMicFlag,
+            micOpened,
+            freshRunning: freshOutput?.state === "running",
+            primedUsable: isUsableContext(primedOutput),
+          });
+          if (outputPath === "fallback-primed" || cancelled) {
+            void freshOutput?.close().catch(() => {});
+            freshOutput = null;
+          }
+          // 병렬 연결 중에 정리가 이미 돌았으면(끊기 · 언마운트) 컨텍스트를 새로 만들지 않는다 — 만들면 닫을 주체가 없다.
+          if (cancelled) return;
+          noteOutputPath(outputPath);
+          // §126 — '통화' 스트림이면 통화 모드 기준 레벨을 낮춘다(`outputGain.ts` 표 · `?voicetrim=0`이면 끔).
+          streamTrimRef.current = callStreamTrimFor(outputPath, readVoiceTrimFlag(readDebugFlagSearch()));
+          noteStreamTrim(streamTrimRef.current);
+          outputBorrowed = freshOutput === null && isUsableContext(primedOutput);
+          inputBorrowed = isUsableContext(primedInput);
+          outputContext =
+            freshOutput ??
+            (outputBorrowed && primedOutput ? primedOutput : new AudioContext({ sampleRate: GEMINI_OUTPUT_SAMPLE_RATE }));
+          inputContext = inputBorrowed && primedInput ? primedInput : new AudioContext();
+          registerCallAudio({
+            output: outputContext,
+            input: inputContext,
+            origin: outputBorrowed ? "primed" : "session",
+            createdAtMs: outputBorrowed && primedAudio ? primedAudio.createdAtMs : performance.now(),
+          });
+          // 비동기 effect에서 만든 컨텍스트는 suspended로 시작할 수 있다 — 명시적으로 깨운다(빌린 것도 한 번 더 요청한다).
+          await outputContext.resume().catch((e: unknown) => noteAudioError(e instanceof Error ? e.name : "unknown"));
+          await inputContext.resume().catch((e: unknown) => noteAudioError(e instanceof Error ? e.name : "unknown"));
+          // §71.7(G433) — 기본 음량은 `GEMINI_OUTPUT_GAIN`(판단값 · OQ-A89). 받은 오디오 소스는 전부 이
+          // 노드에 연결한다(아래 onmessage).
+          outputGain = outputContext.createGain();
+          outputGain.gain.value = GEMINI_OUTPUT_GAIN;
+          // ⭐ §105 — 스피커 모드 증폭(게인 > 1.0)이 깨지지 않게 리미터를 거친다: 게인 → 1/범위 축소 → 곡선(`buildLimiterCurve`) → 출력.
+          // 곡선은 진폭 0.7까지 그대로 통과시켜 통화 모드(0.6) 소리는 바뀌지 않는다. 만들 수 없으면(구형 브라우저) 종전대로 직결한다.
+          try {
+            // §108 — 게인과 리미터 사이에 컴프레서 → 보정 게인. 통화 모드는 비율 1 · 보정 1(소리 무변경 · `liveStageFor`).
+            const compressor = outputContext.createDynamicsCompressor();
+            compressor.threshold.value = SPEAKER_COMPRESSOR.threshold;
+            compressor.knee.value = SPEAKER_COMPRESSOR.knee;
+            compressor.attack.value = SPEAKER_COMPRESSOR.attack;
+            compressor.release.value = SPEAKER_COMPRESSOR.release;
+            const makeup = outputContext.createGain();
+            // §126 — 컴프레서 뒤 · 보정 게인 앞의 '통화' 스트림 감쇠(통화 모드에서만 1 미만).
+            const streamTrim = outputContext.createGain();
+            streamTrim.gain.value = trimGainFor(outputVolumeRef.current, streamTrimRef.current);
+            const limiterScale = outputContext.createGain();
+            limiterScale.gain.value = 1 / LIMITER_INPUT_RANGE;
+            const limiter = outputContext.createWaveShaper();
+            limiter.curve = buildLimiterCurve();
+            limiter.oversample = "2x";
+            outputGain.connect(compressor);
+            compressor.connect(streamTrim);
+            streamTrim.connect(makeup);
+            makeup.connect(limiterScale);
+            limiterScale.connect(limiter);
+            if (outputElementFlag) outputSink = connectFinalToElement(outputContext, limiter);
+            else limiter.connect(outputContext.destination);
+            limiterNodes = [compressor, streamTrim, makeup, limiterScale, limiter];
+            streamTrimNodeRef.current = streamTrim;
+            speakerDynamicsRef.current = { compressor, makeup };
+            applySpeakerDynamics(speakerDynamicsRef.current, outputVolumeRef.current, true);
+          } catch (e) {
+            noteAudioError(e instanceof Error ? e.name : "unknown");
+            outputSink?.release();
+            outputSink = null;
+            if (outputElementFlag) outputSink = connectFinalToElement(outputContext, outputGain);
+            else outputGain.connect(outputContext.destination);
+          }
+          if (!outputElementFlag) noteOutputSink("context"); // §137 E1
+          // T190-3(G455) — 스피커 버튼 음량 모드 반영(위 초기값 = 통화 모드 = 같은 값. 연결 전에 바뀌었으면 여기서 맞춘다).
+          if (outputVolumeRef.current.gain !== GEMINI_OUTPUT_GAIN) outputGain.gain.value = outputVolumeRef.current.gain;
+          outputGainNodeRef.current = outputGain;
+          registerOutputGain(outputGain);
+          // `micReady` = 오디오 컨텍스트 준비(마이크 권한은 받기 때 병렬로 받는다 — `acceptToMicMs`).
+          // 2026-10-27부터 Live 연결과 병렬이라 `micToConnectMs`(이 표시 → 연결 완료)는 음수일 수 있다(= 연결이 먼저 끝났다).
+          markCallSetup("micReady", performance.now());
+          log("audio contexts ready (Live connect runs in parallel)");
+          // 정리가 이미 돌았으면(끊기 · 언마운트) 쌓인 메시지를 처리하지 않는다.
+          if (cancelled) return;
+          liveMessageGate.open();
+        };
+        outputReady = setupCallOutput();
+        // 연결이 먼저 실패해도 처리되지 않은 rejection이 남지 않게 한다(실제 처리는 아래 `await outputReady`).
+        outputReady.catch(() => {});
 
         // 토큰을 API 키 자리에 그대로 넣는다(문서 지침). 단기 토큰은 v1alpha에서만 유효하다.
         const ai = new GoogleGenAI({
@@ -1436,239 +1694,10 @@ export default function GeminiVoiceSession({
               log("onopen ✓");
               if (!cancelled) handlersRef.current.onActive();
             },
-            onmessage: (message: {
-              data?: string;
-              serverContent?: {
-                interrupted?: boolean;
-                turnComplete?: boolean;
-                inputTranscription?: { text?: string };
-                outputTranscription?: { text?: string };
-                // §116 — 재생할 오디오를 직접 고른다(사고 파트 제외 · SDK `data` 게터는 `thought`를 보지 않는다).
-                modelTurn?: { parts?: LiveContentPart[] };
-              };
-              // §59.2 ②(genai.d.ts:9262) — `toolCall?: LiveServerToolCall`.
-              toolCall?: { functionCalls?: { id?: string; name?: string; args?: unknown }[] };
-              // §59.2 ②(genai.d.ts:9264) — `toolCallCancellation?: LiveServerToolCallCancellation`.
-              toolCallCancellation?: { ids?: string[] };
-            }) => {
+            onmessage: (message: LiveServerMessageLike) => {
               if (cancelled) return;
-
-              // ⭐ §59.10 커밋 A + reviewer Critical #1 수정(G383/G385/G386/G390) — 도구가 실제로
-              // 선언되는 세션(SMS 카탈로그 보유 시나리오 대부분 · 확인 무력화 카탈로그 보유 6종의
-              // advanced, §61)에서는 이제 이 분기가 **도달 가능**하다(`credentials.liveTools`, §59.6 ②).
-              // `dispatchToolCall`(위, 이 effect 스코프)이 이름을 실제 콜러블로 라우팅하고 결과를
-              // `{status, guidance}`로 돌려준다 — 미선언 세션·알 수 없는 이름은 여전히
-              // `buildUnsupportedToolResponses`(unsupported)로 안전하게 떨어진다. `BLOCKING` 도구는
-              // 응답이 없으면 통화가 멈추므로(§59.0 1) **어떤 경로에서도 응답을 생략하지 않는다**
-              // (G390 — `dispatchToolCall`의 모든 분기가 값을 반환하고, 콜러블이 던져도
-              // `failureResponse()`로 대체한다).
-              // ⭐ reviewer APPROVED Major #1 수정 — `dispatchToolCall`이 값을 반환하는 것은 "오늘
-              // 이 파일의 모든 분기가 우연히 안 던진다"는 사실에 기댄 것이지, 구조적 보장이 아니었다.
-              // `collectToolResponses`(`liveToolResponse.ts`, 순수 함수·테스트로 고정)가 그 구조적
-              // 보장이다: `dispatchToolCall`이 무엇을 던지든(내부 헬퍼가 나중에 수정되며 throw
-              // 경로가 생기는 경우 포함) 절대 throw하지 않고 `buildUnsupportedToolResponses(calls)`
-              // 폴백을 돌려줘 아래 `sendToolResponse` 호출까지 반드시 도달한다 — "무엇이 잘못되든
-              // 이 함수가 끝나기 전에 sendToolResponse가 최소 한 번은 불린다"가 이제 코드 구조
-              // 자체에서 나온다(안쪽 try/catch — 콜러블별 실패 처리 — 와 겹치는 이중 방어).
-              if (message.toolCall) {
-                const calls = message.toolCall.functionCalls ?? [];
-                const activeSession = session;
-                if (calls.length > 0 && activeSession) {
-                  // §117 — 도구 앞에서 이미 말한 것이 있으면 도구 뒤 첫 전사 조각 앞에서 문단을 가른다.
-                  if (shouldMarkToolBoundary(scammerBuffer)) scammerToolBoundary = true;
-                  // §71.6 — 도구 대기(콜러블 왕복)를 턴 지연과 따로 잰다.
-                  latencyState = noteToolCall(latencyState, {
-                    nowMs: performance.now(),
-                    lastLoudAt: userSpeechDebounceState.lastLoudAt,
-                  });
-                  // reviewer M2 — 도구 결과를 기다리는 동안 보류 큐가 텍스트 턴을 내보내지 않게 한다.
-                  dispatchClientTurn({ type: "toolCall", nowMs: performance.now() });
-                  void (async () => {
-                    const responses = await collectToolResponses(calls, (call) => dispatchToolCall(call, calls));
-                    // 대기 중 언마운트되거나 세션이 교체됐으면 죽은 소켓에 쓰지 않는다.
-                    if (cancelled || !session) return;
-                    try {
-                      session.sendToolResponse({ functionResponses: responses });
-                      latencyState = noteToolResponseSent(latencyState, performance.now());
-                    } catch {
-                      // G390 — 전송 실패도 통화를 막지 않는다(P-4 비차단). 무응답만은 피하는 것이
-                      // 이 배선의 목적이지만, 소켓 자체가 끊긴 경우까지 되살릴 수는 없다.
-                    }
-                    // ⭐ T192 C5(§79.8 R4) — 승인 응답을 보낸 **뒤** 첫 turnComplete를 기다리기 시작한다(래치는 R2에서 이미 걸렸다).
-                    // 전송이 실패해도 건다 — 상한이 준비 신호를 낸다(끊기 승인 뒤 통화가 끝나지 않는 상태 0).
-                    if (armDrainAfterSend) {
-                      armDrainAfterSend = false;
-                      armHangupDrain();
-                    }
-                    // PR-A2(audit-A R1) — 도착 안내(도구 응답)가 나간 **뒤** 결과 신호를 부모에 넘긴다(세션당 1회 판정 · 래치는 부모).
-                    const confirmText = confirmResultAfterToolResponse;
-                    confirmResultAfterToolResponse = null;
-                    if (confirmText) handlersRef.current.onConfirmResultInstruction?.(confirmText);
-                    // 성공 · 실패 무관 — 큐의 도구 대기를 푼다(턴 자체는 turnComplete에서 끝난다).
-                    dispatchClientTurn({ type: "toolResponseSent", nowMs: performance.now() });
-                  })();
-                }
-                return;
-              }
-              // §59.13 (5) — 취소 통보 처리 규약은 미실측(도구를 아직 부르지 않아 되돌릴 것이
-              // 없다). 오늘은 안전하게 무시한다.
-              if (message.toolCallCancellation) return;
-
-              if (!outputContext) return;
-              const sc = message.serverContent;
-
-              // 전사 조각 누적(리포트 기록용). input=사용자 발화, output=사기범(모델) 발화.
-              if (sc?.inputTranscription?.text) {
-                // §105 — 서버가 사용자 말을 들었다는 증거(내용은 적지 않는다 · 개수만).
-                noteAsrChunk();
-                // §105.2.6 — 서버가 들었다 → 화면 쪽 보완 후보를 버린다(판정표 4행).
-                if (sc.inputTranscription.text.trim()) {
-                  unheardReplyState = stepUnheardReply(unheardReplyState, { type: "asr" }).state;
-                }
-                appendUserBuffer(sc.inputTranscription.text);
-                // §82.4.2(G543) — 참가자가 말하기 시작했다 = 침묵 넛지 취소.
-                if (sc.inputTranscription.text.trim()) noteUserSpeechForNudge();
-              }
-              if (sc?.outputTranscription?.text) {
-                ({ buffer: scammerBuffer, boundaryPending: scammerToolBoundary } = appendScammerChunk(
-                  scammerBuffer,
-                  sc.outputTranscription.text,
-                  scammerToolBoundary,
-                ));
-                if (sc.outputTranscription.text.trim()) scammerTextSinceBoundary = true;
-                // §126 — 말하는 도중 "문자를 보냈다"가 보이면 턴 끝을 기다리지 않고 부모에 알린다(문자가 말과 함께 도착).
-                if (!smsClaimRaisedThisTurn && scammerClaimsSmsSent(stripLeakedThought(scammerBuffer))) {
-                  smsClaimRaisedThisTurn = true;
-                  handlersRef.current.onScammerSmsClaim?.(claimedUserTurns());
-                }
-                // §116 — 사고 문장이 보이면 이미 예약된 재생을 끊고, 한국어 대사가 다시 올 때까지 오디오를 예약하지 않는다.
-                const gate = stepThoughtLeakGate(thoughtGate, { type: "transcript", text: sc.outputTranscription.text });
-                thoughtGate = gate.state;
-                if (gate.startSuppress) {
-                  noteThoughtCut(); // §135 진단 — 앱이 지운 끊김
-                  stopAllPlayback();
-                  console.info("[gemini-thought-leak]", JSON.stringify({ suppressed: true }));
-                }
-              }
-
-              // 사용자가 말을 끊으면 예약된 재생을 전부 멈춰 새 응답과 겹치지 않게 한다.
-              if (sc?.interrupted) {
-                // §135 진단 — 예약 재생이 남아 있었으면 말이 잘린 끼어들기다(stopAllPlayback이 nextPlayTime을 0으로 되돌리기 전에 잰다).
-                noteInterrupt(outputContext ? nextPlayTime - outputContext.currentTime > 0 : false);
-                thoughtGate = stepThoughtLeakGate(thoughtGate, { type: "boundary" }).state;
-                stopAllPlayback();
-                stopSpeaking();
-                // 잘린 사기범 발화를 여기서 내보낸다 — 안 하면 다음 말풍선 앞에 붙어 턴 경계가
-                // 밀리고 리포트의 속은-순간 판정이 어긋난다(flushScammerTurn 주석 참고).
-                flushScammerTurn();
-                closeLatencyTurn("interrupted");
-                dispatchClientTurn({ type: "interrupted", nowMs: performance.now() });
-                // T192 C5(§79.8 R4) — 끼어들기도 마지막 응답의 끝으로 본다.
-                beginHangupDrain();
-                return;
-              }
-              // **오디오를 먼저 예약한다**(reviewer Critical 수정). 두 가지 이유:
-              // (1) nextPlayTime이 갱신된 뒤에 게이트 대기 시간을 계산해야 잔여 재생이 정확히 반영된다.
-              // (2) 예전엔 turnComplete를 먼저 처리하고 그 뒤 markSpeaking()이 turnInProgress를
-              //     되살려, 마지막 청크와 turnComplete가 같은 메시지로 오는 정상 케이스에서 4초
-              //     대기가 걸렸다. 이제 순서와 무관하게 resolveTurnInProgress가 규칙으로 정한다.
-              // §116 — 사고 파트(`thought: true`)는 재생하지 않는다. 게이트가 막는 동안 온 오디오도 예약하지 않는다
-              // (`hasAudio`는 그대로 둔다 — 턴 진행 판정 · 게이트 계산은 서버가 말하는 중이라는 사실을 따라야 한다).
-              const audioData = pickLiveAudioData(sc?.modelTurn?.parts);
-              const samples = audioData ? base64ToFloat32(audioData) : null;
-              const hasAudio = samples !== null && samples.length > 0;
-              if (hasAudio && samples && !thoughtGate.suppressing) {
-                audioSinceBoundary = true;
-                noteChunkReceived(samples); // 진단 — 원본 PCM 최대 진폭(`pcm.peakDb`)
-                // §114 — 시나리오 · 세션마다 다른 원본 크기를 목표 말소리 RMS(기관 사칭 기준)로 맞춘 뒤 게인 노드로 보낸다.
-                const normalized = normalizeChunk(samples, loudness);
-                loudness = normalized.state;
-                noteNormalizerGain(loudness.gain); // §122(8) 진단 — 정규화 게인(`norm.gainDb`)
-                const buffer = outputContext.createBuffer(
-                  1,
-                  samples.length,
-                  GEMINI_OUTPUT_SAMPLE_RATE,
-                );
-                buffer.copyToChannel(normalized.out, 0);
-                const source = outputContext.createBufferSource();
-                source.buffer = buffer;
-                source.connect(outputGain ?? outputContext.destination);
-                // §135 진단 — 턴 진행 중인데 앞 청크가 이미 다 재생됐으면 그 사이 소리가 비었다(`play.gaps`).
-                notePlayGap(playGapMs({ turnInProgress, nextPlayTime, currentTime: outputContext.currentTime }));
-                // 이전 청크가 끝나는 시점에 이어붙인다(겹침·끊김 방지).
-                const startAt = Math.max(outputContext.currentTime, nextPlayTime);
-                source.start(startAt);
-                noteChunkScheduled(performance.now());
-                nextPlayTime = startAt + buffer.duration;
-                scheduledSources.add(source);
-                source.onended = () => scheduledSources.delete(source);
-                markSpeaking();
-                // §71.6 — 첫 청크 도착 시각(앵커 → 첫 오디오). 반이중 억제 때문에 이 시점의 `lastLoudAt`은
-                // 응답 직전 참가자 발화 끝이다.
-                const nowMs = performance.now();
-                if (markOpeningFirstAudio(nowMs)) {
-                  logLatency(
-                    formatLatencyLine(
-                      credentials.geminiModel,
-                      buildCallSetupRecord(readCallSetupMarks(), {
-                        baseLatencySec: outputContext.baseLatency,
-                        outputLatencySec: (outputContext as AudioContext & { outputLatency?: number }).outputLatency,
-                      }),
-                    ),
-                  );
-                }
-                latencyState = noteModelAudio(latencyState, {
-                  nowMs,
-                  audioMs: buffer.duration * 1000,
-                  lastLoudAt: userSpeechDebounceState.lastLoudAt,
-                });
-                dispatchClientTurn({ type: "modelAudio", nowMs });
-              }
-
-              const hasTurnComplete = Boolean(sc?.turnComplete);
-              turnInProgress = resolveTurnInProgress({
-                current: turnInProgress,
-                hasAudio,
-                hasTurnComplete,
-                hasInterrupted: false, // interrupted는 위에서 이미 return했다.
-              });
-
-              // 게이트를 **즉시 닫지 않는다** — turnComplete 시점에도 재생될 오디오가 남아 있을 수
-              // 있다. 실제 개방 시각은 항상 잔여 재생 기준으로 다시 잡는다.
-              if (hasAudio || hasTurnComplete) scheduleGateClose();
-              if (hasTurnComplete) {
-                // ⭐ §82.3.4 N1(G539) — 판정은 flush **전에** 경계 이후 신호로 한다. 빈 마감이면 경계 콜백을 부르지 않는다.
-                const emptyTurn = isEmptyTurnComplete({ audioSinceBoundary, scammerTextSinceBoundary });
-                audioSinceBoundary = false;
-                scammerTextSinceBoundary = false;
-                // PR-A2(F6) — 이 턴의 사기범 전사(flush가 비우기 전에 읽는다). 대기 뒤 침묵 넛지 판정의 입력이다.
-                const scammerTurnText = stripLeakedThought(scammerBuffer);
-                // §104 — 이 턴이 답한 참가자 발화(flush가 비우기 전에 읽는다). 자금 소진 선언 판정의 입력이다.
-                const participantTurnText = userBuffer;
-                flushTranscript();
-                thoughtGate = stepThoughtLeakGate(thoughtGate, { type: "boundary" }).state;
-                // ⭐ §59.6 ③ → §82.3.4 — `modelToolScammerTurns`는 이제 위 `flushTranscript`/`flushScammerTurn`이
-                // 비어 있지 않은 사기범 전사를 내보낼 때 오른다(부모 `scammerTurnsRef`와 같은 지점 · 같은 정의).
-                // T68 — 사기범 발화 1턴 완료. 부모가 이 경계만 세어 통화 중 문자 도착을 판단한다
-                // (§15.1.2 "앱 오케스트레이션"). 세션 자체에는 아무 영향이 없다.
-                // ⚠️ 병합 정합(T90+T68, 2026-07-26): T90이 핸들러를 "오디오 먼저 → 게이트 계산
-                // 나중"으로 재정렬하면서 turnComplete 처리 위치가 바뀌었다. 이 콜백은 **전사 flush
-                // 직후**라는 원래 순서를 그대로 유지한다 — 문자 도착 판단이 전사보다 앞서면
-                // 앵커 턴 계산(§15.1.5 G21)이 한 턴 어긋난다.
-                if (!emptyTurn) handlersRef.current.onScammerTurnComplete?.();
-                // PR-A2(F6) — 빈 마감은 사기범 턴 경계가 아니다(위와 같은 조건).
-                if (!emptyTurn) noteScammerTurnForStallNudge(scammerTurnText);
-                // §104 — 같은 경계(빈 마감 제외)에서 반복 · 대기 정체 판정.
-                if (!emptyTurn) noteScammerTurnForRepeatBreak(scammerTurnText, participantTurnText);
-                // §71.6 — 이 모델 턴의 지연 레코드를 닫는다. §71.5 — 턴이 끝났으니 보류분 1건을 보낸다
-                // (2.5가 서버에서 하던 순서와 같다). 전사 flush · 부모 경계 콜백 **뒤**에 둔다 — 보류됐던
-                // 타이핑은 여기서야 userBuffer에 적립돼 다음 턴의 사용자 발화로 기록된다.
-                closeLatencyTurn("turnComplete");
-                dispatchClientTurn({ type: "turnComplete", nowMs: performance.now() });
-                // T192 C5(§79.8 R4) — 승인 응답 뒤 첫 turnComplete = 마지막 대사가 다 왔다 → 잔여 재생을 기다린다(R5).
-                // 오디오를 먼저 예약했으므로(위) `nextPlayTime`에 이 턴의 마지막 청크까지 들어 있다.
-                beginHangupDrain();
-              }
+              // 출력 준비(마이크 → 통화 출력 컨텍스트) 전이면 받은 순서대로 쌓는다 — 위 `setupCallOutput` 끝(`open()`)에서 처리한다.
+              liveMessageGate.push(message);
             },
             onerror: (e: unknown) => {
               log("onerror", e);
@@ -1691,13 +1720,21 @@ export default function GeminiVoiceSession({
             },
           },
         })) as unknown as GeminiLiveSession;
+        const connectResolvedAt = performance.now();
+        // 연결은 출력 준비를 기다리지 않았다 — 맥락 주입 · 오프닝 전에 출력 준비(마이크 대기 포함)를 마저 기다린다.
+        await outputReady;
 
         if (cancelled) {
           cleanup();
           return;
         }
         log("connect() resolved");
-        markCallSetup("connectResolved", performance.now());
+        // 입력 · 출력 컨텍스트는 병렬 출력 준비(`setupCallOutput`)가 만들었다 — 정리로 빠진 경우는 바로 위 `cancelled`에서 끝났다.
+        const readyInput = inputContext as AudioContext | null;
+        if (!readyInput || !outputContext) throw new Error("call-audio-not-ready");
+        // 같은 값을 다시 담는 것은 타입 좁히기용이다(값은 그대로 — 클로저 안 대입은 TS가 이 흐름에서 보지 못한다).
+        inputContext = readyInput;
+        markCallSetup("connectResolved", connectResolvedAt);
         // 타이핑 입력(textMessage effect)이 이 세션에 닿을 수 있도록 노출한다.
         liveSessionRef.current = session;
         // §71.5(G431) — 타이핑 · 지시 effect는 이 함수로만 텍스트 턴을 넣는다(보류 큐 경유).
@@ -1869,6 +1906,8 @@ export default function GeminiVoiceSession({
       } catch (err) {
         log("connect threw", err);
         noteAudioError(err instanceof Error ? err.name : "unknown");
+        // 병렬로 돌던 출력 준비가 끝난 뒤 정리한다(먼저 정리하면 뒤늦게 만든 출력 컨텍스트가 닫히지 않고 남는다).
+        await outputReady?.catch(() => {});
         if (!cancelled) {
           cleanup();
           handlersRef.current.onError();

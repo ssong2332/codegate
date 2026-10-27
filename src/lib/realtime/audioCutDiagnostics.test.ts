@@ -110,7 +110,7 @@ test("[§135 배선] 세션 — 공백은 예약 직전 · 끼어들기는 재�
   const intr = src.indexOf("noteInterrupt(outputContext ? nextPlayTime - outputContext.currentTime > 0 : false);");
   assert.ok(intr > 0);
   assert.ok(intr < src.indexOf("stopAllPlayback();", intr), "nextPlayTime을 0으로 되돌리기 전에 잰다");
-  assert.ok(src.includes("noteThoughtCut(); // §135 진단 — 앱이 지운 끊김\n                  stopAllPlayback();"));
+  assert.ok(src.includes("noteThoughtCut(); // §135 진단 — 앱이 지운 끊김\n            stopAllPlayback();"));
   assert.equal((src.match(/noteContextWhileSpeaking\(\); \/\/ §135 진단/g) ?? []).length, 2);
   // 사본 ref는 게이트 값과 함께 움직인다(켜기 1 · 끄기 1 · 세션 시작 초기화 1).
   assert.equal((src.match(/agentSpeakingRef\.current = (true|false);/g) ?? []).length, 3);

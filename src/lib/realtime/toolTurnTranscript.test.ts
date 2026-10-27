@@ -54,7 +54,7 @@ test("[§117 배선] GeminiVoiceSession — 도구 호출에서 표시 · 출력
   assert.ok(src.includes("if (shouldMarkToolBoundary(scammerBuffer)) scammerToolBoundary = true;"), "toolCall 분기");
   assert.ok(
     src.includes(
-      "({ buffer: scammerBuffer, boundaryPending: scammerToolBoundary } = appendScammerChunk(\n                  scammerBuffer,\n                  sc.outputTranscription.text,\n                  scammerToolBoundary,\n                ));",
+      "({ buffer: scammerBuffer, boundaryPending: scammerToolBoundary } = appendScammerChunk(\n            scammerBuffer,\n            sc.outputTranscription.text,\n            scammerToolBoundary,\n          ));",
     ),
     "출력 전사 적립",
   );

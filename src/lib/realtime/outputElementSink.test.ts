@@ -217,8 +217,8 @@ test("[§137 진단] flag.outelement · out.sink 행", () => {
 test("[§137 배선] 꺼져 있으면 종전 직결 그대로 · 켜면 리미터(또는 폴백 게인)만 요소로 · 정리에서 release · 패널이 플래그를 읽는다", () => {
   const s = read("./GeminiVoiceSession.tsx");
   assert.ok(s.includes("const outputElementFlag = readOutputElementFlag(readDebugFlagSearch());"));
-  assert.ok(s.includes("if (outputElementFlag) outputSink = connectFinalToElement(outputContext, limiter);\n          else limiter.connect(outputContext.destination);"));
-  assert.ok(s.includes("if (outputElementFlag) outputSink = connectFinalToElement(outputContext, outputGain);\n          else outputGain.connect(outputContext.destination);"));
+  assert.ok(s.includes("if (outputElementFlag) outputSink = connectFinalToElement(outputContext, limiter);\n            else limiter.connect(outputContext.destination);"));
+  assert.ok(s.includes("if (outputElementFlag) outputSink = connectFinalToElement(outputContext, outputGain);\n            else outputGain.connect(outputContext.destination);"));
   assert.ok(s.includes('if (!outputElementFlag) noteOutputSink("context"); // §137 E1'));
   assert.equal(s.split("connectOutputElementSink(").length - 1, 1, "요소 연결은 한 곳뿐");
   const cleanup = s.indexOf("const cleanup = ");
