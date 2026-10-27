@@ -4,6 +4,11 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-27 추가분, 브랜치 `claude/debug-panel-setup-latency`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
+
+### Added
+- **진단 패널에 첫 발화 준비 구간 행**: 실기 신고("첫 발화까지 17초")를 휴대폰에서 콘솔 없이 읽게 `?audiodebug=1` 패널에 세 줄을 더했다. `setup.firstMs` = 받기 → 첫 오디오, `setup.prep` = `cred`(자격증명) · `mic`(마이크 허용) · `out`(출력 준비 끝), `setup.live` = `conn`(Live 연결) · `open`(오프닝 전송) · `1st`(첫 오디오). 모두 받기 기준 누적 ms다(새로고침 재개는 마운트 기준). 제품 동작은 바꾸지 않는다(진단만).
+
 > ⚠️ **이 블록(2026-10-27 추가분, 브랜치 `claude/output-element-default`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
 
 ### Changed
