@@ -432,6 +432,9 @@ export const AUDIO_DIAG_KEYS = [
   "cred.prefetched",
   "cred.source",
   "acceptToCredMs",
+  "setup.firstMs",
+  "setup.prep",
+  "setup.live",
   "out.state",
   "out.rate",
   "out.origin",
@@ -480,6 +483,53 @@ export const AUDIO_DIAG_KEYS = [
 export type AudioDiagKey = (typeof AUDIO_DIAG_KEYS)[number];
 
 const show = (v: unknown): string => (v === null || v === undefined ? "-" : String(v));
+
+// 2026-10-27(실기 신고 — 첫 발화까지 17초) — 휴대폰에서 콘솔 없이 준비 구간을 읽게 패널에 싣는다.
+// `liveLatency.ts`의 통화 준비 표시(`readCallSetupMarks`)를 그대로 받는다 — 잎 모듈이라 같은 모양의 타입만 둔다.
+// 값은 모두 **받기 기준 누적 ms**다(새로고침 재개처럼 받기가 없으면 마운트 기준).
+//
+// | 행 | 표시 | 뜻 |
+// |---|---|---|
+// | `setup.firstMs` | 받기 → 첫 오디오 | 사용자가 느끼는 "첫 발화까지" |
+// | `setup.prep` | `cred` 자격증명 준비 · `mic` 마이크 허용 · `out` 출력 준비 끝 | 앞 준비 |
+// | `setup.live` | `conn` Live 연결 · `open` 오프닝 전송 · `1st` 첫 오디오 | 연결 · 모델 |
+export type SetupMarksLike = Partial<
+  Record<
+    "accept" | "micGranted" | "credentialsReady" | "mount" | "micReady" | "connectResolved" | "openingSent" | "firstAudio",
+    number
+  >
+>;
+
+function setupSteps(marks: SetupMarksLike | undefined, steps: ReadonlyArray<readonly [string, keyof SetupMarksLike]>): string {
+  const base = marks?.accept ?? marks?.mount;
+  if (!marks || base === undefined) return "-";
+  const parts = steps.flatMap(([label, key]) => {
+    const at = marks[key];
+    return at === undefined ? [] : [`${label}:${Math.round(at - base)}`];
+  });
+  return parts.length > 0 ? parts.join(" ") : "-";
+}
+
+export function formatSetupFirstMs(marks: SetupMarksLike | undefined): string {
+  const base = marks?.accept ?? marks?.mount;
+  return base === undefined || marks?.firstAudio === undefined ? "-" : String(Math.round(marks.firstAudio - base));
+}
+
+export function formatSetupPrep(marks: SetupMarksLike | undefined): string {
+  return setupSteps(marks, [
+    ["cred", "credentialsReady"],
+    ["mic", "micGranted"],
+    ["out", "micReady"],
+  ]);
+}
+
+export function formatSetupLive(marks: SetupMarksLike | undefined): string {
+  return setupSteps(marks, [
+    ["conn", "connectResolved"],
+    ["open", "openingSent"],
+    ["1st", "firstAudio"],
+  ]);
+}
 const rel = (at: number | null, base: number | null): string =>
   at === null || base === null ? "-" : String(Math.round(at - base));
 
@@ -491,6 +541,8 @@ export function buildAudioDiagRows(input: {
   audioRoute: string;
   credentialsPrefetched: boolean | null | undefined;
   acceptToCredentialsMs: number | null;
+  /** 통화 준비 표시(`liveLatency.ts` `readCallSetupMarks`) — 부재면 `setup.*` 행이 "-". */
+  setupMarks?: SetupMarksLike;
   userActivation: { hasBeenActive: boolean; isActive: boolean } | null;
   browser: string;
   /**
@@ -520,6 +572,9 @@ export function buildAudioDiagRows(input: {
     "cred.prefetched": show(input.credentialsPrefetched),
     "cred.source": show(s.credentialSource),
     acceptToCredMs: show(input.acceptToCredentialsMs),
+    "setup.firstMs": formatSetupFirstMs(input.setupMarks),
+    "setup.prep": formatSetupPrep(input.setupMarks),
+    "setup.live": formatSetupLive(input.setupMarks),
     "out.state": show(s.output?.state),
     "out.rate": show(s.output?.sampleRate),
     "out.origin": show(s.outputOrigin),

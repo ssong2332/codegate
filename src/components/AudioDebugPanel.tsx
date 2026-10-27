@@ -50,7 +50,8 @@ export default function AudioDebugPanel(props: AudioDebugPanelProps) {
 
   const nav = navigator as NavigatorWithExtras;
   const debugSearch = readDebugFlagSearch();
-  const record = buildCallSetupRecord(readCallSetupMarks(), {});
+  const setupMarks = readCallSetupMarks();
+  const record = buildCallSetupRecord(setupMarks, {});
   const rows = buildAudioDiagRows({
     snapshot: readAudioDiag(),
     callMode: props.callMode,
@@ -59,6 +60,7 @@ export default function AudioDebugPanel(props: AudioDebugPanelProps) {
     audioRoute: props.audioRoute,
     credentialsPrefetched: record.credentialsPrefetched,
     acceptToCredentialsMs: record.acceptToCredentialsMs,
+    setupMarks,
     userActivation: nav.userActivation
       ? { hasBeenActive: nav.userActivation.hasBeenActive, isActive: nav.userActivation.isActive }
       : null,
