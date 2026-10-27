@@ -7,6 +7,9 @@
 //
 // npm --prefix functions run build 후
 // node --experimental-strip-types scripts/live-loudness-probe.mjs --secret <메인 체크아웃 functions/.secret.local> --key-var GEMINI_API_KEY2 --out <스크래치 폴더> [--only id,id] [--repeat institutional-impersonation]
+// 2026-10-27(목소리 높낮이 흔들림) — `--turns N`: 순응 답을 N개(최대 `LONG_REPLIES` 길이)로 늘리고, 턴 경계(샘플 위치) · 사기범 자막을
+//   `<id>-<rep>.turns.json`에 남긴다(분석은 scripts/live-pitch-analyze.mjs). 자막 수신(outputAudioTranscription)은 앱과 같게 이 모드에서만 켠다.
+// `--fn-root <워크트리>/functions`: 수정 전 기준 등 다른 트리의 빌드된 lib으로 프롬프트를 조립한다(전수 검수 프로브와 같은 방식).
 import { createRequire } from "node:module";
 import { readFileSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -14,10 +17,10 @@ import { fileURLToPath } from "node:url";
 import { normalizeChunk, INITIAL_LOUDNESS_STATE, speechRms, dbfs } from "../src/lib/realtime/loudnessNormalizer.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const fnRoot = path.join(path.resolve(here, ".."), "functions");
-const require = createRequire(path.join(fnRoot, "package.json"));
 const args = process.argv.slice(2);
 const argVal = (n, d) => { const i = args.indexOf(n); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
+const fnRoot = path.resolve(argVal("--fn-root", path.join(path.resolve(here, ".."), "functions")));
+const require = createRequire(path.join(fnRoot, "package.json"));
 const L = (p) => require(path.join(fnRoot, "lib", p));
 
 const { GoogleGenAI, Modality } = require("@google/genai");
@@ -41,6 +44,14 @@ const SCENARIOS = [
 const OPENING =
   "(전화가 방금 연결됐다. 지금 막 전화를 받은 상대에게 캐릭터로서 자연스럽게 첫 마디를 건네라. 다짜고짜 요구나 압박부터 하지 말고, 먼저 신분(사칭 기관·관계)과 전화를 건 이유를 1~2문장으로 밝히며 상황을 설명한 뒤에 이어가라.)";
 const REPLIES = ["네, 맞는데요. 무슨 일이세요?", "네… 알겠습니다. 어떻게 하면 되나요?", "네, 말씀하신 대로 할게요."];
+// --turns 모드 — 기관 사칭 고급처럼 단계가 긴 흐름이 끝까지 가도록 순응하되 조금씩 되묻는 답(사기범 턴 수를 늘리기 위함).
+const LONG_REPLIES = [
+  "네, 맞는데요. 무슨 일이세요?", "네? 제 명의로요? 저는 그런 적 없는데요.", "아… 그럼 어떻게 해야 하나요?",
+  "네, 알겠습니다. 그 다음은요?", "담당하시는 분이 따로 계신 건가요? 그분이 뭐라고 하셨어요?", "네, 말씀하신 대로 할게요. 더 해야 할 게 있나요?",
+  "잠깐만요, 메모 좀 할게요. 다시 한 번만 말씀해 주세요.", "네, 적었어요. 그럼 이제 어떻게 되는 거예요?", "알겠습니다. 시키는 대로 할게요.",
+  "네, 다 했어요. 이제 끝난 건가요?",
+];
+const TURNS = Math.min(Number(argVal("--turns", "0")) || 0, LONG_REPLIES.length);
 
 function readApiKey() {
   const secret = argVal("--secret", "");
@@ -95,7 +106,8 @@ async function runOne(scenarioId, rep) {
   const voiceName = pickGeminiVoiceName(scenarioId, sessionId, gender);
   const ai = new GoogleGenAI({ apiKey: API_KEY, httpOptions: { apiVersion: "v1alpha" } });
   const chunks = [];
-  let turnsDone = 0, closed = false, lastError = null;
+  let turnsDone = 0, closed = false, lastError = null, samplesSoFar = 0, turnText = "";
+  const turnLog = [];
   let waiter = null;
   const session = await ai.live.connect({
     model: GEMINI_LIVE_MODEL,
@@ -103,11 +115,13 @@ async function runOne(scenarioId, rep) {
       responseModalities: [Modality.AUDIO],
       systemInstruction: systemPrompt,
       speechConfig: { languageCode: "ko-KR", voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
+      ...(TURNS ? { outputAudioTranscription: {} } : {}),
     },
     callbacks: {
       onmessage: (m) => {
-        if (m.data) chunks.push(pcm16ToFloat(m.data));
-        if (m.serverContent?.turnComplete) { turnsDone += 1; waiter?.(); }
+        if (m.data) { const c = pcm16ToFloat(m.data); chunks.push(c); samplesSoFar += c.length; }
+        if (m.serverContent?.outputTranscription?.text) turnText += m.serverContent.outputTranscription.text;
+        if (m.serverContent?.turnComplete) { turnsDone += 1; turnLog.push({ endSample: samplesSoFar, text: turnText.trim() }); turnText = ""; waiter?.(); }
       },
       onerror: (e) => { lastError = scrub(e?.message ?? e); },
       onclose: (e) => { closed = true; if (e?.code && e.code !== 1000) lastError = lastError ?? `close ${e.code} ${scrub(e.reason)}`; waiter?.(); },
@@ -116,7 +130,7 @@ async function runOne(scenarioId, rep) {
   const waitTurn = (ms) => new Promise((resolve) => { const t = setTimeout(resolve, ms); waiter = () => { clearTimeout(t); waiter = null; resolve(); }; });
   session.sendClientContent({ turns: [{ role: "user", parts: [{ text: OPENING }] }], turnComplete: true });
   await waitTurn(45000);
-  for (const reply of REPLIES) {
+  for (const reply of TURNS ? LONG_REPLIES.slice(0, TURNS) : REPLIES) {
     if (closed) break;
     await sleep(500);
     session.sendClientContent({ turns: [{ role: "user", parts: [{ text: reply }] }], turnComplete: true });
@@ -134,11 +148,11 @@ async function runOne(scenarioId, rep) {
   for (const c of chunks) { const r = normalizeChunk(c, state); norm.set(r.out, at); at += c.length; state = r.state; }
   const peak = (a) => { let p = 0; for (const v of a) p = Math.max(p, Math.abs(v)); return p; };
   return {
-    scenarioId, rep, voiceName, gender: gender ?? null, turnsDone, seconds: +(total / 24000).toFixed(1), chunks: chunks.length,
+    scenarioId, rep, variantId, voiceName, gender: gender ?? null, turnsDone, seconds: +(total / 24000).toFixed(1), chunks: chunks.length,
     medianChunkSamples: chunks.length ? chunks.map((c) => c.length).sort((a, b) => a - b)[chunks.length >> 1] : 0,
     rawSpeechRmsDb: +dbfs(speechRms(all)).toFixed(2), rawPeakDb: +dbfs(peak(all)).toFixed(2),
     normSpeechRmsDb: +dbfs(speechRms(norm)).toFixed(2), normPeakDb: +dbfs(peak(norm)).toFixed(2), finalGainDb: +dbfs(state.gain).toFixed(2),
-    error: lastError, _wav: all,
+    error: lastError, _wav: all, _turns: turnLog,
   };
 }
 
@@ -157,7 +171,8 @@ for (const [id, rep] of jobs) {
   try {
     const r = await runOne(id, rep);
     writeFileSync(path.join(outDir, `${id}-${rep}.wav`), wav(r._wav));
-    delete r._wav;
+    if (TURNS) writeFileSync(path.join(outDir, `${id}-${rep}.turns.json`), JSON.stringify({ sampleRate: 24000, variantId: r.variantId, turns: r._turns }, null, 2), "utf8");
+    delete r._wav; delete r._turns;
     results.push(r);
     console.log(JSON.stringify(r));
   } catch (e) {
