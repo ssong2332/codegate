@@ -50,7 +50,7 @@ test("[§126 진단] out.freshMs · out.trimDb 행이 out.path 바로 뒤에 있
 
 test("[§126 배선] 세션 — 감쇠 노드는 컴프레서와 보정 게인 사이 · 경로가 정해진 뒤 값 · 새 컨텍스트 running ms 기록", () => {
   const src = read("./GeminiVoiceSession.tsx");
-  assert.ok(src.includes("compressor.connect(streamTrim);\n          streamTrim.connect(makeup);"));
+  assert.ok(src.includes("compressor.connect(streamTrim);\n            streamTrim.connect(makeup);"));
   assert.ok(src.includes("streamTrimRef.current = callStreamTrimFor(outputPath, readVoiceTrimFlag(readDebugFlagSearch()));"));
   assert.ok(src.indexOf("noteOutputPath(outputPath);") < src.indexOf("streamTrimRef.current = callStreamTrimFor("));
   assert.ok(src.includes('freshOutput.state === "running" ? String(Math.round(performance.now() - freshStartedAt)) : "timeout"'));
