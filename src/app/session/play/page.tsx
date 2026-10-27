@@ -2608,6 +2608,8 @@ export default function SessionCallPage() {
   // 2026-10-27(사용자 지시 — iOS 26 통화 화면) — `ios` 스킨 통화 중 화면(`IosCallControls`). 부가 기능은 One UI형과 같은 판정표(`callExtras`).
   const ios26 = callTokens.controls === "ios26";
   const callExtras = oneUi9 || ios26;
+  // iOS 26 — 종료 원이 버튼 묶음 아래 줄 가운데로 끌어올려진 상태(키패드 · 시트가 닫혀 있을 때).
+  const iosEndLifted = ios26 && !showTextInput && !callPanel;
   const oneUi9Subtitle = oneUi9 ? oneUi9CallerSubtitle(callerLabel) : null;
   // 2026-10-21(실기 신고) — 통화 중 버튼 모양: iOS형 = 76px 원(반투명) · One UI형 = 판 위 64px 둥근 사각(눌림일 때만 채움).
   const gridButtonShape = callTokens.layout === "ios" ? "h-[76px] w-[76px] rounded-full" : "h-16 w-16 rounded-[20px]";
@@ -3743,9 +3745,11 @@ export default function SessionCallPage() {
               그리드로 되돌린다. */}
           {/* 2026-10-21 — iOS형은 종료 원이 그리드 셋째 줄 가운데처럼 붙고(행 간격과 같게) · One UI형은 판 아래 띄운다. */}
           {/* iOS 26 — 종료 원은 버튼 묶음 아래 줄 가운데 칸(비워 둔 자리)로 끌어올린다. 키패드 · 시트가 열리면 종전 자리(아래). */}
+          {/* 2026-10-27 실기 신고(키패드 무반응) — 끌어올린 이 줄은 폭 전체라 아래 줄의 더 보기 · 키패드를 덮어 누름을 가로챘다.
+              끌어올린 동안만 줄은 누름을 통과시키고(pointer-events-none) 종료 원만 받는다(`iosEndOverlay.test.ts`). */}
           <div
             className={`call-compact-end relative flex flex-col items-center gap-1.5 ${
-              ios26 && !showTextInput && !callPanel ? "mt-[-102px]" : callTokens.layout === "ios" || oneUi9 ? "mt-5" : "mt-7"
+              iosEndLifted ? "pointer-events-none mt-[-102px]" : callTokens.layout === "ios" || oneUi9 ? "mt-5" : "mt-7"
             }`}
           >
             <button
@@ -3755,7 +3759,9 @@ export default function SessionCallPage() {
               // §110.4 — 메신저발 통화는 끊으면 대화방으로 돌아간다. §131(5)(메인 세션 라이브 확인 2026-10-24 — 메인 지시 *"메신저에서 이어진 통화는
               // '통화 종료'로"*) — 그 통화만 이름에서 "훈련 종료"를 뺀다(훈련이 끝나지 않는다). 통화 시나리오는 G441 이름 그대로.
               aria-label={returnsToMessengerOnHangup ? "통화 종료" : "통화 종료 — 훈련 종료"}
-              className={`flex items-center justify-center rounded-full shadow-lg transition active:scale-95 ${oneUi9 ? "h-16 w-16" : "h-[76px] w-[76px]"}`}
+              className={`flex items-center justify-center rounded-full shadow-lg transition active:scale-95 ${oneUi9 ? "h-16 w-16" : "h-[76px] w-[76px]"} ${
+                iosEndLifted ? "pointer-events-auto" : ""
+              }`}
               // 2026-10-21 — 누른 뒤에는 눌린 채로 옅게 남는다(이동 전 한 프레임이라도 "먹었다"가 보이게).
               style={{
                 backgroundColor: callTokens.end,

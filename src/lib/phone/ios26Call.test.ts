@@ -32,7 +32,8 @@ test("[iOS 26] 배치 — 위 줄 스피커 · 영상 통화 · 소리 끔 / 아
   }
   // 종료 버튼은 play에 하나뿐(G441) — iOS 26은 그 버튼을 아래 줄 가운데로 끌어올린다.
   assert.equal(play.split('aria-label={returnsToMessengerOnHangup ? "통화 종료" : "통화 종료 — 훈련 종료"}').length, 2);
-  assert.match(play, /ios26 && !showTextInput && !callPanel \? "mt-\[-102px\]"/);
+  assert.match(play, /const iosEndLifted = ios26 && !showTextInput && !callPanel;/);
+  assert.match(play, /iosEndLifted \? "pointer-events-none mt-\[-102px\]"/);
 });
 
 test("[iOS 26] 상표 0 — FaceTime · Apple · iPhone 낱말을 그리지 않는다", () => {
