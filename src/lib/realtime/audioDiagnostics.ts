@@ -70,6 +70,10 @@ type DiagState = {
   thoughtCuts: number;
   /** 사기범이 말하는 중에 보낸 `turnComplete:false` 맥락 주입 · 상태 단언 횟수. */
   contextWhileSpeaking: number;
+  /** §140 — 같은 토큰 + 이어받기 핸들로 조용히 다시 연결한 횟수(성공만). */
+  liveResumes: number;
+  /** §140 — 마지막 재연결 사유(`liveResume.ts` `formatResumeReason` — `close:1011` · `goaway` · `fail:1011`). */
+  liveResumeLast: string | null;
 };
 
 const INITIAL: DiagState = {
@@ -104,6 +108,8 @@ const INITIAL: DiagState = {
   interruptsWhilePlaying: 0,
   thoughtCuts: 0,
   contextWhileSpeaking: 0,
+  liveResumes: 0,
+  liveResumeLast: null,
 };
 
 let state: DiagState = { ...INITIAL };
@@ -316,6 +322,11 @@ export function noteRingClosed(nowMs: number): void {
   state = { ...state, ringClosedAtMs: nowMs };
 }
 
+/** §140 — 조용한 재연결 1건(`succeeded`면 횟수 +1 · 사유는 성공 · 실패 모두 남긴다). */
+export function noteLiveResume(reason: string, succeeded: boolean): void {
+  state = { ...state, liveResumes: state.liveResumes + (succeeded ? 1 : 0), liveResumeLast: reason };
+}
+
 export function noteResumeRetry(count: number): void {
   if (count > 0) state = { ...state, resumeRetries: state.resumeRetries + count };
 }
@@ -475,6 +486,8 @@ export const AUDIO_DIAG_KEYS = [
   "act.hasBeenActive",
   "act.isActive",
   "resume.retry",
+  "live.resume",
+  "live.resumeWhy",
   "err.last",
   "hist",
   "browser",
@@ -615,6 +628,8 @@ export function buildAudioDiagRows(input: {
     "act.hasBeenActive": input.userActivation ? String(input.userActivation.hasBeenActive) : "-",
     "act.isActive": input.userActivation ? String(input.userActivation.isActive) : "-",
     "resume.retry": String(s.resumeRetries),
+    "live.resume": String(s.liveResumes),
+    "live.resumeWhy": show(s.liveResumeLast),
     "err.last": show(s.lastAudioError),
     hist: s.history.length > 0 ? s.history.join(" | ") : "-",
     browser: input.browser,

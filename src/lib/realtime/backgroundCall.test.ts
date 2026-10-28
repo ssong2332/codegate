@@ -117,8 +117,10 @@ test("[§99] 전사 백업 — 왕복 · 다른 세션 · 깨진 값 · 모양 �
 // ── 배선 고정(소스) ─────────────────────────────────────────────────────────────
 
 test("[§99] GeminiVoiceSession — onclose · onerror는 다시 연결 판정을 먼저 거치고, 사용자 종료는 표시 뒤 닫는다", () => {
-  assert.match(session, /if \(reportConnectionLostIfBackground\(\)\) return;\n\s*handlersRef\.current\.onEnded\(\);/);
-  assert.match(session, /if \(!cancelled && !reportConnectionLostIfBackground\(\)\) handlersRef\.current\.onError\(\);/);
+  // §140 — 종전 close 처리는 `fallBackAfterClose`로 옮겼다(조용한 재연결이 아니거나 실패했을 때 · 오류가 먼저 났으면 onError도 같은 자리).
+  assert.match(session, /if \(reportConnectionLostIfBackground\(\)\) return;\n\s*if \(errored\) handlersRef\.current\.onError\(\);\n\s*handlersRef\.current\.onEnded\(\);/);
+  // §140 — onerror의 취소 · 옛 세대 검사는 콜백 첫 줄(`if (cancelled || generation !== liveGeneration) return;`)로 옮겼다.
+  assert.match(session, /if \(!reportConnectionLostIfBackground\(\)\) handlersRef\.current\.onError\(\);/);
   assert.match(session, /stopRequestedRef\.current = true;\n\s*cleanupRef\.current\?\.\(\);/);
   // onConnectionLost가 없으면(다른 호출부) 종전 동작 그대로다.
   assert.match(session, /if \(!handlersRef\.current\.onConnectionLost\) return false;/);

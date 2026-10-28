@@ -103,6 +103,7 @@ import {
   shouldShowReturnNotice,
   serializeTranscriptBackup,
 } from "@/lib/realtime/backgroundCall";
+import { MAX_REALTIME_CALL_MS } from "@/lib/realtime/liveResume";
 import { callCallerFrom, openingTurnFor, type CallCaller } from "@/lib/realtime/escalatedOpening";
 import { createScreenWakeLock, type WakeLockStatus } from "@/lib/realtime/screenWakeLock";
 import {
@@ -676,6 +677,8 @@ export default function SessionCallPage() {
   // 실시간 음성 통화의 전사 턴을 모아 종료 직전에 제출한다(finding #1). 리렌더와 무관하게 누적
   // 되어야 하므로 ref에 쌓는다.
   const transcriptRef = useRef<TranscriptTurn[]>([]);
+  // §140 판정표 4 — 조용한 재연결 뒤 대화 맥락으로 다시 넣을 전사(지금까지 전부 · 세션 컴포넌트가 읽기만 한다).
+  const readTranscriptForResume = useCallback(() => transcriptRef.current, []);
   // §57.2 (6) 처방 D1 — 참가자가 "받기"를 누른 시각(클라 타임스탬프, `handleAnswer`에서 1회
   // 설정). 리포트 타임라인 라벨이 실제 발화 시각과 어긋나던 문제(T-1, `docs/Architecture.md`
   // §57.2)의 처방 — 각 전사 턴의 `atMs`(아래 `handleTranscriptTurn`)는 이 시각 기준 상대 ms다.
@@ -1611,7 +1614,9 @@ export default function SessionCallPage() {
   useEffect(() => {
     if (callMode !== "realtime" || phase !== "live" || maxSessionMs === null) return;
     if (autoEndedRef.current) return;
-    if (elapsedSec * 1000 < maxSessionMs) return;
+    // §140(사용자 결정 2026-10-28) — 실시간 통화는 20분에서 끝낸다(Live 토큰의 새 세션 창이 이어받기까지 덮는 범위 · `liveResume.ts` 판정표 3).
+    // 세션 문서의 `maxSessionMs`(60분)는 메신저 · 폴백 `sendMessage` 한도와 같은 값이라 그대로 두고 여기서만 더 짧은 쪽을 쓴다.
+    if (elapsedSec * 1000 < Math.min(maxSessionMs, MAX_REALTIME_CALL_MS)) return;
     autoEndedRef.current = true;
     // T68/UX-027 Failure (d) — 한도 도달 시 오버레이를 **먼저 내린다**(종료 고지가 문자 화면에 가려지면 안 된다 —
     // AC-059). 이 effect의 조건·의존성에는 오버레이 상태를 넣지 않는다(넣으면 오버레이가 열린 동안 한도 종료가 멈춘다 —
@@ -2840,6 +2845,7 @@ export default function SessionCallPage() {
             onSpeakingChange={realtime.handleSpeakingChange}
             onUserSpeakingChange={realtime.handleUserSpeakingChange}
             onTranscriptTurn={handleTranscriptTurn}
+            readTranscript={readTranscriptForResume}
             textMessage={textMessage}
             onScammerTurnComplete={handleScammerTurnComplete}
             onModelToolVerifyAnnounced={handleModelToolVerifyAnnounced}

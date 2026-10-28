@@ -88,9 +88,35 @@ export function pickGeminiVoiceName(
   return pool[Math.abs(hash) % pool.length];
 }
 
-/** 토큰 수명 — 통화 1건에만 쓰이므로 짧게 잡는다(유출 시 노출 창 최소화). */
-const TOKEN_EXPIRE_MINUTES = 30;
-const NEW_SESSION_EXPIRE_MINUTES = 2;
+/**
+ * 토큰 수명 — 통화 1건에만 쓰인다.
+ * ⭐ §140(2026-10-28 실 키 실측 — Live 연결이 601~602초에 서버 쪽에서 닫힘 · close 1011 · goAway 0건) — 브라우저가 약 10분마다
+ * **같은 토큰 + 이어받기 핸들**로 다시 연결한다(`src/lib/realtime/liveResume.ts` 판정표).
+ * ⛔ **이어받기에도 새 세션 시작 창(`newSessionExpireTime`)이 걸린다**(2026-10-28 재실측 — 창 2분 토큰으로 602초 뒤 이어받기 2회가
+ * 모두 open 직후 close 1011 "new_session_expire_time deadline exceeded"). 그래서 새 세션 창이 통화 전체를 덮어야 한다.
+ * `uses`는 이어받기에 쓰이지 않는다는 SDK 2.13 주석("Resuming a Live API session does not count as a use")은 아직 반박되지 않았다(2 유지).
+ *
+ * | 값 | 분 | 근거 |
+ * |---|---|---|
+ * | 실시간 통화 상한 `REALTIME_CALL_MAX_MINUTES` | 20 | 사용자 결정(2026-10-28) — 브라우저 `MAX_REALTIME_CALL_MS`와 같다 |
+ * | 새 세션 창 `NEW_SESSION_EXPIRE_MINUTES` | 25 | 발급 → 받기 최대 1.5분(프리페치 신선도 `PREFETCH_STALE_MS` 90초) + 통화 20분 + 여유 3.5분 |
+ * | 메시지 수명 `TOKEN_EXPIRE_MINUTES` | 30 | 새 세션 창 이상(SDK 기본값과 같다 — 상한 20시간) |
+ * ⛔ 브라우저 이어받기 창 `LIVE_RESUME_WINDOW_MS`(22분)는 새 세션 창 − 1.5분 이하여야 한다(`liveResume.test.ts`가 고정).
+ */
+export const REALTIME_CALL_MAX_MINUTES = 20;
+export const TOKEN_EXPIRE_MINUTES = 30;
+export const NEW_SESSION_EXPIRE_MINUTES = 25;
+
+/**
+ * §140 — 세션 이어받기. 서버가 `sessionResumptionUpdate`로 핸들을 보내고, 브라우저가 연결이 닫히면 그 핸들로 다시 잇는다.
+ * 공식 문서(ephemeral-tokens)의 잠금 예시와 같은 모양(`sessionResumption: {}` · `lockAdditionalFields` 미설정)이다.
+ */
+export const LIVE_SESSION_RESUMPTION_CONFIG = {} as const;
+/**
+ * §140 — 문맥 창 압축(슬라이딩 창). 압축이 없으면 오디오 세션은 15분에서 끝난다(공식 문서 live-session). 기준 토큰 수는 서버 기본값을 쓴다.
+ * 슬라이딩 창은 오래된 대화부터 줄이고 시스템 지시문은 앞에 남긴다(SDK `SlidingWindow` 주석).
+ */
+export const LIVE_CONTEXT_WINDOW_COMPRESSION = { slidingWindow: {} } as const;
 
 export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
   readonly providerName = "gemini" as const;
@@ -199,7 +225,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       config: {
         // uses는 "세션 시작 가능 횟수"다. 이상적으론 1이지만, dev(React Strict Mode)의 이중 mount나
         // 사용자의 재시도로 두어 번 연결을 시작할 수 있어 소폭 여유(2)를 둔다. 토큰은 여전히 단명
-        // (30분)이고 이 세션에만 묶여 있어 보안 노출은 최소다.
+        // (30분 · 새 세션 창 25분 — §140 이어받기 · 위 상수 주석)이고 이 세션에만 묶여 있어 보안 노출은 최소다. 이어받기는 이 횟수를 쓰지 않는다(SDK 주석).
         uses: 2,
         expireTime: new Date(now + TOKEN_EXPIRE_MINUTES * 60_000).toISOString(),
         newSessionExpireTime: new Date(now + NEW_SESSION_EXPIRE_MINUTES * 60_000).toISOString(),
@@ -291,6 +317,9 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
             // "모델이 함수 호출 여부를 스스로 결정하는" **기본값**이라(`:4668`) 필드를 생략해도 같은
             // 동작이 되지만, 이것은 이 패스의 추정이며 architect의 명시적 재확인 대상이다.
             tools: liveToolDeclarations,
+            // §140 — 10분 연결 수명 · 15분 오디오 세션 한도를 넘기기 위한 두 설정(위 상수 주석).
+            sessionResumption: LIVE_SESSION_RESUMPTION_CONFIG,
+            contextWindowCompression: LIVE_CONTEXT_WINDOW_COMPRESSION,
           },
         },
         httpOptions: { apiVersion: "v1alpha" },
