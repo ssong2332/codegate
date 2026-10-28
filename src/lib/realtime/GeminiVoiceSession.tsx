@@ -132,11 +132,24 @@ import {
   decideSocketClose,
   isReplacementTrackUsable,
 } from "./backgroundCall";
+import {
+  LIVE_RESUME_LOG_PREFIX,
+  RESUME_ATTEMPTS_PER_DROP,
+  RESUME_CONNECT_TIMEOUT_MS,
+  RESUME_RETRY_DELAY_MS,
+  closeCodeOf,
+  decideGoAway,
+  decideLiveClose,
+  formatResumeReason,
+  nextResumeHandle,
+  type LiveCloseInput,
+} from "./liveResume";
 import type { LiveTurnPhase } from "@/lib/verifyintercept";
 import {
   formatMicLine,
   noteAsrChunk,
   noteAudioError,
+  noteLiveResume,
   noteChunkReceived,
   noteNormalizerGain,
   noteFreshResume,
@@ -532,6 +545,20 @@ export default function GeminiVoiceSession({
     let micSourceNode: MediaStreamAudioSourceNode | null = null;
     let silenceNode: GainNode | null = null;
     let session: GeminiLiveSession | null = null;
+    // ⭐ §140 — 조용한 재연결(같은 토큰 + 이어받기 핸들 · 판정표 `liveResume.ts`). 연결 세대(`liveGeneration`)가 바뀌면 옛 연결의
+    // 콜백은 아무것도 하지 않는다. 다시 연결하는 동안(`resumeInFlight`)에는 `session`이 null이다 — 그 사이 나가려던 텍스트 턴은
+    // `turnsAwaitingResume`에 쥐었다가 새 연결로 보내고, 도구 응답은 `resumeInFlight`를 기다렸다가 보낸다.
+    let liveGeneration = 0;
+    let resumeHandle: string | null = null;
+    let liveResumeCount = 0;
+    let firstOpenAtMs: number | null = null;
+    let resumeInFlight: Promise<boolean> | null = null;
+    let goAwayPending = false;
+    const turnsAwaitingResume: ClientTurn[] = [];
+    // 정리(끊기 · 언마운트 · 연결 실패)가 돌았다 — 그 뒤 끝난 재연결 시도는 새 연결을 닫고 버린다.
+    let torndown = false;
+    // goAway 재판정(아래 IIFE가 채운다 — turnComplete에서 부른다).
+    let recheckGoAway: () => void = () => {};
     // 받은 오디오를 이어붙일 다음 재생 시작 시각(출력 컨텍스트 시간축 기준).
     let nextPlayTime = 0;
     // 현재 예약/재생 중인 오디오 소스들 — interrupted 시 이걸 전부 멈추지 않으면 이전 응답의
@@ -898,7 +925,11 @@ export default function GeminiVoiceSession({
     let clientTurnTick: ReturnType<typeof setTimeout> | null = null;
     const sendClientTurn = (turn: ClientTurn) => {
       const activeSession = session;
-      if (!activeSession) return;
+      if (!activeSession) {
+        // §140 — 조용한 재연결 중이면 버리지 않고 새 연결로 보낸다(타이핑이 그 1초 사이에 사라지지 않게).
+        if (resumeInFlight) turnsAwaitingResume.push(turn);
+        return;
+      }
       // ⭐ T192 C5(§79.8 R2 ② · G510) — 승인 · 종료 래치 뒤에는 클라 텍스트 턴(타이핑 · 지시 · 침묵 넛지)을 보내지 않는다.
       // 이 함수가 `turnComplete: true` 전송의 유일한 지점이라(G431) 여기 한 곳에서 막으면 보류분까지 전부 막힌다.
       if (handlersRef.current.isHangupLatched()) return;
@@ -1252,6 +1283,8 @@ export default function GeminiVoiceSession({
 
     let micLogTimer: ReturnType<typeof setInterval> | null = null;
     const cleanup = () => {
+      torndown = true;
+      turnsAwaitingResume.length = 0;
       if (micLogTimer) clearInterval(micLogTimer);
       micLogTimer = null;
       if (typeof document !== "undefined") document.removeEventListener("visibilitychange", handleVisibility);
@@ -1334,6 +1367,9 @@ export default function GeminiVoiceSession({
         toolCall?: { functionCalls?: { id?: string; name?: string; args?: unknown }[] };
         // §59.2 ②(genai.d.ts:9264) — `toolCallCancellation?: LiveServerToolCallCancellation`.
         toolCallCancellation?: { ids?: string[] };
+        // §140 — SDK `LiveServerSessionResumptionUpdate` · `LiveServerGoAway`.
+        sessionResumptionUpdate?: { newHandle?: string; resumable?: boolean };
+        goAway?: { timeLeft?: string };
         };
         // ⭐ 2026-10-27(실기 신고 — 첫 발화까지 17초) — §122.2.2가 통화 출력 컨텍스트를 마이크 **뒤에** 만들면서, 이 자리에서 마이크를
         // 기다린 다음에야 Live 연결을 시작했다(2026-10-21 받기→첫소리 병렬화가 다시 직렬이 됨). 이제 출력 준비(마이크 대기 → 새 출력
@@ -1374,16 +1410,25 @@ export default function GeminiVoiceSession({
             });
             // reviewer M2 — 도구 결과를 기다리는 동안 보류 큐가 텍스트 턴을 내보내지 않게 한다.
             dispatchClientTurn({ type: "toolCall", nowMs: performance.now() });
+            // §140 — 이 호출을 받은 연결 세대. 응답을 기다리는 사이 조용히 다시 연결됐으면 새 연결에 옛 호출 id를 보내지 않는다
+            // (서버는 도구 실행 중 이어받기 핸들을 주지 않는다 — 되살아난 대화에는 이 호출이 없다 · SDK `resumable` 주석).
+            const callGeneration = liveGeneration;
             void (async () => {
               const responses = await collectToolResponses(calls, (call) => dispatchToolCall(call, calls));
+              // §140 — 다시 연결하는 중이면 끝날 때까지 기다린다(뒤의 래치 · 결과 신호 · 큐 풀기를 건너뛰지 않게).
+              if (!cancelled && !session && resumeInFlight) await resumeInFlight;
               // 대기 중 언마운트되거나 세션이 교체됐으면 죽은 소켓에 쓰지 않는다.
               if (cancelled || !session) return;
-              try {
-                session.sendToolResponse({ functionResponses: responses });
-                latencyState = noteToolResponseSent(latencyState, performance.now());
-              } catch {
-                // G390 — 전송 실패도 통화를 막지 않는다(P-4 비차단). 무응답만은 피하는 것이
-                // 이 배선의 목적이지만, 소켓 자체가 끊긴 경우까지 되살릴 수는 없다.
+              if (callGeneration === liveGeneration) {
+                try {
+                  session.sendToolResponse({ functionResponses: responses });
+                  latencyState = noteToolResponseSent(latencyState, performance.now());
+                } catch {
+                  // G390 — 전송 실패도 통화를 막지 않는다(P-4 비차단). 무응답만은 피하는 것이
+                  // 이 배선의 목적이지만, 소켓 자체가 끊긴 경우까지 되살릴 수는 없다.
+                }
+              } else {
+                console.info(LIVE_RESUME_LOG_PREFIX, "stale tool response dropped");
               }
               // ⭐ T192 C5(§79.8 R4) — 승인 응답을 보낸 **뒤** 첫 turnComplete를 기다리기 시작한다(래치는 R2에서 이미 걸렸다).
               // 전송이 실패해도 건다 — 상한이 준비 신호를 낸다(끊기 승인 뒤 통화가 끝나지 않는 상태 0).
@@ -1559,10 +1604,240 @@ export default function GeminiVoiceSession({
           // T192 C5(§79.8 R4) — 승인 응답 뒤 첫 turnComplete = 마지막 대사가 다 왔다 → 잔여 재생을 기다린다(R5).
           // 오디오를 먼저 예약했으므로(위) `nextPlayTime`에 이 턴의 마지막 청크까지 들어 있다.
           beginHangupDrain();
+          // §140 판정표 2 G2 — 말하는 중에 받은 goAway는 턴이 끝난 여기서 다시 본다.
+          recheckGoAway();
         }
         };
         // 표 G1~G4는 `earlyMessageGate.ts`.
         const liveMessageGate = createEarlyMessageGate(handleLiveMessage);
+        // 토큰을 API 키 자리에 그대로 넣는다(문서 지침). 단기 토큰은 v1alpha에서만 유효하다.
+        const ai = new GoogleGenAI({
+          apiKey: credentials.geminiToken,
+          httpOptions: { apiVersion: "v1alpha" },
+        });
+        // ⭐ §140 — 연결 1개를 연다. 첫 연결(세대 0)은 종전과 같다. 다시 연결(세대 ≥ 1)은 이어받기 핸들을 넘기고, 준비 전 닫힘 ·
+        // 시간 초과를 실패로 돌려준다(SDK `connect()`는 서버가 거부하면 끝나지 않는다). 옛 세대의 콜백은 아무것도 하지 않는다.
+        let socketErrored = false;
+        let pendingAttempt: { generation: number; fail: (code: number | null) => void } | null = null;
+        const closeInput = (): LiveCloseInput => ({
+          stopRequested: stopRequestedRef.current,
+          hangupLatched: handlersRef.current.isHangupLatched(),
+          backgroundDecision:
+            connectionLostReported ||
+            (handlersRef.current.onConnectionLost &&
+              decideSocketClose({
+                hiddenNow: isHiddenNow(),
+                lastVisibleAtMs,
+                wasHiddenBefore: wasHidden,
+                nowMs: performance.now(),
+                stopRequested: stopRequestedRef.current,
+                hangupLatched: handlersRef.current.isHangupLatched(),
+              }) === "reconnect")
+              ? "reconnect"
+              : "end",
+          handle: resumeHandle,
+          resumesSoFar: liveResumeCount,
+          firstOpenAtMs,
+          nowMs: performance.now(),
+        });
+        // 다시 연결하지 않을 때(또는 실패했을 때) — 종전 onerror · onclose 순서 그대로.
+        const fallBackAfterClose = (errored: boolean) => {
+          // §99 — 가려진 동안(또는 돌아온 직후) 닫혔으면 통화를 끝내지 않고 부모가 다시 연결한다(`decideSocketClose`).
+          // 사용자 종료(`stopSignal`) · 끊기 래치 뒤의 close는 언제나 종전대로 `onEnded`다.
+          if (reportConnectionLostIfBackground()) return;
+          if (errored) handlersRef.current.onError();
+          handlersRef.current.onEnded();
+          // T192 C5(§79.8 R4 · §79.11 3행) — 끊기 대기 중 서버 close는 R4를 즉시 푼다(사유는 먼저 래치된 scammer).
+          beginHangupDrain();
+        };
+        let resumeLive: (reason: string, errored: boolean) => Promise<boolean> = async () => false;
+        const handleGoAway = () => {
+          const decision = decideGoAway({
+            ...closeInput(),
+            modelBusy:
+              agentSpeaking ||
+              clientTurnState.modelTurnActive ||
+              clientTurnState.toolPending ||
+              clientTurnState.awaitingSince !== null,
+          });
+          console.info(LIVE_RESUME_LOG_PREFIX, `goAway → ${decision}`);
+          goAwayPending = decision === "later";
+          if (decision === "now") {
+            flushTranscript();
+            void resumeLive(formatResumeReason("goaway"), false);
+          }
+        };
+        recheckGoAway = () => {
+          if (goAwayPending && !cancelled) handleGoAway();
+        };
+        const openLive = (generation: number, handle: string | null): Promise<GeminiLiveSession> => {
+          const connecting = ai.live.connect({
+            model: credentials.geminiModel,
+            // 모델·프롬프트·도구·전사설정은 토큰에 고정돼 있어 여기서 다시 보내지 않는다. §140 — 이어받기 핸들만 연결마다 다르다.
+            config: handle
+              ? { responseModalities: [Modality.AUDIO], sessionResumption: { handle } }
+              : { responseModalities: [Modality.AUDIO] },
+            callbacks: {
+              onopen: () => {
+                log("onopen ✓", generation);
+                if (cancelled || generation !== liveGeneration) return;
+                if (generation === 0) {
+                  firstOpenAtMs = performance.now();
+                  handlersRef.current.onActive();
+                }
+              },
+              onmessage: (message: LiveServerMessageLike) => {
+                if (cancelled || generation !== liveGeneration) return;
+                // §140 — 이어받기 핸들(값은 로그 · 진단에 싣지 않는다)과 goAway는 출력 준비와 무관하게 바로 본다.
+                if (message.sessionResumptionUpdate) {
+                  resumeHandle = nextResumeHandle(resumeHandle, message.sessionResumptionUpdate);
+                }
+                if (message.goAway) handleGoAway();
+                // 출력 준비(마이크 → 통화 출력 컨텍스트) 전이면 받은 순서대로 쌓는다 — 위 `setupCallOutput` 끝(`open()`)에서 처리한다.
+                liveMessageGate.push(message);
+              },
+              onerror: (e: unknown) => {
+                log("onerror", e);
+                if (cancelled || generation !== liveGeneration) return;
+                if (pendingAttempt?.generation === generation) {
+                  pendingAttempt.fail(null);
+                  return;
+                }
+                // §140 — 다시 연결할 수 있으면 오류를 기억만 하고 뒤따르는 onclose에서 다시 연결한다(실패하면 종전처럼 onError).
+                if (decideLiveClose(closeInput()) === "resume") {
+                  socketErrored = true;
+                  return;
+                }
+                // §99 — 화면이 가려진 동안의 소켓 오류는 텍스트 강등이 아니라 다시 연결로 보낸다(아래 onclose와 같은 판정 · 1회).
+                if (!reportConnectionLostIfBackground()) handlersRef.current.onError();
+              },
+              onclose: (e: unknown) => {
+                log("onclose", e);
+                if (cancelled || generation !== liveGeneration) return;
+                const code = closeCodeOf(e);
+                if (pendingAttempt?.generation === generation) {
+                  pendingAttempt.fail(code);
+                  return;
+                }
+                flushTranscript();
+                logLatencySummary();
+                console.info(formatMicLine());
+                const errored = socketErrored;
+                socketErrored = false;
+                const decision = decideLiveClose(closeInput());
+                console.info(LIVE_RESUME_LOG_PREFIX, `socket closed code=${code ?? "-"} → ${decision} n=${liveResumeCount}`);
+                if (decision === "resume") {
+                  void resumeLive(formatResumeReason("close", code), errored);
+                  return;
+                }
+                fallBackAfterClose(errored);
+              },
+            },
+          }) as unknown as Promise<GeminiLiveSession>;
+          if (generation === 0) return connecting;
+          return new Promise<GeminiLiveSession>((resolve, reject) => {
+            let settled = false;
+            const settle = (error: unknown, value?: GeminiLiveSession) => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              if (pendingAttempt?.generation === generation) pendingAttempt = null;
+              if (value) resolve(value);
+              else reject(error);
+            };
+            const timer = setTimeout(() => settle(new Error("resume-timeout")), RESUME_CONNECT_TIMEOUT_MS);
+            pendingAttempt = { generation, fail: (code) => settle(new Error(`resume-closed:${code ?? "-"}`)) };
+            connecting.then(
+              (next) => {
+                // 시간 초과 · 준비 전 닫힘으로 이미 포기한 뒤 늦게 열렸으면 닫는다(새는 소켓 0).
+                if (settled) {
+                  try {
+                    next.close();
+                  } catch {
+                    // 무시
+                  }
+                  return;
+                }
+                settle(null, next);
+              },
+              (err: unknown) => settle(err),
+            );
+          });
+        };
+        resumeLive = (reason: string, errored: boolean): Promise<boolean> => {
+          if (resumeInFlight) return resumeInFlight;
+          const previous = session;
+          session = null;
+          liveSessionRef.current = null;
+          goAwayPending = false;
+          // 옛 연결의 콜백을 끊는다(아래 close가 부르는 onclose도 무시된다).
+          liveGeneration += 1;
+          try {
+            previous?.close();
+          } catch {
+            // 이미 닫혔으면 무시
+          }
+          let lastFailure = "-";
+          const run = (async (): Promise<boolean> => {
+            for (let attempt = 1; attempt <= RESUME_ATTEMPTS_PER_DROP; attempt += 1) {
+              if (cancelled || torndown || stopRequestedRef.current || handlersRef.current.isHangupLatched()) return false;
+              const generation = liveGeneration;
+              try {
+                const next = await openLive(generation, resumeHandle);
+                if (cancelled || torndown || generation !== liveGeneration) {
+                  liveGeneration += 1;
+                  try {
+                    next.close();
+                  } catch {
+                    // 무시
+                  }
+                  return false;
+                }
+                session = next;
+                liveSessionRef.current = next;
+                liveResumeCount += 1;
+                noteLiveResume(reason, true);
+                console.info(LIVE_RESUME_LOG_PREFIX, `resumed ${reason} n=${liveResumeCount} attempt=${attempt}`);
+                return true;
+              } catch (err) {
+                lastFailure = err instanceof Error ? err.message.replace(/^resume-/, "") : "error";
+                console.info(LIVE_RESUME_LOG_PREFIX, `attempt ${attempt} failed ${lastFailure}`);
+                // 이 시도의 늦은 콜백을 끊는다.
+                liveGeneration += 1;
+                if (attempt < RESUME_ATTEMPTS_PER_DROP) {
+                  await new Promise<void>((resolve) => setTimeout(resolve, RESUME_RETRY_DELAY_MS));
+                }
+              }
+            }
+            noteLiveResume(`fail:${lastFailure}`, false);
+            return false;
+          })();
+          resumeInFlight = run;
+          void run.then((ok) => {
+            resumeInFlight = null;
+            if (cancelled) return;
+            if (torndown) {
+              // 다시 연결하는 사이 사용자가 끊었다 — 종전에는 정리의 close가 onclose → onEnded를 불렀다(같은 신호를 1회 낸다).
+              if (stopRequestedRef.current) handlersRef.current.onEnded();
+              return;
+            }
+            if (!ok) {
+              turnsAwaitingResume.length = 0;
+              fallBackAfterClose(errored);
+              return;
+            }
+            // 끊길 때 모델이 말하던 턴은 turnComplete가 오지 않는다 — 게이트 타이머가 stall로 정리한다(예약이 없을 수 있어 다시 잡는다).
+            if (turnInProgress || agentSpeaking) scheduleGateClose();
+            // 그 사이 나가려던 텍스트 턴 · 못 보낸 맥락 주입을 새 연결로 보낸다.
+            for (const turn of turnsAwaitingResume.splice(0)) sendClientTurn(turn);
+            const resumeContext = pendingContextTurnRef.current;
+            if (resumeContext && !handlersRef.current.isHangupLatched() && injectContext(resumeContext.text, resumeContext.delivery)) {
+              pendingContextTurnRef.current = null;
+              handlersRef.current.onContextTurnDelivered?.(resumeContext.seq);
+            }
+          });
+          return run;
+        };
         const setupCallOutput = async (): Promise<void> => {
           // 수정안 A — 받기 탭 안에서 미리 깨운 컨텍스트가 살아 있으면 그것을 쓴다(없거나 닫혔으면 종전대로 만든다).
           const primedOutput = primedAudio?.output ?? null;
@@ -1680,46 +1955,7 @@ export default function GeminiVoiceSession({
         // 연결이 먼저 실패해도 처리되지 않은 rejection이 남지 않게 한다(실제 처리는 아래 `await outputReady`).
         outputReady.catch(() => {});
 
-        // 토큰을 API 키 자리에 그대로 넣는다(문서 지침). 단기 토큰은 v1alpha에서만 유효하다.
-        const ai = new GoogleGenAI({
-          apiKey: credentials.geminiToken,
-          httpOptions: { apiVersion: "v1alpha" },
-        });
-        session = (await ai.live.connect({
-          model: credentials.geminiModel,
-          // 모델·프롬프트·도구·전사설정은 토큰에 고정돼 있어 여기서 다시 보내지 않는다.
-          config: { responseModalities: [Modality.AUDIO] },
-          callbacks: {
-            onopen: () => {
-              log("onopen ✓");
-              if (!cancelled) handlersRef.current.onActive();
-            },
-            onmessage: (message: LiveServerMessageLike) => {
-              if (cancelled) return;
-              // 출력 준비(마이크 → 통화 출력 컨텍스트) 전이면 받은 순서대로 쌓는다 — 위 `setupCallOutput` 끝(`open()`)에서 처리한다.
-              liveMessageGate.push(message);
-            },
-            onerror: (e: unknown) => {
-              log("onerror", e);
-              // §99 — 화면이 가려진 동안의 소켓 오류는 텍스트 강등이 아니라 다시 연결로 보낸다(아래 onclose와 같은 판정 · 1회).
-              if (!cancelled && !reportConnectionLostIfBackground()) handlersRef.current.onError();
-            },
-            onclose: (e: unknown) => {
-              log("onclose", e);
-              if (!cancelled) {
-                flushTranscript();
-                logLatencySummary();
-                console.info(formatMicLine());
-                // §99 — 가려진 동안(또는 돌아온 직후) 닫혔으면 통화를 끝내지 않고 부모가 다시 연결한다(`decideSocketClose`).
-                // 사용자 종료(`stopSignal`) · 끊기 래치 뒤의 close는 언제나 종전대로 `onEnded`다.
-                if (reportConnectionLostIfBackground()) return;
-                handlersRef.current.onEnded();
-                // T192 C5(§79.8 R4 · §79.11 3행) — 끊기 대기 중 서버 close는 R4를 즉시 푼다(사유는 먼저 래치된 scammer).
-                beginHangupDrain();
-              }
-            },
-          },
-        })) as unknown as GeminiLiveSession;
+        session = await openLive(0, null);
         const connectResolvedAt = performance.now();
         // 연결은 출력 준비를 기다리지 않았다 — 맥락 주입 · 오프닝 전에 출력 준비(마이크 대기 포함)를 마저 기다린다.
         await outputReady;

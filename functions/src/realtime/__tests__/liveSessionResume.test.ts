@@ -1,0 +1,72 @@
+// §140(2026-10-28 실 키 실측 — Live 연결이 601초에 서버 쪽에서 닫힘 · close 1011 · goAway 0건) — 토큰이 잠그는 이어받기 ·
+// 문맥 창 압축 설정과 토큰 수명을 발급 요청 본문 수준에서 고정한다(`geminiProvider.test.ts`와 같은 fetch 가로채기).
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  GeminiRealtimeProvider,
+  LIVE_CONTEXT_WINDOW_COMPRESSION,
+  LIVE_SESSION_RESUMPTION_CONFIG,
+  NEW_SESSION_EXPIRE_MINUTES,
+  TOKEN_EXPIRE_MINUTES,
+} from "../geminiProvider";
+import { MAX_SESSION_MS } from "../../shared/constants";
+
+function captureTokenRequest(): { restore: () => void; bodies: unknown[] } {
+  const originalFetch = globalThis.fetch;
+  const bodies: unknown[] = [];
+  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+    if (init?.body) bodies.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ name: "auth_tokens/test-token" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as unknown as typeof globalThis.fetch;
+  return {
+    restore: () => {
+      globalThis.fetch = originalFetch;
+    },
+    bodies,
+  };
+}
+
+async function issue(): Promise<{ body: Record<string, unknown>; before: number; after: number }> {
+  const capture = captureTokenRequest();
+  try {
+    const before = Date.now();
+    await new GeminiRealtimeProvider("test-key", true).createCallCredentials({
+      channel: undefined,
+      hangupRelay: undefined,
+      sessionId: "sess",
+      scenarioId: "tax-refund-scam",
+      voiceId: "ignored-for-gemini",
+    });
+    const after = Date.now();
+    return { body: capture.bodies[0] as Record<string, unknown>, before, after };
+  } finally {
+    capture.restore();
+  }
+}
+
+test("[§140] 토큰이 이어받기(sessionResumption)와 슬라이딩 창 압축을 잠근다", async () => {
+  const { body } = await issue();
+  const setup = body.bidiGenerateContentSetup as Record<string, unknown> | undefined;
+  assert.ok(setup, "발급 요청에 bidiGenerateContentSetup이 있어야 한다");
+  assert.deepEqual(setup.sessionResumption, LIVE_SESSION_RESUMPTION_CONFIG);
+  assert.deepEqual(setup.contextWindowCompression, LIVE_CONTEXT_WINDOW_COMPRESSION);
+  assert.deepEqual(LIVE_CONTEXT_WINDOW_COMPRESSION, { slidingWindow: {} });
+  // 공식 문서 잠금 예시와 같은 모양 — 추가 잠금 필드를 두지 않는다(두면 클라의 이어받기 핸들이 무시될 수 있다 · 미실측).
+  assert.equal(body.lockAdditionalFields, undefined);
+});
+
+test("[§140] 토큰 메시지 수명이 통화 최대 길이 + 새 세션 시작 창보다 길다 · 사용 횟수는 그대로 2", async () => {
+  const { body, before, after } = await issue();
+  assert.equal(body.uses, 2);
+  const expireMs = Date.parse(String(body.expireTime));
+  const newSessionMs = Date.parse(String(body.newSessionExpireTime));
+  assert.ok(expireMs >= before + TOKEN_EXPIRE_MINUTES * 60_000 && expireMs <= after + TOKEN_EXPIRE_MINUTES * 60_000);
+  assert.ok(newSessionMs <= after + NEW_SESSION_EXPIRE_MINUTES * 60_000);
+  // 새 세션 시작 창 끝에 연결해도 통화 최대 길이(60분)까지 이어받을 수 있어야 한다.
+  assert.ok((TOKEN_EXPIRE_MINUTES - NEW_SESSION_EXPIRE_MINUTES) * 60_000 > MAX_SESSION_MS);
+  // SDK 상한(20시간) 안.
+  assert.ok(TOKEN_EXPIRE_MINUTES < 20 * 60);
+});

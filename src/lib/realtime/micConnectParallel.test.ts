@@ -56,7 +56,7 @@ function parallelViolations(code: string): string[] {
   const handlerDef = code.indexOf("const handleLiveMessage = (message: LiveServerMessageLike): void => {");
   const setupDef = code.indexOf("const setupCallOutput = async (): Promise<void> => {");
   const start = code.indexOf("outputReady = setupCallOutput();");
-  const connect = code.indexOf("await ai.live.connect(");
+  const connect = code.indexOf("session = await openLive(0, null);"); // §140 — 첫 연결(세대 0)
   const awaitReady = code.indexOf("await outputReady;");
   const micWaitInSetup = code.indexOf("(await micRequest.catch(() => null)) !== null");
   const freshCtx = code.indexOf("freshOutput = new AudioContext({ sampleRate: GEMINI_OUTPUT_SAMPLE_RATE });");
@@ -93,7 +93,7 @@ test("② 세션은 Live 연결을 출력 준비(마이크 대기)와 병렬로 
 });
 
 test("② 역검증 — 연결 전에 출력 준비를 기다리는 옛 직렬 사본 · 문을 건너뛰는 사본은 실패한다", (t) => {
-  const anchor = "        session = (await ai.live.connect({\n";
+  const anchor = "        session = await openLive(0, null);\n"; // §140 — 첫 연결(세대 0)
   assert.ok(session.includes(anchor), "오염 지점을 찾지 못했다 — 역검증이 공회전한다");
   const serial = parallelViolations(session.replace(anchor, "        await outputReady;\n" + anchor));
   const bypass = parallelViolations(session.replace("liveMessageGate.push(message);", "handleLiveMessage(message);"));
