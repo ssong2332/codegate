@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import {
   LIVE_RESUME_WINDOW_MS,
   MAX_LIVE_RESUMES,
+  MAX_REALTIME_CALL_MS,
   closeCodeOf,
   decideGoAway,
   decideLiveClose,
@@ -39,13 +40,18 @@ test("[§140 판정표 1] C1~C6 — 첫 일치 순서", () => {
   assert.equal(decideLiveClose({ ...BASE, resumesSoFar: MAX_LIVE_RESUMES }), "end", "C4 횟수 상한");
   assert.equal(decideLiveClose({ ...BASE, resumesSoFar: MAX_LIVE_RESUMES - 1 }), "resume", "C4 상한 직전");
   assert.equal(decideLiveClose({ ...BASE, firstOpenAtMs: null }), "end", "C5 아직 안 열림");
-  assert.equal(decideLiveClose({ ...BASE, nowMs: 1000 + LIVE_RESUME_WINDOW_MS }), "end", "C5 60분 창 밖");
+  assert.equal(decideLiveClose({ ...BASE, nowMs: 1000 + LIVE_RESUME_WINDOW_MS }), "end", "C5 22분 창 밖");
   assert.equal(decideLiveClose({ ...BASE, nowMs: 1000 + LIVE_RESUME_WINDOW_MS - 1 }), "resume", "C5 창 안");
   assert.equal(decideLiveClose(BASE), "resume", "C6 — 실측 601초 close");
 });
 
-test("[§140] 60분 통화를 버티는 횟수 — 약 10분마다 끊겨도 상한 안", () => {
-  assert.ok(MAX_LIVE_RESUMES >= Math.ceil(LIVE_RESUME_WINDOW_MS / 600_000));
+test("[§140] 불변식 — 통화 20분 < 이어받기 창 · 약 10분 수명 기준 재연결 횟수 + 여유", () => {
+  assert.equal(MAX_REALTIME_CALL_MS, 20 * 60 * 1000, "사용자 결정 2026-10-28");
+  assert.ok(LIVE_RESUME_WINDOW_MS > MAX_REALTIME_CALL_MS, "통화 끝까지 이어받을 수 있다");
+  // 실측 연결 수명 601~602초 → 창 안에서 끊기는 횟수 + 여유 1회 이상.
+  assert.ok(MAX_LIVE_RESUMES >= Math.ceil(LIVE_RESUME_WINDOW_MS / 600_000) + 1);
+  // 통화 상한 20분은 실제로 끊기는 횟수(2회)를 먼저 넘지 않는다 — C5보다 C4가 먼저 걸리지 않게.
+  assert.ok(MAX_LIVE_RESUMES > Math.floor(MAX_REALTIME_CALL_MS / 600_000));
 });
 
 test("[§140 판정표 2] goAway G1~G3", () => {
@@ -73,12 +79,18 @@ test("[§140] 사유 · close 코드 — 숫자 · 고정 낱말만", () => {
   assert.equal(closeCodeOf(null), null);
 });
 
-test("[§140 판정표 3] 브라우저 이어받기 창 ≤ 서버 토큰 수명 − 새 세션 시작 창 − 여유", () => {
+test("[§140 판정표 3] 이어받기 창 ≤ 서버 새 세션 창 − 발급→받기 최대(프리페치 90초) · 통화 상한은 서버와 같다", () => {
   const provider = read("../../../functions/src/realtime/geminiProvider.ts");
+  const hook = read("./useRealtimeCall.ts");
   const expire = Number(/export const TOKEN_EXPIRE_MINUTES = (\d+);/.exec(provider)?.[1]);
   const newSession = Number(/export const NEW_SESSION_EXPIRE_MINUTES = (\d+);/.exec(provider)?.[1]);
-  assert.ok(expire > 0 && newSession > 0, "서버 상수를 읽을 수 있어야 한다");
-  assert.ok(LIVE_RESUME_WINDOW_MS <= (expire - newSession) * 60_000, "토큰이 끝나기 전에만 이어받는다");
+  const callMax = Number(/export const REALTIME_CALL_MAX_MINUTES = (\d+);/.exec(provider)?.[1]);
+  const prefetchStale = Number(/const PREFETCH_STALE_MS = ([\d_]+);/.exec(hook)?.[1].replace(/_/g, ""));
+  assert.ok(expire > 0 && newSession > 0 && callMax > 0 && prefetchStale > 0, "상수를 읽을 수 있어야 한다");
+  // 2026-10-28 재실측 — 이어받기에도 새 세션 창이 걸린다. 첫 연결은 발급 뒤 프리페치 신선도 안이다.
+  assert.ok(LIVE_RESUME_WINDOW_MS <= newSession * 60_000 - prefetchStale, "새 세션 창이 끝나기 전에만 이어받는다");
+  assert.ok(expire >= newSession, "메시지 수명 ≥ 새 세션 창");
+  assert.equal(callMax * 60_000, MAX_REALTIME_CALL_MS, "서버 · 브라우저 통화 상한이 같다");
   assert.match(provider, /sessionResumption: LIVE_SESSION_RESUMPTION_CONFIG,/);
   assert.match(provider, /contextWindowCompression: LIVE_CONTEXT_WINDOW_COMPRESSION,/);
 });
@@ -100,6 +112,9 @@ test("[§140 배선] GeminiVoiceSession — onclose가 판정표 1을 거치고,
   assert.match(s, /if \(resumeInFlight\) turnsAwaitingResume\.push\(turn\);/);
   // 옛 연결에서 받은 도구 호출의 응답은 새 연결에 보내지 않는다.
   assert.match(s, /if \(callGeneration === liveGeneration\) \{/);
+  // 통화 화면 — 실시간 통화 자동 종료는 20분 상한과 세션 문서 한도 중 짧은 쪽.
+  const page = read("../../app/session/play/page.tsx");
+  assert.match(page, /if \(elapsedSec \* 1000 < Math\.min\(maxSessionMs, MAX_REALTIME_CALL_MS\)\) return;/);
   // 진단 — 성공 · 실패 사유를 남긴다.
   assert.match(s, /noteLiveResume\(reason, true\);/);
   assert.match(s, /noteLiveResume\(`fail:\$\{lastFailure\}`, false\);/);

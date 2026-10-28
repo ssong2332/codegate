@@ -24709,7 +24709,8 @@ Hosting만(functions 변경 0).
 - 예전에는 화면이 켜진 채 연결이 닫히면 `decideSocketClose` = `end` → `onEnded`로 통화가 끝났다(§99 재연결은 화면이 가려졌을 때만).
 
 ### 140.2 변경
-- 서버(`functions/src/realtime/geminiProvider.ts`) — 토큰 제약에 `sessionResumption: {}` · `contextWindowCompression: { slidingWindow: {} }`(공식 잠금 예시와 같은 모양 · `lockAdditionalFields` 미설정). `expireTime` 30분 → 65분(통화 최대 60분 + 새 세션 시작 창 2분 + 여유 3분). `uses: 2` · `newSessionExpireTime` 2분은 그대로(SDK 2.13 주석 — 이어받기는 `uses`를 쓰지 않는다).
+- 서버(`functions/src/realtime/geminiProvider.ts`) — 토큰 제약에 `sessionResumption: {}` · `contextWindowCompression: { slidingWindow: {} }`(공식 잠금 예시와 같은 모양 · `lockAdditionalFields` 미설정). `newSessionExpireTime` 2분 → 25분, `expireTime` 30분 유지, `uses: 2` 유지(SDK 2.13 주석 — 이어받기는 `uses`를 쓰지 않는다 · 재실측에서도 반박 없음). 값과 근거는 140.6.
+- 통화 화면(`src/app/session/play/page.tsx`) — 실시간 통화 자동 종료를 `min(maxSessionMs, 20분)`으로(사용자 결정 2026-10-28). 상한에 닿으면 종전 한도 종료(`endCall("limit")` · 사유 `limit_reached`)와 같다.
 - 브라우저(`src/lib/realtime/liveResume.ts` 판정표 · `GeminiVoiceSession.tsx`) — 최신 이어받기 핸들을 보관하고, 닫힘이 판정표 1의 `resume`이면 같은 토큰 + 핸들로 다시 연결한다. 연결 세대가 바뀌면 옛 콜백은 무시된다. 출력 · 입력 컨텍스트 · 마이크 · 예약 재생 · 전사 버퍼는 그대로 쓴다(새 연결은 `session` 변수만 바꾼다). 대화 맥락은 서버가 핸들로 되살리므로 맥락 텍스트 턴을 보내지 않는다.
 - 진단 패널 `live.resume`(성공 횟수) · `live.resumeWhy`(마지막 사유 `close:1011` · `goaway` · `fail:…`).
 
@@ -24719,8 +24720,8 @@ Hosting만(functions 변경 0).
 | C1 | 사용자 끊기 · 끊기 래치(T192) | 종전 종료 |
 | C2 | 화면 가려짐 · 복귀 직후(§99) | 종전 §99 재연결(부모 · 새 토큰) |
 | C3 | 이어받기 핸들 없음 | 종전 종료 |
-| C4 | 조용한 재연결 8회 도달 | 종전 종료 |
-| C5 | 첫 연결 뒤 60분 경과 | 종전 종료 |
+| C4 | 조용한 재연결 4회 도달 | 종전 종료 |
+| C5 | 첫 연결 뒤 22분 경과 | 종전 종료 |
 | C6 | 그 밖 | 같은 토큰 + 핸들로 다시 연결(시도 2회 · 1회 8초 상한) — 모두 실패하면 C2 → 종전 종료(오류가 먼저 났으면 종전처럼 `onError` 뒤 `onEnded`) |
 
 판정표 2(goAway — 실측에서는 오지 않음): 판정표 1이 `resume`이 아니면 무시 · 모델이 말하는/응답 대기/도구 대기 중이면 다음 turnComplete에서 다시 판정 · 유휴면 바로 다시 연결.
@@ -24732,6 +24733,26 @@ Hosting만(functions 변경 0).
 - 다시 연결 중 사용자가 끊으면 새 연결을 닫고 종전과 같이 `onEnded`를 1회 낸다.
 
 ### 140.5 한계 · 미확인
-- **실 키 확인 0** — 잠긴 `sessionResumption: {}`가 클라가 넘긴 핸들을 덮지 않는지, 2분 새 세션 창 뒤에도 이어받기가 받아지는지, 30분 넘는 `expireTime`이 실제로 지켜지는지 모른다(메인 승인 프로브 대상 — 제안: 1세션 약 12분).
+- 1차 실 키 검증(메인 · 2026-10-28 · head `a822e51`) **실패** — 602초에 close 1011, 같은 토큰 + 마지막 핸들로 이어받기 2회가 모두 open 직후 close 1011 "new_session_expire_time deadline exceeded". ⇒ **이어받기에도 새 세션 창이 걸린다**(1차의 "이어받기는 새 세션이 아니다" 가정은 틀렸다). 140.6으로 고쳤다 — 재검증은 메인이 한다.
+- `sessionResumptionUpdate`는 연결 직후 1건(resumable true)만 왔고 10분 동안 갱신이 없었다 — 이어받은 대화가 마지막 시점까지 이어지는지 아직 모른다.
 - 옛 연결에서 받은 도구 호출(예: 문자 보내기)은 되살아난 대화에 없으므로 모델이 같은 도구를 다시 부를 수 있다(중복 처리는 각 콜러블의 기존 규칙에 따른다 · 미확인).
 - 조용한 재연결 사이(대개 1초 안팎 — 추정)의 마이크 소리는 보내지 않는다.
+
+### 140.6 2차 — 통화 상한 20분 · 새 세션 창이 이어받기를 덮는다 (2026-10-28 · 사용자 결정 "최대 통화는 20분으로")
+`MAX_SESSION_MS`(60분)는 세션 문서 `maxSessionMs`로 저장돼 메신저 · 음성 폴백의 `sendMessage` 한도(`roleplay/sessionLimits.ts`)와 실시간 통화 자동 종료가 함께 쓴다. 그래서 전역 값은 두고 실시간 통화에만 20분을 건다.
+
+| 경로 | 상한 | 처리 |
+|---|---|---|
+| 실시간 Live 통화(통화 화면 `callMode = realtime`) | 20분 | 통화 화면 자동 종료 `min(maxSessionMs, MAX_REALTIME_CALL_MS)` |
+| 메신저(`sendMessage`) | 60분(종전) | 변경 없음 — 영향 0 |
+| 음성 폴백(Live 실패 → 글 · TTS, `sendMessage`) | 60분(종전) | 변경 없음 — Live 토큰과 무관(메인 보고 대상) |
+
+| 값 | 분 | 근거 |
+|---|---|---|
+| 실시간 통화 상한 | 20 | 사용자 결정 — 서버 `REALTIME_CALL_MAX_MINUTES` = 브라우저 `MAX_REALTIME_CALL_MS`(테스트가 고정) |
+| 새 세션 창 `newSessionExpireTime` | 25 | 발급 → 받기 최대 1.5분(프리페치 신선도 90초) + 통화 20분 + 여유 3.5분 |
+| 메시지 수명 `expireTime` | 30 | 새 세션 창 이상 |
+| 브라우저 이어받기 창 `LIVE_RESUME_WINDOW_MS` | 22 | 통화 상한 20분 초과 · 새 세션 창 − 1.5분(23.5분) 이하 |
+| 조용한 재연결 상한 `MAX_LIVE_RESUMES` | 4회 | 22분 ÷ 약 10분 = 2회 + 여유 2회 |
+
+- 대가: 토큰 유출 시 새 세션을 열 수 있는 창이 2분 → 25분으로 길어진다(`uses: 2` · 이 세션의 프롬프트 · 도구에 잠긴 토큰이라 노출은 제한적).

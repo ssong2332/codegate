@@ -103,6 +103,7 @@ import {
   shouldShowReturnNotice,
   serializeTranscriptBackup,
 } from "@/lib/realtime/backgroundCall";
+import { MAX_REALTIME_CALL_MS } from "@/lib/realtime/liveResume";
 import { callCallerFrom, openingTurnFor, type CallCaller } from "@/lib/realtime/escalatedOpening";
 import { createScreenWakeLock, type WakeLockStatus } from "@/lib/realtime/screenWakeLock";
 import {
@@ -1611,7 +1612,9 @@ export default function SessionCallPage() {
   useEffect(() => {
     if (callMode !== "realtime" || phase !== "live" || maxSessionMs === null) return;
     if (autoEndedRef.current) return;
-    if (elapsedSec * 1000 < maxSessionMs) return;
+    // §140(사용자 결정 2026-10-28) — 실시간 통화는 20분에서 끝낸다(Live 토큰의 새 세션 창이 이어받기까지 덮는 범위 · `liveResume.ts` 판정표 3).
+    // 세션 문서의 `maxSessionMs`(60분)는 메신저 · 폴백 `sendMessage` 한도와 같은 값이라 그대로 두고 여기서만 더 짧은 쪽을 쓴다.
+    if (elapsedSec * 1000 < Math.min(maxSessionMs, MAX_REALTIME_CALL_MS)) return;
     autoEndedRef.current = true;
     // T68/UX-027 Failure (d) — 한도 도달 시 오버레이를 **먼저 내린다**(종료 고지가 문자 화면에 가려지면 안 된다 —
     // AC-059). 이 effect의 조건·의존성에는 오버레이 상태를 넣지 않는다(넣으면 오버레이가 열린 동안 한도 종료가 멈춘다 —

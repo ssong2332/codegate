@@ -1,4 +1,4 @@
-// §140(2026-10-28 실 키 실측 — Live 연결이 601초에 서버 쪽에서 닫힘 · close 1011 · goAway 0건) — 토큰이 잠그는 이어받기 ·
+// §140(2026-10-28 실 키 실측 — Live 연결이 601초에 서버 쪽에서 닫힘 · close 1011 · goAway 0건 · 재실측: 이어받기에도 새 세션 창 적용) — 토큰이 잠그는 이어받기 ·
 // 문맥 창 압축 설정과 토큰 수명을 발급 요청 본문 수준에서 고정한다(`geminiProvider.test.ts`와 같은 fetch 가로채기).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -7,6 +7,7 @@ import {
   LIVE_CONTEXT_WINDOW_COMPRESSION,
   LIVE_SESSION_RESUMPTION_CONFIG,
   NEW_SESSION_EXPIRE_MINUTES,
+  REALTIME_CALL_MAX_MINUTES,
   TOKEN_EXPIRE_MINUTES,
 } from "../geminiProvider";
 import { MAX_SESSION_MS } from "../../shared/constants";
@@ -58,15 +59,22 @@ test("[§140] 토큰이 이어받기(sessionResumption)와 슬라이딩 창 압�
   assert.equal(body.lockAdditionalFields, undefined);
 });
 
-test("[§140] 토큰 메시지 수명이 통화 최대 길이 + 새 세션 시작 창보다 길다 · 사용 횟수는 그대로 2", async () => {
+test("[§140] 새 세션 창이 실시간 통화 20분 전체(발급 → 받기 1.5분 포함)를 덮는다 · 메시지 수명 ≥ 새 세션 창 · 사용 횟수 2", async () => {
   const { body, before, after } = await issue();
   assert.equal(body.uses, 2);
   const expireMs = Date.parse(String(body.expireTime));
   const newSessionMs = Date.parse(String(body.newSessionExpireTime));
   assert.ok(expireMs >= before + TOKEN_EXPIRE_MINUTES * 60_000 && expireMs <= after + TOKEN_EXPIRE_MINUTES * 60_000);
-  assert.ok(newSessionMs <= after + NEW_SESSION_EXPIRE_MINUTES * 60_000);
-  // 새 세션 시작 창 끝에 연결해도 통화 최대 길이(60분)까지 이어받을 수 있어야 한다.
-  assert.ok((TOKEN_EXPIRE_MINUTES - NEW_SESSION_EXPIRE_MINUTES) * 60_000 > MAX_SESSION_MS);
+  assert.ok(newSessionMs >= before + NEW_SESSION_EXPIRE_MINUTES * 60_000 && newSessionMs <= after + NEW_SESSION_EXPIRE_MINUTES * 60_000);
+  // 2026-10-28 재실측 — 이어받기에도 새 세션 창이 걸린다(창 2분 토큰 → "new_session_expire_time deadline exceeded").
+  assert.equal(REALTIME_CALL_MAX_MINUTES, 20, "사용자 결정 — 실시간 통화 상한 20분");
+  assert.ok(NEW_SESSION_EXPIRE_MINUTES * 60_000 >= REALTIME_CALL_MAX_MINUTES * 60_000 + 90_000 + 60_000, "통화 20분 + 프리페치 90초 + 여유");
+  assert.ok(TOKEN_EXPIRE_MINUTES >= NEW_SESSION_EXPIRE_MINUTES);
   // SDK 상한(20시간) 안.
   assert.ok(TOKEN_EXPIRE_MINUTES < 20 * 60);
+});
+
+test("[§140] 전역 세션 상한(MAX_SESSION_MS)은 메신저 · 폴백과 함께 쓰여 그대로 둔다 — 실시간 통화만 20분", () => {
+  assert.equal(MAX_SESSION_MS, 60 * 60 * 1000);
+  assert.ok(REALTIME_CALL_MAX_MINUTES * 60_000 < MAX_SESSION_MS);
 });

@@ -12,7 +12,7 @@
 // | C2 | 화면이 가려졌거나 돌아온 직후(§99 `decideSocketClose` = reconnect) | `background` | 종전 — 부모가 새 토큰으로 다시 연결 |
 // | C3 | 이어받기 핸들이 없다(첫 연결 실패 · 서버가 아직 안 보냄) | `end` | 종전 |
 // | C4 | 이 통화의 조용한 재연결이 `MAX_LIVE_RESUMES`회에 닿았다 | `end` | 종전 |
-// | C5 | 첫 연결 뒤 `LIVE_RESUME_WINDOW_MS`(60분)가 지났다(토큰 만료 안전 창 밖) | `end` | 종전 |
+// | C5 | 첫 연결 뒤 `LIVE_RESUME_WINDOW_MS`(22분)가 지났다(토큰 새 세션 창 밖) | `end` | 종전 |
 // | C6 | 그 밖 | `resume` | 같은 토큰 + 핸들로 다시 연결 |
 // 다시 연결이 `RESUME_ATTEMPTS_PER_DROP`번 모두 실패하면 C2 → 종전 종료 순으로 떨어진다(소켓 오류가 먼저 났으면 종전 `onError`).
 //
@@ -26,16 +26,19 @@
 // ── 판정표 3: 토큰(서버 `geminiProvider.ts`) ──
 // | 항목 | 값 | 근거 |
 // |---|---|---|
-// | 사용 횟수 `uses` | 2(종전) | 이어받기는 횟수를 쓰지 않는다(SDK 2.13 `CreateAuthTokenConfig.uses` 주석) |
-// | 메시지 수명 `expireTime` | 65분 | 통화 최대 60분 + 새 세션 시작 창 2분 + 여유 3분 — 새 토큰 발급 경로가 필요 없다 |
-// | 새 세션 시작 창 | 2분(종전) | 이어받기는 새 세션이 아니다(문서 — "같은 토큰으로 재연결" · 실측 확인 전) |
-// | 브라우저 이어받기 창 | 첫 연결 뒤 60분 | 토큰은 발급 뒤 2분 안에 연결돼야 하므로 첫 연결 뒤 최소 63분 유효하다 |
+// | 실시간 통화 상한 | 20분 | 사용자 결정(2026-10-28) — 통화 화면 자동 종료 `MAX_REALTIME_CALL_MS`(전역 `maxSessionMs` 60분은 메신저 · 폴백 그대로) |
+// | 사용 횟수 `uses` | 2(종전) | 이어받기는 횟수를 쓰지 않는다(SDK 2.13 `CreateAuthTokenConfig.uses` 주석 — 재실측에서도 반박 없음) |
+// | 새 세션 시작 창 | 25분 | ⛔ **이어받기에도 걸린다**(2026-10-28 재실측 — 창 2분 토큰의 602초 뒤 이어받기 2/2가 close 1011 "new_session_expire_time deadline exceeded"). 발급 → 받기 최대 1.5분 + 통화 20분 + 여유 3.5분 |
+// | 메시지 수명 `expireTime` | 30분 | 새 세션 창 이상 — 새 토큰 발급 경로가 필요 없다 |
+// | 브라우저 이어받기 창 | 첫 연결 뒤 22분 | 첫 연결은 발급 뒤 1.5분 안(프리페치 신선도) — 새 세션 창 25분 − 1.5분 = 23.5분 안쪽 · 통화 상한 20분 바깥 |
 
 export type LiveCloseDecision = "resume" | "background" | "end";
 export type GoAwayDecision = "now" | "later" | "ignore";
 
-/** 한 통화에서 조용히 다시 연결하는 최대 횟수 — 60분 ÷ 약 10분 = 6회 + 여유 2회(판단값). */
-export const MAX_LIVE_RESUMES = 8;
+/** 실시간 통화 상한(사용자 결정 2026-10-28) — 서버 `REALTIME_CALL_MAX_MINUTES`와 같다(`liveResume.test.ts`가 고정). */
+export const MAX_REALTIME_CALL_MS = 20 * 60 * 1000;
+/** 한 통화에서 조용히 다시 연결하는 최대 횟수 — 22분 ÷ 약 10분 = 2회 + 여유 2회(판단값). */
+export const MAX_LIVE_RESUMES = 4;
 /** 연결이 한 번 끊겼을 때 다시 연결을 시도하는 횟수(판단값). */
 export const RESUME_ATTEMPTS_PER_DROP = 2;
 /** 실패한 시도 뒤 다음 시도까지 기다리는 시간(판단값). */
@@ -45,8 +48,8 @@ export const RESUME_RETRY_DELAY_MS = 600;
  * `setupComplete`만 기다린다) 이 시간과 "준비 전 닫힘"으로 실패를 판정한다(판단값).
  */
 export const RESUME_CONNECT_TIMEOUT_MS = 8000;
-/** 첫 연결 뒤 이 시간까지만 같은 토큰으로 이어받는다 — 서버 토큰 수명(65분) − 새 세션 시작 창(2분) − 여유(3분). */
-export const LIVE_RESUME_WINDOW_MS = 60 * 60 * 1000;
+/** 첫 연결 뒤 이 시간까지만 같은 토큰으로 이어받는다 — 통화 상한(20분)보다 길고, 서버 새 세션 창(25분) − 발급→받기 최대(1.5분)보다 짧다. */
+export const LIVE_RESUME_WINDOW_MS = 22 * 60 * 1000;
 
 export type LiveCloseInput = {
   stopRequested: boolean;
