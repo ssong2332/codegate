@@ -107,3 +107,75 @@ export function closeCodeOf(e: unknown): number | null {
 
 /** production 로그 접두어(숫자 · 상태값만). */
 export const LIVE_RESUME_LOG_PREFIX = "[live-resume]";
+
+// ── 판정표 4: 조용히 다시 연결한 뒤 넣는 대화 맥락(`buildSilentResumeContext`) ──
+// ⭐ 2026-10-28 2차 실 키 재검증(메인 · head `5a88d5b`) — 같은 토큰 + 마지막 핸들로 1회 만에 다시 연결됐지만 **맥락 0**이었다
+// (0초 · 540초에 알려 준 암호 둘 다 "기억나지 않는다"). `sessionResumptionUpdate`는 연결 직후 1건(3초)만 오고 10분간 0건이었다 —
+// 핸들이 대화 시작 전 상태에 멈춰 있었다(텍스트 턴만 쓴 프로브라 그랬을 가능성은 미확인). 그래서 핸들 재연결(시스템 프롬프트 · 음성 ·
+// 도구 유지 · 약 1초)은 그대로 두고, 그 위에 지금까지의 전사를 `turnComplete: false` 맥락으로 다시 넣는다(응답을 일으키지 않는다).
+//
+// | # | 조건 | 결과 |
+// |---|---|---|
+// | S1 | 넣을 전사가 0턴(빈 통화 · 전부 핸들 범위) | 맥락 없음 · 이어 말하기 없음 |
+// | S2 | 핸들을 받은 뒤 쌓인 전사가 있다 | 핸들 범위(`covered`)를 빼고 나머지를 최근 것부터 상한까지 담아 시간 순으로 — `turnComplete: false` |
+// | S3 | S2 + 끊길 때 사기범이 말하던 중(`droppedMidTurn`) | S2 맥락 + 이어 말하기 트리거 1회(보류 큐 `silence` 턴 — 끊긴 말을 한 문장으로 마무리) |
+// | S4 | S2 + 유휴 · 참가자 차례 | S2 맥락만 — 참가자의 다음 말을 기다린다 |
+// 중복 방지 기준: 핸들을 받은 시점까지 **이 연결이** 내보낸 전사는 서버 상태에 있다고 본다(추정 — 실측은 핸들이 대화 전에 멈춘 경우뿐).
+// 그 범위에서 끝의 `RESUME_CONTEXT_OVERLAP_TURNS`턴은 다시 넣는다(핸들 직전 턴이 상태에 덜 들어갔을 때 잃는 것보다 겹치는 편이 낫다).
+// 이 연결 전에 쌓인 전사(§99 재연결 · §136 새로고침 이전)는 핸들 상태에 없으므로 언제나 넣는다.
+
+export type SilentResumeTurn = { role: "user" | "scammer"; text: string };
+
+/** 맥락에 싣는 최근 턴 수 · 한 턴 글자 수 · 대화 줄 전체 글자 수 상한(판단값 — 20분 통화 전사가 커질 수 있다). */
+export const RESUME_CONTEXT_MAX_TURNS = 40;
+export const RESUME_CONTEXT_MAX_TURN_CHARS = 200;
+export const RESUME_CONTEXT_MAX_TOTAL_CHARS = 6000;
+/** 핸들 범위 끝에서 다시 넣는 턴 수(판단값). */
+export const RESUME_CONTEXT_OVERLAP_TURNS = 2;
+
+/** 이어 말하기 트리거(S3) — 보류 큐 `silence` 턴. 오케스트레이션 신호라 전사에 기록하지 않는다. */
+export const RESUME_CONTINUE_TRIGGER =
+  "(연결이 잠깐 끊겼다가 다시 이어졌다. 끊기기 직전에 하던 말을 한 문장으로 짧게 마무리하고 상대 대답을 기다려라. 다시 소개하거나 '다시 연결됐다'고 말하지 마라.)";
+
+/**
+ * 핸들이 이미 담고 있다고 보는 전사 범위 `[start, end)`.
+ * - `instanceBaseline`: 이 연결(세션 컴포넌트)이 시작될 때 이미 있던 전사 수(그 앞은 핸들 상태에 없다).
+ * - `instanceTurnsAtHandle`: 마지막 핸들을 받았을 때까지 이 연결이 내보낸 전사 수.
+ */
+export function handleCoveredRange(instanceBaseline: number, instanceTurnsAtHandle: number): { start: number; end: number } {
+  const start = Math.max(0, instanceBaseline);
+  return { start, end: start + Math.max(0, instanceTurnsAtHandle - RESUME_CONTEXT_OVERLAP_TURNS) };
+}
+
+export function buildSilentResumeContext(input: {
+  turns: readonly SilentResumeTurn[];
+  covered: { start: number; end: number };
+  droppedMidTurn: boolean;
+}): { context: string | null; continueTrigger: string | null } {
+  const picked = input.turns
+    .map((t, i) => ({ i, role: t.role, text: t.text.replace(/\s+/g, " ").trim() }))
+    .filter((t) => t.text.length > 0 && !(t.i >= input.covered.start && t.i < input.covered.end));
+  if (picked.length === 0) return { context: null, continueTrigger: null }; // S1
+  const lines: string[] = [];
+  let total = 0;
+  for (let k = picked.length - 1; k >= 0 && lines.length < RESUME_CONTEXT_MAX_TURNS; k -= 1) {
+    const t = picked[k];
+    const text = t.text.length > RESUME_CONTEXT_MAX_TURN_CHARS ? `${t.text.slice(0, RESUME_CONTEXT_MAX_TURN_CHARS)}…` : t.text;
+    const line = `${t.role === "scammer" ? "나" : "상대"}: ${text}`;
+    if (total + line.length > RESUME_CONTEXT_MAX_TOTAL_CHARS && lines.length > 0) break;
+    lines.push(line);
+    total += line.length;
+  }
+  lines.reverse();
+  const omitted = picked.length > lines.length;
+  const context = [
+    "(통화 연결이 잠깐 끊겼다가 방금 다시 이어졌다. 상대에게는 거의 티가 나지 않았다. 아래는 이 통화에서 지금까지 오간 대화다(오래된 것부터).",
+    "같은 인물 · 같은 목적 그대로, 이미 한 말과 상대가 알려 준 정보(이름 · 번호 · 금액 · 답변 등)를 모두 기억하고 이어가라. 이미 기억하는 부분과 겹치면 한 번만 반영하라.",
+    "다시 소개하거나 처음부터 시작하지 말고, 이 안내 자체에는 대답하지 마라.",
+    ...(omitted ? ["(더 앞선 대화는 길어서 생략했다.)"] : []),
+    "대화:",
+    ...lines,
+    ")",
+  ].join("\n");
+  return { context, continueTrigger: input.droppedMidTurn ? RESUME_CONTINUE_TRIGGER : null }; // S3 · S4
+}

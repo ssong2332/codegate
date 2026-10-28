@@ -677,6 +677,8 @@ export default function SessionCallPage() {
   // 실시간 음성 통화의 전사 턴을 모아 종료 직전에 제출한다(finding #1). 리렌더와 무관하게 누적
   // 되어야 하므로 ref에 쌓는다.
   const transcriptRef = useRef<TranscriptTurn[]>([]);
+  // §140 판정표 4 — 조용한 재연결 뒤 대화 맥락으로 다시 넣을 전사(지금까지 전부 · 세션 컴포넌트가 읽기만 한다).
+  const readTranscriptForResume = useCallback(() => transcriptRef.current, []);
   // §57.2 (6) 처방 D1 — 참가자가 "받기"를 누른 시각(클라 타임스탬프, `handleAnswer`에서 1회
   // 설정). 리포트 타임라인 라벨이 실제 발화 시각과 어긋나던 문제(T-1, `docs/Architecture.md`
   // §57.2)의 처방 — 각 전사 턴의 `atMs`(아래 `handleTranscriptTurn`)는 이 시각 기준 상대 ms다.
@@ -2843,6 +2845,7 @@ export default function SessionCallPage() {
             onSpeakingChange={realtime.handleSpeakingChange}
             onUserSpeakingChange={realtime.handleUserSpeakingChange}
             onTranscriptTurn={handleTranscriptTurn}
+            readTranscript={readTranscriptForResume}
             textMessage={textMessage}
             onScammerTurnComplete={handleScammerTurnComplete}
             onModelToolVerifyAnnounced={handleModelToolVerifyAnnounced}

@@ -9,6 +9,13 @@ import {
   LIVE_RESUME_WINDOW_MS,
   MAX_LIVE_RESUMES,
   MAX_REALTIME_CALL_MS,
+  RESUME_CONTEXT_MAX_TOTAL_CHARS,
+  RESUME_CONTEXT_MAX_TURNS,
+  RESUME_CONTEXT_MAX_TURN_CHARS,
+  RESUME_CONTEXT_OVERLAP_TURNS,
+  RESUME_CONTINUE_TRIGGER,
+  buildSilentResumeContext,
+  handleCoveredRange,
   closeCodeOf,
   decideGoAway,
   decideLiveClose,
@@ -98,7 +105,7 @@ test("[§140 판정표 3] 이어받기 창 ≤ 서버 새 세션 창 − 발급�
 test("[§140 배선] GeminiVoiceSession — onclose가 판정표 1을 거치고, 이어받기는 핸들만 넘기며, 옛 세대 콜백은 무시한다", () => {
   const s = read("./GeminiVoiceSession.tsx");
   assert.match(s, /const decision = decideLiveClose\(closeInput\(\)\);/);
-  assert.match(s, /if \(decision === "resume"\) \{\n\s*void resumeLive\(formatResumeReason\("close", code\), errored\);\n\s*return;\n\s*\}\n\s*fallBackAfterClose\(errored\);/);
+  assert.match(s, /if \(decision === "resume"\) \{\n\s*void resumeLive\(formatResumeReason\("close", code\), errored, droppedMidTurn\);\n\s*return;\n\s*\}\n\s*fallBackAfterClose\(errored\);/);
   assert.match(s, /\{ responseModalities: \[Modality\.AUDIO\], sessionResumption: \{ handle \} \}/);
   // 콜백 4종 모두 세대 검사.
   const guards = s.match(/if \(cancelled \|\| generation !== liveGeneration\) return;/g) ?? [];
@@ -151,4 +158,72 @@ test("[§140 진단] resume.retry 뒤 live.resume · live.resumeWhy 2행 — 성
   noteAccept(2000);
   assert.equal(rowsOf()["live.resume"], "0");
   resetAudioDiagForTest();
+});
+
+// ── 판정표 4(2026-10-28 2차 재검증 — 핸들 재연결 성공 · 맥락 0) ──
+
+const T = (role: "user" | "scammer", text: string) => ({ role, text });
+
+test("[§140 판정표 4] S1 — 넣을 전사가 없으면 맥락 · 트리거 없음", () => {
+  assert.deepEqual(buildSilentResumeContext({ turns: [], covered: { start: 0, end: 0 }, droppedMidTurn: true }), { context: null, continueTrigger: null });
+  assert.deepEqual(
+    buildSilentResumeContext({ turns: [T("user", "  "), T("scammer", "")], covered: { start: 0, end: 0 }, droppedMidTurn: false }),
+    { context: null, continueTrigger: null },
+  );
+  // 전부 핸들 범위.
+  assert.equal(buildSilentResumeContext({ turns: [T("user", "a"), T("scammer", "b")], covered: { start: 0, end: 2 }, droppedMidTurn: false }).context, null);
+});
+
+test("[§140 판정표 4] S2 · S4 — 실측 프로브 모양(0초 · 540초 암호)이 시간 순으로 모두 실리고 이어 말하기는 없다", () => {
+  const turns = [T("user", "첫 번째 암호는 파란고래야."), T("scammer", "네, 기억할게요."), T("user", "오늘 날씨 좋네요."), T("scammer", "그러네요."), T("user", "두 번째 암호는 노란우산이야."), T("scammer", "알겠습니다.")];
+  const out = buildSilentResumeContext({ turns, covered: handleCoveredRange(0, 0), droppedMidTurn: false });
+  assert.equal(out.continueTrigger, null, "S4");
+  assert.ok(out.context);
+  const ctx = out.context ?? "";
+  assert.ok(ctx.indexOf("상대: 첫 번째 암호는 파란고래야.") < ctx.indexOf("상대: 두 번째 암호는 노란우산이야."));
+  assert.ok(ctx.includes("나: 알겠습니다."));
+  assert.ok(ctx.includes("이 안내 자체에는 대답하지 마라"));
+  assert.ok(!ctx.includes("생략"));
+});
+
+test("[§140 판정표 4] S3 — 말하던 중에 끊겼으면 이어 말하기 트리거 1개", () => {
+  const out = buildSilentResumeContext({ turns: [T("scammer", "고객님 계좌가 지금")], covered: { start: 0, end: 0 }, droppedMidTurn: true });
+  assert.equal(out.continueTrigger, RESUME_CONTINUE_TRIGGER);
+});
+
+test("[§140 판정표 4] 중복 방지 — 이 연결 이전 전사는 언제나 넣고, 핸들 범위는 끝의 겹침 턴만 다시 넣는다", () => {
+  assert.deepEqual(handleCoveredRange(3, 0), { start: 3, end: 3 }, "대화 전 핸들 = 빼는 것 없음");
+  assert.deepEqual(handleCoveredRange(3, 5), { start: 3, end: 3 + 5 - RESUME_CONTEXT_OVERLAP_TURNS });
+  assert.deepEqual(handleCoveredRange(0, 1), { start: 0, end: 0 });
+  const turns = Array.from({ length: 10 }, (_, i) => T(i % 2 ? "scammer" : "user", `t${i}`));
+  const ctx = buildSilentResumeContext({ turns, covered: handleCoveredRange(3, 5), droppedMidTurn: false }).context ?? "";
+  for (const kept of ["t0", "t1", "t2", "t6", "t7", "t8", "t9"]) assert.ok(ctx.includes(`: ${kept}\n`), kept);
+  for (const dropped of ["t3", "t4", "t5"]) assert.ok(!ctx.includes(`: ${dropped}\n`), dropped);
+});
+
+test("[§140 판정표 4] 길이 상한 — 최근 턴부터 · 턴 수 · 한 턴 · 전체 글자", () => {
+  const many = Array.from({ length: 100 }, (_, i) => T("user", `발화${i}`));
+  const ctx = buildSilentResumeContext({ turns: many, covered: { start: 0, end: 0 }, droppedMidTurn: false }).context ?? "";
+  const lines = ctx.split("\n").filter((l) => l.startsWith("상대: "));
+  assert.equal(lines.length, RESUME_CONTEXT_MAX_TURNS);
+  assert.equal(lines.at(-1), "상대: 발화99");
+  assert.ok(ctx.includes("생략"));
+  const long = buildSilentResumeContext({ turns: [T("scammer", "가".repeat(500))], covered: { start: 0, end: 0 }, droppedMidTurn: false }).context ?? "";
+  assert.ok(long.includes(`나: ${"가".repeat(RESUME_CONTEXT_MAX_TURN_CHARS)}…`));
+  const big = Array.from({ length: 40 }, (_, i) => T("user", `${i}`.padEnd(RESUME_CONTEXT_MAX_TURN_CHARS, "나")));
+  const bigCtx = buildSilentResumeContext({ turns: big, covered: { start: 0, end: 0 }, droppedMidTurn: false }).context ?? "";
+  const body = bigCtx.split("\n").filter((l) => l.startsWith("상대: ")).join("");
+  assert.ok(body.length <= RESUME_CONTEXT_MAX_TOTAL_CHARS);
+});
+
+test("[§140 판정표 4 배선] 재연결 뒤 전사를 turnComplete:false로 넣고, 트리거는 보류 큐 silence 턴 · 화면은 전체 전사를 넘긴다", () => {
+  const s = read("./GeminiVoiceSession.tsx");
+  assert.match(s, /session\.sendClientContent\(\{ turns: silentResume\.context, turnComplete: false \}\);/);
+  assert.match(s, /turn: \{ kind: "silence", text: silentResume\.continueTrigger \}/);
+  assert.match(s, /const droppedMidTurn = turnInProgress;\n\s*flushTranscript\(\);/);
+  // 맥락 주입은 보낸 텍스트 턴 · 이어 말하기보다 먼저.
+  assert.ok(s.indexOf("turns: silentResume.context") < s.indexOf("const heldTurns = turnsAwaitingResume.splice(0);"));
+  const page = read("../../app/session/play/page.tsx");
+  assert.match(page, /readTranscript=\{readTranscriptForResume\}/);
+  assert.match(page, /const readTranscriptForResume = useCallback\(\(\) => transcriptRef\.current, \[\]\);/);
 });

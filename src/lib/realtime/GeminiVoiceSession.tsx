@@ -136,6 +136,9 @@ import {
   LIVE_RESUME_LOG_PREFIX,
   RESUME_ATTEMPTS_PER_DROP,
   RESUME_CONNECT_TIMEOUT_MS,
+  buildSilentResumeContext,
+  handleCoveredRange,
+  type SilentResumeTurn,
   RESUME_RETRY_DELAY_MS,
   closeCodeOf,
   decideGoAway,
@@ -190,6 +193,11 @@ export type GeminiVoiceSessionProps = {
   onUserSpeakingChange: (speaking: boolean) => void;
   /** 완성된 발화 1턴을 부모로 올린다(리포트 기록용, finding #1). role은 user/scammer. */
   onTranscriptTurn: (role: "user" | "scammer", text: string) => void;
+  /**
+   * ⭐ §140 판정표 4 — 지금까지의 통화 전사 전체(부모 `transcriptRef` — 이 연결 이전 · §99 · §136 복원분 포함). 조용히 다시 연결한 뒤
+   * 맥락으로 다시 넣는다. 부재 = 이 연결이 내보낸 전사만 쓴다.
+   */
+  readTranscript?: () => readonly SilentResumeTurn[];
   stopSignal: number;
   muted: boolean;
   /**
@@ -374,6 +382,7 @@ export default function GeminiVoiceSession({
   onSpeakingChange,
   onUserSpeakingChange,
   onTranscriptTurn,
+  readTranscript,
   stopSignal,
   muted,
   outputVolume,
@@ -410,6 +419,7 @@ export default function GeminiVoiceSession({
     onSpeakingChange,
     onUserSpeakingChange,
     onTranscriptTurn,
+    readTranscript,
     onScammerTurnComplete,
     onModelToolVerifyAnnounced,
     onModelToolVerifyFailed,
@@ -454,6 +464,7 @@ export default function GeminiVoiceSession({
       onSpeakingChange,
       onUserSpeakingChange,
       onTranscriptTurn,
+      readTranscript,
       onScammerTurnComplete,
       onModelToolVerifyAnnounced,
       onModelToolVerifyFailed,
@@ -476,6 +487,7 @@ export default function GeminiVoiceSession({
     onSpeakingChange,
     onUserSpeakingChange,
     onTranscriptTurn,
+    readTranscript,
     onScammerTurnComplete,
     onModelToolVerifyAnnounced,
     onModelToolVerifyFailed,
@@ -555,6 +567,14 @@ export default function GeminiVoiceSession({
     let resumeInFlight: Promise<boolean> | null = null;
     let goAwayPending = false;
     const turnsAwaitingResume: ClientTurn[] = [];
+    // §140 판정표 4 — 이 연결이 내보낸 전사(부모 전사가 없을 때 쓴다) · 시작 때 이미 있던 전사 수 · 핸들이 담았다고 보는 전사 수.
+    const instanceTurns: SilentResumeTurn[] = [];
+    const instanceBaseline = handlersRef.current.readTranscript?.().length ?? 0;
+    let instanceTurnsAtHandle = 0;
+    let turnsAtGenerationStart = 0;
+    const noteEmittedTurn = (role: "user" | "scammer", text: string) => {
+      instanceTurns.push({ role, text });
+    };
     // 정리(끊기 · 언마운트 · 연결 실패)가 돌았다 — 그 뒤 끝난 재연결 시도는 새 연결을 닫고 버린다.
     let torndown = false;
     // goAway 재판정(아래 IIFE가 채운다 — turnComplete에서 부른다).
@@ -836,11 +856,13 @@ export default function GeminiVoiceSession({
       const s = stripLeakedThought(scammerBuffer).trim();
       if (u) {
         handlersRef.current.onTranscriptTurn("user", u);
+        noteEmittedTurn("user", u);
       }
       if (s) {
         // ⭐ §82.3.4(G539) — 부모의 `scammerTurnsRef`(비어 있지 않은 사기범 전사 flush 수)와 **같은 지점**.
         modelToolScammerTurns += 1;
         handlersRef.current.onTranscriptTurn("scammer", s);
+        noteEmittedTurn("scammer", s);
       }
       userBuffer = "";
       scammerBuffer = "";
@@ -866,6 +888,7 @@ export default function GeminiVoiceSession({
         // §82.3.4 — 끊긴 조각 flush도 사기범 전사 턴이다(`messages`에 문서 1개로 남는다).
         modelToolScammerTurns += 1;
         handlersRef.current.onTranscriptTurn("scammer", s);
+        noteEmittedTurn("scammer", s);
       }
       scammerBuffer = "";
       scammerToolBoundary = false;
@@ -1650,7 +1673,7 @@ export default function GeminiVoiceSession({
           // T192 C5(§79.8 R4 · §79.11 3행) — 끊기 대기 중 서버 close는 R4를 즉시 푼다(사유는 먼저 래치된 scammer).
           beginHangupDrain();
         };
-        let resumeLive: (reason: string, errored: boolean) => Promise<boolean> = async () => false;
+        let resumeLive: (reason: string, errored: boolean, droppedMidTurn: boolean) => Promise<boolean> = async () => false;
         const handleGoAway = () => {
           const decision = decideGoAway({
             ...closeInput(),
@@ -1664,7 +1687,7 @@ export default function GeminiVoiceSession({
           goAwayPending = decision === "later";
           if (decision === "now") {
             flushTranscript();
-            void resumeLive(formatResumeReason("goaway"), false);
+            void resumeLive(formatResumeReason("goaway"), false, false);
           }
         };
         recheckGoAway = () => {
@@ -1690,7 +1713,13 @@ export default function GeminiVoiceSession({
                 if (cancelled || generation !== liveGeneration) return;
                 // §140 — 이어받기 핸들(값은 로그 · 진단에 싣지 않는다)과 goAway는 출력 준비와 무관하게 바로 본다.
                 if (message.sessionResumptionUpdate) {
-                  resumeHandle = nextResumeHandle(resumeHandle, message.sessionResumptionUpdate);
+                  const nextHandle = nextResumeHandle(resumeHandle, message.sessionResumptionUpdate);
+                  // 판정표 4 중복 방지 — 이 연결에서 전사가 1턴 이상 나간 뒤 받은 핸들만 그 턴까지를 담았다고 본다
+                  // (연결 직후 핸들은 대화 전 상태 — 2026-10-28 재실측).
+                  if (nextHandle !== resumeHandle && instanceTurns.length > turnsAtGenerationStart) {
+                    instanceTurnsAtHandle = instanceTurns.length;
+                  }
+                  resumeHandle = nextHandle;
                 }
                 if (message.goAway) handleGoAway();
                 // 출력 준비(마이크 → 통화 출력 컨텍스트) 전이면 받은 순서대로 쌓는다 — 위 `setupCallOutput` 끝(`open()`)에서 처리한다.
@@ -1719,6 +1748,8 @@ export default function GeminiVoiceSession({
                   pendingAttempt.fail(code);
                   return;
                 }
+                // 판정표 4 S3 — 끊길 때 사기범이 말하던 중이었는가(flush 전에 읽는다).
+                const droppedMidTurn = turnInProgress;
                 flushTranscript();
                 logLatencySummary();
                 console.info(formatMicLine());
@@ -1727,7 +1758,7 @@ export default function GeminiVoiceSession({
                 const decision = decideLiveClose(closeInput());
                 console.info(LIVE_RESUME_LOG_PREFIX, `socket closed code=${code ?? "-"} → ${decision} n=${liveResumeCount}`);
                 if (decision === "resume") {
-                  void resumeLive(formatResumeReason("close", code), errored);
+                  void resumeLive(formatResumeReason("close", code), errored, droppedMidTurn);
                   return;
                 }
                 fallBackAfterClose(errored);
@@ -1764,7 +1795,7 @@ export default function GeminiVoiceSession({
             );
           });
         };
-        resumeLive = (reason: string, errored: boolean): Promise<boolean> => {
+        resumeLive = (reason: string, errored: boolean, droppedMidTurn: boolean): Promise<boolean> => {
           if (resumeInFlight) return resumeInFlight;
           const previous = session;
           session = null;
@@ -1795,6 +1826,7 @@ export default function GeminiVoiceSession({
                 }
                 session = next;
                 liveSessionRef.current = next;
+                turnsAtGenerationStart = instanceTurns.length;
                 liveResumeCount += 1;
                 noteLiveResume(reason, true);
                 console.info(LIVE_RESUME_LOG_PREFIX, `resumed ${reason} n=${liveResumeCount} attempt=${attempt}`);
@@ -1828,8 +1860,28 @@ export default function GeminiVoiceSession({
             }
             // 끊길 때 모델이 말하던 턴은 turnComplete가 오지 않는다 — 게이트 타이머가 stall로 정리한다(예약이 없을 수 있어 다시 잡는다).
             if (turnInProgress || agentSpeaking) scheduleGateClose();
+            // ⭐ 판정표 4 — 핸들만으로는 대화 맥락이 돌아오지 않았다(2026-10-28 재실측 맥락 0) — 전사를 `turnComplete: false`로 다시 넣는다.
+            const resumeTurns = handlersRef.current.readTranscript?.() ?? instanceTurns;
+            const silentResume = buildSilentResumeContext({
+              turns: resumeTurns,
+              covered: handleCoveredRange(handlersRef.current.readTranscript ? instanceBaseline : 0, instanceTurnsAtHandle),
+              droppedMidTurn,
+            });
+            if (silentResume.context && session && !handlersRef.current.isHangupLatched()) {
+              try {
+                session.sendClientContent({ turns: silentResume.context, turnComplete: false });
+                console.info(LIVE_RESUME_LOG_PREFIX, `context turns=${resumeTurns.length} chars=${silentResume.context.length}`);
+              } catch {
+                // 무시 — 통화는 계속된다(P-4 비차단).
+              }
+            }
             // 그 사이 나가려던 텍스트 턴 · 못 보낸 맥락 주입을 새 연결로 보낸다.
-            for (const turn of turnsAwaitingResume.splice(0)) sendClientTurn(turn);
+            const heldTurns = turnsAwaitingResume.splice(0);
+            for (const turn of heldTurns) sendClientTurn(turn);
+            // S3 — 말하던 중에 끊겼으면 끊긴 말을 마무리하게 한 번 넘긴다(보류 큐 — 끊긴 턴은 게이트 stall이 먼저 정리한다).
+            if (silentResume.continueTrigger && heldTurns.length === 0) {
+              dispatchClientTurn({ type: "request", turn: { kind: "silence", text: silentResume.continueTrigger }, nowMs: performance.now() });
+            }
             const resumeContext = pendingContextTurnRef.current;
             if (resumeContext && !handlersRef.current.isHangupLatched() && injectContext(resumeContext.text, resumeContext.delivery)) {
               pendingContextTurnRef.current = null;
