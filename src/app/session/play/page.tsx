@@ -103,7 +103,7 @@ import {
   shouldShowReturnNotice,
   serializeTranscriptBackup,
 } from "@/lib/realtime/backgroundCall";
-import { MAX_REALTIME_CALL_MS } from "@/lib/realtime/liveResume";
+import { callAutoEndLimitMs } from "@/lib/realtime/liveResume";
 import { callCallerFrom, openingTurnFor, type CallCaller } from "@/lib/realtime/escalatedOpening";
 import { createScreenWakeLock, type WakeLockStatus } from "@/lib/realtime/screenWakeLock";
 import {
@@ -1612,11 +1612,13 @@ export default function SessionCallPage() {
   // 않았다. 클라 타이머(answeredAt 기점, elapsedSec)가 서버 maxSessionMs를 넘으면 통화를 끝낸다.
   const autoEndedRef = useRef(false);
   useEffect(() => {
-    if (callMode !== "realtime" || phase !== "live" || maxSessionMs === null) return;
-    if (autoEndedRef.current) return;
     // §140(사용자 결정 2026-10-28) — 실시간 통화는 20분에서 끝낸다(Live 토큰의 새 세션 창이 이어받기까지 덮는 범위 · `liveResume.ts` 판정표 3).
-    // 세션 문서의 `maxSessionMs`(60분)는 메신저 · 폴백 `sendMessage` 한도와 같은 값이라 그대로 두고 여기서만 더 짧은 쪽을 쓴다.
-    if (elapsedSec * 1000 < Math.min(maxSessionMs, MAX_REALTIME_CALL_MS)) return;
+    // 사용자 결정 2026-10-29 — Live 실패 뒤 음성 폴백 통화도 같은 20분 · 같은 종료(`endCall("limit")`). 폴백은 서버 `sendMessage`가
+    // 60분에서도 끝내지만 20분이 먼저 온다. 세션 문서의 `maxSessionMs`(60분)는 메신저 한도와 같은 값이라 서버는 그대로 둔다.
+    const limitMs = callAutoEndLimitMs(callMode, maxSessionMs);
+    if (phase !== "live" || limitMs === null) return;
+    if (autoEndedRef.current) return;
+    if (elapsedSec * 1000 < limitMs) return;
     autoEndedRef.current = true;
     // T68/UX-027 Failure (d) — 한도 도달 시 오버레이를 **먼저 내린다**(종료 고지가 문자 화면에 가려지면 안 된다 —
     // AC-059). 이 effect의 조건·의존성에는 오버레이 상태를 넣지 않는다(넣으면 오버레이가 열린 동안 한도 종료가 멈춘다 —

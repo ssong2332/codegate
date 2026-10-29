@@ -26,7 +26,7 @@
 // ── 판정표 3: 토큰(서버 `geminiProvider.ts`) ──
 // | 항목 | 값 | 근거 |
 // |---|---|---|
-// | 실시간 통화 상한 | 20분 | 사용자 결정(2026-10-28) — 통화 화면 자동 종료 `MAX_REALTIME_CALL_MS`(전역 `maxSessionMs` 60분은 메신저 · 폴백 그대로) |
+// | 실시간 통화 상한 | 20분 | 사용자 결정(2026-10-28) — 통화 화면 자동 종료 `MAX_REALTIME_CALL_MS`. 2026-10-29부터 음성 폴백 통화도 같은 20분(`callAutoEndLimitMs`). 전역 `maxSessionMs` 60분은 메신저용으로 서버에 그대로 |
 // | 사용 횟수 `uses` | 2(종전) | 이어받기는 횟수를 쓰지 않는다(SDK 2.13 `CreateAuthTokenConfig.uses` 주석 — 재실측에서도 반박 없음) |
 // | 새 세션 시작 창 | 25분 | ⛔ **이어받기에도 걸린다**(2026-10-28 재실측 — 창 2분 토큰의 602초 뒤 이어받기 2/2가 close 1011 "new_session_expire_time deadline exceeded"). 발급 → 받기 최대 1.5분 + 통화 20분 + 여유 3.5분 |
 // | 메시지 수명 `expireTime` | 30분 | 새 세션 창 이상 — 새 토큰 발급 경로가 필요 없다 |
@@ -37,6 +37,19 @@ export type GoAwayDecision = "now" | "later" | "ignore";
 
 /** 실시간 통화 상한(사용자 결정 2026-10-28) — 서버 `REALTIME_CALL_MAX_MINUTES`와 같다(`liveResume.test.ts`가 고정). */
 export const MAX_REALTIME_CALL_MS = 20 * 60 * 1000;
+
+/**
+ * 통화 화면 자동 종료 한도(ms). 실시간이든 Live 실패 뒤 음성 폴백(텍스트 + TTS)이든 **통화**는 20분 상한과 세션 문서
+ * `maxSessionMs` 중 짧은 쪽에서 끝낸다(사용자 결정 2026-10-29 — 폴백 통화도 20분). 연결 판정 전(`undecided`) · 세션 문서를
+ * 아직 못 읽었으면 `null`(판정 보류). 메신저 대화방은 이 화면 밖이라 서버 `MAX_SESSION_MS`(60분)를 그대로 쓴다.
+ */
+export function callAutoEndLimitMs(
+  callMode: "undecided" | "realtime" | "fallback",
+  maxSessionMs: number | null,
+): number | null {
+  if (callMode === "undecided" || maxSessionMs === null) return null;
+  return Math.min(maxSessionMs, MAX_REALTIME_CALL_MS);
+}
 /** 한 통화에서 조용히 다시 연결하는 최대 횟수 — 22분 ÷ 약 10분 = 2회 + 여유 2회(판단값). */
 export const MAX_LIVE_RESUMES = 4;
 /** 연결이 한 번 끊겼을 때 다시 연결을 시도하는 횟수(판단값). */

@@ -15,6 +15,7 @@ import {
   RESUME_CONTEXT_OVERLAP_TURNS,
   RESUME_CONTINUE_TRIGGER,
   buildSilentResumeContext,
+  callAutoEndLimitMs,
   handleCoveredRange,
   closeCodeOf,
   decideGoAway,
@@ -119,9 +120,9 @@ test("[§140 배선] GeminiVoiceSession — onclose가 판정표 1을 거치고,
   assert.match(s, /if \(resumeInFlight\) turnsAwaitingResume\.push\(turn\);/);
   // 옛 연결에서 받은 도구 호출의 응답은 새 연결에 보내지 않는다.
   assert.match(s, /if \(callGeneration === liveGeneration\) \{/);
-  // 통화 화면 — 실시간 통화 자동 종료는 20분 상한과 세션 문서 한도 중 짧은 쪽.
+  // 통화 화면 — 통화 자동 종료는 20분 상한과 세션 문서 한도 중 짧은 쪽(`callAutoEndLimitMs` — 아래 폴백 테스트가 행을 고정).
   const page = read("../../app/session/play/page.tsx");
-  assert.match(page, /if \(elapsedSec \* 1000 < Math\.min\(maxSessionMs, MAX_REALTIME_CALL_MS\)\) return;/);
+  assert.match(page, /if \(elapsedSec \* 1000 < limitMs\) return;/);
   // 진단 — 성공 · 실패 사유를 남긴다.
   assert.match(s, /noteLiveResume\(reason, true\);/);
   assert.match(s, /noteLiveResume\(`fail:\$\{lastFailure\}`, false\);/);
@@ -226,4 +227,29 @@ test("[§140 판정표 4 배선] 재연결 뒤 전사를 turnComplete:false로 �
   const page = read("../../app/session/play/page.tsx");
   assert.match(page, /readTranscript=\{readTranscriptForResume\}/);
   assert.match(page, /const readTranscriptForResume = useCallback\(\(\) => transcriptRef\.current, \[\]\);/);
+});
+
+test("[폴백 20분] 통화 자동 종료 한도 — 실시간 · 음성 폴백 모두 20분과 세션 한도 중 짧은 쪽 · 판정 전은 보류", () => {
+  const SESSION_DOC_MAX = 60 * 60 * 1000; // 서버 MAX_SESSION_MS(메신저와 공용 — 그대로)
+  assert.equal(callAutoEndLimitMs("realtime", SESSION_DOC_MAX), MAX_REALTIME_CALL_MS);
+  assert.equal(callAutoEndLimitMs("fallback", SESSION_DOC_MAX), MAX_REALTIME_CALL_MS);
+  assert.equal(callAutoEndLimitMs("fallback", 6 * 60 * 1000), 6 * 60 * 1000, "세션 한도가 더 짧으면 그쪽");
+  assert.equal(callAutoEndLimitMs("realtime", 6 * 60 * 1000), 6 * 60 * 1000);
+  assert.equal(callAutoEndLimitMs("undecided", SESSION_DOC_MAX), null);
+  assert.equal(callAutoEndLimitMs("fallback", null), null);
+  assert.equal(MAX_REALTIME_CALL_MS, 20 * 60 * 1000);
+});
+
+test("[폴백 20분 배선] 통화 화면 한도 effect가 실시간만 거르지 않고 endCall(\"limit\")로 끝낸다 · 메신저 화면은 이 한도를 쓰지 않는다", () => {
+  const page = read("../../app/session/play/page.tsx");
+  const start = page.indexOf("const autoEndedRef");
+  const block = page.slice(start, page.indexOf("}, [callMode, phase, elapsedSec, maxSessionMs]);", start));
+  assert.ok(start >= 0 && block.length > 0);
+  assert.match(block, /const limitMs = callAutoEndLimitMs\(callMode, maxSessionMs\);/);
+  assert.match(block, /if \(phase !== "live" \|\| limitMs === null\) return;/);
+  assert.ok(!/callMode !== "realtime"/.test(block), "한도 effect가 실시간 통화만 보면 폴백 통화가 60분까지 간다");
+  assert.match(block, /await endCall\("limit"\);/);
+  // 메신저 대화방은 통화 화면 밖 — 서버 MAX_SESSION_MS(60분)만 따른다.
+  const messenger = read("../../app/session/messenger/page.tsx");
+  assert.ok(!messenger.includes("callAutoEndLimitMs") && !messenger.includes("MAX_REALTIME_CALL_MS"));
 });
