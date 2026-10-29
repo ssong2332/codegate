@@ -120,7 +120,7 @@ function sessionViolations(code: string): string[] {
   const out: string[] = [];
   if (!code.includes("liveMicHandoff.claim()")) out.push("세션이 받기 때 연 마이크를 넘겨받지 않는다");
   if (/await navigator\.mediaDevices\.getUserMedia/.test(code)) out.push("세션이 연결 전에 마이크를 기다린다");
-  const connect = code.indexOf("session = await openLive(0, null);"); // §140 — 첫 연결(세대 0)
+  const connect = code.indexOf("session = await openLive(0);"); // §140 — 첫 연결(세대 0)
   const mic = code.indexOf("const micStream = await micRequest;");
   const opening = code.indexOf('turn: { kind: "opening", text: OPENING_TRIGGER_TURN }');
   const wire = code.indexOf("inputContext.createMediaStreamSource(micStream)");

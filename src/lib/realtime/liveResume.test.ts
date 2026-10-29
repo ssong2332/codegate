@@ -104,11 +104,13 @@ test("[§140 판정표 3] 이어받기 창 ≤ 서버 새 세션 창 − 발급�
   assert.match(provider, /contextWindowCompression: LIVE_CONTEXT_WINDOW_COMPRESSION,/);
 });
 
-test("[§140 배선] GeminiVoiceSession — onclose가 판정표 1을 거치고, 이어받기는 핸들만 넘기며, 옛 세대 콜백은 무시한다", () => {
+test("[§140 배선] GeminiVoiceSession — onclose가 판정표 1을 거치고, 다시 연결은 핸들 없는 새 세션이며, 옛 세대 콜백은 무시한다", () => {
   const s = read("./GeminiVoiceSession.tsx");
   assert.match(s, /const decision = decideLiveClose\(closeInput\(\)\);/);
   assert.match(s, /if \(decision === "resume"\) \{\n\s*void resumeLive\(formatResumeReason\("close", code\), errored, droppedMidTurn\);\n\s*return;\n\s*\}\n\s*fallBackAfterClose\(errored\);/);
-  assert.match(s, /\{ responseModalities: \[Modality\.AUDIO\], sessionResumption: \{ handle \}, \.\.\.\(resumeVoice \? \{ speechConfig: resumeVoice \} : \{\}\) \}/);
+  // 2026-10-29 — 핸들로 되살린 연결은 목소리가 남성화됐다 — 연결 config에 이어받기 핸들을 싣지 않는다(첫 연결과 같은 config).
+  assert.ok(!/sessionResumption: \{ handle/.test(s), "이어받기 핸들로 다시 연결하지 않는다");
+  assert.match(s, /const next = await openLive\(generation\);/);
   // 콜백 4종 모두 세대 검사.
   const guards = s.match(/if \(cancelled \|\| generation !== liveGeneration\) return;/g) ?? [];
   assert.equal(guards.length, 4);
@@ -264,13 +266,12 @@ test("[§140 후속] 이어받기 목소리 — 서버 값으로 speechConfig를
   assert.equal(resumeSpeechConfig({ voiceName: "", languageCode: "ko-KR" }), null);
 });
 
-test("[§140 후속 배선] 이어받기 연결에만 speechConfig — 첫 연결 config는 종전 그대로 · 값은 credentials.geminiVoice", () => {
+test("[§140 후속 배선] 다시 연결도 첫 연결과 같은 config(목소리는 토큰 고정) · 맥락은 전사 전부 · 서버 계약 필드는 남는다", () => {
   const s = read("./GeminiVoiceSession.tsx");
-  assert.match(s, /const resumeVoice = resumeSpeechConfig\(credentials\.geminiVoice\);/);
-  assert.match(
-    s,
-    /config: handle\n\s*\? \{ responseModalities: \[Modality\.AUDIO\], sessionResumption: \{ handle \}, \.\.\.\(resumeVoice \? \{ speechConfig: resumeVoice \} : \{\}\) \}\n\s*: \{ responseModalities: \[Modality\.AUDIO\] \},/,
-  );
+  assert.match(s, /config: \{ responseModalities: \[Modality\.AUDIO\] \},\n\s*callbacks:/);
+  assert.ok(!s.includes("resumeSpeechConfig("), "speechConfig 재전송 경로는 쓰지 않는다(실측으로 반박)");
+  // 새 세션은 대화를 모른다 — 핸들 범위를 빼지 않는다.
+  assert.match(s, /const silentResume = buildSilentResumeContext\(\{\n\s*turns: resumeTurns,\n\s*covered: \{ start: 0, end: 0 \},/);
   // 서버 · 클라 계약 필드가 같은 모양이다.
   const clientTypes = read("../api/types.ts");
   const serverTypes = read("../../../functions/src/realtime/callTypes.ts");
