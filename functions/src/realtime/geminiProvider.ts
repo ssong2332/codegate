@@ -73,6 +73,9 @@ const GEMINI_VOICE_POOL = [...FEMALE_VOICES, ...MALE_VOICES] as const;
  * 않는다 — 배선이 바뀌어 도달해도 통화를 죽이지 않는다, P-4 비차단 관례). 이 폴백은 도입 전
  * `pickGeminiVoiceName(sessionId)`의 동작과 바이트 단위로 동일하다.
  */
+/** Live 출력 음성 언어 — 토큰 `speechConfig.languageCode`와 응답 `geminiVoice.languageCode`가 같은 값을 쓴다. */
+export const GEMINI_LIVE_LANGUAGE_CODE = "ko-KR";
+
 export function pickGeminiVoiceName(
   scenarioId: string,
   sessionId: string,
@@ -219,6 +222,12 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       ...(input.priorChatContext ? { turnInstruction: input.priorChatContext } : {}),
     });
 
+    // §140 후속(2026-10-29 실기 — 이어받은 뒤 다른 사람 목소리) — 토큰에 잠근 목소리를 응답에도 실어, 브라우저가 이어받기
+    // 연결 config에 같은 `speechConfig`를 다시 넣게 한다(`geminiVoice` — 비밀 아님 · 프롬프트 · 도구는 내리지 않는다).
+    const geminiVoice = {
+      voiceName: pickGeminiVoiceName(input.scenarioId, input.sessionId, speakerGender),
+      languageCode: GEMINI_LIVE_LANGUAGE_CODE,
+    };
     const client = new GoogleGenAI({ apiKey: this.apiKey });
     const now = Date.now();
     const token = await client.authTokens.create({
@@ -235,10 +244,10 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
             responseModalities: [Modality.AUDIO],
             systemInstruction: systemPrompt,
             speechConfig: {
-              languageCode: "ko-KR",
+              languageCode: geminiVoice.languageCode,
               voiceConfig: {
                 prebuiltVoiceConfig: {
-                  voiceName: pickGeminiVoiceName(input.scenarioId, input.sessionId, speakerGender),
+                  voiceName: geminiVoice.voiceName,
                 },
               },
             },
@@ -337,6 +346,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       signedUrl: "",
       geminiToken: tokenName,
       geminiModel: GEMINI_LIVE_MODEL,
+      geminiVoice,
       // Gemini는 고정 프리셋 음성만 쓴다 — 클론 voiceId를 넘겨도 반영되지 않으므로 빈 값으로 둔다
       // (호출부가 "본인 목소리로 합성됐다"고 잘못 표기하지 않게 하려는 의도, 근거 없는 표기 금지).
       voiceId: "",

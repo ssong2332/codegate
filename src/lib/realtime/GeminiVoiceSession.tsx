@@ -145,6 +145,7 @@ import {
   decideLiveClose,
   formatResumeReason,
   nextResumeHandle,
+  resumeSpeechConfig,
   type LiveCloseInput,
 } from "./liveResume";
 import type { LiveTurnPhase } from "@/lib/verifyintercept";
@@ -1638,6 +1639,8 @@ export default function GeminiVoiceSession({
           apiKey: credentials.geminiToken,
           httpOptions: { apiVersion: "v1alpha" },
         });
+        // §140 후속 — 이어받기 연결에 다시 넣을 목소리(서버가 토큰에 잠근 값 · 없으면 null = 종전 config).
+        const resumeVoice = resumeSpeechConfig(credentials.geminiVoice);
         // ⭐ §140 — 연결 1개를 연다. 첫 연결(세대 0)은 종전과 같다. 다시 연결(세대 ≥ 1)은 이어받기 핸들을 넘기고, 준비 전 닫힘 ·
         // 시간 초과를 실패로 돌려준다(SDK `connect()`는 서버가 거부하면 끝나지 않는다). 옛 세대의 콜백은 아무것도 하지 않는다.
         let socketErrored = false;
@@ -1697,8 +1700,9 @@ export default function GeminiVoiceSession({
           const connecting = ai.live.connect({
             model: credentials.geminiModel,
             // 모델·프롬프트·도구·전사설정은 토큰에 고정돼 있어 여기서 다시 보내지 않는다. §140 — 이어받기 핸들만 연결마다 다르다.
+            // §140 후속(2026-10-29 실기) — 이어받은 연결이 기본 목소리로 바뀌어, 이어받을 때만 토큰과 같은 목소리를 다시 넣는다.
             config: handle
-              ? { responseModalities: [Modality.AUDIO], sessionResumption: { handle } }
+              ? { responseModalities: [Modality.AUDIO], sessionResumption: { handle }, ...(resumeVoice ? { speechConfig: resumeVoice } : {}) }
               : { responseModalities: [Modality.AUDIO] },
             callbacks: {
               onopen: () => {

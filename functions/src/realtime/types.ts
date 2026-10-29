@@ -111,6 +111,11 @@ export type RealtimeCallCredentials = {
   geminiToken: string;
   /** Gemini 접속 시 사용할 모델명(토큰에 고정된 값과 동일해야 한다). */
   geminiModel: string;
+  /**
+   * §140 후속 — 토큰에 잠근 출력 음성(Gemini 전용 · 그 밖 프로바이더는 필드 부재). 브라우저가 이어받기 연결 config에
+   * 같은 `speechConfig`를 다시 넣는다(2026-10-29 실기 — 이어받은 뒤 기본 목소리로 바뀜).
+   */
+  geminiVoice?: { voiceName: string; languageCode: string };
   /** 이 통화에 쓸 목소리(ElevenLabs 전용 — 본인 클론 id 또는 공용 기본 음성). */
   voiceId: string;
   language: "ko";

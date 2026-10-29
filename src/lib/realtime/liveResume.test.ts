@@ -16,6 +16,7 @@ import {
   RESUME_CONTINUE_TRIGGER,
   buildSilentResumeContext,
   callAutoEndLimitMs,
+  resumeSpeechConfig,
   handleCoveredRange,
   closeCodeOf,
   decideGoAway,
@@ -107,7 +108,7 @@ test("[§140 배선] GeminiVoiceSession — onclose가 판정표 1을 거치고,
   const s = read("./GeminiVoiceSession.tsx");
   assert.match(s, /const decision = decideLiveClose\(closeInput\(\)\);/);
   assert.match(s, /if \(decision === "resume"\) \{\n\s*void resumeLive\(formatResumeReason\("close", code\), errored, droppedMidTurn\);\n\s*return;\n\s*\}\n\s*fallBackAfterClose\(errored\);/);
-  assert.match(s, /\{ responseModalities: \[Modality\.AUDIO\], sessionResumption: \{ handle \} \}/);
+  assert.match(s, /\{ responseModalities: \[Modality\.AUDIO\], sessionResumption: \{ handle \}, \.\.\.\(resumeVoice \? \{ speechConfig: resumeVoice \} : \{\}\) \}/);
   // 콜백 4종 모두 세대 검사.
   const guards = s.match(/if \(cancelled \|\| generation !== liveGeneration\) return;/g) ?? [];
   assert.equal(guards.length, 4);
@@ -252,4 +253,26 @@ test("[폴백 20분 배선] 통화 화면 한도 effect가 실시간만 거르�
   // 메신저 대화방은 통화 화면 밖 — 서버 MAX_SESSION_MS(60분)만 따른다.
   const messenger = read("../../app/session/messenger/page.tsx");
   assert.ok(!messenger.includes("callAutoEndLimitMs") && !messenger.includes("MAX_REALTIME_CALL_MS"));
+});
+
+test("[§140 후속] 이어받기 목소리 — 서버 값으로 speechConfig를 만들고, 값이 없으면 null(종전 config)", () => {
+  assert.deepEqual(resumeSpeechConfig({ voiceName: "Charon", languageCode: "ko-KR" }), {
+    languageCode: "ko-KR",
+    voiceConfig: { prebuiltVoiceConfig: { voiceName: "Charon" } },
+  });
+  assert.equal(resumeSpeechConfig(undefined), null);
+  assert.equal(resumeSpeechConfig({ voiceName: "", languageCode: "ko-KR" }), null);
+});
+
+test("[§140 후속 배선] 이어받기 연결에만 speechConfig — 첫 연결 config는 종전 그대로 · 값은 credentials.geminiVoice", () => {
+  const s = read("./GeminiVoiceSession.tsx");
+  assert.match(s, /const resumeVoice = resumeSpeechConfig\(credentials\.geminiVoice\);/);
+  assert.match(
+    s,
+    /config: handle\n\s*\? \{ responseModalities: \[Modality\.AUDIO\], sessionResumption: \{ handle \}, \.\.\.\(resumeVoice \? \{ speechConfig: resumeVoice \} : \{\}\) \}\n\s*: \{ responseModalities: \[Modality\.AUDIO\] \},/,
+  );
+  // 서버 · 클라 계약 필드가 같은 모양이다.
+  const clientTypes = read("../api/types.ts");
+  const serverTypes = read("../../../functions/src/realtime/callTypes.ts");
+  for (const src of [clientTypes, serverTypes]) assert.match(src, /geminiVoice\?: \{ voiceName: string; languageCode: string \};/);
 });
