@@ -16,7 +16,6 @@ import {
   RESUME_CONTINUE_TRIGGER,
   buildSilentResumeContext,
   callAutoEndLimitMs,
-  resumeSpeechConfig,
   handleCoveredRange,
   closeCodeOf,
   decideGoAway,
@@ -257,23 +256,12 @@ test("[폴백 20분 배선] 통화 화면 한도 effect가 실시간만 거르�
   assert.ok(!messenger.includes("callAutoEndLimitMs") && !messenger.includes("MAX_REALTIME_CALL_MS"));
 });
 
-test("[§140 후속] 이어받기 목소리 — 서버 값으로 speechConfig를 만들고, 값이 없으면 null(종전 config)", () => {
-  assert.deepEqual(resumeSpeechConfig({ voiceName: "Charon", languageCode: "ko-KR" }), {
-    languageCode: "ko-KR",
-    voiceConfig: { prebuiltVoiceConfig: { voiceName: "Charon" } },
-  });
-  assert.equal(resumeSpeechConfig(undefined), null);
-  assert.equal(resumeSpeechConfig({ voiceName: "", languageCode: "ko-KR" }), null);
-});
-
-test("[§140 후속 배선] 다시 연결도 첫 연결과 같은 config(목소리는 토큰 고정) · 맥락은 전사 전부 · 서버 계약 필드는 남는다", () => {
+test("[§140 후속 배선] 다시 연결도 첫 연결과 같은 config(목소리는 토큰 고정) · 맥락은 전사 전부 · geminiVoice 필드 없음", () => {
   const s = read("./GeminiVoiceSession.tsx");
   assert.match(s, /config: \{ responseModalities: \[Modality\.AUDIO\] \},\n\s*callbacks:/);
   assert.ok(!s.includes("resumeSpeechConfig("), "speechConfig 재전송 경로는 쓰지 않는다(실측으로 반박)");
   // 새 세션은 대화를 모른다 — 핸들 범위를 빼지 않는다.
   assert.match(s, /const silentResume = buildSilentResumeContext\(\{\n\s*turns: resumeTurns,\n\s*covered: \{ start: 0, end: 0 \},/);
-  // 서버 · 클라 계약 필드가 같은 모양이다.
-  const clientTypes = read("../api/types.ts");
-  const serverTypes = read("../../../functions/src/realtime/callTypes.ts");
-  for (const src of [clientTypes, serverTypes]) assert.match(src, /geminiVoice\?: \{ voiceName: string; languageCode: string \};/);
+  // speechConfig 재전송용 서버 필드(geminiVoice)는 지웠다 — 계약 타입에 남지 않는다.
+  for (const src of [read("../api/types.ts"), read("../../../functions/src/realtime/callTypes.ts")]) assert.ok(!src.includes("geminiVoice"));
 });

@@ -28,7 +28,7 @@
 // | 항목 | 값 | 근거 |
 // |---|---|---|
 // | 실시간 통화 상한 | 20분 | 사용자 결정(2026-10-28) — 통화 화면 자동 종료 `MAX_REALTIME_CALL_MS`. 2026-10-29부터 음성 폴백 통화도 같은 20분(`callAutoEndLimitMs`). 전역 `maxSessionMs` 60분은 메신저용으로 서버에 그대로 |
-// | 사용 횟수 `uses` | 2(종전) | ⚠️ 핸들 없는 새 연결은 1회를 쓴다(SDK 2.13 `CreateAuthTokenConfig.uses` 주석 — 이어받기만 횟수를 쓰지 않는다) — 첫 연결 + 다시 연결 1회까지 |
+// | 사용 횟수 `uses` | 3 | 핸들 없는 새 연결은 1회를 쓴다(SDK 2.13 `CreateAuthTokenConfig.uses` 주석 — 이어받기만 횟수를 쓰지 않는다) — 첫 연결 + 다시 연결 1회 + 재시도 1회(dev 이중 mount면 재시도 몫 없음) |
 // | 새 세션 시작 창 | 25분 | ⛔ **이어받기에도 걸린다**(2026-10-28 재실측 — 창 2분 토큰의 602초 뒤 이어받기 2/2가 close 1011 "new_session_expire_time deadline exceeded"). 발급 → 받기 최대 1.5분 + 통화 20분 + 여유 3.5분 |
 // | 메시지 수명 `expireTime` | 30분 | 새 세션 창 이상 — 새 토큰 발급 경로가 필요 없다 |
 // | 브라우저 이어받기 창 | 첫 연결 뒤 22분 | 첫 연결은 발급 뒤 1.5분 안(프리페치 신선도) — 새 세션 창 25분 − 1.5분 = 23.5분 안쪽 · 통화 상한 20분 바깥 |
@@ -52,22 +52,6 @@ export function callAutoEndLimitMs(
   return Math.min(maxSessionMs, MAX_REALTIME_CALL_MS);
 }
 
-/**
- * ⛔ 2026-10-29 이후 앱에서 쓰지 않는다 — 이 값을 다시 넣어도 이어받은 연결의 목소리가 남성화됐다(실측 · 사용자 청취). 재연결은 핸들 없이 새로 연다.
- * §140 후속(2026-10-29 실기 — 10분 뒤 이어받은 연결이 **다른 사람 목소리**) — 이어받기 연결 config에 다시 넣을 `speechConfig`.
- * 토큰은 목소리를 `liveConnectConstraints.config.speechConfig`에만 잠그고, 이어받기 연결 config는 핸들만 보냈다. 이어받을 때
- * 그 잠금이 적용되지 않아 기본 목소리가 나온 것으로 **추정**한다(확인은 프로브 — 이어받기 전후 F0 비교).
- * 서버가 내려준 값(`credentials.geminiVoice`)이 없으면(구 서버 · 폴백) `null` — 종전 config 그대로.
- * 첫 연결에는 넣지 않는다: SDK 2.13 `Tokens.create` 주석 Case 2 — 잠금 필드를 연결에서 보내면 무시되므로 넣어도 같은 값이지만,
- * 이미 잘 동작하는 첫 연결은 바꾸지 않는다(변경 최소).
- */
-export function resumeSpeechConfig(voice: { voiceName: string; languageCode: string } | undefined): {
-  languageCode: string;
-  voiceConfig: { prebuiltVoiceConfig: { voiceName: string } };
-} | null {
-  if (!voice || !voice.voiceName) return null;
-  return { languageCode: voice.languageCode, voiceConfig: { prebuiltVoiceConfig: { voiceName: voice.voiceName } } };
-}
 /** 한 통화에서 조용히 다시 연결하는 최대 횟수 — 22분 ÷ 약 10분 = 2회 + 여유 2회(판단값). */
 export const MAX_LIVE_RESUMES = 4;
 /** 연결이 한 번 끊겼을 때 다시 연결을 시도하는 횟수(판단값). */

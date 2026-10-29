@@ -143,8 +143,6 @@ export type CreateRealtimeCallResponse = {
   geminiToken: string;
   /** Gemini 접속 모델명. 그 외면 빈 문자열. */
   geminiModel: string;
-  /** §140 후속 — 토큰에 잠근 출력 음성(Gemini만 · functions/src/realtime/callTypes.ts와 1:1). 이어받기 연결에 같은 `speechConfig`를 다시 넣는다. */
-  geminiVoice?: { voiceName: string; languageCode: string };
   /** ElevenLabs에서 쓸 목소리(clone 시나리오는 본인 클론 id). Gemini는 고정 음성이라 빈 문자열. */
   voiceId: string;
   language: "ko";

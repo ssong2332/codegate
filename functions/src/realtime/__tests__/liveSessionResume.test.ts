@@ -3,7 +3,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  GEMINI_LIVE_LANGUAGE_CODE,
   GeminiRealtimeProvider,
   LIVE_CONTEXT_WINDOW_COMPRESSION,
   LIVE_SESSION_RESUMPTION_CONFIG,
@@ -31,16 +30,11 @@ function captureTokenRequest(): { restore: () => void; bodies: unknown[] } {
   };
 }
 
-async function issue(): Promise<{
-  body: Record<string, unknown>;
-  before: number;
-  after: number;
-  response: Awaited<ReturnType<GeminiRealtimeProvider["createCallCredentials"]>>;
-}> {
+async function issue(): Promise<{ body: Record<string, unknown>; before: number; after: number }> {
   const capture = captureTokenRequest();
   try {
     const before = Date.now();
-    const response = await new GeminiRealtimeProvider("test-key", true).createCallCredentials({
+    await new GeminiRealtimeProvider("test-key", true).createCallCredentials({
       channel: undefined,
       hangupRelay: undefined,
       sessionId: "sess",
@@ -48,7 +42,7 @@ async function issue(): Promise<{
       voiceId: "ignored-for-gemini",
     });
     const after = Date.now();
-    return { body: capture.bodies[0] as Record<string, unknown>, before, after, response };
+    return { body: capture.bodies[0] as Record<string, unknown>, before, after };
   } finally {
     capture.restore();
   }
@@ -65,9 +59,10 @@ test("[§140] 토큰이 이어받기(sessionResumption)와 슬라이딩 창 압�
   assert.equal(body.lockAdditionalFields, undefined);
 });
 
-test("[§140] 새 세션 창이 실시간 통화 20분 전체(발급 → 받기 1.5분 포함)를 덮는다 · 메시지 수명 ≥ 새 세션 창 · 사용 횟수 2", async () => {
+test("[§140] 새 세션 창이 실시간 통화 20분 전체(발급 → 받기 1.5분 포함)를 덮는다 · 메시지 수명 ≥ 새 세션 창 · 사용 횟수 3", async () => {
   const { body, before, after } = await issue();
-  assert.equal(body.uses, 2);
+  // 2026-10-29 — 10분 재연결이 핸들 없는 새 세션(1회 사용) — 첫 연결 + 재연결 + 재시도 1.
+  assert.equal(body.uses, 3);
   const expireMs = Date.parse(String(body.expireTime));
   const newSessionMs = Date.parse(String(body.newSessionExpireTime));
   assert.ok(expireMs >= before + TOKEN_EXPIRE_MINUTES * 60_000 && expireMs <= after + TOKEN_EXPIRE_MINUTES * 60_000);
@@ -83,19 +78,4 @@ test("[§140] 새 세션 창이 실시간 통화 20분 전체(발급 → 받기 
 test("[§140] 전역 세션 상한(MAX_SESSION_MS)은 메신저 · 폴백과 함께 쓰여 그대로 둔다 — 실시간 통화만 20분", () => {
   assert.equal(MAX_SESSION_MS, 60 * 60 * 1000);
   assert.ok(REALTIME_CALL_MAX_MINUTES * 60_000 < MAX_SESSION_MS);
-});
-
-test("[§140 후속] 응답 geminiVoice = 토큰에 잠근 목소리 · 언어(이어받기 연결이 같은 speechConfig를 다시 넣는다)", async () => {
-  const { body, response } = await issue();
-  const setup = body.bidiGenerateContentSetup as {
-    generationConfig?: { speechConfig?: { languageCode?: string; voiceConfig?: { prebuiltVoiceConfig?: { voiceName?: string } } } };
-  };
-  const locked = setup.generationConfig?.speechConfig;
-  assert.ok(response.geminiVoice, "Gemini 응답에 geminiVoice가 있어야 한다");
-  assert.ok(response.geminiVoice.voiceName.length > 0);
-  assert.equal(response.geminiVoice.voiceName, locked?.voiceConfig?.prebuiltVoiceConfig?.voiceName);
-  assert.equal(response.geminiVoice.languageCode, locked?.languageCode);
-  assert.equal(GEMINI_LIVE_LANGUAGE_CODE, "ko-KR");
-  // 프롬프트 · 도구 선언은 응답에 실리지 않는다(목소리만).
-  assert.deepEqual(Object.keys(response.geminiVoice).sort(), ["languageCode", "voiceName"]);
 });
