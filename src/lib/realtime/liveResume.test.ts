@@ -103,11 +103,13 @@ test("[§140 판정표 3] 이어받기 창 ≤ 서버 새 세션 창 − 발급�
   assert.match(provider, /contextWindowCompression: LIVE_CONTEXT_WINDOW_COMPRESSION,/);
 });
 
-test("[§140 배선] GeminiVoiceSession — onclose가 판정표 1을 거치고, 이어받기는 핸들만 넘기며, 옛 세대 콜백은 무시한다", () => {
+test("[§140 배선] GeminiVoiceSession — onclose가 판정표 1을 거치고, 다시 연결은 핸들 없는 새 세션이며, 옛 세대 콜백은 무시한다", () => {
   const s = read("./GeminiVoiceSession.tsx");
   assert.match(s, /const decision = decideLiveClose\(closeInput\(\)\);/);
   assert.match(s, /if \(decision === "resume"\) \{\n\s*void resumeLive\(formatResumeReason\("close", code\), errored, droppedMidTurn\);\n\s*return;\n\s*\}\n\s*fallBackAfterClose\(errored\);/);
-  assert.match(s, /\{ responseModalities: \[Modality\.AUDIO\], sessionResumption: \{ handle \} \}/);
+  // 2026-10-29 — 핸들로 되살린 연결은 목소리가 남성화됐다 — 연결 config에 이어받기 핸들을 싣지 않는다(첫 연결과 같은 config).
+  assert.ok(!/sessionResumption: \{ handle/.test(s), "이어받기 핸들로 다시 연결하지 않는다");
+  assert.match(s, /const next = await openLive\(generation\);/);
   // 콜백 4종 모두 세대 검사.
   const guards = s.match(/if \(cancelled \|\| generation !== liveGeneration\) return;/g) ?? [];
   assert.equal(guards.length, 4);
@@ -252,4 +254,14 @@ test("[폴백 20분 배선] 통화 화면 한도 effect가 실시간만 거르�
   // 메신저 대화방은 통화 화면 밖 — 서버 MAX_SESSION_MS(60분)만 따른다.
   const messenger = read("../../app/session/messenger/page.tsx");
   assert.ok(!messenger.includes("callAutoEndLimitMs") && !messenger.includes("MAX_REALTIME_CALL_MS"));
+});
+
+test("[§140 후속 배선] 다시 연결도 첫 연결과 같은 config(목소리는 토큰 고정) · 맥락은 전사 전부 · geminiVoice 필드 없음", () => {
+  const s = read("./GeminiVoiceSession.tsx");
+  assert.match(s, /config: \{ responseModalities: \[Modality\.AUDIO\] \},\n\s*callbacks:/);
+  assert.ok(!s.includes("resumeSpeechConfig("), "speechConfig 재전송 경로는 쓰지 않는다(실측으로 반박)");
+  // 새 세션은 대화를 모른다 — 핸들 범위를 빼지 않는다.
+  assert.match(s, /const silentResume = buildSilentResumeContext\(\{\n\s*turns: resumeTurns,\n\s*covered: \{ start: 0, end: 0 \},/);
+  // speechConfig 재전송용 서버 필드(geminiVoice)는 지웠다 — 계약 타입에 남지 않는다.
+  for (const src of [read("../api/types.ts"), read("../../../functions/src/realtime/callTypes.ts")]) assert.ok(!src.includes("geminiVoice"));
 });

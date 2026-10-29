@@ -59,9 +59,10 @@ test("[§140] 토큰이 이어받기(sessionResumption)와 슬라이딩 창 압�
   assert.equal(body.lockAdditionalFields, undefined);
 });
 
-test("[§140] 새 세션 창이 실시간 통화 20분 전체(발급 → 받기 1.5분 포함)를 덮는다 · 메시지 수명 ≥ 새 세션 창 · 사용 횟수 2", async () => {
+test("[§140] 새 세션 창이 실시간 통화 20분 전체(발급 → 받기 1.5분 포함)를 덮는다 · 메시지 수명 ≥ 새 세션 창 · 사용 횟수 3", async () => {
   const { body, before, after } = await issue();
-  assert.equal(body.uses, 2);
+  // 2026-10-29 — 10분 재연결이 핸들 없는 새 세션(1회 사용) — 첫 연결 + 재연결 + 재시도 1.
+  assert.equal(body.uses, 3);
   const expireMs = Date.parse(String(body.expireTime));
   const newSessionMs = Date.parse(String(body.newSessionExpireTime));
   assert.ok(expireMs >= before + TOKEN_EXPIRE_MINUTES * 60_000 && expireMs <= after + TOKEN_EXPIRE_MINUTES * 60_000);

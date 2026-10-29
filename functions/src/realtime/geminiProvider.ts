@@ -91,10 +91,12 @@ export function pickGeminiVoiceName(
 /**
  * 토큰 수명 — 통화 1건에만 쓰인다.
  * ⭐ §140(2026-10-28 실 키 실측 — Live 연결이 601~602초에 서버 쪽에서 닫힘 · close 1011 · goAway 0건) — 브라우저가 약 10분마다
- * **같은 토큰 + 이어받기 핸들**로 다시 연결한다(`src/lib/realtime/liveResume.ts` 판정표).
+ * **같은 토큰**으로 다시 연결한다(`src/lib/realtime/liveResume.ts` 판정표). 2026-10-29부터 핸들 없이 새 세션을 연다(핸들로 되살린
+ * 연결은 목소리가 남성화됐다 — 실측 · 사용자 청취).
  * ⛔ **이어받기에도 새 세션 시작 창(`newSessionExpireTime`)이 걸린다**(2026-10-28 재실측 — 창 2분 토큰으로 602초 뒤 이어받기 2회가
  * 모두 open 직후 close 1011 "new_session_expire_time deadline exceeded"). 그래서 새 세션 창이 통화 전체를 덮어야 한다.
- * `uses`는 이어받기에 쓰이지 않는다는 SDK 2.13 주석("Resuming a Live API session does not count as a use")은 아직 반박되지 않았다(2 유지).
+ * ⛔ 핸들 없는 새 연결은 `uses`를 1회 쓴다(SDK 2.13 주석 — "Resuming a Live API session does not count as a use"는 핸들 이어받기에만
+ * 해당). 그래서 `uses`는 3이다 — 아래 `authTokens.create` 주석의 예산표.
  *
  * | 값 | 분 | 근거 |
  * |---|---|---|
@@ -223,10 +225,13 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
     const now = Date.now();
     const token = await client.authTokens.create({
       config: {
-        // uses는 "세션 시작 가능 횟수"다. 이상적으론 1이지만, dev(React Strict Mode)의 이중 mount나
-        // 사용자의 재시도로 두어 번 연결을 시작할 수 있어 소폭 여유(2)를 둔다. 토큰은 여전히 단명
-        // (30분 · 새 세션 창 25분 — §140 이어받기 · 위 상수 주석)이고 이 세션에만 묶여 있어 보안 노출은 최소다. 이어받기는 이 횟수를 쓰지 않는다(SDK 주석).
-        uses: 2,
+        // uses는 "세션 시작 가능 횟수"다(핸들 이어받기만 횟수를 쓰지 않는다 — SDK 2.13 주석). 2026-10-29부터 10분 재연결이
+        // 핸들 없는 새 세션이라 1회를 쓴다. 예산(운영): 첫 연결 1 + 10분 재연결 1 + 그 재연결의 재시도 1 = 3
+        // (통화 상한 20분 안에서 서버 10분 닫힘은 1번 — 실측 599~602초). dev(React Strict Mode)는 이중 mount가 1회를 더 써서
+        // 재시도 몫이 없다(dev 한정). ⚠️ 실패한 연결 시도가 횟수를 쓰는지는 미실측 — 쓰지 않으면 여유가 더 있다.
+        // 화면 복귀 재연결(§99)은 새 토큰을 받으므로 이 예산 밖이다. 토큰은 여전히 단명(30분 · 새 세션 창 25분)이고
+        // 이 세션에만 묶여 있어 보안 노출은 최소다.
+        uses: 3,
         expireTime: new Date(now + TOKEN_EXPIRE_MINUTES * 60_000).toISOString(),
         newSessionExpireTime: new Date(now + NEW_SESSION_EXPIRE_MINUTES * 60_000).toISOString(),
         liveConnectConstraints: {

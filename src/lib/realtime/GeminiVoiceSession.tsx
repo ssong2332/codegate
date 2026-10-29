@@ -137,7 +137,6 @@ import {
   RESUME_ATTEMPTS_PER_DROP,
   RESUME_CONNECT_TIMEOUT_MS,
   buildSilentResumeContext,
-  handleCoveredRange,
   type SilentResumeTurn,
   RESUME_RETRY_DELAY_MS,
   closeCodeOf,
@@ -557,7 +556,7 @@ export default function GeminiVoiceSession({
     let micSourceNode: MediaStreamAudioSourceNode | null = null;
     let silenceNode: GainNode | null = null;
     let session: GeminiLiveSession | null = null;
-    // ⭐ §140 — 조용한 재연결(같은 토큰 + 이어받기 핸들 · 판정표 `liveResume.ts`). 연결 세대(`liveGeneration`)가 바뀌면 옛 연결의
+    // ⭐ §140 — 조용한 재연결(같은 토큰으로 핸들 없이 새 연결 · 판정표 `liveResume.ts`). 연결 세대(`liveGeneration`)가 바뀌면 옛 연결의
     // 콜백은 아무것도 하지 않는다. 다시 연결하는 동안(`resumeInFlight`)에는 `session`이 null이다 — 그 사이 나가려던 텍스트 턴은
     // `turnsAwaitingResume`에 쥐었다가 새 연결로 보내고, 도구 응답은 `resumeInFlight`를 기다렸다가 보낸다.
     let liveGeneration = 0;
@@ -567,11 +566,8 @@ export default function GeminiVoiceSession({
     let resumeInFlight: Promise<boolean> | null = null;
     let goAwayPending = false;
     const turnsAwaitingResume: ClientTurn[] = [];
-    // §140 판정표 4 — 이 연결이 내보낸 전사(부모 전사가 없을 때 쓴다) · 시작 때 이미 있던 전사 수 · 핸들이 담았다고 보는 전사 수.
+    // §140 판정표 4 — 이 연결이 내보낸 전사(부모 전사가 없을 때 쓴다).
     const instanceTurns: SilentResumeTurn[] = [];
-    const instanceBaseline = handlersRef.current.readTranscript?.().length ?? 0;
-    let instanceTurnsAtHandle = 0;
-    let turnsAtGenerationStart = 0;
     const noteEmittedTurn = (role: "user" | "scammer", text: string) => {
       instanceTurns.push({ role, text });
     };
@@ -1638,7 +1634,7 @@ export default function GeminiVoiceSession({
           apiKey: credentials.geminiToken,
           httpOptions: { apiVersion: "v1alpha" },
         });
-        // ⭐ §140 — 연결 1개를 연다. 첫 연결(세대 0)은 종전과 같다. 다시 연결(세대 ≥ 1)은 이어받기 핸들을 넘기고, 준비 전 닫힘 ·
+        // ⭐ §140 — 연결 1개를 연다. 첫 연결(세대 0)은 종전과 같다. 다시 연결(세대 ≥ 1)은 같은 config로 새 세션을 열고, 준비 전 닫힘 ·
         // 시간 초과를 실패로 돌려준다(SDK `connect()`는 서버가 거부하면 끝나지 않는다). 옛 세대의 콜백은 아무것도 하지 않는다.
         let socketErrored = false;
         let pendingAttempt: { generation: number; fail: (code: number | null) => void } | null = null;
@@ -1693,13 +1689,13 @@ export default function GeminiVoiceSession({
         recheckGoAway = () => {
           if (goAwayPending && !cancelled) handleGoAway();
         };
-        const openLive = (generation: number, handle: string | null): Promise<GeminiLiveSession> => {
+        const openLive = (generation: number): Promise<GeminiLiveSession> => {
           const connecting = ai.live.connect({
             model: credentials.geminiModel,
-            // 모델·프롬프트·도구·전사설정은 토큰에 고정돼 있어 여기서 다시 보내지 않는다. §140 — 이어받기 핸들만 연결마다 다르다.
-            config: handle
-              ? { responseModalities: [Modality.AUDIO], sessionResumption: { handle } }
-              : { responseModalities: [Modality.AUDIO] },
+            // 모델·프롬프트·목소리·도구·전사설정은 토큰에 고정돼 있어 여기서 다시 보내지 않는다.
+            // §140 후속(2026-10-29 실측) — 이어받기 핸들로 되살린 연결은 목소리를 바꿨다(speechConfig를 다시 넣어도 · 판정표 4) —
+            // 다시 연결도 핸들 없이 첫 연결과 같은 config로 새 세션을 연다(맥락은 전사 재주입).
+            config: { responseModalities: [Modality.AUDIO] },
             callbacks: {
               onopen: () => {
                 log("onopen ✓", generation);
@@ -1711,15 +1707,10 @@ export default function GeminiVoiceSession({
               },
               onmessage: (message: LiveServerMessageLike) => {
                 if (cancelled || generation !== liveGeneration) return;
-                // §140 — 이어받기 핸들(값은 로그 · 진단에 싣지 않는다)과 goAway는 출력 준비와 무관하게 바로 본다.
+                // §140 — 이어받기 핸들(값은 로그 · 진단에 싣지 않는다 · 판정표 1 C3의 '서버가 이어받기를 허용함' 신호로만 쓴다)과
+                // goAway는 출력 준비와 무관하게 바로 본다.
                 if (message.sessionResumptionUpdate) {
-                  const nextHandle = nextResumeHandle(resumeHandle, message.sessionResumptionUpdate);
-                  // 판정표 4 중복 방지 — 이 연결에서 전사가 1턴 이상 나간 뒤 받은 핸들만 그 턴까지를 담았다고 본다
-                  // (연결 직후 핸들은 대화 전 상태 — 2026-10-28 재실측).
-                  if (nextHandle !== resumeHandle && instanceTurns.length > turnsAtGenerationStart) {
-                    instanceTurnsAtHandle = instanceTurns.length;
-                  }
-                  resumeHandle = nextHandle;
+                  resumeHandle = nextResumeHandle(resumeHandle, message.sessionResumptionUpdate);
                 }
                 if (message.goAway) handleGoAway();
                 // 출력 준비(마이크 → 통화 출력 컨텍스트) 전이면 받은 순서대로 쌓는다 — 위 `setupCallOutput` 끝(`open()`)에서 처리한다.
@@ -1814,7 +1805,7 @@ export default function GeminiVoiceSession({
               if (cancelled || torndown || stopRequestedRef.current || handlersRef.current.isHangupLatched()) return false;
               const generation = liveGeneration;
               try {
-                const next = await openLive(generation, resumeHandle);
+                const next = await openLive(generation);
                 if (cancelled || torndown || generation !== liveGeneration) {
                   liveGeneration += 1;
                   try {
@@ -1826,7 +1817,6 @@ export default function GeminiVoiceSession({
                 }
                 session = next;
                 liveSessionRef.current = next;
-                turnsAtGenerationStart = instanceTurns.length;
                 liveResumeCount += 1;
                 noteLiveResume(reason, true);
                 console.info(LIVE_RESUME_LOG_PREFIX, `resumed ${reason} n=${liveResumeCount} attempt=${attempt}`);
@@ -1860,11 +1850,11 @@ export default function GeminiVoiceSession({
             }
             // 끊길 때 모델이 말하던 턴은 turnComplete가 오지 않는다 — 게이트 타이머가 stall로 정리한다(예약이 없을 수 있어 다시 잡는다).
             if (turnInProgress || agentSpeaking) scheduleGateClose();
-            // ⭐ 판정표 4 — 핸들만으로는 대화 맥락이 돌아오지 않았다(2026-10-28 재실측 맥락 0) — 전사를 `turnComplete: false`로 다시 넣는다.
+            // ⭐ 판정표 4 — 새 세션은 대화를 모른다 — 지금까지의 전사 전부를 `turnComplete: false`로 다시 넣는다.
             const resumeTurns = handlersRef.current.readTranscript?.() ?? instanceTurns;
             const silentResume = buildSilentResumeContext({
               turns: resumeTurns,
-              covered: handleCoveredRange(handlersRef.current.readTranscript ? instanceBaseline : 0, instanceTurnsAtHandle),
+              covered: { start: 0, end: 0 },
               droppedMidTurn,
             });
             if (silentResume.context && session && !handlersRef.current.isHangupLatched()) {
@@ -2007,7 +1997,7 @@ export default function GeminiVoiceSession({
         // 연결이 먼저 실패해도 처리되지 않은 rejection이 남지 않게 한다(실제 처리는 아래 `await outputReady`).
         outputReady.catch(() => {});
 
-        session = await openLive(0, null);
+        session = await openLive(0);
         const connectResolvedAt = performance.now();
         // 연결은 출력 준비를 기다리지 않았다 — 맥락 주입 · 오프닝 전에 출력 준비(마이크 대기 포함)를 마저 기다린다.
         await outputReady;
