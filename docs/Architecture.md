@@ -24772,3 +24772,47 @@ Hosting만(functions 변경 0).
 - 중복 방지: 이 연결에서 전사가 1턴 이상 나간 **뒤** 받은 핸들만 "그때까지의 전사를 담았다"고 본다(연결 직후 핸들 = 대화 전 상태). 그 범위 끝 2턴은 다시 넣는다(잃는 것보다 겹치는 편이 낫다 · 맥락 문구에 "겹치면 한 번만 반영"). 이 연결 이전 전사(§99 · §136 복원분)는 언제나 넣는다.
 - 전사 출처: 통화 화면 `transcriptRef` 전체(`readTranscript` prop) — 부재면 이 연결이 내보낸 전사만.
 - 메인 프로브용: `src/lib/realtime/liveResume.ts`는 잎 모듈(import 0)이라 `node --experimental-strip-types`에서 직접 불러 쓸 수 있다 — `buildSilentResumeContext({ turns, covered: handleCoveredRange(0, 0), droppedMidTurn: false }).context`.
+
+## 141. (Bug fix — 2026-10-31 · 브랜치 `claude/outelement-default-off` = main `e6846b8` + 변경 · 메인 세션 지시 · 사용자 실기 — *"?outelement=0 주소에서는 목소리 변조 현상이 일어나지 않았어"*) **통화 출력 `<audio>` 경로를 기본 끔으로 되돌림 — 같은 인물 목소리가 문장 안에서 바뀌는 회귀** — implementer 기록
+
+### 141.1 금지
+- 실 키 실측 · 배포 · 운영 Firestore 쓰기 0.
+- `<audio>` 경로 코드(표 E1~E4 · 되돌림 · `release`)는 지우지 않는다 — `?outelement=1`로 계속 A/B할 수 있어야 한다.
+
+### 141.2 §137 · §139가 이 경로를 켠 이유와 끄면 되돌아오는 것
+| 항목 | 내용 | 근거 |
+|---|---|---|
+| 고친 것 | 볼륨 키가 '통화' 음량을 조절하게(§137 신고 — 전화기 아이콘이 뜨지만 미디어 볼륨이 바뀜 · 날마다 크기가 다름) | §137.2 |
+| 실기 결과 | `out.sink=element` 4/4 '통화' 음량 · `context` '통화' 1회 · '미디어' 2회 이상 | 커밋 `c12f7cd`(§139) |
+| 손대지 않은 것 | 수화부↔스피커 선택 · 화면 꺼짐(§99) · 음량 정규화(§114) · 감쇠(§138) | CHANGELOG §139 |
+| 끄면 되돌아오는 것 | ⚠️ 볼륨 키가 때로 '미디어' 음량을 바꾸는 §137 신고 | 위 실기 결과 |
+
+### 141.3 높낮이가 바뀌는 기전(소스 근거 · 크기 추정)
+| 단계 | 경로 | 근거 |
+|---|---|---|
+| 1 | 최종 노드 → `MediaStreamAudioDestinationNode` → 숨긴 `<audio>.srcObject` | `callAudio.ts` `connectOutputElementSink` |
+| 2 | Chromium은 MediaStream 재생을 `TrackAudioRenderer`(`kNonRtcAudioTrack` 싱크)로 한다 | `third_party/blink/renderer/modules/mediastream/track_audio_renderer.cc` — `AudioShifter(5s, 20ms, 20s)` |
+| 3 | `AudioShifter`는 넣는 쪽(Web Audio 렌더 시계 — 24kHz 컨텍스트)과 빼는 쪽(출력 장치 시계)의 어긋남을 **재생 비율을 바꾸는 재샘플링**으로 맞춘다. 느린 비율(20초에 걸쳐 보정) · 빠른 비율(출력 버퍼 1개에 보정)을 각각 0.9~1.1로 자르고 그 사이에서 현재 비율을 정한다 | `media/base/audio_shifter.cc` `std::clamp(…, 0.9, 1.1)` · `resampler_.SetRatio` |
+| 4 | 비율 1.1 = +1.65반음 · 0.9 = −1.82반음. 버퍼가 비면 0으로 채운다(끊김) | 계산 |
+| 5 | `ctx.destination` 경로에는 2~3이 없다 — 고정 비율 재샘플링만 | — |
+- ⚠️ 실제로 비율이 얼마나 흔들리는지는 재지 않았다(추정). 사용자 청취: 원본 WAV 클립(±4반음 구)보다 실기 변화가 더 크다 · `?outelement=0`에서는 변화 없음.
+- `playbackRate`는 쓰지 않는다(소스 0건). 샘플레이트 불일치(24kHz 컨텍스트)는 3의 시계 어긋남 · 렌더 덩어리 흔들림을 키울 수 있다(추정).
+
+### 141.4 해결안 판정표
+| 안 | 내용 | 목소리 변조 | 되돌아오는 결함 · 위험 | 판정 |
+|---|---|---|---|---|
+| A | 기본 끔(`ctx.destination`) · `?outelement=1`로 A/B 유지 | 사용자 실기로 0 확인 | §137 볼륨 키 '미디어' 혼재 | ⭐ **채택**(위험 최소 · 실기 근거 있음) |
+| B | `<audio>` 유지 + 출력 컨텍스트를 기기 기본 샘플레이트로(24kHz 지정 제거) | 미확정 — `AudioShifter`는 그대로 남는다 | 재생 버퍼 · 정규화 · 진단 수치 전반 재검증 필요 | 보류 — 실험 플래그로 실기 A/B 뒤 판단 |
+| C | `<audio>` 유지 + WebRTC 루프백(`RTCPeerConnection`)으로 '통화' 고정 | 미확정 — 지터 버퍼 · 시간 늘이기 가능성 | 지연 증가 · 코덱(Opus) 음질 · 구현 큼 | 기각(지금) |
+| D | `<audio>` 유지 + `setSinkId` 등 장치 지정 | 영향 없음 — 같은 `AudioShifter` 경로 | 스트림 용도('통화')는 바뀌지 않는다 | 기각 |
+
+### 141.5 변경
+| 파일 | 변경 |
+|---|---|
+| `src/lib/realtime/callAudio.ts` | `readOutputElementFlag` — `outelement=1`일 때만 켬(기본 끔 · 파싱 실패도 끔) · 주석 §141 |
+| `src/lib/realtime/GeminiVoiceSession.tsx` | 주석만 |
+| `src/lib/realtime/outputElementSink.test.ts` | 플래그 단언을 기본 끔으로(탭에 남은 `0`도 끔 1줄 추가) |
+
+### 141.6 한계
+- 볼륨 키 '미디어' 혼재가 다시 생긴다 — 해결은 안 B의 실기 A/B 결과를 본 뒤 정한다.
+- 이미 `?outelement=1`로 연 탭은 탭 안 저장 값(F3 · F4) 때문에 계속 켜져 있다(`?outelement=off`로 지운다).
