@@ -149,8 +149,12 @@ export function withBankTransferPrefill(
   attachments: MessengerAttachment[] | undefined,
   bankName: string,
   accountNumber: string,
+  // P2-d — 변형의 가상 예금주(`FlowVariant.accountHolder`). 부재 = 키 없음(받는 분 행 없음 — 종전).
+  accountHolder?: string,
 ): MessengerAttachment[] | undefined {
   return attachments?.map((attachment) =>
-    isBankTransferLanding(attachment.fakeLandingId) ? { ...attachment, bankName, accountNumber } : attachment,
+    isBankTransferLanding(attachment.fakeLandingId)
+      ? { ...attachment, bankName, accountNumber, ...(accountHolder ? { accountHolder } : {}) }
+      : attachment,
   );
 }

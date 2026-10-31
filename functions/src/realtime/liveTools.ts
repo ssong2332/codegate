@@ -126,6 +126,17 @@ const NO_ARGS_PARAMETERS = { type: Type.OBJECT, properties: {} };
  * 모델이 대화 단계를 보고 무엇을 보낼지 고르고, 서버가 세션 흐름 변형의 선언 · 간격으로 재검증한다
  * (`inCallSms/smsGate.ts` — 선언 밖 목적은 `not_allowed`). enum 값은 서버 상수 `SMS_PURPOSES`가 원천이다.
  */
+/**
+ * ⭐ P2-d(2026-10-31 · 실기 신고 2번 · `live-report-1031` 판정) — 목적 설명. P2에서 계좌 문자가 모두 이체 화면 링크를 함께 갖게 되자 모델이 "링크가 있으니
+ * link"로 골라 거절(`not_allowed`)과 같은 요구 반복이 났다. transfer = 이체 화면 링크가 함께 오는 계좌 문자, link = 계좌 없이 신청 · 확인 · 설치 화면을 여는 문자로 가른다.
+ * 상수로 둔 이유: 도구 선언 바이트 고정 테스트(`smsGate.test.ts`)가 이 문장만 되돌려 이전 값과 대조한다.
+ */
+export const SEND_PREPARED_SMS_PURPOSE_DESCRIPTION =
+  "보낼 안내 문자의 목적. identity = 본인확인용 인증번호 문자, transfer = 돈을 보낼 계좌 안내 문자(이체 화면 링크가 함께 와도 transfer), link = 계좌 없이 신청 · 본인확인 · 앱 설치 화면을 여는 링크 문자.";
+/** P2-d 이전 목적 설명(바이트 고정 테스트의 되돌림 원본). */
+export const SEND_PREPARED_SMS_PURPOSE_DESCRIPTION_BEFORE_P2D =
+  "보낼 안내 문자의 목적. identity = 본인확인용 인증번호 문자, transfer = 이체할 계좌 안내 문자, link = 눌러서 진행하는 링크 문자.";
+
 const SEND_PREPARED_SMS_PARAMETERS = {
   type: Type.OBJECT,
   properties: {
@@ -134,7 +145,7 @@ const SEND_PREPARED_SMS_PARAMETERS = {
       format: "enum",
       enum: [...SMS_PURPOSES],
       description:
-        "보낼 안내 문자의 목적. identity = 본인확인용 인증번호 문자, transfer = 이체할 계좌 안내 문자, link = 눌러서 진행하는 링크 문자.",
+        SEND_PREPARED_SMS_PURPOSE_DESCRIPTION,
     },
   },
   required: ["purpose"],

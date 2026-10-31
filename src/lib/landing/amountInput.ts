@@ -78,3 +78,21 @@ export function requiredFieldError(label: string, raw: string): string | undefin
   const hasBatchim = last >= 0xac00 && last <= 0xd7a3 && (last - 0xac00) % 28 !== 0;
   return `${label}${hasBatchim ? "을" : "를"} 입력해 주세요.`;
 }
+
+/**
+ * ⭐ P2-d(2026-10-31 · 메인 "권고대로") — 훈련용 이체 화면의 이체 한도. 근거: 하나은행 모바일OTP 이용안내 *"이체한도 1일 최대 5천만원, 1회 최대 1천만원"*
+ * (https://www.kebhana.com/cont/info/info01/info0104/info010404/index.jsp — 2026-10-31 열람). 은행 · 보안 매체 · 등급마다 다르다(보안카드 · OTP 1등급은 더 크다).
+ * 한 세션의 이체 화면은 많아야 둘이라 1회 한도 안에서는 1일 한도에 닿지 않는다 — 1일 한도는 화면에 안내만 한다.
+ */
+export const TRANSFER_LIMIT_PER_TRANSACTION = 10_000_000;
+export const TRANSFER_LIMIT_PER_DAY = 50_000_000;
+
+/** 1회 한도를 넘는 금액이면 안내 문구(통과하는 금액 · 판정 불가 입력은 undefined — 빈 칸 · 형식 오류는 `amountError`가 먼저 막는다). */
+export function transferLimitError(raw: string): string | undefined {
+  const parsed = parseAmount(raw);
+  if (parsed.kind !== "ok" || parsed.value <= BigInt(TRANSFER_LIMIT_PER_TRANSACTION)) return undefined;
+  return `1회 이체 한도(${formatKoreanAmount(BigInt(TRANSFER_LIMIT_PER_TRANSACTION))})를 넘었습니다. 금액을 다시 입력해 주세요.`;
+}
+
+/** 이체 화면 안내 줄("1회 1,000만 원 · 1일 5,000만 원"). */
+export const TRANSFER_LIMIT_NOTE = `이체 한도 · 1회 ${formatKoreanAmount(BigInt(TRANSFER_LIMIT_PER_TRANSACTION))} · 1일 ${formatKoreanAmount(BigInt(TRANSFER_LIMIT_PER_DAY))}`;

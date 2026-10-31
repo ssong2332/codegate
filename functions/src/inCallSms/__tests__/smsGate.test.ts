@@ -31,7 +31,9 @@ import type { InCallSmsDoc } from "../../shared/types";
 import { extractSmsMarker } from "../../roleplay/smsMarker";
 import { BANK_PLACEHOLDER, FICTIONAL_BANK_NAMES, extractAccountNumber } from "../../shared/fictionalBank";
 import { buildSystemPrompt, UNDECLARED_VERIFICATION_TAIL, wrapUserInputAsData } from "../../roleplay/promptAssembly";
-import { buildLiveToolDeclarations, LIVE_TOOL_SEND_PREPARED_SMS, SEND_PREPARED_SMS_CALL_FIRST_SENTENCE } from "../../realtime/liveTools";
+import { buildLiveToolDeclarations, LIVE_TOOL_SEND_PREPARED_SMS, SEND_PREPARED_SMS_CALL_FIRST_SENTENCE,
+  SEND_PREPARED_SMS_PURPOSE_DESCRIPTION,
+  SEND_PREPARED_SMS_PURPOSE_DESCRIPTION_BEFORE_P2D } from "../../realtime/liveTools";
 import { SCENARIO_PROMPTS } from "../../scenarios";
 import { hasInCallSms } from "../../scenarios/inCallSms";
 import { createHash } from "node:crypto";
@@ -577,7 +579,13 @@ test("[T194-c-1 단계 4 · R3 갱신] 챌린지 base 변형(fv-akj5 · fv-6s5p)
     // ⚠️ §117(DECISIONS #232) — 의도된 변경 1건: `send_prepared_sms` 설명에 "먼저 부르고 · 결과 전에는 말하지 않는다" 1문장(`SEND_PREPARED_SMS_CALL_FIRST_SENTENCE`).
     // 문자를 선언하는 변형(fv-6s5p)만 닿는다 — 그 문장만 되돌리면 이전 값과 바이트 동일하다(이 줄이 매 실행 재증명한다). fv-akj5(문자 선언 0)는 원래 값 그대로.
     const toolsNow = toolsOf(scenarioId, variantId);
-    const tools = sha256(toolsNow.replace(`${SEND_PREPARED_SMS_CALL_FIRST_SENTENCE} `, ""));
+    // ⭐ P2-d — `send_prepared_sms` 목적 설명 교체(transfer = 이체 화면 링크가 함께 오는 계좌 문자)도 의도된 변경이다. 그 문장만 되돌린다(JSON 직렬화 안의 문자열).
+    const tools = sha256(
+      toolsNow
+        .replace(`${SEND_PREPARED_SMS_CALL_FIRST_SENTENCE} `, "")
+        .split(SEND_PREPARED_SMS_PURPOSE_DESCRIPTION)
+        .join(SEND_PREPARED_SMS_PURPOSE_DESCRIPTION_BEFORE_P2D),
+    );
     if (variantId === "fv-6s5p") assert.ok(toolsNow.includes(SEND_PREPARED_SMS_CALL_FIRST_SENTENCE), "§117 문장이 실제 선언에 실려야 한다");
     t.diagnostic(`[단계 4] ${key} system ${system.slice(0, 16)} (R3 기준 ${AFTER_R3[key].slice(0, 16)} · 이전 ${BEFORE_T194C1[key].system.slice(0, 16)}) · tools ${tools.slice(0, 16)} (기준 ${BEFORE_T194C1[key].tools.slice(0, 16)})`);
     assert.equal(system, AFTER_R3[key], `${key}: 조립 프롬프트가 바뀌었다 — 챌린지 수신자 선언이 흔들린다(#192)`);

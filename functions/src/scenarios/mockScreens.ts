@@ -298,6 +298,7 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `courier-safe-transfer` | `scenarios/inCallSms.ts` COURIER_CUSTOMS_SCAM(문자 본문·칩 — P2 X6) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "안전계좌 이체 정보를 확인해 주세요" | "안전계좌로 이체하기" |
 // | `child-bank-transfer` | `roleplay/linkMarker.ts` LINK_LABELS(칩 라벨 — P2-c) | "이체하기" | 링크에서 이체 | "이체 금액을 입력해 주세요" | "이체하기" |
 // | `friend-bank-transfer` | `roleplay/linkMarker.ts` LINK_LABELS(칩 라벨 — P2-c) | "송금하기" | 링크에서 송금 | "송금할 금액을 입력해 주세요" | "송금하기" |
+// | `tax-refund-fee-transfer` | `scenarios/inCallSms.ts` TAX_REFUND_SCAM(문자 본문·칩 — P2-d) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "수수료 이체 정보를 확인해 주세요" | "수수료 이체하기" |
 // | `loan-check-app-install` | `scenarios/inCallSms.ts` LOAN_SCAM(문자 본문·칩 — T194-c-1 Q2) | "아래에서 심사용 보안 점검 앱을 설치해 주세요." | 심사용 보안 점검 앱 설치 | "심사용 보안 점검 앱을 설치해야 대출 심사가 진행됩니다" | "권한 허용하고 계속하기" |
 //
 // ⚠️ **이 표가 조용히 낡지 않게 하는 장치(주석은 강제가 아니다).** 위 **줄 번호는 스냅샷일 뿐이며
@@ -371,6 +372,8 @@ export const BANK_TRANSFER_LANDINGS: readonly string[] = [
   // P2-c — 메신저 링크 칩(자녀 · 지인 사칭).
   "child-bank-transfer",
   "friend-bank-transfer",
+  // P2-d — 환급 처리 수수료.
+  "tax-refund-fee-transfer",
 ];
 
 /** P2 — 이 랜딩이 훈련용 이체 화면인가(문자 문서의 받는 분 · 금액 미리 채움 필드를 싣는 단일 판별자 — `inCallSms/buildDoc.ts`). */
@@ -456,6 +459,22 @@ const TAX_REFUND_SCAM: MockScreenItem[] = [
     momentTactic: "미수령 환급금을 빌미로 한 계좌정보 입력 유도",
     correctAction:
       "돈을 준다며 계좌를 입력하라고 하면 그 자리에서 멈추세요 — 환급은 계좌번호를 링크로 받지 않습니다. ① 환급 여부는 공식 기관 창구에 직접 문의해 확인하기 ② 예금주·계좌번호를 문자 링크에 넣지 않기 ③ 가족이나 가까운 창구에서 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+  // ⭐ P2-d(X6) — 환급 처리 수수료 계좌 문자가 여는 훈련용 이체 화면(`BANK_TRANSFER_LANDINGS`).
+  {
+    landingId: "tax-refund-fee-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "수수료 이체 정보를 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 '환급 처리 수수료'로 표시됩니다."],
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 환급 수수료",
+    mockHost: "refund-fee-send.invalid",
+    fields: ["수수료 입금 계좌", "보낼 금액"],
+    submitLabel: "수수료 이체하기",
+    successHeadline: "환급 수수료 이체가 완료되었습니다.",
+    momentTactic: "환급금 지급을 빌미로 한 처리 수수료 선입금 이체 유도",
+    correctAction:
+      "환급금을 준다며 먼저 수수료를 보내라고 하면 그 자리에서 멈추세요 — 세금 · 보험료 환급은 수수료를 먼저 받지 않고, 돈을 받으려고 돈을 보내는 일은 없습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 문자 속 링크로 이체하지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 이체했다면 바로 112(경찰)나 그 은행 대표번호로 지급정지를 요청하고 1332(금융감독원)에도 알리기.",
   },
 ];
 

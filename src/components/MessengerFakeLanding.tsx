@@ -34,7 +34,7 @@ import { Button } from "./ui";
 import { LANDING_PAGE_TOKENS, browserBarTokensFor } from "../lib/phone/skinTokens";
 import type { MessengerSkin } from "../lib/messenger/detectSkin";
 // §101 추가 — 금액 검증 · 한글 단위 표기 · 필수 칸 안내(잎 모듈 · 상대 경로 — 렌더 하네스 관례).
-import { amountError, amountHint, requiredFieldError } from "../lib/landing/amountInput";
+import { TRANSFER_LIMIT_NOTE, amountError, amountHint, requiredFieldError, transferLimitError } from "../lib/landing/amountInput";
 import {
   BIRTHDATE_MASK,
   identityDisplayValue,
@@ -632,6 +632,19 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 대화",
     mockHost: "friend-send-link.invalid",
   },
+  // ⭐ P2-d(X6) — 환급 처리 수수료 이체 화면(서버 카탈로그 mockScreens.ts와 글자 단위로 동일).
+  "tax-refund-fee-transfer": {
+    headline: "수수료 이체 정보를 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 '환급 처리 수수료'로 표시됩니다."],
+    fields: [
+      { label: "수수료 입금 계좌", placeholder: "문자로 받은 계좌번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "보낼 금액", placeholder: "보내실 금액을 입력하세요", inputMode: "numeric", amount: true },
+    ],
+    submitLabel: "수수료 이체하기",
+    successHeadline: "환급 수수료 이체가 완료되었습니다.",
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 환급 수수료",
+    mockHost: "refund-fee-send.invalid",
+  },
 };
 
 /**
@@ -648,6 +661,8 @@ const BANK_TRANSFER_LANDINGS: readonly string[] = [
   // P2-c — 메신저 링크 칩(자녀 · 지인 사칭).
   "child-bank-transfer",
   "friend-bank-transfer",
+  // P2-d — 환급 처리 수수료.
+  "tax-refund-fee-transfer",
 ];
 
 /** §101 — 여러 화면 사이트의 둘째 화면부터(서버 카탈로그 `MockScreenItem.stepScreens`와 1:1 · 글자 단위 동일). */
@@ -898,7 +913,8 @@ function CredentialFormMockup({
     if (isPrefilled(field)) return undefined;
     const raw = values[field.label] ?? "";
     if (field.format) return identityError(field.format, field.label, raw); // §114
-    return field.amount ? amountError(raw) : requiredFieldError(field.label, raw);
+    // P2-d — 훈련용 이체 화면의 금액은 실제 앱처럼 1회 한도를 넘으면 막는다(`transferLimitError` — 근거는 그 함수 주석).
+    return field.amount ? (amountError(raw) ?? (bankTransfer ? transferLimitError(raw) : undefined)) : requiredFieldError(field.label, raw);
   };
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -1250,6 +1266,12 @@ function CredentialFormMockup({
             <span className="font-semibold" style={{ color: page.headline }}>
               내 입출금 통장
             </span>
+          </p>
+        )}
+        {/* P2-d — 실제 이체 화면의 한도 안내(1회 · 1일). */}
+        {bankTransfer && (
+          <p className="text-[13px]" style={{ color: page.body }}>
+            {TRANSFER_LIMIT_NOTE}
           </p>
         )}
         {confirmAmount && (

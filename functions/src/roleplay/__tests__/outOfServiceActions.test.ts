@@ -193,8 +193,7 @@ const ACCOUNT_SMS_WITHOUT_SCREEN_LEDGER: readonly string[] = [];
  * | 납치 4 | G306 유지 — 실제 사례는 계좌를 전화로 부르고 문자로 보낸 사례를 찾지 못했다. 서비스 밖 위험은 D1 (b)(가상 은행 앱)로 넘긴다 |
  * | 가족 사고 4 · 손주 3 | 보류 — clone 시나리오는 Gemini Live를 타지 않아(ElevenLabs = 고정 에이전트 프롬프트 · 문자 도구 0 / 폴백 = 변형 적용) 운영 경로 확인 전 |
  * | 카드사 `fv-akj5` | #192 — 2인 챌린지 수신자 고급 조립 바이트 고정 |
- * | 환급 3 | P2-b에서 찾음(P0 실측 F2 — 수수료 선입금 계좌 낭독) · 메인 결정 전(범위 밖으로 남김) |
- * ⛔ 늘리지 않는다. P2-b에서 카드사 자가 고급 `fv-x7ue` · `fv-w3dq`가 빠졌다(피해금 이관 문자 · 화면 선언) · P2-c에서 메신저 6이 빠졌다(칩).
+ * ⛔ 늘리지 않는다. P2-d에서 환급 3이 빠졌다(수수료 계좌 문자 · 이체 화면 — 메인 "권고대로"). P2-b에서 카드사 자가 고급 `fv-x7ue` · `fv-w3dq`가 빠졌다(피해금 이관 문자 · 화면 선언) · P2-c에서 메신저 6이 빠졌다(칩).
  */
 const VERBAL_ACCOUNT_WITHOUT_SCREEN_LEDGER: readonly string[] = [
   "card-company-impersonation#fv-akj5",
@@ -209,9 +208,6 @@ const VERBAL_ACCOUNT_WITHOUT_SCREEN_LEDGER: readonly string[] = [
   "kidnapping-threat#fv-dxwu",
   "kidnapping-threat#fv-k268",
   "kidnapping-threat#fv-w7tb",
-  "tax-refund-scam#fv-aqx2",
-  "tax-refund-scam#fv-uk7m",
-  "tax-refund-scam#fv-vtq7",
 ];
 /** smsDeclarationConsistency.test.ts의 계좌 낭독 지시 패턴 + "부른다"(완성형 음절이라 "부르"에 안 걸린다 — 환급 문면) + "불러주는 계좌"(납치 · 손주 문면). */
 const ACCOUNT_READOUT = /계좌\s*불러\s*(?:줄게|드릴게)|계좌는\s*'[^']+'\s*(?:같은|처럼)[^.]*(?:부르|부른)|불러주는 계좌/;
@@ -287,7 +283,7 @@ describe("P0 서비스 밖 행동 유도 — ② 루트 표면 장부", () => {
     assert.deepEqual(actual, [...ACCOUNT_SMS_WITHOUT_SCREEN_LEDGER].sort());
   });
 
-  it("④ X6 — 계좌를 말로 부르고 이체 화면이 없는 현행 변형 = 장부(P2-b 뒤 15)", () => {
+  it("④ X6 — 계좌를 말로 부르고 이체 화면이 없는 현행 변형 = 장부(P2-d 뒤 12)", () => {
     const actual = FLOW_VARIANTS.filter((v) => v.retired !== true)
       .filter((v) => {
         const prompt = resolveSessionScenarioPrompt(v.scenarioId, v.variantId);

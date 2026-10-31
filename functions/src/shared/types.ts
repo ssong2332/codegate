@@ -232,6 +232,8 @@ export type MessengerAttachment = {
   /** ⭐ P2-c(X6) — 훈련용 이체 화면 칩(`BANK_TRANSFER_LANDINGS`)만: 세션 가상 은행명 · 세션 계좌(받는 계좌 미리 채움 원천). 그 밖 칩은 키 없음. */
   bankName?: string;
   accountNumber?: string;
+  /** ⭐ P2-d — 변형의 가상 예금주(확인 화면 "받는 분"). 부재 = 받는 분 행 없음. */
+  accountHolder?: string;
 };
 
 // --- sessions/{sessionId}/messages/{messageId} (AC-024) ---

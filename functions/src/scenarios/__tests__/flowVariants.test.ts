@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
+  accountHolderTactic,
   FLOW_VARIANTS,
   FLOW_VARIANT_SPECS,
   RELAY_RUNTIME_AVAILABLE,
@@ -709,9 +710,10 @@ test("[T194-a §84.13.3 ② · 리뷰 M2] 플래그만 더한 child-kakao · sub
       ? {
           ...currentPrompt,
           personaPrompt: currentPrompt.personaPrompt.replace(ruleLine, "").replace(callPhaseBlock, ""),
-          weakenedTactics: currentPrompt.weakenedTactics.map((tactic) =>
-            tactic === CHILD_INSTALL_TACTIC_110 ? CHILD_INSTALL_TACTIC_BEFORE_110 : tactic,
-          ),
+          // P2-d — 가상 예금주 수법 1줄(`accountHolderTactic`)은 의도된 추가다 — 그 줄만 뺀다.
+          weakenedTactics: currentPrompt.weakenedTactics
+            .filter((tactic) => !(v.accountHolder && tactic === accountHolderTactic(row.scenarioId, v.accountHolder)))
+            .map((tactic) => (tactic === CHILD_INSTALL_TACTIC_110 ? CHILD_INSTALL_TACTIC_BEFORE_110 : tactic)),
         }
       : currentPrompt;
     const assembled = buildSystemPrompt(prompt, {
