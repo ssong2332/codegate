@@ -559,13 +559,13 @@ const CARD_DENIAL_PIVOT_NO_SMS =
   "부인 시 명의 도용 암시 — 상대가 그 카드가 없다거나 그 카드사를 안 쓴다고 하면 그 말을 인정하고 '그래서 더 위험한 겁니다, 본인도 모르게 발급된 것으로 보여요'라며 명의 도용 확인 쪽으로 넘긴 뒤 위 카드정보 요구로 이어간다. 부인을 반박하거나 같은 질문을 되풀이하지 않는다.";
 const CARD_RELIEF_TRANSFER_READOUT =
   "피해금 이관 요구 — '지금 결제 진행 중인 건 저희가 막을 수 있는데, 고객님 잔액을 이관 전용 계좌로 옮겨두셔야 해요, 계좌 불러드릴게요' 처럼 구체적 금액과 함께 이체를 요구한다. 계좌는 'OO은행 948-2716-5093-27' 처럼 이 예시 번호로만 부르고, 실존 은행명·실제 계좌는 쓰지 않는다.";
-// R3 리뷰 C1 — fv-x7ue(링크 문자만 선언) 전용. 그 조립에는 문자 예외 블록이 실려 SMS_METHOD_LINE("계좌번호의 구체적인 값을 네가 지어내
-// 읽어 주지도 않는다")과 A-1 미선언 금지 문장(계좌 안내 문자는 보낸 적 없음)이 함께 있다 → 낭독형도 "문자로 보낸 계좌"형도 모순이다.
-// 그래서 **값을 읽지도 문자를 가리키지도 않는** 형태로 두고, 계좌를 물으면 이 변형의 실제 흐름(Q2 보안 앱 설치 — 단계 2)으로 되돌린다.
-// ⚠️ 설치 화면(card-guard-app-install)에는 이체 입력이 없으므로 "앱에서 이관하라"고 가리키지 않는다 — "설치를 먼저 마쳐야 한다"까지만.
-// 라벨은 그대로(단계 5 · 결정 순간 "피해금 이관에 동의하는 순간"이 이 라벨을 가리킨다 — 라벨을 빼면 단계 · 결정 순간까지 고쳐야 해 더 침습적).
-const CARD_RELIEF_TRANSFER_NO_ACCOUNT =
-  "피해금 이관 요구 — '지금 결제 진행 중인 건 저희가 막을 수 있는데, 고객님 잔액을 이관 전용 계좌로 옮겨두셔야 해요' 처럼 구체적 금액과 함께 이체에 동의하라고 요구한다. 계좌번호는 네가 불러 주지 않고 문자로 보냈다고도 하지 않는다. 상대가 어디로 옮기느냐고 물으면 '보호 조치부터 끝나야 이관이 진행돼요'라며 보안 앱 설치 요구로 되돌린다.";
+// R3 리뷰 C1의 무계좌형(fv-x7ue 전용 — "계좌를 읽지도 문자를 가리키지도 않는" 형태)은 P2-b에서 아래 링크 화면형으로 대체했다(fv-x7ue가 이관 문자를 선언하게 되어 모순이 없어졌다).
+// ⭐ P2-b(2026-10-31 · X6 · 메인 결정 "권고대로") — 카드사 자가 고급 2벌(fv-x7ue · fv-w3dq)은 피해금 이관을 말로만 요구해 참가자가 실제 뱅킹 앱을
+// 열 수밖에 없었다. 이제 설치 문자 뒤 기존 피해금 이관 문자(`card-relief-account` → 이체 화면 `card-relief-transfer`)를 선언하고, 수법도 그 링크
+// 화면에서만 이체하게 한다. ⛔ fv-akj5(2인 챌린지 수신자 고급 · #192 바이트 고정)는 무변경 — 위 무계좌형 문면을 계속 쓴다.
+const CARD_RELIEF_TRANSFER_VIA_LINK =
+  "피해금 이관 요구 — '지금 결제 진행 중인 건 저희가 막을 수 있는데, 고객님 잔액을 이관 전용 계좌로 옮겨두셔야 해요' 처럼 구체적 금액과 함께 이체를 요구한다. 계좌번호는 네가 불러 주지 말고, 보안 앱 설치가 끝난 뒤 문자로 보낸 피해금 이관 안내의 링크 화면에서 이체하게 한다(은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다).";
+const CARD_RELIEF_SMS: FlowVariantSms = { purpose: "transfer", smsId: "card-relief-account", required: true, notBeforeUserTurns: 4 };
 const CARD_REASSURE = { from: "card-company-impersonation", label: "안심 유도" };
 /**
  * fv-akj5 계열 수법 목록 — base main(ea97aa0)의 순서(놀람 · 긴급 · 카드정보 · 피해금 · 부인 · 안심 · 앱 설치 · 기관 조사)를 그대로 지킨다
@@ -841,9 +841,10 @@ const SPECS: VariantSpec[] = [
   {
     ...CARD_COMPANY_ADVANCED_FV_AKJ5,
     variantId: "fv-x7ue",
-    sms: [{ purpose: "link", smsId: "card-guard-app-link", required: true, notBeforeUserTurns: 2 }],
-    // R3 리뷰 C1 — 링크 문자를 선언해 조립에 SMS_METHOD_LINE이 실리므로 계좌 낭독형 대신 무계좌형 피해금 문면(CARD_RELIEF_TRANSFER_NO_ACCOUNT).
-    extraTactics: cardAdvancedExtras(CARD_RELIEF_TRANSFER_NO_ACCOUNT),
+    // P2-b — 설치 문자(하한 2) 뒤 피해금 이관 문자(하한 4 · 이체 화면). 선언 순서 = 단계 순서(4-c 결정 화면 = 이관 화면).
+    sms: [{ purpose: "link", smsId: "card-guard-app-link", required: true, notBeforeUserTurns: 2 }, CARD_RELIEF_SMS],
+    // R3 리뷰 C1 → P2-b — 무계좌형 대신 "문자 속 링크 화면에서 이체"형 피해금 문면(CARD_RELIEF_TRANSFER_VIA_LINK).
+    extraTactics: cardAdvancedExtras(CARD_RELIEF_TRANSFER_VIA_LINK),
     // T194-c-1 리뷰 Minor — 문자를 선언하므로 채널 메타에 "sms"를 더한다(fv-m3hd가 스프레드로 받는 값과 같은 꼴 · 프롬프트 바이트 무영향).
     channels: ["voice", "sms"],
   },
@@ -870,11 +871,12 @@ const SPECS: VariantSpec[] = [
       APP_INSTALL,
       { from: "card-delivery-call", label: "확인 시도 무력화" },
       AGENCY_PROBE,
-      { from: "card-delivery-call", label: "자산 보호 이체 요구" },
+      // P2-b — 원본 문면("보호 계좌로 옮겨 두셔야")을 이 변형의 이관 문자 · 화면과 같은 말로, 링크 화면에서만 이체하게(라벨 무변경).
+      "자산 보호 이체 요구 — '조사가 끝날 때까지 잔액을 이관 전용 계좌로 옮겨 두셔야 피해가 안 생깁니다' 처럼 금액과 이체를 구체적으로 요구한다. 계좌번호는 네가 불러 주지 말고 문자로 보낸 피해금 이관 안내의 링크 화면에서 이체하게 한다(은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다).",
       { from: "card-delivery-call", label: "긴급성 조성" },
     ],
     exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],
-    sms: [{ purpose: "link", smsId: "card-guard-app-link", required: true, notBeforeUserTurns: 2 }],
+    sms: [{ purpose: "link", smsId: "card-guard-app-link", required: true, notBeforeUserTurns: 2 }, CARD_RELIEF_SMS],
     legs: [
       {
         callerLabel: "카드 배송 안내",

@@ -221,10 +221,11 @@ test("[R3 리뷰 C1 · 역방향] fv-x7ue가 fv-akj5의 낭독형 피해금 문�
   const found = readoutConflicts(x7ue, tainted);
   t.diagnostic(`역방향 fv-x7ue: ${JSON.stringify(found)}`);
   assert.ok(found.length > 0, "리뷰 지적 상태를 놓쳤다 — 죽은 검사");
-  // 현행 fv-x7ue 피해금 문면은 계좌를 부르지도, 문자로 보냈다고도 하지 않는다.
+  // 현행 fv-x7ue 피해금 문면은 계좌를 부르지 않는다. ⭐ P2-b — 이관 문자(`card-relief-account`)를 선언하게 되어 "문자로 보낸 안내의 링크 화면"을 가리킨다.
   const current = x7ue.tactics.find((x) => extractTacticLabel(x) === "피해금 이관 요구")!;
   assert.equal(ACCOUNT_READOUT.test(current), false);
-  assert.equal(SENT_SMS.test(current), false);
+  assert.equal(SENT_SMS.test(current), true);
+  assert.ok(x7ue.sms.some((s) => s.smsId === "card-relief-account"), "가리키는 문자를 실제로 선언한다");
 });
 
 // ── R3 리뷰 M2 — 수법 순서는 base(main ea97aa0) 그대로 ────────────────────────────────────────────────────────────────────

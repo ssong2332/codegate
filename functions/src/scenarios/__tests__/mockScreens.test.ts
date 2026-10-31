@@ -1065,6 +1065,9 @@ const T129B_MULTI_LANDING_UNITS: readonly string[] = [
   "loan-refinance-scam#fv-m3hd",
   // P2-c — 자녀 사칭 고급은 보험 앱 설치 칩 뒤 이체 화면 칩을 함께 낸다(같은 이유 · 두 칩은 다른 사기범 메시지에 붙는다).
   "messenger-child-impersonation-kakao#fv-tdgg",
+  // P2-b — 카드사 자가 고급 2벌은 설치 문자 뒤 피해금 이관 문자(이체 화면)를 함께 선언한다(같은 이유).
+  "card-company-impersonation#fv-w3dq",
+  "card-company-impersonation#fv-x7ue",
 ];
 
 /** 등재 단위를 뺀 단위 키 — 역검증들의 기준 입력(등재 단위 때문에 기대 배열이 흔들리지 않게). */
@@ -1129,9 +1132,9 @@ test("[T194-a G589 역검증] 한 (시나리오 × 변형) 안에 랜딩이 2건
 test("[T194-c-1 G604 · ⓚ(=R-a)] 자가 고급 Q2 3 단위 = 정확히 [설치 화면] · Q2 시나리오 전 단위 ≤ 1 / loan 자가 단위에 신청서 링크를 남긴 사본은 2랜딩 → G159가 그 단위를 돌려준다", (t) => {
   const expected: Record<string, string[]> = {
     "card-delivery-call#fv-tvnj": ["card-delivery-app-install"],
-    "card-company-impersonation#fv-x7ue": ["card-guard-app-install"],
-    // §92 — 카드사 흡수 변형(카드 배송 흐름)도 같은 카드사 설치 화면 1건뿐이다.
-    "card-company-impersonation#fv-w3dq": ["card-guard-app-install"],
+    // P2-b — 카드사 자가 고급 2벌은 설치 화면 뒤 피해금 이관 화면을 함께 선언한다(T129 (b) 등재 단위).
+    "card-company-impersonation#fv-x7ue": ["card-guard-app-install", "card-relief-transfer"],
+    "card-company-impersonation#fv-w3dq": ["card-guard-app-install", "card-relief-transfer"],
     // P2 — 대출 자가 고급은 설치 화면 뒤 상환금 이체 화면을 함께 선언한다(T129 (b) 등재 단위 — 아래 INV-1은 등재 밖 단위만 본다).
     "loan-refinance-scam#fv-m3hd": ["loan-check-app-install", "loan-repay-transfer"],
   };
@@ -1146,11 +1149,12 @@ test("[T194-c-1 G604 · ⓚ(=R-a)] 자가 고급 Q2 3 단위 = 정확히 [설치
   assert.deepEqual(findMultiLandingScenarios(q2Units), [], "Q2 시나리오의 어느 단위도 도달 랜딩 2건이 아니다(INV-1)");
   // ⓚ = R-a — 대안 B 모양(loan 자가 단위에 loan-apply-link를 유지한 채 설치 문자 추가). §98 — 기준 입력은 T129 (b) 등재 단위를 뺀 키.
   // P2 — fv-m3hd가 등재 단위가 되어 오염 표본을 등재 밖 Q2 단위(카드사 자가 고급 fv-x7ue)로 옮겼다(같은 모양 — 설치 단위에 화면 1건 추가).
-  const polluted = [...reachableLandingKeysOutsideT129B(), "card-company-impersonation#fv-x7ue::card-relief-transfer"];
+  // P2-b — fv-x7ue도 등재 단위가 되어 오염 표본을 등재 밖 Q2 단위(카드 배송 옛 변형 fv-tvnj)로 옮겼다.
+  const polluted = [...reachableLandingKeysOutsideT129B(), "card-delivery-call#fv-tvnj::loan-refinance-apply"];
   t.diagnostic(
     `[G604] 자가 3 단위 ${JSON.stringify(Object.keys(expected).map((u) => `${u}=${sessionReachableLandingIds(u.split("#")[0], u.split("#")[1]).join(",")}`))} · Q2 단위 2랜딩 ${JSON.stringify(findMultiLandingScenarios(q2Units))} / ⓚ(R-a) 사본 → ${JSON.stringify(findMultiLandingScenarios(polluted))}`,
   );
-  assert.deepEqual(findMultiLandingScenarios(polluted), ["card-company-impersonation#fv-x7ue"]);
+  assert.deepEqual(findMultiLandingScenarios(polluted), ["card-delivery-call#fv-tvnj"]);
 });
 
 test("[T194-c-1 G605 ①] INV-2 — 전 단위(원본 · 전 변형)에서 선언 문자의 랜딩 ⊆ 도달 가능 집합 · 역방향(선언 문자 랜딩을 뺀 집합 사본)은 실패", (t) => {
