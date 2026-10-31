@@ -4,6 +4,11 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-10-31 추가분, 브랜치 `claude/outelement-default-off`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
+
+### Fixed
+- **통화 중 같은 인물 목소리가 문장 안에서 바뀌는 회귀(Architecture §141)**: §139에서 기본으로 켠 `<audio>` 출력 경로를 다시 기본 끔으로 되돌렸다. 사용자 실기에서 `?outelement=0`이면 변조가 없었다. Chromium의 MediaStream 재생(`AudioShifter`)이 시계 차이를 재생 비율 0.9~1.1 재샘플링으로 맞추는 것이 원인으로 보인다(소스 근거 · 크기 추정). ⚠️ 대가로 볼륨 키가 때로 미디어 음량을 바꾸는 §137 신고가 되돌아온다. 켜기(A/B) = `?outelement=1`.
+
 > ⚠️ **이 블록(2026-10-27 추가분, 브랜치 `claude/debug-panel-setup-latency`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
 
 ### Added
