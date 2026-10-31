@@ -445,7 +445,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
 }
 
 // ── messenger(텍스트 · sendMessage 재현) ─────────────────────────────────────────────────────────
-async function runMessenger(scenarioId, level, persona, tag) {
+async function runMessenger(scenarioId, level, persona, tag, job = {}) {
   const t0 = Date.now();
   const now = () => Date.now() - t0;
   const { variantId, scenarioPrompt, declared, verifyEnabled, fictionalBankName, baseOpts } = sessionSetup(scenarioId, level, tag);
@@ -483,7 +483,8 @@ async function runMessenger(scenarioId, level, persona, tag) {
   stored.push({ role: "scammer", textMasked: op.text });
   turns.push({ role: "scammer", n: 1, raw: opening, text: op.text, attachments: op.attachments });
   const respond = makeResponder(persona);
-  for (let i = 1; i < MAX_USER_TURNS[persona] + 1; i += 1) {
+  // P0 실측(2026-10-31) — 계획 항목 maxTurns를 메신저에도 적용(부재 = 종전 상한).
+  for (let i = 1; i < (job.maxTurns ?? MAX_USER_TURNS[persona]) + 1; i += 1) {
     if (ended) break;
     const lastScammer = stored.at(-1)?.textMasked ?? "";
     const u = respond(lastScammer, i);
@@ -730,7 +731,7 @@ for (const job of plan) {
   const startedIso = new Date().toISOString();
   let result, error = null;
   try {
-    result = job.ch === "voice" ? await runVoice(job.id, job.level, job.persona, tag, job) : appLlm ? await runMessengerApp(job.id, job.level, job.persona, tag) : await runMessenger(job.id, job.level, job.persona, tag);
+    result = job.ch === "voice" ? await runVoice(job.id, job.level, job.persona, tag, job) : appLlm ? await runMessengerApp(job.id, job.level, job.persona, tag) : await runMessenger(job.id, job.level, job.persona, tag, job);
   } catch (e) { error = scrub(e?.stack ?? e); result = { turns: [], events: [] }; }
   // 2026-10-24 — 루트 · 리포트 판정(앱 `analyzeConversation`과 같은 함수 · 인증번호 정답 = 이 세션 번호).
   try {
