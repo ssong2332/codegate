@@ -9,9 +9,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { receiptTimeLabel, transferReceiptDataUrl, transferReceiptSvg } from "./transferReceipt.ts";
 
-const room = readFileSync("src/components/MessengerChatRoom.tsx", "utf8").replace(/
-/g, "
-");
+const room = readFileSync("src/components/MessengerChatRoom.tsx", "utf8").replace(/\r\n/g, "\n");
 
 test("[D-e R1] 캡처 SVG — 은행 · 받는 계좌 · 받는 분 · 시각 · 완료 문구 · 금액 칸 0 · 특수문자 이스케이프", () => {
   const svg = transferReceiptSvg({ bankName: "가온은행", accountNumber: "948-2716-5093-27", holder: "김도현" }, new Date(2026, 10, 1, 14, 5));
