@@ -91,7 +91,7 @@ const PROBE_STALL_VOCABULARY =
   /확인\s*(?:하는\s*)?중|확인하고\s*있|확인\s*절차|처리\s*(?:하는\s*)?중|처리하고\s*있|조회\s*중|확인되는\s*대로|처리되는\s*대로|확인되면|기다려|기다리|대기\s*중|지연|잠시만/;
 const PROBE_WAIT_REQUEST_LINE = /대기(?:해|하여|하고)\s*(?:주|계|있어|있으)|대기\s*부탁/;
 const PROBE_LIVE_STALL_TEXT =
-  "(너는 직전 대답과 그 앞 대답에서 대기하라거나 확인 중이라는 말을 했다. 이번 대답에서는 대기하라거나 확인 중이라는 말을 하지 말고, 지금까지 받은 것을 근거로 새 요구를 꺼내라 — 남은 돈이나 다른 계좌의 돈, 추가 정보, 주변 사람이나 은행에 알리지 말라는 구체적인 지시 중 하나로 상황을 앞으로 움직여라. 더 요구할 것이 정말 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
+  "(너는 직전 대답과 그 앞 대답에서 대기하라거나 확인 중이라는 말을 했다. 이번 대답에서는 대기하라거나 확인 중이라는 말을 하지 말고, 지금까지 받은 것을 근거로 새 요구를 꺼내라 — 흐름에 남은 다음 요구, 추가 정보, 주변 사람이나 은행에 알리지 말라는 다짐 중 하나로 상황을 앞으로 움직여라. 더 요구할 것이 정말 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
 function probeIsStallLine(text) {
   const t = text.trim();
   if (!t || t.endsWith("?")) return false;
@@ -445,7 +445,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
 }
 
 // ── messenger(텍스트 · sendMessage 재현) ─────────────────────────────────────────────────────────
-async function runMessenger(scenarioId, level, persona, tag) {
+async function runMessenger(scenarioId, level, persona, tag, job = {}) {
   const t0 = Date.now();
   const now = () => Date.now() - t0;
   const { variantId, scenarioPrompt, declared, verifyEnabled, fictionalBankName, baseOpts } = sessionSetup(scenarioId, level, tag);
@@ -483,7 +483,8 @@ async function runMessenger(scenarioId, level, persona, tag) {
   stored.push({ role: "scammer", textMasked: op.text });
   turns.push({ role: "scammer", n: 1, raw: opening, text: op.text, attachments: op.attachments });
   const respond = makeResponder(persona);
-  for (let i = 1; i < MAX_USER_TURNS[persona] + 1; i += 1) {
+  // P0 실측(2026-10-31) — 계획 항목 maxTurns를 메신저에도 적용(부재 = 종전 상한).
+  for (let i = 1; i < (job.maxTurns ?? MAX_USER_TURNS[persona]) + 1; i += 1) {
     if (ended) break;
     const lastScammer = stored.at(-1)?.textMasked ?? "";
     const u = respond(lastScammer, i);
@@ -730,7 +731,7 @@ for (const job of plan) {
   const startedIso = new Date().toISOString();
   let result, error = null;
   try {
-    result = job.ch === "voice" ? await runVoice(job.id, job.level, job.persona, tag, job) : appLlm ? await runMessengerApp(job.id, job.level, job.persona, tag) : await runMessenger(job.id, job.level, job.persona, tag);
+    result = job.ch === "voice" ? await runVoice(job.id, job.level, job.persona, tag, job) : appLlm ? await runMessengerApp(job.id, job.level, job.persona, tag) : await runMessenger(job.id, job.level, job.persona, tag, job);
   } catch (e) { error = scrub(e?.stack ?? e); result = { turns: [], events: [] }; }
   // 2026-10-24 — 루트 · 리포트 판정(앱 `analyzeConversation`과 같은 함수 · 인증번호 정답 = 이 세션 번호).
   try {
