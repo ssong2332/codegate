@@ -280,7 +280,7 @@ test("[§104 자금 소진 · 대본] 참가자가 돈이 더 없다고 분명�
     assert.equal(EXHAUSTED_DECLARATION.test(t), false, t);
   }
   assert.equal(repeatBreakInstruction("exhausted"), REPEAT_BREAK_EXHAUSTED_INSTRUCTION);
-  assert.ok(REPEAT_BREAK_EXHAUSTED_INSTRUCTION.includes("대출처럼 아직 권하지 않은 다른 수단이 있으면 그것만 권하고"));
+  assert.ok(REPEAT_BREAK_EXHAUSTED_INSTRUCTION.includes("수법 목록이나 통화 흐름에 있는데 아직 권하지 않은 다른 수단이 있으면 그것만 권하고"));
   assert.ok(REPEAT_BREAK_EXHAUSTED_INSTRUCTION.includes("[진행 강제]의 통화 끝내기 항목이 정한 대로 하라"));
   assert.equal(/[0-9]|["“”'‘’]/.test(REPEAT_BREAK_EXHAUSTED_INSTRUCTION), false);
 });
