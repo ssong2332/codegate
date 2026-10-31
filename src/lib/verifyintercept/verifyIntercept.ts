@@ -221,6 +221,11 @@ export type PendingInstruction = {
    * 않는다(`deliveryForInstruction` → `smsNudge`). 큐 순서 규칙(G31)과는 무관하다.
    */
   smsNudge?: boolean;
+  /**
+   * §115 마무리 지시(`deliverInCallSms`의 `wrapUpInstruction` — "짧게 답한 뒤 `end_call`")인가. 이 지시를 처리 중인 동안의 `end_call`은
+   * 6행 지시 대기로 막지 않는다(`isHangupInstructionPending` — 2026-10-31 실기 신고). 큐 순서 규칙(G31)과는 무관하다.
+   */
+  wrapUp?: boolean;
 };
 
 /** 우선순위 순위값 — 낮을수록 먼저 나간다(문자 announce 우선, G31 고정 규칙). */
