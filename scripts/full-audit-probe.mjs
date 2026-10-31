@@ -9,7 +9,8 @@
 //               앱 신호 흉내: send_prepared_sms 도구 결과 · 문자 백스톱 · 확인 창구 도구/재연결 · end_call 도구(판정 함수 그대로)
 //               · 필수 계좌·링크 문자 도착 뒤 확인 결과 조건형 1줄(confirmResultInstruction — 앱 PR-A2와 같은 맥락 주입).
 //   messenger — 텍스트 모델(sendMessage와 같은 조립 · 오프닝 지시 · 문자/링크/에스컬레이션 마커 제거 · 폴백 끊기 판정).
-// 참가자 유형: comply(순순히 따름 · 가짜 값) · suspicious(정체를 캐묻다가 머뭇거리며 따름) · refuse(처음부터 거절)
+// 참가자 유형: comply(순순히 따름 · 가짜 값 · 링크 이체 화면을 제출한다) · suspicious(정체를 캐묻다가 머뭇거리며 따름) · refuse(처음부터 거절)
+//   · verbal(P2 실측 2026-11-01 — comply와 같되 이체 요구에 "링크는 안 눌렀고 제 은행 앱으로 따로 보냈어요"라고 말하고 화면을 제출하지 않는다)
 //
 // node scripts/full-audit-probe.mjs --secret <path> --plan <json> --out <dir> [--key-var GEMINI_API_KEY2] [--tag s1]
 //   plan json = [{ "ch": "voice"|"messenger", "id": "...", "level": "beginner|intermediate|advanced", "persona": "comply|suspicious|refuse" }, ...]
@@ -124,6 +125,8 @@ const LIVE_OPENING_TRIGGER =
 // ── 참가자 응답기 ─────────────────────────────────────────────────────────────────────────────
 // 판정표(위에서 첫 매치) — duration-probe.mjs RESPONDER와 같은 행 + 이미 보냈는데 또 요구받을 때의 행(사용자 신고 재현).
 const PAID_LINE = "네, 보냈어요.";
+// P2 실측 — verbal 참가자의 송금 답(서비스 밖 뱅킹 앱으로 보냈다고 말함 · 화면 제출 0). 사기범이 링크 화면으로 되돌리는지 · 4-c가 끊기를 막는지를 본다.
+const VERBAL_PAID_LINE = "링크는 안 눌렀고, 제 은행 앱으로 따로 보냈어요.";
 const RESPONDER = [
   [/인증\s?번호|인증 코드|숫자 여섯|여섯 자리/, "382914요."],
   [/주민(등록)?\s?번호/, "육일공삼공이에 일 이 삼 사 오 육 칠이요."],
@@ -182,13 +185,13 @@ function makeResponder(persona, getOtp = () => undefined) {
         // 1차 측정 교훈 — "인증번호 확인되었습니다"에도 같은 번호를 다시 불렀다. 직전과 같은 값 답은 되풀이하지 않는다.
         if (prefix + reply === lastReply) break;
         if (reply === PAID_LINE || /보냈어요|찾아 놨어요/.test(reply)) paid = true;
-        return (lastReply = prefix + reply);
+        return (lastReply = prefix + (persona === "verbal" && reply === PAID_LINE ? VERBAL_PAID_LINE : reply));
       }
     }
     return (lastReply = FILLER[i % FILLER.length]);
   };
 }
-const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9 };
+const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9, verbal: 16 };
 
 // ── 키 · 공통 ─────────────────────────────────────────────────────────────────────────────────
 function readApiKey(keyVar = argVal("--key-var", "GEMINI_API_KEY2")) {
@@ -339,16 +342,25 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
         // §115 — 앱 콜러블처럼 4행 입력을 서버 기록(도착 · 제출 흉내)으로 계산한다. 새 lib면 변형의 후속 단계 값(C-5)도 넣는다.
         let goalActionDone = false;
         const followUpUserTurns = goalActionLib?.goalFollowUpFor ? goalActionLib.goalFollowUpFor(scenarioId, variantId) : undefined;
-        if (goalActionLib && verifyEnabled) {
+        // P2 실측(2026-11-01) — P1 M1 이후 앱 콜러블은 선언을 해석할 수 있는 **모든** 세션에서 4행 입력을 계산하고, 4-c행 입력(결정 화면 대기)과
+        // 모델 끊기 사유를 함께 넘긴다(`scammerHangup/index.ts` · `commit.ts`). 새 lib에 그 함수가 있으면 같은 식으로 흉내 낸다(옛 lib = 종전).
+        const p1Lib = goalActionLib?.isDecisionScreenPending ? goalActionLib : null;
+        if (goalActionLib && (verifyEnabled || p1Lib)) {
           goalActionDone = goalActionLib.hasCompletedGoalAction({ delivered, mockScreens: [], declared, declaredKnown: Boolean(variantId), userTurns: userTurns + 1, followUpUserTurns });
         }
+        const decisionScreenPending = p1Lib
+          ? p1Lib.isDecisionScreenPending({ scenarioId, flowVariantId: variantId, delivered, mockScreens: [], declared, declaredKnown: Boolean(variantId), verifyEnabled, followUpUserTurns })
+          : false;
         const d = decideScammerHangup({
           goalActionDone,
+          followUpPending: followUpUserTurns !== undefined && !goalActionDone,
+          decisionScreenPending,
+          hangupKind: c.args?.reason ?? c.args?.kind,
           status: "active", channel: "voice", isMockTurn: false, verifyEnabled, transferPlaced: verifyPhase === "placed", transferReachable: true,
           userTurns: userTurns + 1, pendingInstruction: false, smsAwaitingUser: isSmsAwaitingUser(delivered, userTurns + 1),
           limitReached: false, alreadyAccepted: Boolean(ended), relay: undefined,
         });
-        events.push({ t: now(), ev: "toolResult", name: c.name, status: d.status, row: d.row, kind: c.args?.reason ?? c.args?.kind, userTurns, goalActionDone });
+        events.push({ t: now(), ev: "toolResult", name: c.name, status: d.status, row: d.row, kind: c.args?.reason ?? c.args?.kind, userTurns, goalActionDone, decisionScreenPending });
         if (d.hangup && !ended) ended = { kind: c.args?.reason ?? c.args?.kind ?? "unspecified", userTurns, scammerTurns };
         // §115 — 앱 콜러블과 같이 후속 단계가 남아 막혔으면 되풀이 금지 문면(옛 lib는 두 번째 인자를 무시한다).
         const followUpPending = followUpUserTurns !== undefined && !goalActionDone;
@@ -570,10 +582,11 @@ for (const k of ["log", "warn", "error", "info"]) {
     orig(...a);
   };
 }
-async function runMessengerApp(scenarioId, level, persona, tag) {
+async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
   const t0 = Date.now();
   const now = () => Date.now() - t0;
-  const { variantId, scenarioPrompt, declared, verifyEnabled, fictionalBankName, baseOpts } = sessionSetup(scenarioId, level, tag);
+  // P2 실측 — 계획 항목 variant를 앱 체인 경로에도 적용(부재 = 첫 변형 · 종전).
+  const { variantId, scenarioPrompt, declared, verifyEnabled, fictionalBankName, baseOpts } = sessionSetup(scenarioId, level, tag, job.variant);
   const sid = sessionIdFor(tag, scenarioId, level, persona);
   const stored = [], turns = [], events = [], delivered = [];
   let lastCallAt = 0, ended = null, escalated = null, liveLeg = null;
@@ -617,7 +630,8 @@ async function runMessengerApp(scenarioId, level, persona, tag) {
   turns.push({ role: "scammer", n: 1, servedBy: opening.servedBy, raw: opening.text, text: op.text, attachments: op.attachments });
   const otpOf = () => { for (const e of [...events].reverse()) { const m = e.ev === "sms" && /(?<!\d)(\d{6})(?!\d)/.exec(e.body ?? ""); if (m) return m[1]; } return undefined; };
   const respond = makeResponder(persona, otpOf);
-  for (let i = 1; i < MAX_USER_TURNS[persona] + 1; i += 1) {
+  // P2 실측(2026-11-01) — 앱 체인 메신저 경로에도 계획 항목 maxTurns를 적용(부재 = 종전 상한 · P0이 텍스트 경로에 한 것과 같다).
+  for (let i = 1; i < (job.maxTurns ?? MAX_USER_TURNS[persona]) + 1; i += 1) {
     if (ended) break;
     const lastScammer = stored.at(-1)?.textMasked ?? "";
     const u = respond(lastScammer, i);
@@ -731,7 +745,7 @@ for (const job of plan) {
   const startedIso = new Date().toISOString();
   let result, error = null;
   try {
-    result = job.ch === "voice" ? await runVoice(job.id, job.level, job.persona, tag, job) : appLlm ? await runMessengerApp(job.id, job.level, job.persona, tag) : await runMessenger(job.id, job.level, job.persona, tag, job);
+    result = job.ch === "voice" ? await runVoice(job.id, job.level, job.persona, tag, job) : appLlm ? await runMessengerApp(job.id, job.level, job.persona, tag, job) : await runMessenger(job.id, job.level, job.persona, tag, job);
   } catch (e) { error = scrub(e?.stack ?? e); result = { turns: [], events: [] }; }
   // 2026-10-24 — 루트 · 리포트 판정(앱 `analyzeConversation`과 같은 함수 · 인증번호 정답 = 이 세션 번호).
   try {
