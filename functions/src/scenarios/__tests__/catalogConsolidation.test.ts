@@ -77,9 +77,10 @@ test("[§92 A] 흡수 변형 fv-w3dq = 카드사 고급 · 원본 fv-tvnj와 단
 
 test("[§92 A] 흡수 변형의 문자 = 카드사 카탈로그 설치 문자 1건 · 도달 랜딩 = 카드사 설치 화면 1건 · 자가 고급 풀에만(챌린지 0)", () => {
   const absorbed = findFlowVariant("fv-w3dq")!;
-  assert.deepEqual(absorbed.sms.map((s) => s.smsId), ["card-guard-app-link"]);
+  // ⭐ P2-b(X6) — 설치 문자 뒤 피해금 이관 문자(이체 화면)를 함께 선언한다(말로만 하던 이체 요구를 앱 안 화면으로).
+  assert.deepEqual(absorbed.sms.map((s) => s.smsId), ["card-guard-app-link", "card-relief-account"]);
   assert.ok(findInCallSmsItem("card-company-impersonation", "card-guard-app-link"));
-  assert.deepEqual(sessionReachableLandingIds("card-company-impersonation", "fv-w3dq"), ["card-guard-app-install"]);
+  assert.deepEqual(sessionReachableLandingIds("card-company-impersonation", "fv-w3dq"), ["card-guard-app-install", "card-relief-transfer"]);
   assert.deepEqual(assignablePool("card-company-impersonation", "advanced").map((v) => v.variantId), ["fv-x7ue", "fv-w3dq"]);
   assert.deepEqual(assignablePool("card-company-impersonation", "advanced", "c1").map((v) => v.variantId), ["fv-akj5"]);
   assert.equal(listFlowVariants("card-company-impersonation", "beginner").some((v) => v.variantId === "fv-w3dq"), false);

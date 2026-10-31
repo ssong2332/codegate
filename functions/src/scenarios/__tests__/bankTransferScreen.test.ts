@@ -122,3 +122,13 @@ test("[P2-c] 칩 미리 채움 — 이체 화면 칩에만 세션 은행명 · �
   assert.deepEqual(out?.[1], install, "설치 칩은 무변경");
   assert.equal(withBankTransferPrefill(undefined, "한결은행", "1"), undefined);
 });
+
+// ── ⭐ P2-b(X6 · 메인 결정 "권고대로") — 카드사 자가 고급 2벌만 · 챌린지 fv-akj5 무변경 ──────────────────────────────
+test("[P2-b] 카드사 자가 고급 fv-x7ue · fv-w3dq = 설치 문자 뒤 피해금 이관 문자(이체 화면) · fv-akj5 문자 선언 0 그대로", () => {
+  for (const variantId of ["fv-x7ue", "fv-w3dq"]) {
+    const { declared } = resolveDeclaredSms("card-company-impersonation", variantId);
+    assert.deepEqual(declared.map((d) => [d.smsId, d.required]), [["card-guard-app-link", true], ["card-relief-account", true]], variantId);
+    assert.equal(finalDecisionScreenSms("card-company-impersonation", declared)?.smsId, "card-relief-account", `${variantId}: 결정 화면 = 이관 화면`);
+  }
+  assert.deepEqual(resolveDeclaredSms("card-company-impersonation", "fv-akj5").declared, []);
+});

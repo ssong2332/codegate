@@ -22,7 +22,10 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import * as ts from "typescript";
-import { IN_CALL_SMS } from "../../scenarios/inCallSms";
+import { IN_CALL_SMS, findInCallSmsItem } from "../../scenarios/inCallSms";
+import { FLOW_VARIANTS, resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
+import { isBankTransferLanding } from "../../scenarios/mockScreens";
+import { sessionReachableLandingIds } from "../../scenarios/reachability";
 import { OUT_OF_SERVICE_SENTENCE } from "../promptAssembly";
 
 const FN_SRC = path.resolve(__dirname, "../../../src");
@@ -182,6 +185,37 @@ const ROUTE_LEDGER: Readonly<Record<string, number>> = {
  */
 const ACCOUNT_SMS_WITHOUT_SCREEN_LEDGER: readonly string[] = [];
 
+/**
+ * ④ X6 — 계좌를 **말로 불러** 송금을 요구하는데 이체 화면을 선언하지 않은 현행 변형(P2-b · 2026-10-31). 판정 = 그 변형의 조립 수법에 계좌 낭독 지시
+ * (`ACCOUNT_READOUT`)가 있고 선언 문자 중 이체 화면(`fakeLandingId`)이 있는 `transfer` 문자가 없음. 남은 행마다 이유가 있다(사용자 결정 "권고대로" · 2026-10-31):
+ * | 행 | 이유 |
+ * |---|---|
+ * | 납치 4 | G306 유지 — 실제 사례는 계좌를 전화로 부르고 문자로 보낸 사례를 찾지 못했다. 서비스 밖 위험은 D1 (b)(가상 은행 앱)로 넘긴다 |
+ * | 가족 사고 4 · 손주 3 | 보류 — clone 시나리오는 Gemini Live를 타지 않아(ElevenLabs = 고정 에이전트 프롬프트 · 문자 도구 0 / 폴백 = 변형 적용) 운영 경로 확인 전 |
+ * | 카드사 `fv-akj5` | #192 — 2인 챌린지 수신자 고급 조립 바이트 고정 |
+ * | 환급 3 | P2-b에서 찾음(P0 실측 F2 — 수수료 선입금 계좌 낭독) · 메인 결정 전(범위 밖으로 남김) |
+ * ⛔ 늘리지 않는다. P2-b에서 카드사 자가 고급 `fv-x7ue` · `fv-w3dq`가 빠졌다(피해금 이관 문자 · 화면 선언) · P2-c에서 메신저 6이 빠졌다(칩).
+ */
+const VERBAL_ACCOUNT_WITHOUT_SCREEN_LEDGER: readonly string[] = [
+  "card-company-impersonation#fv-akj5",
+  "family-accident-deepvoice#fv-4dy4",
+  "family-accident-deepvoice#fv-66hh",
+  "family-accident-deepvoice#fv-h5sz",
+  "family-accident-deepvoice#fv-krq3",
+  "grandchild-impersonation#fv-brcb",
+  "grandchild-impersonation#fv-cx5y",
+  "grandchild-impersonation#fv-mabg",
+  "kidnapping-threat#fv-c5ih",
+  "kidnapping-threat#fv-dxwu",
+  "kidnapping-threat#fv-k268",
+  "kidnapping-threat#fv-w7tb",
+  "tax-refund-scam#fv-aqx2",
+  "tax-refund-scam#fv-uk7m",
+  "tax-refund-scam#fv-vtq7",
+];
+/** smsDeclarationConsistency.test.ts의 계좌 낭독 지시 패턴 + "부른다"(완성형 음절이라 "부르"에 안 걸린다 — 환급 문면) + "불러주는 계좌"(납치 · 손주 문면). */
+const ACCOUNT_READOUT = /계좌\s*불러\s*(?:줄게|드릴게)|계좌는\s*'[^']+'\s*(?:같은|처럼)[^.]*(?:부르|부른)|불러주는 계좌/;
+
 describe("P0 서비스 밖 행동 유도 — 판정표 고정", () => {
   it("판정표: 세는 행 11개 · 제외 행 4개(J0 규칙 · J0 이름표 · D9 i · D9 ii) · D9 iii은 세는 행", () => {
     assert.equal(COUNTED.length, 11);
@@ -251,5 +285,19 @@ describe("P0 서비스 밖 행동 유도 — ② 루트 표면 장부", () => {
       .map((item) => item.smsId)
       .sort();
     assert.deepEqual(actual, [...ACCOUNT_SMS_WITHOUT_SCREEN_LEDGER].sort());
+  });
+
+  it("④ X6 — 계좌를 말로 부르고 이체 화면이 없는 현행 변형 = 장부(P2-b 뒤 15)", () => {
+    const actual = FLOW_VARIANTS.filter((v) => v.retired !== true)
+      .filter((v) => {
+        const prompt = resolveSessionScenarioPrompt(v.scenarioId, v.variantId);
+        if (!prompt || !ACCOUNT_READOUT.test(prompt.weakenedTactics.join("\n"))) return false;
+        // 이체 화면 = 선언 문자의 화면(통화) 또는 링크 칩으로 닿는 훈련용 이체 화면(메신저 — P2-c).
+        if (sessionReachableLandingIds(v.scenarioId, v.variantId).some(isBankTransferLanding)) return false;
+        return !v.sms.some((d) => d.purpose === "transfer" && findInCallSmsItem(v.scenarioId, d.smsId)?.fakeLandingId !== undefined);
+      })
+      .map((v) => `${v.scenarioId}#${v.variantId}`)
+      .sort();
+    assert.deepEqual(actual, [...VERBAL_ACCOUNT_WITHOUT_SCREEN_LEDGER].sort());
   });
 });
