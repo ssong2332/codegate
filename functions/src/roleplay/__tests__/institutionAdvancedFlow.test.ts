@@ -170,9 +170,13 @@ test("[신고①] transferSmsLink 부재 · false는 종전 문면(바이트 동
 test("[신고①] sessionTransferSmsOpensLanding — 링크가 붙은 계좌 문자 선언만 참 · 변형 부재 = 거짓", () => {
   for (const v of ADVANCED) assert.equal(sessionTransferSmsOpensLanding(INSTITUTION, v.variantId), true, v.variantId);
   assert.equal(sessionTransferSmsOpensLanding(INSTITUTION, undefined), false);
-  // loan 계좌 문자(loan-account)는 링크가 없다.
+  // ⭐ P2(X6) — loan 계좌 문자(loan-account)도 이제 훈련용 이체 화면 링크가 붙는다(종전: 링크 없음 → 거짓).
   for (const v of listFlowVariants("loan-refinance-scam", "intermediate")) {
-    assert.equal(sessionTransferSmsOpensLanding("loan-refinance-scam", v.variantId), false, v.variantId);
+    assert.equal(sessionTransferSmsOpensLanding("loan-refinance-scam", v.variantId), true, v.variantId);
+  }
+  // 계좌 문자를 선언하지 않는 변형은 여전히 거짓(환급 — 링크 문자만).
+  for (const v of listFlowVariants("tax-refund-scam", "intermediate")) {
+    assert.equal(sessionTransferSmsOpensLanding("tax-refund-scam", v.variantId), false, v.variantId);
   }
 });
 

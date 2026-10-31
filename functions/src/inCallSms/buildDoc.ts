@@ -2,10 +2,16 @@
 import { buildOtpLiveCompareLine, type InCallSmsItem } from "../scenarios/inCallSms";
 import type { FlowVariantSms } from "../scenarios/flowVariants";
 import { buildLiveConfirmResultInstruction, confirmResultPurposeFor } from "./confirmResult";
-import { DEFAULT_MOCK_SCREEN_KIND, resolveMockScreenKind } from "../scenarios/mockScreens";
+import { DEFAULT_MOCK_SCREEN_KIND, isBankTransferLanding, resolveMockScreenKind } from "../scenarios/mockScreens";
 import type { DeliverInCallSmsResponse } from "./types";
 import type { InCallSmsDoc } from "../shared/types";
-import { applyFictionalBank, extractAccountNumber, hasBankPlaceholder } from "../shared/fictionalBank";
+import {
+  applyFictionalBank,
+  extractAccountHolder,
+  extractAccountNumber,
+  extractTransferAmount,
+  hasBankPlaceholder,
+} from "../shared/fictionalBank";
 
 /**
  * ⚠️ **여기서 나가는 필드가 곧 클라가 볼 수 있는 전부다**(AC-060 구조적 금지의 마지막 관문).
@@ -25,6 +31,9 @@ export function buildInCallSmsDoc(
 ): InCallSmsDoc {
   // §81.6 — 가상 은행 자리표시자 줄의 계좌번호(없으면 undefined). 아래 accountNumber 필드에서 한 번만 쓴다.
   const accountNumber = extractAccountNumber(item.body);
+  const opensBankTransfer = item.fakeLandingId !== undefined && isBankTransferLanding(item.fakeLandingId);
+  const holder = extractAccountHolder(fictionalBankName ? applyFictionalBank(item.body, fictionalBankName) : item.body);
+  const amount = extractTransferAmount(item.body);
   // T104(§19.4 #2) — 링크형 문자가 여는 랜딩의 **목업 종류를 서버가 확정해 실어 보낸다**
   // (§15.9.1 R3 — 클라가 `fakeLandingId` 문자열로 kind를 추론하지 않는다).
   const landingKind =
@@ -42,6 +51,9 @@ export function buildInCallSmsDoc(
     ...(fictionalBankName && hasBankPlaceholder(item.body) ? { bankName: fictionalBankName } : {}),
     // §81.6 — 같은 줄의 계좌번호도 구조화 필드로(D-115 랜딩 미리 채움 원천 — 은행명과 한 쌍).
     ...(fictionalBankName && accountNumber ? { accountNumber } : {}),
+    // ⭐ P2(X6) — 훈련용 이체 화면(`BANK_TRANSFER_LANDINGS`)의 받는 분 · 금액 미리 채움. 그 화면을 여는 문자에만 싣는다(다른 문서 모양 무변경).
+    ...(opensBankTransfer && holder ? { accountHolder: holder } : {}),
+    ...(opensBankTransfer && amount ? { transferAmount: amount } : {}),
     // 종류별 필드는 해당 kind일 때만 채운다(부재를 판별자로 오버로드하지 않되, 무의미한 빈 값도
     // 만들지 않는다 — kind가 유일한 판별자다, §14.9.1 원칙).
     ...(item.kind === "otp" && item.otpCode ? { otpCode: item.otpCode } : {}),

@@ -30,9 +30,24 @@ export type InCallSmsView = {
    */
   bankName?: string;
   accountNumber?: string;
+  /** ⭐ P2(X6) — 훈련용 이체 화면(`bank-transfer`)의 받는 분 이름 · 금액(숫자만). 서버가 그 화면을 여는 계좌 문자에만 싣는다. */
+  accountHolder?: string;
+  transferAmount?: string;
 };
 
 /** §101 추가 · D-115 — 이 문자의 수취 계좌 표기("{은행명} {계좌번호}"). 둘 중 하나라도 없으면 미리 채우지 않는다. */
+/** ⭐ P2(X6) — 훈련용 이체 화면의 미리 채움(받는 분 · 은행 · 금액). 은행명이 없으면(옛 문서) 미리 채우지 않는다. */
+export function prefilledTransferOf(
+  sms: Pick<InCallSmsView, "bankName" | "accountHolder" | "transferAmount">,
+): { bankName: string; holder?: string; amount?: string } | undefined {
+  if (!sms.bankName) return undefined;
+  return {
+    bankName: sms.bankName,
+    ...(sms.accountHolder ? { holder: sms.accountHolder } : {}),
+    ...(sms.transferAmount ? { amount: sms.transferAmount } : {}),
+  };
+}
+
 export function prefilledAccountOf(sms: Pick<InCallSmsView, "bankName" | "accountNumber">): string | undefined {
   return sms.bankName && sms.accountNumber ? `${sms.bankName} ${sms.accountNumber}` : undefined;
 }
