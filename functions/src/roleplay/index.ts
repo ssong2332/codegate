@@ -72,7 +72,7 @@ import { extractEscalationSignal } from "./escalationSignal";
 import { callPhaseMockTacticHints, ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall, userTurnsSinceCallEntry } from "./escalatedCall";
 import { isFirstUserTurn } from "./firstTurn";
 import { isL3Procedural } from "./l3Depth";
-import { extractLinkMarker } from "./linkMarker";
+import { extractLinkMarker, withBankTransferPrefill } from "./linkMarker";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
@@ -805,7 +805,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     );
     // ③-a PR-A3(감사 B 1일차 #4) — 이미 대화에 나온 링크 칩을 링크를 말하지 않는 대사에 또 붙이지 않는다(linkChipRepeat.ts 표).
     // 첫 칩 · 링크를 다시 가리키는 대사의 칩은 그대로다 — 앵커(첫 칩 메시지)는 바뀌지 않는다.
-    const replyAttachments = dropRepeatedLinkChips(markerAttachments, linkFreeReplyText, storedHistory);
+    // ⭐ P2-c(X6) — 훈련용 이체 화면 칩에만 세션 가상 은행명 · 세션 계좌를 싣는다(받는 계좌 미리 채움 — 그 밖 칩은 무변경).
+    const replyAttachments = withBankTransferPrefill(
+      dropRepeatedLinkChips(markerAttachments, linkFreeReplyText, storedHistory),
+      fictionalBankName,
+      resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
+    );
     // ③-a′ T191 — 문자 요청 마커를 걷어 낸다(아래 문장 수 상한보다 **앞** — 상한이 끝의 마커를 잘라 먹지 않게).
     const { text: smsMarkerFreeText, purpose: markerPurpose, markerCount: smsMarkerCount } =
       extractSmsMarker(linkFreeReplyText);

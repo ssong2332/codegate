@@ -18,6 +18,9 @@ export type MessengerAttachment = {
   // **부재 → `credential-form`**(하위호환 읽기 규칙, §15.9.1 R2). `app-install` 방향으로 폴백하지
   // 않는다 — 사고로 설치 목업이 열리는 방향은 금지다(R5).
   landingKind?: MockScreenKind;
+  /** ⭐ P2-c(X6) — 훈련용 이체 화면 칩만: 세션 가상 은행명 · 세션 계좌(받는 계좌 미리 채움 — 서버 `withBankTransferPrefill`). */
+  bankName?: string;
+  accountNumber?: string;
 };
 
 // attachments(T29 추가, 옵셔널·하위호환) — 메신저 채팅(UX-022)의 스미싱 링크. 보이스 세션은

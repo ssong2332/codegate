@@ -229,6 +229,9 @@ export type MessengerAttachment = {
   // (판별자 오버로드가 아니라 하위호환 읽기 규칙) — 그래서 카탈로그가 없는 12개 시나리오의
   // attachment는 도입 전과 완전히 동일하다. `app-install` 방향으로 폴백하지 않는다(R5).
   landingKind?: MockScreenKind;
+  /** ⭐ P2-c(X6) — 훈련용 이체 화면 칩(`BANK_TRANSFER_LANDINGS`)만: 세션 가상 은행명 · 세션 계좌(받는 계좌 미리 채움 원천). 그 밖 칩은 키 없음. */
+  bankName?: string;
+  accountNumber?: string;
 };
 
 // --- sessions/{sessionId}/messages/{messageId} (AC-024) ---

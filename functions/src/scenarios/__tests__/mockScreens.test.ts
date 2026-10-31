@@ -733,6 +733,9 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
     "messenger-link",
     // §110.2 — child-insurance-install(메신저 링크 표면).
     "messenger-link",
+    // P2-c(X6) — 자녀 · 지인 사칭 훈련용 이체 화면(메신저 링크 표면).
+    "messenger-link",
+    "messenger-link",
   ]);
 });
 
@@ -980,7 +983,7 @@ test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **�
     false,
     "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
   );
-  assert.equal(reachableLandingKeysAllUnits().length, 22, "도달 가능 랜딩은 22종이다(P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(reachableLandingKeysAllUnits().length, 24, "도달 가능 랜딩은 24종이다(P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
 });
 
 test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
@@ -1060,6 +1063,8 @@ const T129B_MULTI_LANDING_UNITS: readonly string[] = [
   "loan-refinance-scam#fv-6s5p",
   "loan-refinance-scam#fv-d8pw",
   "loan-refinance-scam#fv-m3hd",
+  // P2-c — 자녀 사칭 고급은 보험 앱 설치 칩 뒤 이체 화면 칩을 함께 낸다(같은 이유 · 두 칩은 다른 사기범 메시지에 붙는다).
+  "messenger-child-impersonation-kakao#fv-tdgg",
 ];
 
 /** 등재 단위를 뺀 단위 키 — 역검증들의 기준 입력(등재 단위 때문에 기대 배열이 흔들리지 않게). */
@@ -1325,7 +1330,7 @@ function findFieldConvergence(
 
 test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
   const items = Object.values(MOCK_SCREENS).flat();
-  assert.equal(items.length, 22, "현행 비교 대상은 도달 가능 랜딩 22종이다(P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(items.length, 24, "현행 비교 대상은 도달 가능 랜딩 24종이다(P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
   const stats = fieldDivergenceStats(items);
   for (const { field, compared, excluded, converged } of stats) {
     t.diagnostic(
@@ -1584,6 +1589,21 @@ const BAIT_TO_LANDING: {
     baitExcerpt: "아래 링크에서 바로 이체할 수 있습니다.",
     headlineAnchors: ["이체"],
     ctaAnchors: ["이체"],
+  },
+  // ⭐ P2-c(X6) — 메신저 링크 칩이 여는 훈련용 이체 화면 2종(미끼 = 칩 라벨).
+  {
+    landingId: "child-bank-transfer",
+    baitSource: "roleplay/linkMarker.ts:LINK_LABELS (칩 라벨 — P2-c)",
+    baitExcerpt: "이체하기",
+    headlineAnchors: ["이체"],
+    ctaAnchors: ["이체"],
+  },
+  {
+    landingId: "friend-bank-transfer",
+    baitSource: "roleplay/linkMarker.ts:LINK_LABELS (칩 라벨 — P2-c)",
+    baitExcerpt: "송금하기",
+    headlineAnchors: ["송금"],
+    ctaAnchors: ["송금"],
   },
   // T194-c-1(§84.5.2) — Q2 통화 중 설치 화면 3종. 미끼 = 통화 중 설치 문자 본문 · 칩. CTA는 app-install 예외(권한 허용 버튼).
   {

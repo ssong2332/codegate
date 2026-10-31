@@ -296,6 +296,8 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `blackmail-hush-transfer` | `scenarios/inCallSms.ts` REPUTATION_BLACKMAIL_SCAM(문자 본문·칩 — P2 X6) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "이체할 금액을 확인해 주세요" | "바로 이체하기" |
 // | `courier-fee-transfer` | `scenarios/inCallSms.ts` COURIER_CUSTOMS_SCAM(문자 본문·칩 — P2 X6) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "통관수수료 이체 정보를 확인해 주세요" | "통관수수료 이체하기" |
 // | `courier-safe-transfer` | `scenarios/inCallSms.ts` COURIER_CUSTOMS_SCAM(문자 본문·칩 — P2 X6) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "안전계좌 이체 정보를 확인해 주세요" | "안전계좌로 이체하기" |
+// | `child-bank-transfer` | `roleplay/linkMarker.ts` LINK_LABELS(칩 라벨 — P2-c) | "이체하기" | 링크에서 이체 | "이체 금액을 입력해 주세요" | "이체하기" |
+// | `friend-bank-transfer` | `roleplay/linkMarker.ts` LINK_LABELS(칩 라벨 — P2-c) | "송금하기" | 링크에서 송금 | "송금할 금액을 입력해 주세요" | "송금하기" |
 // | `loan-check-app-install` | `scenarios/inCallSms.ts` LOAN_SCAM(문자 본문·칩 — T194-c-1 Q2) | "아래에서 심사용 보안 점검 앱을 설치해 주세요." | 심사용 보안 점검 앱 설치 | "심사용 보안 점검 앱을 설치해야 대출 심사가 진행됩니다" | "권한 허용하고 계속하기" |
 //
 // ⚠️ **이 표가 조용히 낡지 않게 하는 장치(주석은 강제가 아니다).** 위 **줄 번호는 스냅샷일 뿐이며
@@ -366,6 +368,9 @@ export const BANK_TRANSFER_LANDINGS: readonly string[] = [
   "blackmail-hush-transfer",
   "courier-fee-transfer",
   "courier-safe-transfer",
+  // P2-c — 메신저 링크 칩(자녀 · 지인 사칭).
+  "child-bank-transfer",
+  "friend-bank-transfer",
 ];
 
 /** P2 — 이 랜딩이 훈련용 이체 화면인가(문자 문서의 받는 분 · 금액 미리 채움 필드를 싣는 단일 판별자 — `inCallSms/buildDoc.ts`). */
@@ -893,6 +898,42 @@ const MESSENGER_CHILD_IMPERSONATION_KAKAO: MockScreenItem[] = [
     correctAction:
       "가족이 다른 번호로 앱 설치를 부탁하면 그 자리에서 설치하거나 권한을 허용하지 말고 화면을 닫으세요. ① 원래 알고 있는 자녀 번호로 직접 전화해 확인하기 ② 폰이 고장 났다고 해도 다른 가족에게 먼저 확인하기 ③ 앱은 공식 앱 마켓에서도 모르는 사람의 부탁으로 설치하지 않기 ④ 이미 허용했다면 112(경찰)·1332(금융감독원)에 신고하기.",
   },
+  // ⭐ P2-c(X6 · 2026-10-31) — 메신저 링크 칩이 여는 훈련용 이체 화면(`BANK_TRANSFER_LANDINGS`). 계좌는 세션 계좌로 미리 채운다(첨부 `bankName` · `accountNumber`).
+  {
+    landingId: "child-bank-transfer",
+    kind: "credential-form",
+    entrySurface: "messenger-link",
+    headline: "이체 금액을 입력해 주세요",
+    bodyLines: ["메시지로 받은 계좌가 채워져 있습니다."],
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 메시지",
+    mockHost: "child-send-link.invalid",
+    fields: ["입금 계좌", "보낼 금액"],
+    submitLabel: "이체하기",
+    successHeadline: "송금이 완료되었습니다.",
+    momentTactic: "자녀 사칭 — 급한 사정을 빌미로 한 이체 유도",
+    correctAction:
+      "가족이 다른 번호로 돈을 보내 달라고 하면 보내기 전에 멈추세요 — 폰이 고장 났다며 처음 보는 계좌로 보내 달라는 것이 가장 흔한 수법입니다. ① 원래 알고 있는 자녀 번호로 직접 전화해 확인하기 ② 메시지 속 계좌 · 링크로 이체하지 않기 ③ 다른 가족에게 먼저 확인하기 ④ 이미 이체했다면 바로 112(경찰)나 그 은행 대표번호로 지급정지를 요청하고 1332(금융감독원)에도 알리기.",
+  },
+];
+
+// ⭐ P2-c(X6) — 지인 사칭 카톡 카탈로그 신설(메신저 링크 칩이 여는 훈련용 이체 화면 1건).
+const MESSENGER_FRIEND_LOAN_KAKAO: MockScreenItem[] = [
+  // ⭐ P2-c(X6 · 2026-10-31) — 메신저 링크 칩이 여는 훈련용 이체 화면(`BANK_TRANSFER_LANDINGS`). 계좌는 세션 계좌로 미리 채운다(첨부 `bankName` · `accountNumber`).
+  {
+    landingId: "friend-bank-transfer",
+    kind: "credential-form",
+    entrySurface: "messenger-link",
+    headline: "송금할 금액을 입력해 주세요",
+    bodyLines: ["대화에서 받은 계좌가 채워져 있습니다."],
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 대화",
+    mockHost: "friend-send-link.invalid",
+    fields: ["받는 사람 계좌", "보낼 금액"],
+    submitLabel: "송금하기",
+    successHeadline: "보내기가 완료되었습니다.",
+    momentTactic: "지인 사칭 — 급전 부탁을 빌미로 한 송금 유도",
+    correctAction:
+      "아는 사람이 메시지로 급하게 돈을 빌려 달라고 하면 보내기 전에 멈추세요 — 이름을 먼저 대지 않거나 다른 사람 계좌로 보내 달라고 하면 사칭일 가능성이 큽니다. ① 그 사람의 원래 번호로 직접 전화해 확인하기 ② 메시지 속 계좌 · 링크로 송금하지 않기 ③ 함께 아는 사람에게 먼저 확인하기 ④ 이미 이체했다면 바로 112(경찰)나 그 은행 대표번호로 지급정지를 요청하고 1332(금융감독원)에도 알리기.",
+  },
 ];
 
 export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
@@ -900,6 +941,8 @@ export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   "messenger-parcel-smishing-sms": MESSENGER_PARCEL_SMISHING_SMS,
   // §110.2 — 자녀 사칭 카톡(고급 변형만 마커를 낸다 — 도달은 `sessionReachableLandingIds`가 변형 프롬프트로 거른다).
   "messenger-child-impersonation-kakao": MESSENGER_CHILD_IMPERSONATION_KAKAO,
+  // P2-c(X6) — 지인 사칭 카톡(메신저 링크 칩 → 훈련용 이체 화면).
+  "messenger-friend-loan-kakao": MESSENGER_FRIEND_LOAN_KAKAO,
   "institutional-impersonation": INSTITUTIONAL_IMPERSONATION,
   "card-company-impersonation": CARD_COMPANY_IMPERSONATION,
   "loan-refinance-scam": LOAN_REFINANCE_SCAM,
