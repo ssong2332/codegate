@@ -46,7 +46,9 @@ test("[§117 도구 설명] send_prepared_sms 설명에 '먼저 부르고 · 결
 
 test("[§117 배선] deliverInCallSms — 거부 · 도착 두 응답 모두 trigger로 꼬리를 고른다(백스톱 응답은 종전 그대로)", () => {
   const src = readFileSync(path.join(SRC, "inCallSms/index.ts"), "utf8").replace(/\r\n/g, "\n");
-  assert.ok(src.includes("declineInstruction: withModelToolNoRepeat(declineInstructionFor(result.status), trigger)"), "거부");
+  // P1 M2 — 거부 문면은 `decline`(이미 도착 P-2a면 새 지시 · 그 밖 `declineInstructionFor`)으로 고른 뒤 같은 꼬리를 붙인다.
+  assert.ok(src.includes("declineInstruction: withModelToolNoRepeat(decline, trigger)"), "거부");
+  assert.ok(src.includes(": declineInstructionFor(result.status);"), "거부 — 종전 문면 갈래");
   assert.ok(src.includes("const announceInstruction = withModelToolNoRepeat(built.announceInstruction, trigger);"), "도착");
   // 백스톱 넛지 · 마무리 지시 응답은 꼬리 함수를 거치지 않는다(다음 응답에 실리는 맥락 주입).
   assert.ok(src.includes('return { status: "nudge", nudgeInstruction: buildSmsNudgeInstruction(plan.item.purpose) };'));

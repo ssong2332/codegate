@@ -47,6 +47,15 @@ export const SCAMMER_HANGUP_RETRY_AFTER_GOAL_GUIDANCE =
 export const FALLBACK_GOAL_WRAP_UP_INSTRUCTION =
   "(이번 통화에서 할 일은 모두 마쳤다. 지금까지 한 요구 · 안내를 다시 되풀이하지 말고 새 요구도 꺼내지 마라. 상대의 마지막 말에 짧게 답한 뒤 응답 맨 끝에 [[SIGNAL:END_CALL_GOAL]]을 붙여 통화를 끝내라.)";
 
+/**
+ * ⭐ P1 M1(2026-10-31 · 운영 세션 b94b9eec) — 거절(`blocked_decision` · 4-c행): 결정 화면을 참가자가 아직 마치지 않았는데 `goal`로 끊으려 했다.
+ * 실제 사기범은 송금을 확인하기 전에는 끊지 않고 단계마다 어디까지 했는지 확인한다(`prosecution-call-reality-check-2026-10-31.md` R11 · R12). 같은 안내
+ * 되풀이(§115)를 피하고, 상대가 끝내 거절하면 `give_up`으로 끝낼 수 있게 한다(4-c행은 `give_up`을 막지 않는다). ⛔ 횟수 · 턴 번호 0(G130) ·
+ * 화면 밖 행동 예시 0(P0 — 안내한 화면 안에서만 진행).
+ */
+export const SCAMMER_HANGUP_DECISION_PENDING_GUIDANCE =
+  "(상대가 아직 안내한 화면의 마지막 단계를 마치지 않았다. 원하던 것을 얻었다고 보고 끝내지 마라. 끝내겠다는 말을 하지 말고, 방금 한 안내를 같은 말로 되풀이하지 마라. 아직 그 화면을 안내하지 않았으면 지금 단계를 이어가고, 이미 안내했으면 화면에서 어디까지 했는지 짧게 한 번만 묻고 답을 기다려라. 상대가 끝내 거절하면 그때는 reason을 give_up으로 해서 끝내도 된다.)";
+
 /** 실패(콜러블 미도달) — `createRealtimeCall.liveTools.endCallFailureInstruction`의 원천(배선은 C3). */
 export const SCAMMER_HANGUP_FAILURE_INSTRUCTION =
   "(지금은 통화를 끝낼 수 없다. 끝내겠다는 말을 하지 말고 하던 이야기를 그대로 이어가라.)";
@@ -62,6 +71,8 @@ export function scammerHangupGuidance(
   // §115 — 후속 단계가 남아 막힌 경우만 되풀이 금지 문면(그 밖 확인 무력화 세션은 종전 문면 그대로).
   // §132.13 — 4-b행(후속 단계가 남음)도 같은 문면.
   if (status === "blocked_follow_up") return SCAMMER_HANGUP_FOLLOW_UP_PENDING_GUIDANCE;
+  // P1 M1 — 4-c행(결정 화면 전 goal 끊기).
+  if (status === "blocked_decision") return SCAMMER_HANGUP_DECISION_PENDING_GUIDANCE;
   if (status === "blocked_transfer" && options.followUpPending === true) return SCAMMER_HANGUP_FOLLOW_UP_PENDING_GUIDANCE;
   if (status === "blocked_transfer") return SCAMMER_HANGUP_BLOCKED_TRANSFER_GUIDANCE;
   return SCAMMER_HANGUP_DECLINED_GUIDANCE;

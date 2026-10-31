@@ -105,6 +105,7 @@ test("[§132.13 (3)] 판정표 4-b — 후속 단계 변형은 C-5 전 끊기를
     transferReachable: false,
     goalActionDone: !pending(userTurns),
     followUpPending: pending(userTurns),
+    decisionScreenPending: false,
     userTurns,
     limitReached: false,
     alreadyAccepted: false,
@@ -118,18 +119,21 @@ test("[§132.13 (3)] 판정표 4-b — 후속 단계 변형은 C-5 전 끊기를
   // 인증번호 도착 전 거절도 막는다(사용자 결정 — 실시간 4행과 같은 칸).
   assert.equal(decideFallbackHangup({ ...facts(5), followUpPending: true }, [], false).status, "blocked_follow_up");
   // 실시간(4행 살아 있음)은 종전대로 4행이 먼저 잡는다.
-  assert.equal(decideScammerHangup({ ...facts(7), transferReachable: true, isMockTurn: false, pendingInstruction: false, smsAwaitingUser: false }).row, "4");
+  assert.equal(decideScammerHangup({ ...facts(7), transferReachable: true, isMockTurn: false, pendingInstruction: false, smsAwaitingUser: false, hangupKind: undefined }).row, "4");
   // 후속 단계 없는 변형 = 4-b 무관(종전).
   assert.equal(goalFollowUpFor("kidnapping-threat", "fv-c5ih"), undefined);
   assert.equal(decideFallbackHangup({ ...facts(7), followUpPending: false, goalActionDone: false }, delivered, false).status, "accepted");
   assert.equal(scammerHangupGuidance("blocked_follow_up"), SCAMMER_HANGUP_FOLLOW_UP_PENDING_GUIDANCE);
   // 배선 — 폴백 · 실시간 · 통화 중 카톡이 같은 계산(확인 무력화 여부와 무관).
   const fallbackSrc = read("roleplay/index.ts");
-  assert.ok(fallbackSrc.includes("if (verifyEnabled || followUpUserTurns !== undefined) {"));
+  // P1 M1 — goalActionDone 계산 조건(확인 무력화 ∨ 후속 단계)을 없앴다: 모든 세션에서 같은 함수로 계산한다(C-5는 그대로 후속 단계 변형만).
+  assert.ok(!fallbackSrc.includes("if (verifyEnabled || followUpUserTurns !== undefined) {"));
+  assert.ok(fallbackSrc.includes("followUpUserTurns, // §115 C-5"));
   assert.ok(fallbackSrc.includes("followUpPending: followUpUserTurns !== undefined && !goalActionDone,"));
   const realtimeSrc = read("scammerHangup/index.ts");
-  assert.ok(realtimeSrc.includes("if (isVerifyInterceptSession(session) || followUpUserTurns !== undefined) {"));
-  assert.ok(realtimeSrc.includes("      goalActionDone,\n      followUpUserTurns !== undefined && !goalActionDone,\n    ),"));
+  assert.ok(!realtimeSrc.includes("if (isVerifyInterceptSession(session) || followUpUserTurns !== undefined) {"));
+  assert.ok(realtimeSrc.includes("followUpUserTurns, // §115 C-5"));
+  assert.ok(realtimeSrc.includes("      goalActionDone,\n      followUpUserTurns !== undefined && !goalActionDone,\n      decisionScreenPending,\n    ),"));
   assert.ok(read("roleplay/chatDuringCall.ts").includes("followUpPending: chatFollowUpPending("));
 });
 

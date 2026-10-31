@@ -30,6 +30,9 @@ const PASSING: ScammerHangupInput = {
   // §108 — 기준 입력은 "목표 화면 행동 전"(옛 판정과 같은 쪽).
   goalActionDone: false,
   followUpPending: false,
+  // P1 M1 — 기준 입력은 "결정 화면 없음 · 사유 모름"(옛 판정과 같은 쪽 — 4-c행 통과).
+  decisionScreenPending: false,
+  hangupKind: undefined,
   userTurns: SCAMMER_HANGUP_MIN_USER_TURNS,
   pendingInstruction: false,
   smsAwaitingUser: false,
@@ -52,6 +55,8 @@ const EXPECTED_TABLE: ReadonlyArray<readonly [string, ScammerHangupStatus, boole
   ["4", "blocked_transfer", false],
   // §132.13 — 4-b(후속 단계가 남음 · 경로 무관).
   ["4-b", "blocked_follow_up", false],
+  // P1 M1 — 4-c(결정 화면 전 goal 끊기 · give_up 통과).
+  ["4-c", "blocked_decision", false],
   ["5", "too_early", false],
   ["6", "blocked_pending", false],
   ["7", "limit_reached", false],
@@ -62,11 +67,11 @@ function assertTableShape(rules: readonly ScammerHangupRule[]): void {
   assert.deepEqual(
     rules.map((r) => [r.row, r.status, r.hangup] as const),
     EXPECTED_TABLE,
-    "판정표의 행 · 순서 · 끊기 여부가 §79.19 (3) 순서(1 · 2 · 2-b · 8 · 3 · 4 · 5 · 6 · 7 · 9)와 다르다",
+    "판정표의 행 · 순서 · 끊기 여부가 정본 순서(1 · 2 · 2-b · 8 · 3 · 4 · 4-b · 4-c · 5 · 6 · 7 · 9)와 다르다",
   );
 }
 
-test("[G501 · G526 · G553] 판정표가 §79.19 (3) 순서 그대로다(10행 — 8행은 2-b 바로 뒤)", () => {
+test("[G501 · G526 · G553] 판정표가 §79.19 (3) 순서 그대로다(12행 — 8행은 2-b 바로 뒤 · 4-b · 4-c는 4 바로 뒤)", () => {
   assertTableShape(SCAMMER_HANGUP_RULES);
   assert.equal(SCAMMER_HANGUP_MIN_USER_TURNS, 3, "하한 판단값(OQ-A118 — 사용자 발화 3)이 바뀌었다 — User 확정 없이 바꾸지 말 것");
 });
@@ -184,6 +189,7 @@ function nineRowStatusNewOrder(i: ScammerHangupInput): ScammerHangupStatus {
   if (i.isMockTurn) return "mock_turn";
   if (i.verifyEnabled && !i.transferPlaced && i.transferReachable && !i.goalActionDone) return "blocked_transfer";
   if (i.followUpPending) return "blocked_follow_up";
+  if (i.decisionScreenPending && i.hangupKind !== undefined && i.hangupKind !== "give_up") return "blocked_decision";
   if (i.userTurns < SCAMMER_HANGUP_MIN_USER_TURNS) return "too_early";
   if (i.pendingInstruction || i.smsAwaitingUser) return "blocked_pending";
   if (i.limitReached) return "limit_reached";
@@ -199,18 +205,20 @@ function* allInputs(relay: ScammerHangupInput["relay"]): Generator<ScammerHangup
           for (const transferPlaced of bools)
             for (const transferReachable of bools)
              for (const goalActionDone of bools)
+              for (const decisionScreenPending of bools)
+              for (const hangupKind of [undefined, "goal", "give_up"] as const)
               for (const userTurns of [0, 2, 3, 9])
                 for (const pendingInstruction of bools)
                   for (const smsAwaitingUser of bools)
                     for (const limitReached of bools)
                       for (const alreadyAccepted of bools)
                         yield {
-                          status, channel, isMockTurn, verifyEnabled, transferPlaced, transferReachable, goalActionDone, followUpPending: false, userTurns,
+                          status, channel, isMockTurn, verifyEnabled, transferPlaced, transferReachable, goalActionDone, followUpPending: false, decisionScreenPending, hangupKind, userTurns,
                           pendingInstruction, smsAwaitingUser, limitReached, alreadyAccepted, relay,
                         };
 }
 
-const INPUT_COMBOS = 3 * 3 * 2 * 2 * 2 * 2 * 2 * 4 * 2 * 2 * 2 * 2;
+const INPUT_COMBOS = 3 * 3 * 2 * 2 * 2 * 2 * 2 * 2 * 3 * 4 * 2 * 2 * 2 * 2;
 
 test("[G526 ⓐ] relay 부재 · 마지막 leg — 전 입력 조합에서 새 순서 9행 판정과 같다(회귀 0)", () => {
   let n = 0;
@@ -235,6 +243,7 @@ test("[G553] 표식 있는 입력은 3 · 4 · 5 · 6 · 7행 조건을 무엇�
   const laterRowPatches: ReadonlyArray<readonly [string, Partial<ScammerHangupInput>, ScammerHangupStatus]> = [
     ["3 Mock", { isMockTurn: true }, "mock_turn"],
     ["4 전환 전", { verifyEnabled: true }, "blocked_transfer"],
+    ["4-c 결정 화면 전 goal", { decisionScreenPending: true, hangupKind: "goal" }, "blocked_decision"],
     ["5 하한 미달", { userTurns: 0 }, "too_early"],
     ["6 지시 대기", { pendingInstruction: true }, "blocked_pending"],
     ["6 문자 대기", { smsAwaitingUser: true }, "blocked_pending"],
@@ -271,6 +280,8 @@ test("[G501] 첫 번째로 맞는 행이 이긴다 — 두 행이 동시에 맞�
     ["8 > 3", { alreadyAccepted: true, isMockTurn: true }, "already_accepted"],
     ["3 > 4", { isMockTurn: true, verifyEnabled: true }, "mock_turn"],
     ["4 > 5", { verifyEnabled: true, userTurns: 1 }, "blocked_transfer"],
+    ["4-b > 4-c", { followUpPending: true, decisionScreenPending: true, hangupKind: "goal" }, "blocked_follow_up"],
+    ["4-c > 5", { decisionScreenPending: true, hangupKind: "goal", userTurns: 1 }, "blocked_decision"],
     ["5 > 6", { userTurns: 1, pendingInstruction: true }, "too_early"],
     ["5 > 6(문자)", { userTurns: 1, smsAwaitingUser: true }, "too_early"],
     ["6 > 7", { pendingInstruction: true, limitReached: true }, "blocked_pending"],
@@ -283,14 +294,19 @@ test("[G501] 첫 번째로 맞는 행이 이긴다 — 두 행이 동시에 맞�
   }
 });
 
-test("[G501] kind는 판정 입력이 아니다 · 누락 · 오기입은 unspecified(거절 0)", () => {
+test("[G501] 사유 판독 — 누락 · 오기입은 unspecified(거절 0) · ⭐ P1 M1: 사유는 4-c행만 읽는다", () => {
   assert.equal(normalizeScammerHangupKind("goal"), "goal");
   assert.equal(normalizeScammerHangupKind("give_up"), "give_up");
   for (const raw of [undefined, null, "", "GOAL", "giveup", 1, {}]) {
     assert.equal(normalizeScammerHangupKind(raw), "unspecified", String(raw));
   }
-  // 입력 타입에 kind가 없다 — 판정에 끼어들 자리가 구조적으로 없다.
+  // P1 M1 — 사유는 `hangupKind` 하나로만 들어오고 4-c행 말고는 판정을 바꾸지 않는다: 결정 화면이 없으면 네 사유 모두 같은 판정이다.
   assert.ok(!("kind" in PASSING));
+  for (const hangupKind of [undefined, "goal", "give_up", "unspecified"] as const) {
+    assert.equal(decideScammerHangup({ ...PASSING, hangupKind }).status, "accepted", String(hangupKind));
+  }
+  const rulesReadingKind = SCAMMER_HANGUP_RULES.filter((r) => r.when.toString().includes("hangupKind")).map((r) => r.row);
+  assert.deepEqual(rulesReadingKind, ["4-c"], "사유를 읽는 행이 4-c 말고도 생겼다");
 });
 
 test("[G501 배선] decide.ts는 잎 모듈이다 — 값 import 0(타입 import만)", () => {
@@ -381,7 +397,7 @@ test("[G552 ⓓ 역검증] 옛 식별자를 끼운 요청 타입 사본은 같�
 // 사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과 키가 들어오면 빨개진다. C6-R이 `transferReachable`(서버 값) 1키를 더했다.
 // §104.9 — 메신저 단계 경로 표시(`messengerStageAllowed` · 폴백만 참)가 13번째 키다(사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과는 여전히 0).
 const G600_KEYS = [
-  "alreadyAccepted", "channel", "followUpPending", "goalActionDone", "isMockTurn", "limitReached", "messengerStageAllowed", "pendingInstruction", "relay",
+  "alreadyAccepted", "channel", "decisionScreenPending", "followUpPending", "goalActionDone", "hangupKind", "isMockTurn", "limitReached", "messengerStageAllowed", "pendingInstruction", "relay",
   "smsAwaitingUser", "status", "transferPlaced", "transferReachable", "turnsSinceCallEntry", "userTurns", "verifyEnabled",
 ];
 
@@ -395,7 +411,8 @@ function inputTypeKeys(src: string): string[] {
 
 // §108(사용자 결정 · DECISIONS #223) — 목표 화면 행동 완료(`goalActionDone` — 랜딩 제출 · 앱 설치 응낙 · 서버 기록만)가 14번째 키다. 4행만 읽는다.
 // §131(14) — 메신저에서 넘어온 통화의 통화 진입 뒤 **참가자** 발화 수(`turnsSinceCallEntry` — `userTurns`와 같은 종류 · 5행만 읽는다)가 15번째 키다.
-test("[G600] ScammerHangupInput 키 집합 = 정확히 16키(§108 +1 · §131 +1 · §132.13 +1 · 사기범 턴 · 경과 시간 · 반복 · 확인 결과 0)", () => {
+// P1 M1 — 결정 화면 미완료(`decisionScreenPending`)와 끊기 사유(`hangupKind`)가 17 · 18번째 키다. 둘 다 4-c행만 읽는다.
+test("[G600] ScammerHangupInput 키 집합 = 정확히 18키(§108 +1 · §131 +1 · §132.13 +1 · P1 M1 +2 · 사기범 턴 · 경과 시간 · 반복 · 확인 결과 0)", () => {
   const src = readFileSync(path.join(SRC_DIR, "decide.ts"), "utf8").replace(/\r\n/g, "\n");
   assert.deepEqual(inputTypeKeys(src), G600_KEYS);
   assert.deepEqual(Object.keys(PASSING).sort(), G600_KEYS, "기준 입력과 타입 키가 갈렸다");

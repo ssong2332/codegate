@@ -41,7 +41,7 @@ import {
 } from "../inCallSms/smsGate";
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms } from "../inCallSms/smsDelivery";
-import { goalFollowUpFor, hasCompletedGoalAction, readMockScreenCompletion } from "../scammerHangup/goalAction";
+import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, readMockScreenCompletion } from "../scammerHangup/goalAction";
 import { FALLBACK_GOAL_WRAP_UP_INSTRUCTION } from "../scammerHangup/guidance";
 import type { SmsDeliveryInput } from "../inCallSms/smsDelivery";
 import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
@@ -397,23 +397,36 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // ②-c′ 사기범 끊기 **사전 판정**(T192 C3 · Architecture.md §79.7 · §79.19 (5) 10 · AC-103). LLM 호출 전에 아는 값만으로
     // 실시간 콜러블과 **같은 판정 함수**를 부른다(AC-103 (f)). `accepted`인 턴에만 [진행 강제] 끊기 규칙이 SIGNAL 변형으로
     // 실린다(그 밖 = NONE — 종전 문면). 신호를 실제로 받아들일지는 응답 뒤 사후 판정이 다시 정한다(Mock · 문자 마커).
-    // §108 — 4행 입력(목표 화면 행동 완료 · 실시간 콜러블과 같은 함수). 확인 무력화 세션에서만 읽는다 · 실패 = 미완료(fail-closed).
+    // §108 — 4행 입력(목표 화면 행동 완료 · 실시간 콜러블과 같은 함수) · 실패 = 미완료(fail-closed).
+    // ⭐ P1 M1 — 종전에는 확인 무력화 · 후속 단계 세션에서만 읽었다. 이제 모든 세션에서 계산한다(4-c행 입력과 같은 읽기 · 실시간과 같은 규칙).
     let goalActionDone = false;
     // §132.13 — 후속 단계 변형은 확인 무력화 세션이 아니어도 C-5를 계산한다(4-b행 입력 · 실시간과 같은 계산).
     const followUpUserTurns = goalFollowUpFor(session.scenarioId, session.flowVariantId);
-    if (verifyEnabled || followUpUserTurns !== undefined) {
-      try {
-        goalActionDone = hasCompletedGoalAction({
-          delivered: smsDeliveredLoaded ? smsDelivered : [],
-          mockScreens: await readMockScreenCompletion(sessionRef),
-          declared: smsDeclared,
-          declaredKnown: smsDeclaredReason === undefined,
-          userTurns: userTurnsNow,
-          followUpUserTurns, // §115 C-5
-        });
-      } catch {
-        goalActionDone = false;
-      }
+    const decisionScreenInput = {
+      scenarioId: session.scenarioId,
+      flowVariantId: session.flowVariantId,
+      // 도착 기록을 못 읽었으면 제출 기록도 없다고 본다(4-c행 fail-closed).
+      delivered: smsDeliveredLoaded ? smsDelivered : [],
+      declared: smsDeclared,
+      declaredKnown: smsDeclaredReason === undefined,
+      verifyEnabled,
+      followUpUserTurns,
+    };
+    // P1 M1 — 4-c행 입력. 읽기 실패면 선언만으로 판정한다(결정 화면을 선언한 루트 = 대기 · `give_up` 신호는 그대로 통과).
+    let decisionScreenPending = isDecisionScreenPending({ ...decisionScreenInput, delivered: [], mockScreens: [] });
+    try {
+      const mockScreens = await readMockScreenCompletion(sessionRef);
+      goalActionDone = hasCompletedGoalAction({
+        delivered: smsDeliveredLoaded ? smsDelivered : [],
+        mockScreens,
+        declared: smsDeclared,
+        declaredKnown: smsDeclaredReason === undefined,
+        userTurns: userTurnsNow,
+        followUpUserTurns, // §115 C-5
+      });
+      decisionScreenPending = isDecisionScreenPending({ ...decisionScreenInput, mockScreens });
+    } catch {
+      goalActionDone = false;
     }
     const callEntryTurns = userTurnsSinceCallEntry(session.channel, session.channelHistory, storedHistory);
     const hangupFacts: FallbackHangupFacts = {
@@ -430,6 +443,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       }),
       goalActionDone,
       followUpPending: followUpUserTurns !== undefined && !goalActionDone,
+      decisionScreenPending,
       userTurns: userTurnsNow,
       limitReached,
       alreadyAccepted: Boolean(session.scammerHangup),
@@ -995,6 +1009,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       smsMarkerDeliveryFailed ? { ...hangupFacts, smsDeliveredLoaded: false } : hangupFacts,
       smsDeliveredAfterReply,
       completion.isMock,
+      // P1 M1 — 사후 판정은 응답의 끊기 신호 사유로 4-c행을 본다(신호 없음 = undefined = 종전).
+      endCallSignal,
     );
     const hangupEffect = resolveFallbackHangupEffect({
       endCall: endCallSignal,

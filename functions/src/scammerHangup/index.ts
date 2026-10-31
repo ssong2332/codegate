@@ -18,7 +18,7 @@ import { resolveDeclaredSms, sessionDeclaresInCallSms } from "../inCallSms/smsGa
 import { readDeliveredSms } from "../inCallSms/smsDelivery";
 import type { SessionDoc } from "../shared/types";
 import { decideAndMarkRealtimeHangup, isVerifyInterceptSession } from "./commit";
-import { goalFollowUpFor, hasCompletedGoalAction, readMockScreenCompletion } from "./goalAction";
+import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, readMockScreenCompletion } from "./goalAction";
 import { scammerHangupGuidance } from "./guidance";
 import { readScammerHangupRequest } from "./readRequest";
 import type { RequestScammerHangupRequest, RequestScammerHangupResponse } from "./types";
@@ -60,25 +60,37 @@ export const requestScammerHangup = onCall<
 
   const db = getFirestore();
   const sessionRef = db.collection("sessions").doc(sessionId);
-  // §108 — 4행 입력(목표 화면 행동 완료). 확인 무력화 세션에서만 읽는다(그 밖은 4행이 애초에 꺼져 있다) · 실패 = 미완료(fail-closed).
+  // §108 — 4행 입력(목표 화면 행동 완료) · 실패 = 미완료(fail-closed).
+  // ⭐ P1 M1 — 종전에는 확인 무력화 · 후속 단계 세션에서만 계산했다. 이제 선언을 해석할 수 있는 모든 세션에서 계산한다(4-c행 입력과 같은 읽기).
   let goalActionDone = false;
   // §115 — 후속 단계 변형(기관 사칭 고급 2벌)만 값이 있다. 막힌 응답의 문면을 고르는 데도 쓴다.
   const followUpUserTurns = goalFollowUpFor(session.scenarioId, session.flowVariantId);
-  // §132.13 — 후속 단계 변형은 확인 무력화 세션이 아니어도 C-5를 계산한다(4-b행 입력).
-  if (isVerifyInterceptSession(session) || followUpUserTurns !== undefined) {
-    try {
-      const { declared, reason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId);
-      goalActionDone = hasCompletedGoalAction({
-        delivered,
-        mockScreens: await readMockScreenCompletion(sessionRef),
-        declared,
-        declaredKnown: reason === undefined,
-        userTurns,
-        followUpUserTurns, // §115 C-5
-      });
-    } catch {
-      goalActionDone = false;
-    }
+  const verifySession = isVerifyInterceptSession(session);
+  const { declared, reason: declaredReason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId);
+  const decisionScreenInput = {
+    scenarioId: session.scenarioId,
+    flowVariantId: session.flowVariantId,
+    delivered,
+    declared,
+    declaredKnown: declaredReason === undefined,
+    verifyEnabled: verifySession,
+    followUpUserTurns,
+  };
+  // P1 M1 — 4-c행 입력. 읽기 실패면 화면이 없다고 보고 선언만으로 판정한다(결정 화면을 선언한 루트 = 대기 · fail-closed · `give_up`은 그대로 통과).
+  let decisionScreenPending = isDecisionScreenPending({ ...decisionScreenInput, delivered: [], mockScreens: [] });
+  try {
+    const mockScreens = await readMockScreenCompletion(sessionRef);
+    goalActionDone = hasCompletedGoalAction({
+      delivered,
+      mockScreens,
+      declared,
+      declaredKnown: declaredReason === undefined,
+      userTurns,
+      followUpUserTurns, // §115 C-5
+    });
+    decisionScreenPending = isDecisionScreenPending({ ...decisionScreenInput, mockScreens });
+  } catch {
+    goalActionDone = false;
   }
   const decision = await db.runTransaction((tx) =>
     decideAndMarkRealtimeHangup<FirebaseFirestore.DocumentReference>(
@@ -95,6 +107,7 @@ export const requestScammerHangup = onCall<
       Timestamp.now(),
       goalActionDone,
       followUpUserTurns !== undefined && !goalActionDone,
+      decisionScreenPending,
     ),
   );
 
@@ -107,6 +120,7 @@ export const requestScammerHangup = onCall<
     kind,
     userTurns,
     goalActionDone,
+    decisionScreenPending,
   });
 
   // §115 — 후속 단계가 남아 막혔으면 되풀이 금지 문면(그 밖은 종전 문면).

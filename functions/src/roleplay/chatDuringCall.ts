@@ -39,7 +39,7 @@ import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddres
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { resolveDeclaredSms, resolveRouteAccountNumber } from "../inCallSms/smsGate";
 import { routeEndsWithoutAccount } from "../scenarios/flowVariants";
-import { goalFollowUpFor, hasCompletedGoalAction } from "../scammerHangup/goalAction";
+import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending } from "../scammerHangup/goalAction";
 import { applyFictionalBank, resolveFictionalBankName } from "../shared/fictionalBank";
 import type { MessageDoc, ScenarioPromptDoc, SessionDoc } from "../shared/types";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
@@ -143,6 +143,8 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
     goalActionDone: false,
     // §132.13 — 4-b행 입력. C-5는 선언 · 도착 기록 · 발화 수만 본다(화면 기록 read 0). 도착 기록을 못 읽었으면 미충족(막는 쪽).
     followUpPending: chatFollowUpPending(session.scenarioId, session.flowVariantId, smsDeliveredLoaded ? delivered : [], claim.history.filter((m) => m.role === "user").length + 1),
+    // P1 M1 — 4-c행 입력(화면 기록 read 0 — 이 경로는 `give_up` 신호만 받으므로 4-c행이 막을 일이 없다 · 같은 함수로 채워 둔다).
+    decisionScreenPending: chatDecisionScreenPending(session, smsDeliveredLoaded ? delivered : []),
     userTurns: claim.history.filter((m) => m.role === "user").length + 1,
     limitReached: false,
     alreadyAccepted: Boolean(session.scammerHangup),
@@ -217,7 +219,7 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
   const giveUp =
     endCall === "give_up" &&
     hangupMode === "signal" &&
-    decideFallbackHangup(hangupFacts, delivered, completion.isMock).status === "accepted";
+    decideFallbackHangup(hangupFacts, delivered, completion.isMock, endCall).status === "accepted";
   if (endCall !== undefined && !giveUp) {
     // G170 — 종류 · 행만(대사 0).
     logger.info("[§128] 통화 중 카톡 끊기 신호 무시", { sessionId, kind: endCall, row: hangupPre.row, mode: hangupMode });
@@ -267,4 +269,19 @@ function chatFollowUpPending(
   if (followUpUserTurns === undefined) return false;
   const { declared, reason } = resolveDeclaredSms(scenarioId, flowVariantId);
   return !hasCompletedGoalAction({ delivered, mockScreens: [], declared, declaredKnown: reason === undefined, userTurns, followUpUserTurns });
+}
+
+/** P1 M1 — 4-c행 입력(화면 기록 read 0 — 설치 화면 응낙은 보지 않는다 · 이 경로는 `give_up`만 받는다). */
+function chatDecisionScreenPending(session: SessionDoc, delivered: readonly DeliveredSmsRecord[]): boolean {
+  const { declared, reason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId);
+  return isDecisionScreenPending({
+    scenarioId: session.scenarioId,
+    flowVariantId: session.flowVariantId,
+    delivered,
+    mockScreens: [],
+    declared,
+    declaredKnown: reason === undefined,
+    verifyEnabled: hasVerifyIntercept(session.scenarioId) && normalizeDifficultyLevel(session.difficultyLevel) === "advanced",
+    followUpUserTurns: goalFollowUpFor(session.scenarioId, session.flowVariantId),
+  });
 }

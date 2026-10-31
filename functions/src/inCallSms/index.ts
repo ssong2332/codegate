@@ -209,10 +209,13 @@ export const deliverInCallSms = onCall<
   // §108 — 모델 도구가 목적을 잘못 골랐는데 남은 필수 문자의 게이트가 열려 있으면 그 문자를 보낸다(판정표 `correctModelSmsPurpose`).
   // 계획은 트랜잭션 밖 조회로 세우고, 발송은 아래 단일 통로가 같은 게이트를 다시 통과시킨다(백스톱과 같은 형태).
   let purposeCorrectedFrom: string | undefined;
+  // P1 M2 — 이미 도착한 목적을 다시 부르면 보정하지 않고(거절 · 쓰기 0) 그 문자를 다시 가리키라는 지시를 거절 문면 대신 돌려준다.
+  let alreadyDeliveredInstruction: string | undefined;
   if (trigger !== "backstop") {
     const corrected = correctModelSmsPurpose({ purpose, declared, delivered: await readDeliveredSms(sessionRef), userTurns });
     purpose = corrected.purpose;
     purposeCorrectedFrom = corrected.correctedFrom;
+    alreadyDeliveredInstruction = corrected.alreadyDeliveredInstruction;
   }
 
   // §81 — 세션 가상 은행명(문자 본문·도착 지시·대사가 같은 이름). 부재(옛 세션)는 sessionId 해시.
@@ -241,12 +244,18 @@ export const deliverInCallSms = onCall<
     scammerTranscriptTurns,
     ...(declaredReason ? { declaredReason } : {}),
     ...(purposeCorrectedFrom ? { purposeCorrectedFrom } : {}),
+    ...(alreadyDeliveredInstruction ? { alreadyDeliveredResumed: true } : {}),
     ...(smsClaimed ? { smsClaimed } : {}),
   });
 
   if (result.status !== "delivered") {
     // §117 — 모델 도구 경로면 거부 문면 앞에 되풀이 금지 꼬리(`toolGuidance.ts` 판정표 2행).
-    return { status: result.status, declineInstruction: withModelToolNoRepeat(declineInstructionFor(result.status), trigger) };
+    // P1 M2 — 이미 도착(P-2a)이면 그 문자를 다시 가리키는 지시. 사전 판정과 발송 판정이 갈렸으면(동시 요청 경합) 종전 거절 문면.
+    const decline =
+      result.status === "already_delivered" && alreadyDeliveredInstruction !== undefined
+        ? alreadyDeliveredInstruction
+        : declineInstructionFor(result.status);
+    return { status: result.status, declineInstruction: withModelToolNoRepeat(decline, trigger) };
   }
   const placed = await isVerifyOfferPlaced(db, sessionId, session.scenarioId);
   const item = result.item;

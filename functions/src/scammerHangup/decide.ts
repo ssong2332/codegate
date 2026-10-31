@@ -4,7 +4,8 @@
 // ⛔ 잎 모듈 — Firestore · 네트워크 · LLM import 0(값 import 0, 타입 import만). 텍스트 폴백(`sendMessage`)과
 //    실시간 콜러블(`requestScammerHangup`)이 **이 함수 하나**를 부른다(AC-103 (f) "같은 조건").
 // ⛔ 행은 위에서부터 **첫 번째로 맞는 행**이 이긴다. 표에 없는 경우는 행 추가를 묻는다(§79.2 머리).
-// ⛔ `kind`(goal/give_up)는 판정 입력이 아니다 — 끊는 판단은 모델이 하고 서버 하한은 *막는* 쪽만 맡는다.
+// ⛔ 끊는 판단은 모델이 하고 서버 하한은 *막는* 쪽만 맡는다. ⭐ P1 M1(2026-10-31) — 사유(`hangupKind`)는 **4-c행 하나만** 읽는다
+//    (결정 화면 전 `goal` 끊기는 막고 `give_up`은 막지 않는다). 그 밖 행은 종전대로 사유를 보지 않는다.
 import type { MessengerChannel, ScammerHangupKind, SessionStatus } from "../shared/types";
 
 /**
@@ -23,6 +24,7 @@ export type ScammerHangupStatus =
   | "mock_turn"
   | "blocked_transfer"
   | "blocked_follow_up"
+  | "blocked_decision"
   | "too_early"
   | "blocked_pending"
   | "limit_reached"
@@ -66,6 +68,17 @@ export type ScammerHangupInput = {
    * 4행이 꺼진 경로(폴백 · 전환 도달 불가)에서도 실시간과 같게 결말 단계 전 끊기를 막는다. ⭐ 옵셔널이 아니라 필수 키.
    */
   followUpPending: boolean;
+  /**
+   * ⭐ P1 M1(2026-10-31 · 운영 세션 b94b9eec 검찰 고급 `fv-h3vn`) — 결정 화면(필수 계좌 · 링크 문자가 여는 모의 화면 중 선언 순서상 마지막)을 선언한 루트에서
+   * 참가자가 그 화면을 아직 마치지 않았는가(`goalAction.ts` `isDecisionScreenPending` — 4행 · 4-b행 루트는 거짓). 참이면 4-c행이 `goal` 끊기를 막는다.
+   * ⭐ 옵셔널이 아니라 필수 키(빠뜨리면 컴파일 오류).
+   */
+  decisionScreenPending: boolean;
+  /**
+   * ⭐ P1 M1 — 모델이 고른 끊기 사유. `undefined` = 아직 모른다(폴백 **사전** 판정 — LLM 전이라 신호가 없다). 4-c행만 읽는다:
+   * `give_up` · `undefined`는 통과 · `goal` · `unspecified`(누락 · 오기입)는 막는다(fail-closed). ⭐ 필수 키.
+   */
+  hangupKind: ScammerHangupKind | undefined;
   /**
    * 사용자 발화 수(이번에 답하려는 발화 포함). 폴백 = 서버 `userTurnsNow` · 실시간 = **클라 주장값**(OQ-A120 —
    * S5b `deliverInCallSms`와 같은 등급 · 같은 판독 규칙 `readScammerHangupRequest`).
@@ -122,7 +135,7 @@ export function isNonLastRelayLeg(relay: HangupRelayContext | undefined): boolea
 }
 
 /**
- * §79.2 판정표(10행) — 배열 순서 = 판정 순서. ⛔ 순서를 바꾸지 말 것(G501 · G553이 순서까지 고정한다).
+ * §79.2 판정표(12행 — §132.13 4-b · P1 M1 4-c 포함) — 배열 순서 = 판정 순서. ⛔ 순서를 바꾸지 말 것(G501 · G553이 순서까지 고정한다).
  * ⭐ T192 C3(§79.19 (3) · C1 Minor-1) — 8행을 2-b 바로 뒤로: `1 · 2 · 2-b · 8 · 3 · 4 · 5 · 6 · 7 · 9`. 표식이 생긴 뒤
  * 3~7행 입력은 바뀔 수 없거나(단조) 바뀌어도 무의미하다(이미 끊는 중) ⇒ 승인 뒤 재호출이 판정을 뒤집지 않는다.
  * 1 · 2 · 2-b가 앞에 남는 이유: 세션이 끝났거나 · 메신저 단계거나 · 다른 leg면 승인 유지가 틀린 답이다.
@@ -144,6 +157,13 @@ export const SCAMMER_HANGUP_RULES: readonly ScammerHangupRule[] = [
   },
   // §132.13 — 후속 단계 변형의 결말 단계가 남았으면 막는다(경로 무관 · 거절 끊기 포함 — 사용자 결정 2026-10-25 · 실시간은 종전에도 4행이 같은 칸을 막았다).
   { row: "4-b", status: "blocked_follow_up", hangup: false, when: (i) => i.followUpPending },
+  // ⭐ P1 M1 — 결정 화면을 마치기 전 `goal` 끊기(사유 누락 포함)를 막는다. `give_up`(거절 · 의심으로 더 진행할 수 없음)과 사유를 아직 모르는 폴백 사전 판정은 통과.
+  {
+    row: "4-c",
+    status: "blocked_decision",
+    hangup: false,
+    when: (i) => i.decisionScreenPending && i.hangupKind !== undefined && i.hangupKind !== "give_up",
+  },
   {
     row: "5",
     status: "too_early",
