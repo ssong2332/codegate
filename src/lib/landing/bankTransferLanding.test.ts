@@ -22,9 +22,9 @@ const listOf = (source: string): string[] => {
   return [...body.matchAll(/"([a-z-]+)"/g)].map((m) => m[1]).sort();
 };
 
-test("[P2 C1] 클라 · 서버 훈련용 이체 화면 목록이 같다(5종)", () => {
+test("[P2 C1] 클라 · 서버 훈련용 이체 화면 목록이 같다(통화 중 문자 5종 + 메신저 칩 2종)", () => {
   assert.deepEqual(listOf(component), listOf(catalog));
-  assert.equal(listOf(component).length, 5);
+  assert.equal(listOf(component).length, 7);
 });
 
 test("[P2 C2] 폼 → 확인 → 인증 → 완료 · 제출 콜백은 인증 버튼에서만(무인자)", () => {
@@ -61,4 +61,12 @@ test("[P2 C5] 머리띠 은행명은 세션 가상 은행명 변수뿐(리터럴
   assert.ok(code.includes("`${prefilledTransfer.bankName} 모바일뱅킹`"));
   const bankBlock = code.slice(code.indexOf("if (bankTransfer && !submitted"), code.indexOf("const recordDocument"));
   assert.equal(/[가-힣]{1,6}은행/.test(bankBlock), false, "확인 · 인증 화면에 은행 이름 리터럴 0");
+});
+
+test("[P2-c] 메신저 칩 — 대화방이 칩의 세션 은행명 · 계좌를 받는 계좌(읽기 전용) · 머리띠로 넘기고, 받는 분 이름을 지어내지 않는다", () => {
+  const room = readFileSync("src/components/MessengerChatRoom.tsx", "utf8");
+  assert.ok(room.includes("prefilledAccount: `${fakeLanding.bankName} ${fakeLanding.accountNumber}`"));
+  assert.ok(room.includes("prefilledTransfer: { bankName: fakeLanding.bankName }"));
+  assert.ok(code.includes("...(holder ? [[\"받는 분\", holder] as [string, string]] : [])"), "이름을 모르면 받는 분 행 0");
+  assert.ok(code.includes("`이 계좌로 ${amountText}을 보낼까요?`"));
 });

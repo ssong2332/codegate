@@ -11,6 +11,7 @@ import {
   DEFAULT_MOCK_SCREEN_KIND,
   findDefaultCredentialLanding,
   findMockScreenItem,
+  isBankTransferLanding,
   isMockScreenReachable,
   resolveMockScreenKind,
 } from "../scenarios/mockScreens";
@@ -33,6 +34,9 @@ const LINK_LABELS: Record<string, string> = {
   "parcel-install": "배송 확인 앱 설치하기",
   // §110.2(실기 신고 10) — 자녀 사칭 카톡 고급의 모의 보험 접수 앱 설치 칩.
   "child-insurance-install": "보험 접수 앱 설치하기",
+  // ⭐ P2-c(X6) — 자녀 · 지인 사칭의 훈련용 이체 화면 칩(실제 뱅킹 앱을 열 이유를 없앤다).
+  "child-bank-transfer": "이체하기",
+  "friend-bank-transfer": "송금하기",
 };
 const DEFAULT_LINK_LABEL = "확인하기";
 
@@ -135,4 +139,18 @@ function reachableLandingIdFor(
     }),
   );
   return fallback?.landingId;
+}
+
+/**
+ * ⭐ P2-c(2026-10-31 · X6) — 훈련용 이체 화면 칩(`BANK_TRANSFER_LANDINGS`)에만 세션 가상 은행명 · 세션 계좌를 싣는다(받는 계좌 미리 채움 원천 —
+ * 통화 중 문자의 `bankName` · `accountNumber`와 같은 역할). 그 밖 칩은 그대로 돌려준다(첨부 문서 모양 무변경). 입력이 `undefined`면 `undefined`.
+ */
+export function withBankTransferPrefill(
+  attachments: MessengerAttachment[] | undefined,
+  bankName: string,
+  accountNumber: string,
+): MessengerAttachment[] | undefined {
+  return attachments?.map((attachment) =>
+    isBankTransferLanding(attachment.fakeLandingId) ? { ...attachment, bankName, accountNumber } : attachment,
+  );
 }

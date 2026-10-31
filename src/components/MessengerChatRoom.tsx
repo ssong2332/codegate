@@ -229,6 +229,9 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
     fakeLandingId: string;
     displayText: string;
     landingKind?: MockScreenKind;
+    /** ⭐ P2-c(X6) — 훈련용 이체 화면 칩의 세션 은행명 · 계좌(서버가 실은 값 — 참가자 입력 아님). */
+    bankName?: string;
+    accountNumber?: string;
   } | null>(null);
   // T30 — 에스컬레이션 전이 연출(P-18) 표시 중. true가 되면 잠시 후 /session/play로 이동한다.
   const [escalating, setEscalating] = useState(false);
@@ -734,6 +737,9 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
           fakeLandingId: attachment.fakeLandingId,
           displayText: attachment.displayText,
           ...(attachment.landingKind ? { landingKind: attachment.landingKind } : {}),
+          ...(attachment.bankName && attachment.accountNumber
+            ? { bankName: attachment.bankName, accountNumber: attachment.accountNumber }
+            : {}),
         });
         // 목업이 열린 사실만 남긴다 — **이것은 속은 순간이 아니다**(D-51 ③,
         // AC-062 보호). 승격되는 것은 아래 onInstallConsent뿐이다.
@@ -1360,6 +1366,13 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
           // ⚠️ 위 링크 칩 탭의 "shown"과 달리 이것만 승격된다(AC-080 (b) — 열어보고 닫은 참가자를
           // 실패로 낙인찍지 않는다).
           onCredentialSubmit={() => recordMockScreen(fakeLanding.fakeLandingId, "submitted")}
+          // ⭐ P2-c(X6) — 훈련용 이체 화면의 받는 계좌(읽기 전용) · 머리띠 은행명. 받는 분 이름 · 금액은 대화에서 정해져 미리 채우지 않는다.
+          {...(fakeLanding.bankName && fakeLanding.accountNumber
+            ? {
+                prefilledAccount: `${fakeLanding.bankName} ${fakeLanding.accountNumber}`,
+                prefilledTransfer: { bankName: fakeLanding.bankName },
+              }
+            : {})}
         />
       )}
 

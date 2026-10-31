@@ -17,6 +17,8 @@ import { buildInCallSmsDoc } from "../../inCallSms/buildDoc";
 import { extractAccountHolder, extractTransferAmount } from "../../shared/fictionalBank";
 import { finalDecisionScreenSms } from "../../scammerHangup/goalAction";
 import { resolveDeclaredSms } from "../../inCallSms/smsGate";
+import { sessionReachableLandingIds } from "../reachability";
+import { extractLinkMarker, withBankTransferPrefill } from "../../roleplay/linkMarker";
 
 const CONVERTED: readonly [string, string, string][] = [
   ["loan-refinance-scam", "loan-account", "loan-repay-transfer"],
@@ -44,7 +46,8 @@ test("[P2 B1] 계좌 문자는 전부 이체 화면 링크를 갖는다 · 바�
     // 본문 계좌 줄 형식(§81.6 — 세션 계좌 추출)은 그대로다.
     assert.match(item!.body, /OO은행 \d{3}-\d{4}-\d{4}-\d{2}/);
   }
-  assert.deepEqual([...BANK_TRANSFER_LANDINGS].sort(), CONVERTED.map(([, , l]) => l).sort());
+  // P2-c — 메신저 링크 칩 2종(문자가 아니라 칩이 연다)도 같은 목록에 든다.
+  assert.deepEqual([...BANK_TRANSFER_LANDINGS].sort(), [...CONVERTED.map(([, , l]) => l), "child-bank-transfer", "friend-bank-transfer"].sort());
 });
 
 test("[P2 B2 · B3] 문자 문서 — 이체 화면 문자만 받는 분 · 금액을 싣고, 이름은 세션 가상 이름으로 바뀐 뒤 값이다", () => {
@@ -91,4 +94,31 @@ test("[P2 B4] 이체 화면 제출 = 리포트 속은 순간 원천 · 그 화�
     const { declared } = resolveDeclaredSms(scenarioId, variantId);
     assert.equal(finalDecisionScreenSms(scenarioId, declared)?.smsId, smsId, `${scenarioId}#${variantId}`);
   }
+});
+
+// ── ⭐ P2-c(X6) — 메신저 자녀 · 지인 사칭 6루트의 이체 화면 칩 ─────────────────────────────────────────
+test("[P2-c] 메신저 자녀 · 지인 사칭 전 변형이 이체 화면 칩에 닿고, 칩 라벨 · 카탈로그가 있다", () => {
+  for (const [scenarioId, landingId, variants] of [
+    ["messenger-child-impersonation-kakao", "child-bank-transfer", ["fv-34v5", "fv-tpr3", "fv-tdgg"]],
+    ["messenger-friend-loan-kakao", "friend-bank-transfer", ["fv-42wd", "fv-fvsc", "fv-bxvp"]],
+  ] as const) {
+    const screen = findMockScreenItem(scenarioId, landingId);
+    assert.equal(screen?.entrySurface, "messenger-link", landingId);
+    assert.equal(screen?.kind, "credential-form");
+    for (const variantId of variants) {
+      assert.ok(sessionReachableLandingIds(scenarioId, variantId).includes(landingId), `${scenarioId}#${variantId}`);
+    }
+    const { attachments } = extractLinkMarker(`계좌 보낼게 [[LINK:${landingId}]]`, scenarioId, { level: "intermediate", challenge: false, flowVariantId: variants[1] } as never);
+    assert.equal(attachments?.[0]?.fakeLandingId, landingId);
+    assert.notEqual(attachments?.[0]?.displayText, "확인하기", "기본 라벨이 아니라 등재 라벨");
+  }
+});
+
+test("[P2-c] 칩 미리 채움 — 이체 화면 칩에만 세션 은행명 · 계좌를 싣는다(그 밖 칩 · 부재는 그대로)", () => {
+  const transfer = { kind: "link" as const, displayText: "이체하기", fakeLandingId: "child-bank-transfer", harmless: true as const };
+  const install = { kind: "link" as const, displayText: "보험 접수 앱 설치하기", fakeLandingId: "child-insurance-install", harmless: true as const, landingKind: "app-install" as const };
+  const out = withBankTransferPrefill([transfer, install], "한결은행", "948-2716-5093-27");
+  assert.deepEqual(out?.[0], { ...transfer, bankName: "한결은행", accountNumber: "948-2716-5093-27" });
+  assert.deepEqual(out?.[1], install, "설치 칩은 무변경");
+  assert.equal(withBankTransferPrefill(undefined, "한결은행", "1"), undefined);
 });

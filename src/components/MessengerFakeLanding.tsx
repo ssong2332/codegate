@@ -607,6 +607,31 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 안전계좌",
     mockHost: "safe-keep-send.invalid",
   },
+  // ⭐ P2-c(X6) — 메신저 링크 칩이 여는 훈련용 이체 화면 2종(서버 카탈로그 mockScreens.ts와 글자 단위로 동일).
+  "child-bank-transfer": {
+    headline: "이체 금액을 입력해 주세요",
+    bodyLines: ["메시지로 받은 계좌가 채워져 있습니다."],
+    fields: [
+      { label: "입금 계좌", placeholder: "메시지로 받은 계좌번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "보낼 금액", placeholder: "보내실 금액을 입력하세요", inputMode: "numeric", amount: true },
+    ],
+    submitLabel: "이체하기",
+    successHeadline: "송금이 완료되었습니다.",
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 메시지",
+    mockHost: "child-send-link.invalid",
+  },
+  "friend-bank-transfer": {
+    headline: "송금할 금액을 입력해 주세요",
+    bodyLines: ["대화에서 받은 계좌가 채워져 있습니다."],
+    fields: [
+      { label: "받는 사람 계좌", placeholder: "메시지로 받은 계좌번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "보낼 금액", placeholder: "보내실 금액을 입력하세요", inputMode: "numeric", amount: true },
+    ],
+    submitLabel: "송금하기",
+    successHeadline: "보내기가 완료되었습니다.",
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 대화",
+    mockHost: "friend-send-link.invalid",
+  },
 };
 
 /**
@@ -620,6 +645,9 @@ const BANK_TRANSFER_LANDINGS: readonly string[] = [
   "blackmail-hush-transfer",
   "courier-fee-transfer",
   "courier-safe-transfer",
+  // P2-c — 메신저 링크 칩(자녀 · 지인 사칭).
+  "child-bank-transfer",
+  "friend-bank-transfer",
 ];
 
 /** §101 — 여러 화면 사이트의 둘째 화면부터(서버 카탈로그 `MockScreenItem.stepScreens`와 1:1 · 글자 단위 동일). */
@@ -922,9 +950,10 @@ function CredentialFormMockup({
     const amountRaw = values[copy.fields.find((field) => field.amount)?.label ?? ""] ?? "";
     const amountDigits = amountRaw.replace(/[^\d]/g, "");
     const amountText = amountDigits ? `${Number(amountDigits).toLocaleString("ko-KR")}원` : "";
-    const holder = prefilledTransfer?.holder ?? "받는 분";
+    const holder = prefilledTransfer?.holder;
+    // P2-c — 받는 분 이름을 모르는 진입(메신저 칩 — 예금주가 대화에서 정해진다)은 그 행을 그리지 않는다(지어낸 이름 0).
     const rows: [string, string][] = [
-      ["받는 분", holder],
+      ...(holder ? [["받는 분", holder] as [string, string]] : []),
       ["받는 계좌", prefilledAccount ?? ""],
       ["보내는 금액", amountText],
       ["수수료", "면제"],
@@ -945,7 +974,7 @@ function CredentialFormMockup({
         {bankStage === "confirm" ? (
           <div className="flex flex-col gap-4 px-5 pb-6 pt-5">
             <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
-              {`${holder}님에게 ${amountText}을 보낼까요?`}
+              {holder ? `${holder}님에게 ${amountText}을 보낼까요?` : `이 계좌로 ${amountText}을 보낼까요?`}
             </h1>
             <dl className="flex flex-col divide-y rounded-[10px] border" style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg }}>
               {rows.map(([label, value]) => (
