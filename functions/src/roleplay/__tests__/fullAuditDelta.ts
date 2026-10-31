@@ -11,6 +11,7 @@ import {
   HANGUP_NO_NEW_DEMAND_SENTENCE,
   IMPOSSIBLE_IDENTITY_VALUE_SENTENCE,
   LIVE_NO_IDLE_RULE,
+  OUT_OF_SERVICE_SENTENCE,
   OFF_TOPIC_REPLY_SENTENCE,
   SMS_NOT_YET_SENT_SENTENCE,
   SMS_TOOL_SPEECH_SENTENCE,
@@ -23,6 +24,20 @@ export const FULL_AUDIT_PAYLOAD_OLD = '**실존하지 않는 기관명**을 쓰�
 //   ③ §104 — Live 전용 2곳(조건형 · 있을 때만 걷어 낸다): 문자 도구 줄 끝 `SMS_NOT_YET_SENT_SENTENCE` · NO_STALL_RULE 뒤 `LIVE_NO_IDLE_RULE` 1항.
 export const FULL_AUDIT_REPEAT_ADDED =
   " 상대가 거절한 요구(예: 성함·생년월일)는 압박 문구나 근거만 바꿔 바로 다음 대답에서 다시 꺼내지 않는다 — 그 대답에서는 다른 요구로 바꾸거나, 더 작은 요구로 낮추거나, 아직 쓰지 않은 다른 수법(불이익 암시·확인 절차 차단 등)으로 넘어간다. 거절된 요구는 그 사이에 다른 카드를 쓴 뒤에만 다시 꺼낸다.";
+/** ⑩ P0 [지금, 이전, 횟수] — "once" = 모든 조립에 정확히 1회 · "maybe" = 0 또는 1회. */
+export const P0_TEXT_CHANGES: readonly (readonly [string, string, "once" | "maybe"])[] = [
+  [OUT_OF_SERVICE_SENTENCE, "", "once"],
+  [
+    "카드번호·주민번호·인증번호를 불러 달라, 화면에 뜬 번호를 읽어 달라 등",
+    "카드번호·주민번호·인증번호를 불러 달라, 현금을 찾아 어디로 가라, 앱을 설치하라, 화면에 뜬 번호를 읽어 달라 등",
+    "once",
+  ],
+  ["(전액이 어려우면 일부만)", "(전액이 어려우면 일부만, 이체가 어려우면 다른 방법으로)", "once"],
+  ["(흐름에 남은 다음 요구, 추가 정보, 비밀 유지 요구 등)", "(추가 이체, 추가 정보, 비밀 유지 요구 등)", "once"],
+  ["본인확인 항목 확인, 안내 문자·링크 확인 등", "본인확인 항목 확인, 안내 문자·링크 확인, 조회용 앱 설치 등", "maybe"],
+  ["안내 링크 확인 등", "안내 링크 확인, 앱 설치 등", "maybe"],
+];
+
 /** 두 교체로 늘어난 글자 수. */
 // §104 — 전 경로 공통으로 늘 실리는 [대화 방식] 1문장(주변 이야기 받아치기)도 더한다(조건형 ③④는 NONE 조립에 없어 빼지 않는다).
 export const FULL_AUDIT_LENGTH_DELTA =
@@ -30,7 +45,9 @@ export const FULL_AUDIT_LENGTH_DELTA =
   // §129 — NO_STALL_RULE 뒤 무조건부 1항(줄바꿈 포함).
   1 + CLAIM_CONSISTENCY_RULE.length +
   // 2026-10-31 — 본인확인 항목 끝 무조건부 1문장(있을 수 없는 생년월일 · 날짜 되묻기).
-  IMPOSSIBLE_IDENTITY_VALUE_SENTENCE.length;
+  IMPOSSIBLE_IDENTITY_VALUE_SENTENCE.length +
+  // P0(2026-10-31) — [진행 강제] 무조건부 교체분("once" 행)의 길이 차이.
+  P0_TEXT_CHANGES.filter(([, , mode]) => mode === "once").reduce((sum, [now, before]) => sum + now.length - before.length, 0);
 
 function replaceOnce(text: string, from: string, to: string, label: string): string {
   const count = text.split(from).length - 1;
@@ -66,13 +83,21 @@ export function revertFullAudit(assembled: string): string {
   const impossibleReverted = replaceOnce(toolSpeechReverted, IMPOSSIBLE_IDENTITY_VALUE_SENTENCE, "", "있을 수 없는 신상 값 되묻기");
   // ⑧ §129 — 시나리오 문면 교체(그 시나리오 조립에만 있다 — 0 또는 1회): 금액 자리 "얼마만" → 구체 금액(D5) · 상담원 인용구 존댓말(에뮬 D13) ·
   //    지인 카톡 "ㅇㅇ" 자리표시 금지 1문장(D10).
+  // ⑩ P0(2026-10-31 · in-service-experience-plan §2.1 K3) — [진행 강제] 서비스 밖 행동 예시 제거 · 금지 1문장(무조건부 — 정확히 1회) ·
+  //    고급 선행 요구 예시의 "조회용 앱 설치" · "앱 설치" 제거(조건형 — 0 또는 1회). LIVE_NO_IDLE · 자금 소진 문장은 위에서 상수째 걷어 낸다.
+  const p0Reverted = P0_TEXT_CHANGES.reduce((text, [now, before, mode]) => {
+    if (mode === "once") return replaceOnce(text, now, before, `P0 "${now.slice(0, 12)}"`);
+    const count = text.split(now).length - 1;
+    if (count > 1) throw new Error(`P0 문면 "${now}"이 조립 산출물에 ${count}회 있다(0 또는 1회여야 한다)`);
+    return count === 1 ? text.replace(now, before) : text;
+  }, impossibleReverted);
   return PROBE_129_TEXT_CHANGES.reduce(
     (text, [now, before]) => {
       const count = text.split(now).length - 1;
       if (count > 1) throw new Error(`§129 문면 "${now}"이 조립 산출물에 ${count}회 있다(0 또는 1회여야 한다)`);
       return count === 1 ? text.replace(now, before) : text;
     },
-    impossibleReverted,
+    p0Reverted,
   );
 }
 
@@ -87,3 +112,4 @@ export const PROBE_129_TEXT_CHANGES: readonly (readonly [string, string])[] = [
   ["정부 지원금 대상자로 확인됐습니다'", "정부 지원금 대상자로 확인됐다'"],
   [' 자음 "ㅇㅇ"으로 채우지도 않는다.', ""],
 ];
+

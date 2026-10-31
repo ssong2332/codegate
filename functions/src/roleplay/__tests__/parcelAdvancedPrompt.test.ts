@@ -76,8 +76,9 @@ const AFTER_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { sha2
   // §127 — 페이로드 줄에 참가자 언급 은행 되받기 1문장(+60자 · `USER_MENTIONED_FINANCIAL_SENTENCE`)으로 갱신. 직전 값: 초급 aac610a5e388(6500자) · 중급 44b6e585b4e4(5766자).
   // §129 — NO_STALL_RULE 뒤 무조건부 1항(+313자 · `CLAIM_CONSISTENCY_RULE` + 줄바꿈)으로 갱신. 직전 값: 초급 8f837c0fad8d(6560자) · 중급 b95c83661f25(5826자).
   // 2026-10-31 — 본인확인 항목 끝 "있을 수 없는 값 되묻기" 1문장(+236자 · `IMPOSSIBLE_IDENTITY_VALUE_SENTENCE`)으로 갱신. 직전 값: 초급 ae93113342a4(6873자) · 중급 8ad2cb971c20(6139자).
-  beginner: { sha256: "9ffb578f574c67c51f5f08b259aa0010307d099c410c977aeea7c98622a210fa", length: 7109 },
-  intermediate: { sha256: "ebcb922137e6bfdab96652dbe3dc6343bc160bf25b5d06759a91976e3c0e94ac", length: 6375 },
+  // P0(2026-10-31 · in-service-experience-plan §2.1 K3) — [진행 강제] 서비스 밖 행동 예시 제거 · 금지 1문장(+111자 · `fullAuditDelta.ts` P0_TEXT_CHANGES)으로 갱신. 직전 값: 초급 9ffb578f574c(7109자) · 중급 ebcb922137e6(6375자).
+  beginner: { sha256: "99314edcda719b36fc11825d3ee46237ee6044c97d744701e82626bf9dd26fb1", length: 7220 },
+  intermediate: { sha256: "694a68b5ec486dc4f357824ce3ffe6b8acddeeecf4ab3e39f31eead8e245cb67", length: 6486 },
 };
 
 test("[T194-a G586 · §84.13.3 ④] parcel 초급 · 중급 조립 = 갱신 기대값(가드레일 (5)항 포함) · 가드레일 최후미", () => {

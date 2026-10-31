@@ -97,7 +97,7 @@ export const REPEAT_BREAK_SIMILAR_INSTRUCTION =
 
 /** 1-b행 지시(서버 소유 · 클라 `LIVE_REPEAT_BREAK_TEXT.exhausted`와 같은 글자). 끊을지는 [진행 강제] 끊기 항목에 맡긴다(NONE이면 이어 간다). */
 export const REPEAT_BREAK_EXHAUSTED_INSTRUCTION =
-  "(상대가 더 보낼 돈이나 줄 정보가 없다고 분명히 말했다. 같은 요구를 다시 하지 마라. 대출처럼 아직 권하지 않은 다른 수단이 있으면 그것만 권하고, 이미 권했거나 상대가 그것도 거절하면 더 요구할 것이 남지 않은 것이니 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
+  "(상대가 더 보낼 돈이나 줄 정보가 없다고 분명히 말했다. 같은 요구를 다시 하지 마라. 수법 목록이나 통화 흐름에 있는데 아직 권하지 않은 다른 수단이 있으면 그것만 권하고, 이미 권했거나 상대가 그것도 거절하면 더 요구할 것이 남지 않은 것이니 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
 
 export function repeatBreakInstruction(kind: RepeatBreakKind | null): string | undefined {
   if (kind === "exhausted") return REPEAT_BREAK_EXHAUSTED_INSTRUCTION;
