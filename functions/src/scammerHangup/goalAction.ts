@@ -112,7 +112,7 @@ export async function readMockScreenCompletion(
 // 결정 화면 판정표(위에서부터 첫 행):
 // | # | If(서버 선언 · 서버 기록) | Then |
 // |---|---|---|
-// | D-1 | 확인 무력화 세션(4행이 맡는다) ∨ 후속 단계 변형(4-b행이 맡는다) | 대상 아님(`false`) |
+// | D-1 | 후속 단계 변형(4-b행이 맡는다) | 대상 아님(`false`) — ⭐ D-a(P2 실측 2026-11-01)로 확인 무력화 세션은 대상에 들어왔다(아래 주석) |
 // | D-2 | 선언을 해석할 수 없다(변형 없음 · 모름 · 시나리오 불일치) | 대상 아님(`false` — 화면이 올 수 없다) |
 // | D-2b | 결정 순간이 **말**인 변형(`VERBAL_DECISION_VARIANTS` — 화면은 앞 단계뿐) | 대상 아님(`false` — 메인 세션 결정 2026-10-31 B안) |
 // | D-3 | 선언된 문자 중 `required` ∧ 목적 `transfer` ∨ `link` ∧ 카탈로그에 모의 화면(`fakeLandingId`)이 있는 것이 없다 | 대상 아님(`false` — 말로 끝나는 결말은 범위 밖) |
@@ -162,7 +162,10 @@ export function finalDecisionScreenSms(scenarioId: string, declared: readonly Fl
 
 /** 위 판정표(D-1 ~ D-5). 부수효과 0. */
 export function isDecisionScreenPending(input: DecisionScreenInput): boolean {
-  if (input.verifyEnabled || input.followUpUserTurns !== undefined) return false; // D-1
+  // ⭐ D-a(P2 실 키 실측 2026-11-01 · 대출 고급 `fv-m3hd`) — 확인 무력화 세션을 4-c에서 빼고 4행에 맡겼더니, 4행 입력(`goalActionDone`)이 **아무 화면** 제출(설치 응낙)로
+  // 참이 되어 이체 문자 전에 goal 끊기가 승인됐다. 이제 확인 무력화 세션도 4-c 대상이다 — 4행(호 전환 · 화면 행동 전 모든 끊기)을 지난 뒤에도 goal 끊기는
+  // 선언 순서상 마지막 화면을 마칠 때까지 막힌다(`give_up`은 통과 — 거절하는 참가자를 붙잡아 두지 않는다). `verifyEnabled`는 입력으로 남긴다(호출부 무변경).
+  if (input.followUpUserTurns !== undefined) return false; // D-1
   if (!input.declaredKnown) return false; // D-2
   if (input.flowVariantId !== undefined && VERBAL_DECISION_VARIANTS.includes(input.flowVariantId)) return false; // D-2b
   const screen = finalDecisionScreenSms(input.scenarioId, input.declared);

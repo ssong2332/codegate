@@ -582,11 +582,12 @@ const CARD_RELIEF_TRANSFER_READOUT =
 // 열 수밖에 없었다. 이제 설치 문자 뒤 기존 피해금 이관 문자(`card-relief-account` → 이체 화면 `card-relief-transfer`)를 선언하고, 수법도 그 링크
 // 화면에서만 이체하게 한다. ⛔ fv-akj5(2인 챌린지 수신자 고급 · #192 바이트 고정)는 무변경 — 위 무계좌형 문면을 계속 쓴다.
 const CARD_RELIEF_TRANSFER_VIA_LINK =
-  "피해금 이관 요구 — '지금 결제 진행 중인 건 저희가 막을 수 있는데, 고객님 잔액을 이관 전용 계좌로 옮겨두셔야 해요' 처럼 구체적 금액과 함께 이체를 요구한다. 계좌번호는 네가 불러 주지 말고, 보안 앱 설치가 끝난 뒤 문자로 보낸 피해금 이관 안내의 링크 화면에서 이체하게 한다(은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다).";
+  "피해금 이관 요구 — '지금 결제 진행 중인 건 저희가 막을 수 있는데, 고객님 잔액 중 234만 원을 이관 전용 계좌로 옮겨두셔야 해요' 처럼 구체적 금액과 함께 이체를 요구한다. 금액은 문자에 적힌 234만 원으로만 말하고, 상대가 말한 잔액 전체로 바꾸지 않는다. 계좌번호는 네가 불러 주지 말고, 보안 앱 설치가 끝난 뒤 문자로 보낸 피해금 이관 안내의 링크 화면에서 이체하게 한다(은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다).";
 const CARD_RELIEF_SMS: FlowVariantSms = { purpose: "transfer", smsId: "card-relief-account", required: true, notBeforeUserTurns: 4 };
 const CARD_REASSURE = { from: "card-company-impersonation", label: "안심 유도" };
 // ⭐ P2-d(X6) — 환급 3변형 공통 수수료 계좌 문자(이체 화면 `tax-refund-fee-transfer`).
-const TAX_REFUND_FEE_SMS: FlowVariantSms = { purpose: "transfer", smsId: "tax-refund-fee", required: true, notBeforeUserTurns: 4 };
+// D-b(P2 실측 — 수수료 요구가 문자보다 3~4발화 앞섰다) — 백스톱 간격 1(통관 수수료 문자와 같다).
+const TAX_REFUND_FEE_SMS: FlowVariantSms = { purpose: "transfer", smsId: "tax-refund-fee", required: true, notBeforeUserTurns: 4, ...FAST_BACKSTOP };
 /**
  * fv-akj5 계열 수법 목록 — base main(ea97aa0)의 순서(놀람 · 긴급 · 카드정보 · 피해금 · 부인 · 안심 · 앱 설치 · 기관 조사)를 그대로 지킨다
  * (R3 리뷰 M2). 원본에서 그대로 가져오는 라벨은 `{ from, label }` 참조(문구 사본 0)라 keepLabels 대신 여기서 순서를 정한다.
@@ -892,7 +893,7 @@ const SPECS: VariantSpec[] = [
       { from: "card-delivery-call", label: "확인 시도 무력화" },
       AGENCY_PROBE,
       // P2-b — 원본 문면("보호 계좌로 옮겨 두셔야")을 이 변형의 이관 문자 · 화면과 같은 말로, 링크 화면에서만 이체하게(라벨 무변경).
-      "자산 보호 이체 요구 — '조사가 끝날 때까지 잔액을 이관 전용 계좌로 옮겨 두셔야 피해가 안 생깁니다' 처럼 금액과 이체를 구체적으로 요구한다. 계좌번호는 네가 불러 주지 말고 문자로 보낸 피해금 이관 안내의 링크 화면에서 이체하게 한다(은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다).",
+      "자산 보호 이체 요구 — '조사가 끝날 때까지 잔액 중 234만 원을 이관 전용 계좌로 옮겨 두셔야 피해가 안 생깁니다' 처럼 금액과 이체를 구체적으로 요구한다. 금액은 문자에 적힌 234만 원으로만 말하고, 상대가 말한 잔액 전체로 바꾸지 않는다. 계좌번호는 네가 불러 주지 말고 문자로 보낸 피해금 이관 안내의 링크 화면에서 이체하게 한다(은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다).",
       { from: "card-delivery-call", label: "긴급성 조성" },
     ],
     exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],
@@ -1063,7 +1064,7 @@ const SPECS: VariantSpec[] = [
     stages: st("국제 택배가 통관에서 보류됐다고 알린다.", "통관비 7만 8천 원을 내야 한다며 곧바로 결제를 요구한다."),
     keepLabels: ["생활 밀착형 소재로 경계심 낮추기", "긴급성 조성", "명의 도용 암시", "통관비 결제 요구"],
     exitBlock: ["D0_none"],
-    sms: [{ purpose: "transfer", smsId: "courier-customs-fee", required: true, notBeforeUserTurns: 3 }],
+    sms: [{ purpose: "transfer", smsId: "courier-customs-fee", required: true, notBeforeUserTurns: 3, ...FAST_BACKSTOP }],
     legs: ONE_LEG("택배 고객센터", "female"),
     ...BEGINNER,
     channels: ["voice", "sms"],
@@ -1083,7 +1084,7 @@ const SPECS: VariantSpec[] = [
     exitBlock: ["D2_secrecy", "D5_call_retention"],
     sms: [
       { purpose: "link", smsId: "courier-customs-link", required: false, notBeforeUserTurns: 2 },
-      { purpose: "transfer", smsId: "courier-customs-fee", required: true, notBeforeUserTurns: 3 },
+      { purpose: "transfer", smsId: "courier-customs-fee", required: true, notBeforeUserTurns: 3, ...FAST_BACKSTOP },
     ],
     legs: ONE_LEG("택배 고객센터", "female"),
     ...INTERMEDIATE,
@@ -1104,7 +1105,7 @@ const SPECS: VariantSpec[] = [
     exitBlock: ["D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
     sms: [
       { purpose: "link", smsId: "courier-customs-link", required: false, notBeforeUserTurns: 2 },
-      { purpose: "transfer", smsId: "courier-customs-fee", required: true, notBeforeUserTurns: 3 },
+      { purpose: "transfer", smsId: "courier-customs-fee", required: true, notBeforeUserTurns: 3, ...FAST_BACKSTOP },
     ],
     legs: ONE_LEG("택배 고객센터", "female"),
     ...ADVANCED,

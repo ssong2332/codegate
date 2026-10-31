@@ -263,6 +263,8 @@ export type MessageDoc = {
   notSpoken?: true;
   // §113.2(옵셔널 · 하위호환 · 무백필) — 참가자가 기기 사진을 보낸 턴(사실만 — 이미지 · 파일 정보 0). 부재 = 글 턴.
   photo?: true;
+  /** D-e — 사진 턴 종류(`"transfer-receipt"` = 이체 완료 화면 캡처). 부재 = 기기 사진. */
+  photoKind?: "transfer-receipt";
 };
 
 // --- sessions/{sessionId}/artifacts/{artifactId} (AC-022, ADR-0003) ---

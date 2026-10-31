@@ -14,6 +14,7 @@
 // |---|---|---|
 // | 1 | `purpose`가 변형 `sms` 선언에 없다(enum 밖 · 부재 포함) | `not_allowed`(쓰기 0) |
 // | 2 | 그 목적의 문자가 이미 도착 | `already_delivered`(쓰기 0) |
+// | 2-b | ⭐ D-c(P2 실측 2026-11-01) — 선언 순서상 **앞선 필수 문자**가 아직 도착하지 않았다(선택 문자는 막지 않는다) | `too_early` |
 // | 3 | `userTurns < max(item.notBeforeUserTurns, FIRST_SMS_MIN_USER_TURNS)` | `too_early` |
 // | 4 | 직전 문자 도착 이후 사용자 발화 `< MIN_USER_TURNS_BETWEEN_SMS`(명시 요청이면 `MIN_USER_TURNS_BETWEEN_SMS_EXPLICIT` — §126) | `too_soon` |
 // | 5 | 그 외 | `allowed` |
@@ -106,12 +107,24 @@ export function resolveSmsGate(input: SmsGateInput): SmsGateResult {
     : undefined;
   if (!item) return { status: "not_allowed" };
   if (input.delivered.some((d) => d.smsId === item.smsId)) return { status: "already_delivered", item };
+  // ⭐ D-c(P2 실 키 실측 2026-11-01 — 카드 `fv-w3dq` 이관 문자가 설치 문자보다 먼저 · 환급 `fv-aqx2` 수수료 문자가 신청 링크보다 먼저) — 선언 순서 = 단계 순서다.
+  if (earlierRequiredPending(item, input.declared, input.delivered)) return { status: "too_early", item };
   if (input.userTurns < earliestUserTurns(item)) return { status: "too_early", item };
   const last = lastArrivalUserTurns(input.delivered);
   if (last !== undefined && input.userTurns - last < smsSpacingFor(input.explicit)) {
     return { status: "too_soon", item };
   }
   return { status: "allowed", item };
+}
+
+/** D-c — 선언 순서상 이 문자보다 앞선 **필수** 문자 중 아직 도착하지 않은 것이 있는가. */
+export function earlierRequiredPending(
+  item: FlowVariantSms,
+  declared: readonly FlowVariantSms[],
+  delivered: readonly DeliveredSmsRecord[],
+): boolean {
+  const index = declared.findIndex((d) => d.smsId === item.smsId);
+  return declared.slice(0, Math.max(index, 0)).some((d) => d.required && !delivered.some((r) => r.smsId === d.smsId));
 }
 
 export type SmsBackstopPlan =
@@ -144,22 +157,12 @@ export function planSmsBackstop(input: Omit<SmsGateInput, "purpose"> & { claimed
   const deliveredIds = new Set(input.delivered.map((d) => d.smsId));
   const pending = input.declared.filter((item) => item.required && !deliveredIds.has(item.smsId));
   if (pending.length === 0) return { action: "none_pending" };
-  // 필수 문자는 변형당 1개뿐이지만(현행 데이터), 여럿이면 가장 먼저 열리는 것 · 같으면 선언 순서.
-  let target = pending[0];
-  let openAt = gateOpensAtUserTurns(target, input.delivered);
-  for (const item of pending.slice(1)) {
-    const at = gateOpensAtUserTurns(item, input.delivered);
-    if (at < openAt) {
-      target = item;
-      openAt = at;
-    }
-  }
+  // D-c — 백스톱도 선언 순서상 첫 미도착 필수 문자만 친다(게이트 2-b가 뒤 문자를 막으므로 "가장 먼저 열리는 것" 고르기는 닫힌 문을 두드린다).
+  const target = pending[0];
+  const openAt = gateOpensAtUserTurns(target, input.delivered);
   // §126 — 주장이 있으면 명시 요청 간격(1)으로 연다(하한 `notBeforeUserTurns` · 첫 문자 하한은 그대로).
   if (input.claimed === true) {
-    const claimedTarget = pending
-      .map((item) => ({ item, at: gateOpensAtUserTurns(item, input.delivered, true) }))
-      .reduce((best, cur) => (cur.at < best.at ? cur : best));
-    if (input.userTurns >= claimedTarget.at) return { action: "deliver", item: claimedTarget.item };
+    if (input.userTurns >= gateOpensAtUserTurns(target, input.delivered, true)) return { action: "deliver", item: target };
   }
   // §124 — 변형이 문자마다 간격을 줄 수 있다(부재 = 종전 2).
   const step = target.backstopUserTurns ?? BACKSTOP_USER_TURNS;

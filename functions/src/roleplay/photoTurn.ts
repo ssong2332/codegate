@@ -28,7 +28,18 @@ export const PHOTO_DEMAND = /신분증|사진|찍어\s*(?:서|줘|주|보내)|�
 export const PHOTO_TURN_INSTRUCTION =
   "[사진 수신] 참가자가 방금 대화방으로 사진 1장을 보냈다(사진 내용은 너에게 전달되지 않는다). 캐릭터 그대로 사진을 받은 사람처럼 짧게 반응한다(예: \"고마워, 잘 받았어\"). 네가 앞서 사진 · 신분증을 요구했다면 그 목적대로 다음 단계(보증금 · 송금 · 인증번호 등 시나리오의 다음 수법)로 이어 가고, 요구한 적이 없으면 받았다고만 말한 뒤 하던 이야기를 이어 간다. 사진 속 내용을 지어내 묘사하지 않는다. 훈련 · 시뮬레이션 · 연습을 언급하거나 대괄호 안내문을 쓰거나 대화를 스스로 마무리하지 않는다.";
 
-/** 사진 턴이면 지시 1줄, 아니면 없음. */
-export function photoTurnInstruction(isPhotoTurn: boolean): string | undefined {
-  return isPhotoTurn ? PHOTO_TURN_INSTRUCTION : undefined;
+// ⭐ D-e(P2 실 키 실측 2026-11-01 · 메인 "권고대로") — 사기범의 "이체 완료 화면 캡처해서 보내줘"는 실제 수법이다. 막지 않고 서비스 안에서 하게 한다:
+// 참가자가 이 대화방에서 훈련용 이체 화면을 제출하면 '+'에 앱이 만든 "이체 완료 화면" 캡처가 생기고, 그것을 보낸 턴이 아래 표기 · 지시를 쓴다.
+// | 사진 턴 종류 | 대화 표기 | 지시 |
+// |---|---|---|
+// | 기기 사진(부재) | `PHOTO_TURN_TEXT` | `PHOTO_TURN_INSTRUCTION`(종전) |
+// | `transfer-receipt` | `TRANSFER_RECEIPT_TURN_TEXT` | `TRANSFER_RECEIPT_TURN_INSTRUCTION` — 송금을 확인한 사람처럼 반응 · 같은 돈 재요구 0 · 캡처 내용 창작 0 |
+export const TRANSFER_RECEIPT_TURN_TEXT = "(이체 완료 화면 캡처 1장을 보냈다)";
+export const TRANSFER_RECEIPT_TURN_INSTRUCTION =
+  "[사진 수신] 참가자가 방금 대화방으로 이체 완료 화면 캡처 1장을 보냈다(캡처 속 내용은 너에게 전달되지 않는다). 캐릭터 그대로 송금을 확인한 사람처럼 짧게 반응한다(예: \"확인했어, 고마워\"). 같은 돈을 같은 이유로 다시 보내라고 하지 않는다 — 더 요구하려면 수법 목록 안에서 새 명목을 대거나 하던 이야기를 이어 간다. 캡처 속 금액 · 시각 · 이름을 지어내 말하지 않는다. 훈련 · 시뮬레이션 · 연습을 언급하거나 대괄호 안내문을 쓰거나 대화를 스스로 마무리하지 않는다.";
+
+/** 사진 턴이면 지시 1줄(종류별), 아니면 없음. */
+export function photoTurnInstruction(isPhotoTurn: boolean, photoKind?: "transfer-receipt"): string | undefined {
+  if (!isPhotoTurn) return undefined;
+  return photoKind === "transfer-receipt" ? TRANSFER_RECEIPT_TURN_INSTRUCTION : PHOTO_TURN_INSTRUCTION;
 }

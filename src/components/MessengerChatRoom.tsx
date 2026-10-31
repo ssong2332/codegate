@@ -81,6 +81,8 @@ import {
 } from "@/lib/messenger/replyChoreography";
 import { chatBoxStyle, isNearBottom, TRAINING_INPUT_NO_SUGGEST } from "@/lib/messenger/keyboardViewport";
 import { useKeyboardViewport } from "@/lib/messenger/useKeyboardViewport";
+// D-e — 앱이 만든 이체 완료 화면 캡처(기기 메모리 data URL · 네트워크 0).
+import { transferReceiptDataUrl, type TransferReceiptSource } from "@/lib/messenger/transferReceipt";
 import {
   decideMessengerStartNotice,
   type MessengerStartNoticeState,
@@ -104,6 +106,8 @@ type ChatMessage = {
   /** §113.2 — 사진 턴(서버 문서 `photo` · 낙관적 말풍선). 이미지는 `photoUrl`(이 화면 메모리의 objectURL)에만 있다. */
   photo?: boolean;
   photoUrl?: string;
+  /** D-e — 사진 턴 종류(`"transfer-receipt"` = 앱이 만든 이체 완료 화면 캡처 · 다시 보내기가 같은 종류로 보낸다). */
+  photoKind?: "transfer-receipt";
 };
 
 // ⛔ T190-6b(UX D-100 · PRD AC-092 (d) · AC-031 읽기 고지) — 세션 중 스킨 전환 칩(`SKIN_CYCLE`/`SKIN_LABEL`)과
@@ -258,6 +262,10 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
   // §128(6) — URL은 이 컴포넌트가 아니라 세션 단위 화면 메모리(`sessionPhotos.ts`)에 둔다: 통화 전환 · 통화 겹침으로 대화방이 다시 그려져도
   // 보낸 사진이 그대로 보인다. 정리(revoke)는 다른 세션을 열 때 · 훈련 종료 화면에서 한다(언마운트마다 하지 않는다).
   const photoInputRef = useRef<HTMLInputElement | null>(null);
+  // ⭐ D-e(P2 실측 · 메인 "권고대로") — 이 대화방에서 훈련용 이체 화면을 제출하면 '+'에 "이체 완료 화면" 캡처가 생긴다(사기범의 캡처 요구 = 실제 수법을
+  // 서비스 안에서). 값은 칩에 실린 서버 값뿐(입력 금액 0 — G138). 캡처가 있으면 '+'가 고르기 시트를 연다(없으면 종전처럼 기기 사진 고르기).
+  const [transferReceipt, setTransferReceipt] = useState<TransferReceiptSource | null>(null);
+  const [plusSheetOpen, setPlusSheetOpen] = useState(false);
   const [photoUrls, setPhotoUrls] = useState<Record<number, string>>(() =>
     sessionId ? { ...sessionPhotoStore(sessionId).byTurn } : {},
   );
@@ -450,7 +458,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
   // §94(UX D-137) — 전송 즉시 내 말풍선을 올린다(낙관적 표시 · "1"). 서버 응답을 기다리지 않는다.
   // ⚠️ 서버는 한 번에 한 턴만 처리한다(턴 확보 트랜잭션 — functions/src/roleplay/index.ts) ⇒ 서버 호출 중에는 전송 버튼만
   // 잠그고 입력칸은 열어 둔다(키보드가 닫히지 않게). 서버가 끝난 뒤 연출 중에 보내면 앞 답장은 바로 보인다.
-  const handleSend = async (retryText?: string, photoUrl?: string) => {
+  const handleSend = async (retryText?: string, photoUrl?: string, photoKind?: "transfer-receipt") => {
     const text = photoUrl ? PHOTO_BUBBLE_LABEL : (retryText ?? input).trim();
     if (!sessionId || !text || turnLocked || chatEnded || escalatingNow) return;
     const now = wallClockMs();
@@ -466,7 +474,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
         voiceTalkFloorRef.current,
       ),
     };
-    setPending(photoUrl ? { ...turn, photoUrl } : turn);
+    setPending(photoUrl ? { ...turn, photoUrl, ...(photoKind ? { photoKind } : {}) } : turn);
     setClock(now);
     setSendError(null);
     if (retryText === undefined && !photoUrl) setInput("");
@@ -483,6 +491,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
         sessionId,
         userText: photoUrl ? "" : text,
         ...(photoUrl ? { photo: true } : {}),
+        ...(photoUrl && photoKind ? { photoKind } : {}),
         ...(inCall ? { duringCall: true } : {}),
       });
       if (duringCall && result.reply?.text) duringCall.onChatTurn(text, result.reply.text);
@@ -724,7 +733,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
           text: pending.text,
           turnIndex: pending.baseTurnIndex + 1,
           createdAtMs: pending.sentAtMs,
-          ...(pending.photoUrl ? { photo: true, photoUrl: pending.photoUrl } : {}),
+          ...(pending.photoUrl ? { photo: true, photoUrl: pending.photoUrl, ...(pending.photoKind ? { photoKind: pending.photoKind } : {}) } : {}),
         }
       : null;
   const failedId = optimistic && pending?.failed ? optimistic.id : null;
@@ -1114,7 +1123,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
                 <span className="sr-only">전송 실패</span>
                 <button
                   type="button"
-                  onClick={() => void handleSend(message.text, message.photoUrl)}
+                  onClick={() => void handleSend(message.text, message.photoUrl, message.photoKind)}
                   className="min-h-[44px] px-2 font-semibold underline underline-offset-2"
                   style={{ color: isSms ? threadTokens.link : chatTokens.headerIcon }}
                 >
@@ -1203,6 +1212,42 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
                 <span>{sendError}</span>
               </p>
             )}
+            {/* ⭐ D-e — 사진 고르기 시트(실제 메신저 '+' → 앨범의 최근 사진처럼 맨 앞에 캡처 1장 · 그 밖은 기기 앨범). 안내 문구 0(§113.2 결정 유지). */}
+            {plusSheetOpen && transferReceipt && (
+              <div role="dialog" aria-label="사진 고르기" className="mb-2 flex items-center gap-3 rounded-[14px] border p-3" style={{ borderColor: chatTokens.fieldBorder, backgroundColor: chatTokens.fieldBg }}>
+                <button
+                  type="button"
+                  aria-label="이체 완료 화면 캡처 보내기"
+                  onClick={() => {
+                    setPlusSheetOpen(false);
+                    if (!sessionId) return;
+                    const url = transferReceiptDataUrl(transferReceipt, new Date(wallClockMs()));
+                    void handleSend(undefined, url, "transfer-receipt");
+                  }}
+                  className="shrink-0 overflow-hidden rounded-[8px] border"
+                  style={{ borderColor: chatTokens.fieldBorder }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- 기기 메모리 data URL(정적 export · 최적화 대상 아님) */}
+                  <img src={transferReceiptDataUrl(transferReceipt, new Date(wallClockMs()))} alt="이체 완료 화면 캡처" className="h-[96px] w-[54px] object-cover" />
+                </button>
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlusSheetOpen(false);
+                      photoInputRef.current?.click();
+                    }}
+                    className="min-h-[44px] rounded-[10px] border px-3 text-left text-[15px]"
+                    style={{ borderColor: chatTokens.fieldBorder, color: chatTokens.fieldText }}
+                  >
+                    앨범에서 선택
+                  </button>
+                  <button type="button" onClick={() => setPlusSheetOpen(false)} className="min-h-[44px] rounded-[10px] px-3 text-left text-[15px]" style={{ color: chatTokens.fieldText }}>
+                    닫기
+                  </button>
+                </div>
+              </div>
+            )}
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -1231,7 +1276,8 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
               />
               <button
                 type="button"
-                onClick={() => photoInputRef.current?.click()}
+                // D-e — 이체 완료 화면 캡처가 있으면 고르기 시트(캡처 · 앨범), 없으면 종전처럼 기기 사진 고르기.
+                onClick={() => (transferReceipt ? setPlusSheetOpen(true) : photoInputRef.current?.click())}
                 disabled={turnLocked}
                 aria-label="사진 보내기"
                 className="mb-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full disabled:opacity-50"
@@ -1367,7 +1413,17 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
           // ⛔ 참가자가 입력한 계좌번호·예금주명은 이 경로에 실리지 않는다(콜백이 무인자다 — G138).
           // ⚠️ 위 링크 칩 탭의 "shown"과 달리 이것만 승격된다(AC-080 (b) — 열어보고 닫은 참가자를
           // 실패로 낙인찍지 않는다).
-          onCredentialSubmit={() => recordMockScreen(fakeLanding.fakeLandingId, "submitted")}
+          onCredentialSubmit={() => {
+            recordMockScreen(fakeLanding.fakeLandingId, "submitted");
+            // D-e — 훈련용 이체 화면(칩에 은행 · 계좌가 실린 것)을 제출했으면 이체 완료 화면 캡처를 '+'에 둔다.
+            if (fakeLanding.bankName && fakeLanding.accountNumber) {
+              setTransferReceipt({
+                bankName: fakeLanding.bankName,
+                accountNumber: fakeLanding.accountNumber,
+                ...(fakeLanding.accountHolder ? { holder: fakeLanding.accountHolder } : {}),
+              });
+            }
+          }}
           // ⭐ P2-c(X6) — 훈련용 이체 화면의 받는 계좌(읽기 전용) · 머리띠 은행명. 받는 분 이름 · 금액은 대화에서 정해져 미리 채우지 않는다.
           {...(fakeLanding.bankName && fakeLanding.accountNumber
             ? {

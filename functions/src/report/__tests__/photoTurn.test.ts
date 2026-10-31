@@ -57,7 +57,8 @@ test("[§113.2] 요구 판정 · 서버 사진 턴 — 이미지 필드 0 · 고
   assert.ok(PHOTO_DEMAND.test("사진 좀 보내"));
   assert.equal(PHOTO_DEMAND.test("돈 좀 보내줘"), false);
   const index = readSrc("roleplay/index.ts");
-  assert.match(index, /const isPhotoTurn = photo === true;\s*const userText = isPhotoTurn \? PHOTO_TURN_TEXT : request\.data\?\.userText;/);
+  // D-e(2026-11-01) — 사진 턴 종류(이체 완료 화면 캡처)면 그 고정 문장을 쓴다(허용 값 하나만 · 이미지 0).
+  assert.match(index, /const isPhotoTurn = photo === true;[\s\S]{0,200}const photoKind = isPhotoTurn && requestedPhotoKind === "transfer-receipt" \? requestedPhotoKind : undefined;\s*const userText = isPhotoTurn \? \(photoKind \? TRANSFER_RECEIPT_TURN_TEXT : PHOTO_TURN_TEXT\) : request\.data\?\.userText;/);
   assert.match(index, /\.\.\.\(isPhotoTurn \? \{ photo: true as const \} : \{\}\),/);
   // 요청 타입에 이미지 · 파일 정보 필드가 없다(사실만).
   const types = readSrc("roleplay/types.ts");
