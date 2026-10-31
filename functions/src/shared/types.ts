@@ -300,6 +300,10 @@ export type InCallSmsDoc = {
   bankName?: string;
   /** 2026-10-19(Architecture §81.6) — 같은 문자 본문의 계좌번호(`bankName`과 한 쌍). D-115 랜딩 미리 채움의 원천. */
   accountNumber?: string;
+  /** ⭐ P2(2026-10-31 · X6) — 같은 본문 "예금주: …" 줄의 이름(세션 이름 치환 뒤). 훈련용 이체 화면(`bank-transfer`)의 받는 분 미리 채움 원천. */
+  accountHolder?: string;
+  /** ⭐ P2 — 같은 본문 "금액: …원" 줄의 숫자만(쉼표 제거 · 예 `"1850000"`). 부재 = 참가자가 직접 넣는다(금액을 말로 부르는 루트). */
+  transferAmount?: string;
   // T104(§19.4) — 그 랜딩의 목업 종류. **kind의 진실 원천은 서버**이고(§15.9.1 R3) 클라는
   // `fakeLandingId` 문자열을 분류하지 않는다. 값이 기본값(`credential-form`)이면 **키를 만들지
   // 않는다** — `MessengerAttachment.landingKind`의 생략 규칙(`linkMarker.ts`)과 글자 그대로

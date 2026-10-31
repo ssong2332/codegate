@@ -982,6 +982,9 @@ export default function SessionCallPage() {
             // §101 추가 · D-115 — 이체 랜딩 수취 계좌 미리 채움 원천(서버가 문자 계좌 줄에서 실은 값).
             bankName: data.bankName as string | undefined,
             accountNumber: data.accountNumber as string | undefined,
+            // ⭐ P2(X6) — 훈련용 이체 화면의 받는 분 · 금액 미리 채움 원천(서버가 문자 본문 예금주 · 금액 줄에서 실은 값).
+            accountHolder: data.accountHolder as string | undefined,
+            transferAmount: data.transferAmount as string | undefined,
           };
         }),
       );

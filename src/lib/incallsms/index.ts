@@ -4,6 +4,7 @@ export {
   latestSmsId,
   needsTimeSeparator,
   prefilledAccountOf,
+  prefilledTransferOf,
   sortByArrival,
   spellOutOtp,
   splitBodyAtOtp,

@@ -306,7 +306,8 @@ test("[T194-c-1 G611 · ⓙ] 챌린지 고급 card-company = [fv-akj5] 문자 0 
   assert.deepEqual(resolveDeclaredSms("card-company-impersonation", "fv-akj5").declared, []);
   assert.deepEqual(ids(assignablePool("loan-refinance-scam", "advanced", "c1")), ["fv-6s5p"]);
   assert.deepEqual(resolveDeclaredSms("loan-refinance-scam", "fv-6s5p").declared.map((d) => d.smsId).sort(), ["loan-account", "loan-apply-link"]);
-  assert.deepEqual(sessionReachableLandingIds("loan-refinance-scam", "fv-6s5p"), ["loan-refinance-apply"]);
+  // P2(X6) — 계좌 문자(loan-account)가 훈련용 이체 화면 링크를 병기해 상환금 이체 화면이 도달 집합에 더해졌다(선언 문자는 그대로).
+  assert.deepEqual(sessionReachableLandingIds("loan-refinance-scam", "fv-6s5p"), ["loan-refinance-apply", "loan-repay-transfer"]);
   // 자가 고급 Q2 3종 풀 = Q2 변형(전부 설치 문자 선언).
   const selfPools = {
     "card-delivery-call": ids(assignablePool("card-delivery-call", "advanced")),

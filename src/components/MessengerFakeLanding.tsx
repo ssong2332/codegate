@@ -109,6 +109,11 @@ type MessengerFakeLandingProps = {
    * ⛔ 참가자 입력이 아니다(서버 카탈로그 · 문자에서 온 값) — 어떤 콜백에도 싣지 않는다.
    */
   prefilledAccount?: string;
+  /**
+   * ⭐ P2(X6 · 2026-10-31) — 훈련용 이체 화면(`BANK_TRANSFER_LANDINGS`)의 받는 분 이름 · 금액(숫자만) · 세션 은행명(서버 문자 문서 구조화 필드).
+   * 부재 = 받는 분 "확인 중" 표기 · 금액 빈 칸. ⛔ 참가자 입력이 아니다 — 어떤 콜백에도 싣지 않는다.
+   */
+  prefilledTransfer?: { bankName: string; holder?: string; amount?: string };
 };
 
 /** §101 — 이체 전 단계 기록 이벤트(서버 `functions/src/inCallSms/types.ts` `InCallSmsEvent`의 같은 3값). */
@@ -136,6 +141,7 @@ export default function MessengerFakeLanding({
   onCredentialSubmit,
   onLandingStep,
   prefilledAccount,
+  prefilledTransfer,
 }: MessengerFakeLandingProps) {
   const bar = browserBarTokensFor(skin);
   const returnLabel = RETURN_LABELS[entrySurface];
@@ -265,6 +271,7 @@ export default function MessengerFakeLanding({
             onCredentialSubmit={onCredentialSubmit}
             onLandingStep={onLandingStep}
             prefilledAccount={prefilledAccount}
+            prefilledTransfer={prefilledTransfer}
             returnLabel={returnLabel}
           />
         )}
@@ -538,7 +545,82 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 금융사고대응 보호계좌센터",
     mockHost: "acct-protect-desk.invalid",
   },
+  // ⭐ P2(X6 · 2026-10-31) — 훈련용 이체 화면 5종(서버 카탈로그 mockScreens.ts와 글자 단위로 동일 · 문구 공통 · 주소창 호스트만 다르다).
+  // 첫 화면(이 표) 뒤 이체 정보 확인 · 본인 인증은 `CredentialFormMockup`의 `BANK_TRANSFER_LANDINGS` 분기가 그린다.
+  "loan-repay-transfer": {
+    headline: "상환금 이체 정보를 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 '전환 상환금'으로 표시됩니다."],
+    fields: [
+      { label: "상환 전용 계좌", placeholder: "문자로 받은 계좌번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "보낼 금액", placeholder: "보내실 금액을 입력하세요", inputMode: "numeric", amount: true },
+    ],
+    submitLabel: "상환금 이체하기",
+    successHeadline: "상환금 이체가 완료되었습니다.",
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 상환금",
+    mockHost: "loan-repay-send.invalid",
+  },
+  "asset-deposit-transfer": {
+    headline: "공탁금 이체 정보를 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 '약식 공탁금'으로 표시됩니다."],
+    fields: [
+      { label: "공탁금 계좌", placeholder: "문자로 받은 계좌번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "보낼 금액", placeholder: "보내실 금액을 입력하세요", inputMode: "numeric", amount: true },
+    ],
+    submitLabel: "공탁금 이체하기",
+    successHeadline: "공탁금 이체가 완료되었습니다.",
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 공탁금",
+    mockHost: "deposit-send-link.invalid",
+  },
+  "blackmail-hush-transfer": {
+    headline: "이체할 금액을 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 보내는 분 이름으로 표시됩니다."],
+    fields: [
+      { label: "받는 분 계좌", placeholder: "문자로 받은 계좌번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "보낼 금액", placeholder: "보내실 금액을 입력하세요", inputMode: "numeric", amount: true },
+    ],
+    submitLabel: "바로 이체하기",
+    successHeadline: "이체가 완료되었습니다.",
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 개인",
+    mockHost: "hush-send-link.invalid",
+  },
+  "courier-fee-transfer": {
+    headline: "통관수수료 이체 정보를 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 '통관 수수료'로 표시됩니다."],
+    fields: [
+      { label: "수수료 납부 계좌", placeholder: "문자로 받은 계좌번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "보낼 금액", placeholder: "보내실 금액을 입력하세요", inputMode: "numeric", amount: true },
+    ],
+    submitLabel: "통관수수료 이체하기",
+    successHeadline: "통관수수료 이체가 완료되었습니다.",
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 통관 수수료",
+    mockHost: "customs-fee-send.invalid",
+  },
+  "courier-safe-transfer": {
+    headline: "안전계좌 이체 정보를 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 '피해 조치 보관'으로 표시됩니다."],
+    fields: [
+      { label: "국가 안전계좌", placeholder: "문자로 받은 계좌번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "보낼 금액", placeholder: "보내실 금액을 입력하세요", inputMode: "numeric", amount: true },
+    ],
+    submitLabel: "안전계좌로 이체하기",
+    successHeadline: "안전계좌 보관 이체가 완료되었습니다.",
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 안전계좌",
+    mockHost: "safe-keep-send.invalid",
+  },
 };
+
+/**
+ * ⭐ P2(X6) — 훈련용 이체 화면 landingId(서버 `functions/src/scenarios/mockScreens.ts` `BANK_TRANSFER_LANDINGS`와 같은 목록 — `mockScreenCopy.test.ts` P2 블록).
+ * 이 목록의 랜딩은 첫 화면(위 표) 뒤에 실제 은행 앱 이체 흐름을 잇는다: ② 이체 정보 확인(받는 분 이름 · 계좌 · 금액 · 보이스피싱 주의) → ③ 본인 인증(간편 인증 버튼 —
+ * 비밀번호 입력 칸 0) → 완료. 정확 일치 조회만 한다(R8). 돈은 움직이지 않고 값은 이 파일을 벗어나지 않는다(G138).
+ */
+const BANK_TRANSFER_LANDINGS: readonly string[] = [
+  "loan-repay-transfer",
+  "asset-deposit-transfer",
+  "blackmail-hush-transfer",
+  "courier-fee-transfer",
+  "courier-safe-transfer",
+];
 
 /** §101 — 여러 화면 사이트의 둘째 화면부터(서버 카탈로그 `MockScreenItem.stepScreens`와 1:1 · 글자 단위 동일). */
 type StepScreenCopy = {
@@ -734,6 +816,7 @@ function CredentialFormMockup({
   onCredentialSubmit,
   onLandingStep,
   prefilledAccount,
+  prefilledTransfer,
   returnLabel,
 }: {
   landingId?: string;
@@ -744,12 +827,24 @@ function CredentialFormMockup({
   onLandingStep?: (step: LandingProgressEvent) => void;
   /** §101 추가 · D-115 — 수취 계좌 미리 채움 값(부재 = 빈 입력 칸). */
   prefilledAccount?: string;
+  /** ⭐ P2(X6) — 훈련용 이체 화면의 받는 분 · 금액 · 은행 미리 채움(부재 = 받는 분 "조회 중" · 금액 빈 칸). */
+  prefilledTransfer?: { bankName: string; holder?: string; amount?: string };
   /** 완료 화면 복귀 버튼 문면(진입 표면이 정한다 — D-93). */
   returnLabel: string;
 }) {
   // R8 — **정확 일치 키 조회**만 한다(문자열 분해·부분 일치 금지).
   const copy = (landingId ? CREDENTIAL_LANDING_COPY[landingId] : undefined) ?? GENERIC_CREDENTIAL_COPY;
-  const [values, setValues] = useState<Record<string, string>>({});
+  // ⭐ P2(X6) — 훈련용 이체 화면이면 첫 화면(이 폼) 뒤 실제 은행 앱 이체 흐름을 잇는다: 폼 → 이체 정보 확인 → 본인 인증 → 완료.
+  const bankTransfer = landingId !== undefined && BANK_TRANSFER_LANDINGS.includes(landingId);
+  const [bankStage, setBankStage] = useState<"form" | "confirm" | "auth">("form");
+  // P2 — 훈련용 이체 화면의 금액 칸(`amount`)은 문자 금액을 처음 값으로만 채운다(고칠 수 있다 · 검증 그대로). 값은 이 컴포넌트 state를 벗어나지 않는다(G138).
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      copy.fields
+        .filter((field) => bankTransfer && field.amount && prefilledTransfer?.amount !== undefined)
+        .map((field) => [field.label, prefilledTransfer?.amount ?? ""]),
+    ),
+  );
   const [submitted, setSubmitted] = useState(false);
   // §109 — 열람본 발급 정보의 기준 시각(제출 이벤트 시각 = `performance.timeOrigin + event.timeStamp` · 기기 시계). 입력값과 무관하다.
   const [issuedAtMs, setIssuedAtMs] = useState(0);
@@ -769,6 +864,7 @@ function CredentialFormMockup({
   // §101 추가(사용자 실기 신고 — "공백으로 두고 이체를 누르면 넘어간다") — 칸별 안내 한 줄. 빈 칸 · 금액 오류면 제출 · 단계 진행 · 콜백 0
   // (속은 순간은 실제로 넘어간 제출에서만 잡힌다 — AC-080). 안내는 고정 문구이고 입력값을 싣지 않는다.
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // P2 — 이체 화면 금액 칸의 처음 값은 읽기 전용이 아니라서 여기 들지 않는다(검증도 그대로 받는다).
   const isPrefilled = (field: CredentialFieldCopy) => field.prefill === "account" && prefilledAccount !== undefined;
   const errorFor = (field: CredentialFieldCopy): string | undefined => {
     if (isPrefilled(field)) return undefined;
@@ -792,8 +888,17 @@ function CredentialFormMockup({
       setStepIndex(stepIndex + 1);
       return;
     }
+    // ⭐ P2 — 훈련용 이체 화면은 폼 다음이 이체 정보 확인이다(제출 · 콜백 0 — 속은 순간은 마지막 인증 버튼에서만).
+    if (bankTransfer && bankStage === "form") {
+      setBankStage("confirm");
+      return;
+    }
+    finishSubmit(event.timeStamp);
+  };
+
+  const finishSubmit = (timeStamp: number) => {
     // AC-045 핵심 — 여기서 어떤 네트워크 호출도 하지 않는다. 로컬 state만 바꿔 가짜 피드백을 준다.
-    setIssuedAtMs(performance.timeOrigin + event.timeStamp);
+    setIssuedAtMs(performance.timeOrigin + timeStamp);
     setSubmitted(true);
     // T123/AC-080 — **"제출했다는 사실" 하나만** 위로 올린다. 기록은 페이지가 한다(§15.9.6).
     // ⛔ `values`를 넘기지 않는다(G138) — 넘기는 순간 입력값이 이 파일을 벗어난다.
@@ -806,9 +911,96 @@ function CredentialFormMockup({
       style={{ backgroundColor: page.issuerBarBg, color: page.issuerBarText }}
     >
       <PhoneIcon name="shield" size={24} />
-      <span className="truncate">{issuerNameOf(copy.issuerLabel)}</span>
+      {/* P2 — 훈련용 이체 화면은 세션 가상 은행(§81) 앱 흉내라 머리띠에 그 은행명을 쓴다(부재 = 발급처 이름 · 실존 은행명 0). */}
+      <span className="truncate">{bankTransfer && prefilledTransfer ? `${prefilledTransfer.bankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel)}</span>
     </div>
   );
+
+  // ⭐ P2(X6) — 이체 정보 확인 · 본인 인증(제출 전 화면 — 완료 분기가 아니라 G255 밖 · §130 확인 화면 선례). 실제 은행 앱 흐름 대조는
+  // docs/research/in-service-experience-plan-2026-10-31.md §9(하나 원큐 공식 안내: 이체정보 입력 → 확인 → 추가인증 → 인증 → 완료).
+  if (bankTransfer && !submitted && bankStage !== "form") {
+    const amountRaw = values[copy.fields.find((field) => field.amount)?.label ?? ""] ?? "";
+    const amountDigits = amountRaw.replace(/[^\d]/g, "");
+    const amountText = amountDigits ? `${Number(amountDigits).toLocaleString("ko-KR")}원` : "";
+    const holder = prefilledTransfer?.holder ?? "받는 분";
+    const rows: [string, string][] = [
+      ["받는 분", holder],
+      ["받는 계좌", prefilledAccount ?? ""],
+      ["보내는 금액", amountText],
+      ["수수료", "면제"],
+    ];
+    const cancel = (
+      <button
+        type="button"
+        onClick={() => setBankStage("form")}
+        className="min-h-[48px] rounded-[10px] border px-6 py-2.5 text-base font-semibold"
+        style={{ borderColor: page.inputBorder, color: page.headline }}
+      >
+        취소
+      </button>
+    );
+    return (
+      <>
+        {issuerBar}
+        {bankStage === "confirm" ? (
+          <div className="flex flex-col gap-4 px-5 pb-6 pt-5">
+            <h1 className="text-xl font-bold leading-snug [word-break:keep-all]" style={{ color: page.headline }}>
+              {`${holder}님에게 ${amountText}을 보낼까요?`}
+            </h1>
+            <dl className="flex flex-col divide-y rounded-[10px] border" style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg }}>
+              {rows.map(([label, value]) => (
+                <div key={label} className="flex items-baseline justify-between gap-3 px-3.5 py-3 text-[15px]" style={{ borderColor: page.inputBorder }}>
+                  <dt style={{ color: page.body }}>{label}</dt>
+                  <dd className="break-all text-right font-semibold" style={{ color: page.headline }}>
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            {/* 실제 앱의 이체 전 주의 문구 자리(문구는 은행마다 다르다 — 추정 · §9 표). 정답을 가르치는 문장이 아니라 은행이 늘 띄우는 일반 주의다. */}
+            <p
+              role="note"
+              className="rounded-[10px] px-3.5 py-3 text-[14px] leading-relaxed [word-break:keep-all]"
+              style={{ backgroundColor: page.fieldReadonlyBg, color: page.body }}
+            >
+              보이스피싱 주의 · 모르는 사람이 전화나 문자로 이체를 요구하면 보내기 전에 멈추고 확인하세요.
+            </p>
+            <button
+              type="button"
+              onClick={() => setBankStage("auth")}
+              className="min-h-[52px] rounded-[10px] text-base font-semibold"
+              style={{ backgroundColor: page.submitBg, color: page.submitText }}
+            >
+              이체
+            </button>
+            {cancel}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4 px-5 pb-6 pt-5">
+            <h1 className="text-xl font-bold leading-snug" style={{ color: page.headline }}>
+              본인 인증
+            </h1>
+            <p className="text-[15px] leading-relaxed [word-break:keep-all]" style={{ color: page.body }}>
+              등록된 간편 인증(지문 · 얼굴)으로 이체를 확인합니다.
+            </p>
+            <div className="flex justify-center py-4" style={{ color: page.issuerBarBg }} aria-hidden="true">
+              <PhoneIcon name="shield" size={56} />
+            </div>
+            {/* ⛔ 비밀번호 · 인증번호 입력 칸 0 — 참가자가 실제 비밀번호를 치는 일을 만들지 않는다(버튼 하나가 인증을 대신한다). */}
+            <button
+              type="button"
+              onClick={(event) => finishSubmit(event.timeStamp)}
+              className="min-h-[52px] rounded-[10px] text-base font-semibold"
+              style={{ backgroundColor: page.submitBg, color: page.submitText }}
+            >
+              인증하고 이체하기
+            </button>
+            {cancel}
+          </div>
+        )}
+      </>
+    );
+  }
 
   // §106 — 제출 뒤 가짜 사건 기록 열람본(표에 있는 landingId만 · 정확 일치 R8). 없으면 종전 완료 화면.
   const recordDocument = landingId ? RECORD_DOCUMENT_COPY[landingId] : undefined;
@@ -1019,6 +1211,18 @@ function CredentialFormMockup({
             {line}
           </p>
         ))}
+        {/* P2 — 실제 이체 화면처럼 출금 계좌를 맨 위에 둔다(번호 0 — 참가자 실제 계좌가 아니다). */}
+        {bankTransfer && (
+          <p
+            className="mt-1 flex items-baseline justify-between gap-3 rounded-[10px] border px-3.5 py-3 text-[15px]"
+            style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg, color: page.body }}
+          >
+            <span>출금 계좌</span>
+            <span className="font-semibold" style={{ color: page.headline }}>
+              내 입출금 통장
+            </span>
+          </p>
+        )}
         {confirmAmount && (
           <p
             className="mt-1 flex items-baseline justify-between gap-3 rounded-[10px] border px-3.5 py-3 text-[15px]"
