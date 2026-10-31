@@ -15,7 +15,7 @@
 //  ① 공통 표면(`COMMON_FILES` — 모든 시나리오 프롬프트 · 클라 주입 문면) = **0건**(장부 없음). 새 문면이 서비스 밖 행동을 예시로 들면 실패한다.
 //  ② 루트 표면(시나리오 프롬프트 · 흐름 변형 · 문자 · 모의 화면 · 화면 문구) = **장부와 정확히 같아야 한다**. 장부는 P2~P6에서 앱 안 화면으로
 //     옮길 남은 목록이다 — 늘면 실패(새 유도 금지), 줄면 실패(장부를 같이 줄여 진척을 기록). 행별 담당 단계는 `ROW_PLAN`.
-//  ③ 계좌만 있고 이체 화면 링크가 없는 문자(X6) = 장부 5건(P2).
+//  ③ 계좌만 있고 이체 화면 링크가 없는 문자(X6) = 장부 0건(P2에서 5 → 0).
 // ⚠️ 표기를 본다(의미 아님) — 패턴 밖 표현은 못 잡는다. 문면 원천은 TypeScript 문자열 리터럴 · 템플릿 조각(주석 제외)이다.
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -175,14 +175,12 @@ const ROUTE_LEDGER: Readonly<Record<string, number>> = {
   "src/components/MessengerFakeLanding.tsx#J1_LOAN": 1, // P4
 };
 
-/** ③ X6 — 계좌만 있고 이체 화면 링크(`fakeLandingId`)가 없는 문자(P2에서 이체 화면 링크로 바꾼다). */
-const ACCOUNT_SMS_WITHOUT_SCREEN_LEDGER: readonly string[] = [
-  "asset-deposit-account",
-  "blackmail-hush-account",
-  "courier-customs-fee",
-  "courier-safe-account",
-  "loan-account",
-];
+/**
+ * ③ X6 — 계좌만 있고 이체 화면 링크(`fakeLandingId`)가 없는 문자. ⭐ P2(2026-10-31)에서 5건 → 0건(계좌 문자 5종이 훈련용 이체 화면 링크를 병기했다 —
+ * `loan-account` · `asset-deposit-account` · `blackmail-hush-account` · `courier-customs-fee` · `courier-safe-account`). ⛔ 늘리지 않는다 — 새 계좌 문자는
+ * 이체 화면 링크와 함께 만든다(참가자가 실제 뱅킹 앱을 열 이유를 만들지 않는다).
+ */
+const ACCOUNT_SMS_WITHOUT_SCREEN_LEDGER: readonly string[] = [];
 
 describe("P0 서비스 밖 행동 유도 — 판정표 고정", () => {
   it("판정표: 세는 행 11개 · 제외 행 4개(J0 규칙 · J0 이름표 · D9 i · D9 ii) · D9 iii은 세는 행", () => {
@@ -246,7 +244,7 @@ describe("P0 서비스 밖 행동 유도 — ② 루트 표면 장부", () => {
     assert.deepEqual(sorted(actual), sorted({ ...ROUTE_LEDGER }), JSON.stringify(sorted(actual), null, 2));
   });
 
-  it("③ X6 — 계좌만 있고 이체 화면 링크가 없는 문자 = 장부(P2)", () => {
+  it("③ X6 — 계좌만 있고 이체 화면 링크가 없는 문자 = 장부(P2 뒤 0건)", () => {
     const actual = Object.values(IN_CALL_SMS)
       .flat()
       .filter((item) => item.kind === "account" && !item.fakeLandingId)

@@ -91,7 +91,7 @@ export function revertFullAudit(assembled: string): string {
     if (count > 1) throw new Error(`P0 문면 "${now}"이 조립 산출물에 ${count}회 있다(0 또는 1회여야 한다)`);
     return count === 1 ? text.replace(now, before) : text;
   }, impossibleReverted);
-  return PROBE_129_TEXT_CHANGES.reduce(
+  const probe129Reverted = PROBE_129_TEXT_CHANGES.reduce(
     (text, [now, before]) => {
       const count = text.split(now).length - 1;
       if (count > 1) throw new Error(`§129 문면 "${now}"이 조립 산출물에 ${count}회 있다(0 또는 1회여야 한다)`);
@@ -99,7 +99,33 @@ export function revertFullAudit(assembled: string): string {
     },
     p0Reverted,
   );
+  // ⑪ P2(2026-10-31 · X6) — 계좌 문자에 이체 화면 링크를 병기한 루트(대출 · 통관 · 유포 협박 · 자산 보호)의 수법 · 단계 문면에 "문자 속 링크의 이체 화면에서"
+  //    절을 더했다(그 시나리오 조립에만 · 대출은 수법 2개라 2회까지). 0회 이상 전부 되돌린다.
+  return P2_TEXT_CHANGES.reduce((text, [now, before]) => text.split(now).join(before), probe129Reverted);
 }
+
+/** ⑪ P2 시나리오 문면 교체 — [지금, 이전] 쌍(전부 되돌림). `functions/src/scenarios/*.prompt.ts` · `flowVariants.ts`와 글자 단위로 같다. */
+export const P2_TEXT_CHANGES: readonly (readonly [string, string])[] = [
+  [
+    "계좌는 네가 불러 주지 말고 문자로 보낸 것을 확인하게 하고, 그 문자 속 링크의 이체 화면에서 보내게 한다(은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다). 구체적 유포 내용·대상 묘사는 하지 않는다.",
+    "계좌는 네가 불러 주지 말고 문자로 보낸 것을 확인하게 하고, 구체적 유포 내용·대상 묘사는 하지 않는다.",
+  ],
+  [
+    "계좌는 네가 불러 주지 말고 문자로 보낸 것을 확인하게 하고, 그 문자 속 링크의 이체 화면에서 보내게 한다(은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다).",
+    "계좌는 네가 불러 주지 말고 문자로 보낸 것을 확인하게 한다.",
+  ],
+  [
+    "문자로 보낸 계좌에 예치금을 넣게 한다 — 그 문자 속 링크의 이체 화면에서 보내게 하고, 은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다.",
+    "문자로 보낸 계좌에 예치금을 넣게 한다.",
+  ],
+  [
+    "문자로 보낸 계좌로 옮기게 한다 — 그 문자 속 링크의 이체 화면에서 보내게 하고, 은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다.",
+    "문자로 보낸 계좌로 옮기게 한다.",
+  ],
+  ["문자로 보낸 계좌에 예치금을 문자 속 링크의 이체 화면에서 넣으라고", "문자로 보낸 계좌에 예치금을 넣으라고"],
+  ["문자로 보낸 계좌로 문자 속 링크의 이체 화면에서 이체하라고", "문자로 보낸 계좌로 이체하라고"],
+  ["문자로 보낸 계좌에 공탁금을 문자 속 링크의 이체 화면에서 넣으라고", "문자로 보낸 계좌에 공탁금을 넣으라고"],
+];
 
 /** ⑧ §129 시나리오 문면 교체 — [지금, 이전] 쌍. */
 export const PROBE_129_TEXT_CHANGES: readonly (readonly [string, string])[] = [

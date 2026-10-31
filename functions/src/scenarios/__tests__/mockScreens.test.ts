@@ -681,9 +681,11 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
       "loan-refinance-scam",
       // §92.3 — 고급 전용 2종 카탈로그 신설(credential-form 각 1건).
       "prosecution-cooperation-call",
+      // P2(X6) — 유포 협박 카탈로그 신설(계좌 문자가 여는 이체 화면 1건).
+      "reputation-blackmail-scam",
       "tax-refund-scam",
     ],
-    "통화 채널 9종이 카탈로그에 없으면 정밀화가 아무것도 안 푼 것이다",
+    "통화 채널 10종이 카탈로그에 없으면 정밀화가 아무것도 안 푼 것이다",
   );
   // 그리고 **허용목록 밖** 통화 채널 시나리오는 app-install을 하나도 갖지 않는다(정밀화의 안전 전제 = M2 차단).
   // ⚠️ T194-c-1 허용목록 대체(§84.5.1 · G583 — X8): 허용목록 3종은 설치 항목을 갖되 **통화 중 문자 표면으로만** 갖는다.
@@ -718,6 +720,12 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
     // §98 — 검찰 고급 보관 지갑 송금 화면(통화 중 문자 표면).
     "in-call-sms",
     // §101 — 검찰 고급 자산 검수 사이트(통화 중 문자 표면).
+    "in-call-sms",
+    // P2(X6) — 훈련용 이체 화면 5종(통화 중 계좌 문자 표면).
+    "in-call-sms",
+    "in-call-sms",
+    "in-call-sms",
+    "in-call-sms",
     "in-call-sms",
     "messenger-link",
     "messenger-link",
@@ -972,7 +980,7 @@ test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **�
     false,
     "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
   );
-  assert.equal(reachableLandingKeysAllUnits().length, 17, "도달 가능 랜딩은 17종이다(§110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(reachableLandingKeysAllUnits().length, 22, "도달 가능 랜딩은 22종이다(P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
 });
 
 test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
@@ -1042,7 +1050,17 @@ function findMultiLandingScenarios(keys: readonly string[]): string[] {
  *    (b)를 되돌리면 아래 "(b) 생존" 단언이 먼저 빨간불이 된다.
  */
 // §101 — fv-h3vn(자산 검수 사이트)도 같은 구조(사건 조회 + 둘째 화면)라 같은 이유로 등재한다.
-const T129B_MULTI_LANDING_UNITS: readonly string[] = ["prosecution-cooperation-call#fv-c8wq", "prosecution-cooperation-call#fv-h3vn"];
+// ⭐ P2(2026-10-31 · X6) — 계좌 문자가 이체 화면 링크를 병기하면서 앞 단계 화면(신청서 · 통관 확인 · 점검 앱 설치)과 이체 화면을 함께 선언하게 된 5단위를
+//    같은 이유로 등재한다(T129 (b) 생존 단언이 아래에서 매 실행 확인된다 · 두 화면의 문자는 도착 순서가 달라 같은 사기범 메시지에 앵커되지 않는 것이 보통이다).
+const T129B_MULTI_LANDING_UNITS: readonly string[] = [
+  "prosecution-cooperation-call#fv-c8wq",
+  "prosecution-cooperation-call#fv-h3vn",
+  "courier-customs-scam#fv-62ak",
+  "courier-customs-scam#fv-xpvu",
+  "loan-refinance-scam#fv-6s5p",
+  "loan-refinance-scam#fv-d8pw",
+  "loan-refinance-scam#fv-m3hd",
+];
 
 /** 등재 단위를 뺀 단위 키 — 역검증들의 기준 입력(등재 단위 때문에 기대 배열이 흔들리지 않게). */
 function reachableLandingKeysOutsideT129B(): string[] {
@@ -1109,21 +1127,25 @@ test("[T194-c-1 G604 · ⓚ(=R-a)] 자가 고급 Q2 3 단위 = 정확히 [설치
     "card-company-impersonation#fv-x7ue": ["card-guard-app-install"],
     // §92 — 카드사 흡수 변형(카드 배송 흐름)도 같은 카드사 설치 화면 1건뿐이다.
     "card-company-impersonation#fv-w3dq": ["card-guard-app-install"],
-    "loan-refinance-scam#fv-m3hd": ["loan-check-app-install"],
+    // P2 — 대출 자가 고급은 설치 화면 뒤 상환금 이체 화면을 함께 선언한다(T129 (b) 등재 단위 — 아래 INV-1은 등재 밖 단위만 본다).
+    "loan-refinance-scam#fv-m3hd": ["loan-check-app-install", "loan-repay-transfer"],
   };
   for (const [unit, landings] of Object.entries(expected)) {
     const [scenarioId, variantId] = unit.split("#");
     assert.deepEqual(sessionReachableLandingIds(scenarioId, variantId), landings, unit);
   }
   const bySession = reachableLandingKeysBySession();
-  const q2Units = bySession.filter((key) => IN_CALL_INSTALL_SCENARIOS.some((id) => key.startsWith(`${id}#`)));
+  // P2 — INV-1은 T129 (b) 등재 밖 단위에만 건다(등재 단위는 (b)가 landingId로 판정을 가른다 — §98 처방).
+  const q2Units = reachableLandingKeysOutsideT129B().filter((key) => IN_CALL_INSTALL_SCENARIOS.some((id) => key.startsWith(`${id}#`)));
+  void bySession;
   assert.deepEqual(findMultiLandingScenarios(q2Units), [], "Q2 시나리오의 어느 단위도 도달 랜딩 2건이 아니다(INV-1)");
   // ⓚ = R-a — 대안 B 모양(loan 자가 단위에 loan-apply-link를 유지한 채 설치 문자 추가). §98 — 기준 입력은 T129 (b) 등재 단위를 뺀 키.
-  const polluted = [...reachableLandingKeysOutsideT129B(), "loan-refinance-scam#fv-m3hd::loan-refinance-apply"];
+  // P2 — fv-m3hd가 등재 단위가 되어 오염 표본을 등재 밖 Q2 단위(카드사 자가 고급 fv-x7ue)로 옮겼다(같은 모양 — 설치 단위에 화면 1건 추가).
+  const polluted = [...reachableLandingKeysOutsideT129B(), "card-company-impersonation#fv-x7ue::card-relief-transfer"];
   t.diagnostic(
     `[G604] 자가 3 단위 ${JSON.stringify(Object.keys(expected).map((u) => `${u}=${sessionReachableLandingIds(u.split("#")[0], u.split("#")[1]).join(",")}`))} · Q2 단위 2랜딩 ${JSON.stringify(findMultiLandingScenarios(q2Units))} / ⓚ(R-a) 사본 → ${JSON.stringify(findMultiLandingScenarios(polluted))}`,
   );
-  assert.deepEqual(findMultiLandingScenarios(polluted), ["loan-refinance-scam#fv-m3hd"]);
+  assert.deepEqual(findMultiLandingScenarios(polluted), ["card-company-impersonation#fv-x7ue"]);
 });
 
 test("[T194-c-1 G605 ①] INV-2 — 전 단위(원본 · 전 변형)에서 선언 문자의 랜딩 ⊆ 도달 가능 집합 · 역방향(선언 문자 랜딩을 뺀 집합 사본)은 실패", (t) => {
@@ -1303,7 +1325,7 @@ function findFieldConvergence(
 
 test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
   const items = Object.values(MOCK_SCREENS).flat();
-  assert.equal(items.length, 17, "현행 비교 대상은 도달 가능 랜딩 17종이다(§110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(items.length, 22, "현행 비교 대상은 도달 가능 랜딩 22종이다(P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
   const stats = fieldDivergenceStats(items);
   for (const { field, compared, excluded, converged } of stats) {
     t.diagnostic(
@@ -1526,6 +1548,42 @@ const BAIT_TO_LANDING: {
     baitExcerpt: "아래에서 보호계좌로 옮기기를 진행해 주세요.",
     headlineAnchors: ["보호계좌", "옮기기"],
     ctaAnchors: ["보호계좌", "옮기기"],
+  },
+  // ⭐ P2(X6) — 계좌 문자가 여는 훈련용 이체 화면 5종(credential-form — CTA가 미끼 행위 "이체"를 반복한다).
+  {
+    landingId: "loan-repay-transfer",
+    baitSource: "scenarios/inCallSms.ts:LOAN_SCAM (문자 본문·칩 — P2)",
+    baitExcerpt: "아래 링크에서 바로 이체할 수 있습니다.",
+    headlineAnchors: ["이체"],
+    ctaAnchors: ["이체"],
+  },
+  {
+    landingId: "asset-deposit-transfer",
+    baitSource: "scenarios/inCallSms.ts:ASSET_PROTECTION_NOTICE_CALL (문자 본문·칩 — P2)",
+    baitExcerpt: "아래 링크에서 바로 이체할 수 있습니다.",
+    headlineAnchors: ["이체"],
+    ctaAnchors: ["이체"],
+  },
+  {
+    landingId: "blackmail-hush-transfer",
+    baitSource: "scenarios/inCallSms.ts:REPUTATION_BLACKMAIL_SCAM (문자 본문·칩 — P2)",
+    baitExcerpt: "아래 링크에서 바로 이체할 수 있습니다.",
+    headlineAnchors: ["이체"],
+    ctaAnchors: ["이체"],
+  },
+  {
+    landingId: "courier-fee-transfer",
+    baitSource: "scenarios/inCallSms.ts:COURIER_CUSTOMS_SCAM (문자 본문·칩 — P2)",
+    baitExcerpt: "아래 링크에서 바로 이체할 수 있습니다.",
+    headlineAnchors: ["이체"],
+    ctaAnchors: ["이체"],
+  },
+  {
+    landingId: "courier-safe-transfer",
+    baitSource: "scenarios/inCallSms.ts:COURIER_CUSTOMS_SCAM (문자 본문·칩 — P2)",
+    baitExcerpt: "아래 링크에서 바로 이체할 수 있습니다.",
+    headlineAnchors: ["이체"],
+    ctaAnchors: ["이체"],
   },
   // T194-c-1(§84.5.2) — Q2 통화 중 설치 화면 3종. 미끼 = 통화 중 설치 문자 본문 · 칩. CTA는 app-install 예외(권한 허용 버튼).
   {

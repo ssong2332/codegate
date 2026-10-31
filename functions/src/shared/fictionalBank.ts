@@ -140,7 +140,21 @@ export function extractAccountNumber(body: string): string | undefined {
 }
 
 /**
- * 이 시나리오의 세션 계좌번호 — **계좌 문자가 있으면 그 문자 속 계좌**(대사와 문자가 같은 번호), 없으면 예시 계좌.
+ * ⭐ P2(2026-10-31 · X6) — 계좌 문자 본문의 "예금주: …" 줄 이름 · "금액: …원" 줄 숫자(쉼표 제거). 훈련용 이체 화면의 미리 채움 원천이다
+ * (두 번째 리터럴 0 — 문자 본문이 유일한 원천). 줄이 없으면 undefined.
+ */
+export function extractAccountHolder(body: string): string | undefined {
+  const name = body.split("\n").find((l) => l.startsWith("예금주:"))?.slice("예금주:".length).trim();
+  return name ? name : undefined;
+}
+
+export function extractTransferAmount(body: string): string | undefined {
+  const digits = body.split("\n").find((l) => l.startsWith("금액:"))?.match(/[\d,]+(?=원)/)?.[0]?.replace(/,/g, "");
+  return digits ? digits : undefined;
+}
+
+/**
+ * 이 시나리오의 세션 계좌번호 —**계좌 문자가 있으면 그 문자 속 계좌**(대사와 문자가 같은 번호), 없으면 예시 계좌.
  * 변형 세션은 `resolveRouteAccountNumber`(`inCallSms/smsGate.ts`)로 부른다 — 그 변형이 선언한 문자만 본다.
  * 프롬프트(`buildSystemPrompt` `sessionAccountNumber`)와 문자 문서(`accountNumber`)가 같은 값을 쓴다.
  */

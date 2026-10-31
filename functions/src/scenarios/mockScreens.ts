@@ -291,6 +291,11 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `asset-check-wallet` | `scenarios/inCallSms.ts` PROSECUTION_COOPERATION_CALL(문자 본문·칩 — §98) | "아래에서 보관 지갑 전송을 진행해 주세요." | 링크에서 보관 지갑 전송 | "검수 전용 보관 지갑 전송이 아직 완료되지 않았습니다" | "보관 지갑으로 전송하기" |
 // | `card-delivery-app-install` | `scenarios/inCallSms.ts` CARD_DELIVERY_CALL(문자 본문·칩 — T194-c-1 Q2) | "아래에서 보안 점검 앱을 설치해 주세요." | 보안 점검 앱 설치 | "보안 점검 앱을 설치해야 사고 접수가 이어집니다" | "권한 허용하고 계속하기" |
 // | `card-guard-app-install` | `scenarios/inCallSms.ts` CARD_COMPANY_IMPERSONATION(문자 본문·칩 — T194-c-1 Q2) | "아래에서 피해 차단용 보안 앱을 설치해 주세요." | 피해 차단용 보안 앱 설치 | "피해 차단용 보안 앱을 설치해야 보호 조치가 시작됩니다" | "권한 허용하고 계속하기" |
+// | `loan-repay-transfer` | `scenarios/inCallSms.ts` LOAN_SCAM(문자 본문·칩 — P2 X6) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "상환금 이체 정보를 확인해 주세요" | "상환금 이체하기" |
+// | `asset-deposit-transfer` | `scenarios/inCallSms.ts` ASSET_PROTECTION_NOTICE_CALL(문자 본문·칩 — P2 X6) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "공탁금 이체 정보를 확인해 주세요" | "공탁금 이체하기" |
+// | `blackmail-hush-transfer` | `scenarios/inCallSms.ts` REPUTATION_BLACKMAIL_SCAM(문자 본문·칩 — P2 X6) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "이체할 금액을 확인해 주세요" | "바로 이체하기" |
+// | `courier-fee-transfer` | `scenarios/inCallSms.ts` COURIER_CUSTOMS_SCAM(문자 본문·칩 — P2 X6) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "통관수수료 이체 정보를 확인해 주세요" | "통관수수료 이체하기" |
+// | `courier-safe-transfer` | `scenarios/inCallSms.ts` COURIER_CUSTOMS_SCAM(문자 본문·칩 — P2 X6) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "안전계좌 이체 정보를 확인해 주세요" | "안전계좌로 이체하기" |
 // | `loan-check-app-install` | `scenarios/inCallSms.ts` LOAN_SCAM(문자 본문·칩 — T194-c-1 Q2) | "아래에서 심사용 보안 점검 앱을 설치해 주세요." | 심사용 보안 점검 앱 설치 | "심사용 보안 점검 앱을 설치해야 대출 심사가 진행됩니다" | "권한 허용하고 계속하기" |
 //
 // ⚠️ **이 표가 조용히 낡지 않게 하는 장치(주석은 강제가 아니다).** 위 **줄 번호는 스냅샷일 뿐이며
@@ -347,6 +352,27 @@ const MESSENGER_PARCEL_SMISHING_SMS: MockScreenItem[] = [
 ];
 
 // UF-008 — 통화 중 문자(UX-027)의 `loan-apply-link` 칩에서 열린다(`inCallSms.ts` LOAN_SCAM).
+// ── ⭐ P2(2026-10-31 · docs/research/in-service-experience-plan-2026-10-31.md §2.1 K1 `bank-transfer` · X6) — 훈련용 이체 화면 ──────────────
+// 계좌만 적힌 문자 5종이 이 화면을 여는 링크 문자로 바뀌었다. 참가자가 실제 뱅킹 앱을 열 이유를 없애는 것이 목적이다(사용자 원칙 — 훈련은 서비스 밖
+// 실제 행동으로 번지지 않는다). 화면은 "세션 가상 은행(§81) 앱의 이체" 흉내다: ① 이체 정보(받는 분 계좌 · 금액 — 문자 값 미리 채움) → ② 이체 정보
+// 확인(받는 분 이름 · 계좌 · 금액 · 보이스피싱 주의) → ③ 본인 인증(간편 인증 버튼 — 비밀번호 입력 칸 0) → 완료. 돈은 움직이지 않고 입력값은 서버로
+// 가지 않는다(AC-045 — 기록은 마지막 버튼을 눌렀다는 사실 하나). 렌더 정본 = `src/components/MessengerFakeLanding.tsx` `BankTransferMockup`.
+// ⛔ 새 kind 0(`credential-form` — 안전 계약 그대로). landingId는 전역 유일이라 루트마다 id가 다르고, 화면 문구는 5종이 같다(드리프트 테스트가 항목 단위 리터럴을 읽어 펼치지 않는다).
+// 실제 은행 앱 흐름과의 대조 · 다른 점은 `docs/research/in-service-experience-plan-2026-10-31.md` §9.
+/** P2 — 훈련용 이체 화면 landingId(루트마다 1개 · 화면은 같다). 클라 `BANK_TRANSFER_LANDINGS`와 같은 목록(G76 드리프트 테스트). */
+export const BANK_TRANSFER_LANDINGS: readonly string[] = [
+  "loan-repay-transfer",
+  "asset-deposit-transfer",
+  "blackmail-hush-transfer",
+  "courier-fee-transfer",
+  "courier-safe-transfer",
+];
+
+/** P2 — 이 랜딩이 훈련용 이체 화면인가(문자 문서의 받는 분 · 금액 미리 채움 필드를 싣는 단일 판별자 — `inCallSms/buildDoc.ts`). */
+export function isBankTransferLanding(landingId: string): boolean {
+  return BANK_TRANSFER_LANDINGS.includes(landingId);
+}
+
 const LOAN_REFINANCE_SCAM: MockScreenItem[] = [
   {
     landingId: "loan-refinance-apply",
@@ -386,6 +412,22 @@ const LOAN_REFINANCE_SCAM: MockScreenItem[] = [
     momentTactic: "대출 심사를 빌미로 한 보안 점검 앱 설치·권한 허용 유도",
     correctAction:
       "대출 심사를 이유로 앱 설치나 권한 허용을 요구받으면 그 자리에서 허용하지 말고 화면을 닫으세요. ① 대출 상담은 이미 알고 있는 금융회사 대표번호로 직접 확인하기 ② 문자 속 링크로 앱을 설치하지 않기 ③ 가족이나 가까운 창구에서 함께 확인하기 ④ 이미 허용했다면 가족 휴대폰이나 집 전화로 경찰이나 금융감독원에 신고하기.",
+  },
+  // ⭐ P2(X6) — 계좌 문자가 여는 훈련용 이체 화면(문구는 `BANK_TRANSFER_LANDINGS` 5종 공통).
+  {
+    landingId: "loan-repay-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "상환금 이체 정보를 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 '전환 상환금'으로 표시됩니다."],
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 상환금",
+    mockHost: "loan-repay-send.invalid",
+    fields: ["상환 전용 계좌", "보낼 금액"],
+    submitLabel: "상환금 이체하기",
+    successHeadline: "상환금 이체가 완료되었습니다.",
+    momentTactic: "저금리 대환 승인을 빌미로 한 상환금 선입금 이체 유도",
+    correctAction:
+      "대출을 해 주겠다며 먼저 돈을 넣으라고 하면 그 자리에서 멈추세요 — 정상 금융회사는 대출 전에 상환금 · 수수료 · 보증금을 입금하라고 하지 않습니다. ① 통화를 끊고 그 금융회사 대표번호로 직접 확인하기 ② 문자 속 링크로 이체하지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 이체했다면 바로 112(경찰)나 그 은행 대표번호로 지급정지를 요청하고 1332(금융감독원)에도 알리기.",
   },
 ];
 
@@ -432,6 +474,38 @@ const COURIER_CUSTOMS_SCAM: MockScreenItem[] = [
     momentTactic: "통관 보류를 빌미로 한 수취인 정보 입력 유도",
     correctAction:
       "통관이 보류됐다며 링크로 정보를 확인하라고 하면 입력하지 말고 화면을 닫으세요. ① 배송 상태는 주문한 판매처나 배송사 공식 경로에서 직접 조회하기 ② 생년월일·연락처를 문자 링크에 넣지 않기 ③ 가족이나 가까운 사람에게 화면을 보여 주고 함께 확인하기 ④ 이미 입력했다면 112(경찰)·1332(금융감독원)에 신고하기.",
+  },
+  // ⭐ P2(X6) — 계좌 문자가 여는 훈련용 이체 화면(문구는 `BANK_TRANSFER_LANDINGS` 5종 공통).
+  {
+    landingId: "courier-fee-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "통관수수료 이체 정보를 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 '통관 수수료'로 표시됩니다."],
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 통관 수수료",
+    mockHost: "customs-fee-send.invalid",
+    fields: ["수수료 납부 계좌", "보낼 금액"],
+    submitLabel: "통관수수료 이체하기",
+    successHeadline: "통관수수료 이체가 완료되었습니다.",
+    momentTactic: "통관 보류를 빌미로 한 수수료 이체 유도",
+    correctAction:
+      "통관이 막혔다며 문자 속 계좌나 링크로 수수료를 내라고 하면 멈추세요 — 배송 조회와 납부는 이미 알고 있는 택배사 · 관세 공식 경로에서 직접 확인합니다. ① 통화를 끊고 송장 번호로 공식 경로에서 직접 조회하기 ② 문자 속 링크로 이체하지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 이체했다면 바로 112(경찰)나 그 은행 대표번호로 지급정지를 요청하고 1332(금융감독원)에도 알리기.",
+  },
+  // ⭐ P2(X6) — 계좌 문자가 여는 훈련용 이체 화면(문구는 `BANK_TRANSFER_LANDINGS` 5종 공통).
+  {
+    landingId: "courier-safe-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "안전계좌 이체 정보를 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 '피해 조치 보관'으로 표시됩니다."],
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 안전계좌",
+    mockHost: "safe-keep-send.invalid",
+    fields: ["국가 안전계좌", "보낼 금액"],
+    submitLabel: "안전계좌로 이체하기",
+    successHeadline: "안전계좌 보관 이체가 완료되었습니다.",
+    momentTactic: "명의 도용 피해 조치를 빌미로 한 국가 안전계좌 이체 유도",
+    correctAction:
+      "'국가 안전계좌로 옮겨야 피해를 막는다'고 하면 그 자리에서 멈추세요 — 어떤 수사 · 금융기관도 돈을 다른 계좌로 옮기라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 문자 속 링크로 이체하지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 이체했다면 바로 112(경찰)나 그 은행 대표번호로 지급정지를 요청하고 1332(금융감독원)에도 알리기.",
   },
 ];
 
@@ -558,6 +632,22 @@ const ASSET_PROTECTION_NOTICE_CALL: MockScreenItem[] = [
     momentTactic: "자산 보호를 빌미로 한 현금 인출 · 전달 약속 유도",
     correctAction:
       "'돈을 찾아 맡기면 보관해 주겠다'고 하면 그 자리에서 멈추세요 — 어떤 기관도 수사를 이유로 현금을 받아 가거나 보관해 주지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 은행 창구에서 돈을 찾는 이유를 물으면 사실대로 말하고 도움을 청하기 ③ 이미 돈을 건넸다면 바로 경찰에 신고하기",
+  },
+  // ⭐ P2(X6) — 계좌 문자가 여는 훈련용 이체 화면(문구는 `BANK_TRANSFER_LANDINGS` 5종 공통).
+  {
+    landingId: "asset-deposit-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "공탁금 이체 정보를 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 '약식 공탁금'으로 표시됩니다."],
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 공탁금",
+    mockHost: "deposit-send-link.invalid",
+    fields: ["공탁금 계좌", "보낼 금액"],
+    submitLabel: "공탁금 이체하기",
+    successHeadline: "공탁금 이체가 완료되었습니다.",
+    momentTactic: "약식 처리 명목의 공탁금 이체 유도",
+    correctAction:
+      "'약식으로 끝내려면 공탁금을 먼저 넣으라'고 하면 그 자리에서 멈추세요 — 수사기관은 전화로 공탁금 · 보증금을 계좌로 보내라고 하지 않습니다. ① 통화를 끊고 이미 알고 있는 기관 대표번호로 직접 확인하기 ② 문자 속 링크로 이체하지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 이체했다면 바로 112(경찰)나 그 은행 대표번호로 지급정지를 요청하고 1332(금융감독원)에도 알리기.",
   },
 ];
 
@@ -709,6 +799,26 @@ const PROSECUTION_COOPERATION_CALL: MockScreenItem[] = [
 //
 // ⚠️ **UX v1.25 정정 — bodyLines 둘째 줄만.** v1.24 원안은 fields 라벨("보호계좌 번호"·"옮길
 // 금액")을 문자 그대로 반복해 T116 G194에 걸렸다(institutional·card와 같은 형태).
+// ⭐ P2(X6) — 유포 협박 카탈로그 신설(이 시나리오 첫 항목 · 계좌 문자 `blackmail-hush-account`가 여는 이체 화면 1건).
+const REPUTATION_BLACKMAIL_SCAM: MockScreenItem[] = [
+  // ⭐ P2(X6) — 계좌 문자가 여는 훈련용 이체 화면(문구는 `BANK_TRANSFER_LANDINGS` 5종 공통).
+  {
+    landingId: "blackmail-hush-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "이체할 금액을 확인해 주세요",
+    bodyLines: ["받는 분 통장에는 보내는 분 이름으로 표시됩니다."],
+    issuerLabel: "ⓒ 모바일뱅킹 송금 요청 · 개인",
+    mockHost: "hush-send-link.invalid",
+    fields: ["받는 분 계좌", "보낼 금액"],
+    submitLabel: "바로 이체하기",
+    successHeadline: "이체가 완료되었습니다.",
+    momentTactic: "영상 유포 협박을 무마해 주겠다는 명목의 입금 유도",
+    correctAction:
+      "유포하겠다며 돈을 보내라고 하면 보내지 마세요 — 돈을 보내도 협박은 끝나지 않고 더 큰 요구로 이어지는 경우가 많습니다. ① 입금하지 말고 대화를 멈추기 ② 협박 메시지 · 번호를 지우지 말고 남겨 두기 ③ 혼자 감당하지 말고 가족이나 믿을 수 있는 사람과 112(경찰)에 함께 알리기 ④ 이미 이체했다면 바로 112(경찰)나 그 은행 대표번호로 지급정지를 요청하고 1332(금융감독원)에도 알리기.",
+  },
+];
+
 const BANK_SECURITY_VERIFY_SCAM: MockScreenItem[] = [
   {
     landingId: "protect-account-transfer",
@@ -796,6 +906,8 @@ export const MOCK_SCREENS: Record<string, MockScreenItem[]> = {
   "tax-refund-scam": TAX_REFUND_SCAM,
   "courier-customs-scam": COURIER_CUSTOMS_SCAM,
   "bank-security-verify-scam": BANK_SECURITY_VERIFY_SCAM,
+  // P2(X6) — 카탈로그 신설(계좌 문자가 여는 훈련용 이체 화면 1건).
+  "reputation-blackmail-scam": REPUTATION_BLACKMAIL_SCAM,
   // T194-c-1(§84.5.2) — 카탈로그 신설(이 시나리오 첫 항목 · 통화 중 설치 화면 1건).
   "card-delivery-call": CARD_DELIVERY_CALL,
   // §92.3(DECISIONS #206) — 고급 전용 2종 카탈로그 신설(각 `credential-form` 1건).
