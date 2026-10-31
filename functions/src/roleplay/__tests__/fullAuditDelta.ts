@@ -9,6 +9,7 @@ import {
   CLAIM_CONSISTENCY_RULE,
   HANGUP_EXHAUSTED_SENTENCE,
   HANGUP_NO_NEW_DEMAND_SENTENCE,
+  IMPOSSIBLE_IDENTITY_VALUE_SENTENCE,
   LIVE_NO_IDLE_RULE,
   OFF_TOPIC_REPLY_SENTENCE,
   SMS_NOT_YET_SENT_SENTENCE,
@@ -27,7 +28,9 @@ export const FULL_AUDIT_REPEAT_ADDED =
 export const FULL_AUDIT_LENGTH_DELTA =
   FULL_AUDIT_PAYLOAD_NEW.length - FULL_AUDIT_PAYLOAD_OLD.length + FULL_AUDIT_REPEAT_ADDED.length + OFF_TOPIC_REPLY_SENTENCE.length + USER_MENTIONED_FINANCIAL_SENTENCE.length +
   // §129 — NO_STALL_RULE 뒤 무조건부 1항(줄바꿈 포함).
-  1 + CLAIM_CONSISTENCY_RULE.length;
+  1 + CLAIM_CONSISTENCY_RULE.length +
+  // 2026-10-31 — 본인확인 항목 끝 무조건부 1문장(있을 수 없는 생년월일 · 날짜 되묻기).
+  IMPOSSIBLE_IDENTITY_VALUE_SENTENCE.length;
 
 function replaceOnce(text: string, from: string, to: string, label: string): string {
   const count = text.split(from).length - 1;
@@ -59,6 +62,8 @@ export function revertFullAudit(assembled: string): string {
   //    Live 문자 도구 줄 끝 "도구 이름 · 인자를 말하지 않는다" 1문장(조건형 — 0 또는 1회).
   const claimReverted = replaceOnce(userMentionedReverted, `\n${CLAIM_CONSISTENCY_RULE}`, "", "하지 않은 일 확인 금지");
   const toolSpeechReverted = removeAtMostOnce(claimReverted, SMS_TOOL_SPEECH_SENTENCE, "도구 이름 발화 금지");
+  // ⑨ 2026-10-31(운영 세션 c8184afd 실기 신고) — 본인확인 항목(TRUE · FALSE 중 하나) 끝 "있을 수 없는 값 되묻기" 1문장(무조건부 — 정확히 1회).
+  const impossibleReverted = replaceOnce(toolSpeechReverted, IMPOSSIBLE_IDENTITY_VALUE_SENTENCE, "", "있을 수 없는 신상 값 되묻기");
   // ⑧ §129 — 시나리오 문면 교체(그 시나리오 조립에만 있다 — 0 또는 1회): 금액 자리 "얼마만" → 구체 금액(D5) · 상담원 인용구 존댓말(에뮬 D13) ·
   //    지인 카톡 "ㅇㅇ" 자리표시 금지 1문장(D10).
   return PROBE_129_TEXT_CHANGES.reduce(
@@ -67,7 +72,7 @@ export function revertFullAudit(assembled: string): string {
       if (count > 1) throw new Error(`§129 문면 "${now}"이 조립 산출물에 ${count}회 있다(0 또는 1회여야 한다)`);
       return count === 1 ? text.replace(now, before) : text;
     },
-    toolSpeechReverted,
+    impossibleReverted,
   );
 }
 

@@ -79,6 +79,30 @@ export function isEndLatched(s: CallEndingState): boolean {
   return s.phase !== "idle";
 }
 
+/**
+ * §79.19 (3) 부모 클라 항(6행 "지시 대기") — `end_call`을 막을 지시가 남아 있는가.
+ *
+ * ⭐ 2026-10-31 실기 신고(운영 세션 c8184afd · 기관 사칭 고급 · "갑자기 아무 말 없이 통화가 종료") — §115 마무리 지시(`wrapUpInstruction`)는
+ * "짧게 답한 뒤 `end_call`을 불러라"인데, 큐를 떠나는 순간 `busy`가 켜지고 다음 사기범 턴 경계에서야 꺼진다. 모델은 그 지시대로 **같은
+ * 응답 턴 안에서** `end_call`을 부르므로 그 지시 자신이 6행을 켰다(로그 09:31:09 row 6 → 재호출 09:31:19 row 9 · 그 사이 콜드 스타트 포함 약 20초 침묵).
+ *
+ * | 큐 | 처리 중(busy) | 처리 중인 지시 | 교대 대기 | 결과 |
+ * |---|---|---|---|---|
+ * | 1건 이상 | 무관 | 무관 | 무관 | 대기(막는다) |
+ * | 0 | 예 | 마무리 지시가 아님 | 무관 | 대기(막는다 — 종전) |
+ * | 0 | 예 | 마무리 지시 | 아니오 | 대기 아님 — 그 지시가 바로 끊으라는 지시다 |
+ * | 0 | 아니오 | — | 아니오 | 대기 아님 |
+ * | 무관 | 무관 | 무관 | 예 | 대기(막는다) |
+ */
+export function isHangupInstructionPending(input: {
+  queued: number;
+  busy: boolean;
+  busyIsWrapUp: boolean;
+  relaySwitchPending: boolean;
+}): boolean {
+  return input.queued > 0 || (input.busy && !input.busyIsWrapUp) || input.relaySwitchPending;
+}
+
 /** S7 교대 허용 — 래치 idle만 `true`(§79.18 (3) ④ · G528 ⓒ). 호출과 토큰 폐기는 S7 몫. */
 export function shouldAcceptRelaySwitch(s: CallEndingState): boolean {
   return !isEndLatched(s);

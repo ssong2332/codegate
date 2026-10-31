@@ -90,7 +90,11 @@ test("[§79.18 (2) · G528] 부모 — 동결 인터페이스 5종을 세션 컴
   // §121.7 ⓒ — 통화 중 대화방 카톡을 더한다(메인 결정 '두 채널 발화 합산').
   assert.match(pageCode, /const getSessionUserTurns = useCallback\(\(\) => turnCountersRef\.current\.userTurns \+ chatTurnsDuringCallRef\.current, \[\]\);/);
   const pending = slice(pageCode, "const getPendingInstruction = useCallback(", "const isHangupLatched = ");
-  assert.match(pending, /instructionQueueRef\.current\.length > 0 \|\| instructionBusyRef\.current \|\| isRelaySwitchPending\(\)/);
+  // 2026-10-31 — 판정은 순수 함수(마무리 지시 처리 중은 대기 아님 — `wrapUpHangup.test.ts`).
+  assert.match(
+    pending,
+    /isHangupInstructionPending\(\{\s*queued: instructionQueueRef\.current\.length,\s*busy: instructionBusyRef\.current,\s*busyIsWrapUp: instructionBusyWrapUpRef\.current,\s*relaySwitchPending: isRelaySwitchPending\(\),\s*\}\)/,
+  );
   assert.equal(pending.includes("toolPending"), false, "부모 클라 항에 toolPending이 들어갔다(G555)");
   assert.match(pageCode, /const isHangupLatched = useCallback\(\(\) => isEndLatched\(callEndingRef\.current\), \[\]\);/);
   assert.match(
