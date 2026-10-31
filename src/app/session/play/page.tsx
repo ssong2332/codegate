@@ -41,6 +41,7 @@ import {
   REMOTE_HANGUP_STATUS_LINE,
   beginCallEnding,
   isEndLatched,
+  isHangupInstructionPending,
   latchHangupAccepted,
   type CallEndedBy,
   type CallEndingState,
@@ -472,6 +473,8 @@ export default function SessionCallPage() {
   }, []);
   // 이번 사기범 턴에 이미 지시를 하나 넣었는가(다음 turnComplete까지 추가 주입을 보류한다).
   const instructionBusyRef = useRef(false);
+  // 2026-10-31 실기 신고 — 처리 중인 지시가 §115 마무리 지시(끊으라는 지시)인가. 이때의 `end_call`은 6행으로 막지 않는다(`isHangupInstructionPending`).
+  const instructionBusyWrapUpRef = useRef(false);
   // §52.7 (5) 가·나 / §57.5(G369) — `shouldDrainInstructionQueue`의 입력. 아직 지시를 한 번도
   // 보내지 않은 상태를 "열림"(참가자 조건 충족)으로 보는 것이 계약이므로 **`true`로 시작**한다
   // (첫 지시는 항상 나가야 한다 — §52.7 (5) 가의 금지). 실제로 지시를 보낸 순간 `false`(닫힘)로
@@ -553,7 +556,13 @@ export default function SessionCallPage() {
   const getSessionUserTurns = useCallback(() => turnCountersRef.current.userTurns + chatTurnsDuringCallRef.current, []);
   // §79.19 (3) — 부모 클라 항: 지시 큐 비어 있지 않음 ∨ 이번 턴 지시 처리 중 ∨ 교대 대기. ⛔ `toolPending`은 없다(G555).
   const getPendingInstruction = useCallback(
-    () => instructionQueueRef.current.length > 0 || instructionBusyRef.current || isRelaySwitchPending(),
+    () =>
+      isHangupInstructionPending({
+        queued: instructionQueueRef.current.length,
+        busy: instructionBusyRef.current,
+        busyIsWrapUp: instructionBusyWrapUpRef.current,
+        relaySwitchPending: isRelaySwitchPending(),
+      }),
     [isRelaySwitchPending],
   );
   const isHangupLatched = useCallback(() => isEndLatched(callEndingRef.current), []);
@@ -1048,6 +1057,7 @@ export default function SessionCallPage() {
     if (!item) return;
     instructionQueueRef.current = rest;
     instructionBusyRef.current = true;
+    instructionBusyWrapUpRef.current = item.wrapUp === true;
     instructionGateOpenRef.current = false;
     instructionSuppressedStreakRef.current = 0;
     instructionCapReachedAtSecRef.current = null;
@@ -1087,13 +1097,14 @@ export default function SessionCallPage() {
     (
       text: string,
       priority: PendingInstruction["priority"],
-      options?: { speakerSwitch?: boolean; smsNudge?: boolean },
+      options?: { speakerSwitch?: boolean; smsNudge?: boolean; wrapUp?: boolean },
     ) => {
       instructionQueueRef.current = enqueueInstruction(instructionQueueRef.current, {
         text,
         priority,
         ...(options?.speakerSwitch ? { speakerSwitch: true } : {}),
         ...(options?.smsNudge ? { smsNudge: true } : {}),
+        ...(options?.wrapUp ? { wrapUp: true } : {}),
       });
       drainInstructionQueue();
     },
@@ -1188,7 +1199,7 @@ export default function SessionCallPage() {
         // 더 묻지 않아 1회다(재마운트 대비로 ref 표시도 둔다). `goal_pending`은 아무것도 하지 않고 다음 발화에 다시 묻는다.
         if (result.status === "none_pending" && result.wrapUpInstruction && !state.wrapUpSent) {
           state.wrapUpSent = true;
-          enqueueTurnInstruction(result.wrapUpInstruction, "sms", { smsNudge: true });
+          enqueueTurnInstruction(result.wrapUpInstruction, "sms", { smsNudge: true, wrapUp: true });
         }
       } catch {
         // 같은 발화 수로는 다시 묻지 않는다 — 다음 사용자 발화에서 최신 값으로 다시 묻는다(발송 단계는 `>=`라 놓치지 않는다).
@@ -1377,6 +1388,7 @@ export default function SessionCallPage() {
     lastScammerBoundaryAtSecRef.current = elapsedSecRef.current;
     // 턴이 끝났으니 보류분을 하나 더 내보낸다(위 계약 (2)).
     instructionBusyRef.current = false;
+    instructionBusyWrapUpRef.current = false;
     drainInstructionQueue();
     // T118 / A5-α — 전환 이후에는 같은 턴 경계에서 전환 상태 단언을 **다시** 넣는다(§25.3).
     // 큐를 타지 않으므로 위 드레인과 경합하지 않는다(턴 슬롯 소비 0 ⇒ G31/G58 무변경).

@@ -75,8 +75,9 @@ const BASE_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { varia
 const AFTER_ASSEMBLY_SHA256: Readonly<Record<"beginner" | "intermediate", { sha256: string; length: number }>> = {
   // §127 — 페이로드 줄에 참가자 언급 은행 되받기 1문장(+60자 · `USER_MENTIONED_FINANCIAL_SENTENCE`)으로 갱신. 직전 값: 초급 aac610a5e388(6500자) · 중급 44b6e585b4e4(5766자).
   // §129 — NO_STALL_RULE 뒤 무조건부 1항(+313자 · `CLAIM_CONSISTENCY_RULE` + 줄바꿈)으로 갱신. 직전 값: 초급 8f837c0fad8d(6560자) · 중급 b95c83661f25(5826자).
-  beginner: { sha256: "ae93113342a4b7cc9669480a39e6bad9daa62d5870b2c910c895b97e2d50cfd3", length: 6873 },
-  intermediate: { sha256: "8ad2cb971c2071bcb233db7384a82dc719762851bca23d26fd9f4c1d134c11c0", length: 6139 },
+  // 2026-10-31 — 본인확인 항목 끝 "있을 수 없는 값 되묻기" 1문장(+236자 · `IMPOSSIBLE_IDENTITY_VALUE_SENTENCE`)으로 갱신. 직전 값: 초급 ae93113342a4(6873자) · 중급 8ad2cb971c20(6139자).
+  beginner: { sha256: "9ffb578f574c67c51f5f08b259aa0010307d099c410c977aeea7c98622a210fa", length: 7109 },
+  intermediate: { sha256: "ebcb922137e6bfdab96652dbe3dc6343bc160bf25b5d06759a91976e3c0e94ac", length: 6375 },
 };
 
 test("[T194-a G586 · §84.13.3 ④] parcel 초급 · 중급 조립 = 갱신 기대값(가드레일 (5)항 포함) · 가드레일 최후미", () => {
