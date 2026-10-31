@@ -2963,26 +2963,52 @@ export default function SessionCallPage() {
             onBlur={() => setBannerPausedSmsId(null)}
             onMouseEnter={() => setBannerPausedSmsId(latestSms.smsId)}
             onMouseLeave={() => setBannerPausedSmsId(null)}
-            className="flex w-full max-w-[414px] flex-col gap-1 px-3.5 py-3 text-left shadow-[0_6px_20px_rgba(0,0,0,0.35)]"
+            className={`flex w-full max-w-[414px] px-3.5 py-3 text-left shadow-[0_6px_20px_rgba(0,0,0,0.35)] ${
+              bannerTokens.layout === "ios" ? "items-center gap-3" : "flex-col gap-1"
+            }`}
             style={{
               backgroundColor: bannerTokens.bg,
               borderRadius: bannerTokens.radiusPx,
               color: bannerTokens.text,
             }}
           >
-            <span className="flex items-center gap-2 text-[13px]" style={{ color: bannerTokens.textSecondary }}>
-              <span
-                aria-hidden="true"
-                className="flex h-5 w-5 items-center justify-center rounded-md"
-                style={{ backgroundColor: bannerTokens.appIconBg, color: bannerTokens.appIconFg }}
-              >
-                <PhoneIcon name="message" size={14} />
-              </span>
-              <span>메시지</span>
-              <span className="ml-auto">지금</span>
-            </span>
-            <span className="block truncate text-[15px] font-semibold">{latestSms.senderLabel}</span>
-            <span className="line-clamp-2 text-[15px] leading-snug">{latestSms.body.split("\n")[0]}</span>
+            {/* 2026-10-31 — iOS형은 앱 이름 줄 없이 왼쪽 큰 앱 아이콘 + [발신 · "지금" / 본문](`bannerTokens.layout` 주석). */}
+            {bannerTokens.layout === "ios" ? (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[9px]"
+                  style={{ backgroundColor: bannerTokens.appIconBg, color: bannerTokens.appIconFg }}
+                >
+                  <PhoneIcon name="message" size={22} />
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="flex items-baseline gap-2">
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{latestSms.senderLabel}</span>
+                    <span className="shrink-0 text-[13px]" style={{ color: bannerTokens.textSecondary }}>
+                      지금
+                    </span>
+                  </span>
+                  <span className="line-clamp-2 text-[15px] leading-snug">{latestSms.body.split("\n")[0]}</span>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="flex items-center gap-2 text-[13px]" style={{ color: bannerTokens.textSecondary }}>
+                  <span
+                    aria-hidden="true"
+                    className="flex h-5 w-5 items-center justify-center rounded-md"
+                    style={{ backgroundColor: bannerTokens.appIconBg, color: bannerTokens.appIconFg }}
+                  >
+                    <PhoneIcon name="message" size={14} />
+                  </span>
+                  <span>메시지</span>
+                  <span className="ml-auto">지금</span>
+                </span>
+                <span className="block truncate text-[15px] font-semibold">{latestSms.senderLabel}</span>
+                <span className="line-clamp-2 text-[15px] leading-snug">{latestSms.body.split("\n")[0]}</span>
+              </>
+            )}
             {/* T187(§72 · PRD v1.18 AC-086 · UX D-82) — 세션 중 표식 칩 삭제. 빈 자리를 채우지 않는다. */}
           </button>
         </div>
