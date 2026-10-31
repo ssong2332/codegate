@@ -45,5 +45,5 @@ test("[§121.7 배선] sendMessage는 duringCall이면 시나리오 확인 직�
   assert.ok(!chat.includes("deliverSmsThroughGate"), "문자 0");
   // §128(3) G3 — 세션을 끝내는 것은 포기 신호 · 사후 판정 accepted · 트랜잭션 재확인일 때뿐이다.
   assert.match(chat, /const end = giveUp && fresh\?\.status === "active";/);
-  assert.match(chat, /endCall === "give_up" &&\n\s*hangupMode === "signal" &&\n\s*decideFallbackHangup\(hangupFacts, delivered, completion\.isMock\)\.status === "accepted"/);
+  assert.match(chat, /endCall === "give_up" &&\n\s*hangupMode === "signal" &&\n\s*decideFallbackHangup\(hangupFacts, delivered, completion\.isMock, endCall\)\.status === "accepted"/); // P1 M1 — 사후 판정에 신호 사유(4-c행)
 });

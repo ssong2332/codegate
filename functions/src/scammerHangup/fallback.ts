@@ -24,6 +24,8 @@ export type FallbackHangupFacts = {
   goalActionDone: boolean;
   /** §132.13 — 후속 단계 변형 ∧ C-5 미충족(4-b행 · 실시간과 같은 계산). */
   followUpPending: boolean;
+  /** P1 M1 — 결정 화면 미완료(4-c행 · `isDecisionScreenPending` — 실시간과 같은 함수 · 읽기 실패 = 선언대로 대기). */
+  decisionScreenPending: boolean;
   /** `userTurnsNow`(S5b 문자 게이트와 같은 변수 — G552 ⓒ). */
   userTurns: number;
   /** 턴 확보 트랜잭션 값으로 LLM 전에 계산한 한도(§79.19 (5) 10 — 옛 79.7 1의 `limitReached:false` 정정). */
@@ -66,11 +68,14 @@ export function fallbackSmsAwaitingUser(
 /**
  * 폴백 판정 — 사전(`isMockTurn:false` · LLM 전)과 사후(`completion.isMock` · 문자 마커 도착을 더한 목록)가 같은 함수를 쓴다.
  * 폴백의 `pendingInstruction`은 항상 `false`(클라 큐가 없다 — 문자 대기는 서버 항이 대신한다, §79.19 (4)).
+ * ⭐ P1 M1 — `hangupKind`: 사전 판정은 `undefined`(LLM 전이라 신호를 모른다 — 4-c행 통과 · `give_up` 신호 길을 열어 둔다) ·
+ * 사후 판정은 응답의 끊기 신호 사유(`goal`이면 결정 화면 전 4-c행이 막는다).
  */
 export function decideFallbackHangup(
   facts: FallbackHangupFacts,
   delivered: readonly DeliveredSmsRecord[],
   isMockTurn: boolean,
+  hangupKind?: ScammerHangupKind,
 ): ScammerHangupDecision {
   return decideScammerHangup({
     status: facts.status,
@@ -81,6 +86,8 @@ export function decideFallbackHangup(
     transferReachable: facts.transferReachable,
     goalActionDone: facts.goalActionDone,
     followUpPending: facts.followUpPending,
+    decisionScreenPending: facts.decisionScreenPending,
+    hangupKind,
     userTurns: facts.userTurns,
     pendingInstruction: false,
     smsAwaitingUser: fallbackSmsAwaitingUser(facts, delivered),

@@ -5,6 +5,7 @@ import * as path from "node:path";
 import {
   SCAMMER_HANGUP_ACCEPTED_GUIDANCE,
   SCAMMER_HANGUP_BLOCKED_TRANSFER_GUIDANCE,
+  SCAMMER_HANGUP_DECISION_PENDING_GUIDANCE,
   SCAMMER_HANGUP_DECLINED_GUIDANCE,
   SCAMMER_HANGUP_FAILURE_INSTRUCTION,
   SCAMMER_HANGUP_FOLLOW_UP_PENDING_GUIDANCE,
@@ -60,7 +61,8 @@ test("[G516] 상수 4개가 §79.5 정본과 바이트 동일하다", () => {
 });
 
 test("[G516] 문면에 숫자 0(F11/G130 — 횟수 · 턴 번호를 모델에게 주지 않는다)", () => {
-  for (const value of CONSTANTS) assert.doesNotMatch(value, /[0-9０-９]/);
+  // P1 M1 — 4-c 문면도 같은 규칙(정본 4개 대조 목록과는 따로 본다).
+  for (const value of [...CONSTANTS, SCAMMER_HANGUP_DECISION_PENDING_GUIDANCE]) assert.doesNotMatch(value, /[0-9０-９]/);
 });
 
 test("[G516] 판정 status 전수 → 문면 매핑(승인 2 · 전환 전 1 · 나머지 공통 거절)", () => {
@@ -71,7 +73,9 @@ test("[G516] 판정 status 전수 → 문면 매핑(승인 2 · 전환 전 1 · 
         ? SCAMMER_HANGUP_BLOCKED_TRANSFER_GUIDANCE
         : rule.status === "blocked_follow_up" // §132.13 — 4-b행 = 후속 단계 문면
           ? SCAMMER_HANGUP_FOLLOW_UP_PENDING_GUIDANCE
-          : SCAMMER_HANGUP_DECLINED_GUIDANCE;
+          : rule.status === "blocked_decision" // P1 M1 — 4-c행 = 결정 화면 전 문면
+            ? SCAMMER_HANGUP_DECISION_PENDING_GUIDANCE
+            : SCAMMER_HANGUP_DECLINED_GUIDANCE;
     assert.equal(scammerHangupGuidance(rule.status), expected, rule.status);
   }
 });

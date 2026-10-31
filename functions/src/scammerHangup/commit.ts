@@ -53,6 +53,8 @@ export async function decideAndMarkRealtimeHangup<Ref>(
   goalActionDone: boolean,
   /** §132.13 — 4-b행 입력(후속 단계 변형 ∧ C-5 미충족 · 핸들러가 계산). */
   followUpPending: boolean,
+  /** P1 M1 — 4-c행 입력(`goalAction.ts` `isDecisionScreenPending` · 핸들러가 트랜잭션 밖에서 계산 · 읽기 실패 = 선언대로 대기). */
+  decisionScreenPending: boolean,
 ): Promise<ScammerHangupDecision> {
   const smsAwaitingUser = isSmsAwaitingUser(delivered, claims.userTurns);
   const sessionSnap = await tx.get(refs.session);
@@ -69,6 +71,8 @@ export async function decideAndMarkRealtimeHangup<Ref>(
       transferReachable: true,
       goalActionDone: false,
       followUpPending: false,
+      decisionScreenPending: false,
+      hangupKind: claims.kind,
       userTurns: claims.userTurns,
       pendingInstruction: claims.pendingInstruction,
       smsAwaitingUser,
@@ -99,6 +103,9 @@ export async function decideAndMarkRealtimeHangup<Ref>(
     transferReachable: isVerifyTransferReachable({ path: "realtime", scenarioId: session.scenarioId, offerDoc }),
     goalActionDone,
     followUpPending,
+    decisionScreenPending,
+    // P1 M1 — 실시간은 모델의 `end_call` 사유가 판정 시점에 있다(4-c행만 읽는다).
+    hangupKind: claims.kind,
     userTurns: claims.userTurns,
     pendingInstruction: claims.pendingInstruction,
     smsAwaitingUser,

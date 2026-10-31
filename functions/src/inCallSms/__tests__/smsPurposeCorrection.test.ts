@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
-import { correctModelSmsPurpose, resolveSmsGate } from "../smsGate";
+import { buildSmsAlreadyDeliveredInstruction, correctModelSmsPurpose, resolveSmsGate } from "../smsGate";
 import type { DeliveredSmsRecord } from "../smsGate";
 import type { FlowVariantSms } from "../../scenarios/flowVariants";
 
@@ -29,10 +29,13 @@ test("[§108 P-2] 로그 1a54b807 재현 — 없는 목적(link)을 부르면 �
   assert.equal(resolveSmsGate({ purpose: r.purpose, declared: INSTITUTION, delivered, userTurns: 8 }).status, "allowed");
 });
 
-test("[§108 P-2] 로그 47891afd 형태 재현 — 이미 보낸 목적(link)을 다시 부르면 남은 필수(transfer)로 바꾼다", () => {
+test("[§108 P-2 → ⭐ P1 M2 P-2a] 로그 47891afd 형태 — 이미 보낸 목적(link)을 다시 부르면 **바꾸지 않고** 그 문자를 다시 가리키게 한다", () => {
+  // 종전(§108)에는 남은 필수(transfer)로 바꿔 보냈다. 운영 세션 b94b9eec(검찰 고급)에서 그 보정이 대화 단계를 건너뛰어(P1 M2) 이미 도착한 목적은 보정하지 않는다.
   const delivered: DeliveredSmsRecord[] = [{ smsId: "loan-check-app-link", userTurnsAtArrival: 3 }];
   const r = correctModelSmsPurpose({ purpose: "link", declared: LINK_THEN_TRANSFER, delivered, userTurns: 6 });
-  assert.deepEqual(r, { purpose: "transfer", correctedFrom: "link" });
+  assert.equal(r.purpose, "link");
+  assert.equal(r.correctedFrom, undefined);
+  assert.equal(r.alreadyDeliveredInstruction, buildSmsAlreadyDeliveredInstruction("link"));
 });
 
 test("[§108 P-3] 하한은 앞당기지 않는다 — 문자 간격(too_soon) · 첫 문자 하한(too_early) · 남은 필수 0 · 게이트 닫힘", () => {
@@ -48,13 +51,14 @@ test("[§108 P-3] 하한은 앞당기지 않는다 — 문자 간격(too_soon) �
   });
   // 첫 문자 하한 전(발화 1) → 그대로.
   assert.deepEqual(correctModelSmsPurpose({ purpose: "link", declared: INSTITUTION, delivered: [], userTurns: 1 }), { purpose: "link" });
-  // 남은 필수 0 → 그대로(already_delivered 거절).
+  // 남은 필수 0 → 그대로(already_delivered 거절). ⭐ P1 M2 — 이미 도착이면 그 문자를 다시 가리키는 지시가 함께 온다(P-2a).
   const all: DeliveredSmsRecord[] = [
     { smsId: "institution-otp", userTurnsAtArrival: 4 },
     { smsId: "institution-safe-account", userTurnsAtArrival: 6 },
   ];
   assert.deepEqual(correctModelSmsPurpose({ purpose: "transfer", declared: INSTITUTION, delivered: all, userTurns: 9 }), {
     purpose: "transfer",
+    alreadyDeliveredInstruction: buildSmsAlreadyDeliveredInstruction("transfer"),
   });
 });
 

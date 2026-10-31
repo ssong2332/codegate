@@ -14,6 +14,8 @@
 // ⚠️ `userTurns`는 경로마다 판정표 5행과 같은 값이다(실시간 = 클라 주장 · 폴백 = 서버 계수 — OQ-A120과 같은 등급).
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { findFlowVariant, type FlowVariantSms } from "../scenarios/flowVariants";
+import { findInCallSmsItem } from "../scenarios/inCallSms";
+import { resolveMockScreenKind } from "../scenarios/mockScreens";
 
 /**
  * C-3 — 마지막 문자 도착 뒤 참가자 발화 수. ⚠️ **판단값**(측정값 아님): 문자 백스톱의 넛지 간격(`BACKSTOP_USER_TURNS = 2`) · 문자 간 간격
@@ -28,8 +30,8 @@ export const GOAL_AFTER_LAST_SMS_USER_TURNS = 2;
  */
 export const GOAL_NO_SMS_MIN_USER_TURNS = 8;
 
-/** `mockScreens` 문서에서 판정에 쓰는 사실 2개(시각 값의 존재만). */
-export type MockScreenCompletion = { consented: boolean; submitted: boolean };
+/** `mockScreens` 문서에서 판정에 쓰는 사실 2개(시각 값의 존재만). P1 M1 — 문서 id(= `landingId`)도 싣는다(4-c행 · 부재 = 종전 호출부). */
+export type MockScreenCompletion = { consented: boolean; submitted: boolean; landingId?: string };
 
 export type GoalActionInput = {
   delivered: readonly DeliveredSmsRecord[];
@@ -96,5 +98,80 @@ export async function readMockScreenCompletion(
   sessionRef: FirebaseFirestore.DocumentReference,
 ): Promise<MockScreenCompletion[]> {
   const snap = await sessionRef.collection("mockScreens").get();
-  return snap.docs.map((doc) => ({ consented: Boolean(doc.get("consentedAt")), submitted: Boolean(doc.get("submittedAt")) }));
+  return snap.docs.map((doc) => ({
+    landingId: doc.id,
+    consented: Boolean(doc.get("consentedAt")),
+    submitted: Boolean(doc.get("submittedAt")),
+  }));
+}
+
+// ── ⭐ P1 M1(2026-10-31 · 운영 세션 b94b9eec 검찰 고급 `fv-h3vn` — 자산 검수 사이트 이체 전에 사용자 발화 11에서 `goal` 끊기 승인) ──────────
+// 끊기 판정표 4-c행 입력(`decisionScreenPending`). 실제 사기범은 송금을 받기 전에는 끊지 않는다(`prosecution-call-reality-check-2026-10-31.md`
+// §1 R11 · R12 · §3 M1). 4행(확인 무력화) · 4-b행(후속 단계)이 없는 루트는 지금까지 하한(5행)만 넘으면 결정 화면 전에도 `goal`로 끊을 수 있었다.
+//
+// 결정 화면 판정표(위에서부터 첫 행):
+// | # | If(서버 선언 · 서버 기록) | Then |
+// |---|---|---|
+// | D-1 | 확인 무력화 세션(4행이 맡는다) ∨ 후속 단계 변형(4-b행이 맡는다) | 대상 아님(`false`) |
+// | D-2 | 선언을 해석할 수 없다(변형 없음 · 모름 · 시나리오 불일치) | 대상 아님(`false` — 화면이 올 수 없다) |
+// | D-2b | 결정 순간이 **말**인 변형(`VERBAL_DECISION_VARIANTS` — 화면은 앞 단계뿐) | 대상 아님(`false` — 메인 세션 결정 2026-10-31 B안) |
+// | D-3 | 선언된 문자 중 `required` ∧ 목적 `transfer` ∨ `link` ∧ 카탈로그에 모의 화면(`fakeLandingId`)이 있는 것이 없다 | 대상 아님(`false` — 말로 끝나는 결말은 범위 밖) |
+// | D-4 | 그중 **선언 순서상 마지막** 화면(= 결정 화면)을 마쳤다 — 입력 화면은 그 문자 문서 `landingSubmittedAt` · 설치 화면은 `mockScreens/{landingId}` 응낙 ∨ 제출 | 완료(`false`) |
+// | D-5 | 그 밖 | 대기(`true`) — 4-c행이 `goal` · 사유 없음 끊기를 막는다(`give_up`은 막지 않는다) |
+// ⚠️ "마지막 화면"인 이유: 검찰 `fv-h3vn`은 사건 조회(본인 확인 입력 — 앞 단계)와 자산 검수 사이트(이체 — 결정 순간)를 둘 다 선언한다. 아무 화면이나 제출로
+// 보면 앞 단계 본인 확인만으로 풀린다. 선언 순서 = 단계 순서인지는 `decisionScreen.test.ts`가 전 변형에서 `notBeforeUserTurns` 오름차순으로 고정한다.
+// ⛔ 이 값은 끊기를 *막을* 뿐이다 — 끊을지 판단은 여전히 모델이다(H-1~H-5).
+
+/**
+ * ⭐ D-2b(메인 세션 결정 2026-10-31 B안) — 모의 화면을 선언했지만 그 화면이 **앞 단계**이고 결정 순간은 말(약속 · 번호 불러 주기)인 변형.
+ * 이 변형에서 화면 제출을 끊기 조건으로 삼으면 약속까지 받은 사기범도 `goal`로 끊지 못한다(현실과 다름).
+ * ⚠️ P4(대출 체험) · P5(현금 · 금 · 상품권)에서 결정 순간이 서비스 안 화면으로 바뀌면 **이 목록에서 빼서 4-c 대상으로 옮긴다**
+ * (`in-service-experience-plan-2026-10-31.md` §5). `decisionScreenHangup.test.ts`가 목록과 대상 장부를 함께 고정한다.
+ */
+export const VERBAL_DECISION_VARIANTS: readonly string[] = [
+  "fv-k9ra", // 자산 보호 고급 — 보관 접수 신청 화면 뒤 인출 · 전달 약속(P5 현금)
+  "fv-t8ga", // 자산 보호 고급 — 보관 접수 신청 화면 뒤 금 제출 약속(P5 금)
+  "fv-v2mk", // 검찰 고급 — 사건 조회 화면 뒤 상품권 핀 번호(P5 상품권)
+  "fv-a6lq", // 검찰 고급 — 사건 조회 화면 뒤 대출 약속(P4 대출)
+];
+
+export type DecisionScreenInput = {
+  scenarioId: string;
+  /** 세션 `flowVariantId`(D-2b). */
+  flowVariantId: string | undefined;
+  delivered: readonly DeliveredSmsRecord[];
+  mockScreens: readonly MockScreenCompletion[];
+  declared: readonly FlowVariantSms[];
+  declaredKnown: boolean;
+  /** 확인 무력화 세션(`isVerifyInterceptSession` · 폴백 `verifyEnabled`). */
+  verifyEnabled: boolean;
+  /** `goalFollowUpFor` 값(부재 = 후속 단계 변형 아님). */
+  followUpUserTurns: number | undefined;
+};
+
+/** D-3 — 이 선언의 결정 화면 문자(선언 순서상 마지막 · 없으면 undefined). */
+export function finalDecisionScreenSms(scenarioId: string, declared: readonly FlowVariantSms[]): FlowVariantSms | undefined {
+  const screens = declared.filter(
+    (item) =>
+      item.required &&
+      (item.purpose === "transfer" || item.purpose === "link") &&
+      findInCallSmsItem(scenarioId, item.smsId)?.fakeLandingId !== undefined,
+  );
+  return screens[screens.length - 1];
+}
+
+/** 위 판정표(D-1 ~ D-5). 부수효과 0. */
+export function isDecisionScreenPending(input: DecisionScreenInput): boolean {
+  if (input.verifyEnabled || input.followUpUserTurns !== undefined) return false; // D-1
+  if (!input.declaredKnown) return false; // D-2
+  if (input.flowVariantId !== undefined && VERBAL_DECISION_VARIANTS.includes(input.flowVariantId)) return false; // D-2b
+  const screen = finalDecisionScreenSms(input.scenarioId, input.declared);
+  if (screen === undefined) return false; // D-3
+  const landingId = findInCallSmsItem(input.scenarioId, screen.smsId)?.fakeLandingId;
+  const submitted = input.delivered.some((d) => d.smsId === screen.smsId && d.landingSubmitted === true);
+  const installed =
+    landingId !== undefined &&
+    resolveMockScreenKind(input.scenarioId, landingId) === "app-install" &&
+    input.mockScreens.some((m) => m.landingId === landingId && (m.consented || m.submitted));
+  return !(submitted || installed); // D-4 · D-5
 }

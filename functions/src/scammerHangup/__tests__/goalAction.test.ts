@@ -33,6 +33,8 @@ const VERIFY_ADVANCED: ScammerHangupInput = {
   transferReachable: true,
   goalActionDone: false,
   followUpPending: false,
+  decisionScreenPending: false,
+  hangupKind: undefined,
   userTurns: 12,
   pendingInstruction: false,
   smsAwaitingUser: false,

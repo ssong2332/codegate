@@ -403,6 +403,7 @@ export type ScammerHangupStatus =
   | "mock_turn"
   | "blocked_transfer"
   | "blocked_follow_up"
+  | "blocked_decision"
   | "too_early"
   | "blocked_pending"
   | "limit_reached"

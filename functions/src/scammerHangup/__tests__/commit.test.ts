@@ -50,7 +50,7 @@ function activeSession(extra: Record<string, unknown> = {}): Record<string, unkn
 
 test("[§79.5] 승인 — 표식 1건 write(acceptedAt · kind · path=realtime) · 세션 종료 필드 write 0", async () => {
   const { tx, updates } = makeTx({ [SESSION_REF]: activeSession() });
-  const decision = await decideAndMarkRealtimeHangup(tx, REFS, CLAIMS, [], NOW, false, false);
+  const decision = await decideAndMarkRealtimeHangup(tx, REFS, CLAIMS, [], NOW, false, false, false);
   assert.equal(decision.status, "accepted");
   assert.equal(updates.length, 1);
   assert.equal(updates[0]!.ref, SESSION_REF);
@@ -61,7 +61,7 @@ test("[§79.5] 승인 — 표식 1건 write(acceptedAt · kind · path=realtime)
 test("[§79.5 멱등] 표식이 이미 있으면 already_accepted · write 0(첫 승인의 값 유지)", async () => {
   const first = { acceptedAt: Timestamp.fromMillis(1), kind: "give_up", path: "realtime" };
   const { tx, updates } = makeTx({ [SESSION_REF]: activeSession({ scammerHangup: first }) });
-  const decision = await decideAndMarkRealtimeHangup(tx, REFS, CLAIMS, [], NOW, false, false);
+  const decision = await decideAndMarkRealtimeHangup(tx, REFS, CLAIMS, [], NOW, false, false, false);
   assert.equal(decision.status, "already_accepted");
   assert.equal(decision.hangup, true);
   assert.equal(updates.length, 0);
@@ -77,27 +77,27 @@ test("[§79.5] 거절 행 — write 0(대조군: 같은 세션에서 조건만 �
   ];
   for (const [label, docs, claims, status] of rejected) {
     const { tx, updates } = makeTx(docs);
-    const decision = await decideAndMarkRealtimeHangup(tx, REFS, claims, [], NOW, false, false);
+    const decision = await decideAndMarkRealtimeHangup(tx, REFS, claims, [], NOW, false, false, false);
     assert.equal(decision.status, status, label);
     assert.equal(updates.length, 0, `${label}: 거절인데 표식을 썼다`);
   }
   const control = makeTx({ [SESSION_REF]: activeSession() });
-  await decideAndMarkRealtimeHangup(control.tx, REFS, CLAIMS, [], NOW, false, false);
+  await decideAndMarkRealtimeHangup(control.tx, REFS, CLAIMS, [], NOW, false, false, false);
   assert.equal(control.updates.length, 1, "대조군이 write하지 않는다 — 위 write 0 단언이 공허하다");
 });
 
 test("[§79.2 #4] 확인 무력화 고급 세션 — 전환 전 blocked_transfer · placedAt 뒤 accepted", async () => {
   const session = activeSession({ scenarioId: VERIFY_SCENARIO, difficultyLevel: "advanced" });
   const before = makeTx({ [SESSION_REF]: session, [VERIFY_REF]: { announcedAt: NOW } });
-  assert.equal((await decideAndMarkRealtimeHangup(before.tx, REFS, CLAIMS, [], NOW, false, false)).status, "blocked_transfer");
+  assert.equal((await decideAndMarkRealtimeHangup(before.tx, REFS, CLAIMS, [], NOW, false, false, false)).status, "blocked_transfer");
   assert.equal(before.updates.length, 0);
   assert.deepEqual(before.reads, [SESSION_REF, VERIFY_REF]);
 
   const noDoc = makeTx({ [SESSION_REF]: session });
-  assert.equal((await decideAndMarkRealtimeHangup(noDoc.tx, REFS, CLAIMS, [], NOW, false, false)).status, "blocked_transfer");
+  assert.equal((await decideAndMarkRealtimeHangup(noDoc.tx, REFS, CLAIMS, [], NOW, false, false, false)).status, "blocked_transfer");
 
   const after = makeTx({ [SESSION_REF]: session, [VERIFY_REF]: { placedAt: NOW } });
-  assert.equal((await decideAndMarkRealtimeHangup(after.tx, REFS, CLAIMS, [], NOW, false, false)).status, "accepted");
+  assert.equal((await decideAndMarkRealtimeHangup(after.tx, REFS, CLAIMS, [], NOW, false, false, false)).status, "accepted");
   assert.equal(after.updates.length, 1);
 });
 
@@ -105,7 +105,7 @@ test("[§79.2 #4] 확인 무력화 시나리오라도 고급이 아니면 막지
   for (const difficultyLevel of [undefined, "beginner", "intermediate"]) {
     const session = activeSession({ scenarioId: VERIFY_SCENARIO, difficultyLevel });
     const { tx, reads } = makeTx({ [SESSION_REF]: session });
-    assert.equal((await decideAndMarkRealtimeHangup(tx, REFS, CLAIMS, [], NOW, false, false)).status, "accepted", String(difficultyLevel));
+    assert.equal((await decideAndMarkRealtimeHangup(tx, REFS, CLAIMS, [], NOW, false, false, false)).status, "accepted", String(difficultyLevel));
     assert.deepEqual(reads, [SESSION_REF], `${String(difficultyLevel)}: 불필요한 verifyIntercept read`);
   }
   assert.equal(isVerifyInterceptSession({ scenarioId: PLAIN_SCENARIO, difficultyLevel: "advanced" }), false);
@@ -144,12 +144,12 @@ test("[§79.5 배선] 콜러블은 트랜잭션 안에서 판정한다 · 세션
 test("[G554] 콜러블 판정 — 서버 도착 기록으로 문자 대기를 본다(클라가 pendingInstruction:false라도 막는다) · 발화 뒤에는 승인", async () => {
   const delivered = [{ smsId: "sms-1", userTurnsAtArrival: 5 }];
   const waiting = makeTx({ [SESSION_REF]: activeSession() });
-  const blocked = await decideAndMarkRealtimeHangup(waiting.tx, REFS, CLAIMS, delivered, NOW, false, false);
+  const blocked = await decideAndMarkRealtimeHangup(waiting.tx, REFS, CLAIMS, delivered, NOW, false, false, false);
   assert.deepEqual([blocked.status, blocked.row], ["blocked_pending", "6"]);
   assert.equal(waiting.updates.length, 0, "문자 대기인데 표식을 썼다");
   // 대조군 — 같은 도착 기록 · 참가자가 한 번 더 말한 뒤(userTurns 6)는 승인.
   const spoke = makeTx({ [SESSION_REF]: activeSession() });
-  assert.equal((await decideAndMarkRealtimeHangup(spoke.tx, REFS, { ...CLAIMS, userTurns: 6 }, delivered, NOW, false, false)).status, "accepted");
+  assert.equal((await decideAndMarkRealtimeHangup(spoke.tx, REFS, { ...CLAIMS, userTurns: 6 }, delivered, NOW, false, false, false)).status, "accepted");
   assert.equal(spoke.updates.length, 1);
 });
 
@@ -182,7 +182,7 @@ test("[G598] 실시간 콜러블 — 계열 B 고급 6종 · 오퍼 문서 없�
       ["문서 있음 · 전환 전", { [SESSION_REF]: session, [VERIFY_REF]: { announcedAt: NOW } }],
     ] as const) {
       const { tx, updates } = makeTx(docs as Docs);
-      assert.equal((await decideAndMarkRealtimeHangup(tx, REFS, CLAIMS, [], NOW, false, false)).status, "blocked_transfer", `${scenarioId} ${label}`);
+      assert.equal((await decideAndMarkRealtimeHangup(tx, REFS, CLAIMS, [], NOW, false, false, false)).status, "blocked_transfer", `${scenarioId} ${label}`);
       assert.equal(updates.length, 0);
     }
   }

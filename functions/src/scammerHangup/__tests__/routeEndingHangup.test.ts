@@ -28,6 +28,8 @@ function input(over: Partial<ScammerHangupInput>): ScammerHangupInput {
     transferReachable: true,
     goalActionDone: false,
     followUpPending: false,
+    decisionScreenPending: false,
+    hangupKind: undefined,
     userTurns: 3,
     pendingInstruction: false,
     smsAwaitingUser: false,

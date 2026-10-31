@@ -172,18 +172,30 @@ export function planSmsBackstop(input: Omit<SmsGateInput, "purpose"> & { claimed
  * ⭐ §108(2026-10-22 실기 신고 *"문자 발송이 여전히 느리게 온다"*) — 모델 도구(`send_prepared_sms`)의 **목적 보정**.
  * 운영 로그(§108.3): 모델이 문자를 보내려고 도구를 불렀는데 목적을 잘못 골라(`link`가 없는 시나리오에서 `link` → `not_allowed` ·
  * 이미 보낸 `link`를 다시 → `already_delivered`) 거절되고, 실제 문자는 2~3발화 뒤 백스톱으로만 왔다.
+ * ⭐ P1 M2(2026-10-31 · 운영 세션 b94b9eec 검찰 고급 `fv-h3vn` 발화 7) — 모델이 **이미 도착한** 사건 조회 문자(`link`)를 다시 부르자 P-2가 자산 검수
+ * 사이트 문자(`transfer`)로 바꿔 보냈다. 모델은 아직 앞 단계를 말하고 있었을 수 있어 문자가 대화 단계를 건너뛴다(실제 사기범은 링크를 그 단계의 말과
+ * 함께 보낸다 — `prosecution-call-reality-check-2026-10-31.md` R13 · §3 M2). 이미 도착한 목적은 보정하지 않고 그 문자를 다시 가리키게 한다(P-2a).
+ * 뒤 문자는 백스톱(`planSmsBackstop` — 넛지 뒤 발송)에만 맡긴다.
  * 판정표(위에서부터 첫 행):
  * | # | If | Then |
  * |---|---|---|
  * | P-1 | 요청 목적이 게이트를 통과한다(`allowed`) | 그대로 |
- * | P-2 | 요청 목적이 `not_allowed` ∨ `already_delivered` ∧ 남은 필수 문자의 게이트가 **지금 열려 있다**(`planSmsBackstop` `claimed` = deliver) | 그 필수 문자의 목적으로 바꾼다 |
+ * | P-2a | 요청 목적이 `already_delivered`(선언에 있고 이미 도착) | 그대로(거절) + `alreadyDeliveredInstruction`(그 문자를 다시 가리키고 지금 단계를 이어가라) |
+ * | P-2 | 요청 목적이 `not_allowed`(선언 밖 · enum 밖) ∧ 남은 필수 문자의 게이트가 **지금 열려 있다**(`planSmsBackstop` `claimed` = deliver) | 그 필수 문자의 목적으로 바꾼다 |
  * | P-3 | 그 밖(`too_early` · `too_soon` — 하한 전 · 남은 필수 0 · 게이트 닫힘) | 그대로(거절 — 하한은 앞당기지 않는다) |
- * 반환 = 실제로 게이트에 넘길 목적 · 바꿨으면 `correctedFrom`(로그용).
+ * 반환 = 실제로 게이트에 넘길 목적 · 바꿨으면 `correctedFrom`(로그용) · P-2a면 `alreadyDeliveredInstruction`(거절 문면 대신 모델에게 돌려준다).
  */
-export function correctModelSmsPurpose(input: SmsGateInput): { purpose: unknown; correctedFrom?: string } {
+export function correctModelSmsPurpose(input: SmsGateInput): {
+  purpose: unknown;
+  correctedFrom?: string;
+  alreadyDeliveredInstruction?: string;
+} {
   // §126 — 모델 도구 호출은 명시 요청이다(간격 1 · 발송 통로도 같은 값으로 다시 판정한다).
   const gate = resolveSmsGate({ ...input, explicit: true });
-  if (gate.status !== "not_allowed" && gate.status !== "already_delivered") return { purpose: input.purpose };
+  if (gate.status === "already_delivered" && gate.item !== undefined) {
+    return { purpose: input.purpose, alreadyDeliveredInstruction: buildSmsAlreadyDeliveredInstruction(gate.item.purpose) }; // P-2a
+  }
+  if (gate.status !== "not_allowed") return { purpose: input.purpose };
   const plan = planSmsBackstop({ declared: input.declared, delivered: input.delivered, userTurns: input.userTurns, claimed: true });
   if (plan.action !== "deliver") return { purpose: input.purpose };
   return {
@@ -298,6 +310,15 @@ const PURPOSE_LABEL: Record<SmsPurpose, string> = {
 /** `not_allowed` 거부 문면(설계 정본 1줄 그대로). */
 export const SMS_DECLINE_NOT_ALLOWED =
   "(그런 안내는 보낼 수 없다. 문자를 보냈다고 말하지 말고 하던 이야기를 이어가라.)";
+
+/**
+ * ⭐ P1 M2 — 모델 도구가 이미 도착한 문자를 다시 부를 때(`correctModelSmsPurpose` P-2a)의 지시. 종전 `SMS_DECLINE_ALREADY`("다시 언급하지도 말고")와
+ * 달리 이미 받은 그 문자를 가리키게 한다 — 모델이 그 문자를 부른 것은 대화가 아직 그 단계라는 뜻이고, 다른 목적의 문자로 바꿔 보내면 단계를 건너뛴다.
+ * ⛔ 새로 보냈다는 주장 0 · 다음 문자 언급 0 · 화면 밖 행동 예시 0(P0) · 인용 예시 대사 0(AC-099 (g)).
+ */
+export function buildSmsAlreadyDeliveredInstruction(purpose: SmsPurpose): string {
+  return `(${PURPOSE_LABEL[purpose]} 안내 문자는 이미 상대 휴대전화에 도착해 있다. 새로 보냈다고 말하지 말고, 필요하면 이미 보낸 그 문자를 한 번만 짧게 가리킨 뒤 지금 하던 단계를 이어가라. 다른 안내가 필요한 단계에 이르면 그때 그 종류의 문자를 따로 보내라.)`;
+}
 
 /** 백스톱 넛지(설계 정본 문면의 `{목적}` 자리에 목적 라벨). 실시간 = 맥락 주입 · 폴백 = 턴 지시 1줄. */
 export function buildSmsNudgeInstruction(purpose: SmsPurpose): string {
