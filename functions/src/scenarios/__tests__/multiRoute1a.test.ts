@@ -42,7 +42,8 @@ test("[§124 신고 (9)] 백스톱 간격 — 1이면 열린 뒤 1발화 넛지 
   assert.equal(planSmsBackstop({ declared: fast, delivered: [], userTurns: openAt }).action, "wait");
   assert.equal(planSmsBackstop({ declared: fast, delivered: [], userTurns: openAt + 1 }).action, "nudge");
   assert.equal(planSmsBackstop({ declared: fast, delivered: [], userTurns: openAt + 2 }).action, "deliver");
-  const slow = resolveDeclaredSms("courier-customs-scam", "fv-xpvu").declared; // 계좌 문자 하한 3 · 간격 부재
+  // P2 결함 수정 D-b(2026-11-01) — 통관 수수료 문자도 간격 1이 되어(`fv-xpvu`) 간격 부재 표본을 대출 초급 `fv-bqr9`(계좌 문자 하한 3 · 간격 부재)로 옮겼다.
+  const slow = resolveDeclaredSms("loan-refinance-scam", "fv-bqr9").declared;
   assert.equal(planSmsBackstop({ declared: slow, delivered: [], userTurns: 3 + BACKSTOP_USER_TURNS }).action, "nudge");
   assert.equal(planSmsBackstop({ declared: slow, delivered: [], userTurns: 3 + 2 * BACKSTOP_USER_TURNS - 1 }).action, "wait");
   assert.equal(planSmsBackstop({ declared: slow, delivered: [], userTurns: 3 + 2 * BACKSTOP_USER_TURNS }).action, "deliver");

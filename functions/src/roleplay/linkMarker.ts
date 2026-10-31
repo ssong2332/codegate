@@ -158,3 +158,35 @@ export function withBankTransferPrefill(
       : attachment,
   );
 }
+
+/**
+ * ⭐ D-g(P2 실 키 실측 2026-11-01 · 자녀 사칭 고급 `fv-tdgg` — *"계좌는 해담은행 948-2716-5093-27이고, 예금주는 박지훈이야."* 에 칩이 없었다) — 모델이
+ * `[[LINK:…]]` 마커를 빠뜨리면 참가자는 계좌만 보고 실제 뱅킹 앱을 열 수밖에 없다. 판정표(위에서 첫 매치):
+ * | # | If | Then |
+ * |---|---|---|
+ * | G1 | 이번 첨부에 이미 훈련용 이체 화면 칩이 있다 | 그대로 |
+ * | G2 | 이 세션이 메신저 링크로 닿는 훈련용 이체 화면이 없다 | 그대로 |
+ * | G3 | 대사에 세션 계좌번호가 없다 | 그대로(계좌를 말하지 않는 대사에 칩을 붙이지 않는다) |
+ * | G4 | 앞선 사기범 메시지에 그 칩이 이미 있었다 | 그대로(반복 칩 정책 `dropRepeatedLinkChips`와 같은 방향) |
+ * | G5 | 그 밖 | 그 칩 1개를 붙인다(라벨 = `LINK_LABELS`) |
+ */
+export function ensureBankTransferChip(
+  attachments: MessengerAttachment[] | undefined,
+  replyText: string,
+  accountNumber: string,
+  reachableLandingIds: readonly string[],
+  scenarioId: string,
+  history: ReadonlyArray<{ role: string; attachments?: readonly MessengerAttachment[] }>,
+): MessengerAttachment[] | undefined {
+  if ((attachments ?? []).some((attachment) => isBankTransferLanding(attachment.fakeLandingId))) return attachments; // G1
+  const landingId = reachableLandingIds.find(
+    (id) => isBankTransferLanding(id) && findMockScreenItem(scenarioId, id)?.entrySurface === "messenger-link",
+  );
+  if (!landingId) return attachments; // G2
+  if (!accountNumber || !replyText.includes(accountNumber)) return attachments; // G3
+  const shown = history.some(
+    (message) => message.role === "scammer" && (message.attachments ?? []).some((attachment) => attachment.fakeLandingId === landingId),
+  );
+  if (shown) return attachments; // G4
+  return [...(attachments ?? []), { kind: "link", displayText: LINK_LABELS[landingId] ?? DEFAULT_LINK_LABEL, fakeLandingId: landingId, harmless: true }]; // G5
+}

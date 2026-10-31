@@ -19,6 +19,11 @@ export type SendMessageRequest = {
    */
   photo?: boolean;
   /**
+   * ⭐ D-e(P2 실측 2026-11-01 · 메인 "권고대로") — 사진 턴의 종류. `"transfer-receipt"` = 앱이 만든 **이체 완료 화면 캡처**(참가자가 이 대화방에서
+   * 훈련용 이체 화면을 제출한 뒤에만 '+'에 나온다 · 이미지는 기기 메모리에만). 부재 = 기기 사진(종전). `photo`가 참일 때만 읽는다.
+   */
+  photoKind?: "transfer-receipt";
+  /**
    * §121.7 PR-3 — 통화 중(메신저에서 넘어온 통화) 대화방에서 보낸 카톡이다. 참이면 `roleplay/chatDuringCall.ts` 경로 — 저장 채널
    * `messenger` · 문자 · 끊기 · 전환 판정 0 · 음성 합성 0.
    */

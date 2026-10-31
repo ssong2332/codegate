@@ -98,6 +98,8 @@ export type SendMessageRequest = {
   sessionId: string;
   userText: string;
   photo?: boolean;
+  /** D-e — 사진 턴 종류(`"transfer-receipt"` = 앱이 만든 이체 완료 화면 캡처 · functions/src/roleplay/types.ts와 1:1). */
+  photoKind?: "transfer-receipt";
   duringCall?: boolean;
   /** §129 에뮬 D2 — 이 탭에서 "받기" 뒤 지난 ms(`sendMessage` 래퍼가 채운다 · functions/src/roleplay/types.ts와 1:1). */
   answeredElapsedMs?: number;

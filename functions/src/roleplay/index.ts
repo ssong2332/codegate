@@ -72,11 +72,12 @@ import { extractEscalationSignal } from "./escalationSignal";
 import { callPhaseMockTacticHints, ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall, userTurnsSinceCallEntry } from "./escalatedCall";
 import { isFirstUserTurn } from "./firstTurn";
 import { isL3Procedural } from "./l3Depth";
-import { extractLinkMarker, withBankTransferPrefill } from "./linkMarker";
+import { ensureBankTransferChip, extractLinkMarker, withBankTransferPrefill } from "./linkMarker";
+import { sessionReachableLandingIds } from "../scenarios/reachability";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
-import { PHOTO_TURN_TEXT, photoTurnInstruction } from "./photoTurn";
+import { PHOTO_TURN_TEXT, TRANSFER_RECEIPT_TURN_TEXT, photoTurnInstruction } from "./photoTurn";
 import { replyChatDuringCall } from "./chatDuringCall";
 import {
   currentCallCaller,
@@ -153,11 +154,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     }
-    const { sessionId, photo } = request.data ?? {};
+    const { sessionId, photo, photoKind: requestedPhotoKind } = request.data ?? {};
     // §113.2(실기 신고 9 · 사용자 결정 2026-10-23) — 사진 보내기 턴: 이미지는 서버에 오지 않는다(요청에 이미지 필드 0). 사실만 고정 문장으로
     // 대화에 남긴다(`PHOTO_TURN_TEXT` — 사기범 AI · 리포트가 같은 문장을 본다). 사진 턴이면 클라 글자는 쓰지 않는다.
     const isPhotoTurn = photo === true;
-    const userText = isPhotoTurn ? PHOTO_TURN_TEXT : request.data?.userText;
+    // D-e — 이체 완료 화면 캡처(앱이 만든 이미지 · 이미지 자체는 서버에 오지 않는다). 사진 턴일 때만 · 허용 값 하나만 받는다.
+    const photoKind = isPhotoTurn && requestedPhotoKind === "transfer-receipt" ? requestedPhotoKind : undefined;
+    const userText = isPhotoTurn ? (photoKind ? TRANSFER_RECEIPT_TURN_TEXT : PHOTO_TURN_TEXT) : request.data?.userText;
     if (!sessionId || !userText || !userText.trim()) {
       throw new HttpsError("invalid-argument", "sessionId와 userText가 필요합니다.");
     }
@@ -235,6 +238,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         ...(fresh.channel ? { channel: fresh.channel } : {}),
         // §113.2 — 사진 전송 사실(종류만 · 이미지 0).
         ...(isPhotoTurn ? { photo: true as const } : {}),
+        ...(photoKind ? { photoKind } : {}),
       } satisfies MessageDoc);
       // answeredAt(통화 시작 기점, #6)은 첫 턴에만 설정한다 — 이후 턴은 기존 값을 유지한다.
       // §129 에뮬 D2(사용자 결정 ㉠) — 처음부터 통화인 세션은 클라가 실은 "받기 뒤 지난 ms"로 실제 받은 시각을 되짚는다(`session/answeredAt.ts` 표 B).
@@ -688,7 +692,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         ? FALLBACK_GOAL_WRAP_UP_INSTRUCTION
         : claimWrapUp;
     const turnInstructionWithPhoto =
-      [turnInstructionWithSms, photoTurnInstruction(isPhotoTurn), participantCalledInstruction, fallbackWrapUp].filter(Boolean).join("\n") ||
+      [turnInstructionWithSms, photoTurnInstruction(isPhotoTurn, photoKind), participantCalledInstruction, fallbackWrapUp].filter(Boolean).join("\n") ||
       undefined;
 
     // 첫 사용자 턴만 LLM 시간 제한 20초(2026-10-18, 사용자 결정 C — llm/index.ts LLM_FIRST_TURN_TIMEOUT_MS).
@@ -807,10 +811,19 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 첫 칩 · 링크를 다시 가리키는 대사의 칩은 그대로다 — 앵커(첫 칩 메시지)는 바뀌지 않는다.
     // ⭐ P2-c(X6) — 훈련용 이체 화면 칩에만 세션 가상 은행명 · 세션 계좌를 싣는다(받는 계좌 미리 채움 — 그 밖 칩은 무변경).
     const routeVariant = findFlowVariant(session.flowVariantId);
+    const routeAccountNumber = resolveRouteAccountNumber(session.scenarioId, session.flowVariantId);
     const replyAttachments = withBankTransferPrefill(
-      dropRepeatedLinkChips(markerAttachments, linkFreeReplyText, storedHistory),
+      // D-g — 계좌를 말했는데 모델이 이체 화면 칩을 빠뜨리면 서버가 붙인다(`linkMarker.ts` `ensureBankTransferChip` 표).
+      ensureBankTransferChip(
+        dropRepeatedLinkChips(markerAttachments, linkFreeReplyText, storedHistory),
+        linkFreeReplyText,
+        routeAccountNumber,
+        sessionReachableLandingIds(session.scenarioId, session.flowVariantId),
+        session.scenarioId,
+        storedHistory,
+      ),
       fictionalBankName,
-      resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
+      routeAccountNumber,
       // P2-d — 변형의 가상 예금주(대화 수법 줄과 같은 값). 변형이 다른 시나리오 것이면 싣지 않는다.
       routeVariant?.scenarioId === session.scenarioId ? routeVariant.accountHolder : undefined,
     );

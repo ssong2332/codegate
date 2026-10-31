@@ -52,6 +52,8 @@ export type PendingTurn = {
   failed?: boolean;
   /** §113.2 — 사진 턴이면 이 화면 메모리의 objectURL(낙관적 말풍선 · 다시 보내기). 연출 판정에는 쓰지 않는다. */
   photoUrl?: string;
+  /** D-e — 사진 턴 종류(`"transfer-receipt"` = 앱이 만든 이체 완료 화면 캡처). 연출 판정에는 쓰지 않는다. */
+  photoKind?: "transfer-receipt";
   /** 공개가 끝난 뒤 적용할 결과 — 답장이 보인 다음에 종료 · 통화 전환으로 넘어간다. */
   // §104.9 — `scammerEnded` = 서버 `endReason: "scammer_ended"`(사기범이 메신저 단계를 끝냈다 · 종료 문구 E-1/E-2).
   outcome?: { ended?: boolean; escalate?: boolean; scammerEnded?: boolean };
