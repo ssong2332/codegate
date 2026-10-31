@@ -85,3 +85,33 @@ test("[§120 ⑤] sendMessage가 사진 턴 지시를 턴 지시에 싣는다(�
   assert.match(src, /\[turnInstructionWithSms, photoTurnInstruction\(isPhotoTurn\)(?:, participantCalledInstruction)?(?:, fallbackWrapUp)?\]\.filter\(Boolean\)/); // §127 폴백 마무리 지시
   assert.match(src, /turnInstruction: turnInstructionWithPhoto/);
 });
+
+// ⭐ D-f(P2 실 키 실측 2026-11-01 · `docs/research/p2-live-probe-2026-11-01.md` §4 D-f) — 메신저 지인 사칭 고급 마지막 발화(Claude 1차)가 메타 해설로 바뀌어
+// 화면에 나갔다(종전 판정이 통과시켰다 — 실측 문장 그대로 고정). 조각 · 오탐 표본을 함께 둔다.
+const P2_LIVE_META =
+  "(훈련 세션을 여기서 마무리합니다. 지금까지 나온 지시와 요구는 실제 상황에서 보이스피싱·메신저피싱에 해당하는 전형적인 패턴이었습니다.)";
+
+test("[D-f ①] P2 실측 메타 해설 · 그 조각은 training-meta로 쓸 수 없다", () => {
+  for (const text of [
+    P2_LIVE_META,
+    "훈련 세션을 여기서 마무리합니다.",
+    "지금까지 나온 지시와 요구는 실제로는 따르면 안 됩니다.",
+    "이건 메신저피싱에 해당하는 수법이에요.",
+    "전형적인 패턴이었습니다.",
+    "실제 상황에서 보이스피싱이라면 바로 끊으셔야 합니다.",
+  ]) {
+    assert.equal(judgeScammerReplyUsability(text), "training-meta", text);
+  }
+});
+
+test("[D-f ②] 오탐 방지 — 세션 · 패턴 · 피싱 낱말이 들어간 정상 사기범 대사는 통과한다", () => {
+  for (const text of [
+    "고객님 명의 계좌가 보이스피싱 범죄에 이용된 정황이 확인되어 연락드렸습니다.",
+    "로그인 세션이 만료돼서 다시 들어가야 한대, 링크 다시 눌러 줘.",
+    "결제 패턴이 평소랑 달라서 보안팀에서 확인 중입니다.",
+    "지금까지 쓰시던 계좌는 잠시 거래가 제한됩니다.",
+    "엄마 지금까지 연락 못 해서 미안해, 폰이 고장 났었어.",
+  ]) {
+    assert.equal(judgeScammerReplyUsability(text), undefined, text);
+  }
+});
