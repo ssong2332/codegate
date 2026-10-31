@@ -82,6 +82,12 @@ export type CallSkinTokens = {
 };
 
 export type BannerSkinTokens = {
+  /**
+   * 2026-10-31(사용자 요청 *"ios와 oneui의 문자 화면 이런것도 확인"*) — 배너 골격. `oneui` = 종전 3줄(작은 앱 아이콘 + "메시지" +
+   * "지금" / 발신 / 본문 — Android 알림 머리줄). `ios` = 왼쪽 큰 앱 아이콘 + 오른쪽 [발신 · "지금" / 본문](iOS 알림 배너에는
+   * 앱 이름 줄이 없다). 배치는 공개 화면 기억 근사(실기 측정 전 — 추정).
+   */
+  layout: "ios" | "oneui";
   /** 떠 있는 문자 배너 바탕(UX-014 v1.33 (6)). 근사. */
   bg: string;
   radiusPx: number;
@@ -220,6 +226,7 @@ const CALL_TOKENS: Record<MessengerSkin, CallSkinTokens> = {
 
 const BANNER_TOKENS: Record<MessengerSkin, BannerSkinTokens> = {
   ios: {
+    layout: "ios",
     bg: "rgba(245,245,247,0.96)",
     radiusPx: 18,
     text: "#1C1C1E",
@@ -228,6 +235,7 @@ const BANNER_TOKENS: Record<MessengerSkin, BannerSkinTokens> = {
     appIconFg: "#FFFFFF",
   },
   samsung: {
+    layout: "oneui",
     bg: "#FFFFFF",
     radiusPx: 22,
     text: "#1B1B1F",
@@ -236,6 +244,7 @@ const BANNER_TOKENS: Record<MessengerSkin, BannerSkinTokens> = {
     appIconFg: "#FFFFFF",
   },
   default: {
+    layout: "oneui",
     bg: "#FFFFFF",
     radiusPx: 22,
     text: "#1B1B1F",

@@ -4,6 +4,7 @@
 // 재현보다 우선한다. 미달이면 "하한을 지키는 가장 가까운 값"을 쓰고 편차 목록을 남긴다(D-96 (3)).
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   CONTRAST_MINIMUM,
   bannerTokensFor,
@@ -142,4 +143,40 @@ test("[실기 신고 2026-10-21 · G456 역검증] 판을 바탕과 거의 같�
   const poisoned = { ...callTokensFor("default"), gridPanelBg: "#C9D4DB" };
   const violations = contrastViolations(panelPairs("default", poisoned));
   assert.ok(violations.some((v) => v.startsWith("default.call.panelLabel ")), violations.join(" | "));
+});
+
+// 2026-10-31(사용자 요청 *"ios와 oneui의 문자 화면 이런것도 확인"*) — 통화 중 문자 배너 골격이 스킨마다 갈린다.
+// 종전에는 iOS형도 Android 알림 머리줄("메시지" 앱 이름 줄)을 그렸다. iOS 알림 배너에는 앱 이름 줄이 없다.
+/** 통화 화면 배너 마크업(`showSmsBanner` 블록)에서 iOS형 분기 · One UI형 분기를 잘라 위반을 모은다. */
+function bannerLayoutViolations(play: string): string[] {
+  const out: string[] = [];
+  const start = play.indexOf("{showSmsBanner && latestSms && (");
+  const block = start >= 0 ? play.slice(start, play.indexOf("</button>", start)) : "";
+  if (!block) return ["배너 블록을 찾지 못했다"];
+  const iosStart = block.indexOf('bannerTokens.layout === "ios" ? (');
+  const split = block.indexOf(") : (", iosStart);
+  if (iosStart < 0 || split < 0) return ["배너가 bannerTokens.layout으로 갈리지 않는다"];
+  const iosBranch = block.slice(iosStart, split);
+  const oneUiBranch = block.slice(split);
+  if (iosBranch.includes("<span>메시지</span>")) out.push("iOS형 배너에 앱 이름 줄이 있다");
+  if (!iosBranch.includes("h-[38px] w-[38px]")) out.push("iOS형 배너에 왼쪽 큰 앱 아이콘이 없다");
+  if (!iosBranch.includes("latestSms.senderLabel") || !iosBranch.includes("지금")) out.push("iOS형 배너 첫 줄(발신 · 지금)이 없다");
+  if (!oneUiBranch.includes("<span>메시지</span>")) out.push("One UI형 배너의 앱 이름 줄이 사라졌다");
+  return out;
+}
+
+test("[2026-10-31 문자 화면 점검] 배너 골격 — iOS형 = 큰 아이콘 + 발신 · 지금(앱 이름 줄 없음) · One UI형 · 기본 = 종전 3줄", () => {
+  assert.equal(bannerTokensFor("ios").layout, "ios");
+  assert.equal(bannerTokensFor("samsung").layout, "oneui");
+  assert.equal(bannerTokensFor("default").layout, "oneui");
+  assert.deepEqual(bannerLayoutViolations(readFileSync("src/app/session/play/page.tsx", "utf8")), []);
+});
+
+test("[2026-10-31 역검증] iOS형 분기에 앱 이름 줄을 되살린 사본은 실패한다", () => {
+  const play = readFileSync("src/app/session/play/page.tsx", "utf8");
+  const iosStart = play.indexOf('bannerTokens.layout === "ios" ? (');
+  assert.ok(iosStart > 0, "오염 지점을 찾지 못했다");
+  const anchor = play.indexOf("<>", iosStart) + 2;
+  const poisoned = play.slice(0, anchor) + "<span>메시지</span>" + play.slice(anchor);
+  assert.ok(bannerLayoutViolations(poisoned).includes("iOS형 배너에 앱 이름 줄이 있다"));
 });
