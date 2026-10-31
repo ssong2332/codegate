@@ -232,6 +232,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
     /** ⭐ P2-c(X6) — 훈련용 이체 화면 칩의 세션 은행명 · 계좌(서버가 실은 값 — 참가자 입력 아님). */
     bankName?: string;
     accountNumber?: string;
+    accountHolder?: string;
   } | null>(null);
   // T30 — 에스컬레이션 전이 연출(P-18) 표시 중. true가 되면 잠시 후 /session/play로 이동한다.
   const [escalating, setEscalating] = useState(false);
@@ -740,6 +741,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
           ...(attachment.bankName && attachment.accountNumber
             ? { bankName: attachment.bankName, accountNumber: attachment.accountNumber }
             : {}),
+          ...(attachment.accountHolder ? { accountHolder: attachment.accountHolder } : {}),
         });
         // 목업이 열린 사실만 남긴다 — **이것은 속은 순간이 아니다**(D-51 ③,
         // AC-062 보호). 승격되는 것은 아래 onInstallConsent뿐이다.
@@ -1370,7 +1372,11 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
           {...(fakeLanding.bankName && fakeLanding.accountNumber
             ? {
                 prefilledAccount: `${fakeLanding.bankName} ${fakeLanding.accountNumber}`,
-                prefilledTransfer: { bankName: fakeLanding.bankName },
+                prefilledTransfer: {
+                  bankName: fakeLanding.bankName,
+                  // P2-d — 변형의 가상 예금주(대화에서 사기범이 댄 이름과 같은 값).
+                  ...(fakeLanding.accountHolder ? { holder: fakeLanding.accountHolder } : {}),
+                },
               }
             : {})}
         />

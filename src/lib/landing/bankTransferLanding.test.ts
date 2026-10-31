@@ -22,9 +22,9 @@ const listOf = (source: string): string[] => {
   return [...body.matchAll(/"([a-z-]+)"/g)].map((m) => m[1]).sort();
 };
 
-test("[P2 C1] 클라 · 서버 훈련용 이체 화면 목록이 같다(통화 중 문자 5종 + 메신저 칩 2종)", () => {
+test("[P2 C1] 클라 · 서버 훈련용 이체 화면 목록이 같다(통화 중 문자 6종 + 메신저 칩 2종)", () => {
   assert.deepEqual(listOf(component), listOf(catalog));
-  assert.equal(listOf(component).length, 7);
+  assert.equal(listOf(component).length, 8);
 });
 
 test("[P2 C2] 폼 → 확인 → 인증 → 완료 · 제출 콜백은 인증 버튼에서만(무인자)", () => {
@@ -66,7 +66,21 @@ test("[P2 C5] 머리띠 은행명은 세션 가상 은행명 변수뿐(리터럴
 test("[P2-c] 메신저 칩 — 대화방이 칩의 세션 은행명 · 계좌를 받는 계좌(읽기 전용) · 머리띠로 넘기고, 받는 분 이름을 지어내지 않는다", () => {
   const room = readFileSync("src/components/MessengerChatRoom.tsx", "utf8");
   assert.ok(room.includes("prefilledAccount: `${fakeLanding.bankName} ${fakeLanding.accountNumber}`"));
-  assert.ok(room.includes("prefilledTransfer: { bankName: fakeLanding.bankName }"));
+  assert.ok(room.includes("bankName: fakeLanding.bankName,"));
+  // P2-d — 변형의 가상 예금주를 받는 분으로 넘긴다(대화의 사기범 이름과 같은 값).
+  assert.ok(room.includes("...(fakeLanding.accountHolder ? { holder: fakeLanding.accountHolder } : {}),"));
   assert.ok(code.includes("...(holder ? [[\"받는 분\", holder] as [string, string]] : [])"), "이름을 모르면 받는 분 행 0");
   assert.ok(code.includes("`이 계좌로 ${amountText}을 보낼까요?`"));
+});
+
+test("[P2-d] 이체 한도 — 1회 1,000만 원 초과는 막고(이체 화면만) · 1회 · 1일 한도 안내 줄 · 근거 주소", async () => {
+  const { transferLimitError, TRANSFER_LIMIT_NOTE, TRANSFER_LIMIT_PER_TRANSACTION, TRANSFER_LIMIT_PER_DAY } = await import("./amountInput.ts");
+  assert.equal(TRANSFER_LIMIT_PER_TRANSACTION, 10_000_000);
+  assert.equal(TRANSFER_LIMIT_PER_DAY, 50_000_000);
+  assert.equal(transferLimitError("10000000"), undefined, "한도와 같으면 통과");
+  assert.match(transferLimitError("10000001") ?? "", /1회 이체 한도\(1,000만 원\)/);
+  assert.equal(transferLimitError(""), undefined, "빈 칸은 amountError가 먼저 막는다");
+  assert.equal(TRANSFER_LIMIT_NOTE, "이체 한도 · 1회 1,000만 원 · 1일 5,000만 원");
+  assert.ok(code.includes("(amountError(raw) ?? (bankTransfer ? transferLimitError(raw) : undefined))"), "이체 화면에서만 한도 검사");
+  assert.ok(readFileSync("src/lib/landing/amountInput.ts", "utf8").includes("kebhana.com/cont/info/info01/info0104/info010404"), "근거 주소");
 });

@@ -155,6 +155,8 @@ const IN_CALL_SMS_FIELDS: Record<keyof InCallSmsItem, FieldPolicy> = {
 const FLOW_VARIANT_FIELDS: Record<keyof FlowVariant, FieldPolicy> = {
   tactics: { profile: "scenarioContent" },
   decisionMoment: { profile: "scenarioContent" },
+  // P2-d — 가상 예금주 이름(수법 줄 · 이체 화면에 그대로 실린다 — 시나리오 콘텐츠와 같은 층으로 스캔).
+  accountHolder: { profile: "scenarioContent" },
   stages: { skip: "아래에서 stageId별 개별 표면 + 합성 페르소나로 등록" },
   legs: { skip: "아래에서 leg별 callerLabel · personaPrompt 개별 표면으로 등록" },
   variantId: { skip: "불투명 식별자" },
@@ -450,6 +452,7 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
       v.stages.length +
       v.legs.reduce((m, leg) => m + 1 + (leg.personaPrompt === undefined ? 0 : 1), 0) +
       (v.decisionMoment === undefined ? 0 : 1) +
+      (v.accountHolder === undefined ? 0 : 1) + // P2-d — 가상 예금주
       (v.stages.length > 0 ? 1 : 0) +
       1, // §119 — 루트 이름(routeLabel)
     0,

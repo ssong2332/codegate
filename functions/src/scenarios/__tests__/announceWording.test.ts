@@ -40,9 +40,9 @@ function catalogTexts(): [string, string][] {
 
 // T191 S5 — 확인 권유는 card-delivery-call(고급 전용 ①, AC-071 메커닉 재사용) 1건이 늘어 7건이다.
 // T194-c-1(§84.5.2) — Q2 설치 안내 문자 3건(card-delivery · card-company · loan)이 늘어 문자 안내가 14건, §92.3 고급 전용 2종으로 16건이다(같은 규칙을 받는다).
-test("[T191/S3 · G541] 문자 안내 20건 + 확인 권유 7건 — 재촉·다급 0 · 인용 예시 0 · 대답 안에서 말하기 · 따로 말 꺼내기 금지", () => {
+test("[T191/S3 · G541] 문자 안내 21건 + 확인 권유 7건 — 재촉·다급 0 · 인용 예시 0 · 대답 안에서 말하기 · 따로 말 꺼내기 금지", () => {
   const texts = catalogTexts();
-  assert.equal(texts.filter(([w]) => w.startsWith("sms ")).length, 20, "문자 안내 건수(§92.3 — 고급 전용 2종 +2 · §98 — 검찰 보관 지갑 +1 · §101 — 검찰 자산 검수 사이트 +1 · §124 — 택배 국가 안전계좌 +1 · §125 — 자산 보호 공탁금 +1)(카탈로그가 바뀌면 이 숫자를 확인하고 갱신)");
+  assert.equal(texts.filter(([w]) => w.startsWith("sms ")).length, 21, "문자 안내 건수(P2-d — 환급 수수료 +1 · §92.3 — 고급 전용 2종 +2 · §98 — 검찰 보관 지갑 +1 · §101 — 검찰 자산 검수 사이트 +1 · §124 — 택배 국가 안전계좌 +1 · §125 — 자산 보호 공탁금 +1)(카탈로그가 바뀌면 이 숫자를 확인하고 갱신)");
   assert.equal(texts.filter(([w]) => w.startsWith("verify ")).length, 7, "확인 권유 건수");
   const violations = texts.flatMap(([where, text]) => g490Violations(where, text));
   assert.deepEqual(violations, []);

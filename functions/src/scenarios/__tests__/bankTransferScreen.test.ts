@@ -18,6 +18,8 @@ import { extractAccountHolder, extractTransferAmount } from "../../shared/fictio
 import { finalDecisionScreenSms } from "../../scammerHangup/goalAction";
 import { resolveDeclaredSms } from "../../inCallSms/smsGate";
 import { sessionReachableLandingIds } from "../reachability";
+import { accountHolderTactic, findFlowVariant } from "../flowVariants";
+import { SEND_PREPARED_SMS_PURPOSE_DESCRIPTION } from "../../realtime/liveTools";
 import { extractLinkMarker, withBankTransferPrefill } from "../../roleplay/linkMarker";
 
 const CONVERTED: readonly [string, string, string][] = [
@@ -26,6 +28,8 @@ const CONVERTED: readonly [string, string, string][] = [
   ["reputation-blackmail-scam", "blackmail-hush-account", "blackmail-hush-transfer"],
   ["courier-customs-scam", "courier-customs-fee", "courier-fee-transfer"],
   ["courier-customs-scam", "courier-safe-account", "courier-safe-transfer"],
+  // P2-d — 환급 처리 수수료(새 계좌 문자 · 말로 부르던 계좌를 문자 · 화면으로).
+  ["tax-refund-scam", "tax-refund-fee", "tax-refund-fee-transfer"],
 ];
 
 test("[P2 B1] 계좌 문자는 전부 이체 화면 링크를 갖는다 · 바뀐 5종은 각자 훈련용 이체 화면을 연다", () => {
@@ -63,7 +67,11 @@ test("[P2 B2 · B3] 문자 문서 — 이체 화면 문자만 받는 분 · 금�
   // 금액 줄이 없는 문자(금액은 통화에서 정한다) — 금액 필드 없음.
   const deposit = buildInCallSmsDoc(findInCallSmsItem("asset-protection-notice-call", "asset-deposit-account")!, at, 5, "asset-protection-notice-call", "새솔은행");
   assert.equal(deposit.accountHolder, "자산보호공탁관리");
-  assert.equal("transferAmount" in deposit, false);
+  // P2-d — 공탁금 문자에 금액 줄(500만 원)이 생겼다(사기범 말 · 문자 · 화면 금액 일치).
+  assert.equal(deposit.transferAmount, "5000000");
+  // 금액 줄이 없는 문자(국가 안전계좌 — 금액은 통화에서 정한다)는 금액 필드 없음.
+  const safeKeep = buildInCallSmsDoc(findInCallSmsItem("courier-customs-scam", "courier-safe-account")!, at, 7, "courier-customs-scam", "새솔은행");
+  assert.equal("transferAmount" in safeKeep, false);
   // B3 — 기존 이체 화면(안전계좌)은 종전 모양 그대로(두 필드 없음).
   const safe = buildInCallSmsDoc(findInCallSmsItem("institutional-impersonation", "institution-safe-account")!, at, 6, "institutional-impersonation", "한결은행");
   assert.equal("accountHolder" in safe, false);
@@ -131,4 +139,33 @@ test("[P2-b] 카드사 자가 고급 fv-x7ue · fv-w3dq = 설치 문자 뒤 피�
     assert.equal(finalDecisionScreenSms("card-company-impersonation", declared)?.smsId, "card-relief-account", `${variantId}: 결정 화면 = 이관 화면`);
   }
   assert.deepEqual(resolveDeclaredSms("card-company-impersonation", "fv-akj5").declared, []);
+});
+
+// ── ⭐ P2-d(메인 "권고대로") — 가상 예금주 · 환급 수수료 · 목적 설명 ────────────────────────────────────────────────
+test("[P2-d] 메신저 6변형 = 가상 예금주 하나씩(서로 다름) · 대화 수법 줄 = 칩 미리 채움 값", () => {
+  const ids = ["fv-34v5", "fv-tpr3", "fv-tdgg", "fv-42wd", "fv-fvsc", "fv-bxvp"];
+  const holders = ids.map((id) => findFlowVariant(id)?.accountHolder);
+  assert.ok(holders.every((h) => typeof h === "string" && h.length >= 2), JSON.stringify(holders));
+  assert.equal(new Set(holders).size, ids.length, "변형마다 다른 이름");
+  for (const id of ids) {
+    const v = findFlowVariant(id)!;
+    assert.ok(v.tactics.includes(accountHolderTactic(v.scenarioId, v.accountHolder!)), `${id}: 수법 줄`);
+  }
+  const chip = { kind: "link" as const, displayText: "이체하기", fakeLandingId: "child-bank-transfer", harmless: true as const };
+  assert.equal(withBankTransferPrefill([chip], "한결은행", "948-2716-5093-27", "김도현")?.[0]?.accountHolder, "김도현");
+  assert.equal("accountHolder" in (withBankTransferPrefill([chip], "한결은행", "1")?.[0] ?? {}), false, "부재 = 키 없음");
+});
+
+test("[P2-d] 환급 — 초급 = 수수료 화면 1통(초급 상한) · 중급 · 고급 = 신청 화면 뒤 수수료 화면 · 결정 화면 = 수수료", () => {
+  assert.deepEqual(resolveDeclaredSms("tax-refund-scam", "fv-vtq7").declared.map((d) => d.smsId), ["tax-refund-fee"]);
+  for (const id of ["fv-aqx2", "fv-uk7m"]) {
+    const { declared } = resolveDeclaredSms("tax-refund-scam", id);
+    assert.deepEqual(declared.map((d) => d.smsId), ["tax-refund-link", "tax-refund-fee"], id);
+    assert.equal(finalDecisionScreenSms("tax-refund-scam", declared)?.smsId, "tax-refund-fee", id);
+  }
+});
+
+test("[P2-d] send_prepared_sms 목적 설명 — transfer는 이체 화면 링크가 함께 와도 transfer · link는 계좌 없는 링크", () => {
+  assert.ok(SEND_PREPARED_SMS_PURPOSE_DESCRIPTION.includes("이체 화면 링크가 함께 와도 transfer"));
+  assert.ok(SEND_PREPARED_SMS_PURPOSE_DESCRIPTION.includes("link = 계좌 없이"));
 });

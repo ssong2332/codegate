@@ -107,6 +107,12 @@ export type FlowVariant = {
   /** 고급 전용 3종 필수(AC-097 (e)). */
   decisionMoment?: string;
   /**
+   * ⭐ P2-d(2026-10-31 · 메인 "권고대로") — 메신저 자녀 · 지인 사칭의 **가상 예금주 이름**(변형마다 하나 · 실존 인물 아님). 수법 1줄(`accountHolderTactic`)로 대화에
+   * 싣고, 같은 값을 이체 화면 칩(`withBankTransferPrefill`)에 실어 확인 화면 "받는 분"에 띄운다 — 자녀 · 지인과 **다른 이름**이 뜨는 것이 실제 앱에서 가장
+   * 중요한 위험 신호다. 부재 = 종전(받는 분 행 없음).
+   */
+  accountHolder?: string;
+  /**
    * §115(DECISIONS #230) — 이체 화면 뒤에 **말로 하는 후속 단계**(대출 실행 유도 등)가 있는 변형. 끊기 4행의 "할 일을 다 했다"
    * (`scammerHangup/goalAction.ts`)를 필수 문자가 모두 도착한 뒤 참가자 발화 ≥ 이 값일 때로 늦춘다 — 후속 단계를 꺼내고 답을 들을 시간.
    * ⚠️ 판단값. 부재 = 종전 판정(C-1 ~ C-4) 그대로.
@@ -164,6 +170,18 @@ function findByLabel(scenarioId: string, label: string): string | undefined {
   return found;
 }
 
+/**
+ * ⭐ P2-d — 가상 예금주 수법 1줄(라벨 "다른 명의 계좌 요구" — 실제 수법: 폰 고장 · 한도 핑계로 남의 명의 계좌를 대는 것, 계획서 C15).
+ * 둘러대는 말은 시나리오마다 다르다(자녀 = 폰 고장으로 인증 불가 · 지인 = 통장 한도). 이름은 변형 값 그대로이고 다른 예금주를 지어내지 않게 한다.
+ */
+export function accountHolderTactic(scenarioId: string, holder: string): string {
+  const excuse =
+    scenarioId === "messenger-friend-loan-kakao"
+      ? "'내 통장이 지금 한도에 걸려서 그래, 이 사람 계좌로 받을게'"
+      : "'폰이 고장 나서 내 계좌 인증이 안 돼, 친구 계좌로 받을게'";
+  return `다른 명의 계좌 요구 — 계좌를 알려 줄 때 예금주는 '${holder}'라고 밝히고, 상대가 왜 다른 사람 이름이냐고 물으면 ${excuse} 처럼 둘러댄다. 이 이름 말고 다른 예금주를 지어내지 않는다.`;
+}
+
 function buildTactics(spec: VariantSpec): string[] {
   const base = tacticsOf(spec.scenarioId);
   let kept: string[];
@@ -179,7 +197,7 @@ function buildTactics(spec: VariantSpec): string[] {
   const extras = (spec.extraTactics ?? [])
     .map((e) => (typeof e === "string" ? e : findByLabel(e.from, e.label)))
     .filter((t): t is string => t !== undefined);
-  return [...kept, ...extras];
+  return [...kept, ...extras, ...(spec.accountHolder ? [accountHolderTactic(spec.scenarioId, spec.accountHolder)] : [])];
 }
 
 // ── §119 루트 표(DECISIONS #234) — 변형 ID → 루트 키 · 이름 ────────────────────────────────────────
@@ -538,7 +556,7 @@ const ASSET_GOLD_PERSONA = assetProtectionRoutePersona(
   "자산 실물 전수 조사 명목으로 예금을 금으로 바꿔 담당 직원에게 제출하라고 요구하는 상황을 연기한다.",
 );
 const ASSET_DEPOSIT_DEMAND =
-  "공탁금 이체 요구 — '정식 수사로 넘어가면 계좌가 전부 묶이는데, 약식으로 처리하려면 공탁금을 먼저 넣어 두셔야 합니다, 수사가 끝나면 전액 돌려드립니다' 처럼 약식 처리를 이유로 공탁금을 넣게 한다. 계좌번호는 지어내 말하지 않고 문자로 보낸 것을 확인하게 한다.";
+  "공탁금 이체 요구 — '정식 수사로 넘어가면 계좌가 전부 묶이는데, 약식으로 처리하려면 공탁금 500만 원을 먼저 넣어 두셔야 합니다, 수사가 끝나면 전액 돌려드립니다' 처럼 약식 처리를 이유로 공탁금을 넣게 한다. 계좌번호는 지어내 말하지 않고 문자로 보낸 것을 확인하게 한다.";
 
 // 음성 시나리오용 "다른 번호" 수법(가족 · 손주 고급 — §2.6.3 "딥보이스 + 다른 번호로 연락", 사례 S9 · C18).
 const OTHER_NUMBER_PRETEXT =
@@ -567,6 +585,8 @@ const CARD_RELIEF_TRANSFER_VIA_LINK =
   "피해금 이관 요구 — '지금 결제 진행 중인 건 저희가 막을 수 있는데, 고객님 잔액을 이관 전용 계좌로 옮겨두셔야 해요' 처럼 구체적 금액과 함께 이체를 요구한다. 계좌번호는 네가 불러 주지 말고, 보안 앱 설치가 끝난 뒤 문자로 보낸 피해금 이관 안내의 링크 화면에서 이체하게 한다(은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다).";
 const CARD_RELIEF_SMS: FlowVariantSms = { purpose: "transfer", smsId: "card-relief-account", required: true, notBeforeUserTurns: 4 };
 const CARD_REASSURE = { from: "card-company-impersonation", label: "안심 유도" };
+// ⭐ P2-d(X6) — 환급 3변형 공통 수수료 계좌 문자(이체 화면 `tax-refund-fee-transfer`).
+const TAX_REFUND_FEE_SMS: FlowVariantSms = { purpose: "transfer", smsId: "tax-refund-fee", required: true, notBeforeUserTurns: 4 };
 /**
  * fv-akj5 계열 수법 목록 — base main(ea97aa0)의 순서(놀람 · 긴급 · 카드정보 · 피해금 · 부인 · 안심 · 앱 설치 · 기관 조사)를 그대로 지킨다
  * (R3 리뷰 M2). 원본에서 그대로 가져오는 라벨은 `{ from, label }` 참조(문구 사본 0)라 keepLabels 대신 여기서 순서를 정한다.
@@ -993,11 +1013,13 @@ const SPECS: VariantSpec[] = [
     authoring: "authored",
     stages: st(
       "미수령 환급금이 있다고 알린다.",
-      "환급을 받으려면 수수료가 먼저 필요하다며 곧바로 요구하고, 접수는 문자로 보낸 안내에서 하라고 한다.",
+      "환급을 받으려면 수수료가 먼저 필요하다며 곧바로 요구하고, 문자로 보낸 수수료 안내의 링크 화면에서 이체하라고 한다.",
     ),
     keepLabels: ["공짜 돈 유혹", "권위 포장", "본인확인 빙자 정보 수집", "환급 수수료 요구", "부인 시 절차 정당화"],
     exitBlock: ["D0_none"],
-    sms: [{ purpose: "link", smsId: "tax-refund-link", required: true, notBeforeUserTurns: 2 }],
+    // P2-d(X6) — 초급의 요구는 수수료 선입금 하나다(단계 2 · demandStages 1). 초급 문자 상한 1통(AC-096 (b))이라 환급 신청 링크 대신 수수료 계좌 문자(이체 화면)
+    // 하나를 선언한다 — 말로 부르던 계좌가 앱 안 화면으로 들어온다. 중급 · 고급은 신청 링크 뒤 수수료 문자 두 통.
+    sms: [{ ...TAX_REFUND_FEE_SMS, notBeforeUserTurns: 2 }],
     legs: ONE_LEG("국세청 환급 담당", "female"),
     ...BEGINNER,
     channels: ["voice", "sms"],
@@ -1010,7 +1032,8 @@ const SPECS: VariantSpec[] = [
     authoring: "current",
     stages: [],
     exitBlock: ["D2_secrecy", "D5_call_retention"],
-    sms: [{ purpose: "link", smsId: "tax-refund-link", required: true, notBeforeUserTurns: 2 }],
+    // P2-d(X6) — 환급 신청 화면 뒤 처리 수수료 계좌 문자(이체 화면). 선언 순서 = 단계 순서(4-c 결정 화면 = 수수료 이체 화면).
+    sms: [{ purpose: "link", smsId: "tax-refund-link", required: true, notBeforeUserTurns: 2 }, TAX_REFUND_FEE_SMS],
     legs: ONE_LEG("국세청 환급 담당", "female"),
     ...INTERMEDIATE,
     channels: ["voice", "sms"],
@@ -1023,7 +1046,8 @@ const SPECS: VariantSpec[] = [
     authoring: "current",
     stages: [],
     exitBlock: ["D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
-    sms: [{ purpose: "link", smsId: "tax-refund-link", required: true, notBeforeUserTurns: 2 }],
+    // P2-d(X6) — 환급 신청 화면 뒤 처리 수수료 계좌 문자(이체 화면). 선언 순서 = 단계 순서(4-c 결정 화면 = 수수료 이체 화면).
+    sms: [{ purpose: "link", smsId: "tax-refund-link", required: true, notBeforeUserTurns: 2 }, TAX_REFUND_FEE_SMS],
     legs: ONE_LEG("국세청 환급 담당", "female"),
     ...ADVANCED,
     channels: ["voice", "sms"],
@@ -1036,7 +1060,7 @@ const SPECS: VariantSpec[] = [
     scenarioId: "courier-customs-scam",
     level: "beginner",
     authoring: "authored",
-    stages: st("국제 택배가 통관에서 보류됐다고 알린다.", "통관비를 내야 한다며 곧바로 결제를 요구한다."),
+    stages: st("국제 택배가 통관에서 보류됐다고 알린다.", "통관비 7만 8천 원을 내야 한다며 곧바로 결제를 요구한다."),
     keepLabels: ["생활 밀착형 소재로 경계심 낮추기", "긴급성 조성", "명의 도용 암시", "통관비 결제 요구"],
     exitBlock: ["D0_none"],
     sms: [{ purpose: "transfer", smsId: "courier-customs-fee", required: true, notBeforeUserTurns: 3 }],
@@ -1356,6 +1380,8 @@ const SPECS: VariantSpec[] = [
   {
     variantId: "fv-34v5",
     scenarioId: "messenger-child-impersonation-kakao",
+    // P2-d — 가상 예금주(자녀 이름과 다른 이름 — 실제 앱의 위험 신호).
+    accountHolder: "김도현",
     level: "beginner",
     authoring: "authored",
     stages: st("폰이 고장 나 친구 폰으로 연락한다고 한다.", "곧바로 송금을 부탁한다."),
@@ -1372,6 +1398,7 @@ const SPECS: VariantSpec[] = [
   {
     variantId: "fv-tpr3",
     scenarioId: "messenger-child-impersonation-kakao",
+    accountHolder: "이서준",
     level: "intermediate",
     authoring: "current",
     stages: [],
@@ -1386,6 +1413,7 @@ const SPECS: VariantSpec[] = [
   {
     variantId: "fv-tdgg",
     scenarioId: "messenger-child-impersonation-kakao",
+    accountHolder: "박지훈",
     level: "advanced",
     authoring: "authored",
     stages: st(
@@ -1414,6 +1442,8 @@ const SPECS: VariantSpec[] = [
     (level, i): VariantSpec => ({
       variantId: ["fv-42wd", "fv-fvsc", "fv-bxvp"][i],
       scenarioId: "messenger-friend-loan-kakao",
+      // P2-d — 가상 예금주(지인과 다른 이름).
+      accountHolder: ["최민혁", "정유나", "한승우"][i],
       level,
       authoring: "current",
       stages: [],
@@ -1702,7 +1732,7 @@ const SPECS: VariantSpec[] = [
     stages: st(
       `${ASSET_PROTECTION_STAGES_HEAD[0]} ${INVESTIGATION_CARD_USE}`,
       ...ASSET_PROTECTION_STAGES_HEAD.slice(1),
-      withSmsFirst(`정식 수사로 넘어가면 계좌가 전부 묶이니 약식으로 처리하려면 공탁금을 먼저 넣어 둬야 하고 수사가 끝나면 전액 돌려준다고 이유부터 설명한 뒤, 문자로 보낸 계좌에 공탁금을 문자 속 링크의 이체 화면에서 넣으라고 요구한다. 상대가 거절하거나 망설이면 더 조르지 않고 마무리한다. ${VERBAL_ENDING_WRAP}`),
+      withSmsFirst(`정식 수사로 넘어가면 계좌가 전부 묶이니 약식으로 처리하려면 공탁금 500만 원을 먼저 넣어 둬야 하고 수사가 끝나면 전액 돌려준다고 이유부터 설명한 뒤, 문자로 보낸 계좌에 공탁금을 문자 속 링크의 이체 화면에서 넣으라고 요구한다. 상대가 거절하거나 망설이면 더 조르지 않고 마무리한다. ${VERBAL_ENDING_WRAP}`),
     ),
     dropLabels: ["인출·전달 요구"],
     extraTactics: [ASSET_DEPOSIT_DEMAND],

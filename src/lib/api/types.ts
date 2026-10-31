@@ -21,6 +21,8 @@ export type MessengerAttachment = {
   /** ⭐ P2-c(X6) — 훈련용 이체 화면 칩만: 세션 가상 은행명 · 세션 계좌(받는 계좌 미리 채움 — 서버 `withBankTransferPrefill`). */
   bankName?: string;
   accountNumber?: string;
+  /** ⭐ P2-d — 변형의 가상 예금주(확인 화면 "받는 분"). 부재 = 받는 분 행 없음. */
+  accountHolder?: string;
 };
 
 // attachments(T29 추가, 옵셔널·하위호환) — 메신저 채팅(UX-022)의 스미싱 링크. 보이스 세션은

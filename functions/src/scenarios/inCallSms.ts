@@ -160,8 +160,8 @@ const ASSET_PROTECTION_NOTICE_CALL: InCallSmsItem[] = [
     smsId: "asset-deposit-account",
     kind: "account",
     senderLabel: `${SMS_SENDER_NUMBER["asset-protection-notice-call"]} (공탁금 안내)`,
-    body: "[자산보호] 약식 처리 공탁금 안내\n예금주: 자산보호공탁관리\nOO은행 519-3306-7420-85\n수사 종료 후 전액 반환됩니다.\n아래 링크에서 바로 이체할 수 있습니다.",
-    // ⭐ P2(X6 · 2026-10-31) — 계좌만 있던 문자에 훈련용 이체 화면 링크를 병기했다(금액은 통화에서 정한다 — 화면에서 참가자가 넣는다 · 계좌 무변경).
+    body: "[자산보호] 약식 처리 공탁금 안내\n예금주: 자산보호공탁관리\nOO은행 519-3306-7420-85\n금액: 5,000,000원\n수사 종료 후 전액 반환됩니다.\n아래 링크에서 바로 이체할 수 있습니다.",
+    // ⭐ P2(X6 · 2026-10-31) — 계좌만 있던 문자에 훈련용 이체 화면 링크를 병기했다(계좌 무변경). P2-d — 금액 줄(500만 원)을 더해 사기범 말 · 문자 · 화면 금액을 맞췄다.
     linkDisplayText: "공탁금 이체하기",
     fakeLandingId: "asset-deposit-transfer",
     linkAddress: "deposit-send-link.invalid/send/Dp7w",
@@ -301,6 +301,20 @@ const TAX_REFUND_SCAM: InCallSmsItem[] = [
     afterScammerTurns: 3,
     announceInstruction:
       "(참가자 휴대전화로 방금 환급금 조회 링크 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 그 링크를 눌러 계좌를 등록해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 실제 주소를 읽어 주지 말고 문자 속 링크를 누르라고만 하라.)",
+  },
+  // ⭐ P2-d(2026-10-31 · X6 · 메인 "권고대로") — 환급 3변형의 "처리 수수료 선입금" 요구가 계좌를 말로 불렀다(P0 실측 F2 · 장부 ④). 계좌 문자 + 훈련용 이체 화면으로
+  // 바꿨다. afterScammerTurns=4: 이 시나리오의 3과 겹치지 않는 값(발송 시점은 변형 선언 notBeforeUserTurns가 정한다).
+  {
+    smsId: "tax-refund-fee",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["tax-refund-scam"]} (환급금 안내)`,
+    body: "[환급안내] 환급 처리 수수료 납부 계좌\n예금주: 환급처리지원센터\nOO은행 731-0452-6618-04\n금액: 99,000원\n수수료 확인 즉시 환급금이 지급됩니다.\n아래 링크에서 바로 이체할 수 있습니다.",
+    linkDisplayText: "환급 수수료 이체하기",
+    fakeLandingId: "tax-refund-fee-transfer",
+    linkAddress: "refund-fee-send.invalid/send/Rf6t",
+    afterScammerTurns: 4,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 환급 처리 수수료 계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 수수료를 먼저 넣어 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
   },
 ];
 
