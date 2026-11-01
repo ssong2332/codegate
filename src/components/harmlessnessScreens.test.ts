@@ -115,6 +115,7 @@ const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   "WebDarkModeNotice.tsx": false, // 세션 전 브라우저 설정 안내(§95.6) — 사기 상황을 그리지 않는다
   "LegalDocumentView.tsx": false, // 법적 고지 화면 틀(2026-10-21) — 앱 자신의 처리방침 · 약관, 사기 표면 아님
   "LegalLinks.tsx": false, // 법적 고지 하단 링크(2026-10-21) — 앱 자신의 고지 링크, 사기 표면 아님
+  "LogoutButton.tsx": false, // 로그아웃(2026-11-01) — 앱 자신의 계정 버튼, 사기 표면 아님
   "MessengerStartNotice.tsx": false, // 세션 전 시작 고지(UX-022 start-notice, T187) — 앱 자신의 고지, 사기 표면 아님
   "ScenarioPanelGroups.tsx": false, // 시나리오 선택 판 묶음(UX D-141 · 시안 E2) — 앱 자신의 선택 UI, 사기 표면 아님
   "TrainingPrepScreen.tsx": false, // 훈련 준비 대기 화면(UX D-141 · §97.7) — 세션 전 앱 안내(실제 준비 단계 · 예방 요령), 사기 표면 아님

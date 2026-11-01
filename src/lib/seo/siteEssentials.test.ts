@@ -15,6 +15,7 @@ import {
   SITEMAP_PATHS,
 } from "./publicPages.ts";
 import { INFO_PATHS, LEGAL_PATHS } from "../auth/anonymousScope.ts";
+import { resolveAuthInvalidationMode } from "../authinvalidation/authInvalidation.ts";
 import { FAQ_ITEMS, FAQ_LINK_EXPIRY_DAYS, FAQ_RETENTION_DAYS } from "../faq/faqContent.ts";
 import { CHALLENGE_LINK_EXPIRY_DAYS, CHALLENGE_RETENTION_DAYS } from "../legal/legalContent.ts";
 
@@ -115,4 +116,13 @@ test("[§133 · UX D-162] 자주 묻는 질문 5문항 — 순서 · 빈 답 0 �
   assert.match(read("src/app/scenarios/experience-select/page.tsx"), /title: "지인에게 보내기"/);
   // UX D-162 — 머리줄 안(첫 화면 높이 0 추가 · 412×780 넘침 0 실측).
   assert.match(codeOnly("src/app/page.tsx"), /<header[^>]*>[\s\S]*<Link href="\/faq"[^>]*min-h-\[48px\][^>]*>\s*자주 묻는 질문\s*<\/Link>\s*<\/header>/);
+});
+
+// 사용자 신고 2026-11-01 "로그아웃하는 기능은 없는 거 같네" — 훈련 유형 선택 화면 하단 로그아웃(익명 제외).
+test("로그아웃 — /scenarios 하단에 있고, 익명에게는 숨기며, 무효화 배너 대상 경로가 아니다", () => {
+  const button = codeOnly("src/components/LogoutButton.tsx");
+  assert.match(button, /if \(!user \|\| user\.isAnonymous\) return null;/);
+  assert.match(button, /await signOut\(auth\);\s*router\.replace\("\/"\);/);
+  assert.match(codeOnly("src/app/scenarios/page.tsx"), /<LogoutButton\b/);
+  assert.equal(resolveAuthInvalidationMode({ pathname: "/scenarios", signedOut: true, hadUser: true, unauthenticatedCallable: false, wasAnonymous: false }), "none");
 });

@@ -1,30 +1,30 @@
 // 법적 고지 초안(개인정보처리방침 · 이용약관 · 문의) — 외부 점검 2026-10-21 "법적 문제" 대응.
 //
 // ⛔ 초안이다. 법률 자문을 거친 확정 문구가 아니다 — 화면 맨 위에 DRAFT_NOTICE를 반드시 띄운다.
-// ⛔ 운영자명 · 연락처 · 시행일은 사용자에게 받기 전까지 대괄호 자리표시로 둔다(지어내지 않는다).
+// ⛔ 운영자명 · 연락처 · 시행일은 사용자가 준 값만 쓴다(지어내지 않는다) — 2026-11-01 사용자 제공(OPERATOR_INFO).
 // ⛔ 수집 항목 · 보존 기간은 코드의 실제 값이다. 값이 바뀌면 여기도 고친다(근거는 각 항목 주석).
 //
 // 순수 모듈이다(React · Firebase import 0건) — 루트 테스트 러너가 그대로 읽는다.
 
 /**
- * 법적 고지 링크 노출 스위치 — 사용자 결정 2026-10-21(DECISIONS #205): *"개인정보처리방침에 들어갈 내용은 현재는 보류로
- * 놔두고 배포했다가 나중에 수정하자. 법적 페이지는 링크만 숨기자."* 내용(운영자 정보 등)이 확정되면 true로 바꾸고,
- * 각 고지 화면의 `robots` noindex(LEGAL_ROBOTS)도 함께 푼다. 페이지 파일은 그대로 둔다(주소로는 열린다).
+ * 법적 고지 링크 노출 스위치 — 사용자 결정 2026-10-21(DECISIONS #205)로 숨겼다가, 2026-11-01 사용자가 운영자 정보를 주어
+ * 다시 켰다(외부 점검 "개인정보처리방침이 없어요" 대응). 끄면 고지 화면 3개의 `robots` noindex(LEGAL_ROBOTS)가 함께 걸린다.
  */
-export const SHOW_LEGAL_LINKS = false;
+export const SHOW_LEGAL_LINKS = true;
 
-/** 자리표시가 든 초안이 검색엔진에 노출되지 않게 — SHOW_LEGAL_LINKS가 false인 동안 고지 화면 3개에 건다. */
+/** 링크를 숨긴 동안에는 고지 화면 3개를 검색엔진에서 뺀다 — SHOW_LEGAL_LINKS가 false일 때만 noindex. */
 export const LEGAL_ROBOTS = SHOW_LEGAL_LINKS ? undefined : { index: false, follow: false };
 
-export const PLACEHOLDER = {
-  operator: "[운영자명]",
-  email: "[문의 이메일]",
-  officer: "[개인정보 보호책임자 성명·직책]",
-  effectiveDate: "[시행일]",
+/** 운영자 정보 — 2026-11-01 사용자 제공 값 그대로. */
+export const OPERATOR_INFO = {
+  operator: "박수홍",
+  email: "asg21274@gmail.com",
+  officer: "박수홍(운영자)",
+  effectiveDate: "2026년 11월 1일",
 } as const;
 
 export const DRAFT_NOTICE =
-  "이 문서는 초안입니다. 법률 검토 전이며, 대괄호로 표시한 항목은 운영자 정보가 확정되면 채워집니다.";
+  "이 문서는 초안입니다. 법률 검토 전이며, 검토 뒤 문구가 바뀔 수 있습니다.";
 
 export type LegalSection = {
   heading: string;
@@ -43,7 +43,7 @@ export const CHALLENGE_RETENTION_DAYS = 30;
 
 export const PRIVACY_POLICY: LegalDocument = {
   title: "개인정보처리방침",
-  intro: `${PLACEHOLDER.operator}(이하 "운영자")는 금융사기 예방 훈련 서비스(이하 "서비스")를 제공하면서 아래와 같이 개인정보를 처리합니다.`,
+  intro: `${OPERATOR_INFO.operator}(이하 "운영자")는 금융사기 예방 훈련 서비스(이하 "서비스")를 제공하면서 아래와 같이 개인정보를 처리합니다.`,
   sections: [
     {
       heading: "1. 수집하는 항목",
@@ -118,18 +118,18 @@ export const PRIVACY_POLICY: LegalDocument = {
     },
     {
       heading: "8. 개인정보 보호책임자",
-      items: [`책임자: ${PLACEHOLDER.officer}`, `연락처: ${PLACEHOLDER.email}`],
+      items: [`책임자: ${OPERATOR_INFO.officer}`, `연락처: ${OPERATOR_INFO.email}`],
     },
     {
       heading: "9. 시행일",
-      paragraphs: [`이 방침은 ${PLACEHOLDER.effectiveDate}부터 적용합니다.`],
+      paragraphs: [`이 방침은 ${OPERATOR_INFO.effectiveDate}부터 적용합니다.`],
     },
   ],
 };
 
 export const TERMS_OF_SERVICE: LegalDocument = {
   title: "이용약관",
-  intro: `이 약관은 ${PLACEHOLDER.operator}(이하 "운영자")가 제공하는 금융사기 예방 훈련 서비스(이하 "서비스")의 이용 조건을 정합니다.`,
+  intro: `이 약관은 ${OPERATOR_INFO.operator}(이하 "운영자")가 제공하는 금융사기 예방 훈련 서비스(이하 "서비스")의 이용 조건을 정합니다.`,
   sections: [
     {
       heading: "1. 서비스의 성격",
@@ -175,7 +175,7 @@ export const TERMS_OF_SERVICE: LegalDocument = {
     },
     {
       heading: "7. 문의와 시행일",
-      items: [`문의: ${PLACEHOLDER.email}`, `시행일: ${PLACEHOLDER.effectiveDate}`],
+      items: [`문의: ${OPERATOR_INFO.email}`, `시행일: ${OPERATOR_INFO.effectiveDate}`],
     },
   ],
 };
@@ -186,7 +186,7 @@ export const CONTACT_INFO: LegalDocument = {
   sections: [
     {
       heading: "운영자 연락처",
-      items: [`운영자: ${PLACEHOLDER.operator}`, `이메일: ${PLACEHOLDER.email}`],
+      items: [`운영자: ${OPERATOR_INFO.operator}`, `이메일: ${OPERATOR_INFO.email}`],
     },
     {
       heading: "실제 사기 피해가 의심될 때",

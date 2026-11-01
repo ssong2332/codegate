@@ -1,4 +1,4 @@
-// 법적 고지 초안 가드 — 외부 점검 2026-10-21. 지키는 것: ① 초안 표식 · 자리표시 유지(운영자 정보 지어내기 금지)
+// 법적 고지 초안 가드 — 외부 점검 2026-10-21. 지키는 것: ① 초안 표식 · 운영자 정보는 사용자 제공 값만(지어내기 금지)
 // ② 보존 기간이 서버 상수와 같다 ③ 고지 화면이 공개 경로이고 익명도 열 수 있다 ④ 첫 화면 · 로그인 화면에 링크가 있다.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -9,7 +9,7 @@ import {
   CONTACT_INFO,
   DRAFT_NOTICE,
   LEGAL_ROBOTS,
-  PLACEHOLDER,
+  OPERATOR_INFO,
   SHOW_LEGAL_LINKS,
   PRIVACY_POLICY,
   TERMS_OF_SERVICE,
@@ -19,17 +19,24 @@ import { isAnonymousOutsideRecipientFlow, LEGAL_PATHS } from "../auth/anonymousS
 const allText = (doc: typeof PRIVACY_POLICY) =>
   [doc.intro, ...doc.sections.flatMap((s) => [s.heading, ...(s.paragraphs ?? []), ...(s.items ?? [])])].join("\n");
 
-test("초안 표식이 있고 운영자 정보는 자리표시 그대로다", () => {
+// 2026-11-01 사용자 제공 값(운영자명 · 문의 이메일 · 보호책임자 · 시행일). 값이 바뀌면 사용자에게 받은 값으로만 고친다.
+test("초안 표식이 있고 운영자 정보는 사용자가 준 값 그대로다(자리표시 0)", () => {
   assert.match(DRAFT_NOTICE, /초안/);
   assert.match(DRAFT_NOTICE, /법률 검토 전/);
-  for (const value of Object.values(PLACEHOLDER)) assert.match(value, /^\[.+\]$/, `자리표시가 아니다: ${value}`);
-  assert.ok(allText(PRIVACY_POLICY).includes(PLACEHOLDER.officer));
-  assert.ok(allText(PRIVACY_POLICY).includes(PLACEHOLDER.effectiveDate));
-  assert.ok(allText(TERMS_OF_SERVICE).includes(PLACEHOLDER.email));
-  assert.ok(allText(CONTACT_INFO).includes(PLACEHOLDER.operator));
-  // 지어낸 연락처가 끼어들지 않았다(이메일 · 일반 전화번호 형태 0건 — 112 · 1332만 허용).
+  assert.deepEqual(
+    { ...OPERATOR_INFO },
+    { operator: "박수홍", email: "asg21274@gmail.com", officer: "박수홍(운영자)", effectiveDate: "2026년 11월 1일" },
+  );
+  assert.ok(allText(PRIVACY_POLICY).includes(OPERATOR_INFO.officer));
+  assert.ok(allText(PRIVACY_POLICY).includes(OPERATOR_INFO.effectiveDate));
+  assert.ok(allText(TERMS_OF_SERVICE).includes(OPERATOR_INFO.email));
+  assert.ok(allText(CONTACT_INFO).includes(OPERATOR_INFO.operator));
   for (const doc of [PRIVACY_POLICY, TERMS_OF_SERVICE, CONTACT_INFO]) {
-    assert.doesNotMatch(allText(doc), /[\w.+-]+@[\w-]+\.[\w.]+/);
+    // 대괄호 자리표시가 남지 않았다.
+    assert.doesNotMatch(allText(doc), /\[[^\]]+\]/);
+    // 지어낸 연락처가 끼어들지 않았다(이메일은 운영자 이메일 하나뿐 · 일반 전화번호 형태 0건 — 112 · 1332만 허용).
+    const emails = new Set(allText(doc).match(/[\w.+-]+@[\w-]+\.[\w.]+/g) ?? []);
+    for (const e of emails) assert.equal(e, OPERATOR_INFO.email);
     assert.doesNotMatch(allText(doc), /\d{2,4}-\d{3,4}-\d{4}/);
   }
 });
@@ -60,14 +67,14 @@ test("고지 화면은 공개 경로이고 익명 사용자도 /login으로 튕�
   assert.equal(isAnonymousOutsideRecipientFlow(true, "/scenarios"), true, "익명 범위 밖 판정이 느슨해졌다");
 });
 
-// 사용자 결정 2026-10-21(DECISIONS #205) — 내용 확정 전까지 링크를 숨기고 초안 화면은 noindex. 켜면 이 테스트를 함께 바꾼다.
-test("링크 보류 중 — LegalLinks는 스위치 한 곳으로 렌더하지 않고, 고지 화면 3개는 noindex다", () => {
-  assert.equal(SHOW_LEGAL_LINKS, false);
-  assert.deepEqual(LEGAL_ROBOTS, { index: false, follow: false });
+// 사용자 결정 2026-10-21(DECISIONS #205)로 숨겼다가 2026-11-01 운영자 정보를 받아 다시 켰다 — 링크 노출 · 검색 허용.
+test("링크 노출 중 — 스위치 한 곳으로 켜지고, 고지 화면 3개는 noindex가 풀렸다", () => {
+  assert.equal(SHOW_LEGAL_LINKS, true);
+  assert.equal(LEGAL_ROBOTS, undefined);
   const links = readFileSync("src/components/LegalLinks.tsx", "utf8");
   assert.match(links, /if \(!SHOW_LEGAL_LINKS\) return null;/, "숨김 스위치가 LegalLinks에 없다");
   for (const p of LEGAL_PATHS) {
-    assert.match(readFileSync(`src/app${p}/page.tsx`, "utf8"), /robots: LEGAL_ROBOTS/, `${p}에 noindex가 없다`);
+    assert.match(readFileSync(`src/app${p}/page.tsx`, "utf8"), /robots: LEGAL_ROBOTS/, `${p}에 noindex 스위치 배선이 없다`);
   }
 });
 

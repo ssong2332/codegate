@@ -29,6 +29,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PanelBadge, PanelList } from "@/components/ui";
 import SelectScreenHeader from "@/components/SelectScreenHeader";
+import LogoutButton from "@/components/LogoutButton";
 import {
   getSelectedTrainingType,
   setSelectedTrainingType,
@@ -69,6 +70,7 @@ export default function ScenarioTypeSelectPage() {
           { key: "messenger", icon: "chat", title: "메신저피싱", description: "카카오톡·문자로 오는 사기", badge: lastPick("messenger") },
         ]}
       />
+      <LogoutButton className="mt-auto pb-6 pt-8" />
     </main>
   );
 }
