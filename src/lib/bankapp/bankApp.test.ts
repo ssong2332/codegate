@@ -8,6 +8,7 @@
 // | A5 | 실존 은행명 0 — 가상 은행 목록 = 서버 `FICTIONAL_BANK_NAMES`(드리프트 0) · 화면 문구 · 컴포넌트에 실존 은행 이름 0 |
 // | A6 | 통화 유지(D-35 · G10) — 오버레이는 문자함과 같은 자리의 형제 노드 · 라우팅 0 · 문자함 · 확인 시트와 동시에 열리지 않는다 |
 // | A7 | 계좌 복사 = 앱 안 state(기기 복사 API 0) · 인증번호 복사 메뉴 0(AC-061) |
+// | A8 | 2026-11-01 실기 신고 보강 — One UI형 홈 = 3버튼 탐색 막대(누를 수 있는 것은 홈 하나) · 문자 속 계좌번호를 누르면 같은 복사 메뉴 |
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -169,4 +170,15 @@ test("[BA-1 A7] 계좌 복사 = 앱 안 state · 기기 복사 API 0 · 인증�
   // 복사 대상은 계좌 줄 구조화 필드(은행명 · 계좌번호)가 있는 문자뿐 — 인증번호(otpCode)는 메뉴에 실리지 않는다.
   const menu = smsOverlay.slice(smsOverlay.indexOf('role="menu"'), smsOverlay.indexOf("</div>", smsOverlay.indexOf('role="menu"')));
   assert.ok(menu.includes("sms.accountNumber") && !menu.includes("otpCode"));
+});
+
+test("[BA-1 A8] 실기 신고 보강 — One UI형 3버튼 탐색 막대(홈만 누름) · 계좌번호 누름 = 복사 메뉴", () => {
+  const homeBar = overlayCode.slice(overlayCode.indexOf("export function HomeBar"));
+  const oneUi = homeBar.slice(homeBar.indexOf("grid-cols-3"));
+  assert.equal((oneUi.match(/<button/g) ?? []).length, 1, "One UI형 막대에서 누를 수 있는 것은 홈 하나");
+  assert.equal((oneUi.match(/aria-hidden="true"/g) ?? []).length, 3, "최근 앱 · 홈 그림 · 뒤로는 스크린리더 대상 밖");
+  // 계좌번호 버튼은 복사 메뉴를 여는 것뿐 — 복사 콜백 · 기기 API를 직접 부르지 않는다.
+  const split = smsOverlay.slice(smsOverlay.indexOf("accountSplit ? ("), smsOverlay.indexOf("accountSplit.after}"));
+  assert.ok(split.includes("onClick={() => setCopyMenuSmsId(sms.smsId)}") && !split.includes("onCopyAccount"));
+  assert.ok(smsOverlay.includes("const accountAt = copyable &&"), "플래그 꺼짐(copyable 거짓)이면 계좌 버튼 0");
 });
