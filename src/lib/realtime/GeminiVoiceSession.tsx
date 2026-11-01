@@ -315,6 +315,11 @@ export type GeminiVoiceSessionProps = {
    * 인자 = 그 시점 사용자 발화 수(`claimedUserTurns` — 도구 경로와 같은 값). 부모가 즉시 주장 백스톱을 묻는다(종전: 턴 끝 flush에서만).
    */
   onScammerSmsClaim?: (userTurns: number) => void;
+  /**
+   * H1(2026-11-01 U1) — 화자 전환 첫 발화(`relayGreeting`)를 Live에 **실제로 보낸** 순간 1회. 부모는 이때 발신자 라벨을
+   * 확인 창구로 바꾼다(보류 큐가 앞 화자의 발화가 끝나기를 기다리는 동안 라벨이 먼저 바뀌지 않게). 부재 = 아무 일 없음.
+   */
+  onRelayGreetingSent?: () => void;
 };
 
 // §105 — `[live-mic]` 진단 줄 주기(숫자만 · 판단값).
@@ -406,6 +411,7 @@ export default function GeminiVoiceSession({
   resumeTurn,
   onConnectionLost,
   onScammerSmsClaim,
+  onRelayGreetingSent,
 }: GeminiVoiceSessionProps) {
   // §99 — 마운트 시점 값만 쓴다(첫 턴은 연결 직후 1회).
   const resumeTurnRef = useRef(resumeTurn ?? null);
@@ -433,6 +439,7 @@ export default function GeminiVoiceSession({
     onScammerHangupReady,
     onConnectionLost,
     onScammerSmsClaim,
+    onRelayGreetingSent,
   });
   const mutedRef = useRef(muted);
   // 정리 대상들 — 언마운트 시 전부 닫지 않으면 마이크가 계속 열려 있다.
@@ -478,6 +485,7 @@ export default function GeminiVoiceSession({
       onScammerHangupReady,
       onConnectionLost,
       onScammerSmsClaim,
+      onRelayGreetingSent,
     };
   }, [
     onActive,
@@ -501,6 +509,7 @@ export default function GeminiVoiceSession({
     onScammerHangupReady,
     onConnectionLost,
     onScammerSmsClaim,
+    onRelayGreetingSent,
   ]);
 
   useEffect(() => {
@@ -957,6 +966,8 @@ export default function GeminiVoiceSession({
         const nowMs = performance.now();
         latencyState = noteSentTurn(latencyState, turn.kind, nowMs);
         if (turn.kind === "opening") markCallSetup("openingSent", nowMs);
+        // H1(2026-11-01 U1) — 넘김 지시가 실제로 나갔다(라벨 전환 시점).
+        if (turn.kind === "relayGreeting") handlersRef.current.onRelayGreetingSent?.();
         // §57.4 D3 — 타이핑 전사는 **실제로 보낸 시점에** 적립한다. 보류 중에 적립하면 그 턴의 flush에서
         // 사용자 문장이 아직 말하던 사기범 문장보다 먼저 기록된다(§71.5).
         if (turn.kind === "text") appendUserBuffer(turn.text.trim());
