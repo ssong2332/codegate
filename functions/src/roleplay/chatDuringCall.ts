@@ -87,10 +87,12 @@ export type ChatDuringCallInput = {
   /** 이미 사진 턴 문장으로 바뀐 사용자 글(호출부가 길이 · 빈 값을 검사했다). */
   userText: string;
   isPhotoTurn: boolean;
+  /** D-e · D-k — 이체 완료 화면 캡처(호출부가 사진 턴 · 허용 값만 남겼다). */
+  photoKind?: "transfer-receipt";
 };
 
 export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<SendMessageResponse> {
-  const { db, sessionRef, sessionId, session, scenarioPrompt, userText, isPhotoTurn } = input;
+  const { db, sessionRef, sessionId, session, scenarioPrompt, userText, isPhotoTurn, photoKind } = input;
   if (!canChatDuringCall(session)) {
     throw new HttpsError("failed-precondition", "통화 중 대화방에서만 보낼 수 있습니다.");
   }
@@ -113,6 +115,7 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
       createdAt: Timestamp.now(),
       channel: "messenger",
       ...(isPhotoTurn ? { photo: true as const } : {}),
+      ...(photoKind ? { photoKind } : {}),
     } satisfies MessageDoc);
     tx.update(sessionRef, { turnCount: fresh.turnCount + 1 });
     return { history, userIndex: history.length, turnCount: fresh.turnCount + 1 };
@@ -162,7 +165,7 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
   };
   const turnInstruction = [
     chatInstruction,
-    photoTurnInstruction(isPhotoTurn),
+    photoTurnInstruction(isPhotoTurn, photoKind),
     turnFacts.transferReported ? TRANSFER_REPORTED_INSTRUCTION : undefined,
     personaAnchorInstruction(session.scenarioId),
   ]

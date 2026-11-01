@@ -31,7 +31,7 @@ test("[§121.7 배선] sendMessage는 duringCall이면 시나리오 확인 직�
   const route = index.indexOf("if (request.data?.duringCall === true) {");
   assert.ok(route > index.indexOf("const scenarioPrompt = resolveSessionScenarioPrompt("), "시나리오 프롬프트 확인 뒤");
   assert.ok(route < index.indexOf("const claim = await db.runTransaction("), "일반 턴 확보 앞");
-  assert.match(index, /return replyChatDuringCall\(\{ db, sessionRef, sessionId, session, scenarioPrompt, userText, isPhotoTurn \}\);/);
+  assert.match(index, /return replyChatDuringCall\(\{ db, sessionRef, sessionId, session, scenarioPrompt, userText, isPhotoTurn, photoKind \}\);/);
 
   const chat = read("chatDuringCall.ts");
   assert.equal((chat.match(/channel: "messenger",/g) ?? []).length, 2, "사용자 · 사기범 둘 다 messenger");

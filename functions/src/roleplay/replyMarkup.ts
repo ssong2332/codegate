@@ -10,6 +10,7 @@
 // | 1 | 굵게 표기 `**…**` (한 줄 안 · 짝이 맞을 때만) | 별표만 지우고 안의 글은 남긴다 | #5 friend-loan 고급 S6 "**비밀번호 4자리**" |
 // | 2 | 빈 백틱 "``" (앞뒤에 다른 백틱이 붙지 않은 두 개) | 지운다 | #6 subsidy 중급 S3 "안내드리는 `` 주소로" |
 // | 3 | 지문 괄호 — 괄호 안이 아래 지문 어휘로 **시작**하고(어휘 바로 뒤 = `)`·공백·쉼표·말줄임) 12자 이하 | 괄호째 지운다 | #8 subsidy 초급 S5 "(잠시 후) 여보세요?" |
+// | 3-c | D-f2 맨 앞 짧은 괄호 지문 — 대사 **맨 앞**의 한글 괄호(2~15자 · 숫자 · 라틴 0)가 지문 끝맺음("-음" · "-며" · "중" · "후" · "뒤" · "채" · "듯" · "-히")으로 끝남 | 괄호째 지운다(지우면 빈 대사면 그대로) | P2 확인 실측 2026-11-01 지인 메신저 fv-42wd "(통화 맺음) 확인해 보니…" |
 // | 4 | 메타 표식 — 대괄호 · 괄호 · 겹낫표 안이 아래 메타 어휘를 담은 짧은 표기("[훈련 종료]" · "(시뮬레이션 끝)") | 괄호째 지운다 | 2026-10-21 실기 신고 6 friend-loan "…보내줘.[훈련 종료]" |
 // | 4-b | §129 D10 자리표시 이름 — "나 ㅇㅇ이야"처럼 이름 자리를 자음 "ㅇㅇ"으로 채운 자기소개 | "나야"로 바꾼다(이름을 지어내지 않는다) | 프로브 2026-10-24 지인 카톡 고급 거절 S1 |
 // | 3-b | §131(9) 괄호 속 혼잣말 — 띄어쓰기 있는 한국어 문장 + 종결 어미로 끝나는 괄호(숫자 0) | 괄호째 지운다(지우면 빈 대사면 그대로) | 프로브 2026-10-24b D6 |
@@ -62,6 +63,10 @@ const STAGE_DIRECTION = new RegExp(
 // "(주)" · "(가상)" · "(1588-…)" · "(OO은행 고객센터)"도 남는다. 지우면 대사가 빈 경우는 지우지 않는다(아래).
 const PAREN_MONOLOGUE =
   /[ \t]*\((?=[^()\n]*\s)(?:[^()\n\d]{4,60}?[ㅠㅜ]+|[^()\n\d]{4,60}?(?:네요|군요|는데요|거든요|[었였]어요|[었였]네)[ㅠㅜ]*)[.!?~…]*\)/g;
+
+// 3-c행(D-f2 — P2 확인 실측 2026-11-01 지인 메신저 "(통화 맺음) 확인해 보니 이체가 들어가지 않았어요.") — 머리 어휘 목록(3행) 밖 지문이 대사 맨 앞에 붙은 것.
+// 맨 앞 한 개만 · 한글 낱말 1~4개 · 끝 글자가 지문 끝맺음일 때만. ⛔ "(주)"(1자) · "(가상)" · "(참고로)" · "(OO은행 고객센터)"(라틴) · 가운데 괄호는 남는다.
+const LEADING_STAGE_DIRECTION = /^\s*\((?=[가-힣\s]{2,15}\))(?:[가-힣]+\s){0,3}[가-힣]*(?:음|며|중|후|뒤|채|듯|히)\)[ \t]*/;
 
 // 4행 — 모델이 대사 밖 진행 표기(훈련 · 대화가 끝났다는 표시)를 대사에 붙인 것. 사기범 인물은 이런 표기를 할 이유가 없으므로
 // 메타 어휘가 들어간 짧은 괄호만 지운다. ⛔ "[지원금 안내]" 같은 문자 머리표는 메타 어휘가 없어 남는다.
@@ -119,7 +124,11 @@ export function tidyScammerReplyMarkup(text: string): ReplyMarkupResult {
   const withoutMonologue = text.replace(PAREN_MONOLOGUE, "");
   const monologueFree = withoutMonologue !== text && withoutMonologue.trim().length > 0 ? withoutMonologue : text;
   if (monologueFree !== text) count();
-  const tidied = monologueFree
+  // 3-c행 — 맨 앞 짧은 괄호 지문(지우면 빈 대사면 그대로).
+  const withoutLeading = monologueFree.replace(LEADING_STAGE_DIRECTION, "");
+  const leadingFree = withoutLeading !== monologueFree && withoutLeading.trim().length > 0 ? withoutLeading : monologueFree;
+  if (leadingFree !== monologueFree) count();
+  const tidied = leadingFree
     .replace(BOLD_PAIR, (_m, inner: string) => {
       count();
       return inner;

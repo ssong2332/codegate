@@ -198,7 +198,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     }
     // §121.7 PR-3 — 통화 중 대화방 카톡(메인 결정 ⓑⓒ). 문자 · 끊기 · 전환 판정을 타지 않는 별도 경로(`chatDuringCall.ts` 판정표).
     if (request.data?.duringCall === true) {
-      return replyChatDuringCall({ db, sessionRef, sessionId, session, scenarioPrompt, userText, isPhotoTurn });
+      // D-k(P2 확인 실측 2026-11-01) — 통화 중 대화방 캡처도 종류를 넘긴다(빠지면 일반 사진 지시가 갔다).
+      return replyChatDuringCall({ db, sessionRef, sessionId, session, scenarioPrompt, userText, isPhotoTurn, photoKind });
     }
 
     // ① PII 마스킹(guardrails, T11 실구현 — 전화/계좌/주민번호형/이메일 정규식 토큰화, guardrails/
