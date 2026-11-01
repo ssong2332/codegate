@@ -100,7 +100,8 @@ test("[§131(11) N5 판정표 W] 메신저 대사의 통화 표현 — 문장 �
     assert.equal(fixMessengerCallWording(keep), keep, keep);
   }
   const index = readSrc("roleplay/index.ts");
-  assert.ok(index.includes('const limitedReplyText = session.channel === "messenger" ? fixMessengerCallWording(factCheckedReplyText) : factCheckedReplyText;'));
+  // R9(2026-11-01) — 같은 자리에서 비밀번호 요구 문장을 먼저 뺀 뒤(`passwordGuard`) 메신저 통화 표현을 고친다.
+  assert.ok(index.includes('const limitedReplyText = session.channel === "messenger" ? fixMessengerCallWording(passwordGuard.text) : passwordGuard.text;'));
   assert.equal(readSrc("roleplay/chatDuringCall.ts").includes("fixMessengerCallWording"), false, "통화 중 대화방은 실제 통화가 있어 고치지 않는다");
 });
 
