@@ -93,6 +93,8 @@ const publicMetaLib = optionalLib("scenarios/publicMeta.js");
 const constantsLib = optionalLib("shared/constants.js");
 const escalatedCallLib = optionalLib("roleplay/escalatedCall.js");
 const replyMarkupLib = optionalLib("roleplay/replyMarkup.js");
+// R13 미러(2026-11-01) — 앱 판정표 W(메신저 단계 통화 말 · "이만 끊을게" 교정). 옛 lib = 종전(미적용).
+const personaGuardLib = optionalLib("roleplay/personaGuard.js");
 const replyLengthLib = optionalLib("roleplay/replyLength.js");
 const realNamesLib = optionalLib("guardrails/realFinancialNames.js");
 const otpCheckLib = optionalLib("roleplay/otpCheck.js");
@@ -785,6 +787,7 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       pp.text = unconfirmed.text;
       if (pp.endCall === "goal") pp.endCall = undefined;
     } else if (ackLib?.stripUnperformedAcknowledgement) pp.text = ackLib.stripUnperformedAcknowledgement(pp.text, { transferReported, photoSent: false });
+    if (!escalated && personaGuardLib?.fixMessengerCallWording) pp.text = personaGuardLib.fixMessengerCallWording(pp.text);
     if (pp.smsMarker !== undefined) {
       const g = resolveSmsGate({ purpose: pp.smsMarker, declared, delivered, userTurns: userTurnsNow });
       events.push({ ev: "smsMarker", purpose: pp.smsMarker, status: g.status, userTurns: userTurnsNow });
@@ -795,6 +798,12 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       }
     }
     if (pp.dropped) events.push({ ev: "signalDropped", ...pp.dropped, userTurns: userTurnsNow });
+    // R14 미러(2026-11-01) — 앱 판정표 G: 넘어온 통화에서 포기 단계가 두 턴째인데 끊기 신호가 없으면 포기 1줄 + give_up(옛 lib = 함수 없음 = 종전).
+    if (screenActionLib?.decideForcedScreenGiveUp?.({ escalatedCall: Boolean(escalated), endCall: pp.endCall, hangupSignalAllowed: hangupMode === "signal", facts: screenFacts, userTurns: userTurnsNow })) {
+      events.push({ ev: "forcedScreenGiveUp", userTurns: userTurnsNow, original: pp.text });
+      pp.text = screenActionLib.screenGiveUpReply(pp.text);
+      pp.endCall = "give_up";
+    }
     const post = decideFallbackHangup(hangupFacts, delivered, false);
     const effect = resolveFallbackHangupEffect({ endCall: pp.endCall, hangupMode, pre, post });
     events.push({ ev: "hangup", mode: hangupMode, preRow: pre.row, postRow: post.row, endCall: pp.endCall ?? null, end: effect.end, userTurns: userTurnsNow });

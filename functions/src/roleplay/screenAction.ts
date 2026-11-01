@@ -203,6 +203,42 @@ export function anyScreenGiveUp(facts: readonly ScreenFact[], userTurns: number)
   return (["install", "transfer", "form"] as const).some((kind) => screenPressureFor(kind, facts, userTurns) === "give_up");
 }
 
+// ── R14(#477 실측 ③ — 메신저에서 통화로 넘어간 뒤 텍스트 폴백에서 이체를 끝까지 안 하는데 포기 지시를 6턴 내내 무시하고 재촉) — 판정표 G ──
+// 지시 문면만으로는 막히지 않았다(끊기 신호 허용 · 포기 문장 주입 상태에서 신호 0). 포기 단계가 두 턴째 이어지면 서버가 끝맺는다.
+// | # | If | Then |
+// |---|---|---|
+// | G1 | 메신저에서 넘어온 통화(텍스트 폴백)가 아님 | 무변경(처음부터 통화인 세션 · 메신저 단계 — 카드사 고급 등 종전) |
+// | G2 | 모델이 이번 대답에 끊기 신호를 보냄 | 무변경(모델 끝맺음 그대로) |
+// | G3 | 끊기 사전 판정이 신호 허용이 아님 | 무변경(끊을 수 없는 칸 — 대사만 바꾸면 끝나지 않는 작별이 된다) |
+// | G4 | 마치지 않은 화면이 지금 포기 단계가 아님 | 무변경 |
+// | G5 | 포기 단계 첫 턴(직전 발화 수에서는 포기 단계 아님) | 무변경(포기 지시 문장으로 모델에 한 번 맡긴다) |
+// | G6 | 그 밖(포기 단계가 두 턴째 이어짐) | 대사를 포기 1줄(말투 맞춤)로 바꾸고 `give_up` 끊기 신호를 붙인다 |
+export function decideForcedScreenGiveUp(input: {
+  escalatedCall: boolean;
+  endCall: "goal" | "give_up" | undefined;
+  hangupSignalAllowed: boolean;
+  facts: readonly ScreenFact[];
+  userTurns: number;
+}): boolean {
+  if (!input.escalatedCall) return false; // G1
+  if (input.endCall !== undefined) return false; // G2
+  if (!input.hangupSignalAllowed) return false; // G3
+  if (!anyScreenGiveUp(input.facts, input.userTurns)) return false; // G4
+  return anyScreenGiveUp(input.facts, input.userTurns - 1); // G5 · G6
+}
+
+/** G6 포기 1줄(따옴표 0 · 숫자 0 · 새 요구 0). 반말 대사면 반말 · 그 밖 존댓말(`actionAcknowledgement.ts` U1과 같은 판정). */
+export const SCREEN_GIVE_UP_REPLY = {
+  casual: "안 되겠다. 이렇게는 더 못 하겠어. 그만할게.",
+  polite: "더는 진행이 어렵겠습니다. 여기서 마치겠습니다.",
+} as const;
+
+const GIVE_UP_POLITE_ENDING = /(?:니다|습니까|십니까|세요|십시오|어요|아요|에요|예요|해요|죠|군요|네요)(?=[\s.?!~…ㅠㅜ]|$)/;
+
+export function screenGiveUpReply(modelText: string): string {
+  return GIVE_UP_POLITE_ENDING.test(modelText) ? SCREEN_GIVE_UP_REPLY.polite : SCREEN_GIVE_UP_REPLY.casual;
+}
+
 /** 재촉 단계 · 금액 문장(따옴표 대사 예시 0 · 횟수 0 — 턴 지시 스캔 게이트 대상). */
 export const SCREEN_PRESSURE_SENTENCES = {
   installHold:
