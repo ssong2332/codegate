@@ -148,6 +148,58 @@ export function extractAccountHolder(body: string): string | undefined {
   return name ? name : undefined;
 }
 
+/**
+ * ⭐ U3(실기기 신고 2026-11-01 · 카드사 고급 fv-x7ue — *"예금주는 같은데 은행명은 다른데?"* 지난번 미르은행 · 이번 새솔은행 · 예금주 오현수) —
+ * 계좌번호 · 예금주는 문자 · 변형에 고정인데 은행명만 세션마다 골라, 같은 대포통장이 은행만 바뀌어 보였다. 예금주가 보이는 계좌는
+ * **계좌번호 · 은행 · 예금주를 한 묶음으로 고정**한다(메인 권고 — 한 사람 명의 통장은 한 은행에 있다. 세션마다 셋을 다 바꾸면 문자 본문 ·
+ * 변형 값을 세션마다 만들어야 하고, 대사 · 문자 · 이체 화면 · 리포트가 같은 값을 쓰는지 검증할 축이 늘어난다).
+ *
+ * | 세션이 보여 주는 계좌 | 세션 은행명(`fictionalBankName`) |
+ * |---|---|
+ * | 선언한 계좌 문자에 예금주 줄이 있다 | 그 예금주의 고정 은행(아래 표) |
+ * | 계좌 문자는 없고 변형에 가상 예금주(`accountHolder` — 메신저)가 있다 | 그 예금주의 고정 은행 |
+ * | 예금주가 보이지 않는다(말로 부르는 예시 계좌 · 계좌 없음) | 세션마다 고른다(종전 — 묶음이 없어 어긋남이 보이지 않는다) |
+ *
+ * ⚠️ 세션 은행명이 정해지면 같은 자리의 카드사 · 캐피탈 이름(`fictionalOrgNamesFor`)도 따라 고정된다(그 변형에서 늘 같은 이름).
+ * ⚠️ 이미 만든 세션은 저장된 `fictionalBankName`을 그대로 쓴다(무소급). 표에 없는 예금주는 종전처럼 고른다 — 새 예금주를 넣으면 이 표에도 넣는다
+ * (`__tests__/cardAdvancedU2U3U7.test.ts`가 문자 · 변형의 예금주 전부가 표에 있는지 본다).
+ */
+export const ACCOUNT_HOLDER_BANKS: Readonly<Record<string, string>> = {
+  // 통화 계좌 문자(`scenarios/inCallSms.ts` "예금주:" 줄)
+  윤재석: "다온은행",
+  서지원: "늘봄은행",
+  강태윤: "가온은행",
+  오현수: "미르은행",
+  임하늘: "해담은행",
+  김민재: "보담은행",
+  문성호: "새솔은행",
+  배준영: "한결은행",
+  신예린: "다온은행",
+  // 메신저 변형 가상 예금주(`scenarios/flowVariants.ts` `accountHolder`)
+  김도현: "새솔은행",
+  이서준: "해담은행",
+  박지훈: "가온은행",
+  최민혁: "늘봄은행",
+  정유나: "보담은행",
+  한승우: "한결은행",
+};
+
+/** U3 — 예금주의 고정 은행(표에 없으면 undefined = 세션마다 고른다). */
+export function fixedBankForHolder(holder: string | undefined): string | undefined {
+  if (holder === undefined) return undefined;
+  const bank = ACCOUNT_HOLDER_BANKS[holder];
+  return bank !== undefined && FICTIONAL_BANK_NAMES.includes(bank) ? bank : undefined;
+}
+
+/** U3 — `resolveSessionAccountNumber`와 같은 문자(선언 문자 중 첫 계좌 문자)의 예금주. 없으면 undefined. */
+export function resolveSessionAccountHolder(scenarioId: string, declaredSmsIds?: readonly string[]): string | undefined {
+  for (const item of IN_CALL_SMS[scenarioId] ?? []) {
+    if (declaredSmsIds && !declaredSmsIds.includes(item.smsId)) continue;
+    if (extractAccountNumber(item.body)) return extractAccountHolder(item.body);
+  }
+  return undefined;
+}
+
 export function extractTransferAmount(body: string): string | undefined {
   const digits = body.split("\n").find((l) => l.startsWith("금액:"))?.match(/[\d,]+(?=원)/)?.[0]?.replace(/,/g, "");
   return digits ? digits : undefined;

@@ -494,3 +494,21 @@ test("[T191 smsNudge] 넛지 항목은 smsNudge로 · 맥락 주입으로 나가
   });
   assert.equal(announce.state.armedAt, 1000);
 });
+
+// ⭐ U2(실기기 신고 2026-11-01 · 카드사 고급 fv-x7ue — 말로만 "설치했다"에 다음 단계로 넘어감) — T194-c-2로 남겨 둔 실시간 설치 응낙 주입.
+test("[U2 installConsented] 통화 중 설치 화면 첫 응낙 — 서버 지시를 실시간에서만 맥락 주입 · 침묵 넛지 대상 아님", () => {
+  assert.equal(sendsAsContextInjection("installConsented"), true, "turnComplete:false(X5)");
+  const step = stepSilenceNudge(INITIAL_SILENCE_NUDGE_STATE, { type: "injected", delivery: "installConsented", nowMs: 1000 });
+  assert.equal(step.state.armedAt, null, "'방금 보낸 문자' 침묵 넛지를 걸지 않는다");
+  assert.ok(
+    page.includes('if (callMode === "realtime" && res.contextInstruction) pushContextTurn(res.contextInstruction, "installConsented");'),
+    "실시간에서만 · 서버가 지시를 돌려줄 때만",
+  );
+  assert.ok(page.includes("inject(await recordMockScreenEvent(request));"), "재시도 경로도 같은 주입");
+  const kinds = '"confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted" | "installConsented"';
+  const voice = readFileSync("src/lib/realtime/GeminiVoiceSession.tsx", "utf8").replace(/\r\n/g, "\n");
+  assert.equal(page.split(kinds).length - 1, 2, "page.tsx 슬롯 · pushContextTurn 타입");
+  assert.equal(voice.split(kinds).length - 1, 2, "GeminiVoiceSession contextTurn 타입 2곳");
+  const types = readFileSync("src/lib/api/types.ts", "utf8").replace(/\r\n/g, "\n");
+  assert.ok(/export type RecordMockScreenEventResponse = \{\n  ok: true;\n[\s\S]*?contextInstruction\?: string;\n\};/.test(types));
+});

@@ -24,4 +24,11 @@ export type RecordMockScreenEventRequest = {
 };
 /** T194-c-1(docs/Architecture.md §84.5.3 · §84.15.3) — 통화 중 설치 화면(Q2) 기록 때 그 통화의 경로(위 요청 필드와 같은 리터럴). */
 export type MockScreenCallMode = NonNullable<RecordMockScreenEventRequest["callMode"]>;
-export type RecordMockScreenEventResponse = { ok: true };
+export type RecordMockScreenEventResponse = {
+  ok: true;
+  /**
+   * ⭐ U2(2026-11-01) — 통화 중 설치 화면(Q2)의 **첫 응낙**이 실시간 통화에서 왔을 때만: 실시간 사기범에게 넣을 맥락 지시 1줄(설치 · 권한 허용을 마쳤다).
+   * 클라는 맥락 주입(`installConsented`)으로 넣는다. 폴백 · 두 번째 응낙 · 메신저 표면 · 호 전환 뒤 = 부재.
+   */
+  contextInstruction?: string;
+};

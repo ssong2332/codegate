@@ -24,7 +24,8 @@ test("[§132.7 N4] 이체 화면 제출 — 서버가 돌려준 맥락 1줄을 �
     page,
     /if \(callMode === "realtime" && res\.contextInstruction\) pushContextTurn\(res\.contextInstruction, "landingSubmitted"\);/,
   );
-  assert.ok(read("./contextInjection.ts").includes('| "landingSubmitted";'));
+  // U2(2026-11-01) — 뒤에 installConsented 행이 붙었다(목록 끝 단언 → 행 존재 단언).
+  assert.ok(read("./contextInjection.ts").includes('| "landingSubmitted"'));
   assert.ok(read("./GeminiVoiceSession.tsx").includes('"confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted"'));
 });
 
