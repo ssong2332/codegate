@@ -70,7 +70,7 @@ import { isVerifyTransferReachable, type VerifyOfferDocState } from "../scammerH
 import { pickFallbackTurnInstruction } from "../verifyIntercept/fallbackTurn";
 import { announcedVerifyAnchor } from "../verifyIntercept/buildDoc";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
-import { resolveSessionEscalation } from "../scenarios/escalation";
+import { resolveTransitionNow } from "../scenarios/escalation";
 import { LLM_TEXT_SECRETS } from "../shared/config";
 import { MESSENGER_ESCALATION_FALLBACK_TURNS, SEND_MESSAGE_MAX_LENGTH } from "../shared/constants";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
@@ -974,7 +974,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
               !limitReached &&
               !refusalRepeatBlocked &&
               endCallSignal === undefined &&
-              resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined &&
+              resolveTransitionNow(session, PUBLIC_SCENARIOS) !== undefined &&
               !isEscalationTooEarly(turnsSinceMessengerEntry(turnCount, session.channelHistory)),
           })
         : ({ action: "none" } as const);
@@ -1199,7 +1199,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       finalize.stillActive &&
       !finalize.hangupEnded &&
       session.channel === "messenger" &&
-      resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined;
+      resolveTransitionNow(session, PUBLIC_SCENARIOS) !== undefined;
     let escalationTrigger: ChannelTransitionTrigger | undefined;
     if (canEscalate && !limitReached) {
       if (signalEscalate) {

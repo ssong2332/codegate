@@ -34,6 +34,10 @@ export type ScenarioMeta = {
   // `scenarios/escalation.ts`의 (시나리오 × 난이도) 술어로만 한다 — 이 필드를 직접 읽지 않는다(G580).
   // 클라 원본(messengerParcelSmishingSms.ts)과 같은 값이어야 한다(루트 대조 테스트 escalation.test.ts).
   advancedEscalation?: EscalationConfig;
+  // ⭐ A2 ㉢(실기기 신고 2026-11-01 · 사용자 결정 "권고대로") — 통화 전이를 **목소리 복제(녹음 · 재사용)를 고른 세션에서만 · 한 번만** 연다.
+  // 그 통화는 짧은 딥보이스 통화다(우는 목소리 한두 마디 → 사기범이 끊고 대화방으로 돌아온다). 참가자가 건 보이스톡은 늘 받지 않는다.
+  // ⛔ 화면 · 서버가 이 필드를 직접 읽지 않는다 — 세션 술어 `resolveSessionEscalation`과 보이스톡 분기만 쓴다.
+  escalationCloneOnly?: true;
   // T191 S5(고급 전용 3종 — PRD AC-097 (b) · UX 계약 C-1) — 이 시나리오는 고급으로만 만들 수 있다.
   // **화면 표시값**(UX-017 "고급 전용" 묶음 · UX-029 고급 1장)일 뿐 수법·흐름 정보가 아니다(C-4).
   // 강제는 서버(`createSession` · `createChallenge`의 `assertDifficultyAllowed`)가 한다 — 클라
@@ -210,7 +214,7 @@ export const messengerChildImpersonationKakaoScenario: ScenarioMeta = {
   title: "자녀 사칭 급전 요청(카카오톡)",
   fraudType: "자녀 사칭(카카오톡)",
   estimatedDuration: "약 5~8분",
-  difficulty: "가족 걱정을 건드리고, 채팅하다가 전화로 이어집니다",
+  difficulty: "가족 걱정을 건드리고, 폰이 고장 났다며 채팅으로 송금을 재촉합니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "엄마, 나야. 폰 액정 깨져서 친구 폰으로 톡 보내." },
   ],
@@ -218,6 +222,8 @@ export const messengerChildImpersonationKakaoScenario: ScenarioMeta = {
   channel: "messenger",
   surface: "kakao",
   escalation: { toChannel: "voice", voiceMode: "clone" },
+  // A2 ㉢ — 기본은 채팅만 · 목소리 복제 세션에서만 짧은 딥보이스 통화 1회 · 참가자 보이스톡은 받지 않음.
+  escalationCloneOnly: true,
 };
 
 export const messengerFriendLoanKakaoScenario: ScenarioMeta = {

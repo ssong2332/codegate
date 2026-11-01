@@ -51,7 +51,8 @@ test("[§121.7 대화방] 통화 중 모드 — 고지 생략 · 배너 · 보�
   assert.ok(before > 0 && call > before, "전사 제출이 전송 앞");
   assert.match(send, /\.\.\.\(inCall \? \{ duringCall: true \} : \{\}\)/);
   assert.match(send, /duringCall\.onChatTurn\(text, result\.reply\.text\)/);
-  assert.match(room, /const canVoiceTalk = sessionEscalates && !chatEnded && !inCall;/);
+  // A2 ㉢(2026-11-01) — 목소리 복제 짧은 통화 시나리오는 보이스톡을 받지 않는다(같은 줄 끝 조건).
+  assert.match(room, /const canVoiceTalk = sessionEscalates && !chatEnded && !inCall && scenario\?\.escalationCloneOnly !== true;/);
   assert.match(room, /chatEnded \|\| inCall\n\s*\? undefined/);
   assert.match(room, /if \(duringCall\) \{\n\s*duringCall\.onEndTraining\(\);/);
 });

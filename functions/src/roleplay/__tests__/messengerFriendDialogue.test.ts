@@ -110,7 +110,8 @@ test("[실기 4] requestEscalation — 전이 불가 분기 안에서만 via=voi
   const body = code.slice(start, code.indexOf("export const requestReverseEscalation"));
   assert.match(
     body,
-    /if \(!resolveSessionEscalation\(session, PUBLIC_SCENARIOS\)\) \{\s*if \(via === "voice_talk" && PUBLIC_SCENARIOS\[session\.scenarioId\]\?\.surface === "kakao"\) \{\s*const turnIndex = await recordVoiceTalkUnanswered\(db, sessionId\);\s*return \{ voiceTalk: "unanswered", turnIndex \};\s*\}\s*throw new HttpsError\("failed-precondition", "이 시나리오는 통화 전이를 지원하지 않습니다\."\);/,
+    // A2 ㉢(2026-11-01) — 전환 판정은 `resolveTransitionNow` · 목소리 복제 짧은 통화 시나리오의 보이스톡도 같은 분기(늘 응답 없음).
+    /if \(!resolveTransitionNow\(session, PUBLIC_SCENARIOS\) \|\| \(via === "voice_talk" && voiceTalkNeverAnswered\)\) \{\s*if \(via === "voice_talk" && PUBLIC_SCENARIOS\[session\.scenarioId\]\?\.surface === "kakao"\) \{\s*const turnIndex = await recordVoiceTalkUnanswered\(db, sessionId\);\s*return \{ voiceTalk: "unanswered", turnIndex \};\s*\}\s*throw new HttpsError\("failed-precondition", "이 시나리오는 통화 전이를 지원하지 않습니다\."\);/,
   );
   assert.ok(body.indexOf("assertAnonymousChallengeScope") < body.indexOf("recordVoiceTalkUnanswered"), "소유 · 익명 범위 검사 뒤");
   const record = codeOnly(SRC("session/voiceTalkUnanswered.ts"));

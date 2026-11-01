@@ -20,14 +20,16 @@ import { GeminiRealtimeProvider } from "../../realtime/geminiProvider";
 // "통화가 불가능하다"는 대사 꼴(실측 대사 · 채팅 단계 수법 원문).
 const CALL_IMPOSSIBLE = /통화가 (아예 )?안 (돼|된다)|톡으로만/;
 
-test("[통화 단계 규칙] child-kakao 원본 · 흐름 변형 전부에 정확히 1번 — 다른 시나리오에는 없다", () => {
-  assert.equal(SCENARIO_PROMPTS[CHILD].personaPrompt.split(CHILD_CALL_PHASE_RULE).length - 1, 1);
+// ⭐ A2 ㉢(2026-11-01) — 자녀 사칭은 기본 채팅만 · 목소리 복제 세션의 통화는 짧은 통화 규칙(`CLONE_SHORT_CALL_RULE` — 통화 넘김 맥락)이 맡는다 ⇒ 긴 통화 단계 규칙은 어느 조립에도 없다.
+test("[통화 단계 규칙] A2 ㉢ — child-kakao 원본 · 흐름 변형 전부에 0번 · 다른 시나리오에도 없다", () => {
+  assert.equal(SCENARIO_PROMPTS[CHILD].personaPrompt.split(CHILD_CALL_PHASE_RULE).length - 1, 0);
   const variants = FLOW_VARIANTS.filter((v) => v.scenarioId === CHILD);
   assert.ok(variants.length >= 3);
   for (const v of variants) {
     const prompt = resolveSessionScenarioPrompt(CHILD, v.variantId);
     assert.ok(prompt, v.variantId);
-    assert.equal(prompt.personaPrompt.split(CHILD_CALL_PHASE_RULE).length - 1, 1, v.variantId);
+    assert.equal(prompt.personaPrompt.split(CHILD_CALL_PHASE_RULE).length - 1, 0, v.variantId);
+    assert.equal(prompt.personaPrompt.includes("[[SIGNAL:ESCALATE_VOICE]]"), false, `${v.variantId}: 모델이 먼저 전화하는 신호 지시 0`);
   }
   for (const [id, prompt] of Object.entries(SCENARIO_PROMPTS)) {
     if (id !== CHILD) assert.equal(prompt.personaPrompt.includes("[통화로 넘어온 뒤]"), false, id);
@@ -48,7 +50,7 @@ test("[통화 단계 규칙] 문면 — 메시지 대화를 이어받아 첫마�
   for (const label of CHAT_ONLY_TACTIC_LABELS) assert.ok(labels.includes(label), label);
 });
 
-test("[통화 단계 규칙] 폴백 조립(sendMessage 옵션) · 남성/여성 세션 · Live 조립 모두에 실린다", () => {
+test("[통화 단계 규칙] A2 ㉢ — 폴백 · 남성/여성 · Live 조립 어디에도 실리지 않는다", () => {
   const prompt = SCENARIO_PROMPTS[CHILD];
   const fallback = buildSystemPrompt(prompt, { difficultyLevel: "intermediate", identityCheckAllowed: false });
   const male = buildSystemPrompt(prompt, { difficultyLevel: "intermediate", identityCheckAllowed: false, speakerGender: "male" });
@@ -61,11 +63,11 @@ test("[통화 단계 규칙] 폴백 조립(sendMessage 옵션) · 남성/여성 
     liveSpeechStyle: true,
   });
   for (const [label, text] of [["폴백", fallback], ["남성", male], ["여성", female], ["Live", live]] as const) {
-    assert.equal(text.split(CHILD_CALL_PHASE_RULE).length - 1, 1, label);
+    assert.equal(text.split(CHILD_CALL_PHASE_RULE).length - 1, 0, label);
   }
 });
 
-test("[통화 단계 규칙] Live 토큰 발급 요청의 시스템 프롬프트에 실린다(GeminiRealtimeProvider 실경로)", async () => {
+test("[통화 단계 규칙] A2 ㉢ — Live 토큰 발급 요청의 시스템 프롬프트에도 없다(GeminiRealtimeProvider 실경로)", async () => {
   const originalFetch = globalThis.fetch;
   const bodies: string[] = [];
   globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
@@ -92,7 +94,7 @@ test("[통화 단계 규칙] Live 토큰 발급 요청의 시스템 프롬프트
   }
   const setup = JSON.parse(bodies[0]) as { bidiGenerateContentSetup?: { systemInstruction?: { parts?: { text?: string }[] } } };
   const sent = setup.bidiGenerateContentSetup?.systemInstruction?.parts?.[0]?.text ?? "";
-  assert.ok(sent.includes(CHILD_CALL_PHASE_RULE), "Live 시스템 프롬프트에 통화 단계 규칙이 없다");
+  assert.ok(sent.length > 0 && !sent.includes(CHILD_CALL_PHASE_RULE), "Live 시스템 프롬프트에 긴 통화 단계 규칙이 없어야 한다");
 });
 
 test("[Mock 대사 원천 판정표] 에스컬레이션 전 = 원본 그대로 · 뒤 = 채팅 전용 수법만 뺀다 · 다 빠지면 원본", () => {
