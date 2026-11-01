@@ -12,6 +12,7 @@
 // 참가자 유형: comply(순순히 따름 · 가짜 값 · 링크 이체 화면을 제출한다) · suspicious(정체를 캐묻다가 머뭇거리며 따름) · refuse(처음부터 거절)
 //   · verbal(P2 실측 2026-11-01 — comply와 같되 이체 요구에 "링크는 안 눌렀고 제 은행 앱으로 따로 보냈어요"라고 말하고 화면을 제출하지 않는다)
 //   · verbalInstall(U2 실측 2026-11-01 — comply와 같되 통화 중 문자 설치 화면의 권한 허용을 누르지 않고 "설치했어요"라고 말로만 답한다 · 이체 화면은 comply처럼 제출)
+//   · verbalTransfer(#463 확인 실측 2026-11-01 — comply와 같되 설치 화면은 허용하고, 이체 화면은 제출하지 않은 채 "네, 보냈어요"라고 말로만 답한다)
 //
 // node scripts/full-audit-probe.mjs --secret <path> --plan <json> --out <dir> [--key-var GEMINI_API_KEY2] [--tag s1]
 //   plan json = [{ "ch": "voice"|"messenger", "id": "...", "level": "beginner|intermediate|advanced", "persona": "comply|suspicious|refuse" }, ...]
@@ -203,7 +204,7 @@ function makeResponder(persona, getOtp = () => undefined) {
     return (lastReply = FILLER[i % FILLER.length]);
   };
 }
-const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9, verbal: 16, verbalInstall: 16 };
+const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9, verbal: 16, verbalInstall: 16, verbalTransfer: 16 };
 
 // ── 키 · 공통 ─────────────────────────────────────────────────────────────────────────────────
 function readApiKey(keyVar = argVal("--key-var", "GEMINI_API_KEY2")) {
@@ -403,7 +404,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
   for (let i = job.startIndex ?? 0; i < (job.startIndex ?? 0) + (job.maxTurns ?? MAX_USER_TURNS[persona]); i += 1) {
     if (closed) break;
     // §115 — 순응 참가자는 링크 이체 화면을 연 문자가 도착한 다음 발화에서 제출한다(앱의 landingSubmittedAt 흉내 · C-1 입력).
-    if (persona === "comply" || persona === "verbalInstall") {
+    if (persona === "comply" || persona === "verbalInstall" || persona === "verbalTransfer") {
       for (const d of delivered) {
         const landingId = findInCallSmsItem(scenarioId, d.smsId)?.fakeLandingId;
         if (!d.landingSubmitted && d.userTurnsAtArrival < userTurns && landingId) {
@@ -416,6 +417,8 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
             if (consentText) sendText(consentText, false, "install_consent_ctx");
             continue;
           }
+          // #463 확인 — verbalTransfer는 이체 · 입력 화면을 제출하지 않는다(말로만 "보냈어요").
+          if (persona === "verbalTransfer") continue;
           d.landingSubmitted = true;
           events.push({ t: now(), ev: "landingSubmitted", smsId: d.smsId, userTurns });
           // §132.7 — 앱처럼 제출 사실을 맥락 주입(새 lib에만 상수가 있다 — 옛 lib = 주입 0).
@@ -446,7 +449,19 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
       // §104 — 앱 화면처럼 마지막 문자 도착 뒤 사기범이 "문자 보냈다"고 말했으면 백스톱에 주장을 싣는다(새 lib에서만 효과 — 옛 lib는 인자를 무시).
       const lastSmsIdx = turns.map((t) => t.kind).lastIndexOf("sms_ctx");
       const claimed = turns.slice(lastSmsIdx + 1).some((t) => t.role === "scammer" && PROBE_SMS_SENT_CLAIM.test(t.text ?? ""));
-      const p = planSmsBackstop({ declared, delivered, userTurns, claimed });
+      // #463 판정표 SB 미러 — 앱 `inCallSms/index.ts`처럼 권한 허용 기록 없는 설치 문자가 있으면 다음 필수 문자를 보류(옛 lib = 종전).
+      const installPending = screenActionLib?.installPendingSince && screenActionLib.screenActionApplies(variantId)
+        ? screenActionLib.installPendingSince(
+            true,
+            scenarioId,
+            delivered.map((d) => ({ ...d, fakeLandingId: findInCallSmsItem(scenarioId, d.smsId)?.fakeLandingId })),
+            delivered
+              .filter((d) => d.landingSubmitted && isInCallInstallLanding(scenarioId, findInCallSmsItem(scenarioId, d.smsId)?.fakeLandingId))
+              .map((d) => ({ landingId: findInCallSmsItem(scenarioId, d.smsId).fakeLandingId, consented: true, submitted: false })),
+          )
+        : undefined;
+      const p = planSmsBackstop({ declared, delivered, userTurns, claimed, ...(installPending !== undefined ? { installPendingSince: installPending } : {}) });
+      if (installPending !== undefined) events.push({ t: now(), ev: "installHold", since: installPending, userTurns, action: p.action });
       if (claimed) events.push({ t: now(), ev: "smsClaim", userTurns, action: p.action });
       if (p.action === "deliver") {
         const g = resolveSmsGate({ purpose: p.item.purpose, declared, delivered, userTurns });
@@ -654,6 +669,23 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
   turns.push({ role: "scammer", n: 1, servedBy: opening.servedBy, raw: opening.text, text: op.text, attachments: op.attachments });
   const otpOf = () => { for (const e of [...events].reverse()) { const m = e.ev === "sms" && /(?<!\d)(\d{6})(?!\d)/.exec(e.body ?? ""); if (m) return m[1]; } return undefined; };
   const respond = makeResponder(persona, otpOf);
+  // #463 확인 실측 — 앱 `roleplay/index.ts`의 칩 정리 · 화면 행동(SA) · 송금 보고(§131 R1) · 사후 손질(A1)을 같은 lib 함수로 따른다(옛 lib = 종전).
+  // ⚠️ 이 프로브의 메신저 참가자는 칩 화면을 제출하지 않는다(mockScreens 기록 0) — comply 메신저 측정에 쓰면 모든 칩이 "미완료"로 잡힌다.
+  const linkLib = optionalLib("roleplay/linkMarker.js");
+  const chipRepeatLib = optionalLib("roleplay/linkChipRepeat.js");
+  const ackLib = optionalLib("roleplay/actionAcknowledgement.js");
+  const reachLib = optionalLib("scenarios/reachability.js");
+  const routeVariant = findFlowVariant(variantId);
+  const routeAccount = routeAccountNumber(scenarioId, variantId);
+  const shapeChips = (attachments, text, history) => {
+    let a = attachments;
+    if (chipRepeatLib?.dropRepeatedLinkChips) a = chipRepeatLib.dropRepeatedLinkChips(a, text, history);
+    if (linkLib?.dropPrematureBankTransferChip) a = linkLib.dropPrematureBankTransferChip(a, text, routeAccount, history);
+    if (linkLib?.ensureBankTransferChip && reachLib) a = linkLib.ensureBankTransferChip(a, text, routeAccount, reachLib.sessionReachableLandingIds(scenarioId, variantId), scenarioId, history);
+    if (linkLib?.withBankTransferPrefill) a = linkLib.withBankTransferPrefill(a, fictionalBankName, routeAccount, routeVariant?.scenarioId === scenarioId ? routeVariant.accountHolder : undefined);
+    return a;
+  };
+  if (op.attachments) stored[stored.length - 1].attachments = op.attachments;
   // P2 실측(2026-11-01) — 앱 체인 메신저 경로에도 계획 항목 maxTurns를 적용(부재 = 종전 상한 · P0이 텍스트 경로에 한 것과 같다).
   for (let i = 1; i < (job.maxTurns ?? MAX_USER_TURNS[persona]) + 1; i += 1) {
     if (ended) break;
@@ -702,7 +734,15 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
     const offer = declared.length > 0
       ? buildSmsMarkerOfferInstruction(declared.filter((it) => resolveSmsGate({ purpose: it.purpose, declared, delivered, userTurns: userTurnsNow }).status === "allowed").map((it) => it.purpose))
       : undefined;
-    const confirmPlan = choice === "none" && !otpInstr && !offer && !nudge
+    // #463 SA 미러 — 메신저 칩(이력 첨부) · mockScreens 기록 0(이 프로브는 칩 화면을 제출하지 않는다).
+    const screenApplies = screenActionLib?.screenActionApplies ? screenActionLib.screenActionApplies(variantId) : false;
+    const screenFacts = screenApplies ? screenActionLib.messengerScreenFacts(scenarioId, storedHistory, []) : [];
+    const screenPlan = screenApplies ? screenActionLib.planScreenAction({ applies: true, facts: screenFacts, currentUserText: u }) : undefined;
+    const screenStatus = screenApplies ? screenActionLib.buildScreenStatusLine(true, screenFacts) : undefined;
+    if (screenPlan) events.push({ ev: "screenNotDone", kind: screenPlan.kind, userTurns: userTurnsNow });
+    const transferScreenPending = screenFacts.some((f) => f.kind === "transfer") && !screenFacts.some((f) => f.kind === "transfer" && f.done);
+    const transferReported = ackLib ? ackLib.userReportedTransfer(storedHistory, u) && !transferScreenPending : false;
+    const confirmPlan = !screenPlan && choice === "none" && !otpInstr && !offer && !nudge
       ? planConfirmResult({ scenarioId, declared, delivered, userTurns: userTurnsNow, currentUserText: u, priorUserTexts: storedHistory.filter((m) => m.role === "user").map((m) => m.textMasked) })
       : undefined;
     const escalatedInstr = escalated && choice === "none" && escalatedCallLib ? escalatedCallLib.ESCALATED_CALL_CONTEXT_INSTRUCTION : undefined;
@@ -710,10 +750,13 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       ? repeatBreakLib.decideRepeatBreak(storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked), u)
       : null;
     if (rbKind) events.push({ ev: "repeatBreak", kind: rbKind, userTurns: userTurnsNow });
-    const tiAll = [ti, otpInstr, confirmPlan?.instruction, escalatedInstr, rbKind ? repeatBreakLib.repeatBreakInstruction(rbKind) : undefined, nudge, offer].filter(Boolean).join("\n") || undefined;
+    const tiAll = [ti, otpInstr, screenStatus, screenPlan?.instruction, confirmPlan?.instruction, transferReported ? ackLib.TRANSFER_REPORTED_INSTRUCTION : undefined, escalatedInstr, rbKind ? repeatBreakLib.repeatBreakInstruction(rbKind) : undefined, nudge, offer].filter(Boolean).join("\n") || undefined;
     const firstUserTurn = storedHistory.filter((m) => m.role === "user").length === 0;
     const res = await complete(buildSystemPrompt(scenarioPrompt, { ...baseOpts, ...(tiAll ? { turnInstruction: tiAll } : {}), hangupMode }), history, firstUserTurn);
     const pp = postProcess(res.text, choice, userTurnsNow, false);
+    // #463 — 앱 후처리 순서 미러: 칩 정리(S2 · D-g · P2-c) · 하지 않은 일 인정 문장 삭제(A1 — 이체 화면 미완료면 "입금 확인" 문장 삭제).
+    pp.attachments = shapeChips(pp.attachments, pp.text, storedHistory);
+    if (ackLib?.stripUnperformedAcknowledgement) pp.text = ackLib.stripUnperformedAcknowledgement(pp.text, { transferReported, photoSent: false });
     if (pp.smsMarker !== undefined) {
       const g = resolveSmsGate({ purpose: pp.smsMarker, declared, delivered, userTurns: userTurnsNow });
       events.push({ ev: "smsMarker", purpose: pp.smsMarker, status: g.status, userTurns: userTurnsNow });
@@ -728,7 +771,7 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
     const effect = resolveFallbackHangupEffect({ endCall: pp.endCall, hangupMode, pre, post });
     events.push({ ev: "hangup", mode: hangupMode, preRow: pre.row, postRow: post.row, endCall: pp.endCall ?? null, end: effect.end, userTurns: userTurnsNow });
     if (effect.end) ended = { kind: effect.kind, userTurns: userTurnsNow, row: post.row };
-    stored.push({ role: "scammer", textMasked: pp.text, channel: escalated ? "voice" : "messenger" });
+    stored.push({ role: "scammer", textMasked: pp.text, channel: escalated ? "voice" : "messenger", ...(pp.attachments ? { attachments: pp.attachments } : {}) });
     turns.push({ role: "scammer", n: scammerTurnNumber, servedBy: res.servedBy ?? (res.isMock ? "mock" : "unknown"), cause: [ti && "sms_announce", otpInstr && "otp_check", confirmPlan?.instruction && "confirm_result", rbKind && `repeat:${rbKind}`, nudge && "nudge", pp.escalate && "ESCALATE", effect.end && `ENDED:${effect.kind}`].filter(Boolean).join("+") || "user", raw: res.text, text: pp.text, attachments: pp.attachments });
     if (pp.escalate && !escalated && !ended) {
       escalated = { userTurns: userTurnsNow };
