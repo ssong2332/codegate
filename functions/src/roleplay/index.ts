@@ -26,6 +26,17 @@ import {
 } from "../scenarios/mockScreens";
 import { textPathAnchorScammerTurn } from "../inCallSms/buildDoc";
 import { planConfirmResult } from "../inCallSms/confirmResult";
+import {
+  buildScreenStatusLine,
+  inCallScreenFacts,
+  installPendingSince,
+  messengerScreenFacts,
+  planScreenAction,
+  screenActionApplies,
+  sessionScreenActionOnly,
+  type MockScreenRecord,
+  type ScreenFact,
+} from "./screenAction";
 import { buildNoSmsTransferClaimInstruction, isCompletionClaim, transferClaimsReachDemandStages } from "../inCallSms/confirmResult";
 import {
   buildSmsMarkerOfferInstruction,
@@ -40,7 +51,7 @@ import {
   sessionTransferSmsOpensLanding,
 } from "../inCallSms/smsGate";
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
-import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms } from "../inCallSms/smsDelivery";
+import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms, readMockScreenRecords } from "../inCallSms/smsDelivery";
 import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, readMockScreenCompletion } from "../scammerHangup/goalAction";
 import { FALLBACK_GOAL_WRAP_UP_INSTRUCTION } from "../scammerHangup/guidance";
 import type { SmsDeliveryInput } from "../inCallSms/smsDelivery";
@@ -265,6 +276,10 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
 
     const storedHistory = claim.history;
     const nextIndex = claim.userIndex;
+    // 화면 행동만 인정(`screenAction.ts`) — 적용 변형 · `mockScreens` 응낙 · 제출 기록(화면을 보낸 세션에서만 1회 읽는다).
+    const screenApplies = screenActionApplies(session.flowVariantId);
+    let mockRecordsCache: MockScreenRecord[] | undefined;
+    const loadMockRecords = async (): Promise<MockScreenRecord[]> => (mockRecordsCache ??= await readMockScreenRecords(sessionRef));
 
     // ④ 한도 계산(T192 C3 — §79.19 (5) 10: 입력이 전부 턴 확보 트랜잭션 값이라 **LLM 전에** 계산한다. 끊기 사전 판정이
     // 같은 값을 쓰고, 아래 종료 반영 · 응답도 이 값을 그대로 재사용한다 — 계산 지점 1곳).
@@ -331,7 +346,17 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         smsDelivered = await readDeliveredSms(sessionRef);
         smsDeliveredLoaded = true;
         userTurnsNow = effectiveTextPathUserTurns(serverUserTurns, smsDelivered);
-        const plan = planSmsBackstop({ declared: smsDeclared, delivered: smsDelivered, userTurns: userTurnsNow });
+        // 화면 행동만 인정 판정표 SB — 설치 화면 권한 허용 기록이 없으면 다음 단계 문자를 잠시 밀지 않는다.
+        const installPending =
+          screenApplies && smsDelivered.some((d) => d.fakeLandingId !== undefined)
+            ? installPendingSince(true, session.scenarioId, smsDelivered, await loadMockRecords())
+            : undefined;
+        const plan = planSmsBackstop({
+          declared: smsDeclared,
+          delivered: smsDelivered,
+          userTurns: userTurnsNow,
+          ...(installPending !== undefined ? { installPendingSince: installPending } : {}),
+        });
         if (plan.action === "deliver") {
           // 앵커 — 응답 **전**에 쓰므로 이번 응답은 포함되지 않는다(`textPathAnchorScammerTurn` 주석).
           const result = await deliverSmsThroughGate(smsStore, {
@@ -581,7 +606,20 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // 다음 단계(또는 마무리)로" 지시(`inCallSms/confirmResult.ts` 판정표). G31(턴 지시 1개)에 맞춰 **다른 턴 지시가 없는 턴에만**
     // 싣는다(문자 announce · 확인 오퍼 · 응낙 · 인증번호 대조 · 문자 마커 제시 · 백스톱 넛지가 있는 턴 · 호 전환 뒤 = 0 — 리뷰 Minor-1).
     // ⛔ 공유 판정 패턴(J-2) 무접촉.
+    // 화면 행동만 인정 판정표 SA — 말로만 "했다"(화면 기록 없음)면 미완료 지시 · 그 턴의 확인 결과 · "받은 것으로 친다" 지시는 싣지 않는다.
+    const screenFacts: ScreenFact[] = [];
+    if (screenApplies && (smsDelivered.some((d) => d.fakeLandingId !== undefined) || storedHistory.some((m) => (m.attachments ?? []).length > 0))) {
+      const records = await loadMockRecords();
+      screenFacts.push(...inCallScreenFacts(session.scenarioId, smsDelivered, records), ...messengerScreenFacts(session.scenarioId, storedHistory, records));
+    }
+    const screenPlan = planScreenAction({ applies: screenApplies, facts: screenFacts, currentUserText: maskedUserText });
+    if (screenPlan) {
+      // G170 — 종류 · 발화 수만(대사 0).
+      logger.info("[화면 행동] 말로만 완료 주장 — 미완료 지시", { sessionId, kind: screenPlan.kind, userTurns: userTurnsNow });
+    }
+    const transferScreenPending = screenFacts.some((f) => f.kind === "transfer") && !screenFacts.some((f) => f.kind === "transfer" && f.done);
     const confirmPlan =
+      !screenPlan &&
       smsDeliveredLoaded &&
       turnChoice === "none" &&
       !otpCheckInstruction &&
@@ -625,11 +663,15 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // §131(13) 판정표 R — 참가자가 이미 송금했다고 말했으면 같은 송금을 다시 요구하지 않게 1줄(`actionAcknowledgement.ts`).
     // §131(7) 판정표 P — 지인 · 자녀 사칭 메신저는 역할 고정 1줄(`personaGuard.ts` · 그 밖 시나리오 = 없음).
     const turnFacts = {
-      transferReported: userReportedTransfer(storedHistory, maskedUserText),
+      // 화면 행동만 인정 — 보낸 이체 화면이 있는데 아직 이체 기록이 없으면 말만으로는 송금으로 치지 않는다(대사 속 "입금 확인" 문장도 지워진다).
+      transferReported: userReportedTransfer(storedHistory, maskedUserText) && !transferScreenPending,
       photoSent: userSentPhoto(storedHistory, isPhotoTurn),
     };
     const confirmAndCallContext =
       [
+        // 화면 행동만 인정 — 매 턴 화면 기록 1줄 · 말로만 주장한 턴은 미완료 지시.
+        buildScreenStatusLine(screenApplies, screenFacts),
+        screenPlan?.instruction,
         confirmPlan?.instruction,
         escalatedCallInstruction,
         repeatBreakInstruction(repeatBreakKind),
@@ -732,6 +774,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         sessionAccountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
         // §132.19 판정표 A — 결말이 계좌 이체가 아닌 루트는 계좌 예시 · 번호 문장 대신 금지 1문장(호출부 6곳 같은 술어).
         noAccountEnding: routeEndsWithoutAccount(session.scenarioId, session.flowVariantId),
+        // 화면 행동만 인정 — [화면 행동 확인](호출부 6곳 같은 술어 · `roleplay/screenAction.ts`).
+        screenActionOnly: sessionScreenActionOnly(session.scenarioId, session.flowVariantId),
         // T194-b(§84.3.4 · G568 호출부 3곳 중 "텍스트 턴") — 세션 문서 값 그대로(부재 = 블록 0 · 바이트 동일).
         // ⚠️ `hangupMode` 앞에 둔다 — G552 ⓒ 소스 스캔이 hangupMode를 옵션 마지막으로 고정한다.
         personaCard: session.personaCard?.items,

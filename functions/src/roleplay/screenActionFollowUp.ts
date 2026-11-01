@@ -16,6 +16,7 @@
 // | 설치 뒤 통화가 설계인 항목(지원금 · 택배 — `MESSENGER_INSTALL_WITHOUT_CALL_LANDINGS` 밖) | 예 | 전화 예고형(종전 원문) | 전환(`announced_call`) — 응답 `escalation` |
 // | 그 밖 · 제출 | — | 전화 예고 없는 형 | 지금 전환할 수 있으면 전환 · 없으면 예고 문장을 지운다 |
 // ⛔ 화면 입력값은 이 요청에 없다(AC-045 — 인자는 세션 id · 화면 id뿐). ⛔ 로그에 대사 0(G170).
+import { sessionScreenActionOnly } from "./screenAction";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
@@ -142,6 +143,8 @@ export const requestScreenActionFollowUp = onCall<RequestScreenActionFollowUpReq
         sessionAccountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
         // §132.19 판정표 A — 결말이 계좌 이체가 아닌 루트는 계좌 예시 · 번호 문장 대신 금지 1문장(호출부 6곳 같은 술어).
         noAccountEnding: routeEndsWithoutAccount(session.scenarioId, session.flowVariantId),
+        // 화면 행동만 인정 — [화면 행동 확인](호출부 6곳 같은 술어 · `roleplay/screenAction.ts`).
+        screenActionOnly: sessionScreenActionOnly(session.scenarioId, session.flowVariantId),
         personaCard: session.personaCard?.items,
         ...(familyAddress ? { familyAddress } : {}),
       }),

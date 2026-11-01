@@ -11,6 +11,7 @@
 //      클라는 그 값을 읽을 수도 바꿀 수도 없다).
 //   2. 제약 없이 발급한 토큰은 클라이언트가 setup 프레임을 임의로 주입해 모델·프롬프트·도구를
 //      바꿔치기할 수 있다고 보고된 바 있다. 도구는 빈 배열로 명시적으로 잠근다.
+import { sessionScreenActionOnly } from "../roleplay/screenAction";
 import { GoogleGenAI, Modality, EndSensitivity, StartSensitivity } from "@google/genai";
 import { asksIdentityCheck } from "../roleplay/personaAuthority";
 import { isL3Procedural } from "../roleplay/l3Depth";
@@ -206,6 +207,8 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       sessionAccountNumber: resolveRouteAccountNumber(input.scenarioId, input.flowVariantId),
       // §132.19 판정표 A — 결말이 계좌 이체가 아닌 루트는 계좌 예시 · 번호 문장 대신 금지 1문장(호출부 6곳 같은 술어).
       noAccountEnding: routeEndsWithoutAccount(input.scenarioId, input.flowVariantId),
+      // 화면 행동만 인정 — [화면 행동 확인](호출부 6곳 같은 술어 · `roleplay/screenAction.ts`).
+      screenActionOnly: sessionScreenActionOnly(input.scenarioId, input.flowVariantId),
       // ⭐ T192 C3(§79.6 ① · §79.19 (5) 9 · G502) — `end_call`을 선언한 토큰에만 TOOL 변형(같은 술어 3번째 호출부).
       // 확인 무력화 1문장은 위 `verifyInterceptEnabled`로 조립 함수가 붙인다. 그 밖 = NONE(종전 문면 바이트 동일).
       hangupMode: declaresEndCall(input.scenarioId, endCallScope.channel, endCallScope.relay, endCallScope.liveAvailable)

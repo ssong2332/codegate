@@ -60,6 +60,8 @@ const { scammerHangupGuidance } = L("scammerHangup/guidance.js");
 const { isSmsAwaitingUser } = L("scammerHangup/smsWait.js");
 // §104(2026-10-22) — 새 서버 판정(반복 차단 · 신호↔대사). 옛 lib(수정 전 기준 측정)에는 없으므로 없으면 종전 동작(null).
 const optionalLib = (p) => { try { return L(p); } catch { return null; } };
+// 화면 행동만 인정 — 공통 규칙 술어(옛 lib에는 없다 = 종전 조립).
+const screenActionLib = optionalLib("roleplay/screenAction.js");
 const repeatBreakLib = optionalLib("roleplay/repeatBreak.js");
 const signalConsistencyLib = optionalLib("roleplay/signalConsistency.js");
 // §108 · §115 — 끊기 4행 입력(할 일 완료). 옛 lib에는 없을 수 있다(없으면 false — 종전 프로브 동작).
@@ -236,6 +238,8 @@ function sessionSetup(scenarioId, level, tag, pinnedVariant) {
     speakerGender: speakerGenderFor(scenarioId),
     fictionalBankName,
     sessionAccountNumber: routeAccountNumber(scenarioId, variantId),
+    // 화면 행동만 인정 — 앱 호출부 6곳과 같은 술어(옛 lib = 키 없음 · 종전 조립).
+    ...(screenActionLib?.sessionScreenActionOnly ? { screenActionOnly: screenActionLib.sessionScreenActionOnly(scenarioId, variantId) } : {}),
   };
   return { variantId, scenarioPrompt, declared, verifyEnabled, fictionalBankName, baseOpts };
 }
