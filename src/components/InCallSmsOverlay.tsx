@@ -44,6 +44,7 @@ import {
 } from "@/lib/incallsms";
 import { runExitSequence } from "@/lib/incallsms/closeSequence";
 import { CALL_BAR_TOKENS, smsThreadTokensFor } from "@/lib/phone/skinTokens";
+import { BANK_APP_COPY, type CopiedAccount } from "@/lib/bankapp/bankApp";
 import type { MessengerSkin } from "@/lib/messenger/detectSkin";
 
 type InCallSmsOverlayProps = {
@@ -91,6 +92,12 @@ type InCallSmsOverlayProps = {
    * 문자함 헤더·스레드와 그 안에서 연 랜딩의 브라우저 바가 같은 값을 쓴다. 부재 = 기본.
    */
   skin?: MessengerSkin;
+  /**
+   * ⭐ BA-1(docs/research/in-service-bank-app-design-2026-11-01.md §2.1 C · 결정 BA1 · BA2) — 계좌 줄이 있는 문자 말풍선을 길게 누르거나(우클릭 ·
+   * 메뉴 키) 고르면 "계좌번호 복사" 메뉴가 뜨고, 고르면 그 계좌(서버 문자 문서의 구조화 필드 그대로)를 페이지의 앱 안 state로 올린다.
+   * ⛔ 기기 복사 API 0(실제 기기에 계좌가 남지 않는다) · 인증번호는 여전히 복사 메뉴 0(AC-061). 부재 = 메뉴 0(종전 — 진단 플래그 꺼짐).
+   */
+  onCopyAccount?: (account: CopiedAccount) => void;
 };
 
 const FOCUSABLE =
@@ -117,6 +124,7 @@ export default function InCallSmsOverlay({
   onInstallShown,
   onInstallConsent,
   skin = "default",
+  onCopyAccount,
 }: InCallSmsOverlayProps) {
   const sorted = sortByArrival(messages);
   const thread = smsThreadTokensFor(skin);
@@ -159,6 +167,19 @@ export default function InCallSmsOverlay({
     prefilledTransfer?: ReturnType<typeof prefilledTransferOf>;
   } | null>(null);
   const [view, setView] = useState<"thread" | "landing">("thread");
+  // ⭐ BA-1 — 계좌번호 복사 메뉴가 열린 말풍선 · 길게 누르기 타이머 · 복사 안내.
+  const [copyMenuSmsId, setCopyMenuSmsId] = useState<string | null>(null);
+  const [copyNotice, setCopyNotice] = useState("");
+  const longPressRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!copyNotice) return;
+    const timer = window.setTimeout(() => setCopyNotice(""), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copyNotice]);
+  const clearLongPress = () => {
+    if (longPressRef.current !== null) window.clearTimeout(longPressRef.current);
+    longPressRef.current = null;
+  };
   // ⭐ reviewer Major(포커스) — 보기 전환 때 포커스가 `hidden`이 된 요소와 함께 body로 떨어지지 않게 한다.
   // 랜딩으로 가면 랜딩 영역(`role="region"` · 이름 "{제목} 화면")으로 옮겨 스크린리더가 그 이름을 읽어 전환을 안다
   // (세션 중 새 문구 0 — AC-093 (e) · 기존 이름 A5를 쓴다). 스레드로 돌아오면 그 랜딩을 연 **링크 버튼**으로 되돌린다.
@@ -451,6 +472,10 @@ export default function InCallSmsOverlay({
               <h2 ref={titleRef} tabIndex={-1} className="sr-only outline-none">
                 문자 메시지
               </h2>
+              {/* ⭐ BA-1 — 계좌번호 복사 안내(2초 뒤 사라짐 · 스크린리더 알림). */}
+              <p role="status" className={copyNotice ? "sticky top-0 z-10 mx-auto mb-2 w-fit rounded-full bg-[#22303A] px-4 py-2 text-[14px] text-white" : "sr-only"}>
+                {copyNotice}
+              </p>
 
               {sorted.length === 0 ? (
                 // Empty — §114(UX D-152) 이후 메시지 버튼이 처음부터 활성이라 첫 문자 전에 누르면 이 상태가 보인다(UX-027 States).
@@ -473,6 +498,8 @@ export default function InCallSmsOverlay({
                     const otpSplit = sms.otpCode ? splitBodyAtOtp(sms.body, sms.otpCode) : null;
                     // D-101 — 링크 줄 = 가짜 주소(부재 = 옛 문서 → 표시 텍스트).
                     const linkText = sms.linkAddress ?? sms.linkDisplayText;
+                    // ⭐ BA-1 — 계좌번호 복사 대상(서버가 계좌 줄 구조화 필드를 실은 문자 · 플래그 켜짐).
+                    const copyable = onCopyAccount !== undefined && Boolean(sms.bankName && sms.accountNumber);
                     return (
                       <li
                         key={sms.smsId}
@@ -497,7 +524,31 @@ export default function InCallSmsOverlay({
                         <div className="flex w-full items-end gap-1.5">
                           {/* 수신 말풍선 — 본문 17px · 줄높이 1.45 · 최대폭 80%(UX-027 v1.33 (4)). */}
                           <div
-                            className="flex max-w-[80%] flex-col gap-2 px-[13px] py-[9px]"
+                            // ⭐ BA-1 — 계좌 줄이 있는 말풍선만 길게 누르기 · 우클릭 · 메뉴 키(Shift+F10)로 복사 메뉴를 연다(플래그 꺼짐 = 핸들러 0).
+                            {...(copyable
+                              ? {
+                                  tabIndex: 0,
+                                  "aria-haspopup": "menu" as const,
+                                  onContextMenu: (event: React.MouseEvent) => {
+                                    event.preventDefault();
+                                    setCopyMenuSmsId(sms.smsId);
+                                  },
+                                  onPointerDown: () => {
+                                    clearLongPress();
+                                    longPressRef.current = window.setTimeout(() => setCopyMenuSmsId(sms.smsId), 500);
+                                  },
+                                  onPointerUp: clearLongPress,
+                                  onPointerLeave: clearLongPress,
+                                  onPointerCancel: clearLongPress,
+                                  onKeyDown: (event: React.KeyboardEvent) => {
+                                    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+                                      event.preventDefault();
+                                      setCopyMenuSmsId(sms.smsId);
+                                    }
+                                  },
+                                }
+                              : {})}
+                            className="flex max-w-[80%] select-none flex-col gap-2 px-[13px] py-[9px]"
                             style={{
                               backgroundColor: thread.bubbleBg,
                               color: thread.bubbleText,
@@ -562,6 +613,35 @@ export default function InCallSmsOverlay({
                             </span>
                           )}
                         </div>
+                        {copyable && copyMenuSmsId === sms.smsId && (
+                          <div role="menu" aria-label="말풍선 메뉴" className="ml-1 flex gap-2">
+                            <button
+                              type="button"
+                              role="menuitem"
+                              autoFocus
+                              onClick={() => {
+                                setCopyMenuSmsId(null);
+                                onCopyAccount?.({
+                                  bankName: sms.bankName!,
+                                  accountNumber: sms.accountNumber!,
+                                  ...(sms.accountHolder ? { holder: sms.accountHolder } : {}),
+                                });
+                                setCopyNotice(BANK_APP_COPY.copied);
+                              }}
+                              className="min-h-[44px] rounded-full bg-white px-4 text-[15px] font-semibold text-[#22303A] shadow"
+                            >
+                              {BANK_APP_COPY.copyAccount}
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => setCopyMenuSmsId(null)}
+                              className="min-h-[44px] rounded-full bg-white px-4 text-[15px] text-[#22303A] shadow"
+                            >
+                              닫기
+                            </button>
+                          </div>
+                        )}
                       </li>
                     );
                   })}

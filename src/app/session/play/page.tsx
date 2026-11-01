@@ -15,7 +15,7 @@
 //
 // Phase: incoming(수신) → connecting(연결) → opening(폴백 전용 오프닝 재생) → live(대화) → ended.
 // 통화 타이머·서버 시간 한도는 모두 answeredAt("받기") 기점이다(OQ-U8).
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { collection, doc, getDoc, onSnapshot, orderBy, query } from "firebase/firestore";
@@ -190,6 +190,9 @@ import CallStartNotice from "@/components/CallStartNotice";
 import { personaEventLogLine, readSessionPersonaCard, type PersonaCardView } from "@/lib/personacard/personaCard";
 import CallWaveform from "@/components/CallWaveform";
 import InCallSmsOverlay from "@/components/InCallSmsOverlay";
+import BankAppOverlay, { HomeBar } from "@/components/BankAppOverlay";
+import { fictionalBalanceFor, isBankAppEnabled, myBankNameFor, type CopiedAccount } from "@/lib/bankapp/bankApp";
+import { readDebugFlagSearch } from "@/lib/realtime/debugFlags";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
 import { LoadingStatus } from "@/components/ui";
 import { TRAINING_INPUT_NO_SUGGEST } from "@/lib/messenger/keyboardViewport";
@@ -198,6 +201,11 @@ import { startRingback } from "@/lib/phone/ringbackPlayer";
 import MessengerChatRoom from "@/components/MessengerChatRoom";
 import VoiceTalkDialScreen from "@/components/VoiceTalkDialScreen";
 import { chatDuringCallContextText } from "@/lib/realtime/chatDuringCall";
+
+// ⭐ BA-1 — 진단 플래그 `bankapp=1` 판독(값이 바뀌어도 알릴 원천이 없다 — 구독 없음).
+const noopSubscribeBankApp = () => () => {};
+const readBankAppEnabled = () => isBankAppEnabled(readDebugFlagSearch());
+const readBankAppEnabledOnServer = () => false;
 
 // ⚠️ 지연 로딩 필수 — @elevenlabs/react가 끌어오는 livekit-client(WebRTC)를 이 화면 로드 시점에
 // 함께 불러오면 WebRTC를 못 쓰는 환경에서 렌더러가 통째로 죽는다(실측: 페이지 자체가 로드 실패).
@@ -634,6 +642,12 @@ export default function SessionCallPage() {
   // (§16.2 무개정 재사용). 이 값들도 타이머·한도·오디오 effect 어디에도 들어가지 않는다(§15.1.1).
   const [verifyOffer, setVerifyOffer] = useState<VerifyInterceptView | null>(null);
   const [verifyOverlayOpen, setVerifyOverlayOpen] = useState(false);
+  // ⭐ BA-1(docs/research/in-service-bank-app-design-2026-11-01.md §2 · 결정 BA0~BA12) — 진단 플래그 `bankapp=1`일 때만 통화 화면 "홈" →
+  // 훈련용 홈 · 내 은행 앱(형제 노드 오버레이 — 통화 유지 D-35). 서버 호출 0 · 기록 0(BA-2에서 잇는다). 계좌 복사 값은 앱 안 state뿐.
+  // 판독은 진단 패널과 같은 방식(`AudioDebugPanel` — 서버 렌더 = 꺼짐 · 브라우저 = 주소 쿼리 + 탭 저장 값).
+  const bankAppEnabled = useSyncExternalStore(noopSubscribeBankApp, readBankAppEnabled, readBankAppEnabledOnServer);
+  const [bankAppOpen, setBankAppOpen] = useState(false);
+  const [copiedAccount, setCopiedAccount] = useState<CopiedAccount | null>(null);
   const [verifyDialing, setVerifyDialing] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
   // ⛔ §49(V5, 2026-08-02) — 참가자가 탭하던 상시 컨트롤이 삭제되면서 이 값을 `true`로 바꾸는
@@ -1502,6 +1516,7 @@ export default function SessionCallPage() {
     // E2 — 종료 고지가 문자 · 확인 화면에 가려지지 않게 **둘 다** 먼저 내린다(AC-006 · AC-059 · D-113).
     setSmsOverlayOpen(false);
     setVerifyOverlayOpen(false);
+    setBankAppOpen(false);
     speech.stop();
     // E3 — 폴백 마지막 대사: `<audio onEnded>` · 오디오 없음/재생 거부 = 1500ms · 상한 15초 · 참가자 탭 = 즉시.
     if (!step.skipWait && opts?.fallbackLastLine) {
@@ -1616,6 +1631,7 @@ export default function SessionCallPage() {
     setEndLatched(true);
     setSmsOverlayOpen(false);
     setVerifyOverlayOpen(false);
+    setBankAppOpen(false);
   };
   // ⭐ T192 C5(§79.8 R5) — 마지막 대사 재생이 끝났다 → 공통 종료 함수.
   const handleScammerHangupReady = () => {
@@ -2211,7 +2227,16 @@ export default function SessionCallPage() {
     // 겹치면 **포커스 트랩이 중첩돼 "훈련 종료" 도달성이 깨진다**(AC-006). 상태를 하나로 합치는
     // 리팩터는 하지 않는다(요청되지 않은 변경 금지) — 여는 쪽에서 상대를 닫는 것으로 충분하다.
     setVerifyOverlayOpen(false);
+    setBankAppOpen(false);
     setSmsOverlayOpen(true);
+  };
+
+  // ⭐ BA-1 — 홈 화면 열기 · 닫기(라우팅 0 — 상태만 바꾼다 · 동시 열림 금지: 문자함 · 확인 시트를 닫는다 · G26).
+  const handleOpenHome = () => {
+    if (isEndLatched(callEndingRef.current)) return;
+    setSmsOverlayOpen(false);
+    setVerifyOverlayOpen(false);
+    setBankAppOpen(true);
   };
 
   const handleCloseSmsOverlay = () => {
@@ -2268,6 +2293,7 @@ export default function SessionCallPage() {
     if (callMode === "fallback") speech.stop();
     // 동시 열림 금지(§16.6 G26) — 반대 방향도 동일하게 상대를 닫는다.
     setSmsOverlayOpen(false);
+    setBankAppOpen(false);
     setVerifyError(null);
     setVerifyOverlayOpen(true);
   };
@@ -2906,7 +2932,7 @@ export default function SessionCallPage() {
       {/* §130(UX D-161 (3)) — 문자함 · 대화방이 통화 화면을 덮는 동안 아래 통화 셸은 `inert`(초점 · 스크린리더 대상 밖). 셸은 그대로
           마운트돼 있어 통화 · 타이머는 이어진다(G10 — 속성만 바뀐다). 확인 시트(UX-031)는 비모달이라 대상이 아니다. */}
       <div
-        inert={chatOpen || smsOverlayOpen ? true : undefined}
+        inert={chatOpen || smsOverlayOpen || bankAppOpen ? true : undefined}
         className={`mx-auto flex w-full max-w-[430px] flex-col ${showTextInput ? "h-dvh flex-none" : "min-h-dvh flex-1"} ${callExtras ? "relative" : ""}`}
         style={{
           // §89.5 ⓑ — 수신 벨은 흐린 그라데이션 바탕(그 밖 phase는 단색 — 종전).
@@ -3835,6 +3861,13 @@ export default function SessionCallPage() {
               </button>
             )}
           </div>
+
+          {/* ⭐ BA-1 — 홈 막대(iOS형 = 가는 홈 막대 · One UI형 = 탐색 막대 홈 버튼). 진단 플래그 켜짐 · 통화 중 · 종료 래치 전만. 누르면 훈련용 홈(통화 유지). */}
+          {bankAppEnabled && !localHangup && !endLatched && (
+            <div className="mt-4">
+              <HomeBar ios={deviceSkin.skin === "ios"} onHome={handleOpenHome} color={callTokens.textPrimary} />
+            </div>
+          )}
         </div>
       )}
       </div>
@@ -3864,6 +3897,24 @@ export default function SessionCallPage() {
           // T194-c-1(Q2) — 통화 중 문자로 연 설치 화면의 노출 · 응낙(기록만 — 실시간 언급 주입은 T194-c-2).
           onInstallShown={(landingId) => handleRecordInCallInstall(landingId, "shown")}
           onInstallConsent={(landingId) => handleRecordInCallInstall(landingId, "consented")}
+          // ⭐ BA-1 — 진단 플래그가 켜졌을 때만 계좌번호 복사 메뉴(값은 이 페이지 state뿐 · 서버 0).
+          onCopyAccount={bankAppEnabled ? setCopiedAccount : undefined}
+        />
+      )}
+
+      {/* ⭐ BA-1 — 훈련용 홈 · 내 은행 앱. 문자 오버레이와 **같은 자리의 형제 노드**(D-35 · G10) — 라우팅 · 상위 래퍼 · `key` 변경 0이라
+          통화 세션 · 마이크 · 타이머가 그대로 이어진다. 문자함 · 확인 시트와 동시에 열리지 않는다(여는 핸들러가 상대를 닫는다 — G26). */}
+      {bankAppEnabled && bankAppOpen && (
+        <BankAppOverlay
+          ios={deviceSkin.skin === "ios"}
+          callerLabel={callerLabel}
+          elapsedLabel={formatCallElapsed(elapsedSec)}
+          myBankName={myBankNameFor(sessionId ?? "", copiedAccount?.bankName ?? inCallSms.find((sms) => sms.bankName)?.bankName)}
+          balance={fictionalBalanceFor(sessionId ?? "")}
+          seed={sessionId ?? ""}
+          copiedAccount={copiedAccount}
+          onClose={() => setBankAppOpen(false)}
+          onOpenMessages={() => handleOpenSmsOverlay(null)}
         />
       )}
 
