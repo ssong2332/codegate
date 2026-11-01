@@ -1,17 +1,20 @@
 // ⭐ BA-1(2026-11-01 · docs/research/in-service-bank-app-design-2026-11-01.md §2 · 사용자 결정 BA0~BA12 "권고대로") — 훈련용 홈 화면 ·
 // 가상 "내 은행 앱"의 순수 로직(잎 모듈 · 렌더 하네스가 `@/` 별칭을 풀지 못하므로 상대 경로만 import한다).
 //
-// 왜: 현실에서는 사이트가 돈을 옮기지 못한다. 피해자는 **자기 은행 앱을 열어** 계좌를 붙여 넣고, 받는 분 이름을 확인하고, 인증한 뒤 보낸다.
-// 이 모듈은 그 순간들(앱 열기 · 붙여넣기 · 받는 분 확인 · 인증 · 완료)을 서비스 안에서 재현하는 화면의 상태 규칙이다.
+// 왜: 현실에서는 사이트가 돈을 옮기지 못한다. 피해자는 **자기 은행(송금) 앱으로** 받는 분 이름을 확인하고 인증한 뒤 보낸다.
+// ⭐ 간소화안(2026-11-01 · 사용자 승인 "간소화안으로") — 훈련용 홈 · 탐색 막대 · 앱 안 클립보드 · 잠금 해제 · 내 계좌 화면을 뺐다
+// (실기기 확인: "복사 -> 은행앱 -> 받는 분 이름 확인으로 가는 절차가 복잡" · "실제로 계좌번호가 복사되지도 않네" · "뒤로가기랑 최근 앱 보기 버튼은 사용도 불가능").
+// 실기 근거: 삼성 메시지는 문자 속 계좌번호를 알아보고 '송금' 버튼을 띄워 송금 앱(토스 · 하나은행)으로 넘긴다(삼성 뉴스룸 2019 · 삼성 커뮤니티 2025 답변).
+// iOS 문자 앱의 같은 기능은 공개 자료에서 확인하지 못했다(추정 — 같은 동작으로 둔다).
 //
-// | 항목 | 정책 (BA-1 범위) |
+// | 항목 | 정책 |
 // |---|---|
-// | 켜는 조건 | 진단 플래그 `bankapp=1`(`debugFlags.ts` 저장 키) — 플래그가 없으면 홈 버튼 · 계좌 복사 · 은행 앱 모두 0(종전 화면 그대로) |
-// | 서버 | **호출 0 · 기록 0**. 이체 기록 · 속은 순간 연결은 BA-2(통화 계좌 문자 이전)에서 한다. 기존 링크 이체 화면은 그대로 둔다 |
-// | 입력값 | 받는 계좌 · 금액은 화면 state를 벗어나지 않는다(G138 — 콜백 · 네트워크 · 저장소 0) |
-// | 비밀번호 | 숫자 입력 칸 0 — 잠금 해제 · 인증은 지문 · 얼굴 버튼 하나(BA3) |
-// | 계좌 복사 | 사용자가 문자 말풍선을 길게 눌러 "계좌번호 복사"를 고를 때만 앱 안 state에 둔다. **기기 클립보드 API는 쓰지 않는다**(실제 기기에 계좌가 남지 않게).
-//   인증번호는 여전히 복사할 수 없다(AC-061 그대로) |
+// | 켜는 조건 | 진단 플래그 `bankapp=1`(`debugFlags.ts` 저장 키) — 플래그가 없으면 계좌 누름 · 은행 앱 0(종전 링크 이체 화면 그대로) |
+// | 여는 길 | 통화 중 문자 속 계좌번호 한 번 누름 → '송금' · 메신저 송금 칩 → 받는 계좌가 채워진 송금 화면 |
+// | 서버 | 송금 완료(인증 버튼) = 종전 이체 화면 제출과 **같은 기록 경로**(통화 `landing_submitted` · 메신저 `recordMockScreen(…, "submitted")`) |
+// | 입력값 | 금액은 화면 state를 벗어나지 않는다(G138 — 완료 콜백은 무인자 · 네트워크 · 저장소 0) |
+// | 비밀번호 | 숫자 입력 칸 0 — 인증은 지문 · 얼굴 버튼 하나(BA3) |
+// | 클립보드 | 쓰지 않는다(기기 클립보드 API 0 · 앱 안 복사 0). 인증번호는 여전히 복사할 수 없다(AC-061 그대로) |
 // | 은행 이름 | 가상 은행명만(서버 `functions/src/shared/fictionalBank.ts` `FICTIONAL_BANK_NAMES`와 같은 목록 — 드리프트 테스트) · 실존 은행명 0 |
 // ⚠️ 이 파일은 값을 import하지 않는다(테스트 러너가 확장자 없는 상대 import를 풀지 못한다). 금액 형식 · 1회 한도 판정은 화면이
 // `@/lib/landing/amountInput`(`amountError` · `transferLimitError` · `amountHint`)으로 먼저 하고, 잔액 판정만 여기 `balanceError`가 한다.
@@ -69,25 +72,6 @@ export function fictionalBalanceFor(seed: string): number {
   return (1000 + (hash(`balance:${seed}`) % steps)) * 10_000;
 }
 
-/** 내 계좌 표기(가상 · 결정적 · 가운데 가림). 실제 계좌 형식을 흉내 내지 않도록 자리 수를 고정한다. */
-export function myAccountLabelFor(seed: string): string {
-  const n = String(hash(`my-account:${seed}`) % 10000).padStart(4, "0");
-  return `입출금 통장 ···· ${n}`;
-}
-
-/** 계좌번호 표기 정리(숫자 · 하이픈만 남김). */
-export function normalizeAccountNumber(raw: string): string {
-  return raw.replace(/[^\d-]/g, "");
-}
-
-/** 받는 계좌 칸 판정 — 숫자가 10~16자리면 통과(국내 계좌 자리 수 범위 · 추정). 통과면 undefined. */
-export function accountNumberError(raw: string): string | undefined {
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length === 0) return "받는 분 계좌번호를 입력해 주세요.";
-  if (digits.length < 10 || digits.length > 16) return "계좌번호를 다시 확인해 주세요.";
-  return undefined;
-}
-
 /** 금액(숫자 · 쉼표만 남긴 값)을 정수로. 판정 불가면 undefined. */
 function amountValue(raw: string): bigint | undefined {
   const compact = raw.replace(/[\s,]/g, "");
@@ -113,90 +97,82 @@ export function balanceText(balance: number): string {
   return `${String(balance).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}원`;
 }
 
-/** 문자 말풍선에서 "계좌번호 복사"로 앱 안에 둔 값(서버 문자 문서의 구조화 필드 그대로). */
-export type CopiedAccount = {
+/** 송금 화면이 받는 계좌(서버 문자 문서 · 메신저 칩의 구조화 필드 그대로 — 참가자 입력 아님). */
+export type TransferTarget = {
   bankName: string;
   accountNumber: string;
-  /** 서버가 실은 예금주(이체 화면 문자만). 부재 = 은행 조회 결과를 아래 표에서 고른다. */
+  /** 서버가 실은 예금주. 부재 = 아래 표에서 결정적으로 고른 가상 이름(은행 앱은 예금주 조회 결과를 늘 보여 준다). */
   holder?: string;
+  /** 문자에 적힌 금액("2,340,000"처럼 숫자 · 쉼표). 부재 = 금액 칸 빈 값. */
+  amount?: string;
 };
 
 /**
- * 받는 분 이름(B5 "예금주 조회" 결과). 붙여 넣은 계좌가 문자에서 온 것이고 서버가 예금주를 실었으면 그 값이다.
- * 그 밖(직접 입력 · 예금주 없음)은 계좌 숫자로 결정적으로 고른 **가상 개인 이름**이다(대포통장은 개인 명의 — 설계 §3.2 W1).
- * ⚠️ BA-4에서 시나리오별 고정 예금주(서버 카탈로그)로 바뀐다 — 이 표는 그 전까지의 자리 값이다. 실존 인물 아님.
+ * 받는 분 이름(예금주 조회 결과). 서버가 예금주를 실었으면 그 값이다.
+ * 그 밖은 계좌 숫자로 결정적으로 고른 **가상 개인 이름**이다(대포통장은 개인 명의 — 설계 §3.2 W1). 실존 인물 아님.
  */
 export const FALLBACK_HOLDER_NAMES: readonly string[] = ["김민서", "이도윤", "박서연", "최준호", "정하은", "윤지성"];
 
-export function recipientHolderFor(accountNumber: string, copied: CopiedAccount | null): string {
-  const digits = accountNumber.replace(/\D/g, "");
-  if (copied?.holder && copied.accountNumber.replace(/\D/g, "") === digits) return copied.holder;
+export function recipientHolderFor(target: Pick<TransferTarget, "accountNumber" | "holder">): string {
+  if (target.holder) return target.holder;
+  const digits = target.accountNumber.replace(/\D/g, "");
   return FALLBACK_HOLDER_NAMES[hash(`holder:${digits}`) % FALLBACK_HOLDER_NAMES.length]!;
 }
 
 /**
- * 화면 단계(설계 §2.2). 홈(B0) → 잠금 해제(B1) → 내 계좌(B2) → 받는 계좌(B3) → 금액(B4) → 받는 분 확인(B5) → 인증(B6) → 완료(B7).
+ * 구조화 필드가 없는 옛 계좌 문자(§51 즉시형 등 — 서버가 `accountHolder` · `transferAmount`를 P2 이체 화면 문자에만 싣는다)의 표시용 보정.
+ * 서버 문구의 고정 줄 "예금주: {이름}" · "금액: {숫자}원"만 읽는다(문자를 분류하지 않는다 — 화면에 보일 값이 문자와 어긋나지 않게 할 뿐).
+ * 실기 확인(2026-11-01 로컬): 피해금 이관 문자 "예금주: 오현수"인데 송금 화면이 가상 이름을 보였다.
+ */
+export function holderFromSmsBody(body: string): string | undefined {
+  return /^예금주:\s*(\S+)\s*$/m.exec(body)?.[1];
+}
+
+export function amountFromSmsBody(body: string): string | undefined {
+  return /^금액:\s*([\d,]+)원\s*$/m.exec(body)?.[1];
+}
+
+/**
+ * 화면 단계(간소화안). 받는 분 확인 → 금액 → 인증(보낼 내용 요약 + 지문 버튼) → 완료.
  * | # | If (지금 · 행동) | Then |
  * |---|---|---|
- * | S1 | 홈 · 은행 앱 아이콘 | lock |
- * | S2 | lock · 간편 인증 | account |
- * | S3 | account · 이체 | recipient |
- * | S4 | recipient · 다음(계좌 통과) | amount |
- * | S5 | amount · 다음(금액 통과) | confirm |
- * | S6 | confirm · 보내기 | auth |
- * | S7 | auth · 인증 | done |
- * | S8 | confirm · auth의 취소 | amount(값 유지) |
- * | S9 | done · 확인 | account(입력값 폐기 — 새 이체) |
- * | S10 | 앱 안 뒤로(recipient · amount) | 한 단계 앞(account · recipient) |
+ * | S1 | recipient · 다음 | amount |
+ * | S2 | amount · 다음(금액 통과) | auth |
+ * | S3 | auth · 인증 | done (= 송금 완료 기록 1회) |
+ * | S4 | amount · 뒤로 | recipient |
+ * | S5 | auth · 취소 | amount(값 유지) |
+ * | S6 | 표에 없는 조합 | 그대로 |
+ * 앱 닫기(통화 띠 · 닫기 · 완료 확인 · Esc)는 단계가 아니라 호출부 `onClose`다.
  */
-export type BankAppStage = "home" | "lock" | "account" | "recipient" | "amount" | "confirm" | "auth" | "done";
+export type BankAppStage = "recipient" | "amount" | "auth" | "done";
 
-export type BankAppAction = "open" | "unlock" | "transfer" | "next" | "send" | "authenticate" | "cancel" | "finish" | "back";
+export type BankAppAction = "next" | "authenticate" | "cancel" | "back";
 
 const NEXT: Partial<Record<BankAppStage, Partial<Record<BankAppAction, BankAppStage>>>> = {
-  home: { open: "lock" },
-  lock: { unlock: "account" },
-  account: { transfer: "recipient" },
-  recipient: { next: "amount", back: "account" },
-  amount: { next: "confirm", back: "recipient" },
-  confirm: { send: "auth", cancel: "amount" },
+  recipient: { next: "amount" },
+  amount: { next: "auth", back: "recipient" },
   auth: { authenticate: "done", cancel: "amount" },
-  done: { finish: "account" },
 };
 
-/** 위 표(S1~S10). 표에 없는 조합은 그대로 머문다. */
+/** 위 표(S1~S6). */
 export function nextBankAppStage(stage: BankAppStage, action: BankAppAction): BankAppStage {
   return NEXT[stage]?.[action] ?? stage;
 }
 
 /** 화면 문구(한 곳에서 관리 — 테스트가 실존 은행명 · 비밀번호 요구 문구를 스캔한다). */
 export const BANK_APP_COPY = {
-  homeLabel: "홈",
-  homeAria: "홈 화면으로",
   callPill: "눌러서 통화로 돌아가기",
-  appMessages: "메시지",
-  appPhone: "전화",
-  appCamera: "카메라",
-  appSettings: "설정",
-  lockTitle: "간편 인증으로 로그인",
-  lockBody: "등록된 지문 · 얼굴로 로그인합니다.",
-  lockButton: "지문 · 얼굴로 로그인",
-  balanceLabel: "출금 가능 금액",
-  transferButton: "이체",
-  historyButton: "내역",
-  recipientTitle: "누구에게 보낼까요?",
-  bankLabel: "받는 분 은행",
-  accountLabel: "계좌번호",
-  pasteLabel: "복사한 계좌번호 붙여넣기",
+  close: "닫기",
+  /** 문자 속 계좌번호를 누르면 뜨는 메뉴(삼성 메시지 '송금' 버튼 근사). */
+  sendToAccount: "송금",
+  recipientTitle: "받는 분이 맞는지 확인해 주세요",
+  recipientNote: "받는 분 이름이 생각한 사람과 다르면 보내지 마세요.",
   amountTitle: "얼마를 보낼까요?",
+  balanceLabel: "출금 가능 금액",
   next: "다음",
   confirmCaution: "보이스피싱 주의 · 모르는 사람이 전화나 문자로 이체를 요구하면 보내기 전에 멈추고 확인하세요.",
-  send: "보내기",
   cancel: "취소",
-  authTitle: "본인 인증",
-  authBody: "등록된 간편 인증(지문 · 얼굴)으로 이체를 확인합니다.",
-  authButton: "인증하고 이체하기",
+  authBody: "등록된 지문 · 얼굴로 이체를 확인합니다.",
+  authButton: "지문 · 얼굴로 인증하고 보내기",
   doneButton: "확인",
-  copyAccount: "계좌번호 복사",
-  copied: "계좌번호를 복사했습니다.",
 } as const;
