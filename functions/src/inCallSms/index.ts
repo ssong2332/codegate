@@ -26,11 +26,18 @@ import {
 } from "./smsGate";
 import type { SmsGateStatus } from "./smsGate";
 import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms, readMockScreenRecords } from "./smsDelivery";
-import { installPendingSince, screenActionApplies } from "../roleplay/screenAction";
+import {
+  buildLiveScreenStatusInstruction,
+  inCallScreenFacts,
+  installPendingSince,
+  isAmountComparison,
+  notYetSentSmsLabels,
+  screenActionApplies,
+} from "../roleplay/screenAction";
 import { goalFollowUpFor, planGoalWrapUp } from "../scammerHangup/goalAction";
 import { GOAL_WRAP_UP_INSTRUCTION } from "../scammerHangup/guidance";
 import { withModelToolNoRepeat } from "./toolGuidance";
-import { LANDING_SUBMITTED_INSTRUCTION } from "./confirmResult";
+import { landingSubmittedInstructionFor } from "./confirmResult";
 import type {
   DeliverInCallSmsRequest,
   DeliverInCallSmsResponse,
@@ -172,11 +179,23 @@ export const deliverInCallSms = onCall<
   const smsClaimed = trigger === "backstop" && request.data?.smsClaimed === true;
   if (trigger === "backstop") {
     const deliveredNow = await readDeliveredSms(sessionRef);
-    // 화면 행동만 인정 판정표 SB — 설치 화면 권한 허용 기록이 없으면 다음 단계 문자를 잠시 밀지 않는다(설치 문자가 도착한 세션만 mockScreens를 읽는다).
+    // 화면 행동만 인정 판정표 SB — 설치 화면 권한 허용 기록이 없으면 다음 단계 문자를 잠시 밀지 않는다(화면을 여는 문자가 도착한 세션만 mockScreens를 읽는다).
     const holdApplies = screenActionApplies(session.flowVariantId) && deliveredNow.some((d) => d.fakeLandingId !== undefined);
-    const installPending = holdApplies
-      ? installPendingSince(true, session.scenarioId, deliveredNow, await readMockScreenRecords(sessionRef))
+    const mockRecords = holdApplies ? await readMockScreenRecords(sessionRef) : [];
+    const installPending = holdApplies ? installPendingSince(true, session.scenarioId, deliveredNow, mockRecords) : undefined;
+    // R1(#465 실측) — 실시간은 매 발화 이 질의가 오므로 화면 기록 · 재촉 단계 1줄을 함께 돌려준다(클라 맥락 주입 `screenStatus`). 발송 응답 · 호 전환 뒤 = 없음.
+    const rawScreenStatus = holdApplies
+      ? buildLiveScreenStatusInstruction(
+          true,
+          inCallScreenFacts(session.scenarioId, deliveredNow, mockRecords),
+          userTurns,
+          notYetSentSmsLabels(session.scenarioId, declared, deliveredNow),
+        )
       : undefined;
+    const screenStatusInstruction =
+      rawScreenStatus !== undefined && !(await isVerifyOfferPlaced(db, sessionId, session.scenarioId)) ? rawScreenStatus : undefined;
+    const withScreenStatus = (response: DeliverInCallSmsResponse): DeliverInCallSmsResponse =>
+      screenStatusInstruction !== undefined ? { ...response, screenStatusInstruction } : response;
     const plan = planSmsBackstop({
       declared,
       delivered: deliveredNow,
@@ -185,11 +204,13 @@ export const deliverInCallSms = onCall<
       ...(installPending !== undefined ? { installPendingSince: installPending } : {}),
     });
     // §132.9 — "보냈다" 주장이 하한 전에 나왔으면 정정 1줄을 함께 돌려준다(클라 1회 주입 · 하한은 그대로).
-    if (plan.action === "wait") return smsClaimed ? { status: "waiting", claimNotYetInstruction: SMS_CLAIM_NOT_YET } : { status: "waiting" };
+    if (plan.action === "wait") {
+      return withScreenStatus(smsClaimed ? { status: "waiting", claimNotYetInstruction: SMS_CLAIM_NOT_YET } : { status: "waiting" });
+    }
     if (plan.action === "none_pending") {
       // §115 — 후속 단계 변형은 할 일을 마칠 때까지 계속 묻게 하고(`goal_pending`), 마친 첫 질의에 마무리 지시 1줄을 싣는다.
       const followUpUserTurns = goalFollowUpFor(session.scenarioId, session.flowVariantId);
-      if (followUpUserTurns === undefined) return { status: "none_pending" };
+      if (followUpUserTurns === undefined) return withScreenStatus({ status: "none_pending" });
       const wrap = planGoalWrapUp({
         delivered: deliveredNow,
         declared,
@@ -198,12 +219,12 @@ export const deliverInCallSms = onCall<
         followUpUserTurns,
         placed: await isVerifyOfferPlaced(db, sessionId, session.scenarioId),
       });
-      if (wrap === "pending") return { status: "goal_pending" };
+      if (wrap === "pending") return withScreenStatus({ status: "goal_pending" });
       if (wrap === "wrap_up") {
         logger.info("[§115] 할 일 완료 — 마무리 지시", { sessionId, userTurns });
         return { status: "none_pending", wrapUpInstruction: GOAL_WRAP_UP_INSTRUCTION };
       }
-      return { status: "none_pending" };
+      return withScreenStatus({ status: "none_pending" });
     }
     if (plan.action === "nudge") {
       // 전환(호 전환) 뒤에는 원 사기범이 없다 — 넛지를 싣지 않는다(§53.6 (3)과 같은 판단). ⚠️ 리뷰 Minor ④ — 반면
@@ -212,9 +233,9 @@ export const deliverInCallSms = onCall<
       const placed = await isVerifyOfferPlaced(db, sessionId, session.scenarioId);
       if (placed) return { status: "waiting" };
       // 리뷰 Minor ③ — 같은 개방 시점으로는 넛지 1회(화면 재마운트로 같은 발화 수를 다시 물어도). 쓰기는 넛지당 1회.
-      if (alreadyNudged(session.smsNudgedOpenAt, plan.openAt)) return { status: "waiting" };
+      if (alreadyNudged(session.smsNudgedOpenAt, plan.openAt)) return withScreenStatus({ status: "waiting" });
       await sessionRef.update({ smsNudgedOpenAt: FieldValue.arrayUnion(plan.openAt) });
-      return { status: "nudge", nudgeInstruction: buildSmsNudgeInstruction(plan.item.purpose) };
+      return withScreenStatus({ status: "nudge", nudgeInstruction: buildSmsNudgeInstruction(plan.item.purpose) });
     }
     purpose = plan.item.purpose;
   }
@@ -307,6 +328,8 @@ export const recordInCallSmsEvent = onCall<
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
   const { sessionId, smsId, event } = request.data ?? {};
+  // N1 — 이체 화면 제출의 요구액 대비 비교(값 밖 · 다른 이벤트 = 무시 · 오류 0). 금액 값은 요청에 없다(G138).
+  const amountComparison = event === "landing_submitted" && isAmountComparison(request.data?.amountComparison) ? request.data.amountComparison : undefined;
   // ⛔ 고정 enum 값만 받는다 — 참가자 입력값을 담을 필드가 요청 타입에 **존재하지 않는다**(AC-045). §101 — 사이트 단계 3값 추가.
   if (!sessionId || !smsId || !isInCallSmsEvent(event)) {
     throw new HttpsError("invalid-argument", "sessionId·smsId·event가 필요합니다.");
@@ -344,11 +367,19 @@ export const recordInCallSmsEvent = onCall<
   }
 
   const field = EVENT_FIELD[event];
+  // N1 — 비교 결과는 제출마다 마지막 값으로 덮는다(모자란 금액을 마저 보낸 두 번째 제출이 반영되게 — 화면이 같은 계좌로 보낸 합계로 비교한다).
+  const previousComparison = isAmountComparison(snap.get("landingAmountComparison")) ? (snap.get("landingAmountComparison") as string) : undefined;
+  const comparisonUpdate = amountComparison !== undefined ? { landingAmountComparison: amountComparison } : {};
   // 최초 1회만 세팅한다(§API.md) — 다시 열어봐도 "처음 열어본 시각"이 밀리지 않는다.
   if (!snap.get(field)) {
-    await smsRef.update({ [field]: Timestamp.now() });
+    await smsRef.update({ [field]: Timestamp.now(), ...comparisonUpdate });
     // §132.7 — 이체 화면 제출을 처음 기록한 순간에만 실시간 사기범용 맥락 1줄을 돌려준다(이미 기록됨 = 없음 · 중복 주입 0).
-    if (event === "landing_submitted") return { recorded: true, contextInstruction: LANDING_SUBMITTED_INSTRUCTION };
+    // N1 — 요구액보다 적게 보냈으면 모자란 금액을 요구하는 문면(판정표 `landingSubmittedInstructionFor`).
+    if (event === "landing_submitted") return { recorded: true, contextInstruction: landingSubmittedInstructionFor(amountComparison, false) };
+  } else if (event === "landing_submitted" && amountComparison !== undefined) {
+    await smsRef.update(comparisonUpdate);
+    // N1 — 앞 제출이 모자랐는데 다시 제출했다: 이번 결과를 알린다(그 밖 재제출 = 종전대로 없음).
+    if (previousComparison === "less") return { recorded: true, contextInstruction: landingSubmittedInstructionFor(amountComparison, true) };
   }
   return { recorded: true };
 });

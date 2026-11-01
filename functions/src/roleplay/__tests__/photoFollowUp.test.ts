@@ -42,7 +42,8 @@ test("§122(6) 대상 밖은 종전 판정: 통화 단계 · 포기 끊기 · �
 
 test("§122(6) sendMessage가 판정표 B 결과에 판정표 P를 덧대어 끊기 신호를 정한다", () => {
   const src = readFileSync(path.resolve(__dirname, "../../../src/roleplay/index.ts"), "utf8");
-  const b = src.indexOf("judgeEndCallSignal(rawEndCallSignal, signalFreeReplyText)");
+  // R3(#465) — 판정 입력이 "이체 미완료 송금 확인 단정이면 목표 신호 제외"를 거친다(여러 줄).
+  const b = src.indexOf("const endCallConsistency = judgeEndCallSignal(");
   const p = src.indexOf("isGoalBeforePhotoFollowUp({");
   const effect = src.indexOf("endCall: endCallSignal,");
   assert.ok(b > 0 && p > b && effect > p);

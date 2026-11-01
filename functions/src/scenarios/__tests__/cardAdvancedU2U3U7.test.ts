@@ -139,7 +139,8 @@ test("[U2 배선 · 서버] recordMockScreenEvent — 통화 중 설치 화면�
   assert.ok(src.includes('return installConsentInstructionFor({ entrySurface: "in-call-sms", escalatedCall: false, path: "realtime", transferPlaced });'));
   // 새 문서(첫 이벤트가 응낙) · 기존 문서의 첫 응낙 두 분기 모두 · 다시 누른 응낙은 `if (!snap.get(field))` 밖이라 지시 0.
   assert.ok(src.includes("return createdInstruction ? { ok: true, contextInstruction: createdInstruction } : { ok: true };"));
-  assert.ok(/if \(!snap\.get\(field\)\) \{\n    await ref\.update\(\{ \[field\]: now \}\);\n[\s\S]*?if \(firstInstruction\) return \{ ok: true, contextInstruction: firstInstruction \};\n  \}\n  return \{ ok: true \};/.test(src));
+  // N1(2026-11-01) — 같은 갱신에 이체 화면 제출의 요구액 대비 비교가 붙는다(그 밖 화면 = 빈 객체).
+  assert.ok(/if \(!snap\.get\(field\)\) \{\n    await ref\.update\(\{ \[field\]: now, \.\.\.\(amountComparison !== undefined \? \{ amountComparison \} : \{\}\) \}\);\n[\s\S]*?if \(firstInstruction\) return \{ ok: true, contextInstruction: firstInstruction \};\n  \}\n  return \{ ok: true \};/.test(src));
   const types = read("mockScreens/types.ts");
   assert.ok(types.includes("contextInstruction?: string;"));
 });

@@ -23,6 +23,8 @@ export type MessengerAttachment = {
   accountNumber?: string;
   /** ⭐ P2-d — 변형의 가상 예금주(확인 화면 "받는 분"). 부재 = 받는 분 행 없음. */
   accountHolder?: string;
+  /** N1 — 대화에서 요구한 금액("2,000,000" — 서버 `demandAmountFrom`). 화면은 비교 결과만 돌려보낸다. 부재 = 모름. */
+  transferAmount?: string;
 };
 
 // attachments(T29 추가, 옵셔널·하위호환) — 메신저 채팅(UX-022)의 스미싱 링크. 보이스 세션은
@@ -253,6 +255,11 @@ export type DeliverInCallSmsResponse = {
    * 다음 단계로 넘어가게 하는 조건형 1줄(서버 소유). ⚠️ 아직 어디서도 주입하지 않는다(클라 배선은 A-2).
    */
   confirmResultInstruction?: string;
+  /**
+   * R1(#465 실측) — 백스톱이고 아직 마치지 않은 화면 · 요구액보다 적게 보낸 이체가 있을 때만: 화면 기록 · 재촉 단계 1줄(서버 소유).
+   * 클라는 맥락 주입(`screenStatus`)으로 넣고, 이 값이 있으면 `none_pending`이어도 다음 발화에 다시 묻는다.
+   */
+  screenStatusInstruction?: string;
 };
 // T123/AC-080 — `landing_submitted` = "그 문자가 연 가짜 랜딩의 폼을 제출했다"는 **사실 하나**.
 // ⛔ 참가자 입력값(계좌번호·예금주명)을 담을 필드가 아래 요청 타입에 **존재하지 않는다**(AC-045).
@@ -268,6 +275,8 @@ export type RecordInCallSmsEventRequest = {
   sessionId: string;
   smsId: string;
   event: InCallSmsEvent;
+  /** N1 — `landing_submitted`에서만: 보낸 금액이 요구액보다 적은가 · 같은가 · 많은가(⛔ 금액 값 0 — G138). 부재 = 모름. */
+  amountComparison?: AmountComparison;
 };
 export type RecordInCallSmsEventResponse = {
   recorded: true;
@@ -296,7 +305,11 @@ export type RecordMockScreenEventRequest = {
    * 않는다(무시된다). ⛔ 응낙 시점의 사기범 턴 계수는 보내지 않는다 — 앵커는 서버가 문자 문서에서 복사한다.
    */
   callMode?: "realtime" | "fallback";
+  /** N1 — 이체 화면 `submitted`에서만: 보낸 금액이 요구액보다 적은가 · 같은가 · 많은가(⛔ 금액 값 0 — G138). 부재 = 모름. */
+  amountComparison?: AmountComparison;
 };
+/** N1 — 이체 화면 제출의 요구액 대비 비교(서버 `roleplay/screenAction.ts` `AmountComparison`과 같은 값). */
+export type AmountComparison = "less" | "equal" | "more";
 export type RecordMockScreenEventResponse = {
   ok: true;
   /**

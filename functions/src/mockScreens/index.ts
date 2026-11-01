@@ -13,7 +13,8 @@ import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
-import { findMockScreenItem, installConsentInstructionFor, isMockScreenReachable } from "../scenarios/mockScreens";
+import { findMockScreenItem, installConsentInstructionFor, isBankTransferLanding, isMockScreenReachable } from "../scenarios/mockScreens";
+import { isAmountComparison } from "../roleplay/screenAction";
 import { findVerifyInterceptItem } from "../scenarios/verifyIntercept";
 import { sessionReachableLandingIds } from "../scenarios/reachability";
 import { anchorFromInCallSmsDoc, findDeclaredSmsIdForLanding, readMockScreenCallMode } from "./inCallAnchor";
@@ -163,6 +164,12 @@ export const recordMockScreenEvent = onCall<
     throw new HttpsError("invalid-argument", "이 화면에는 입력 제출 단계가 없습니다.");
   }
 
+  // N1 — 이체 화면 제출의 요구액 대비 비교(그 밖 화면 · 이벤트 · 값 밖 = 무시 · 오류 0). 금액 값은 요청에 없다(G138).
+  const amountComparison =
+    event === "submitted" && isBankTransferLanding(landingId) && isAmountComparison(request.data?.amountComparison)
+      ? request.data.amountComparison
+      : undefined;
+
   const db = getFirestore();
   const ref = db.collection("sessions").doc(sessionId).collection("mockScreens").doc(landingId);
   const snap = await ref.get();
@@ -179,6 +186,7 @@ export const recordMockScreenEvent = onCall<
       ...(inCallAnchor !== undefined ? { anchorScammerTurn: inCallAnchor } : {}),
       ...(event === "consented" ? { consentedAt: now } : {}),
       ...(event === "submitted" ? { submittedAt: now } : {}),
+      ...(amountComparison !== undefined ? { amountComparison } : {}),
     };
     await ref.create(doc);
     const createdInstruction = realtimeConsent ? await inCallConsentInstruction(sessionId, session.scenarioId) : undefined;
@@ -189,8 +197,10 @@ export const recordMockScreenEvent = onCall<
   // 않는다(`recordInCallSmsEvent`의 기존 관례와 동일).
   const field =
     event === "shown" ? "shownAt" : event === "consented" ? "consentedAt" : "submittedAt";
+  // N1 — 비교 결과는 제출마다 마지막 값으로 덮는다(모자란 금액을 마저 보낸 두 번째 제출 — 화면이 같은 계좌로 보낸 합계로 비교한다).
+  if (snap.get(field) && amountComparison !== undefined) await ref.update({ amountComparison });
   if (!snap.get(field)) {
-    await ref.update({ [field]: now });
+    await ref.update({ [field]: now, ...(amountComparison !== undefined ? { amountComparison } : {}) });
     // U2 — 첫 응낙(최초 1회 세팅과 같은 조건)일 때만 실시간 지시를 돌려준다. 다시 눌러도 두 번 알리지 않는다.
     const firstInstruction = realtimeConsent ? await inCallConsentInstruction(sessionId, session.scenarioId) : undefined;
     if (firstInstruction) return { ok: true, contextInstruction: firstInstruction };

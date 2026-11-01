@@ -125,10 +125,11 @@ test("[BA-1 A3] G138 — 금액이 오버레이 밖으로 나가지 않는다(�
   for (const forbidden of ["fetch(", "XMLHttpRequest", "sendBeacon", "localStorage", "sessionStorage", "indexedDB", "callCallable", "@/lib/api", "firebase"]) {
     assert.ok(!overlayCode.includes(forbidden), `오버레이에 있으면 안 되는 것: ${forbidden}`);
   }
-  // 위로 올리는 콜백은 무인자 두 개뿐이다(닫기 · 송금 완료).
+  // 위로 올리는 콜백은 둘뿐이다(닫기 무인자 · 송금 완료). N1(2026-11-01) — 송금 완료는 요구액 대비 비교 결과 하나만 싣는다(세 값 enum · 금액 값 0).
   assert.ok(overlayCode.includes("onClose: () => void;"));
-  assert.ok(overlayCode.includes("onSubmitted: () => void;"));
-  assert.ok(!/onClose\([^)]/.test(overlayCode) && !/onSubmitted\([^)]/.test(overlayCode), "콜백에 값을 싣지 않는다");
+  assert.ok(overlayCode.includes("onSubmitted: (amountComparison: AmountComparison | undefined) => void;"));
+  assert.ok(!/onClose\([^)]/.test(overlayCode), "닫기 콜백에 값을 싣지 않는다");
+  assert.deepEqual(overlayCode.match(/onSubmitted\([^)]*\)?/g), ["onSubmitted(recordTransferAndCompare(ledgerKey ?? \"\", target, amount)"], "송금 완료 = 비교 결과 호출 한 곳");
   for (const forbidden of ["fetch(", "localStorage", "sessionStorage", "callCallable"]) {
     assert.ok(!stripComments(lib).includes(forbidden), `순수 모듈에 있으면 안 되는 것: ${forbidden}`);
   }
@@ -198,11 +199,12 @@ test("[BA-1 A7] 간소화안 — 클립보드 · 홈 · 탐색 막대 0 · 계�
 test("[BA-1 A8] 기록 경로 — 통화 = landing_submitted(여는 순간 link_tapped) · 메신저 칩 = submitted + 이체 완료 캡처", () => {
   const open = between(page, "const handleOpenBankApp = (", "};");
   assert.ok(open.includes('handleRecordSmsEvent(smsId, "link_tapped")'));
-  assert.ok(page.includes('onSubmitted={() => handleRecordSmsEvent(bankTransfer.smsId, "landing_submitted")}'));
+  // N1 — 비교 결과를 같은 기록 경로로 함께 보낸다.
+  assert.ok(page.includes('onSubmitted={(amountComparison) => handleRecordSmsEvent(bankTransfer.smsId, "landing_submitted", amountComparison)}'));
   const chip = between(messenger, "<BankAppOverlay", ") : fakeLanding && (");
-  assert.ok(chip.includes('recordMockScreen(fakeLanding.fakeLandingId, "submitted")') && chip.includes("setTransferReceipt("));
+  assert.ok(chip.includes('recordMockScreen(fakeLanding.fakeLandingId, "submitted", amountComparison)') && chip.includes("setTransferReceipt("));
   // 완료 기록은 인증 버튼 한 번뿐이다(완료 화면의 확인은 닫기).
   const auth = between(overlayCode, "const authenticate = () => {", "};");
-  assert.ok(auth.includes("onSubmitted();") && auth.includes('go("authenticate")'));
-  assert.equal(overlayCode.split("onSubmitted()").length - 1, 1);
+  assert.ok(auth.includes("onSubmitted(recordTransferAndCompare(") && auth.includes('go("authenticate")'));
+  assert.equal(overlayCode.split("onSubmitted(").length - 1, 1);
 });

@@ -80,6 +80,12 @@ export type DeliverInCallSmsResponse = {
    * 하는 **조건형** 1줄(`inCallSms/confirmResult.ts`). ⚠️ 이 필드를 Live 세션에 주입하는 클라 배선은 아직 없다(A-2).
    */
   confirmResultInstruction?: string;
+  /**
+   * R1(#465 실측 · 실기기 "보안 앱 설치 그냥 통과되는데") — 백스톱(`trigger:"backstop"`)이고 이 세션에 아직 마치지 않은 화면(설치 · 이체 · 입력)이 있거나
+   * 요구액보다 적게 보낸 이체가 있을 때만: 화면 기록 · 재촉 단계 1줄(`roleplay/screenAction.ts` `buildLiveScreenStatusInstruction` · 서버 소유 문면).
+   * 클라는 맥락 주입(`screenStatus`)으로 넣고, 이 값이 있으면 `none_pending`이어도 다음 발화에 다시 묻는다. 부재 = 넣을 것 없음.
+   */
+  screenStatusInstruction?: string;
 };
 
 // T123/AC-080 — `landing_submitted`는 **"그 문자가 연 가짜 랜딩의 폼을 제출했다"**는 사실 하나다.
@@ -99,6 +105,11 @@ export type RecordInCallSmsEventRequest = {
   sessionId: string;
   smsId: string;
   event: InCallSmsEvent;
+  /**
+   * N1(실기기 신고 2026-11-01 — 요구액보다 적게 보내도 통과) — `landing_submitted`에서만: 보낸 금액이 요구액(문자 금액 줄)보다 적은가 · 같은가 · 많은가.
+   * ⛔ 금액 값 자체는 싣지 않는다(G138 · AC-045 — 비교는 화면 안에서 끝난다). 부재 = 모름(옛 화면 · 요구액 없는 문자). 값 밖 = 무시(오류 0).
+   */
+  amountComparison?: "less" | "equal" | "more";
 };
 export type RecordInCallSmsEventResponse = {
   recorded: true;

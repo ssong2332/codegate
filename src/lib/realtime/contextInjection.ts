@@ -34,6 +34,8 @@
  * `landingSubmitted` 행은 §132.7(메인 세션 지시 — 실 키 회귀 프로브 N4)로 추가했다.
  * | `installConsented` | U2 — 참가자가 통화 중 문자 링크의 설치 화면에서 권한 허용을 처음 눌렀다(서버 `recordMockScreenEvent` 응답 `contextInstruction`) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖** · 침묵 넛지 대상 아님 |
  * `installConsented` 행은 U2(실기기 신고 2026-11-01 — 말로만 "설치했다"에 다음 단계로 넘어감 · 메인 "권고 순서대로")로 추가했다.
+ * | `screenStatus` | R1 — 참가자 발화마다 문자 백스톱 질의(`deliverInCallSms`) 응답 `screenStatusInstruction`(아직 마치지 않은 화면 · 재촉 단계 · 요구액보다 적은 이체) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖** · 침묵 넛지 대상 아님 · 슬롯이 비었을 때만(다른 맥락 주입을 덮지 않는다) |
+ * `screenStatus` 행은 R1(#465 실측 · 실기기 "보안 앱 설치 그냥 통과되는데" · 메인 "권고대로")로 추가했다.
  */
 export type InstructionDelivery =
   | "smsAnnounce"
@@ -45,7 +47,8 @@ export type InstructionDelivery =
   | "repeatBreak"
   | "chatDuringCall"
   | "landingSubmitted"
-  | "installConsented";
+  | "installConsented"
+  | "screenStatus";
 
 /** G31 큐(`@/lib/verifyintercept` `PendingInstruction`) 항목 → 전달 방식. */
 export function deliveryForInstruction(item: {

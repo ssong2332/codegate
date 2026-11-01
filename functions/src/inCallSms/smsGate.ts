@@ -27,6 +27,7 @@
 // | `userTurns === openAt + 간격` | `nudge` 1회(정확히 그 발화에서만 — 상태 저장 없이 1회가 된다) |
 // | 그 외 | `wait` |
 // 간격 = 그 문자 선언의 `backstopUserTurns`(§124 — 변형별) · 부재면 `BACKSTOP_USER_TURNS`.
+import type { AmountComparison } from "../roleplay/screenAction";
 import type { FlowVariantSms, SmsPurpose } from "../scenarios/flowVariants";
 import { findFlowVariant } from "../scenarios/flowVariants";
 import { findInCallSmsItem, hasInCallSms } from "../scenarios/inCallSms";
@@ -68,6 +69,8 @@ export type DeliveredSmsRecord = {
   landingSubmitted?: true;
   /** 화면 행동만 인정(`roleplay/screenAction.ts`) — 이 문자가 여는 화면 id(문서 `fakeLandingId`). 게이트 판정은 이 필드를 보지 않는다. */
   fakeLandingId?: string;
+  /** N1 — 이 문자가 연 이체 화면의 마지막 제출이 요구액보다 적은가 · 같은가 · 많은가(문서 `landingAmountComparison`). 게이트 판정은 보지 않는다. */
+  landingAmountComparison?: AmountComparison;
 };
 
 export type SmsGateStatus = "allowed" | "not_allowed" | "already_delivered" | "too_early" | "too_soon";

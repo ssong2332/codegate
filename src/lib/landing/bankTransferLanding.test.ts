@@ -27,14 +27,15 @@ test("[P2 C1] 클라 · 서버 훈련용 이체 화면 목록이 같다(통화 �
   assert.equal(listOf(component).length, 8);
 });
 
-test("[P2 C2] 폼 → 확인 → 인증 → 완료 · 제출 콜백은 인증 버튼에서만(무인자)", () => {
+test("[P2 C2] 폼 → 확인 → 인증 → 완료 · 제출 콜백은 인증 버튼에서만(입력값 0 · N1 비교 결과만)", () => {
   const submit = code.slice(code.indexOf("const handleSubmit"), code.indexOf("const finishSubmit"));
   assert.ok(submit.includes('if (bankTransfer && bankStage === "form") {'), "폼 다음은 확인 화면");
   assert.ok(submit.indexOf('setBankStage("confirm")') < submit.indexOf("finishSubmit(event.timeStamp)"));
   assert.ok(code.includes('onClick={() => setBankStage("auth")}'), "확인 화면의 이체 버튼 → 인증");
   assert.equal((code.match(/finishSubmit\(event\.timeStamp\)/g) ?? []).length, 2, "폼 제출(종전 랜딩) · 인증 버튼 두 곳뿐");
   const finish = code.slice(code.indexOf("const finishSubmit"), code.indexOf("const issuerBar"));
-  assert.ok(finish.includes("onCredentialSubmit?.();"), "무인자 콜백");
+  assert.ok(finish.includes("onCredentialSubmit?.();"), "무인자 콜백(이체 화면 밖 랜딩)");
+  assert.ok(finish.includes("onCredentialSubmit?.(\n        recordTransferAndCompare("), "N1 — 이체 화면은 요구액 대비 비교 결과 하나만");
   assert.ok(code.includes('onClick={() => setBankStage("form")}'), "취소 = 폼으로");
   for (const label of ["본인 인증", "인증하고 이체하기", "보이스피싱 주의", "출금 계좌"]) assert.ok(code.includes(label), label);
 });
@@ -58,7 +59,8 @@ test("[P2 C4] 미리 채움 — 은행명이 있으면 받는 분 · 금액을, 
 });
 
 test("[P2 C5] 머리띠 은행명은 세션 가상 은행명 변수뿐(리터럴 은행명 0)", () => {
-  assert.ok(code.includes("`${prefilledTransfer.bankName} 모바일뱅킹`"));
+  // N2(실기기 신고 2026-11-01) — 머리띠는 받는 계좌 은행이 아니라 참가자의 "내 은행"(세션 가상 은행 변수 · `myBankNameFor`).
+  assert.ok(code.includes("`${prefilledTransfer.myBankName} 모바일뱅킹`"));
   const bankBlock = code.slice(code.indexOf("if (bankTransfer && !submitted"), code.indexOf("const recordDocument"));
   assert.equal(/[가-힣]{1,6}은행/.test(bankBlock), false, "확인 · 인증 화면에 은행 이름 리터럴 0");
 });

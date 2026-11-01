@@ -197,6 +197,13 @@ test("[§15.9.6] 응낙 기록은 콜백으로 위임한다(컴포넌트가 직�
 const SUBMIT_CALLBACK_NO_ARG = /onCredentialSubmit\??\.?\(\s*\)/;
 /** ② 인자를 실은 호출이 있는가 — 있으면 위반이다(§31.6 G138). */
 const SUBMIT_CALLBACK_WITH_ARG = /onCredentialSubmit\??\.?\(\s*[^)\s]/;
+/**
+ * ⭐ N1(실기기 신고 2026-11-01 — 요구액보다 적게 보내도 통과 · 메인 "G138과 충돌하면 금액 비교 결과만 보내는 안으로") — 유일한 예외 모양:
+ * 훈련용 이체 화면의 요구액 대비 **비교 결과**(`recordTransferAndCompare`가 돌려주는 "less" · "equal" · "more" · undefined)를 그대로 싣는 호출.
+ * 금액 값 · 계좌 · 이름은 실리지 않는다(그 함수의 반환 타입이 세 값 enum이다 — `src/lib/bankapp/bankApp.ts` 판정표 C). ② 검사는 이 모양을 뺀 나머지에 한다.
+ */
+const SUBMIT_CALLBACK_COMPARISON_ONLY = /onCredentialSubmit\?\.\(\s*recordTransferAndCompare\(/g;
+const withoutComparisonCall = (source: string) => source.replace(SUBMIT_CALLBACK_COMPARISON_ONLY, "");
 
 /** ③ 콜백 호출과 입력 state(`values`/`setValues`)가 **같은 식(줄)** 에 등장하는 지점. */
 function submitCallbackLinesTouchingValues(source: string): string[] {
@@ -218,9 +225,15 @@ test("[G138/AC-080 (a)] 제출 콜백은 **무인자**다 — 입력값이 컴�
     SUBMIT_CALLBACK_NO_ARG.test(componentCode),
     "`onCredentialSubmit?.()` 형태의 **무인자** 호출이 있어야 한다",
   );
-  // ② 인자를 실은 호출이 0건이다 — 이것이 G138의 본체다.
+  // ② 인자를 실은 호출이 0건이다 — 이것이 G138의 본체다(N1 비교 결과 한 모양만 예외 — 위 상수).
+  assert.equal((componentCode.match(SUBMIT_CALLBACK_COMPARISON_ONLY) ?? []).length, 1, "N1 비교 결과 호출은 이체 화면 제출 한 곳뿐");
+  assert.match(
+    readFileSync("src/lib/bankapp/bankApp.ts", "utf8"),
+    /export function recordTransferAndCompare\([\s\S]*?\): AmountComparison \| undefined \{/,
+    "비교 함수는 세 값 enum만 돌려준다",
+  );
   assert.equal(
-    SUBMIT_CALLBACK_WITH_ARG.test(componentCode),
+    SUBMIT_CALLBACK_WITH_ARG.test(withoutComparisonCall(componentCode)),
     false,
     "제출 콜백에 인자를 실으면 참가자 입력이 컴포넌트 밖으로 나가는 첫 경로가 생긴다(AC-045 위반)",
   );
@@ -252,11 +265,11 @@ test("[G138/역검증] 인자를 실은 제출 콜백이 섞이면 위 ②·③�
   );
 
   const real = {
-    withArg: SUBMIT_CALLBACK_WITH_ARG.test(componentCode),
+    withArg: SUBMIT_CALLBACK_WITH_ARG.test(withoutComparisonCall(componentCode)),
     valuesLines: submitCallbackLinesTouchingValues(componentCode).length,
   };
   const bad = {
-    withArg: SUBMIT_CALLBACK_WITH_ARG.test(poisoned),
+    withArg: SUBMIT_CALLBACK_WITH_ARG.test(withoutComparisonCall(poisoned)),
     valuesLines: submitCallbackLinesTouchingValues(poisoned).length,
   };
   t.diagnostic(
@@ -299,10 +312,13 @@ test("[G138/AC-080 (a)] 기록 콜러블 2종의 요청 타입에 **입력값을
   const sms = requestFieldKeys(inCallSmsTypes, "RecordInCallSmsEventRequest");
   const mock = requestFieldKeys(mockScreenTypes, "RecordMockScreenEventRequest");
   t.diagnostic(`요청 필드 — recordInCallSmsEvent: ${sms.join(",")} / recordMockScreenEvent: ${mock.join(",")}`);
-  assert.deepEqual(sms, ["event", "sessionId", "smsId"], "세션 id·문자 id·고정 enum 3개뿐이어야 한다");
+  // N1(2026-11-01) — `amountComparison`(요구액 대비 고정 enum 3값 "less" · "equal" · "more")이 더해졌다. 금액 값이 아니라 비교 결과라 아래에서 enum 리터럴임을 고정한다.
+  assert.deepEqual(sms, ["amountComparison", "event", "sessionId", "smsId"], "세션 id·문자 id·고정 enum 2개(event · amountComparison)뿐이어야 한다");
+  assert.match(inCallSmsTypes, /amountComparison\?: "less" \| "equal" \| "more";/, "amountComparison은 고정 enum 리터럴이어야 한다(금액 값 0)");
   // T194-c-1(docs/Architecture.md §84.5.3 · §84.15.3 · G584) — `callMode`(통화 경로 고정 enum 2값 "realtime" · "fallback")가 더해졌다.
   // 참가자 입력값이 아니라 화면 상태(통화 경로)라 AC-045 "입력값 서버 미전송"은 그대로다 — 아래에서 enum 리터럴 타입임을 함께 고정한다.
-  assert.deepEqual(mock, ["callMode", "event", "landingId", "sessionId"], "세션 id·랜딩 id·고정 enum 2개(event · callMode)뿐이어야 한다");
+  assert.deepEqual(mock, ["amountComparison", "callMode", "event", "landingId", "sessionId"], "세션 id·랜딩 id·고정 enum 3개(event · callMode · amountComparison)뿐이어야 한다");
+  assert.match(mockScreenTypes, /amountComparison\?: "less" \| "equal" \| "more";/, "amountComparison은 고정 enum 리터럴이어야 한다(금액 값 0)");
   assert.match(mockScreenTypes, /callMode\?: "realtime" \| "fallback";/, "callMode는 고정 enum 리터럴이어야 한다(자유 문자열 0)");
 });
 
@@ -315,7 +331,7 @@ test("[G138/역검증] 요청 타입에 입력값 필드가 하나라도 붙으�
   assert.notEqual(poisoned, inCallSmsTypes, "오염 샘플이 실제로 만들어져야 한다");
   const badKeys = requestFieldKeys(poisoned, "RecordInCallSmsEventRequest");
   t.diagnostic(`오염 샘플의 요청 필드: ${badKeys.join(",")}`);
-  assert.notDeepEqual(badKeys, ["event", "sessionId", "smsId"], "오염이 검출되지 않으면 게이트가 무의미하다");
+  assert.notDeepEqual(badKeys, ["amountComparison", "event", "sessionId", "smsId"], "오염이 검출되지 않으면 게이트가 무의미하다");
   assert.ok(badKeys.includes("accountNumber"));
 });
 
@@ -775,8 +791,8 @@ test("[T190/D-93] 계좌번호·금액 칸에만 inputMode numeric — 검증(ma
 test("[T190/D-93] 완료 복귀 문면은 진입 표면이 정한다 — 메신저 '채팅으로' · 문자함 '문자로'", () => {
   assert.ok(componentCode.includes('messenger: "채팅으로 돌아가기"'));
   assert.ok(componentCode.includes('"in-call-sms": "문자로 돌아가기"'));
-  // §106 — credential 완료 화면이 2벌(종전 완료 문구 · 사건 기록 열람본)이라 3이다.
-  assert.equal((componentCode.match(/^\s*\{returnLabel\}\s*$/gm) ?? []).length, 3, "두 kind의 완료 버튼(credential 2벌 · 설치 1)이 모두 진입 표면 문면을 쓴다");
+  // §106 — credential 완료 화면이 2벌(종전 완료 문구 · 사건 기록 열람본)이라 3이었다. N4(2026-11-01) — 훈련용 이체 화면 완료 영수증 1벌이 더해져 4다.
+  assert.equal((componentCode.match(/^\s*\{returnLabel\}\s*$/gm) ?? []).length, 4, "두 kind의 완료 버튼(credential 3벌 · 설치 1)이 모두 진입 표면 문면을 쓴다");
 });
 
 // ── T194-a(docs/Architecture.md §84.13.3 ③) — 설치 화면 상황별 표 `INSTALL_LANDING_COPY` ─────────────────────────────

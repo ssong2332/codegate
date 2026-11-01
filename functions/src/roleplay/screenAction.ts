@@ -26,7 +26,7 @@
 import type { MessengerAttachment } from "../shared/types";
 import { findMockScreenItem, isBankTransferLanding } from "../scenarios/mockScreens";
 import { IN_CALL_SMS } from "../scenarios/inCallSms";
-import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
+import { INSTALL_HOLD_USER_TURNS as INSTALL_HOLD_TURNS, type DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { isCompletionClaim } from "../inCallSms/confirmResult";
 import { USER_TRANSFER_REPORT } from "./actionAcknowledgement";
 import { sessionReachableLandingIds } from "../scenarios/reachability";
@@ -40,7 +40,17 @@ export function screenActionApplies(flowVariantId: string | undefined): boolean 
 }
 
 export type ScreenKind = "install" | "transfer" | "form";
-export type ScreenFact = { landingId: string; kind: ScreenKind; done: boolean };
+/** N1(실기기 신고 2026-11-01 — 요구액 200만 원에 200원을 보내도 통과) — 이체 화면 제출 때 화면이 보낸 **비교 결과만**(금액 값 0 · G138). */
+export type AmountComparison = "less" | "equal" | "more";
+export const AMOUNT_COMPARISONS: readonly AmountComparison[] = ["less", "equal", "more"];
+export function isAmountComparison(value: unknown): value is AmountComparison {
+  return typeof value === "string" && (AMOUNT_COMPARISONS as readonly string[]).includes(value);
+}
+/**
+ * `offeredAtUserTurns` = 그 화면을 보낸 시점의 사용자 발화 수(통화 중 문자 = 도착 기록 · 메신저 칩 = 그 메시지 앞 참가자 메시지 수 · 부재 = 모름).
+ * `amount` = 이체 화면 제출의 요구액 대비 비교(부재 = 모름 · 옛 화면).
+ */
+export type ScreenFact = { landingId: string; kind: ScreenKind; done: boolean; offeredAtUserTurns?: number; amount?: AmountComparison };
 
 /** 카탈로그 화면 종류(설치 · 이체 · 입력). 이 시나리오 카탈로그 밖이면 undefined. */
 export function screenKindOf(scenarioId: string, landingId: string): ScreenKind | undefined {
@@ -52,8 +62,8 @@ export function screenKindOf(scenarioId: string, landingId: string): ScreenKind 
   return (IN_CALL_SMS[scenarioId] ?? []).some((sms) => sms.kind === "account" && sms.fakeLandingId === landingId) ? "transfer" : "form";
 }
 
-/** `mockScreens/{landingId}` 문서에서 판정에 쓰는 필드만. */
-export type MockScreenRecord = { landingId: string; consented: boolean; submitted: boolean };
+/** `mockScreens/{landingId}` 문서에서 판정에 쓰는 필드만. `amountComparison` = N1 메신저 이체 화면 제출의 비교 결과(부재 = 모름). */
+export type MockScreenRecord = { landingId: string; consented: boolean; submitted: boolean; amountComparison?: AmountComparison };
 
 /** 통화 중 문자 표면의 화면 사실(도착 순서). */
 export function inCallScreenFacts(
@@ -67,7 +77,13 @@ export function inCallScreenFacts(
     if (!record.fakeLandingId) continue;
     const kind = screenKindOf(scenarioId, record.fakeLandingId);
     if (!kind) continue;
-    facts.push({ landingId: record.fakeLandingId, kind, done: kind === "install" ? consented.has(record.fakeLandingId) : record.landingSubmitted === true });
+    facts.push({
+      landingId: record.fakeLandingId,
+      kind,
+      done: kind === "install" ? consented.has(record.fakeLandingId) : record.landingSubmitted === true,
+      ...(record.userTurnsAtArrival !== undefined ? { offeredAtUserTurns: record.userTurnsAtArrival } : {}),
+      ...(record.landingAmountComparison ? { amount: record.landingAmountComparison } : {}),
+    });
   }
   return facts;
 }
@@ -81,7 +97,9 @@ export function messengerScreenFacts(
   const byId = new Map(mockScreens.map((m) => [m.landingId, m] as const));
   const seen = new Set<string>();
   const facts: ScreenFact[] = [];
+  let userMessages = 0;
   for (const message of history) {
+    if (message.role === "user") userMessages += 1;
     if (message.role !== "scammer") continue;
     for (const attachment of message.attachments ?? []) {
       if (seen.has(attachment.fakeLandingId)) continue;
@@ -89,7 +107,13 @@ export function messengerScreenFacts(
       if (!kind) continue;
       seen.add(attachment.fakeLandingId);
       const record = byId.get(attachment.fakeLandingId);
-      facts.push({ landingId: attachment.fakeLandingId, kind, done: kind === "install" ? record?.consented === true : record?.submitted === true });
+      facts.push({
+        landingId: attachment.fakeLandingId,
+        kind,
+        done: kind === "install" ? record?.consented === true : record?.submitted === true,
+        offeredAtUserTurns: userMessages,
+        ...(record?.amountComparison ? { amount: record.amountComparison } : {}),
+      });
     }
   }
   return facts;
@@ -110,8 +134,9 @@ export function isScreenClaim(kind: ScreenKind, text: string): boolean {
 export const SCREEN_NOT_DONE_INSTRUCTION: Readonly<Record<ScreenKind, string>> = {
   install:
     "(앱 확인: 상대는 설치했다고 말했지만 앱에는 아직 설치 화면에서 권한 허용을 누른 기록이 없다. 끝난 것으로 받아들이지 말고, 아직 확인이 안 된다며 네가 보낸 링크 화면에서 권한 허용하고 계속하기까지 눌러 달라고 짧게 말하라. 설치가 끝났다거나 확인됐다고 말하지 말고 다음 단계로 넘어가지 마라.)",
+  // R5(#465 실측 — 이체 되돌림에 "권한을 허용하고 이관을 완료"가 섞였다) — 이체 화면에는 설치 · 권한 단계가 없다고 못 박는다.
   transfer:
-    "(앱 확인: 상대는 보냈다고 말했지만 앱에는 아직 네가 보낸 링크 화면에서 이체한 기록이 없다. 끝난 것으로 받아들이지 말고, 입금 확인이 안 된다며 그 링크 화면에서 다시 진행해 달라고 짧게 말하라. 입금이 확인됐다고 말하지 말고 다음 단계로 넘어가지 마라.)",
+    "(앱 확인: 상대는 보냈다고 말했지만 앱에는 아직 네가 보낸 링크 화면에서 이체한 기록이 없다. 끝난 것으로 받아들이지 말고, 입금 확인이 안 된다며 그 링크 화면에서 다시 진행해 달라고 짧게 말하라. 이체 화면에는 설치나 권한 허용 단계가 없으니 설치 · 권한 이야기는 섞지 마라. 입금이 확인됐다고 말하지 말고 다음 단계로 넘어가지 마라.)",
   form:
     "(앱 확인: 상대는 마쳤다고 말했지만 앱에는 아직 네가 보낸 링크 화면을 제출한 기록이 없다. 끝난 것으로 받아들이지 말고, 아직 접수가 확인되지 않는다며 그 링크 화면에서 마저 진행해 달라고 짧게 말하라. 처리됐다고 말하지 말고 다음 단계로 넘어가지 마라.)",
 };
@@ -137,14 +162,128 @@ const KIND_LABEL: Readonly<Record<ScreenKind, { name: string; done: string; pend
   form: { name: "입력 화면", done: "제출 마침", pending: "제출 기록 없음" },
 };
 
+/** N1 — 이체 마침 뒤에 붙이는 요구액 비교(맥락을 넘긴 호출만 · 부재 = 붙이지 않는다). */
+const AMOUNT_LABEL: Readonly<Record<AmountComparison, string>> = {
+  less: "요구한 금액보다 적게 보냄",
+  equal: "요구한 금액 그대로 보냄",
+  more: "요구한 금액보다 많이 보냄",
+};
+
+// ── 재촉 단계(판정표 SP — #465 실측 R1 · R4 · R6) ─────────────────────────────────────────────
+// 아직 마치지 않은 화면을 보낸 뒤 지난 참가자 발화 수(`pending`)로 정한다. 그 종류에 마친 화면이 있으면 대상이 아니다(SA2와 같다). ⛔ 위에서 첫 매치.
+// | # | If | Then |
+// |---|---|---|
+// | SP1 | 설치 ∧ (pending ≥ `INSTALL_HOLD_USER_TURNS` ∨ 그 설치 화면 뒤에 다른 종류 화면을 이미 보냈다) | `release` — 설치 없이 다음 요구로 넘어가도 된다(백스톱 보류 SB가 풀리는 때와 같다) · 끝났다고는 여전히 말하지 않는다 |
+// | SP2 | 이체 · 입력 ∧ pending ≥ `SCREEN_GIVE_UP_USER_TURNS` | `give_up` — 포기로 끝낸다(4-c행은 포기 끊기를 막지 않는다) |
+// | SP3 | pending ≥ `SCREEN_PRESSURE_SWITCH_USER_TURNS` | `switch` — 같은 재촉 대신 다른 압박 |
+// | SP4 | 그 밖 | `hold` — 마칠 때까지 다음 요구로 넘어가지 않는다 · 끝났다고 말하지 않는다 |
+// ⚠️ 판단값 — 재촉 두 번이면 압박을 바꾼다(메인 지시 원문 "같은 재촉 2번이면 다른 압박으로 바꾸고, 그래도 안 되면 끊기"). 끊기는 이체 화면을 여는 데
+//    드는 발화(문자 열기 · 은행 앱 · 인증)를 감안해 여섯 번째 발화부터다. 값을 바꾸려면 아래 상수만 바꾼다.
+export const SCREEN_PRESSURE_SWITCH_USER_TURNS = 2;
+export const SCREEN_GIVE_UP_USER_TURNS = 6;
+
+export type ScreenPressure = "hold" | "switch" | "release" | "give_up";
+
+/** 판정표 SP — 아직 마치지 않은 그 종류 화면 중 가장 늦게 보낸 것 기준. 대상 아님(마침 · 보낸 시점 모름 · 그 종류 없음) = undefined. */
+export function screenPressureFor(kind: ScreenKind, facts: readonly ScreenFact[], userTurns: number): ScreenPressure | undefined {
+  const ofKind = facts.filter((f) => f.kind === kind);
+  if (ofKind.length === 0 || ofKind.some((f) => f.done)) return undefined;
+  const offered = ofKind.map((f) => f.offeredAtUserTurns).filter((n): n is number => n !== undefined);
+  if (offered.length === 0) return undefined;
+  const latest = Math.max(...offered);
+  const pending = userTurns - latest;
+  const movedOn = facts.some((f) => f.kind !== "install" && f.offeredAtUserTurns !== undefined && f.offeredAtUserTurns >= latest);
+  if (kind === "install" && (pending >= INSTALL_HOLD_TURNS || movedOn)) return "release"; // SP1
+  if (kind !== "install" && pending >= SCREEN_GIVE_UP_USER_TURNS) return "give_up"; // SP2
+  return pending >= SCREEN_PRESSURE_SWITCH_USER_TURNS ? "switch" : "hold"; // SP3 · SP4
+}
+
+/** 재촉 단계 · 금액 문장(따옴표 대사 예시 0 · 횟수 0 — 턴 지시 스캔 게이트 대상). */
+export const SCREEN_PRESSURE_SENTENCES = {
+  installHold:
+    "설치 화면은 상대가 권한 허용을 누르기 전에는 끝난 것이 아니니, 설치가 끝났다거나 확인됐다고 말하지 말고 설치를 마칠 때까지 다음 요구로 넘어가지 마라.",
+  installRelease: "설치가 끝났다거나 확인됐다고는 말하지 말되, 설치 없이 다음 요구로 넘어가도 된다.",
+  transferPending: "이체 화면에는 설치나 권한 허용 단계가 없으니 이체를 재촉할 때 설치 · 권한 이야기를 섞지 말고, 입금이 확인됐다고 말하지 마라.",
+  switch: "같은 재촉을 되풀이하지 말고 급함이나 불이익 같은 다른 압박으로 바꿔 말하라.",
+  giveUp: "여러 번 재촉해도 하지 않으니 더 진행할 수 없다고 보고 포기로 끝내라. 원하던 것을 얻었다고 끝내지는 마라.",
+  transferLess:
+    "상대가 보낸 돈이 요구한 금액보다 적다. 들어온 만큼은 확인됐다고 하되 모자란 금액을 같은 화면에서 마저 보내라고 하고, 다 받았다거나 끝났다고 말하지 마라.",
+  transferMore: "상대가 요구한 금액보다 많이 보냈다. 받은 것으로 치고, 돌려주겠다는 약속은 하지 마라.",
+} as const;
+
+/** R2(#465 실측 — 보류 중인 계좌 문자를 "문자로 보내 드린 안내 링크"로 가리켰다) — 문자 종류별 이름. */
+const SMS_KIND_LABEL: Readonly<Record<string, string>> = { account: "계좌 안내 문자", link: "링크 문자", otp: "인증번호 문자" };
+
+/** R2 — 선언된 필수 문자 중 아직 도착하지 않은 것의 종류 이름(카탈로그 밖 · 선택 문자 = 제외 · 같은 이름은 한 번). */
+export function notYetSentSmsLabels(
+  scenarioId: string,
+  declared: ReadonlyArray<{ smsId: string; required?: boolean }>,
+  delivered: readonly DeliveredSmsRecord[],
+): string[] {
+  const deliveredIds = new Set(delivered.map((d) => d.smsId));
+  const labels = declared
+    .filter((item) => item.required === true && !deliveredIds.has(item.smsId))
+    .map((item) => SMS_KIND_LABEL[(IN_CALL_SMS[scenarioId] ?? []).find((sms) => sms.smsId === item.smsId)?.kind ?? ""])
+    .filter((label): label is string => label !== undefined);
+  return [...new Set(labels)];
+}
+
+/** 마친 이체 화면 중 가장 늦게 보낸 것의 금액 비교(없으면 undefined). */
+export function latestTransferAmount(facts: readonly ScreenFact[]): AmountComparison | undefined {
+  return [...facts].reverse().find((f) => f.kind === "transfer" && f.done && f.amount !== undefined)?.amount;
+}
+
+/** 상태 줄 뒤 덧붙임(재촉 단계 · 금액 · 아직 안 보낸 문자). */
+function pressureSentences(facts: readonly ScreenFact[], userTurns: number, notYetSent: readonly string[]): string[] {
+  const out: string[] = [];
+  const install = screenPressureFor("install", facts, userTurns);
+  if (install === "release") out.push(SCREEN_PRESSURE_SENTENCES.installRelease);
+  else if (install) out.push(SCREEN_PRESSURE_SENTENCES.installHold);
+  if (facts.some((f) => f.kind === "transfer") && !facts.some((f) => f.kind === "transfer" && f.done)) {
+    out.push(SCREEN_PRESSURE_SENTENCES.transferPending); // R5
+  }
+  const others = (["transfer", "form"] as const).map((kind) => screenPressureFor(kind, facts, userTurns));
+  if (others.includes("give_up")) out.push(SCREEN_PRESSURE_SENTENCES.giveUp);
+  else if (install === "switch" || others.includes("switch")) out.push(SCREEN_PRESSURE_SENTENCES.switch);
+  const amount = latestTransferAmount(facts);
+  if (amount === "less") out.push(SCREEN_PRESSURE_SENTENCES.transferLess);
+  if (amount === "more") out.push(SCREEN_PRESSURE_SENTENCES.transferMore);
+  if (notYetSent.length > 0) out.push(`아직 ${notYetSent.join(" · ")}는 보내지 않았다. 보냈다고 말하거나 그 문자 속 계좌 · 링크를 가리키지 마라.`);
+  return out;
+}
+
 /**
  * 폴백(텍스트) 매 턴 상태 줄 — 서버가 아는 화면 사실을 그대로 알린다(실시간은 응낙 · 제출 순간의 맥락 주입이 같은 사실을 나른다).
  * 적용 제외 · 보낸 화면 0 = undefined(종전 바이트 동일).
  */
-export function buildScreenStatusLine(applies: boolean, facts: readonly ScreenFact[]): string | undefined {
+export function buildScreenStatusLine(
+  applies: boolean,
+  facts: readonly ScreenFact[],
+  // R1 · R2 · R4 · R5 · R6 · N1 — 넘기면 재촉 단계(판정표 SP) · 금액 비교 · 아직 안 보낸 문자를 덧붙인다. 부재 = 종전 바이트.
+  context?: { userTurns: number; notYetSent?: readonly string[] },
+): string | undefined {
   if (!applies || facts.length === 0) return undefined;
-  const parts = facts.map((f) => `${KIND_LABEL[f.kind].name} — ${f.done ? KIND_LABEL[f.kind].done : KIND_LABEL[f.kind].pending}`);
-  return `(앱 화면 기록: ${parts.join(" · ")}. 기록이 없는 화면은 상대가 했다고 말해도 끝난 것으로 보지 않는다.)`;
+  const parts = facts.map((f) => {
+    const amount = context && f.done && f.amount ? ` · ${AMOUNT_LABEL[f.amount]}` : "";
+    return `${KIND_LABEL[f.kind].name} — ${f.done ? KIND_LABEL[f.kind].done : KIND_LABEL[f.kind].pending}${amount}`;
+  });
+  const extra = context ? pressureSentences(facts, context.userTurns, context.notYetSent ?? []) : [];
+  return `(앱 화면 기록: ${parts.join(" · ")}. 기록이 없는 화면은 상대가 했다고 말해도 끝난 것으로 보지 않는다.${extra.map((s) => ` ${s}`).join("")})`;
+}
+
+/**
+ * R1(#465 실측 · 실기기 "보안 앱 설치 그냥 통과되는데") — 실시간 매 발화 화면 기록 줄. `deliverInCallSms` 백스톱 응답 `screenStatusInstruction`으로
+ * 돌려주고 클라가 맥락 주입(`screenStatus`)한다. 아직 마치지 않은 화면이 있거나 요구액보다 적게 보낸 이체가 있을 때만 · 그 밖 = undefined(주입 0).
+ */
+export function buildLiveScreenStatusInstruction(
+  applies: boolean,
+  facts: readonly ScreenFact[],
+  userTurns: number,
+  notYetSent: readonly string[],
+): string | undefined {
+  if (!applies || facts.length === 0) return undefined;
+  if (!facts.some((f) => !f.done) && latestTransferAmount(facts) !== "less") return undefined;
+  return buildScreenStatusLine(true, facts, { userTurns, notYetSent });
 }
 
 /** 판정표 SB — 설치 응낙이 없을 때 백스톱이 다음 필수 문자를 미루는 발화 수(원천 = `smsGate.ts` — 순환 import를 피해 거기 둔다). */

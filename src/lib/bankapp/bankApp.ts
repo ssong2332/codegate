@@ -12,7 +12,7 @@
 // | 켜는 조건 | 진단 플래그 `bankapp=1`(`debugFlags.ts` 저장 키) — 플래그가 없으면 계좌 누름 · 은행 앱 0(종전 링크 이체 화면 그대로) |
 // | 여는 길 | 통화 중 문자 속 계좌번호 한 번 누름 → '송금' · 메신저 송금 칩 → 받는 계좌가 채워진 송금 화면 |
 // | 서버 | 송금 완료(인증 버튼) = 종전 이체 화면 제출과 **같은 기록 경로**(통화 `landing_submitted` · 메신저 `recordMockScreen(…, "submitted")`) |
-// | 입력값 | 금액은 화면 state를 벗어나지 않는다(G138 — 완료 콜백은 무인자 · 네트워크 · 저장소 0) |
+// | 입력값 | 금액은 화면 state를 벗어나지 않는다(G138 — 네트워크 · 저장소 0). N1 — 완료 콜백은 요구액 대비 **비교 결과 하나**만 싣는다(아래 판정표 C) |
 // | 비밀번호 | 숫자 입력 칸 0 — 인증은 지문 · 얼굴 버튼 하나(BA3) |
 // | 클립보드 | 쓰지 않는다(기기 클립보드 API 0 · 앱 안 복사 0). 인증번호는 여전히 복사할 수 없다(AC-061 그대로) |
 // | 은행 이름 | 가상 은행명만(서버 `functions/src/shared/fictionalBank.ts` `FICTIONAL_BANK_NAMES`와 같은 목록 — 드리프트 테스트) · 실존 은행명 0 |
@@ -105,7 +105,48 @@ export type TransferTarget = {
   holder?: string;
   /** 문자에 적힌 금액("2,340,000"처럼 숫자 · 쉼표). 부재 = 금액 칸 빈 값. */
   amount?: string;
+  /**
+   * N1 — 사기범이 요구한 금액(비교 기준 · 금액 칸은 채우지 않는다). 메신저 칩은 대화에서 정해진 금액이라 미리 채우지 않고 비교에만 쓴다.
+   * 부재 = `amount`를 기준으로 쓴다(문자 금액 줄).
+   */
+  requestedAmount?: string;
 };
+
+// ── N1(실기기 신고 2026-11-01 — 요구액 200만 원에 200원을 보내도 통과) — 요구액 대비 비교 ─────────────────────────────────────────
+// 은행 화면은 현실처럼 아무 금액이나 보낼 수 있다(막지 않는다). 대신 제출 때 **비교 결과 하나**("less" · "equal" · "more")만 호출부로 올려
+// 서버가 사기범에게 "적게 왔다"를 알린다. ⛔ 금액 값은 콜백 · 네트워크 · 저장소로 나가지 않는다(G138 — 비교는 이 모듈 안에서 끝난다).
+// 같은 계좌로 나눠 보낸 금액은 합계로 비교한다(모자란 금액을 마저 보내면 "같음"이 된다) — 합계는 이 모듈의 메모리 표에만 있다(탭을 닫으면 사라진다).
+// | # | If | Then |
+// |---|---|---|
+// | C1 | 요구액(`requestedAmount` ?? `amount`)을 모른다 · 보낸 금액 판정 불가 | 없음(비교 결과를 보내지 않는다) |
+// | C2 | 합계 < 요구액 | `less` |
+// | C3 | 합계 = 요구액 | `equal` |
+// | C4 | 합계 > 요구액 | `more` |
+export type AmountComparison = "less" | "equal" | "more";
+
+const sentTotals = new Map<string, bigint>();
+
+/** 이번 송금을 합계에 더하고 요구액과 비교한다(위 표). `ledgerKey` = 세션 id(다른 세션의 같은 계좌와 섞이지 않게). */
+export function recordTransferAndCompare(
+  ledgerKey: string,
+  target: Pick<TransferTarget, "accountNumber" | "amount" | "requestedAmount">,
+  raw: string,
+): AmountComparison | undefined {
+  const sent = amountValue(raw);
+  if (sent === undefined) return undefined; // C1
+  const key = `${ledgerKey}:${target.accountNumber.replace(/\D/g, "")}`;
+  const total = (sentTotals.get(key) ?? BigInt(0)) + sent;
+  sentTotals.set(key, total);
+  const requested = amountValue(target.requestedAmount ?? target.amount ?? "");
+  if (requested === undefined) return undefined; // C1
+  return total < requested ? "less" : total === requested ? "equal" : "more"; // C2 · C3 · C4
+}
+
+/** 완료 화면 시각("오후 3:07" — 기기 시계 · 화면에만). */
+export function transferTimeText(date: Date): string {
+  const hours = date.getHours();
+  return `${hours < 12 ? "오전" : "오후"} ${hours % 12 === 0 ? 12 : hours % 12}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
 
 /**
  * 받는 분 이름(예금주 조회 결과). 서버가 예금주를 실었으면 그 값이다.
