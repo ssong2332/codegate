@@ -234,6 +234,8 @@ export type MessengerAttachment = {
   accountNumber?: string;
   /** ⭐ P2-d — 변형의 가상 예금주(확인 화면 "받는 분"). 부재 = 받는 분 행 없음. */
   accountHolder?: string;
+  /** N1 — 대화에서 요구한 금액("2,000,000" — `linkMarker.ts` `demandAmountFrom`). 화면은 비교 결과만 서버로 보낸다. 부재 = 모름(비교 0). */
+  transferAmount?: string;
 };
 
 // --- sessions/{sessionId}/messages/{messageId} (AC-024) ---
@@ -444,6 +446,8 @@ export type MockScreenDoc = {
   submittedAt?: FirebaseFirestore.Timestamp;
   // §128(7) — 화면 행동(응낙 · 제출) 뒤 사기범이 먼저 보낸 메시지를 남긴 시각(`roleplay/screenActionFollowUp.ts` — 1회 보장). 부재 = 아직 없음(무백필).
   screenFollowUpAt?: FirebaseFirestore.Timestamp;
+  // N1(실기기 신고 2026-11-01) — 이체 화면(`BANK_TRANSFER_LANDINGS`) 제출의 요구액 대비 비교(마지막 제출 값으로 덮는다). ⛔ 금액 값 필드는 없다(G138). 부재 = 모름.
+  amountComparison?: "less" | "equal" | "more";
 };
 
 // --- reports/{reportId}.stages / .mockScreenTimeline (T84, §15.9.5, AC-073) ---

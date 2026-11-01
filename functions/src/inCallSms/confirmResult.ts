@@ -81,6 +81,26 @@ export const LANDING_SUBMITTED_INSTRUCTION =
   "(앱 확인: 상대가 방금 문자 링크 화면에서 이체하기를 눌러 이체를 마쳤다. 이체가 끝난 것으로 받아들이고, 아직 완료되지 않았다거나 다시 이체하라는 말은 하지 마라. 이번 대답에서 입금 확인이 끝났다고 그럴듯하게 알려 주고, 상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
 
 /**
+ * N1(실기기 신고 2026-11-01 — *"요구하는 금액보다 더 적은 금액을 보내도 통과"*) — 이체 화면이 보낸 요구액 대비 비교로 고르는 제출 맥락 1줄.
+ * | # | If | Then |
+ * |---|---|---|
+ * | L1 | 적음(`less`) | `LANDING_SUBMITTED_SHORT_INSTRUCTION` — 들어온 만큼만 확인 · 모자란 금액을 같은 화면에서 마저 · 끝내지 않는다 |
+ * | L2 | 다시 제출 ∧ 같음 · 많음 | `LANDING_RESUBMITTED_FULL_INSTRUCTION` — 이제 다 들어왔다 |
+ * | L3 | 그 밖(같음 · 많음 · 모름) | `LANDING_SUBMITTED_INSTRUCTION`(종전 바이트) |
+ * 은행 화면은 현실처럼 아무 금액이나 보낼 수 있다(막지 않는다) — 사기범이 반응할 뿐이다.
+ */
+export const LANDING_SUBMITTED_SHORT_INSTRUCTION =
+  "(앱 확인: 상대가 방금 문자 링크 화면에서 이체를 마쳤지만, 보낸 돈이 네가 요구한 금액보다 적다. 들어온 만큼은 확인됐다고 하되 금액이 모자란다고 분명히 짚고, 모자란 금액을 같은 화면에서 마저 보내라고 하라. 다 받았다거나 끝났다고 말하지 말고, 이번 대답에서 통화를 끝내지 마라.)";
+export const LANDING_RESUBMITTED_FULL_INSTRUCTION =
+  "(앱 확인: 상대가 모자랐던 금액을 방금 문자 링크 화면에서 마저 보내 이제 요구한 금액이 다 들어왔다. 입금 확인이 끝났다고 그럴듯하게 알려 주고, 상대에게 더 요구할 것이 남아 있으면 그 요구로 넘어가고, 더 요구할 것이 남지 않았으면 [진행 강제]의 통화 끝내기 항목이 정한 대로 하라.)";
+
+export function landingSubmittedInstructionFor(comparison: "less" | "equal" | "more" | undefined, resubmitted: boolean): string {
+  if (comparison === "less") return LANDING_SUBMITTED_SHORT_INSTRUCTION; // L1
+  if (resubmitted) return LANDING_RESUBMITTED_FULL_INSTRUCTION; // L2
+  return LANDING_SUBMITTED_INSTRUCTION; // L3
+}
+
+/**
  * §129 D7(2026-10-24 실 키 회귀 프로브 — 은행 사칭 중급: 참가자는 *"그 다음엔 어떻게 해요?"* 라고만 했는데 *"네, 이체 확인되었습니다"* 후 목표 끊기).
  * 조건형 지시를 무조건 지시로 읽었다(추정) ⇒ 조건이 아닐 때 할 일을 같은 지시 안에 붙인다. ⚠️ 모델 행동 완화(결정적 차단 아님).
  */

@@ -151,12 +151,52 @@ export function withBankTransferPrefill(
   accountNumber: string,
   // P2-d — 변형의 가상 예금주(`FlowVariant.accountHolder`). 부재 = 키 없음(받는 분 행 없음 — 종전).
   accountHolder?: string,
+  // N1 — 대화에서 요구한 금액(`demandAmountFrom` — "2,000,000"처럼 숫자 · 쉼표). 부재 = 키 없음(화면은 비교 결과를 보내지 않는다).
+  transferAmount?: string,
 ): MessengerAttachment[] | undefined {
   return attachments?.map((attachment) =>
     isBankTransferLanding(attachment.fakeLandingId)
-      ? { ...attachment, bankName, accountNumber, ...(accountHolder ? { accountHolder } : {}) }
+      ? { ...attachment, bankName, accountNumber, ...(accountHolder ? { accountHolder } : {}), ...(transferAmount ? { transferAmount } : {}) }
       : attachment,
   );
+}
+
+// ── N1(실기기 신고 2026-11-01 · 자녀 사칭 — 200만 원 요구에 200원을 보내도 통과) — 메신저 이체 칩의 요구액 ─────────────────────────
+// 메신저 금액은 변형 고정값이 아니라 사기범 대사가 정한다(F4 — 구체 금액). 화면이 보낸 금액과 비교할 수 있게 칩에 요구액을 싣는다(금액 값은 서버 → 화면 한 방향 ·
+// 화면은 비교 결과만 돌려보낸다 — G138). 판정표(위에서 첫 매치):
+// | # | If | Then |
+// |---|---|---|
+// | M1 | 이번 대사에 원 단위 금액이 있다 | 그 대사의 **마지막** 금액("삼천만 원 말고 200만 원만" → 200만) |
+// | M2 | 앞선 사기범 메시지(최근부터)에 금액이 있다 | 그 메시지의 마지막 금액 |
+// | M3 | 그 밖 | 없음 |
+// 금액 표기: 숫자(쉼표 허용) + 단위(억 · 천만 · 백만 · 십만 · 만 · 천)를 이어 쓰고 끝에 "원"("1억 2천만 원" · "200만 원" · "2,340,000원"). 한글 수사("이백만 원")는 읽지 않는다.
+const AMOUNT_UNITS: Readonly<Record<string, number>> = { 억: 100_000_000, 천만: 10_000_000, 백만: 1_000_000, 십만: 100_000, 만: 10_000, 천: 1_000 };
+const AMOUNT_PATTERN = /((?:\d[\d,]*\s*(?:억|천만|백만|십만|만|천)\s*)*\d[\d,]*\s*(?:억|천만|백만|십만|만|천)?)\s*원/g;
+const AMOUNT_TOKEN = /(\d[\d,]*)\s*(억|천만|백만|십만|만|천)?/g;
+
+/** 한 대사의 마지막 원 단위 금액("2,000,000"). 없으면 undefined. */
+function lastAmountIn(text: string): string | undefined {
+  let last: number | undefined;
+  for (const match of text.matchAll(AMOUNT_PATTERN)) {
+    let total = 0;
+    for (const token of match[1]!.matchAll(AMOUNT_TOKEN)) {
+      total += Number(token[1]!.replace(/,/g, "")) * (token[2] ? AMOUNT_UNITS[token[2]]! : 1);
+    }
+    if (Number.isSafeInteger(total) && total > 0) last = total;
+  }
+  return last === undefined ? undefined : last.toLocaleString("en-US");
+}
+
+/** 판정표 M1 ~ M3. */
+export function demandAmountFrom(replyText: string, history: ReadonlyArray<{ role: string; textMasked?: string }>): string | undefined {
+  const own = lastAmountIn(replyText); // M1
+  if (own) return own;
+  for (const message of [...history].reverse()) {
+    if (message.role !== "scammer") continue;
+    const earlier = lastAmountIn(message.textMasked ?? "");
+    if (earlier) return earlier; // M2
+  }
+  return undefined; // M3
 }
 
 /**

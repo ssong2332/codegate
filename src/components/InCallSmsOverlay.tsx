@@ -44,7 +44,7 @@ import {
 } from "@/lib/incallsms";
 import { runExitSequence } from "@/lib/incallsms/closeSequence";
 import { CALL_BAR_TOKENS, smsThreadTokensFor } from "@/lib/phone/skinTokens";
-import { BANK_APP_COPY, amountFromSmsBody, holderFromSmsBody, type TransferTarget } from "@/lib/bankapp/bankApp";
+import { BANK_APP_COPY, amountFromSmsBody, holderFromSmsBody, type AmountComparison, type TransferTarget } from "@/lib/bankapp/bankApp";
 import type { MessengerSkin } from "@/lib/messenger/detectSkin";
 
 type InCallSmsOverlayProps = {
@@ -72,9 +72,10 @@ type InCallSmsOverlayProps = {
    * 그 링크가 연 가짜 랜딩의 폼을 **제출한 사실** 기록(T123 · AC-080).
    * ⚠️ 이 파일도 콜러블을 부르지 않는다 — `onOpened`·`onLinkTapped`와 정확히 같은 형태로
    * 콜백만 위로 올리고, 실제 기록은 **페이지**가 한다(§15.9.6 · §31.3 (2) 3).
-   * ⛔ 인자는 `smsId` 하나다 — 참가자 입력값은 이 경로에 실리지 않는다(G138/AC-045).
+   * ⛔ 참가자 입력값은 이 경로에 실리지 않는다(G138/AC-045) — 인자는 `smsId`와 N1 비교 결과뿐이다.
    */
-  onLandingSubmitted: (smsId: string) => void;
+  /** N1 — 훈련용 이체 화면이면 요구액 대비 비교 결과 하나(금액 값 0 · G138)가 함께 온다. */
+  onLandingSubmitted: (smsId: string, amountComparison?: AmountComparison) => void;
   /**
    * §101 — 여러 화면 사이트에서 이체 전 단계 버튼을 누른 사실(인자 = 이 문자의 id + 고정 단계 값). 기록은 페이지가 한다.
    * 부재 = 중계 0(종전 동작).
@@ -99,6 +100,11 @@ type InCallSmsOverlayProps = {
    * ⛔ 기기 복사 API 0 · 인증번호 메뉴 0(AC-061).
    */
   onSendToAccount?: (smsId: string, target: TransferTarget) => void;
+  /**
+   * N1 · N2(실기기 신고 2026-11-01) — 이 세션 참가자의 "내 은행"(이체 화면 머리띠 — 받는 계좌 은행이 아니다) · 같은 계좌로 나눠 보낸 합계 열쇠(세션 id).
+   * 부재 = 머리띠는 발급처 이름 · 합계 열쇠 빈 값.
+   */
+  bankIdentity?: { myBankName: string; ledgerKey: string };
 };
 
 const FOCUSABLE =
@@ -126,6 +132,7 @@ export default function InCallSmsOverlay({
   onInstallConsent,
   skin = "default",
   onSendToAccount,
+  bankIdentity,
 }: InCallSmsOverlayProps) {
   const sorted = sortByArrival(messages);
   const thread = smsThreadTokensFor(skin);
@@ -680,13 +687,13 @@ export default function InCallSmsOverlay({
                 onClose={closeLanding}
                 // T123/AC-080 — 제출 **사실 하나**를 페이지로 중계한다. 인자는 이 문자의 id뿐이고
                 // 참가자 입력값은 콜백 자체가 무인자라 여기까지 오지 않는다(G138).
-                onCredentialSubmit={() => onLandingSubmitted(landing.smsId)}
+                onCredentialSubmit={(amountComparison) => onLandingSubmitted(landing.smsId, amountComparison)}
                 // §101 — 여러 화면 사이트의 단계 **사실 하나**(고정 값)를 페이지로 중계한다.
                 onLandingStep={(step) => onLandingStep?.(landing.smsId, step)}
                 // §101 추가 · D-115 — 이체 랜딩의 수취 계좌 칸(읽기 전용)을 이 문자의 계좌 줄로 채운다.
                 prefilledAccount={landing.prefilledAccount}
                 // ⭐ P2(X6) — 훈련용 이체 화면의 받는 분 · 금액 · 은행 미리 채움(참가자 입력 아님 — 어떤 콜백에도 싣지 않는다).
-                prefilledTransfer={landing.prefilledTransfer}
+                prefilledTransfer={landing.prefilledTransfer && bankIdentity ? { ...landing.prefilledTransfer, ...bankIdentity } : landing.prefilledTransfer}
                 // T194-c-1(Q2) — 가짜 "권한 허용" 응낙 **사실 하나**를 페이지로 중계한다(인자 = 랜딩 id뿐 · 이 파일은 콜러블을 부르지 않는다).
                 onInstallConsent={() => {
                   if (landing.landingKind === "app-install" && landing.landingId) onInstallConsent?.(landing.landingId);

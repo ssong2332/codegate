@@ -462,6 +462,20 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
         : undefined;
       const p = planSmsBackstop({ declared, delivered, userTurns, claimed, ...(installPending !== undefined ? { installPendingSince: installPending } : {}) });
       if (installPending !== undefined) events.push({ t: now(), ev: "installHold", since: installPending, userTurns, action: p.action });
+      // R1 미러(2026-11-01) — 앱 `deliverInCallSms` 백스톱 응답 `screenStatusInstruction`처럼 발송 아닌 응답이면 화면 기록 · 재촉 단계 1줄을 맥락 주입(옛 lib = 0).
+      if (p.action !== "deliver" && verifyPhase !== "placed" && screenActionLib?.buildLiveScreenStatusInstruction && screenActionLib.screenActionApplies(variantId)) {
+        const withLanding = delivered.map((d) => ({ ...d, fakeLandingId: findInCallSmsItem(scenarioId, d.smsId)?.fakeLandingId }));
+        const records = withLanding
+          .filter((d) => d.landingSubmitted && isInCallInstallLanding(scenarioId, d.fakeLandingId))
+          .map((d) => ({ landingId: d.fakeLandingId, consented: true, submitted: false }));
+        const status = screenActionLib.buildLiveScreenStatusInstruction(
+          true,
+          screenActionLib.inCallScreenFacts(scenarioId, withLanding, records),
+          userTurns,
+          screenActionLib.notYetSentSmsLabels(scenarioId, declared, delivered),
+        );
+        if (status) { sendText(status, false, "screen_status_ctx"); events.push({ t: now(), ev: "screenStatus", userTurns, text: status }); }
+      }
       if (claimed) events.push({ t: now(), ev: "smsClaim", userTurns, action: p.action });
       if (p.action === "deliver") {
         const g = resolveSmsGate({ purpose: p.item.purpose, declared, delivered, userTurns });
@@ -682,7 +696,7 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
     if (chipRepeatLib?.dropRepeatedLinkChips) a = chipRepeatLib.dropRepeatedLinkChips(a, text, history);
     if (linkLib?.dropPrematureBankTransferChip) a = linkLib.dropPrematureBankTransferChip(a, text, routeAccount, history);
     if (linkLib?.ensureBankTransferChip && reachLib) a = linkLib.ensureBankTransferChip(a, text, routeAccount, reachLib.sessionReachableLandingIds(scenarioId, variantId), scenarioId, history);
-    if (linkLib?.withBankTransferPrefill) a = linkLib.withBankTransferPrefill(a, fictionalBankName, routeAccount, routeVariant?.scenarioId === scenarioId ? routeVariant.accountHolder : undefined);
+    if (linkLib?.withBankTransferPrefill) a = linkLib.withBankTransferPrefill(a, fictionalBankName, routeAccount, routeVariant?.scenarioId === scenarioId ? routeVariant.accountHolder : undefined, linkLib.demandAmountFrom?.(text, history));
     return a;
   };
   if (op.attachments) stored[stored.length - 1].attachments = op.attachments;
@@ -738,7 +752,8 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
     const screenApplies = screenActionLib?.screenActionApplies ? screenActionLib.screenActionApplies(variantId) : false;
     const screenFacts = screenApplies ? screenActionLib.messengerScreenFacts(scenarioId, storedHistory, []) : [];
     const screenPlan = screenApplies ? screenActionLib.planScreenAction({ applies: true, facts: screenFacts, currentUserText: u }) : undefined;
-    const screenStatus = screenApplies ? screenActionLib.buildScreenStatusLine(true, screenFacts) : undefined;
+    // R1 · R4 · R6 미러(2026-11-01) — 앱처럼 재촉 단계 맥락을 넘긴다(옛 lib는 셋째 인자를 무시 = 종전).
+    const screenStatus = screenApplies ? screenActionLib.buildScreenStatusLine(true, screenFacts, { userTurns: userTurnsNow, notYetSent: [] }) : undefined;
     if (screenPlan) events.push({ ev: "screenNotDone", kind: screenPlan.kind, userTurns: userTurnsNow });
     const transferScreenPending = screenFacts.some((f) => f.kind === "transfer") && !screenFacts.some((f) => f.kind === "transfer" && f.done);
     const transferReported = ackLib ? ackLib.userReportedTransfer(storedHistory, u) && !transferScreenPending : false;
@@ -756,7 +771,13 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
     const pp = postProcess(res.text, choice, userTurnsNow, false);
     // #463 — 앱 후처리 순서 미러: 칩 정리(S2 · D-g · P2-c) · 하지 않은 일 인정 문장 삭제(A1 — 이체 화면 미완료면 "입금 확인" 문장 삭제).
     pp.attachments = shapeChips(pp.attachments, pp.text, storedHistory);
-    if (ackLib?.stripUnperformedAcknowledgement) pp.text = ackLib.stripUnperformedAcknowledgement(pp.text, { transferReported, photoSent: false });
+    // R3 미러(2026-11-01) — 이체 화면 미완료인데 송금 확인 단정이면 대사 전체를 미확인 되돌림 1줄로 · 그 응답의 목표 끊기 신호 무시(옛 lib = 종전 A1만).
+    const unconfirmed = ackLib?.guardUnconfirmedTransfer ? ackLib.guardUnconfirmedTransfer(pp.text, transferScreenPending) : { replaced: false };
+    if (unconfirmed.replaced) {
+      events.push({ ev: "unconfirmedTransferReplaced", userTurns: userTurnsNow, original: pp.text });
+      pp.text = unconfirmed.text;
+      if (pp.endCall === "goal") pp.endCall = undefined;
+    } else if (ackLib?.stripUnperformedAcknowledgement) pp.text = ackLib.stripUnperformedAcknowledgement(pp.text, { transferReported, photoSent: false });
     if (pp.smsMarker !== undefined) {
       const g = resolveSmsGate({ purpose: pp.smsMarker, declared, delivered, userTurns: userTurnsNow });
       events.push({ ev: "smsMarker", purpose: pp.smsMarker, status: g.status, userTurns: userTurnsNow });

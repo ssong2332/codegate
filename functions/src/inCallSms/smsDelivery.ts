@@ -13,6 +13,7 @@ import { withSessionOtp } from "../scenarios/sessionOtp";
 import type { FlowVariantSms } from "../scenarios/flowVariants";
 import type { InCallSmsDoc, InCallSmsTriggerKind } from "../shared/types";
 import { buildInCallSmsDoc } from "./buildDoc";
+import { isAmountComparison, type AmountComparison } from "../roleplay/screenAction";
 import type { DeliveredSmsRecord, SmsGateStatus } from "./smsGate";
 import { resolveSmsGate } from "./smsGate";
 
@@ -122,6 +123,8 @@ function toDeliveredRecord(doc: FirebaseFirestore.QueryDocumentSnapshot): Delive
     ...(doc.get("landingSubmittedAt") ? { landingSubmitted: true as const } : {}),
     // 화면 행동만 인정(`roleplay/screenAction.ts`) — 이 문자가 여는 화면 id. 게이트 판정은 이 필드를 보지 않는다.
     ...(typeof doc.get("fakeLandingId") === "string" ? { fakeLandingId: doc.get("fakeLandingId") as string } : {}),
+    // N1 — 이체 화면 제출의 요구액 대비 비교(값 밖 · 부재 = 키 없음).
+    ...(isAmountComparison(doc.get("landingAmountComparison")) ? { landingAmountComparison: doc.get("landingAmountComparison") as AmountComparison } : {}),
   };
 }
 
@@ -131,10 +134,16 @@ function toDeliveredRecord(doc: FirebaseFirestore.QueryDocumentSnapshot): Delive
  */
 export async function readMockScreenRecords(
   sessionRef: FirebaseFirestore.DocumentReference,
-): Promise<{ landingId: string; consented: boolean; submitted: boolean }[]> {
+): Promise<{ landingId: string; consented: boolean; submitted: boolean; amountComparison?: AmountComparison }[]> {
   try {
     const snap = await sessionRef.collection("mockScreens").get();
-    return snap.docs.map((doc) => ({ landingId: doc.id, consented: Boolean(doc.get("consentedAt")), submitted: Boolean(doc.get("submittedAt")) }));
+    return snap.docs.map((doc) => ({
+      landingId: doc.id,
+      consented: Boolean(doc.get("consentedAt")),
+      submitted: Boolean(doc.get("submittedAt")),
+      // N1 — 메신저 이체 화면 제출의 요구액 대비 비교(값 밖 · 부재 = 키 없음).
+      ...(isAmountComparison(doc.get("amountComparison")) ? { amountComparison: doc.get("amountComparison") as AmountComparison } : {}),
+    }));
   } catch {
     return [];
   }

@@ -51,6 +51,7 @@ test("[§117 배선] deliverInCallSms — 거부 · 도착 두 응답 모두 tri
   assert.ok(src.includes(": declineInstructionFor(result.status);"), "거부 — 종전 문면 갈래");
   assert.ok(src.includes("const announceInstruction = withModelToolNoRepeat(built.announceInstruction, trigger);"), "도착");
   // 백스톱 넛지 · 마무리 지시 응답은 꼬리 함수를 거치지 않는다(다음 응답에 실리는 맥락 주입).
-  assert.ok(src.includes('return { status: "nudge", nudgeInstruction: buildSmsNudgeInstruction(plan.item.purpose) };'));
+  // R1(#465) — 백스톱 응답은 화면 기록 줄을 덧붙이는 감싸개(`withScreenStatus`)를 지난다(꼬리 함수는 여전히 0).
+  assert.ok(src.includes('return withScreenStatus({ status: "nudge", nudgeInstruction: buildSmsNudgeInstruction(plan.item.purpose) });'));
   assert.ok(src.includes('return { status: "none_pending", wrapUpInstruction: GOAL_WRAP_UP_INSTRUCTION };'));
 });

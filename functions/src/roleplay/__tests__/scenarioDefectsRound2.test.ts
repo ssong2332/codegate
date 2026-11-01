@@ -156,9 +156,10 @@ test("[§104 배선] sendMessage — 신호는 대사 판정을 거친 값만 �
     src,
     /const giveUpCheck = reclassifyMessengerGiveUp\(endCallCheck\.endCall, [^\n]+\);\n\s*const endCallSignal = giveUpCheck\.endCall;/,
   );
-  // 날것 신호가 판정 밖에서 쓰이지 않는다(선언 1 + 판정 입력 1).
+  // 날것 신호가 판정 밖에서 쓰이지 않는다(선언 1 + 판정 입력 1). R3(#465) — 끊기 신호는 판정 입력 식 안에서 목표 제외 조건으로 한 번 더 읽힌다(선언 1 + 판정 입력 2).
   assert.equal((src.match(/rawSignalEscalate/g) ?? []).length, 3);
-  assert.equal((src.match(/rawEndCallSignal/g) ?? []).length, 2);
+  assert.equal((src.match(/rawEndCallSignal/g) ?? []).length, 3);
+  assert.ok(src.includes('unconfirmedTransferAck && rawEndCallSignal === "goal" ? undefined : rawEndCallSignal,'), "판정 입력 식 안에서만");
 });
 
 // ── 결함 1 · 7 — 페르소나 · 수법 문면 ──────────────────────────────────────────────────────────

@@ -58,7 +58,7 @@ import {
   sendMessage,
   submitRealtimeTranscript,
 } from "@/lib/api";
-import type { InCallSmsEvent, TranscriptTurn } from "@/lib/api";
+import type { AmountComparison, InCallSmsEvent, TranscriptTurn } from "@/lib/api";
 import {
   countUnread,
   latestSmsId,
@@ -466,19 +466,24 @@ export default function SessionCallPage() {
   // ⭐ PR-A2(audit-A R1 · R8) — G31 큐 **밖** 맥락 주입 슬롯(확인 결과 신호 · 자동 호 전환 실패). 응답을 유발하지 않고 턴 슬롯을
   // 쓰지 않아 큐(참가자 발화 조건 · 턴 경계 대기)를 타지 않는다 — 전환 상태 단언(`personaStateTurn`)과 같은 이유의 별도 슬롯.
   const [contextTurn, setContextTurn] = useState<
-    { text: string; seq: number; delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted" | "installConsented" } | null
+    { text: string; seq: number; delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted" | "installConsented" | "screenStatus" } | null
   >(null);
   // PR-A2 — 확인 결과 신호 주입 상태(세션당 1회 · 도착 안내 뒤 대기분). 판정은 순수 함수(`stallRecovery.ts`).
   const confirmResultInjectionRef = useRef<ConfirmResultInjectionState>(INITIAL_CONFIRM_RESULT_INJECTION_STATE);
   // PR-A2 리뷰 Minor 1 — 슬롯 seq는 단조 증가(전달 확인으로 슬롯을 비운 뒤에도 앞 seq를 재사용하지 않는다).
   const contextTurnSeqRef = useRef(0);
-  const pushContextTurn = useCallback((text: string, delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted" | "installConsented") => {
+  // R1(#465) — 아직 보내지 않은 슬롯 seq(보낸 뒤 null). 매 발화 화면 기록 줄(`screenStatus`)은 슬롯이 비었을 때만 넣는다 —
+  // 같은 틱의 확인 결과 · 제출 알림을 덮어쓰지 않게(화면 기록은 다음 발화에 다시 온다).
+  const contextTurnPendingSeqRef = useRef<number | null>(null);
+  const pushContextTurn = useCallback((text: string, delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted" | "installConsented" | "screenStatus") => {
     contextTurnSeqRef.current += 1;
+    contextTurnPendingSeqRef.current = contextTurnSeqRef.current;
     setContextTurn({ text, seq: contextTurnSeqRef.current, delivery });
   }, []);
   // PR-A2 리뷰 Minor 1 — 세션 컴포넌트가 그 슬롯을 **실제로 보냈을 때만** 비운다. 연결 전 · 재마운트 공백에 도착한 지시는 슬롯에 남아
   // 연결 직후 보내진다(유실 0) · 보낸 뒤에는 비워져 다음 재마운트가 다시 넣지 않는다(중복 0).
   const handleContextTurnDelivered = useCallback((seq: number) => {
+    if (contextTurnPendingSeqRef.current === seq) contextTurnPendingSeqRef.current = null;
     setContextTurn((prev) => (prev && prev.seq === seq ? null : prev));
   }, []);
   // 이번 사기범 턴에 이미 지시를 하나 넣었는가(다음 turnComplete까지 추가 주입을 보류한다).
@@ -1199,7 +1204,9 @@ export default function SessionCallPage() {
           ...(smsClaimPendingRef.current ? { smsClaimed: true } : {}),
         });
         setSmsError(null);
-        if (result.status === "none_pending") state.nonePending = true;
+        // R1(#465) — 아직 마치지 않은 화면이 있으면 남은 문자가 없어도 다음 발화에 다시 묻는다(화면 기록 줄이 매 발화 온다).
+        if (result.status === "none_pending" && !result.screenStatusInstruction) state.nonePending = true;
+        if (result.screenStatusInstruction && contextTurnPendingSeqRef.current === null) pushContextTurn(result.screenStatusInstruction, "screenStatus");
         // §115 — `goal_pending`도 남은 필수 문자가 없다는 뜻이라 "문자 보냈다" 주장을 내린다.
         if (result.status === "delivered" || result.status === "none_pending" || result.status === "goal_pending") smsClaimPendingRef.current = false;
         // §132.9 — 주장이 내려가면 정정 1회 표시도 초기화(다음 주장에 다시 1회).
@@ -1250,6 +1257,7 @@ export default function SessionCallPage() {
     realtime.credentials?.inCallSmsBackstop,
     enqueueTurnInstruction,
     offerConfirmResult,
+    pushContextTurn,
   ]);
 
   // ⭐ §126 — 사기범이 말하는 도중 "문자를 보냈다"가 보였다(`GeminiVoiceSession` 출력 전사 · 턴당 1회). 턴 끝 flush를 기다리지 않고
@@ -2266,11 +2274,12 @@ export default function SessionCallPage() {
 
   // T123 — enum을 여기서 다시 적지 않고 **계약 타입을 그대로 쓴다**. 값을 복제해 두면 서버가
   // 값을 늘릴 때마다 이 자리가 조용히 뒤처진다(§18.1 드리프트 원천).
-  const handleRecordSmsEvent = (smsId: string, event: InCallSmsEvent) => {
+  // N1 — `landing_submitted`에만 요구액 대비 비교 결과(금액 값 0 · G138)를 함께 보낸다.
+  const handleRecordSmsEvent = (smsId: string, event: InCallSmsEvent, amountComparison?: AmountComparison) => {
     if (!sessionId) return;
     // 기록 실패는 조용히 흡수한다 — 기록 때문에 훈련을 막지 않는다(API.md Errors).
     // §132.7 — 이체 화면 제출을 처음 기록하면 서버가 실시간 사기범용 맥락 1줄을 돌려준다(폴백은 쓰지 않는다 — 실시간만 주입).
-    void recordInCallSmsEvent({ sessionId, smsId, event })
+    void recordInCallSmsEvent({ sessionId, smsId, event, ...(amountComparison ? { amountComparison } : {}) })
       .then((res) => {
         if (callMode === "realtime" && res.contextInstruction) pushContextTurn(res.contextInstruction, "landingSubmitted");
       })
@@ -3913,7 +3922,7 @@ export default function SessionCallPage() {
           // T123/AC-080 — 가짜 랜딩 폼을 **제출한 사실**만 기록한다(기존 핸들러 재사용).
           // ⛔ 참가자가 입력한 값은 이 경로에 실리지 않는다(콜백이 무인자다 — G138/AC-045).
           // ⚠️ 위 `link_tapped`와 달리 이 이벤트만 리포트에서 "속은 순간"으로 승격된다(AC-080 (b)).
-          onLandingSubmitted={(smsId) => handleRecordSmsEvent(smsId, "landing_submitted")}
+          onLandingSubmitted={(smsId, amountComparison) => handleRecordSmsEvent(smsId, "landing_submitted", amountComparison)}
           // §101 — 자산 검수 사이트의 이체 전 단계(본인 확인 · 코인 전환 · 금액) — 같은 기록 경로 · 고정 값.
           onLandingStep={(smsId, step) => handleRecordSmsEvent(smsId, step)}
           // T194-c-1(Q2) — 통화 중 문자로 연 설치 화면의 노출 · 응낙(기록만 — 실시간 언급 주입은 T194-c-2).
@@ -3921,6 +3930,8 @@ export default function SessionCallPage() {
           onInstallConsent={(landingId) => handleRecordInCallInstall(landingId, "consented")}
           // ⭐ BA-1 간소화안 — 진단 플래그가 켜졌을 때만 계좌번호 '송금' → 내 은행 송금 화면(이 문자의 링크는 그리지 않는다).
           onSendToAccount={bankAppEnabled ? handleOpenBankApp : undefined}
+          // N1 · N2 — 이체 화면 머리띠의 "내 은행" · 같은 계좌 합계 열쇠.
+          bankIdentity={{ myBankName: myBankNameFor(sessionId ?? "", sortedSms.find((sms) => sms.bankName)?.bankName), ledgerKey: sessionId ?? "" }}
         />
       )}
 
@@ -3932,9 +3943,10 @@ export default function SessionCallPage() {
           myBankName={myBankNameFor(sessionId ?? "", bankTransfer.target.bankName)}
           balance={fictionalBalanceFor(sessionId ?? "")}
           target={bankTransfer.target}
+          ledgerKey={sessionId ?? ""}
           onClose={() => setBankAppOpen(false)}
-          // 송금 완료 = 종전 이체 화면 제출과 같은 기록 경로(4-c 끊기 해제 · 리포트 속은 순간 · 실시간 맥락 1줄). ⛔ 무인자 — 금액은 실리지 않는다(G138).
-          onSubmitted={() => handleRecordSmsEvent(bankTransfer.smsId, "landing_submitted")}
+          // 송금 완료 = 종전 이체 화면 제출과 같은 기록 경로(4-c 끊기 해제 · 리포트 속은 순간 · 실시간 맥락 1줄). ⛔ 금액 값은 실리지 않는다(G138) — N1 비교 결과만.
+          onSubmitted={(amountComparison) => handleRecordSmsEvent(bankTransfer.smsId, "landing_submitted", amountComparison)}
         />
       )}
 

@@ -116,6 +116,7 @@ export async function readMockScreenCompletion(
 // | D-2 | 선언을 해석할 수 없다(변형 없음 · 모름 · 시나리오 불일치) | 대상 아님(`false` — 화면이 올 수 없다) |
 // | D-2b | 결정 순간이 **말**인 변형(`VERBAL_DECISION_VARIANTS` — 화면은 앞 단계뿐) | 대상 아님(`false` — 메인 세션 결정 2026-10-31 B안) |
 // | D-3 | 선언된 문자 중 `required` ∧ 목적 `transfer` ∨ `link` ∧ 카탈로그에 모의 화면(`fakeLandingId`)이 있는 것이 없다 | 대상 아님(`false` — 말로 끝나는 결말은 범위 밖) |
+// | D-4a | 결정 화면을 제출했지만 마지막 제출이 요구액보다 적었다(N1 — 문자 문서 `landingAmountComparison === "less"`) | 대기(`true`) — 모자란 금액을 마저 받기 전에는 `goal`로 끊지 않는다 |
 // | D-4 | 그중 **선언 순서상 마지막** 화면(= 결정 화면)을 마쳤다 — 입력 화면은 그 문자 문서 `landingSubmittedAt` · 설치 화면은 `mockScreens/{landingId}` 응낙 ∨ 제출 | 완료(`false`) |
 // | D-5 | 그 밖 | 대기(`true`) — 4-c행이 `goal` · 사유 없음 끊기를 막는다(`give_up`은 막지 않는다) |
 // ⚠️ "마지막 화면"인 이유: 검찰 `fv-h3vn`은 사건 조회(본인 확인 입력 — 앞 단계)와 자산 검수 사이트(이체 — 결정 순간)를 둘 다 선언한다. 아무 화면이나 제출로
@@ -160,7 +161,7 @@ export function finalDecisionScreenSms(scenarioId: string, declared: readonly Fl
   return screens[screens.length - 1];
 }
 
-/** 위 판정표(D-1 ~ D-5). 부수효과 0. */
+/** 위 판정표(D-1 ~ D-5 · D-4a). 부수효과 0. */
 export function isDecisionScreenPending(input: DecisionScreenInput): boolean {
   // ⭐ D-a(P2 실 키 실측 2026-11-01 · 대출 고급 `fv-m3hd`) — 확인 무력화 세션을 4-c에서 빼고 4행에 맡겼더니, 4행 입력(`goalActionDone`)이 **아무 화면** 제출(설치 응낙)로
   // 참이 되어 이체 문자 전에 goal 끊기가 승인됐다. 이제 확인 무력화 세션도 4-c 대상이다 — 4행(호 전환 · 화면 행동 전 모든 끊기)을 지난 뒤에도 goal 끊기는
@@ -171,7 +172,9 @@ export function isDecisionScreenPending(input: DecisionScreenInput): boolean {
   const screen = finalDecisionScreenSms(input.scenarioId, input.declared);
   if (screen === undefined) return false; // D-3
   const landingId = findInCallSmsItem(input.scenarioId, screen.smsId)?.fakeLandingId;
-  const submitted = input.delivered.some((d) => d.smsId === screen.smsId && d.landingSubmitted === true);
+  const submittedRecord = input.delivered.find((d) => d.smsId === screen.smsId && d.landingSubmitted === true);
+  if (submittedRecord?.landingAmountComparison === "less") return true; // D-4a
+  const submitted = submittedRecord !== undefined;
   const installed =
     landingId !== undefined &&
     resolveMockScreenKind(input.scenarioId, landingId) === "app-install" &&

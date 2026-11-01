@@ -395,7 +395,8 @@ test("[PR-A2 배선 · 세션 컴포넌트] 맥락 주입 슬롯 — instruction
 });
 
 test("[PR-A2 배선 · 화면] 백스톱은 안내를 큐에 넣기 전에 판정 · 드레인이 대기분을 푼다 · 재시도는 순수 판정 · 슬롯을 세션 컴포넌트에 넘긴다", () => {
-  const backstop = slice(pageCode, 'if (result.status === "none_pending") state.nonePending = true;', 'if (result.status === "nudge"');
+  // R1(#465) — 화면이 남았으면 남은 문자가 없어도 다시 묻는다(앵커 줄이 바뀌었다 · 판정 순서 단언은 그대로).
+  const backstop = slice(pageCode, 'if (result.status === "none_pending" && !result.screenStatusInstruction) state.nonePending = true;', 'if (result.status === "nudge"');
   const iOffer = backstop.indexOf("offerConfirmResult(result.confirmResultInstruction, result.announceInstruction);");
   const iEnqueue = backstop.indexOf('enqueueTurnInstruction(result.announceInstruction, "sms");');
   assert.ok(iOffer >= 0 && iOffer < iEnqueue, "안내가 즉시 드레인되면 대기분이 영영 안 풀린다");

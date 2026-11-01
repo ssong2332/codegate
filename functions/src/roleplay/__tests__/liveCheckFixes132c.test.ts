@@ -18,7 +18,8 @@ test("[§132.7 N4] 이체 화면 제출을 처음 기록하면 실시간 맥락 
   // 최초 기록 분기 안에서만(이미 기록됨 = 없음 · 중복 주입 0).
   assert.match(
     src,
-    /if \(!snap\.get\(field\)\) \{\n\s*await smsRef\.update\(\{ \[field\]: Timestamp\.now\(\) \}\);\n(?:\s*\/\/[^\n]*\n)?\s*if \(event === "landing_submitted"\) return \{ recorded: true, contextInstruction: LANDING_SUBMITTED_INSTRUCTION \};\n\s*\}\n\s*return \{ recorded: true \};/,
+    // N1(2026-11-01) — 요구액 대비 비교로 문면을 고른다(같음 · 많음 · 모름 = 종전 `LANDING_SUBMITTED_INSTRUCTION` — `landingSubmittedInstructionFor` L3).
+    /if \(!snap\.get\(field\)\) \{\n\s*await smsRef\.update\(\{ \[field\]: Timestamp\.now\(\), \.\.\.comparisonUpdate \}\);\n(?:\s*\/\/[^\n]*\n)*\s*if \(event === "landing_submitted"\) return \{ recorded: true, contextInstruction: landingSubmittedInstructionFor\(amountComparison, false\) \};\n\s*\}/,
   );
 });
 
@@ -29,7 +30,8 @@ test("[§132.9 D12] 하한 전 '보냈다' 주장 — waiting 응답에 정정 1
   const src = read("inCallSms/index.ts");
   assert.ok(
     src.includes(
-      'if (plan.action === "wait") return smsClaimed ? { status: "waiting", claimNotYetInstruction: SMS_CLAIM_NOT_YET } : { status: "waiting" };',
+      // R1(#465) — 같은 응답이 화면 기록 줄 감싸개를 지난다.
+      'return withScreenStatus(smsClaimed ? { status: "waiting", claimNotYetInstruction: SMS_CLAIM_NOT_YET } : { status: "waiting" });',
     ),
   );
 });

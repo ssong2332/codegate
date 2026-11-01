@@ -21,6 +21,11 @@ export type RecordMockScreenEventRequest = {
    * c-1에서는 기록 · 관측용이다(실시간 응낙 지시 동봉 판정은 T194-c-2).
    */
   callMode?: "realtime" | "fallback";
+  /**
+   * N1(실기기 신고 2026-11-01 — 요구액 200만 원에 200원을 보내도 통과) — 이체 화면(`BANK_TRANSFER_LANDINGS`)의 `submitted`에서만: 보낸 금액이 요구액보다
+   * 적은가 · 같은가 · 많은가. ⛔ 금액 값은 싣지 않는다(G138). 부재 = 모름 · 값 밖 = 무시.
+   */
+  amountComparison?: "less" | "equal" | "more";
 };
 /** T194-c-1(docs/Architecture.md §84.5.3 · §84.15.3) — 통화 중 설치 화면(Q2) 기록 때 그 통화의 경로(위 요청 필드와 같은 리터럴). */
 export type MockScreenCallMode = NonNullable<RecordMockScreenEventRequest["callMode"]>;

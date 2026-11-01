@@ -81,9 +81,10 @@ test("[§115 문면] 되풀이 금지 · 다음 단계 또는 한 번 묻고 대
 
 test("[§115 배선] 백스톱 응답 · 끊기 응답 · 클라 주입 1회", () => {
   const sms = readFileSync(path.join(SRC, "inCallSms/index.ts"), "utf8");
-  assert.ok(sms.includes('if (wrap === "pending") return { status: "goal_pending" };'));
+  // R1(#465) — 백스톱 응답은 화면 기록 줄 감싸개(`withScreenStatus`)를 지난다(마무리 지시 응답은 할 일을 마친 뒤라 감싸지 않는다).
+  assert.ok(sms.includes('if (wrap === "pending") return withScreenStatus({ status: "goal_pending" });'));
   assert.ok(sms.includes('return { status: "none_pending", wrapUpInstruction: GOAL_WRAP_UP_INSTRUCTION };'));
-  assert.ok(sms.includes('if (followUpUserTurns === undefined) return { status: "none_pending" };'), "후속 값 없는 변형은 종전 응답");
+  assert.ok(sms.includes('if (followUpUserTurns === undefined) return withScreenStatus({ status: "none_pending" });'), "후속 값 없는 변형은 종전 응답");
   const hangup = readFileSync(path.join(SRC, "scammerHangup/index.ts"), "utf8");
   assert.ok(hangup.includes("const followUpPending = followUpUserTurns !== undefined && !goalActionDone;"));
   assert.ok(hangup.includes("scammerHangupGuidance(decision.status, { followUpPending, goalActionDone })")); // §127 — 할 일 완료 뒤 6행 재시도 문면

@@ -30,7 +30,9 @@ import {
   buildScreenStatusLine,
   inCallScreenFacts,
   installPendingSince,
+  latestTransferAmount,
   messengerScreenFacts,
+  notYetSentSmsLabels,
   planScreenAction,
   screenActionApplies,
   sessionScreenActionOnly,
@@ -83,7 +85,7 @@ import { extractEscalationSignal } from "./escalationSignal";
 import { callPhaseMockTacticHints, ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall, userTurnsSinceCallEntry } from "./escalatedCall";
 import { isFirstUserTurn } from "./firstTurn";
 import { isL3Procedural } from "./l3Depth";
-import { dropPrematureBankTransferChip, ensureBankTransferChip, extractLinkMarker, withBankTransferPrefill } from "./linkMarker";
+import { demandAmountFrom, dropPrematureBankTransferChip, ensureBankTransferChip, extractLinkMarker, withBankTransferPrefill } from "./linkMarker";
 import { sessionReachableLandingIds } from "../scenarios/reachability";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
@@ -120,6 +122,8 @@ import {
 } from "./signalConsistency";
 import { CALL_AFTER_EXCUSE_INSTRUCTION, decideCallAnnouncement, saidCallUnavailableRecently } from "./callAnnouncement";
 import {
+  assertsTransferConfirmed,
+  guardUnconfirmedTransfer,
   stripUnperformedAcknowledgement,
   TRANSFER_REPORTED_INSTRUCTION,
   userReportedTransfer,
@@ -664,13 +668,18 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // §131(7) 판정표 P — 지인 · 자녀 사칭 메신저는 역할 고정 1줄(`personaGuard.ts` · 그 밖 시나리오 = 없음).
     const turnFacts = {
       // 화면 행동만 인정 — 보낸 이체 화면이 있는데 아직 이체 기록이 없으면 말만으로는 송금으로 치지 않는다(대사 속 "입금 확인" 문장도 지워진다).
-      transferReported: userReportedTransfer(storedHistory, maskedUserText) && !transferScreenPending,
+      // N1 — 이체를 마쳤어도 요구액보다 적게 보냈으면 "받은 것으로 친다"가 아니다(상태 줄이 모자란 금액 요구를 싣는다).
+      transferReported:
+        userReportedTransfer(storedHistory, maskedUserText) && !transferScreenPending && latestTransferAmount(screenFacts) !== "less",
       photoSent: userSentPhoto(storedHistory, isPhotoTurn),
     };
     const confirmAndCallContext =
       [
-        // 화면 행동만 인정 — 매 턴 화면 기록 1줄 · 말로만 주장한 턴은 미완료 지시.
-        buildScreenStatusLine(screenApplies, screenFacts),
+        // 화면 행동만 인정 — 매 턴 화면 기록 1줄 · 말로만 주장한 턴은 미완료 지시. R1 · R2 · R4 · R5 · R6 · N1 — 재촉 단계 · 금액 비교 · 아직 안 보낸 문자.
+        buildScreenStatusLine(screenApplies, screenFacts, {
+          userTurns: userTurnsNow,
+          notYetSent: notYetSentSmsLabels(session.scenarioId, smsDeclared, smsDelivered),
+        }),
         screenPlan?.instruction,
         confirmPlan?.instruction,
         escalatedCallInstruction,
@@ -877,6 +886,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       routeAccountNumber,
       // P2-d — 변형의 가상 예금주(대화 수법 줄과 같은 값). 변형이 다른 시나리오 것이면 싣지 않는다.
       routeVariant?.scenarioId === session.scenarioId ? routeVariant.accountHolder : undefined,
+      // N1 — 대화에서 요구한 금액(화면이 보낸 금액과 비교해 결과만 돌려준다).
+      demandAmountFrom(linkFreeReplyText, storedHistory),
     );
     // ③-a′ T191 — 문자 요청 마커를 걷어 낸다(아래 문장 수 상한보다 **앞** — 상한이 끝의 마커를 잘라 먹지 않게).
     const { text: smsMarkerFreeText, purpose: markerPurpose, markerCount: smsMarkerCount } =
@@ -911,7 +922,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       // G170 — 사유 코드만(대사 0).
       logger.info("[§129] 거절 중 두 번째 전환 신호 무시", { sessionId });
     }
-    const endCallConsistency = judgeEndCallSignal(rawEndCallSignal, signalFreeReplyText);
+    // R3(#465 실측) — 이체 화면을 아직 마치지 않았는데 대사가 송금 확인을 단정하면 아래에서 대사를 되돌림 1줄로 바꾼다 · 같은 응답의 목표 끊기는 받지 않는다.
+    const unconfirmedTransferAck = transferScreenPending && assertsTransferConfirmed(signalFreeReplyText);
+    const endCallConsistency = judgeEndCallSignal(
+      unconfirmedTransferAck && rawEndCallSignal === "goal" ? undefined : rawEndCallSignal,
+      signalFreeReplyText,
+    );
     // §122(6) 판정표 P — 메신저 단계에서 사진 뒤 남은 단계(송금 등)를 꺼내기 전의 목표 끊기는 받지 않는다(`photoFollowUp.ts`).
     const endCallCheck = isGoalBeforePhotoFollowUp({
       channel: session.channel,
@@ -986,7 +1002,15 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         )
       : undefined;
     // §131(12) 판정표 A — 참가자가 하지 않은 송금 · 사진을 받았다는 문장을 지운다. §131(11) 판정표 W — 메신저 단계는 지금 대화를 통화라고 부르는 말을 고친다.
-    const factCheckedReplyText = stripUnperformedAcknowledgement(lengthLimited ? lengthLimited.text : realNameFreeReplyText, turnFacts);
+    // R3 판정표 U(`actionAcknowledgement.ts`) — 이체 화면 미완료인데 송금 확인 단정이면 대사 전체를 미확인 되돌림 1줄로(A1이 원문을 남기는 한 문장 대사 포함).
+    const unconfirmedGuard = guardUnconfirmedTransfer(lengthLimited ? lengthLimited.text : realNameFreeReplyText, unconfirmedTransferAck);
+    if (unconfirmedGuard.replaced) {
+      // G170 — 사유 코드만(대사 0).
+      logger.info("[R3] 이체 화면 미완료 · 송금 확인 단정 대사 교체", { sessionId, userTurns: userTurnsNow });
+    }
+    const factCheckedReplyText = unconfirmedGuard.replaced
+      ? unconfirmedGuard.text
+      : stripUnperformedAcknowledgement(lengthLimited ? lengthLimited.text : realNameFreeReplyText, turnFacts);
     const limitedReplyText = session.channel === "messenger" ? fixMessengerCallWording(factCheckedReplyText) : factCheckedReplyText;
     // §128(4) — 참가자가 건 통화의 "전화 받아 줘서"류 교정(`callCaller.ts` 표 · 그 밖 턴 무변경).
     const shapedReplyText = participantCalled ? fixParticipantCalledReply(limitedReplyText) : limitedReplyText;

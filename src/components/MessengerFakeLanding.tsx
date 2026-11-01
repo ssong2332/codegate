@@ -46,6 +46,8 @@ import {
 } from "../lib/landing/identityInput";
 // §106 — 사건 기록 열람본의 피의자 칸 값(잎 모듈 · 상대 경로).
 import { recordIssueInfo, recordSubjectRows, type RecordRow } from "../lib/landing/recordDocument";
+// N1 · N4 — 같은 계좌로 보낸 합계 비교 · 완료 시각(잎 모듈 · 상대 경로 — 위 하네스 주석).
+import { recordTransferAndCompare, transferTimeText, type AmountComparison } from "../lib/bankapp/bankApp";
 
 /** UX-023의 목업 종류. 부재 → `credential-form`(하위호환 읽기 규칙, §15.9.1 R2). */
 export type MessengerFakeLandingKind = "credential-form" | "app-install";
@@ -90,13 +92,14 @@ type MessengerFakeLandingProps = {
   /**
    * kind=`credential-form`에서 참가자가 입력 폼을 **제출한 순간**(T123 · AC-080 (b) — 응낙 판정
    * 지점은 제출 하나다. 링크 탭·화면 노출·입력 중은 승격되지 않는다).
-   * ⛔⛔ **무인자다(§31.6 G138).** 인자를 실으면 참가자가 입력한 계좌번호·예금주명이 컴포넌트
+   * ⛔⛔ **입력값을 싣지 않는다(§31.6 G138).** 입력값을 실으면 참가자가 입력한 계좌번호·예금주명이 컴포넌트
    * 밖으로 나가는 첫 경로가 생기고, 그 순간부터 페이지가 그 값을 어디로도 보낼 수 있다 —
    * 이 파일의 금지 토큰 스캔은 그것을 잡지 못한다(AC-045). `mockScreenCopy.test.ts`의 G138
    * 블록이 무인자 형태를 단언하고 역검증까지 같이 둔다.
    * ⚠️ 이 컴포넌트는 **네트워크 호출을 하지 않는다** — 기록은 페이지가 담당한다(§15.9.6).
+   * N1(실기기 신고 2026-11-01) — 훈련용 이체 화면만 요구액 대비 **비교 결과 하나**("less" · "equal" · "more")를 싣는다. 금액 값은 여전히 0이다.
    */
-  onCredentialSubmit?: () => void;
+  onCredentialSubmit?: (amountComparison?: AmountComparison) => void;
   /**
    * ⭐ §101(검찰 고급 자산 검수 사이트) — 여러 화면 사이트(`STEP_FLOW_COPY`)에서 **이체 전 단계 버튼**을 누른 순간. 인자는
    * `STEP_FLOW_EVENTS`의 고정 값 하나뿐이다(본인 확인 · 코인 전환 · 금액 입력 뒤 다음). 마지막 이체 확인은 위 `onCredentialSubmit`.
@@ -113,7 +116,21 @@ type MessengerFakeLandingProps = {
    * ⭐ P2(X6 · 2026-10-31) — 훈련용 이체 화면(`BANK_TRANSFER_LANDINGS`)의 받는 분 이름 · 금액(숫자만) · 세션 은행명(서버 문자 문서 구조화 필드).
    * 부재 = 받는 분 "확인 중" 표기 · 금액 빈 칸. ⛔ 참가자 입력이 아니다 — 어떤 콜백에도 싣지 않는다.
    */
-  prefilledTransfer?: { bankName: string; holder?: string; amount?: string };
+  prefilledTransfer?: PrefilledTransfer;
+};
+
+/**
+ * ⭐ P2(X6) — 훈련용 이체 화면 미리 채움(서버 구조화 필드 · 참가자 입력 아님). N1 · N2 추가:
+ * `requestedAmount` = 대화 · 문자에서 요구한 금액(비교 기준 — 금액 칸은 채우지 않는다) · `myBankName` = 참가자의 "내 은행"(머리띠 — 받는 계좌 은행이 아니다) ·
+ * `ledgerKey` = 같은 계좌로 나눠 보낸 합계를 세는 열쇠(세션 id).
+ */
+export type PrefilledTransfer = {
+  bankName: string;
+  holder?: string;
+  amount?: string;
+  requestedAmount?: string;
+  myBankName?: string;
+  ledgerKey?: string;
 };
 
 /** §101 — 이체 전 단계 기록 이벤트(서버 `functions/src/inCallSms/types.ts` `InCallSmsEvent`의 같은 3값). */
@@ -869,14 +886,14 @@ function CredentialFormMockup({
 }: {
   landingId?: string;
   onClose: () => void;
-  /** ⛔ 무인자 콜백이다 — 입력값은 아래 `values` state를 벗어나지 않는다(§31.6 G138/AC-045). */
-  onCredentialSubmit?: () => void;
+  /** ⛔ 입력값은 아래 `values` state를 벗어나지 않는다(§31.6 G138/AC-045). N1 — 훈련용 이체 화면만 요구액 대비 비교 결과 하나를 싣는다. */
+  onCredentialSubmit?: (amountComparison?: AmountComparison) => void;
   /** §101 — 여러 화면 사이트의 이체 전 단계(고정 이벤트 값만 — 입력값 0). */
   onLandingStep?: (step: LandingProgressEvent) => void;
   /** §101 추가 · D-115 — 수취 계좌 미리 채움 값(부재 = 빈 입력 칸). */
   prefilledAccount?: string;
   /** ⭐ P2(X6) — 훈련용 이체 화면의 받는 분 · 금액 · 은행 미리 채움(부재 = 받는 분 "조회 중" · 금액 빈 칸). */
-  prefilledTransfer?: { bankName: string; holder?: string; amount?: string };
+  prefilledTransfer?: PrefilledTransfer;
   /** 완료 화면 복귀 버튼 문면(진입 표면이 정한다 — D-93). */
   returnLabel: string;
 }) {
@@ -894,6 +911,9 @@ function CredentialFormMockup({
     ),
   );
   const [submitted, setSubmitted] = useState(false);
+  // N4(실기기 신고 2026-11-01 — 완료 화면이 "송금이 완료되었습니다." 한 줄뿐) — 훈련용 이체 화면의 완료 영수증(보낸 금액 표기 · 보낸 시각).
+  // 제출 순간 한 번 만든다(완료 분기는 `values`를 읽지 않는다 — G255 좁은 예외: 이체 화면의 받는 분 · 계좌 · 금액만 · 은행 앱 완료 화면 BA5와 같다).
+  const [receipt, setReceipt] = useState<{ amountText: string; sentAt: Date } | null>(null);
   // §109 — 열람본 발급 정보의 기준 시각(제출 이벤트 시각 = `performance.timeOrigin + event.timeStamp` · 기기 시계). 입력값과 무관하다.
   const [issuedAtMs, setIssuedAtMs] = useState(0);
   // §101 — 여러 화면 사이트의 현재 화면(0 = 본인 확인 = 위 `copy`). 한 화면 폼이면 늘 0이다.
@@ -951,6 +971,24 @@ function CredentialFormMockup({
     setSubmitted(true);
     // T123/AC-080 — **"제출했다는 사실" 하나만** 위로 올린다. 기록은 페이지가 한다(§15.9.6).
     // ⛔ `values`를 넘기지 않는다(G138) — 넘기는 순간 입력값이 이 파일을 벗어난다.
+    // N1 — 훈련용 이체 화면은 요구액 대비 비교 결과("less" · "equal" · "more") 하나만 더 싣는다(금액 값 0 · 판정표는 `bankApp.ts` C).
+    if (bankTransfer) {
+      const amountRaw = values[copy.fields.find((field) => field.amount)?.label ?? ""] ?? "";
+      const amountDigits = amountRaw.replace(/[^\d]/g, "");
+      setReceipt({ amountText: amountDigits ? `${Number(amountDigits).toLocaleString("ko-KR")}원` : "", sentAt: new Date() });
+      onCredentialSubmit?.(
+        recordTransferAndCompare(
+          prefilledTransfer?.ledgerKey ?? "",
+          {
+            accountNumber: prefilledAccount ?? "",
+            ...(prefilledTransfer?.amount ? { amount: prefilledTransfer.amount } : {}),
+            ...(prefilledTransfer?.requestedAmount ? { requestedAmount: prefilledTransfer.requestedAmount } : {}),
+          },
+          amountRaw,
+        ),
+      );
+      return;
+    }
     onCredentialSubmit?.();
   };
 
@@ -960,8 +998,11 @@ function CredentialFormMockup({
       style={{ backgroundColor: page.issuerBarBg, color: page.issuerBarText }}
     >
       <PhoneIcon name="shield" size={24} />
-      {/* P2 — 훈련용 이체 화면은 세션 가상 은행(§81) 앱 흉내라 머리띠에 그 은행명을 쓴다(부재 = 발급처 이름 · 실존 은행명 0). */}
-      <span className="truncate">{bankTransfer && prefilledTransfer ? `${prefilledTransfer.bankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel)}</span>
+      {/* P2 — 훈련용 이체 화면은 은행 앱 흉내라 머리띠에 은행명을 쓴다. N2(실기기 신고 2026-11-01) — 받는 계좌 은행이 아니라 참가자의 "내 은행"이다
+          (`myBankName` — 부재 = 발급처 이름 · 실존 은행명 0). */}
+      <span className="truncate">
+        {bankTransfer && prefilledTransfer?.myBankName ? `${prefilledTransfer.myBankName} 모바일뱅킹` : issuerNameOf(copy.issuerLabel)}
+      </span>
     </div>
   );
 
@@ -1223,6 +1264,39 @@ function CredentialFormMockup({
               {returnLabel}
             </Button>
           </div>
+        </div>
+      </>
+    );
+  }
+
+  // N4 — 훈련용 이체 화면 완료 영수증(실제 은행 앱 완료 화면: 받는 분 · 받는 계좌 · 보낸 금액 · 보낸 시각). 값은 화면 문자열로만 쓰인다(G138).
+  if (submitted && bankTransfer && receipt) {
+    const receiptRows: [string, string][] = [
+      ...(prefilledTransfer?.holder ? [["받는 분", prefilledTransfer.holder] as [string, string]] : []),
+      ["받는 계좌", prefilledAccount ?? ""],
+      ["보낸 금액", receipt.amountText],
+      ["보낸 시각", transferTimeText(receipt.sentAt)],
+    ];
+    return (
+      <>
+        {issuerBar}
+        <div className="flex flex-col gap-4 p-5">
+          <p role="status" className="text-lg font-semibold leading-snug" style={{ color: page.headline }}>
+            {copy.successHeadline}
+          </p>
+          <dl className="flex flex-col divide-y rounded-[10px] border" style={{ borderColor: page.inputBorder, backgroundColor: page.inputBg }}>
+            {receiptRows.map(([label, value]) => (
+              <div key={label} className="flex items-baseline justify-between gap-3 px-3.5 py-3 text-[15px]" style={{ borderColor: page.inputBorder }}>
+                <dt style={{ color: page.body }}>{label}</dt>
+                <dd className="break-all text-right font-semibold tabular-nums" style={{ color: page.headline }}>
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <Button type="button" onClick={onClose}>
+            {returnLabel}
+          </Button>
         </div>
       </>
     );

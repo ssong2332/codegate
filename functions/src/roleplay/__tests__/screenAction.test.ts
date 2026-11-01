@@ -69,8 +69,9 @@ test("[판정표 SA] 말로만 완료 주장 = 미완료 지시 · 화면에서 
 test("[화면 사실] 통화 중 문자 = 문자 기록 + mockScreens 응낙 / 메신저 = 사기범 칩 + mockScreens 제출", () => {
   const records = [{ landingId: "card-guard-app-install", consented: true, submitted: false }];
   assert.deepEqual(inCallScreenFacts(CARD, [guard, { ...relief, landingSubmitted: true }, { smsId: "x" }], records), [
-    { landingId: "card-guard-app-install", kind: "install", done: true },
-    { landingId: "card-relief-transfer", kind: "transfer", done: true },
+    // R6(#465) — 재촉 단계 판정(SP)용으로 보낸 시점의 발화 수(문자 도착 기록)를 함께 싣는다.
+    { landingId: "card-guard-app-install", kind: "install", done: true, offeredAtUserTurns: 2 },
+    { landingId: "card-relief-transfer", kind: "transfer", done: true, offeredAtUserTurns: 6 },
   ]);
   assert.deepEqual(inCallScreenFacts(CARD, [guard, relief], []).map((f) => f.done), [false, false]);
   const K = "messenger-child-impersonation-kakao";
@@ -81,7 +82,8 @@ test("[화면 사실] 통화 중 문자 = 문자 기록 + mockScreens 응낙 / �
     { role: "scammer", attachments: [chip] },
   ];
   if (screenKindOf(K, "child-bank-transfer") === "transfer") {
-    assert.deepEqual(messengerScreenFacts(K, history, []), [{ landingId: "child-bank-transfer", kind: "transfer", done: false }]);
+    // R6 — 메신저 칩은 그 메시지 앞 참가자 메시지 수(처음 보낸 칩 = 0).
+    assert.deepEqual(messengerScreenFacts(K, history, []), [{ landingId: "child-bank-transfer", kind: "transfer", done: false, offeredAtUserTurns: 0 }]);
     assert.deepEqual(messengerScreenFacts(K, history, [{ landingId: "child-bank-transfer", consented: false, submitted: true }])[0]?.done, true);
   } else {
     assert.fail("메신저 송금 칩 화면 id가 카탈로그에 없다 — 테스트 고정값 확인");
@@ -170,8 +172,9 @@ test("[배선] 호출부 6곳 같은 술어 · 폴백 SA가 확인 결과 · 송
   for (const [file, args] of callers) assert.ok(read(file).includes(`screenActionOnly: sessionScreenActionOnly(${args}),`), file);
   const send = read("roleplay/index.ts");
   assert.ok(send.includes("const confirmPlan =\n      !screenPlan &&"), "말로만 주장한 턴엔 확인 결과 신호 0");
-  assert.ok(send.includes("transferReported: userReportedTransfer(storedHistory, maskedUserText) && !transferScreenPending,"));
-  assert.ok(send.indexOf("buildScreenStatusLine(screenApplies, screenFacts),") < send.indexOf("confirmPlan?.instruction,\n        escalatedCallInstruction,"));
+  // N1 — 요구액보다 적게 보냈으면 받은 것으로 치지 않는다 · R1 등 — 상태 줄에 재촉 단계 맥락을 넘긴다.
+  assert.ok(send.includes('userReportedTransfer(storedHistory, maskedUserText) && !transferScreenPending && latestTransferAmount(screenFacts) !== "less",'));
+  assert.ok(send.indexOf("buildScreenStatusLine(screenApplies, screenFacts, {") < send.indexOf("confirmPlan?.instruction,\n        escalatedCallInstruction,"));
   assert.ok(send.includes("...(installPending !== undefined ? { installPendingSince: installPending } : {}),"));
   const live = read("inCallSms/index.ts");
   assert.ok(live.includes("...(installPending !== undefined ? { installPendingSince: installPending } : {}),"));

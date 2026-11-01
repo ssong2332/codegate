@@ -6,8 +6,8 @@
 //
 // ⚠️ **이것은 라우트가 아니라 화면 위에 겹치는 계층이다**(D-35 — 통화 중에는 `InCallSmsOverlay`와 같은 자리의 형제 노드). 호출부는
 // 조건부 렌더만 하고 router.push · 상위 래퍼 · `key` 변경을 하지 않는다 — 통화 세션 · 마이크 · 타이머가 그대로 이어진다(G10).
-// ⚠️ **서버 호출 0** — 기록은 호출부가 한다(인증 버튼 = 무인자 `onSubmitted` 하나 · 종전 이체 화면 제출과 같은 경로).
-// 금액은 이 컴포넌트 state를 벗어나지 않는다(G138 — 콜백 인자 · 네트워크 · 저장소 0).
+// ⚠️ **서버 호출 0** — 기록은 호출부가 한다(인증 버튼 = `onSubmitted` 하나 · 종전 이체 화면 제출과 같은 경로).
+// 금액은 이 컴포넌트 state를 벗어나지 않는다(G138 — 네트워크 · 저장소 0). N1 — 콜백 인자는 요구액 대비 **비교 결과 하나**뿐이다(`recordTransferAndCompare`).
 // ⛔ 비밀번호 · 인증번호 숫자 입력 칸 0(BA3 — 참가자가 습관대로 실제 비밀번호를 치지 않게). 인증은 버튼 하나.
 // ⛔ 주소창 0 — 앱에는 주소창이 없다(설계 §3.1). 실존 은행명 · 로고 0(가상 은행명 · 자체 SVG 아이콘).
 import { useEffect, useRef, useState } from "react";
@@ -17,7 +17,10 @@ import {
   balanceText,
   nextBankAppStage,
   recipientHolderFor,
+  recordTransferAndCompare,
+  transferTimeText,
   wonText,
+  type AmountComparison,
   type BankAppAction,
   type BankAppStage,
   type TransferTarget,
@@ -37,8 +40,12 @@ type Props = {
   target: TransferTarget;
   /** 앱 닫기(통화 띠 · 닫기 · 완료 확인 · Esc). */
   onClose: () => void;
-  /** 인증 버튼(= 송금 완료) **사실 하나**. ⛔ 무인자 — 금액은 여기 실리지 않는다(G138). */
-  onSubmitted: () => void;
+  /** N1 — 같은 계좌로 나눠 보낸 합계를 세는 열쇠(세션 id). 부재 = 빈 열쇠. */
+  ledgerKey?: string;
+  /**
+   * 인증 버튼(= 송금 완료) 사실 + N1 요구액 대비 비교 결과(요구액을 모르면 `undefined`). ⛔ 금액 값은 실리지 않는다(G138).
+   */
+  onSubmitted: (amountComparison: AmountComparison | undefined) => void;
 };
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -58,8 +65,10 @@ const APP = {
   notice: "#EEF2F7",
 } as const;
 
-export default function BankAppOverlay({ call, myBankName, balance, target, onClose, onSubmitted }: Props) {
+export default function BankAppOverlay({ call, myBankName, balance, target, ledgerKey, onClose, onSubmitted }: Props) {
   const [stage, setStage] = useState<BankAppStage>("recipient");
+  // N4 — 완료 화면의 보낸 시각(인증 순간 · 기기 시계 · 화면에만).
+  const [sentAt, setSentAt] = useState<Date | null>(null);
   // G138 — 금액은 여기 state에만 있다(문자 금액은 처음 값으로만 채운다 · 고칠 수 있다).
   const [amount, setAmount] = useState(target.amount ?? "");
   const [error, setError] = useState<string | undefined>(undefined);
@@ -111,8 +120,9 @@ export default function BankAppOverlay({ call, myBankName, balance, target, onCl
   };
 
   const authenticate = () => {
-    // S3 — 송금 완료 기록은 이 한 번뿐이다(완료 화면에서 다시 누를 버튼 0).
-    onSubmitted();
+    // S3 — 송금 완료 기록은 이 한 번뿐이다(완료 화면에서 다시 누를 버튼 0). N1 — 비교 결과만 올린다.
+    onSubmitted(recordTransferAndCompare(ledgerKey ?? "", target, amount));
+    setSentAt(new Date());
     go("authenticate");
   };
 
@@ -293,6 +303,14 @@ export default function BankAppOverlay({ call, myBankName, balance, target, onCl
     );
   } else {
     // ④ 완료(BA5 — 받는 분 · 금액 재표시 허용 · 값은 이 state뿐 · 서버 0). 참가자가 이 화면을 캡처할 수 있다.
+    // N4(실기기 신고 2026-11-01) — 실제 은행 앱처럼 받는 분 · 받는 계좌 · 보낸 금액 · 보낸 시각 · 출금 계좌 은행을 한 표로 보여 준다.
+    const receiptRows: [string, string][] = [
+      ["받는 분", holder],
+      ["받는 계좌", account],
+      ["보낸 금액", amountWon],
+      ["보낸 시각", sentAt ? transferTimeText(sentAt) : ""],
+      ["출금 계좌", `${myBankName} 입출금`],
+    ];
     body = (
       <>
         {appBar()}
@@ -303,9 +321,16 @@ export default function BankAppOverlay({ call, myBankName, balance, target, onCl
             </svg>
           </span>
           {title(`${holder}님께 ${amountWon}을 보냈어요`)}
-          <p className="text-[15px] tabular-nums" style={{ color: APP.sub }}>
-            {account}
-          </p>
+          <dl className="flex w-full flex-col divide-y rounded-[12px] border text-left" style={{ borderColor: APP.line, backgroundColor: APP.card }}>
+            {receiptRows.map(([label, value]) => (
+              <div key={label} className="flex items-baseline justify-between gap-3 px-4 py-3 text-[15px]" style={{ borderColor: APP.line }}>
+                <dt style={{ color: APP.sub }}>{label}</dt>
+                <dd className="break-all text-right font-semibold tabular-nums" style={{ color: APP.text }}>
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
           <div className="mt-auto w-full">{primaryButton(COPY.doneButton, onClose)}</div>
         </div>
       </>

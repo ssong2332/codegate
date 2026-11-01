@@ -35,6 +35,7 @@ import {
   sendMessage,
   updateMessengerSkin,
   type MessengerAttachment,
+  type AmountComparison,
   type MockScreenEvent,
   type MockScreenKind,
 } from "@/lib/api";
@@ -246,6 +247,8 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
     bankName?: string;
     accountNumber?: string;
     accountHolder?: string;
+    /** N1 — 대화에서 요구한 금액(서버가 칩에 실은 값 · 비교 기준 — 금액 칸은 채우지 않는다). */
+    transferAmount?: string;
   } | null>(null);
   // T30 — 에스컬레이션 전이 연출(P-18) 표시 중. true가 되면 잠시 후 /session/play로 이동한다.
   const [escalating, setEscalating] = useState(false);
@@ -664,16 +667,18 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
       })
       .catch(() => {});
   };
-  const recordMockScreen = (landingId: string, event: MockScreenEvent) => {
+  // N1 — 이체 화면 `submitted`에만 요구액 대비 비교 결과(금액 값 0 · G138)를 함께 보낸다.
+  const recordMockScreen = (landingId: string, event: MockScreenEvent, amountComparison?: AmountComparison) => {
     if (!sessionId) return;
     const followUp = event === "consented" || event === "submitted";
+    const request = { sessionId, landingId, event, ...(amountComparison ? { amountComparison } : {}) };
     void (async () => {
       try {
-        await recordMockScreenEvent({ sessionId, landingId, event });
+        await recordMockScreenEvent(request);
         if (followUp) requestFollowUpAfterScreen(landingId);
       } catch {
         try {
-          await recordMockScreenEvent({ sessionId, landingId, event });
+          await recordMockScreenEvent(request);
           if (followUp) requestFollowUpAfterScreen(landingId);
         } catch (err) {
           // T187(G437) — 개발자 콘솔 문자열이지만 렌더 가능 리터럴 축은 호출 맥락을 가리지 않으므로
@@ -760,6 +765,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
             ? { bankName: attachment.bankName, accountNumber: attachment.accountNumber }
             : {}),
           ...(attachment.accountHolder ? { accountHolder: attachment.accountHolder } : {}),
+          ...(attachment.transferAmount ? { transferAmount: attachment.transferAmount } : {}),
         });
         // 목업이 열린 사실만 남긴다 — **이것은 속은 순간이 아니다**(D-51 ③,
         // AC-062 보호). 승격되는 것은 아래 onInstallConsent뿐이다.
@@ -1414,10 +1420,13 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
             bankName: fakeLanding.bankName,
             accountNumber: fakeLanding.accountNumber,
             ...(fakeLanding.accountHolder ? { holder: fakeLanding.accountHolder } : {}),
+            // N1 — 대화에서 요구한 금액은 비교에만 쓴다(금액 칸은 비워 둔다 — 참가자가 직접 넣는다).
+            ...(fakeLanding.transferAmount ? { requestedAmount: fakeLanding.transferAmount } : {}),
           }}
+          ledgerKey={sessionId ?? ""}
           onClose={() => setFakeLanding(null)}
-          onSubmitted={() => {
-            recordMockScreen(fakeLanding.fakeLandingId, "submitted");
+          onSubmitted={(amountComparison) => {
+            recordMockScreen(fakeLanding.fakeLandingId, "submitted", amountComparison);
             setTransferReceipt({
               bankName: fakeLanding.bankName!,
               accountNumber: fakeLanding.accountNumber!,
@@ -1446,8 +1455,8 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
           // ⛔ 참가자가 입력한 계좌번호·예금주명은 이 경로에 실리지 않는다(콜백이 무인자다 — G138).
           // ⚠️ 위 링크 칩 탭의 "shown"과 달리 이것만 승격된다(AC-080 (b) — 열어보고 닫은 참가자를
           // 실패로 낙인찍지 않는다).
-          onCredentialSubmit={() => {
-            recordMockScreen(fakeLanding.fakeLandingId, "submitted");
+          onCredentialSubmit={(amountComparison) => {
+            recordMockScreen(fakeLanding.fakeLandingId, "submitted", amountComparison);
             // D-e — 훈련용 이체 화면(칩에 은행 · 계좌가 실린 것)을 제출했으면 이체 완료 화면 캡처를 '+'에 둔다.
             if (fakeLanding.bankName && fakeLanding.accountNumber) {
               setTransferReceipt({
@@ -1465,6 +1474,10 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
                   bankName: fakeLanding.bankName,
                   // P2-d — 변형의 가상 예금주(대화에서 사기범이 댄 이름과 같은 값).
                   ...(fakeLanding.accountHolder ? { holder: fakeLanding.accountHolder } : {}),
+                  // N1 — 대화에서 요구한 금액(비교 기준) · N2 — 머리띠는 참가자의 "내 은행"(받는 계좌 은행이 아니다) · 합계 열쇠.
+                  ...(fakeLanding.transferAmount ? { requestedAmount: fakeLanding.transferAmount } : {}),
+                  myBankName: myBankNameFor(sessionId ?? "", fakeLanding.bankName),
+                  ledgerKey: sessionId ?? "",
                 },
               }
             : {})}
