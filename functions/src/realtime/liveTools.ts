@@ -16,6 +16,7 @@ import type { DifficultyLevel } from "../shared/difficulty";
 import type { MessengerChannel } from "../shared/types";
 import { SMS_PURPOSES, sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { hasVerifyIntercept, VERIFY_DECLINE_ALREADY } from "../scenarios/verifyIntercept";
+import { sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import { isNonLastRelayLeg, type HangupRelayContext } from "../scammerHangup/decide";
 import { SCAMMER_HANGUP_FAILURE_INSTRUCTION } from "../scammerHangup/guidance";
 
@@ -70,8 +71,10 @@ export function verifySeriesFor(scenarioId: string): VerifyOfferSeries | undefin
 export function declaresOfferVerificationDesk(
   scenarioId: string,
   difficultyLevel?: DifficultyLevel,
+  /** §142 · R7 — 다통화 변형은 창구 도구를 선언하지 않는다(`sessionUsesVerifyIntercept`). 부재 = 종전. */
+  flowVariantId?: string,
 ): boolean {
-  return hasVerifyIntercept(scenarioId) && difficultyLevel === "advanced";
+  return sessionUsesVerifyIntercept(scenarioId, difficultyLevel === "advanced", flowVariantId);
 }
 
 /**
@@ -223,7 +226,7 @@ export function buildLiveToolDeclarations(
 ): Tool[] {
   const declarations: FunctionDeclaration[] = [];
   if (sessionDeclaresInCallSms(scenarioId, flowVariantId)) declarations.push(SEND_PREPARED_SMS_DECLARATION);
-  if (declaresOfferVerificationDesk(scenarioId, difficultyLevel)) {
+  if (declaresOfferVerificationDesk(scenarioId, difficultyLevel, flowVariantId)) {
     declarations.push(OFFER_VERIFICATION_DESK_DECLARATION);
   }
   if (declaresEndCall(scenarioId, endCallScope.channel, endCallScope.relay, endCallScope.liveAvailable)) {
@@ -273,7 +276,7 @@ export function buildLiveToolNames(
   endCallScope: EndCallScope,
 ): LiveToolNames | undefined {
   const smsDeclared = sessionDeclaresInCallSms(scenarioId, flowVariantId);
-  const offerDeclared = declaresOfferVerificationDesk(scenarioId, difficultyLevel);
+  const offerDeclared = declaresOfferVerificationDesk(scenarioId, difficultyLevel, flowVariantId);
   const endCallDeclared = declaresEndCall(
     scenarioId,
     endCallScope.channel,

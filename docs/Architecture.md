@@ -24904,3 +24904,23 @@ Hosting만(functions 변경 0).
 |---|---|
 | AC-096 (b) | "고급 인원 1~3"에 단서 추가: *"다통화(통화를 끊고 참가자가 다시 거는 흐름) 변형은 서로 다른 인물 수로 세며, 카드 배송 사칭 전형 흐름(배송원 → 카드사 상담원 → 감독기관 → 검사 — 금감원 소비자경보 2025-1호)을 재현하는 변형은 4명까지 허용한다(사용자 승인 설계 #470)."* |
 | AC-072 | 무해화 범위 명확화: *"사기범이 원격 지원 앱 화면의 접속번호를 불러 달라고 요구하는 대사는 요구의 재현이며 허용한다. 설치 경로 · 권한 · 원격 제어의 작동 방식 설명은 계속 금지한다(사용자 승인 설계 #470)."* |
+
+### 142.8 PR-3(레그 런타임 · R7) — 배정 대기 유지
+⛔ 운영 동작 변화 0 — 두 변형은 `pendingRollout`이라 배정되지 않는다. 아래는 배정 해제(PR-4) 뒤에만 실행된다.
+
+| 지점 | 파일 | 동작 |
+|---|---|---|
+| 레그 판정(잎) | `functions/src/callLegs/legPlan.ts` | 142.4 판정표(`planLegStart`) · 끊기 보정 · 목소리 자리 · 앞 레그 인계 블록 · 폴백 이력 분할 |
+| 레그 시작 | `functions/src/callLegs/index.ts` `startCallLeg`(새 콜러블) · `request.ts` | 행동 `dial` · `callback` · `transfer`. 설치 응낙 = `mockScreens/card-remote-support-install.consentedAt`. 레그 시작 발화 수 = 서버 `messages` 사용자 줄 수. 진짜 기관 = `relay.genuineNumberId` 기록(세션 종료는 화면이 안내 뒤 `endSession`) |
+| 토큰 | `realtime/index.ts` · `geminiProvider.ts` · `scenarioVoice.ts` | 레그 프롬프트 · 레그 성별 · 레그 목소리(풀 남 Puck · Charon · Fenrir / 여 Aoede · Kore · Leda — 자리 1 이후 음질은 추정 · 실측 전) · 레그 1부터 `[앞선 통화 기록]` · 응답 `callLeg {legIndex, callerLabel}` |
+| 문자 게이트 | `inCallSms/smsGate.ts` `resolveDeclaredSms(…, {relay})` | 현재 레그 문자만 · 하한 + 레그 시작 발화 수(발송 · 끊기 판정 지점만 — 도달 랜딩 · 계좌 해석은 종전 전체 선언) |
+| 끊기(실시간) | `scammerHangup/commit.ts` · `index.ts` | 마지막이 아닌 레그: 4-b · 4-c 입력 거짓 · 5행 하한 = 레그 시작 뒤 발화 · 8행 = 그 레그 끝 기록 · 승인 = `relay.legEnded`(세션 끝 표식 0) · 응답 `legEnd {exit}` |
+| 끊기 · 프롬프트(폴백) | `roleplay/index.ts` | 위와 같은 입력 · 레그 프롬프트 · 이력을 현재 레그로 자르고 앞 통화는 인계 블록 · 응답 `legEnd {exit}`(`ended` false) |
+| R7 | `sessionUsesVerifyIntercept`(flowVariants) — 호출부 commit · roleplay · chatDuringCall · realtime · liveTools · geminiProvider | 다통화 변형은 확인 창구 세션이 아니다 → 끊기 4행이 열릴 길이 0 · `give_up`이 마지막 레그에서 승인된다(단언 `legRuntime.test.ts`) |
+
+PR-2 화면 계약(이 PR이 전제하는 것):
+| 항목 | 계약 |
+|---|---|
+| 실시간 `userTurns` 주장값 | 세션 누적(레그마다 0으로 되돌리지 않는다) — 문자 하한 · 끊기 5행이 서버 레그 시작 발화 수와 같은 축이어야 한다 |
+| 레그 끝 순서 | `legEnd` 수신 → 그 레그 전사 `submitRealtimeTranscript` → `startCallLeg` → 새 `createRealtimeCall`(토큰이 서버 `relay`로 레그를 정한다) |
+| 리포트 | 수법 해석은 레그 0 프롬프트 기준(종전 단일 지점) — 레그 전체 수법 · 교육점은 PR-4 |

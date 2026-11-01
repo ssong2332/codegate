@@ -5,7 +5,7 @@
 //
 // ⛔ 세션을 끝내지 않는다 — `status` · `endReason` · `endedAt` write 0. 끝내는 것은 전사 제출 뒤 `endSession`(§79.9).
 // ⛔ 표식은 이미 있으면 그대로 둔다(멱등 — 첫 승인의 `acceptedAt` · `kind` 유지).
-import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
+import { sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import type { ScammerHangupKind, ScammerHangupMarker, SessionDoc } from "../shared/types";
@@ -18,8 +18,14 @@ import { isVerifyTransferReachable, type VerifyOfferDocState } from "./transferR
 export type HangupDocSnapshot = { exists: boolean; data(): unknown };
 export type HangupTransaction<Ref> = {
   get(ref: Ref): Promise<HangupDocSnapshot>;
-  update(ref: Ref, data: { scammerHangup: ScammerHangupMarker }): unknown;
+  update(ref: Ref, data: { scammerHangup: ScammerHangupMarker } | { relay: NonNullable<SessionDoc["relay"]> }): unknown;
 };
+
+/**
+ * §142 — 다통화 변형의 마지막이 아닌 레그(`callLegs/legPlan.ts` `legHangupAdjustments`). 승인되면 세션 끝 표식(`scammerHangup`) 대신
+ * `relay.legEnded`를 쓴다(세션은 이어진다 — 다음 레그는 `startCallLeg`). 8행(이미 승인)은 그 레그의 끝 기록으로 본다 · 5행 하한은 레그 시작 뒤 발화 수.
+ */
+export type HangupLegScope = { nonLastLeg: true; legIndex: number; turnsSinceLegStart: number };
 
 /** 클라 주장값(OQ-A120 — S5b와 같은 등급). T192 C3: 하한 입력이 사기범 턴에서 사용자 발화로 바뀌었다(§79.19 (2) 8). */
 export type RealtimeHangupClaims = {
@@ -32,11 +38,14 @@ export type RealtimeHangupRefs<Ref> = {
   session: Ref;
   /** 시나리오의 확인 무력화 오퍼 문서 ref를 만든다(`hasVerifyIntercept`일 때만 부른다). */
   verifyOffer: (scenarioId: string) => Ref | undefined;
+  /** §142 — 서버가 세션 문서 · 카탈로그로 계산한 레그 범위(마지막이 아닌 레그만 · 클라 값 0). 부재 = 종전. */
+  legScope?: HangupLegScope;
 };
 
 /** 확인 무력화 세션 정의 — `roleplay/index.ts`의 `verifyEnabled`와 같은 식(§79.2 #4). */
-export function isVerifyInterceptSession(session: Pick<SessionDoc, "scenarioId" | "difficultyLevel">): boolean {
-  return hasVerifyIntercept(session.scenarioId) && normalizeDifficultyLevel(session.difficultyLevel) === "advanced";
+export function isVerifyInterceptSession(session: Pick<SessionDoc, "scenarioId" | "difficultyLevel" | "flowVariantId">): boolean {
+  // §142 · R7 — 다통화 변형은 창구 오퍼가 없다(`sessionUsesVerifyIntercept`).
+  return sessionUsesVerifyIntercept(session.scenarioId, normalizeDifficultyLevel(session.difficultyLevel) === "advanced", session.flowVariantId);
 }
 
 export async function decideAndMarkRealtimeHangup<Ref>(
@@ -57,6 +66,7 @@ export async function decideAndMarkRealtimeHangup<Ref>(
   decisionScreenPending: boolean,
 ): Promise<ScammerHangupDecision> {
   const smsAwaitingUser = isSmsAwaitingUser(delivered, claims.userTurns);
+  const legScope = refs.legScope;
   const sessionSnap = await tx.get(refs.session);
   const session = (sessionSnap.exists ? sessionSnap.data() : undefined) as SessionDoc | undefined;
   if (session === undefined) {
@@ -102,22 +112,36 @@ export async function decideAndMarkRealtimeHangup<Ref>(
     // T192 C6-R — 실시간 경로는 진리표 1행(항상 true · 동작 변화 0). 같은 함수를 부른다(판정 지점 하나 — G596).
     transferReachable: isVerifyTransferReachable({ path: "realtime", scenarioId: session.scenarioId, offerDoc }),
     goalActionDone,
-    followUpPending,
-    decisionScreenPending,
+    // §142 — 마지막이 아닌 레그에는 후속 단계 · 결정 화면이 없다(4-b · 4-c 입력 거짓).
+    followUpPending: legScope ? false : followUpPending,
+    decisionScreenPending: legScope ? false : decisionScreenPending,
     // P1 M1 — 실시간은 모델의 `end_call` 사유가 판정 시점에 있다(4-c행만 읽는다).
     hangupKind: claims.kind,
     userTurns: claims.userTurns,
     pendingInstruction: claims.pendingInstruction,
     smsAwaitingUser,
     limitReached: false,
-    alreadyAccepted: Boolean(session.scammerHangup),
+    alreadyAccepted: legScope ? session.relay?.legEnded === legScope.legIndex : Boolean(session.scammerHangup),
     // §79.18 (1) — 서버 값만(세션 문서 · 카탈로그). 클라 요청에는 이 값이 없다. S7 전에는 항상 undefined.
     relay: resolveHangupRelay(session),
+    ...(legScope ? { turnsSinceCallEntry: legScope.turnsSinceLegStart } : {}),
   });
   if (decision.status === "accepted") {
-    tx.update(refs.session, {
-      scammerHangup: { acceptedAt, kind: claims.kind, path: "realtime" },
-    });
+    // §142 — 마지막이 아닌 레그의 승인 = 레그 끝 기록(세션 끝 표식 0 · 다음 레그는 `startCallLeg`). write 지점은 여전히 한 곳.
+    tx.update(
+      refs.session,
+      legScope
+        ? {
+            relay: {
+              ...(session.relay ?? {}),
+              legIndex: legScope.legIndex,
+              legStartUserTurns: session.relay?.legStartUserTurns ?? [0],
+              connected: false,
+              legEnded: legScope.legIndex,
+            },
+          }
+        : { scammerHangup: { acceptedAt, kind: claims.kind, path: "realtime" } },
+    );
   }
   return decision;
 }

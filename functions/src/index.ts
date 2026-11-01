@@ -37,6 +37,8 @@ export { recordMockScreenEvent } from "./mockScreens";
 // 사기범의 먼저 끊기(T192 C1, Architecture.md §79.5, AC-103) — 실시간 `end_call` 도구 호출의 서버 판정 ·
 // 승인 표식 기록. ⚠️ 세션을 끝내지 않는다(끝내는 것은 `endSession`) · LLM 경로 import 0(시크릿 선언 0).
 export { requestScammerHangup } from "./scammerHangup";
+// §142(카드사 고급 재구성 PR-3) — 다통화 변형의 다음 통화(레그) 시작.
+export { startCallLeg } from "./callLegs";
 // 초급 사전 브리핑(T72, UX-029, §15.3.4, AC-066) — 세션 **시작 전** 화면에서만 소비되는 수법
 // 라벨 조회. 대화 중 실시간 판정 경로는 신설하지 않는다(D-6 유지).
 export { getBeginnerBriefing } from "./scenarios/beginnerBriefing";

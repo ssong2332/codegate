@@ -35,7 +35,8 @@ function makeTx(docs: Docs) {
       return { exists: doc !== undefined, data: () => doc };
     },
     update(ref, data) {
-      updates.push({ ref, data });
+      // §142 — 레그 끝 기록(`relay`)도 같은 update로 온다. 이 파일의 기존 단언은 세션 끝 표식만 본다(레그 끝은 callLegs 테스트).
+      updates.push({ ref, data: data as { scammerHangup: ScammerHangupMarker } });
     },
   };
   return { tx, reads, updates };

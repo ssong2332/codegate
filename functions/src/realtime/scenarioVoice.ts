@@ -11,6 +11,7 @@
 // "정답을 미리 알려주지 않는다" 축 계승). 이 파일은 `functions/src/realtime/`(서버 전용) 밖으로
 // import되지 않는다 — `roleplay/index.ts`·`roleplay/openingLine.ts`가 읽는 것도 이 파일이 export한
 // **표의 값**뿐이고, 클라로 나가는 응답 어디에도 이 표는 실리지 않는다.
+import { resolveSessionCallLeg, type RelayState } from "../callLegs/legPlan";
 import { resolveScenarioEscalation, resolveSessionEscalation, type EscalationSessionView } from "../scenarios/escalation";
 import { findFlowVariant } from "../scenarios/flowVariants";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
@@ -74,8 +75,11 @@ export function speakerGenderFor(scenarioId: string): "male" | "female" | undefi
  * 표에 값이 있는 시나리오는 **표 값 그대로**다(오늘 동작 바이트 동일).
  */
 export function resolveSessionSpeakerGender(
-  session: EscalationSessionView & { flowVariantId?: string; voiceSelectionSource?: string },
+  session: EscalationSessionView & { flowVariantId?: string; voiceSelectionSource?: string; relay?: RelayState },
 ): "male" | "female" | undefined {
+  // §142(D5) — 다통화 변형은 현재 레그 화자 성별이 표 값보다 먼저다(레그마다 다른 인물). 다통화가 아닌 세션은 아래 종전 규칙 그대로(바이트 동일).
+  const callLeg = resolveSessionCallLeg(findFlowVariant(session.flowVariantId), session);
+  if (callLeg) return callLeg.gender;
   const fromTable = speakerGenderFor(session.scenarioId);
   if (fromTable) return fromTable;
   // ⭐ 2026-10-20 실기 신고(child-kakao — "남성 음성"을 골랐는데 통화가 여성 음성) — 참가자가 메신저 통화용 목소리 선택(UX-025)에서

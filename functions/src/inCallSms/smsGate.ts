@@ -28,6 +28,7 @@
 // | 그 외 | `wait` |
 // 간격 = 그 문자 선언의 `backstopUserTurns`(§124 — 변형별) · 부재면 `BACKSTOP_USER_TURNS`.
 import type { AmountComparison } from "../roleplay/screenAction";
+import { currentLegIndex, legStartUserTurns, type RelayState } from "../callLegs/legPlan";
 import type { FlowVariantSms, SmsPurpose } from "../scenarios/flowVariants";
 import { findFlowVariant } from "../scenarios/flowVariants";
 import { findInCallSmsItem, hasInCallSms } from "../scenarios/inCallSms";
@@ -232,12 +233,26 @@ export function correctModelSmsPurpose(input: SmsGateInput): {
 export function resolveDeclaredSms(
   scenarioId: string,
   flowVariantId: string | undefined,
+  /**
+   * §142 — 발송 · 끊기 판정 지점만 넘긴다(세션 문서 `relay`). 다통화 변형이면 **현재 레그 문자만** 남기고 하한을 레그 시작 발화 수만큼
+   * 미룬다(`notBeforeUserTurns + legStartUserTurns[leg]`) — 세션 누적 발화 수를 쓰는 판정 함수들을 그대로 쓸 수 있다.
+   * 인자 부재(도달 랜딩 · 계좌 · 프롬프트 목적 등 변형 전체를 보는 지점) = 종전(전체 선언).
+   */
+  legScope?: { relay: RelayState | undefined },
 ): { declared: FlowVariantSms[]; reason?: "no_variant" | "unknown_variant" | "scenario_mismatch" } {
   if (!flowVariantId) return { declared: [], reason: "no_variant" };
   const variant = findFlowVariant(flowVariantId);
   if (!variant) return { declared: [], reason: "unknown_variant" };
   if (variant.scenarioId !== scenarioId) return { declared: [], reason: "scenario_mismatch" };
-  return { declared: variant.sms.filter((item) => findInCallSmsItem(scenarioId, item.smsId) !== undefined) };
+  const declared = variant.sms.filter((item) => findInCallSmsItem(scenarioId, item.smsId) !== undefined);
+  if (!legScope || !variant.multiCall) return { declared };
+  const leg = currentLegIndex(variant, legScope.relay);
+  const offset = legStartUserTurns(legScope.relay, leg);
+  return {
+    declared: declared
+      .filter((item) => (item.leg ?? 0) === leg)
+      .map((item) => ({ ...item, notBeforeUserTurns: item.notBeforeUserTurns + offset })),
+  };
 }
 
 /**

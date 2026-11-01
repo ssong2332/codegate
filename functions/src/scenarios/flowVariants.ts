@@ -2254,6 +2254,15 @@ const MULTI_CALL_LEG_END_TRANSFER =
   "이 통화의 마지막 단계를 마치면 '연결해 드리겠습니다, 잠시만 기다려 주세요'처럼 짧게 말하고 통화를 넘긴다. 넘긴 뒤 다음 사람의 일을 대신 진행하지 않는다.";
 const MULTI_CALL_LAST_LEG = "이 통화가 이번 흐름의 마지막 통화다. 다른 사람에게 넘기겠다는 말은 하지 않는다.";
 
+/**
+ * §142 · R7(docs/research/realdevice-fixes-probe-2026-11-01.md — 확인 무력화 세션에서 포기 끊기가 4행에 막혀 통화가 끝나지 않음) —
+ * 이 세션이 확인 창구 오퍼(호 전환)를 쓰는가 = 확인 무력화 시나리오 ∧ 고급 ∧ **다통화 변형이 아님**. 다통화 변형은 확인을 참가자 발신
+ * (공식 번호 → 가로채기)으로 재현하므로 창구 오퍼가 없다 ⇒ 끊기 4행(`blocked_transfer`)이 열릴 길이 없다. 판정 지점 전부가 이 함수를 쓴다.
+ */
+export function sessionUsesVerifyIntercept(scenarioId: string, isAdvanced: boolean, flowVariantId: string | undefined): boolean {
+  return hasVerifyIntercept(scenarioId) && isAdvanced && findFlowVariant(flowVariantId)?.multiCall !== true;
+}
+
 /** §142 — 다통화 변형의 레그 번호 보정(범위 밖 · 비정수 = 마지막 레그). */
 export function multiCallLegIndex(variant: Pick<FlowVariant, "legs">, legIndex: number): number {
   return Number.isInteger(legIndex) && legIndex >= 0 && legIndex < variant.legs.length ? legIndex : variant.legs.length - 1;

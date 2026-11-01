@@ -86,7 +86,11 @@ test("[리뷰 Minor 1] parcel 고급 · 목소리 선택 → 고른 성별이 �
 
 test("[배선] 세션 원천 하나 — createRealtimeCall · sendMessage는 세션 문서를, 오프닝은 createSession 요청값을 넘긴다(소스 스캔)", () => {
   assert.match(src("realtime/index.ts"), /speakerGender: resolveSessionSpeakerGender\(session\),/);
-  assert.match(src("realtime/geminiProvider.ts"), /voiceName: pickGeminiVoiceName\(input\.scenarioId, input\.sessionId, speakerGender\)/);
+  // §142(D5) — 다통화 레그만 레그 목소리 자리로 갈린다(부재 = 종전 식 그대로).
+  assert.match(
+    src("realtime/geminiProvider.ts"),
+    /voiceName: input\.callLeg && speakerGender\s+\? pickLegVoiceName\(speakerGender, input\.callLeg\.voiceSlot\)\s+: pickGeminiVoiceName\(input\.scenarioId, input\.sessionId, speakerGender\)/,
+  );
   assert.match(src("roleplay/index.ts"), /speakerGender: resolveSessionSpeakerGender\(session\),/);
   assert.match(src("session/index.ts"), /personaCard: personaCard\?\.items, voiceSelectionSource, familyAddress \}/);
   assert.match(src("session/index.ts"), /\.\.\.\(voiceSelectionSource \? \{ voiceSelectionSource \} : \{\}\),/, "세션 문서에도 같은 값을 저장한다");

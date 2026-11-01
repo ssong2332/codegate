@@ -168,7 +168,8 @@ export const deliverInCallSms = onCall<
   );
 
   // ⭐ T191 — 판정 원천은 세션의 흐름 변형 선언이다(카탈로그 고정 턴 폐기). 선언 밖 목적은 보내지 않는다.
-  const { declared, reason: declaredReason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId);
+  // §142 — 다통화 변형은 현재 레그 문자만 · 하한은 레그 시작 기준(`legScope`).
+  const { declared, reason: declaredReason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId, { relay: session.relay });
   const db = getFirestore();
   const sessionRef = db.collection("sessions").doc(sessionId);
 

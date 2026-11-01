@@ -184,6 +184,11 @@ export type SessionDoc = {
   // **불투명 ID**(`fv-xxxx`). 수법 · 단계 · 인원은 `functions/src/scenarios/flowVariants.ts`(서버 전용)에만
   // 있다(D-46 · ADR-0004). 부재 = 변형 도입 이전 세션 → 원본 시나리오 프롬프트로 해석(무소급).
   flowVariantId?: string;
+  /**
+   * §142(다통화 · 카드사 고급 재구성) — 레그 런타임 상태. 서버만 쓴다(레그 시작 콜러블 `startCallLeg` · 끊기 승인 `requestScammerHangup`).
+   * 판정은 `callLegs/legPlan.ts`. 부재 = 레그 0(다통화가 아닌 세션은 읽지 않는다). `genuineNumberId` = 진짜 기관 번호로 걸어 방어로 끝난 번호(D3).
+   */
+  relay?: { legIndex: number; legStartUserTurns: number[]; connected?: boolean; legEnded?: number; genuineNumberId?: string };
   // 개발 단계 루트 강제 지정(`session/devRouteOverride.ts` F4) — 요청 `forceVariantId`로 변형을 정했을 때만 `"forced"`. 부재 = 회전 덱 배정.
   routeOverride?: "forced";
   // T192 C1 추가(옵셔널, 하위호환 · 무백필 — Architecture.md §79.5) — 사기범 끊기 승인 표식. 서버만 쓴다
