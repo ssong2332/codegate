@@ -33,7 +33,8 @@ test("[§130 D7] 통화 하단 판은 화면 아래에 붙는다 · 바탕은 �
 });
 
 test("[§130 D11] 문자함 · 대화방이 덮으면 통화 셸은 inert · 문자함을 닫으면 inert가 풀린 뒤 초점을 옮긴다", () => {
-  assert.ok(play.includes("inert={chatOpen || smsOverlayOpen ? true : undefined}"));
+  // BA-1(2026-11-01) — 훈련용 홈 · 내 은행 앱(`bankAppOpen`)도 통화 셸을 덮는 모달이라 같은 줄에 더했다.
+  assert.ok(play.includes("inert={chatOpen || smsOverlayOpen || bankAppOpen ? true : undefined}"));
   assert.ok(play.includes("requestAnimationFrame(() => smsTriggerRef.current?.focus());"));
   assert.ok(!/inert=\{[^}]*verifyOverlayOpen/.test(play), "확인 시트(UX-031)는 비모달 — 셸을 막지 않는다");
 });
