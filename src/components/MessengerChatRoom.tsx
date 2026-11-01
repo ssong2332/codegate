@@ -39,7 +39,7 @@ import {
   type MockScreenEvent,
   type MockScreenKind,
 } from "@/lib/api";
-import { resolveSessionEscalation, scenarios, type ScenarioDoc } from "@/content/scenarios";
+import { resolveTransitionNow, scenarios, type ScenarioDoc } from "@/content/scenarios";
 import { detectDeviceSkin, type MessengerSkin } from "@/lib/messenger/detectSkin";
 // T190-6(docs/Architecture.md §74.5 · 표 K · UX-022 v1.33) — 통화·문자함과 **같은 해석 함수**(한 세션 = 한 스킨).
 import {
@@ -313,8 +313,15 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
         }
         setScenario(found);
         setSessionEscalates(
-          resolveSessionEscalation(
-            { scenarioId: scenarioId as string, difficultyLevel: data.difficultyLevel, challengeId: data.challengeId },
+          resolveTransitionNow(
+            {
+              scenarioId: scenarioId as string,
+              difficultyLevel: data.difficultyLevel,
+              challengeId: data.challengeId,
+              // A2 ㉢ — 목소리 복제 세션 · 통화 1회 판정 입력(서버 술어와 같은 값).
+              voiceSelectionSource: data.voiceSelectionSource,
+              channelHistory: data.channelHistory,
+            },
             scenarios,
           ) !== undefined,
         );
@@ -733,7 +740,8 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
   // §95(UX D-138 · 실기 신고 11) — 카톡형은 번호 대신 상대 이름(시나리오 `chatDisplayName` · 부재 = 번호). 문자형 · 통화는 번호 그대로.
   const peerName = isSms ? scenario.callerLabel : (scenario.chatDisplayName ?? scenario.callerLabel);
   // §121.7 — 통화 위 대화방에서는 이미 통화 중이라 보이스톡 · "전화로 확인"을 숨긴다.
-  const canVoiceTalk = sessionEscalates && !chatEnded && !inCall;
+  // A2 ㉢ — 목소리 복제 짧은 통화 시나리오는 참가자가 건 보이스톡을 받지 않는다(폰 고장 핑계와 일관 · 응답 없음 연출).
+  const canVoiceTalk = sessionEscalates && !chatEnded && !inCall && scenario?.escalationCloneOnly !== true;
   // §94 — 표시 목록 = 구독 문서(이번 턴 답장은 공개 전까지 숨김) + 아직 서버 문서가 없는 내 말풍선(낙관적).
   const visibleMessages =
     pending && replyView.hideReply

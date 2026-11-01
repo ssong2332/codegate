@@ -108,8 +108,10 @@ test("[T194-a G580] 서버 전이 판정 지점 4곳이 같은 술어를 부른�
   const read = (rel: string) => codeOnly(fs.readFileSync(path.join(FUNCTIONS_SRC, rel), "utf8"));
   const session = read("session/index.ts");
   assert.match(session, /resolveScenarioEscalation\(PUBLIC_SCENARIOS\[scenarioId\], resolvedDifficultyLevel\) !== undefined/, "S-1 createSession");
-  assert.match(session, /if \(!resolveSessionEscalation\(session, PUBLIC_SCENARIOS\)\)/, "S-2 requestEscalation");
-  assert.match(read("roleplay/index.ts"), /resolveSessionEscalation\(session, PUBLIC_SCENARIOS\) !== undefined/, "S-3 sendMessage");
+  // A2 ㉢(2026-11-01) — 실제 전환 지점(S-2 · S-3)은 세션 술어 위에 목소리 복제 · 1회 판정을 얹은 `resolveTransitionNow`를 부른다(그 안에서 세션 술어를 부른다).
+  assert.match(session, /if \(!resolveTransitionNow\(session, PUBLIC_SCENARIOS\) \|\|/, "S-2 requestEscalation");
+  assert.match(read("roleplay/index.ts"), /resolveTransitionNow\(session, PUBLIC_SCENARIOS\) !== undefined/, "S-3 sendMessage");
+  assert.match(read("scenarios/escalation.ts"), /const config = resolveSessionEscalation\(session, catalog\);/, "전환 판정은 세션 술어 위에 얹는다");
   assert.match(read("report/generateReportCore.ts"), /resolveSessionStageIntent\(session\)/, "S-4 리포트 단계");
   assert.match(read("report/mockScreenTimeline.ts"), /voiceIntended: resolveSessionEscalation\(session, PUBLIC_SCENARIOS\) !== undefined/, "S-5");
 });

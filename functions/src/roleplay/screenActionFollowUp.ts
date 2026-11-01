@@ -32,7 +32,7 @@ import {
   MOCK_INSTALL_CONSENT_INSTRUCTION,
   MOCK_INSTALL_CONSENT_INSTRUCTION_NO_CALL,
 } from "../scenarios/mockScreens";
-import { resolveSessionEscalation } from "../scenarios/escalation";
+import { resolveTransitionNow } from "../scenarios/escalation";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { transitionChannel } from "../session/channelTransition";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
@@ -154,7 +154,7 @@ export const requestScreenActionFollowUp = onCall<RequestScreenActionFollowUpReq
     const scenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId);
     if (!scenarioPrompt) return {};
     const canEscalateNow =
-      resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined &&
+      resolveTransitionNow(session, PUBLIC_SCENARIOS) !== undefined &&
       !isEscalationTooEarly(turnsSinceMessengerEntry(session.turnCount, session.channelHistory));
     const messagesRef = sessionRef.collection("messages");
     const historySnap = await messagesRef.orderBy("turnIndex", "asc").get();

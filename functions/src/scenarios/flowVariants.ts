@@ -1443,7 +1443,7 @@ const SPECS: VariantSpec[] = [
     level: "beginner",
     authoring: "authored",
     stages: st("폰이 고장 나 친구 폰으로 연락한다고 한다.", "곧바로 송금을 부탁한다."),
-    keepLabels: ["다급함 조성", "가족애·죄책감 이용", "채널 전환 유도", "송금 직접 요구"],
+    keepLabels: ["다급함 조성", "가족애·죄책감 이용", "송금 직접 요구"], // A2 ㉢ — "채널 전환 유도"(네가 먼저 전화) 수법 제거
     exitBlock: ["D0_none"],
     sms: [],
     legs: ONE_LEG("자녀", "female"),

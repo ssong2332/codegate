@@ -115,6 +115,12 @@ export type ScammerHangupInput = {
    * 5행은 두 값 모두 하한 이상이어야 통과한다. 부재 = 종전(`userTurns`만 — 처음부터 통화인 세션 · 실시간 콜러블).
    */
   turnsSinceCallEntry?: number;
+  /**
+   * ⭐ A2 ㉢(2026-11-01 · 사용자 결정) — 목소리 복제 짧은 딥보이스 통화(메신저발 · `escalationCloneOnly` 시나리오)인가. 참이고 사유가 `give_up`이면
+   * 5행 하한(통화 뒤 사용자 발화 수)을 보지 않는다 — 우는 목소리 한두 마디 뒤 사기범이 끊고 대화방으로 돌아오는 것이 그 통화의 설계다.
+   * 부재 = 거짓 = 종전.
+   */
+  shortCloneCall?: boolean;
 };
 
 export type ScammerHangupRule = {
@@ -169,9 +175,11 @@ export const SCAMMER_HANGUP_RULES: readonly ScammerHangupRule[] = [
     status: "too_early",
     hangup: false,
     // `!(x >= 하한)` — 정본 `x < 하한`과 유한값에서 같고, 비유한값(NaN)은 막는 쪽으로 떨어진다(fail-closed).
+    // A2 ㉢ — 목소리 복제 짧은 통화의 포기 끊기는 하한 예외.
     when: (i) =>
-      !(i.userTurns >= SCAMMER_HANGUP_MIN_USER_TURNS) ||
-      (i.turnsSinceCallEntry !== undefined && !(i.turnsSinceCallEntry >= SCAMMER_HANGUP_MIN_USER_TURNS)),
+      !(i.shortCloneCall === true && i.hangupKind === "give_up") &&
+      (!(i.userTurns >= SCAMMER_HANGUP_MIN_USER_TURNS) ||
+        (i.turnsSinceCallEntry !== undefined && !(i.turnsSinceCallEntry >= SCAMMER_HANGUP_MIN_USER_TURNS))),
   },
   {
     row: "6",
