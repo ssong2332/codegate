@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   buildConfirmResultInstruction,
   buildLiveConfirmResultInstruction,
+  buildLiveScreenConfirmInstruction,
   confirmResultPurposeFor,
   isCompletionClaim,
   planConfirmResult,
@@ -140,7 +141,11 @@ test("[A-1/⑦ 문면] 결과 신호 4종 — 숫자·따옴표 대사·재촉/�
 
 // ── Live 응답 필드(deliverInCallSms) ─────────────────────────────────────────────────────────
 test("[A-1/⑦ Live] buildConfirmResultField — 필수 계좌 문자에만 confirmResultInstruction, 전환 뒤 · 선택 문자 · 인증번호 · 선언 미전달은 빈 객체 / buildInCallSmsResponse는 종전 그대로", () => {
+  // 화면 행동만 인정(2026-11-01) — loan-account는 이체 화면을 연다 ⇒ 변형 미전달(적용) = 앱 알림 전 확인 금지형 · 적용 제외 변형(fv-6s5p #192) = 종전 조건형.
   assert.deepEqual(buildConfirmResultField({ placed: false, scenarioId: LOAN }, TRANSFER), {
+    confirmResultInstruction: buildLiveScreenConfirmInstruction("transfer"),
+  });
+  assert.deepEqual(buildConfirmResultField({ placed: false, scenarioId: LOAN, flowVariantId: "fv-6s5p" }, TRANSFER), {
     confirmResultInstruction: buildLiveConfirmResultInstruction("transfer"),
   });
   assert.deepEqual(buildConfirmResultField({ placed: true, scenarioId: LOAN }, TRANSFER), {}, "전환 뒤에는 원 사기범이 없다(announce와 같은 게이트)");
@@ -162,7 +167,7 @@ test("[A-1/⑦ 배선] sendMessage — 다른 턴 지시가 없는 턴에만 pla
   assert.match(src, /import \{ planConfirmResult \} from "\.\.\/inCallSms\/confirmResult";/);
   assert.match(
     src,
-    /const confirmPlan =\n\s*smsDeliveredLoaded &&\n\s*turnChoice === "none" &&\n\s*!otpCheckInstruction &&\n\s*!smsOfferInstruction &&\n\s*!smsNudgeInstruction &&\n\s*verifyState\?\.placed !== true\n\s*\? planConfirmResult\(\{/,
+    /const confirmPlan =\n\s*!screenPlan &&\n\s*smsDeliveredLoaded &&\n\s*turnChoice === "none" &&\n\s*!otpCheckInstruction &&\n\s*!smsOfferInstruction &&\n\s*!smsNudgeInstruction &&\n\s*verifyState\?\.placed !== true\n\s*\? planConfirmResult\(\{/,
   );
   assert.match(src, /currentUserText: maskedUserText,/);
   // §104 — 같은 배열 끝에 반복 차단 1줄(`repeatBreak.ts` — 확인 결과 지시가 있는 턴에는 계산하지 않는다)이 붙었다.
@@ -170,7 +175,7 @@ test("[A-1/⑦ 배선] sendMessage — 다른 턴 지시가 없는 턴에만 pla
   // §131(13) · (7) — 그 뒤에 송금 보고 뒤 재요구 금지 · 역할 고정 1줄이 더 붙었다(배열을 줄마다 쓴다).
   assert.match(
     src,
-    /\[\s*confirmPlan\?\.instruction,\s*escalatedCallInstruction,\s*repeatBreakInstruction\(repeatBreakKind\),\s*callAfterExcuseInstruction,\s*turnFacts\.transferReported \? TRANSFER_REPORTED_INSTRUCTION : undefined,\s*personaAnchorInstruction\(session\.scenarioId\),\s*\]\s*\.filter\(Boolean\)/,
+    /\[\s*(?:\/\/[^\n]*\n\s*)?buildScreenStatusLine\(screenApplies, screenFacts\),\s*screenPlan\?\.instruction,\s*confirmPlan\?\.instruction,\s*escalatedCallInstruction,\s*repeatBreakInstruction\(repeatBreakKind\),\s*callAfterExcuseInstruction,\s*turnFacts\.transferReported \? TRANSFER_REPORTED_INSTRUCTION : undefined,\s*personaAnchorInstruction\(session\.scenarioId\),\s*\]\s*\.filter\(Boolean\)/,
   );
   assert.match(src, /\[promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction(?:, otpFollowUpInstruction)?(?:, otpHoldInstruction)?\]/); // §132.6 인증번호 다시 요구
   // 계산 순서 — 인증번호 대조 · 문자 마커 제시 · 넛지가 정해진 뒤(리뷰 Minor-1 — 같은 턴 겹침 0), LLM 호출 앞.
@@ -187,7 +192,7 @@ test("[A-1/⑦ 배선] deliverInCallSms — 도착 응답에 선언 항목으로
   // T194-c-1 G608 — 결과 신호 판별에 세션 시나리오를 함께 넘긴다(설치 문자 제외 — 폴백과 같은 함수).
   // §117 — 종전 응답 조립(`buildInCallSmsResponse`)은 그대로 펼치고, announce만 모델 도구 경로에서 되풀이 금지 꼬리를 붙여 덮는다(`toolGuidance.ts`).
   assert.match(src, /const built = buildInCallSmsResponse\(item, \{ placed, fictionalBankName \}\);/);
-  assert.match(src, /\.\.\.built,\n\s*\.\.\.\(announceInstruction !== undefined \? \{ announceInstruction \} : \{\}\),\n\s*\.\.\.buildConfirmResultField\(\{ placed, scenarioId: session\.scenarioId \}, declaredItem\),/);
+  assert.match(src, /\.\.\.built,\n\s*\.\.\.\(announceInstruction !== undefined \? \{ announceInstruction \} : \{\}\),\n\s*\.\.\.buildConfirmResultField\(\{ placed, scenarioId: session\.scenarioId, flowVariantId: session\.flowVariantId \}, declaredItem\),/);
 });
 
 // ── A-1 리뷰 Major-2 — 송금·전송과 무관한 "~했어요" 오탐(허용목록 행 추가) ─────────────────────────

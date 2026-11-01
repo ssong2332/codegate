@@ -11,7 +11,8 @@ import { END_CALL_LIVE_AVAILABLE } from "../liveTools";
 import { HANGUP_RULE_NONE, NO_STALL_RULE } from "../../roleplay/promptAssembly";
 import { FLOW_VARIANTS } from "../../scenarios/flowVariants";
 import { buildConfirmResultField } from "../../inCallSms/buildDoc";
-import { buildLiveConfirmResultInstruction } from "../../inCallSms/confirmResult";
+import { buildLiveConfirmResultInstruction, buildLiveScreenConfirmInstruction } from "../../inCallSms/confirmResult";
+import { findInCallSmsItem } from "../../scenarios/inCallSms";
 import { resolveDeclaredSms } from "../../inCallSms/smsGate";
 
 const VOICE_SCOPE = { channel: undefined, hangupRelay: undefined } as const;
@@ -107,7 +108,11 @@ test("[PR-A2 · end_call 끔 · 리뷰 Minor 3] 끔(주입) · 모듈 운영값 
         assert.ok(required.length > 0, `${tag}: 필수 계좌 · 링크 문자 선언이 없다(표본 전제)`);
         for (const item of required) {
           const field = buildConfirmResultField({ placed: false, scenarioId: LOAN }, item);
-          assert.equal(field.confirmResultInstruction, buildLiveConfirmResultInstruction(item.purpose as "transfer" | "link"), `${tag}/${item.smsId}`);
+          // 화면 행동만 인정(2026-11-01) — 링크 화면을 여는 문자는 앱 알림 전 확인 금지형(변형 미전달 = 적용). 스위치와 무관한 것은 그대로다.
+          const expected = findInCallSmsItem(LOAN, item.smsId)?.fakeLandingId
+            ? buildLiveScreenConfirmInstruction(item.purpose as "transfer" | "link")
+            : buildLiveConfirmResultInstruction(item.purpose as "transfer" | "link");
+          assert.equal(field.confirmResultInstruction, expected, `${tag}/${item.smsId}`);
           fields.push(`${level}/${item.smsId}:${field.confirmResultInstruction}`);
         }
       }

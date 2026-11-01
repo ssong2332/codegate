@@ -43,6 +43,8 @@ export const MIN_USER_TURNS_BETWEEN_SMS = 2;
  * 자동 백스톱(주장 없는 넛지 · 발송)의 간격은 종전 2 그대로다. ⚠️ AC-099 (c) "문자 사이 발화 ≥2"의 예외 — 사용자 승인 대상.
  */
 export const MIN_USER_TURNS_BETWEEN_SMS_EXPLICIT = 1;
+/** 화면 행동만 인정 판정표 SB — 설치 응낙이 없을 때 백스톱이 다음 필수 문자를 미루는 발화 수(`roleplay/screenAction.ts`가 다시 내보낸다). */
+export const INSTALL_HOLD_USER_TURNS = 4;
 /** 백스톱 단계 간격 — 게이트가 열린 뒤 이만큼 발화하면 넛지, 다시 이만큼이면 발송(설계 판단값). */
 export const BACKSTOP_USER_TURNS = 2;
 /** 클라 주장 카운터의 범위 검사 상한(설계 "서버는 범위만 검사"). */
@@ -64,6 +66,8 @@ export type DeliveredSmsRecord = {
   userTurnsAtArrival?: number;
   /** §108 — 이 문자가 연 랜딩을 제출했다(`landingSubmittedAt` — 끊기 4행 `goalActionDone` C-1). 부재 = 제출 전 · 읽지 않음. */
   landingSubmitted?: true;
+  /** 화면 행동만 인정(`roleplay/screenAction.ts`) — 이 문자가 여는 화면 id(문서 `fakeLandingId`). 게이트 판정은 이 필드를 보지 않는다. */
+  fakeLandingId?: string;
 };
 
 export type SmsGateStatus = "allowed" | "not_allowed" | "already_delivered" | "too_early" | "too_soon";
@@ -153,12 +157,23 @@ export function gateOpensAtUserTurns(
  * 말했다 — 실시간 클라 주장)면 넛지 · 대기 단계를 건너뛰고 **게이트가 열린 순간** 보낸다(`userTurns ≥ openAt`). 게이트 하한(`notBeforeUserTurns` ·
  * 문자 간 간격)은 그대로다 — 하한 전이면 여전히 `wait`. 부재 · false = 종전 판정.
  */
-export function planSmsBackstop(input: Omit<SmsGateInput, "purpose"> & { claimed?: boolean }): SmsBackstopPlan {
+export function planSmsBackstop(
+  input: Omit<SmsGateInput, "purpose"> & {
+    claimed?: boolean;
+    /**
+     * 화면 행동만 인정 판정표 SB(`roleplay/screenAction.ts` `installPendingSince`) — 권한 허용 기록이 없는 통화 중 설치 문자의 도착 발화 수.
+     * 그 뒤 `INSTALL_HOLD_USER_TURNS` 발화 동안 **다음** 필수 문자는 `wait`(설치 문자 자신 · 부재 = 종전).
+     */
+    installPendingSince?: number;
+  },
+): SmsBackstopPlan {
   const deliveredIds = new Set(input.delivered.map((d) => d.smsId));
   const pending = input.declared.filter((item) => item.required && !deliveredIds.has(item.smsId));
   if (pending.length === 0) return { action: "none_pending" };
   // D-c — 백스톱도 선언 순서상 첫 미도착 필수 문자만 친다(게이트 2-b가 뒤 문자를 막으므로 "가장 먼저 열리는 것" 고르기는 닫힌 문을 두드린다).
   const target = pending[0];
+  // SB1 — 설치 화면을 마치지 않았으면 다음 단계 문자를 밀지 않는다(주장 백스톱 포함 · 보류가 끝나면 종전 판정).
+  if (input.installPendingSince !== undefined && input.userTurns < input.installPendingSince + INSTALL_HOLD_USER_TURNS) return { action: "wait" };
   const openAt = gateOpensAtUserTurns(target, input.delivered);
   // §126 — 주장이 있으면 명시 요청 간격(1)으로 연다(하한 `notBeforeUserTurns` · 첫 문자 하한은 그대로).
   if (input.claimed === true) {
