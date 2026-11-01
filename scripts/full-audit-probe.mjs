@@ -36,6 +36,7 @@ const L = (p) => require(path.join(libDir, p));
 const { GoogleGenAI, Modality, EndSensitivity, StartSensitivity } = require("@google/genai");
 const { buildSystemPrompt, toLlmHistory, wrapUserInputAsData } = L("roleplay/promptAssembly.js");
 const { resolveSessionScenarioPrompt, listFlowVariants } = L("scenarios/flowVariants.js");
+const flowVariantsLib = L("scenarios/flowVariants.js");
 const { sessionDeclaresInCallSms, sessionDeclaredSmsPurposes, sessionTransferSmsOpensLanding, resolveDeclaredSms, planSmsBackstop, resolveSmsGate, buildSmsNudgeInstruction, buildSmsMarkerOfferInstruction } = L("inCallSms/smsGate.js");
 const { findInCallSmsItem, SMS_DECLINE_TOO_EARLY, SMS_DECLINE_ALREADY } = L("scenarios/inCallSms.js");
 const { buildInCallSmsResponse, buildConfirmResultField } = L("inCallSms/buildDoc.js");
@@ -269,13 +270,22 @@ function sessionSetup(scenarioId, level, tag, pinnedVariant) {
 async function runVoice(scenarioId, level, persona, tag, job = {}) {
   const t0 = Date.now();
   const now = () => Date.now() - t0;
-  const { variantId, scenarioPrompt, declared, verifyEnabled, fictionalBankName, baseOpts } = sessionSetup(scenarioId, level, tag, job.variant);
+  let { variantId, scenarioPrompt, declared, verifyEnabled, fictionalBankName, baseOpts } = sessionSetup(scenarioId, level, tag, job.variant);
+  // §142 확인 실측(2026-11-02) — 다통화 레그(`runMultiCall`이 넘긴다): 앱 토큰(`geminiProvider.ts`)처럼 현재 레그 프롬프트 · 레그 문자 선언 ·
+  // 레그 화자 성별 · 창구 오퍼 없음(R7). 부재 = 종전 동작 그대로.
+  const leg = job.leg;
+  if (leg) {
+    scenarioPrompt = resolveSessionScenarioPrompt(scenarioId, variantId, leg.legIndex);
+    declared = resolveDeclaredSms(scenarioId, variantId, { relay: leg.relay }).declared;
+    verifyEnabled = flowVariantsLib.sessionUsesVerifyIntercept(scenarioId, level === "advanced", variantId);
+    baseOpts = { ...baseOpts, speakerGender: leg.gender, verifyInterceptEnabled: verifyEnabled };
+  }
   const endCallScope = { channel: "voice", relay: undefined, liveAvailable: liveTools.END_CALL_LIVE_AVAILABLE };
   const declaresEnd = declaresEndCall(scenarioId, "voice", undefined, endCallScope.liveAvailable);
   const systemPrompt = buildSystemPrompt(scenarioPrompt, {
     ...baseOpts,
     toolDrivenTiming: true,
-    offerToolDeclared: declaresOfferVerificationDesk(scenarioId, level),
+    offerToolDeclared: leg ? declaresOfferVerificationDesk(scenarioId, level, variantId) : declaresOfferVerificationDesk(scenarioId, level),
     hangupMode: declaresEnd ? "tool" : "none",
     liveSpeechStyle: true,
     // 2026-10-24 — 메신저에서 넘어온 통화 leg면 앱(`geminiProvider.ts` §110.3)처럼 앞선 대화 블록을 턴 지시 자리에.
@@ -286,8 +296,8 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
   const tools = buildLiveToolDeclarations(scenarioId, level, variantId, endCallScope);
   const verifyItem = verifyEnabled ? findVerifyInterceptItem(scenarioId) : undefined;
   const ai = new GoogleGenAI({ apiKey: API_KEY, httpOptions: { apiVersion: "v1alpha" } });
-  const turns = [], events = [], delivered = [];
-  let buf = "", scammerTurns = 0, userTurns = 0, closed = false, verifyPhase = "idle", announcedAtTurn = null, ended = null;
+  const turns = [], events = [], delivered = job.delivered ?? [];
+  let buf = "", scammerTurns = 0, userTurns = job.userTurnsBase ?? 0, closed = false, verifyPhase = "idle", announcedAtTurn = null, ended = null;
   let pendingConfirm = null, confirmInjected = false, wrapUpSent = false;
   let waiters = [];
   const notify = (ev) => { for (const w of [...waiters]) w(ev); };
@@ -296,7 +306,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
     config: {
       responseModalities: [Modality.AUDIO],
       systemInstruction: systemPrompt,
-      speechConfig: { languageCode: "ko-KR", voiceConfig: { prebuiltVoiceConfig: { voiceName: pickGeminiVoiceName(scenarioId, `full-audit-${tag}`) } } },
+      speechConfig: { languageCode: "ko-KR", voiceConfig: { prebuiltVoiceConfig: { voiceName: leg?.voiceName ?? pickGeminiVoiceName(scenarioId, `full-audit-${tag}`) } } },
       inputAudioTranscription: {},
       outputAudioTranscription: {},
       realtimeInputConfig: { automaticActivityDetection: { startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW, prefixPaddingMs: 300, endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH, silenceDurationMs: 400 } },
@@ -376,10 +386,13 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
         const decisionScreenPending = p1Lib
           ? p1Lib.isDecisionScreenPending({ scenarioId, flowVariantId: variantId, delivered, mockScreens: [], declared, declaredKnown: Boolean(variantId), verifyEnabled, followUpUserTurns })
           : false;
+        // §142 — 마지막이 아닌 레그는 앱 `commit.ts`처럼 4-b · 4-c 입력 거짓 · 하한 = 레그 시작 뒤 발화 수.
+        const legScope = leg?.nonLast ? { turnsSinceCallEntry: userTurns + 1 - leg.legStart } : null;
         const d = decideScammerHangup({
           goalActionDone,
-          followUpPending: followUpUserTurns !== undefined && !goalActionDone,
-          decisionScreenPending,
+          followUpPending: legScope ? false : followUpUserTurns !== undefined && !goalActionDone,
+          decisionScreenPending: legScope ? false : decisionScreenPending,
+          ...(legScope ?? {}),
           hangupKind: c.args?.reason ?? c.args?.kind,
           status: "active", channel: "voice", isMockTurn: false, verifyEnabled, transferPlaced: verifyPhase === "placed", transferReachable: true,
           userTurns: userTurns + 1, pendingInstruction: false, smsAwaitingUser: isSmsAwaitingUser(delivered, userTurns + 1),
@@ -388,7 +401,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
           ...(job.shortCloneCall ? { shortCloneCall: true } : {}),
         });
         events.push({ t: now(), ev: "toolResult", name: c.name, status: d.status, row: d.row, kind: c.args?.reason ?? c.args?.kind, userTurns, goalActionDone, decisionScreenPending });
-        if (d.hangup && !ended) ended = { kind: c.args?.reason ?? c.args?.kind ?? "unspecified", userTurns, scammerTurns };
+        if (d.hangup && !ended) ended = { kind: c.args?.reason ?? c.args?.kind ?? "unspecified", userTurns, scammerTurns, ...(leg?.nonLast ? { legEnd: leg.exit } : {}) };
         // §115 — 앱 콜러블과 같이 후속 단계가 남아 막혔으면 되풀이 금지 문면(옛 lib는 두 번째 인자를 무시한다).
         const followUpPending = followUpUserTurns !== undefined && !goalActionDone;
         return { id: c.id, name: c.name, response: { status: d.status, guidance: scammerHangupGuidance(d.status, { followUpPending }) } };
@@ -453,7 +466,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
     const lastUserText = [...turns].reverse().find((t) => t.role === "user")?.text;
     const rb = probeLiveRepeatBreak(scammerTexts[scammerTexts.length - 2], scammerTexts[scammerTexts.length - 1] ?? "", userTurns > 0, lastUserText);
     if (rb) { sendText(rb.text, false, "repeat_ctx"); events.push({ t: now(), ev: "repeatBreak", kind: rb.kind, scammerTurns, userTurns }); }
-    const u = respond(lastScammer, i);
+    const u = leg?.firstLine && i === (job.startIndex ?? 0) ? leg.firstLine : respond(lastScammer, i);
     userTurns += 1;
     sendText(u, true, "user");
     await waitTurn(45000);
@@ -518,7 +531,103 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
   await sleep(800);
   try { session.close(); } catch {}
   await sleep(400);
-  return { model: GEMINI_LIVE_MODEL, sessionId: sid, variantId, fictionalBankName, tools: tools.flatMap((t) => (t.functionDeclarations ?? []).map((d) => d.name)), declaredSms: declared.map((d) => d.smsId), delivered, verifyPhase, ended, turns, events, wallMs: now() };
+  return { model: GEMINI_LIVE_MODEL, sessionId: sid, variantId, fictionalBankName, userTurns, closed, tools: tools.flatMap((t) => (t.functionDeclarations ?? []).map((d) => d.name)), declaredSms: declared.map((d) => d.smsId), delivered, verifyPhase, ended, turns, events, wallMs: now() };
+}
+
+// ── multicall(§142 카드사 고급 재구성 확인 실측 · 2026-11-02) ─────────────────────────────────────────
+// 다통화 변형 한 세션 = 레그마다 Live 새 연결(앱 `startLeg` → 새 토큰과 같다). 레그 사이는 앱 콜러블 `startCallLeg`의 판정
+// (`planLegStart` · 같은 함수)을 프로브 메모리의 `relay`로 흉내 낸다(Firestore 0). 끊기 승인 = 레그 끝(`commit.ts`처럼 relay.legEnded).
+// 흉내 내는 것: 레그 프롬프트 · 레그 문자 선언(게이트 하한 = 레그 시작 뒤 발화) · 레그 목소리 자리 · 앞 통화 인계 블록 ·
+// 클라 레그 첫 연결 신호(`GeminiVoiceSession.tsx` OPENING_TRIGGER_TURN — 레그 연결은 `resumeTurn` null) · 설치 권한 허용(comply).
+// 흉내 내지 않는 것: 화면 대기 시간(재발신 30초 · 연결음) · 오디오 · 리포트 LLM 문장.
+const CLIENT_OPENING_TRIGGER =
+  "(전화가 방금 연결됐다. 지금 막 전화를 받은 상대에게 캐릭터로서 자연스럽게 첫 마디를 건네라. 첫 마디는 짧게 — 신분(사칭 기관·관계)과 전화를 건 이유를 짧은 한두 문장(5초 안팎)으로만 밝히고, 멈춰서 상대의 대답을 기다려라. 다짜고짜 요구나 압박부터 하지 말고, 자세한 설명은 상대가 반응한 뒤 다음 턴에 이어가라.)";
+const legPlanLib = optionalLib("callLegs/legPlan.js");
+const dialLib = optionalLib("scenarios/dialDirectory.js");
+const { pickLegVoiceName } = L("realtime/geminiProvider.js");
+// 참가자가 직접 건 레그의 첫마디(번호 id별 — 사기범 첫 응대 뒤 참가자가 하는 말).
+const DIAL_FIRST_LINE = {
+  "card-fake-callback": "문자 보고 전화드렸어요. 저는 카드 신청한 적이 없는데요.",
+  "supervisor-official": "카드사에서 신고하라고 해서 전화드렸어요.",
+};
+// refuseInstall — comply와 같되 앱 설치 요구는 거절하고 권한 허용을 누르지 않는다(R7 — 창구 오퍼 없이 포기하는가).
+function makeRefuseInstallResponder(otpOf) {
+  const base = makeResponder("comply", otpOf);
+  let n = 0;
+  return (last, i) => {
+    if (/(설치|원격|앱|권한)/.test(last)) return ["그런 앱은 설치 안 할래요. 좀 찜찜해요.", "설치는 못 하겠어요. 다른 방법 없어요?", "앱은 안 깔 거예요."][n++ % 3];
+    return base(last, i);
+  };
+}
+async function runMultiCall(job, tag) {
+  if (!legPlanLib || !dialLib) throw new Error("이 lib에는 §142 레그 런타임이 없다");
+  const t0 = Date.now();
+  const scenarioId = job.id, level = job.level;
+  const variant = findFlowVariant(job.variant);
+  if (!variant?.multiCall) throw new Error(`다통화 변형이 아님: ${job.variant}`);
+  const sid = sessionIdFor(tag, scenarioId, level, job.persona);
+  const delivered = [], turns = [], events = [], legs = [], dials = [];
+  // R2 — 시작 문자(앱 `deliverOpenerSms` — userTurnsAtArrival 0 · 게이트 밖).
+  if (variant.openerSmsId) delivered.push({ smsId: variant.openerSmsId, userTurnsAtArrival: 0, by: "opener" });
+  let relay, userTurns = 0, outcome = null, idx = 0;
+  let otpSource = () => undefined;
+  const respond = job.persona === "refuseInstall" ? makeRefuseInstallResponder(() => otpSource()) : makeResponder("comply", () => otpSource());
+  const installConsented = () => delivered.some((d) => d.landingSubmitted && isInCallInstallLanding(scenarioId, findInCallSmsItem(scenarioId, d.smsId)?.fakeLandingId));
+  const numberOf = (numberId) => dialLib.findDialEntry(scenarioId, numberId)?.number ?? "";
+  // 다음 레그를 열 행동(계획 항목 `dials` — 키 = "start" 또는 끝난 레그 번호 · 부재 = transfer 레그는 transfer, 그 밖은 계획 끝).
+  const actionFor = (key, exit) => {
+    const d = job.dials?.[key];
+    if (d) return d;
+    return exit === "transfer" ? { action: "transfer" } : null;
+  };
+  let key = variant.legs[0].entry === "incoming" ? null : "start";
+  for (let guard = 0; guard < variant.legs.length + 1; guard += 1) {
+    let legIndex, entry;
+    if (key === null) {
+      legIndex = 0; entry = "incoming";
+    } else {
+      const exit = key === "start" ? undefined : variant.legs[key].exit;
+      const a = actionFor(key, exit);
+      if (!a) { outcome = { kind: "stopped_by_plan", after: key }; break; }
+      const dialed = a.numberId ? numberOf(a.numberId) : undefined;
+      const plan = legPlanLib.planLegStart({ variant, relay, action: a.action, dialed, installConsented: installConsented(), userTurns });
+      dials.push({ after: key, action: a.action, numberId: a.numberId, dialed, status: plan.status, ...(plan.status === "not_ready" ? { reason: plan.reason } : {}), installConsented: installConsented(), userTurns });
+      if (plan.status === "genuine") { outcome = { kind: "genuine", numberId: plan.entry.numberId, notice: plan.entry.genuineNotice }; break; }
+      if (plan.status !== "connected") { outcome = { kind: plan.status, after: key }; break; }
+      relay = plan.relay; legIndex = plan.legIndex; entry = plan.entry;
+    }
+    const legDef = variant.legs[legIndex];
+    const slot = legPlanLib.legVoiceSlot(variant, legIndex);
+    const legStart = legPlanLib.legStartUserTurns(relay, legIndex);
+    const prior = legIndex > 0 ? legPlanLib.buildPriorLegContext(turns.filter((t) => t.role === "user" || (t.role === "scammer" && t.n)).map((t) => ({ role: t.role, text: t.text }))) : undefined;
+    const nonLast = legIndex < variant.legs.length - 1;
+    const voiceName = pickLegVoiceName(slot.gender, slot.slot);
+    const startIndex = entry === "incoming" && legIndex === 0 ? 0 : Math.max(1, idx);
+    const legJob = {
+      variant: variant.variantId, sessionId: sid, delivered, userTurnsBase: userTurns, startIndex,
+      maxTurns: (legDef.maxUserTurns ?? 6) + 3, respond, setOtpSource: (f) => { otpSource = f; },
+      openingTrigger: CLIENT_OPENING_TRIGGER,
+      ...(prior ? { priorChatContext: prior } : {}),
+      leg: { legIndex, relay, legStart, gender: slot.gender, voiceName, nonLast, exit: legDef.exit,
+        firstLine: entry === "dial" ? DIAL_FIRST_LINE[legDef.dialTarget] : undefined },
+    };
+    if (existsSync(stopFile)) throw new Error("정지 파일 감지(429)");
+    const r = await runVoice(scenarioId, level, job.persona === "refuseInstall" ? "refuseInstall" : "comply", tag, legJob);
+    turns.push(...r.turns.map((t) => ({ ...t, leg: legIndex })));
+    events.push(...r.events.map((e) => ({ ...e, leg: legIndex })));
+    idx = startIndex + (r.userTurns - userTurns);
+    legs.push({ legIndex, entry, callerLabel: legDef.callerLabel, voiceName, voiceSlot: slot.slot, gender: slot.gender, userTurnsStart: userTurns, userTurnsEnd: r.userTurns, ended: r.ended, priorContextLines: prior ? prior.split("\n").length - 2 : 0, declaredSms: r.declaredSms, wallMs: r.wallMs });
+    userTurns = r.userTurns;
+    const closeErr = r.events.find((e) => e.ev === "close" && /(^|\D)429(\D|$)|RESOURCE_EXHAUSTED|quota/i.test(`${e.code ?? ""} ${e.reason ?? ""}`));
+    if (closeErr) throw new Error(`429 감지(Live close): ${closeErr.code} ${closeErr.reason}`);
+    if (!r.ended) { outcome = { kind: "leg_not_ended", legIndex }; break; }
+    if (!nonLast) { outcome = { kind: "finished", legIndex }; break; }
+    relay = { ...(relay ?? {}), legIndex, legStartUserTurns: relay?.legStartUserTurns ?? [0], connected: false, legEnded: legIndex };
+    if (job.stopAfterLeg === legIndex) { outcome = { kind: "stopped_by_plan", after: legIndex }; break; }
+    key = legIndex;
+    await sleep(3000);
+  }
+  return { model: GEMINI_LIVE_MODEL, sessionId: sid, variantId: variant.variantId, legs, dials, outcome, delivered, relay, turns, events, wallMs: Date.now() - t0 };
 }
 
 // ── messenger(텍스트 · sendMessage 재현) ─────────────────────────────────────────────────────────
@@ -906,7 +1015,7 @@ for (const job of plan) {
   const startedIso = new Date().toISOString();
   let result, error = null;
   try {
-    result = job.ch === "voice" ? await runVoice(job.id, job.level, job.persona, tag, job) : appLlm ? await runMessengerApp(job.id, job.level, job.persona, tag, job) : await runMessenger(job.id, job.level, job.persona, tag, job);
+    result = job.ch === "multicall" ? await runMultiCall(job, tag) : job.ch === "voice" ? await runVoice(job.id, job.level, job.persona, tag, job) : appLlm ? await runMessengerApp(job.id, job.level, job.persona, tag, job) : await runMessenger(job.id, job.level, job.persona, tag, job);
   } catch (e) { error = scrub(e?.stack ?? e); result = { turns: [], events: [] }; }
   // 2026-10-24 — 루트 · 리포트 판정(앱 `analyzeConversation`과 같은 함수 · 인증번호 정답 = 이 세션 번호).
   try {
@@ -918,7 +1027,9 @@ for (const job of plan) {
       .filter((t) => (t.text ?? "").trim())
       .map((t, k) => ({ role: t.role, textMasked: t.text, turnIndex: k, createdAtMs: k * 1000, channel: job.ch === "messenger" && !t.leg ? "messenger" : "voice" }));
     const otpCodes = sessionOtpLib ? listOtpItems(job.id).map((it) => sessionOtpLib.withSessionOtp(it, sid).otpCode).filter(Boolean) : [];
-    const a = analyzeConversation(msgs, 0, resolveSessionScenarioPrompt(job.id, result.variantId)?.weakenedTactics ?? [], otpCodes);
+    // §142 — 다통화 변형은 앱 리포트(`generateReportCore.ts`)처럼 변형 전체 수법으로 해석한다.
+    const tacticsFor = fv?.multiCall ? [...fv.tactics] : resolveSessionScenarioPrompt(job.id, result.variantId)?.weakenedTactics ?? [];
+    const a = analyzeConversation(msgs, 0, tacticsFor, otpCodes);
     result.verdict = { wasDeceived: a.wasDeceived, deceivedMoments: a.deceivedMoments.map((m) => ({ turnIndex: m.turnIndex, tactic: m.tactic ?? m.tacticLabel })), riskSignals: (a.riskSignals ?? []).length };
   } catch (e) { result.verdictError = scrub(e?.message ?? e); }
   const errText = [error ?? "", ...(result.events ?? []).filter((e) => e.ev === "error" || e.ev === "close").map((e) => `${e.code ?? ""} ${e.msg ?? ""} ${e.reason ?? ""}`)].join(" ");
