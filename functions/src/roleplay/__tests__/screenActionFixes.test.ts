@@ -26,7 +26,7 @@ import {
   LANDING_SUBMITTED_SHORT_INSTRUCTION,
   landingSubmittedInstructionFor,
 } from "../../inCallSms/confirmResult";
-import { INSTALL_HOLD_USER_TURNS, resolveDeclaredSms, type DeliveredSmsRecord } from "../../inCallSms/smsGate";
+import { resolveDeclaredSms, type DeliveredSmsRecord } from "../../inCallSms/smsGate";
 import { isDecisionScreenPending } from "../../scammerHangup/goalAction";
 import { findInCallSmsItem } from "../../scenarios/inCallSms";
 
@@ -43,12 +43,13 @@ const transfer = (offered: number, done = false, amount?: "less" | "equal" | "mo
   ...(amount ? { amount } : {}),
 });
 
-test("[SP] 재촉 단계 판정표 — 설치 hold · switch · release(보류 발화 수 · 다른 화면 뒤) · 이체 give_up · 마친 종류 = 대상 아님", () => {
+test("[SP] 재촉 단계 판정표 — hold · switch · release(다른 화면 뒤) · 설치 · 이체 모두 give_up(Q3) · 마친 종류 = 대상 아님", () => {
   assert.equal(SCREEN_PRESSURE_SWITCH_USER_TURNS, 2);
   assert.equal(SCREEN_GIVE_UP_USER_TURNS, 6);
   assert.equal(screenPressureFor("install", [install(3)], 4), "hold", "SP4");
   assert.equal(screenPressureFor("install", [install(3)], 3 + SCREEN_PRESSURE_SWITCH_USER_TURNS), "switch", "SP3");
-  assert.equal(screenPressureFor("install", [install(3)], 3 + INSTALL_HOLD_USER_TURNS), "release", "SP1 — 백스톱 보류 SB와 같은 때");
+  assert.equal(screenPressureFor("install", [install(3)], 3 + SCREEN_GIVE_UP_USER_TURNS - 1), "switch", "Q3 — 보류 시한으로 풀리지 않는다");
+  assert.equal(screenPressureFor("install", [install(3)], 3 + SCREEN_GIVE_UP_USER_TURNS), "give_up", "Q3 — 끝까지 설치하지 않으면 포기");
   assert.equal(screenPressureFor("install", [install(3), transfer(4)], 4), "release", "SP1 — 설치 뒤 다른 화면을 이미 보냈다");
   assert.equal(screenPressureFor("transfer", [transfer(5)], 5 + SCREEN_GIVE_UP_USER_TURNS - 1), "switch");
   assert.equal(screenPressureFor("transfer", [transfer(5)], 5 + SCREEN_GIVE_UP_USER_TURNS), "give_up", "SP2");

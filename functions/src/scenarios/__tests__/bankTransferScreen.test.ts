@@ -51,7 +51,11 @@ test("[P2 B1] 계좌 문자는 전부 이체 화면 링크를 갖는다 · 바�
     assert.match(item!.body, /OO은행 \d{3}-\d{4}-\d{4}-\d{2}/);
   }
   // P2-c — 메신저 링크 칩 2종(문자가 아니라 칩이 연다)도 같은 목록에 든다.
-  assert.deepEqual([...BANK_TRANSFER_LANDINGS].sort(), [...CONVERTED.map(([, , l]) => l), "child-bank-transfer", "friend-bank-transfer"].sort());
+  // B7(실기기 신고 2026-11-01) — P2 이전 계좌 문자 이체 화면 3종도 같은 흐름(인증 · 영수증 · 금액 비교)으로 들어왔다.
+  assert.deepEqual(
+    [...BANK_TRANSFER_LANDINGS].sort(),
+    [...CONVERTED.map(([, , l]) => l), "child-bank-transfer", "friend-bank-transfer", "card-relief-transfer", "safe-account-transfer", "protect-account-transfer"].sort(),
+  );
 });
 
 test("[P2 B2 · B3] 문자 문서 — 이체 화면 문자만 받는 분 · 금액을 싣고, 이름은 세션 가상 이름으로 바뀐 뒤 값이다", () => {
@@ -72,10 +76,12 @@ test("[P2 B2 · B3] 문자 문서 — 이체 화면 문자만 받는 분 · 금�
   // 금액 줄이 없는 문자(국가 안전계좌 — 금액은 통화에서 정한다)는 금액 필드 없음.
   const safeKeep = buildInCallSmsDoc(findInCallSmsItem("courier-customs-scam", "courier-safe-account")!, at, 7, "courier-customs-scam", "새솔은행");
   assert.equal("transferAmount" in safeKeep, false);
-  // B3 — 기존 이체 화면(안전계좌)은 종전 모양 그대로(두 필드 없음).
+  // B7(2026-11-01) — P2 이전 이체 화면(안전계좌 · 카드 피해금 · 보호계좌)도 받는 분 · 금액을 싣는다(금액 줄이 없는 안전계좌는 받는 분만).
   const safe = buildInCallSmsDoc(findInCallSmsItem("institutional-impersonation", "institution-safe-account")!, at, 6, "institutional-impersonation", "한결은행");
-  assert.equal("accountHolder" in safe, false);
+  assert.equal(safe.accountHolder, "강태윤");
   assert.equal("transferAmount" in safe, false);
+  const relief = buildInCallSmsDoc(findInCallSmsItem("card-company-impersonation", "card-relief-account")!, at, 6, "card-company-impersonation", "한결은행");
+  assert.equal(relief.transferAmount, "2340000", "B6 — 요구액 비교의 원천");
 });
 
 test("[P2] 추출 함수 — 줄이 없으면 undefined · 쉼표 제거", () => {

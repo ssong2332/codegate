@@ -56,7 +56,7 @@ import PhoneIcon from "@/components/PhoneIcon";
 import EndTrainingButton from "@/components/EndTrainingButton";
 import MessengerFakeLanding, { isBankTransferLandingId } from "@/components/MessengerFakeLanding";
 import BankAppOverlay from "@/components/BankAppOverlay";
-import { fictionalBalanceFor, isBankAppEnabled, myBankNameFor } from "@/lib/bankapp/bankApp";
+import { fictionalBalanceFor, isBankAppEnabled, latestDemandAmount, myBankNameFor } from "@/lib/bankapp/bankApp";
 import { readDebugFlagSearch } from "@/lib/realtime/debugFlags";
 import MessengerProfileSheet from "@/components/MessengerProfileSheet";
 import VoiceTalkDialScreen from "@/components/VoiceTalkDialScreen";
@@ -752,6 +752,11 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
       : null;
   const failedId = optimistic && pending?.failed ? optimistic.id : null;
   // §131(3) — 링크 카드 한 벌(말풍선 아래 · 접힌 통화 줄 아래 — `threadItems.ts` 판정표 F2)이 같은 모양 · 같은 기록을 쓰게 한 곳에 둔다.
+  // A4(실기기 신고 2026-11-01) — 이체 화면 칩의 요구액 = 지금 대화방에 보이는 사기범 메시지의 가장 최근 금액(칩 뒤에 말한 금액 포함) · 없으면 칩 값.
+  const chipDemandAmount = (attachment: MessengerAttachment) =>
+    attachment.bankName && attachment.accountNumber
+      ? (latestDemandAmount(messages.filter((m) => m.role === "scammer").map((m) => m.text)) ?? attachment.transferAmount)
+      : undefined;
   const renderLinkCard = (attachment: MessengerAttachment, key: number, indent: boolean) => (
     <button
       key={key}
@@ -765,7 +770,7 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
             ? { bankName: attachment.bankName, accountNumber: attachment.accountNumber }
             : {}),
           ...(attachment.accountHolder ? { accountHolder: attachment.accountHolder } : {}),
-          ...(attachment.transferAmount ? { transferAmount: attachment.transferAmount } : {}),
+          ...(chipDemandAmount(attachment) ? { transferAmount: chipDemandAmount(attachment) } : {}),
         });
         // 목업이 열린 사실만 남긴다 — **이것은 속은 순간이 아니다**(D-51 ③,
         // AC-062 보호). 승격되는 것은 아래 onInstallConsent뿐이다.

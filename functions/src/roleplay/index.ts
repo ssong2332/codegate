@@ -679,6 +679,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         buildScreenStatusLine(screenApplies, screenFacts, {
           userTurns: userTurnsNow,
           notYetSent: notYetSentSmsLabels(session.scenarioId, smsDeclared, smsDelivered),
+          // Q1 — 메신저 단계의 포기 끝맺음은 대화방 말투.
+          messenger: session.channel === "messenger",
         }),
         screenPlan?.instruction,
         confirmPlan?.instruction,

@@ -753,7 +753,7 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
     const screenFacts = screenApplies ? screenActionLib.messengerScreenFacts(scenarioId, storedHistory, []) : [];
     const screenPlan = screenApplies ? screenActionLib.planScreenAction({ applies: true, facts: screenFacts, currentUserText: u }) : undefined;
     // R1 · R4 · R6 미러(2026-11-01) — 앱처럼 재촉 단계 맥락을 넘긴다(옛 lib는 셋째 인자를 무시 = 종전).
-    const screenStatus = screenApplies ? screenActionLib.buildScreenStatusLine(true, screenFacts, { userTurns: userTurnsNow, notYetSent: [] }) : undefined;
+    const screenStatus = screenApplies ? screenActionLib.buildScreenStatusLine(true, screenFacts, { userTurns: userTurnsNow, notYetSent: [], messenger: !escalated }) : undefined;
     if (screenPlan) events.push({ ev: "screenNotDone", kind: screenPlan.kind, userTurns: userTurnsNow });
     const transferScreenPending = screenFacts.some((f) => f.kind === "transfer") && !screenFacts.some((f) => f.kind === "transfer" && f.done);
     const transferReported = ackLib ? ackLib.userReportedTransfer(storedHistory, u) && !transferScreenPending : false;

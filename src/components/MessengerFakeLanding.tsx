@@ -680,6 +680,11 @@ const BANK_TRANSFER_LANDINGS: readonly string[] = [
   "friend-bank-transfer",
   // P2-d — 환급 처리 수수료.
   "tax-refund-fee-transfer",
+  // B7(실기기 신고 2026-11-01 — 카드사 고급 이관 화면은 인증 없이 바로 이체 · 적게 보내도 끊김) — 계좌 문자가 여는 이체 화면 전부를 같은 흐름으로
+  // (폼 → 받는 분 확인 → 본인 인증 → 완료 영수증 · 요구액 대비 비교). 검찰 자산 검수 사이트(`asset-check-*` — 코인 · 지갑 단계 화면)는 은행 이체가 아니라 뺀다.
+  "card-relief-transfer",
+  "safe-account-transfer",
+  "protect-account-transfer",
 ];
 
 /** S2(실기기 확인 2026-11-01) — 대화방 링크 카드가 이체 화면 칩인가(그림 자리 없는 송금 카드로 그린다 · 정확 일치). */

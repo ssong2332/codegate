@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { recordTransferAndCompare, transferTimeText } from "./bankApp.ts";
+import { lastAmountIn, latestDemandAmount, recordTransferAndCompare, transferTimeText } from "./bankApp.ts";
 import { sendsAsContextInjection, stepSilenceNudge, INITIAL_SILENCE_NUDGE_STATE } from "../realtime/contextInjection.ts";
 
 const read = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
@@ -56,7 +56,8 @@ test("[B4] 비교 결과만 기록 경로로 · 메신저 칩 요구액은 비�
   assert.ok(room.includes("const request = { sessionId, landingId, event, ...(amountComparison ? { amountComparison } : {}) };"));
   assert.ok(room.includes("...(fakeLanding.transferAmount ? { requestedAmount: fakeLanding.transferAmount } : {}),"));
   assert.ok(!room.includes("amount: fakeLanding.transferAmount"), "금액 칸을 미리 채우지 않는다(참가자가 직접 넣는다)");
-  assert.ok(room.includes("...(attachment.transferAmount ? { transferAmount: attachment.transferAmount } : {}),"), "서버가 칩에 실은 요구액");
+  // A4 — 대화방 가장 최근 금액 · 없으면 서버가 칩에 실은 요구액(아래 [A4] 테스트).
+  assert.ok(room.includes("?? attachment.transferAmount"), "서버가 칩에 실은 요구액(대체값)");
   assert.ok(page.includes("void recordInCallSmsEvent({ sessionId, smsId, event, ...(amountComparison ? { amountComparison } : {}) })"));
   assert.ok(page.includes('onLandingSubmitted={(smsId, amountComparison) => handleRecordSmsEvent(smsId, "landing_submitted", amountComparison)}'));
   assert.ok(smsOverlay.includes("onCredentialSubmit={(amountComparison) => onLandingSubmitted(landing.smsId, amountComparison)}"));
@@ -72,4 +73,23 @@ test("[B5 R1] 실시간 화면 기록 줄 — 맥락 주입 · 침묵 넛지 0 �
   const kinds = '"confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted" | "installConsented" | "screenStatus"';
   assert.equal(page.split(kinds).length - 1, 2);
   assert.equal(read("src/lib/realtime/GeminiVoiceSession.tsx").split(kinds).length - 1, 2);
+});
+
+// ── A4(실기기 신고 2026-11-01 저녁) — 대화방 요구액: 칩 뒤에 말한 금액도 비교 기준 · 서버 표기 규칙과 같다 ──
+
+test("[A4] 대화방 가장 최근 금액이 요구액 · 서버 `demandAmountFrom` 표기 규칙과 같다(드리프트)", () => {
+  assert.equal(latestDemandAmount(["가온은행 948-2716-5093-27 여기로 보내 줘", "아 200만 원만 보내 줘"]), "2,000,000", "칩 뒤에 말한 금액");
+  assert.equal(latestDemandAmount(["300만 원 필요해", "그 계좌로 보내 줘"]), "3,000,000", "최근 메시지에 없으면 그 앞");
+  assert.equal(latestDemandAmount(["폰이 고장 났어"]), undefined);
+  for (const [text, want] of [["1억 2천만 원", "120,000,000"], ["금액: 2,340,000원", "2,340,000"], ["삼천만 원 말고 200만 원만", "2,000,000"], ["계좌 948-2716-5093-27", undefined]] as const) {
+    assert.equal(lastAmountIn(text), want, text);
+  }
+  const server = read("functions/src/roleplay/linkMarker.ts");
+  const client = read("src/lib/bankapp/bankApp.ts");
+  for (const name of ["AMOUNT_UNITS", "AMOUNT_PATTERN", "AMOUNT_TOKEN"]) {
+    const line = (src: string) => src.split("\n").find((l) => l.startsWith(`const ${name} =`));
+    assert.equal(line(client), line(server), `${name} 서버와 같은 줄`);
+  }
+  assert.ok(room.includes('latestDemandAmount(messages.filter((m) => m.role === "scammer").map((m) => m.text)) ?? attachment.transferAmount'));
+  assert.ok(room.includes("...(chipDemandAmount(attachment) ? { transferAmount: chipDemandAmount(attachment) } : {}),"));
 });
