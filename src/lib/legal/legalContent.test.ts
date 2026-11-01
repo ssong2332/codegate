@@ -12,6 +12,7 @@ import {
   OPERATOR_INFO,
   SHOW_LEGAL_LINKS,
   PRIVACY_POLICY,
+  splitOperatorEmail,
   TERMS_OF_SERVICE,
 } from "./legalContent.ts";
 import { isAnonymousOutsideRecipientFlow, LEGAL_PATHS } from "../auth/anonymousScope.ts";
@@ -84,4 +85,18 @@ test("첫 화면 · 로그인 화면 하단에 고지 링크 자리가 있다(�
   }
   const links = readFileSync("src/components/LegalLinks.tsx", "utf8");
   for (const p of LEGAL_PATHS) assert.ok(links.includes(`href: "${p}"`), `${p} 링크가 없다`);
+});
+
+// UX-03(외부 보안 점검 2026-11-01) — /contact 이메일이 mailto: 링크다.
+test("UX-03 — 문의 화면의 운영자 이메일 줄은 mailto: 링크로 나뉘고 LegalDocumentView가 그 href를 그린다", () => {
+  const line = CONTACT_INFO.sections.flatMap((s) => [...(s.paragraphs ?? []), ...(s.items ?? [])]).find((t) => t.includes(OPERATOR_INFO.email));
+  assert.ok(line, "문의 화면에 운영자 이메일 줄이 없다");
+  const parts = splitOperatorEmail(line);
+  assert.ok(parts);
+  assert.equal(parts.href, `mailto:${OPERATOR_INFO.email}`);
+  assert.equal(parts.before + parts.email + parts.after, line, "나눈 뒤 이어 붙이면 원문과 같아야 한다");
+  assert.equal(splitOperatorEmail("이메일이 없는 줄"), null);
+  const view = readFileSync("src/components/LegalDocumentView.tsx", "utf8");
+  assert.match(view, /<a href=\{parts\.href\}/);
+  assert.match(view, /<li key=\{item\}>\{withMailtoLink\(item\)\}<\/li>/);
 });
