@@ -760,6 +760,10 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
     // #463 SA 미러 — 메신저 칩(이력 첨부) · mockScreens 기록 0(이 프로브는 칩 화면을 제출하지 않는다).
     const screenApplies = screenActionLib?.screenActionApplies ? screenActionLib.screenActionApplies(variantId) : false;
     const screenFacts = screenApplies ? screenActionLib.messengerScreenFacts(scenarioId, storedHistory, []) : [];
+    // R8 미러(2026-11-01 · #479 확인 실측에서 빠진 것을 발견) — 앱 `roleplay/index.ts`처럼 메신저 이체 칩을 보냈는데 마치지 않았으면 결정 화면 대기(4-c행이 goal 끊기를 막는다).
+    // 이 응답 전 이력 기준 · 화면 행동 적용 여부와 무관(앱과 같음) · 이 프로브는 칩 화면을 제출하지 않는다(기록 0).
+    const r8TransferChips = screenActionLib?.messengerScreenFacts ? screenActionLib.messengerScreenFacts(scenarioId, storedHistory, []).filter((f) => f.kind === "transfer") : [];
+    const r8DecisionScreenPending = r8TransferChips.length > 0 && !r8TransferChips.some((f) => f.done);
     const screenPlan = screenApplies ? screenActionLib.planScreenAction({ applies: true, facts: screenFacts, currentUserText: u }) : undefined;
     // R1 · R4 · R6 미러(2026-11-01) — 앱처럼 재촉 단계 맥락을 넘긴다(옛 lib는 셋째 인자를 무시 = 종전).
     const screenStatus = screenApplies ? screenActionLib.buildScreenStatusLine(true, screenFacts, { userTurns: userTurnsNow, notYetSent: [], messenger: !escalated }) : undefined;
@@ -804,9 +808,10 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       pp.text = screenActionLib.screenGiveUpReply(pp.text);
       pp.endCall = "give_up";
     }
-    const post = decideFallbackHangup(hangupFacts, delivered, false);
+    // R8 · P1 M1 미러 — 사후 판정은 응답의 끊기 사유로 4-c행을 본다(앱 `decideFallbackHangup(..., endCallSignal)`).
+    const post = decideFallbackHangup({ ...hangupFacts, decisionScreenPending: r8DecisionScreenPending }, delivered, false, pp.endCall);
     const effect = resolveFallbackHangupEffect({ endCall: pp.endCall, hangupMode, pre, post });
-    events.push({ ev: "hangup", mode: hangupMode, preRow: pre.row, postRow: post.row, endCall: pp.endCall ?? null, end: effect.end, userTurns: userTurnsNow });
+    events.push({ ev: "hangup", mode: hangupMode, preRow: pre.row, postRow: post.row, endCall: pp.endCall ?? null, end: effect.end, userTurns: userTurnsNow, decisionScreenPending: r8DecisionScreenPending });
     if (effect.end) ended = { kind: effect.kind, userTurns: userTurnsNow, row: post.row };
     stored.push({ role: "scammer", textMasked: pp.text, channel: escalated ? "voice" : "messenger", ...(pp.attachments ? { attachments: pp.attachments } : {}) });
     turns.push({ role: "scammer", n: scammerTurnNumber, servedBy: res.servedBy ?? (res.isMock ? "mock" : "unknown"), cause: [ti && "sms_announce", otpInstr && "otp_check", confirmPlan?.instruction && "confirm_result", rbKind && `repeat:${rbKind}`, nudge && "nudge", pp.escalate && "ESCALATE", effect.end && `ENDED:${effect.kind}`].filter(Boolean).join("+") || "user", raw: res.text, text: pp.text, attachments: pp.attachments });
