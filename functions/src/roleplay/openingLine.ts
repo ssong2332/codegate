@@ -3,6 +3,7 @@
 // index.ts(sendMessage, onCall + firebase-admin 의존)와 분리해둔 이유: 이 파일은 Firestore/admin
 // 초기화가 전혀 필요 없는 순수 조합(LLM 어댑터 호출)이라 node:test에서 admin 앱 부트스트랩 없이도
 // 바로 단위 테스트할 수 있다.
+import { sessionScreenActionOnly } from "./screenAction";
 import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
@@ -190,6 +191,8 @@ export async function generateOpeningLine(
       sessionAccountNumber: resolveRouteAccountNumber(scenarioId, flowVariantId),
       // §132.19 판정표 A — 결말이 계좌 이체가 아닌 루트는 계좌 예시 · 번호 문장 대신 금지 1문장(호출부 6곳 같은 술어).
       noAccountEnding: routeEndsWithoutAccount(scenarioId, flowVariantId),
+      // 화면 행동만 인정 — [화면 행동 확인](호출부 6곳 같은 술어 · `roleplay/screenAction.ts`).
+      screenActionOnly: sessionScreenActionOnly(scenarioId, flowVariantId),
       // T194-b(§84.3.4 · G568 호출부 3곳 중 "오프닝 대사") — 부재 = 블록 0(바이트 동일).
       ...(personaCard ? { personaCard } : {}),
       // §110.5 — 호칭(호출부 3곳 같은 값 · 부재 = 블록 0).

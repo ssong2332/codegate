@@ -425,9 +425,10 @@ test("[M1 역검증] 강등 직후 폴백 — 보정 없는 오염본과 정본�
 
 test("[M1 배선] sendMessage는 도착 기록을 읽은 뒤 effectiveTextPathUserTurns로 계수를 보정한다(소스 스캔)", () => {
   const src = readFileSync(path.resolve(__dirname, "../../../src/roleplay/index.ts"), "utf8");
-  const readAt = src.indexOf("smsDelivered = await readDeliveredSms(sessionRef);");
-  const fixAt = src.indexOf("userTurnsNow = effectiveTextPathUserTurns(serverUserTurns, smsDelivered);");
-  const planAt = src.indexOf("planSmsBackstop({ declared: smsDeclared, delivered: smsDelivered, userTurns: userTurnsNow })");
+  const readAt = src.replace(/\r\n/g, "\n").indexOf("smsDelivered = await readDeliveredSms(sessionRef);");
+  const fixAt = src.replace(/\r\n/g, "\n").indexOf("userTurnsNow = effectiveTextPathUserTurns(serverUserTurns, smsDelivered);");
+  // 화면 행동만 인정(2026-11-01) — 계획 호출에 설치 보류 인자(SB)가 붙어 여러 줄이 됐다(순서 단언은 그대로).
+  const planAt = src.replace(/\r\n/g, "\n").indexOf("planSmsBackstop({\n          declared: smsDeclared,\n          delivered: smsDelivered,\n          userTurns: userTurnsNow,");
   assert.ok(readAt > -1 && fixAt > readAt && planAt > fixAt, "읽기 → 보정 → 계획 순서가 아니다");
 });
 

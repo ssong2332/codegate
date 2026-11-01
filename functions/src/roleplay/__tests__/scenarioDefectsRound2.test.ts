@@ -324,7 +324,8 @@ test("[§104 문자 미도착] 사기범이 문자를 보냈다고 말했으면(
   assert.ok(src.includes('const smsClaimed = trigger === "backstop" && request.data?.smsClaimed === true;'));
   // §115 — 도착 기록을 한 번 읽어 백스톱 계획과 마무리 판정(`planGoalWrapUp`)이 같은 값을 쓴다.
   assert.ok(src.includes("const deliveredNow = await readDeliveredSms(sessionRef);"));
-  assert.ok(src.includes("planSmsBackstop({ declared, delivered: deliveredNow, userTurns, claimed: smsClaimed })"));
+  // 화면 행동만 인정(2026-11-01) — 같은 계획 호출에 설치 보류 인자(SB)가 붙어 여러 줄이 됐다.
+  assert.ok(src.includes("const plan = planSmsBackstop({\n      declared,\n      delivered: deliveredNow,\n      userTurns,\n      claimed: smsClaimed,"));
 });
 
 // ══ §104.9 메신저 단계 사기범 종료(대안 A) ══════════════════════════════════════════════════════════════════════════

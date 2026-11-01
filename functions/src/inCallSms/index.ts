@@ -25,7 +25,8 @@ import {
   resolveDeclaredSms,
 } from "./smsGate";
 import type { SmsGateStatus } from "./smsGate";
-import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms } from "./smsDelivery";
+import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms, readMockScreenRecords } from "./smsDelivery";
+import { installPendingSince, screenActionApplies } from "../roleplay/screenAction";
 import { goalFollowUpFor, planGoalWrapUp } from "../scammerHangup/goalAction";
 import { GOAL_WRAP_UP_INSTRUCTION } from "../scammerHangup/guidance";
 import { withModelToolNoRepeat } from "./toolGuidance";
@@ -171,7 +172,18 @@ export const deliverInCallSms = onCall<
   const smsClaimed = trigger === "backstop" && request.data?.smsClaimed === true;
   if (trigger === "backstop") {
     const deliveredNow = await readDeliveredSms(sessionRef);
-    const plan = planSmsBackstop({ declared, delivered: deliveredNow, userTurns, claimed: smsClaimed });
+    // 화면 행동만 인정 판정표 SB — 설치 화면 권한 허용 기록이 없으면 다음 단계 문자를 잠시 밀지 않는다(설치 문자가 도착한 세션만 mockScreens를 읽는다).
+    const holdApplies = screenActionApplies(session.flowVariantId) && deliveredNow.some((d) => d.fakeLandingId !== undefined);
+    const installPending = holdApplies
+      ? installPendingSince(true, session.scenarioId, deliveredNow, await readMockScreenRecords(sessionRef))
+      : undefined;
+    const plan = planSmsBackstop({
+      declared,
+      delivered: deliveredNow,
+      userTurns,
+      claimed: smsClaimed,
+      ...(installPending !== undefined ? { installPendingSince: installPending } : {}),
+    });
     // §132.9 — "보냈다" 주장이 하한 전에 나왔으면 정정 1줄을 함께 돌려준다(클라 1회 주입 · 하한은 그대로).
     if (plan.action === "wait") return smsClaimed ? { status: "waiting", claimNotYetInstruction: SMS_CLAIM_NOT_YET } : { status: "waiting" };
     if (plan.action === "none_pending") {
@@ -267,7 +279,7 @@ export const deliverInCallSms = onCall<
   return {
     ...built,
     ...(announceInstruction !== undefined ? { announceInstruction } : {}),
-    ...buildConfirmResultField({ placed, scenarioId: session.scenarioId }, declaredItem),
+    ...buildConfirmResultField({ placed, scenarioId: session.scenarioId, flowVariantId: session.flowVariantId }, declaredItem),
     status: "delivered",
   };
 });

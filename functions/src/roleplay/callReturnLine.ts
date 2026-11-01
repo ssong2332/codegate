@@ -11,6 +11,7 @@
 // | `followUp` 없음(옛 클라) | 종전(전이만) |
 // ⛔ 신호 마커(`[[SIGNAL:…]]` · `[[SMS:…]]`)는 지우기만 한다 — 복귀 메시지는 통화 재전환 · 끊기 · 문자 발송을 일으키지 않는다.
 // ⛔ 대사 본문을 로그에 싣지 않는다(G170).
+import { sessionScreenActionOnly } from "./screenAction";
 import { logger } from "firebase-functions";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
@@ -101,6 +102,8 @@ export async function generateCallReturnLine(
       sessionAccountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
       // §132.19 판정표 A — 결말이 계좌 이체가 아닌 루트는 계좌 예시 · 번호 문장 대신 금지 1문장(호출부 6곳 같은 술어).
       noAccountEnding: routeEndsWithoutAccount(session.scenarioId, session.flowVariantId),
+      // 화면 행동만 인정 — [화면 행동 확인](호출부 6곳 같은 술어 · `roleplay/screenAction.ts`).
+      screenActionOnly: sessionScreenActionOnly(session.scenarioId, session.flowVariantId),
       personaCard: session.personaCard?.items,
       ...(familyAddress ? { familyAddress } : {}),
     }),

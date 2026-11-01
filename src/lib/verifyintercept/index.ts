@@ -1,10 +1,12 @@
 export {
   announceTurnsOnInstructionDispatch,
+  callerLabelForDisplay,
   deferredAnnouncePendingOnDispatch,
   enqueueInstruction,
   IDLE_LIVE_TURN_PHASE,
   INSTRUCTION_DRAIN_BACKSTOP_SEC,
   INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES,
+  instructionBusyBlocks,
   isResponseInProgress,
   nextVerifyOfferStage,
   rollbackVerifyOfferPhase,

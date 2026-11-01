@@ -202,9 +202,18 @@ test("[T110/G85-UI/§49 V5] 통화 셸에 번호 은유·상시 트리거 문구
   // '번호' 문자열이 정당하게 존재한다 — 다이얼패드(AC-026)와 **C8 발신자 라벨 폴백**이다.
   // C8은 §22.1이 **무변경**으로 못박은 값이고, 그 라벨 전환이 원 화자 퇴장의 **유일한 시각적
   // 보증**이다(G87 — T103도 이 우선순위를 그대로 계승해야 한다).
+  // ⚠️ H1(2026-11-01 U1) — 우선순위 식을 `callerLabelForDisplay`로 옮겼다(넘김 지시가 Live에 나가기 전까지만 원래 라벨을 유지).
+  // 우선순위 자체(재연결 라벨 → 시나리오 라벨 → "발신번호 표시제한")는 무변경이다 — 아래가 두 곳을 함께 고정한다.
   assert.ok(
-    rendered.includes('verifyOffer?.reconnectedCallerLabel ?? scenario.callerLabel ?? "발신번호 표시제한"'),
+    rendered.includes("reconnectedCallerLabel: verifyOffer?.reconnectedCallerLabel,") &&
+      rendered.includes("scenarioCallerLabel: scenario.callerLabel,"),
     "C8 우선순위가 깨지면 전환 후에도 필에 원 화자가 남아 겹침이 UI로 재현된다(G87)",
+  );
+  const lib = readFileSync("src/lib/verifyintercept/verifyIntercept.ts", "utf8");
+  assert.ok(
+    lib.includes('const original = input.scenarioCallerLabel ?? "발신번호 표시제한";') &&
+      lib.includes("return input.reconnectedCallerLabel ?? original;"),
+    "C8 우선순위(재연결 라벨 → 시나리오 라벨 → 표시제한)는 그대로여야 한다(G87)",
   );
 });
 
