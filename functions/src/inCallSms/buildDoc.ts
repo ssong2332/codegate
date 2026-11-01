@@ -5,6 +5,7 @@ import { buildLiveConfirmResultInstruction, buildLiveScreenConfirmInstruction, c
 import { screenActionApplies } from "../roleplay/screenAction";
 import { DEFAULT_MOCK_SCREEN_KIND, isBankTransferLanding, resolveMockScreenKind } from "../scenarios/mockScreens";
 import type { DeliverInCallSmsResponse } from "./types";
+import { findDialEntry } from "../scenarios/dialDirectory";
 import type { InCallSmsDoc } from "../shared/types";
 import {
   applyFictionalBank,
@@ -35,6 +36,8 @@ export function buildInCallSmsDoc(
   const opensBankTransfer = item.fakeLandingId !== undefined && isBankTransferLanding(item.fakeLandingId);
   const holder = extractAccountHolder(fictionalBankName ? applyFictionalBank(item.body, fictionalBankName) : item.body);
   const amount = extractTransferAmount(item.body);
+  // §142 — 번호 안내 문자의 번호(번호부가 원천 — 본문에서 파싱하지 않는다).
+  const dialNumber = item.dialNumberId ? findDialEntry(scenarioId, item.dialNumberId)?.number : undefined;
   // T104(§19.4 #2) — 링크형 문자가 여는 랜딩의 **목업 종류를 서버가 확정해 실어 보낸다**
   // (§15.9.1 R3 — 클라가 `fakeLandingId` 문자열로 kind를 추론하지 않는다).
   const landingKind =
@@ -58,6 +61,7 @@ export function buildInCallSmsDoc(
     // 종류별 필드는 해당 kind일 때만 채운다(부재를 판별자로 오버로드하지 않되, 무의미한 빈 값도
     // 만들지 않는다 — kind가 유일한 판별자다, §14.9.1 원칙).
     ...(item.kind === "otp" && item.otpCode ? { otpCode: item.otpCode } : {}),
+    ...(item.kind === "callback" && dialNumber ? { dialNumber } : {}),
     // §51.6 R10/G317 — kind가 아니라 필드 존재로 판정한다("account"도 이제 링크를 병기할 수
     // 있다). kind로 링크 부착 여부를 추론하는 코드를 두지 않는다(R10 양방향 금지).
     ...(item.linkDisplayText ? { linkDisplayText: item.linkDisplayText } : {}),

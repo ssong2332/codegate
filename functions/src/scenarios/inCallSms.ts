@@ -20,7 +20,11 @@
 //     T191(문자 도달 조건) 이후로는 트리거(`smsId` + `afterScammerTurns`)도 클라에 내려가지 않는다 — 발송 여부는
 //     세션 흐름 변형의 `sms` 선언 + `inCallSms/smsGate.ts`가 정한다.
 
-export type InCallSmsKind = "account" | "link" | "otp";
+import { CARD_FAKE_CALLBACK_NUMBER_ID } from "./dialDirectory";
+import { CARD_REBUILD_NAMES } from "./fictionalNames";
+
+// §142 — `callback` = 전화번호를 안내하는 문자(번호를 누르면 앱 안 다이얼 화면이 그 번호로 채워진다 · `dialNumberId` 필수 · 링크 · 인증번호 0).
+export type InCallSmsKind = "account" | "link" | "otp" | "callback";
 
 export type InCallSmsItem = {
   /** 카탈로그 안에서 유일한 id. Firestore `sessions/{sid}/inCallSms/{smsId}`의 문서 id가 된다. */
@@ -55,6 +59,8 @@ export type InCallSmsItem = {
   afterScammerTurns: number;
   /** 도착 순간 캐릭터가 "문자 보냈다"고 알리게 하는 1줄 지시(서버 소유 — 전달 응답으로만 나간다). */
   announceInstruction: string;
+  /** §142 — `kind === "callback"`일 때만. 본문 속 번호의 번호부 id(`dialDirectory.ts`). 그 항목의 `number`가 본문에 그대로 있어야 한다(테스트 고정). */
+  dialNumberId?: string;
 };
 
 // ⭐ §104.10(2026-10-22 사용자 결정 "지금 전체 변경" — DECISIONS #219 · UX W-11 갱신) — 발신번호 자리표시 "0000-0000"을 시나리오별 **고정**
@@ -286,6 +292,55 @@ const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
     afterScammerTurns: 2,
     announceInstruction:
       "(참가자 휴대전화로 방금 보안 앱 설치 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 앱 설치를 진행해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 실제 주소를 읽어 주지 말고, 설치 방법·권한 설정은 설명하지 마라.)",
+  },
+  // ⭐ §142(카드사 고급 재구성 · 다통화 변형 전용 — 레그 선언은 `flowVariants.ts`). afterScammerTurns는 발송 판정 입력이 아니다(위 타입 주석).
+  // R2 시작 문자 — 세션이 이 문자가 도착한 화면에서 시작한다(게이트 밖 · 변형 `openerSmsId`). 출처: 조사 S7 · S18(카드 발급 문자 → 가짜 고객센터).
+  {
+    smsId: "card-issue-notice",
+    kind: "callback",
+    senderLabel: `${SMS_SENDER_NUMBER["card-company-impersonation"]} (${CARD_REBUILD_NAMES.cardCompany})`,
+    body: `[${CARD_REBUILD_NAMES.cardCompany}] 신용카드 발급이 완료되었습니다.\n본인이 신청하지 않으셨다면 고객센터로 바로 연락 바랍니다.\n고객센터 02-0762-5513`,
+    dialNumberId: CARD_FAKE_CALLBACK_NUMBER_ID,
+    afterScammerTurns: 6,
+    announceInstruction:
+      "(참가자 휴대전화에 카드 발급 안내 문자가 와 있고, 참가자가 그 문자에 있던 고객센터로 직접 전화를 걸어 왔다. 상대의 말에 대답할 때 그 대답 안에서 전화를 받은 상담원으로 한두 문장 응대하고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 연락처 · 계좌번호 · 금액을 새로 지어내 말하지 마라.)",
+  },
+  // R1 배송원 레그 — 반송 처리용 가짜 대표번호(조사 S1 p.2 실제사례 · S8).
+  {
+    smsId: "card-callback-number",
+    kind: "callback",
+    senderLabel: `${SMS_SENDER_NUMBER["card-company-impersonation"]} (${CARD_REBUILD_NAMES.cardCompany} 배송)`,
+    body: `[${CARD_REBUILD_NAMES.cardCompany} 배송] 카드 반송 · 사고 접수는 고객센터로 연락 바랍니다.\n고객센터 02-0762-5513`,
+    dialNumberId: CARD_FAKE_CALLBACK_NUMBER_ID,
+    afterScammerTurns: 7,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 반송 접수 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자에 있는 고객센터로 바로 전화해 보라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 연락처 숫자를 새로 지어내거나 소리 내어 불러 주지 마라.)",
+  },
+  // 상담원 레그 — 원격 지원 앱(조사 S1 p.3 — 공식 스토어형 원격제어 앱). 화면 `card-remote-support-install`(app-install · Q2).
+  {
+    smsId: "card-remote-support-link",
+    kind: "link",
+    senderLabel: `${SMS_SENDER_NUMBER["card-company-impersonation"]} (${CARD_REBUILD_NAMES.cardCompany} 고객센터)`,
+    body: `[${CARD_REBUILD_NAMES.cardCompany}] 명의 도용 피해 확인을 위한 보안 점검 안내입니다.\n아래에서 원격 지원 도우미를 설치해 주세요.`,
+    linkDisplayText: "원격 지원 도우미 설치하기",
+    fakeLandingId: "card-remote-support-install",
+    linkAddress: "remote-help-store.invalid/app/Hd7q",
+    afterScammerTurns: 8,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 원격 지원 앱 설치 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 앱 설치를 진행해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 실제 주소를 읽어 주지 말고, 설치 방법·권한 설정은 설명하지 마라.)",
+  },
+  // 감독기관 레그(마지막) — 안전계좌(조사 S1 p.4~5 "자산보호 · 안전계좌 송금"). 금액 = D8 980만 원. 화면 `card-safe-transfer`(훈련용 이체 화면).
+  {
+    smsId: "card-safe-account",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["card-company-impersonation"]} (${CARD_REBUILD_NAMES.supervisor} 자산보호 안내)`,
+    body: "[자산보호 안내] 조사 기간 안전계좌 안내\n예금주: 한도윤\nOO은행 503-1847-2260-91\n금액: 9,800,000원\n아래에서 자산 보호 이체를 진행해 주세요.",
+    linkDisplayText: "자산 보호 이체 진행하기",
+    fakeLandingId: "card-safe-transfer",
+    linkAddress: "asset-guard-desk.invalid/safe/Wm4c",
+    afterScammerTurns: 9,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 안전계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 이체를 진행해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
   },
 ];
 

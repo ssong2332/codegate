@@ -24816,3 +24816,85 @@ Hosting만(functions 변경 0).
 ### 141.6 한계
 - 볼륨 키 '미디어' 혼재가 다시 생긴다 — 해결은 안 B의 실기 A/B 결과를 본 뒤 정한다.
 - 이미 `?outelement=1`로 연 탭은 탭 안 저장 값(F3 · F4) 때문에 계속 켜져 있다(`?outelement=off`로 지운다).
+
+## 142. (Feature — 2026-11-01 · 브랜치 `claude/card-advanced-rebuild` = main `6cf6d816` + 변경 · 메인 세션 지시(사용자 승인 "권고대로" — 설계안 #470 D1~D9)) **카드사 고급 재구성 — 통화를 나눈 다화자 흐름(레그 런타임) · 참가자 직접 발신 · 공식 번호 가로채기** — architect · implementer 기록
+
+### 142.0 금지 · 범위
+| 항목 | 규칙 |
+|---|---|
+| 근거 | 설계 `docs/research/card-company-advanced-redesign-2026-11-01.md`(#470) · 현실 조사 `docs/research/card-company-scam-reality-2026-11-01.md`(#468) |
+| 바이트 고정 | `fv-akj5` · `fv-6s5p`(#192) 무변경 — `inCallSms/__tests__/smsGate.test.ts` T194-c-1 블록이 그대로 고정한다 |
+| 도구 선언 | Live 도구 선언 무변경(`realtime/__tests__/toolDeclarationUnchanged.test.ts`) — 레그 끝은 기존 `end_call`로 낸다 |
+| 실제 전화 | 앱 안 다이얼 화면만 · `tel:` · 외부 이동 0(AC-019 무변경) |
+| 이름 · 번호 | 카드사 "윤슬카드" · 감독기관 "금융감독기관"(일반 명사) · 팀 · 담당자 §118 `FSS_CALLER_NAMES` · 검찰청 "한빛지방검찰청"(§109). 번호는 국번 0 시작 가상 관례(`inCallSms.ts` `SMS_SENDER_NUMBER`) |
+| 서비스 밖 유도 | 대출 · 현금 인출 · 금 구매 0 — 결말은 서비스 안 이체 화면 하나 |
+
+### 142.1 결정 반영 (설계안 §6 — 메인 전달 확정값)
+| # | 확정 | 반영 위치 |
+|---|---|---|
+| D1 | "금융감독기관" + 가상 팀 · 이름 | `fictionalNames.ts` `CARD_REBUILD_NAMES` |
+| D2 | "윤슬카드"(웹 확인 — 기각: 가온카드 = KB국민카드 실존 상품 · 단비카드 = 삼성카드 제휴 상품명) | 같은 상수 주석 |
+| D3 | 진짜 번호로 건 경우 = 자동 안내 화면 → 방어 종료 | 다이얼 판정표(142.4) `genuine` |
+| D4 | N초 안에 안 걸면 다음 화자가 다시 걸어옴 | 레그 `entry` 대체 = `incoming` |
+| D5 | 통화(레그)마다 새 Live 연결 · 레그별 목소리 | 142.3 |
+| D6 | `fv-akj5` 무변경(챌린지 전용 — 알려진 현실 차이로 기록) | — |
+| D7 | 중급 `fv-35f2` 범위 밖 | — |
+| D8 | 이체 요구 980만 원 | 안전계좌 문자 |
+| D9 | R2(발급 문자 진입) 포함 · 덱 2벌 | 새 변형 2벌 |
+
+### 142.2 레그 모델 (판정표 — 이 표대로만)
+레그 = 한 화자가 맡는 통화 구간. 변형의 `legs[i]`에 **들어오는 방식(entry)** 과 **나가는 방식(exit)** 을 둔다.
+
+| entry | 뜻 | 화면 |
+|---|---|---|
+| `incoming` | 상대가 걸어온다(첫 레그 종전 동작 · D4 대체) | 수신 벨 → 받기 |
+| `dial` | 참가자가 앱 안 다이얼에서 건다 | 다이얼 → 발신(연결음) → 연결 |
+| `transfer` | 앞 화자가 연결해 준다(참가자 행동 0) | 대기음 → 같은 통화 화면 · 라벨 교체 |
+
+| exit | 앞 레그 `end_call`이 승인되면 | 다음 |
+|---|---|---|
+| `dial` | 통화 종료 화면 → 전화 앱(다이얼 · 연락처) | 참가자 발신 → 142.4 판정 |
+| `transfer` | 통화 유지 · 대기음 | 다음 레그 새 연결 |
+| (마지막 레그 — exit 없음) | 종전 끊기 = 세션 끝 | 리포트 |
+
+### 142.3 런타임 (서버가 레그 번호의 유일한 원천)
+| 항목 | 규칙 |
+|---|---|
+| 레그 번호 | 세션 문서 `relay.legIndex`(서버 필드 — 클라 쓰기 금지). 다음 레그 시작은 서버 콜러블만 쓴다 |
+| 프롬프트 | `resolveVariantPrompt(base, variant, legIndex)` — 그 레그 페르소나 + **그 레그 단계만** + 앞 레그 인계 1블록 |
+| 목소리 | 레그 `speakerGender` · 레그별 목소리(D5). 같은 인물이 다시 나오면(감독기관 2 → 4) 같은 목소리 |
+| 문자 게이트 | 문자 선언에 `leg`를 두고, 현재 레그 문자만 허용 · 하한은 **레그 시작 뒤 사용자 발화 수** |
+| 끊기 판정 2-b | `exit`가 있는 레그(다이얼 · 연결 흐름)의 `end_call`은 막지 않고 **레그 끝**으로 처리한다. `exit` 없는 legs ≥ 2(옛 릴레이 데이터)는 종전대로 |
+| 확인 무력화 | 이 흐름의 변형은 확인 창구 오퍼를 쓰지 않는다 — 확인은 참가자 발신으로 재현된다. ⇒ 4행(`blocked_transfer`)이 열릴 길이 없어 포기 끊기가 막히지 않는다(R7 — `docs/research/realdevice-fixes-probe-2026-11-01.md`) |
+| 4-c | 마지막 레그 이체 화면에만 적용(종전과 같은 입력) |
+
+### 142.4 다이얼 판정표 (exit `dial` 뒤 참가자가 건 번호)
+| 건 번호 | 조건 | 결과 |
+|---|---|---|
+| 레그가 기대한 번호(문자 속 번호 · 공식 번호) | 가로채기 조건 없음 · 또는 조건 충족 | 다음 레그 연결 |
+| 공식 번호(감독기관) | 가로채기 조건 = 원격 지원 앱 설치 응낙(화면 행동) **불충족** | `genuine` 자동 안내 → 방어 종료(D3) |
+| 연락처의 진짜 카드사 번호 | 첫 다이얼(배송원 뒤) | `genuine` 자동 안내 → 방어 종료(D3) |
+| 그 밖 번호 | — | "없는 번호" 안내 · 다시 걸기 |
+| N초 안에 안 건다 | — | 다음 레그가 `incoming`으로 걸어옴(D4) |
+
+### 142.5 PR-1(서버 데이터 · 화면 문구) — 배정 대기
+| 항목 | 내용 | 위치 |
+|---|---|---|
+| 새 변형 | `fv-k3dn`(R1 배송 전화 진입 · 레그 5 · 인물 4) · `fv-r8vb`(R2 발급 문자 진입 · 레그 4 · 인물 3) — `multiCall` · `pendingRollout` | `flowVariants.ts` |
+| 레그 프롬프트 | `resolveVariantPrompt(base, v, legIndex)` — 다통화면 그 레그 페르소나 + 그 레그 단계 + 레그 끝 규칙 1줄 + 레그 수법만. `resolveSessionScenarioPrompt(…, legIndex)` 인자 추가(다통화 아닌 변형은 읽지 않음) | 같은 파일 |
+| 레그 페르소나 · 수법 | 배송원 · 상담원 · 감독기관(2레그 같은 인물) · 검사 | `cardRebuildLegs.prompt.ts` |
+| 번호부 | 가짜 대표번호 · 진짜 카드사 · 감독기관 공식 번호(가상) + 진짜 기관 자동 안내(D3) | `dialDirectory.ts` |
+| 문자 4 | `card-issue-notice`(R2 시작 · callback) · `card-callback-number`(callback) · `card-remote-support-link`(link) · `card-safe-account`(account 980만 원) | `inCallSms.ts` |
+| 문자 종류 | `callback` 신설 — 문서 필드 `dialNumber`(번호부가 원천) · 선언 목적은 `link`(Live 도구 목적 열거 무변경) | `inCallSms.ts` · `shared/types.ts` · `inCallSms/buildDoc.ts` |
+| 화면 2 | `card-remote-support-install`(app-install · Q2) · `card-safe-transfer`(훈련용 이체 화면) — 클라 문구 표 바이트 동일(G76) | `mockScreens.ts` · `MessengerFakeLanding.tsx` |
+| 배정 | 두 변형 모두 `pendingRollout` — `listFlowVariants`가 거른다 ⇒ 자가 고급 덱은 종전 그대로(`fv-x7ue` · `fv-w3dq`). 단언 `[§142 배정 대기]`가 레그 게이트 전 해제를 막는다 | `smsGate.test.ts` |
+| 테스트 갱신 | 장부 · 개수 단언(설치 화면 6→7 · 도달 랜딩 25→27 · 문자 안내 21→25 · T129 (b) 등재 +2 · 4-c 대상 +2 · J6 장부 3→5) · 다통화 제외(세션 전체 문자 시뮬레이션 2건 — 레그 시뮬레이션은 PR-3) · 새 단언(`[§142 레그 합성]` · `[§142 배정 대기]`) · 무해화 스캔 확대(레그별 합성 페르소나 · 번호부 도메인) | — |
+| ⚠️ PRD 충돌 | AC-096 (b) 고급 인원 1~3 ↔ R1 인물 4(설계 #470 §3.2 승인). 다통화는 인물 수(`speakerId`)로 세고 `fv-k3dn`만 명시 예외(`flowVariants.test.ts` `ADVANCED_MULTI_CALL_PEOPLE_EXEMPT`) — 메인 보고 | — |
+| AC-072 판단 | 상담원 수법 "접속번호를 한 번만 묻는다"는 설치 절차 설명이 아니라 사기범 요구 재현으로 봤다(조사 S1 p.3) — 메인 보고 | `cardRebuildLegs.prompt.ts` |
+
+### 142.6 남은 단위
+| PR | 내용 | 해제 조건 |
+|---|---|---|
+| PR-3 런타임 | 세션 `relay.legIndex`(서버) · 레그 시작 콜러블(다이얼 판정표 142.4 · 가로채기 = 원격 지원 앱 응낙) · `createRealtimeCall` 레그 프롬프트 · 레그 목소리(풀 확장) · 앞 레그 인계 블록 · 문자 게이트 레그 단위 · 끊기 2-b(레그 끝) · 이 변형 확인 창구 끄기(R7) · 폴백 `sendMessage` 레그 | 레그별 시뮬레이션 단언 |
+| PR-2 클라 | 전화 앱 다이얼 · 연락처 · 발신 화면 · 문자 번호 누름 · R2 시작 셸 · 레그 전환(`useRealtimeCall` 레그 열기) · 진짜 기관 자동 안내 · D4 재발신 · 원격 지원 화면 접속번호 | 에뮬레이터 스모크 |
+| PR-4 | `pendingRollout` 해제 · `fv-x7ue` · `fv-w3dq` 은퇴 · 리포트 교육점 · 루트 이름 | 실 키 실측(세션 수 제안 — 승인 필요) |

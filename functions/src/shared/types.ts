@@ -293,7 +293,7 @@ export type ArtifactDoc = {
 // ⚠️ `MessengerAttachment`는 **무변경**이다 — OTP형은 링크가 아니라 표시용 코드라
 // `{kind:"link",displayText,fakeLandingId,harmless}`에 담기지 않는다. 억지 확장은 "link인데
 // fakeLandingId가 없는" 부재-오버로드를 만든다(§14.9.1이 반복 기각한 안티패턴).
-export type InCallSmsKind = "account" | "link" | "otp";
+export type InCallSmsKind = "account" | "link" | "otp" | "callback";
 export type InCallSmsDoc = {
   smsId: string; // = 문서 id. 서버가 IN_CALL_SMS[session.scenarioId] 소속을 재검증한 값만 기록
   kind: InCallSmsKind;
@@ -313,6 +313,8 @@ export type InCallSmsDoc = {
   accountHolder?: string;
   /** ⭐ P2 — 같은 본문 "금액: …원" 줄의 숫자만(쉼표 제거 · 예 `"1850000"`). 부재 = 참가자가 직접 넣는다(금액을 말로 부르는 루트). */
   transferAmount?: string;
+  /** §142 — `kind === "callback"`일 때만. 본문 속 번호(번호부 `dialDirectory.ts` 값) — 누르면 앱 안 다이얼 화면을 이 번호로 채운다(`tel:` 0). */
+  dialNumber?: string;
   // T104(§19.4) — 그 랜딩의 목업 종류. **kind의 진실 원천은 서버**이고(§15.9.1 R3) 클라는
   // `fakeLandingId` 문자열을 분류하지 않는다. 값이 기본값(`credential-form`)이면 **키를 만들지
   // 않는다** — `MessengerAttachment.landingKind`의 생략 규칙(`linkMarker.ts`)과 글자 그대로

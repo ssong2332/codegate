@@ -309,8 +309,19 @@ test("[변형 = 동작] 전 변형 — resolveDeclaredSms가 변형 sms 선언�
   }
 });
 
+// §142 — 다통화(`multiCall`) 변형은 문자를 레그 단위로 선언한다(같은 목적이 레그마다 다시 온다). 세션 전체를 한 줄로 흘리는 이 시뮬레이션의
+// 대상이 아니다 — 레그 게이트는 레그 런타임과 함께 레그별 시뮬레이션으로 고정한다. 그 전까지는 아래 [§142 배정 대기] 단언이 그 변형들을
+// 배정 풀 밖에 묶어 둔다(게이트 없이 켜지지 않게).
+const SESSION_WIDE_VARIANTS = FLOW_VARIANTS.filter((v) => !v.multiCall);
+
+test("[§142 배정 대기] 다통화 변형은 레그 게이트가 생기기 전까지 전부 배정 대기다(새 세션 후보 0)", () => {
+  const multi = FLOW_VARIANTS.filter((v) => v.multiCall);
+  assert.deepEqual(multi.map((v) => v.variantId).sort(), ["fv-k3dn", "fv-r8vb"]);
+  for (const v of multi) assert.equal(v.pendingRollout, true, `${v.variantId}: 레그 게이트 전 배정 금지`);
+});
+
 test("[변형 = 동작] 전 변형 × 모델 최악 요청 — 도착 = 선언 · 간격 ≥2 · 첫 문자 ≥ 하한", async () => {
-  for (const v of FLOW_VARIANTS) {
+  for (const v of SESSION_WIDE_VARIANTS) {
     const docs = await simulate(v, "model_all");
     const declaredIds = new Set(v.sms.map((s) => s.smsId));
     assert.equal(docs.length, v.sms.length, `${v.variantId}: 선언된 문자 전부가 (모델이 부르면) 가고 그 밖은 0`);
@@ -330,7 +341,7 @@ test("[변형 = 동작] 전 변형 × 모델 최악 요청 — 도착 = 선언 �
 
 test("[변형 = 동작] 전 변형 × 모델 무호출(백스톱만) — 필수만 가고 선택은 0 · 문자 0통 변형은 0", async () => {
   let optionalSkipped = 0;
-  for (const v of FLOW_VARIANTS) {
+  for (const v of SESSION_WIDE_VARIANTS) {
     const docs = await simulate(v, "backstop_only");
     const required = v.sms.filter((s) => s.required).map((s) => s.smsId).sort();
     assert.deepEqual(docs.map((d) => d.smsId).sort(), required, v.variantId);

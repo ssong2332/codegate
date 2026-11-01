@@ -63,7 +63,7 @@ const linkedSms = Object.values(IN_CALL_SMS)
   .filter((item) => item.linkAddress !== undefined);
 
 test("[T190/G453] 모든 mockHost가 .invalid 가짜 호스트 규칙을 지키고 서로 다르다", (t) => {
-  assert.equal(allScreens.length, 25, "도달 가능 랜딩은 25종이다(credential-form 19 + app-install 6 — P2-d 환급 수수료 이체 화면 · P2-c 메신저 이체 화면 2종 · P2 훈련용 이체 화면 5종 · T194-a parcel-install · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱 · §92.3 고급 전용 2종 · §98 검찰 보관 지갑 · §101 검찰 자산 검수 사이트)");
+  assert.equal(allScreens.length, 27, "도달 가능 랜딩은 27종이다(credential-form 20 + app-install 7 — §142 카드사 고급 재구성 안전계좌 이체 · 원격 지원 설치 · P2-d 환급 수수료 이체 화면 · P2-c 메신저 이체 화면 2종 · P2 훈련용 이체 화면 5종 · T194-a parcel-install · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱 · §92.3 고급 전용 2종 · §98 검찰 보관 지갑 · §101 검찰 자산 검수 사이트)");
   const violations = allScreens.flatMap((item) => mockHostViolations(item.mockHost));
   t.diagnostic(`[G453] 호스트 ${allScreens.length}개: ${allScreens.map((i) => i.mockHost).join(" · ")}`);
   assert.deepEqual(violations, []);

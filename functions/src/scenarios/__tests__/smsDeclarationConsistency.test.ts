@@ -41,7 +41,8 @@ const CLASSIFY: ReadonlyArray<[SmsPurpose, RegExp]> = [
   ["transfer", /계좌|이체|송금|입금/],
   ["link", /링크|앱|설치|접수|주소/],
 ];
-const KIND_TO_PURPOSE: Record<InCallSmsKind, SmsPurpose> = { otp: "identity", account: "transfer", link: "link" };
+// §142 — 번호 안내 문자(callback)는 link 목적으로 선언한다(Live 도구 목적 열거 무변경).
+const KIND_TO_PURPOSE: Record<InCallSmsKind, SmsPurpose> = { otp: "identity", account: "transfer", link: "link", callback: "link" };
 const EXCLUDED_SMS_CHANNEL_SCENARIOS = new Set(["messenger-parcel-smishing-sms", "messenger-subsidy-smishing-sms"]);
 
 type Session = { key: string; scenarioId: string; declared: readonly SmsPurpose[]; text: string };

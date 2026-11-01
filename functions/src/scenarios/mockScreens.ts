@@ -296,6 +296,8 @@ const MESSENGER_SUBSIDY_SMISHING_SMS: MockScreenItem[] = [
 // | `blackmail-hush-transfer` | `scenarios/inCallSms.ts` REPUTATION_BLACKMAIL_SCAM(문자 본문·칩 — P2 X6) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "이체할 금액을 확인해 주세요" | "바로 이체하기" |
 // | `courier-fee-transfer` | `scenarios/inCallSms.ts` COURIER_CUSTOMS_SCAM(문자 본문·칩 — P2 X6) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "통관수수료 이체 정보를 확인해 주세요" | "통관수수료 이체하기" |
 // | `courier-safe-transfer` | `scenarios/inCallSms.ts` COURIER_CUSTOMS_SCAM(문자 본문·칩 — P2 X6) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "안전계좌 이체 정보를 확인해 주세요" | "안전계좌로 이체하기" |
+// | `card-remote-support-install` | `scenarios/inCallSms.ts` CARD_COMPANY_IMPERSONATION(문자 본문·칩 — §142) | "아래에서 원격 지원 도우미를 설치해 주세요." | 링크에서 원격 지원 앱 설치 | "원격 지원 도우미를 설치해야 보안 점검이 시작됩니다" | "설치하고 권한 허용하기" |
+// | `card-safe-transfer` | `scenarios/inCallSms.ts` CARD_COMPANY_IMPERSONATION(문자 본문·칩 — §142) | "아래에서 자산 보호 이체를 진행해 주세요." | 링크에서 안전계좌 이체 | "자산 보호 조치가 완료되지 않았습니다" | "자산 보호 이체하기" |
 // | `child-bank-transfer` | `roleplay/linkMarker.ts` LINK_LABELS(칩 라벨 — P2-c) | "이체하기" | 링크에서 이체 | "이체 금액을 입력해 주세요" | "이체하기" |
 // | `friend-bank-transfer` | `roleplay/linkMarker.ts` LINK_LABELS(칩 라벨 — P2-c) | "송금하기" | 링크에서 송금 | "송금할 금액을 입력해 주세요" | "송금하기" |
 // | `tax-refund-fee-transfer` | `scenarios/inCallSms.ts` TAX_REFUND_SCAM(문자 본문·칩 — P2-d) | "아래 링크에서 바로 이체할 수 있습니다." | 링크에서 이체 | "수수료 이체 정보를 확인해 주세요" | "수수료 이체하기" |
@@ -379,6 +381,8 @@ export const BANK_TRANSFER_LANDINGS: readonly string[] = [
   "card-relief-transfer",
   "safe-account-transfer",
   "protect-account-transfer",
+  // §142 — 카드사 고급 재구성(다통화) 결말 안전계좌 이체.
+  "card-safe-transfer",
 ];
 
 /** P2 — 이 랜딩이 훈련용 이체 화면인가(문자 문서의 받는 분 · 금액 미리 채움 필드를 싣는 단일 판별자 — `inCallSms/buildDoc.ts`). */
@@ -615,6 +619,43 @@ const CARD_COMPANY_IMPERSONATION: MockScreenItem[] = [
     momentTactic: "명의 도용 피해 차단을 빌미로 한 보안 앱 설치·권한 허용 유도",
     correctAction:
       "피해를 막아 주겠다며 앱 설치나 권한 허용을 요구받으면 그 자리에서 허용하지 말고 화면을 닫으세요. ① 통화를 끊고 카드 뒷면이나 명세서에 적힌 번호로 직접 확인하기 ② 문자 속 링크로 앱을 설치하지 않기 ③ 가족이나 가까운 은행 창구에서 함께 확인하기 ④ 이미 허용했다면 가족 휴대폰이나 집 전화로 경찰이나 금융감독원에 신고하기.",
+  },  // ⭐ §142(카드사 고급 재구성 · 다통화 변형 전용) — 원격 지원 앱 설치(조사 S1 p.3 — 공식 스토어형 원격제어 앱 → 악성 앱). Q2 `app-install`.
+  // 설치 절차 · 권한 작동 방식 설명 0(AC-072) — 화면은 "설치 · 권한 허용" 버튼 하나다. 이 응낙이 가로채기 조건이다(Architecture.md §142.4).
+  {
+    landingId: "card-remote-support-install",
+    kind: "app-install",
+    entrySurface: "in-call-sms",
+    headline: "원격 지원 도우미를 설치해야 보안 점검이 시작됩니다",
+    bodyLines: [
+      "상담원이 휴대폰 보안 상태를 함께 점검해 드리는 앱입니다.",
+      "아래에서 원격 지원 도우미 설치를 진행해 주세요.",
+      "설치 후 접근 권한을 허용하면 상담원이 점검을 이어서 진행해 드립니다.",
+    ],
+    issuerLabel: "ⓒ 원격 지원 도우미",
+    mockHost: "remote-help-store.invalid",
+    consentLabel: "설치하고 권한 허용하기",
+    momentTactic: "명의 도용 보안 점검을 빌미로 한 원격 지원 앱 설치·권한 허용 유도",
+    correctAction:
+      "모르는 상담원이 '보안 점검'이라며 원격 지원 앱을 깔라고 하면 그 자리에서 멈추세요 — 원격 지원 앱으로 휴대폰을 넘겨받으면 내가 건 전화까지 가로챌 수 있습니다. ① 통화를 끊고 카드 뒷면에 적힌 번호로 직접 확인하기 ② 상담원이 시키는 앱을 설치하지 않기 ③ 가족 등 다른 사람의 전화로 함께 확인하기 ④ 이미 허용했다면 가족 휴대폰이나 집 전화로 경찰이나 금융감독원에 신고하기.",
+  },
+  // ⭐ §142 — 안전계좌 이체(조사 S1 p.4~5 "자산보호 · 안전계좌 송금"). 훈련용 이체 화면(`BANK_TRANSFER_LANDINGS`) — 렌더는 내 은행 송금 화면.
+  {
+    landingId: "card-safe-transfer",
+    kind: "credential-form",
+    entrySurface: "in-call-sms",
+    headline: "자산 보호 조치가 완료되지 않았습니다",
+    bodyLines: [
+      "조사가 끝날 때까지 자산을 안전계좌에 보관해야 합니다.",
+      "보내실 금액을 적고 아래 버튼을 눌러 주세요.",
+    ],
+    issuerLabel: "ⓒ 자산보호 안내센터",
+    mockHost: "asset-guard-desk.invalid",
+    fields: ["안전계좌 번호", "보호 금액"],
+    submitLabel: "자산 보호 이체하기",
+    successHeadline: "자산 보호 이체가 접수되었습니다.",
+    momentTactic: "수사 협박 뒤 자산 보호를 빌미로 한 안전계좌 이체 유도",
+    correctAction:
+      "'안전계좌'로 돈을 옮기라고 하면 100% 사기입니다 — 검찰 · 금융감독기관 · 카드사 어디도 개인에게 이체를 요구하지 않습니다. ① 통화를 끊고 가족 등 다른 사람의 전화로 확인하기 ② 휴대폰에 원격 지원 앱이 있다면 그 휴대폰으로 건 전화는 믿지 않기 ③ 가까운 은행 창구에서 직원과 함께 확인하기 ④ 이미 보냈다면 112(경찰)·1332(금융감독원)에 바로 신고하기.",
   },
 ];
 

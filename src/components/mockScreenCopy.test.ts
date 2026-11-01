@@ -730,7 +730,7 @@ function componentHosts(code: string): string[] {
 test("[T190/G453 클라] 컴포넌트의 가짜 호스트 전부(카탈로그 8 + 범용 폴백 1)가 .invalid 규칙을 지킨다", (t) => {
   const hosts = componentHosts(componentCode);
   t.diagnostic(`[G453 클라] 호스트 ${hosts.length}개: ${hosts.join(" · ")}`);
-  assert.equal(hosts.length, 26, "카탈로그 credential 19(P2 훈련용 이체 화면 5 · P2-c 메신저 2 · P2-d 환급 수수료 1 포함) + 설치 6(T194-a parcel-install · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱 1 · §92.3 credential 2 · §98 보관 지갑 1 · §101 자산 검수 사이트 1) + 범용 폴백 1");
+  assert.equal(hosts.length, 28, "§142 카드사 고급 재구성 2(안전계좌 이체 · 원격 지원 설치) + 카탈로그 credential 19(P2 훈련용 이체 화면 5 · P2-c 메신저 2 · P2-d 환급 수수료 1 포함) + 설치 6(T194-a parcel-install · T194-c-1 Q2 3종 · §110.2 자녀 보험 접수 앱 1 · §92.3 credential 2 · §98 보관 지갑 1 · §101 자산 검수 사이트 1) + 범용 폴백 1");
   assert.deepEqual(hosts.flatMap(clientHostViolations), []);
   // 범용 폴백 호스트는 카탈로그 호스트와 겹치지 않는다(겹치면 미스가 다른 사이트처럼 보인다).
   assert.equal(new Set(hosts).size, hosts.length);
@@ -753,6 +753,9 @@ test("[T190/G453 클라 역검증] .com 호스트를 넣은 사본 · https:// �
 // ── T190-5 — D-93 숫자 자판 힌트(UX-023 v1.33 (4) · docs/Architecture.md §74.8) ─────────────────────────────
 // 클라 전용 표현 힌트(`placeholder`와 같은 층)라 서버 카탈로그 드리프트 대조 밖이다. 계좌번호·금액 칸에만 필드별로 명시한다.
 const NUMERIC_FIELD_LABELS = [
+  // §142 — 카드사 고급 재구성 안전계좌 이체(card-safe-transfer) 2칸.
+  "안전계좌 번호",
+  "보호 금액",
   "계좌번호",
   "안전계좌 번호",
   "이체 금액",
@@ -808,7 +811,8 @@ test("[T194-a §84.13.3 ③ ⓐ] 설치 문구 표의 키 집합 = 서버 카탈
     .sort();
   assert.deepEqual(keys, installIds, "표에만 있거나 카탈로그에만 있는 설치 항목이 있다");
   // T194-c-1(§84.15.4) — Q2 통화 중 설치 화면 3종이 더해졌다. §110.2 — 자녀 사칭 카톡 고급의 보험 접수 앱 1종.
-  assert.deepEqual(installIds, ["card-delivery-app-install", "card-guard-app-install", "child-insurance-install", "loan-check-app-install", "parcel-install", "subsidy-install"]);
+  // §142 — 카드사 고급 재구성 원격 지원 도우미 설치 1종.
+  assert.deepEqual(installIds, ["card-delivery-app-install", "card-guard-app-install", "card-remote-support-install", "child-insurance-install", "loan-check-app-install", "parcel-install", "subsidy-install"]);
 });
 
 test("[T194-a §84.13.3 ③ ⓑ] 표에 없는 id의 app-install은 설치 화면을 그리지 않는다 — 기본 문구 폴백 0(소스 구조) · 역방향", (t) => {
@@ -962,7 +966,8 @@ test("[§106 ②③] 입력값을 읽는 곳은 열람본 분기 1곳 · 종전 
 test("[§101 D-115 ①②] 미리 채움 칸 = 이체형 3종의 수취 계좌 칸뿐 · 둘째 줄 정본 · 읽기 전용", () => {
   const prefilled = [...componentCode.matchAll(/\{ label: "([^"]+)", placeholder: "[^"]*", inputMode: "numeric", prefill: "account" \}/g)].map((m) => m[1]);
   // ⭐ P2(X6) — 훈련용 이체 화면 5종의 받는 계좌 칸도 문자 계좌로 미리 채운다(같은 D-115 원천 · 읽기 전용).
-  assert.deepEqual(prefilled.sort(), ["안전계좌 번호", "보호계좌 번호", "이관 전용 계좌번호", "상환 전용 계좌", "공탁금 계좌", "받는 분 계좌", "수수료 납부 계좌", "국가 안전계좌", "입금 계좌", "받는 사람 계좌", "수수료 입금 계좌"].sort());
+  // §142 — 카드사 고급 재구성 안전계좌 이체의 받는 계좌 칸 "안전계좌 번호"(기관 사칭 안전계좌와 같은 라벨) +1.
+  assert.deepEqual(prefilled.sort(), ["안전계좌 번호", "안전계좌 번호", "보호계좌 번호", "이관 전용 계좌번호", "상환 전용 계좌", "공탁금 계좌", "받는 분 계좌", "수수료 납부 계좌", "국가 안전계좌", "입금 계좌", "받는 사람 계좌", "수수료 입금 계좌"].sort());
   for (const line of [
     "이체하실 금액만 입력하시면 보호 조치가 바로 적용됩니다.",
     "이관하실 금액을 적고 아래 버튼을 눌러 주세요.",
@@ -977,7 +982,8 @@ test("[§101 D-115 ①②] 미리 채움 칸 = 이체형 3종의 수취 계좌 �
 test("[§101 ③④⑤] 금액 칸은 필드별 명시 · 검증 실패면 콜백 전에 돌아간다 · 입력값 자동 서식 0", () => {
   const amounts = [...componentCode.matchAll(/\{ label: "([^"]+)", placeholder: "[^"]*", inputMode: "numeric", amount: true \}/g)].map((m) => m[1]);
   // ⭐ P2(X6) — 훈련용 이체 화면 5종의 금액 칸(라벨 공통 · 처음 값만 문자 금액).
-  assert.deepEqual(amounts.sort(), ["보관 신청 금액", "전송 금액", "전환 금액", "이체 금액", "이관 금액", "옮길 금액", ...Array<string>(8).fill("보낼 금액")].sort());
+  // §142 — 카드사 고급 재구성 안전계좌 이체 "보호 금액" +1.
+  assert.deepEqual(amounts.sort(), ["보호 금액", "보관 신청 금액", "전송 금액", "전환 금액", "이체 금액", "이관 금액", "옮길 금액", ...Array<string>(8).fill("보낼 금액")].sort());
   const submit = componentCode.slice(componentCode.indexOf("const handleSubmit"), componentCode.indexOf("const issuerBar"));
   const guard = submit.indexOf("if (Object.keys(found).length > 0) return;");
   assert.ok(guard > 0, "검증 실패 시 되돌아가는 줄");

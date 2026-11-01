@@ -188,6 +188,9 @@ const EXPECTED_GUARDED = [
   "fv-xpvu", // 통관 고급 — 통관 확인 → 수수료 이체 화면
   "fv-uk7m", // 환급 고급 — 신청 화면 → 수수료 이체 화면
   "fv-62q8", // 은행 사칭 고급 — 보호계좌 이체 화면
+  // §142 — 카드사 고급 재구성(다통화 · 배정 대기). 결정 화면 = 마지막 레그 안전계좌 이체 화면(card-safe-transfer).
+  "fv-k3dn", // 카드사 고급 — 배송 전화 진입
+  "fv-r8vb", // 카드사 고급 — 발급 문자 진입
 ];
 
 test("[P1 M1 · D-2b] 결정 순간이 말인 4변형은 화면을 선언했어도 4-c 대상이 아니다 — P4 · P5에서 화면으로 바뀌면 옮긴다", () => {
@@ -218,7 +221,13 @@ test("[P1 M1] 결정 화면 = 선언 순서상 마지막 — 전 변형에서 �
   for (const v of FLOW_VARIANTS) {
     const screens = v.sms.filter((s) => s.required && (s.purpose === "transfer" || s.purpose === "link"));
     for (let i = 1; i < screens.length; i += 1) {
-      assert.ok(screens[i]!.notBeforeUserTurns >= screens[i - 1]!.notBeforeUserTurns, `${v.variantId}: 선언 순서와 하한 순서가 다르다`);
+      // §142 — 다통화 변형의 하한은 레그 시작 뒤 발화 수라 레그가 먼저다(레그 오름차순 · 같은 레그 안에서 하한 오름차순).
+      const [prev, cur] = [screens[i - 1]!, screens[i]!];
+      if (v.multiCall) {
+        assert.ok((cur.leg ?? 0) > (prev.leg ?? 0) || ((cur.leg ?? 0) === (prev.leg ?? 0) && cur.notBeforeUserTurns >= prev.notBeforeUserTurns), `${v.variantId}: 선언 순서와 레그 · 하한 순서가 다르다`);
+        continue;
+      }
+      assert.ok(cur.notBeforeUserTurns >= prev.notBeforeUserTurns, `${v.variantId}: 선언 순서와 하한 순서가 다르다`);
     }
   }
 });

@@ -173,7 +173,8 @@ const ROUTE_LEDGER: Readonly<Record<string, number>> = {
   "functions/src/scenarios/mockScreens.ts#J11_COVER_STORY": 1, // P5
   "functions/src/scenarios/mockScreens.ts#J2_CASH": 1, // P5
   "functions/src/scenarios/mockScreens.ts#J5_COIN": 2, // O4 확인
-  "functions/src/scenarios/mockScreens.ts#J6_INSTALL": 3, // P6
+  // §142 — 카드사 고급 재구성 원격 지원 앱 설치 화면(서비스 안 모의 설치 화면 · P6 — 설치 화면 문면 2문장).
+  "functions/src/scenarios/mockScreens.ts#J6_INSTALL": 5, // P6
   "functions/src/scenarios/prosecutionCooperationCall.prompt.ts#J1_LOAN": 2, // P4
   "functions/src/scenarios/prosecutionCooperationCall.prompt.ts#J5_COIN": 3, // O4 확인
   "functions/src/scenarios/taxRefundScam.prompt.ts#J6_INSTALL": 1, // P6

@@ -54,7 +54,9 @@ test("[P2 B1] 계좌 문자는 전부 이체 화면 링크를 갖는다 · 바�
   // B7(실기기 신고 2026-11-01) — P2 이전 계좌 문자 이체 화면 3종도 같은 흐름(인증 · 영수증 · 금액 비교)으로 들어왔다.
   assert.deepEqual(
     [...BANK_TRANSFER_LANDINGS].sort(),
-    [...CONVERTED.map(([, , l]) => l), "child-bank-transfer", "friend-bank-transfer", "card-relief-transfer", "safe-account-transfer", "protect-account-transfer"].sort(),
+    [...CONVERTED.map(([, , l]) => l), "child-bank-transfer", "friend-bank-transfer", "card-relief-transfer", "safe-account-transfer", "protect-account-transfer",
+      // §142 — 카드사 고급 재구성 안전계좌 이체(처음부터 훈련용 이체 화면).
+      "card-safe-transfer"].sort(),
   );
 });
 

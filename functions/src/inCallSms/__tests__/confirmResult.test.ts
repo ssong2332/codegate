@@ -385,7 +385,7 @@ function confirmResultPurposeForBeforeQ2(item: FlowVariantSms | undefined): "tra
 
 test("[T194-c-1 G608 · R-e] Q2 설치 문자 — 사본(목적만)은 'link'로 결과 신호를 내고, 수정본은 폴백 · Live 모두 대상 0 · 계좌 문자는 그대로", (t) => {
   const q2 = FLOW_VARIANTS.filter((v) => v.sms.some((s) => isInCallInstallSms(v.scenarioId, s.smsId)));
-  assert.deepEqual(q2.map((v) => v.variantId).sort(), ["fv-d8pw", "fv-e5mv", "fv-m3hd", "fv-r4hc", "fv-tvnj", "fv-u9fz", "fv-w3dq", "fv-x7ue"], "Q2 설치 문자를 선언한 변형은 자가 고급 4벌(§92 — 카드사 흡수 변형 fv-w3dq 추가)");
+  assert.deepEqual(q2.map((v) => v.variantId).sort(), ["fv-d8pw", "fv-e5mv", "fv-k3dn", "fv-m3hd", "fv-r4hc", "fv-r8vb", "fv-tvnj", "fv-u9fz", "fv-w3dq", "fv-x7ue"], "Q2 설치 문자를 선언한 변형은 자가 고급 4벌(§92 — 카드사 흡수 변형 fv-w3dq 추가 · §142 카드사 고급 재구성 fv-k3dn · fv-r8vb 배정 대기)");
   const lines: string[] = [];
   for (const v of q2) {
     const declared = resolveDeclaredSms(v.scenarioId, v.variantId).declared;
