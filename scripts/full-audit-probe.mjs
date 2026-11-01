@@ -11,6 +11,7 @@
 //   messenger — 텍스트 모델(sendMessage와 같은 조립 · 오프닝 지시 · 문자/링크/에스컬레이션 마커 제거 · 폴백 끊기 판정).
 // 참가자 유형: comply(순순히 따름 · 가짜 값 · 링크 이체 화면을 제출한다) · suspicious(정체를 캐묻다가 머뭇거리며 따름) · refuse(처음부터 거절)
 //   · verbal(P2 실측 2026-11-01 — comply와 같되 이체 요구에 "링크는 안 눌렀고 제 은행 앱으로 따로 보냈어요"라고 말하고 화면을 제출하지 않는다)
+//   · verbalInstall(U2 실측 2026-11-01 — comply와 같되 통화 중 문자 설치 화면의 권한 허용을 누르지 않고 "설치했어요"라고 말로만 답한다 · 이체 화면은 comply처럼 제출)
 //
 // node scripts/full-audit-probe.mjs --secret <path> --plan <json> --out <dir> [--key-var GEMINI_API_KEY2] [--tag s1]
 //   plan json = [{ "ch": "voice"|"messenger", "id": "...", "level": "beginner|intermediate|advanced", "persona": "comply|suspicious|refuse" }, ...]
@@ -51,6 +52,15 @@ const { extractSmsMarker } = L("roleplay/smsMarker.js");
 const { extractLinkMarker } = L("roleplay/linkMarker.js");
 const { extractEscalationSignal } = L("roleplay/escalationSignal.js");
 const { resolveSessionAccountNumber, resolveFictionalBankName, applyFictionalBank } = L("shared/fictionalBank.js");
+// U3(#460) — 앱처럼 예금주가 보이는 계좌는 그 묶음의 고정 은행(`pickSessionBankName`과 같은 판정 · 옛 lib = 종전 해시).
+const fixedRouteBank = (scenarioId, variantId) =>
+  L("shared/fictionalBank.js").fixedBankForHolder?.(L("inCallSms/smsGate.js").resolveRouteAccountHolder?.(scenarioId, variantId));
+// U2(#460) — 통화 중 설치 화면의 권한 허용(앱 `recordMockScreenEvent` 첫 응낙 → `installConsented` 맥락 주입)의 미러.
+const mockScreensLib = (() => { try { return L("scenarios/mockScreens.js"); } catch { return null; } })();
+const isInCallInstallLanding = (scenarioId, landingId) => {
+  const item = mockScreensLib?.findMockScreenItem?.(scenarioId, landingId);
+  return item?.entrySurface === "in-call-sms" && item?.kind === "app-install";
+};
 // §132.5 — 앱과 같이 루트가 선언한 문자로 계좌번호를 정한다(옛 lib = 시나리오 단위).
 const routeAccountNumber = (scenarioId, variantId) =>
   L("inCallSms/smsGate.js").resolveRouteAccountNumber?.(scenarioId, variantId) ?? resolveSessionAccountNumber(scenarioId);
@@ -191,7 +201,7 @@ function makeResponder(persona, getOtp = () => undefined) {
     return (lastReply = FILLER[i % FILLER.length]);
   };
 }
-const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9, verbal: 16 };
+const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9, verbal: 16, verbalInstall: 16 };
 
 // ── 키 · 공통 ─────────────────────────────────────────────────────────────────────────────────
 function readApiKey(keyVar = argVal("--key-var", "GEMINI_API_KEY2")) {
@@ -224,7 +234,7 @@ function sessionSetup(scenarioId, level, tag, pinnedVariant) {
   const scenarioPrompt = resolveSessionScenarioPrompt(scenarioId, variantId);
   const { declared } = resolveDeclaredSms(scenarioId, variantId);
   const verifyEnabled = hasVerifyIntercept(scenarioId) && level === "advanced";
-  const fictionalBankName = resolveFictionalBankName({ sessionId: `full-audit-${tag}-${scenarioId}-${level}` });
+  const fictionalBankName = fixedRouteBank(scenarioId, variantId) ?? resolveFictionalBankName({ sessionId: `full-audit-${tag}-${scenarioId}-${level}` });
   const baseOpts = {
     difficultyLevel: level,
     inCallSmsEnabled: sessionDeclaresInCallSms(scenarioId, variantId),
@@ -322,7 +332,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
           status = "delivered";
           const r = smsResponse(item);
           guidance = r.announceInstruction;
-          events.push({ t: now(), ev: "sms", by: "model", smsId: item.smsId, body: r.body });
+          events.push({ t: now(), ev: "sms", by: "model", smsId: item.smsId, body: r.body, scammerTurns, userTurns }); // U2 채점 — 도착 시점 계수
         } else guidance = g.status === "already_delivered" ? SMS_DECLINE_ALREADY : SMS_DECLINE_TOO_EARLY;
         if (toolGuidanceLib) guidance = toolGuidanceLib.withModelToolNoRepeat(guidance, "model_tool");
         events.push({ t: now(), ev: "toolResult", name: c.name, purpose: c.args?.purpose, status, userTurns });
@@ -389,9 +399,19 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
   for (let i = job.startIndex ?? 0; i < (job.startIndex ?? 0) + (job.maxTurns ?? MAX_USER_TURNS[persona]); i += 1) {
     if (closed) break;
     // §115 — 순응 참가자는 링크 이체 화면을 연 문자가 도착한 다음 발화에서 제출한다(앱의 landingSubmittedAt 흉내 · C-1 입력).
-    if (persona === "comply") {
+    if (persona === "comply" || persona === "verbalInstall") {
       for (const d of delivered) {
-        if (!d.landingSubmitted && d.userTurnsAtArrival < userTurns && findInCallSmsItem(scenarioId, d.smsId)?.fakeLandingId) {
+        const landingId = findInCallSmsItem(scenarioId, d.smsId)?.fakeLandingId;
+        if (!d.landingSubmitted && d.userTurnsAtArrival < userTurns && landingId) {
+          // U2(#460) — 설치 화면은 제출이 아니라 권한 허용이다: comply = 앱처럼 실시간 응낙 지시를 맥락 주입 · verbalInstall = 누르지 않는다(말로만).
+          if (isInCallInstallLanding(scenarioId, landingId)) {
+            if (persona === "verbalInstall") continue;
+            d.landingSubmitted = true;
+            const consentText = mockScreensLib?.installConsentInstructionFor?.({ entrySurface: "in-call-sms", escalatedCall: false, path: "realtime", transferPlaced: verifyPhase === "placed" });
+            events.push({ t: now(), ev: "installConsented", smsId: d.smsId, userTurns, injected: Boolean(consentText) });
+            if (consentText) sendText(consentText, false, "install_consent_ctx");
+            continue;
+          }
           d.landingSubmitted = true;
           events.push({ t: now(), ev: "landingSubmitted", smsId: d.smsId, userTurns });
           // §132.7 — 앱처럼 제출 사실을 맥락 주입(새 lib에만 상수가 있다 — 옛 lib = 주입 0).
@@ -430,7 +450,7 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
           const item = findInCallSmsItem(scenarioId, g.item.smsId);
           delivered.push({ smsId: item.smsId, userTurnsAtArrival: userTurns, by: "backstop" });
           const r = smsResponse(item);
-          events.push({ t: now(), ev: "sms", by: "backstop", smsId: item.smsId, body: r.body });
+          events.push({ t: now(), ev: "sms", by: "backstop", smsId: item.smsId, body: r.body, scammerTurns, userTurns }); // U2 채점 — 도착 시점 계수
           sendText(r.announceInstruction ?? item.announceInstruction, false, "sms_ctx");
           if (pendingConfirm && !confirmInjected) { confirmInjected = true; sendText(pendingConfirm, false, "confirm_ctx"); pendingConfirm = null; }
         }
