@@ -500,6 +500,15 @@ export default function InCallSmsOverlay({
                     const linkText = sms.linkAddress ?? sms.linkDisplayText;
                     // ⭐ BA-1 — 계좌번호 복사 대상(서버가 계좌 줄 구조화 필드를 실은 문자 · 플래그 켜짐).
                     const copyable = onCopyAccount !== undefined && Boolean(sms.bankName && sms.accountNumber);
+                    const accountAt = copyable && sms.accountNumber ? sms.body.indexOf(sms.accountNumber) : -1;
+                    const accountSplit =
+                      accountAt >= 0 && sms.accountNumber
+                        ? {
+                            before: sms.body.slice(0, accountAt),
+                            account: sms.accountNumber,
+                            after: sms.body.slice(accountAt + sms.accountNumber.length),
+                          }
+                        : null;
                     return (
                       <li
                         key={sms.smsId}
@@ -548,7 +557,7 @@ export default function InCallSmsOverlay({
                                   },
                                 }
                               : {})}
-                            className="flex max-w-[80%] select-none flex-col gap-2 px-[13px] py-[9px]"
+                            className="flex max-w-[80%] select-none flex-col gap-2 px-[13px] py-[9px] [-webkit-touch-callout:none]"
                             style={{
                               backgroundColor: thread.bubbleBg,
                               color: thread.bubbleText,
@@ -565,6 +574,21 @@ export default function InCallSmsOverlay({
                                   <span aria-hidden="true">{otpSplit.code}</span>
                                   <span className="sr-only">인증번호 {spellOutOtp(otpSplit.code)}</span>
                                   {otpSplit.after}
+                                </>
+                              ) : accountSplit ? (
+                                <>
+                                  {accountSplit.before}
+                                  {/* ⭐ BA-1 보강(2026-11-01 실기 신고 — 길게 눌러도 메뉴가 없었다) — 실기 문자 앱이 숫자열을 밑줄로 알아보고
+                                      누르면 메뉴를 띄우듯, 계좌번호를 누르면 같은 복사 메뉴를 연다(길게 누르기가 손떨림 · 스크롤로 취소돼도 된다). */}
+                                  <button
+                                    type="button"
+                                    aria-haspopup="menu"
+                                    onClick={() => setCopyMenuSmsId(sms.smsId)}
+                                    className="inline underline underline-offset-[3px]"
+                                  >
+                                    {accountSplit.account}
+                                  </button>
+                                  {accountSplit.after}
                                 </>
                               ) : (
                                 sms.body

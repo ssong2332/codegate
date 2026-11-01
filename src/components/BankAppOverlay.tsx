@@ -489,23 +489,38 @@ export default function BankAppOverlay({
 
 /**
  * 홈으로 가는 막대 — 통화 화면 · 은행 앱 아래에 같은 모양으로 쓴다.
- * iOS형 = 가는 홈 막대(실기의 위로 쓸기 대신 누름) · One UI형 = 탐색 막대 가운데 홈 버튼. ⛔ 실제 OS 제스처 · 상표 아이콘 0.
+ * iOS형 = 가는 홈 막대(실기의 위로 쓸기 대신 누름) · One UI형 = 3버튼 탐색 막대(최근 앱 · 홈 · 뒤로) 중 가운데 홈 버튼. ⛔ 실제 OS 제스처 · 상표 아이콘 0.
+ * 2026-11-01 실기 신고(BA-1 배포본 — "홈 버튼이 보이지 않았다") — One UI형은 18px 테두리 사각형 하나뿐이라 홈 버튼으로 읽히지 않았다(추정 ·
+ * 로컬 재현에서는 그려져 있었다). 실기 탐색 막대처럼 세 아이콘 줄로 그린다. 최근 앱 · 뒤로는 모양만(누를 수 없음 · 스크린리더 대상 밖).
  */
 export function HomeBar({ ios, onHome, color = "rgba(17,24,39,0.75)" }: { ios: boolean; onHome: () => void; color?: string }) {
-  return (
-    <div className="flex shrink-0 items-center justify-center pb-[env(safe-area-inset-bottom)]">
-      <button
-        type="button"
-        onClick={onHome}
-        aria-label={COPY.homeAria}
-        className="flex min-h-[44px] min-w-[160px] items-center justify-center"
-      >
-        {ios ? (
+  if (ios) {
+    return (
+      <div className="flex shrink-0 items-center justify-center pb-[env(safe-area-inset-bottom)]">
+        <button type="button" onClick={onHome} aria-label={COPY.homeAria} className="flex min-h-[44px] min-w-[160px] items-center justify-center">
           <span aria-hidden="true" className="block h-[5px] w-[134px] rounded-full" style={{ backgroundColor: color }} />
-        ) : (
-          <span aria-hidden="true" className="block h-[18px] w-[18px] rounded-[6px] border-2" style={{ borderColor: color }} />
-        )}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div
+      className="grid w-full shrink-0 grid-cols-3 items-center justify-items-center pb-[env(safe-area-inset-bottom)]"
+      style={{ color }}
+    >
+      {/* 최근 앱(세로줄 셋) — 모양만. */}
+      <span aria-hidden="true" className="flex h-[48px] items-center gap-[4px] opacity-80">
+        <span className="block h-[16px] w-[2.5px] rounded-full bg-current" />
+        <span className="block h-[16px] w-[2.5px] rounded-full bg-current" />
+        <span className="block h-[16px] w-[2.5px] rounded-full bg-current" />
+      </span>
+      <button type="button" onClick={onHome} aria-label={COPY.homeAria} className="flex min-h-[48px] min-w-[72px] items-center justify-center">
+        <span aria-hidden="true" className="block h-[22px] w-[22px] rounded-[8px] border-[2.5px] border-current" />
       </button>
+      {/* 뒤로(왼쪽 꺾쇠) — 모양만. */}
+      <span aria-hidden="true" className="flex h-[48px] items-center opacity-80">
+        <span className="block h-[13px] w-[13px] -rotate-45 rounded-[2px] border-l-[2.5px] border-t-[2.5px] border-current" />
+      </span>
     </div>
   );
 }
