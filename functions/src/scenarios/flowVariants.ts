@@ -583,7 +583,8 @@ const CARD_RELIEF_TRANSFER_READOUT =
 // 화면에서만 이체하게 한다. ⛔ fv-akj5(2인 챌린지 수신자 고급 · #192 바이트 고정)는 무변경 — 위 무계좌형 문면을 계속 쓴다.
 const CARD_RELIEF_TRANSFER_VIA_LINK =
   "피해금 이관 요구 — '지금 결제 진행 중인 건 저희가 막을 수 있는데, 고객님 잔액 중 234만 원을 이관 전용 계좌로 옮겨두셔야 해요' 처럼 구체적 금액과 함께 이체를 요구한다. 금액은 문자에 적힌 234만 원으로만 말하고, 상대가 말한 잔액 전체로 바꾸지 않는다. 계좌번호는 네가 불러 주지 말고, 보안 앱 설치가 끝난 뒤 문자로 보낸 피해금 이관 안내의 링크 화면에서 이체하게 한다(은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다).";
-const CARD_RELIEF_SMS: FlowVariantSms = { purpose: "transfer", smsId: "card-relief-account", required: true, notBeforeUserTurns: 4 };
+// D-i(P2 확인 실측 2026-11-01 · fv-x7ue) — 기본 백스톱 간격이라 이관 문자가 늦어 사기범이 문자 없이 3턴 재촉했다 — 백스톱 간격 1(수수료 문자와 같다).
+const CARD_RELIEF_SMS: FlowVariantSms = { purpose: "transfer", smsId: "card-relief-account", required: true, notBeforeUserTurns: 4, ...FAST_BACKSTOP };
 const CARD_REASSURE = { from: "card-company-impersonation", label: "안심 유도" };
 // ⭐ P2-d(X6) — 환급 3변형 공통 수수료 계좌 문자(이체 화면 `tax-refund-fee-transfer`).
 // D-b(P2 실측 — 수수료 요구가 문자보다 3~4발화 앞섰다) — 백스톱 간격 1(통관 수수료 문자와 같다).
