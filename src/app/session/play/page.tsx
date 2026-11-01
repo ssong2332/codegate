@@ -138,11 +138,13 @@ import { CALL_EXTRA_COPY, CALL_EXTRA_TOAST_MS, captionLine, recordingElapsedSec,
 import EndTrainingButton from "@/components/EndTrainingButton";
 import {
   announceTurnsOnInstructionDispatch,
+  callerLabelForDisplay,
   deferredAnnouncePendingOnDispatch,
   enqueueInstruction,
   IDLE_LIVE_TURN_PHASE,
   INSTRUCTION_DRAIN_BACKSTOP_SEC,
   INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES,
+  instructionBusyBlocks,
   isResponseInProgress,
   nextVerifyOfferStage,
   rollbackVerifyOfferPhase,
@@ -649,6 +651,8 @@ export default function SessionCallPage() {
   const [bankAppOpen, setBankAppOpen] = useState(false);
   const [copiedAccount, setCopiedAccount] = useState<CopiedAccount | null>(null);
   const [verifyDialing, setVerifyDialing] = useState(false);
+  // H1(2026-11-01 U1) — 확인 창구 넘김 지시가 큐 · 보류 큐에 있고 아직 Live에 나가지 않았다(`onRelayGreetingSent`가 끈다).
+  const [speakerSwitchPending, setSpeakerSwitchPending] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
   // ⛔ §49(V5, 2026-08-02) — 참가자가 탭하던 상시 컨트롤이 삭제되면서 이 값을 `true`로 바꾸는
   // 호출부가 사라졌다. ⛔ **일부러 지우지 않는다**(G285 신설 취지) — `shouldAnnounceVerifyOffer`의
@@ -1048,14 +1052,18 @@ export default function SessionCallPage() {
   const drainInstructionQueue = useCallback(() => {
     // T192 C5(§79.9 E2) — 승인 · 종료 래치 뒤에는 지시를 내보내지 않는다(동결 · 큐는 버리지 않는다).
     if (isEndLatched(callEndingRef.current)) return;
-    if (instructionBusyRef.current) return;
     if (instructionQueueRef.current.length === 0) return;
+    // H1(2026-11-01 U1) — 확인 창구 넘김 지시(`speakerSwitch`)만 직전 지시의 응답 대기와 참가자 턴 대기를 건너뛴다
+    // (`enqueueInstruction`이 맨 앞에 둔다). 실제 전송 시점은 `relayGreeting` 보류 큐가 정한다(모델 발화가 끝난 뒤).
+    const head = instructionQueueRef.current[0];
+    if (instructionBusyBlocks({ busy: instructionBusyRef.current, next: head })) return;
     // §52.7 (5) 가·나 / §57.5 — G31 큐에도 G99와 같은 참가자 턴 조건을 곱한다(T-4). ⛔ 큐에서
     // 버리지 않는다(G31 계약 (2)) — 억제되면 항목은 그대로 남고 다음 경계에서 재시도된다.
     if (
       !shouldDrainInstructionQueue({
         userSpokeSinceLastInjection: instructionGateOpenRef.current,
         suppressedBoundaryStreak: instructionSuppressedStreakRef.current,
+        nextIsSpeakerSwitch: head?.speakerSwitch === true,
       })
     ) {
       instructionSuppressedStreakRef.current += 1;
@@ -1396,6 +1404,11 @@ export default function SessionCallPage() {
     verifySeries,
     verifyIntentExpressed,
   ]);
+
+  // H1(2026-11-01 U1) — 넘김 지시가 Live에 나갔다 ⇒ 이제 발신자 라벨을 확인 창구로 바꾼다.
+  const handleRelayGreetingSent = useCallback(() => {
+    setSpeakerSwitchPending(false);
+  }, []);
 
   const handleScammerTurnComplete = useCallback(() => {
     // ⭐ §82.3.4(G539) — 사기범 턴 수는 여기서 올리지 않는다. 같은 `turnComplete`의 전사 flush(`handleTranscriptTurn`,
@@ -2371,6 +2384,8 @@ export default function SessionCallPage() {
       // 실시간 경로만 클라가 주입한다(폴백은 서버가 다음 턴 프롬프트에 싣는다 — §16.2).
       if (requestCallMode === "realtime") {
         // §82.4.2 — 재연결 지시는 화자 전환 첫 발화다(맥락 주입이 아니라 `relayGreeting` 텍스트 턴).
+        // H1(2026-11-01 U1) — 넘김 지시가 Live에 실제로 나갈 때까지 라벨은 원래 발신자를 유지한다(`callerLabelForDisplay`).
+        setSpeakerSwitchPending(true);
         enqueueTurnInstruction(result.reconnectInstruction, "verify", { speakerSwitch: true });
         // T118 / A5 — 이 시점부터 전환 상태 단언이 참이 된다(`placed`). 카운터를 0으로 두어
         // **참가자가 한 번 말한 뒤**부터 재주입되게 한다(G99 — 여기서 0으로 두지 않으면 다음
@@ -2619,8 +2634,13 @@ export default function SessionCallPage() {
   // 않는다(§15.1.2 단일 렌더 소스 원칙).
   // ⚠️ 라벨만 바뀐다 — "같은 사기범입니다"·"어디에 걸어도 같은 곳입니다"류 문구는 이 화면 어디에도
   // 두지 않는다(OQ-38 확정 = 세션 중엔 상황만, D-6 유지).
-  const callerLabel =
-    verifyOffer?.reconnectedCallerLabel ?? scenario.callerLabel ?? "발신번호 표시제한";
+  // H1(2026-11-01 U1) — 넘김 지시가 아직 Live에 나가지 않았으면 원래 라벨을 유지한다(라벨이 실제 화자보다 앞서지 않게).
+  const callerLabel = callerLabelForDisplay({
+    reconnectedCallerLabel: verifyOffer?.reconnectedCallerLabel,
+    scenarioCallerLabel: scenario.callerLabel,
+    // 실시간 경로에서만 보류한다 — 폴백은 서버가 다음 턴 프롬프트에 싣는다(넘김 지시 전송 이벤트가 없다).
+    speakerSwitchPending: speakerSwitchPending && callMode === "realtime",
+  });
   // T72(§15.6 G6) — 자격증명을 아직 못 받았으면(수신 대기 중) 기본은 true다. 실제로 난이도를
   // 반영하지 못하는 경로(ElevenLabs)만 서버가 false로 명시해 내려준다.
   const difficultyApplied = realtime.credentials?.difficultyApplied !== false;
@@ -2895,6 +2915,7 @@ export default function SessionCallPage() {
             readTranscript={readTranscriptForResume}
             textMessage={textMessage}
             onScammerTurnComplete={handleScammerTurnComplete}
+            onRelayGreetingSent={handleRelayGreetingSent}
             onModelToolVerifyAnnounced={handleModelToolVerifyAnnounced}
             onModelToolVerifyFailed={handleModelToolVerifyFailed}
             claimVerifyAnnounceSlot={claimVerifyAnnounceSlot}
