@@ -29,6 +29,7 @@ import { planConfirmResult } from "../inCallSms/confirmResult";
 import {
   buildScreenStatusLine,
   inCallScreenFacts,
+  anyScreenGiveUp,
   installPendingSince,
   latestTransferAmount,
   messengerScreenFacts,
@@ -124,6 +125,7 @@ import { CALL_AFTER_EXCUSE_INSTRUCTION, decideCallAnnouncement, saidCallUnavaila
 import {
   assertsTransferConfirmed,
   guardUnconfirmedTransfer,
+  stripPasswordRequests,
   stripUnperformedAcknowledgement,
   TRANSFER_REPORTED_INSTRUCTION,
   userReportedTransfer,
@@ -461,6 +463,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       decisionScreenPending = isDecisionScreenPending({ ...decisionScreenInput, mockScreens });
     } catch {
       goalActionDone = false;
+    }
+    // R8(#468 실측 — 메신저 이체 칩 기록 없이 인증번호를 받은 뒤 "접수는 됐어"로 goal 끝) — 메신저 이체 화면 칩을 보냈는데 그 화면을 아직 마치지 않았거나
+    // 요구액보다 적게 보냈으면 결정 화면 대기(4-c행이 goal 끊기를 막는다 · give_up은 통과). 통화 중 문자 결정 화면 판정(D-1 ~ D-5)과 같은 뜻의 메신저 짝이다.
+    if (!decisionScreenPending && storedHistory.some((m) => (m.attachments ?? []).length > 0)) {
+      const chipFacts = messengerScreenFacts(session.scenarioId, storedHistory, await loadMockRecords());
+      const transferChips = chipFacts.filter((f) => f.kind === "transfer");
+      if (transferChips.length > 0 && (!transferChips.some((f) => f.done) || latestTransferAmount(chipFacts) === "less")) decisionScreenPending = true;
     }
     const callEntryTurns = userTurnsSinceCallEntry(session.channel, session.channelHistory, storedHistory);
     const hangupFacts: FallbackHangupFacts = {
@@ -868,7 +877,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // ⭐ P2-c(X6) — 훈련용 이체 화면 칩에만 세션 가상 은행명 · 세션 계좌를 싣는다(받는 계좌 미리 채움 — 그 밖 칩은 무변경).
     const routeVariant = findFlowVariant(session.flowVariantId);
     const routeAccountNumber = resolveRouteAccountNumber(session.scenarioId, session.flowVariantId);
-    const replyAttachments = withBankTransferPrefill(
+    // R10(#468 실측) — 마치지 않은 화면이 포기 단계면 이번 대답에 새 화면 칩을 붙이지 않는다(포기로 끝내야 할 차례에 다음 단계 화면을 여는 모순 차단).
+    const giveUpStage = screenApplies && anyScreenGiveUp(screenFacts, userTurnsNow);
+    const replyAttachmentsBeforeGiveUp = withBankTransferPrefill(
       // D-g — 계좌를 말했는데 모델이 이체 화면 칩을 빠뜨리면 서버가 붙인다(`linkMarker.ts` `ensureBankTransferChip` 표).
       ensureBankTransferChip(
         // S2 — 이체 화면 칩은 계좌가 대화에 나온 뒤에만(`linkMarker.ts` `dropPrematureBankTransferChip` 표).
@@ -891,6 +902,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       // N1 — 대화에서 요구한 금액(화면이 보낸 금액과 비교해 결과만 돌려준다).
       demandAmountFrom(linkFreeReplyText, storedHistory),
     );
+    const keptOnGiveUp = replyAttachmentsBeforeGiveUp?.filter((attachment) => screenFacts.some((f) => f.landingId === attachment.fakeLandingId));
+    const replyAttachments = giveUpStage ? (keptOnGiveUp && keptOnGiveUp.length > 0 ? keptOnGiveUp : undefined) : replyAttachmentsBeforeGiveUp;
     // ③-a′ T191 — 문자 요청 마커를 걷어 낸다(아래 문장 수 상한보다 **앞** — 상한이 끝의 마커를 잘라 먹지 않게).
     const { text: smsMarkerFreeText, purpose: markerPurpose, markerCount: smsMarkerCount } =
       extractSmsMarker(linkFreeReplyText);
@@ -1013,7 +1026,10 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const factCheckedReplyText = unconfirmedGuard.replaced
       ? unconfirmedGuard.text
       : stripUnperformedAcknowledgement(lengthLimited ? lengthLimited.text : realNameFreeReplyText, turnFacts);
-    const limitedReplyText = session.channel === "messenger" ? fixMessengerCallWording(factCheckedReplyText) : factCheckedReplyText;
+    // R9 판정표 P(`actionAcknowledgement.ts`) — 화면에 없는 비밀번호 입력 · 불러 달라는 문장을 뺀다(실제 비밀번호 입력 유도 차단).
+    const passwordGuard = stripPasswordRequests(factCheckedReplyText);
+    if (passwordGuard.stripped) logger.info("[R9] 비밀번호 요구 문장 제거", { sessionId, userTurns: userTurnsNow });
+    const limitedReplyText = session.channel === "messenger" ? fixMessengerCallWording(passwordGuard.text) : passwordGuard.text;
     // §128(4) — 참가자가 건 통화의 "전화 받아 줘서"류 교정(`callCaller.ts` 표 · 그 밖 턴 무변경).
     const shapedReplyText = participantCalled ? fixParticipantCalledReply(limitedReplyText) : limitedReplyText;
     // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).

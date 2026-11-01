@@ -125,4 +125,6 @@ test("로그아웃 — /scenarios 하단에 있고, 익명에게는 숨기며, �
   assert.match(button, /await signOut\(auth\);\s*router\.replace\("\/"\);/);
   assert.match(codeOnly("src/app/scenarios/page.tsx"), /<LogoutButton\b/);
   assert.equal(resolveAuthInvalidationMode({ pathname: "/scenarios", signedOut: true, hadUser: true, unauthenticatedCallable: false, wasAnonymous: false }), "none");
+  // 로그아웃 뒤 재로그인 때 이전 계정으로 자동 로그인되지 않게 계정 선택 창을 강제한다.
+  assert.match(codeOnly("src/lib/firebase/auth.ts"), /googleProvider\.setCustomParameters\(\{ prompt: "select_account" \}\);/);
 });

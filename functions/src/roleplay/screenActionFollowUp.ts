@@ -51,7 +51,7 @@ import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt, toLlmHistory } from "./promptAssembly";
 import { DEMAND_SENTENCE, limitReplySentences, MAX_SCAMMER_REPLY_SENTENCES } from "./replyLength";
-import { stripUnperformedAcknowledgement, userReportedTransfer, userSentPhoto } from "./actionAcknowledgement";
+import { stripPasswordRequests, stripUnperformedAcknowledgement, userReportedTransfer, userSentPhoto } from "./actionAcknowledgement";
 import { fixMessengerCallWording, personaGuardFor } from "./personaGuard";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
@@ -216,7 +216,8 @@ export const requestScreenActionFollowUp = onCall<RequestScreenActionFollowUpReq
         photoSent: userSentPhoto(history),
       }),
     );
-    const text = finalizeScammerReplyText(factChecked).trim();
+    // R9 — 화면에 없는 비밀번호 입력 요구 문장 제거(sendMessage와 같은 판정표 P).
+    const text = finalizeScammerReplyText(stripPasswordRequests(factChecked).text).trim();
     if (!text) return {}; // S4
 
     const turnIndex = await db.runTransaction(async (tx) => {

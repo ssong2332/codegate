@@ -90,6 +90,30 @@ export function guardUnconfirmedTransfer(text: string, transferScreenPending: bo
   return { text: POLITE_ENDING.test(text) ? TRANSFER_NOT_CONFIRMED_REPLY.polite : TRANSFER_NOT_CONFIRMED_REPLY.casual, replaced: true }; // U1
 }
 
+// ── R9(#468 실측 · 자녀 사칭 — 화면에 없는 "비밀번호 여섯 자리 입력"을 안내) — 실제 비밀번호 입력을 부추기는 문장을 결정적으로 뺀다 ──────────────
+// 이 앱의 이체 · 인증 화면에는 비밀번호 칸이 없다(본인 인증 = 지문 · 얼굴 버튼 하나). 참가자가 습관대로 실제 비밀번호를 치지 않게 한다(BA3와 같은 원칙).
+// | # | If | Then |
+// |---|---|---|
+// | P1 | 대사의 문장 · 절이 비밀번호 · 비번 · 보안카드를 입력 · 불러 · 알려 · 눌러 달라는 말 | 그 절을 뺀다 |
+// | P2 | 다 빠지면 | 화면 버튼만 누르면 된다는 1줄(말투 맞춤) |
+// | P3 | 그 밖 | 그대로 |
+// ⚠️ 인증번호(문자로 온 6자리)는 대상이 아니다 — 인증번호 문자를 선언한 루트의 설계 단계다(그 밖 루트의 인증번호 요구는 지시 문면이 막는다).
+const PASSWORD_REQUEST = /(?:비밀\s?번호|비번|보안\s?카드)[^.?!\n]{0,20}(?:입력|눌러|누르|불러|알려|말해|적어|넣어|쳐)/;
+
+export const PASSWORD_FREE_REPLY = {
+  casual: "링크 화면에서 이체하기 버튼만 누르면 돼.",
+  polite: "링크 화면에서 이체하기 버튼만 눌러 주시면 됩니다.",
+} as const;
+
+/** P1 ~ P3. */
+export function stripPasswordRequests(text: string): { text: string; stripped: boolean } {
+  const clauses = clausesOf(text);
+  const kept = clauses.filter((clause) => !PASSWORD_REQUEST.test(clause));
+  if (kept.length === clauses.length) return { text, stripped: false }; // P3
+  if (kept.length === 0) return { text: POLITE_ENDING.test(text) ? PASSWORD_FREE_REPLY.polite : PASSWORD_FREE_REPLY.casual, stripped: true }; // P2
+  return { text: kept.join(" "), stripped: true }; // P1
+}
+
 /** R1 지시(따옴표 대사 예시 0 · 턴 지시 스캔 게이트 대상). */
 export const TRANSFER_REPORTED_INSTRUCTION =
   "(참가자는 이미 돈을 보냈다고 말했다. 그 송금은 받은 것으로 치고, 같은 돈을 같은 이유로 다시 보내라고 요구하지 않는다. 더 요구하려면 수법 목록 안에서 새 명목을 대거나 다른 요구로 넘어간다.)";
