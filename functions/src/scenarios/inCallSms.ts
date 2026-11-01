@@ -82,7 +82,7 @@ const LOAN_SCAM: InCallSmsItem[] = [
     senderLabel: `${SMS_SENDER_NUMBER["loan-refinance-scam"]} (○○캐피탈 상담센터)`,
     // A-1 ③(2026-10-19 · audit-A R1 ②) — 마지막 줄 "입금 확인 즉시 전환 승인 처리됩니다. (오늘 18시 마감)"이 "입금 확인을
     // 기다리는" 구도를 깔아 사기범이 "확인 중·기다려 주세요"로 버티는 재료가 됐다 → 마감만 남긴 요구 문장으로 바꿨다(계좌·금액 무변경).
-    body: "[○○캐피탈] 저금리 전환 상환 전용 계좌 안내\n예금주: ○○캐피탈\nOO은행 352-0812-4471-63\n금액: 1,850,000원\n오늘 18시까지 입금해 주세요.\n아래 링크에서 바로 이체할 수 있습니다.",
+    body: "[○○캐피탈] 저금리 전환 상환 전용 계좌 안내\n예금주: 윤재석\nOO은행 352-0812-4471-63\n금액: 1,850,000원\n오늘 18시까지 입금해 주세요.\n아래 링크에서 바로 이체할 수 있습니다.",
     // ⭐ P2(X6 · 2026-10-31) — 계좌만 있던 문자에 훈련용 이체 화면 링크를 병기했다(참가자가 실제 뱅킹 앱을 열 이유를 없앤다 · 계좌 · 금액 무변경).
     linkDisplayText: "상환금 이체하기",
     fakeLandingId: "loan-repay-transfer",
@@ -160,7 +160,7 @@ const ASSET_PROTECTION_NOTICE_CALL: InCallSmsItem[] = [
     smsId: "asset-deposit-account",
     kind: "account",
     senderLabel: `${SMS_SENDER_NUMBER["asset-protection-notice-call"]} (공탁금 안내)`,
-    body: "[자산보호] 약식 처리 공탁금 안내\n예금주: 자산보호공탁관리\nOO은행 519-3306-7420-85\n금액: 5,000,000원\n수사 종료 후 전액 반환됩니다.\n아래 링크에서 바로 이체할 수 있습니다.",
+    body: "[자산보호] 약식 처리 공탁금 안내\n예금주: 서지원\nOO은행 519-3306-7420-85\n금액: 5,000,000원\n수사 종료 후 전액 반환됩니다.\n아래 링크에서 바로 이체할 수 있습니다.",
     // ⭐ P2(X6 · 2026-10-31) — 계좌만 있던 문자에 훈련용 이체 화면 링크를 병기했다(계좌 무변경). P2-d — 금액 줄(500만 원)을 더해 사기범 말 · 문자 · 화면 금액을 맞췄다.
     linkDisplayText: "공탁금 이체하기",
     fakeLandingId: "asset-deposit-transfer",
@@ -234,7 +234,7 @@ const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [
     // §51(사용자 라이브 신고 — §45 ⓐ 미집행) — 기존 4줄은 한 글자도 지우지 않고 예고 1줄을
     // 더했다(D-59 관례). 새 4번째 줄이 아래 `fakeLandingId`가 여는 이체 랜딩(UX-023
     // safe-account-transfer)을 예고한다.
-    body: "[자산보호절차] 임시 안전계좌 안내\n예금주: 국민안전지원센터\nOO은행 210-3391-5540-08\n아래에서 안전계좌 이체를 진행해 주세요.\n이체 후 담당자에게 바로 알려 주세요.",
+    body: "[자산보호절차] 임시 안전계좌 안내\n예금주: 강태윤\nOO은행 210-3391-5540-08\n아래에서 안전계좌 이체를 진행해 주세요.\n이체 후 담당자에게 바로 알려 주세요.",
     // §51.6 R10 — 기존 account 항목에 링크 필드를 병기한다(신규 항목 신설 0건, G245 — 도착 턴
     // 그대로 6 유지).
     linkDisplayText: "안전계좌 이체 진행하기",
@@ -265,7 +265,7 @@ const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
     smsId: "card-relief-account",
     kind: "account",
     senderLabel: `${SMS_SENDER_NUMBER["card-company-impersonation"]} (피해금 이관 안내)`,
-    body: "[승인취소 지원] 피해금 이관 전용 계좌 안내\n예금주: 카드피해대응지원센터\nOO은행 417-0625-3082-19\n금액: 2,340,000원\n아래에서 피해금 이관을 진행해 주세요.",
+    body: "[승인취소 지원] 피해금 이관 전용 계좌 안내\n예금주: 오현수\nOO은행 417-0625-3082-19\n금액: 2,340,000원\n아래에서 피해금 이관을 진행해 주세요.",
     linkDisplayText: "피해금 이관 진행하기",
     fakeLandingId: "card-relief-transfer",
     linkAddress: "card-relief-desk.invalid/move/R3xp",
@@ -308,7 +308,7 @@ const TAX_REFUND_SCAM: InCallSmsItem[] = [
     smsId: "tax-refund-fee",
     kind: "account",
     senderLabel: `${SMS_SENDER_NUMBER["tax-refund-scam"]} (환급금 안내)`,
-    body: "[환급안내] 환급 처리 수수료 납부 계좌\n예금주: 환급처리지원센터\nOO은행 731-0452-6618-04\n금액: 99,000원\n수수료 확인 즉시 환급금이 지급됩니다.\n아래 링크에서 바로 이체할 수 있습니다.",
+    body: "[환급안내] 환급 처리 수수료 납부 계좌\n예금주: 임하늘\nOO은행 731-0452-6618-04\n금액: 99,000원\n수수료 확인 즉시 환급금이 지급됩니다.\n아래 링크에서 바로 이체할 수 있습니다.",
     linkDisplayText: "환급 수수료 이체하기",
     fakeLandingId: "tax-refund-fee-transfer",
     linkAddress: "refund-fee-send.invalid/send/Rf6t",
@@ -355,7 +355,7 @@ const BANK_SECURITY_VERIFY_SCAM: InCallSmsItem[] = [
     smsId: "bank-protect-account",
     kind: "account",
     senderLabel: `${SMS_SENDER_NUMBER["bank-security-verify-scam"]} (계좌보호 안내)`,
-    body: "[금융사고대응] 보호계좌 이체 안내\n예금주: 계좌보호대응센터\nOO은행 100-2043-7788-21\n금액: 4,120,000원\n아래에서 보호계좌로 옮기기를 진행해 주세요.",
+    body: "[금융사고대응] 보호계좌 이체 안내\n예금주: 문성호\nOO은행 100-2043-7788-21\n금액: 4,120,000원\n아래에서 보호계좌로 옮기기를 진행해 주세요.",
     linkDisplayText: "보호계좌 이체 진행하기",
     fakeLandingId: "protect-account-transfer",
     linkAddress: "acct-protect-desk.invalid/shield/Bq4t",
@@ -382,7 +382,7 @@ const COURIER_CUSTOMS_SCAM: InCallSmsItem[] = [
     smsId: "courier-customs-fee",
     kind: "account",
     senderLabel: `${SMS_SENDER_NUMBER["courier-customs-scam"]} (통관 안내)`,
-    body: "[통관수수료] 납부 계좌 안내\n예금주: 국제통관지원센터\nOO은행 604-2270-1183-91\n금액: 78,000원\n아래 링크에서 바로 이체할 수 있습니다.",
+    body: "[통관수수료] 납부 계좌 안내\n예금주: 배준영\nOO은행 604-2270-1183-91\n금액: 78,000원\n아래 링크에서 바로 이체할 수 있습니다.",
     // ⭐ P2(X6 · 2026-10-31) — 계좌만 있던 문자에 훈련용 이체 화면 링크를 병기했다(참가자가 실제 뱅킹 앱을 열 이유를 없앤다 · 계좌 · 금액 무변경).
     linkDisplayText: "통관수수료 이체하기",
     fakeLandingId: "courier-fee-transfer",
@@ -397,7 +397,7 @@ const COURIER_CUSTOMS_SCAM: InCallSmsItem[] = [
     smsId: "courier-safe-account",
     kind: "account",
     senderLabel: `${SMS_SENDER_NUMBER["courier-customs-scam"]} (자산 보호 안내)`,
-    body: "[명의도용 피해조치] 국가 안전계좌 안내\n예금주: 자산보호관리센터\nOO은행 604-2270-1183-91\n수사 종료 시까지 보관 후 반환됩니다.\n아래 링크에서 바로 이체할 수 있습니다.",
+    body: "[명의도용 피해조치] 국가 안전계좌 안내\n예금주: 신예린\nOO은행 604-2270-1183-91\n수사 종료 시까지 보관 후 반환됩니다.\n아래 링크에서 바로 이체할 수 있습니다.",
     // ⭐ P2(X6 · 2026-10-31) — 계좌만 있던 문자에 훈련용 이체 화면 링크를 병기했다(금액은 통화에서 정한다 — 화면에서 참가자가 넣는다 · 계좌 무변경).
     linkDisplayText: "안전계좌로 이체하기",
     fakeLandingId: "courier-safe-transfer",

@@ -84,3 +84,18 @@ test("[P2-d] 이체 한도 — 1회 1,000만 원 초과는 막고(이체 화면�
   assert.ok(code.includes("(amountError(raw) ?? (bankTransfer ? transferLimitError(raw) : undefined))"), "이체 화면에서만 한도 검사");
   assert.ok(readFileSync("src/lib/landing/amountInput.ts", "utf8").includes("kebhana.com/cont/info/info01/info0104/info010404"), "근거 주소");
 });
+
+// ⭐ S2(실기기 확인 2026-11-01 · 지인 사칭 fv-42wd) — 대화방의 이체 화면 칩(송금하기 · 이체하기)은 웹 링크 미리보기가 아니라 송금 카드다 — 빈 그림 자리(회색 칸)를 두지 않는다.
+// 칩이 붙는 시점(계좌가 대화에 나온 뒤)은 서버 `functions/src/scenarios/__tests__/realismSmall3.test.ts` S2.
+test("[S2] 이체 화면 칩 = 그림 자리 없음 · 그 밖 링크 카드는 단색 그림 자리 그대로", () => {
+  const room = readFileSync("src/components/MessengerChatRoom.tsx", "utf8").replace(/\r\n/g, "\n");
+  const fake = component.replace(/\r\n/g, "\n");
+  assert.ok(fake.includes("export function isBankTransferLandingId(landingId: string): boolean {\n  return BANK_TRANSFER_LANDINGS.includes(landingId);\n}"));
+  assert.ok(room.includes('import MessengerFakeLanding, { isBankTransferLandingId } from "@/components/MessengerFakeLanding";'));
+  assert.ok(
+    room.includes(
+      '{isBankTransferLandingId(attachment.fakeLandingId) ? null : (\n            <span aria-hidden="true" className="h-[72px] w-full" style={{ backgroundColor: chatTokens.linkCardThumb }} />\n          )}',
+    ),
+  );
+  assert.equal((room.match(/chatTokens\.linkCardThumb/g) ?? []).length, 1, "그림 자리는 이 한 곳뿐");
+});

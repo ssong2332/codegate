@@ -665,6 +665,11 @@ const BANK_TRANSFER_LANDINGS: readonly string[] = [
   "tax-refund-fee-transfer",
 ];
 
+/** S2(실기기 확인 2026-11-01) — 대화방 링크 카드가 이체 화면 칩인가(그림 자리 없는 송금 카드로 그린다 · 정확 일치). */
+export function isBankTransferLandingId(landingId: string): boolean {
+  return BANK_TRANSFER_LANDINGS.includes(landingId);
+}
+
 /** §101 — 여러 화면 사이트의 둘째 화면부터(서버 카탈로그 `MockScreenItem.stepScreens`와 1:1 · 글자 단위 동일). */
 type StepScreenCopy = {
   headline: string;

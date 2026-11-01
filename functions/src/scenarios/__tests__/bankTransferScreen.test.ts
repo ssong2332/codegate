@@ -66,7 +66,7 @@ test("[P2 B2 · B3] 문자 문서 — 이체 화면 문자만 받는 분 · 금�
   assert.equal(hush.transferAmount, "3000000");
   // 금액 줄이 없는 문자(금액은 통화에서 정한다) — 금액 필드 없음.
   const deposit = buildInCallSmsDoc(findInCallSmsItem("asset-protection-notice-call", "asset-deposit-account")!, at, 5, "asset-protection-notice-call", "새솔은행");
-  assert.equal(deposit.accountHolder, "자산보호공탁관리");
+  assert.equal(deposit.accountHolder, "서지원"); // S1 — 기관명 → 가상 개인 이름
   // P2-d — 공탁금 문자에 금액 줄(500만 원)이 생겼다(사기범 말 · 문자 · 화면 금액 일치).
   assert.equal(deposit.transferAmount, "5000000");
   // 금액 줄이 없는 문자(국가 안전계좌 — 금액은 통화에서 정한다)는 금액 필드 없음.

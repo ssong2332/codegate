@@ -34,6 +34,7 @@ import {
   needsTimeSeparator,
   prefilledAccountOf,
   prefilledTransferOf,
+  sameSenderNumber,
   sortByArrival,
   spellOutOtp,
   splitBodyAtOtp,
@@ -121,7 +122,8 @@ export default function InCallSmsOverlay({
   const thread = smsThreadTokensFor(skin);
   // UX-027 v1.33 (3) — 모두 같은 발신처면 헤더에 그 값, 섞이면 "메시지" + 말풍선마다 발신처(D-89).
   const headerLabel = threadHeaderLabel(sorted);
-  const mixedSenders = sorted.length > 0 && sorted.some((sms) => sms.senderLabel !== sorted[0].senderLabel);
+  // S3 — 같은 번호면 안내 이름이 달라도 섞인 것이 아니다(한 방 · 한 제목).
+  const mixedSenders = sorted.length > 0 && sorted.some((sms) => !sameSenderNumber(sms.senderLabel, sorted[0].senderLabel));
   const panelRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
   // 말풍선 스레드의 스크롤 컨테이너 = 열람 판정의 뷰포트(IntersectionObserver root).
@@ -466,7 +468,7 @@ export default function InCallSmsOverlay({
                       needsTimeSeparator(previous ? previous.arrivedAtMs : null, sms.arrivedAtMs);
                     // 발신처가 섞였을 때만 말풍선 위에 다시 보인다(같은 발신처가 이어지면 반복하지 않는다 — D-89).
                     const showSender =
-                      mixedSenders && (previous === null || previous.senderLabel !== sms.senderLabel);
+                      mixedSenders && (previous === null || !sameSenderNumber(previous.senderLabel, sms.senderLabel));
                     // D-90 · G459 — 본문 안 인증번호를 **정확 일치 첫 1회**로 감싼다. null이면 박스 폴백.
                     const otpSplit = sms.otpCode ? splitBodyAtOtp(sms.body, sms.otpCode) : null;
                     // D-101 — 링크 줄 = 가짜 주소(부재 = 옛 문서 → 표시 텍스트).

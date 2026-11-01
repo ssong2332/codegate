@@ -160,6 +160,31 @@ export function withBankTransferPrefill(
 }
 
 /**
+ * ⭐ S2(실기기 확인 2026-11-01 · 지인 사칭 `fv-42wd` 첫 메시지 아래 "송금하기" 칩 — 계좌를 알려 주기 전) — 이체 화면 칩은 계좌가 대화에 나온 뒤에만 붙인다.
+ * 판정표(위에서 첫 매치 · 계좌 비교는 공백 · 하이픈을 뺀 글자):
+ * | # | If | Then |
+ * |---|---|---|
+ * | P1 | 이번 첨부에 이체 화면 칩이 없다 | 그대로 |
+ * | P2 | 이번 대사에 세션 계좌번호가 있다 | 그대로 |
+ * | P3 | 앞선 사기범 메시지에 세션 계좌번호가 있었다 | 그대로 |
+ * | P4 | 그 밖(첫 메시지 · 계좌 전) | 이체 화면 칩만 뺀다(다른 칩은 그대로 · 다 빠지면 `undefined`) |
+ */
+export function dropPrematureBankTransferChip(
+  attachments: MessengerAttachment[] | undefined,
+  replyText: string,
+  accountNumber: string,
+  history: ReadonlyArray<{ role: string; textMasked?: string }>,
+): MessengerAttachment[] | undefined {
+  if (!(attachments ?? []).some((attachment) => isBankTransferLanding(attachment.fakeLandingId))) return attachments; // P1
+  const compact = (text: string) => text.replace(/[\s-]/g, "");
+  const account = compact(accountNumber);
+  if (account.length > 0 && compact(replyText).includes(account)) return attachments; // P2
+  if (account.length > 0 && history.some((message) => message.role === "scammer" && compact(message.textMasked ?? "").includes(account))) return attachments; // P3
+  const kept = (attachments ?? []).filter((attachment) => !isBankTransferLanding(attachment.fakeLandingId)); // P4
+  return kept.length > 0 ? kept : undefined;
+}
+
+/**
  * ⭐ D-g(P2 실 키 실측 2026-11-01 · 자녀 사칭 고급 `fv-tdgg` — *"계좌는 해담은행 948-2716-5093-27이고, 예금주는 박지훈이야."* 에 칩이 없었다) — 모델이
  * `[[LINK:…]]` 마커를 빠뜨리면 참가자는 계좌만 보고 실제 뱅킹 앱을 열 수밖에 없다. 판정표(위에서 첫 매치):
  * | # | If | Then |
