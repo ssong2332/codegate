@@ -376,18 +376,20 @@ test("[§59.6 liveTools 배선] realtime/index.ts의 두 반환 경로 모두 cr
   const src = readFileSync(path.resolve(__dirname, "../../../src/realtime/index.ts"), "utf8");
   assert.match(
     src,
-    /return withVerifyOffer\(withSmsTriggers\(\{ \.\.\.credentials, voiceId: "" \}\)\);/,
+    /return withCallLeg\(withVerifyOffer\(withSmsTriggers\(\{ \.\.\.credentials, voiceId: "" \}\)\)\);/,
     "challenge 세션 경로가 credentials를 스프레드하지 않는다 — liveTools 등 옵셔널 필드가 누락될 수 있다",
   );
   assert.match(
     src,
-    /return withVerifyOffer\(withSmsTriggers\(credentials\)\);/,
+    /return withCallLeg\(withVerifyOffer\(withSmsTriggers\(credentials\)\)\);/,
     "일반 경로가 credentials를 그대로 넘기지 않는다 — liveTools 등 옵셔널 필드가 누락될 수 있다",
   );
   // withSmsTriggers/withVerifyOffer 자신도 `<T extends object>(x: T): T` 형태의 스프레드/항등
   // 래퍼여야 한다(필드를 나열해 재구성하면 같은 위험이 생긴다).
   assert.match(src, /const withSmsTriggers = <T extends object>\(credentials: T\): T =>/);
   assert.match(src, /const withVerifyOffer = <T extends \{ provider: RealtimeProviderName \}>\(credentials: T\): T =>/);
+  // §142(PR-3) — 다통화 레그 응답 래퍼(`callLeg` 추가)도 같은 스프레드 항등 형태다.
+  assert.match(src, /const withCallLeg = <T extends object>\(credentials: T\): T =>/);
 });
 
 // ⭐ §71 D2(G430) — 3.8은 behavior를 생략하면 NON_BLOCKING이라 도구 호출과 함께 턴을 끝낸다(2026-10-17 프로브).

@@ -39,7 +39,7 @@ import { completeWithFallback, getLlmClient } from "../llm";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { resolveDeclaredSms, resolveRouteAccountNumber } from "../inCallSms/smsGate";
-import { routeEndsWithoutAccount } from "../scenarios/flowVariants";
+import { routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending } from "../scammerHangup/goalAction";
 import { applyFictionalBank, resolveFictionalBankName } from "../shared/fictionalBank";
 import type { MessageDoc, ScenarioPromptDoc, SessionDoc } from "../shared/types";
@@ -49,7 +49,6 @@ import { readDeliveredSms } from "../inCallSms/smsDelivery";
 import type { DeliveredSmsRecord } from "../inCallSms/smsGate";
 import { decideFallbackHangup, fallbackHangupMode, fallbackSmsDeclaredFor, type FallbackHangupFacts } from "../scammerHangup/fallback";
 import { resolveHangupRelay } from "../scammerHangup/relayContext";
-import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { extractEscalationSignal } from "./escalationSignal";
 import { callPhaseMockTacticHints, isEscalatedVoiceCall } from "./escalatedCall";
 import { isL3Procedural } from "./l3Depth";
@@ -141,7 +140,7 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
   const hangupFacts: FallbackHangupFacts = {
     status: session.status,
     channel: session.channel,
-    verifyEnabled: hasVerifyIntercept(session.scenarioId) && normalizeDifficultyLevel(session.difficultyLevel) === "advanced",
+    verifyEnabled: sessionUsesVerifyIntercept(session.scenarioId, normalizeDifficultyLevel(session.difficultyLevel) === "advanced", session.flowVariantId),
     transferPlaced: false,
     transferReachable: true,
     goalActionDone: false,
@@ -285,7 +284,8 @@ function chatFollowUpPending(
 
 /** P1 M1 — 4-c행 입력(화면 기록 read 0 — 설치 화면 응낙은 보지 않는다 · 이 경로는 `give_up`만 받는다). */
 function chatDecisionScreenPending(session: SessionDoc, delivered: readonly DeliveredSmsRecord[]): boolean {
-  const { declared, reason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId);
+  // §142 — 다통화 변형은 현재 레그 선언으로(마지막 레그가 아니면 결정 화면이 없다).
+  const { declared, reason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId, { relay: session.relay });
   return isDecisionScreenPending({
     scenarioId: session.scenarioId,
     flowVariantId: session.flowVariantId,
@@ -293,7 +293,7 @@ function chatDecisionScreenPending(session: SessionDoc, delivered: readonly Deli
     mockScreens: [],
     declared,
     declaredKnown: reason === undefined,
-    verifyEnabled: hasVerifyIntercept(session.scenarioId) && normalizeDifficultyLevel(session.difficultyLevel) === "advanced",
+    verifyEnabled: sessionUsesVerifyIntercept(session.scenarioId, normalizeDifficultyLevel(session.difficultyLevel) === "advanced", session.flowVariantId),
     followUpUserTurns: goalFollowUpFor(session.scenarioId, session.flowVariantId),
   });
 }

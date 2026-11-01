@@ -40,6 +40,7 @@ import { ESCALATED_CALL_CONTEXT_INSTRUCTION } from "../../roleplay/escalatedCall
 import { VERIFY_INTERCEPT, type VerifyInterceptItem } from "../verifyIntercept";
 import { IN_CALL_SMS, type InCallSmsItem } from "../inCallSms";
 import { FLOW_VARIANTS, resolveVariantPrompt, type FlowVariant } from "../flowVariants";
+import { DIAL_DIRECTORY } from "../dialDirectory";
 import type { ScenarioPromptDoc } from "../../shared/types";
 import {
   PERSONA_CARD_LABELS,
@@ -150,6 +151,8 @@ const IN_CALL_SMS_FIELDS: Record<keyof InCallSmsItem, FieldPolicy> = {
   kind: { skip: "열거형 InCallSmsKind" },
   fakeLandingId: { skip: "식별자 참조 — 실 URL 필드가 아니다(§15.1.2)" },
   afterScammerTurns: { skip: "숫자 트리거" },
+  // §142 — 번호 안내 문자의 번호부 id(번호 문자열 자체는 본문에 있어 body 프로파일로 스캔된다).
+  dialNumberId: { skip: "식별자 참조(dialDirectory.ts)" },
 };
 
 // T191 S5 — 흐름 변형(PRD AC-102 (a) "신규 콘텐츠 전부가 금지 패턴 검증 대상" · 릴레이 leg 포함).
@@ -180,6 +183,12 @@ const FLOW_VARIANT_FIELDS: Record<keyof FlowVariant, FieldPolicy> = {
   // §119(#234) — 루트 키는 kebab 식별자, 루트 이름은 리포트에 보이는 문구라 콘텐츠와 같은 층으로 검사한다.
   routeKey: { skip: "식별자(kebab 루트 키)" },
   routeLabel: { profile: "scenarioContent" },
+  // §142 — 다통화 플래그 · 배정 대기 플래그(리터럴 true) · 시작 문자 id. 레그 단계 문면은 변형 `stages`(이어 붙인 값)로 스캔된다.
+  multiCall: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
+  pendingRollout: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
+  openerSmsId: { skip: "카탈로그 smsId 참조(본문은 inCallSms 도메인이 스캔)" },
+  // §142 PR-4 — 리포트 교육 포인트(세션이 끝난 뒤 리포트에만 보이는 실제 대응 안내 · 사기 대사 아님 — 무해화 대상 표면이 아니다).
+  reportLessons: { skip: "리포트 전용 예방 조언 문장(세션 중 표면 0)" },
 };
 
 // ── 표면 수집 ────────────────────────────────────────────────────────────────
@@ -295,6 +304,27 @@ function collectAllSurfaces(): Surface[] {
         profile: "scenarioContent",
       });
     }
+    // §142 — 다통화 변형은 레그마다 합성 페르소나가 다르다(레그 페르소나 + 그 레그 단계 + 레그 끝 규칙) — 레그 전부를 스캔한다.
+    if (variant.multiCall) {
+      variant.legs.forEach((_, legIndex) => {
+        surfaces.push({
+          domain: "flowVariant",
+          itemId: variant.variantId,
+          field: `composedLegPrompt[${legIndex}]`,
+          text: resolveVariantPrompt(SCENARIO_PROMPTS[variant.scenarioId], variant, legIndex).personaPrompt,
+          profile: "scenarioContent",
+        });
+      });
+    }
+  }
+  // §142 — 앱 안 다이얼 번호부(연락처 이름 · 진짜 기관 자동 안내 문구는 화면에 그대로 뜬다 — mockSurface).
+  for (const [scenarioId, entries] of Object.entries(DIAL_DIRECTORY)) {
+    for (const entry of entries) {
+      const texts = [...(entry.contactLabel ? [["contactLabel", entry.contactLabel]] : []), ...(entry.genuineNotice ?? []).map((line, i) => [`genuineNotice[${i}]`, line])];
+      for (const [field, text] of texts) {
+        surfaces.push({ domain: "dialDirectory", itemId: `${scenarioId}/${entry.numberId}`, field, text, profile: "mockSurface" });
+      }
+    }
   }
   // 카탈로그 항목이 아닌 **모듈 상수** 모델 지시(§15.9.1 R3이 항목 밖에 둔 것) — 등록부에서 빠지기
   // 가장 쉬운 자리라 명시적으로 싣는다.
@@ -366,7 +396,8 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
   }
   assert.deepEqual(
     [...byDomain.keys()].sort(),
-    ["flowVariant", "inCallSms", "mockScreens", "moduleConstant", "personaCard", "publicMeta", "scenarioPrompt", "verifyIntercept"],
+    // §142 — 앱 안 다이얼 번호부(dialDirectory) 도메인 추가.
+    ["dialDirectory", "flowVariant", "inCallSms", "mockScreens", "moduleConstant", "personaCard", "publicMeta", "scenarioPrompt", "verifyIntercept"],
     "콘텐츠 도메인이 추가·삭제되면 이 목록을 갱신하고 표면 수집도 함께 넓혀야 한다",
   );
 
@@ -456,10 +487,17 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
       (v.decisionMoment === undefined ? 0 : 1) +
       (v.accountHolder === undefined ? 0 : 1) + // P2-d — 가상 예금주
       (v.stages.length > 0 ? 1 : 0) +
+      (v.multiCall ? v.legs.length : 0) + // §142 — 레그별 합성 페르소나
       1, // §119 — 루트 이름(routeLabel)
     0,
   );
   assert.equal(byDomain.get("flowVariant"), expectedFlow, "T191 S5 흐름 변형 표면");
+  // §142 — 다이얼 번호부: 연락처 이름 + 자동 안내 줄.
+  const expectedDial = Object.values(DIAL_DIRECTORY)
+    .flat()
+    .reduce((n, e) => n + (e.contactLabel === undefined ? 0 : 1) + (e.genuineNotice?.length ?? 0), 0);
+  assert.ok(expectedDial > 0);
+  assert.equal(byDomain.get("dialDirectory"), expectedDial, "§142 다이얼 번호부 표면");
   t.diagnostic(`[AC-102 (a)] 흐름 변형 표면 after=${expectedFlow} (before=0 — 도메인 신설)`);
   // T194-b(G565) — 가상 신상 카드: 라벨 + 지역 선택지 + 대출 프롬프트 일반명 + 블록 머리 · 꼬리(§88 — 이름 풀 · 가림 고정값 폐지).
   const expectedPersona =
@@ -472,7 +510,8 @@ test("[T86/(b)] 검사 대상 수 — 수집기가 카탈로그 항목을 하나
   assert.equal(
     ALL_SURFACES.length,
     // T194-c-1 G585 — 모듈 상수 +1(IN_CALL_INSTALL_CONSENT_INSTRUCTION).
-    expectedPrompt + expectedMeta + expectedVerify + expectedMock + expectedSms + 1 + 6 + 1 + expectedFlow + expectedPersona,
+    // §142 — 다이얼 번호부 도메인 +expectedDial.
+    expectedPrompt + expectedMeta + expectedVerify + expectedMock + expectedSms + 1 + 6 + 1 + expectedFlow + expectedPersona + expectedDial,
   );
   assert.ok(ALL_SURFACES.length >= 300, `총 검사 표면 수가 줄었다(현재 ${ALL_SURFACES.length})`);
 });
@@ -674,6 +713,9 @@ const SCENARIO_MODULE_INVENTORY: Record<string, string> = {
   "sessionOtp.ts": "콘텐츠 아님 — 인증번호 문자의 번호를 세션 해시 숫자로 바꾸는 순수 함수(문면은 inCallSms.ts 카탈로그 그대로 · §114)",
   "fictionalNames.ts": "콘텐츠 아님 — 사기범 페르소나가 밝히는 가상 고유명 상수(§109 · §118 · 이름은 조립된 프롬프트 · 모의 화면에서 스캔된다)",
   "personaCardCatalog.ts": "scanned (personaCard 도메인 — 라벨 · 시 · 도 선택지 · 대출 프롬프트 일반명)",
+  // §142 — 카드사 고급 재구성 레그 페르소나 · 수법(FLOW_VARIANTS의 legs · tactics · 레그별 합성 페르소나 경유) · 다이얼 번호부(dialDirectory 도메인).
+  "cardRebuildLegs.prompt.ts": "scanned (FLOW_VARIANTS 경유 — 다통화 레그 페르소나 · 수법 · 레그별 합성 페르소나)",
+  "dialDirectory.ts": "scanned (dialDirectory 도메인 — 연락처 이름 · 진짜 기관 자동 안내 문구)",
 };
 
 test("[T86/(c)] 신규 콘텐츠 카탈로그 파일이 등록 없이 추가되지 못한다(모듈 등록부 1:1)", () => {

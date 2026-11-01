@@ -64,7 +64,8 @@ test("[P4] 카드사 인증번호 도착 지시 — 의심 · 거절에 먼저 �
 });
 
 test("[H3] 확인 창구가 있는 2인 루트 — 넘겨받은 뒤 통화 끝까지 창구 담당자 · 창구 없는 2인 루트에는 예외가 없다", () => {
-  const twoLeg = FLOW_VARIANTS.filter((v) => v.legs.length > 1);
+  // §142 — 다통화 변형은 레그마다 다른 인물이라 한 화자 규칙 · 창구 예외를 싣지 않는다(flowVariants.test.ts [§142 레그 합성]).
+  const twoLeg = FLOW_VARIANTS.filter((v) => v.legs.length > 1 && !v.multiCall);
   assert.ok(twoLeg.length > 0);
   let withDesk = 0;
   for (const v of twoLeg) {

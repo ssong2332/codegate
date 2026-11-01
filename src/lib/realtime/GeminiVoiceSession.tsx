@@ -22,7 +22,7 @@
 //     F12 콘솔로 바로 진단할 수 있게 한다.
 import { useEffect, useRef } from "react";
 import { GoogleGenAI, Modality } from "@google/genai";
-import type { CreateRealtimeCallResponse } from "@/lib/api";
+import type { CallLegEnd, CreateRealtimeCallResponse } from "@/lib/api";
 import { deliverInCallSms, deliverVerifyOffer, requestScammerHangup } from "@/lib/api";
 import {
   GEMINI_INPUT_SAMPLE_RATE,
@@ -297,7 +297,8 @@ export type GeminiVoiceSessionProps = {
   /** 승인 · 종료 래치(`isEndLatched(callEndingRef.current)`) — 마이크 · 클라 텍스트 턴 · 침묵 넛지 차단의 판정(G510). */
   isHangupLatched: () => boolean;
   /** R2 — 승인 응답을 `sendToolResponse`로 보내기 **전에** 부른다(부모: `latchHangupAccepted`). */
-  onScammerHangupAccepted: () => void;
+  /** §142 — 다통화 변형의 마지막이 아닌 통화 끝이면 `legEnd`(세션 계속 · 부모가 다음 통화 화면을 연다). 부재 = 종전(통화 종료). */
+  onScammerHangupAccepted: (legEnd?: CallLegEnd) => void;
   /** R5 — 응답 뒤 첫 `turnComplete`(또는 끼어들기 · close · 상한) + 잔여 재생 + 꼬리가 지난 뒤 1회(부모: `endCall("scammer")`). */
   onScammerHangupReady: () => void;
   /**
@@ -736,7 +737,7 @@ export default function GeminiVoiceSession({
           });
           if (result.status === "accepted" || result.status === "already_accepted") {
             // R2 — 응답 전송 **전에** 부모 래치를 건다(마이크 · 클라 텍스트 턴 · 침묵 넛지가 즉시 멈춘다 — G510).
-            handlersRef.current.onScammerHangupAccepted();
+            handlersRef.current.onScammerHangupAccepted(result.legEnd);
             armDrainAfterSend = true;
           }
           return {

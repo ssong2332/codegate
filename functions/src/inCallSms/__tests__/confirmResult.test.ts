@@ -177,7 +177,7 @@ test("[A-1/⑦ 배선] sendMessage — 다른 턴 지시가 없는 턴에만 pla
     src,
     /\[\s*(?:\/\/[^\n]*\n\s*)?buildScreenStatusLine\(screenApplies, screenFacts, \{[^}]*\}\),\s*screenPlan\?\.instruction,\s*confirmPlan\?\.instruction,\s*escalatedCallInstruction,\s*repeatBreakInstruction\(repeatBreakKind\),\s*callAfterExcuseInstruction,\s*turnFacts\.transferReported \? TRANSFER_REPORTED_INSTRUCTION : undefined,\s*personaAnchorInstruction\(session\.scenarioId\),\s*\]\s*\.filter\(Boolean\)/,
   );
-  assert.match(src, /\[promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction(?:, otpFollowUpInstruction)?(?:, otpHoldInstruction)?\]/); // §132.6 인증번호 다시 요구
+  assert.match(src, /\[(?:priorLegBlock, )?promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction(?:, otpFollowUpInstruction)?(?:, otpHoldInstruction)?\]/); // §132.6 인증번호 다시 요구 · §142 앞 레그 인계 블록(다통화 레그 1 이후만)
   // 계산 순서 — 인증번호 대조 · 문자 마커 제시 · 넛지가 정해진 뒤(리뷰 Minor-1 — 같은 턴 겹침 0), LLM 호출 앞.
   assert.ok(src.indexOf("const smsOfferInstruction =") < src.indexOf("const confirmPlan ="), "문자 마커 제시가 정해진 뒤에 판정해야 한다");
   assert.ok(src.indexOf("let smsNudgeInstruction") < src.indexOf("const confirmPlan ="), "넛지가 정해진 뒤에 판정해야 한다");
@@ -385,7 +385,7 @@ function confirmResultPurposeForBeforeQ2(item: FlowVariantSms | undefined): "tra
 
 test("[T194-c-1 G608 · R-e] Q2 설치 문자 — 사본(목적만)은 'link'로 결과 신호를 내고, 수정본은 폴백 · Live 모두 대상 0 · 계좌 문자는 그대로", (t) => {
   const q2 = FLOW_VARIANTS.filter((v) => v.sms.some((s) => isInCallInstallSms(v.scenarioId, s.smsId)));
-  assert.deepEqual(q2.map((v) => v.variantId).sort(), ["fv-d8pw", "fv-e5mv", "fv-m3hd", "fv-r4hc", "fv-tvnj", "fv-u9fz", "fv-w3dq", "fv-x7ue"], "Q2 설치 문자를 선언한 변형은 자가 고급 4벌(§92 — 카드사 흡수 변형 fv-w3dq 추가)");
+  assert.deepEqual(q2.map((v) => v.variantId).sort(), ["fv-d8pw", "fv-e5mv", "fv-k3dn", "fv-m3hd", "fv-r4hc", "fv-r8vb", "fv-tvnj", "fv-u9fz", "fv-w3dq", "fv-x7ue"], "Q2 설치 문자를 선언한 변형은 자가 고급 4벌(§92 — 카드사 흡수 변형 fv-w3dq 추가 · §142 카드사 고급 재구성 fv-k3dn · fv-r8vb 배정 대기)");
   const lines: string[] = [];
   for (const v of q2) {
     const declared = resolveDeclaredSms(v.scenarioId, v.variantId).declared;

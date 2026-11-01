@@ -98,12 +98,22 @@ const INTERMEDIATE_SMS_EXEMPT = [
   "messenger-subsidy-smishing-sms",
 ];
 
+/**
+ * §142 — 다통화 변형의 인원 = 서로 다른 인물(`speakerId`) 수(같은 인물이 다시 나오는 레그는 한 명). 고급 1~3명 범위(AC-096 (b))를 넘는 것은
+ * 아래 명시 예외뿐이다 — ⚠️ PRD 문면과 충돌하므로 메인 보고 대상(설계 #470 §3.2 · 사용자 승인 "권고대로" — 배송원 · 상담원 · 감독기관 · 검사 4인).
+ */
+const ADVANCED_MULTI_CALL_PEOPLE_EXEMPT: Readonly<Record<string, number>> = { "fv-k3dn": 4 };
+function peopleCount(v: FlowVariant): number {
+  return v.multiCall ? new Set(v.legs.map((leg, i) => leg.speakerId ?? `#${i}`)).size : v.legs.length;
+}
+
 /** PRD AC-096 (b) 자동 검증표(78.2.3). 위반 목록을 돌려준다(빈 배열 = 범위 안). */
 function rangeViolations(v: FlowVariant): string[] {
   const out: string[] = [];
   const d = effectiveExitBlock(v).filter((x) => x !== "D0_none");
+  // §142 — 다통화 변형의 문자 수 = 레그별 선언 합(레그마다 다른 문자). 범위표는 세션 전체 문자 수 기준이라 그대로 센다.
   const sms = v.sms.length;
-  const legs = v.legs.length;
+  const legs = ADVANCED_MULTI_CALL_PEOPLE_EXEMPT[v.variantId] === peopleCount(v) ? 3 : peopleCount(v);
   if (v.level === "beginner") {
     if (sms > 1) out.push(`초급 문자 ${sms}통(0~1)`);
     if (legs !== 1) out.push(`초급 인원 ${legs}(1)`);
@@ -154,14 +164,15 @@ test("[T191 S5 변형 데이터] 시나리오 17종 × 허용 난이도마다 �
 
 test("[T191 S5 변형 데이터] 저작 입력의 라벨이 전부 원천에 실재한다(조용한 누락 0) · 문자 참조가 카탈로그 소속이다", () => {
   assert.deepEqual(UNRESOLVED_TACTIC_LABELS, [], "keep/drop/extra 라벨이 원천에 없다 — 수법이 조용히 빠졌다");
-  const kindByPurpose = { identity: "otp", transfer: "account", link: "link" } as const;
+  // §142 — link 목적은 번호 안내 문자(callback)도 받는다(Live 도구 목적 열거 무변경).
+  const kindByPurpose = { identity: ["otp"], transfer: ["account"], link: ["link", "callback"] } as const;
   for (const v of FLOW_VARIANTS) {
     assert.ok(v.tactics.length > 0, `${v.variantId}: 수법 0개`);
     assert.ok(v.legs.length >= 1, `${v.variantId}: 인원 0`);
     for (const sms of v.sms) {
       const item = IN_CALL_SMS[v.scenarioId]?.find((i) => i.smsId === sms.smsId);
       assert.ok(item, `${v.variantId}: smsId ${sms.smsId}가 ${v.scenarioId} 카탈로그에 없다(G12와 같은 소속 원칙)`);
-      assert.equal(item.kind, kindByPurpose[sms.purpose], `${v.variantId}: ${sms.smsId} 목적(${sms.purpose})과 종류(${item.kind}) 불일치`);
+      assert.ok((kindByPurpose[sms.purpose] as readonly string[]).includes(item.kind), `${v.variantId}: ${sms.smsId} 목적(${sms.purpose})과 종류(${item.kind}) 불일치`);
     }
   }
 });
@@ -487,7 +498,8 @@ test("[T191 S5 고급 전용 · 미러] 클라 src/content 미러가 publicMeta�
 // ── 프롬프트 합성 ─────────────────────────────────────────────────────────────
 
 test("[T191 S5 프롬프트 합성] 가드레일 원문 불변 · 최후미 · '현행'(라벨 제외 0) 변형은 원본과 같다 · 저작 변형은 흐름 블록을 갖는다", () => {
-  for (const v of FLOW_VARIANTS) {
+  // §142 — 다통화 변형은 레그마다 따로 본다(아래 [§142 레그 합성]).
+  for (const v of FLOW_VARIANTS.filter((x) => !x.multiCall)) {
     const base = SCENARIO_PROMPTS[v.scenarioId];
     const resolved = resolveVariantPrompt(base, v);
     assert.equal(resolved.guardrailPreamble, base.guardrailPreamble, `${v.variantId}: 가드레일 변형 금지`);
@@ -515,8 +527,43 @@ test("[T191 S5 릴레이 S7 이전] 인원 ≥ 2 변형은 한 화자 규칙을 
   assert.equal(RELAY_RUNTIME_AVAILABLE, false, "S7 구현 전 전제 — S7이 이 값을 바꾸면 이 테스트를 갱신한다");
   for (const v of FLOW_VARIANTS.filter((x) => x.stages.length > 0)) {
     const persona = resolveVariantPrompt(SCENARIO_PROMPTS[v.scenarioId], v).personaPrompt;
-    assert.equal(persona.includes("처음부터 끝까지 너 혼자 맡는다"), v.legs.length > 1, `${v.variantId}`);
+    // §142 — 다통화 변형은 레그마다 다른 인물이라 한 화자 규칙을 싣지 않는다(전역 스위치와 별개 — 변형 플래그).
+    assert.equal(persona.includes("처음부터 끝까지 너 혼자 맡는다"), v.legs.length > 1 && !v.multiCall, `${v.variantId}`);
   }
+});
+
+test("[§142 레그 합성] 다통화 변형 — 레그마다 그 레그 페르소나 · 그 레그 단계만 · 레그 끝 규칙 · 수법 = 레그 라벨 · 가드레일 원문 불변 · 최후미", () => {
+  const multi = FLOW_VARIANTS.filter((v) => v.multiCall);
+  assert.ok(multi.length >= 2);
+  for (const v of multi) {
+    const base = SCENARIO_PROMPTS[v.scenarioId];
+    v.legs.forEach((leg, i) => {
+      const resolved = resolveVariantPrompt(base, v, i);
+      assert.equal(resolved.guardrailPreamble, base.guardrailPreamble, `${v.variantId}#${i}: 가드레일 변형 금지`);
+      assert.ok(leg.personaPrompt && resolved.personaPrompt.startsWith(leg.personaPrompt), `${v.variantId}#${i}: 레그 페르소나`);
+      for (const stage of leg.stages ?? []) assert.ok(resolved.personaPrompt.includes(stage), `${v.variantId}#${i}: 레그 단계`);
+      // 다른 레그 고유 단계는 싣지 않는다.
+      for (const other of v.legs) {
+        if (other === leg || other.speakerId === leg.speakerId) continue;
+        for (const stage of other.stages ?? []) assert.equal(resolved.personaPrompt.includes(stage), false, `${v.variantId}#${i}: 다른 레그 단계 누출`);
+      }
+      assert.equal(resolved.personaPrompt.includes("처음부터 끝까지 너 혼자 맡는다"), false);
+      const endRule = leg.exit === "dial" ? "짧게 인사하고 통화를 끝낸다" : leg.exit === "transfer" ? "통화를 넘긴다" : "마지막 통화다";
+      assert.ok(resolved.personaPrompt.includes(endRule), `${v.variantId}#${i}: 레그 끝 규칙`);
+      assert.deepEqual(resolved.weakenedTactics.map(extractTacticLabel), [...(leg.tacticLabels ?? [])].filter((l) => v.tactics.some((t) => extractTacticLabel(t) === l)));
+      assert.ok(resolved.weakenedTactics.length >= 1, `${v.variantId}#${i}: 레그 수법 0`);
+      for (const level of DIFFICULTY_LEVELS as readonly DifficultyLevel[]) {
+        const assembled = buildSystemPrompt(resolved, { difficultyLevel: level });
+        assert.ok(assembled.lastIndexOf(base.guardrailPreamble) > assembled.lastIndexOf("[이번 통화의 흐름]"), `${v.variantId}#${i}/${level}: 가드레일 최후미`);
+      }
+    });
+    // 범위 밖 레그 번호 = 마지막 레그(다음 레그를 지어내지 않는다).
+    assert.equal(resolveVariantPrompt(base, v, 99).personaPrompt, resolveVariantPrompt(base, v, v.legs.length - 1).personaPrompt);
+    // 세션 해석 단일 지점이 레그 번호를 넘긴다 · 다통화가 아닌 변형은 레그 번호를 읽지 않는다.
+    assert.equal(resolveSessionScenarioPrompt(v.scenarioId, v.variantId, 1)?.personaPrompt, resolveVariantPrompt(base, v, 1).personaPrompt);
+  }
+  const single = FLOW_VARIANTS.find((x) => x.variantId === "fv-x7ue")!;
+  assert.deepEqual(resolveSessionScenarioPrompt(single.scenarioId, single.variantId, 1), resolveSessionScenarioPrompt(single.scenarioId, single.variantId));
 });
 
 test("[T191 S5 해석 단일 지점] resolveSessionScenarioPrompt — 부재 · 미지 · 다른 시나리오 ID는 원본, 정상 ID는 변형", () => {

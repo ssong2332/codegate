@@ -148,3 +148,20 @@ export async function readMockScreenRecords(
     return [];
   }
 }
+
+/**
+ * §142 PR-4(R2 · 사용자 승인 설계 #470 D9) — 시작 문자(변형 `openerSmsId`)를 세션 생성 시점에 도착시킨다. 게이트 밖(선언 밖 · 발화 0)이라
+ * 판정 없이 쓰지만, 문서를 만드는 지점은 이 파일 하나로 둔다(G537/X4). 이미 있으면 덮어쓰지 않는다(`create`).
+ */
+export async function deliverOpenerSms(
+  sessionRef: FirebaseFirestore.DocumentReference,
+  item: InCallSmsItem,
+  now: FirebaseFirestore.Timestamp,
+  scenarioId: string,
+  fictionalBankName?: string,
+): Promise<void> {
+  await sessionRef
+    .collection("inCallSms")
+    .doc(item.smsId)
+    .create({ ...buildInCallSmsDoc(item, now, 0, scenarioId, fictionalBankName), userTurnsAtArrival: 0 });
+}

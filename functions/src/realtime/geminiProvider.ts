@@ -16,9 +16,8 @@ import { GoogleGenAI, Modality, EndSensitivity, StartSensitivity } from "@google
 import { asksIdentityCheck } from "../roleplay/personaAuthority";
 import { isL3Procedural } from "../roleplay/l3Depth";
 import { buildSystemPrompt } from "../roleplay/promptAssembly";
-import { resolveSessionScenarioPrompt, routeEndsWithoutAccount } from "../scenarios/flowVariants";
+import { resolveSessionScenarioPrompt, routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import { resolveRouteAccountNumber, sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
-import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import {
   buildLiveToolDeclarations,
   buildLiveToolNames,
@@ -62,6 +61,16 @@ export const INPUT_TRANSCRIPTION_CONFIG = { languageHints: { languageCodes: ["ko
 // 무의미해도 배열 구조를 유지한다 — 풀이 늘어도 호출부가 무변경이어야 한다.
 const FEMALE_VOICES = ["Aoede"] as const;
 const MALE_VOICES = ["Puck"] as const;
+/**
+ * §142(D5 · 다통화 변형 전용) — 레그 화자 목소리 자리. 자리 0 = 위 기본 목소리(종전과 같다) · 자리 1~ = 같은 성별의 다른 인물.
+ * ⚠️ 자리 1 이후 목소리의 한국어 품질은 실측 전이다(추정 — 확인: 확인 실측 세션 청취). 자리가 풀을 넘으면 끝 목소리로 둔다.
+ */
+export const LEG_MALE_VOICES = ["Puck", "Charon", "Fenrir"] as const;
+export const LEG_FEMALE_VOICES = ["Aoede", "Kore", "Leda"] as const;
+export function pickLegVoiceName(gender: "male" | "female", slot: number): string {
+  const pool = gender === "male" ? LEG_MALE_VOICES : LEG_FEMALE_VOICES;
+  return pool[Math.min(Math.max(0, Math.floor(slot)), pool.length - 1)];
+}
 /** `notApplicable` 폴백 — 두 풀의 합집합이라 **오늘 동작과 바이트 단위로 동일**하다(회귀 0). */
 const GEMINI_VOICE_POOL = [...FEMALE_VOICES, ...MALE_VOICES] as const;
 
@@ -137,7 +146,8 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
   async createCallCredentials(input: RealtimeCallInput): Promise<RealtimeCallCredentials> {
     // T191 S5(AC-096 (e)) — 세션에 배정된 흐름 변형을 합성한 프롬프트(sendMessage · 오프닝과 같은 단일
     // 해석 지점). flowVariantId 부재 = 원본(무소급).
-    const scenarioPrompt = resolveSessionScenarioPrompt(input.scenarioId, input.flowVariantId);
+    // §142 — 다통화 변형은 현재 레그 프롬프트(부재 = 종전).
+    const scenarioPrompt = resolveSessionScenarioPrompt(input.scenarioId, input.flowVariantId, input.callLeg?.legIndex);
     if (!scenarioPrompt) {
       throw new Error(`시나리오 프롬프트가 없습니다: ${input.scenarioId}`);
     }
@@ -188,8 +198,8 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       inCallSmsPurposes: sessionDeclaredSmsPurposes(input.scenarioId, input.flowVariantId),
       // 2026-10-21 — 계좌 문자의 이체 링크(호출부 3곳 같은 술어 · G63).
       transferSmsLink: sessionTransferSmsOpensLanding(input.scenarioId, input.flowVariantId),
-      verifyInterceptEnabled:
-        hasVerifyIntercept(input.scenarioId) && input.difficultyLevel === "advanced",
+      // §142 · R7 — 다통화 변형은 창구 오퍼 없음(`sessionUsesVerifyIntercept`).
+      verifyInterceptEnabled: sessionUsesVerifyIntercept(input.scenarioId, input.difficultyLevel === "advanced", input.flowVariantId),
       l3Procedural: isL3Procedural(input.scenarioId),
       identityCheckAllowed: asksIdentityCheck(input.scenarioId),
       // T194-a(§84.4.3) — 호출부가 해석한 세션 단위 성별(부재 = 표 값 — 표에 값이 있는 시나리오는 같은 값).
@@ -201,7 +211,7 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
       // `:101`의 buildLiveToolDeclarations와 **같은 술어**라 문면-선언 불일치가 구조적으로 성립하지
       // 않는다(reviewer Critical #2가 세운 정합 유지, G400). 로직 중복 구현 금지 —
       // declaresOfferVerificationDesk()가 유일한 원천이다.
-      offerToolDeclared: declaresOfferVerificationDesk(input.scenarioId, input.difficultyLevel),
+      offerToolDeclared: declaresOfferVerificationDesk(input.scenarioId, input.difficultyLevel, input.flowVariantId),
       // §81 — 세션 가상 은행명(문자 본문과 같은 이름). 부재면 종전 문자열("OO은행").
       ...(input.fictionalBankName ? { fictionalBankName: input.fictionalBankName } : {}),
       sessionAccountNumber: resolveRouteAccountNumber(input.scenarioId, input.flowVariantId),
@@ -246,7 +256,10 @@ export class GeminiRealtimeProvider implements RealtimeVoiceProvider {
               languageCode: "ko-KR",
               voiceConfig: {
                 prebuiltVoiceConfig: {
-                  voiceName: pickGeminiVoiceName(input.scenarioId, input.sessionId, speakerGender),
+                  // §142(D5) — 다통화 레그는 레그 목소리 자리(같은 인물 = 같은 목소리). 부재 = 종전.
+                  voiceName: input.callLeg && speakerGender
+                    ? pickLegVoiceName(speakerGender, input.callLeg.voiceSlot)
+                    : pickGeminiVoiceName(input.scenarioId, input.sessionId, speakerGender),
                 },
               },
             },

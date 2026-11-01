@@ -24816,3 +24816,139 @@ Hosting만(functions 변경 0).
 ### 141.6 한계
 - 볼륨 키 '미디어' 혼재가 다시 생긴다 — 해결은 안 B의 실기 A/B 결과를 본 뒤 정한다.
 - 이미 `?outelement=1`로 연 탭은 탭 안 저장 값(F3 · F4) 때문에 계속 켜져 있다(`?outelement=off`로 지운다).
+
+## 142. (Feature — 2026-11-01 · 브랜치 `claude/card-advanced-rebuild` = main `6cf6d816` + 변경 · 메인 세션 지시(사용자 승인 "권고대로" — 설계안 #470 D1~D9)) **카드사 고급 재구성 — 통화를 나눈 다화자 흐름(레그 런타임) · 참가자 직접 발신 · 공식 번호 가로채기** — architect · implementer 기록
+
+### 142.0 금지 · 범위
+| 항목 | 규칙 |
+|---|---|
+| 근거 | 설계 `docs/research/card-company-advanced-redesign-2026-11-01.md`(#470) · 현실 조사 `docs/research/card-company-scam-reality-2026-11-01.md`(#468) |
+| 바이트 고정 | `fv-akj5` · `fv-6s5p`(#192) 무변경 — `inCallSms/__tests__/smsGate.test.ts` T194-c-1 블록이 그대로 고정한다 |
+| 도구 선언 | Live 도구 선언 무변경(`realtime/__tests__/toolDeclarationUnchanged.test.ts`) — 레그 끝은 기존 `end_call`로 낸다 |
+| 실제 전화 | 앱 안 다이얼 화면만 · `tel:` · 외부 이동 0(AC-019 무변경) |
+| 이름 · 번호 | 카드사 "윤슬카드" · 감독기관 "금융감독기관"(일반 명사) · 팀 · 담당자 §118 `FSS_CALLER_NAMES` · 검찰청 "한빛지방검찰청"(§109). 번호는 국번 0 시작 가상 관례(`inCallSms.ts` `SMS_SENDER_NUMBER`) |
+| 서비스 밖 유도 | 대출 · 현금 인출 · 금 구매 0 — 결말은 서비스 안 이체 화면 하나 |
+
+### 142.1 결정 반영 (설계안 §6 — 메인 전달 확정값)
+| # | 확정 | 반영 위치 |
+|---|---|---|
+| D1 | "금융감독기관" + 가상 팀 · 이름 | `fictionalNames.ts` `CARD_REBUILD_NAMES` |
+| D2 | "윤슬카드"(웹 확인 — 기각: 가온카드 = KB국민카드 실존 상품 · 단비카드 = 삼성카드 제휴 상품명) | 같은 상수 주석 |
+| D3 | 진짜 번호로 건 경우 = 자동 안내 화면 → 방어 종료 | 다이얼 판정표(142.4) `genuine` |
+| D4 | N초 안에 안 걸면 다음 화자가 다시 걸어옴 | 레그 `entry` 대체 = `incoming` |
+| D5 | 통화(레그)마다 새 Live 연결 · 레그별 목소리 | 142.3 |
+| D6 | `fv-akj5` 무변경(챌린지 전용 — 알려진 현실 차이로 기록) | — |
+| D7 | 중급 `fv-35f2` 범위 밖 | — |
+| D8 | 이체 요구 980만 원 | 안전계좌 문자 |
+| D9 | R2(발급 문자 진입) 포함 · 덱 2벌 | 새 변형 2벌 |
+
+### 142.2 레그 모델 (판정표 — 이 표대로만)
+레그 = 한 화자가 맡는 통화 구간. 변형의 `legs[i]`에 **들어오는 방식(entry)** 과 **나가는 방식(exit)** 을 둔다.
+
+| entry | 뜻 | 화면 |
+|---|---|---|
+| `incoming` | 상대가 걸어온다(첫 레그 종전 동작 · D4 대체) | 수신 벨 → 받기 |
+| `dial` | 참가자가 앱 안 다이얼에서 건다 | 다이얼 → 발신(연결음) → 연결 |
+| `transfer` | 앞 화자가 연결해 준다(참가자 행동 0) | 대기음 → 같은 통화 화면 · 라벨 교체 |
+
+| exit | 앞 레그 `end_call`이 승인되면 | 다음 |
+|---|---|---|
+| `dial` | 통화 종료 화면 → 전화 앱(다이얼 · 연락처) | 참가자 발신 → 142.4 판정 |
+| `transfer` | 통화 유지 · 대기음 | 다음 레그 새 연결 |
+| (마지막 레그 — exit 없음) | 종전 끊기 = 세션 끝 | 리포트 |
+
+### 142.3 런타임 (서버가 레그 번호의 유일한 원천)
+| 항목 | 규칙 |
+|---|---|
+| 레그 번호 | 세션 문서 `relay.legIndex`(서버 필드 — 클라 쓰기 금지). 다음 레그 시작은 서버 콜러블만 쓴다 |
+| 프롬프트 | `resolveVariantPrompt(base, variant, legIndex)` — 그 레그 페르소나 + **그 레그 단계만** + 앞 레그 인계 1블록 |
+| 목소리 | 레그 `speakerGender` · 레그별 목소리(D5). 같은 인물이 다시 나오면(감독기관 2 → 4) 같은 목소리 |
+| 문자 게이트 | 문자 선언에 `leg`를 두고, 현재 레그 문자만 허용 · 하한은 **레그 시작 뒤 사용자 발화 수** |
+| 끊기 판정 2-b | `exit`가 있는 레그(다이얼 · 연결 흐름)의 `end_call`은 막지 않고 **레그 끝**으로 처리한다. `exit` 없는 legs ≥ 2(옛 릴레이 데이터)는 종전대로 |
+| 확인 무력화 | 이 흐름의 변형은 확인 창구 오퍼를 쓰지 않는다 — 확인은 참가자 발신으로 재현된다. ⇒ 4행(`blocked_transfer`)이 열릴 길이 없어 포기 끊기가 막히지 않는다(R7 — `docs/research/realdevice-fixes-probe-2026-11-01.md`) |
+| 4-c | 마지막 레그 이체 화면에만 적용(종전과 같은 입력) |
+
+### 142.4 다이얼 판정표 (exit `dial` 뒤 참가자가 건 번호)
+| 건 번호 | 조건 | 결과 |
+|---|---|---|
+| 레그가 기대한 번호(문자 속 번호 · 공식 번호) | 가로채기 조건 없음 · 또는 조건 충족 | 다음 레그 연결 |
+| 공식 번호(감독기관) | 가로채기 조건 = 원격 지원 앱 설치 응낙(화면 행동) **불충족** | `genuine` 자동 안내 → 방어 종료(D3) |
+| 연락처의 진짜 카드사 번호 | 첫 다이얼(배송원 뒤) | `genuine` 자동 안내 → 방어 종료(D3) |
+| 그 밖 번호 | — | "없는 번호" 안내 · 다시 걸기 |
+| N초 안에 안 건다 | — | 다음 레그가 `incoming`으로 걸어옴(D4) |
+
+### 142.5 PR-1(서버 데이터 · 화면 문구) — 배정 대기
+| 항목 | 내용 | 위치 |
+|---|---|---|
+| 새 변형 | `fv-k3dn`(R1 배송 전화 진입 · 레그 5 · 인물 4) · `fv-r8vb`(R2 발급 문자 진입 · 레그 4 · 인물 3) — `multiCall` · `pendingRollout` | `flowVariants.ts` |
+| 레그 프롬프트 | `resolveVariantPrompt(base, v, legIndex)` — 다통화면 그 레그 페르소나 + 그 레그 단계 + 레그 끝 규칙 1줄 + 레그 수법만. `resolveSessionScenarioPrompt(…, legIndex)` 인자 추가(다통화 아닌 변형은 읽지 않음) | 같은 파일 |
+| 레그 페르소나 · 수법 | 배송원 · 상담원 · 감독기관(2레그 같은 인물) · 검사 | `cardRebuildLegs.prompt.ts` |
+| 번호부 | 가짜 대표번호 · 진짜 카드사 · 감독기관 공식 번호(가상) + 진짜 기관 자동 안내(D3) | `dialDirectory.ts` |
+| 문자 4 | `card-issue-notice`(R2 시작 · callback) · `card-callback-number`(callback) · `card-remote-support-link`(link) · `card-safe-account`(account 980만 원) | `inCallSms.ts` |
+| 문자 종류 | `callback` 신설 — 문서 필드 `dialNumber`(번호부가 원천) · 선언 목적은 `link`(Live 도구 목적 열거 무변경) | `inCallSms.ts` · `shared/types.ts` · `inCallSms/buildDoc.ts` |
+| 화면 2 | `card-remote-support-install`(app-install · Q2) · `card-safe-transfer`(훈련용 이체 화면) — 클라 문구 표 바이트 동일(G76) | `mockScreens.ts` · `MessengerFakeLanding.tsx` |
+| 배정 | 두 변형 모두 `pendingRollout` — `listFlowVariants`가 거른다 ⇒ 자가 고급 덱은 종전 그대로(`fv-x7ue` · `fv-w3dq`). 단언 `[§142 배정 대기]`가 레그 게이트 전 해제를 막는다 | `smsGate.test.ts` |
+| 테스트 갱신 | 장부 · 개수 단언(설치 화면 6→7 · 도달 랜딩 25→27 · 문자 안내 21→25 · T129 (b) 등재 +2 · 4-c 대상 +2 · J6 장부 3→5) · 다통화 제외(세션 전체 문자 시뮬레이션 2건 — 레그 시뮬레이션은 PR-3) · 새 단언(`[§142 레그 합성]` · `[§142 배정 대기]`) · 무해화 스캔 확대(레그별 합성 페르소나 · 번호부 도메인) | — |
+| PRD 예외(사용자 승인 설계 #470에 따른 예외) | AC-096 (b) 고급 인원 1~3 ↔ R1 인물 4 — 설계 #470 §3.2(배송원 · 상담원 · 감독기관 · 검사) · D5 · D9를 사용자가 "권고대로" 승인(메인 판단 2026-11-01). 다통화는 인물 수(`speakerId`)로 세고 `fv-k3dn`만 명시 예외(`flowVariants.test.ts` `ADVANCED_MULTI_CALL_PEOPLE_EXEMPT`). ⛔ PRD 원문 무수정(planner 소관) — 갱신 문안 제안은 142.7 | — |
+| AC-072(사용자 승인 설계 #470에 따른 예외) | 상담원 수법 "접속번호를 한 번만 묻는다" = 사기범 요구 재현(조사 S1 p.3 · 설계 #470 §3 단계 4) — 설치 절차 · 권한 작동 방식 설명은 여전히 0 | `cardRebuildLegs.prompt.ts` |
+
+### 142.6 남은 단위
+| PR | 내용 | 해제 조건 |
+|---|---|---|
+| PR-3 런타임 | 세션 `relay.legIndex`(서버) · 레그 시작 콜러블(다이얼 판정표 142.4 · 가로채기 = 원격 지원 앱 응낙) · `createRealtimeCall` 레그 프롬프트 · 레그 목소리(풀 확장) · 앞 레그 인계 블록 · 문자 게이트 레그 단위 · 끊기 2-b(레그 끝) · 이 변형 확인 창구 끄기(R7) · 폴백 `sendMessage` 레그 | 레그별 시뮬레이션 단언 |
+| PR-2 클라 | 전화 앱 다이얼 · 연락처 · 발신 화면 · 문자 번호 누름 · R2 시작 셸 · 레그 전환(`useRealtimeCall` 레그 열기) · 진짜 기관 자동 안내 · D4 재발신 · 원격 지원 화면 접속번호 | 에뮬레이터 스모크 |
+| PR-4 | `pendingRollout` 해제 · `fv-x7ue` · `fv-w3dq` 은퇴 · 리포트 교육점 · 루트 이름 | 실 키 실측(세션 수 제안 — 승인 필요) |
+
+### 142.7 PRD 갱신 문안 제안(planner 소관 — 원문 무수정 · 제안만)
+| AC | 제안 문안(갱신 고지 append 형식) |
+|---|---|
+| AC-096 (b) | "고급 인원 1~3"에 단서 추가: *"다통화(통화를 끊고 참가자가 다시 거는 흐름) 변형은 서로 다른 인물 수로 세며, 카드 배송 사칭 전형 흐름(배송원 → 카드사 상담원 → 감독기관 → 검사 — 금감원 소비자경보 2025-1호)을 재현하는 변형은 4명까지 허용한다(사용자 승인 설계 #470)."* |
+| AC-072 | 무해화 범위 명확화: *"사기범이 원격 지원 앱 화면의 접속번호를 불러 달라고 요구하는 대사는 요구의 재현이며 허용한다. 설치 경로 · 권한 · 원격 제어의 작동 방식 설명은 계속 금지한다(사용자 승인 설계 #470)."* |
+
+### 142.8 PR-3(레그 런타임 · R7) — 배정 대기 유지
+⛔ 운영 동작 변화 0 — 두 변형은 `pendingRollout`이라 배정되지 않는다. 아래는 배정 해제(PR-4) 뒤에만 실행된다.
+
+| 지점 | 파일 | 동작 |
+|---|---|---|
+| 레그 판정(잎) | `functions/src/callLegs/legPlan.ts` | 142.4 판정표(`planLegStart`) · 끊기 보정 · 목소리 자리 · 앞 레그 인계 블록 · 폴백 이력 분할 |
+| 레그 시작 | `functions/src/callLegs/index.ts` `startCallLeg`(새 콜러블) · `request.ts` | 행동 `dial` · `callback` · `transfer`. 설치 응낙 = `mockScreens/card-remote-support-install.consentedAt`. 레그 시작 발화 수 = 서버 `messages` 사용자 줄 수. 진짜 기관 = `relay.genuineNumberId` 기록(세션 종료는 화면이 안내 뒤 `endSession`) |
+| 토큰 | `realtime/index.ts` · `geminiProvider.ts` · `scenarioVoice.ts` | 레그 프롬프트 · 레그 성별 · 레그 목소리(풀 남 Puck · Charon · Fenrir / 여 Aoede · Kore · Leda — 자리 1 이후 음질은 추정 · 실측 전) · 레그 1부터 `[앞선 통화 기록]` · 응답 `callLeg {legIndex, callerLabel}` |
+| 문자 게이트 | `inCallSms/smsGate.ts` `resolveDeclaredSms(…, {relay})` | 현재 레그 문자만 · 하한 + 레그 시작 발화 수(발송 · 끊기 판정 지점만 — 도달 랜딩 · 계좌 해석은 종전 전체 선언) |
+| 끊기(실시간) | `scammerHangup/commit.ts` · `index.ts` | 마지막이 아닌 레그: 4-b · 4-c 입력 거짓 · 5행 하한 = 레그 시작 뒤 발화 · 8행 = 그 레그 끝 기록 · 승인 = `relay.legEnded`(세션 끝 표식 0) · 응답 `legEnd {exit}` |
+| 끊기 · 프롬프트(폴백) | `roleplay/index.ts` | 위와 같은 입력 · 레그 프롬프트 · 이력을 현재 레그로 자르고 앞 통화는 인계 블록 · 응답 `legEnd {exit}`(`ended` false) |
+| R7 | `sessionUsesVerifyIntercept`(flowVariants) — 호출부 commit · roleplay · chatDuringCall · realtime · liveTools · geminiProvider | 다통화 변형은 확인 창구 세션이 아니다 → 끊기 4행이 열릴 길이 0 · `give_up`이 마지막 레그에서 승인된다(단언 `legRuntime.test.ts`) |
+
+PR-2 화면 계약(이 PR이 전제하는 것):
+| 항목 | 계약 |
+|---|---|
+| 실시간 `userTurns` 주장값 | 세션 누적(레그마다 0으로 되돌리지 않는다) — 문자 하한 · 끊기 5행이 서버 레그 시작 발화 수와 같은 축이어야 한다 |
+| 레그 끝 순서 | `legEnd` 수신 → 그 레그 전사 `submitRealtimeTranscript` → `startCallLeg` → 새 `createRealtimeCall`(토큰이 서버 `relay`로 레그를 정한다) |
+| 리포트 | 수법 해석은 레그 0 프롬프트 기준(종전 단일 지점) — 레그 전체 수법 · 교육점은 PR-4 |
+
+### 142.9 PR-2(클라 — R1 통화 전환) — 배정 대기 유지
+⛔ 운영 동작 변화 0(두 변형 배정 대기). 판정은 서버(`startCallLeg`) · 화면 흐름 표는 `src/lib/callLegs/legTransition.ts` 머리 주석.
+
+| 지점 | 파일 | 동작 |
+|---|---|---|
+| API | `src/lib/api/startCallLeg.ts` · `types.ts` | `startCallLeg` · `legEnd`(끊기 · 폴백 응답) · `callLeg`(토큰) 타입 1:1 |
+| 실시간 훅 | `src/lib/realtime/useRealtimeCall.ts` | `suspendForLeg`(자격증명을 비워 Live 세션 언마운트 — `stop()` 신호는 새 세션을 즉시 닫으므로 쓰지 않는다) · `startLeg`(새 토큰 → `connectionSeq` +1 재마운트) |
+| 끊기 래치 | `GeminiVoiceSession.tsx` · `page.tsx` | `legEnd`면 종료 래치 대신 통화 사이 표식(`legSwitchingRef` — 실시간 `ended`를 서버 close로 읽지 않는다) → 마지막 대사 뒤 `beginLegTransition` |
+| 통화 사이 | `page.tsx` `beginLegTransition` · `CallLegScreens.tsx` | Live 내림 → 전사 제출(서버 레그 시작 발화 수 계약) → 호 전환 = 연결음 3.5초 뒤 `transfer` / 다시 걸기 = 다이얼(키패드 · 연락처 · 메시지) · 30초 동안 안 걸면 상대 재발신(D4 · 받기) |
+| 서버 응답 | 같은 곳 | `connected` = 발신 연결음 4.5초 뒤 새 통화(라벨 = 서버 `callerLabel` · 새 연결은 이어받기가 아니라 오프닝) · `genuine` = 자동 안내 → 통화 종료 = 훈련 종료 · `unknown_number` = 다이얼 안내 · `not_ready` · 실패 = 종전 끊기 종료 |
+| 문자 번호 | `InCallSmsOverlay.tsx` · `inCallSms.ts` | `callback` 문자의 `dialNumber`를 본문에서 찾아 누를 수 있게 → 다이얼에 채움(통화 중에 누르면 끊긴 뒤 다이얼이 그 번호로 열린다) |
+| 오디오 | (변경 0) | 받기 때 만든 출력 컨텍스트가 통화 사이에도 살아 있어(`shouldReleasePrimedCallAudio` = 거짓) 새 통화 · 연결음이 그대로 쓴다 — `primeCallAudio` 호출 수 무변경 |
+
+판단값(실측 전): 상대 재발신 30초 · 발신 연결음 4.5초 · 호 전환 3.5초. 남은 것: **R2 시작 셸**(발급 문자에서 시작 → 첫 통화를 참가자가 건다 — 서버 시작 문자 발송 · 첫 받기 오디오 준비 포함) · PR-4.
+
+### 142.10 PR-4(배정 해제 · 은퇴 · R2 시작 셸 · 리포트) — 운영 동작이 바뀌는 단위
+⛔ 배포 전 실 키 확인 실측 필요(아래 제안). 사용자 승인 설계 #470(D9 (a) R2 포함 덱 2벌)에 따른 변경.
+
+| 지점 | 파일 | 동작 |
+|---|---|---|
+| 배정 | `flowVariants.ts` | `fv-k3dn` · `fv-r8vb` `pendingRollout` 해제 · `fv-x7ue` · `fv-w3dq` `retired`(옛 세션 · 리포트 해석은 그대로) → 카드사 고급 자가 풀 = 재구성 2루트 · 챌린지 풀은 `fv-akj5` 그대로(Q2) |
+| R2 첫 통화 | `flowVariants.ts` `CARD_REBUILD_AGENT_FIRST_LEG` | 배송원 레그가 없는 R2 첫 통화(상담원)에 본인확인 요구 수법을 더한다(받는 분 정보 카드 치환 원천 · 문면은 배송 · 발급 공용) |
+| R2 시작 문자 | `session/index.ts` · `inCallSms/smsDelivery.ts` `deliverOpenerSms` | 확정 배정 뒤 시작 문자(`card-issue-notice`)를 도착시키고 세션 문서 `startSurface: "sms"`(문서 생성 지점은 `smsDelivery.ts` 하나 — G537/X4) |
+| R2 시작 화면 | `page.tsx` | `startSurface`면 벨 0 · 전화 앱 다이얼(메시지 탭에 시작 문자)로 시작 · 첫 다이얼 탭이 받기와 같은 오디오 준비(탭 안 동기 — `callAudio.test.ts` 게이트에 이 지점 등재) · 서버 연결 판정 뒤 받기 경로로 첫 통화 |
+| 리포트 | `report/generateReportCore.ts` | 다통화 변형은 변형 전체 수법으로 해석(레그 0 합성본 아님) · 루트 교육 포인트 4개(`CARD_REBUILD_REPORT_LESSONS` — 조사 문서 ①~④)를 예방 조언 마무리 앞에 |
+
+확인 실측 제안(실 키 · 승인 필요): **6세션** — R1 × (끝까지 따름 · 원격 앱 거절 give_up — R7 · 공식 번호 확인 시도 genuine) · R2 × (따름 · 진짜 카드사 번호 genuine · 재발신 대기 D4). 판단값(재발신 30초 · 연결음) · 레그 목소리 자리 1 이후 음질 · 레그 인계 자연스러움도 이때 본다.

@@ -13,6 +13,8 @@ import { ELEVENLABS_API_KEY, GEMINI_KEY_SECRETS } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { sessionDeclaresInCallSms } from "../inCallSms/smsGate";
 import { getVerifyOfferTrigger } from "../scenarios/verifyIntercept";
+import { findFlowVariant, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
+import { buildPriorLegContext, resolveSessionCallLeg } from "../callLegs/legPlan";
 import type { VoiceMode } from "../scenarios/publicMeta";
 import type { ChallengeDoc, SessionDoc, VoiceSelectionSource } from "../shared/types";
 import { getRealtimeProvider, requiresServerPromptProvider } from "./provider";
@@ -149,8 +151,17 @@ export const createRealtimeCall = onCall<
   // §110.3(실기 신고 12) — 메신저→통화 전이 세션이면 지금까지의 대화(메시지 · 앞선 통화 전사)와 화면에서 한 일을 읽어 Live 프롬프트에 싣는다.
   // 읽기 실패는 통화를 막지 않는다(블록 없이 진행 — P-4).
   const familyAddress = sessionFamilyAddress(session);
+  // §142(D5) — 다통화 변형의 현재 레그(서버 필드 `relay`만). 레그 1부터는 앞 통화 기록을 인계 블록으로 싣는다(읽기 실패 = 블록 0 · 통화는 막지 않는다).
+  const callLeg = resolveSessionCallLeg(findFlowVariant(session.flowVariantId), session);
   let priorChatContext: string | undefined;
-  if (isEscalatedVoiceCall(session.channel, session.channelHistory)) {
+  if (callLeg && callLeg.legIndex > 0) {
+    try {
+      const messagesSnap = await db.collection("sessions").doc(sessionId).collection("messages").orderBy("turnIndex", "asc").get();
+      priorChatContext = buildPriorLegContext(messagesSnap.docs.map((d) => d.data() as { role: string; text?: string }));
+    } catch {
+      priorChatContext = undefined;
+    }
+  } else if (isEscalatedVoiceCall(session.channel, session.channelHistory)) {
     try {
       const sessionRef = db.collection("sessions").doc(sessionId);
       const [messagesSnap, mockSnap] = await Promise.all([
@@ -203,10 +214,15 @@ export const createRealtimeCall = onCall<
   // 현행 4경로에서 판정이 4/4 동일하다(위 `TURN_INSTRUCTION_CAPABLE_PROVIDERS` 주석 · `[§43/G234]`).
   const verifyOffer = getVerifyOfferTrigger(session.scenarioId);
   const isAdvanced = normalizeDifficultyLevel(session.difficultyLevel) === "advanced";
+  // §142 · R7 — 다통화 변형은 창구 오퍼를 내리지 않는다.
+  const usesVerify = sessionUsesVerifyIntercept(session.scenarioId, isAdvanced, session.flowVariantId);
   const withVerifyOffer = <T extends { provider: RealtimeProviderName }>(credentials: T): T =>
-    verifyOffer && isAdvanced && isTurnInstructionCapable(credentials.provider)
+    verifyOffer && usesVerify && isTurnInstructionCapable(credentials.provider)
       ? { ...credentials, verifyOffer }
       : credentials;
+  // §142 — 다통화 레그 표시값(서버 원천). 실시간 · 폴백 응답 모두에 붙인다.
+  const withCallLeg = <T extends object>(credentials: T): T =>
+    callLeg ? { ...credentials, callLeg: { legIndex: callLeg.legIndex, callerLabel: callLeg.callerLabel } } : credentials;
   try {
     const credentials = await provider.createCallCredentials({
       sessionId,
@@ -231,6 +247,8 @@ export const createRealtimeCall = onCall<
       ...(familyAddress ? { familyAddress } : {}),
       // §110.3 — 메신저에서 넘어온 통화면 앞선 대화(부재 = 처음부터 통화 · 블록 0).
       ...(priorChatContext ? { priorChatContext } : {}),
+      // §142 — 다통화 레그(부재 = 종전).
+      ...(callLeg ? { callLeg: { legIndex: callLeg.legIndex, voiceSlot: callLeg.voiceSlot } } : {}),
     });
     timing.mark("credentials");
     logger.info(REALTIME_SETUP_LOG_MESSAGE, timing.finish({ provider: credentials.provider, isMock: credentials.isMock }));
@@ -253,9 +271,9 @@ export const createRealtimeCall = onCall<
     // `credentials`를 필드별로 재구성하지 말 것 — 그러면 `liveTools`가 조용히 누락된다
     // (`toolDeclarationUnchanged.test.ts`의 소스 스캔 테스트가 이 형태를 고정한다).
     if (session.challengeId && credentials.provider !== "elevenlabs") {
-      return withVerifyOffer(withSmsTriggers({ ...credentials, voiceId: "" }));
+      return withCallLeg(withVerifyOffer(withSmsTriggers({ ...credentials, voiceId: "" })));
     }
-    return withVerifyOffer(withSmsTriggers(credentials));
+    return withCallLeg(withVerifyOffer(withSmsTriggers(credentials)));
   } catch {
     // 자격증명 발급 실패가 통화 자체를 막지 않도록, 목업(텍스트 폴백)으로 강등해 돌려준다
     // (P-4 핵심 루프 비차단). 클라는 isMock을 보고 폴백 UI를 띄운다 — 조용히 실패하지 않는다.
@@ -269,7 +287,7 @@ export const createRealtimeCall = onCall<
     // 명시 타입 인자 — 제네릭 래퍼를 통과하면 객체 리터럴의 문자열 리터럴 타입이 넓어져
     // `provider: string`이 된다(실측 TS2345). 반환 계약을 그대로 고정한다.
     logger.info(REALTIME_SETUP_LOG_MESSAGE, timing.finish({ provider: "none", isMock: true }));
-    return withVerifyOffer<CreateRealtimeCallResponse>({
+    return withCallLeg(withVerifyOffer<CreateRealtimeCallResponse>({
       provider: "none",
       signedUrl: "",
       geminiToken: "",
@@ -280,6 +298,6 @@ export const createRealtimeCall = onCall<
       // T72 — 이 폴백은 클라를 텍스트 경로(sendMessage)로 보내며, 그 경로는 매 턴 서버가 프롬프트를
       // 조립하므로 난이도가 정상 반영된다(MockRealtimeProvider와 동일 판단).
       difficultyApplied: true,
-    });
+    }));
   }
 });

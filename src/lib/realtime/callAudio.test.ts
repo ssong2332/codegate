@@ -155,7 +155,13 @@ function answerPrimeViolations(code: string): string[] {
   // 다른 곳(effect 등)에서 만들면 안 된다 — 받기 1회 + §136 새로고침 뒤 다시 열기(`resumeRestoredCall`) 1회뿐.
   const resume = sliceBetween(code, "const resumeRestoredCall = () => {", "const handleResumeTap");
   const inResume = (resume.match(/primeCallAudio\(/g) ?? []).length;
-  if ((code.match(/primeCallAudio\(/g) ?? []).length - inResume !== 1 || inResume > 1) out.push("primeCallAudio 호출이 정확히 1회가 아니다");
+  // §142 PR-4(R2) — 시작 문자 세션의 첫 다이얼 탭(받기 대신 참가자가 건다 — 탭 핸들러 안 동기 · 같은 재진입 가드 · 같은 플래그).
+  const smsStartDial = sliceBetween(code, "const primeSmsStartDial = () => {", "const dialLeg = () => {");
+  const inSmsStart = (smsStartDial.match(/primeCallAudio\(/g) ?? []).length;
+  if (inSmsStart > 1 || (inSmsStart === 1 && !smsStartDial.includes("if (!smsPrimed && audioFlags.audioPrime) {"))) {
+    out.push("시작 문자 다이얼의 오디오 준비가 받기와 같은 가드를 쓰지 않는다");
+  }
+  if ((code.match(/primeCallAudio\(/g) ?? []).length - inResume - inSmsStart !== 1 || inResume > 1) out.push("primeCallAudio 호출이 정확히 1회가 아니다");
   return out;
 }
 

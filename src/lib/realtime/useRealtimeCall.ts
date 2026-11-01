@@ -66,6 +66,13 @@ export type RealtimeCallControls = {
    * 종전 강등 경로). 통화 중(`active`)일 때만 동작한다.
    */
   reconnect: (sessionId: string) => Promise<void>;
+  /**
+   * §142(카드사 고급 재구성) — 다통화 변형의 통화 사이: 지금 Live 세션을 내린다(자격증명을 비워 언마운트 · `stop()`의 종료 신호는 쓰지 않는다 —
+   * 새 세션이 마운트되자마자 그 신호로 닫히기 때문). 상태는 `reconnecting`(화면 phase 유지 · 종료 셸 0).
+   */
+  suspendForLeg: () => void;
+  /** §142 — 서버가 다음 통화를 연 뒤(`startCallLeg` connected) 새 자격증명으로 다음 인물의 Live 세션을 띄운다. 실패 = `error`(텍스트로 이어감). */
+  startLeg: (sessionId: string) => Promise<void>;
   /** RealtimeVoiceSession이 올려주는 콜백들. */
   handleActive: () => void;
   handleEnded: () => void;
@@ -326,6 +333,35 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     }
   }, []);
 
+  const suspendForLeg = useCallback(() => {
+    if (statusRef.current !== "active" && statusRef.current !== "reconnecting") return;
+    statusRef.current = "reconnecting";
+    setStatus("reconnecting");
+    setCredentials(null);
+    setIsAgentSpeaking(false);
+    setIsUserSpeaking(false);
+  }, []);
+
+  const startLeg = useCallback(async (sessionId: string) => {
+    if (statusRef.current !== "reconnecting") return;
+    try {
+      const issued = await createRealtimeCall({ sessionId });
+      if (!mountedRef.current || statusRef.current !== "reconnecting") return;
+      if (issued.isMock || issued.provider !== "gemini" || !issued.geminiToken) {
+        setCredentials(toFallbackCredentials(issued));
+        setStatus("error");
+        setErrorMessage(SCREEN_OFF_COPY.reconnectFailed);
+        return;
+      }
+      setCredentials(issued);
+      setConnectionSeq((n) => n + 1);
+    } catch {
+      if (!mountedRef.current || statusRef.current !== "reconnecting") return;
+      setStatus("error");
+      setErrorMessage(SCREEN_OFF_COPY.reconnectFailed);
+    }
+  }, []);
+
   const handleActive = useCallback(() => {
     if (mountedRef.current) setStatus("active");
   }, []);
@@ -371,6 +407,8 @@ export function useRealtimeCall(): RealtimeCallState & RealtimeCallControls {
     start,
     stop,
     reconnect,
+    suspendForLeg,
+    startLeg,
     handleActive,
     handleEnded,
     handleError,

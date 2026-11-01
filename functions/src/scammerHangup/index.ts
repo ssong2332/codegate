@@ -18,6 +18,8 @@ import { resolveDeclaredSms, sessionDeclaresInCallSms } from "../inCallSms/smsGa
 import { readDeliveredSms } from "../inCallSms/smsDelivery";
 import type { SessionDoc } from "../shared/types";
 import { decideAndMarkRealtimeHangup, isVerifyInterceptSession } from "./commit";
+import { findFlowVariant } from "../scenarios/flowVariants";
+import { currentLegIndex, legHangupAdjustments } from "../callLegs/legPlan";
 import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, readMockScreenCompletion } from "./goalAction";
 import { scammerHangupGuidance } from "./guidance";
 import { readScammerHangupRequest } from "./readRequest";
@@ -66,7 +68,8 @@ export const requestScammerHangup = onCall<
   // §115 — 후속 단계 변형(기관 사칭 고급 2벌)만 값이 있다. 막힌 응답의 문면을 고르는 데도 쓴다.
   const followUpUserTurns = goalFollowUpFor(session.scenarioId, session.flowVariantId);
   const verifySession = isVerifyInterceptSession(session);
-  const { declared, reason: declaredReason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId);
+  // §142 — 다통화 변형은 현재 레그 선언(마지막이 아닌 레그에는 결정 화면이 없다 — 4-c는 마지막 레그 안전계좌 화면).
+  const { declared, reason: declaredReason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId, { relay: session.relay });
   const decisionScreenInput = {
     scenarioId: session.scenarioId,
     flowVariantId: session.flowVariantId,
@@ -92,6 +95,12 @@ export const requestScammerHangup = onCall<
   } catch {
     goalActionDone = false;
   }
+  // §142 — 다통화 변형의 마지막이 아닌 레그(레그 끝 끊기). 이 레그에는 결정 화면 · 후속 단계가 없다(4-c · 4-b 입력 거짓).
+  const variant = findFlowVariant(session.flowVariantId);
+  const legAdj = variant && variant.scenarioId === session.scenarioId ? legHangupAdjustments(variant, session.relay, userTurns) : undefined;
+  const legScope = legAdj?.nonLastLeg
+    ? { nonLastLeg: true as const, legIndex: currentLegIndex(variant!, session.relay), turnsSinceLegStart: legAdj.turnsSinceLegStart }
+    : undefined;
   const decision = await db.runTransaction((tx) =>
     decideAndMarkRealtimeHangup<FirebaseFirestore.DocumentReference>(
       tx,
@@ -101,6 +110,7 @@ export const requestScammerHangup = onCall<
           const item = findVerifyInterceptItem(scenarioId);
           return item ? sessionRef.collection("verifyIntercept").doc(item.offerId) : undefined;
         },
+        ...(legScope ? { legScope } : {}),
       },
       { userTurns, pendingInstruction, kind },
       delivered,
@@ -126,5 +136,9 @@ export const requestScammerHangup = onCall<
   // §115 — 후속 단계가 남아 막혔으면 되풀이 금지 문면(그 밖은 종전 문면).
   const followUpPending = followUpUserTurns !== undefined && !goalActionDone;
   // §127 — 할 일을 마친 뒤 6행에 막혔으면 다시 끊으라는 문면.
-  return { status: decision.status, guidance: scammerHangupGuidance(decision.status, { followUpPending, goalActionDone }) };
+  const legEnd =
+    legScope && decision.hangup
+      ? { legEnd: { exit: variant!.legs[legScope.legIndex].exit ?? ("dial" as const) } }
+      : {};
+  return { status: decision.status, guidance: scammerHangupGuidance(decision.status, { followUpPending, goalActionDone }), ...legEnd };
 });

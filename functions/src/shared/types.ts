@@ -184,8 +184,15 @@ export type SessionDoc = {
   // **불투명 ID**(`fv-xxxx`). 수법 · 단계 · 인원은 `functions/src/scenarios/flowVariants.ts`(서버 전용)에만
   // 있다(D-46 · ADR-0004). 부재 = 변형 도입 이전 세션 → 원본 시나리오 프롬프트로 해석(무소급).
   flowVariantId?: string;
+  /**
+   * §142(다통화 · 카드사 고급 재구성) — 레그 런타임 상태. 서버만 쓴다(레그 시작 콜러블 `startCallLeg` · 끊기 승인 `requestScammerHangup`).
+   * 판정은 `callLegs/legPlan.ts`. 부재 = 레그 0(다통화가 아닌 세션은 읽지 않는다). `genuineNumberId` = 진짜 기관 번호로 걸어 방어로 끝난 번호(D3).
+   */
+  relay?: { legIndex: number; legStartUserTurns: number[]; connected?: boolean; legEnded?: number; genuineNumberId?: string };
   // 개발 단계 루트 강제 지정(`session/devRouteOverride.ts` F4) — 요청 `forceVariantId`로 변형을 정했을 때만 `"forced"`. 부재 = 회전 덱 배정.
   routeOverride?: "forced";
+  // §142 PR-4 — 다통화 R2(`openerSmsId` 변형): 세션이 수신 통화가 아니라 시작 문자가 도착한 화면에서 시작한다(첫 통화는 참가자 발신). 서버만 쓴다 · 부재 = 수신 통화(종전).
+  startSurface?: "sms";
   // T192 C1 추가(옵셔널, 하위호환 · 무백필 — Architecture.md §79.5) — 사기범 끊기 승인 표식. 서버만 쓴다
   // (클라 write는 firestore.rules가 전부 거부). `endReason: "scammer_ended"`의 **서버측 근거**다 —
   // 이것 없이 온 `scammer_ended`는 `user_ended`로 기록된다(`session/endReason.ts`).
@@ -293,7 +300,7 @@ export type ArtifactDoc = {
 // ⚠️ `MessengerAttachment`는 **무변경**이다 — OTP형은 링크가 아니라 표시용 코드라
 // `{kind:"link",displayText,fakeLandingId,harmless}`에 담기지 않는다. 억지 확장은 "link인데
 // fakeLandingId가 없는" 부재-오버로드를 만든다(§14.9.1이 반복 기각한 안티패턴).
-export type InCallSmsKind = "account" | "link" | "otp";
+export type InCallSmsKind = "account" | "link" | "otp" | "callback";
 export type InCallSmsDoc = {
   smsId: string; // = 문서 id. 서버가 IN_CALL_SMS[session.scenarioId] 소속을 재검증한 값만 기록
   kind: InCallSmsKind;
@@ -313,6 +320,8 @@ export type InCallSmsDoc = {
   accountHolder?: string;
   /** ⭐ P2 — 같은 본문 "금액: …원" 줄의 숫자만(쉼표 제거 · 예 `"1850000"`). 부재 = 참가자가 직접 넣는다(금액을 말로 부르는 루트). */
   transferAmount?: string;
+  /** §142 — `kind === "callback"`일 때만. 본문 속 번호(번호부 `dialDirectory.ts` 값) — 누르면 앱 안 다이얼 화면을 이 번호로 채운다(`tel:` 0). */
+  dialNumber?: string;
   // T104(§19.4) — 그 랜딩의 목업 종류. **kind의 진실 원천은 서버**이고(§15.9.1 R3) 클라는
   // `fakeLandingId` 문자열을 분류하지 않는다. 값이 기본값(`credential-form`)이면 **키를 만들지
   // 않는다** — `MessengerAttachment.landingKind`의 생략 규칙(`linkMarker.ts`)과 글자 그대로

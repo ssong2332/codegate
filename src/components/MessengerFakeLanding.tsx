@@ -545,6 +545,22 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     issuerLabel: "ⓒ 카드 피해금 이관 지원센터",
     mockHost: "card-relief-desk.invalid",
   },
+  // §142(카드사 고급 재구성) — 안전계좌 이체(훈련용 이체 화면). 서버 카탈로그(mockScreens.ts)와 글자 단위로 동일(G76).
+  "card-safe-transfer": {
+    headline: "자산 보호 조치가 완료되지 않았습니다",
+    bodyLines: [
+      "조사가 끝날 때까지 자산을 안전계좌에 보관해야 합니다.",
+      "보내실 금액을 적고 아래 버튼을 눌러 주세요.",
+    ],
+    fields: [
+      { label: "안전계좌 번호", placeholder: "문자로 받은 안전계좌 번호를 입력하세요", inputMode: "numeric", prefill: "account" },
+      { label: "보호 금액", placeholder: "보내실 금액을 입력하세요", inputMode: "numeric", amount: true },
+    ],
+    submitLabel: "자산 보호 이체하기",
+    successHeadline: "자산 보호 이체가 접수되었습니다.",
+    issuerLabel: "ⓒ 자산보호 안내센터",
+    mockHost: "asset-guard-desk.invalid",
+  },
   // §53(§51 커밋 D) — 이체형 가짜 랜딩(UX-023 v1.25 (2)/(17-a) 정본 — bodyLines 둘째 줄은
   // T116 G194 정정 후 문면, 서버 카탈로그(mockScreens.ts)와 글자 단위로 동일).
   "protect-account-transfer": {
@@ -685,6 +701,8 @@ const BANK_TRANSFER_LANDINGS: readonly string[] = [
   "card-relief-transfer",
   "safe-account-transfer",
   "protect-account-transfer",
+  // §142 — 카드사 고급 재구성 결말 안전계좌 이체.
+  "card-safe-transfer",
 ];
 
 /** S2(실기기 확인 2026-11-01) — 대화방 링크 카드가 이체 화면 칩인가(그림 자리 없는 송금 카드로 그린다 · 정확 일치). */
@@ -1557,6 +1575,18 @@ const INSTALL_LANDING_COPY: Record<string, InstallCopy> = {
     consentLabel: "권한 허용하고 계속하기",
     issuerLabel: "ⓒ 카드 명의보호 안내센터",
     mockHost: "card-guard-check.invalid",
+  },
+  // §142(카드사 고급 재구성) — 원격 지원 앱 설치(통화 중 문자함 안에서 열린다). 서버 카탈로그 항목과 바이트 동일(G76).
+  "card-remote-support-install": {
+    headline: "원격 지원 도우미를 설치해야 보안 점검이 시작됩니다",
+    bodyLines: [
+      "상담원이 휴대폰 보안 상태를 함께 점검해 드리는 앱입니다.",
+      "아래에서 원격 지원 도우미 설치를 진행해 주세요.",
+      "설치 후 접근 권한을 허용하면 상담원이 점검을 이어서 진행해 드립니다.",
+    ],
+    consentLabel: "설치하고 권한 허용하기",
+    issuerLabel: "ⓒ 원격 지원 도우미",
+    mockHost: "remote-help-store.invalid",
   },
   "loan-check-app-install": {
     headline: "심사용 보안 점검 앱을 설치해야 대출 심사가 진행됩니다",

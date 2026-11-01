@@ -144,6 +144,8 @@ const ANONYMOUS_POLICY: Record<string, AnonymousPolicy> = {
   requestScammerHangup: "session",
   // §128(7) — 화면 행동 뒤 사기범 먼저 보내기(세션 소유 · 익명 범위 검사 — sendMessage와 같은 S 클래스).
   requestScreenActionFollowUp: "session",
+  // §142(카드사 고급 재구성 PR-3) — 다통화 변형의 다음 통화 시작(세션 소유 · 익명 범위 검사 — requestScammerHangup과 같은 S 클래스).
+  startCallLeg: "session",
   getBeginnerBriefing: "deny",
   createChallenge: "deny",
   deleteChallenge: "deny",
@@ -202,19 +204,19 @@ const EXPORTED_NAMES: readonly string[] = Object.keys(callables);
 
 test("[T176 T-2] index.ts export 집합과 §68.3 정책표가 양방향으로 일치한다(G421)", () => {
   assertNoClassificationGaps(EXPORTED_NAMES, ANONYMOUS_POLICY);
-  assert.equal(EXPORTED_NAMES.length, 28, "§68.1 1 — 서버 진입점은 28개(콜러블 26 + 트리거 1 + 스케줄 1 — T192 C1 +1 · §128(7) +1)");
+  assert.equal(EXPORTED_NAMES.length, 29, "§68.1 1 — 서버 진입점은 29개(콜러블 27 + 트리거 1 + 스케줄 1 — T192 C1 +1 · §128(7) +1 · §142 +1)");
 });
 
-test("[T176 T-2] 정책표 클래스별 개수 = §68.3(D 6 · S 15 · R 1 · E 2 · N 2 · X 2 — 변경 대상 22 · T192 C1 S +1 · §128(7) S +1)", () => {
+test("[T176 T-2] 정책표 클래스별 개수 = §68.3(D 6 · S 16 · R 1 · E 2 · N 2 · X 2 — 변경 대상 23 · T192 C1 S +1 · §128(7) S +1 · §142 S +1)", () => {
   const count = (policy: AnonymousPolicy) =>
     Object.values(ANONYMOUS_POLICY).filter((p) => p === policy).length;
   assert.equal(count("deny"), 6);
-  assert.equal(count("session"), 15);
+  assert.equal(count("session"), 16);
   assert.equal(count("report"), 1);
   assert.equal(count("entry"), 2);
   assert.equal(count("no_auth"), 2);
   assert.equal(count("not_callable"), 2);
-  assert.equal(count("deny") + count("session") + count("report"), 22);
+  assert.equal(count("deny") + count("session") + count("report"), 23);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

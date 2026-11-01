@@ -14,7 +14,15 @@ import { maskPII } from "../guardrails";
 import { neutralizeUserMentionedFinancialNames, replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from "../llm";
 import { triggerReportGeneration } from "../report";
-import { findFlowVariant, resolveSessionScenarioPrompt, routeEndsWithoutAccount } from "../scenarios/flowVariants";
+import { findFlowVariant, resolveSessionScenarioPrompt, routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
+import {
+  buildPriorLegContext,
+  currentLegIndex,
+  legHangupAdjustments,
+  legStartUserTurns,
+  resolveSessionCallLeg,
+  splitLegHistory,
+} from "../callLegs/legPlan";
 import { findInCallSmsItem } from "../scenarios/inCallSms";
 import type { InCallSmsItem } from "../scenarios/inCallSms";
 import {
@@ -62,7 +70,7 @@ import { deliverSmsThroughGate, firestoreSmsStore, readDeliveredSms, readMockScr
 import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, readMockScreenCompletion } from "../scammerHangup/goalAction";
 import { FALLBACK_GOAL_WRAP_UP_INSTRUCTION } from "../scammerHangup/guidance";
 import type { SmsDeliveryInput } from "../inCallSms/smsDelivery";
-import { findVerifyInterceptItem, hasVerifyIntercept } from "../scenarios/verifyIntercept";
+import { findVerifyInterceptItem } from "../scenarios/verifyIntercept";
 import {
   decideFallbackHangup,
   fallbackHangupMode,
@@ -212,7 +220,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     }
 
     // T191 S5(AC-096 (e)(f)) — 세션에 배정된 흐름 변형을 합성한 프롬프트(부재 = 원본 · 무소급).
-    const scenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId);
+    // §142(PR-3) — 다통화 변형은 현재 레그의 인물 · 단계로 합성한다(그 밖 = undefined = 종전 바이트 동일).
+    const sessionCallLeg = resolveSessionCallLeg(findFlowVariant(session.flowVariantId), session);
+    const scenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId, sessionCallLeg?.legIndex);
     if (!scenarioPrompt) {
       throw new HttpsError(
         "internal",
@@ -310,7 +320,15 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // ② 서버에서 scenarioPrompts 기반으로 조립한 프롬프트 + 사용자 입력 구분자 감싸기(ADR-0004) →
     // LLM 어댑터(functions/src/llm) 호출.
     // T191 — 사용자 입력 속 `[[SMS:` 흉내는 `wrapUserInputAsData`(promptAssembly `escapeSentinelLookalikes`)가 무력화한다.
-    const llmHistory = toLlmHistory(storedHistory);
+    // §142(PR-3) — 다통화 레그 1 이후는 모델 이력을 현재 레그로 자르고 앞 통화는 인계 블록으로 넘긴다(Live 새 연결과 같은 입력).
+    const legHistory =
+      sessionCallLeg && sessionCallLeg.legIndex > 0
+        ? splitLegHistory(storedHistory, legStartUserTurns(session.relay, sessionCallLeg.legIndex))
+        : undefined;
+    const priorLegBlock = legHistory
+      ? buildPriorLegContext(legHistory.prior.map((m) => ({ role: m.role, text: m.textMasked })))
+      : undefined;
+    const llmHistory = toLlmHistory(legHistory ? legHistory.current : storedHistory);
     llmHistory.push({ role: "user", content: wrapUserInputAsData(maskedUserText) });
 
     // reviewer 리뷰 Major #1 수정(2026-07-24, 실 Gemini 활성화로 처음 실측 가능해진 결함) — 사용자
@@ -334,9 +352,11 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const fictionalBankName = resolveFictionalBankName({ sessionId, fictionalBankName: session.fictionalBankName });
     const serverUserTurns = storedHistory.filter((m) => m.role === "user").length + 1;
     let userTurnsNow = serverUserTurns;
+    // §142 — 다통화 변형은 현재 레그 문자만 · 하한은 레그 시작 기준.
     const { declared: smsDeclared, reason: smsDeclaredReason } = resolveDeclaredSms(
       session.scenarioId,
       session.flowVariantId,
+      { relay: session.relay },
     );
     const smsStore = firestoreSmsStore(db, sessionRef);
     const smsDeliveryBase: Omit<SmsDeliveryInput, "purpose" | "anchorScammerTurn" | "trigger" | "userTurns"> = {
@@ -410,7 +430,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // ⚠️ 턴 지시는 문자열 **1개**뿐이라 문자 announce와 충돌할 수 있다 — 선택 규칙은
     // `verifyIntercept/fallbackTurn.ts`의 순수 함수 한 곳에 모아 두었다(G31).
     const difficultyLevel = normalizeDifficultyLevel(session.difficultyLevel);
-    const verifyEnabled = hasVerifyIntercept(session.scenarioId) && difficultyLevel === "advanced";
+    // §142 · R7 — 다통화 변형은 창구 오퍼 없음.
+    const verifyEnabled = sessionUsesVerifyIntercept(session.scenarioId, difficultyLevel === "advanced", session.flowVariantId);
     const verifyItem = verifyEnabled ? findVerifyInterceptItem(session.scenarioId) : undefined;
     const scammerDocCount = scammerTurnNumber - 1;
     let verifyOfferRef: FirebaseFirestore.DocumentReference | undefined;
@@ -481,6 +502,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       if (messengerTransferChipPending) decisionScreenPending = true;
     }
     const callEntryTurns = userTurnsSinceCallEntry(session.channel, session.channelHistory, storedHistory);
+    // §142(PR-3) — 다통화 변형의 마지막이 아닌 레그: 끊기 승인 = 레그 끝(`relay.legEnded` · 세션 계속). 이 레그에는 결정 화면 · 후속 단계가 없고
+    // 5행 하한은 레그 시작 뒤 발화 수다(실시간 `scammerHangup/index.ts`와 같은 입력).
+    const legVariant = sessionCallLeg ? findFlowVariant(session.flowVariantId) : undefined;
+    const legAdj = legVariant ? legHangupAdjustments(legVariant, session.relay, userTurnsNow) : undefined;
+    const legScope = legAdj?.nonLastLeg && legVariant
+      ? { legIndex: currentLegIndex(legVariant, session.relay), turnsSinceLegStart: legAdj.turnsSinceLegStart }
+      : undefined;
     const hangupFacts: FallbackHangupFacts = {
       status: session.status,
       channel: session.channel,
@@ -504,6 +532,15 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       smsDeliveredLoaded,
       // §131(14) — 메신저에서 넘어온 통화는 5행 하한을 통화 진입 뒤 발화로도 본다(통화 첫 턴 끊기 방지 · 그 밖 = 키 0).
       ...(callEntryTurns !== undefined ? { turnsSinceCallEntry: callEntryTurns } : {}),
+      // §142(PR-3) — 다통화 마지막이 아닌 레그(뒤에 둬서 덮어쓴다): 결정 화면 · 후속 단계 없음 · 8행 = 그 레그 끝 기록 · 5행 하한 = 레그 시작 뒤 발화.
+      ...(legScope
+        ? {
+            followUpPending: false,
+            decisionScreenPending: false,
+            alreadyAccepted: session.relay?.legEnded === legScope.legIndex,
+            turnsSinceCallEntry: legScope.turnsSinceLegStart,
+          }
+        : {}),
     };
     const hangupPre = decideFallbackHangup(hangupFacts, smsDelivered, false);
     const hangupMode = fallbackHangupMode(hangupPre);
@@ -733,8 +770,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       // G170 — 턴 번호만(대사 0).
       logger.info("[§132] 인증번호 다시 요구 지시", { sessionId, userTurns: userTurnsNow, since: otpArrivedSince });
     }
+    // §142(PR-3) — 다통화 레그 1 이후는 앞 통화 인계 블록을 맨 앞에(그 밖 = undefined = 종전 바이트 동일).
     const turnInstructionWithSms =
-      [promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction, otpFollowUpInstruction, otpHoldInstruction]
+      [priorLegBlock, promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction, otpFollowUpInstruction, otpHoldInstruction]
         .filter(Boolean)
         .join("\n") || undefined;
     // §120 — 사진 턴이면 캐릭터 유지형 반응 지시 1줄을 맨 뒤에 붙인다(`photoTurn.ts` 표 · 그 밖 턴 = 없음 · 문면 바이트 동일).
@@ -1215,9 +1253,19 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       // §112(사용자 결정 2026-10-23 *"ai가 먼저 끊는 경우도 메신저로 넘어가도록"*) — 메신저에서 넘어온 통화(`escalatedCall`)는 여기서 세션을
       // 끝내지 않고 표식만 남긴다. 화면이 끊김 안내 → 전사 제출 → 역전환을 하고, 역전환이 표식의 종류로 끝낼지 이어갈지 정한다
       // (`session/callReturn.ts` `decideCallReturn`). 처음부터 통화인 세션은 종전(같은 트랜잭션에서 종료).
+      // §142(PR-3) — 마지막이 아닌 레그의 끊기 = 레그 끝(세션 계속 · 표식 대신 `relay.legEnded`). 화면이 다음 통화(다이얼 · 연결)를 연다.
+      const legEnded = hangupAccepted && legScope !== undefined;
       const hangupEnded = hangupAccepted && !escalatedCall;
       const hangupToMessenger = hangupAccepted && escalatedCall;
-      if (hangupEffect.end && hangupAccepted) {
+      if (legEnded && legScope) {
+        update.relay = {
+          ...(fresh?.relay ?? session.relay ?? {}),
+          legIndex: legScope.legIndex,
+          legStartUserTurns: fresh?.relay?.legStartUserTurns ?? session.relay?.legStartUserTurns ?? [0],
+          connected: false,
+          legEnded: legScope.legIndex,
+        };
+      } else if (hangupEffect.end && hangupAccepted) {
         const endedAt = Timestamp.now();
         if (hangupEnded) {
           update.status = "ended";
@@ -1235,7 +1283,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       if (Object.keys(update).length > 0) {
         tx.update(sessionRef, update);
       }
-      return { stillActive, hangupEnded, hangupToMessenger };
+      // §142 — 레그 끝은 세션 끝 · 대화방 역전환이 아니다(위 `else if`가 종료 필드 · 표식을 쓰지 않는다).
+      return { stillActive, hangupEnded: hangupEnded && !legEnded, hangupToMessenger: hangupToMessenger && !legEnded, legEnded };
     });
 
     // T8 배선: 한도 도달로 이 턴이 세션을 자동 종료시켰다면(status=ended, endReason=limit_reached),
@@ -1325,6 +1374,10 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       ...(deliveredSmsId ? { sms: { smsId: deliveredSmsId } } : {}),
       // §112 — 메신저에서 넘어온 통화의 폴백 끊기(세션은 아직 active · 화면이 끊김 안내 뒤 역전환).
       ...(finalize.hangupToMessenger ? { scammerHungUp: true as const } : {}),
+      // §142(PR-3) — 레그 끝(세션 계속). 화면은 나가는 방식대로 다이얼 · 연결을 연다(`startCallLeg`).
+      ...(finalize.legEnded && legScope && legVariant
+        ? { legEnd: { exit: legVariant.legs[legScope.legIndex].exit ?? ("dial" as const) } }
+        : {}),
     };
   },
 );

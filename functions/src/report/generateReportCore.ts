@@ -7,7 +7,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
+import { findFlowVariant, resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { MOCK_SCREENS } from "../scenarios/mockScreens";
 import { listOtpItems } from "../scenarios/inCallSms";
 import { withSessionOtp } from "../scenarios/sessionOtp";
@@ -51,6 +51,14 @@ import { resolveRouteSummary } from "./routeSummary";
 import { stripLeakedThought } from "../realtime/thoughtLeak";
 import { resolveReportTimeBaseMs } from "../session/answeredAt";
 import { personaCardKind } from "../scenarios/personaCardCatalog";
+
+/** §142 PR-4 — 루트 교육 포인트를 마무리 문장 앞에 붙인다(중복 0 · 부재 = 입력 그대로). */
+export function withRouteLessons(advice: string[], lessons: readonly string[] | undefined): string[] {
+  if (!lessons || lessons.length === 0 || advice.length === 0) return advice;
+  const closing = advice[advice.length - 1]!;
+  const head = advice.slice(0, -1);
+  return [...head, ...lessons.filter((lesson) => !head.includes(lesson)), closing];
+}
 
 export async function generateReportForSession(sessionId: string): Promise<GenerateReportResponse> {
   const db = getFirestore();
@@ -117,7 +125,10 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   // §129 에뮬 D2(사용자 결정 ㉠) — "N분 N초 시점"의 기준 = 통화를 받은 시각(처음부터 통화인 세션 · `session/answeredAt.ts` 표 A). 그 밖 = 생성 시각(종전).
   const reportTimeBaseMs = resolveReportTimeBaseMs(session);
   const scenarioPrompt = resolveSessionScenarioPrompt(session.scenarioId, session.flowVariantId);
-  const weakenedTactics = scenarioPrompt?.weakenedTactics ?? [];
+  // §142 PR-4 — 다통화 변형은 레그마다 다른 인물 · 수법이다. 리포트는 레그 0 합성본이 아니라 변형 전체 수법으로 해석한다(통화 전부의 대화를 본다).
+  const sessionVariant = findFlowVariant(session.flowVariantId);
+  const multiCallVariant = sessionVariant?.multiCall && sessionVariant.scenarioId === session.scenarioId ? sessionVariant : undefined;
+  const weakenedTactics = multiCallVariant ? [...multiCallVariant.tactics] : (scenarioPrompt?.weakenedTactics ?? []);
 
   // ② 대화 로그 규칙 기반 분석(analyzeConversation.ts 참고 — Mock 단계 한계 고지 포함) →
   // deceivedMoments/tacticsUsed/wasDeceived 산출.
@@ -289,7 +300,10 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
   // (session/channelTransition.ts) 통화 문구가 그대로 맞다. "voice" 문구는 이 변경 전과 한 글자도
   // 다르지 않다. ⛔ 조언의 **수법 입력**은 여전히 `analysis.tacticsUsed`다(G215 — 아래 ②-e 참고).
   const adviceChannel: AdviceChannel = session.channel === "messenger" ? "messenger" : "voice";
-  const preventionAdvice = buildPreventionAdvice(analysis.tacticsUsed, wasDeceived, adviceChannel);
+  const preventionAdvice = withRouteLessons(
+    buildPreventionAdvice(analysis.tacticsUsed, wasDeceived, adviceChannel),
+    sessionVariant?.scenarioId === session.scenarioId ? sessionVariant?.reportLessons : undefined,
+  );
 
   // ②-e ⭐ **승격 순간의 수법 합집합**(T136, §42.6 B, AC-008/AC-009) — 카드가 이름으로 부르는
   // 수법이 아코디언 목록에서 빠져 **같은 리포트가 자기 안에서 어긋나던 것**을 닫는다.

@@ -84,6 +84,11 @@ export type RealtimeCallInput = {
    * 부재 = 처음부터 통화인 세션(블록 0 · 바이트 동일). Gemini 경로만 반영한다.
    */
   priorChatContext?: string;
+  /**
+   * §142(D5 · 다통화 변형) — **이미 해석된** 현재 레그(`callLegs/legPlan.ts` `resolveSessionCallLeg` — 호출부 `createRealtimeCall`이 1회).
+   * Gemini 경로는 그 레그 프롬프트(`resolveSessionScenarioPrompt(…, legIndex)`)와 레그 목소리 자리(`voiceSlot`)를 쓴다. 부재 = 종전(바이트 동일).
+   */
+  callLeg?: { legIndex: number; voiceSlot: number };
 };
 
 /**

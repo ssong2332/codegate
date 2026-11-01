@@ -38,6 +38,14 @@ import type { AxisExitBlock } from "./axes";
 import { SCENARIO_PROMPTS } from "./index";
 import { PARCEL_ADVANCED_INSTALL_TACTIC, PARCEL_ADVANCED_LEG_PERSONA } from "./messengerParcelSmishingSms.prompt";
 import { CARD_DELIVERY_PERSONA } from "./cardDeliveryCall.prompt";
+import {
+  CARD_REBUILD_AGENT_PERSONA,
+  CARD_REBUILD_COURIER_PERSONA,
+  CARD_REBUILD_PROSECUTOR_PERSONA,
+  CARD_REBUILD_SUPERVISOR_PERSONA,
+  CARD_REBUILD_TACTICS as CRT,
+} from "./cardRebuildLegs.prompt";
+import { CARD_FAKE_CALLBACK_NUMBER_ID, SUPERVISOR_OFFICIAL_NUMBER_ID } from "./dialDirectory";
 import { ASSET_CUSTODY_PROCEDURE_TACTIC, assetProtectionRoutePersona } from "./assetProtectionNoticeCall.prompt";
 import {
   PROSECUTION_CASE_LINK_PERSONA,
@@ -71,7 +79,17 @@ export type FlowVariantSms = {
    * ⚠️ 판단값. 하한(`notBeforeUserTurns` · 문자 간격)은 그대로다 — 앞당기는 것은 "열린 뒤 기다리는 시간"뿐이다.
    */
   backstopUserTurns?: number;
+  /**
+   * §142(다통화 · `multiCall` 변형 전용) — 이 문자를 보내는 레그 번호. 게이트는 현재 레그의 문자만 허용하고 하한은 레그 시작 뒤 사용자 발화 수로 센다.
+   * 부재 = 종전(세션 전체 · 레그 구분 없음).
+   */
+  leg?: number;
 };
+
+/** §142 — 레그로 들어오는 방식(판정표 Architecture.md §142.2). */
+export type FlowVariantLegEntry = "incoming" | "dial" | "transfer";
+/** §142 — 레그가 끝난 뒤 다음 레그로 가는 방식. */
+export type FlowVariantLegExit = "dial" | "transfer";
 
 export type FlowVariantLeg = {
   /** 화면 표시값(S7 화자 표기 · UX 계약 C-6/C-8) — 실제 부서명 · 이름 0(AC-102 (c)). */
@@ -82,6 +100,20 @@ export type FlowVariantLeg = {
   /** S7 교대 하한 · 천장(판단값). */
   minUserTurns: number;
   maxUserTurns: number;
+  /** §142(`multiCall` 변형 전용) — 들어오는 방식. 부재 = 종전(첫 레그 수신). */
+  entry?: FlowVariantLegEntry;
+  /** §142 — 나가는 방식. 부재 = 마지막 레그. */
+  exit?: FlowVariantLegExit;
+  /** §142 — 이 레그의 단계(모델 흐름 블록은 현재 레그 것만 싣는다). 변형 `stages`는 레그 단계를 이어 붙인 값이다(리포트 · 브리핑용). */
+  stages?: readonly string[];
+  /** §142 — 이 레그가 쓰는 수법 라벨(— 앞). 부재 = 변형 수법 전부. */
+  tacticLabels?: readonly string[];
+  /** §142 — 같은 인물이면 같은 값(같은 목소리 · D5). 부재 = 레그마다 다른 인물. */
+  speakerId?: string;
+  /** §142 — `entry === "dial"`일 때 참가자가 걸어야 하는 번호 id(`dialDirectory.ts`). */
+  dialTarget?: string;
+  /** §142 다이얼 판정표 — 이 화면 행동(원격 지원 앱 설치 응낙)이 없으면 연결 대신 진짜 기관 자동 안내(D3). */
+  interceptRequires?: "install";
 };
 
 export type FlowVariant = {
@@ -133,6 +165,23 @@ export type FlowVariant = {
    * `listFlowVariants`(= 배정 풀 · 브리핑 라벨의 입력)에서는 빠진다. ⛔ `false`를 쓰지 않는다 — 부재가 거짓이다.
    */
   retired?: true;
+  /**
+   * §142 — 통화를 나눈 다화자 흐름(레그 런타임). 참이면 `legs`의 entry · exit · stages · tacticLabels를 쓰고, 단일 화자 규칙을 싣지 않는다.
+   * ⛔ `false`를 쓰지 않는다 — 부재가 거짓이다. 전역 `RELAY_RUNTIME_AVAILABLE`과 별개다(옛 legs ≥ 2 변형은 종전대로 한 화자).
+   */
+  multiCall?: true;
+  /** §142 다통화 R2 — 세션이 통화가 아니라 이 문자(`IN_CALL_SMS` id)가 도착한 화면에서 시작한다. 첫 레그는 참가자 발신. */
+  openerSmsId?: string;
+  /**
+   * §142 — **배정 대기**(런타임 · 화면이 갖춰지기 전). `listFlowVariants`(배정 풀)에서 빠진다 — `retired`와 같은 거르기지만 뜻이 다르다
+   * (옛 변형이 아니라 아직 켜지지 않은 새 변형). ⛔ `false`를 쓰지 않는다.
+   */
+  pendingRollout?: true;
+  /**
+   * §142 PR-4 — 이 루트 리포트의 교육 포인트(예방 조언 마무리 문장 앞에 붙는다). 출처 = `docs/research/card-company-scam-reality-2026-11-01.md`
+   * "리포트 교육 포인트"([S1] 금감원 소비자경보 p.4~5). 리포트는 세션 밖 화면이라 실제 대응 안내다(가상 기관명 규칙은 세션 중 대사 · 화면에만).
+   */
+  reportLessons?: readonly string[];
   /**
    * §119(DECISIONS #234) — **루트 키**: 시나리오 안에서 결말(돈 · 정보가 빠지는 방식)의 이름. 난이도가 달라도 같은 결말이면 같은 키다
    * (사용자 결정 D-6 "루트 = 결말 방식, 난이도 = 깊이"). 한 배정 풀 안에서는 서로 달라야 한다(D-11 — 테스트 고정).
@@ -242,6 +291,9 @@ const R = {
   remoteAppProtect: ["remote-app-protect", "보안 앱 설치형"],
   cashHandoff: ["cash-handoff", "현금 전달형"],
   coinSite: ["coin-site", "코인 전환형"],
+  // §142 — 카드사 고급 재구성(다통화). 결말은 같고 진입이 달라 다른 키(§119 규칙).
+  deliverySafeAccount: ["delivery-safe-account", "카드 배송 전화 진입 · 안전계좌 이체형"],
+  issueSmsSafeAccount: ["issue-sms-safe-account", "카드 발급 문자 진입 · 안전계좌 이체형"],
 } as const satisfies Record<string, RouteEntry>;
 
 export const VARIANT_ROUTES: Readonly<Record<string, RouteEntry>> = {
@@ -251,6 +303,7 @@ export const VARIANT_ROUTES: Readonly<Record<string, RouteEntry>> = {
   // 카드사 — 초급은 카드 정보 직접 요구 · 중급은 피해금 이관 · 고급은 앱 설치(부정결제 진입) / 카드 배송 진입
   "fv-aqp6": R.cardInfo, "fv-35f2": R.reliefTransfer,
   "fv-akj5": R.remoteAppRelief, "fv-x7ue": R.remoteAppRelief, "fv-w3dq": R.deliveryOpener,
+  "fv-k3dn": R.deliverySafeAccount, "fv-r8vb": R.issueSmsSafeAccount,
   // 저금리 대환대출
   // §124 — 고급 fv-6s5p · fv-m3hd의 결말은 "기존 대출 상환 또는 선입금"이라 상환형(앱 설치는 진입 단계 — 결말이 아니다)
   "fv-bqr9": R.prepay, "fv-avap": R.repay, "fv-6s5p": R.repay, "fv-m3hd": R.repay,
@@ -705,6 +758,162 @@ const LOAN_ADVANCED_FV_6S5P: VariantSpec = {
   sources: ["S10", "S19", "C13", "C22"],
 };
 
+// ── §142 카드사 고급 재구성 — 레그 정의(R1 · R2 공유 · 사본 0) ─────────────────────────────────────────────
+// 레그 표 = `cardRebuildLegs.prompt.ts` 머리 주석. 턴 예산은 판단값(설계 §3.2 — 실측으로 조정).
+const tacticLabelOf = (tactic: string) => extractTacticLabel(tactic);
+const CARD_REBUILD_COURIER_LEG: FlowVariantLeg = {
+  callerLabel: "010-0794-2261",
+  personaPrompt: CARD_REBUILD_COURIER_PERSONA,
+  speakerGender: "male",
+  speakerId: "courier",
+  minUserTurns: 2,
+  maxUserTurns: 5,
+  entry: "incoming",
+  exit: "dial",
+  stages: [
+    "카드 배송 연락처럼 말을 걸고, 받으실 분 확인을 핑계로 성함을 묻는다.",
+    withSmsFirst("상대가 카드를 신청한 적 없다고 하면 반송 처리가 필요하다며 반송 접수 안내 문자(고객센터 연락처)를 보낸다."),
+    "문자에 있는 고객센터로 바로 전화해 보라고 권하고 통화를 끝낸다.",
+  ],
+  tacticLabels: [tacticLabelOf(CRT.deliveryReassure), tacticLabelOf(CRT.deliveryIdentity), tacticLabelOf(CRT.fakeCallback)],
+};
+const CARD_REBUILD_AGENT_LEG: FlowVariantLeg = {
+  callerLabel: "02-0762-5513",
+  personaPrompt: CARD_REBUILD_AGENT_PERSONA,
+  speakerGender: "female",
+  speakerId: "agent",
+  minUserTurns: 3,
+  maxUserTurns: 8,
+  entry: "dial",
+  exit: "dial",
+  dialTarget: CARD_FAKE_CALLBACK_NUMBER_ID,
+  stages: [
+    "전화를 받는 상담원으로 응대하고, 명의 도용으로 카드와 연동 계좌가 개설된 것 같다고 알린다.",
+    "도용된 명의로 연결된 거래 은행이 어디인지 묻는다(계좌번호 · 비밀번호는 묻지 않는다).",
+    withSmsFirst(
+      "피해가 번지지 않게 원격 지원 앱을 설치하게 한다. 앱이 설치와 권한 허용을 마쳤다고 알려 준 뒤에만(또는 상대가 분명히 거절하면) 다음 단계로 넘어간다.",
+    ),
+    "이 건은 금융감독기관 신고가 필요하다며 상대가 대표번호로 직접 전화하게 하고 통화를 끝낸다.",
+  ],
+  tacticLabels: [
+    tacticLabelOf(CRT.identityTheft),
+    tacticLabelOf(CRT.linkedAccount),
+    tacticLabelOf(CRT.remoteApp),
+    tacticLabelOf(CRT.officialReport),
+  ],
+};
+// §142 PR-4(R2) — 발급 문자를 보고 참가자가 직접 건 상담원은 먼저 본인확인부터 묻는다(배송원 레그가 없는 R2의 첫 통화 — 받는 분 정보 카드의 치환 원천).
+const CARD_REBUILD_AGENT_FIRST_LEG: FlowVariantLeg = {
+  ...CARD_REBUILD_AGENT_LEG,
+  tacticLabels: [tacticLabelOf(CRT.deliveryIdentity), ...(CARD_REBUILD_AGENT_LEG.tacticLabels ?? [])],
+};
+const CARD_REBUILD_SUPERVISOR_FIRST_LEG: FlowVariantLeg = {
+  callerLabel: "금융감독기관 대표번호",
+  personaPrompt: CARD_REBUILD_SUPERVISOR_PERSONA,
+  speakerGender: "male",
+  speakerId: "supervisor",
+  minUserTurns: 2,
+  maxUserTurns: 5,
+  entry: "dial",
+  exit: "transfer",
+  dialTarget: SUPERVISOR_OFFICIAL_NUMBER_ID,
+  interceptRequires: "install",
+  stages: [
+    "대표번호로 걸려 온 전화를 받는 조사관으로 응대하고, 카드 명의 도용 건이 이미 접수돼 있다며 피해를 걱정해 준다.",
+    "상대 명의 계좌가 범죄에 쓰였을 수 있어 검찰 조사가 걸려 있다고 알리고, 약식 조사로 조용히 끝낼 수 있게 돕겠다고 한다.",
+    "담당 검사에게 연결해 주겠다며 통화를 넘긴다.",
+  ],
+  tacticLabels: [tacticLabelOf(CRT.authority), tacticLabelOf(CRT.plainSummary)],
+};
+const CARD_REBUILD_PROSECUTOR_LEG: FlowVariantLeg = {
+  callerLabel: "한빛지방검찰청",
+  personaPrompt: CARD_REBUILD_PROSECUTOR_PERSONA,
+  speakerGender: "male",
+  speakerId: "prosecutor",
+  minUserTurns: 2,
+  maxUserTurns: 5,
+  entry: "transfer",
+  exit: "transfer",
+  stages: [
+    "연결받은 검사로 응대하고, 상대 명의 계좌가 자금세탁에 쓰인 정황이 있어 구속 수사를 검토 중이라고 알린다.",
+    "비공개 수사라 가족에게 알리면 가족도 조사 대상이 될 수 있다며 비밀을 지키게 한다.",
+    "자산 조치는 조사관이 안내할 것이라며 다시 조사관에게 통화를 넘긴다.",
+  ],
+  tacticLabels: [tacticLabelOf(CRT.arrestThreat), tacticLabelOf(CRT.secrecy)],
+};
+const CARD_REBUILD_SUPERVISOR_LAST_LEG: FlowVariantLeg = {
+  callerLabel: "금융감독기관 대표번호",
+  personaPrompt: CARD_REBUILD_SUPERVISOR_PERSONA,
+  speakerGender: "male",
+  speakerId: "supervisor",
+  minUserTurns: 2,
+  maxUserTurns: 8,
+  entry: "transfer",
+  stages: [
+    "검사와 통화를 마치고 다시 넘겨받은 조사관으로 응대한다.",
+    withSmsFirst("조사가 끝날 때까지 자산을 보호해야 한다며 안전계좌 문자의 링크 화면에서 980만 원을 옮기게 한다."),
+    "은행에서 이체 이유를 물으면 가족 사업 자금이라고 답하라고 미리 일러 준다.",
+    `이체를 마치면 조사가 끝나면 그대로 돌려준다며 비밀을 다시 당부하고 마무리한다. ${VERBAL_ENDING_WRAP}`,
+  ],
+  tacticLabels: [tacticLabelOf(CRT.safeAccount), tacticLabelOf(CRT.bankCoaching), tacticLabelOf(CRT.urgency)],
+};
+/** §142 PR-4 — 카드 배송 · 발급 사칭 다통화 루트의 교육 포인트 4개(조사 문서 ①~④ 순서). */
+export const CARD_REBUILD_REPORT_LESSONS: readonly string[] = [
+  "문자나 전화로 안내받은 번호로 다시 걸지 마세요. 카드사 · 기관 번호는 카드 뒷면이나 공식 홈페이지에서 직접 찾아 거세요.",
+  "전화로 앱 설치를 요구받으면 그 자체로 사기입니다. 원격 지원 앱을 설치하면 휴대폰을 통째로 넘겨주는 것과 같습니다.",
+  "금융감독기관 · 검찰 · 경찰은 전화로 이체 · 안전계좌 · 자산 보호를 요구하지 않습니다. 기관이 이체를 요구하면 100% 사기입니다.",
+  "통화하던 휴대폰으로 다시 거는 확인 전화는 가로채질 수 있습니다. 가족 등 다른 사람의 전화로 확인하세요.",
+];
+
+const cardRebuildSpec = (
+  variantId: string,
+  legs: FlowVariantLeg[],
+  sms: FlowVariantSms[],
+  extra: Partial<VariantSpec> = {},
+): VariantSpec => ({
+  variantId,
+  scenarioId: "card-company-impersonation",
+  level: "advanced",
+  authoring: "authored",
+  stages: st(...legs.flatMap((leg) => leg.stages ?? [])),
+  keepLabels: [],
+  // 수법 = 이 변형 레그들이 쓰는 라벨만(R2는 배송원 수법 0).
+  extraTactics: Object.values(CRT).filter((t) => legs.some((leg) => leg.tacticLabels?.includes(extractTacticLabel(t)))),
+  // D2 — 검사 레그 "비밀 유지 요구"(콘텐츠 라벨 ∪ 고급 L3 오버레이 — 축 D 양방향 게이트).
+  exitBlock: ["D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy"],
+  sms,
+  legs,
+  ...ADVANCED,
+  channels: ["voice", "sms"],
+  demandStages: 3,
+  decisionMoment: "원격 지원 앱 설치 또는 안전계좌 이체에 동의하는 순간",
+  sources: ["C03", "C04", "S4", "S22"],
+  multiCall: true,
+  reportLessons: CARD_REBUILD_REPORT_LESSONS,
+  ...extra,
+});
+// R1 — 배송 전화 진입. 문자 선언은 레그 단위(게이트는 현재 레그 문자만 · 하한 = 레그 시작 뒤 사용자 발화). 같은 레그 안 목적 중복 0.
+const CARD_REBUILD_R1 = cardRebuildSpec(
+  "fv-k3dn",
+  [CARD_REBUILD_COURIER_LEG, CARD_REBUILD_AGENT_LEG, CARD_REBUILD_SUPERVISOR_FIRST_LEG, CARD_REBUILD_PROSECUTOR_LEG, CARD_REBUILD_SUPERVISOR_LAST_LEG],
+  [
+    { purpose: "link", smsId: "card-callback-number", required: true, notBeforeUserTurns: 1, leg: 0, ...FAST_BACKSTOP },
+    { purpose: "link", smsId: "card-remote-support-link", required: true, notBeforeUserTurns: 2, leg: 1, ...FAST_BACKSTOP },
+    { purpose: "transfer", smsId: "card-safe-account", required: true, notBeforeUserTurns: 1, leg: 4, ...FAST_BACKSTOP },
+  ],
+);
+// R2 — 발급 문자 진입. 배송원 레그 없음 · 세션은 발급 문자(`card-issue-notice`) 화면에서 시작하고 첫 레그(상담원)는 참가자 발신.
+const CARD_REBUILD_R2 = cardRebuildSpec(
+  "fv-r8vb",
+  [CARD_REBUILD_AGENT_FIRST_LEG, CARD_REBUILD_SUPERVISOR_FIRST_LEG, CARD_REBUILD_PROSECUTOR_LEG, CARD_REBUILD_SUPERVISOR_LAST_LEG],
+  [
+    { purpose: "link", smsId: "card-remote-support-link", required: true, notBeforeUserTurns: 2, leg: 0, ...FAST_BACKSTOP },
+    { purpose: "transfer", smsId: "card-safe-account", required: true, notBeforeUserTurns: 1, leg: 3, ...FAST_BACKSTOP },
+  ],
+  // §142 PR-4 — 시작 셸: 세션 생성이 이 문자를 도착시키고(`session/index.ts` · `startSurface`) 화면은 전화 앱에서 시작한다.
+  { openerSmsId: "card-issue-notice" },
+);
+
 const SPECS: VariantSpec[] = [
   // ── institutional-impersonation (§2.6.3 1행 — 사례 C10 · C11 · C09, S16 · S11 · S27) ──────
   {
@@ -914,6 +1123,9 @@ const SPECS: VariantSpec[] = [
     extraTactics: cardAdvancedExtras(CARD_RELIEF_TRANSFER_VIA_LINK, CARD_APP_INSTALL_VIA_SMS),
     // T194-c-1 리뷰 Minor — 문자를 선언하므로 채널 메타에 "sms"를 더한다(fv-m3hd가 스프레드로 받는 값과 같은 꼴 · 프롬프트 바이트 무영향).
     channels: ["voice", "sms"],
+    // §142 PR-4(사용자 승인 설계 #470 · "권고대로") — 배정 은퇴. 카드사 고급은 통화를 나눈 재구성 루트(fv-k3dn · fv-r8vb)가 맡는다.
+    // 옛 세션 · 리포트 해석은 그대로(`findFlowVariant`).
+    retired: true,
   },
   // ⭐ §92(docs/Architecture.md · DECISIONS #206 · 사용자 승인 *"시나리오 결정 권고안대로 진행"*) — 고급 전용 `card-delivery-call`을 목록에서 빼고
   // 그 흐름을 **카드사 고급의 변형**으로 흡수한다(보고서 R1 — 겹침 높음). 내용 = `fv-tvnj`(아래 · 무변경 — 옛 세션용)와 같은 단계 · 수법 ·
@@ -966,7 +1178,16 @@ const SPECS: VariantSpec[] = [
     demandStages: 3,
     decisionMoment: CARD_DELIVERY_DECISION_MOMENT,
     sources: ["C03", "C04", "S4", "S22"],
+    // §142 PR-4(사용자 승인 설계 #470 · "권고대로") — 배정 은퇴. 카드사 고급은 통화를 나눈 재구성 루트(fv-k3dn · fv-r8vb)가 맡는다.
+    // 옛 세션 · 리포트 해석은 그대로(`findFlowVariant`).
+    retired: true,
   },
+
+  // ⭐ §142(Architecture.md §142 · 설계 #470 · 메인 "권고대로") — 카드사 고급 재구성: 통화를 나눈 다화자 흐름. 현실 근거 = 조사 문서 §1 · §7.
+  // R1 배송 전화 진입(fv-k3dn) · R2 발급 문자 진입(fv-r8vb). 둘 다 `pendingRollout`(배정 대기) — 레그 런타임 · 다이얼 화면이 갖춰지면 풀고
+  // fv-x7ue · fv-w3dq를 은퇴시킨다(§142.6). ⛔ fv-akj5 · fv-6s5p 무변경(#192 · D6).
+  CARD_REBUILD_R1,
+  CARD_REBUILD_R2,
 
   // ── loan-refinance-scam (§2.6.3 3행 — S10 · S19) ─────────────────────────────────────────
   {
@@ -1978,7 +2199,10 @@ export const FLOW_VARIANT_SPECS: readonly Readonly<VariantSpec>[] = SPECS;
 /** 그 시나리오 · 난이도에 허용된 변형(회전 순서 · 배정 은퇴 제외). */
 export function listFlowVariants(scenarioId: string, level: DifficultyLevel): FlowVariant[] {
   // §92.3 — 배정 은퇴 변형은 새 세션 후보가 아니다(옛 세션 해석은 `findFlowVariant`가 한다).
-  return FLOW_VARIANTS.filter((v) => v.scenarioId === scenarioId && v.level === level && v.retired !== true);
+  // §142 — 배정 대기 변형도 새 세션 후보가 아니다.
+  return FLOW_VARIANTS.filter(
+    (v) => v.scenarioId === scenarioId && v.level === level && v.retired !== true && v.pendingRollout !== true,
+  );
 }
 
 // ⭐ T194-c-1(docs/Architecture.md §84.16.1 · G590 갱신) — 배정 가능 풀 `assignablePool`은 `scenarios/variantPool.ts`로 옮겼다. 판별에
@@ -2035,6 +2259,7 @@ export function resolveVariantPrompt(
   legIndex = 0,
 ): ScenarioPromptDoc {
   const legPersona = variant.legs[legIndex]?.personaPrompt ?? base.personaPrompt;
+  if (variant.multiCall) return resolveMultiCallLegPrompt(base, variant, legIndex);
   const personaPrompt =
     variant.stages.length === 0
       ? legPersona
@@ -2043,6 +2268,41 @@ export function resolveVariantPrompt(
     ...base,
     personaPrompt,
     weakenedTactics: [...variant.tactics],
+  };
+}
+
+// §142 — 다통화 레그 프롬프트. 흐름 블록 = **현재 레그 단계만** + 레그 끝 규칙 1줄 · 수법 = 레그 라벨만(부재 = 전부).
+// 범위 밖 legIndex는 마지막 레그로 본다(끊기 쪽은 마지막 레그 규칙이 안전하다 — 다음 레그를 지어내지 않는다).
+const MULTI_CALL_LEG_END_DIAL =
+  "이 통화의 마지막 단계를 마치면 짧게 인사하고 통화를 끝낸다. 이 통화에서 다음 사람의 일(앱 · 신고 · 조사 · 이체)을 대신 진행하지 않는다.";
+const MULTI_CALL_LEG_END_TRANSFER =
+  "이 통화의 마지막 단계를 마치면 '연결해 드리겠습니다, 잠시만 기다려 주세요'처럼 짧게 말하고 통화를 넘긴다. 넘긴 뒤 다음 사람의 일을 대신 진행하지 않는다.";
+const MULTI_CALL_LAST_LEG = "이 통화가 이번 흐름의 마지막 통화다. 다른 사람에게 넘기겠다는 말은 하지 않는다.";
+
+/**
+ * §142 · R7(docs/research/realdevice-fixes-probe-2026-11-01.md — 확인 무력화 세션에서 포기 끊기가 4행에 막혀 통화가 끝나지 않음) —
+ * 이 세션이 확인 창구 오퍼(호 전환)를 쓰는가 = 확인 무력화 시나리오 ∧ 고급 ∧ **다통화 변형이 아님**. 다통화 변형은 확인을 참가자 발신
+ * (공식 번호 → 가로채기)으로 재현하므로 창구 오퍼가 없다 ⇒ 끊기 4행(`blocked_transfer`)이 열릴 길이 없다. 판정 지점 전부가 이 함수를 쓴다.
+ */
+export function sessionUsesVerifyIntercept(scenarioId: string, isAdvanced: boolean, flowVariantId: string | undefined): boolean {
+  return hasVerifyIntercept(scenarioId) && isAdvanced && findFlowVariant(flowVariantId)?.multiCall !== true;
+}
+
+/** §142 — 다통화 변형의 레그 번호 보정(범위 밖 · 비정수 = 마지막 레그). */
+export function multiCallLegIndex(variant: Pick<FlowVariant, "legs">, legIndex: number): number {
+  return Number.isInteger(legIndex) && legIndex >= 0 && legIndex < variant.legs.length ? legIndex : variant.legs.length - 1;
+}
+
+function resolveMultiCallLegPrompt(base: ScenarioPromptDoc, variant: FlowVariant, legIndex: number): ScenarioPromptDoc {
+  const leg = variant.legs[multiCallLegIndex(variant, legIndex)];
+  const endRule =
+    leg.exit === "dial" ? MULTI_CALL_LEG_END_DIAL : leg.exit === "transfer" ? MULTI_CALL_LEG_END_TRANSFER : MULTI_CALL_LAST_LEG;
+  const lines = [FLOW_BLOCK_HEADER, FLOW_BLOCK_LEAD, ...(leg.stages ?? []).map((summary, i) => `${i + 1}. ${summary}`), endRule];
+  const labels = leg.tacticLabels ? new Set(leg.tacticLabels) : undefined;
+  return {
+    ...base,
+    personaPrompt: `${leg.personaPrompt ?? base.personaPrompt}\n\n${lines.join("\n")}`,
+    weakenedTactics: variant.tactics.filter((t) => labels === undefined || labels.has(extractTacticLabel(t))),
   };
 }
 
@@ -2068,6 +2328,8 @@ function buildFlowBlock(variant: FlowVariant): string {
 export function resolveSessionScenarioPrompt(
   scenarioId: string,
   flowVariantId?: string,
+  /** §142 — 다통화 변형의 현재 레그(세션 문서 `relay.legIndex` — 서버 필드). 부재 = 0. 다통화가 아닌 변형은 읽지 않는다(종전 0). */
+  legIndex?: number,
 ): ScenarioPromptDoc | undefined {
   const base = SCENARIO_PROMPTS[scenarioId];
   if (!base) return undefined;
@@ -2079,7 +2341,7 @@ export function resolveSessionScenarioPrompt(
     );
     return base;
   }
-  return resolveVariantPrompt(base, variant);
+  return resolveVariantPrompt(base, variant, variant.multiCall ? (legIndex ?? 0) : 0);
 }
 
 /**

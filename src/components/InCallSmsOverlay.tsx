@@ -37,6 +37,7 @@ import {
   sameSenderNumber,
   sortByArrival,
   spellOutOtp,
+  splitBodyAtDialNumber,
   splitBodyAtOtp,
   takeNewlyVisibleSmsIds,
   threadHeaderLabel,
@@ -101,6 +102,11 @@ type InCallSmsOverlayProps = {
    */
   onSendToAccount?: (smsId: string, target: TransferTarget) => void;
   /**
+   * §142(카드사 고급 재구성) — 전화번호 안내 문자의 번호를 누르면(실기 문자 앱이 번호를 알아보고 통화를 제안하듯) 그 번호를 페이지로 올린다.
+   * 페이지가 앱 안 전화 다이얼을 그 번호로 채워 연다(실제 전화 발신 0). 부재 = 번호는 보통 글자.
+   */
+  onDialNumber?: (number: string) => void;
+  /**
    * N1 · N2(실기기 신고 2026-11-01) — 이 세션 참가자의 "내 은행"(이체 화면 머리띠 — 받는 계좌 은행이 아니다) · 같은 계좌로 나눠 보낸 합계 열쇠(세션 id).
    * 부재 = 머리띠는 발급처 이름 · 합계 열쇠 빈 값.
    */
@@ -132,6 +138,7 @@ export default function InCallSmsOverlay({
   onInstallConsent,
   skin = "default",
   onSendToAccount,
+  onDialNumber,
   bankIdentity,
 }: InCallSmsOverlayProps) {
   const sorted = sortByArrival(messages);
@@ -505,6 +512,8 @@ export default function InCallSmsOverlay({
                             after: sms.body.slice(accountAt + sms.accountNumber.length),
                           }
                         : null;
+                    // §142 — 전화번호 안내 문자의 번호(다이얼 콜백이 있을 때만 누를 수 있다).
+                    const dialSplit = onDialNumber && !otpSplit && !accountSplit ? splitBodyAtDialNumber(sms.body, sms.dialNumber) : null;
                     return (
                       <li
                         key={sms.smsId}
@@ -560,6 +569,20 @@ export default function InCallSmsOverlay({
                                     {accountSplit.account}
                                   </button>
                                   {accountSplit.after}
+                                </>
+                              ) : dialSplit ? (
+                                <>
+                                  {dialSplit.before}
+                                  <button
+                                    type="button"
+                                    onClick={() => onDialNumber?.(dialSplit.number)}
+                                    aria-label={`전화 걸기: ${dialSplit.number}`}
+                                    className="inline underline underline-offset-[3px]"
+                                    style={{ color: thread.link }}
+                                  >
+                                    {dialSplit.number}
+                                  </button>
+                                  {dialSplit.after}
                                 </>
                               ) : (
                                 sms.body

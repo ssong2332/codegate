@@ -88,7 +88,8 @@ test("[§92 A] 흡수 변형의 문자 = 카드사 카탈로그 설치 문자 1�
   assert.deepEqual(absorbed.sms.map((s) => s.smsId), ["card-guard-app-link", "card-relief-account"]);
   assert.ok(findInCallSmsItem("card-company-impersonation", "card-guard-app-link"));
   assert.deepEqual(sessionReachableLandingIds("card-company-impersonation", "fv-w3dq"), ["card-guard-app-install", "card-relief-transfer"]);
-  assert.deepEqual(assignablePool("card-company-impersonation", "advanced").map((v) => v.variantId), ["fv-x7ue", "fv-w3dq"]);
+  // §142 PR-4 — 흡수 변형(fv-w3dq)은 배정 은퇴(옛 세션 해석은 위 단언대로 그대로). 자가 고급 풀 = 재구성 2루트.
+  assert.deepEqual(assignablePool("card-company-impersonation", "advanced").map((v) => v.variantId), ["fv-k3dn", "fv-r8vb"]);
   assert.deepEqual(assignablePool("card-company-impersonation", "advanced", "c1").map((v) => v.variantId), ["fv-akj5"]);
   assert.equal(listFlowVariants("card-company-impersonation", "beginner").some((v) => v.variantId === "fv-w3dq"), false);
 });

@@ -191,8 +191,9 @@ function w10Violations(text: string): string[] {
 test("[T194-c-1 · UX v1.40 D-128 W-12 · W-10] Q2 설치 카드 3벌 — correctAction ④가 정본 그대로 · 숫자 0 · 대비 문구 0 · 공공 낱말 든 문장에 부정 토큰 0", (t) => {
   assert.deepEqual(
     q2InstallItems.map((i) => i.landingId).sort(),
-    ["card-delivery-app-install", "card-guard-app-install", "loan-check-app-install"],
-    "Q2 설치 카드 대상이 3벌이 아니다",
+    // §142 — 카드사 고급 재구성 원격 지원 앱 설치 화면 +1.
+    ["card-delivery-app-install", "card-guard-app-install", "card-remote-support-install", "loan-check-app-install"],
+    "Q2 설치 카드 대상이 4벌이 아니다",
   );
   const lines: string[] = [];
   for (const item of q2InstallItems) {
@@ -392,7 +393,8 @@ test("[§15.9.1 R6 → T194-c-1 G583] IN_CALL_SMS의 설치 랜딩 참조는 허
   // 실제로 설치 문자를 선언하는 변형이 있다(공회전 방지).
   const declaring = FLOW_VARIANTS.filter((v) => v.sms.some((s) => (IN_CALL_SMS[v.scenarioId] ?? []).some((i) => i.smsId === s.smsId && allItems.some((m) => m.kind === "app-install" && m.landingId === i.fakeLandingId))));
   // §92 — 카드사 흡수 변형 fv-w3dq가 같은 카드사 설치 문자(card-guard-app-link)를 선언한다.
-  assert.deepEqual(declaring.map((v) => v.variantId).sort(), ["fv-d8pw", "fv-e5mv", "fv-m3hd", "fv-r4hc", "fv-tvnj", "fv-u9fz", "fv-w3dq", "fv-x7ue"]);
+  // §142 — 카드사 고급 재구성 2벌(원격 지원 앱 설치 문자 card-remote-support-link)도 선언한다.
+  assert.deepEqual(declaring.map((v) => v.variantId).sort(), ["fv-d8pw", "fv-e5mv", "fv-k3dn", "fv-m3hd", "fv-r4hc", "fv-r8vb", "fv-tvnj", "fv-u9fz", "fv-w3dq", "fv-x7ue"]);
 });
 
 // ── T104 신규 게이트 G-A~G-E (Architecture.md §19.5 · ADR-0012) ───────────────
@@ -722,6 +724,9 @@ test("[T104/G-E] 정밀화된 게이트가 **실제로 무언가를 잡는다**(
     "in-call-sms",
     // §101 — 검찰 고급 자산 검수 사이트(통화 중 문자 표면).
     "in-call-sms",
+    // §142 — 카드사 고급 재구성 원격 지원 설치 · 안전계좌 이체(통화 중 문자 표면) 2건.
+    "in-call-sms",
+    "in-call-sms",
     // P2(X6) — 훈련용 이체 화면 5종(통화 중 계좌 문자 표면). P2-d — 환급 수수료 이체 화면 +1.
     "in-call-sms",
     "in-call-sms",
@@ -985,7 +990,7 @@ test("[AC-078 (a)] 콘텐츠 카탈로그 ↔ 도달 가능 랜딩 집합이 **�
     false,
     "어떤 프롬프트도 내지 않는 라벨이 도달 가능 집합에 들어왔다",
   );
-  assert.equal(reachableLandingKeysAllUnits().length, 25, "도달 가능 랜딩은 25종이다(P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(reachableLandingKeysAllUnits().length, 27, "도달 가능 랜딩은 27종이다(§142 — 카드사 고급 재구성 원격 지원 설치 · 안전계좌 이체 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
 });
 
 test("[AC-078 (a) 역검증] 한쪽에서 1건을 빼면 실제로 실패한다", () => {
@@ -1070,6 +1075,9 @@ const T129B_MULTI_LANDING_UNITS: readonly string[] = [
   // P2-b — 카드사 자가 고급 2벌은 설치 문자 뒤 피해금 이관 문자(이체 화면)를 함께 선언한다(같은 이유).
   "card-company-impersonation#fv-w3dq",
   "card-company-impersonation#fv-x7ue",
+  // §142 — 카드사 고급 재구성 2벌은 원격 지원 앱 설치 화면(상담원 레그)과 안전계좌 이체 화면(마지막 레그)을 선언한다(다른 통화 · 다른 사기범 메시지).
+  "card-company-impersonation#fv-k3dn",
+  "card-company-impersonation#fv-r8vb",
   // P2-d — 환급 중급 · 고급은 환급 신청 화면 뒤 수수료 이체 화면을 함께 선언한다(초급은 수수료 화면 하나).
   "tax-refund-scam#fv-aqx2",
   "tax-refund-scam#fv-uk7m",
@@ -1140,6 +1148,9 @@ test("[T194-c-1 G604 · ⓚ(=R-a)] 자가 고급 Q2 3 단위 = 정확히 [설치
     // P2-b — 카드사 자가 고급 2벌은 설치 화면 뒤 피해금 이관 화면을 함께 선언한다(T129 (b) 등재 단위).
     "card-company-impersonation#fv-x7ue": ["card-guard-app-install", "card-relief-transfer"],
     "card-company-impersonation#fv-w3dq": ["card-guard-app-install", "card-relief-transfer"],
+    // §142 — 카드사 고급 재구성 2벌(T129 (b) 등재 단위).
+    "card-company-impersonation#fv-k3dn": ["card-remote-support-install", "card-safe-transfer"],
+    "card-company-impersonation#fv-r8vb": ["card-remote-support-install", "card-safe-transfer"],
     // P2 — 대출 자가 고급은 설치 화면 뒤 상환금 이체 화면을 함께 선언한다(T129 (b) 등재 단위 — 아래 INV-1은 등재 밖 단위만 본다).
     "loan-refinance-scam#fv-m3hd": ["loan-check-app-install", "loan-repay-transfer"],
   };
@@ -1339,7 +1350,7 @@ function findFieldConvergence(
 
 test("[AC-079] bodyLines·fields·successHeadline·issuerLabel이 **각각 단독으로** 수렴하지 않는다", (t) => {
   const items = Object.values(MOCK_SCREENS).flat();
-  assert.equal(items.length, 25, "현행 비교 대상은 도달 가능 랜딩 25종이다(P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
+  assert.equal(items.length, 27, "현행 비교 대상은 도달 가능 랜딩 27종이다(§142 — 카드사 고급 재구성 2종 추가 · P2-d — 환급 수수료 이체 화면 · P2-c — 메신저 이체 화면 2종 · P2 — 훈련용 이체 화면 5종 추가 · §110.2 — 자녀 보험 접수 앱 추가 · §101 — 검찰 자산 검수 사이트 추가 · §53/§51 커밋 D — protect-account-transfer 추가 · T194-a — parcel-install 추가 · T194-c-1 — Q2 설치 화면 3종 추가 · §92.3 — 고급 전용 2종 credential-form 추가 · §98 — 검찰 보관 지갑 송금 화면 추가)");
   const stats = fieldDivergenceStats(items);
   for (const { field, compared, excluded, converged } of stats) {
     t.diagnostic(
@@ -1452,8 +1463,9 @@ test("[AC-079 (b)] 옵셔널 필드가 **양쪽 다 부재인 쌍**은 비교에
   // T194-c-1 — Q2 설치 화면 3종이 더해져 app-install이 **5종** · §110.2 자녀 보험 접수 앱으로 **6종** ⇒ 제외쌍 = C(6,2) = 15.
   assert.deepEqual(
     realStats.map((s) => s.excluded),
-    [0, 15, 15, 0],
-    "app-install 6종(subsidy · parcel · Q2 3종 · 자녀 보험 접수 앱) — fields · successHeadline에서 제외 규칙이 실제로 일한다",
+    // §142 — 카드사 고급 재구성 원격 지원 설치 화면 +1 ⇒ app-install 7종 · 제외쌍 C(7,2) = 21.
+    [0, 21, 21, 0],
+    "app-install 7종(subsidy · parcel · Q2 3종 · 자녀 보험 접수 앱 · 원격 지원 도우미) — fields · successHeadline에서 제외 규칙이 실제로 일한다",
   );
   const oneSideAbsent = fieldDivergenceStats([
     twoInstalls[0],
@@ -1665,6 +1677,21 @@ const BAIT_TO_LANDING: {
     baitExcerpt: "아래에서 피해 차단용 보안 앱을 설치해 주세요.",
     headlineAnchors: ["피해 차단용", "보안 앱", "설치"],
     ctaAnchors: [],
+  },
+  // §142 — 카드사 고급 재구성(다통화).
+  {
+    landingId: "card-remote-support-install",
+    baitSource: "scenarios/inCallSms.ts:CARD_COMPANY_IMPERSONATION card-remote-support-link (문자 본문·칩)",
+    baitExcerpt: "아래에서 원격 지원 도우미를 설치해 주세요.",
+    headlineAnchors: ["원격 지원 도우미", "설치"],
+    ctaAnchors: [],
+  },
+  {
+    landingId: "card-safe-transfer",
+    baitSource: "scenarios/inCallSms.ts:CARD_COMPANY_IMPERSONATION card-safe-account (문자 본문·칩)",
+    baitExcerpt: "아래에서 자산 보호 이체를 진행해 주세요.",
+    headlineAnchors: ["자산 보호"],
+    ctaAnchors: ["이체"],
   },
   {
     landingId: "loan-check-app-install",

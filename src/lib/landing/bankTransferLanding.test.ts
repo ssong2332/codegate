@@ -22,9 +22,9 @@ const listOf = (source: string): string[] => {
   return [...body.matchAll(/"([a-z-]+)"/g)].map((m) => m[1]).sort();
 };
 
-test("[P2 C1] 클라 · 서버 훈련용 이체 화면 목록이 같다(통화 중 문자 6종 + 메신저 칩 2종 + B7 계좌 문자 3종)", () => {
+test("[P2 C1] 클라 · 서버 훈련용 이체 화면 목록이 같다(통화 중 문자 6종 + 메신저 칩 2종 + B7 계좌 문자 3종 + §142 안전계좌 1종)", () => {
   assert.deepEqual(listOf(component), listOf(catalog));
-  assert.equal(listOf(component).length, 11);
+  assert.equal(listOf(component).length, 12);
 });
 
 test("[P2 C2] 폼 → 확인 → 인증 → 완료 · 제출 콜백은 인증 버튼에서만(입력값 0 · N1 비교 결과만)", () => {

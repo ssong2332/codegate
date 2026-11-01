@@ -235,7 +235,8 @@ test("[계좌] §81.6 문자 문서 — 자리표시자 줄의 계좌번호를 a
       if (extracted) {
         assert.equal(doc.accountNumber, extracted);
         assert.equal(doc.bankName, "가온은행");
-        assert.equal(resolveSessionAccountNumber(scenarioId), extracted, `${scenarioId}: 프롬프트 계좌 = 문자 계좌`);
+        // §142 — 한 시나리오에 계좌 문자가 둘 이상이면(카드사 피해금 이관 · 안전계좌) 세션 계좌는 그 루트가 선언한 문자로 정해진다(런타임 `resolveRouteAccountNumber`와 같은 입력).
+        assert.equal(resolveSessionAccountNumber(scenarioId, [item.smsId]), extracted, `${scenarioId}: 프롬프트 계좌 = 문자 계좌`);
         assert.ok(doc.body.includes(`가온은행 ${extracted}`));
       } else {
         assert.equal("accountNumber" in doc, false);
