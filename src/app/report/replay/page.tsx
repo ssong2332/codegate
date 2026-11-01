@@ -18,6 +18,14 @@ import { collection, doc, getDoc, getDocs, orderBy, query, Timestamp } from "fir
 import { db } from "@/lib/firebase";
 import { scenarios } from "@/content/scenarios";
 import { setChallengeResultSharing } from "@/lib/api";
+import {
+  classifyLoadError,
+  REPORT_FORBIDDEN_ACTION_HREF,
+  REPORT_FORBIDDEN_ACTION_LABEL,
+  REPORT_FORBIDDEN_MESSAGE,
+  REPORT_INVALID_LINK_MESSAGE,
+  type LoadErrorKind,
+} from "@/lib/loaderror/loadErrorView";
 import { getChallengeToken } from "@/lib/recording";
 import { Badge, Button, LoadingStatus } from "@/components/ui";
 import {
@@ -74,6 +82,7 @@ export default function ReplayPage() {
   // turnIndex 오름차순). 없거나 범위를 벗어나면 그냥 처음부터 보여준다(직접 URL 진입 대비).
   const momentParam = searchParams.get("moment");
   const [state, setState] = useState<PageState>(sessionId ? "loading" : "no-session");
+  const [errorKind, setErrorKind] = useState<LoadErrorKind>("retryable");
   const [report, setReport] = useState<ReportSummary | null>(null);
   const [timeline, setTimeline] = useState<ReplayTimelineItem[]>([]);
   // D-61 — 모의 화면 항목의 표시 문구는 **같은 순간에 승격된 `deceivedMoment`가 있는가**로 갈린다
@@ -222,8 +231,10 @@ export default function ReplayPage() {
         setSenderPersona(result.senderPersona);
         setStepPos(-1);
         setState("loaded");
-      } catch {
-        if (!cancelled) setState("error");
+      } catch (error) {
+        if (cancelled) return;
+        setErrorKind(classifyLoadError(error));
+        setState("error");
       }
     })();
     return () => {
@@ -330,7 +341,10 @@ export default function ReplayPage() {
         setStepPos(-1);
         setState("loaded");
       })
-      .catch(() => setState("error"));
+      .catch((error: unknown) => {
+        setErrorKind(classifyLoadError(error));
+        setState("error");
+      });
   };
 
   const handleGoToReport = () => {
@@ -367,6 +381,34 @@ export default function ReplayPage() {
   }
 
   if (state === "error" || !report) {
+    // UX-01(외부 보안 점검 2026-11-01) — 권한 없음 · 잘못된 링크는 다시 시도해도 같다. 다시 시도는 일시 오류만.
+    if (errorKind === "forbidden" || errorKind === "invalid-link") {
+      return (
+        <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+          <p role="alert" className="flex items-center gap-2 text-lg text-danger">
+            <span aria-hidden="true">⚠</span>
+            <span>{errorKind === "forbidden" ? REPORT_FORBIDDEN_MESSAGE : REPORT_INVALID_LINK_MESSAGE}</span>
+          </p>
+          {errorKind === "forbidden" ? (
+            <button
+              type="button"
+              onClick={() => router.push(REPORT_FORBIDDEN_ACTION_HREF)}
+              className="min-h-[48px] rounded-[8px] border border-line-strong px-6 py-3 text-lg font-bold text-ink hover:bg-white"
+            >
+              {REPORT_FORBIDDEN_ACTION_LABEL}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleGoHome}
+              className="min-h-[48px] rounded-[8px] border border-line-strong px-6 py-3 text-lg font-bold text-ink hover:bg-white"
+            >
+              처음으로
+            </button>
+          )}
+        </main>
+      );
+    }
     return (
       <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">

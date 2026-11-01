@@ -143,8 +143,9 @@ test("PUBLIC_SCENARIOS: escalation이 있는 시나리오는 channel='messenger'
 const ESCALATION_SIGNAL_LITERAL = "[[SIGNAL:ESCALATE_VOICE]]";
 
 test("[AC-073] escalation 메타를 가진 모든 시나리오의 personaPrompt가 구조화 신호 리터럴 지시를 포함한다", () => {
+  // A2 ㉢(2026-11-01) — 목소리 복제 짧은 통화 시나리오(`escalationCloneOnly` — 자녀 사칭)는 모델이 먼저 전화하지 않는다(통화는 서버 max-turn 전이만).
   const escalationIds = Object.entries(PUBLIC_SCENARIOS)
-    .filter(([, meta]) => meta.escalation !== undefined)
+    .filter(([, meta]) => meta.escalation !== undefined && meta.escalationCloneOnly !== true)
     .map(([id]) => id);
   assert.ok(escalationIds.length >= 1, "에스컬레이션 가능 시나리오가 최소 1종은 있어야 한다");
 

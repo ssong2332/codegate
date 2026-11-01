@@ -16,6 +16,7 @@
 //
 // node scripts/full-audit-probe.mjs --secret <path> --plan <json> --out <dir> [--key-var GEMINI_API_KEY2] [--tag s1]
 //   plan json = [{ "ch": "voice"|"messenger", "id": "...", "level": "beginner|intermediate|advanced", "persona": "comply|suspicious|refuse" }, ...]
+//   #476(2026-11-01) — 메신저 항목에 "voiceSelectionSource": "recorded"|"reused"|"fallback_male"|"fallback_female"(세션 목소리 결정 미러 · 부재 = 선택 없음)
 //   §115 — 선택 키: "variant"(흐름 변형 고정 · 부재면 첫 변형) · "maxTurns"(참가자 발화 상한 덮어쓰기)
 //   --fn-root <functions 폴더> — 다른 체크아웃(수정 전 기준)의 빌드된 lib로 돌린다(부재 = 이 저장소 functions)
 import { createRequire } from "node:module";
@@ -86,8 +87,14 @@ const { listOtpItems } = L("scenarios/inCallSms.js");
 const sessionOtpLib = optionalLib("scenarios/sessionOtp.js");
 const { analyzeConversation } = L("report/analyzeConversation.js");
 const priorChatLib = optionalLib("realtime/priorChatContext.js");
+// #476 미러(2026-11-01) — 실제 전환 판정(`resolveTransitionNow` — 목소리 복제 · 1회) · 서버 자동 전환(max-turn) · 메타(옛 lib = 종전 — 신호 전환만).
+const escalationLib = optionalLib("scenarios/escalation.js");
+const publicMetaLib = optionalLib("scenarios/publicMeta.js");
+const constantsLib = optionalLib("shared/constants.js");
 const escalatedCallLib = optionalLib("roleplay/escalatedCall.js");
 const replyMarkupLib = optionalLib("roleplay/replyMarkup.js");
+// R13 미러(2026-11-01) — 앱 판정표 W(메신저 단계 통화 말 · "이만 끊을게" 교정). 옛 lib = 종전(미적용).
+const personaGuardLib = optionalLib("roleplay/personaGuard.js");
 const replyLengthLib = optionalLib("roleplay/replyLength.js");
 const realNamesLib = optionalLib("guardrails/realFinancialNames.js");
 const otpCheckLib = optionalLib("roleplay/otpCheck.js");
@@ -374,6 +381,8 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
           status: "active", channel: "voice", isMockTurn: false, verifyEnabled, transferPlaced: verifyPhase === "placed", transferReachable: true,
           userTurns: userTurns + 1, pendingInstruction: false, smsAwaitingUser: isSmsAwaitingUser(delivered, userTurns + 1),
           limitReached: false, alreadyAccepted: Boolean(ended), relay: undefined,
+          // #476 미러 — 목소리 복제 짧은 통화의 포기 끊기 5행 예외(앱 `commit.ts`).
+          ...(job.shortCloneCall ? { shortCloneCall: true } : {}),
         });
         events.push({ t: now(), ev: "toolResult", name: c.name, status: d.status, row: d.row, kind: c.args?.reason ?? c.args?.kind, userTurns, goalActionDone, decisionScreenPending });
         if (d.hangup && !ended) ended = { kind: c.args?.reason ?? c.args?.kind ?? "unspecified", userTurns, scammerTurns };
@@ -751,6 +760,10 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
     // #463 SA 미러 — 메신저 칩(이력 첨부) · mockScreens 기록 0(이 프로브는 칩 화면을 제출하지 않는다).
     const screenApplies = screenActionLib?.screenActionApplies ? screenActionLib.screenActionApplies(variantId) : false;
     const screenFacts = screenApplies ? screenActionLib.messengerScreenFacts(scenarioId, storedHistory, []) : [];
+    // R8 미러(2026-11-01 · #479 확인 실측에서 빠진 것을 발견) — 앱 `roleplay/index.ts`처럼 메신저 이체 칩을 보냈는데 마치지 않았으면 결정 화면 대기(4-c행이 goal 끊기를 막는다).
+    // 이 응답 전 이력 기준 · 화면 행동 적용 여부와 무관(앱과 같음) · 이 프로브는 칩 화면을 제출하지 않는다(기록 0).
+    const r8TransferChips = screenActionLib?.messengerScreenFacts ? screenActionLib.messengerScreenFacts(scenarioId, storedHistory, []).filter((f) => f.kind === "transfer") : [];
+    const r8DecisionScreenPending = r8TransferChips.length > 0 && !r8TransferChips.some((f) => f.done);
     const screenPlan = screenApplies ? screenActionLib.planScreenAction({ applies: true, facts: screenFacts, currentUserText: u }) : undefined;
     // R1 · R4 · R6 미러(2026-11-01) — 앱처럼 재촉 단계 맥락을 넘긴다(옛 lib는 셋째 인자를 무시 = 종전).
     const screenStatus = screenApplies ? screenActionLib.buildScreenStatusLine(true, screenFacts, { userTurns: userTurnsNow, notYetSent: [], messenger: !escalated }) : undefined;
@@ -778,6 +791,22 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       pp.text = unconfirmed.text;
       if (pp.endCall === "goal") pp.endCall = undefined;
     } else if (ackLib?.stripUnperformedAcknowledgement) pp.text = ackLib.stripUnperformedAcknowledgement(pp.text, { transferReported, photoSent: false });
+    // R15 미러(2026-11-01) — 앱 순서: 설치 완료 단정 교체(판정표 I) → 신분증 요구 소유 낱말(P4) → 통화 말(W). 옛 lib = 함수 없음 = 종전.
+    const installPending = !escalated && screenFacts.some((f) => f.kind === "install") && !screenFacts.some((f) => f.kind === "install" && f.done);
+    if (ackLib?.guardUnconfirmedInstall) {
+      const ig = ackLib.guardUnconfirmedInstall(pp.text, installPending);
+      if (ig.replaced) { events.push({ ev: "unconfirmedInstallReplaced", userTurns: userTurnsNow, original: pp.text }); pp.text = ig.text; }
+    }
+    if (personaGuardLib?.fixPersonaIdRequest) {
+      const pf = personaGuardLib.fixPersonaIdRequest(scenarioId, pp.text);
+      if (pf.fixed) { events.push({ ev: "personaIdFixed", userTurns: userTurnsNow, original: pp.text }); pp.text = pf.text; }
+    }
+    if (!escalated && personaGuardLib?.fixMessengerCallWording) pp.text = personaGuardLib.fixMessengerCallWording(pp.text);
+    // R16 미러(2026-11-01) — 메신저 이체 칩 미완료 · 포기 아님 · 작별 대사 → 이체 미확인 재촉 1줄(판정표 F).
+    if (ackLib?.guardFarewellWhileTransferPending) {
+      const fg = ackLib.guardFarewellWhileTransferPending(pp.text, { messengerStage: !escalated, transferChipPending: r8DecisionScreenPending, givingUp: pp.endCall === "give_up" });
+      if (fg.replaced) { events.push({ ev: "farewellReplaced", userTurns: userTurnsNow, original: pp.text }); pp.text = fg.text; }
+    }
     if (pp.smsMarker !== undefined) {
       const g = resolveSmsGate({ purpose: pp.smsMarker, declared, delivered, userTurns: userTurnsNow });
       events.push({ ev: "smsMarker", purpose: pp.smsMarker, status: g.status, userTurns: userTurnsNow });
@@ -788,22 +817,40 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       }
     }
     if (pp.dropped) events.push({ ev: "signalDropped", ...pp.dropped, userTurns: userTurnsNow });
-    const post = decideFallbackHangup(hangupFacts, delivered, false);
+    // R14 미러(2026-11-01) — 앱 판정표 G: 넘어온 통화에서 포기 단계가 두 턴째인데 끊기 신호가 없으면 포기 1줄 + give_up(옛 lib = 함수 없음 = 종전).
+    if (screenActionLib?.decideForcedScreenGiveUp?.({ escalatedCall: Boolean(escalated), endCall: pp.endCall, hangupSignalAllowed: hangupMode === "signal", facts: screenFacts, userTurns: userTurnsNow })) {
+      events.push({ ev: "forcedScreenGiveUp", userTurns: userTurnsNow, original: pp.text });
+      pp.text = screenActionLib.screenGiveUpReply(pp.text);
+      pp.endCall = "give_up";
+    }
+    // R8 · P1 M1 미러 — 사후 판정은 응답의 끊기 사유로 4-c행을 본다(앱 `decideFallbackHangup(..., endCallSignal)`).
+    const post = decideFallbackHangup({ ...hangupFacts, decisionScreenPending: r8DecisionScreenPending }, delivered, false, pp.endCall);
     const effect = resolveFallbackHangupEffect({ endCall: pp.endCall, hangupMode, pre, post });
-    events.push({ ev: "hangup", mode: hangupMode, preRow: pre.row, postRow: post.row, endCall: pp.endCall ?? null, end: effect.end, userTurns: userTurnsNow });
+    events.push({ ev: "hangup", mode: hangupMode, preRow: pre.row, postRow: post.row, endCall: pp.endCall ?? null, end: effect.end, userTurns: userTurnsNow, decisionScreenPending: r8DecisionScreenPending });
     if (effect.end) ended = { kind: effect.kind, userTurns: userTurnsNow, row: post.row };
     stored.push({ role: "scammer", textMasked: pp.text, channel: escalated ? "voice" : "messenger", ...(pp.attachments ? { attachments: pp.attachments } : {}) });
     turns.push({ role: "scammer", n: scammerTurnNumber, servedBy: res.servedBy ?? (res.isMock ? "mock" : "unknown"), cause: [ti && "sms_announce", otpInstr && "otp_check", confirmPlan?.instruction && "confirm_result", rbKind && `repeat:${rbKind}`, nudge && "nudge", pp.escalate && "ESCALATE", effect.end && `ENDED:${effect.kind}`].filter(Boolean).join("+") || "user", raw: res.text, text: pp.text, attachments: pp.attachments });
-    if (pp.escalate && !escalated && !ended) {
+    // #476 미러 — 앱 `roleplay/index.ts` ④-b: 실제 전환 판정을 지날 때만 신호 · max-turn 자동 전환(계획 항목 `voiceSelectionSource` = 세션 목소리 결정).
+    const transitionOk = escalationLib?.resolveTransitionNow && publicMetaLib
+      ? escalationLib.resolveTransitionNow({ scenarioId, difficultyLevel: level, voiceSelectionSource: job.voiceSelectionSource }, publicMetaLib.PUBLIC_SCENARIOS) !== undefined
+      : true;
+    const autoEscalate = Boolean(escalationLib?.resolveTransitionNow) && transitionOk && !pp.escalate
+      && constantsLib?.MESSENGER_ESCALATION_FALLBACK_TURNS !== undefined && userTurnsNow >= constantsLib.MESSENGER_ESCALATION_FALLBACK_TURNS;
+    if (pp.escalate && !transitionOk) events.push({ ev: "escalateBlocked", userTurns: userTurnsNow, reason: "transition_gate" });
+    if (((pp.escalate && transitionOk) || autoEscalate) && !escalated && !ended) {
       escalated = { userTurns: userTurnsNow };
-      events.push({ ev: "escalate", userTurns: userTurnsNow });
+      events.push({ ev: "escalate", userTurns: userTurnsNow, trigger: autoEscalate ? "maxturn_fallback" : "structured_signal" });
       // 통화 leg — 앱처럼 앞선 대화 블록을 실은 Live 세션(예산 안에서만). 예산이 없으면 텍스트 폴백(에스컬레이션 맥락 1줄)으로 잇는다.
       if (liveLegBudget > 0 && priorChatLib) {
         liveLegBudget -= 1;
-        const priorChatContext = priorChatLib.buildPriorChatContext(stored, [], "scammer");
+        // #476 미러 — 앱 `realtime/index.ts`처럼 목소리 복제 짧은 통화 시나리오면 짧은 통화 규칙을 붙이고, 끊기 5행 예외(`shortCloneCall`)를 켠다.
+        const cloneShort = publicMetaLib?.PUBLIC_SCENARIOS?.[scenarioId]?.escalationCloneOnly === true && Boolean(priorChatLib.CLONE_SHORT_CALL_RULE);
+        const basePrior = priorChatLib.buildPriorChatContext(stored, [], "scammer");
+        const priorChatContext = cloneShort && basePrior ? `${basePrior}\n${priorChatLib.CLONE_SHORT_CALL_RULE}` : basePrior;
+        if (cloneShort) events.push({ ev: "cloneShortCall", userTurns: userTurnsNow });
         const remaining = MAX_USER_TURNS[persona] - i;
         if (remaining > 0) {
-          liveLeg = await runVoice(scenarioId, level, persona, tag, { variant: variantId, priorChatContext, openingTrigger: ESCALATED_CALL_OPENING_TURN, respond: (t, k) => respond(t, k), startIndex: i + 1, maxTurns: remaining, sessionId: sid });
+          liveLeg = await runVoice(scenarioId, level, persona, tag, { variant: variantId, priorChatContext, openingTrigger: ESCALATED_CALL_OPENING_TURN, respond: (t, k) => respond(t, k), startIndex: i + 1, maxTurns: remaining, sessionId: sid, shortCloneCall: cloneShort });
           for (const t of liveLeg.turns) turns.push({ ...t, leg: "live" });
           for (const e of liveLeg.events) events.push({ ...e, leg: "live" });
           for (const d of liveLeg.delivered) delivered.push({ ...d, leg: "live" });

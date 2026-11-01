@@ -273,12 +273,14 @@ function withCallComponentViolations(source: string): string[] {
 // 문자열로 바꿨다. 단언 내용("버튼 · 고지 · 서버 전이가 같은 술어")은 그대로다: 예전 술어는 시나리오 속성
 // (`scenario.escalation`)이었고, 이제 (시나리오 × 난이도) 세션 술어 `resolveSessionEscalation`이다(택배 문자는 고급 세션만 참 —
 // UX D-124 ② · PRD AC-106 (i)).
-const PAGE_PREDICATE_STATE = "resolveSessionEscalation(";
+// A2 ㉢(2026-11-01) — 대화방 값은 실제 전환 판정(세션 술어 + 목소리 복제 · 1회)에서 온다.
+const PAGE_PREDICATE_STATE = "resolveTransitionNow(";
 const PAGE_NOTICE_PROP = "includesCall={sessionEscalates}";
 // §94 — 종료 판정이 답장 공개 뒤로 미뤄져 `chatEnded`(= ended ∨ 공개된 종료 결과)를 쓴다. 술어(sessionEscalates)는 같다.
 // §95(UX D-138) — 카톡형은 "전화로 확인"이 프로필 시트의 "보이스톡"으로 옮겨 갔다. 두 자리(문자형 머리줄 버튼 · 시트)가 같은 값 하나를 쓴다.
 // §121.7(메인 결정 ⓑ) — 통화 위에 겹친 대화방(`inCall`)은 이미 통화 중이라 두 자리를 함께 숨긴다(같은 값 하나 — 술어는 그대로).
-const PAGE_BUTTON_GUARD = "const canVoiceTalk = sessionEscalates && !chatEnded && !inCall;";
+// A2 ㉢(2026-11-01) — 목소리 복제 짧은 통화 시나리오는 보이스톡을 받지 않는다(술어 값 sessionEscalates는 그대로 같다).
+const PAGE_BUTTON_GUARD = "const canVoiceTalk = sessionEscalates && !chatEnded && !inCall && scenario?.escalationCloneOnly !== true;";
 
 test("[T190-8a/G462 ①②] 시작 전 고지 변형 — 컴포넌트는 includesCall로만 고르고 페이지는 '전화로 확인' 버튼과 같은 세션 술어 값을 넘긴다", () => {
   assert.deepEqual(withCallComponentViolations(read("src/components/MessengerStartNotice.tsx")), []);
@@ -289,7 +291,7 @@ test("[T190-8a/G462 ①②] 시작 전 고지 변형 — 컴포넌트는 include
   assert.ok(page.includes("{isSms && canVoiceTalk && ("), "문자형 '전화로 확인'이 canVoiceTalk로 게이팅돼야 한다");
   // 실기 신고 4(2026-10-21) — 시트 "보이스톡"은 모든 카톡형 세션에 보이고(대화 종료 전), **통화 전이**만 canVoiceTalk로 고른다.
   assert.match(page, /voiceTalk=\{\s*chatEnded(?: \|\| inCall)?\s*\?\s*undefined\s*:\s*canVoiceTalk\s*\?/, "프로필 시트 '보이스톡'의 통화 전이가 canVoiceTalk로 게이팅돼야 한다");
-  assert.ok(page.includes(PAGE_PREDICATE_STATE), "그 값은 세션 술어(resolveSessionEscalation)에서 와야 한다");
+  assert.ok(page.includes(PAGE_PREDICATE_STATE), "그 값은 전환 판정(resolveTransitionNow)에서 와야 한다");
   // 시나리오 속성 직접 읽기가 고지 · 버튼 자리에 남지 않았다(택배 초급 · 중급에 '전화' 예고 0 — UX-022 v1.33 (7) 원칙).
   assert.equal(page.includes("Boolean(scenario.escalation)"), false);
   assert.equal(/\{scenario\.escalation && !ended/.test(page), false);
@@ -314,8 +316,9 @@ test("[T190-8a/G462 ④ 역검증 — AC-091 (f)ⓓ] 조건을 true로 바꾼 �
 test("[T190-8a/G462 ⑤] 에스컬레이션 집합 = 서버 두 전이 경로의 술어 · 클라 보유 수 = 서버 보유 수", () => {
   const session = codeOnly(read("functions/src/session/index.ts"));
   const roleplay = codeOnly(read("functions/src/roleplay/index.ts"));
-  assert.ok(session.includes("!resolveSessionEscalation(session, PUBLIC_SCENARIOS)"), "requestEscalation이 같은 술어를 쓰지 않는다");
-  assert.ok(roleplay.includes("resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined"), "sendMessage 자동 전이가 같은 술어를 쓰지 않는다");
+  // A2 ㉢(2026-11-01) — 실제 전환 지점은 세션 술어 위에 목소리 복제 · 1회 판정을 얹은 `resolveTransitionNow`(대화방 sessionEscalates도 같은 함수).
+  assert.ok(session.includes("!resolveTransitionNow(session, PUBLIC_SCENARIOS)"), "requestEscalation이 같은 판정을 쓰지 않는다");
+  assert.ok(roleplay.includes("resolveTransitionNow(session, PUBLIC_SCENARIOS) !== undefined"), "sendMessage 자동 전이가 같은 판정을 쓰지 않는다");
   const serverCount = (codeOnly(read("functions/src/scenarios/publicMeta.ts")).match(/^\s*escalation:\s*\{/gm) ?? []).length;
   const clientCount = readdirSync("src/content/scenarios")
     .filter((f) => f.endsWith(".ts"))

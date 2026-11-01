@@ -19,7 +19,7 @@ import {
   MOCK_INSTALL_CONSENT_INSTRUCTION_IN_CALL,
   MOCK_INSTALL_CONSENT_INSTRUCTION_NO_CALL,
 } from "../../scenarios/mockScreens";
-import { messengerChildImpersonationKakaoPrompt } from "../../scenarios/messengerChildImpersonationKakao.prompt";
+import { CHILD_CALL_PHASE_RULE, messengerChildImpersonationKakaoPrompt } from "../../scenarios/messengerChildImpersonationKakao.prompt";
 import { judgeScammerReplyUsability } from "../../llm/replyUsability";
 
 const SRC = path.resolve(__dirname, "../../../src");
@@ -82,7 +82,9 @@ test("[§128(1) 배선] sendMessage — 예고 판정은 신호 처리 뒤 · �
 });
 
 test("[§128(4)] 참가자가 건 통화 — 페르소나 문장 교체 · '전화 받아줘서' 교정 · 그 밖 무변경", () => {
-  const persona = messengerChildImpersonationKakaoPrompt.personaPrompt;
+  // A2 ㉢(2026-11-01) — 자녀 사칭 페르소나에는 이제 통화 단계 규칙이 없다(참가자 보이스톡은 받지 않음) ⇒ 교체 대상 0. 교체 함수는 규칙 문면으로 고정한다.
+  assert.equal(resolveParticipantCalledPersona(messengerChildImpersonationKakaoPrompt.personaPrompt), messengerChildImpersonationKakaoPrompt.personaPrompt);
+  const persona = CHILD_CALL_PHASE_RULE;
   const swapped = resolveParticipantCalledPersona(persona);
   assert.notEqual(swapped, persona);
   assert.ok(!swapped.includes("통화는 네가 먼저 건 전화다"));
@@ -93,7 +95,8 @@ test("[§128(4)] 참가자가 건 통화 — 페르소나 문장 교체 · '전�
   assert.equal(fixParticipantCalledReply("응 아빠 나야"), "응 아빠 나야");
   const index = read("roleplay/index.ts");
   assert.match(index, /systemPrompt: buildSystemPrompt\(turnScenarioPrompt, \{/);
-  assert.match(index, /const shapedReplyText = participantCalled \? fixParticipantCalledReply\(limitedReplyText\) : limitedReplyText;/);
+  // R14(2026-11-01) — 참가자 통화 교정 뒤 판정표 G 포기 1줄 교체가 한 단계 더 붙었다(교정 식 자체는 그대로).
+  assert.match(index, /const calledShapedReplyText = participantCalled \? fixParticipantCalledReply\(limitedReplyText\) : limitedReplyText;/);
 });
 
 test("[§128(3)] 통화 중 카톡 포기 지시 — 포기 신호만 · 목표 신호 금지 · 메타 판정에 걸리지 않음", () => {

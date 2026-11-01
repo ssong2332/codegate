@@ -12,11 +12,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   resolveScenarioEscalation as resolveClient,
   resolveSessionEscalation as resolveClientSession,
+  resolveTransitionNow as transitionClient,
   type EscalationMetaView,
 } from "./escalation.ts";
 import {
   resolveScenarioEscalation as resolveServer,
   resolveSessionEscalation as resolveServerSession,
+  resolveTransitionNow as transitionServer,
 } from "../../../functions/src/scenarios/escalation.ts";
 import { PUBLIC_SCENARIOS } from "../../../functions/src/scenarios/publicMeta.ts";
 
@@ -121,6 +123,30 @@ test("[T194-a G580] 화면 판정 지점 — C-1 난이도 화면 · C-4 목소�
   );
   assert.match(
     read("src/components/MessengerChatRoom.tsx"),
-    /resolveSessionEscalation\(\s*\{ scenarioId: scenarioId as string, difficultyLevel: data\.difficultyLevel, challengeId: data\.challengeId \},\s*scenarios,\s*\) !== undefined/,
+    // A2 ㉢(2026-11-01) — 대화방은 실제 전환 판정(`resolveTransitionNow` = 세션 술어 + 목소리 복제 · 1회)을 부른다.
+    /resolveTransitionNow\(\s*\{\s*scenarioId: scenarioId as string,\s*difficultyLevel: data\.difficultyLevel,\s*challengeId: data\.challengeId,[\s\S]*?voiceSelectionSource: data\.voiceSelectionSource,\s*channelHistory: data\.channelHistory,\s*\},\s*scenarios,\s*\) !== undefined/,
   );
+});
+
+// ── A2 ㉢(2026-11-01) — 전환 판정 `resolveTransitionNow`: 서버 · 클라 같은 결과 · 대화방은 그 판정으로 버튼을 열고 보이스톡은 늘 응답 없음 ──
+test("[A2 ㉢] resolveTransitionNow — 서버 · 클라 같은 결과(목소리 복제 · 1회) · 두 메타 플래그 같음 · 대화방 배선", async () => {
+  const cases = [
+    { scenarioId: "messenger-child-impersonation-kakao", difficultyLevel: "advanced", voiceSelectionSource: "fallback_male" },
+    { scenarioId: "messenger-child-impersonation-kakao", difficultyLevel: "beginner", voiceSelectionSource: "recorded" },
+    { scenarioId: "messenger-child-impersonation-kakao", difficultyLevel: "advanced", voiceSelectionSource: "reused", channelHistory: [{ from: "messenger", to: "voice" }] },
+    { scenarioId: "messenger-subsidy-smishing-sms", difficultyLevel: "beginner" },
+  ];
+  const clientCatalog = await loadClientCatalog();
+  for (const id of Object.keys(PUBLIC_SCENARIOS)) {
+    assert.equal(clientCatalog[id]!.escalationCloneOnly, PUBLIC_SCENARIOS[id]!.escalationCloneOnly, `${id}: escalationCloneOnly 드리프트`);
+  }
+  for (const c of cases) {
+    assert.deepEqual(transitionClient(c, clientCatalog), transitionServer(c, PUBLIC_SCENARIOS), JSON.stringify(c));
+  }
+  assert.equal(transitionClient(cases[0]!, clientCatalog), undefined, "C1");
+  assert.ok(transitionClient(cases[1]!, clientCatalog), "C3");
+  assert.equal(transitionClient(cases[2]!, clientCatalog), undefined, "C2");
+  const room = fs.readFileSync(path.join(REPO_ROOT, "src/components/MessengerChatRoom.tsx"), "utf8").replace(/\r\n/g, "\n");
+  assert.ok(room.includes("resolveTransitionNow(") && room.includes("voiceSelectionSource: data.voiceSelectionSource,"));
+  assert.ok(room.includes("const canVoiceTalk = sessionEscalates && !chatEnded && !inCall && scenario?.escalationCloneOnly !== true;"));
 });

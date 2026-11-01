@@ -16,7 +16,7 @@ export const messengerChildImpersonationKakaoScenario: ScenarioDoc = {
   title: "자녀 사칭 급전 요청(카카오톡)",
   fraudType: "자녀 사칭(카카오톡)",
   estimatedDuration: "약 5~8분",
-  difficulty: "가족 걱정을 건드리고, 채팅하다가 전화로 이어집니다",
+  difficulty: "가족 걱정을 건드리고, 폰이 고장 났다며 채팅으로 송금을 재촉합니다",
   deepvoiceLines,
   callerLabel: "010-4471-2298",
   channel: "messenger",
@@ -26,4 +26,6 @@ export const messengerChildImpersonationKakaoScenario: ScenarioDoc = {
   chatDisplayName: "이지수",
   chatNonFriend: true,
   escalation: { toChannel: "voice", voiceMode: "clone" },
+  // A2 ㉢(2026-11-01) — 서버 `publicMeta.ts`와 같은 값(목소리 복제 세션에서만 짧은 통화 1회 · 참가자 보이스톡은 받지 않음).
+  escalationCloneOnly: true,
 };

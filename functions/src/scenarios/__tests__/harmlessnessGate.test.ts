@@ -75,6 +75,8 @@ const SCENARIO_META_FIELDS: Record<keyof ScenarioMeta, FieldPolicy> = {
   escalation: { skip: "열거형 조합 {toChannel,voiceMode} — 자유 문자열 없음" },
   // T194-a(§84.4.1) — `escalation`과 같은 모양(고급 세션 전용 전이 설정).
   advancedEscalation: { skip: "열거형 조합 {toChannel,voiceMode} — 자유 문자열 없음" },
+  // A2 ㉢(2026-11-01) — 불리언 true 1값(목소리 복제 세션에서만 짧은 통화 1회).
+  escalationCloneOnly: { skip: "불리언 true 1값 — 자유 문자열 없음" },
   // T191 S5 — 리터럴 `true` 플래그 2종(UX 계약 C-1 · C-9). 자유 문자열이 아니다.
   advancedOnly: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
   preSessionBurdenNotice: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },

@@ -41,6 +41,20 @@ export const INSTITUTION_SELF_INTRO = new RegExp(
     `|(?:${INSTITUTION_NOUNS})[^.?!\\n]{0,12}(?:${SELF_INTRO_ROLE})\\s*(?:인데요|입니다|이에요|예요)`,
 );
 
+// ── R15 ⓑ(#479 확인 실측 ② S5 · 예비 모델 — 자녀가 엄마에게 "내 신분증 사진 · 내 주민등록증 사진 찍어서 보내줘") — 판정표 P4 ─────────────────
+// 사칭 인물(자녀 · 지인)이 상대에게 신분증을 달라면서 "내" 것이라고 말하면 역할이 뒤집힌다(상대 손에 사칭 인물의 신분증이 있을 리 없다).
+// | # | If | Then |
+// |---|---|---|
+// | P4 | 대상 시나리오(`PERSONA_GUARDED_SCENARIOS`) ∧ "내/제 + 신분증 · 주민등록증 · 운전면허증"이 같은 절 안에서 찍어 · 보내 · 줘 · 필요와 함께 나옴 | 소유 낱말("내 · 제")만 뺀다(신분증 요구 자체는 루트 수법 그대로) |
+// | P5 | 그 밖(자기 신분증을 잃어버렸다는 핑계처럼 요구가 없는 절 · 다른 시나리오) | 그대로 |
+const OWN_ID_REQUEST = /(?:^|(?<=[\s,.!?]))(?:내|제)\s+(?=(?:신분증|주민등록증|주민증|운전면허증)[^.?!\n]{0,30}(?:찍어|보내|줘|줄래|주세요|부탁|필요))/g;
+
+export function fixPersonaIdRequest(scenarioId: string, text: string): { text: string; fixed: boolean } {
+  if (!(scenarioId in PERSONA_GUARDED_SCENARIOS)) return { text, fixed: false }; // P5
+  const out = text.replace(OWN_ID_REQUEST, "");
+  return { text: out, fixed: out !== text }; // P4
+}
+
 export function personaGuardFor(scenarioId: string): RegExp | undefined {
   if (IDENTITY_HIDDEN_SCENARIOS.includes(scenarioId)) return INSTITUTION_SELF_INTRO;
   return scenarioId in PERSONA_GUARDED_SCENARIOS ? INSTITUTION_PERSONA : undefined;
@@ -63,17 +77,30 @@ export function personaAnchorInstruction(scenarioId: string): string | undefined
 // | W1 | 문장 맨 앞 "여보세요"(부호 포함) | 지운다(지우면 빈 대사면 원문) |
 // | W2 | "(친구 폰|이 번호|다른 번호)으로 전화하는/전화한" — 지금 대화를 전화라고 말함 | "연락하는/연락한" |
 // | W3 | "통화(를/는)? (여기서)? 마치/끝내/끊 + 미래 · 현재 어미(겠 · 을게 · ㄹ게 · 습니다 · 자)" — 지금 대화를 통화로 끝냄 | "통화" → "대화" |
+// | W4 | R13(#477 실측 — 메신저 포기 끝맺음 "이만 끊을게" · "먼저 끊을게") — 앞에 통화 · 대화 · 전화 낱말 없이 "끊 + 미래 어미" | 메신저 끝맺음으로(끊을게 → 갈게 · 끊을게요 → 갈게요 · 끊겠습니다 → 마치겠습니다) |
 // ⛔ "내가 지금 전화할게"(전환 예고) · "통화가 안 돼"(핑계) · "아까 통화 끊어서 미안"(지난 통화)은 바꾸지 않는다 — 실제 통화를 가리키는 말이다.
 // ⛔ 통화 중 대화방(`chatDuringCall`)에는 쓰지 않는다 — 그때 "통화 끊을게"는 실제 통화를 가리킬 수 있다.
 const LEADING_HELLO = /(^|[.?!\n]\s*)여보세요\s*[?？!.,~…]*\s*/g;
 const CHAT_AS_CALL = /(친구\s*폰|이\s*번호|다른\s*번호|이\s*폰)(\s*(?:으로|로))\s*전화(하는|한|하고|해서|했)/g;
 const END_CHAT_AS_CALL = /통화(\s*(?:를|는)?\s*(?:여기서\s*|이만\s*|그만\s*)?)(마치|끝내|끊)(?=겠|을게|을께|ㄹ게|습니다|자|을\s*게|어야|을\s*거)/g;
+// W4 — 통화 · 대화 · 전화 낱말이 앞에 없는 "끊 + 미래 어미"(W3가 먼저 "통화 … 끊"을 "대화 … 끊"으로 바꾼 뒤라 그 꼴은 여기서 빠진다).
+const END_CHAT_BARE_HANGUP = /(?<!(?:통화|대화|전화)\s*(?:를|는)?\s*(?:여기서\s*|이만\s*|그만\s*)?)끊(을게요|을께요|을게|을께|겠습니다|겠어|는다)/g;
+const BARE_HANGUP_REPLACEMENT: Readonly<Record<string, string>> = {
+  을게요: "갈게요",
+  을께요: "갈게요",
+  을게: "갈게",
+  을께: "갈게",
+  겠습니다: "마치겠습니다",
+  겠어: "갈게",
+  는다: "간다",
+};
 
 export function fixMessengerCallWording(text: string): string {
   const fixed = text
     .replace(LEADING_HELLO, "$1")
     .replace(CHAT_AS_CALL, (_m, via: string, particle: string, tail: string) => `${via}${particle} 연락${tail}`)
     .replace(END_CHAT_AS_CALL, (_m, middle: string, verb: string) => `대화${middle}${verb}`)
+    .replace(END_CHAT_BARE_HANGUP, (_m, tail: string) => BARE_HANGUP_REPLACEMENT[tail] ?? `끊${tail}`)
     .replace(/[ \t]{2,}/g, " ")
     .trim();
   return fixed.length > 0 ? fixed : text;

@@ -198,20 +198,63 @@ export function screenPressureFor(kind: ScreenKind, facts: readonly ScreenFact[]
   return pending >= SCREEN_PRESSURE_SWITCH_USER_TURNS ? "switch" : "hold"; // SP3 · SP4
 }
 
+/** R10 — 아직 마치지 않은 화면 중 하나라도 포기 단계(SP2)인가(포기 단계에서는 새 화면 칩을 붙이지 않는다). */
+export function anyScreenGiveUp(facts: readonly ScreenFact[], userTurns: number): boolean {
+  return (["install", "transfer", "form"] as const).some((kind) => screenPressureFor(kind, facts, userTurns) === "give_up");
+}
+
+// ── R14(#477 실측 ③ — 메신저에서 통화로 넘어간 뒤 텍스트 폴백에서 이체를 끝까지 안 하는데 포기 지시를 6턴 내내 무시하고 재촉) — 판정표 G ──
+// 지시 문면만으로는 막히지 않았다(끊기 신호 허용 · 포기 문장 주입 상태에서 신호 0). 포기 단계가 두 턴째 이어지면 서버가 끝맺는다.
+// | # | If | Then |
+// |---|---|---|
+// | G1 | 메신저에서 넘어온 통화(텍스트 폴백)가 아님 | 무변경(처음부터 통화인 세션 · 메신저 단계 — 카드사 고급 등 종전) |
+// | G2 | 모델이 이번 대답에 끊기 신호를 보냄 | 무변경(모델 끝맺음 그대로) |
+// | G3 | 끊기 사전 판정이 신호 허용이 아님 | 무변경(끊을 수 없는 칸 — 대사만 바꾸면 끝나지 않는 작별이 된다) |
+// | G4 | 마치지 않은 화면이 지금 포기 단계가 아님 | 무변경 |
+// | G5 | 포기 단계 첫 턴(직전 발화 수에서는 포기 단계 아님) | 무변경(포기 지시 문장으로 모델에 한 번 맡긴다) |
+// | G6 | 그 밖(포기 단계가 두 턴째 이어짐) | 대사를 포기 1줄(말투 맞춤)로 바꾸고 `give_up` 끊기 신호를 붙인다 |
+export function decideForcedScreenGiveUp(input: {
+  escalatedCall: boolean;
+  endCall: "goal" | "give_up" | undefined;
+  hangupSignalAllowed: boolean;
+  facts: readonly ScreenFact[];
+  userTurns: number;
+}): boolean {
+  if (!input.escalatedCall) return false; // G1
+  if (input.endCall !== undefined) return false; // G2
+  if (!input.hangupSignalAllowed) return false; // G3
+  if (!anyScreenGiveUp(input.facts, input.userTurns)) return false; // G4
+  return anyScreenGiveUp(input.facts, input.userTurns - 1); // G5 · G6
+}
+
+/** G6 포기 1줄(따옴표 0 · 숫자 0 · 새 요구 0). 반말 대사면 반말 · 그 밖 존댓말(`actionAcknowledgement.ts` U1과 같은 판정). */
+export const SCREEN_GIVE_UP_REPLY = {
+  casual: "안 되겠다. 이렇게는 더 못 하겠어. 그만할게.",
+  polite: "더는 진행이 어렵겠습니다. 여기서 마치겠습니다.",
+} as const;
+
+const GIVE_UP_POLITE_ENDING = /(?:니다|습니까|십니까|세요|십시오|어요|아요|에요|예요|해요|죠|군요|네요)(?=[\s.?!~…ㅠㅜ]|$)/;
+
+export function screenGiveUpReply(modelText: string): string {
+  return GIVE_UP_POLITE_ENDING.test(modelText) ? SCREEN_GIVE_UP_REPLY.polite : SCREEN_GIVE_UP_REPLY.casual;
+}
+
 /** 재촉 단계 · 금액 문장(따옴표 대사 예시 0 · 횟수 0 — 턴 지시 스캔 게이트 대상). */
 export const SCREEN_PRESSURE_SENTENCES = {
   installHold:
     "설치 화면은 상대가 권한 허용을 누르기 전에는 끝난 것이 아니니, 설치가 끝났다거나 확인됐다고 말하지 말고 설치를 마칠 때까지 다음 요구로 넘어가지 마라.",
   installRelease: "설치가 끝났다거나 확인됐다고는 말하지 말되, 설치 없이 다음 요구로 넘어가도 된다.",
   // Q2(#466 실측 — 재촉 중 기다리라는 말과 다시 하라는 말이 엇갈렸다) — 앱 기록이 없으면 아직 안 보낸 것이다.
+  // R9(#468 실측) — 이체 화면에는 비밀번호 · 인증번호 칸이 없다(인증은 지문 · 얼굴 버튼 하나).
   transferPending:
-    "이체 화면에는 설치나 권한 허용 단계가 없으니 이체를 재촉할 때 설치 · 권한 이야기를 섞지 말고, 입금이 확인됐다고 말하지 마라. 앱 기록이 없으면 아직 보내지 않은 것이니 기다려 보라는 말은 하지 마라.",
+    "이체 화면에는 설치나 권한 허용 단계가 없으니 이체를 재촉할 때 설치 · 권한 이야기를 섞지 말고, 입금이 확인됐다고 말하지 마라. 앱 기록이 없으면 아직 보내지 않은 것이니 기다려 보라는 말은 하지 마라. 이체 화면에는 비밀번호나 인증번호를 넣는 칸이 없으니 비밀번호 · 인증번호를 입력하라거나 불러 달라고 하지 마라.",
   // Q4(#466 실측 — 재촉마다 같은 문장 뼈대) — 내용뿐 아니라 문장 뼈대도 바꾼다.
   switch: "같은 재촉을 되풀이하지 말고 급함이나 불이익 같은 다른 압박으로 바꿔 말하라. 앞서 쓴 문장 뼈대도 되풀이하지 마라.",
   giveUp: "여러 번 재촉해도 하지 않으니 더 진행할 수 없다고 보고 포기로 끝내라. 원하던 것을 얻었다고 끝내지는 마라.",
   // Q1(#466 실측 — 메신저 포기 대사가 먼저 끊을게 · 끝내면서 이체 요구를 남김) — 대화방 포기 끝맺음.
+  // R10(#468 실측 — 메신저 설치 칩 포기 단계에서 이체 요구로 넘어감) — 이번 대답에서 끝내고 새 요구를 꺼내지 않는다.
   giveUpMessenger:
-    "여러 번 재촉해도 하지 않으니 더 진행할 수 없다고 보고 포기로 끝내라. 대화방이니 전화를 끊는다는 말은 하지 말고, 끝내면서 다시 요구를 남기지 마라. 원하던 것을 얻었다고 끝내지는 마라.",
+    "여러 번 재촉해도 하지 않으니 더 진행할 수 없다고 보고 이번 대답에서 포기로 끝내라. 신분증 · 송금 같은 새 요구를 꺼내지 말고, 대화방이니 전화를 끊는다는 말은 하지 말고, 끝내면서 다시 요구를 남기지 마라. 원하던 것을 얻었다고 끝내지는 마라.",
   transferLess:
     "상대가 보낸 돈이 요구한 금액보다 적다. 들어온 만큼은 확인됐다고 하되 모자란 금액을 같은 화면에서 마저 보내라고 하고, 다 받았다거나 끝났다고 말하지 마라.",
   transferMore: "상대가 요구한 금액보다 많이 보냈다. 받은 것으로 치고, 돌려주겠다는 약속은 하지 마라.",

@@ -37,6 +37,9 @@ import { planConfirmResult } from "../inCallSms/confirmResult";
 import {
   buildScreenStatusLine,
   inCallScreenFacts,
+  anyScreenGiveUp,
+  decideForcedScreenGiveUp,
+  screenGiveUpReply,
   installPendingSince,
   latestTransferAmount,
   messengerScreenFacts,
@@ -78,7 +81,7 @@ import { isVerifyTransferReachable, type VerifyOfferDocState } from "../scammerH
 import { pickFallbackTurnInstruction } from "../verifyIntercept/fallbackTurn";
 import { announcedVerifyAnchor } from "../verifyIntercept/buildDoc";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
-import { resolveSessionEscalation } from "../scenarios/escalation";
+import { resolveTransitionNow } from "../scenarios/escalation";
 import { LLM_TEXT_SECRETS } from "../shared/config";
 import { MESSENGER_ESCALATION_FALLBACK_TURNS, SEND_MESSAGE_MAX_LENGTH } from "../shared/constants";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
@@ -132,12 +135,15 @@ import { CALL_AFTER_EXCUSE_INSTRUCTION, decideCallAnnouncement, saidCallUnavaila
 import {
   assertsTransferConfirmed,
   guardUnconfirmedTransfer,
+  guardUnconfirmedInstall,
+  guardFarewellWhileTransferPending,
+  stripPasswordRequests,
   stripUnperformedAcknowledgement,
   TRANSFER_REPORTED_INSTRUCTION,
   userReportedTransfer,
   userSentPhoto,
 } from "./actionAcknowledgement";
-import { fixMessengerCallWording, personaAnchorInstruction, personaGuardFor } from "./personaGuard";
+import { fixMessengerCallWording, fixPersonaIdRequest, personaAnchorInstruction, personaGuardFor } from "./personaGuard";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
@@ -482,6 +488,16 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       decisionScreenPending = isDecisionScreenPending({ ...decisionScreenInput, mockScreens });
     } catch {
       goalActionDone = false;
+    }
+    // R8(#468 실측 — 메신저 이체 칩 기록 없이 인증번호를 받은 뒤 "접수는 됐어"로 goal 끝) — 메신저 이체 화면 칩을 보냈는데 그 화면을 아직 마치지 않았거나
+    // 요구액보다 적게 보냈으면 결정 화면 대기(4-c행이 goal 끊기를 막는다 · give_up은 통과). 통화 중 문자 결정 화면 판정(D-1 ~ D-5)과 같은 뜻의 메신저 짝이다.
+    // R16 판정표 F — 같은 판정(메신저 이체 칩 미완료)을 작별 대사 교체에도 쓴다(통화 중 문자 결정 화면과 무관 — 카드사 고급 등 통화 루트 무변경).
+    let messengerTransferChipPending = false;
+    if (storedHistory.some((m) => (m.attachments ?? []).length > 0)) {
+      const chipFacts = messengerScreenFacts(session.scenarioId, storedHistory, await loadMockRecords());
+      const transferChips = chipFacts.filter((f) => f.kind === "transfer");
+      messengerTransferChipPending = transferChips.length > 0 && (!transferChips.some((f) => f.done) || latestTransferAmount(chipFacts) === "less");
+      if (messengerTransferChipPending) decisionScreenPending = true;
     }
     const callEntryTurns = userTurnsSinceCallEntry(session.channel, session.channelHistory, storedHistory);
     // §142(PR-3) — 다통화 변형의 마지막이 아닌 레그: 끊기 승인 = 레그 끝(`relay.legEnded` · 세션 계속). 이 레그에는 결정 화면 · 후속 단계가 없고
@@ -906,7 +922,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // ⭐ P2-c(X6) — 훈련용 이체 화면 칩에만 세션 가상 은행명 · 세션 계좌를 싣는다(받는 계좌 미리 채움 — 그 밖 칩은 무변경).
     const routeVariant = findFlowVariant(session.flowVariantId);
     const routeAccountNumber = resolveRouteAccountNumber(session.scenarioId, session.flowVariantId);
-    const replyAttachments = withBankTransferPrefill(
+    // R10(#468 실측) — 마치지 않은 화면이 포기 단계면 이번 대답에 새 화면 칩을 붙이지 않는다(포기로 끝내야 할 차례에 다음 단계 화면을 여는 모순 차단).
+    const giveUpStage = screenApplies && anyScreenGiveUp(screenFacts, userTurnsNow);
+    const replyAttachmentsBeforeGiveUp = withBankTransferPrefill(
       // D-g — 계좌를 말했는데 모델이 이체 화면 칩을 빠뜨리면 서버가 붙인다(`linkMarker.ts` `ensureBankTransferChip` 표).
       ensureBankTransferChip(
         // S2 — 이체 화면 칩은 계좌가 대화에 나온 뒤에만(`linkMarker.ts` `dropPrematureBankTransferChip` 표).
@@ -929,6 +947,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       // N1 — 대화에서 요구한 금액(화면이 보낸 금액과 비교해 결과만 돌려준다).
       demandAmountFrom(linkFreeReplyText, storedHistory),
     );
+    const keptOnGiveUp = replyAttachmentsBeforeGiveUp?.filter((attachment) => screenFacts.some((f) => f.landingId === attachment.fakeLandingId));
+    const replyAttachments = giveUpStage ? (keptOnGiveUp && keptOnGiveUp.length > 0 ? keptOnGiveUp : undefined) : replyAttachmentsBeforeGiveUp;
     // ③-a′ T191 — 문자 요청 마커를 걷어 낸다(아래 문장 수 상한보다 **앞** — 상한이 끝의 마커를 잘라 먹지 않게).
     const { text: smsMarkerFreeText, purpose: markerPurpose, markerCount: smsMarkerCount } =
       extractSmsMarker(linkFreeReplyText);
@@ -980,7 +1000,16 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       : endCallConsistency;
     // §129 D13 판정표 C — 메신저 단계의 포기 신호인데 참가자가 거절 · 의심 없이 따라오는 중이면 목표로 기록한다(끝내는 것은 그대로).
     const giveUpCheck = reclassifyMessengerGiveUp(endCallCheck.endCall, maskedUserText, session.channel === "messenger");
-    const endCallSignal = giveUpCheck.endCall;
+    // R14 판정표 G(`screenAction.ts`) — 넘어온 통화에서 포기 단계가 두 턴째인데 끊기 신호가 없으면 서버가 포기로 끝맺는다(대사는 아래에서 포기 1줄로).
+    const forcedScreenGiveUp = decideForcedScreenGiveUp({
+      escalatedCall,
+      endCall: giveUpCheck.endCall,
+      hangupSignalAllowed: hangupMode === "signal",
+      facts: screenApplies ? screenFacts : [],
+      userTurns: userTurnsNow,
+    });
+    if (forcedScreenGiveUp) logger.info("[R14] 넘어온 통화 포기 단계 서버 끝맺음", { sessionId, userTurns: userTurnsNow });
+    const endCallSignal = forcedScreenGiveUp ? ("give_up" as const) : giveUpCheck.endCall;
     if (giveUpCheck.reclassified) {
       // G170 — 사유 코드만(대사 0).
       logger.info("[§129] 포기 신호를 목표로 기록", { sessionId });
@@ -1012,7 +1041,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
               !limitReached &&
               !refusalRepeatBlocked &&
               endCallSignal === undefined &&
-              resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined &&
+              resolveTransitionNow(session, PUBLIC_SCENARIOS) !== undefined &&
               !isEscalationTooEarly(turnsSinceMessengerEntry(turnCount, session.channelHistory)),
           })
         : ({ action: "none" } as const);
@@ -1051,9 +1080,29 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const factCheckedReplyText = unconfirmedGuard.replaced
       ? unconfirmedGuard.text
       : stripUnperformedAcknowledgement(lengthLimited ? lengthLimited.text : realNameFreeReplyText, turnFacts);
-    const limitedReplyText = session.channel === "messenger" ? fixMessengerCallWording(factCheckedReplyText) : factCheckedReplyText;
+    // R9 판정표 P(`actionAcknowledgement.ts`) — 화면에 없는 비밀번호 입력 · 불러 달라는 문장을 뺀다(실제 비밀번호 입력 유도 차단).
+    const passwordGuard = stripPasswordRequests(factCheckedReplyText);
+    if (passwordGuard.stripped) logger.info("[R9] 비밀번호 요구 문장 제거", { sessionId, userTurns: userTurnsNow });
+    // R15 ⓐ 판정표 I(`actionAcknowledgement.ts`) — 메신저 단계에서 설치 기록 없이 설치 완료를 단정하면 설치 미확인 1줄로(주 모델 · 예비 모델 무관).
+    const installScreenPending =
+      session.channel === "messenger" && screenFacts.some((f) => f.kind === "install") && !screenFacts.some((f) => f.kind === "install" && f.done);
+    const installGuard = guardUnconfirmedInstall(passwordGuard.text, installScreenPending);
+    if (installGuard.replaced) logger.info("[R15] 설치 화면 미완료 · 설치 완료 단정 대사 교체", { sessionId, userTurns: userTurnsNow });
+    // R15 ⓑ 판정표 P4(`personaGuard.ts`) — 자녀 · 지인 사칭이 상대에게 "내 신분증"을 달라는 역할 뒤집힘에서 소유 낱말을 뺀다.
+    const personaIdFix = fixPersonaIdRequest(session.scenarioId, installGuard.text);
+    if (personaIdFix.fixed) logger.info("[R15] 신분증 요구 소유 낱말 교정", { sessionId, userTurns: userTurnsNow });
+    const wordingFixedReplyText = session.channel === "messenger" ? fixMessengerCallWording(personaIdFix.text) : personaIdFix.text;
+    // R16 판정표 F(`actionAcknowledgement.ts`) — 이체 칩 미완료(4-c가 goal 끝을 막는 상태)에서 작별 · 나중 연락 대사는 이체 미확인 재촉 1줄로.
+    const farewellGuard = guardFarewellWhileTransferPending(wordingFixedReplyText, {
+      messengerStage: session.channel === "messenger",
+      transferChipPending: messengerTransferChipPending,
+      givingUp: endCallSignal === "give_up",
+    });
+    if (farewellGuard.replaced) logger.info("[R16] 이체 칩 미완료 · 작별 대사 교체", { sessionId, userTurns: userTurnsNow });
+    const limitedReplyText = farewellGuard.text;
     // §128(4) — 참가자가 건 통화의 "전화 받아 줘서"류 교정(`callCaller.ts` 표 · 그 밖 턴 무변경).
-    const shapedReplyText = participantCalled ? fixParticipantCalledReply(limitedReplyText) : limitedReplyText;
+    const calledShapedReplyText = participantCalled ? fixParticipantCalledReply(limitedReplyText) : limitedReplyText;
+    const shapedReplyText = forcedScreenGiveUp ? screenGiveUpReply(calledShapedReplyText) : calledShapedReplyText;
     // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).
     if (realNameReplacedCount > 0) {
       logger.info("사기범 대사 실존 금융회사명 치환", {
@@ -1248,7 +1297,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       finalize.stillActive &&
       !finalize.hangupEnded &&
       session.channel === "messenger" &&
-      resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined;
+      resolveTransitionNow(session, PUBLIC_SCENARIOS) !== undefined;
     let escalationTrigger: ChannelTransitionTrigger | undefined;
     if (canEscalate && !limitReached) {
       if (signalEscalate) {

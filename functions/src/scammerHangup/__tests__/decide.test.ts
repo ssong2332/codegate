@@ -43,6 +43,8 @@ const PASSING: ScammerHangupInput = {
   messengerStageAllowed: false,
   // §131(14) — 기준 입력은 처음부터 통화인 세션(통화 진입 기준 없음 · 종전 판정).
   turnsSinceCallEntry: undefined,
+  // A2 ㉢ — 기준 입력은 짧은 통화 아님(종전 판정).
+  shortCloneCall: false,
 };
 
 /** 표의 정본 사본 — 행 번호 · status · 끊기 여부 · **순서**(§79.19 (3) — 8행이 2-b 바로 뒤). */
@@ -305,8 +307,13 @@ test("[G501] 사유 판독 — 누락 · 오기입은 unspecified(거절 0) · �
   for (const hangupKind of [undefined, "goal", "give_up", "unspecified"] as const) {
     assert.equal(decideScammerHangup({ ...PASSING, hangupKind }).status, "accepted", String(hangupKind));
   }
+  // A2 ㉢(2026-11-01) — 5행도 사유를 읽는다: 목소리 복제 짧은 통화(`shortCloneCall`)의 포기 끊기만 하한 예외(그 밖 입력에서는 종전 판정).
   const rulesReadingKind = SCAMMER_HANGUP_RULES.filter((r) => r.when.toString().includes("hangupKind")).map((r) => r.row);
-  assert.deepEqual(rulesReadingKind, ["4-c"], "사유를 읽는 행이 4-c 말고도 생겼다");
+  assert.deepEqual(rulesReadingKind, ["4-c", "5"], "사유를 읽는 행이 4-c · 5 말고도 생겼다");
+  const tooEarly = { ...PASSING, userTurns: 0 };
+  assert.equal(decideScammerHangup({ ...tooEarly, hangupKind: "give_up" }).status, "too_early", "짧은 통화가 아니면 종전 하한");
+  assert.equal(decideScammerHangup({ ...tooEarly, hangupKind: "give_up", shortCloneCall: true }).status, "accepted", "짧은 통화의 포기 끊기 = 하한 예외");
+  assert.equal(decideScammerHangup({ ...tooEarly, hangupKind: "goal", shortCloneCall: true }).status, "too_early", "짧은 통화라도 goal은 하한 그대로");
 });
 
 test("[G501 배선] decide.ts는 잎 모듈이다 — 값 import 0(타입 import만)", () => {
@@ -398,7 +405,7 @@ test("[G552 ⓓ 역검증] 옛 식별자를 끼운 요청 타입 사본은 같�
 // §104.9 — 메신저 단계 경로 표시(`messengerStageAllowed` · 폴백만 참)가 13번째 키다(사기범 턴 · 경과 시간 · 반복 · 랜딩 제출 · 확인 결과는 여전히 0).
 const G600_KEYS = [
   "alreadyAccepted", "channel", "decisionScreenPending", "followUpPending", "goalActionDone", "hangupKind", "isMockTurn", "limitReached", "messengerStageAllowed", "pendingInstruction", "relay",
-  "smsAwaitingUser", "status", "transferPlaced", "transferReachable", "turnsSinceCallEntry", "userTurns", "verifyEnabled",
+  "shortCloneCall", "smsAwaitingUser", "status", "transferPlaced", "transferReachable", "turnsSinceCallEntry", "userTurns", "verifyEnabled",
 ];
 
 /** `export type ScammerHangupInput = { … };` 블록의 최상위 키(주석 제거). */
@@ -412,7 +419,8 @@ function inputTypeKeys(src: string): string[] {
 // §108(사용자 결정 · DECISIONS #223) — 목표 화면 행동 완료(`goalActionDone` — 랜딩 제출 · 앱 설치 응낙 · 서버 기록만)가 14번째 키다. 4행만 읽는다.
 // §131(14) — 메신저에서 넘어온 통화의 통화 진입 뒤 **참가자** 발화 수(`turnsSinceCallEntry` — `userTurns`와 같은 종류 · 5행만 읽는다)가 15번째 키다.
 // P1 M1 — 결정 화면 미완료(`decisionScreenPending`)와 끊기 사유(`hangupKind`)가 17 · 18번째 키다. 둘 다 4-c행만 읽는다.
-test("[G600] ScammerHangupInput 키 집합 = 정확히 18키(§108 +1 · §131 +1 · §132.13 +1 · P1 M1 +2 · 사기범 턴 · 경과 시간 · 반복 · 확인 결과 0)", () => {
+// A2 ㉢(2026-11-01) — 목소리 복제 짧은 통화(`shortCloneCall`)가 19번째 키다. 5행만 읽는다.
+test("[G600] ScammerHangupInput 키 집합 = 정확히 19키(A2 ㉢ +1 · §108 +1 · §131 +1 · §132.13 +1 · P1 M1 +2 · 사기범 턴 · 경과 시간 · 반복 · 확인 결과 0)", () => {
   const src = readFileSync(path.join(SRC_DIR, "decide.ts"), "utf8").replace(/\r\n/g, "\n");
   assert.deepEqual(inputTypeKeys(src), G600_KEYS);
   assert.deepEqual(Object.keys(PASSING).sort(), G600_KEYS, "기준 입력과 타입 키가 갈렸다");

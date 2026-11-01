@@ -24,7 +24,8 @@ import { resolveFictionalBankName } from "../shared/fictionalBank";
 import { resolveHangupRelay } from "../scammerHangup/relayContext";
 import { resolveSessionSpeakerGender } from "./scenarioVoice";
 import { REALTIME_SETUP_LOG_MESSAGE, startSetupTiming, takeColdStartFlag } from "./setupTiming";
-import { buildPriorChatContext, priorChatActions, type PriorChatMessage } from "./priorChatContext";
+import { buildPriorChatContext, CLONE_SHORT_CALL_RULE, priorChatActions, type PriorChatMessage } from "./priorChatContext";
+import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { currentCallCaller } from "../roleplay/callCaller";
 import { isEscalatedVoiceCall } from "../roleplay/escalatedCall";
 import { sessionFamilyAddress } from "../scenarios/familyAddress";
@@ -173,6 +174,10 @@ export const createRealtimeCall = onCall<
         // §123 — 누가 건 통화인가(대화방 보이스톡 발신 = 참가자).
         currentCallCaller(session.channelHistory),
       );
+      // A2 ㉢ — 목소리 복제 짧은 통화 시나리오면 짧은 통화 규칙을 붙인다(우는 목소리 한두 마디 → give_up으로 끊고 대화방으로).
+      if (priorChatContext && PUBLIC_SCENARIOS[session.scenarioId]?.escalationCloneOnly === true) {
+        priorChatContext = `${priorChatContext}\n${CLONE_SHORT_CALL_RULE}`;
+      }
     } catch {
       priorChatContext = undefined;
     }

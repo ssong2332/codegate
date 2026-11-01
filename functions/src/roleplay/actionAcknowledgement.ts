@@ -90,6 +90,79 @@ export function guardUnconfirmedTransfer(text: string, transferScreenPending: bo
   return { text: POLITE_ENDING.test(text) ? TRANSFER_NOT_CONFIRMED_REPLY.polite : TRANSFER_NOT_CONFIRMED_REPLY.casual, replaced: true }; // U1
 }
 
+// ── R9(#468 실측 · 자녀 사칭 — 화면에 없는 "비밀번호 여섯 자리 입력"을 안내) — 실제 비밀번호 입력을 부추기는 문장을 결정적으로 뺀다 ──────────────
+// 이 앱의 이체 · 인증 화면에는 비밀번호 칸이 없다(본인 인증 = 지문 · 얼굴 버튼 하나). 참가자가 습관대로 실제 비밀번호를 치지 않게 한다(BA3와 같은 원칙).
+// | # | If | Then |
+// |---|---|---|
+// | P1 | 대사의 문장 · 절이 비밀번호 · 비번 · 보안카드를 입력 · 불러 · 알려 · 눌러 달라는 말 | 그 절을 뺀다 |
+// | P2 | 다 빠지면 | 화면 버튼만 누르면 된다는 1줄(말투 맞춤) |
+// | P3 | 그 밖 | 그대로 |
+// ⚠️ 인증번호(문자로 온 6자리)는 대상이 아니다 — 인증번호 문자를 선언한 루트의 설계 단계다(그 밖 루트의 인증번호 요구는 지시 문면이 막는다).
+const PASSWORD_REQUEST = /(?:비밀\s?번호|비번|보안\s?카드)[^.?!\n]{0,20}(?:입력|눌러|누르|불러|알려|말해|적어|넣어|쳐)/;
+
+export const PASSWORD_FREE_REPLY = {
+  casual: "링크 화면에서 이체하기 버튼만 누르면 돼.",
+  polite: "링크 화면에서 이체하기 버튼만 눌러 주시면 됩니다.",
+} as const;
+
+/** P1 ~ P3. */
+export function stripPasswordRequests(text: string): { text: string; stripped: boolean } {
+  const clauses = clausesOf(text);
+  const kept = clauses.filter((clause) => !PASSWORD_REQUEST.test(clause));
+  if (kept.length === clauses.length) return { text, stripped: false }; // P3
+  if (kept.length === 0) return { text: POLITE_ENDING.test(text) ? PASSWORD_FREE_REPLY.polite : PASSWORD_FREE_REPLY.casual, stripped: true }; // P2
+  return { text: kept.join(" "), stripped: true }; // P1
+}
+
 /** R1 지시(따옴표 대사 예시 0 · 턴 지시 스캔 게이트 대상). */
 export const TRANSFER_REPORTED_INSTRUCTION =
   "(참가자는 이미 돈을 보냈다고 말했다. 그 송금은 받은 것으로 치고, 같은 돈을 같은 이유로 다시 보내라고 요구하지 않는다. 더 요구하려면 수법 목록 안에서 새 명목을 대거나 다른 요구로 넘어간다.)";
+
+// ── R15 ⓐ(#479 확인 실측 ② S5 · 예비 모델 — 설치 기록 없이 "설치 끝난 거 맞지? 고마워"로 설치를 끝난 일로 치고 다음 요구로 넘어감) — 판정표 I ──────────────
+// 지시(설치 화면 재촉 문장)는 주 모델 · 예비 모델 모두 받지만 예비 모델이 무시했다. 출력 단계에서 결정적으로 막는다(모델 무관).
+// | # | If | Then |
+// |---|---|---|
+// | I1 | 메신저 단계 ∧ 보낸 설치 화면을 아직 마치지 않았다(권한 허용 기록 없음) ∧ 대사의 어떤 절이 설치 완료 단정(부정 · 조건 · 허용 언급 없는 "설치 … 끝났/됐/완료") | 대사 전체를 설치 미확인 1줄(말투 맞춤)로 |
+// | I2 | 그 밖(통화 단계 · 카드사 고급 등 처음부터 통화 = 대상 아님) | 그대로 |
+// ⚠️ "설치는 됐는데 허용을 아직 안 누른 것 같아"처럼 허용 · 권한을 함께 말하는 절은 재촉이라 대상이 아니다. "설치 끝나면"(조건)도 아니다.
+const INSTALL_DONE = /설치\s*(?:가|는|도|를)?\s*(?:다\s*)?(?:끝났|끝난\s*거|끝난\s*것|끝냈|됐|된\s*거|된\s*것|완료\s*(?:됐|된|했)|마쳤|마친\s*거|잘\s*됐)/;
+// 묻는 꼴("다 됐어?")은 확인 질문이라 대상이 아니다 — "끝난 거 맞지?"처럼 단정에 동의를 구하는 꼴은 대상.
+const INSTALL_NOT_DONE = /안\s*(?:됐|된|끝|했)|아직|못\s*했|않|허용|권한|[는은]지|(?:됐|끝났|했|마쳤)(?:어|니|나|냐|어요|나요)\s*\?/;
+
+export const INSTALL_NOT_CONFIRMED_REPLY = {
+  casual: "잠깐만, 아직 설치 완료가 안 떴어. 보낸 링크 화면에서 설치하고 허용까지 눌러 줘.",
+  polite: "아직 설치 완료가 확인되지 않습니다. 보내 드린 링크 화면에서 설치와 허용까지 진행해 주세요.",
+} as const;
+
+/** I1 판정 — 대사에 설치 완료 단정이 있는가. */
+export function assertsInstallDone(text: string): boolean {
+  return clausesOf(text).some((clause) => INSTALL_DONE.test(clause) && !INSTALL_NOT_DONE.test(clause));
+}
+
+/** I1 · I2. */
+export function guardUnconfirmedInstall(text: string, installScreenPending: boolean): { text: string; replaced: boolean } {
+  if (!installScreenPending || !assertsInstallDone(text)) return { text, replaced: false }; // I2
+  return { text: POLITE_ENDING.test(text) ? INSTALL_NOT_CONFIRMED_REPLY.polite : INSTALL_NOT_CONFIRMED_REPLY.casual, replaced: true }; // I1
+}
+
+// ── R16(#479 확인 실측 ② S12 — 이체 칩 미완료인데 말로만 "보냈어요" → "이체 기록이 확인이 안 돼서 나중에 다시 연락할게"로 작별) — 판정표 F ─────────────
+// 이 상태의 goal 끊기는 4-c행이 막는다(대화는 이어진다) — 작별 대사만 나가면 떠난다고 해 놓고 다음 메시지를 또 보내는 모순이 된다.
+// | # | If | Then |
+// |---|---|---|
+// | F1 | 메신저 단계 ∧ 보낸 이체 칩을 아직 마치지 않았다(기록 없음 · 요구액보다 적음) ∧ 이번 응답이 포기 끝맺음이 아니다 ∧ 대사의 어떤 절이 작별 · 나중 연락 | 대사 전체를 이체 미확인 재촉 1줄(U1과 같은 문장 · 말투 맞춤)로 |
+// | F2 | 그 밖(포기 끝맺음 — 4-c가 통과시키는 정상 작별 · 통화 단계) | 그대로 |
+const FAREWELL = /(?:나중에|이따|다음에|좀\s*있다)\s*(?:다시\s*)?연락|다시\s*연락\s*(?:할게|할께|드릴게|드리겠|하겠|줄게)|(?:이만|이제|그럼)\s*(?:갈게|들어갈게|끊을게|마칠게)|이만\s*(?:마치겠|줄이겠)/;
+
+/** F1 판정 — 대사에 작별 · 나중 연락 절이 있는가. */
+export function saysFarewell(text: string): boolean {
+  return clausesOf(text).some((clause) => FAREWELL.test(clause));
+}
+
+/** F1 · F2. */
+export function guardFarewellWhileTransferPending(
+  text: string,
+  input: { messengerStage: boolean; transferChipPending: boolean; givingUp: boolean },
+): { text: string; replaced: boolean } {
+  if (!input.messengerStage || !input.transferChipPending || input.givingUp || !saysFarewell(text)) return { text, replaced: false }; // F2
+  return { text: POLITE_ENDING.test(text) ? TRANSFER_NOT_CONFIRMED_REPLY.polite : TRANSFER_NOT_CONFIRMED_REPLY.casual, replaced: true }; // F1
+}

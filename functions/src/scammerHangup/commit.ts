@@ -13,6 +13,8 @@ import { decideScammerHangup, type ScammerHangupDecision } from "./decide";
 import { resolveHangupRelay } from "./relayContext";
 import { isSmsAwaitingUser } from "./smsWait";
 import { isVerifyTransferReachable, type VerifyOfferDocState } from "./transferReach";
+import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
+import { isEscalatedVoiceCall } from "../roleplay/escalatedCall";
 
 /** 이 모듈이 쓰는 Firestore 트랜잭션의 최소 면(가짜 구현으로 테스트할 수 있게). */
 export type HangupDocSnapshot = { exists: boolean; data(): unknown };
@@ -124,6 +126,9 @@ export async function decideAndMarkRealtimeHangup<Ref>(
     alreadyAccepted: legScope ? session.relay?.legEnded === legScope.legIndex : Boolean(session.scammerHangup),
     // §79.18 (1) — 서버 값만(세션 문서 · 카탈로그). 클라 요청에는 이 값이 없다. S7 전에는 항상 undefined.
     relay: resolveHangupRelay(session),
+    // A2 ㉢ — 목소리 복제 짧은 통화(메신저에서 넘어온 통화 ∧ `escalationCloneOnly` 시나리오) — 포기 끊기 5행 하한 예외.
+    shortCloneCall:
+      PUBLIC_SCENARIOS[session.scenarioId]?.escalationCloneOnly === true && isEscalatedVoiceCall(session.channel, session.channelHistory),
     ...(legScope ? { turnsSinceCallEntry: legScope.turnsSinceLegStart } : {}),
   });
   if (decision.status === "accepted") {

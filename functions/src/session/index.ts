@@ -15,7 +15,7 @@ import { generateOpeningLine } from "../roleplay";
 import { triggerReportGeneration } from "../report";
 import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
-import { resolveScenarioEscalation, resolveSessionEscalation } from "../scenarios/escalation";
+import { resolveScenarioEscalation, resolveTransitionNow } from "../scenarios/escalation";
 import {
   CREATE_SESSION_WINDOW_MAX,
   MAX_SESSION_MS,
@@ -552,8 +552,11 @@ export const requestEscalation = onCall<
   if (session.channel !== "messenger") {
     throw new HttpsError("failed-precondition", "메신저 채널 세션에서만 요청할 수 있습니다.");
   }
+  // A2 ㉢(2026-11-01) — 목소리 복제 짧은 통화 시나리오(자녀 사칭)는 참가자가 건 보이스톡을 받지 않는다(폰 고장 핑계와 일관 · 그 세션이 통화로 이어지는지와 무관).
+  const voiceTalkNeverAnswered = PUBLIC_SCENARIOS[session.scenarioId]?.escalationCloneOnly === true;
   // T194-a(§84.4.1 S-2) — 세션 술어(sendMessage 자동 전이 · 클라 버튼 · 시작 고지 열과 같은 술어).
-  if (!resolveSessionEscalation(session, PUBLIC_SCENARIOS)) {
+  // A2 ㉢ — 실제 전환 지점은 `resolveTransitionNow`(세션 술어 + 목소리 복제 · 1회 판정표 C).
+  if (!resolveTransitionNow(session, PUBLIC_SCENARIOS) || (via === "voice_talk" && voiceTalkNeverAnswered)) {
     // 실기 신고 4(2026-10-21) — 카톡형 프로필 시트 "보이스톡"은 통화로 이어지지 않는 세션에도 있다. 사기범은 받지 않고
     // 채팅으로 돌린다(`voiceTalkUnanswered.ts` 표 2행). 문자형 · `via` 없음은 종전대로 거부(3행).
     if (via === "voice_talk" && PUBLIC_SCENARIOS[session.scenarioId]?.surface === "kakao") {
