@@ -233,6 +233,9 @@ if (CLAUDE_KEY_VAR) {
   process.env[argVal("--key-var", "GEMINI_API_KEY2")] = API_KEY;
   appLlm = L("llm/index.js");
   if (!appLlm.getClaudeApiKey()) throw new Error("앱 체인이 Claude 키를 읽지 못함 — 멈춘다");
+  // 2026-11-01(#482 확인) — `--force-scammer-fallback`: 1차 Claude 호출이 일부러 틀린 키로 실패하게 해 앱 2차(gemini-fallback)가 매 턴 답하게 한다.
+  // 체인 · 후처리는 앱 그대로(`withGeminiAfterClaude`는 어떤 실패든 2차로 넘긴다) · 진짜 키는 이 분기에서 쓰지 않는다 · 과금 0(인증 실패).
+  if (process.argv.includes("--force-scammer-fallback")) process.env.CLAUDE_API_KEY = "forced-fallback-invalid-key";
 }
 // 메신저 → 통화 전환 뒤 Live leg 수 상한(실 키 세션 예산에 포함). 0이면 전환 뒤에도 텍스트 폴백으로 잇는다.
 let liveLegBudget = Number(argVal("--live-leg-budget", "0"));
@@ -644,6 +647,16 @@ for (const k of ["log", "warn", "error", "info"]) {
     orig(...a);
   };
 }
+// 2026-11-01(#482 확인 실측 — 2차 Gemini 429가 났는데 멈추지 않았다) — firebase-functions 로거는 불러올 때 잡아 둔 원본 console(`UNPATCHED_CONSOLE`)로
+// 쓰므로 위 console 가로채기를 지나가지 않는다. 그 원본이 쓰는 stdout · stderr 쓰기에서 같은 판정을 한다.
+for (const stream of [process.stdout, process.stderr]) {
+  const origWrite = stream.write.bind(stream);
+  stream.write = (chunk, ...rest) => {
+    const s = typeof chunk === "string" ? chunk : Buffer.isBuffer(chunk) ? chunk.toString("utf8") : "";
+    if (!seen429 && /"severity":"(WARNING|ERROR)"/.test(s) && /(^|\D)429(\D|$)|RESOURCE_EXHAUSTED|rate_limit_error/i.test(s)) seen429 = scrub(s).slice(0, 200);
+    return origWrite(chunk, ...rest);
+  };
+}
 async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
   const t0 = Date.now();
   const now = () => Date.now() - t0;
@@ -784,6 +797,15 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
     const pp = postProcess(res.text, choice, userTurnsNow, false);
     // #463 — 앱 후처리 순서 미러: 칩 정리(S2 · D-g · P2-c) · 하지 않은 일 인정 문장 삭제(A1 — 이체 화면 미완료면 "입금 확인" 문장 삭제).
     pp.attachments = shapeChips(pp.attachments, pp.text, storedHistory);
+    // R17 미러(2026-11-01) — 앱 판정표 A: 메신저 단계 · 마치지 않은 화면 재촉 단계 · 다음 단계 요구 → 새 칩 떼기 · goal 무시 · 대사는 아래에서 재촉 1줄(옛 lib = 함수 없음 = 종전).
+    const advanceGate = screenActionLib?.decideStageAdvanceGate
+      ? screenActionLib.decideStageAdvanceGate({ messengerStage: !escalated && screenApplies, facts: screenFacts, userTurns: userTurnsNow, replyText: pp.text, chipLandingIds: (pp.attachments ?? []).flatMap((a) => (a.fakeLandingId ? [a.fakeLandingId] : [])) })
+      : { blocked: false };
+    if (advanceGate.blocked) {
+      pp.attachments = (pp.attachments ?? []).filter((a) => screenFacts.some((f) => f.landingId === a.fakeLandingId));
+      if (pp.attachments.length === 0) pp.attachments = undefined;
+      if (pp.endCall === "goal") pp.endCall = undefined;
+    }
     // R3 미러(2026-11-01) — 이체 화면 미완료인데 송금 확인 단정이면 대사 전체를 미확인 되돌림 1줄로 · 그 응답의 목표 끊기 신호 무시(옛 lib = 종전 A1만).
     const unconfirmed = ackLib?.guardUnconfirmedTransfer ? ackLib.guardUnconfirmedTransfer(pp.text, transferScreenPending) : { replaced: false };
     if (unconfirmed.replaced) {
@@ -807,6 +829,10 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       const fg = ackLib.guardFarewellWhileTransferPending(pp.text, { messengerStage: !escalated, transferChipPending: r8DecisionScreenPending, givingUp: pp.endCall === "give_up" });
       if (fg.replaced) { events.push({ ev: "farewellReplaced", userTurns: userTurnsNow, original: pp.text }); pp.text = fg.text; }
     }
+    if (advanceGate.blocked) {
+      events.push({ ev: "stageAdvanceBlocked", kind: advanceGate.kind, userTurns: userTurnsNow, original: pp.text });
+      pp.text = screenActionLib.stageHoldReply(advanceGate.kind, pp.text, userTurnsNow);
+    }
     if (pp.smsMarker !== undefined) {
       const g = resolveSmsGate({ purpose: pp.smsMarker, declared, delivered, userTurns: userTurnsNow });
       events.push({ ev: "smsMarker", purpose: pp.smsMarker, status: g.status, userTurns: userTurnsNow });
@@ -817,8 +843,8 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       }
     }
     if (pp.dropped) events.push({ ev: "signalDropped", ...pp.dropped, userTurns: userTurnsNow });
-    // R14 미러(2026-11-01) — 앱 판정표 G: 넘어온 통화에서 포기 단계가 두 턴째인데 끊기 신호가 없으면 포기 1줄 + give_up(옛 lib = 함수 없음 = 종전).
-    if (screenActionLib?.decideForcedScreenGiveUp?.({ escalatedCall: Boolean(escalated), endCall: pp.endCall, hangupSignalAllowed: hangupMode === "signal", facts: screenFacts, userTurns: userTurnsNow })) {
+    // R14 · R18 미러(2026-11-01) — 앱 판정표 G: 넘어온 통화 · 메신저 단계에서 포기 단계가 두 턴째인데 끊기 신호가 없으면 포기 1줄 + give_up(옛 lib = 함수 없음 = 종전).
+    if (screenActionLib?.decideForcedScreenGiveUp?.({ escalatedCall: Boolean(escalated), messengerStage: !escalated, endCall: pp.endCall, hangupSignalAllowed: hangupMode === "signal", facts: screenFacts, userTurns: userTurnsNow })) {
       events.push({ ev: "forcedScreenGiveUp", userTurns: userTurnsNow, original: pp.text });
       pp.text = screenActionLib.screenGiveUpReply(pp.text);
       pp.endCall = "give_up";
