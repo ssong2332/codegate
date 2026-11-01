@@ -234,6 +234,8 @@ const PRIORITY_RANK: Record<InstructionPriority, number> = { sms: 0, verify: 1 }
 /**
  * 큐에 넣는다 — **같은 우선순위 안에서는 도착 순서가 보존**되고(안정 삽입), 문자 지시는 대기 중인
  * 확인 지시보다 앞으로 들어간다. 빈 문자열은 넣지 않는다(주입해 봐야 모델이 받을 게 없다).
+ * ⭐ H1(2026-11-01 U1) — 화자 전환 첫 발화(`speakerSwitch`)는 우선순위와 무관하게 **맨 앞**(앞선 화자 전환 뒤)으로
+ * 들어간다. 라벨은 이미 확인 창구로 바뀌었는데 대기 중인 문자 안내가 먼저 나가면 앞 사람 목소리로 그 안내를 말한다.
  */
 export function enqueueInstruction(
   queue: readonly PendingInstruction[],
@@ -241,9 +243,11 @@ export function enqueueInstruction(
 ): PendingInstruction[] {
   if (!item.text.trim()) return [...queue];
   const next = [...queue];
-  const insertAt = next.findIndex(
-    (pending) => PRIORITY_RANK[pending.priority] > PRIORITY_RANK[item.priority],
-  );
+  const insertAt = item.speakerSwitch
+    ? next.findIndex((pending) => !pending.speakerSwitch)
+    : next.findIndex(
+        (pending) => !pending.speakerSwitch && PRIORITY_RANK[pending.priority] > PRIORITY_RANK[item.priority],
+      );
   if (insertAt < 0) next.push(item);
   else next.splice(insertAt, 0, item);
   return next;
@@ -404,6 +408,11 @@ export type InstructionDrainGateInput = {
    * 상한(나) 판정에만 쓴다.
    */
   suppressedBoundaryStreak: number;
+  /**
+   * H1(2026-11-01 U1) — 큐 맨 앞 항목이 화자 전환 첫 발화(`speakerSwitch`)인가. 그렇다면 참가자 턴 대기를 건너뛴다.
+   * 부재 = 아님(종전 판정 그대로).
+   */
+  nextIsSpeakerSwitch?: boolean;
 };
 
 /**
@@ -456,9 +465,42 @@ export const INSTRUCTION_DRAIN_BACKSTOP_SEC = 5;
  * 재시도된다.
  */
 export function shouldDrainInstructionQueue(input: InstructionDrainGateInput): boolean {
+  // ⭐ H1(2026-11-01 U1 실기 신고) — 확인 창구 넘김 지시는 기다리지 않는다. 라벨은 재연결 직후 이미 창구로 바뀌는데,
+  // 이 지시가 참가자 발화(또는 5초 안전장치)까지 묶여 있으면 그 사이 원래 인물이 계속 답한다. 이 항목은 오퍼당 1건이고
+  // 앱이 연결 연출(2.5초)을 거친 뒤에만 오며, `relayGreeting` 보류 큐(§71.5)가 모델 발화가 끝난 뒤에 보내므로
+  // 말을 끊지 않는다 ⇒ T-4(연속 강제 발화 반복)의 자기 구동이 되지 않는다. 다른 지시는 종전 그대로다.
+  if (input.nextIsSpeakerSwitch) return true;
   if (input.userSpokeSinceLastInjection) return true;
   if (input.suppressedBoundaryStreak >= INSTRUCTION_DRAIN_MAX_SUPPRESSED_BOUNDARIES) return true;
   return false;
+}
+
+/**
+ * H1(2026-11-01 U1) — 직전 지시의 응답 턴이 아직 끝나지 않았을 때(`instructionBusy`) 다음 항목을 막는가.
+ * 화자 전환 첫 발화만 막지 않는다 — 직전 지시가 맥락 주입(확인 권유 안내)이면 응답을 유발하지 않아, 참가자가
+ * 말하기 전까지 턴 완료가 오지 않는다(넘김 지시가 그만큼 묶인다). 전송 시점은 `relayGreeting` 보류 큐가 정한다.
+ */
+export function instructionBusyBlocks(input: {
+  busy: boolean;
+  next: PendingInstruction | undefined;
+}): boolean {
+  if (!input.busy) return false;
+  return input.next?.speakerSwitch !== true;
+}
+
+/**
+ * H1(2026-11-01 U1) — 통화 화면 발신자 라벨. 넘김 지시가 아직 Live에 **보내지지 않았으면**(재연결은 끝났지만
+ * `relayGreeting`이 보류 큐에서 앞 화자의 발화가 끝나기를 기다리는 중) 원래 라벨을 유지한다 — 라벨이 실제 화자보다
+ * 앞서지 않게. 새로고침 뒤에는 대기 표시가 없으므로 문서 값(재연결 라벨)을 그대로 쓴다(T83 단일 렌더 소스 유지).
+ */
+export function callerLabelForDisplay(input: {
+  reconnectedCallerLabel: string | undefined;
+  scenarioCallerLabel: string | undefined;
+  speakerSwitchPending: boolean;
+}): string {
+  const original = input.scenarioCallerLabel ?? "발신번호 표시제한";
+  if (input.speakerSwitchPending) return original;
+  return input.reconnectedCallerLabel ?? original;
 }
 
 // ── T118 / R-2 — 오퍼 전달 실패의 롤백 범위(§25.5 (4)) ────────────────────────────

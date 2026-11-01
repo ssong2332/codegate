@@ -120,5 +120,22 @@ function toDeliveredRecord(doc: FirebaseFirestore.QueryDocumentSnapshot): Delive
     ...(typeof at === "number" ? { userTurnsAtArrival: at } : {}),
     // §108 — 끊기 4행 입력(C-1). 게이트 판정은 이 필드를 보지 않는다.
     ...(doc.get("landingSubmittedAt") ? { landingSubmitted: true as const } : {}),
+    // 화면 행동만 인정(`roleplay/screenAction.ts`) — 이 문자가 여는 화면 id. 게이트 판정은 이 필드를 보지 않는다.
+    ...(typeof doc.get("fakeLandingId") === "string" ? { fakeLandingId: doc.get("fakeLandingId") as string } : {}),
   };
+}
+
+/**
+ * 화면 행동만 인정 — `sessions/{sid}/mockScreens` 문서의 응낙 · 제출 사실(트랜잭션 밖 단순 조회 · 세션당 문서 수는 카탈로그 항목 수 이하).
+ * 읽기 실패는 빈 목록(= 아무 화면도 마치지 않음)으로 본다 — 말로만 주장한 쪽으로 기울지 않게(대화는 막지 않는다).
+ */
+export async function readMockScreenRecords(
+  sessionRef: FirebaseFirestore.DocumentReference,
+): Promise<{ landingId: string; consented: boolean; submitted: boolean }[]> {
+  try {
+    const snap = await sessionRef.collection("mockScreens").get();
+    return snap.docs.map((doc) => ({ landingId: doc.id, consented: Boolean(doc.get("consentedAt")), submitted: Boolean(doc.get("submittedAt")) }));
+  } catch {
+    return [];
+  }
 }

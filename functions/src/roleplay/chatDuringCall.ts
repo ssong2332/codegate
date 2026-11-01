@@ -29,6 +29,7 @@
 // - 포기면 바로 끝내는 이유: 메신저발 통화의 포기 끊기는 "톡으로 한 번 더 붙잡기"(`session/callReturn.ts` give_up)로 이어지는데, 지금은 이미 그 톡
 //   대화방에서 포기했다 — 더 붙잡을 채널이 없다.
 // ⛔ 로그는 숫자 · 단계명만(G170).
+import { sessionScreenActionOnly } from "./screenAction";
 import { logger } from "firebase-functions";
 import { HttpsError } from "firebase-functions/v2/https";
 import { Timestamp, type DocumentReference, type Firestore } from "firebase-admin/firestore";
@@ -182,6 +183,8 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
       sessionAccountNumber: resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
       // §132.19 판정표 A — 결말이 계좌 이체가 아닌 루트는 계좌 예시 · 번호 문장 대신 금지 1문장(호출부 6곳 같은 술어).
       noAccountEnding: routeEndsWithoutAccount(session.scenarioId, session.flowVariantId),
+      // 화면 행동만 인정 — [화면 행동 확인](호출부 6곳 같은 술어 · `roleplay/screenAction.ts`).
+      screenActionOnly: sessionScreenActionOnly(session.scenarioId, session.flowVariantId),
       personaCard: session.personaCard?.items,
       ...(familyAddressPrompt ? { familyAddress: familyAddressPrompt } : {}),
       hangupMode,

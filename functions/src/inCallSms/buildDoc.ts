@@ -1,7 +1,8 @@
 // 카탈로그 항목 → Firestore 문서 변환 (T68). 부수효과 없는 순수 함수라 단위 테스트 대상이다.
-import { buildOtpLiveCompareLine, type InCallSmsItem } from "../scenarios/inCallSms";
+import { buildOtpLiveCompareLine, findInCallSmsItem, type InCallSmsItem } from "../scenarios/inCallSms";
 import type { FlowVariantSms } from "../scenarios/flowVariants";
-import { buildLiveConfirmResultInstruction, confirmResultPurposeFor } from "./confirmResult";
+import { buildLiveConfirmResultInstruction, buildLiveScreenConfirmInstruction, confirmResultPurposeFor } from "./confirmResult";
+import { screenActionApplies } from "../roleplay/screenAction";
 import { DEFAULT_MOCK_SCREEN_KIND, isBankTransferLanding, resolveMockScreenKind } from "../scenarios/mockScreens";
 import type { DeliverInCallSmsResponse } from "./types";
 import type { InCallSmsDoc } from "../shared/types";
@@ -145,10 +146,17 @@ export function buildInCallSmsResponse(
  * T194-c-1 G608 — 설치 화면을 여는 문자(Q2)는 대상이 아니다(폴백 `planConfirmResult`와 **같은 함수** · `scenarioId`로 판별).
  */
 export function buildConfirmResultField(
-  input: { placed: boolean; scenarioId: string },
+  // 화면 행동만 인정 — `flowVariantId`(적용 제외 변형 판정 · 부재 = 적용).
+  input: { placed: boolean; scenarioId: string; flowVariantId?: string },
   declaredItem: FlowVariantSms | undefined,
 ): Pick<DeliverInCallSmsResponse, "confirmResultInstruction"> {
   if (!resolveInCallSmsPlan(input).includeInstruction) return {};
   const purpose = confirmResultPurposeFor(declaredItem, input.scenarioId);
-  return purpose ? { confirmResultInstruction: buildLiveConfirmResultInstruction(purpose) } : {};
+  if (!purpose) return {};
+  // 화면 행동만 인정 — 링크 화면을 여는 문자면 말이 아니라 앱 알림(제출 맥락 주입)으로 결과를 알린다.
+  const opensScreen = declaredItem !== undefined && findInCallSmsItem(input.scenarioId, declaredItem.smsId)?.fakeLandingId !== undefined;
+  return {
+    confirmResultInstruction:
+      opensScreen && screenActionApplies(input.flowVariantId) ? buildLiveScreenConfirmInstruction(purpose) : buildLiveConfirmResultInstruction(purpose),
+  };
 }
