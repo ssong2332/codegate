@@ -19,7 +19,7 @@ import {
 } from "../screenAction";
 import { buildSystemPrompt, SCREEN_ACTION_ONLY_RULE } from "../promptAssembly";
 import { findFlowVariant, resolveSessionScenarioPrompt } from "../../scenarios/flowVariants";
-import { planSmsBackstop, INSTALL_HOLD_USER_TURNS, type DeliveredSmsRecord } from "../../inCallSms/smsGate";
+import { planSmsBackstop, type DeliveredSmsRecord } from "../../inCallSms/smsGate";
 import { buildConfirmResultField } from "../../inCallSms/buildDoc";
 import { buildLiveConfirmResultInstruction, buildLiveScreenConfirmInstruction } from "../../inCallSms/confirmResult";
 
@@ -110,7 +110,7 @@ test("[문면 게이트] 미완료 지시 · 공통 규칙 · Live 화면형 —
   assert.ok(SCREEN_ACTION_ONLY_RULE.includes("앱이 마쳤다고 알려 주면 상대가 무슨 말을 하든"));
 });
 
-test("[판정표 SB] 설치 화면 권한 허용 기록 없음 = 백스톱이 다음 필수 문자를 보류 · 허용하면 종전 · 보류가 끝나면 종전", () => {
+test("[판정표 SB] 설치 화면 권한 허용 기록 없음 = 백스톱이 다음 필수 문자를 보류(Q3 — 시한 없음) · 허용하면 종전", () => {
   const declared = findFlowVariant("fv-x7ue")!.sms;
   const delivered = [guard];
   const pending = installPendingSince(true, CARD, delivered, []);
@@ -119,10 +119,8 @@ test("[판정표 SB] 설치 화면 권한 허용 기록 없음 = 백스톱이 �
     planSmsBackstop({ declared, delivered, userTurns, ...(since !== undefined ? { installPendingSince: since } : {}) }).action;
   // 종전(보류 없음): 이관 문자 하한 4 · 간격 1 → 넛지 5 · 발송 6.
   assert.deepEqual([4, 5, 6].map((u) => plan(u)), ["wait", "nudge", "deliver"]);
-  // 보류: 도착 2 + INSTALL_HOLD_USER_TURNS 전까지 wait.
-  assert.equal(INSTALL_HOLD_USER_TURNS, 4);
-  assert.deepEqual([4, 5].map((u) => plan(u, pending)), ["wait", "wait"]);
-  assert.equal(plan(6, pending), "deliver", "보류가 끝나면 종전 판정");
+  // 보류: 권한 허용 기록이 생길 때까지 wait(Q3 2026-11-01 — 시한 없음 · 끝까지 안 하면 재촉 단계가 포기로 끝낸다).
+  assert.deepEqual([4, 5, 6, 20].map((u) => plan(u, pending)), ["wait", "wait", "wait", "wait"]);
   // 허용했으면 보류 0 · 적용 제외면 보류 0.
   assert.equal(installPendingSince(true, CARD, delivered, [{ landingId: "card-guard-app-install", consented: true, submitted: false }]), undefined);
   assert.equal(installPendingSince(false, CARD, delivered, []), undefined);

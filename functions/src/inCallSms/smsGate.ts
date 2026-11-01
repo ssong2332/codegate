@@ -44,8 +44,6 @@ export const MIN_USER_TURNS_BETWEEN_SMS = 2;
  * 자동 백스톱(주장 없는 넛지 · 발송)의 간격은 종전 2 그대로다. ⚠️ AC-099 (c) "문자 사이 발화 ≥2"의 예외 — 사용자 승인 대상.
  */
 export const MIN_USER_TURNS_BETWEEN_SMS_EXPLICIT = 1;
-/** 화면 행동만 인정 판정표 SB — 설치 응낙이 없을 때 백스톱이 다음 필수 문자를 미루는 발화 수(`roleplay/screenAction.ts`가 다시 내보낸다). */
-export const INSTALL_HOLD_USER_TURNS = 4;
 /** 백스톱 단계 간격 — 게이트가 열린 뒤 이만큼 발화하면 넛지, 다시 이만큼이면 발송(설계 판단값). */
 export const BACKSTOP_USER_TURNS = 2;
 /** 클라 주장 카운터의 범위 검사 상한(설계 "서버는 범위만 검사"). */
@@ -165,7 +163,7 @@ export function planSmsBackstop(
     claimed?: boolean;
     /**
      * 화면 행동만 인정 판정표 SB(`roleplay/screenAction.ts` `installPendingSince`) — 권한 허용 기록이 없는 통화 중 설치 문자의 도착 발화 수.
-     * 그 뒤 `INSTALL_HOLD_USER_TURNS` 발화 동안 **다음** 필수 문자는 `wait`(설치 문자 자신 · 부재 = 종전).
+     * 값이 있으면 **다음** 필수 문자는 `wait`(설치 문자 자신 · 부재 = 종전). Q3(2026-11-01) — 보류 시한이 없다(끝까지 설치하지 않으면 재촉 단계가 포기로 끝낸다).
      */
     installPendingSince?: number;
   },
@@ -175,8 +173,8 @@ export function planSmsBackstop(
   if (pending.length === 0) return { action: "none_pending" };
   // D-c — 백스톱도 선언 순서상 첫 미도착 필수 문자만 친다(게이트 2-b가 뒤 문자를 막으므로 "가장 먼저 열리는 것" 고르기는 닫힌 문을 두드린다).
   const target = pending[0];
-  // SB1 — 설치 화면을 마치지 않았으면 다음 단계 문자를 밀지 않는다(주장 백스톱 포함 · 보류가 끝나면 종전 판정).
-  if (input.installPendingSince !== undefined && input.userTurns < input.installPendingSince + INSTALL_HOLD_USER_TURNS) return { action: "wait" };
+  // SB1 — 설치 화면을 마치지 않았으면 다음 단계 문자를 밀지 않는다(주장 백스톱 포함 · Q3 — 시한 없음).
+  if (input.installPendingSince !== undefined) return { action: "wait" };
   const openAt = gateOpensAtUserTurns(target, input.delivered);
   // §126 — 주장이 있으면 명시 요청 간격(1)으로 연다(하한 `notBeforeUserTurns` · 첫 문자 하한은 그대로).
   if (input.claimed === true) {

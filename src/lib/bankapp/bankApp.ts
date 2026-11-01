@@ -142,6 +142,35 @@ export function recordTransferAndCompare(
   return total < requested ? "less" : total === requested ? "equal" : "more"; // C2 · C3 · C4
 }
 
+// ── A4(실기기 신고 2026-11-01 · 자녀 사칭 — 칩에 요구액이 없어 비교가 빠졌다) — 대화방 요구액 ──────────────────────────────────────
+// 서버는 칩을 붙인 순간까지의 대사로 요구액을 싣는다(`functions/src/roleplay/linkMarker.ts` `demandAmountFrom`). 사기범이 칩 **뒤에** 금액을 말하면 칩에는 없다.
+// ⇒ 화면을 여는 순간 대화방에 보이는 사기범 메시지 중 **가장 최근** 금액을 요구액으로 쓰고, 없으면 칩 값. 금액 표기 규칙은 서버와 같다(드리프트 테스트).
+const AMOUNT_UNITS: Readonly<Record<string, number>> = { 억: 100_000_000, 천만: 10_000_000, 백만: 1_000_000, 십만: 100_000, 만: 10_000, 천: 1_000 };
+const AMOUNT_PATTERN = /((?:\d[\d,]*\s*(?:억|천만|백만|십만|만|천)\s*)*\d[\d,]*\s*(?:억|천만|백만|십만|만|천)?)\s*원/g;
+const AMOUNT_TOKEN = /(\d[\d,]*)\s*(억|천만|백만|십만|만|천)?/g;
+
+/** 한 대사의 마지막 원 단위 금액("2,000,000"). 없으면 undefined. */
+export function lastAmountIn(text: string): string | undefined {
+  let last: number | undefined;
+  for (const match of text.matchAll(AMOUNT_PATTERN)) {
+    let total = 0;
+    for (const token of match[1]!.matchAll(AMOUNT_TOKEN)) {
+      total += Number(token[1]!.replace(/,/g, "")) * (token[2] ? AMOUNT_UNITS[token[2]]! : 1);
+    }
+    if (Number.isSafeInteger(total) && total > 0) last = total;
+  }
+  return last === undefined ? undefined : last.toLocaleString("en-US");
+}
+
+/** 대화방 사기범 메시지(오래된 순) 중 가장 최근 금액. 없으면 undefined. */
+export function latestDemandAmount(scammerTexts: readonly string[]): string | undefined {
+  for (const text of [...scammerTexts].reverse()) {
+    const amount = lastAmountIn(text);
+    if (amount) return amount;
+  }
+  return undefined;
+}
+
 /** 완료 화면 시각("오후 3:07" — 기기 시계 · 화면에만). */
 export function transferTimeText(date: Date): string {
   const hours = date.getHours();
