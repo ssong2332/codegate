@@ -24939,3 +24939,16 @@ PR-2 화면 계약(이 PR이 전제하는 것):
 | 오디오 | (변경 0) | 받기 때 만든 출력 컨텍스트가 통화 사이에도 살아 있어(`shouldReleasePrimedCallAudio` = 거짓) 새 통화 · 연결음이 그대로 쓴다 — `primeCallAudio` 호출 수 무변경 |
 
 판단값(실측 전): 상대 재발신 30초 · 발신 연결음 4.5초 · 호 전환 3.5초. 남은 것: **R2 시작 셸**(발급 문자에서 시작 → 첫 통화를 참가자가 건다 — 서버 시작 문자 발송 · 첫 받기 오디오 준비 포함) · PR-4.
+
+### 142.10 PR-4(배정 해제 · 은퇴 · R2 시작 셸 · 리포트) — 운영 동작이 바뀌는 단위
+⛔ 배포 전 실 키 확인 실측 필요(아래 제안). 사용자 승인 설계 #470(D9 (a) R2 포함 덱 2벌)에 따른 변경.
+
+| 지점 | 파일 | 동작 |
+|---|---|---|
+| 배정 | `flowVariants.ts` | `fv-k3dn` · `fv-r8vb` `pendingRollout` 해제 · `fv-x7ue` · `fv-w3dq` `retired`(옛 세션 · 리포트 해석은 그대로) → 카드사 고급 자가 풀 = 재구성 2루트 · 챌린지 풀은 `fv-akj5` 그대로(Q2) |
+| R2 첫 통화 | `flowVariants.ts` `CARD_REBUILD_AGENT_FIRST_LEG` | 배송원 레그가 없는 R2 첫 통화(상담원)에 본인확인 요구 수법을 더한다(받는 분 정보 카드 치환 원천 · 문면은 배송 · 발급 공용) |
+| R2 시작 문자 | `session/index.ts` · `inCallSms/smsDelivery.ts` `deliverOpenerSms` | 확정 배정 뒤 시작 문자(`card-issue-notice`)를 도착시키고 세션 문서 `startSurface: "sms"`(문서 생성 지점은 `smsDelivery.ts` 하나 — G537/X4) |
+| R2 시작 화면 | `page.tsx` | `startSurface`면 벨 0 · 전화 앱 다이얼(메시지 탭에 시작 문자)로 시작 · 첫 다이얼 탭이 받기와 같은 오디오 준비(탭 안 동기 — `callAudio.test.ts` 게이트에 이 지점 등재) · 서버 연결 판정 뒤 받기 경로로 첫 통화 |
+| 리포트 | `report/generateReportCore.ts` | 다통화 변형은 변형 전체 수법으로 해석(레그 0 합성본 아님) · 루트 교육 포인트 4개(`CARD_REBUILD_REPORT_LESSONS` — 조사 문서 ①~④)를 예방 조언 마무리 앞에 |
+
+확인 실측 제안(실 키 · 승인 필요): **6세션** — R1 × (끝까지 따름 · 원격 앱 거절 give_up — R7 · 공식 번호 확인 시도 genuine) · R2 × (따름 · 진짜 카드사 번호 genuine · 재발신 대기 D4). 판단값(재발신 30초 · 연결음) · 레그 목소리 자리 1 이후 음질 · 레그 인계 자연스러움도 이때 본다.

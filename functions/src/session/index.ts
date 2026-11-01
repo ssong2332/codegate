@@ -50,6 +50,9 @@ import type {
   UpdateMessengerSkinResponse,
 } from "./types";
 import { pickSessionBankName } from "../inCallSms/smsGate";
+import { deliverOpenerSms } from "../inCallSms/smsDelivery";
+import { findFlowVariant } from "../scenarios/flowVariants";
+import { findInCallSmsItem } from "../scenarios/inCallSms";
 import { resolvePersonaCardRequest } from "./personaCard";
 import { FAMILY_ADDRESS_INVALID_REASON, readFamilyAddress } from "../scenarios/familyAddress";
 import { emitPrepStage, type CreateSessionPrepChunk } from "./prepStages";
@@ -338,6 +341,19 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       variantAssignment,
       now,
     );
+
+    // §142 PR-4(R2 · 사용자 승인 설계 #470 D9) — 시작 문자 변형은 세션 시작과 함께 그 문자가 도착해 있다(게이트 밖 · 선언 밖 · 발화 0 시점).
+    // 화면은 `startSurface`로 수신 벨 대신 문자 · 전화 앱 화면에서 시작하고, 첫 통화는 참가자가 건다(`startCallLeg` dial).
+    const openerVariant = findFlowVariant(sessionDoc.flowVariantId);
+    const openerItem =
+      openerVariant?.openerSmsId && openerVariant.scenarioId === scenarioId
+        ? findInCallSmsItem(scenarioId, openerVariant.openerSmsId)
+        : undefined;
+    if (openerItem) {
+      await deliverOpenerSms(sessionRef, openerItem, now, scenarioId, fictionalBankName);
+      await sessionRef.set({ startSurface: "sms" }, { merge: true });
+      sessionDoc.startSurface = "sms";
+    }
 
     await sessionRef.collection("messages").add({
       role: "scammer",

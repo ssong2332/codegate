@@ -550,6 +550,9 @@ export default function SessionCallPage() {
   const legEndRef = useRef<CallLegEnd | null>(null);
   const legSwitchingRef = useRef(false);
   const legTimersRef = useRef<number[]>([]);
+  // §142 PR-4(R2) — 세션이 수신 벨이 아니라 시작 문자 · 전화 앱 화면에서 시작한다(세션 문서 `startSurface` — 서버 값). 첫 통화는 참가자가 건다.
+  const [smsStart, setSmsStart] = useState(false);
+  const smsStartDialerShownRef = useRef(false);
   // 2026-10-21(실기 신고 "종료 버튼 반응이 느리다") — 참가자 · 한도 종료의 즉시 표시. 정지 직후 켜서 경과 시간 자리를
   // "통화 종료"로 바꾼다(실제 통화 앱처럼 누르는 순간 끝난 것이 보인다). 사기범 끊기는 `remoteHangup`이 따로 그린다.
   const [localHangup, setLocalHangup] = useState(false);
@@ -900,6 +903,8 @@ export default function SessionCallPage() {
         }
         setScenario(found);
         setScenarioId(scenarioId);
+        // §142 PR-4(R2) — 서버가 시작 문자를 도착시킨 세션(부재 = 수신 통화 · 종전).
+        setSmsStart(data.startSurface === "sms");
         setMaxSessionMs((data.maxSessionMs as number) ?? null);
         // T72(UX-014 v1.11 난이도 배지, P-22) — 세션 문서에 서버가 **실제로 기록한** 값을 읽는다
         // (sessionStorage 힌트가 아니라). 부재(난이도 도입 이전 세션)면 중급으로 정규화된다.
@@ -1724,6 +1729,11 @@ export default function SessionCallPage() {
     setLegDialing(false);
     legSwitchingRef.current = false;
     setEndLatched(false);
+    // §142 PR-4(R2) — 첫 통화(아직 받기 전)는 받기와 같은 경로로 연다(오디오 준비는 다이얼 탭에서 이미 했다 — `primeSmsStartDial`).
+    if (smsStart && !answerHandledRef.current) {
+      handleAnswer();
+      return;
+    }
     if (callMode === "realtime" && sessionId) {
       setLegOpening(true);
       void realtime.startLeg(sessionId);
@@ -1798,8 +1808,20 @@ export default function SessionCallPage() {
     // D4 — 참가자가 다시 걸지 않으면 상대가 다시 걸어 온다.
     legTimeout(() => void openNextLeg("callback"), LEG_CALLBACK_DELAY_MS);
   };
+  // §142 PR-4(R2) — 시작 문자 세션의 첫 다이얼 탭: 받기와 같은 오디오 준비를 **이 탭 핸들러 안에서 동기로** 한다(iOS 자동재생 · `callAudio.test.ts`).
+  const primeSmsStartDial = () => {
+    if (!smsStart || answerHandledRef.current) return;
+    const audioFlags = readAudioFlags(window.location.search);
+    let smsPrimed = primedCallAudioRef.current;
+    if (!smsPrimed && audioFlags.audioPrime) {
+      smsPrimed = primeCallAudio(GEMINI_OUTPUT_SAMPLE_RATE, performance.now());
+      primedCallAudioRef.current = smsPrimed;
+      setPrimedCallAudio(smsPrimed);
+    }
+  };
   const dialLeg = () => {
     if (legScreen.kind !== "dialer" || legScreen.digits.length === 0 || legDialing) return;
+    primeSmsStartDial();
     clearLegTimers();
     void openNextLeg("dial", legScreen.digits);
   };
@@ -1832,6 +1854,12 @@ export default function SessionCallPage() {
     }
   }, [legScreen]);
   useEffect(() => () => clearLegTimers(), []);
+  // §142 PR-4(R2) — 수신 단계 대신 전화 앱(빈 다이얼 · 메시지 탭에 시작 문자)에서 시작한다.
+  useEffect(() => {
+    if (!smsStart || pageState !== "ready" || phase !== "incoming" || smsStartDialerShownRef.current) return;
+    smsStartDialerShownRef.current = true;
+    setLegScreen({ kind: "dialer", digits: "" });
+  }, [smsStart, pageState, phase]);
 
   // finding #2: 실시간 음성 통화의 시간 한도 자동 종료. 폴백 경로는 sendMessage가 서버에서
   // 한도를 판정해 자동 종료하지만(AC-007), 실시간 경로는 sendMessage를 안 타 한도가 강제되지
@@ -2032,6 +2060,8 @@ export default function SessionCallPage() {
     if (pageState !== "ready" || phase !== "incoming") return;
     // §121(1) — 사용자가 건 보이스톡은 벨이 아니라 연결음이다(아래 발신 effect).
     if (voiceTalkDial) return;
+    // §142 PR-4(R2) — 시작 문자 세션은 벨이 울리지 않는다(참가자가 건다).
+    if (smsStart) return;
     // T190-8b — "준비됐어요" 탭에서 미리 깨운 컨텍스트가 있으면 넘긴다(소유권 이전 — 알림이 stop에서 닫는다).
     const primedContext = primedAlertContextRef.current ?? undefined;
     primedAlertContextRef.current = null;
@@ -2044,7 +2074,7 @@ export default function SessionCallPage() {
       alert.stop();
       if (incomingAlertRef.current === alert) incomingAlertRef.current = null;
     };
-  }, [pageState, phase, deviceSkin.skin, voiceTalkDial]);
+  }, [pageState, phase, deviceSkin.skin, voiceTalkDial, smsStart]);
 
   // §121(1)(UX D-154) — 보이스톡 발신 연출: 연결음(맡겨 받은 통화 출력 컨텍스트로) → `VOICE_TALK_CONNECT_MS` 뒤 상대가 받는다(= 받기와 같은
   // 처리 — 이 화면에는 받기 탭이 없어 대화방 탭에서 준비한 오디오를 넘겨받는다). 취소 중이면 받지 않는다.

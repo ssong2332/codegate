@@ -191,6 +191,8 @@ export type SessionDoc = {
   relay?: { legIndex: number; legStartUserTurns: number[]; connected?: boolean; legEnded?: number; genuineNumberId?: string };
   // 개발 단계 루트 강제 지정(`session/devRouteOverride.ts` F4) — 요청 `forceVariantId`로 변형을 정했을 때만 `"forced"`. 부재 = 회전 덱 배정.
   routeOverride?: "forced";
+  // §142 PR-4 — 다통화 R2(`openerSmsId` 변형): 세션이 수신 통화가 아니라 시작 문자가 도착한 화면에서 시작한다(첫 통화는 참가자 발신). 서버만 쓴다 · 부재 = 수신 통화(종전).
+  startSurface?: "sms";
   // T192 C1 추가(옵셔널, 하위호환 · 무백필 — Architecture.md §79.5) — 사기범 끊기 승인 표식. 서버만 쓴다
   // (클라 write는 firestore.rules가 전부 거부). `endReason: "scammer_ended"`의 **서버측 근거**다 —
   // 이것 없이 온 `scammer_ended`는 `user_ended`로 기록된다(`session/endReason.ts`).

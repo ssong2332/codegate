@@ -310,14 +310,19 @@ test("[변형 = 동작] 전 변형 — resolveDeclaredSms가 변형 sms 선언�
 });
 
 // §142 — 다통화(`multiCall`) 변형은 문자를 레그 단위로 선언한다(같은 목적이 레그마다 다시 온다). 세션 전체를 한 줄로 흘리는 이 시뮬레이션의
-// 대상이 아니다 — 레그 게이트는 레그 런타임과 함께 레그별 시뮬레이션으로 고정한다. 그 전까지는 아래 [§142 배정 대기] 단언이 그 변형들을
-// 배정 풀 밖에 묶어 둔다(게이트 없이 켜지지 않게).
+// 대상이 아니다 — 레그 게이트는 PR-3 레그 런타임과 함께 `callLegs/__tests__/legRuntime.test.ts`가 레그별로 고정한다(현재 레그 문자만 · 하한 + 레그 시작 발화).
 const SESSION_WIDE_VARIANTS = FLOW_VARIANTS.filter((v) => !v.multiCall);
 
-test("[§142 배정 대기] 다통화 변형은 레그 게이트가 생기기 전까지 전부 배정 대기다(새 세션 후보 0)", () => {
+test("[§142 배정 해제] 다통화 변형 = 레그 게이트를 지난다 — 레그마다 그 레그 문자만 · 범위 인자 없는 해석은 전체 선언(PR-4 배정 해제 뒤)", () => {
   const multi = FLOW_VARIANTS.filter((v) => v.multiCall);
   assert.deepEqual(multi.map((v) => v.variantId).sort(), ["fv-k3dn", "fv-r8vb"]);
-  for (const v of multi) assert.equal(v.pendingRollout, true, `${v.variantId}: 레그 게이트 전 배정 금지`);
+  for (const v of multi) {
+    for (const [legIndex] of v.legs.entries()) {
+      const relay = { legIndex, legStartUserTurns: v.legs.map((_, i) => i * 5), connected: true };
+      const { declared } = resolveDeclaredSms(v.scenarioId, v.variantId, { relay });
+      for (const item of declared) assert.equal(item.leg ?? 0, legIndex, `${v.variantId}: 레그 ${legIndex}에 다른 레그 문자 ${item.smsId}`);
+    }
+  }
 });
 
 test("[변형 = 동작] 전 변형 × 모델 최악 요청 — 도착 = 선언 · 간격 ≥2 · 첫 문자 ≥ 하한", async () => {

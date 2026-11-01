@@ -152,7 +152,10 @@ test("[T194-a G586 · §84.4.3] 화자 성별 세션 해석 — 표 값이 있�
     if (!table) notApplicableSeen.push(id);
     for (const level of DIFFICULTY_LEVELS) {
       for (const variant of listFlowVariants(id, level)) {
-        const expected = table ?? (variant.variantId === "fv-g454" ? "female" : undefined);
+        // §142 — 다통화 변형(카드사 재구성)은 통화마다 인물이 바뀌어 지금 통화의 성별이 표 값을 이긴다(relay 부재 = 첫 통화).
+        const expected = variant.multiCall
+          ? variant.legs[0].speakerGender
+          : (table ?? (variant.variantId === "fv-g454" ? "female" : undefined));
         assert.equal(
           resolveSessionSpeakerGender({ scenarioId: id, difficultyLevel: level, flowVariantId: variant.variantId }),
           expected,

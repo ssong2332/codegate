@@ -178,6 +178,11 @@ export type FlowVariant = {
    */
   pendingRollout?: true;
   /**
+   * §142 PR-4 — 이 루트 리포트의 교육 포인트(예방 조언 마무리 문장 앞에 붙는다). 출처 = `docs/research/card-company-scam-reality-2026-11-01.md`
+   * "리포트 교육 포인트"([S1] 금감원 소비자경보 p.4~5). 리포트는 세션 밖 화면이라 실제 대응 안내다(가상 기관명 규칙은 세션 중 대사 · 화면에만).
+   */
+  reportLessons?: readonly string[];
+  /**
    * §119(DECISIONS #234) — **루트 키**: 시나리오 안에서 결말(돈 · 정보가 빠지는 방식)의 이름. 난이도가 달라도 같은 결말이면 같은 키다
    * (사용자 결정 D-6 "루트 = 결말 방식, 난이도 = 깊이"). 한 배정 풀 안에서는 서로 달라야 한다(D-11 — 테스트 고정).
    * 값은 아래 `VARIANT_ROUTES` 표가 원천이다(저작 입력에 쓰지 않는다).
@@ -797,6 +802,11 @@ const CARD_REBUILD_AGENT_LEG: FlowVariantLeg = {
     tacticLabelOf(CRT.officialReport),
   ],
 };
+// §142 PR-4(R2) — 발급 문자를 보고 참가자가 직접 건 상담원은 먼저 본인확인부터 묻는다(배송원 레그가 없는 R2의 첫 통화 — 받는 분 정보 카드의 치환 원천).
+const CARD_REBUILD_AGENT_FIRST_LEG: FlowVariantLeg = {
+  ...CARD_REBUILD_AGENT_LEG,
+  tacticLabels: [tacticLabelOf(CRT.deliveryIdentity), ...(CARD_REBUILD_AGENT_LEG.tacticLabels ?? [])],
+};
 const CARD_REBUILD_SUPERVISOR_FIRST_LEG: FlowVariantLeg = {
   callerLabel: "금융감독기관 대표번호",
   personaPrompt: CARD_REBUILD_SUPERVISOR_PERSONA,
@@ -847,6 +857,14 @@ const CARD_REBUILD_SUPERVISOR_LAST_LEG: FlowVariantLeg = {
   ],
   tacticLabels: [tacticLabelOf(CRT.safeAccount), tacticLabelOf(CRT.bankCoaching), tacticLabelOf(CRT.urgency)],
 };
+/** §142 PR-4 — 카드 배송 · 발급 사칭 다통화 루트의 교육 포인트 4개(조사 문서 ①~④ 순서). */
+export const CARD_REBUILD_REPORT_LESSONS: readonly string[] = [
+  "문자나 전화로 안내받은 번호로 다시 걸지 마세요. 카드사 · 기관 번호는 카드 뒷면이나 공식 홈페이지에서 직접 찾아 거세요.",
+  "전화로 앱 설치를 요구받으면 그 자체로 사기입니다. 원격 지원 앱을 설치하면 휴대폰을 통째로 넘겨주는 것과 같습니다.",
+  "금융감독기관 · 검찰 · 경찰은 전화로 이체 · 안전계좌 · 자산 보호를 요구하지 않습니다. 기관이 이체를 요구하면 100% 사기입니다.",
+  "통화하던 휴대폰으로 다시 거는 확인 전화는 가로채질 수 있습니다. 가족 등 다른 사람의 전화로 확인하세요.",
+];
+
 const cardRebuildSpec = (
   variantId: string,
   legs: FlowVariantLeg[],
@@ -871,7 +889,7 @@ const cardRebuildSpec = (
   decisionMoment: "원격 지원 앱 설치 또는 안전계좌 이체에 동의하는 순간",
   sources: ["C03", "C04", "S4", "S22"],
   multiCall: true,
-  pendingRollout: true,
+  reportLessons: CARD_REBUILD_REPORT_LESSONS,
   ...extra,
 });
 // R1 — 배송 전화 진입. 문자 선언은 레그 단위(게이트는 현재 레그 문자만 · 하한 = 레그 시작 뒤 사용자 발화). 같은 레그 안 목적 중복 0.
@@ -887,11 +905,12 @@ const CARD_REBUILD_R1 = cardRebuildSpec(
 // R2 — 발급 문자 진입. 배송원 레그 없음 · 세션은 발급 문자(`card-issue-notice`) 화면에서 시작하고 첫 레그(상담원)는 참가자 발신.
 const CARD_REBUILD_R2 = cardRebuildSpec(
   "fv-r8vb",
-  [CARD_REBUILD_AGENT_LEG, CARD_REBUILD_SUPERVISOR_FIRST_LEG, CARD_REBUILD_PROSECUTOR_LEG, CARD_REBUILD_SUPERVISOR_LAST_LEG],
+  [CARD_REBUILD_AGENT_FIRST_LEG, CARD_REBUILD_SUPERVISOR_FIRST_LEG, CARD_REBUILD_PROSECUTOR_LEG, CARD_REBUILD_SUPERVISOR_LAST_LEG],
   [
     { purpose: "link", smsId: "card-remote-support-link", required: true, notBeforeUserTurns: 2, leg: 0, ...FAST_BACKSTOP },
     { purpose: "transfer", smsId: "card-safe-account", required: true, notBeforeUserTurns: 1, leg: 3, ...FAST_BACKSTOP },
   ],
+  // §142 PR-4 — 시작 셸: 세션 생성이 이 문자를 도착시키고(`session/index.ts` · `startSurface`) 화면은 전화 앱에서 시작한다.
   { openerSmsId: "card-issue-notice" },
 );
 
@@ -1104,6 +1123,9 @@ const SPECS: VariantSpec[] = [
     extraTactics: cardAdvancedExtras(CARD_RELIEF_TRANSFER_VIA_LINK, CARD_APP_INSTALL_VIA_SMS),
     // T194-c-1 리뷰 Minor — 문자를 선언하므로 채널 메타에 "sms"를 더한다(fv-m3hd가 스프레드로 받는 값과 같은 꼴 · 프롬프트 바이트 무영향).
     channels: ["voice", "sms"],
+    // §142 PR-4(사용자 승인 설계 #470 · "권고대로") — 배정 은퇴. 카드사 고급은 통화를 나눈 재구성 루트(fv-k3dn · fv-r8vb)가 맡는다.
+    // 옛 세션 · 리포트 해석은 그대로(`findFlowVariant`).
+    retired: true,
   },
   // ⭐ §92(docs/Architecture.md · DECISIONS #206 · 사용자 승인 *"시나리오 결정 권고안대로 진행"*) — 고급 전용 `card-delivery-call`을 목록에서 빼고
   // 그 흐름을 **카드사 고급의 변형**으로 흡수한다(보고서 R1 — 겹침 높음). 내용 = `fv-tvnj`(아래 · 무변경 — 옛 세션용)와 같은 단계 · 수법 ·
@@ -1156,6 +1178,9 @@ const SPECS: VariantSpec[] = [
     demandStages: 3,
     decisionMoment: CARD_DELIVERY_DECISION_MOMENT,
     sources: ["C03", "C04", "S4", "S22"],
+    // §142 PR-4(사용자 승인 설계 #470 · "권고대로") — 배정 은퇴. 카드사 고급은 통화를 나눈 재구성 루트(fv-k3dn · fv-r8vb)가 맡는다.
+    // 옛 세션 · 리포트 해석은 그대로(`findFlowVariant`).
+    retired: true,
   },
 
   // ⭐ §142(Architecture.md §142 · 설계 #470 · 메인 "권고대로") — 카드사 고급 재구성: 통화를 나눈 다화자 흐름. 현실 근거 = 조사 문서 §1 · §7.

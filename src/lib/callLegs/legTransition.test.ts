@@ -107,3 +107,14 @@ test("[§142 화면] 다이얼 화면 — 실제 전화 발신 0(tel: 링크 0) 
   assert.ok(!code.includes("tel:"));
   assert.ok(!/모의|훈련용/.test(code));
 });
+
+test("[§142 PR-4 R2] 시작 문자 세션 — 벨 0 · 전화 앱 다이얼로 시작 · 첫 다이얼 탭에서 오디오 준비 · 첫 통화는 받기 경로", () => {
+  const page = read("src/app/session/play/page.tsx");
+  assert.ok(page.includes('setSmsStart(data.startSurface === "sms");'), "서버 값(세션 문서)으로만 정한다");
+  assert.ok(page.includes("    if (smsStart) return;"), "시작 문자 세션은 벨이 울리지 않는다");
+  assert.ok(page.includes('setLegScreen({ kind: "dialer", digits: "" });\n  }, [smsStart, pageState, phase]);'));
+  const dial = page.slice(page.indexOf("const dialLeg = () => {"), page.indexOf("const answerLegCallback"));
+  assert.ok(dial.indexOf("primeSmsStartDial();") >= 0 && dial.indexOf("primeSmsStartDial();") < dial.indexOf("openNextLeg("), "탭 안에서 동기로 준비한 뒤 서버에 묻는다");
+  const connect = page.slice(page.indexOf("const connectLeg = "), page.indexOf("const openNextLeg = "));
+  assert.ok(connect.includes("if (smsStart && !answerHandledRef.current) {\n      handleAnswer();"));
+});

@@ -187,6 +187,8 @@ const FLOW_VARIANT_FIELDS: Record<keyof FlowVariant, FieldPolicy> = {
   multiCall: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
   pendingRollout: { skip: "리터럴 true 플래그 — 자유 문자열 없음" },
   openerSmsId: { skip: "카탈로그 smsId 참조(본문은 inCallSms 도메인이 스캔)" },
+  // §142 PR-4 — 리포트 교육 포인트(세션이 끝난 뒤 리포트에만 보이는 실제 대응 안내 · 사기 대사 아님 — 무해화 대상 표면이 아니다).
+  reportLessons: { skip: "리포트 전용 예방 조언 문장(세션 중 표면 0)" },
 };
 
 // ── 표면 수집 ────────────────────────────────────────────────────────────────
