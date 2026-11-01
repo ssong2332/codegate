@@ -9,6 +9,7 @@ export {
   senderNumberOf,
   sortByArrival,
   spellOutOtp,
+  splitBodyAtDialNumber,
   splitBodyAtOtp,
   takeNewlyVisibleSmsIds,
   threadHeaderLabel,

@@ -9,7 +9,8 @@
 /** Firestore `sessions/{sid}/inCallSms/{smsId}` 문서의 클라 표현(읽기 전용). */
 export type InCallSmsView = {
   smsId: string;
-  kind: "account" | "link" | "otp";
+  // §142 — `callback` = 전화번호 안내 문자(번호를 누르면 앱 안 다이얼이 그 번호로 채워진다).
+  kind: "account" | "link" | "otp" | "callback";
   senderLabel: string;
   body: string;
   otpCode?: string;
@@ -33,7 +34,17 @@ export type InCallSmsView = {
   /** ⭐ P2(X6) — 훈련용 이체 화면(`bank-transfer`)의 받는 분 이름 · 금액(숫자만). 서버가 그 화면을 여는 계좌 문자에만 싣는다. */
   accountHolder?: string;
   transferAmount?: string;
+  /** §142 — `callback` 문자의 안내 번호(서버 번호부 값 그대로 · 본문에 같은 글자로 있다). */
+  dialNumber?: string;
 };
+
+/** §142 — 본문의 안내 번호 첫 1회를 누를 수 있게 나눈다(본문에 없으면 null — 번호를 새로 그리지 않는다). */
+export function splitBodyAtDialNumber(body: string, dialNumber: string | undefined): { before: string; number: string; after: string } | null {
+  if (!dialNumber) return null;
+  const at = body.indexOf(dialNumber);
+  if (at < 0) return null;
+  return { before: body.slice(0, at), number: dialNumber, after: body.slice(at + dialNumber.length) };
+}
 
 /** §101 추가 · D-115 — 이 문자의 수취 계좌 표기("{은행명} {계좌번호}"). 둘 중 하나라도 없으면 미리 채우지 않는다. */
 /** ⭐ P2(X6) — 훈련용 이체 화면의 미리 채움(받는 분 · 은행 · 금액). 은행명이 없으면(옛 문서) 미리 채우지 않는다. */

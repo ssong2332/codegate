@@ -24924,3 +24924,18 @@ PR-2 화면 계약(이 PR이 전제하는 것):
 | 실시간 `userTurns` 주장값 | 세션 누적(레그마다 0으로 되돌리지 않는다) — 문자 하한 · 끊기 5행이 서버 레그 시작 발화 수와 같은 축이어야 한다 |
 | 레그 끝 순서 | `legEnd` 수신 → 그 레그 전사 `submitRealtimeTranscript` → `startCallLeg` → 새 `createRealtimeCall`(토큰이 서버 `relay`로 레그를 정한다) |
 | 리포트 | 수법 해석은 레그 0 프롬프트 기준(종전 단일 지점) — 레그 전체 수법 · 교육점은 PR-4 |
+
+### 142.9 PR-2(클라 — R1 통화 전환) — 배정 대기 유지
+⛔ 운영 동작 변화 0(두 변형 배정 대기). 판정은 서버(`startCallLeg`) · 화면 흐름 표는 `src/lib/callLegs/legTransition.ts` 머리 주석.
+
+| 지점 | 파일 | 동작 |
+|---|---|---|
+| API | `src/lib/api/startCallLeg.ts` · `types.ts` | `startCallLeg` · `legEnd`(끊기 · 폴백 응답) · `callLeg`(토큰) 타입 1:1 |
+| 실시간 훅 | `src/lib/realtime/useRealtimeCall.ts` | `suspendForLeg`(자격증명을 비워 Live 세션 언마운트 — `stop()` 신호는 새 세션을 즉시 닫으므로 쓰지 않는다) · `startLeg`(새 토큰 → `connectionSeq` +1 재마운트) |
+| 끊기 래치 | `GeminiVoiceSession.tsx` · `page.tsx` | `legEnd`면 종료 래치 대신 통화 사이 표식(`legSwitchingRef` — 실시간 `ended`를 서버 close로 읽지 않는다) → 마지막 대사 뒤 `beginLegTransition` |
+| 통화 사이 | `page.tsx` `beginLegTransition` · `CallLegScreens.tsx` | Live 내림 → 전사 제출(서버 레그 시작 발화 수 계약) → 호 전환 = 연결음 3.5초 뒤 `transfer` / 다시 걸기 = 다이얼(키패드 · 연락처 · 메시지) · 30초 동안 안 걸면 상대 재발신(D4 · 받기) |
+| 서버 응답 | 같은 곳 | `connected` = 발신 연결음 4.5초 뒤 새 통화(라벨 = 서버 `callerLabel` · 새 연결은 이어받기가 아니라 오프닝) · `genuine` = 자동 안내 → 통화 종료 = 훈련 종료 · `unknown_number` = 다이얼 안내 · `not_ready` · 실패 = 종전 끊기 종료 |
+| 문자 번호 | `InCallSmsOverlay.tsx` · `inCallSms.ts` | `callback` 문자의 `dialNumber`를 본문에서 찾아 누를 수 있게 → 다이얼에 채움(통화 중에 누르면 끊긴 뒤 다이얼이 그 번호로 열린다) |
+| 오디오 | (변경 0) | 받기 때 만든 출력 컨텍스트가 통화 사이에도 살아 있어(`shouldReleasePrimedCallAudio` = 거짓) 새 통화 · 연결음이 그대로 쓴다 — `primeCallAudio` 호출 수 무변경 |
+
+판단값(실측 전): 상대 재발신 30초 · 발신 연결음 4.5초 · 호 전환 3.5초. 남은 것: **R2 시작 셸**(발급 문자에서 시작 → 첫 통화를 참가자가 건다 — 서버 시작 문자 발송 · 첫 받기 오디오 준비 포함) · PR-4.

@@ -97,6 +97,7 @@ const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   "MessengerFakeLanding.tsx": true, // 가짜 랜딩 + 모의 앱 설치(UX-023, T84)
   "MessengerChatRoom.tsx": true, // 메신저 대화방(UX-022 · §121.4 PR-2로 라우트 본문을 옮김) — 사기범 말풍선 · 링크 칩을 그린다
   "MessengerProfileSheet.tsx": true,
+  "CallLegScreens.tsx": false, // §142 통화 사이 화면(전화 앱 다이얼 · 연결 중 · 진짜 기관 자동 안내) — 사기 표면이 아니다(자동 안내 문구는 서버 번호부 · 사기 문구 0)
   "VoiceTalkDialScreen.tsx": true, // §123 카톡형 보이스톡 발신 화면(UX D-156) — 사기범 이름을 그린다 // 카톡형 상대 프로필 시트(§95 · UX D-138) — 사기범 이름을 그린다
   "InCallSmsOverlay.tsx": true, // 통화 중 문자 오버레이(UX-027, T68)
   "BankAppOverlay.tsx": true, // BA-1 간소화안 가상 내 은행 송금 화면(진단 플래그 bankapp=1) — 사기 상황의 이체 화면을 그린다

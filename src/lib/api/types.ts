@@ -116,6 +116,8 @@ export type SendMessageResponse = {
   endReason?: "limit_reached" | "scammer_ended";
   /** §112 — 메신저에서 넘어온 통화에서 사기범이 끊었다(세션은 active · 화면이 끊김 안내 뒤 대화방으로 돌아간다). */
   scammerHungUp?: true;
+  /** §142(카드사 고급 재구성) — 다통화 변형의 마지막이 아닌 통화가 끝났다(`ended` false · 세션 계속). functions/src/roleplay/types.ts와 1:1. */
+  legEnd?: CallLegEnd;
   isMock: boolean;
   // 실시간 음성 통화 전환(2026-07-22 사용자 결정) — 사기범 응답 합성 오디오(서버가 이미 반환 중,
   // functions/src/roleplay/types.ts와 1:1).
@@ -186,6 +188,8 @@ export type CreateRealtimeCallResponse = {
    * 소유 한국어 1줄(G386 — 클라가 저작하지 않는다).
    */
   liveTools?: LiveTools;
+  /** §142 — 다통화 변형이면 이 토큰이 맡은 통화(서버 `relay`가 정한다 · functions/src/realtime/callTypes.ts와 1:1). 부재 = 종전. */
+  callLeg?: { legIndex: number; callerLabel: string };
 };
 export type VerifyOfferTrigger = { availableAfterScammerTurns: number };
 export type LiveTools = {
@@ -446,7 +450,19 @@ export type RequestScammerHangupRequest = {
 export type RequestScammerHangupResponse = {
   status: ScammerHangupStatus;
   guidance: string;
+  /** §142 — 다통화 변형의 마지막이 아닌 통화 끝(세션 계속 · 화면이 다음 통화를 연다). functions/src/scammerHangup/types.ts와 1:1. */
+  legEnd?: CallLegEnd;
 };
+
+// --- startCallLeg (§142 카드사 고급 재구성 · functions/src/callLegs/request.ts와 1:1) ---
+/** 통화가 끝난 방식 — `dial` = 참가자가 다시 건다(또는 상대가 다시 건다 · D4) · `transfer` = 호 전환. */
+export type CallLegEnd = { exit: "dial" | "transfer" };
+export type StartCallLegRequest = { sessionId: string; action: "dial" | "transfer" | "callback"; dialed?: string };
+export type StartCallLegResponse =
+  | { status: "connected"; legIndex: number; callerLabel: string; entry: "dial" | "transfer" | "incoming" }
+  | { status: "genuine"; number: string; contactLabel?: string; notice: readonly string[] }
+  | { status: "unknown_number" }
+  | { status: "not_ready"; reason: "not_multi_call" | "leg_in_progress" | "no_next_leg" | "wrong_action" };
 
 // --- updateMessengerSkin (T29 · UX-022 · AC-031/P-16) ---
 // 메신저 채팅(UX-022)의 UA 자동 감지·수동 전환 결과를 세션 문서에 지속한다(리포트·새로고침·

@@ -317,7 +317,8 @@ test("[G555 ⓐ 역검증] end_call 분기에 toolPending을 넣은 사본은 �
 test("[G504 · R3 · G386] end_call — 승인이면 응답 전에 부모 래치 · 콜러블 throw = endCallFailureInstruction(문면 저작 0) · 응답 생략 0", () => {
   const branch = endCallBranch(geminiSession);
   const acceptedAt = branch.indexOf('result.status === "accepted" || result.status === "already_accepted"');
-  const latchAt = branch.indexOf("handlersRef.current.onScammerHangupAccepted();");
+  // §142 — 다통화 변형은 통화 끝(`legEnd`)을 같은 래치 호출로 넘긴다(부재 = 종전).
+  const latchAt = branch.indexOf("handlersRef.current.onScammerHangupAccepted(result.legEnd);");
   const returnAt = branch.indexOf("response: { status: result.status, guidance: result.guidance }");
   assert.ok(acceptedAt >= 0 && latchAt > acceptedAt && returnAt > latchAt, "래치가 응답 반환(= sendToolResponse) 앞이 아니다(R2)");
   assert.match(branch, /guidance: liveTools\.endCallFailureInstruction \?\? liveTools\.failureInstruction,/);

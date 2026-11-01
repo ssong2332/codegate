@@ -56,9 +56,10 @@ import {
   recordMockScreenEvent,
   requestReverseEscalation,
   sendMessage,
+  startCallLeg,
   submitRealtimeTranscript,
 } from "@/lib/api";
-import type { AmountComparison, InCallSmsEvent, TranscriptTurn } from "@/lib/api";
+import type { AmountComparison, CallLegEnd, InCallSmsEvent, TranscriptTurn } from "@/lib/api";
 import {
   countUnread,
   latestSmsId,
@@ -192,6 +193,19 @@ import CallStartNotice from "@/components/CallStartNotice";
 import { personaEventLogLine, readSessionPersonaCard, type PersonaCardView } from "@/lib/personacard/personaCard";
 import CallWaveform from "@/components/CallWaveform";
 import InCallSmsOverlay from "@/components/InCallSmsOverlay";
+import CallLegScreens from "@/components/CallLegScreens";
+import {
+  LEG_CALLBACK_DELAY_MS,
+  LEG_DIAL_CONNECT_MS,
+  LEG_TRANSFER_CONNECT_MS,
+  backspaceDial,
+  dialContactsFor,
+  digitsOf,
+  legCallerLabelOr,
+  pressDialKey,
+  screenAfterLegEnd,
+  type LegScreen,
+} from "@/lib/callLegs/legTransition";
 import BankAppOverlay from "@/components/BankAppOverlay";
 import { fictionalBalanceFor, isBankAppEnabled, myBankNameFor, type TransferTarget } from "@/lib/bankapp/bankApp";
 import { readDebugFlagSearch } from "@/lib/realtime/debugFlags";
@@ -525,6 +539,17 @@ export default function SessionCallPage() {
   const [callEndedBy, setCallEndedBy] = useState<CallEndedBy | null>(null);
   // 래치가 걸렸는가의 state 사본(효과 조건용 — 폴백 자동 청취 · 전송 차단). 값의 원천은 `callEndingRef`.
   const [endLatched, setEndLatched] = useState(false);
+  // §142(카드사 고급 재구성 PR-2) — 다통화 변형의 통화 사이 상태(`src/lib/callLegs/legTransition.ts` 표). 끝난 통화가 남긴 `legEnd`는
+  // 마지막 대사 재생이 끝날 때(`handleScammerHangupReady`) 통화 사이 화면으로 바뀐다. 이 동안은 종료 래치(`callEndingRef`)를 걸지 않는다 —
+  // 세션은 계속된다. `legSwitchingRef`가 참이면 실시간 상태 effect가 `ended`를 서버 close로 읽지 않는다(§112.5 대화방 전환과 같은 방식).
+  const [legScreen, setLegScreen] = useState<LegScreen>({ kind: "none" });
+  const [legCallerLabel, setLegCallerLabel] = useState<string | null>(null);
+  const [legDialing, setLegDialing] = useState(false);
+  // 새 통화의 첫 연결은 이어받기 맥락이 아니라 오프닝으로 시작한다(다른 인물 · 새 통화 — D5).
+  const [legOpening, setLegOpening] = useState(false);
+  const legEndRef = useRef<CallLegEnd | null>(null);
+  const legSwitchingRef = useRef(false);
+  const legTimersRef = useRef<number[]>([]);
   // 2026-10-21(실기 신고 "종료 버튼 반응이 느리다") — 참가자 · 한도 종료의 즉시 표시. 정지 직후 켜서 경과 시간 자리를
   // "통화 종료"로 바꾼다(실제 통화 앱처럼 누르는 순간 끝난 것이 보인다). 사기범 끊기는 `remoteHangup`이 따로 그린다.
   const [localHangup, setLocalHangup] = useState(false);
@@ -1008,6 +1033,8 @@ export default function SessionCallPage() {
             // ⭐ P2(X6) — 훈련용 이체 화면의 받는 분 · 금액 미리 채움 원천(서버가 문자 본문 예금주 · 금액 줄에서 실은 값).
             accountHolder: data.accountHolder as string | undefined,
             transferAmount: data.transferAmount as string | undefined,
+            // §142 — 전화번호 안내 문자의 번호(누르면 다이얼).
+            dialNumber: data.dialNumber as string | undefined,
           };
         }),
       );
@@ -1647,7 +1674,17 @@ export default function SessionCallPage() {
 
   // ⭐ T192 C5(§79.8 R2) — 실시간 끊기 승인. 래치만 건다(화면은 마지막 대사가 끝날 때까지 통화 중 그대로 — D-112 · 예고 0).
   // UX D-113 — 열려 있던 문자함 · 확인 시트는 **마지막 대사 재생보다 먼저** 닫는다.
-  const handleScammerHangupAccepted = () => {
+  const handleScammerHangupAccepted = (legEnd?: CallLegEnd) => {
+    if (legEnd) {
+      // §142 — 마지막이 아닌 통화의 끝(세션 계속). 종료 래치 대신 통화 사이 표식만 건다(마이크 · 텍스트 턴은 `endLatched`로 멈춘다).
+      legEndRef.current = legEnd;
+      legSwitchingRef.current = true;
+      setEndLatched(true);
+      setSmsOverlayOpen(false);
+      setVerifyOverlayOpen(false);
+      setBankAppOpen(false);
+      return;
+    }
     callEndingRef.current = latchHangupAccepted(callEndingRef.current);
     setEndLatched(true);
     setSmsOverlayOpen(false);
@@ -1656,8 +1693,145 @@ export default function SessionCallPage() {
   };
   // ⭐ T192 C5(§79.8 R5) — 마지막 대사 재생이 끝났다 → 공통 종료 함수.
   const handleScammerHangupReady = () => {
+    const legEnd = legEndRef.current;
+    if (legEnd) {
+      legEndRef.current = null;
+      void beginLegTransition(legEnd);
+      return;
+    }
     void endCall("scammer");
   };
+
+  // ── §142(카드사 고급 재구성 PR-2) — 통화 사이 화면 흐름(`legTransition.ts` 표대로만) ─────────────────────
+  const clearLegTimers = () => {
+    for (const id of legTimersRef.current) window.clearTimeout(id);
+    legTimersRef.current = [];
+    ringbackStopRef.current?.();
+    ringbackStopRef.current = null;
+  };
+  const legTimeout = (fn: () => void, ms: number) => {
+    legTimersRef.current.push(window.setTimeout(fn, ms));
+  };
+  const playLegRingback = () => {
+    ringbackStopRef.current?.();
+    ringbackStopRef.current = startRingback(primedCallAudioRef.current?.output ?? null, RINGBACK_TONE);
+  };
+  // 서버가 연 다음 통화로 들어간다 — 실시간이면 새 자격증명으로 다음 인물의 Live 세션(오프닝부터) · 폴백이면 다음 턴부터 서버가 그 인물로 답한다.
+  const connectLeg = (callerLabelForLeg: string) => {
+    clearLegTimers();
+    setLegCallerLabel(callerLabelForLeg);
+    setLegScreen({ kind: "none" });
+    setLegDialing(false);
+    legSwitchingRef.current = false;
+    setEndLatched(false);
+    if (callMode === "realtime" && sessionId) {
+      setLegOpening(true);
+      void realtime.startLeg(sessionId);
+    }
+  };
+  const openNextLeg = async (action: "dial" | "transfer" | "callback", dialed?: string) => {
+    if (!sessionId) return;
+    setLegDialing(true);
+    try {
+      const result = await startCallLeg({ sessionId, action, ...(dialed ? { dialed } : {}) });
+      if (!endCallMountedRef.current) return;
+      if (result.status === "connected") {
+        if (action === "callback") {
+          // D4 — 상대가 다시 걸어 왔다(받기를 눌러야 연결된다).
+          ringbackStopRef.current?.();
+          setLegScreen({ kind: "incoming", label: result.callerLabel });
+          setLegDialing(false);
+          return;
+        }
+        if (action === "dial") {
+          // 발신 연결음 뒤 상대가 받는다(실제 전화처럼).
+          setLegScreen({ kind: "connecting", via: "dial", label: result.callerLabel });
+          playLegRingback();
+          legTimeout(() => connectLeg(result.callerLabel), LEG_DIAL_CONNECT_MS);
+          return;
+        }
+        connectLeg(result.callerLabel);
+        return;
+      }
+      setLegDialing(false);
+      if (result.status === "genuine") {
+        clearLegTimers();
+        setLegScreen({ kind: "genuine", number: result.number, contactLabel: result.contactLabel, notice: result.notice });
+        return;
+      }
+      if (result.status === "unknown_number") {
+        setLegScreen({ kind: "dialer", digits: digitsOf(dialed ?? ""), notice: "unknown_number" });
+        return;
+      }
+      // not_ready — 다통화 흐름 밖(서버 상태와 어긋남) · 종전 사기범 끊기 종료로 간다.
+      clearLegTimers();
+      legSwitchingRef.current = false;
+      setLegScreen({ kind: "none" });
+      void endCall("scammer", { sessionAlreadyEnded: true });
+    } catch {
+      // 콜러블 실패 — 다이얼이면 다시 걸 수 있게 둔다 · 그 밖은 종료(AC-006 종료는 항상 성공).
+      setLegDialing(false);
+      if (action === "dial") return;
+      clearLegTimers();
+      legSwitchingRef.current = false;
+      setLegScreen({ kind: "none" });
+      void endCall("scammer", { sessionAlreadyEnded: true });
+    }
+  };
+  // 끝난 통화 → 통화 사이 화면. 전사는 여기서 제출한다(서버가 다음 통화 시작 발화 수를 `messages`로 센다 — §142.8 계약).
+  const beginLegTransition = async (legEnd: CallLegEnd) => {
+    if (callMode === "realtime") realtime.suspendForLeg();
+    audioRef.current?.pause();
+    speech.stop();
+    try {
+      await flushTranscript();
+    } catch {
+      // 제출 실패는 다음 통화를 막지 않는다(종료 때 다시 제출된다).
+    }
+    if (!endCallMountedRef.current) return;
+    setLegScreen(screenAfterLegEnd(legEnd.exit));
+    if (legEnd.exit === "transfer") {
+      playLegRingback();
+      legTimeout(() => void openNextLeg("transfer"), LEG_TRANSFER_CONNECT_MS);
+      return;
+    }
+    // D4 — 참가자가 다시 걸지 않으면 상대가 다시 걸어 온다.
+    legTimeout(() => void openNextLeg("callback"), LEG_CALLBACK_DELAY_MS);
+  };
+  const dialLeg = () => {
+    if (legScreen.kind !== "dialer" || legScreen.digits.length === 0 || legDialing) return;
+    clearLegTimers();
+    void openNextLeg("dial", legScreen.digits);
+  };
+  const answerLegCallback = () => {
+    if (legScreen.kind !== "incoming") return;
+    connectLeg(legScreen.label);
+  };
+  const endTrainingFromLeg = () => {
+    clearLegTimers();
+    legSwitchingRef.current = false;
+    setLegScreen({ kind: "none" });
+    void endCall("user");
+  };
+  // 문자 속 번호 누름 → 다이얼에 채운다(통화 사이일 때만 — 통화 중에는 번호만 채워 두고 끊긴 뒤 다이얼이 그 번호로 열린다).
+  const pendingDialRef = useRef<string | null>(null);
+  const handleDialNumber = (number: string) => {
+    const digits = digitsOf(number);
+    setSmsOverlayOpen(false);
+    if (legScreen.kind === "dialer") {
+      setLegScreen({ kind: "dialer", digits });
+      return;
+    }
+    pendingDialRef.current = digits;
+  };
+  useEffect(() => {
+    if (legScreen.kind === "dialer" && legScreen.digits === "" && pendingDialRef.current) {
+      const digits = pendingDialRef.current;
+      pendingDialRef.current = null;
+      setLegScreen({ kind: "dialer", digits });
+    }
+  }, [legScreen]);
+  useEffect(() => () => clearLegTimers(), []);
 
   // finding #2: 실시간 음성 통화의 시간 한도 자동 종료. 폴백 경로는 sendMessage가 서버에서
   // 한도를 판정해 자동 종료하지만(AC-007), 실시간 경로는 sendMessage를 안 타 한도가 강제되지
@@ -1716,6 +1890,8 @@ export default function SessionCallPage() {
         // `realtime.stop()`한 뒤에도 이 분기가 오지만, 그때는 래치가 이미 `ending`이라 `endCall`이 무시한다(E1).
         // §112.5 — 대화방 전환(`handleRequestReverseEscalation`)이 멈춘 통화는 래치가 없으므로 여기서 걸러야 한다(서버 close가 아니다).
         if (switchingToMessengerRef.current) return;
+        // §142 — 통화 사이(다음 통화를 여는 중)의 close는 서버 close가 아니다.
+        if (legSwitchingRef.current) return;
         await endCall("remote");
       }
     })();
@@ -2003,6 +2179,8 @@ export default function SessionCallPage() {
     reconnectCountRef.current += 1;
     // 세션 컴포넌트가 onclose에서 남은 전사를 이미 올렸다(`flushTranscript` → `handleTranscriptTurn`) — 그것까지 싣는다.
     setResumeTurn(buildResumeTurn(transcriptRef.current));
+    // §142 — 통화 중 다시 잇기는 같은 인물의 이어받기다(새 통화 오프닝 아님).
+    setLegOpening(false);
     void realtime.reconnect(sessionId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, realtime.reconnect, realtime.handleError, realtime.handleEnded]);
@@ -2022,6 +2200,8 @@ export default function SessionCallPage() {
     }
     if (speech.status === "listening") speech.stop();
     setResumeTurn(buildResumeTurn(transcriptRef.current));
+    // §142 — 통화 중 다시 잇기는 같은 인물의 이어받기다(새 통화 오프닝 아님).
+    setLegOpening(false);
     setCallMode("realtime");
     void realtime.start(sessionId);
     if (resumedAudio) {
@@ -2539,6 +2719,24 @@ export default function SessionCallPage() {
         void endCall("scammer", { fallbackLastLine: { hasAudio: Boolean(result.audioUrl) } });
         return;
       }
+      // §142 — 다통화 변형의 마지막이 아닌 통화 끝(세션 계속) — 마지막 대사 뒤 통화 사이 화면.
+      if (result.legEnd) {
+        legSwitchingRef.current = true;
+        setEndLatched(true);
+        if (result.audioUrl) setPlaybackUrl(result.audioUrl);
+        const legEnd = result.legEnd;
+        // 마지막 대사 재생 끝(`<audio onEnded>`) · 오디오 없음 = 읽을 시간 · 상한 — 끊기 종료(E3)와 같은 대기.
+        let started = false;
+        const begin = () => {
+          if (started) return;
+          started = true;
+          fallbackLastLineDoneRef.current = null;
+          void beginLegTransition(legEnd);
+        };
+        if (result.audioUrl) fallbackLastLineDoneRef.current = begin;
+        window.setTimeout(begin, result.audioUrl ? HANGUP_DRAIN_CAP_MS : HANGUP_NO_AUDIO_READ_MS);
+        return;
+      }
       // §112 — 메신저에서 넘어온 통화의 폴백 끊기는 세션을 끝내지 않고 `scammerHungUp`만 온다(위와 같은 종료 순서 · 끝은 대화방 복귀).
       if (result.scammerHungUp === true) {
         if (result.audioUrl) setPlaybackUrl(result.audioUrl);
@@ -2647,12 +2845,14 @@ export default function SessionCallPage() {
   // ⚠️ 라벨만 바뀐다 — "같은 사기범입니다"·"어디에 걸어도 같은 곳입니다"류 문구는 이 화면 어디에도
   // 두지 않는다(OQ-38 확정 = 세션 중엔 상황만, D-6 유지).
   // H1(2026-11-01 U1) — 넘김 지시가 아직 Live에 나가지 않았으면 원래 라벨을 유지한다(라벨이 실제 화자보다 앞서지 않게).
-  const callerLabel = callerLabelForDisplay({
+  const baseCallerLabel = callerLabelForDisplay({
     reconnectedCallerLabel: verifyOffer?.reconnectedCallerLabel,
     scenarioCallerLabel: scenario.callerLabel,
     // 실시간 경로에서만 보류한다 — 폴백은 서버가 다음 턴 프롬프트에 싣는다(넘김 지시 전송 이벤트가 없다).
     speakerSwitchPending: speakerSwitchPending && callMode === "realtime",
   });
+  // §142 — 다통화 변형이면 지금 통화의 라벨(서버 값 — 통화 연결 응답 · 토큰)이 이긴다. 부재 = 종전 라벨.
+  const callerLabel = legCallerLabelOr(legCallerLabel ?? realtime.credentials?.callLeg?.callerLabel, baseCallerLabel);
   // T72(§15.6 G6) — 자격증명을 아직 못 받았으면(수신 대기 중) 기본은 true다. 실제로 난이도를
   // 반영하지 못하는 경로(ElevenLabs)만 서버가 false로 명시해 내려준다.
   const difficultyApplied = realtime.credentials?.difficultyApplied !== false;
@@ -2945,7 +3145,7 @@ export default function SessionCallPage() {
             onScammerHangupAccepted={handleScammerHangupAccepted}
             onScammerHangupReady={handleScammerHangupReady}
             // §110.3 — 메신저에서 넘어온 통화의 첫 연결은 대화를 이어받는 첫마디 신호(`escalatedOpening.ts` 판정표).
-            resumeTurn={openingTurnFor({
+            resumeTurn={legOpening ? null : openingTurnFor({
               connectionSeq: realtime.connectionSeq,
               resumeTurn,
               escalatedFromMessenger: scenario.channel === "messenger",
@@ -3907,6 +4107,19 @@ export default function SessionCallPage() {
           early return·상위 래퍼·`key` 변경·router.push 중 어느 하나라도 하면 GeminiVoiceSession/
           RealtimeVoiceSession이 언마운트되어 실시간 세션·마이크·타이머가 끊긴다(§15.1.1/§15.6 G10,
           D-35 — 이 기능의 존재 이유). 여기서는 형제 하나가 추가로 그려질 뿐이라 통화가 유지된다. */}
+      {/* §142(카드사 고급 재구성 PR-2) — 다통화 변형의 통화 사이 화면(다이얼 · 연결 중 · 다시 걸려 온 전화 · 진짜 기관 자동 안내). */}
+      <CallLegScreens
+        screen={legScreen}
+        contacts={dialContactsFor(scenarioId ?? "")}
+        dialing={legDialing}
+        onKey={(key) => setLegScreen((cur) => (cur.kind === "dialer" ? { kind: "dialer", digits: pressDialKey(cur.digits, key) } : cur))}
+        onBackspace={() => setLegScreen((cur) => (cur.kind === "dialer" ? { kind: "dialer", digits: backspaceDial(cur.digits) } : cur))}
+        onSetDigits={(digits) => setLegScreen((cur) => (cur.kind === "dialer" ? { kind: "dialer", digits } : cur))}
+        onDial={dialLeg}
+        onAnswer={answerLegCallback}
+        onEndTraining={endTrainingFromLeg}
+        onOpenSms={inCallSms.length > 0 ? () => handleOpenSmsOverlay(null) : undefined}
+      />
       {smsOverlayOpen && (
         <InCallSmsOverlay
           messages={inCallSms}
@@ -3930,6 +4143,8 @@ export default function SessionCallPage() {
           onInstallConsent={(landingId) => handleRecordInCallInstall(landingId, "consented")}
           // ⭐ BA-1 간소화안 — 진단 플래그가 켜졌을 때만 계좌번호 '송금' → 내 은행 송금 화면(이 문자의 링크는 그리지 않는다).
           onSendToAccount={bankAppEnabled ? handleOpenBankApp : undefined}
+          // §142 — 전화번호 안내 문자의 번호 누름 → 앱 안 다이얼.
+          onDialNumber={handleDialNumber}
           // N1 · N2 — 이체 화면 머리띠의 "내 은행" · 같은 계좌 합계 열쇠.
           bankIdentity={{ myBankName: myBankNameFor(sessionId ?? "", sortedSms.find((sms) => sms.bankName)?.bankName), ledgerKey: sessionId ?? "" }}
         />

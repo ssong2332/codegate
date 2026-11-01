@@ -98,10 +98,14 @@ test("[§79.18 (2) · G528] 부모 — 동결 인터페이스 5종을 세션 컴
   assert.equal(pending.includes("toolPending"), false, "부모 클라 항에 toolPending이 들어갔다(G555)");
   assert.match(pageCode, /const isHangupLatched = useCallback\(\(\) => isEndLatched\(callEndingRef\.current\), \[\]\);/);
   assert.match(
-    slice(pageCode, "const handleScammerHangupAccepted = () => {", "const handleScammerHangupReady = () => {"),
+    // §142 — 다통화 변형의 통화 끝(`legEnd`)은 앞 갈래가 래치 없이 통화 사이로 보낸다(부재 = 종전 래치).
+    slice(pageCode, "const handleScammerHangupAccepted = (legEnd?: CallLegEnd) => {", "const handleScammerHangupReady = () => {"),
     /callEndingRef\.current = latchHangupAccepted\(callEndingRef\.current\);/,
   );
-  assert.match(pageCode, /const handleScammerHangupReady = \(\) => \{\s*void endCall\("scammer"\);/);
+  assert.match(
+    pageCode,
+    /const handleScammerHangupReady = \(\) => \{\s*const legEnd = legEndRef\.current;\s*if \(legEnd\) \{\s*legEndRef\.current = null;\s*void beginLegTransition\(legEnd\);\s*return;\s*\}\s*void endCall\("scammer"\);/,
+  );
 });
 
 const endCallBody = () => slice(pageCode, "const endCall = async (", "const handleEndTraining = async (");
