@@ -137,7 +137,8 @@ test("[은행명] 배선 — 세션 생성 2곳이 저장·오프닝에 전달, 
   const src = (rel: string) => readFileSync(path.resolve(__dirname, "../../../src", rel), "utf8").replace(/\r\n/g, "\n");
   for (const file of ["session/index.ts", "challenge/userAccess.ts"]) {
     const s = src(file);
-    assert.match(s, /const fictionalBankName = pickFictionalBankName\(\);/, file);
+    // U3(2026-11-01) — 변형 배정 뒤 `pickSessionBankName`(예금주가 보이는 계좌 = 고정 은행 · 그 밖 = 종전 무작위 — `smsGate.ts`).
+    assert.match(s, /const fictionalBankName = pickSessionBankName\(scenarioId, (variantAssignment\.)?flowVariantId\);/, file);
     // T191 S5(#313) 병합 — 3번째 인자는 흐름 변형 ID, 4번째가 은행명이다.
     // T194-a(§84.13.3 ⑤) — 5번째 인자 = 챌린지 ID(세션 술어 입력). 호출부 전부 **명시** 전달(자가 세션 = `undefined`) — 5인자 형태로 고정한다.
     // ⭐ T194-b(§84.13.3 ⑤ ⓒ) — 꼬리 인자(은행명 · 챌린지 ID · 카드)를 **객체 1개**(4번째 인자)로 묶었다(6번째 위치 인자 금지).

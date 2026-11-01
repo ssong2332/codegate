@@ -13,7 +13,8 @@ import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
-import { findMockScreenItem, isMockScreenReachable } from "../scenarios/mockScreens";
+import { findMockScreenItem, installConsentInstructionFor, isMockScreenReachable } from "../scenarios/mockScreens";
+import { findVerifyInterceptItem } from "../scenarios/verifyIntercept";
 import { sessionReachableLandingIds } from "../scenarios/reachability";
 import { anchorFromInCallSmsDoc, findDeclaredSmsIdForLanding, readMockScreenCallMode } from "./inCallAnchor";
 import type { MockScreenDoc, SessionDoc } from "../shared/types";
@@ -57,6 +58,31 @@ async function readInCallLandingAnchor(
   // G170 — ID · 경로 · 숫자만(대사 0).
   logger.info("[T194-c-1] 통화 중 설치 화면 기록", { sessionId, landingId, smsId, callMode, anchorResolved: anchor !== undefined });
   return anchor;
+}
+
+/**
+ * ⭐ U2(실기기 신고 2026-11-01 · 카드사 고급 fv-x7ue — *"그냥 설치했다고 말하니까 다음 단계로 넘어갔어"*) — T194-c-2로 남겨 둔 **실시간 응낙 지시 동봉**.
+ * 실시간 사기범은 설치 화면의 권한 허용을 볼 수 없어 참가자의 말("설치했어요")만 듣고 다음 단계로 갔다. 첫 응낙이면 진리표(`installConsentInstructionFor`)의
+ * 실시간 행 문면을 응답에 실어 클라가 맥락 주입(`installConsented`)으로 넣는다(`recordInCallSmsEvent` §132.7 `landingSubmitted`와 같은 꼴).
+ *
+ * | If | Then |
+ * |---|---|
+ * | 통화 중 설치 화면(`in-call-sms` ∧ `app-install`) ∧ `event === "consented"` ∧ `callMode === "realtime"` ∧ 이 문서의 첫 응낙 | 진리표 실시간 행(호 전환 뒤면 `undefined`) |
+ * | 그 밖(폴백 — `sendMessage` 응낙 턴 지시가 맡는다 · 두 번째 응낙 · 메신저 표면) | 지시 없음(종전 `{ ok: true }`) |
+ */
+async function inCallConsentInstruction(sessionId: string, scenarioId: string): Promise<string | undefined> {
+  // 호 전환 뒤 화자는 확인 창구다(진리표 `transferPlaced` 행 — `inCallSms/index.ts` `isVerifyOfferPlaced`와 같은 문서). 읽기 실패는 전환 전으로 본다.
+  let transferPlaced = false;
+  const verifyItem = findVerifyInterceptItem(scenarioId);
+  if (verifyItem) {
+    try {
+      const snap = await getFirestore().collection("sessions").doc(sessionId).collection("verifyIntercept").doc(verifyItem.offerId).get();
+      transferPlaced = Boolean(snap.get("placedAt"));
+    } catch {
+      transferPlaced = false;
+    }
+  }
+  return installConsentInstructionFor({ entrySurface: "in-call-sms", escalatedCall: false, path: "realtime", transferPlaced });
 }
 
 /**
@@ -124,6 +150,9 @@ export const recordMockScreenEvent = onCall<
     item.entrySurface === "in-call-sms" && item.kind === "app-install"
       ? await readInCallLandingAnchor(sessionId, session, landingId, request.data?.callMode)
       : undefined;
+  // U2 — 통화 중 설치 화면의 실시간 응낙(첫 응낙일 때만 아래 두 분기에서 지시를 만든다). 폴백 · 메신저 표면 = 지시 없음.
+  const realtimeConsent =
+    item.entrySurface === "in-call-sms" && item.kind === "app-install" && event === "consented" && request.data?.callMode === "realtime";
   if (event === "consented" && item.kind !== "app-install") {
     throw new HttpsError("invalid-argument", "이 화면에는 권한 허용 단계가 없습니다.");
   }
@@ -152,7 +181,8 @@ export const recordMockScreenEvent = onCall<
       ...(event === "submitted" ? { submittedAt: now } : {}),
     };
     await ref.create(doc);
-    return { ok: true };
+    const createdInstruction = realtimeConsent ? await inCallConsentInstruction(sessionId, session.scenarioId) : undefined;
+    return createdInstruction ? { ok: true, contextInstruction: createdInstruction } : { ok: true };
   }
 
   // 최초 1회만 세팅한다(§15.9.6) — 다시 열어봐도 "처음 열어본 시각"·"처음 응낙한 시각"이 밀리지
@@ -161,6 +191,9 @@ export const recordMockScreenEvent = onCall<
     event === "shown" ? "shownAt" : event === "consented" ? "consentedAt" : "submittedAt";
   if (!snap.get(field)) {
     await ref.update({ [field]: now });
+    // U2 — 첫 응낙(최초 1회 세팅과 같은 조건)일 때만 실시간 지시를 돌려준다. 다시 눌러도 두 번 알리지 않는다.
+    const firstInstruction = realtimeConsent ? await inCallConsentInstruction(sessionId, session.scenarioId) : undefined;
+    if (firstInstruction) return { ok: true, contextInstruction: firstInstruction };
   }
   return { ok: true };
 });

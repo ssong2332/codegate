@@ -30,7 +30,7 @@
 import type { FlowVariantSms, SmsPurpose } from "../scenarios/flowVariants";
 import { findFlowVariant } from "../scenarios/flowVariants";
 import { findInCallSmsItem, hasInCallSms } from "../scenarios/inCallSms";
-import { resolveSessionAccountNumber } from "../shared/fictionalBank";
+import { fixedBankForHolder, pickFictionalBankName, resolveSessionAccountHolder, resolveSessionAccountNumber } from "../shared/fictionalBank";
 
 /** 첫 문자 하한 — 오프닝 뒤 참가자가 두 번 말하기 전엔 문자 없음(설계 판단값 · AC-099 (b) "첫 문자의 하한"). */
 export const FIRST_SMS_MIN_USER_TURNS = 2;
@@ -231,6 +231,25 @@ export function resolveDeclaredSms(
 export function resolveRouteAccountNumber(scenarioId: string, flowVariantId: string | undefined): string {
   const { declared, reason } = resolveDeclaredSms(scenarioId, flowVariantId);
   return resolveSessionAccountNumber(scenarioId, reason === undefined ? declared.map((item) => item.smsId) : undefined);
+}
+
+/**
+ * ⭐ U3 — 이 세션이 보여 줄 계좌의 예금주(`resolveRouteAccountNumber`와 같은 계좌 문자 → 없으면 변형의 가상 예금주 `accountHolder`). 없으면 undefined.
+ */
+export function resolveRouteAccountHolder(scenarioId: string, flowVariantId: string | undefined): string | undefined {
+  const { declared, reason } = resolveDeclaredSms(scenarioId, flowVariantId);
+  const fromSms = resolveSessionAccountHolder(scenarioId, reason === undefined ? declared.map((item) => item.smsId) : undefined);
+  if (fromSms !== undefined) return fromSms;
+  const variant = flowVariantId ? findFlowVariant(flowVariantId) : undefined;
+  return variant?.scenarioId === scenarioId ? variant.accountHolder : undefined;
+}
+
+/**
+ * ⭐ U3 — 새 세션의 가상 은행명. 예금주가 보이는 계좌면 그 묶음의 고정 은행(`fictionalBank.ts` `ACCOUNT_HOLDER_BANKS` 판정표), 아니면 종전대로 고른다.
+ * 호출부 = 세션 생성 두 곳(`session/index.ts` createSession · `challenge/userAccess.ts` 수신자 세션) — 변형 배정 **뒤**에 부른다.
+ */
+export function pickSessionBankName(scenarioId: string, flowVariantId: string | undefined, random?: () => number): string {
+  return fixedBankForHolder(resolveRouteAccountHolder(scenarioId, flowVariantId)) ?? pickFictionalBankName(random);
 }
 
 /**

@@ -464,13 +464,13 @@ export default function SessionCallPage() {
   // ⭐ PR-A2(audit-A R1 · R8) — G31 큐 **밖** 맥락 주입 슬롯(확인 결과 신호 · 자동 호 전환 실패). 응답을 유발하지 않고 턴 슬롯을
   // 쓰지 않아 큐(참가자 발화 조건 · 턴 경계 대기)를 타지 않는다 — 전환 상태 단언(`personaStateTurn`)과 같은 이유의 별도 슬롯.
   const [contextTurn, setContextTurn] = useState<
-    { text: string; seq: number; delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted" } | null
+    { text: string; seq: number; delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted" | "installConsented" } | null
   >(null);
   // PR-A2 — 확인 결과 신호 주입 상태(세션당 1회 · 도착 안내 뒤 대기분). 판정은 순수 함수(`stallRecovery.ts`).
   const confirmResultInjectionRef = useRef<ConfirmResultInjectionState>(INITIAL_CONFIRM_RESULT_INJECTION_STATE);
   // PR-A2 리뷰 Minor 1 — 슬롯 seq는 단조 증가(전달 확인으로 슬롯을 비운 뒤에도 앞 seq를 재사용하지 않는다).
   const contextTurnSeqRef = useRef(0);
-  const pushContextTurn = useCallback((text: string, delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted") => {
+  const pushContextTurn = useCallback((text: string, delivery: "confirmResult" | "verifyReconnectFailed" | "chatDuringCall" | "landingSubmitted" | "installConsented") => {
     contextTurnSeqRef.current += 1;
     setContextTurn({ text, seq: contextTurnSeqRef.current, delivery });
   }, []);
@@ -2264,16 +2264,20 @@ export default function SessionCallPage() {
   // T194-c-1(docs/Architecture.md §84.5.3 · §84.15.3 · Q2) — 통화 중 문자가 연 모의 설치 화면의 노출 · 응낙 기록. `callMode`는 서버가 통화 중
   // 설치 항목에 필수로 요구한다(앵커는 서버가 그 문자 문서에서 복사 — 클라 계수를 보내지 않는다). 응낙이 유실되면 리포트가 그 순간을 잃으므로
   // 메신저 경로(`messenger/page.tsx` T84)와 같이 1회 재시도하고 실패는 콘솔 경고로 남긴다(비차단).
-  // ⚠️ 실시간 사기범이 응낙을 언급하게 하는 주입(맥락 주입 전달 행)은 T194-c-2(PR-A2 뒤) — 여기는 기록만 한다.
+  // ⭐ U2(2026-11-01) — T194-c-2로 남겨 둔 실시간 응낙 주입: 첫 응낙이면 서버가 `contextInstruction`을 돌려주고 여기서 맥락 주입(`installConsented`)한다
+  // (§132.7 `landingSubmitted`와 같은 꼴 — 폴백은 `sendMessage` 응낙 턴 지시가 맡는다).
   const handleRecordInCallInstall = (landingId: string, event: "shown" | "consented") => {
     if (!sessionId) return;
     const request = { sessionId, landingId, event, callMode: callMode === "realtime" ? "realtime" : "fallback" } as const;
     void (async () => {
+      const inject = (res: { contextInstruction?: string }) => {
+        if (callMode === "realtime" && res.contextInstruction) pushContextTurn(res.contextInstruction, "installConsented");
+      };
       try {
-        await recordMockScreenEvent(request);
+        inject(await recordMockScreenEvent(request));
       } catch {
         try {
-          await recordMockScreenEvent(request);
+          inject(await recordMockScreenEvent(request));
         } catch (err) {
           console.warn("[T194-c-1] 목업 화면 이벤트 기록 실패(비차단 — 훈련은 계속됩니다)", { landingId, event, err });
         }

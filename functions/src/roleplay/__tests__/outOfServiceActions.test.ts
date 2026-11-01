@@ -161,8 +161,10 @@ const ROUTE_LEDGER: Readonly<Record<string, number>> = {
   "functions/src/scenarios/flowVariants.ts#J3_GOLD": 5, // P5
   "functions/src/scenarios/flowVariants.ts#J4_VOUCHER": 5, // P5
   "functions/src/scenarios/flowVariants.ts#J5_COIN": 2, // O4 확인
-  "functions/src/scenarios/flowVariants.ts#J6_INSTALL": 9, // P6
-  "functions/src/scenarios/flowVariants.ts#J7_APP_DELETE": 4, // P6
+  // U7(2026-11-01) — 대환대출 설치 수법 2벌(fv-d8pw · fv-r4hc 인라인)을 상수 `LOAN_APP_INSTALL_VIA_SMS` 1개로 합쳤다(9 → 7 · 4 → 3).
+  // 조립 결과의 유도 문장 수는 같다(fv-m3hd · fv-d8pw · fv-r4hc가 같은 상수 · fv-6s5p 원문 유지) — 소스 문장만 줄었다.
+  "functions/src/scenarios/flowVariants.ts#J6_INSTALL": 7, // P6
+  "functions/src/scenarios/flowVariants.ts#J7_APP_DELETE": 3, // P6
   "functions/src/scenarios/flowVariants.ts#J9_PHOTO": 2, // P6
   "functions/src/scenarios/grandchildImpersonation.prompt.ts#J4_VOUCHER": 1, // P5
   "functions/src/scenarios/loanScam.prompt.ts#J1_LOAN": 2, // P4
