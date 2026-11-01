@@ -146,7 +146,22 @@ export const MIXED_THREAD_HEADER_LABEL = "메시지";
 export function threadHeaderLabel(sorted: readonly InCallSmsView[]): string {
   const first = sorted[0]?.senderLabel;
   if (first === undefined) return MIXED_THREAD_HEADER_LABEL;
-  return sorted.every((item) => item.senderLabel === first) ? first : MIXED_THREAD_HEADER_LABEL;
+  // S3(실기기 확인 2026-11-01) — 같은 번호면 문자마다 붙은 안내 이름이 달라도 한 방이다(실제 휴대폰) — 제목은 첫 문자의 발신 라벨로 고정한다.
+  return sorted.every((item) => sameSenderNumber(item.senderLabel, first)) ? first : MIXED_THREAD_HEADER_LABEL;
+}
+
+/**
+ * S3 — 발신 라벨의 번호 부분(`"02-0762-4180 (카드 명의보호 안내)"` → `"02-0762-4180"`). 괄호 안내 이름이 없으면 라벨 그대로.
+ * 서버 라벨 꼴 = `${번호} (${안내 이름})`(`functions/src/scenarios/inCallSms.ts` senderLabel).
+ */
+export function senderNumberOf(senderLabel: string): string {
+  const cut = senderLabel.indexOf(" (");
+  return (cut >= 0 ? senderLabel.slice(0, cut) : senderLabel).trim();
+}
+
+/** S3 — 두 발신 라벨이 같은 번호인가(같은 방 · 같은 제목 · 말풍선 위 발신처 반복 0). */
+export function sameSenderNumber(a: string, b: string): boolean {
+  return senderNumberOf(a) === senderNumberOf(b);
 }
 
 // ── T190-5(UX-027 v1.33 (4) — 스레드 시각) ────────────────────────────────────────────────────────

@@ -72,7 +72,7 @@ import { extractEscalationSignal } from "./escalationSignal";
 import { callPhaseMockTacticHints, ESCALATED_CALL_CONTEXT_INSTRUCTION, isEscalatedVoiceCall, userTurnsSinceCallEntry } from "./escalatedCall";
 import { isFirstUserTurn } from "./firstTurn";
 import { isL3Procedural } from "./l3Depth";
-import { ensureBankTransferChip, extractLinkMarker, withBankTransferPrefill } from "./linkMarker";
+import { dropPrematureBankTransferChip, ensureBankTransferChip, extractLinkMarker, withBankTransferPrefill } from "./linkMarker";
 import { sessionReachableLandingIds } from "../scenarios/reachability";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { tidyScammerReplyMarkup } from "./replyMarkup";
@@ -816,7 +816,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     const replyAttachments = withBankTransferPrefill(
       // D-g — 계좌를 말했는데 모델이 이체 화면 칩을 빠뜨리면 서버가 붙인다(`linkMarker.ts` `ensureBankTransferChip` 표).
       ensureBankTransferChip(
-        dropRepeatedLinkChips(markerAttachments, linkFreeReplyText, storedHistory),
+        // S2 — 이체 화면 칩은 계좌가 대화에 나온 뒤에만(`linkMarker.ts` `dropPrematureBankTransferChip` 표).
+        dropPrematureBankTransferChip(
+          dropRepeatedLinkChips(markerAttachments, linkFreeReplyText, storedHistory),
+          linkFreeReplyText,
+          routeAccountNumber,
+          storedHistory,
+        ),
         linkFreeReplyText,
         routeAccountNumber,
         sessionReachableLandingIds(session.scenarioId, session.flowVariantId),

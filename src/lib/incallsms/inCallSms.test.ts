@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   countUnread,
   formatSmsClock,
@@ -10,6 +11,8 @@ import {
   splitBodyAtOtp,
   takeNewlyVisibleSmsIds,
   threadHeaderLabel,
+  sameSenderNumber,
+  senderNumberOf,
   type InCallSmsView,
 } from "./inCallSms.ts";
 
@@ -151,4 +154,19 @@ test("[T190-5/UX-027 v1.33 (4)] needsTimeSeparator — 첫 문자 · 5분 이상
   assert.equal(needsTimeSeparator(t0, t0 + 4 * 60 * 1000), false);
   assert.equal(needsTimeSeparator(t0, t0 + 5 * 60 * 1000), true);
   assert.equal(needsTimeSeparator(t0, 0), false, "시각을 모르면 구분줄을 지어내지 않는다");
+});
+
+// ⭐ S3(실기기 확인 2026-11-01) — 같은 번호 02-0762-4180인데 두 번째 문자부터 제목이 "메시지" · 말풍선 위 발신 줄이 바뀌었다(안내 이름이 문자마다 달라서).
+// 실제 휴대폰은 번호로 방을 가른다 — 같은 번호 = 한 방 · 첫 문자의 발신 라벨을 제목으로 고정. 번호가 다르면 종전대로 "메시지".
+test("[S3] threadHeaderLabel — 같은 번호 · 다른 안내 이름 = 첫 문자 라벨 · 다른 번호 = '메시지'", () => {
+  const first = view({ smsId: "a", senderLabel: "02-0762-4180 (카드 명의보호 안내)" });
+  const second = view({ smsId: "b", senderLabel: "02-0762-4180 (피해금 이관 안내)" });
+  assert.equal(threadHeaderLabel([first, second]), "02-0762-4180 (카드 명의보호 안내)");
+  assert.equal(threadHeaderLabel([first, view({ smsId: "c", senderLabel: "1588-0000 (통관 안내)" })]), "메시지");
+  assert.equal(senderNumberOf("02-0762-4180 (피해금 이관 안내)"), "02-0762-4180");
+  assert.equal(senderNumberOf("A"), "A", "안내 이름 없는 라벨");
+  assert.equal(sameSenderNumber(first.senderLabel, second.senderLabel), true);
+  const overlay = readFileSync("src/components/InCallSmsOverlay.tsx", "utf8").replace(/\r\n/g, "\n");
+  assert.ok(overlay.includes("sorted.some((sms) => !sameSenderNumber(sms.senderLabel, sorted[0].senderLabel))"), "섞임 판정도 번호로");
+  assert.ok(overlay.includes("!sameSenderNumber(previous.senderLabel, sms.senderLabel)"), "말풍선 위 발신 줄도 번호로");
 });

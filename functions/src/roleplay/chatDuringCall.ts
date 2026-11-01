@@ -52,7 +52,7 @@ import { hasVerifyIntercept } from "../scenarios/verifyIntercept";
 import { extractEscalationSignal } from "./escalationSignal";
 import { callPhaseMockTacticHints, isEscalatedVoiceCall } from "./escalatedCall";
 import { isL3Procedural } from "./l3Depth";
-import { extractLinkMarker } from "./linkMarker";
+import { dropPrematureBankTransferChip, extractLinkMarker } from "./linkMarker";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { asksIdentityCheck } from "./personaAuthority";
 import { photoTurnInstruction } from "./photoTurn";
@@ -202,7 +202,13 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
 
   // 마커 정리 — 링크 칩은 살리고(대화방이 그린다), 문자 · 신호 마커는 지우기만 한다(효과 0 — 위 표).
   const { text: linkFreeText, attachments: markerAttachments } = extractLinkMarker(completion.text, session.scenarioId, session);
-  const attachments = dropRepeatedLinkChips(markerAttachments, linkFreeText, claim.history);
+  // S2 — 이체 화면 칩은 계좌가 대화에 나온 뒤에만(`linkMarker.ts` `dropPrematureBankTransferChip` 표).
+  const attachments = dropPrematureBankTransferChip(
+    dropRepeatedLinkChips(markerAttachments, linkFreeText, claim.history),
+    linkFreeText,
+    resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
+    claim.history,
+  );
   const { text: smsFreeText } = extractSmsMarker(linkFreeText);
   const { text: signalFreeText, endCall } = extractEscalationSignal(smsFreeText);
   const { text: tidyText } = tidyScammerReplyMarkup(signalFreeText);

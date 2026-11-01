@@ -43,7 +43,7 @@ import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { decideCallAnnouncement } from "./callAnnouncement";
 import { extractEscalationSignal } from "./escalationSignal";
 import { isL3Procedural } from "./l3Depth";
-import { extractLinkMarker } from "./linkMarker";
+import { dropPrematureBankTransferChip, extractLinkMarker } from "./linkMarker";
 import { dropRepeatedLinkChips } from "./linkChipRepeat";
 import { turnsSinceMessengerEntry } from "./messengerReentry";
 import { asksIdentityCheck } from "./personaAuthority";
@@ -159,7 +159,13 @@ export const requestScreenActionFollowUp = onCall<RequestScreenActionFollowUpReq
     if (completion.isMock) return {}; // S4 — 문맥 없는 Mock 대사는 저장하지 않는다.
 
     const { text: linkFreeText, attachments: markerAttachments } = extractLinkMarker(completion.text, session.scenarioId, session);
-    const attachments = dropRepeatedLinkChips(markerAttachments, linkFreeText, history);
+    // S2 — 이체 화면 칩은 계좌가 대화에 나온 뒤에만(`linkMarker.ts` `dropPrematureBankTransferChip` 표).
+    const attachments = dropPrematureBankTransferChip(
+      dropRepeatedLinkChips(markerAttachments, linkFreeText, history),
+      linkFreeText,
+      resolveRouteAccountNumber(session.scenarioId, session.flowVariantId),
+      history,
+    );
     const { text: smsFreeText } = extractSmsMarker(linkFreeText);
     const { text: signalFreeText, escalate: signalEscalate } = extractEscalationSignal(smsFreeText);
     // §128(1) 같은 규칙 — 신호든 대사든 전화를 예고했으면 지금 전환할 수 있을 때만 전환하고, 아니면 예고 문장을 지운다.

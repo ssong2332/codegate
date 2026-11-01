@@ -53,7 +53,7 @@ import {
 import { MESSENGER_CHAT_TOKENS, messengerSmsTokensFor, smsThreadTokensFor } from "@/lib/phone/skinTokens";
 import PhoneIcon from "@/components/PhoneIcon";
 import EndTrainingButton from "@/components/EndTrainingButton";
-import MessengerFakeLanding from "@/components/MessengerFakeLanding";
+import MessengerFakeLanding, { isBankTransferLandingId } from "@/components/MessengerFakeLanding";
 import MessengerProfileSheet from "@/components/MessengerProfileSheet";
 import VoiceTalkDialScreen from "@/components/VoiceTalkDialScreen";
 import MessengerStartNotice from "@/components/MessengerStartNotice";
@@ -772,8 +772,11 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
         </>
       ) : (
         // §89.5 ⓐ — 메신저형 링크 = 미리보기 카드(그림 자리는 무늬 없는 단색 · 실제 사이트 그림 · 로고 없음).
+        // S2(실기기 확인 2026-11-01) — 이체 화면 칩(송금하기 · 이체하기)은 웹 링크가 아니라 송금 카드라 빈 그림 자리를 두지 않는다.
         <>
-          <span aria-hidden="true" className="h-[72px] w-full" style={{ backgroundColor: chatTokens.linkCardThumb }} />
+          {isBankTransferLandingId(attachment.fakeLandingId) ? null : (
+            <span aria-hidden="true" className="h-[72px] w-full" style={{ backgroundColor: chatTokens.linkCardThumb }} />
+          )}
           <span className="px-3 py-2 text-[15px] font-semibold leading-snug" style={{ color: chatTokens.linkCardTitle }}>
             {attachment.displayText}
           </span>

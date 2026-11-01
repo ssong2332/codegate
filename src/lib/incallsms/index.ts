@@ -5,6 +5,8 @@ export {
   needsTimeSeparator,
   prefilledAccountOf,
   prefilledTransferOf,
+  sameSenderNumber,
+  senderNumberOf,
   sortByArrival,
   spellOutOtp,
   splitBodyAtOtp,

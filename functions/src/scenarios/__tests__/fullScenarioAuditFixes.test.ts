@@ -18,9 +18,11 @@ test("[전수 검수 ④] 공통 조립 산출물에 '국민안전지원센터' 
   }
 });
 
-test("[전수 검수 ④] 자산보호 계좌 문자의 예금주 값은 그대로다(문자 고유 값 — 프롬프트 예시만 뺐다)", () => {
+// S1(실기기 확인 2026-11-01) — 계좌 문자 예금주는 기관명이 아니라 가상 개인 이름(강태윤)으로 바뀌었다. 프롬프트 예시에 기관명이 다시 들어오지 않는 것은 위 테스트가 지킨다.
+test("[전수 검수 ④ · S1] 자산보호 계좌 문자의 예금주 = 가상 개인 이름(기관명 0)", () => {
   const bodies = Object.values(IN_CALL_SMS).flat().map((item) => item.body);
-  assert.ok(bodies.some((body) => body.includes("예금주: 국민안전지원센터")));
+  assert.ok(bodies.some((body) => body.includes("예금주: 강태윤")));
+  assert.equal(bodies.some((body) => body.includes("예금주: 국민안전지원센터")), false);
 });
 
 test("[전수 검수 ②③] 자녀 납치 — 보냈다고 하면 받은 것으로 친다 · 같은 송금 재요구 금지 · 절차 지어내기 금지 · 예금주는 사람 이름", () => {

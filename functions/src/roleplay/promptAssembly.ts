@@ -202,10 +202,14 @@ export const UNDECLARED_VERIFICATION_TAIL =
 // (그 문자의 도착 지시 `announceInstruction`은 *"문자 속 링크로 이체를 진행해 달라"* 를 말하라고 한다 — 정면 모순).
 // ⇒ 호출부가 `transferSmsLink`(= `sessionTransferSmsOpensLanding`)를 넘기면 계좌 종류 · 예시를 링크 화면 기준으로 바꾸고, 미선언 목록에서
 //    링크를 뺀다. 부재 · false = 종전 바이트 동일.
-const SMS_KIND_LABEL_TRANSFER_WITH_LINK = "계좌 안내(이체 링크 포함)";
+export const HOLDER_EXCUSE_SENTENCE =
+  " 문자 속 예금주가 기관이 아니라 사람 이름인 이유를 물으면 '보안상 담당자 명의로 관리하는 계좌라서 그렇다'처럼 둘러대고, 그 이름 말고 다른 예금주를 지어내지 않는다.";
+const SMS_KIND_LABEL_TRANSFER_WITH_LINK ="계좌 안내(이체 링크 포함)";
 const SMS_DEMAND_EXAMPLE_TRANSFER_WITH_LINK = `"문자로 보낸 계좌 안내의 링크를 열어 그 화면에서 금액을 넣고 이체해 달라"`;
 export const TRANSFER_VIA_LINK_ONLY_SENTENCE =
-  " 계좌 안내 문자로 이체를 요구할 때는 그 문자 속 링크의 이체 화면에서 하게 하고, 은행 앱·창구·ATM에서 따로 보내라고 하지 않는다.";
+  " 계좌 안내 문자로 이체를 요구할 때는 그 문자 속 링크의 이체 화면에서 하게 하고, 은행 앱·창구·ATM에서 따로 보내라고 하지 않는다." +
+  // S1(실기기 확인 2026-11-01 · 메인 "권고 순서대로") — 계좌 문자의 예금주는 개인 이름이다(실제 사기 계좌 = 개인 명의 대포통장). 참가자가 물으면 둘러대게 한다.
+  HOLDER_EXCUSE_SENTENCE;
 // 리뷰 M2 — link 목적을 선언하지 않은 세션에서 미선언 목록의 "링크 문자는 보낸 적이 없으니"를 빼면, 앱 설치 같은 **다른** 링크 문자를
 // 지어내는 것을 막던 문장도 함께 사라진다. 그 경우에만 "링크는 계좌 문자에 붙은 것 하나뿐"을 1구절 붙인다.
 export const TRANSFER_LINK_IS_ONLY_LINK_SENTENCE =

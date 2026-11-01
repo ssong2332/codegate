@@ -13,7 +13,7 @@ import { fixMessengerCallWording, personaAnchorInstruction, personaGuardFor } fr
 import { resolveRouteAccountNumber, sessionDeclaredSmsPurposes, sessionDeclaresInCallSms, sessionTransferSmsOpensLanding } from "../inCallSms/smsGate";
 import { isL3Procedural } from "./l3Depth";
 import { extractEscalationSignal } from "./escalationSignal";
-import { extractLinkMarker } from "./linkMarker";
+import { dropPrematureBankTransferChip, extractLinkMarker } from "./linkMarker";
 import { asksIdentityCheck } from "./personaAuthority";
 import { buildSystemPrompt } from "./promptAssembly";
 import { limitReplySentences } from "./replyLength";
@@ -212,7 +212,9 @@ export async function generateOpeningLine(
   // T84(§15.9.1 R4) — 오프닝 대사에 실린 링크에도 같은 규칙으로 `landingKind`가 붙는다(호출부가
   // 갈라지면 "오프닝 링크만 kind가 없는" 비대칭이 생긴다 — §15.6 G5와 같은 이유).
   // T194-a(§84.4.4 · G582) — 세션 술어 입력을 넘겨 이 세션에서 도달 불가한 설치 마커를 강등한다.
-  const { text: linkFreeText, attachments } = extractLinkMarker(completion.text, scenarioId, sessionView);
+  const { text: linkFreeText, attachments: markerAttachments } = extractLinkMarker(completion.text, scenarioId, sessionView);
+  // S2 — 이체 화면 칩은 계좌가 대화에 나온 뒤에만(`linkMarker.ts` `dropPrematureBankTransferChip` 표). 첫 메시지라 앞선 대사가 없다.
+  const attachments = dropPrematureBankTransferChip(markerAttachments, linkFreeText, resolveRouteAccountNumber(scenarioId, flowVariantId), []);
   // §122(7) 실기 신고 2026-10-23 — 자녀 사칭 카톡 첫 말풍선이 "[[SIGNAL:ESCALATE_VOICE]] 아빠, 나야. …"로 나갔다.
   // 이 경로만 신호 · 문자 마커 추출이 빠져 있었다(sendMessage · callReturnLine은 이미 지운다). ⛔ 오프닝은 지우기만 한다 —
   // 첫 마디는 통화 전환 · 끊기 · 문자 발송을 일으키지 않는다(전환 하한 — 신호 판정은 `signalConsistency.ts` A0).

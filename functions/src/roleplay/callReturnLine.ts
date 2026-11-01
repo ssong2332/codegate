@@ -22,7 +22,7 @@ import { applyFictionalBank, resolveFictionalBankName } from "../shared/fictiona
 import type { MessageDoc, SessionDoc } from "../shared/types";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { extractEscalationSignal } from "./escalationSignal";
-import { extractLinkMarker } from "./linkMarker";
+import { dropPrematureBankTransferChip, extractLinkMarker } from "./linkMarker";
 import { isL3Procedural } from "./l3Depth";
 import { asksIdentityCheck } from "./personaAuthority";
 import { splitSentences } from "./callAnnouncement";
@@ -114,7 +114,9 @@ export async function generateCallReturnLine(
   });
   // 문맥 없는 Mock 대사는 저장하지 않는다(판정표 2행).
   if (completion.isMock) return { message: undefined, isMock: true };
-  const { text: linkFreeText, attachments } = extractLinkMarker(completion.text, session.scenarioId, session);
+  const { text: linkFreeText, attachments: markerAttachments } = extractLinkMarker(completion.text, session.scenarioId, session);
+  // S2 — 이체 화면 칩은 계좌가 대화에 나온 뒤에만(`linkMarker.ts` `dropPrematureBankTransferChip` 표).
+  const attachments = dropPrematureBankTransferChip(markerAttachments, linkFreeText, resolveRouteAccountNumber(session.scenarioId, session.flowVariantId), history);
   const { text: smsFreeText } = extractSmsMarker(linkFreeText);
   const { text: signalFreeText } = extractEscalationSignal(smsFreeText);
   const { text: markupFreeText } = tidyScammerReplyMarkup(signalFreeText);
