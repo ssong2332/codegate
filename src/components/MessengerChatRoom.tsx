@@ -17,7 +17,7 @@
 // 생겨 그 2종도 이 화면까지 들어올 수 있으므로, ①명시 "전화로 확인" 버튼(scenario.escalation
 // 있을 때만, 1턴부터 상시)과 ②sendMessage 응답의 escalation 플래그 처리(전이 연출 후 /session/play
 // 이동)를 배선한다(§13.2/13.3, P-18, AC-034/036/039).
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { collection, doc, getDoc, onSnapshot, orderBy, query, type Timestamp } from "firebase/firestore";
 import { chatEndedNotice, endsRun, formatChatTime, isUnreadByPeer, startsPeerRun } from "@/lib/messenger/chatPresentation";
@@ -54,6 +54,9 @@ import { MESSENGER_CHAT_TOKENS, messengerSmsTokensFor, smsThreadTokensFor } from
 import PhoneIcon from "@/components/PhoneIcon";
 import EndTrainingButton from "@/components/EndTrainingButton";
 import MessengerFakeLanding, { isBankTransferLandingId } from "@/components/MessengerFakeLanding";
+import BankAppOverlay from "@/components/BankAppOverlay";
+import { fictionalBalanceFor, isBankAppEnabled, myBankNameFor } from "@/lib/bankapp/bankApp";
+import { readDebugFlagSearch } from "@/lib/realtime/debugFlags";
 import MessengerProfileSheet from "@/components/MessengerProfileSheet";
 import VoiceTalkDialScreen from "@/components/VoiceTalkDialScreen";
 import MessengerStartNotice from "@/components/MessengerStartNotice";
@@ -198,10 +201,16 @@ export type ChatRoomCallLink = {
   onScammerLeft: () => void;
 };
 
+// ⭐ BA-1 간소화안 — 진단 플래그 판독(통화 화면과 같은 방식 — 서버 렌더 = 꺼짐 · 브라우저 = 주소 쿼리 + 탭 저장 값).
+const noopSubscribeBankApp = () => () => {};
+const readBankAppEnabled = () => isBankAppEnabled(readDebugFlagSearch());
+const readBankAppEnabledOnServer = () => false;
+
 export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoomCallLink } = {}) {
   const inCall = duringCall !== undefined;
   const router = useRouter();
   const [sessionId] = useState<string | null>(() => getPendingSessionId());
+  const bankAppEnabled = useSyncExternalStore(noopSubscribeBankApp, readBankAppEnabled, readBankAppEnabledOnServer);
   const [pageState, setPageState] = useState<PageState>(sessionId ? "checking" : "no-session");
   const [scenario, setScenario] = useState<ScenarioDoc | null>(null);
   // T194-a(Architecture.md §84.4.1 C-2 · C-3 · UX D-124 ② · PRD AC-106 (i)) — 이 세션이 통화로 이어질 수 있는가. 세션 문서의
@@ -1395,7 +1404,28 @@ export default function MessengerChatRoom({ duringCall }: { duringCall?: ChatRoo
         />
       )}
 
-      {fakeLanding && (
+      {/* ⭐ BA-1 간소화안 — 진단 플래그가 켜졌으면 송금 칩(은행 · 계좌가 실린 이체 화면 칩)은 사기 사이트 이체 화면 대신 내 은행 송금 화면을 연다.
+          기록 · 캡처는 아래 이체 화면 제출과 같다(`recordMockScreen(…, "submitted")` · 이체 완료 화면 캡처를 '+'에). */}
+      {fakeLanding && bankAppEnabled && isBankTransferLandingId(fakeLanding.fakeLandingId) && fakeLanding.bankName && fakeLanding.accountNumber ? (
+        <BankAppOverlay
+          myBankName={myBankNameFor(sessionId ?? "", fakeLanding.bankName)}
+          balance={fictionalBalanceFor(sessionId ?? "")}
+          target={{
+            bankName: fakeLanding.bankName,
+            accountNumber: fakeLanding.accountNumber,
+            ...(fakeLanding.accountHolder ? { holder: fakeLanding.accountHolder } : {}),
+          }}
+          onClose={() => setFakeLanding(null)}
+          onSubmitted={() => {
+            recordMockScreen(fakeLanding.fakeLandingId, "submitted");
+            setTransferReceipt({
+              bankName: fakeLanding.bankName!,
+              accountNumber: fakeLanding.accountNumber!,
+              ...(fakeLanding.accountHolder ? { holder: fakeLanding.accountHolder } : {}),
+            });
+          }}
+        />
+      ) : fakeLanding && (
         <MessengerFakeLanding
           title={fakeLanding.displayText}
           // T104 — 상황별 콘텐츠 조회 키(§19.4 R8: 정확 일치 조회 전용).

@@ -190,8 +190,8 @@ import CallStartNotice from "@/components/CallStartNotice";
 import { personaEventLogLine, readSessionPersonaCard, type PersonaCardView } from "@/lib/personacard/personaCard";
 import CallWaveform from "@/components/CallWaveform";
 import InCallSmsOverlay from "@/components/InCallSmsOverlay";
-import BankAppOverlay, { HomeBar } from "@/components/BankAppOverlay";
-import { fictionalBalanceFor, isBankAppEnabled, myBankNameFor, type CopiedAccount } from "@/lib/bankapp/bankApp";
+import BankAppOverlay from "@/components/BankAppOverlay";
+import { fictionalBalanceFor, isBankAppEnabled, myBankNameFor, type TransferTarget } from "@/lib/bankapp/bankApp";
 import { readDebugFlagSearch } from "@/lib/realtime/debugFlags";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
 import { LoadingStatus } from "@/components/ui";
@@ -642,12 +642,12 @@ export default function SessionCallPage() {
   // (§16.2 무개정 재사용). 이 값들도 타이머·한도·오디오 effect 어디에도 들어가지 않는다(§15.1.1).
   const [verifyOffer, setVerifyOffer] = useState<VerifyInterceptView | null>(null);
   const [verifyOverlayOpen, setVerifyOverlayOpen] = useState(false);
-  // ⭐ BA-1(docs/research/in-service-bank-app-design-2026-11-01.md §2 · 결정 BA0~BA12) — 진단 플래그 `bankapp=1`일 때만 통화 화면 "홈" →
-  // 훈련용 홈 · 내 은행 앱(형제 노드 오버레이 — 통화 유지 D-35). 서버 호출 0 · 기록 0(BA-2에서 잇는다). 계좌 복사 값은 앱 안 state뿐.
+  // ⭐ BA-1 간소화안(2026-11-01 · 사용자 승인 "간소화안으로") — 진단 플래그 `bankapp=1`일 때만 문자 속 계좌번호 '송금' → 내 은행 송금 화면
+  // (형제 노드 오버레이 — 통화 유지 D-35). 송금 완료 = 그 문자의 이체 랜딩 제출과 같은 기록(`landing_submitted`).
   // 판독은 진단 패널과 같은 방식(`AudioDebugPanel` — 서버 렌더 = 꺼짐 · 브라우저 = 주소 쿼리 + 탭 저장 값).
   const bankAppEnabled = useSyncExternalStore(noopSubscribeBankApp, readBankAppEnabled, readBankAppEnabledOnServer);
   const [bankAppOpen, setBankAppOpen] = useState(false);
-  const [copiedAccount, setCopiedAccount] = useState<CopiedAccount | null>(null);
+  const [bankTransfer, setBankTransfer] = useState<{ smsId: string; target: TransferTarget } | null>(null);
   const [verifyDialing, setVerifyDialing] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
   // ⛔ §49(V5, 2026-08-02) — 참가자가 탭하던 상시 컨트롤이 삭제되면서 이 값을 `true`로 바꾸는
@@ -2231,9 +2231,12 @@ export default function SessionCallPage() {
     setSmsOverlayOpen(true);
   };
 
-  // ⭐ BA-1 — 홈 화면 열기 · 닫기(라우팅 0 — 상태만 바꾼다 · 동시 열림 금지: 문자함 · 확인 시트를 닫는다 · G26).
-  const handleOpenHome = () => {
+  // ⭐ BA-1 간소화안 — 송금 화면 열기(라우팅 0 — 상태만 바꾼다 · 동시 열림 금지: 문자함 · 확인 시트를 닫는다 · G26).
+  // 여는 순간은 종전 링크 탭과 같은 기록(`link_tapped`)이다 — 리포트 · 판정이 보는 사실이 바뀌지 않는다.
+  const handleOpenBankApp = (smsId: string, target: TransferTarget) => {
     if (isEndLatched(callEndingRef.current)) return;
+    handleRecordSmsEvent(smsId, "link_tapped");
+    setBankTransfer({ smsId, target });
     setSmsOverlayOpen(false);
     setVerifyOverlayOpen(false);
     setBankAppOpen(true);
@@ -3866,12 +3869,6 @@ export default function SessionCallPage() {
             )}
           </div>
 
-          {/* ⭐ BA-1 — 홈 막대(iOS형 = 가는 홈 막대 · One UI형 = 탐색 막대 홈 버튼). 진단 플래그 켜짐 · 통화 중 · 종료 래치 전만. 누르면 훈련용 홈(통화 유지). */}
-          {bankAppEnabled && !localHangup && !endLatched && (
-            <div className="mt-4">
-              <HomeBar ios={deviceSkin.skin === "ios"} onHome={handleOpenHome} color={callTokens.textPrimary} />
-            </div>
-          )}
         </div>
       )}
       </div>
@@ -3901,24 +3898,22 @@ export default function SessionCallPage() {
           // T194-c-1(Q2) — 통화 중 문자로 연 설치 화면의 노출 · 응낙(기록만 — 실시간 언급 주입은 T194-c-2).
           onInstallShown={(landingId) => handleRecordInCallInstall(landingId, "shown")}
           onInstallConsent={(landingId) => handleRecordInCallInstall(landingId, "consented")}
-          // ⭐ BA-1 — 진단 플래그가 켜졌을 때만 계좌번호 복사 메뉴(값은 이 페이지 state뿐 · 서버 0).
-          onCopyAccount={bankAppEnabled ? setCopiedAccount : undefined}
+          // ⭐ BA-1 간소화안 — 진단 플래그가 켜졌을 때만 계좌번호 '송금' → 내 은행 송금 화면(이 문자의 링크는 그리지 않는다).
+          onSendToAccount={bankAppEnabled ? handleOpenBankApp : undefined}
         />
       )}
 
-      {/* ⭐ BA-1 — 훈련용 홈 · 내 은행 앱. 문자 오버레이와 **같은 자리의 형제 노드**(D-35 · G10) — 라우팅 · 상위 래퍼 · `key` 변경 0이라
+      {/* ⭐ BA-1 간소화안 — 내 은행 송금 화면. 문자 오버레이와 **같은 자리의 형제 노드**(D-35 · G10) — 라우팅 · 상위 래퍼 · `key` 변경 0이라
           통화 세션 · 마이크 · 타이머가 그대로 이어진다. 문자함 · 확인 시트와 동시에 열리지 않는다(여는 핸들러가 상대를 닫는다 — G26). */}
-      {bankAppEnabled && bankAppOpen && (
+      {bankAppEnabled && bankAppOpen && bankTransfer && (
         <BankAppOverlay
-          ios={deviceSkin.skin === "ios"}
-          callerLabel={callerLabel}
-          elapsedLabel={formatCallElapsed(elapsedSec)}
-          myBankName={myBankNameFor(sessionId ?? "", copiedAccount?.bankName ?? inCallSms.find((sms) => sms.bankName)?.bankName)}
+          call={{ callerLabel, elapsedLabel: formatCallElapsed(elapsedSec) }}
+          myBankName={myBankNameFor(sessionId ?? "", bankTransfer.target.bankName)}
           balance={fictionalBalanceFor(sessionId ?? "")}
-          seed={sessionId ?? ""}
-          copiedAccount={copiedAccount}
+          target={bankTransfer.target}
           onClose={() => setBankAppOpen(false)}
-          onOpenMessages={() => handleOpenSmsOverlay(null)}
+          // 송금 완료 = 종전 이체 화면 제출과 같은 기록 경로(4-c 끊기 해제 · 리포트 속은 순간 · 실시간 맥락 1줄). ⛔ 무인자 — 금액은 실리지 않는다(G138).
+          onSubmitted={() => handleRecordSmsEvent(bankTransfer.smsId, "landing_submitted")}
         />
       )}
 

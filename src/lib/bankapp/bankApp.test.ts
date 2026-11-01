@@ -1,14 +1,14 @@
-// ⭐ BA-1(docs/research/in-service-bank-app-design-2026-11-01.md §5 BA-1 완료 기준) — 훈련용 홈 · 내 은행 앱의 계약.
+// ⭐ BA-1 간소화안(2026-11-01 · 사용자 승인 "간소화안으로" · docs/research/in-service-bank-app-design-2026-11-01.md) — 내 은행 송금 화면의 계약.
 // | # | 고정하는 것 |
 // |---|---|
-// | A1 | 플래그 `bankapp=1`만 켠다 · 저장 유지 키에 있다(`debugFlags.ts`) · 페이지는 플래그가 꺼지면 홈 막대 · 오버레이 · 복사 메뉴를 그리지 않는다 |
-// | A2 | 화면 단계 표 S1~S10(홈 → 잠금 → 계좌 → 받는 계좌 → 금액 → 확인 → 인증 → 완료) |
-// | A3 | G138 — 입력값(계좌 · 금액)은 오버레이 state를 벗어나지 않는다: 콜백 인자 0 · 네트워크 · 저장소 · 콜러블 0 |
-// | A4 | 입력 칸 0 — 비밀번호 · 인증번호 입력 칸이 없다(입력은 받는 계좌 · 금액 두 칸뿐 · password 타입 0) |
+// | A1 | 플래그 `bankapp=1`만 켠다 · 저장 유지 키에 있다(`debugFlags.ts`) · 플래그가 꺼지면 계좌 누름 · 송금 화면 0(종전 링크 화면 그대로) |
+// | A2 | 화면 단계 표 S1~S6(받는 분 확인 → 금액 → 인증 → 완료) · 판정(잔액 · 금액 표기 · 받는 분 이름) |
+// | A3 | G138 — 금액은 오버레이 state를 벗어나지 않는다: 완료 콜백 무인자 · 네트워크 · 저장소 · 콜러블 0 |
+// | A4 | 입력 칸 0 — 비밀번호 · 인증번호 입력 칸이 없다(입력은 금액 한 칸뿐 · password 타입 0) |
 // | A5 | 실존 은행명 0 — 가상 은행 목록 = 서버 `FICTIONAL_BANK_NAMES`(드리프트 0) · 화면 문구 · 컴포넌트에 실존 은행 이름 0 |
 // | A6 | 통화 유지(D-35 · G10) — 오버레이는 문자함과 같은 자리의 형제 노드 · 라우팅 0 · 문자함 · 확인 시트와 동시에 열리지 않는다 |
-// | A7 | 계좌 복사 = 앱 안 state(기기 복사 API 0) · 인증번호 복사 메뉴 0(AC-061) |
-// | A8 | 2026-11-01 실기 신고 보강 — One UI형 홈 = 3버튼 탐색 막대(누를 수 있는 것은 홈 하나) · 문자 속 계좌번호를 누르면 같은 복사 메뉴 |
+// | A7 | 간소화안 — 클립보드 · 홈 화면 · 탐색 막대 0 · 계좌번호 누름 = '송금' 메뉴 · 그 문자의 링크는 그리지 않는다 · 인증번호 메뉴 0(AC-061) |
+// | A8 | 기록 경로 — 통화 송금 완료 = `landing_submitted`(여는 순간 `link_tapped`) · 메신저 송금 칩 = `recordMockScreen(…, "submitted")` + 이체 완료 캡처 |
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -17,10 +17,11 @@ import {
   BANK_APP_FLAG,
   FALLBACK_HOLDER_NAMES,
   FICTIONAL_BANK_NAMES,
-  accountNumberError,
+  amountFromSmsBody,
   balanceError,
   balanceText,
   fictionalBalanceFor,
+  holderFromSmsBody,
   isBankAppEnabled,
   myBankNameFor,
   nextBankAppStage,
@@ -37,6 +38,11 @@ const overlayCode = stripComments(overlay);
 const page = read("src/app/session/play/page.tsx");
 const smsOverlay = read("src/components/InCallSmsOverlay.tsx");
 const lib = read("src/lib/bankapp/bankApp.ts");
+const messenger = read("src/components/MessengerChatRoom.tsx");
+const between = (source: string, start: string, end: string) => {
+  const at = source.indexOf(start);
+  return source.slice(at, source.indexOf(end, at));
+};
 
 test("[BA-1 A1] 플래그 — bankapp=1만 켜고, 저장 유지 키라 통화 화면까지 남는다", () => {
   assert.equal(BANK_APP_FLAG, "bankapp");
@@ -52,50 +58,57 @@ test("[BA-1 A1] 플래그 — bankapp=1만 켜고, 저장 유지 키라 통화 �
   assert.equal(isBankAppEnabled(resolveDebugFlags("?bankapp=off", JSON.stringify(first.stored)).effectiveSearch), false);
 });
 
-test("[BA-1 A1] 페이지 — 플래그가 꺼지면 홈 막대 · 오버레이 · 복사 메뉴 0", () => {
-  assert.ok(page.includes("{bankAppEnabled && !localHangup && !endLatched && ("), "홈 막대는 플래그 · 통화 중 조건 뒤에만");
-  assert.ok(page.includes("{bankAppEnabled && bankAppOpen && ("), "오버레이는 플래그 뒤에만");
-  assert.ok(page.includes("onCopyAccount={bankAppEnabled ? setCopiedAccount : undefined}"), "복사 메뉴는 플래그 뒤에만");
-  // 문자함은 콜백이 없으면 복사 대상이 없다(종전 화면 그대로).
-  assert.ok(smsOverlay.includes("const copyable = onCopyAccount !== undefined && Boolean(sms.bankName && sms.accountNumber);"));
+test("[BA-1 A1] 페이지 — 플래그가 꺼지면 계좌 누름 · 송금 화면 0(종전 링크 그대로)", () => {
+  assert.ok(page.includes("{bankAppEnabled && bankAppOpen && bankTransfer && ("), "통화 송금 화면은 플래그 뒤에만");
+  assert.ok(page.includes("onSendToAccount={bankAppEnabled ? handleOpenBankApp : undefined}"), "계좌 누름은 플래그 뒤에만");
+  assert.ok(
+    messenger.includes("fakeLanding && bankAppEnabled && isBankTransferLandingId(fakeLanding.fakeLandingId)"),
+    "메신저 송금 칩도 플래그 뒤에만",
+  );
+  // 문자함은 콜백이 없으면 송금 대상이 없다(종전 화면 그대로 — 링크도 그대로).
+  assert.ok(smsOverlay.includes("onSendToAccount !== undefined &&"));
+  assert.ok(smsOverlay.includes("{sms.linkDisplayText && !sendable && ("));
 });
 
-test("[BA-1 A2] 화면 단계 표 S1~S10", () => {
+test("[BA-1 A2] 화면 단계 표 S1~S6", () => {
   const path: [Parameters<typeof nextBankAppStage>[0], Parameters<typeof nextBankAppStage>[1], string][] = [
-    ["home", "open", "lock"],
-    ["lock", "unlock", "account"],
-    ["account", "transfer", "recipient"],
     ["recipient", "next", "amount"],
-    ["amount", "next", "confirm"],
-    ["confirm", "send", "auth"],
+    ["amount", "next", "auth"],
     ["auth", "authenticate", "done"],
-    ["confirm", "cancel", "amount"],
-    ["auth", "cancel", "amount"],
-    ["done", "finish", "account"],
-    ["recipient", "back", "account"],
     ["amount", "back", "recipient"],
+    ["auth", "cancel", "amount"],
   ];
   for (const [from, action, to] of path) assert.equal(nextBankAppStage(from, action), to, `${from} + ${action}`);
   // 표에 없는 조합은 머문다(인증을 건너뛰어 완료로 가는 길 0).
-  assert.equal(nextBankAppStage("confirm", "authenticate"), "confirm");
-  assert.equal(nextBankAppStage("lock", "transfer"), "lock");
+  assert.equal(nextBankAppStage("recipient", "authenticate"), "recipient");
+  assert.equal(nextBankAppStage("amount", "authenticate"), "amount");
+  assert.equal(nextBankAppStage("done", "next"), "done");
 });
 
-test("[BA-1 A2] 판정 — 계좌 자리 수 · 잔액 초과 · 금액 표기 · 받는 분 이름", () => {
-  assert.equal(accountNumberError(""), "받는 분 계좌번호를 입력해 주세요.");
-  assert.equal(accountNumberError("123-45"), "계좌번호를 다시 확인해 주세요.");
-  assert.equal(accountNumberError("948-2716-5093-27"), undefined);
+test("[BA-1 A2] 판정 — 잔액 초과 · 금액 표기 · 받는 분 이름", () => {
   assert.equal(balanceError("5,000,000", 10_000_000), undefined);
   assert.equal(balanceError("20000000", 10_000_000), "출금 가능 금액보다 많습니다.");
   assert.equal(balanceError("abc", 10_000_000), undefined, "형식 오류는 amountError가 먼저 막는다");
   assert.equal(wonText("500000"), "500,000원");
+  assert.equal(wonText("2,340,000"), "2,340,000원");
   assert.equal(balanceText(12_340_000), "12,340,000원");
-  // 문자에서 복사한 계좌 = 서버가 실은 예금주 · 직접 입력 = 가상 개인 이름(결정적).
-  const copied = { bankName: "미르은행", accountNumber: "948-2716-5093-27", holder: "김도현" };
-  assert.equal(recipientHolderFor("948-2716-5093-27", copied), "김도현");
-  const typed = recipientHolderFor("1234567890", copied);
-  assert.ok(FALLBACK_HOLDER_NAMES.includes(typed));
-  assert.equal(recipientHolderFor("1234567890", null), typed);
+  // 서버가 실은 예금주 그대로 · 없으면 가상 개인 이름(결정적 · 하이픈 무관).
+  assert.equal(recipientHolderFor({ accountNumber: "948-2716-5093-27", holder: "김도현" }), "김도현");
+  const fallback = recipientHolderFor({ accountNumber: "1234567890" });
+  assert.ok(FALLBACK_HOLDER_NAMES.includes(fallback));
+  assert.equal(recipientHolderFor({ accountNumber: "123-456-7890" }), fallback);
+});
+
+test("[BA-1 A2] 옛 계좌 문자 보정 — 문자에 보이는 예금주 · 금액 줄(서버 문구 그대로)", () => {
+  const body = "[승인취소 지원] 피해금 이관 전용 계좌 안내\n예금주: 오현수\nOO은행 417-0625-3082-19\n금액: 2,340,000원\n아래에서 피해금 이관을 진행해 주세요.";
+  assert.equal(holderFromSmsBody(body), "오현수");
+  assert.equal(amountFromSmsBody(body), "2,340,000");
+  // 줄이 없으면 부재(가상 이름 · 빈 금액 칸으로 간다).
+  assert.equal(holderFromSmsBody("[자산보호절차] 임시 안전계좌 안내\nOO은행 210-3391-5540-08"), undefined);
+  assert.equal(amountFromSmsBody("예금주: 강태윤\nOO은행 210-3391-5540-08"), undefined);
+  // 메뉴는 구조화 필드를 먼저 쓰고, 없을 때만 본문 줄로 맞춘다.
+  assert.ok(smsOverlay.includes("const holder = sms.accountHolder ?? holderFromSmsBody(sms.body);"));
+  assert.ok(smsOverlay.includes("const amount = sms.transferAmount ?? amountFromSmsBody(sms.body);"));
 });
 
 test("[BA-1 A2] 내 은행 · 잔액 — 결정적 · 사기범 계좌 은행과 다르다 · 1,000만~3,000만 원", () => {
@@ -108,26 +121,26 @@ test("[BA-1 A2] 내 은행 · 잔액 — 결정적 · 사기범 계좌 은행과
   }
 });
 
-test("[BA-1 A3] G138 — 입력값이 오버레이 밖으로 나가지 않는다(콜백 인자 · 네트워크 · 저장소 · 콜러블 0)", () => {
+test("[BA-1 A3] G138 — 금액이 오버레이 밖으로 나가지 않는다(콜백 인자 · 네트워크 · 저장소 · 콜러블 0)", () => {
   for (const forbidden of ["fetch(", "XMLHttpRequest", "sendBeacon", "localStorage", "sessionStorage", "indexedDB", "callCallable", "@/lib/api", "firebase"]) {
     assert.ok(!overlayCode.includes(forbidden), `오버레이에 있으면 안 되는 것: ${forbidden}`);
   }
-  // 위로 올리는 콜백은 무인자 두 개뿐이다(통화 복귀 · 문자함).
+  // 위로 올리는 콜백은 무인자 두 개뿐이다(닫기 · 송금 완료).
   assert.ok(overlayCode.includes("onClose: () => void;"));
-  assert.ok(overlayCode.includes("onOpenMessages: () => void;"));
-  assert.ok(!/onClose\([^)]/.test(overlayCode) && !/onOpenMessages\([^)]/.test(overlayCode), "콜백에 값을 싣지 않는다");
+  assert.ok(overlayCode.includes("onSubmitted: () => void;"));
+  assert.ok(!/onClose\([^)]/.test(overlayCode) && !/onSubmitted\([^)]/.test(overlayCode), "콜백에 값을 싣지 않는다");
   for (const forbidden of ["fetch(", "localStorage", "sessionStorage", "callCallable"]) {
     assert.ok(!stripComments(lib).includes(forbidden), `순수 모듈에 있으면 안 되는 것: ${forbidden}`);
   }
 });
 
-test("[BA-1 A4] 입력 칸 0 — 비밀번호 · 인증번호 칸이 없고 입력은 받는 계좌 · 금액 두 칸뿐", () => {
-  assert.equal(overlayCode.split("<input").length - 1, 2, "입력 칸은 받는 계좌 · 금액 두 개");
-  assert.equal(overlayCode.split("<select").length - 1, 1, "선택은 받는 분 은행 하나");
+test("[BA-1 A4] 입력 칸 0 — 비밀번호 · 인증번호 칸이 없고 입력은 금액 한 칸뿐", () => {
+  assert.equal(overlayCode.split("<input").length - 1, 1, "입력 칸은 금액 하나");
+  assert.equal(overlayCode.split("<select").length - 1, 0, "선택 칸 0(받는 계좌는 문자 · 칩에서 채워진다)");
   for (const forbidden of ['type="password"', "비밀번호를 입력", "인증번호를 입력", "OTP", "보안카드", "<textarea"]) {
     assert.ok(!overlayCode.includes(forbidden), `있으면 안 되는 것: ${forbidden}`);
   }
-  assert.ok(BANK_APP_COPY.lockButton.includes("지문") && BANK_APP_COPY.authButton.includes("인증"));
+  assert.ok(BANK_APP_COPY.authButton.includes("지문") && BANK_APP_COPY.authButton.includes("인증"));
   // 주소창 0 — 앱에는 주소창이 없다(가짜 호스트 · `.invalid` 0).
   assert.ok(!overlayCode.includes(".invalid") && !overlayCode.includes("mockHost"));
 });
@@ -149,36 +162,47 @@ test("[BA-1 A5] 실존 은행명 0 — 가상 목록 = 서버 목록 · 화면 �
 
 test("[BA-1 A6] 통화 유지 — 형제 노드 · 라우팅 0 · 동시 열림 0 · 종료 래치에서 닫힘", () => {
   const smsAt = page.indexOf("{smsOverlayOpen && (");
-  const bankAt = page.indexOf("{bankAppEnabled && bankAppOpen && (");
+  const bankAt = page.indexOf("{bankAppEnabled && bankAppOpen && bankTransfer && (");
   const verifyAt = page.indexOf("{verifyOverlayOpen && verifyOffer && (");
   assert.ok(smsAt > 0 && bankAt > smsAt && verifyAt > bankAt, "문자함 · 은행 앱 · 확인 시트가 같은 자리에 차례로 있다");
-  const openHome = page.slice(page.indexOf("const handleOpenHome = () => {"), page.indexOf("};", page.indexOf("const handleOpenHome = () => {")));
-  assert.ok(openHome.includes("setSmsOverlayOpen(false)") && openHome.includes("setVerifyOverlayOpen(false)") && openHome.includes("setBankAppOpen(true)"));
-  assert.ok(!openHome.includes("router."), "홈 열기는 라우팅하지 않는다");
+  const open = between(page, "const handleOpenBankApp = (", "};");
+  assert.ok(open.includes("setSmsOverlayOpen(false)") && open.includes("setVerifyOverlayOpen(false)") && open.includes("setBankAppOpen(true)"));
+  assert.ok(open.includes("isEndLatched(callEndingRef.current)"), "종료 래치 뒤에는 열지 않는다");
+  assert.ok(!open.includes("router."), "송금 화면 열기는 라우팅하지 않는다");
   assert.ok(!overlayCode.includes("useRouter") && !overlayCode.includes("router."), "오버레이는 라우팅하지 않는다");
   // 문자함 · 확인 시트를 열면 은행 앱이 닫힌다 · 종료 래치(E2 · 끊기 승인)에서도 닫힌다.
   assert.ok(page.split("setBankAppOpen(false);").length - 1 >= 4);
   assert.ok(page.includes("inert={chatOpen || smsOverlayOpen || bankAppOpen ? true : undefined}"));
-  // 통화 필(탭 = 통화 복귀)이 오버레이에 있다.
+  // 통화 띠(탭 = 통화 복귀)가 오버레이에 있다(통화 중일 때만 — 메신저는 부재).
   assert.ok(overlayCode.includes("aria-label={COPY.callPill}") && BANK_APP_COPY.callPill === "눌러서 통화로 돌아가기");
+  assert.ok(page.includes("call={{ callerLabel, elapsedLabel: formatCallElapsed(elapsedSec) }}"));
 });
 
-test("[BA-1 A7] 계좌 복사 = 앱 안 state · 기기 복사 API 0 · 인증번호 복사 메뉴 0", () => {
-  for (const source of [overlay, smsOverlay, page, lib]) {
+test("[BA-1 A7] 간소화안 — 클립보드 · 홈 · 탐색 막대 0 · 계좌번호 누름 = '송금' 메뉴 · 링크 대체 · 인증번호 메뉴 0", () => {
+  for (const source of [overlay, smsOverlay, page, lib, messenger]) {
     assert.ok(!source.includes("navigator.clipboard") && !source.includes("execCommand"), "기기 복사 API 0");
   }
-  // 복사 대상은 계좌 줄 구조화 필드(은행명 · 계좌번호)가 있는 문자뿐 — 인증번호(otpCode)는 메뉴에 실리지 않는다.
-  const menu = smsOverlay.slice(smsOverlay.indexOf('role="menu"'), smsOverlay.indexOf("</div>", smsOverlay.indexOf('role="menu"')));
-  assert.ok(menu.includes("sms.accountNumber") && !menu.includes("otpCode"));
+  for (const gone of ["HomeBar", "copiedAccount", "onCopyAccount", "CopiedAccount", "longPress"]) {
+    assert.ok(![overlayCode, smsOverlay, page, lib].some((source) => source.includes(gone)), `빠져야 할 것: ${gone}`);
+  }
+  // 계좌번호 버튼은 '송금' 메뉴를 여는 것뿐이고, 메뉴는 문자 문서의 구조화 필드만 싣는다(인증번호 0).
+  const split = between(smsOverlay, "accountSplit ? (", "accountSplit.after}");
+  assert.ok(split.includes("onClick={() => setSendMenuSmsId(sms.smsId)}") && !split.includes("onSendToAccount"));
+  const menu = between(smsOverlay, 'role="menu"', "</div>");
+  assert.ok(menu.includes("onSendToAccount?.(sms.smsId,") && menu.includes("sms.accountNumber") && !menu.includes("otpCode"));
+  assert.equal(BANK_APP_COPY.sendToAccount, "송금");
+  // 이체 랜딩이 있는 계좌 문자만(기록 경로가 그 랜딩 제출이라서).
+  assert.ok(smsOverlay.includes('sms.landingKind !== "app-install"; // 부재 = credential-form'));
 });
 
-test("[BA-1 A8] 실기 신고 보강 — One UI형 3버튼 탐색 막대(홈만 누름) · 계좌번호 누름 = 복사 메뉴", () => {
-  const homeBar = overlayCode.slice(overlayCode.indexOf("export function HomeBar"));
-  const oneUi = homeBar.slice(homeBar.indexOf("grid-cols-3"));
-  assert.equal((oneUi.match(/<button/g) ?? []).length, 1, "One UI형 막대에서 누를 수 있는 것은 홈 하나");
-  assert.equal((oneUi.match(/aria-hidden="true"/g) ?? []).length, 3, "최근 앱 · 홈 그림 · 뒤로는 스크린리더 대상 밖");
-  // 계좌번호 버튼은 복사 메뉴를 여는 것뿐 — 복사 콜백 · 기기 API를 직접 부르지 않는다.
-  const split = smsOverlay.slice(smsOverlay.indexOf("accountSplit ? ("), smsOverlay.indexOf("accountSplit.after}"));
-  assert.ok(split.includes("onClick={() => setCopyMenuSmsId(sms.smsId)}") && !split.includes("onCopyAccount"));
-  assert.ok(smsOverlay.includes("const accountAt = copyable &&"), "플래그 꺼짐(copyable 거짓)이면 계좌 버튼 0");
+test("[BA-1 A8] 기록 경로 — 통화 = landing_submitted(여는 순간 link_tapped) · 메신저 칩 = submitted + 이체 완료 캡처", () => {
+  const open = between(page, "const handleOpenBankApp = (", "};");
+  assert.ok(open.includes('handleRecordSmsEvent(smsId, "link_tapped")'));
+  assert.ok(page.includes('onSubmitted={() => handleRecordSmsEvent(bankTransfer.smsId, "landing_submitted")}'));
+  const chip = between(messenger, "<BankAppOverlay", ") : fakeLanding && (");
+  assert.ok(chip.includes('recordMockScreen(fakeLanding.fakeLandingId, "submitted")') && chip.includes("setTransferReceipt("));
+  // 완료 기록은 인증 버튼 한 번뿐이다(완료 화면의 확인은 닫기).
+  const auth = between(overlayCode, "const authenticate = () => {", "};");
+  assert.ok(auth.includes("onSubmitted();") && auth.includes('go("authenticate")'));
+  assert.equal(overlayCode.split("onSubmitted()").length - 1, 1);
 });

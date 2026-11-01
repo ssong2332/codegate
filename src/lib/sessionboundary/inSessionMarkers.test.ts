@@ -57,7 +57,7 @@ const SESSION_SURFACE_REGISTRY: Record<string, SurfaceRole> = {
   "src/components/DrilldownOptionCard.tsx": "not-in-session", // 시나리오 드릴다운 카드(세션 전)
   "src/components/EndTrainingButton.tsx": "in-session", // 상시 종료(AC-006) — 세션 중 유일한 상시 요소
   "src/components/InCallSmsOverlay.tsx": "in-session", // UX-027 통화 중 문자함
-  "src/components/BankAppOverlay.tsx": "in-session", // BA-1 통화 중 훈련용 홈 · 내 은행 앱(진단 플래그 bankapp=1)
+  "src/components/BankAppOverlay.tsx": "in-session", // BA-1 간소화안 내 은행 송금 화면(진단 플래그 bankapp=1)
   "src/components/LegalDocumentView.tsx": "not-in-session", // 법적 고지 화면 틀(2026-10-21 — 세션 밖 공개 화면)
   "src/components/LegalLinks.tsx": "not-in-session", // 첫 화면 · 로그인 · 고지 화면 하단 링크(세션 밖)
   "src/components/MessengerFakeLanding.tsx": "in-session", // UX-023 가짜 랜딩

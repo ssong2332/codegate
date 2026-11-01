@@ -99,7 +99,7 @@ const CLIENT_SCREEN_INVENTORY: Record<string, boolean> = {
   "MessengerProfileSheet.tsx": true,
   "VoiceTalkDialScreen.tsx": true, // §123 카톡형 보이스톡 발신 화면(UX D-156) — 사기범 이름을 그린다 // 카톡형 상대 프로필 시트(§95 · UX D-138) — 사기범 이름을 그린다
   "InCallSmsOverlay.tsx": true, // 통화 중 문자 오버레이(UX-027, T68)
-  "BankAppOverlay.tsx": true, // BA-1 통화 중 훈련용 홈 · 가상 내 은행 앱(진단 플래그 bankapp=1) — 사기 상황의 이체 화면을 그린다
+  "BankAppOverlay.tsx": true, // BA-1 간소화안 가상 내 은행 송금 화면(진단 플래그 bankapp=1) — 사기 상황의 이체 화면을 그린다
   "VerifyCallOverlay.tsx": true, // 확인 전화 오버레이(UX-031, T83)
   "SpoofImage.tsx": true, // 발신번호 위조 카드(T12)
   // 사기 표면이 아닌 공용 컨트롤·표식 — 문구 스캔 대상이 아니다(그래도 등록은 강제한다).
