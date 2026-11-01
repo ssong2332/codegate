@@ -16,15 +16,16 @@ const CHILD = "messenger-child-impersonation-kakao";
 const PARCEL = "messenger-parcel-smishing-sms";
 const src = (rel: string) => readFileSync(path.resolve(__dirname, "../../../src", rel), "utf8").replace(/\r\n/g, "\n");
 
-test("[신고 재현] child-kakao · 기본 남성 목소리 선택 → 세션 성별 male → Gemini 음성이 모든 세션에서 남성 풀", () => {
+// ⭐ A2 ㉠(2026-11-01) — child-kakao는 통화 단계가 없어졌다 ⇒ 목소리 선택이 와도 세션 성별 0(parcel 초급 · 중급과 같은 규칙 · AC-106 (f)).
+// 성별이 주어졌을 때의 음성 풀 · [화자] 치환 규칙 자체는 그대로 고정한다(통화가 있는 다른 시나리오가 같은 함수를 쓴다).
+test("[신고 재현 → A2 ㉠] child-kakao · 기본 남성 목소리 선택 → 통화 없음이라 세션 성별 0 · 성별을 주면 Gemini 음성이 그 성별 풀", () => {
   const voices = new Set<string>();
   const femaleVoices = new Set<string>();
   for (let i = 0; i < 50; i += 1) {
     const session = { scenarioId: CHILD, difficultyLevel: "intermediate", sessionId: `sess-${i}`, voiceSelectionSource: "fallback_male" };
-    const gender = resolveSessionSpeakerGender(session);
-    assert.equal(gender, "male");
-    voices.add(pickGeminiVoiceName(CHILD, session.sessionId, gender));
-    femaleVoices.add(pickGeminiVoiceName(CHILD, session.sessionId, resolveSessionSpeakerGender({ ...session, voiceSelectionSource: "fallback_female" })));
+    assert.equal(resolveSessionSpeakerGender(session), undefined, "통화 단계 없음 = 성별 0");
+    voices.add(pickGeminiVoiceName(CHILD, session.sessionId, "male"));
+    femaleVoices.add(pickGeminiVoiceName(CHILD, session.sessionId, "female"));
   }
   assert.deepEqual([...voices], ["Puck"]);
   assert.deepEqual([...femaleVoices], ["Aoede"]);
@@ -49,7 +50,8 @@ test("[회귀 0] 클론(recorded · reused) · 선택 부재 · 챌린지는 종
 
 test("[프롬프트] 같은 성별이 [화자] 블록으로 — 남성 음성인데 '딸'이라 말하지 않게(텍스트 · 오프닝 · Live 같은 원천)", () => {
   const prompt = SCENARIO_PROMPTS[CHILD];
-  const male = buildSystemPrompt(prompt, { difficultyLevel: "intermediate", speakerGender: resolveSessionSpeakerGender({ scenarioId: CHILD, voiceSelectionSource: "fallback_male" }) });
+  // A2 ㉠ — 세션 해석은 이제 성별 0이라 성별을 직접 넘겨 치환 규칙만 고정한다.
+  const male = buildSystemPrompt(prompt, { difficultyLevel: "intermediate", speakerGender: "male" });
   const none = buildSystemPrompt(prompt, { difficultyLevel: "intermediate", speakerGender: resolveSessionSpeakerGender({ scenarioId: CHILD }) });
   assert.ok(male.includes("[화자"), "기본 남성 목소리 세션은 [화자] 블록이 생긴다");
   assert.ok(!none.includes("[화자"), "선택 없는 세션은 종전처럼 블록 0(§84.4.6)");

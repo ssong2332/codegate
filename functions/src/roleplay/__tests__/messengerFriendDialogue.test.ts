@@ -96,12 +96,13 @@ test("[실기 4] 응답 없음 문면 — 시도 순서로 돌려 쓰고 연속 
   }
 });
 
-test("[실기 4] 응답 없음 분기 대상 = 통화로 이어지지 않는 카톡형뿐(오늘 friend-loan 1종) · 세 난이도", () => {
+test("[실기 4] 응답 없음 분기 대상 = 통화로 이어지지 않는 카톡형뿐(friend-loan · A2 ㉠ 자녀 사칭 2종) · 세 난이도", () => {
   const targets = Object.entries(PUBLIC_SCENARIOS)
     .filter(([, meta]) => meta.surface === "kakao")
     .filter(([, meta]) => ["beginner", "intermediate", "advanced"].some((lv) => !resolveScenarioEscalation(meta, lv)))
     .map(([id]) => id);
-  assert.deepEqual(targets, [FRIEND]);
+  // A2 ㉠(2026-11-01) — 자녀 사칭은 통화 넘김을 껐다 ⇒ 참가자가 건 보이스톡은 받지 않는 연출로 간다.
+  assert.deepEqual(targets.sort(), ["messenger-child-impersonation-kakao", FRIEND].sort());
 });
 
 test("[실기 4] requestEscalation — 전이 불가 분기 안에서만 via=voice_talk · 카톡형이면 응답 없음, 그 밖은 종전 거부", () => {

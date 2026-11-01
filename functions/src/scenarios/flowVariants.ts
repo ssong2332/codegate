@@ -1443,7 +1443,7 @@ const SPECS: VariantSpec[] = [
     level: "beginner",
     authoring: "authored",
     stages: st("폰이 고장 나 친구 폰으로 연락한다고 한다.", "곧바로 송금을 부탁한다."),
-    keepLabels: ["다급함 조성", "가족애·죄책감 이용", "채널 전환 유도", "송금 직접 요구"],
+    keepLabels: ["다급함 조성", "가족애·죄책감 이용", "송금 직접 요구"], // A2 ㉠ — "채널 전환 유도"(통화 넘김) 수법 제거
     exitBlock: ["D0_none"],
     sms: [],
     legs: ONE_LEG("자녀", "female"),
@@ -1451,7 +1451,7 @@ const SPECS: VariantSpec[] = [
     channels: ["messenger"],
     demandStages: 1,
     // T194-a(AC-106 (i) ②) — 공개 메타 `escalation` 보유 시나리오라 세 난이도 모두 통화 단계가 있다.
-    escalatesToVoice: true,
+    // A2 ㉠(2026-11-01) — 통화 넘김 없음(공개 메타 `escalation` 제거와 같은 값 — G581).
   },
   {
     variantId: "fv-tpr3",
@@ -1466,7 +1466,7 @@ const SPECS: VariantSpec[] = [
     ...INTERMEDIATE,
     channels: ["messenger"],
     demandStages: 1,
-    escalatesToVoice: true,
+    // A2 ㉠(2026-11-01) — 통화 넘김 없음(공개 메타 `escalation` 제거와 같은 값 — G581).
   },
   {
     variantId: "fv-tdgg",
@@ -1492,7 +1492,7 @@ const SPECS: VariantSpec[] = [
     channels: ["messenger"],
     demandStages: 3,
     sources: ["C15", "S6"],
-    escalatesToVoice: true,
+    // A2 ㉠(2026-11-01) — 통화 넘김 없음(공개 메타 `escalation` 제거와 같은 값 — G581).
   },
 
   // ── messenger-friend-loan / parcel / subsidy · reputation-blackmail — §2.6.3 세 난이도 "현행" ──

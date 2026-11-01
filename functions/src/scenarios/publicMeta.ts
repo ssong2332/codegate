@@ -210,14 +210,15 @@ export const messengerChildImpersonationKakaoScenario: ScenarioMeta = {
   title: "자녀 사칭 급전 요청(카카오톡)",
   fraudType: "자녀 사칭(카카오톡)",
   estimatedDuration: "약 5~8분",
-  difficulty: "가족 걱정을 건드리고, 채팅하다가 전화로 이어집니다",
+  difficulty: "가족 걱정을 건드리고, 폰이 고장 났다며 채팅으로만 송금을 재촉합니다",
   deepvoiceLines: [
     { lineId: "line-1", text: "엄마, 나야. 폰 액정 깨져서 친구 폰으로 톡 보내." },
   ],
   callerLabel: "자녀 (사칭)",
   channel: "messenger",
   surface: "kakao",
-  escalation: { toChannel: "voice", voiceMode: "clone" },
+  // A2 ㉠(실기기 신고 2026-11-01 · 사용자 결정 "권고대로") — 통화 넘김 없음. 메신저 자녀 사칭은 "폰이 고장 나 친구 폰으로 톡"이라 목소리를 숨기는 수법이다
+  // (사기범이 먼저 보이스톡을 걸면 그 핑계와 어긋난다). 참가자가 건 보이스톡은 받지 않는 연출(`voiceTalkUnanswered`)만 남는다.
 };
 
 export const messengerFriendLoanKakaoScenario: ScenarioMeta = {

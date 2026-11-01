@@ -182,8 +182,8 @@ test("[T194-a G586 · §84.4.3] 화자 성별 세션 해석 — 표 값이 있�
     const [v] = listFlowVariants("messenger-child-impersonation-kakao", level);
     return preFix("messenger-child-impersonation-kakao", level, v.variantId);
   });
-  assert.deepEqual(leaked, ["female", "female", "female"], "역방향 샘플 — 옛 구현은 child-kakao 세 난이도에 성별을 부여한다");
-  for (const value of leaked) assert.notEqual(value, undefined, "옛 구현 값은 위 기대값(undefined)과 달라 실패한다");
+  // A2 ㉠(2026-11-01) — child-kakao가 통화 넘김을 꺼 옛 구현도 이제 성별을 주지 않는다(역방향 샘플이 더는 갈리지 않는다 — 기록용으로 값만 고정).
+  assert.deepEqual(leaked, [undefined, undefined, undefined], "통화 넘김이 없는 child-kakao는 옛 · 새 구현 모두 성별 0");
   const advanced = listFlowVariants(PARCEL, "advanced")[0];
   assert.equal(resolveSessionSpeakerGender({ scenarioId: PARCEL, difficultyLevel: "advanced", flowVariantId: advanced.variantId }), "female");
   assert.equal(

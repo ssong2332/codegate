@@ -1,7 +1,6 @@
 // 시나리오 "자녀 사칭 급전 요청(카카오톡)" 공개 메타 (2026-07-23, T27 메신저피싱 확장, OQ-19
-// 표면 넓게). channel="messenger", surface="kakao". 사용자가 채팅 중 의심을 표하면 사기범이
-// "전화로 확인시켜 주겠다"며 보이스로 에스컬레이션한다(escalation.voiceMode="clone" — 자녀를
-// 사칭하는 채팅이므로 통화도 본인 목소리 복제를 그대로 이어 쓴다, AC-046).
+// 표면 넓게). channel="messenger", surface="kakao". ⭐ A2 ㉠(실기기 신고 2026-11-01 · 사용자 결정) — 통화로 넘어가지 않는다
+// (예전: 의심하면 "전화로 확인시켜 주겠다"며 보이스로 에스컬레이션 · voiceMode="clone"). 폰 고장 핑계로 목소리를 숨기는 실제 수법과 맞춘다.
 import type { DeepvoiceLine, ScenarioDoc } from "./familyAccidentDeepvoice";
 
 export const MESSENGER_CHILD_IMPERSONATION_KAKAO_SCENARIO_ID = "messenger-child-impersonation-kakao";
@@ -16,7 +15,7 @@ export const messengerChildImpersonationKakaoScenario: ScenarioDoc = {
   title: "자녀 사칭 급전 요청(카카오톡)",
   fraudType: "자녀 사칭(카카오톡)",
   estimatedDuration: "약 5~8분",
-  difficulty: "가족 걱정을 건드리고, 채팅하다가 전화로 이어집니다",
+  difficulty: "가족 걱정을 건드리고, 폰이 고장 났다며 채팅으로만 송금을 재촉합니다",
   deepvoiceLines,
   callerLabel: "010-4471-2298",
   channel: "messenger",
@@ -25,5 +24,5 @@ export const messengerChildImpersonationKakaoScenario: ScenarioDoc = {
   // 빌린 폰 주인의 이름처럼 보이는 평범한 이름(성별 단서 없음 — 이 시나리오는 아들/딸이 정해지지 않는다). 실존 인물 아님.
   chatDisplayName: "이지수",
   chatNonFriend: true,
-  escalation: { toChannel: "voice", voiceMode: "clone" },
+  // A2 ㉠(2026-11-01) — 통화 넘김 없음(서버 `publicMeta.ts`와 같은 값 · 참가자 보이스톡 = 받지 않는 연출).
 };

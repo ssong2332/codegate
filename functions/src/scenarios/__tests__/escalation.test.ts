@@ -27,7 +27,8 @@ test("[T194-a G580 ①] 진리표 — escalation 보유 2종은 세 난이도 ·
   }
   t.diagnostic(`[G580] 전이 있음 ${yes.length}칸`);
   const expected = [
-    ...["messenger-child-impersonation-kakao", "messenger-subsidy-smishing-sms"].flatMap((id) =>
+    // A2 ㉠(2026-11-01) — 자녀 사칭은 통화 넘김을 껐다(escalation 제거) ⇒ 세 난이도 모두 보유는 지원금 1종.
+    ...["messenger-subsidy-smishing-sms"].flatMap((id) =>
       DIFFICULTY_LEVELS.flatMap((level) => [`${id}/${level}`, `${id}/${level}/챌린지`]),
     ),
     "messenger-parcel-smishing-sms/advanced",

@@ -21,6 +21,7 @@ import {
   resolveMockScreenKind,
   type MockScreenItem,
   type MockScreenKind,
+  MESSENGER_INSTALL_WITHOUT_CALL_LANDINGS,
 } from "../mockScreens";
 import { IN_CALL_SMS } from "../inCallSms";
 import { pickFallbackTurnInstruction } from "../../verifyIntercept/fallbackTurn";
@@ -783,8 +784,9 @@ test("[AC-073] app-install 카탈로그를 가진 시나리오는 escalation 배
     for (const level of DIFFICULTY_LEVELS) {
       // T194-c-1(§84.15.7 단계 1 · G587) — **메신저 링크 표면** 설치 항목만 본다. 통화 중 문자 표면 설치(Q2)는 처음부터 통화인 세션이라
       // 메신저 → 통화 전이가 없다(3단계 표시 0 — G587). 그 세션의 단계 파생은 `report/__tests__/mockScreenTimeline.test.ts`가 본다.
+      // A2 ㉠(2026-11-01) — 설치 뒤 통화가 아닌 메신저 설치(`MESSENGER_INSTALL_WITHOUT_CALL_LANDINGS` — 자녀 사칭 보험 앱)는 전이 배선 없이 연다.
       const reachable = listAppInstallMockScreens(scenarioId)
-        .filter((item) => item.entrySurface === "messenger-link")
+        .filter((item) => item.entrySurface === "messenger-link" && !MESSENGER_INSTALL_WITHOUT_CALL_LANDINGS.includes(item.landingId))
         .some((item) =>
           isMockScreenReachable({ scenarioId, difficultyLevel: level, flowVariantId: firstVariantId(scenarioId, level) }, item),
         );
@@ -798,13 +800,12 @@ test("[AC-073] app-install 카탈로그를 가진 시나리오는 escalation 배
   assert.deepEqual(
     cells.sort(),
     [
-      "messenger-child-impersonation-kakao/advanced",
       "messenger-parcel-smishing-sms/advanced",
       "messenger-subsidy-smishing-sms/advanced",
       "messenger-subsidy-smishing-sms/beginner",
       "messenger-subsidy-smishing-sms/intermediate",
     ],
-    "설치 단계에 도달하는 칸 = 지원금 세 난이도 + 택배 고급(AC-106 (f) — 택배 초급 · 중급 0) + 자녀 사칭 고급(§110.2)",
+    "설치 단계에 도달하는 칸 = 지원금 세 난이도 + 택배 고급(AC-106 (f) — 택배 초급 · 중급 0) · 자녀 사칭 고급(§110.2)은 A2 ㉠로 통화 없는 설치라 제외",
   );
 });
 
@@ -1843,7 +1844,10 @@ test("[§15.9.7 G54] 응낙 턴 지시가 채널 전이 신호를 담지 않는�
 
 test("[T194-a G591] 모든 (시나리오 × 난이도 × 세션 종류) 배정 풀 변형에서 메신저 설치 화면이 도달 가능하면 그 세션 종류의 에스컬레이션이 참 · 역방향", (t) => {
   const installIds = new Set(
-    allItems.filter((item) => item.kind === "app-install" && item.entrySurface === "messenger-link").map((item) => item.landingId),
+    allItems
+      // A2 ㉠(2026-11-01) — 설치 뒤 통화가 아닌 메신저 설치는 에스컬레이션과 무관하다(위 [AC-073]과 같은 제외).
+      .filter((item) => item.kind === "app-install" && item.entrySurface === "messenger-link" && !MESSENGER_INSTALL_WITHOUT_CALL_LANDINGS.includes(item.landingId))
+      .map((item) => item.landingId),
   );
   const check = (pool: (id: string, level: (typeof DIFFICULTY_LEVELS)[number], challengeId?: string) => readonly { variantId: string }[]) => {
     const bad: string[] = [];

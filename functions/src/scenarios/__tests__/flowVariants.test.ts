@@ -593,7 +593,8 @@ const EXPECTED_CALL_STAGE: Readonly<Record<string, Readonly<Record<DifficultyLev
   "messenger-parcel-smishing-sms": { beginner: false, intermediate: false, advanced: true },
   "messenger-subsidy-smishing-sms": { beginner: true, intermediate: true, advanced: true },
   // 그 밖 메신저 시나리오 = 공개 메타 그대로(AC-106 (i) 신설 시점 값 — §84.4.5 ③).
-  "messenger-child-impersonation-kakao": { beginner: true, intermediate: true, advanced: true },
+  // A2 ㉠(2026-11-01) — 자녀 사칭 통화 넘김 제거.
+  "messenger-child-impersonation-kakao": { beginner: false, intermediate: false, advanced: false },
   "messenger-friend-loan-kakao": { beginner: false, intermediate: false, advanced: false },
 };
 // ⭐ §84.13.5 처방 4 — 챌린지 세션 기대값: 전부 "없음"(에스컬레이션 메타 시나리오는 챌린지 자체가 거부된다).
@@ -680,9 +681,7 @@ const CHILD_INSTALL_TACTIC_110 =
   "보험 처리 앱 설치 요구 — '액정 보험 처리하려면 이 앱 깔아야 한대, 여기서 받으면 돼' 처럼 자연스러운 문장과 함께 `[[LINK:child-insurance-install]]` 마커만 사용해 설치를 부탁한다. 실존 앱 이름 · 앱스토어 주소 · 실제 URL은 어떤 경우에도 출력하지 않고, 설치 방법 · 권한 설정은 설명하지 않는다.";
 
 const BASE_FLAGGED_ASSEMBLY: readonly { scenarioId: string; level: DifficultyLevel; variantId: string; sha256: string; length: number }[] = [
-  { scenarioId: "messenger-child-impersonation-kakao", level: "beginner", variantId: "fv-34v5", sha256: "5d2ab0397bf0b43db0ba6dfdea2bea47ce420f2f038ef6f78881fce612fa2ebf", length: 6625 },
-  { scenarioId: "messenger-child-impersonation-kakao", level: "intermediate", variantId: "fv-tpr3", sha256: "43addc55a5e13b7074231e776ae80ea12bc07fa2e846f2e381db68b76ea33492", length: 5860 },
-  { scenarioId: "messenger-child-impersonation-kakao", level: "advanced", variantId: "fv-tdgg", sha256: "81f2ea3e212c1384f3bf077d43fb00c2bc547ff6a6c23c8f8c206d1d92c97436", length: 7323 },
+  // A2 ㉠(2026-11-01 · 사용자 결정) — child-kakao 3벌은 통화 넘김을 껐다(`escalatesToVoice` 제거 · 페르소나 · 수법 문면 의도 변경)라 이 "플래그만 더한" 대조에서 뺐다.
   { scenarioId: "messenger-subsidy-smishing-sms", level: "beginner", variantId: "fv-rizf", sha256: "a2e606c25ff5bfd88c95a1424c002a5e010cd149a30245e33e5528f35965e434", length: 7265 },
   { scenarioId: "messenger-subsidy-smishing-sms", level: "intermediate", variantId: "fv-afbr", sha256: "67ab2d736788293f0978cc034b53ac74c85bd1d3397a607d70e5f0394f60fdad", length: 6526 },
   { scenarioId: "messenger-subsidy-smishing-sms", level: "advanced", variantId: "fv-hu8w", sha256: "b29e4c651cda6960e4f9d5a28ab3f61165c6a97da68f78d6d34398e1d8e4de48", length: 8443 },

@@ -1061,6 +1061,8 @@ export function isMockScreenReachable(
   if (item.kind !== "app-install") return true;
   // T194-c-1(§84.15.7 단계 3 · G583) — 통화 중 문자 표면의 설치는 허용목록 시나리오에서만(그 밖은 닫힌 쪽).
   if (item.entrySurface === "in-call-sms") return IN_CALL_INSTALL_SCENARIOS.includes(session.scenarioId);
+  // A2 ㉠(2026-11-01) — 설치 뒤 다음 단계가 통화가 아닌 메신저 설치(자녀 사칭 보험 앱 — 통화 넘김 없음)는 전이와 무관하게 연다.
+  if (MESSENGER_INSTALL_WITHOUT_CALL_LANDINGS.includes(item.landingId)) return true;
   // 표의 2 · 3행을 한 식으로 — `escalation` 보유 시나리오는 세션 술어가 세 난이도 · 챌린지 모두에서 값을 내므로 "현행 그대로"와
   // 같고, `advancedEscalation`만 가진 시나리오는 고급 자가 세션에서만 값을 낸다(메타 필드 직접 읽기 0 — G580).
   return resolveSessionEscalation(session, PUBLIC_SCENARIOS) !== undefined;

@@ -320,7 +320,8 @@ test("[T190-8a/G462 ⑤] 에스컬레이션 집합 = 서버 두 전이 경로의
   const clientCount = readdirSync("src/content/scenarios")
     .filter((f) => f.endsWith(".ts"))
     .filter((f) => /^\s*escalation:\s*\{/m.test(codeOnly(read(`src/content/scenarios/${f}`)))).length;
-  assert.ok(serverCount >= 2, `서버 에스컬레이션 시나리오가 ${serverCount}개뿐이다 — 파서가 죽었다`);
+  // A2 ㉠(2026-11-01) — 자녀 사칭 통화 넘김 제거로 세 난이도 보유는 지원금 1종이 됐다(파서 생존 확인 하한 2 → 1).
+  assert.ok(serverCount >= 1, `서버 에스컬레이션 시나리오가 ${serverCount}개다 — 파서가 죽었다`);
   assert.equal(clientCount, serverCount, "클라 escalation 보유 수와 서버 PUBLIC_SCENARIOS 보유 수가 다르다 — 고지 문면이 갈라진다");
   // T194-a — 고급 전용 전이 설정도 같은 방식으로 센다(값 대조는 src/content/scenarios/escalation.test.ts).
   const serverAdvanced = (codeOnly(read("functions/src/scenarios/publicMeta.ts")).match(/^\s*advancedEscalation:\s*\{/gm) ?? []).length;
