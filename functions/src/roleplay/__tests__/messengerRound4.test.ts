@@ -95,7 +95,8 @@ test("[§128(4)] 참가자가 건 통화 — 페르소나 문장 교체 · '전�
   assert.equal(fixParticipantCalledReply("응 아빠 나야"), "응 아빠 나야");
   const index = read("roleplay/index.ts");
   assert.match(index, /systemPrompt: buildSystemPrompt\(turnScenarioPrompt, \{/);
-  assert.match(index, /const shapedReplyText = participantCalled \? fixParticipantCalledReply\(limitedReplyText\) : limitedReplyText;/);
+  // R14(2026-11-01) — 참가자 통화 교정 뒤 판정표 G 포기 1줄 교체가 한 단계 더 붙었다(교정 식 자체는 그대로).
+  assert.match(index, /const calledShapedReplyText = participantCalled \? fixParticipantCalledReply\(limitedReplyText\) : limitedReplyText;/);
 });
 
 test("[§128(3)] 통화 중 카톡 포기 지시 — 포기 신호만 · 목표 신호 금지 · 메타 판정에 걸리지 않음", () => {

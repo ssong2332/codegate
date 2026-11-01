@@ -63,17 +63,30 @@ export function personaAnchorInstruction(scenarioId: string): string | undefined
 // | W1 | 문장 맨 앞 "여보세요"(부호 포함) | 지운다(지우면 빈 대사면 원문) |
 // | W2 | "(친구 폰|이 번호|다른 번호)으로 전화하는/전화한" — 지금 대화를 전화라고 말함 | "연락하는/연락한" |
 // | W3 | "통화(를/는)? (여기서)? 마치/끝내/끊 + 미래 · 현재 어미(겠 · 을게 · ㄹ게 · 습니다 · 자)" — 지금 대화를 통화로 끝냄 | "통화" → "대화" |
+// | W4 | R13(#477 실측 — 메신저 포기 끝맺음 "이만 끊을게" · "먼저 끊을게") — 앞에 통화 · 대화 · 전화 낱말 없이 "끊 + 미래 어미" | 메신저 끝맺음으로(끊을게 → 갈게 · 끊을게요 → 갈게요 · 끊겠습니다 → 마치겠습니다) |
 // ⛔ "내가 지금 전화할게"(전환 예고) · "통화가 안 돼"(핑계) · "아까 통화 끊어서 미안"(지난 통화)은 바꾸지 않는다 — 실제 통화를 가리키는 말이다.
 // ⛔ 통화 중 대화방(`chatDuringCall`)에는 쓰지 않는다 — 그때 "통화 끊을게"는 실제 통화를 가리킬 수 있다.
 const LEADING_HELLO = /(^|[.?!\n]\s*)여보세요\s*[?？!.,~…]*\s*/g;
 const CHAT_AS_CALL = /(친구\s*폰|이\s*번호|다른\s*번호|이\s*폰)(\s*(?:으로|로))\s*전화(하는|한|하고|해서|했)/g;
 const END_CHAT_AS_CALL = /통화(\s*(?:를|는)?\s*(?:여기서\s*|이만\s*|그만\s*)?)(마치|끝내|끊)(?=겠|을게|을께|ㄹ게|습니다|자|을\s*게|어야|을\s*거)/g;
+// W4 — 통화 · 대화 · 전화 낱말이 앞에 없는 "끊 + 미래 어미"(W3가 먼저 "통화 … 끊"을 "대화 … 끊"으로 바꾼 뒤라 그 꼴은 여기서 빠진다).
+const END_CHAT_BARE_HANGUP = /(?<!(?:통화|대화|전화)\s*(?:를|는)?\s*(?:여기서\s*|이만\s*|그만\s*)?)끊(을게요|을께요|을게|을께|겠습니다|겠어|는다)/g;
+const BARE_HANGUP_REPLACEMENT: Readonly<Record<string, string>> = {
+  을게요: "갈게요",
+  을께요: "갈게요",
+  을게: "갈게",
+  을께: "갈게",
+  겠습니다: "마치겠습니다",
+  겠어: "갈게",
+  는다: "간다",
+};
 
 export function fixMessengerCallWording(text: string): string {
   const fixed = text
     .replace(LEADING_HELLO, "$1")
     .replace(CHAT_AS_CALL, (_m, via: string, particle: string, tail: string) => `${via}${particle} 연락${tail}`)
     .replace(END_CHAT_AS_CALL, (_m, middle: string, verb: string) => `대화${middle}${verb}`)
+    .replace(END_CHAT_BARE_HANGUP, (_m, tail: string) => BARE_HANGUP_REPLACEMENT[tail] ?? `끊${tail}`)
     .replace(/[ \t]{2,}/g, " ")
     .trim();
   return fixed.length > 0 ? fixed : text;

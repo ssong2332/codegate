@@ -23,6 +23,9 @@ export const THOUGHT_SPAN_MIN_WORDS = 8;
 
 const HANGUL = /[가-힣ㄱ-ㆎ]/;
 const NON_HANGUL_SPAN = /[^가-힣ㄱ-ㆎ]+/g;
+// R11(#477 실측 2026-11-01 — "(앱 설치 확인 신호가 없으니 아직 설치된 것으로 보지 않는다.)"처럼 지시 해설이 괄호째 대사에 섞였다) — 괄호 안이
+// 진행 해설 어휘(참가자 · 신호 · 기록 · 재촉 · 되풀이 · 다음 단계 · 지시 · 앱 화면 …)를 담고 해라체("-다")로 끝나면 괄호째 지운다. 인물 대사는 이런 괄호를 쓰지 않는다.
+const DIRECTIVE_COMMENTARY = /[ \t]*\((?=[^()\n]*(?:참가자|상대(?:가|의|는|에게)|신호|기록|재촉|되풀이|다음\s*단계|지시|넘어가지|앱\s*(?:화면|알림|확인)))[^()\n]{4,240}?다\.?\)/g;
 const LATIN_WORD = /[A-Za-z]+(?:['’][A-Za-z]+)*/g;
 const THOUGHT_MARKER = /^[\s*]*thought(?=[\s:*]|$)[\s:*]*/i;
 const LEADING_PUNCT = /^[.,!?…~。]*/;
@@ -108,6 +111,10 @@ export function stripLeakedThought(text: string): string {
   rest = rest.replace(CIRCLE_TITLE, (_m, surname: string | undefined) => {
     stripped = true;
     return surname ? `${surname} ` : "";
+  });
+  rest = rest.replace(DIRECTIVE_COMMENTARY, () => {
+    stripped = true;
+    return " ";
   });
   rest = rest.replace(NON_HANGUL_SPAN, (span) => {
     if (latinWordCount(span) < THOUGHT_SPAN_MIN_WORDS) return span;

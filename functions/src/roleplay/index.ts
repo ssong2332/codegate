@@ -30,6 +30,8 @@ import {
   buildScreenStatusLine,
   inCallScreenFacts,
   anyScreenGiveUp,
+  decideForcedScreenGiveUp,
+  screenGiveUpReply,
   installPendingSince,
   latestTransferAmount,
   messengerScreenFacts,
@@ -955,7 +957,16 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       : endCallConsistency;
     // §129 D13 판정표 C — 메신저 단계의 포기 신호인데 참가자가 거절 · 의심 없이 따라오는 중이면 목표로 기록한다(끝내는 것은 그대로).
     const giveUpCheck = reclassifyMessengerGiveUp(endCallCheck.endCall, maskedUserText, session.channel === "messenger");
-    const endCallSignal = giveUpCheck.endCall;
+    // R14 판정표 G(`screenAction.ts`) — 넘어온 통화에서 포기 단계가 두 턴째인데 끊기 신호가 없으면 서버가 포기로 끝맺는다(대사는 아래에서 포기 1줄로).
+    const forcedScreenGiveUp = decideForcedScreenGiveUp({
+      escalatedCall,
+      endCall: giveUpCheck.endCall,
+      hangupSignalAllowed: hangupMode === "signal",
+      facts: screenApplies ? screenFacts : [],
+      userTurns: userTurnsNow,
+    });
+    if (forcedScreenGiveUp) logger.info("[R14] 넘어온 통화 포기 단계 서버 끝맺음", { sessionId, userTurns: userTurnsNow });
+    const endCallSignal = forcedScreenGiveUp ? ("give_up" as const) : giveUpCheck.endCall;
     if (giveUpCheck.reclassified) {
       // G170 — 사유 코드만(대사 0).
       logger.info("[§129] 포기 신호를 목표로 기록", { sessionId });
@@ -1031,7 +1042,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     if (passwordGuard.stripped) logger.info("[R9] 비밀번호 요구 문장 제거", { sessionId, userTurns: userTurnsNow });
     const limitedReplyText = session.channel === "messenger" ? fixMessengerCallWording(passwordGuard.text) : passwordGuard.text;
     // §128(4) — 참가자가 건 통화의 "전화 받아 줘서"류 교정(`callCaller.ts` 표 · 그 밖 턴 무변경).
-    const shapedReplyText = participantCalled ? fixParticipantCalledReply(limitedReplyText) : limitedReplyText;
+    const calledShapedReplyText = participantCalled ? fixParticipantCalledReply(limitedReplyText) : limitedReplyText;
+    const shapedReplyText = forcedScreenGiveUp ? screenGiveUpReply(calledShapedReplyText) : calledShapedReplyText;
     // 로그에는 숫자·ID만 싣는다(대사 본문 금지 — G170).
     if (realNameReplacedCount > 0) {
       logger.info("사기범 대사 실존 금융회사명 치환", {
