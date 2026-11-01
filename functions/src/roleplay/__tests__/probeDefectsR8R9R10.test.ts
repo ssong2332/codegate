@@ -27,7 +27,9 @@ test("[R9 P] 비밀번호 입력 · 불러 달라는 절을 뺀다 · 다 빠지
 
 test("[R8] 메신저 이체 칩 미완료 · 적게 보냄 = 결정 화면 대기 → goal 끊기 4-c 막힘 · give_up 통과", () => {
   const src = read("roleplay/index.ts");
-  assert.ok(src.includes('if (transferChips.length > 0 && (!transferChips.some((f) => f.done) || latestTransferAmount(chipFacts) === "less")) decisionScreenPending = true;'));
+  // R16(2026-11-01) — 같은 판정을 변수로 들어 작별 대사 교체(판정표 F)와 나눠 쓴다(결정 화면 대기 반영은 그대로).
+  assert.ok(src.includes('messengerTransferChipPending = transferChips.length > 0 && (!transferChips.some((f) => f.done) || latestTransferAmount(chipFacts) === "less");'));
+  assert.ok(src.includes("if (messengerTransferChipPending) decisionScreenPending = true;"));
   const base = {
     status: "active" as const,
     channel: "messenger" as const,
