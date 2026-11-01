@@ -4,7 +4,22 @@ import Link from "next/link";
 import { Chip, LineIcon } from "@/components/ui";
 import LegalLinks from "@/components/LegalLinks";
 import PageToc from "@/components/PageToc";
-import { DRAFT_NOTICE, type LegalDocument } from "@/lib/legal/legalContent";
+import { DRAFT_NOTICE, splitOperatorEmail, type LegalDocument } from "@/lib/legal/legalContent";
+
+// UX-03 — 운영자 이메일은 눌러서 메일 앱을 여는 링크로 그린다(나머지 문구는 그대로 텍스트).
+function withMailtoLink(text: string) {
+  const parts = splitOperatorEmail(text);
+  if (!parts) return text;
+  return (
+    <>
+      {parts.before}
+      <a href={parts.href} className="font-semibold text-brand underline underline-offset-2">
+        {parts.email}
+      </a>
+      {parts.after}
+    </>
+  );
+}
 
 export default function LegalDocumentView({ doc }: { doc: LegalDocument }) {
   // UX D-140 (3) — 조항 제목이 곧 목록이다.
@@ -32,13 +47,13 @@ export default function LegalDocumentView({ doc }: { doc: LegalDocument }) {
             </h2>
             {section.paragraphs?.map((p) => (
               <p key={p} className="text-[17px] leading-[1.65] text-ink-sub">
-                {p}
+                {withMailtoLink(p)}
               </p>
             ))}
             {section.items && (
               <ul className="flex list-disc flex-col gap-1.5 pl-5 text-[17px] leading-[1.65] text-ink-sub">
                 {section.items.map((item) => (
-                  <li key={item}>{item}</li>
+                  <li key={item}>{withMailtoLink(item)}</li>
                 ))}
               </ul>
             )}

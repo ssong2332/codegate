@@ -15,6 +15,14 @@ import { doc, getDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { generateReport } from "@/lib/api";
 import {
+  classifyLoadError,
+  REPORT_FORBIDDEN_ACTION_HREF,
+  REPORT_FORBIDDEN_ACTION_LABEL,
+  REPORT_FORBIDDEN_MESSAGE,
+  REPORT_INVALID_LINK_MESSAGE,
+  type LoadErrorKind,
+} from "@/lib/loaderror/loadErrorView";
+import {
   DIFFICULTY_LABEL,
   normalizeDifficultyLevel,
   type DifficultyLevel,
@@ -158,6 +166,7 @@ export default function ReportPage() {
   const sessionId = searchParams.get("sessionId");
   const [state, setState] = useState<PageState>(sessionId ? "loading" : "no-session");
   const [report, setReport] = useState<ReportData | null>(null);
+  const [errorKind, setErrorKind] = useState<LoadErrorKind>("retryable");
   const [scenarioTitle, setScenarioTitle] = useState<string | null>(null);
   // T70(UX-028 진입점 조건) — 2인 챌린지 체험 세션이면 되감기는 강제 해설(UX-018) 이후 단계로만
   // 노출된다(AC-042). 아래 세션 조회 effect가 함께 채운다.
@@ -216,6 +225,7 @@ export default function ReportPage() {
         const data = await fetchReport(sessionId);
         if (cancelled) return;
         if (!data) {
+          setErrorKind("retryable");
           setState("error");
           return;
         }
@@ -231,8 +241,10 @@ export default function ReportPage() {
             }),
           );
         }
-      } catch {
-        if (!cancelled) setState("error");
+      } catch (error) {
+        if (cancelled) return;
+        setErrorKind(classifyLoadError(error));
+        setState("error");
       }
     })();
     return () => {
@@ -270,13 +282,17 @@ export default function ReportPage() {
     fetchReport(sessionId)
       .then((data) => {
         if (!data) {
+          setErrorKind("retryable");
           setState("error");
           return;
         }
         setReport(data);
         setState("loaded");
       })
-      .catch(() => setState("error"));
+      .catch((error: unknown) => {
+        setErrorKind(classifyLoadError(error));
+        setState("error");
+      });
   };
 
   const handleGoHome = () => {
@@ -310,6 +326,34 @@ export default function ReportPage() {
   }
 
   if (state === "error" || !report) {
+    // UX-01(외부 보안 점검 2026-11-01) — 권한 없음 · 잘못된 링크는 다시 시도해도 같다. 다시 시도는 일시 오류만.
+    if (errorKind === "forbidden" || errorKind === "invalid-link") {
+      return (
+        <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
+          <p role="alert" className="flex items-center gap-2 text-lg text-danger">
+            <span aria-hidden="true">⚠</span>
+            <span>{errorKind === "forbidden" ? REPORT_FORBIDDEN_MESSAGE : REPORT_INVALID_LINK_MESSAGE}</span>
+          </p>
+          {errorKind === "forbidden" ? (
+            <button
+              type="button"
+              onClick={() => router.push(REPORT_FORBIDDEN_ACTION_HREF)}
+              className="min-h-[48px] rounded-[8px] border border-line-strong px-6 py-3 text-lg font-bold text-ink hover:bg-white"
+            >
+              {REPORT_FORBIDDEN_ACTION_LABEL}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleGoHome}
+              className="min-h-[48px] rounded-[8px] border border-line-strong px-6 py-3 text-lg font-bold text-ink hover:bg-white"
+            >
+              처음으로
+            </button>
+          )}
+        </main>
+      );
+    }
     return (
       <main className="mx-auto flex min-h-dvh max-w-xl flex-col items-center justify-center gap-4 bg-page p-8 text-center">
         <p role="alert" className="flex items-center gap-2 text-lg text-danger">

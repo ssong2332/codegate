@@ -30,7 +30,7 @@ import {
   MAX_USER_TURNS,
 } from "../shared/constants";
 import { getVoiceProvider } from "../voice/provider";
-import { hashToken } from "./token";
+import { hashToken, isWellFormedShareToken } from "./token";
 import { markChallengeConsumed, resolveChallengeByTokenHash } from "./index";
 import { decideConsentGate } from "./consentGate";
 import type { ChallengeDoc, ChallengeResultSummary, MessageDoc, ReportDoc, SessionDoc } from "../shared/types";
@@ -72,7 +72,7 @@ export const getChallengeLanding = onCall<
   Promise<GetChallengeLandingResponse>
 >({ secrets: [...LLM_TEXT_SECRETS] }, async (request) => {
   const { token } = request.data ?? {};
-  if (!token) {
+  if (!isWellFormedShareToken(token)) {
     throw new HttpsError("invalid-argument", "token이 필요합니다.");
   }
   const resolved = await resolveChallengeByTokenHash(hashToken(token));
@@ -107,7 +107,7 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
       throw new HttpsError("unauthenticated", "동의 처리에는 임시 인증(익명 로그인)이 필요합니다.");
     }
     const { token } = request.data ?? {};
-    if (!token) {
+    if (!isWellFormedShareToken(token)) {
       throw new HttpsError("invalid-argument", "token이 필요합니다.");
     }
 
@@ -346,7 +346,7 @@ export const reportChallenge = onCall<ReportChallengeRequest, Promise<ReportChal
     // 무인증(토큰) — getChallengeLanding과 동일 패턴. 동의 전에도, 소진 후에도 신고할 수 있어야
     // 한다(§14.5 "1명뿐인 taker" — 별도 신고 컬렉션 불요, 챌린지 문서에 직접 임베드).
     const { token, reason, note } = request.data ?? {};
-    if (!token || !reason || !REPORT_REASONS.has(reason)) {
+    if (!isWellFormedShareToken(token) || !reason || !REPORT_REASONS.has(reason)) {
       throw new HttpsError("invalid-argument", "token과 유효한 reason이 필요합니다.");
     }
     // 자체 감사 결함 5 — note는 자유서술 신고 사유라 rewind/judge.ts REWIND_ANSWER_MAX_LENGTH(500)와
@@ -424,7 +424,7 @@ export const setChallengeResultSharing = onCall<
     throw new HttpsError("unauthenticated", "결과 공유 동의에는 인증이 필요합니다.");
   }
   const { token, share } = request.data ?? {};
-  if (!token || typeof share !== "boolean") {
+  if (!isWellFormedShareToken(token) || typeof share !== "boolean") {
     throw new HttpsError("invalid-argument", "token과 share가 필요합니다.");
   }
 
