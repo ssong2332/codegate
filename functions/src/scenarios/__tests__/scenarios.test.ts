@@ -1391,6 +1391,8 @@ function assembledPrompts(): Array<{ label: string; text: string }> {
                   ...(hangupMode === "none" ? {} : { hangupMode }),
                   // §90 — [말투]는 Live 토큰(= toolDrivenTiming:true의 유일한 호출부)에만 실린다(운영 짝으로만 — 판정표 마지막 행).
                   ...(toolDrivenTiming ? { liveSpeechStyle: true } : {}),
+                  // 화면 행동만 인정(2026-11-01) — [화면 행동 확인]은 화면을 여는 문자가 있는 세션에만 실린다(문자 축과 함께 켠다).
+                  ...(inCallSmsEnabled ? { screenActionOnly: true } : {}),
                 }),
               });
             }

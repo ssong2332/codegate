@@ -206,6 +206,14 @@ export const HOLDER_EXCUSE_SENTENCE =
   " 문자 속 예금주가 기관이 아니라 사람 이름인 이유를 물으면 '보안상 담당자 명의로 관리하는 계좌라서 그렇다'처럼 둘러대고, 그 이름 말고 다른 예금주를 지어내지 않는다.";
 const SMS_KIND_LABEL_TRANSFER_WITH_LINK ="계좌 안내(이체 링크 포함)";
 const SMS_DEMAND_EXAMPLE_TRANSFER_WITH_LINK = `"문자로 보낸 계좌 안내의 링크를 열어 그 화면에서 금액을 넣고 이체해 달라"`;
+/**
+ * ⭐ 화면 행동만 인정(실기기 신고 2026-11-01 · 카드사 고급 fv-x7ue — 권한 허용 없이 "했다"고 하니 넘어감 · 이체도 말로만 넘어감 · 메인 "간소화안으로" ①).
+ * 실시간은 매 턴 화면 상태를 받지 못하므로 "앱 알림(응낙 · 제출 맥락 주입)이 없으면 아직 안 한 것"을 조립에 둔다. 폴백은 매 턴 상태 줄 · 미완료 지시가 함께 간다
+ * (`roleplay/screenAction.ts` 판정표 SA). ⛔ 따옴표 대사 예시 0.
+ */
+export const SCREEN_ACTION_ONLY_RULE =
+  "[화면 행동 확인]\n- 네가 보낸 문자나 링크의 화면(앱 설치와 권한 허용, 이체, 신청 입력)은 앱이 상대가 그 화면에서 마쳤다고 알려 준 뒤에만 끝난 것으로 본다.\n- 상대가 설치했다, 보냈다, 입력했다고 말만 하고 앱의 알림이 없으면, 실제로 확인할 수 있는 사기범처럼 아직 확인이 안 된다며 그 화면에서 마저 진행해 달라고 하고 다음 단계로 넘어가지 않는다. 이때 완료됐다거나 확인됐다고 말하지 않는다. 같은 말을 되풀이하지 말고 화면에서 어디까지 했는지 묻거나 다른 말로 재촉한다.\n- 앱이 마쳤다고 알려 주면 상대가 무슨 말을 하든 그 단계는 끝난 것으로 보고 다음으로 넘어간다.";
+
 export const TRANSFER_VIA_LINK_ONLY_SENTENCE =
   " 계좌 안내 문자로 이체를 요구할 때는 그 문자 속 링크의 이체 화면에서 하게 하고, 은행 앱·창구·ATM에서 따로 보내라고 하지 않는다." +
   // S1(실기기 확인 2026-11-01 · 메인 "권고 순서대로") — 계좌 문자의 예금주는 개인 이름이다(실제 사기 계좌 = 개인 명의 대포통장). 참가자가 물으면 둘러대게 한다.
@@ -924,6 +932,11 @@ export type BuildSystemPromptOptions = {
    * "이 번호를 그대로 쓴다" 문장 대신 "계좌번호를 불러 주거나 이체 · 송금을 요구하지 않는다"를 싣는다(`sessionAccountNumber`보다 앞선다). 부재 = 종전.
    */
   noAccountEnding?: boolean;
+  /**
+   * 화면 행동만 인정(`roleplay/screenAction.ts` `sessionScreenActionOnly`) — 참이면 [화면 행동 확인] 블록(`SCREEN_ACTION_ONLY_RULE`)을 싣는다.
+   * 부재 · 거짓 = 블록 0(종전 바이트 동일 · #192 바이트 고정 변형은 술어가 거짓).
+   */
+  screenActionOnly?: boolean;
   /** UX-029에서 사용자가 고른 강도. 부재·intermediate면 블록을 내보내지 않는다(기준선). */
   difficultyLevel?: DifficultyLevel;
   /**
@@ -1141,6 +1154,8 @@ export function buildSystemPrompt(
     ...(opts.verifyInterceptEnabled === true
       ? [buildVerifyInterceptRule(opts.toolDrivenTiming === true, opts.offerToolDeclared === true), ""]
       : []),
+    // 화면 행동만 인정 — [화면 행동 확인](조건형 · 부재 = 블록 0 · 종전 바이트 동일).
+    ...(opts.screenActionOnly === true ? [SCREEN_ACTION_ONLY_RULE, ""] : []),
     // T194-b(§84.3.4) — [미리 확보한 상대 정보](조건형). [진행 강제] 뒤라 예외 문장이 금지 규칙보다 **나중에** 읽힌다.
     ...(personaCardBlock ? [personaCardBlock, ""] : []),
     ...(difficultyBlock ? [difficultyBlock, ""] : []),
