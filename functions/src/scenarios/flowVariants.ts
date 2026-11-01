@@ -430,6 +430,36 @@ const COURIER_SAFE_ACCOUNT_DEMAND =
 
 const APP_INSTALL = { from: "card-delivery-call", label: "보안 점검 앱 설치 요구" };
 const AGENCY_PROBE = { from: "card-delivery-call", label: "기관 조사 언급" };
+// ⭐ U2 · U7(실기기 신고 2026-11-01 · 카드사 고급 fv-x7ue — *"보안앱 설치 문자 없이 설치하라고 해서, 그냥 설치했다고 말하니까 다음 단계로 넘어갔어"* ·
+// *"'OO안심보안'을 설치하라고 하는데 … 왜 아직 잔재가 남아 있지?"*). 원본 `APP_INSTALL`(card-delivery-call)은 자리표시 앱 이름 '○○안심보안'으로 말로만
+// 설치를 요구하고 설치 문자 · 화면을 가리키지 않는다. 설치 문자(`card-guard-app-link`)를 선언한 자가 고급 2벌(fv-x7ue · fv-w3dq)은 아래 문면을 쓴다.
+// | 고친 것 | 문면 |
+// |---|---|
+// | 앱 이름(U7) | 설치 화면(`card-guard-app-install`) 제목 그대로 "피해 차단용 보안 앱" — 실존 앱과 겹치는 고유명 0 · 자리표시 0 |
+// | 순서(U2 ①) | 설치는 문자 속 링크 화면에서만 · 문자를 보내기 전에는 설치를 재촉하지 않는다(단계 문면 `withSmsFirst`와 짝) |
+// | 말로만 설치(U2 ②) | 앱이 설치 · 권한 허용 완료를 알려 주기 전(실시간 = `installConsented` 맥락 주입 · 폴백 = 응낙 턴 지시)에는 끝난 것으로 보지 않고 링크 화면으로 되돌린다 |
+// ⛔ 라벨(— 앞)은 원본과 같다(리포트 분류 · 브리핑 라벨). ⛔ fv-akj5(#192 바이트 고정)는 원본 `APP_INSTALL`을 계속 쓴다 — 원본 문면 '○○안심보안'은 그래서 남는다.
+const CARD_GUARD_APP_NAME = "피해 차단용 보안 앱";
+const CARD_APP_INSTALL_VIA_SMS = `보안 점검 앱 설치 요구 — '피해가 번지지 않게 휴대폰 보안 조치부터 하셔야 합니다, 방금 보내 드린 문자의 링크에서 ${CARD_GUARD_APP_NAME}을 설치해 주세요' 처럼 요구한다. 앱은 '${CARD_GUARD_APP_NAME}'이라고만 부르고 실존 앱 이름은 쓰지 않는다. 설치는 네가 보낸 문자 속 링크 화면에서만 하게 하고, 문자를 보내기 전에는 설치하라고 재촉하지 않는다. 상대가 설치했다고 말만 하고 앱이 설치와 권한 허용을 마쳤다고 알려 주지 않았으면 끝난 것으로 보지 말고, 문자 속 링크 화면에서 '권한 허용하고 계속하기'까지 눌러 달라고 짧게 되돌린 뒤 화면에서 어디까지 했는지 묻는다(같은 말을 되풀이하지 않는다). 상대가 설치를 분명히 거절하면 설치 없이 다음 요구로 넘어간다. 설치 방법·경로·권한의 작동 방식은 설명하지 않는다.`;
+// U7 — fv-w3dq 0번 화자 페르소나(card-delivery-call 원본 `CARD_DELIVERY_PERSONA`)의 앱 이름 규칙 줄만 설치 화면 이름으로 바꾼다. 원본은 합쳐진 시나리오의
+// 옛 세션(§92 — 새 세션 거부)이 계속 쓰므로 그대로 둔다. 원천 줄이 사라지면 조용히 꺼지지 않게 모듈 로드에서 멈춘다.
+const CARD_DELIVERY_APP_NAME_LINE = "- 보안 점검 앱은 '○○안심보안'이라는 이름으로만 부르고 실존 앱 이름은 쓰지 않는다.";
+if (!CARD_DELIVERY_PERSONA.includes(CARD_DELIVERY_APP_NAME_LINE)) {
+  throw new Error("flowVariants: 카드 배송 페르소나의 앱 이름 줄을 찾지 못했다(U7)");
+}
+const CARD_DELIVERY_PERSONA_GUARD_APP = CARD_DELIVERY_PERSONA.replace(
+  CARD_DELIVERY_APP_NAME_LINE,
+  `- 보안 점검 앱은 '${CARD_GUARD_APP_NAME}'이라고만 부르고 실존 앱 이름은 쓰지 않는다.`,
+);
+// U2 — 설치 단계 문면(fv-x7ue · fv-w3dq). 문자 도구 먼저(`withSmsFirst`) · 완료 신호 뒤에만 다음 단계.
+const CARD_GUARD_INSTALL_STAGE_TAIL = `설치는 문자 속 링크 화면에서 하게 하고, 앱이 상대가 설치와 권한 허용을 마쳤다고 알려 준 뒤에만(또는 상대가 분명히 거절하면) 다음 단계로 넘어간다.`;
+// U2 ③ — 설치 문자 백스톱 간격 1(넛지 1발화 · 강제 2발화 — 종전 2 · 4). 하한 2는 그대로.
+const CARD_GUARD_SMS: FlowVariantSms = { purpose: "link", smsId: "card-guard-app-link", required: true, notBeforeUserTurns: 2, ...FAST_BACKSTOP };
+// U7 — 대환대출 고급 설치 요구(설치 문자 `loan-check-app-link` → 화면 `loan-check-app-install` 제목 "심사용 보안 점검 앱"). ⛔ fv-6s5p(#192 바이트 고정)는 원문 유지.
+const LOAN_CHECK_APP_NAME = "심사용 보안 점검 앱";
+const LOAN_PRIVACY_HINT =
+  "개인정보 보유 암시 — '고객님 대출 이력 보고 맞춤으로 연락드렸습니다' 처럼 이미 정보를 아는 듯 말한다. 상대가 말하지 않은 이름 · 금액 · 금융사는 지어내 단정하지 않는다.";
+const LOAN_APP_INSTALL_VIA_SMS = `보안 앱 설치·금융 앱 삭제 요구 — '심사 전에 문자로 보내 드린 링크에서 ${LOAN_CHECK_APP_NAME}을 설치하시고, 쓰시던 금융 앱은 잠시 지워 주셔야 합니다' 처럼 요구한다. 앱은 '${LOAN_CHECK_APP_NAME}'이라고만 부르고 실존 앱 이름은 쓰지 않는다. 설치 방법 · 경로 · 권한 설정은 설명하지 않는다.`;
 // §92 — 카드 배송 흐름(fv-tvnj 원본 · 카드사 흡수 변형 fv-w3dq가 공유 — 문구 사본 0).
 const CARD_DELIVERY_STAGES = [
   "카드 배송 일정을 안내하며 말을 건다.",
@@ -593,12 +623,12 @@ const TAX_REFUND_FEE_SMS: FlowVariantSms = { purpose: "transfer", smsId: "tax-re
  * fv-akj5 계열 수법 목록 — base main(ea97aa0)의 순서(놀람 · 긴급 · 카드정보 · 피해금 · 부인 · 안심 · 앱 설치 · 기관 조사)를 그대로 지킨다
  * (R3 리뷰 M2). 원본에서 그대로 가져오는 라벨은 `{ from, label }` 참조(문구 사본 0)라 keepLabels 대신 여기서 순서를 정한다.
  */
-const cardAdvancedExtras = (relief: string): VariantSpec["extraTactics"] => [
+const cardAdvancedExtras = (relief: string, install: string | typeof APP_INSTALL = APP_INSTALL): VariantSpec["extraTactics"] => [
   CARD_INFO_DEMAND_NO_SMS,
   relief,
   CARD_DENIAL_PIVOT_NO_SMS,
   CARD_REASSURE,
-  APP_INSTALL,
+  install,
   AGENCY_PROBE,
 ];
 
@@ -651,7 +681,8 @@ const LOAN_ADVANCED_FV_6S5P: VariantSpec = {
     "기존 대출 상환 또는 선입금을 요구한다.",
   ),
   extraTactics: [
-    "개인정보 보유 암시 — '고객님 대출 이력 보고 맞춤으로 연락드렸습니다' 처럼 이미 정보를 아는 듯 말한다. 상대가 말하지 않은 이름 · 금액 · 금융사는 지어내 단정하지 않는다.",
+    LOAN_PRIVACY_HINT,
+    // ⛔ U7 — 자리표시 앱 이름 '○○안심보안'이 남지만 fv-6s5p는 #192 조립 바이트 고정이라 바꾸지 않는다(스프레드 fv-m3hd는 덮어쓴다).
     "보안 앱 설치·금융 앱 삭제 요구 — '심사 전에 ○○안심보안 점검 앱을 설치하시고, 쓰시던 금융 앱은 잠시 지워 주셔야 합니다' 처럼 요구한다. 설치 방법 · 경로 · 권한 설정은 설명하지 않는다.",
   ],
   exitBlock: ["D1_time_pressure", "D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
@@ -863,10 +894,16 @@ const SPECS: VariantSpec[] = [
   {
     ...CARD_COMPANY_ADVANCED_FV_AKJ5,
     variantId: "fv-x7ue",
-    // P2-b — 설치 문자(하한 2) 뒤 피해금 이관 문자(하한 4 · 이체 화면). 선언 순서 = 단계 순서(4-c 결정 화면 = 이관 화면).
-    sms: [{ purpose: "link", smsId: "card-guard-app-link", required: true, notBeforeUserTurns: 2 }, CARD_RELIEF_SMS],
-    // R3 리뷰 C1 → P2-b — 무계좌형 대신 "문자 속 링크 화면에서 이체"형 피해금 문면(CARD_RELIEF_TRANSFER_VIA_LINK).
-    extraTactics: cardAdvancedExtras(CARD_RELIEF_TRANSFER_VIA_LINK),
+    // U2 — 설치 단계만 바꾼다(문자 도구 먼저 · 완료 신호 뒤에만 다음 단계). 나머지 단계는 fv-akj5 그대로(사본이 아니라 원본 배열에서 꺼낸다).
+    stages: CARD_COMPANY_ADVANCED_FV_AKJ5.stages.map((stage, i) =>
+      i === 1
+        ? { ...stage, summary: withSmsFirst(`피해가 번지지 않게 휴대폰에 ${CARD_GUARD_APP_NAME}을 설치하라고 요구한다. ${CARD_GUARD_INSTALL_STAGE_TAIL}`) }
+        : stage,
+    ),
+    // P2-b — 설치 문자(하한 2) 뒤 피해금 이관 문자(하한 4 · 이체 화면). 선언 순서 = 단계 순서(4-c 결정 화면 = 이관 화면). U2 — 설치 문자 백스톱 간격 1.
+    sms: [CARD_GUARD_SMS, CARD_RELIEF_SMS],
+    // R3 리뷰 C1 → P2-b — 무계좌형 대신 "문자 속 링크 화면에서 이체"형 피해금 문면(CARD_RELIEF_TRANSFER_VIA_LINK). U2 · U7 — 설치 요구 문면.
+    extraTactics: cardAdvancedExtras(CARD_RELIEF_TRANSFER_VIA_LINK, CARD_APP_INSTALL_VIA_SMS),
     // T194-c-1 리뷰 Minor — 문자를 선언하므로 채널 메타에 "sms"를 더한다(fv-m3hd가 스프레드로 받는 값과 같은 꼴 · 프롬프트 바이트 무영향).
     channels: ["voice", "sms"],
   },
@@ -884,13 +921,19 @@ const SPECS: VariantSpec[] = [
     scenarioId: "card-company-impersonation",
     level: "advanced",
     authoring: "authored",
-    stages: st(...CARD_DELIVERY_STAGES),
+    // U2 — 설치 단계(3번째)만 문자 도구 먼저 · 완료 신호 뒤에만 다음 단계(원본 배열 `CARD_DELIVERY_STAGES`는 fv-tvnj가 같이 쓰므로 여기서만 바꾼다).
+    stages: st(
+      ...CARD_DELIVERY_STAGES.map((stage, i) =>
+        i === 2 ? withSmsFirst(`본인 확인 뒤 휴대폰에 ${CARD_GUARD_APP_NAME}을 설치하라고 요구한다. ${CARD_GUARD_INSTALL_STAGE_TAIL}`) : stage,
+      ),
+    ),
     keepLabels: [],
     extraTactics: [
       { from: "card-delivery-call", label: "안심 유도" },
       { from: "card-delivery-call", label: "부인 시 명의 도용 암시" },
       CARD_DELIVERY_IDENTITY_DEMAND,
-      APP_INSTALL,
+      // U2 · U7 — 원본 APP_INSTALL('○○안심보안' · 말로만) 대신 설치 화면 이름 · 문자 링크형.
+      CARD_APP_INSTALL_VIA_SMS,
       { from: "card-delivery-call", label: "확인 시도 무력화" },
       AGENCY_PROBE,
       // P2-b — 원본 문면("보호 계좌로 옮겨 두셔야")을 이 변형의 이관 문자 · 화면과 같은 말로, 링크 화면에서만 이체하게(라벨 무변경).
@@ -898,11 +941,12 @@ const SPECS: VariantSpec[] = [
       { from: "card-delivery-call", label: "긴급성 조성" },
     ],
     exitBlock: ["D3_verification_hijack", "D4_procedural_legitimacy"],
-    sms: [{ purpose: "link", smsId: "card-guard-app-link", required: true, notBeforeUserTurns: 2 }, CARD_RELIEF_SMS],
+    sms: [CARD_GUARD_SMS, CARD_RELIEF_SMS],
     legs: [
       {
         callerLabel: "카드 배송 안내",
-        personaPrompt: CARD_DELIVERY_PERSONA,
+        // U7 — 앱 이름 줄만 설치 화면 이름(위 상수).
+        personaPrompt: CARD_DELIVERY_PERSONA_GUARD_APP,
         speakerGender: "female",
         minUserTurns: 3,
         maxUserTurns: 8,
@@ -961,6 +1005,8 @@ const SPECS: VariantSpec[] = [
       { purpose: "link", smsId: "loan-check-app-link", required: true, notBeforeUserTurns: 2 },
       { purpose: "transfer", smsId: "loan-account", required: true, notBeforeUserTurns: 3 },
     ],
+    // U7 — fv-6s5p(#192 바이트 고정)에서 물려받은 자리표시 앱 이름 '○○안심보안'을 이 변형에서만 설치 화면 이름으로 바꾼다(첫 수법은 그대로).
+    extraTactics: [LOAN_PRIVACY_HINT, LOAN_APP_INSTALL_VIA_SMS],
   },
   // §124(#239) — 대환대출 고급 새 루트 2(상수 주석 참고). 자가 고급 풀의 Q2 항 때문에 둘 다 점검 앱 설치 문자(필수)를 선언한다.
   {
@@ -975,7 +1021,8 @@ const SPECS: VariantSpec[] = [
     keepLabels: ["권위·정당성 포장", "이익 유혹", "마감 압박", "절차·서류 정당화", "확인 차단", "전화 끊음 저지"],
     extraTactics: [
       LOAN_DEPOSIT_DEMAND,
-      "보안 앱 설치·금융 앱 삭제 요구 — '심사 전에 ○○안심보안 점검 앱을 설치하시고, 쓰시던 금융 앱은 잠시 지워 주셔야 합니다' 처럼 요구한다. 설치 방법 · 경로 · 권한 설정은 설명하지 않는다.",
+      // U7 — 자리표시 앱 이름 대신 설치 화면 이름.
+      LOAN_APP_INSTALL_VIA_SMS,
     ],
     sms: [
       { purpose: "link", smsId: "loan-check-app-link", required: true, notBeforeUserTurns: 2, ...FAST_BACKSTOP },
@@ -996,7 +1043,8 @@ const SPECS: VariantSpec[] = [
     keepLabels: ["권위·정당성 포장", "이익 유혹", "마감 압박", "절차·서류 정당화", "확인 차단", "전화 끊음 저지"],
     extraTactics: [
       "개인정보 보유 암시 — '고객님 대출 이력 보고 맞춤으로 연락드렸습니다' 처럼 이미 정보를 아는 듯 말한다. 상대가 말하지 않은 이름 · 금액 · 금융사는 지어내 단정하지 않는다.",
-      "보안 앱 설치·금융 앱 삭제 요구 — '심사 전에 ○○안심보안 점검 앱을 설치하시고, 쓰시던 금융 앱은 잠시 지워 주셔야 합니다' 처럼 요구한다. 설치 방법 · 경로 · 권한 설정은 설명하지 않는다.",
+      // U7 — 자리표시 앱 이름 대신 설치 화면 이름.
+      LOAN_APP_INSTALL_VIA_SMS,
       LOAN_CASH_REPAY_DEMAND,
     ],
     sms: [{ purpose: "link", smsId: "loan-check-app-link", required: true, notBeforeUserTurns: 2, ...FAST_BACKSTOP }],

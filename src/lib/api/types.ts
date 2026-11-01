@@ -297,7 +297,14 @@ export type RecordMockScreenEventRequest = {
    */
   callMode?: "realtime" | "fallback";
 };
-export type RecordMockScreenEventResponse = { ok: true };
+export type RecordMockScreenEventResponse = {
+  ok: true;
+  /**
+   * ⭐ U2(2026-11-01) — 통화 중 설치 화면(Q2)의 **첫 응낙**이 실시간 통화에서 왔을 때만: 실시간 사기범에게 넣을 맥락 지시 1줄(설치 · 권한 허용을 마쳤다).
+   * 클라는 맥락 주입(`installConsented`)으로 넣는다. 폴백 · 두 번째 응낙 · 메신저 표면 · 호 전환 뒤 = 부재.
+   */
+  contextInstruction?: string;
+};
 
 // §128(7) — 화면 행동(설치 응낙 · 입력 제출) 뒤 사기범이 먼저 보내는 메시지(functions/src/roleplay/screenActionFollowUp.ts와 1:1).
 // ⛔ 화면 입력값은 요청에 없다(AC-045 — 세션 id · 화면 id뿐).

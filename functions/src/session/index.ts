@@ -49,7 +49,7 @@ import type {
   UpdateMessengerSkinRequest,
   UpdateMessengerSkinResponse,
 } from "./types";
-import { pickFictionalBankName } from "../shared/fictionalBank";
+import { pickSessionBankName } from "../inCallSms/smsGate";
 import { resolvePersonaCardRequest } from "./personaCard";
 import { FAMILY_ADDRESS_INVALID_REASON, readFamilyAddress } from "../scenarios/familyAddress";
 import { emitPrepStage, type CreateSessionPrepChunk } from "./prepStages";
@@ -225,8 +225,6 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     // 주석 참고. 사용자 실측 신고로 발견된 정합성 버그 수정, 2026-07-24).
     // T72(§15.3.3 호출부 3곳 중 "오프닝 대사") — 세션 문서 write 전이라 요청값(정규화 완료)을 직접
     // 넘긴다. 여기서 빠뜨리면 오프닝 첫 마디만 중급으로 나오는 비대칭이 생긴다(§15.6 G5).
-    // §81 — 세션 가상 은행명을 오프닝 전에 고른다(오프닝 대사와 세션 문서가 같은 이름을 쓴다).
-    const fictionalBankName = pickFictionalBankName();
     // T191 S5(PRD AC-096 (e) · D6) — 흐름 변형 배정. 오프닝 대사도 배정된 변형으로 조립해야 하므로
     // generateOpeningLine 앞이다. Firestore 접근은 회전 문서 키 조회 1건뿐(인덱스 0 — 설계 금지 X6).
     // 동의 · 한도 게이트 뒤라 거절된 시도는 회전 문서를 읽지도 쓰지도 않는다.
@@ -240,6 +238,9 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     const variantAssignment = routeOverride.applied
       ? { flowVariantId: routeOverride.variantId, candidates: [routeOverride.variantId] }
       : await assignFlowVariantForSession(db, request.auth.uid, scenarioId, resolvedDifficultyLevel);
+    // §81 — 세션 가상 은행명을 오프닝 전에 고른다(오프닝 대사와 세션 문서가 같은 이름을 쓴다).
+    // U3 — 변형 배정 뒤로 옮겼다: 예금주가 보이는 계좌면 그 묶음의 고정 은행(`smsGate.ts` `pickSessionBankName`).
+    const fictionalBankName = pickSessionBankName(scenarioId, variantAssignment.flowVariantId);
     // T4: sessionId(온보딩 "사전 세션 id")가 넘어오면 createVoiceClone이 만들어 둔 pending
     // sessions/{sid} 문서를 새로 만들지 않고 채택한다 — sessionId 불일치 갭 해소. 넘어오지 않으면
     // 기존과 동일하게 새 id를 발급한다(하위호환). ID 생성/채택 로직만 바꿨고, 그 외 인격유지·

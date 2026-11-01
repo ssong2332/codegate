@@ -64,14 +64,21 @@ test("[§92 A] 흡수 변형 fv-w3dq = 카드사 고급 · 원본 fv-tvnj와 단
   const legacy = findFlowVariant("fv-tvnj")!;
   assert.equal(absorbed.scenarioId, "card-company-impersonation");
   assert.equal(absorbed.level, "advanced");
-  assert.deepEqual(absorbed.stages, legacy.stages);
+  // U2(2026-11-01) — 설치 단계(3번째)만 "문자 도구 먼저 · 완료 신호 뒤에만"으로 바뀌었다. 나머지 단계 · 단계 수는 원본과 같다.
+  assert.equal(absorbed.stages.length, legacy.stages.length);
+  assert.deepEqual(absorbed.stages.filter((_, i) => i !== 2), legacy.stages.filter((_, i) => i !== 2));
+  assert.ok(absorbed.stages[2]!.summary.startsWith("본인 확인 뒤 휴대폰에 피해 차단용 보안 앱을 설치하라고 요구한다."));
   assert.equal(absorbed.decisionMoment, legacy.decisionMoment);
   assert.deepEqual(absorbed.sources, legacy.sources);
   assert.deepEqual(absorbed.exitBlock, legacy.exitBlock);
   assert.deepEqual(absorbed.tactics.map(extractTacticLabel), legacy.tactics.map(extractTacticLabel));
-  assert.equal(absorbed.legs[0]!.personaPrompt, CARD_DELIVERY_PERSONA);
+  // U7(2026-11-01) — 0번 화자 페르소나 = 원본에서 앱 이름 줄 하나만 설치 화면 이름으로 바꾼 것.
+  const appLine = "- 보안 점검 앱은 '○○안심보안'이라는 이름으로만 부르고 실존 앱 이름은 쓰지 않는다.";
+  const guardPersona = CARD_DELIVERY_PERSONA.replace(appLine, "- 보안 점검 앱은 '피해 차단용 보안 앱'이라고만 부르고 실존 앱 이름은 쓰지 않는다.");
+  assert.ok(CARD_DELIVERY_PERSONA.includes(appLine));
+  assert.equal(absorbed.legs[0]!.personaPrompt, guardPersona);
   const prompt = resolveSessionScenarioPrompt("card-company-impersonation", "fv-w3dq")!;
-  assert.ok(prompt.personaPrompt.startsWith(CARD_DELIVERY_PERSONA), "조립 페르소나가 카드 배송 상담원으로 시작한다");
+  assert.ok(prompt.personaPrompt.startsWith(guardPersona), "조립 페르소나가 카드 배송 상담원으로 시작한다");
   assert.ok(prompt.personaPrompt.includes("카드 배송 일정을 안내하며 말을 건다."));
 });
 

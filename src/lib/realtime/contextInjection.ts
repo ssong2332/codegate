@@ -32,6 +32,8 @@
  * `chatDuringCall` 행은 §121.7(메인 결정 "두 채널 맥락" — 통화 · 메신저 동시 사용 PR-3)으로 추가했다.
  * | `landingSubmitted` | §132.7 — 참가자가 문자 링크의 이체 화면을 처음 제출했다(서버 `recordInCallSmsEvent` 응답 `contextInstruction`) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖** · 침묵 넛지 대상 아님 |
  * `landingSubmitted` 행은 §132.7(메인 세션 지시 — 실 키 회귀 프로브 N4)로 추가했다.
+ * | `installConsented` | U2 — 참가자가 통화 중 문자 링크의 설치 화면에서 권한 허용을 처음 눌렀다(서버 `recordMockScreenEvent` 응답 `contextInstruction`) | 맥락 주입(`turnComplete:false`) · **G31 큐 밖** · 침묵 넛지 대상 아님 |
+ * `installConsented` 행은 U2(실기기 신고 2026-11-01 — 말로만 "설치했다"에 다음 단계로 넘어감 · 메인 "권고 순서대로")로 추가했다.
  */
 export type InstructionDelivery =
   | "smsAnnounce"
@@ -42,7 +44,8 @@ export type InstructionDelivery =
   | "verifyReconnectFailed"
   | "repeatBreak"
   | "chatDuringCall"
-  | "landingSubmitted";
+  | "landingSubmitted"
+  | "installConsented";
 
 /** G31 큐(`@/lib/verifyintercept` `PendingInstruction`) 항목 → 전달 방식. */
 export function deliveryForInstruction(item: {

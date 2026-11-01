@@ -44,7 +44,7 @@ import type {
   SetChallengeResultSharingRequest,
   SetChallengeResultSharingResponse,
 } from "./types";
-import { pickFictionalBankName } from "../shared/fictionalBank";
+import { pickSessionBankName } from "../inCallSms/smsGate";
 import { readStoredPersonaCard } from "../session/personaCard";
 
 ensureFirebaseAdminApp();
@@ -175,8 +175,6 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
     // T72(§15.3.2/§15.6 G9) — 발신자가 챌린지에 실어 보낸 난이도를 오프닝 조립에 그대로 쓰고,
     // 아래에서 사용자2 체험 세션 문서에도 **복사**한다(프롬프트는 세션 단위로 조립되므로 복사하지
     // 않으면 이후 턴(sendMessage)·통화(createRealtimeCall)에서 발신자 선택이 소실된다).
-    // §81 — 세션 가상 은행명을 오프닝 전에 고른다(오프닝 대사와 세션 문서가 같은 이름을 쓴다).
-    const fictionalBankName = pickFictionalBankName();
     // T191 S5(AC-096 (e) · 설계 "2인 챌린지 수신자") — 수신자는 익명 · 이력 없음이라 회전 문서를 쓰지
     // 않고 `hash(challengeId) mod n`으로 결정론 배정한다(같은 링크의 재시도 · 재개가 같은 변형).
     const flowVariantId = assignFlowVariantForChallenge(
@@ -184,6 +182,9 @@ export const consentChallenge = onCall<ConsentChallengeRequest, Promise<ConsentC
       resolved.difficultyLevel,
       resolved.challengeId,
     );
+    // §81 — 세션 가상 은행명을 오프닝 전에 고른다(오프닝 대사와 세션 문서가 같은 이름을 쓴다).
+    // U3 — 변형 배정 뒤로 옮겼다: 예금주가 보이는 계좌면 그 묶음의 고정 은행(`smsGate.ts` `pickSessionBankName`).
+    const fictionalBankName = pickSessionBankName(scenarioId, flowVariantId);
     // ⭐ §88(DECISIONS #199 · UX D-131) — 발신자가 넣은 받는 분 정보(챌린지 문서 카드 · `inputBy: "sender"`)를 수신자 세션에 적용한다
     // (#168~#175 계열 "수신자 카드 없음" 대체). 위 사전 읽기 값 하나를 오프닝과 아래 세션 문서에 **같이** 쓴다 — 카드는 생성 뒤
     // 바뀌지 않는다(지우기만 한다). 부재 · 모양 이상 = 카드 0(사기범은 성함 · 생년월일을 묻는다).
