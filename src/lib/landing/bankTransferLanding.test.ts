@@ -35,7 +35,8 @@ test("[P2 C2] 폼 → 확인 → 인증 → 완료 · 제출 콜백은 인증 �
   assert.equal((code.match(/finishSubmit\(event\.timeStamp\)/g) ?? []).length, 2, "폼 제출(종전 랜딩) · 인증 버튼 두 곳뿐");
   const finish = code.slice(code.indexOf("const finishSubmit"), code.indexOf("const issuerBar"));
   assert.ok(finish.includes("onCredentialSubmit?.();"), "무인자 콜백(이체 화면 밖 랜딩)");
-  assert.ok(finish.includes("onCredentialSubmit?.(\n        recordTransferAndCompare("), "N1 — 이체 화면은 요구액 대비 비교 결과 하나만");
+  // 줄바꿈(LF · CRLF 체크아웃)에 무관하게 — 공백 묶음으로 본다.
+  assert.match(finish, /onCredentialSubmit\?\.\(\s+recordTransferAndCompare\(/, "N1 — 이체 화면은 요구액 대비 비교 결과 하나만");
   assert.ok(code.includes('onClick={() => setBankStage("form")}'), "취소 = 폼으로");
   for (const label of ["본인 인증", "인증하고 이체하기", "보이스피싱 주의", "출금 계좌"]) assert.ok(code.includes(label), label);
 });
