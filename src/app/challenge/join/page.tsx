@@ -42,6 +42,7 @@ import {
   resolveConsentFailureView,
 } from "@/lib/challenge";
 import { Banner, Button, LoadingDots, LoadingStatus } from "@/components/ui";
+import { CHALLENGE_INVALID_LINK_MESSAGE, classifyLoadError } from "@/lib/loaderror/loadErrorView";
 
 // T181 C5(UX v1.27 D-75) — "completed" = UX-021 Error (c) 완료 안내(체험이 끝난 훈련의 링크 재진입).
 type PageState = "no-token" | "loading" | "blocked" | "load-error" | "ready" | "completed";
@@ -106,14 +107,25 @@ export default function ChallengeJoinPage() {
     setState("ready");
   };
 
+  // UX-01(외부 보안 점검 2026-11-01) — 잘못된 · 없는 링크(not-found · invalid-argument)는 다시 시도해도
+  // 같으므로 차단 안내로 끝낸다. 네트워크 · 일시 오류만 "다시 시도" 화면(load-error)이다.
+  const handleLoadFailure = (error: unknown) => {
+    if (classifyLoadError(error) === "retryable") {
+      setState("load-error");
+      return;
+    }
+    setBlockedMessage(CHALLENGE_INVALID_LINK_MESSAGE);
+    setState("blocked");
+  };
+
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
     (async () => {
       try {
         await loadLanding(token);
-      } catch {
-        if (!cancelled) setState("load-error");
+      } catch (error) {
+        if (!cancelled) handleLoadFailure(error);
       }
     })();
     return () => {
@@ -129,7 +141,7 @@ export default function ChallengeJoinPage() {
   const handleRetryLoad = () => {
     if (!token) return;
     setState("loading");
-    loadLanding(token).catch(() => setState("load-error"));
+    loadLanding(token).catch(handleLoadFailure);
   };
 
   const handleConsent = async () => {

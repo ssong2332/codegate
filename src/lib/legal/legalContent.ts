@@ -23,6 +23,21 @@ export const OPERATOR_INFO = {
   effectiveDate: "2026년 11월 1일",
 } as const;
 
+/**
+ * UX-03(외부 보안 점검 2026-11-01) — 본문 줄 안의 운영자 이메일을 `mailto:` 링크로 그리기 위해 나눈다.
+ * 운영자 이메일이 없는 줄은 null(그대로 텍스트). 링크 대상은 OPERATOR_INFO.email 하나뿐이다(지어낸 주소 0).
+ */
+export function splitOperatorEmail(text: string): { before: string; email: string; href: string; after: string } | null {
+  const at = text.indexOf(OPERATOR_INFO.email);
+  if (at < 0) return null;
+  return {
+    before: text.slice(0, at),
+    email: OPERATOR_INFO.email,
+    href: `mailto:${OPERATOR_INFO.email}`,
+    after: text.slice(at + OPERATOR_INFO.email.length),
+  };
+}
+
 export const DRAFT_NOTICE =
   "이 문서는 초안입니다. 법률 검토 전이며, 검토 뒤 문구가 바뀔 수 있습니다.";
 
