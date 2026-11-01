@@ -797,6 +797,15 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
     const pp = postProcess(res.text, choice, userTurnsNow, false);
     // #463 — 앱 후처리 순서 미러: 칩 정리(S2 · D-g · P2-c) · 하지 않은 일 인정 문장 삭제(A1 — 이체 화면 미완료면 "입금 확인" 문장 삭제).
     pp.attachments = shapeChips(pp.attachments, pp.text, storedHistory);
+    // R17 미러(2026-11-01) — 앱 판정표 A: 메신저 단계 · 마치지 않은 화면 재촉 단계 · 다음 단계 요구 → 새 칩 떼기 · goal 무시 · 대사는 아래에서 재촉 1줄(옛 lib = 함수 없음 = 종전).
+    const advanceGate = screenActionLib?.decideStageAdvanceGate
+      ? screenActionLib.decideStageAdvanceGate({ messengerStage: !escalated && screenApplies, facts: screenFacts, userTurns: userTurnsNow, replyText: pp.text, chipLandingIds: (pp.attachments ?? []).flatMap((a) => (a.fakeLandingId ? [a.fakeLandingId] : [])) })
+      : { blocked: false };
+    if (advanceGate.blocked) {
+      pp.attachments = (pp.attachments ?? []).filter((a) => screenFacts.some((f) => f.landingId === a.fakeLandingId));
+      if (pp.attachments.length === 0) pp.attachments = undefined;
+      if (pp.endCall === "goal") pp.endCall = undefined;
+    }
     // R3 미러(2026-11-01) — 이체 화면 미완료인데 송금 확인 단정이면 대사 전체를 미확인 되돌림 1줄로 · 그 응답의 목표 끊기 신호 무시(옛 lib = 종전 A1만).
     const unconfirmed = ackLib?.guardUnconfirmedTransfer ? ackLib.guardUnconfirmedTransfer(pp.text, transferScreenPending) : { replaced: false };
     if (unconfirmed.replaced) {
@@ -820,6 +829,10 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       const fg = ackLib.guardFarewellWhileTransferPending(pp.text, { messengerStage: !escalated, transferChipPending: r8DecisionScreenPending, givingUp: pp.endCall === "give_up" });
       if (fg.replaced) { events.push({ ev: "farewellReplaced", userTurns: userTurnsNow, original: pp.text }); pp.text = fg.text; }
     }
+    if (advanceGate.blocked) {
+      events.push({ ev: "stageAdvanceBlocked", kind: advanceGate.kind, userTurns: userTurnsNow, original: pp.text });
+      pp.text = screenActionLib.stageHoldReply(advanceGate.kind, pp.text, userTurnsNow);
+    }
     if (pp.smsMarker !== undefined) {
       const g = resolveSmsGate({ purpose: pp.smsMarker, declared, delivered, userTurns: userTurnsNow });
       events.push({ ev: "smsMarker", purpose: pp.smsMarker, status: g.status, userTurns: userTurnsNow });
@@ -830,8 +843,8 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       }
     }
     if (pp.dropped) events.push({ ev: "signalDropped", ...pp.dropped, userTurns: userTurnsNow });
-    // R14 미러(2026-11-01) — 앱 판정표 G: 넘어온 통화에서 포기 단계가 두 턴째인데 끊기 신호가 없으면 포기 1줄 + give_up(옛 lib = 함수 없음 = 종전).
-    if (screenActionLib?.decideForcedScreenGiveUp?.({ escalatedCall: Boolean(escalated), endCall: pp.endCall, hangupSignalAllowed: hangupMode === "signal", facts: screenFacts, userTurns: userTurnsNow })) {
+    // R14 · R18 미러(2026-11-01) — 앱 판정표 G: 넘어온 통화 · 메신저 단계에서 포기 단계가 두 턴째인데 끊기 신호가 없으면 포기 1줄 + give_up(옛 lib = 함수 없음 = 종전).
+    if (screenActionLib?.decideForcedScreenGiveUp?.({ escalatedCall: Boolean(escalated), messengerStage: !escalated, endCall: pp.endCall, hangupSignalAllowed: hangupMode === "signal", facts: screenFacts, userTurns: userTurnsNow })) {
       events.push({ ev: "forcedScreenGiveUp", userTurns: userTurnsNow, original: pp.text });
       pp.text = screenActionLib.screenGiveUpReply(pp.text);
       pp.endCall = "give_up";

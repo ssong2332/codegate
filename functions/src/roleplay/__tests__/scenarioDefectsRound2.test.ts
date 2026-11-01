@@ -160,7 +160,8 @@ test("[§104 배선] sendMessage — 신호는 대사 판정을 거친 값만 �
   // 날것 신호가 판정 밖에서 쓰이지 않는다(선언 1 + 판정 입력 1). R3(#465) — 끊기 신호는 판정 입력 식 안에서 목표 제외 조건으로 한 번 더 읽힌다(선언 1 + 판정 입력 2).
   assert.equal((src.match(/rawSignalEscalate/g) ?? []).length, 3);
   assert.equal((src.match(/rawEndCallSignal/g) ?? []).length, 3);
-  assert.ok(src.includes('unconfirmedTransferAck && rawEndCallSignal === "goal" ? undefined : rawEndCallSignal,'), "판정 입력 식 안에서만");
+  // R17(2026-11-01) — 다음 단계 요구 차단(판정표 A)도 같은 자리에서 goal을 뺀다.
+  assert.ok(src.includes('(unconfirmedTransferAck || advanceGate.blocked) && rawEndCallSignal === "goal" ? undefined : rawEndCallSignal,'), "판정 입력 식 안에서만");
 });
 
 // ── 결함 1 · 7 — 페르소나 · 수법 문면 ──────────────────────────────────────────────────────────

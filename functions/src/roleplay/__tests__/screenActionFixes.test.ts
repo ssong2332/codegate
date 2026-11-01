@@ -177,7 +177,8 @@ test("[배선] 백스톱 응답 화면 기록 · 제출 비교 저장 · 폴백 
   assert.ok(mock.includes('event === "submitted" && isBankTransferLanding(landingId) && isAmountComparison(request.data?.amountComparison)'));
   const role = read("roleplay/index.ts");
   assert.ok(role.includes("buildScreenStatusLine(screenApplies, screenFacts, {\n          userTurns: userTurnsNow,"));
-  assert.ok(role.includes('unconfirmedTransferAck && rawEndCallSignal === "goal" ? undefined : rawEndCallSignal'));
+  // R17(2026-11-01) — 판정표 A 차단과 같은 식에서 goal을 뺀다.
+  assert.ok(role.includes('(unconfirmedTransferAck || advanceGate.blocked) && rawEndCallSignal === "goal" ? undefined : rawEndCallSignal'));
   assert.ok(role.includes("demandAmountFrom(linkFreeReplyText, storedHistory)"));
   assert.ok(role.includes('latestTransferAmount(screenFacts) !== "less"'), "적게 보냈으면 받은 것으로 치지 않는다");
 });
