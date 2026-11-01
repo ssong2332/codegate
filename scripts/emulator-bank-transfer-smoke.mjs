@@ -13,6 +13,7 @@
 //     5 리포트 deceivedMoments에 그 화면의 속은 순간(momentTactic)
 // (B) 메신저 칩(자녀 사칭 초급 — `child-bank-transfer`): 칩 메시지(첨부 · 세션 은행 · 계좌) → shown → submitted → 리포트 속은 순간.
 //     ⚠️ Mock LLM은 링크 마커를 내지 않으므로 칩이 실린 사기범 메시지 1건을 에뮬레이터 Firestore에 직접 쓴다(앵커 재료).
+// (C) D-e 이체 완료 화면 캡처: 화면 제출 → 캡처 보내기 → 저장 문면 · 종류 · 이미지 0 · 사기범 응답 생성(내용은 Mock이라 판정 안 함).
 import { writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -177,7 +178,49 @@ async function partB() {
   });
 }
 
-for (const [name, fn] of [["A", partA], ["B", partB]]) {
+// (C) D-e 이체 완료 화면 캡처(2026-11-01 · 확인 실측): 칩 → 화면 제출 → 캡처 보내기(`photo: true` · `photoKind: "transfer-receipt"`) → 사기범 응답.
+//     화면(MessengerChatRoom)이 보내는 요청 모양 그대로. 서버에 남는 것 = 고정 문장 · 종류뿐(이미지 · data URL 0).
+//     ⚠️ Mock LLM은 턴 지시를 읽지 않으므로 응답 *내용*(확인 반응 · 재요구 0)은 여기서 판정하지 않는다 — 응답이 생겼는지만 본다.
+async function partC() {
+  const user = await newUser();
+  const { sessionId } = await call("createSession", { scenarioId: "messenger-child-impersonation-kakao", voiceId: "generic-voice", difficultyLevel: "beginner" }, user.idToken);
+  await call("sendMessage", { sessionId, userText: "응 무슨 일이야?" }, user.idToken);
+  const before = await fsList(`sessions/${sessionId}/messages`);
+  await fsWrite(`sessions/${sessionId}/messages/p2-chip`, {
+    role: "scammer",
+    textMasked: "엄마 이 계좌로 200만 원만 보내줘",
+    turnIndex: Math.max(...before.map((m) => Number(m.turnIndex ?? 0))) + 1,
+    createdAt: new Date(),
+    attachments: [
+      { kind: "link", displayText: "이체하기", fakeLandingId: "child-bank-transfer", harmless: true, bankName: "가온은행", accountNumber: "948-2716-5093-27", accountHolder: "김도현" },
+    ],
+  });
+  await call("recordMockScreenEvent", { sessionId, landingId: "child-bank-transfer", event: "shown" }, user.idToken);
+  await call("recordMockScreenEvent", { sessionId, landingId: "child-bank-transfer", event: "submitted" }, user.idToken);
+  const reply = await call("sendMessage", { sessionId, photo: true, photoKind: "transfer-receipt" }, user.idToken);
+  const messages = (await fsList(`sessions/${sessionId}/messages`)).sort((a, b) => Number(a.turnIndex) - Number(b.turnIndex));
+  const sent = messages.filter((m) => m.role === "user").at(-1);
+  check("C", "1 캡처 턴 저장 = 고정 문장 · photo · photoKind", sent?.textMasked === "(이체 완료 화면 캡처 1장을 보냈다)" && sent?.photo === true && sent?.photoKind === "transfer-receipt", {
+    textMasked: sent?.textMasked,
+    photo: sent?.photo,
+    photoKind: sent?.photoKind,
+  });
+  check("C", "2 서버에 이미지 0(data URL · photoUrl 필드 없음)", messages.every((m) => !("photoUrl" in m) && !JSON.stringify(m).includes("data:image")));
+  const after = messages.filter((m) => m.role === "scammer" && Number(m.turnIndex) > Number(sent?.turnIndex ?? 0));
+  check("C", "3 사기범 응답 생성(Mock — 내용 판정 안 함)", after.length >= 1 && typeof reply === "object", { replyText: String(after[0]?.textMasked ?? "").slice(0, 80) });
+  // 허용 값 밖 photoKind · 사진 턴이 아닌 photoKind는 버려진다(일반 사진 턴 · 일반 글자 턴).
+  await call("sendMessage", { sessionId, photo: true, photoKind: "bogus" }, user.idToken);
+  await call("sendMessage", { sessionId, userText: "보냈어", photoKind: "transfer-receipt" }, user.idToken);
+  const users = (await fsList(`sessions/${sessionId}/messages`)).filter((m) => m.role === "user").sort((a, b) => Number(a.turnIndex) - Number(b.turnIndex));
+  const [bogus, plain] = users.slice(-2);
+  check("C", "4 허용 밖 종류 = 일반 사진 턴 · 글자 턴엔 종류 0", bogus?.photo === true && !bogus?.photoKind && bogus?.textMasked !== sent?.textMasked && !plain?.photo && !plain?.photoKind, {
+    bogus: { textMasked: bogus?.textMasked, photoKind: bogus?.photoKind },
+    plain: { textMasked: plain?.textMasked, photoKind: plain?.photoKind },
+  });
+  await call("endSession", { sessionId, endReason: "user_ended" }, user.idToken);
+}
+
+for (const [name, fn] of [["A", partA], ["B", partB], ["C", partC]]) {
   try {
     await fn();
   } catch (error) {
