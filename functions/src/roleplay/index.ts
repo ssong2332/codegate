@@ -127,13 +127,15 @@ import { CALL_AFTER_EXCUSE_INSTRUCTION, decideCallAnnouncement, saidCallUnavaila
 import {
   assertsTransferConfirmed,
   guardUnconfirmedTransfer,
+  guardUnconfirmedInstall,
+  guardFarewellWhileTransferPending,
   stripPasswordRequests,
   stripUnperformedAcknowledgement,
   TRANSFER_REPORTED_INSTRUCTION,
   userReportedTransfer,
   userSentPhoto,
 } from "./actionAcknowledgement";
-import { fixMessengerCallWording, personaAnchorInstruction, personaGuardFor } from "./personaGuard";
+import { fixMessengerCallWording, fixPersonaIdRequest, personaAnchorInstruction, personaGuardFor } from "./personaGuard";
 import { resolveSessionSpeakerGender } from "../realtime/scenarioVoice";
 import { isSessionLimitReached } from "./sessionLimits";
 import type { ScammerMessage, SendMessageRequest, SendMessageResponse } from "./types";
@@ -468,10 +470,13 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     }
     // R8(#468 실측 — 메신저 이체 칩 기록 없이 인증번호를 받은 뒤 "접수는 됐어"로 goal 끝) — 메신저 이체 화면 칩을 보냈는데 그 화면을 아직 마치지 않았거나
     // 요구액보다 적게 보냈으면 결정 화면 대기(4-c행이 goal 끊기를 막는다 · give_up은 통과). 통화 중 문자 결정 화면 판정(D-1 ~ D-5)과 같은 뜻의 메신저 짝이다.
-    if (!decisionScreenPending && storedHistory.some((m) => (m.attachments ?? []).length > 0)) {
+    // R16 판정표 F — 같은 판정(메신저 이체 칩 미완료)을 작별 대사 교체에도 쓴다(통화 중 문자 결정 화면과 무관 — 카드사 고급 등 통화 루트 무변경).
+    let messengerTransferChipPending = false;
+    if (storedHistory.some((m) => (m.attachments ?? []).length > 0)) {
       const chipFacts = messengerScreenFacts(session.scenarioId, storedHistory, await loadMockRecords());
       const transferChips = chipFacts.filter((f) => f.kind === "transfer");
-      if (transferChips.length > 0 && (!transferChips.some((f) => f.done) || latestTransferAmount(chipFacts) === "less")) decisionScreenPending = true;
+      messengerTransferChipPending = transferChips.length > 0 && (!transferChips.some((f) => f.done) || latestTransferAmount(chipFacts) === "less");
+      if (messengerTransferChipPending) decisionScreenPending = true;
     }
     const callEntryTurns = userTurnsSinceCallEntry(session.channel, session.channelHistory, storedHistory);
     const hangupFacts: FallbackHangupFacts = {
@@ -1040,7 +1045,23 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // R9 판정표 P(`actionAcknowledgement.ts`) — 화면에 없는 비밀번호 입력 · 불러 달라는 문장을 뺀다(실제 비밀번호 입력 유도 차단).
     const passwordGuard = stripPasswordRequests(factCheckedReplyText);
     if (passwordGuard.stripped) logger.info("[R9] 비밀번호 요구 문장 제거", { sessionId, userTurns: userTurnsNow });
-    const limitedReplyText = session.channel === "messenger" ? fixMessengerCallWording(passwordGuard.text) : passwordGuard.text;
+    // R15 ⓐ 판정표 I(`actionAcknowledgement.ts`) — 메신저 단계에서 설치 기록 없이 설치 완료를 단정하면 설치 미확인 1줄로(주 모델 · 예비 모델 무관).
+    const installScreenPending =
+      session.channel === "messenger" && screenFacts.some((f) => f.kind === "install") && !screenFacts.some((f) => f.kind === "install" && f.done);
+    const installGuard = guardUnconfirmedInstall(passwordGuard.text, installScreenPending);
+    if (installGuard.replaced) logger.info("[R15] 설치 화면 미완료 · 설치 완료 단정 대사 교체", { sessionId, userTurns: userTurnsNow });
+    // R15 ⓑ 판정표 P4(`personaGuard.ts`) — 자녀 · 지인 사칭이 상대에게 "내 신분증"을 달라는 역할 뒤집힘에서 소유 낱말을 뺀다.
+    const personaIdFix = fixPersonaIdRequest(session.scenarioId, installGuard.text);
+    if (personaIdFix.fixed) logger.info("[R15] 신분증 요구 소유 낱말 교정", { sessionId, userTurns: userTurnsNow });
+    const wordingFixedReplyText = session.channel === "messenger" ? fixMessengerCallWording(personaIdFix.text) : personaIdFix.text;
+    // R16 판정표 F(`actionAcknowledgement.ts`) — 이체 칩 미완료(4-c가 goal 끝을 막는 상태)에서 작별 · 나중 연락 대사는 이체 미확인 재촉 1줄로.
+    const farewellGuard = guardFarewellWhileTransferPending(wordingFixedReplyText, {
+      messengerStage: session.channel === "messenger",
+      transferChipPending: messengerTransferChipPending,
+      givingUp: endCallSignal === "give_up",
+    });
+    if (farewellGuard.replaced) logger.info("[R16] 이체 칩 미완료 · 작별 대사 교체", { sessionId, userTurns: userTurnsNow });
+    const limitedReplyText = farewellGuard.text;
     // §128(4) — 참가자가 건 통화의 "전화 받아 줘서"류 교정(`callCaller.ts` 표 · 그 밖 턴 무변경).
     const calledShapedReplyText = participantCalled ? fixParticipantCalledReply(limitedReplyText) : limitedReplyText;
     const shapedReplyText = forcedScreenGiveUp ? screenGiveUpReply(calledShapedReplyText) : calledShapedReplyText;

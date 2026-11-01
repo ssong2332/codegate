@@ -791,7 +791,22 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       pp.text = unconfirmed.text;
       if (pp.endCall === "goal") pp.endCall = undefined;
     } else if (ackLib?.stripUnperformedAcknowledgement) pp.text = ackLib.stripUnperformedAcknowledgement(pp.text, { transferReported, photoSent: false });
+    // R15 미러(2026-11-01) — 앱 순서: 설치 완료 단정 교체(판정표 I) → 신분증 요구 소유 낱말(P4) → 통화 말(W). 옛 lib = 함수 없음 = 종전.
+    const installPending = !escalated && screenFacts.some((f) => f.kind === "install") && !screenFacts.some((f) => f.kind === "install" && f.done);
+    if (ackLib?.guardUnconfirmedInstall) {
+      const ig = ackLib.guardUnconfirmedInstall(pp.text, installPending);
+      if (ig.replaced) { events.push({ ev: "unconfirmedInstallReplaced", userTurns: userTurnsNow, original: pp.text }); pp.text = ig.text; }
+    }
+    if (personaGuardLib?.fixPersonaIdRequest) {
+      const pf = personaGuardLib.fixPersonaIdRequest(scenarioId, pp.text);
+      if (pf.fixed) { events.push({ ev: "personaIdFixed", userTurns: userTurnsNow, original: pp.text }); pp.text = pf.text; }
+    }
     if (!escalated && personaGuardLib?.fixMessengerCallWording) pp.text = personaGuardLib.fixMessengerCallWording(pp.text);
+    // R16 미러(2026-11-01) — 메신저 이체 칩 미완료 · 포기 아님 · 작별 대사 → 이체 미확인 재촉 1줄(판정표 F).
+    if (ackLib?.guardFarewellWhileTransferPending) {
+      const fg = ackLib.guardFarewellWhileTransferPending(pp.text, { messengerStage: !escalated, transferChipPending: r8DecisionScreenPending, givingUp: pp.endCall === "give_up" });
+      if (fg.replaced) { events.push({ ev: "farewellReplaced", userTurns: userTurnsNow, original: pp.text }); pp.text = fg.text; }
+    }
     if (pp.smsMarker !== undefined) {
       const g = resolveSmsGate({ purpose: pp.smsMarker, declared, delivered, userTurns: userTurnsNow });
       events.push({ ev: "smsMarker", purpose: pp.smsMarker, status: g.status, userTurns: userTurnsNow });

@@ -41,6 +41,20 @@ export const INSTITUTION_SELF_INTRO = new RegExp(
     `|(?:${INSTITUTION_NOUNS})[^.?!\\n]{0,12}(?:${SELF_INTRO_ROLE})\\s*(?:인데요|입니다|이에요|예요)`,
 );
 
+// ── R15 ⓑ(#479 확인 실측 ② S5 · 예비 모델 — 자녀가 엄마에게 "내 신분증 사진 · 내 주민등록증 사진 찍어서 보내줘") — 판정표 P4 ─────────────────
+// 사칭 인물(자녀 · 지인)이 상대에게 신분증을 달라면서 "내" 것이라고 말하면 역할이 뒤집힌다(상대 손에 사칭 인물의 신분증이 있을 리 없다).
+// | # | If | Then |
+// |---|---|---|
+// | P4 | 대상 시나리오(`PERSONA_GUARDED_SCENARIOS`) ∧ "내/제 + 신분증 · 주민등록증 · 운전면허증"이 같은 절 안에서 찍어 · 보내 · 줘 · 필요와 함께 나옴 | 소유 낱말("내 · 제")만 뺀다(신분증 요구 자체는 루트 수법 그대로) |
+// | P5 | 그 밖(자기 신분증을 잃어버렸다는 핑계처럼 요구가 없는 절 · 다른 시나리오) | 그대로 |
+const OWN_ID_REQUEST = /(?:^|(?<=[\s,.!?]))(?:내|제)\s+(?=(?:신분증|주민등록증|주민증|운전면허증)[^.?!\n]{0,30}(?:찍어|보내|줘|줄래|주세요|부탁|필요))/g;
+
+export function fixPersonaIdRequest(scenarioId: string, text: string): { text: string; fixed: boolean } {
+  if (!(scenarioId in PERSONA_GUARDED_SCENARIOS)) return { text, fixed: false }; // P5
+  const out = text.replace(OWN_ID_REQUEST, "");
+  return { text: out, fixed: out !== text }; // P4
+}
+
 export function personaGuardFor(scenarioId: string): RegExp | undefined {
   if (IDENTITY_HIDDEN_SCENARIOS.includes(scenarioId)) return INSTITUTION_SELF_INTRO;
   return scenarioId in PERSONA_GUARDED_SCENARIOS ? INSTITUTION_PERSONA : undefined;
