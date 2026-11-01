@@ -31,6 +31,8 @@ import {
   inCallScreenFacts,
   anyScreenGiveUp,
   decideForcedScreenGiveUp,
+  decideStageAdvanceGate,
+  stageHoldReply,
   screenGiveUpReply,
   installPendingSince,
   latestTransferAmount,
@@ -910,7 +912,18 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       demandAmountFrom(linkFreeReplyText, storedHistory),
     );
     const keptOnGiveUp = replyAttachmentsBeforeGiveUp?.filter((attachment) => screenFacts.some((f) => f.landingId === attachment.fakeLandingId));
-    const replyAttachments = giveUpStage ? (keptOnGiveUp && keptOnGiveUp.length > 0 ? keptOnGiveUp : undefined) : replyAttachmentsBeforeGiveUp;
+    // R17 판정표 A(`screenAction.ts`) — 메신저 단계에서 마치지 않은 화면이 재촉 단계인데 대답이 다음 단계 요구(그 화면 밖 요구 어휘 · 새 화면 칩)를 꺼내면
+    // 서버가 막는다: 새 칩을 떼고(아래) · goal 끊기를 받지 않고(③-b) · 대사를 현 단계 재촉 1줄로 바꾼다(③-c 끝). 단정 문구 유무 · 모델 종류와 무관하다.
+    const advanceGate = decideStageAdvanceGate({
+      messengerStage: session.channel === "messenger" && screenApplies,
+      facts: screenFacts,
+      userTurns: userTurnsNow,
+      replyText: linkFreeReplyText,
+      chipLandingIds: (replyAttachmentsBeforeGiveUp ?? []).flatMap((attachment) => (attachment.fakeLandingId ? [attachment.fakeLandingId] : [])),
+    });
+    if (advanceGate.blocked) logger.info("[R17] 마치지 않은 화면 · 다음 단계 요구 차단", { sessionId, kind: advanceGate.kind, userTurns: userTurnsNow });
+    const replyAttachments =
+      giveUpStage || advanceGate.blocked ? (keptOnGiveUp && keptOnGiveUp.length > 0 ? keptOnGiveUp : undefined) : replyAttachmentsBeforeGiveUp;
     // ③-a′ T191 — 문자 요청 마커를 걷어 낸다(아래 문장 수 상한보다 **앞** — 상한이 끝의 마커를 잘라 먹지 않게).
     const { text: smsMarkerFreeText, purpose: markerPurpose, markerCount: smsMarkerCount } =
       extractSmsMarker(linkFreeReplyText);
@@ -947,7 +960,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // R3(#465 실측) — 이체 화면을 아직 마치지 않았는데 대사가 송금 확인을 단정하면 아래에서 대사를 되돌림 1줄로 바꾼다 · 같은 응답의 목표 끊기는 받지 않는다.
     const unconfirmedTransferAck = transferScreenPending && assertsTransferConfirmed(signalFreeReplyText);
     const endCallConsistency = judgeEndCallSignal(
-      unconfirmedTransferAck && rawEndCallSignal === "goal" ? undefined : rawEndCallSignal,
+      (unconfirmedTransferAck || advanceGate.blocked) && rawEndCallSignal === "goal" ? undefined : rawEndCallSignal,
       signalFreeReplyText,
     );
     // §122(6) 판정표 P — 메신저 단계에서 사진 뒤 남은 단계(송금 등)를 꺼내기 전의 목표 끊기는 받지 않는다(`photoFollowUp.ts`).
@@ -962,15 +975,16 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       : endCallConsistency;
     // §129 D13 판정표 C — 메신저 단계의 포기 신호인데 참가자가 거절 · 의심 없이 따라오는 중이면 목표로 기록한다(끝내는 것은 그대로).
     const giveUpCheck = reclassifyMessengerGiveUp(endCallCheck.endCall, maskedUserText, session.channel === "messenger");
-    // R14 판정표 G(`screenAction.ts`) — 넘어온 통화에서 포기 단계가 두 턴째인데 끊기 신호가 없으면 서버가 포기로 끝맺는다(대사는 아래에서 포기 1줄로).
+    // R14 · R18 판정표 G(`screenAction.ts`) — 넘어온 통화 · 메신저 단계에서 포기 단계가 두 턴째인데 끊기 신호가 없으면 서버가 포기로 끝맺는다(대사는 아래에서 포기 1줄로).
     const forcedScreenGiveUp = decideForcedScreenGiveUp({
       escalatedCall,
+      messengerStage: session.channel === "messenger",
       endCall: giveUpCheck.endCall,
       hangupSignalAllowed: hangupMode === "signal",
       facts: screenApplies ? screenFacts : [],
       userTurns: userTurnsNow,
     });
-    if (forcedScreenGiveUp) logger.info("[R14] 넘어온 통화 포기 단계 서버 끝맺음", { sessionId, userTurns: userTurnsNow });
+    if (forcedScreenGiveUp) logger.info("[R14 · R18] 포기 단계 서버 끝맺음", { sessionId, channel: session.channel ?? "voice", userTurns: userTurnsNow });
     const endCallSignal = forcedScreenGiveUp ? ("give_up" as const) : giveUpCheck.endCall;
     if (giveUpCheck.reclassified) {
       // G170 — 사유 코드만(대사 0).
@@ -1061,7 +1075,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       givingUp: endCallSignal === "give_up",
     });
     if (farewellGuard.replaced) logger.info("[R16] 이체 칩 미완료 · 작별 대사 교체", { sessionId, userTurns: userTurnsNow });
-    const limitedReplyText = farewellGuard.text;
+    // R17 판정표 A — 다음 단계로 넘어간 대답은 현 단계 재촉 1줄로(앞 손질 결과와 무관 · 포기 끝맺음은 아래 G가 이긴다).
+    const limitedReplyText = advanceGate.blocked ? stageHoldReply(advanceGate.kind, farewellGuard.text, userTurnsNow) : farewellGuard.text;
     // §128(4) — 참가자가 건 통화의 "전화 받아 줘서"류 교정(`callCaller.ts` 표 · 그 밖 턴 무변경).
     const calledShapedReplyText = participantCalled ? fixParticipantCalledReply(limitedReplyText) : limitedReplyText;
     const shapedReplyText = forcedScreenGiveUp ? screenGiveUpReply(calledShapedReplyText) : calledShapedReplyText;

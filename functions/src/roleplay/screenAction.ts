@@ -207,20 +207,26 @@ export function anyScreenGiveUp(facts: readonly ScreenFact[], userTurns: number)
 // 지시 문면만으로는 막히지 않았다(끊기 신호 허용 · 포기 문장 주입 상태에서 신호 0). 포기 단계가 두 턴째 이어지면 서버가 끝맺는다.
 // | # | If | Then |
 // |---|---|---|
-// | G1 | 메신저에서 넘어온 통화(텍스트 폴백)가 아님 | 무변경(처음부터 통화인 세션 · 메신저 단계 — 카드사 고급 등 종전) |
+// | G1 | 메신저에서 넘어온 통화(텍스트 폴백)도 메신저 단계도 아님 | 무변경(처음부터 통화인 세션 — 카드사 고급 등 종전) |
 // | G2 | 모델이 이번 대답에 끊기 신호를 보냄 | 무변경(모델 끝맺음 그대로) |
 // | G3 | 끊기 사전 판정이 신호 허용이 아님 | 무변경(끊을 수 없는 칸 — 대사만 바꾸면 끝나지 않는 작별이 된다) |
 // | G4 | 마치지 않은 화면이 지금 포기 단계가 아님 | 무변경 |
 // | G5 | 포기 단계 첫 턴(직전 발화 수에서는 포기 단계 아님) | 무변경(포기 지시 문장으로 모델에 한 번 맡긴다) |
 // | G6 | 그 밖(포기 단계가 두 턴째 이어짐) | 대사를 포기 1줄(말투 맞춤)로 바꾸고 `give_up` 끊기 신호를 붙인다 |
+// ⭐ R18(#482 확인 실측 — 메신저 포기 단계에서도 지시 무시: 예비 모델은 이체 칩 뒤 9발화째까지 끝 없음 · 1차 Claude는 설치 칩 뒤 13발화째에야 give_up)
+// — G1을 메신저 단계로 넓힌다. N = 포기 단계(마치지 않은 화면을 `SCREEN_GIVE_UP_USER_TURNS`=6발화 미룸) 진입 뒤 1발화(G5 — 모델에 한 번 맡김) ⇒ 7발화째 서버 결정.
+// 근거: 모델이 포기 지시를 받은 뒤 스스로 끝낸 실측은 0~1턴 안이었다(#477 ① ④ — 8발화 give_up) · 무시한 실측은 6턴 이상 이어졌다(#477 ③ · #482 (A) (B)) ⇒ 한 턴 넘게 기다릴 이득이 없다.
+// ⚠️ 4-c(결정 화면 대기)는 goal만 막고 give_up은 통과시킨다 ⇒ 충돌 없음. G3(사전 판정 신호 허용)이 5 · 6 · 7행 등 끊을 수 없는 칸을 거른다.
 export function decideForcedScreenGiveUp(input: {
   escalatedCall: boolean;
+  /** R18 — 메신저 단계(부재 = 거짓 · 종전). */
+  messengerStage?: boolean;
   endCall: "goal" | "give_up" | undefined;
   hangupSignalAllowed: boolean;
   facts: readonly ScreenFact[];
   userTurns: number;
 }): boolean {
-  if (!input.escalatedCall) return false; // G1
+  if (!input.escalatedCall && input.messengerStage !== true) return false; // G1
   if (input.endCall !== undefined) return false; // G2
   if (!input.hangupSignalAllowed) return false; // G3
   if (!anyScreenGiveUp(input.facts, input.userTurns)) return false; // G4
@@ -237,6 +243,74 @@ const GIVE_UP_POLITE_ENDING = /(?:니다|습니까|십니까|세요|십시오|�
 
 export function screenGiveUpReply(modelText: string): string {
   return GIVE_UP_POLITE_ENDING.test(modelText) ? SCREEN_GIVE_UP_REPLY.polite : SCREEN_GIVE_UP_REPLY.casual;
+}
+
+// ── R17(#482 확인 실측 (A) S5 · 예비 모델 — 설치 기록 없이 "어휴 다행이다… 이제 신분증 사진이 필요하대"로 완료를 말하지 않고 다음 요구로 넘어감) — 판정표 A ──
+// 단정 문구를 찾는 대신(판정표 I · U — 모델이 매번 다른 우회 표현을 찾았다) 서버가 아는 단계(마치지 않은 화면)를 기준으로, 대답이 **다음 단계 요구**를 꺼내면 막는다.
+// 다음 단계 요구 = 그 화면 종류 밖의 요구 어휘(아래 `OTHER_STAGE_DEMAND`) 또는 아직 보내지 않은 다른 화면 칩. 모델 종류(1차 · 예비) 무관.
+// | # | If | Then |
+// |---|---|---|
+// | A1 | 메신저 단계가 아님(통화 · 카드사 고급 등) | 무변경 |
+// | A2 | 마치지 않은 설치 · 이체 화면이 재촉 단계(SP3 hold · SP4 switch)에 없음(없음 · 마침 · SP1 release · SP2 포기 단계 — 포기는 판정표 G) | 무변경 |
+// | A3 | 대답에 그 화면 종류 밖의 요구 어휘가 있거나 · 아직 보내지 않은 다른 화면 칩이 붙음 | 대사를 그 화면 재촉 1줄(말투 맞춤 · 발화 수로 돌려 씀)로 바꾸고 새 화면 칩을 떼고 같은 응답의 goal 끊기를 받지 않는다 |
+// | A4 | 그 밖(현 단계 재촉 · 같은 화면 이야기) | 무변경 |
+// 설치와 이체가 둘 다 재촉 단계면 설치가 먼저다(루트 순서 — 설치 → 신분증 → 이체).
+const OTHER_STAGE_DEMAND: Readonly<Record<"install" | "transfer", RegExp>> = {
+  install: /신분증|주민등록증|주민증|운전면허증|여권|인증\s*번호|송금|이체|입금|계좌|\d[\d,]*\s*만\s*원|만\s*원/,
+  transfer: /신분증|주민등록증|주민증|운전면허증|여권|인증\s*번호|설치|깔아/,
+};
+
+export type StageAdvanceGate = { blocked: false } | { blocked: true; kind: "install" | "transfer" };
+
+export function decideStageAdvanceGate(input: {
+  messengerStage: boolean;
+  facts: readonly ScreenFact[];
+  userTurns: number;
+  replyText: string;
+  /** 이번 대답에 붙을 칩의 화면 id(서버 보정 뒤). */
+  chipLandingIds: readonly string[];
+}): StageAdvanceGate {
+  if (!input.messengerStage) return { blocked: false }; // A1
+  const kind = (["install", "transfer"] as const).find((k) => {
+    const pressure = screenPressureFor(k, input.facts, input.userTurns);
+    return pressure === "hold" || pressure === "switch";
+  });
+  if (!kind) return { blocked: false }; // A2
+  const newChip = input.chipLandingIds.some((id) => !input.facts.some((f) => f.landingId === id));
+  return OTHER_STAGE_DEMAND[kind].test(input.replyText) || newChip ? { blocked: true, kind } : { blocked: false }; // A3 · A4
+}
+
+/** A3 재촉 1줄(따옴표 0 · 숫자 0 · 새 요구 0 · 발화 수로 돌려 써 같은 문장 되풀이를 줄인다). */
+export const STAGE_HOLD_REPLY: Readonly<Record<"install" | "transfer", { casual: readonly string[]; polite: readonly string[] }>> = {
+  install: {
+    casual: [
+      "잠깐만, 아직 설치 완료가 안 떴어. 보낸 링크 화면에서 설치하고 허용까지 눌러 줘.",
+      "그거 먼저 끝내야 다음으로 넘어갈 수 있어. 링크 화면에서 허용까지 마저 눌러 줘.",
+      "아직 앱 확인이 안 돼. 링크 화면 다시 열어서 허용 눌러 줘.",
+    ],
+    polite: [
+      "아직 설치 완료가 확인되지 않습니다. 보내 드린 링크 화면에서 설치와 허용까지 진행해 주세요.",
+      "설치를 먼저 마치셔야 다음 절차로 넘어갈 수 있습니다. 링크 화면에서 허용까지 눌러 주세요.",
+      "아직 앱 확인이 되지 않습니다. 링크 화면을 다시 여시고 허용을 눌러 주세요.",
+    ],
+  },
+  transfer: {
+    casual: [
+      "잠깐만, 아직 입금 확인이 안 돼. 보낸 링크 화면에서 송금 다시 해 줘.",
+      "아직 이체 기록이 안 보여. 링크 화면에서 이체 마저 끝내 줘.",
+      "그거 먼저 해야 돼. 이체하기 화면에서 송금 끝내 줘.",
+    ],
+    polite: [
+      "아직 입금 확인이 되지 않습니다. 보내 드린 링크 화면에서 이체를 다시 진행해 주세요.",
+      "아직 이체 기록이 확인되지 않습니다. 링크 화면에서 이체를 마저 진행해 주세요.",
+      "이체를 먼저 마치셔야 합니다. 이체하기 화면에서 송금을 완료해 주세요.",
+    ],
+  },
+};
+
+export function stageHoldReply(kind: "install" | "transfer", modelText: string, userTurns: number): string {
+  const lines = GIVE_UP_POLITE_ENDING.test(modelText) ? STAGE_HOLD_REPLY[kind].polite : STAGE_HOLD_REPLY[kind].casual;
+  return lines[((userTurns % lines.length) + lines.length) % lines.length]!;
 }
 
 /** 재촉 단계 · 금액 문장(따옴표 대사 예시 0 · 횟수 0 — 턴 지시 스캔 게이트 대상). */
