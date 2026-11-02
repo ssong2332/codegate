@@ -61,7 +61,8 @@ test("[dev-route] createSession 배선 — 적용 시 회전 배정을 건너뛰
   assert.ok(src.includes("requested: forceVariantId,"));
   assert.ok(
     src.includes(
-      "const variantAssignment = routeOverride.applied\n      ? { flowVariantId: routeOverride.variantId, candidates: [routeOverride.variantId] }\n      : await assignFlowVariantForSession(",
+      // 보안 점검 후속(2026-11-02) — 예약 뒤 본문이 try/finally 안으로 들어가 들여쓰기가 2칸 늘었다.
+      "const variantAssignment = routeOverride.applied\n        ? { flowVariantId: routeOverride.variantId, candidates: [routeOverride.variantId] }\n        : await assignFlowVariantForSession(",
     ),
   );
   assert.ok(src.includes('...(routeOverride.applied ? { routeOverride: "forced" as const } : {}),'));
