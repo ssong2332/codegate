@@ -9,7 +9,7 @@ import { logger } from "firebase-functions";
 import { getFirestore } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { readDocId } from "../shared/requestValidation";
-import { realtimeIssueLegKey, reserveRealtimeIssue } from "./issueBudget";
+import { realtimeIssueLegKey, realtimeSessionTimeExceeded, reserveRealtimeIssue } from "./issueBudget";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { ELEVENLABS_API_KEY, GEMINI_KEY_SECRETS } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
@@ -155,6 +155,10 @@ export const createRealtimeCall = onCall<
   const callLeg = resolveSessionCallLeg(findFlowVariant(session.flowVariantId), session);
   // ⭐ SEC-08(외부 보안 점검 2차) — 통화 구간별 발급 예산(6회 · 최초 발급 후 25분, `issueBudget.ts` 표). 외부 호출(Live 토큰 · 폴백 포함) 전 ·
   // 앞선 대화 read 전에 판정한다(거절 = 외부 호출 0). 다통화 다음 레그 · 메신저→통화 재진입은 새 구간이라 자기 예산을 갖는다.
+  // 보안 점검 후속(2026-11-02) — 세션 전체 시간 예산(기존 기준 · `issueBudget.ts` 표)을 넘은 세션은 첫 발급도 막는다(외부 호출 · 예산 문서 쓰기 0).
+  if (realtimeSessionTimeExceeded(session, Date.now())) {
+    throw new HttpsError("resource-exhausted", "이 통화는 더 이상 다시 연결할 수 없습니다. 통화를 마치고 결과를 확인해 주세요.");
+  }
   await reserveRealtimeIssue(db, db.collection("sessions").doc(sessionId), realtimeIssueLegKey(session, callLeg));
   let priorChatContext: string | undefined;
   if (callLeg && callLeg.legIndex > 0) {

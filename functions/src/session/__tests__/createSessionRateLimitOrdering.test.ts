@@ -34,7 +34,8 @@ test("[G410] 롤링 윈도우 게이트(슬롯 예약) 호출이 generateOpening
 test("[G410] 거절 코드는 resource-exhausted다(challenge/index.ts:122-125·rewind/attemptSlot.ts와 동일)", () => {
   const src = readFileSync(SLOT_SRC, "utf8");
   assert.ok(src.includes("isCreateSessionRateLimited({"), "판정이 rateLimit.ts 순수 함수를 거치지 않는다");
-  const gateIdx = src.indexOf("if (limited) {");
+  // 보안 점검 후속(2026-11-02) — 판정 결과가 객체(`decision`)가 됐다(중복 시작 판정 추가).
+  const gateIdx = src.indexOf("if (decision.limited) {");
   assert.ok(gateIdx > -1);
   const afterGate = src.slice(gateIdx, gateIdx + 600);
   assert.match(afterGate, /HttpsError\(\s*\n?\s*"resource-exhausted"/, "롤링 윈도우 거절 코드가 resource-exhausted가 아니다");
