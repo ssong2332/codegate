@@ -24,6 +24,7 @@ import {
   resolveSessionCallLeg,
   splitLegHistory,
 } from "../callLegs/legPlan";
+import { isLegDialSmsPending } from "../callLegs/legHandoff";
 import { findInCallSmsItem } from "../scenarios/inCallSms";
 import type { InCallSmsItem } from "../scenarios/inCallSms";
 import {
@@ -539,7 +540,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       // §142(PR-3) — 다통화 마지막이 아닌 레그(뒤에 둬서 덮어쓴다): 결정 화면 · 후속 단계 없음 · 8행 = 그 레그 끝 기록 · 5행 하한 = 레그 시작 뒤 발화.
       ...(legScope
         ? {
-            followUpPending: false,
+            // 실기기 신고 F2 — 다음 번호가 문자에만 있는 레그는 그 문자가 도착하기 전 끊기를 막는다(4-b · 실시간과 같은 판정).
+            followUpPending: isLegDialSmsPending(legVariant, session.relay, smsDelivered.map((d) => d.smsId)),
             decisionScreenPending: false,
             alreadyAccepted: session.relay?.legEnded === legScope.legIndex,
             turnsSinceCallEntry: legScope.turnsSinceLegStart,

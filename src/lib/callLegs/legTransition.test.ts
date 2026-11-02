@@ -8,6 +8,7 @@ import {
   DIAL_MAX_DIGITS,
   LEG_CALLBACK_DELAY_MS,
   LEG_DIAL_CONTACTS,
+  LEG_GENUINE_COPY,
   backspaceDial,
   dialContactsFor,
   digitsOf,
@@ -147,4 +148,28 @@ test("[§142 D1 배선] 새 통화(레그)를 열면 문자 백스톱 질의를 
 
 test("[§142 D2 프로브 미러] 실측 프로브의 참가자 발신 첫 신호 = 클라 상수", () => {
   assert.ok(read("scripts/full-audit-probe.mjs").includes(JSON.stringify(LEG_DIALED_OPENING_TURN)));
+});
+
+// 실기기 신고(2026-11-02 · 카드사 고급) F1 · F4.
+test("[F1] R2 시작 = 받은 문자 화면 — 받기 전에도 문자 구독 · 문자 도착 뒤 문자함 1회 자동 열기 · 통화 표시줄 없음 · 번호 누름 = 다이얼 채움", () => {
+  const page = read("src/app/session/play/page.tsx");
+  assert.ok(page.includes('if (!sessionId || phase === "pre-call-notice" || ((phase === "incoming" || phase === "connecting") && !smsStart)) return;'));
+  assert.ok(page.includes("  }, [sessionId, phase, smsStart]);"));
+  assert.ok(page.includes('if (!smsStart || pageState !== "ready" || phase !== "incoming" || smsStartInboxShownRef.current || inCallSms.length === 0) return;'));
+  assert.ok(page.includes('noActiveCall={smsStart && (phase === "incoming" || phase === "connecting")}'));
+  // 번호 누름 경로(종전) — 문자함을 닫고 다이얼에 채운다.
+  const dial = page.slice(page.indexOf("const handleDialNumber = "), page.indexOf("const handleDialNumber = ") + 400);
+  assert.ok(dial.includes("setSmsOverlayOpen(false);") && dial.includes('setLegScreen({ kind: "dialer", digits });'));
+  const overlay = read("src/components/InCallSmsOverlay.tsx");
+  assert.ok(overlay.includes("{!noActiveCall && ("), "통화가 없으면 '통화 중' 표시줄을 그리지 않는다");
+});
+
+test("[F4] 진짜 기관 자동 안내 = 방어 성공 안내 · 세션 중 표식 낱말 0(G437)", () => {
+  for (const text of [LEG_GENUINE_COPY.defenseTitle, LEG_GENUINE_COPY.defenseBody]) {
+    assert.ok(text.length > 0);
+    assert.ok(!/모의|훈련용|시뮬레이션/.test(text), text);
+  }
+  const screens = read("src/components/CallLegScreens.tsx");
+  const genuine = screens.slice(screens.indexOf('screen.kind === "genuine"'), screens.indexOf("// 다이얼"));
+  assert.ok(genuine.includes("{LEG_GENUINE_COPY.defenseTitle}") && genuine.includes("{LEG_GENUINE_COPY.defenseBody}"));
 });

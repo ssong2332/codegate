@@ -116,6 +116,11 @@ export default function CallLegScreens(props: CallLegScreensProps) {
               <p key={line}>{line}</p>
             ))}
           </div>
+          {/* 실기기 신고 F4 — 공식 번호로 직접 확인한 끝 = 방어 성공(그냥 끝난 것이 아니다). */}
+          <div className="max-w-sm rounded-2xl bg-[#2FB55D]/15 px-4 py-3 text-left">
+            <p className="text-[16px] font-semibold text-[#7BE39C]">{LEG_GENUINE_COPY.defenseTitle}</p>
+            <p className="mt-1 text-[15px] leading-relaxed text-white/85">{LEG_GENUINE_COPY.defenseBody}</p>
+          </div>
         </div>
         <div className="flex justify-center pb-[max(40px,env(safe-area-inset-bottom))]">
           <RoundButton label={LEG_GENUINE_COPY.endButton} color="#E5484D" icon="end" onClick={props.onEndTraining} />

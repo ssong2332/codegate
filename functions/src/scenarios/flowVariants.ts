@@ -774,6 +774,10 @@ const CARD_REBUILD_COURIER_LEG: FlowVariantLeg = {
   stages: [
     "카드 배송 연락처럼 말을 걸고, 받으실 분 확인을 핑계로 성함을 묻는다.",
     withSmsFirst("상대가 카드를 신청한 적 없다고 하면 반송 처리가 필요하다며 반송 접수 안내 문자(고객센터 연락처)를 보낸다."),
+    // 실기기 신고 F3(2026-11-02 — "카드 발급했다고 하니까 그냥 끝났다") — 신청했다는 답에도 미끼를 거두지 않고 다른 발급 건으로 이어 간다.
+    withSmsFirst(
+      "상대가 카드를 신청했다고 하면 끝내지 말고, 신청하신 카드 말고 상대 명의로 한 장이 더 발급 신청돼 배송 중이라며 그 건은 본인이 아니면 반송 처리가 필요하다고 같은 반송 접수 안내 문자를 보낸다.",
+    ),
     "문자에 있는 고객센터로 바로 전화해 보라고 권하고 통화를 끝낸다.",
   ],
   tacticLabels: [tacticLabelOf(CRT.deliveryReassure), tacticLabelOf(CRT.deliveryIdentity), tacticLabelOf(CRT.fakeCallback)],
@@ -806,6 +810,11 @@ const CARD_REBUILD_AGENT_LEG: FlowVariantLeg = {
 // §142 PR-4(R2) — 발급 문자를 보고 참가자가 직접 건 상담원은 먼저 본인확인부터 묻는다(배송원 레그가 없는 R2의 첫 통화 — 받는 분 정보 카드의 치환 원천).
 const CARD_REBUILD_AGENT_FIRST_LEG: FlowVariantLeg = {
   ...CARD_REBUILD_AGENT_LEG,
+  // 실기기 신고 F3 — 발급 문자를 보고 건 참가자가 "제가 신청한 게 맞다"고 해도 끝내지 않는다(R2 첫 통화에만 — R1 상담원은 배송원 통화에서 이미 미신청을 들었다).
+  stages: [
+    "전화를 받는 상담원으로 응대하고, 명의 도용으로 카드와 연동 계좌가 개설된 것 같다고 알린다. 상대가 카드를 직접 신청했다고 하면 끝내지 말고, 그 카드 말고 상대 명의로 한 장이 더 발급됐고 연동 계좌까지 열려 있다며 같은 방향으로 이어 간다.",
+    ...(CARD_REBUILD_AGENT_LEG.stages ?? []).slice(1),
+  ],
   tacticLabels: [tacticLabelOf(CRT.deliveryIdentity), ...(CARD_REBUILD_AGENT_LEG.tacticLabels ?? [])],
 };
 const CARD_REBUILD_SUPERVISOR_FIRST_LEG: FlowVariantLeg = {

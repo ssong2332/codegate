@@ -120,7 +120,12 @@ test("[T187/G444 ②③ 역검증 — AC-088 (f)] ⓐ 가드 없는 구독 사�
 test("[T187/G444 ④ · T190-8b] 통화 화면은 \"받기\" 전(pre-call-notice·incoming·connecting)에 대화를 구독하지 않는다", () => {
   // T190-8b(§74.22 (4) #3) — 벨 직전 고지 상태가 더해져 가드 문자열을 같은 커밋에 갱신했다(구독 effect 3곳 모두).
   const guard = 'if (!sessionId || phase === "pre-call-notice" || phase === "incoming" || phase === "connecting") return;';
-  assert.equal(read(PLAY).split(guard).length - 1, 3, "대화·문자·확인 오퍼 구독 3곳 모두 같은 가드여야 한다");
+  // 실기기 신고 F1(2026-11-02) — 문자 구독만 §142 R2 시작 문자 세션(`smsStart`)에서 받기 전에도 연다(첫 통화를 그 문자 속 번호로 건다).
+  // 벨 직전 고지(pre-call-notice) 전에는 그 세션도 구독하지 않는다 — 고지가 먼저라는 G444 ④의 뜻은 그대로다.
+  const smsGuard = 'if (!sessionId || phase === "pre-call-notice" || ((phase === "incoming" || phase === "connecting") && !smsStart)) return;';
+  const play = read(PLAY);
+  assert.equal(play.split(guard).length - 1, 2, "대화 · 확인 오퍼 구독 2곳은 같은 가드여야 한다");
+  assert.equal(play.split(smsGuard).length - 1, 1, "문자 구독은 R2 시작 문자 예외 가드 1곳");
 });
 
 test("[T187/G444 ⑤] 세션 전 문면 = UX 정본(글자 단위) · PREROLL_NOTICE 바이트 무변경", () => {

@@ -115,6 +115,12 @@ export function legCallerLabelOr(legCallerLabel: string | null | undefined, fall
 /** 진짜 기관 자동 안내 화면의 버튼(D3 — 방어 성공으로 훈련을 끝낸다). */
 export const LEG_GENUINE_COPY = {
   endButton: "통화 종료",
+  /**
+   * 실기기 신고 F4(2026-11-02 — 공식 번호로 걸어 끝났는데 "그냥 끝났다"로 느꼈다) — 이 끝이 방어 성공임을 화면이 말한다.
+   * ⛔ 세션 중 화면이라 '모의' · '훈련용' 표식 낱말 0(G437).
+   */
+  defenseTitle: "올바른 대응이에요",
+  defenseBody: "문자나 전화로 안내받은 번호가 아니라, 저장해 둔 공식 번호로 직접 확인하셨어요. 통화를 끝내면 결과를 볼 수 있어요.",
   unknownNumber: "없는 번호입니다. 번호를 확인하고 다시 걸어 주세요.",
   callbackHint: "통화가 끊겼습니다.",
 } as const;
