@@ -12,7 +12,9 @@ import {
   dialContactsFor,
   digitsOf,
   formatDialDigits,
+  LEG_DIALED_OPENING_TURN,
   legCallerLabelOr,
+  legOpeningTurnFor,
   pressDialKey,
   screenAfterLegEnd,
 } from "./legTransition.ts";
@@ -87,7 +89,8 @@ test("[§142 배선] 통화 화면 — 끊기 legEnd는 종료 래치 대신 통
   assert.ok(page.includes("void beginLegTransition(legEnd);"));
   assert.ok(page.includes("const result = await startCallLeg({ sessionId, action, ...(dialed ? { dialed } : {}) });"));
   assert.ok(page.includes("void realtime.startLeg(sessionId);"));
-  assert.ok(page.includes("resumeTurn={legOpening ? null : openingTurnFor({"));
+  // D2 — 레그 전환 연결은 `legOpeningTurnFor`(참가자가 건 통화 = 받는 쪽 신호 · 그 밖 = 기본 트리거 null).
+  assert.ok(page.includes("resumeTurn={legOpeningTurn !== undefined ? legOpeningTurn : openingTurnFor({"));
   // 통화 사이의 Live close는 서버 close가 아니다(종료 셸 0).
   assert.ok(page.includes("if (legSwitchingRef.current) return;\n        await endCall(\"remote\");"));
   // 전사는 다음 통화를 열기 전에 제출한다(서버가 레그 시작 발화 수를 messages로 센다 — §142.8).
@@ -117,4 +120,31 @@ test("[§142 PR-4 R2] 시작 문자 세션 — 벨 0 · 전화 앱 다이얼로 
   assert.ok(dial.indexOf("primeSmsStartDial();") >= 0 && dial.indexOf("primeSmsStartDial();") < dial.indexOf("openNextLeg("), "탭 안에서 동기로 준비한 뒤 서버에 묻는다");
   const connect = page.slice(page.indexOf("const connectLeg = "), page.indexOf("const openNextLeg = "));
   assert.ok(connect.includes("if (smsStart && !answerHandledRef.current) {\n      handleAnswer();"));
+});
+
+test("[§142 D2] 참가자가 건 통화의 첫 신호 = 받는 쪽(레그 전환 · R2 첫 통화) · 그 밖은 종전 판정", () => {
+  assert.equal(legOpeningTurnFor({ legOpening: true, connectionSeq: 3, entry: "dial" }), LEG_DIALED_OPENING_TURN);
+  assert.equal(legOpeningTurnFor({ legOpening: true, connectionSeq: 3, entry: "transfer" }), null);
+  assert.equal(legOpeningTurnFor({ legOpening: true, connectionSeq: 3, entry: "incoming" }), null);
+  assert.equal(legOpeningTurnFor({ legOpening: true, connectionSeq: 3, entry: undefined }), null);
+  assert.equal(legOpeningTurnFor({ legOpening: false, connectionSeq: 0, entry: "dial" }), LEG_DIALED_OPENING_TURN);
+  assert.equal(legOpeningTurnFor({ legOpening: false, connectionSeq: 0, entry: "incoming" }), undefined);
+  assert.equal(legOpeningTurnFor({ legOpening: false, connectionSeq: 2, entry: "dial" }), undefined);
+  assert.equal(legOpeningTurnFor({ legOpening: false, connectionSeq: 0, entry: undefined }), undefined);
+  assert.ok(LEG_DIALED_OPENING_TURN.includes("네가 전화한 것이 아니다"));
+  const page = read("src/app/session/play/page.tsx");
+  assert.ok(page.includes("const legOpeningTurn = legOpeningTurnFor({ legOpening, connectionSeq: realtime.connectionSeq, entry: realtime.credentials?.callLeg?.entry });"));
+  assert.ok(page.includes("resumeTurn={legOpeningTurn !== undefined ? legOpeningTurn : openingTurnFor({"));
+});
+
+test("[§142 D1 배선] 새 통화(레그)를 열면 문자 백스톱 질의를 다시 연다 — 앞 레그 none_pending · 마무리 1회 표시 초기화", () => {
+  const page = read("src/app/session/play/page.tsx");
+  const connectLeg = page.slice(page.indexOf("const connectLeg = (callerLabelForLeg: string) => {"), page.indexOf("const openNextLeg = async"));
+  assert.ok(connectLeg.includes("smsBackstopRef.current.nonePending = false;"));
+  assert.ok(connectLeg.includes("smsBackstopRef.current.wrapUpSent = false;"));
+  assert.ok(connectLeg.indexOf("smsBackstopRef.current.nonePending = false;") < connectLeg.indexOf("handleAnswer();"));
+});
+
+test("[§142 D2 프로브 미러] 실측 프로브의 참가자 발신 첫 신호 = 클라 상수", () => {
+  assert.ok(read("scripts/full-audit-probe.mjs").includes(JSON.stringify(LEG_DIALED_OPENING_TURN)));
 });

@@ -65,5 +65,5 @@ export type CreateRealtimeCallResponse = {
   /**
    * §142(다통화 변형) — 이번 통화의 레그(서버 `relay`가 원천). 클라는 통화 화면 발신자 라벨을 이 값으로 바꾼다. 부재 = 다통화 아님(종전).
    */
-  callLeg?: { legIndex: number; callerLabel: string };
+  callLeg?: { legIndex: number; callerLabel: string; entry?: "dial" | "transfer" | "incoming" };
 };

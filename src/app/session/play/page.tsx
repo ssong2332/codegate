@@ -202,6 +202,7 @@ import {
   dialContactsFor,
   digitsOf,
   legCallerLabelOr,
+  legOpeningTurnFor,
   pressDialKey,
   screenAfterLegEnd,
   type LegScreen,
@@ -1729,6 +1730,10 @@ export default function SessionCallPage() {
     setLegDialing(false);
     legSwitchingRef.current = false;
     setEndLatched(false);
+    // §142 D1 — 새 통화 = 새 레그: 백스톱 질의를 다시 연다. 앞 레그의 `none_pending`(질의 멈춤) · 마무리 지시 1회 표시가 남으면
+    // 뒤 레그의 문자(안전계좌) · 넘김 지시가 오지 않는다.
+    smsBackstopRef.current.nonePending = false;
+    smsBackstopRef.current.wrapUpSent = false;
     // §142 PR-4(R2) — 첫 통화(아직 받기 전)는 받기와 같은 경로로 연다(오디오 준비는 다이얼 탭에서 이미 했다 — `primeSmsStartDial`).
     if (smsStart && !answerHandledRef.current) {
       handleAnswer();
@@ -2883,6 +2888,8 @@ export default function SessionCallPage() {
   });
   // §142 — 다통화 변형이면 지금 통화의 라벨(서버 값 — 통화 연결 응답 · 토큰)이 이긴다. 부재 = 종전 라벨.
   const callerLabel = legCallerLabelOr(legCallerLabel ?? realtime.credentials?.callLeg?.callerLabel, baseCallerLabel);
+  // §142 D2 — 참가자가 건 통화면 받는 쪽 첫 신호(서버 `callLeg.entry` · `legTransition.ts` 표). `undefined` = 종전 판정.
+  const legOpeningTurn = legOpeningTurnFor({ legOpening, connectionSeq: realtime.connectionSeq, entry: realtime.credentials?.callLeg?.entry });
   // T72(§15.6 G6) — 자격증명을 아직 못 받았으면(수신 대기 중) 기본은 true다. 실제로 난이도를
   // 반영하지 못하는 경로(ElevenLabs)만 서버가 false로 명시해 내려준다.
   const difficultyApplied = realtime.credentials?.difficultyApplied !== false;
@@ -3175,7 +3182,7 @@ export default function SessionCallPage() {
             onScammerHangupAccepted={handleScammerHangupAccepted}
             onScammerHangupReady={handleScammerHangupReady}
             // §110.3 — 메신저에서 넘어온 통화의 첫 연결은 대화를 이어받는 첫마디 신호(`escalatedOpening.ts` 판정표).
-            resumeTurn={legOpening ? null : openingTurnFor({
+            resumeTurn={legOpeningTurn !== undefined ? legOpeningTurn : openingTurnFor({
               connectionSeq: realtime.connectionSeq,
               resumeTurn,
               escalatedFromMessenger: scenario.channel === "messenger",

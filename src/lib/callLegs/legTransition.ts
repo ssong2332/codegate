@@ -23,6 +23,31 @@ export const LEG_TRANSFER_CONNECT_MS = 3500;
 export const LEG_CALLBACK_DELAY_MS = 30_000;
 /** 참가자 발신 연결음(판단값 — 실제 전화처럼 두세 번 울리고 받는다). */
 export const LEG_DIAL_CONNECT_MS = 4500;
+/**
+ * D2(§142 확인 실측 2026-11-02 — 참가자가 건 통화 4개 중 2개에서 상대가 "…연락드렸습니다"처럼 건 쪽으로 말했다) — 참가자가 건 통화의 첫 신호.
+ * 기본 트리거(`GeminiVoiceSession` OPENING_TRIGGER_TURN)는 "전화를 받은 상대에게 … 전화를 건 이유를 밝혀라"라 받는 쪽 레그와 맞지 않는다.
+ */
+export const LEG_DIALED_OPENING_TURN =
+  "(상대가 너에게 건 전화를 너는 방금 받았다 — 네가 전화한 것이 아니다. '연락드렸습니다'처럼 건 쪽의 말을 하지 말고, 전화를 받는 쪽의 짧은 인사 한마디(5초 안팎)만 한 뒤 멈춰서 상대가 왜 전화했는지 말하기를 기다려라. 용건 설명은 상대의 말을 들은 뒤에 한다.)";
+
+/**
+ * 통화 첫 연결 신호(레그 판정 — 서버 `callLeg.entry`가 원천). `undefined` = 레그 판정 밖(종전 `openingTurnFor`).
+ * | # | If | Then |
+ * |---|---|---|
+ * | 1 | 레그 전환으로 연 연결 ∧ 참가자가 건 통화(`dial`) | `LEG_DIALED_OPENING_TURN` |
+ * | 2 | 레그 전환으로 연 연결(그 밖 — 호 전환 · 재발신) | `null`(기본 트리거 — 종전) |
+ * | 3 | 세션 첫 연결(`connectionSeq` 0) ∧ 참가자가 건 통화(R2 첫 통화 — 받기 경로) | `LEG_DIALED_OPENING_TURN` |
+ * | 4 | 그 밖 | `undefined` |
+ */
+export function legOpeningTurnFor(input: {
+  legOpening: boolean;
+  connectionSeq: number;
+  entry: "dial" | "transfer" | "incoming" | undefined;
+}): string | null | undefined {
+  if (input.legOpening) return input.entry === "dial" ? LEG_DIALED_OPENING_TURN : null;
+  if (input.connectionSeq === 0 && input.entry === "dial") return LEG_DIALED_OPENING_TURN;
+  return undefined;
+}
 /** 키패드에 입력할 수 있는 최대 자리 수(서버 `MAX_DIALED_LENGTH` 20자 안 — 하이픈 포함 표시). */
 export const DIAL_MAX_DIGITS = 13;
 

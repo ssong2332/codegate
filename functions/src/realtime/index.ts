@@ -222,7 +222,7 @@ export const createRealtimeCall = onCall<
       : credentials;
   // §142 — 다통화 레그 표시값(서버 원천). 실시간 · 폴백 응답 모두에 붙인다.
   const withCallLeg = <T extends object>(credentials: T): T =>
-    callLeg ? { ...credentials, callLeg: { legIndex: callLeg.legIndex, callerLabel: callLeg.callerLabel } } : credentials;
+    callLeg ? { ...credentials, callLeg: { legIndex: callLeg.legIndex, callerLabel: callLeg.callerLabel, entry: callLeg.entry } } : credentials;
   try {
     const credentials = await provider.createCallCredentials({
       sessionId,

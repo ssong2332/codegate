@@ -37,6 +37,8 @@ import {
 import { goalFollowUpFor, planGoalWrapUp } from "../scammerHangup/goalAction";
 import { GOAL_WRAP_UP_INSTRUCTION } from "../scammerHangup/guidance";
 import { withModelToolNoRepeat } from "./toolGuidance";
+import { findFlowVariant } from "../scenarios/flowVariants";
+import { LEG_LATER_SMS_DECLINE, LEG_TRANSFER_HANDOFF_INSTRUCTION, isLaterLegSmsPurpose, planLegHandoff } from "../callLegs/legHandoff";
 import { landingSubmittedInstructionFor } from "./confirmResult";
 import type {
   DeliverInCallSmsRequest,
@@ -170,6 +172,9 @@ export const deliverInCallSms = onCall<
   // ⭐ T191 — 판정 원천은 세션의 흐름 변형 선언이다(카탈로그 고정 턴 폐기). 선언 밖 목적은 보내지 않는다.
   // §142 — 다통화 변형은 현재 레그 문자만 · 하한은 레그 시작 기준(`legScope`).
   const { declared, reason: declaredReason } = resolveDeclaredSms(session.scenarioId, session.flowVariantId, { relay: session.relay });
+  // §142 D1 — 다통화 변형의 레그 넘김 판정 입력(서버 `relay`만 · 다른 시나리오의 변형 = 없음).
+  const sessionVariant = findFlowVariant(session.flowVariantId);
+  const legVariant = sessionVariant && sessionVariant.scenarioId === session.scenarioId ? sessionVariant : undefined;
   const db = getFirestore();
   const sessionRef = db.collection("sessions").doc(sessionId);
 
@@ -209,6 +214,13 @@ export const deliverInCallSms = onCall<
       return withScreenStatus(smsClaimed ? { status: "waiting", claimNotYetInstruction: SMS_CLAIM_NOT_YET } : { status: "waiting" });
     }
     if (plan.action === "none_pending") {
+      // §142 D1 — 나감이 transfer인 마지막이 아닌 레그(문자 0)는 레그 시작 뒤 발화가 차면 넘김 지시(= 이 통화 `end_call`) · 차기 전에는 계속 묻게 한다.
+      const handoff = planLegHandoff(legVariant, session.relay, userTurns);
+      if (handoff === "wait") return withScreenStatus({ status: "goal_pending" });
+      if (handoff === "handoff") {
+        logger.info("[§142] 레그 넘김 지시", { sessionId, userTurns, legIndex: session.relay?.legIndex ?? 0 });
+        return { status: "none_pending", wrapUpInstruction: LEG_TRANSFER_HANDOFF_INSTRUCTION };
+      }
       // §115 — 후속 단계 변형은 할 일을 마칠 때까지 계속 묻게 하고(`goal_pending`), 마친 첫 질의에 마무리 지시 1줄을 싣는다.
       const followUpUserTurns = goalFollowUpFor(session.scenarioId, session.flowVariantId);
       if (followUpUserTurns === undefined) return withScreenStatus({ status: "none_pending" });
@@ -285,10 +297,13 @@ export const deliverInCallSms = onCall<
   if (result.status !== "delivered") {
     // §117 — 모델 도구 경로면 거부 문면 앞에 되풀이 금지 꼬리(`toolGuidance.ts` 판정표 2행).
     // P1 M2 — 이미 도착(P-2a)이면 그 문자를 다시 가리키는 지시. 사전 판정과 발송 판정이 갈렸으면(동시 요청 경합) 종전 거절 문면.
+    // §142 D1 — 뒤 레그의 문자를 이 레그에서 부르면(감독기관 첫 레그의 안전계좌 문자) 넘김으로 이끄는 거절 문면.
     const decline =
       result.status === "already_delivered" && alreadyDeliveredInstruction !== undefined
         ? alreadyDeliveredInstruction
-        : declineInstructionFor(result.status);
+        : result.status === "not_allowed" && isLaterLegSmsPurpose(legVariant, session.relay, purpose)
+          ? LEG_LATER_SMS_DECLINE
+          : declineInstructionFor(result.status);
     return { status: result.status, declineInstruction: withModelToolNoRepeat(decline, trigger) };
   }
   const placed = await isVerifyOfferPlaced(db, sessionId, session.scenarioId);
