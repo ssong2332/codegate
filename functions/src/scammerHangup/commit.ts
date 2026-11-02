@@ -27,7 +27,13 @@ export type HangupTransaction<Ref> = {
  * §142 — 다통화 변형의 마지막이 아닌 레그(`callLegs/legPlan.ts` `legHangupAdjustments`). 승인되면 세션 끝 표식(`scammerHangup`) 대신
  * `relay.legEnded`를 쓴다(세션은 이어진다 — 다음 레그는 `startCallLeg`). 8행(이미 승인)은 그 레그의 끝 기록으로 본다 · 5행 하한은 레그 시작 뒤 발화 수.
  */
-export type HangupLegScope = { nonLastLeg: true; legIndex: number; turnsSinceLegStart: number };
+export type HangupLegScope = {
+  nonLastLeg: true;
+  legIndex: number;
+  turnsSinceLegStart: number;
+  /** 실기기 신고 F2 — 이 레그의 번호 문자가 아직 도착하지 않았다(`callLegs/legHandoff.ts` `isLegDialSmsPending`) → 4-b행. 부재 = 거짓. */
+  dialSmsPending?: boolean;
+};
 
 /** 클라 주장값(OQ-A120 — S5b와 같은 등급). T192 C3: 하한 입력이 사기범 턴에서 사용자 발화로 바뀌었다(§79.19 (2) 8). */
 export type RealtimeHangupClaims = {
@@ -115,7 +121,8 @@ export async function decideAndMarkRealtimeHangup<Ref>(
     transferReachable: isVerifyTransferReachable({ path: "realtime", scenarioId: session.scenarioId, offerDoc }),
     goalActionDone,
     // §142 — 마지막이 아닌 레그에는 후속 단계 · 결정 화면이 없다(4-b · 4-c 입력 거짓).
-    followUpPending: legScope ? false : followUpPending,
+    // F2 — 마지막이 아닌 레그는 번호 문자가 남았을 때만 4-b(다음 번호가 문자에만 있는 레그 · 사유 무관).
+    followUpPending: legScope ? legScope.dialSmsPending === true : followUpPending,
     decisionScreenPending: legScope ? false : decisionScreenPending,
     // P1 M1 — 실시간은 모델의 `end_call` 사유가 판정 시점에 있다(4-c행만 읽는다).
     hangupKind: claims.kind,

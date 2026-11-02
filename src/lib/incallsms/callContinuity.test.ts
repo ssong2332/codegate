@@ -636,7 +636,16 @@ test("[T103/D-56] 문자 도착만으로는 문자함이 열리지 않는다 —
   // 그대로 적는 관례라, 주석까지 세면 근거를 적었다는 이유로 개수가 어긋난다(위 codeOnly와 같은 이유).
   const pageCode = codeOnly(page);
   const opens = pageCode.match(/setSmsOverlayOpen\(true\)/g) ?? [];
-  assert.equal(opens.length, 1, "문자함을 여는 지점은 하나여야 한다(자동 전환 훅 금지 — G92)");
+  // 실기기 신고 F1(2026-11-02) — 예외 1곳: §142 R2 시작 문자 세션의 **통화 전** 시작 화면(받은 문자 화면에서 시작 · 첫 통화를 그 문자 속 번호로 건다).
+  // 통화 중 문자 도착으로 여는 자동 전환(G92)은 여전히 0 — 예외는 `smsStart` ∧ `incoming`(받기 전)에서 1회뿐이다.
+  assert.equal(opens.length, 2, "문자함을 여는 지점 = 참가자 탭 핸들러 + R2 시작 화면 1곳(자동 전환 훅 금지 — G92)");
+  const startGuard = 'if (!smsStart || pageState !== "ready" || phase !== "incoming" || smsStartInboxShownRef.current || inCallSms.length === 0) return;';
+  const startAt = pageCode.indexOf(startGuard);
+  assert.ok(startAt > 0, "R2 시작 화면 가드가 없다");
+  assert.ok(
+    pageCode.slice(startAt, startAt + startGuard.length + 120).includes("setSmsOverlayOpen(true)"),
+    "예외 열기는 R2 시작 문자 세션의 받기 전 단계에서만",
+  );
   const openHandler = pageCode.slice(
     pageCode.indexOf("const handleOpenSmsOverlay"),
     pageCode.indexOf("const handleCloseSmsOverlay"),

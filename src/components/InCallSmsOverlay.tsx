@@ -54,6 +54,11 @@ type InCallSmsOverlayProps = {
   callerLabel: string;
   elapsedLabel: string;
   /**
+   * 실기기 신고 F1(2026-11-02) — 아직 연결된 통화가 없다(§142 R2 시작 문자 화면 — 첫 통화는 참가자가 문자 속 번호를 눌러 건다).
+   * 참이면 ① 통화 표시줄("통화 중 · 경과")을 그리지 않는다(없는 통화를 있다고 보이지 않는다). 부재 = 종전.
+   */
+  noActiveCall?: boolean;
+  /**
    * ⛔ **더 이상 그리지 않는다**(사용자 결정 2026-10-18 — 통화 표시줄의 AI 대사 자막 제거, 문자함·그 안의 랜딩
    * 둘 다). 대사 자막은 통화 화면 자체 자막에만 남는다(표시줄 탭 = 통화 복귀). 호출부(session/play/page.tsx)가
    * 아직 넘기므로 타입에만 남겨 두고 **구조 분해하지 않는다** — 호출부 정리는 그 파일 소유 세션의 몫이다.
@@ -129,6 +134,7 @@ export default function InCallSmsOverlay({
   messages,
   callerLabel,
   elapsedLabel,
+  noActiveCall = false,
   onClose,
   onOpened,
   onLinkTapped,
@@ -403,6 +409,7 @@ export default function InCallSmsOverlay({
               오른쪽 "통화로" 칩은 없앴다(표시줄 자체가 버튼이고 아래 큰 복귀 버튼이 있다).
               ⛔ 발신자는 호출부가 이미 계산해 넘긴 `callerLabel` prop **하나만** 읽는다(G87/§23.7 C1·C2).
               아래 스레드의 발신번호(`senderLabel`)는 **문자의 발신자**이고 통화 발신자와 다른 값이 정상이다(§23.7 C3). */}
+          {!noActiveCall && (
           <button
             type="button"
             onClick={requestClose}
@@ -417,6 +424,7 @@ export default function InCallSmsOverlay({
             </span>
             <span className="sr-only">눌러서 통화로 돌아가기</span>
           </button>
+          )}
 
           {/* ── 보기 1: 문자 스레드(UX-027 v1.33 (1)~(5)). 랜딩을 보는 동안 `hidden`(접근성 트리·포커스 밖 — G460). */}
           <div

@@ -4,6 +4,7 @@
 // 실측: 감독기관 첫 레그(나감 = transfer · 문자 선언 0)가 "검사에게 연결해 드릴게요, 잠시만요"만 되풀이하고 `end_call`을 부르지 않은 채
 // 마지막 레그의 일(안전계좌 이체)로 건너뛰었고, 그 레그에 없는 transfer 문자를 3~4회 요청했다(2/2).
 import type { FlowVariant } from "../scenarios/flowVariants";
+import { findInCallSmsItem } from "../scenarios/inCallSms";
 import { currentLegIndex, legStartUserTurns, type RelayState } from "./legPlan";
 
 /** 넘김 지시(백스톱 응답 `wrapUpInstruction` 자리 — 클라가 레그마다 1회 맥락 주입 · `end_call`을 막지 않는 마무리 지시로 처리). */
@@ -44,4 +45,35 @@ export function isLaterLegSmsPurpose(variant: LegVariant | undefined, relay: Rel
   if (!variant?.multiCall || typeof purpose !== "string") return false;
   const legIndex = currentLegIndex(variant, relay);
   return variant.sms.some((item) => item.purpose === purpose && (item.leg ?? 0) > legIndex);
+}
+
+/** F2 — 번호 문자 전 끊기를 막았을 때의 지시(끊기 응답 `guidance` 자리). */
+export const LEG_DIAL_SMS_PENDING_GUIDANCE =
+  "(아직 통화를 끝낼 수 없다. 상대가 다음에 걸 번호는 네가 보내는 안내 문자에만 있다 — 끝내겠다는 말을 하지 말고, 이 통화의 단계대로 그 문자를 먼저 보내라. 상대가 카드를 신청했다고 하더라도 단계의 그 경우대로 이어 가서 문자를 보낸 뒤에 끝낸다.)";
+
+/**
+ * 실기기 신고 F2(2026-11-02 — 배송원이 번호 문자 없이 끊어 참가자가 번호 없는 빈 다이얼에 남았다) — 이 레그를 끝내기 전에 도착해야 할
+ * **번호 문자**가 남았는가. 끊기 판정 4-b행(`blocked_follow_up`)의 레그 입력이다(구조 판정 — 대사 문구 0).
+ * | # | If | Then |
+ * |---|---|---|
+ * | 1 | 다통화 아님 · 마지막 레그 · 나감이 dial이 아님 | false |
+ * | 2 | 이 레그의 필수 문자 중 번호 안내 문자(카탈로그 `dialNumberId`)가 아직 도착하지 않았다 | true |
+ * | 3 | 그 밖(번호 문자 선언 0 — 상담원 레그처럼 다음 번호가 연락처에 있는 레그 · 이미 도착) | false |
+ */
+export function isLegDialSmsPending(
+  variant: (LegVariant & Pick<FlowVariant, "scenarioId">) | undefined,
+  relay: RelayState | undefined,
+  deliveredSmsIds: readonly string[],
+): boolean {
+  if (!variant?.multiCall) return false;
+  const legIndex = currentLegIndex(variant, relay);
+  if (legIndex >= variant.legs.length - 1) return false;
+  if (variant.legs[legIndex].exit !== "dial") return false;
+  return variant.sms.some(
+    (item) =>
+      (item.leg ?? 0) === legIndex &&
+      item.required &&
+      findInCallSmsItem(variant.scenarioId, item.smsId)?.dialNumberId !== undefined &&
+      !deliveredSmsIds.includes(item.smsId),
+  );
 }

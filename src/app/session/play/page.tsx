@@ -554,6 +554,8 @@ export default function SessionCallPage() {
   // §142 PR-4(R2) — 세션이 수신 벨이 아니라 시작 문자 · 전화 앱 화면에서 시작한다(세션 문서 `startSurface` — 서버 값). 첫 통화는 참가자가 건다.
   const [smsStart, setSmsStart] = useState(false);
   const smsStartDialerShownRef = useRef(false);
+  // 실기기 신고 F1 — 시작 문자 화면을 한 번만 자동으로 연다(닫으면 아래 전화 앱 다이얼 · '메시지'로 다시 연다).
+  const smsStartInboxShownRef = useRef(false);
   // 2026-10-21(실기 신고 "종료 버튼 반응이 느리다") — 참가자 · 한도 종료의 즉시 표시. 정지 직후 켜서 경과 시간 자리를
   // "통화 종료"로 바꾼다(실제 통화 앱처럼 누르는 순간 끝난 것이 보인다). 사기범 끊기는 `remoteHangup`이 따로 그린다.
   const [localHangup, setLocalHangup] = useState(false);
@@ -1008,7 +1010,9 @@ export default function SessionCallPage() {
   // 실시간은 deliverInCallSms가, 폴백 텍스트는 sendMessage가 같은 컬렉션에 쓰므로 화면 코드가
   // 갈라지지 않는다. 콜러블 응답은 렌더 소스가 아니다.
   useEffect(() => {
-    if (!sessionId || phase === "pre-call-notice" || phase === "incoming" || phase === "connecting") return;
+    // 실기기 신고 F1(2026-11-02) — §142 R2 시작 문자 세션은 받기 전(`incoming` · 첫 다이얼 뒤 `connecting`)에도 구독한다. 시작 문자는 세션
+    // 생성 때 이미 도착해 있고(`session/index.ts` `deliverOpenerSms`), 첫 통화는 그 문자 속 번호로 건다 — 구독이 꺼져 있으면 빈 다이얼만 보였다.
+    if (!sessionId || phase === "pre-call-notice" || ((phase === "incoming" || phase === "connecting") && !smsStart)) return;
     const smsQuery = query(
       collection(db, "sessions", sessionId, "inCallSms"),
       orderBy("arrivedAt", "asc"),
@@ -1046,7 +1050,7 @@ export default function SessionCallPage() {
       );
     });
     return unsubscribe;
-  }, [sessionId, phase]);
+  }, [sessionId, phase, smsStart]);
 
   // T83 — 확인 권유(오퍼) 문서 구독(UX-031). **실시간·폴백 양 경로의 단일 렌더 소스**다(§16.1.3):
   // 콜러블 응답에는 모델 지시만 실리고 창구명·번호는 이 구독으로만 화면에 들어온다(사전 유출 방지).
@@ -1865,6 +1869,13 @@ export default function SessionCallPage() {
     smsStartDialerShownRef.current = true;
     setLegScreen({ kind: "dialer", digits: "" });
   }, [smsStart, pageState, phase]);
+  // 실기기 신고 F1(2026-11-02 — "이 화면이 뭐야?" 번호 · 안내 없는 빈 다이얼) — 실제 휴대폰처럼 받은 **문자 화면**에서 시작한다. 문자 속 번호를
+  // 누르면 `handleDialNumber`가 문자함을 닫고 그 번호를 아래 다이얼에 채운다(초록 버튼 = 첫 통화). 문자가 구독으로 들어온 뒤 1회.
+  useEffect(() => {
+    if (!smsStart || pageState !== "ready" || phase !== "incoming" || smsStartInboxShownRef.current || inCallSms.length === 0) return;
+    smsStartInboxShownRef.current = true;
+    setSmsOverlayOpen(true);
+  }, [smsStart, pageState, phase, inCallSms.length]);
 
   // finding #2: 실시간 음성 통화의 시간 한도 자동 종료. 폴백 경로는 sendMessage가 서버에서
   // 한도를 판정해 자동 종료하지만(AC-007), 실시간 경로는 sendMessage를 안 타 한도가 강제되지
@@ -4164,6 +4175,8 @@ export default function SessionCallPage() {
           skin={deviceSkin.skin}
           callerLabel={callerLabel}
           elapsedLabel={formatCallElapsed(elapsedSec)}
+          // 실기기 신고 F1 — R2 첫 통화 전(시작 문자 화면)에는 연결된 통화가 없다.
+          noActiveCall={smsStart && (phase === "incoming" || phase === "connecting")}
           scammerCaption={pillCaption}
           onClose={handleCloseSmsOverlay}
           onEndTraining={() => void handleEndTraining()}

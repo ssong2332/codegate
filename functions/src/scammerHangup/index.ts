@@ -20,6 +20,7 @@ import type { SessionDoc } from "../shared/types";
 import { decideAndMarkRealtimeHangup, isVerifyInterceptSession } from "./commit";
 import { findFlowVariant } from "../scenarios/flowVariants";
 import { currentLegIndex, legHangupAdjustments } from "../callLegs/legPlan";
+import { LEG_DIAL_SMS_PENDING_GUIDANCE, isLegDialSmsPending } from "../callLegs/legHandoff";
 import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending, readMockScreenCompletion } from "./goalAction";
 import { scammerHangupGuidance } from "./guidance";
 import { readScammerHangupRequest } from "./readRequest";
@@ -99,7 +100,13 @@ export const requestScammerHangup = onCall<
   const variant = findFlowVariant(session.flowVariantId);
   const legAdj = variant && variant.scenarioId === session.scenarioId ? legHangupAdjustments(variant, session.relay, userTurns) : undefined;
   const legScope = legAdj?.nonLastLeg
-    ? { nonLastLeg: true as const, legIndex: currentLegIndex(variant!, session.relay), turnsSinceLegStart: legAdj.turnsSinceLegStart }
+    ? {
+        nonLastLeg: true as const,
+        legIndex: currentLegIndex(variant!, session.relay),
+        turnsSinceLegStart: legAdj.turnsSinceLegStart,
+        // 실기기 신고 F2 — 다음 번호가 문자에만 있는 레그는 그 문자가 도착하기 전 끊기를 막는다(4-b).
+        dialSmsPending: isLegDialSmsPending(variant, session.relay, delivered.map((d) => d.smsId)),
+      }
     : undefined;
   const decision = await db.runTransaction((tx) =>
     decideAndMarkRealtimeHangup<FirebaseFirestore.DocumentReference>(
@@ -140,5 +147,10 @@ export const requestScammerHangup = onCall<
     legScope && decision.hangup
       ? { legEnd: { exit: variant!.legs[legScope.legIndex].exit ?? ("dial" as const) } }
       : {};
-  return { status: decision.status, guidance: scammerHangupGuidance(decision.status, { followUpPending, goalActionDone }), ...legEnd };
+  // F2 — 번호 문자 전이라 막혔으면 그 문자를 먼저 보내라는 문면.
+  const guidance =
+    legScope?.dialSmsPending && decision.status === "blocked_follow_up"
+      ? LEG_DIAL_SMS_PENDING_GUIDANCE
+      : scammerHangupGuidance(decision.status, { followUpPending, goalActionDone });
+  return { status: decision.status, guidance, ...legEnd };
 });
