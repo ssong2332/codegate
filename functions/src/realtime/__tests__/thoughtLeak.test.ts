@@ -66,10 +66,12 @@ test("[§116 행 1 한계] 사고 문단 안의 한글 인용은 남고, 그 뒤
 });
 
 test("[§116 배선] 저장 — submitTranscript는 사기범 줄만 마스킹 전에 거른다", () => {
-  const s = src("realtime/submitTranscript.ts");
+  // SEC-07(외부 보안 점검 2차) — 저장 전 정규화를 판독 모듈(`transcriptRequest.ts` `prepareTranscriptTurns`)로 옮겼다(규칙 그대로).
+  const s = src("realtime/transcriptRequest.ts");
   assert.match(s, /import \{ stripLeakedThought \} from "\.\/thoughtLeak";/);
-  assert.match(s, /const raw = role === "scammer" \? stripLeakedThought\(submitted\) : submitted;/);
+  assert.match(s, /const raw = turn\.role === "scammer" \? stripLeakedThought\(submitted\) : submitted;/);
   assert.ok(s.indexOf("stripLeakedThought(submitted)") < s.indexOf("maskPII(raw)"), "마스킹 전에 거른다");
+  assert.match(src("realtime/submitTranscript.ts"), /const prepared = prepareTranscriptTurns\(turns\);/);
 });
 
 test("[§116 배선] 이미 저장된 전사 — 리포트 판정 입력은 사기범 줄을 거른다", () => {

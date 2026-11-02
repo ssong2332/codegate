@@ -10,6 +10,7 @@ import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
+import { isDocId } from "../shared/requestValidation";
 import { maskPII } from "../guardrails";
 import { neutralizeUserMentionedFinancialNames, replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient, LLM_FIRST_TURN_TIMEOUT_MS } from "../llm";
@@ -192,7 +193,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     // D-e — 이체 완료 화면 캡처(앱이 만든 이미지 · 이미지 자체는 서버에 오지 않는다). 사진 턴일 때만 · 허용 값 하나만 받는다.
     const photoKind = isPhotoTurn && requestedPhotoKind === "transfer-receipt" ? requestedPhotoKind : undefined;
     const userText = isPhotoTurn ? (photoKind ? TRANSFER_RECEIPT_TURN_TEXT : PHOTO_TURN_TEXT) : request.data?.userText;
-    if (!sessionId || !userText || !userText.trim()) {
+    // SEC-07 — 숫자 · 객체 userText는 `.trim()`에서 예외(500)였다. 문자열 · 문서 ID 모양만 받는다(read · LLM 앞).
+    if (!isDocId(sessionId) || typeof userText !== "string" || !userText.trim()) {
       throw new HttpsError("invalid-argument", "sessionId와 userText가 필요합니다.");
     }
     // §66.2 — 길이 상한. ⛔ 절단이 아니라 거절(AC-039 "조용한 실패 금지", rewind/index.ts:68-73와

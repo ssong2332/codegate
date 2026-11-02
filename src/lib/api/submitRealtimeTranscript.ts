@@ -1,4 +1,5 @@
 import { callCallable } from "./callable";
+import { withTranscriptBatchId } from "../realtime/transcriptBatchId";
 import type {
   SubmitRealtimeTranscriptRequest,
   SubmitRealtimeTranscriptResponse,
@@ -17,6 +18,7 @@ export async function submitRealtimeTranscript(
 ): Promise<SubmitRealtimeTranscriptResponse> {
   return callCallable<SubmitRealtimeTranscriptRequest, SubmitRealtimeTranscriptResponse>(
     "submitRealtimeTranscript",
-    request,
+    withTranscriptBatchId(request),
   );
 }
+

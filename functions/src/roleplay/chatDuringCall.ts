@@ -38,6 +38,8 @@ import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { applyFamilyAddressText, resolveFamilyAddressPrompt, sessionFamilyAddress } from "../scenarios/familyAddress";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
+import { MAX_SESSION_MS, MAX_USER_TURNS } from "../shared/constants";
+import { isSessionLimitReached } from "./sessionLimits";
 import { resolveDeclaredSms, resolveRouteAccountNumber } from "../inCallSms/smsGate";
 import { routeEndsWithoutAccount, sessionUsesVerifyIntercept } from "../scenarios/flowVariants";
 import { goalFollowUpFor, hasCompletedGoalAction, isDecisionScreenPending } from "../scammerHangup/goalAction";
@@ -78,6 +80,21 @@ export function canChatDuringCall(session: Pick<SessionDoc, "status" | "channel"
   return session.status === "active" && isEscalatedVoiceCall(session.channel, session.channelHistory);
 }
 
+/** SEC-08 — 통화 중 카톡 예산 판정(순수). 턴 = 세션 누적 사용자 턴(`turnCount`) · 시간 기점 = 받은 시각(부재면 생성 시각). */
+export const CHAT_DURING_CALL_MAX_TURNS = MAX_USER_TURNS;
+export function chatDuringCallBudgetExceeded(
+  session: Pick<SessionDoc, "turnCount" | "answeredAt" | "createdAt" | "maxSessionMs">,
+  nowMs: number,
+): boolean {
+  const startedAtMs = (session.answeredAt ?? session.createdAt).toMillis();
+  return isSessionLimitReached({
+    turnCount: session.turnCount,
+    maxUserTurns: CHAT_DURING_CALL_MAX_TURNS,
+    elapsedMs: nowMs - startedAtMs,
+    maxSessionMs: session.maxSessionMs ?? MAX_SESSION_MS,
+  });
+}
+
 export type ChatDuringCallInput = {
   db: Firestore;
   sessionRef: DocumentReference;
@@ -105,6 +122,11 @@ export async function replyChatDuringCall(input: ChatDuringCallInput): Promise<S
     const fresh = freshSnap.data() as SessionDoc | undefined;
     if (!fresh || !canChatDuringCall(fresh)) {
       throw new HttpsError("failed-precondition", "통화 중 대화방에서만 보낼 수 있습니다.");
+    }
+    // ⭐ SEC-08(외부 보안 점검 2차) — 이 경로는 일반 턴 한도를 타지 않아 상한 없이 LLM을 불렀다. 승인 기준(카톡 100회 · 기존 60분 예산)을
+    // 턴 확보 트랜잭션 안 · LLM 앞에서 강제한다(거절 = 저장 0 · AI 호출 0).
+    if (chatDuringCallBudgetExceeded(fresh, Date.now())) {
+      throw new HttpsError("resource-exhausted", "대화 시간이 끝났습니다. 통화를 마치고 결과를 확인해 주세요.");
     }
     const historySnap = await tx.get(messagesRef.orderBy("turnIndex", "asc"));
     const history = historySnap.docs.map((doc) => doc.data() as MessageDoc);

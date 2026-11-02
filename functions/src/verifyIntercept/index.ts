@@ -12,6 +12,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { readDocId } from "../shared/requestValidation";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { ELEVENLABS_API_KEY, GEMINI_KEY_SECRETS } from "../shared/config";
 import {
@@ -183,9 +184,7 @@ export const deliverVerifyOffer = onCall<
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
   const { sessionId, scammerTurns } = request.data ?? {};
-  if (!sessionId) {
-    throw new HttpsError("invalid-argument", "sessionId가 필요합니다.");
-  }
+  readDocId(sessionId, "sessionId"); // SEC-07 — 숫자 · 객체 · 경로 모양 값은 read 앞에서 invalid-argument.
   const callMode = readCallMode(request.data?.callMode);
   const stage = readOfferStage(request.data?.stage);
   const trigger = readTrigger(request.data?.trigger);
@@ -302,6 +301,8 @@ export const deliverVerifyReconnect = onCall<
   if (!sessionId || !offerId) {
     throw new HttpsError("invalid-argument", "sessionId와 offerId가 필요합니다.");
   }
+  readDocId(sessionId, "sessionId"); // SEC-07
+  readDocId(offerId, "offerId");
   const callMode = readCallMode(request.data?.callMode);
 
   const session = await loadOwnedActiveSession(sessionId, request.auth.uid);

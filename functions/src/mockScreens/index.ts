@@ -12,6 +12,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { readDocId } from "../shared/requestValidation";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { findMockScreenItem, installConsentInstructionFor, isBankTransferLanding, isMockScreenReachable } from "../scenarios/mockScreens";
 import { isAmountComparison } from "../roleplay/screenAction";
@@ -117,6 +118,8 @@ export const recordMockScreenEvent = onCall<
   ) {
     throw new HttpsError("invalid-argument", "sessionId·landingId·event가 필요합니다.");
   }
+  readDocId(sessionId, "sessionId"); // SEC-07
+  readDocId(landingId, "landingId");
 
   const session = await loadOwnedSession(sessionId, request.auth.uid);
   assertAnonymousChallengeScope(request.auth, session);

@@ -352,6 +352,10 @@ export const reportChallenge = onCall<ReportChallengeRequest, Promise<ReportChal
     // 자체 감사 결함 5 — note는 자유서술 신고 사유라 rewind/judge.ts REWIND_ANSWER_MAX_LENGTH(500)와
     // 같은 상한을 둔다(조용히 자르지 않고 거절 — AC-039와 동일 원칙). 무인증 콜러블이라 남용
     // 방지 필요성이 더 크다.
+    // SEC-07 — note는 문자열만(숫자 · 객체는 길이 검사를 지나쳐 그대로 저장됐다 · 1차 점검 후속).
+    if (note !== undefined && note !== null && typeof note !== "string") {
+      throw new HttpsError("invalid-argument", "note가 올바르지 않습니다.");
+    }
     if (note && note.length > CHALLENGE_REPORT_NOTE_MAX_LENGTH) {
       throw new HttpsError(
         "invalid-argument",

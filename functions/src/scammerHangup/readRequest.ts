@@ -5,6 +5,7 @@
 // ⛔ Firestore import 0. 무효값은 조용히 보정하지 않고 `invalid-argument`로 거절한다(6행 차단 무력화 방지).
 // `userTurns`는 S5b `deliverInCallSms`와 **같은 판독 규칙**(정수 · 0~`MAX_CLAIMED_TURNS` — OQ-A120 같은 등급).
 import { HttpsError } from "firebase-functions/v2/https";
+import { isDocId } from "../shared/requestValidation";
 import { MAX_CLAIMED_TURNS } from "../inCallSms/smsGate";
 import type { ScammerHangupKind } from "../shared/types";
 import { normalizeScammerHangupKind } from "./decide";
@@ -20,7 +21,8 @@ export function readScammerHangupRequest(data: unknown): ScammerHangupRequestCla
   const raw = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
   const { sessionId, userTurns, pendingInstruction, kind } = raw;
   // C1 Minor ② — `!sessionId`는 숫자 · 객체 같은 비문자열을 통과시켰다.
-  if (typeof sessionId !== "string" || sessionId === "") {
+  // SEC-07 — `"a/b"` 같은 경로 모양도 문서 ID가 아니다.
+  if (!isDocId(sessionId)) {
     throw new HttpsError("invalid-argument", "sessionId가 필요합니다.");
   }
   if (typeof userTurns !== "number" || !Number.isInteger(userTurns) || userTurns < 0 || userTurns > MAX_CLAIMED_TURNS) {

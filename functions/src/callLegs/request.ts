@@ -1,5 +1,6 @@
 // §142(PR-3) — `startCallLeg` 요청 판독 · 응답 타입 · 가로채기 화면 해석(잎 모듈 — Firestore · onCall 0, 테스트가 직접 부른다).
 import { HttpsError } from "firebase-functions/v2/https";
+import { isDocId } from "../shared/requestValidation";
 import { findInCallSmsItem } from "../scenarios/inCallSms";
 import { findMockScreenItem } from "../scenarios/mockScreens";
 import type { LegStartAction, MultiCallVariant } from "./legPlan";
@@ -18,7 +19,7 @@ const MAX_DIALED_LENGTH = 20;
 export function readStartCallLegRequest(data: unknown): StartCallLegRequest {
   const raw = (data ?? {}) as Record<string, unknown>;
   const sessionId = raw.sessionId;
-  if (typeof sessionId !== "string" || sessionId.length === 0 || sessionId.length > 128) {
+  if (!isDocId(sessionId)) {
     throw new HttpsError("invalid-argument", "sessionId가 올바르지 않습니다.");
   }
   const action = raw.action;

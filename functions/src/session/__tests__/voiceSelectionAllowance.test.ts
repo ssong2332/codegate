@@ -39,7 +39,8 @@ test("[§87] createSession — 게이트가 시나리오 존재 확인 뒤 · �
   const src = readFileSync(SRC, "utf8");
   const handlerIdx = src.indexOf("export const createSession");
   const gateIdx = src.indexOf("assertVoiceSelectionSourceAllowed(voiceSelectionSource);", handlerIdx);
-  const scenarioCheckIdx = src.indexOf("if (!SCENARIO_PROMPTS[scenarioId])", handlerIdx);
+  // SEC-07 — 존재 확인이 자기 키만 인정하는 모양으로 바뀌었다(`constructor` 같은 상속 키 차단).
+  const scenarioCheckIdx = src.indexOf("if (!Object.prototype.hasOwnProperty.call(SCENARIO_PROMPTS, scenarioId)", handlerIdx);
   const firestoreIdx = src.indexOf("getFirestore()", handlerIdx);
   const openingIdx = src.indexOf("await generateOpeningLine(", handlerIdx);
   assert.ok(handlerIdx > -1 && gateIdx > -1, "createSession 안에 게이트 호출이 없다");

@@ -13,10 +13,9 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { assertAnonymousChallengeScope, denyAnonymous } from "../shared/anonymousGate";
-import { maskPII } from "../guardrails";
 import { findOpeningToMarkNotSpoken } from "./openingMark";
 import { resolveTurnCreatedAtMs } from "./transcriptTiming";
-import { stripLeakedThought } from "./thoughtLeak";
+import { prepareTranscriptTurns, readTranscriptRequest, transcriptBatchKey } from "./transcriptRequest";
 import type { MessageDoc, SessionDoc } from "../shared/types";
 import { messageLegIndex } from "../callLegs/legPlan";
 import { findFlowVariant } from "../scenarios/flowVariants";
@@ -42,17 +41,18 @@ export type TranscriptTurn = { role: "user" | "scammer"; text: string; atMs?: nu
  * `session.createdAt`으로 대체(둘 다 없으면 현행 합성 로직 그대로 — G366/G367 참고,
  * `docs/Architecture.md` §57.2 (6)).
  */
+/**
+ * 전사 재전송(외부 보안 점검 2차) — `batchId`: 제출 1회마다 화면이 새로 만드는 값. 같은 값으로 다시 오면 저장 0(부재 = 서버가
+ * 내용 해시로 키를 만든다 — `transcriptRequest.ts` 표).
+ */
 export type SubmitRealtimeTranscriptRequest = {
   sessionId: string;
   turns: TranscriptTurn[];
   openingNotSpoken?: boolean;
   answeredAtMs?: number;
+  batchId?: string;
 };
 export type SubmitRealtimeTranscriptResponse = { written: number };
-
-/** 한 번에 제출 가능한 턴 수 상한 — 악의적/폭주 입력 방지(정상 통화는 수십 턴 이내). */
-const MAX_TURNS = 200;
-const MAX_TEXT_LEN = 2000;
 
 export const submitRealtimeTranscript = onCall<
   SubmitRealtimeTranscriptRequest,
@@ -61,21 +61,19 @@ export const submitRealtimeTranscript = onCall<
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
-  const { sessionId, turns, openingNotSpoken, answeredAtMs } = request.data ?? {};
-  if (!sessionId || !Array.isArray(turns)) {
-    throw new HttpsError("invalid-argument", "sessionId와 turns가 필요합니다.");
-  }
+  // SEC-07 — 타입 · 허용 값(역할 · null 항목 · 숫자 sessionId)을 세션 read 앞에서 판독한다(어긋나면 invalid-argument · 저장 0).
+  const { sessionId, turns, openingNotSpoken, answeredAtMs, batchId } = readTranscriptRequest(request.data);
   if (turns.length === 0) {
     denyAnonymous(request.auth); // T181 C(§69.7) — 익명 + 빈 turns는 read 0회로 거부(AC-085 (b) 예외 2 소멸). 비익명은 아래 그대로.
     return { written: 0 };
   }
-  if (turns.length > MAX_TURNS) {
-    throw new HttpsError("invalid-argument", "제출 가능한 턴 수를 초과했습니다.");
-  }
+  const prepared = prepareTranscriptTurns(turns);
 
   const db = getFirestore();
   const sessionRef = db.collection("sessions").doc(sessionId);
   const messagesRef = sessionRef.collection("messages");
+  // 전사 재전송 — 같은 제출이 다시 오면 저장 0(종료된 세션도 막지 않는다 — 통화 종료 직후 제출이 정상 흐름이다).
+  const batchRef = sessionRef.collection("transcriptBatches").doc(transcriptBatchKey(batchId, prepared));
 
   // 소유권 검증 + 기존 메시지 뒤에 이어 붙일 turnIndex 확보를 한 트랜잭션으로 묶는다
   // (sendMessage의 원자적 턴 확보와 동일 원칙). 마스킹 후 write.
@@ -89,6 +87,9 @@ export const submitRealtimeTranscript = onCall<
       throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
     }
     assertAnonymousChallengeScope(request.auth, session);
+    // 트랜잭션 안에서 읽는다 — 같은 제출 두 개가 동시에 와도 한쪽만 표시 문서를 만들고 다른 쪽은 재시도에서 저장 0이 된다.
+    const batchSnap = await tx.get(batchRef);
+    if (batchSnap.exists) return 0;
 
     const historySnap = await tx.get(messagesRef.orderBy("turnIndex", "asc"));
     // ⛔ **G350** — 이어 붙일 인덱스는 `historySnap.size`(문서 수) 그대로다. 아래 `notSpoken`
@@ -112,13 +113,8 @@ export const submitRealtimeTranscript = onCall<
     // §142 N3 — 다통화 변형이면 이 전사가 오간 통화 번호(트랜잭션에서 읽은 서버 `relay` 기준 · 부재 = 필드 0).
     const legIndex = messageLegIndex(findFlowVariant(session.flowVariantId), session);
 
-    turns.forEach((turn, i) => {
-      const role = turn.role === "user" ? "user" : "scammer";
-      const submitted = typeof turn.text === "string" ? turn.text.slice(0, MAX_TEXT_LEN) : "";
-      // §116 — 사기범 전사의 영어 사고 문장을 지운다(옛 화면이 걸러내지 않고 보내도 저장 전에 막는다 · 참가자 발화는 원문).
-      const raw = role === "scammer" ? stripLeakedThought(submitted) : submitted;
-      const masked = maskPII(raw).trim();
-      if (!masked) return;
+    // §116(사기범 사고 문장 제거) · 마스킹 · 빈 줄 제외는 트랜잭션 앞 `prepareTranscriptTurns`가 끝냈다(종전 규칙 그대로).
+    prepared.forEach(({ index: i, role, textMasked: masked, atMs }) => {
       // 전사에는 정확한 write 시각이 없으므로 제출 시각 기준으로 턴 간격을 근사한다(리포트
       // 타임라인 "N초 시점"용 — 실시간 통화는 정밀 턴 타이밍이 없어 근사가 불가피하다). D1 —
       // 클라가 `answeredAtMs`·`turn.atMs`를 실어 보낸 경우 그 값을 우선하고, 부재 시(과거
@@ -130,8 +126,8 @@ export const submitRealtimeTranscript = onCall<
         createdAt: Timestamp.fromMillis(
           resolveTurnCreatedAtMs({
             index: i,
-            atMs: typeof turn.atMs === "number" ? turn.atMs : undefined,
-            answeredAtMs: typeof answeredAtMs === "number" ? answeredAtMs : undefined,
+            atMs,
+            answeredAtMs,
             sessionCreatedAtMs,
             baseTimeMs: baseTime,
             nowMs: baseTime,
@@ -158,6 +154,8 @@ export const submitRealtimeTranscript = onCall<
           : baseTime;
       tx.update(sessionRef, { answeredAt: Timestamp.fromMillis(clientAnswered) });
     }
+    // 키 · 줄 수 · 시각만(본문 0).
+    tx.create(batchRef, { written: count, createdAt: Timestamp.fromMillis(baseTime) });
 
     return count;
   });

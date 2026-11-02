@@ -16,8 +16,10 @@ import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { maskPII } from "../guardrails";
 import { getLlmClient } from "../llm";
 import { LLM_TEXT_SECRETS } from "../shared/config";
+import { isDocId } from "../shared/requestValidation";
 import type { MessageDoc, ReportDoc, RewindAttemptDoc } from "../shared/types";
-import { judgeRewindAnswerWith, REWIND_ANSWER_MAX_LENGTH, REWIND_ATTEMPT_LIMIT } from "./judge";
+import { judgeRewindAnswerWith, REWIND_ANSWER_MAX_LENGTH } from "./judge";
+import { reserveRewindSlot } from "./attemptSlot";
 import { pickScammerLineForMoment } from "./scammerLine";
 import type { JudgeRewindAnswerRequest, JudgeRewindAnswerResponse } from "./types";
 
@@ -60,7 +62,7 @@ export const judgeRewindAnswer = onCall<
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
   const { reportId, momentIndex, answerText } = request.data ?? {};
-  if (!reportId || typeof momentIndex !== "number" || !Number.isInteger(momentIndex) || momentIndex < 0) {
+  if (!isDocId(reportId) || typeof momentIndex !== "number" || !Number.isInteger(momentIndex) || momentIndex < 0) {
     throw new HttpsError("invalid-argument", "reportId와 momentIndex가 필요합니다.");
   }
   if (typeof answerText !== "string" || !answerText.trim()) {
@@ -95,11 +97,10 @@ export const judgeRewindAnswer = onCall<
 
   // 남용 방지 상한(§15.2.2). UX의 "횟수 제한 없음"은 사용자 체감 수준의 요구이며 50건은 학습
   // 흐름에서 도달하지 않는다.
+  // ⭐ SEC-06(외부 보안 점검 2차) — 세기와 슬롯 확보를 판정(LLM) **전에** 한 트랜잭션으로 한다(`attemptSlot.ts` 표). 전에는 트랜잭션 밖에서
+  // 세어 49개 상태의 동시 요청 2개가 둘 다 통과해 51개가 저장됐다.
   const attemptsRef = reportRef.collection("rewindAttempts");
-  const existing = await attemptsRef.limit(REWIND_ATTEMPT_LIMIT).get();
-  if (existing.size >= REWIND_ATTEMPT_LIMIT) {
-    throw new HttpsError("resource-exhausted", "이 리포트에서 되감기를 너무 많이 실행했습니다.");
-  }
+  await reserveRewindSlot(db, reportRef);
 
   // answerMasked(참가자 입력)는 maskPII를 거친 마스킹 후 값이다(원문 미저장, ADR-0004 계승).
   // scammerLineMasked(사기범 발화)는 이름과 달리 마스킹되지 않는다 — finalizeScammerReplyText
