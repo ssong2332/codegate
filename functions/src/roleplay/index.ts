@@ -959,7 +959,9 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       replyText: linkFreeReplyText,
       chipLandingIds: (replyAttachmentsBeforeGiveUp ?? []).flatMap((attachment) => (attachment.fakeLandingId ? [attachment.fakeLandingId] : [])),
     });
-    if (advanceGate.blocked) logger.info("[R17] 마치지 않은 화면 · 다음 단계 요구 차단", { sessionId, kind: advanceGate.kind, userTurns: userTurnsNow });
+    if (advanceGate.blocked) {
+      logger.info("[R17 · R19] 마치지 않은 화면 · 다음 단계 요구 차단", { sessionId, kind: advanceGate.kind, giveUpStage: advanceGate.giveUpStage, userTurns: userTurnsNow });
+    }
     const replyAttachments =
       giveUpStage || advanceGate.blocked ? (keptOnGiveUp && keptOnGiveUp.length > 0 ? keptOnGiveUp : undefined) : replyAttachmentsBeforeGiveUp;
     // ③-a′ T191 — 문자 요청 마커를 걷어 낸다(아래 문장 수 상한보다 **앞** — 상한이 끝의 마커를 잘라 먹지 않게).
@@ -1021,6 +1023,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       hangupSignalAllowed: hangupMode === "signal",
       facts: screenApplies ? screenFacts : [],
       userTurns: userTurnsNow,
+      // R19 G5′ — 포기 단계 첫 턴이라도 다음 단계 요구를 꺼냈으면 이 턴에 끝맺는다.
+      advanceDemand: advanceGate.blocked && advanceGate.giveUpStage,
     });
     if (forcedScreenGiveUp) logger.info("[R14 · R18] 포기 단계 서버 끝맺음", { sessionId, channel: session.channel ?? "voice", userTurns: userTurnsNow });
     const endCallSignal = forcedScreenGiveUp ? ("give_up" as const) : giveUpCheck.endCall;
@@ -1114,7 +1118,12 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
     });
     if (farewellGuard.replaced) logger.info("[R16] 이체 칩 미완료 · 작별 대사 교체", { sessionId, userTurns: userTurnsNow });
     // R17 판정표 A — 다음 단계로 넘어간 대답은 현 단계 재촉 1줄로(앞 손질 결과와 무관 · 포기 끝맺음은 아래 G가 이긴다).
-    const limitedReplyText = advanceGate.blocked ? stageHoldReply(advanceGate.kind, farewellGuard.text, userTurnsNow) : farewellGuard.text;
+    // R19 — 포기 단계(A2g)인데 모델이 스스로 give_up을 보냈으면(G2) 재촉 대신 포기 1줄(끝나는 응답에 재촉을 남기지 않는다).
+    const limitedReplyText = !advanceGate.blocked
+      ? farewellGuard.text
+      : advanceGate.giveUpStage && endCallSignal === "give_up"
+        ? screenGiveUpReply(farewellGuard.text)
+        : stageHoldReply(advanceGate.kind, farewellGuard.text, userTurnsNow);
     // §128(4) — 참가자가 건 통화의 "전화 받아 줘서"류 교정(`callCaller.ts` 표 · 그 밖 턴 무변경).
     const calledShapedReplyText = participantCalled ? fixParticipantCalledReply(limitedReplyText) : limitedReplyText;
     const shapedReplyText = forcedScreenGiveUp ? screenGiveUpReply(calledShapedReplyText) : calledShapedReplyText;

@@ -95,8 +95,8 @@ test("[R15 · R16 배선] sendMessage — 메신저 단계 · 이체 칩 판정 
     "const personaIdFix = fixPersonaIdRequest(session.scenarioId, installGuard.text);",
     "fixMessengerCallWording(personaIdFix.text)",
     "const farewellGuard = guardFarewellWhileTransferPending(wordingFixedReplyText, {",
-    // R17(2026-11-01) — 작별 교체 뒤에 판정표 A 재촉 교체가 한 단계 더 붙었다.
-    "const limitedReplyText = advanceGate.blocked ? stageHoldReply(advanceGate.kind, farewellGuard.text, userTurnsNow) : farewellGuard.text;",
+    // R17(2026-11-01) — 작별 교체 뒤에 판정표 A 재촉 교체가 한 단계 더 붙었다(R19 2026-11-02 — 포기 단계 분기를 품은 여러 줄 식).
+    ": stageHoldReply(advanceGate.kind, farewellGuard.text, userTurnsNow);",
   ].map((needle) => roleplay.indexOf(needle));
   assert.ok(order.every((at, k) => at > 0 && (k === 0 || at > order[k - 1]!)), JSON.stringify(order));
 });

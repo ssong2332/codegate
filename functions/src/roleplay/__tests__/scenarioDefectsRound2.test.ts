@@ -154,8 +154,8 @@ test("[§104 배선] sendMessage — 신호는 대사 판정을 거친 값만 �
   // §129 D13 — 판정된 끊기 신호(`endCallCheck`)는 포기 종류 보정(판정표 C — 종류만 바꾸고 끝내는 것은 그대로)을 한 번 더 거친다.
   assert.match(
     src,
-    // R14(2026-11-01) — 판정을 거친 값에 판정표 G(넘어온 통화 포기 단계 서버 끝맺음)만 더해진다.
-    /const giveUpCheck = reclassifyMessengerGiveUp\(endCallCheck\.endCall, [^\n]+\);[\s\S]{0,700}?const endCallSignal = forcedScreenGiveUp \? \("give_up" as const\) : giveUpCheck\.endCall;/,
+    // R14(2026-11-01) — 판정을 거친 값에 판정표 G(넘어온 통화 포기 단계 서버 끝맺음)만 더해진다(R19 2026-11-02 — G에 A의 포기 단계 판정을 넘기는 줄 2행이 늘어 창 700→900).
+    /const giveUpCheck = reclassifyMessengerGiveUp\(endCallCheck\.endCall, [^\n]+\);[\s\S]{0,900}?const endCallSignal = forcedScreenGiveUp \? \("give_up" as const\) : giveUpCheck\.endCall;/,
   );
   // 날것 신호가 판정 밖에서 쓰이지 않는다(선언 1 + 판정 입력 1). R3(#465) — 끊기 신호는 판정 입력 식 안에서 목표 제외 조건으로 한 번 더 읽힌다(선언 1 + 판정 입력 2).
   assert.equal((src.match(/rawSignalEscalate/g) ?? []).length, 3);

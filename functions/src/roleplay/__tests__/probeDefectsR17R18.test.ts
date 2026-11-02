@@ -27,7 +27,7 @@ test("[R17 A] 설치 재촉 단계 — 완료를 말하지 않고 다음 요구�
   // 단정 문구가 없는 실측 원문 — 판정표 I는 못 잡았다.
   assert.deepEqual(
     decideStageAdvanceGate({ ...base, replyText: "어휴 다행이다... 이제 보험 접수하려면 엄마 신분증 사진이 필요하대. 지금 바로 찍어서 여기로 보내 줘." }),
-    { blocked: true, kind: "install" },
+    { blocked: true, kind: "install", giveUpStage: false },
   );
   assert.equal(decideStageAdvanceGate({ ...base, replyText: "엄마 200만 원만 급하게 보내줘" }).blocked, true, "송금 요구");
   assert.equal(decideStageAdvanceGate({ ...base, replyText: "인증번호 6자리 불러 줘" }).blocked, true, "인증번호");
@@ -37,17 +37,18 @@ test("[R17 A] 설치 재촉 단계 — 완료를 말하지 않고 다음 요구�
   assert.equal(decideStageAdvanceGate({ ...base, messengerStage: false, replyText: "신분증 보내 줘" }).blocked, false, "A1 통화 단계");
 });
 
-test("[R17 A2] 재촉 단계가 아니면 무변경 — 마침 · 포기 단계(G 몫) · 설치 뒤 다른 화면을 이미 보냄(SP1 release)", () => {
+test("[R17 A2] 재촉 단계가 아니면 무변경 — 마침 · 설치 뒤 다른 화면을 이미 보냄(SP1 release) · 포기 단계는 R19 A2g(probeDefectsR19)", () => {
   const text = "이제 신분증 사진 보내 줘";
   assert.equal(decideStageAdvanceGate({ messengerStage: true, facts: [{ ...INSTALL, done: true }], userTurns: 4, replyText: text, chipLandingIds: [] }).blocked, false);
-  assert.equal(
-    decideStageAdvanceGate({ messengerStage: true, facts: [INSTALL], userTurns: 1 + SCREEN_GIVE_UP_USER_TURNS, replyText: text, chipLandingIds: [] }).blocked,
-    false,
+  // R19(2026-11-02) — 포기 단계의 다음 단계 요구도 막는다(G가 끝맺음 · 예전 기대값 false).
+  assert.deepEqual(
+    decideStageAdvanceGate({ messengerStage: true, facts: [INSTALL], userTurns: 1 + SCREEN_GIVE_UP_USER_TURNS, replyText: text, chipLandingIds: [] }),
+    { blocked: true, kind: "install", giveUpStage: true },
     "포기 단계",
   );
   assert.deepEqual(
     decideStageAdvanceGate({ messengerStage: true, facts: [INSTALL, TRANSFER], userTurns: 9, replyText: "인증번호 불러 줘", chipLandingIds: [] }),
-    { blocked: true, kind: "transfer" },
+    { blocked: true, kind: "transfer", giveUpStage: false },
     "설치 release · 이체 재촉 단계",
   );
 });
@@ -105,7 +106,8 @@ test("[R17 · R18 배선] sendMessage — 칩 떼기 · goal 무시 · 재촉 �
   assert.ok(roleplay.includes("giveUpStage || advanceGate.blocked ? (keptOnGiveUp && keptOnGiveUp.length > 0 ? keptOnGiveUp : undefined) : replyAttachmentsBeforeGiveUp;"));
   assert.ok(roleplay.includes('(unconfirmedTransferAck || advanceGate.blocked) && rawEndCallSignal === "goal" ? undefined : rawEndCallSignal,'));
   assert.ok(roleplay.includes('      messengerStage: session.channel === "messenger",\n'));
-  const hold = roleplay.indexOf("const limitedReplyText = advanceGate.blocked ? stageHoldReply(");
+  // R19(2026-11-02) — 재촉 교체가 포기 단계 give_up 분기를 품은 여러 줄 식이 됐다.
+  const hold = roleplay.indexOf(": stageHoldReply(advanceGate.kind, farewellGuard.text, userTurnsNow);");
   const giveUp = roleplay.indexOf("const shapedReplyText = forcedScreenGiveUp ? screenGiveUpReply(");
   assert.ok(hold > 0 && giveUp > hold, "포기 1줄 교체가 뒤(이긴다)");
 });
