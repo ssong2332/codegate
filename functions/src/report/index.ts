@@ -13,6 +13,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { readDocId } from "../shared/requestValidation";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import type { SessionDoc } from "../shared/types";
 import { generateReportForSession } from "./generateReportCore";
@@ -26,9 +27,7 @@ export const generateReport = onCall<GenerateReportRequest, Promise<GenerateRepo
       throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     }
     const { sessionId } = request.data ?? {};
-    if (!sessionId) {
-      throw new HttpsError("invalid-argument", "sessionId가 필요합니다.");
-    }
+    readDocId(sessionId, "sessionId"); // SEC-07 — 숫자 · 객체 · 경로 모양 값은 read 앞에서 invalid-argument.
 
     // 소유권 검증(다른 콜러블들과 동일 패턴, createSession/endSession 참고) — 실제 생성 로직
     // (session 상태 확인·messages read·reports write)은 generateReportForSession에 위임한다.

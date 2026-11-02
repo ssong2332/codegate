@@ -32,6 +32,7 @@ import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
 import { denyAnonymous } from "../shared/anonymousGate";
+import { isDocId, readDocId } from "../shared/requestValidation";
 import { voiceInputStoragePath } from "../voice";
 import { getVoiceProvider } from "../voice/provider";
 import { PUBLIC_SCENARIOS, isAdvancedOnlyScenario } from "../scenarios/publicMeta";
@@ -71,7 +72,8 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
     }
     denyAnonymous(request.auth);
     const { scenarioId, displayName, difficultyLevel, personaCardInput } = request.data ?? {};
-    if (!scenarioId || !displayName || !displayName.trim()) {
+    // SEC-07 — 숫자 · 객체 displayName은 `.trim()`에서 예외가 났다. 문자열 · 문서 ID 모양을 read 앞에서 판독한다.
+    if (!isDocId(scenarioId) || typeof displayName !== "string" || !displayName.trim()) {
       throw new HttpsError("invalid-argument", "scenarioId와 displayName이 필요합니다.");
     }
     // 자체 감사 결함 5 — displayName은 UX-020 목록·UX-021 동의 랜딩에 그대로 노출되는 표시용
@@ -83,7 +85,7 @@ export const createChallenge = onCall<CreateChallengeRequest, Promise<CreateChal
         `displayName은 ${CHALLENGE_DISPLAY_NAME_MAX_LENGTH}자까지 입력할 수 있습니다.`,
       );
     }
-    const scenario = PUBLIC_SCENARIOS[scenarioId];
+    const scenario = Object.prototype.hasOwnProperty.call(PUBLIC_SCENARIOS, scenarioId) ? PUBLIC_SCENARIOS[scenarioId] : undefined;
     if (!scenario) {
       throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
     }
@@ -270,9 +272,7 @@ export const deleteChallenge = onCall<DeleteChallengeRequest, Promise<DeleteChal
     }
     denyAnonymous(request.auth);
     const { challengeId } = request.data ?? {};
-    if (!challengeId) {
-      throw new HttpsError("invalid-argument", "challengeId가 필요합니다.");
-    }
+    readDocId(challengeId, "challengeId"); // SEC-07
 
     const db = getFirestore();
     const ref = db.collection("challenges").doc(challengeId);

@@ -17,6 +17,7 @@
 // 파이프라인 자체가 신설되지 않았다.
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { denyAnonymous } from "../shared/anonymousGate";
+import { readDocId } from "../shared/requestValidation";
 import { SCENARIO_PROMPTS } from "./index";
 import { beginnerBriefingLabels } from "./flowVariants";
 import { extractTacticLabel } from "./tacticFlavor";
@@ -51,10 +52,8 @@ export const getBeginnerBriefing = onCall<
   }
   denyAnonymous(request.auth);
   const { scenarioId } = request.data ?? {};
-  if (!scenarioId) {
-    throw new HttpsError("invalid-argument", "scenarioId가 필요합니다.");
-  }
-  const scenarioPrompt = SCENARIO_PROMPTS[scenarioId];
+  readDocId(scenarioId, "scenarioId"); // SEC-07 — 상속 키(`constructor`)도 아래에서 거른다.
+  const scenarioPrompt = Object.prototype.hasOwnProperty.call(SCENARIO_PROMPTS, scenarioId) ? SCENARIO_PROMPTS[scenarioId] : undefined;
   if (!scenarioPrompt) {
     throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
   }

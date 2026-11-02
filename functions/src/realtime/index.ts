@@ -8,6 +8,8 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { readDocId } from "../shared/requestValidation";
+import { realtimeIssueLegKey, reserveRealtimeIssue } from "./issueBudget";
 import { assertAnonymousChallengeScope } from "../shared/anonymousGate";
 import { ELEVENLABS_API_KEY, GEMINI_KEY_SECRETS } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
@@ -97,9 +99,7 @@ export const createRealtimeCall = onCall<
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
   const { sessionId } = request.data ?? {};
-  if (!sessionId) {
-    throw new HttpsError("invalid-argument", "sessionId가 필요합니다.");
-  }
+  readDocId(sessionId, "sessionId"); // SEC-07 — 숫자 · 객체 · 경로 모양 값은 read 앞에서 invalid-argument.
 
   const db = getFirestore();
   const sessionSnap = await db.collection("sessions").doc(sessionId).get();
@@ -153,6 +153,9 @@ export const createRealtimeCall = onCall<
   const familyAddress = sessionFamilyAddress(session);
   // §142(D5) — 다통화 변형의 현재 레그(서버 필드 `relay`만). 레그 1부터는 앞 통화 기록을 인계 블록으로 싣는다(읽기 실패 = 블록 0 · 통화는 막지 않는다).
   const callLeg = resolveSessionCallLeg(findFlowVariant(session.flowVariantId), session);
+  // ⭐ SEC-08(외부 보안 점검 2차) — 통화 구간별 발급 예산(6회 · 최초 발급 후 25분, `issueBudget.ts` 표). 외부 호출(Live 토큰 · 폴백 포함) 전 ·
+  // 앞선 대화 read 전에 판정한다(거절 = 외부 호출 0). 다통화 다음 레그 · 메신저→통화 재진입은 새 구간이라 자기 예산을 갖는다.
+  await reserveRealtimeIssue(db, db.collection("sessions").doc(sessionId), realtimeIssueLegKey(session, callLeg));
   let priorChatContext: string | undefined;
   if (callLeg && callLeg.legIndex > 0) {
     try {

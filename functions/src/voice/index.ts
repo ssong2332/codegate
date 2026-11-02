@@ -20,6 +20,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { readDocId } from "../shared/requestValidation";
 import { denyAnonymous } from "../shared/anonymousGate";
 import { getVoiceProvider } from "./provider";
 import type { CreateVoiceCloneRequest, CreateVoiceCloneResponse } from "./types";
@@ -39,9 +40,7 @@ export const createVoiceClone = onCall<CreateVoiceCloneRequest, Promise<CreateVo
     }
     denyAnonymous(request.auth);
     const { sessionId } = request.data ?? {};
-    if (!sessionId) {
-      throw new HttpsError("invalid-argument", "sessionId가 필요합니다.");
-    }
+    readDocId(sessionId, "sessionId"); // SEC-07 — 숫자 · 객체 · 경로 모양 값은 read 앞에서 invalid-argument.
     const uid = request.auth.uid;
 
     const db = getFirestore();

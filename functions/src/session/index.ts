@@ -17,12 +17,11 @@ import { SCENARIO_PROMPTS } from "../scenarios";
 import { PUBLIC_SCENARIOS } from "../scenarios/publicMeta";
 import { resolveScenarioEscalation, resolveTransitionNow } from "../scenarios/escalation";
 import {
-  CREATE_SESSION_WINDOW_MAX,
   MAX_SESSION_MS,
   MAX_USER_TURNS,
   MESSENGER_ESCALATION_MAX_USER_TURNS,
 } from "../shared/constants";
-import { isCreateSessionRateLimited } from "./rateLimit";
+import { releaseCreateSessionSlot, reserveCreateSessionSlot } from "./createSlot";
 import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, LLM_TEXT_SECRETS, isDevRouteOverrideEnabled } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
@@ -56,6 +55,7 @@ import { findInCallSmsItem } from "../scenarios/inCallSms";
 import { resolvePersonaCardRequest } from "./personaCard";
 import { FAMILY_ADDRESS_INVALID_REASON, readFamilyAddress } from "../scenarios/familyAddress";
 import { emitPrepStage, type CreateSessionPrepChunk } from "./prepStages";
+import { readDocId } from "../shared/requestValidation";
 
 ensureFirebaseAdminApp();
 
@@ -77,6 +77,14 @@ function readOptionalConfigString(param: { value: () => string }): string {
  * 있다). 알 수 없는 값을 조용히 통과시키지 않는다 — verifyIntercept/index.ts의
  * `readOfferStage`/`readTrigger`와 동일한 패턴(선례 재사용, architect 설계 불요).
  */
+/** SEC-07 — 선택 enum 판독(부재 = 통과 · 목록 밖 = invalid-argument). */
+function readOptionalEnum(value: unknown, field: string, allowed: readonly string[]): void {
+  if (value === undefined || value === null) return;
+  if (typeof value !== "string" || !allowed.includes(value)) {
+    throw new HttpsError("invalid-argument", `${field}가 올바르지 않습니다.`);
+  }
+}
+
 function readMessengerSkin(value: unknown): MessengerSkin {
   if (value === "ios" || value === "samsung" || value === "default") return value;
   throw new HttpsError("invalid-argument", "messengerSkin은 ios·samsung·default 중 하나여야 합니다.");
@@ -114,7 +122,18 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     if (!scenarioId || !voiceId) {
       throw new HttpsError("invalid-argument", "scenarioId와 voiceId가 필요합니다.");
     }
-    if (!SCENARIO_PROMPTS[scenarioId]) {
+    // SEC-07 — 타입 · 허용 값을 어떤 Firestore 읽기 · LLM 호출보다 앞에서 판독한다(전에는 숫자 · 객체가 그대로 세션 문서에 실리거나
+    // `.doc(x)`에서 예외가 났다). ⛔ `SCENARIO_PROMPTS[x]` 만 보면 `constructor` 같은 상속 키가 통과한다 — 자기 키만 인정한다.
+    readDocId(scenarioId, "scenarioId");
+    readDocId(voiceId, "voiceId");
+    if (sessionId !== undefined && sessionId !== null) readDocId(sessionId, "sessionId");
+    if (forceVariantId !== undefined && forceVariantId !== null) readDocId(forceVariantId, "forceVariantId");
+    readOptionalEnum(channel, "channel", ["voice", "messenger"]);
+    readOptionalEnum(surface, "surface", ["kakao", "sms"]);
+    if (messengerSkin !== undefined && messengerSkin !== null) readMessengerSkin(messengerSkin);
+    if (skinSource !== undefined && skinSource !== null) readSkinSource(skinSource);
+    readOptionalEnum(voiceSelectionSource, "voiceSelectionSource", ["recorded", "reused", "fallback_male", "fallback_female"]);
+    if (!Object.prototype.hasOwnProperty.call(SCENARIO_PROMPTS, scenarioId) || !SCENARIO_PROMPTS[scenarioId]) {
       throw new HttpsError("invalid-argument", `존재하지 않는 scenarioId입니다: ${scenarioId}`);
     }
     // T191 S5(PRD AC-097 (b) · UX 계약 C-2) — 고급 전용 시나리오를 초급 · 중급 · **난이도 미전달**로
@@ -194,32 +213,41 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       throw new HttpsError("failed-precondition", "훈련 참여 동의가 필요합니다.");
     }
 
+    // T4: sessionId(온보딩 "사전 세션 id")가 넘어오면 createVoiceClone이 만들어 둔 pending
+    // sessions/{sid} 문서를 새로 만들지 않고 채택한다 — sessionId 불일치 갭 해소. 넘어오지 않으면
+    // 기존과 동일하게 새 id를 발급한다(하위호환). ID 생성/채택 로직만 바꿨고, 그 외 인격유지·
+    // 가드레일·프롬프트 조립 로직은 그대로다.
+    // SEC-05 — 아래 슬롯 예약 키가 이 세션 문서 id라 예약 앞으로 옮겼다(읽기만 · 거절은 예약 0).
+    let sessionRef = db.collection("sessions").doc();
+    if (sessionId) {
+      const candidateRef = db.collection("sessions").doc(sessionId);
+      const candidateSnap = await candidateRef.get();
+      if (candidateSnap.exists) {
+        const candidate = candidateSnap.data();
+        if (candidate?.uid !== request.auth.uid) {
+          throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
+        }
+        // #1 치명 버그 차단(2026-07-22): 같은 사전 id로 이미 시작(active)되었거나 종료(ended)된
+        // 세션을 되살려 쓰지 못하게 막는다. 정상 클론 경로의 pending 문서는 status:"created"라
+        // 통과한다. 클라(session/end)가 종료 시 사전 id를 비우므로 정상 흐름에선 이 경로에 안 걸리며,
+        // 이 가드는 클라 클리어가 누락된 경우의 서버측 이중 방어다.
+        if (candidate?.status === "active" || candidate?.status === "ended") {
+          throw new HttpsError(
+            "failed-precondition",
+            "이미 사용된 세션입니다. 시나리오 선택부터 다시 시작해 주세요.",
+          );
+        }
+      }
+      sessionRef = candidateRef;
+    }
+
     // §66.3 — createSession 롤링 윈도우(폭주 백스톱, G180 승계). ⛔ 위치가 설계다: 동의 게이트
     // 뒤(동의 오류가 먼저 나와야 한다) · generateOpeningLine 앞(이 게이트의 존재 이유가 그 LLM
     // 호출을 막는 것이다, challenge/index.ts:108-110과 동일 원칙) · 세션 문서 write 앞(거절된
     // 시도가 창을 더럽히지 않는다).
-    const recentSnap = await db
-      .collection("sessions")
-      .where("uid", "==", request.auth.uid)
-      .orderBy("createdAt", "desc")
-      .limit(CREATE_SESSION_WINDOW_MAX + 1)
-      .get();
-    const nowMs = Date.now();
-    if (
-      isCreateSessionRateLimited({
-        // ⛔ createdAt 부재 문서는 세지 않는다 — "값이 없으니 기본이겠지"를 판정 근거로 삼지 않는다
-        // (§15.0-4 승계, §66.3).
-        recentCreatedAtMs: recentSnap.docs
-          .map((d) => (d.get("createdAt") as FirebaseFirestore.Timestamp | undefined)?.toMillis())
-          .filter((t): t is number => typeof t === "number"),
-        nowMs,
-      })
-    ) {
-      throw new HttpsError(
-        "resource-exhausted",
-        "짧은 시간에 너무 많이 시작했습니다. 잠시 후 다시 시도해 주세요.",
-      );
-    }
+    // ⭐ SEC-05(외부 보안 점검 2차) — 세기와 예약을 한 트랜잭션으로 한다(`createSlot.ts` 표). 전에는 트랜잭션 밖에서 세어 동시 요청 2개가
+    // 둘 다 통과했다. 예약은 세션 문서 커밋 뒤 해제하고, 그 전에 실패한 시도는 예약이 TTL(2분) 동안 남아 한 번으로 센다(AI를 이미 썼을 수 있다).
+    await reserveCreateSessionSlot(db, request.auth.uid, sessionRef.id);
 
     // roleplay 모듈(트랙 A 내부 계약, Architecture.md §4)에 오프닝 사기범 대사 생성을 위임한다.
     // LLM 호출 지점은 functions/src/llm 어댑터를 거친다(sendMessage와 동일 구조, T7 태스크 지시).
@@ -244,32 +272,6 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     // §81 — 세션 가상 은행명을 오프닝 전에 고른다(오프닝 대사와 세션 문서가 같은 이름을 쓴다).
     // U3 — 변형 배정 뒤로 옮겼다: 예금주가 보이는 계좌면 그 묶음의 고정 은행(`smsGate.ts` `pickSessionBankName`).
     const fictionalBankName = pickSessionBankName(scenarioId, variantAssignment.flowVariantId);
-    // T4: sessionId(온보딩 "사전 세션 id")가 넘어오면 createVoiceClone이 만들어 둔 pending
-    // sessions/{sid} 문서를 새로 만들지 않고 채택한다 — sessionId 불일치 갭 해소. 넘어오지 않으면
-    // 기존과 동일하게 새 id를 발급한다(하위호환). ID 생성/채택 로직만 바꿨고, 그 외 인격유지·
-    // 가드레일·프롬프트 조립 로직은 그대로다.
-    let sessionRef = db.collection("sessions").doc();
-    if (sessionId) {
-      const candidateRef = db.collection("sessions").doc(sessionId);
-      const candidateSnap = await candidateRef.get();
-      if (candidateSnap.exists) {
-        const candidate = candidateSnap.data();
-        if (candidate?.uid !== request.auth.uid) {
-          throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
-        }
-        // #1 치명 버그 차단(2026-07-22): 같은 사전 id로 이미 시작(active)되었거나 종료(ended)된
-        // 세션을 되살려 쓰지 못하게 막는다. 정상 클론 경로의 pending 문서는 status:"created"라
-        // 통과한다. 클라(session/end)가 종료 시 사전 id를 비우므로 정상 흐름에선 이 경로에 안 걸리며,
-        // 이 가드는 클라 클리어가 누락된 경우의 서버측 이중 방어다.
-        if (candidate?.status === "active" || candidate?.status === "ended") {
-          throw new HttpsError(
-            "failed-precondition",
-            "이미 사용된 세션입니다. 시나리오 선택부터 다시 시작해 주세요.",
-          );
-        }
-      }
-      sessionRef = candidateRef;
-    }
     // §100 ① "훈련 내용" — 동의 · 한도 게이트 통과 + 흐름 변형 배정 + 사전 세션 id 확인이 끝났다.
     prepMs.scenarioMs = Date.now() - prepStartedAt;
     await emitPrepStage(response, "scenario");
@@ -341,6 +343,8 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
       variantAssignment,
       now,
     );
+    // SEC-05 — 세션 문서가 창 안 목록에 들어왔으니 예약을 지운다(예약 키 = 세션 id라 그 사이에도 두 번 세지 않는다 · 실패는 TTL이 정리).
+    await releaseCreateSessionSlot(db, request.auth.uid, sessionRef.id);
 
     // §142 PR-4(R2 · 사용자 승인 설계 #470 D9) — 시작 문자 변형은 세션 시작과 함께 그 문자가 도착해 있다(게이트 밖 · 선언 밖 · 발화 0 시점).
     // 화면은 `startSurface`로 수신 벨 대신 문자 · 전화 앱 화면에서 시작하고, 첫 통화는 참가자가 건다(`startCallLeg` dial).
@@ -426,6 +430,7 @@ export const endSession = onCall<EndSessionRequest, Promise<EndSessionResponse>>
     if (!sessionId || !endReason) {
       throw new HttpsError("invalid-argument", "sessionId와 endReason이 필요합니다.");
     }
+    readDocId(sessionId, "sessionId"); // SEC-07
     // T192 C1(§79.5 ① · G508) — 사유 허용목록. 그 밖의 문자열은 기록하지 않는다.
     const requestedReason = readEndSessionReason(endReason);
     if (!requestedReason) {
@@ -514,6 +519,7 @@ export const updateMessengerSkin = onCall<
   if (!sessionId || !request.data?.messengerSkin || !request.data?.skinSource) {
     throw new HttpsError("invalid-argument", "sessionId·messengerSkin·skinSource가 필요합니다.");
   }
+  readDocId(sessionId, "sessionId"); // SEC-07
   // 신고 항목 4 — truthy 체크만으로는 임의 문자열("SAMSUNG" 대소문자 오탈자 등)이 조용히 통과해
   // Firestore에 잘못된 값으로 저장될 수 있었다. enum 값인지 실제로 검증한다.
   const messengerSkin = readMessengerSkin(request.data.messengerSkin);
@@ -547,9 +553,7 @@ export const requestEscalation = onCall<
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
   const { sessionId, via } = request.data ?? {};
-  if (!sessionId) {
-    throw new HttpsError("invalid-argument", "sessionId가 필요합니다.");
-  }
+  readDocId(sessionId, "sessionId"); // SEC-07 — 숫자 · 객체 · 경로 모양 값은 read 앞에서 invalid-argument.
 
   const db = getFirestore();
   const sessionRef = db.collection("sessions").doc(sessionId);
@@ -618,9 +622,7 @@ export const requestReverseEscalation = onCall<
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
   const { sessionId } = request.data ?? {};
-  if (!sessionId) {
-    throw new HttpsError("invalid-argument", "sessionId가 필요합니다.");
-  }
+  readDocId(sessionId, "sessionId"); // SEC-07 — 숫자 · 객체 · 경로 모양 값은 read 앞에서 invalid-argument.
 
   const db = getFirestore();
   const sessionRef = db.collection("sessions").doc(sessionId);

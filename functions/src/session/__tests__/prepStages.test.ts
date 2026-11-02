@@ -43,7 +43,7 @@ test("[G701] 신호는 실제로 끝난 지점에서만 — 모든 거부 게이
   const saved = at('emitPrepStage(response, "saved")');
   // 거부 게이트(동의 · 한도 · 사전 세션 id 재사용)보다 뒤 — 거절된 요청은 어떤 단계도 체크되지 않는다.
   assert.ok(at('"훈련 참여 동의가 필요합니다."') < scenario);
-  assert.ok(at("isCreateSessionRateLimited({") < scenario);
+  assert.ok(at("await reserveCreateSessionSlot(") < scenario); // SEC-05 — 한도 게이트 = 트랜잭션 슬롯 예약
   assert.ok(at('"이미 사용된 세션입니다.') < scenario);
   assert.ok(at("await assignFlowVariantForSession(") < scenario);
   // ② 오프닝 대사 생성 뒤 · 저장 앞.

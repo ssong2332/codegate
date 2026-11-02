@@ -12,12 +12,13 @@ import * as path from "node:path";
 import { HttpsError } from "firebase-functions/v2/https";
 import { ANONYMOUS_DENIED_MESSAGE, denyAnonymous } from "../../shared/anonymousGate";
 
-const SRC = path.resolve(__dirname, "../../../src/realtime/submitTranscript.ts");
+// SEC-07(외부 보안 점검 2차) — 턴 수 상한 · 판독은 `transcriptRequest.ts`로 옮겼다(핸들러는 그 판독 뒤 빈 분기 → Firestore 단계 순서 그대로).
+const SRC = path.resolve(__dirname, "../../../src/realtime/transcriptRequest.ts");
 
 /** 턴 수 상한은 소스의 값을 그대로 읽는다 — 스텁이 다른 상한으로 통과하는 것을 막는다. */
 const MAX_TURNS = ((): number => {
-  const m = /const MAX_TURNS = (\d+);/.exec(readFileSync(SRC, "utf-8"));
-  assert.ok(m, "submitTranscript.ts에서 MAX_TURNS 선언을 찾지 못했다 — 스텁 전제가 깨졌다");
+  const m = /export const TRANSCRIPT_MAX_TURNS = (\d+);/.exec(readFileSync(SRC, "utf-8"));
+  assert.ok(m, "transcriptRequest.ts에서 TRANSCRIPT_MAX_TURNS 선언을 찾지 못했다 — 스텁 전제가 깨졌다");
   return Number(m[1]);
 })();
 

@@ -21,6 +21,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { ensureFirebaseAdminApp } from "../firebaseAdmin";
+import { readDocId } from "../shared/requestValidation";
 import { replaceRealFinancialNames } from "../guardrails/realFinancialNames";
 import { completeWithFallback, getLlmClient } from "../llm";
 import { resolveSessionScenarioPrompt, routeEndsWithoutAccount } from "../scenarios/flowVariants";
@@ -133,6 +134,8 @@ export const requestScreenActionFollowUp = onCall<RequestScreenActionFollowUpReq
     if (!request.auth) throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
     const { sessionId, landingId } = request.data ?? {};
     if (!sessionId || !landingId) throw new HttpsError("invalid-argument", "sessionId·landingId가 필요합니다.");
+    readDocId(sessionId, "sessionId"); // SEC-07
+    readDocId(landingId, "landingId");
     const db = getFirestore();
     const sessionRef = db.collection("sessions").doc(sessionId);
     const sessionSnap = await sessionRef.get();

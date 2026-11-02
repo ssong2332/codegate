@@ -407,11 +407,16 @@ export type TranscriptTurn = { role: "user" | "scammer"; text: string; atMs?: nu
  * 서버가 `session.createdAt`으로 대체(둘 다 없으면 리포트 라벨 산출은 현행 합성 로직 그대로 —
  * `docs/Architecture.md` §57.2 (6)).
  */
+/**
+ * 전사 재전송(외부 보안 점검 2차) — `batchId`: 제출 1회마다 새로 만드는 값(`submitRealtimeTranscript.ts`가 채운다). 서버는 같은
+ * 값으로 다시 온 제출을 저장하지 않는다(부재 = 서버가 내용 해시로 거른다).
+ */
 export type SubmitRealtimeTranscriptRequest = {
   sessionId: string;
   turns: TranscriptTurn[];
   openingNotSpoken?: boolean;
   answeredAtMs?: number;
+  batchId?: string;
 };
 export type SubmitRealtimeTranscriptResponse = { written: number };
 
