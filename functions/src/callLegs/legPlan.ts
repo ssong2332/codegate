@@ -8,6 +8,7 @@
 // | `legStartUserTurns[i]` | 레그 i가 시작될 때의 세션 사용자 발화 수(문자 하한 · 끊기 5행의 기준) |
 // | `connected` | 현재 레그 통화가 연결됐는가. 첫 레그가 `incoming`이면 부재여도 연결로 본다(세션 시작 = 수신 통화) |
 // | `legEnded` | 마지막으로 끝난 레그 번호(끊기 승인이 쓴다) — `legIndex`와 같으면 다음 레그를 열 차례 |
+// | `entry` | 현재 레그가 실제로 열린 방식(`startCallLeg`가 쓴다 — D2: 참가자가 건 통화인가). 부재 = 변형 레그 정의 |
 import type { FlowVariant, FlowVariantLeg } from "../scenarios/flowVariants";
 import { lookupDialedNumber, type DialEntry } from "../scenarios/dialDirectory";
 
@@ -16,6 +17,7 @@ export type RelayState = {
   legStartUserTurns: number[];
   connected?: boolean;
   legEnded?: number;
+  entry?: "dial" | "transfer" | "incoming";
 };
 
 export type MultiCallVariant = Pick<FlowVariant, "scenarioId" | "legs" | "multiCall">;
@@ -102,6 +104,7 @@ export function planLegStart(input: {
       legIndex: target,
       legStartUserTurns: [...(relay?.legStartUserTurns ?? []).slice(0, target), Math.max(0, Math.floor(input.userTurns))],
       connected: true,
+      entry,
     },
   });
   if (action === "transfer") return nextRelay("transfer");
@@ -153,11 +156,27 @@ export function legVoiceSlot(
 export function resolveSessionCallLeg(
   variant: (Pick<FlowVariant, "legs" | "multiCall" | "scenarioId">) | undefined,
   session: { scenarioId: string; relay?: RelayState },
-): { legIndex: number; gender: "male" | "female"; voiceSlot: number; callerLabel: string } | undefined {
+): { legIndex: number; gender: "male" | "female"; voiceSlot: number; callerLabel: string; entry: "dial" | "transfer" | "incoming" } | undefined {
   if (!variant || !variant.multiCall || variant.scenarioId !== session.scenarioId) return undefined;
   const legIndex = currentLegIndex(variant, session.relay);
   const { gender, slot } = legVoiceSlot(variant, legIndex);
-  return { legIndex, gender, voiceSlot: slot, callerLabel: variant.legs[legIndex].callerLabel };
+  return { legIndex, gender, voiceSlot: slot, callerLabel: variant.legs[legIndex].callerLabel, entry: resolveLegEntry(variant, session.relay, legIndex) };
+}
+
+/**
+ * D2(§142 확인 실측 2026-11-02) — 현재 레그가 실제로 열린 방식. 참가자가 건 통화(`dial`)면 클라가 "받는 쪽" 첫 신호를 보낸다.
+ * | # | If | Then |
+ * |---|---|---|
+ * | 1 | `relay.entry`가 있고 그 relay의 레그가 지금 레그다 | 그 값(서버 `startCallLeg`가 쓴 실제 방식 — R2 재발신은 incoming) |
+ * | 2 | 그 밖 | 변형 레그 정의(`entry` 부재 = incoming) |
+ */
+export function resolveLegEntry(
+  variant: Pick<FlowVariant, "legs">,
+  relay: RelayState | undefined,
+  legIndex: number,
+): "dial" | "transfer" | "incoming" {
+  if (relay?.entry && relay.legIndex === legIndex) return relay.entry;
+  return variant.legs[legIndex]?.entry ?? "incoming";
 }
 
 /**

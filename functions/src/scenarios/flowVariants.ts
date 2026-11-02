@@ -42,7 +42,8 @@ import {
   CARD_REBUILD_AGENT_PERSONA,
   CARD_REBUILD_COURIER_PERSONA,
   CARD_REBUILD_PROSECUTOR_PERSONA,
-  CARD_REBUILD_SUPERVISOR_PERSONA,
+  CARD_REBUILD_SUPERVISOR_FIRST_PERSONA,
+  CARD_REBUILD_SUPERVISOR_LAST_PERSONA,
   CARD_REBUILD_TACTICS as CRT,
 } from "./cardRebuildLegs.prompt";
 import { CARD_FAKE_CALLBACK_NUMBER_ID, SUPERVISOR_OFFICIAL_NUMBER_ID } from "./dialDirectory";
@@ -809,7 +810,7 @@ const CARD_REBUILD_AGENT_FIRST_LEG: FlowVariantLeg = {
 };
 const CARD_REBUILD_SUPERVISOR_FIRST_LEG: FlowVariantLeg = {
   callerLabel: "금융감독기관 대표번호",
-  personaPrompt: CARD_REBUILD_SUPERVISOR_PERSONA,
+  personaPrompt: CARD_REBUILD_SUPERVISOR_FIRST_PERSONA,
   speakerGender: "male",
   speakerId: "supervisor",
   minUserTurns: 2,
@@ -843,7 +844,7 @@ const CARD_REBUILD_PROSECUTOR_LEG: FlowVariantLeg = {
 };
 const CARD_REBUILD_SUPERVISOR_LAST_LEG: FlowVariantLeg = {
   callerLabel: "금융감독기관 대표번호",
-  personaPrompt: CARD_REBUILD_SUPERVISOR_PERSONA,
+  personaPrompt: CARD_REBUILD_SUPERVISOR_LAST_PERSONA,
   speakerGender: "male",
   speakerId: "supervisor",
   minUserTurns: 2,
@@ -2275,8 +2276,10 @@ export function resolveVariantPrompt(
 // 범위 밖 legIndex는 마지막 레그로 본다(끊기 쪽은 마지막 레그 규칙이 안전하다 — 다음 레그를 지어내지 않는다).
 const MULTI_CALL_LEG_END_DIAL =
   "이 통화의 마지막 단계를 마치면 짧게 인사하고 통화를 끝낸다. 이 통화에서 다음 사람의 일(앱 · 신고 · 조사 · 이체)을 대신 진행하지 않는다.";
+// ⭐ D1(§142 확인 실측 2026-11-02) — "통화를 넘긴다"만으로는 모델이 넘김을 끊기로 보지 않고 "잠시만요"를 되풀이하며 다음 사람의 일로 건너뛰었다(2/2).
+// 넘김 = 이 통화를 네 쪽에서 끝내는 것(끊기 규칙 — 도구 여부는 [진행 강제]가 정한다)이라고 적는다.
 const MULTI_CALL_LEG_END_TRANSFER =
-  "이 통화의 마지막 단계를 마치면 '연결해 드리겠습니다, 잠시만 기다려 주세요'처럼 짧게 말하고 통화를 넘긴다. 넘긴 뒤 다음 사람의 일을 대신 진행하지 않는다.";
+  "이 통화의 마지막 단계를 마치면 '연결해 드리겠습니다'처럼 짧게 말하고 통화를 넘긴다. 통화를 넘기는 것은 네 쪽에서 이 통화를 끝내는 것이다 — 넘기겠다고 말하는 그 응답에서 [진행 강제]의 끊기 규칙대로 원하던 것을 얻은 끝내기로 끝낸다. '잠시만 기다려 주세요'라고 한 뒤 이 통화에서 상대와 이야기를 이어 가지 않고, 다음 사람의 일을 대신 진행하지 않는다.";
 const MULTI_CALL_LAST_LEG = "이 통화가 이번 흐름의 마지막 통화다. 다른 사람에게 넘기겠다는 말은 하지 않는다.";
 
 /**

@@ -189,7 +189,8 @@ export type CreateRealtimeCallResponse = {
    */
   liveTools?: LiveTools;
   /** §142 — 다통화 변형이면 이 토큰이 맡은 통화(서버 `relay`가 정한다 · functions/src/realtime/callTypes.ts와 1:1). 부재 = 종전. */
-  callLeg?: { legIndex: number; callerLabel: string };
+  /** §142 D2 — `entry`: 이 통화가 실제로 열린 방식(서버 `relay.entry`) — `dial`이면 참가자가 건 통화다. */
+  callLeg?: { legIndex: number; callerLabel: string; entry?: "dial" | "transfer" | "incoming" };
 };
 export type VerifyOfferTrigger = { availableAfterScammerTurns: number };
 export type LiveTools = {

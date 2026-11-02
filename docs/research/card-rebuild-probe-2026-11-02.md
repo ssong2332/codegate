@@ -44,3 +44,29 @@ node scripts/full-audit-probe.mjs --secret <메인 체크아웃 functions/.secre
 ```
 계획 항목 예: `{ "ch": "multicall", "id": "card-company-impersonation", "level": "advanced", "variant": "fv-k3dn", "persona": "comply", "dials": { "0": { "action": "dial", "numberId": "card-fake-callback" }, "1": { "action": "dial", "numberId": "supervisor-official" } } }`
 — `persona`: comply · refuseInstall(설치만 거절) · 그 밖 이름은 comply 응답기. `dials` 키 = `"start"` 또는 끝난 레그 번호(부재면 transfer 레그는 transfer · 그 밖은 계획 끝). `stopAfterLeg`로 조기 정지.
+
+---
+
+## D1 · D2 수정 뒤 확인 실측 — 2세션(2026-11-02)
+
+- 승인: 사용자 "권고대로"(메인 전달) — D1 · D2 수정 + 확인 2세션(R1 comply · R2 comply). 키 `GEMINI_API_KEY2`만 · **429 0회** · 운영 Firestore 쓰기 0.
+- 대상: 브랜치 `claude/card-rebuild-d1d2`(main `d6b5d9a6` + #489 + 수정). 프로브는 새 서버 판정(넘김 지시 · 뒤 레그 거절 문면)과 클라 첫 신호(`LEG_DIALED_OPENING_TURN`)를 미러한다.
+
+### 결론: R1은 레그 0~4를 **완주**했다(D1 해소 · 수정 전 0/2). R2는 레그 0에서 **Live 서버 내부 오류(close 1011)**로 끊겨 D1 판정 불가 — D2는 두 세션 모두 해소.
+
+| 항목 | 수정 뒤 | 수정 전(위 6세션) | 근거 |
+|---|---|---|---|
+| R1 결과 | `finished`(레그 4 · 안전계좌 문자 도착 · 이체 화면 제출) | `leg_not_ended`(레그 2) | `outcome` · `delivered card-safe-account@20✓` |
+| 감독기관 첫 레그 넘김 | 넘김 지시 @16(레그 시작 13 + 3) → `end_call goal/accepted` · `legEnd transfer` | 끊기 0회 · transfer 문자 4회 거절 | `legHandoff L2@16` · toolResult |
+| 감독기관 첫 레그 돈 이야기 | 0 | 980만 원 · 안전계좌 · 가족 사업 자금 | R1 L2 대사 |
+| 검사 레그 넘김 | `end_call goal/accepted`(넘김 지시 없이 스스로) | 도달 못 함 | R1 L3 |
+| 마지막 레그 | "네, 다시 권도하 조사관입니다" — 같은 목소리(Charon) · 980만 원 이체 · 은행 답변 코칭 | 도달 못 함 | R1 L4 |
+| D2 참가자 발신 첫마디 | 3/3 받는 쪽 인사만("네, 윤슬카드 고객센터입니다." ×2 · "네, 금융감독기관 계좌안전점검팀입니다.") | 2/4 건 쪽 말 | R1 L1 · L2 · R2 L0 |
+| R2 | 레그 0 설치 허용 직후 Live `close 1011 Internal error encountered` | — | R2 events · 429 아님 |
+
+### 새 결함(수정 안 함 · 목록만)
+
+| # | 심각도 | 증상 | 재현 | 원인(추정 — 확인 방법) |
+|---|---|---|---|---|
+| N1 | 중간 | 마지막 레그 출력 전사에 한국어 **지시 해설 문장**이 섞였다 — "조사관으로서 차분하고 공적인 말투로 … 문자 발송 도구를 호출하자." 뒤에 정상 대사 | 1/1(R1 L4 · 도구 호출 앞) | 기존 사고 문장 차단(§116 `thoughtLeak` — 영어 중심)이 한국어 해설을 못 거른다. 확인: 같은 전사로 클라 자막 · 서버 전사 필터 통과 여부 |
+| N2 | 판단 대기 | R2 확인 실측이 Live 서버 오류로 레그 0에서 끝나 R2의 D1(레그 1 감독기관 첫) 확인이 없다 | 1/1 | 일시 오류(추정). 확인: R2 comply 1세션 재실측(승인 필요) |

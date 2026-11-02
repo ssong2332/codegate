@@ -358,6 +358,11 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
           const r = smsResponse(item);
           guidance = r.announceInstruction;
           events.push({ t: now(), ev: "sms", by: "model", smsId: item.smsId, body: r.body, scammerTurns, userTurns }); // U2 채점 — 도착 시점 계수
+        } else if (leg && g.status === "not_allowed") {
+          // §142 D1 미러 — 앱 `inCallSms/index.ts`처럼 뒤 레그 문자면 넘김 거절 문면 · 그 밖 not_allowed는 앱 문면.
+          guidance = legHandoffLib?.isLaterLegSmsPurpose(findFlowVariant(variantId), leg.relay, c.args?.purpose)
+            ? legHandoffLib.LEG_LATER_SMS_DECLINE
+            : L("inCallSms/smsGate.js").SMS_DECLINE_NOT_ALLOWED;
         } else guidance = g.status === "already_delivered" ? SMS_DECLINE_ALREADY : SMS_DECLINE_TOO_EARLY;
         if (toolGuidanceLib) guidance = toolGuidanceLib.withModelToolNoRepeat(guidance, "model_tool");
         events.push({ t: now(), ev: "toolResult", name: c.name, purpose: c.args?.purpose, status, userTurns });
@@ -470,7 +475,8 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
     userTurns += 1;
     sendText(u, true, "user");
     await waitTurn(45000);
-    if (declared.length > 0 && !closed) {
+    // §142 — 다통화 레그는 문자 선언 없는 레그도 앱처럼 백스톱을 묻는다(클라 `inCallSmsBackstop`은 변형 단위).
+    if ((declared.length > 0 || leg) && !closed) {
       // §104 — 앱 화면처럼 마지막 문자 도착 뒤 사기범이 "문자 보냈다"고 말했으면 백스톱에 주장을 싣는다(새 lib에서만 효과 — 옛 lib는 인자를 무시).
       const lastSmsIdx = turns.map((t) => t.kind).lastIndexOf("sms_ctx");
       const claimed = turns.slice(lastSmsIdx + 1).some((t) => t.role === "scammer" && PROBE_SMS_SENT_CLAIM.test(t.text ?? ""));
@@ -514,6 +520,13 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
         }
       } else if (p.action === "nudge") {
         sendText(buildSmsNudgeInstruction(p.item.purpose), false, "sms_nudge_ctx");
+      } else if (p.action === "none_pending" && leg && legHandoffLib && legHandoffLib.planLegHandoff(findFlowVariant(variantId), leg.relay, userTurns) !== undefined) {
+        // §142 D1 미러 — 앱 백스톱처럼 transfer 레그 넘김 판정(wait = 다음 발화에 다시 · handoff = 넘김 지시 레그당 1회).
+        if (!wrapUpSent && legHandoffLib.planLegHandoff(findFlowVariant(variantId), leg.relay, userTurns) === "handoff") {
+          wrapUpSent = true;
+          sendText(legHandoffLib.LEG_TRANSFER_HANDOFF_INSTRUCTION, false, "leg_handoff_ctx");
+          events.push({ t: now(), ev: "legHandoff", userTurns });
+        }
       } else if (p.action === "none_pending" && !wrapUpSent && goalActionLib?.planGoalWrapUp && guidanceLib?.GOAL_WRAP_UP_INSTRUCTION) {
         // §115 — 앱 백스톱 질의와 같은 판정(`planGoalWrapUp`)으로 할 일 완료 시 마무리 지시 1회 맥락 주입.
         const wrap = goalActionLib.planGoalWrapUp({
@@ -543,6 +556,10 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
 const CLIENT_OPENING_TRIGGER =
   "(전화가 방금 연결됐다. 지금 막 전화를 받은 상대에게 캐릭터로서 자연스럽게 첫 마디를 건네라. 첫 마디는 짧게 — 신분(사칭 기관·관계)과 전화를 건 이유를 짧은 한두 문장(5초 안팎)으로만 밝히고, 멈춰서 상대의 대답을 기다려라. 다짜고짜 요구나 압박부터 하지 말고, 자세한 설명은 상대가 반응한 뒤 다음 턴에 이어가라.)";
 const legPlanLib = optionalLib("callLegs/legPlan.js");
+const legHandoffLib = optionalLib("callLegs/legHandoff.js");
+// D2 미러 — 클라 `src/lib/callLegs/legTransition.ts` LEG_DIALED_OPENING_TURN(참가자가 건 통화의 첫 신호 · 루트 `[§142 D2 프로브 미러]`가 같은 문면을 고정).
+const LEG_DIALED_OPENING_TURN =
+  "(상대가 너에게 건 전화를 너는 방금 받았다 — 네가 전화한 것이 아니다. '연락드렸습니다'처럼 건 쪽의 말을 하지 말고, 전화를 받는 쪽의 짧은 인사 한마디(5초 안팎)만 한 뒤 멈춰서 상대가 왜 전화했는지 말하기를 기다려라. 용건 설명은 상대의 말을 들은 뒤에 한다.)";
 const dialLib = optionalLib("scenarios/dialDirectory.js");
 const { pickLegVoiceName } = L("realtime/geminiProvider.js");
 // 참가자가 직접 건 레그의 첫마디(번호 id별 — 사기범 첫 응대 뒤 참가자가 하는 말).
@@ -606,7 +623,8 @@ async function runMultiCall(job, tag) {
     const legJob = {
       variant: variant.variantId, sessionId: sid, delivered, userTurnsBase: userTurns, startIndex,
       maxTurns: (legDef.maxUserTurns ?? 6) + 3, respond, setOtpSource: (f) => { otpSource = f; },
-      openingTrigger: CLIENT_OPENING_TRIGGER,
+      // D2 — 앱처럼 참가자가 건 통화(서버 relay.entry = dial)는 받는 쪽 첫 신호(옛 lib = relay.entry 없음 → 기본 트리거).
+      openingTrigger: relay?.entry === "dial" ? LEG_DIALED_OPENING_TURN : CLIENT_OPENING_TRIGGER,
       ...(prior ? { priorChatContext: prior } : {}),
       leg: { legIndex, relay, legStart, gender: slot.gender, voiceName, nonLast, exit: legDef.exit,
         firstLine: entry === "dial" ? DIAL_FIRST_LINE[legDef.dialTarget] : undefined },

@@ -55,7 +55,7 @@ test("[§142.4 8행] R1 배송원 레그 끝 → 문자 속 가짜 대표번호�
   if (plan.status !== "connected") return;
   assert.equal(plan.legIndex, 1);
   assert.equal(plan.entry, "dial");
-  assert.deepEqual(plan.relay, { legIndex: 1, legStartUserTurns: [0, 4], connected: true });
+  assert.deepEqual(plan.relay, { legIndex: 1, legStartUserTurns: [0, 4], connected: true, entry: "dial" });
 });
 
 test("[§142.4 9행 · D3] 진짜 카드사 대표번호로 걸면 자동 안내(방어 종료) — 사기범 레그로 이어지지 않는다", () => {
@@ -101,7 +101,7 @@ test("[§142.4 4행] 마지막 레그 뒤에는 다음 레그가 없다", () => 
 test("[§142.4 2행] R2 — 세션은 발급 문자에서 시작(연결 전) · 첫 다이얼이 레그 0(상담원)을 연다 · 호 전환은 거부", () => {
   const plan = planLegStart({ variant: R2, relay: undefined, action: "dial", dialed: FAKE_CALLBACK, installConsented: false, userTurns: 0 });
   assert.equal(plan.status, "connected");
-  if (plan.status === "connected") assert.deepEqual(plan.relay, { legIndex: 0, legStartUserTurns: [0], connected: true });
+  if (plan.status === "connected") assert.deepEqual(plan.relay, { legIndex: 0, legStartUserTurns: [0], connected: true, entry: "dial" });
   const transfer = planLegStart({ variant: R2, relay: undefined, action: "transfer", installConsented: false, userTurns: 0 });
   assert.deepEqual(transfer, { status: "not_ready", reason: "wrong_action" });
 });

@@ -155,8 +155,8 @@ test("[§99] 통화 화면 — 세션 key = connectionSeq · 재연결 콜백 ·
   assert.match(play, /key=\{realtime\.connectionSeq\}/);
   assert.match(play, /onConnectionLost=\{handleConnectionLost\}/);
   // §110.3 — 첫 연결의 신호 선택은 `openingTurnFor`(재연결 = 종전 `resumeTurn` 그대로 · 메신저발 첫 연결만 이어받기 신호).
-  // §142 — 다통화 변형의 새 통화 첫 연결은 오프닝(이어받기 아님)이라 앞에 `legOpening ? null :` 갈래가 붙는다.
-  assert.match(play, /resumeTurn=\{(?:legOpening \? null : )?openingTurnFor\(\{\s*connectionSeq: realtime\.connectionSeq,\s*resumeTurn,/);
+  // §142 — 다통화 변형의 새 통화 첫 연결은 오프닝(이어받기 아님)이라 앞에 레그 판정 갈래가 붙는다(D2 — `legOpeningTurnFor` · 판정 밖 = `undefined`).
+  assert.match(play, /resumeTurn=\{(?:legOpeningTurn !== undefined \? legOpeningTurn : )?openingTurnFor\(\{\s*connectionSeq: realtime\.connectionSeq,\s*resumeTurn,/);
   assert.match(play, /createScreenWakeLock\(/);
   assert.match(play, /lock\.stop\(\)/);
   assert.match(play, /serializeTranscriptBackup\(sessionId, transcriptRef\.current\)/);

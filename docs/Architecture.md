@@ -24952,3 +24952,16 @@ PR-2 화면 계약(이 PR이 전제하는 것):
 | 리포트 | `report/generateReportCore.ts` | 다통화 변형은 변형 전체 수법으로 해석(레그 0 합성본 아님) · 루트 교육 포인트 4개(`CARD_REBUILD_REPORT_LESSONS` — 조사 문서 ①~④)를 예방 조언 마무리 앞에 |
 
 확인 실측 제안(실 키 · 승인 필요): **6세션** — R1 × (끝까지 따름 · 원격 앱 거절 give_up — R7 · 공식 번호 확인 시도 genuine) · R2 × (따름 · 진짜 카드사 번호 genuine · 재발신 대기 D4). 판단값(재발신 30초 · 연결음) · 레그 목소리 자리 1 이후 음질 · 레그 인계 자연스러움도 이때 본다.
+
+### 142.11 D1 · D2(확인 실측 2026-11-02 결함) — 레그 넘김 · 참가자 발신 첫마디
+근거 `docs/research/card-rebuild-probe-2026-11-02.md`. 원인은 조립본으로 확인했다(추정 아님): 레그 2 프롬프트 [캐릭터]에 레그 4 문장(980만 원 · 가족 사업 자금)이 있었고, transfer 끝 규칙에 "넘김 = 끊기" 연결이 없었다(조립본 "통화를 끝" 0회). D2는 레그 연결 첫 신호가 클라 기본 트리거("전화를 건 이유를 밝혀라")였다.
+
+| 지점 | 파일 | 동작 |
+|---|---|---|
+| 페르소나 분리 | `cardRebuildLegs.prompt.ts` | 감독기관 첫(넘김까지만 · 돈 이야기 0) · 마지막(다시 넘겨받은 같은 사람) — `speakerId` 그대로(같은 목소리) |
+| transfer 끝 규칙 | `flowVariants.ts` `MULTI_CALL_LEG_END_TRANSFER` | 넘김 = 네 쪽에서 이 통화를 끝내는 것([진행 강제] 끊기 규칙 · goal) · '잠시만' 뒤 이어가기 금지 |
+| 서버 넘김 판정 | `callLegs/legHandoff.ts` `planLegHandoff` · `inCallSms/index.ts` | 백스톱 `none_pending` 자리: transfer · 문자 0 레그는 레그 시작 뒤 발화 < `minUserTurns + 1` = `goal_pending` · 이상 = `wrapUpInstruction`(넘김 지시 — `end_call`) |
+| 뒤 레그 문자 거절 | 같은 파일 `isLaterLegSmsPurpose` | 이 레그에 없고 뒤 레그에 선언된 목적 = 넘김으로 이끄는 거절 문면 |
+| 클라 백스톱 재개 | `page.tsx` `connectLeg` | 새 레그마다 `nonePending` · `wrapUpSent` 초기화 — 앞 레그 `none_pending`이 뒤 레그 문자 · 넘김 지시를 막지 않게(D1 수정 중 발견 — 이 초기화가 없으면 서버 넘김 지시 · 마지막 레그 안전계좌 백스톱이 도달하지 않는다) |
+| D2 레그 진입 | `legPlan.ts` `relay.entry` · `resolveLegEntry` → 토큰 `callLeg.entry` | `startCallLeg`가 실제 진입(dial · transfer · incoming — 재발신은 incoming)을 기록 |
+| D2 첫 신호 | `legTransition.ts` `legOpeningTurnFor` · `LEG_DIALED_OPENING_TURN` | 참가자가 건 통화(레그 전환 · R2 첫 통화) = 받는 쪽 인사만 하고 기다리는 신호 · 그 밖 = 종전 |

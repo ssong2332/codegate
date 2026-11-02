@@ -169,7 +169,7 @@ test("[N1 D-4a] 결정 화면 — 마지막 제출이 요구액보다 적으면 
 test("[배선] 백스톱 응답 화면 기록 · 제출 비교 저장 · 폴백 상태 줄 맥락 · R3 교체 · 칩 요구액", () => {
   const sms = read("inCallSms/index.ts");
   assert.ok(sms.includes("const withScreenStatus = (response: DeliverInCallSmsResponse): DeliverInCallSmsResponse =>"));
-  assert.equal((sms.match(/withScreenStatus\(/g) ?? []).length, 6, "대기 · 남은 문자 없음 3 · 넛지(이미 넛지 포함) — 발송 · 전환 뒤 = 0");
+  assert.equal((sms.match(/withScreenStatus\(/g) ?? []).length, 7, "대기 · 남은 문자 없음 3 · §142 D1 레그 넘김 대기 1 · 넛지(이미 넛지 포함) — 발송 · 전환 뒤 = 0");
   assert.ok(sms.includes("!(await isVerifyOfferPlaced(db, sessionId, session.scenarioId))"), "호 전환 뒤 = 없음");
   assert.ok(sms.includes("contextInstruction: landingSubmittedInstructionFor(amountComparison, false)"));
   assert.ok(sms.includes('if (previousComparison === "less") return { recorded: true, contextInstruction: landingSubmittedInstructionFor(amountComparison, true) };'));
