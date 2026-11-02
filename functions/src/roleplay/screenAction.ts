@@ -211,12 +211,15 @@ export function anyScreenGiveUp(facts: readonly ScreenFact[], userTurns: number)
 // | G2 | 모델이 이번 대답에 끊기 신호를 보냄 | 무변경(모델 끝맺음 그대로) |
 // | G3 | 끊기 사전 판정이 신호 허용이 아님 | 무변경(끊을 수 없는 칸 — 대사만 바꾸면 끝나지 않는 작별이 된다) |
 // | G4 | 마치지 않은 화면이 지금 포기 단계가 아님 | 무변경 |
+// | G5′ | 포기 단계 첫 턴인데 대답이 다음 단계 요구(판정표 A A2g — R19) | 대사를 포기 1줄로 바꾸고 `give_up` 끊기 신호를 붙인다(지시를 어긴 것이 이 턴에 확인됐다) |
 // | G5 | 포기 단계 첫 턴(직전 발화 수에서는 포기 단계 아님) | 무변경(포기 지시 문장으로 모델에 한 번 맡긴다) |
 // | G6 | 그 밖(포기 단계가 두 턴째 이어짐) | 대사를 포기 1줄(말투 맞춤)로 바꾸고 `give_up` 끊기 신호를 붙인다 |
 // ⭐ R18(#482 확인 실측 — 메신저 포기 단계에서도 지시 무시: 예비 모델은 이체 칩 뒤 9발화째까지 끝 없음 · 1차 Claude는 설치 칩 뒤 13발화째에야 give_up)
 // — G1을 메신저 단계로 넓힌다. N = 포기 단계(마치지 않은 화면을 `SCREEN_GIVE_UP_USER_TURNS`=6발화 미룸) 진입 뒤 1발화(G5 — 모델에 한 번 맡김) ⇒ 7발화째 서버 결정.
 // 근거: 모델이 포기 지시를 받은 뒤 스스로 끝낸 실측은 0~1턴 안이었다(#477 ① ④ — 8발화 give_up) · 무시한 실측은 6턴 이상 이어졌다(#477 ③ · #482 (A) (B)) ⇒ 한 턴 넘게 기다릴 이득이 없다.
 // ⚠️ 4-c(결정 화면 대기)는 goal만 막고 give_up은 통과시킨다 ⇒ 충돌 없음. G3(사전 판정 신호 허용)이 5 · 6 · 7행 등 끊을 수 없는 칸을 거른다.
+// ⭐ R19(#485 확인 실측 (A) S8 · 예비 모델 — 포기 단계 첫 턴에 "이제 마지막으로 … 신분증 사진" 요구가 그대로 나감 · A는 비켜 가고 G는 G5로 기다렸다)
+// — G5′: 첫 턴이라도 판정표 A가 다음 단계 요구를 잡았으면(`advanceDemand`) 기다리지 않고 이 턴에 끝맺는다. G2 · G3에 걸려 끝맺지 못하면 A3 재촉 1줄이 대신 막는다(`roleplay/index.ts`).
 export function decideForcedScreenGiveUp(input: {
   escalatedCall: boolean;
   /** R18 — 메신저 단계(부재 = 거짓 · 종전). */
@@ -225,11 +228,14 @@ export function decideForcedScreenGiveUp(input: {
   hangupSignalAllowed: boolean;
   facts: readonly ScreenFact[];
   userTurns: number;
+  /** R19 — 판정표 A가 포기 단계에서 다음 단계 요구를 잡았다(부재 = 거짓 · 종전). */
+  advanceDemand?: boolean;
 }): boolean {
   if (!input.escalatedCall && input.messengerStage !== true) return false; // G1
   if (input.endCall !== undefined) return false; // G2
   if (!input.hangupSignalAllowed) return false; // G3
   if (!anyScreenGiveUp(input.facts, input.userTurns)) return false; // G4
+  if (input.advanceDemand === true) return true; // G5′
   return anyScreenGiveUp(input.facts, input.userTurns - 1); // G5 · G6
 }
 
@@ -251,7 +257,8 @@ export function screenGiveUpReply(modelText: string): string {
 // | # | If | Then |
 // |---|---|---|
 // | A1 | 메신저 단계가 아님(통화 · 카드사 고급 등) | 무변경 |
-// | A2 | 마치지 않은 설치 · 이체 화면이 재촉 단계(SP3 hold · SP4 switch)에 없음(없음 · 마침 · SP1 release · SP2 포기 단계 — 포기는 판정표 G) | 무변경 |
+// | A2g | 재촉 단계 화면은 없고 마치지 않은 설치 · 이체 화면이 SP2 포기 단계인데 대답이 A3과 같은 다음 단계 요구 | 막는다(`giveUpStage: true`) — 판정표 G G5′가 이 턴에 포기로 끝맺는다(끝맺지 못하면 A3과 같은 재촉 1줄) · R19 |
+// | A2 | 마치지 않은 설치 · 이체 화면이 재촉 단계(SP3 hold · SP4 switch)에도 포기 단계 다음 단계 요구(A2g)에도 없음(없음 · 마침 · SP1 release · 포기 단계의 다음 단계 요구 아닌 대답) | 무변경 |
 // | A3 | 대답에 그 화면 종류 밖의 요구 어휘가 있거나 · 아직 보내지 않은 다른 화면 칩이 붙음 | 대사를 그 화면 재촉 1줄(말투 맞춤 · 발화 수로 돌려 씀)로 바꾸고 새 화면 칩을 떼고 같은 응답의 goal 끊기를 받지 않는다 |
 // | A4 | 그 밖(현 단계 재촉 · 같은 화면 이야기) | 무변경 |
 // 설치와 이체가 둘 다 재촉 단계면 설치가 먼저다(루트 순서 — 설치 → 신분증 → 이체).
@@ -260,7 +267,7 @@ const OTHER_STAGE_DEMAND: Readonly<Record<"install" | "transfer", RegExp>> = {
   transfer: /신분증|주민등록증|주민증|운전면허증|여권|인증\s*번호|설치|깔아/,
 };
 
-export type StageAdvanceGate = { blocked: false } | { blocked: true; kind: "install" | "transfer" };
+export type StageAdvanceGate = { blocked: false } | { blocked: true; kind: "install" | "transfer"; giveUpStage: boolean };
 
 export function decideStageAdvanceGate(input: {
   messengerStage: boolean;
@@ -271,13 +278,14 @@ export function decideStageAdvanceGate(input: {
   chipLandingIds: readonly string[];
 }): StageAdvanceGate {
   if (!input.messengerStage) return { blocked: false }; // A1
-  const kind = (["install", "transfer"] as const).find((k) => {
-    const pressure = screenPressureFor(k, input.facts, input.userTurns);
-    return pressure === "hold" || pressure === "switch";
-  });
+  const pressureOf = (k: "install" | "transfer") => screenPressureFor(k, input.facts, input.userTurns);
+  const pressing = (["install", "transfer"] as const).find((k) => pressureOf(k) === "hold" || pressureOf(k) === "switch");
+  const kind = pressing ?? (["install", "transfer"] as const).find((k) => pressureOf(k) === "give_up");
   if (!kind) return { blocked: false }; // A2
   const newChip = input.chipLandingIds.some((id) => !input.facts.some((f) => f.landingId === id));
-  return OTHER_STAGE_DEMAND[kind].test(input.replyText) || newChip ? { blocked: true, kind } : { blocked: false }; // A3 · A4
+  return OTHER_STAGE_DEMAND[kind].test(input.replyText) || newChip
+    ? { blocked: true, kind, giveUpStage: pressing === undefined } // A3 · A2g
+    : { blocked: false }; // A4 · A2
 }
 
 /** A3 재촉 1줄(따옴표 0 · 숫자 0 · 새 요구 0 · 발화 수로 돌려 써 같은 문장 되풀이를 줄인다). */

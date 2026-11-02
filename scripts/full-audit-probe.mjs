@@ -957,8 +957,11 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
       if (fg.replaced) { events.push({ ev: "farewellReplaced", userTurns: userTurnsNow, original: pp.text }); pp.text = fg.text; }
     }
     if (advanceGate.blocked) {
-      events.push({ ev: "stageAdvanceBlocked", kind: advanceGate.kind, userTurns: userTurnsNow, original: pp.text });
-      pp.text = screenActionLib.stageHoldReply(advanceGate.kind, pp.text, userTurnsNow);
+      events.push({ ev: "stageAdvanceBlocked", kind: advanceGate.kind, giveUpStage: advanceGate.giveUpStage === true, userTurns: userTurnsNow, original: pp.text });
+      // R19 미러(2026-11-02) — 포기 단계(A2g)인데 모델이 give_up을 보냈으면 재촉 대신 포기 1줄.
+      pp.text = advanceGate.giveUpStage === true && pp.endCall === "give_up"
+        ? screenActionLib.screenGiveUpReply(pp.text)
+        : screenActionLib.stageHoldReply(advanceGate.kind, pp.text, userTurnsNow);
     }
     if (pp.smsMarker !== undefined) {
       const g = resolveSmsGate({ purpose: pp.smsMarker, declared, delivered, userTurns: userTurnsNow });
@@ -971,7 +974,7 @@ async function runMessengerApp(scenarioId, level, persona, tag, job = {}) {
     }
     if (pp.dropped) events.push({ ev: "signalDropped", ...pp.dropped, userTurns: userTurnsNow });
     // R14 · R18 미러(2026-11-01) — 앱 판정표 G: 넘어온 통화 · 메신저 단계에서 포기 단계가 두 턴째인데 끊기 신호가 없으면 포기 1줄 + give_up(옛 lib = 함수 없음 = 종전).
-    if (screenActionLib?.decideForcedScreenGiveUp?.({ escalatedCall: Boolean(escalated), messengerStage: !escalated, endCall: pp.endCall, hangupSignalAllowed: hangupMode === "signal", facts: screenFacts, userTurns: userTurnsNow })) {
+    if (screenActionLib?.decideForcedScreenGiveUp?.({ escalatedCall: Boolean(escalated), messengerStage: !escalated, endCall: pp.endCall, hangupSignalAllowed: hangupMode === "signal", facts: screenFacts, userTurns: userTurnsNow, advanceDemand: advanceGate.blocked && advanceGate.giveUpStage === true })) {
       events.push({ ev: "forcedScreenGiveUp", userTurns: userTurnsNow, original: pp.text });
       pp.text = screenActionLib.screenGiveUpReply(pp.text);
       pp.endCall = "give_up";
