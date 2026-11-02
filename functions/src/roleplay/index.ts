@@ -273,6 +273,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         // §113.2 — 사진 전송 사실(종류만 · 이미지 0).
         ...(isPhotoTurn ? { photo: true as const } : {}),
         ...(photoKind ? { photoKind } : {}),
+        // §142 N3 — 다통화 변형이면 이 턴이 오간 통화 번호(서버 `relay`).
+        ...(sessionCallLeg ? { legIndex: sessionCallLeg.legIndex } : {}),
       } satisfies MessageDoc);
       // answeredAt(통화 시작 기점, #6)은 첫 턴에만 설정한다 — 이후 턴은 기존 값을 유지한다.
       // §129 에뮬 D2(사용자 결정 ㉠) — 처음부터 통화인 세션은 클라가 실은 "받기 뒤 지난 ms"로 실제 받은 시각을 되짚는다(`session/answeredAt.ts` 표 B).
@@ -1153,6 +1155,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       createdAt: Timestamp.now(),
       ...(replyAttachments ? { attachments: replyAttachments } : {}),
       ...(session.channel ? { channel: session.channel } : {}),
+      ...(sessionCallLeg ? { legIndex: sessionCallLeg.legIndex } : {}),
     } satisfies MessageDoc);
 
     // ③-d T191 — 모델 마커 경로. 응답을 저장한 **뒤**라 앵커에 이번 응답이 포함된다. 같은 단일 통로를 지난다.

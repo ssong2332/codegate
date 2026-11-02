@@ -164,6 +164,18 @@ export function resolveSessionCallLeg(
 }
 
 /**
+ * §142 N3 — 메시지를 쓰는 지점(실시간 전사 제출 · 폴백 턴)이 그 메시지에 남길 통화 번호 = 그 시점의 서버 현재 레그.
+ * 다통화가 아니면 undefined(필드 부재 — 종전 문서 그대로). 전사는 레그 끝(끊기 승인 뒤 · 다음 레그 열기 전)에 제출되므로 끝난 레그 번호다.
+ */
+export function messageLegIndex(
+  variant: (Pick<FlowVariant, "legs" | "multiCall" | "scenarioId">) | undefined,
+  session: { scenarioId: string; relay?: RelayState },
+): number | undefined {
+  if (!variant || !variant.multiCall || variant.scenarioId !== session.scenarioId) return undefined;
+  return currentLegIndex(variant, session.relay);
+}
+
+/**
  * D2(§142 확인 실측 2026-11-02) — 현재 레그가 실제로 열린 방식. 참가자가 건 통화(`dial`)면 클라가 "받는 쪽" 첫 신호를 보낸다.
  * | # | If | Then |
  * |---|---|---|

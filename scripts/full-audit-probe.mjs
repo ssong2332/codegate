@@ -1046,11 +1046,12 @@ for (const job of plan) {
     const msgs = (result.turns ?? [])
       .filter((t) => (t.role === "scammer" && t.kind !== "interrupted" && (t.n || t.leg)) || t.role === "user")
       .filter((t) => (t.text ?? "").trim())
-      .map((t, k) => ({ role: t.role, textMasked: t.text, turnIndex: k, createdAtMs: k * 1000, channel: job.ch === "messenger" && !t.leg ? "messenger" : "voice" }));
+      .map((t, k) => ({ role: t.role, textMasked: t.text, turnIndex: k, createdAtMs: k * 1000, channel: job.ch === "messenger" && !t.leg ? "messenger" : "voice", ...(job.ch === "multicall" ? { legIndex: t.leg } : {}) }));
     const otpCodes = sessionOtpLib ? listOtpItems(job.id).map((it) => sessionOtpLib.withSessionOtp(it, sid).otpCode).filter(Boolean) : [];
     // §142 — 다통화 변형은 앱 리포트(`generateReportCore.ts`)처럼 변형 전체 수법으로 해석한다.
     const tacticsFor = fv?.multiCall ? [...fv.tactics] : resolveSessionScenarioPrompt(job.id, result.variantId)?.weakenedTactics ?? [];
-    const a = analyzeConversation(msgs, 0, tacticsFor, otpCodes);
+    // §142 N3 — 앱 리포트처럼 다통화는 통화별 수법 목록(메시지 legIndex · 옛 lib = 인자 무시).
+    const a = analyzeConversation(msgs, 0, tacticsFor, otpCodes, fv?.multiCall ? flowVariantsLib.multiCallLegTactics?.(fv) : undefined);
     result.verdict = { wasDeceived: a.wasDeceived, deceivedMoments: a.deceivedMoments.map((m) => ({ turnIndex: m.turnIndex, tactic: m.tactic ?? m.tacticLabel })), riskSignals: (a.riskSignals ?? []).length };
   } catch (e) { result.verdictError = scrub(e?.message ?? e); }
   const errText = [error ?? "", ...(result.events ?? []).filter((e) => e.ev === "error" || e.ev === "close").map((e) => `${e.code ?? ""} ${e.msg ?? ""} ${e.reason ?? ""}`)].join(" ");

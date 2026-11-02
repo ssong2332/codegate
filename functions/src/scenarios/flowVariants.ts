@@ -2301,12 +2301,25 @@ function resolveMultiCallLegPrompt(base: ScenarioPromptDoc, variant: FlowVariant
   const endRule =
     leg.exit === "dial" ? MULTI_CALL_LEG_END_DIAL : leg.exit === "transfer" ? MULTI_CALL_LEG_END_TRANSFER : MULTI_CALL_LAST_LEG;
   const lines = [FLOW_BLOCK_HEADER, FLOW_BLOCK_LEAD, ...(leg.stages ?? []).map((summary, i) => `${i + 1}. ${summary}`), endRule];
-  const labels = leg.tacticLabels ? new Set(leg.tacticLabels) : undefined;
   return {
     ...base,
     personaPrompt: `${leg.personaPrompt ?? base.personaPrompt}\n\n${lines.join("\n")}`,
-    weakenedTactics: variant.tactics.filter((t) => labels === undefined || labels.has(extractTacticLabel(t))),
+    weakenedTactics: legTacticsOf(variant, leg),
   };
+}
+
+function legTacticsOf(variant: Pick<FlowVariant, "tactics">, leg: FlowVariantLeg): string[] {
+  const labels = leg.tacticLabels ? new Set(leg.tacticLabels) : undefined;
+  return variant.tactics.filter((t) => labels === undefined || labels.has(extractTacticLabel(t)));
+}
+
+/**
+ * §142 N3 — 다통화 변형의 **통화별 수법 목록**(인덱스 = 레그 번호). 레그 프롬프트가 모델에게 주는 목록과 같은 값이라, 리포트가 그 통화
+ * 대사를 해석할 때 그 통화에서 쓰지 않은 수법을 붙이지 않는다(`report/analyzeConversation.ts` `legTactics`). 다통화가 아니면 undefined.
+ */
+export function multiCallLegTactics(variant: Pick<FlowVariant, "tactics" | "legs" | "multiCall"> | undefined): string[][] | undefined {
+  if (!variant?.multiCall) return undefined;
+  return variant.legs.map((leg) => legTacticsOf(variant, leg));
 }
 
 function buildFlowBlock(variant: FlowVariant): string {

@@ -18,6 +18,8 @@ import { findOpeningToMarkNotSpoken } from "./openingMark";
 import { resolveTurnCreatedAtMs } from "./transcriptTiming";
 import { stripLeakedThought } from "./thoughtLeak";
 import type { MessageDoc, SessionDoc } from "../shared/types";
+import { messageLegIndex } from "../callLegs/legPlan";
+import { findFlowVariant } from "../scenarios/flowVariants";
 
 ensureFirebaseAdminApp();
 
@@ -107,6 +109,8 @@ export const submitRealtimeTranscript = onCall<
     // §57.2 (6) 처방 D1 — 클램프 하한이자 `answeredAtMs` 부재 시 기준점 폴백.
     const sessionCreatedAtMs = session.createdAt.toMillis();
     let count = 0;
+    // §142 N3 — 다통화 변형이면 이 전사가 오간 통화 번호(트랜잭션에서 읽은 서버 `relay` 기준 · 부재 = 필드 0).
+    const legIndex = messageLegIndex(findFlowVariant(session.flowVariantId), session);
 
     turns.forEach((turn, i) => {
       const role = turn.role === "user" ? "user" : "scammer";
@@ -136,6 +140,7 @@ export const submitRealtimeTranscript = onCall<
         // T30 추가(§13.1) — 교차채널 타임라인(AC-037)용 채널 표기. 실시간 통화 전사는 항상
         // channel="voice" 단계에서 발생한다(에스컬레이션 세션이든 순수 보이스 세션이든 동일).
         channel: "voice",
+        ...(legIndex !== undefined ? { legIndex } : {}),
       } satisfies MessageDoc);
       nextIndex += 1;
       count += 1;

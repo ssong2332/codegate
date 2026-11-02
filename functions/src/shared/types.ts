@@ -274,6 +274,11 @@ export type MessageDoc = {
   photo?: true;
   /** D-e — 사진 턴 종류(`"transfer-receipt"` = 이체 완료 화면 캡처). 부재 = 기기 사진. */
   photoKind?: "transfer-receipt";
+  /**
+   * §142 N3(옵셔널 · 하위호환 · 무백필) — 다통화 변형에서 이 턴이 오간 통화(레그) 번호. 쓰는 곳 = 실시간 전사 제출 · 폴백 턴(서버 `relay` 기준 ·
+   * `callLegs/legPlan.ts` `messageLegIndex`). 리포트가 대사의 수법을 그 통화 목록에서만 고른다. 부재 = 다통화 아님 · 옛 문서(변형 전체 수법).
+   */
+  legIndex?: number;
 };
 
 // --- sessions/{sessionId}/artifacts/{artifactId} (AC-022, ADR-0003) ---

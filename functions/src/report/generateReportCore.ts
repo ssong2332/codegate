@@ -7,7 +7,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { findFlowVariant, resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
+import { findFlowVariant, multiCallLegTactics, resolveSessionScenarioPrompt } from "../scenarios/flowVariants";
 import { MOCK_SCREENS } from "../scenarios/mockScreens";
 import { listOtpItems } from "../scenarios/inCallSms";
 import { withSessionOtp } from "../scenarios/sessionOtp";
@@ -100,6 +100,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
       ...(data.channel ? { channel: data.channel } : {}),
       // §113.2 — 사진 보내기 턴(사실만 · 판정 H3 입력).
       ...(data.photo === true ? { photo: true as const } : {}),
+      // §142 N3 — 다통화 변형의 통화 번호(서버가 쓴 값 · 부재 = 옛 문서).
+      ...(typeof data.legIndex === "number" ? { legIndex: data.legIndex } : {}),
     };
   });
   // T84(§15.9.5 e-2) — 설치 순간의 앵커는 "N번째 사기범 턴"이 아니라 **그 링크를 실은 사기범
@@ -144,6 +146,8 @@ export async function generateReportForSession(sessionId: string): Promise<Gener
     weakenedTactics,
     // §114 — 정답은 이 세션의 번호(문자에 보인 값과 같은 해시).
     listOtpItems(session.scenarioId).map((item) => withSessionOtp(item, sessionId).otpCode!),
+    // §142 N3 — 다통화 변형은 대사의 수법을 그 통화 목록에서만 고른다(통화 번호 = 메시지 `legIndex`).
+    multiCallLegTactics(multiCallVariant),
   );
 
   // ②-b 통화 중 문자 이벤트 스냅샷(T89, §15.1.5, AC-059) — `sessions/{sid}/inCallSms`를 **1회 추가
