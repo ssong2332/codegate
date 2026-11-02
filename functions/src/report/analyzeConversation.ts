@@ -48,6 +48,8 @@ export type AnalysisMessage = {
   channel?: AdviceChannel;
   /** §113.2 — 참가자가 기기 사진을 보낸 턴(서버 `MessageDoc.photo`). 판정 H3 입력. */
   photo?: true;
+  /** §142 N3 — 다통화 변형에서 이 메시지가 오간 통화(서버 `MessageDoc.legIndex`). 수법 해석 범위 입력(부재 = 변형 전체 수법). */
+  legIndex?: number;
 };
 
 export type DeceivedMomentResult = {
@@ -799,6 +801,12 @@ export function analyzeConversation(
   weakenedTactics: string[],
   /** 사용자 결정 2026-10-21 — 이 세션 시나리오의 인증번호 정답(카탈로그). 부재 · 빈 배열 = 대조 안 함(종전 판정 — 위 W0). */
   otpCodes: readonly string[] = [],
+  /**
+   * §142 N3(R2 재실측 2026-11-02 — 마지막 통화의 안전계좌 이체 응답이 상담원 통화의 "보안 점검 앱 설치 요구"로 분류) — 다통화 변형의
+   * **통화별 수법 목록**(인덱스 = `legIndex`). 사기범 대사의 수법은 그 대사가 오간 통화의 목록에서만 고른다(대사 문구가 다른 통화 수법과
+   * 겹쳐도 그 통화에서 쓰지 않은 수법은 붙지 않는다). `legIndex`가 없거나 범위 밖인 메시지 · 인자 부재 = `weakenedTactics`(종전).
+   */
+  legTactics?: readonly (readonly string[])[],
 ): ConversationAnalysis {
   // ⭐ §55 D3 — **낭독되지 않은 문서는 분석에 넣지 않는다.** 넣으면 ⓐ 말한 적 없는 대사가
   // `tacticsUsed`("시도된 수법")에 오르고 ⓑ 바로 뒤 참가자 발화와 **짝지어져** 없는 "속은 순간"을
@@ -811,6 +819,15 @@ export function analyzeConversation(
   const deceivedMoments: DeceivedMomentResult[] = [];
   const tacticLabelsUsed = new Set<string>();
   const tacticMatchers = buildTacticMatchers(weakenedTactics);
+  // §142 N3 — 통화별 수법 범위(서버가 메시지에 쓴 `legIndex` 기준). 범위가 없으면 세션 전체 목록 · 매처(종전 바이트 동일).
+  const legMatchers = legTactics?.map((tactics) => buildTacticMatchers([...tactics]));
+  const scopeOf = (message: AnalysisMessage): { tactics: string[]; matchers: TacticMatcher[] } => {
+    const leg = message.legIndex;
+    if (legTactics && legMatchers && leg !== undefined && leg >= 0 && leg < legTactics.length) {
+      return { tactics: [...legTactics[leg]!], matchers: legMatchers[leg]! };
+    }
+    return { tactics: weakenedTactics, matchers: tacticMatchers };
+  };
   const riskSignals: RiskSignal[] = [];
   // §113.2 H3 — 지금까지 사진 · 신분증을 요구한 가장 최근 사기범 대사(없으면 undefined).
   let photoDemand: AnalysisMessage | undefined;
@@ -826,14 +843,15 @@ export function analyzeConversation(
     // 한 대사에 수법이 여럿이면 모두 "시도된 수법"에 올린다(2026-10-17). 속은 순간의 라벨은 종전처럼
     // 목록 순서상 **첫** 수법이다 — 라벨 규칙을 바꾸면 아카이브 묶기 키(T74)가 함께 흔들린다.
     // ⚠️ §129 L1(사용자 승인 2026-10-24) — 단, 부인 대응 · 암시 라벨은 건너뛴 첫 수법이다(아래 라벨 고르기).
-    const matchedTactics = findMatchedTactics(msg.textMasked, tacticMatchers);
+    const msgScope = scopeOf(msg);
+    const matchedTactics = findMatchedTactics(msg.textMasked, msgScope.matchers);
     for (const matched of matchedTactics) {
       tacticLabelsUsed.add(extractTacticLabel(matched));
     }
     // §128(2) T-1 — 문구 키가 빈 대사도 요구 어형 표(`resolveDemandFallbackTactic` — 세션 목록 안 라벨만)로 "시도된 수법"에 올린다.
     // 종전에는 속은 순간으로 판정된 짝에서만 보정해, 거절한 요구(추가 송금 · 비밀번호 등)가 목록에서 빠졌다. 속은 순간 판정 · 라벨은 무변경.
     if (matchedTactics.length === 0) {
-      const demandLabel = resolveDemandFallbackTactic(msg.textMasked, weakenedTactics);
+      const demandLabel = resolveDemandFallbackTactic(msg.textMasked, msgScope.tactics);
       if (demandLabel) tacticLabelsUsed.add(demandLabel);
     }
 
@@ -889,7 +907,10 @@ export function analyzeConversation(
           ? transferDemand
           : msg;
     // §129 L1 — 속은 순간 라벨에서는 부인 대응 · 암시 라벨을 빼고 다음 일치를 쓴다(시도된 수법 목록은 위에서 이미 올렸다 · 무변경).
-    const keyTactics = (labelSource === msg ? matchedTactics : findMatchedTactics(labelSource.textMasked, tacticMatchers)).filter(
+    // §142 N3 — 라벨 후보는 라벨을 고른 대사가 오간 통화의 목록에서만.
+    const labelScope = scopeOf(labelSource);
+    const scopeTactics = labelScope.tactics;
+    const keyTactics = (labelSource === msg ? matchedTactics : findMatchedTactics(labelSource.textMasked, labelScope.matchers)).filter(
       (tactic) => !NON_DEMAND_LABEL.test(extractTacticLabel(tactic)),
     );
     // §129.13 (b)(메인 라이브 2026-10-25 · 금 구매형 — "인증번호 … 불러 주십시오. 그리고 … 수사 기밀이라서 …" → "인증번호 128139 왔어요"가
@@ -902,7 +923,7 @@ export function analyzeConversation(
       : undefined;
     const otpCategoryTactic =
       otpGiven && !otpKeyTactic
-        ? weakenedTactics
+        ? scopeTactics
             .map(extractTacticLabel)
             .find((label) => !NON_DEMAND_LABEL.test(label) && resolveTacticCategory(label) === "personal_info_demand")
         : undefined;
@@ -916,7 +937,7 @@ export function analyzeConversation(
       ? keyTactics.find((tactic) => DEMAND_CATEGORIES.includes(resolveTacticCategory(extractTacticLabel(tactic))))
       : undefined;
     const l4DemandLabel =
-      keyIsVerificationBlock && !l4KeyTactic ? resolveDemandFallbackTactic(labelSource.textMasked, weakenedTactics) : undefined;
+      keyIsVerificationBlock && !l4KeyTactic ? resolveDemandFallbackTactic(labelSource.textMasked, scopeTactics) : undefined;
     const labelTactic =
       otpKeyTactic ?? l4KeyTactic ?? (otpCategoryTactic || l4DemandLabel ? undefined : firstKeyTactic);
     // §129 L2 — 요구 어형 표도 비면 답의 내용 범주로(사진 턴 제외).
@@ -924,12 +945,12 @@ export function analyzeConversation(
       ? undefined
       : (otpCategoryTactic ??
         l4DemandLabel ??
-        resolveDemandFallbackTactic(labelSource.textMasked, weakenedTactics) ??
-        (userReply.photo === true && photoDemand ? resolvePhotoProvidedTactic(photoDemand.textMasked, weakenedTactics) : undefined) ??
-        resolveAnswerCategoryTactic(labelSource.textMasked, userReply, weakenedTactics));
+        resolveDemandFallbackTactic(labelSource.textMasked, scopeTactics) ??
+        (userReply.photo === true && photoDemand ? resolvePhotoProvidedTactic(photoDemand.textMasked, scopeOf(photoDemand).tactics) : undefined) ??
+        resolveAnswerCategoryTactic(labelSource.textMasked, userReply, scopeTactics));
     if (fallbackTactic) tacticLabelsUsed.add(fallbackTactic);
     // §129.10 최종 폴백(메인 제안 · 빈 라벨 0) — 문구 키 · 요구 어형 표 · 답 내용 범주가 모두 비면 세션 목록의 대표 요구 수법(`representativeTactic`).
-    const representative = labelTactic || fallbackTactic ? undefined : representativeTactic(weakenedTactics);
+    const representative = labelTactic || fallbackTactic ? undefined : representativeTactic(scopeTactics);
     if (representative) tacticLabelsUsed.add(representative);
     const tactic = labelTactic ? extractTacticLabel(labelTactic) : (fallbackTactic ?? representative ?? "약화된 사기 수법");
     // AC-026 예시("15초 시점에 속았습니다")를 그대로 따르기 위해 turnIndex가 아니라 실제 경과
