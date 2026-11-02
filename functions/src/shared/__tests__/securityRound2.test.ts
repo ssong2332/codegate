@@ -11,9 +11,22 @@ import * as path from "node:path";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { isDocId, readDocId } from "../requestValidation";
-import { decideCreateSlot, releaseCreateSessionSlot, reserveCreateSessionSlot, CREATE_SLOT_INFLIGHT_TTL_MS } from "../../session/createSlot";
+import {
+  decideCreateSlot,
+  endFailedCreateSessionAttempt,
+  releaseCreateSessionSlot,
+  reserveCreateSessionSlot,
+  CREATE_SLOT_INFLIGHT_TTL_MS,
+} from "../../session/createSlot";
 import { nextRewindSlot, reserveRewindSlot } from "../../rewind/attemptSlot";
-import { nextRealtimeIssue, realtimeIssueLegKey, reserveRealtimeIssue, REALTIME_ISSUE_MAX_PER_LEG, REALTIME_ISSUE_WINDOW_MS } from "../../realtime/issueBudget";
+import {
+  nextRealtimeIssue,
+  realtimeIssueLegKey,
+  realtimeSessionTimeExceeded,
+  reserveRealtimeIssue,
+  REALTIME_ISSUE_MAX_PER_LEG,
+  REALTIME_ISSUE_WINDOW_MS,
+} from "../../realtime/issueBudget";
 import { chatDuringCallBudgetExceeded } from "../../roleplay/chatDuringCall";
 import { prepareTranscriptTurns, readTranscriptRequest, transcriptBatchKey } from "../../realtime/transcriptRequest";
 
@@ -174,7 +187,7 @@ test("[SEC-05] 새 방식 — 같은 상태의 동시 요청 2개 중 1개만 �
 test("[SEC-05 배선] createSession — 예약이 동의 게이트 뒤 · 흐름 변형 배정 · 오프닝 대사(LLM) 앞, 해제는 세션 커밋 뒤", () => {
   const src = read("session/index.ts");
   const handler = src.slice(src.indexOf("export const createSession"), src.indexOf("export const endSession"));
-  const reserve = handler.indexOf("await reserveCreateSessionSlot(db, request.auth.uid, sessionRef.id);");
+  const reserve = handler.indexOf("await reserveCreateSessionSlot(db, request.auth.uid, sessionRef.id, Date.now, { adoptsSessionDoc: Boolean(sessionId) });");
   assert.ok(reserve > -1);
   assert.ok(handler.indexOf('"훈련 참여 동의가 필요합니다."') < reserve);
   assert.ok(reserve < handler.indexOf("await assignFlowVariantForSession("));
@@ -416,4 +429,106 @@ test("[규칙 · 인덱스] 새 카운터 문서는 기존 전면 거부 규칙 
   const rules = readFileSync(path.resolve(SRC, "../../firestore.rules"), "utf8").replace(/\r\n/g, "\n");
   assert.match(rules, /match \/\{document=\*\*\} \{\n\s*allow read, write: if false;/);
   for (const sub of ["limits", "transcriptBatches"]) assert.equal(rules.includes(`match /${sub}/`), false, `${sub}에 허용 규칙이 생겼다`);
+});
+
+// ── 보안 점검 후속(2026-11-02) — 같은 사전 세션 id 동시 시작 · 오래된 세션 첫 통화 발급 ──
+// 실제 콜러블 경로(오프닝 메시지 수 · 발급 결과)는 `scripts/emulator-security-round3-smoke.mjs`(main 빌드 6/9 → 이 브랜치)가 잰다.
+test("[중복 시작] 판정표 — 진행 중 표에 같은 id · 채택 문서 active/ended면 중복(예약 0), 그 밖은 예약 + 진행 중 표시", () => {
+  const now = 10_000_000;
+  const base = { recent: [], inflight: {}, slotId: "pre1", nowMs: now };
+  const first = decideCreateSlot(base);
+  assert.equal(first.duplicate, false);
+  assert.deepEqual(first.running, { pre1: now });
+  const dup = decideCreateSlot({ ...base, inflight: first.inflight, running: first.running });
+  assert.equal(dup.duplicate, true, "진행 중인 같은 id");
+  assert.deepEqual(dup.inflight, { pre1: now }, "중복은 예약을 더하지 않는다");
+  assert.equal(decideCreateSlot({ ...base, alreadyStarted: true }).duplicate, true, "이미 시작 · 종료된 사전 문서");
+  assert.equal(decideCreateSlot({ ...base, running: { pre1: now - CREATE_SLOT_INFLIGHT_TTL_MS } }).duplicate, false, "TTL 지난 진행 중 표시는 버린다");
+  assert.equal(decideCreateSlot({ ...base, running: { other: now } }).duplicate, false, "다른 id는 중복 아님");
+});
+
+test("[중복 시작 재현 → 수정] 같은 사전 id 동시 3개 — 옛 방식은 오프닝 3개 · AI 3회, 새 방식은 1개 · 1회 · 나머지 failed-precondition", async () => {
+  // 옛 방식: 트랜잭션 밖 상태 확인(created → 통과) → 같은 키 예약(두 번 세지 않음) → 오프닝 대사 → 쓰기.
+  {
+    const { store } = fakeDb();
+    store.set("sessions/pre1", { uid: "u1", status: "created", createdAt: ts(Date.now()) });
+    let aiCalls = 0;
+    const oldHandler = async () => {
+      if (["active", "ended"].includes(store.get("sessions/pre1")?.status as string)) throw new HttpsError("failed-precondition", "used");
+      await new Promise((r) => setTimeout(r, 5));
+      aiCalls += 1;
+      store.set("sessions/pre1", { ...store.get("sessions/pre1"), status: "active" });
+      store.set(`sessions/pre1/messages/m${aiCalls}`, { turnIndex: 0 });
+    };
+    const r = await settle([oldHandler(), oldHandler(), oldHandler()]);
+    assert.equal(r.ok, 3, "옛 방식은 셋 다 통과한다(결함 재현)");
+    assert.equal(aiCalls, 3);
+  }
+  const { db, store } = fakeDb();
+  store.set("sessions/pre1", { uid: "u1", status: "created", createdAt: ts(Date.now()) });
+  let aiCalls = 0;
+  const handler = async () => {
+    await reserveCreateSessionSlot(db, "u1", "pre1", Date.now, { adoptsSessionDoc: true });
+    let committed = false;
+    try {
+      await new Promise((r) => setTimeout(r, 5)); // 오프닝 대사(LLM)
+      aiCalls += 1;
+      store.set("sessions/pre1", { ...store.get("sessions/pre1"), status: "active", createdAt: ts(Date.now()) });
+      await releaseCreateSessionSlot(db, "u1", "pre1");
+      committed = true;
+    } finally {
+      if (!committed) await endFailedCreateSessionAttempt(db, "u1", "pre1");
+    }
+  };
+  const r = await settle([handler(), handler(), handler()]);
+  assert.equal(r.ok, 1);
+  assert.deepEqual(r.rejected, ["failed-precondition", "failed-precondition"]);
+  assert.equal(aiCalls, 1, "거절된 요청은 오프닝 대사(외부 호출) 0");
+  // 첫 요청이 커밋 · 해제한 뒤의 같은 id 재시작도 트랜잭션 안 상태 확인으로 거절된다.
+  await assert.rejects(reserveCreateSessionSlot(db, "u1", "pre1", Date.now, { adoptsSessionDoc: true }), (e: unknown) => codeOf(e) === "failed-precondition");
+  assert.equal(aiCalls, 1);
+});
+
+test("[중복 시작] 실패한 시도 뒤 같은 사전 id 재시도는 허용 · 횟수 셈은 TTL 동안 남는다", async () => {
+  const { db, store } = fakeDb();
+  store.set("sessions/pre2", { uid: "u1", status: "created", createdAt: ts(Date.now()) });
+  await reserveCreateSessionSlot(db, "u1", "pre2", Date.now, { adoptsSessionDoc: true });
+  await endFailedCreateSessionAttempt(db, "u1", "pre2"); // 오프닝 대사 실패 등
+  const slot = store.get("users/u1/limits/createSession");
+  assert.deepEqual(slot?.running, {}, "진행 중 표시는 지운다");
+  assert.ok((slot?.inflight as Record<string, number>).pre2 > 0, "횟수 셈은 남긴다(SEC-05 그대로)");
+  await assert.doesNotReject(reserveCreateSessionSlot(db, "u1", "pre2", Date.now, { adoptsSessionDoc: true }));
+});
+
+test("[중복 시작 배선] createSession — 사전 id면 채택 문서를 트랜잭션 안에서 읽고, 예약 ~ 응답을 try/finally로 감싸 실패면 진행 중 표시만 지운다", () => {
+  const src = read("session/index.ts");
+  const handler = src.slice(src.indexOf("export const createSession"), src.indexOf("export const endSession"));
+  const reserve = handler.indexOf("{ adoptsSessionDoc: Boolean(sessionId) }");
+  const tryAt = handler.indexOf("    try {\n", reserve);
+  assert.ok(reserve > -1 && tryAt > reserve);
+  assert.ok(tryAt < handler.indexOf("await generateOpeningLine("), "오프닝 대사가 try 안이다");
+  const release = handler.indexOf("await releaseCreateSessionSlot(db, request.auth.uid, sessionRef.id);");
+  assert.ok(handler.indexOf("committed = true;", release) > release);
+  assert.match(handler, /\} finally \{\n\s*if \(!committed\) await endFailedCreateSessionAttempt\(db, request\.auth\.uid, sessionRef\.id\);/);
+  const slot = read("session/createSlot.ts");
+  assert.match(slot, /const adoptedStatus = adoptedRef \? \(await tx\.get\(adoptedRef\)\)\.get\("status"\) : undefined;/);
+});
+
+test("[오래된 세션 발급] 세션 시간 예산 판정 — 기점(받은 시각, 없으면 생성 시각)부터 maxSessionMs(60분) 이상이면 거절", () => {
+  const now = 300 * MIN;
+  assert.equal(realtimeSessionTimeExceeded({ createdAt: ts(now - 120 * MIN) as never, maxSessionMs: 60 * MIN }, now), true, "생성 2시간 · 받은 시각 없음");
+  assert.equal(realtimeSessionTimeExceeded({ createdAt: ts(now - 62 * MIN) as never, answeredAt: ts(now - 61 * MIN) as never, maxSessionMs: 60 * MIN }, now), true);
+  assert.equal(realtimeSessionTimeExceeded({ createdAt: ts(now - 50 * MIN) as never, maxSessionMs: 60 * MIN }, now), false, "대기 화면 · 예산 안");
+  assert.equal(realtimeSessionTimeExceeded({ createdAt: ts(now - 90 * MIN) as never, answeredAt: ts(now - 30 * MIN) as never, maxSessionMs: 60 * MIN }, now), false, "기점은 받은 시각");
+  assert.equal(realtimeSessionTimeExceeded({ createdAt: ts(now - 60 * MIN) as never, maxSessionMs: undefined as never }, now), true, "maxSessionMs 부재 = 60분");
+});
+
+test("[오래된 세션 발급 배선] createRealtimeCall — 시간 예산 판정이 종료 세션 거절 뒤 · 구간 예산 · 외부 호출 · 앞선 대화 read 앞", () => {
+  const src = read("realtime/index.ts");
+  const time = src.indexOf("if (realtimeSessionTimeExceeded(session, Date.now())) {");
+  assert.ok(time > -1);
+  assert.ok(src.indexOf('if (session.status !== "active")') < time);
+  assert.ok(time < src.indexOf("await reserveRealtimeIssue("));
+  assert.ok(time < src.indexOf("await provider.createCallCredentials("));
+  assert.ok(time < src.indexOf('collection("messages").orderBy("turnIndex", "asc").get()'));
 });

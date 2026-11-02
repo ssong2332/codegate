@@ -21,7 +21,7 @@ import {
   MAX_USER_TURNS,
   MESSENGER_ESCALATION_MAX_USER_TURNS,
 } from "../shared/constants";
-import { releaseCreateSessionSlot, reserveCreateSessionSlot } from "./createSlot";
+import { endFailedCreateSessionAttempt, releaseCreateSessionSlot, reserveCreateSessionSlot } from "./createSlot";
 import { FALLBACK_VOICE_FEMALE_ID, FALLBACK_VOICE_MALE_ID, LLM_TEXT_SECRETS, isDevRouteOverrideEnabled } from "../shared/config";
 import { normalizeDifficultyLevel } from "../shared/difficulty";
 import { getVoiceProvider } from "../voice/provider";
@@ -247,172 +247,181 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
     // 시도가 창을 더럽히지 않는다).
     // ⭐ SEC-05(외부 보안 점검 2차) — 세기와 예약을 한 트랜잭션으로 한다(`createSlot.ts` 표). 전에는 트랜잭션 밖에서 세어 동시 요청 2개가
     // 둘 다 통과했다. 예약은 세션 문서 커밋 뒤 해제하고, 그 전에 실패한 시도는 예약이 TTL(2분) 동안 남아 한 번으로 센다(AI를 이미 썼을 수 있다).
-    await reserveCreateSessionSlot(db, request.auth.uid, sessionRef.id);
+    // 보안 점검 후속(2026-11-02) — 사전 세션 id를 채택하면 같은 트랜잭션에서 그 문서 상태 · 진행 중 표를 다시 읽어 같은 id 동시 시작을 하나로 줄인다
+    // (`createSlot.ts` 표 — 나머지는 오프닝 대사 · 쓰기 0으로 failed-precondition).
+    await reserveCreateSessionSlot(db, request.auth.uid, sessionRef.id, Date.now, { adoptsSessionDoc: Boolean(sessionId) });
+    // 예약 ~ 세션 커밋 사이 실패면 진행 중 표시만 지운다(같은 사전 id 재시도 허용 · 횟수는 TTL 동안 남는다).
+    let committed = false;
+    try {
 
-    // roleplay 모듈(트랙 A 내부 계약, Architecture.md §4)에 오프닝 사기범 대사 생성을 위임한다.
-    // LLM 호출 지점은 functions/src/llm 어댑터를 거친다(sendMessage와 동일 구조, T7 태스크 지시).
-    // isMock은 generateOpeningLine이 실제로 관측한 값을 그대로 쓴다(별도 isUsingMockLlm() 사전
-    // 확인과 분리 — completeWithFallback 도입 후 그 둘이 다른 사실이 될 수 있음, openingLine.ts
-    // 주석 참고. 사용자 실측 신고로 발견된 정합성 버그 수정, 2026-07-24).
-    // T72(§15.3.3 호출부 3곳 중 "오프닝 대사") — 세션 문서 write 전이라 요청값(정규화 완료)을 직접
-    // 넘긴다. 여기서 빠뜨리면 오프닝 첫 마디만 중급으로 나오는 비대칭이 생긴다(§15.6 G5).
-    // T191 S5(PRD AC-096 (e) · D6) — 흐름 변형 배정. 오프닝 대사도 배정된 변형으로 조립해야 하므로
-    // generateOpeningLine 앞이다. Firestore 접근은 회전 문서 키 조회 1건뿐(인덱스 0 — 설계 금지 X6).
-    // 동의 · 한도 게이트 뒤라 거절된 시도는 회전 문서를 읽지도 쓰지도 않는다.
-    // 개발 단계 루트 강제 지정(`devRouteOverride.ts` 판정표) — 적용되면 회전 덱을 읽지도 쓰지도 않는다(후보 1개 = 회전 문서 0).
-    const routeOverride = resolveDevRouteOverride({
-      enabled: isDevRouteOverrideEnabled(),
-      requested: forceVariantId,
-      scenarioId,
-      level: resolvedDifficultyLevel,
-    });
-    const variantAssignment = routeOverride.applied
-      ? { flowVariantId: routeOverride.variantId, candidates: [routeOverride.variantId] }
-      : await assignFlowVariantForSession(db, request.auth.uid, scenarioId, resolvedDifficultyLevel);
-    // §81 — 세션 가상 은행명을 오프닝 전에 고른다(오프닝 대사와 세션 문서가 같은 이름을 쓴다).
-    // U3 — 변형 배정 뒤로 옮겼다: 예금주가 보이는 계좌면 그 묶음의 고정 은행(`smsGate.ts` `pickSessionBankName`).
-    const fictionalBankName = pickSessionBankName(scenarioId, variantAssignment.flowVariantId);
-    // §100 ① "훈련 내용" — 동의 · 한도 게이트 통과 + 흐름 변형 배정 + 사전 세션 id 확인이 끝났다.
-    prepMs.scenarioMs = Date.now() - prepStartedAt;
-    await emitPrepStage(response, "scenario");
-    // T194-b(§84.3.4) — 오프닝 대사도 카드를 알아야 한다(§81과 같은 이유). 카드는 위(§88)에서 이미 확정됐다.
-    const { message: openingMessage, isMock } = await generateOpeningLine(
-      scenarioId,
-      resolvedDifficultyLevel,
-      variantAssignment.flowVariantId,
-      { fictionalBankName, challengeId: undefined, personaCard: personaCard?.items, voiceSelectionSource, familyAddress },
-    );
-    // §100 ② "첫마디" — 오프닝 대사 생성(LLM)이 끝났다.
-    prepMs.openingMs = Date.now() - prepStartedAt - prepMs.scenarioMs;
-    await emitPrepStage(response, "opening");
+      // roleplay 모듈(트랙 A 내부 계약, Architecture.md §4)에 오프닝 사기범 대사 생성을 위임한다.
+      // LLM 호출 지점은 functions/src/llm 어댑터를 거친다(sendMessage와 동일 구조, T7 태스크 지시).
+      // isMock은 generateOpeningLine이 실제로 관측한 값을 그대로 쓴다(별도 isUsingMockLlm() 사전
+      // 확인과 분리 — completeWithFallback 도입 후 그 둘이 다른 사실이 될 수 있음, openingLine.ts
+      // 주석 참고. 사용자 실측 신고로 발견된 정합성 버그 수정, 2026-07-24).
+      // T72(§15.3.3 호출부 3곳 중 "오프닝 대사") — 세션 문서 write 전이라 요청값(정규화 완료)을 직접
+      // 넘긴다. 여기서 빠뜨리면 오프닝 첫 마디만 중급으로 나오는 비대칭이 생긴다(§15.6 G5).
+      // T191 S5(PRD AC-096 (e) · D6) — 흐름 변형 배정. 오프닝 대사도 배정된 변형으로 조립해야 하므로
+      // generateOpeningLine 앞이다. Firestore 접근은 회전 문서 키 조회 1건뿐(인덱스 0 — 설계 금지 X6).
+      // 동의 · 한도 게이트 뒤라 거절된 시도는 회전 문서를 읽지도 쓰지도 않는다.
+      // 개발 단계 루트 강제 지정(`devRouteOverride.ts` 판정표) — 적용되면 회전 덱을 읽지도 쓰지도 않는다(후보 1개 = 회전 문서 0).
+      const routeOverride = resolveDevRouteOverride({
+        enabled: isDevRouteOverrideEnabled(),
+        requested: forceVariantId,
+        scenarioId,
+        level: resolvedDifficultyLevel,
+      });
+      const variantAssignment = routeOverride.applied
+        ? { flowVariantId: routeOverride.variantId, candidates: [routeOverride.variantId] }
+        : await assignFlowVariantForSession(db, request.auth.uid, scenarioId, resolvedDifficultyLevel);
+      // §81 — 세션 가상 은행명을 오프닝 전에 고른다(오프닝 대사와 세션 문서가 같은 이름을 쓴다).
+      // U3 — 변형 배정 뒤로 옮겼다: 예금주가 보이는 계좌면 그 묶음의 고정 은행(`smsGate.ts` `pickSessionBankName`).
+      const fictionalBankName = pickSessionBankName(scenarioId, variantAssignment.flowVariantId);
+      // §100 ① "훈련 내용" — 동의 · 한도 게이트 통과 + 흐름 변형 배정 + 사전 세션 id 확인이 끝났다.
+      prepMs.scenarioMs = Date.now() - prepStartedAt;
+      await emitPrepStage(response, "scenario");
+      // T194-b(§84.3.4) — 오프닝 대사도 카드를 알아야 한다(§81과 같은 이유). 카드는 위(§88)에서 이미 확정됐다.
+      const { message: openingMessage, isMock } = await generateOpeningLine(
+        scenarioId,
+        resolvedDifficultyLevel,
+        variantAssignment.flowVariantId,
+        { fictionalBankName, challengeId: undefined, personaCard: personaCard?.items, voiceSelectionSource, familyAddress },
+      );
+      // §100 ② "첫마디" — 오프닝 대사 생성(LLM)이 끝났다.
+      prepMs.openingMs = Date.now() - prepStartedAt - prepMs.scenarioMs;
+      await emitPrepStage(response, "opening");
 
-    const now = Timestamp.now();
+      const now = Timestamp.now();
 
-    // NOTE(T3/T8 후속): identitySelfConfirmed는 CreateSessionRequest 계약에 없다(API.md). voiceId가
-    // 전달됐다는 것은 이미 본인 확인 게이트(ADR-0002)를 통과해 createVoiceClone까지 마쳤다는 뜻이라
-    // true로 간주한다 — T3(온보딩)이 별도 소스(예: consents 문서)를 명시적으로 넘기고 싶다면 이
-    // 가정을 교체하면 된다.
-    const sessionDoc: SessionDoc = {
-      sessionId: sessionRef.id,
-      uid: request.auth.uid,
-      scenarioId,
-      status: "active",
-      voiceId: resolvedVoiceId,
-      cloneStatus: "ready",
-      identitySelfConfirmed: true,
-      turnCount: 0,
-      maxUserTurns: isEscalationCapable ? MESSENGER_ESCALATION_MAX_USER_TURNS : MAX_USER_TURNS,
-      maxSessionMs: MAX_SESSION_MS,
-      createdAt: now,
-      // T30 추가(§13.1) — 세션이 처음 시작된 채널. 생성 시 1회만 기록(이후 전이와 무관하게 불변).
-      entryChannel: channel ?? "voice",
-      // Firestore admin SDK는 필드값 undefined를 기본적으로 거부하므로(ignoreUndefinedProperties
-      // 미설정), Mock이 아닐 때는 llmProvider 필드 자체를 생략한다.
-      ...(isMock ? { llmProvider: "mock" as const } : {}),
-      // 메신저피싱 확장(T29) — UX-024가 넘긴 경우에만 채운다. 부재 시 기존과 동일하게 voice
-      // 세션으로 생성된다(Migration Policy, Architecture.md §13.1/13.4).
-      ...(channel ? { channel } : {}),
-      ...(surface ? { surface } : {}),
-      ...(messengerSkin ? { messengerSkin } : {}),
-      ...(skinSource ? { skinSource } : {}),
-      // UX-025(§13.6) — 에스컬레이션 가능 메신저 시나리오에서만 채워진다.
-      ...(voiceSelectionSource ? { voiceSelectionSource } : {}),
-      // T72(§15.3.2) — 항상 확정값을 기록한다(부재 문서는 하위호환 읽기로만 처리하고, 새 문서는
-      // 명시 필드를 남긴다 — "값이 없으니 기본이겠지"를 판정 근거로 삼지 않는다는 §15.0-4 원칙).
-      difficultyLevel: resolvedDifficultyLevel,
-      fictionalBankName,
-      // T191 S5(AC-096 (e)) — 배정된 흐름 변형의 **불투명 ID**만 기록한다(수법 · 흐름 0 — X1 · C-4).
-      // 여기 값은 미리보기이고, 아래 트랜잭션이 회전 문서를 다시 읽어 확정값으로 덮어 쓴다.
-      // 응답에는 싣지 않는다(세션 전 화면에 변형 정보 0 — 아래 return 참고).
-      flowVariantId: variantAssignment.flowVariantId,
-      ...(routeOverride.applied ? { routeOverride: "forced" as const } : {}),
-      // T194-b(§84.3.2) — 대상 세션에만 필드가 생긴다(대상 밖 = 부재 · 빈 값 0). 오프닝에 넘긴 것과 같은 객체다.
-      ...(personaCard ? { personaCard } : {}),
-      // §110.5 — 고른 경우에만(부재 = 종전 문면).
-      ...(familyAddress ? { familyAddress } : {}),
-    };
-    // merge:true — sessionId를 채택한 경우 pending 문서(createVoiceClone이 만든 voiceProvider 등
-    // 부가 필드)를 지우지 않고 scenarioId/status 등을 덧씌운다. 새 문서인 경우는 기존과 동일.
-    // T191 S5 — 회전 문서(`users/{uid}/variantRotation/{scenarioId}__{level}`)와 세션 문서를 **한
-    // 트랜잭션**으로 쓴다(회전 문서를 다시 읽어 확정 → 둘을 같은 커밋). 동시 생성 경합에서도 연속 배정 0.
-    // 후보가 1개면 회전 문서를 읽지도 쓰지도 않는다.
-    sessionDoc.flowVariantId = await commitSessionWithVariant(
-      db,
-      sessionRef,
-      sessionDoc,
-      variantAssignment,
-      now,
-    );
-    // SEC-05 — 세션 문서가 창 안 목록에 들어왔으니 예약을 지운다(예약 키 = 세션 id라 그 사이에도 두 번 세지 않는다 · 실패는 TTL이 정리).
-    await releaseCreateSessionSlot(db, request.auth.uid, sessionRef.id);
+      // NOTE(T3/T8 후속): identitySelfConfirmed는 CreateSessionRequest 계약에 없다(API.md). voiceId가
+      // 전달됐다는 것은 이미 본인 확인 게이트(ADR-0002)를 통과해 createVoiceClone까지 마쳤다는 뜻이라
+      // true로 간주한다 — T3(온보딩)이 별도 소스(예: consents 문서)를 명시적으로 넘기고 싶다면 이
+      // 가정을 교체하면 된다.
+      const sessionDoc: SessionDoc = {
+        sessionId: sessionRef.id,
+        uid: request.auth.uid,
+        scenarioId,
+        status: "active",
+        voiceId: resolvedVoiceId,
+        cloneStatus: "ready",
+        identitySelfConfirmed: true,
+        turnCount: 0,
+        maxUserTurns: isEscalationCapable ? MESSENGER_ESCALATION_MAX_USER_TURNS : MAX_USER_TURNS,
+        maxSessionMs: MAX_SESSION_MS,
+        createdAt: now,
+        // T30 추가(§13.1) — 세션이 처음 시작된 채널. 생성 시 1회만 기록(이후 전이와 무관하게 불변).
+        entryChannel: channel ?? "voice",
+        // Firestore admin SDK는 필드값 undefined를 기본적으로 거부하므로(ignoreUndefinedProperties
+        // 미설정), Mock이 아닐 때는 llmProvider 필드 자체를 생략한다.
+        ...(isMock ? { llmProvider: "mock" as const } : {}),
+        // 메신저피싱 확장(T29) — UX-024가 넘긴 경우에만 채운다. 부재 시 기존과 동일하게 voice
+        // 세션으로 생성된다(Migration Policy, Architecture.md §13.1/13.4).
+        ...(channel ? { channel } : {}),
+        ...(surface ? { surface } : {}),
+        ...(messengerSkin ? { messengerSkin } : {}),
+        ...(skinSource ? { skinSource } : {}),
+        // UX-025(§13.6) — 에스컬레이션 가능 메신저 시나리오에서만 채워진다.
+        ...(voiceSelectionSource ? { voiceSelectionSource } : {}),
+        // T72(§15.3.2) — 항상 확정값을 기록한다(부재 문서는 하위호환 읽기로만 처리하고, 새 문서는
+        // 명시 필드를 남긴다 — "값이 없으니 기본이겠지"를 판정 근거로 삼지 않는다는 §15.0-4 원칙).
+        difficultyLevel: resolvedDifficultyLevel,
+        fictionalBankName,
+        // T191 S5(AC-096 (e)) — 배정된 흐름 변형의 **불투명 ID**만 기록한다(수법 · 흐름 0 — X1 · C-4).
+        // 여기 값은 미리보기이고, 아래 트랜잭션이 회전 문서를 다시 읽어 확정값으로 덮어 쓴다.
+        // 응답에는 싣지 않는다(세션 전 화면에 변형 정보 0 — 아래 return 참고).
+        flowVariantId: variantAssignment.flowVariantId,
+        ...(routeOverride.applied ? { routeOverride: "forced" as const } : {}),
+        // T194-b(§84.3.2) — 대상 세션에만 필드가 생긴다(대상 밖 = 부재 · 빈 값 0). 오프닝에 넘긴 것과 같은 객체다.
+        ...(personaCard ? { personaCard } : {}),
+        // §110.5 — 고른 경우에만(부재 = 종전 문면).
+        ...(familyAddress ? { familyAddress } : {}),
+      };
+      // merge:true — sessionId를 채택한 경우 pending 문서(createVoiceClone이 만든 voiceProvider 등
+      // 부가 필드)를 지우지 않고 scenarioId/status 등을 덧씌운다. 새 문서인 경우는 기존과 동일.
+      // T191 S5 — 회전 문서(`users/{uid}/variantRotation/{scenarioId}__{level}`)와 세션 문서를 **한
+      // 트랜잭션**으로 쓴다(회전 문서를 다시 읽어 확정 → 둘을 같은 커밋). 동시 생성 경합에서도 연속 배정 0.
+      // 후보가 1개면 회전 문서를 읽지도 쓰지도 않는다.
+      sessionDoc.flowVariantId = await commitSessionWithVariant(
+        db,
+        sessionRef,
+        sessionDoc,
+        variantAssignment,
+        now,
+      );
+      // SEC-05 — 세션 문서가 창 안 목록에 들어왔으니 예약을 지운다(예약 키 = 세션 id라 그 사이에도 두 번 세지 않는다 · 실패는 TTL이 정리).
+      await releaseCreateSessionSlot(db, request.auth.uid, sessionRef.id);
+      committed = true;
 
-    // §142 PR-4(R2 · 사용자 승인 설계 #470 D9) — 시작 문자 변형은 세션 시작과 함께 그 문자가 도착해 있다(게이트 밖 · 선언 밖 · 발화 0 시점).
-    // 화면은 `startSurface`로 수신 벨 대신 문자 · 전화 앱 화면에서 시작하고, 첫 통화는 참가자가 건다(`startCallLeg` dial).
-    const openerVariant = findFlowVariant(sessionDoc.flowVariantId);
-    const openerItem =
-      openerVariant?.openerSmsId && openerVariant.scenarioId === scenarioId
-        ? findInCallSmsItem(scenarioId, openerVariant.openerSmsId)
-        : undefined;
-    if (openerItem) {
-      await deliverOpenerSms(sessionRef, openerItem, now, scenarioId, fictionalBankName);
-      await sessionRef.set({ startSurface: "sms" }, { merge: true });
-      sessionDoc.startSurface = "sms";
-    }
-
-    await sessionRef.collection("messages").add({
-      role: "scammer",
-      textMasked: openingMessage.text,
-      turnIndex: 0,
-      createdAt: now,
-      // PR-A3(감사 B 1일차 #11) — 오프닝 대사에 실린 링크 칩도 저장한다. 빠져 있으면 리포트 앵커(첫 칩 메시지 ·
-      // mockScreenTimeline.ts)가 첫 응답으로 밀린다. 칩이 없으면 필드 부재(종전 그대로).
-      ...(openingMessage.attachments ? { attachments: openingMessage.attachments } : {}),
-      // T30 추가(§13.1) — 교차채널 타임라인(AC-037)용 채널 표기. 보이스 전용 세션은 기존과 동일하게
-      // 필드 부재.
-      ...(channel ? { channel } : {}),
-    } satisfies MessageDoc);
-
-    // 실시간 음성 통화 전환(2026-07-22 사용자 결정) — sendMessage.audioUrl과 동일 패턴으로 오프닝
-    // 대사도 합성한다. 실패해도 세션 생성 자체는 막지 않는다(P-4 비차단 원칙).
-    // T29 reviewer Major #2: channel="messenger"는 UI가 audioUrl을 아예 재생하지 않으므로(채팅은
-    // 텍스트 전용, 에스컬레이션 전까지 TTS 불필요) 합성 자체를 건너뛴다 — Mock에서는 무해하지만
-    // 실 ElevenLabs 연동 후 턴마다 불필요한 비용·지연·Storage 산출물(AC-021 폐기 대상)이 쌓이는
-    // 것을 막는다.
-    let openingAudioUrl: string | undefined;
-    if (channel !== "messenger") {
-      try {
-        const synthesis = await getVoiceProvider().synthesize({
-          sessionId: sessionRef.id,
-          voiceId,
-          text: openingMessage.text,
-        });
-        openingAudioUrl = synthesis.audioUrl;
-      } catch {
-        // 합성 실패는 무시 — 클라는 openingAudioUrl 없으면 텍스트만 표시(폴백).
+      // §142 PR-4(R2 · 사용자 승인 설계 #470 D9) — 시작 문자 변형은 세션 시작과 함께 그 문자가 도착해 있다(게이트 밖 · 선언 밖 · 발화 0 시점).
+      // 화면은 `startSurface`로 수신 벨 대신 문자 · 전화 앱 화면에서 시작하고, 첫 통화는 참가자가 건다(`startCallLeg` dial).
+      const openerVariant = findFlowVariant(sessionDoc.flowVariantId);
+      const openerItem =
+        openerVariant?.openerSmsId && openerVariant.scenarioId === scenarioId
+          ? findInCallSmsItem(scenarioId, openerVariant.openerSmsId)
+          : undefined;
+      if (openerItem) {
+        await deliverOpenerSms(sessionRef, openerItem, now, scenarioId, fictionalBankName);
+        await sessionRef.set({ startSurface: "sms" }, { merge: true });
+        sessionDoc.startSurface = "sms";
       }
-    }
-    // §100 ③ "저장" — 세션 문서 · 오프닝 메시지 커밋(+ 보이스면 오프닝 합성 시도)이 끝났다. 바로 아래가 응답이다.
-    prepMs.savedMs = Date.now() - prepStartedAt - prepMs.scenarioMs - prepMs.openingMs;
-    await emitPrepStage(response, "saved");
-    logger.info("[session-prep] createSession", {
-      ...prepMs,
-      totalMs: Date.now() - prepStartedAt,
-      streaming: request.acceptsStreaming === true,
-      channel: channel ?? "voice",
-    });
 
-    return {
-      sessionId: sessionRef.id,
-      openingMessage,
-      // T30 버그 수정(에뮬레이터 검증 중 발견): sessionDoc.maxUserTurns는 이미 에스컬레이션 여부에
-      // 따라 분기했는데 이 응답 값은 MAX_USER_TURNS를 그대로 하드코딩해 응답과 저장값이 어긋나 있었다.
-      maxUserTurns: sessionDoc.maxUserTurns,
-      maxSessionMs: MAX_SESSION_MS,
-      isMock,
-      ...(openingAudioUrl ? { openingAudioUrl } : {}),
-      // T72 — 실제로 적용된 난이도(폴백 감지용, §15.3.2).
-      difficultyLevel: resolvedDifficultyLevel,
-    };
+      await sessionRef.collection("messages").add({
+        role: "scammer",
+        textMasked: openingMessage.text,
+        turnIndex: 0,
+        createdAt: now,
+        // PR-A3(감사 B 1일차 #11) — 오프닝 대사에 실린 링크 칩도 저장한다. 빠져 있으면 리포트 앵커(첫 칩 메시지 ·
+        // mockScreenTimeline.ts)가 첫 응답으로 밀린다. 칩이 없으면 필드 부재(종전 그대로).
+        ...(openingMessage.attachments ? { attachments: openingMessage.attachments } : {}),
+        // T30 추가(§13.1) — 교차채널 타임라인(AC-037)용 채널 표기. 보이스 전용 세션은 기존과 동일하게
+        // 필드 부재.
+        ...(channel ? { channel } : {}),
+      } satisfies MessageDoc);
+
+      // 실시간 음성 통화 전환(2026-07-22 사용자 결정) — sendMessage.audioUrl과 동일 패턴으로 오프닝
+      // 대사도 합성한다. 실패해도 세션 생성 자체는 막지 않는다(P-4 비차단 원칙).
+      // T29 reviewer Major #2: channel="messenger"는 UI가 audioUrl을 아예 재생하지 않으므로(채팅은
+      // 텍스트 전용, 에스컬레이션 전까지 TTS 불필요) 합성 자체를 건너뛴다 — Mock에서는 무해하지만
+      // 실 ElevenLabs 연동 후 턴마다 불필요한 비용·지연·Storage 산출물(AC-021 폐기 대상)이 쌓이는
+      // 것을 막는다.
+      let openingAudioUrl: string | undefined;
+      if (channel !== "messenger") {
+        try {
+          const synthesis = await getVoiceProvider().synthesize({
+            sessionId: sessionRef.id,
+            voiceId,
+            text: openingMessage.text,
+          });
+          openingAudioUrl = synthesis.audioUrl;
+        } catch {
+          // 합성 실패는 무시 — 클라는 openingAudioUrl 없으면 텍스트만 표시(폴백).
+        }
+      }
+      // §100 ③ "저장" — 세션 문서 · 오프닝 메시지 커밋(+ 보이스면 오프닝 합성 시도)이 끝났다. 바로 아래가 응답이다.
+      prepMs.savedMs = Date.now() - prepStartedAt - prepMs.scenarioMs - prepMs.openingMs;
+      await emitPrepStage(response, "saved");
+      logger.info("[session-prep] createSession", {
+        ...prepMs,
+        totalMs: Date.now() - prepStartedAt,
+        streaming: request.acceptsStreaming === true,
+        channel: channel ?? "voice",
+      });
+
+      return {
+        sessionId: sessionRef.id,
+        openingMessage,
+        // T30 버그 수정(에뮬레이터 검증 중 발견): sessionDoc.maxUserTurns는 이미 에스컬레이션 여부에
+        // 따라 분기했는데 이 응답 값은 MAX_USER_TURNS를 그대로 하드코딩해 응답과 저장값이 어긋나 있었다.
+        maxUserTurns: sessionDoc.maxUserTurns,
+        maxSessionMs: MAX_SESSION_MS,
+        isMock,
+        ...(openingAudioUrl ? { openingAudioUrl } : {}),
+        // T72 — 실제로 적용된 난이도(폴백 감지용, §15.3.2).
+        difficultyLevel: resolvedDifficultyLevel,
+      };
+    } finally {
+      if (!committed) await endFailedCreateSessionAttempt(db, request.auth.uid, sessionRef.id);
+    }
   },
 );
 
