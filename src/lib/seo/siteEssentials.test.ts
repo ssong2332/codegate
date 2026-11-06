@@ -2,7 +2,7 @@
 // 점검 보고서 `docs/research/site-essentials-audit-2026-10-24.md`(라이브: robots · sitemap 404 · 404 영문 · 제목 전부 같음 · FAQ 없음).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -127,4 +127,25 @@ test("로그아웃 — /scenarios 하단에 있고, 익명에게는 숨기며, �
   assert.equal(resolveAuthInvalidationMode({ pathname: "/scenarios", signedOut: true, hadUser: true, unauthenticatedCallable: false, wasAnonymous: false }), "none");
   // 로그아웃 뒤 재로그인 때 이전 계정으로 자동 로그인되지 않게 계정 선택 창을 강제한다.
   assert.match(codeOnly("src/lib/firebase/auth.ts"), /googleProvider\.setCustomParameters\(\{ prompt: "select_account" \}\);/);
+});
+
+// 외부 점검 후속(2026-11-06) — 정적 export의 첫 화면 HTML에 법적 고지 링크가 0개였다(RouteGuard가 인증 판정 전 null → `out/index.html` 본문 비어 있음).
+// JS를 실행하지 않는 점검 도구가 "법적 고지 없음"으로 본다. 첫 화면만 `<noscript>`로 싣는다(JS 켜진 브라우저는 그리지 않아 반짝임 · 리다이렉트 0).
+const LEGAL_HREFS = ["/privacy", "/terms", "/contact"] as const;
+
+test("[법적 링크 정적 HTML] RouteGuard 판정 전 — 첫 화면(\"/\")만 noscript 안에 LegalLinks, 그 밖은 종전대로 null", () => {
+  const guard = codeOnly("src/lib/auth/RouteGuard.tsx");
+  assert.match(guard, /if \(loading\) return pathname === "\/" \? <noscript><LegalLinks \/><\/noscript> : null;/);
+  assert.match(guard, /import LegalLinks from "@\/components\/LegalLinks";/);
+  // 링크 세 개는 LegalLinks 한 곳이 단일 출처다(첫 화면 하단 · 로그인 · 고지 화면과 같은 목록).
+  const links = read("src/components/LegalLinks.tsx");
+  for (const href of LEGAL_HREFS) assert.ok(links.includes(`href: "${href}"`), `${href}가 LegalLinks에 없다`);
+});
+
+// 빌드 산출물 확인은 opt-in이다 — 루트 빌드는 `.env`가 없는 워크트리에서 실패하므로(CLAUDE.md Build (root)) `out/`이 있을 때만 돈다.
+// ⚠️ 오래된 `out/`이면 결과도 오래됐다 — 확인할 때는 `.next` · `out`을 지우고 `npm run build` 뒤에 돌린다.
+test("[법적 링크 정적 HTML] 빌드 산출물 out/index.html에 세 링크가 정적으로 들어 있다", { skip: !existsSync("out/index.html") && "out/ 없음(빌드 안 함)" }, () => {
+  const html = read("out/index.html");
+  const noscript = /<noscript>([\s\S]*?)<\/noscript>/.exec(html)?.[1] ?? "";
+  for (const href of LEGAL_HREFS) assert.ok(noscript.includes(`href="${href}"`), `out/index.html noscript에 ${href} 링크가 없다`);
 });
