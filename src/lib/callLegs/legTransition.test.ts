@@ -95,8 +95,9 @@ test("[§142 배선] 통화 화면 — 끊기 legEnd는 종료 래치 대신 통
   // 통화 사이의 Live close는 서버 close가 아니다(종료 셸 0).
   assert.ok(page.includes("if (legSwitchingRef.current) return;\n        await endCall(\"remote\");"));
   // 전사는 다음 통화를 열기 전에 제출한다(서버가 레그 시작 발화 수를 messages로 센다 — §142.8).
+  // 2026-11-06 요청 2 — 같은 제출에 레그 진단 요약(`legDiag`)을 싣는다.
   const begin = page.slice(page.indexOf("const beginLegTransition = async"), page.indexOf("const dialLeg = () => {"));
-  assert.ok(begin.indexOf("await flushTranscript();") >= 0 && begin.indexOf("await flushTranscript();") < begin.indexOf("setLegScreen(screenAfterLegEnd"));
+  assert.ok(begin.indexOf("await flushTranscript(legDiag);") >= 0 && begin.indexOf("await flushTranscript(legDiag);") < begin.indexOf("setLegScreen(screenAfterLegEnd"));
   // 폴백 응답의 통화 끝도 같은 흐름.
   assert.ok(page.includes("if (result.legEnd) {"));
   const session = read("src/lib/realtime/GeminiVoiceSession.tsx");

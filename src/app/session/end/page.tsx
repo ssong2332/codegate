@@ -18,6 +18,7 @@ import { db } from "@/lib/firebase";
 import { endSession } from "@/lib/api";
 import type { EndSessionReason } from "@/lib/api/types";
 import { clearPendingEndReason, clearPendingSession, getPendingSessionId, peekPendingEndReason } from "@/lib/recording";
+import { clearPendingCallDiag, peekPendingCallDiag } from "@/lib/realtime/callDiagSummary";
 import { Button, LoadingStatus } from "@/components/ui";
 import { EXIT_BOARD } from "@/lib/design/e2Prep";
 import { resolveRewindEntry } from "@/lib/rewind/rewindEntry";
@@ -56,7 +57,9 @@ async function fetchChallengeContext(
 
 // T192 C4 — 사유를 인자로 받는 순수 헬퍼(컴포넌트 밖 — effect 의존성에 함수가 끼지 않게).
 function requestEndSession(sid: string, endReason: EndSessionReason) {
-  return endSession({ sessionId: sid, endReason });
+  // 2026-11-06 — 통화 화면이 끝내는 순간 남긴 진단 요약(숫자 · 상태값만 · 없으면 필드 0 — `callDiagSummary.ts`).
+  const diag = peekPendingCallDiag(sid);
+  return endSession({ sessionId: sid, endReason, ...(diag ? { diag } : {}) });
 }
 
 export default function SessionEndPage() {
@@ -111,6 +114,7 @@ export default function SessionEndPage() {
         // 되살려 쓰던 치명 버그 차단(pendingSession.clearPendingSession 주석 참고). 이 화면의
         // 로컬 sessionId 변수는 이미 캡처돼 있어 "리포트 보기"(쿼리 파라미터로 전달)는 영향 없다.
         clearPendingSession();
+        clearPendingCallDiag();
         setState("ended");
       } catch {
         if (!cancelled) setState("error");
@@ -175,6 +179,7 @@ export default function SessionEndPage() {
       .then(async () => {
         // Minor-2 — 종료가 성공한 뒤에만 사유 힌트를 지운다(실패 경로는 남겨 다음 재시도 · 새로고침이 같은 값을 보낸다).
         clearPendingEndReason();
+        clearPendingCallDiag();
         setChallenge(await fetchChallengeContext(sessionId));
         setState("ended");
       })

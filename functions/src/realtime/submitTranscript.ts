@@ -18,6 +18,7 @@ import { resolveTurnCreatedAtMs } from "./transcriptTiming";
 import { prepareTranscriptTurns, readTranscriptRequest, transcriptBatchKey } from "./transcriptRequest";
 import type { MessageDoc, SessionDoc } from "../shared/types";
 import { messageLegIndex } from "../callLegs/legPlan";
+import { logCallDiag, readCallDiag } from "./callDiag";
 import { findFlowVariant } from "../scenarios/flowVariants";
 
 ensureFirebaseAdminApp();
@@ -77,6 +78,9 @@ export const submitRealtimeTranscript = onCall<
 
   // 소유권 검증 + 기존 메시지 뒤에 이어 붙일 turnIndex 확보를 한 트랜잭션으로 묶는다
   // (sendMessage의 원자적 턴 확보와 동일 원칙). 마스킹 후 write.
+  // 2026-11-06 — 통화(레그) 끝 진단 요약(선택 · 숫자 · 상태값만 · 어긋나면 버린다 — 전사 제출은 막지 않는다).
+  const diag = readCallDiag((request.data as { diag?: unknown } | null | undefined)?.diag);
+  let diagLegIndex: number | undefined;
   const written = await db.runTransaction(async (tx) => {
     const snap = await tx.get(sessionRef);
     if (!snap.exists) {
@@ -112,6 +116,7 @@ export const submitRealtimeTranscript = onCall<
     let count = 0;
     // §142 N3 — 다통화 변형이면 이 전사가 오간 통화 번호(트랜잭션에서 읽은 서버 `relay` 기준 · 부재 = 필드 0).
     const legIndex = messageLegIndex(findFlowVariant(session.flowVariantId), session);
+    diagLegIndex = legIndex;
 
     // §116(사기범 사고 문장 제거) · 마스킹 · 빈 줄 제외는 트랜잭션 앞 `prepareTranscriptTurns`가 끝냈다(종전 규칙 그대로).
     prepared.forEach(({ index: i, role, textMasked: masked, atMs }) => {
@@ -160,5 +165,7 @@ export const submitRealtimeTranscript = onCall<
     return count;
   });
 
+  // 소유권 · 활성 검사(트랜잭션)를 지난 뒤에만 남긴다.
+  if (diag) logCallDiag(sessionId, "leg", diag, diagLegIndex);
   return { written };
 });

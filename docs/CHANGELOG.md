@@ -4,6 +4,15 @@ Owner: docs agent (see AGENTS.md). Format: [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+> ⚠️ **이 블록(2026-11-06 추가분, 브랜치 `claude/card-incoming-mic-diag`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting과 Functions**.
+
+### Fixed
+- **카드사 고급 R1 수신 화면 번호**: 수신 화면은 `1588-7742`인데, 받으면 `010-0794-2261`로 바뀌었다. 이제 서버가 세션 문서에 `startCallerLabel`을 쓰고, 수신 화면도 처음부터 첫 레그 번호를 보인다.
+- **마이크 거부 뒤 화면에 "말씀하세요"만 남던 문제**: 이제 안내 카드를 띄운다. 카드에는 "다시 시도"와 "글자로 대화하기" 버튼이 있고, 파형 문구는 "마이크 꺼짐"으로 바뀐다.
+
+### Added
+- **통화 진단 요약 로그 `[call-diag]`**: 레그 끝과 세션 끝에 숫자와 상태값만 서버 로그로 남긴다. 필터와 판정표는 `docs/research/call-diag-log-2026-11-06.md`에 있다.
+
 > ⚠️ **이 블록(2026-10-31 추가분, 브랜치 `claude/outelement-default-off`)**: 아직 main에 병합되지 않았고 배포 0회. 배포 = **Hosting만**(functions 변경 0).
 
 ### Fixed

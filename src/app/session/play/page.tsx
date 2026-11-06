@@ -48,6 +48,8 @@ import {
 } from "@/lib/session/callEnding";
 import { handOffTranscriptFlush } from "@/lib/session/transcriptFlushHandoff";
 import { RESUME_TAP_COPY, needsResumeTap, showsCallWaveform } from "@/lib/session/resumeGate";
+import { MIC_DENIED_COPY, isMicDenied, showsMicDeniedNotice } from "@/lib/session/micDenied";
+import { buildCallDiagSummary, setPendingCallDiag, type CallDiagSummary } from "@/lib/realtime/callDiagSummary";
 import {
   deliverInCallSms,
   deliverVerifyOffer,
@@ -391,6 +393,8 @@ export default function SessionCallPage() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [showTextInput, setShowTextInput] = useState(false);
+  // 결함 ②(2026-11-06) — 마이크 거부 안내 카드를 참가자가 닫았는가(글자로 대화하기 · 다시 시도).
+  const [micDeniedDismissed, setMicDeniedDismissed] = useState(false);
   // 사용자 신고(2026-07-25) — "키패드가 실제로 작동하지 않는다". 실제 통화처럼 숫자 키패드를 띄우고
   // 누른 숫자를 표시한다(ARS 입력을 요구하는 시나리오의 몰입 요소). 실시간 세션에 텍스트 턴으로
   // 보낼 수 있어, 상대가 "인증번호 눌러주세요"라고 하면 실제로 눌러서 응답할 수 있다.
@@ -553,6 +557,8 @@ export default function SessionCallPage() {
   const legTimersRef = useRef<number[]>([]);
   // §142 PR-4(R2) — 세션이 수신 벨이 아니라 시작 문자 · 전화 앱 화면에서 시작한다(세션 문서 `startSurface` — 서버 값). 첫 통화는 참가자가 건다.
   const [smsStart, setSmsStart] = useState(false);
+  // 결함 ①(2026-11-06) — 수신 통화로 시작하는 다통화 세션의 첫 통화 발신자(서버 세션 문서 `startCallerLabel`). 받기 전 벨 화면도 이 번호다.
+  const [startCallerLabel, setStartCallerLabel] = useState<string | null>(null);
   const smsStartDialerShownRef = useRef(false);
   // 실기기 신고 F1 — 시작 문자 화면을 한 번만 자동으로 연다(닫으면 아래 전화 앱 다이얼 · '메시지'로 다시 연다).
   const smsStartInboxShownRef = useRef(false);
@@ -835,7 +841,13 @@ export default function SessionCallPage() {
   // 실시간 음성 통화 전사를 서버에 제출한다(finding #1). 종료 직전에 1회 호출. 실패해도 통화
   // 종료를 막지 않는다(리포트가 비는 건 통화를 못 끝내는 것보다 나은 실패) — 조용히 흡수.
   // §121.7 — 새로 쓴 전사 문서 수를 돌려준다(통화 중 대화방이 보내기 직전에 부른다 — 기준점 보정용). 실패 · 빈 전사 = 0.
-  const flushTranscript = useCallback(async (): Promise<number> => {
+  // 2026-11-06 — 통화 진단 요약(레그 끝 · 세션 끝 — `callDiagSummary.ts`). 이 시점의 실시간 상태 · 경로는 아래 effect가 ref로 맞춘다(콜백 스테일 방지).
+  const callDiagContextRef = useRef<{ realtimeStatus: string; callMode: string }>({ realtimeStatus: "idle", callMode: "undecided" });
+  useEffect(() => {
+    callDiagContextRef.current = { realtimeStatus: realtime.status, callMode };
+  }, [realtime.status, callMode]);
+  const currentCallDiag = (): CallDiagSummary => buildCallDiagSummary(readAudioDiag(), callDiagContextRef.current);
+  const flushTranscript = useCallback(async (diag?: CallDiagSummary): Promise<number> => {
     const turns = transcriptRef.current;
     if (!sessionId || turns.length === 0) return 0;
     transcriptRef.current = [];
@@ -849,6 +861,7 @@ export default function SessionCallPage() {
         turns,
         openingNotSpoken: openingNotSpokenRef.current,
         answeredAtMs: answeredAtMsRef.current ?? undefined,
+        ...(diag ? { diag } : {}),
       });
       // §99 — 제출에 **성공한** 전사만 백업에서 지운다(실패하면 남겨 둔다 — 복원 때 두 번 제출하지 않게, 성공 뒤에만).
       try {
@@ -908,6 +921,7 @@ export default function SessionCallPage() {
         setScenarioId(scenarioId);
         // §142 PR-4(R2) — 서버가 시작 문자를 도착시킨 세션(부재 = 수신 통화 · 종전).
         setSmsStart(data.startSurface === "sms");
+        setStartCallerLabel(typeof data.startCallerLabel === "string" ? data.startCallerLabel : null);
         setMaxSessionMs((data.maxSessionMs as number) ?? null);
         // T72(UX-014 v1.11 난이도 배지, P-22) — 세션 문서에 서버가 **실제로 기록한** 값을 읽는다
         // (sessionStorage 힌트가 아니라). 부재(난이도 도입 이전 세션)면 중급으로 정규화된다.
@@ -1626,6 +1640,8 @@ export default function SessionCallPage() {
       if (sessionId) handOffTranscriptFlush(sessionId, flushDone);
       // E6(사유) — 종료 화면이 읽는 1회성 힌트(C4 · 허용목록 밖이면 종료 화면이 `user_ended`). ⛔ 이 화면의 힌트 기록은 이 1곳뿐이다.
       if (sessionId) setPendingEndReason(sessionId, ending.reason);
+      // 2026-11-06 — 끝내는 순간의 통화 진단 요약(종료 화면이 `endSession`에 싣는다 · 정리 뒤에 읽으면 전부 닫힌 값이다).
+      if (sessionId) setPendingCallDiag(sessionId, currentCallDiag());
       // E7 — 끊기 표시만 max(표시 시간, 기록 완료) 뒤 이동한다(UX (11) ②). 상시 · 한도는 즉시.
       if (noticeWait) await Promise.all([flushDone, noticeWait]);
     } finally {
@@ -1799,11 +1815,13 @@ export default function SessionCallPage() {
   };
   // 끝난 통화 → 통화 사이 화면. 전사는 여기서 제출한다(서버가 다음 통화 시작 발화 수를 `messages`로 센다 — §142.8 계약).
   const beginLegTransition = async (legEnd: CallLegEnd) => {
+    // 2026-11-06 — 끝난 통화(레그)의 진단 요약은 정리(`suspendForLeg`) **전에** 떠 둔다(뒤에 읽으면 닫힌 값).
+    const legDiag = currentCallDiag();
     if (callMode === "realtime") realtime.suspendForLeg();
     audioRef.current?.pause();
     speech.stop();
     try {
-      await flushTranscript();
+      await flushTranscript(legDiag);
     } catch {
       // 제출 실패는 다음 통화를 막지 않는다(종료 때 다시 제출된다).
     }
@@ -2263,6 +2281,18 @@ export default function SessionCallPage() {
   const handleResumeTap = () => {
     setResumeTapNeeded(false);
     resumeRestoredCall();
+  };
+  // 결함 ②(2026-11-06 — 마이크 거부 뒤 "말씀하세요"만 남았다) — "다시 시도" 탭(사용자 활성화) 안에서 실시간을 다시 연다. 권한을 허용했으면
+  // 마이크가 열리고, 또 거부되면 같은 폴백 분기가 다시 안내 카드를 띄운다. 대화가 있었으면 이어받기 맥락으로 시작한다(§99 · §136과 같은 방식).
+  const handleMicRetry = () => {
+    if (!sessionId || isEndLatched(callEndingRef.current)) return;
+    setMicDeniedDismissed(false);
+    audioRef.current?.pause();
+    if (speech.status === "listening") speech.stop();
+    setResumeTurn(buildResumeTurn(transcriptRef.current));
+    setLegOpening(false);
+    setCallMode("realtime");
+    void realtime.start(sessionId);
   };
   // §136 S1 — 활성화가 이미 있는 복원(R2)은 버튼 없이 곧바로 다시 연다.
   useEffect(() => {
@@ -2898,7 +2928,8 @@ export default function SessionCallPage() {
     speakerSwitchPending: speakerSwitchPending && callMode === "realtime",
   });
   // §142 — 다통화 변형이면 지금 통화의 라벨(서버 값 — 통화 연결 응답 · 토큰)이 이긴다. 부재 = 종전 라벨.
-  const callerLabel = legCallerLabelOr(legCallerLabel ?? realtime.credentials?.callLeg?.callerLabel, baseCallerLabel);
+  // 결함 ① — 받기 전(토큰 전)에는 세션 문서의 첫 레그 라벨(벨 화면 = 받은 뒤 통화 화면).
+  const callerLabel = legCallerLabelOr(legCallerLabel ?? realtime.credentials?.callLeg?.callerLabel ?? startCallerLabel, baseCallerLabel);
   // §142 D2 — 참가자가 건 통화면 받는 쪽 첫 신호(서버 `callLeg.entry` · `legTransition.ts` 표). `undefined` = 종전 판정.
   const legOpeningTurn = legOpeningTurnFor({ legOpening, connectionSeq: realtime.connectionSeq, entry: realtime.credentials?.callLeg?.entry });
   // T72(§15.6 G6) — 자격증명을 아직 못 받았으면(수신 대기 중) 기본은 true다. 실제로 난이도를
@@ -2958,9 +2989,12 @@ export default function SessionCallPage() {
   // 실시간 경로는 SDK의 발화 상태를, 폴백 경로는 오디오 재생 여부를 "상대가 말하는 중"으로 본다.
   const agentSpeaking =
     callMode === "realtime" ? realtime.isAgentSpeaking : Boolean(playbackUrl);
+  const micDenied = isMicDenied({ callMode, realtimeStatus: realtime.status });
   const waveLabel = agentSpeaking
     ? "상대방이 말하는 중"
-    : callMode === "realtime"
+    : micDenied
+      ? MIC_DENIED_COPY.waveLabel
+      : callMode === "realtime"
       ? "말씀하세요"
       : speech.status === "listening"
         ? "듣고 있어요"
@@ -3568,6 +3602,40 @@ export default function SessionCallPage() {
               <PhoneIcon name="speaker" size={18} />
               {RESUME_TAP_COPY.action}
             </button>
+          </div>
+          </div>
+        )}
+        {/* 결함 ②(2026-11-06) — 마이크 거부(`micDenied.ts` 1행): 말해도 전달되지 않는다는 사실 · 다시 시도 · 글자로 대화하기를 첫 화면에 둔다
+            (종전엔 안내 줄과 입력칸이 기본 닫힘인 키패드 패널 안에만 있었다). 바깥은 눌림이 통과한다(종료 버튼 유지). */}
+        {!resumeTapNeeded &&
+          showsMicDeniedNotice({ callMode, realtimeStatus: realtime.status, phase, textInputOpen: showTextInput, dismissed: micDeniedDismissed }) && (
+          <div className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+30dvh)] z-30 flex justify-center px-4">
+          <div
+            role="alert"
+            className="pointer-events-auto flex max-w-sm flex-col items-center gap-3 rounded-3xl border border-[var(--call-field-border)] px-6 py-5 text-center text-[var(--call-fg)] shadow-xl"
+            style={{ background: callTokens.bg }}
+          >
+            <p className="text-base font-semibold">{MIC_DENIED_COPY.title}</p>
+            <p className="text-sm opacity-80">{MIC_DENIED_COPY.body}</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                onClick={handleMicRetry}
+                className="flex min-h-[48px] items-center rounded-full bg-[var(--call-chip)] px-5 py-2 text-base font-semibold text-[var(--call-fg)]"
+              >
+                {MIC_DENIED_COPY.retry}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMicDeniedDismissed(true);
+                  setShowTextInput(true);
+                }}
+                className="flex min-h-[48px] items-center rounded-full border border-[var(--call-field-border)] px-5 py-2 text-base font-semibold text-[var(--call-fg)]"
+              >
+                {MIC_DENIED_COPY.text}
+              </button>
+            </div>
           </div>
           </div>
         )}

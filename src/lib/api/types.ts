@@ -3,6 +3,7 @@
 // 계약 변경은 트랙 간 합의 후(Architecture.md §8).
 import type { DifficultyLevel } from "@/lib/difficulty";
 import type { PersonaCardInput } from "@/lib/personacard/personaCardInput";
+import type { CallDiagSummary } from "@/lib/realtime/callDiagSummary";
 
 // 메신저 표면 요소(T29, Architecture.md §13.4, AC-032/045) — 실 URL 필드가 존재하지 않는다.
 // 링크는 displayText(모의 표기)·fakeLandingId(인앱 가짜 랜딩 참조)로만 표현된다.
@@ -417,6 +418,8 @@ export type SubmitRealtimeTranscriptRequest = {
   openingNotSpoken?: boolean;
   answeredAtMs?: number;
   batchId?: string;
+  /** 2026-11-06 — 레그 끝 통화 진단 요약(숫자 · 상태값만 · `src/lib/realtime/callDiagSummary.ts`). 부재 = 로그 없음. */
+  diag?: CallDiagSummary;
 };
 export type SubmitRealtimeTranscriptResponse = { written: number };
 
@@ -427,6 +430,8 @@ export type EndSessionReason = "user_ended" | "limit_reached" | "scammer_ended";
 export type EndSessionRequest = {
   sessionId: string;
   endReason: EndSessionReason;
+  /** 2026-11-06 — 세션 끝 통화 진단 요약(숫자 · 상태값만). 부재 = 로그 없음. */
+  diag?: CallDiagSummary;
 };
 export type EndSessionResponse = { status: "ended"; reportPending: true };
 

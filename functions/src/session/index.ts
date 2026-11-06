@@ -51,6 +51,8 @@ import type {
 import { pickSessionBankName } from "../inCallSms/smsGate";
 import { deliverOpenerSms } from "../inCallSms/smsDelivery";
 import { findFlowVariant } from "../scenarios/flowVariants";
+import { startCallerLabelFor } from "../callLegs/legPlan";
+import { logCallDiag, readCallDiag } from "../realtime/callDiag";
 import { findInCallSmsItem } from "../scenarios/inCallSms";
 import { resolvePersonaCardRequest } from "./personaCard";
 import { FAMILY_ADDRESS_INVALID_REASON, readFamilyAddress } from "../scenarios/familyAddress";
@@ -364,6 +366,12 @@ export const createSession = onCall<CreateSessionRequest, Promise<CreateSessionR
         await sessionRef.set({ startSurface: "sms" }, { merge: true });
         sessionDoc.startSurface = "sms";
       }
+      // 결함 ① — 수신 통화로 시작하는 다통화 변형은 벨 화면부터 첫 레그 번호를 보인다(받기 전에는 통화 토큰의 레그 라벨이 없다).
+      const startCallerLabel = startCallerLabelFor(openerVariant, scenarioId);
+      if (startCallerLabel) {
+        await sessionRef.set({ startCallerLabel }, { merge: true });
+        sessionDoc.startCallerLabel = startCallerLabel;
+      }
 
       await sessionRef.collection("messages").add({
         role: "scammer",
@@ -460,6 +468,9 @@ export const endSession = onCall<EndSessionRequest, Promise<EndSessionResponse>>
       throw new HttpsError("permission-denied", "본인 세션이 아닙니다.");
     }
     assertAnonymousChallengeScope(request.auth, session);
+    // 2026-11-06 — 세션 끝 통화 진단 요약(선택 · 숫자 · 상태값만 · 어긋나면 버린다 — 종료는 막지 않는다 · 소유권 검사 뒤).
+    const callDiag = readCallDiag((request.data as { diag?: unknown } | null | undefined)?.diag);
+    if (callDiag) logCallDiag(sessionId, "end", callDiag);
 
     // 멱등 처리(API.md endSession Errors 절: "이미 ended면 멱등 처리") — 이미 종료된 세션이면
     // status/endReason/endedAt을 재작성하지 않고 동일 응답만 반환한다. sendMessage의 한도 도달
