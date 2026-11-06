@@ -230,3 +230,21 @@ export function splitLegHistory<T extends { role: "user" | "scammer" }>(
   }
   return { prior: messages.slice(0, cut), current: messages.slice(cut) };
 }
+
+/**
+ * 결함 ①(2026-11-06 메인 내장 브라우저 시험 — 수신 화면은 시나리오 기본 번호, 받고 나면 배송원 번호로 바뀌었다) — 세션이 **수신 통화로 시작하는**
+ * 다통화 변형이면 첫 레그 발신자 라벨(벨이 울릴 때부터 그 번호가 떠야 한다). 받기 전에는 통화 토큰(`callLeg.callerLabel`)이 아직 없다.
+ * | # | If | Then |
+ * |---|---|---|
+ * | 1 | 다통화 아님 · 다른 시나리오 · 첫 레그가 참가자 발신(R2 — 시작 문자 화면) | undefined(종전 시나리오 라벨) |
+ * | 2 | 그 밖 | 레그 0 `callerLabel` |
+ */
+export function startCallerLabelFor(
+  variant: (Pick<FlowVariant, "legs" | "multiCall" | "scenarioId">) | undefined,
+  scenarioId: string,
+): string | undefined {
+  if (!variant?.multiCall || variant.scenarioId !== scenarioId) return undefined;
+  const first = variant.legs[0];
+  if (!first || (first.entry ?? "incoming") !== "incoming") return undefined;
+  return first.callerLabel;
+}

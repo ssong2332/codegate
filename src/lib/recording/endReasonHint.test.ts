@@ -76,7 +76,8 @@ test("[G512 · C4-2 · Minor-2] 종료 화면 — 힌트를 읽어 endSession에
   const retryClear = src.indexOf("clearPendingEndReason();", retryStart);
   assert.ok(retryThen > 0 && retryClear > retryThen && retryClear < retryCatch, "재시도 경로의 힌트 삭제가 성공 콜백(.then) 안이 아니다");
   assert.equal(src.split("clearPendingEndReason(").length - 1, 1, "힌트 삭제 호출은 재시도 성공 콜백 1곳뿐이어야 한다");
-  assert.ok(src.includes("endSession({ sessionId: sid, endReason })"), "endSession 요청에 힌트 값이 실리지 않는다");
+  // 2026-11-06 요청 2 — 같은 요청에 통화 진단 요약(`diag`)을 함께 싣는다.
+  assert.ok(src.includes("endSession({ sessionId: sid, endReason, ...(diag ? { diag } : {}) })"), "endSession 요청에 힌트 값이 실리지 않는다");
   assert.equal(src.includes('endReason: "user_ended"'), false, "옛 고정값 요청이 남았다");
   // C4-2 주석 정정 — 옛 문장(C1 허용목록 뒤 거짓)이 원문 그대로 남아 있지 않다.
   assert.equal(src.includes("endSession 서버는 이미 어떤 endReason이든 멱등하게 처리한다"), false, "옛 거짓 주석이 그대로 남았다");
@@ -113,7 +114,7 @@ test("[G512 역검증] 힌트 줄을 지운 사본 · 고정값으로 되돌린 
   assert.notEqual(playPoisoned, play, "주입 앵커가 없다");
   assert.equal((playPoisoned.match(/setPendingEndReason\(/g) ?? []).length, 0);
   const end = read("src/app/session/end/page.tsx");
-  const endPoisoned = end.replace("endSession({ sessionId: sid, endReason })", 'endSession({ sessionId: sid, endReason: "user_ended" })');
+  const endPoisoned = end.replace("endSession({ sessionId: sid, endReason, ...(diag ? { diag } : {}) })", 'endSession({ sessionId: sid, endReason: "user_ended" })');
   assert.notEqual(endPoisoned, end, "주입 앵커가 없다");
   assert.equal(endPoisoned.includes('endReason: "user_ended"'), true);
 });

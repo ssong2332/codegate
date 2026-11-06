@@ -193,6 +193,9 @@ export type SessionDoc = {
   routeOverride?: "forced";
   // §142 PR-4 — 다통화 R2(`openerSmsId` 변형): 세션이 수신 통화가 아니라 시작 문자가 도착한 화면에서 시작한다(첫 통화는 참가자 발신). 서버만 쓴다 · 부재 = 수신 통화(종전).
   startSurface?: "sms";
+  // 결함 ①(2026-11-06) — 수신 통화로 시작하는 다통화 변형의 첫 레그 발신자 라벨(`callLegs/legPlan.ts` `startCallerLabelFor`). 서버만 쓴다 ·
+  // 부재 = 시나리오 기본 라벨(종전). 받기 뒤에는 통화 토큰의 레그 라벨이 같은 값으로 이어진다.
+  startCallerLabel?: string;
   // T192 C1 추가(옵셔널, 하위호환 · 무백필 — Architecture.md §79.5) — 사기범 끊기 승인 표식. 서버만 쓴다
   // (클라 write는 firestore.rules가 전부 거부). `endReason: "scammer_ended"`의 **서버측 근거**다 —
   // 이것 없이 온 `scammer_ended`는 `user_ended`로 기록된다(`session/endReason.ts`).
