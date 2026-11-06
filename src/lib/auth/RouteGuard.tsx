@@ -19,6 +19,7 @@ import { INFO_PATHS, isAnonymousOutsideRecipientFlow, LEGAL_PATHS } from "./anon
 import { isKnownAppPath } from "@/lib/seo/publicPages";
 import { useAuthInvalidation } from "@/lib/authinvalidation";
 import AuthInvalidationBanner from "@/components/AuthInvalidationBanner";
+import LegalLinks from "@/components/LegalLinks";
 
 // T37(UX-021 동의 랜딩, AC-048) — 사용자2는 "로그인 없이 링크만으로 진입"해야 한다. 동의를 탭하기
 // 전까지는(익명 사인인 이전) request.auth 자체가 없으므로, 이 라우트를 PUBLIC_PATHS에 넣지 않으면
@@ -72,7 +73,10 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
 
   // 인증 판정 전이거나 리다이렉트 대상인 화면은 아무것도 렌더링하지 않아
   // 보호된 콘텐츠가 잠깐이라도 노출되는 것을 막는다.
-  if (loading) return null;
+  // 외부 점검 후속(2026-11-06) — 정적 export는 이 판정 전 상태로 굳어 `out/index.html`에 법적 고지 링크가 0개였다(JS를 실행하지 않는
+  // 점검 도구가 "법적 고지 없음"으로 본다). 첫 화면("/")에만 `<noscript>`로 링크를 싣는다 — JS가 켜진 브라우저는 noscript를 그리지
+  // 않으므로 화면 · 반짝임 · 리다이렉트 · 인증 흐름은 그대로다. 로드가 끝난 비로그인 첫 화면은 page.tsx의 LegalLinks를 종전대로 그린다.
+  if (loading) return pathname === "/" ? <noscript><LegalLinks /></noscript> : null;
   if (!user && !isPublicPath && !holdCurrentScreen) return null;
   if (anonymousOutOfScope && !holdCurrentScreen) return null;
   if (user && !user.isAnonymous && pathname === "/login") return null;
