@@ -200,6 +200,8 @@ import {
   LEG_CALLBACK_DELAY_MS,
   LEG_DIAL_CONNECT_MS,
   LEG_TRANSFER_CONNECT_MS,
+  LEG_TRANSFER_HOLD_TONE,
+  LEG_TRANSFER_HOLD_TONE_CAP_MS,
   backspaceDial,
   dialContactsFor,
   digitsOf,
@@ -207,6 +209,8 @@ import {
   legOpeningTurnFor,
   pressDialKey,
   screenAfterLegEnd,
+  labelAfterLegConnect,
+  showsReconnectingNotice,
   type LegScreen,
 } from "@/lib/callLegs/legTransition";
 import BankAppOverlay from "@/components/BankAppOverlay";
@@ -555,6 +559,9 @@ export default function SessionCallPage() {
   const legEndRef = useRef<CallLegEnd | null>(null);
   const legSwitchingRef = useRef(false);
   const legTimersRef = useRef<number[]>([]);
+  // 2026-11-07 — 통화 중 넘김 대기음(`LEG_TRANSFER_HOLD_TONE`)의 정지 함수 · 넘김 직전에 보이던 발신자 라벨(넘긴 뒤에도 그대로 — `labelAfterLegConnect`).
+  const holdToneStopRef = useRef<(() => void) | null>(null);
+  const transferShownLabelRef = useRef<string | null>(null);
   // §142 PR-4(R2) — 세션이 수신 벨이 아니라 시작 문자 · 전화 앱 화면에서 시작한다(세션 문서 `startSurface` — 서버 값). 첫 통화는 참가자가 건다.
   const [smsStart, setSmsStart] = useState(false);
   // 결함 ①(2026-11-06) — 수신 통화로 시작하는 다통화 세션의 첫 통화 발신자(서버 세션 문서 `startCallerLabel`). 받기 전 벨 화면도 이 번호다.
@@ -1660,6 +1667,12 @@ export default function SessionCallPage() {
   // 종전대로 훈련을 끝낸다. §112 — 사기범 끊기도 대화방 복귀다(`endCall`의 scammer 분기). 처음부터 통화인 시나리오는 종전(훈련 종료).
   const returnsToMessengerOnHangup = scenario?.channel === "messenger";
   const handleHangup = async () => {
+    // 2026-11-07 — 넘김 대기 중의 통화 종료 = 종전 "연결 중" 화면의 종료와 같다(대기 · 다음 통화 예약을 걷고 훈련 종료).
+    if (legScreen.kind === "holding") {
+      endTrainingFromLeg();
+      return;
+    }
+    stopHoldTone();
     if (returnsToMessengerOnHangup && !isEndLatched(callEndingRef.current)) {
       await handleRequestReverseEscalation("hangup");
       return;
@@ -1729,11 +1742,31 @@ export default function SessionCallPage() {
   };
 
   // ── §142(카드사 고급 재구성 PR-2) — 통화 사이 화면 흐름(`legTransition.ts` 표대로만) ─────────────────────
-  const clearLegTimers = () => {
+  const stopHoldTone = () => {
+    holdToneStopRef.current?.();
+    holdToneStopRef.current = null;
+  };
+  // 2026-11-07 — 넘김 대기음: 새 통화가 연결(실시간 `active` — 아래 effect)될 때까지 · 상한 `LEG_TRANSFER_HOLD_TONE_CAP_MS`.
+  const startHoldTone = () => {
+    stopHoldTone();
+    const stopTone = startRingback(primedCallAudioRef.current?.output ?? null, LEG_TRANSFER_HOLD_TONE);
+    const capTimer = window.setTimeout(stopHoldTone, LEG_TRANSFER_HOLD_TONE_CAP_MS);
+    holdToneStopRef.current = () => {
+      window.clearTimeout(capTimer);
+      stopTone();
+    };
+  };
+  /** `keepHoldTone` — 넘긴 통화를 실시간으로 여는 동안은 대기음을 이어 둔다(연결되면 effect가 멈춘다). */
+  const clearLegTimers = (opts?: { keepHoldTone?: boolean }) => {
     for (const id of legTimersRef.current) window.clearTimeout(id);
     legTimersRef.current = [];
     ringbackStopRef.current?.();
     ringbackStopRef.current = null;
+    // 참조만 쓴다(함수 호출 0) — 아래 마운트 해제 effect의 의존성이 늘지 않게(`stopHoldTone`과 같은 동작).
+    if (!opts?.keepHoldTone) {
+      holdToneStopRef.current?.();
+      holdToneStopRef.current = null;
+    }
   };
   const legTimeout = (fn: () => void, ms: number) => {
     legTimersRef.current.push(window.setTimeout(fn, ms));
@@ -1743,8 +1776,8 @@ export default function SessionCallPage() {
     ringbackStopRef.current = startRingback(primedCallAudioRef.current?.output ?? null, RINGBACK_TONE);
   };
   // 서버가 연 다음 통화로 들어간다 — 실시간이면 새 자격증명으로 다음 인물의 Live 세션(오프닝부터) · 폴백이면 다음 턴부터 서버가 그 인물로 답한다.
-  const connectLeg = (callerLabelForLeg: string) => {
-    clearLegTimers();
+  const connectLeg = (callerLabelForLeg: string, via?: "transfer") => {
+    clearLegTimers({ keepHoldTone: via === "transfer" && callMode === "realtime" && Boolean(sessionId) });
     setLegCallerLabel(callerLabelForLeg);
     setLegScreen({ kind: "none" });
     setLegDialing(false);
@@ -1785,10 +1818,12 @@ export default function SessionCallPage() {
           legTimeout(() => connectLeg(result.callerLabel), LEG_DIAL_CONNECT_MS);
           return;
         }
-        connectLeg(result.callerLabel);
+        // 2026-11-07 — 통화 중 넘김: 통화 화면 · 번호를 그대로 두고 새 통화를 연다(`labelAfterLegConnect` 표).
+        connectLeg(labelAfterLegConnect({ via: action, shownLabel: transferShownLabelRef.current, nextLabel: result.callerLabel }), "transfer");
         return;
       }
       setLegDialing(false);
+      stopHoldTone();
       if (result.status === "genuine") {
         clearLegTimers();
         setLegScreen({ kind: "genuine", number: result.number, contactLabel: result.contactLabel, notice: result.notice });
@@ -1817,6 +1852,10 @@ export default function SessionCallPage() {
   const beginLegTransition = async (legEnd: CallLegEnd) => {
     // 2026-11-06 — 끝난 통화(레그)의 진단 요약은 정리(`suspendForLeg`) **전에** 떠 둔다(뒤에 읽으면 닫힌 값).
     const legDiag = currentCallDiag();
+    // 2026-11-07 — 넘김이면 지금 보이는 통화 라벨(아래 `callerLabel`의 다통화 쪽 원천과 같은 순서)을 다음 통화에도 그대로 쓴다.
+    // 정리(`suspendForLeg`) 전에 뜬다 — 정리 뒤에는 토큰 라벨이 비어 있다. 원천이 없으면 `labelAfterLegConnect` 2행(새 라벨).
+    transferShownLabelRef.current =
+      legEnd.exit === "transfer" ? (legCallerLabel ?? realtime.credentials?.callLeg?.callerLabel ?? startCallerLabel ?? null) : null;
     if (callMode === "realtime") realtime.suspendForLeg();
     audioRef.current?.pause();
     speech.stop();
@@ -1828,7 +1867,8 @@ export default function SessionCallPage() {
     if (!endCallMountedRef.current) return;
     setLegScreen(screenAfterLegEnd(legEnd.exit));
     if (legEnd.exit === "transfer") {
-      playLegRingback();
+      // 2026-11-07 — 통화 화면 그대로(통화 시간 계속) · 연결음 대신 통화 대기음.
+      startHoldTone();
       legTimeout(() => void openNextLeg("transfer"), LEG_TRANSFER_CONNECT_MS);
       return;
     }
@@ -1881,6 +1921,10 @@ export default function SessionCallPage() {
     }
   }, [legScreen]);
   useEffect(() => () => clearLegTimers(), []);
+  // 2026-11-07 — 넘긴 통화가 연결되면(또는 실패해 다시 잇는 상태를 벗어나면) 대기음을 멈춘다.
+  useEffect(() => {
+    if (realtime.status !== "reconnecting") stopHoldTone();
+  }, [realtime.status]);
   // §142 PR-4(R2) — 수신 단계 대신 전화 앱(빈 다이얼 · 메시지 탭에 시작 문자)에서 시작한다.
   useEffect(() => {
     if (!smsStart || pageState !== "ready" || phase !== "incoming" || smsStartDialerShownRef.current) return;
@@ -2906,6 +2950,7 @@ export default function SessionCallPage() {
         onEndTraining={() => void handleEndTraining()}
         skinPicker={{ value: deviceSkin.skin, source: deviceSkin.source, onChange: handleChooseCallSkin }}
         personaCard={personaCard}
+        smsStart={smsStart}
       />
     );
   }
@@ -3391,7 +3436,7 @@ export default function SessionCallPage() {
           경고색 · 점멸 0(`role="status"`). "계속하기" 탭은 iOS에서 소리 · 마이크를 다시 켜는 사용자 동작도 된다(위 탭 안전망). */}
       {callMode === "realtime" && phase === "live" && (
         <ScreenOffNotice
-          reconnecting={realtime.status === "reconnecting"}
+          reconnecting={showsReconnectingNotice({ reconnecting: realtime.status === "reconnecting", legScreen: legScreen.kind, legOpening })}
           returned={showReturnNotice}
           keepAwakeUnavailable={wakeLockStatus === "unsupported" || wakeLockStatus === "denied"}
           onDismissReturned={() => setShowReturnNotice(false)}

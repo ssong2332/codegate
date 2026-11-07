@@ -9,6 +9,9 @@ import {
   LEG_CALLBACK_DELAY_MS,
   LEG_DIAL_CONTACTS,
   LEG_GENUINE_COPY,
+  LEG_TRANSFER_CONNECT_MS,
+  LEG_TRANSFER_HOLD_TONE,
+  LEG_TRANSFER_HOLD_TONE_CAP_MS,
   backspaceDial,
   dialContactsFor,
   digitsOf,
@@ -18,13 +21,17 @@ import {
   legOpeningTurnFor,
   pressDialKey,
   screenAfterLegEnd,
+  labelAfterLegConnect,
+  showsReconnectingNotice,
 } from "./legTransition.ts";
 import { splitBodyAtDialNumber } from "../incallsms/inCallSms.ts";
+import { RINGBACK_TONE } from "../messenger/voiceTalkDial.ts";
+import { PRE_CALL_NOTICE, PRE_CALL_SMS_START_NOTICE } from "../sessionboundary/preSessionCopy.ts";
 
 const read = (file: string) => readFileSync(file, "utf8").replace(/\r\n/g, "\n");
 
-test("[§142 표] 끝난 방식 → 화면: 호 전환 = 연결 중 · 다시 걸기 = 빈 다이얼", () => {
-  assert.deepEqual(screenAfterLegEnd("transfer"), { kind: "connecting", via: "transfer", label: "연결 중" });
+test("[§142 표] 끝난 방식 → 화면: 호 전환 = 통화 화면 유지(holding · 2026-11-07) · 다시 걸기 = 빈 다이얼", () => {
+  assert.deepEqual(screenAfterLegEnd("transfer"), { kind: "holding" });
   assert.deepEqual(screenAfterLegEnd("dial"), { kind: "dialer", digits: "" });
   assert.ok(LEG_CALLBACK_DELAY_MS >= 10_000, "D4 — 상대가 너무 빨리 다시 걸면 참가자가 스스로 확인할 틈이 없다");
 });
@@ -141,7 +148,7 @@ test("[§142 D2] 참가자가 건 통화의 첫 신호 = 받는 쪽(레그 전�
 
 test("[§142 D1 배선] 새 통화(레그)를 열면 문자 백스톱 질의를 다시 연다 — 앞 레그 none_pending · 마무리 1회 표시 초기화", () => {
   const page = read("src/app/session/play/page.tsx");
-  const connectLeg = page.slice(page.indexOf("const connectLeg = (callerLabelForLeg: string) => {"), page.indexOf("const openNextLeg = async"));
+  const connectLeg = page.slice(page.indexOf('const connectLeg = (callerLabelForLeg: string, via?: "transfer") => {'), page.indexOf("const openNextLeg = async"));
   assert.ok(connectLeg.includes("smsBackstopRef.current.nonePending = false;"));
   assert.ok(connectLeg.includes("smsBackstopRef.current.wrapUpSent = false;"));
   assert.ok(connectLeg.indexOf("smsBackstopRef.current.nonePending = false;") < connectLeg.indexOf("handleAnswer();"));
@@ -173,4 +180,72 @@ test("[F4] 진짜 기관 자동 안내 = 방어 성공 안내 · 세션 중 표�
   const screens = read("src/components/CallLegScreens.tsx");
   const genuine = screens.slice(screens.indexOf('screen.kind === "genuine"'), screens.indexOf("// 다이얼"));
   assert.ok(genuine.includes("{LEG_GENUINE_COPY.defenseTitle}") && genuine.includes("{LEG_GENUINE_COPY.defenseBody}"));
+});
+
+// 2026-11-07 실기기 신고 — 통화 중 넘김에서 검은 "연결 중" 화면 · "다시 연결하고 있어요" 배너가 몰입을 깼다(수정 3).
+test("[11-07 수정 3 표] 넘김 뒤 라벨 — 넘김이면 보이던 라벨 그대로 · 그 밖(걸기 · 다시 걸려 옴 · 보이던 라벨 없음)은 새 라벨", () => {
+  assert.equal(labelAfterLegConnect({ via: "transfer", shownLabel: "02-0715-8800", nextLabel: "한빛지방검찰청" }), "02-0715-8800");
+  assert.equal(labelAfterLegConnect({ via: "transfer", shownLabel: null, nextLabel: "한빛지방검찰청" }), "한빛지방검찰청");
+  assert.equal(labelAfterLegConnect({ via: "transfer", shownLabel: "", nextLabel: "한빛지방검찰청" }), "한빛지방검찰청");
+  assert.equal(labelAfterLegConnect({ via: "dial", shownLabel: "02-0715-8800", nextLabel: "02-0700-3324" }), "02-0700-3324");
+  assert.equal(labelAfterLegConnect({ via: "callback", shownLabel: "02-0715-8800", nextLabel: "02-0700-3324" }), "02-0700-3324");
+});
+
+test("[11-07 수정 3 표] 다시 연결 안내 — 통화 사이 · 새 통화 연결은 숨김 · 화면 꺼짐 뒤 다시 잇기만 보임", () => {
+  assert.equal(showsReconnectingNotice({ reconnecting: false, legScreen: "none", legOpening: false }), false);
+  assert.equal(showsReconnectingNotice({ reconnecting: true, legScreen: "holding", legOpening: false }), false);
+  assert.equal(showsReconnectingNotice({ reconnecting: true, legScreen: "dialer", legOpening: false }), false);
+  assert.equal(showsReconnectingNotice({ reconnecting: true, legScreen: "none", legOpening: true }), false);
+  assert.equal(showsReconnectingNotice({ reconnecting: true, legScreen: "none", legOpening: false }), true);
+});
+
+test("[11-07 수정 3] 대기음 = 합성 톤(음원 0) · 발신 연결음과 다른 소리 · 상한이 넘김 대기보다 길다", () => {
+  assert.notDeepEqual([...LEG_TRANSFER_HOLD_TONE.freqsHz], [...RINGBACK_TONE.freqsHz]);
+  assert.ok(LEG_TRANSFER_HOLD_TONE.peak <= RINGBACK_TONE.peak, "대기음이 연결음보다 크지 않다");
+  assert.ok(LEG_TRANSFER_HOLD_TONE_CAP_MS > LEG_TRANSFER_CONNECT_MS);
+  const page = read("src/app/session/play/page.tsx");
+  const start = page.slice(page.indexOf("const startHoldTone = () => {"), page.indexOf("const clearLegTimers = "));
+  assert.ok(start.includes("startRingback(primedCallAudioRef.current?.output ?? null, LEG_TRANSFER_HOLD_TONE)"), "기존 통화 출력 컨텍스트 · 합성 톤");
+  assert.ok(!/new Audio\(|\.mp3|\.wav/.test(start), "음원 파일 0");
+});
+
+test("[11-07 수정 3 배선] 넘김 = 통화 화면 유지 · 대기음 · 연결되면 멈춤 · 라벨 고정 · 종료 버튼 = 훈련 종료 · 배너 판정", () => {
+  const page = read("src/app/session/play/page.tsx");
+  const begin = page.slice(page.indexOf("const beginLegTransition = async"), page.indexOf("const primeSmsStartDial = "));
+  const transfer = begin.slice(begin.indexOf('if (legEnd.exit === "transfer") {'));
+  assert.ok(transfer.includes("startHoldTone();"), "넘김 대기음");
+  assert.ok(!transfer.slice(0, transfer.indexOf("return;")).includes("playLegRingback();"), "넘김에 발신 연결음 0");
+  // 보이던 라벨은 정리(suspendForLeg) 전에 뜬다.
+  assert.ok(begin.indexOf("transferShownLabelRef.current =") < begin.indexOf("realtime.suspendForLeg();"));
+  const open = page.slice(page.indexOf("const openNextLeg = async"), page.indexOf("const beginLegTransition = async"));
+  assert.ok(open.includes('connectLeg(labelAfterLegConnect({ via: action, shownLabel: transferShownLabelRef.current, nextLabel: result.callerLabel }), "transfer");'));
+  const connect = page.slice(page.indexOf("const connectLeg = "), page.indexOf("const openNextLeg = "));
+  assert.ok(connect.includes('clearLegTimers({ keepHoldTone: via === "transfer" && callMode === "realtime" && Boolean(sessionId) });'));
+  // 새 통화가 연결되면(실시간 `reconnecting`을 벗어나면) 대기음을 멈춘다.
+  assert.ok(page.includes('if (realtime.status !== "reconnecting") stopHoldTone();'));
+  // 통화 화면의 종료 버튼 — 넘김 대기 중이면 예약을 걷고 훈련 종료(종전 "연결 중" 화면의 종료와 같다).
+  const hangup = page.slice(page.indexOf("const handleHangup = async () => {"), page.indexOf("const handleHangup = async () => {") + 400);
+  assert.ok(hangup.includes('if (legScreen.kind === "holding") {\n      endTrainingFromLeg();'));
+  // 배너는 순수 판정으로만.
+  assert.ok(page.includes('reconnecting={showsReconnectingNotice({ reconnecting: realtime.status === "reconnecting", legScreen: legScreen.kind, legOpening })}'));
+  assert.ok(!page.includes('reconnecting={realtime.status === "reconnecting"}'));
+  // 통화 사이 화면은 넘김 대기 때 아무것도 그리지 않는다(검은 화면 0).
+  const screens = read("src/components/CallLegScreens.tsx");
+  assert.ok(screens.includes('if (screen.kind === "none" || screen.kind === "holding") return null;'));
+});
+
+// 2026-11-07 실기기 신고 — "첫 화면에 문자 화면이 뜨니 당황스럽다"(수정 4).
+test("[11-07 수정 4] 시작 문자 세션의 벨 직전 고지 — 제목 · 안내 한 줄 · 세션 전 화면에서만 · 행동 지시 0", () => {
+  assert.notEqual(PRE_CALL_SMS_START_NOTICE.title, PRE_CALL_NOTICE.title);
+  assert.ok(PRE_CALL_SMS_START_NOTICE.hint.includes("문자"));
+  assert.ok(!/전화를 걸|번호로|누르/.test(PRE_CALL_SMS_START_NOTICE.hint), "무엇을 하라는 지시는 판단을 미리 알려 준다");
+  const notice = read("src/components/CallStartNotice.tsx");
+  assert.ok(notice.includes("{smsStart ? PRE_CALL_SMS_START_NOTICE.title : PRE_CALL_NOTICE.title}"));
+  assert.ok(notice.includes("{smsStart && <p className=\"text-[17px] leading-[1.55] text-ink\">{PRE_CALL_SMS_START_NOTICE.hint}</p>}"));
+  // 값의 원천 = 서버 세션 문서(`startSurface`)로 정한 같은 상태 · 고지 화면에만 넘긴다.
+  const page = read("src/app/session/play/page.tsx");
+  assert.ok(page.includes('setSmsStart(data.startSurface === "sms");'));
+  assert.match(page, /<CallStartNotice[\s\S]*?smsStart=\{smsStart\}/);
+  assert.equal((page.match(/PRE_CALL_SMS_START_NOTICE/g) ?? []).length, 0, "세션 중 화면(통화 화면)에 이 문구 0 — G437");
+  assert.equal((read("src/components/CallLegScreens.tsx").match(/PRE_CALL_SMS_START_NOTICE/g) ?? []).length, 0);
 });

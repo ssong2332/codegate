@@ -3,7 +3,7 @@
 // 서버가 한 통화의 끝을 알려 주면(`legEnd {exit}`) 화면은 아래 표대로만 움직인다(Architecture.md §142.4 · §142.8).
 // | 끝난 방식 | 화면 | 다음 통화를 여는 호출 |
 // |---|---|---|
-// | `transfer` | "연결 중" + 연결음 `LEG_TRANSFER_CONNECT_MS` | `startCallLeg({action:"transfer"})` |
+// | `transfer` | **통화 화면 그대로**(`holding` — 통화 시간 계속 · 번호 그대로) + 통화 대기음 `LEG_TRANSFER_HOLD_TONE` · `LEG_TRANSFER_CONNECT_MS` | `startCallLeg({action:"transfer"})` |
 // | `dial` | 전화 앱 다이얼(키패드 · 연락처) — 참가자가 번호를 눌러 건다 | `startCallLeg({action:"dial", dialed})` |
 // | `dial` · `LEG_CALLBACK_DELAY_MS` 동안 걸지 않음 | 상대가 다시 걸어 온다(D4 — 수신 화면) → 받기 | `startCallLeg({action:"callback"})` |
 //
@@ -17,8 +17,16 @@
 //
 // ⛔ 실제 전화 발신 0 — 키패드는 앱 안 화면이다(번호는 서버 번호부로만 판정한다).
 
-/** 호 전환 연결음 길이(판단값 — 보이스톡 연결음 `VOICE_TALK_CONNECT_MS`와 같은 3.5초). */
+/** 호 전환 대기 길이(판단값 — 보이스톡 연결음 `VOICE_TALK_CONNECT_MS`와 같은 3.5초). */
 export const LEG_TRANSFER_CONNECT_MS = 3500;
+/**
+ * 2026-11-07 실기기 신고("앞 통화가 끝나면 연결되는 과정이 실제와 다른 UX" · "검은 화면은 몰입감을 깬다") — 통화 중 넘김은
+ * 화면을 바꾸지 않고 이 대기음만 들린다. 음원 파일 0 — `startRingback`(OscillatorNode)이 합성한다(저작물 음원 0).
+ * 값은 판단값: 발신 연결음(`RINGBACK_TONE` 440+480Hz · 1초/2초)과 귀로 구별되게 단음 · 짧은 울림 · 작은 소리.
+ */
+export const LEG_TRANSFER_HOLD_TONE = { freqsHz: [425], onMs: 250, offMs: 1250, peak: 0.08 } as const;
+/** 대기음 상한(판단값) — 새 통화가 연결(실시간 `active`)되면 그때 멈추고, 연결이 늦어도 이 시간 뒤에는 멈춘다. */
+export const LEG_TRANSFER_HOLD_TONE_CAP_MS = 20_000;
 /** D4 — 참가자가 다시 걸지 않으면 상대가 다시 걸어 오기까지(판단값 30초 — 실측 전). */
 export const LEG_CALLBACK_DELAY_MS = 30_000;
 /** 참가자 발신 연결음(판단값 — 실제 전화처럼 두세 번 울리고 받는다). */
@@ -53,14 +61,44 @@ export const DIAL_MAX_DIGITS = 13;
 
 export type LegScreen =
   | { kind: "none" }
+  /** 통화 중 넘김 대기 — 통화 사이 화면 0(통화 화면이 그대로 보인다 · `CallLegScreens`는 아무것도 그리지 않는다). */
+  | { kind: "holding" }
   | { kind: "connecting"; via: "transfer" | "dial"; label: string }
   | { kind: "dialer"; digits: string; notice?: "unknown_number" }
   | { kind: "incoming"; label: string }
   | { kind: "genuine"; number: string; contactLabel?: string; notice: readonly string[] };
 
-/** 통화가 끝난 직후의 화면. */
+/** 통화가 끝난 직후의 화면(넘김 = 통화 화면 유지 · 직접 걸기 = 다이얼). */
 export function screenAfterLegEnd(exit: "dial" | "transfer"): LegScreen {
-  return exit === "transfer" ? { kind: "connecting", via: "transfer", label: "연결 중" } : { kind: "dialer", digits: "" };
+  return exit === "transfer" ? { kind: "holding" } : { kind: "dialer", digits: "" };
+}
+
+/**
+ * 새 통화가 연결된 뒤 화면의 발신자 라벨.
+ * | # | If | Then |
+ * |---|---|---|
+ * | 1 | 통화 중 넘김(`transfer`) ∧ 넘김 직전에 보이던 라벨이 있다 | 그 라벨 그대로 |
+ * | 2 | 그 밖(직접 걸기 · 다시 걸려 온 전화 · 넘김인데 보이던 라벨 없음) | 서버가 준 새 통화 라벨 |
+ * 근거(추정 — 실기 대조 전): 실제 전화에서 상대가 내부에서 돌려 연결해도 내 통화 화면의 번호는 처음 연결된 번호 그대로다.
+ */
+export function labelAfterLegConnect(input: { via: "dial" | "transfer" | "callback"; shownLabel: string | null; nextLabel: string }): string {
+  return input.via === "transfer" && input.shownLabel ? input.shownLabel : input.nextLabel;
+}
+
+/**
+ * 통화 화면 "다시 연결하고 있어요" 안내(§99)를 보이는가. 통화 사이(`suspendForLeg`)와 새 통화 연결(`startLeg`)도 실시간 상태를
+ * `reconnecting`으로 쓰지만 끊긴 통화를 다시 잇는 것이 아니다(2026-11-07 실기기 — 넘김 연결 중 배너가 떴다).
+ * | # | If | Then |
+ * |---|---|---|
+ * | 1 | `reconnecting` 아님 | 숨김 |
+ * | 2 | 넘김 대기(`holding`) · 다른 통화 사이 화면이 떠 있다 | 숨김 |
+ * | 3 | 새 통화(레그) 연결 중(`legOpening`) | 숨김 |
+ * | 4 | 그 밖(화면 꺼짐 뒤 다시 잇기 — `startReconnect`가 `legOpening`을 내린다) | 보임 |
+ */
+export function showsReconnectingNotice(input: { reconnecting: boolean; legScreen: LegScreen["kind"]; legOpening: boolean }): boolean {
+  if (!input.reconnecting) return false;
+  if (input.legScreen !== "none") return false;
+  return !input.legOpening;
 }
 
 /** 키패드 입력(숫자 · `*` · `#`만 · 자리 수 상한). */
