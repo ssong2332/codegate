@@ -42,11 +42,10 @@ import {
   CARD_REBUILD_AGENT_PERSONA,
   CARD_REBUILD_COURIER_PERSONA,
   CARD_REBUILD_PROSECUTOR_PERSONA,
-  CARD_REBUILD_SUPERVISOR_FIRST_PERSONA,
-  CARD_REBUILD_SUPERVISOR_LAST_PERSONA,
+  CARD_REBUILD_SUPERVISOR_PERSONA,
   CARD_REBUILD_TACTICS as CRT,
 } from "./cardRebuildLegs.prompt";
-import { CARD_FAKE_CALLBACK_NUMBER_ID, SUPERVISOR_OFFICIAL_NUMBER_ID } from "./dialDirectory";
+import { CARD_FAKE_CALLBACK_NUMBER_ID, PROSECUTOR_OFFICIAL_NUMBER_ID, SUPERVISOR_OFFICIAL_NUMBER_ID } from "./dialDirectory";
 import { ASSET_CUSTODY_PROCEDURE_TACTIC, assetProtectionRoutePersona } from "./assetProtectionNoticeCall.prompt";
 import {
   PROSECUTION_CASE_LINK_PERSONA,
@@ -762,6 +761,10 @@ const LOAN_ADVANCED_FV_6S5P: VariantSpec = {
 // ── §142 카드사 고급 재구성 — 레그 정의(R1 · R2 공유 · 사본 0) ─────────────────────────────────────────────
 // 레그 표 = `cardRebuildLegs.prompt.ts` 머리 주석. 턴 예산은 판단값(설계 §3.2 — 실측으로 조정).
 const tacticLabelOf = (tactic: string) => extractTacticLabel(tactic);
+// 2026-11-07 실기기 신고(세션 1d84811b) — 참가자가 "카드 두 장 시켰다"고 세 번 반박했는데 배송원이 "신청하신 카드 외에 고객님 명의로 한 장 더…"를
+// 세 번 그대로 되풀이했다. '신청했다' 갈래에 반박 대응 규칙을 붙인다(대사 판정은 정규식이 아니라 이 지시문 — 모델 몫).
+const CARD_APPLIED_REBUTTAL_RULE =
+  "상대가 구체적으로 반박하면(예: '두 장 신청했다' · '이미 받았다') 그 말을 받아들여 답을 그 내용에 맞게 바꾸고, 앞에서 한 문장을 같은 말로 되풀이하지 않는다. 같은 반박이 이어지면 더 설득하지 말고 문자로 직접 확인해 보시라며 다음 단계로 넘어간다.";
 const CARD_REBUILD_COURIER_LEG: FlowVariantLeg = {
   callerLabel: "010-0794-2261",
   personaPrompt: CARD_REBUILD_COURIER_PERSONA,
@@ -776,7 +779,7 @@ const CARD_REBUILD_COURIER_LEG: FlowVariantLeg = {
     withSmsFirst("상대가 카드를 신청한 적 없다고 하면 반송 처리가 필요하다며 반송 접수 안내 문자(고객센터 연락처)를 보낸다."),
     // 실기기 신고 F3(2026-11-02 — "카드 발급했다고 하니까 그냥 끝났다") — 신청했다는 답에도 미끼를 거두지 않고 다른 발급 건으로 이어 간다.
     withSmsFirst(
-      "상대가 카드를 신청했다고 하면 끝내지 말고, 신청하신 카드 말고 상대 명의로 한 장이 더 발급 신청돼 배송 중이라며 그 건은 본인이 아니면 반송 처리가 필요하다고 같은 반송 접수 안내 문자를 보낸다.",
+      `상대가 카드를 신청했다고 하면 끝내지 말고, 신청하신 카드 말고 상대 명의로 한 장이 더 발급 신청돼 배송 중이라며 그 건은 본인이 아니면 반송 처리가 필요하다고 같은 반송 접수 안내 문자를 보낸다. ${CARD_APPLIED_REBUTTAL_RULE}`,
     ),
     "문자에 있는 고객센터로 바로 전화해 보라고 권하고 통화를 끝낸다.",
   ],
@@ -812,60 +815,57 @@ const CARD_REBUILD_AGENT_FIRST_LEG: FlowVariantLeg = {
   ...CARD_REBUILD_AGENT_LEG,
   // 실기기 신고 F3 — 발급 문자를 보고 건 참가자가 "제가 신청한 게 맞다"고 해도 끝내지 않는다(R2 첫 통화에만 — R1 상담원은 배송원 통화에서 이미 미신청을 들었다).
   stages: [
-    "전화를 받는 상담원으로 응대하고, 명의 도용으로 카드와 연동 계좌가 개설된 것 같다고 알린다. 상대가 카드를 직접 신청했다고 하면 끝내지 말고, 그 카드 말고 상대 명의로 한 장이 더 발급됐고 연동 계좌까지 열려 있다며 같은 방향으로 이어 간다.",
+    `전화를 받는 상담원으로 응대하고, 명의 도용으로 카드와 연동 계좌가 개설된 것 같다고 알린다. 상대가 카드를 직접 신청했다고 하면 끝내지 말고, 그 카드 말고 상대 명의로 한 장이 더 발급됐고 연동 계좌까지 열려 있다며 같은 방향으로 이어 간다. ${CARD_APPLIED_REBUTTAL_RULE}`,
     ...(CARD_REBUILD_AGENT_LEG.stages ?? []).slice(1),
   ],
   tacticLabels: [tacticLabelOf(CRT.deliveryIdentity), ...(CARD_REBUILD_AGENT_LEG.tacticLabels ?? [])],
 };
-const CARD_REBUILD_SUPERVISOR_FIRST_LEG: FlowVariantLeg = {
+// 2026-11-07 넘김 축소(실기기 신고 "통화 넘기는 게 너무 많다" · 사용자 승인) — 감독기관 → 검사는 통화 중 넘김(transfer)이 아니라 **참가자가 연락처의
+// 검찰청 대표번호로 직접 거는** 통화다(조사 문서 §7 6단계 "가상 검찰청 번호로 걸게 함" — 통화 중 넘김은 출처 없음). 감독기관 대표번호와 같은 가로채기 장치
+// (원격 지원 앱 응낙 뒤 공식 번호 → 사기범). 번호 안내 문자를 새로 두지 않는다(R1 문자 4통 = 고급 범위 AC-096 (b) 0~3 초과). 마지막 '검사 → 다시 감독기관'
+// 레그는 없앴고 검사 레그가 안전계좌 이체 요구까지 맡는다(조사 S1 부제 "검찰, 금감원 사칭 직원이 자산보호 등 명목으로 자금이체를 유도"). R1 5→4통 · R2 4→3통.
+const CARD_REBUILD_SUPERVISOR_LEG: FlowVariantLeg = {
   callerLabel: "금융감독기관 대표번호",
-  personaPrompt: CARD_REBUILD_SUPERVISOR_FIRST_PERSONA,
+  personaPrompt: CARD_REBUILD_SUPERVISOR_PERSONA,
   speakerGender: "male",
   speakerId: "supervisor",
   minUserTurns: 2,
   maxUserTurns: 5,
   entry: "dial",
-  exit: "transfer",
+  exit: "dial",
   dialTarget: SUPERVISOR_OFFICIAL_NUMBER_ID,
   interceptRequires: "install",
   stages: [
     "대표번호로 걸려 온 전화를 받는 조사관으로 응대하고, 카드 명의 도용 건이 이미 접수돼 있다며 피해를 걱정해 준다.",
     "상대 명의 계좌가 범죄에 쓰였을 수 있어 검찰 조사가 걸려 있다고 알리고, 약식 조사로 조용히 끝낼 수 있게 돕겠다고 한다.",
-    "담당 검사에게 연결해 주겠다며 통화를 넘긴다.",
+    "담당 검사와 직접 통화해야 약식 조사가 된다며, 상대가 검찰청 대표번호로 직접 전화해 담당 검사를 찾게 하고 통화를 끝낸다.",
   ],
   tacticLabels: [tacticLabelOf(CRT.authority), tacticLabelOf(CRT.plainSummary)],
 };
 const CARD_REBUILD_PROSECUTOR_LEG: FlowVariantLeg = {
-  callerLabel: "한빛지방검찰청",
+  callerLabel: "한빛지방검찰청 대표번호",
   personaPrompt: CARD_REBUILD_PROSECUTOR_PERSONA,
   speakerGender: "male",
   speakerId: "prosecutor",
-  minUserTurns: 2,
-  maxUserTurns: 5,
-  entry: "transfer",
-  exit: "transfer",
+  minUserTurns: 3,
+  maxUserTurns: 10,
+  entry: "dial",
+  dialTarget: PROSECUTOR_OFFICIAL_NUMBER_ID,
+  interceptRequires: "install",
   stages: [
-    "연결받은 검사로 응대하고, 상대 명의 계좌가 자금세탁에 쓰인 정황이 있어 구속 수사를 검토 중이라고 알린다.",
+    "대표번호로 걸려 온 전화를 받는 검사로 응대하고, 상대 명의 계좌가 자금세탁에 쓰인 정황이 있어 구속 수사를 검토 중이라고 알린다.",
     "비공개 수사라 가족에게 알리면 가족도 조사 대상이 될 수 있다며 비밀을 지키게 한다.",
-    "자산 조치는 조사관이 안내할 것이라며 다시 조사관에게 통화를 넘긴다.",
-  ],
-  tacticLabels: [tacticLabelOf(CRT.arrestThreat), tacticLabelOf(CRT.secrecy)],
-};
-const CARD_REBUILD_SUPERVISOR_LAST_LEG: FlowVariantLeg = {
-  callerLabel: "금융감독기관 대표번호",
-  personaPrompt: CARD_REBUILD_SUPERVISOR_LAST_PERSONA,
-  speakerGender: "male",
-  speakerId: "supervisor",
-  minUserTurns: 2,
-  maxUserTurns: 8,
-  entry: "transfer",
-  stages: [
-    "검사와 통화를 마치고 다시 넘겨받은 조사관으로 응대한다.",
-    withSmsFirst("조사가 끝날 때까지 자산을 보호해야 한다며 안전계좌 문자의 링크 화면에서 980만 원을 옮기게 한다."),
+    withSmsFirst("협조하면 약식으로 끝낼 수 있다며, 조사가 끝날 때까지 자산을 보호해야 하니 안전계좌 문자의 링크 화면에서 980만 원을 옮기게 한다."),
     "은행에서 이체 이유를 물으면 가족 사업 자금이라고 답하라고 미리 일러 준다.",
     `이체를 마치면 조사가 끝나면 그대로 돌려준다며 비밀을 다시 당부하고 마무리한다. ${VERBAL_ENDING_WRAP}`,
   ],
-  tacticLabels: [tacticLabelOf(CRT.safeAccount), tacticLabelOf(CRT.bankCoaching), tacticLabelOf(CRT.urgency)],
+  tacticLabels: [
+    tacticLabelOf(CRT.arrestThreat),
+    tacticLabelOf(CRT.secrecy),
+    tacticLabelOf(CRT.safeAccount),
+    tacticLabelOf(CRT.bankCoaching),
+    tacticLabelOf(CRT.urgency),
+  ],
 };
 /** §142 PR-4 — 카드 배송 · 발급 사칭 다통화 루트의 교육 포인트 4개(조사 문서 ①~④ 순서). */
 export const CARD_REBUILD_REPORT_LESSONS: readonly string[] = [
@@ -903,22 +903,23 @@ const cardRebuildSpec = (
   ...extra,
 });
 // R1 — 배송 전화 진입. 문자 선언은 레그 단위(게이트는 현재 레그 문자만 · 하한 = 레그 시작 뒤 사용자 발화). 같은 레그 안 목적 중복 0.
+// 안전계좌 하한 3 = 검사 레그의 협박 · 비밀 유지 두 단계 뒤(종전 감독기관 두 번째 통화는 첫 단계라 1이었다).
 const CARD_REBUILD_R1 = cardRebuildSpec(
   "fv-k3dn",
-  [CARD_REBUILD_COURIER_LEG, CARD_REBUILD_AGENT_LEG, CARD_REBUILD_SUPERVISOR_FIRST_LEG, CARD_REBUILD_PROSECUTOR_LEG, CARD_REBUILD_SUPERVISOR_LAST_LEG],
+  [CARD_REBUILD_COURIER_LEG, CARD_REBUILD_AGENT_LEG, CARD_REBUILD_SUPERVISOR_LEG, CARD_REBUILD_PROSECUTOR_LEG],
   [
     { purpose: "link", smsId: "card-callback-number", required: true, notBeforeUserTurns: 1, leg: 0, ...FAST_BACKSTOP },
     { purpose: "link", smsId: "card-remote-support-link", required: true, notBeforeUserTurns: 2, leg: 1, ...FAST_BACKSTOP },
-    { purpose: "transfer", smsId: "card-safe-account", required: true, notBeforeUserTurns: 1, leg: 4, ...FAST_BACKSTOP },
+    { purpose: "transfer", smsId: "card-safe-account", required: true, notBeforeUserTurns: 3, leg: 3, ...FAST_BACKSTOP },
   ],
 );
 // R2 — 발급 문자 진입. 배송원 레그 없음 · 세션은 발급 문자(`card-issue-notice`) 화면에서 시작하고 첫 레그(상담원)는 참가자 발신.
 const CARD_REBUILD_R2 = cardRebuildSpec(
   "fv-r8vb",
-  [CARD_REBUILD_AGENT_FIRST_LEG, CARD_REBUILD_SUPERVISOR_FIRST_LEG, CARD_REBUILD_PROSECUTOR_LEG, CARD_REBUILD_SUPERVISOR_LAST_LEG],
+  [CARD_REBUILD_AGENT_FIRST_LEG, CARD_REBUILD_SUPERVISOR_LEG, CARD_REBUILD_PROSECUTOR_LEG],
   [
     { purpose: "link", smsId: "card-remote-support-link", required: true, notBeforeUserTurns: 2, leg: 0, ...FAST_BACKSTOP },
-    { purpose: "transfer", smsId: "card-safe-account", required: true, notBeforeUserTurns: 1, leg: 3, ...FAST_BACKSTOP },
+    { purpose: "transfer", smsId: "card-safe-account", required: true, notBeforeUserTurns: 3, leg: 2, ...FAST_BACKSTOP },
   ],
   // §142 PR-4 — 시작 셸: 세션 생성이 이 문자를 도착시키고(`session/index.ts` · `startSurface`) 화면은 전화 앱에서 시작한다.
   { openerSmsId: "card-issue-notice" },

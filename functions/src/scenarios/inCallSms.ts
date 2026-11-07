@@ -21,7 +21,7 @@
 //     세션 흐름 변형의 `sms` 선언 + `inCallSms/smsGate.ts`가 정한다.
 
 import { CARD_FAKE_CALLBACK_NUMBER_ID } from "./dialDirectory";
-import { CARD_REBUILD_NAMES } from "./fictionalNames";
+import { CARD_REBUILD_NAMES, CASE_RECORD_NAMES } from "./fictionalNames";
 
 // §142 — `callback` = 전화번호를 안내하는 문자(번호를 누르면 앱 안 다이얼 화면이 그 번호로 채워진다 · `dialNumberId` 필수 · 링크 · 인증번호 0).
 export type InCallSmsKind = "account" | "link" | "otp" | "callback";
@@ -329,11 +329,11 @@ const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
     announceInstruction:
       "(참가자 휴대전화로 방금 원격 지원 앱 설치 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 앱 설치를 진행해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 실제 주소를 읽어 주지 말고, 설치 방법·권한 설정은 설명하지 마라.)",
   },
-  // 감독기관 레그(마지막) — 안전계좌(조사 S1 p.4~5 "자산보호 · 안전계좌 송금"). 금액 = D8 980만 원. 화면 `card-safe-transfer`(훈련용 이체 화면).
+  // 검사 레그(마지막 · 2026-11-07 넘김 축소 — 종전 감독기관 두 번째 통화의 일을 검사가 맡는다) — 안전계좌(조사 S1 p.4~5 "자산보호 · 안전계좌 송금"). 금액 = D8 980만 원. 화면 `card-safe-transfer`(훈련용 이체 화면).
   {
     smsId: "card-safe-account",
     kind: "account",
-    senderLabel: `${SMS_SENDER_NUMBER["card-company-impersonation"]} (${CARD_REBUILD_NAMES.supervisor} 자산보호 안내)`,
+    senderLabel: `${SMS_SENDER_NUMBER["card-company-impersonation"]} (${CASE_RECORD_NAMES.office} 자산보호 안내)`,
     body: "[자산보호 안내] 조사 기간 안전계좌 안내\n예금주: 한도윤\nOO은행 503-1847-2260-91\n금액: 9,800,000원\n아래에서 자산 보호 이체를 진행해 주세요.",
     linkDisplayText: "자산 보호 이체 진행하기",
     fakeLandingId: "card-safe-transfer",

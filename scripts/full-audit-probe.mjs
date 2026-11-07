@@ -566,6 +566,7 @@ const { pickLegVoiceName } = L("realtime/geminiProvider.js");
 const DIAL_FIRST_LINE = {
   "card-fake-callback": "문자 보고 전화드렸어요. 저는 카드 신청한 적이 없는데요.",
   "supervisor-official": "카드사에서 신고하라고 해서 전화드렸어요.",
+  "prosecutor-official": "금융감독기관에서 담당 검사님께 직접 전화하라고 해서 전화드렸어요.",
 };
 // refuseInstall — comply와 같되 앱 설치 요구는 거절하고 권한 허용을 누르지 않는다(R7 — 창구 오퍼 없이 포기하는가).
 function makeRefuseInstallResponder(otpOf) {
@@ -616,7 +617,7 @@ async function runMultiCall(job, tag) {
     const legDef = variant.legs[legIndex];
     const slot = legPlanLib.legVoiceSlot(variant, legIndex);
     const legStart = legPlanLib.legStartUserTurns(relay, legIndex);
-    const prior = legIndex > 0 ? legPlanLib.buildPriorLegContext(turns.filter((t) => t.role === "user" || (t.role === "scammer" && t.n)).map((t) => ({ role: t.role, text: t.text }))) : undefined;
+    const prior = legIndex > 0 ? legPlanLib.buildPriorLegContext(turns.filter((t) => t.role === "user" || (t.role === "scammer" && t.n)).map((t) => ({ role: t.role, text: t.text, legIndex: t.leg }))) : undefined;
     const nonLast = legIndex < variant.legs.length - 1;
     const voiceName = pickLegVoiceName(slot.gender, slot.slot);
     const startIndex = entry === "incoming" && legIndex === 0 ? 0 : Math.max(1, idx);
@@ -634,7 +635,7 @@ async function runMultiCall(job, tag) {
     turns.push(...r.turns.map((t) => ({ ...t, leg: legIndex })));
     events.push(...r.events.map((e) => ({ ...e, leg: legIndex })));
     idx = startIndex + (r.userTurns - userTurns);
-    legs.push({ legIndex, entry, callerLabel: legDef.callerLabel, voiceName, voiceSlot: slot.slot, gender: slot.gender, userTurnsStart: userTurns, userTurnsEnd: r.userTurns, ended: r.ended, priorContextLines: prior ? prior.split("\n").length - 2 : 0, declaredSms: r.declaredSms, wallMs: r.wallMs });
+    legs.push({ legIndex, entry, callerLabel: legDef.callerLabel, voiceName, voiceSlot: slot.slot, gender: slot.gender, userTurnsStart: userTurns, userTurnsEnd: r.userTurns, ended: r.ended, priorContextLines: prior ? prior.split("\n").length - 3 : 0, declaredSms: r.declaredSms, wallMs: r.wallMs });
     userTurns = r.userTurns;
     const closeErr = r.events.find((e) => e.ev === "close" && /(^|\D)429(\D|$)|RESOURCE_EXHAUSTED|quota/i.test(`${e.code ?? ""} ${e.reason ?? ""}`));
     if (closeErr) throw new Error(`429 감지(Live close): ${closeErr.code} ${closeErr.reason}`);

@@ -331,7 +331,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         ? splitLegHistory(storedHistory, legStartUserTurns(session.relay, sessionCallLeg.legIndex))
         : undefined;
     const priorLegBlock = legHistory
-      ? buildPriorLegContext(legHistory.prior.map((m) => ({ role: m.role, text: m.textMasked })))
+      ? buildPriorLegContext(legHistory.prior.map((m) => ({ role: m.role, text: m.textMasked, legIndex: m.legIndex, notSpoken: m.notSpoken === true })))
       : undefined;
     const llmHistory = toLlmHistory(legHistory ? legHistory.current : storedHistory);
     llmHistory.push({ role: "user", content: wrapUserInputAsData(maskedUserText) });

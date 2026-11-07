@@ -29,13 +29,14 @@ const numberOf = (numberId: string): string => {
 const FAKE_CALLBACK = numberOf("card-fake-callback");
 const GENUINE_CENTER = numberOf("card-genuine-center");
 const SUPERVISOR_OFFICIAL = numberOf("supervisor-official");
+const PROSECUTOR_OFFICIAL = numberOf("prosecutor-official");
 const ended = (legIndex: number, starts: number[]): RelayState => ({ legIndex, legStartUserTurns: starts, connected: false, legEnded: legIndex });
 
-test("[§142.4] 전제 — R1 · R2는 다통화 변형이고 레그 수가 설계대로다(5 · 4)", () => {
+test("[§142.4] 전제 — R1 · R2는 다통화 변형이고 레그 수가 설계대로다(4 · 3 — 2026-11-07 넘김 축소 전 5 · 4)", () => {
   assert.equal(R1.multiCall, true);
   assert.equal(R2.multiCall, true);
-  assert.equal(R1.legs.length, 5);
-  assert.equal(R2.legs.length, 4);
+  assert.equal(R1.legs.length, 4);
+  assert.equal(R2.legs.length, 3);
 });
 
 test("[§142.4 1행] 다통화가 아닌 변형은 다음 레그를 열지 않는다", () => {
@@ -81,20 +82,22 @@ test("[§142.4 8 · 9행] 감독기관 공식 번호 — 원격 지원 앱 응�
   if (after.status === "connected") assert.equal(after.legIndex, 2);
 });
 
-test("[§142.4 5 · 6행] 나가는 방식과 행동 — transfer 자리에 dial은 거부 · dial 자리의 callback(D4)은 연결(entry incoming)", () => {
-  // 레그 2(감독기관 첫 통화)의 끝은 호 전환이다.
-  const wrong = planLegStart({ variant: R1, relay: ended(2, [0, 4, 9]), action: "dial", dialed: FAKE_CALLBACK, installConsented: true, userTurns: 12 });
+test("[§142.4 5 · 6행] 나가는 방식과 행동 — dial 자리에 transfer는 거부 · 다른 번호는 연결 0 · dial 자리의 callback(D4)은 연결(entry incoming)", () => {
+  // 레그 2(감독기관)의 끝은 참가자 발신이다(2026-11-07 넘김 축소 전 = 호 전환).
+  const wrong = planLegStart({ variant: R1, relay: ended(2, [0, 4, 9]), action: "transfer", installConsented: true, userTurns: 12 });
   assert.deepEqual(wrong, { status: "not_ready", reason: "wrong_action" });
-  const transfer = planLegStart({ variant: R1, relay: ended(2, [0, 4, 9]), action: "transfer", installConsented: true, userTurns: 12 });
-  assert.equal(transfer.status, "connected");
-  if (transfer.status === "connected") assert.deepEqual([transfer.legIndex, transfer.entry], [3, "transfer"]);
+  const other = planLegStart({ variant: R1, relay: ended(2, [0, 4, 9]), action: "dial", dialed: FAKE_CALLBACK, installConsented: true, userTurns: 12 });
+  assert.deepEqual(other, { status: "unknown_number" });
+  const dial = planLegStart({ variant: R1, relay: ended(2, [0, 4, 9]), action: "dial", dialed: PROSECUTOR_OFFICIAL, installConsented: true, userTurns: 12 });
+  assert.equal(dial.status, "connected");
+  if (dial.status === "connected") assert.deepEqual([dial.legIndex, dial.entry], [3, "dial"]);
   const callback = planLegStart({ variant: R1, relay: ended(0, [0]), action: "callback", installConsented: false, userTurns: 4 });
   assert.equal(callback.status, "connected");
   if (callback.status === "connected") assert.deepEqual([callback.legIndex, callback.entry], [1, "incoming"]);
 });
 
 test("[§142.4 4행] 마지막 레그 뒤에는 다음 레그가 없다", () => {
-  const plan = planLegStart({ variant: R1, relay: ended(4, [0, 4, 9, 12, 15]), action: "transfer", installConsented: true, userTurns: 18 });
+  const plan = planLegStart({ variant: R1, relay: ended(3, [0, 4, 9, 12]), action: "dial", dialed: PROSECUTOR_OFFICIAL, installConsented: true, userTurns: 18 });
   assert.deepEqual(plan, { status: "not_ready", reason: "no_next_leg" });
 });
 
@@ -111,21 +114,22 @@ test("[§142.3] 레그 문자 게이트 — 현재 레그 문자만 · 하한은
   assert.deepEqual(leg0.map((s) => s.smsId), ["card-callback-number"]);
   const leg1 = resolveDeclaredSms(SCENARIO, "fv-k3dn", { relay: { legIndex: 1, legStartUserTurns: [0, 4], connected: true } }).declared;
   assert.deepEqual(leg1.map((s) => [s.smsId, s.notBeforeUserTurns]), [["card-remote-support-link", 2 + 4]]);
-  const last = resolveDeclaredSms(SCENARIO, "fv-k3dn", { relay: { legIndex: 4, legStartUserTurns: [0, 4, 9, 12, 15], connected: true } }).declared;
-  assert.deepEqual(last.map((s) => [s.smsId, s.notBeforeUserTurns]), [["card-safe-account", 1 + 15]]);
+  const last = resolveDeclaredSms(SCENARIO, "fv-k3dn", { relay: { legIndex: 3, legStartUserTurns: [0, 4, 9, 12], connected: true } }).declared;
+  assert.deepEqual(last.map((s) => [s.smsId, s.notBeforeUserTurns]), [["card-safe-account", 3 + 12]]);
   // 범위 인자 부재(도달 랜딩 · 계좌 해석 등 변형 전체를 보는 지점) = 종전(전체 선언).
   assert.equal(resolveDeclaredSms(SCENARIO, "fv-k3dn").declared.length, R1.sms.length);
 });
 
 test("[§142.3] 끊기 보정 — 마지막이 아닌 레그만 nonLastLeg · 5행 하한은 레그 시작 뒤 발화 수", () => {
   assert.deepEqual(legHangupAdjustments(R1, { legIndex: 1, legStartUserTurns: [0, 4] }, 7), { nonLastLeg: true, turnsSinceLegStart: 3 });
-  assert.deepEqual(legHangupAdjustments(R1, { legIndex: 4, legStartUserTurns: [0, 4, 9, 12, 15] }, 20), { nonLastLeg: false, turnsSinceLegStart: 5 });
+  assert.deepEqual(legHangupAdjustments(R1, { legIndex: 3, legStartUserTurns: [0, 4, 9, 12] }, 20), { nonLastLeg: false, turnsSinceLegStart: 8 });
   assert.equal(legHangupAdjustments(findFlowVariant("fv-akj5") as FlowVariant, undefined, 7), undefined);
 });
 
-test("[§142.3 D5] 레그 목소리 — 같은 인물(감독기관 레그 2 · 4)은 같은 자리 · 남성 인물 셋은 서로 다른 자리 · 상담원은 여성", () => {
+test("[§142.3 D5] 레그 목소리 — 남성 인물 셋(배송원 · 감독기관 · 검사)은 서로 다른 자리 · 상담원은 여성 · 같은 speakerId는 같은 자리", () => {
   const slots = R1.legs.map((_, i) => legVoiceSlot(R1, i));
-  assert.deepEqual(slots[2], slots[4]);
+  const twice = { ...R1, legs: [...R1.legs, R1.legs[2]] };
+  assert.deepEqual(legVoiceSlot(twice, 4), slots[2]);
   const male = [slots[0], slots[2], slots[3]].map((s) => s.slot);
   assert.equal(new Set(male).size, 3);
   assert.equal(slots[1]!.gender, "female");
@@ -187,7 +191,7 @@ test("[§142 R7] 끝까지 설치를 거절한 give_up — 종전 fv-x7ue는 4�
     scenarioId: SCENARIO,
     difficultyLevel: "advanced",
     flowVariantId: "fv-k3dn",
-    relay: { legIndex: 4, legStartUserTurns: [0, 4, 9, 12, 15], connected: true },
+    relay: { legIndex: 3, legStartUserTurns: [0, 4, 9, 12], connected: true },
   });
   const after = await decideAndMarkRealtimeHangup(rebuilt.tx, REFS, claims, [], NOW, false, false, false);
   assert.equal(after.status, "accepted");
