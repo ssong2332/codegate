@@ -101,6 +101,37 @@ ${LIVE_SPEECH_STYLE_VOICE_KEEP}`;
 const LIVE_SPEECH_STYLE_NAME_INSTITUTION = `- **상대의 이름·나이 같은 신상은 [미리 확보한 상대 정보 — 이 통화에서만]에 적혀 있거나 상대가 이 통화에서 직접 말한 것만 쓴다.** 그 밖의 이름은 지어내 부르지 않는다 — 아직 모르는 이름이 필요하면 상대에게 물어 확인한다.`;
 const LIVE_SPEECH_STYLE_NAME_OTHER = `- **상대의 이름·나이 같은 신상은 [미리 확보한 상대 정보 — 이 통화에서만]에 적혀 있거나 상대가 이 통화에서 직접 말한 것만 쓴다.** 그 밖의 이름은 지어내 부르지 않는다 — 이름 대신 상황에 맞는 호칭으로 부른다.`;
 
+// ⭐ 2026-11-07(Edge 시나리오 시험 판 3 · 16 · 23 — `docs/research/edge-scenario-test-2026-11-07.md`) — Live 음성 경로는 출력이 오디오라
+// 텍스트 경로의 결정적 후처리(표식 추출 · R9 비밀번호 문장 제거 · 실명 치환)가 소리에는 닿지 않는다. 이 블록이 소리의 유일한 층이고,
+// 자막 · 저장 전사는 `realtime/liveTranscriptGuard.ts`(화면 사본 `src/lib/realtime/liveTranscriptGuard.ts`)가 결정적으로 거른다.
+// | 줄 | 실측 결함 | 지시 |
+// |---|---|---|
+// | L1 | 판 23 — 메신저에서 넘어온 통화 자막에 `[[LINK:parcel-install]]` · `[[SIGNAL:ESCALATE_VOICE]]` | 겹대괄호 표식은 통화에서 말하지 않는다 · 통화로 넘기라는 표식 지시는 이미 통화 중이라 해당 없음 |
+// | L2 | 판 3 · 판 33 — 계좌 비밀번호를 말로 요구(은행 · 기관 사칭 수법 문면과 [진행 강제] 화면 밖 규칙의 "계좌 비밀번호" 예시) | 비밀번호는 말로 묻지 않고 화면 인증으로 넘긴다 · 수법 목록 · 예시보다 우선 |
+// | L3 | 판 16 — "한진택배 고객센터" 2회(소속 자기소개) | 자기 소속을 밝힐 때도 실제 회사 이름 대신 업종 이름 |
+// ⛔ 실제 회사 이름을 예로 적지 않는다(예시가 오히려 그 이름을 부른다). ⛔ 문자로 받은 인증번호는 L2 대상이 아니다(인증번호 문자 루트의 설계 단계).
+// 실리는 곳 = `liveSpeechStyle`(Gemini Live 토큰 1곳). 폴백 · 오프닝 · 메신저 = 블록 0 = 종전 바이트 동일.
+export const LIVE_CALL_SAFETY_HEAD = "[실시간 통화 — 반드시 지킬 것]";
+/** L1 — 시나리오 문면에 겹대괄호 표식(`[[`)이 있을 때만 싣는다(없는 시나리오에 표식 이야기를 꺼내 오히려 부르지 않게). */
+export const LIVE_CALL_MARKER_RULE = `- 이 대화는 음성 통화다. 위 설명에 나오는 [[LINK:…]] · [[SIGNAL:…]]처럼 겹대괄호로 감싼 표식은 문자 대화에서만 쓰는 것이다. 통화에서는 표식을 소리 내어 말하거나 읽지 않는다. 링크는 "문자로 보내 드린 링크"처럼 말로만 가리킨다. 위 설명에 상대를 전화 통화로 넘기라는 지시가 있어도 지금은 이미 통화 중이므로 해당하지 않는다 — 전화를 다시 걸겠다거나 상담원이 전화드리겠다는 말 없이 이 통화에서 하던 안내를 바로 이어 간다.`;
+export const LIVE_CALL_PASSWORD_RULE = `- 비밀번호(계좌 · 카드 · 인터넷뱅킹 · 간편 비밀번호 · 보안카드 번호)는 말로 불러 달라거나 알려 달라고 하지 않는다. 위 페르소나 · 수법 목록 · [진행 강제] 어디에 비밀번호를 불러 달라는 요구나 "계좌 비밀번호" 예시가 있어도 이 줄이 우선한다 — 그 차례에는 비밀번호를 묻는 대신 "화면에서 인증하실 때 직접 누르시면 됩니다"라고만 안내하는 것으로 그 요구를 대신하고 다음 단계로 넘어간다. 상대가 비밀번호 숫자를 말해도 그 숫자를 되풀이하거나 맞는지 확인하지 않는다. 문자로 받은 인증번호는 이 줄의 대상이 아니다.`;
+export const LIVE_CALL_COMPANY_RULE = `- 자기 소속을 밝힐 때도 택배 · 통신 · 보험 · 증권 · 쇼핑몰 · 캐피탈 · 은행 · 카드 회사의 실제 이름은 쓰지 않는다. 위 설명에 정해진 이름이 있으면 그 이름만, 없으면 "택배사 고객센터"처럼 업종 이름으로만 말한다.`;
+
+/** 겹대괄호 표식을 쓰는 시나리오 문면인가(페르소나 · 수법 중 하나라도 `[[`). */
+export function scenarioUsesControlMarkers(prompt: Pick<ScenarioPromptDoc, "personaPrompt" | "weakenedTactics">): boolean {
+  return prompt.personaPrompt.includes("[[") || prompt.weakenedTactics.some((tactic) => tactic.includes("[["));
+}
+
+/** Live 전용 [실시간 통화 — 반드시 지킬 것] 블록(L1은 표식을 쓰는 시나리오만). */
+export function buildLiveCallSafetyBlock(usesControlMarkers: boolean): string {
+  return [
+    LIVE_CALL_SAFETY_HEAD,
+    ...(usesControlMarkers ? [LIVE_CALL_MARKER_RULE] : []),
+    LIVE_CALL_PASSWORD_RULE,
+    LIVE_CALL_COMPANY_RULE,
+  ].join("\n");
+}
+
 /** Live 전용 [말투] 블록. `identityCheckAllowed`(institution 여부)로 연령·톤 줄과 이름 부재 시 처리만 갈린다. */
 export function buildLiveSpeechStyleBlock(identityCheckAllowed: boolean): string {
   return [
@@ -1161,6 +1192,8 @@ export function buildSystemPrompt(
     ...(opts.screenActionOnly === true ? [SCREEN_ACTION_ONLY_RULE, ""] : []),
     // T194-b(§84.3.4) — [미리 확보한 상대 정보](조건형). [진행 강제] 뒤라 예외 문장이 금지 규칙보다 **나중에** 읽힌다.
     ...(personaCardBlock ? [personaCardBlock, ""] : []),
+    // 2026-11-07 — Live 전용 [실시간 통화 — 반드시 지킬 것](L1 ~ L3 · 위 상수 주석). [진행 강제]보다 뒤라 그 예시보다 나중에 읽힌다. 부재 = 블록 0.
+    ...(opts.liveSpeechStyle === true ? [buildLiveCallSafetyBlock(scenarioUsesControlMarkers(prompt)), ""] : []),
     ...(difficultyBlock ? [difficultyBlock, ""] : []),
     ...(opts.turnInstruction ? [opts.turnInstruction, ""] : []),
     prompt.guardrailPreamble,

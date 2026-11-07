@@ -23,6 +23,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { maskPII } from "../guardrails";
 import { readDocId, readOptionalBoolean, readOptionalFiniteNumber } from "../shared/requestValidation";
 import { stripLeakedThought } from "./thoughtLeak";
+import { guardLiveScammerLine, guardLiveUserLine } from "./liveTranscriptGuard";
 
 /** 한 번에 제출 가능한 턴 수 상한 — 악의적/폭주 입력 방지(정상 통화는 수십 턴 이내). */
 export const TRANSCRIPT_MAX_TURNS = 200;
@@ -85,9 +86,16 @@ export function readTranscriptRequest(data: unknown): ReadTranscriptRequest {
 /** 저장 전 정규화 — 길이 자르기 · §116 사기범 사고 문장 제거 · PII 가림 · 빈 줄 제외(종전 저장 규칙 그대로). */
 export function prepareTranscriptTurns(turns: readonly ReadTranscriptTurn[]): PreparedTranscriptTurn[] {
   const out: PreparedTranscriptTurn[] = [];
+  // 2026-11-07(판 3) — 참가자 줄 U1의 조건 = 바로 앞 사기범 줄(거른 뒤 값 · 빈 줄 포함 직전 사기범 제출 기준).
+  let previousScammerLine: string | undefined;
   turns.forEach((turn, index) => {
     const submitted = turn.text.slice(0, TRANSCRIPT_MAX_TEXT_LEN);
-    const raw = turn.role === "scammer" ? stripLeakedThought(submitted) : submitted;
+    // §116 사고 문장 → 2026-11-07 `liveTranscriptGuard.ts`(S1 표식 · S2 실존 회사명 · U1 비밀번호 숫자). 화면이 이미 걸렀어도 옛 화면 캐시를 위해 다시 거른다(멱등).
+    const raw =
+      turn.role === "scammer"
+        ? guardLiveScammerLine(stripLeakedThought(submitted))
+        : guardLiveUserLine(submitted, previousScammerLine);
+    if (turn.role === "scammer") previousScammerLine = raw;
     const textMasked = maskPII(raw).trim();
     if (!textMasked) return;
     out.push(turn.atMs === undefined ? { index, role: turn.role, textMasked } : { index, role: turn.role, textMasked, atMs: turn.atMs });
