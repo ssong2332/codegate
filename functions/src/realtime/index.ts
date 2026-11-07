@@ -268,6 +268,8 @@ export const createRealtimeCall = onCall<
       ...(familyAddress ? { familyAddress } : {}),
       // §110.3 — 메신저에서 넘어온 통화면 앞선 대화(부재 = 처음부터 통화 · 블록 0).
       ...(priorChatContext ? { priorChatContext } : {}),
+      // Edge 판 23 · 24 — 메신저에서 넘어온 통화(다통화 다음 레그 · 같은 레그 재연결은 아니다 — 위 앞선 대화 갈래와 같은 조건).
+      ...(!callLeg && isEscalatedVoiceCall(session.channel, session.channelHistory) ? { escalatedCall: true } : {}),
       // §142 — 다통화 레그(부재 = 종전).
       ...(callLeg ? { callLeg: { legIndex: callLeg.legIndex, voiceSlot: callLeg.voiceSlot } } : {}),
     });

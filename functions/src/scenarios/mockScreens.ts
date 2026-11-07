@@ -696,7 +696,7 @@ const ASSET_PROTECTION_NOTICE_CALL: MockScreenItem[] = [
     ],
     issuerLabel: "ⓒ 자산보호 보관접수 안내",
     mockHost: "asset-custody-desk.invalid",
-    fields: ["보관 신청 금액", "돈을 찾을 은행", "찾는 방법(현금 또는 수표)"],
+    fields: ["보관 신청 금액", "돈을 찾을 은행", "보관 방법(현금 · 수표 · 금 실물)"],
     submitLabel: "보관 신청하기",
     successHeadline: "보관 신청이 접수되었습니다.",
     momentTactic: "자산 보호를 빌미로 한 현금 인출 · 전달 약속 유도",
