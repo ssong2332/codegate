@@ -93,3 +93,55 @@ test("[A4] 대화방 가장 최근 금액이 요구액 · 서버 `demandAmountFr
   assert.ok(room.includes('latestDemandAmount(messages.filter((m) => m.role === "scammer").map((m) => m.text)) ?? attachment.transferAmount'));
   assert.ok(room.includes("...(chipDemandAmount(attachment) ? { transferAmount: chipDemandAmount(attachment) } : {}),"));
 });
+
+// ── ⭐ PR-A(2026-11-07 · 기관 사칭 고급 · 택배 통관 고급 — 적은 금액이 통과) — 통화 중 문자 이체 화면의 요구액 ──
+// 설계 docs/research/institution-advanced-loan-design-2026-11-07.md §1.1 판정표 R1 ~ R3 · 한글 수사 H1 ~ H3.
+
+test("[PR-A H] 한글 수사 금액(실시간 전사 표기)을 읽는다 · 금액 아닌 낱말은 그대로", () => {
+  const cases: Array<[string, string | undefined]> = [
+    ["우선 구백팔십만 원을 옮기셔야 합니다", "9,800,000"],
+    ["협박 금액은 삼백만 원", "3,000,000"],
+    ["수수료는 구만 구천 원", "99,000"],
+    ["5백만 원", "5,000,000"],
+    ["9백8십만 원", "9,800,000"],
+    ["3천만 원 정도 있어요", "30,000,000"],
+    ["만 원만", "10,000"],
+    ["삼천만 원 말고 200만 원만", "2,000,000"],
+    ["저희 사원이 연락드립니다", undefined],
+    ["구원 투수", undefined],
+  ];
+  for (const [text, want] of cases) assert.equal(lastAmountIn(text), want, text);
+  assert.equal(latestDemandAmount(["잔액이 삼천만 원이시군요", "그중 구백팔십만 원을 먼저 옮기셔야 합니다", "네 링크 누르세요"]), "9,800,000");
+});
+
+test("[PR-A H 드리프트] 한글 수사 줄은 서버 linkMarker와 원문이 같다", () => {
+  const server = read("functions/src/roleplay/linkMarker.ts");
+  const client = read("src/lib/bankapp/bankApp.ts");
+  const slice = (src: string) => src.slice(src.indexOf("const HANGUL_NUMERALS"), src.indexOf("/** 한글 수사 금액을 숫자로 바꾼 대사"));
+  assert.ok(slice(client).length > 200);
+  assert.equal(slice(client), slice(server));
+  const fn = (src: string) => {
+    const at = src.indexOf("function hangulAmountsToDigits(text: string): string {");
+    return src.slice(at, src.indexOf("\n}\n", at));
+  };
+  assert.ok(fn(client).length > 100);
+  assert.equal(fn(client), fn(server));
+});
+
+test("[PR-A R] 통화 중 문자 이체 화면 — 요구액 = 통화에서 마지막으로 말한 금액(없으면 문자 금액) · 금액 값은 콜백 밖으로 0", () => {
+  // R1 · R2 · R3 — 화면 비교 표(B1)와 맞물린다: requestedAmount가 문자 amount보다 우선.
+  const sms = { accountNumber: "210-3391-5540-08", amount: "9,800,000" };
+  assert.equal(recordTransferAndCompare("pa1", { ...sms, requestedAmount: "5,000,000" }, "5,000,000"), "equal", "R1 말한 금액");
+  assert.equal(recordTransferAndCompare("pa2", sms, "100,000"), "less", "R2 문자 금액");
+  assert.equal(recordTransferAndCompare("pa3", { accountNumber: "1" }, "100,000"), undefined, "R3");
+  // 배선 — 페이지가 올린 대사 + 아직 올리지 않은 실시간 전사를 넘기고, 오버레이는 열 때마다 다시 잰다(링크 · 은행 앱 '송금' 두 길).
+  assert.ok(page.includes("demandAmountNow={() =>"));
+  assert.ok(page.includes('...messages.filter((m) => m.role === "scammer").map((m) => m.text),'));
+  assert.ok(page.includes('...transcriptRef.current.filter((t) => t.role === "scammer").map((t) => t.text),'));
+  assert.ok(smsOverlay.includes("const spoken = demandAmountNow?.();"));
+  assert.ok(smsOverlay.includes("transfer && spoken ? { ...transfer, requestedAmount: spoken } : transfer;"));
+  assert.ok(smsOverlay.includes("? { ...current, prefilledTransfer: withDemand(prefilledTransferOf(sms)) }"), "같은 문자 랜딩을 다시 열어도 요구액 갱신");
+  assert.ok(smsOverlay.includes("...(spoken ? { requestedAmount: spoken } : {}),"), "은행 앱 '송금' 길");
+  // G138 — 기록 콜백 인자는 그대로 비교 결과 하나(위 [B4]).
+  assert.ok(!smsOverlay.includes("onLandingSubmitted(landing.smsId, amountComparison, "));
+});

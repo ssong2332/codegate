@@ -826,7 +826,8 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
           )
         : undefined;
     const fallbackWrapUp =
-      hangupMode === "signal" && goalActionDone && goalFollowUpFor(session.scenarioId, session.flowVariantId) !== undefined
+      // PR-A — 결정 화면(이체)을 마치기 전 · 적게 보낸 상태에서는 마무리 지시를 싣지 않는다(실시간 `planGoalWrapUp`과 같은 조건 · 4-c행 입력 재사용).
+      hangupMode === "signal" && goalActionDone && !decisionScreenPending && goalFollowUpFor(session.scenarioId, session.flowVariantId) !== undefined
         ? FALLBACK_GOAL_WRAP_UP_INSTRUCTION
         : claimWrapUp;
     const turnInstructionWithPhoto =

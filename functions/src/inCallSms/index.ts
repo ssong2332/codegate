@@ -230,6 +230,8 @@ export const deliverInCallSms = onCall<
         userTurns,
         followUpUserTurns,
         placed: await isVerifyOfferPlaced(db, sessionId, session.scenarioId),
+        // PR-A — 이체 전 · 적게 보낸 상태에서는 마무리 지시를 내지 않는다(`planGoalWrapUp` 판정표).
+        scenarioId: session.scenarioId,
       });
       if (wrap === "pending") return withScreenStatus({ status: "goal_pending" });
       if (wrap === "wrap_up") {

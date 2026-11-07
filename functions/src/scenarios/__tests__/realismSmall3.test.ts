@@ -30,7 +30,12 @@ test("[S1] 계좌 문자 예금주 = 가상 개인 이름(한글 2~4자) · 기�
     assert.equal(/센터|관리|캐피탈|공탁|보호|대응|통관|○/.test(name), false, `${smsId}: 기관형 ${name}`);
   }
   // 같은 계좌번호를 쓰는 문자끼리가 아니면 예금주 이름이 겹치지 않는다(한 대화에서 두 사람 이름이 섞이지 않게 — 시나리오마다 하나).
-  assert.equal(new Set(holders.map(([, name]) => name)).size, holders.length, holders.map(([, n]) => n).join(","));
+  // PR-A(2026-11-07) — 기관 고급 전용 문자(`institution-asset-safe-account`)는 초급 · 중급 문자와 **같은 계좌 · 같은 예금주**다(금액 줄만 더함).
+  // ⇒ 이름 하나 = 계좌 하나(같은 계좌의 문자끼리만 이름을 함께 쓴다).
+  const accountOf = (smsId: string) => /\d{3}-\d{4}-\d{4}-\d{2}/.exec(Object.values(IN_CALL_SMS).flat().find((i) => i.smsId === smsId)!.body)?.[0];
+  const pairs = new Set(holders.map(([smsId, name]) => `${name}@${accountOf(smsId)}`));
+  assert.equal(new Set(holders.map(([, name]) => name)).size, pairs.size, holders.map(([, n]) => n).join(","));
+  assert.equal(holders.length - pairs.size, 1, "같은 계좌를 다시 쓰는 문자는 기관 고급 전용 1건뿐");
   assert.equal(findFlowVariant("fv-akj5")?.sms.length ?? 0, 0, "fv-akj5(#192) 문자 선언 0 그대로");
 });
 

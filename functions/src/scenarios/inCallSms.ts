@@ -265,6 +265,21 @@ const INSTITUTIONAL_IMPERSONATION: InCallSmsItem[] = [
     announceInstruction:
       '(참가자 휴대전화로 방금 안전계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 이체를 진행해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)',
   },
+  // ⭐ PR-A(2026-11-07 사용자 신고 *"이체 금액을 적게 보내도 그냥 넘어가는"* · 설계 docs/research/institution-advanced-loan-design-2026-11-07.md §1.2) —
+  // 고급 전용 안전계좌 문자. 위 항목과 같은 계좌 · 같은 이체 화면에 **금액 줄**(980만 원 — 1회 이체 한도 안 · 사용자 결정 D-L6)을 더했다. 금액 줄이
+  // 문서 `transferAmount`(요구액 판정표 R2의 원천)가 된다. 위 항목은 초급 · 중급 · 은퇴 변형(`fv-pgqt`)이 그대로 쓴다(바이트 무변경).
+  {
+    smsId: "institution-asset-safe-account",
+    kind: "account",
+    senderLabel: `${SMS_SENDER_NUMBER["institutional-impersonation"]} (자산보호 안내)`,
+    body: "[자산보호절차] 임시 안전계좌 안내\n예금주: 강태윤\nOO은행 210-3391-5540-08\n금액: 9,800,000원\n아래에서 안전계좌 이체를 진행해 주세요.\n이체 후 담당자에게 바로 알려 주세요.",
+    linkDisplayText: "안전계좌 이체 진행하기",
+    fakeLandingId: "safe-account-transfer",
+    linkAddress: "jasan-boho-center.invalid/transfer/a7Kq",
+    afterScammerTurns: 7,
+    announceInstruction:
+      "(참가자 휴대전화로 방금 안전계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 문자 속 링크로 문자에 적힌 금액을 이체해 달라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
+  },
 ];
 
 const CARD_COMPANY_IMPERSONATION: InCallSmsItem[] = [
@@ -467,14 +482,16 @@ const COURIER_CUSTOMS_SCAM: InCallSmsItem[] = [
     smsId: "courier-safe-account",
     kind: "account",
     senderLabel: `${SMS_SENDER_NUMBER["courier-customs-scam"]} (자산 보호 안내)`,
-    body: "[명의도용 피해조치] 국가 안전계좌 안내\n예금주: 신예린\nOO은행 604-2270-1183-91\n수사 종료 시까지 보관 후 반환됩니다.\n아래 링크에서 바로 이체할 수 있습니다.",
-    // ⭐ P2(X6 · 2026-10-31) — 계좌만 있던 문자에 훈련용 이체 화면 링크를 병기했다(금액은 통화에서 정한다 — 화면에서 참가자가 넣는다 · 계좌 무변경).
+    body: "[명의도용 피해조치] 국가 안전계좌 안내\n예금주: 신예린\nOO은행 604-2270-1183-91\n금액: 7,600,000원\n수사 종료 시까지 보관 후 반환됩니다.\n아래 링크에서 바로 이체할 수 있습니다.",
+    // ⭐ P2(X6 · 2026-10-31) — 계좌만 있던 문자에 훈련용 이체 화면 링크를 병기했다(계좌 무변경).
+    // ⭐ PR-A(2026-11-07 Edge 시험 판 10 — 금액 줄이 없고 사기범도 금액을 말하지 않아 10만 원만 보내도 통과) — 금액 줄 760만 원(1회 이체 한도 안 · 판단값).
+    // 문서 `transferAmount`(요구액 판정표 R2)의 원천이 된다. 이 문자는 `fv-y3ks`만 쓴다.
     linkDisplayText: "안전계좌로 이체하기",
     fakeLandingId: "courier-safe-transfer",
     linkAddress: "safe-keep-send.invalid/send/Sk8v",
     afterScammerTurns: 7,
     announceInstruction:
-      "(참가자 휴대전화로 방금 국가 안전계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 수사가 끝날 때까지 문자 속 링크로 그 계좌에 옮겨 두라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호를 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
+      "(참가자 휴대전화로 방금 국가 안전계좌 안내 문자가 실제로 도착했다. 상대의 말에 대답할 때 그 대답 안에서 문자를 보냈다는 사실과 수사가 끝날 때까지 문자 속 링크로 문자에 적힌 금액을 그 계좌에 옮겨 두라는 말을 한두 문장으로 알리고 상대의 반응을 기다려라. 이것만 말하려고 지금 따로 말을 꺼내지는 마라. 계좌번호·금액을 새로 지어내 말하지 말고, 실제 주소를 읽어 주지도 마라.)",
   },
 ];
 

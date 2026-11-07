@@ -218,7 +218,7 @@ import {
 } from "@/lib/callLegs/legTransition";
 import { buildRecents, officialNumberForTitle, type PhoneCallLog } from "@/lib/callLegs/phoneApp";
 import BankAppOverlay from "@/components/BankAppOverlay";
-import { fictionalBalanceFor, isBankAppEnabled, myBankNameFor, type TransferTarget } from "@/lib/bankapp/bankApp";
+import { fictionalBalanceFor, isBankAppEnabled, latestDemandAmount, myBankNameFor, type TransferTarget } from "@/lib/bankapp/bankApp";
 import { readDebugFlagSearch } from "@/lib/realtime/debugFlags";
 import VerifyCallOverlay from "@/components/VerifyCallOverlay";
 import { LoadingStatus } from "@/components/ui";
@@ -4450,6 +4450,14 @@ export default function SessionCallPage() {
           onDialNumber={handleDialNumber}
           // N1 · N2 — 이체 화면 머리띠의 "내 은행" · 같은 계좌 합계 열쇠.
           bankIdentity={{ myBankName: myBankNameFor(sessionId ?? "", sortedSms.find((sms) => sms.bankName)?.bankName), ledgerKey: sessionId ?? "" }}
+          // ⭐ PR-A(2026-11-07 — 적은 금액이 통과) — 요구액 판정표 R1: 올린 대사(`messages`)와 아직 올리지 않은 실시간 전사 중 사기범이 마지막으로 말한 금액.
+          // 금액 값은 화면 안 비교에만 쓰인다(G138 — 기록 경로에는 비교 결과 하나).
+          demandAmountNow={() =>
+            latestDemandAmount([
+              ...messages.filter((m) => m.role === "scammer").map((m) => m.text),
+              ...transcriptRef.current.filter((t) => t.role === "scammer").map((t) => t.text),
+            ])
+          }
         />
       )}
 

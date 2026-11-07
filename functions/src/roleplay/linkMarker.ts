@@ -169,15 +169,48 @@ export function withBankTransferPrefill(
 // | M1 | 이번 대사에 원 단위 금액이 있다 | 그 대사의 **마지막** 금액("삼천만 원 말고 200만 원만" → 200만) |
 // | M2 | 앞선 사기범 메시지(최근부터)에 금액이 있다 | 그 메시지의 마지막 금액 |
 // | M3 | 그 밖 | 없음 |
-// 금액 표기: 숫자(쉼표 허용) + 단위(억 · 천만 · 백만 · 십만 · 만 · 천)를 이어 쓰고 끝에 "원"("1억 2천만 원" · "200만 원" · "2,340,000원"). 한글 수사("이백만 원")는 읽지 않는다.
+// 금액 표기: 숫자(쉼표 허용) + 단위(억 · 천만 · 백만 · 십만 · 만 · 천)를 이어 쓰고 끝에 "원"("1억 2천만 원" · "200만 원" · "2,340,000원").
+// ⭐ PR-A(2026-11-07) — 한글 수사("이백만 원" · "구만 구천 원")도 먼저 숫자로 바꿔 읽는다. 아래 한글 수사 줄은 클라 `src/lib/bankapp/bankApp.ts`와 원문이 같다(드리프트 테스트).
 const AMOUNT_UNITS: Readonly<Record<string, number>> = { 억: 100_000_000, 천만: 10_000_000, 백만: 1_000_000, 십만: 100_000, 만: 10_000, 천: 1_000 };
 const AMOUNT_PATTERN = /((?:\d[\d,]*\s*(?:억|천만|백만|십만|만|천)\s*)*\d[\d,]*\s*(?:억|천만|백만|십만|만|천)?)\s*원/g;
 const AMOUNT_TOKEN = /(\d[\d,]*)\s*(억|천만|백만|십만|만|천)?/g;
 
-/** 한 대사의 마지막 원 단위 금액("2,000,000"). 없으면 undefined. */
+const HANGUL_NUMERALS: Readonly<Record<string, number>> = { 일: 1, 이: 2, 삼: 3, 사: 4, 오: 5, 육: 6, 칠: 7, 팔: 8, 구: 9 };
+const HANGUL_AMOUNT_PATTERN = /(^|[^가-힣\d,])((?:[\d,]+|[일이삼사오육칠팔구십백천만억])(?:\s?(?:[\d,]+|[일이삼사오육칠팔구십백천만억]))*)(?=\s*원)/g;
+
+function hangulAmountValue(phrase: string): number | undefined {
+  let total = 0;
+  let section = 0;
+  let digit = 0;
+  for (const [token] of phrase.replace(/\s/g, "").matchAll(/[\d,]+|[^\d,]/g)) {
+    if (/^[\d,]+$/.test(token)) digit = Number(token.replace(/,/g, ""));
+    else if (token in HANGUL_NUMERALS) digit = HANGUL_NUMERALS[token]!;
+    else if (token === "십" || token === "백" || token === "천") {
+      section += (digit || 1) * (token === "십" ? 10 : token === "백" ? 100 : 1_000);
+      digit = 0;
+    } else {
+      total += (section + digit || 1) * (token === "억" ? 100_000_000 : 10_000);
+      section = 0;
+      digit = 0;
+    }
+  }
+  const value = total + section + digit;
+  return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+/** 한글 수사 금액을 숫자로 바꾼 대사(판정표 H1 ~ H3 — 클라 `src/lib/bankapp/bankApp.ts`). */
+function hangulAmountsToDigits(text: string): string {
+  return text.replace(HANGUL_AMOUNT_PATTERN, (whole: string, before: string, phrase: string) => {
+    if (!/[일이삼사오육칠팔구십백천만억]/.test(phrase) || !/[\d십백천만억]/.test(phrase)) return whole;
+    const value = hangulAmountValue(phrase);
+    return value === undefined ? whole : `${before}${value}`;
+  });
+}
+
+/** 한 대사의 마지막 원 단위 금액("2,000,000"). 없으면 undefined. 한글 수사도 읽는다(PR-A). */
 function lastAmountIn(text: string): string | undefined {
   let last: number | undefined;
-  for (const match of text.matchAll(AMOUNT_PATTERN)) {
+  for (const match of hangulAmountsToDigits(text).matchAll(AMOUNT_PATTERN)) {
     let total = 0;
     for (const token of match[1]!.matchAll(AMOUNT_TOKEN)) {
       total += Number(token[1]!.replace(/,/g, "")) * (token[2] ? AMOUNT_UNITS[token[2]]! : 1);

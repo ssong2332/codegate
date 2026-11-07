@@ -425,8 +425,19 @@ const FAST_BACKSTOP = { backstopUserTurns: 1 } as const;
 // 발화 4에 도착했고, 사기범은 흐름 순서대로 자산 질문을 이어 가 문자를 언급하지도 번호를 묻지도 않았다. 인증번호 하한을 3 → 5로 올려 강제 도착을
 // 발화 7(1a 이전과 같은 시점)로 되돌리고, 계좌 문자는 그대로 6(인증번호 도착 + 간격 2가 먼저 걸린다). 백스톱 간격 1은 유지한다(도구가 늦을 때만 작동).
 const INSTITUTION_OTP_V2: FlowVariantSms = { ...INSTITUTION_ADVANCED_SMS[0], notBeforeUserTurns: 5, ...FAST_BACKSTOP };
-const INSTITUTION_ADVANCED_SMS_V2: FlowVariantSms[] = [INSTITUTION_OTP_V2, { ...INSTITUTION_ADVANCED_SMS[1], ...FAST_BACKSTOP }];
+// PR-A(2026-11-07) — 종전 `INSTITUTION_ADVANCED_SMS_V2`(fv-c5fj 전용)는 아래 `INSTITUTION_ADVANCED_SMS_V3`(금액 줄 있는 고급 전용 안전계좌 문자)로 바뀌었다.
 const INSTITUTION_OTP_ONLY_SMS: FlowVariantSms[] = [INSTITUTION_OTP_V2];
+// ⭐ PR-A(2026-11-07 사용자 신고 *"이체 금액을 적게 보내도 그냥 넘어가는"* · docs/research/institution-advanced-loan-design-2026-11-07.md §1.2 · 사용자 결정 D-L6) —
+// 고급 `fv-c5fj`의 안전계좌 금액을 말 · 문자 · 화면에서 하나로 둔다(980만 원 — 1회 이체 한도 1,000만 원 안). 문자는 금액 줄이 있는 고급 전용
+// `institution-asset-safe-account`. 이체 화면은 사기범이 마지막으로 말한 금액(없으면 문자 금액)과 보낸 금액을 비교한다(판정표 R1 · R2).
+// ⛔ 은퇴 `fv-pgqt`는 위 두 상수(`INSTITUTION_ADVANCED_LINK_TRANSFER_STAGE` · `INSTITUTION_LINK_TRANSFER`)를 그대로 쓴다(바이트 무변경).
+const INSTITUTION_SAFE_AMOUNT = "980만 원";
+const INSTITUTION_ADVANCED_SAFE_AMOUNT_STAGE = `자산을 보호해야 한다며 문자로 보낸 안전계좌 안내의 링크를 열게 하고, 그 화면에서 ${INSTITUTION_SAFE_AMOUNT}을 넣어 이체를 마치라고 요구한다. 금액은 문자에 적힌 것과 같은 ${INSTITUTION_SAFE_AMOUNT}이라고 분명히 말하고(한 번에 보낼 수 있는 한도 안이라 우선 이 금액부터라고 한다), 다른 금액으로 바꾸지 않는다. 은행 앱이나 창구에서 따로 이체하라고 하지 않는다.`;
+const INSTITUTION_SAFE_AMOUNT_TRANSFER = `이체 화면 유도 — '문자로 보낸 안내의 링크를 눌러 보시면 안전계좌는 이미 들어가 있습니다, ${INSTITUTION_SAFE_AMOUNT}만 넣고 이체 누르시면 됩니다' 처럼 문자 속 링크의 이체 화면에서 직접 이체하게 한다. 은행 앱·창구·ATM에서 따로 보내라고 하지 않는다.`;
+const INSTITUTION_ADVANCED_SMS_V3: FlowVariantSms[] = [
+  INSTITUTION_OTP_V2,
+  { ...INSTITUTION_ADVANCED_SMS[1], smsId: "institution-asset-safe-account", ...FAST_BACKSTOP },
+];
 
 // (3) 사용자 결정 *"가상 기관 + 지역 언급"* — [미리 확보한 상대 정보] 목록(§88 카드)이 있으면 사건 설명에 섞는다. 기관 이름은 페르소나의 가상
 // 고유명(§118) 그대로이고, 실제 기관 이름은 쓰지 않는다. 목록이 없으면 이 문장은 아무것도 하게 하지 않는다(지어내기 금지).
@@ -494,8 +505,9 @@ const LOAN_CASH_REPAY_DEMAND =
 // 원 사례의 미끼는 쇼핑 결제 문자였다 — 이 시나리오에서는 해외 택배 통관 보류로 바꿨다(같은 진입 · 같은 결말). 경찰 · 검사는 한 화자가 전해 들은 말로만 전한다.
 const COURIER_IDENTITY_THEFT_DEMAND =
   "명의 도용 수사 이관 — '통관 중인 물품이 고객님 명의로 수입 신고됐는데 본인이 아니시면 명의가 도용된 겁니다, 이 건은 경찰 수사팀으로 넘어가 자산 보호 조치가 필요합니다' 처럼 택배 상담에서 수사 이야기로 넘긴다. 실제 수사기관 부서 · 담당자 이름은 쓰지 않는다.";
+// ⭐ PR-A(2026-11-07 Edge 시험 판 10 — 금액이 없어 10만 원만 보내도 통과) — 문자 `courier-safe-account` 금액 줄(760만 원)과 같은 금액을 말하게 한다.
 const COURIER_SAFE_ACCOUNT_DEMAND =
-  "국가 안전계좌 이체 요구 — '수사가 끝날 때까지 자산을 국가 안전계좌로 옮겨 두셔야 도용 피해가 번지지 않습니다, 계좌는 방금 문자로 보냈습니다' 처럼 문자로 보낸 계좌로 옮기게 한다 — 그 문자 속 링크의 이체 화면에서 보내게 하고, 은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다. 계좌번호를 지어내 말하지 않는다.";
+  "국가 안전계좌 이체 요구 — '수사가 끝날 때까지 자산 중 760만 원을 국가 안전계좌로 옮겨 두셔야 도용 피해가 번지지 않습니다, 계좌와 금액은 방금 문자로 보냈습니다' 처럼 문자로 보낸 계좌로 옮기게 한다 — 그 문자 속 링크의 이체 화면에서 보내게 하고, 은행 앱 · 창구 · ATM에서 따로 보내라고 하지 않는다. 계좌번호를 지어내 말하지 않는다.";
 
 const APP_INSTALL = { from: "card-delivery-call", label: "보안 점검 앱 설치 요구" };
 const AGENCY_PROBE = { from: "card-delivery-call", label: "기관 조사 언급" };
@@ -1003,18 +1015,18 @@ const SPECS: VariantSpec[] = [
     // ⇒ 고급 2벌 모두 인증번호(identity · 필수) → 안전계좌 링크 문자(transfer · 필수 · 랜딩) 순서를 거친다. 필수 2개 선례 = loan fv-m3hd.
     //    하한 2 · 4 — `planSmsBackstop`이 먼저 열리는 인증번호를 먼저 강제하고, 계좌 문자는 그 뒤 간격(2)을 지켜 열린다.
     // §124(#239) — 사용자 실기 신고 (2) 대출 단계 이유 · (3) 내 정보 활용 · (9) 문자 도구 먼저. 단계 순서 · 문자 선언 목적 · 결정 순간은 그대로.
-    stages: st(...INSTITUTION_HEAD_STAGES, withSmsFirst(INSTITUTION_ADVANCED_LINK_TRANSFER_STAGE), INSTITUTION_ADVANCED_LOAN_STAGE_V2),
+    stages: st(...INSTITUTION_HEAD_STAGES, withSmsFirst(INSTITUTION_ADVANCED_SAFE_AMOUNT_STAGE), INSTITUTION_ADVANCED_LOAN_STAGE_V2),
     keepLabels: ["권위 암시", "불이익 암시", "신원정보 직접 요구", "부인 시 명의 도용 암시", "안전계좌 이체 요구", "비밀 유지 요구", "전화 끊음 저지"],
     extraTactics: [
       ASSET_INFO,
       INSTITUTION_OTP_DEMAND,
-      INSTITUTION_LINK_TRANSFER,
+      INSTITUTION_SAFE_AMOUNT_TRANSFER,
       INSTITUTION_LOAN_DEMAND_V2,
       "안심 유도 — '협조만 하시면 약식으로 조용히 끝납니다' 처럼 위협과 번갈아 안심시켜 경계를 낮춘다.",
     ],
     // D2 · D5(콘텐츠) + D3 · D4(고급 오버레이 — 확인 무력화 카탈로그 보유 → d3_and_d4)
     exitBlock: ["D2_secrecy", "D3_verification_hijack", "D4_procedural_legitimacy", "D5_call_retention"],
-    sms: [...INSTITUTION_ADVANCED_SMS_V2],
+    sms: [...INSTITUTION_ADVANCED_SMS_V3],
     legs: [
       { callerLabel: "검사", speakerGender: "male", minUserTurns: 3, maxUserTurns: 8 },
       { callerLabel: "금융감독원 직원", speakerGender: "female", minUserTurns: 2, maxUserTurns: 10 },
@@ -1436,7 +1448,7 @@ const SPECS: VariantSpec[] = [
       "해외 택배가 통관에서 보류됐다고 알린다.",
       "보류된 물품이 고객님 명의로 수입 신고됐는데 본인이 아니면 명의가 도용된 것이라며, 이 건이 경찰 수사팀으로 넘어갔다고 전해 들은 말처럼 전한다.",
       "도용 피해가 번지지 않게 자산을 확인해야 한다며 거래 은행과 잔액 규모를 묻는다.",
-      withSmsFirst("수사가 끝날 때까지 자산을 국가 안전계좌로 옮겨야 도용 피해를 막는다며 문자로 보낸 계좌로 문자 속 링크의 이체 화면에서 이체하라고 요구하고, 거절하거나 망설이면 더 조르지 않고 마무리한다."),
+      withSmsFirst("수사가 끝날 때까지 자산 중 760만 원을 국가 안전계좌로 옮겨야 도용 피해를 막는다며 문자로 보낸 계좌로 문자 속 링크의 이체 화면에서 문자에 적힌 760만 원을 이체하라고 요구하고(다른 금액으로 바꾸지 않는다), 거절하거나 망설이면 더 조르지 않고 마무리한다."),
     ),
     keepLabels: ["생활 밀착형 소재로 경계심 낮추기", "긴급성 조성", "확인 절차 차단", "명의 도용 암시", "전화 끊음 저지"],
     extraTactics: [COURIER_IDENTITY_THEFT_DEMAND, ASSET_INFO, COURIER_SAFE_ACCOUNT_DEMAND],
