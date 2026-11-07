@@ -173,9 +173,10 @@ test("[A-1/⑦ 배선] sendMessage — 다른 턴 지시가 없는 턴에만 pla
   // §104 — 같은 배열 끝에 반복 차단 1줄(`repeatBreak.ts` — 확인 결과 지시가 있는 턴에는 계산하지 않는다)이 붙었다.
   // §131(2) — 그 뒤에 통화 불가 핑계 연속성 1줄(`callAnnouncement.ts` 판정표 K — 다른 턴 지시가 없는 턴만)이 더 붙었다.
   // §131(13) · (7) — 그 뒤에 송금 보고 뒤 재요구 금지 · 역할 고정 1줄이 더 붙었다(배열을 줄마다 쓴다).
+  // D4 2차(2026-11-07 Edge 재시험 2) — 반복 차단 바로 뒤에 초급 물러섬 · 마무리 1줄(`beginnerRetreat.ts` 판정표 B)이 붙었다.
   assert.match(
     src,
-    /\[\s*(?:\/\/[^\n]*\n\s*)?buildScreenStatusLine\(screenApplies, screenFacts, \{[^}]*\}\),\s*screenPlan\?\.instruction,\s*confirmPlan\?\.instruction,\s*escalatedCallInstruction,\s*repeatBreakInstruction\(repeatBreakKind\),\s*callAfterExcuseInstruction,\s*turnFacts\.transferReported \? TRANSFER_REPORTED_INSTRUCTION : undefined,\s*personaAnchorInstruction\(session\.scenarioId\),\s*\]\s*\.filter\(Boolean\)/,
+    /\[\s*(?:\/\/[^\n]*\n\s*)?buildScreenStatusLine\(screenApplies, screenFacts, \{[^}]*\}\),\s*screenPlan\?\.instruction,\s*confirmPlan\?\.instruction,\s*escalatedCallInstruction,\s*repeatBreakInstruction\(repeatBreakKind\),\s*beginnerRetreatInstruction\(beginnerRetreatKind\),\s*callAfterExcuseInstruction,\s*turnFacts\.transferReported \? TRANSFER_REPORTED_INSTRUCTION : undefined,\s*personaAnchorInstruction\(session\.scenarioId\),\s*\]\s*\.filter\(Boolean\)/,
   );
   assert.match(src, /\[(?:legRejoinNotice, )?promptTurnInstruction, confirmAndCallContext, smsNudgeInstruction, smsOfferInstruction(?:, otpFollowUpInstruction)?(?:, otpHoldInstruction)?\]/); // §132.6 인증번호 다시 요구 · 2026-11-07 끊긴 레그 재연결 첫 턴 1줄(앞 레그 인계 블록은 제거)
   // 계산 순서 — 인증번호 대조 · 문자 마커 제시 · 넛지가 정해진 뒤(리뷰 Minor-1 — 같은 턴 겹침 0), LLM 호출 앞.

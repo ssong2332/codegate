@@ -64,7 +64,20 @@ export function decideConsentGate(input: ConsentGateInput): ConsentGateResult {
  * 그대로 내보내 3일이 지난 미사용 링크가 "대기"로 보였다. ⇒ 같은 규칙(최초 진입 창은 `pending`에만 적용)으로 `pending` ∧ 만료 경과 →
  * `"expired"`. 이미 동의한 챌린지(`consented` · `in_progress`)는 링크가 소모됐고 재개는 보존기간을 따르므로 그대로 둔다.
  */
+//
+// D6 2차(2026-11-07 Edge 재시험 2) — 10-30 생성분은 "만료"가 됐지만 10-17 생성분("T186 테스트")은 여전히 "대기"였다. `linkExpiresAt`은
+// 생성 콜러블이 T36(2026-07-24)부터 항상 쓰고(없으면 `toMillis()`에서 목록 전체가 실패한다), 만료 시각은 생성 + 3일이라 10-17 문서의 링크는
+// 지났다. 그런데도 "대기"였다면 `status`가 `pending`이 아니고, 화면이 "대기"로 그리는 나머지 값 — `consented` · `in_progress`(상대가 동의해
+// 들어왔지만 체험을 끝내지 않음 · 완료 전이는 세션 종료 때만 일어난다 `shared/challengeCompletion.ts`) — 중 하나다(소거법 추정 · 운영 문서는
+// 읽지 않았다. 확인 방법: 에뮬레이터에서 생성 → 동의 → 체험 중 이탈 → 시계를 3일 넘겨 목록 조회).
+// 판정표 L(목록 상태):
+// | # | If | Then |
+// |---|---|---|
+// | L1 | `pending` · `consented` · `in_progress` ∧ `linkExpiresAt` 경과 | `"expired"` — 링크 기한이 지나 새로 열 수 없다(동의한 본인의 재개는 보존기간 안에서 그대로 허용 — 위 게이트 무변경) |
+// | L2 | 그 밖 | 저장된 값 그대로(완료 · 신고 · 삭제 · 기한 안) |
+const LINK_WINDOW_STATUSES: ReadonlySet<ChallengeStatus> = new Set(["pending", "consented", "in_progress"]);
+
 export function listedChallengeStatus(status: ChallengeStatus, linkExpiresAtMs: number, nowMs: number): ChallengeStatus {
-  if (status === "pending" && linkExpiresAtMs <= nowMs) return "expired";
-  return status;
+  if (LINK_WINDOW_STATUSES.has(status) && linkExpiresAtMs <= nowMs) return "expired"; // L1
+  return status; // L2
 }

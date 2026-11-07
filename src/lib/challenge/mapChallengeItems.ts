@@ -43,7 +43,9 @@ export const PENDING_STATUS_LABEL = "상대가 아직 해보지 않았습니다"
  * `"expired"`로 내보낸다(`functions/src/challenge/consentGate.ts` `listedChallengeStatus`). 종전에는 이 상태도 미완료 라벨로 묶여
  * "대기"로 보였다. 화면이 "만료" 배지로 바꾼다.
  */
-export const EXPIRED_STATUS_LABEL = "링크가 만료되어 더 이상 열 수 없습니다";
+// D6 2차 — 동의만 하고 끝내지 않은 채 기한이 지난 챌린지도 "expired"로 온다. 동의한 본인은 보존기간 안에서 이어 할 수 있으므로
+// "더 이상 열 수 없다"가 아니라 "새로 열 수 없다"로 쓴다.
+export const EXPIRED_STATUS_LABEL = "링크 기한(3일)이 지나 새로 열 수 없습니다";
 
 export function mapChallengesToListItems(
   challenges: readonly ChallengeSource[],

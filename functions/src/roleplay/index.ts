@@ -143,6 +143,7 @@ import {
 } from "./replyLength";
 import { finalizeScammerReplyText } from "./scammerReplyMasking";
 import { decideRepeatBreak, repeatBreakInstruction } from "./repeatBreak";
+import { beginnerRetreatInstruction, decideBeginnerRetreat } from "./beginnerRetreat";
 import {
   isEscalationTooEarly,
   isRepeatEscalationDuringRefusal,
@@ -730,8 +731,22 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
       escalatedCall && turnChoice === "none" ? ESCALATED_CALL_CONTEXT_INSTRUCTION : undefined;
     // §104(전수 검수 2차 F4 · M4) — 직전 두 사기범 대답이 같은 인적사항 요구 · 거의 같은 말이면 "다른 카드로" 1줄(`repeatBreak.ts` 판정표).
     // 앱 진행 지시(문자 · 확인 · 응낙 · 인증번호 대조 · 확인 결과)가 있는 턴에는 싣지 않는다(G31 — 그 지시가 이미 다음 국면을 정한다).
-    const repeatBreakKind =
+    // D4 2차(Edge 재시험 2) — 초급에서 참가자가 거절 · 의심하면 그 턴에만 물러섬 · 마무리 1줄(`beginnerRetreat.ts` 판정표 B).
+    // 그 턴에는 반대 방향("다른 수법 · 다른 요구를 꺼내라")인 반복 차단 지시를 싣지 않는다. 앱 진행 지시가 있는 턴은 제외(G31 — 반복 차단과 같은 조건).
+    const beginnerRetreatKind =
       turnChoice === "none" && !otpCheckInstruction && !confirmPlan?.instruction
+        ? decideBeginnerRetreat(
+            difficultyLevel,
+            maskedUserText,
+            storedHistory.filter((m) => m.role === "user").map((m) => m.textMasked),
+          )
+        : null;
+    if (beginnerRetreatKind) {
+      // G170 — 판정 종류 · 턴 번호만(대사 0).
+      logger.info("[D4] sendMessage 초급 물러섬 지시", { sessionId, kind: beginnerRetreatKind, scammerTurnNumber });
+    }
+    const repeatBreakKind =
+      turnChoice === "none" && !otpCheckInstruction && !confirmPlan?.instruction && !beginnerRetreatKind
         ? decideRepeatBreak(storedHistory.filter((m) => m.role === "scammer").map((m) => m.textMasked), maskedUserText)
         : null;
     if (repeatBreakKind) {
@@ -768,6 +783,7 @@ export const sendMessage = onCall<SendMessageRequest, Promise<SendMessageRespons
         confirmPlan?.instruction,
         escalatedCallInstruction,
         repeatBreakInstruction(repeatBreakKind),
+        beginnerRetreatInstruction(beginnerRetreatKind),
         callAfterExcuseInstruction,
         turnFacts.transferReported ? TRANSFER_REPORTED_INSTRUCTION : undefined,
         personaAnchorInstruction(session.scenarioId),
