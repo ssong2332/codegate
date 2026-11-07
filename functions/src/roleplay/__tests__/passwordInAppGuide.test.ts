@@ -45,7 +45,8 @@ test("가리키는 화면이 실재한다 — 은행 사칭 전 변형은 보호
   const inst = FLOW_VARIANTS.filter((v) => v.scenarioId === "institutional-impersonation");
   const without = inst.filter((v) => !sessionTransferSmsOpensLanding(v.scenarioId, v.variantId)).map((v) => v.variantId).sort();
   // 2026-11-07 — 금 구매형 fv-g2ld는 지정 거래소 문자(transfer → 앱 안 금 거래소 화면 · 결제 인증 시트)가 생겨 "화면 있음" 쪽으로 옮겼다.
-  assert.deepEqual(without, ["fv-q7cn"], "안전계좌 화면이 없는 기관 사칭 루트(문면의 '그런 문자 단계가 없으면' 조건 대상)");
+  // 같은 날(사용자 결정 D-G2 E1-b) 현금 예탁형 fv-q7cn도 출금 예약 안내 문자(transfer → 내 은행 출금 예약 화면 · 생체 인증 시트)가 생겨 옮겼다 — 남은 루트 0.
+  assert.deepEqual(without, [], "안전계좌 화면이 없는 기관 사칭 루트(문면의 '그런 문자 단계가 없으면' 조건 대상)");
   assert.match(demandOf("institutional-impersonation"), /그런 문자 단계가 없으면 비밀번호는 요구하지 않는다/);
 });
 

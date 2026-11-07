@@ -1727,7 +1727,8 @@ test("[2026-10-17 계좌 문자] 계좌형 문자가 있는 시나리오 전수(
 const ACCOUNT_SMS_VARIANT_ONLY: Record<string, string[]> = {
   "prosecution-cooperation-call": ["fv-c8wq", "fv-h3vn", "fv-v2mk"],
   // 2026-11-07(사용자 결정 D-G1) — 자산 보호 고급 금형 fv-t8ga(지정 거래소 문자 — 계좌 줄 없는 `account`)가 더해졌다.
-  "asset-protection-notice-call": ["fv-p3jx", "fv-t8ga"],
+  // 같은 날(사용자 결정 D-G2 E1-b) — 자산 보호 고급 현금형 fv-k9ra(출금 예약 안내 문자 — 계좌 줄 없는 `account`)가 더해졌다.
+  "asset-protection-notice-call": ["fv-k9ra", "fv-p3jx", "fv-t8ga"],
   "kidnapping-threat": ["fv-k268", "fv-w7tb"],
 };
 

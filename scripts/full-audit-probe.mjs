@@ -13,8 +13,8 @@
 //   · verbal(P2 실측 2026-11-01 — comply와 같되 이체 요구에 "링크는 안 눌렀고 제 은행 앱으로 따로 보냈어요"라고 말하고 화면을 제출하지 않는다)
 //   · verbalInstall(U2 실측 2026-11-01 — comply와 같되 통화 중 문자 설치 화면의 권한 허용을 누르지 않고 "설치했어요"라고 말로만 답한다 · 이체 화면은 comply처럼 제출)
 //   · verbalTransfer(#463 확인 실측 2026-11-01 — comply와 같되 설치 화면은 허용하고, 이체 화면은 제출하지 않은 채 "네, 보냈어요"라고 말로만 답한다)
-//   · truthful(2026-11-07 앱 안 금 구매 — comply와 같되 금 거래소 화면의 고액 구매 확인에 사실대로 "예"라 답해 구매가 보류된다 ·
-//     앱의 `landing_held` 기록 · `GOLD_HELD_INSTRUCTION` 맥락 주입을 흉내 내고, 그 뒤로는 화면 안내를 들어 망설인다. 금 화면 밖은 comply와 같다)
+//   · truthful(2026-11-07 앱 안 금 구매 · 출금 예약 — comply와 같되 금 거래소 화면의 고액 구매 확인 · 출금 예약 화면의 문진표에 사실대로 "예"라 답해 보류된다 ·
+//     앱의 `landing_held` 기록 · `GOLD_HELD_INSTRUCTION` / `CASH_HELD_INSTRUCTION` 맥락 주입을 흉내 내고, 그 뒤로는 화면 안내를 들어 망설인다. 그 밖 화면은 comply와 같다)
 //
 // node scripts/full-audit-probe.mjs --secret <path> --plan <json> --out <dir> [--key-var GEMINI_API_KEY2] [--tag s1]
 //   plan json = [{ "ch": "voice"|"messenger", "id": "...", "level": "beginner|intermediate|advanced", "persona": "comply|suspicious|refuse" }, ...]
@@ -217,6 +217,7 @@ function makeResponder(persona, getOtp = () => undefined) {
 const MAX_USER_TURNS = { comply: 16, suspicious: 16, refuse: 9, verbal: 16, verbalInstall: 16, verbalTransfer: 16, truthful: 16 };
 // 2026-11-07 — truthful 참가자가 금 거래소 화면 보류 뒤 하는 말(첫 줄 = 보류 직후 1회 · 나머지 = 이후 망설임 반복).
 const GOLD_HELD_FIRST_LINE = "화면에서 구매가 보류됐다고 나와요. 수사기관이 금을 사라고 하지 않는다고, 112에 확인하라던데요?";
+const CASH_HELD_FIRST_LINE = "화면에서 출금 예약이 보류됐다고 나와요. 수사기관이 현금을 찾으라고 하지 않는다고, 112에 확인하라던데요?";
 const GOLD_HELD_LINES = ["그래도 좀 이상해서요. 먼저 확인해 보고 할게요.", "화면에서 그렇게 나오니까 지금은 못 사겠어요.", "제가 직접 알아보고 다시 할게요."];
 
 // ── 키 · 공통 ─────────────────────────────────────────────────────────────────────────────────
@@ -436,7 +437,12 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
   // 2026-11-07 — truthful: 금 거래소 화면이 보류된 뒤로는 화면 안내를 들어 망설인다(보류 전 = comply와 같다).
   let heldSaid = 0;
   const respond = persona === "truthful"
-    ? (last, i) => (delivered.some((d) => d.landingHeld) ? (heldSaid++ === 0 ? GOLD_HELD_FIRST_LINE : GOLD_HELD_LINES[(heldSaid - 2) % GOLD_HELD_LINES.length]) : baseRespond(last, i))
+    ? (last, i) => {
+        const held = delivered.find((d) => d.landingHeld);
+        if (!held) return baseRespond(last, i);
+        if (heldSaid++ === 0) return held.heldKind === "cash" ? CASH_HELD_FIRST_LINE : GOLD_HELD_FIRST_LINE;
+        return GOLD_HELD_LINES[(heldSaid - 2) % GOLD_HELD_LINES.length];
+      }
     : baseRespond;
   if (job.setOtpSource) job.setOtpSource(otpOf);
   sendText(job.openingTrigger ?? LIVE_OPENING_TRIGGER, true, "opening");
@@ -461,16 +467,23 @@ async function runVoice(scenarioId, level, persona, tag, job = {}) {
           if (persona === "verbalTransfer") continue;
           // 2026-11-07 — 금 거래소 화면: 앱 `recordInCallSmsEvent`처럼 결제 = `GOLD_PURCHASED_INSTRUCTION` · 보류(truthful) = `GOLD_HELD_INSTRUCTION`을 맥락 주입(옛 lib = 종전 경로).
           const goldLanding = Boolean(mockScreensLib?.isGoldLanding?.(landingId));
-          if (goldLanding && persona === "truthful") {
+          // 2026-11-07(사용자 결정 D-G2 E1-b) — 출금 예약 화면도 같은 길(예약 = `CASH_RESERVED_INSTRUCTION` · 보류 = `CASH_HELD_INSTRUCTION`).
+          const cashLanding = Boolean(mockScreensLib?.isCashLanding?.(landingId));
+          if ((goldLanding || cashLanding) && persona === "truthful") {
             d.landingHeld = true;
+            d.heldKind = cashLanding ? "cash" : "gold";
             events.push({ t: now(), ev: "landingHeld", smsId: d.smsId, userTurns });
-            sendText(mockScreensLib.GOLD_HELD_INSTRUCTION, false, "landing_held_ctx");
+            sendText(cashLanding ? mockScreensLib.CASH_HELD_INSTRUCTION : mockScreensLib.GOLD_HELD_INSTRUCTION, false, "landing_held_ctx");
             continue;
           }
           d.landingSubmitted = true;
-          events.push({ t: now(), ev: "landingSubmitted", smsId: d.smsId, userTurns, ...(goldLanding ? { gold: true } : {}) });
+          events.push({ t: now(), ev: "landingSubmitted", smsId: d.smsId, userTurns, ...(goldLanding ? { gold: true } : {}), ...(cashLanding ? { cash: true } : {}) });
           // §132.7 — 앱처럼 제출 사실을 맥락 주입(새 lib에만 상수가 있다 — 옛 lib = 주입 0).
-          const landingText = goldLanding ? mockScreensLib.GOLD_PURCHASED_INSTRUCTION : optionalLib("inCallSms/confirmResult.js")?.LANDING_SUBMITTED_INSTRUCTION;
+          const landingText = goldLanding
+            ? mockScreensLib.GOLD_PURCHASED_INSTRUCTION
+            : cashLanding
+              ? mockScreensLib.CASH_RESERVED_INSTRUCTION
+              : optionalLib("inCallSms/confirmResult.js")?.LANDING_SUBMITTED_INSTRUCTION;
           if (landingText) sendText(landingText, false, "landing_ctx");
         }
       }

@@ -48,10 +48,10 @@ test("[G1] 금 구매형 2변형이 지정 거래소 문자를 선언한다 · �
     assert.ok(sms.senderLabel.startsWith(SMS_SENDER_NUMBER[route.scenarioId]!), "같은 시나리오 발신 번호");
     assert.ok(!/\d{2,3}-\d{3,4}-\d{4,}|금액|중량|\d+g/.test(sms.body), "계좌 · 금액 · 중량 줄 0(참가자가 화면에서 고른다)");
   }
+  // 2026-11-07(PR 2 · 사용자 결정 D-G2 E1-b) — 현금형은 출금 예약 화면으로 옮겼다(`inAppCash.test.ts`). 금 문자를 선언하지 않는다.
   const cash = variant("fv-q7cn");
-  assert.deepEqual(cash.sms.map((s) => s.smsId), ["institution-otp"], "현금형은 다음 PR — 이번엔 무변경");
-  assert.ok(cash.goalFollowUpUserTurns !== undefined);
-  assert.ok(VERBAL_DECISION_VARIANTS.includes("fv-k9ra"), "자산 보호 현금형도 다음 PR");
+  assert.deepEqual(cash.sms.map((s) => s.smsId), ["institution-otp", "institution-cash-reserve"], "현금형 = 출금 예약 문자(금 문자 0)");
+  assert.equal(VERBAL_DECISION_VARIANTS.includes("fv-k9ra"), false, "자산 보호 현금형도 4-c 대상");
 });
 
 test("[G2] 단계 · 수법 · 페르소나 — 문자 속 거래소 화면에서 산다 · 앱 밖 장소 금지 · 장소 · 시간 0 · 말 결말 꼬리 0", () => {
@@ -119,8 +119,9 @@ test("[G4] 화면 카탈로그 · 화면 행동 · 결제 · 보류 실시간 �
 
   const index = read("inCallSms/index.ts");
   assert.ok(index.includes('landing_held: "landingHeldAt"'));
-  assert.ok(index.includes('if (event === "landing_held" && !goldLanding) {'), "보류는 금 화면 문서에서만");
-  assert.ok(index.includes('contextInstruction: event === "landing_held" ? GOLD_HELD_INSTRUCTION : GOLD_PURCHASED_INSTRUCTION'));
+  // PR 2(사용자 결정 D-G2 E1-b) — 보류 단계가 있는 화면 = 금 거래소 ∨ 출금 예약(`inAppCash.test.ts`가 출금 쪽을 본다).
+  assert.ok(index.includes('if (event === "landing_held" && !goldLanding && !cashLanding) {'), "보류는 금 · 출금 예약 화면 문서에서만");
+  assert.ok(index.includes("contextInstruction: goldLanding ? (held ? GOLD_HELD_INSTRUCTION : GOLD_PURCHASED_INSTRUCTION) : held ? CASH_HELD_INSTRUCTION : CASH_RESERVED_INSTRUCTION,"));
   assert.ok(read("inCallSms/types.ts").includes('| "landing_held";'));
 });
 
