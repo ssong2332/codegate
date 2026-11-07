@@ -1814,7 +1814,9 @@ const SPECS: VariantSpec[] = [
       "주소지 오류로 배송이 보류됐다는 문자로 접근한다.",
       "재배송을 접수하려면 배송 확인 앱을 먼저 설치해야 한다며 설치 링크를 보내고 권한 허용까지 권한다.",
       "설치를 마쳤거나 상대가 계속 의심하면 배송 상담원이 직접 전화하겠다며 통화로 넘어간다.",
-      "통화에서는 상담원으로서 재배송 접수를 마무리하려면 앱에서 권한을 하나 더 허용해야 한다며 다시 요구한다.",
+      // Edge 시험 판 23(2026-11-07) — 종전 "앱에서 권한을 하나 더 허용해야 한다며 다시 요구한다"는 설치 화면에 없는 단계라(권한 허용은 한 번뿐)
+      // 참가자가 따라 할 화면이 없었다. 실제 화면(설치 → 권한 허용 한 번)에 맞춰 아직 안 했으면 그 화면을 권하고, 마쳤으면 접수를 마무리한다.
+      "통화에서는 상담원으로서, 상대가 아직 설치와 권한 허용을 하지 않았으면 앞서 문자로 보낸 링크 화면에서 마치라고 다시 권하고, 이미 마쳤으면 재배송 접수가 끝났다며 안심시킨다.",
     ),
     dropLabels: ["링크 클릭 유도"],
     extraTactics: [
@@ -2260,7 +2262,19 @@ export function findFlowVariant(variantId: string | undefined): FlowVariant | un
 // | cash-repay | 기존 대출을 현금으로 직접 상환 |
 // | loan-cash | 대출금을 현금으로 찾아 직원에게 전달 |
 // | voucher | 상품권 핀 번호를 불러 줌 |
-const NO_ACCOUNT_ROUTE_KEYS: ReadonlySet<string> = new Set(["gold", "cash-handoff", "cash-repay", "loan-cash", "voucher"]);
+// | subsidy-app · delivery-app · redelivery-link | 문자 링크 화면(앱 설치 · 재배송 신청)에서 끝난다 — 이체 화면 · 계좌 문자가 없다 |
+// ⭐ Edge 시험 판 31(2026-11-07 · 정부지원금 스미싱 고급 fv-hu8w) — 사기범이 "확인금 1만 원을 OO은행 948-2716-5093-27로 이체"를 지어냈다(공통 예시 계좌 ·
+//    "이 번호를 그대로 쓴다"가 실렸다). 이 세션엔 이체 수단이 없어 참가자는 "설치한 확인 앱에서 이체 화면을 여시라"는 없는 화면 요구까지 받았다(§132.19 금 구매형과 같은 구조).
+const NO_ACCOUNT_ROUTE_KEYS: ReadonlySet<string> = new Set([
+  "gold",
+  "cash-handoff",
+  "cash-repay",
+  "loan-cash",
+  "voucher",
+  "subsidy-app",
+  "delivery-app",
+  "redelivery-link",
+]);
 
 /** 판정표 A — 이 세션의 루트 결말이 계좌 이체가 아닌가(변형 부재 · 다른 시나리오의 ID = 거짓 · 종전 문면). */
 export function routeEndsWithoutAccount(scenarioId: string, flowVariantId: string | undefined): boolean {

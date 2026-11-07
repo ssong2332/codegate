@@ -167,10 +167,12 @@ function sendMessageWiringOk(code: string): boolean {
   const realName = at("replaceRealFinancialNames(markupFreeReplyText)");
   if ([link, drop, signal, tidy, realName].some((index) => index < 0)) return false;
   if (!(link < drop && signal < tidy && tidy < realName)) return false;
-  // 저장 · 응답은 정리된 칩(replyAttachments)만 쓴다 — 추출 원본(markerAttachments)은 선언 1 + 정리 입력 1뿐이다.
+  // 저장 · 응답은 정리된 칩만 쓴다 — 추출 원본(markerAttachments)은 선언 1 + 정리 입력 1뿐이다.
+  // Edge 판 25(2026-11-07) — 정리된 칩(replyAttachments)을 최종 대사로 한 번 더 판정한 savedReplyAttachments를 저장 · 응답에 쓴다.
   return (
     (code.match(/markerAttachments/g) ?? []).length === 2 &&
-    (code.match(/attachments: replyAttachments/g) ?? []).length === 2
+    (code.match(/finalizeBankTransferChips\(replyAttachments, finalReplyText/g) ?? []).length === 1 &&
+    (code.match(/attachments: savedReplyAttachments/g) ?? []).length === 2
   );
 }
 
@@ -184,7 +186,7 @@ test("[PR-A3 배선] sendMessage — 칩 반복 정리는 마커 추출 뒤 · �
       .replace("tidyScammerReplyMarkup(signalFreeReplyText)", "__TIDY__")
       .replace("replaceRealFinancialNames(markupFreeReplyText)", "tidyScammerReplyMarkup(signalFreeReplyText)")
       .replace("__TIDY__", "replaceRealFinancialNames(markupFreeReplyText)"),
-    code.replace("attachments: replyAttachments", "attachments: markerAttachments"),
+    code.replace("attachments: savedReplyAttachments", "attachments: markerAttachments"),
   ];
   tainted.forEach((variant, index) => assert.equal(sendMessageWiringOk(variant), false, `오염본 ${index + 1}`));
 });

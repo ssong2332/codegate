@@ -70,9 +70,26 @@ function clausesOf(text: string): string[] {
     .filter((clause) => clause.length > 0);
 }
 
-/** U1 판정 — 대사에 송금 확인 단정이 있는가(A1과 같은 어형 · 같은 절에 돈 낱말). */
+// ⭐ Edge 시험 판 20(2026-11-07 · 지인 사칭 중급 fv-fvsc) — "송금하기" 칩을 열지 않고 "방금 150만원 보냈어"라고만 했는데 사기범이
+//    *"지금 보니까 들어온 것 같아. 진짜 살려줬다"* 로 받았다. 화면 기록 줄 · SA1 미완료 지시는 실렸을 것이다(코드 경로 확인 — 모델이 따르지 않은 것은 추정 ·
+//    서버 로그 미확인). 결정적 차단 U1이 이 말을 못 잡았다: 돈 낱말이 같은 절에 없는 도착 · 수령 표현이라 A1 어형(+ 돈 낱말) 밖이었다.
+//    ⇒ U1에 도착 · 수령 단정(돈 낱말 없이도)을 더한다. 이 판정은 **보낸 이체 화면을 아직 마치지 않은 세션에서만** 쓰인다(U2 — 호출부가 거른다).
+// | # | If (절 단위 · 물음 절 제외) | Then |
+// |---|---|---|
+// | U1a | A1 어형 + 같은 절에 돈 낱말 | 송금 확인 단정 |
+// | U1b | 도착 · 수령 단정(`ARRIVAL_ACK` — "들어온 것 같아" · "들어왔어" · "잘 받았어" · "받은 거 같아" · "살려줬다") ∧ 앞에 "안 · 못"이 없다 ∧ 같은 절에 사진 · 문자 · 링크 낱말이 없다 | 송금 확인 단정 |
+// | U1c | 그 밖 | 아니다 |
+const ARRIVAL_ACK = /(?<!(?:안|못)\s?)(?:들어온\s*(?:것|거|듯)|들어왔(?!는지|나|니|을)|잘\s*받았|받은\s*(?:것|거)\s*같|살려\s*줬)/;
+/** U1b 제외 — 사진 · 캡처 · 메시지 · 링크가 들어왔다 · 받았다는 말(송금 이야기가 아니다). */
+const NON_MONEY_ARRIVAL = /사진|캡처|캡쳐|신분증|스샷|문자|메시지|톡|링크|연락|전화/;
+
+/** U1 판정 — 대사에 송금 확인 단정이 있는가(U1a · U1b). */
 export function assertsTransferConfirmed(text: string): boolean {
-  return clausesOf(text).some((clause) => TRANSFER_ACK.test(clause) && MONEY_WORDS.test(clause));
+  return clausesOf(text).some(
+    (clause) =>
+      (TRANSFER_ACK.test(clause) && MONEY_WORDS.test(clause)) ||
+      (!/[?？]$/.test(clause) && ARRIVAL_ACK.test(clause) && !NON_MONEY_ARRIVAL.test(clause)),
+  );
 }
 
 /** U1 되돌림 1줄(따옴표 0 · 숫자 0). 반말 대사면 반말 · 그 밖 존댓말. */

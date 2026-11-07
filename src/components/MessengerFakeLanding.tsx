@@ -446,7 +446,7 @@ const CREDENTIAL_LANDING_COPY: Record<string, CredentialCopy> = {
     fields: [
       { label: "보관 신청 금액", placeholder: "금액을 입력하세요", inputMode: "numeric", amount: true },
       { label: "돈을 찾을 은행", placeholder: "은행을 입력하세요" },
-      { label: "찾는 방법(현금 또는 수표)", placeholder: "현금 또는 수표" },
+      { label: "보관 방법(현금 · 수표 · 금 실물)", placeholder: "현금 · 수표 · 금 실물 중 하나" },
     ],
     submitLabel: "보관 신청하기",
     successHeadline: "보관 신청이 접수되었습니다.",
